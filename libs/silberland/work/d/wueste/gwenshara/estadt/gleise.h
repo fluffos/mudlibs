@@ -1,0 +1,10 @@
+#define GLEISEROOM   ROOM "gleise/"
+#define GLEISEOBJ    OBJ "gleise/"
+#define GLEISEWEAPON WEAPON "gleise/"
+#define GLEISEARMOUR ARMOUR "gleise/"
+#define GLEISENPC    NPC "gleise/"
+#define GLEISEMASTER MASTER "gleismaster"
+#define GLEISELOG    LOG "gleise"
+
+#define ANSCHLUSS_BASAR BASARIROOM "basari_3x3"
+#define ANSCHLUSS_STADT STADTROOM  "1a2_bruecke"

@@ -1,0 +1,231 @@
+//=========================================================================
+//
+// File:    pflanze.c
+// Created by Ronja@SL
+//
+// Project: Moor
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit "std/npc";
+inherit "std/npc/spells";
+
+#define MAX_PFLANZEN 5
+#define MAX_SAMEN 5
+
+string *spieler;
+int samen ;
+
+void create()
+{
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Eine fleischfressende Pflanze");
+  SetProp(P_LONG,
+    "Vor Dir siehst Du einen Sonnentau, eine fleischfressende Pflanze. "
+    "Ein stattliches Exemplar, diese hier ernaehrt sich bestimmt nicht "
+    "von Insekten (oder es gibt Insekten in entsprechender Groesse hier, "
+    "aber da denkst Du jetzt lieber nicht dran). Dieser Sonnentau ist "
+    "bestimmt auch in der Lage, kleine bis mittlere Tiere zu fangen "
+    "und zu verspeisen. Nimm Dich vor den Leimruten in acht, mit der "
+    "der Sonnentau seine Opfer faengt."
+  );
+
+  SetProp(P_NAME, "Sonnentau");
+  SetProp(P_GENDER, MALE);
+  AddId( ({"pflanze", "sonnentau", "falle", "\nSONNENTAU", "NOWIMPY","NOCONTROL"}) );
+
+  set_living_name("sonnentau");
+
+  create_default_npc(13);
+  SetProp(P_HANDS, ({" mit seinen klebrigen Blaettern",150,({DT_POISON,DT_BLUDGEON}) }) );
+  SetProp(P_SIZE, 100);
+  SetProp(P_ALIGN, 0);
+  SetProp(P_MAX_HANDS, 15);
+  SetProp(P_AGGRESSIVE, 0);
+  SetProp(P_WIMPY,0);
+
+  SetProp(P_MSGIN, "waechst aus dem Boden");
+  SetProp(P_MSGOUT, "verwelkt urploetzlich");
+  SetProp(P_MMSGIN, "waechst aus dem Boden");
+  SetProp(P_MMSGOUT, "verwelkt ploetzlich");
+
+  SetProp(P_DIE_MSG, " verwelkt.\n");
+
+  AddInfo(DEFAULT_INFO, " wartet auf Beute.\n");
+
+  AddDetail( ({"leimrute","leimruten","rute","ruten"}) ,
+    "Nimm Dich vor den Leimruten in acht! Damit faengt der Sonnentau "
+    "seine Beute. Hat er Dich erstmal an einer seiner Leimruten, dann "
+    "ist es fraglich, ob Du Dich rechtzeitig wieder losreissen kannst. "
+    "Von diesen Leimruten hat der Sonnentau seinen Namen, denn der "
+    "Leim glitzert in der Sonne (sofern die Sonne hier einmal "
+    "scheint)."
+  );
+
+  SetProp( P_REJECT, ({ REJECT_DESTRUCT,
+    "Der Sonnentau wirft @WEN ins Moor.\n" }) );
+
+  SetProp(P_SPELLRATE,50);
+
+  AddSpell(1,200,
+    "Der Sonnentau schleudert ein paar Samen aus.\n",
+    "Der Sonnentau schleudert ein paar Samen aus.\n",
+    DT_MAGIC, "spell_fortpflanzen"
+  );
+
+  AddSpell(1,400,
+    "Der Sonnentau schleudert eine Leimrute nach Dir aus.\n",
+    "Der Sonnentau schleudert eine Leimrute nach @WEM aus.\n",
+    DT_MAGIC, "spell_festhalten"
+  );
+
+  AddDefaultSpell(1, 100, DS_POISON,
+    "Der Sonnentau spritzt aetzenden Schleim auf Dich.\n",
+    "Der Sonnentau spritzt aetzenden Schleim auf @WEN.\n"
+  );
+
+  SetChats(3, ({
+    "Der Sonnentau glitzert im fahlen Licht.\n",
+    "Der Sonnentau waechst etwas.\n",
+    "Der Sonnentau rollt einige Blaetter ein.\n"
+  }));
+
+  SetAttackChats(10, ({
+    "Der Sonnentau laesst schnell noch ein paar Blaetter wachsen.\n",
+    "Der Sonnentau versucht Dich einzuwickeln.\n",
+    "Der Sonnentau versucht Dich ins Moor zu ziehen.\n",
+    "Der Sonnentau bewirft Dich mit Schlamm.\n"
+  }) );
+
+  AddCmd( ({"reiss","reisse"}) , "cmd_reissen");
+
+  spieler = ({});
+  samen = MAX_SAMEN;
+}
+
+void sterben()
+{
+  tell_room(ENV(TO),"Ein Sonnentau verwelkt.\n");
+  remove();
+  return;
+}
+
+void SetSeed(int n)
+{
+  samen = n;
+}
+
+void reset()
+{
+  int n;
+
+  ::reset();
+
+  if(!is_clone(TO) || !ENV(TO)) return;
+
+  SetSeed(MAX_SAMEN);
+
+  n = sizeof(filter_objects(all_inventory(ENV(TO)),"id","\nSONNENTAU"));
+  if(n > 1) call_out("sterben",0);
+  return;
+}
+
+void init()
+{
+  ::init();
+  if (TP && TP->id("\nSONNENTAU")) AddDefender(TP);
+}
+
+void InformDefend(object enemy)
+{
+  Kill(enemy);
+}
+
+string *klebspieler()
+{
+  return spieler;
+}
+
+void spell_fortpflanzen()
+{
+  int n;
+  object room,ob;
+
+  if(!(room=ENV(TO))) return;
+
+  if(samen == 0)
+  {
+    tell_room(room,"Keiner der Samen geht jedoch an.\n");
+    MOORMASTER->Msg("Der Sonnentau hat keine Samen mehr");
+    return;
+  }
+
+  n = sizeof(filter_objects(all_inventory(room), "id", "\nSONNENTAU"));
+  if(n >= MAX_PFLANZEN) return;
+
+  samen--;
+  ob=clone_object(NPC "pflanze");
+  ob->SetSeed(0); // neue pflanzen sich nicht fort, erst im reset wieder
+  ob->move(room,M_GO,"aus dem Moor","waechst",
+                        "waechst in atemberaubender Geschwindigkeit");
+  MOORMASTER->Msg("Der Sonnentau pflanzt sich fort");
+
+  return;
+}
+
+void spell_festhalten(object enemy,int damage,string damtype)
+{
+  if(-1 == member(spieler,getuid(enemy))) spieler += ({ getuid(enemy) });
+  return;
+}
+
+int cmd_reissen(string str)
+{
+  notify_fail("Wovon willst Du Dich los reissen ?\n");
+
+  if(!str || str == "") return 0;
+  if(!(str == "von pflanze los"    ||
+       str == "von sonnentau los"  ||
+       str == "von rute los"       ||
+       str == "von ruten los"      ||
+       str == "von leimrute los"   ||
+       str == "von leimruten los"  ||
+       str == "los"                ||
+       str == "dich los"           )) return 0;
+
+  if(-1 == member(spieler, getuid(TP) ))
+  {
+    notify_fail("Du haengst doch gar nicht fest!\n");
+    return 0;
+  }
+
+  TELLPLAYER("Du reisst Dich von einer Leimrute los.\n");
+  spieler -= ({ getuid(TP) });
+  TP->AddHp(-7);
+  return 1;
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  spieler -= ({ getuid(player) });
+  if(killer == TO)
+  {
+    MOORMASTER->Msg("Der Sonnentau hat gerade "+UID(player)+" umgebracht");
+  }
+  return;
+}
+
+varargs void die(int poisondeath)
+{
+  object enemy;
+
+  if(enemy=QueryProp(P_KILLER)||TP)
+    MOORMASTER->Msg(CAP(Name(WER,1))+" wurde von "+CAP(getuid(enemy))+" umgebracht");
+
+  ::die(poisondeath);
+}
+

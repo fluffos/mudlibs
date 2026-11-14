@@ -1,0 +1,140 @@
+/****************************************************************************
+ denk.c, (C) 2002 by Carador for Silberland
+****************************************************************************/
+
+/*
+
+Name    : unsichtbar
+Pfad    : /d/ebene/carador/ridu/obj/denk.c
+Fundort : Belohnung dafuer, dass man an Bord des Schiffs, dem Drachenkopf
+          geholfen hat, wieder auf seinen Drachenrumpf zu kommen.
+Aufwand : Mittel bis Hoch, d.h. man muss auf dem Schiff erst die 7 normalen
+          Entladungen hinter sich bringen (7 minuten). Danach kann man erst
+          dem Drachen helfen. Das geht dann aber ziemlich leicht.
+Details :
+- Hat man dem Drachen geholfen, so sagt er einem, dass man, wenn man mal in
+  arger Not ist, dass man an ihn denken soll und er einem dann helfen wolle.
+  Ausserdem sagt der dem Spieler noch, wie er heisst. Das ist jedes Mal ein
+  anderer Name.
+- Das Objekt ist autoloading.
+- Macht man dann spaeter einen 'denk'-Befehl, dessen Text den Namen des
+  Drachens enthaelt und hat ausserdem zu diesem Zeitpunkt weniger als 
+  20% seiner MAX_HP, so loest der Drache sein Versprechen ein und verschafft
+  dem Spieler eine Vollheilung. Maximal werden jedoch 300HP/SP geheilt.
+  Solange dieses Kontingent nicht erschoepft ist, bleibt das Objekt erhalten.
+  D.h. der Spieler kann es mehrmals benutzen. Im Kampf funktioniert dies
+  jedoch nicht, man ist zu beschaeftigt, um konzentriert genug an den
+  Drachen zu denken.
+- Ausserdem kann man auch nur eines dieser Objekt haben. Hilft man dem Drachen
+  nochmal, so wird als einzigstes, das Kontingent wieder aufgefrischt.
+*/
+
+#pragma strong_types
+#include "../def.h"
+
+inherit RD_THING;
+
+string my_name;
+int hp, sp;
+
+string _query_short()
+{
+  return 0;
+}
+
+string short()
+{
+  return 0;
+}
+
+void create()
+{
+  ::create();
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  AddId(({ "\nridu#denk" }));
+  AddCmd(({ "denke", "denk" }), "do_denk");
+  my_name = RD_LIBDIR"names"->get_random_name();
+  hp = 300;
+  sp = 300;
+}
+
+void reset_hp_sp()
+{
+  hp = 300;
+  sp = 300;
+}
+
+mixed _query_autoloadobj()
+{
+  return ([ "my_name" : my_name, "hp":hp, "sp":sp ]);
+}
+
+void _set_autoloadobj(mixed arg)
+{
+  my_name = arg["my_name"];
+  hp = arg["hp"];
+  sp = arg["sp"];
+}
+
+status do_denk(string str)
+{
+  if ( !my_name || 
+       !str || 
+       strstr(lower_case(str), my_name) < 0 ||
+       this_player()->InFight()
+     ) return 0;
+  if (find_call_out("denk_reaktion") < 0)
+    call_out("denk_reaktion", 2);
+  return 0;
+}
+
+string query_my_name()
+{
+  return my_name;
+}
+
+void denk_reaktion()
+{
+  int hph, sph;
+  string l;
+  object env;
+
+  if ( !(env = environment()) ||
+       !interactive(env) ||
+       env->QueryProp(P_GHOST) ||
+       ( (env->QueryProp(P_HP) * 100) / env->QueryProp(P_MAX_HP) >= 20 &&
+         (env->QueryProp(P_SP) * 100) / env->QueryProp(P_MAX_SP) >= 20)
+     ) return;
+
+  hph = env->QueryProp(P_MAX_HP) - env->QueryProp(P_HP);
+  if (hph > hp) hph = hp;
+  hp-=hph;
+
+  sph = env->QueryProp(P_MAX_SP) - env->QueryProp(P_SP);
+  if (sph > sp) sph = sp;
+  sp-=sph;
+
+  message(({
+    ({ M_TARGETS, env, "In Deiner groessten Not und Verzweiflung denkst Du "
+       "an " + capitalize(my_name) + ", Deinen Drachenfreund, und auf einmal "
+       "kannst Du fuehlen, wie auch " + capitalize(my_name) + 
+       " an Dich denkt, und zwar  . o O (" +
+       capitalize(env->query_real_name()) + ", endlich kann ich mich fuer "
+       "Deine grossartige Heldentat bedanken!" +
+     (hp>0||sp>0? " Wenn Du micht noch einmal brauchst, denk einfach wieder "
+       "an mich." : "") + ")" }),
+    ({ "Ploetzlich wirst Du von einer bislang ungekannten Waerme "
+       "und Staerke durchflutet." }) }));
+
+  env->AddHp(hph);
+  env->AddSp(sph);
+
+  l = "gedacht, heile " + hph + "HP/" + sph + "SP" +
+     ", Rest " + hp + "HP/" + sp + "SP";
+
+  if (hp<=0 && sp<=0) l += ", destruct";
+
+  RD_LOGGER->do_log("drachen", l, env);
+  if (hp<=0 && sp<=0) remove();
+}

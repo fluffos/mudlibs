@@ -1,0 +1,342 @@
+// 06.08.2003 Archon: ueberarbeitet
+// 11.01.2004 Feyaria: NEUTER beruecksichtigt
+// 16.08.2012 Gwenshara: Redesign
+
+inherit "std/weapon";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <new_skills.h>
+#include <defines.h>
+#include <moredef.h>
+#include <wizlevels.h>
+#include <ansi.h>
+#include <vt100.h>
+#include <class.h>
+#include "../nekro.h"
+
+#define MAX_BLOOD_POOL     300
+#define BLOOD_USE_INTERVAL 120
+#define BLOOD_PER_TICK     1
+
+#define DEBUG(x) if(objectp(find_player("gwenshara"))) \
+                   tell_object(find_player("gwenshara"), x);
+
+
+nosave int CheckPermissions();
+int reinit(object ob, object caster);
+int UseBloodPool(int value);
+int AddBloodPool(int value);
+
+
+private nosave string *hitfuncs;
+private nosave object *obj_hitf;
+private nosave int bloodpool;
+private nosave int ability;
+private nosave int last_blood_time;
+
+void create()
+{
+  if (!is_clone(TO) )  return;
+  ::create();
+  bloodpool=0;
+  hitfuncs=({});
+  SetProp(P_NOBUY,1);
+}
+
+nosave int CheckPermissions() 
+{
+  if(!PO) return 0;
+  if(PO==ME) return 1;
+  return 1;
+}
+
+int reinit(object ob, object caster) 
+{
+  mapping properties;
+  string new_short;
+  int i;
+  mixed ind, val;
+  string *not_set, *shorts;
+  //if(!CheckPermissions());
+  not_set=({"clone_time","commands","cloner","last_use"});
+  properties=ob->__query_properties(ob,0)[0];
+  ind=m_indices(properties);
+  val=m_values(properties);
+  for(i=sizeof(ind)-1;i>=0;i--) 
+  {
+    if(member(not_set,ind[i])==-1) 
+      SetProp(ind[i],val[i]);
+  } 
+  SetProp(P_HIT_FUNC, TO);
+  SetProp(P_MATERIAL, ([MAT_BONE:90,MAT_BLOOD:5, MAT_MISC_UNHOLY:5]));
+  SetProp(P_WIELD_FUNC, TO);
+  shorts=explode(QueryProp(P_SHORT), " ");
+  if(sizeof(shorts) > 1) 
+  {
+    if( sizeof(regexp( ({shorts[0]}), "\\Ein.*\\"))) 
+    {
+      new_short=shorts[0]+ 
+             sprintf(" bluttriefend%s ", QueryProp(P_GENDER)==FEMALE?"e":
+                 (QueryProp(P_GENDER)==NEUTER?"es":"er"))+
+             implode(shorts[1..], " ");
+      SetProp(P_SHORT, new_short);
+    }
+  }
+  SetProp(P_NEKRO_PESTERED, getuid(caster));
+  SetProp(P_SHORT, QueryProp(P_SHORT)+" (verpestet)");
+  SetProp(P_NAME_ADJ, "bluttriefend");
+  SetProp(P_VALUE, 1);
+  SetProp(P_ITEMD, ({sprintf("ist von %s verflucht worden", 
+          caster->name(WEM))}));
+  SetProp(P_LONG, BS(QueryProp(P_LONG)+sprintf("%s scheint vollstaendig "
+        "aus Knochen zu bestehen und sondert staendig Blut ab.", 
+        CAP(QueryPronoun(WER)))));
+  SetProp(P_MAGIC, 1);
+  
+  ability         = caster->QuerySkillAbility("fluch der klinge");
+  last_blood_time = time();
+  return 1;
+} 
+
+int WieldFunc(object waffe, int silent) 
+{
+  object owner;
+  if(getuid(TP) != QueryProp(P_NEKRO_PESTERED)) 
+  {
+    if(TP->QueryProp(P_GUILD) == "nekromanten") 
+    {
+      tell_object(TP, BS("Als Du die Waffe zueckst spuerst Du eine innere "
+          "Leere in Dir ..."));
+      TP->AddSp(-50);
+      if(owner=find_player(QueryProp(P_NEKRO_PESTERED)) && !random(10)) 
+      {
+        if(objectp(owner)) {
+          tell_object(owner, "Eine Welle der Macht durchflutet Dich!\n");
+          owner->AddSp(random(10)+5);
+        }
+      }
+      return 1;
+    }
+    tell_object(TP, BS("Du hast ein ungutes Gefuehl dabei diese Waffe zu "
+        "zuecken. Sicherheitshalber laesst Du es bleiben."));
+    return 0;
+  }
+  return 1;
+}
+
+void check_blood_use()
+{
+  int passed_ticks, now;
+  
+  now = time();
+  
+  if(now-last_blood_time < BLOOD_USE_INTERVAL)
+    return;
+	
+  passed_ticks = (int) ((now-last_blood_time)/BLOOD_USE_INTERVAL);
+  
+  if(bloodpool <= 0 && objectp(QueryProp(P_WIELDED)))
+  {
+    tell_object(QueryProp(P_WIELDED),
+	  BS(
+	    sprintf("Dein %s hat keine Seelen mehr! Eine tiefe Kaelte "
+		        "entreisst Dir einen Teil Deiner Essenz!",
+				name(RAW))
+	  )
+	);
+	QueryProp(P_WIELDED)->AddSp(-10);
+	
+  }
+  
+  // DEBUG(sprintf("FK: use blood, ticks = %i\n", passed_ticks));
+  
+  UseBloodPool(BLOOD_PER_TICK*passed_ticks);
+  
+  if(bloodpool < 0)
+    bloodpool = 0;
+	 
+  if(bloodpool > MAX_BLOOD_POOL)
+    bloodpool = MAX_BLOOD_POOL;
+	
+  last_blood_time = time();
+  
+  if(bloodpool && objectp(QueryProp(P_WIELDED)))
+    tell_object(QueryProp(P_WIELDED), 
+	            BS(
+	              sprintf("Einige Seelen loesen sich kreischend von %s.",
+				          name(RAW))
+				)
+	);
+  return;
+}
+
+int HitFunc(object enemy) 
+{
+  int i, dam;
+  int dam_add;
+  object pl;
+  
+  dam=0;
+  
+  // Pruefen, ob Seelen zu verbrauchen sind
+  check_blood_use();
+  
+  if(random(3)) {
+  
+    dam = (int) ((bloodpool/MAX_BLOOD_POOL)*60+1+random(40));
+	/*DEBUG(sprintf("FK: wielder = %O | blood = %i | dam = %i",
+	      QueryProp(P_WIELDED), bloodpool, dam))*/
+	
+    if( bloodpool && random(100) < ((int) ability/1300) ) {
+	  pl = QueryProp(P_WIELDED);
+	  if(objectp(pl))
+	    tell_object(pl, 
+		  BS(sprintf("Dein %s schlaegt eine tiefe Wunde!", 
+		             name(RAW))
+		 )
+		);
+		
+      dam*=2+random(1);
+    }
+  }
+  
+  if(!sizeof(obj_hitf)) return dam;
+  obj_hitf-=({0});
+  for(i=sizeof(obj_hitf)-1;i>=0;i--) 
+    dam+=call_other(obj_hitf[i], "HitFunc", enemy);
+  return dam;
+}
+
+int AddHitFunc(string hit_obj) 
+{
+  object ob;
+  if(!CheckPermissions()) return 0;
+  hitfuncs+=({hit_obj});
+  call_other(hit_obj, "???");
+  if(ob=find_object(hit_obj)) 
+  {
+    obj_hitf+=({ob}); 
+  }
+  return 1;
+}
+
+mixed QueryHitFuncs() 
+{
+  return hitfuncs;
+}
+
+// Erhoeht den Bloodpool. Ein Teil wandert in die Waffe und der
+// Rest in den globalen Pool der Nekromanten
+int AddBloodPool(int value) {
+  int overflow, topool;
+  
+  if(bloodpool >= MAX_BLOOD_POOL) {
+    write(BS(sprintf("Dein %s pulsiert in unheiligen Licht. %s ist vollgesogen "
+            "und wird keine Seelen mehr aufnehmen!", name(RAW), 
+            CAP(QueryPronoun(WER)))));
+    // Waffe voll -> alles in den globalen Pool
+    return value;
+  }
+  
+  write(BS(sprintf("Dein %s saugt einen Teil der Seele auf!", name(RAW))));
+  
+  topool = (int) (value/(1+random(3)));
+  bloodpool += topool;
+  overflow = value-topool;
+  if(overflow<0)
+    overflow = 0;
+  return overflow;
+}
+
+int UseBloodPool(int value) {
+  if(bloodpool == 0) return 0;
+  if(value > bloodpool) {
+    write(BS(sprintf("Dein %s ist leer. ER BRAUCHT MEHR SEELEN!", 
+            name(RAW))));
+    bloodpool=0;
+    return 0;
+  }
+  bloodpool-=value;
+  return 1;
+}
+
+int QueryBloodPool() {
+  return bloodpool;
+}
+
+void reanimate_me() {
+  object npc;
+  mapping properties;
+  string new_short;
+  int i;
+  mixed ind, val,help;
+  string *not_set, *shorts;
+  //if(!CheckPermissions());
+  if(random(5)) {
+     tell_room(ENV(ME), BS(sprintf("%s loest sich auf!\n", Name(WER,1))));
+     remove();
+     return ;
+  }
+  npc=clone_object("/p/std/npc/nekro_npc");
+  not_set=({"clone_time","commands","cloner","last_use"});
+  properties=ME->__query_properties(ME,0)[0];
+  ind=m_indices(properties);
+  val=m_values(properties);
+  for(i=sizeof(ind)-1;i>=0;i--) 
+  {
+    if(member(not_set,ind[i])==-1) 
+      npc->SetProp(ind[i],val[i]);
+  } 
+  npc->SetProp(P_MATERIAL, ([MAT_BONE:90,MAT_BLOOD:5, MAT_MISC_UNHOLY:5]));
+  shorts=explode(QueryProp(P_SHORT), " ");
+  if(sizeof(shorts) > 1) 
+  {
+    if( sizeof(regexp( ({shorts[0]}), "\\Ein.*\\"))) 
+    {
+      new_short=shorts[0]+ 
+             sprintf(" bluttriefend%s ", QueryProp(P_GENDER)==FEMALE?"e":
+                 (QueryProp(P_GENDER)==NEUTER?"es":"er"))+
+             implode(shorts[1..], " ");
+      npc->SetProp(P_SHORT, new_short);
+    }
+  }
+  npc->SetProp(P_SHORT, QueryProp(P_SHORT)+" (schwebend)");
+  npc->SetProp(P_LONG, BS(QueryProp(P_LONG)+sprintf("%s schwebt in der Luft "
+          "und scheint belebt zu sein.",
+        CAP(QueryPronoun(WER)))));
+  npc->create_default_npc((QueryProp(P_WC)/15)-random(5));
+  help=npc->QueryProp(P_HANDS);
+  npc->SetProp(P_HANDS, ({"", help[1], QueryProp(P_DAM_TYPE)}));
+  npc->move(ENV(ME), M_NOCHECK|M_SILENT);
+  npc->SetProp(P_CORPSE, 0);
+  npc->SetProp(P_DIE_MSG, " loest sich in Rauch auf.\n");
+  npc->SetProp(P_AGGRESSIVE,
+            ([ 0:0.5, P_GUILD: (["nekromanten":0.0, "abenteurer":0.2,
+                                "dunkelelfen":0.1, "paladine":1.0]) ]));
+  npc->AddClass(CL_DEMON);
+  npc->SetProp(P_XP, 0);
+  npc->SetProp (P_REJECT, ({REJECT_DROP, sprintf("Du kannst %s nichts geben!\n",
+          name(WEM)) }));
+  npc->SetProp(P_MSGIN, "schwebt herein");
+  npc->SetProp(P_MSGOUT, "schwebt");
+  npc->SetProp(P_MMSGIN, "schwebt weg");
+  npc->SetProp(P_MMSGOUT, "schwebt");
+  npc->SetProp(P_HP_DELAY, 9999999);
+  npc->SetProp(P_MAX_ALCOHOL, 0);
+  npc->SetProp(P_MAX_FOOD, 0);
+  npc->SetProp(P_MAX_DRINK, 0);
+  npc->SetResetRemove();
+  tell_room(ENV(ME), BS(sprintf("Mit einem lauten Kreischen wird %s "
+          "beseelt!\n", name(WER))));
+  remove();
+}
+
+void reset()
+{
+  ::reset();
+  check_blood_use();
+  return;
+}
+

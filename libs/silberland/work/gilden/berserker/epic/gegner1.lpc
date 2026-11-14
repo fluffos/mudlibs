@@ -1,0 +1,158 @@
+
+inherit "std/npc";
+
+#include <properties.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include "berserkerstufe11.h"
+#include "../def.h"
+#include <npcmaster.h>
+
+void create() 
+{
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Turtos, der Ahn der Hobbitberserker");
+  SetProp(P_LONG,
+    "Turtos ist ein uralter Hobbit mit grauem, lockigen Haar, dass durch "
+    "ein blutrotes Stirnband gebaendigt wird. Er hat eine "
+    "zerschlissene Lederruestung an und eine gewaltige Axt gezueckt. ");
+  SetProp(P_NAME, "Turtos");
+  SetProp(P_GENDER, MALE);
+  AddId(({"berserker", "ahn", "turtos", "hobbitberserker", "hobbit"}));
+
+  create_default_npc(24);
+  SetProp(P_HANDS, ({" mit seiner Axt",QueryProp(P_HANDS)[1],DT_BLUDGEON}));
+  SetProp(P_RACE, "Hobbit");
+  SetProp(P_SIZE, 100);
+  SetProp(P_ALIGN, 0);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_NO_SCORE, 1);
+  SetProp(P_KILL_NAME, "Der Weg der Ahnen");
+
+  SetProp(P_MSGIN, "kommt an");
+  SetProp(P_MSGOUT, "geht");
+  SetProp(P_MMSGIN, "erscheint in einer Rauchwolke");
+  SetProp(P_MMSGOUT, "verschwindet mit Knall und Schwefelduft");
+
+  SetProp(P_DIE_MSG,  " loest sich in Luft auf.\n");
+  SetProp(P_NOCORPSE, 1 );
+
+  AddInfo(DEFAULT_INFO, "sagt: Du musst mich besiegen, um auf den Weg der "
+      "Ahnen zu bestehen!\n");
+  AddLibrary(NPC "kronang.lib", 1);
+
+  SetProp(P_SPELLRATE,0);
+
+  SetProp(P_GUILD, "berserker");
+  SetProp(P_GUILD_LEVEL, 3);
+  call_other("/gilden/berserker","learn_berserker_skills", 3000, 3000);
+
+  SUID;
+  CLONEME("/p/weapon/axe/stabaxt" );
+  command("zuecke axt");
+  CLONEME("/gilden/berserker/obj/stirnband");
+  command("trage alles");
+
+  AddCmd( ({"zertreten", "rammen", "kampfschrei", "kopfstoss", "spalten",
+        "blutrausch", "schlachtruf"}), "nix");
+}
+
+int nix(string str)
+{
+  if (!InFight(TP)) return 0;
+  write("Du musst diesen Kampf gewinnen, ohne Dich auf "+query_verb()+" zu "
+      "verlassen!\n");
+  return 1;
+}
+
+void die(int poisondeath) 
+{
+  object ob, wer;
+  log_file(B11_LOG, "["+ dtime()+"] "+
+      sprintf("%O",QueryProp(P_KILLER)||TP)+" killt den Hobbitberserker.\n");
+  if( (wer=QueryProp(P_KILLER)) || (wer=TP) )
+  {
+    ob=wer->QueryArmours(AT_BOOT)[0];
+    ob->remove(1); if( ob ) destruct(ob);
+    ob=clone_object(BERSERKERRUESTUNG);
+    ob->create2(wer->QueryProp(P_RACE), AT_BOOT);
+    ob->move(wer, M_NOCHECK);
+    ob->DoWear(1);
+    wer->SetProp(P_GUILD_LEVEL, 3);
+    wer->heal_self(400);
+    environment()->AddExit("weiter", "./weg_der_ahnen3");
+  }
+  ::die(poisondeath);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp) 
+{
+  if(killer == ME)
+    log_file(B11_LOG, "["+ dtime()+"] Der Hobbitberserker hat gerade "+
+        sprintf("%O",player)+" umgebracht.\n");
+  call_out("corpsemove", 4);
+  heal_self(2000);
+}
+
+void corpsemove()
+{
+  present("leiche")->move("/gilden/berserker", M_NOCHECK);
+}
+
+int _query_wimpy() { return 0; }
+
+void Attack(object enemy)
+{
+  if( !QueryProp(P_DISABLE_SPELLS) )
+  {
+    if ( time() - enemy->QueryProp("last_rammen_time")<4 )
+      command_me("zertreten");
+    else switch( 100*enemy->QueryProp(P_SIZE)/QueryProp(P_SIZE))
+    {
+      case 0..30: command_me("zertreten"); break;
+    }
+  }
+  if( enemy ) ::Attack(enemy);
+}
+
+int Defend(int dam, string dam_type, mixed spell, object enemy)
+{
+  object *obs;
+  object ob;
+
+  if (!sizeof(obs = enemy->QueryArmours(AT_BOOT)))
+  {
+    tell_object(enemy, break_string("Ohne Schuhe brauchst Du gar nicht gegen "
+          "mich kaempfen!\n",78, Name(WER,1)+" sagt: "));
+    enemy->StopHuntFor(ME);
+    StopHuntFor(enemy);
+    enemy->move("/gilden/berserker",M_NOCHECK);
+    return 0;
+  }
+    ob = obs[0];
+  if( !sizeof(obs) || (ob->QueryProp(P_AC)+ob->QueryProp(P_DAMAGED)) < 
+      3*VALID_ARMOUR_CLASS[AT_BOOT]/4)
+  {
+    tell_object(enemy, break_string(ob->Name(WER,1)+" "+
+          (ob->QueryProp(P_PLURAL)?"sind":"ist")+ " ja Schrott. Komm wieder "
+          "mit besserer Ausruestung!",78, Name(WER,1)+" sagt: "));
+    enemy->StopHuntFor(ME);
+    StopHuntFor(enemy);
+    enemy->move("/gilden/berserker",M_NOCHECK);
+    return 0;
+  }
+  enemy->SetProp(P_FOOD, enemy->QueryProp(P_MAX_FOOD));
+  enemy->SetProp(P_DRINK, enemy->QueryProp(P_MAX_DRINK));
+  ::Defend(dam, dam_type, spell, enemy);
+}
+
+void reset()
+{
+  ::reset();
+  if (!is_clone(TO)) return;
+  if( !InFight()) heal_self(2000);
+}

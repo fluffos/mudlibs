@@ -1,0 +1,271 @@
+/*
+** Baumstamm ueber Bach im Silberwald
+**
+** 1996-03-03 (Woody) 1.0  Initial Version,
+**                         lieg auf moos
+** 1996-03-06 (Woody) 1.1  Wer im Moos liegt, kann nicht einfach
+**                         wieder runter sondern muss erst aufstehn :)
+** 1996-03-31 (Woody) 1.2  ZT (Stein heben)
+** 1996-04-07 (Woody) 1.3  ausruhen implementiert
+** 1996-04-08 (Woody) 1.4  INDOORS, Temperatur
+** 1996-05-04 (Woody) 1.5  Heilstelle (Wasser trinken)
+** 1996-06-18 (Woody) 1.6  ::reset() aufrufen
+** 1998-06-17 (Woody) 1.7  ?
+** 2001-07-08 (Woody) 1.8  wassertrinken saettigt nun um +1
+*/
+
+inherit "std/room";
+
+#include <moving.h>
+#include <player.h>
+#include <properties.h>
+#include "../silberwald.h"
+
+#define HEAL 80
+
+string *pilzfound;
+object *ruht;
+object *trink;
+
+create()
+{
+  ::create();
+  SetProp (P_LIGHT, 1);
+  SetProp (P_INDOORS, 0);
+  SetProp (P_ENVIRONMENT, ([ENV_TERRAIN:TT_FOREST, ENV_TEMPERATURE:18]));
+  SetProp (P_INT_SHORT, "Auf einem Baumstamm");
+  SetProp (P_INT_LONG, bs("Du befindest Dich auf einem kraeftigen Baumstamm, "+
+    "der quer ueber den Bach liegt. Er ist teilweise von satt gruenem "+
+    "Moos ueberwuchert, das so richtig gemuetlich aussieht.\n"));
+  AddDetail ( ({"bach", "baechlein"}), bs(
+    "Das kleine vertraeumte Baechlein plaetschert ruhig vor sich hin. "+
+    "Du kannst von hier aus viele Steine am Grund des klaren Wassers "+
+    "erkennen.\n"));
+  AddDetail ("grund", "Am Grund des Wassers erkennst Du Steine.\n");
+  AddDetail ("wasser", "Das Wasser ist unglaublich klar und rein.\n");
+  AddDetail ("steine", "Bunte, runde, kleine, grosse, viele Steine...\n"+
+    "Ein Stein faellt Dir besonders auf.\n");
+  AddDetail ("stein", "Einer der Steine ist zwar klein, ragt jedoch "+
+    "dennoch ein wenig aus der\nMasse hervor, als ob etwas unter ihm "+
+    "verborgen waere.\n");
+  AddDetail ( ({"baumstamm", "baum", "stamm"}), "Du stehst drauf.\n");
+  AddDetail ("boden", "Du stehst auf einem kraeftigen Baumstamm.\n");
+  AddDetail ("gras", "Gras siehst Du hier nicht, aber saftiges Moos.\n");
+  AddDetail ( ({"moos", "moosbewuchs"}), bs("Das Moos scheint herrlich "+
+    "weich zu sein, genau der richtige Ort, um sich kurz ein wenig "+
+    "auszuruhen.\n"));
+
+  AddSound ( ({DEFAULT_SOUND, "plaetschern","bach","baechlein"}), bs(
+    "Das leise Plaetschern und Rauschen des Baches unter Dir hat "+
+    "eine unheimlich beruhigende Wirkung auf Dich. Vielleicht solltest "+
+    "Du Dich hier nach einem gemuetlichen Platz umsehen, um dieser "+
+    "Symphonie der Natur zuzuhoeren."));
+
+  AddCmd ( ({"heb","hebe","nimm"}), "hebe");
+  AddCmd ( ({"lieg","liege", "leg", "lege"}), "liege");
+  AddCmd ( ({"steh","stehe"}), "stehe");
+  AddCmd ( ({"such","suche","durchsuch","durchsuche"}), "such");
+  AddCmd ( ({"ruh","ruhe"}), "ruhe");
+  AddCmd ( "trink", "trink", 1);
+
+  // Neue Konstruktion:
+  AddExit( ({"runter","unten"}), ([
+              EX_DEST : ROOM("room_c06"),
+          EX_TESTFUNC : "darf_runter",
+               EX_MSG : "zurueck in den Wald",
+             EX_PLMSG : "Du huepfst behende vom Baumstamm herunter.\n" ]) );
+
+  SetProp( P_HIDE_EXITS, ({ "unten" }) );
+
+  // Alte Konstruktion:
+  // AddSpecialExit ("runter","runter");
+  // AddCmd ("unten", "runter");
+  // AddExit ("suedwesten",ROOM("room_d07"));
+
+  pilzfound = ({ });
+  ruht = ({ });
+  trink = ({ });
+}
+
+int hebe(string str)
+{
+  notify_fail ("Was willst Du heben?\n");
+  if (!stringp(str)) return 0;
+  switch (str)
+  {
+    case "stein": case "stein auf": case "stein hoch":
+      if (!(TP->FindPotion(
+       "\nDu hebst den Stein vorsichtig an und findest doch tatsaechlich ein "+
+       "kleines\nFlaeschchen mit sonderbar prickelndem Inhalt. Du nimmst es, "+
+       "legst den Stein\nvorsichtig an seinen Platz zurueck und trinkst das "+
+       "Flaeschchen ohne lang zu\nueberlegen mit einem Schluck aus.\n\n")))
+        write (
+          "Vorsichtig hebst Du den Stein an und findest einen alten Knochen.\n"+
+          "Vor lauter Schreck laesst Du den Stein gleich wieder fallen.\n");
+      return 1;
+    case "knochen":
+      write ("Lass den alten Knochen besser mal da!\n");
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+int darf_runter(string str)
+{
+  if (member_array (TP, ruht) != -1)
+    return write("Aber Du liegst doch noch im Moos!\n"), 0;
+  else
+    return 1;
+}
+
+/*
+int runter()
+{
+  if (member_array (TP, ruht) != -1)
+    write ("Aber Du liegst doch noch im Moos!\n");
+  else
+    TP->move(ROOM("room_c06"), M_GO, "runter");
+  return 1;
+}
+*/
+
+int liege(string str)
+{
+  notify_fail ("Wo willst Du es Dir bequem machen?\n");
+  if (!stringp(str)) return 0;
+
+  if (str=="moos" || str=="boden")
+    return
+      notify_fail("\"" + query_verb() + " " + str + "\" ???  "
+          "Brrr, formulier das mal ein bisschen um. ;-)\n"), 0;
+
+  if (str[0..4] == "dich ")
+    str = str[5..];
+
+  switch (str)
+  {
+    case "in moos":
+    case "auf moos":
+    case "auf boden":
+
+      if (member_array (TP, ruht) != -1)
+      {
+        notify_fail ("Aber Du liegst doch schon im Moos!\n");
+        return 0;
+      }
+      write (bs("Du machst es Dir auf dem wunderbar weichem Moos so richtig "+
+        "bequem. Das Moos scheint in seiner unendlichen Weichheit etwas "+
+        "verstecken zu wollen. Vielleicht solltest Du es ja mal "+
+        "durchsuchen?\n"));
+      say (TP->Name()+" macht es sich auf dem weichen Moos "+
+        "bequem.\n", TP);
+      ruht += ({ TP });
+      return 1;
+    default:
+      notify_fail ("Da kannst Du nicht liegen!\n");
+  }
+  return 0;
+}
+
+int stehe(string str)
+{
+  notify_fail ("Du meinst wohl aufstehen, oder?\n");
+  if (!stringp(str)) return 0;
+  if (str != "auf") return 0;
+  notify_fail ("Aber Du stehst doch schon!\n");
+  if (member_array (TP, ruht) == -1) return 0;
+  ruht -= ({ TP });
+  write ("Du erhebst Dich mit einem Seufzer aus dem weichen Moos.\n");
+  say (TP->Name()+" verlaesst mit sichtlichem Widerstreben "+
+    "das weiche Moos.\n");
+  return 1;
+}
+
+int such(string str)
+{
+  object ob;
+
+  if (!stringp(str))
+    return ::imposs();
+  if (str == "moos");
+  else if (str == "moosbewuchs");
+  else
+    return ::imposs(str);
+
+  if (member_array (TP, pilzfound) == -1)
+  {
+    ob = clone_object(OBJ("div/eierschwammerl"));
+    if (ob->move(TP) == ME_TOO_HEAVY)
+    {
+      write (bs(
+        "Du findest ein herrlich gelb leuchtendes, frisch duftendes "+
+        "Eierschwammerl. Leider kannst Du es nicht mehr tragen. Du "+
+        "versteckst es daher wieder sorgfaeltig unter dem dichten Moos, "+
+        "in dem Du es entdeckt hast, um es spaeter wieder abzuholen.\n"));
+      ob->remove();
+    }
+    else
+    {
+      write (bs("Du findest einen herrlich gelb leuchtendes, frisch "
+          "duftendes Eierschwammerl und steckst es sogleich ein.\n"));
+      say (TP->Name()+" scheint etwas gefunden zu haben.\n", TP);
+      pilzfound += ({ TP });
+    }
+  }
+  else
+  {
+    write (bs(
+      "Du drueckst das Moos sanft zur Seite und siehst eine Stelle, "+
+      "an der vor kurzem jemand etwas gefunden und mitgenommen "+
+      "haben muss. Vielleicht warst es ja Du selber?\n"));
+  }
+  return 1;
+}
+
+void reset()
+{
+  pilzfound = ({ });
+  trink = ({ });
+  ::reset();
+}
+
+int ruhe(string str)
+{
+  if (!stringp(str) || str=="")
+    write("Einfach nur ruhen? In Frieden oder wie? ;)\n");
+  else if (str=="in frieden")
+    write("Deine Selbstmordgelueste in allen Ehren, "
+          "aber so einfach gehts auch nicht ;)\n");
+  else if (str=="aus")
+    write("Hmmja, aber was TUST Du wohl am besten, um Dich auszuruhen?\n");
+  else
+    write("Hae? WIE willst Du Dich ausruhen?!?\n");
+  return 1;
+}
+
+int trink(string str)
+{
+  if (!stringp(str) || str=="")
+    return notify_fail ("WAS willst Du trinken?\n"), 0;
+
+  if ((str!="wasser") && (str!="aus bach") && (str!="aus baechlein"))
+    return notify_fail ("Das kannst Du nicht trinken.\n"), 0;
+
+  // Kann der Spieler noch?
+  if (TP->drink_soft(1))
+  {
+    if (member_array (TP, trink) == -1)
+    {
+      write(bs("Du nimmst einen Schluck reinsten Wassers aus dem Bach und "
+        "fuehlst Dich auf einmal viel besser."));
+      say(bs(TPN+" nimmt einen Schluck reinsten Wassers aus dem Bach und "
+        "macht gleich einen gestaerkten Eindruck."));
+      TP->heal_self(HEAL);
+      trink += ({ TP });
+    }
+    else
+      write ("Du trinkst ein wenig von dem klaren Wasser aus dem Bach.\n");
+  }
+  return 1;
+}

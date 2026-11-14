@@ -1,0 +1,240 @@
+//=========================================================================
+//
+// File:    milchkanne.c
+// Created by Ronja@SL
+//
+// Project: kaeseladen
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+
+#define LEER 0
+#define KUHMILCH 1
+#define SCHAFSMILCH 2
+#define ZIEGENMILCH 3
+#define MILCH ({"Kuhmilch","Schafsmilch","Ziegenmilch"})
+
+int kanne;
+
+create()
+{
+  if (!is_clone(TO))return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Eine Milchkanne");
+
+  SetProp(P_NAME, "Milchkanne");
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({"kanne","milchkanne","\nKAESEMILCHKANNE"}) );
+  SetProp(P_INFO,
+      "Du kannst die Milch auch in kleine Portionen aufteilen, wie Du sie "
+      "zum Kochen brauchst.");
+
+  SetProp(P_MATERIAL, ([MAT_TIN:100]) );
+  SetProp(P_WEIGHT, 400);
+  SetProp(P_VALUE, 20);
+  SetProp(P_NOBUY, 1);
+
+  kanne = LEER;
+
+  AddCmd( ({"trink","trinke"}),           "cmd_trinken");
+  AddCmd( ({"leer","leere","entleere"}) , "cmd_leeren");
+  AddCmd( ({"teile", "teil"}), "cmd_teilen");
+}
+
+int move(mixed dest, int method)
+{
+  if((kanne != LEER) &&
+     (dest->id("beutel") ||
+      dest->id("sack") ||
+      dest->id("rucksack") ||
+      dest->id("ruessel") ))
+  {
+    tell_object(TP,"Dann wuerdest Du die ganze Milch verschuetten. ");
+    return ME_CANT_BE_INSERTED;
+  }
+
+  return ::move(dest,method);
+}
+
+void SetStat(int i)
+{
+  kanne = i;
+}
+
+int QueryStat()
+{
+  return kanne;
+}
+
+string _query_long()
+{
+  string s;
+
+  s = "Mit dieser Milchkanne kannst Du die Milch auffangen, wenn Du Tiere "
+      "melkst. ";
+
+  switch(kanne)
+  {
+    case 0 :
+      s += "Sie ist in Moment leer.";
+      break;
+
+    case 1 :
+      s += "Sie ist im Moment mit leckerer Kuhmilch gefuellt. ";
+      break;
+
+    case 2 :
+      s += "Sie ist im Moment mit leckerer Schafsmilch gefuellt. ";
+      break;
+
+    case 3 :
+      s += "Sie ist im Moment mit leckerer Ziegenmilch gefuellt. ";
+      break;
+
+    default:
+      s += "Sie ist im Moment mit lauter Bugs gefuellt. ";
+      break;
+  }
+
+  return BS(s);
+}
+
+int cmd_trinken(string str)
+{
+  string was,woraus;
+  int syntaxok;
+  int n;
+
+  syntaxok = 0;
+
+  notify_fail("Was moechtest Du woraus trinken?\n");
+
+  if(!str || str == "") return 0;
+
+  if(str == "milch"       ||
+     str == "kuhmilch"    ||
+     str == "ziegenmilch" ||
+     str == "schafsmilch"  )
+  {
+    was     = str;
+    woraus  = "kanne";
+  }
+  else
+  {
+    if(sscanf(str,"%s aus %s",was,woraus) != 2) return 0;
+  }
+
+//DB(sprintf("%s / %s / %s",str,was,woraus));
+
+  if(!(was == "milch"       ||
+       was == "ziegenmilch" ||
+       was == "kuhmilch"    ||
+       was == "schafsmilch" )) return 0;
+
+  if(!(woraus == "kanne"       ||
+       woraus == "milchkanne"  )) return 0;
+
+  if(kanne == LEER)
+  {
+    TELLPLAYER("Deine Milchkanne ist doch leer.\n");
+    TELLOTHERS(CAP(TPN)+" glotzt daemlich in eine Milchkanne hinein.\n");
+    return 1;
+  }
+
+  if(was == "kuhmilch" && kanne != KUHMILCH)
+  {
+    TELLPLAYER("Es befindet sich keine Kuhmilch in der Milchkanne.\n");
+    return 1;
+  }
+
+  if(was == "ziegenmilch" && kanne !=ZIEGENMILCH)
+  {
+    TELLPLAYER("Es befindet sich keine Ziegenmilch in der Milchkanne.\n");
+    return 1;
+  }
+
+  if(was == "schafsmilch" && kanne !=SCHAFSMILCH)
+  {
+    TELLPLAYER("Es befindet sich keine Schafsmilch in der Milchkanne.\n");
+    return 1;
+  }
+
+  if(TP->QueryProp(P_DRINK)+15 > TP->QueryProp(P_MAX_DRINK))
+  {
+    TELLPLAYER("Soviel kannst Du beim besten Willen nicht mehr trinken...\n");
+    return 1;
+  }
+
+  TP->AddHp(3);
+  TP->AddSp(2);
+  TP->SetProp(P_DRINK,TP->QueryProp(P_DRINK)+15);
+  TELLPLAYER("Hmmm, das war lecker.\n");
+  kanne = LEER;
+
+  return 1;
+}
+
+int cmd_leeren(string str)
+{
+  notify_fail("Was moechtest Du leeren?\n");
+
+  if(!str || str == "") return 0;
+  if(!(str == "kanne"         ||
+       str == "milchkanne"    ||
+       str == "kanne aus"     ||
+       str == "milchkanne aus")) return 0;
+
+  if(kanne == LEER)
+  {
+    TELLPLAYER("Die Milchkanne ist doch leer!\n");
+    TELLOTHERS(CAP(TPN)+" starrt gedankenverloren in "+TPPP(TO,WER)+" Milchkanne.");
+    return 1;
+  }
+
+  TELLPLAYER("Du kippst die leckere "+MILCH[kanne]+" einfach weg.\n");
+  TELLOTHERS(CAP(TPN)+" kippt "+MILCH[kanne]+" einfach weg.\n");
+  kanne = LEER;
+  return 1;
+}
+
+int cmd_teilen(string str)
+{
+  object ob;
+  int i;
+
+  notify_fail("Willst Du die Milch in Portionen aufteilen?\n");
+
+  if (str != "milch in portionen auf")
+    return 0;
+  if (kanne == LEER)
+  {
+    TELLPLAYER("Die Milchkanne ist doch leer!\n");
+    TELLOTHERS(CAP(TPN)+" starrt gedankenverloren in "+TPPP(TO,WER)+" Milchkanne.");
+    return 1;
+  }
+
+  TELLPLAYER("Du teilst die "+MILCH[kanne]+" in kleine Portionen auf.\n");
+  TELLOTHERS(CAP(TPN)+" teilt die "+MILCH[kanne]+" in kleine Portionen auf.\n");
+  kanne = LEER;
+  for (i = 0; i < 4; i++)
+  {
+    ob = clone_object("/p/std/skills/baking/obj/milk");
+    if (ob->move(TP, M_GET) < 0)
+    {
+      write("Da Du die Milch nicht mehr tragen kannst, laesst Du sie auf den "
+          "Boden fallen.\n");
+      ob->move(ENV(TP));
+    }
+  }
+  return 1;
+}
+

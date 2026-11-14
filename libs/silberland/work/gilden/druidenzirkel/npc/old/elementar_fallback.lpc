@@ -1,0 +1,1217 @@
+/* 
+// /gilden/druidenzirkel/npcs/elementar.c   
+//
+// Standardelementar
+// 18.01.1998
+// Angrox@Silberland
+//
+// Updates: 
+            09.11.1998   ELEMENT_CASTER & _OWNER sind objects   
+                         Funktionen auf aktuellen Stand gebracht
+                         StartReaction
+            10.11.1998   Luftelementar Dienste
+            11.11.1998   Luftelementar Dienste
+            12.11.1998   Luft/Erzelementardienste
+            13.11.1998 - 16.11.1998  Elementardienste
+            21.03.1999 - Bugfix: Nicht beherrschte Elementare verschwinden 
+                         im Kampf
+            12.07.1999 - Beschraenkung der Dienste
+ */
+#pragma strong_types;
+
+inherit "std/npc";
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <wizlevels.h>
+#include <armour.h>
+#include <moving.h>
+#include <class.h>
+#include <new_skills.h>
+#include "/gilden/druidenzirkel/druiden.h"
+
+nosave int CheckPursuers();
+nosave int zeit=0;
+nosave int can_act=1;
+nosave int setremove=0;
+nosave int fehler=0;
+nosave string element;
+nosave int *e_dam_type;
+
+
+void create() {
+  if (!is_clone(TO)) return;
+  ::create();
+  element="Neutral";
+  e_dam_type=({DT_BLUDGEON});
+  SetProp(P_SHORT, "Elementar");
+  SetProp(P_NAME, "Elementar");
+  SetProp(P_GENDER, NEUTER);
+  AddId(({"elementar", DRUIDENELEMENTAR}));
+  create_default_npc(1);
+
+  SetProp(P_HANDS, ({" mit elementarer Macht",100,DT_MAGIC}));
+  SetProp(P_RACE, "Elementar");
+  SetProp(P_XP, 0);
+  SetProp(P_SIZE, 200);
+  SetProp(P_ALIGN, 0);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_HEAL,0);
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:-100,T_RANGE_MAX:100]));
+  SetProp(P_AGGRESSIVE,0);
+  SetProp(P_WIMPY, 0);
+   // Verwundbarkeiten und Resistenzen
+  SetProp(P_RESISTANCE_STRENGTHS, ([ 
+    DT_SLASH      :0,        DT_BLUDGEON   :0,        DT_PIERCE     :0,
+    DT_SQUEEZE    :0,        DT_WHIP       :0,        DT_RIP        :0,
+    DT_FIRE       :0,        DT_COLD       :0,        DT_WATER      :0,    
+    DT_AIR        :0,        DT_LIGHTNING  :0,        DT_EXPLOSION  :0, 
+    DT_SOUND      :-0.5,     DT_LIGHT      :-0.5,     DT_ELECTRIC   :0,    
+    DT_ACID       :-0.5,     DT_POISON     :0,        DT_TERROR     :-0.5,   
+    DT_HOLY       :-0.5,     DT_UNHOLY     :-0.5,     DT_MAGIC      :0,
+    DT_MIND       :-0.5,     DT_STONE       :0]) );
+  SetProp(P_NOMAGIC,10);
+  SetProp(P_MSGIN, "kommt an");
+  SetProp(P_MMSGIN, "stapft");
+  SetProp(P_MMSGOUT, "stapft"); 
+  SetProp(P_DIE_MSG,  " verschwindet.\n");
+  SetProp(P_NOCORPSE,1);
+  SetProp(P_KILL_NAME, "Ein Elementar");
+  SetProp(P_KILL_MSG, "Mein Meister wollte Deinen Tod!");
+  AddInfo(DEFAULT_INFO, "reagiert nicht auf Dich.\n");
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    "Das Elementar ignoriert Dich.\n" }) );
+  SetProp(E_REMOVE_MSG, "Das Elementar verschwindet.\n");
+}
+
+//Fuer das filter_array in catch_tell:
+int is_elemental(object ob) {
+  if(ob->id(DRUIDENELEMENTAR))
+    return 1; 
+  return 0;
+}
+
+init() {
+  object owner;
+  ::init();
+  // Feuerelementar soll im Wasser verdampfen
+  if(lower_case(element)=="feuer" && ( 
+      ENV(ME)->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN]==TT_UNDERWATER ||
+      ENV(ME)->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN]==TT_WATER))
+  {
+    call_out("waterdeath", 0);
+    return ;
+  }
+  if(ENV(ME)&& !QueryProp(ELEMENTAL_OWNER) &&
+        sizeof(filter_array(all_inventory(ENV(ME)),#'is_elemental))>10) 
+  {
+    call_out("remove", 2);
+    return;
+  }
+    
+  if(member(users(), QueryProp(ELEMENTAL_CASTER))==-1) {
+    ME->remove();
+    return;
+  }
+  if(objectp(QueryProp(ELEMENTAL_OWNER))) {
+     if(!living(owner=QueryProp(ELEMENTAL_OWNER))) {
+       ME->remove();
+       return;
+     }
+     if(objectp(owner))
+       owner->AddDefender(TO);
+  }
+  
+  return;
+}
+
+void reset() {
+  ::reset();
+  ME->remove();
+}
+
+int remove() {
+  object owner;
+  if(objectp(QueryProp(ELEMENTAL_OWNER)))
+    if(living(owner=QueryProp(ELEMENTAL_OWNER))) {
+      owner->RemovePursuer(ME);
+      tell_room(MENV, BS(QueryProp(E_REMOVE_MSG)));
+    }
+  while(remove_call_out("remove")!=-1);
+  return ::remove();
+}
+
+
+nosave void waterdeath() {
+  SetProp(E_REMOVE_MSG, "Das Feuerelementar verdampft mit "
+      "Schmerzgebruell.\n");
+  ME->remove();
+}
+
+
+int PreventFollow(object dest) {
+  object owner;
+  if(objectp(QueryProp(ELEMENTAL_OWNER))) {
+    owner=find_living(getuid(QueryProp(ELEMENTAL_OWNER)));
+    if(!owner || owner->QueryProp(P_GHOST)) {
+      call_out("remove", 0);
+      return 1;
+    }
+  }
+  return 0;
+}
+
+void set_time(int x) {
+  zeit=x;
+}
+
+void set_fehler() {
+  fehler=1;
+}
+
+int set_element(string str) {
+  mapping res;
+  res=QueryProp(P_RESISTANCE_STRENGTHS);
+  element=lower_case(str);
+  switch (lower_case(str)) {
+    case "feuer": 
+      e_dam_type=({DT_FIRE});
+      SetProp(P_RESISTANCE_STRENGTHS, res+([DT_FIRE:-1, DT_WATER:3, 
+                                            DT_COLD:1]));
+      AddInfo(({"dienst", "dienste"}), "@@feuer_info@@", "sagt: "); 
+      SetProp(P_MSGOUT, "brennt sich seinen Weg");
+      SetProp(P_MMSGOUT, "verschwindet in einer Flammensaeule");
+      SetProp(P_MMSGIN, "materialisiert sich in einer Flammensaeule");
+      break;
+      
+    case "wasser": 
+      e_dam_type=({DT_WATER});
+      SetProp(P_RESISTANCE_STRENGTHS, res+([DT_WATER:-1, DT_FIRE:3]));
+      AddInfo(({"dienst", "dienste"}), "@@wasser_info@@","sagt: "); 
+      SetProp(P_MSGOUT, "fliesst");
+      SetProp(P_MMSGOUT, "versickert im Erdboden");
+      SetProp(P_MMSGIN, "entsteht aus der Luftfeuchtigkeit");
+      break;
+      
+    case "eis": 
+      e_dam_type=({DT_COLD});
+      SetProp(P_RESISTANCE_STRENGTHS, res+([DT_COLD:-1, DT_FIRE:1, 
+                                            DT_POISON:3]));
+      AddInfo(({"dienst", "dienste"}), "@@eis_info@@","sagt :");
+      SetProp(P_MSGOUT, "verbreitet seine Kaelte");
+      SetProp(P_MMSGOUT, "verschwindet in eisiger Kaelte");
+      SetProp(P_MMSGIN, "materialisiert sich aus der Kaelte");
+      break;
+    
+    case "erz": 
+      e_dam_type=({DT_STONE});
+      SetProp(P_RESISTANCE_STRENGTHS, res+([DT_SLASH:-0.9, DT_BLUDGEON:-0.9,
+            DT_PIERCE:-0.9, DT_SQUEEZE:-0.9,DT_WHIP:-0.9,DT_RIP:-0.9, 
+            DT_STONE:-0.9,DT_AIR:3]));
+      AddInfo(({"dienst", "dienste"}), "@@erz_info@@","sagt: ");
+      SetProp(P_MSGOUT, "stapft schweren Schrittes");
+      SetProp(P_MMSGOUT, "verschwindet im Erdboden");
+      SetProp(P_MMSGIN, "entsteigt der Erde");
+      break;
+    
+    case "luft": 
+      e_dam_type=({DT_AIR});
+      SetProp(P_RESISTANCE_STRENGTHS, res+([DT_SLASH:2, DT_BLUDGEON:2
+          ,DT_PIERCE:2, DT_SQUEEZE:2,DT_WHIP:2,DT_RIP:2, DT_STONE:2, 
+          DT_AIR:-1]));
+      AddInfo(({"dienst", "dienste"}), "@@luft_info@@","sagt: ");
+      SetProp(P_MSGOUT, "weht");
+      SetProp(P_MMSGOUT, "fliegt weg");
+      SetProp(P_MMSGIN, "fliegt mit Sturmgebruell herein");
+      break;
+  }
+  return 1;
+  set_next_reset(15+random(20));
+}
+
+/* Ausgabe der Frage nach Dienst */
+nosave string luft_info() {
+  //if(!IS_WIZARD(TP)) return "Das geht Dich nichts an!";
+  if(TP!=QueryProp(ELEMENTAL_OWNER))
+    return "Du bist nicht mein Meister!";
+  if(TP->QueryProp(P_GUILD)!="druidenzirkel")
+    return "Meine Dienste biete ich nur Druiden an.";
+  return sprintf("Diese Dienste kann ich Dir anbieten, Meister: "
+      "Ich kann Deine Magie auffrischen (sag luftelementar frische "
+      "meine magie auf), ich kann Gegenstaende zu anderen Spielern "
+      "bringen (sag luftelementar bringe <spieler> <gegenstand> - "
+      "%d MP fuer Sender (+ Gewichtszuschlag) und Empfaenger) und ich kann Dich im ganzen "
+      "SilberLand umherfliegen (sag luftelementar fliege mich nach "
+      "<ziel> - %d MP + Gewichtszuschlag, 1 Magiestein). Die Wegpunkte, zu denen ich Dich fliegen "
+      "kann, musst Du allerdings selbst herausfinden.", LUFT_BRINGEN,
+      LUFT_FLIEGEN);
+}
+
+nosave string erz_info() {
+  //if(!IS_WIZARD(TP)) return "Das geht Dich nichts an!";
+  if(TP!=QueryProp(ELEMENTAL_OWNER))
+    return "Du bist nicht mein Meister!";
+  if(TP->QueryProp(P_GUILD)!="druidenzirkel")
+    return "Meine Dienste biete ich nur Druiden an.";
+  return sprintf( 
+        "All das kann ich Dir bieten, Meister: Ich kann mich in Edelsteine "
+        "verwandeln (sag erzelementar verwandle dich in edelsteine - %d MP) "
+        
+        "<material> - %d MP), ich kann einen Teil Deiner getragenen "
+        " Ausruestung reparieren (sag erzelementar reapriere ausruestung - "
+        "%d MP) und Dich vor physischen Schaeden schuetzen (sag erz"
+        "elementar schuetze mich - %d MP).",ERZ_EDELSTEIN, ERZ_MATERIE,
+        ERZ_REPARIEREN,ERZ_SCHUTZ);
+}
+
+nosave string feuer_info() {
+  //if(!IS_WIZARD(TP)) return "Das geht Dich nichts an!";
+  if(TP!=QueryProp(ELEMENTAL_OWNER))
+    return "Du bist nicht mein Meister!";
+  if(TP->QueryProp(P_GUILD)!="druidenzirkel")
+    return "Meine Dienste biete ich nur Druiden an.";
+  return sprintf( 
+        "Folgende Dienste kann ich Euch anbieten, Meister: Hitzeschutz "
+        "(sag feuerelementar schuetze mich vor hitze - %d MP), ich kann "
+        "einen Eurer Mitstreiter enthaaren (sag feuerelementar enthaare "
+        "<name> - %d MP), und ich kann "
+        "die Temperatur des Raumes temporaer erhoehen (sag feuerelementar "
+        "erhoehe temperatur - %d MP).", FEUER_SCHUTZ, FEUER_ENTHAARE,
+        FEUER_TEMP);
+}
+
+nosave string eis_info() {
+  //if(!IS_WIZARD(TP)) return "Das geht Dich nichts an!";
+  if(TP!=QueryProp(ELEMENTAL_OWNER))
+    return "Du bist nicht mein Meister!";
+  if(TP->QueryProp(P_GUILD)!="druidenzirkel")
+    return "Meine Dienste biete ich nur Druiden an.";
+  return sprintf( 
+        "Meister, diese Dienste kann ich Dir anbieten: Kaelteschutz "
+        "(sag eiselementar schuetze mich vor kaelte - %d MP) und ich "
+        "kann die Temperatur in einem Raum temporaer senken (sag "
+        "eiselementar senke temperatur - %d MP).", EIS_SCHUTZ,
+        EIS_TEMP);
+}
+
+nosave string wasser_info() {
+  //if(!IS_WIZARD(TP)) return "Das geht Dich nichts an!";
+  if(TP!=QueryProp(ELEMENTAL_OWNER))
+    return "Du bist nicht mein Meister!";
+  if(TP->QueryProp(P_GUILD)!="druidenzirkel")
+    return "Meine Dienste biete ich nur Druiden an.";
+  return sprintf( 
+        "Meister, diese Dienste kann ich Dir anbieten: Alle Lebenspunkte "
+        "heilen (sag wasserelementar heile mich), unter Wasser atmen (sag "
+        "wasserelementar lass mich unter wasser atmen - %d MP) und ich kann "
+        "Deinen Durst stillen (sag wasserelementar stille meinen durst - "
+        "%d MP), Meister!", WASSER_ATMEN, WASSER_DURST);
+}
+
+
+string QueryElement() {
+ return lower_case(element);
+}
+
+
+nosave int CheckPursuers() {
+  object owner;
+  int i;
+  mixed purs;
+  if(!objectp(owner=QueryProp(ELEMENTAL_OWNER))) return 1;
+  purs=owner->QueryPursuers();
+  for(i=sizeof(purs)-1;i>=0;i--) {
+    if(strstr(file_name(purs[i]), explode(file_name(ME), "#")[0])!=-1) {
+      tdm(sprintf("%O hat mehrere Elementare!\n%O\n\n",
+          QueryProp(ELEMENTAL_OWNER), purs));
+      return 0;
+    }
+  }
+  return 1;
+}
+
+
+InformDefend(object enemy) {
+  ::InformDefend();
+  if(fehler||(member(({"erz", "wasser", "luft"}), lower_case(element))!=-1))
+     return;
+  ME->Kill(enemy);
+  if(!setremove) {
+    call_out("AttackStopAndRemove", (int)zeit);
+    SetProp("has_attacked", 1);
+    setremove=1;
+  }
+}
+
+AttackStopAndRemove() {
+  if(objectp(QueryProp(ELEMENTAL_OWNER)))
+    SetProp(E_REMOVE_MSG, BS(sprintf("Das %selementar von %s loest sich "
+     +"nach erfuelltem Dienst auf.\n", CAP(element),
+       QueryProp(ELEMENTAL_OWNER)->name(WER))));
+  ME->remove();
+}
+
+
+BecomesNetDead(object wer) {
+  if (wer==QueryProp(ELEMENTAL_OWNER)) 
+    ME->remove();
+}
+
+
+DefendOther(int dam, mixed dam_type, mixed spell, object enemy) {
+ mixed res;
+ object owner; 
+ 
+ if(!objectp(QueryProp(ELEMENTAL_OWNER)) || !MENV) 
+   return ({dam,dam_type,spell,enemy});
+ owner=QueryProp(ELEMENTAL_OWNER);
+ if(fehler || lower_case(element)=="eis" || lower_case(element)=="feuer" ||
+     !owner || owner->QueryProp(P_ALIGN)>800 || owner->QueryProp(P_ALIGN)<-800)
+   return ({dam, dam_type, spell, enemy});
+   
+ if(member(PresentEnemies(), owner)!=-1) {
+   owner->SetProp(P_DEFENDERS, owner->QueryProp(P_DEFENDERS)-({ME}));
+   set_fehler();
+   return ({dam, dam_type, spell, enemy});
+ }
+ if(!random(4)) { 
+   if(member_array(dam_type, e_dam_type)!=-1) {
+     tell_room(MENV, BS(sprintf("Das %selementar wehrt eine Attacke "
+         "fuer %s ab!\n",CAP(element), CAP(getuid(owner)))), ({owner}));
+     tell_object(owner, BS(sprintf("Dein %selementar wehrt eine "
+         "Attacke fuer Dich ab!\n", CAP(element))));
+     dam=dam/2;
+   } 
+   else {
+     tell_object(owner, sprintf("Dein %selementar schwaecht "
+		   +"die Attacke ab!\n", CAP(element)));
+     tell_room(ENV(ME), BS(sprintf("Das %selementar schwaecht eine "
+           +"Attacke fuer %s ab.",CAP(element), CAP(getuid(owner)))),
+         ({owner})); 
+     dam=2*dam/3;
+   }
+   SetProp(ELEMENTAL_DEFENDS, QueryProp(ELEMENTAL_DEFENDS)-1);
+ }
+ if(QueryProp(ELEMENTAL_DEFENDS) < 1) 
+   ME->remove(); 
+ res=({dam, dam_type, spell, enemy});
+ return res;
+}
+
+void Attack(object enemy) {
+  // Nu haun herrenlose Elementare zurueck auf spieler 
+  // Es haut jedoch nicht auf NPCs zurueck (raumspells)
+  // Nebeneffekt: Scripter sterben uU daran <iwo>
+  if(!objectp(QueryProp(ELEMENTAL_OWNER)) && !query_once_interactive(enemy))
+  {
+    ME->remove();
+    return;
+  }
+  if((member(({"feuer","eis"}), lower_case(element))==-1)
+     && !query_once_interactive(enemy))
+  {
+    enemy->SetProp(P_XP, 0);
+  }
+  ::Attack(enemy);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp) {
+  if(fehler)
+    ME->remove();
+  return;
+}
+
+void catch_tell(string str) {
+  string sayer, elemental, new_owner, action, helpvar, helpvar2;
+  object owner, caster, amulett;
+  owner=QueryProp(ELEMENTAL_OWNER);
+  caster=QueryProp(ELEMENTAL_CASTER);
+  if(!can_act) return;
+  
+  if(sscanf(str, "%s sagt: %s gehorche %s\n", sayer, elemental, 
+      new_owner)==3)
+  { 
+    if(!objectp(owner) || TP!=owner) { 
+      command_me("sag Du bist nicht mein Meister, Du Wurm!");
+      return;
+    }
+    if(member(QueryProp(P_IDS), lower_case(elemental))==-1) 
+      return;
+    call_out("element_change", 1,new_owner,owner,caster);
+  }
+  
+  if(sscanf(str, "%s sagt: %s %s\n", sayer, elemental, action)!=3)
+    return;
+  
+  if(member(QueryProp(P_IDS), lower_case(elemental))==-1) 
+    return;
+  
+  if(!objectp(owner) || TP!=owner) {
+    command_me("sag Du bist nicht mein Meister! Verschwinde, "
+        "Du Wurm!");
+    return;
+  }
+  
+  // 1407 1999 -> testweise ausgebaut -> 1999-12-13 wieder rein
+  // Massive Abwertung - schadet aber sicher nicht im SL <iwo>
+  if( InFight(owner) ) {
+    command_me("sag Ich helfe Euch lieber vorher im Kampf, Meister!");
+    return;
+  }
+  
+  if(TP->QueryProp(P_GUILD)!="druidenzirkel") {
+    command_me("sag Es tut mir leid, Meister. Nur Druiden biete "
+        "ich meine anderen Dienste an!");
+    return;
+  }
+  if(TP->QueryProp(P_ALIGN)<-500) {
+    command_me("sag Meister, Du bist zu boese. Dem Boesen diene ich nicht.");
+    return; 
+  }
+  if(TP->QueryProp(E_AGGRESSIVE)) {
+    command_me("sag Ich diene keinem Feind der Elemente!");
+    // TP->SetProp(E_AGGRESSIVE, 0);
+    ME->remove();
+    return; 
+  }
+  if(TP->QueryProp(P_ALIGN)>500) {
+    command_me("sag Meister, Du bist zu gut. Ich erfuelle nur Neutralen "
+        "Wuensche.");
+    return; 
+  }
+  if(((amulett=present(DRUIDENAMULETT,TP))->QueryService(element))<1) {
+       command_me("sag Meister, Du musst warten, bis ich Dir Deinen Wunsch "
+          "erfuellen kann!");
+       return; 
+  }
+  amulett->ChangeService(element,-1); 
+
+  //if(!IS_WIZARD(TP)) return;
+  if(elemental=="luftelementar") {
+    if(lower_case(action)=="frische meine magie auf")
+      call_out("luft_magie", 0);
+    if(sscanf(action, "fliege mich nach %s", helpvar)==1)
+      call_out("luft_fliegen", 0, helpvar);
+    if(sscanf(action, "bringe %s %s", helpvar, helpvar2)==2)
+      call_out("luft_bringen", 0, helpvar, helpvar2);
+  }
+  if(elemental=="erzelementar") {
+    if(lower_case(action)=="repariere ausruestung")
+      call_out("erz_repariere", 0);
+    if(sscanf(action, "verwandle dich in %s", helpvar)==1)
+      call_out("erz_verwandle", 0, helpvar);
+    if(lower_case(action)=="schuetze mich")
+      call_out("erz_schutz", 0);
+  }
+  if(elemental=="wasserelementar") {
+    if(lower_case(action)=="heile mich")
+      call_out("wasser_heilen");
+    if(lower_case(action)=="stille meinen durst") 
+      call_out("wasser_durst");
+    if(lower_case(action)=="lass mich unter wasser atmen")
+      call_out("wasser_atmen");
+  }
+  if(elemental=="eiselementar") {
+    if(lower_case(action)=="senke temperatur")
+      call_out("eis_temp");
+    if(lower_case(action)=="schuetze mich vor kaelte") 
+      call_out("eis_schutz");
+  }
+  if(elemental=="feuerelementar") {
+    if(lower_case(action)=="erhoehe temperatur")
+      call_out("feuer_temp");
+    if(lower_case(action)=="schuetze mich vor hitze") 
+      call_out("feuer_schutz");
+    if(sscanf(action, "enthaare %s", helpvar)==1) {
+      call_out("feuer_enthaare", 0, helpvar);
+    }
+  }
+  return;
+}
+
+// Luftelementar
+nosave int luft_magie() {
+  command_me("sag Sehr wohl, Meister. Euer Wunsch ist mein Befehl!");
+  tell_room(MENV, BS(sprintf("Das Luftelementar beginnt sich um %s zu "
+      "drehen, bis es schliesslich vor Deinen Augen verschwimmt. %s "
+      "scheint nun maechtiger zu sein!", TP->name(WEN), TP->Name(WER))),
+      ({TP}));
+  tell_object(TP, BS("Das Luftelementar beginnt sich immer schneller "
+      "um Dich zu drehen, bis es schliesslich vor Deinen Augen "
+      "verschwimmt. Du fuehlst ploetzlich maechtige Magie durch Dich "
+      "fliessen."));
+  TP->SetProp(P_SP, TP->QueryProp(P_MAX_SP));
+  TP->AddHP(-random(10));
+  ME->remove();
+}
+
+nosave int luft_bringen(string target, string item) {
+  object pl, it;
+  int kosten;
+  
+  pl=find_player(lower_case(target));
+  if(!pl || pl->QueryProp(P_INVIS)) {
+    command_me(sprintf("sag Meister, ich denke ein Spieler namens %s "
+        "existiert nicht!", CAP(target)));
+    return 0;
+  }
+  if(IS_LEARNER(pl)) {
+    command_me("sag Einem Magier kann ich nichts bringen!");
+    return 0;
+  }
+  if(pointerp(pl->QueryProp(P_IGNORE)) && 
+        member(pl->QueryProp(P_IGNORE), "luftelementar.bringen")!=-1)
+  {
+    command_me(sprintf("sag Meister, %s moechte nichts geschickt bekommen.",
+          pl->name(WER)));
+    return 0;
+  }
+  if(member(({NO_TPORT_OUT, NO_TPORT}),MENV->QueryProp(P_NO_TPORT))!=-1 ||
+      MENV->QueryProp(P_NOMAGIC)) 
+  {
+    command_me("sag Meister, von hier aus kann ich nichts transportieren");
+    return 0;
+  }
+  if(ENV(pl) && 
+      member(({NO_TPORT_IN, NO_TPORT}), ENV(pl)->QueryProp(P_NO_TPORT))!=-1)
+  {
+    command_me("sag Meister, ich kann den Gegenstand nicht in diese "
+        "Gegend transportieren. Eine magische Macht haelt mich davon "
+        "ab!");
+    return 0;
+  }
+  if(!it=present(lower_case(item), TP)) {
+    command_me("sag Meister, Ihr habt nichts dergleichen!");
+    return 0;
+  }
+  // Kosten werden nun nach value und gewicht ermittelt.
+  kosten = (int) (LUFT_BRINGEN + 0.01 * it->QueryProp(P_TOTAL_WEIGHT));
+  
+  if(TP->QueryProp(P_SP)<(int)kosten) {
+    command_me("sag Meister, Ihr seid nicht maechtig genug!");
+    return 0;
+  }
+  if(it->QueryProp(P_AMOUNT)>1) {
+    command_me("sag Meister, ich transportiere nur einzelene "
+        "Gegenstaende!");
+    return 0;
+  }
+  if(it->QueryProp(P_AUTOLOADOBJ) || it->QueryProp(P_NODROP) ||
+      it->QueryProp(P_NEVERDROP) || it->QueryProp(P_CURSED))
+  {
+    command_me("sag Meister, diesen Gegenstand kann ich nicht "
+        "transportieren!");
+    return 0;
+  }
+  it->move(ME,M_NOCHECK);
+  TP->AddSp(-(int)kosten);
+  tell_object(TP, BS(sprintf("%s materialistert sich im Luftelementar.",
+      it->Name(WER))));
+  tell_room(MENV, BS(sprintf("Ploetzlich materialisiert sich %s im "
+      "Luftelementar.", it->name(WER))),({TP}));
+  call_out("GoVoid", 4, lower_case(target), lower_case(item));  
+}
+
+nosave int GoVoid(string target, string item) {
+  TP->RemovePursuer(ME);
+  //ME->RemovePursuers(TP);
+  tell_room(MENV, BS("Das Luftelementar fliegt weg."));
+  ME->move(DRUIDEN("room/himmel:elementar"), M_TPORT|M_SILENT);
+  call_out("GoTarget", random(10)+21, target, item);
+  return 1;
+}
+
+nosave int GoTarget(string target, string item) {
+  object pl;
+  if(!pl=find_player(target)) {
+    call_out("GoBack", 0, item);
+    return 0;
+  }
+  ME->move(ENV(pl), M_GO);
+  command_me(sprintf("sag Mein Meister %s schickt Euch dies hier, %s!",
+      TP->name(WER),pl->name(WER)));
+  command_me(sprintf("zeige %s %s", item, getuid(pl)));
+  command_me(sprintf("gib %s an %s", item, getuid(pl)));
+  //command_me(
+  //TELL("angrox", sprintf("TP: %O\n", TP));
+  if(pl->QueryProp(P_SP)<LUFT_BRINGEN) {
+    command_me("sag Ihr habt zu wenig Magiepunkte! Aber ich nehme auch "
+        "Lebenspunkte!");
+    pl->AddHp(-LUFT_BRINGEN);
+  }
+  else 
+    pl->AddSp(-LUFT_BRINGEN);
+  call_out("GoBack", 2, item);
+  return 1;
+}
+
+nosave varargs int GoBack(mixed item) {
+  if(catch(ME->move(ENV(TP), M_TPORT))) {
+    ME->remove();
+    return 0;
+  }
+  if(!present(item, ME)) {
+    command_me("sag Meister, ich habe Euren Auftrag erfuellt!");
+    ME->remove();
+    return 1;
+  }
+  command_me("sag Meister, ich habe Euren Auftrag nicht erfuellen koennen!");
+  command_me(sprintf("gib %s an %s", item, getuid(TP)));
+  TP->AddPursuer(ME);
+  return 0;
+}
+
+
+nosave int luft_fliegen(string ziel) {
+  mapping ziele;
+  string destination;
+  object ob;
+  int kosten;
+
+  ziele=LUFT_ZIELE;
+  
+  if(!MENV) return 0;
+  if(MENV->QueryProp(P_INDOORS)) {
+    command_me("sag Meister! Ich kann Euch hier nicht befoerdern! Ich "
+        "kann Dich nur im freien Gelaende befoerdern!");
+    return 0;
+  }
+  if(member(({NO_TPORT_OUT, NO_TPORT}),MENV->QueryProp(P_NO_TPORT))!=-1 ||
+      MENV->QueryProp(P_NOMAGIC)) 
+  {
+    command_me("sag Meister, hier haelt mich eine magische Macht fest. Ich "
+        "kann Euch nicht transportieren.");
+    return 0;
+  }
+  
+  kosten = (int) (LUFT_FLIEGEN + 0.001 * TP->QueryProp(P_TOTAL_WEIGHT));
+  
+  if(TP->QueryProp(P_SP)< (int) kosten) {
+    command_me("sag Meister, Ihr seid nicht maechtig genug! Ich kann "
+        "Euch nirgends hinfliegen!");
+    return 0;
+  }
+  if(!ob=present("magiestein", TP)) {
+    command_me("sag Meister, Ihr habt keinen Magiestein bei Euch!");
+    return 0;
+  }
+  if(!member(ziele,ziel)) {
+    command_me("sag Meister, dorthin kann ich Euch nicht bringen!");
+    return 0;
+  }
+  TP->SetProp("destination",ziele[ziel][random(sizeof(ziele[ziel]))]);
+  command_me("sag Meister, macht Euch bereit!"); 
+  can_act=0;
+  TP->AddSp(-(int)kosten);
+  ob->AddAmount(-1);
+  call_out("fly_away", 2);
+}
+
+nosave int fly_away() {
+  tell_room(MENV, BS(sprintf("Das Luftelementar schnappt %s und fliegt mit "
+      "%s davon.", TP->name(WEN), TP->QueryPronoun(WEM))), ({TP}));
+  TP->move(DRUIDEN("room/himmel:"+getuid(TP)), M_GO, 
+      "mit dem Luftelementar davon", "fliegt", "fliegt mit dem "
+      "Luftelementar davon");
+  SetProp(E_REMOVE_MSG, "");
+  ME->remove();
+  return 1;
+}
+
+/* Erzelementar  */
+nosave int erz_verwandle(string material) {
+  mixed mat;
+  string *members;
+  object ob;
+  
+  if(material=="edelsteine") {
+    if(TP->QueryProp(P_SP)<ERZ_EDELSTEIN) {
+      command_me("sag Meister! Ihr seid nicht maechtig genug!");
+      return 0;
+    }
+    command_me("sag Sehr wohl, Meister!");
+    "/obj/gemmaster"->DistributeGem(2,1,1,1);
+    SetProp(E_REMOVE_MSG,BS("Das Erzelementar beginnt sich zu verfluessigen. "
+        "Das fluessige Elementar verdichtet sich am Boden zu einer "
+        "strahlenden Masse, deren Lichtintensitaet alles, was Du "
+        "bisher gesehen hast, uebertrifft. Mit einem mal "
+        "erlischt das Licht, und am Boden liegen ein paar Edelsteine."));
+    TP->AddSp(-ERZ_EDELSTEIN);
+    ME->remove();
+    return 1;
+  }
+  if(!stringp(mat=MATERIALDB->String2Material(material))) {
+    command_me("sag Meister, solche Materie existiert nicht!");
+    return 0;
+  }
+  members=MATERIALDB->GetMatMembership(mat);
+  if(member(members, MATGROUP_METAL)==-1 &&
+      member(members, MATGROUP_MINERAL)==-1 &&
+      member(members, MATGROUP_JEWEL)==-1 &&
+      member(members, MATGROUP_STONE)==-1)
+  {
+     command_me(sprintf("sag Meister, in %s kann ich mich nicht "
+         "verwandeln!", CAP(material)));
+     return 0;
+  }
+  ob=clone_object(DRUIDEN("obj/thing"));
+  ob->SetProp(P_MATERIAL, ([mat:100]));
+  ob->SetProp(P_SHORT, sprintf("Ein Klumpen %s", CAP(material)));
+  ob->SetProp(P_GENDER, MALE);
+  ob->SetProp(P_WEIGHT, 1000);
+  ob->SetProp(P_MAGIC, 1);
+  ob->SetProp(P_LONG, sprintf(
+      "Das ist ein Klumpen aus reinem %s. Er muss wohl etwa ein "
+      "Kilogramm wiegen.", CAP(material)));
+  ob->SetProp(P_NOSELL, "Du willst den Klumpen gar nicht verkaufen!\n");
+  ob->SetProp(P_NAME, sprintf("Klumpen %s", CAP(material)));
+  ob->AddId(({material+"klumpen", "\n"+material, "klumpen", material}));
+  ob->move(ME, M_NOCHECK);
+  command_me("sag So soll es sein, Meister!");
+  SetProp(E_REMOVE_MSG,BS(sprintf(
+        "Das Erzelementar beginnt sich zu verfluessigen. "
+        "Das fluessige Elementar verdichtet sich am Boden zu einer "
+        "strahlenden Masse, deren Lichtintensitaet alles, was Du "
+        "bisher gesehen hast, uebertrifft. Mit einem mal "
+        "erlischt das Licht, und am Boden liegt ein Klumpen %s.", 
+        CAP(material))));
+  ME->remove();
+  return 1;
+}
+
+nosave int erz_repariere() {
+  object *items;
+  int i, dam;
+  string prop;
+  items=TP->QueryProp(P_ARMOURS);
+  if( TP->QueryProp(P_WEAPON) )  // Bugfix feyaria
+    items+=({TP->QueryProp(P_WEAPON)});
+  if(!sizeof(items)) {
+    command_me("sag Meister, Ihr habt weder eine Ruestung an, noch "
+        "eine Waffe gezueckt!");
+    return 0;
+  }
+  if(TP->QueryProp(P_SP)<ERZ_REPARIEREN) {
+    command_me("Meister, Du bist nicht maechtig genug!");
+    return 0;
+  }
+  command_me("sag Wie Ihr wuenscht, Meister");
+  TP->AddSp(-ERZ_REPARIEREN);
+  for(i=sizeof(items)-1;i>=0;i--) {
+    if(dam=items[i]->QueryProp(P_DAMAGED)/4) {
+      if(!items[i]->Query(prop, F_QUERY_METHOD)) {
+        items[i]->Damage(-dam);
+      }
+    }
+  }
+  tell_room(MENV, BS(sprintf("Das Erzelementar verwandelt sich in "
+      "fluessiges Metall und fliesst in die Ausruestung von %s. Diese "
+      "scheint sich von selbst zu reparieren!", TP->name(WEM))), ({TP}));
+  tell_object(TP, BS("Das Erzelementar verwandelt sich in fluessiges Metall "
+      "und scheint in Deine Ausruestung einzufliessen. Diese scheint sich "
+      "selbst zu reparieren."));
+  ME->remove();
+  return 1;
+}
+
+nosave int erz_schutz() {
+  object ob;
+  if(TP->Query(P_BODY,F_QUERY_METHOD)) {
+    command_me("sag Meister, Ihr habt schon einen Schutz!");
+    return 0;
+  }
+  if(TP->QueryProp(P_SP)<ERZ_SCHUTZ) {
+    command_me("Meister, Ihr seid nicht maechtig genug!");
+    return 0;
+  }
+  command_me("sag Wie Ihr wuenscht, Meister!");
+  tell_room(MENV,BS(sprintf("Das Erzlementar verfluessigt sich und "
+      "bildet einen Schutzpanzer um %s.",TP->name(WER))),({TP}));
+  tell_object(TP, BS("Dein Erzelementar verfluessigt sich und bildet "
+      "einen Schutzpanzer um Dich!"));
+  ob=clone_object(DRUIDEN("obj/schutz"));
+  ob->move(TP, M_NOCHECK);
+  ob->SetVariables(TP,10+random(QueryProp(P_LEVEL)/2+17),200+random(200), 
+      "erz");
+  TP->AddSp(-ERZ_SCHUTZ);
+  ME->remove();
+  return 1;
+}
+
+
+
+/* Wasserlementar */
+ //+dschungel/feyaria/kueste/obj/waterbreath
+nosave int wasser_heilen() {
+  command_me("sag Sehr wohl, Meister. Euer Wunsch ist mein Befehl!");
+  tell_room(MENV, BS(sprintf("Das Wasserelementar beginnt sich um %s zu "
+      "drehen, bis es schliesslich vor Deinen Augen verschwimmt. %s "
+      "Wunden sind verschwunden!", TP->name(WEN), TP->Name(WESSEN))),
+      ({TP}));
+  tell_object(TP, BS("Das Wasserelementar beginnt sich immer schneller "
+      "um Dich zu drehen, bis es schliesslich vor Deinen Augen "
+      "verschwimmt. Deine Wunden sind ploetzlich verschwunden.")); 
+  TP->SetProp(P_HP, TP->QueryProp(P_MAX_HP));
+  TP->AddSp(-random(5));
+  ME->remove();
+  return 1;
+}
+
+nosave int wasser_atmen() {
+  object ob;
+  if(TP->QueryProp(P_SP)<WASSER_ATMEN) {
+    command_me("sag Meister, Ihr seid nicht maechtig genug!");
+    return 0;
+  }
+  if(present("\nwaterbreath", TP)) {
+    command_me("sag Meister, Ihr koennt schon unter Wasser atmen.");
+    return 0;
+  }
+  if(stringp(catch(ob=clone_object("/d/dschungel/feyaria/kueste/obj/"
+      "waterbreath")))) 
+  {
+    command_me("sag Meister! Ich kann Euch nicht unter Wasser atmen lassen! "
+        "Wende Dich doch an einen der ehrwuerdigen Magier, sofern sie nicht "
+        "gerade wettideln!");
+    return 0;
+  }
+  ob->move(TP, M_NOCHECK);
+  ob->atmen((15+random(6))*60); // 15..20 mins
+  TP->AddSp(-WASSER_ATMEN);
+  command_me("sag Schon geschehen, Meister! Ihr koennt nun unter Wasser "
+      "atmen!");
+  ME->remove();
+  return 1;
+}
+
+nosave int wasser_durst() {
+  if(TP->QueryProp(P_SP)<WASSER_DURST) {
+    command_me("sag Meister, Ihr habt zuwenig Magie!");
+    return 0;
+  }
+  if(TP->QueryProp(P_DRINK)>=TP->QueryProp(P_MAX_DRINK)) {
+    command_me("sag Meister, Ihr habt bereits einen vollen "
+        "Fluessigkeitshaushalt.");
+    return 0;
+  }
+  command_me("sag Sehr wohl, Meister!");
+  tell_room(MENV, BS(sprintf("Das Wasserelementar von %s verfluessigt sich "
+      "und wird von %s Koerper absorbiert.", TP->name(WER), 
+      TP->QueryPossPronoun())));
+  tell_object(TP, BS("Dein Wasserelementar verfluessigt sich und wird "
+      "von Deinem Koerprt absorbiert."));
+  TP->AddSp(-WASSER_DURST);
+  TP->SetProp(P_DRINK, TP->QueryProp(P_MAX_DRINK));
+  ME->remove();   
+  return 1;
+}
+
+/* Eiselementar */
+nosave int eis_schutz() {
+  object ob;
+  mapping temp;
+  if(TP->QueryProp(P_SP)<EIS_SCHUTZ) {
+    command_me("sag Meister, Euch fehlt die Magie!");
+    return 0;
+  }
+  if(present("\ntempschutz", TP)) {
+    command_me("sag Meister, Ihr habt schon einen anderen Temperatur"
+        "schutz!");
+    return 0;
+  }
+  ob=clone_object(DRUIDEN("obj/tempschutz"));
+  ob->SetVariables(([T_COLD_PROT: (int)((QueryProp(P_LEVEL)/5)+
+                    TP->QueryProp(P_GUILD_LEVEL)/5), 
+                    T_HEAT_PROT:0]));
+  TP->AddSp(-EIS_SCHUTZ);
+  command_me("sag Ich werde Euch schuetzen, Meister!");
+  tell_room(MENV, BS(sprintf("Das Eiselementar bildet einen "
+      "eisblauen Schimmer, der %s umgibt.", TP->name(WER))), ({TP}));
+  tell_object(TP, "Das Eiselementar bildet einen eisblauen "
+      "Schimmer um Dich. Du bist nun gegen die Kaelte geschuetzt.");
+  ob->move(TP,M_NOCHECK);
+  ob->DoWear(1);
+  ME->remove();
+  return 1;
+}
+
+nosave int eis_temp() {
+  object ob;
+  mapping new_temp, help_temp;
+  new_temp=([]);
+  help_temp=([]);
+  if(!IS_ARCH(TP) && !member(DRUIDENMAGIER, TP)) {
+    command_me("sag Meister, ich kann im Moment die Temperatur nicht "
+      "veraendern!");
+    return 1;
+  }
+  if(TP->QueryProp(P_SP)<EIS_TEMP) {
+    command_me("sag Meister, Ihr habt zuwenig Magie!");
+    return 0;
+  }
+  if(!MENV) {
+    command_me("sag Meister, hier im Nichts gibt es keine Temperatur!");
+    return 0;
+  }
+  help_temp=MENV->QueryProp(P_ENVIRONMENT);
+  TELL("angrox", sprintf("%O\n",help_temp));
+  if(!member(help_temp, ENV_TEMPERATURE)) {
+    command_me("sag Meister, hier gibt es keine Temperatur!");
+    return 0;
+  }
+  if(MENV->Query(P_ENVIRONMENT, F_QUERY_METHOD) || present("\ntemp", MENV)) 
+  {
+    command_me("sag Meister, die Temperatur wurde hier schon veraendert!");
+    return 0;
+  }
+  new_temp=MENV->QueryProp(P_ENVIRONMENT);
+  TELL("angrox", sprintf("%d\n",new_temp[ENV_TEMPERATURE]));
+  new_temp[ENV_TEMPERATURE]=new_temp[ENV_TEMPERATURE]-(int)ME->QueryProp(P_LEVEL)/2;
+  TELL("angrox", sprintf("%d, old: %d\n",new_temp[ENV_TEMPERATURE], help_temp[ENV_TEMPERATURE]));
+  TP->AddSp(-EIS_TEMP);
+  tell_room(MENV, BS("Das Eiselementar verwandelt sich in eisige Kaelte "
+      "und senkt die Temperatur des Raumes rapide ab!"));
+  ob=clone_object(DRUIDEN("obj/temp"));
+  TELL("angrox", sprintf("----SetVariables\n%O\n%O\n-----\n", new_temp, help_temp));
+  ob->move(MENV, M_NOCHECK);
+  ob->SetVariables(new_temp, help_temp);
+  ME->remove();
+  return 1;
+}
+
+/* Feuerelementar */
+nosave int feuer_schutz() {
+  object ob;
+  if(TP->QueryProp(P_SP)<FEUER_SCHUTZ) {
+    command_me("sag Meister, Euch fehlt die Magie!");
+    return 0;
+  }
+  if(present("\ntempschutz", TP)) {
+    command_me("sag Meister, Ihr habt schon einen anderen Temperatur"
+        "schutz!");
+    return 0;
+  }
+  ob=clone_object(DRUIDEN("obj/tempschutz"));
+  ob->SetVariables(([T_HEAT_PROT: (int)QueryProp(P_LEVEL)/5, 
+                    T_COLD_PROT:0]));
+  TP->AddSp(-FEUER_SCHUTZ);
+  command_me("sag Ich werde Euch schuetzen, Meister!");
+  tell_room(MENV, BS(sprintf("Das Feuerelementar bildet eine "
+      "feurige Aura, die %s umgibt.", TP->name(WER))), ({TP}));
+  tell_object(TP, "Das Feuerelementar bildet eine feurige "
+      "Aura um Dich. Du bist nun gegen hohe Temperaturen geschuetzt.");
+  ob->move(TP,M_NOCHECK);
+  ob->DoWear(1);
+  ME->remove();
+  return 1;
+}
+
+nosave int feuer_temp() {
+  object ob;
+  mapping temp;
+  command_me("sag Meister, ich kann im Moment die Temperatur nicht "
+      "veraendern!");
+  return 1;
+  if(TP->QueryProp(P_SP)<FEUER_TEMP) {
+    command_me("sag Meister, Ihr habt zuwenig Magie!");
+    return 0;
+  }
+  if(!MENV) {
+    command_me("sag Meister, hier im Nichts gibt es keine Temperatur!");
+    return 0;
+  }
+  if(!member(MENV->QueryProp(P_ENVIRONMENT), ENV_TEMPERATURE)) {
+    command_me("sag Meister, hier gibt es keine Temperatur!");
+    return 0;
+  }
+  if(MENV->Query(P_ENVIRONMENT, F_QUERY_METHOD) || present("\ntemp", MENV)) 
+  {
+    command_me("sag Meister, die Temperatur wurde hier schon veraendert!");
+    return 0;
+  }
+  TP->AddSp(-FEUER_TEMP);
+  temp=MENV->QueryProp(P_ENVIRONMENT);
+  temp[ENV_TEMPERATURE]+=QueryProp(P_LEVEL)/2;
+  ob=clone_object(DRUIDEN("obj/temp"));
+  ob->move(MENV, M_NOCHECK);
+  ob->SetVariables(temp, MENV->QueryProp(P_ENVIRONMENT));
+  tell_room(MENV, BS("Das Feuerelementar verwandelt sich in feurige Hitze "
+      "und erhoeht die Temperatur des Raumes!"));
+  ME->remove();
+  return 1;
+}
+
+nosave int feuer_enthaare(string pl_name) {
+  object ob,pl;
+  mapping temp;
+  int wiz;
+  wiz=0;
+  if(TP->QueryProp(P_SP)<FEUER_ENTHAARE) {
+    command_me("sag Meister, Ihr habt zuwenig Magie!");
+    return 0;
+  }
+  if(!pl=find_player(lower_case(pl_name))) {
+    command_me(sprintf("sag Meister, %s ist nicht anwesend!", CAP(pl_name)));
+    return 0;
+  }
+  if((ENV(pl) != ENV(ME)) && !IS_WIZARD(TP)) {
+    command_me(sprintf("sag Meister, %s ist nicht hier im Raum!", 
+          CAP(pl_name)));
+    return 0;
+  }
+  else if(IS_WIZARD(TP)) {
+    wiz=1;
+  }
+  if(present("\nfeuerelementar_enthaare", pl)) {
+    command_me(sprintf("sag Meister, %s hat bereits keine Haare mehr!", 
+          CAP(pl_name)));
+    return 0;
+  }
+  TP->AddSp(-FEUER_ENTHAARE);
+  ob=CLONEOB(OBJ("enthaarung"));
+  ob->move(pl, M_NOCHECK);
+  ob->weg((TP->QueryProp(P_GUILD_LEVEL)*100));
+  tell_room(MENV, BS(sprintf("Das Feuerelementar verwandelt sich in eine "
+          "grosse Feuerkugel und schiesst auf %s zu! Es huellt %s kurz ein "
+          "und verbrennt %s komplette Koerperbehaarung, ohne %s zu "
+          "verletzen!", CAP(pl_name), pl->QueryPronoun(WEN), 
+          pl->QueryPossPronoun(WEM),pl->QueryPronoun(WEN))), ({pl}));
+  tell_object(pl, BS("Das Feuerelementar verwandelt sich in eine Feuerkugel "
+        "schiesst auf Dich zu! WUSCH - Du bist von Flammen umhuellt, spuerst "
+        "die segende Hitze. Mit einem Schlag ist die Hitze verschwunden - "
+        "genauso wie Deine komplette Koerperbehaarung!"));
+  ME->remove();
+  return 1;
+}
+
+/* Elementar einem anderem Spieler uebergeben */
+nosave int element_change(string n_owner, object owner, object caster) {
+  string name1;
+  object new_owner,ob;
+  int helpvar;
+  if(!new_owner=find_living(n_owner)) {
+    say(BSA(sprintf("Meister, es gibt kein Lebewesen, dass '%s' heisst!", 
+       CAP(n_owner)), "Das "+QueryProp(P_NAME)+" spricht: "));
+    return 0;
+  }
+  if(new_owner->id(DRUIDENELEMENTAR) || new_owner->id("feuerwusel")) 
+    return 0;
+  if(owner==new_owner) return 0;
+  if(!present(n_owner, ENV(ME))) {
+    say(BSA(sprintf("Meister, hier ist niemand, der '%s' heisst!", 
+          CAP(n_owner)), "Das "+QueryProp(P_NAME)+" spricht: "));
+    return 0;
+  }
+  tdm(sprintf("Owner: %O, Caster: %O, New_Owner: %O\n",
+      owner, QueryProp(ELEMENTAL_CASTER), new_owner));
+  if(call_other("/spellbooks/druiden_spells", "QueryOwnCreature", 
+       new_owner, 0, 1)) 
+  {
+    say(BSA(sprintf("Meister, %s hat bereits ein anderes Elementar!",
+          new_owner->name(WER)),"Das "+QueryProp(P_NAME)+" spricht: "));
+     return 0;
+  }
+  if(!ob=present("magiestein", owner)) {
+    command_me("sag Meister, Ihr benoetigt einen Magiestein!");
+    return 0;
+  }
+  if(new_owner->QueryProp(P_GUILD)=="druidenzirkel" || 
+     ( stringp( owner->QueryProp(P_MARRIED) )  &&    // Bugfix Feyaria 
+       lower_case(owner->QueryProp(P_MARRIED))==n_owner) )
+  {
+    helpvar=50; //kosten fuers Uebertragen   
+  }
+  else 
+    helpvar=225; // kosten
+  if(owner->QueryProp(P_SP)<helpvar) {
+    say(BSA("Meister, Du bist nicht maechtig genug!", 
+        "Das "+QueryProp(P_NAME)+" spricht: "));
+    return 0;
+  }
+  owner->AddSp(-helpvar);
+  ob->AddAmount(-1);
+  catch(owner->RemovePursuer(ME));
+  catch(owner->SetProp(P_DEFENDERS, owner->QueryProp(P_DEFENDERS)-({ME})));
+  SetProp(ELEMENTAL_OWNER, new_owner);
+  new_owner->AddDefender(TO);
+  new_owner->AddPursuer(TO);
+  //CheckPursuers();
+  SetProp(P_LONG, call_other("/spellbooks/druiden_spells", "Set_P_LONG",
+      element)+(" Es bleibt staendig in der Naehe von "
+      +(new_owner->name(WEM))+".")); 
+  SetProp(P_MSGOUT, "folgt "+new_owner->name(WEM));
+  SetProp(P_MMSGOUT, "folgt "+new_owner->name(WEM));
+  SetProp(E_REMOVE_MSG, BS(sprintf("Das %selementar von %s loest sich "
+      "nach erfuelltem Dienst auf.", CAP(QueryElement()), 
+      new_owner->Name(WER))));
+  say(BSA(sprintf("Ab nun gehorche ich %s.", new_owner->name(WEM)), 
+	   "Das "+QueryProp(P_NAME)+" spricht: "));
+  write_file(LOG("element_transfer"), 
+	      sprintf("%s: %s.%s->%s (%s)\n", 
+	      dtime(time()), getuid(owner), QueryProp(P_NAME), 
+	      QueryProp(ELEMENTAL_OWNER)->name(WER), 
+	      file_name(ENV(ME))));
+  return 1;
+} 
+
+
+
+//////////////////////////////////////////////////////////////////////////////
+// Reactions
+//////////////////////////////////////////////////////////////////////////////
+
+void StartReaction(string verb, string gruppe, string adverb, int touch) {
+  // feuerelementare knuddeln, wuscheln ist mal keine gute idee
+  if(touch && (element=="feuer"|| element=="eis")) {
+    call_out("fire", 0);
+    return;
+  }
+  if(member( ({"spuck", "spucke", "sabbere", "sabber"}), verb)!=-1)
+  {  
+   if(element=="feuer")
+    call_out("attack", 0);
+   if(element=="wasser")
+     call_out("smile", 0);
+  }
+  return;
+}
+/*
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+    return StartReaction(verb, gruppe, adverb, touch);
+}
+*/
+void fire()
+{
+  if(element=="feuer") {
+    tell_room(MENV, sprintf("%s verbrennt sich furchtbar an dem "
+        "Feuerelementar!\n%s schreit laut auf!\n", TP->Name(WER),
+        TP->Name(WER)), ({TP}));
+    tell_object(TP, BS("WAHHHH! Du verbrennst Dich furchtbar an dem "
+        "Feuerelementar!"));
+  }
+  else {
+    tell_room(MENV, BS(sprintf("%s bleibt an dem Eiselementar haften und "
+        "reisst sich gewaltsam los!\n%s schreit laut auf!\n", TP->Name(WER),
+        TP->Name(WER))), ({TP}));
+    tell_object(TP, BS("WAHHHH! Du bleibst an dem Eiselementar haften. Du "
+        "reisst Dich gewaltsam los!"));
+  }
+  if(TP->is_class_member(CL_TROLL))
+    TP->AddHp(-random(20)+21);
+  else 
+    TP->AddHp(-random(20)+1); 
+}
+
+void attack() {
+  tell_room(MENV, BS("Das Feuerelementar scheint das nicht witzig zu "
+      "finden!"));
+  ME->Kill(TP);
+} 
+
+void smile() {
+  tell_room(MENV, BS(sprintf("Das Wasserelementar scheint sich zu freuen und "
+      "laechelt %s an!", TP->name(WEN))),({TP}));
+  tell_object(TP, BS("Das Wasserelementar scheint sich zu freuen und laechelt "
+      "Dich an!"));
+} 

@@ -1,0 +1,128 @@
+//=========================================================================
+//
+// File:    horn.c
+// Created by Ronja@SL
+//
+// Project: sternenwald
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit WEAPON "std_horn";
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+
+#define MAXCOUNTER 1
+#define MAX_HEAL_ONCE 200
+#define MAX_HEAL_TOTAL 300
+
+int counter,total_heal;
+
+create()
+{
+  if (!is_clone(TO))return;
+
+  ::create();
+
+  SUID;
+
+  ltext = "Das Horn des grossen, weissen Einhornhengstes liegt schwer "
+          "in Deiner Hand. Wohl weniger durch sein Gewicht, als durch "
+          "seine grosse Macht, die Du sofort spuerst. Das Horn selbst "
+          "ist von einer gleissenden Aura umgeben, so dass Du es "
+          "kaum erkennen kannst. Lang und gewunden laesst es sich "
+          "wohl auch als Speer einsetzen, aber seine Macht scheint "
+          "auf einem anderen Gebiet als dem Kampf zu liegen.";
+
+  SetProp(P_NAME_ADJ,"weiss");
+  AddAdjective( ({"weissen","weisses","weisser","weissem"}) );
+
+  SetProp(P_INFO ,"Das Horn eines weissen Einhornes ist in der Lage, Dich zu "
+                  "heilen, wenn Du die Spitze beruehrst.");
+
+  AddCmd( ({"beruehr","beruehre"}) , "cmd_beruehren" );
+
+  total_heal = 1000;
+  counter = MAXCOUNTER;
+}
+
+void reset()
+{
+  ::reset();
+
+  if(counter < MAXCOUNTER) counter++;
+}
+
+void SetHeal(int i)
+{
+  total_heal = i;
+  SWMASTER->Msg("WHORN->SetHeal() gesetzt von "+file_name(PO));
+}
+
+int cmd_beruehren(string str)
+{
+  int amount_hp, amount_sp;
+
+  notify_fail("Was moechtest Du beruehren?\n\n");
+
+  if(!syntaxok(str)) return 0;
+
+  if(!counter)
+  {
+    TELLPLAYER(BS("Die Magie des Hornes muss sich erst wieder sammeln, "
+                  "bevor es Dich heilen kann.\n"));
+    return 1;
+  }
+
+  if((TP->QueryProp(P_HP) == TP->QueryProp(P_MAX_HP)) &&
+     (TP->QueryProp(P_SP) == TP->QueryProp(P_MAX_SP))  )
+  {
+    TELLPLAYER("Du beruehrst die Spitze des Hornes und fuehlst... nichts.\n");
+
+    TELLOTHERS(CTPN+" beruehrt die Spitze eines Hornes.\n ");
+
+    return 1;
+  }
+
+  TELLPLAYER(BS("Du beruehrst die Spitze des Hornes und fuehlst, wie seine "
+                "heilende Wirkung Dich durchdringt."));
+
+  TELLOTHERS(BS(CTPN+" beruehrt die Spitze eines Hornes und sieht gleich viel "
+             "besser aus. "));
+
+  amount_hp = TP->QueryProp(P_MAX_HP) - TP->QueryProp(P_HP);
+  if(amount_hp > MAX_HEAL_ONCE) amount_hp = MAX_HEAL_ONCE;
+  if(amount_hp > total_heal) amount_hp = total_heal;
+  total_heal -= amount_hp;
+
+  amount_sp = TP->QueryProp(P_MAX_SP) - TP->QueryProp(P_SP);
+  if((amount_sp+amount_hp) > MAX_HEAL_TOTAL) amount_sp = MAX_HEAL_TOTAL - amount_hp;
+  if(amount_sp > MAX_HEAL_ONCE) amount_sp = MAX_HEAL_ONCE;
+  if(amount_sp > total_heal) amount_sp = total_heal;
+
+  total_heal -= amount_sp;
+
+  TP->AddHp(amount_hp);
+  TP->AddSp(amount_sp);
+
+  SWMASTER->Msg(sprintf("%s heilt sich mit dem weissen Horn(HP:%d/SP:%d)",
+                   TPUID,amount_hp,amount_sp));
+
+  counter--;
+
+  if(total_heal <= 0)
+  {
+    TELLPLAYER(BS("Die heilende Kraft und Magie des Hornes hat sich "
+                  "erschoepft und es zerfaellt zu Sternenstaub."));
+    TELLOTHERS(BS(CAP(TP->Name(WESSEN))+" "+Name(RAW)+" zerfaellt "
+                  "zu Sternenstaub."));
+    SWMASTER->Msg("Das weisse Horn zerfaellt");
+    remove();
+  }
+
+  return 1;
+}
+

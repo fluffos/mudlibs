@@ -1,0 +1,739 @@
+// Leiter, um auf Wachturm zu kommen
+// Filename: leiter.c
+// File by Rage, Januar 02
+
+inherit "std/thing";
+
+#include "../def.h"
+#include <moving.h>
+#include <wizlevels.h>
+
+int resetcounter;
+int leiter_angelehnt;
+int leiter_freigelegt;        //Leiter ist unten frei von Schnee
+int sprossen_zustand;         //0 ... Sprosse ganz
+                              //1 ... Sprosse angeknackst
+                              //2 ... Sprosse durchgebrochen
+                              //3 ... Sprosse fehlt
+int mindestkraft;             //Kraft, um Leiter umzuwerfen
+string anlauf_nehmender, anlauf_pronomen;
+object leiter_aufsteller;     //Spieler, der Leiter aufstellen will
+object leiter_helfer;         //Spieler, der Leiteraufsteller hilft
+int geholfen;
+int anlaufend;
+object gebeten;
+
+void create()
+{
+  if ( !is_clone(TO) ) return;
+  ::create();
+
+  leiter_angelehnt = 1;
+  sprossen_zustand = 1;
+  leiter_freigelegt = 0;
+  anlauf_nehmender = "";
+  anlauf_pronomen = "";
+  anlaufend = 0;
+  leiter_aufsteller = 0;
+  leiter_helfer = 0;
+  geholfen = 0;
+  
+  SetProp( P_SHORT, "Eine angelehnte Leiter" );
+  SetProp( P_LONG,
+    "Die Leiter ist ungefaehr drei Meter lang, besteht aus Holz und hat "
+    "zahlreiche Sprossen. Da sie im Moment an die Plattform des "
+    "Wachturmes gelehnt ist, kannst Du muehelos nach oben steigen." );
+  SetProp( P_NAME, "Leiter" );
+  SetProp( P_GENDER, FEMALE );
+  SetProp( P_SIZE, 250);
+
+//DETAILS
+  AddDetail( "moment",
+    "Im Moment ist die Leiter an der Plattform angelehnt." );
+  AddSpecialDetail( ({ "leitersprossen","sprossen" }), "detailSprossen" );
+  AddSpecialDetail( ({ "leitersprosse","sprosse" }), "detailSprosse" );
+  AddSpecialDetail( "sprung", "detailSprung" );
+  AddDetail( ({ "holm","holme","holmen" }),
+    "Die beiden Holme halten erst die Leiter zusammen. Sie sind drei "
+    "Meter lang und in sie sind die Sprossen gesteckt worden." );
+  AddDetail( ({ "fichtenholz","holz" }),
+    "Die ganze Leiter besteht erwartungsgemaess aus Holz, und wenn Du ganz "
+    "genau sein willst, ist es Fichtenholz." );
+  AddDetail( ({ "taetigkeit","raufklettern","klettern" }),
+    "Raufklettern ist eine Taetigkeit, also wirst Du sie nur sehen koennen, "
+    "wenn es wer macht. Dir kommt gerade eine sehr gemeine Idee, als Du "
+    "ans Klettern denkst." );
+  AddDetail( "idee",
+    "Durch ein normales Untersuchen siehst Du Die Idee nicht. Lass Dein "
+    "Hirn einmal arbeiten." );    
+//END DETAILS
+
+  AddId( ({ "holzleiter","sprossenleiter","leiter","\nwachturmleiter" }) );
+  SetProp( P_MATERIAL, MAT_FIR );
+  SetProp( P_WEIGHT, 20000 );
+  SetProp( P_VALUE, 200 );
+  SetProp( P_NOGET, "Die Leiter ist viel zu unhandlich, um sie mitzunehmen.\n" );
+  SetProp( P_NOBUY, 1 );
+  SetProp( P_SMELL, "Die Leiter riecht sehr verdaechtig nach Fichtenholz.\n" );
+
+  AddCmd( ({ "stell","stelle" }), "cmd_stellen" );
+  AddCmd( ({ "tausch","tausche" }), "cmd_tauschen" );
+  AddCmd( ({ "denk","denke" }), "cmd_denken" );
+  AddCmd( ({ "wirf","werf","werfe","schmeiss","schmeisse","hau","haue",
+             "stoss","stosse","kipp","kippe","rempel","remple" }),
+             "cmd_stossen" );
+  AddCmd( ({ "grab","grabe","schaufel","schaufle" }), "cmd_graben" );
+  AddCmd( ({ "hol","hole" }), "cmd_holen" );
+  AddCmd( ({ "bitt","bitte" }), "cmd_bitten" );
+  AddCmd( ({ "hilf","helf","helfe" }), "cmd_helfen" );
+}
+
+string detailSprossen()
+{
+  string text;
+  
+  text = "Die Leiter hat etwa 15 Sprossen, anhand derer man problemlos zum "
+         "Wachturm hinaufklettern kann. Sie stecken an ihren Enden jeweils "
+         "in einem Holm drin, womit die Leiter sehr stabil ist.";
+  switch( sprossen_zustand )
+  {
+    case 0:
+      text += " Die Sprossen sind alle voll funktionstauglich, also geh ruhig "
+              "rauf!";
+    break;
+    case 1:
+      text += " Eine der Sprossen sieht aber schon so aus, als ob sie einen "
+              "Sprung haette.";
+    break;
+    case 2:
+      text += " Eine der Sprossen ist komplett geborsten und nun haengen die "
+              "Enden in den Holmen.";
+    break;
+    case 3:
+      text += " Eine der Sprossen scheint Dir entfernt worden zu sein. Wer "
+              "das wohl getan hat?";
+    break;
+    default:
+      text += " Die Sprossen sind alle voll funktionstauglich, also geh ruhig "
+              "rauf!";
+    break;
+  }  
+  return BS(text);
+}
+
+string detailSprosse()
+{
+  string text;
+   
+  switch( sprossen_zustand )
+  {
+    case 0:
+      text = "Jede einzelne Sprosse wirkt sehr stabil, womit Du ohne weiteres "
+             "ueber die Leiter auf den Wachturm steigen kannst.";
+    break;
+    case 1:
+      text = "Die fuenfte Sprosse kommt Dir nicht mehr ganz sicher vor. Wenn "
+             "man auf diese treten wuerde, bricht man bestimmt durch.";
+      TP -> SetProp( P_LEITERKONTROLLE, 1 );
+    break;
+    case 2:
+      text = "Die fuenfte Sprosse von unten ist komplett geborsten und nun "
+             "haengen die Enden in den Holmen. Diese Sprosse sollte "
+             "moeglichst bald ausgestauscht werden, bevor noch etwas "
+             "passiert.";
+      TP -> SetProp( P_LEITERKONTROLLE, 1 );
+    break;
+    case 3:
+      text = "Eine Sprosse ist entfernt worden und zwar die fuenfte. Wer "
+             "konnte so verantwortungslos sein und eine Leiter mit einer "
+             "fehlenden Sprosse hier aufstellen? Vielleicht kannst Du "
+             "dagegen etwas machen.";
+      TP -> SetProp( P_LEITERKONTROLLE, 1 );
+    break;
+    default:
+      text = "Jede einzelne Sprosse wirkt sehr stabil, womit Du ohne weiteres "
+             "ueber die Leiter auf den Wachturm steigen kannst.";
+    break;
+  }  
+  return BS(text);
+}
+
+string detailSprung()
+{
+  object ob;
+
+  if ( sprossen_zustand == 1 )
+  {
+    ob = clone_object( OBJ "idee" );
+    ob -> move( TP, M_SILENT|M_NOCHECK ); 
+    return BS(
+      "Eine der Leitersprossen hat einen gefaehrlichen Sprung mittendrin. "
+      "Diese Sprosse sollte bald ausgetauscht werden, weil sonst verletzt "
+      "sich noch wer beim Raufklettern." );
+  }
+  return BS(
+    "Sowas siehst Du da nicht!" );
+}
+
+leiter_aufstellen()
+{
+  SetProp( P_SHORT, "Eine angelehnte Leiter" );
+  SetProp( P_LONG,
+    "Die Leiter ist ungefaehr drei Meter lang, besteht aus Holz und hat "
+    "zahlreiche Sprossen. Da sie im Moment an die Plattform des "
+    "Wachturmes gelehnt ist, kannst Du muehelos nach oben steigen." );
+  AddDetail( "moment",
+    "Im Moment ist die Leiter an der Plattform angelehnt." );
+  leiter_freigelegt = 0;
+  leiter_angelehnt = 1;
+}
+
+zustand_schlechter()
+{
+  sprossen_zustand ++;
+}
+
+leiter_zustand()
+{
+  return sprossen_zustand;
+}
+
+leiter_an_ort()
+{
+  return leiter_angelehnt;
+}
+
+//COMMANDS
+int cmd_stellen(string str)
+{
+  string was;
+  
+  notify_fail( "Willst Du die Leiter wo hin- oder aufstellen?\n" );
+
+  if ( str == "" || !str ) return 0;
+  if ( sscanf(str,"%s auf", was) != 1 ) return 0;
+  if ( member( ({ "leiter","sprossenleiter","holzleiter"
+                }),was) != -1 )            
+  {
+    if ( geholfen )
+    {
+      if ( TP == leiter_aufsteller )
+      {
+       write( BS(
+          "Da Dir "+leiter_helfer->Name(WER)+" beim Aufstellen der Leiter "
+          "hilft, gelingt es Dir, diese so hinzustellen, dass man nun ohne "
+          "Probleme wieder auf den Wachturm klettern kann.") );
+        tell_object( leiter_helfer, BS(
+          "Mit Deiner Hilfe stellt "+TPN+" die Leiter wieder auf, womit man "
+          "nun ohne Probleme wieder auf den Wachturm klettern kann.") );
+        tell_room( ENV(TP),BS(
+          TPN+" stellt mit der Hilfe von "+leiter_helfer->Name(WEM)+" Leiter "
+          "auf, womit man nun ohne Probleme wieder auf den Wachturm klettern "
+          "kann."), ({ TP, leiter_helfer }) );
+        SetProp( P_SHORT, "Eine angelehnte Leiter" );
+        SetProp( P_LONG,
+          "Die Leiter ist ungefaehr drei Meter lang, besteht aus Holz und hat "
+          "zahlreiche Sprossen. Da sie im Moment an die Plattform des "
+          "Wachturmes gelehnt ist, kannst Du muehelos nach oben steigen." );
+        AddDetail( "moment",
+          "Im Moment ist die Leiter an der Plattform angelehnt." );
+        RemoveDetail( "naehe",
+          "Die Leiter liegt sehr nahe am Weg." );
+        AddDetail( ({ "taetigkeit","raufklettern","klettern" }),
+          "Raufklettern ist eine Taetigkeit, also wirst Du sie nur sehen koennen, "
+          "wenn es wer macht. Dir kommt gerade eine sehr gemeine Idee, als Du "
+          "ans Klettern denkst." );
+        leiter_helfer = 0;
+        leiter_aufsteller = 0;
+        gebeten = 0;
+        leiter_angelehnt = 1;
+        geholfen = 0;
+        write_file("/d/polar/rage/ostplatz/log/forsch.log",ctime()+": "+
+          CAP(getuid(TP))+" stellt die Leiter auf.\n");
+        return 1;
+      }
+      if ( TP == leiter_helfer )
+      {
+        write( BS(
+          "Du kannst jetzt nicht selbst die Leiter aufstellen, wo Du Dich "
+          "dazu entschlossen hast, "+leiter_aufsteller->Name(WEM)+" dabei "
+          "zu helfen.") );
+        return -1;
+      }
+      write( BS(
+        "Du kannst jetzt nicht die Leiter aufstellen, weil das will wohl "+
+        leiter_aufsteller->Name(WER)+" mit der Hilfe von "+
+        leiter_helfer->Name(WEM)+" machen.") );
+      return -1;
+    }
+    write( BS(
+      "Du musst schon einen anderen Spieler um Hilfe bitten, denn die Leiter "
+      "ist Dir viel zu unhandlich, um sie allein aufzustellen.") );
+    return -1;
+  }
+}
+
+int cmd_tauschen(string str)
+{
+  object sprosse;
+  string was;
+
+  notify_fail( "Was moechtest Du hier gerne austauschen?\n" );
+
+  if ( str == "" || !str ) return 0;
+  if ( sscanf(str,"%s aus",was) != 1 ) return 0;
+
+  if ( member( ({ "sprosse","holzsprosse","leitersprosse"
+                }),was) != -1 )
+  {
+    if ( sprosse = present("\nleitersprosse", TP) )
+    {
+      if ( sprossen_zustand == 0 )
+      {
+        write( BS(
+          "Du brauchst die Sprosse nicht auszutauschen, weil sie nicht "
+          "kaputt ist.") );
+        return -1;
+      }
+      else if ( sprossen_zustand == 1 )
+      {
+        write( BS(
+          "Sorgfaeltig tauschst Du die angeknackste Sprosse mit einer "
+          "neuen aus, bevor noch jemand beim Klettern bei der Sprosse "
+          "durchbricht.") );
+      }
+      else if ( sprossen_zustand == 2 )
+      {
+        write( BS(
+          "Sorgfaeltig nimmst Du die beiden Teile der durchgetretenen "
+          "Sprosse aus den Holmen heraus und ersetzt sie mit einer neuen, "
+          "damit die Leiter wieder ohne Probleme zu verwenden ist.") );
+      }
+      else if ( sprossen_zustand == 3 )
+      {
+      	write( BS(
+      	  "Da eine Sprosse in der Leiter schon gefehlt hat, setzt Du eine "
+      	  "neue an der fehlenden Stelle ein, damit die Leiter wieder "
+      	  "ohne Probleme zu verwenden ist.") );
+      }
+      say(
+        TPN+" setzt eine neue Sprosse in der Leiter ein.\n" );
+      sprossen_zustand = 0;
+      sprosse -> remove();
+      write_file("/d/polar/rage/ostplatz/log/forsch.log",ctime()+": "+
+        CAP(getuid(TP))+" tauscht die Sprosse aus.\n");
+      return 1;
+    }
+    write( BS(
+      "Es ist zwar gut von Dir gemeint, dass Du die Sprosse austauschen "
+      "willst, doch Du hast keine dabei, die Du statt der alten "
+      "einsetzen koenntest.") );
+    return -1;
+  }
+}
+
+int cmd_denken(string str)
+{
+  object ob;
+
+  if ( str == "idee" || str == "an idee" )
+  {
+    if( ob = present("\nidee",TP) )
+    {
+      write( BS(
+        "Was waere, wenn die Leiter gar nicht so angelehnt da stuende, "
+        "sondern man sie irgendwie zum Umfallen brachte?") );
+      return 1;
+    }
+    write( BS(
+      "Dir gehen viele Ideen durch den Kopf, aber keine mit der Du "
+      "irgendetwas anfangen koenntest.") );
+    return -1;
+  }
+}
+
+int cmd_stossen(string str)
+{
+  string was;
+
+  if ( TP->QueryProp(P_GENDER) == FEMALE )
+    notify_fail( "Willst Du etwas umstossen, Du kleine Randaliererin?\n" );
+  notify_fail( "Willst Du etwas umstossen, Du kleiner Randalierer?\n" );
+  
+  if ( !str || str == "" ) return 0;
+  if ( sscanf(str,"%s um", was) != 1 ) return 0;
+  if ( member( ({ "leiter","sprossenleiter","holzleiter"
+                }),was) != -1 )
+  {
+    if ( leiter_freigelegt )
+    {
+      switch ( TP->QueryProp(P_RACE) )
+      {
+        case "Fee":
+          mindestkraft = 38;
+        break;
+        case "Hobbit":
+        case "Zwerg":
+          mindestkraft = 36;
+        break;
+        case "Mensch":
+          mindestkraft = 34;
+        break;
+        case "Dunkelelf":
+        case "Elf":
+          mindestkraft = 31;
+        break;
+        case "Oger":
+          mindestkraft = 28;
+        break;
+        case "Troll":
+          mindestkraft = 25;
+        break;
+        default:
+          mindestkraft = 38;
+        break;
+      }
+      if ( getuid(TP) == anlauf_nehmender )
+        mindestkraft = mindestkraft-10;
+      if ( TP->QueryAttribute(A_STR) > mindestkraft-random(6) )
+      {
+        write( BS(
+          "Mit all deiner Kraft gelingt es Dir, die Leiter zu Fall "
+          "zu bringen. Du gehst noch geschwind zur Seite und dann "
+          "landet sie trotz ihres Gewichtes leise im Schnee direkt "
+          "neben dem Weg.") );
+        say( BS(
+          TPN+" schmeisst die Leiter um, die trotz ihres Gewichtes "
+          "leise im Schnee neben dem Weg landet.") );
+        SetProp( P_SHORT, "Eine am Boden liegende Leiter" );
+        SetProp( P_LONG,
+          "Die Leiter ist ungefaehr drei Meter lang, besteht aus Holz "
+          "und hat zahlreiche Sprossen. Sie liegt im Moment am Boden "
+          "und zwar fast am Weg, dass sicher alle drueberstolpern." );
+        AddDetail( "moment",
+          "Im Moment liegt die Leiter in der Naehe des Weges am "
+          "Boden, wo man leicht drueber stolpern kann." );
+        AddDetail( "naehe",
+          "Die Leiter liegt sehr nahe am Weg." );
+        AddDetail( ({ "taetigkeit","raufklettern","klettern" }),
+          "Raufklettern ist eine Taetigkeit, also wirst Du sie nur "
+          "sehen koennen, wenn es wer macht, aber dazu sollte die "
+          "Leiter wieder aufgestellt werden." ); 
+        while(remove_call_out("anlauf") != -1);
+        anlaufend = 0;
+        anlauf_nehmender = "";
+        leiter_angelehnt = 0;
+        write_file("/d/polar/rage/ostplatz/log/forsch.log",ctime()+": "+
+          CAP(getuid(TP))+" stoesst die Leiter um.\n");
+        return 1;
+      }
+      write( BS(
+        "Du gibst dein Bestes und legst deine ganze Kraft in den "
+        "Versuch, die Leiter umzuwerfen, doch leider bist Du zu "
+        "schwach dazu.") );
+      say( BS(
+        TPN+" schiebt an der Leiter herum, doch Du verstehst nicht, "
+        "was "+TP->QueryPronoun(WER)+" vorhat.") );
+      while(remove_call_out("anlauf") != -1);
+      anlaufend = 0;
+      anlauf_nehmender = "";
+      return -1;
+    }
+    write( BS(
+      "Zum Umstossen ist die Leiter leider zu schwer, weil sie im tiefen "
+      "Schnee steckt. Wenn Du sie unten frei bekommst, geht es bestimmt "
+      "wesentlich leichter.") );
+    say( BS(
+      TPN+" stemmt sich gegen die Leiter, aber es passiert sonst nichts "
+      "weiter.") );
+    return -1;
+  }      
+}
+
+int cmd_graben(string str)
+{
+  string was;
+
+  notify_fail( "Moechtest Du etwas frei schaufeln?\n" );
+
+  if ( !str || str == "" ) return 0;
+  if ( sscanf(str,"%s frei",was) != 1 ) return 0;
+  
+  if ( member( ({ "leiter","sprossenleiter","holzleiter"
+                }),was ) != -1 )
+  {
+    if ( leiter_freigelegt )
+    {
+      write(
+        "Die Leiter wurde bereits vom Schnee frei geschaufelt.\n" );
+      return -1;
+    }
+    if ( (present("schaufel",TP)) || (present("schneeschaufel",TP)) )
+    {
+      write( BS(
+        "Eifrig graebst Du mit der Schaufel die Leiter frei. Nun sollte "
+        "sie sich wesentlich leichter bewegen lassen.") );
+      say( BS(
+        TPN+" graebt verbissen mit einer Schaufel genau dort im Schnee, "
+        "wo die Leiter aufgestellt wurde.") );
+      leiter_freigelegt = 1;
+      return 1;
+    }
+    write( BS(
+      "Ohne einer Schaufel wird es schwer werden, den um die Leiter "
+      "festgetretenen, liegenden Schnee weg zu bekommen.") );
+    return -1;
+  }
+}
+
+int cmd_holen(string str)
+{
+  notify_fail( "Moechtest Du Anlauf holen oder was anderes?\n" );
+
+  if ( str == "anlauf" )
+  {
+    if ( getuid(TP) == anlauf_nehmender )
+    {
+      write(
+        "Du bist gerade dabei, Anlauf zu nehmen. Einmal sollte reichen.\n" );
+      return -1;
+    }
+    if ( anlaufend )
+    {
+      write( BS(
+        CAP(anlauf_nehmender)+" nimmt bereits Anlauf und Du moechtest "+
+        anlauf_pronomen+" dabei nicht in die Quere kommen.") );
+      return -1;
+    }
+    write( BS(
+      "Du nimmst ein paar Schritte Anlauf, um nun die Leiter umzustossen. "
+      "Versuch ruhig Dein Glueck!") );
+    say(
+      TPN+" geht langsam ein paar Schritt nach hinten.\n");
+    anlaufend = 1;
+    anlauf_nehmender = getuid(TP);
+    anlauf_pronomen = TP->QueryPronoun(WEM);
+    if ( find_call_out("anlauf") == -1 )
+      call_out( "anlauf", 10, TP );
+    return 1;
+  }
+}
+void anlauf_remove()
+{
+  if ( !objectp(TP) ) return;
+  if ( getuid(TP) == anlauf_nehmender )
+  {
+    while( remove_call_out("anlauf") != -1 );
+    write( BS(
+      "Da Du ohnehin den Raum verlaesst, brichst Du Deinen Anlauf lieber ab, "
+      "denn vielleicht brauchst Du Deine Kraefte fuer etwas anderes.") );
+    anlaufend = 0;
+    anlauf_nehmender = "";
+  }
+  if ( TP == gebeten || TP == leiter_aufsteller )
+  {
+    gebeten = 0;
+    leiter_aufsteller = 0;
+    leiter_helfer = 0;
+    geholfen = 0;
+  }
+}
+void anlauf(object spieler)
+{
+  anlaufend = 0;
+  anlauf_nehmender = "";
+  tell_object(spieler,
+    "Du ueberlegst es Dir doch anders und brichst Deinen Anlauf ab.\n" );
+  tell_room(ENV(spieler),
+    CAP(getuid(spieler))+" steht kurz unentschlossen herum und kehrt "
+    "wieder zurueck.\n",({spieler}) );
+}
+
+int cmd_bitten(string str)
+{
+  object helfer, wem;
+  string was, sucher_rasse, helfer_rasse;
+
+  notify_fail( "Wem willst Du um Hilfe bitten?\n" );
+
+  if ( str == "" || !str ) return 0;
+  if ( sscanf(str,"%s um %s", wem, was) == 2 )
+  {
+    helfer = find_player(wem);
+    sucher_rasse = TP->QueryProp(P_RACE);
+    helfer_rasse = helfer->QueryProp(P_RACE);
+    if ( was == "hilfe" )
+    {
+      if ( present(wem, ENV(TO)) )
+      {
+      	if ( helfer == gebeten )
+      	{
+      	  write( BS(
+      	    "Du hast "+helfer->Name(WEN)+" schon um Hilfe gebeten. Warte "
+      	    "zumindest, bis "+helfer->QueryPronoun(WER)+" Dir hilft.") );
+      	  return -1;
+      	}
+      	if ( helfer == TP )
+      	{
+      	  write(
+      	    "Das wird nichts bringen, wenn Du Dich selbst um Hilfe bittest.\n" );
+      	  return -1;
+      	}
+      	if ( member( ({ "Fee","Zwerg","Hobbit" }), sucher_rasse) != -1 )
+      	{
+      	  if ( member( ({ "Fee","Zwerg","Hobbit","Mensch","Elf",
+      	                  "Dunkelelf"
+      	                }),helfer_rasse ) != -1 )
+      	  {
+      	    write( BS(
+      	      "Da Du selbst nicht zu den groessten Rassen zaehlst, solltest "
+      	      "Du Dir besser einen groesseren Helfer suchen als "+
+      	      helfer->Name(WER)+".") );
+      	    return -1;
+      	  }
+      	}
+      	if ( member( ({ "Elf","Dunkelelf","Mensch" }), sucher_rasse) != -1 )
+      	{  
+      	  if ( member( ({ "Fee","Zwerg","Hobbit" }), helfer_rasse ) != -1 )
+      	  {
+      	    write( BS(
+      	      "Wenn Du schon jemanden um Hilfe bitten willst, dann musst Du Dir "
+      	      "wen aussuchen, der zumindest aehnlich gross ist wie Du oder "
+      	      "noch groesser.") );
+      	    return -1;
+      	  }
+      	}
+      	if ( IS_WIZARD(TP) )
+      	{
+      	  if ( IS_WIZARD(helfer) )
+      	  {
+      	    write( BS(
+              "Du bittest "+helfer->Name(WEM)+" um Hilfe und hoffst nun, dass "+
+              helfer->QueryPronoun(WER)+" Dir helfen wird.") );
+            tell_object( helfer, BS(
+              TPN+" bittet Dich um Hilfe beim Aufstellen der Leiter und "+
+              TP->QueryPronoun(WER)+" wartet nun darauf, ob Du "+
+              TP->QueryPronoun(WEM)+" hilfst.") );
+            tell_room( ENV(TP),
+              TPN+" bittet "+helfer->Name(WEN)+" um Hilfe.\n",
+              ({ TP,helfer }) );
+            gebeten = find_player(wem);
+            leiter_aufsteller = TP;
+            write_file("/d/polar/rage/ostplatz/log/forsch.log",ctime()+": "+
+              CAP(getuid(TP))+" holt sich Hilfe.\n");
+            return 1;
+      	  }
+      	  write( BS(
+      	    "Du kannst nur deinesgleichen um Hilfe bitten, denn es waere Dir "
+      	    "viel zu peinlich, jemanden wie "+helfer->Name(WEN)+" zu fragen.") );
+      	  return -1;
+      	}
+      	if ( IS_WIZARD(helfer) )
+      	{
+          write( BS(
+            "Das ist unter Deiner Wuerde, eine"+
+            (helfer->QueryProp(P_GENDER)==FEMALE?" ":"n ")+ "Magier"+
+            (helfer->QueryProp(P_GENDER)==FEMALE?"in ":" ")+"wie "+
+            helfer->Name(WEN)+" um Hilfe zu bitten.") );
+          return -1;
+        }
+        write( BS(
+          "Du bittest "+helfer->Name(WEM)+" um Hilfe und hoffst nun, dass "+
+          helfer->QueryPronoun(WER)+" Dir helfen wird.") );
+        tell_object( helfer, BS(
+          TPN+" bittet Dich um Hilfe beim Aufstellen der Leiter und "+
+          TP->QueryPronoun(WER)+" wartet nun darauf, ob Du "+
+          TP->QueryPronoun(WEM)+" hilfst.") );
+        tell_room( ENV(TP),
+          TPN+" bittet "+helfer->Name(WEN)+" um Hilfe.\n",
+          ({ TP,helfer }) );
+        gebeten = find_player(wem);
+        leiter_aufsteller = TP;
+        return 1;
+      }
+      write( BS(
+        "Du moechtest zwar "+helfer->Name(WEN)+" um Hilfe bitten, "
+        "doch "+helfer->QueryPronoun(WER)+" ist gar nicht da!") );
+      return -1;
+    }
+    write(
+      "Worum möchtest Du "+helfer->Name(WEN)+" bitten?\n" );
+    return -1;
+  }
+}
+
+int cmd_helfen(string str)
+{
+  object hilfesucher;
+  
+  notify_fail( "Wem moechtest Du hier gerne helfen?\n" );
+
+  if ( str == "" || !str ) return 0;
+
+  if ( hilfesucher = find_player(str) )
+  {
+    if ( present(str, ENV(TO)) )
+    {
+      if ( hilfesucher == TP )
+      {
+        write( BS(
+          "Du hilfst Dir zwar sonst immer gern selbst, doch in diesem Fall "
+          "wird das nichts bringen.") );
+        return -1;
+      }
+      if ( hilfesucher == leiter_aufsteller )
+      {
+      	if ( TP == gebeten )
+      	{
+          write( BS(
+            "Du wirst jetzt "+hilfesucher->Name(WEM)+" beim Aufstellen der "
+            "Leiter helfen.") );
+          tell_object( hilfesucher,
+            TPN+" hilft Dir nun beim Aufstellen der Leiter.\n" );
+          tell_room( ENV(TP),
+            TPN+" will wohl "+hilfesucher->Name(WEM)+" beim Aufstellen der "
+            "Leiter helfen.\n",({ TP, hilfesucher}) );
+          leiter_helfer = TP;
+          geholfen = 1;
+          write_file("/d/polar/rage/ostplatz/log/forsch.log",ctime()+": "+
+            CAP(getuid(TP))+" hilft bei der Leiter.\n");
+          return 1;
+        }
+        write( BS(
+          hilfesucher->Name(WER)+" braucht zwar Hilfe, doch er hat schon "+
+          gebeten->Name(WEN)+" um Hilfe gebeten.") );
+        return -1;
+      }
+      write( BS(
+        "Es ist zwar nett von Dir, dass Du "+hilfesucher->Name(WEM)+" helfen "
+        "moechtest, doch "+hilfesucher->QueryPronoun(WER)+" braucht gar keine "
+        "Hilfe im Moment.") );
+      tell_object( hilfesucher,
+        TPN+" bietet Dir "+TP->QueryPossPronoun(WEM)+" Hilfe an, doch Du "
+        "hast keine Ahnung wozu.\n" );
+      return -1;
+    }
+    write( BS(
+      "Du moechtest zwar "+hilfesucher->Name(WEM)+" helfen, "
+      "aber anscheinend ist "+hilfesucher->QueryPronoun(WER)+" gar nicht da!") );
+    return -1;
+  }
+}
+//COMMANDS END
+
+void reset()
+{
+  ::reset();
+
+  resetcounter++;
+  if ( resetcounter > 9 )
+  {
+    leiter_freigelegt = 0;
+    resetcounter = 0;
+  }
+}
+
+/* IDEEN
+Short ändern, wenn Leiter kaputt ist
+Detail Sprossenenden fehlt
+*/

@@ -1,0 +1,249 @@
+// 02.12.2006 erstellt von Hiri
+
+
+
+inherit "std/container";
+#include "../def.h"
+#include <container.h>
+
+
+private int open_key, lock_key, is_open, is_locked;
+
+create()
+{
+  ::create();
+  is_open = 0; is_locked = 0;
+  open_key = 0; lock_key = 0;
+  SetProp(P_CNT_STATUS, CNT_STATUS_CLOSED);
+
+  SetProp(P_SHORT,"Eine regenbogenfarbene Schatzkiste");
+  SetProp(P_LONG,
+    "Diese Schatzkiste ist der Schatz am Ende des Regensbogens. "
+    "Du warst Dir nie Sicher ob es ihn gibt, dachtest es  "
+    "waere eine Sage, die seit Anbeginn der Zeit erzaehlt "
+    "wird. Du staunst wirklich sehr. Die Schatzkiste schimmert "
+    "in allen Regenbogenfarben.");
+
+  AddDetail(({"schloss"}),
+    "Ein sehr stabil aussehendes Schloss sichert die Schatzkiste. "
+    "Du wirst wohl den passenden Schluessel benoetigen, "
+    "um dieSchatzkiste zu oeffnen. ");
+  AddDetail(({"holz","eiche", "eichenholz"}),
+    "Die Schatzkiste besteht aus einfachem, soliden Eichenholz.");
+  AddDetail(({"beschlag","beschlaege","metall","metallbeschlag",
+              "metallbeschlaege"}),
+    "Zusaetzlich ist die Schatzkiste mit Metallbeschlaegen verstaerkt. "
+    "Mit roher Gewalt wirst Du die Schatzkiste nicht aufbekommen.");
+  AddDetail(({"gewalt"}),
+    "Gewalt bringt Dich nicht weiter.");
+  AddDetail(({"schluessel"}),
+    "Ohne Schluessel wirst Du die Schatzkiste wohl nicht aufbekommen, oder? "
+    "Vielleicht solltest Du mal jemanden fragen?");
+  AddDetail(({"fremder","fremden"}),
+    "Das Schloss schuetzt den Inhalt der Schatzkiste vor Fremden wie Dir.");
+  AddDetail(({"fremde"}),
+    "Du bist dir nicht fremd - der Schatzkiste aber schon.");
+  AddDetail(({"finger","fingern"}),
+    "Na Du willst doch nicht etwas klauen, oder?");
+  AddDetail(({"inhalt"}),
+    "Der ist in der Schatzkiste.");
+
+  SetProp(P_NAME, "Schatzkiste");
+  SetProp(P_PLURAL, "Schatzkisten");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_WEIGHT, 10000);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NOGET, "Die Schatzkiste ist viel zu schwer fuer Dich.\n");
+
+  AddId(({"schatzkiste","schatz","kiste","regenbogenschatz"}));
+
+  add_openclose_commands();
+  SetProp(P_CNT_KEY,"SCHATZ_REGENBOGENSCHLUESSEL");
+  
+  SUID;
+  CLONEME(OBJ "schzechi");
+  
+  AddCmd("oeffne", "do_open");
+  AddCmd(({"schliess", "schliesse", "verschliesse"}), "do_close");
+}
+
+// Methode zum Setzen des Container-Status
+int _set_cnt_status(int st)
+{
+  switch (st)
+  {
+    case CNT_STATUS_OPEN :
+      is_open = 1; is_locked = 0;
+      break;
+    case CNT_STATUS_CLOSED :
+      is_open = 0;
+      break;
+    case CNT_STATUS_LOCKED :
+      is_open = 0; is_locked = 1;
+      break;
+    default :
+      return -1;  // Fehlerstatus
+  }
+  SetProp(P_TRANSPARENT, is_open);
+  return Set(P_CNT_STATUS, st);
+}
+
+// Methode zum Abfragen des Container-Status
+int _query_cnt_status()
+{
+  if (is_locked)
+    return CNT_STATUS_LOCKED;
+  if (is_open)
+    return CNT_STATUS_OPEN;
+  else
+    return CNT_STATUS_CLOSED;
+  return -1;   // Fehlerstatus
+}
+
+// Methode zum Setzen eines Schluessels (wenn P_CNT_KEY gesetzt
+// wird, wird angenommen, dass ein Schluessel erforderlich ist)
+mixed _set_cnt_key(mixed key)
+{
+  if (stringp(key))
+  {
+    open_key = lock_key = 1;
+    return Set(P_CNT_KEY, ([CNT_STATUS_OPEN:key,CNT_STATUS_LOCKED:key]));
+  }
+  else if (mappingp(key))
+  {
+    open_key = stringp(key[CNT_STATUS_OPEN]);
+    lock_key = stringp(key[CNT_STATUS_LOCKED]);
+    return Set(P_CNT_KEY, key);
+  }
+  else
+    return -1;  // Fehlerstatus
+}
+
+// short() ueberschreiben, damit der Status mitausgegeben wird:
+string short()
+{
+  string sh;
+
+  if (QueryProp(P_INVIS)) return 0;
+  if (sh = QueryProp(P_SHORT))
+    if (is_open)
+      return process_string(sh) + " (geoeffnet).\n";
+    else
+      return process_string(sh) + (is_locked?" (ab":" (") + "geschlossen).\n";
+}
+
+// long() ueberschreiben, damit der Status mitausgegeben wird:
+varargs string long()
+{
+  string descr, inv_descr;
+
+  descr = process_string(QueryProp(P_LONG));
+  if(!QueryProp(P_TRANSPARENT))
+    return descr+capitalize(QueryPronoun())+" ist "+(is_locked?"ab":"")+"geschlossen.\n";
+
+  inv_descr = make_invlist(PL, all_inventory(ME));
+  if (inv_descr != "")
+    descr += capitalize(QueryPronoun()) + " ist geoeffnet und enthaelt:\n" + inv_descr;
+  else
+    descr += capitalize(QueryPronoun()) + " ist geoeffnet und leer.\n";
+  return descr;
+}
+
+
+
+
+
+// Funktionen zum Oeffnen/Schliessen des Containers, ggf. mit Schluessel
+// (in Anlehnung an entsprechende Funktionen aus /obj/doormaster.c)
+
+int do_open(string args)
+{
+  object key;
+  string s1, s2;
+
+  notify_fail("WAS moechtest Du oeffnen?\n");
+  if (!args || !PL) return 0;
+  notify_fail("Das kannst Du nicht oeffnen.\n");
+  if (sscanf(args, "%s mit %s", s1, s2) < 2)
+  { s1 = args; s2 = 0;}
+  if (!id(s1)) return 0;
+  if (open_key)
+    if (s2)
+    {
+      if (!(key = present(s2, PL)))
+      {
+        write("So einen Schluessel hast Du nicht.\n");
+        return 1;
+      }
+      if (!key->id(QueryProp(P_CNT_KEY)[CNT_STATUS_OPEN]))
+      {
+        write(CAP(key->name(WER,1))+" passt nicht zu "+name(WEM,1)+".\n");
+        return 1;
+      }
+    }
+    else
+    {
+      write("Du benoetigst einen Schluessel, um "+name(WEN,1)+" zu oeffnen.\n");
+      return 1;
+    }
+  if (is_open)
+  {
+    write(CAP(name(WER,1))+" ist doch schon geoeffnet!\n");
+    return 1;
+  }
+  if (open_key)
+    write("Du oeffnest "+name(WEN,1)+" mit "+key->name(WEM,1)+".\n");
+  else
+    write("Du oeffnest "+name(WEN,1)+".\n");
+  say(CAP(PL->name())+" oeffnet "+name(WEN,1)+".\n");
+  SetProp(P_CNT_STATUS, CNT_STATUS_OPEN);
+  return 1;
+}
+
+int do_close(string args)
+{
+  object key;
+  string s1, s2;
+
+  notify_fail("WAS moechtest Du schliessen?\n");
+  if (!args || !PL) return 0;
+  notify_fail("Das kannst Du nicht schliessen.\n");
+  if (sscanf(args, "%s mit %s", s1, s2) < 2)
+  { s1 = args; s2 = 0;}
+  if (!id(s1)) return 0;
+  if (lock_key)
+    if (s2)
+    {
+      if (!(key = present(s2, PL)))
+      {
+        write("So einen Schluessel hast Du nicht.\n");
+        return 1;
+      }
+      if (!key->id(QueryProp(P_CNT_KEY)[CNT_STATUS_LOCKED]))
+      {
+        write(CAP(key->name(WER,1))+" passt nicht zu "+name(WEM,1)+".\n");
+        return 1;
+      }
+    }
+    else
+    {
+      write("Du benoetigst einen Schluessel, um "+name(WEN,1)+" zu schliessen.\n");
+      return 1;
+    }
+  if (!is_open)
+  {
+    write(CAP(name(WER,1))+" ist doch schon geschlossen!\n");
+    return 1;
+  }
+  if (lock_key)
+    write("Du schliesst "+name(WEN,1)+" mit "+key->name(WEM,1)+".\n");
+  else
+    write("Du schliesst "+name(WEN,1)+".\n");
+  say(CAP(PL->name())+" schliesst "+name(WEN,1)+".\n");
+  if (lock_key)
+    SetProp(P_CNT_STATUS, CNT_STATUS_LOCKED);
+  else
+    SetProp(P_CNT_STATUS, CNT_STATUS_CLOSED);
+  return 1;
+}

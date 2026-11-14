@@ -1,0 +1,250 @@
+/****************************************************************************
+ stein.c, (C) 2002 by Carador for Silberland
+****************************************************************************/
+
+/*
+
+Name   : Ein gruener Stein bzw. Ein lilafarbener Stein bzw. Ein roter Stein
+Pfad   : /d/ebene/carador/ridu/std/stein.c
+Wert   : 500
+Fundort: Questbelohnung fuer Quest 'Der fliegende Silberlaender', d.h.
+         wird am Questende in /d/ebene/carador/ridu/room/pier.c ausgegeben.
+Aufwand: Hoch, man muss die ganze Quest spielen, die, selbst, wenn man sie
+         auswendig kann, mindestens 5 Min. dauert.
+Details: 
+
+- Der Stein hat ein negatives Gewicht: -3333
+- Traegt der Spieler den Stein bei sich, erwaermt er sich alle 90 Sekunden
+  um eine Einheit
+- Liegt der Stein im Raum rum, kuehlt er alle 90 Sekunden um 5 Einheiten ab
+- Hat der Stein eine Waerme von mindestens 9 erreicht, so besteht ab dann
+  alle 90 Sekunden eine 2.5% Wahrscheinlichkeit, dass der Stein ausbrennt,
+  d.h. ab dann +3333 Gewicht hat und ansonsten nix mehr macht
+- Ab Waerme 9 steigt auch die Wahrscheinlichkeit, dass es zu magischen
+  Entladungen kommt, die in 50% aller Faelle dazu fuehren, dass der Spieler
+  einen Schritt in eine zufaellig Richtung macht. Dabei kuehlt sich der Stein
+  wieder ein bisschen ab. (IS_LEARNERS werden natuerlich nicht bewegt)
+- Vorbereitung: Wenn man nix bei sich hat ausser den Steinen, kann das
+  P_TOTAL_WEIGHT - P_WEIGHT < 0 werden. Um bei weight_text() nix falsches
+  zu kriegen, muss in std/player/base.c in weight_text() vor das 
+  switch(p) ein:
+    if (p<0) p=0;
+  rein.
+- Man kann nur einen Stein von jeder Farbe bei sich haben. Sind zwei im
+  gleichen Living, so explodiert einer von beiden.
+
+*/
+
+#pragma strong_type
+#include "../def.h"
+
+inherit RD_THING;
+
+string schimmern;
+status ausgebrannt;
+int waerme = 0; 
+
+string *all_dirs = ({ "norden", "nordosten", "osten", "suedosten", "sueden",
+  "suedwesten", "westen", "nordwesten" });
+
+string *waerme_descs = ({
+  "kalt",   // 0
+  "lauwarm",  //1
+  "ein bisschen warm", // 2
+  "warm",   //3
+  "sehr warm",  //4
+  "extrem warm", // 5
+  "ein bisschen heiss",  // 6
+  "heiss", // 7
+  "sehr heiss",  //8
+  "extrem heiss"  // 9
+});
+
+
+private string my_long()
+{
+  string desc;
+  int tmp_waerme;
+
+  tmp_waerme = waerme;
+  if (tmp_waerme > 9) tmp_waerme = 9;
+  
+  if (ausgebrannt) return "\
+Der Stein zeigt nichts weiter als ein schwaches, "+schimmern+" Schimmern.";
+
+  desc = "\
+Im Innern dieses halbdurchsichtigen Steins siehst Du ein dunkles, \
+" + schimmern + " Glimmen.";
+  
+  if (environment() && living(environment())) desc += "\
+ Der Stein fuehlt sich in Deinen Haenden seltsam leicht an, beinahe zu \
+leicht. Ausserdem fasst er sich " + waerme_descs[tmp_waerme] + " an.";
+
+  return break_string(desc, 78);
+}
+
+
+void set_farbe(string f)
+{
+  switch(f) {
+    case "gruen":
+      schimmern = "gruenliches";
+      SetProp(P_NAME_ADJ, "gruen");
+      SetProp(P_SHORT, "Ein gruener Stein");
+      AddId(({ "gruenen stein", "stein", "gruener stein" }));
+      return;
+    case "lila":
+      schimmern = "lilanes";
+      SetProp(P_NAME_ADJ, "lilafarben");
+      SetProp(P_SHORT, "Ein lilafarbener Stein");
+      AddId(({ "lilanen stein", "stein", "lilaner stein", 
+               "lilafarbenen stein", "lilafarbener stein",
+               "lila stein" }));
+      return;
+    case "rot":
+      schimmern = "roetliches";
+      SetProp(P_NAME_ADJ, "rot");
+      SetProp(P_SHORT, "Ein roter Stein");
+      AddId(({ "roten stein", "stein", "roter stein" }));
+      return;
+   }
+}
+
+void create()
+{
+  ::create();
+
+  SetProp(P_NAME, "Stein");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_LONG, #'my_long);
+  SetProp(P_WEIGHT, -3333); 
+  SetProp(P_MATERIAL, MAT_CRYSTAL);
+  SetProp(P_SIZE, 40);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_VALUE, 500);
+
+  if (is_clone(this_object()))
+    RD_LIBDIR"steinloop"->add_stein(this_object());
+  
+  AddRule("reibe <me>", "reibe_stein");
+  AddRule("reibe an <me>", "reibe_stein");
+  AddRule("reibe am <me>", "reibe_stein");
+  AddRule("reib <me>", "reibe_stein");
+  AddRule("reib an <me>", "reibe_stein");
+  AddRule("reib am <me>", "reibe_stein");
+  AddDetail("glimmen", "Beim Betrachten des Glimmens fuehlst Du Dich "
+    "auf einmal ganz leicht.");
+}
+
+void random_move()
+{
+  object *liv, r;
+  string *cmd, dir;
+
+  if (sizeof(liv = filter_array(all_environment(this_object()), 
+              #'interactive)) != 1) return;
+
+  r = environment(liv[0]);
+  if (!r) return;
+  cmd = m_indices(r->QueryProp(P_EXITS)||([])) & all_dirs;
+  if (!sizeof(cmd)) return;
+  dir = cmd[random(sizeof(cmd))];
+
+  if (random(3) || IS_LEARNER(liv[0])) {
+    message(({ ({ M_TARGETS, liv[0], M_ME_BEST, "faengt ploetzlich "
+      "an zu vibrieren und sich zu bewegen. Doch Du bringst ihn wieder "
+      "unter Kontrolle." }) }));
+  } else {
+    message(({ 
+      ({ M_TARGETS, liv[0], M_ME_BEST, " entlaedt ploetzlich "
+         "so explosionsartig kinetische Energie, dass Du Dich nicht "
+         "dagegen wehren kannst." }),
+      ({ M_ROOM, r, liv[0], M_VERB, ({ "wirst", "wird" }),
+         liv[0], "ploetzlich von einer unsichtbaren Kraft in Richtung "+
+         capitalize(dir) + " gezogen." }) }));
+    liv[0]->command_me(dir);
+  }
+}
+
+void my_action()
+{
+  int rnd;
+  object *liv, bumm;
+
+  if (!environment()) {
+    remove();
+    return;
+  }
+
+  if (sizeof(liv = filter_array(all_environment(this_object()), 
+              #'interactive)) != 1) {
+    waerme-=5;
+    if (waerme<0) waerme = 0; 
+
+  } else {
+    if( ( id("lilafarbener stein") && 
+          (bumm = present("lilafarbener stein 2", liv[0])) ) ||
+        ( id("roter stein") && 
+          (bumm = present("roter stein 2", liv[0])) ) ||
+        ( id("gruener stein") && 
+          (bumm = present("gruener stein 2", liv[0])) ) ) {
+      message(({
+        ({ M_TARGETS, ({ liv[0] }),
+        "Ploetlich explodiert ", bumm, "in tausend "
+        "kleine Splitter." }),
+        ({ M_EXCLUDE, ({ liv[0] }),
+        "Im Gepaeck von ", M_DAT, liv[0], "kommt es zu einer heftigen "
+        "Explosion." }) }));
+      if (bumm == this_object()) {
+        remove();
+        return;
+      }
+      bumm->remove();
+    }
+    waerme++;
+    message(({ ({
+      M_TARGETS, ({ liv[0] }), 
+       (waerme == 1 ?
+        "D" + name() + " wird ploetzlich lauwarm." :
+        "D" + name() + " erwaermt sich immer weiter.") }) }));
+    if (waerme > 39) waerme = 39;
+    if (waerme >= 9) {
+      rnd = random(40);
+      if (!rnd) {
+          message(({ ({ M_TARGETS, liv[0], M_ME_BEST, "wird ploetzlich "
+           "schlagartig kalt." }) }));
+          SetProp(P_WEIGHT, 4000);
+          SetProp(P_VALUE, 0);
+          ausgebrannt = 1;
+          RD_LOGGER->do_log("stein", "ausgebrannt", liv[0]);
+          RD_LIBDIR"steinloop"->remove_stein(this_object());
+          return;
+      }
+      if (rnd < waerme) {
+          random_move();
+          waerme -=5;
+          return;
+      }
+    }
+  }
+}
+
+
+status do_action(string verb, mapping args)
+{
+  switch(verb) {
+    case "reibe_stein" :
+      if (environment() != this_player()) {
+        message("Dazu musst Du ihn schon nehmen.");
+        return 1;
+      }
+      message(({ ({ M_PL_BEST, M_PL_VERB, "reib", " an ",
+        M_ME_DAT_BEST, "." }),
+       ({ M_WRITE, "Der Stein wird ploetzlich ganz warm." }) }));
+       if (waerme < 9) waerme = 9;
+       random_move();
+      return 1;
+  }
+}
+
+

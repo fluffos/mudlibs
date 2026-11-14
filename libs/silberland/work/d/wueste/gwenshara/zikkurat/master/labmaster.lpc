@@ -1,0 +1,124 @@
+// A master to generate and manage the labyrinth
+#include "../def.h"
+#include <ansi.h>
+#define DEBUG(x) if(debugFlag && find_player("gwenshara")) tell_object(find_player("gwenshara"), x+"\n")
+
+private nosave int *primes;
+private nosave int debugFlag;
+
+public void create() {
+    if(is_clone(this_object())) {
+        raise_error("Illegal cloning of singleton master");
+        return;
+    }
+
+    // contains height and with of each level
+    primes = ({29,23,19,17,13,11,7,5,3});
+    debugFlag = 1; // TODO ausschalten
+}
+
+public void SetDebug(int f) {
+    debugFlag = f;
+}
+
+public int IsValidRoom(int level, int x, int y) {
+    return x>=0 && x < primes[level] && y >=0 && y < primes[level];
+}
+
+public int BeaconPosition(int level) {
+    return level/2+1; // works because primes :)
+}
+
+public int IsExitRoom(int level, int x, int y) {
+    if(level == 0 && x == 0 && y == primes[0]/2+1) return EXIT_ROOM_WEST;
+    if(level == 0 && x == primes[0]-1 && y == primes[0]/2+1) return EXIT_ROOM_EAST;
+    return EXIT_ROOM_NO;
+}
+
+public mapping GetExits(int level, int x, int y) {
+    mapping exits;
+
+    if(!IsValidRoom(level, x, y)) {
+        return 0;
+    }
+    
+    exits = ([]);
+    if(IsValidRoom(level, x, y-1)) {
+        exits += ([ "norden": sprintf("%slabyrinth:%d:%d:%d", ROOM, level, x, y-1)]);
+    }
+    if(IsValidRoom(level, x+1, y)) {
+        exits += ([ "osten": sprintf("%slabyrinth:%d:%d:%d", ROOM, level, x+1, y)]);
+    }
+    if(IsValidRoom(level, x, y+1)) {
+        exits += ([ "sueden": sprintf("%slabyrinth:%d:%d:%d", ROOM, level, x, y+1)]);
+    }
+    if(IsValidRoom(level, x-1, y)) {
+        exits += ([ "westen": sprintf("%slabyrinth:%d:%d:%d", ROOM, level, x-1, y)]);
+    }
+
+    if(IsExitRoom(level, x, y) == EXIT_ROOM_WEST)  {
+        exits += ([ "westen": EXIT_WESTEN ]);
+    } else if(IsExitRoom(level, x, y) == EXIT_ROOM_EAST) {
+        exits += ([ "osten": EXIT_OSTEN ]);
+    }
+    return exits;
+}
+
+private void placeBeacon(string room) {
+    object beacon;
+
+    call_other(room, "???");
+    if(objectp(present("\nzikkurat_beacon", find_object(room)))) return;
+
+    beacon = clone_object(OBJ "kohlebecken");
+    if(beacon->move(find_object(room), M_NOCHECK|M_PUT) != 1) {
+        DEBUG("fehler beim platzieren des beacon in '" + room +"'");
+        beacon->remove(1);
+    }
+}
+
+public void PlaceFires(int level) {
+    int i, prime;
+    string room;
+
+    prime = primes[level];
+    //TODO implement
+    for(i=0;i<=prime/2;i+=2) { 
+        room = sprintf("%slabyrinth:%d:%d:%d", ROOM, level, i, i);
+        DEBUG("beacon at "+room);
+        placeBeacon(room);
+        room = sprintf("%slabyrinth:%d:%d:%d", ROOM, level, i, prime-1-i);
+        DEBUG(sprintf("beacon at %s", room));
+        placeBeacon(room);
+    }
+    for(i=prime-1;i>prime/2+1;i-=2) { 
+        room = sprintf("%slabyrinth:%d:%d:%d", ROOM, level, i, i);
+        DEBUG(sprintf("beacon at %s", room));
+        placeBeacon(room);
+        room = sprintf("%slabyrinth:%d:%d:%d", ROOM, level, i, prime-1-i);
+        DEBUG(sprintf("beacon at %s", room));
+        placeBeacon(room);
+    }
+}
+
+public void WriteMap(int level) {
+    int x, y, prime;
+    string room, out;
+
+    out = "";
+
+    prime = primes[level];
+    for(y=0; y<prime; ++y) {
+        for(x=0; x<prime; x++) {
+            if(!IsValidRoom(level, x, y)) continue;
+            
+            room = sprintf("%slabyrinth:%d:%d:%d", ROOM, level, x, y);
+            call_other(room, "???");
+            if(objectp(present("\nzikkurat_beacon", find_object(room)))) out += ANSI_BOLD+ANSI_RED+"*"+ANSI_NORMAL;
+            else out += "o";
+        }
+        out += "\n";
+    }
+
+    write(out);
+}

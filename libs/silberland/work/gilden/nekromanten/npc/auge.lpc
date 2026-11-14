@@ -1,0 +1,649 @@
+
+//                    andere spieler sehen die antworten nicht mehr 
+//                    (weniger scroll)
+// 08.08.2003 Archon: uebergabe des skillpunkt
+// 10.12.2003 Feyaria: verschwinden mitteilen
+// 06.01.2004 Feyaria: PreventFollow
+
+inherit "std/npc";
+inherit "std/npc/spells";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <new_skills.h>
+#include <class.h>
+#include <defines.h>
+#include <moredef.h>
+#include "../nekro.h"
+
+private nosave object caster;
+private nosave int gender;
+private nosave int job;
+private nosave int beobachte;
+private nosave int suc;
+private nosave int skp;
+private nosave string anrede;
+private nosave int max_services=1;
+
+string auge_info_dienste();
+
+void create()
+{
+ 
+  if (!is_clone(TO)) return;
+  ::create();
+  job=0;
+  create_default_npc(1);
+  SetProp(P_SHORT, "Ein fliegendes Auge");
+  SetProp(P_LONG,
+      "Du siehst ein Auge, das etwa zwei Schritt ueber den Boden fliegt. Es "
+      "ist in etwa faustgross und blickt sich genau um. Nichts scheint ihm zu "
+      "entgehen.");
+  SetProp(P_NAME, "Auge");
+  SetProp(P_NAME_ADJ, "fliegend");
+  SetProp(P_GENDER, NEUTER);
+  SetProp(P_SIZE, 10);
+  AddId( ({ "auge", NEKRO_EYE_NPC}));
+  AddClass(CL_FLYING);
+
+  SetProp(P_RACE, "Daemon");
+  SetProp(P_ALIGN, -1000);
+  SetProp(P_MAX_HANDS, 0);
+  SetProp(P_NOCORPSE, 1);
+  SetProp(P_NO_GLOBAL_ATTACK, 1);
+  SetProp(P_FRIEND, 1);
+  SetProp(P_MAX_POISON, 0);
+  SetProp(P_BODY, 1000); // Es weicht aus :-)
+  SetProp(P_TEMPERATURE_RANGE, ([0:-276, 1:500]));
+  SetProp(P_MSGIN, "schwebt herein");
+  SetProp(P_MSGOUT, "fliegt");
+  SetProp(P_MMSGIN, "schwebt herein");
+  SetProp(P_MMSGOUT, "fliegt");
+  SetProp(P_DIE_MSG, BS(" faellt klatschend zu Boden und loest sich in "
+      "stinkenden Rauch auf."));
+  SetProp(P_HANDS, ({" mit einem finsteren Blick", 10,DT_TERROR}));
+
+  SetProp(P_SMELL, "Das Auge weicht Dir gekonnt aus.\n");
+  AddClass(CL_DEMON);
+  SetProp(P_KILL_MSG, "Nun dienst Du MIR!");
+  SetChats(5, ({
+        "Das fliegende Auge beobachtet Dich.\n", 
+        "Das fliegende Auge beobachtet Dich sehr genau.\n",
+        "Das fliegende Auge sieht sich genau um.\n"}) );
+  SetProp(P_SPELLRATE,20);
+  SetProp (P_REJECT,
+         ({ REJECT_DROP, "Das Auge kann @WEN nicht nehmen!\n" }) );
+  AddDefaultSpell(1,1,DS_PARALYZE,
+      " Das Auge hypnotisiert Dich.\n",
+      " Das Auge hypnotisiert @WEN.\n", 4);
+  AddInfo(({"dienste","dienst"}), #'auge_info_dienste, "uebermittelt Dir: ",
+      "scheint @WEN zu fixieren.");
+
+}
+
+int tc(string str) 
+{
+  tell_object(caster, str);
+  return 1;
+}  
+
+int Setup(object _caster, int _suc, int _skp) 
+{
+  caster=_caster;
+  suc=_suc;
+  skp=_skp;
+  gender=caster->QueryProp(P_GENDER);
+  if(gender==2)
+    anrede="dunkle Gebieterin";
+  else
+    anrede="dunkler Gebieter";
+  AddId( ({ getuid(caster)+"auge"}));
+  tell_room(ENV(caster), "Das fliegende Auge sieht sich um.\n");
+  set_living_name(getuid(caster)+"auge");
+  if(skp>1) {
+    caster->AddPursuer(ME);
+    SetProp(P_MSGOUT , "schwebt "+caster->name(WEM)+" hinterher");
+    SetProp(P_MMSGOUT, "schwebt "+caster->name(WEM)+" hinterher");
+    max_services=skp+(suc>7000?1:0)+
+      (caster->QuerySkill("auge_des_khaza_dhunaar")==MAX_ABILITY?1:0)+
+      (caster->QueryProp(P_GUILD_CIRCLE)==7?1:0)+
+      (caster->QueryProp(P_GUILD_LEVEL)==7?1:0);
+  }
+
+  if(skp>3) {
+    tell_room(ENV(caster), "Die Pupille des fliegenden Auges irisiert hypnotisch.\n");
+    caster->AddDefender(ME);
+  }
+
+  return 1;
+}
+
+void catch_tell(string str) 
+{
+  string target, wer;
+
+  if (!query_verb()) return ;
+  if(TP != caster) return ;
+  if(job) return ;
+
+  if(query_verb() == "sag" || query_verb()[0..0]!="'") 
+  {
+    if(sscanf(str, "%s sagt: auge schaetz %s ein", wer, target)==2 ||
+       sscanf(str, "%s sagt: auge schaetze %s ein", wer, target)==2) 
+    {
+      job=1;
+      call_out("schaetz", 0, lower_case(target));
+    }
+
+    if(sscanf(str, "%s sagt: auge identifiziere %s\n", wer, target)==2) 
+    {
+      job=1;
+      call_out("identifiziere", 0, lower_case(target));
+    }
+
+    if (!skp) return; //das kann ich erst mit skillpunkt
+    if(sscanf(str, "%s sagt: auge beobachte diesen raum", wer)==1) 
+    {
+      job=1;
+      call_out("beobachte", 0);
+    }
+  }
+  if (!skp) return; //das kann ich erst mit skillpunkt
+  if(query_verb() == "teile") 
+  {
+    if(sscanf(str, "%s teilt Dir mit: umgebung", wer) == 1) 
+    {
+      job=1;
+      call_out("schau", 0);
+    }
+    if(sscanf(str, "%s teilt Dir mit: verschwinde", wer) == 1) 
+    {
+      job=1;
+      call_out("remove", 0,0,BS("Das Auge zerplatzt in stinkenden Rauch und "
+          "verschwindet in seine eigene Dimension."));
+    }
+  }
+  return ;
+}
+  
+int beobachte() 
+{
+  command_me(sprintf("sag Wie Ihr wuenscht, %s.", anrede));
+  job=0;
+  beobachte=1;
+  if(skp>1) 
+    caster->RemovePursuer(ME);
+  return 1;
+}
+
+int schau() 
+{
+  int cost;
+  string env;
+  cost=10;
+  if(!caster) return 0;
+  if(caster->QueryProp(P_SP) < cost) 
+  {
+    cost-=caster->QueryProp(P_SP);
+    caster->SetProp(P_SP, 0);
+    caster->do_damage(cost);
+  }
+  else
+    caster->AddSp(-cost);
+  env=ENV(ME)->int_long(ME, ME, 0);
+  tc("Das Auge uebertraegt Euch telepathisch seine Umgebung:\n");
+  tc(env); 
+  job=0;
+  return 1;
+}
+
+init() 
+{
+  ::init();
+  if(caster && beobachte && !TP->QueryProp(P_INVIS)) 
+  {
+    tell_object(caster, sprintf("Das Auge teilt Dir mit: %s kommt herein!\n", 
+          TP->Name(WER)));
+  }
+}
+
+void reset() 
+{
+  ::reset();
+  if(is_clone(TO)) 
+    call_out("remove", 0,0,BS("Das Auge verschwindet mit Knall und "
+          "Schwefelduft in seine eigene Dimension."));;
+  return;
+}
+
+int do_damage(int dam, mixed enemy)
+{
+  if( dam + QueryProp(P_HP) <= 0)
+    SetProp(P_ALIGN, enemy->QueryProp(P_ALIGN)); // Kein Align-Leeching
+  return ::do_damage(dam, enemy);
+}
+
+varargs void die( int poisondeath, int flag ) 
+{
+  object pl;
+  if(!pl=QueryProp(P_KILLER))
+    pl=TP;
+  if(caster && !flag) 
+  {
+    if(TP)
+      tc(sprintf("Das fliegende Auge wurde von %s vernichtet!\n", 
+            TP->name(WEM)));
+    else
+      tc("Das fliegende Auge wurde vernichtet!\n");
+    caster->AddHp(-random(20));
+  }
+  ::die(poisondeath);
+  return ;
+}
+
+varargs int remove(int silent, string text) 
+{
+  if(text && ENV(ME))
+    tell_room(ENV(ME), text);
+  return ::remove(silent);
+}
+
+int schaetz(string target) 
+{
+  object victim;
+  int hpdiff, wcdiff, acdiff, i;
+  int hp, vhp, wc, vwc, ac, vac, gen, val, align;
+  string result;
+  string vname, vnamegen;
+  mapping map1, dam_map;
+  int abil;
+
+  tell_room(environment(ME),
+    BS("Das Auge spricht mit "+PL->name(WEN)+"."),({PL}));
+
+  if(!victim=present(target, ENV(ME))) 
+  {
+    job=0;
+    tc(BSA(sprintf("So etwas sehe ich hier nicht, %s!",anrede),"Das Auge sagt: "));
+    return 0;
+  } 
+  if(!living(victim)) 
+  {
+    job=0;
+    tc(BSA(sprintf("Ich kann keine Dinge einschaetzen, %s!",anrede),"Das Auge sagt: "));
+    return 0;
+  }
+  
+  hp = caster->QueryProp(P_HP);    vhp = victim->QueryProp(P_HP);
+  wc = caster->QueryProp(P_TOTAL_WC);  vwc = victim->QueryProp(P_TOTAL_WC);
+  ac = caster->QueryProp(P_TOTAL_AC);  vac = victim->QueryProp(P_TOTAL_AC);
+  hpdiff = hp - vhp;
+  wcdiff = wc - vwc;
+  acdiff = ac - vac;
+  vname = victim->name(WER, 1);
+  vnamegen = victim->name(WESSEN, 1);
+  gen = victim->QueryProp(P_GENDER);
+  align=victim->QueryProp(P_ALIGN);
+
+  if (hpdiff > 2*vhp)
+     result = "Ihr seid " + victim->name(WEM, 1) + " haushoch ueberlegen.\n";
+  else if (hpdiff > vhp)
+      result = "Ihr seid viel staerker als " + vname + ".\n";
+  else if (hpdiff > vhp/5)
+      result = "Ihr seid staerker als " + vname + ".\n";
+  else if (-hpdiff > 2*hp)
+     result = capitalize(vname) + " ist Euch haushoch ueberlegen.\n";
+  else if (-hpdiff > hp)
+     result = capitalize(vname) + " ist viel staerker als Ihr es seid.\n";
+  else if (-hpdiff > hp/5)
+     result = capitalize(vname) + " ist staerker als Ihr.\n";
+  else
+     result = capitalize(vname) + " ist etwa gleich stark wie Ihr.\n";
+  tc(BSA(result,"Das Auge sagt: "));
+
+  if (acdiff > 2*vac)
+      result = "Eure Ruestung ist unglaublich viel besser als die " 
+     + vnamegen + ".\n";
+   else if (acdiff > vac)
+      result = "Eure Ruestung ist viel besser als die " + vnamegen + ".\n"; 
+   else if (acdiff >vac/5)
+      result = "Eure Ruestung ist besser als die " + vnamegen + ".\n";
+   else if (-acdiff > 2*ac)
+      result = "Die Ruestung " + vnamegen 
+     + " ist unglaublich viel besser als Eure.\n";
+   else if (-acdiff > ac)
+      result = "Die Ruestung " + vnamegen + " ist viel besser als Eure.\n";
+   else if (-acdiff > ac/5)
+      result = "Die Ruestung " + vnamegen + " ist besser als Eure.\n";
+   else
+      result = "Eure Ruestungen sind etwa gleich gut.\n";
+  tc(BSA(result,"Das Auge sagt: "));
+
+   if (wcdiff > 2*vwc)
+      result = "Eure Waffe wird Euren Gegner zerfetzen.\n";
+   else if (wcdiff > vwc)
+      result = "Eure Waffe ist viel besser als die " +vnamegen + ".\n";
+   else if (wcdiff > vwc/5)
+      result = "Eure Waffe ist besser als die " +vnamegen + ".\n";
+   else if (-wcdiff > 2*wc)
+      result = "Die Waffe " + vnamegen 
+     + " wuerde Euch zerfetzen.\n";
+   else if (-wcdiff > wc)
+      result = "Die Waffe " + vnamegen + " ist viel besser als Eure.\n";
+   else if (-wcdiff > wc/5)
+      result = "Die Waffe " + vnamegen + " ist besser als Eure.\n";
+   else
+      result = "Eure Waffen sind etwa gleich gut.\n";
+  tc(BSA(result,"Das Auge sagt: "));
+
+  result = capitalize(victim->QueryPronoun(WER) || "es");
+  if ((val = victim->QueryProp(P_ALIGN)) <= -1000)
+    result += " ist von satanischer Gesinnung. Ein echtes Vorbild!";
+  else if (val < -800) result += " ist so richtig schoen boese.";
+  else if (val < -600) result += " ist extrem boese.";
+  else if (val < -400) result += " ist sehr boese.";
+  else if (val < -300) result += " ist etwas boesartig.";
+  else if (val < -200) result += " ist von etwas boeser Gesinnung.";
+  else if (val < -100) result += " ist sehr frech.";
+  else if (val < -50) result += " ist frech.";
+  else if (val < 50) result += " steht allem ziemlich neutral gegenueber.";
+  else if (val < 100) result += " ist nett.";
+  else if (val < 200) result += " ist sehr nett.";
+  else if (val < 300) result += " ist ekelhaft nett und gut.";
+  else if (val < 400) result += " ist gut. Ein gutes Opfer.";
+  else if (val < 600) result += " ist sehr gut. Ein sehr gutes Opfer.";
+  else if (val < 800) result += " ist von extrem guter Gesinnung, wie "
+                                "ekelhaft!";
+  else if (val < 1000) result += " ist fast heilig. Vorauf wartest Du noch? "
+    "TOETEN!";
+  else 
+  { 
+    result += " strahlt eine unangenehme Heiligkeit aus. ";
+    if(gen == FEMALE)  
+      result+="Sie wird eine gute Dienerin abgeben, nachdem sie tot ist!";
+    else 
+      result+="Er wird einen guten Diener abgeben, nachdem er tot ist!";
+  }
+  tc(BSA(result,"Das Auge sagt: "));
+
+  val = caster->QueryProp(P_ALIGN)/32 + align / 12;
+  result="Wenn Ihr "+CAP(victim->name(WEN,1))+" vernichten wuerdet, wuerde Eure "
+    "Gesinnung ";
+  if(val < 0) 
+    result += "steigen.";
+  else if (val > 0) 
+    result += "sinken. SOFORT VERNICHTEN!";
+  else 
+    result += "gleich bleiben.";
+  tc(BSA(result,"Das Auge sagt: "));
+
+  result=CAP(vname);
+  switch(100*victim->QueryProp(P_SIZE)/(caster->QueryProp(P_SIZE)+1)) 
+  {
+    case 0..20   : result+=" ist sehr viel kleiner als Ihr.\n"; break;
+    case 21..50  : result+=" ist viel kleiner als Ihr.\n"; break;
+    case 51..75  : result+=" ist kleiner als Ihr.\n"; break;
+    case 76..90  : result+=" ist etwas kleiner als Ihr.\n"; break;
+    case 91..110 : result+=" ist etwa gleich gross wie Ihr.\n"; break;
+    case 111..140: result+=" ist etwas groesser als Ihr.\n"; break;
+    case 141..200: result+=" ist groesser als Ihr.\n"; break;
+    case 201..350: result+=" ist viel groesser als Ihr.\n"; break;
+    case 351..500: result+=" ist sehr viel groesser als Ihr.\n"; break;
+    case 501..800: result+=" ueberragt Euch um Haeuser.\n"; break;
+    default      : result+=" ist gross wie ein Berg.\n";
+  }
+  tc(BSA(result,"Das Auge sagt: "));
+
+  result=CAP(vname);
+  val=caster->QueryProp(P_LEVEL);
+  if(val>50) val=50;
+  switch(victim->QueryProp(P_LEVEL)-val) 
+  {
+    case -500..-40: result+=" hat gar keine Macht."; break;
+    case -39..-25 : result+=" hat kaum Macht verglichen mit Euch."; break;
+    case -24..-11 : result+=" hat nur wenig Macht verglichen mit Euch."; break;
+    case -10..-6  : result+=" ist weniger maechtig als Ihr."; break;
+    case -5..-1   : result+=" ist fast so maechtig wie Ihr."; break;
+    case 0        : result+=" ist gleich maechtig wie Ihr."; break;
+    case 1..5     : result+=" ist etwas maechtiger als Ihr."; break;
+    case 6..10    : result+=" ist maechtiger als Ihr."; break;
+    case 11..30   : result+=" ist um vieles maechtiger als Ihr."; break;
+    case 31..50   : result+=" hat gewaltige Macht verglichen mit Euch."; 
+                   break;
+    default       : result+=" hat nahezu unendliche Macht."; break;
+  }
+  tc(BSA(result,"Das Auge sagt: "));
+
+  dam_map=(["unheiligen Schaden": DT_UNHOLY,
+            "Saeureschaden"     : DT_ACID,
+            "Giftschaden"       : DT_POISON]);
+  for(i=sizeof(dam_map)-1; i>=0;i--) 
+  {
+    result="Gegen "+m_indices(dam_map)[i]+" ist "+vname+" ";
+    map1=victim->QueryProp(P_RESISTANCE_STRENGTHS);
+    if(mappingp(map1)) 
+    {
+      val=(int)(100*map1[m_values(dam_map)[i]]);
+      switch(val) 
+      {
+        case -100: result+="immun."; break;
+        case -99..-60: result+="beinahe immun."; break;
+        case -59..-40: result+="extrem resistent."; break;               
+        case -39..-20: result+="sehr resistent."; break;
+        case -19..-1: result+="resistent."; break;
+        case 0: result+="weder resistent noch anfaellig."; break;
+        case 1..20: result+="anfaellig."; break;
+        case 21..40: result+="sehr anfaellig."; break;
+        case 41..60: result+="stark anfaellig. Eine leichte Beute!"; break;
+        case 61..100: result+="extrem stark anfaellig! Worauf wartet Ihr "
+                      "noch? VERNICHTEN!"; break;
+        default: result+="so unglaublich stark anfaellig, dass Euch der "
+                 "Sieg gewiss ist! HarHar!"; break;              
+      }
+    }
+    else 
+      result+="weder resistent noch anfaellig.";
+    tc(BSA(result,"Das Auge sagt: "));
+  }
+  if (mappingp(map1 = caster->QuerySkill("Fight_knife")))
+  {
+    abil = map1[SI_SKILLABILITY];
+    if (abil != MAX_ABILITY && victim->QueryProp(P_LEVEL) * 400 > abil)
+      tc(BSA(victim->Name(WER,1)+" ist "+(victim->QueryProp(P_GENDER) == FEMALE ?
+              "eine wuerdige Trainingspartnerin":"ein wuerdiger Trainingspartner")+
+            ".", "Das Auge sagt: "));
+  }
+  if (present(NEKRO_BLOOD_PACT, victim))
+    tc(BSA(sprintf("%s ist durch einen Blutpakt gestaerkt!", victim->Name(WER,1)),
+          "Das Auge sagt: "));
+  if (present(NEKRO_DARK_PACT, victim))
+    tc(BSA(sprintf("%s ist durch einen dunklen Pakt gestaerkt!", victim->Name(WER,1)),
+          "Das Auge sagt: "));
+  
+  if(stringp(result=victim->QueryProp(P_INFO))) {
+    tc(BSA("Folgende Geheimnisse konnte ich noch entdecken: "+result,
+          "Das Auge sagt: "));
+  }
+  job=0;
+  max_services--;
+  if(max_services < 1)
+    call_out("remove", 0,0,BS("Das Auge zerplatzt in stinkenden Rauch und "
+          "verschwindet in seine eigene Dimension."));
+  return 1;
+}
+
+int identifiziere(string target) 
+{
+  object ob;
+  string result;
+  mapping mat, res, prot;
+  string *damtypes;
+  int *damnr;
+  mixed mod;
+  int i, abil;
+
+  tell_room(environment(ME),
+    BS("Das Auge spricht mit "+PL->name(WEN)+"."),({PL}));
+  if(!(ob=present(target, ENV(ME))) && !(ob=present(target, caster)) ) 
+  {
+    job=0;
+    tc(BSA(sprintf("So etwas sehe ich hier nicht, %s!",anrede),"Das Auge sagt: "));
+    return 0;
+  } 
+  if(living(ob)) 
+  {
+    job=0;
+    tc(BSA(sprintf("Ich kann keine Lebewesen identifizieren, %s!",anrede),"Das Auge sagt: "));
+    return 0;
+  }
+
+  if( (mat=ob->QueryProp(P_MATERIAL)) && (pointerp(mat))) 
+  {
+    if (sizeof(mat))
+      result=sprintf("%s besteh%s aus %s.", ob->Name(WER,1),
+             (ob->IsPlural()?"en":"t"),
+             ob->MatList(WEM) || "unbekanntem Material");
+  } 
+  else if (mappingp(mat)) 
+  {
+    result=sprintf("%s besteh%s aus %s.", ob->Name(WER,1),
+            (ob->IsPlural()?"en":"t"),
+            ob->MaterialList(WEM,caster) || "unbekanntem Material");
+  }
+  tc(BSA(result,"Das Auge sagt: "));
+
+  if (result=ob->info(caster) || ob->QueryProp(P_INFO))
+    tc(BSA(result,"Das Auge sagt: "));
+  else
+    tc(BSA(sprintf("%s %s keine besonderen Geheimnisse.\n",
+           CAP(ob->QueryPronoun(WER)), (ob->IsPlural()?"bergen":"birgt")),
+           "Das Auge sagt: "));
+  if(ob->QueryProp(P_MAGIC))
+    tc(BSA(sprintf("%s wohn%s eine Form von Magie inne.",
+            CAP(ob->QueryPronoun(WEM)), (ob->IsPlural()?"en":"t")),
+            "Das Auge sagt: "));
+  if(ob->QueryProp(P_CURSED))
+    tc(BSA(sprintf("HarHar, auf %s befinde%s sich ein perfider Fluch!",
+            ob->QueryPronoun(WEM), (ob->IsPlural()?"n":"t")), 
+            "Das Auge sagt: "));
+  if(ob->QueryProp(P_NOBUY))
+    tc(BSA(sprintf("%s %s nirgends gekauft werden, nicht "
+          "einmal bei den verfluchten Paladinen!",
+          CAP(ob->QueryPronoun(WER)),(ob->IsPlural()?"koennen":"kann")), 
+          "Das Auge sagt: "));
+  if(ob->QueryProp(P_NODROP) && suc>5000)
+    tc(BSA(sprintf("%s koennt Ihr nicht mehr ablegen! HarHar!",
+            CAP(ob->QueryPronoun(WEN))),
+            "Das Auge sagt: "));
+
+  res = ([DT_HOLY: "heiligen Schaden",
+          DT_UNHOLY: "unheiligen Schaden",
+          DT_TERROR: "Terrorschaden",
+          DT_LIGHT: "Lichtschaden",
+          DT_ACID: "Saeureschaden",
+          DT_EXPLOSION: "Explosionsschaden",
+        ]);
+
+  if(ob->QueryProp(P_ARMOUR_TYPE) && mappingp(prot=ob->QueryProp(P_DAM_PROTECTION)))
+  {
+    result = "";
+    damtypes = m_indices(prot);
+    damnr = m_values(prot);
+    for(i=sizeof(damtypes)-1; i>=0; i--)
+    {
+      if( member(res, damtypes[i]) )
+      {
+        switch(damnr[i])
+        {
+          case 1: break;
+          case 2: result+="besser "; break;
+          case 3: result+"stark "; break;
+          default: result+"extrem "; 
+        }
+        result+="gegen "+res[damtypes[i]]+", ";
+      }
+    }
+    if(strlen(result))
+      tc(BSA(ob->Name(WER,1)+" schuetz"+(ob->IsPlural()?"en":"t")+
+            " zusaetzlich "+result+"\b\b.", "Das Auge sagt: "));
+  }
+  if (ob->QueryProp(P_WEAPON_TYPE) == WT_KNIFE)
+  {
+    abil = caster->QuerySkill("Fight_knife")[SI_SKILLABILITY];
+    if (abil != MAX_ABILITY && ob->QueryProp(P_WC) >= abil/100)
+      tc(BSA(ob->Name(WER,1)+" eignet sich zum Ueben des Dolchkampfes.",
+            "Das Auge sagt: "));
+  }
+  if(ob->QueryProp(P_NEKRO_SPELLCOST))
+    tc(BSA(ob->Name(WER,1)+" verringer"+(ob->IsPlural()?"n":"t")+
+          " die Kosten Deiner Zauber.", "Das Auge sagt: "));
+  if(ob->QueryProp(P_NEKRO_BONUS))
+    tc(BSA(ob->Name(WER,1)+" verbesser"+(ob->IsPlural()?"n":"t")+
+          " Deine Zauber.", "Das Auge sagt: "));
+  job=0;
+  max_services--;
+  if(max_services < 1)
+    call_out("remove", 0,0,BS("Das Auge zerplatzt in stinkenden Rauch und "
+          "verschwindet in seine eigene Dimension."));
+  return 1;
+}
+
+string auge_info_dienste() {
+  string txt;
+  if(TP!=caster) 
+    return "Verschwinde, sterblicher Wurm!";
+  txt="Ich kann Eure Gegner fuer Euch einschaetzen (sag auge schaetz <name> "
+    "ein), "+anrede+", und ich kann "
+    "Gegenstaende identifizieren (sag auge identifiziere <gegenstand>). ";
+  if(skp)
+    txt+="Ich kann auch hier verweilen und Euch immer berichten, wenn jemand "
+      "den Raum betritt (sag auge beobachte diesen raum). Ich kann Euch auch "
+      "jederzeit die genaue Umgebung telepatisch uebermitteln (teile "+
+      getuid(caster)+"auge mit umgebung), "+anrede+". Wenn ihr meine Dienste "
+      "nicht mehr benoetigt, so teilt mir einfach 'verschwinde' mit.";
+  return txt;
+}
+
+public void InformDefend(object enemy) {
+  int r;
+
+  if(InFight() || enemy->QueryProp("last_nekro_auge_slowed") + 8 > time()) return;
+
+  r = random(caster->QueryAttribute(A_INT)+skp);
+
+  if(caster->QueryProp(P_TESTPLAYER)) {
+    tell_object(caster, sprintf("auge: %d > %d\n", r, enemy->QueryProp(P_LEVEL)));
+  }
+
+  if(r < enemy->QueryProp(P_LEVEL) && random(100)) return;
+
+  tell_room(ENV(ME), Name(WER) + " stiert " + enemy->name(WEN, 1) + " intensiv an.\n");
+  if(random(100) < enemy->QueryProp(P_NOMAGIC)) {
+    tell_room(ENV(ME), enemy->Name(WER, 1) + " wehrt den Zauber ab.\n");
+    return;
+  }
+
+  enemy->SetProp(P_DISABLE_ATTACK, 1);
+  enemy->SetProp("last_nekro_auge_slowed", time());
+  return;
+}
+
+int PreventFollow(object dest)
+{
+  if(objectp(caster))
+  {
+    if(living(caster) && !query_once_interactive(caster))  return 0; //NPC
+    if(interactive(caster) && !caster->QueryProp(P_GHOST)) return 0; //spieler
+  }
+  return 1;
+}
+
+void BecomesNetDead(object ob)
+{
+  if(ob == caster)
+  {
+    remove();
+  }
+}
+

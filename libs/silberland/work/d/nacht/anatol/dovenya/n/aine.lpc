@@ -1,0 +1,362 @@
+/* Aine Abendsang
+ * Rezeptionistin des Casino 'Comet'
+ * __________________________________________(i) Anatol@Silberland (2013) */
+
+#pragma strict_types
+#include "../defines.h"
+#include <moving.h>
+#include "../sys/comet.h"
+#define WECHSELKURS 100    // Eine Comete ist x Muenzen wert
+
+inherit "std/npc";
+
+nosave mapping greeted;
+
+public void 
+create() 
+{
+    seteuid(getuid(this_object()));
+
+    if (is_clone(this_object())) 
+    {
+        destruct(this_object());
+        return;
+    }
+    ::create();
+    greeted=([]);
+    SetProp(P_SHORT,"Aine Abendsang, Empfangsdame des 'Comet'");
+    SetProp(P_LONG,
+      "Mit freundlichem Blick und freundlichen Worten empfaengt Aine "
+      "jeden Gast des Casinos. Sie ist vermutlich noch recht jung und "
+      "eher unerfahren, doch zunaechst ganz Business und traegt ueber "
+      "der weissen Bluse eine goldfarbene Kombination aus Hose und "
+      "Jacke, allerdings alles gar nicht business-like eng anliegend und "
+      "figurbetont. Die Nachtelfin beantwortet vermutlich die eine oder "
+      "andere Frage, hauptsaechlich aber tauscht sie fuer die Gaeste "
+      "des Hauses Muenzen in die am Tisch geltenden Cometen und umgekehrt.");
+      
+    AddDetail(({"kombination","hose","jacke"}),
+        "Es steht ausser Frage, dass dies die Berufskleidung Aines ist. "
+        "Wo sonst koennte frau sich so extravagant kleiden und nicht "
+        "fehlplatziert wirken? Hier jedenfalls passt sie mit dieser "
+        "Kleidung ganz hervorragend her.");
+    AddDetail("bluse",
+        "Die Bluse ist schnoerkellos, dafuer mit einem Stehkragen. Aine "
+        "traegt sie sprichwoertlich zugeknoepft, was ihrer Figur natuerlich "
+        "keinen Abbruch tut.");
+
+    SetProp(P_GENDER, FEMALE);
+    SetProp(P_INFO, break_string(
+       "Aine ist die Empfangsdame des Casinos 'Comet' und mit "
+       "verantwortungsvollen Aufgaben betraut. Handgemenge sind nicht "
+       "so ihr Ding, deshalb steht sie bevorzugt hinter der Rezeption."
+        ,77));
+
+    SetProp(P_NAME,"Aine Abendsang");
+    AddId(({"aine", 
+            "aine abendsang", 
+            "abendsang", 
+            "\a\n\a\tol_aine_abendsang"}));
+  
+    SetProp(P_ARTICLE,0);
+    set_living_name("aine"); 
+    create_default_npc(1);
+    SetProp(P_MAX_HP,300);
+    SetProp(P_MAX_SP,300);
+    SetProp(P_BODY,30);
+    SetProp(P_NOATTACK,"steht unerreichbar hinter der Rezeption"); 
+    SetProp(P_HANDS,({" bestimmt nicht",150,DT_SQUEEZE}));
+    SetProp(P_XP,0);
+    SetProp(P_SIZE,172);
+    SetProp(P_ALIGN,730);
+    SetProp(P_RACE,"Nachtelf");
+    SetProp(P_REJECT, REJECT_DROP);
+    SetProp(P_MMSGIN,"faellt verdutzt aus einem Funkenwirbel");
+    SetProp(P_MSGIN,"stellt sich leise summend hinter den Empfang");
+    SetProp(P_MSGOUT,"verlaesst kurzfristig den Empfang");
+    SetProp(P_MMSGOUT,"wird verdutzt in einen Funkenwirbel gezogen");
+    SetProp(P_AWAY,"Ich bin gerade arbeiten - entschuldige!");
+    SetProp(P_MURDER_MSG,"Huch!");
+
+    AddCmd(({"wechsel","wechsle","tausche","tausch"}), "cmdWechsel");
+
+    AddInfo(DEFAULT_INFO," kann dazu leider nichts sagen.");
+
+}
+// Cometen in Geld wechseln... und umgekehrt.
+// Geld ---> Cometen: Unkritisch, Cometen wiegen nix
+// Cometen ---> Geld: Geld ist nicht gewichtslos. 
+
+// Syntax "wechsel <irgendwas> einheit"
+
+nosave int
+cmdWechsel(string was)
+{
+    int amount;
+    string what;
+    notify_fail(sprintf("Was willst Du eintauschen?\n"
+        "(Tip: %s <wieviel> <von was>)\n",query_verb()));
+
+    if ((!was) || (!stringp(was)))
+    {
+        return 0;
+    }
+    if ((sscanf(was,"%d%s",amount,what)==2) && (what==""))
+    {
+        notify_fail(sprintf("%d Stueck Kohle oder was?\n"
+            "(Tip: %s %d cometen/muenzen)\n",amount,query_verb(),amount));
+        return 0;
+    }  
+    notify_fail("Das hat so gar nicht hingehauen...\n");
+
+    if ((sscanf(was,"%d %s",amount,what)!=2)||(amount < 1))
+    {
+        return 0;
+    }
+
+    if ((what=="muenzen")||(what=="muenze"))
+    {
+        if (this_player()->QueryMoney() < amount)
+        {
+            notify_fail("So viel Geld hast Du nicht dabei.\n");
+            return 0;
+        }
+        else if (amount % WECHSELKURS)
+        {
+            notify_fail(sprintf("Da eine Comete %d Muenzen entspricht, "
+                "bliebe da ein Rest uebrig.\n",WECHSELKURS));
+            return 0;
+        }
+        else
+        {
+            ADD_JETONS(this_player(),amount/WECHSELKURS);
+            this_player()->AddMoney((-1)*amount);
+            this_player()->Message(break_string(sprintf(
+                "%s tauscht Dir %d Muenzen in %d Cometen um.",
+                    Name(WER), amount, amount/WECHSELKURS),77));
+            environment()->Message(break_string(sprintf(
+                "%s tauscht %s %d Muenzen in %d Cometen um.",
+                    Name(WER), (string)this_player()->name(WEM), 
+                    amount, amount/WECHSELKURS),77),MSGFLAG_NO_TP);
+            return 1;
+        }
+    }
+    else if ((what=="cometen")||(what=="comete"))
+    {
+        if (!HAS_JETONS(this_player(),amount))
+        {
+            notify_fail("So viele Cometen hast Du doch gar nicht.\n");
+            return 0;
+        }
+        else {
+            switch (this_player()->AddMoney(amount*WECHSELKURS))
+            {
+                case 1: 
+                    ADD_JETONS(this_player(), (-1)*amount);
+                    this_player()->Message(break_string(sprintf(
+                        "%s tauscht Dir %d Cometen in "
+                            "%d Muenzen.\n",
+                            Name(WER), amount, amount*WECHSELKURS),77));
+                    environment()->Message(break_string(sprintf(
+                        "%s tauscht %s %d Cometen in %d Muenzen um.",
+                        Name(WER), (string)this_player()->name(WEM), 
+                        amount, amount*WECHSELKURS),77),MSGFLAG_NO_TP);
+                    return 1;
+                    break;
+                case ME_TOO_HEAVY:
+                    notify_fail("Du koenntest so viele Muenzen "
+                            "nicht mehr tragen.\n");
+                    return 0;
+                    break;
+                default:
+                    notify_fail("Das hat, warum auch immer, "
+                        "nicht geklappt.\n");
+                    return 0;
+                    break;
+            }        
+        }
+    }
+    else
+    {
+        notify_fail("Das kannst Du hier nicht eintauschen.\n"
+            "Aine kann man nur Cometen gegen Muenzen eintauschen. "
+            "Und umgekehrt.\n");
+        return 0;
+    }
+
+}
+
+public void
+reset()
+{
+    ::reset();
+    if (find_object(DOVENYA_ROOM "comet") && 
+        (environment() != find_object(DOVENYA_ROOM "comet")))
+    {
+        move(find_object(DOVENYA_ROOM "comet"),M_TPORT|M_NOCHECK);
+    }
+}
+
+public void
+PrepareGreet(object pl)
+{
+    if ((!member(greeted,pl)) ||
+          greeted[pl]<(time()-60))
+    {
+        call_out("MeetAndGreet",0,pl);
+    }
+}
+
+public void
+MeetAndGreet(object pl)
+{
+    if ((member(greeted,pl)) &&
+          greeted[pl]>=(time()-60))
+    {
+        return;
+    }
+
+    if ((!pl) || (!environment()) || 
+        (environment(pl)!=environment()) || (!query_once_interactive(pl)))
+    {
+        return 0;
+    }
+    
+    greeted-=([0]);
+    greeted+=([pl:time()]);
+    switch ((int)RECALC_VIP(this_player()))
+    { 
+        case 0:
+            environment()->Message(break_string(sprintf(
+            "%s sagt: Hallo, %s, willkommen im 'Comet'.\n",
+                    Name(WER), this_player()->name(WER)),77),MSGFLAG_VISUAL);
+            break;
+        case VIP_BASIC: 
+            environment()->Message(break_string(sprintf(
+                "Hallo, %s %s! Schoen, Dich wieder zu sehen!\n",
+                ((int)(this_player()->QueryProp(P_GENDER))==FEMALE
+                    ?"Frau"
+                    :(int)(this_player()->QueryProp(P_GENDER))==MALE
+                        ?"Herr"
+                        :"Etwas"),
+                this_player()->name(WER)),77,Name(WER)+" sagt: "),
+                MSGFLAG_VISUAL);
+            environment()->Message(break_string(sprintf(
+                "%s nickt %s freundlich zu.\n",
+                    Name(WER), this_player()->name(WEM)),77),
+                        MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+            this_player()->Message(break_string(sprintf(
+                "%s nickt Dir freundlich zu.\n",Name(WER)),77),
+                MSGFLAG_VISUAL);
+            break;
+        case VIP_SILVER:
+            environment()->Message(break_string(sprintf(
+                "%s strahlt %s an.\n",
+                    Name(WER), this_player()->name(WEN)),77),
+                        MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+            this_player()->Message(break_string(sprintf(
+                "%s strahlt Dich an.\n",Name(WER)),77),
+                MSGFLAG_VISUAL);
+            environment()->Message(break_string(sprintf(
+                "Hochgeschaetzte%s %s - ich bin erfreut Dich wieder bei "
+                "uns begruessen zu duerfen! Ich wuensche einen sehr "
+                "angenehmen Aufenthalt im 'Comet'!\n",
+                ((int)(this_player()->QueryProp(P_GENDER))==FEMALE
+                    ?""
+                    :(int)(this_player()->QueryProp(P_GENDER))==MALE
+                        ?"r"
+                        :"s"),
+                this_player()->name(WER)),77,Name(WER)+" sagt: "),
+                MSGFLAG_VISUAL);
+            break;
+        case VIP_GOLD:
+            environment()->Message(break_string(sprintf(
+                "%s reicht %s zur Begruessung die Hand.\n",
+                    Name(WER), this_player()->name(WEM)),77),
+                        MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+            this_player()->Message(break_string(sprintf(
+                "%s reicht Dir zur Begruessung die Hand.\n",
+                        Name(WER)),77),
+                MSGFLAG_VISUAL);
+            environment()->Message(break_string(sprintf(
+                "Welch' Vergnuegen, Dich wieder bei uns zu haben, %s, "
+                "ich bin ja so gluecklich und aufgeregt - herzlichst "
+                "Willkommen im 'Comet', mein%s Beste%s!",
+                this_player()->name(WER),
+                ((int)(this_player()->QueryProp(P_GENDER))==FEMALE
+                    ?"e"
+                    :(int)(this_player()->QueryProp(P_GENDER))==MALE
+                        ?""
+                        :""),
+                ((int)(this_player()->QueryProp(P_GENDER))==FEMALE
+                    ?""
+                    :(int)(this_player()->QueryProp(P_GENDER))==MALE
+                        ?"r"
+                        :"s")
+                ),77,Name(WER)+" strahlt: "),
+                MSGFLAG_VISUAL);
+            break;
+        case VIP_PLATINUM:
+            environment()->Message(break_string(sprintf(
+                "%s reicht %s zur Begruessung beide Haende.\n",
+                    Name(WER), this_player()->name(WEM)),77),
+                        MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+            this_player()->Message(break_string(sprintf(
+                "%s reicht Dir zur Begruessung beide Haende.\n",
+                        Name(WER)),77),
+                MSGFLAG_VISUAL);
+            environment()->Message(break_string(sprintf(
+                "Hochverehrteste%s %s! Das 'Comet' steht Dir, wie immer, "
+                "zur Verfuegung, "
+                "ich hoffe, alles ist zu Deiner Zufriedenheit! ",
+                ((int)(this_player()->QueryProp(P_GENDER))==FEMALE
+                    ?""
+                    :(int)(this_player()->QueryProp(P_GENDER))==MALE
+                        ?"r"
+                        :"s"),
+                this_player()->name(WER)
+                ),77,Name(WER)+" strahlt: "),
+                MSGFLAG_VISUAL);
+            break;
+        case VIP_OCTARINE:
+            environment()->Message(break_string(sprintf(
+                "%s ruft aus: %s, ach mein%s!\n",
+                Name(WER),
+                this_player()->name(WER),
+                ((int)(this_player()->QueryProp(P_GENDER))==FEMALE
+                    ?"e Teuerste"
+                    :(int)(this_player()->QueryProp(P_GENDER))==MALE
+                        ?" Teuerster"
+                        :" Teuerstes")),77),MSGFLAG_VISUAL);
+            environment()->Message(break_string(sprintf(
+                "%s reicht %s zur Begruessung beide Haende und sinkt "
+                "erfuerchtig geneigten Hauptes "
+                "vor %s auf die Knie.\n",
+                    Name(WER), this_player()->name(WEM),
+                        this_player()->QueryPronoun(WEM)),77),
+                        MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+            this_player()->Message(break_string(sprintf(
+                "%s reicht Dir zur Begruessung beide Haende und sinkt "
+                "erfuerchtig geneigten Hauptes "
+                "vor Dir auf die Knie.\n",
+                        Name(WER)),77,0,1),
+                MSGFLAG_VISUAL);
+            environment()->Message(break_string(sprintf(
+                "Das 'Comet' und ich werden bemueht sein, "
+                "jeden Deiner Wuensche auf das Exklusivste "
+                "zu erfuellen! Wirklich ... jeden.... Wir sind "
+                "wie immer ganz die Deinen ..."
+                ),77,Name(WER)+" haucht: "),MSGFLAG_VISUAL);
+            environment()->Message(break_string(sprintf(
+                "%s erhebt sich wieder und nestelt verlegen "
+                "an ihrer Bluse herum.\n",
+                    Name(WER)), 77),
+                        MSGFLAG_VISUAL);
+            break;
+        default:
+            environment()->Message(break_string(sprintf(
+                "%s nickt unverbindlich zur Begruessung.\n",
+                Name(WER)),77),MSGFLAG_VISUAL);
+    }
+    return;
+}

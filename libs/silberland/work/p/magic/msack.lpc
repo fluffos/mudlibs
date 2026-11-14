@@ -1,0 +1,112 @@
+#include <properties.h>
+#include <moving.h>
+
+inherit "/std/container";
+
+#define MAX_SCHUETTEL 100
+#define PEARLS_NEEDED 30
+#define GEMS_NEEDED 50
+#define MSTONE_NEEDED 25
+
+int geschuettelt=0;
+int next_schuettel_time;
+
+void create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+  SetProp(P_SHORT, "Ein magischer Sack");
+  SetProp(P_LONG, 
+    "Dieser magische Sack eignet sich besonders dazu, um kleine, wertvolle "
+    "Dinge wie Edelsteine, Perlen und Magiesteine darin aufzubewahren.");
+  SetProp(P_INFO,
+    "Die Magie des Sackes laesst sich durch schuetteln aktivieren.\n");  
+  AddId(({"sack", "msack"}));
+  AddAdjective( ({"magisch", "magischer", "magischen"}) );
+  SetProp(P_NAME, "Sack");
+  SetProp(P_NAME_ADJ, "magisch");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_WEIGHT, 100);
+  SetProp(P_MAX_WEIGHT, 5000);
+  SetProp(P_WEIGHT_PERCENT, 25);
+  SetProp(P_VALUE, 4000);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_MATERIAL, ([MAT_LEATHER:50, MAT_MISC_MAGIC:50]) );
+  AddCmd( ({"schuettel", "schuettle", "schuettl"}), "schuetteln");
+}
+
+int schuetteln(string str)
+{
+  int anzahl;
+  object perle, riesenperle;
+  notify_fail("Was willst Du schuetteln?\n");
+  if( !str || !id(str) ) return 0;
+  if((perle=present("PERLE", this_object())) && 
+      perle->QueryProp(P_AMOUNT)>=PEARLS_NEEDED)
+  {
+    riesenperle=clone_object("/p/magic/riesenperle");
+    riesenperle->create_big_pearl(perle);
+    riesenperle->move(this_object(),M_NOCHECK);
+    perle->AddAmount(-PEARLS_NEEDED);
+    log_file("obj/MSACK", sprintf("%s: %s erzeugt %s.\n",
+          dtime(), this_player()->Name(), riesenperle->name(WEN,0)));
+    write("Du schuettelst den Sack und etwas passiert.\n");
+    geschuettelt++;
+  }
+  else if ((perle=present("EDELSTEIN", this_object())) && 
+      perle->QueryProp(P_AMOUNT)>=GEMS_NEEDED)
+  {
+    riesenperle=clone_object("/p/magic/supergem");
+    riesenperle->create_super_gem(perle);
+    riesenperle->move(this_object(),M_NOCHECK);
+    perle->AddAmount(-GEMS_NEEDED);
+    log_file("obj/MSACK", sprintf("%s: %s erzeugt %s.\n",
+          dtime(), this_player()->Name(), riesenperle->name(WEN,0)));
+    write("Du schuettelst den Sack und etwas passiert.\n");
+    geschuettelt++;
+  }
+  else if ((perle=present("magiesteine", this_object())) &&
+      time()>next_schuettel_time)
+  {
+    if ((anzahl=perle->QueryProp(P_AMOUNT)) >= MSTONE_NEEDED )
+    {
+      anzahl = MSTONE_NEEDED;
+      write("Du schuettelst den Sack und etwas passiert.\n");
+      riesenperle=clone_object("/p/magic/m2");
+      riesenperle->move(this_object(),M_NOCHECK);
+      geschuettelt++;
+    }
+    else
+    {
+      if (anzahl > 5 )
+        anzahl=5;
+      write("Du schuettelst den Sack und die Magie "+
+          (anzahl==1?"des Magiesteins":"der Magiesteine")+
+          " geht auf Dich ueber.\n");
+      this_player()->AddSp(20*anzahl+random(11)*anzahl);
+    }
+    perle->AddAmount(-anzahl);
+    next_schuettel_time=time()+60+random(600); // nach 1-11 minuten wieder
+  }
+  else
+    write("Du schuettelst den magischen Sack, aber nichts passiert.\n");
+  if(geschuettelt-random(MAX_SCHUETTEL/3) > MAX_SCHUETTEL)
+  {
+    write("Durch das viele Schuetteln loest sich der magische Sack auf.\n");
+    call_out("remove",0);
+  }
+  return 1;
+}
+
+varargs int PreventInsert(object ob) 
+{
+  if(!ob->IsUnit() && ob->QueryProp(P_WEIGHT)>500 )
+  {
+    write(ob->Name(WER,1)+" ist zu schwer fuer diesen Sack.\n");
+    return 1;
+  }
+  return ::PreventInsert(ob); 
+}
+

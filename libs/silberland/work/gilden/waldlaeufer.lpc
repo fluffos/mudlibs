@@ -1,0 +1,2794 @@
+/*****************************************************************************
+Gildenraum der Waldlaeufer
+(c) Lilyth, Torian, Delgo @ Silberland <sl.mud.at>
+24.08.05 - Begin
+*****************************************************************************/
+//** INCLUDE + INHERIT + DEFINE ********************************************//
+inherit  "/std/gilden_room";
+#include <properties.h>
+#include <rooms.h>
+#include <wizlevels.h>
+#include <language.h>
+#include <defines.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <config.h>
+#include "waldlaeufer/def.h"
+#include "/gilden/waldlaeufer/functions.h"
+#include "/gilden/waldlaeufer/ranger_guild_level_restrictions.h"
+#include "/spellbooks/waldlaeufer/std/restrictions.lpc"
+#include "/gilden/waldlaeufer/ranger_tasks.h"
+
+#define NEEDED_XP 0
+#define NEEDED_QUEST 1
+#define EXAM_ROOM 2
+#define NEEDED_ARCHENEMYS 3
+#define TASK_OBJECT 4
+
+//--Vorfunktionen-------------------------------------------------------------
+mapping Dolchkampf(object player, string skill, mapping sinfo);
+mapping Bogenkampf(object player, string skill, mapping sinfo);
+mapping Beweglichkeit(object player, string skill, mapping sinfo);
+mapping Kraeuterkunde(object player, string skill, mapping sinfo);
+string topliste();
+void Channel(string msg);
+string cap_skill(string str);
+nosave mixed advance(string str);
+nosave varargs int advance2();
+string Lcond(object ob) ;
+private void generateZauberliste();
+
+//--Variablen-----------------------------------------------------------------
+mapping guild_titles_male=([
+          KREIS_1: "der Lehrling des Waldes"; "der Faehrtensucher";
+                   "der Pfadfinder"; "der Kraeuterkundige"; 
+                   "der Wildnisexperte",
+          KREIS_2: "der Bewahrer des Waldes"; "der Waldakrobat"; 
+                   "der Waldschleicher"; "der Waldgeist"; 
+                   "der Hueter der Flamme"]);
+mapping guild_titles_female=([
+          KREIS_1: "der Lehrling des Waldes"; "die Faehrtensucherin"; 
+                   "die Pfadfinderin"; "die Kraeuterkundige"; 
+                   "die Wildnisexpertin",
+          KREIS_2: "die Bewahrerin des Waldes"; "die Waldakrobatin"; 
+                   "die Waldschleicherin"; "der Waldgeist"; 
+                   "die Hueterin der Flamme"]);
+mapping path_titles_male=([
+          MESSER_PFAD: "der Messerkaempfer"; "der Messerwerfer"; 
+                       "der Klingenwirbel"; "'Das Messer'"; 
+                       "die Rache des Waldes",
+          BOGEN_PFAD: "der Pfeilemacher"; "der Bogenschuetze"; 
+                      "der Meisterschuetze"; "'Der stille Tod'"; 
+                      "die Rache des Waldes",
+          TIERMEISTER_PFAD:  "der Tierfluesterer"; "der Freund der Tiere";
+                             "der Tierbaendiger"; "der Beschuetzer der Tiere";
+                             "der Tiermeister",
+          BESCHWOERER_PFAD:  "der Tierrufer"; "der Tierbeschwoerer";
+                             "der Wolfsmeister"; "der Baerenmeister";
+                             "der Spinnenmeister",
+          IAMA_PFAD: "der Floetenspieler"; "der Melodienwahrer";
+                     "der Meisterspieler";  "der Bewahrer der Melodie";
+                     "der Meister der Iama"]);
+mapping path_titles_female=([
+          MESSER_PFAD: "die Messerkaempferin"; "die Messerwerferin"; 
+                       "der Klingenwirbel"; "'Das Messer'"; 
+                       "die Rache des Waldes",
+          BOGEN_PFAD: "die Pfeilemacherin"; "die Bogenschuetzin"; 
+                      "die Meisterschuetzin"; "'Der stille Tod'"; 
+                      "die Rache des Waldes",
+          TIERMEISTER_PFAD:  "die Tierfluesterin"; "die Freundin der Tiere";
+                             "die Tierbaendigerin"; 
+                             "die Beschuetzerin der Tiere";
+                             "die Tiermeisterin",
+          BESCHWOERER_PFAD:  "die Tierruferin"; "die Tierbeschwoererin";
+                             "die Wolfsmeisterin"; "die Baerenmeisterin";
+                             "die Spinnenmeisterin",
+          IAMA_PFAD: "die Floetenspielerin"; "die Melodienwahrerin";
+                     "die Meisterspielerin";  "die Bewahrerin der Melodie";
+                     "die Meisterin der Iama"]);
+mixed archenemys;
+mixed paths;
+mixed players_archenemy=([]);
+string zauberliste;
+//**************************************************************************//
+
+
+
+//** StandardFunktionen ****************************************************//
+//-- Create ------------------------------------------------------------------
+void create()
+{
+  string s, *str, word, *words, circle, grad, path;
+  int i, k;
+  mixed m;
+  
+  ::create();
+
+  SetProp(P_GUILD_DEFAULT_SPELLBOOK,"waldlaeufer_spells");
+
+  SetProp(P_INDOORS, 0);
+  SetProp(P_LIGHT, 1);
+  SetProp(P_ENVIRONMENT,([ENV_TEMPERATURE: 18, ENV_TERRAIN: TT_FOREST]) );
+  
+  SetProp(P_GUILD_RESTRICTIONS, 
+    ([  P_LEVEL:        10, 
+        A_INT:          7, 
+        A_DEX:          10,
+        SR_FUN:         "Lcond_Schueler"]));
+
+  SetProp(P_GUILD_LEVELS,
+   ([ 1: ([P_LEVEL:10, A_DEX:10, SR_FUN: "Lcond_Schueler" ]),
+      2: ([P_LEVEL:13, A_DEX:11, SR_FUN: "Lcond" ]),
+      3: ([P_LEVEL:16, A_DEX:12, SR_FUN: "Lcond" ]),
+      4: ([P_LEVEL:19, A_DEX:14, SR_FUN: "Lcond" ]),
+      5: ([P_LEVEL:21, A_DEX:15, SR_FUN: "Lcond" ]),
+      6: ([P_LEVEL:24, SR_FUN: "Lcond_Waldlaeufer",
+            SM_RACE:([
+              "Dunkelelf": ([A_DEX:18]),
+              "Zwerg": ([A_DEX:17]),
+              "Elf": ([A_DEX: 18]),
+              "Fee": ([A_DEX: 17]),
+              "Hobbit": ([A_DEX: 18]),
+              "Mensch": ([A_DEX: 18]),
+              "Oger": ([A_DEX: 16]),
+              "Troll": ([A_DEX: 16])
+            ])
+        ]),
+      7: ([P_LEVEL:26, SR_FUN: "Lcond", 
+          SM_RACE:([
+            "Dunkelelf": ([A_DEX:19]),
+            "Zwerg": ([A_DEX:17]),
+            "Elf": ([A_DEX: 19]),
+            "Fee": ([A_DEX: 20]),
+            "Hobbit": ([A_DEX: 20]),
+            "Mensch": ([A_DEX: 19]),
+            "Oger": ([A_DEX: 16]),
+            "Troll": ([A_DEX: 16]),
+            ])
+          ]),
+      8: ([P_LEVEL:28, SR_FUN: "Lcond" ]),
+      9: ([P_LEVEL:31, SR_FUN: "Lcond", 
+            SM_RACE: ([
+              "Dunkelelf": ([A_DEX:20]),
+              "Zwerg": ([A_DEX:18]),
+              "Elf": ([A_DEX: 20]),
+              "Fee": ([A_DEX: 21]),
+              "Hobbit": ([A_DEX: 21]),
+              "Mensch": ([A_DEX: 20]),
+              "Oger": ([A_DEX: 16]),
+              "Troll": ([A_DEX: 16]),
+            ])
+          ]),
+     10: ([P_LEVEL:34, SR_FUN: "Lcond", 
+            SM_RACE:([
+              "Dunkelelf": ([A_DEX:22]),
+              "Zwerg": ([A_DEX:20]),
+              "Elf": ([A_DEX: 21]),
+              "Fee": ([A_DEX: 22]),
+              "Hobbit": ([A_DEX: 22]),
+              "Mensch": ([A_DEX: 21]),
+              "Oger": ([A_DEX: 17]),
+              "Troll": ([A_DEX: 17]),
+            ])
+          ]),
+     11: ([P_LEVEL:37, SR_FUN: "Lcond_Hueter",  SR_SEER: 1,
+            SM_RACE:([
+              "Dunkelelf": ([A_DEX:24]),
+              "Zwerg": ([A_DEX:22]),
+              "Elf": ([A_DEX: 23]),
+              "Fee": ([A_DEX: 24]),
+              "Hobbit": ([A_DEX: 24]),
+              "Mensch": ([A_DEX: 23]),
+              "Oger": ([A_DEX: 19]),
+              "Troll": ([A_DEX: 19]),
+            ])
+          ]),
+     12: ([P_LEVEL:40, SR_FUN: "Lcond", 
+            SM_RACE:([
+              "Dunkelelf": ([A_DEX:25]),
+              "Zwerg": ([A_DEX:23]),
+              "Elf": ([A_DEX: 24]),
+              "Fee": ([A_DEX: 25]),
+              "Hobbit": ([A_DEX: 25]),
+              "Mensch": ([A_DEX: 24]),
+              "Oger": ([A_DEX: 20]),
+              "Troll": ([A_DEX: 20]),
+            ])
+          ]),
+     13: ([P_LEVEL:43, SR_FUN: "Lcond",
+            SM_RACE:([
+              "Dunkelelf": ([A_DEX:27]),
+              "Zwerg": ([A_DEX:25]),
+              "Elf": ([A_DEX: 26]),
+              "Fee": ([A_DEX: 27]),
+              "Hobbit": ([A_DEX: 27]),
+              "Mensch": ([A_DEX: 26]),
+              "Oger": ([A_DEX: 22]),
+              "Troll": ([A_DEX: 21]),
+             ])
+          ]),
+     14: ([P_LEVEL:45, SR_FUN: "Lcond", 
+            SM_RACE:([
+              "Dunkelelf": ([A_DEX:29]),
+              "Zwerg": ([A_DEX:27]),
+              "Elf": ([A_DEX: 28]),
+              "Fee": ([A_DEX: 29]),
+              "Hobbit": ([A_DEX: 29]),
+              "Mensch": ([A_DEX: 28]),
+              "Oger": ([A_DEX: 24]),
+              "Troll": ([A_DEX: 23]),
+            ])
+        ]),
+     15: ([P_LEVEL:47, SR_FUN: "Lcond", 
+            SM_RACE:([
+              "Dunkelelf": ([A_DEX:31]),
+              "Zwerg": ([A_DEX:29]),
+              "Elf": ([A_DEX: 30]),
+              "Fee": ([A_DEX: 31]),
+              "Hobbit": ([A_DEX: 31]),
+              "Mensch": ([A_DEX: 31]),
+              "Oger": ([A_DEX: 26]),
+              "Troll": ([A_DEX: 25]),
+            ])
+        ]),
+     16: ([P_LEVEL:50, 
+            SM_RACE: ([
+              "Dunkelelf": ([A_DEX:32]),
+              "Zwerg": ([A_DEX:30]),
+              "Elf": ([A_DEX: 31]),
+              "Fee": ([A_DEX: 32]),
+              "Hobbit": ([A_DEX: 32]),
+              "Mensch": ([A_DEX: 31]),
+              "Oger": ([A_DEX: 27]),
+              "Troll": ([A_DEX: 26]),
+            ]), SR_FUN: "Lcond_Meister"]),
+     17: ([P_LEVEL:55, SR_FUN: "Lcond", 
+            SM_RACE:([
+              "Fee": ([A_DEX:33]),
+              "Hobbit": ([A_DEX:33])
+          ])]),
+     18: ([P_LEVEL:60, SR_FUN: "Lcond", 
+            SM_RACE: (["Fee": ([A_DEX:34]) ])]),
+     19: ([P_LEVEL:65, SR_FUN: "Lcond" ]),
+     20: ([P_LEVEL:70,SR_FUN: "Lcond" ]) 
+    ]) );
+  
+  AddSkill( FIGHT(WT_BOW), 
+    ([ SI_SKILLFUNC:"Bogenkampf",SI_DIFFICULTY:100,SI_SKILLABILITY: 200]) );
+  AddSkill( FIGHT(WT_KNIFE), 
+    ([ SI_SKILLFUNC:"Dolchkampf",SI_DIFFICULTY:100,SI_SKILLABILITY: 200]) );
+  AddSkill( SK_MAGIC_DEFENSE, 
+    ([ SI_SKILLFUNC:"Beweglichkeit",SI_DIFFICULTY:100,SI_SKILLABILITY: 200]));
+  AddSkill( SK_RANGER_HERBALISM, 
+    ([ SI_SKILLFUNC:"Kraeuterkunde",SI_DIFFICULTY:100,SI_SKILLABILITY: 200]));
+    
+  archenemys=GUILD_MASTER->get_archenemy_list();
+  if(!pointerp(archenemys)) { archenemys=({}); }
+  paths=GUILD_MASTER->get_paths();
+  if(!pointerp(paths)) { paths=({}); }
+
+  //-- GS 1 - 10 ----------------------------------------------------
+  AddSpell(DURCHDRINGE);
+  AddSpell(SCHAETZ);
+  AddSpell(AUGEN_DES_JAEGERS);
+  AddSpell(DEUTSCHUSS);  // 3
+  AddSpell(MESSERSTICH); // 3
+  AddSpell(GESCHWINDIGKEIT);
+  AddSpell(PAKT_DER_SCHATTEN);
+  AddSpell(ZAEHMUNG);
+  AddSpell(MARKIERUNGSSCHUSS);
+  AddSpell(KRAEUTERMIXTUR);
+  AddSpell(FUSSTRITT);
+  AddSpell(TIERHEILUNG);
+
+  AddSpell(FESSELFALLE);
+  AddSpell(FANGFALLE);
+  AddSpell(STOLPERDRAHT);
+  AddSpell(PFEILFALLE);
+
+  AddSpell(RINDENHAUT);
+
+  AddSpell(ASPEKT_DES_PANTHERS);
+  
+  //-- Pfad der Tiere -----------------------------------------------
+  AddSpell(TIERE_DES_WALDES);
+  AddSpell(WALDWOLF);
+  AddSpell(SCHWARZBAER);
+  AddSpell(ADLER);
+  AddSpell(SPINNE);
+  AddSpell(WILDER_SCHWARM);
+  AddSpell(WALDGEIST);
+
+  //-- Pfad der Iama ------------------------------------------------
+  AddSpell(MELODIE_DER_RUHE);
+  AddSpell(ODE_DES_STURMES);
+  AddSpell(MELODIE_DER_AVATARA);
+  AddSpell(HYMNE_DES_WALDES);
+  AddSpell(MELODIE_DES_OSTENS);
+  AddSpell(MELODIE_DER_VERAENDERUNG);
+  AddSpell(MELODIE_DER_ZEIT);
+
+  //-- Pfad des Bogens ----------------------------------------------
+  AddSpell(KALTE_FLAMME);
+  AddSpell(ZIELSCHUSS);
+  //AddSpell(DOPPELSCHUSS);
+  AddSpell(PANZERBRECHENDER_SCHUSS);
+  AddSpell(GIFTPFEIL);
+  AddSpell(SALVE);
+  AddSpell(BLICK_DES_FALKEN);
+  AddSpell(FREIPFEILE);
+
+  //-- Pfad der Messer ----------------------------------------------
+  AddSpell(KLINGENWIRBEL);
+  AddSpell(MESSERWURF);
+  AddSpell(BLAUE_FLAMME);
+  AddSpell(VIOLETTE_FLAMME);
+  AddSpell(AUSWEIDEN);
+  AddSpell(SEELE_DER_KLINGE);
+  AddSpell(SCHATTENSCHNITT);
+
+  //-- Pfad der Tiermeister -----------------------------------------
+  AddSpell(TIERANGRIFF);
+  AddSpell(KAMPFGEIST);
+  AddSpell(KRAFT_DER_AHNEN);
+  AddSpell(KRAFT_DES_TIERES);
+  AddSpell(GEMEINSAME_ATTACKE);
+  AddSpell(WUT_DER_BESTIE);
+  AddSpell(INKARNATION_DER_KOEIGE);
+  
+  SetProp(P_INT_SHORT,"Im Herzen eines riesigen Baumes");
+  SetProp(P_INT_LONG,
+    "Deine wird Aufmerksamkeit sofort von der imposanten magischen Flamme in der "
+    "Mitte des Raumes gefesselt. Die Flammen wechseln regelmaessig ihre Farben, von "
+    "lebhaftem Gruen ueber strahlendes Blau bis hin zu warmem Rot, und erfuellen den "
+    "Raum mit einem faszinierenden Lichtspiel. Die natuerliche Architektur des Raumes, "
+    "die sich organisch in den Baum eingefuegt hat, zeigt sich in den geschwungenen "
+    "Boegen und Strukturen, die eine harmonische Verbindung zur umgebenden Natur schaffen. "
+    "Die Luft ist erfuellt von einem angenehmen Duft nach frischem Holz und der lebendigen "
+    "Energie des Waldes. An einer der Waende ist eine gut sichtbare Rangliste der "
+    "Waldlaeufer angebracht, die ihre Hierarchie und Verdienste zeigt. Hier, an diesem "
+    "Ort, versammeln sich die Waldlaeufer, um ihre Auftraege zu empfangen."
+    );
+
+  //--Details----------------------------------------------------------------
+
+  AddDetail( ({ "architektur" }),
+    "Die Architektur des Raumes ist organisch und geschwungen, nahtlos in den Baum eingefuegt und schafft eine harmonische Verbindung zur umgebenden Natur.");
+
+  AddDetail( ({ "aufmerksamkeit" }),
+    "Die Aufmerksamkeit wird sofort von der imposanten magischen Flamme in der Mitte des Raumes gefesselt, die regelmaessig ihre Farben wechselt und ein faszinierendes Lichtspiel erzeugt.");
+
+  AddDetail( ({ "auftraege" }),
+    "Der Raum dient als der Ort, an dem die Waldlaeufer regelmaessig zusammenkommen, um Auftraege von ihrem Obersten entgegenzunehmen und strategische Entscheidungen zu treffen.");
+
+  AddDetail( ({ "baum" }),
+    "Der Raum ist im Inneren eines riesigen Baumes gelegen, dessen natuerliche Struktur eine einzigartige und inspirierende Umgebung schafft.");
+
+  AddDetail( ({ "blau" }),
+    "Die magische Flamme in der Mitte des Raumes wechselt regelmaessig zu einem strahlenden Blau.");
+
+  AddDetail( ({ "boden" }),
+    "Der Boden des Raumes besteht aus natuerlichen Materialien, die sich angenehm anfuehlen und die Verbundenheit zur Natur unterstreichen.");
+
+  AddDetail( ({ "boegen" }),
+    "Geschwungene Boegen praegen die Architektur des Raumes und fuegen sich organisch in die Struktur des riesigen Baumes ein.");
+
+  AddDetail( ({ "duft" }),
+    "Die Luft ist erfuellt von einem angenehmen Duft nach frischem Holz und der lebendigen Energie des Waldes, der den Raum durchzieht.");
+
+  AddDetail( ({ "energie" }),
+    "Die magische Flamme in der Mitte des Raumes strahlt eine lebendige Energie aus, die den Raum mit einer belebenden Praesenz erfuellt.");
+
+  AddDetail( ({ "farben" }),
+    "Die magische Flamme wechselt regelmaessig ihre Farben, von lebhaftem Gruen ueber strahlendes Blau bis hin zu warmem Rot, und taucht den Raum in ein faszinierendes Lichtspiel.");
+
+  AddDetail( ({ "flamme" }),
+    "Die imposante magische Flamme in der Mitte des Raumes ist als die Flamme von Tethyr bekannt und symbolisiert die Lebensquelle des gesamten Waldes.");
+
+  AddDetail( ({ "gruen" }),
+    "Die magische Flamme wechselt regelmaessig zu einem lebendigen Gruen, das lebendig erstrahlen laesst.");
+
+  AddDetail( ({ "hierarchie" }),
+    "An einer der Waende ist eine gut sichtbare Rangliste der Waldlaeufer angebracht, die ihre Hierarchie und Verdienste zeigt.");
+
+  AddDetail( ({ "himmel" }),
+    "Die organische Architektur ermoeglicht einen Blick auf den Himmel, der durch das Blaetterdach des Baumes hindurchscheint und eine natuerliche Verbindung zur Umgebung schafft.");
+
+  AddDetail( ({ "holz" }),
+    "Die natuerliche Struktur des Raumes besteht aus dem Holz des riesigen Baumes, das sehr natuerlich und rustikal wirkt.");
+
+  AddDetail( ({ "lichtspiel" }),
+    "Die magische Flamme erzeugt ein faszinierendes Lichtspiel im Raum, das durch die wechselnden Farben eine dynamische und inspirierend wirkt.");
+
+  AddDetail( ({ "luft" }),
+    "Die Luft im Raum ist frisch und erfuellt von einem angenehmen Duft nach dem Wald, der durch die offenen Strukturen des Raumes zirkuliert.");
+
+  AddDetail( ({ "mitte" }),
+    "In der Mitte des Raumes thront die imposante Flamme von Tethyr, die als Lebensquelle des gesamten Waldes gilt und den Raum mit ihrer lebendigen Praesenz erfuellt.");
+
+  AddDetail( ({ "natur" }),
+    "Die natuerliche Architektur des Raumes schafft eine Verbindung zur umgebenden Natur, die durch die organisch gewachsenen Strukturen und das Holz des Baumes deutlich wird.");
+
+  AddDetail( ({ "ort" }),
+    "Der Raum dient als zentraler Ort, an dem die Waldlaeufer zusammenkommen, um ihre Befehle zu erhalten und strategische Entscheidungen zu treffen.");
+
+  AddDetail( ({ "rangliste" }),
+    "An einer der Waende ist eine gut sichtbare Rangliste der Waldlaeufer angebracht, die ihre Hierarchie und Verdienste zeigt.");
+
+  AddDetail( ({ "raum" }),
+    "Der Raum ist gross und geraeumig, von der natuerlichen Struktur des riesigen Baumes geformt, und von der Natur selbst erfuellt.");
+
+  AddDetail( ({ "raumes" }),
+    "Die Struktur des Raumes ist auf natuerliche Weise gewachsen und fuegt sich harmonisch in die Umgebung des riesigen Baumes ein.");
+
+  AddDetail( ({ "rot" }),
+    "Die magische Flamme wechselt regelmaessig zu einem warmen Rot, das dem Raum eine gemuetliche und inspirierende Stimmung verleiht.");
+
+  AddDetail( ({ "strukturen" }),
+    "Geschwungene Boegen und organisch gewachsene Strukturen praegen die Architektur des Raumes, die sich nahtlos in den riesigen Baum eingefuegt hat.");
+
+  AddDetail( ({ "verbindung" }),
+    "Die Architektur des Raumes schafft eine natuerliche Verbindung zur umgebenden Natur, waehrend die Waldlaeufer ihre Befehle entgegennehmen und ihre Strategien besprechen.");
+
+  AddDetail( ({ "verdienste" }),
+    "An einer der Waende ist eine Rangliste der Waldlaeufer angebracht, die ihre Verdienste und Positionen innerhalb der Gilde deutlich macht.");
+
+  AddDetail( ({ "waende" }),
+    "Die Waende des Raumes sind von der natuerlichen Struktur des riesigen Baumes geformt und bieten Platz fuer die Anzeige der Rangliste der Waldlaeufer.");
+
+  AddDetail( ({ "waldes" }),
+    "Die imposante Flamme von Tethyr symbolisiert die Lebensquelle des gesamten Waldes und wird von den Waldlaeufern als zentrales Element des Raumes verehrt.");
+
+  AddDetail( ({ "waldlaeufer" }),
+    "Der Raum ist der zentrale Treffpunkt der Waldlaeufer, an dem sie ihre Befehle entgegennehmen und ihre Strategien planen.");
+
+  AddDetail( ({ "waldlaeufer" }),
+    "Die Rangliste an der Wand zeigt die Hierarchie und Verdienste der Waldlaeufer innerhalb der Gilde.");
+
+    AddDetail( ({ "anzeige" }),
+    "Eine gut sichtbare Anzeige an einer der Waende praesentiert die Rangliste der Waldlaeufer, die ihre Hierarchie und Verdienste deutlich macht.");
+
+  AddDetail( ({ "befehle" }),
+    "Der Raum ist der Ort, an dem die Waldlaeufer regelmaessig zusammenkommen, um ihre Befehle vom Obersten der Gilde zu erhalten und strategische Entscheidungen zu treffen.");
+
+  AddDetail( ({ "blaetterdach" }),
+    "Das Blaetterdach des Baumes ermoeglicht einen faszinierenden Blick auf den Himmel, der durch die offenen Strukturen des Raumes hindurchscheint.");
+
+  AddDetail( ({ "blick" }),
+    "Von verschiedenen Punkten im Raum aus bietet sich ein beeindruckender Blick auf die natuerliche Umgebung des Baumes und des umliegenden Waldes.");
+
+  AddDetail( ({ "element" }),
+    "Die natuerliche Struktur des Raumes, im Inneren des riesigen Baumes, ist ein harmonisches Element, das eine Verbindung zur umgebenden Natur schafft.");
+
+  AddDetail( ({ "entscheidungen" }),
+    "Der Raum dient als der zentrale Ort, an dem die Waldlaeufer strategische Entscheidungen treffen und ihre naechsten Schritte planen.");
+
+  AddDetail( ({ "gilde" }),
+    "Der Raum ist der Treffpunkt der Waldlaeufer, wo die Mitglieder zusammenkommen, um ihre Befehle zu erhalten und ihre Positionen innerhalb der Gilde zu festigen.");
+
+  AddDetail( ({ "inneren" }),
+    "Die Struktur des Raumes ist im Inneren des riesigen Baumes gewachsen, was dem Raum eine einzigartige und natuerliche Wirkung verleiht.");
+
+  AddDetail( ({ "lebensquelle" }),
+    "Die imposante Flamme von Tethyr, die in der Mitte des Raumes brennt, gilt als die Lebensquelle des gesamten Waldes und wird von den Waldlaeufern verehrt.");
+
+  AddDetail( ({ "materialien" }),
+    "Die Materialien im Raum sind natuerlich und bestehen hauptsaechlich aus dem Holz des riesigen Baumes, das sehr naturverbunden wirkt.");
+
+  AddDetail( ({ "obersten" }),
+    "Der Raum ist der Ort, an dem die Waldlaeufer regelmaessig zusammenkommen, um ihre Befehle vom Obersten der Gilde entgegenzunehmen.");
+
+  AddDetail( ({ "platz" }),
+    "Der Raum bietet ausreichend Platz fuer die Versammlung der Waldlaeufer, wobei die geschwungenen Boegen und Strukturen eine angenehme und offene Architektur schaffen.");
+
+  AddDetail( ({ "positionen" }),
+    "An einer der Waende ist eine gut sichtbare Rangliste der Waldlaeufer angebracht, die ihre Positionen innerhalb der Gilde deutlich macht.");
+
+  AddDetail( ({ "praesenz" }),
+    "Die Praesenz der imposanten Flamme von Tethyr verleiht den Waldlaeufern eine Verbindung zur Natur.");
+
+  AddDetail( ({ "stimmung" }),
+    "Die Stimmung im Raum wird von der wechselnden Farbe der magischen Flamme beeinflusst.");
+
+  AddDetail( ({ "strategien" }),
+    "Der Raum dient als der strategische Ort, an dem die Waldlaeufer ihre naechsten Schritte planen und ihre Strategien entwickeln.");
+
+  AddDetail( ({ "struktur" }),
+    "Die Struktur des Raumes ist auf natuerliche Weise gewachsen und fuegt sich harmonisch in den riesigen Baum ein, wodurch eine einladende und inspirierende Umgebung entsteht.");
+
+  AddDetail( ({ "tethyr" }),
+    "Die magische Flamme in der Mitte des Raumes wird als die Flamme von Tethyr verehrt und symbolisiert die Lebensquelle des gesamten Waldes.");
+
+  AddDetail( ({ "umgebung" }),
+    "Der Raum schafft eine natuerliche Verbindung zur Umgebung, die durch das Blaetterdach des Baumes, den Himmel und die offenen Strukturen betont wird.");
+
+  AddDetail( ({ "verbundenheit" }),
+    "Die Architektur des Raumes schafft eine natuerliche Verbundenheit zur umgebenden Natur, waehrend die Waldlaeufer ihre Befehle entgegennehmen und ihre Strategien besprechen.");
+
+  AddDetail( ({ "wald" }),
+    "Der Raum ist ein Ort der Versammlung und Strategie fuer die Waldlaeufer, die eng mit dem umliegenden Wald und der Natur verbunden sind.");
+
+  AddDetail( ({ "wand" }),
+    "An einer der Waende ist eine gut sichtbare Rangliste der Waldlaeufer angebracht, die ihre Hierarchie und Verdienste zeigt.");
+
+  AddDetail( ({ "weise" }),
+    "Die imposante Flamme von Tethyr leitet die Waldlaeufer weise und symbolisiert die Lebensquelle, die ihre Praesenz im gesamten Wald spueren laesst.");
+
+    AddDetail( ({ "farbe" }),
+    "Die magische Flamme in der Mitte des Raumes wechselt regelmaessig ihre Farbe, wodurch eine faszinierende und wechselnde Wirkung im Raum entsteht.");
+
+  AddDetail( ({ "mitglieder" }),
+    "Der Raum dient als Treffpunkt fuer die Mitglieder der Waldlaeufer, wo sie ihre Befehle erhalten und strategische Entscheidungen treffen.");
+
+  AddDetail( ({ "punkten" }),
+    "Die Rangliste an der Wand zeigt die Verdienste der Waldlaeufer, die ihre Positionen innerhalb der Gilde widerspiegeln.");
+
+  AddDetail( ({ "schritte" }),
+    "Die Waldlaeufer treffen sich im Raum, um ihre naechsten Schritte zu planen und strategische Entscheidungen zu treffen.");
+
+  AddDetail( ({ "strategie" }),
+    "Der Raum dient als strategischer Treffpunkt, an dem die Waldlaeufer ihre Strategien entwickeln und besprechen.");
+
+  AddDetail( ({ "treffpunkt" }),
+    "Der Raum ist der zentrale Treffpunkt fuer die Waldlaeufer, an dem sie sich regelmaessig versammeln, um ihre Befehle zu erhalten und ihre Strategien zu koordinieren.");
+
+  AddDetail( ({ "versammlung" }),
+    "Der Raum bietet ausreichend Platz fuer die Versammlung der Waldlaeufer, die hier regelmaessig zusammenkommen, um ihre Befehle entgegenzunehmen und ihre Positionen zu festigen.");
+
+  AddDetail( ({ "wirkung" }),
+    "Die beeindruckende Wirkung des Raumes wird durch die wechselnde Farbe der magischen Flamme und die natuerliche Umgebung verstaerkt.");
+  
+
+  
+  SetProp(P_NAME, GUILD_NPC);
+  SetProp(P_ARTICLE, 0);
+  
+  RemoveCmd( ({"tritt","trete","lern","lerne", "verlasse", "austritt", 
+               "austreten", "erlerne", "beitreten", "beitritt", "erhoeh",
+               "erhoehe"}) );
+               
+  AddCmd( "waehl|waehle&erzfeind",              "choose_archenemy", "Willst du einen Erzfeind waehlen?"   );
+  
+  AddCmd( "trete|tritt&gilde|waldlaeufern&bei", "beitreten"          );
+  AddCmd( "beitreten|beitritt",                 "beitreten"          );
+  
+  AddCmd( "austritt|austreten",                 "austreten_test"     );
+  AddCmd( "trete|tritt&aus&gilde&aus",          "austreten_test"     );
+  AddCmd( "verlasse&gilde|waldlaeufer",         "austreten_test"     );
+  
+  AddCmd( "lerne|lern|erlerne",                 "NewLearnSpell"      );
+  AddCmd( "lerne|lern|erlerne&"
+          "fertigkeit|fertigkeiten",            "choose_skill"       );
+  AddCmd( "lerne|lern|erlerne&meisterfertigkeit|meisterfaehigkeiten",
+                                                "choose_master_skill");
+  AddCmd( "verlern|verlerne&"
+          "fertigkeiten|fertigkeit",            "unlearn_skills"     );
+  
+  AddCmd( "erhoehe",                            "advance"            );
+  
+  AddCmd( "forder|fordere&pruefung",            "goto_exam_room"     );
+  
+  AddCmd( "betrete|betret|betritt&pfad",        "choose_path"        );
+  AddCmd( "verlasse&pfad",                      "choose_loosen_path" );
+  AddCmd( "betrete|betret|betritt&meisterpfad", "choose_master_path");
+  AddCmd( "mtoplist", "mtoplist");
+  
+  AddReadDetail( ({"liste", "topliste"}), CLOSURE(topliste)); 
+
+  AddExit( "norden",     ROOM "d2" );
+  AddExit( "suedosten",  ROOM "e4" ); // tiermeister
+  AddExit( "sueden",     ROOM "d4" ); // iama
+  AddExit( "suedwesten", ROOM "c4" ); // kraeutergarten
+  AddExit( "westen",     ROOM "c3" ); // fallenverkaeufer
+  
+  RemoveItem("/obj/zeitungsautomat");
+  AddItem(NPC"gnpc", REFRESH_DESTRUCT);
+  
+  generateZauberliste();
+}
+//**************************************************************************//
+
+public int choose_master_skill(string str) {
+  string *possible_paths, ret;
+  int i;
+  if(TP->QueryProp(P_GUILD_LEVEL) < 20) {
+    write("Du kannst erst auf der letzten Stufe Meisterfertigkeiten erlernen.\n");
+    return 1;
+  }
+
+  if(RANGERMASTER->GetMasterAbility(getuid(TP)) != 0) {
+    write("Du hast bereits eine Meisterfertigkeit erlernt.\n");
+    return 1;
+   }
+
+  
+   switch(RANGERMASTER->GetMasterPath(getuid(TP))) {
+      case TIERMEISTER_PFAD:
+        possible_paths = ({MASTER_ABIILITY_DEEP_BOND, MASTER_ABIILITY_POWERFUL_COMPANION});
+        break;
+      case BOGEN_PFAD:
+        possible_paths = ({MASTER_ABIILITY_CRITICAL_AIM, MASTER_ABIILITY_BACKOFF});
+        break;
+      case MESSER_PFAD:
+        possible_paths = ({MASTER_ABIILITY_CRIPPLING_STRIKE, MASTER_ABIILITY_THOUSAND_CUTS});
+        break;
+      case IAMA_PFAD:
+        possible_paths = ({MASTER_ABIILITY_VOICE_OF_NATURE, MASTER_ABIILITY_RAGE_OF_NATURE});
+        break;
+      case BESCHWOERER_PFAD:
+        possible_paths = ({MASTER_ABIILITY_IMPROVED_BINDING, MASTER_ABIILITY_PERMANENT_SUMMON});
+        break;
+      default:
+        write("Du hast keinen Meisterpfad gewaehlt.\n");
+        return 1;
+    }
+
+  str = implode(explode(lower_case(TP->_unparsed_args(1)), " ")[1..], " ");
+  for(i=0; i<sizeof(possible_paths); ++i) {
+    if(str == lower_case(possible_paths[i])) break;
+  }
+
+  if(!str || i >= sizeof(possible_paths)) {
+    write("Du kannst nur folgende Meisterfertigkeiten erlernen:\n");
+    for(i=0; i<sizeof(possible_paths); ++i) {
+      write(" - " + capitalize(possible_paths[i]) + "\n");
+    }
+    write("syntax: 'lerne meisterfertigkeit <fertigkeit>'\n");
+    return 1;
+  }
+
+  if((ret=RANGERMASTER->SetMasterAbility(getuid(TP), possible_paths[i])) != 1) {
+    write(ret+"\n");
+    return 1;
+  }
+
+  write("Du hast die Meisterfertigkeit '"+possible_paths[i]+"' erlernt.\n");
+  return 1;
+}
+
+public int mtoplist() {
+  if(!IS_LEARNER(TP)) return 0;
+
+  write(BS("*** TOPLIST UPDATE ***"));
+  call_other(RANGERMASTER, "UpdateTopList");
+  return 1;
+}
+
+public int compareSpellLevel(string spellA, string spellB) {
+  return GUILD_SPELLBOOK->get_spell_use_guild_level(spellA) >  GUILD_SPELLBOOK->get_spell_use_guild_level(spellB);
+}
+
+private void generateZauberliste() {
+  string s, *str, word, circle, grad, path;
+  int i, k, lastLevel;
+  mapping m, skills;
+
+  s="Du kannst folgende Zauber erlernen: (Kreis\\Rang\\[\\Pfad])\n";
+  skills = QueryProp(P_GUILD_SKILLS);
+  str=m_indices(QueryProp(P_GUILD_SKILLS));
+  str-=({SK_MAGIC_DEFENSE, FIGHT(WT_BOW), FIGHT(WT_KNIFE), 
+         SK_RANGER_HERBALISM });
+  str=sort_array(str, "compareSpellLevel", TO);
+  lastLevel=1;
+  for(i=0;i<sizeof(str);i++)
+  {
+    word=cap_skill(str[i]);
+    k=GUILD_SPELLBOOK->get_spell_use_guild_level(str[i]);
+    circle=circle_to_string(GetCircle(k));
+    grad=to_string(GetGrad(k));
+    m=GUILD_SPELLBOOK->QuerySpell(str[i]);
+    if(k > lastLevel) s+="\n";
+    if(mappingp(m) && stringp(path=m[SI_PATH]) )
+    {
+      s+=sprintf(" %-35s %-s \n", word, "("+circle+"\\"+grad+"\\"+path+")");
+    }
+    else
+    {
+      s+=sprintf(" %-35s %-s \n", word, "("+circle+"\\"+grad+")");
+    }
+    lastLevel=k;
+  }
+  s+="\n";
+  zauberliste=s;
+}
+
+
+/** Gildenaufstiege/Pfadwahl/Skillpunktwahl *********************************/
+//-- Raum der Pruefungen -----------------------------------------------------
+int goto_exam_room()
+{
+  object ob;
+  mixed env;
+  
+  if(!objectp(TP)) { return 0; }
+  notify_fail("Du darfst den Raum nicht betreten.\n");
+  if(!IsGuildMember(TP)) { return 0; }
+  if(TP->QueryProp(P_GUILD_LEVEL) >= MAX_GUILD_LEVEL) { return 0; }
+  env=ENV(TP);
+ /*if( (5*60+QuerySpellTime("examroom", getuid(TP))) >= time() )
+  { notify_fail("Du darfst den Raum noch nicht wieder betreten.\n");
+    return 0; }*/
+  SetSpellTime("examroom", getuid(TP));
+  TP->move(ROOM "exam:"+getuid(TP), M_GO|M_SILENT);
+  if(objectp(env))
+  { tell_room(env, BS(TP->Name()+" stellt sich den geheimen Pruefungen der "
+                   "Waldlaeufer.")); }
+  return 1;
+}
+//-- Prozentausgabe in String ------------------------------------------------
+string integer_to_percent(int percent) 
+{
+  string str;
+  
+  str="";
+  percent=limit(percent,0,1000);
+  switch (percent)
+  {
+    case   0.. 10: str+="fast gar keine";                     break;
+    case  11.. 20: str+="weniger als ein Viertel";            break;
+    case  21.. 30: str+="etwa ein Viertel";                   break;
+    case  31.. 40: str+="weniger als die Haelfte";            break;
+    case  41.. 60: str+="in etwa die Haelfte";                break;
+    case  61.. 70: str+="mehr als die Haelfte";               break;
+    case  71.. 80: str+="etwa drei Viertel";                  break;
+    case  81.. 90: str+="mehr als drei Viertel";              break;
+    case  91.. 99: str+="beinahe alle";                       break;
+    case 100     : str+="alle";                               break;
+    case 101..150: str+="mehr als gewoehnlich";               break;
+    case 151..199: str+="viel mehr als gewoehnlich";          break;
+    case 200..299: str+="doppelt soviel als gewoehnlich";     break;
+    case 300..399: str+="dreimal soviel als gewoehnlich";     break;
+    case 400..499: str+="viermal soviel als gewoehnlich";     break;
+    case 500..599: str+="fuenfmal soviel als gewoehnlich";    break;
+    default: str+="mehr als fuenfmal soviel als gewoehnlich"; break;
+  }
+  return str;
+}
+
+//-- FilterFunktion fuer anwesende Waldlaeufer -------------------------------
+int lcond_filter_func(object ob, int gl)
+{
+  // DBD(getuid(ob)+":"+to_string(gl));
+  if( interactive(ob) && IsGuildMember(ob) && 
+      query_idle(ob)<=120  && ob->QueryProp(P_GUILD_LEVEL)>=gl ) { return 1; }
+  return 0;
+}
+
+//-- Kreis der Schueler ------------------------------------------------------
+string Lcond_Schueler(object ob) 
+{
+  string s;
+  
+  s="";
+  
+  if(s=="") { return 0; } // Erlaubt
+  return s; // Zurueckgelieferte Begruendung
+}
+
+varargs string Test(string str,int akt,int min,int target) {
+  string out;
+  int percent;
+  out="";
+
+  if(akt < min) out+="noch ungewoehnlich viel";
+  else if(akt < target) {
+    akt -= min;
+    target -= min;
+    percent = 100 - (100*akt/target);
+    out+="Du musst "+str+" ";
+    switch (percent) {
+      case -10000..10:  
+                   out+="noch eine Winzigkeit mehr";
+                   break;
+      case 11..20: out+="nur noch sehr minimal";
+                   break;
+      case 21..30: out+="noch sehr wenig";
+                   break;
+      case 31..40: out+="noch ein wenig";
+                   break;
+      case 41..60: out+="etwa nochmal soviel";
+                   break;
+      case 61..70: out+="noch mehr";
+                   break;
+      case 71..80: out+="noch viel";
+                   break;
+      case 81..90: out+="noch sehr viel";
+                   break;
+      case 91..100: out+="noch unglaublich viel";
+                    break;
+      default:      out+="noch ungewoehnlich viel";
+                    break;
+    }
+    out+=" ueben. ";
+  }
+  
+  return out;
+}
+
+public string needsToLeadnSchuelerSkills(object ob, int targetValue) {
+  string r, *skills;
+  int i, sum, a, b;
+
+  r = "";
+
+  skills = ({"augen des jaegers", "durchdringe", "fesselfalle", "geschwindigkeit",
+  "rindenhaut", "schaetz"});
+
+  for(i=0; i<sizeof(skills); ++i) {
+  sum += ob->QuerySkillAbility(skills[i]);
+  }
+
+  // entweder messerstich oder deutschuss zaehlen
+  a = sum + ob->QuerySkillAbility("messerstich");
+  b = sum + ob->QuerySkillAbility("deutschuss");
+  sum = (a>b?a:b);
+  r = Test("was du im Kreis der Schueler gelernt hast", sum/sizeof(skills)+1 , 0, targetValue);
+
+  if(r != "") {
+    r = sprintf("Du musst deine Zauber noch weiter ueben und zeigen, dass "
+    "du unsere Grundfaehigkeiten als Schueler gut genug beherrschst. "
+    "%sDu kannst dir aussuchen, ob du dich dabei auf den Messerstich oder den Deutschuss "
+    "spezialisierst. ", r);
+  }
+
+  return r;
+}
+
+public string needsToLearnWaldlaeuferSkills(object ob, int targetValue) {
+  string r, *skills;
+  int i, sum, a, b;
+
+  r = "";
+
+  skills = ({"zaehmung", "markierung der beute", "fusstritt", "tiere besprechen", 
+             "fangfalle", "kraeutermixtur"});
+
+  for(i=0; i<sizeof(skills); ++i) {
+    sum += ob->QuerySkillAbility(skills[i]);
+  }
+
+  //tell_object(ob, sprintf("sum = %d avg = %d target=%d\n", sum, sum/6, targetValue));
+
+  r = Test("was du im Kreis der Waldlaeufer gelernt hast", sum/sizeof(skills) , 0, targetValue);
+
+  if(r != "") {
+    r = sprintf("Du musst deine Zauber noch weiter ueben und zeigen, dass "
+    "du die Faehigkeiten eines Waldlaeufers gut genug beherrschst. "
+    "%s", r);
+  }
+
+  return r;
+}
+
+//-- Kreis der Waldlaeufer ---------------------------------------------------
+string Lcond_Waldlaeufer(object ob) 
+{
+  string s, r;
+  int a, b;
+  mixed res;
+  
+  res=Lcond(ob);
+  if(!stringp(res)) { s=""; }
+  else { s=res; }
+
+  r = needsToLeadnSchuelerSkills(ob, 5500);
+  if(r != "") {
+    s += r;
+  }
+
+  a = ob->QuerySkillAbility(FIGHT(WT_BOW));
+  b = ob->QuerySkillAbility(FIGHT(WT_KNIFE));
+  s += Test("den Kampf mit dem Bogen oder dem Messer", a+b, 0, 1000);
+
+  if(s=="") { return 0; } // Erlaubt
+  return s; // Zurueckgelieferte Begruendung
+}
+
+//-- Kreis der Hueter --------------------------------------------------------
+string Lcond_Hueter(object ob) 
+{
+  string s, r;
+  int a, b;
+  mixed res;
+  
+  res=Lcond(ob);
+  if(!stringp(res)) { s=""; }
+  else { s=res; }
+
+  r = needsToLeadnSchuelerSkills(ob, 8000);
+  if(r != "") {
+    s += r;
+  }
+
+  r = needsToLearnWaldlaeuferSkills(ob, 5500);
+  if(r != "") {
+    s += r;
+  }
+
+  a = ob->QuerySkillAbility(FIGHT(WT_BOW));
+  b = ob->QuerySkillAbility(FIGHT(WT_KNIFE));
+  s += Test("den Kampf mit dem Bogen oder dem Messer", a+b, 0, 3333);
+
+  if(s=="") { return 0; } // Erlaubt
+  return s; // Zurueckgelieferte Begruendung
+}
+
+//-- Kreis der Meister -------------------------------------------------------
+string Lcond_Meister(object ob) 
+{
+  string s;
+  mixed res, rangers;
+  
+  res=Lcond(ob);
+  if(!stringp(res)) { s=""; }
+  else { s=res; }
+  
+  
+ // TODO skill lerncheck
+  
+  if(s=="") { return 0; } // Erlaubt
+  return s; // Zurueckgelieferte Begruendung
+}
+
+//-- Trennung der Einzelanforderungen in Gildenstufen ------------------------
+string check_lvl_cond(object ob, int flag) 
+{
+  string s, quest;
+  int percent, res, gl, value, i, j;
+  mixed cond, ae;
+  float f;
+  
+  s="";
+  res=0;
+  gl=ob->QueryProp(P_GUILD_LEVEL);
+  flag=limit(flag, NEEDED_XP, TASK_OBJECT);
+  
+  switch(flag)
+  {
+    case NEEDED_XP:
+      j=GUILD_MASTER->GetNeededXp(getuid(ob)) - ob->QueryProp(P_XP);
+      res = 100*j/XP_PER_LEVEL[gl+1];
+      res=limit(res,0,100);
+      if(ob->QueryProp(P_TESTPLAYER)) tell_object(ob, sprintf("xp = %d (%d/%d)\n", res, ob->QueryProp(P_XP), GUILD_MASTER->GetNeededXp(getuid(ob))));
+      s+="Von den benoetigten Kampferfahrungen fehlen Dir "
+         +integer_to_percent(res)+".";
+      res=(ob->QueryProp(P_XP)<GUILD_MASTER->GetNeededXp(getuid(ob)));
+      if(ob->QueryProp(P_TESTPLAYER)) tell_object(ob, sprintf("res = %d\n", res));
+    break;
+    
+    case NEEDED_QUEST:
+      //Testies
+      if(TP->QueryProp(P_TESTPLAYER))
+      {
+        quest=TP->QueryProp(P_RANGER_NEED_QUEST);
+        if(stringp(quest))
+        {
+          if(test_bit(quest, 1+gl))
+          {
+            res=0;
+            break;
+          }
+        }
+      }
+            
+      if(stringp(cond=GUILD_QUESTS[1+gl, 0]))
+      { if(!ob->QueryQuest(cond))
+        { res=1;
+          s+="Du hast Deine Aufgabe noch nicht erfuellt. "
+             +GUILD_QUESTS[1+gl, 1];
+          break; } }
+      res=0;
+    break;
+    
+    case EXAM_ROOM:
+      /*ae=GUILD_MASTER->GetExamRoom(getuid(ob));
+      if(!stringp(ae)) { res=1; break; }
+      res=1-test_bit(ae, gl+1);
+      s+="Du musst Dich noch dem Raum der Pruefungen stellen.";*/
+      // temporaer ausgesetzt
+    break;
+    
+    case NEEDED_ARCHENEMYS:
+      res=GUILD_MASTER->GetKilledArchenemys(getuid(ob));
+      res=(100*res)/((gl+1)*200);
+      res=limit(res,0,100);
+      if(!stringp(ae=GUILD_MASTER->GetArchenemy(getuid(ob)))){ae="Erzfeinde";}
+      else { ae=GUILD_MASTER->get_race_plural(ae); }
+      s+="Du hast noch nicht genug ueber "+ae+" gelernt. Du musst noch mehr "
+         "gegen sie kaempfen. " + 
+         Test("das Kaempfen gegen "+ae, GUILD_MASTER->GetKilledArchenemys(getuid(ob)), 0, (gl+1)*200);
+      res=99-res;
+    break;
+    
+    case TASK_OBJECT:
+      for(i=0; i<=gl; ++i) {
+        ae=GUILD_MASTER->GetTask(getuid(ob));
+        j=test_bit(ae, i+1);
+        pDebug(ob, sprintf("task_object check :: gl=%d bit=%d\n", i+1, j));
+        
+        ae=guild_level_mission_text[i+1];
+        if(!j && stringp(ae) && strlen(ae) > 0) {
+          s+="Du hast Deinen Auftrag noch nicht erfuellt.";
+         
+          return s + ae + " ";
+        }
+      }
+      res = 0;
+    break;
+  }
+  
+  if(res<1) { return 0; } // Alles erfuellt?
+  return s+" ";
+}
+
+public string check_level20_skills(object pl) {
+  string *skills_to_have, res;
+  int i;
+
+  skills_to_have = RANGERMASTER->GetAllSkillsFor(pl);
+
+  res = "";
+  for(i=0; i<sizeof(skills_to_have); ++i) {
+    if(pl->QuerySkillAbility(skills_to_have[i]) < MAX_ABILITY) {
+      if(skills_to_have[i] == "pakt der schatten") continue;
+      if(skills_to_have[i] == SK_MAGIC_DEFENSE) res += " Ausweichen,";
+      else if(skills_to_have[i] == SK_RANGER_HERBALISM) res += " Kraeutersuche,";
+      else if(skills_to_have[i] == FIGHT(WT_BOW)) res += " Bogenkampf,";
+      else if(skills_to_have[i] == FIGHT(WT_KNIFE)) res += " Messerkampf,";
+      else res += " "+skills_to_have[i]+",";
+    }
+  }
+
+  if(res == "") return 0;
+  return "Du musst deine Faehigkeiten noch perfektionieren. Folgende Faehigkeiten mussst du ueben:"+res+"\b";
+}
+
+//-- Trennung in Einzelanforderungen -----------------------------------------
+string Lcond(object ob) 
+{
+  string s;
+  mixed res;
+  int i;
+  
+  s="";
+  if(!IsGuildMember(ob)) 
+  { return BS("Du bist kein Mitglied der "+CAP(GUILDNAME)+"."); }
+  if(stringp(res=check_lvl_cond(ob, NEEDED_XP)))         { s+=res; }
+  if(stringp(res=check_lvl_cond(ob, NEEDED_QUEST )))     { s+=res; }
+  if(stringp(res=check_lvl_cond(ob, EXAM_ROOM)))         { s+=res; }
+  if(stringp(res=check_lvl_cond(ob, NEEDED_ARCHENEMYS))) { s+=res; }
+  if(stringp(res=check_lvl_cond(ob, TASK_OBJECT)))       { s+=res; }
+  if(ob->QueryProp(P_GUILD_LEVEL) >= 19 && stringp(res=check_level20_skills(ob))) { s+=res; }
+  if(s=="") { return 0; } // Erlaubt
+  return s; // Zurueckgelieferte Begruendung
+}
+
+//-- Hauptfunktion -----------------------------------------------------------
+nosave mixed advance(string str) 
+{
+  mixed res;
+  mapping cond;
+  int gl, kreis, rang, i, kreis_flag;
+  object gnpc;
+
+  if(!objectp(gnpc=present(GUILD_NPC_ID, TO)))
+  { notify_fail("Du brauchst "+GUILD_NPC_LONG+" dafuer!\n");
+    return 0; }
+  gl=TP->QueryProp(P_GUILD_LEVEL); kreis=GetCircle(gl); rang=GetGrad(gl);
+    
+  notify_fail(BSA("Was willst Du erhoehen? Deinen Rang oder Deinen Kreis?\n",
+                  GUILD_NPC+" sagt: "));
+  if(!str) { return 0; }
+ 
+  str=TP->_unparsed_args();
+  if(!IsGuildMember(TP)) 
+  { notify_fail("Das geht nur als Mitglied der Gilde.");
+    return 0; }
+    
+  if(str=="rang" || str=="kreis")
+  {
+    if(str=="rang")  { kreis_flag=0; }
+    if(str=="kreis") { kreis_flag=1; }
+    if(!kreis_flag && rang>=5)
+    {
+      gnpc->command_me("sag Du kannst Deinen Rang nicht weiter erhoehen "
+                       +CAP(getuid(TP))+".");
+      if(kreis<4)
+      { gnpc->command_me("sag Du kannst nur im Kreis aufsteigen."); }
+      return 1; 
+    }
+    if(kreis_flag && rang!=5 )
+    {
+      gnpc->command_me("sag Du kannst nur auf dem hoechsten Rang eines "
+                       "Kreises den naechsten Kreis betreten "
+                       +CAP(getuid(TP))+"."); 
+      return 1;
+    }
+    if(gl>=MAX_GUILD_LEVEL)
+    {
+      gnpc->command_me("sag Du kannst nicht weiter erhoehen "
+                       +CAP(getuid(TP))+". Du solltest das eigentlich "
+                       "wissen."); 
+      return 1;
+    }
+    cond=QueryProp(P_GUILD_LEVELS);
+    res=call_other(RES_CHECKER, "check_new_restrictions", TP, cond[gl+1]);
+
+    if(gl > 15 && RANGERMASTER->GetMasterPath(getuid(TP)) == 0) {
+      if(stringp(res)) res += "Du musst noch deinen Meisterpfad auswaehlen.";
+      else res =  "Du musst noch deinen Meisterpfad auswaehlen.";
+    }
+  
+    if(!stringp(res))
+    {
+      //LoadSequenz(SEQ+"aufstieg.seq", TP, #'advance2);
+      call_out("advance2",0,TP, kreis_flag);
+      return 1;
+    }
+    else
+    {
+      if(res!="")
+      { 
+        tell_room(TO, break_string("Du kannst noch nicht aufsteigen, "+CAP(getuid(TP))+"! "+res,
+                                   78, "Raziel sagt: "));
+        return 1;
+      }
+    }
+  }
+  return 0;
+}
+
+public void give_task_item(int gl, object pl) {
+  object task;
+
+  if(test_bit(GUILD_MASTER->GetTask(getuid(pl)), gl+1)) return; // aufgabe bereits geloest
+
+  switch(gl) {
+    case 2:
+      if(objectp(present(RANGER_TASK_SCHUPPE, pl))) return;
+      tell_object(pl, BS("Raziel gibt dir eine unbekannte Schuppe."));
+      tell_room(TO, BS("Raziel gibt "+pl->name(WEM)+" eine unbekannte Schuppe."));
+      task = clone_object(OBJ "task_schuppe");
+      task->move(pl, M_NOCHECK);
+      break;
+    case 3:
+      if(objectp(present(RANGER_TASK_SCHUPPE2, pl))) return;
+      tell_object(pl, BS("Raziel gibt dir eine Hydraschuppe."));
+      tell_room(TO, BS("Raziel gibt "+pl->name(WEM)+" eine Schuppe."));
+      task = clone_object(OBJ "task_schuppe2");
+      task->move(pl, M_NOCHECK);
+      break;
+    case 6:
+      if(objectp(present(RANGER_TASK_WEAPON_GATHER, pl))) return;
+      task = clone_object(OBJ "task_waffensammler");
+      task->move(pl, M_NOCHECK);
+      tell_room(TO, BS("Raziel sagt: "+TPN+", geh und bring Kronosch die Waffen, damit er uns gewogen wird!"));
+      break;
+    case 7:
+      if(objectp(present(RANGER_TASK_MAGIC_WEAPONS, pl))) return;
+      task = clone_object(OBJ "task_waffensammler2");
+      task->move(pl, M_NOCHECK);
+      tell_room(TO, BS("Raziel sagt: Kronosch benoetigt bestimmte Gegenstaende, "+TPN+
+      "! Geh und bring sie ihm.")); 
+      break;
+    case 9:
+      if(objectp(present(RANGER_TASK_SCALE_GATHERER, pl))) return;
+      task = clone_object(OBJ "task_schuppensammler");
+      task->move(pl, M_NOCHECK);
+      tell_room(TO, BS("Raziel sagt: Kronosch arbeitet gut, "+TPN+". Er hat allerdings nach Drachenschuppen und Wasserfragmenten gefragt. Besorge sie fuer ihn!")); 
+      break;
+    case 12:
+      if(objectp(present(RANGER_TASK_PALA_KILLER, pl))) return;
+      task = clone_object(OBJ "task_palakiller");
+      task->move(pl, M_NOCHECK);
+      tell_room(TO, BS("Raziel sagt: "+TPN+", eile dich! Greife das Haupttor der Paladine an. Es gilt keine Zeit zu verlieren!"));
+    case 15:
+      if(objectp(present(RANGER_TASK_SCHNITZELJAGD, pl))) return;
+      task = clone_object(OBJ "task_schnitzeljagd");
+      task->move(pl, M_NOCHECK);
+      tell_room(TO, BS("Raziel sagt: "+TPN+", finder heraus was Hugen ueber unsere gestohlene Waffe weiss!"));
+      break;
+  }
+}
+
+//-- Eigentlicher Aufstieg ---------------------------------------------------
+nosave varargs int advance2(object pl, int kreis) 
+{
+  mixed m;
+  int gl, i, j, k;
+  object task, gnpc;
+
+  if(!objectp(gnpc=present(GUILD_NPC_ID, TO)))
+  { write("Du brauchst "+GUILD_NPC_LONG+" dafuer!\n");
+    return 1; }
+
+  if(!pl) { pl=TP; }
+  gilden_room::advance(); // Eigentlicher Aufstieg der Gildenstufe
+  gl=pl->QueryProp(P_GUILD_LEVEL);
+    
+  gnpc->command_me("ja "+getuid(TP));
+  i=pl->QueryProp(P_GENDER)==FEMALE;
+  k=GetCircle(gl);
+  if(kreis)
+  {
+    gnpc->command_me("sag "+CAP(getuid(pl))+", ab jetzt bist Du ein"
+                     +(i?"e":"")+" "+circle_to_string(k)+(i?"in":"")+".");
+    switch(k)
+    {
+      case 1:
+        gnpc->command_me("sag Es wird jetzt Deine Aufgabe sein die "
+                         "Grundfertigkeiten zu erlernen und stetig zu "
+                         "verbessern. Uebe Dich.");
+        gnpc->command_me("emote wendet sich ab.");
+      break;
+      case 2:
+        gnpc->command_me("muster "+getuid(pl));
+        gnpc->command_me("sag Du bist der Gilde also treu geblieben. Nun wir "
+                         "werden sehen wie Du Dich weiter qualifizierst. Du "
+                         "wirst jetzt maechtigere Zauber erlernen, aber "
+                         "dafuer musst Du auch mehr arbeiten.");
+        gnpc->command_me("emote verschraenkt die Arme vor der Brust.");
+      break;
+      case 3:
+        gnpc->command_me("sag Betrete nun eine der Pfade. Du hast Deine "
+                         "Vertrauenswuerdigkeit bewiesen und bist jetzt ein "
+                         "vollwertiges Mitglied. Ab jetzt geht es los.");
+        gnpc->command_me("laechel kalt");
+      break;
+      case 4:
+        gnpc->command_me("sag Grosse Macht bringt grosse Verantwortung, Du "
+                         "hast jetzt eine Vorbildfunktion fuer die anderen. "
+                         "Bleibe ein treues Mitglied und Du wirst dafuer "
+                         "belohnt.");
+        gnpc->command_me("klopf "+getuid(pl)+" /respektvoll");
+      break;
+    }
+  }
+  else if(gl<MAX_GUILD_LEVEL) { 
+    gnpc->command_me("sag Gut "+CAP(getuid(pl))+", aber arbeite weiter an Dir."); 
+  }
+
+  if(strlen(guild_level_mission_text[gl+1]) > 0) {
+    gnpc->command_me("sag " + guild_level_mission_text[gl+1]);
+  }
+
+  give_task_item(gl, pl);
+  
+  if(gl<MAX_GUILD_LEVEL) {
+    m=QueryProp(P_GUILD_LEVELS);
+    m=m[gl+1]; 
+    j=pl->QueryProp(P_XP) + XP_PER_LEVEL[gl+1];
+
+    GUILD_MASTER->SetGuildLevel(getuid(pl), gl);
+    GUILD_MASTER->SetNeededXp(getuid(pl), j);
+    GUILD_MASTER->SetKilledArchenemys(getuid(pl), 0);
+    i=0;
+  }
+  if(member(SKILL_POINT_LEVEL, gl)!= -1) // Neuer Skillpunkt
+  { 
+    R_SKILLMASTER->IncFreeSkillPoints(getuid(pl)); i=1;
+    tell_object(TP, BS("Du hast einen Fertigkeitspunkt erhalten. Verteile ihn mit <lerne fertigkeiten>.")); 
+  }
+  
+  if(kreis)
+  {
+    if(!IS_LEARNER(pl) ){ 
+      Channel(CAP(getuid(pl))+" hat soeben den Kreis der "+circle_to_string(GetCircle(gl))+" betreten."); 
+    }
+  } else {
+    if(!IS_LEARNER(pl)) {
+      Channel(CAP(getuid(pl))+" hat soeben den "+GetGrad(gl)+". Rang im Kreis der "+circle_to_string(GetCircle(gl))+" erreicht."); 
+    }
+  }
+  
+  log_member(TP, "Neue Gildenstufe: "+to_string(gl)+(i?"(Skillpunkt)":"") );
+  return 1;
+}
+/****************************************************************************/
+
+
+
+/** Auswahl der Erzfeindrasse und speichern *********************************/
+//-- Vorfunktion fuer Erzfeindauswahl ----------------------------------------
+string print_archenemy_slots(object pl) {
+  string s, *ae;
+
+  ae = GUILD_MASTER->GetArchenemy(getuid(pl));
+
+  if(sizeof(ae) < 1) s = "* <frei>\n";
+  else s = "* "+GUILD_MASTER->get_race_plural(ae[0])+"\n";
+
+  if(pl->QueryProp(P_GUILD_LEVEL) > 5) {
+    if(sizeof(ae) < 2) s += "* <frei>\n";
+    else s += "* "+GUILD_MASTER->get_race_plural(ae[1])+"\n";
+  }
+
+  if(pl->QueryProp(P_GUILD_LEVEL) > 10) {
+    if(sizeof(ae) < 3) s += "* <frei>\n";
+    else s += "* "+GUILD_MASTER->get_race_plural(ae[2])+"\n";
+  }
+
+  if(pl->QueryProp(P_GUILD_LEVEL) > 15) {
+    if(sizeof(ae) < 4) s += "* <frei>\n";
+    else s += "* "+GUILD_MASTER->get_race_plural(ae[3])+"\n";
+  }
+
+  if(pl->QueryProp(P_GUILD_LEVEL) >= 20) {
+    if(sizeof(ae) < 5) s += "* <frei>\n";
+    else s += "* "+GUILD_MASTER->get_race_plural(ae[4])+"\n";
+  }
+
+  return s;
+}
+
+int max_archenemy_slots(object pl) {
+  return pl->QueryProp(P_GUILD_LEVEL) / 5 + 1;
+}
+
+int choose_archenemy()
+{
+  string s;
+  int i;
+  
+  s="Du kannst diese Erzfeinde waehlen:\n";
+  for(i=0;i<sizeof(archenemys);i+=2)
+  { s+=sprintf(" %2s: %-18s", to_string(i+1), archenemys[i]);
+    if((i+1)==sizeof(archenemys)) {break;}
+    s+=sprintf("|  %2s: %-18s\n", to_string(i+2), archenemys[i+1]);
+  }
+  s+="\nWenn du gerade erst in der Gilde beginnst, empfiehlt sich ein einfacher "
+     "Erzfeind (Menschen, Hobbits, Zwerge oder Elfen). Du kannst ihn spaeter "
+     "gegen steigende Kosten wechseln.\nGegen deine Erzfeinde erhaeltst du einen "
+     "Angriffsbonus. Du musst sie aber auch zum Aufstieg in der Gilde toeten.\n";
+  s+="Du hast aktuell folgende Erzfeinde:\n";
+  s+= print_archenemy_slots(TP);
+  s+="\n";
+
+  if(sizeof(GUILD_MASTER->GetArchenemy(getuid(TP))) >= max_archenemy_slots(TP)) {
+    s += "Du hast bereits soviele Erzfeinde gewaehlt, wie du haben kannst.\nMoechtest du deine Erzfeinde zuruecksetzen? (ja/nein)";
+    write(s);
+    input_to("reset_archenemy");
+    return 1;
+  } else {
+    s+="Welchen neuen Erzfeind (<Nr.>) waehlst Du: ";
+    write(s);
+    input_to("choose_archenemy_two");
+    return 1;
+  }
+}
+
+public void reset_archenemy(string str) {
+  string res;
+
+  if(!objectp(TP)) return;
+  str = lower_case(str);
+  if(str != "ja" && str != "j") {
+    write("Abgebrochen.\n");
+    return;
+  }
+
+  R_RES_CHECKER->reset_archenemy(TP);
+}
+
+void choose_archenemy_two(string str)
+{
+  int i;
+  
+  if( !intp(i=to_int(str)) || i>sizeof(archenemys) || i<1 )
+  { write("\nDu musst eine Zahl zwischen 1 und "
+          +to_string(sizeof(archenemys))+" eintippen!\n"); 
+    return; }
+  i--;
+  players_archenemy+=([getuid(TP):archenemys[i]]);
+  
+  if(!IsGuildMember(TP))
+  {
+    write(BS("Du waehlst '"+archenemys[i]+"'."));
+    return;
+
+  }
+  
+  //else: Der Wechsel
+  write(BS("Moechtest du wirklich den Erzfeind "+to_string(GUILD_MASTER->get_race_plural(players_archenemy[getuid(TP)]))+"' hinzufuegen? (ja/nein)"));
+  input_to("change_archenemy");  
+}
+void change_archenemy(string str)
+{
+  int res;
+  
+  str=lower_case(str);
+  if(!objectp(TP)) return;
+  if(str!="ja" && str!="j" ) {
+    write(BS("Abgebrochen."));
+    return;
+  }
+
+  res=GUILD_MASTER->SetArchenemy(getuid(TP), players_archenemy[getuid(TP)]);
+  if(res != 1) {
+    write(BS("Fehler beim Setzen des Erzfeindes ("+players_archenemy[getuid(TP)]+", r="+res+")."));
+    return;
+  }
+
+  write(BS(to_string(GUILD_MASTER->get_race_plural(players_archenemy[getuid(TP)]))+" sind nun deine Erzfeinde."));
+  players_archenemy = m_delete(players_archenemy, getuid(TP));
+  return;
+}
+mixed get_archenemys() { return players_archenemy; }
+/****************************************************************************/
+
+
+
+/** Fertigkeitspunkte investieren und resetten ******************************/
+//-- Skill auswaehlen --------------------------------------------------------
+int choose_skill()
+{
+  string s;
+  
+  if(!objectp(TP)) { return 1; }
+  if(!IsGuildMember(TP)) 
+  { tell_object(TP, BS("Du kannst hier nur als Waldlaeufer lernen."));
+    return 1; }
+  
+  s=to_string(R_SKILLMASTER->QuerySkillTree(getuid(TP)))+"\n";
+  s+="Welche Fertigkeiten willst Du erlernen? <Nr.>\n";
+  write(s);
+  input_to("set_skill");
+  return 1;
+}
+
+//-- Der Skill wird evtl. gesetzt --------------------------------------------
+void set_skill(string str)
+{
+  mixed list, m;
+  string skill;
+  int i, res;
+  
+  if(!objectp(TP)) return;
+  if(!pointerp(list=R_SKILLMASTER->get_skill_list())) return;
+  if( !intp(i=to_int(str)) || i>sizeof(list) || i<1 )
+  { write("\nDu musst eine Zahl zwischen 1 und "
+          +to_string(sizeof(list))+" eintippen!"); 
+    return; }
+  i--;
+  skill=list[i];
+  res=R_SKILLMASTER->AddSkillPoint(getuid(TP), skill);
+  if(res == 1)
+  {
+    write(BS("Du erlernst '"+skill+"'."));
+    return;
+  }
+  else 
+  {
+    res=res*(-1);
+    m=({"Du bist kein Mitglied der Gilde", "Du hast nicht genug "
+        "Fertigkeitspunkte", "Du hast diese Fertigkeit schon erlernt", 
+        "Diese Fertigkeit gibt es nicht", "Du darfst nicht mehr Fertigkeiten "
+        "erlernen", "Du brauchst dafuer noch '"
+        +to_string(R_SKILLMASTER->QueryNeededSkill(skill))+"'"});
+    res=limit(res,0,5);
+    write(BS(m[res]+"."));
+  }
+  return;
+}
+
+//-- Skills werden alle verlernt und Skillpunkte wieder rausgegeben ----------
+int unlearn_skills()
+{
+  string s;
+  
+  if(!objectp(TP)) { return 1; }
+  if(!IsGuildMember(TP)) 
+  { tell_object(TP, BS("Das kannst Du nur als Waldlaeufer."));
+    return 1; }
+  
+  write("Willst Du sicher ALLE Fertigkeiten verlernen? (Ja/Nein)\n");
+  input_to("unlearn_skills_two");
+  return 1;
+}
+void unlearn_skills_two(string str)
+{
+  if(!objectp(TP)) return;
+  str=lower_case(str);
+  if(str=="ja" || str=="j")
+  {
+    R_RES_CHECKER->reset_skillpoints(TP);
+    return;
+  }
+  write(BS("Du behaelst Deine Fertigkeiten."));
+  return;
+}
+/****************************************************************************/
+
+
+
+/** Pfade betreten und verlassen ********************************************/
+//-- Den zu verlassenden Pfad auswaehlen -------------------------------------
+int choose_loosen_path()
+{
+  string s;
+  int i;
+  mixed p;
+  
+  if(!IsGuildMember(TP))
+  {
+    write("Aber Du bist doch kein Mitglied!\n");
+    return 1;
+  }
+  
+  p=RANGERMASTER->GetPaths(getuid(TP));
+  if( !pointerp(p) || sizeof(p)<1 )
+  {
+    write("Du hast Doch gar keinen Pfad betreten!\n");
+    return 1;
+  }
+  s="Du kannst folgende Pfade verlassen:\n";
+  for(i=0;i<sizeof(p);i++)
+  { s+="  "+to_string(1+i)+". Pfad der "+p[i]+"\n"; }
+  s+="\nWelchen Pfad (<Nr.>) waehlst Du: ";
+  write(s);
+  input_to("leave_path");
+  return 1;
+}
+
+//-- Einen Pfad verlassen ----------------------------------------------------
+void leave_path(string str)
+{
+  int i, res;
+  string *m;
+  mixed p;
+
+  p=RANGERMASTER->GetPaths(getuid(TP));
+  if( !pointerp(p) || sizeof(p)<1  ) return;
+  if( !intp(i=to_int(str)) || i>sizeof(p) || i<1 )
+  { write("\nSo einen Pfad hast Du nicht betreten!"); 
+    return; }
+  i--;
+  if(!objectp(TP)) return;
+
+  if(p[i] == RANGERMASTER->GetMasterPath(getuid(TP))) {
+    write(BS("Deinen Meisterpfad kannst du nicht verlassen."));
+    return;
+  }
+
+  R_RES_CHECKER->leave_path(TP, p[i]);
+  return;
+}
+
+//-- Einen Pfad auswaehlen ---------------------------------------------------
+int choose_path()
+{
+  string s;
+  int i;
+  
+  if(!IsGuildMember(TP))
+  { write("Aber Du bist doch kein Mitglied!\n"); return 1; }
+  
+  if(TP->QueryProp(P_GUILD_LEVEL) <= 10)
+  { write("Deine Gildenstufe ist zu niedrig!\n"); return 1; }
+  
+  s="Du kannst folgende Pfade betreten:\n";
+  for(i=0;i<sizeof(paths);i++)
+  { s+="  "+to_string(1+i)+". Pfad der "+paths[i]+"\n"; }
+  s+="\nWelchen Pfad (<Nr.>) waehlst Du: ";
+  write(s);
+  input_to("choose_path_two");
+  return 1;
+}
+
+public int choose_master_path() {
+  string s, *pfade;
+  int i;
+  if(!IsGuildMember(TP)) {
+    write("Aber Du bist doch kein Mitglied!\n"); 
+    return 1; 
+  }
+  
+  if(TP->QueryProp(P_GUILD_LEVEL) <= 15) {
+    write("Das kannst du nur im Kreis der Meister!\n");
+    return 1; 
+  }
+
+  if(stringp(s=RANGERMASTER->GetMasterPath(getuid(TP)))) {
+    write(BS("Du bist bereits ein Meister des "+s+"pfads."));
+    return 1;
+  }
+
+  pfade = RANGERMASTER->GetPaths(getuid(TP));
+  if(!pointerp(pfade) || sizeof(pfade) == 0) {
+    write(BS("Du folgst keinem Pfad. Du kannst nur Meister eines bereits gefolgten Pfades werden."));
+    return 1;
+  }
+
+  s="!!! Bedenke, dass du den Meisterpfad nicht mehr wechseln oderverlassen kannst. !!!\n";
+  s+="Welcher Pfad soll dein Meisterpfad werden?\n\n";
+  for(i=0; i<sizeof(pfade); ++i) {
+    s+= BS(sprintf("%d. %s", i+1, CAP(pfade[i])));
+  }
+  s+="\nDeine Wahl: ";
+
+  write(s);
+  input_to("choose_master_path_2");
+  return 1;
+}
+
+public void choose_master_path_2(string input) {
+  mixed s;
+  string *pfade;
+  int i;
+
+  pfade = RANGERMASTER->GetPaths(getuid(TP));
+  i = to_int(input);
+  if(i == 0) {
+    write(BS("Abgebrochen."));
+    return;
+  }
+  i -= 1;
+
+  s = RANGERMASTER->SetMasterPath(getuid(TP), pfade[i]);
+  if(stringp(s)) {
+    write(BS(s));
+    return;
+  }
+
+  write(BS("Du bist nun ein Meister des "+pfade[i]+"pfades."));
+  return;
+}
+
+//-- Dem Pfad beitreten ------------------------------------------------------
+void choose_path_two(string str)
+{
+  int i, res;
+  string *m;
+  
+  if( !intp(i=to_int(str)) || i>sizeof(paths) || i<1 )
+  { write("\nDu musst eine Zahl zwischen 1 und "
+          +to_string(sizeof(paths))+" eintippen!"); 
+    return; }
+  i--;
+  if(!objectp(TP)) return;
+  res=GUILD_MASTER->AddPath(getuid(TP), to_string(paths[i]));
+  if(res == 1)
+  {
+    write(BS("Du waehlst den '"+paths[i]+"pfad'."));
+    return;
+  }
+  else 
+  {
+    res=res*(-1);
+    m=({"Du bist kein Mitglied der Gilde", "Den Pfad gibt es nicht", 
+        "Das Maximum an Pfaden ist erreicht", "Es sind noch nicht mehr Pfade "
+        "erlaubt", "Du hast dem Pfad schon betreten", "Ein Fehler ist "
+        "aufgetreten"});
+    res=limit(res,0,5);
+    write(BS(m[res]+"."));
+  }
+  return;
+}
+/****************************************************************************/
+
+
+
+//** Eintreten und Austreten ***********************************************//
+//-- Beitrittsfunktion -------------------------------------------------------
+int beitreten()
+{
+  int i;
+  object ob, gnpc;
+  
+  if(!objectp(gnpc=present(GUILD_NPC_ID, TO)))
+  { write("Du brauchst "+GUILD_NPC_LONG+" dafuer!\n");
+    return 1; }
+  
+ /* if(!TP->QueryProp(P_TESTPLAYER) && !IS_LEARNER(TP) )
+  { write("Zur Zeit duerfen nur Testspieler beitreten!\n"); return 1; }*/
+  
+  if(IsGuildMember(TP) && !IS_ARCH(TP))
+  { write("Aber Du bist doch schon Mitglied!\n"); return 1; }
+  
+  if(member(archenemys, players_archenemy[getuid(TP)]) == -1)
+  { write("Du musst erst einen Erzfeind waehlen (<waehle erzfeind>)!\n");
+    return 1; }
+  
+  if( (i=::beitreten()) < 0) { return 1; } // Meldung wird da uebernommen
+  
+  if(objectp(ob=clone_object(OBJ"koecher")) ) { ob->move(TP, M_NOCHECK); }
+
+  gnpc->command_me("murmel");
+  gnpc->command_me("ja "+getuid(TP));
+  gnpc->command_me("sag Deine Gelegenheit Dich zu beweisen "
+                   +CAP(getuid(TP))+".");
+  gnpc->command_me("wlwisper Heisst "+CAP(getuid(TP))+" willkommen!");
+  gnpc->command_me("sag Sieh dir <hilfe wl_uebersicht> an, um die Grundlagen der Gilde zu verstehen.");
+  
+  if(!IS_LEARNER(TP) )
+  { Channel(CAP(getuid(TP))+" hat sich soeben den Waldlaeufern "
+             "angeschlossen."); }
+    
+  // Grundwerte
+  TP->SetProp(P_GUILD_LEVEL, 1);
+  adjust_title(TP);
+  GUILD_MASTER->AddMember(TP, players_archenemy[getuid(TP)]);
+
+  // Skills
+  if(!(TP->QuerySkillAbility(FIGHT(WT_KNIFE))))
+    TP->ModifySkill(FIGHT(WT_KNIFE), 
+        QuerySkill(FIGHT(WT_KNIFE))+([SI_SKILLABILITY:10 ]), 100
+        ,GUILDNAME);
+
+  if(!(TP->QuerySkillAbility(FIGHT(WT_BOW))))
+    TP->ModifySkill(FIGHT(WT_BOW), 
+        QuerySkill(FIGHT(WT_BOW))+([SI_SKILLABILITY:10 ]), 100
+        ,GUILDNAME);
+ 
+  if(!(TP->QuerySkillAbility(SK_MAGIC_DEFENSE)))
+    TP->ModifySkill(SK_MAGIC_DEFENSE, 
+        QuerySkill(SK_MAGIC_DEFENSE)+([SI_SKILLABILITY:10 ]), 100
+        ,GUILDNAME);       
+
+  if(!(TP->QuerySkillAbility(SK_RANGER_HERBALISM)))
+    TP->ModifySkill(SK_RANGER_HERBALISM, 
+        QuerySkill(SK_RANGER_HERBALISM)+([SI_SKILLABILITY:500 ]), 100
+        ,GUILDNAME);
+  
+  WLOG(GUILD_LOG_FILE, "tritt den Waldlaeufern bei");
+  WLOG(MEMBERLOG, "tritt der Gilde bei. Erzfeind: "
+                   +players_archenemy[getuid(TP)] );
+  log_member(TP, "Gildeneintritt, Erzfeind: "+players_archenemy[getuid(TP)]); 
+  return 1;
+}
+
+//-- Austritt ----------------------------------------------------------------
+int austreten()
+{
+  object ob, gnpc;
+  int i;
+
+  if(!objectp(TP)) { return 0; }
+  if(!IsGuildMember(TP))
+  {  write("Aber Du bist doch gar kein Mitglied!\n");
+     return 1; }
+     
+  if(objectp(gnpc=present(GUILD_NPC_ID, TO)))
+  { gnpc->command_me("nein");
+    gnpc->command_me("sag Du warst eben zu schwach "+CAP(getuid(TP))+"."); }
+
+  WLOG(GUILD_LOG_FILE, "verlaesst die Waldlaeufer");
+  WLOG(MEMBERLOG, "verlaesst die Gilde auf Gildenstufe "
+                   +to_string(TP->QueryProp(P_GUILD_LEVEL)));
+  log_member(TP, "Gildenaustritt, Gildenstufe: "
+                 +to_string(TP->QueryProp(P_GUILD_LEVEL)));
+  GUILD_MASTER->RemoveMember(getuid(TP));
+  TP->SetProp( P_GUILD_LEVEL, 0 );
+  
+  if(!IS_LEARNER(TP) )
+  { Channel(CAP(getuid(TP))+" hat soeben die Waldlaeufer verlassen. Nicht "
+            "jede"+(TP->QueryProp(P_GENDER)==FEMALE?"e":"r")+" ist bereit fuer uns zu kaempfen."); }
+  
+  for(i=0;i<sizeof(RANGER_ITEMS);i++)
+  { if( objectp(ob=present(RANGER_ITEMS[i], TP)) ) { ob->remove(1); } }
+  
+  return ::austreten();
+}
+
+//-- Austritt, Sicherheitsabfrage --------------------------------------------
+int second_austreten_test(string str)
+{
+  str=lower_case(str);
+  if(str=="ja" || str=="j") { austreten(); return 1;}
+  return 1;
+}
+int austreten_test()
+{
+  if(!objectp(TP)) { return 0; }
+  if(!IsGuildMember(TP))
+  {  write("Aber Du bist doch gar kein Mitglied!\n");
+     return 1; }
+  write("Willst Du wirklich austreten? Ja/Nein: \n");
+  input_to("second_austreten_test");
+  return 1;
+}
+//**************************************************************************//
+
+
+
+//** Spellfunktionen *******************************************************//
+//-- Spell lernen ------------------------------------------------------------
+int NewLearnSpell(string str) 
+{
+  mixed path, s, res;
+  int i, n, gl;
+  
+  str=TP->_unparsed_args();
+  if(!IsGuildMember(TP)) 
+  { tell_object(TP, BS("Du kannst hier nur als Waldlaeufer lernen."));
+    return 1; }
+  notify_fail("Welchen Zauber moechtest du erlernen?\n");
+  if(!str) { write(zauberliste); return 1; }
+
+  str=lower_case(str);
+  s=m_indices(QueryProp(P_GUILD_SKILLS));
+  s-=({SK_MAGIC_DEFENSE, FIGHT(WT_BOW), FIGHT(WT_KNIFE), 
+       SK_RANGER_HERBALISM });
+  if( member(s, str) == -1 )
+  {
+    write(BS("So einen Zauber gibt es nicht."));
+    return 1;
+  }
+
+  
+  if(stringp(path=RANGERMASTER->get_path(str)))
+  {
+    res=RANGERMASTER->GetPaths(getuid(TP));
+    if(!pointerp(res)) { res=({"",""}); }
+    n=member(res, path);
+    if(n == -1)
+    {
+      tell_object(TP,BS("Du musst zuerst dem Pfad der "+path+" betreten."));
+      return 1; 
+    }
+
+    gl = GUILD_SPELLBOOK->QuerySpell(str)[SI_SKILLRESTR_LEARN][P_GUILD_LEVEL];
+    if(gl > 16 && RANGERMASTER->GetMasterPath(getuid(TP)) != path) {
+      tell_object(TP, BS("Du musst Meister des Pfades der "+path+" sein, um diesen Zauber zu erlernen."));
+      return 1;
+    }
+  }
+  n = LearnSpell(str);
+  if(n!=1) return n;
+
+  TP->ModifySkill(str, ([SI_SKILLABILITY: 2000]));
+  return n;
+}
+//**************************************************************************//
+
+
+
+/** TopListen-Handling/Crontabjobs ******************************************/
+//-- TopListe lesen ----------------------------------------------------------
+string topliste()
+{
+  TP->More(read_file(READ_TOPLIST));
+  tell_room(TO, BS(TP->Name(WER, 1)+" liest sich eine Liste durch."), ({TP}));
+  return "";
+}
+
+//-- TopListe updaten --------------------------------------------------------
+void toplist_update() { GUILD_MASTER->UpdateTopList(); return ;}
+
+//-- Backup der Mitglieder ---------------------------------------------------
+void member_backup() { GUILD_MASTER->Backup(); return ;}
+
+//-- Zauberliste ausgeben ----------------------------------------------------
+string get_zauberliste() { return zauberliste; }
+/****************************************************************************/
+
+
+
+/** ChannelmasterKommunikation **********************************************/
+//-- Sendet eine Nachricht auf -Info -----------------------------------------
+void Channel(string msg) 
+{
+  CHMASTER->join("Info",TO);
+  CHMASTER->send("Info",TO,msg,MSG_SAY);
+  return ;
+}
+/****************************************************************************/
+
+
+
+/** Titel und Presays *******************************************************/
+//-- Der Titel/Presay werden gesetzt -----------------------------------------
+int  adjust_title(object player)
+{
+  string s, s2;
+  mixed p;
+  int gl, grad, female;
+  
+  if( !objectp(player)                              || 
+      (IS_SEER(player) && file_name(previous_object())[0..30] != "/gilden/waldlaeufer/obj/koecher") || // seher werden nicht uebersteuert
+      !IsGuildMember(player)                        || 
+      !stringp(s=player->QueryProp(P_RACE))         ||
+      !intp(gl=player->QueryProp(P_GUILD_LEVEL))    ||
+      !stringp( s2=circle_to_string(GetCircle(gl))) || 
+      !intp(female=(player->QueryProp(P_GENDER) == FEMALE)) ) { return 0; }
+  
+  //Presay Handling
+  switch(s)
+  { case "Elf":       s+="en"; break;
+    case "Hobbit":    s+="";   break;
+    case "Mensch":    s+="en"; break;
+    case "Dunkelelf": s+="en"; break;
+    case "Fee":       s+="n";  break; }
+  s+=lower_case(s2);
+  if(female) s+="in";
+  player->SetProp(P_PRESAY, s);
+ 
+  //Titel
+  p=RANGERMASTER->GetPaths(getuid(player));
+  grad=GetGrad(gl);
+  if(!p || !pointerp(p) || sizeof(p)<1 || gl<=10)
+  {
+    gl=limit(gl,1,10); 
+    s2=circle_to_string(GetCircle(gl));
+    if(female) { s=guild_titles_female[s2, (grad-1)]; }
+    else {s=guild_titles_male[s2, (grad-1)];}   
+    player->SetProp(P_TITLE, s);
+    return 1;
+  }
+  s2=p[sizeof(p)-1];
+  if(female) { s=path_titles_female[s2, (grad-1)]; }
+  else {s=path_titles_male[s2, (grad-1)];}
+  player->SetProp(P_TITLE, s);
+  return 1;
+}
+/****************************************************************************/
+
+
+
+/** Ausgabe der Fertigkeiten ************************************************/
+//-- Umwandlung Fertigkeiten (zahl/string) -----------------------------------
+string ability_to_string(int ability) 
+{
+ string str;
+ 
+ switch(ability) 
+ {
+   case 0   ..500 : str="ueberhaupt nicht";                            break;
+   case 501 ..1000: str="eigentlich nicht";                            break;
+   case 1001..1500: str="fast gar nicht";                              break;
+   case 1501..2000: str="kaum";                                        break;
+   case 2001..2500: str="sehr schlecht";                               break;
+   case 2501..3000: str="nur sehr laienhaft";                          break;
+   case 3001..3500: str="schlecht";                                    break;
+   case 3501..4000: str="wie ein Amateur";                             break;
+   case 4001..4500: str="unterdurchschnittlich";                       break;
+   case 4501..5000: str="durchschnittlich";                            break;
+   case 5001..5500: str="etwas ueberdurchschnittlich";                 break;
+   case 5501..6000: str="ueberdurchschnittlich";                       break;
+   case 6001..6500: str="fast ausreichend";                            break;
+   case 6501..7000: str="ausreichend";                                 break;
+   case 7001..7500: str="recht sicher";                                break;
+   case 7501..8000: str="relativ gut";                                 break;
+   case 8001..8500: str="gut";                                         break;
+   case 8501..9000: str="sehr gut";                                    break;
+   case 9001..9500: str="wie ein Waldlaeufer";                         break;
+   case 9501..9750: str="fast fehlerfrei";                             break;
+   case 9751..9850: str="wie ein Hueter";                              break;
+   case 9851..9900: str="fehlerfrei";                                  break;
+   case 9901..9950: str="wie ein Meister";                             break;
+   case 9951..9999: str="wie ein Lehrmeister";                         break;
+   case 10000     : str="wie ein legendaerer Meister";                 break;
+   default        : str="nicht";                                       break;
+  }
+  return str;
+}
+
+//-- Die zauber werden gross geschrieben -------------------------------------
+string cap_skill(string str)
+{
+  int i;
+  string word, *words;
+  
+  words=explode(str, " "); word="";
+  for(i=0;i<sizeof(words);i++)
+  { if(member(({"der", "des"}), words[i]) == -1) { words[i]=CAP(words[i]); }
+    word+=words[i]+" "; }
+  return word[0..<2];
+}
+
+//-- Zusammenfassung in string -----------------------------------------------
+string fertigkeiten(object ob)
+{
+  string s, *paths, spellpath;
+  int i, abil, abils;
+  mixed m, keys;
+  
+  if(!objectp(ob) || !mappingp(m=ob->QueryProp(P_NEWSKILLS))) { return ""; }
+  s=GUILD_NPC+" fluestert Dir zu:\n";
+  keys=sort_array(m_indices(m), CLOSURE(>));
+  abils=0;
+  paths = RANGERMASTER->GetPaths(getuid(ob));
+  for(i=0;i<sizeof(keys);i++)
+  {
+    if(member( ({SK_RANGER_HERBALISM, SK_MAGIC_DEFENSE, FIGHT(WT_BOW), 
+                 FIGHT(WT_KNIFE)}), keys[i]) != -1) { continue; }
+
+    spellpath = RANGERMASTER->get_path(abil);
+    if(stringp(spellpath) && member(paths, spellpath) < 0) continue;
+
+    abil=ob->QuerySkillAbility(keys[i]);
+    s+=BS(" "+cap_skill(keys[i])+" kannst Du "
+       +ability_to_string(abil)+".\n"); 
+    abils+=abil; 
+  }
+  abil=ob->QuerySkillAbility(SK_RANGER_HERBALISM);
+  s+=BS(" Kraeuterkunde kannst Du "
+     +ability_to_string(abil)+".\n");
+  abils+=abil;
+  abil=ob->QuerySkillAbility(SK_MAGIC_DEFENSE);
+  s+=BS(" Beweglichkeit kannst Du "
+     +ability_to_string(abil)+".\n");
+  abils+=abil;
+  abil=ob->QuerySkillAbility(FIGHT(WT_BOW));
+  s+=BS(" Bogenkampf kannst Du "
+     +ability_to_string(abil)+".\n");
+  abils+=abil;
+  abil=ob->QuerySkillAbility(FIGHT(WT_KNIFE));
+  s+=BS(" Dolchkampf kannst Du "
+     +ability_to_string(abil)+".\n");
+  abils+=abil;
+  i=limit(ob->QueryProp(P_GUILD_RATING),0,MAX_ABILITY);
+  s+=BS(" In Summe bist du "
+     +ability_to_string(i)+".");
+  return s;
+}
+/****************************************************************************/
+
+
+
+/** Skills der Gilde ********************************************************/
+
+mapping show_enemy(object player, object enemy)
+{
+  string s;
+  int hp, maxhp;
+  if( random(50) <= 20 + player->QueryProp(P_GUILD_LEVEL) && enemy)
+  {
+    hp = enemy->QueryProp( P_HP );
+    maxhp = enemy->QueryProp( P_MAX_HP );
+    s = enemy->Name(WER, 1);
+    switch(100 * hp / maxhp)
+    {
+      case 0..1: s += " ist eigentlich schon tot"; break;
+      case 2..3: s += " ist am Verbluten und wird gleich sterben"; break;
+      case 4..6: s += " steht auf der Schwelle des Todes"; break;
+      case 7..9: s += " blutet aus vielen toedlichen Wunden"; break;
+      case 10..12: s += " blutet aus vielen schweren Wunden"; break;
+      case 13..15: s += " braucht sofort einen Notarzt"; break;
+      case 16..18: s += " braucht dringend einen Arzt"; break;
+      case 19..21: s += " braucht bald einen Arzt"; break;
+      case 22..24: s += " ist in extrem schlechter Verfassung"; break;
+      case 25..27: s += " ist in sehr schlechter Verfassung"; break;
+      case 28..30: s += " ist in keiner guten Verfassung"; break;
+      case 31..33: s += " ist in einem ueblen Zustand";break;
+      case 34..36: s += " wankt bereits bedenklich"; break;
+      case 37..39: s += " wankt schon etwas"; break;
+      case 40..42: s += " macht einen stark mitgenommenen Eindruck"; break;
+      case 43..45: s += " macht einen mitgenommenen Eindruck"; break;
+      case 46..48: s += " macht einen etwas mitgenommenen Eindruck"; break;
+      case 49..51: s += " sieht schon relativ schlecht aus"; break;
+      case 52..54: s += " sieht gar nicht mehr gut aus"; break;
+      case 55..57: s += " sieht nicht mehr taufrisch aus"; break;
+      case 58..60: s += " ist schwer angeschlagen"; break;
+      case 61..63: s += " ist ziemlich angeschlagen"; break;
+      case 64..66: s += " ist leicht angeschlagen"; break;
+      case 67..69: s += " fuehlt sich ziemlich schlecht"; break;
+      case 70..72: s += " fuehlt sich etwas schlecht"; break;
+      case 73..75: s += " fuehlte sich heute schon besser"; break;
+      case 76..78: s += " ist schon ziemlich geschwaecht"; break;
+      case 79..81: s += " ist schon etwas geschwaecht"; break;
+      case 82..84: s += " hat schon viele Kratzer"; break;
+      case 85..87: s += " hat schon einige Kratzer"; break;
+      case 88..90: s += " hat erst ein paar Kratzer"; break;
+      case 91..93: s += " ist noch bei bester Gesundheit"; break;
+      case 94..96: s += " ist bei hervorragender Gesundheit"; break;
+      case 97..98: s += " ist bei ausgezeichneter Gesundheit"; break;
+      case 99..100: s += " ist absolut fit"; break;
+      default: s+= " ist bei bester Gesundheit";
+    }
+    switch( player->QueryProp(P_TTY) )
+    {
+      case "ansi" :
+          s = ANSI_GREEN + ANSI_BG_BLACK + s + ANSI_NORMAL; break;
+      case "vt100" : s = ANSI_BOLD + s + ANSI_NORMAL; break;
+    }
+    s += ".\n";
+    tell_object(player,s);
+  }
+}
+
+public void registerArchenemyAttack(object enemy, object pl) {
+  if( GUILD_MASTER->is_archenemy_of(getuid(pl), enemy) && (enemy->QueryProp(P_LEVEL))>=(pl->QueryProp(P_GUILD_LEVEL)) ){ 
+    GUILD_MASTER->IncKilledArchenemys(getuid(pl), 1); 
+  }
+}
+
+private void executePetSupport(object enemy, object player) {
+  mapping *x;
+
+  if(!pointerp(x=player->QueryProp(P_RANGER_PET_SUPPORT))) return;
+  if(!objectp(x[0])) { // pet ist weg
+    player->SetProp(P_RANGER_PET_SUPPORT, 0);
+    return;
+  }
+
+  x[0]->supportRanger(enemy);
+  return;
+}
+
+private mapping deep_bond_special_attack(object player, mapping sinfo) {
+  object koecher, enemy, pet, p;
+
+  if(random(100) > player->QueryAttribute(A_INT)/2) return sinfo;
+  if(!objectp(player)) return sinfo;
+  if(!objectp(enemy = sinfo[SI_ENEMY])) return sinfo;
+  if(!objectp(koecher = present(GUILD_OBJ_ID, player))) return sinfo;
+  if(koecher->_query_master_ability() != MASTER_ABIILITY_DEEP_BOND) return sinfo;
+  if(!objectp(pet = koecher->FindPet(player))) return sinfo;
+
+  switch(pet->QueryProp(P_RANGER_PET_RACE)) {
+    case "katze":
+      tell_object(player, BS("Dein Angriff verursacht eine blutende Wunde."));
+      tell_room(ENV(enemy), BS(player->Name(WESSEN)+" Angriff verursacht eine blutende Wunde."), ({player}));
+      call_other(GUILD_SPELLBOOK, "eviscerate_bleed", enemy, sinfo[SI_SKILLDAMAGE]/20, player);
+      break;
+    case "riese":
+      tell_object(player, BS("Deine Attacke kommt mit der Wucht eines wilden Nasnhorns."));
+      enemy->SetProp(P_DISABLE_ATTACK, 1);
+      enemy->SetProp(P_LAST_RAMMEN_TIME, time());
+      tell_room(ENV(enemy), BS(enemy->Name(WER)+" faellt zu Boden."));
+      break;
+    case "vogel":
+      tell_object(player, BS("Schnell wie ein Vogel wirbelst du herum und bist bereit fuer den naechsten Angriff."));
+      player->SetProP(P_NEXT_SPELL_TIME, time()-5);
+      break;
+    case "spinne":
+    if(!enemy->is_class_member(({CL_UNDEAD})) && !objectp(present(NPC_POISON_ID, enemy)))
+      tell_object(player, BS("Dein Angriff vergiftet deinen Gegner."));
+      p=clone_object(OBJ "npc_poison"); p->move(enemy, M_TPORT|M_SILENT);
+      p->poison(enemy, player, 0, random(pet->QueryProp(P_LEVEL)));
+      tell_room(ENV(enemy), BS("Der Angriff von "+player->name(WEM)+" vergiftet "+enemy->name(WEN)+"."), ({player}));
+      break;
+    case "panzertier":
+      tell_object(player, BS("Du haeltst einen Moment inne und atmest durch."));
+      tell_room(ENV(player), BS(player->Name(WER)+" haelt einen Moment inne und atmet durch."), ({player}));
+      player->AddHp(player->QueryProp(P_LEVEL)/10);
+      break;
+    case "huftier":
+      // nothing -> gives a higher chance to dodge
+      break;
+    case "echse":
+      tell_object(player, BS("Mit starrem Blick konzentrierst du dich einen Moment in Reglosigkeit."));
+      tell_room(ENV(player), BS(player->Name(WER)+" verharrt einen Moment reglos."), ({player}));
+      player->AddSp(player->QueryProp(P_LEVEL)/10);
+      break;
+    case "kleintier":
+      tell_object(player, BS("Du visierst eine ungerschuetzte Stelle "+enemy->name(WESSEN)+" an."));
+      tell_room(ENV(player), BS(player->Name(WER)+" visiert eine ungeschuetzte Stelle "+enemy->name(WESSEN)+" an."), ({player}));
+      sinfo[OFFSET(SI_SKILLDAMAGE)] += sinfo[SI_SKILLDAMAGE] / 10;
+      break;
+    case "insekt":
+      tell_object(player, BS("Du laesst deine Angriffe in rasender Geschwindigkeit erfolgen."));
+      player->ModifySkillAttribute(SA_SPEED, 200, 2+random(2), TO);
+      break;  
+  }
+  return sinfo;
+}
+
+//-- Dolchkampf (FIGHT(WT_KNIFE)) --------------------------------------------
+public mapping Dolchkampf(object player, string skill, mapping sinfo) { 
+  mixed kf, *x;
+  object ob;
+  int abil, ud, val, bonus, wc, wcRem, fix, swc, r;
+
+  if(objectp(ob=present(VISION_ID, player)) && ob->QueryProp(P_RANGER_LIFE_SENSE)) {
+    show_enemy(player, sinfo[SI_ENEMY]);
+  }
+
+  registerArchenemyAttack(sinfo[SI_ENEMY], player);
+  sinfo = deep_bond_special_attack(player, sinfo);
+  
+  executePetSupport(sinfo[SI_ENEMY], player);
+  if(!objectp(sinfo[SI_ENEMY])) return sinfo; // Gegner durch pet assist gestorben
+
+  ud=sinfo[SI_USR];
+  abil = sinfo[SI_SKILLABILITY];
+  val = (3 * player->QueryAttribute(A_DEX) + 4*player->QueryProp(P_GUILD_LEVEL)) * abil / MAX_ABILITY;
+
+  bonus=random(val);
+
+  // wir rufen den blutdorn hier auf, damit wir die bestehenden HitFuncs von magischen Waffen nicht kaputt machen
+  if(objectp(ob=present(BLUTDORN_ID, player))) {
+    bonus += ob->HitFunc(sinfo[SI_ENEMY]);
+  }
+
+  // Frosch oder zu schlechte Waffe -> kein lernen
+  if(abil<MAX_ABILITY && !player->QueryProp(P_FROG) && player->QueryProp(P_WEAPON)->QueryProp(P_WC) > abil/90 && (sinfo[SI_ENEMY]->QueryProp(P_LEVEL) > abil/400 || !random(10) ) && ++ud > abil/50) {
+    ud = 0;
+    abil += random(player->QuerProp(P_GUILD_LEVEL) + player->QueryAttribute(A_DEX)/3);
+    if (abil >= MAX_ABILITY) tell_object(player, BS("Du hast nun die Vollendung um Messerkampf erreicht!"));
+  }
+
+  if(RANGERMASTER->is_archenemy_of(player, sinfo[SI_ENEMY]) && ! random(3)) {
+    sinfo[SI_SKILLDAMAGE]+=(sinfo[SI_SKILLDAMAGE]*player->QueryProp(P_GUILD_LEVEL))/100;
+    if(!random(2)) {
+      tell_object(player, BS("Dein Wissen ueber die Anatomie deiner Feinde hilft dir einen Treffer zu landen!"));
+    }
+  }
+
+  //Skillpoints
+  if(R_SKILLMASTER->HasSkill(getuid(player), MESSERKAMPF)) { 
+    sinfo[SI_SKILLDAMAGE]+=player->QueryProp(P_GUILD_LEVEL) * 5; 
+  }
+  
+  if(R_SKILLMASTER->HasSkill(getuid(player), KLINGENMEISTER)) { 
+    sinfo[SI_SKILLDAMAGE]+=random(player->QueryProp(P_GUILD_LEVEL) * 5); 
+  }
+
+  if(player->QueryProp(P_RANGER_ODE_DES_STURMES_ACTIVE) > time() && !random(25-player->QueryProp(P_GUILD_LEVEL))) {
+    if(!pointerp(sinfo[SI_SKILLDAMAGE_TYPE])) sinfo[SI_SKILLDAMAGE_TYPE] = ({sinfo[SI_SKILLDAMAGE_TYPE]});
+    sinfo[SI_SKILLDAMAGE_TYPE] += ({DT_LIGHTNING});
+  }
+
+  if(!random(500+MAX_ABILITY-abil)) {
+    tell_object(player, "Du laesst deine Klingen in irrsinniger Geschwindigkeit wirbeln!\n");
+    if(player->QuerySkillAttribute(SA_SPEED) <= 100) {
+      player->ModifySkillAttribute(TO, SA_SPEED, 200 + random(100), 2+random(abil/1000));
+    } else {
+      player->ModifySkillAttribute(TO, SA_SPEED, 150, 2+random(abil/2000));
+    }
+  }
+
+  if(R_SKILLMASTER->HasSkill(getuid(player), SPEED_TWO)) {
+    swc = player->QueryProp(P_GUILD_LEVEL) /4;
+    r = random(100);
+    pDebug(player, sprintf("messerkampf :: second wind chance=%d roll=%d\n", swc, r));
+    if(r < swc) {
+      call_out("second_wind", 0, player, sinfo[SI_ENEMY]);
+    }
+  }
+
+  // Seele der Klinge
+  if(objectp(ob=present(EDGE_SOUL_ID, player))) {
+    sinfo[SI_SKILLDAMAGE] += ob->CheckCritical(sinfo);
+    if(ob->QueryProp(P_DAM_TYPE) != 0) sinfo[SI_SKILLDAMAGE_TYPE] = ({ ob->QueryProp(P_DAM_TYPE) });
+  }  
+
+  sinfo[SI_SKILLDAMAGE]+=bonus*player->QuerySkillAttribute(SA_DAMAGE)/100;
+
+  // Meisterfertigkeit: Tausend Schnitte
+  if(RANGERMASTER->GetMasterAbility(getuid(player)) == MASTER_ABIILITY_THOUSAND_CUTS) {
+    r = random(100);
+    pDebug(player, sprintf("messerkampf :: thousand cuts chance=%d roll=%d\n", player->QueryAttribute(A_DEX), r));
+    if(r < player->QueryAttribute(A_DEX)/3) {
+      tell_object(player, BS("Du hinterlaesst einen blutenden Schnitt bei "+sinfo[SI_ENEMY]->name(WEM)+"."));
+      pDebug(player, sprintf("messerkampf :: thousand cuts dam=%d\n", sinfo[SI_SKILLDAMAGE]/20));
+      sinfo[SI_ENEMY]->SetProp(P_RANGER_EVISCERATED_UNTIL, time()+2+random(8));
+      call_other(GUILD_SPELLBOOK, "eviscerate_bleed", sinfo[SI_ENEMY], sinfo[SI_SKILLDAMAGE]/20, player);
+    }
+  } else // Meisterfertigkeit: Verkruepellnder Stoss
+  if(RANGERMASTER->GetMasterAbility(getuid(player)) == MASTER_ABIILITY_CRIPPLING_STRIKE) {
+    r = random(100);
+    if(r < player->QueryAttribute(A_DEX)/3) {
+      tell_object(player, BS("Dein Angriff verkrueppelt "+sinfo[SI_ENEMY]->name(WEN)+"."));
+      pDebug(player, sprintf("messerkampf :: crippling strike debuff=%d duration=%d\n", player->QueryAttribute(A_STR)/2, sinfo[SI_SKILLDAMAGE]/20));
+      ob = clone_object(OBJ "crippled");
+      if(!ob->move(sinfo[SI_ENEMY])) {
+        destruct(ob);
+      } else {
+        ob->set_debuff(-1 * player->QueryAttribute(A_STR)/4);
+        ob->set_timeout(sinfo[SI_SKILLDAMAGE]/20);
+      }
+    }
+  }
+
+  player->ModifySkill( FIGHT(WT_KNIFE), ([ SI_USR: ud, SI_SKILLABILITY: abil ]), sinfo[SI_DIFFICULTY], "waldlaeufer"); 
+  return sinfo;
+}
+
+public void second_wind(object player, object enemy) {
+  int fix, wc, wcRem, bonus, y;
+  object weapon;
+
+  pDebug(player, sprintf("second_wind :: player=%O enemy=%O\n", player, enemy));
+
+  if(!objectp(player) || !objectp(enemy)) return;
+
+  bonus = random((3 * player->QueryAttribute(A_DEX) + 4*player->QueryProp(P_GUILD_LEVEL)) * player->QuerySkillAbility(FIGHT(WT_KNIFE)) / MAX_ABILITY);
+  weapon = player->QueryProp(P_WEAPON);
+  if(!objectp(weapon)) return;
+  wc = weapon->QueryProp(P_WC);
+  fix = wc * weapon->QueryProp(P_WC_FIX)/100;
+  wcRem = wc - fix;
+
+  tell_object(player, "Mit rasender Geschwindigkeit setzt du einen weiteren Angriff nach!\n");
+  enemy->Defend(fix + bonus + random(wcRem), weapon->QueryProp(P_DAM_TYPE), ([SP_PHYSICAL_ATTACK:1, SP_SHOW_DAMAGE: 1]), player);
+
+  return;
+}
+
+//-- Bogenkampf (FIGHT(WT_BOW)) ----------------------------------------------
+public mapping Bogenkampf(object player, string skill, mapping sinfo) { 
+  mixed kf, *x;
+  object ob;
+  int abil, ud, val, bonus, y;
+
+  if(objectp(ob=present(VISION_ID, player)) && ob->QueryProp(P_RANGER_LIFE_SENSE)) {
+    show_enemy(player, sinfo[SI_ENEMY]);
+  }
+
+  registerArchenemyAttack(sinfo[SI_ENEMY], player);
+  sinfo = deep_bond_special_attack(player, sinfo);
+  executePetSupport(sinfo[SI_ENEMY], player);
+  if(!objectp(sinfo[SI_ENEMY])) return sinfo; // Gegner durch pet assist gestorben
+
+  ud=sinfo[SI_USR];
+  abil = sinfo[SI_SKILLABILITY];
+  val = (3 * player->QueryAttribute(A_DEX) + 4*player->QueryProp(P_GUILD_LEVEL)) * abil / MAX_ABILITY;
+
+  bonus=random(val);
+
+  // Frosch oder zu schlechte Waffe -> Fertig
+  if(player->QueryProp(P_FROG) || player->QueryProp(P_WEAPON)->QueryProp(P_WC) < abil/40) return sinfo;
+  
+  // lernen
+  if( (sinfo[SI_ENEMY]->QueryProp(P_LEVEL) > abil/400 || !random(10) ) && ++ud > abil/50 && abil<MAX_ABILITY) {
+    ud = 0;
+    abil += random(player->QuerProp(P_GUILD_LEVEL) + player->QueryAttribute(A_DEX)/3);
+    if (abil >= MAX_ABILITY) tell_object(player, BS("Du hast nun die Vollendung um Bogenkampf erreicht!"));
+  }
+
+  if(RANGERMASTER->is_archenemy_of(player, sinfo[SI_ENEMY]) && ! random(3)) {
+    sinfo[SI_SKILLDAMAGE]+=(sinfo[SI_SKILLDAMAGE]*player->QueryProp(P_GUILD_LEVEL))/100;
+    if(!random(2)) {
+      tell_object(player, BS("Dein Wissen ueber die Anatomie deiner Feinde hilft dir einen Treffer zu landen!"));
+    }
+  }
+
+  //Skillpoints
+  if(R_SKILLMASTER->HasSkill(getuid(player), BOGENKAMPF)) { 
+    sinfo[SI_SKILLDAMAGE] += player->QueryProp(P_GUILD_LEVEL) * 5; 
+  }
+  
+  if(R_SKILLMASTER->HasSkill(getuid(player), BOGENMEISTER)) { 
+    sinfo[SI_SKILLDAMAGE]+=random(player->QueryProp(P_GUILD_LEVEL) * 5); 
+  }
+
+  // Kalte Flamme
+  if(pointerp(kf=player->QueryProp(P_RANGER_COLD_FLAME)) && kf[1] >= time()) {
+    if(!pointerp(sinfo[SI_SKILLDAMAGE_TYPE])) sinfo[SI_SKILLDAMAGE_TYPE]=({sinfo[SI_SKILLDAMAGE_TYPE]});
+    sinfo[SI_SKILLDAMAGE_TYPE] += kf[2];
+    sinfo[SI_SKILLDAMAGE] += random(kf[3]);
+  }
+
+  if(!random(500+MAX_ABILITY-abil) ) {
+    tell_object(player, "Du landest einen perfekten Treffer!\n");
+    sinfo[SI_SKILLDAMAGE] *= 2;
+  }
+
+  player->ModifySkill( FIGHT(WT_BOW), ([ SI_USR: ud, SI_SKILLABILITY: abil ]), sinfo[SI_DIFFICULTY], "waldlaeufer"); 
+
+  sinfo[SI_SKILLDAMAGE]+=bonus*player->QuerySkillAttribute(SA_DAMAGE)/100;
+
+  // falkenauge meisterschuss
+  if(pointerp(x=player->QueryProp(P_RANGER_FALCONEYES))) {
+    if(x[0] < time()) {
+      player->SetProp(P_RANGER_FALCONEYES, 0);
+    } else {
+      y = sinfo[SI_SKILLDAMAGE];
+      if(x[2] < 0.0) {
+        sinfo[SI_SKILLDAMAGE] = (int) (sinfo[SI_SKILLDAMAGE] * (1.0 + x[2])); // kampfmalus bei fehlschlag auf alles
+      } else {
+        if(x[1] == sinfo[SI_ENEMY]) {
+          sinfo[SI_SKILLDAMAGE] = (int) (sinfo[SI_SKILLDAMAGE] * (1.0 + x[2])); // kampfbonus auf den gegner
+        } else {
+          sinfo[SI_SKILLDAMAGE] = (int) (sinfo[SI_SKILLDAMAGE] * (1.0 - x[2])); // malus auf alle anderen gegner
+        }
+        pDebug(player, sprintf("falkenauge :: bonus=%.2f damBefore=%d modifiedDamage=%d\n", x[2], y, sinfo[SI_SKILLDAMAGE]));
+      }
+    }
+  }
+
+  if(RANGERMASTER->GetMasterAbility(getuid(player)) == MASTER_ABIILITY_CRITICAL_AIM) {
+    pDebug(player, "critical aim :: check\n");
+    if(random(100) < player->QueryAttribute(A_DEX)/2) {
+      tell_object(player, "Du konzentrierst dich auf eine kritische Stelle und triffst sie perfekt!\n");
+      tell_room(ENV(player), BS(player->Name(WER)+" konzentriert sich und trifft eine kritische Stelle!"), ({player}));
+      sinfo[SI_SKILLDAMAGE] *= 2;
+    }
+  }
+
+  return sinfo;
+}
+
+private int deep_bond_special_edodge(object player, int sinfo) {
+  object koecher, pet;
+
+  if(random(100) > player->QueryAttribute(A_INT)/2) return sinfo;
+  if(!objectp(player)) return sinfo;
+  if(!objectp(koecher = present(GUILD_OBJ_ID, player))) return sinfo;
+  if(koecher->_query_master_ability() != MASTER_ABIILITY_DEEP_BOND) return sinfo;
+  if(!objectp(pet = koecher->FindPet(player))) return sinfo;
+  if(pet->QueryProp(P_RANGER_PET_RACE) != "huftier") return sinfo;
+  if(!random(40-pet->QueryProp(P_LEVEL))) return sinfo;
+
+  tell_object(player, BS("Du schlaegst wilde Haken als haettest du Hufe!"));
+  return sinfo * 2;
+}
+
+//-- Beweglichkeit (SK_MAGIC_DEFENSE) ----------------------------------------
+mapping Beweglichkeit(object player, string skill, mapping sinfo) 
+{ 
+  int ability, usage, r, k, i, dex, playerSize, enemySize, avoided;
+  mixed spell, dam_type, *x;
+  string *messages, *feen, *froesche, *indoor, *normal, *forest;
+  mapping env;
+  object ob;
+
+  if(pointerp(x=player->QueryProp(P_RANGER_FALCONEYES)) && x[0] < time() && sinfo[SI_ENEMY] != x[1]) {
+    // mit aktivem falkenauge vernachlaessigen wir unsere verteidigung gegenueber allen anderen
+    // -> kein ausweichen ausser gegen das fokussierte ziel
+    return sinfo;
+  }
+
+  // kein Ausweichen, wenn es grad nicht geht (Zaubervorbereitung) oder wir paralysiert, blind etc. sind
+  // Sinne des Jaegers lassen uns aber auch Blind ausweichen
+  if(RANGERMASTER->GetMasterAbility(getuid(player)) != MASTER_ABIILITY_BACKOFF) {
+    if((player->QueryProp(P_RANGER_NO_MAGIC_DEFENSE)+1)>=time()) {return sinfo;}
+    if( player->QueryProp(P_PARALYZED) || (player->QueryProp(P_BLIND) && !objectp(present(VISION_ID, player))  || 
+        player->QueryProp(P_DISABLE_ATTACK))) {
+        return sinfo;
+    }
+  }
+
+  registerArchenemyAttack(sinfo[SI_ENEMY], player);
+
+  // Ein paar Werte initialisieren zum Speicher sparen. Das hier passiert immerhin in JEDEM Defend
+  spell = sinfo[SI_SPELL];
+  ability=sinfo[SI_SKILLABILITY];
+  dex = player->QueryAttribute(A_DEX);
+  enemySize = sinfo[SI_ENEMY]->QueryProp(P_SIZE);
+  playerSize = player->QueryProp(P_SIZE);
+
+  //Das Ausweichen:
+  //Es wird komplett ausgewichen, man muss es sich so vorstellen, dass der/die
+  // Waldlaeufer/in aus der Reichweite springt/hechtet oder so. -> damage wird
+  // ergo auf 0 gesetzt. (akrobaten im kampf :-))
+  // Wir wenden einfache Mathematik an, weil komplexe Formeln sich zu 99% auf einfache
+  // Wahrscheinlichkeiten reduzieren lassen.
+  
+  // r ist unsere basischance auszuweichen (in %o) -> pro 2000 punkte 1% chance einem angriff auszuweichen
+  // macht bei MAX_ABILITY eine 5% Basischance. Wir rechnen aber in Promille also pro 200 Punkte +0.5%
+  r = ability / 200;
+
+  // Besonders hohes Geschick erhoeht die Chance nochmal
+  if(dex > 25) {
+    r += dex-25; // bei DEX 40 -> +1.5%
+  }
+
+  // Mit Talent gibt es noch einen Bonus auf Basis der GS
+  if(R_SKILLMASTER->HasSkill(getuid(player), AKROBATIK)) {
+    r += player->QuerProp(P_GUILD_LEVEL); // bei GS 20 -> 2%
+  }
+
+   // Mit dem Respekt der Tiere ist unsere Chance, dass wir Tieren ausweichen doppelt so hoch.
+   if(R_SKILLMASTER->HasSkill(getuid(player), TIER_RESPEKT) &&  stringp(PETMASTER->PetCategory(sinfo[SI_ENEMY]))) {
+    r *= 2;
+  }
+
+  // Bestimmte environments haben auch eine Auswirkung
+  if(mappingp(env=ENV(player)->QueryProp(P_ENVIRONMENT)) && member(env, ENV_TERRAIN)) {
+    switch(env[ENV_TERRAIN]) {
+      case TT_FOREST: 
+      case TT_JUNGLE: r += 10; break;
+      case TT_WATER:
+      case TT_UNDERWATER:
+      case TT_CAVE: r -= 10; break; // hoehlen sind eng, schwimmend ist es schwer
+      case TT_PLAIN:
+      case TT_DESERT: r += 5; break; // hier ist Platz
+      case TT_SWAMP:
+      case TT_MOUNTAIN: r -= 5; break; // hier muss man beim ausweichen mehr aufpassen
+      case TT_AIR:
+        if(player->is_class_member(CL_FLYING)) r += 20; break; // fliegen!
+    }
+  }
+
+  // Groessendifferenz
+  if(enemySize > 0) {
+    if(enemySize > playerSize) {
+      r += limit(10*enemySize/playerSize, 0, 20); // -> max. +2% chance auszuweichen
+    } else if(playerSize > enemySize) {
+      r -= limit(10*playerSize/enemySize, 0, 20); // -> max. -2% chance auszuweichen
+    }
+  }
+
+  // Hier kommen wir nur hin mit P_DISABLE_ATTACK wenn wir die Meisterfertigkeit "Zurueckweichen" haben
+  // damit wird die Chance verdreifacht
+  if(player->QueryProp(P_DISABLE_ATTACK) && RANGERMASTER->GetMasterAbility(getuid(player)) == MASTER_ABIILITY_BACKOFF) {
+    r *= 3;
+  }
+
+  // magischen Angriffen wird schwieriger ausgewichen, ausser sie sind physisch
+  if(mappingp(spell) && (!member(spell, SP_PHYSICAL_ATTACK) || (member(spell, SP_PHYSICAL_ATTACK) && !spell[SP_PHYSICAL_ATTACK]))) {
+    dam_type=sinfo[SI_SKILLDAMAGE_TYPE];
+    if(!pointerp(dam_type)) dam_type = ({ dam_type });
+
+    // DT_MIND (geistigen Angriffen) laesst sich nicht ausweichen
+    if(member(dam_type, DT_MIND) >= 0 || member(dam_type, DT_TERROR) >= 0) return sinfo;
+
+    // bestimmten "magischen" angriffen ist ausweichen schwerer
+    k = 0;
+    for(i=0; i<sizeof(dam_type); ++i) {
+      if(member(({DT_SOUND, DT_MAGIC, DT_ELECTRIC, DT_UNHOLY, DT_HOLY, DT_TERROR}), dam_type[i]) >= 0) k++;
+    }
+
+    // Die Chance wir anteilsmaessig der magischen Schaeden reduziert
+    r = (int) (r * (1.0 - k / sizeof(dam_type)));
+  }
+   
+  sinfo[SI_USR]++; //usage wird unabhaengig vom tatsaechlichen ausweichen 
+                  //angewendet, wichtig fuer das lerntempo
+  usage=sinfo[SI_USR];
+
+  //Das Lernen:
+  //kein lernen wenn der Gegner zu schwach ist, der auszuweichende schaden zu
+  //gering und natuerlich nur sehr selten, da dieser Skill bei JEDEM Defend
+  //aufgerufen wird!
+  if( (!random(5))                                                      &&
+      (ability < MAX_ABILITY)                                           &&
+      (sinfo[SI_ENEMY]->QueryProp(P_LEVEL) > ability/333)               &&
+      (sinfo[SI_SKILLDAMAGE] >= ability/500)                            &&
+      (usage > ability/50)  ) {
+    usage=0;
+    ability+=1+random(player->QuerProp(P_GUILD_LEVEL)+player->QueryAttribute(A_DEX)/2); //1-30
+    if (ability >= MAX_ABILITY) { 
+      tell_object(player, BS("Deine Beweglichkeit und Koerperberherrschung "
+                             "haben ihren Hoehepunkt erreicht. Du kannst "
+                             "Dich nichtmehr weiter steigern."));
+      ability=MAX_ABILITY;
+    }
+
+    player->ModifySkill( SK_MAGIC_DEFENSE, ([ SI_USR: usage, SI_SKILLABILITY: ability ]), sinfo[SI_DIFFICULTY],"waldlaeufer"); 
+  }
+
+  froesche=({"Du bist so klein, dass Du kaum getroffen wirst und leicht "
+             "ausweichen kannst.","Du huepfst mit einem weiten Sprung aus der"
+             " Reichweite Deines Gegners."});
+  feen=({"Elegant flatterst Du hin und her und entgehst so der Attacke.",
+         "Schnell fliegst Du nach oben und wirst so nicht getroffen."});
+  forest=({"Schnell gehst Du hinter einem Baum in Deckung.","Du wirfst einige"
+           " Blaetter und Zweige nach oben, durch die gekonnte Ablenkung "
+           "wirst Du nicht getroffen.","Du springst schnell nach oben, "
+           "schwingst Dich an einem Ast rauf und entgehst somit dem Schaden.",
+           "Du wirbelst herum, laeufst auf einem Baum zu. Du laeufst den "
+           "Baum gekonnt mit zwei Schritten nach oben und drueckst Dich "
+           "kraftvoll ab, um mit einem elegentan Rueckwaertssalto zu landen. "
+           "Dein Gegner hatte keine Chance Dich zu treffen."});
+  indoor=({"Du springst schnell an eine Wand, um Dich gleich wieder mit eine "
+           "Drehung zur Seite abzustossen. Der Angriff Deines Feindes geht "
+           "ins Leere.","Du laeufst an der Wand entlang und springst nach "
+           "einem Wandlauf ueber den Angriff des Gegners.", "Du drehst dich "
+           "um, springst an die Wand und drueckst Dich nach hinten ab. Mit "
+           "einem Salto segelst Du ueber die Attacke des Gegners hinweg."});
+  normal=({"Mit einem kraeftigen Sprung hechtest Du aus der Reichweite deines"
+           " Feindes.","Du gehst in die Knie und tauchst unter den Angriff "
+           "durch.","Du rollst Dich nach vorne ab.","Du rollst Dich in "
+           "letzter Sekunde nach links ab.","Im letzten Moment rollst Du "
+           "Dich nach rechts ab.","Du laesst Dich nach hinten fallen und "
+           "nach einer geschickten Rueckwaertsrolle stehst Du wieder "
+           "unbeschadet auf den Fuessen.","Du springst genau nach oben, "
+           "ziehst die Beine an und der Angriff verfehlt Dich.","Du beugst "
+           "Dich schnell nach hinten und spuerst wie der Angriff knapp ueber "
+           "Deinem Gesicht wirkungslos verpufft.","Reaktionsschnell wirfst "
+           "Du Dich auf den Boden und wirst somit nicht getroffen.",
+           "Blitzartig wirbelst Du herum und Durch die schnelle Drehung, "
+           "gelingt es deinem Feind nicht, Dich zu verletzen.","Du machst "
+           "einen Schritt nach vorne und rechts und springst mit einem Salto "
+           "ueber den Angriff hinweg. Nach diesem geschickten "
+           "Ausweichmanoever stehst Du in optimaler Konterposition.",
+           "Schnell und sicher schlaegst du ein Rad zur Seite und rettest "
+           "Dich so vor dem Angriff.","Wie ein Karnickel schlaegst Du Haken "
+           "und bringst Dich in Sicherheit."});
+
+  // und hier der test on wir ausweichen
+  k = random(1000);
+  r = deep_bond_special_edodge(player, r);
+  pDebug(player, sprintf("ausweichen :: chance=%d roll=%d\n", r, k));
+
+  // chance trifft ein -> ausweichen
+  if(k <= r){
+    avoided = 1;
+  } else {
+    // die Melodie des Ostens gibt uns nochmal einen Bonus aufs ausweichen
+    if(objectp(ob=present(MELODIE_DES_OSTENS_ID, player))) {
+      pDebug(player, sprintf("ausweichen :: mdo bonus=%d\n",  ob->QueryProp(P_X_ATTR_MOD)[A_DEX]*2)); 
+      if(k  <= (r + ob->QueryProp(P_X_ATTR_MOD)[A_DEX]*2)) {
+        tell_object(player, BS("Deine ubernatuerliche Geschmeidigkeit und Geschicklichkeit helfen dir besser auszuweichen."));
+        avoided = 1;
+      }
+    }
+
+    // sinne des jaegers koennen uns einen re-roll erlauben
+    if(objectp(present(VISION_ID, player)) && R_SKILLMASTER->HasSkill(getuid(player), SINNE_DES_JAEGERS)) {
+      k = random(1000);
+      pDebug(player, sprintf("ausweichen :: reroll chance=%d roll=%d\n", r/2, k));
+      if(k <= r/2) {
+        tell_object(player, BS("Deine geschaerften Sinne geben dir eine Vorahnung was dein Gegner tun wird!"));
+        avoided=1; // wir haben es geschafft
+      }
+    }
+  }
+
+  if(avoided) {
+    sinfo[SI_SKILLDAMAGE]=0;
+    messages=normal;
+    if(IsInForest(player)) messages+=forest;
+    if( ENV(player) && (ENV(player)->QueryProp(P_INDOORS)) ) messages+=indoor;
+    if(QueryEnv(player)==TT_WATER) messages=feen;
+    if(player->QueryProp(P_FROG)) messages=froesche;
+    tell_object(player, BS(messages[random(sizeof(messages))]));
+  }
+  
+
+  return sinfo;
+}
+
+//-- Kraeutersuche -----------------------------------------------------------
+mapping Kraeuterkunde(object player, string skill, mapping sinfo)
+{ 
+  int ability, usage, fail, i;
+   
+  //Vorbedingungen
+  //Nur im echten FOREST -> Query; Froesche und Blinde sammeln keine Kraeuter
+  if(!player) return sinfo;
+  if(ENV(TP)->Query(P_ENVIRONMENT)[ENV_TERRAIN] != TT_FOREST)
+  { tell_object(TP,BS("Das geht nur im Wald.")); return sinfo;}
+  if(HERBS_MASTER->QueryRoom(sinfo[SI_ENVIRONMENT]))
+  { tell_object(TP,BS("Hier wurden schon vor kurzer Zeit Kraeuter gesucht."));
+    return sinfo;}
+  if(player->QueryProp(P_FROG) || player->QueryProp(P_BLIND)) 
+  { tell_object(TP,BS("Das geht Doch so nicht!")); return sinfo; }
+  if(player->InFight())
+  { tell_object(TP,BS("Das geht nicht im Kampf.")); return sinfo; }
+
+  pDebug(player, sprintf("Kraeutersuche :: p=%O skill=%s sinfo=%O\n", player, skill, sinfo));
+  
+  //Die Anwendung
+  sinfo[SI_USR]++;
+  usage=sinfo[SI_USR];
+  ability=sinfo[SI_SKILLABILITY];
+  i=ability+1000*R_SKILLMASTER->HasSkill(getuid(player), KRAEUTERKUNDE);
+  if(i>10000) {i=10000;}
+  fail=1;
+  if(!random(10-(i/1000)))
+  {
+    fail=0;
+  }
+  player->SetProp(P_PARALYZED, ([PARALYZE_TIME: 20, 
+							PARALYZE_MSG: "Du bist zu beschaeftigt!\n", 
+							PARALYZE_MSG_OTHER: "%s sucht in Ruhe Kraeuter.\n", 
+							PARALYZE_END: "\n",
+							PARALYZE_END_OTHER: "%s beendet seine Kraeutersuche.\n"]));
+  tell_object(player, BS("Du suchst nach Kraeutern und Heilpflanzen."));
+  tell_room(ENV(player), 
+              BS(player->Name(WER, 1)+" sucht nach Kraeutern und "
+                 "Heilpflanzen."), ({player}) );
+  call_out("sammelSeq",3,2+random(3),player, fail);
+  
+  //Das lernen, nur aller ability/200
+  if( (ability < MAX_ABILITY) &&  (usage > ability/200)  || fail && !random(5))
+  {
+    usage=0;
+    ability+=1+random(player->QuerProp(P_GUILD_LEVEL)+player->QueryAttribute(A_INT)) + random(10);
+    if (ability >= MAX_ABILITY)
+    { 
+      HERBS_MASTER->DistributeHerbs(1, 0, MAX_ABILITY, 
+                                    player,"sturmdrachenfeuer");
+      tell_object(player, BS("Du findest ein Sturmdrachenfeuer. Du hast jetzt"
+                             " die hoechste Fertigkeitsstufe der "
+                             "Kraeuterkundigen erreicht."));
+    } else {
+      tell_object(player, "Du verstehst die lokale Pflanzenwelt nun besser.\nDu berrschst die Kraeuterkunde nun besser.\n");
+
+    }
+    if(ability>MAX_ABILITY) { ability=MAX_ABILITY;}
+    player->ModifySkill( SK_RANGER_HERBALISM, ([ SI_USR: usage, SI_SKILLABILITY: ability ]), sinfo[SI_DIFFICULTY],"waldlaeufer");   }
+  return sinfo;
+}
+
+//-- Der Sequenzaufruf fuer Kraeuterkunde ------------------------------------
+int sammelSeq(int counter, object player, int fail)
+{
+  string *messages;
+  int i;
+  
+  if(counter<1)
+  {
+    player->SetProp(P_PARALYZED, 0);
+    if(fail) {
+      tell_object(player,BS("Leider war Deine Kraeutersuche erfolglos."));
+    } else {
+      tell_object(player,BS("Du hast einige Kraeuter gefunden."));
+      
+      i = player->QuerySkillAbility(SK_RANGER_HERBALISM)+1000*R_SKILLMASTER->HasSkill(getuid(player), KRAEUTERKUNDE);
+      HERBS_MASTER->DistributeHerbs(1+(i/2000),random(i/2500),i,player);
+      HERBS_MASTER->AddRoom(ENV(player));
+    }
+    return 1;
+  }
+
+  counter--;
+  messages=({
+    "Geduldig suchst Du Deine Umgebung ab.",
+    "Du pflueckst ein paar Pflanzen und schaust, ob Du sie gebrauchen kannst.",
+    "Du entdeckst hier und dort ein Blatt.",
+    "Vorsichtig gehst Du mit der Sichel zu Werk.",
+    "Du gehst langsam voran und spaehst nach nuetzlichen Kraeutern.",
+    "Mit geuebtem Blick findest Du einige seltene Pflanzen.",
+    "Du untersuchst die Pflanzen sorgfaeltig, um sicherzugehen, dass sie essbar sind.",
+    "Du ziehst behutsam eine Wurzel aus der Erde.",
+    "Im Schatten eines Baumes entdeckst Du ein besonderes Kraut.",
+    "Du ueberpruefst Deine Funde und sortierst die brauchbaren Pflanzen aus.",
+    "Mit einem Laecheln auf den Lippen findest Du ein huebsches Kraut.",
+    "Du machst eine kurze Pause und geniesst den Duft der Natur.",
+    "Zwischen ein paar Steinen entdeckst du weichs Moos.",
+    "Du beugst Dich nieder und sammelst behutsam ein paar Blaetter ein.",
+    "Deine Haende sind voller Erde, nachdem du ein paar Pflanzen ausgraebst.",
+    "Du suchst eine Stelle, wo du denkst, dass die besten Kraeuter wachsen.",
+    "Du findest eine kleine Ansammlung von aromatischen Pflanzen.",
+    "Mit geschickten Bewegungen sammelst Du die Kraeuter ein, ohne sie zu beschaedigen.",
+    "Du bemerkst eine Veraenderung im Duft der Luft und untersuchst das Gewaechs, von dem er kommt."});
+  tell_object(player,BS(messages[random(sizeof(messages))]));
+  call_out("sammelSeq",4,counter,player,fail);
+  return 1;
+}
+/****************************************************************************/
+
+varargs mixed check_advance(object pl) {
+  int ggrad, glvl;
+  mapping cond;
+  mixed res;
+  glvl=pl->QueryProp(P_GUILD_LEVEL);
+  if(glvl > 19) return "Du bist schon im ein Meister des fuenften Grades!";
+  cond=QueryProp(P_GUILD_LEVELS);
+  res=call_other(RES_CHECKER, "check_new_restrictions", pl, cond[glvl+1]);
+  return res;
+}
+
+public void init() {
+  ::init();
+  if(TP->QueryProp(P_GUILD) != "waldlaeufer") return;
+
+  // falls wer das item verloren hat
+  call_out("give_task_item", 0, TP->QueryProp(P_GUILD_LEVEL), TP);
+  call_out("check_koecher", 0, TP);
+  if(TP->QuerySkill("doppelschuss")) {
+    call_out("replace_doppelschuss", 0, TP);
+  }
+}
+
+public void replace_doppelschuss(object pl) {
+  int ability;
+
+  if(!pl->QuerySkill("doppelschuss")) return;
+
+  // remove skill "doppelschuss" from player and add skill "panzerbrechender schuss" on same skill level
+  ability = pl->QuerySkillAbility(DOPPELSCHUSS);
+  pl->SetProp(P_NEWSKILLS, m_delete(pl->QueryProp(P_NEWSKILLS), DOPPELSCHUSS));
+  LearnSpell(PANZERBRECHENDER_SCHUSS, TP);
+  TP->ModifySkill(PANZERBRECHENDER_SCHUSS, ([SI_SKILLABILITY: ability]));
+
+  tell_object(pl, " *** Du hast den Doppelschuss durch den Panzerbrechenden Schuss ersetzt. ***\n");
+}
+
+public void check_koecher(object pl) {
+  object razi, koecher;
+
+  if(!objectp(razi=present(GUILD_NPC_ID))) return;
+
+  if(!objectp(koecher=present(GUILD_OBJ_ID, pl))) {
+    razi->command_me("sag "+pl->Name(WER)+", du hast deinen Koecher verloren. Frag mich nach einem Neuen!");
+    return;
+  }
+
+  if(koecher->Version() != KOECHER_VERSION) {
+    razi->command_me("sag "+pl->Name(WER)+", dein Koecher ist veraltet. Frag mich nach einem Neuen!");
+    return;
+  }
+
+  return;
+}
+
+public int GuildRating(object pl) {
+  return RANGERMASTER->GuildRating(getuid(pl));
+}

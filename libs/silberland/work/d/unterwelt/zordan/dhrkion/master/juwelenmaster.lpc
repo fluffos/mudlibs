@@ -1,0 +1,173 @@
+//=========================================================================
+//
+// File:    juwelenmaster.c
+// Created by Ronja@SL
+//
+// Project: Juwelenquest
+//
+//=========================================================================
+
+#include "../def.h"
+
+#define SAVEFILE "/d/" REGION "/" MAGIERNAME "/" GEBIET "/master/juwelenmaster"
+
+#include <ansi.h>
+
+mapping quest;
+// 0: Timestamp Start Quest
+// 1: Anzahl der Kills
+
+string *listener;
+
+void create()
+{
+  if(is_clone(this_object()))
+  {
+    destruct(this_object());
+    return;
+  }
+
+  seteuid(getuid(this_object()));
+
+  quest    = ([ ]);
+  listener = ({ });
+
+  restore_object(SAVEFILE);
+  return;
+}
+
+int IsQuester(string uuid)
+{
+  return member(quest, uuid);
+}
+
+void DeleteQuester(string uuid)
+{
+  if(!IsQuester(uuid)) return;
+
+  quest = m_delete(quest, uuid);
+  save_object(SAVEFILE);
+}
+
+int AddKill(string uuid)
+{
+  if(!IsQuester(uuid)) return 0;
+
+  quest[uuid, 1] += 1;
+  save_object(SAVEFILE);
+
+  return quest[uuid, 1];
+}
+
+int GetKills(string uuid)
+{
+  if(!IsQuester(uuid)) return 0;
+
+  return quest[uuid, 1];
+}
+
+void StartQuest(string uuid)
+{
+  if(IsQuester(uuid)) return 0;
+
+  quest += ([uuid: ctime(time());0]);
+  save_object(SAVEFILE);
+}
+
+void Msg(string s)
+{
+  object pl;
+  int i;
+
+  write_file(LOG "juwelenquest.log", ctime()+": "+s+".\n");
+
+  i = sizeof(listener);
+  while(i--)
+  {
+    pl = find_player(listener[i]);
+
+    if(!pl)              return;
+    if(!interactive(pl)) return;
+    //if(!IS_LORD(pl))     return;  //April 2004 by Malar -> Report
+                                    //Ansonsten ist eh ein Check beim Eintragen
+                                    //des Listeners, daher nicht bedeutend..
+
+    s = BSI(s+".", "JQ: ");
+    if(pl->QueryProp(P_TTY)) s = ANSI_BOLD+ANSI_RED+s+ANSI_NORMAL;
+
+    tell_object(pl, s);
+  }
+}
+
+void AddListener(string uid)
+{
+  if(member(listener, uid) == -1)
+  {
+    listener += ({ uid });
+    save_object(SAVEFILE);
+    Msg("Neuer Listener: "+CAP(uid));
+  }
+}
+
+void RemoveListener(string uid)
+{
+  if(member(listener, uid) != -1)
+  {
+    listener -= ({uid});
+    save_object(SAVEFILE);
+    Msg("Listener entfernt: "+CAP(uid));
+  }
+}
+
+void Out(string str, int l)
+{
+  tell_object(TP, "| " + str + sprintf("%" + (l-strlen(str)-4) + "s", " ") +
+                  "|\n");
+  return;
+}
+
+void Report()
+{
+  int l, i, dat;
+  string z1, z2, npl, *keys, str;
+
+  if(!TP)              return;
+  if(!interactive(TP)) return;
+
+  /*                 //April 2004 by Malar -> Report
+  if(!IS_LORD(TP))
+  {
+    Msg(CAP(getuid(TP)) + "versuchte grade, sich Details fuer die "
+        "Juwelenquest anzusehen");
+    return;
+  }
+  */
+
+  z1 = "+==============================================================="
+       "=============+\n";
+  l  = strlen(z1);
+  z2 = "+---------------------------------------------------------------"
+       "-------------+\n";
+
+
+  tell_object(TP, z1);
+  Out("Uebersicht ueber die Juwelenquest", l);
+  tell_object(TP, z2);
+
+  keys = sort_array(m_indices(quest), #'<);
+
+  i = sizeof(keys);
+  while(i--)
+  {
+    npl =        explode(keys[i], "_")[0];
+    dat = to_int(explode(keys[i], "_")[1]);
+
+    str = sprintf("%-23s %26s hat %2d Kills."   , keys[i]
+                                                , quest[keys[i], 0]
+                                                , quest[keys[i], 1]);
+    Out(str, l);
+  }
+
+  tell_object(TP, z1);
+}
+

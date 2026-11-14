@@ -1,0 +1,235 @@
+inherit "std/thing";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <defines.h>
+#include <new_skills.h>
+#include <moredef.h>
+#include "/gilden/bardengilde/bardengilde.h"
+
+object caster, victim;
+float modStep, modCap, factor;
+int speed, removed;
+mapping sinfo;
+
+string *strophen = ({
+  "Und ich waehnte, durch die Lueft\n"
+  "wallten suesse Weihrauchduefte,\n"
+  "Ausgestreut durch unsichtbare Seraphshaende um mich her.\n",
+
+  "\"Lethe,\" rief ich, \"suesse Spende\n"
+  "schickt Dir Gott durch Engelshaende,\n"
+  "Dass sich von Lenoren wende Deine Trauer tief und schwer!\n",
+
+  "Nimm, o nimm die suesse Spende\n"
+  "und vergiss der Trauer schwer!\"\n"
+  "Sprach der Rabe: \"Nimmermehr!\"\n",
+
+  "\"Gramprophet!\" rief ich voll Zweifel,\n"
+  "\"ob Du Vogel oder Teufel!\n"
+  "Bei dem ew'gen Himmel droben, bei dem Gott, den ich verehr'\n",
+
+  "Kuende mir, ob ich Lenoren,\n"
+  "die hienieden ich verloren,\n"
+  "Wieder find' an Edens Toren - sie, die throhnt im Engelsheer\n",
+
+  "Jene Sel'ge, die Lenoren\n"
+  "nennt der Engel heilig Heer!\"\n"
+  "Sprach der Rabe: \"Nimmermehr!\"\n"
+});
+
+private int modifyBySkillAttribute(int baseVal, string skillAttribute) {
+  return (int) (baseVal * (caster->QuerySkillAttribute(skillAttribute) / 100.0));
+}
+
+public void create() {
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+//--Beschreibungen---------------------------------------------------------
+
+  SetProp(P_SHORT, 0);
+  SetProp(P_LONG,
+    "Ein Bardenlied");
+
+//--Namen------------------------------------------------------------------
+
+  SetProp(P_NAME, "Der Besuch des Raben");
+  SetProp(P_GENDER, NEUTER);
+  SetProp(P_INVIS, 1);
+  AddId(({SONG_FEAR, BARD_UPKEEP_EFFECT}));
+  SetProp(P_BARD_UPKEEP_MODES, ({SK_SINGING}));
+
+//--Eigenschaften----------------------------------------------------------
+
+  SetProp(P_MATERIAL, MAT_MAGIC );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_SIZE, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NEVERDROP, 1);
+
+  AddCmd(({"beende", "beend"}), "cancel_effect");
+}
+
+private void consume_and_damage() {
+  object fearEffect;
+  float mod;
+  int dam;
+  string victimName, msg;
+  object *ignorants;
+
+  if(!objectp(victim) || !objectp(caster)) {
+    return;
+  } else {
+    victimName = victim->name(WEN, 1);
+  }
+
+  msg=BS(sprintf("Mit finsterer Stimme rufst du: \"Nimmermehr!\" und deutest auf %s.", victimName));
+  if(stringp(msg)) tell_object(caster, msg);
+  msg=BS(sprintf("%s ruft mit finsterer Stimme: \"Nimmermehr!\" und deutet auf %s", caster->Name(WER, 1),victimName));
+  if(stringp(msg)) {
+    tell_room(environment(caster), msg, ({caster}));
+  }
+
+  if(!present(victim, environment(caster))) {
+    tell_object(caster, "Huch?! Dein Gegner ist gar nicht mehr hier!\n");
+  } else {
+    if(objectp(present(SONG_FEAR_BUILDUP, victim))) {
+      tell_object(caster, BS(sprintf("Mit einem Schlag entlaedst du den Wahnsinn in %s!", victimName)));
+      mod = present(SONG_FEAR_BUILDUP, victim)->QueryCurrentMod();
+    } else {
+      mod = 0.8;
+    }
+
+    dam = sinfo[OFFSET(SI_SKILLDAMAGE)];
+    sinfo[OFFSET(SI_SKILLDAMAGE)] = (int) (sinfo[OFFSET(SI_SKILLDAMAGE)] * mod);
+    if(caster->QueryProp(P_TESTPLAYER)) {
+      tell_object(caster, BS(sprintf("dmg=%d mod=%.2f\nsinfo=%O\n", dam, mod, sinfo[OFFSET(SI_SKILLDAMAGE)])));
+    }
+
+    dam = call_other("/spellbooks/barden_spells", "TryDefaultAttackSpell", 
+              victim, caster, sinfo, ([SP_NAME:"der besuch des raben", SP_SHOW_DAMAGE:1]));
+    if(caster->QueryProp(P_TESTPLAYER)) {
+      tell_object(caster, BS(sprintf("dealt dmg=%d\n", dam)));
+    }
+
+    if(objectp(victim) && objectp((fearEffect=present(SONG_FEAR_BUILDUP, victim)))) {
+      fearEffect->remove(1);
+    }
+  }
+  remove(1);
+}
+
+public int cancel_effect(string args) {
+  notify_fail("Welches Lied willst du beenden?\n");
+  args = this_player()->_unparsed_args(1);
+  write(args+"\n");
+  if(args != "der besuch des raben" && 
+     args != "'der besuch des raben'") return 0;
+
+  write("Du beendest deinen Vortrag.\n");
+  tell_room(ENV(caster), BS(sprintf("%s beendet den Vortrag von 'Der Besuch des Raben'.", caster->Name(WER))), ({caster}));
+
+  while(remove_call_out("speak_verse") >= 0);
+  consume_and_damage();
+
+  return 1;
+}
+
+private void checkAndAddFearEffect() {
+  object fearBuildup;
+
+  if(!objectp(victim)) return;
+
+  if(!objectp(present(SONG_FEAR_BUILDUP, victim))) {
+    fearBuildup = clone_object("/gilden/bardengilde/obj/fear_buildup");
+    if(!fearBuildup->Setup(victim)) {
+      tell_object(caster, BS("Der Zauber kann sich nicht manifestieren!"));
+      remove(1);
+    }
+  }
+}
+
+public void Setup(object _caster, object _victim, int ability, int success, float _factor, mapping _sinfo) {
+  sinfo = _sinfo;
+  factor = _factor;
+  caster = _caster;
+  victim = _victim;
+
+  checkAndAddFearEffect();
+
+  modStep = ((float) ability)/50000.0 + ((float) success/50000);
+  modStep = ((float) modifyBySkillAttribute((int) (modStep*100), SA_DAMAGE)) / 100.0;
+  modStep *= 1.0 + factor;
+  if(modStep > 0.50) modStep = 0.50;
+  if(modStep < 0.05) modStep = 0.05;
+
+  modCap  = ((float) ability/20000.0) + (((float) success)/20000.0);
+  modCap = ((float) modifyBySkillAttribute((int) (modCap*100), SA_DAMAGE)) / 100.0;
+  modCap *= 1.0 + factor;
+  if(modCap > 1.2) modCap = 1.5;
+  if(modCap < 0.1) modCap = 0.1;
+
+  speed = 6 - (ability/2000);
+
+  if(caster->QueryProp(P_TESTPLAYER)) {
+    tell_object(caster, sprintf("modStep=%.2f modCap=%.2f speed=%d\n", modStep, modCap, speed));
+  }
+
+  call_out("speak_verse", speed, 0);
+}
+
+
+private void write_songtext(int step) {
+  string strophe, strophe_room, indent;
+  object env, *ignorants;
+
+  if(!objectp(env=environment(caster)) || !objectp(caster)) return;
+
+  strophe = strophen[step];
+
+  indent = sprintf("%s spricht: ", caster->Name(WER, 1));
+  strophe_room = break_string(strophe, 78, indent, BS_LEAVE_MY_LFS);
+  if(!stringp(strophe) || !stringp(strophe_room)) return;
+
+  ignorants = filter_array(all_inventory(env), "ignoresSongtext", find_object("/spellbooks/barden_spells"));
+  tell_room(env, strophe_room, ({caster}));
+  tell_object(caster, break_string(strophe, 78, "Du sprichst: ", BS_LEAVE_MY_LFS));
+}
+
+
+public void speak_verse(int step) {
+  object fear;
+
+  if(removed) return;
+
+  if(!objectp(victim) || (objectp(victim) && environment(victim) != environment(caster))) {
+    tell_object(caster, BS("Da dein Opfer nicht mehr hier ist beendest du deinen Vortrag."));
+    remove(1);
+  }
+
+  if(step >= sizeof(strophen)) {
+    consume_and_damage();
+    return;
+  }
+
+  if(!random(2)) {
+    write_songtext(step);
+  }
+
+  checkAndAddFearEffect();
+
+  if(!objectp(victim)) return;
+  fear = present(SONG_FEAR_BUILDUP, victim);
+  if(objectp(fear)) fear->increase_fear(caster, modStep, modCap);
+  call_out("speak_verse", speed, ++step);
+}
+
+varargs int remove(int silent) {
+  removed = 1;
+  return ::remove(silent);
+}

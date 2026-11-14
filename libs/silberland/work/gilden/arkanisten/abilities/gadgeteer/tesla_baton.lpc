@@ -1,0 +1,76 @@
+#include "../../arkanisten.h"
+
+inherit GUILD_FOLDER "abilities/ability.lpc";
+
+public void create() {
+    if(is_clone(TO)) return;
+
+    ::create();
+    SetProp(P_ABILITY_NAME, CAP(TESLA_BATON));
+    SetProp(P_ABILITY_DESCRIPTIPON, 
+        "Der Blitzstab basiert auf den Prinzipien der Lichtbringerspule mit dem Unterschied, dass "
+        "die elektrische Energie hier nicht in Licht umgewandelt wird, sondern in starke Stromschlaege. "
+        "Ein Blitzsatab wird in der Schildhand gefuehrt. Er ist zwar kein besonders vormidables Werkzeug "
+        "zur Verteidigung, kann dafuer jedoch deinen Gegnern einen heftigen Blitzschlag verpassen, der "
+        "sie zurueckschrecken laesst.");    
+    SetProp(P_ABILITY_TYPE, ABILITY_TYPE_ACTIVE);
+    SetProp(P_ABILITY_BASE_ATTRIBUTE, A_DEX);
+    SetProp(P_ABILITY_CASTVERB, CAST_VERB_WIELD);
+    SetProp(P_ABILITY_GROUP, ({ABILITY_GROUP_GADGETS}));
+    SetProp(P_ABILITY_COST, 0);
+    SetProp(P_ABILITY_REQUIRES, ({LIGHTBRINGER_COIL}));
+    SetProp(P_ABILITY_SPELLBREAK, 0);
+}
+
+public mapping prepare_use(object user, mapping sinfo) {
+    if(present(TESLA_BATON_ID, user)) {
+        tell_object(user, BS("Du hast deinen Blitzstab bereits in der Hand."));
+        return 0;
+    }
+
+    if(get_free_hands(user) < 1 || sizeof(user->QueryArmours(AT_SHIELD)) > 0) {
+        tell_object(user, BS("Fuer den Blitzstab benoetigst du deine Schildhand."));
+        return 0;
+    }
+
+    return ::prepare_use(user, sinfo);
+}
+
+public void success(object user, mapping sinfo, int skillcheck) {
+    object cb, enemy;
+
+    if(objectp(cb=present(TESLA_BATON_ID, user))) {
+        enemy = sinfo[SI_SKILLARG] || sinfo[SI_ENEMY];
+        if(!objectp(enemy)) return;
+
+        pDebug(user, sprintf("tesla_baton :: stunchance=1:%d success=%d\n", 13-sinfo[SI_SKILLABILITY]/1000, skillcheck));
+        if(!random(13-sinfo[SI_SKILLABILITY]/1000)) {
+            tell_object(user, BS("Du erwischst "+enemy->name(WEN)+" mit deinem Blitzstab und "+enemy->QueryPronoun()+" krampft zusammen."));
+            tell_room(ENV(user), BS(user->Name(WER)+" erwischt "+enemy->name(WEN)+" mit dem Blitzstab und "+enemy->QueryPronoun()+" krampft zusammen."), ({user}));
+            enemy->SetProp(P_DISABLE_ATTACK, 1 + skillcheck/5000);
+
+            if(skillcheck > 8000) {
+                sinfo[SI_SKILLDAMAGE] = 200;
+                sinfo[OFFSET(SI_SKILLDAMAGE)] = 100;
+                sinfo[SI_SKILLDAMAGE_TYPE] = ({ DT_ELECTRIC });
+                call_other("/std/spellbook", "TryDefaultAttackSpell", enemy, user, sinfo, ([SP_NAME: "Uhrwerkschlinge", SP_SHOW_DAMAGE: 1]));
+            }
+        }
+    } else {
+        cb = clone_object(OBJ "tesla_baton");
+        if(!cb->move(user)) {
+            tell_object(user, BS("Du kannst das gerade nicht tun."));
+            destruct(cb);
+            return;
+        }
+
+        cb->setup(user);
+        cb->do_wear(TESLA_BATON_ID);
+    }
+
+    return;
+}
+public int on_use_after_eval(object user, mapping sinfo, int skillcheck) {
+    if(!objectp(present(TESLA_BATON_ID, user))) return ERFOLG; // always succeed in wearing it
+    return ::on_use_after_eval(user, sinfo, skillcheck);
+}

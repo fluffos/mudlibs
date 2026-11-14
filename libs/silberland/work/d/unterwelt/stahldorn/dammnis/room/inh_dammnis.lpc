@@ -1,0 +1,385 @@
+//=========================================================================
+//
+// File:    inh_dammnis.c
+// Created by Stahldorn@SL
+//
+// Project: Verdammnis
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit "std/room";
+
+#define LW(x) (sizeof(x)==1 ? x[0] : implode(x[0..<2],", ")+" und "+x[<1])
+
+string *richtungen  = ({ });
+string *zielraeume  = ({ });
+string *viecher     = ({ });
+string long_text    = "";
+
+string *riname      = ({ });
+
+string *roomlist;
+
+void create()
+{
+  int i;
+
+  ::create();
+  SetProp(P_INT_SHORT, "Hoehle der Verdammnis" );
+
+  SetProp(P_LIGHT, 0);
+  SetProp(P_INDOORS, 1);
+  SetProp(P_ENVIRONMENT,([ENV_TEMPERATURE: 28, ENV_TERRAIN: TT_CAVE]) );
+
+  AddDetail( ({ "schritt" }),
+    "Mach keinen falschen Schritt, sonst faellst Du runter!"
+  );
+
+  AddDetail( ({ "balken" }),
+    "Die Balken, die den Abgrund ueberspannen, haben kein Gelaender und "
+    "sind gerade so breit, dass eine Person darueberlaufen kann."
+  );
+
+  AddDetail( ({ "boden", "plattform" }),
+    "Die Plattform ist nicht besonders gross, aber man kann hier wenigstens "
+    "bequem stehen. Obwohl es bei mehreren Personen relativ eng werden "
+    "koennte."
+  );
+
+  AddDetail( ({ "gelaender" }),
+    "So etwas gibt es hier leider nicht. Du musst hoellisch aufpassen, "
+    "nicht in die Tiefe zu fallen."
+  );
+
+  AddDetail( ({ "tiefe", "abgrund" }),
+    "Der Abgrund ist immens tief. Du kannst beim besten Willen sein "
+    "Ende nicht erkennen."
+  );
+
+  AddDetail( ({ "decke" }),
+    "Obwohl Du Dich in einer Hoehle befindest, siehst Du seltsamerweise "
+    "keine Decke ueber Dir. Nur ganz ganz weit oben glaubst Du manchmal "
+    "eine Bewegung zu erkennen, aber sicher bist Du Dir nicht."
+  );
+
+  AddDetail( ({ "bewegung" }),
+    "Vielleicht taeuschst Du Dich auch, aber manchmal sieht es kurz so aus, "
+    "als ob da weit oben etwas waere, das sich bewegt. Komisch."
+  );
+
+  AddDetail( ({ "wand", "waende" }),
+    "Obwohl Du Dich in einer Hoehle befindest, siehst Du seltsamerweise "
+    "keine Waende um Dich herum."
+  );
+
+  AddDetail( ({ "hoehle" }),
+    "Die Hoehle, in der Du stehst, muss riesengross sein, denn Du siehst "
+    "weder Waende, noch eine Decke, noch einen Boden. Nur ein Netz "
+    "von Balken und Plattformen, das sich ueber einen endlosen Abgrund "
+    "spannt."
+  );
+
+  AddDetail( ({ "netz", "plattformen" }),
+    "Ein Netz aus Balken und Plattformen spannt sich ueber den Abgrund."
+  );
+
+  AddSound( ({ DEFAULT_SOUND }),
+    "Ueberall dringen Schreie und Kampfgeraeusche an Dein Ohr."
+  );
+
+  AddSound( ({ "schreie", "geraeusche", "kampfgeraeusche", "schrei" }),
+    "Die Geraeusche werden durch vielfaeltige Echos verzerrt."
+    "Du kannst den Ursprung nicht bestimmen."
+  );
+
+  AddSound( ({ "echo", "echos" }),
+    "Die Echos hunderter Geraeusche erfuellen die Hoehle."
+  );
+
+  AddSmell( ({ DEFAULT_SMELL }),
+    "Es riecht furchtbar muffig und stickig."
+  );
+
+  AddSpecialDetail( ({ "schimmern", "feld" , "etwas"
+                     , "schimmerndes feld" }), "detail_feld");
+
+  AddDetail( ({ "dunkelheit" }),
+    "Finster. Dunkel." );
+
+  AddSpecialExit(
+    ({ "norden", "nordosten", "osten", "suedosten",
+       "sueden", "suedwesten", "westen", "nordwesten" }),
+    "sturz" );
+
+  SetProp(P_HIDE_EXITS, ({"aufgabe"}) );
+  AddSpecialExit( "aufgabe", "aufgabe" );
+
+  AddCmd( ({ "betrete", "betret", "betritt" }), "cmd_betreten");
+
+  RemoveExit(richtungen);
+
+  i = sizeof(richtungen);
+  while(i--)
+  {
+    AddExit(richtungen[i], ROOM + "dam_" + zielraeume[i]);
+    riname += ({ capitalize(richtungen[i]) }) ;
+  }
+
+  i = sizeof(viecher);
+  while(i--)
+  {
+     AddItem(NPC + viecher[i], REFRESH_DESTRUCT,
+      ([P_MNPC_DEFAULTROOM: file_name(this_object())]));
+  }
+
+  roomlist =
+    ({ "/d/unterwelt/basics/central/room/00-05-08"
+     , "/d/unterwelt/basics/central/room/00-01-06"
+     , "/d/wueste/protheg/kraterrand/room/oasen/1"
+     , "/d/ebene/Silberwald/room/erde5"
+     , "/d/unterwelt/clementine/polaris/room/bib"
+     , "/d/unterwelt/basics/central/room/00+08+07"
+     , "/d/unterwelt/basics/central/room/00-22+07"
+     , "/d/polar/lamuerte/eishoehle/rooms/19613"
+     , "/d/dschungel/dante/hoehle/room/hoehle12"
+     , "/d/unterwelt/zordan/dhrkion/room/tunnel1"
+     , "/d/dschungel/dante/weg/room/brunnen4"
+     });
+
+}
+
+int aufgabe(string str)
+{
+  notify_fail("Deine Aufgabe ist es, hier heraus zu finden.\n");
+  return 0;
+}
+
+int sturz_npc(object npc, string dir)
+{
+  string s;
+
+  if(random(500) < 200) return 0;
+
+  npc->move(ROOM "boden", M_GO, "ueber einen Balken","geht",
+                         "faellt von oben herunter");
+
+  npc->do_damage(90+random(60));
+  return 1;
+}
+
+int sturz_spieler(object pl, string dir)
+{
+  string s, target;
+
+  s = pl->Name()+" will nach "+CAP(dir)+" ueber den Abgrund gehen. ";
+
+  if(random(500) < 50)
+  {
+    tell_object(pl, BS("Als Du einen Schritt nach "+CAP(dir)+" gehen "
+                       "willst, stolperst Du und faellst genau in das "
+                       "schimmernde Feld hinein, welches sich gerade "
+                       "vor Dir materialisiert."));
+
+    tell_room(TO, BS("Als "+pl->name(WER)+" einen Schritt nach "+CAP(dir)+
+                     " gehen will, stolpert "+pl->QueryPronoun(WER)+" und "
+                     "faellt genau in das schimmernde Feld hinein, welches "
+                     "sich gerade vor "+pl->QueryPronoun(WEM)+
+                     " materialisiert."), ({ pl }) );
+
+    target = roomlist[random(sizeof(roomlist))];
+    VMASTER->Msg(CAP(getuid(TP))+" stolpert in das Feld => " + target);
+
+    TP->move(target, M_TPORT|M_SILENT|M_NO_SHOW|M_NOCHECK);
+
+    tell_room(ENV(TP), BS(TP->Name()+" erscheint aus einem transzendentem "
+                          "Wirbel."), ({ pl }) );
+
+    return 1;
+  }
+
+  if(random(500) < 200)
+  {
+    tell_object(pl,BS("Du willst nach "+CAP(dir)+" gehen, bemerkst aber "
+                      "gerade noch rechtzeitig, dass da ein Abgrund ist, "
+                      "und bleibst stehen. Uff, Glueck gehabt, beinah "
+                      "waere es um Dich geschehen gewesen."));
+
+    tell_room(TO,BS(s + CAP(pl->QueryPronoun(WER))+" kann sich aber gerade "
+                    "noch selber davon abhalten."), ({ pl }) );
+
+    VMASTER->Msg(CAP(getuid(TP))+" stuerzt nicht hinunter");
+
+    return 1;
+  }
+
+  tell_object(pl, BS("Du gehst nach "+CAP(dir)+" und bemerkst sogleich, "
+                     "dass Du hier keinen festen Boden mehr unter den "
+                     "Fuessen spuerst. Du faellst tief tief tief..."));
+
+  tell_room(TO, pl->Name()+" faellt laut schreiend in die Tiefe.\n", ({ pl }) );
+
+  tell_object(pl,"Du knallst mit voller Wucht auf den Boden.\n");
+  tell_room(ROOM "boden", BS(pl->Name()+" kommt laut schreiend von oben "
+                             "heruntergefallen und knallt unsanft auf den "
+                             "Boden auf."), ({ }) );
+
+  pl->move(ROOM "boden", M_GO|M_NOCHECK|M_NO_SHOW|M_SILENT);
+
+  SetProp(P_KILL_NAME, "Ein verdammt harter Aufprall");
+  pl->do_damage(80+random(90));
+
+  if(pl->QueryProp(P_GHOST))
+  {
+    VMASTER->Msg(CAP(getuid(pl))+" faellt hinunter und stirbt");
+  }
+  else
+  {
+    VMASTER->Msg(CAP(getuid(pl))+" faellt hinunter");
+  }
+
+  return 1;
+}
+
+int sturz(string dir)
+{
+  if(!TP)              return 0;
+  if(!living(TP))      return 0;
+
+  if(query_once_interactive(TP))
+  {
+    return sturz_spieler(TP, dir);
+  }
+
+  return sturz_npc(TP, dir);
+}
+
+void init()
+{
+  ::init();
+
+  if(TP && (random(10) == 4)) VMASTER->move(TO,TP);
+}
+
+string field_dir()
+{
+  string room, field, s, dir;
+
+  field = VMASTER->QueryCurrentField();
+  room  = explode(file_name(TO), "_")[<1];
+
+  if(room == field)
+     return "Vor Dir befindet sich ein schimmerndes Feld. ";
+
+  dir = "";
+
+  if(field[1] > room[1])
+    dir = "nord";
+  else if(field[1] < room[1])
+    dir = "sued";
+
+  if(field[0] > room[0])
+    dir += "ost";
+  else if(field[0] < room[0])
+    dir += "west";
+
+  s = "Weiter im " + CAP(dir) + "en schimmert etwas.";
+  return s;
+}
+
+string _query_int_long()
+{
+  string ret;
+  int i, n;
+
+  n   = sizeof(richtungen);
+
+  ret = "Du stehst auf einer kleinen Plattform, von der aus ";
+
+  switch(n)
+  {
+    case 0:  ret +=  "kein";    break;
+    case 1:  ret +=  "ein";     break;
+    case 2:  ret +=  "zwei";    break;
+    case 3:  ret +=  "drei";    break;
+    case 4:  ret +=  "vier";    break;
+    case 5:  ret +=  "fuenf";   break;
+    case 6:  ret +=  "sechs";   break;
+    case 7:  ret +=  "sieben";  break;
+    case 8:  ret +=  "acht";    break;
+    default: ret +=  "viele";   break;
+  }
+
+  ret += " Balken nach ";
+
+  switch(n)
+  {
+    case 0:  ret += "nirgendwo";  break;
+    case 1:  ret += riname[0];    break;
+    default: ret += LW(riname);   break;
+  }
+
+
+  ret += (n > 1) ? " wegfuehren. ":" wegfuehrt. ";
+
+  ret += "Unter Dir lauert ein gewaltiger Abgrund darauf, das Du einen "
+         "falschen Schritt machst, und hinunterfaellst. ";
+
+  ret += field_dir();
+  ret  = ret + " " + long_text;;
+
+  return BS(ret);
+}
+
+
+mixed QueryDirs()
+{
+  return ({ richtungen, zielraeume });
+}
+
+string detail_feld(string str)
+{
+  string s;
+
+  if(file_name(TO) == VMASTER->QueryCurrentRoom())
+  {
+    s = "Ein schimmerndes Feld, das in der Luft haengt. Vielleicht kann "
+        "man es betreten?";
+  }
+  else
+  {
+    s = field_dir();
+  }
+
+  return BS(s);
+}
+
+int cmd_betreten(string str)
+{
+  string target;
+
+  notify_fail("Was moechtest Du betreten?\n");
+
+  if(!str || str == "") return 0;
+  if(!(str == "feld"))  return 0;
+
+  if(file_name(TO) != VMASTER->QueryCurrentRoom()) return 0;
+
+  if(!interactive(TP)) return 0;
+
+  target = roomlist[random(sizeof(roomlist))];
+  VMASTER->Msg(CAP(getuid(TP))+" betritt das Feld => " + target);
+
+  tell_room(TO,BS(TP->Name()+" betritt das Feld und verschwindet in einem "
+                  "transzendenten Wirbel."), ({TP}) );
+  tell_object(TP,BS("Du betrittst das Feld und wirst in einen transzendenten "
+                    "Wirbel hineingezogen."));
+
+  TP->move(target, M_TPORT|M_SILENT|M_NO_SHOW|M_NOCHECK);
+
+  tell_room(ENV(TP), BS(TP->Name()+" erscheint aus einem transzendentem "
+                        "Wirbel."), ({ TP }) );
+
+  return 1;
+}

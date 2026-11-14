@@ -1,0 +1,169 @@
+// Unsichtbares Objekt, das den Himmelsritt verwaltet.
+
+#include "../def.h"
+
+inherit "std/thing";
+
+object owner;
+int ascent, hover;
+int descend_delay;
+
+void create()
+{
+  if (!is_clone(TO)) return;
+  ::create();
+
+  AddId(({"\namz_himmelsritt"}));
+  SetProp(P_SHORT, 0);
+  SetProp(P_INVIS, 1);
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_MAGIC, 1);
+
+  if (getuid(previous_object()) != SPELL_UID)
+    call_out("remove", 1);
+}
+
+void init()
+{
+  ::init();
+  if (!environment() || environment()->QueryProp(P_GUILD) != GUILDNAME)
+    call_out("remove", 0);
+}
+
+public void setup_himmelsritt(object pl, int asc, int skp)
+{
+  owner = pl;
+  ascent = asc;
+  owner->SetProp(P_AMAZONEN_ASCENT, ascent);
+  set_heart_beat(1);
+  pDebug(owner, sprintf("Himmelsritt gestartet: Ascent = %d", ascent));
+  if(objectp(present(GUILD_ITEM, pl))) present(GUILD_ITEM, pl)->RegisterEffect();
+
+  descend_delay = owner->QueryAttribute(A_DEX) / 5 * (skp > 2 ? 2 : 1);
+  call_out("do_descend", descend_delay);
+}
+
+void printHeight() {
+  pDebug(owner, sprintf("himmelsritt :: ascent=%d\n", ascent));
+    tell_object(owner, sprintf(ANSI_BOLD+"Du befindest dich %s.\n"+ANSI_NORMAL,
+    ({ "kaum ueber dem Boden",
+      "einige Meter hoch",
+      "mehrere Meter hoch",
+      "weit über dem Boden",
+      "sehr hoch in der Luft",
+      "extrem hoch in der Luft",
+      "in beachtlicher Hoehe schwebend",
+      "fast außer Sichtweite",
+      "am Himmel schwebend",
+      "in maximaler Hoehe" })[ascent - 1]));
+    tell_room(environment(owner), sprintf("%s befindet sich %s.\n",
+    owner->Name(WER),
+    ({ "kaum ueber dem Boden",
+      "einige Meter hoch",
+      "mehrere Meter hoch",
+      "weit über dem Boden",
+      "sehr hoch in der Luft",
+      "extrem hoch in der Luft",
+      "in beachtlicher Hoehe schwebend",
+      "fast außer Sichtweite",
+      "am Himmel schwebend",
+      "in maximaler Hoehe" })[ascent - 1]), ({owner}));
+}
+
+varargs int remove(int silent)
+{
+  if (objectp(owner))
+  {
+    owner->SetProp(P_AMAZONEN_ASCENT, 0);
+    owner->SetProp(P_AMAZONEN_STURZFLUG, 0);
+    if(objectp(present(GUILD_ITEM, owner))) present(GUILD_ITEM, owner)->UnregisterEffect("himmelsritt");
+    if(objectp(present(GUILD_ITEM, owner))) present(GUILD_ITEM, owner)->UnregisterEffect("sturzflug");
+  }
+  return ::remove(silent);
+}
+
+void ascend(int n) {
+  ascent += n;
+  if(ascent > 10) {
+    ascent = 10;
+  }
+  owner->SetProp(P_AMAZONEN_ASCENT, ascent);
+  tell_object(owner, BS(ANSI_BOLD+"Du gewinnst an Hoehe."+ANSI_NORMAL));
+  printHeight();
+}
+
+void descend(int n) {
+  if(pointerp(owner->QueryProp(P_PREPARED_SPELL))) return; // kein absinken während spell prep
+
+  // wir schweben ggf an der stelle
+  hover -= n;
+  if(hover < 0) {
+    n = -hover;
+    hover = 0;
+  } else {
+    return;
+  }
+
+  ascent -= n;
+  if(ascent <= 0) {
+    tell_object(owner, BS(ANSI_BOLD+"Du landest wieder am Boden."+ANSI_NORMAL));
+    tell_room(environment(owner), BS(ANSI_BOLD + owner->Name(WER)+" landet auf dem Boden." + ANSI_NORMAL), ({owner}));
+    owner->SetProp(P_AMAZONEN_ASCENT, 0);
+    if(owner->QueryProp(P_AMAZONEN_STURZFLUG)) {
+      owner->SetProp(P_AMAZONEN_STURZFLUG, 0);
+      if(objectp(present(GUILD_ITEM, owner))) present(GUILD_ITEM, owner)->UnregisterEffect("sturzflug");
+      tell_object(owner, BS("Du beendest deinen Sturzflug, da du gelandet bist."));
+    }
+    remove(1);
+    return;
+  }
+  owner->SetProp(P_AMAZONEN_ASCENT, ascent);
+  tell_object(owner, BS(ANSI_BOLD+"Du verlierst an Hoehe."+ANSI_NORMAL));
+  printHeight();
+}
+
+void addHover(int n) {
+  if(hover < 0) hover = 0;
+  hover += n;
+}
+
+void heart_beat()
+{
+  int skp;
+  if (!objectp(owner))
+  {
+    remove();
+    return;
+  }
+
+  if(owner->QueryProp(P_AMAZONEN_STURZFLUG) < time() && owner->QueryProp(P_AMAZONEN_STURZFLUG) != 0) {
+    tell_object(owner, BS("Du beendest deinen Sturzflug."));
+    owner->SetProp(P_AMAZONEN_STURZFLUG, 0);
+    if(objectp(present(GUILD_ITEM, owner))) present(GUILD_ITEM, owner)->UnregisterEffect("sturzflug");
+  }
+
+  // Sturzflug beschleunigt das Absinken.
+  if (owner->QueryProp(P_AMAZONEN_STURZFLUG) >= time())
+  {
+    skp = AMAZONEN_TALENTMASTER->QuerySpentPoints(owner, "sturzflug");
+    if(skp > 1 && !random(3)) descend(1);
+    else if(skp < 2) descend(1);
+  }
+}
+
+
+string extra_look() {
+  return "Durchscheinende Fluegel wachsen aus ihrem Ruecken.\n";
+}
+
+void do_descend() {
+  descend(1);
+  if(ascent > 0) {
+    call_out("do_descend", descend_delay);
+  }
+}

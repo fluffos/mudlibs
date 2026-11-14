@@ -1,0 +1,118 @@
+inherit "std/thing";
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <new_skills.h>
+#include <defines.h>
+#include <moredef.h>
+#include "../druiden.h"
+
+nosave object owner;
+nosave mixed value;
+nosave string element;
+
+create() {
+  if(!is_clone(TO)) return;
+  ::create();
+  SetProp(P_SHORT, 0);
+  SetProp(P_WEIGHT, 0);  
+  SetProp(P_VALUE, 1);
+  SetProp(P_NOBUY, 1); 
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NOSELL, 1);
+  AddId(({ "\nschutz"}));
+  if(getuid(previous_object())!="GUILD.druidenzirkel") {
+   call_out("remove", 1);
+   return 0;
+  }
+}
+
+int SetVariables(object pl, mixed val, int time, string elem) {
+  if(getuid(previous_object())!="GUILD.druidenzirkel") {
+   call_out("remove", 1);
+   return 0;
+  }
+  element=elem;
+  owner=pl;
+  value=val;
+  TELL("angrox", sprintf("E:%s, O:%O, V:%O\n",element,owner,value));
+  switch (element) {
+    case "erz":
+       TP->AddResistanceModifier( ([
+                       DT_SLASH: -0.05,
+                       DT_BLUDGEON: -0.05,
+                       DT_PIERCE: -0.05,
+                       DT_SQUEEZE: -0.05,
+                       DT_WHIP: -0.05,
+                       DT_RIP: -0.05,
+                       ]), "druiden_erz_schutz");
+       //if(!owner->Query(P_BODY, F_QUERY_METHOD)) 
+       //  owner->Set(P_BODY, symbol_function("body_change", TO), 
+       //      F_QUERY_METHOD);
+       break;
+    case "eis":
+       if(!owner->Query(P_TEMPERATURE_RANGE, F_QUERY_METHOD)) 
+         owner->Set(P_TEMPERATURE_RANGE, symbol_function("temp_change", TO), 
+             F_QUERY_METHOD);
+       break;
+    case "feuer":
+       if(!owner->Query(P_TEMPERATURE_RANGE, F_QUERY_METHOD)) {
+         TELL("angrox","SET !\n");
+         owner->Set(P_TEMPERATURE_RANGE, symbol_function("temp_change", TO), 
+             F_QUERY_METHOD);
+       }
+       break;
+  }
+  call_out("remove", time);
+  return 1;
+}
+
+mixed QueryVariables() {
+  return ({owner, value, element});
+}
+
+int body_change() {
+  return value; 
+}
+
+int temp_change() {
+  TELL("angrox", "CALL!\n");
+  return value;
+}
+
+remove() {
+  if(objectp(owner) && find_player(getuid(owner))) {
+    tell_object(owner, BS(sprintf("Der Schutz des %selementars "
+         "erlischt!", CAP(element)))); 
+    switch (element) {
+      case "erz":
+         // owner->Set(P_BODY, 0, F_QUERY_METHOD); break;
+         owner->RemoveResistanceModifier("druiden_erz_schutz");
+         break;
+      case "eis":
+         owner->Set(P_TEMPERATURE_RANGE, 0, F_QUERY_METHOD); break;
+      case "feuer":
+         owner->Set(P_TEMPERATURE_RANGE, 0, F_QUERY_METHOD); break;
+    }
+  }
+  while(remove_call_out("remove")!=-1);
+  ::remove();
+}
+
+init() {
+  ::init();
+  if(!living(ENV(ME)))
+    call_out("remove", 0);
+}
+
+reset() {
+  ::reset();
+  if (!is_clone(this_object())) return;
+  call_out("remove", 0);
+}
+
+BecomesNetDead(object wer) {
+  if(wer==owner)
+    remove();
+}

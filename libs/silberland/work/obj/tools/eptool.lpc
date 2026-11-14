@@ -1,0 +1,1036 @@
+/*
+ * Tool um Forscherpunkte zu verwalten - Woody@SL
+ * ---
+ * 2012-03-21  Woody   1.17  npcp -> epcp, neu: npccp
+ * 2002-05-03  Woody   1.16  Auch Dateinamen fuer Commands zulassen
+ * 2002-04-30  Feyaria 1.15  Filenamen im NPC-Master aendern
+ * 2001-10-24  Woody   1.14  Nur noch ein Space bei "unt *tool"
+ * 2001-01-03  Zordan  1.13  Verwaltung des FP Orakels hinzugefuegt
+ * 1999-05-22  Woody   1.12  Security, Balanceteam, npcdump <regexp>
+ * 1999-03-16  Woody   1.11  inherited nun std/tool
+ * 1999-03-05  Woody   1.10  Bugfix in npcr und npcrr
+ * 1998-03-15  Woody   1.9   npcset akzeptiert Filenamen (mit '/' beginnend)
+ * 1998-02-11  Feyaria 1.8   IS_LORD abfrage im init
+ * 1998-01-15  Feyaria 1.7   npcset auch mit nummer
+ * 1997-06-01  Woody   1.6   npcmaster Queue Handling
+ * 1997-05-28  Woody   1.5   Bugfix in eps <nr> (wenn !IS_ARCH())
+ * 1997-05-27  Woody   1.4   epc(hange)
+ * 1996-10-13  Woody   1.3   NPC-Master Interface
+ * 1996-10-13  Woody   1.2   clone# wird nicht mehr angezeigt in epshow
+ * 1996-10-10  Woody   1.1   epdump, epshow erweitert
+ * 1996-09-27  Woody   1.0   Release
+ *
+ */
+
+inherit "std/tool";
+
+#include <defines.h>
+#include <properties.h>
+#include <language.h>
+#include <wizlevels.h>
+#include <moving.h>
+#include <ansi.h>
+#include <exploration.h>
+#include <npcmaster.h>
+
+#define VERSION "1.17"
+
+#define NF notify_fail
+
+#define P_LONG_EP "long_ep"
+#define P_LONG_NPC "long_npc"
+
+nosave object owner;
+
+void create()
+{
+  string str;
+
+  if (IS_BLUE(ME)) return;
+  ::create();
+  owner = PL;
+
+  AddId(({"eptool","ep-tool"}));
+  AddId(({"npctool","npc-tool"}));
+  SetProp(P_ARTICLE,0);
+  SetProp(P_GENDER, NEUTER);
+
+  str=capitalize(((str=getuid(this_player()))[<1]=='s'||str[<1]=='x'||
+        str[<1]=='z')?str+="'":str+="s");
+  SetProp(P_NAME, str+" EP-Tool");
+  SetProp(P_SHORT, str+" EP/NPC-Tool v"+VERSION);
+
+  SetProp(P_LONG_EP,
+   "Das EP-Tool [v"+VERSION+"] dient der Administration von Exploration Points.\n\n"
+
+   "Implementierte Kommandos (fuer Erzmagier++):\n"
+   " epa(dd) <objekt>:<typ>:<eps>:<keys>     Exploration Point(s) hinzufuegen\n"
+   " epc(hange) <objekt>:<typ>:<eps>:<keys>  Exploration Point(s) aendern\n"
+   " epcp(ath) <oldpath> <newpath>           Ganzen Pfad von EP(s) aendern\n"
+   " epd(el) <objekt>:<typ>                  EP entfernen\n"
+   " eps(how) <nummer> | <objekt>[:<typ>]    EP #x oder eines Objekts anzeigen\n"
+   " epi(nfo) [<spieler>]                    Diverse Infos anzeigen\n"
+   " epdump                                  Saemtliche EPs anzeigen \n"
+   " epaot <object>                          Fuegt ein Orakel Objekt hinzu\n"
+   " eprot <object>                          Entfernt ein Orakel Objekt\n"
+   " epsot                                   Zeigt alle Orakel Objekte an\n"
+   " epaoq <frage>:<pfad>                    Fuegt eine Orakel Frage hinzu\n"
+   " eproq <frage>                           Entfernt eine Orakel Frage\n"
+   " epsoq                                   Zeigt alle Orakel Fragen an\n"
+   " epfoc                                   Berechnet neue Orakel Fragen sofort\n"
+   " unt npctool                             fuer Infos zur Erstkill-Verwaltung\n\n"+
+   break_string(
+   "<objekt> ist eine Objektangabe, wobei auch der Suffix 'im raum' bzw. "
+   "'in mir' erlaubt ist, um festzulegen, ob sich das Objekt im Raum "
+   "oder im Inventory befindet. Die Angabe 'hier' steht fuer den "
+   "Raum, in dem man grade steht.", 78)+"\n"+
+   break_string(
+   "<typ> ist 'det' (Detail, Read-/Special-Detail), 'sens' (raumspezifischer "
+   "Geruch oder Geraeusch (eines Raums, NICHT eines Objekts!)) "
+   "'exit' (Ausgang), 'cmd' (ein AddCmd-Kommand), 'info' "
+   "(Infos von einem NPC), 'pub' (Speisen und Getraenke) oder 'misc' "
+   "(eigene GiveExplorationPoint()-Aufrufe im Objekt).", 78)+"\n"+
+   break_string(
+   "<keys> sind, durch Kommas getrennt, saemtliche (!!) moegliche Schluessel,\n"
+   "also Detail, Ausgang, Kommando-Verb oder Info-Schluesselwort\n"
+   "des NPCs. Dabei sind wirklich saemtliche moeglichen Schluessel anzugeben,\n"
+   "zB. 'kletter' und auch 'klettere' (\"kletter, klettere\"), wenn beides\n"
+   "dieselbe Aktion ausloest.\n", 78)+"\n"
+  );
+
+  SetProp(P_LONG_NPC,
+   "Das NPC-Tool [v"+VERSION+"] dient der Administration von Erstkills.\n\n"
+
+   "Implementierte Kommandos (fuer Erzmagier++):\n"
+   " npcs(et) <objekt>|<nummer>:<bonus>      NPC-Killerbonus hinzufuegen/aendern\n"
+   " npcc(hange) <objekt>|<nummer>:<neues objekt>   NPC-Filename aendern\n"
+   " npccp(ath) <oldpath> <newpath>          Ganzen Pfad von Boni aendern\n"
+   " npcp(ending) [<spieler>|?]              Bonus-Spielerqueue anzeigen\n"
+   " npcq(ueue) [<regexp>]                   Bonus-Queue anzeigen\n"
+   " npca(pprove) <dateiname>                Bonus bestaetigen\n"
+   " npcar <regexp>                          Bonus nach Regexp bestaetigen\n"
+   " npcr(emove) <dateiname>                 Eintrag aus der Queue loeschen\n"
+   " npcrr <regexp>                          Eintraege -\"- nach Regexp loeschen\n"
+   " npcdump [<regexp>]                      Saemtliche NPC-Boni anzeigen\n"+
+   " unt eptool                              fuer Infos zur EP-Verwaltung\n\n"+
+
+   break_string(
+   "<objekt> ist eine Objektangabe, wobei auch der Suffix 'im raum' bzw. "
+   "'in mir' erlaubt ist, um festzulegen, ob sich das Objekt im Raum "
+   "oder im Inventory befindet. Die Angabe 'hier' steht fuer den "
+   "Raum, in dem man grade steht.", 78)+"\n"
+  );
+
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NODROP, "Lass das lieber nicht wo rumliegen.\n");
+  SetProp(P_NOBUY, 1);
+  AddCmd(({ "epa", "epadd" }),   "epAdd");
+  AddCmd(({ "epc", "epchange" }),"epChange");
+  AddCmd(({ "epcp", "epcpath" }),"epChangePath");
+  AddCmd(({ "epd", "epdel" }),   "epDel");
+  AddCmd(({ "eps", "epshow" }),  "epShow");
+  AddCmd(({ "epi", "epinfo" }),  "epInfo");
+  AddCmd("epdump", "epDump");
+  AddCmd(({ "epaot" }), "epAddOracleTrusted");
+  AddCmd(({ "eprot" }), "epRemoveOracleTrusted");
+  AddCmd(({ "epsot" }), "epShowOracleTrusted");
+  AddCmd(({ "epaoq" }), "epAddOracleString");
+  AddCmd(({ "eproq" }), "epRemoveOracleString");
+  AddCmd(({ "epsoq" }), "epShowOracleString");
+  AddCmd(({ "epfoc" }), "epForceOracleCalc");
+  AddCmd(({ "npcs", "npcset" }),   "npcSet");
+  AddCmd(({ "npcp", "npcpending" }),   "npcPending");
+  AddCmd(({ "npcq", "npcqueue" }),     "npcQueue");
+  AddCmd(({ "npca", "npcapprove" }),   "npcApprove");
+  AddCmd(({ "npcar" }),                "npcApproveRegexp");
+  AddCmd(({ "npcr", "npcremove" }),    "npcRemove");
+  AddCmd(({ "npcrr" }),                "npcRemoveRegexp");
+  AddCmd("npcdump",                    "npcDump");
+  AddCmd(({ "npcc", "npcchange" }),    "npcChange");
+  AddCmd(({ "npccp", "npccpath" }),    "npcChangePath");
+  // "  npcs(how) <objekt>                      NPC-Killerbonus anzeigen\n"
+  // AddCmd(({ "npcs", "npcshow" }),  "npcShow");
+  call_out("env_check",0);
+}
+
+varargs int move(mixed dest, int method)
+{
+  if (dest != owner) return ME_CANT_BE_DROPPED;
+  else return ::move(dest, method);
+}
+
+void env_check()
+{
+  if (!environment()) return destruct(this_object());
+}
+
+void init()
+{
+  object ob;
+  if( !IS_ARCH(ob=environment(this_object()))
+      && (member(NPCMASTER->QueryBalance(), getuid(ob)) == -1) )
+    call_out("remove",0);
+  ::init();
+}
+
+int _query_autoloadobj() { return 1; }
+
+string last_id="";
+
+int id(string str)
+{
+  int yes;
+  if (yes=::id(str)) last_id=str;
+  return yes;
+}
+
+string _query_long()
+{
+  if (strstr(last_id,"npc")==-1) return QueryProp(P_LONG_EP);
+  return QueryProp(P_LONG_NPC);
+}
+
+object GetObj(string s)
+{
+  object ob;
+  string s1, s2;
+
+  // Raum?
+  if ((s == "hier") || (s == "here"))
+    return environment(PL);
+
+  // Einschraenkungen bzgl. Environment:
+  if (sscanf(s, "%s in mir", s1)) return present(s1, PL);
+  if (sscanf(s, "%s im raum", s1)) return present(s1, environment(PL));
+
+  // Keine Einschraenkungen, einfach suchen:
+  if (!(ob = present(s, environment(PL))))
+    ob = present(s, PL);
+
+  // Last resort: Filename
+  if (!ob) ob = find_object(s);
+
+  return ob;
+}
+
+int epAddChange(string str, int changeflag)
+{
+  string s_ob,s_typ,s_keys, *keys;
+  int i, type, eps;
+  object ob;
+
+  str = this_player()->_unparsed_args();
+  NF("Nicht genug Parameter angegeben!\n"
+     "Syntax: epa(dd) <objekt>:<typ>:<eps>:<keys>\n"
+     "bzw. epc(hange) <objekt>:<typ>:<eps>:<keys>\n");
+  if (!str) return 0;
+  if (sscanf(str, "%s:%s:%d:%s", s_ob, s_typ, eps, s_keys) < 4)
+    return 0;
+
+  if ((type=member(EP_TYP_STR, s_typ)) < 0)
+    return NF("Ungueltiger EP-Typ!\n"), 0;
+
+  ob = GetObj(s_ob);
+  if (!ob)
+    return NF("Objekt nicht gefunden!\n"), 0;
+
+  if ((eps<0) || (eps>EPS_MAX))
+    return NF("Ungueltige EP-Anzahl!\n"), 0;
+
+  // keys = explode (implode(explode(s_keys," "),""), ",");  // spaces raus
+  keys = explode (s_keys, ",");  // nee, spaces drin sind schon o.k.
+  for (i=sizeof(keys)-1; i>=0; i--)                 // nur leading/trailing
+    keys[i] = implode (explode(keys[i], " "), " "); // spaces wolln wir nicht
+
+  i = changeflag ? EPMASTER->ChangeEPObject(ob, type, keys, eps)
+                 : EPMASTER->AddEPObject (ob, type, keys, eps);
+  if (i<0)
+  {
+    switch (i)
+    {
+      case EPERR_NOT_ARCH:
+        return NF("Funktion ist Erzmagiern vorbehalten!\n"), 0;
+      case EPERR_INVALID_OB:
+        return NF("Das angegebene Objekt ist fuer EPs nicht zulaessig!\n"), 0;
+      case EPERR_INVALID_ARG:
+        return NF("Ungueltiges Argument!\n"), 0;
+      default:
+        return NF("Unbekannter Fehler!\n"), 0;
+    }
+  }
+  write ("Ok, EP hinzugefuegt. Insgesamt gibt es nun "+i+" EPs.\n");
+  write (sprintf("%-4s  [%2d]  %:-40s  %:-20s\n",
+         s_typ, eps, file_name(ob), implode(keys, ",") ));
+  return 1;
+}
+
+int epAdd(string str)
+{
+  return epAddChange(str,0);
+}
+
+int epChange(string str)
+{
+  return epAddChange(str,1);
+}
+
+int epChangePath(string str)
+{
+  mixed tmp;
+  int n;
+
+  str = this_player()->_unparsed_args();
+  notify_fail("Syntax: epcp(ath) <oldpath> <newpath>\n");
+  if (!str) return 0;
+  tmp = explode(str, " ");
+  if (sizeof(tmp) != 2) return 0;
+
+  n = EPMASTER->ChangeEPPath(tmp[0], tmp[1]);
+  if (n < 0)
+    write("Fehler: "+n+"\n");
+  else
+    write("Ok, insgesamt " + n + " FP(s) betroffen.\n");
+  return 1;
+}
+
+int npcSet(string str)
+{
+  string s_ob;
+  int i, bonus, num;
+  object ob;
+
+  str = this_player()->_unparsed_args();
+  NF("Nicht genug Parameter angegeben!\n"
+     "Syntax: npcs(et) <objekt>:<bonus> oder <nummer>:<bonus>\n");
+  if (!str) return 0;
+  if (sscanf(str, "%d:%d", num, bonus) == 2)
+    s_ob=NPCMASTER->QueryNPCbyNumber(num)[2];
+  else if (sscanf(str, "%s:%d", s_ob, bonus) == 2)
+  {
+    if (s_ob[0] != '/')
+    {
+      ob = GetObj(s_ob);
+      if (!ob) return NF("Objekt nicht gefunden!\n"), 0;
+      s_ob = explode(file_name(ob),"#")[0];
+    }
+    else
+      if (s_ob[<2..] == ".lpc")
+        s_ob = s_ob[0..<3];
+  }   
+  if (bonus<0) return NF("Ungueltiger Bonus!\n"), 0;
+
+  i = NPCMASTER->SetScore(s_ob, bonus);
+
+  if (i<1)
+  {
+    switch (i)
+    {
+      case NPC_NO_PERMISSION:
+        return NF("Funktion ist Erzmagiern vorbehalten!\n"), 0;
+      case NPC_INVALID_ARG:
+        return NF("Ungueltiges Argument!\n"), 0;
+      default:
+        return NF("Unbekannter Fehler!\n"), 0;
+    }
+  }
+  write ("Ok, Bonus gesetzt:\n");
+  write (sprintf("[%d] %s\n", bonus, s_ob));
+  return 1;
+}
+
+int npcPending(string str)
+{
+  mapping m,p;
+  mixed   ind;
+  int     i,j;
+  string  res;
+
+  m=NPCMASTER->QueryPending();
+  p=NPCMASTER->QueryQueued();
+  if (!sizeof(m))
+    res="Derzeit keine Spieler in der Pending Queue.\n";
+  else if (stringp(str))
+    if (str=="?")
+      res=break_string("Derzeit sind folgende Spieler in der Queue:\n"+
+          implode( map_array(sort_array(m_indices(m), #'>), #'capitalize),
+            ", ")+".", 78, 0, 1);
+    else if (!member(m,str))
+      res=capitalize(str)+" hat keine Eintraege in der Pending Queue.\n";
+    else {
+      res=sprintf("%s (%s):\n", capitalize(str),
+          find_player(str) ? "anwesend" :
+          find_netdead(str) ? "netztot seit "+
+          dtime(file_date("/save/"+str[0..0]+"/"+str+".o")) :
+          "zuletzt ausgeloggt: "+
+          dtime(file_date("/save/"+str[0..0]+"/"+str+".o")));
+      for (j=sizeof(m[str])-1; j>=0; j--)
+        res+=sprintf("  %'.'-50s... %s\n", m[str][j],
+             member(p,m[str][j]) ? p[m[str][j]] + " (?)"
+               : to_string(NPCMASTER->QueryScore(m[str][j])));
+    }
+  else {
+    res="";
+    ind=sort_array(m_indices(m), #'<);
+    for (i=sizeof(ind)-1; i>=0; i--) {
+      res+=sprintf("%s (%s):\n", capitalize(ind[i]),
+          find_player(ind[i]) ? "anwesend" :
+          find_netdead(ind[i]) ? "netztot seit "+
+          dtime(file_date("/save/"+ind[i][0..0]+"/"+ind[i]+".o")) :
+          "zuletzt ausgeloggt: "+
+          dtime(file_date("/save/"+ind[i][0..0]+"/"+ind[i]+".o")));
+      for (j=sizeof(m[ind[i]])-1; j>=0; j--)
+        res+=sprintf("  %'.'-50s... %s\n", m[ind[i]][j],
+             member(p,m[ind[i]][j]) ? p[m[ind[i]][j]] + " (?)"
+               : to_string(NPCMASTER->QueryScore(m[ind[i]][j])));
+    }
+  }
+  this_player()->More(res);
+  return 1;
+}
+
+int npcQueue(string str)
+{
+  mapping m;
+  mixed ind;
+  int i;
+
+  str = this_player()->_unparsed_args();
+  m=NPCMASTER->QueryQueued(str);
+  ind=sort_array(m_indices(m), #'<);
+  if (!sizeof(ind))
+    write("Derzeit keine NPCs"+
+        (str ? ", die '"+str+"' matchen" : "")+" in der Queue.\n");
+  else
+  for (i=sizeof(ind)-1; i>=0; i--)
+    write(sprintf("%:'.'-52s... P_XP ergaebe %d Punkte\n",
+          ind[i]+" ", m[ind[i]]));
+  return 1;
+}
+
+int npcApprove(string str)
+{
+  int i;
+  mixed x;
+
+  str = this_player()->_unparsed_args();
+  NF("Nicht genug Parameter angegeben!\n"
+     "Syntax: npca(pprove) <dateiname>\n");
+  if (!str) return 0;
+
+  if (str[<2..] == ".lpc") str=str[0..<3];
+  if (file_size(str+".lpc") <= 0)
+    return write(str+".c nicht gefunden oder ungueltig!\n"), 1;
+
+  x = NPCMASTER->ApproveQueued(str);
+  if (pointerp(x)) {
+    write(sprintf("Killbonus (%d) fuer %s bestaetigt [#%d]\n",
+        x[1], str, x[0]));
+    return 1;
+  }
+  else switch (x)
+    {
+      case NPC_NO_PERMISSION:
+        return NF("Funktion ist Erzmagiern vorbehalten!\n"), 0;
+      case NPC_INVALID_ARG:
+        return NF("Ungueltiges Argument!\n"), 0;
+      default:
+        return NF("Unbekannter Fehler!\n"), 0;
+    }
+}
+
+int npcApproveRegexp(string str)
+{
+  int i;
+  mixed x;
+
+  str = this_player()->_unparsed_args();
+  NF("Nicht genug Parameter angegeben!\n"
+     "Syntax: npcar <regexp>\n");
+  if (!str) return 0;
+
+  x = NPCMASTER->ApproveQueuedRegexp(str);
+  if (pointerp(x)) {
+    write("Killbonus bestaetigt fuer:\n");
+    for (i=0; i<sizeof(x); i++)
+      write(sprintf("#%4d  [%3d]  %-40s\n",
+          x[i][1], x[i][2], x[i][0]));
+    write(sprintf("-----------\nInsgesamt %d Eintraege bestaetigt.\n",
+        sizeof(x)));
+  }
+  else if (x==NPC_INVALID_ARG)
+    write("Keine passenden Eintraege gefunden!\n");
+  else switch (x)
+    {
+      case NPC_NO_PERMISSION:
+        return NF("Funktion ist Erzmagiern vorbehalten!\n"), 0;
+      /*
+      case NPC_INVALID_ARG:
+        return NF("Ungueltiges Argument!\n"), 0;
+      */
+      default:
+        return NF("Unbekannter Fehler!\n"), 0;
+    }
+  return 1;
+}
+
+int npcRemove(string str)
+{
+  int i,n;
+  mixed x;
+
+  str = this_player()->_unparsed_args();
+  NF("Nicht genug Parameter angegeben!\n"
+     "Syntax: npcr(emove) <dateiname>\n");
+  if (!str) return 0;
+
+  n = sizeof(NPCMASTER->QueryQueued());
+  if (str[<2..] == ".lpc") str=str[0..<3];
+  x=NPCMASTER->RemoveQueued(str);
+  if (mappingp(x))
+    if (sizeof(x) != n)
+      write("Ok, Eintrag '"+str+"' aus Queue entfernt.\n");
+    else
+      write("Kein Eintrag dieses Namens in der Queue!\n");
+  else switch (x)
+    {
+      case NPC_NO_PERMISSION:
+        return NF("Funktion ist Erzmagiern vorbehalten!\n"), 0;
+      case NPC_INVALID_ARG:
+        return NF("Ungueltiges Argument!\n"), 0;
+      default:
+        return NF("Unbekannter Fehler!\n"), 0;
+    }
+  return 1;
+}
+
+int npcRemoveRegexp(string str)
+{
+  int i,n;
+  mixed x;
+
+  str = this_player()->_unparsed_args();
+  NF("Nicht genug Parameter angegeben!\n"
+     "Syntax: npcrr <regexp>\n");
+  if (!str) return 0;
+
+  n = sizeof(NPCMASTER->QueryQueued());
+  x=NPCMASTER->RemoveQueuedRegexp(str);
+  if (mappingp(x))
+    if (n=n-sizeof(x))
+      write("Ok, "+n+(n==1?" Eintrag":" Eintraege")+" aus Queue entfernt.\n");
+    else
+      write("Keine passenden Eintraege in der Queue!\n");
+  else switch (x)
+    {
+      case NPC_NO_PERMISSION:
+        return NF("Funktion ist Erzmagiern vorbehalten!\n"), 0;
+      case NPC_INVALID_ARG:
+        return NF("Ungueltiges Argument!\n"), 0;
+      default:
+        return NF("Unbekannter Fehler!\n"), 0;
+    }
+  return 1;
+}
+
+int npcDump(string str)
+{
+  string d;
+
+  if ((this_interactive() != this_player()) || (this_player() != owner))
+    return NF("Du bist dazu nicht berechtigt!\n"), 0;
+  if (!stringp(d=NPCMASTER->QueryDump()))
+    return NF("Du bist dazu nicht berechtigt!\n"), 0;
+  if (str)
+    d=implode(regexp(explode(d,"\n"),str = this_player()->_unparsed_args()),"\n");
+  this_player()->More(str ? "NPC-Dump nach regexp \""+str+"\":\n"+d : d);
+  return 1;
+}
+
+int npcChange(string str)
+{
+  string old, new;
+  int i, bonus, num;
+  object ob;
+
+  str = this_player()->_unparsed_args();
+  NF("Nicht genug Parameter angegeben!\n"
+     "Syntax: npcc(hange) <objekt>|<nummer>:<neues objekt>\n");
+  if (!str) return 0;
+  if (sscanf(str, "%d:%s", num, new) == 2)
+    old=NPCMASTER->QueryNPCbyNumber(num)[2];
+  else if (sscanf(str, "%s:%s", old, new) == 2)
+  {
+    if (old[0] != '/')
+    {
+      ob = GetObj(old);
+      if (!ob) return NF("Objekt nicht gefunden!\n"), 0;
+      old = explode(file_name(ob),"#")[0];
+    }
+    else
+      if (old[<2..] == ".lpc")
+        old = old[0..<3];
+  }   
+  else
+    return NF("Falsche Parameter!\n"), 0;
+  if (new[0] != '/')
+  {
+    ob = GetObj(new);
+    if (!ob) return NF("Objekt nicht gefunden!\n"), 0;
+    new = explode(file_name(ob),"#")[0];
+  }
+  else
+    if (new[<2..] == ".lpc")
+      new = new[0..<3];
+
+  i = NPCMASTER->ChangeScore(old, new);
+
+  if (i<1)
+  {
+    switch (i)
+    {
+      case NPC_NO_PERMISSION:
+        return NF("Funktion ist Erzmagiern vorbehalten!\n"), 0;
+      case NPC_INVALID_ARG:
+        return NF("Ungueltiges Argument!\n"), 0;
+      default:
+        return NF("Unbekannter Fehler!\n"), 0;
+    }
+  }
+  write ("Ok, Filename geaendert:\n");
+  write (sprintf("von: %s\nauf: %s\n", old, new));
+  return 1;
+}
+
+int npcChangePath(string str)
+{
+  mixed tmp;
+  int n;
+
+  str = this_player()->_unparsed_args();
+  NF("Nicht genug Parameter angegeben!\n"
+     "Syntax: npccp(ath) <oldpath> <newpath>\n");
+  if (!str) return 0;
+  tmp = explode(str, " ");
+  if (sizeof(tmp) != 2) return 0;
+
+  n = NPCMASTER->ChangePath(tmp[0], tmp[1]);
+  if (n < 0)
+    write("Fehler: "+n+"\n");
+  else
+    write("Ok, insgesamt " + n + " Boni betroffen. "
+        "Bitte /log/ARCH/npc.log pruefen!\n");
+  return 1;
+}
+
+int epDel(string str)
+{
+  string s_ob, s_typ;
+  int i, type;
+  object ob;
+
+  str = this_player()->_unparsed_args();
+  NF("Nicht genug Parameter angegeben!\n"
+     "Syntax: epd(el) <objekt>:<typ>\n");
+  if (!str) return 0;
+  if ((i=sscanf(str, "%s:%s", s_ob, s_typ)) < 2)
+    return 0;
+  if ((type=member(EP_TYP_STR, s_typ)) < 0)
+    return NF("Ungueltiger EP-Typ!\n"), 0;
+
+  ob = GetObj(s_ob);
+  if (!ob)
+    return NF("Objekt nicht gefunden!\n"), 0;
+
+  i = EPMASTER->RemoveEPObject (ob, type);
+  if (i<0)
+  {
+    switch (i)
+    {
+      case EPERR_NOT_ARCH:
+        return NF("Funktion ist Erzmagiern vorbehalten!\n"), 0;
+      case EPERR_INVALID_OB:
+        return NF("Das angegebene Objekt ist fuer EPs nicht zulaessig!\n"), 0;
+      case EPERR_INVALID_ARG:
+        return NF("Ungueltiges Argument!\n"), 0;
+      case EPERR_NO_ENTRY:
+        return NF("Objekt hatte keinen FP!\n"), 0;
+      default:
+        return NF("Unbekannter Fehler!\n"), 0;
+    }
+  }
+  write (sprintf("%-4s  %:-70s\n", s_typ, file_name(ob) ));
+  write ("Ok, EP geloescht. Insgesamt gibt es nun "+i+" EPs.\n");
+  return 1;
+}
+
+int epShow(string str)
+{
+  string s_ob, s_typ, s;
+  mixed *result;
+  int i, type;
+  object ob;
+
+  str = this_player()->_unparsed_args();
+  NF("Nicht genug Parameter angegeben!\n"
+     "Syntax: eps(how) <nummer> | <objekt>[:<typ>]\n");
+  if (!str) return 0;
+  if ((i=sscanf(str, "%s:%s", s_ob, s_typ)) < 2)
+  {
+    s_ob=str;
+    s_typ="";
+  }
+  ob = GetObj(s_ob);
+  if (!ob)
+    if (s_ob==to_string(i=to_int(s_ob)))
+    {
+      result = ({ "", 0, ({}), 0 });
+      result = EPMASTER->QueryEPEntry(i);
+      if (!result)
+        return NF("Die EP-Tabelle hat keinen Eintrag #"+i+".\n"), 0;
+      else if (intp(result))
+        switch(result)
+        {
+          case EPERR_NOT_ARCH:
+            write("Funktion ist Erzmagiern vorbehalten!\n");
+            break;
+          default:
+            write("Unbekannter Fehler!\n");
+        }
+      else
+      {
+        write (sprintf("EP-Nr: #%d, Objekt: \"%s\", Typ: \"%s\"\n"
+                       "EPs: %d, Keys: ({ %s })\n",
+               i, result[0], EP_TYP_STR[result[1]],
+               result[3], implode(result[2], ", ") ));
+      }
+      return 1;
+    }
+    else
+      return NF("Objekt nicht gefunden!\n"), 0;
+  s="";
+  s_ob = explode(file_name(ob), "#")[0];
+  result = ({ ({}), 0, 0 });
+  if (s_typ!="")
+  {
+    if ((type=member(EP_TYP_STR, s_typ)) < 0)
+      return NF("Ungueltiger EP-Typ!\n"), 0;
+    if ((result=EPMASTER->QueryEPObject (ob, type) ))
+      s = sprintf ("%-4s  #%04d  %:-25s  [%2d]  ({ %.25s })\n",
+                   s_typ, result[EPM_NUM], s_ob[<25..],
+                   result[EPM_EPS], implode(result[EPM_KEY], ",") );
+  }
+  else
+  {
+    for (type=0; type<=EP_TYP_MAX; type++)
+    {
+      result = ({ ({}), 0, 0 });
+      if (pointerp(result=EPMASTER->QueryEPObject (ob, type)))
+        s += sprintf ("%-4s  #%04d  %:-25s  [%2d]  ({ %.25s })\n",
+                     EP_TYP_STR[type], result[EPM_NUM], s_ob[<25..],
+                     result[EPM_EPS], implode(result[EPM_KEY], ",") );
+    }
+  }
+  if (s!="")
+    write (
+    "type  bitnr  file name of object        EPs   Keys\n"+
+    "-----------------------------------------------------------------------------\n"+
+    s);
+  else
+    if (intp(result) && (result < 0))
+      switch(result)
+      {
+        case EPERR_NOT_ARCH:
+          write("Funktion ist Erzmagiern vorbehalten!\n");
+          break;
+        case EPERR_INVALID_OB:
+          write("Das angegebene Objekt ist fuer EPs nicht zulaessig!\n");
+          break;
+        default:
+          write("Unbekannter Fehler!\n");
+      }
+    else
+      write ("Das Objekt "+s_ob+" hat keine EP"+
+        (s_typ != "" ? " vom Typ \""+s_typ+"\".\n" : ".\n"));
+  return 1;
+}
+
+int epInfo(string str)
+{
+  object ob;
+
+  if (!str)
+  {
+    write (
+      sprintf ("Anzahl der EP-Objekte: %d\n"+
+               "Maximum an erreichbaren EPs: %d\n"+
+               "Aktueller EP-Durchschnitt: %d\n",
+               EPMASTER->QueryMaxEPObjects(),
+               EPMASTER->QueryMaxEP(),
+               EPMASTER->QueryAverage() ));
+  }
+  else
+  {
+    ob=find_player(str);
+    if (!ob)
+      return NF("Spieler "+capitalize(str)+" nicht gefunden!\n"), 0;
+    write (
+      sprintf ("%s hat %d EP gefunden.\n",
+        capitalize(getuid(ob)), EPMASTER->QueryExplorationPoints(ob) ));
+  }
+  return 1;
+}
+
+int epDump(string str)
+{
+  int result;
+  result = EPMASTER->dumpEP();
+  if (result < 0) switch(result)
+  {
+    case EPERR_NOT_ARCH:
+      write("Funktion ist Erzmagiern vorbehalten!\n");
+      break;
+    default:
+      write("Unbekannter Fehler!\n");
+  }
+  return 1;
+}
+
+int epAddOracleString(string str)
+{
+  int result,i;
+  string frage,pfad;
+    
+  str = this_player()->_unparsed_args();
+  NF("Nicht genug Parameter angegeben!\n"
+     "Syntax: epaos <frage>:<pfad>\n");
+  if (!str) return 0;
+
+  if ((i=sscanf(str, "%s:%s", frage, pfad)) < 2) return 0;
+
+  frage=lowerstring(frage);
+  pfad=(string)MASTER->make_path_absolute(pfad);
+  if(strlen(pfad) < 6)
+    return NF("Pfad ist viel zu kurz!\n"), 0;
+  
+  if(file_size(pfad) != -2)
+    return NF("Pfad "+pfad+" wurde nicht gefunden!\n"), 0;
+ 
+  result=EPMASTER->AddOracleString(frage,pfad);
+  if (result<0)
+  {
+    switch (result)
+    {
+      case EPERR_NOT_ARCH:
+        return NF("Funktion ist Erzmagiern vorbehalten!\n"), 0;
+      case EPERR_INVALID_OB:
+        return NF("Das angegebene Objekt ist fuer das Orakel nicht zulaessig!\n"), 0;
+      case EPERR_INVALID_ARG:
+        return NF("Ungueltiges Argument!\n"), 0;
+      case EPERR_NO_ENTRY:
+        return NF("Objekt hatte keinen Eintrag!\n"), 0;
+      default:
+        return NF("Unbekannter Fehler!\n"), 0;
+    }
+  }
+  write(break_string("Ok, Frage \""+frage+"\" mit dem Pfad "
+           "\""+pfad+"\" in FP-Orakel eingetragen.\n"));
+  return 1;
+}
+
+int epRemoveOracleString(string str)
+{
+  mixed result;
+  string frage,pfad;
+    
+  str = this_player()->_unparsed_args();
+  NF("Nicht genug Parameter angegeben!\n"
+     "Syntax: epros <frage>\n");
+  if (!str) return 0;
+
+  frage=lowerstring(str);
+  
+  result=EPMASTER->RemoveOracleString(frage);
+  if (intp(result) && result<0)
+  {
+    switch (result)
+    {
+      case EPERR_NOT_ARCH:
+        return NF("Funktion ist Erzmagiern vorbehalten!\n"), 0;
+      case EPERR_INVALID_OB:
+        return NF("Das angegebene Objekt ist fuer das Orakel nicht zulaessig!\n"), 0;
+      case EPERR_INVALID_ARG:
+        return NF("Ungueltiges Argument!\n"), 0;
+      case EPERR_NO_ENTRY:
+        return NF("Objekt hatte keinen Eintrag!\n"), 0;
+      default:
+        return NF("Unbekannter Fehler!\n"), 0;
+    }
+  }
+  if(stringp(result))
+    write(break_string("Ok, Frage \""+frage+"\" mit dem Pfad "
+             "\""+result+"\" aus FP-Orakel entfernt.\n"));
+  return 1;
+}
+
+int epShowOracleString(string str)
+{
+  mixed result;
+  int i;
+    
+  result=EPMASTER->ShowOracleString();
+  if (intp(result) && result<0)
+  {
+    switch (result)
+    {
+      case EPERR_NOT_ARCH:
+        return NF("Funktion ist Erzmagiern vorbehalten!\n"), 0;
+      case EPERR_INVALID_OB:
+        return NF("Das angegebene Objekt ist fuer das Orakel nicht zulaessig!\n"), 0;
+      case EPERR_INVALID_ARG:
+        return NF("Ungueltiges Argument!\n"), 0;
+      case EPERR_NO_ENTRY:
+        return NF("Objekt hatte keinen Eintrag!\n"), 0;
+      default:
+        return NF("Unbekannter Fehler!\n"), 0;
+    }
+  }
+  if(pointerp(result))
+  {
+    write("Eingetragene Orakel Fragen:\n");
+    for(i=0;i<sizeof(result);i++)
+    {
+      printf("%3d: %s\n",i,result[i]);
+    }
+  }
+  else
+  {
+    write("Derzeit sind gar keine Orakel Fragen eingetragen.\n");
+  }
+  return 1;
+}
+
+int epAddOracleTrusted(string str)
+{
+  object ob;
+  int result;
+    
+  str = this_player()->_unparsed_args();
+  NF("Nicht genug Parameter angegeben!\n"
+     "Syntax: epaot <objekt>\n");
+  if (!str) return 0;
+
+  ob = GetObj(str);
+  if (!ob)
+    return NF("Objekt nicht gefunden!\n"), 0;
+  
+  str=explode(file_name(ob),"#")[0]+".lpc";
+
+  result=EPMASTER->AddOracleTrusted(str);
+  if (result<0)
+  {
+    switch (result)
+    {
+      case EPERR_NOT_ARCH:
+        return NF("Funktion ist Erzmagiern vorbehalten!\n"), 0;
+      case EPERR_INVALID_OB:
+        return NF("Das angegebene Objekt ist fuer das Orakel nicht zulaessig!\n"), 0;
+      case EPERR_INVALID_ARG:
+        return NF("Ungueltiges Argument!\n"), 0;
+      case EPERR_NO_ENTRY:
+        return NF("Objekt hatte keinen Eintrag!\n"), 0;
+      default:
+        return NF("Unbekannter Fehler!\n"), 0;
+    }
+  }
+  write("Ok, \""+str+"\" eingetragen.\n");
+  write("Ab jetzt gibt es "+result+" eingetragene Orakel-Objekte.\n");
+  return 1;
+}
+
+int epRemoveOracleTrusted(string str)
+{
+  object ob;
+  int result;
+    
+  str = this_player()->_unparsed_args();
+  NF("Nicht genug Parameter angegeben!\n"
+     "Syntax: eprot <objekt>\n");
+  if (!str) return 0;
+
+  ob = GetObj(str);
+  if (!ob)
+    return NF("Objekt nicht gefunden!\n"), 0;
+  
+  str=explode(file_name(ob),"#")[0];
+
+  result=EPMASTER->RemoveOracleTrusted(str);
+  if (result<0)
+  {
+    switch (result)
+    {
+      case EPERR_NOT_ARCH:
+        return NF("Funktion ist Erzmagiern vorbehalten!\n"), 0;
+      case EPERR_INVALID_OB:
+        return NF("Das angegebene Objekt ist fuer das Orakel nicht zulaessig!\n"), 0;
+      case EPERR_INVALID_ARG:
+        return NF("Ungueltiges Argument!\n"), 0;
+      case EPERR_NO_ENTRY:
+        return NF("Objekt hatte keinen Eintrag!\n"), 0;
+      default:
+        return NF("Unbekannter Fehler!\n"), 0;
+    }
+  }
+  write("Ok, \""+str+"\" ausgetragen.\n");
+  write("Ab jetzt gibt es nur noch "+result+" eingetragene Orakel-Objekte.\n");
+  return 1;
+}
+
+int epShowOracleTrusted(string str)
+{
+  mixed result;
+  int i;
+    
+  result=EPMASTER->ShowOracleTrusted();
+  if (intp(result) && result<0)
+  {
+    switch (result)
+    {
+      case EPERR_NOT_ARCH:
+        return NF("Funktion ist Erzmagiern vorbehalten!\n"), 0;
+      case EPERR_INVALID_OB:
+        return NF("Das angegebene Objekt ist fuer das Orakel nicht zulaessig!\n"), 0;
+      case EPERR_INVALID_ARG:
+        return NF("Ungueltiges Argument!\n"), 0;
+      case EPERR_NO_ENTRY:
+        return NF("Objekt hatte keinen Eintrag!\n"), 0;
+      default:
+        return NF("Unbekannter Fehler!\n"), 0;
+    }
+  }
+  if(pointerp(result))
+  {
+    write("Eingetragene Orakel-Objekte:\n");
+    for(i=0;i<sizeof(result);i++)
+    {
+      printf("%3d: %s\n",i,result[i]);
+    }
+  }
+  else
+  {
+    write("Derzeit sind gar keine Orakel Objekte eingetragen.\n");
+  }
+  return 1;
+}
+
+int epForceOracleCalc(string str)
+{
+  int result;
+
+  result=EPMASTER->CalcOracle(0);
+  if(result != EPERR_NOT_ARCH)
+    write("Neue Berechnung fuer das FP-Orakel gestartet!\n");
+  else
+    write("Neue Berechnung fuer das FP-Orakel konnte nicht gestartet werden!\n");
+  return 1;
+}
+

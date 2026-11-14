@@ -1,0 +1,293 @@
+//=========================================================================
+//
+// File:    schmied_030.c
+// Created by Ronja@SL
+//
+// Project: testgebiet
+//
+// Beispiel fuer Sequenzen. Der Schmied erzaehlt einen Witz, kann
+// sich aber nicht erinnern. Kann Sachen reparieren, jedoch nur Waffen
+// aus Metall
+//
+//=========================================================================
+
+#include "../def.h"
+
+#define OUT ({"grinst","schmunzelt","lacht","kichert"})
+
+// Wir wollen einen Schmied, std/npc wird er dabei automatisch
+inherit "std/repair";
+
+void create()
+{
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein Schmied");
+  SetProp(P_LONG,
+    "Ein Schmied. Er scheint keine rechte Lust zu haben zu arbeiten, denn "
+    "er steht nur herum und grinst. "
+  );
+
+  SetProp(P_NAME, "Schmied");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:0,T_RANGE_MAX:80]));
+
+  AddId( ({"schmied"}) );
+  AddClass(CL_HUMAN); // siehe /sys/class.h
+
+  create_default_npc(15);
+  SetProp(P_HANDS, ({" mit seinen Haenden",QueryProp(P_HANDS)[1],DT_BLUDGEON}));
+  SetProp(P_RACE, "Mensch");
+  SetProp(P_SIZE, 185);
+  SetProp(P_ALIGN, 250);
+  SetProp(P_MAX_HANDS, 2);
+
+  SetProp(P_WIMPY, 0);
+
+  SetProp(P_MSGIN, "kommt herein");
+  SetProp(P_MSGOUT, "geht");
+  SetProp(P_MMSGIN, "kommt herein");
+  SetProp(P_MMSGOUT, "geht kurz hinaus");
+
+  AddInfo(DEFAULT_INFO, "kennst Du schon den neuesten Witz?","fragt Dich: ");
+
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    Name(WEM)+" will Deine Sachen nicht tragen.\n" }) );
+
+  SetChats(3,
+    ({Name(WER,1)+" sagt: Ich liebe Witze!\n"
+     })
+  );
+
+  SetAttackChats(10,
+    ({Name(WER,1)+" schimpft: Das ist nicht witzig!\n"
+     })
+  );
+
+  SUID;
+}
+
+void init()
+{
+  ::init();
+
+//-------------------------------------------------------------------------
+// Wenn ein Spieler zum Schmied kommt, soll dieser einen Witz erzaehlen.
+//
+// Dabei soll aber nicht gleich der Spieler mit Ausgaben bombadiert werden,
+// sondern der Schmied soll zeitversetzt mit dem Spieler reden. In LPC
+// gibt es dabei keine Wait() bzw Delay() funktion, die eine gewisse Zeit
+// wartet. Vielmehr muessen wir dem Muddriver eine Funktion mitteilen,
+// die er nach x Sekunden aufzurufen hat. Dies geht mit der Funktion
+// call_out. Man uebergibt dem call_out den Namen der Funktion (diese
+// muss im gleichen Objekt definiert sein, sowie die Zeitspanne, nach
+// der der Muddriver die Funktion aufrufen soll. Dabei findet keine
+// Kontrolle statt, ob die Funktion auf wirklich existiert! Existiert
+// sie nicht, so laeuft der Vorgang ohne jede Meldung ins Leere.
+// Daher ist auf exakte Schreibweise (auch Gross/Klein) zu achten.
+// Der Zeitraum kann in 1-Sekunden schritten angegeben werden. Der
+// Driver jedoch schaut nur alle 2 Sekunden nach, welche Funktionen
+// als naechstes aufzurufen sind. Trotz einer Angabe von 3 Sekunden
+// wird die Funktion daher erst nach 4 Sekunden aufgerufen.
+//-------------------------------------------------------------------------
+
+//-------------------------------------------------------------------------
+// Wenn das Objekt this_player() existiert und ein Spieler ist (interactive)
+// dann rufen wir die Funktion TellJoke direkt ohne warten auf (0 Sekunden),
+// uebergeben ihr den aktuellen Spieler und den Parameter 1. Der Parameter
+// 1 gibt dabei an, das der Schmied seinen ersten Satz sagen soll.
+//-------------------------------------------------------------------------
+
+  if(TP && interactive(TP)) call_out("TellJoke", 0, TP, 1);
+
+//-------------------------------------------------------------------------
+// Es muss eine Funtkion existieren in dieser Datei namens Telljoke().
+// Diese sollte keine Werte zurueckgeben (void) und 2 Parameter empfangen.
+// Aus dem call_out werden die ersten 2 Werte fuer den call_out
+// selber benoetigt, alle darauf folgenden Werte werden an TellJoke()
+// uebermittelt. Die Funktion muss also "Telljoke(object player, int satz)"
+// heissen:
+//
+// call_out("TellJoke", 0,     TP           , 1);
+// void      TellJoke(         object player, int satz)
+//-------------------------------------------------------------------------
+}
+
+void TellJoke(object player, int satz)
+{
+  string s;
+
+//-------------------------------------------------------------------------
+// Der Einfachheit wird der Spieler oft gelaehmt (P_PARALYZE), wenn eine
+// Sequenz ablaufen soll, damit sich der Spieler nicht entfernt. Eine
+// Paralyse schuetzt aber nicht vor einem disconnect. Ausserdem ist es
+// unlogisch, denn bloss weil ein NPC etwas laenger plappert, kann der
+// Spieler sich ja totzdem bewegen. Und die korrekte logische Behandlung
+// dieser Faelle ist auch nicht kompliziert.
+//
+// Hint: Mit dem Kommando "xcallo open" aus den X-Tools kann man sich alle
+// gerade wartenden prozesse aus der Region /d/open anschauen.
+//-------------------------------------------------------------------------
+
+//-------------------------------------------------------------------------
+// Erst schauen wir mal nach, ob da ein Objekt uebergeben wurde, wenn
+// nicht, dann beenden wir die Sequenz gleich.
+//-------------------------------------------------------------------------
+
+  if(!player)                return;
+
+//-------------------------------------------------------------------------
+// Dann schauen wir nach, ob der Spieler ueberhaupt noch interaktiv ist,
+// d.h. ob uns nicht evtl ein disconnect oder etwas aehnlich boeses
+// dazwischengefunkt hat. Ist der Spieler nicht mehr interaktiv, beenden
+// wir die Funktion sofort.
+//-------------------------------------------------------------------------
+
+  if(!interactive(player))   return;
+
+//-------------------------------------------------------------------------
+// Zur Sicherheit schauen wir noch nach, ob der Schmied auch selbst ein
+// Environment hat, ansonsten ist die Funktion auch schon zu Ende.
+//-------------------------------------------------------------------------
+
+  if(!ENV(TO))               return;
+
+//-------------------------------------------------------------------------
+// Und zu guter letzt schauen wir noch nach, ob sich der Spieler noch
+// im gleichen Raum aufhaelt wie der Schmied. Das MAKRO ENV ist ein
+// Kuerzel fuer environment(), welche die Umgebung eines Objektes
+// zurueckliefert. Fuer die Spieler und NPCs ist das in der Regel
+// ein Raum. Haben NPC und Spieler ein unterschiedliches Environment,
+// so befinden sie sich auch nicht im gleichen Raum. Wir geben noch
+// eine Meldung an den Raum und beenden dann die Sequenz, in dem wir
+// die Funktion verlassen.
+//-------------------------------------------------------------------------
+
+  if(ENV(player) != ENV(TO))
+  {
+
+//--Ausgabe einer Meldung an alle, die man hoeren kann, denn der Schmied
+//--sagt ja etwas. Beim Testen aber bitte daran denken, das Magier mit
+//--aktiviertem mschau keine Auswirkungen von BLIND bzw DEAF zu spueren
+//--bekommen
+
+    ENV(TO)->Message(break_string("Nanu, wo ist denn "+player->name()+
+                                  " hin, ich war doch noch gar nicht "
+                                  "fertig!", 78, Name(WER,1)+
+                                  " wundert sich: ",1)
+                    , MSGFLAG_SOUND);
+
+    return;
+  }
+
+//-------------------------------------------------------------------------
+// Die Ausgabe des "Witzes" erfolgt nur an den Spieler. Dies ist zwar
+// unlogisch, denn was der Schmied erzaehlt, sollte ja jeder im
+// Raum hoeren koennen. Auf der anderen Seite loest aber jeder
+// Spieler eine neue Sequenz aus, und das gabe bei mehreren Spielern
+// ein ziemliches kuddelmuddel. Man kann natuerlich auch ganz ordentlich
+// programmieren und sich merken, das der Schmied gerade einen Witz
+// erzaehlt und in diesem Fall keine weitere Sequenz mehr anstoesst,
+// aber das Beispiel soll ja uebersichtlich bleiben. Die Aenderung
+// auf dieses Verhalten bleibt dem geneigten Leser ueberlassen :)
+// Hinweis wer sich daran versuchen moechte: man page von find_call_out.
+//-------------------------------------------------------------------------
+
+//-------------------------------------------------------------------------
+// Wir muessen jetzt natuerlich schauen, welchen Satz der Schmied sagen soll
+// Die Ausgabe speichern wird dabei in einer Variablen zwischengespeichert
+//-------------------------------------------------------------------------
+
+  switch(satz)
+  {
+    case 1:
+      s = "Hallo "+player->name()+", moechtest Du einen Witz "
+          "hoeren?";
+      break;
+
+    case 2:
+      s = "Also pass auf, ich erzaehl Dir mal einen.";
+      break;
+
+    case 3:
+      s = "Kommt ne Regionsmagierin zum Arzt....";
+      break;
+
+    case 4:
+      s = "Aeh, nein. Beschwert sich eine Regionsmagierin beim Mudgott...";
+      break;
+
+    case 5:
+      s = "Jetzt hab ichs... spielt ne Regionsmagierin die beleidigte "
+          "Leberwurst...";
+      break;
+
+    case 6:
+      s = "Ich kann mir einfach keine Witze merken. ";
+      break;
+
+//--Haben wir eine Nummer ereicht, die nicht mehr durch case abgefangen
+//--wird, so gibt es nichts mehr zu sagen und wir verlassen die Funktion
+
+    default:
+      return;
+      break; // <-- Das break ist eigentlich ueberfluessig
+  }
+
+//--Jetzt die Ausgabe noch etwas huebscher machen:
+
+  s = break_string(s, 78, Name(WER,1)+" "+OUT[random(sizeof(OUT))]+": ",1);
+
+//--An den Spieler ausgeben
+
+  player->Message(s , MSGFLAG_SOUND);
+
+//--Zaehler auf den naechsten Satz stellen
+
+  satz = satz + 1;
+
+//--Und Funktion wieder aufrufen, um den naechsten Satz auszugeben
+
+  call_out("TellJoke", 4 , player, satz);
+
+//-------------------------------------------------------------------------
+// An vielen Stellen im Silberland werden viele Funktionen nacheinander
+// geschaltet, um eine Sequenz zu programmieren. Diese hier verwendete
+// Methode hat der Vorteil, das die gesamten Eingangspruefungen
+// nur einmal programmiert werden muessen und nicht in jeder Funktion
+// wieder und wieder. Gerade wenn man noch eine weitere Eingangspruefung
+// spaeter hinzufuegen moechte, braucht man dies nur an einer
+// Stelle zu tun und nich an vielen.
+//-------------------------------------------------------------------------
+
+}
+
+//-------------------------------------------------------------------------
+// Mit dieser Funktion kann man die zu reparierenden Objekte filtern
+//-------------------------------------------------------------------------
+
+int rep_auswahl(object ob)
+{
+
+  //--Besteht es zumindest teilweise aus Metall?
+
+  if(!ob->QueryMaterialGroup(MATGROUP_METAL))
+  {
+    TP->Message(BS(Name(WER,1)+" sagt: Ich kann nur Sachen aus Metall "
+                "reparieren!"), MSGFLAG_SOUND);
+    return 0;
+  }
+
+  //--Ist es eine Waffe?
+
+  if(!ob->QueryProp(P_WEAPON_TYPE))
+  {
+    TP->Message(BS(Name(WER,1)+" sagt: Ich repariere nur "
+                "Waffen!"), MSGFLAG_SOUND);
+    return 0;
+  }
+
+  //--Das Objekt darf repariert werden
+  return 1;
+}

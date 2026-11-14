@@ -1,0 +1,109 @@
+Beim ueberschreiten von 2 Milliarden wird eine Milliarde abgezogen und die
+Prop P_MXP (milliarden XP) um eins erhöht. So kanns nie zu einem Ueberlauf
+kommen (ausser man bekommt ca 150 millionen xp auf einmal).
+In P_XP sind dann auch noch ueber 1 Milliarde XP, was fuer alle Restrictions
+reichen sollte. Ueberall wo ein XP-anstieg beruecksichtigt wird, muss dann
+die P_MXP property berücksichtigt werden. (zb in den Gilden, aber das ist 
+nicht dringend, nur wenn ein Spieler waehrend dem Gildenstufenaufstieg einen 
+Milliardenumbruch hat.)
+
+In der Mudlib sinds nur ein paar Aenderungen.
+
+
+------ living/life.c ----------------------------------------------------
+
+Z365:
+
+    lost_exp = ME->QueryProp(P_XP) / (l-17) + 
+               ME->QueryProp(P_MXP) * (1000000000 / (l-17));
+
+
+Z1079:
+
+int AddExp(int e)
+{
+  int experience;
+
+  experience = QueryProp(P_XP);
+  if(QueryProp(P_KILLS)>1 && e>0) return experience;
+  if((experience+=e) < 0) experience = 0; 
+  if((experience) > 2000000000)
+  {
+    experience -= 1000000000;
+    Set(P_MXP,SAVE|PROTECTED|SECURED,F_MODE_AS);
+    SetProp(P_MXP, QueryProp(P_MXP) + 1);
+  }
+  return SetProp(P_XP, experience);
+}
+
+
+
+--------player/exploration.c---------------------------------------------
+Z303:
+
+nomask static int Exp2Lp(int xp)
+{
+  if (xp <= 0) return 0;
+  if (xp > XP_EXPLIMIT)
+    return LP_EXPLIMIT + ((xp - XP_EXPLIMIT) / XP_PER_LP) +
+    QueryProp(P_MXP) * (1000000000 / XP_PER_LP);
+  else
+    return to_int (100 * log( to_float( xp + XP_BASE ) / XP_BASE )
+                   / log(XP_FACT) );
+}
+
+//  selbiges auch im perl script für die toplisten
+
+--------player/life.c------------------------------------------------------
+
+Z353:
+
+    lost_exp = QueryProp(P_XP) / (l-17) + 
+               QueryProp(P_MXP) * (1000000000 / (l-17));
+
+--------player/base.c----------------------------------------------------
+Aenderung beim Info geht zwar nur bis 9 Milliarden, aber das sollte 
+vorlaeufig reichen
+
+Z1804:
+
+ ret = sprintf(
+    "Du bist: %s"+
+    "+------------------------------+------------------------------+\n"
+    "| Lebenspunkte:      %3d (%3d) | Erfahrungspunkte: %1s%9d |\n"
+    "| Magiepunkte:       %3d (%3d) | Abenteuerpunkte: %4d (%4d) |\n"
+    "| Attributpunkte:           %2d | Stufe %d [%-'.'*s] %d |\n"
+    "+------------------------------+------------------------------+\n"
+    "| Ausdauer:           %8s | Kraft:              %8s |\n"
+    "| Intelligenz:        %8s | Geschicklichkeit:   %8s |\n"+
+    (internal ? "" :
+    "+------------------------------+------------------------------+\n"
+    ),
+    capitalize(short() || "\n"),
+    QueryProp(P_HP), QueryProp(P_MAX_HP),
+    to_string((QueryProp(P_MXP) + QueryProp(P_XP) / 1000000000) || " "),
+    QueryProp(P_XP) % 1000000000,
+    QueryProp(P_SP), QueryProp(P_MAX_SP),
+    QueryProp(P_QP), QM->QueryAllQP(),
+    QueryProp(P_AP),
+    level,
+    (n = 18 - strlen(to_string(level)) - strlen(to_string(level + 1))),
+    sprintf("%'#'*s", LevelPerc( level + 1 ) * n / 100, ""),
+    level + 1,
+    sprintf("%d (%+d)", ind[A_CON], QueryAttributeOffset(A_CON)),
+    sprintf("%d (%+d)", ind[A_STR], QueryAttributeOffset(A_STR)),
+    sprintf("%d (%+d)", ind[A_INT], QueryAttributeOffset(A_INT)),
+    sprintf("%d (%+d)", ind[A_DEX], QueryAttributeOffset(A_DEX))
+  ); 
+
+
+oder noch besser: eine funktion die die XP als string zurueckgibt:
+
+string xp_string()
+{ 
+  return regreplace(regreplace(sprintf("%d%9d",
+          QueryProp(P_MXP) + QueryProp(P_XP) / 1000000000,
+          QueryProp(P_XP) % 1000000000 ), " ", "0", 1), "^(0*)", "",1);
+}
+
+

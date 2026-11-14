@@ -1,0 +1,951 @@
+// Spellbook fuer die Alchemistengilde.
+// 14.10.1997  --  Stahldorn
+
+/*  Die Spells der Alchemisten
+
+Extraktion:        Zutaten: -, Gildenlevel: 1, SP:4
+Analyse:           Zutaten: -, Gildenlevel: 1, SP:20 (wird mit Level besser)
+Elixier:           Zutaten: -, Gildenlevel: 1, SP:je nach spell
+Rauchbombe:        Zutaten: ?, Gildenlevel: 2, SP:10/5
+Lichtbogen:        Zutaten: ?, Gildenlevel: 2, SP:3/5
+Nebelwolke:        Zutaten: ?, Gildenlevel: 3, SP:10/10
+Galvanisieren:     Zutaten: ?, Gildenlevel: 3, SP:10/25
+Knallerbsen:       Zutaten: ?, Gildenlevel: 4, SP:15/5
+BleiZuGold:        Zutaten: ?, Gildenlevel: 4, SP:20/45
+Antidot:           Zutaten: ?, Gildenlevel: 5, SP:20/40
+Saeurebatzen:      Zutaten: ?, Gildenlevel: 5, SP:20/10
+Kraftdroge:        Zutaten: ?, Gildenlevel: 6, SP:30/15
+Haarfarbe:         Zutaten: ?, Gildenlevel: 6, SP:10/10
+Ausschlag:         Zutaten: ?, Gildenlevel: 7, SP:20/10
+Thermitlanze:      Zutaten: ?, Gildenlevel: 7, SP:20/20
+Schnellkorrosion:  Zutaten: ?, Gildenlevel: 8, SP:30/30
+Waermecreme:       Zutaten: ?, Gildenlevel: 8, SP:20/25
+Ausdauerdroge:     Zutaten: ?, Gildenlevel: 9, SP:40/20
+Heiltrank:         Zutaten: ?, Gildenlevel: 9, SP:30/30
+Kuehlungscreme:    Zutaten: ?, Gildenlevel: 10, SP:20/25
+Drogenrausch:      Zutaten: ?, Gildenlevel: 10, SP:40/30
+Brandsatz:         Zutaten: ?, Gildenlevel: 11, SP:50/30
+Gefrierschock:     Zutaten: ?, Gildenlevel: 11, SP:45/30
+Dynamitangriff:    Zutaten: ?, Gildenlevel: 12, SP:80/40
+
+*/
+
+#include <properties.h>
+#include <language.h>
+#include <attributes.h>
+#include <combat.h>
+#include <doors.h>
+#include <living/combat.h>
+#include <wizlevels.h>
+#include <new_skills.h>
+#include <moving.h>
+#include "/gilden/alchemisten/def.h"
+
+#define SPELLBONUS(x,y) if((caster->QueryProp(P_GUILD_LEVEL)>=x) && \
+			   (succ/2+(random(succ/2)) > y))
+#define OBN1 ob->name(WER,1)
+#define OBN2 ob->name(WESSEN,1)
+#define OBN3 ob->name(WEM,1)
+#define OBN4 ob->name(WEN,1)
+
+inherit "/std/spellbook";
+
+void create()
+{
+  ::create();
+  SetProp(P_GLOBAL_SKILLPROPS,
+	  ([SI_SPELLFATIGUE: 2,              // 2 Sekunden kein neuer Spell
+	    SI_SKILLRESTR_USE: ([SR_FUN:"KastenTest"]),
+	    SI_SP_LOW_MSG:"Du hast leider nicht mehr genuegend magische "
+			  "Konzentration.\n",
+	    SI_TIME_MSG: "Du bist noch zu erschoepft von Deinem letzten "
+			 "Versuch.\n",
+	    ]));
+  AddSpell("extraktion",4,
+	   ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:1]),
+	     SI_PREPARE_TIME: 1,     
+	     SI_SKILLLEARN: 9,
+	     SI_SKILLLEARN_ATTRIBUTE: A_DEX,
+	     SI_SP_LOW_MSG: break_string("Die Extraktion von Gegenstaenden "
+			    "kostet Dich leider 4 Magiepunkte an "
+			    "magischer Konzentration.", 78),
+			 ]));
+  AddSpell("analyse",20,
+	   ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:1]),
+	     SI_PREPARE_TIME: 1,     
+	     SI_DIFFICULTY: 25, 
+	     SI_SKILLLEARN: 4,
+	   SI_SPELLFATIGUE: 0,
+	     SI_SKILLLEARN_ATTRIBUTE: A_INT,
+			 ]));
+/*
+  AddSpell("rauchbombe",5,
+	   ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:2]),
+	     SI_SKILLDAMAGE: 90,
+	     OFFSET(SI_SKILLDAMAGE): 20,
+	     SI_SKILLRESTR_USE: ([SR_FUN: lambda( 'x ({"Elixier_Rauchbombe"}), 
+    ({#'?, ({#'present, ({'x, ({#'this_object}) }) }),
+       0, "Du brauchst ein Elixier dazu!\n"}))]),
+	     SI_SKILLDAMAGE_TYPE: ({ DT_POISON, DT_AIR }),
+	     ]));
+*/
+}
+
+string KastenTest(object caster, mapping sinfo)
+{
+  if(!present("alch_kasten\n", caster))
+    return "Ein Alchemist ohne Alchemiebaukasten ist leider nur ein halber Alchemist.\n";
+}
+
+nosave int total_fail;
+
+void Misserfolg(object caster, string spell, mapping sinfo)
+{
+  int old_abil;
+  if (!total_fail)
+  {
+    switch(spell)
+    {
+      case "analyse": break; 
+      default:
+	write("Der Zauberspruch ist missglueckt.\n");
+    }
+  }
+  old_abil = sinfo[SI_SKILLABILITY];
+  Learn(caster, spell, sinfo);
+  total_fail = 0;   // gleich zuruecksetzen
+  
+  if(spell == "analyse") return;
+  
+  sinfo=caster->QuerySkill(spell);
+  if (old_abil < (mappingp(sinfo) ? sinfo[SI_SKILLABILITY] : sinfo))
+    write( "Du lernst aus Deinem Fehler.\n" ); 
+  else
+    write( "Leider lernst Du nicht aus Deinem Fehler.\n" );
+}
+
+
+int extraktion(object caster, mapping sinfo)
+{
+  object ob, ob2, kasten;
+  mapping mats;
+  string *strmats, ret, str;
+  int i, gramm;
+  float weight, proz;
+  
+  if(!str=sinfo[SI_SKILLARG] )
+  {
+    write("Was willst Du extrahieren?\n");
+	return 0;
+  }
+  if(!ob=present(str,caster))
+  {
+    write("Du hast doch gar kein "+capitalize(str)+"?\n");
+	return 0;
+  }
+  if( ob->QueryProp(P_CURSED) || ob->QueryProp(P_MAGIC) || 
+      ob->QueryProp(P_NODROP) || ob->QueryProp(P_NEVERDROP) )
+  {
+    write( break_string("Eine unbekannte Macht hindert Dich daran, "+ 
+      OBN4+ " zu extrahieren.",78));
+    return 0;
+  }
+  if(ob->id("alch_material\n")){
+    write("Das ist doch schon extrahiert!\n");
+    return 0;
+  }
+  if(ob->IsUnit()){
+    write("Mit Units geht das noch nicht (to-do).\n");
+    return 0;
+  }
+  if((weight=ob->QueryProp(P_WEIGHT)) < 50 ) {
+    write(OBN1+" ist zu klein zum Extrahieren. Du gibst auf.\n");
+    return 0;
+  }
+  if(living(ob) ) {
+    write(break_string("Du stellst fest, dass "+OBN1+
+	    " noch lebt, und beschliesst, "+ob->QueryPronoun(WER)+
+	    " nicht zu extrahieren.", 78));
+    return 0;
+  }
+  
+  if (SpellSuccess(caster,sinfo)<=0)
+  {
+    total_fail=1;
+    write("Du schaffst es nicht, "+OBN4+ " zu extrahieren.\n");
+    return MISSERFOLG;
+  }
+  
+  if(!mappingp(mats = ob->QueryProp(P_MATERIAL))) return 0;
+  strmats = m_indices(mats);
+  ret="";
+  ob->remove();
+  if(objectp(ob))
+  {
+    write(capitalize(OBN1) + " widersetzt sich Deinem Extraktionsversuch.\n"); 
+    return 0;
+  }
+
+  for(i=sizeof(strmats)-1;i>=0;i--)
+  {
+    proz= ((float) mats[strmats[i]]) / 100.0;
+    ob2=clone_object(MATUNIT);
+    ob2->move(caster, M_GET);
+
+    if(member(MATMASTER->GetGroupMembers(MATGROUP_WOOD), strmats[i])>-1)
+      strmats[i] = MAT_MISC_WOOD;
+    if(member(MATMASTER->GetGroupMembers(MATGROUP_PAPER), strmats[i])>-1)
+      strmats[i] = MAT_PAPER;
+    if(member(MATMASTER->GetGroupMembers(MATGROUP_CLOTH), strmats[i])>-1)
+      strmats[i] = MAT_CLOTH;
+    ob2->SetMaterial(strmats[i]);
+    ob2->AddAmount(gramm = (int) 
+	(proz*((75.0 + (float) random(15)) / 100.0)*weight));
+    ob2->move(kasten, M_PUT);
+
+    ret+= (gramm+1)+" Gramm "; 
+    ret+=(MATMASTER->MaterialName(strmats[i], 0, 100));
+    ret+=((i>1)?", ":(i==1)?" und ":"");
+  }
+  ret+=".";
+  write(break_string("Du spaltest "+OBN4+" in "+ret, 78));
+  tell_room(environment(caster), 
+    break_string(caster->Name()+" spaltet "+OBN4+" in "+ret, 78), 
+    ({caster}));
+
+  return ERFOLG;  
+}
+
+
+int elixier(object caster, mapping sinfo)
+{
+  
+  int succ;
+  object ob;
+  string str;
+
+  if(!str=sinfo[SI_SKILLARG] )
+  {
+    write("Was fuer ein Elixier willst Du denn mixen?\n");
+	return 0;
+  }
+  
+  if ((succ=SpellSuccess(caster,sinfo))<=0)
+  {
+    if(succ <= -4000) total_fail = 1;
+    return MISSERFOLG;
+  }
+
+  ob=clone_object(OBJ "elixier");
+  ob->move(caster, M_NOCHECK);
+  ob->SetProp(P_ALCH_ELIXIER, str);
+  ob->SetProp(P_ALCH_QUALITY, succ);
+  return ERFOLG;
+}
+
+
+int rauchbombe(object caster, mapping sinfo)
+{
+DB(caster->Name()+" macht eine Rauchbombe");
+return ERFOLG;
+}
+
+
+
+
+// ----------------------- ANALYSE -------------------------------------
+
+string analyse_chats(object ob, int wann)
+{
+
+  if(living(ob))
+    switch((wann-1)*5 + (random(5)+1))
+    {
+      case 1: return "Du schaetzt die Groesse "+OBN2+" ein.";
+      case 2: return "Du versuchst, die Rasse "+OBN2+" festzustellen.";
+      case 3: return "Du pruefst die Feuerfestigkeit "+OBN2+".";
+      case 4: return "Du vergleichst die Physis "+OBN2+" mit Deiner.";
+      case 5: return "Du nimmst eine Blutprobe von "+OBN3+".";
+      case 6: return "Du fuehrst langwierige Schmerztests an "+OBN3+
+		     " durch.";
+      case 7: return "Du untersuchst den Temperaturwohlfuehlbereich "+
+		     OBN2+".";
+      case 8: return "Du fuehrst Reaktionstests mit "+OBN3+" durch.";
+      case 9: return "Du testest die Charakterstaerke "+OBN2+".";
+      case 10: return "Du stichst "+OBN4+" mit einer langen Nadel.";
+      case 11: return "Du testest die Saeureempfindlichkeit an "+OBN3+".";
+      case 12: return "Du kartographierst die Magieaura "+OBN2+".";
+      case 13: return "Du reinitialisierst die laterale Kordialpatina "+
+		      OBN2+".";
+      case 14: return "Du schnueffelst an "+OBN3+".";
+      case 15: return "Du versuchst, magische Besonderheiten an "+
+		      OBN3+" zu erkennen.";
+      default: return "Du analysierst "+OBN4+" das "+wann+". Mal.";
+    }
+  else // if !living
+    switch((wann-1)*5 +(random(5)+1))
+    {
+      case 1: return "Du wiegst "+OBN4+" genau ab.";
+      case 2: return "Du schaetzt den Wert "+OBN2+" genau ab.";
+      case 3: return "Du betrachtest "+OBN4+" von allen Seiten.";
+      case 4: return "Du stellst umfangreiche alchemische Analysen mit "
+		     +OBN3+" an.";
+      case 5: return "Du testest "+OBN4+" auf Hitzebestaendigkeit.";
+      case 6: return "Du ueberpruefst "+OBN4+" genau.";
+      case 7: return "Du fuehrst eine Level 2 Diagnose an "+OBN3+" durch.";
+      case 8: return "Du versuchst, irgendwelche Besonderheiten an "+OBN3+
+		     " herauszufinden.";
+      case 9: return "Du testest "+OBN4+" auf Saeurefestigkeit.";
+      case 10: return "Du glaubst, den Molekularaufbau "+OBN2+
+		      " herausgefunden zu haben.";
+      case 11: return "Du stellst mit einem Teststreifen den pH-Wert "
+		      +OBN2+" fest.";
+      case 12: return "Du schnupperst mit Deiner trainierten Nase an "
+		      +OBN3+".";
+      case 13: return "Du analysierst den prozentuellen "
+		      "Gehalt der Bestandteile "+OBN2+".";
+      case 14: return "Du testest "+OBN4+" auf Umweltvertraeglichkeit.";
+      case 15: return "Du lauschst mit pruefenden Ohren an "+OBN3+".";
+      default: return "Du analysierst "+OBN4+" das "+wann+". Mal.";
+    }
+}
+
+string eng2germ(string eng, int typ)
+{
+  switch (typ)
+  {
+    case 1: switch(eng)
+    {
+      case DT_FIRE: return "Feuer";
+      case DT_MAGIC: return "Magie";
+      case DT_COLD: return "Eisschaden";
+      case DT_ACID: return "Saeuren";
+      case DT_TERROR: return "Terror";
+      case DT_POISON: return "Giftschaden";
+      case DT_HOLY: return "Heiligschaden";
+      case DT_UNHOLY: return "Unheiligschaden";
+      case DT_LIGHT: return "Licht";
+      case DT_SOUND: return "Laerm";
+      case DT_WATER: return "Wasserschaden";
+      case DT_LIGHTNING: return "Blitzschlag";
+      case DT_ELECTRIC: return "Strom";
+      case DT_EXPLOSION: return "Explosionen";
+      case DT_AIR: return "Luftschaden";
+      default: return eng;
+    }
+    case 2: switch (eng)
+    {
+      case AT_ARMOUR: return "Ruestung";
+      case AT_HELMET: return "Kopfbedeckung";
+      case AT_BRACERS: return "Armschutz";
+      case AT_TROUSERS: return "Beinbekleidung";
+      case AT_BOOT: return "Schuhe";
+      case AT_GLOVE: return "Handschuhe";
+      case AT_RING: return "Ring";
+      case AT_CLOAK: return "Umhang";
+      case AT_AMULET: return "Amulett";
+      case AT_BELT: return "Guertel";
+      default: return eng;
+    }
+    case 3: switch (eng)
+    {
+      case WT_SWORD: return "wie ein Schwert";
+      case WT_AXE: return "wie eine Axt";
+      case WT_CLUB: return "als Keule";
+      case WT_SPEAR: return "wie einen Speer";
+      case WT_KNIFE: return "wie ein Messer";
+      case WT_AMMU: return "als Munitionswaffe";
+      case WT_BOW: return "als Bogenwaffe";
+      case WT_WHIP: return "wie eine Peitsche";
+      case WT_CHAIN: return "als Kettenwaffe";
+      default: return eng;
+    }
+    default: return eng;
+  }
+}
+
+string ana_norm_fail(object caster, object ob)
+{
+   string ret;
+   if(living(ob))
+     switch(random(500))
+     {
+       case 1..100: 
+	 ret = BS("Ploetzlich wirst Du abgelenkt und "
+		  "verlierst Deine Konzentration. "); break;
+       case 101..200: 
+	 ret = BS(CAP(OBN1)+" macht auf einmal eine unvermutete Bewegung, "
+		  "die Dich ganz aus dem Konzept bringt."); break;
+       case 201..300: 
+	 ret = BS(CAP(OBN1)+" will anscheinend gerade nicht analysiert "
+		   "werden."); break;
+       case 301..400: 
+	 ret = BS(CAP(OBN1)+" schaut Dich boese an. Du bekommst es mit "
+		   "der Angst."); break;
+       default: 
+	 ret = BS("Du schaffst es nicht, die Groesse "+OBN2+" festzustellen."); 
+	 break;
+     }
+   else
+     switch(random(500))
+     {
+       case 1..100: 
+	 ret = BS("Die Materialerkennung haut irgendwie nicht hin und Du "
+		  "beschliesst deshalb, die Analyse abzubrechen."); break;
+       case 101..200: 
+	 ret = BS("Ploetzlich stellst Du fest, dass Du gleich am Anfang "
+		  "der Analyse einen dummen Fehler gemacht hast, der alle "
+		  "Ergebnisse ueber den Haufen wirft."); break;
+       case 201..300: 
+	 ret = "Irgendwie scheinst Du heute unkonzentriert zu sein.\n"; 
+	 break;
+       case 301..400: 
+	 ret = BS("Du irrst Dich bei der Gewichtsanalyse so grundlegend, "
+		  "dass Du beschliesst, neu anzufangen waere besser."); break;
+       default : 
+	 ret = "Du machst einen grundlegenden Analysefehler.\n"; 
+     }
+   
+   return (ret+"Deine Analyse "+OBN2+" missglueckt.\n"
+	       "Vielleicht lernst Du aus Deinem Fehler.\n");
+}
+
+string ana_total_fail(object caster, object ob)
+{
+  string ret;
+  int dam;
+
+  if(living(ob))
+  {
+    switch(random(500))
+    {
+       case 1..100: 
+	   ret = BS(sprintf("Du stichst %s etwas zu brutal mit einer Nadel. "
+			  "%s gefaellt das gar nicht und %s greift Dich an.", 
+			  OBN4, CAP(OBN3), ob->QueryPronoun(WER)));
+	   tell_object(ob, BS(sprintf("%s sticht Dir brutal eine Nadel "
+			    "in den Hintern. Beinahe haettest Du %s dafuer "
+			    "ernsthaft angegriffen.", caster->Name(WER),
+			    caster->QueryPronoun(WEN))));
+	   tell_room(environment(caster), 
+		   BS(caster->Name(WER)+" sticht "+ob->name(WEN)+" mit "
+		      "einer langen Nadel. Das muss aber weh tun..."), 
+	  	     ({ caster, ob }) );
+	   if(!interactive(ob))
+	   {
+	     ob->Defend(50+random(50), DT_PIERCE, 0, caster);
+	     ob->Kill(caster);
+	     return ret;
+	   }
+	   ob->reduce_hit_point(5+random(5));
+	   ret += BS("Gut, dass "+OBN1+" nicht nachtragend ist, denn "+
+		     ob->QueryPronoun(WER)+" kommt sofort zur Besinnung und "
+		     "stellt den Angriff ein.");
+	   return ret;
+       case 101..200: 
+	   ret = BS(sprintf("%s schreit schmerzerfuellt auf, als Du %s einem "
+			  "Hitzetest unterziehst, und haut Dir gehoerig "
+			  "auf die Nase.",CAP(OBN1), ob->QueryPronoun(WEN)));
+	   tell_object(ob, BS(caster->Name(WER)+" hat versucht, Dich "
+			    "anzuzuenden! Du haust "+
+			    caster->QueryPronoun(WEM)+" eine rein und "
+			    "haeltst damit die Sache fuer erledigt."));
+	   tell_room(environment(caster), 
+		   BS(caster->Name()+" zuendelt ungeschickt an "+
+		      ob->name(WEM)+" herum. "+CAP(OBN1)+" reagiert mit "
+		      "einer deftigen Faustwatschn."), ({ caster,ob }));
+	   caster->reduce_hit_point(5+random(15));
+	   return ret;
+       case 201..300:
+	   tell_object(ob, BS(caster->Name()+" heilt Dich unabsichtlich, "
+			    "als "+caster->QueryPossPronoun(FEMALE,WER,1)+
+			    " alchemische Analyse von Dir fehlschlaegt."));
+	   ob->SetProp(P_HP, ob->QueryProp(P_MAX_HP));
+	   caster->SetProp(P_SP, 0);
+	   return BS(sprintf("Als Du die Magieaura %s genau ermitteln willst, "
+			  "machst Du einen entscheidenden Fehler. Du heilst "
+			  "%s voellig, verlierst aber dabei leider all "
+			  "Deine Magiepunkte. Vielleicht lernst Du sogar "
+			  "etwas aus Deinem Fehler.",OBN2, OBN4));
+       case 301..400: 
+	   return BS("Da es Dir einfach nicht gelingt, die Rasse "+OBN2+
+		   "herauszufinden, oder auch nur die Groesse zu bestimmen, "
+		   "gibst Du enttaeuscht auf. Du beendest Deine Analyse. "
+		   "Vielleicht lernst Du sogar etwas aus Deinem Fehler."); 
+       default:
+	   tell_room(environment(caster), BS(caster->Name()+
+	      " versagt bei einer alchemischen Analyse und beschliesst "
+	      "daraufhin, Selbstmord zu begehen. "+
+	      CAP(caster->QueryPronoun(WER))+" trinkt eine giftig aussehende "
+	      "Fluessigkeit."), ({ caster }));
+	   caster->AddPoison(4);
+	   return BS("Deine Analyse "+OBN2+" schlaegt total irrsinnig fehl. "
+	  	     "Du schaemst Dich so sehr, dass Du beschliesst, Deinem "
+		     "Leben ein Ende zu setzen. Du oeffnest eine kleine Phiole "
+		     "mit Gift und trinkst sie aus.");
+    }
+  }
+  else
+  {
+    switch(random(500))
+    {
+      case 1..100: 
+	  if(ob->QueryProp(P_ARMOUR_TYPE) && dam=(ob->QueryProp(P_AC)/3))
+	  {
+	    ob->SetProp(P_AC, ob->QueryProp(P_AC)-dam);
+	    ob->SetProp(P_DAMAGED, dam);
+	  }
+	  else if(ob->QueryProp(P_WEAPON_TYPE) && dam=(ob->QueryProp(P_WC)/3))
+	  {
+	    ob->SetProp(P_WC, ob->QueryProp(P_WC)-dam);
+	    ob->SetProp(P_DAMAGED, dam);
+	  }
+	  ob->SetProp(P_VALUE, ob->QueryProp(P_VALUE)/2);
+	  return BS("Hubs! Als Du eine kleine Materialprobe nehmen willst, "
+		  "bohrst Du zu tief und beschaedigst "+OBN4+" schwer. "
+		  "Deine Analyse missglueckt.");
+      case 101..200:
+        ob->SetProp(P_CURSED, 1);
+  	  return BS("Irgendwie scheint es Dir, als ob Du bei der Analyse "+ 
+		  OBN2+" einen schweren Fehler gemacht hast, denn "+OBN1+
+		  " fuehlt sich nun so kalt und gefaehrlich an. Verwenden "
+		  "solltest Du "+ob->QueryPronoun(WEN)+" jedenfalls nicht "
+		  "mehr. Deine Analyse ist missglueckt und vielleicht hast "
+		  "Du sogar aus Deinem Fehler etwas gelernt.");
+      case 201..300:  
+	  ret = BS("Du schuettest unabsichtlich ziemlich viel Saeure ueber "
+		 +OBN4+" und ueber Deine Arme. ");
+        ret += CAP(OBN1);
+	  if (!(ob->QueryProp(P_MAGIC)) && !(ob->QueryProp(P_CURSED)) &&
+	      !(ob->QueryProp(P_NODROP)) && !(ob->QueryProp(P_NEVERDROP)))
+	       ob->remove();
+	  if(objectp(ob))
+	    ret+=" widersteht der Saeure.\n";
+	  else
+	    ret+=" loest sich vollstaendig auf.\n";
+	  ret+="Deine Arme werden schwer veraetzt.\nDeine Analye missglueckt.\n";
+	  tell_room(environment(caster), BS( caster->Name(WER)+
+	    " schuettet sich Saeure ueber die Arme und schreit laut auf."), 
+	    ({ caster }));
+	  caster->Defend(100+random(300), DT_ACID, ([SP_SHOW_DAMAGE:0]), TO);
+	  return ret;
+      case 301..400:
+	  caster->AddPoison(6);
+	  tell_room(environment(caster), BS( caster->Name(WER)+
+	    " inhaliert giftige Daempfe und sieht ganz ungluecklich drein."), 
+	    ({ caster }));
+	  return BS(
+	    "Bei einer der umfangreichen Tests an "+OBN3+" oeffnest Du in "
+	    "Deiner Unwissenheit die Testkammer Deines Alchemiebaukastens "
+	    "etwas zu frueh und atmest giftige Daempfe ein. Deine Analyse "
+	    "missglueckt.");
+      case 401..430:
+	   caster->SetProp(P_BLIND, 
+	     "Lauter kleine Lichtpuenktchen tanzen vor Deinen Augen.\n");
+	  tell_room(environment(caster), BS( caster->Name(WER)+
+	    " erzeugt irgendwie einen Bogen gleissenden Lichts, der aber sofort "
+          "wieder verschwindet. Gut dass Du in dem Moment wo anders "
+          "hingeschaut ast, sonst waerst Du jetzt blind."), 
+	    ({ caster }));
+	   return BS(
+	     "Bei Deinem Versuch, "+OBN4+" zu analysieren, fabrizierst Du"
+	     "einen gleissenden Lichtbogen, der Dich blendet. "
+	     "Lauter kleine Lichtpuenktchen tanzen vor Deinen Augen. Du "
+	     "bist blind!");
+      case 489:
+	  tell_object(caster, BS(
+	    "Auweh. Du machst einen schweren Fehler bei Deiner Analyse "+OBN2+
+	    " und faengst Feuer. Wie eine brennende Fackel stuerzt "
+	    "Du zu Boden und verbrennst qualvoll."));
+	  tell_room(environment(caster), BS( caster->Name(WESSEN)+
+	    " Kleidung faengt unvermittelt Feuer. "+caster->Name(WER)+
+	    " verbrennt hilflos in wenigen Sekunden vor Deinen Augen zu "
+	    "einem Haeufchen Schlacke."), ({ caster }));
+	  caster->Defend(5000+random(5000), DT_FIRE, 0, this_object());
+	  return "";
+      default:
+	  return BS("Du versagst bei dem Versuch, "+OBN4+" zu analysieren "
+		  "vollstaendig. Deprimiert gibst Du auf.");
+    }
+  }
+}
+
+int analyse(object caster, mapping sinfo)
+{
+  object ob;
+  string str, obn1; 
+  int succ, count;
+
+  if((find_call_out("analyse_2") >= 0))
+  {
+    write("Du brichst Deine letzte Analyse ab.\n");
+    remove_call_out("analyse_2");
+  }
+
+  if(!str=sinfo[SI_SKILLARG] )
+  {
+    write("Was willst Du analysieren?\n");
+    return 0;
+  }
+  if(!(ob=present(str,caster)) && !(ob=present(str, environment(caster))))
+  {
+    write("Aehm... Sowas siehst Du hier nicht.\n");
+    return 0;
+  }
+  obn1=ob->name(WER, 1);
+  if((succ=SpellSuccess(caster,sinfo)) <= -4000)
+      total_fail = 1;
+  
+  DB(caster->Name(WER)+" will "+ob->name(WEN)+" analysieren. ("+succ+")");
+  tell_object(ob, BS(
+     caster->Name(WER)+" taxiert Dich fest mit seinen Augen, packt seltsame "
+	"Instrumente aus und beginnt, an Dir herumzufummeln."));
+  tell_room(environment(caster), BS(
+     caster->Name(WER)+" beginnt mit der alchemischen Analyse "+
+       ob->name(WESSEN)+"."), 
+     ({ ob, caster }));
+  tell_object(caster, break_string(analyse_chats(ob, count=1),78));
+  call_out("analyse_2", 5, caster, ob, obn1, ++count, succ);
+  if(succ <= 0) return MISSERFOLG;
+  else return ERFOLG;
+}
+
+string analyse_compare(object caster, object ob)
+{
+  int hp, wc, ac, vhp, vwc, vac, hpdiff, acdiff, wcdiff, gen;
+  string ret; 
+ 
+   hp = caster->QueryProp(P_HP);    vhp = ob->QueryProp(P_HP);
+   wc = caster->QueryProp(P_TOTAL_WC);  vwc = ob->QueryProp(P_TOTAL_WC);
+   ac = caster->QueryProp(P_TOTAL_AC);  vac = ob->QueryProp(P_TOTAL_AC);
+   hpdiff = hp - vhp;
+   wcdiff = wc - vwc;
+   acdiff = ac - vac;
+   ret = "";
+   gen = ob->QueryProp(P_GENDER);
+
+   ret+="Ergebnis des Kampfstaerkenvergleichs:\n";
+   if (hpdiff > 2*vhp)
+      ret += break_string("Du wuerdest doppelt so schwere Wunden ueberleben "
+			  +"wie "+OBN1+ ".", 78, "  ");
+   else if (hpdiff > vhp)
+      ret += "  Du bist sehr viel zaeher als " + OBN1 + ".\n";
+   else if (hpdiff > vhp/5)
+      ret += "  Du bist zaeher und ausdauernder als " + OBN1 + ".\n";
+   else if (-hpdiff > 2*hp)
+      ret += break_string(capitalize(OBN1) + " wuerde doppelt so schwere "
+			  +"Wunden ueberleben wie Du.", 78, "  ");
+   else if (-hpdiff > hp)
+      ret += "  "+capitalize(OBN1) + " ist sehr viel zaeher als Du.\n";
+   else if (-hpdiff > hp/5)
+      ret += "  "+capitalize(OBN1) + " ist zaeher und ausdauernder als Du.\n";
+   else
+      ret += "  "+capitalize(OBN1)+" ist etwa gleich ausdauernd wie Du.\n";
+
+   if (acdiff > 2*vac)
+      ret += "  Deine Ruestung ist unglaublich viel besser als die " 
+     + OBN2 + ".\n";
+   else if (acdiff > vac)
+      ret += "  Deine Ruestung ist viel besser als die " + OBN2 + ".\n"; 
+   else if (acdiff >vac/5)
+      ret += "  Deine Ruestung ist besser als die " + OBN2 + ".\n";
+   else if (-acdiff > 2*ac)
+      ret += "  Die Ruestung " + OBN2+
+	     " ist unglaublich viel besser als Deine.\n";
+   else if (-acdiff > ac)
+      ret += "  Die Ruestung " +OBN2+ " ist viel besser als Deine.\n";
+   else if (-acdiff > ac/5)
+      ret += "  Die Ruestung " +OBN2+ " ist besser als Deine.\n";
+   else
+      ret += "  Eure Ruestungen sind etwa gleich gut.\n";
+
+   if (wcdiff > 2*vwc)
+      ret += "  Deine Waffe haelt jeden Vergleich mit der "+OBN2+" stand.\n";
+   else if (wcdiff > vwc)
+      ret += "  Deine Waffe scheint viel besser als die " +OBN2 + "zu sein.\n";
+   else if (wcdiff > vwc/5)
+      ret += "  Deine Waffe scheint besser als die " +OBN2 + "zu sein.\n";
+   else if (-wcdiff > 2*wc)
+      ret += "  Die Waffe " + OBN2 +
+	     " laesst Deine ganz mickrig aussehen.\n";
+   else if (-wcdiff > wc)
+      ret += "  Die Waffe " +OBN2+ " scheint viel besser als Deine zu sein.\n";
+   else if (-wcdiff > wc/5)
+      ret += "  Die Waffe " +OBN2+ " scheint besser als Deine zu sein.\n";
+   else
+      ret += "  Eure Waffen sind etwa gleich gut.\n";
+
+   switch(ob->QueryProp(P_WIMPY))
+   {
+     case 0: break;
+     case 1..10: ret += ("  "+CAP(OBN1)+" ist nicht voellig unvorsichtig.\n"); break;
+     case 11..20: ret += ("  "+CAP(OBN1)+" ist etwas vorsichtig.\n"); break;
+     case 21..50: ret += ("  "+CAP(OBN1)+" ist vorsichtig.\n"); break;
+     case 51..100: ret += ("  "+CAP(OBN1)+" ist sehr vorsichtig.\n"); break;
+     default: ret += ("  "+CAP(OBN1)+" ist total uebervorsichtig.\n"); break;
+   }
+  return ret;
+}
+
+void analyse_2(object caster, object ob, string obn1, int count, int succ)
+{
+  string at, wt;    // Armour-type, Weapon-type
+  mapping mat, pr;  // Materialien, Protections
+  int i, tot; // tot == total% der Materialien (muss ja nicht 100% sein)
+  string ret; 
+  string *smat, *spr, *dts; // Materialien, Protections, Damage-types
+  mixed tmp;
+  float tmp_fl;
+
+  if(!objectp(ob) || 
+     (!present(ob, caster) && !present(ob, environment(caster)) ))
+  {
+    printf("Huch? Wo ist %s denn hin? \n", obn1);
+    write("Da Dein Versuchsobjekt nicht mehr da ist, brichst Du die "
+	  "Analyse ab.\n");
+    return;
+  }
+
+  if((succ <= 0) && (!(random(4)) || (count >= 4)))  
+  {
+    if(succ > -4000)
+      write(ana_norm_fail(caster, ob));
+    else
+      write(ana_total_fail(caster, ob));
+    return;
+  }
+  
+  if(count < 4)
+  {
+    tell_object(caster, break_string(analyse_chats(ob, count),78));
+    call_out("analyse_2", 5, caster, ob, obn1, ++count, succ);
+    return;
+  }
+
+  // ----- nun endlich das Analyseergebnis -----
+  mat=ob->QueryProp(P_MATERIAL);
+  ret="\n"+break_string("Du beendest Deine Analyse "+OBN2+" und kommst zu "
+		   "folgendem Ergebnis:", 78);
+  
+  if(living(ob))  // *** nur Lebewesen ***
+  { // --- Groesse, Rasse ---
+    ret += "Bestimmung von Groesse und Rasse:\n";
+    ret += ("  "+CAP(OBN1) + " ist ziemlich genau "+ 
+	    ob->QueryProp(P_SIZE)+" cm gross.\n");
+    ret += ("  "+CAP(OBN1)+" ist "+ob->QueryProp(P_RACE)+".\n");
+
+    // --- Resistenzen ---
+    if(mappingp(pr = ob->QueryProp(P_RESISTANCE_STRENGTHS)))
+    {
+      ret+="Eventuell gefundene Resistenzen und Verwundbarkeiten:\n";
+      spr = m_indices(pr);
+      for(i=sizeof(spr)-1; i>=0; i--)
+      {
+  SPELLBONUS(10, 3000) {
+      tmp_fl = (float) pr[spr[i]];
+	if( 0.0 > (float) tmp_fl)
+	  ret += ("  "+CAP(OBN1)+" ist gegen "+eng2germ(spr[i],1)+
+		  " resistenter als normal.\n");
+	else if( 0.0 < (float) tmp_fl)
+	  ret += ("  "+CAP(OBN1)+" ist gegen "+eng2germ(spr[i],1)+
+		  " empfindlich.\n");
+  }  // SPELLBONUS
+      }  //for  
+    }
+    // --- Align ---
+    ret+="Ergebnis der Gesinnungsbestimmung:\n";
+    ret+=("  "+CAP(OBN1)+" ist ");
+    switch(ob->QueryProp(P_ALIGN))
+    {
+      case -1000000..-1000: ret+="unfassbar satanisch boese.\n";
+		    break;
+      case -999..-500:  ret+="durch und durch boese.\n";
+		    break;
+      case -499..-200:  ret+="boese.\n";
+		    break;
+      case -199..-40:   ret+="frech.\n";
+		    break;
+      case -39..40:    ret+="von neutraler Gesinnung.\n";
+		    break;
+      case 41..200:   ret+="ziemlich nett.\n";
+		    break;
+      case 201..500:   ret+="von gutem Charakter.\n";
+		    break;
+      case 501..1000:  ret+="voller Guete.\n";
+		    break;
+      case 1001..1000000:  ret+="reif fuer die Heiligsprechung.\n";
+		    break;
+      default: ret+="scheinheilig.\n"; break;
+    }
+    // --- Kampfstaerke ---
+    ret += analyse_compare(caster, ob);
+
+    // --- magische Angriffe? ---
+    dts=({});
+  SPELLBONUS(6, 2000) {
+    if(tmp=(ob->QueryProp(P_WEAPON)))
+    {
+       if(stringp(tmp->QueryProp(P_DAM_TYPE)))
+	 dts=({tmp->QueryProp(P_DAM_TYPE) });
+       else if(pointerp(tmp->QueryProp(P_DAM_TYPE)))
+	 dts= tmp->QueryProp(P_DAM_TYPE) ;
+    }
+    else
+    {
+       if(stringp(tmp=(ob->QueryProp(P_HANDS)[2])))
+	 dts = ({ tmp });
+       else if(pointerp(tmp))
+	 dts = tmp ;
+    }
+  }  // SPELLBONUS
+
+    // --- Spells ? ---
+    for(i=sizeof(ob->QueryProp(P_SPELLS))-1; i>=0; i--)
+    {
+ SPELLBONUS(6, 2000) {
+	tmp=ob->QueryProp(P_SPELLS)[i][3];
+	if(stringp(tmp))
+	{
+	  dts -= ({ tmp });
+	  dts += ({ tmp });
+	}
+	else if(pointerp(tmp))
+	{
+	  dts += tmp;
+	}
+ }// SPELLBONUS
+    } //for
+    dts -= m_indices(PHYSICAL_DAMAGE_TYPES);
+
+    ret+=sprintf(sizeof(dts)?"  Achtung! %s kaempft mit:\n":"", CAP(OBN1));
+    for(i=sizeof(dts)-1; i>=0; i--)
+    {
+      ret+=("    "+eng2germ(dts[i],1)+((i>0)?",\n":".\n"));
+    }
+  }
+
+  else   // *** nur Dinge ***
+  {
+    //  --- Gewicht --- 
+    ret+="Ergebnis der Gewichtsanalyse und Wertbestimmung:\n";
+    if(ob->QueryProp(P_WEIGHT))
+      ret+=(break_string(sprintf("  %s wieg%s etwa %d Gramm.", 
+	CAP(OBN1),
+	(ob->IsUnit() && ob->QueryProp("u_req") != 1 ? "en" : "t"),
+	 ob->QueryProp(P_WEIGHT) ), 78));
+     else 
+      ret+=(break_string(sprintf("  %s wieg%s gar nichts.", 
+	CAP(OBN1),
+	(ob->IsUnit() && ob->QueryProp("u_req") != 1 ? "en" : "t")),78));
+
+    //  --- Wert ---    
+    if(ob->QueryProp(P_VALUE))
+      ret+=(break_string(sprintf("  %s ha%s einen Wert von %d Muenzen.", 
+	   CAP(OBN1),
+	   (ob->IsUnit() && ob->QueryProp("u_req") != 1 ? "ben" : "t"),
+	   ob->QueryProp(P_VALUE) ), 78));
+    else
+      ret+=(break_string(sprintf("  %s %s wertlos.", 
+	CAP(OBN1),
+	(ob->IsUnit() && ob->QueryProp("u_req") != 1 ? "sind" : "ist")),78));
+
+    //  --- Ruestungstyp, magische Resistenzen ---
+    if(at=(ob->QueryProp(P_ARMOUR_TYPE)))
+    {
+      ret+="Ergebnis der Ruestungsanalyse:\n";
+      if(at!=AT_MISC)
+	 ret+=("  Du kannst "+ OBN4 +" als "+eng2germ(at,2)+
+	       " verwenden.\n");
+      if(mappingp(pr=(ob->QueryProp(P_DAM_PROTECTION))) && 
+	 sizeof(spr = m_indices(pr) - m_indices(PHYSICAL_DAMAGE_TYPES)))
+      { 
+	 for(i=sizeof(spr)-1; i>=0; i--)
+	 {
+ SPELLBONUS(8, 3000) {
+	   if(pr[spr[i]] > 0) 
+	     ret += ("  "+CAP(OBN1)+ " schuetzt gegen "+
+		     eng2germ(spr[i],1) + ".\n");
+	   else if(pr[spr[i]] < 0)
+	     ret += ("  "+CAP(OBN1)+ " reagiert empfindlich auf "+
+		     eng2germ(spr[i],1) + ".\n");
+ }//SPELLBONUS
+	 }
+      }
+ SPELLBONUS(8, 3000) {
+      if(ob->QueryProp(P_DEFEND_FUNC))
+	ret+=break_string( "  "+CAP(OBN1)+
+	      " scheint irgendwie eine Abwehrbesonderheit zu haben.",78);  
+ }//SPELLBONUS
+    }  // if(at)  
+    
+    //  --- Waffentyp, magische Schaeden ---
+    else if(wt=(ob->QueryProp(P_WEAPON_TYPE)))
+    {
+      if(stringp(wt) && wt!=WT_MISC && wt!=WT_HANDS && wt!=WT_MAGIC)
+      {
+	 ret+="Ergebnis der Waffenanalyse:\n";
+	 ret+=("  Man benutzt "+ OBN4 +" "+eng2germ(wt,3)+".\n");
+      }
+
+ SPELLBONUS(8, 3000) {
+      if(ob->QueryProp(P_HIT_FUNC))
+	ret+=break_string( "  "+CAP(OBN1)+
+	    " scheint irgendwie eine Angriffsbesonderheit zu haben.",78);
+ }//SPELLBONUS
+      if(sizeof((dts=ob->QueryProp(P_DAM_TYPE)-m_indices(PHYSICAL_DAMAGE_TYPES))))
+	for(i=sizeof(dts)-1;i>=0; i--) 
+	{
+	  SPELLBONUS(5, 1000) {
+	    ret+="  "+CAP(OBN1)+" trifft mit "+eng2germ(dts[i],1)+".\n";
+	  }//SPELLBONUS
+	}
+    }  //if(wt)
+  }
+
+  // *** Lebewesen und Dinge ***
+  //  --- Magic? Cursed? ---
+  if(ob->QueryProp(P_MAGIC))
+    ret+="Eine magische Aura umgibt "+OBN4+".\n";
+ SPELLBONUS(5, 2000) {
+  if(ob->QueryProp(P_CURSED))
+    ret+="Auf "+OBN3+" scheint ein Fluch zu liegen.\n";
+ } //SPELLBONUS
+   // --- Vergiftet? ---
+  if(ob->QueryProp(P_POISON))
+    ret+=CAP(OBN1)+" scheint vergiftet zu sein.\n";
+
+  //  --- Material ---   
+  if (mappingp(mat))
+  {
+    ret+="Materialerkennungsergebnis:\n";
+    ret+=(break_string(sprintf("  %s besteh%s zu:",
+	CAP(OBN1),
+	(ob->IsUnit() && ob->QueryProp("u_req") != 1 ? "en" : "t")), 78));
+    tot = 0;
+    for(i=sizeof(smat=m_indices(mat))-1; i>=0; i--)
+    {
+      ret+=("       "+mat[smat[i]]+" Prozent aus "+
+	    MATMASTER->MaterialName(smat[i], WER, 100)+"\n");
+      tot+=mat[smat[i]];
+    }
+    if(tot < 100)
+      ret+="  Den Rest kannst Du nicht genau identifizieren.\n";
+    else if(tot > 100)
+      ret+=sprintf("  An %s ist mehr dran als es man glaubt...\n", OBN3);
+  }
+
+  //  --- P_SMELL und P_SOUND ---    
+  ret+="Schnupper- und Lauschergebnis:\n";
+  ret+=("  "+sprintf(ob->QueryProp(P_SMELL) || 
+	       "%s hat keinen Eigengeruch.\n", CAP(OBN1)));
+  ret+=("  "+sprintf(ob->QueryProp(P_SOUND) || 
+	       "Du hoerst nichts verdaechtiges an %s.\n", OBN3));
+
+  //  --- P_INFO ---    
+  ret+="Identifikationsergebnis:\n";
+  ret+=(sprintf(ob->QueryProp(P_INFO) || 
+	       "  Du kannst nichts besonderes an %s erkennen.", OBN3)+"\n");
+    
+  caster->More(ret);
+  return;
+}

@@ -1,0 +1,256 @@
+//=========================================================================
+//
+// File:    dung_03_10.c
+// Created by Speedy
+//
+// Project: Sarumans Quest (Finde die verlorene Schriftrolle)
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit ROOM "dung-inh";
+
+void create()
+{
+  ::create();
+
+  SetProp(P_LIGHT, 1);
+  ltext1 = "Dieser unheimliche Raum ist etwas anders als alle anderen. "
+           "Der Raum ist hell erleuchtet und an der Wand steht ein grosser "
+           "Altar. Trotzdem sind die Waende, die Dich umgeben, sicher schon "
+           "sehr alt. Der Zement fliesst schon zwischen den Steinen hervor "
+           "und ein schwacher Luftzug laesst Dich die Faeulnis riechen, die "
+           "hier herrscht. Der Wind traegt sie durch alle Gaenge. An der "
+           "Wand haengen viele Fackeln, die den Raum sehr hell machen. ";
+  ltext2 = "";
+
+  AddDetail( ({"wand","waende","mauer","mauern"}),
+    "An einer der Mauer, steht ein grosser Altar, vielleicht solltest Du "
+    "ihn naeher untersuchen. "
+  );
+
+  AddDetail( ({"altar"}),
+    "Der Altar ist sehr gross, auf ihm siehst Du in jeder Ecke der Platte "+
+    "eine Kerze stehen. In der Mitte steht einen Opferschale. "
+  );
+
+  AddDetail( ({"mitte","opferschale","schale"}),
+    "Das ist eine kleine Schale, wo man Geld hineinwerfen kann. Im Moment "+
+    "liegen schon einige Muenzen darin. "
+  );
+
+  AddDetail( ({"muenzen","muenze","geld"}),
+    "In der Schale liegen schon einige Muenzen, aber abzaehlen willst Du "
+    "sie nicht. "
+  );
+
+  AddDetail( ({"platte"}),
+    "Die Platte des Altars ist gross und aus Eisen. An jeder Ecke dieser "+
+    "Platte steht eine Kerze, in der Mitte siehst Du noch eine kleine "+
+    "Opferschale stehen. "
+  );
+
+  AddDetail( ({"ecke"}),
+    "Da gibts nicht viel, hier stehen die Kerzen. "
+  );
+
+  AddDetail( ({"eisen"}),
+    "Das Eisen ist schoen poliert und glaenzt wunderbar im Licht. "
+  );
+
+  AddDetail( ({"opfer"}),
+    "Das Opfer liegt in der Schale. Darum heisst sie auch Opferschale."
+  );
+
+  AddReadDetail( ({"tafel"}) ,
+    "Auf der Tafel steht: Nur die Bussbereiten, werden durch das Tor "
+    "des Himmels treten. "
+  );
+
+  AddSpecialDetail( ({"kerze","kerzen"}), "detail_kerzen" );
+  AddSpecialDetail( ({"tafel"}),          "detail_xtafel" );
+
+  AddCmd( CMD_NEHMEN,                  "cmd_nehmen" );
+  AddCmd( ({"zuende","zuend"}),        "cmd_zuenden" );
+  AddCmd( ({"loesch","loesche"}),      "cmd_loeschen" );
+  AddCmd( ({"knie","bete","bitte"}),   "cmd_beten" );
+  AddCmd( ({"lege","leg"})+CMD_WERFEN, "cmd_spenden" );
+
+  AddExit( "westen", GETEXIT("02_10") );
+  SUID;
+}
+
+int cmd_spenden(string str)
+{
+  int besitz,menge,syntaxok;
+  string was,wohin;
+
+  notify_fail("Was moechtest Du wo hinein werfen?\n");
+  if(!str || str == "") return 0;
+
+  syntaxok = 0;
+
+  if(!syntaxok && sscanf(str,"%d %s in %s",menge,was,wohin) == 3)
+  {
+    syntaxok = 1;
+  }
+
+  if(!syntaxok && sscanf(str,"%s in %s",was,wohin)==2)
+  {
+    menge = (was == "muenze") ? 1 : TP->QueryMoney();
+    syntaxok = 1;
+  }
+
+  if(!syntaxok) return 0;
+  if(!(wohin == "schale" || wohin == "opferschale"))
+  {
+    TELLPLAYER("Wo hinein moechtest Du etwas werfen?\n");
+    return 1;
+  }
+
+  if(!(was == "muenze" || was == "muenzen"))
+  {
+    TELLPLAYER("Du ueberlegst es Dir doch noch anders.\n");
+    return 1;
+  }
+
+  besitz = TP->QueryMoney();
+  if(!besitz)
+  {
+    TELLPLAYER("Du hast ja gar keine Muenzen!\n");
+    return 1;
+  }
+
+  if(menge <= 0)
+  {
+    TELLPLAYER("Du wirfst doch nichts in das Becken.\n");
+    return 1;
+  }
+
+  if(menge > besitz)
+  {
+    TELLPLAYER("Soviele Muenzen hast Du ja gar nicht!\n");
+    return 1;
+  }
+
+  TP->AddMoney(-menge);
+  SMASTER->SetFlag(TPUID,F_MUENZE_WERFEN);
+  TELLPLAYER("Du wirfst "+menge+" Muenzen in die Opferschale.\n");
+
+  return 1;
+}
+
+int cmd_beten(string str)
+{
+  if( SMASTER->QueryFlag(TPUID,F_MUENZE_WERFEN)    &&
+     !SMASTER->QueryFlag(TPUID,F_BETEN)            &&
+      SMASTER->QueryStatus(TPUID,S_KERZEN_AN)       )
+  {
+    TELLPLAYER(BS("Du kniest vor dem Altar nieder, und in der Ferne hoerst "
+                  "Du ein Rumpeln, wie wenn eine Tuer aufgegangen waere. "));
+    SMASTER->SetFlag(TPUID,F_BETEN);
+    SMASTER->SetDoorStatus(TPUID,"I",DOOROPENED);
+    return 1;
+  }
+
+  TELLPLAYER("Du kniest vor dem Altar nieder ... aber nichts passiert.\n");
+  return 1;
+}
+
+int cmd_loeschen(string str)
+{
+  notify_fail("Was willst Du ausloeschen?\n");
+  if(!str || str == "") return 0;
+
+  if(!(str == "kerze"      ||
+       str == "kerze aus"  ||
+       str == "kerzen"     ||
+       str == "kerzen aus" )) return 0;
+
+  if(!SMASTER->QueryStatus(TPUID,S_KERZEN_AN))
+  {
+    TELLPLAYER("Aber die Kerzen sind doch schon geloescht.\n");
+    return 1;
+  }
+
+  TELLPLAYER("Du loescht die Kerzen aus, der Raum wird auch ein wenig "
+             "dunkler.\n");
+  SMASTER->ClearStatus(TPUID,S_KERZEN_AN);
+  return 1;
+}
+
+int cmd_zuenden(string str)
+{
+  object ob;
+
+  notify_fail( "Was willst Du anzuenden?\n" );
+  if(!str || str == "") return 0;
+  if(!(str == "kerze an" || str == "kerzen an")) return 0;
+
+  if(SMASTER->QueryStatus(TPUID,S_KERZEN_AN))
+  {
+    TELLPLAYER("Aber die Kerzen brennen doch schon.\n");
+    return 1;
+  }
+
+  if(!(ob=present("fackel", TP)))
+  {
+    TELLPLAYER("Mit einer brennenden Fackel geht das am besten.\n");
+    return 1;
+  }
+
+  if(!ob->_query_lighted())
+  {
+    TELLPLAYER("Mit einer BRENNENDEN Fackel geht das am besten.\n");
+    return 1;
+  }
+
+  TELLPLAYER(BS("Du zuendest die Kerzen nacheinander an. Der Raum ist "
+                "ploetzlich viel heller geworden. "));
+
+  SMASTER->SetStatus(TPUID,S_KERZEN_AN);
+  SMASTER->SetFlag(TPUID,F_KERZE_ZUENDEN);
+  return 1;
+}
+
+int cmd_nehmen(string str)
+{
+  notify_fail("Was moechtest Du nehmen?\n");
+  if(!str || str == "") return 0;
+
+  if(!(str=="geld"                    ||
+       str=="muenze"                  ||
+       str=="muenzen"                 ||
+       str=="geld aus schale"         ||
+       str=="muenze aus schale"       ||
+       str=="muenzenaus schale"       ||
+       str=="geld aus opferschale"    ||
+       str=="muenze aus opferschale"  ||
+       str=="muenzen aus opferschale" )) return 0;
+
+  TELLPLAYER(BS("Du kannst doch nicht einfach einen Altar bestehlen, das "
+                "Geld ist fuer gute Zwecke bestimmt. "));
+  return 1;
+}
+
+string detail_tafel(string str)
+{
+  if(SMASTER->QueryStatus(TPUID,S_KERZEN_AN))
+    return BS("Eine kleine Tafel haengt an der Wand hinter dem Altar, die "
+              "siehst Du jetzt erst durch das Licht der Kerzen, vielleicht "
+              "kannst Du sie lesen. ");
+
+  return "Sowas siehst Du da nicht!\n";
+}
+
+string detail_kerzen(string str)
+{
+  if(SMASTER->QueryStatus(TPUID,S_KERZEN_AN))
+    return BS("Die Kerzen brennen in einem hellen Licht. Dir faellt eine "
+              "kleine Tafel hinter dem Altar auf der Wand auf. ");
+
+  return BS("Die Kerzen sind zwar nicht mehr sehr gross, aber brennen "
+            "wuerden sie trotzdem noch. ");
+}
+

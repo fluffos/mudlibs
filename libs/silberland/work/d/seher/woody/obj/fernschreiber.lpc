@@ -1,0 +1,201 @@
+// fernschreiber.c  Ein Fernschreiber
+// Nach einer Idee von Grimmborn, mit Texten von Marsupilami und kleineren
+// Hilfstellungen von Hate.
+// Hm.... Marsupilami hatte die Idee, einem nicht eingeloggten Spieler die
+// Nachricht in die Post umzuleiten... mal Loco fragen...
+//
+// **** Ubernahme in andere MUDs oder sonstwohin nur mit meiner Genehmigung!
+//
+//------------
+// Neu in 1.01: Autoload und leichter
+// Neu in 1.02: Mupfel-Kram raus (./files.h, sys/macros.h)
+// Neu in 1.03: Typo-fixing, Versionsausgabe
+// Neu in 1.04: noch leichter :-)
+// Neu in 1.05: keine Meldungen an unsichtbare Spieler, kein 'echoto' im MG
+// Neu in 1.06: Magier koennen unsichtbaren Magiern was senden,
+//              keine Sendekosten fuer Magier
+// Neu in 1.07: Im MG: nur der erste Buchstabe des Namens wird ausgegeben
+//              Im MG: permanentes 'behalte'
+// Neu in 1.08: permanentes 'behalte' jetzt auch fuers AL
+//              CountUp statt implode bei Ausgabe
+//              Im AL: P_MATERIAL gesetzt
+// 29-11-1996   - Mupfel@AnderLand -
+// Neu in 1.09: Auch das MG kennt inzwischen Materialien ;)
+//              Der Kasten wiegt jetzt gar nichts mehr
+// 01.05.2002   - Mupfel -
+// 28.06.2003   SL-Version, dank an Rikus@MG fuers Ueberlassen
+
+inherit "std/thing";
+
+#include <language.h>
+#include <properties.h>
+#include <moving.h>
+#include <wizlevels.h>
+#include <defines.h>
+
+#define FAX_COST  15
+#define MSG_PREFIXED
+#define VERSION "1.10"
+
+object *msgto;  // Array mit den Spielerobjekten, global wg. efun::input_to
+
+
+string CountUp(string *foo)
+{
+  int cnt;
+  string back;
+
+  switch (sizeof(foo))
+  {
+    case 0: back=0; break;
+    case 1: back=foo[0]; break;
+    default:
+      back=implode(foo[0..sizeof(foo)-2], ", ");
+      back+=" und "+foo[sizeof(foo)-1];
+  }
+  return back;
+}
+
+
+void create()
+{
+  if (!IS_BLUE(ME)) ::create();
+  SetProp(P_SHORT, "Ein kleiner grauer Kasten");
+  SetProp(P_VALUE, 1684);
+  SetProp(P_IDS, ({"Ding", "kasten", "kleiner kasten", "kleinem kasten", "fernschreiber"}));
+  if (IS_BLUE(ME)) return;
+  SetProp(P_LONG,
+    "Du haeltst hier einen kleinen grauen Kasten in Haenden, der unzweifelhaft "
+    "eine magische Ausstrahlung besitzt. Auf der Oberseite siehst Du ein weisses "
+    "Feld, das Du mit dem kleinen Stift, der daran befestigt ist, beschreiben "
+    "kannst. Daneben befindet sich ein kleiner blauer Knopf, auf dem in roten "
+    "Buchstaben START steht.", 78);
+  SetProp(P_INFO, break_string(
+    "Mit Hilfe dieses Kastens kannst Du einem oder mehreren Mitspielern eine "
+    "Nachricht zukommen lassen. Gib dazu 'nachricht an <Name>' oder "
+    "'nachricht an <Name1 Name2 ...>' ein und danach Deine Nachricht, "
+    "die Du mit '.' oder '**' abschliessen musst. Fux, der freundliche "
+    "Postbeamte, wird dann Deine Nachricht weiterleiten. "
+    "Das Ganze kostet Dich nur "+FAX_COST+" Magiepunkte pro Empfaenger.\n"
+    "Mit 'version fernschreiber' kannst Du die aktuelle Version ermitteln.",
+    78, 0, 1));
+  SetProp(P_NAME, "Kasten");
+  SetProp(P_NAME_ADJ, "klein");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_MATERIAL, ([MAT_MISC_WOOD:80, MAT_MISC_MAGIC:20]));
+  SetProp(P_AUTOLOADOBJ, 1);
+  SetProp(P_NOBUY, 1);       // wird bei Verkauf vernichtet
+  SetProp(P_MAGIC, 1);       // magisches Objekt
+  SetProp(P_NEVERDROP, 1);   // wird beim Tod des Spielers vernichtet
+  AddCmd("nachricht", "telex");
+  AddCmd("version", "version");
+  // Details an Objekten: MorgenGrauen only!
+  AddDetail(({"feld", "stift", "knopf", "buchstaben", "start"}),
+    "Versuch mal, den Kasten zu identifizieren.\n");
+}
+
+mixed _query_keep_on_sell()
+{
+  return getuid(this_player());   // permanentes 'behalte'
+}
+
+int version(string args)
+{
+  if (!args) return 0;
+  if (!id(args)) return 0;
+
+  write("Woody's Fernschreiber " VERSION " vom 26.8.2003 "
+        "(based on Mupfels FS 1.09 1.5.2002)\n");
+  return 1;
+}
+
+private nosave object check_player(string x)
+{
+  object pl;
+
+  if (objectp(pl=find_player(x)) && (IS_WIZARD(PL) || !pl->QueryProp(P_INVIS)))
+    return pl;
+  else
+    return (object) 0;
+}
+
+int telex(string args)
+{
+  string dest;
+  object *tmp;
+  int    i, anz;
+
+  // erst mal der Seher-Check
+  if (!IS_SEER(PL))
+  {
+    write("Tut mit leid, diesen Fernschreiber koennen nur Seher benutzen!\n");
+    return 1;
+  }
+  // hier gehts los
+  notify_fail("Syntax: 'nachricht an <Name>' oder 'nachricht an <Name1 Name2 ...>'\n");
+  if (!args) return 0;
+  if (!sscanf(args, "an %s", dest)==1) return 0;
+  // String zerlegen zum Test, obs ein oder mehrere Spieler sind
+  // (da der Parser schon dabei war: zerlegen an den ' ')
+  // Bei der Gelegenheit gleich nicht vorhandene oder unsichtbare
+  // Zielpersonen ausfiltern
+  tmp = map_array(efun::explode(dest, " "), #'check_player)-({0});
+  // Doppelnennungen eliminieren (thx to Hate)
+  msgto = ({});
+  for (i=0;i<sizeof(tmp);i++)
+    if (member_array(tmp[i], msgto)==-1)  // Eintragen wenn neu
+      msgto += ({tmp[i]});
+  anz = sizeof(msgto);
+  // An sich selbst keine Faxe senden
+  if (member_array(PL, msgto)!=-1)
+    msgto -= ({PL});
+  // Sollte die Liste jetzt leer sein, Meldung und Ende
+  if (sizeof(msgto)==0)
+  {
+    write("Keinen Empfaenger gefunden!\n");
+    return 1;
+  }
+  if (!IS_WIZARD(PL) && (PL->QueryProp(P_SP)<(anz*FAX_COST)))
+  {
+    printf("Du benoetigst %d Magiepunkte fuer diese Funktion, und die hast Du nicht!\n",
+           anz*FAX_COST);
+    return 1;
+  }
+  // Erst die Kohle dann die Ware :-)
+  if (!IS_WIZARD(PL))
+    PL->AddSp(-anz*FAX_COST);
+  // Ausgabe der Nachricht
+  write("Du schickst eine Nachricht an "+
+        CountUp(map_array(msgto, lambda(({'u}),({#'capitalize,
+                                                     ({#'getuid, 'u})
+                                                    }))))+".\n");
+  write("Gib jetzt den Text ein: (Textende mit '.' oder '**')\n");
+  map_array(msgto, #'tell_object,
+    "Fux, der freundliche Postbote, kommt hereingerannt und baut seinen portablen\n"+
+    "Fernschreiber auf. Der Fernschreiber beginnt zu rattern und Du liest:\n"+
+    "---- Nachricht von "+CAP(getuid(PL))+" ----\n");
+  input_to("message_to");
+  return 1;
+}
+
+void message_to(string msg)
+{
+  if (msg=="." || msg=="**")
+  {
+    write("Ende der Nachricht.\n");
+    map_array(msgto, #'tell_object,
+      "---- Ende der Nachricht ----\n"+
+      "Der freundliche Postbote Fux packt seinen portablen Fernschreiber wieder ein,\n"+
+      "winkt Dir nochmal zu und verschwindet wieder.\n");
+  }
+  else
+  {
+#ifdef MSG_PREFIXED
+    map_array(msgto, #'tell_object, CAP(getuid(PL))[0..0]+"> "+msg+"\n");
+#else
+    map_array(msgto, #'tell_object, msg+"\n");
+#endif
+    input_to("message_to");
+  }
+}

@@ -1,0 +1,101 @@
+// Provozieren: Schildmaid-Kampfspell (Stufe 12)
+// Setzt beim Gegner einen bevorzugten Feind (P_PREFERED_ENEMY) auf die
+// Amazone und senkt zeitweise die Koerperpanzerung (P_BODY).
+
+#include "/gilden/amazonen/def.h"
+#include <living/combat.h>
+
+varargs int prep_provozieren(object caster, mapping sinfo, int flag)
+{
+  object victim;
+
+  if (!caster->InFight())
+  {
+    tell_object(caster, "Du kannst nur im Kampf provozieren.\n");
+    return 0;
+  }
+
+  if (caster->QueryProp(P_DISABLE_ATTACK))
+  {
+    tell_object(caster, "Du bist kampfunfaehig und kannst niemanden provozieren!\n");
+    return 0;
+  }
+
+  victim = FindEnemyVictim(sinfo[SI_SKILLARG], caster,
+      "Wen willst Du provozieren?\n");
+  if (!victim)
+    return 0;
+
+  if (present(AMAZON_PROVOZIEREN, victim))
+  {
+    tell_object(caster, BS(sprintf("%s ist bereits von Dir provoziert.\n",
+            victim->Name(WER, 1))));
+    return 0;
+  }
+
+  if (!pay_for_spell(caster, sinfo, !flag))
+    return 0;
+
+  sinfo[SI_ENEMY] = victim;
+  return 1;
+}
+
+int provozieren(object caster, mapping sinfo)
+{
+  object victim, ob;
+  int suc, glevel, ability;
+  int chance, dur, reduction, body;
+
+  if (!prep_provozieren(caster, sinfo, 1))
+    return 0;
+
+  victim = sinfo[SI_ENEMY];
+  if (!objectp(victim))
+    return 0;
+
+  if ((suc = SpellSuccess(caster, sinfo)) <= 0)
+    return MISSERFOLG;
+
+  glevel = caster->QueryProp(P_GUILD_LEVEL);
+  ability = sinfo[SI_SKILLABILITY];
+  if (ability < 0) ability = 0;
+
+  chance = 45 + glevel + ability / 350 + suc / 150;
+  if (chance < 55) chance = 55;
+  if (chance > 90) chance = 90;
+
+  dur = 20 + ability / 250 + suc / 700;
+  if (dur < 20) dur = 20;
+  if (dur > 90) dur = 90;
+  if(sinfo[SI_SKILLPOINTS] > 0) dur *= 2;
+
+  body = victim->QueryProp(P_BODY);
+  reduction = 8 + glevel / 2 + ability / 4000 + suc / 4000;
+  if (reduction < 5) reduction = 5;
+  if (reduction > 40) reduction = 40;
+  if(sinfo[SI_SKILLPOINTS] > 1) reduction += glevel;
+
+  environment(caster)->Message(
+      BS(sprintf("%s provoziert %s und zwingt %s, die Deckung zu oeffnen.",
+            caster->Name(WER, 1), victim->name(WEN, 1), victim->name(WEN, 1))),
+      MSGFLAG_VISUAL, ([ MSGFLAG_EXCLUDE : ({ caster, victim }) ]) );
+
+  tell_object(caster, BS(sprintf("Du provozierst %s und reisst die Aufmerksamkeit auf Dich.\n",
+          victim->name(WEN, 1))));
+  tell_object(victim, BS(sprintf("%s provoziert Dich und Du verlierst kurzzeitig Deine Deckung!",
+          caster->Name(WER, 1))));
+
+  if (!victim->IsEnemy(caster))
+    victim->Kill(caster);
+
+  ob = clone_object(OBJ "provozieren");
+  if (ob->move(victim, M_NOCHECK) != 1)
+  {
+    destruct(ob);
+    tell_object(caster, "Du kannst die Provokation nicht aufrecht erhalten.\n");
+    return 0;
+  }
+
+  ob->setup(caster, victim, chance, reduction, dur, body);
+  return ERFOLG;
+}

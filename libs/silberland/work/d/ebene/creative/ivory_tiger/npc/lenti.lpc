@@ -1,0 +1,205 @@
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <new_skills.h>
+#include "/sys/living/life.h"
+#include <moving.h>
+#include <wizlevels.h>
+#include "../files.h"
+#include "../quest.h"
+
+inherit STD("dieb");
+inherit "std/npc/sequencer";
+
+object giver;
+int given_ob;
+int kettle=20;
+
+create()
+{
+  object w;
+
+  if (!is_clone(this_object()))
+    return;
+
+  ::create();
+  SetProp(P_NAME, "Lenti");
+  AddId("lenti");
+  customize(0,0,"troll");
+  SetProp(P_SHORT, "Lenti, der Dieb");
+  SetProp(P_ALIGN, -400);
+  SetProp(P_LONG, 
+      "Vor Dir steht ein riesiger Troll mit einem daemlichen Gesichts"
+      "ausdruck. Du fragst Dich wie die Diebe nur so einen in Ihren "
+      "Reihen aufnehmen konnnte. Er starrt Dir direkt in die Augen und "
+      "ueberlegt wohl gerade ob er Dich einfach ungespitzt in den "
+      "Boden rammen soll.");
+  SetProp(P_ARTICLE, 0);
+  AddSpell(4,800,
+    "Lenti schlaegt stupide auf Dich ein!\n",
+    "Lenti schlaegt stupide auf @WEN ein!\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1]));
+  (w=present("Waffe", TO));
+  w->DoUnwield(1);
+  w->remove();
+  clone_object(WEAPON("lmesser"))->move(TO);
+  command_me("zuecke messer");
+  AddInfo( ({"saufmeisterschaft", "meisterschaft"}), 
+      "Ich habe als Trostpreis einen Teekessel gewonnen. Wie gerne haette "
+      "ich ein anderes Objekt, aber es will ja niemand mit mir tauschen.", 
+      "seufzt: ");
+  AddInfo( ({"trostpreis"}),
+      "Erinnere mich bloss nicht daran. Ich bin als erster bei der "
+      "Saufmeisterschaft ausgeschieden." , "sagt: ");
+  AddInfo( ({"objekt"}),
+      "Ach, Du haettest Interesse mit mir was zu tauschen? Also ich wuerde "
+      "den Teekessel gegen ein Yari tauschen? Hast Du ein Yari?", "sagt: ");
+  AddInfo( ({"yari"}), 
+      "Yaris finden sich normalerweise in Urnen oder in urnenaehnlichen "
+      "Gebilden. Hast Du eines bei Dir?", "sagt: ");
+  AddInfo( ({"urnen", "gebilde", "urnenaehnliche gebilde"}),
+      "Hast Du ein Yari bei Dir?", "fragt: ");
+  AddInfo( ({"teekessel"}), 
+      "Der Teekessel hat sogar meinen Namen eingraviert. Ein sehr schoener "
+      "Teekessel. Ich wuerde ihn gegen ein anderes Objekt tauschen. Hast "
+      "Du ein Yari? Das wuerde ich brauchen. Da wuerde ich gerne tauschen mit "
+      "Dir.", "sagt: ");
+
+  RegisterGive("yari", ({
+               ({ "sag Was haben wir denn da ?", 3 }),
+               ({ "proceed", 4 })
+               }));
+  add_action("got_something", "proceed");
+  given_ob=0;
+}
+
+give_notify(ob) {
+  sequencer::give_notify(ob);
+//  dieb::give_notify(ob);
+}
+
+int yari(object o) {
+  giver=this_interactive();
+
+  if (o->id("\nyariyari") && !given_ob && !deep_present(IV_KETTLE, TP) && kettle) {
+    o->remove();
+    given_ob=1;
+    return 1;
+  }
+  if (o->id(IV_BOOZE_MUG)) {
+    if (present(IV_LOCKPICKNOTE, o)) {
+      command_me("sag Ich nehme nur einen leeren Becher an.");
+      give_obj(o, giver);
+      return 0;
+    }
+    o->remove();
+    given_ob=2;
+    return 1;
+  }
+  if (!kettle) {
+     command_me("sag Warte etwas, dann habe ich wieder einen Teekessel!");
+  }
+  tell_room(ENV(ME),sprintf("Lenti frisst %s mit einem Haps auf.\n", 
+        o->name(WEN)));
+  o->remove();
+  given_ob=0;
+  return 0;
+}
+
+int got_something() {
+  object kessel, b, r;
+  int flag;
+
+  switch (given_ob) {
+    case 1:
+      if (b=deep_present(IV_QUEST_ITEM, giver))
+        flag=b->check_flag(IV_GET_YARI);
+      if(b && !flag) {
+        command_me("sag Moment. Das Yari sieht aber komisch aus. Das hast "
+            "Du sicherlich nicht selber aus einem urnenaehnlichen Behaelter "
+            "geholt. Es ist sicher schlecht. Damit kann ich nichts anfangen.");
+        command_me("gib yari an "+getuid(giver));
+        given_ob=0;
+        return 1;
+      }
+      if (b)
+        flag=b->check_flag(IV_GET_KETTLE);
+      if (b && !flag) {
+        b->set_flag(IV_GET_KETTLE);
+      }
+      if (!b && !giver->QueryQuest(IV_QUEST)) {
+        command_me("sag Halt. Hier stimmt etwas nicht. Geh doch mal"
+            +" zu Vannor. Er braucht dringend Hilfe. Erst wenn Du ihm"
+            +" hilfst kann ich Dir den Kessel geben. Tut mir leid!");
+        given_ob=0;
+        return 1;
+      }
+      command_me("emote jubelt!");
+      command_me("sag EIN YARI! Endlich! Woody sei Dank!");
+      command_me("sag Dafuer bekommst Du meinen Teekessel!");
+      tell_room(ENV(ME), BS(
+            "Lenti holt schnell seinen Teekessel aus seinen"
+            +" Besitztuemern hervor und kritzelt was darauf herum."));
+      command_me("sag So, nun steht Dein Name auf dem Trostpreis der Saufmeisterschaft.");
+      command_me("emote grinst breit.");
+      kettle--;
+      kessel=clone_object(OBJ("kessel"));
+      kessel->set_owner(giver->query_real_name());
+      kessel->move(giver, M_NOCHECK); // questobject
+      r=find_object(ROOM("i1"));
+      if (r)
+        r->set_Loser(CAP(getuid(giver)));
+      tell_object(giver, "Lenti gibt Dir einen Teekessel.\n"); 
+      tell_room(ENV(ME), sprintf("Lenti gibt %s einen Teekessel.\n", giver->name(WEM)), ({giver}));
+      given_ob=0;
+      break;
+    case 2:
+      if (ENV(TO)) {
+        if (present(giver, ENV(TO))) {
+          tell_object(giver, "Lenti huepft um Dich herum.\n");
+          tell_room(ENV(TO), sprintf("Lenti huepft um %s herum.\n", giver->name(WEN)), ({giver}) );
+        }
+        else {
+          tell_object(giver, "Lenti huepft aus der Ferne um Dich herum.\n");
+          tell_object(giver, "Lenti teilt Dir mit: Danke, "+giver->Name()+"!\n");
+        }
+      }
+      call_out("belohnung", 2, giver);
+      given_ob=0;
+      break;
+  }
+  given_ob=0;
+  return 1;
+
+}
+
+reset() {
+  ::reset();
+  kettle=20;
+}
+
+belohnung(object dest) {
+  object e, r;
+
+  command_me("sag Danke, "+dest->Name()+"! Heriolf wird Augen machen, wenn ich ihm den Saufbecher"
+            +" zeigen kann, er glaubt mir naemlich nie, dass ich der WAHRE Sieger der Saufmeisterschaft"
+            +" bin!");
+  call_other("/obj/gemmaster", "DistributeGem", 1, 3, 2, TO);
+  r=find_object(ROOM("i1"));
+  if (r) {
+    r->set_winner("Lenti");
+    r->set_loser(CAP(getuid(dest)));
+  }
+  e=present("edelsteine", TO);
+  if (ENV(TO)) {
+    if (present(dest, ENV(TO))) {
+      command_me("sag Hier hast Du etwas fuer Deine Bemuehungen!");
+      give_obj(e, dest);
+    }
+    else {
+      tell_object(dest, "Lenti steckt Dir aus der Ferne dankbar "+e->name(WEN)+" zu.\n");
+      e->move(dest, M_NOCHECK);
+    }
+  }
+}
+

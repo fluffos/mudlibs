@@ -1,0 +1,206 @@
+//  Projekt     : Barry's Pfeifenladen
+//  Objekt Name : Ein Geschenk
+//  Erstellt    : 07.06.2001 (Orw)
+//  Geaendert   : -
+
+inherit "std/container";
+
+#include <properties.h>
+#include <language.h>
+#include "../def.h"
+
+#define FARBEN ({"blau","gruen","rot","gelb","weiss","violett","pink"})
+int farbe = random(7);
+
+object gegenstand;
+string schenker;
+
+create()
+{
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein Geschenkskarton");
+  SetProp(P_LONG,
+	  "Du haeltst einen Geschenkskarton mit dazugehoerigem "
+	  +FARBEN[farbe]+"en Geschenkspapier in Deinen Haenden. In den Karton "
+	  "kannst Du einen Gegenstand Deiner Wahl verpacken und ihn dann "
+	  "verschenken." );
+  SetProp(P_NAME, "Geschenkskarton");
+  SetProp(P_GENDER, MALE);
+  AddId(({"geschenkskarton","karton"}));
+
+  SetProp(P_MATERIAL, ([MAT_CARTON:80, MAT_PAPER:20]) );
+  SetProp(P_WEIGHT, 100);
+  SetProp(P_MAX_WEIGHT, 5000);
+  SetProp(P_VALUE, 50);
+
+  AddCmd( ({"verpacke","verpack"}), "fktverpacken");
+
+}
+
+varargs int PreventInsert(object ob)
+{
+  return 1;
+}
+
+int fktverpacken(string str)
+{
+  notify_fail("Was willst Du verpacken?\n");
+  if (!str) return 0;
+  if (present(str,TP))
+  {
+    gegenstand=present(str,TP);
+    if(gegenstand->QueryProp(P_NODROP) ||
+       gegenstand->QueryProp(P_NEVERDROP) ||
+       gegenstand->QueryProp(P_CURSED))
+    {
+      write(BS("So wirst Du "+gegenstand->name(WEN,1)+" nicht los!\n"));
+      return 1;
+    }
+    if(gegenstand->QueryProp(P_WIELDED))
+    {
+      write(BS("Du solltest "+gegenstand->name(WEN,1)+" vorher wegstecken!\n"));
+      return 1;
+    }
+    if(gegenstand->QueryProp(P_WORN))
+    {
+      write(BS("Du solltest "+gegenstand->name(WEN,1)+" vorher ausziehen!\n"));
+      return 1;
+    }
+    if(gegenstand == TO)
+    {
+      write(BS("Du kannst den Geschenkskarton doch nicht in sich selbst verpacken!\n"));
+      return 1;
+    }
+    else
+    {
+      write(BS("Du verpackst "+gegenstand->name(WEN,1)+" und bindest eine "
+            "huebsche Schleife um den Karton.\n"));
+      say(TPN+" verpackt etwas in einem Geschenkskarton.\n", TP);
+      RemoveCmd(({"verpacke","verpack"}));
+      AddCmd(({"verpacke","verpack"}),"fktverpacken2");
+      AddCmd(({"verschenke","verschenk","schenke","schenk"}),"fktschenken");
+      schenker=TPN;
+      SetProp(P_SHORT, "Ein "+FARBEN[farbe]+"es Geschenkspackerl");
+      SetProp(P_LONG,
+	    "Du haeltst ein "+FARBEN[farbe]+"es Geschenkspackerl "
+	    "in Deinen Haenden. Du hast darin einen Gegenstand verpackt.");
+      SetProp(P_NAME, "Geschenkspackerl");
+      SetProp(P_GENDER, NEUTER);
+      SetProp(P_INFO, 
+            "In diesem Geschenk wurde "+gegenstand->name(WER,0)+" verpackt.");
+      RemoveId(({"geschenkskarton","karton"}));
+      AddId   (({"geschenk","geschenkspackerl","packerl"}));
+      SetProp(P_NODROP, 
+            "Du kannst das Packerl jemandem schenken, und nicht "
+            "wegschmeissen, hergeben, ablegen oder sonstwas...\n");
+      gegenstand->move(ME, M_PUT|M_SILENT|M_NOCHECK);
+      return 1;
+    }
+  }
+  else
+  {
+    write(CAP(str)+" besitzt Du doch gar nicht...\n");
+    return 1;
+  }
+}
+
+int fktverpacken2 (string str)
+{
+  write("In dem Packerl wurde schon etwas verpackt.\n");
+  return 1;
+}
+
+int fktschenken (string str)
+{
+  string wem;
+  string was;
+  object spieler;
+  object geschenk;
+  notify_fail("Wem willst Du Was schenken?\n");
+  if(!str) return 0;
+  if(sscanf(str, "%s %s", wem, was) ||
+     sscanf(str, "%s an %s", was, wem))
+  {
+    if(was=="packerl" || was=="geschenkspackerl" || was=="geschenk")
+    {
+      if(find_player(wem))
+      {
+      	if(find_player(wem)==TP)
+      	{
+      	  write("So schoen verpacken und dann Dir selber schenken? Noe!\n");
+      	  return 1;
+      	}
+      	if(environment(TP) == environment(find_player(wem)))
+      	{
+          spieler=find_player(wem);
+          geschenk=this_object();
+          write("Du schenkst "+CAP(wem)+" das Packerl.\n");
+          tell_object(spieler, TPN+" schenkt Dir ein Packerl.\n");
+          geschenk->move(spieler, M_GIVE|M_SILENT|M_NOCHECK);
+          RemoveCmd(({"schenke","schenk","verschenke","verschenk"}));
+          AddCmd(({"schenke","schenk","verschenke","verschenk"}),"fktschenken2");
+          SetProp(P_LONG,
+	    "Du haeltst ein "+FARBEN[farbe]+"es Geschenkspackerl "
+	    "in Deinen Haenden. "+CAP(schenker)+" hat darin einen Gegenstand "
+	    "verpackt und ihn Dir geschenkt.");
+          AddCmd(({"oeffne","oeffnen"}),"fktoeffnen");
+          SetProp(P_NODROP, 
+            "Du laesst dieses schoene Geschenk lieber nicht aus den Augen.\n");
+          return 1;
+        }
+        else
+        {
+          write(CAP(wem)+" siehst Du hier nicht.\n");
+          return 1;          
+        }
+      }
+      else
+      {
+        write(CAP(wem)+" ist ja gar nicht im Spiel.\n");
+        return 1;
+      }
+    }
+    else
+    {
+      write("Willst Du nicht das Packerl verschenken?\n");
+      return 1;
+    }
+  }
+  return 0;
+}
+
+int fktschenken2(string str)
+{
+  write(BS("Dieses Geschenk hast Du bekommen, das sollst Du nicht "
+        "weiterschenken.\n"));
+  return 1;
+}
+
+int fktoeffnen(string str)
+{
+  notify_fail("Was willst Du oeffnen?\n");
+  if(!str) return 0;
+  if(str=="packerl" || str=="geschenkspackerl" || str=="geschenk")
+  {
+    if(objectp(gegenstand))
+    {
+      write("Gespannt oeffnest Du das Geschenkspackerl...\n"
+          "...und holst "+gegenstand->name(WER,0)+" heraus.\n"
+          "Das zerknuellte Geschenkspapier und der Karton verschwinden "
+          "mit einem lauten Knall.\n");
+      say(TPN+" oeffnet das Geschenk von "+CAP(schenker)+".\n",TP);
+      gegenstand->move(TP,M_GET|M_SILENT|M_NOCHECK);
+      TO->remove();
+      return 1;
+    }
+    else
+    {
+      write(BS("In dem Packerl war zwar mal was verpackt, aber "
+            "anscheinend hat es sich in Luft aufgeloest."));
+      say(TPN+" oeffnet das Geschenk von "+CAP(schenker)+".\n",TP);
+      return 1;
+    }
+  }
+}

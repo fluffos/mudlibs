@@ -1,0 +1,1347 @@
+
+/*
+ * "SET! - Die ultimative Herausforderung!" ist keine Erfindung
+ * von mir, sondern von SET Enterprises, Inc. (c) 1988, 1990
+ *
+ * "SET!" gibt es im Netz meines Wissens nicht, daher, schaetze
+ * ich, verletze ich vielleicht irgendwelche Rechte, schaedige
+ * aber SCHMID (der deutsche Vertreiber) nicht. Also kein schlechtes
+ * Gewissen :).
+ *
+ * Lhjana - der SET-Npc. 
+ *
+ * (c) 4/1998 Adrian Holzwarth / Anatol@Silberland
+ */
+
+#pragma strict_types
+
+#include "../defines.h"
+#include "ansi.h"
+#include "properties.h"
+#include "moving.h"
+#include "combat.h"
+
+#define LOGFILE LOG "lhjana.log"
+#define LLOG(x) DO_LOG(LOGFILE,x)
+/* Spiel-Status: Kein Spiel laeuft     */
+#define STAT_NO_GAME    0
+/* Spiel-Status: Spiel in Vorbereitung */
+#define STAT_PREPARE    1
+/* Spiel-Status: Spiel laeuft!         */
+#define STAT_RUNNING    2
+/* Spiel-Status: Spiel wird beendet.   */
+#define STAT_CLEANUP    3
+
+/* Die Symbole... */
+
+#define SYM0  "/"
+#define SYM1  "O"
+#define SYM2  "*"
+
+/* Die Rahmen...  */
+
+#define BOX0  ({  "+---------+",  \
+                  "|         |",  \
+                  "|         |",  \
+                  "|         |",  \
+                  "+---------+"  })
+
+#define BOX1  ({  "/=========\\", \
+                  ")         (",  \
+                  ")         (",  \
+                  ")         (",  \
+                 "\\=========/" })
+
+#define BOX2  ({ "\\ooooooooo/", \
+                  "8         8",  \
+                  "8         8",  \
+                  "8         8",  \
+                  "/ooooooooo\\" })
+
+#define NO_CARD ({"           ",  \
+                  "           ",  \
+                  "           ",  \
+                  "           ",  \
+                  "           "  })
+
+/* Ach ja, die Farben... */
+
+#define COL0  ANSI_RED
+#define COL1  ANSI_GREEN
+#define COL2  ANSI_CYAN
+
+
+#define SY(x) tell_room(environment(this_object()),break_string(x,77,0,1))
+#define SOTH(x) tell_room(environment(this_object()),break_string(x,77,0,1),\
+    ({this_player()}))
+
+
+inherit "/std/npc";
+
+nosave mixed    symbols;  /* Symbole und Anzahle in Stringformat            */
+nosave mixed    boxes;    /* Die drei verschiedenen Boxen                   */
+nosave string * colors;   /* Die drei verschiedenen Farben...               */
+nosave string * noc;      /* "no card" - Das leere Feld.                    */
+nosave int *    pool;     /* Der Karten-"Pool", also alle restlichen Karten */
+nosave int *    table;    /* Die Karten, die auf dem Tisch liegen           */
+nosave string * tabstrp;  /* Das "Spielfeld" als Zeilen                     */
+nosave int      game;     /* Der Spielstatus, siehe set.h                   */
+nosave string   env;      /* Die Umgebung, in der gespielt wird             */
+nosave mapping  players;  /* Mitspieler                                     */
+nosave int      closed;   /* Spielmodus - offen || geschlossen              */
+nosave int      lhjanapts; /* Lhjanas eigene Punkte                           */
+nosave mixed    sets;     /* Angemeldete Sets                               */
+string *     banish_list; /* Die duerfen nicht mitspielen, Berx wollte es :)*/
+
+nomask nosave private int col(int i) { return ((((i/3)/3)/3)%3); }
+nomask nosave private int num(int i) { return (((i/3)/3)%3); }
+nomask nosave private int sym(int i) { return ((i/3)%3); }
+nomask nosave private int box(int i) { return (i%3); }
+
+
+nomask varargs nosave void evalSets(int nr);
+nomask nosave void endGame(int nr);
+nomask nosave int stillHope();
+
+/* banished() liefert TRUE, wenn das uebergebene Objekt aus dem
+ * Spiel ausgeschlossen bleiben soll. NPCs zum Beispiel :> 
+ * Die anderen Funktionen dienen dazu, gespielbanishte Spieler zu handlen,
+ * was ich auf Berx' Wunsch hin natuerlich einbauen musste...
+ * Du denkst . o O ( Suchties... ) */
+
+nomask int banish(string who) {
+  if ((!who)||(!stringp(who))) return -1;
+  if (!this_player()) return -2;
+  if (getuid(this_player())!="anatol") return -3;
+  if (member(banish_list, who)!=-1) return -4;
+  banish_list+=({lower_case(who)});
+  save_object(DOVENYA_SAVE "lhjana");
+  return 1;
+}
+
+nomask int unbanish(string who) {
+  if ((!who)||(!stringp(who))) return -1;
+  if (!this_player()) return -2;
+  if (getuid(this_player())!="anatol") return -3;
+  if (member(banish_list, who)==-1) return -4;
+  banish_list-=({lower_case(who)});
+  save_object(DOVENYA_SAVE "lhjana");
+  return 1;
+}
+
+nomask void showbanish() {
+  string * xx;
+  if (!this_player()) return;
+  xx=banish_list;
+  while(sizeof(xx)) {
+    printf("  %12s\n",capitalize(xx[0]));
+    xx=xx[1..];
+  }
+  return;
+}
+
+nomask nosave int banished(object ob) { 
+  return ((!objectp(ob)) ||
+          (!interactive(ob)) ||
+          (member(banish_list,getuid(ob))!=-1));
+}
+
+/* Die Spielerliste... */
+
+nomask nosave string doCap(string s) {
+  if (stringp(s)) return capitalize(s);
+  else return "";
+}
+
+nomask nosave string playerList() {
+  string * x;
+  string res;
+  x=({})+m_indices(players);
+  x=filter_array(x,"isPlayer");
+  if (!sizeof(x)) return "Niemand?!";
+  x=map_array(x,"doCap",this_object());
+  if (sizeof(x)==1) return x[0];
+  res=implode(x[0..<2],", ")+" und "+x[<1];
+  return res;
+}
+
+nomask nosave int isPlayer(string pl) {
+  if ((!stringp(pl)) ||
+      (!member(players,pl)) ||
+      (!players[pl,2])) return 0;
+  else return 1;
+}
+
+/* Spieler, die den Raum verlassen, rausgetranst werden, quitten, 
+ * sterben und verschwinden, unsichtbar werden usw... RAUS!        */
+
+nomask nosave void safetyLoop() {
+  string * keys;
+  int kick;
+  object o;
+
+  if (!sizeof(filter_array(m_indices(players),"isPlayer"))) return;
+  while (remove_call_out("safetyLoop")!=-1);
+  keys=m_indices(players);
+  while (sizeof(keys)) {
+    kick=1;
+    if (isPlayer(keys[0])) {
+      if (!o=find_player(keys[0]))
+        SY("Lhjana schmollt: Boh, "+capitalize(keys[0])+" ist einfach weg.\n");
+      else if (environment(this_object())!=environment(o))
+        SY("Lhjana stutzt: Nanu, wo ist "+
+          capitalize(keys[0])+" hingelaufen?\n");
+      else if (!interactive(o)) 
+        SY("Lhjana schaut auf "+capitalize(keys[0])+
+         " herunter und murmelt 'netztot...'\n");
+      else if (o->QueryProp(P_INVIS)) 
+        SY("Lhjana denkt: . o O ( poeh! )\n");
+      else if (query_idle(o)>360) 
+        SY("Lhjana sagt: Also sechs Minuten ideln ist mir zuviel.\n");
+      else
+        kick=0; 
+      if (kick) {
+        SY("Lhjana vermerkt sich "+capitalize(keys[0])+
+            " als 'ausgestiegen'.\n");
+        players[keys[0],2]=0;
+      } 
+    }
+    keys=keys[1..];
+  }
+  if (!sizeof(filter_array(m_indices(players),"isPlayer")))
+    endGame(1);
+  else if (!stillHope()) {
+    if (find_call_out("evalSets")==-1)
+      call_out("evalSets",2);
+  }
+  call_out("safetyLoop",4);
+  return;
+}  
+
+nomask nosave int resetPlayer(string key) {
+  if ((isPlayer(key)) && (players[key,1]))
+    SY(capitalize(key)+" kann wieder mitmachen!\n");
+  players[key,1]=players[key,3]=0;
+  return 1;
+}
+
+nomask nosave void resetPlayers() {
+ filter_mapping(players,"resetPlayer");
+ return;
+}
+
+nomask nosave int hasHope(string key) {
+  return ( isPlayer(key) && ((!players[key,1]) && (!players[key,3])));
+}
+
+nomask nosave int stillHope() {
+  return (sizeof (filter_mapping(players,"hasHope")))  ;
+}
+
+nomask nosave void tellPlayer(string msg) {
+  string * pls;
+  object ob;
+  pls=filter_array(m_indices(players),"isPlayer");
+  while (sizeof(pls)) {
+    if (ob=find_player(pls[0])) 
+      tell_object(ob,msg);
+    pls=pls[1..];
+  }
+  return;
+}
+
+/* Diese Funktion initialisiert den Kartenpool neu, das heisst im
+ * "Klartext": Alle Karten kommen zurueck und sortiert auf den 
+ * Kartenstapel... */
+ 
+nomask nosave void initPool() {
+  int i;
+
+  pool=({});   
+  for (i=0;i<81;pool+=({i++}));
+  SY("Lhjana schnippst mit den Fingern ...\n"
+       "       ....und zaubert ein Set-Kartenspiel hervor.");
+  return;
+}
+
+/* Der Tisch wird auch vorinitialisiert, es koennen ja bis zu
+ * 15 Karten auf ihm aufgedeckt liegen.  */
+
+nomask nosave void initTable() {
+  table=({-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1});
+  return;
+}
+
+/* shufflePool() tut das, was man vermutet - der Kartenstapel wird,
+ * ungeachtet seines momentanen Zustands, gemischt. */
+
+nomask nosave void shufflePool() {
+  int * ptr;
+  int i,sz;
+
+  ptr=({})+pool;
+  pool=({});
+  while (sz=sizeof(ptr)) {
+    pool+=({ptr[i=random(sz)]});
+    ptr-=({ptr[i]});
+  }
+  SY("Lhjana mischt geschickt die Karten.");
+}
+
+/*
+ *    0  0  ->  0
+ *    0  1  ->  2
+ *    0  2  ->  1
+ *    1  0  ->  2
+ *    1  1  ->  1
+ *    1  2  ->  0
+ *    2  0  ->  1
+ *    2  1  ->  0
+ *    2  2  ->  2                        
+ */
+
+nomask nosave int thirdValue(int a, int b) {
+  return (a==b?a:(~(a|b))&3); /* (a==b?(3-(a+b))) ist unspektakulaer */
+}
+
+/* Bei SET kann man mit zwei Karten die dritte Karte "erzwingen", 
+ * das heisst, man weiss, wie sie aussehen muesste, um mit den 
+ * beiden ersten ein Set zu bilden.         */
+
+nomask nosave int thirdCard(int a, int b) {
+  int ret;
+
+  ret=thirdValue(a%3,b%3);
+  ret+=thirdValue((a/=3)%3,(b/=3)%3)*3;
+  ret+=thirdValue((a/=3)%3,(b/=3)%3)*9;
+  ret+=thirdValue((a/=3)%3,(b/=3)%3)*27;
+  return ret;
+}
+
+/* Ein Set ist, wenn Karte A und Karte B die Karte C erzwingen. */
+
+nomask nosave int isSet(int a, int b, int c) {
+  return (c==thirdCard(a,b));
+}
+
+/* printCard() ist nur eine Debug-Funktion, mit der man sich eine
+ * Karte anzeigen lassen kann. Im Spiel wird sie - hoffentlich - 
+ * nicht verwendet.  */
+
+nomask void printCard(int i) {
+  string * card;
+  string tc;
+  if ((i>=0) && (i<80)) {
+    printf("Karte %2d: Farbe %d, Anzahl %d, Symbol %d, Box %d\n",
+           i, col(i), num(i), sym(i), box(i));
+    card=boxes[box(i)]; 
+    tc=colors[col(i)];
+    card[2][3..7]=symbols[sym(i)][num(i)];
+    printf(tc+implode(card,"\n")+ANSI_NORMAL+"\n");
+  }
+  else 
+    printf("Keine Karte.\n");
+}
+
+/* getCard() liefert ein array of strings, das quasi die grafische
+ * Variante der Karte i enthaelt. */
+
+nomask nosave varargs string * getCard(int i,int pos) {
+  string * card;
+  string c;
+  int j;
+
+  if ( (i<0) || (i>80) ) return NO_CARD;
+  if (pos>14) pos=0;
+  card=({})+boxes[box(i)];
+  c=colors[col(i)];
+  card[2][3..7]=ANSI_BOLD+symbols[sym(i)][num(i)]+ANSI_NORMAL+c;
+  card[0][2..2]=sprintf("%s%c%s",ANSI_NORMAL,'a'+pos,c);
+  for (j=sizeof(card);j;j--)
+    card[j-1]=c+card[j-1]+ANSI_NORMAL;
+  return card;
+}
+
+/* Fuer ein "print" braucht man einen String... hier isser: */
+
+nomask nosave void generateTableString() {
+  int i,j,k,l,c;
+  string cc, cn;
+  string * tc;
+  cn=ANSI_NORMAL;
+  tabstrp=({"","","","","","","","","","","","","","","","","",""});
+  for (i=0;i<15;i++) {
+    tc=getCard(c=table[i],i);
+    for (j=0;j<5;j++)
+      tabstrp[((i%3)*6)+j]+=tc[j]+"  ";
+  }
+}
+
+/* Drei Karten als String, uebergeben werden MUSS der Zahlenwert, 
+ * uebergeben werden KANN die Brettposition                        */
+
+nomask varargs string getThree(int q1, int q2, int q3, int p1, int p2, int p3){
+  string * tc;
+  string * res;
+  int j;
+ 
+  if (p1==p2) {
+    p1=0;
+    p2=1;
+    p3=2;
+  } 
+  res=({"","","","","",""});
+  tc=getCard(q1,p1);
+  for (j=0;j<5;j++)
+    res[j]+=tc[j]+"  ";
+  tc=getCard(q2,p2);
+  for (j=0;j<5;j++)
+    res[j]+=tc[j]+"  ";
+  tc=getCard(q3,p3);
+  for (j=0;j<5;j++) 
+    res[j]+=tc[j]+"  ";
+  return (implode(res,"\n")); 
+}
+
+/* Das ganze dann den Spielern zeigen... */
+
+nomask nosave void showThree(int p1, int p2, int p3) {
+  tellPlayer(getThree(table[p1], table[p2], table[p3], p1,p2,p3)); 
+  return;
+}
+
+/* Die ersten zwoelf auf den Tisch. */
+
+nomask nosave void firstTwelve() {
+  table[0..11]=pool[0..11];
+  pool=pool[12..];
+  SY("Lhjana setzt sich und legt die ersten zwoelf Karten aus.");
+  generateTableString();
+  return;
+}
+
+/* Drei Karten wegnehmen... */
+
+nomask nosave int removeThree(int p1, int p2, int p3) {
+  if ((table[p1]==-1) || (table[p2]==-1) || (table[p3]==-1))
+    return 0;
+  table[p1]=-1;
+  table[p2]=-1;
+  table[p3]=-1;
+  SY("Lhjana nimmt das Set auf und legt die Karten zur Seite.\n");
+  generateTableString();
+}
+
+/* Drei Karten hinlegen... die Meldung wird wo anders gemacht, weil
+ * ja auch mal mehr als 3 Karten gelegt werden muessen... */
+
+nomask varargs nosave int nextThree(int p1, int p2, int p3) {  
+  if (sizeof(pool)<3) 
+    return 0;
+  if ((table[p1]!=-1) || (table[p2]!=-1) || (table[p3]!=-1))
+    return 0;
+  table[p1]=pool[0];
+  table[p2]=pool[1];
+  table[p3]=pool[2];
+  pool=pool[3..];
+  return 1;
+}
+
+/* Jojo, ausgeben */
+
+nomask nosave void printTable() {
+  printf(implode(tabstrp,"\n")); 
+  return;
+}
+
+/* Und fuer alle... ausgeben */
+ 
+nomask nosave void showTable() {
+  tellPlayer(sprintf(implode(tabstrp,"\n"))); 
+  return;
+}
+
+/* Schluss, aus, Spielende */
+ 
+nomask nosave void endGame(int nr) {
+  mixed * result;
+  if (find_call_out("endGame")!=-1) return;
+  switch(nr) {
+    case 1:
+      if (game==STAT_NO_GAME)
+        return (void) players=([]);
+      SY("Lhjana sagt: Ok, das war es dann!\n");
+      game=STAT_CLEANUP;
+      call_out("endGame",2,2);
+      break;
+    case 2:
+      while (remove_call_out("safetyLoop")!=-1);
+      SY("Lhjana nimmt alle Karten auf und wertet aus.\n");
+      call_out("endGame",2,3);
+      break;
+    case 3:
+      result=sort_array(m_indices(players),"lessPoints",this_object());
+      LLOG(sprintf("***SPIELENDE***"));
+      SY("Lhjana verkuendet:\n");
+      while (sizeof(result)) {
+        SY(sprintf(" %11s: %d Sets\n",
+              capitalize(result[0]),players[result[0]]));
+        LLOG(sprintf(" %11s: %d Sets\n",
+              capitalize(result[0]),players[result[0]]));
+        result=result[1..];
+      }
+      LLOG(sprintf(" %11s: %d Sets\n","Lhjana",lhjanapts));
+      SY("Lhjana fuegt hinzu: Ich selbst habe "+lhjanapts+" Punkt"+
+        (lhjanapts==1?"":"e")+" bekommen.\n");
+      while (remove_call_out("safetyLoop")!=-1);
+      call_out("endGame",4,4);
+      break;
+    case 4:
+      SY("Lhjana laechelt und laesst die Karten wieder "
+          "*PLOPP* verschwinden.\n");
+      game=STAT_NO_GAME;
+      players=([]);
+      sets=({});
+      lhjanapts=0;
+      closed=0;
+      break;
+    default:
+      SY("Lhjana hustet: INTERNER FEHLER -3, "
+                "BITTE ANATOL VERSTAENDIGEN.\n");
+      break;
+  }
+  return;
+}
+
+/* SET-Evaluation */
+
+
+/* Falls was fehlt, muss die Auslage wieder korrigiert werden... */
+
+nomask varargs nosave void adjustTable(int schieb) {
+  int i;
+  int * todo;
+
+  todo=({});
+  for(i=0;i<15;i++) 
+    if (table[i]==-1) 
+      todo+=({i});
+  if ((sizeof(todo)>=3) && 
+    ((table[12]!=-1)||(table[13]!=-1)||(table[14]!=-1))) {
+    schieb=1;
+    SY("Lhjana verschiebt Randkarten ins Hauptfeld.\n");
+    if (table[12]!=-1) {
+      table[todo[0]]=table[12];
+      table[12]=-1;
+      todo=todo[1..]+({12});
+    }
+    if (table[13]!=-1) {
+      table[todo[0]]=table[13];
+      table[13]=-1;
+      todo=todo[1..]+({13});
+    }
+    if (table[14]!=-1) {
+      table[todo[0]]=table[14];
+      table[14]=-1;
+      todo=todo[1..]+({14});
+    }
+  }
+  if ((sizeof(todo)>3)&&(sizeof(pool))) {
+    SY("Lhjana legt neue Karten auf die leeren Felder.\n");
+    while ((sizeof(todo)>=6)&&(sizeof(pool))) {
+      nextThree(todo[0],todo[1],todo[2]);
+      todo=todo[3..];
+    }
+    schieb=1;
+  }
+  if (schieb) {
+    generateTableString();
+    showTable();
+  }
+  else if (!stillHope())
+    evalSets();
+  return;
+}
+
+nomask varargs nosave void evalSets(int nr) {
+  mixed s;
+  int * t;
+  int i,j,k;
+  while (remove_call_out("evalSets") !=-1);
+  if (!nr) {
+    if ((find_call_out("evalSetQueue")!=-1)
+        || (find_call_out("evalSetQueue2")!=-1)) return;
+    SY("Lhjana sagt: Hm, dann schau'n wir mal...\n");
+    call_out("evalSets",2,2);
+    return;
+  }
+  else {
+    s=({});
+    for (i=0;i<13;i++) {
+      if (table[i]==-1) continue;
+      for (j=(i+1);j<14;j++) {
+        if (table[j]==-1) continue;
+        for (k=(j+1);k<15;k++) {
+          if (table[k]==-1) continue;
+          if (isSet(table[i],table[j],table[k]))
+            s+=({({i,j,k})});
+        }
+      }
+    }
+    if (sizeof(s)) {
+      if (sizeof(s)>1)
+        SY("Lhjana kichert: Na, das ist aber lustig! Da sind doch mindestens\n"
+          "Lhjana kichert: "+sizeof(s)+" Set-Kombinationen zu finden! "
+          "Zum Beispiel:\n");
+      else
+        SY("Lhjana sagt: Schade, aber ich habe noch ein Set gefunden:\n");
+      t=s[random(sizeof(s))];
+      showThree(t[0],t[1],t[2]);
+      removeThree(t[0],t[1],t[2]);
+      lhjanapts++;
+      resetPlayers();
+      call_out("adjustTable",2);
+    }
+    else {
+      k=0;
+      for (i=0;i<15;i++)
+        if (table[i]!=-1) k++;
+      if (k==15) {
+        SY("Lhjana aechzt.\nLhjana japst: FUENFZEHN Karten und kein Set!\n"
+           "Lhjana japst: Wie unwahrscheinlich ist DAS denn?!\n"
+           "Lhjana entscheidet sich dazu, das Spiel "
+           "zu beenden.\n");
+        game=STAT_CLEANUP;
+        call_out("endGame",3,3);  
+      }
+      else {  /* k==12 oder weniger */
+        SY("Lhjana sagt: Tja, ich sehe auch kein Set mehr.\n");
+        if (!sizeof(pool)) {
+          SY("Lhjana sagt: Und der Kartenstapel ist auch leer.\n");
+          endGame(1);
+        }
+        else {
+          s=({});
+          for (i=0;i<15;i++) {
+            if (table[i]==-1) s+=({i});
+          }
+          if (sizeof(s)<3)
+            SY("Lhjana hustet: INTERNER FEHLER -2, "
+                "BITTE ANATOL VERSTAENDIGEN.\n");
+          else {
+            nextThree(s[0],s[1],s[2]);
+            resetPlayers();
+            SY("Lhjana ergaenzt das Spielfeld.\n");
+            generateTableString();
+            showTable();
+          } 
+        }
+      }
+    }
+    return;
+  }
+}
+  
+  
+nomask nosave int lessPoints(string a, string b) {
+  return players[a]<players[b];
+}
+
+nomask nosave int cmdMitspielen() {
+  if (!this_player()) return 0;
+  notify_fail("Du darfst leider nicht mitspielen.\n");
+  if (banished(this_player())) return 0;
+  notify_fail("Ja doch, Du spielst ja schon mit!\n");
+  if (isPlayer(getuid(this_player()))) return 0;
+  notify_fail("Die Runde hat schon begonnen und wird als "
+    "'geschlossene Gesellschaft'\ngespielt, Du kannst leider nicht "
+    "mehr einsteigen.\n");
+  if (((game==STAT_PREPARE) || (game==STAT_RUNNING)) && (closed))
+    return 0;
+  notify_fail(
+    "Nicht so hastig, die letzte Runde ist noch nicht ganz zuende!\n");
+  if (game==STAT_CLEANUP) return 0;
+  notify_fail("Du brauchst ein Ansi-Terminal mit Farbdarstellung, sorry!!\n");
+  if (((string)this_player()->QueryProp(P_TTY))!="ansi") return 0;
+  notify_fail("Du kannst aber nur _sichtbar_ mitspielen...\n");
+  if (this_player()->QueryProp(P_INVIS))  return 0;
+  if (game==STAT_NO_GAME) {
+    SOTH((string)this_player()->Name(WER)+" spielt mit!\n");
+    write("Lhjana nickt Dir zu, Du spielst mit!\n");
+    players+=([getuid(this_player()):0;0;1;0]);
+    call_out("safetyLoop",4);
+    SY(break_string("Bisher besteht die Runde aus "+playerList()+".",
+      76,"Lhjana sagt: ",1));
+  }
+  else {
+    if (member(players,getuid(this_player()))) {
+      SOTH((string)this_player()->Name(WER)+" steigt wieder ein!\n");
+      write("Du bist wieder dabei!\n");
+      players[getuid(this_player()),2]=1;
+    }
+    else {
+      SOTH((string)this_player()->Name(WER)+" macht ab jetzt auch mit!\n");
+      write("Lhjana nimmt Dich in die Runde auf, Du bist dabei!\n");
+      players+=([getuid(this_player()):0;0;1;0]);
+    }
+    SY(break_string("Es spielen nun "+playerList()+"!",
+      76,"Lhjana freut sich: ",1));
+  }
+  return 1;
+}
+
+nomask nosave int cmdKarten() {
+  if (!this_player()) return 0;
+  notify_fail(
+    "Die Karten sind farbig dargestellt, Deine Terminaleinstellung erlaubt\n"
+    "jedoch keine Farbe. (Versuche doch mal 'stty ansi', vielleicht siehst\n"
+    "Du dann ja Farben! Ohne geht SET! jedenfalls nicht :-\\)\n");
+  if (((string)this_player()->QueryProp(P_TTY))!="ansi") return 0;
+  notify_fail(
+    "Es findet gar kein Spiel statt, also liegen keine Karten aus.\n");
+  if (game==STAT_NO_GAME) return 0;
+  notify_fail(
+    "Es liegen noch keine Karten aus.\n");
+  if (game==STAT_PREPARE) return 0;
+  notify_fail(
+    "Lhjana ist gerade am Auswerten, es ist gleich gelaufen.\n");
+  if (game==STAT_CLEANUP) return 0;
+  if (game!=STAT_RUNNING) return 0;
+  printTable();
+  return 1;
+}
+
+nomask nosave int cmdStand() {
+  string result;
+  string *keys;
+  switch (game) {
+    case STAT_NO_GAME: 
+      result="Derzeit findet keine SET!-Runde statt.\n";
+      result+=break_string("Fuer die naechste Runde "+
+        (sizeof(players)?(sizeof(players)==1?"ist ":"sind ")+
+          playerList():"ist noch niemand")+" angemeldet.\n",77) +
+        (closed?"Die Runde wird wohl als 'geschlossene Gesellschaft'"
+          " gespielt.\n":"");
+      break;
+    case STAT_PREPARE: 
+      result="Die SET!-Runde faengt gerade an.\n";
+      result+=break_string("Fuer diese Runde "+
+        (sizeof(players)?(sizeof(players)==1?"ist ":"sind ")+
+          playerList():"ist noch niemand")+" angemeldet.\n",77)+
+        (closed?"Die Runde wird als 'geschlossene Gesellschaft'"
+          " gespielt.\n":"");
+      break;
+    case STAT_RUNNING: 
+      result="Im Moment wird gespielt ("+
+        (closed?"'geschlossene Gesellschaft'":"offen")+").\n";
+      keys=sort_array(m_indices(players),#'>);
+      while (sizeof(keys)) {
+        if (players[keys[0],2])
+          result+=sprintf("%13s %s\n",
+            capitalize(keys[0]),(players[keys[0],1]?
+            "- pausiert wegen Falschmeldung":
+            (players[keys[0],3]?"- findet kein Set":"")));
+        keys=keys[1..];  
+      }
+      result+=(isPlayer(getuid(this_player()))?
+      sprintf("Dein aktueller Punktestand ist %d.\n",
+      players[getuid(this_player())]):"");
+      break;
+    case STAT_CLEANUP:
+      result="Die Runde geht graaaaade zu Ende!\n";
+      break;
+  }
+  write(result);
+  return 1;
+}
+
+nomask nosave int cmdAussteigen() {
+  if (!this_player()) return 0;
+
+  notify_fail("Du spielst doch gar nicht mit, Pappnase! :)\n");
+  if (!isPlayer(getuid(this_player()))) return 0;
+  notify_fail("Lhjana ist gerade beschaeftigt, versuch's doch ein paar "
+    "Augeblicke spaeter nochmal, dann bekommt sie es auch mit...\n");
+  if (game==STAT_PREPARE) return 0;
+  notify_fail("Die Runde ist doch schon gelaufen...\n");
+  if (game==STAT_CLEANUP) return 0;
+  if (game==STAT_RUNNING) {
+    write("Lhjana nickt Dir leise seufzend zu.\n"
+      "Du steigst mit "+players[getuid(this_player())]+" Punkt"
+      +(players[getuid(this_player())]==1?"":"en")+" aus.\n");
+    SOTH(sprintf("%s steigt aus!\n"
+      "Lhjana verabschiedet %s mit %d Punkt%s aus der Runde.\n",
+      (string)this_player()->Name(WER),
+      (string)this_player()->name(WEN),
+      players[getuid(this_player())],
+      (players[getuid(this_player())]==1?"":"en")));
+    players[getuid(this_player()),2]=0;
+  }
+  else {
+    write(
+      "Lhjana nimmt Deinen Rueckzieher seufzend zur Kenntnis.\n");
+    SOTH((string)this_player()->Name(WER)+
+      " ueberlegt es sich anders und spielt doch nicht mit.\n");
+    players-=([getuid(this_player())]);   
+  }
+  if (!sizeof(filter_array(m_indices(players),"isPlayer"))) {
+    if (game==STAT_RUNNING)
+      endGame(1);
+    else 
+      SY("Lhjana sagt: Tja, keiner mehr dabei...\nLhjana schnieft leise.\n");
+  }
+  else {
+    SY(break_string("Die Runde besteht noch aus "+playerList()+".",
+      76,"Lhjana sagt: ",1));
+    if ((game==STAT_RUNNING) && (!stillHope())) 
+      evalSets();
+  }   
+  return 1;
+}
+
+nomask nosave int beginGame() {
+  
+  if (!this_player()) return 0;
+  notify_fail("Lhjana ist doch schon dabei, eine neue Runde anzufangen...\n");
+  if (game==STAT_PREPARE) return 0;
+  notify_fail("Lass' Lhjana erstmal die letzte Runde auswerten, ok?\n");
+  if (game==STAT_CLEANUP) return 0;
+  notify_fail("Aber es wird doch schon gespielt, was willst Du?\n");
+  if (game==STAT_RUNNING) return 0;
+  notify_fail("Du darfst leider nicht mitspielen.\n");
+  if (banished(this_player())) return 0;
+  notify_fail("Es duerfen nur Mitspieler die Runde eroeffnen.\n");
+  if (!member(players,getuid(this_player()))) return 0;
+  
+  SY(this_player()->Name()+" laesst das Spiel beginnen, "
+    "die Runde besteht aus "+playerList()+".\n"
+    "Lhjana jubelt: Los gehts!\n");
+  game=STAT_PREPARE;
+  call_out("beginGame2",3);
+  return 1;
+}
+
+nomask nosave void beginGame2() {
+  initPool();
+  initTable();
+  call_out("beginGame3",2);
+  return;
+}
+
+nomask nosave void beginGame3() {
+  shufflePool();
+  call_out("beginGame4",3);
+  return;
+}
+
+nomask nosave void beginGame4() {
+  firstTwelve();
+  showTable(); 
+  game=STAT_RUNNING;
+  call_out("safetyLoop",4);
+  return;
+}
+
+nomask nosave int cmdRunde(string str) {
+  if (!this_player()) return 0;
+  if (banished(this_player())) return 0;
+  notify_fail("Die Runde darf nur von einem Mitspieler als 'geschlossene "
+    "Gesellschaft'\n (un)markiert (was fuer ein deutsch...) werden.\n");
+  if (!isPlayer(getuid(this_player()))) return 0;
+  notify_fail("Lhjana ist grade beschaeftigt, versuch's gleich nochmal!\n");
+  if (game==STAT_PREPARE) return 0;
+  notify_fail("Die Runde ist doch schon gelaufen, was soll das noch?\n");
+  if (game==STAT_CLEANUP) return 0;
+  notify_fail("Was jetzt, <runde oeffnen> oder <runde schliessen>?\n"); 
+  if ((!stringp(str))||(!str)||((str!="oeffnen")&&(str!="schliessen")))
+    return 0;
+  notify_fail("Die Runde ist doch schon eine geschlossene Gesellschaft.\n");
+  if ((closed)&&(str=="schliessen")) return 0;
+  notify_fail("Die Runde ist doch schon eine offene, freie Runde.\n");
+  if ((!closed)&&(str=="oeffnen")) return 0;
+  if (str=="oeffnen") {
+    write("Ok, jeder, der mag, kann in das Spiel einsteigen.\n");
+    SY("Lhjana sagt: "+(string)this_player()->Name(WER)+
+        " hat die Runde geoeffnet!\n"+
+      "Lhjana sagt: Wenn jemand einsteigen moechte, kann er das tun.\n");
+    closed=0;
+  }
+  else {
+    write("Du musst es wissen - ab jetzt kann "
+       "keiner mehr ins Spiel einsteigen.\n");
+    SY(break_string((string)this_player()->Name(WER)+
+      " proklamiert 'geschlossene Gesellschaft'! Es kann jetzt niemand mehr "
+      "in ein laufendes Spiel einsteigen, tut mir leid.",76,"Lhjana seufzt: "
+      ,0));
+    closed=1;
+  }
+  return 1;
+}
+
+
+nomask nosave void evalSetQueue() {
+  if (!sizeof(sets))
+    return;
+  SY("Lhjana schaut sich die Karten an und zieht eine Augenbraue hoch.\n");
+  call_out("evalSetQueue2",2);
+}
+
+nomask varargs nosave void evalSetQueue2(int foundsome) {
+  int  v1, v2, v3;
+  int  p1, p2, p3; 
+  string pl;
+  if (!sizeof(sets)) {
+    adjustTable(foundsome);
+    return;
+  }
+  v1=table[sets[0][0]];
+  v2=table[sets[0][1]];
+  v3=table[sets[0][2]];
+  p1=sets[0][0];
+  p2=sets[0][1];
+  p3=sets[0][2];
+  pl=sets[0][3];
+  sets=sets[1..];
+  
+  if (players[pl,1]) 
+    SY("Die weitere Meldung von "+capitalize(pl)+
+      " wird von Lhjana ignoriert.\n");
+  else if ((v1==-1) || (v2==-1) || (v3==-1)) {
+    SY("Lhjana seufzt.\n"+break_string(sprintf(
+      "Fuer %c %c %c reicht es nicht mehr, da eben ein Set herausgenommen "
+      "wurde, %s war nicht schnell genug...",
+      p1+'a', p2+'a', p3+'a', capitalize(pl)), 74, "Lhjana sagt: ",1));
+  }
+  else if (!isSet(v1, v2, v3)) {
+    SY("Lhjana schuettelt bedauernd den Kopf.\n"+break_string(sprintf(
+      "%c %c %c ist leider kein Set.\n"
+      "%s muss warten, bis ein Set gefunden wurde oder "
+      "neue Karten hinzukamen, bevor %s wieder mitmachen darf.",
+      p1+'a', p2+'a', p3+'a', capitalize(pl),capitalize(pl))
+      , 76, "Lhjana sagt: ",1));
+    players[pl,1]=1;     
+  }
+  else {
+    showThree(p1, p2, p3);
+    SY("Lhjana jauchzt freudig!\n"+break_string(sprintf(
+      "%c %c %c ist ein Set, %s bekommt einen Punkt!",
+      p1+'a', p2+'a', p3+'a', capitalize(pl)), 76, "Lhjana sagt: ",1));
+    players[pl]+=1;
+    removeThree(p1,p2,p3);
+    resetPlayers();
+    foundsome++;
+  }
+  call_out("evalSetQueue2",3,foundsome);  
+  return;
+}
+
+/* Ohje, hier wird es erstmal happig :> */
+ 
+nomask nosave int cmdSet(string str) { 
+  int i;
+
+  if (!this_player()) return 0;
+  notify_fail("Entweder 'set <1> <2> <3>' (Leerzeichen optional)\n"
+    "oder     'set keines'\n");
+  if ((!str) || (str=="")) return 0;
+  notify_fail("Nur Mitspieler duerfen ein Set melden. Du spielst nicht\n"
+    "mit und bist deshalb auch kein Mitspieler. Logisch, oder?\n");
+  if (!isPlayer(getuid(this_player()))) return 0;
+  notify_fail("Das macht doch JETZT keinen Sinn, oder?\n");
+  if (game!=STAT_RUNNING) return 0;
+  notify_fail("Du darfst noch kein Set melden, da seit Deinem letzten "
+    "Fehlalarm\nnoch kein Set gefunden wurde und auch keine neuen "
+    "Karten hinzukamen.\n");
+  if (players[getuid(this_player()),1]) return 0;
+
+  if ((str=="keines")||(str=="keins")) {
+    if (players[getuid(this_player()),3]) 
+      write("Du hast schon kundgetan, dass Du glaubst, dass kein Set zu\n"
+        "finden ist oder zumindest DU keines mehr findest.\n");
+    else  {
+      players[getuid(this_player()),3]=1;
+      write("Du tust kund, dort kein Set zu finden.\n"
+        "Lhjana registriert Deine Bemerkung und nickt beilaeufig.\n");
+      SOTH((string)this_player()->Name(WER)+
+        " glaubt nicht, ein Set finden zu koennen.\nLhjana nimmt "+
+        (string)this_player()->QueryPossPronoun(FEMALE, WEN,SINGULAR)+ 
+        " Haltung zur Kenntnis.\n"); 
+      if (!stillHope())
+        call_out("evalSets",2);
+    }
+    return 1;
+  }
+  str=implode(explode(str," "),"");
+
+  notify_fail("Entweder 'set <1> <2> <3>' (Leerzeichen optional)\n"
+    "oder     'set keines'\n");
+  if (strlen(str)!=3) return 0;
+  notify_fail("Selbstverstaendlich koennen nur drei "
+    "_verschiedene_ Karten ein Set bilden.\n");
+  if ((str[0]==str[1]) || (str[1]==str[2])) return 0;
+
+  for (i=0;i<3;i++) {
+    if ((str[i]>'o') || (str[i]<'a')) {
+      printf("Also '%c' kann ja wohl nicht sein?!\n",str[i]);
+      return 1;
+    }
+    else if (table[str[i]-'a']==-1) {
+      printf("An Position %c liegt gar keine Karte!\n",str[i]);
+      return 1;
+    }
+  }
+  str=implode(sort_array(({str[0..0],str[1..1],str[2..2]}),#'>),"");
+
+  printf("Du deutest auf die Karten %c, %c und %c und rufst: Set!\n",
+      str[0],str[1], str[2]);
+  SOTH(sprintf("%s  %s deutet auf die Karten %c, %c und %c und ruft: Set!%s\n",
+    ANSI_BOLD,(string)this_player()->Name(WER),str[0],str[1], str[2],
+    ANSI_NORMAL));
+  sets+=({({str[0]-'a',str[1]-'a',str[2]-'a',getuid(this_player())})});
+  if (((find_call_out("evalSetQueue")==-1) 
+    && (find_call_out("evalSetQueue2"))==-1))
+    call_out("evalSetQueue",2);
+  return 1;
+}
+
+nomask void create() {
+  int i,j;
+  object o;
+  if (is_clone(this_object())) return (void) destruct(this_object());
+  // if (!is_clone(this_object())) return;
+  ::create();
+  if (!restore_object(DOVENYA_SAVE "lhjana"))
+    banish_list=({});
+  SetProp(P_NAME,"Lhjana");
+  SetProp(P_SHORT,"Lhjana, die Nachtelfin");
+  SetProp(P_LONG,break_string(
+    "Lhjana ist eine typische Vertreterin der Nachtelfen - zierliche "
+    "Gestalt und deutlich kleiner als ein Mensch, dazu einen lange "
+    "wildkirsch-roten Pferdeschwanz und frech funkelnde gelbgruene " 
+    "Augen. Dass das (uebrigens sehr huebsche) Gesicht mit spitzen "
+    "Oehrchen ausgestattet ist, versteht sich ja von selbst. Lhjana "
+    "ist uebrigens richtig SET!-begeistert, versuch' doch mal 'hilfe set'!"
+    ,77));
+   SetProp(P_RACE,"Nachtelf");
+   SetProp(P_ALIGN,800);
+   AddDetail(({"pferdeschwanz","haare"}),
+    "Die wildkirsch-roten Haare Lhjanas sind zu einem Pferdeschwanz "
+    "zusammengebunden, einige Nachtelfinnen tragen sie aber auch offen.");
+   AddDetail("see" ,"Nein, ganz und gar nicht. Selbst Lhjanas Augen sehen "
+    "nicht aus wie Seen, sondern funkeln frech gelbgruen unter "
+    "verspielten Ponyfransen vor.");
+   AddDetail(({"augen","augenpaar"}),"Frech funkelt das gelbgruene Augenpaar "
+    "unter verspielten Ponyfransen hervor.");
+   AddDetail("ponyfransen","Hin und wieder pustet Lhjana die Fransen von "
+    "ihren Augen weg, aber diese 'Geste' kennt man ja.");
+   AddDetail("geste","... auch wenn es bei Lhjana sogar charmant wirkt."); 
+   AddDetail("gestalt","Nachtelfen und -innen sind fuer gewoehnlich eher "
+    "klein und von zierlicher Gestalt.");
+   AddDetail(({"nachtelf","nachtelfin","nachtelfen","nachtelfinnen"}),
+    "Ja, geh mal nachschauen, schau Dir mal ein paar Nachtelfen an...");
+   AddDetail(({"gesicht","nachtelfinnengesicht"}),
+    "Dies jugendliche Gesicht einer Nachtelfin ist "
+    "geradezu typisch: Zwei spitze Oehrchen, eine leicht stupsige Nase, "
+    "einen wohlgeformten Mund, langbewimperte gelbgruen strahlende "
+    "Augen und einen (fuer Elfen zumindest) ueberdurchschnittlich hellen "
+    "Teint. Alles in allem ein wirklich huebsches Nachtelfinnengesicht, "
+    "und in diesem Falle ein charmantes noch dazu.");
+   AddDetail("mund","Ein huebscher Mund, und meistens laechelt er.");
+   AddDetail(({"ohren","oehrchen","ohr"}),"Spitz, wie es sich fuer "
+    "solche Oehrchen gehoert! Suueess!");
+   AddDetail("wimpern","Mit den Wimpern kann man klimpern...");
+   AddDetail("teint","Der Teint der Nachtelfen ist fuer gewoehnlich "
+    "ziemlich hell... kein Wunder, sie entstammen einer Welt, in der "
+    "nur der Mond scheint...");
+   AddDetail("vertreterin","Lhjana ist eine typische Vertreterin ihrer Rasse.");
+
+   SetProp(P_SMELL,"Lhjana duftet irgendwie... nach herbem Fruehling.\n");
+   
+   AddInfo ( DEFAULT_INFO,
+        ({"weiss mit der Frage nichts anzufangen.\n",
+          "schaut fragend aus der Waesche.\n",
+          "guckt lieb aus der Waesche.\n",
+          "fragt: Ist das ein Kartenspiel?\n",
+          "hat ganz offensichtlich die Frage nicht verstanden.\n",
+          "laechelt verschmitzt und zuckt mit den Schultern.\n",
+          "sagt: Nie!\nLhjana sagt: Ok"
+               ", war ein Witz, ich hab's nicht kapiert :)\n"}));
+   AddInfo(({"lhjana", "wisperwipfel", "lhjana wisperwipfel"}), 
+          "Das ist mein Name - das bin ich.","nickt: ");
+   AddInfo("anatol","Zu ihm sage ich besser nichts...","laechelt: ");
+   AddInfo("woody","Der sagte, er koenne bestimmt kein SET! spielen, "
+      "aber Woody untertreibt ja immer!","schmollt: ");
+   AddInfo("thor","Thor hat die ersten Runden SET! mit mir gespielt!",
+     "laechelt: ");
+   AddInfo("sargola","Sargola hat 'Set-Tussn' zu mir gesagt!","schnieft: ");
+   AddInfo("set","SET! ist ein tolles Kartenspiel, Du kannst hier bei mir "
+      "SET! spielen, schau Dir doch mal die Hilfeseite an...'hilfe set'! "
+      "Allerdings brauchst Du ein ansi-Terminal fuer das Spiel.",
+    "schwaermt: ");
+   AddInfo(({"hilfeseite","hilfe"}),
+      "Naja, 'hilfe set' geht natuerlich nur hier, bei mir.",
+      "stellt richtig: ");
+   AddInfo("kartenspiel", "Aeh... also eigentlich spiele ich nur SET!, "
+      "da braucht man kein Glueck oder Geschick oder Pokerface, da "
+      "ist eine schnelle Auffassungsgabe das A und O.","erklaert: ");
+   AddInfo(({"stelle","stellen"}),
+       "Seit sich dort ein Zwerg mit fettigen Fingern beim Essen abstuetzte, "
+       "patschen alle Leute wie bloede an die Felswand. Dabei weiss doch "
+       "jeder, dass man hier gegen einen BAUM patschen muss, um geheilt zu "
+       "werden...","kichert: ");
+   AddInfo("pokerface","Ich weiss doch gar nicht, was das ist!","kichert: ");
+   AddInfo("a","A a a a!","grinst: ");
+   AddInfo("o","Oh-oh...?!","schmunzelt: ");
+   AddInfo("glueck","Jeder braucht irgendwo Glueck... fuer SET! nicht!",
+      "sagt: ");
+   AddInfo("geschick","Mein Geschick? Hach, ich bin fuerchterlich "
+      "uuuungeschickt!", "tut, als ob sie blond waere: ");
+   AddInfo(({"ansi-terminal","terminal","ansi"}),
+      "SET! basiert leider unter anderem auf verschiedenen Farben, das "
+      "heisst, Du brauchst ein Terminal, das Farbe darstellen kann. Und "
+      "Du musst mit 'stty ansi' das dem Silberland auch gesagt haben.",
+      "erklaert: ");
+   AddInfo(({"blumen","bluemchen","blume"}),
+      "jubelt: Hey, ich mag Blumen!!\n");
+   AddInfo(({"farbe","farben"}),
+     "Farben sind bei SET! sehr wichtig! :)","laechelt: ");
+   AddInfo(({"waesche","kleid"}),"Mein Kleid gehoert mir!","protestiert: ");
+  create_default_npc(15);
+  SetProp(P_XP,0); 
+  SetProp(P_NOCORPSE,1);
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_DIE_MSG, " verschwindet in einer blauweissen Sternenwolke.\n");
+  SetProp(P_WEIGHT,52000);
+  SetProp(P_SIZE,153);
+  SetProp(P_ARTICLE,0);
+  SetProp(P_NOATTACK,"achtet den Frieden des Gartens und balgt sich nicht"
+         " mit Dir.");
+  SetProp(P_MSGIN,"tritt aus einer blau-weissen Sternenwolke");
+  SetProp(P_MSGOUT,"winkt und huepft");
+  SetProp(P_MMSGOUT,"verschwindet in einer blau-weissen Sternenwolke");
+  SetProp(P_MMSGIN,"tritt aus einer blau-weissen Sternenwolke");
+  SetProp(P_HANDS,({" gar nicht",0,DT_BLUDGEON}));
+  AddId(({"lhjana","wisperwipfel", "lhjana wisperwipfel","\a\n\a\tol_lhjana","ANATOL_SET_NPC"}));
+
+  seteuid(getuid(this_object()));
+
+  // if (o=clone_object(ARMOUR "lh_kleid"))
+  //   o->move(this_object(),M_GET);
+
+  // command("trage kleid");  
+
+  AddCmd("anfangen","beginGame");
+  AddCmd("mitspielen","cmdMitspielen");
+  AddCmd("aussteigen","cmdAussteigen");
+  AddCmd("set","cmdSet");
+  AddCmd("runde","cmdRunde");
+  AddCmd("karten","cmdKarten");
+  AddCmd("stand","cmdStand");
+  AddCmd("hilfe","cmdHilfe");
+
+  /* Fuer die Darstellung und des schnelleren Zugriffs wegen werden
+   * die Symbole in verschachtelten Arrays abgelegt, so dass die
+   * Eigenschaften "Anzahl" und "Symbol" zusammengefasst sind. Ob das
+   * die Performance wirklich beeinflusst? Ich werd's nie erfahren. */
+
+  symbols= ({ 
+     ({"  " SYM0 "  ", " " SYM0 " " SYM0 " ", SYM0 " " SYM0 " " SYM0 }),
+     ({"  " SYM1 "  ", " " SYM1 " " SYM1 " ", SYM1 " " SYM1 " " SYM1 }),
+     ({"  " SYM2 "  ", " " SYM2 " " SYM2 " ", SYM2 " " SYM2 " " SYM2 })
+           });
+  boxes= ({ BOX0, BOX1, BOX2 });
+  colors=({ COL0,COL1,COL2 });
+  noc=NO_CARD;
+  sets=({});
+  lhjanapts=closed=0;
+  players=([]);
+  game=STAT_NO_GAME;
+  move("/d/nacht/anatol/dovenya/r/garten_s",M_GO); // Der Raum hat sie auf REFRESH_DESTRUCT
+  return;
+}
+
+
+nomask varargs string short() {
+  if (game==STAT_RUNNING) return 
+    "Lhjana Wisperwipfel (vor einem Kartenspiel sitzend).\n";
+  else return "Lhjana Wisperwipfel.\n";
+}
+ 
+nomask varargs string long() {
+  return break_string(
+    "Lhjana ist eine typische Vertreterin der Nachtelfen - zierliche "
+    "Gestalt und deutlich kleiner als ein Mensch, dazu einen lange "
+    "wildkirsch-roten Pferdeschwanz und frech funkelnde gelbgruene " 
+    "Augen. Dass das (uebrigens sehr huebsche) Gesicht mit spitzen "
+    "Oehrchen ausgestattet ist, versteht sich ja irgendwie von selbst.\nLhjana "
+    "ist uebrigens richtig SET!-begeistert, versuch' doch mal 'hilfe set'!"
+    ,77,0,1)+((game==STAT_RUNNING)?
+    "Sie sitzt momentan vor einem Kartenspiel auf dem Boden.\n":"");
+}
+
+nomask string getShortHelp() {
+  return break_string("\n\
+            SET!  -  Die ultimative Herausforderung\n\
+     \n\
+     mitspielen                  ins Spiel einsteigen / mitspielen\n\
+     aussteigen                  aussteigen / doch nicht mitspielen\n\
+     anfangen                    das Spiel beginnen lassen\n\
+     karten                      ausliegende Karten anschauen\n\
+     runde oeffnen|schliessen    'geschlossene Gesellschaft' ja/nein\n\
+     stand                       Spielzustand anzeigen\n\
+     set keines|<a> <b> <c>      'sehe kein Set' / Set melden\n\
+     hilfe set [lang]            Hilfeseite [/ Spielregeln]\n\
+\n"
+  ,76,0,1);
+}  
+
+nomask string getLongHelp() {
+  string res;
+  if (!this_player()) return "";
+  res=break_string("\n\
+             SET!  -  Die ultimative Herausforderung\n\
+\n\
+  SET! ist ein Kartenspiel fuer (nahezu) beliebig viele Spieler. \n\
+\n\
+  Das Spiel  besteht aus 81 verschiedenen Karten, von denen zu Beginn\n\
+  zwoelf aufgedeckt und ausgelegt werden. Jede dieser Karten zeichnet\n\
+  sich durch vier Eigenschaften aus:\n"
+"\n\
+   - Symbolart      (Es gibt /, * und O)\n\
+   - Symbolanzahl   (Ein Symbol kommt ein- bis dreimal auf eine Karte)\n\
+   - Rahmenart      (Etwa wie ------, ======= oder ooooooo)\n\
+   - Farbe          (Hiervon rot, tuerkis und gruen)\n\
+\n\
+     *****************************************************\n\
+     *  Ein SET bilden drei Karten, bei welchen fuer     *\n\
+     *  jedes ihrer vier Merkmale jeweils gilt:          *\n\
+     *  entweder bei allen drei Karten GENAU GLEICH,     *\n\
+     *  oder bei allen drei Karten VOELLIG VERSCHIEDEN.  *\n\
+     *****************************************************\n"
+"\n\
+Am Ende der Spielregeln sind noch einige Beispiele aufgefuehrt.\n\
+\n\
+ZIEL DES SPIELS:\n\
+\n\
+  Ganz einfach: Moeglichst viele Sets finden!\n\
+\n"
+"SPIELABLAUF: \n\
+\n\
+  Normalerweise melden sich die Mitspieler an ('mitspielen'),  bevor\n\
+  ein Spieler mit 'anfangen' das Spiel beginnen laesst. Es ist aber,\n\
+  sofern  die Runde  nicht von  einem Mitspieler  zur  geschlossenen\n\
+  Gesellschaft  erklaert  worden  ist ('runde schliessen',  kann mit\n\
+  'runde oeffnen' wieder zurueckgenommen werden), auch der (Wieder-)\n\
+  Einstieg  in eine laufende Runde moeglich.  Aussteigen kann man zu \n\
+  (fast) jedem beliebigen Zeitpunkt.\n\
+\n\
+  Wenn man ein Set in der Auslage sieht und meldet (z.B. 'set a b c'\n\
+  oder 'set abc'),  bekommt man  einen  Punkt gutgeschrieben und die \n\
+  drei  Karten  werden entfernt und  (sofern nicht bereits 15 Karten \n\
+  auslagen) durch drei neue vom Stapel ersetzt. Hat man sich vertan, \n\
+  da die drei Karten  KEIN  Set bilden,  so darf man erst wieder ein \n\
+  Set melden,  wenn ein  anderer Spieler ein  Set gefunden  hat oder \n\
+  neue Karten hinzukamen.\n\
+\n\
+  Glaubt man, dass in der Auslage kein  Set vorhanden ist,  kann man\n\
+  dies  auch kund tun  ('set keines'),  darf aber weiterhin  ein Set\n\
+  melden,  falls man doch  noch eines sieht!  Wenn alle Spieler, die\n\
+  ein Set melden duerfen  (die, die nicht wegen einer  Falschmeldung \n\
+  vom  Spielleiter gesperrt sind), den Glauben an die Existenz eines \n\
+  Sets in der  Auslage  verloren haben,  prueft der Spielleiter,  ob \n\
+  tatsaechlich  keines mehr  vorhanden ist und  ergaenzt die Auslage\n\
+  gegebenenfalls um drei weitere Karten auf 15.  War dennoch ein Set\n\
+  zu finden,  punktet der Spielleiter und ersetzt das Set durch drei\n\
+  neue Karten. Ach ja: Der Spielleiter ist Lhjana! :o)\n\
+  \n\
+  Um die ausliegenden Karten zu betrachten, muss man nicht unbedingt\n\
+  selbst  mitspielen,  das Kommando  'karten' ist,  wie auch 'stand'\n\
+  (Informationen ueber das laufende Spiel), auch fuer Zuschauer aus-\n\
+  fuehrbar.\n\
+\n"
+"SPIELENDE:\n\
+\n\
+  Wenn  der Kartenstapel  verbraucht ist und  kein Set mehr gefunden\n\
+  werden kann, ist das Spiel beendet und es wird ausgewertet.\n\
+  \n\
+  Das Spiel wird  vorzeitig beendet,  wenn alle Spieler ausgestiegen\n\
+  ('aussteigen') sind oder vom Spielleiter als ''ausgestiegen'' ver-\n\
+  merkt (z.B. nach Verlassen des Raumes) wurden.  \n\
+  \n\
+  Falls in einer erweiterten Auslage  (15 Karten) kein Set zu finden\n\
+  sein sollte, fuehrt dies auch zum vorzeitigen Spielende.\n\
+\n\
+          21.04.98, Anatol\n",77,0,1);
+  if ((string)this_player()->QueryProp(P_TTY)!="ansi") 
+    res+="\n"
+      "Da Du keine ansi-Terminalemulation eingestellt hast, bleiben Dir die\n"
+      "Set-Beispiele leider vorenthalten! Besorg' Dir doch mal ein besseres\n"
+      "Terminal!\n\n";
+  else {
+    res+="\n Einige Beispiele:\n\n";
+    res+=getThree(28,1,55)+
+         "Farbe: verschieden, Rahmen: gleich,\n"
+         "Symbole: gleich, Anzahl: gleich...              Also: SET!\n\n";
+    res+=getThree(0,40,80)+
+         "Farbe: verschieden, Rahmen: verschieden,\n"
+         "Symbole: verschieden, Anzahl: verschieden...    Also: SET!\n\n";
+    res+=getThree(33,26,66)+
+         "Farbe: verschieden, Rahmen: verschieden,\n"
+         "Symbole: WEDER NOCH, Anzahl: verschieden...     Also: KEIN SET!\n\n";
+  }
+
+  res+="\
+    SET! - Die ultimative Herausforderung!  ist keine Erfindung\n\
+     von mir, sondern von SET Enterprises, Inc. (c) 1988, 1990\n\n";
+
+  return res;
+}
+
+nomask nosave int cmdHilfe(string str) {
+  if (!this_player()) return 0;
+  if (str=="set") {
+    printf(getShortHelp());
+    return 1;
+  }
+  else if (str=="set lang") {
+    this_player()->More(getLongHelp());
+    return 1;
+  }
+  else return 0;
+}
+
+varargs int move(mixed dest, int method, string dir, string textout,
+     string textin) {
+  if ((game!=STAT_NO_GAME)||(sizeof(players))) {
+    if (this_player()) tell_object(this_player(), 
+        "Lhjana ist gerade beschaeftigt, tut mir leid.\n");
+    return 0;
+  }
+  else return ::move(dest, method, dir, textout, textin);
+}
+
+nomask public void NotifyPatsch() {
+  if (!this_player()) return;
+  if (previous_object()!=environment()) return;
+  if (getuid(previous_object())!=getuid(this_object())) return;
+  tell_room(environment(),"Lhjana gibt ein albernes Kichern von sich.\n");
+  return;
+}
+
+nomask public void
+NotifyPflueck() 
+{
+    object ob;
+    if (!ob=this_player()) return;
+    if (previous_object()!=environment()) return;
+    if (getuid(previous_object())!=getuid(this_object())) return;
+    if (environment(ob) == environment())
+    {
+        command_me("sag Sag mal - spinnst Du?!");
+        environment()->Message(Name(WER)+" gibt "+
+            ob->Name(WEM)+ " eine schallende Ohrfeige.\n",MSGFLAG_NO_TP);
+        ob->Message(Name(WER)+" gibt Dir eine schallende Ohrfeige.\n");
+        environment()->Message(Name(WER)+" kuckt zornig.\n");
+    }
+    return;
+}

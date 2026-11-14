@@ -1,0 +1,98 @@
+
+
+#include <wizlevels.h>
+#include <language.h>
+#include <config.h>
+#include <new_skills.h>
+#include <properties.h>
+
+#include "../paladin.h"
+
+mixed saveload;
+nosave mapping paladins=([ ]);
+/*
+ Doch besser ein MApping von mappings, so braucht man nur einmal laden :)
+ also ([spieler:([spell:abil, spell:abil, ...]), spieler2:([...])...])
+ */
+create()
+{
+  if (is_clone(this_object())) {
+    destruct(this_object());
+    return 1;
+  }
+  seteuid(getuid(this_object()));
+  if (restore_object(ABILLIST))
+    paladins=saveload;
+  saveload=0;
+}
+
+query_prevent_shadow() { return 1; }
+
+
+nosave int CheckIfAllowed()
+{
+ object ob;
+ string fname;
+ ob=previous_object();
+ fname=file_name(ob);
+  
+ if(!IS_ARCH(getuid(ob)) && member(UID_ALLOWED, getuid(ob))==-1) { 
+     tell_angrox(sprintf("Versuchte "
+      +"Aenderung im Abilmaster von %s (direkt!)\n", CAP(getuid(ob))));
+     tell_zordan(sprintf("Versuchte "
+      +"Aenderung im Abilmaster von %s (direkt!)\n", CAP(getuid(ob))));
+     write_secure_log(ctime()+": Versuchte Aenderung im Abilmaster "
+             +"von "+CAP(getuid(ob))+" (direkt!)\n");
+     return 0;      
+   }
+ return 1;
+}
+
+int CheckAbility(object pl, string spell, int abil)
+{
+  mapping spells;
+  if(!CheckIfAllowed()) return -2;
+  if(!interactive(pl)) return -3;
+  if(!member(paladins, getuid(pl))) 
+    paladins+=([getuid(pl):([])]);
+  spells=paladins[getuid(pl)];
+  if(!member(spells, spell))
+    spells+=([spell:abil]);
+  if(spells[spell] < abil && getuid(pl) != "GUILD.paladine") {
+    write_secure_log(sprintf("%s: Veraenderte Ability: %s(%d) -> %d von %s\n", 
+	      ctime(), spell, spells[spell], abil, CAP(getuid(pl))));
+    return 1;
+  }
+  return 0;
+}
+
+int UpdateAbility(object pl, string spell, int new_abil)
+{
+  mapping spells;
+  if(!CheckIfAllowed()) return -2;
+  if(!interactive(pl)) return -3;
+  if(!member(paladins, getuid(pl))) return -1;
+  spells=paladins[getuid(pl)];
+  if(!member(spells, spell))
+    spells+=([spell:new_abil]);
+  spells[spell]=new_abil;
+  paladins[getuid(pl)]=spells;
+  saveload=paladins;
+  save_object(ABILLIST);
+  return 1;
+}
+
+mixed QueryAllAbils()
+{
+ return paladins;
+}
+
+int DeleteEntry(string player)
+{
+  if(!CheckIfAllowed()) return -2;
+  if(!member(paladins, player)) return -1;
+  paladins=m_delete(paladins, player);
+  saveload=paladins;
+  save_object(ABILLIST);
+  return 1;
+}

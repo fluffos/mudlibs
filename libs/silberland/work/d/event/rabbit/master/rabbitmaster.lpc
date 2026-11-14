@@ -1,0 +1,575 @@
+/*
+//
+// Der Master fuer das Karnickelevent
+//
+// Angrox@Silberland
+//
+// 17.11.1997
+*/
+
+#include "/secure/wizlevels.h"
+#include <properties.h>
+#include <language.h>
+#include <config.h>
+#include <mnpc.h>
+#include <moving.h>
+#include <defines.h>
+#include <moredef.h>
+#include "../rabbit.h"
+
+// prototypes
+varargs int StartRabbitEvent(int maxrabbits, int dauer, string wo_text, 
+    string gebiet, string startroom, string room1, string room2, int 
+    startrabbits);
+nosave void Channel(string msg);
+void CloneLoop(object room, int nr);
+
+
+//mixed saveload; 
+nosave mapping rabbit_map=([ ]);
+nosave mapping kills_by_players=([ ]);
+nosave int max_rabbits;
+nosave int event_in_progress, last_amount_check, solved;
+nosave int last_gender=MALE;
+nosave string region;
+nosave int max_gen=1;
+
+// Fuer StartEvent
+nosave mapping locations=([
+    "midas":({"in Midas", "/d/ebene/Midas", 
+      "/d/ebene/Midas/room/wachweg_c9",
+      "/d/ebene/Midas/room/room_a7", 
+      "/d/ebene/Midas/room/room_g1"}),
+    "kyranda":({"in Kyranda", "/d/ebene/lamuerte/burg", 
+      "d/ebene/lamuerte/burg/weg/13x9y",
+      "/d/ebene/lamuerte/burg/mauer/16x1y",
+      "/d/ebene/lamuerte/burg/mauer/5x4y"}),
+    "tijara":({"in Tijara", "/d/dschungel/feyaria/tijara", 
+      "/d/dschungel/feyaria/tijara/room/kraeuter_b6",
+      "/d/dschungel/feyaria/tijara/room/weg_a3",
+      "/d/dschungel/feyaria/tijara/room/kneipe_e2"}),
+    "derlim":({"in Derlim", "/d/huegelland/raballion/hobbits",
+      "/d/huegelland/raballion/hobbits/room/suedweg1",
+      "/d/huegelland/raballion/hobbits/room/hauptstrasse2",
+      "/d/huegelland/raballion/hobbits/room/hauptplatz"}),
+    "test":({"im Testgebiet", "/players/woody/room",
+      "/players/woody/room/test_e2",
+      "/players/woody/room/testkneipe",
+      "/players/woody/room/test_d2"}),
+    "nekr":({"bei den Nekromanten", "/d/unterwelt/nekromanten/room/",
+      "/d/unterwelt/nekromanten/room/treppe",
+      "/d/unterwelt/nekromanten/room/kuppel",
+      "/d/unterwelt/nekromanten/room/kuppel"}),
+      "gebirge":({"im Gebirge", "/d/gebirge",
+          "/d/gebirge/angrox/room/ebene1/bergwerk_r24",
+          "/d/gebirge/eros/room/berg_f19",
+          "/d/gebirge/thor/plateau/room/plat12"}),
+          ]);
+
+
+int create() {
+  if (is_clone(this_object())) {
+    destruct(this_object());
+    return 1;
+  } 
+  seteuid(getuid(this_object())); 
+}
+
+query_prevent_shadow() { return 1; }
+
+int CheckCloneAllowed() {
+  if(!max_rabbits) max_rabbits=MAX_RABBITS;
+  if(sizeof(rabbit_map)>=max_rabbits) return 0;
+  return 1;
+}
+
+
+/*
+//  1 ... Rabbit wird geclont
+//  0 ... Max Anzahl erreicht
+// -1 ... Eltern sind nicht eingetragen oder 
+vater==mutter
+*/
+mixed CloneRabbit(int parent_gen)
+{
+  object ob;
+  int lvl;
+  if(!max_rabbits) max_rabbits=MAX_RABBITS;
+  if(sizeof(rabbit_map)>=max_rabbits) return 0;
+  ob=CLONEOB(RABBITS_NEW);
+  if(last_gender==0) last_gender=MALE;
+  if(last_gender==MALE) 
+  {
+    ob->set_sex(FEMALE);
+    last_gender=FEMALE;
+    ob->AddId("READYFEMALE");
+    //ob->SetProp(P_GENDER, FEMALE);
+  }
+  else 
+  {
+    ob->set_sex(MALE);
+    last_gender=MALE;
+    ob->SetProp(P_GENDER, MALE);
+    ob->set_exhausted(time()+4);
+  }
+  if((parent_gen+1) > max_gen)
+    max_gen=parent_gen+1;
+  ob->AddGen(parent_gen);
+  lvl=ob->QueryProp(P_LEVEL)+1;
+  ob->SetLevel(lvl<=10?lvl:10);
+  rabbit_map+=([file_name(ob):time()+random(10)]);
+
+  return ob;
+}
+
+int CloneRabbitForStart(object room)
+{
+  object ob;
+  if (!room) return 0;
+  ob=clone_object(RABBITS_NEW);
+  if(last_gender==0) last_gender=MALE;
+  if(last_gender==MALE) 
+  {
+    ob->set_sex(FEMALE);
+    last_gender=FEMALE;
+    ob->AddId("READYFEMALE");
+    ob->set_exhausted(time()+6);
+    //ob->SetProp(P_GENDER, FEMALE);
+  }
+  else 
+  {
+    ob->set_sex(MALE);
+    last_gender=MALE;
+    ob->SetProp(P_GENDER, MALE);
+  }
+  if(!region) region="/";
+  rabbit_map+=([file_name(ob):time()+random(5)]);
+  ob->set_exhausted(time());
+  ob->AddGen(0);
+  ob->move(room, M_GO);
+  return 1;
+}
+
+
+void move_loop() {
+  string *rab;
+  int x,y;
+  rab=m_indices(rabbit_map);
+  TELL("angrox", sprintf("ANZAHL KARNICKEL: %d, MaxLvl: %d\n", sizeof(rab),
+        max_gen));
+  while(sizeof(rab)) {
+    x=sizeof(rab);
+    if(x <= 150) {
+      call_out("move_rabbits", 0, rab[0..x-1]);
+      rab=({});
+    }
+    else {
+      call_out("move_rabbits", 0, rab[0..149]);
+      rab=rab[150..x-1];
+    }
+    y++;
+    if(y > 300) break;
+  }
+  call_out("move_loop", 2);
+  return ;
+}
+
+nosave int move_rabbits(string *rab) {
+  int i;
+  object rabbit;
+  for(i=sizeof(rab)-1; i>=0;i--) {
+    if(catch(rabbit=find_object(rab[i]))) {
+      TELL("angrox", sprintf("FEHLER RABBIT! rab[i]= %s, i= %d, sizeof(rab) = %d\n", rab[i], i, sizeof(rab)));
+      TELL("angrox", sprintf("rab[i-1]= %s\n", rab[i-1]));
+      break;
+    }
+    if(!objectp(rabbit)) {
+      rabbit_map=m_delete(rabbit_map, rab[i]);
+      continue;
+    }
+    if(rabbit_map[rab[i]] <= time()) {
+      rabbit->move_random(region);
+      rabbit_map[rab[i]]=time()+(random(4)*2);
+    }
+  }
+}
+
+void stop_moving() {
+  while( find_call_out("move_loop") !=-1 )
+    remove_call_out("move_loop");
+  while( find_call_out("move_rabbits") !=-1 )
+    remove_call_out("move_rabbits");
+  return;
+
+}
+
+
+nosave int LogKill(string player)
+{
+  if(member(kills_by_players, player)==0)
+    kills_by_players+=([player:0]);
+  kills_by_players[player]=kills_by_players[player]+1;
+  return 1;
+}
+
+
+int RemoveRabbit(object rabbit)
+{
+  if(!member(rabbit_map, file_name(rabbit))) return -1;
+  rabbit_map=m_delete(rabbit_map, file_name(rabbit));
+  return 1;
+}
+
+
+int KillRabbit(object rabbit, object player)
+{
+  RemoveRabbit(rabbit);
+  if(interactive(player) && getuid(player)!="angrox")
+    LogKill(getuid(player));
+  return 1;
+}
+
+
+mapping GetKills()
+{
+  return kills_by_players;
+}
+
+
+mapping GetRabbits()
+{
+  return rabbit_map;
+}
+
+
+int GetAmount()
+{
+  return sizeof(rabbit_map);
+}
+
+
+int RemoveAll()
+{
+  int i;
+  string *rab;
+  object ob;
+  rab=m_indices(rabbit_map);
+  if(!sizeof(rab)) return 0;
+  for(i=sizeof(rab)-1;i>=0;i--)
+  {
+    if(ob=find_object(rab[i]))
+      ob->remove();
+  }
+  rabbit_map=([]);
+  return 1;
+}
+
+
+string name()
+{
+  return "Elsurion";
+}
+
+
+mixed Score(int rabbits_left)
+{
+  int i,j, *a, *score;
+  mapping scoret;
+  string *b;
+  scoret=([]);
+  score=({});
+  a=({});
+  b=({});
+  if(member(kills_by_players, "Event"))
+    kills_by_players=m_delete(kills_by_players, "Event");
+  b=m_indices(kills_by_players);
+  a=m_values(kills_by_players);
+  for(i=0;i<=sizeof(kills_by_players)-1;i++)
+  {
+    if(member(scoret, a[i]))
+      scoret[a[i]]+=({b[i]});
+    else scoret+=([a[i]:({b[i]})]);
+  }
+  score=sort_array(m_indices(scoret), #'<); //')
+  /*
+     tell_object(find_player("angrox"), sprintf("Scoret: %O\n"
+     +"Score:%O\nScoretable: %O\n\n", scoret, score, scoretable));
+     */
+  return ({score, scoret});
+}
+
+
+int ChannelAuswertung(int *scores0, mapping scores1)
+{
+  int anzahl,i,j;
+  string msg;
+  int tabs;
+  if(!scores0 || !scores1) return 0;
+  if(!sizeof(scores0)) return 0;
+  msg="";
+  Channel("Die Besten unter euch waren:");
+  if((sizeof(scores0))>10) anzahl=10;
+  else anzahl=sizeof(scores0);
+  for (i=0;i<=anzahl-1;i++)
+  {
+    for(j=0;j<=(sizeof(scores1[scores0[i]])-1);j++)
+    {
+      msg+=(CAP(scores1[scores0[i]][j])+", "); 
+    }
+    msg=msg+"\b\b";
+    tabs=32-(strlen(msg));
+    msg+=(sprintf("%*' 's: %d Karnickel",tabs,"",scores0[i]));
+    Channel(msg);
+    msg="";
+  } 
+  return 1;
+}
+
+
+int CheckValidUser(string str) {
+   if(sizeof(explode(str, ".")) > 1)
+     return 0;
+   return 1;
+}
+
+
+nosave void Channel(string msg) {
+  CHMASTER->join("Event",TO);
+  CHMASTER->send("Event",TO,msg,MSG_SAY);
+  //TELL("angrox", sprintf("EVENT: %s\n", msg));
+  return;
+}
+
+
+int EndEvent() {
+  mixed score;
+  stop_moving();
+  if(find_call_out("Messages"))
+    remove_call_out("Messages");
+  if(find_call_out("EndEvent"))
+    remove_call_out("EndEvent");
+  if(find_call_out("EndIsNear"))
+    remove_call_out("EndIsNear"); 
+  if(!solved)
+    Channel("Ihr habt es NICHT geschafft alle Karnickel zu toeten! "
+        +"Eine SCHWACHE Leistung! Aber immerhin konntet ihr "
+        +"das Allerschlimmste verhindern.");
+  event_in_progress=0;
+  score=Score(sizeof(rabbit_map));
+  RemoveAll();
+  region="";
+  call_out("ChannelAuswertung", 1, score[0],score[1]);
+  //call_other(RABBITLOGMASTER, "AddStats", score[0],score[1]);
+  TELL("angrox", "Karnickelevent: Maximiale Generation = "+max_gen+"\n");
+  return 1;
+}
+
+EndIsNear() {
+  Channel("WAHHH! GLEICH IST ALLES VORBEI! MACHT SCHNELLER!");
+  call_out("EndEvent", 60);
+}
+
+/*
+// Hier wird das Event gestartet
+//
+//
+*/
+
+int StartEvent(string loc, int maxrabbits, int dauer, int startrabbits) {
+  string *infos;
+  if(!member(locations, loc)) return 0; 
+  infos=locations[loc];
+  StartRabbitEvent(maxrabbits, dauer, infos[0], infos[1], infos[2],
+      infos[3], infos[4], startrabbits);
+  return 1;
+}
+
+varargs int StartRabbitEvent(int maxrabbits, int dauer, string wo_text, 
+    string gebiet, string startroom, string room1, string room2, int 
+    startrabbits) 
+{
+  int i;
+  object hr,nr1,nr2;
+  
+  //write ("Schlachtruf zu unbalanciert fuer Rabbitevent. Ende.\n");
+  //return -2;
+  if(event_in_progress) return -1;
+  kills_by_players=([]);
+  rabbit_map=([]);
+  if (intp(max_rabbits)) max_rabbits=maxrabbits;
+  if (!intp(dauer) || dauer<5) dauer=5;
+  if (!stringp(startroom)) return -2;
+  if (!gebiet) gebiet="/";
+  if (!startrabbits) startrabbits=10;
+  region=gebiet;
+  call_other(startroom, "???");
+  call_other(room1, "???");
+  call_other(room2, "???");
+  if (!hr=find_object(startroom)) return -3;
+  write("Startraum ok!\n");
+  if(stringp(room1)) 
+  {
+    if (!nr1=find_object(room1)) return -3;
+    write("Nebenraum 1 ok!\n");
+  }
+  if(stringp(room2)) 
+  {
+    if (!nr2=find_object(room2)) return -3;  
+    write("Nebenraum 2 ok!\n");
+  }
+  CloneLoop(hr,startrabbits);
+  write("Hasen in "+startroom+" geclont!\n");
+  if(objectp(nr1))
+  {
+      CloneLoop(nr1, startrabbits);
+    write("Hasen in "+room1+" geclont!\n");
+  }
+  if(objectp(nr2))
+  {
+      CloneLoop(nr2,startrabbits);
+    write("Hasen in "+room2+" geclont!\n");
+  }
+  call_out("EndIsNear", (dauer-1)*60);
+  event_in_progress=1;
+  call_out("move_loop", 0);
+  solved=0;
+  last_gender=MALE;  
+  write("Maximale Anzahl von Karnickel: "+max_rabbits+"\n");
+  write("Dauer des Events: "+dauer+" Minute(n)!\n");
+  call_out("SendStartText", 15, wo_text);
+  return 1; 
+}
+
+void CloneLoop(object room, int nr) {
+  int nr2,i;
+  if(nr>20) {
+    nr2=20;
+    nr-=20;
+  }
+  else {
+    nr2=nr;
+    nr=0;
+  }
+  for(i=nr2;i>=0;i--) {
+      CloneRabbitForStart(room);
+  }
+  if(nr > 0)
+    call_out("CloneLoop", 2, room, nr);
+  return;
+
+}
+
+Messages()
+{
+  int anzahl;
+  string a,b,str;
+  if(event_in_progress==0) return;
+  if(last_amount_check==0)
+  {
+    Channel("Ich habe die neuesten Berichte! Die Anzahl "
+        +"der Karnickel ist seit dem letzten Bericht "
+        +"auf NULL gesunken! DIE KARNICKELPLAGE IST "
+        +"BEENDET!");
+    solved=1;
+    call_out("EndEvent", 2);
+    return;
+  }
+  anzahl=sizeof(rabbit_map); 
+  switch(100*anzahl/last_amount_check)
+  {
+    case 0:        a="ist";
+                   b="auf NULL gesunken! DIE KARNICKELPLAGE "
+                     +"IST BEENDET!";
+                   solved=1;     
+                   EndEvent();
+                   break; 
+    case 1..20:    a="ist";
+                   b="beinahe auf Null geschrumpft. Weiter so! "
+                     +"Bald ist es geschafft!";
+                   break;
+    case 21..40:   a="ist";
+                   b="auf etwa ein Viertel verringert. Gut so!";
+                   break;
+    case 41..60:   a="hat sich";
+                   b="in etwa halbiert.";
+                   break;
+    case 61..80:   a="hat sich";
+                   b="etwa um ein Viertel verringert.";
+                   break;   
+    case 81..120:  a="ist";
+                   b="in etwa gleichgeblieben.";
+                   break;
+    case 121..140: a="ist";
+                   b="etwa um ein Viertel gestiegen.";
+                   break;
+    case 141..160: a="ist";
+                   b="etwa um die Haelfte gestiegen.";
+                   break;
+    case 161..180: a="hat sich";
+                   b="etwa um drei Viertel erhoeht.";
+                   break;
+    case 181..220: a="hat sich";
+                   b="etwa verdoppelt. Ihr muesst SCHNELLER handeln!";
+                   break;
+    case 221..240: a="ist";
+                   b="etwa um das Eineinviertelfache gestiegen.";
+                   break;
+    case 241..260: a="ist";
+                   b="etwa um einhundertfuenfzig Prozent gestiegen.";
+                   break;
+    case 261..280: a="hat sich";
+                   b="etwa um sieben Viertel erhoeht.";
+                   break;
+    case 281..320: a="hat sich";
+                   b="etwa VERDREIFACHT!!!!";
+                   break;
+    default:       a="hat sich";
+                   b="mehr als VERDREIFACHT!! WARUM TUT IHR NICHTS?!?";
+                   break;
+  } 
+  str="Ich habe die neuesten Berichte! Die Anzahl der Karnickel "+a
+    +" seit der letzten Meldung "+b+" Absolut gesehen ";
+  switch(100*GetAmount()/(max_rabbits))
+  {
+    case 0..15:  str+="sind fast ueberhaupt keine Karnickel mehr vorhanden.";
+                 break;
+    case 16..30: str+="sind nur mehr ein paar Karnickel da.";
+                 break;
+    case 31..45: str+="hoppeln noch etliche Karnickel um ihr Leben.";
+                 break;
+    case 46..55:  str+="sind viele Karnickel am Leben.";
+                  break;
+    case 56..70: str+="hoppeln SEHR viele Karnickel herum.";
+                 break;
+    case 71..85: str+="sind EXTREM viele von Biestern unterwegs!!!!";
+                 break;
+    case 86..100: str+="hoppelt eine UNGLAUBLICH HOHE Anzahl von "
+                  +"diesen kleinen Biestern herum!!!!!!";
+                  break;    
+    default:     str+="sind eine undefinierbare Anzahl Karnickel da.";
+                 break;
+  }
+  Channel(str);
+  last_amount_check=anzahl;
+  call_out("Messages",120);
+} 
+
+
+void SendStartText(string wo) 
+{
+  Channel("Ein Reisender berichtete soeben von einer sich ausbreitender " 
+      +"Karnickelplage "+wo+"! Alle Wehrfaehigen muessen dieser " 
+      +"Plage unbedingt Einhalt gebieten, da ansonsten ein grosser " 
+      +"Teil des SilberLandes von den Karnickeln kahlgefressen wird !"); 
+  call_out("Messages", 60); 
+  last_amount_check=sizeof(rabbit_map);
+}
+
+int set_region(string str) {
+  region=str;
+  return 1;
+}
+
+mixed test123(string str) {
+  return Channel(str);
+}

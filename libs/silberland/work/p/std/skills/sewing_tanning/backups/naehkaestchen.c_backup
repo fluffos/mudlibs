@@ -1,0 +1,685 @@
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include <combat.h>
+#include <wizlevels.h>
+#include <defines.h>
+#include <moredef.h>
+#include <new_skills.h>
+#include "/p/daemon/skillmaster/skillmaster.h"
+
+#define ARMOR(x) ("/p/std/skills/sewing_tanning/items/"+x)
+
+// Prototypes
+int obtain_sewing_skill(object pl);
+int obtain_tanning_skill(object pl);
+
+
+// Variables
+int DELAY_COUNT=0;
+
+int PL_MOVED=0;
+int IS_SEWING=0;
+
+int s_skill=2000,g_skill=2000;
+
+string *used_furs;
+string NKOWNER;
+string NKNAME;
+
+string *level_names = 
+({ "PLACEHOLDER",
+   "Naehneuling",
+   "Naehlehrling",
+   "Naehgeselle",
+   "Naehkundige",
+   "Naeherprobte",
+   "Naehgepruefte",
+   "Naehgelehrte",
+   "Naehweise",
+   "Naehkunstbeherrschende",
+   "Naehkunstmeisternde"
+   });
+
+string *gerb_names =
+({ "PLACEHOLDER",
+   "wirklich schlecht",
+   "schlecht",
+   "mittelmaessig",
+   "durchschnittlich",
+   "gut",
+   "ueberdurchschnittlich gut",
+   "sehr gut",
+   "perfekt",
+   "mehr als perfekt",
+   "meisterhaft"
+   });
+
+
+//d/ebene/obj/ruestung/biberfell.c               biberfell
+//d/gebirge/thor/hoehlenquest/armour/bfell.c     baerenfell
+//d/wueste/verdandi/friedhof/armour/bueffelfell.c bueffelfell
+//p/armour/cloak/baerenfell                      braunbaerenfell
+//d/kristallwald/sargola/wald/obj/fuchsf         fuchsfell
+//d/gebirge/eros/ruestung/grizzlyfell.c          grizzlyfell
+//d/ebene/obj/ruestung/igelfell.c                igelfell
+//d/ebene/obj/ruestung/igelfellteil.c            igelfellchen
+//d/dschungel/feyaria/kueste/armour/jaguarfell.c jaguarfell
+//d/ebene/obj/ruestung/otterfell.c               otterfell
+//d/dschungel/dante/weg/armour/dtigerfell.c      tigerfell
+//d/gebirge/thor/plateau/armour/pumafell.c       pumafell
+//d/gebirge/dusty/hoch/obj/fell.c                wuslerfell
+//d/gebirge/thor/hoehlenquest/armour/wfell.c     wolfsfell
+//d/polar/lamuerte/eishoehle/obj/yeti_fur        yetifell
+
+mixed *armor_types =
+({
+    ({ "PLACEHOLDER" }),
+    ({1,0, "Paar Lederhandschuhe", "Ein Paar lederne Handschuhe",
+      1, "biberfell", 1, "raupenseide","Handschuh",3,"leder_items"}),
+    ({1,0, "Lederkappe", "Eine lederne Kappe",
+      1, "biberfell", 1, "raupenseide","Helm",4,"leder_items"}),
+    ({1,2300, "Lederhalsband", "Ein ledernes Halsband",
+      1, "biberfell", 1, "raupenseide","Amulett",1,"leder_items"}),
+    ({1,2350, "Lederhose", "Eine lederne Hose",
+      1, "biberfell", 1, "raupenseide","Hosen",3,"leder_items"}),
+    ({1,2350, "Lederguertel", "Ein lederner Guertel",
+      1, "biberfell", 1, "raupenseide","Guertel",1,"leder_items"}),
+    ({1,2350, "Lederumhang", "Ein Lederumhang",
+      1, "biberfell", 1, "raupenseide","Umhang",3,"leder_items"}),
+    ({1,2400, "I", "Ein Seil",
+      2, "fuchsfell", 1, "spinnenseide","Seil",0,"seil"}),
+    ({1,2400, "Paar Lederschuhe", "Lederne Schuhe",
+      1, "biberfell", 1, "raupenseide","Schuhe",3,"leder_items"}),
+    ({1,2450, "Paar Lederschienen", "Lederne Armschienen",
+      1, "biberfell", 1, "raupenseide","Armschienen",3,"leder_items"}),
+    ({2,2500, "Lederpanzer", "Ein feiner lederner Panzer",
+      1, "biberfell", 2, "raupenseide","Panzer",12,"leder_items"}),
+    ({2,2500, "I", "Ein kleiner Lederbeutel",
+      1, "biberfell", 3, "raupenseide","Beutel",0,"beutel"}),
+    ({2,2500, "Paar Fellhandschuhe", "Ein Paar fellerne Handschuhe",
+      2, "fuchsfell", 2, "spinnenseide","Handschuh",4,"fell_items"}),
+    ({2,2550, "fellerne Hose", "Eine fellerne Hose",
+      2, "fuchsfell", 2, "spinnenseide","Hosen",4,"fell_items"}),
+    ({2,2550, "fellerne Muetze", "Eine fellerne Muetze",
+      1, "fuchsfell", 1, "spinnenseide","Helm",6,"fell_items"}),
+    ({2,2550, "Paar fellerne Armschienen", "Fellerne Armschienen",
+      1, "fuchsfell", 1, "spinnenseide","Armschienen",4,"fell_items"}),
+    ({2,2600, "fellernes Halsband", "Ein warmes fellernes Halsband",
+      1, "fuchsfell", 2, "spinnenseide","Amulett",1,"fell_items"}),
+    ({2,2750, "I", "Eine lederne Peitsche",
+      1, "fuchsfell", 1, "holz","Peitsche",0,"peitsche"}),
+    ({2,3450, "fellerner Gurt", "Ein fellerner Gurt",
+      1, "bueffelfell", 3, "spinnenseide","Guertel",1,"fell_items"}),
+    ({3,3500, "Fellumhang", "Ein lodernder Fellumhang",
+      1, "bueffelfell", 2, "spinnenseide","Umhang",4,"fell_items"}),
+    ({3,4200, "Paar fellerne Stiefel", "Waermende Fellstiefel",
+      1, "bueffelfell", 3, "spinnenseide","Schuhe",4,"fell_items"}),
+    ({3,4300, "Fellpanzer", "Ein fellerner Panzer",
+      2, "bueffelfell", 4, "spinnenseide","Panzer",16,"fell_items"}),
+    ({3,4400,"Patchworkmuetze", "Eine patchwork Muetze",
+      2, "baerenfell", 1, "stoffreste","Helm",7,"patch_items"}),
+    ({3,4500, "I", "Eine edle Ledertasche",
+      1, "bueffelfell", 3, "raupenseide","Ledertasche",0,"tasche"}),
+    ({3,4600,"Patchworkhalsband", "Ein patchwork Halsband",
+      1 , "baerenfell", 2, "stoffreste","Amulett",2,"patch_items"}),
+    ({3,5050, "I", "Bandagen",
+      2, "bueffelfell", 2, "spinnenseide","Bandagen",0,
+      "/gilden/nekromanten/obj/bandagen"}),
+    ({3,5450,"Patchworkgurt", "Ein patchwork Guertel",
+      1, "baerenfell", 3, "stoffreste","Guertel",2,"patch_items"}),
+    ({4,5500,"Patchworkumhang", "Ein patchwork Umhang",
+      1, "baerenfell", 2, "stoffreste","Umhang",5,"patch_items"}),
+    ({4,5550,"Paar Patchworkschienen", "Patchwork Armschienen",
+      1, "baerenfell", 2, "stoffreste","Armschienen",5,"patch_items"}),
+    ({4,5600,"I", "Ein lederner metallbesetzter Morgenstern",
+     1, "baerenfell", 1, "eisenbrocken","Stern",0,"morgenstern"}),
+    ({4,5850,"Paar Patchworkschuhe", "Patchwork Schuhe",
+      1, "baerenfell", 3, "stoffreste","Schuhe",5,"patch_items"}),
+    ({4,6150,"Patchworkhose", "Patchwork Hose",
+      1, "baerenfell", 3, "stoffreste","Hosen",5,"patch_items"}),
+    ({4,6500,"Patchworkpanzer", "Ein patchwork Panzer",
+      2, "baerenfell", 4, "stoffreste","Panzer",20,"patch_items"}),
+    ({4,6500,"holzverstaerkte Lederkappe", "Eine holzverstaerkte lederne Kappe",
+      2, "grizzlyfell", 1, "holz","Helm",9,"holz_items"}),
+    ({4,6700,"Paar holzverstaerkte Armschienen", "Holzverstaerkte lederne Armschienen",
+      2, "grizzlyfell", 1, "holz","Armschienen",6,"holz_items"}),
+    ({5,6750,"holzverstaerktes Halsband", "Ein holzverstaerktes ledernes Halsband",
+      1 , "grizzlyfell", 2, "holz","Amulett",2,"holz_items"}),
+    ({5,7000,"holzverstaerkter Ledergurt", "Ein holzverstaerkter lederner Gurt",
+      1, "grizzlyfell", 3, "holz","Guertel",2,"holz_items"}),
+    ({5,7250,"holzverstaerkte lederene Hose", "Holzverstaerkte Lederhosen",
+      1, "grizzlyfell", 3, "holz","Hosen",6,"holz_items"}),
+    ({5,7350,"doppeltgenaehter Lederumhang", "Ein doppelt genaehter Umhang",
+      1, "grizzlyfell", 5, "spinnenseide","Umhang",6,"holz_items"}),
+    ({5,7950,"Paar holzbeschlagene Lederschuhe", "Holzbeschlagene Lederschuhe",
+      1, "grizzlyfell", 3, "holz","Schuhe",6,"holz_items"}),
+    ({6,8000,"Lederpanzer", "Ein holzbeschlagener lederner Panzer",
+      2, "grizzlyfell", 4, "holz","Panzer",24,"holz_items"}),
+    ({6,8250, "I", "Ein Sack der Leichtigkeit",
+      1, "grizzlyfell", 3, "spinnenseide","Leichtsack",0,"sack_leicht"}),
+    ({6,8300,"metallbeschlagene Lederkappe", "Eine metallbeschlagene lederne Kappe",
+      2, "grizzlyfell", 1, "eisenbrocken","Helm",9,"metall_items"}),
+    ({6,8500,"Metallhalsband", "Ein metallbeschlaenes Halsband",
+      1 , "grizzlyfell", 2, "eisenbrocken","Amulett",2,"metall_items"}),
+    ({6,8750,"Metallguertel", "Ein metallbeschlagener Guertel",
+      1, "grizzlyfell", 3, "eisenbrocken","Guertel",2,"metall_items"}),
+    ({6,9100,"Paar Metallschienen", "Ein Paar metallbeschlagene Armschienen",
+      1, "grizzlyfell", 3, "eisenbrocken","Armschienen",6,"metall_items"}),
+    ({7,9150,"Metallumhang", "Ein metallbeschlagener Umhang",
+      1, "grizzlyfell", 2, "eisenbrocken", "Umhang", 6, "metall_items"}),
+    ({7,9200,"Paar Metallschuhe", "Metallbeschagene Schuhe",
+      1, "grizzlyfell", 3, "eisenbrocken", "Schuhe", 6, "metall_items"}),
+    ({7,9250,"metallern beschlagene Hose", "Metallbeschagene Hose",
+      1, "grizzlyfell", 3, "eisenbrocken", "Hosen", 6, "metall_items"}),
+    ({7,9300,"Metallpanzer", "Ein metallbeschlagener Panzer", 
+      2, "grizzlyfell", 4, "eisenbrocken", "Panzer", 24, "metall_items"}),
+    ({7,9450,"magische seiderne Muetze", "Eine magische Seidenmuetze",
+      2, "jaguarfell", 3, "magieseide", "Helm", 10, "seiden_items"}),
+    ({8,9500,"magisches seidernes Halsband", "Ein magisches Seidenhalsband",
+      1 , "jaguarfell", 4, "magieseide", "Amulett", 2, "seiden_items"}),
+    ({8,9550,"magischer seiderner Guertel", "Ein magischer Seidenguertel",
+      1, "jaguarfell", 3, "magieseide", "Guertel", 3, "seiden_items"}),
+    ({8,9550,"magischen seidernen Umhang", "Ein magischer Seidenumhang",
+      1, "jaguarfell", 4, "magieseide", "Umhang", 7, "seiden_items"}),
+    ({8,9550,"Paar magische seiderne Schuhe", "Magische Seidenschuhe",
+      1, "jaguarfell", 5, "magieseide", "Schuhe", 7, "seiden_items"}),
+    ({8,9650,"Paar magische seiderne Armschienen", "Magische Seidenarmschienen",
+      1, "jaguarfell", 5, "magieseide", "Armschienen", 7, "seiden_items"}),
+    ({9,9750,"magische seinerner Panzer", "Ein magischer Seidenpanzer",
+      2, "jaguarfell", 6, "magieseide", "Panzer", 28, "seiden_items" }),
+    ({9,9800, "I", "Ein ultimativer Sack der Leichtigkeit",
+      1, "grizzlyfell", 6, "magieseide","Leichtsack",0,"sack_ultimativ"}),
+    ({9,9850, "I", "Eine magische Lederpeitsche der Zucht",
+      3, "grizzlyfell", 4, "magieseide","Zuschtpeitsch",0,"peitsche_zucht"}),
+    ({9,9950, "magische Seidenhose", "Eine magische Seidenhose",
+     1, "jaguarfell", 1, "magieseide", "Hosen", 7, "seiden_items"}),
+    ({10,10000,"ultimative Haube des Meiserschneiders",
+      "Eine ultimative Haube des Meisterschneiders",
+      2, "jaguarfell", 3, "magieseide", "Helm", 11, "meister_items"}),
+    ({10,10000,"ultimatives Halsband des Meisterschneiders",
+      "Ein magisches Seidenhalsband des Meisterschneiders",
+      1 , "jaguarfell", 1, "magieseide", "Amulett", 3, "meister_items"}),
+    ({10,10000,"ultimative Hose des Meisterschneiders",
+      "Magische Seidenhose des Meisterschneiders",
+       1 , "jaguarfell", 1, "magieseide", "Hosen", 8, "meister_items"}),
+    ({10,10000,"Paar ultimative Armschienen des Meisterschneiders",
+      "Magische Seidenarmschienen des Meisterschneiders",
+       1 , "wuslerfell", 1, "magieseide", "Armschienen", 8, "meister_items"}),
+    ({10,10000,"ultimativer Guertel des Meisterschneiders",
+      "Ein magischer Seidenguertel des Meisterschneiders",
+       1, "braunbaerenfell", 1, "magieseide", "Guertel", 3, "meister_items"}),
+    ({10,10000,"ultimativer Umhang des Meisterschneiders",
+      "Ein magischer Seidenumhang des Meiserschneiders",
+       1, "pumafell", 1, "magieseide", "Guertel", 3, "meister_items"}),
+    ({10,10000,"Paar ultimative Schuhe des Meisterschneiders",
+      "Magische Seidenschuhe des Meisterschneiders",
+       1, "wolfsfell", 1, "magieseide", "Schuhe", 8, "meister_items"}),
+    ({10,10000,"ultimativer Panzer des Meisterschneiders",
+      "Ein magischer Panzer des Meisterschneiders",
+       1, "yetifell", 2, "magieseide", "Panzer", 32, "meister_items"}),
+});
+
+
+void set_furs(){
+  int x;
+  used_furs=({""});
+  for (x=1;x<=sizeof(armor_types)-1;x++)
+  {
+    if(member_array(armor_types[x][5], used_furs)==-1){
+      used_furs+=({armor_types[x][5]});
+    }
+  }
+  return;
+}
+
+void show_furs(){
+  int x;
+  for (x=1;x<=sizeof(used_furs)-1;x++){
+    write(used_furs[x]+"\n");
+  }
+  return;
+}
+
+string show_level(){
+  if (s_skill <= 2450) return level_names[1];
+  if (s_skill <= 3450) return level_names[2];
+  if (s_skill <= 5450) return level_names[3];
+  if (s_skill <= 6700) return level_names[4];
+  if (s_skill <= 7950) return level_names[5];
+  if (s_skill <= 9100) return level_names[6];
+  if (s_skill <= 9450) return level_names[7];
+  if (s_skill <= 9650) return level_names[8];
+  if (s_skill <= 9950) return level_names[9];
+  if (s_skill <= 10000) return level_names[10];
+  return "Error";
+}
+  
+string show_gerb(){
+  if (s_skill <= 1000) return gerb_names[1];
+  if (s_skill <= 2000) return gerb_names[2];
+  if (s_skill <= 3000) return gerb_names[3];
+  if (s_skill <= 4000) return gerb_names[4];
+  if (s_skill <= 5000) return gerb_names[5];
+  if (s_skill <= 6000) return gerb_names[6];
+  if (s_skill <= 7000) return gerb_names[7];
+  if (s_skill <= 8000) return gerb_names[8];
+  if (s_skill <= 9000) return gerb_names[9];
+  if (s_skill <= 1000) return gerb_names[10];
+  return "Error";
+}
+
+
+void create()
+{
+  if (!is_clone(this_object()))
+    return;
+  ::create();
+  SetProp(P_NAME,"Naehkaestchen");
+  SetProp(P_SHORT,"Ein Naehkaestchen");
+  SetProp(P_LONG,"Du siehst ein Naehkaestchen. Es ermoeglicht Dir verschiedene "+
+                 "Dinge herzustellen. "+
+                 "Mit <naehmuster> oder kurz <nm> kannst Du Dir ansehen, was Du herstellen "+
+                 "kannst. "+
+                 "Um Felle zu vernaehen, musst Du sie zuerst gerben, was mit <gerbe> oder "+
+                 "<ng> gemacht werden kann. Zu guter Letzt kannst du mit <naehe> oder <naeh> "+
+                 "den Naehvorgang einleiten."
+                 );
+  AddId( ({"\nnaehkaestchen","kaestchen","naehkaestchen"}) );
+  SetProp(P_GENDER, NEUTER);
+  SetProp(P_NODROP, "Das gibst Du nicht her.\n");
+  SetProp(P_NEVERDROP, "Das gibst Du nicht her.\n");
+
+  AddCmd(({"naehe","naeh"}), "func_naeh");
+  AddCmd(({"naehmuster","nm"}), "func_muster");
+  AddCmd(({"gerbe","ng"}), "func_gerbe");
+  
+  set_furs();
+  NKNAME=capitalize(getuid(this_player()));    
+  call_other(SKILLMASTER, "???");
+  s_skill=SKILLMASTER->QuerySkill(this_player(),SK_SEWING);
+  g_skill=SKILLMASTER->QuerySkill(this_player(),SK_TANNING);
+
+}
+
+
+varargs string long() {
+  if(SKILLMASTER->QuerySkill(this_player(),SK_SEWING) == -1)
+    obtain_sewing_skill(this_player());
+  if(SKILLMASTER->QuerySkill(this_player(),SK_TANNING) == -1)
+    obtain_tanning_skill(this_player());
+  s_skill=SKILLMASTER->QuerySkill(this_player(),SK_SEWING);
+  g_skill=SKILLMASTER->QuerySkill(this_player(),SK_TANNING);
+  NKNAME=capitalize(getuid(this_player()));    
+  return BS( "Du siehst ein Naehkaestchen. Es ermoeglicht Dir verschiedene "
+             "Dinge herzustellen. Mit <naehmuster> oder kurz <nm> kannst "
+             "Du Dir ansehen, was Du herstellen kannst. "
+             "Um Felle zu vernaehen, musst Du sie zuerst gerben, was "
+             "mit <gerbe> oder <ng> gemacht werden kann. Zu guter Letzt "
+             "kannst du mit <naehe> oder <naeh> den Naehvorgang einleiten. "
+             );
+
+}
+
+int obtain_tanning_skill(object pl) {
+   int start_skill, maxskill, maxunlearn;
+   int x;
+   switch(pl->QueryProp(P_RACE)) {
+     case "Zwerg": start_skill=2800; maxskill=10000; maxunlearn=9000; break;
+     case "Elf": start_skill=2900; maxskill=10000; maxunlearn=9000; break;
+     case "Dunkelelf": start_skill=2000; maxskill=10000; maxunlearn=9000; break;
+     case "Fee": start_skill=2900; maxskill=10000; maxunlearn=9000; break;
+     case "Oger": start_skill=200; maxskill=8000; maxunlearn=3000; break;
+     case "Troll": start_skill=200; maxskill=8000; maxunlearn=3000; break;
+     default: start_skill=2000; maxskill=9999; maxunlearn=9000;
+   }
+   call_other(SKILLMASTER, "???");
+   SKILLMASTER->AddSkill(pl, SK_TANNING, start_skill, maxskill,
+       maxunlearn, SK_TANNING_NAME);
+   g_skill=SKILLMASTER->QuerySkill(this_player(),SK_TANNING);
+   return 1;
+}
+
+int obtain_sewing_skill(object pl) {
+   int start_skill, maxskill, maxunlearn;
+   int x;
+   switch(pl->QueryProp(P_RACE)) {
+     case "Zwerg": start_skill=2300; maxskill=10000; maxunlearn=9000; break;
+     case "Elf": start_skill=2300; maxskill=10000; maxunlearn=9000; break;
+     case "Dunkelelf": start_skill=2300; maxskill=10000; maxunlearn=9000; break;
+     case "Fee": start_skill=2300; maxskill=10000; maxunlearn=9000; break;
+     case "Oger": start_skill=200; maxskill=7950; maxunlearn=3000; break;
+     case "Troll": start_skill=200; maxskill=7950; maxunlearn=3000; break;
+     default: start_skill=2200; maxskill=9999; maxunlearn=9000;
+   }
+   call_other(SKILLMASTER, "???");
+   SKILLMASTER->AddSkill(pl, SK_SEWING, start_skill, maxskill,
+       maxunlearn, SK_SEWING_NAME);
+   s_skill=SKILLMASTER->QuerySkill(this_player(),SK_SEWING);
+   
+   return 1;
+}
+
+
+
+//-----GAERBEN BEGIN-----
+
+func_gerbe(string arg){
+  object fell;
+  int suc;
+ 
+  notify_fail("Was willst Du gerben?\n");
+  NKNAME=capitalize(getuid(this_player()));    
+
+  if(!arg) return 0;
+
+  if(!fell=present(arg, this_player())) {
+    notify_fail("Das hast Du nicht bei Dir.\n");
+    return 0;
+  }
+  
+  if(arg=="fell") {
+    write("Welches Fell meinst Du genau? (z.b. biberfell,...)\n");
+    return 1;
+  }
+  
+  if(member_array(explode(arg," ")[0],used_furs)==-1){
+    notify_fail("Das kann man nicht gerben.\n");
+    return 0;
+  }
+  
+  if(member_array("\ng_fell",(fell->QueryProp(P_IDS)))!=-1) {
+   write(fell->QueryProp(P_SHORT)+" ist schon gegerbt!\n");
+   return 1;
+  }
+ 
+  if (IS_SEWING) {
+    write("Du kannst nicht gerben waehrend du naehst!\n");
+    return 1;
+  }
+
+  call_other(SKILLMASTER, "???");
+
+  if(interactive(TP) && (SKILLMASTER->QuerySkill(TP, SK_TANNING)==-1))
+     obtain_tanning_skill(TP);
+
+  suc=SKILLMASTER->UseSkill(TP, SK_TANNING); 
+  g_skill=SKILLMASTER->QuerySkill(this_player(),SK_TANNING);
+
+  if(suc>0) {
+    write(fell->QueryProp(P_SHORT)+" wird von Dir gegerbt.\n");
+    tell_room(environment(this_player()),NKNAME+" gerbt: "+fell->QueryProp(P_SHORT)+".\n",
+                ({this_player()}));
+    fell->AddId("\ng_fell");
+    fell->SetProp(P_SHORT,(fell->QueryProp(P_SHORT)+" (gegerbt)"));
+    if(random(g_skill)>7800){
+     fell->SetProp(P_SHORT,(fell->QueryProp(P_SHORT)+" (hochqualitativ)"));
+     //fell->RemoveId("\ng_fell");
+     fell->AddId("\ng_fell_hq");
+    }
+  }
+  else
+  {
+    write(fell->QueryProp(P_SHORT)+" wird von Dir zerstoert als Du versuchst es zu gerben.\n");
+    fell->remove(0);
+  }
+  return 1;
+}
+
+string player_tries_to_move(object pl,string dir,mapping dest)
+{
+  PL_MOVED=1;
+  return(break_string("Du solltest Dich nicht bewegen waehrend Du naehst.",78));
+}
+
+//-----GAERBEN END-----
+
+
+//-----NAEHEN BEGIN-----
+
+int sew_now(int i) {
+  switch(DELAY_COUNT) {
+    case 0:
+      tell_object(this_player(),
+          "Du naehst [------]\n");
+          //"Du suchst Dir das passende Naehmuster.\n");
+      break;
+    case 1:
+      tell_object(this_player(),
+          "Du naehst [**----]\n");
+          //"Du suchst Dir das passende Naehmuster.\n");
+      break;
+    case 2:
+      tell_object(this_player(),
+          "Du naehst [****--]\n");
+          //"Du konzentrierst Dich.\n");
+      if( this_player())
+        this_player()->SetProp(P_TMP_MOVE_HOOK, 0);
+      break;
+  }
+
+  if(DELAY_COUNT>2){
+    if(!PL_MOVED){
+      tell_object(this_player(),
+          "Du naehst [******]\n");
+     call_out("build_armor",1,i);
+     DELAY_COUNT=0;
+     PL_MOVED=0;
+     IS_SEWING=0;
+     return 1;
+    }
+    else{
+     DELAY_COUNT=0;
+     write("Du vernichtest alles und brichst den Naehvorgang ab.\n");
+     PL_MOVED=0;
+     IS_SEWING=0;
+     return 1;
+    }
+  }
+      
+  DELAY_COUNT++;
+  call_out("sew_now",armor_types[i][0]+random(2),i);
+  return 1;
+}
+
+func_naeh(mixed in){
+  int amount;
+  string fell;
+  object *fell_present;
+  object *silk_present;
+  object *dest_now;
+  int r,s,i;
+ 
+  r=0;
+  s=0;
+  amount=0;
+
+  fell_present=({});
+  dest_now=({});
+  
+  NKNAME=capitalize(getuid(this_player()));    
+  notify_fail(break_string("Was willst du Naehen? Nr. 1,2,.."+
+      " (siehe Kommando <naehmuster>)"));
+ 
+  if(!in) return 0;
+  
+  i=to_int(in);
+
+
+
+  call_other(SKILLMASTER, "???");
+
+  if(interactive(TP) && (SKILLMASTER->QuerySkill(TP, SK_SEWING)==-1))
+     obtain_sewing_skill(TP);
+  
+  if(i<1 || i>(sizeof(armor_types)-1)) return 0;
+
+//  ({1,5, "lkappe", "Eine lederne Kappe", 1, "biberfell", 1, "raupenseide"}),
+
+  if(armor_types[i][1]>s_skill) return 0;
+  
+  write("Du versuchst folgendes herzustellen: "+armor_types[i][3]+".\n");
+ // write(armor_types[to_int(i)][4]);
+  amount=sizeof(fell_present=filter_objects(all_inventory(this_player()),
+                "id",armor_types[i][5]));
+  if(amount<armor_types[i][4]){
+    write("Fehlende Komponenten: "+capitalize(armor_types[i][5])+
+          " ("+(armor_types[i][4]-amount)+" Stk.)");
+    r=1;
+  } 
+   
+  amount=sizeof(silk_present=filter_objects(all_inventory(this_player()),
+                "id",armor_types[i][7]));
+  if(amount<armor_types[i][6]){
+    if(r==1) write(" und "); else write ("Fehlende Komponenten: ");
+    write(capitalize(armor_types[i][7])+
+          " ("+(armor_types[i][6]-amount)+" Stk.)");
+    r=1;
+  }
+  if(r==1){
+    write(".\n");
+   return 1;
+  }
+ 
+ if(armor_types[i][1]<9000){ 
+  for(r=0;r<armor_types[i][4];r++){
+    if(member_array("\ng_fell",(fell_present[r]->QueryProp(P_IDS)))!=-1){
+    s++;
+    dest_now+=({fell_present[r]});    
+    }
+  }
+  if(s<armor_types[i][4]){
+    write("Du hast nur "+s+" Stk. gegerbte "+
+        capitalize(armor_types[i][5])+
+        "e brauchst jedoch "+
+        armor_types[i][4]+" Stk.\n");
+    return 1;
+  }
+ }
+  else{
+    for(r=0;r<armor_types[i][4];r++){
+      if((sizeof(fell_present)-1) >= r) {
+        if(member_array("\ng_fell_hq",(fell_present[r]->QueryProp(P_IDS)))!=-1)
+        {
+         s++;
+         dest_now+=({fell_present[r]});    
+        }
+      }
+       
+    } 
+    if(s<armor_types[i][4]){
+      write("Du hast nur "+s+" Stk. hochqualitativ gegerbte "+
+          capitalize(armor_types[i][5])+
+          "e brauchst jedoch "+armor_types[i][4]+" Stk.\n");
+      return 1;
+    }
+  }
+  for(r=0;r<=armor_types[i][6]-1;r++) {
+     if((sizeof(silk_present)-1) >= r) 
+       dest_now+=({silk_present[r]});
+  }
+
+  write("Du nimmst folgende Dinge zur Hand:\n");
+  for(r=0;r<=sizeof(dest_now)-1;r++) {
+    write(" -"+dest_now[r]->QueryProp(P_SHORT)+"\n");
+    dest_now[r]->remove(0);
+  }
+
+  if(!this_player()->QueryProp(P_TMP_MOVE_HOOK)){
+     this_player()->SetProp(P_TMP_MOVE_HOOK, ({ time()+200, this_object(), "player_tries_to_move" }) );
+  }
+  else
+  {
+    write("Aus irgendeinem Grund kannst Du  nicht naehen.\n "
+        "Du wirst schon wissen, warum!\n");
+    return 1;
+    
+  }
+  
+  write ("Du beginnst...\n");
+  tell_room(environment(this_player()),NKNAME+" packt sein Naehkaestchen aus und naeht.\n",
+      ({this_player()})); 
+  DELAY_COUNT=0;
+  IS_SEWING=1;
+  call_out("sew_now",1,i); 
+
+  return 1;
+}
+
+
+int build_armor(int i){
+   object cob;
+   string *parts;
+   int suc;
+
+  call_other(SKILLMASTER, "???");
+
+  //leichter etwas naehen, schwerer den skill hochzubringen
+  suc=SKILLMASTER->UseSkill(TP, SK_SEWING, -2000, 2000);
+  s_skill=SKILLMASTER->QuerySkill(this_player(),SK_SEWING);
+  
+   if(suc>0) {
+      write ("Du erzeugst: "+armor_types[i][3]+".\n");
+    tell_room(environment(this_player()),NKNAME+" erzeugt: "+armor_types[i][3]+".\n",
+        ({this_player()}));
+
+      if(armor_types[i][2]=="I"){
+        if(armor_types[i][10][0]!="/")
+          cob=clone_object(ARMOR(armor_types[i][10]));
+        else
+          cob=clone_object(armor_types[i][10]);
+        cob->move(this_player(),M_NOCHECK);
+      }
+      else {
+      cob=clone_object(ARMOR(armor_types[i][10]));
+      cob->move(this_player(),M_NOCHECK);
+      cob->SetProp(P_ARMOUR_TYPE,armor_types[i][8]);
+      parts=explode(armor_types[i][3]," ");
+      cob->AddId(lower_case(parts[sizeof(parts)-1]));
+      cob->SetProp(P_AC,armor_types[i][9]);
+      cob->SetProp(P_SHORT,armor_types[i][3]);
+      cob->SetProp(P_NAME,armor_types[i][2]);
+      cob->AddId(explode(lower_case(armor_types[i][2])," "));
+      cob->AddId(lower_case(armor_types[i][8]));
+      cob->_init_armor();
+      }
+    return 1;
+   }
+  write("Du warst zu ungeschickt! Leider hast Du alles vernichtet.\n");
+  return 1;
+}
+
+int func_muster(string i){
+  int x;
+  int y;
+
+  y=0;
+  notify_fail("Welche Seite der Muster haettes Du gerne? naehmuster <1..10>\n");
+
+  if(to_int(i) < 1 || to_int(i) > 10) return 0;
+  
+  
+  write("----------------------------------------------------------------\n");
+  write("In Ausbildungsstufe "+i+" ("+level_names[to_int(i)]+") kannst Du \n");
+  write("mit Deinem momentanen Koennen folgendes herstellen:\n");
+  write("----------------------------------------------------------------\n");
+  for (x=1;x<=sizeof(armor_types)-1;x++)
+  {
+    if(to_int(i)==to_int(armor_types[x][0])&&(s_skill>=armor_types[x][1])){
+
+    y++;
+// write(sprintf("%2d. %s - Erfahrung: %1d\n    Kosten: %1d Stk. %s und %1d Stk. %s\n",
+ write(sprintf("%2d. %s \n    Kosten: %1d Stk. %s und %1d Stk. %s\n",
+      x,armor_types[x][3],armor_types[x][4],
+      capitalize(armor_types[x][5]),
+     armor_types[x][6],
+      capitalize(armor_types[x][7])));
+    }
+  }
+  if(!y) write ("Noch gar nichts.\n");
+  write("----------------------------------------------------------------\n");
+  return 1;
+}
+

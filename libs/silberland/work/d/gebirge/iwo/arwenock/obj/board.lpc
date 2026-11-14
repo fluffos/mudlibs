@@ -1,0 +1,144 @@
+#include <properties.h>
+#include <material.h>
+#include "../def.h"
+#include "../tangram.h"
+
+#define WIZNAME "creative"
+
+inherit "std/thing";
+
+mixed *plan;
+mixed *contains;
+
+create()
+{
+  if (!is_clone(TO))
+    return;
+  ::create();
+  
+  plan=({ ({ ({0,C_STD,'.'}),({0,C_STD,'.'}),({0,C_STD,'.'}),({-1,C_STREET,'|'}),({-1,C_STREET,' '}),({-1,C_STREET,'|'}),({0,C_STD,'.'}),({0,C_STD,'.'}) }),
+          ({ ({0,C_STD,'.'}),({0,C_STD,'.'}),({0,C_STD,'.'}),({0,C_STD,'.'}),({-1,C_STREET,'V'}),({0,C_STD,'.'}),({0,C_STD,'.'}),({0,C_STD,'.'}) }), 
+          ({ ({0,C_STD,'.'}),({0,C_STD,'.'}),({0,C_STD,'.'}),({0,C_STD,'.'}),({-1,C_STREET,'|'}),({0,C_STD,'.'}),({0,C_STD,'.'}),({0,C_STD,'.'}) }), 
+          ({ ({0,C_STD,'.'}),({0,C_STD,'.'}),({0,C_STD,'.'}),({-1,C_STREET,'-'}),({-1,C_STREET,'+'}),({0,C_STD,'.'}),({0,C_STD,'.'}),({0,C_STD,'.'}) }), 
+          ({ ({0,C_STD,'.'}),({0,C_STD,'.'}),({0,C_STD,'.'}),({0,C_STD,'.'}),({-1,C_STREET,'|'}),({0,C_STD,'.'}),({0,C_STD,'.'}),({0,C_STD,'.'}) }), 
+          ({ ({0,C_STD,'.'}),({0,C_STD,'.'}),({0,C_STD,'.'}),({0,C_STD,'.'}),({-1,C_STREET,'+'}),({-1,C_STREET,'+'}),({0,C_STD,'.'}),({0,C_STD,'.'}) }), 
+          ({ ({0,C_STD,'.'}),({0,C_STD,'.'}),({0,C_STD,'.'}),({0,C_STD,'.'}),({0,C_STREET,'.'}),({-1,C_STREET,'|'}),({0,C_STD,'.'}),({0,C_STD,'.'}) }), 
+          ({ ({0,C_STD,'.'}),({0,C_STD,'.'}),({0,C_STD,'.'}),({0,C_STD,'.'}),({0,C_STD,'.'}),({-1,C_STREET,'|'}),({0,C_STD,'.'}),({0,C_STD,'.'}) }) });
+
+  SetProp(P_SHORT, "Ein Planungsbrett");
+  SetProp(P_LONG, BS("Das ist Dein persoenliches Planungsbrett fuer die"
+                    +" suedlichen Gebiete von Arwenock. Du kannst Deine"
+                    +" Teile darauf einsetzen, welche davon entfernen"
+                    +" oder Dir das Brett einfach anzeigen lassen."));
+  SetProp(P_GENDER, NEUTER);
+  SetProp(P_WEIGHT, 800);
+  SetProp(P_VALUE, 0);
+  SetProp(P_MATERIAL, MAT_MISC_WOOD);
+  AddId(({"brett", "planungsbrett"}));
+  AddCmd(({"setze", "setz"}), "put_tile");
+  AddCmd(({"entferne", "entfern"}), "drop_tile");
+  AddCmd(({"zeige", "zeig"}), "show_board");
+  SetProp(P_NODROP, 1);
+}
+
+int customize(string owner)
+{
+  string s;
+  
+  switch (owner[<1]) {
+    case 'x':
+    case 's': s=CAP(owner)+"'"; break;
+    default:  s=CAP(owner)+"s";
+  }
+  SetProp(P_SHORT, s+" Planungsbrett");
+  SetProp(P_NAME, s+" Planungsbrett");
+  SetProp(P_ARTICLE, 0);
+}
+
+put_tile(str)
+{
+  string what, wx, wy, *tile_shape;
+  int tile_no, heading, i, j, offx, offy, may_insert, tile_x, tile_y;
+  object t;
+
+  notify_fail("Syntax: setz <teil> an [A-H],[1-8] ein. (linke obere Ecke)\n");
+  str=TP->_unparsed_args();
+  if (!str || (sscanf(str, "%s an %s,%s ein", what, wx, wy))!=3)
+    return 0;
+  if (strlen(wx)!=1 || strlen(wy)!=1)
+    return 0;
+  if ((wx[0]<'A' || wx[0]>'H') && (wx[0]<'a' || wx[0]>'h'))
+    return 0;
+  if (wy[0]<'1' || wy[0]>'8')
+    return 0;
+  if (wx[0]>'H')
+    wx[0]-='a'-'A';
+  if (!(t=present(what, TP))) {
+    write("So etwas hast Du doch gar nicht!\n");
+    return 1;
+  }
+  tile_no=t->query_tile_idx();
+  heading=t->query_heading();
+  tile_shape=TMASTER->query_tile(tile_no, heading);
+  offx=(int)wx[0]-'A';
+  offy=(int)wy[0]-'1';
+  tile_y=sizeof(tile_shape);
+  tile_x=strlen(tile_shape[0]);
+  if (offy+tile_y-1>7) {
+    write("Dort wuerde es aber nicht hinpassen, es wuerde am unteren Rand ueberstehen!\n");
+    return 1;
+  }
+  if (offx+tile_x-1>7) {
+    write("Dort wuerde es aber nicht hinpassen, es wuerde am rechten Rand ueberstehen!\n");
+    return 1;
+  }
+  may_insert=1;
+  for (i=offy; i<offy+tile_y; i++)
+    for (j=offx; j<offx+tile_x; j++)
+      if (tile_shape[i-offy][j-offx]=='#')
+        if(plan[i][j][2]!='.')
+          may_insert=0;
+  if (!may_insert) {
+    write("Dort wuerde es aber nicht hinpassen, es wuerde bestehende Teile ueberlappen!\n");
+    return 1;
+  }
+  for (i=offy; i<offy+tile_y; i++)
+    for (j=offx; j<offx+tile_x; j++)
+      if (tile_shape[i-offy][j-offx]=='#') {
+        plan[i][j][2]='#';
+        // farbe setzen, owner setzen, contains aktualisieren!!!
+      }
+  write(sprintf("Teil %s -> x: %s, y: %s\n", what, wx, wy));
+  return 1;
+}
+
+drop_tile(str)
+{
+}
+
+show_board(str)
+{
+  string out;
+  int i, j, t1, t2;
+
+  if (str!="planungsbrett" && str!="brett" && str!="planungsbrett an" &&
+      str!="brett an")
+    return 0;
+  out="Dein Planungsbrett sieht derzeit so aus:\n\n"
+     +"     ABCDEFGH\n"
+     +"    +--------+\n";
+  t1=sizeof(plan);
+  t2=sizeof(plan[i]);
+  for (i=0; i<t1; i++) {
+    out+=sprintf("   %d|", i+1);
+    t2=sizeof(plan[i]);
+    for (j=0; j<t2; j++) {
+      out+=/* color[plan[i][j][1]]+ */ to_string(({plan[i][j][2]}));
+    }
+    out+="|\n";
+  }
+  out+="    +--------+\n\n";
+  write(out);
+  return 1;
+}
+

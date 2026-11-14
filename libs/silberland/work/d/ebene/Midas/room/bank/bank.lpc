@@ -1,0 +1,774 @@
+/*
+   Standardbank fuer Silberland
+   (c) Omrani@Silberland 1996
+   
+   - Bankraubanpassung, Angrox
+   - Nicht mehr existente Spieler werden im reset() jetzt geloescht, Zordan
+   - ueberweisen an andere Spieler
+   - log jetzt in /log/d/ebene/ (woody)
+*/
+
+inherit "/std/room";
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include <wizlevels.h>
+#include <bank.h>
+
+#define STANDARDBANKFILENAME "/d/ebene/Midas/room/bank/tbank"
+
+#define ZINSEN  0.01 /* Zinsen pro Tag Spielzeit in Prozent */
+#define GEBUEHR 0.05 /* Gebuehr fuers Abheben in Prozent */
+#define MAX_GELD 7500  /* Limit pro Level des Spielers */
+#define MAX_RESERVE 1500000  /* Bei ueberschreiten Einzahlung in Zentralbank */ 
+#define MIN_RESERVE 500000   /* Bei unterschreiten Abhebung von Zentralbank */ 
+
+mapping konten = ([ ]);  // Hier werden alle Daten gespeichert
+int reserve = MAX_RESERVE / 2;
+nosave int checkpoint;
+
+string bankfile();
+
+/*
+  konten[id]    ... Guthaben
+  konten[id, 1] ... geraubt, seit letzter Kontomeldung, noch unbenutzt
+  konten[id, 2] ... Zinsen, seit letzter Kontomeldung
+  konten[id, 3] ... Alter bei letzter Zinsberechnung
+  konten[id, 4] ... Zinsen - (Gebuehren + Raub), nur fuer Testzwecke
+                      mal schaun was teurer ist
+  konten[id, 5] ... Magier oder Testie
+*/
+
+void create()
+{
+  ::create();
+
+  seteuid(getuid());            // set effective user id to gain proper rights
+  restore_object(bankfile());
+
+  checkpoint=0;
+
+  SetProp(P_INDOORS,1);
+  SetProp(P_LIGHT,1);
+
+  SetProp(P_INT_SHORT, "Eine Bank");  
+  SetProp(P_INT_LONG, "Du bist in einer Bank.\nHilfe mit: \"hilfe bank\"\n");
+
+  AddCmd("eroeffne","eroeffnen");
+  AddCmd( ({ "loese", "loes" }),"aufloesen");
+  AddCmd( ({ "zahle", "zahl" }), "einzahlen");
+  AddCmd( ({ "hebe", "heb" }), "abheben");
+  AddCmd( "hilfe","hilfe");
+  AddCmd( ({ "zeige", "zeig" }), "auszug");
+  AddCmd( ({ "ueberfall", "ueberfalle" }), "ueberfall");
+  AddCmd( ({ "ueberweis", "ueberweise" }), "ueberweisen");
+}
+
+#define SEIN (this_player()->QueryPossPronoun(NEUTER, WEN, SINGULAR))
+#define SEINEM (this_player()->QueryPossPronoun(NEUTER, WEM, SINGULAR))
+#define NAME  (this_player()->Name(WER))
+#define ALTER (this_player()->QueryProp(P_AGE))
+#define MUENZEN(m) ((m) == 1 ? "1 Muenze" : ((m) + " Muenzen"))
+#define USERID (getuid(this_player()))
+
+/* Damit neue Banken das umdefinieren koennen */
+
+string bankfile()   // _MUSS_ von jeder Bank selbst umdefiniert werden !!!
+{
+  return STANDARDBANKFILENAME;
+}
+
+int max_geld()
+{
+  return this_player()->QueryProp(P_LEVEL) * MAX_GELD;
+}
+
+int anderer_max_geld(string str)
+{
+  object ob;
+  
+  ob=find_player(str) || find_netdead(str);
+  return ob->QueryProp(P_LEVEL) * MAX_GELD;
+}
+
+void eroeffnung_ausgabe()
+{
+  write("Du eroeffnest ein Konto.\n");
+  say(NAME + " eroeffnet ein Konto.\n");
+}
+
+void aufloesung_ausgabe()
+{
+  write("Du loest Dein Konto auf.\n");
+  say(NAME + " loest " + SEIN + " Konto auf.\n");
+}
+
+void schon_konto_ausgabe()
+{
+  write("Aber Du hast doch schon ein Konto.\n");
+}
+
+varargs void kein_konto_ausgabe(string who)
+{
+  if (who)
+    write("Aber " + capitalize(who) + " hat doch gar kein Konto hier.\n");
+  else
+    write("Aber Du hast doch gar kein Konto hier.\n");
+}
+
+void anderer_reboot_ausgabe(string str)
+{
+  write("Aber "+capitalize(str)+" muss eingeloggt oder netztot sein.\n");
+}
+
+void falsche_zahl_ausgabe()
+{
+  write("Wie viele Muenzen meinst Du?\n");
+}
+
+void noch_geld_ausgabe(int geld)
+{
+  write("Aber Du hast doch noch Geld auf Deinem Konto.\n");
+}
+
+void zuwenig_geld_ausgabe(int geld)
+{
+  write("Du hast doch gar nicht genug Geld dabei.\n");
+}
+
+void zuwenig_konto_ausgabe(int geld)
+{
+  write("Aber Du hast doch nur "+ MUENZEN(geld) + " auf Deinem Konto.\n");
+}
+
+void leeres_konto_ausgabe()
+{
+  write("Aber Du hast doch gar kein Geld auf Deinem Konto.\n");
+}
+
+void zuwenig_gebuehr_ausgabe(int geld)
+{
+  write("Tut mir leid. Fuer diese Summe kannst Du Dir die Gebuehren nicht leisten.\n");
+}
+
+void bank_pleite_ausgabe()
+{
+  write ("Tut mir schrecklich leid. "
+         "So viel Geld haben wir im Moment nicht auf Lager.\n");
+}
+
+void limit_ausgabe()
+{
+  write("Tut mir leid. Das oberste Limit fuer Dein Konto betraegt " +
+        MUENZEN(max_geld()) + ".\n");
+}
+
+void anderer_limit_ausgabe(string str)
+{
+  write("Tut mir leid. Das oberste Limit fuer das Konto von "+capitalize(str)+
+        " betraegt " +MUENZEN(anderer_max_geld(str)) + ".\n");
+}
+
+void einzahlung_ausgabe(int geld)
+{
+  write("Du zahlst "+ MUENZEN(geld) +" auf Dein Konto ein.\n");
+  say(NAME + " zahlt etwas auf " + SEIN + " Konto ein.\n");
+}
+
+void abhebung_ausgabe(int geld, int gebuehr)
+{
+  write("Du hebst "+ MUENZEN(geld) +" von Deinem Konto ab.\n");
+  write("An Gebuehren muessen wir dabei "+ MUENZEN(gebuehr) +" (" +
+  GEBUEHR * 100 + "%) einheben.\n");
+  say(NAME + " hebt etwas von " + SEINEM + " Konto ab.\n");
+}
+
+void ueberweisen_ausgabe(int geld, int gebuehr, string str)
+{
+  write("Du ueberweist "+ MUENZEN(geld) +" auf das Konto von "+capitalize(str)+".\n");
+  write("An Gebuehren muessen wir dabei "+ MUENZEN(gebuehr) +" (" +
+  GEBUEHR * 100 + "%) einheben.\n");
+  say(NAME + " ueberweist etwas von " + SEINEM + " Konto auf ein anderes.\n");
+}
+
+int auszugs_ausgabe(int geld, int raub, int zinsen)
+{
+  if (raub > 0)
+  {
+    write("Leider hatten wir unlaengst einen Bankueberfall.\n"+
+      "Dabei wurden auch von Deinem Konto " + MUENZEN(raub) + " gestohlen.\n");
+    if((geld-=raub)<0) geld=0;
+  }
+  if (geld <= 0)
+    write("Dein Konto ist leider leer.\n");
+  else if (geld == 1)
+    write("Du hast nur eine einsame Muenze auf Deinem Konto.\n");
+  else
+    write("Du hast "+ geld +" Muenzen auf Deinem Konto.\n");
+  if (zinsen > 0)
+  {
+    write("Seit Deinem letzten Kontoauszug ha" +(zinsen==1 ? "t" : "ben") +
+      " sich " + MUENZEN(zinsen) + " an Zinsen angehaeuft.\n");
+  }
+ return geld;
+}
+
+void zusatzhilfe()
+{
+  if (!member(konten, USERID))
+    write("Hoffentlich koennen wir Dich bald als Kunde begruessen.\n");
+  else
+    write("Ich hoffe, Du bist zufrieden mit unserem Service.\n");
+}
+
+/* Gratis gibts heutzutage gar nix */
+int berechne_gebuehr(int geld)
+{
+  return (int)((geld - 1) * GEBUEHR) + 1;  // Gebuehr fuers abheben
+}
+
+/* gebuehr wenn man alles abhebt */
+int berechne_gebuehr_alles(int geld)
+{
+  return (int)((geld - 1) * (1 - 1/(1+GEBUEHR))) + 1; 
+  // Gebuehr fuer alles abheben
+}
+
+float zinsen_pro_tag()
+{
+  return ZINSEN;    //  Zinsen pro Tag Spielzeit
+}
+
+int berechne_zinsen(int geld, int aelter)
+{
+  int zinsen;
+
+  zinsen = (int) (geld * 
+           (exp((aelter) * zinsen_pro_tag() / 43200) - 1));
+  // 43200 = Sekunden pro Tag / 2, da Alter in 2sec Einheiten gerechnet wird
+  if (geld + zinsen > max_geld())
+    zinsen = max_geld() - geld;
+  if (zinsen < 0)
+    zinsen = 0;
+  return zinsen;
+}
+
+void maxlimithilfe()
+{
+  write("Unser Limit betraegt fuer Leute Deiner Stufe derzeit " +
+        MUENZEN(max_geld()) + ".\n");
+}
+
+void gebuehrhilfe()
+{
+  write("Wir muessen leider eine Gebuehr von "+ GEBUEHR * 100 + 
+        "% fuer jedes Abheben verrechnen.\n"+
+        "Dafuer koennen wir aber auch "+ ZINSEN * 100 +
+        "% Zinsen pro Tag berechnen.\n");
+}
+
+
+void addiere_zinsen(string id)
+{
+  int zinsen;
+
+  if (!konten[id, 5] && (IS_WIZARD(this_player()) ||
+                 this_player()->QueryProp(P_TESTPLAYER)))
+  {
+    // jemand is Magier geworden
+    reserve += konten[id];
+    konten[id, 5] = 1;
+  }
+  if (konten[id, 5] && !IS_WIZARD(this_player()) &&
+                 !this_player()->QueryProp(P_TESTPLAYER))
+  {
+    // entmagiert oder Testplayerflag removed, sehr selten sowas
+    konten[id] = 0;
+    konten[id, 5] = 0;
+  }
+
+  zinsen = berechne_zinsen(konten[id], ALTER - konten[id,3]);
+  reserve += zinsen;
+  konten[id] += zinsen;
+  konten[id, 2] += zinsen;
+  konten[id, 3] = ALTER;
+  konten[id, 4] += zinsen;
+}
+
+
+/* Zuerst muss man ein Konto eroeffnen */
+int eroeffnen(string str)
+{
+  notify_fail("Was moechtest Du eroeffnen?\n");
+  if (str != "konto")
+    return 0;
+  else  if (member(konten, USERID))
+    schon_konto_ausgabe();
+  else {
+    if(this_player()->QueryGuest()) {
+      write("Als Gast brauchst Du bestimmt kein Konto.\n");
+      return 1;
+    }  
+    konten += ([ USERID: 0; 0; 0; ALTER; 0; IS_WIZARD(this_player()) ||
+                 this_player()->QueryProp(P_TESTPLAYER)]);
+    eroeffnung_ausgabe();
+    save_object(bankfile());
+  }
+  return 1;
+}
+
+/* Man kann es auch wieder aufloesen */
+int aufloesen(string str)
+{
+  notify_fail("Was moechtest Du aufloesen?\n");
+  if (str != "konto auf")
+    return 0;
+  else if (!member(konten, USERID))
+    kein_konto_ausgabe();
+  else if (konten[USERID] != 0)
+    noch_geld_ausgabe(konten[USERID]);
+  else
+  {
+    konten -= ([ USERID ]);
+    aufloesung_ausgabe();
+    save_object(bankfile());
+  }
+  return 1;
+}
+
+/* natuerlich kann man was einzahlen */
+int einzahlen(string str)
+{
+  int geld, anzahl;
+  string str1, dummy;
+
+  notify_fail("Was moechtest Du einzahlen?\n");
+  if (!str)
+    return 0;
+  if (sscanf(str,"%d %sein%s", geld, str1, dummy) < 3)
+    return 0;
+  if (str1 !="muenze " && str1!="muenzen " && str1!="gold " && str1!="")
+    return 0;
+  else if (!member(konten, USERID))
+    kein_konto_ausgabe();
+  else if (geld <= 0)
+    falsche_zahl_ausgabe();
+  else if ( (anzahl = this_player()->QueryMoney()) < geld)
+    zuwenig_geld_ausgabe(anzahl);
+  else if (geld + konten[USERID] > max_geld() )
+    limit_ausgabe();
+  else
+  {
+    addiere_zinsen(USERID);
+    if (!konten[USERID, 5])
+      reserve += geld;
+    if (reserve > MAX_RESERVE)
+    {
+      ZENTRALBANK->PayIn(reserve - MAX_RESERVE / 2);
+      reserve = MAX_RESERVE / 2;
+    }
+    konten[USERID] += geld;
+    this_player()->AddMoney(-geld);
+    einzahlung_ausgabe(geld);
+    save_object(bankfile());
+  } 
+  return 1;
+}
+
+/* ab sofort kann man auch etwas ueberweisen */
+int ueberweisen(string str)
+{
+  int geld, anzahl, raub, gebuehr;
+  string str1, emp;
+  object pl;
+  mixed ret;
+
+  if(!IS_SEER(this_player()))
+    return 0;
+
+  notify_fail("Was moechtest Du an wen ueberweisen?\n");
+  if (!str) 
+    return 0;
+  if (sscanf(str,"%d %san %s", geld, str1, emp) < 3)
+    return 0;
+  if (str1 !="muenze " && str1!="muenzen " && str1!="gold " && str1!="")
+    return 0;
+  if (!stringp(emp) || emp=="")
+    return 0;
+  emp=lower_case(emp);
+  if (USERID == emp) {
+    write("Warum solltest Du Dir selber etwas ueberweisen wollen?\n");
+    return 1;
+  }
+  if (!member(konten, USERID)) {
+    kein_konto_ausgabe();
+    return 1;
+  }
+  pl=find_player(emp) || find_netdead(emp);
+  if (!objectp(pl)) {
+    anderer_reboot_ausgabe(emp);
+    return 1;
+  }
+  if (!member(konten, emp)) {
+    kein_konto_ausgabe(emp);
+    return 1;
+  }
+  if (geld <= 0) {
+    falsche_zahl_ausgabe();
+    return 1;
+  }
+  raub=konten[USERID, 1];
+  if (raub > 0)
+  {
+    write("Leider hatten wir unlaengst einen Bankueberfall.\n"+
+      "Dabei wurden auch von Deinem Konto " + MUENZEN(raub) + " gestohlen.\n");
+    if((konten[USERID]-=raub)<0) konten[USERID]=0;
+    raub=0;
+    konten[USERID, 1]=0;
+  }
+  addiere_zinsen(USERID);
+  if (konten[USERID] <= 0)
+  {
+    leeres_konto_ausgabe();
+    return 1;
+  }
+  if (geld > konten[USERID]) {
+    zuwenig_konto_ausgabe(konten[USERID]);
+    return 1;
+  }
+  gebuehr = berechne_gebuehr(geld);
+  if (gebuehr + geld > konten[USERID]) {
+    zuwenig_gebuehr_ausgabe(konten[USERID]);
+    return 1;
+  }
+  if (geld + konten[emp] > anderer_max_geld(emp)) {
+    anderer_limit_ausgabe(emp);
+    return 1;
+  }
+  if (pointerp(ret=pl->QueryProp(P_IGNORE))) {
+    if ((member(ret,getuid(this_player())) >= 0) ||
+        (member(ret,"ueberweisung") >= 0) ||
+        (member(ret,"ueberweisung."+getuid(this_player())) >= 0)) {
+      write(capitalize(emp)+" moechte nicht, dass Du etwas auf "+
+            pl->QueryPossPronoun(NEUTER, WEN, SINGULAR)+" Konto ueberweist.\n");
+      return 1;
+    }
+  }
+  konten[USERID] -= (geld + gebuehr);
+  konten[USERID, 4] -= gebuehr;
+  konten[emp] += (geld);
+  ueberweisen_ausgabe(geld, gebuehr, emp);
+  save_object(bankfile());
+  return 1;
+}
+
+/* und auch was abheben */
+int abheben(string str)
+{
+  int geld, anzahl, gebuehr, i, raub;
+  string str1, str2, dummy;
+  object muenzen;
+
+  raub=konten[USERID, 1];
+  notify_fail("Was moechtest Du abheben?\n");
+  if (!str)
+    return 0;
+  if (str == "alles ab")
+  {
+    if (!member(konten, USERID))
+      kein_konto_ausgabe();
+    else
+    {
+      addiere_zinsen(USERID);
+      geld = konten[USERID];
+      if (raub > 0)
+       {
+         write("Leider hatten wir unlaengst einen Bankueberfall.\n"+
+               "Dabei wurden auch von Deinem Konto " + MUENZEN(raub) + " gestohlen.\n");
+         if((geld-=raub)<0) geld=0;
+         raub=0;
+         konten[USERID, 1]=0;
+       }
+      if (geld <= 0)
+      {
+        leeres_konto_ausgabe();
+        return 1;
+      }
+      gebuehr = berechne_gebuehr_alles(geld);
+      geld -= gebuehr;
+      if (!konten[USERID, 5])
+      {
+        if(reserve < geld)
+          reserve += ZENTRALBANK->WithDraw(MAX_RESERVE/2-reserve+geld);
+        if(reserve < geld)
+        {
+          bank_pleite_ausgabe();
+          return 1;
+        }
+        reserve -= geld;
+      }
+      if (reserve < MIN_RESERVE)
+        reserve += ZENTRALBANK->WithDraw(MAX_RESERVE/2 - geld);
+      konten[USERID, 4] -= gebuehr;
+      konten[USERID] = 0;
+      abhebung_ausgabe(geld, gebuehr);
+      save_object(bankfile());
+      if (this_player()->AddMoney(geld) <= 0)
+      {
+        write("Du kannst das Geld nicht mehr tragen und laesst es auf den Boden fallen!\n");
+        muenzen=clone_object("/obj/money");
+        muenzen->SetProp(P_AMOUNT,geld);
+        muenzen->move(this_object(), M_NOCHECK);
+      }
+    }
+    return 1;
+  }
+  if (sscanf(str,"%d %sab%s", geld, str1, dummy) < 3)
+    return 0;
+  if (str1 !="muenze " && str1!="muenzen " && str1!="gold " && str1!="")
+    return 0;
+  else if (!member(konten, USERID))
+    kein_konto_ausgabe();
+  if (raub > 0)
+  {
+    write("Leider hatten wir unlaengst einen Bankueberfall.\n"+
+      "Dabei wurden auch von Deinem Konto " + MUENZEN(raub) + " gestohlen.\n");
+    if((konten[USERID]-=raub)<0) konten[USERID]=0;
+    raub=0;
+    konten[USERID, 1]=0;
+  }
+  if (geld <= 0)
+    falsche_zahl_ausgabe();
+  else
+  {
+    addiere_zinsen(USERID);
+    if (geld > konten[USERID]) 
+      zuwenig_konto_ausgabe(konten[USERID]);
+    else
+    {
+      gebuehr = berechne_gebuehr(geld);
+      if (gebuehr + geld > konten[USERID])
+        zuwenig_gebuehr_ausgabe(konten[USERID]);
+      else
+      {
+        if (!konten[USERID, 5])
+        {
+          if(reserve < geld)
+            reserve+=ZENTRALBANK->WithDraw(MAX_RESERVE/2-reserve+geld);
+          if(reserve < geld)
+          {
+            bank_pleite_ausgabe();
+            return 1;
+          }
+          reserve -= geld;
+        }
+        if (reserve < MIN_RESERVE)
+          reserve += ZENTRALBANK->WithDraw(MAX_RESERVE/2 - reserve);
+
+        konten[USERID] -= geld + gebuehr;
+        konten[USERID, 4] -= gebuehr;
+        abhebung_ausgabe(geld, gebuehr);
+        save_object(bankfile());
+        if (this_player()->AddMoney(geld) <= 0) 
+        {
+          write("Du kannst das Geld nicht mehr tragen und laesst es auf den Boden fallen!\n");
+          muenzen=clone_object("/obj/money");
+          muenzen->SetProp(P_AMOUNT,geld);
+          muenzen->move(this_object(), M_NOCHECK);
+        } 
+      }
+    }
+  }
+  return 1;
+}
+
+/* Zaehle alles zusammen, NUR FUER MAGIER, Konten von Magiern und
+   Testies werden dabei nicht beruecksichtigt */
+void gesamtauszug(mixed key, mixed guthaben, mixed geraubt, mixed lzinsen,
+                  mixed alter, mixed gzinsen, mixed ismagier,
+                  int gesamtzahl, int gesamtsumme, mixed gesamtzinsen,
+                  int magier)
+{
+  if ((magier && ismagier) || (!magier && !ismagier))
+  {
+    gesamtzahl++;
+    gesamtsumme += guthaben;
+    gesamtzinsen += gzinsen;
+  }
+}
+
+/* wenn jemand wissen will, wieviel er hat */
+int auszug(string str)
+{
+  string was, vonwem;
+  object ob;
+
+  notify_fail("Was moechtest Du gezeigt haben?\n");
+  if (IS_WIZARD(this_player()) && (str == "gesamtkontoauszug" || str == "gesamt"))
+  {
+    int gesamtzahl,gesamtsumme,gesamtzinsen;
+    gesamtzahl =  gesamtsumme = gesamtzinsen = 0;
+    walk_mapping(konten, "gesamtauszug", this_object(),
+                 &gesamtzahl, &gesamtsumme, &gesamtzinsen, 1);
+    write ("Konten der Magier und Testies:\n");
+    write ("Sparkonten:         " + gesamtzahl + "\n");
+    write ("Spareinlagen:       " + gesamtsumme + "\n");
+    write ("Zinsen+Gebuehren:   " + gesamtzinsen + "\n");
+    gesamtzahl =  gesamtsumme = gesamtzinsen = 0;
+    walk_mapping(konten, "gesamtauszug", this_object(),
+                 &gesamtzahl, &gesamtsumme, &gesamtzinsen, 0);
+    write ("\nKonten der Spieler:\n");
+    write ("Sparkonten:         " + gesamtzahl + "\n");
+    write ("Spareinlagen:       " + gesamtsumme + "\n");
+    write ("Zinsen+Gebuehren:   " + gesamtzinsen + "\n");
+    write ("Bankkapital:        " + reserve + "\n");
+    write ("Zentralbankkapital: " + ZENTRALBANK->_query_current_money()+ "\n");
+    return 1;
+  }
+
+  // Fremdauszug?
+  if (IS_WIZARD(this_player()) && sscanf(str,"%s von %s",was,vonwem) == 2)
+  {
+    ob = find_player(vonwem) || find_netdead(vonwem);
+    if (!member(konten, vonwem))
+      kein_konto_ausgabe(vonwem != USERID ? vonwem : 0);
+    else
+      write(
+          sprintf(
+            "Konto von %s%s:\n"
+            "Kontostand:  %6d, davon geraubt: %d, "
+            "davon ungesehene Zinsen: %d\n"
+            "Maximal:     %6s, "
+            "neue Zinsen: %6s%s\n"
+            "(letzte Zinsberechnung erfolgte bei Alter: %s)\n\n",
+            capitalize(vonwem),
+            konten[vonwem,5] ? " (Magier oder Testspieler!)" : "",
+            konten[vonwem],
+            konten[vonwem,1],
+            konten[vonwem,2],
+            ob ? to_string(ob->QueryProp(P_LEVEL) * MAX_GELD) : "??????",
+            ob ?
+              to_string(berechne_zinsen(konten[vonwem],
+                              ob->QueryProp(P_AGE) - konten[vonwem,3])) :
+              "unbekannt (nur abfragbar wenn netztot oder eingeloggt!)",
+            ob ?
+              " [fuer Alterung von " +
+              time2string("%dd %02h:%02m:%02s",
+                2 * (ob->QueryProp(P_AGE) - konten[vonwem,3])) + "]" :
+              "",
+            time2string("%dd %02h:%02m:%02s", 2 * konten[vonwem,3])
+            ) );
+
+    return 1;
+  }
+
+  if (str != "konto" && str != "auszug" && str != "kontoauszug")
+    return 0;
+  else if (!member(konten, USERID))
+    kein_konto_ausgabe();
+  else
+  {
+    addiere_zinsen(USERID);
+    konten[USERID]=auszugs_ausgabe(konten[USERID], 
+                   konten[USERID,1], konten[USERID,2]);
+    konten[USERID,1] = 0;   // raub
+    konten[USERID,2] = 0;   // zinsen
+    konten[USERID,3] = ALTER;  // Zeit der letzten Zinsberechnung
+    save_object(bankfile());
+  }
+  return 1;
+}
+
+/* etwas Hilfe muss sein, niemand soll im Regen stehen gelassen werden */
+int hilfe(string str)
+{
+  if (str == "bank")
+  {
+    write("Folgende Funktionen gibt es in der Bank:\n");
+    write("   Konto eroeffnen  : 'eroeffne konto'\n");
+    write("   Konto aufloesen  : 'loese konto auf'\n");
+    write("   Geld einzahlen   : 'zahle x muenzen ein'\n");
+    write("   Geld abheben     : 'hebe x muenzen ab'\n");
+    write("   Kontoauszug      : 'zeige kontoauszug'\n");
+    if (IS_SEER(this_player()))
+      write("   Ueberweisung     : 'ueberweise x muenzen an y'\n");
+    if (IS_WIZARD(this_player())) {
+      write("   Fremden Auszug   : 'zeige kontoauszug von <wem>'\n");
+      write("   Gesamtkontoauszug: 'zeige gesamtkontoauszug'\n");
+    }
+    maxlimithilfe();
+    gebuehrhilfe();
+    zusatzhilfe();
+    return 1;
+  }
+  return 0;
+}
+
+/* Von Angrox: */
+int bankraub(string owner, int money)
+{
+ if(!member(konten, owner)) return -1; //der hat kein konto
+ if (money>konten[owner,0]) return -2; // soviel geld hat er nicht
+ konten[owner,1]=money;
+ save_object(bankfile());
+ return 1;
+}
+
+mixed QueryOwner(string owner) {
+  return konten[owner];
+}
+
+int ueberfall(string str)
+{
+  if (str == "bank")
+  {
+     write("Du bist viel zu ehrlich, um an sowas auch nur zu denken!\n");
+     return 1;
+  }
+  return 0;
+}
+
+int remove() {
+  save_object(bankfile());
+  return ::remove();
+}
+
+void reset() {
+  ::reset();
+  if( file_name(this_object())=="/d/ebene/Midas/room/bank/bank") return ;
+  // Standard-bank soll nicht konten automatisch checken, das buggt staendig
+  if(find_call_out("check_konten") == -1)
+    call_out("check_konten",120+random(120));  
+}
+
+nosave void check_konten() {
+  int i;
+  string t,*pl;
+
+  pl=sort_array(m_indices(konten),#'>);
+  for(i=checkpoint;i<checkpoint+100;i++) {
+    if(i>=sizeof(konten)) continue;
+    t=sprintf("/save/%c/%s",lowerchar(pl[i][0]),lowerstring(pl[i]+".o"));
+    if(file_size(t) < 0) {
+      log_file("d/ebene/BANKEN",sprintf("%s: Kontoloeschung (%s) von %s "
+        "mit %d Muenzen.\n",
+        dtime(time()),bankfile(),capitalize(pl[i]),konten[pl[i]]));
+      konten=m_delete(konten,pl[i]);
+    }
+  }
+  save_object(bankfile());
+  checkpoint+=100;
+  if(checkpoint>sizeof(konten)) {
+    checkpoint=0;
+  }
+}
+
+//
+// API nach aussen
+//
+
+mapping alle_konten() {
+  return konten;
+}
+

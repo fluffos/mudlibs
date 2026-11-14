@@ -1,0 +1,201 @@
+#include "../carolina.h"
+
+inherit "std/container";
+inherit "/std/container/restrictions.lpc";
+
+
+#include <language.h>
+#include <properties.h>
+#include <moving.h>
+#include <combat.h>
+#include <verben.h>
+#include <container.h>
+#include <wizlevels.h>
+
+#define MAXITEMS 3
+
+void create()
+{
+  if(!is_clone(TO)) return;
+ 
+  ::create();
+  
+  SetProp(P_SHORT, 0);
+  SetProp(P_LONG,
+    "An ihnen kann man wohl seine Kleidung aufhaengen.");
+  SetProp(P_NAME, "Haken");
+  SetProp(P_GENDER, MALE);
+  AddId( ({ "haken", "NOWIMPY", "kleiderhaken" }) );
+  SetProp(P_NOGET, 1);
+  SetProp(P_ARTICLE, 1);
+  SetProp(P_CNT_STATUS, CNT_STATUS_OPEN);
+  AddCmd( ({ "nimm", "nehm", "nehme" }), "c_nehmen");
+  AddCmd( ({ "haeng", "haenge" }), "c_haengen");
+
+}
+
+string short()
+{
+ return "";
+}
+
+varargs string long()
+{
+ string str;
+ string invl;
+
+ if (!stringp(str)) str = "";
+ str = QueryProp(P_LONG);
+
+  invl = make_invlist(PL, all_inventory(ME),
+   TP ? (TP->QueryProp(P_SHORTINV) ? 0 : 2) :0); 
+
+  if(invl != "")
+  str += "Momentan siehst Du folgendes an den Haken haengen:\n" + invl;
+ 
+ return str;
+}
+
+
+
+int ruestung_darf_weg(object ob)
+{
+  if( ob->QueryProp(P_CURSED))    return 0;
+  if( ob->QueryProp(P_NEVERDROP)) return 0;
+  if( ob->id("QUESTOBJ"))         return 0;
+  if( ob->QueryProp(P_NODROP))    return 0;
+  if(!ob->QueryProp(P_SHORT))     return 0;
+  if( ob->QueryProp(P_INVIS))     return 0;
+  if(!ob->QueryProp(P_NAME))      return 0;
+
+  if(ob->QueryProp(P_ARMOUR_TYPE) == AT_ARMOUR) return 1;
+  if(ob->QueryProp(P_ARMOUR_TYPE) == AT_CLOAK)  return 1;
+
+  return 0;
+}
+
+int c_nehmen(string str)
+{
+  object ob;
+  int i,n;
+  string was, wovon;
+
+  notify_fail("Was willst Du wovon nehmen?\n");
+  if(!str || str == "") return 0;
+  n=sscanf(str, "%s von %s", was, wovon);
+  if(n!=2){n=sscanf(str, "%s vom %s", was, wovon);}
+  if(n!=2){return 0;}
+
+  if( !((wovon == "haken") || (wovon == "kleiderhaken")) )
+  {
+    return 0;
+  }
+
+  if(!IS_LEARNING(TP) &&
+    ((TP->QueryProp(P_SIZE) < 130) || (TP->QueryProp(P_FROG) == 1)) )
+  {
+    write(BS("Du reckst und streckst Dich, aber Du bist zu klein um "
+                  "etwas vom Kleiderhaken zu nehmen."));
+    return -1;
+  }
+
+  if(sizeof(all_inventory(TO)) == 0)
+  {
+    write("An dem Kleiderhaken haengt doch aber gar nichts!\n");
+    return -1;
+  }
+
+  if(ob = present(was,TO))
+  {
+    if(ME_TOO_HEAVY==ob->move(TP,M_GET|M_SILENT))
+    {
+      write("Das kannst Du nicht mehr tragen!\n");
+      return -1;
+    }
+    else
+    {
+      write("Du nimmst "+ob->name(WEN)+" vom Kleiderhaken.\n");
+    }
+    return 1;
+  }
+
+  write("So etwas haengt nicht an einem Haken.\n");
+  return -1;
+}
+
+int c_haengen(string str)
+{
+  object ob;
+  int n;
+  string was, woran;
+
+  notify_fail("Was willst Du woran aufhaengen?\n");
+
+  if(!str || str == "") return 0;
+  n = sscanf(str, "%s an %s", was, woran);
+  if(n!=2){n=sscanf(str, "%s an %s auf", was, woran);}
+  if(n!=2){n=sscanf(str, "%s am %s", was, woran);}
+  if(n!=2){n=sscanf(str, "%s am %s auf", was, woran);}
+  if(n!=2){return 0;}
+
+  if( !((woran == "haken") || (woran == "kleiderhaken")) )
+  {
+    return 0;
+  }
+
+  if(!IS_LEARNING(TP) &&
+    ((TP->QueryProp(P_SIZE) < 130) || (TP->QueryProp(P_FROG) == 1)) )
+  {
+    write(BS("Du reckst und streckst Dich, aber Du bist zu klein "
+                  "um etwas an einen Kleiderhaken zu haengen."));
+    return -1;
+  }
+
+  if(!ob=present(was,TP))
+  {
+    write("Sowas hast Du doch gar nicht bei Dir!\n");
+    return 1;
+  }
+
+  if(sizeof(all_inventory(TO)) >= MAXITEMS)
+  {
+    write(BS("Die Haken sind schon vollbehangen, da passt "
+       "nichts mehr rauf."));
+    return -1;
+  }
+  if(ob->QueryProp(P_CURSED) )
+  {
+   write(BS("Aber das geht doch nicht!\n"));
+   return 1;
+  }
+
+  if((ob->QueryProp(P_ARMOUR_TYPE) == AT_ARMOUR) ||
+     (ob->QueryProp(P_ARMOUR_TYPE) == AT_CLOAK))
+  {
+    write("Du haengst "+ob->name(WEN)+" an einen Kleiderhaken.\n");
+    ob->move(TO, M_TPORT | M_NOCHECK | M_SILENT); 
+    return 1;
+  }
+  
+  write("Das kannst Du nicht an den Kleiderhaken haengen!\n");
+  return -1;
+}
+
+varargs int PreventInsert(object ob)
+{
+ return 1;
+}
+
+
+void init()
+{
+  ::init();
+
+  if(!TP)              return;
+  if(!interactive(TP)) return;
+  if(IS_WIZARD(TP))    return;
+
+  call_out("getit",0,TP);
+}
+
+ 

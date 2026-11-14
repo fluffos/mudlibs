@@ -1,0 +1,997 @@
+/* GEMA (generic map) - client
+ * __________________________________________(i) Anatol@Silberland (2012) */
+
+#pragma strict_types
+
+#include <ansi.h>
+#include <properties.h>
+#include <wizlevels.h>
+#include "../defines.h"
+
+#define RANGE_SMALL 1
+#define RANGE_DEFAULT 2
+#define RANGE_LARGE 4
+#define RANGE_XXL 6
+#define RANGE_MAX 10
+
+inherit "/std/thing";
+
+#define DBG(x) if (find_player("anatol") && (find_player("anatol")->QueryProp("debug_map"))) tell_object(find_player("anatol"),x)
+private nosave string current_zone;
+private nosave int * current_pos;
+private nosave int current_set;
+private nosave mixed * current_zonelist;
+private nosave string * raw;
+private int activated;
+
+// The Wizard's edition allows viewing any player's position.
+
+nosave int isWizardEdition() 
+{
+    return ((this_player()==this_interactive())
+         &&(!process_call())
+         &&(IS_WIZARD(this_interactive()))
+         &&(environment(this_object())==this_player()));
+}
+
+// The Limited Edition ... just for the show :-)
+
+nosave int isLimitedEdition() 
+{
+    return ((isWizardEdition()) && (getuid(this_player()) == "anatol"));
+}
+
+public string 
+_query_short() 
+{
+    return (living(environment())?"De":"E")+"ine magische Karte"+
+      (isWizardEdition()
+          ?(isLimitedEdition()
+              ?" (Streng limitierte Ausgabe)"
+              :" (Sonderdruck fuer Kuenstler)")
+          :"");
+}
+
+public string
+_query_long() 
+{
+    if (!environment()||(!query_once_interactive(environment())))
+        return "Eine geografische Karte. Mehr siehst Du von hier aus nicht.\n";
+    if (!activated)
+        return break_string("Eine uebersichtliche geografische Karte. Sie "
+        "glitzert und funkelt geradezu vor williger Magie. Du kannst "
+        "davon ausgehen, dass sie Dir, wo immer sie es vermag, treue "
+        "Dienste leistet. Syntax: karte [klein|gross]",77,0,1)+
+        (isWizardEdition()
+            ?"(und extra fuer Kreative 'karte kreativ-modus')\n"
+            :"");
+    else
+       return 
+        sprintf("Befehlsuebersicht:\n"
+        ".-----------------------------------------------------------.\n"
+        "| karte kreativ-modus                                       |\n"
+        "| karte [<x> <y> [<z>]] [set|xset <s>] [klein|gross|riesig] |\n"
+        "+-----------------------------+-----------------------------+\n"
+        "| zone                        | segment                     |\n"
+        "| zone liste [<filter>]       | segment laden [<koords>]    |\n"
+        "| zone <zone>|<index>         | segment sichern [<koords>]  |\n"
+        "| zone neu <zone>             | segment tilgen [<koords>]   |\n"
+        "| zone umbenennen <zone_neu>  | segment 0|1|2 <inhalt>      |\n"
+        "| zone tilgen <zone>          +-----------------------------+\n"
+        "| zone +kuenstler <uid>       | karte hilfe                 |\n"
+        "| zone -kuenstler <uid>       +-----------------------------'\n"
+        "| zone steuerung <objekt>     |                              \n"
+        "'-----------------------------' %s\n",dtime(file_time(
+          explode(file_name(this_object()),"#")[0]+".lpc")));
+}
+
+public int
+_query_autoloadobj()
+{
+    return isWizardEdition();
+}
+
+nosave int
+wizMap(string zone, int * coords, int range, int set, int flags)
+{
+    if (!coords)
+        coords=({0,0,0});
+    else if (sizeof(coords)==2) 
+        coords+=({0});
+    if ((!zone) && (!(zone=current_zone)))
+        return 0;
+    printf("Zone %s\nKarte %d/%d/%d set %d (r=%d)\n",
+        current_zone, coords[0],coords[1],coords[2],0, range);
+    printf(GEMA_SERVER->Map(zone,coords,range,set,flags));
+    return 1;
+}
+
+nosave string getSetList(string zone)
+{
+  int * sets;
+  int i;
+  string res;
+
+  sets=(int*)GEMA_SERVER->QuerySets(zone);
+  if (!sizeof(sets)) 
+      return 0;
+  res=" - ";
+  for (i=0;i<sizeof(sets);i++)
+     res+=to_string(i)+":"+
+       to_string((int)(GEMA_SERVER->QueryGraticuleCountPerSet(zone,sets[i])))
+       +" ";
+  return res;
+}
+/*
+.-----------------------------------------------------------------------------.
+| Zone: 12345678901234567890123456789012345678901234567890123456789012345678  |
+| Kartenfragmente: 32                                                         |
+| Steuerobjekt: /....................................................... [FL] |
+|                                                               .-------.     |
+| Eingetragene Kartographierer:                   Leersegment:  | .---. |     |
+|       - Anatol                                                | | ? | |     |
+|       - ....                                                  | '---' |     |
+|       - ....                                                  '-------'     |
+'-----------------------------------------------------------------------------'
+*/
+
+nosave int
+showZone()
+{
+    string handler;
+    string * defaultsegment;
+    string * maintainer;
+    int i;
+
+    printf(ANSI_BOLD+ANSI_BLACK+".-----------------------------"+
+        "------------------------------------------------."+
+        ANSI_NORMAL+"\n");
+    printf(ANSI_BOLD+ANSI_BLACK+"| Zone: "+ANSI_NORMAL+
+        sprintf("%-68s ",(current_zone?current_zone:"(keine)"))+
+        ANSI_BOLD+ANSI_BLACK+" |"+ANSI_NORMAL+"\n");
+    if (current_zone)
+    {
+        printf(ANSI_BOLD+ANSI_BLACK+"| Sets/Fragmente: "+ANSI_NORMAL+
+        sprintf("%-50s      ",
+           to_string((int)(GEMA_SERVER->QueryGraticuleCount(current_zone)))+
+           getSetList(current_zone))+
+        ANSI_BOLD+ANSI_BLACK+
+        "    |"+
+        ANSI_NORMAL+"\n");
+        handler=(string)GEMA_SERVER->QueryHandler(current_zone);
+        defaultsegment=(string*)GEMA_SERVER->QueryDefaultGraticule(current_zone);
+        maintainer=(string*)GEMA_SERVER->QueryArtists(current_zone);
+
+        printf(ANSI_BOLD+ANSI_BLACK+"| Steuerobjekt: " +ANSI_NORMAL+
+            sprintf("%-61s ", (handler?handler+" ["+
+            (file_size(handler+".lpc")?"F":"?")+
+            (find_object(handler)?"L":"/")+"]":"(keines)"))+
+            ANSI_BOLD+ANSI_BLACK+"|"+ANSI_NORMAL+"\n");
+        printf(ANSI_BOLD+ANSI_BLACK+"|                            "
+               "                                   .-------.     |"
+            +ANSI_NORMAL+"\n");
+
+        printf(ANSI_BOLD+ANSI_BLACK+"| Eingetragene Kartographierer:     "
+               "              Leersegment:  | "+ANSI_NORMAL+
+               ((sizeof(defaultsegment)==3)?
+               (string)(GEMA_SERVER->ProcessToAnsi((defaultsegment[0]))):
+               "     ")+ANSI_BOLD+ANSI_BLACK+" |     |"+ANSI_NORMAL+"\n");
+
+        printf(ANSI_BOLD+ANSI_BLACK+"|       "+ANSI_NORMAL+
+            ((sizeof(maintainer)>0)?"- "+ANSI_NORMAL+sprintf("%-19s ",
+            capitalize(maintainer[0])):
+            " (keine)              ")+ANSI_BOLD+ANSI_BLACK+"                                  "
+            "| "+ANSI_NORMAL+
+               ((sizeof(defaultsegment)==3)?
+               (string)(GEMA_SERVER->ProcessToAnsi((defaultsegment[1]))):
+               "keins")+ANSI_BOLD+ANSI_BLACK+" |     |"+ANSI_NORMAL+"\n");
+
+        printf(ANSI_BOLD+ANSI_BLACK+"|       "+
+            ((sizeof(maintainer)>1)?"- "+ANSI_NORMAL+sprintf("%-19s ",
+            capitalize(maintainer[1])):
+            "                      ")+ANSI_BOLD+ANSI_BLACK+"                                  "
+            "| "+ANSI_NORMAL+
+               ((sizeof(defaultsegment)==3)?
+               (string)(GEMA_SERVER->ProcessToAnsi((defaultsegment[2]))):
+               "     ")+ANSI_BOLD+ANSI_BLACK+" |     |"+ANSI_NORMAL+"\n");
+
+        printf(ANSI_BOLD+ANSI_BLACK+"|       "+
+            ((sizeof(maintainer)>2)?"- "+ANSI_NORMAL+sprintf("%-19s ",
+            capitalize(maintainer[2])):
+            "                      ")+ANSI_BOLD+ANSI_BLACK+"                                  "
+             "'-------'     |"+ANSI_NORMAL+"\n");
+        for (i=3;i<sizeof(maintainer);i++)
+        {
+            printf(ANSI_BOLD+ANSI_BLACK+"|       "+"- "+ANSI_NORMAL+
+                sprintf("%-19s ",capitalize(maintainer[i]))
+                +ANSI_BOLD+ANSI_BLACK+"                  "
+                 "                              |"+ANSI_NORMAL+"\n");
+        }
+    }
+    printf(ANSI_BOLD+ANSI_BLACK+"'-----------------------------"+
+        "------------------------------------------------'"+
+        ANSI_NORMAL+"\n");
+
+    return 1;
+}
+
+nosave int 
+showZoneList(string zonefilter)
+{
+  int i;
+
+  current_zonelist=(string*)(GEMA_SERVER->GetZones(zonefilter));
+
+  if (!sizeof(current_zonelist))
+       printf(break_string(sprintf(
+          "Fuer Dich sind %sleider keine der vorhandenen Zonen relevant.\n",
+          (stringp(zonefilter)&&strlen(zonefilter)?"(Filter: '"+zonefilter+
+            "') ":"")),77));
+  else
+  {
+      printf(break_string(sprintf(
+          "Liste der vorhandenen und fuer Dich relevanten Zonen%s:\n",
+          (stringp(zonefilter)&&strlen(zonefilter)?" (Filter: '"+zonefilter+
+            "')":"")),77));
+      for (i=0;i<sizeof(current_zonelist);i++)
+          printf("%4d : %s\n",i,current_zonelist[i]);
+  }
+  return 1;
+}
+
+/*
+0123456789012345678901234567890123456789012345678901234567890123456789012345678
+  
+.--------------------------------------------------------------. .------------.
+| Set X        [ -1234, -1234, 0 ]                             | |  BB `00`00 |
+| .-------.                                                .---' |  RR `31`41 |
+| | XXXXX | 0: "12345678901234567890123456789012345"       | .---'  GG `32`42 |
+| | XXXXX | 1: ".........1.........2.........3....."       | |  BB  YY `33`43 |
+| | XXXXX | 2: "..................................."       | | `01  BB `34`44 |
+| '-------'                                                | |      PP `35`45 |
+|                                                          | |  NN  CC `36`46 |
+| Zone: 1234567890123456789012345678901234567890123456789  | | `00  WW `37`47 |
+'----------------------------------------------------------' '----------------'
+*/
+
+
+
+
+
+nosave int 
+showWorkspace() 
+{
+    string * seg;
+
+    if (pointerp(raw))
+        seg=map_array(raw,"ProcessToAnsi", GEMA_SERVER);
+    if ((!seg)||(sizeof(seg)!=3))
+        seg=({"`31 \\  / ","`31  X  ","`31/   \\"});
+
+    printf(ANSI_BOLD+ANSI_BLACK+".-------------------------------------"
+         "-------------------------. .------------."+ANSI_NORMAL+"\n");
+
+    printf(ANSI_BOLD+ANSI_BLACK+"|  "+(current_set?ANSI_YELLOW+ANSI_BOLD+sprintf("SET %2d",current_set):"      ")+
+    "      "+ANSI_NORMAL+
+         (current_pos?sprintf("%-67s ",ANSI_BOLD+ANSI_BLACK"[ "+ANSI_NORMAL+to_int(current_pos[0])+", "+to_int(current_pos[1])+(current_pos[2]?", "+to_int(current_pos[2]):"")+ANSI_BOLD+ANSI_BLACK" ]"+ANSI_NORMAL):
+         "          keine                           ")+
+         ANSI_BLACK+ANSI_BOLD+"      | |  "+ANSI_NORMAL+ANSI_BLACK+"B"+ANSI_BOLD+"B"+ANSI_NORMAL+" `30`40"+ANSI_BLACK+ANSI_BOLD+
+         " |"+ANSI_NORMAL+"\n");
+
+    printf(ANSI_BOLD+ANSI_BLACK+
+        "| .-------.                                                .---' |  "
+        +ANSI_NORMAL+ANSI_RED+"R"+ANSI_BOLD+"R"+ANSI_NORMAL+" `31`41 "+
+        ANSI_BLACK+ANSI_BOLD+"|"+ANSI_NORMAL+"\n");
+
+    printf(ANSI_BOLD+ANSI_BLACK+
+        "| | "+ANSI_NORMAL+seg[0]+ANSI_BOLD+ANSI_BLACK+" | 0: \""+
+        ANSI_NORMAL+sprintf("%-46s ",raw[0]+ANSI_BLACK+ANSI_BOLD+"\"")+
+        "     | .---'  "+
+        ANSI_NORMAL+ANSI_GREEN+"G"+ANSI_BOLD+"G"+ANSI_NORMAL+" `32`42 "+
+        ANSI_BLACK+ANSI_BOLD+"|"+ANSI_NORMAL+"\n");
+
+    printf(ANSI_BOLD+ANSI_BLACK+
+        "| | "+ANSI_NORMAL+seg[1]+ANSI_BOLD+ANSI_BLACK+" | 1: \""+
+        ANSI_NORMAL+sprintf("%-46s ",raw[1]+ANSI_BLACK+ANSI_BOLD+"\"")+
+        "     | | "+ANSI_NORMAL+ANSI_BOLD+" BB  "+
+        ANSI_NORMAL+ANSI_YELLOW+"Y"+ANSI_BOLD+"Y"+ANSI_NORMAL+" `33`43 "+
+        ANSI_BLACK+ANSI_BOLD+"|"+ANSI_NORMAL+"\n");
+
+    printf(ANSI_BOLD+ANSI_BLACK+
+        "| | "+ANSI_NORMAL+seg[2]+ANSI_BOLD+ANSI_BLACK+" | 2: \""+
+        ANSI_NORMAL+sprintf("%-46s ",raw[2]+ANSI_BLACK+ANSI_BOLD+"\"")+
+        "     | | "+ANSI_NORMAL+"`01  "+
+        ANSI_NORMAL+ANSI_BLUE+"B"+ANSI_BOLD+"B"+ANSI_NORMAL+" `34`44 "+
+        ANSI_BLACK+ANSI_BOLD+"|"+ANSI_NORMAL+"\n");
+
+    printf(ANSI_BOLD+ANSI_BLACK+
+        "| '-------'                                                | "
+        "|      "
+        +ANSI_NORMAL+ANSI_PURPLE+"P"+ANSI_BOLD+"P"+ANSI_NORMAL+" `35`45 "+
+        ANSI_BLACK+ANSI_BOLD+"|"+ANSI_NORMAL+"\n");
+
+    printf(ANSI_BOLD+ANSI_BLACK+
+        "|                                                          | |  "
+        +ANSI_NORMAL+"NN  "
+        +ANSI_NORMAL+ANSI_CYAN+"C"+ANSI_BOLD+"C"+ANSI_NORMAL+" `36`46 "+
+        ANSI_BLACK+ANSI_BOLD+"|"+ANSI_NORMAL+"\n");
+
+    printf(ANSI_BOLD+ANSI_BLACK+
+        "| Zone: "+sprintf("%-49s ",
+           (current_zone
+               ?(strlen(current_zone)<58
+                    ?current_zone
+                    :current_zone[0..30]+"..."+current_zone[<10..<1])
+               :" (keine)"
+           ))
+        +ANSI_BLACK+ANSI_BOLD+" | | "+ANSI_NORMAL+"`00  "
+        +ANSI_NORMAL+ANSI_WHITE+"W"+ANSI_BOLD+"W"+ANSI_NORMAL+" `37`47 "+
+        ANSI_BLACK+ANSI_BOLD+"|"+ANSI_NORMAL+"\n");
+        
+    printf(ANSI_BOLD+ANSI_BLACK+"'-------------------------------------"
+         "---------------------' '----------------'"+ANSI_NORMAL+"\n");
+    return 1;
+}
+
+
+
+nosave int 
+resetWorkspace() 
+{
+    raw=({"     ","  ``   ","     "});
+    current_pos=0;
+    current_zone=0;
+    return 1;
+}
+
+
+varargs nosave int 
+err(string s)
+{
+   printf("Fehler: %s\n",(s?s:"Hat leider nicht geklappt."));
+   return 1;
+}
+
+nosave int *
+stringToPosition(string s)
+{
+    string * args;
+    int x, y, z, set;
+    string rest,param;
+
+    if ((!s)||(!stringp(s))||(!strlen(s))) 
+        return 0;
+
+    args=explode(s," ");
+
+    // not that much of a dynamic solution
+
+    // less than 2 Arguments? Too few.
+    // TODO: "here" or "hier"
+
+    if (sizeof(args)<2)
+       return 0;
+
+    // two args: x, y
+    if (sizeof(args)==2) 
+    {
+        if ((to_string(to_int(args[0]))==args[0])
+             && (to_string(to_int(args[1]))==args[1]))
+             return ({to_int(args[0]),to_int(args[1]),0,0});
+    }
+    // three args: x, y, z
+    else if (sizeof(args)==3) 
+    {
+        if ((to_string(to_int(args[0]))==args[0])
+             && (to_string(to_int(args[1]))==args[1])
+             && (to_string(to_int(args[2]))==args[2]))
+             return ({to_int(args[0]),to_int(args[1]),to_int(args[2]),0});
+    }
+    // four args:  x, y, "set", set
+    else if (sizeof(args)==4) 
+    {
+        if ((to_string(to_int(args[0]))==args[0])
+             && (to_string(to_int(args[1]))==args[1])
+             && ((args[2] == "s")||(args[2]=="set"))
+             && (to_string(to_int(args[3]))==args[3])
+             && (to_int(args[3])>=0))
+             return ({to_int(args[0]),to_int(args[1]),0,to_int(args[3])});
+    }
+    // five args:  x, y, z, "set", set
+    else if (sizeof(args)==5) 
+    {
+        if ((to_string(to_int(args[0]))==args[0])
+             && (to_string(to_int(args[1]))==args[1])
+             && (to_string(to_int(args[2]))==args[2])
+             && ((args[3] == "s")||(args[3]=="set"))
+             && (to_string(to_int(args[4]))==args[4])
+             && (to_int(args[4])>=0))
+             return ({to_int(args[0]),to_int(args[1]),
+                 to_int(args[2]),to_int(args[4])});
+    }
+    else 
+         return 0;
+}
+       
+
+nosave int
+cmdSegment(string s)
+{
+    int var;
+    int * coords;
+    string * args;
+    string cmd,param;
+
+    if ((!isWizardEdition())|| (!activated)) return 0;
+
+    if ((!stringp(s)|| (!strlen(s))))
+       return showWorkspace();
+
+    cmd=(args=explode(s=(string)this_player()->_unparsed_args()," "))[0];
+
+    if (sizeof(args)>1)
+        param=implode(args=args[1..]," ");
+    else 
+        param=0;
+    args=explode(s," ");
+    
+    // segment 0..2 ...
+
+    switch (args[0])
+    {
+        case "0":
+        case "1":
+        case "2":
+            if (((strlen(param))<5) ||
+              ((var=strlen((string)(GEMA_SERVER->ProcessToVT100(
+                    param=regreplace(
+                        regreplace(
+                             regreplace(param,"``","\a",1),
+                             "` ", " ",1),
+                     "\a","``",1))))
+                )<5))
+                return 
+                err("Eine Segmentzeile benoetigt genau 5 sichtbare Zeichen.");
+            if ((var==7)&& (param[0]=='\"') && (param[<1]=='\"'))
+                    raw[to_int(cmd)]=param[1..<2];
+            else if (var==5)
+                    raw[to_int(cmd)]=param;
+            else 
+                return err("Eine Segmentzeile benoetigt "
+                         "genau 5 sichtbare Zeichen.");
+            return showWorkspace();
+            break;
+        case "l":
+        case "load":
+        case "lade":
+        case "laden":
+            if (!current_zone)
+               return err("Es muss zuvor eine Zone ausgewaehlt sein.");
+            if (param) 
+            {
+                if (member((["standard","default","def"]),param))
+                {
+                    printf("Uebernehme Standard-Segment... \n");
+                    if (!args=(string*)GEMA_SERVER->QueryDefaultGraticule(
+                         current_zone))
+                          return err("Hat leider nicht geklappt.");
+                     else
+                     {
+                         raw=args;
+                         current_pos=0;
+                         current_set=0;
+                         printf("(Koordinaten und Set 'vergessen'.\n");
+                         return 1;
+                     }
+
+                }
+                else if (!(coords=stringToPosition(param)))
+                    return err("Das waren irgendwie keine Koordinaten...");
+            }
+            else
+            {
+                if (!current_pos)
+                    return err("Keine Koordinaten - welches Segment "
+                    "soll geladen werden?");
+            }
+            if (param)
+            {
+                if (!(args=(string*)GEMA_SERVER->QueryGraticule(
+                      current_zone,coords[0..2],coords[3])))
+                {   
+                    printf("Kein Segment hinterlegt. Uebernehme " +
+                    "Koordinaten und Standard-Segment...\n");
+                    if(!args=(string*)GEMA_SERVER->QueryDefaultGraticule(
+                         current_zone))
+                      return err("Hat leider nicht geklappt.");
+                }
+                raw=args;
+                current_pos=coords[0..2];
+                current_set=coords[3];
+                return showWorkspace();
+            }
+            else
+            {
+                if (!(args=(string*)GEMA_SERVER->QueryGraticule(
+                        current_zone,current_pos,current_set)))
+                    return err("Hat leider nicht geklappt.");
+                raw=args;
+                return showWorkspace();
+            }
+            break;
+        case "s":
+        case "save":
+        case "sichern":
+        case "sichere":
+            if (!current_zone)
+               return err("Es muss zuvor eine Zone ausgewaehlt sein.");
+            if (param) 
+            {
+                if (member((["standard","default","def"]),param))
+                {
+                    printf("Speichere in Standard-Segment... Rueckgabewert %d\n",
+                    var=(int)GEMA_SERVER->SetDefaultGraticule(
+                         current_zone,raw));
+                    if (var!=1)
+                          return err("Hat wohl nicht geklappt.");
+                    else 
+                        return 1;
+                }
+                else if (!(coords=stringToPosition(param)))
+                    return err("Das waren irgendwie keine Koordinaten...");
+            }
+            else
+            {
+                if (!current_pos)
+                    return err("Keine Koordinaten - welches Segment "
+                    "soll geladen werden?");
+            }
+            if (param)
+            {
+                printf("Versuche, Segment an neue Koordinaten zu speichern... "
+                "Rueckgabewert: %d\n", (var=(int)GEMA_SERVER->SetGraticule(
+                      current_zone,coords[0..2],raw,coords[3])));
+                if (var!=1)
+                    err("Ging wohl schief. Schade.\n");
+                else
+                {
+                    current_pos=coords[0..2];
+                    current_set=coords[3];
+                    return wizMap(current_zone,current_pos,1,current_set,
+                        GEMA_MAP_FLAG_COORDINATES);
+                }
+                return 1;
+            }
+            else
+            {
+                printf("Versuche, Segment an bekannte Koordinaten zu "
+                    "speichern... Rueckgabewert: %d\n", 
+                      (var=(int)GEMA_SERVER->SetGraticule(
+                      current_zone,current_pos,raw,current_set)));
+                if (var!=1)
+                    return err("Ging wohl schief. Schade.");
+                return wizMap(current_zone,current_pos,1,current_set,
+                        GEMA_MAP_FLAG_COORDINATES);
+            }
+            break;
+        case "t":
+        case "terminate":
+        case "tilgen":
+        case "truncate":
+            if (!current_zone)
+               return err("Es muss zuvor eine Zone ausgewaehlt sein.");
+            if (param) 
+            {
+                if (!(coords=stringToPosition(param)))
+                    return err("Das waren irgendwie keine Koordinaten...");
+            }
+            else
+            {
+                if (!current_pos)
+                    return err("Keine Koordinaten - welches Segment "
+                    "soll aus der Karte getilgt werden?");
+            }
+            if (param)
+            {   
+                printf("Versuche, Segment an den neuen "
+                    "Koordinaten zu tilgen... "
+                "Rueckgabewert: %d\n", (var=(int)GEMA_SERVER->SetGraticule(
+                      current_zone,coords[0..2],0,coords[3])));
+                if (var!=1)
+                    err("Ging wohl schief. Schade.\n");
+                else
+                {
+                    current_pos=coords[0..2];
+                    current_set=coords[3];
+                }
+                return 1;
+            }
+            else
+            {
+                printf("Versuche, Segment an den bekannten Koordinaten zu "
+                    "tilgen...  Rueckgabewert: %d\n", 
+                      (var=(int)GEMA_SERVER->SetGraticule(
+                      current_zone,current_pos,0,current_set)));
+
+                if (var!=1)
+                    return err("Ging wohl schief. Schade.");
+                return 1;
+            }
+            break;
+        default:
+            return err("Den Befehl gibts offenbar nicht. Versuche "
+               "'laden', 'sichern' oder, wenns sein muss, 'tilgen'. "
+               "Um Zeilen eines Segments zu definieren, gib als Befehl "
+               "die Ziffern 0, 1 oder 2 an.");
+    }
+}
+
+
+nosave int printHelp()
+{
+    printf("Die Hilfe ist leider noch nicht verfuegbar.\n");
+    return 1;
+}
+
+public void
+create() {
+    if (!is_clone(this_object())) 
+        return;
+    ::create();
+
+    SetProp(P_SHORT,0);
+    SetProp(P_LONG,
+        "Wow, ein ultrahochmagische Karte.");
+    SetProp(P_NAME,"Landkarte");
+    AddAdjective(({"magisch","ultrahochmagisch"}));
+    SetProp(P_GENDER,FEMALE);
+    AddId(({"karte","landkarte","uebersichtskarte", "\a\n\a\tol_karte"}));
+  
+    SetProp(P_WEIGHT,0);
+    SetProp(P_VALUE,0);
+    SetProp(P_NODROP,0);
+    SetProp(P_NEVERDROP,1);
+    SetProp(P_MATERIAL,([MAT_PERGAMENT:3,MAT_MAGIC:97]));
+  
+    AddCmd("karte","cmdKarte");
+    AddCmd("zone","cmdZone");
+    AddCmd("segment","cmdSegment");
+    raw=({"     ","     ","     "});
+    current_pos=0;
+    current_zone=0;
+    current_set=0;
+}
+
+nosave int
+cmdZone(string s)
+{
+    string *args;
+    string cmd;
+    string param;
+    int var;
+
+    if ((!this_player())|| !isWizardEdition() || (!activated)) return 0;
+    if ((!s)||(!stringp(s)))
+        return showZone();
+
+    // pepare parameter handling
+
+    cmd=(args=explode(s=(string)this_player()->_unparsed_args()," "))[0];
+    if (sizeof(args)>1)
+        param=implode(args=args[1..]," ");
+    else
+    { 
+        param=0;
+    }
+
+    switch (lowerstring(cmd))
+    {
+        case "l":
+        case "list":
+        case "liste":
+            return showZoneList(param);
+            break;
+        case "n":
+        case "neu":
+        case "new":
+            if (!param)
+                 return err("Benoetigt eine ZoneID als Argument.");
+            printf("Versuche, neue Zone anzulegen, Rueckgabewert: %d\n",
+                   (int)GEMA_SERVER->AddZone(param));
+            return 1;
+            break;
+        case "move":
+        case "umbenennen":
+        case "u": 
+            if (!current_zone)
+                return err("Es muss bereits eine Zone selektiert sein, "
+                   "damit das klappt.");
+            if (!param)
+                 return err("Benoetigt eine ZoneID als Argument.");
+            printf(break_string(sprintf("Versuche Zone '%s' in '%s' "
+                   "umzubenennen, ... Rueckgabewert: %d\n",
+                   current_zone,param,
+                   var=(int)GEMA_SERVER->MoveZone(current_zone,param)),77));
+            if (var==1)
+                current_zone=param;
+            return 1;
+            break;
+        case "T":
+        case "tilgen":
+        case "tilge":
+            if (!param)
+                 return err("Benoetigt eine ZoneID als Argument.");
+            printf("Versuche, Zone zu LOESCHEN, Rueckgabewert: %d\n",
+                    (int)GEMA_SERVER->DeleteZone(param));
+            return 1;
+            break;
+        case "+k":
+        case "+kuenstler":
+            if (!param)
+                 return err("Benoetigt eine uid als Argument.");
+            if (!current_zone)
+                return err("Hierfuer muss zuvor eine Zone selektiert sein.");
+            printf(break_string(sprintf(
+                "Versuche, die uid '%s' als fuer die Zone berechtigten "
+                "Kuenstler einzutragen... Rueckgabewert: %d\n",
+                   param,(int)GEMA_SERVER->AddArtist(current_zone,param)),77));
+            return 1;
+            break;
+        case "-k":
+        case "-kuenstler":
+            if (!param)
+                 return err("Benoetigt eine uid als Argument.");
+            if (!current_zone)
+                return err("Hierfuer muss zuvor eine Zone selektiert sein.");
+            printf(break_string(sprintf(
+                "Versuche, die uid '%s' aus der Liste der fuer die Zone "
+                "berechtigten "
+                "Kuenstler auszutragen... Rueckgabewert: %d\n",
+                   param,(int)GEMA_SERVER->RemoveArtist(current_zone,param)),77));
+            return 1;
+            break;
+        case "steuerung": 
+            if (!param)
+                 return err("Benoetigt einen Dateipfad (oder '0') als Argument.");
+            if (!current_zone)
+                return err("Hierfuer muss zuvor eine Zone selektiert sein.");
+            printf(break_string(sprintf(
+                "Versuche, fuer die Zone das Steuerungsobjekt "
+                "auf '%s' zu setzen... "
+                "Rueckgabewert: %d\n",
+                   param,
+                   var=(int)GEMA_SERVER->SetHandler(current_zone,
+                   (param=="0"?0:param)),77)));
+            return 1;
+            break;           
+        default:
+            if (param)
+                cmd=cmd+" "+param;
+            if ((cmd==to_string(to_int(cmd))) &&
+                     pointerp(current_zonelist) &&
+                     (to_int(cmd)>=0)  &&
+                     to_int(cmd)<sizeof(current_zonelist))
+                 cmd=current_zonelist[to_int(cmd)];
+            if (GEMA_SERVER->IsZone(cmd))
+            {
+                printf("Zone gesetzt: %s\n",cmd);
+                current_zone=cmd;
+                return showZone();
+            }
+            else
+                return err("Das ist keine existierende Zone.");
+            break;
+    }
+    return 1;
+}
+
+nosave int
+cmdKarte(string s) 
+{
+    int * tpos;
+    int range;
+    int x, y, z,use_set;
+    int flags;
+    string rstr;
+    string str;
+    string * args;
+    string cmd;
+    string param;
+
+    if (!this_player()) 
+        return 0;
+    // check the player's tty.
+
+    switch ((string)this_player()->QueryProp(P_TTY))
+    {
+        case "ansi":
+            flags=0;
+            break;
+        case "vt100":
+            flags=GEMA_MAP_FLAG_NOANSI;
+            break;
+        default:
+            notify_fail(break_string("Um die Karte grafisch wahrnehmen "
+                "zu koennen, musst Du Deine Terminaleinstellung auf "
+                "'vt100' (schwarz/weiss) oder 'ansi' (farbig) einstellen. "
+                "Nutze hierfuer den Befehl 'stty vt100|ansi|dumb'. "
+                "Wenn Du einen Screen-Reader oder Braille-Zeile nutzst, "
+                "kannst du mit der Karte leider nicht viel anfangen.",77));
+            return 0;
+    }    
+
+
+    if ((!s) ||(!stringp(s)) || (!strlen(s)))
+         range = RANGE_DEFAULT; 
+    else if (s=="gross")
+         range = RANGE_LARGE;
+    else if (s=="klein")
+        range = RANGE_SMALL;
+    else if ((s=="riesig") && (isWizardEdition()))
+        range = RANGE_XXL;
+
+    if (isWizardEdition() && 
+        ((s=="kreativ") || (s=="k") || 
+         (s=="kreativmodus") || (s=="kreativ-modus")))
+    {
+        write("Kreativ-Modus "+(activated?"de":"")+"aktiviert.\n");
+        if (activated=(activated?0:1))
+        {
+            showZone();
+            showWorkspace();
+        }
+        return 1;
+    }
+
+   // risk of double code, but it is easier (and safer) do differ between
+   // standard player commands and the "designer edition".
+
+    // ---------------------------------- Players block begin:
+
+    notify_fail("Das hat jetzt leider nicht funktioniert.\n"
+                 "Probier' doch 'karte klein', 'karte gross' oder "
+                 "einfach nur 'karte'\n");
+    
+
+    if (range)
+    {
+        if (!isWizardEdition() || !activated)
+        {
+             if ((this_player()->CannotSee()))
+             {
+                 printf(break_string("Ja, schoen bloed, da hast du eine tolle "
+                    "magische Karte und kannst nichts sehen. Aergerlich, echt "
+                    "aergerlich.",77));
+                 return 1;
+             }
+         
+             str=(string)(GEMA_SERVER->PlayerMap(
+                    environment(this_player()),range));
+             if (!str)
+                 printf("Die Karte glitzert und funkelt, "
+                          "doch ihre Magie verpufft wirkungslos.\n");
+             else
+                 printf(str);
+             return 1;
+        }
+    }
+
+    if (!isWizardEdition())
+        return 0;
+
+    if (!activated)
+        return 0;
+    // ---------------------------------- Players done.
+
+    if (s=="hilfe")
+        return printHelp();
+
+    flags|=GEMA_MAP_FLAG_COORDINATES;
+
+    if (range)
+    {
+        if (!current_zone)
+            printf(break_string("Im Kreativ-Modus musst du vorher eine Zone "
+              "auswaehlen.",77));
+        else
+            return wizMap(current_zone,current_pos,range, current_set,flags);
+        return 1;
+    }
+
+
+   //  karte [<x> <y> [<z>]] [set|xset <s>] [klein|gross|riesig] 
+
+   args=explode((string)(this_player()->_unparsed_args())," ");
+
+   // 1. check if range given
+
+    if (member((["klein","gross","riesig"]),(args[<1])))
+    {
+        if (args[<1]=="gross")
+            range = RANGE_LARGE;
+        else if (args[<1]=="klein")
+            range = RANGE_SMALL;
+        else 
+            range = RANGE_XXL;
+
+        if (sizeof(args)>1)
+            args=args[0..<2];
+        else
+            args=({});
+    }
+    else
+        range=RANGE_DEFAULT;
+
+    // check if set or xset is given
+
+    if ((sizeof(args)>1) && 
+         ((args[<2]=="set") || (args[<2]=="xset")))
+    {
+        if ((to_string(to_int(args[<1]))==args[<1])
+           && (to_int(args[<1])>=0))
+        {
+            use_set=to_int(args[<1]);
+            if (args[<2]=="xset")
+                flags|=GEMA_MAP_FLAG_NO_OVERLAY;
+            if (sizeof(args)>2)
+                args=args[0..<3];
+            else
+                args=({});
+        }
+        else 
+            return err("'"+args[<1]+"' ist kein gueltiges Set.");
+    }
+    else 
+        use_set=current_set;
+
+    // check if coordinates are given.
+
+    if (sizeof(args)>3)
+        return err(sprintf("Zu viele Argumente - es duerften nur noch "
+        "2 oder 3 Koordinaten unversorgt sein, finde aber '%s'.",
+           implode(args," ")));
+    else if (!sizeof(args))
+    {
+        if (!current_pos)
+            x=y=z=0;
+        else
+        {
+            x=current_pos[0];
+            y=current_pos[1];
+            z=current_pos[2];
+        }
+    }
+    else if (sizeof(args)==2)
+    {
+        if ((args[0]==to_string(to_int(args[0])))
+             && (args[1]==to_string(to_int(args[1]))))
+        {
+            x=to_int(args[0]);
+            y=to_int(args[1]);
+            z=(current_pos?current_pos[2]:0);
+        }
+        else
+            return err(sprintf("Haette Koordinaten erwartet, bekam '%s'",
+                implode(args," ")));
+    }
+    else if (sizeof(args)==3)
+    {
+        if ((args[0]==to_string(to_int(args[0])))
+             && (args[1]==to_string(to_int(args[1])))
+             && (args[2]==to_string(to_int(args[2]))))
+        {
+            x=to_int(args[0]);
+            y=to_int(args[1]);
+            z=to_int(args[2]);
+        }
+        else
+            return err(sprintf("Haette Koordinaten erwartet, bekam '%s'",
+                implode(args," ")));
+    }
+    else
+        return err(sprintf("Das hat nicht gepasst ('%s').",implode(args," ")));
+
+    return wizMap(current_zone, ({x,y,z}),range, use_set, flags);
+
+
+}

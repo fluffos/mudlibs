@@ -1,0 +1,113 @@
+/*
+ * Elementarpanzer
+ *
+ *
+ * Kosten: 
+ * Level : 5
+ * Objekte:
+ * Damage:
+ *
+ */
+
+int elementarpanzer_check(object caster, mapping sinfo) 
+{
+  if(caster->InFight()) 
+  {
+    printf(BS("Du kannst Dich nicht auf die Muster des Zaubers "
+       +"konzentrieren."));
+    return 0;
+  }
+  if(CheckArmour(caster)) 
+  {
+    printf("Du hast Doch schon eine Ruestung an!\n");
+    return 0;
+  }
+  if(present("elementarpanzer", caster)) 
+  {
+    printf("Du hast schon einen Elementarpanzer.\n");
+    return 0;
+  }
+  return 1;
+}
+
+int elementarpanzer(object caster, mapping sinfo) 
+{
+  object l;
+  int aclass, suc;
+  string caster_element;
+  int ac,hp,sp,cold,heat, dur;
+
+  if(CheckArmour(caster)) 
+  {
+    printf("Du hast Doch schon eine Ruestung an!\n");
+    return 0;
+  }
+  sinfo=DoSpellModification(GEIST, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  if((suc=SpellSuccess(caster,sinfo))<=0) 
+  {
+    if(suc<-2000) 
+    {
+      printf(BS("Um Dich herum formt sich ein Panzer, doch vermag er "
+              "Dich nicht zu schuetzen.\n"));
+      say(sprintf(BS("Um %s materialisiert sich ein Panzer aus "
+          +"den Elementen selbst!\n"),  caster->name()));
+      l=clone_object("/gilden/druidenzirkel/armour/e_panzer");
+      l->SetProp(P_AC, 1);
+      l->move(TP, M_NOCHECK); 
+      l->DoWear(1);   
+      l->NegativeProtection(suc, 1);
+      l->panzer_weg(500);
+      l->SetProp(P_CURSED, 1);
+    }        
+    return MISSERFOLG;
+  } 
+  write_color(BS("Durch Deine Konzentration formen Deine Gedanken einen Panzer "
+       +"aus Eis, Luft, Feuer, Erz und Wasser und Humus."),"",caster,1);
+  say(sprintf(BS("Um %s materialisiert sich ein Panzer aus "
+          +"den Elementen selbst.\n"),  caster->name()));
+  switch (caster_element=call_other(DRUIDENMASTER, "GetDruidElement", caster) )
+  {
+    case ERZ: ac=3; break;
+    case LUFT: sp=2; break;
+    case HUMUS: hp=2; break;
+    case FEUER: heat=3; break;
+    case EIS: cold=3; break;
+    case WASSER: hp=1; sp=1; break;
+    case GEIST: ac=sp=hp=cold=heat=1; break;
+  }
+  dur=0;
+  if( sinfo[SI_SKILLABILITY] == MAX_ABILITY )
+  {
+    ac+=random(3);
+    sp+=random(2);
+    hp+=random(2);
+    heat+=random(2);
+    cold+=random(2);
+    dur=TP->QueryAttribute(A_INT) * random(caster->QueryProp(P_GUILD_LEVEL));
+  }
+  l=clone_object("/gilden/druidenzirkel/armour/e_panzer");
+  if( (aclass=suc/1000+random(TP->QueryAttribute(A_INT)/2)+ 
+        TP->QueryProp(P_GUILD_LEVEL)+ ac)>VALID_ARMOUR_CLASS[AT_ARMOUR])
+     aclass=VALID_ARMOUR_CLASS[AT_ARMOUR];
+  l->SetProp(P_AC, aclass);
+  l->SetProp(P_TEMPERATURE_PROTECTION,  // Maximal 6/4
+      ([T_COLD_PROT:2+aclass/10+cold, T_HEAT_PROT:aclass/10+heat]));  
+  l->SetProp(P_M_HEALTH_MOD,  // Maximal 6/6
+      ([P_SP:SpellEnhanceModifier(caster, HUMUS, suc/3333+sp), 
+        P_HP:SpellEnhanceModifier(caster, HUMUS, suc/3333+hp) ]) );
+  l->move(TP, M_NOCHECK); 
+  l->DoWear(1);   
+  l->SetProp(P_CURSED, 1);
+  l->NegativeProtection(0,0);
+  dur+=caster->QueryProp(P_GUILD_LEVEL)*aclass;
+  dur=SpellEnhanceModifier(caster, HUMUS, dur);
+  l->panzer_weg(dur);
+  return ERFOLG;
+}
+

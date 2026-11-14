@@ -1,0 +1,1212 @@
+inherit "std/thing";
+
+#include <properties.h>
+#include <moving.h>
+#include <combat.h>
+#include <wizlevels.h>
+#include <defines.h>
+#include <moredef.h>
+#include <new_skills.h>
+#include <ansi.h>
+#include "/p/daemon/skillmaster/skillmaster.h"
+#include "/gilden/paladine/paladin_extern.h"
+#include "/gilden/druidenzirkel/druiden_extern.h"
+#include "/gilden/berserker/berserker_extern.h"
+#include "/gilden/nekromanten/nekro_properties.h"
+#include "/gilden/zechpreller/zechpreller_extern.h"
+#include "/gilden/amazonen/amazonen_extern.h"
+#include "/gilden/waldlaeufer/def_extern.h"
+#include "/p/daemon/itemd/itemd.h"
+
+#define ARMOR "/p/std/skills/jewelry/items/"
+
+// Prototypes
+int obtain_jewelry_skill(object pl);
+void check_sk_values();
+
+// Variables
+int DELAY_COUNT=0;
+
+int PL_MOVED=0;
+int IS_SEWING=0;
+
+int j_skill=1000;
+
+string NKOWNER;
+string NKNAME;
+
+string *level_names = 
+({ "PLACEHOLDER",
+   "kleiner Kupferlehrling",
+   "Kupferlehrling",
+   "grosser Kupferlehrling",
+   "kleiner Kupfergeselle",
+   "Kupfergeselle",
+   "grosser Kupfergeselle",
+   "kleiner Kupfermeister",
+   "Kupfermeister",
+   "grosser Kupfermeister",
+   "Kupfergrossmeister",
+   "kleiner Silberlehrling",
+   "Silberlehrling",
+   "grosser Silberlehrling",
+   "kleiner Silbergeselle",
+   "Silbergeselle",
+   "grosser Silbergeselle",
+   "kleiner Silbermeister",
+   "Silbermeister",
+   "grosser Silbermeister",
+   "Silbergrossmeister",
+   "kleiner Goldlehrling",
+   "Goldlehrling",
+   "grosser Goldlehrling",
+   "kleiner Goldgeselle",
+   "Goldgeselle",
+   "grosser Goldgeselle",
+   "kleiner Goldmeister",
+   "Goldmeister",
+   "grosser Goldmeister",
+   "Goldgrossmeister",
+   "Juweliergeselle [1]",
+   "Juweliergeselle [2]",
+   "kleiner Platinlehrling",
+   "Platinlehrling",
+   "grosser Platinlehrling",
+   "kleiner Platingeselle",
+   "Platingeselle",
+   "grosser Platingeselle",
+   "kleiner Platinmeister",
+   "Platinmeister",
+   "grosser Platinmeister",
+   "Platingrossmeister",
+   "Juweliermeister [1]",
+   "Juweliermeister [2]",
+   "Juweliermeister [3]",
+   "Juweliermeister [4]",
+   "Juweliermeister [5]",
+   "Juweliergrossmeister [1]",
+   "Juweliergrossmeister [2]",
+   "Juweliergrossmeister [3]",
+   "Juweliergrossmeister [4]",
+   "Juweliergrossmeister [5]",
+   "Juweliergrossmeister [6]",
+   "Juweliergrossmeister [7]",
+   "Juweliergrossmeister [8]",
+   });
+
+string *skill_names =
+({ "PLACEHOLDER",
+   "wirklich schlecht",
+   "schlecht",
+   "mittelmaessig",
+   "durchschnittlich",
+   "gut",
+   "ueberdurchschnittlich gut",
+   "sehr gut",
+   "perfekt",
+   "mehr als perfekt",
+   "meisterhaft"
+   });
+
+// 0: nummer, 1: skill, 2:Name, 3: short, 4,5: x*metall, 6,7: x*gem, 8: ac, 9:id, 10: filename, 11: props
+mixed *armor_types =
+({
+ ({ "PLACEHOLDER" }),
+ ({1, 25, "Kupferpolarperlenring", "Ein kupferner Polarperlenring", 1, "kupfer", 1, "polarperle", 1, "ring", "perlenring.lpc", 0}),
+ ({1, 50, "Kupfertuerkisring", "Ein kupferner Tuerkisring", 1, "kupfer", 1, "tuerkis", 1, "ring", "ring.lpc", 0}),
+ ({1, 75, "Kupferfelseninselperlenring", "Ein kupferner Felseninselperlenring", 1, "kupfer", 1, "felseninselperle", 1, "ring", "perlenring.lpc", 0}),
+ ({1, 100, "Kupferaventurinring", "Ein kupferner Aventurinring", 1, "kupfer", 1, "aventurin", 1, "ring", "ring.lpc", 0}),
+ ({1, 125, "Kupferoktopusperlenring", "Ein kupferner Oktopusperlenring", 1, "kupfer", 1, "oktopusperle", 1, "ring", "perlenring.lpc", 0}),
+ ({1, 150, "Kupferbergkristallring", "Ein kupferner Bergkristallring", 1, "kupfer", 1, "bergkristall", 1, "ring", "ring.lpc", 0}),
+ ({1, 175, "Kupferderlimperlenring", "Ein kupferner Derlimperlenring", 1, "kupfer", 1, "derlimperle", 1, "ring", "perlenring.lpc", 0}),
+ ({1, 200, "Kupferachatring", "Ein kupferner Achatring", 1, "kupfer", 1, "achat", 1, "ring", "ring.lpc", 0}),
+ ({1, 225, "Kupferkorallenperlenring", "Ein kupferner Korallenperlenring", 1, "kupfer", 1, "korallenperle", 1, "ring", "perlenring.lpc", 0}),
+ ({1, 250, "Kupferdioptasring", "Ein kupferner Dioptasring", 1, "kupfer", 1, "dioptas", 1, "ring", "ring.lpc", 0}),
+
+ ({2, 275, "Kupferpolarperlenkette", "Eine kupferne Polarperlenkette", 1, "kupfer", 1, "polarperle", 1, "kette", "perlenkette.lpc", 0}),
+ ({2, 300, "Kupfertuerkisamulett", "Ein kupfernes Tuerkisamulett", 1, "kupfer", 1, "tuerkis", 1, "amulett", "amulett.lpc", 0}),
+ ({2, 325, "Kupferfelseninselperlenkette", "Eine kupferne Felseninselperlenkette", 1, "kupfer", 1, "felseninselperle", 1, "kette", "perlenkette.lpc", 0}),
+ ({2, 350, "Kupferaventurinamulett", "Ein kupfernes Aventurinamulett", 1, "kupfer", 1, "aventurin", 1, "amulett", "amulett.lpc", 0}),
+ ({2, 375, "Kupferoktopusperlenkette", "Eine kupferne Oktopusperlenkette", 1, "kupfer", 1, "oktopusperle", 1, "kette", "perlenkette.lpc", 0}),
+ ({2, 400, "Kupferbergkristallamulett", "Ein kupfernes Bergkristallamulett", 1, "kupfer", 1, "bergkristall", 1, "amulett", "amulett.lpc", 0}),
+ ({2, 425, "Kupferderlimperlenkette", "Eine kupferne Derlimperlenkette", 1, "kupfer", 1, "derlimperle", 1, "kette", "perlenkette.lpc", 0}),
+ ({2, 450, "Kupferachatamulett", "Ein kupfernes Achatamulett", 1, "kupfer", 1, "achat", 1, "amulett", "amulett.lpc", 0}),
+ ({2, 475, "Kupferkorallenperlenkette", "Eine kupferne Korallenperlenkette", 1, "kupfer", 1, "korallenperle", 1, "kette", "perlenkette.lpc", 0}),
+ ({2, 500, "Kupferdioptasamulett", "Ein kupfernes Dioptasamulett", 1, "kupfer", 1, "dioptas", 1, "amulett", "amulett.lpc", 0}),
+ 
+ ({3, 525, "Kupferquaulperlenring", "Ein kupferner Quaulperlenring", 1, "kupfer", 1, "quaulperle", 1, "ring", "perlenring.lpc", 0}),
+ ({3, 550, "Kupfertigeraugering", "Ein kupferner Tigeraugering", 1, "kupfer", 1, "tigerauge", 1, "ring", "ring.lpc", 0}),
+ ({3, 575, "Kupfermidasperlenring", "Ein kupferner Midasperlenring", 1, "kupfer", 1, "midasperle", 1, "ring", "perlenring.lpc", 0}),
+ ({3, 600, "Kupferalmandinring", "Ein kupferner Almandinring", 1, "kupfer", 1, "almandin", 1, "ring", "ring.lpc", 0}),
+ ({3, 625, "Kupfersmoerskyperlenring", "Ein kupferner Smoerskyperlenring", 1, "kupfer", 1, "smoerskyperle", 1, "ring", "perlenring.lpc", 0}),
+ ({3, 650, "Kupfercupritring", "Ein kupferner Cupritring", 1, "kupfer", 1, "cuprit", 1, "ring", "ring.lpc", 0}),
+ ({3, 675, "Kupferriffperlenring", "Ein kupferner Riffperlenring", 1, "kupfer", 1, "riffperle", 1, "ring", "perlenring.lpc", 0}),
+ ({3, 700, "Kupferbenitoitring", "Ein kupferner Benitoitring", 1, "kupfer", 1, "benitoit", 1, "ring", "ring.lpc", 0}),
+ ({3, 725, "Kupfermauritiusperlenring", "Ein kupferner Mauritiusperlenring", 1, "kupfer", 1, "mauritiusperle", 1, "ring", "perlenring.lpc", 0}),
+ ({3, 750, "Kupferonyxring", "Ein kupferner Onyxring", 1, "kupfer", 1, "onyx", 1, "ring", "ring.lpc", 0}),
+
+ ({4, 775, "Kupferquaulperlenkette", "Eine kupferne Quaulperlenkette", 1, "kupfer", 1, "quaulperle", 1, "kette", "perlenkette.lpc", 0}),
+ ({4, 800, "Kupfertigeraugeamulett", "Ein kupfernes Tigeraugeamulett", 1, "kupfer", 1, "tigerauge", 1, "amulett", "amulett.lpc", 0}),
+ ({4, 825, "Kupfermidasperlenkette", "Eine kupferne Midasperlenkette", 1, "kupfer", 1, "midasperle", 1, "kette", "perlenkette.lpc", 0}),
+ ({4, 850, "Kupferalmandinamulett", "Ein kupfernes Almandinamulett", 1, "kupfer", 1, "almandin", 1, "amulett", "amulett.lpc", 0}),
+ ({4, 875, "Kupfersmoerskyperlenkette", "Eine kupferne Smoerskyperlenkette", 1, "kupfer", 1, "smoerskyperle", 1, "kette", "perlenkette.lpc", 0}),
+ ({4, 900, "Kupfercupritamulett", "Ein kupfernes Cupritamulett", 1, "kupfer", 1, "cuprit", 1, "amulett", "amulett.lpc", 0}),
+ ({4, 925, "Kupferriffperlenkette", "Eine kupferne Riffperlenkette", 1, "kupfer", 1, "riffperle", 1, "kette", "perlenkette.lpc", 0}),
+ ({4, 950, "Kupferbenitoitamulett", "Ein kupfernes Benitoitamulett", 1, "kupfer", 1, "benitoit", 1, "amulett", "amulett.lpc", 0}),
+ ({4, 975, "Kupfermauritiusperlenkette", "Eine kupferne Mauritiusperlenkette", 1, "kupfer", 1, "mauritiusperle", 1, "kette", "perlenkette.lpc", 0}),
+ ({4, 1000, "Kupferonyxamulett", "Ein kupfernes Onyxamulett", 1, "kupfer", 1, "onyx", 1, "amulett", "amulett.lpc", 0}),
+
+ ({5, 1025, "Kupferzombieinselperlenring", "Ein kupferner Zombieinselperlenring", 1, "kupfer", 1, "zombieinselperle", 1, "ring", "perlenring.lpc", 0}),
+ ({5, 1050, "Kupferjaspisring", "Ein kupferner Jaspisring", 1, "kupfer", 1, "jaspis", 1, "ring", "ring.lpc", 0}),
+ ({5, 1075, "Kupferkrakenperlenring", "Ein kupferner Krakenperlenring", 1, "kupfer", 1, "krakenperle", 1, "ring", "perlenring.lpc", 0}),
+ ({5, 1100, "Kupferlapislazuliring", "Ein kupferner Lapislazuliring", 1, "kupfer", 1, "lapislazuli", 1, "ring", "ring.lpc", 0}),
+ ({5, 1125, "Kupferknarkhperlenring", "Ein kupferner Knarkhperlenring", 1, "kupfer", 1, "knarkhperle", 1, "ring", "perlenring.lpc", 0}),
+ ({5, 1150, "Kupferbernsteinring", "Ein kupferner Bernsteinring", 1, "kupfer", 1, "bernstein", 1, "ring", "ring.lpc", 0}),
+ ({5, 1175, "Kupfertijaraperlenring", "Ein kupferner Tijaraperlenring", 1, "kupfer", 1, "tijaraperle", 1, "ring", "perlenring.lpc", 0}),
+ ({5, 1200, "Kupfergranatring", "Ein kupferner Granatring", 1, "kupfer", 1, "granat", 1, "ring", "ring.lpc", 0}),
+ ({5, 1225, "Kupfersuedseeperlenring", "Ein kupferner Suedseeperlenring", 1, "kupfer", 1, "suedseeperle", 1, "ring", "perlenring.lpc", 0}),
+ ({5, 1250, "Kupfertopasring", "Ein kupferner Topasring", 1, "kupfer", 1, "topas", 1, "ring", "ring.lpc", 0}),
+
+ ({6, 1275, "Kupferzombieinselperlenkette", "Eine kupferne Zombieinselperlenkette", 1, "kupfer", 1, "zombieinselperle", 1, "kette", "perlenkette.lpc", 0}),
+ ({6, 1300, "Kupferjaspisamulett", "Ein kupfernes Jaspisamulett", 1, "kupfer", 1, "jaspis", 1, "amulett", "amulett.lpc", 0}),
+ ({6, 1325, "Kupferkrakenperlenkette", "Eine kupferne Krakenperlenkette", 1, "kupfer", 1, "krakenperle", 1, "kette", "perlenkette.lpc", 0}),
+ ({6, 1350, "Kupferlapislazuliamulett", "Ein kupfernes Lapislazuliamulett", 1, "kupfer", 1, "lapislazuli", 1, "amulett", "amulett.lpc", 0}),
+ ({6, 1375, "Kupferknarkhperlenkette", "Eine kupferne Knarkhperlenkette", 1, "kupfer", 1, "knarkhperle", 1, "kette", "perlenkette.lpc", 0}),
+ ({6, 1400, "Kupferbernsteinamulett", "Ein kupfernes Bernsteinamulett", 1, "kupfer", 1, "bernstein", 1, "amulett", "amulett.lpc", 0}),
+ ({6, 1425, "Kupfertijaraperlenkette", "Eine kupferne Tijaraperlenkette", 1, "kupfer", 1, "tijaraperle", 1, "kette", "perlenkette.lpc", 0}),
+ ({6, 1450, "Kupfergranatamulett", "Ein kupfernes Granatamulett", 1, "kupfer", 1, "granat", 1, "amulett", "amulett.lpc", 0}),
+ ({6, 1475, "Kupfersuedseeperlenkette", "Eine kupferne Suedseeperlenkette", 1, "kupfer", 1, "suedseeperle", 1, "kette", "perlenkette.lpc", 0}),
+ ({6, 1500, "Kupfertopasamulett", "Ein kupfernes Topasamulett", 1, "kupfer", 1, "topas", 1, "amulett", "amulett.lpc", 0}),
+ 
+ ({7, 1525, "Kupferhaiperlenring", "Ein kupferner Haiperlenring", 1, "kupfer", 1, "haiperle", 1, "ring", "perlenring.lpc", 0}),
+ ({7, 1550, "Kupferturmalinring", "Ein kupferner Turmalinring", 1, "kupfer", 1, "turmalin", 1, "ring", "ring.lpc", 0}),
+ ({7, 1575, "Kupferpiratenperlenring", "Ein kupferner Piratenperlenring", 1, "kupfer", 1, "piratenperle", 1, "ring", "perlenring.lpc", 0}),
+ ({7, 1600, "Kupferperidotring", "Ein kupferner Peridotring", 1, "kupfer", 1, "peridot", 1, "ring", "ring.lpc", 0}),
+ ({7, 1625, "Kupferschwertfischperlenring", "Ein kupferner Schwertfischperlenring", 1, "kupfer", 1, "schwertfischperle", 1, "ring", "perlenring.lpc", 0}),
+ ({7, 1650, "Kupfersugilithring", "Ein kupferner Sugilithring", 1, "kupfer", 1, "sugilith", 1, "ring", "ring.lpc", 0}),
+ ({7, 1675, "Kupfertiefseeperlenring", "Ein kupferner Tiefseeperlenring", 1, "kupfer", 1, "tiefseeperle", 1, "ring", "perlenring.lpc", 0}),
+ ({7, 1700, "Kupferrosenquarzring", "Ein kupferner Rosenquarzring", 1, "kupfer", 1, "rosenquarz", 1, "ring", "ring.lpc", 0}),
+ ({7, 1725, "Kupferwalperlenring", "Ein kupferner Walperlenring", 1, "kupfer", 1, "walperle", 1, "ring", "perlenring.lpc", 0}),
+ ({7, 1750, "Kupfercitrinring", "Ein kupferner Citrinring", 1, "kupfer", 1, "citrin", 1, "ring", "ring.lpc", 0}),
+
+ ({8, 1775, "Kupferhaiperlenkette", "Eine kupferne Haiperlenkette", 1, "kupfer", 1, "haiperle", 1, "kette", "perlenkette.lpc", 0}),
+ ({8, 1800, "Kupferturmalinamulett", "Ein kupfernes Turmalinamulett", 1, "kupfer", 1, "turmalin", 1, "amulett", "amulett.lpc", 0}),
+ ({8, 1825, "Kupferpiratenperlenkette", "Eine kupferne Piratenperlenkette", 1, "kupfer", 1, "piratenperle", 1, "kette", "perlenkette.lpc", 0}),
+ ({8, 1850, "Kupferperidotamulett", "Ein kupfernes Peridotamulett", 1, "kupfer", 1, "peridot", 1, "amulett", "amulett.lpc", 0}),
+ ({8, 1875, "Kupferschwertfischperlenkette", "Eine kupferne Schwertfischperlenkette", 1, "kupfer", 1, "schwertfischperle", 1, "kette", "perlenkette.lpc", 0}),
+ ({8, 1900, "Kupfersugilithamulett", "Ein kupfernes Sugilithamulett", 1, "kupfer", 1, "sugilith", 1, "amulett", "amulett.lpc", 0}),
+ ({8, 1925, "Kupfertiefseeperlenkette", "Eine kupferne Tiefseeperlenkette", 1, "kupfer", 1, "tiefseeperle", 1, "kette", "perlenkette.lpc", 0}),
+ ({8, 1950, "Kupferrosenquarzamulett", "Ein kupfernes Rosenquarzamulett", 1, "kupfer", 1, "rosenquarz", 1, "amulett", "amulett.lpc", 0}),
+ ({8, 1975, "Kupferwalperlenkette", "Eine kupferne Walperlenkette", 1, "kupfer", 1, "walperle", 1, "kette", "perlenkette.lpc", 0}),
+ ({8, 2000, "Kupfercitrinamulett", "Ein kupfernes Citrinamulett", 1, "kupfer", 1, "citrin", 1, "amulett", "amulett.lpc", 0}),
+
+ ({9, 2025, "Kupferamethystring", "Ein kupferner Amethystring", 1, "kupfer", 1, "amethyst", 1, "ring", "ring.lpc", 0}),
+ ({9, 2050, "Kupferopalring", "Ein kupferner Opalring", 1, "kupfer", 1, "opal", 1, "ring", "ring.lpc", 0}),
+ ({9, 2075, "Kupferjadeitring", "Ein kupferner Jadeitring", 1, "kupfer", 1, "jadeit", 1, "ring", "ring.lpc", 0}),
+ ({9, 2100, "Kupferaquamarinring", "Ein kupferner Aquamarinring", 1, "kupfer", 1, "aquamarin", 1, "ring", "ring.lpc", 0}),
+ ({9, 2125, "Kupferoktarinring", "Ein kupferner Oktarinring", 1, "kupfer", 1, "oktarin", 1, "ring", "ring.lpc", 0}),
+ ({9, 2150, "Kupferzirkonring", "Ein kupferner Zirkonring", 1, "kupfer", 1, "zirkon", 1, "ring", "ring.lpc", 0}),
+ ({9, 2175, "Kupfersmaragdring", "Ein kupferner Smaragdring", 1, "kupfer", 1, "smaragd", 1, "ring", "ring.lpc", 0}),
+ ({9, 2200, "Kupfersaphirring", "Ein kupferner Saphirring", 1, "kupfer", 1, "saphir", 1, "ring", "ring.lpc", 0}),
+ ({9, 2225, "Kupferrubinring", "Ein kupferner Rubinring", 1, "kupfer", 1, "rubin", 1, "ring", "ring.lpc", 0}),
+ ({9, 2250, "Kupferdiamantring", "Ein kupferner Diamantring", 1, "kupfer", 1, "diamant", 1, "ring", "ring.lpc", 0}),
+
+ ({10, 2275, "Kupferamethystamulett", "Ein kupfernes Amethystamulett", 1, "kupfer", 1, "amethyst", 1, "amulett", "amulett.lpc", 0}),
+ ({10, 2300, "Kupferopalamulett", "Ein kupfernes Opalamulett", 1, "kupfer", 1, "opal", 1, "amulett", "amulett.lpc", 0}),
+ ({10, 2325, "Kupferjadeitamulett", "Ein kupfernes Jadeitamulett", 1, "kupfer", 1, "jadeit", 1, "amulett", "amulett.lpc", 0}),
+ ({10, 2350, "Kupferaquamarinamulett", "Ein kupfernes Aquamarinamulett", 1, "kupfer", 1, "aquamarin", 1, "amulett", "amulett.lpc", 0}),
+ ({10, 2375, "Kupferoktarinamulett", "Ein kupfernes Oktarinamulett", 1, "kupfer", 1, "oktarin", 1, "amulett", "amulett.lpc", 0}),
+ ({10, 2400, "Kupferzirkonamulett", "Ein kupfernes Zirkonamulett", 1, "kupfer", 1, "zirkon", 1, "amulett", "amulett.lpc", 0}),
+ ({10, 2425, "Kupfersmaragdamulett", "Ein kupfernes Smaragdamulett", 1, "kupfer", 1, "smaragd", 1, "amulett", "amulett.lpc", 0}),
+ ({10, 2450, "Kupfersaphiramulett", "Ein kupfernes Saphiramulett", 1, "kupfer", 1, "saphir", 1, "amulett", "amulett.lpc", 0}),
+ ({10, 2475, "Kupferrubinamulett", "Ein kupfernes Rubinamulett", 1, "kupfer", 1, "rubin", 1, "amulett", "amulett.lpc", 0}),
+ ({10, 2500, "Kupferdiamantamulett", "Ein kupfernes Diamantamulett", 1, "kupfer", 1, "diamant", 1, "amulett", "amulett.lpc", 0}),
+
+ ({11, 2525, "Silberpolarperlenring", "Ein silberner Polarperlenring", 1, "silber", 2, "polarperle", 2, "ring", "perlenring.lpc", 0}),
+ ({11, 2550, "Silbertuerkisring", "Ein silberner Tuerkisring", 1, "silber", 2, "tuerkis", 2, "ring", "ring.lpc", 0}),
+ ({11, 2575, "Silberfelseninselperlenring", "Ein silberner Felseninselperlenring", 1, "silber", 2, "felseninselperle", 2, "ring", "perlenring.lpc", 0}),
+ ({11, 2600, "Silberaventurinring", "Ein silberner Aventurinring", 1, "silber", 2, "aventurin", 2, "ring", "ring.lpc", 0}),
+ ({11, 2625, "Silberoktopusperlenring", "Ein silberner Oktopusperlenring", 1, "silber", 2, "oktopusperle", 2, "ring", "perlenring.lpc", 0}),
+ ({11, 2650, "Silberbergkristallring", "Ein silberner Bergkristallring", 1, "silber", 2, "bergkristall", 2, "ring", "ring.lpc", 0}),
+ ({11, 2675, "Silberderlimperlenring", "Ein silberner Derlimperlenring", 1, "silber", 2, "derlimperle", 2, "ring", "perlenring.lpc", 0}),
+ ({11, 2700, "Silberachatring", "Ein silberner Achatring", 1, "silber", 2, "achat", 2, "ring", "ring.lpc", 0}),
+ ({11, 2725, "Silberkorallenperlenring", "Ein silberner Korallenperlenring", 1, "silber", 2, "korallenperle", 2, "ring", "perlenring.lpc", 0}),
+ ({11, 2750, "Silberdioptasring", "Ein silberner Dioptasring", 1, "silber", 2, "dioptas", 2, "ring", "ring.lpc", 0}),
+
+ ({12, 2775, "Silberpolarperlenkette", "Eine silberne Polarperlenkette", 1, "silber", 2, "polarperle", 2, "kette", "perlenkette.lpc", 0}),
+ ({12, 2800, "Silbertuerkisamulett", "Ein silbernes Tuerkisamulett", 1, "silber", 2, "tuerkis", 2, "amulett", "amulett.lpc", 0}),
+ ({12, 2825, "Silberfelseninselperlenkette", "Eine silberne Felseninselperlenkette", 1, "silber", 2, "felseninselperle", 2, "kette", "perlenkette.lpc", 0}),
+ ({12, 2850, "Silberaventurinamulett", "Ein silbernes Aventurinamulett", 1, "silber", 2, "aventurin", 2, "amulett", "amulett.lpc", 0}),
+ ({12, 2875, "Silberoktopusperlenkette", "Eine silberne Oktopusperlenkette", 1, "silber", 2, "oktopusperle", 2, "kette", "perlenkette.lpc", 0}),
+ ({12, 2900, "Silberbergkristallamulett", "Ein silbernes Bergkristallamulett", 1, "silber", 2, "bergkristall", 2, "amulett", "amulett.lpc", 0}),
+ ({12, 2925, "Silberderlimperlenkette", "Eine silberne Derlimperlenkette", 1, "silber", 2, "derlimperle", 2, "kette", "perlenkette.lpc", 0}),
+ ({12, 2950, "Silberachatamulett", "Ein silbernes Achatamulett", 1, "silber", 2, "achat", 2, "amulett", "amulett.lpc", 0}),
+ ({12, 2975, "Silberkorallenperlenkette", "Eine silberne Korallenperlenkette", 1, "silber", 2, "korallenperle", 2, "kette", "perlenkette.lpc", 0}),
+ ({12, 3000, "Silberdioptasamulett", "Ein silbernes Dioptasamulett", 1, "silber", 2, "dioptas", 2, "amulett", "amulett.lpc", 0}),
+ 
+ ({13, 3025, "Silberquaulperlenring", "Ein silberner Quaulperlenring", 1, "silber", 2, "quaulperle", 2, "ring", "perlenring.lpc", 0}),
+ ({13, 3050, "Silbertigeraugering", "Ein silberner Tigeraugering", 1, "silber", 2, "tigerauge", 2, "ring", "ring.lpc", 0}),
+ ({13, 3075, "Silbermidasperlenring", "Ein silberner Midasperlenring", 1, "silber", 2, "midasperle", 2, "ring", "perlenring.lpc", 0}),
+ ({13, 3100, "Silberalmandinring", "Ein silberner Almandinring", 1, "silber", 2, "almandin", 2, "ring", "ring.lpc", 0}),
+ ({13, 3125, "Silbersmoerskyperlenring", "Ein silberner Smoerskyperlenring", 1, "silber", 2, "smoerskyperle", 2, "ring", "perlenring.lpc", 0}),
+ ({13, 3150, "Silbercupritring", "Ein silberner Cupritring", 1, "silber", 2, "cuprit", 2, "ring", "ring.lpc", 0}),
+ ({13, 3175, "Silberriffperlenring", "Ein silberner Riffperlenring", 1, "silber", 2, "riffperle", 2, "ring", "perlenring.lpc", 0}),
+ ({13, 3200, "Silberbenitoitring", "Ein silberner Benitoitring", 1, "silber", 2, "benitoit", 2, "ring", "ring.lpc", 0}),
+ ({13, 3225, "Silbermauritiusperlenring", "Ein silberner Mauritiusperlenring", 1, "silber", 2, "mauritiusperle", 2, "ring", "perlenring.lpc", 0}),
+ ({13, 3250, "Silberonyxring", "Ein silberner Onyxring", 1, "silber", 2, "onyx", 2, "ring", "ring.lpc", 0}),
+
+ ({14, 3275, "Silberquaulperlenkette", "Eine silberne Quaulperlenkette", 1, "silber", 2, "quaulperle", 2, "kette", "perlenkette.lpc", 0}),
+ ({14, 3300, "Silbertigeraugeamulett", "Ein silbernes Tigeraugeamulett", 1, "silber", 2, "tigerauge", 2, "amulett", "amulett.lpc", 0}),
+ ({14, 3325, "Silbermidasperlenkette", "Eine silberne Midasperlenkette", 1, "silber", 2, "midasperle", 2, "kette", "perlenkette.lpc", 0}),
+ ({14, 3350, "Silberalmandinamulett", "Ein silbernes Almandinamulett", 1, "silber", 2, "almandin", 2, "amulett", "amulett.lpc", 0}),
+ ({14, 3375, "Silbersmoerskyperlenkette", "Eine silberne Smoerskyperlenkette", 1, "silber", 2, "smoerskyperle", 2, "kette", "perlenkette.lpc", 0}),
+ ({14, 3400, "Silbercupritamulett", "Ein silbernes Cupritamulett", 1, "silber", 2, "cuprit", 2, "amulett", "amulett.lpc", 0}),
+ ({14, 3425, "Silberriffperlenkette", "Eine silberne Riffperlenkette", 1, "silber", 2, "riffperle", 2, "kette", "perlenkette.lpc", 0}),
+ ({14, 3450, "Silberbenitoitamulett", "Ein silbernes Benitoitamulett", 1, "silber", 2, "benitoit", 2, "amulett", "amulett.lpc", 0}),
+ ({14, 3475, "Silbermauritiusperlenkette", "Eine silberne Mauritiusperlenkette", 1, "silber", 2, "mauritiusperle", 2, "kette", "perlenkette.lpc", 0}),
+ ({14, 3500, "Silberonyxamulett", "Ein silbernes Onyxamulett", 1, "silber", 2, "onyx", 2, "amulett", "amulett.lpc", 0}),
+
+ ({15, 3525, "Silberzombieinselperlenring", "Ein silberner Zombieinselperlenring", 1, "silber", 2, "zombieinselperle", 2, "ring", "perlenring.lpc", 0}),
+ ({15, 3550, "Silberjaspisring", "Ein silberner Jaspisring", 1, "silber", 2, "jaspis", 2, "ring", "ring.lpc", 0}),
+ ({15, 3575, "Silberkrakenperlenring", "Ein silberner Krakenperlenring", 1, "silber", 2, "krakenperle", 2, "ring", "perlenring.lpc", 0}),
+ ({15, 3600, "Silberlapislazuliring", "Ein silberner Lapislazuliring", 1, "silber", 2, "lapislazuli", 2, "ring", "ring.lpc", 0}),
+ ({15, 3625, "Silberknarkhperlenring", "Ein silberner Knarkhperlenring", 1, "silber", 2, "knarkhperle", 2, "ring", "perlenring.lpc", 0}),
+ ({15, 3650, "Silberbernsteinring", "Ein silberner Bernsteinring", 1, "silber", 2, "bernstein", 2, "ring", "ring.lpc", 0}),
+ ({15, 3675, "Silbertijaraperlenring", "Ein silberner Tijaraperlenring", 1, "silber", 2, "tijaraperle", 2, "ring", "perlenring.lpc", 0}),
+ ({15, 3700, "Silbergranatring", "Ein silberner Granatring", 1, "silber", 2, "granat", 2, "ring", "ring.lpc", 0}),
+ ({15, 3725, "Silbersuedseeperlenring", "Ein silberner Suedseeperlenring", 1, "silber", 2, "suedseeperle", 2, "ring", "perlenring.lpc", 0}),
+ ({15, 3750, "Silbertopasring", "Ein silberner Topasring", 1, "silber", 2, "topas", 2, "ring", "ring.lpc", 0}),
+
+ ({16, 3775, "Silberzombieinselperlenkette", "Eine silberne Zombieinselperlenkette", 1, "silber", 2, "zombieinselperle", 2, "kette", "perlenkette.lpc", 0}),
+ ({16, 3800, "Silberjaspisamulett", "Ein silbernes Jaspisamulett", 1, "silber", 2, "jaspis", 2, "amulett", "amulett.lpc", 0}),
+ ({16, 3825, "Silberkrakenperlenkette", "Eine silberne Krakenperlenkette", 1, "silber", 2, "krakenperle", 2, "kette", "perlenkette.lpc", 0}),
+ ({16, 3850, "Silberlapislazuliamulett", "Ein silbernes Lapislazuliamulett", 1, "silber", 2, "lapislazuli", 2, "amulett", "amulett.lpc", 0}),
+ ({16, 3875, "Silberknarkhperlenkette", "Eine silberne Knarkhperlenkette", 1, "silber", 2, "knarkhperle", 2, "kette", "perlenkette.lpc", 0}),
+ ({16, 3900, "Silberbernsteinamulett", "Ein silbernes Bernsteinamulett", 1, "silber", 2, "bernstein", 2, "amulett", "amulett.lpc", 0}),
+ ({16, 3925, "Silbertijaraperlenkette", "Eine silberne Tijaraperlenkette", 1, "silber", 2, "tijaraperle", 2, "kette", "perlenkette.lpc", 0}),
+ ({16, 3950, "Silbergranatamulett", "Ein silbernes Granatamulett", 1, "silber", 2, "granat", 2, "amulett", "amulett.lpc", 0}),
+ ({16, 3975, "Silbersuedseeperlenkette", "Eine silberne Suedseeperlenkette", 1, "silber", 2, "suedseeperle", 2, "kette", "perlenkette.lpc", 0}),
+ ({16, 4000, "Silbertopasamulett", "Ein silbernes Topasamulett", 1, "silber", 2, "topas", 2, "amulett", "amulett.lpc", 0}),
+ 
+ ({17, 4025, "Silberhaiperlenring", "Ein silberner Haiperlenring", 1, "silber", 2, "haiperle", 2, "ring", "perlenring.lpc", 0}),
+ ({17, 4050, "Silberturmalinring", "Ein silberner Turmalinring", 1, "silber", 2, "turmalin", 2, "ring", "ring.lpc", 0}),
+ ({17, 4075, "Silberpiratenperlenring", "Ein silberner Piratenperlenring", 1, "silber", 2, "piratenperle", 2, "ring", "perlenring.lpc", 0}),
+ ({17, 4100, "Silberperidotring", "Ein silberner Peridotring", 1, "silber", 2, "peridot", 2, "ring", "ring.lpc", 0}),
+ ({17, 4125, "Silberschwertfischperlenring", "Ein silberner Schwertfischperlenring", 1, "silber", 2, "schwertfischperle", 2, "ring", "perlenring.lpc", 0}),
+ ({17, 4150, "Silbersugilithring", "Ein silberner Sugilithring", 1, "silber", 2, "sugilith", 2, "ring", "ring.lpc", 0}),
+ ({17, 4175, "Silbertiefseeperlenring", "Ein silberner Tiefseeperlenring", 1, "silber", 2, "tiefseeperle", 2, "ring", "perlenring.lpc", 0}),
+ ({17, 4200, "Silberrosenquarzring", "Ein silberner Rosenquarzring", 1, "silber", 2, "rosenquarz", 2, "ring", "ring.lpc", 0}),
+ ({17, 4225, "Silberwalperlenring", "Ein silberner Walperlenring", 1, "silber", 2, "walperle", 2, "ring", "perlenring.lpc", 0}),
+ ({17, 4250, "Silbercitrinring", "Ein silberner Citrinring", 1, "silber", 2, "citrin", 2, "ring", "ring.lpc", 0}),
+
+ ({18, 4275, "Silberhaiperlenkette", "Eine silberne Haiperlenkette", 1, "silber", 2, "haiperle", 2, "kette", "perlenkette.lpc", 0}),
+ ({18, 4300, "Silberturmalinamulett", "Ein silbernes Turmalinamulett", 1, "silber", 2, "turmalin", 2, "amulett", "amulett.lpc", 0}),
+ ({18, 4325, "Silberpiratenperlenkette", "Eine silberne Piratenperlenkette", 1, "silber", 2, "piratenperle", 2, "kette", "perlenkette.lpc", 0}),
+ ({18, 4350, "Silberperidotamulett", "Ein silbernes Peridotamulett", 1, "silber", 2, "peridot", 2, "amulett", "amulett.lpc", 0}),
+ ({18, 4375, "Silberschwertfischperlenkette", "Eine silberne Schwertfischperlenkette", 1, "silber", 2, "schwertfischperle", 2, "kette", "perlenkette.lpc", 0}),
+ ({18, 4400, "Silbersugilithamulett", "Ein silbernes Sugilithamulett", 1, "silber", 2, "sugilith", 2, "amulett", "amulett.lpc", 0}),
+ ({18, 4425, "Silbertiefseeperlenkette", "Eine silberne Tiefseeperlenkette", 1, "silber", 2, "tiefseeperle", 2, "kette", "perlenkette.lpc", 0}),
+ ({18, 4450, "Silberrosenquarzamulett", "Ein silbernes Rosenquarzamulett", 1, "silber", 2, "rosenquarz", 2, "amulett", "amulett.lpc", 0}),
+ ({18, 4475, "Silberwalperlenkette", "Eine silberne Walperlenkette", 1, "silber", 2, "walperle", 2, "kette", "perlenkette.lpc", 0}),
+ ({18, 4500, "Silbercitrinamulett", "Ein silbernes Citrinamulett", 1, "silber", 2, "citrin", 2, "amulett", "amulett.lpc", 0}),
+
+ ({19, 4525, "Silberamethystring", "Ein silberner Amethystring", 1, "silber", 2, "amethyst", 2, "ring", "ring.lpc", 0}),
+ ({19, 4550, "Silberopalring", "Ein silberner Opalring", 1, "silber", 2, "opal", 2, "ring", "ring.lpc", 0}),
+ ({19, 4575, "Silberjadeitring", "Ein silberner Jadeitring", 1, "silber", 2, "jadeit", 2, "ring", "ring.lpc", 0}),
+ ({19, 4600, "Silberaquamarinring", "Ein silberner Aquamarinring", 1, "silber", 2, "aquamarin", 2, "ring", "ring.lpc", 0}),
+ ({19, 4625, "Silberoktarinring", "Ein silberner Oktarinring", 1, "silber", 2, "oktarin", 2, "ring", "ring.lpc", 0}),
+ ({19, 4650, "Silberzirkonring", "Ein silberner Zirkonring", 1, "silber", 2, "zirkon", 2, "ring", "ring.lpc", 0}),
+ ({19, 4675, "Silbersmaragdring", "Ein silberner Smaragdring", 1, "silber", 2, "smaragd", 2, "ring", "ring.lpc", 0}),
+ ({19, 4700, "Silbersaphirring", "Ein silberner Saphirring", 1, "silber", 2, "saphir", 2, "ring", "ring.lpc", 0}),
+ ({19, 4725, "Silberrubinring", "Ein silberner Rubinring", 1, "silber", 2, "rubin", 2, "ring", "ring.lpc", 0}),
+ ({19, 4750, "Silberdiamantring", "Ein silberner Diamantring", 1, "silber", 2, "diamant", 2, "ring", "ring.lpc", 0}),
+
+ ({20, 4775, "Silberamethystamulett", "Ein silbernes Amethystamulett", 1, "silber", 2, "amethyst", 2, "amulett", "amulett.lpc", 0}),
+ ({20, 4800, "Silberopalamulett", "Ein silbernes Opalamulett", 1, "silber", 2, "opal", 2, "amulett", "amulett.lpc", 0}),
+ ({20, 4825, "Silberjadeitamulett", "Ein silbernes Jadeitamulett", 1, "silber", 2, "jadeit", 2, "amulett", "amulett.lpc", 0}),
+ ({20, 4850, "Silberaquamarinamulett", "Ein silbernes Aquamarinamulett", 1, "silber", 2, "aquamarin", 2, "amulett", "amulett.lpc", 0}),
+ ({20, 4875, "Silberoktarinamulett", "Ein silbernes Oktarinamulett", 1, "silber", 2, "oktarin", 2, "amulett", "amulett.lpc", 0}),
+ ({20, 4900, "Silberzirkonamulett", "Ein silbernes Zirkonamulett", 1, "silber", 2, "zirkon", 2, "amulett", "amulett.lpc", 0}),
+ ({20, 4925, "Silbersmaragdamulett", "Ein silbernes Smaragdamulett", 1, "silber", 2, "smaragd", 2, "amulett", "amulett.lpc", 0}),
+ ({20, 4950, "Silbersaphiramulett", "Ein silbernes Saphiramulett", 1, "silber", 2, "saphir", 2, "amulett", "amulett.lpc", 0}),
+ ({20, 4975, "Silberrubinamulett", "Ein silbernes Rubinamulett", 1, "silber", 2, "rubin", 2, "amulett", "amulett.lpc", 0}),
+ ({20, 5000, "Silberdiamantamulett", "Ein silbernes Diamantamulett", 1, "silber", 2, "diamant", 2, "amulett", "amulett.lpc", 0}),
+
+ ({21, 5025, "Goldpolarperlenring", "Ein goldener Polarperlenring", 1, "gold", 3, "polarperle", 3, "ring", "perlenring.lpc", 0}),
+ ({21, 5050, "Goldtuerkisring", "Ein goldener Tuerkisring", 1, "gold", 3, "tuerkis", 3, "ring", "ring.lpc", 0}),
+ ({21, 5075, "Goldfelseninselperlenring", "Ein goldener Felseninselperlenring", 1, "gold", 3, "felseninselperle", 3, "ring", "perlenring.lpc", 0}),
+ ({21, 5100, "Goldaventurinring", "Ein goldener Aventurinring", 1, "gold", 3, "aventurin", 3, "ring", "ring.lpc", 0}),
+ ({21, 5125, "Goldoktopusperlenring", "Ein goldener Oktopusperlenring", 1, "gold", 3, "oktopusperle", 3, "ring", "perlenring.lpc", 0}),
+ ({21, 5150, "Goldbergkristallring", "Ein goldener Bergkristallring", 1, "gold", 3, "bergkristall", 3, "ring", "ring.lpc", 0}),
+ ({21, 5175, "Goldderlimperlenring", "Ein goldener Derlimperlenring", 1, "gold", 3, "derlimperle", 3, "ring", "perlenring.lpc", 0}),
+ ({21, 5200, "Goldachatring", "Ein goldener Achatring", 1, "gold", 3, "achat", 3, "ring", "ring.lpc", 0}),
+ ({21, 5225, "Goldkorallenperlenring", "Ein goldener Korallenperlenring", 1, "gold", 3, "korallenperle", 3, "ring", "perlenring.lpc", 0}),
+ ({21, 5250, "Golddioptasring", "Ein goldener Dioptasring", 1, "gold", 3, "dioptas", 3, "ring", "ring.lpc", 0}),
+
+ ({22, 5275, "Goldpolarperlenkette", "Eine goldene Polarperlenkette", 1, "gold", 3, "polarperle", 3, "kette", "perlenkette.lpc", 0}),
+ ({22, 5300, "Goldtuerkisamulett", "Ein goldenes Tuerkisamulett", 1, "gold", 3, "tuerkis", 3, "amulett", "amulett.lpc", 0}),
+ ({22, 5325, "Goldfelseninselperlenkette", "Eine goldene Felseninselperlenkette", 1, "gold", 3, "felseninselperle", 3, "kette", "perlenkette.lpc", 0}),
+ ({22, 5350, "Goldaventurinamulett", "Ein goldenes Aventurinamulett", 1, "gold", 3, "aventurin", 3, "amulett", "amulett.lpc", 0}),
+ ({22, 5375, "Goldoktopusperlenkette", "Eine goldene Oktopusperlenkette", 1, "gold", 3, "oktopusperle", 3, "kette", "perlenkette.lpc", 0}),
+ ({22, 5400, "Goldbergkristallamulett", "Ein goldenes Bergkristallamulett", 1, "gold", 3, "bergkristall", 3, "amulett", "amulett.lpc", 0}),
+ ({22, 5425, "Goldderlimperlenkette", "Eine goldene Derlimperlenkette", 1, "gold", 3, "derlimperle", 3, "kette", "perlenkette.lpc", 0}),
+ ({22, 5450, "Goldachatamulett", "Ein goldenes Achatamulett", 1, "gold", 3, "achat", 3, "amulett", "amulett.lpc", 0}),
+ ({22, 5475, "Goldkorallenperlenkette", "Eine goldene Korallenperlenkette", 1, "gold", 3, "korallenperle", 3, "kette", "perlenkette.lpc", 0}),
+ ({22, 5500, "Golddioptasamulett", "Ein goldenes Dioptasamulett", 1, "gold", 3, "dioptas", 3, "amulett", "amulett.lpc", 0}),
+ 
+ ({23, 5525, "Goldquaulperlenring", "Ein goldener Quaulperlenring", 1, "gold", 3, "quaulperle", 3, "ring", "perlenring.lpc", 0}),
+ ({23, 5550, "Goldtigeraugering", "Ein goldener Tigeraugering", 1, "gold", 3, "tigerauge", 3, "ring", "ring.lpc", 0}),
+ ({23, 5575, "Goldmidasperlenring", "Ein goldener Midasperlenring", 1, "gold", 3, "midasperle", 3, "ring", "perlenring.lpc", 0}),
+ ({23, 5600, "Goldalmandinring", "Ein goldener Almandinring", 1, "gold", 3, "almandin", 3, "ring", "ring.lpc", 0}),
+ ({23, 5625, "Goldsmoerskyperlenring", "Ein goldener Smoerskyperlenring", 1, "gold", 3, "smoerskyperle", 3, "ring", "perlenring.lpc", 0}),
+ ({23, 5650, "Goldcupritring", "Ein goldener Cupritring", 1, "gold", 3, "cuprit", 3, "ring", "ring.lpc", 0}),
+ ({23, 5675, "Goldriffperlenring", "Ein goldener Riffperlenring", 1, "gold", 3, "riffperle", 3, "ring", "perlenring.lpc", 0}),
+ ({23, 5700, "Goldbenitoitring", "Ein goldener Benitoitring", 1, "gold", 3, "benitoit", 3, "ring", "ring.lpc", 0}),
+ ({23, 5725, "Goldmauritiusperlenring", "Ein goldener Mauritiusperlenring", 1, "gold", 3, "mauritiusperle", 3, "ring", "perlenring.lpc", 0}),
+ ({23, 5750, "Goldonyxring", "Ein goldener Onyxring", 1, "gold", 3, "onyx", 3, "ring", "ring.lpc", 0}),
+
+ ({24, 5775, "Goldquaulperlenkette", "Eine goldene Quaulperlenkette", 1, "gold", 3, "quaulperle", 3, "kette", "perlenkette.lpc", 0}),
+ ({24, 5800, "Goldtigeraugeamulett", "Ein goldenes Tigeraugeamulett", 1, "gold", 3, "tigerauge", 3, "amulett", "amulett.lpc", 0}),
+ ({24, 5825, "Goldmidasperlenkette", "Eine goldene Midasperlenkette", 1, "gold", 3, "midasperle", 3, "kette", "perlenkette.lpc", 0}),
+ ({24, 5850, "Goldalmandinamulett", "Ein goldenes Almandinamulett", 1, "gold", 3, "almandin", 3, "amulett", "amulett.lpc", 0}),
+ ({24, 5875, "Goldsmoerskyperlenkette", "Eine goldene Smoerskyperlenkette", 1, "gold", 3, "smoerskyperle", 3, "kette", "perlenkette.lpc", 0}),
+ ({24, 5900, "Goldcupritamulett", "Ein goldenes Cupritamulett", 1, "gold", 3, "cuprit", 3, "amulett", "amulett.lpc", 0}),
+ ({24, 5925, "Goldriffperlenkette", "Eine goldene Riffperlenkette", 1, "gold", 3, "riffperle", 3, "kette", "perlenkette.lpc", 0}),
+ ({24, 5950, "Goldbenitoitamulett", "Ein goldenes Benitoitamulett", 1, "gold", 3, "benitoit", 3, "amulett", "amulett.lpc", 0}),
+ ({24, 5975, "Goldmauritiusperlenkette", "Eine goldene Mauritiusperlenkette", 1, "gold", 3, "mauritiusperle", 3, "kette", "perlenkette.lpc", 0}),
+ ({24, 6000, "Goldonyxamulett", "Ein goldenes Onyxamulett", 1, "gold", 3, "onyx", 3, "amulett", "amulett.lpc", 0}),
+
+ ({25, 6025, "Goldzombieinselperlenring", "Ein goldener Zombieinselperlenring", 1, "gold", 3, "zombieinselperle", 3, "ring", "perlenring.lpc", 0}),
+ ({25, 6050, "Goldjaspisring", "Ein goldener Jaspisring", 1, "gold", 3, "jaspis", 3, "ring", "ring.lpc", 0}),
+ ({25, 6075, "Goldkrakenperlenring", "Ein goldener Krakenperlenring", 1, "gold", 3, "krakenperle", 3, "ring", "perlenring.lpc", 0}),
+ ({25, 6100, "Goldlapislazuliring", "Ein goldener Lapislazuliring", 1, "gold", 3, "lapislazuli", 3, "ring", "ring.lpc", 0}),
+ ({25, 6125, "Goldknarkhperlenring", "Ein goldener Knarkhperlenring", 1, "gold", 3, "knarkhperle", 3, "ring", "perlenring.lpc", 0}),
+ ({25, 6150, "Goldbernsteinring", "Ein goldener Bernsteinring", 1, "gold", 3, "bernstein", 3, "ring", "ring.lpc", 0}),
+ ({25, 6175, "Goldtijaraperlenring", "Ein goldener Tijaraperlenring", 1, "gold", 3, "tijaraperle", 3, "ring", "perlenring.lpc", 0}),
+ ({25, 6200, "Goldgranatring", "Ein goldener Granatring", 1, "gold", 3, "granat", 3, "ring", "ring.lpc", 0}),
+ ({25, 6225, "Goldsuedseeperlenring", "Ein goldener Suedseeperlenring", 1, "gold", 3, "suedseeperle", 3, "ring", "perlenring.lpc", 0}),
+ ({25, 6250, "Goldtopasring", "Ein goldener Topasring", 1, "gold", 3, "topas", 3, "ring", "ring.lpc", 0}),
+
+ ({26, 6275, "Goldzombieinselperlenkette", "Eine goldene Zombieinselperlenkette", 1, "gold", 3, "zombieinselperle", 3, "kette", "perlenkette.lpc", 0}),
+ ({26, 6300, "Goldjaspisamulett", "Ein goldenes Jaspisamulett", 1, "gold", 3, "jaspis", 3, "amulett", "amulett.lpc", 0}),
+ ({26, 6325, "Goldkrakenperlenkette", "Eine goldene Krakenperlenkette", 1, "gold", 3, "krakenperle", 3, "kette", "perlenkette.lpc", 0}),
+ ({26, 6350, "Goldlapislazuliamulett", "Ein goldenes Lapislazuliamulett", 1, "gold", 3, "lapislazuli", 3, "amulett", "amulett.lpc", 0}),
+ ({26, 6375, "Goldknarkhperlenkette", "Eine goldene Knarkhperlenkette", 1, "gold", 3, "knarkhperle", 3, "kette", "perlenkette.lpc", 0}),
+ ({26, 6400, "Goldbernsteinamulett", "Ein goldenes Bernsteinamulett", 1, "gold", 3, "bernstein", 3, "amulett", "amulett.lpc", 0}),
+ ({26, 6425, "Goldtijaraperlenkette", "Eine goldene Tijaraperlenkette", 1, "gold", 3, "tijaraperle", 3, "kette", "perlenkette.lpc", 0}),
+ ({26, 6450, "Goldgranatamulett", "Ein goldenes Granatamulett", 1, "gold", 3, "granat", 3, "amulett", "amulett.lpc", 0}),
+ ({26, 6475, "Goldsuedseeperlenkette", "Eine goldene Suedseeperlenkette", 1, "gold", 3, "suedseeperle", 3, "kette", "perlenkette.lpc", 0}),
+ ({26, 6500, "Goldtopasamulett", "Ein goldenes Topasamulett", 1, "gold", 3, "topas", 3, "amulett", "amulett.lpc", 0}),
+ 
+ ({27, 6525, "Goldhaiperlenring", "Ein goldener Haiperlenring", 1, "gold", 3, "haiperle", 3, "ring", "perlenring.lpc", 0}),
+ ({27, 6550, "Goldturmalinring", "Ein goldener Turmalinring", 1, "gold", 3, "turmalin", 3, "ring", "ring.lpc", 0}),
+ ({27, 6575, "Goldpiratenperlenring", "Ein goldener Piratenperlenring", 1, "gold", 3, "piratenperle", 3, "ring", "perlenring.lpc", 0}),
+ ({27, 6600, "Goldperidotring", "Ein goldener Peridotring", 1, "gold", 3, "peridot", 3, "ring", "ring.lpc", 0}),
+ ({27, 6625, "Goldschwertfischperlenring", "Ein goldener Schwertfischperlenring", 1, "gold", 3, "schwertfischperle", 3, "ring", "perlenring.lpc", 0}),
+ ({27, 6650, "Goldsugilithring", "Ein goldener Sugilithring", 1, "gold", 3, "sugilith", 3, "ring", "ring.lpc", 0}),
+ ({27, 6675, "Goldtiefseeperlenring", "Ein goldener Tiefseeperlenring", 1, "gold", 3, "tiefseeperle", 3, "ring", "perlenring.lpc", 0}),
+ ({27, 6700, "Goldrosenquarzring", "Ein goldener Rosenquarzring", 1, "gold", 3, "rosenquarz", 3, "ring", "ring.lpc", 0}),
+ ({27, 6725, "Goldwalperlenring", "Ein goldener Walperlenring", 1, "gold", 3, "walperle", 3, "ring", "perlenring.lpc", 0}),
+ ({27, 6750, "Goldcitrinring", "Ein goldener Citrinring", 1, "gold", 3, "citrin", 3, "ring", "ring.lpc", 0}),
+
+ ({28, 6775, "Goldhaiperlenkette", "Eine goldene Haiperlenkette", 1, "gold", 3, "haiperle", 3, "kette", "perlenkette.lpc", 0}),
+ ({28, 6800, "Goldturmalinamulett", "Ein goldenes Turmalinamulett", 1, "gold", 3, "turmalin", 3, "amulett", "amulett.lpc", 0}),
+ ({28, 6825, "Goldpiratenperlenkette", "Eine goldene Piratenperlenkette", 1, "gold", 3, "piratenperle", 3, "kette", "perlenkette.lpc", 0}),
+ ({28, 6850, "Goldperidotamulett", "Ein goldenes Peridotamulett", 1, "gold", 3, "peridot", 3, "amulett", "amulett.lpc", 0}),
+ ({28, 6875, "Goldschwertfischperlenkette", "Eine goldene Schwertfischperlenkette", 1, "gold", 3, "schwertfischperle", 3, "kette", "perlenkette.lpc", 0}),
+ ({28, 6900, "Goldsugilithamulett", "Ein goldenes Sugilithamulett", 1, "gold", 3, "sugilith", 3, "amulett", "amulett.lpc", 0}),
+ ({28, 6925, "Goldtiefseeperlenkette", "Eine goldene Tiefseeperlenkette", 1, "gold", 3, "tiefseeperle", 3, "kette", "perlenkette.lpc", 0}),
+ ({28, 6950, "Goldrosenquarzamulett", "Ein goldenes Rosenquarzamulett", 1, "gold", 3, "rosenquarz", 3, "amulett", "amulett.lpc", 0}),
+ ({28, 6975, "Goldwalperlenkette", "Eine goldene Walperlenkette", 1, "gold", 3, "walperle", 3, "kette", "perlenkette.lpc", 0}),
+ ({28, 7000, "Goldcitrinamulett", "Ein goldenes Citrinamulett", 1, "gold", 3, "citrin", 3, "amulett", "amulett.lpc", 0}),
+
+ ({29, 7025, "Goldamethystring", "Ein goldener Amethystring", 1, "gold", 3, "amethyst", 3, "ring", "ring.lpc", 0}),
+ ({29, 7050, "Goldopalring", "Ein goldener Opalring", 1, "gold", 3, "opal", 3, "ring", "ring.lpc", 0}),
+ ({29, 7075, "Goldjadeitring", "Ein goldener Jadeitring", 1, "gold", 3, "jadeit", 3, "ring", "ring.lpc", 0}),
+ ({29, 7100, "Goldaquamarinring", "Ein goldener Aquamarinring", 1, "gold", 3, "aquamarin", 3, "ring", "ring.lpc", 0}),
+ ({29, 7125, "Goldoktarinring", "Ein goldener Oktarinring", 1, "gold", 3, "oktarin", 3, "ring", "ring.lpc", 0}),
+ ({29, 7150, "Goldzirkonring", "Ein goldener Zirkonring", 1, "gold", 3, "zirkon", 3, "ring", "ring.lpc", 0}),
+ ({29, 7175, "Goldsmaragdring", "Ein goldener Smaragdring", 1, "gold", 3, "smaragd", 3, "ring", "ring.lpc", 0}),
+ ({29, 7200, "Goldsaphirring", "Ein goldener Saphirring", 1, "gold", 3, "saphir", 3, "ring", "ring.lpc", 0}),
+ ({29, 7225, "Goldrubinring", "Ein goldener Rubinring", 1, "gold", 3, "rubin", 3, "ring", "ring.lpc", 0}),
+ ({29, 7250, "Golddiamantring", "Ein goldener Diamantring", 1, "gold", 3, "diamant", 3, "ring", "ring.lpc", 0}),
+
+ ({30, 7275, "Goldamethystamulett", "Ein goldenes Amethystamulett", 1, "gold", 3, "amethyst", 1, "amulett", "amulett.lpc", 0}),
+ ({30, 7300, "Goldopalamulett", "Ein goldenes Opalamulett", 1, "gold", 3, "opal", 1, "amulett", "amulett.lpc", 0}),
+ ({30, 7325, "Goldjadeitamulett", "Ein goldenes Jadeitamulett", 1, "gold", 3, "jadeit", 1, "amulett", "amulett.lpc", 0}),
+ ({30, 7350, "Goldaquamarinamulett", "Ein goldenes Aquamarinamulett", 1, "gold", 3, "aquamarin", 1, "amulett", "amulett.lpc", 0}),
+ ({30, 7375, "Goldoktarinamulett", "Ein goldenes Oktarinamulett", 1, "gold", 3, "oktarin", 1, "amulett", "amulett.lpc", 0}),
+ ({30, 7400, "Goldzirkonamulett", "Ein goldenes Zirkonamulett", 1, "gold", 3, "zirkon", 1, "amulett", "amulett.lpc", 0}),
+ ({30, 7425, "Goldsmaragdamulett", "Ein goldenes Smaragdamulett", 1, "gold", 3, "smaragd", 1, "amulett", "amulett.lpc", 0}),
+ ({30, 7450, "Goldsaphiramulett", "Ein goldenes Saphiramulett", 1, "gold", 3, "saphir", 1, "amulett", "amulett.lpc", 0}),
+ ({30, 7475, "Goldrubinamulett", "Ein goldenes Rubinamulett", 1, "gold", 3, "rubin", 1, "amulett", "amulett.lpc", 0}),
+ ({30, 7500, "Golddiamantamulett", "Ein goldenes Diamantamulett", 1, "gold", 3, "diamant", 1, "amulett", "amulett.lpc", 0}),
+
+ ({31, 7500, "Goldring der Temperatur", "Ein Goldring der Temperatur", 3, "gold", 15, "amethyst", 4, "magic_ring", "ring.lpc", ([P_TEMPERATURE_PROTECTION, ([ T_COLD_PROT:3, T_HEAT_PROT:2 ])])}),
+ ({31, 7500, "Goldring der Kaelte", "Ein Goldring der Kaelte", 3, "gold", 15, "jadeit", 4, "ring", "magic_ring.lpc", ([P_TEMPERATURE_PROTECTION, ([ T_COLD_PROT:6 ])])}),
+ ({31, 7500, "Goldring der Hitze", "Ein Goldring der Hitze", 3, "gold", 15, "opal", 4, "ring", "magic_ring.lpc", ([P_TEMPERATURE_PROTECTION, ([ T_HEAT_PROT:6]) ])}),
+ ({31, 7500, "Goldring der Macht", "Ein Goldring der Macht", 3, "gold", 15, "aquamarin", 4, "ring", "magic_ring.lpc", ([P_M_HEALTH_MOD: ([P_HP:4, P_SP:4])])}),
+ ({31, 7500, "Goldring des Lebens", "Ein Goldring des Lebens", 3, "gold", 15, "zirkon", 4, "ring", "magic_ring.lpc", ([P_M_HEALTH_MOD: ([P_HP:9])])}),
+ ({31, 7500, "Goldring der Magie", "Ein Goldring der Magie", 3, "gold", 15, "oktarin", 4, "ring", "magic_ring.lpc", ([P_M_HEALTH_MOD: ([P_SP:9])])}),
+ ({31, 7500, "Goldring der Geschicklichkeit", "Ein Goldring der Geschicklichkeit", 3, "gold", 15, "smaragd", 4, "ring", "magic_ring.lpc", ([P_M_ATTR_MOD: ([A_DEX:1])])}),
+ ({31, 7500, "Goldring der Ausdauer", "Ein Goldring der Ausdauer", 3, "gold", 15, "saphir", 4, "ring", "magic_ring.lpc", ([P_M_ATTR_MOD: ([A_CON:1])])}),
+ ({31, 7500, "Goldring der Intelligenz", "Ein Goldring der Intelligenz", 3, "gold", 15, "diamant", 4, "magic_ring", "ring.lpc", ([P_M_ATTR_MOD: ([A_INT:1])])}),
+ ({31, 7500, "Goldring der Staerke", "Ein Goldring der Staerke", 3, "gold", 15, "rubin", 4, "ring", "magic_ring.lpc", ([P_M_ATTR_MOD: ([A_STR:1])])}),
+ 
+ ({32, 7500, "Goldamulett der Temperatur", "Ein Goldamulett der Temperatur", 3, "gold", 15, "amethyst", 4, "amulett", "magic_amulett.lpc", ([P_TEMPERATURE_PROTECTION, ([ T_COLD_PROT:3, T_HEAT_PROT:2 ])])}),
+ ({32, 7500, "Goldamulett der Kaelte", "Ein Goldamulett der Kaelte", 3, "gold", 15, "jadeit", 4, "amulett", "magic_amulett.lpc", ([P_TEMPERATURE_PROTECTION, ([ T_COLD_PROT:6 ])])}),
+ ({32, 7500, "Goldamulett der Hitze", "Ein Goldamulett der Hitze", 3, "gold", 15, "opal", 4, "amulett", "magic_amulett.lpc", ([P_TEMPERATURE_PROTECTION, ([ T_HEAT_PROT:6]) ])}),
+ ({32, 7500, "Goldamulett der Macht", "Ein Goldamulett der Macht", 3, "gold", 15, "aquamarin", 4, "amulett", "magic_amulett.lpc", ([P_M_HEALTH_MOD: ([P_HP:4, P_SP:4])])}),
+ ({32, 7500, "Goldamulett des Lebens", "Ein Goldamulett des Lebens", 3, "gold", 15, "zirkon", 4, "amulett", "magic_amulett.lpc", ([P_M_HEALTH_MOD: ([P_HP:9])])}),
+ ({32, 7500, "Goldamulett der Magie", "Ein Goldamulett der Magie", 3, "gold", 15, "oktarin", 4, "amulett", "magic_amulett.lpc", ([P_M_HEALTH_MOD: ([P_SP:9])])}),
+ ({32, 7500, "Goldamulett der Geschicklichkeit", "Ein Goldamulett der Geschicklichkeit", 3, "gold", 15, "smaragd", 4, "amulett", "magic_amulett.lpc", ([P_M_ATTR_MOD: ([A_DEX:1])])}),
+ ({32, 7500, "Goldamulett der Ausdauer", "Ein Goldamulett der Ausdauer", 3, "gold", 15, "saphir", 4, "amulett", "magic_amulett.lpc", ([P_M_ATTR_MOD: ([A_CON:1])])}),
+ ({32, 7500, "Goldamulett der Intelligenz", "Ein Goldamulett der Intelligenz", 3, "gold", 15, "diamant", 4, "amulett", "magic_amulett.lpc", ([P_M_ATTR_MOD: ([A_INT:1])])}),
+ ({32, 7500, "Goldamulett der Staerke", "Ein Goldamulett der Staerke", 3, "gold", 15, "rubin", 4, "amulett", "magic_amulett.lpc", ([P_M_ATTR_MOD: ([A_STR:1])])}),
+
+ ({33, 7525, "Platinpolarperlenring", "Ein platinener Polarperlenring", 1, "platin", 4, "polarperle", 4, "ring", "perlenring.lpc", 0}),
+ ({33, 7550, "Platintuerkisring", "Ein platinener Tuerkisring", 1, "platin", 4, "tuerkis", 4, "ring", "ring.lpc", 0}),
+ ({33, 7575, "Platinfelseninselperlenring", "Ein platinener Felseninselperlenring", 1, "platin", 4, "felseninselperle", 4, "ring", "perlenring.lpc", 0}),
+ ({33, 7600, "Platinaventurinring", "Ein platinener Aventurinring", 1, "platin", 4, "aventurin", 4, "ring", "ring.lpc", 0}),
+ ({33, 7625, "Platinoktopusperlenring", "Ein platinener Oktopusperlenring", 1, "platin", 4, "oktopusperle", 4, "ring", "perlenring.lpc", 0}),
+ ({33, 7650, "Platinbergkristallring", "Ein platinener Bergkristallring", 1, "platin", 4, "bergkristall", 4, "ring", "ring.lpc", 0}),
+ ({33, 7675, "Platinderlimperlenring", "Ein platinener Derlimperlenring", 1, "platin", 4, "derlimperle", 4, "ring", "perlenring.lpc", 0}),
+ ({33, 7700, "Platinachatring", "Ein platinener Achatring", 1, "platin", 4, "achat", 4, "ring", "ring.lpc", 0}),
+ ({33, 7725, "Platinkorallenperlenring", "Ein platinener Korallenperlenring", 1, "platin", 4, "korallenperle", 4, "ring", "perlenring.lpc", 0}),
+ ({33, 7750, "Platindioptasring", "Ein platinener Dioptasring", 1, "platin", 4, "dioptas", 4, "ring", "ring.lpc", 0}),
+
+ ({34, 7775, "Platinpolarperlenkette", "Eine platinene Polarperlenkette", 1, "platin", 4, "polarperle", 4, "kette", "perlenkette.lpc", 0}),
+ ({34, 7800, "Platintuerkisamulett", "Ein platinenes Tuerkisamulett", 1, "platin", 4, "tuerkis", 4, "amulett", "amulett.lpc", 0}),
+ ({34, 7825, "Platinfelseninselperlenkette", "Eine platinene Felseninselperlenkette", 1, "platin", 4, "felseninselperle", 4, "kette", "perlenkette.lpc", 0}),
+ ({34, 7850, "Platinaventurinamulett", "Ein platinenes Aventurinamulett", 1, "platin", 4, "aventurin", 4, "amulett", "amulett.lpc", 0}),
+ ({34, 7875, "Platinoktopusperlenkette", "Eine platinene Oktopusperlenkette", 1, "platin", 4, "oktopusperle", 4, "kette", "perlenkette.lpc", 0}),
+ ({34, 7900, "Platinbergkristallamulett", "Ein platinenes Bergkristallamulett", 1, "platin", 4, "bergkristall", 4, "amulett", "amulett.lpc", 0}),
+ ({34, 7925, "Platinderlimperlenkette", "Eine platinene Derlimperlenkette", 1, "platin", 4, "derlimperle", 4, "kette", "perlenkette.lpc", 0}),
+ ({34, 7950, "Platinachatamulett", "Ein platinenes Achatamulett", 1, "platin", 4, "achat", 4, "amulett", "amulett.lpc", 0}),
+ ({34, 7975, "Platinkorallenperlenkette", "Eine platinene Korallenperlenkette", 1, "platin", 4, "korallenperle", 4, "kette", "perlenkette.lpc", 0}),
+ ({34, 8000, "Platindioptasamulett", "Ein platinenes Dioptasamulett", 1, "platin", 4, "dioptas", 4, "amulett", "amulett.lpc", 0}),
+ 
+ ({35, 8025, "Platinquaulperlenring", "Ein platinener Quaulperlenring", 1, "platin", 4, "quaulperle", 4, "ring", "perlenring.lpc", 0}),
+ ({35, 8050, "Platintigeraugering", "Ein platinener Tigeraugering", 1, "platin", 4, "tigerauge", 4, "ring", "ring.lpc", 0}),
+ ({35, 8075, "Platinmidasperlenring", "Ein platinener Midasperlenring", 1, "platin", 4, "midasperle", 4, "ring", "perlenring.lpc", 0}),
+ ({35, 8100, "Platinalmandinring", "Ein platinener Almandinring", 1, "platin", 4, "almandin", 4, "ring", "ring.lpc", 0}),
+ ({35, 8125, "Platinsmoerskyperlenring", "Ein platinener Smoerskyperlenring", 1, "platin", 4, "smoerskyperle", 4, "ring", "perlenring.lpc", 0}),
+ ({35, 8150, "Platincupritring", "Ein platinener Cupritring", 1, "platin", 4, "cuprit", 4, "ring", "ring.lpc", 0}),
+ ({35, 8175, "Platinriffperlenring", "Ein platinener Riffperlenring", 1, "platin", 4, "riffperle", 4, "ring", "perlenring.lpc", 0}),
+ ({35, 8200, "Platinbenitoitring", "Ein platinener Benitoitring", 1, "platin", 4, "benitoit", 4, "ring", "ring.lpc", 0}),
+ ({35, 8225, "Platinmauritiusperlenring", "Ein platinener Mauritiusperlenring", 1, "platin", 4, "mauritiusperle", 4, "ring", "perlenring.lpc", 0}),
+ ({35, 8250, "Platinonyxring", "Ein platinener Onyxring", 1, "platin", 4, "onyx", 4, "ring", "ring.lpc", 0}),
+
+ ({36, 8275, "Platinquaulperlenkette", "Eine platinene Quaulperlenkette", 1, "platin", 4, "quaulperle", 4, "kette", "perlenkette.lpc", 0}),
+ ({36, 8300, "Platintigeraugeamulett", "Ein platinenes Tigeraugeamulett", 1, "platin", 4, "tigerauge", 4, "amulett", "amulett.lpc", 0}),
+ ({36, 8325, "Platinmidasperlenkette", "Eine platinene Midasperlenkette", 1, "platin", 4, "midasperle", 4, "kette", "perlenkette.lpc", 0}),
+ ({36, 8350, "Platinalmandinamulett", "Ein platinenes Almandinamulett", 1, "platin", 4, "almandin", 4, "amulett", "amulett.lpc", 0}),
+ ({36, 8375, "Platinsmoerskyperlenkette", "Eine platinene Smoerskyperlenkette", 1, "platin", 4, "smoerskyperle", 4, "kette", "perlenkette.lpc", 0}),
+ ({36, 8400, "Platincupritamulett", "Ein platinenes Cupritamulett", 1, "platin", 4, "cuprit", 4, "amulett", "amulett.lpc", 0}),
+ ({36, 8425, "Platinriffperlenkette", "Eine platinene Riffperlenkette", 1, "platin", 4, "riffperle", 4, "kette", "perlenkette.lpc", 0}),
+ ({36, 8450, "Platinbenitoitamulett", "Ein platinenes Benitoitamulett", 1, "platin", 4, "benitoit", 4, "amulett", "amulett.lpc", 0}),
+ ({36, 8475, "Platinmauritiusperlenkette", "Eine platinene Mauritiusperlenkette", 1, "platin", 4, "mauritiusperle", 4, "kette", "perlenkette.lpc", 0}),
+ ({36, 8500, "Platinonyxamulett", "Ein platinenes Onyxamulett", 1, "platin", 4, "onyx", 4, "amulett", "amulett.lpc", 0}),
+
+ ({37, 8525, "Platinzombieinselperlenring", "Ein platinener Zombieinselperlenring", 1, "platin", 4, "zombieinselperle", 4, "ring", "perlenring.lpc", 0}),
+ ({37, 8550, "Platinjaspisring", "Ein platinener Jaspisring", 1, "platin", 4, "jaspis", 4, "ring", "ring.lpc", 0}),
+ ({37, 8575, "Platinkrakenperlenring", "Ein platinener Krakenperlenring", 1, "platin", 4, "krakenperle", 4, "ring", "perlenring.lpc", 0}),
+ ({37, 8600, "Platinlapislazuliring", "Ein platinener Lapislazuliring", 1, "platin", 4, "lapislazuli", 4, "ring", "ring.lpc", 0}),
+ ({37, 8625, "Platinknarkhperlenring", "Ein platinener Knarkhperlenring", 1, "platin", 4, "knarkhperle", 4, "ring", "perlenring.lpc", 0}),
+ ({37, 8650, "Platinbernsteinring", "Ein platinener Bernsteinring", 1, "platin", 4, "bernstein", 4, "ring", "ring.lpc", 0}),
+ ({37, 8675, "Platintijaraperlenring", "Ein platinener Tijaraperlenring", 1, "platin", 4, "tijaraperle", 4, "ring", "perlenring.lpc", 0}),
+ ({37, 8700, "Platingranatring", "Ein platinener Granatring", 1, "platin", 4, "granat", 4, "ring", "ring.lpc", 0}),
+ ({37, 8725, "Platinsuedseeperlenring", "Ein platinener Suedseeperlenring", 1, "platin", 4, "suedseeperle", 4, "ring", "perlenring.lpc", 0}),
+ ({37, 8750, "Platintopasring", "Ein platinener Topasring", 1, "platin", 4, "topas", 4, "ring", "ring.lpc", 0}),
+
+ ({38, 8775, "Platinzombieinselperlenkette", "Eine platinene Zombieinselperlenkette", 1, "platin", 4, "zombieinselperle", 4, "kette", "perlenkette.lpc", 0}),
+ ({38, 8800, "Platinjaspisamulett", "Ein platinenes Jaspisamulett", 1, "platin", 4, "jaspis", 4, "amulett", "amulett.lpc", 0}),
+ ({38, 8825, "Platinkrakenperlenkette", "Eine platinene Krakenperlenkette", 1, "platin", 4, "krakenperle", 4, "kette", "perlenkette.lpc", 0}),
+ ({38, 8850, "Platinlapislazuliamulett", "Ein platinenes Lapislazuliamulett", 1, "platin", 4, "lapislazuli", 4, "amulett", "amulett.lpc", 0}),
+ ({38, 8875, "Platinknarkhperlenkette", "Eine platinene Knarkhperlenkette", 1, "platin", 4, "knarkhperle", 4, "kette", "perlenkette.lpc", 0}),
+ ({38, 8900, "Platinbernsteinamulett", "Ein platinenes Bernsteinamulett", 1, "platin", 4, "bernstein", 4, "amulett", "amulett.lpc", 0}),
+ ({38, 8925, "Platintijaraperlenkette", "Eine platinene Tijaraperlenkette", 1, "platin", 4, "tijaraperle", 4, "kette", "perlenkette.lpc", 0}),
+ ({38, 8950, "Platingranatamulett", "Ein platinenes Granatamulett", 1, "platin", 4, "granat", 4, "amulett", "amulett.lpc", 0}),
+ ({38, 8975, "Platinsuedseeperlenkette", "Eine platinene Suedseeperlenkette", 1, "platin", 4, "suedseeperle", 4, "kette", "perlenkette.lpc", 0}),
+ ({38, 9000, "Platintopasamulett", "Ein platinenes Topasamulett", 1, "platin", 4, "topas", 4, "amulett", "amulett.lpc", 0}),
+ 
+ ({39, 9025, "Platinhaiperlenring", "Ein platinener Haiperlenring", 1, "platin", 4, "haiperle", 4, "ring", "perlenring.lpc", 0}),
+ ({39, 9050, "Platinturmalinring", "Ein platinener Turmalinring", 1, "platin", 4, "turmalin", 4, "ring", "ring.lpc", 0}),
+ ({39, 9075, "Platinpiratenperlenring", "Ein platinener Piratenperlenring", 1, "platin", 4, "piratenperle", 4, "ring", "perlenring.lpc", 0}),
+ ({39, 9100, "Platinperidotring", "Ein platinener Peridotring", 1, "platin", 4, "peridot", 4, "ring", "ring.lpc", 0}),
+ ({39, 9125, "Platinschwertfischperlenring", "Ein platinener Schwertfischperlenring", 1, "platin", 4, "schwertfischperle", 4, "ring", "perlenring.lpc", 0}),
+ ({39, 9150, "Platinsugilithring", "Ein platinener Sugilithring", 1, "platin", 4, "sugilith", 4, "ring", "ring.lpc", 0}),
+ ({39, 9175, "Platintiefseeperlenring", "Ein platinener Tiefseeperlenring", 1, "platin", 4, "tiefseeperle", 4, "ring", "perlenring.lpc", 0}),
+ ({39, 9200, "Platinrosenquarzring", "Ein platinener Rosenquarzring", 1, "platin", 4, "rosenquarz", 4, "ring", "ring.lpc", 0}),
+ ({39, 9225, "Platinwalperlenring", "Ein platinener Walperlenring", 1, "platin", 4, "walperle", 4, "ring", "perlenring.lpc", 0}),
+ ({39, 9250, "Platincitrinring", "Ein platinener Citrinring", 1, "platin", 4, "citrin", 4, "ring", "ring.lpc", 0}),
+
+ ({40, 9275, "Platinhaiperlenkette", "Eine platinene Haiperlenkette", 1, "platin", 4, "haiperle", 4, "kette", "perlenkette.lpc", 0}),
+ ({40, 9300, "Platinturmalinamulett", "Ein platinenes Turmalinamulett", 1, "platin", 4, "turmalin", 4, "amulett", "amulett.lpc", 0}),
+ ({40, 9325, "Platinpiratenperlenkette", "Eine platinene Piratenperlenkette", 1, "platin", 4, "piratenperle", 4, "kette", "perlenkette.lpc", 0}),
+ ({40, 9350, "Platinperidotamulett", "Ein platinenes Peridotamulett", 1, "platin", 4, "peridot", 4, "amulett", "amulett.lpc", 0}),
+ ({40, 9375, "Platinschwertfischperlenkette", "Eine platinene Schwertfischperlenkette", 1, "platin", 4, "schwertfischperle", 4, "kette", "perlenkette.lpc", 0}),
+ ({40, 9400, "Platinsugilithamulett", "Ein platinenes Sugilithamulett", 1, "platin", 4, "sugilith", 4, "amulett", "amulett.lpc", 0}),
+ ({40, 9425, "Platintiefseeperlenkette", "Eine platinene Tiefseeperlenkette", 1, "platin", 4, "tiefseeperle", 4, "kette", "perlenkette.lpc", 0}),
+ ({40, 9450, "Platinrosenquarzamulett", "Ein platinenes Rosenquarzamulett", 1, "platin", 4, "rosenquarz", 4, "amulett", "amulett.lpc", 0}),
+ ({40, 9475, "Platinwalperlenkette", "Eine platinene Walperlenkette", 1, "platin", 4, "walperle", 4, "kette", "perlenkette.lpc", 0}),
+ ({40, 9500, "Platincitrinamulett", "Ein platinenes Citrinamulett", 1, "platin", 4, "citrin", 4, "amulett", "amulett.lpc", 0}),
+
+ ({41, 9525, "Platinamethystring", "Ein platinener Amethystring", 1, "platin", 4, "amethyst", 4, "ring", "ring.lpc", 0}),
+ ({41, 9550, "Platinopalring", "Ein platinener Opalring", 1, "platin", 4, "opal", 4, "ring", "ring.lpc", 0}),
+ ({41, 9575, "Platinjadeitring", "Ein platinener Jadeitring", 1, "platin", 4, "jadeit", 4, "ring", "ring.lpc", 0}),
+ ({41, 9600, "Platinaquamarinring", "Ein platinener Aquamarinring", 1, "platin", 4, "aquamarin", 4, "ring", "ring.lpc", 0}),
+ ({41, 9625, "Platinoktarinring", "Ein platinener Oktarinring", 1, "platin", 4, "oktarin", 4, "ring", "ring.lpc", 0}),
+ ({41, 9650, "Platinzirkonring", "Ein platinener Zirkonring", 1, "platin", 4, "zirkon", 4, "ring", "ring.lpc", 0}),
+ ({41, 9675, "Platinsmaragdring", "Ein platinener Smaragdring", 1, "platin", 4, "smaragd", 4, "ring", "ring.lpc", 0}),
+ ({41, 9700, "Platinsaphirring", "Ein platinener Saphirring", 1, "platin", 4, "saphir", 4, "ring", "ring.lpc", 0}),
+ ({41, 9725, "Platinrubinring", "Ein platinener Rubinring", 1, "platin", 4, "rubin", 4, "ring", "ring.lpc", 0}),
+ ({41, 9750, "Platindiamantring", "Ein platinener Diamantring", 1, "platin", 4, "diamant", 4, "ring", "ring.lpc", 0}),
+
+ ({42, 9775, "Platinamethystamulett", "Ein platinenes Amethystamulett", 1, "platin", 4, "amethyst", 4, "amulett", "amulett.lpc", 0}),
+ ({42, 9800, "Platinopalamulett", "Ein platinenes Opalamulett", 1, "platin", 4, "opal", 4, "amulett", "amulett.lpc", 0}),
+ ({42, 9825, "Platinjadeitamulett", "Ein platinenes Jadeitamulett", 1, "platin", 4, "jadeit", 4, "amulett", "amulett.lpc", 0}),
+ ({42, 9850, "Platinaquamarinamulett", "Ein platinenes Aquamarinamulett", 1, "platin", 4, "aquamarin", 4, "amulett", "amulett.lpc", 0}),
+ ({42, 9875, "Platinoktarinamulett", "Ein platinenes Oktarinamulett", 1, "platin", 4, "oktarin", 4, "amulett", "amulett.lpc", 0}),
+ ({42, 9900, "Platinzirkonamulett", "Ein platinenes Zirkonamulett", 1, "platin", 4, "zirkon", 4, "amulett", "amulett.lpc", 0}),
+ ({42, 9925, "Platinsmaragdamulett", "Ein platinenes Smaragdamulett", 1, "platin", 4, "smaragd", 4, "amulett", "amulett.lpc", 0}),
+ ({42, 9950, "Platinsaphiramulett", "Ein platinenes Saphiramulett", 1, "platin", 4, "saphir", 4, "amulett", "amulett.lpc", 0}),
+ ({42, 9975, "Platinrubinamulett", "Ein platinenes Rubinamulett", 1, "platin", 4, "rubin", 4, "amulett", "amulett.lpc", 0}),
+ ({42, 9985, "Platindiamantamulett", "Ein platinenes Diamantamulett", 1, "platin", 4, "diamant", 4, "amulett", "amulett.lpc", 0}),
+ 
+ ({43, 9990, "Platinring des Engels", "Ein Platinring des Engels", 4, "platin", 20, "bergkristall", 4, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_HOLY:10])])}),
+ ({43, 9990, "Platinring des Daemons", "Ein Platinring des Daemons", 4, "platin", 20, "turmalin", 4, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_UNHOLY:10])])}),
+ ({43, 9990, "Platinring der Saeure", "Ein Platinring der Saeure", 4, "platin", 20, "lapislazuli", 4, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_ACID:10])])}),
+ ({43, 9990, "Platinring des Lichts", "Ein Platinring des Lichts", 4, "platin", 20, "bernstein", 4, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_LIGHT:10])])}),
+ ({43, 9990, "Platinring des Laerms", "Ein Platinring des Laerms", 4, "platin", 20, "amethyst", 4, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_SOUND:10])])}),
+ ({43, 9990, "Platinring des Schreckens", "Ein Platinring des Schreckens", 4, "platin", 20, "onyx", 4, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_TERROR:10])])}),
+ ({43, 9990, "Platinring des Blitzes", "Ein Platinring des Blitzes", 4, "platin", 20, "granat", 4, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_LIGHTNING:10])])}),
+ ({43, 9990, "Platinring der Luft", "Ein Platinring der Luft", 4, "platin", 20, "topas", 4, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_AIR:10])])}),
+ ({43, 9990, "Platinring des Zaubers", "Ein Platinring des Zaubers", 4, "platin", 20, "opal", 4, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_MAGIC:10])])}),
+ ({43, 9990, "Platinring des Geistes", "Ein Platinring des Geistes", 4, "platin", 20, "tigerauge", 4, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_MIND:10])])}),
+ 
+ ({44, 9990, "Platinamulett des Engels", "Ein Platinamulett des Engels", 4, "platin", 20, "bergkristall", 4, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_HOLY:10])])}),
+ ({44, 9990, "Platinamulett des Daemons", "Ein Platinamulett des Daemons", 4, "platin", 20, "turmalin", 4, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_UNHOLY:10])])}),
+ ({44, 9990, "Platinamulett der Saeure", "Ein Platinamulett der Saeure", 4, "platin", 20, "lapislazuli", 4, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_ACID:10])])}),
+ ({44, 9990, "Platinamulett des Lichts", "Ein Platinamulett des Lichts", 4, "platin", 20, "bernstein", 4, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_LIGHT:10])])}),
+ ({44, 9990, "Platinamulett des Laerms", "Ein Platinamulett des Laerms", 4, "platin", 20, "amethyst", 4, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_SOUND:10])])}),
+ ({44, 9990, "Platinamulett des Schreckens", "Ein Platinamulett des Schreckens", 4, "platin", 20, "onyx", 4, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_TERROR:10])])}),
+ ({44, 9990, "Platinamulett des Blitzes", "Ein Platinamulett des Blitzes", 4, "platin", 20, "granat", 4, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_LIGHTNING:10])])}),
+ ({44, 9990, "Platinamulett der Luft", "Ein Platinamulett der Luft", 4, "platin", 20, "topas", 4, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_AIR:10])])}),
+ ({44, 9990, "Platinamulett des Zaubers", "Ein Platinamulett des Zaubers", 4, "platin", 20, "opal", 4, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_MAGIC:10])])}),
+ ({44, 9990, "Platinamulett des Geistes", "Ein Platinamulett des Geistes", 4, "platin", 20, "tigerauge", 4, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_MIND:10])])}),
+ 
+ ({45, 9990, "Platinring des Wassers", "Ein Platinring des Wassers", 4, "platin", 20, "aquamarin", 4, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_WATER:10])])}),
+ ({45, 9990, "Platinring des Giftes", "Ein Platinring des Giftes", 4, "platin", 20, "smaragd", 4, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_POISON:10])])}),
+ ({45, 9990, "Platinring des Eises", "Ein Platinring des Eises", 4, "platin", 20, "saphir", 4, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_COLD:10])])}),
+ ({45, 9990, "Platinring des Feuers", "Ein Platinring des Feuers", 4, "platin", 20, "rubin", 4, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_FIRE:10])])}),
+ ({45, 9990, "Platinring der Explosion", "Ein Platinring der Explosion", 4, "platin", 20, "diamant", 4, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_EXPLOSION:10])])}),
+ ({45, 9990, "Platinamulett des Wassers", "Ein Platinamulett des Wassers", 4, "platin", 20, "aquamarin", 4, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_WATER:10])])}),
+ ({45, 9990, "Platinamulett des Giftes", "Ein Platinamulett des Giftes", 4, "platin", 20, "smaragd", 4, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_POISON:10])])}),
+ ({45, 9990, "Platinamulett des Eises", "Ein Platinamulett des Eises", 4, "platin", 20, "saphir", 4, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_COLD:10])])}),
+ ({45, 9990, "Platinamulett des Feuers", "Ein Platinamulett des Feuers", 4, "platin", 20, "rubin", 4, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_FIRE:10])])}),
+ ({45, 9990, "Platinamulett der Explosion", "Ein Platinamulett der Explosion", 4, "platin", 20, "diamant", 4, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_EXPLOSION:10])])}),
+ 
+ ({46, 9990, "Platinring der Temperatur", "Ein Platinring der Temperatur", 5, "platin", 30, "amethyst", 4, "ring", "magic_ring.lpc", ([P_TEMPERATURE_PROTECTION, ([ T_COLD_PROT:4, T_HEAT_PROT:4 ])])}),
+ ({46, 9990, "Platinring der Kaelte", "Ein Platinring der Kaelte", 5, "platin", 30, "jadeit", 4, "ring", "magic_ring.lpc", ([P_TEMPERATURE_PROTECTION, ([ T_COLD_PROT:9 ])])}),
+ ({46, 9990, "Platinring der Hitze", "Ein Platinring der Hitze", 5, "platin", 30, "opal", 4, "ring", "magic_ring.lpc", ([P_TEMPERATURE_PROTECTION, ([ T_HEAT_PROT:8]) ])}),
+ ({46, 9990, "Platinring der Macht", "Ein Platinring der Macht", 5, "platin", 30, "aquamarin", 4, "ring", "magic_ring.lpc", ([P_M_HEALTH_MOD: ([P_HP:9, P_SP:9])])}),
+ ({46, 9990, "Platinring des Lebens", "Ein Platinring des Lebens", 5, "platin", 30, "zirkon", 4, "ring", "magic_ring.lpc", ([P_M_HEALTH_MOD: ([P_HP:19])])}),
+ ({46, 9990, "Platinring der Magie", "Ein Platinring der Magie", 5, "platin", 30, "oktarin", 4, "ring", "magic_ring.lpc", ([P_M_HEALTH_MOD: ([P_SP:19])])}),
+ ({46, 9990, "Platinring der Geschicklichkeit", "Ein Platinring der Geschicklichkeit", 5, "platin", 30, "smaragd", 4, "ring", "magic_ring.lpc", ([P_M_ATTR_MOD: ([A_DEX:3])])}),
+ ({46, 9990, "Platinring der Ausdauer", "Ein Platinring der Ausdauer", 5, "platin", 30, "saphir", 4, "ring", "magic_ring.lpc", ([P_M_ATTR_MOD: ([A_CON:3])])}),
+ ({46, 9990, "Platinring der Intelligenz", "Ein Platinring der Intelligenz", 5, "platin", 30, "diamant", 4, "ring", "magic_ring.lpc", ([P_M_ATTR_MOD: ([A_INT:3])])}),
+ ({46, 9990, "Platinring der Staerke", "Ein Platinring der Staerke", 5, "platin", 30, "rubin", 4, "ring", "magic_ring.lpc", ([P_M_ATTR_MOD: ([A_STR:3])])}),
+ 
+ ({47, 9990, "Platinamulett der Temperatur", "Ein Platinamulett der Temperatur", 5, "platin", 30, "amethyst", 4, "amulett", "magic_amulett.lpc", ([P_TEMPERATURE_PROTECTION, ([ T_COLD_PROT:4, T_HEAT_PROT:4 ])])}),
+ ({47, 9990, "Platinamulett der Kaelte", "Ein Platinamulett der Kaelte", 5, "platin", 30, "jadeit", 4, "amulett", "magic_amulett.lpc", ([P_TEMPERATURE_PROTECTION, ([ T_COLD_PROT:9 ])])}),
+ ({47, 9990, "Platinamulett der Hitze", "Ein Platinamulett der Hitze", 5, "platin", 30, "opal", 4, "amulett", "magic_amulett.lpc", ([P_TEMPERATURE_PROTECTION, ([ T_HEAT_PROT:8]) ])}),
+ ({47, 9990, "Platinamulett der Macht", "Ein Platinamulett der Macht", 5, "platin", 30, "aquamarin", 4, "amulett", "magic_amulett.lpc", ([P_M_HEALTH_MOD: ([P_HP:9, P_SP:9])])}),
+ ({47, 9990, "Platinamulett des Lebens", "Ein Platinamulett des Lebens", 5, "platin", 30, "zirkon", 4, "amulett", "magic_amulett.lpc", ([P_M_HEALTH_MOD: ([P_HP:19])])}),
+ ({47, 9990, "Platinamulett der Magie", "Ein Platinamulett der Magie", 5, "platin", 30, "oktarin", 4, "amulett", "magic_amulett.lpc", ([P_M_HEALTH_MOD: ([P_SP:19])])}),
+ ({47, 9990, "Platinamulett der Geschicklichkeit", "Ein Platinamulett der Geschicklichkeit", 5, "platin", 30, "smaragd", 4, "amulett", "magic_amulett.lpc", ([P_M_ATTR_MOD: ([A_DEX:3])])}),
+ ({47, 9990, "Platinamulett der Ausdauer", "Ein Platinamulett der Ausdauer", 5, "platin", 30, "saphir", 4, "amulett", "magic_amulett.lpc", ([P_M_ATTR_MOD: ([A_CON:3])])}),
+ ({47, 9990, "Platinamulett der Intelligenz", "Ein Platinamulett der Intelligenz", 5, "platin", 30, "diamant", 4, "amulett", "magic_amulett.lpc", ([P_M_ATTR_MOD: ([A_INT:3])])}),
+ ({47, 9990, "Platinamulett der Staerke", "Ein Platinamulett der Staerke", 5, "platin", 30, "rubin", 4, "amulett", "magic_amulett.lpc", ([P_M_ATTR_MOD: ([A_STR:3])])}),
+
+ ({48,10000, "Mithrilring des Engels", "Ein Mithrilring des Engels", 1, "mithril", 40, "bergkristall", 5, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_HOLY:15])])}),
+ ({48,10000, "Mithrilring des Daemons", "Ein Mithrilring des Daemons", 1, "mithril", 40, "turmalin", 5, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_UNHOLY:15])])}),
+ ({48,10000, "Mithrilring der Saeure", "Ein Mithrilring der Saeure", 1, "mithril", 40, "lapislazuli", 5, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_ACID:15])])}),
+ ({48,10000, "Mithrilring des Lichts", "Ein Mithrilring des Lichts", 1, "mithril", 40, "bernstein", 5, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_LIGHT:15])])}),
+ ({48,10000, "Mithrilring des Laerms", "Ein Mithrilring des Laerms", 1, "mithril", 40, "amethyst", 5, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_SOUND:15])])}),
+ ({48,10000, "Mithrilring des Schreckens", "Ein Mithrilring des Schreckens", 1, "mithril", 40, "onyx", 5, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_TERROR:15])])}),
+ ({48,10000, "Mithrilring des Blitzes", "Ein Mithrilring des Blitzes", 1, "mithril", 40, "granat", 5, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_LIGHTNING:15])])}),
+ ({48,10000, "Mithrilring der Luft", "Ein Mithrilring der Luft", 1, "mithril", 40, "topas", 5, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_AIR:15])])}),
+ ({48,10000, "Mithrilring des Zaubers", "Ein Mithrilring des Zaubers", 1, "mithril", 40, "opal", 5, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_MAGIC:15])])}),
+ ({48,10000, "Mithrilring des Geistes", "Ein Mithrilring des Geistes", 1, "mithril", 40, "tigerauge", 5, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_MIND:15])])}),
+ 
+ ({49,10000, "Mithrilamulett des Engels", "Ein Mithrilamulett des Engels", 1, "mithril", 40, "bergkristall", 5, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_HOLY:15])])}),
+ ({49,10000, "Mithrilamulett des Daemons", "Ein Mithrilamulett des Daemons", 1, "mithril", 40, "turmalin", 5, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_UNHOLY:15])])}),
+ ({49,10000, "Mithrilamulett der Saeure", "Ein Mithrilamulett der Saeure", 1, "mithril", 40, "lapislazuli", 5, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_ACID:15])])}),
+ ({49,10000, "Mithrilamulett des Lichts", "Ein Mithrilamulett des Lichts", 1, "mithril", 40, "bernstein", 5, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_LIGHT:15])])}),
+ ({49,10000, "Mithrilamulett des Laerms", "Ein Mithrilamulett des Laerms", 1, "mithril", 40, "amethyst", 5, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_SOUND:15])])}),
+ ({49,10000, "Mithrilamulett des Schreckens", "Ein Mithrilamulett des Schreckens", 1, "mithril", 40, "onyx", 5, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_TERROR:15])])}),
+ ({49,10000, "Mithrilamulett des Blitzes", "Ein Mithrilamulett des Blitzes", 1, "mithril", 40, "granat", 5, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_LIGHTNING:15])])}),
+ ({49,10000, "Mithrilamulett der Luft", "Ein Mithrilamulett der Luft", 1, "mithril", 40, "topas", 5, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_AIR:15])])}),
+ ({49,10000, "Mithrilamulett des Zaubers", "Ein Mithrilamulett des Zaubers", 1, "mithril", 40, "opal", 5, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_MAGIC:15])])}),
+ ({49,10000, "Mithrilamulett des Geistes", "Ein Mithrilamulett des Geistes", 1, "mithril", 40, "tigerauge", 5, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_MIND:15])])}),
+ 
+ ({50,10000, "Mithrilring des Wassers", "Ein Mithrilring des Wassers", 1, "mithril", 40, "aquamarin", 5, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_WATER:15])])}),
+ ({50,10000, "Mithrilring des Giftes", "Ein Mithrilring des Giftes", 1, "mithril", 40, "smaragd", 5, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_POISON:15])])}),
+ ({50,10000, "Mithrilring des Eises", "Ein Mithrilring des Eises", 1, "mithril", 40, "saphir", 5, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_COLD:15])])}),
+ ({50,10000, "Mithrilring des Feuers", "Ein Mithrilring des Feuers", 1, "mithril", 40, "rubin", 5, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_FIRE:15])])}),
+ ({50,10000, "Mithrilring der Explosion", "Ein Mithrilring der Explosion", 1, "mithril", 40, "diamant", 5, "ring", "magic_ring.lpc", ([P_DAM_PROTECTION: ([DT_EXPLOSION:15])])}),
+ ({50,10000, "Mithrilamulett des Wassers", "Ein Mithrilamulett des Wassers", 1, "mithril", 40, "aquamarin", 5, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_WATER:15])])}),
+ ({50,10000, "Mithrilamulett des Giftes", "Ein Mithrilamulett des Giftes", 1, "mithril", 40, "smaragd", 5, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_POISON:15])])}),
+ ({50,10000, "Mithrilamulett des Eises", "Ein Mithrilamulett des Eises", 1, "mithril", 40, "saphir", 5, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_COLD:15])])}),
+ ({50,10000, "Mithrilamulett des Feuers", "Ein Mithrilamulett des Feuers", 1, "mithril", 40, "rubin", 5, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_FIRE:15])])}),
+ ({50,10000, "Mithrilamulett der Explosion", "Ein Mithrilamulett der Explosion", 1, "mithril", 40, "diamant", 5, "amulett", "magic_amulett.lpc", ([P_DAM_PROTECTION: ([DT_EXPLOSION:15])])}),
+ 
+ ({51,10000, "Mithrilring der Temperatur", "Ein Mithrilring der Temperatur", 1, "mithril", 50, "amethyst", 5, "ring", "magic_ring.lpc", ([P_TEMPERATURE_PROTECTION, ([ T_COLD_PROT:6, T_HEAT_PROT:6 ])])}),
+ ({51,10000, "Mithrilring der Kaelte", "Ein Mithrilring der Kaelte", 1, "mithril", 50, "jadeit", 5, "ring", "magic_ring.lpc", ([P_TEMPERATURE_PROTECTION, ([ T_COLD_PROT:14 ])])}),
+ ({51,10000, "Mithrilring der Hitze", "Ein Mithrilring der Hitze", 1, "mithril", 50, "opal", 5, "ring", "magic_ring.lpc", ([P_TEMPERATURE_PROTECTION, ([ T_HEAT_PROT:12]) ])}),
+ ({51,10000, "Mithrilring der Macht", "Ein Mithrilring der Macht", 1, "mithril", 50, "aquamarin", 5, "ring", "magic_ring.lpc", ([P_M_HEALTH_MOD: ([P_HP:13, P_SP:13])])}),
+ ({51,10000, "Mithrilring des Lebens", "Ein Mithrilring des Lebens", 1, "mithril", 50, "zirkon", 5, "ring", "magic_ring.lpc", ([P_M_HEALTH_MOD: ([P_HP:29])])}),
+ ({51,10000, "Mithrilring der Magie", "Ein Mithrilring der Magie", 1, "mithril", 50, "oktarin", 5, "ring", "magic_ring.lpc", ([P_M_HEALTH_MOD: ([P_SP:29])])}),
+ ({51,10000, "Mithrilring der Geschicklichkeit", "Ein Mithrilring der Geschicklichkeit", 1, "mithril", 50, "smaragd", 5, "ring", "magic_ring.lpc", ([P_M_ATTR_MOD: ([A_DEX:5])])}),
+ ({51,10000, "Mithrilring der Ausdauer", "Ein Mithrilring der Ausdauer", 1, "mithril", 50, "saphir", 5, "ring", "magic_ring.lpc", ([P_M_ATTR_MOD: ([A_CON:5])])}),
+ ({51,10000, "Mithrilring der Intelligenz", "Ein Mithrilring der Intelligenz", 1, "mithril", 50, "diamant", 5, "ring", "magic_ring.lpc", ([P_M_ATTR_MOD: ([A_INT:5])])}),
+ ({51,10000, "Mithrilring der Staerke", "Ein Mithrilring der Staerke", 1, "mithril", 50, "rubin", 5, "ring", "magic_ring.lpc", ([P_M_ATTR_MOD: ([A_STR:5])])}),
+ 
+ ({52,10000, "Mithrilamulett der Temperatur", "Ein Mithrilamulett der Temperatur", 1, "mithril", 50, "amethyst", 5, "amulett", "magic_amulett.lpc", ([P_TEMPERATURE_PROTECTION, ([ T_COLD_PROT:6, T_HEAT_PROT:6 ])])}),
+ ({52,10000, "Mithrilamulett der Kaelte", "Ein Mithrilamulett der Kaelte", 1, "mithril", 50, "jadeit", 5, "amulett", "magic_amulett.lpc", ([P_TEMPERATURE_PROTECTION, ([ T_COLD_PROT:14 ])])}),
+ ({52,10000, "Mithrilamulett der Hitze", "Ein Mithrilamulett der Hitze", 1, "mithril", 50, "opal", 5, "amulett", "magic_amulett.lpc", ([P_TEMPERATURE_PROTECTION, ([ T_HEAT_PROT:12]) ])}),
+ ({52,10000, "Mithrilamulett der Macht", "Ein Mithrilamulett der Macht", 1, "mithril", 50, "aquamarin", 5, "amulett", "magic_amulett.lpc", ([P_M_HEALTH_MOD: ([P_HP:13, P_SP:13])])}),
+ ({52,10000, "Mithrilamulett des Lebens", "Ein Mithrilamulett des Lebens", 1, "mithril", 50, "zirkon", 5, "amulett", "magic_amulett.lpc", ([P_M_HEALTH_MOD: ([P_HP:29])])}),
+ ({52,10000, "Mithrilamulett der Magie", "Ein Mithrilamulett der Magie", 1, "mithril", 50, "oktarin", 5, "amulett", "magic_amulett.lpc", ([P_M_HEALTH_MOD: ([P_SP:29])])}),
+ ({52,10000, "Mithrilamulett der Geschicklichkeit", "Ein Mithrilamulett der Geschicklichkeit", 1, "mithril", 50, "smaragd", 5, "amulett", "magic_amulett.lpc", ([P_M_ATTR_MOD: ([A_DEX:5])])}),
+ ({52,10000, "Mithrilamulett der Ausdauer", "Ein Mithrilamulett der Ausdauer", 1, "mithril", 50, "saphir", 5, "amulett", "magic_amulett.lpc", ([P_M_ATTR_MOD: ([A_CON:5])])}),
+ ({52,10000, "Mithrilamulett der Intelligenz", "Ein Mithrilamulett der Intelligenz", 1, "mithril", 50, "diamant", 5, "amulett", "magic_amulett.lpc", ([P_M_ATTR_MOD: ([A_INT:5])])}),
+ ({52,10000, "Mithrilamulett der Staerke", "Ein Mithrilamulett der Staerke", 1, "mithril", 50, "rubin", 5, "amulett", "magic_amulett.lpc", ([P_M_ATTR_MOD: ([A_STR:5])])}),
+
+ ({53,10000, "Mithrilring der Berserker", "Ein Mithrilring der Berserker", 2, "mithril", 1, "riesenfelseninselperle", 5, "ring", "magic_perlenring.lpc", ([P_BERSERKER_BONUS: (["all":25])])}),
+ ({53,10000, "Mithrilring der Druiden", "Ein Mithrilring der Druiden", 2, "mithril", 1, "riesenpolarperle", 5, "ring", "magic_perlenring.lpc", ([P_ITEMD_ELEMENTAL_VALUE: 12])}),
+ ({53,10000, "Mithrilring der Nekromanten", "Ein Mithrilring der Nekromanten", 2, "mithril", 1, "riesenzombieinselperle", 5, "ring", "magic_perlenring.lpc", ([P_NEKRO_SPELLCOST: 12])}),
+ ({53,10000, "Mithrilring der Paladine", "Ein Mithrilring der Paladine", 2, "mithril", 1, "riesenschwertfischperle", 5, "ring", "magic_perlenring.lpc", ([P_PALADIN_SPELLCOST: 12])}),
+ ({53,10000, "Mithrilring der Zechpreller", "Ein Mithrilring der Zechpreller", 2, "mithril", 1, "riesentiefseeperle", 5, "ring", "magic_perlenring.lpc", ([P_ZECHPRELLER_SPELLCOST: 12])}),
+ ({53,10000, "Mithrilkette der Berserker", "Eine Mithrilkette der Berserker", 2, "mithril", 1, "riesenfelseninselperle", 5, "amulett", "magic_perlenkette.lpc", ([P_BERSERKER_BONUS: (["all":25])])}),
+ ({53,10000, "Mithrilkette der Druiden", "Eine Mithrilkette der Druiden", 2, "mithril", 1, "riesenpolarperle", 5, "amulett", "magic_perlenkette.lpc", ([P_ITEMD_ELEMENTAL_VALUE: 12])}),
+ ({53,10000, "Mithrilkette der Nekromanten", "Eine Mithrilkette der Nekromanten", 2, "mithril", 1, "riesenzombieinselperle", 5, "amulett", "magic_perlenkette.lpc", ([P_NEKRO_SPELLCOST: 12])}),
+ ({53,10000, "Mithrilkette der Paladine", "Eine Mithrilkette der Paladine", 2, "mithril", 1, "riesenschwertfischperle", 5, "amulett", "magic_perlenkette.lpc", ([P_PALADIN_SPELLCOST: 12])}),
+ ({53,10000, "Mithrilkette der Zechpreller", "Eine Mithrilkette der Zechpreller", 2, "mithril", 1, "riesentiefseeperle", 5, "amulett", "magic_perlenkette.lpc", ([P_ZECHPRELLER_SPELLCOST: 12])}),
+
+ ({54,10000, "Mithrilring des Kochs", "Ein Mithrilring des Kochs", 1, "mithril", 1, "riesensmoerskyperle", 5, "ring", "magic_perlenring.lpc", ([P_SKILL_MOD: ([SK_BAKING:1000])])}),
+ ({54,10000, "Mithrilring des Schmiedes", "Ein Mithrilring des Schmiedes", 1, "mithril", 1, "riesenmidasperle", 5, "ring", "magic_perlenring.lpc", ([P_SKILL_MOD: ([SK_ARMOURSMITHING:1000])])}),
+ ({54,10000, "Mithrilring der Gluecks", "Ein Mithrilring des Gluecks", 1, "mithril", 1, "riesentijaraperle", 5, "ring", "magic_perlenring.lpc", ([P_SKILL_MOD: ([SK_LUCK:3000])])}),
+ ({54,10000, "Mithrilring des Bergmannes", "Ein Mithrilring des Bergmannes", 1, "mithril", 1, "riesenriffperle", 5, "ring", "magic_perlenring.lpc", ([P_SKILL_MOD: ([SK_PROSPECT:1000])])}),
+ ({54,10000, "Mithrilring des Juweliers", "Ein Mithrilring des Juweliers", 1, "mithril", 1, "riesenderlimperle", 5, "ring", "magic_perlenring.lpc", ([P_SKILL_MOD: ([SK_JEWELRY:1000])])}),
+ ({54,10000, "Mithrilkette des Kochs", "Eine Mithrilkette des Kochs", 1, "mithril", 1, "riesensmoerskyperle", 5, "amulett", "magic_perlenkette.lpc", ([P_SKILL_MOD: ([SK_BAKING:1000])])}),
+ ({54,10000, "Mithrilkette des Schmiedes", "Eine Mithrilkette des Schmiedes", 1, "mithril", 1, "riesenmidasperle", 5, "amulett", "magic_perlenkette.lpc", ([P_SKILL_MOD: ([SK_ARMOURSMITHING:1000])])}),
+ ({54,10000, "Mithrilkette des Gluecks", "Eine Mithrilkette des Gluecks", 1, "mithril", 1, "riesentijaraperle", 5, "amulett", "magic_perlenkette.lpc", ([P_SKILL_MOD: ([SK_LUCK:3000])])}),
+ ({54,10000, "Mithrilkette des Bergmannes", "Eine Mithrilkette des Bergmannes", 1, "mithril", 1, "riesenriffperle", 5, "amulett", "magic_perlenkette.lpc", ([P_SKILL_MOD: ([SK_PROSPECT:1000])])}),
+ ({54,10000, "Mithrilkette des Juweliers", "Eine Mithrilkette des Juweliers", 1, "mithril", 1, "riesenderlimperle", 5, "amulett", "magic_perlenkette.lpc", ([P_SKILL_MOD: ([SK_JEWELRY:1000])])}),
+
+ ({55,10000, "Mithrilring der Amazonen", "Ein Mithrilring der Amazonen", 2, "mithril", 1, "riesenkorallenperle", 5, "ring", "magic_perlenring.lpc", ([P_AMAZONEN_SPELLCOST: 12])}),
+ ({55,10000, "Mithrilring der Waldlaeufer", "Ein Mithrilring der Waldlaeufer", 2, "mithril", 1, "riesenpiratenperle", 5, "ring", "magic_perlenring.lpc",([P_RANGER_SPELLCOST: 12]) }),
+ ({55,10000, "Mithrilkette der Amazonen", "Eine Mithrilkette der Amazonen", 2, "mithril", 1, "riesenkorallenperle", 5, "amulett", "magic_perlenkette.lpc", ([P_AMAZONEN_BONUS: (["all":25])]) }),
+ ({55,10000, "Mithrilkette der Waldlaeufer", "Eine Mithrilkette der Waldlaeufer", 2, "mithril", 1, "riesenpiratenperle", 5, "amulett", "magic_perlenkette.lpc", ([P_RANGER_BONUS: (["all":25])]) }),
+
+});
+
+
+void create()
+{
+  if (!is_clone(this_object()))
+    return;
+  ::create();
+  SetProp(P_SHORT, "Ein Juwelierkaestchen");
+  SetProp(P_LONG,
+      "Du siehst ein Juwelierkaestchen. Es ermoeglicht Dir verschiedene "+
+      "Dinge herzustellen. Mit <juweliermuster> oder kurz <jm> kannst Du "+
+      "Dir ansehen, was Du herstellen kannst. "
+      "Mit <jj> kannst Du dann die Schmuckstuecke herstellen.");
+  AddId( ({"\nJuwelierkaestchen","kaestchen","juwelierkaestchen"}) );
+  SetProp(P_NAME, "Juwelierkaestchen");
+  SetProp(P_GENDER, NEUTER);
+
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_WEIGHT, 100);
+  SetProp(P_VALUE, 100);
+  SetProp(P_MATERIAL, ({MAT_WOOD, MAT_METAL}));
+
+  AddCmd(({"jj"}), "func_jj");
+  AddCmd(({"juweliermuster","jm"}), "func_muster");
+  
+  check_sk_values();
+  SUID;
+}
+
+string show_level(){
+  return level_names[1+j_skill/250];
+}
+
+void check_sk_values() 
+{
+  NKNAME=capitalize(getuid(this_player()));    
+  call_other(SKILLMASTER, "???");
+  j_skill=SKILLMASTER->QuerySkill(this_player(),SK_JEWELRY);
+  return;
+}
+
+int obtain_jewelry_skill(object pl) {
+   int start_skill, maxskill, maxunlearn;
+   int x;
+   switch(pl->QueryProp(P_RACE)) {
+     case "Mensch": start_skill=250; maxskill=10000; maxunlearn=9000; break;
+     case "Hobbit": start_skill=500; maxskill=10000; maxunlearn=9000; break;
+     case "Zwerg": start_skill=750; maxskill=10000; maxunlearn=9000; break;
+     case "Elf": start_skill=300; maxskill=10000; maxunlearn=9000; break;
+     case "Dunkelelf": start_skill=300; maxskill=10000; maxunlearn=9000; break;
+     case "Fee": start_skill=350; maxskill=10000; maxunlearn=9000; break;
+     case "Oger": start_skill=50; maxskill=9000; maxunlearn=6000; break;
+     case "Troll": start_skill=50; maxskill=9000; maxunlearn=6000; break;
+     default: start_skill=250; maxskill=9990; maxunlearn=9000;
+   }
+   call_other(SKILLMASTER, "???");
+   SKILLMASTER->AddSkill(pl, SK_JEWELRY, start_skill, maxskill,
+       maxunlearn, SK_JEWELRY_NAME);
+   j_skill=SKILLMASTER->QuerySkill(this_player(),SK_JEWELRY);
+   
+   return 1;
+}
+
+void init() 
+{
+  ::init();
+  if(this_player() && environment() && this_player() == environment())
+  {
+    SetProp(P_KEEP_ON_SELL, getuid(environment()));
+    call_other(SKILLMASTER, "???");
+    if(SKILLMASTER->QuerySkill(this_player(),SK_JEWELRY) == 0)
+      obtain_jewelry_skill(this_player());
+    check_sk_values();
+  }
+}
+
+//-----JUWELIEREN BEGIN-----
+
+varargs mixed player_tries_to_move(mixed dest, int methods, string direction, 
+  string textout, string textin)
+{
+  PL_MOVED=1;
+  if(MENV->QueryProp(P_GHOST))
+  {
+    while(remove_call_out("sew_now") != -1);
+    return ({dest, methods, direction, textout, textin});
+  }
+  return(break_string("Du solltest Dich nicht bewegen waehrend Du juwelierst.",78));
+}
+
+string random_message(int i, int nr)
+{
+  string metal, gem;
+
+  metal = armor_types[i][5];
+  gem = armor_types[i][7];
+  if(nr == 6)
+    return ({"Das Schmuckstueck naehert sich der Vollendung.",
+             "Du bist fast fertig.",
+             "Du spuerst, dass dies ein Meisterstueck werden wird.",
+             "Du denkst . o O (Ich bin der beste Juwelier im SilberLand)",
+             "Fast hast Du es geschafft",
+             "Bald ist das neue Schmuckstueck fertig",
+             armor_types[i][3] +" naehert sich der Fertigstellung.",
+             armor_types[i][3] +" ist fast fertig.",
+             armor_types[i][3] +" wird sicher wunderschoen.",
+             "Hoffentlich gelingt dieses Schmuckstueck!"})[random(10)];
+  return ({
+      "Mit einem kleinen Hammer bearbeitest Du das Edelmetall.",
+      "Mit einem kleinen Hammer bearbeitest Du das "+CAP(metal)+".",
+      "Mit Schleifpapier bringst Du das Metall zum Glaenzen.",
+      "Mit Schleifpapier bringst Du das "+CAP(metal)+" zum Glaenzen.",
+      "Du polierst den Schmuckstein.",
+      "Langsam kann man die Form des neuen Schmuckstuecks erkennen.",
+      "Du polierst das Metall.",
+      "Du schleifst und haemmerst.",
+      "Vor Deinem inneren Auge siehst Du schon das fertige Schmuckstueck.",
+      "Du polierst "+(strstr(gem, "perle")!=-1 ? "die Perle" : "den Edelstein")+".",
+      "Du haemmerst.",
+      "Du polierst.",
+      "Du schleifst.",
+      "Du haemmerst und polierst.",
+      "Du polierst und schleifst.",
+      "Du haemmerst und schleifst.",
+      "Du polierst und haemmerst.",
+      "Du schleifst und polierst.",
+      "Du haemmerst das Metall.",
+      "Du haemmerst das "+CAP(metal)+".",
+      "Du polierst das Metall.",
+      "Du polierst das "+CAP(metal)+".",
+      "Deine Finger schmerzen von dieser Arbeit.",
+      "Du konzentrierst Dich voll auf Deine Arbeit.",
+      "Dir bricht ein Fingernagel ab.",
+      "Du brichst Dir fast einen Fingernagel ab.",
+      "Du schleifst, haemmerst und polierst.",
+      "Du haemmerst, schleifst und polierst.",
+      "Du polierst, haemmerst und schleifst.",
+      "Du haemmerst, polierst und schleifst.",
+      "Du polierst, schleifst und haemmerst.",
+      "Du schleifst, polierst und haemmerst.",
+      "Du hoffst, dass Du bald ein Meisterjuwelier bist.",
+      armor_types[i][3] +" nimmt langsam Gestalt an.",
+      "Du denkst . o O (ganz schoen teuer dieses Juwelierhandwerk)",
+      "Du denkst . o O (Ich brauche mehr (" +
+        (strstr(gem, "perle")!=-1 ? "Perlen" : "Edelsteine") + ")",
+      "Du denkst . o O (Ich brauche mehr Geld fuer Edelmetalle)",
+      "Du singst: Lustig ist das Juwelierleben, tralalala.",
+      })[random(38)];
+}
+
+varargs void sew_now(int i, int value, string *material) 
+{
+  int delay;
+
+  if(!this_player()) return;
+
+  switch(DELAY_COUNT) {
+    case 0:
+      tell_object(this_player(),
+          random_message(i, 0)+" [------]\n");
+      break;
+    case 1:
+      tell_object(this_player(),
+          random_message(i, 1)+" [*-----]\n");
+      break;
+    case 2:
+      tell_object(this_player(),
+          random_message(i, 2)+" [**----]\n");
+      break;
+    case 3:
+      tell_object(this_player(),
+          random_message(i, 3)+" [***---]\n");
+      break;
+    case 4:
+      tell_object(this_player(),
+          random_message(i, 4)+" [****--]\n");
+      break;
+    case 5:
+      tell_object(this_player(),
+          random_message(i, 5)+" [*****-]\n");
+      break;
+  }
+
+  if(DELAY_COUNT>5)
+  {
+    if(!PL_MOVED)
+    {
+      tell_object(this_player(),
+          random_message(i, 6)+" [******]\n");
+      call_out("build_armor",1, i, value, material);
+      DELAY_COUNT=0;
+      PL_MOVED=0;
+      IS_SEWING=0;
+      return;
+    }
+    else
+    {
+      this_player()->SetProp(P_TMP_MOVE_HOOK, 0);
+      tell_object(this_player(), 
+          "Du vernichtest alles und brichst den Vorgang ab.\n");
+      DELAY_COUNT=0;
+      PL_MOVED=0;
+      IS_SEWING=0;
+      return;
+    }
+  }
+
+  delay = armor_types[i][0]/4+random(2);
+  if(delay > 6)
+  {
+    if(!mappingp(armor_types[i][11]))
+      delay /= 2;
+    DELAY_COUNT++;
+  }
+  else
+   DELAY_COUNT+=2;
+  call_out("sew_now", delay, i, value, material);
+}
+
+int metal_file_name(object ob)
+{
+  if(strstr(file_name(ob), "/p/std/skills/jewelry/obj") != -1)
+    return 1;
+  return 0;
+}
+  
+int gem_file_name(object ob)
+{
+  if(strstr(file_name(ob), "/obj/gems/") != -1 ||
+     strstr(file_name(ob), "/obj/pearls/") != -1 ||
+     strstr(file_name(ob), "/p/magic/") != -1)
+    return 1;
+  return 0;
+}
+
+int func_jj(mixed in)
+{
+  int amount;
+  object *metal_present;
+  object *gem_present;
+  int r,i;
+  int value;
+  string *material;
+ 
+  r=0;
+  amount=0;
+
+  metal_present=({});
+  gem_present=({});
+  
+  NKNAME=capitalize(getuid(this_player()));    
+  notify_fail(break_string("Das geht jetzt nicht."));
+  if(this_player()->InFight()) return 0;
+  notify_fail(break_string("Was willst du herstellen? Nr. 1,2,.."+
+      " (siehe Kommando <juweliermuster>)"));
+ 
+  if(!in) return 0;
+  
+  i=to_int(in);
+
+  call_other(SKILLMASTER, "???");
+
+  if(interactive(TP) && (SKILLMASTER->QuerySkill(TP, SK_JEWELRY)==0))
+     obtain_jewelry_skill(TP);
+  
+  if(i<1 || i>(sizeof(armor_types)-1)) return 0;
+
+//  ({1,5, "lkappe", "Eine lederne Kappe", 1, "biberfell", 1, "raupenseide"}),
+
+  if(armor_types[i][1]>j_skill) return 0;
+  
+  write("Du versuchst folgendes herzustellen: "+armor_types[i][3]+".\n");
+ // write(armor_types[to_int(i)][4]);
+  amount=sizeof(metal_present=filter_array(filter_objects(all_inventory(this_player()),
+                "id",armor_types[i][5]), #'metal_file_name));
+  if(amount<armor_types[i][4]){
+    write("Fehlende Komponenten: "+capitalize(armor_types[i][5])+
+          " ("+(armor_types[i][4]-amount)+" Stk.)");
+    r=1;
+  } 
+   
+  amount=sizeof(gem_present=filter_array(filter_objects(all_inventory(this_player()),
+                "id",armor_types[i][7]), #'gem_file_name));
+  if(amount && gem_present[0]->IsUnit())
+  {
+    if( (amount=gem_present[0]->QueryProp(P_AMOUNT)) < armor_types[i][6])
+    {
+      if(r==1) write(" und "); else write ("Fehlende Komponenten: ");
+      write(capitalize(armor_types[i][7])+
+          " ("+(armor_types[i][6]-amount)+" Stk.)");
+      r=1;
+    }
+  }
+  else if(amount<armor_types[i][6] )
+  {
+    if(r==1) write(" und "); else write ("Fehlende Komponenten: ");
+    write(capitalize(armor_types[i][7])+
+          " ("+(armor_types[i][6]-amount)+" Stk.)");
+    r=1;
+  }
+  if(r==1)
+  {
+    write(".\n");
+    return 1;
+  }
+
+  if(!this_player()->QueryProp(P_TMP_MOVE_HOOK))
+  {
+     this_player()->SetProp(P_TMP_MOVE_HOOK, 
+         ({ time()+200, this_object(), "player_tries_to_move" }) );
+  }
+  else
+  {
+    write("Aus irgendeinem Grund kannst Du nichts herstellen.\n"
+        "Du wirst schon wissen, warum!\n");
+    return 1;
+  }
+  
+  value = 0;
+  material = ({});
+  write("Du nimmst folgende Dinge zur Hand:\n");
+  for(r=0;r<=armor_types[i][4]-1;r++) {
+     if((sizeof(metal_present)-1) >= r) 
+     {
+       write(" - "+metal_present[r]->QueryProp(P_SHORT)+"\n");
+       value += metal_present[r]->QueryProp(P_VALUE);
+       material += m_indices(metal_present[r]->QueryProp(P_MATERIAL));
+       metal_present[r]->remove(0);
+     }
+  }
+
+  material += m_indices(gem_present[0]->QueryProp(P_MATERIAL));
+  if(gem_present[0]->IsUnit())
+  {
+    int *cpu;
+    write(" - "+armor_types[i][6] + " " + gem_present[0]->Name(RAW)+"\n");
+    cpu = gem_present[0]->QueryCoinsPerUnits();
+    value += cpu[0] * armor_types[i][6] / cpu[1];
+    gem_present[0]->AddAmount(-armor_types[i][6]);
+  }
+  else
+  {
+    write(" - "+gem_present[0]->QueryProp(P_SHORT)+"\n");
+    value += gem_present[0]->QueryProp(P_VALUE);
+    gem_present[0]->remove(0);
+  }
+
+  write ("Du beginnst...\n");
+  tell_room(environment(this_player()),NKNAME+" packt "+
+      this_player()->QueryPossPronoun(NEUTER, WEN, SINGULAR)
+      +" Juwelierkaestchen aus und beginnt zu arbeiten.\n",
+      ({this_player()})); 
+  DELAY_COUNT=0;
+  IS_SEWING=1;
+  call_out("sew_now", 1, i, value/2, m_indices(mkmapping(material, material))); 
+
+  return 1;
+}
+
+int build_armor(int i, int value, string *material)
+{
+  object cob;
+  int suc;
+  int trivial;
+  string n;
+  string *props;
+  int j;
+  mapping old_prop;
+
+  if(!this_player()) return 0;
+  this_player()->SetProp(P_TMP_MOVE_HOOK, 0);
+  if(j_skill - 1000 > armor_types[i][1])
+    trivial = 1;
+  else
+    trivial = 0;
+  call_other(SKILLMASTER, "???");
+  //leichter etwas naehen, schwerer den skill hochzubringen
+  suc=SKILLMASTER->UseSkill(TP, SK_JEWELRY, -2500+i*8, 2000-i*10, trivial);
+  j_skill=SKILLMASTER->QuerySkill(this_player(),SK_JEWELRY);
+  if(suc>0) 
+  {
+    write ("Du erzeugst"+(trivial ? " mit Leichtigkeit" : "")+": "+armor_types[i][3]+".\n");
+    tell_room(environment(this_player()),BS(NKNAME+" erzeugt: "
+          +armor_types[i][3]+"."), ({this_player()}));
+
+    cob=clone_object(ARMOR + armor_types[i][10]);
+    cob->move(this_player(),M_NOCHECK);
+    if (sizeof(props = explode(armor_types[i][2], " ")) == 3)
+    {
+      cob->SetProp(P_NAME, ({
+            armor_types[i][2],
+            props[0] + (props[0][<1] == 'e' ? "" : "s") + " " + props[1] + " " + props[2],
+            armor_types[i][2],
+            armor_types[i][2],
+            }));
+    }
+    else
+      cob->SetProp(P_NAME,armor_types[i][2]);
+    if(suc > 9000)
+    {
+      cob->SetProp(P_SHORT,armor_types[i][3]+ " (hochqualitativ)");
+      cob->SetProp(P_NAME_ADJ, "hochqualitativ");
+      cob->SetProp(P_QUALITY_DECAY, 500);
+      if(i >= 480)
+        cob->SetProp(P_M_HEALTH_MOD, ([P_HP:1+random(4), P_SP:1+random(4)]) );
+      else
+        cob->SetProp(P_M_HEALTH_MOD, ([P_HP:1, P_SP:1]) );
+      cob->SetProp(P_TEMPERATURE_PROTECTION, ([T_COLD_PROT:1, T_HEAT_PROT:1]) );
+    }
+    else
+      cob->SetProp(P_SHORT,armor_types[i][3]);
+
+    n = strstr(armor_types[i][2], "perle") != -1 ? "n" : ""; 
+    cob->AddId(explode(lower_case(armor_types[i][2])," "));
+    cob->AddId(lower_case(armor_types[i][3]));
+    cob->AddId(armor_types[i][5] + armor_types[i][9]);
+    cob->AddId(armor_types[i][7] + n + armor_types[i][9]);
+    cob->AddId(armor_types[i][5] + armor_types[i][7] + n + armor_types[i][9]);
+
+    cob->SetProp(P_AC, armor_types[i][8]);
+    cob->SetProp(P_MATERIAL, material);
+    cob->SetProp(P_VALUE, value);
+    cob->SetProp(P_ITEMD_NO_SOCKETED, 1);
+    cob->SetProp(P_QUALITY_DECAY, cob->QueryProp(P_QUALITY_DECAY) + i/5 + suc/50);
+    cob->set_long(capitalize(armor_types[i][5]), capitalize(armor_types[i][7]),
+        armor_types[i][6], capitalize(getuid(this_player())));
+    if(mappingp(armor_types[i][11]))
+    {
+      for(j = sizeof(props = m_indices(armor_types[i][11])) - 1; j >= 0; j--)
+      {
+        if(mappingp(armor_types[i][11][props[j]]))
+        {
+          if(!mappingp(old_prop = cob->QueryProp(props[j])))
+            old_prop = ([]);
+          cob->SetProp(props[j], old_prop + armor_types[i][11][props[j]]);
+        }
+        else
+          cob->SetProp(props[j], armor_types[i][11][props[j]]);
+      }
+      cob->SetProp(P_MAGIC, i/100);
+      cob->SetProp(P_WEAR_RESTRICTIONS,
+          armor_types[i][5] == "mithril" ? ([P_LEVEL: 60]) :
+          (armor_types[i][5] == "platin" ? ([SR_SEER: 1]) : ([P_LEVEL: 20])));
+
+      if(find_player("feyaria"))
+        tell_object(find_player("feyaria"),
+            sprintf("%s*** JUWELIER *** : %O baut %s (%O)%s\n", 
+              ANSI_BOLD+ANSI_YELLOW, this_player(),cob->QueryProp(P_SHORT),
+              cob, ANSI_NORMAL));
+      write_file("/p/std/skills/jewelry/log/magic",
+            sprintf("%s  %O baut %s (%O)\n", 
+              dtime(), this_player(),cob->QueryProp(P_SHORT), cob));
+    }
+    return 1;
+  }
+  write("Du warst zu ungeschickt! Leider hast Du alles vernichtet.\n");
+  tell_room(environment(this_player()),BS("So ein Missgeschick! " + NKNAME +
+        " versagt erbaermlich beim Juwelieren."), ({this_player()}));
+  return 1;
+}
+
+int func_muster(string i){
+  int x;
+  int y;
+  int max;
+
+  check_sk_values();
+  
+  max = sizeof(level_names) - 1;
+  y=0;
+  notify_fail("Welche Seite der Muster haettes Du gerne? juweliermuster <1.." +
+      max + ">\n");
+
+  if(to_int(i) < 1 || to_int(i) > max) return 0;
+  
+  
+  write("----------------------------------------------------------------\n");
+  write("In Ausbildungsstufe "+i+" ("+level_names[to_int(i)]+") kannst Du \n");
+  write("mit Deinem momentanen Koennen folgendes herstellen:\n");
+  write("----------------------------------------------------------------\n");
+  for (x=1;x<=sizeof(armor_types)-1;x++)
+  {
+    if(to_int(i)==to_int(armor_types[x][0])&&(j_skill>=armor_types[x][1])){
+
+    y++;
+    write(sprintf("%2d. %s \n    Kosten: %1d Stk. %s und %1d Stk. %s\n",
+      x,armor_types[x][3],armor_types[x][4],
+      capitalize(armor_types[x][5]),
+     armor_types[x][6],
+      capitalize(armor_types[x][7])));
+    }
+  }
+  if(!y) write ("Noch gar nichts.\n");
+  write("----------------------------------------------------------------\n");
+  return 1;
+}

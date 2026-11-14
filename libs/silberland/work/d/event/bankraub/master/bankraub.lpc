@@ -1,0 +1,236 @@
+/*
+
+   Master fuer den Bankueberfall in Midas - Zordan@SL
+
+*/
+
+inherit "std/thing";
+
+#include <moving.h>
+#include <properties.h>
+#include <wizlevels.h>
+#include <combat.h>
+#include <bank.h>
+#include <defines.h>
+#include <moredef.h>
+#include "../bank.h"
+
+nosave object raeuber;
+nosave int gesamt,starttime,zeit;
+nosave string *wege=({ "Kyranda","Felonia","Derlim","Fischerdorf" });
+nosave mapping raub=([ ]);
+
+mapping konten = ([ ]);
+int reserve;
+ 
+create() {
+  if (is_clone(this_object())) {
+    destruct(this_object());
+    return 1;
+  }
+  seteuid(getuid(this_object()));
+  SetProp(P_NAME, "Ein Bankangestellter");
+}
+
+query_prevent_shadow() { return 1; }
+
+nosave int check_secure() {
+  object ob;
+  ob=previous_object();
+  if (IS_ARCH(getuid(ob))) return 1;
+  if (getuid(ob)=="zordan") return 1;
+  if (getuid(ob)=="malar") return 1; //September 2004 - Malar :-)
+  if (file_name(ob)[0..16] == "/d/event/bankraub") return 1;
+  write_file(BANKRAUBLOG "secure.log" ,ctime()+": "+
+    CAP(getuid(ob))+" hat versucht etwas im Bankraubmaster zu machen.\n");
+  return 0;
+}
+
+void Channel(string msg) {
+  if(!check_secure()) return;
+//  catch(VOICEMASTER->SendToChannel("Event",TO,SAY,msg));
+  CHMASTER->join("Event",TO);
+  CHMASTER->send("Event",TO,msg,MSG_SAY);
+  //TELL("angrox", sprintf("BANKRAUB: %s\n", msg));
+}
+
+string name() {
+  return "Ein Bankangestellter";
+}
+
+mixed StartEvent(int prozent,int dauer) {
+  object *spieler;
+  int anzahl,i,level,geld,richtung;
+  string plname;
+  if(!check_secure()) return -2;
+  if ((dauer < 15) || (dauer >30))
+    return "Die Dauer muss zwischen 15 und 30 Minuten liegen!";
+  if ((prozent < 1) || (prozent >50))
+    return "Es koennen nur 1-50% des Bankguthabens geraubt werden!";
+  if (!restore_object("/d/ebene/Midas/room/bank/sbank"))
+    return "ACHTUNG: Savefile der Bank konnte nicht geladen werden!";
+  gesamt=0;
+  level=0;
+  raub=([ ]);
+  richtung=random(4);
+  spieler=users();
+  anzahl=sizeof(spieler);
+  for (i=anzahl-1;i>=0;i--) {
+    if(IS_LEARNER(spieler[i])) {
+      spieler-=({ spieler[i] });
+    } else if((konten[getuid(spieler[i])] - konten[getuid(spieler[i]),1]) <= 0) {
+      spieler-=({ spieler[i] });
+    } else if(query_idle(spieler[i]) > 600) {
+      spieler-=({ spieler[i] });
+    }
+  }
+  anzahl=sizeof(spieler);
+  if (anzahl<5)
+    return "Es sollten schon mindestens 5 Spieler anwesend sein!";
+  for (i=0;i<anzahl;i++) {
+    plname=getuid(spieler[i]);
+    geld=konten[plname]-konten[plname,1];
+    write(CAP(plname)+" hat ein Guthaben von "+
+      geld+" und es werden "+
+      geld*prozent/100+" geraubt.\n");
+    gesamt+=geld*prozent/100;
+    call_other("/d/ebene/Midas/room/bank/sbank","bankraub",plname,geld*prozent/100);
+    level+=spieler[i]->QueryProp(P_LEVEL);
+    raub+=([ i: plname ; geld*prozent/100 ]);
+  }
+  write("Insgesammt stiehlt der Raeuber "+gesamt+" Muenzen.\n");
+
+  call_out("EndBankraubEvent",dauer*60+30);
+  call_out("BankRaubEvent",60);
+  Channel(
+    "AARGL. Ein Bankraeuber hat soeben die Silberbank in Midas ueberfallen "
+    "und ist mit "+gesamt+" Muenzen in Richtung "+wege[richtung]+
+    " geflohen. JEDER der ein Konto bei uns hat, sollte sich sofort auf den "
+    "Weg machen und diesen gemeinen Kerl dingfest machen!");
+
+  starttime=time();
+  zeit=dauer*60;
+  level/=anzahl;
+  if (level<20) level=20;
+  if (level>50) level=50;
+  raeuber=clone_object( RAEUBER );
+  raeuber->setzeweg(richtung);
+  raeuber->create_default_npc(level);
+  raeuber->SetProp(P_HANDS, ({" mit seinen Haenden",
+           3*raeuber->QueryProp(P_HANDS)[1] /2 ,DT_BLUDGEON}));
+  raeuber->SetProp(P_MAX_HP, 2*raeuber->QueryProp(P_MAX_HP));
+  raeuber->SetProp(P_BODY, 3*raeuber->QueryProp(P_BODY)/2);
+  raeuber->move("/d/ebene/Midas/room/bank/sbank",M_GO);
+  return "Bankevent erfolgreich gestartet.";
+}
+
+void Killed(object ob,object spieler) {
+  int a,wieviel;
+  object geld;
+  string opfer;
+  opfer="";
+  a=(starttime+zeit)-time();
+  wieviel=gesamt*a/zeit;
+  geld=CLONEOB("/obj/money");
+  geld->SetProp(P_AMOUNT, wieviel); 
+  geld->move(ob,M_NOCHECK);
+  ZENTRALBANK->PayIn(gesamt-wieviel);
+  if(find_call_out("EndBankraubEvent")+1)
+    remove_call_out("EndBankraubEvent");
+  if(find_call_out("BankRaubEvent")+1)
+    remove_call_out("BankraubEvent");
+  Channel(
+    "Super "+spieler->Name()+", Du hast den Bankraeuber geschnappt und "
+    "dingfest gemacht. Gratuliere! Von folgenden Konten hatte er Geld "
+    "entwendet:");
+  for(a=0;a<sizeof(raub);a++) {
+    opfer+=sprintf("%s: %d",capitalize(raub[a,0]),raub[a,1]);
+    if (a==(sizeof(raub)-1)) opfer+="."; 
+    else opfer+=", ";
+  }
+  Channel(opfer);
+}
+
+void EndBankraubEvent() {
+  object *inv;
+  int i;
+  if(!check_secure()) return;
+  if(find_call_out("EndBankraubEvent")+1)
+    remove_call_out("EndBankraubEvent");
+  if(find_call_out("BankRaubEvent")+1)
+    remove_call_out("BankraubEvent");
+  if (objectp(raeuber)) {
+    inv=all_inventory(raeuber);
+    for(i=sizeof(inv)-1;i>=0;i--) {
+      inv[i]->DoUnwear(1);
+      inv[i]->remove();
+    }
+    raeuber->remove();
+  }
+  ZENTRALBANK->PayIn(gesamt);
+  Channel(
+    "Wie ich soeben erfahren habe, ist der Bankraeuber mit dem gesamten Geld "
+    "entwischt. Das naechste Mal solltet Ihr auf jeden Fall schneller handeln!");
+}
+
+void BankRaubEvent() {
+  string wo,a,*b;
+  if(!check_secure()) return;
+  a="ebene";
+  b=({ "","" });
+  if (objectp(raeuber)) b=explode(file_name(ENV(raeuber)), "/");
+  else return;
+  if(b[0]=="d") a=b[1];
+  Channel(
+    "Wie mir ein Spion soeben mitteilte, befindet sich der Bankraeuber "
+    "zur Zeit auf der Flucht in der Region "+capitalize(a)+".");
+  call_out("BankRaubEvent",60);
+}
+
+int CheckMoney(int prozent) {
+  object *spieler;
+  int anzahl,i,level,geld;
+  string plname;
+  if(!check_secure()) return -2;
+  SUID;
+  if (!restore_object("/d/ebene/Midas/room/bank/sbank")) {
+    write("ACHTUNG: Savefile der Bank konnte nicht geladen werden!");
+    return -2;
+  }
+
+  gesamt=0;
+  level=0;
+  spieler=users();
+
+  anzahl=sizeof(spieler);
+  for (i=anzahl-1;i>=0;i--) {
+    if(IS_LEARNER(spieler[i])) {
+      spieler-=({ spieler[i] });
+    } else if((konten[getuid(spieler[i])] - konten[getuid(spieler[i]),1]) <= 0) {
+      spieler-=({ spieler[i] });
+    } else if(query_idle(spieler[i]) > 600) {
+      spieler-=({ spieler[i] });
+    }
+  }
+
+  anzahl=sizeof(spieler);
+  for (i=0;i<anzahl;i++) {
+    plname=getuid(spieler[i]);
+    geld=konten[plname]-konten[plname,1];
+    write(CAP(plname)+" hat ein Guthaben von "+geld+" und es werden "+
+      geld*prozent/100+" geraubt.\n");
+    gesamt+=geld*prozent/100;
+    level+=spieler[i]->QueryProp(P_LEVEL);
+  }
+
+  write("Insgesammt stiehlt der Raeuber "+gesamt+" Muenzen.\n");
+  write("Summe der Spielerlevel: "+level+"\n");
+  write("Anzahl der Spieler: "+anzahl+"\n");
+  level/=anzahl;
+  if (level<20) level=20;
+  if (level>50) level=50;
+
+  write("Der Raeuber waere Level "+level+".\n");
+  
+  return 1;
+}

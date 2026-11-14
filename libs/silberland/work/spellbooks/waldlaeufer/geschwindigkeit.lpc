@@ -1,0 +1,105 @@
+mapping prep_geschwindigkeit(object caster, mapping sinfo, int silent) 
+{  
+  if(!GuildItemTest(caster, sinfo)) return 0;
+  //Aenderungen der Werte im sinfo Mapping vermeiden!
+  if(pointerp(caster->QueryProp(P_RANGER_SPEED_ACTIVE)) && caster->QueryProp(P_RANGER_SPEED_ACTIVE)[0] > time()) { 
+    caster->Message(BS("Du musst erst deinen Kreislauf beruhigen bevor Du "
+                       "wieder Deine Kampfgeschwindigkeit erhoehst.")); 
+    return 0;}
+    
+  if(!silent){FirstPrepareFuncSuccessfull(caster, sinfo);}
+  return sinfo;
+}
+
+
+
+public void sustain_speed(object caster) {
+  int realSpeed;
+  object weapon;
+  int *activeSpeed, t, spCost;
+
+  activeSpeed = caster->QueryProp(P_RANGER_SPEED_ACTIVE);
+
+  if(!objectp(caster)) return;
+  if(!pointerp(activeSpeed)) {
+    tell_object(caster, BS("Dein Kreislauf hat sich wieder beruhigt."));
+    return;
+  }
+
+  if(activeSpeed[0] < time() && activeSpeed[1] <= 0) {
+    tell_object(caster, BS("Dein Kreislauf hat sich wieder beruhigt."));
+    caster->SetProp(P_RANGER_SPEED_ACTIVE, 0);
+    return;
+  }
+
+  // wir regeln den speed hier nach staerke der waffe. kleine waffe -> mehr speed, grosse waffe -> weniger speed
+  weapon = caster->QueryProp(P_WEAPON);
+  if(objectp(weapon)) {
+    realSpeed = activeSpeed[1] - (int) ((weapon->QueryProp(P_WC) - 200.0)/1.1);
+  } else {
+    realSpeed = activeSpeed[1];
+  }
+
+  if(realSpeed < 150+R_SKILLMASTER->HasSkill(getuid(caster), SPEED_ONE)*50) realSpeed = 150;
+  if(realSpeed > 450+R_SKILLMASTER->HasSkill(getuid(caster), SPEED_ONE)*50) realSpeed = 450;
+
+  spCost = (realSpeed/100) - 1;
+
+  if(activeSpeed[0] < time() && activeSpeed[1] > 0 || caster->QueryProp(P_SP) < spCost) {
+    tell_object(caster, BS("Deine Glieder sind erschoepft. Deine Angriffe erfolgen wieder in normaler Geschwindigkeit."));
+    t = 6;
+    caster->SetProp(P_RANGER_SPEED_ACTIVE, ({time()+t, -1}));
+    call_out("sustain_speed", t, caster); // erst nach einer kurzen pause wieder
+    return;
+  } 
+
+  caster->ModifySkillAttribute(caster, SA_SPEED, realSpeed, 4);
+  caster->AddSp(-spCost);
+  call_out("sustain_speed", 4, caster);
+  return;
+}
+
+int geschwindigkeit(object caster, mapping sinfo)
+{
+  int duration, gl, speed, success;
+  
+  if(!mappingp(sinfo=prep_geschwindigkeit(caster, sinfo, 1))) return 0;
+
+  success=SpellSuccess(caster,sinfo);
+  if(success < (-5000+random(2000)))
+  {
+    tell_object(caster, BSC("Deine Muskeln erschlaffen, Du wirst traege."));
+    caster->ModifySkillAttribute(caster, SA_SPEED, 50, 15);
+    return MISSERFOLG;
+  }
+  if(success<0)
+  {
+    tell_object(caster, BSC("Du hast Deine Koerperspannung nicht "
+                        "ausreichend erhoehen koennen."));
+    return MISSERFOLG;
+  }
+  
+  
+  gl=caster->QueryProp(P_GUILD_LEVEL);
+  if(gl > 20) gl=20;
+  duration=caster->QueryAttribute(A_DEX)+
+           random(caster->QueryAttribute(A_DEX)) + success/1000;
+  speed=100+gl/2*10;
+  
+  //Skillpoint
+  if(R_SKILLMASTER->HasSkill(getuid(caster), SPEED_ONE)) { speed+=100; }
+  if(R_SKILLMASTER->HasSkill(getuid(caster), SPEED_TWO)) { duration+=20; }
+
+  duration += duration * get_equip_bonus(caster, "geschwindigkeit") / 100;
+
+  caster->SetProp(P_RANGER_SPEED_ACTIVE, ({time()+duration, speed}));
+
+  tell_object(caster, BS("Du spannst Deine Muskeln an und beginnst deinen Gegner "
+                 "schneller anzugreifen."));
+  tell_room(ENV(caster), BS(caster->Name(WER)+" spannt die Muskeln an und beginnt "
+                 "schneller zu kaempfen."), ({caster}));
+
+  sustain_speed(caster);
+
+  return ERFOLG;
+}

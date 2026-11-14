@@ -1,0 +1,732 @@
+// Kerker ist ein virtual_room
+//
+// 04.05.2003 erstellt (Archon)
+/*
+ zuletzt bearbeitet: 27.12.2004 Clementine@SL
+ Rev 1.1 30.07.2003 Archon: rep
+ Rev 1.0 04.05.2003 Archon: erstellt
+*/
+
+#pragma strict_types
+#include "../def.h"
+inherit "/std/room";
+
+#define AUSGANG  ROOM "aussen_spitze" //schutz bei disconnect des spielers
+
+void create();
+string _query_int_long();
+string detail_boden();
+string detail_stroh();
+mixed detail_erde();
+mixed detail_stein();
+string detail_weg();
+string detail_moertel();
+mixed detail_loch();
+string read_woerter();
+int cmd_schiebe(string str);
+int cmd_ziehe(string str);
+int cmd_breche(string str);
+int cmd_durchwuehle(string str);
+int cmd_schabe(string str);
+int cmd_lockere(string str);
+int cmd_hebe(string str);
+int cmd_lege(string str);
+void handlung(int pos,object pl,object waechter);
+int exit_spalt();
+void BecomesNetDead(object spieler);
+
+int pos,rpos,informiert,rune,latte,winkel;
+object waechter;
+
+#define POS_STROH 2
+#define POS_MOERTEL 3
+#define POS_LOCKER 4
+#define POS_LOCH 5
+#define POS_MAX 6
+
+void create()
+{
+  ::create();
+  pos=1;
+  rpos=1;
+  informiert=0;
+  rune=0;
+  latte=0;
+  winkel=0;
+  waechter=0;
+
+  SetProp(P_INDOORS,1);
+  SetProp(P_LIGHT,1);
+  SetProp(P_NO_TPORT,NO_TPORT);
+  SetProp(P_NOQUIT,1); //da der raum geclont wird
+  SetProp(P_INT_SHORT,"In einem Kerker");
+
+  AddSmell(({DEFAULT_SMELL,"luft","geruch","gestank"}),
+    "Du ziehst die Luft tief durch die Nase ein. Dies bereust Du sofort, "
+    "als Du Dich beinahe, wegen des extremen Gestanks, uebergeben musst.");
+
+  AddDetail(({"kerker","kerkers","umgebung","raum","ort"}),#'_query_int_long);
+  AddDetail(({"nase"}),
+    "Deine Nase ist riesig.");
+  AddDetail(({"ausgang","westen"}),
+    "Die Tuer des Kerkers liegt im Westen. Doch leider ist sie zu "
+    "und Du bekommst sie bestimmt nicht auf.");
+  AddDetail(({"decke"}),
+    "Die Decke weisst schon leichten Moosbewuchs und schlimmer noch "
+    "Schimmelbewuchs auf.");
+  AddDetail(({"schimmel","schimmels","bewuchs","schimmelbewuchs"}),
+    "Noch nie Schimmel gesehen, oder was? Auf eine Beschreibung wird "
+    "hier jedenfalls verzichtet!");
+  AddDetail(({"beschreibung"}),
+    "Dieser Ort hier ist einfach grauenvoll.");
+  AddDetail(({"moos","bewuchs","moosbewuchs"}),
+    "Trotz des Mooses und des ekligen Schimmels sieht die Decke "
+    "noch ertraeglicher, als der Rest des Kerkers aus. "
+    "Auch sind dort keine Schmierereien zu sehen.");
+  AddDetail(({"rest"}),
+    "Ist es hier trostlos.");
+  AddDetail(({"wille","willen"}),
+    "Der muesste schon eisern sein, um es hier auszuhalten.");
+  AddDetail(({"boden","kerkerboden"}),#'detail_boden);
+  AddDetail(({"stroh","lager","haufen"}),#'detail_stroh);
+  AddDetail(({"erde"}),#'detail_erde);
+  AddDetail(({"wand","waende"}),
+    "Die Waende um Dich herum sind aus grossen Granitbloecken errichtet "
+    "worden. Obwohl kleinere, wie auch groesser Risse sie ueberziehen, "
+    "wirst Du nichtmal einen kleinen Brocken aus ihnen heraus brechen "
+    "koennen. Dies ist fuer Deine Gesundheit wohl auch besser so, denn "
+    "sonst muesstest Du die vollig schimmligen Waende auch noch anfassen.");
+  AddDetail(({"brocken"}),
+    "Du wuerdest Jahre benoetigen, um auch nur kleine Brocken aus der "
+    "Wand herauszubrechen. Vergeude also nicht Deine Zeit mit dem "
+    "Versuch.");
+  AddDetail(({"gesundheit"}),
+    "Du solltest Deine Gesundheit schonen ... sie ist das einzige, was "
+    "Dir hier bleibt.");
+  AddDetail(({"versuch"}),
+    "Probieren geht ueber studieren.");
+  AddDetail(({"ewigkeit","ewigkeiten"}),
+    "Nur die Goetter koennen die Ewigkeit ermessen.");
+  AddDetail(({"gott","goetter","goettin"}),
+    "Es gibt viele Goetter, doch gerade jetzt, wuerde Dir wohl nur "
+    "Lloth helfen.");
+  AddDetail(({"lloth"}),
+    "Lloth ist die dunkle Goettin der Dunkelelfen.");
+  AddDetail(({"dunkelelf","dunkelelfen"}),
+    "Du gruebelst eine Weile vor Dir hin, und kommst dann zu den Schluss, "
+    "dass wenn hier schon einmal jemand eingesperrt war, dies ein Dunkelelf "
+    "gewesen sein muss. Wenn dem so war, dann hat vielleicht dieser eine "
+    "Nachricht hinterlassen.");
+  AddDetail(({"schluss"}),
+    "Schluss ... oh wie schade, hast Du keine Lust mehr?");
+  AddDetail(({"lust"}),
+    "ROTWERD");
+  AddDetail(({"nachricht","nachrichten"}),
+    "Meinst Du die Schmierereien an der Wand?");
+  AddDetail(({"zeit"}),
+    "Zeit wirst Du hier drinnen genug haben.");
+  AddDetail(({"jahr","jahre","weile"}),
+    "Wenn Du hier nicht heraus kommst, wirst Du  hier wohl oder uebel "
+    "einige Jahre verbringen.");
+  AddDetail(({"bloecke","bloecken","granit",
+              "granitbloecke","granitbloecken"}),
+    "Die Waende bestehen aus grossen Granitbloecken, welche durch Fugen "
+    "und ueber die Zeit entstandene Risse von einander getrennt sind.");
+  AddDetail(({"fugen","fuge","moertelfuge","moertelfugen"}),
+    "Die Fugen schliessen die einzelnen Bloecke ab. Die Fugen bestehen aus "
+    "Moertel.");
+  AddDetail(({"haeftling","gefangener","insasse"}),
+    "Das musst wohl Du sein, oder?");
+  AddDetail(({"ort","umgebung","raum","verlies","zelle"}),
+    "Schau Dich ruhig um.");
+  AddDetail(({"spalt","spalten","spalte","ritzen","ritze","risse"}),
+    "Die werden wohl im Laufe der Zeit entstanden sein. Interessanter "
+    "als die Risse sind die Schmierereien an den Waenden.");
+  AddDetail(({"laufe","laufen"}),
+    "Laufe? Laufen? Wie, was, wann, wo ...");
+  AddDetail(({"block","granitblock"}),
+    "Er bestehen aus Granit und sitzt felsenfest in der Wand.");
+  AddDetail(({"stein","steine","steinblock","steinbloecke"}),#'detail_stein);
+  AddDetail(({"tuer","kerkertuer","seite"}),
+    "Du ruettelst an der Kerkertuer. Doch nach kurzer Zeit gibst Du "
+    "auf, denn Du siehst ein, dass Du die Tuer so nie aufbekommst.");
+  AddDetail(({"gedanke","gedanken"}),
+    "Hast Du welche?");
+  AddDetail(({"gitter"}),
+    "Die Gitter sind nahe dem Boden. Zwischen den einzelnen Stangen "
+    "ragen ein paar Strohhalme hinaus. Doch leider ist der Abstand zwischen "
+    "den Stangen zu gering, als das Du hindurch passen koenntest.");
+  AddDetail(({"stab","staebe","gitterstaebe","gitterstab","stange","stangen"}),
+    "Du kannst 4 Staebe erkennen.");
+  AddDetail(({"schmiererei","schmierereien"}),
+    "Als Du Dir die Schmierereien in der Wand ansiehst, stellst Du fest, "
+    "das es sich um Woerter handelt.");
+  AddDetail(({"wort","woerter"}),
+    "Du koenntest sie lesen.");
+  AddDetail(({"weg","idee"}),#'detail_weg);
+  AddDetail(({"platz"}),
+    "Wie bekommst Du den Stein nur heraus? Hast Du eine Idee?");
+  AddDetail(({"vorstellung"}),
+    "Strenge Deinen Geist an, vielleicht findest Du dann einen Weg hier "
+    "heraus.");
+  AddDetail(({"geist"}),
+    "Du spuerst schon den Hauch des Todes.");
+  AddDetail(({"hauch"}),
+    "Hier hauch Dich bestimmt kein anderer, als der Tod an.");
+  AddDetail(({"tod","todes"}),
+    "Hoffentlich hat der Tod wo anders zu tun.");
+  AddDetail(({"ecke","ecken"}),
+    "Natuerlich hat der Kerker Ecken und in einer davon stehen, oder besser "
+    "liegen die Ueberreste eines Bettes.");
+  AddDetail(({"bett","bettgestell","gestell","ueberreste"}),
+    "Das Bettgestell ist schon vor langer Zeit in sich zusammengebrochen. "
+    "Mehr als ein paar lange Latten, die mit Eisenwinkeln an den zerbrochenen "
+    "Beinen des Bettes befestigt sind, ist nicht uebrig. Auf dem "
+    "unbrauchbarem Gestell liegt eine voellig zerfetzte Matratze.");
+  AddDetail(({"matratze"}),
+    "Die Matratze mag vor Jahrhunderten einemal ihren Zweck erfuellt haben, "
+    "doch jetzt ist sie zerfetzt und ihre Innereien haengen heraus. "
+    "Ausserdem ist sie feucht und modrig. Darauf will bestimmt keiner "
+    "mehr schlafen.");
+  AddDetail(({"jahrhunderten"}),
+    "Die sind schon lange vorbei.");
+  AddDetail(({"bein","beine","bettbeine","gestellbeine","stummel"}),
+    "Die Beine des Bettes waren so morsch, dass sie schon vor einer Ewigkeit "
+    "in sich zusammengefallen sind. Nur noch kurze Stummel, an denen "
+    "Eisenwinkel befestigt sind, zeuge davon, dass sie jemals sich am Bett "
+    "befunden haben.");
+  AddDetail(({"zweck"}),
+    "Alles hat einen Zweck.");
+  AddDetail(({"innerei","innereien","span","spaen","holzspan","holzspaene"}),
+    "Die Innereien der Matratze sehen aus wie Holzspaene. Dies ist bestimmt "
+    "der geeignete Ort, um etwas zu verstecken. Eine gruendliche Durchsuchung "
+    "koennte Dir Deine Vermutung bestaetigen.");
+  AddDetail(({"durchsuchung"}),
+    "Willst Du die Holzspaene der Matratze durchsuchen?");
+  AddDetail(({"vermutung","vermutungen"}),
+    "Vermutungen sind manchmal richtig.");
+  AddDetail(({"latte","latten"}),
+    "Einige der Latten des Bettgestelles sehen sehr stabil aus, vielleicht "
+    "kannst Du sie aus dem Gestell herausbrechen?");
+  AddDetail(({"eisen","eisenwinkel","winkel"}),
+    "Die Winkel sind recht gross und sehen stabil aus. Vielleicht solltest "
+    "Du einmal an einem der Winkel ziehen und ihn so in Deinen Besitz "
+    "bekommen. Du kannst ihn bestimmt noch irgendwann gebrauchen.");
+  AddDetail(({"besitz"}),
+    "Du schaust Dir Deinen Besitz an und denkst .oO( Etwas mehr koennte es "
+    "schon sein )");
+  AddDetail(({"etwas"}),
+    "Wie was wo?");
+  AddDetail(({"moertel"}),#'detail_moertel);
+  AddDetail(({"werkzeug"}),
+    "Was kann Dir hier nur heraus helfen?");
+  AddDetail(({"loch"}),#'detail_loch);
+  AddDetail(({"dort","drueben"}),
+    "Meinst Du die Schmierereien?");
+  
+  AddReadDetail(({"wort","woerter","schmiererei","schmierereien"}),
+    #'read_woerter);
+  AddReadDetail(({"weiter","drueben","dinge","andere","mehr","dort",
+                  "weitere"}),
+    "Willst Du weitere Schmierereien lesen?");
+ 
+  AddCmd(({"schieb","schiebe","schieben"}),"cmd_schiebe");  
+  AddCmd(({"zieh","ziehe","ziehen"}),"cmd_ziehe");
+  AddCmd(({"brech","breche","brechen","abbrechen","herausbrechen","brich"}),
+         "cmd_breche");
+  AddCmd(({"durchsuche","durchsuchen","durchwuehle","durchwuehlen"}),
+         "cmd_durchwuehle");
+  AddCmd(({"schabe","schaben","wegschaben"}),"cmd_schabe");
+  AddCmd(({"locker","lockere","lockern"}),"cmd_lockere");
+  AddCmd(({"heb","hebe","heben","stemme","stemmen","stemm"}),"cmd_hebe");
+  AddCmd(({"leg","lege","legen"}),"cmd_lege");
+}
+
+void reset()
+{
+  ::reset();
+  rune=0; //man kann das zeug notfals erneut holen - wer weiss ob sonst jemand festhaengt
+  latte=0;
+  winkel=0;
+}
+
+string _query_int_long()
+{
+  return break_string(
+    "Du steckst im Kerker fest. Die Kerkertuer im Westen bekommst Du sicher "
+    "nicht auf. Die Waende bestehen aus soliden Granitbloecken, zwischen "
+    "denen nur schmale Fugen sind. Um Dich herum liegt sehr altes, schon "
+    "schimmliges Stroh. Nachdem hier schon seit Ewigkeiten keiner mehr "
+    "gewesen ist, riecht der Kerker muffig und wirkt in keinster Weise "
+    "einladend. In einer Ecke "
+    "siehst Du noch die Ueberreste eines alten Bettgestelles. "
+    "Du kannst Dir beim besten Willen nicht vorstellen, hier hausen "
+    "zu muessen und suchst Dir besser einen Weg hinaus. Ist Dir schon "
+    "eine Idee gekommen, wie Du dies erreichen kannst?");
+}
+
+string detail_boden()
+{
+  string ret;
+  switch(pos)
+  {
+    case 1: 
+      ret="Der gesamte Boden ist duenn mit schimmligen Stroh ausgelegt.";
+    break;
+    case POS_STROH: 
+      ret="Nachdem Du das gesamte Stroh neben dem Bettgestell aufgehaeuft "
+          "hast, erblickst Du am Boden grosse festsitzende Steinbloecke. "
+          "Wenn darunter Erde sein sollte, kommst Du jedenfalls nicht daran.";
+    break;
+    case POS_MOERTEL: 
+      ret="Gerade hast Du einen Steinblock des Bodens von seiner Moertelfuge "
+          "befreit. Doch er ist noch immer an seinem urspruenglichen Platz! "
+          "So kommst Du noch immer nicht an die Erde heran.";
+    break;
+    case POS_LOCKER:
+      ret="Gerade hast Du einen Steinblock des Bodens von seiner Moertelfuge "
+          "befreit und gelockert. Doch er ist noch immer an seinem "
+          "urspruenglichen Platz! So kommst Du noch immer nicht an die Erde "
+          "heran.";
+    break;
+    default:
+      ret="Der Boden bestehst aus grossen Steinbloecken. Einer dieser "
+          "Blocke wurde entfernt und liegt nun neben einen Strohlager. "
+          "Dort wo einmal der Block war, erkennst Du ein Loch im Boden, "
+          "in dem Du normale Erde siehst.";
+    break;
+  }
+  return break_string(ret);
+}
+
+string detail_stroh()
+{
+  if (pos<POS_STROH)
+    return break_string("Der gesamte Kerkerboden ist duenn mit altem, "
+      "leicht schimmligen Stroh bedeckt. Da das Bettgestell unbrauchbar "
+      "ist, koenntest Du vielleicht das Stroh daneben zusammen schieben, "
+      "um wenigstens ein Lager zu haben.");
+  return break_string("Das Stroh ist neben dem kaputen Bettgestell "
+    "zu einen Haufen zusammengeschoben. Wenn Du willst, koenntest Du "
+    "darauf ausruhen.");
+}
+
+mixed detail_erde()
+{
+  if (!informiert) return 0;
+  if (pos<POS_STROH)
+    return "Du siehst hier keine Erde.\n";
+  if (pos<POS_LOCH)
+    return break_string(
+      "Wenn unter den Steinbloecken Erde sein sollte, solltest Du einen "
+      "Weg finden, daran zu kommen.");
+  return "In dem von Dir geschaffenen Loch erspaehst Du Erde.\n";  
+}
+
+mixed detail_stein()
+{
+  if (pos<POS_STROH) return 0;
+  if (pos<POS_MOERTEL)
+    return break_string(
+      "Grosse Steinbloecke bedecken den Boden. Wenn Du doch nur "
+      "einen herausbekommen koenntest! Doch die Fugen sind voller "
+      "Moertel, so dass Du keinen bewegen kannst.");
+  if (pos<POS_LOCKER)
+    return break_string(
+      "Grosse Steinbloecke bedecken den Boden. Die Fugen eines "
+      "Blockes hast Du entfernt, nun sollte es Dir moeglich sein, "
+      "diesen Stein zu lockern.");
+  if (pos<POS_LOCH)
+    return break_string(
+      "Grosse Steinbloecke bedecken den Boden. Die Fugen eines "
+      "Blockes hast Du entfernt und diesen gelockert. Es sollte "
+      "ein leichtes sein, diesen Stein herauszustemmen.");
+  return break_string(
+    "Grosse Steinbloecke bedecken, bis auf eine Stelle, den gesamten "
+    "Boden. An dieser einen Stelle ist statt dessen ein Loch.");
+}
+
+string detail_weg()
+{
+  string ret;
+  if (!informiert)
+    ret="Du hast zur Zeit keine Vorstellung davon, "
+        "wie Du hier herauskommen koenntest."; 
+  else
+   switch(pos)
+   {
+    case 1: 
+      ret="Da Du kaum Erde in den Waenden oder an der Decke finden "
+          "wirst, solltest Du sie am Boden suchen. Aber dort liegt "
+          "noch allerhand stoehrendes."; 
+    break;
+    case POS_STROH: 
+      ret="Die beschriebene Erde muss unter den Steinen sein, "
+          "doch sind die Steine viel zu fest. Der Moertel in der Fuge "
+          "des eines Steines sieht sproede aus. Wenn Du ein geeignetes "
+          "Werkzeug haettest, koenntest Du den Moertel aus der Fuge "
+          "schaben.";
+    break;
+    case POS_MOERTEL: 
+      ret="Gerade hast Du einen Steinblock des Bodens von seiner Moertelfuge "
+          "befreit. Doch er sitzt noch immer fest! Du ueberlegst Dir, dass "
+          "Du als naechstes versuchen solltest, den Stein zu lockern.";
+    break;
+    case POS_LOCKER:
+      ret="Den lockeren Steinblock solltest Du nun eigentlich mit Hilfe der "
+          "Latte herausheben koennen.";
+    break;
+    case POS_LOCH:
+      ret="Du solltest nun, wie Du es gelesen hast, eine Beschwoerungsrune "
+          "in die nun sichtbare Erde legen.";
+    break;
+   }
+  return break_string(ret);
+}
+
+string detail_moertel()
+{
+  if (pos<POS_STROH) 
+    return "In den Fugen erkennst Du Moertel.\n";
+  if (pos<POS_MOERTEL) 
+    return break_string(
+      "Der Moertel in der Fuge des eines Steines sieht etwas sproede "
+      "aus, vielleicht koennte man diesen irgendwie heraus bekommen?");  
+  return "Der Moertel in den restlichen Fugen sitzt fest.\n";
+}
+
+mixed detail_loch()
+{
+  if (pos<POS_LOCH) return 0;
+  return "Im Boden siehst Du ein Loch, in welchem Du dunkle Erde "
+         "erkennen kannst.\n";
+}
+
+string read_woerter()
+{
+  string ret;
+  switch(rpos)
+  {
+    case 1: ret="Ich werde nichts verraten ..."; break;
+    case 2: ret="Ein Dunkelelf haelt alles aus ..."; break;
+    case 3: ret="Die Dunkelelfen sind die Herren aller Rassen!"; break;
+    case 4: ret="Es muss einen Weg heraus geben ..."; break;
+    case 5: ret="Jahrhunderte ..."; break;
+    case 6: ret="Ich habs ... geschafft ..."; break;
+    case 7: ret="Ich lasse die Rune hier, Dunkelelf. Du sollst dem Hexer "
+                "entkommen ..."; break;
+    case 8: ret="Leg sie in nackte Erde und ihre Macht sei entfaltet."; 
+            informiert=1; break;
+    case 9: rpos=1; return "Du hast alles gelesen, was hier stand.\n"; break;
+  }
+  rpos++;
+  return ret+"\nDort drueben steht noch mehr.\n";
+}
+
+int cmd_schiebe(string str)
+{
+  if (!S_STANDARD->check_cmd(str,
+       "stroh&zusammen|beiseite",
+       "Was willst Du beiseite schieben?|"
+       "Du willst das Stroh wohl ZUSAMMEN schieben, oder?"))
+    return 0;
+  if (pos>=POS_STROH)
+    return notify_fail("Aber das hast Du doch schon gemacht.\n"),0;
+  pos++;
+  write(break_string(
+    "Du schiebst das gesamte Stroh schoen saeuberlich auf einen "
+    "Haufen neben dem Bettgestell zusammen und legst dabei grosse "
+    "Steinbloecke am Boden frei."));
+  return 1;
+}
+
+int cmd_ziehe(string str)
+{
+  object ob;
+  if (!S_STANDARD->check_cmd(str,
+       "eisen|winkeleisen|winkel",
+       "Woran willst Du ziehen?"))
+    return 0;
+  if (!informiert)
+    return notify_fail(break_string(
+      "Du solltest erst eine Idee haben, wie Du hier heraus kommst, bevor "
+      "hier an etwas ziehst.")),0;
+  if (winkel)
+    return notify_fail("Aber Du hast doch schon einen Winkel!\n"),0;
+  winkel=1;
+  write(break_string(
+    "Du ziehst kraeftig an dem Winkel und dieser loest sich sofort "
+    "von dem morschen Bein des Gestelles und eine kurze Zeit spaeter "
+    "auch von der an ihm befestigten Latte."));
+  ob=clone_object(OBJ "winkel");
+  if (ob->move(PL,M_GET)<1)
+  {
+    ob->move(ME,M_NOCHECK);
+    write("Du laesst den Winkel fallen.\n");
+  }
+  return 1;
+}
+
+int cmd_breche(string str)
+{
+  object ob;
+  if (!S_STANDARD->check_cmd(str,
+       "latte&gestell|bett|bettgestell",
+       "Was willst Du abbrechen?|"
+       "Woraus willst Du die Latte heraus brechen?"))
+    return 0;
+  if (!informiert)
+    return notify_fail(break_string(
+      "Du solltest erst eine Idee haben, wie Du hier heraus kommst, bevor "
+      "hier etwas abbrichst.")),0;
+  if (latte)
+    return notify_fail(break_string(
+      "Aber Du hast doch schon eine Latte herausgebrochen!")),0;
+  latte=1;
+  write(break_string(
+    "Du schaust Dir das Gestell genauer an, und findest eine geeignete "
+    "Latte, die Du glaubst herausbrechen zu koennen. Gedacht, ein wenig die "
+    "Muskeln gespannt und schon hast Du die Latte herausgebrochen."));
+  ob=clone_object(OBJ "latte");
+  if (ob->move(PL,M_GET)<1)
+  {
+    ob->move(ME,M_NOCHECK);
+    write("Du laesst die Latte fallen.\n");
+  }
+  return 1;
+}
+
+int cmd_durchwuehle(string str)
+{
+  object ob;
+  if (!S_STANDARD->check_cmd(str,
+       "matratze|innereien|spaene|holzspaene",
+       "Was willst Du durchwuehlen?"))
+    return 0;
+  if (!informiert)
+    return notify_fail(break_string(
+      "Du solltest erst eine Idee haben, wie Du hier heraus kommst, bevor "
+      "hier etwas durchwuehlst.")),0;
+  if (rune)
+    return notify_fail(break_string(
+      "Aber Du hast doch schon eine Beschwoerungsrune "
+      "gefunden! Wozu noch weiter suchen?")),0;
+  rune=1;
+  write(break_string(
+    "Du wuehlst Dich durch die Holzspaene der Matratze. Zerrst sie heraus, "
+    "schiebst sie von links nach rechts und wieder zurueck. Dann endlich "
+    "spuerrst Du einen kleinen Gegenstand und umfasst ihn mit Deiner Hand. "
+    "Kaum hast Du ihn erfasst, ziehst Du ihn heraus und erspaehst eine "
+    "kleine Rune."));
+  ob=clone_object(OBJ "beschwoerungsrune");
+  if (ob->move(PL,M_GET)<1)
+  {
+    ob->move(ME,M_NOCHECK);
+    write("Du laesst die Rune fallen.\n");
+  }
+  return 1;
+}
+
+int cmd_schabe(string str)
+{
+  object winkel;
+  if (pos<POS_STROH) return 0;
+  if (!S_STANDARD->check_cmd(str,
+       "moertel&fuge",
+       "Was willst Du wegschaben?|Woraus willst Du den Moertel schaben?"))
+    return 0;
+  if (pos>=POS_MOERTEL) 
+    return notify_fail("Aber das hast Du doch schon getan.\n"),0;
+  winkel=(object)S_STANDARD->present_clone(OBJ "winkel",PL);
+  if (!objectp(winkel))
+    return notify_fail("Dir fehlt ein dazu geeignetes Werkzeug!\n"),0;
+  pos++;
+  winkel->remove(1);
+  write(break_string(
+    "Du kniest Dich hin und beginnst die Fuge mit dem Eisenwinkel zu "
+    "bearbeiten. Mit viel Geduld schaffst Du es den Moertel erst von "
+    "der einen Seite und dann auch von den anderen drei Seiten des "
+    "Steinblockes heraus zu schaben. Geschafft! Du wischst Dir den "
+    "Schweiss von der Stirn."));
+  return 1;
+}
+
+int cmd_lockere(string str)
+{
+  object latte;
+  if (pos<POS_MOERTEL) return 0;
+  if (!S_STANDARD->check_cmd(str,
+       "stein|steinblock|block|steinbloecke|bloecke",
+       "Was willst Du lockern?"))
+    return 0;
+  if (pos>=POS_LOCKER) 
+    return notify_fail("Aber das hast Du doch schon getan.\n"),0;
+  latte=(object)S_STANDARD->present_clone(OBJ "latte",PL);
+  if (!objectp(latte))
+    return notify_fail("Dir fehlt ein dazu geeignetes Werkzeug!\n"),0;
+  pos++;
+  write(break_string(
+    "Du setzt die Spitze der Latte in der freigeschabten Fuge an, "
+    "drueckst und ziehst kraeftig, wackelst an der Latte, bis "
+    "sich der Steinblock sichtbar gelockert hat!"));
+  return 1;
+}
+
+int cmd_hebe(string str)
+{
+  object latte;
+  if (pos<POS_LOCKER) return 0;
+  if (!S_STANDARD->check_cmd(str,
+       "stein|steinblock|block|steinbloecke|bloecke&hoch|heraus|weg",
+       "Was willst Du herausheben?|"
+       "Du willst den Steinblock bestimmt HERAUS heben, oder?"))
+    return 0;
+  if (pos>=POS_LOCH) 
+    return notify_fail("Aber das hast Du doch schon getan.\n"),0;
+  latte=(object)S_STANDARD->present_clone(OBJ "latte",PL);
+  if (!objectp(latte))
+    return notify_fail("Dir fehlt ein dazu geeignetes Werkzeug!\n"),0;
+  latte->remove(1);
+  pos++;
+  write(break_string(
+    "Du rammst an einer Ecke die Spitze der Latte in die Fuge und "
+    "hebelst dann den Steinbrocken etwas heraus und zur Seite. "
+    "Gerade als Du die Latte umsetzen willst, um den Stein vollstaendig "
+    "heraus zu hebeln, bricht diese entzwei. Zum Glueck ist dies "
+    "nich so schlimm, da Du nun, nachdem der Stein schon halb draussen "
+    "liegt, diesen mit Deinen Haenden fassen kannst und unter lautem "
+    "Gestoehne zur Seite schiebst. Endlich kannst Du die Erde in dem "
+    "entstandenem Loch sehen."));
+  return 1;
+}
+
+int cmd_lege(string str)
+{
+  object rune;
+  if (pos<POS_LOCH) return 0;
+  if (!S_STANDARD->check_cmd(str,
+       "rune|beschwoerungsrune&erde|loch",
+       "Was willst Du wohin legen?|"
+       "Du willst die Rune bestimmt in die Erde legen, oder?"))
+    return 0;
+  if (pos>=POS_MAX) 
+    return notify_fail("Aber das hast Du doch schon getan.\n"),0;
+  rune=(object)S_STANDARD->present_clone(OBJ "beschwoerungsrune",PL);
+  if (!objectp(rune))
+    return notify_fail("Aber Du hast gar keine Beschwoerungsrune!\n"),0;
+  rune->remove(1);
+  pos++;
+  write(break_string(
+    "Du legst die Rune, nicht wissend, was passiert, vorsichtig in die "
+    "Erde hinein. Kaum hat die Rune diese beruehrt strahlt sie blau "
+    "auf und blendet Dich. Auch wenn Du nichts sehen kannst, merkst "
+    "Du trotzdem, wie sich der Boden unter Deinen Fuessen hebt und "
+    "mit lautem Getoese auseinander bricht. Als sich Dein Sehvermoegen "
+    "wieder einstellt, siehst Du einen riesigen Erdenwaechter vor "
+    "Dir aufragen."));
+  waechter=clone_object(NPC "erdenwaechter");
+  waechter->move(ME,M_GO|M_SILENT);
+  PL->SetProp(P_PARALYZED,([
+      PARALYZE_TIME:-1,
+      PARALYZE_MSG:
+       "Du bist von dem Erdenwaechter gebannt.\n",
+      PARALYZE_MSG_OTHER:break_string(
+       PL->Name(WER,1)+" ist von dem Erdenwaechter gebannt."),
+      PARALYZE_END:"Der Erdenwaechter verschwindet.\n",
+      PARALYZE_END_OTHER:"Der Erdenwaechter verschwindet.\n" ]));
+  call_out("handlung",10,1,PL,waechter);
+  return 1;
+}
+
+void handlung(int pos,object pl,object waechter)
+{
+  tell_room(ME,"\n");
+  switch(pos)
+  {
+    case 1:
+      tell_room(ME,break_string(
+        "Wer wagt es mir zu Befehlen? Wer stoert meine Ruhe?",78,
+        "Der Waechter fragt: "));
+      tell_room(ME,break_string(
+        "Ich, oh Erdenwaechter. Ich benoetige Eure Hilfe, oh Freund "
+        "der dunklen Maechte!",78,"Mit zittriger Stimme antwortest Du: "));
+    break;
+    case 2:
+      tell_room(ME,break_string(
+        "Du traust Dir viel zu, Du Wurm! Warum sollte ich Dir helfen? "
+        "Ich werde Dich eher zerquetschen.",78,
+        "Der Waechter brummt boese: "));
+      tell_room(ME,break_string(
+        "Waechter ich bin hier um die verfluchten Lichtwesen zu vernichten, "
+        "doch wurde ich hier gefangen. Wenn Du mir hilfst, werden viele "
+        "der Verfehlten sterben.",78,"Du versuchst zu ueberzeugen: "));
+    break;
+    case 3:
+      tell_room(ME,break_string(
+        "Der Waechter ueberlegt eine Weile und knurrt dann ein wenig "
+        "enttaeuscht eine Zustimmung. Du atmest erleichtert auf, als Dir "
+        "Deine Leben zugebilligt wurde."));
+      tell_room(ME,break_string(
+        "Ich werde Dir einen Weg oeffnen, doch etwas wird es Dich kosten. "
+        "Stimmst Du diesem Packt zu?",78,"Der Waechter knurrt: "));
+    break;
+    case 4:
+      tell_room(ME,break_string(
+        "Du zauderst nicht lange und erklaerst Dich einverstanden. "
+        "Was bleibt Dir auch anderes uebrig. Einen anderen Weg hier heraus "
+        "wirst Du nicht finden. Ausserdem treibt Dich der Hass gegen Deine "
+        "Kerkermeister an."));
+    break;
+    default:
+      tell_room(ME,break_string(
+        "So sei es dann! Ich erfuelle meinen Teil und nehme mir, was "
+        "mir dafuer zusteht.",78,"Der Waechter brummt:"));
+      tell_room(ME,break_string( //kann an den raum - da er ja alleine ist
+        "Der Waechter streckt seine Hand aus und beruehrt "
+        "Dich, sofort spuerst Du, wie Deine Lebensenergie Dich verlaesst. "
+        "Als er Dich ausgesogen hat, verblasst der Waechter und hinterlaesst "
+        "einen Spalt am Boden."));        
+      PL->SetProp(P_PARALYZED,0);
+      PL->AddHp(-200);
+      P_ARCHON_QUESTMASTER->advance_quest(PL); //7->8
+      AddExit("spalt",#'exit_spalt);
+      waechter->remove(1);
+      return;
+    break;
+  }
+  call_out("handlung",10,++pos,pl,waechter);
+}
+
+int exit_spalt()
+{
+  write(break_string("Du kletterst den Spalt hinab und folgst dann "
+    "einen dunklen Tunnel. Nach einigen Metern endet dieser an der "
+    "auesseren Turmwand, zwei Meter ueber dem Boden. Du springst "
+    "kurzentschlossen hinab und willst Dich dann sofort auf dem Weg "
+    "zu der Priesterin machen."));
+  PL->move(ROOM "vorturm",M_GO,"","klettert hinab","erscheint");
+  remove(1); //raum zerstoeren
+  return 1;
+}
+
+void BecomesNetDead(object spieler)
+{
+  spieler->move(AUSGANG,M_SILENT|M_NOCHECK);
+  remove(1);
+}
+
+/*
+Idee:
+Objekte
+Matratze - Rune darin versteckt
+Beschwoerungsrune - nur in kontakt mit erde wirksam
+Reste eines Bettgestells - Holzstab, Eisenwinkel
+
+stroh wegschieben
+fugen von stein wegschaben (eisenwinkel)
+stein am boden lockern (ruetteln mit Holzstab)
+stein herausheben
+rune in loch legen
+erdgeist und waechter der erde erscheint (Was willst Du sterblicher?)
+
+*/

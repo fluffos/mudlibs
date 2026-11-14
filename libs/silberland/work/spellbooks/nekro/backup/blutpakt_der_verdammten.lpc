@@ -1,0 +1,146 @@
+/*
+ * Blutpakt der Verdammten
+ *
+ * Pakt ist zwischen living|npc & living|npc moeglich
+ * Pakt mit npc fuehrt zu blood_pact
+ * Pakt mit living fuehrt zu dark_pact
+ * Blutpakt heilt npc - selber schaden (2x)
+ * Dunklerpakt heilt living (1x)
+ *
+ * Kosten: 100 MP
+ * Level : 6 
+ * Objekte: /gilden/nekromanten/obj/blood_pact
+ * Objekte: /gilden/nekromanten/obj/dark_pact
+ *
+ * Skillpunktefaehig bei body (npc)
+ *
+ */
+
+int check_blutpakt(object caster, mapping sinfo) 
+{
+  object victim;
+  victim=FindLivingVictim(sinfo[SI_SKILLARG],caster,
+                         BS("Mit welchem Untoten willst Du den "
+                         "Blutpakt schliessen?"));
+  if (!victim)
+    return 0;
+  if(!victim->is_class_member(CL_UNDEAD)) 
+  {
+    write(BS(sprintf("%s Nur mit einem Untoten kannst Du einen Blutpakt "
+            "schliessen!", random_fluch())));
+    return 0;
+  }
+  if(victim->QueryProp(P_NEKRO_BLOOD_PACT) || present(NEKRO_BLOOD_PACT, victim))
+  {
+    if(victim == caster) 
+      write("Auf Dir liegt schon ein Pakt des Blutes!\n");
+    else 
+      write(BS(sprintf("Auf diese%s Untoten liegt bereits ein Blutpakt!",
+              victim->QueryProp(P_GENDER)==FEMALE?"r":"m")));
+    return 0;
+  }
+  return 1;
+}
+
+int prep_blutpakt(object caster, mapping sinfo) 
+{
+  int dam,suc,nr,i;
+  object victim,ob, corpse;
+  if(!check_blutpakt(caster, sinfo)) 
+    return 0;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  write(BS("Mit einem schnellen Schnitt fuegst Du Dir eine Wunde zu und "
+        "laesst dein unheiliges Blut auf den Boden tropfen."));
+  tell_room(ENV(caster), BS(sprintf("%s fuehrt mit %s Haenden seltsame Gesten "
+      "durch. Schnell einen Dolch gezueckt fuegt %s sich einen Schnitt an der "
+      "Hand zu.", caster->Name(WER), caster->QueryPossPronoun(WESSEN,3),
+      caster->QueryPronoun(WER))), ({caster}));
+  do_spellbook_damage(random(20)+5, caster, "Ein schneller Schnitt", 
+      ({"ging etwas zu tief.", MSG_EMOTE}) );
+  if(caster->QueryProp(P_GHOST))
+    return 0;
+  return 1;
+}
+
+int blutpakt(object caster, mapping sinfo) 
+{
+  int suc, pct, body;
+  object victim,ob;
+
+  victim=FindLivingVictim(sinfo[SI_SKILLARG],caster,
+                         "Mit welchem Untoten moechtest Du den Blutpakt "
+                         "schliessen?\n");
+  if (!victim ||!check_blutpakt(caster, sinfo))
+    return 0;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+
+  suc=SpellSuccess(caster,sinfo);
+  if (suc<random(-5000)) 
+  {
+    tell_room(ENV(caster), "Irgendetwas ging katastrophal schief!\n", 
+        ({caster}));
+    tell_object(caster, BS(sprintf("%s Irgendetwas ging schief!", 
+            random_fluch())));
+    if(!query_once_interactive(victim)) 
+    {
+      caster->RemoveDefender(victim);
+      victim->Kill(caster);
+    }
+    else {
+      do_spellbook_damage(random(30)+20, caster, "Ein blutiger Pakt", 
+          ({"ist nichts fuer Anfaenger.", MSG_EMOTE}));
+    }
+    return MISSERFOLG;
+  }
+  else if (suc<0) 
+  {
+    tell_room(ENV(caster),sprintf("%s Nichts passiert.\n",random_fluch()));
+    return MISSERFOLG;
+  }
+  if(!query_once_interactive(victim)) 
+  {
+    body=victim->QueryProp(P_BODY)+(caster->QueryProp(P_GUILD_LEVEL)+
+        caster->QueryProp(P_GUILD_CIRCLE))*3*suc/MAX_ABILITY;
+//todo body durch skillpunkte veraendern
+    victim->SetProp(P_NEKRO_BLOOD_PACT, ({victim->QueryProp(P_BODY), }));
+    victim->SetProp(P_BODY, body);
+    
+    victim->ModifySkillAttribute(TO, SA_SPEED, (100+(suc/1000)), (500+
+          (suc/20)));
+    tell_room(ENV(caster), BS(sprintf("%s scheint nun mehr geschuetzt zu sein "
+            "und sich schneller zu bewegen." , victim->Name(WER))));
+    ob=clone_object(OBJ "blood_pact");
+    ob->move(victim, M_NOCHECK);
+    ob->Setup(victim, 1);
+  }
+  else 
+  {
+    tell_room(ENV(caster), BS(sprintf("%s sieht viel maechtiger und "
+            "staerker aus!", victim->Name(WER))), ({caster, victim}));
+    tell_object(victim, "AAAAAH DU FUEHLST DICH VIEL BESSER!\n");
+    if(caster != victim) 
+    {
+      tell_object(caster, BS(sprintf("%s sieht gleich viel besser aus! "
+              "Vergiss bloss nicht etwas dafuer zu verlangen!", 
+              victim->Name(WER))));
+    }
+    victim->SetProp(P_HP, victim->QueryProp(P_MAX_HP));
+    victim->SetProp(P_SP, victim->QueryProp(P_MAX_SP));
+    ob=clone_object(OBJ "dark_pact");
+    ob->Setup(victim, 3);
+    ob->move(victim, M_NOCHECK);
+  }
+  return ERFOLG;
+}
+

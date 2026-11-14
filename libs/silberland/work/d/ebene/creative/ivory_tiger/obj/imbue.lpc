@@ -1,0 +1,152 @@
+#include <language.h>
+#include <properties.h>
+#include <material.h>
+#include "../files.h"
+#include "../quest.h"
+#include <moving.h>
+#include <wizlevels.h>
+
+#define DEFAULT_SP_BONUS (15+random(6))
+
+inherit "std/thing";
+
+private string owner;
+
+void _set_autoloadobj(mixed data)
+{
+  if (mappingp(data) && sizeof(data)==1) {
+    owner=data["owner"];
+  }
+  return;
+}
+
+mapping _query_autoloadobj()
+{
+  return (["owner": owner]);
+}
+
+create()
+{
+  if (!is_clone(this_object())) return;
+
+  ::create();
+  SetProp(P_NAME, "Balsam");
+  SetProp(P_SHORT, "Ein Balsam");
+  SetProp(P_IVORY, 1);
+  SetProp(P_LONG, BS(
+          "Mit diesem Balsam kannst Du eine beliebige Ruestung Deiner"
+         +" Wahl einbalsamieren. Gar fremdartige Gerueche dringen aus dem"
+         +" Inneren und Du vermutest, dass diesem Balsam eine starke"
+         +" Macht innewohnt."));
+  SetProp(P_WEIGHT, 500);
+  SetProp(P_GENDER, MALE);
+  SetProp(P_MATERIAL, ([MAT_FAT:60, MAT_MISC_HERBAL:30, MAT_MAGIC:10]));
+  AddId("balsam");
+  AddId(IV_IMBUE);
+  SetProp(P_VALUE, 1000);
+  AddCmd(({"balsamier", "balsamiere"}), "balm");
+  owner="";
+}
+
+balm(str)
+{
+  object a;
+  string was;
+  mapping t, h_mod;
+
+  notify_fail("Was moechtest Du einbalsamieren?\n");
+  if (!str)
+    return 0;
+  if (sscanf(str, "%s ein", was)!=1)
+    return 0;
+  if (!(a=present(was, TP))) {
+    write("Das hast Du doch gar nicht bei Dir!\n");
+    return 1;
+  }
+  if (!IS_ARCH(TP) && !TP->QueryQuest(IV_QUEST)) {
+    write("Du musst den Balsam erst Vannor zurueckbringen!\n");
+    return 1;
+  }
+  if (!a->id("Ruestung")) {
+    write("Der Balsam macht nur bei Ruestungen einen Sinn!\n");
+    return 1;
+  }
+  if (a->QueryProp(P_AC)<4) {
+    write(BS(
+        "Die Ruestung bietet doch von vornherein kaum Schutz, wie willst"
+       +" Du da durch den Balsam noch mehr erreichen."));
+    return 1;
+  }
+  if (a->QueryProp(P_APPLIED_BALM)==1) {
+    write(BS(
+	  "Diese Ruestung wurde scheinbar schon einmal behandelt,"
+	 +" Dein Balsam wuerde keinerelei Wirkung zeigen."));
+    return 1;
+  }
+  if (owner=="") {
+    //schiefgelaufen!
+    raise_error("illegal use of imbue item!!\n");
+    TO->remove();
+    return 1;
+  }
+  if (call_other(ITEMD, "GenerateRare", a, 1)!=1) {
+    write(BS("Du schmierst ein wenig von dem Balsam auf "+a->name(WER)
+	   +". Leider kannst Du keinerlei einsetzende Wirkung erkennen,"
+	   +" vermutlich vertraegt "+a->name(WER)+" sich nicht mit dem"
+	   +" Balsam."));
+    return 1;
+  }
+  write(BS("Du balsamierst "+name(WEN, 2)+" heftig ein und siehst "
+      +name(WEN, 2)+" einmal kurz heftig aufgluehen. Du bist fast geblendet"
+      +" von dem hellen Licht."));
+  a->SetProp(P_APPLIED_BALM, 1);
+  call_other(OBJ("res_arm_check"), "???");
+  a->SetProp(P_MAY_WEAR_BALMED, owner);
+  a->SetProp(P_WEAR_FUNC, find_object(OBJ("res_arm_check")));
+  a->SetProp("itemd", a->QueryProp("itemd")+({sprintf("wurde von %s mit "
+          "einem magischen Balsam eingerieben", TP->name(WER))}));
+  h_mod=a->QueryProp(P_M_HEALTH_MOD);
+  if (mappingp(h_mod))
+    h_mod=([ P_HP : h_mod[P_HP], P_SP : h_mod[P_SP] + DEFAULT_SP_BONUS ]);
+  else
+    h_mod=([ P_HP : 0 , P_SP : DEFAULT_SP_BONUS ]);
+  a->SetProp(P_M_HEALTH_MOD, h_mod);
+  TO->remove();
+  return 1;
+}
+
+int set_may_apply_balm(string str) {
+  if (!IS_ARCH(TP) && 
+      file_name(PO)[0..39]!="/d/dschungel/feyaria/tijara/npc/elsurion" &&
+      file_name(PO)[0..19]!="/p/daemon/itemd/cain")
+    return 0;
+  owner=str;
+  return 1;
+}
+
+string get_owner() {
+  return owner;
+}
+
+string get_status() {
+  return CAP(owner)+" darf den Balsam benuetzen.\n";
+}
+
+
+string _query_info() {
+  string txt;
+
+  txt="Der Balsam wird eine Ruestung Deiner Wahl moeglicherweise aufwerten. Er scheint von innen"
+     +" heraus zu gluehen.";
+  if (!TP->QueryQuest(IV_QUEST))
+    txt+=" Du weisst noch nicht genau, welche Kraft dem Balsam innewohnt, Du musst ihn wohl"
+        +" zuerst noch Vannor zeigen!";
+  else
+     txt+=" Du vermutest, dass ihm eine starke Macht innewohnt. Vermutlich ist"
+         +" das der Balsam, vom dem Vannor sagte, er habe sehr seltene magische Eigenschaften, die"
+         +" sich auf die Ruestung uebertragen wuerden. Sei also weise bei Deiner Entscheidung,"
+         +" welche Ruestung Du damit einbalsamierst, denn Du kannst den Balsam nur ein einziges Mal"
+         +" benuetzen!";
+  return BS(txt);
+}
+

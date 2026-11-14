@@ -1,0 +1,130 @@
+// /d/huegelland/feyaria/weg/obj/stierhoerner.c
+// Hoerner eines Stieres
+// 1998-11-28  Feyaria@SilberLand
+
+inherit "std/armour";
+
+#include <properties.h>
+#include "../def.h"
+
+void create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  SetProp (P_SHORT, "Steigeisen");
+  SetProp (P_LONG, 
+    "Steigeisen, wie man sie sich auf die Stiefel schnallt, wenn man ueber "
+    "ein Eisfeld gehen der einen hohen Berg besteigen will. Sie haben viele "
+    "Spitzen an der Unterseite, sodass man in keinem Gelaende ausrutschen "
+    "kann.");
+  SetProp (P_NAME, "Steigeisen");
+  SetProp (P_PLURAL, 1);
+  SetProp (P_GENDER, NEUTER);
+  AddId( ({"steigeisen"}) );
+  SetProp(P_INFO,
+      "Die Steigeisen kann man statt Schuhen tragen oder sie auch daran "
+      "befestigen, was sicher komfortabler ist.");
+
+  SetProp (P_VALUE, 500);
+  SetProp (P_WEIGHT, 1000);
+  SetProp (P_NOBUY, 1);
+  SetProp (P_MATERIAL, MAT_IRON);
+  SetProp (P_ARMOUR_TYPE, AT_BOOT);
+  SetProp (P_AC, 5);
+  SetProp (P_EFFECTIVE_WC, 145);
+
+  AddCmd( ({"befestige", "befestig"}), "befestigen");
+}
+
+mapping new_material( mapping m1, mapping m2, int w1, int w2)
+{
+  mapping newmat, newmat1, newmat2;
+  string *mat, *mat2;
+  int *perc, *perc2;
+  int w, i;
+
+  w = w1 + w2;
+  mat=m_indices(m1);
+  perc=m_values(m1);
+  mat2=m_indices(m2);
+  perc2=m_values(m2);
+  newmat1=([]);
+  newmat2=([]);
+
+  for(i=sizeof(mat);i--;i>=0)
+    newmat1+=([mat[i]:perc[i]*w1/w]);
+  for(i=sizeof(mat2);i--;i>=0)
+    newmat2+=([mat2[i]:perc2[i]*w2/w]);
+//  DB(sprintf("%O\n%O\n",newmat1,newmat2));
+  mat+=mat2;
+
+  newmat = ([]);
+  while(sizeof(mat))
+  {
+    newmat += ([mat[0]: newmat1[mat[0]] + newmat2[mat[0]] ]);
+    mat -= ({mat[0]});
+  }
+//  DB(sprintf("NEWMAT: %O\n", newmat));
+
+  w = 0;
+  for(i=sizeof(newmat);i--;i>=0)
+    w += m_values(newmat)[i];
+
+  if(w != 100)
+    newmat[m_indices(newmat)[0]] = m_values(newmat)[0] + 100 - w;
+
+//  DB(sprintf("NEWMAT: %O\n", newmat));
+  return newmat;
+}
+
+int befestigen(string str)
+{
+  string s1, s2;
+  object stiefel;
+  string *old_adj;
+  int ac, w1, w2, w;
+
+  notify_fail("Was willst Du an was befestigen?\n");
+  if( !str ) return 0;
+  if( sscanf(str, "%s an %s", s1, s2) != 2 ) return 0;
+  if( !id(s1) ) 
+    return notify_fail("Das kannst Du nicht an "+CAP(s2)+" befestigen!\n"),0;
+  if( !stiefel=present(s2, TP) )
+    return notify_fail("Aber Du hast ja gar kein "+CAP(s2)+"!\n"),0;
+  if( stiefel->QueryProp(P_ARMOUR_TYPE) != AT_BOOT )
+    return notify_fail("Du kannst die Steigeisen nur an Stiefeln "
+        "befestigen!\n"),0;
+  if(function_exists("long",stiefel)[0..4] != "/std/" || 
+      function_exists("short",stiefel)[0..4] != "/std/")
+    return notify_fail( BS("Irgendwie ist "+stiefel->name(WER,1)+" nicht "
+        "geeignet, um die Steigeisen daran zu befestigen.")),0;
+  if( stiefel->QueryProp(P_EFFECTIVE_WC) )
+    return notify_fail(BS("An "+stiefel->name(WEM,1)+" kannst Du die Steigeisen "
+        "nicht befestigen, weil da schon Steigeisen oder so etwas aehnliches "
+        "befestigt sind.")),0;
+  if( stiefel->QueryProp(P_WEIGHT)>3000)
+    return notify_fail(BS("An "+stiefel->name(WEM,1)+" kannst Du die Steigeisen "
+        "nicht befestigen, weil "+stiefel->QueryPronoun(WER)+" sonst zu schwer "
+        "wuerde"+(stiefel->IsPlural() ? "n" : "")+".")),0;
+
+  write("Du befestigst die Steigeisen an "+stiefel->name(WEM,1)+".\n");
+  say(CAP_TPN+" befestigt Steigeisen an "+stiefel->name(WEM,0)+".\n", ({TP}) );
+
+  stiefel->SetProp(P_SHORT, stiefel->QueryProp(P_SHORT)+ " mit Steigeisen");
+  stiefel->SetProp(P_LONG, stiefel->QueryProp(P_LONG)+ "Steigeisen sind an der "
+      "Unterseite befestigt, um auf eisigem Untergrund besseren Halt zu "
+      "haben. Natuerlich tut es auch viel mehr weh, wenn man damit zutritt.");
+
+  if( (ac=stiefel->QueryProp(P_AC))<8-stiefel->QueryProp(P_DAMAGED) )
+    stiefel->SetProp(P_AC, ac+random(3) );
+  stiefel->Set(P_WEIGHT, 
+      w=((w1=stiefel->QueryProp(P_WEIGHT))+(w2=QueryProp(P_WEIGHT)/2)) );
+  stiefel->SetProp(P_TOTAL_WEIGHT, stiefel->QueryProp(P_WEIGHT));
+  stiefel->SetProp(P_MATERIAL, 
+      new_material(stiefel->QueryProp(P_MATERIAL), QueryProp(P_MATERIAL), w1, w2));
+  stiefel->SetProp(P_EFFECTIVE_WC, 100+random(50));
+  remove();
+  return 1;
+}
+  

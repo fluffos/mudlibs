@@ -1,0 +1,163 @@
+// Magen der Muellschluckermutter (mschlucker_mutter) - Umhang
+// Schlachtfeld
+// von Wraz / Mendralim
+// Heilt oefters, entsaettigt, entalkoholisiert, macht durstig
+// schuetzt vor Saeure & heilt ein wenig bei Saeureschaden
+
+#include "../def.h"
+
+inherit "std/armour";
+
+int self_destruct_time = time() + 60*60*24*(90+random(20));
+
+void create()
+{
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein Magenumhang");
+  SetProp(P_LONG, 
+    "Dies ist der Magen der Mutter aller Muellschlucker. Du kannst ihn Dir wie einen "
+    "Umhang einfach umhaengen. Er stinkt allerdings "
+    "grauenerregend nach Verwesung und Verdauung. Gelegentlicht tropft etwas Saeure "
+    "von ihm herab.");
+  SetProp(P_NAME, "Magenumhang");
+  SetProp(P_GENDER, MALE);
+  AddId (({"magen","magenumhang","umhang"}));
+  
+  SetProp(P_ARMOUR_TYPE, AT_CLOAK);
+  SetProp(P_AC, 10);
+  SetProp(P_MATERIAL, ([MAT_MISC_DEAD:100]) );
+  SetProp(P_WEIGHT, 1500);
+  SetProp(P_VALUE, 5000);
+  SetProp(P_TEMPERATURE_PROTECTION, ([T_COLD_PROT:3, T_HEAT_PROT:1]) );
+  SetProp(P_DAM_PROTECTION, QueryProp(P_DAM_PROTECTION)+([DT_ACID:1]) );
+
+  SetProp(P_QUALITY_DECAY, 1000);
+  SetProp(P_WEAR_FUNC, TO );
+  SetProp(P_REMOVE_FUNC, TO );
+  SetProp(P_DEFEND_FUNC, TO );
+  SetProp(P_INFO, "Du erkennst, dass dieser Magen scheinbar fast ein Eigenleben hat, "
+    "und auch weiterhin Saeure produziert. Ob das gut oder schlecht ist, ist Dir noch "
+    "nicht ganz klar.");
+
+  SetProp(P_SMELL, 
+    "Dieser Umhang stinkt zum Wuergen, der Geruch entschlaegt jeder "
+    "Beschreibung.");
+
+  AddDetail(({"saeure"}),
+    "Die Saeure fliesst aus seltsamen Oeffnungen aus dem Magenumhang.");
+  
+  AddDetail(({"oeffnungen", "saeuredruesen", "druesen"}),
+    "Hm, Saeuredruesen? Gibt es sowas?");
+}
+
+// ------ DEFENDFUNC() ------------------------------------------------------
+int DefendFunc(string *dtyp, mixed spell, object enemy)
+{
+  if(!living(ENV(TO))) return 0;
+
+  if (member(dtyp, DT_ACID) >= 0)
+  {
+    ENV(TO)->Message(BS("Der Saeureangriff scheint dem Magenumhang gut zu tun, er verbreitet "
+    "kurz eine wohlige Waerme auf Deiner Haut."));
+    TO->Damage(-1); // Magenumhang reparieren
+    if(ENV(TO) && interactive(ENV(TO)))
+    {
+      ENV(TO)->AddHp(1+random(10));
+      ENV(TO)->AddSp(1+random(5));
+    }
+    return 10; // AC Bonus gegen Saeure
+  }
+  return 0;
+}
+
+// ------ start_callouts() ---------------------------------------------------
+void start_callouts()
+{
+  if(find_call_out("do_un_eat") == -1) call_out("do_un_eat",60*(2+random(5)));
+  if(find_call_out("do_heal") == -1) call_out("do_heal",60*(5+random(11)));
+}
+
+// ------ do_heal() ---------------------------------------------------
+void do_heal()
+{
+  int hp_healing;
+
+  if(!ENV(TO) || !living(ENV(TO))) return;
+  if(!QueryProp(P_WORN)) return;
+
+  hp_healing = 20 + random(200) + random(11)/10 * (200+random(400));
+  if(!random(40)) hp_healing = -(hp_healing/2);
+
+  start_callouts();
+
+  if(ENV(ENV(TO))) 
+    ENV(ENV(TO))->Message(BS(ENV(TO)->Name()+
+    " stinkt grauenvoll nach Verwesung und Verdauung."),
+    MSGFLAG_SMELL|MSGFLAG_NO_TP);
+
+  if(ENV(TO)->QueryProp(P_HP) >= ENV(TO)->QueryProp(P_MAX_HP) &&
+    ENV(TO)->QueryProp(P_SP) >= ENV(TO)->QueryProp(P_MAX_SP) &&
+    hp_healing >= 0) return; // HP & SP voll, dann sparen wir uns die Heilung
+
+  if(hp_healing < 0) ENV(TO)->Message(BS("Magensaeure spritzt aus dem Magenumhang und veraetzt Dich!"));
+  else ENV(TO)->Message(BS("Ein wenig Magensaeure fliesst ueber den Magenumhang. Er wird dabei "
+    "angenehm warm."));
+  
+  ENV(TO)->AddHp(hp_healing+random(hp_healing/10));
+  ENV(TO)->AddSp(hp_healing+random(hp_healing/10));
+}
+
+// ------ do_un_eat() ---------------------------------------------------
+void do_un_eat()
+{
+  if(!ENV(TO) || !living(ENV(TO))) return;
+  if(!QueryProp(P_WORN)) return;
+
+  if(ENV(TO)->QueryProp(P_FOOD)) ENV(TO)->eat_food(-300);
+  if(ENV(TO)->QueryProp(P_ALCOHOL) && ENV(TO)->QueryProp(P_GUILD) != "zechpreller") 
+    ENV(TO)->drink_alcohol(-300);
+  if(ENV(TO)->QueryProp(P_DRINK)) ENV(TO)->drink_soft(-300);
+
+  start_callouts();
+}
+
+// ------ WEARFUNC() ------------------------------------------------------
+int WearFunc(object me)
+{ 
+  if(ENV(me)) start_callouts();
+  return 1;
+}
+
+// ------ REMOVEFUNC() ------------------------------------------------------
+int RemoveFunc(object me)
+{
+  while(find_call_out("do_un_eat") >= 0)
+    remove_call_out("do_un_eat");
+  while(find_call_out("do_heal") >= 0)
+    remove_call_out("do_heal");
+  return 1;
+}
+
+// ------ RESET() ------------------------------------------------------
+void reset()
+{
+  ::reset();
+
+  if(!is_clone(TO)) return;
+
+  if (self_destruct_time < time())
+  {
+    if(ENV(TO))
+      ENV(TO)->Message(BS("Der Magenumhang verspritzt seine letzte Saeure und zerfaellt zu Staub."));
+    if(ENV(TO) && living(ENV(TO)))
+    {
+      ENV(TO)->AddHp(500);
+      ENV(TO)->AddSp(500);
+    }
+    TO->remove();
+  }
+
+  if(QueryProp(P_WORN)) start_callouts();
+}

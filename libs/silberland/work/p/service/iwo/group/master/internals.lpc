@@ -1,0 +1,338 @@
+/*
+ internal functions for Group master
+ Iwo@SL
+*/
+ 
+
+// No need to explain
+string strmul(string a, int x)
+{
+  string str;
+  int i;
+
+  str = "";
+
+  for (i = 0; i <= x-1; i++)
+    {
+      str += a;
+    }
+
+  return str;
+}
+
+
+// Adds a task
+void AddTask(int delay, int count, string function, mixed *args)
+{
+  mixed pid;
+
+  int type; // 0 clear if count reaches zero, 1 loop forever
+
+  if (count == 0) type = 1;
+  else type = 0;
+  
+  
+  pid = time() + random(100);
+  //          PID     NEXT    TYPE  PTIME  COUNT  COMMAND   ARGS
+  tasks += ([ pid: time()+delay; type; delay; count; function; args ]);
+
+  MasterInfo("New Task:");
+  MasterInfo(sprintf("PID:%O TYPE:%O PTIME:%O COUNT:%O",
+               pid, type, delay, count));
+  MasterInfo(sprintf("COMMAND:%O ARGS:%O", function, implode(args, ",")));
+
+  return;
+}
+
+
+// RunTask
+varargs void RunTask(string pid, int next, int type, int delay, int count, string function, mixed *args)
+{
+  if (function == "RunTask" || function == "AddTask") raise_error("Possible recursive task. Aborting.");
+
+  // It's time to run it
+  if (next < time())
+    {
+      apply(#'call_other,TO,function,args);
+      
+      if (type == 1) tasks[pid, 0] = time()+delay;
+      else
+        {
+          if (count <= 1) tasks -= ([ pid ]);
+          else
+            {
+              count--;
+              tasks[pid, 0] = time()+delay;
+              tasks[pid, 3] = count;
+            }
+        }
+        
+  
+    }
+}
+
+
+
+
+// Check if a new group got enough members
+void CheckEmpty(string grp)
+{
+  if (!IsGroup(grp)) return 0;
+  if (NumMembers(grp) < 2) BreakGroup(grp, BREAK_EMPTY);
+  return;
+}
+
+
+// Check if members are in the same env as leader
+void CheckPresence()
+{
+  if (sizeof(groups) >0) walk_mapping(groups, "CheckPresence2", TO);
+}
+
+// Part2 of CheckPresence
+varargs void CheckPresence2(string grp, string leader, mapping members)
+{
+  walk_mapping(members, "CheckLeaderPresence", TO,  leader);
+  return;
+}
+
+// Part3 of CheckPresence
+varargs void CheckLeaderPresence(string s_pl)
+{
+  string leader, grp;
+  object pl;
+  object ob_leader;
+
+  pl = find_player(s_pl);
+
+  grp = affiliations[s_pl, 0];
+
+  // This for group report. Poor named function... i know
+  NotifyHpChange(grp, pl);
+
+  leader = QueryLeader(grp);
+
+  // pl is leader
+  if (leader == s_pl || grp == "gurus") return;
+
+  // stupid but be sure
+  if (!pl || !leader) return;
+
+  // leader is a arch wizard or my massa, no breaking
+  if (ob_leader = find_player(leader))
+   if (IS_ARCH(ob_leader) || getuid(ob_leader) == "iwo") return;
+  
+  if (!present( leader, ENV(pl) ) )
+    {
+      // Increase away from group by 2
+      groups[grp, 1][s_pl, 3] += 2;
+      // pl has been to long away from leader
+      if (groups[grp, 1][s_pl, 3] > MAX_AWAY_FROM_GROUP && !IS_WIZARD(pl))
+        {
+	  TellP(pl, "Da Du zu lange von Deiner Gruppe entfernt warst, beschliesst Du auszutreten.");
+          LeaveGroup(pl, 0);
+	}
+        
+    }
+  else
+    {
+      // set away from group to zero
+      groups[grp, 1][s_pl, 3] = 0;
+    }
+    
+  return;
+}
+
+
+// Run this for each player
+varargs void CheckMembers (string grp)
+{
+  walk_mapping(groups[grp, 1], "CheckXp", TO, grp);
+}
+
+// Call NotifyXpChange if currXP != lastXP
+varargs void CheckXp (string pl, int firstXP, int lastXP, string grp)
+{
+  object ob_pl;
+  int currXP;
+
+  ob_pl = find_player(pl);
+  lastXP = groups[grp, 1][pl, 1];
+  currXP = ob_pl->QueryProp(P_XP);
+
+  if (lastXP != currXP) NotifyXpChange(pl, currXP - lastXP, grp);
+
+  return;
+}
+
+
+// Calculate new XP for all members
+varargs void NotifyXpChange(string pl, int value, string grp)
+{
+  // ReCalcXp(pl, value, grp);
+}
+
+
+
+// Calculate new XP for all members
+//  *** D E A K T I V I E R T ! ! ! ***
+// Some miscalculations. Just used to test
+// possibility. Complete rewrite suggested
+varargs void RecalcXp(string pl, int value, string grp)
+{
+  object ob_pl;
+  string *members;
+  int xpinc, grpsize, i;
+
+  members = m_indices(groups[grp, 1]);  
+  grpsize = sizeof(members);
+  xpinc = value / (grpsize + 1);
+  find_player(pl)->AddExp(xpinc - value);
+ 
+  for (i = 0; i < grpsize; i++)
+    {
+      ob_pl = find_player(members[i]);
+      ob_pl->AddExp(xpinc);
+      groups[grp, 1][members[i], 1] = ob_pl->QueryProp(P_XP);
+      TellP(find_player("iwo"), sprintf("Player: %s, EP-Zuwachs: %d", members[i], groups[grp,1][members[i],1] - groups[grp,1][members[i],0]));
+    } 
+ 
+}
+
+
+
+// Updates old group objects
+void CheckGobjVersion(object gobj, string version)
+{
+  object pl;
+  
+  if (destruct_gobj == 1) 
+    {
+      MasterInfo(sprintf("Destruct group object (%O)", ENV(gobj)));
+      gobj->remove();
+      return;
+    }
+  
+  if (version != GROUPOBJVERSION)
+    {
+      if(!interactive(ENV(gobj))) return;
+      pl = ENV(gobj);
+      gobj->remove();
+      TellP(pl, "Ein sengender Schmerz durchfaehrt Dich.");
+      TellP(pl, "Du greifst Dir ans linke Auge und schreist vor Schmerz.");
+      tell_room(ENV(pl), BS(pl->Name(WER) + " fasst sich ploetzlich ans linke "
+        "Auge und schreit vor Schmerz."), ({ pl }));
+      pl->AddHp(-5);
+      clone_object(GROUPOBJ)->move(pl, M_NOCHECK);
+      MasterInfo(sprintf("Group object updated. %s->%s", version, GROUPOBJVERSION));
+      MasterInfo(sprintf("Env: %O", pl));
+    }
+  return;
+}
+
+
+void RegisterGobj(object gobj)
+{
+  if (member(group_objects, gobj)>-1) return;
+  
+  MasterInfo(sprintf("Group object registered: %O (%O)", gobj, environment(gobj)));
+  
+  group_objects += ({ gobj });
+}
+
+
+
+void UnRegisterGobj(object gobj)
+{
+  if (member(group_objects, gobj)<0) return;
+  
+  MasterInfo(sprintf("Group object unregistered: %O (%O)", gobj, environment(gobj)));
+  
+  group_objects -= ({ gobj });
+}
+
+
+private nosave void CheckGobjs()
+{
+  int i;
+  int invalid;
+  int all;
+  
+  all = sizeof(group_objects);
+  
+  for (i=0;i<sizeof(group_objects);i++)
+    {
+      if (!objectp(group_objects[i]) || !environment(group_objects[i])
+        || !interactive(environment(group_objects[i])))
+	  {
+	    MasterInfo(sprintf("Unregistering Group object: %O", group_objects[i]));
+	    group_objects -= ({ group_objects[i] });
+	    invalid++;
+	  }
+	     
+    }
+  MasterInfo(sprintf("Checked %d Objects, %d removed.", all, invalid));
+}
+
+
+private nosave void FindAllGobjs()
+{
+  int i, gc;
+  object *pls;
+  object gobj;
+  
+  pls = users();
+  
+  MasterInfo("Finding all Group objects...");
+  
+  gc=0;
+  
+  for (i=0;i<sizeof(pls);i++)
+    {
+      if (gobj = present("\ngobj", pls[i]))
+        { 
+	  RegisterGobj(gobj); 
+	  gc++; 
+	}
+    }
+  
+  MasterInfo(sprintf("Found %d Objects.", gc));
+}
+
+
+private nosave void ResetAllGobjs()
+{
+  int i;
+  CheckGobjs();
+
+  MasterInfo("Resetting all Group objects...");
+  
+  for (i=0;i<sizeof(group_objects);i++)
+      group_objects[i]->reset();
+
+  MasterInfo(sprintf("Done. (%d Objects)", sizeof(group_objects)));
+  
+}
+
+
+private nosave void NotifyGobjs()
+{
+  int i;
+  object pl;
+  object room;
+  
+  CheckGobjs();
+  for (i=0;i<sizeof(group_objects);i++)
+    {
+      if ( !objectp(group_objects[i]) || // Bugfix Feyaria.
+          (!pl = environment(group_objects[i])) ) continue;
+      if (!group_objects[i]->QueryProp(P_GROUPREPORT_NOTIFY)) continue;
+      room = environment(pl);
+      tell_object(pl, BS("Astrale Funken entweichen von Deinem Stigma "
+        "in die Unendlichkeit."));
+      if (!pl->QueryProp(P_INVIS))  // Bugfix Feyaria fuer invis magier
+        tell_room(room, BS("Das Stigma ueber " + pl->name(WESSEN) + " Auge "
+              "scheint zu gluehen."), ({ pl}));
+    }
+  
+}

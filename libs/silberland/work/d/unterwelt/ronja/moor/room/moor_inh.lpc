@@ -1,0 +1,226 @@
+//=========================================================================
+//
+// File:    moor_inh.c
+// Created by Ronja@SL
+//
+// Project: Moor
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit "/std/room";
+
+int moor_ist_da();
+
+void create()
+{
+  ::create();
+
+  SetProp(P_INT_SHORT, "Im Moor" );
+  SetProp(P_INT_LONG,
+    "Du befindest Dich mitten im Moor. Wege sind keine vorhanden. In einiger "
+    "Entfernung haengen Nebelschwaden und machen das Moor noch unheimlicher "
+    "als es schon ist. Die Sonne ist nur schemenhaft hinter dem Dunstschleier "
+    "zu erkennen. Einen Weg kannst Du nicht erkennen, jeder Schritt koennte "
+    "Dein Ende bedeuten."
+  );
+
+  SetProp(P_LIGHT, 1 );
+  SetProp(P_INDOORS, 0 );
+  SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE: 16, ENV_TERRAIN: TT_SWAMP]) );
+
+  AddDetail( ({"boden","moor","weg"}) ,
+    "Moor, nichts als Moor. Jeder falsche Schritt koennte Dein Ende bedeuten, "
+    "wenn Du im Moor versinkst."
+  );
+
+  AddDetail( ({"ende"}) ,
+    "Du wirst doch nicht etwa suizidgefaehrdet sein?"
+  );
+
+  AddDetail( ({"schritt"}) ,
+    "Ein falscher Schritt und Du koenntest bei Lars landen."
+  );
+
+  AddDetail( ({"lars"}) ,
+    "Der ist zum Glueck nicht hier."
+  );
+
+  AddDetail( ({"glueck"}) ,
+    "Etwas Glueck brauchst Du hier, wenn Du nicht im Moor versinken willst."
+  );
+
+  AddDetail( ({"himmel"}) ,
+    "Grau und tief haengen die Wolken ueber dem Moor. Die Sonne kannst Du nur "
+    "als Schemen hinter einem Dunstschleier erkennen. "
+  );
+
+  AddDetail( ({"sonne","schemen"}) ,
+    "Die tiefhaengenden Wolken verschleiern die Sonne, so dass Du nur einen "
+    "Schemen erkennen kannst."
+  );
+
+  AddDetail( ({"dunst","dunstschleier","wolken"}) ,
+    "Tief haengen die Wolken ueber dem Moor und lassen das ganze Moor "
+    "unwirklich erscheinen."
+  );
+
+  AddDetail( ({"nebelschwaden","nebel","schwaden"}) ,
+    "Der Dunstschleier des Himmels setzt sich in Nebelschwaden am Boden "
+    "fort, so dass Du nur einige Meter weit sehen kannst. "
+  );
+
+  AddDetail( ({"entfernung"}) ,
+    "Sind die Nebelschwaden nun nah oder fern? Alles ist so unwirklich "
+    "hier, dass Du noch nicht einmal dieses entscheiden kannst."
+  );
+
+  AddDetail( ({"meter"}) ,
+    "Wenn Du es genau wissen willst: Du kannst 5,37 Meter weit sehen."
+  );
+
+  AddSound(DEFAULT_SOUND,
+    "Hier ist es absolut still. Die Nebelschwaden scheinen jedes Geraeusch "
+    "zu verschlucken. "
+  );
+
+  AddSound( ({"nebelschwaden","schwaden","geraeusch"}) ,
+    "Die Nebelschwaden scheinen jedes Geraeusch zu verschlucken. "
+  );
+
+  AddSmell(DEFAULT_SMELL,
+    "Durch die Nebelschwaden riecht die Luft angenehm frisch, gar nicht "
+    "muffig oder faulig. "
+  );
+
+  AddSmell( ({"luft"}) ,
+    "Die Luft riecht angenehm frisch, gar nicht faulig."
+  );
+
+  SetProp(P_HIDE_EXITS, ({"aufgabe"}) );
+  AddSpecialExit( "aufgabe", "exit_aufgabe" );
+}
+
+int aufgabe(string str)
+{
+  notify_fail("Aufgeben gilt nicht!\n");
+  return 0;
+}
+
+int keinausgang(string str)
+{
+  notify_fail(BS("Diese Richtung sieht nicht sehr vertrauenserweckend aus. "
+                 "Vielleicht solltest Du doch eine andere Richtung waehlen."
+  ));
+  return 0;
+}
+
+varargs int PreventInsert(object ob)
+{
+   object *items;
+
+   if(living(ob))                  return ::PreventInsert(ob);
+   if(interactive(ob))             return ::PreventInsert(ob);
+   if(query_once_interactive(ob))  return ::PreventInsert(ob);
+   if(ob->id("\nTORFNASS"))        return ::PreventInsert(ob);
+   if(ob->id("\nTORFTROCKEN"))     return ::PreventInsert(ob);
+   if(ob->id("\neggshadow"))       return ::PreventInsert(ob);
+   if(ob->id("morphei"))           return ::PreventInsert(ob);
+   if(ob->id("\nnekro_temp_obj"))  return ::PreventInsert(ob);
+   if(ob->QueryProp(P_INVIS))      return ::PreventInsert(ob);
+   if(ob->QueryProp(P_SHORT))      return ::PreventInsert(ob);
+
+   if(ob->id("Leiche"))
+   {
+     items = deep_inventory(ob);
+     call_out("logging",0,ob->QueryProp(P_ORIG_NAME),items);
+   }
+
+   if(ob->id("Ruestung") || ob->id("Waffe") || ob->id("\nschupp"))
+   {
+     call_out("versinken2", 0, ob);
+   }
+   else
+   {
+     call_out("versinken", 0, ob);
+   }
+
+   return ::PreventInsert(ob);
+}
+
+void versinken2(object ob)
+{
+  object truhe,room;
+  int i;
+  string verb;
+
+  if (!objectp(ob) || ENV(ob)!=TO) return;
+
+  if(ob->IsUnit() && ob->QueryProp(P_AMOUNT) > 1)
+  {
+    verb = " versinken ";
+  }
+  else
+  {
+    verb = " versinkt ";
+  }
+
+  tell_room(TO, ob->Name(WER)+verb+"unwiderruflich im Moor.\n");
+
+  call_other(ROOM "eingang", "???");
+  room = find_object(ROOM "eingang");
+  if(truhe = present("\nTRUHE", room))
+  {
+    if(1 != ob->move(truhe,M_SILENT))
+    {
+      MOORMASTER->Msg(ob->Name(WER,0)+"("+file_name(ob)+")"+verb+"im Moor");
+      ob->remove();
+    }
+    else
+    {
+      MOORMASTER->Msg(ob->Name(WER,0)+"("+file_name(ob)+") kommt in die Truhe");
+    }
+  }
+  else
+  {
+    MOORMASTER->Msg(ob->Name(WER,0)+"("+file_name(ob)+")"+verb+"im Moor");
+    ob->remove();
+  }
+}
+
+void versinken(object ob)
+{
+  string verb;
+
+  if (!objectp(ob) || ENV(ob)!=TO) return;
+
+  if(ob->IsUnit() && ob->QueryProp(P_AMOUNT) > 1)
+  {
+    verb = " versinken ";
+  }
+  else
+  {
+    verb = " versinkt ";
+  }
+
+  tell_room(TO, ob->Name(WER)+verb+"unwiderruflich im Moor.\n");
+  MOORMASTER->Msg(ob->Name(WER,0)+"("+file_name(ob)+")"+verb+"im Moor");
+  ob->remove();
+}
+
+int moor_ist_da()
+{
+  return 1;
+}
+
+void logging(string nam, object *items)
+{
+  int i;
+  i = sizeof(items);
+  while(i--)
+    MOORMASTER->Msg(CAP(nam)+" stirbt und hat "+items[i]->name(WEN,0)+"("+file_name(items[i])+") dabei");
+  return;
+}
+
+

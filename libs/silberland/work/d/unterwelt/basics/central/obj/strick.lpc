@@ -1,0 +1,226 @@
+//=========================================================================
+//
+// File:    strick.c
+// Created by Ronja@SL
+//
+// Project: basics
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit "std/thing";
+
+#include <ansi.h>
+
+int dtime,fdamage,rdamage,started;
+
+string victim;
+string *sp;
+int    nsp;
+
+void create()
+{
+  if (!is_clone(TO))return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Ein Strick");
+  SetProp(P_LONG,
+    "Ein Strick, mit dem man frueher wohl Leute aufgehaengt hat. Jetzt "
+    "liegt er um Deinen Hals und schnuert Dir die Luft ab. "
+  );
+
+  SetProp(P_NAME, "Strick");
+  SetProp(P_GENDER, MALE);
+  AddId( ({"strick","\nhenkerstrick"}) );
+
+  SetProp(P_KILL_NAME,"Akuter Luftmangel");
+  SetProp(P_KILL_MSG,"Ich liebe das Roecheln am Morgen.");
+
+  SetProp(P_MATERIAL, ([MAT_CANNABIS:100]) );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_VALUE, 450);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NODROP, "Locker erstmal den Strick um Deinen Hals!\n");
+
+  AddCmd( ({"locker","lockere"}) , "cmd_lockern");
+  AddCmd( ({"loes","loese"})     , "cmd_loesen");
+
+  victim  = "";
+
+  dtime   = 4;
+  fdamage = 10;
+  rdamage = 15;
+
+  started = 0;
+
+  sp = ({"Der Strick um Deinen Hals schnuert Dir den Atem ab!"
+        ,"Wenn Du den Strick nicht bald loswirst, dann ist es Dein Ende!"
+        ,"Deine Augen treten schon aus ihren Hoehlen!"
+        ,"Ohne Luft roechelt es sich schlecht!"
+        ,"Sie zu, dass Du den Strick schnell loswirst!"
+        ,"Lange ohne Luft auszuhalten bringt Dir nicht viel - nur den Tod!"
+        ,"Mit dem Strick um den Hals bekommst Du keine Luft mehr!"
+        ,"Werde schnell den Strick um Deinen Hals los!"
+        ,"Wie lange willst Du noch warten um den Strick loszuwerden?!"
+        });
+
+  nsp = sizeof(sp);
+}
+
+void init()
+{
+  ::init();
+
+  if(TP && interactive(TP)) victim = getuid(TP);
+}
+
+int cmd_lockern(string str)
+{
+  notify_fail("Was moechtest Du lockern?\n");
+
+  if(!str || str == "") return 0;
+  if(!(str == "strick"         ||
+       str == "strick um hals" )) return 0;
+
+  tell_object(TP,BS("Du lockerst den Strick um Deinen Hals, entfernst ihn "
+                    "und wirfst ihn weg."));
+
+  started = 0;
+  call_out("remove",0);
+  return 1;
+}
+
+int cmd_loesen(string str)
+{
+  notify_fail("Was moechtest Du loesen?\n");
+
+  if(!str || str == "") return 0;
+  if(!(str == "strick"         ||
+       str == "strick um hals" )) return 0;
+
+  tell_object(TP,BS("Der Strick sitzt viel zu fest!"));
+
+  return 1;
+}
+
+void SetValues(int* values)
+{
+  dtime   = values[0];
+  fdamage = values[1];
+  rdamage = values[2];
+}
+
+int* QueryValues()
+{
+  return ({dtime,fdamage,rdamage});
+}
+
+void SetVictim(object player)
+{
+  victim = getuid(player);
+}
+
+string QueryVictim()
+{
+  return victim;
+}
+
+void ApplyDamage()
+{
+  object pl;
+
+  pl = find_player(victim);
+
+  if(!pl)                    return;
+  if(pl->QueryProp(P_GHOST)) return;
+  if(ENV(TO) != pl)          return;
+  if(!started)               return;
+
+  if(pl->QueryProp(P_TTY))
+  {
+    tell_object(pl,ANSI_BOLD+ANSI_RED+BS(sp[random(nsp)])+ANSI_NORMAL);
+  }
+  else
+  {
+    tell_object(pl,BS(sp[random(nsp)]));
+  }
+
+  pl->SetProp(P_KILLER, TO);
+  pl->do_damage(fdamage+random(rdamage),TO);
+
+  call_out("ApplyDamage",dtime);
+}
+
+void StartDamage()
+{
+  if(!started)
+  {
+    started = 1;
+    call_out("ApplyDamage",dtime);
+  }
+}
+
+void StopDamage()
+{
+  started = 0;
+}
+
+void BecomesNetDead(object player)
+{
+  if(victim == getuid(player)) started = 0;
+}
+
+void BecomesNetAlive(object player)
+{
+  if(victim == getuid(player)) StartDamage();
+}
+
+void NotifyPlayerDeath(object player, object killer, int lost_xp)
+{
+  string hour;
+
+  if(victim != getuid(player)) return;
+
+  hour = ctime()[11..12];
+
+  switch(hour)
+  {
+    case "07" :
+    case "08" :
+    case "09" :
+    case "10" :
+      SetProp(P_KILL_MSG,"Ich liebe das Roecheln am Morgen.");
+      break;
+
+    case "11" :
+    case "12" :
+    case "13" :
+      SetProp(P_KILL_MSG,"Ich liebe das Roecheln am Mittag.");
+      break;
+
+    case "14" :
+    case "15" :
+    case "16" :
+    case "17" :
+      SetProp(P_KILL_MSG,"Ich liebe das Roecheln am Nachmittag.");
+      break;
+
+    case "18" :
+    case "19" :
+    case "20" :
+    case "21" :
+    case "22" :
+      SetProp(P_KILL_MSG,"Ich liebe das Roecheln am Abend.");
+      break;
+
+    default   :
+      SetProp(P_KILL_MSG,"Ich liebe das Roecheln in der Nacht.");
+      break;
+  }
+
+  started = 0;
+  call_out("remove",0);
+}
+

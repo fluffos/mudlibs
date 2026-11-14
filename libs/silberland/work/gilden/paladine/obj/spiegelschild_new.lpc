@@ -1,0 +1,250 @@
+
+// Spiegelschild der Paladine
+// Changes:
+// 20.08.2004 Angrox
+//            ist nun ein echtes Schild
+// 14.02.2000 Angrox
+//            Becomesnetdead auskommentiert
+
+inherit "std/armour";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <new_skills.h>
+#include "../paladin.h"
+#include "../blessing.h"
+#include <wizlevels.h>
+#include <defines.h>
+#include <moredef.h>
+
+int suc,level;
+int last_time;
+int bonusAc;
+
+create() {
+  if( !is_clone(TO) ) return;
+  ::create();
+
+  suc=0;
+  last_time=0;
+
+  AddId (({PALADINITEM, "\nspiegelschild", "spiegelschild", "schild", 
+        "NODESTRUCT", "UNZERSTOERBAR"}));
+  SetProp (P_SHORT, "Ein durchscheinendes Spiegelschild");
+  SetProp (P_LONG, 
+      "Du siehst ein durchscheindes Schild, das staendig von hellen "
+      "Lichtblitzen durchzuckt wird. Es strahlt eine Aura der Goettlichkeit "
+      "aus. Du bist Dir sicher das Dich dieses Schild gegen die Ausgeburten "
+      "des Boesen schuetzen wird! In Kombination mit Schildparade ist "
+      "dieses Schild sicher hervorragend!");
+  SetProp (P_NAME, "Spiegelschild");
+  SetProp (P_NAME_ADJ, "durchscheinend");
+  SetProp (P_GENDER, NEUTER);
+  SetProp (P_WEIGHT, 0);
+  SetProp (P_NODROP, 1);
+  SetProp (P_NEVERDROP, 1);
+  SetProp (P_MAGIC, 1);
+  SetProp (P_ARMOUR_TYPE, AT_SHIELD );
+  SetProp (P_AC, 0);
+  SetProp (P_WEAR_TEXT, ({BS("Du nimmst das goettliche Spiegelschild fester "
+        "in die Hand! Fuer Dusty!"), " zieht %s an.\n" }));
+  SetProp (P_MATERIAL, MAT_MAGIC  );
+  SetProp (P_VALUE, 0);
+  SetProp (P_NOBUY, 1);
+  SetProp (P_NOSELL, 1);
+  SetProp (P_DEFEND_FUNC, TO );
+
+  if(getuid(previous_object())!="GUILD.pal_spells" && 
+     !IS_ARCH(getuid(previous_object()))) {
+   call_out("remove", 1);
+   return 0;
+  }
+}
+
+int DefendFunc(mixed dam_type, mixed spell, object enemy) {
+  int i,min;
+  string *was;
+  object owner;
+
+  // Fix: keine doppelten Zurueckschlaege mehr wegen Rekursionsgefahr
+  // nur noch ein Rueckschlag pro time() moeglich !!!
+  
+  if(last_time==time()) return 0;
+
+  if (suc==0 || level==0 || !owner=MENV) {
+    call_out("remove", 1);
+    return 0;
+  }
+
+  if (random(11-(int)2*level/3)) return 0;
+  i=0; 
+  was=({ });
+
+  // physische und nicht-materielle schadenstypen kann spiegelschild nicht abwehren
+  if (sizeof(dam_type & m_indices(PHYSICAL_DAMAGE_TYPES) + ({DT_SOUND, DT_MIND}) )) {
+    if(HAS_BLESSING(owner, BLESSING_SHIELD_OF_FAITH) && !random(10) && bonusAc < 20) {
+      tell_object(owner, BS("Die Kraft deines Glaubens staerkt den Spiegelschild."));
+      bonusAc++;
+    }
+
+    return bonusAc;
+  }
+
+  if(mappingp(spell) && spell[SI_SKILLDAMAGE] != 0)
+    min=spell[SI_SKILLDAMAGE];
+  else
+    min=(level-12)*50;
+
+  if (member(dam_type, DT_LIGHTNING) != -1) {
+    i=suc/130;
+    was+=({ DT_LIGHTNING });
+  }
+  if (member(dam_type, DT_LIGHT) != -1) {
+    i=suc/60;
+    was+=({ DT_LIGHT });
+  }
+  if (member(dam_type, DT_EXPLOSION) != -1) {
+    i=suc/80;
+    was+=({ DT_EXPLOSION });
+  }
+  if (member(dam_type, DT_TERROR) != -1) {
+    i=suc/70;
+    was+=({ DT_TERROR });
+  }
+  if (member(dam_type, DT_MAGIC) != -1) {
+    i=suc/50;
+    was+=({ DT_MAGIC });
+  }
+  if (member(dam_type, DT_UNHOLY) != -1) {
+    i=suc/40;
+    was+=({ DT_UNHOLY });
+  }
+  if (member(dam_type, DT_POISON) != -1) {
+    i=suc/100;
+    was+=({ DT_POISON });
+  }
+  if (member(dam_type, DT_ACID) != -1) {
+    i=suc/100;
+    was+=({ DT_ACID });
+  }
+  if (member(dam_type, DT_ELECTRIC) != -1) {
+    i=suc/130;
+    was+=({ DT_ELECTRIC });
+  }
+  if (member(dam_type, DT_HOLY) != -1) {
+    i=suc/80;
+    was+=({ DT_HOLY });
+  }
+
+  if(HAS_BLESSING(owner, BLESSING_SHIELD_OF_FAITH) && !random(5-sizeof(was)) && bonusAc < 20) {
+    tell_object(owner, BS("Die Kraft deines Glaubens staerkt den Spiegelschild."));
+    bonusAc++;
+  }
+
+  if (i>0) {
+    last_time=time();
+    i+=random(min);
+    if (i > 200) i = 200;
+
+    if(HAS_BLESSING(owner, BLESSING_SHIELD_OF_FAITH)) {
+      was = ({ DT_HOLY });
+      tell_object(owner,BS("Durch deinen Glauben gereinigt wirft der goettliche Spiegelschild einen Teil des Angriffs auf "+enemy->name(WEN)+" zurueck."));
+      tell_object(enemy,BS("Durch den Glauben gereinigt wirft der goettliche Spiegelschild von "+owner->name(WEN)+" wirft einen Teil des Angriffs auf Dich zurueck."));
+    } else {
+      tell_object(owner,BS("Der goettliche Spiegelschild Dustys wirft einen Teil auf "+enemy->name(WEN)+" zurueck."));
+      tell_object(enemy,BS("Der goettliche Spiegelschild von "+owner->name(WEN)+" wirft einen Teil auf Dich zurueck."));
+    }
+
+    if (interactive(owner)) {
+      owner->AddSp(-(random(2)+1));
+    }
+
+
+    //TELL("angrox", sprintf("Spiegelschild -- i: %d, was: %O, min: %d, spell: %O\n",i,was,min,spell));
+    enemy->Defend(i, 
+                  was, 
+                  ([SP_SHOW_DAMAGE:1,
+                    SP_NAME:"Spiegelschild",
+                    SP_PHYSICAL_ATTACK: 0]), 
+                  owner );
+    return random(level/2)+(level/2) + bonusAc;
+  }
+
+  return bonusAc;
+}
+
+string extra_look() {
+  object player;
+  if(!player=ENV(ME)) return "";
+  if(player->QueryProp(P_GENDER)==FEMALE)
+    return "Du kannst Dein eigenes Spiegelbild irgendwie "
+           "an ihrem Koerper erkennen.\n";
+  else 
+    return "Du kannst Dein eigenes Spiegelbild irgendwie "
+           "an seinem Koerper erkennen.\n";
+}
+
+int start_remove(int time,int suc1) {
+  object owner;
+  
+  if (!owner=MENV) {
+    call_out("remove", 1);
+    return 0;
+  }
+  if (owner->QueryProp(P_GUILD) != "paladine" && !IS_WIZARD(owner)) {
+    call_out("remove", 1);
+    return 0;
+  }
+  if(getuid(previous_object())!="GUILD.pal_spells" &&
+      !IS_WIZARD(owner)) {                                                             
+    call_out("remove", 1);                                                                                         
+    return 0;                                                                                                      
+  }      
+  call_out("remove_me", time);
+  level=owner->QueryProp(P_GUILD_LEVEL);
+  SetProp (P_AC, 16+(level-13)*3);
+  suc=suc1;
+  bonusAc = 0;
+  return 1;
+}
+
+
+remove_me() {
+  object player, room;
+  if(player=ENV(ME)) 
+    tell_object(player, "Dein Spiegelschild verblasst.\n");
+  if(player&& room=ENV(player))
+    tell_room(room, sprintf("Du kannst Dein Spiegelbild nicht mehr an %s "
+                            "erkennen.\n", player->name(WER)), ({player}));
+  DoUnwear(1);
+  remove();
+}
+
+/* Auskommentiert, da Spieler immer reconnecten  <angrox, 14.02.2000>
+void BecomesNetDead(object player) {
+  if(player==MENV) {
+    remove_me();
+  }
+}
+*/
+
+void reset() {
+  if (!is_clone(this_object()))
+    return;
+  ::reset();
+  call_out("remove_me", 1);
+}
+
+varargs int DoWear(int silent, int all) {
+  return ::DoWear(silent,all); 
+}
+
+varargs int DoUnwear(int silent, int all) {
+  return ::DoUnwear(0); 
+}
+
+void Setup(int special_wc) {
+  SetProp(P_PALADIN_SCHILDPARADE_AC, special_wc > 10 ? 10 : special_wc);
+  return ;
+}

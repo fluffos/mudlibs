@@ -1,0 +1,1068 @@
+//  Projekt   : Barry's Pfeifenladen
+//  NPC Name  : Barry Ledersohle
+//  Erstellt  : 14.03.2001 (Orw)
+//  Geaendert : -
+
+/*
+** 2003-02-07  PROtheG  1 AddInfo hinzugefuegt, Begruessung erweitert und
+**                      give_notify erweitert, sodass Hobbits eine 
+**                      Hobbitpfeife bekommen koennen.
+**
+** 2003-04-07  PROtheG  Hobbitpfeife aktiviert.
+**
+*/
+
+inherit "std/npc/spells";
+inherit "std/npc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <new_skills.h>
+#include <moving.h>
+#include <npc.h>
+#include "../def.h"
+
+#define EMASTER "/d/huegelland/orw/pfeifenladen/enemymaster.lpc"
+#define ENEMY(wer) (member(EMASTER->QueryFeinde(), getuid(wer))!=-1)
+#define SAVERAUM ROOM"pfeifenladen.lpc"
+
+#define GERUECHTEVERBREITER(wer) (member(geruechteverbreiter, getuid(wer))!=-1)
+#define HOBBITTOOL "/p/service/protheg/rt/obj/gradopfeife"
+
+string *geruechteverbreiter=({});
+string *begruesst=({});
+string geruecht;
+int geruechtecounter;
+string geruechteinfo(string key);
+
+void create() 
+{
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Barry Ledersohle, der Pfeifenhaendler");
+  SetProp(P_LONG,
+    "Vor Dir steht Barry Ledersohle, ein kleiner rundlicher Hobbit, der "
+    "seinen Falten zufolge schon ein beachtliches Alter erreicht hat. "
+    "Die Haare auf seinem Kopf und an den Haenden sind schon lange grau, "
+    "nur an den grossen Fuessen kannst Du noch einige braune Haerchen "
+    "entdecken. Stolz steht er hinter der Ladentheke und wartet auf "
+    "Kundschaft. So wie er Dich anlaechelt fuehlst Du dich sofort wie "
+    "zuhause und beschliesst etwas laenger zu bleiben um Dich mit ihm "
+    "ueber den neuesten Tratsch und Klatsch aus Derlim zu unterhalten.");
+  SetProp(P_NAME, "Barry");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:0,T_RANGE_MAX:30]));
+  AddId(({"barry", "ledersohle", "pfeifenhaendler","haendler","verkaeufer",
+          "PFEIFENBARRY"}));
+  set_living_name("barry");
+
+  create_default_npc(18);
+  SetProp(P_HANDS, ({
+    " mit seinen behaarten Haenden",QueryProp(P_HANDS)[1],DT_BLUDGEON}));
+  SetProp(P_MAX_HP, QueryProp(P_MAX_HP)+random(20));
+  SetProp(P_BODY, QueryProp(P_BODY)+random(10));
+  SetProp(P_XP, QueryProp(P_XP)+100*100); // Bonus fuer Spells
+  SetProp(P_RACE, "Hobbit");
+  SetProp(P_SIZE, 90+random(6));
+  SetProp(P_ALIGN, 300+random(100));
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_HEAL,10);
+  SetProp(P_AGGRESSIVE,0);
+  SetProp(P_WIMPY, 0);
+  SetProp(P_RESISTANCE_STRENGTHS,
+      ([ DT_TERROR    : -0.1,
+         DT_MAGIC     : -0.1,
+         DT_SOUND     :  0.2,
+         DT_LIGHTNING :  0.1,
+         DT_POISON    :  0.1 ]) );
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_NOMAGIC,0);
+
+  SetProp(P_MSGIN, "kommt an");
+  SetProp(P_MSGOUT, "geht");
+  SetProp(P_MMSGIN, "erscheint in einer Rauchwolke");
+  SetProp(P_MMSGOUT, "verschwindet mit Knall und Schwefelduft");
+
+  SetProp(P_DIE_MSG,  " faellt mit der Pfeife in der Hand tot zu Boden.\n");
+  SetProp(P_NOCORPSE, 0 );
+  SetProp(P_MURDER_MSG, "Hilfe, wo bin ich jetzt? Darf man hier rauchen?");
+  SetProp(P_KILL_NAME, "Barry Ledersohle");
+  SetProp(P_KILL_MSG, "Da rauch ich doch lieber ne Pfeife!");
+
+/* Details */
+  AddDetail( ({"falten","falte"}),
+    "Barry hat schon viele kleine Falten, er muss schon ziemlich "
+    "alt sein.");
+  AddDetail( ({"alter"}),
+    "Wie alt Barry genau ist vermagst Du nicht zu schaetzen.");
+  AddDetail( ({"haare","kopfhaare","haende","kopf"}),
+    "Barrys Haare am Kopf und an den Haenden sind schon lange grau.");
+  AddDetail( ({"fuesse","fuss"}),
+    "Die Fuesse von Barry sind stark behaart und wie fuer einen "
+    "Hobbit ueblich, ziemlich gross.");
+  AddDetail( ({"haerchen"}),
+    "An den Fuessen kannst Du noch einige braune Haerchen entdecken.");
+
+/* Infos */
+
+  AddInfo(DEFAULT_INFO, ({
+    "zuckt mit den Schultern.\n",
+    "denkt . o O ( So eine bloede Frage! )\n",
+    "fragt: Redest Du immer soviel Mist?\n",
+    "fragt: Bist Du das erste Mal hier?\n",
+    "sagt: Hmm.. fuer solchen Bloedsinn hab ich keine Zeit!\n",
+    "fragt: Wie bitte?\n",
+    "fragt: Wie meinst Du das?\n",
+    "fragt: Kannst Du das nochmal wiederholen?\n",
+    "sagt: Ich glaub, ich hoer schlecht!\n",
+    "gruebelt: Hmmm....., tja...., soso....\n",
+    "sagt: Ach wirklich? Was Du nicht sagst!\n",
+    "kratzt sich hinter dem Ohr.\n",
+    "schaut Dich mit grossen Augen an.\n",
+    "schaut Dich erstaunt an.\n",
+    "sagt: Das meinst Du doch nicht ernst!\n",
+    "staunt: Ach wirklich! Das ist mir aber ganz neu!\n",
+    "sagt: Das hab ich mich auch schon immer gefragt.\n",
+    "sagt: Du kannst aber komische Fragen stellen!\n",
+    "sagt: Ich hab noch nie von sowas gehoert!\n",
+    "beachtet Dich gar nicht.\n",
+    "seufzt.\n",
+    "verwuschelt Deine Haare.\n",
+    "ignoriert Deine dummen Fragen.\n",
+    "dreht sich uninteressiert weg.\n",
+    "kichert.\n",
+    "grinst Dich an.\n",
+    "gruebelt.\n",
+    "knuddelt Dich.\n",
+    "bleibt stumm.\n",
+    "fragt: Wie heisst Du ueberhaupt?\n",
+    "sagt: Lass uns das Thema wechseln.\n",
+    "lacht Dich aus.\n",
+    "sagt: Nein, Nein und nochmals NEIN!\n",
+    "sagt: Das ist doch alles Bloedsinn!\n",
+    "fragt sich: Warum red ich eigentlich mit Dir?\n",
+    "laechelt Dich an.\n",
+    "meint: Frag doch jemand anders!\n" }) );
+
+  AddLibrary(STDINFOS,1,1);
+  
+  AddInfo( ({"magier","regionsmitarbeiter"}),
+    "Es gibt einige Magier hier im Silberland, einer davon ist Orw.",
+    "sagt: ");
+  AddInfo( ({"orw"}),
+    "Ich und Orw haben diesen Laden hier gemeinsam aufgebaut, leider "
+    "arbeitet er schon wieder an neuen Gebieten, aber er kommt mich "
+    "regelmaessig besuchen.\n"
+    "Achja, bevor ichs vergess... Jegliche Beschwerden bezueglich "
+    "des Ladens gehen an ihn und nicht an mich!",
+    "sagt: ");
+  AddInfo( ({"beschwerden","beschwerde"}),
+    "Hast Du eine Beschwerde? Dann schick eine Mail an Orw und belaesstige "
+    "nicht mich damit!",
+    "sagt zornig: ");
+  AddInfo( ({"laden","wohlfuehlladen","pfeifenladen","raum"}),
+    "Ich habe diesen Laden vor langer Zeit von meinem Vater geerbt, so wie "
+    "er von seinem Vater. Ich und mein Bruder leiten ihn, er ist fuer die "
+    "Pfeifenwerkstatt und ich fuer den Verkauf zustaendig.",
+    "erzaehlt: ");
+  AddInfo( ({"zeit"}),
+    "Lang ists her.....!",
+    "seufzt: ");
+  AddInfo( ({"vater"}),
+    "Der ist leider schon lang tot, er war der beste Pfeifenhersteller im "
+    "ganzen Silberland.",
+    "seufzt: ");
+  AddInfo( ({"pfeifenhersteller","hersteller"}),
+    "Das Handwerk des Pfeifen herstellens hat jetzt mein Bruder "
+    "uebernommen und er beherrscht es beinahe so gut wie mein Vater es "
+    "konnte.",
+    "sagt: ");
+  AddInfo( ({"verkauf","verkaufen"}),
+    "Ich habe hier den Verkauf uebernommen. Ich verkaufe die Dinge die "
+    "mein Bruder herstellt, sowie viele andere Waren die man eben so "
+    "zum Wohlfuehlen braucht.",
+    "sagt: ");
+  AddInfo( ({"wohlfuehlen"}),
+    "Das ist das Motto unseres Ladens: Eintreten und Wohlfuehlen.",
+    "sagt: ");
+  AddInfo( ({"eintreten"}),
+    "Du bist doch schon hier.....",
+    "grinst: ");
+  AddInfo( ({"motto"}),
+    "Eintreten und Wohlfuehlen! Das ist das Motto meines Ladens.",
+    "sagt: ");
+  AddInfo( ({"pfeifenwerkstatt","werkstatt"}),
+    "Schau doch mal rein, der Raum im Westen ist die Werkstatt. "
+    "Mein Bruder freut sich ueber jeden Besuch. Vielleicht erklaert er "
+    "Dir wie man eine Pfeife herstellt, vorrausgesetzt Du willst das "
+    "ueberhaupt wissen.",
+    "sagt: ");
+  AddInfo( ({"schaukelstuhl","stuhl"}),
+    "Manchmal kommen alte Leute hier vorbei und die setzen sich halt in "
+    "den Schaukelstuhl. Der ist zwar schon uralt aber sehr bequem.",
+    "sagt: ");
+  AddInfo( ({"couch"}),
+    "Setz Dich ruhig in die Couch und mach es Dir bequem. Du kannst "
+    "bei mir Getraenke bestellen.",
+    "sagt: ");
+  AddInfo( ({"getraenke","getraenk","getraenken"}),
+    "Du kannst bei mir einige warme und kalte Getraenke bestellen. "
+    "Wenn Du genau wissen willst welche Du bei mir bekommen kannst, "
+    "dann tippe einfach <menue>. Bevor Du bestellen kannst musst Du es "
+    "Dir aber bequem machen, an so hektische Leute schenke ich keine "
+    "Getraenke aus.",
+    "sagt: ");
+  AddInfo( ({"bestellen","bestellung"}),
+    "Tippe <menue> und waehle ein Getraenk aus, dann mach es Dir auf "
+    "der Couch bequem. Mit <bestelle ...> kannst Du dann Dein "
+    "ausgewaehltes Getraenk bestellen.",
+    "sagt: ");
+  AddInfo( ({"kiste"}),
+    "Das ist meine alte Kiste, Du kannst ruhig mal reinschauen. Ich "
+    "bewahre darin alle Geschenke auf die ich von Freunden bekomme. "
+    "Aber wehe Du versuchst etwas zu stehlen...",
+    "meint: ");
+  AddInfo( ({"waage"}),
+    "Meinst Du die kleine kupferne Waage auf meiner Ladentheke? Die habe "
+    "ich von Dodo bekommen.",
+    "fragt: ");
+  AddInfo( ({"dodo","stolzfuss"}),
+    "Dodo hat einen grossen Troedlerladen suedlich vom Hauptplatz.",
+    "sagt: ");
+  AddInfo( ({"troedlerladen"}),
+    "Ja, er verkauft so allerhand, schau ruhig mal bei Dodo vorbei, "
+    "aber nimm Dich vor seiner Spinne in acht.",
+    "sagt: ");
+  AddInfo( ({"spinne","spinnen"}),
+    "Dodo hat eine grosse Spinne, genaueres kann ich Dir auch nicht "
+    "erzaehlen. Da ich grosse Angst vor Spinnen habe wollte ich "
+    "nichts davon wissen als er sie mir zeigen wollte.",
+    "sagt: ");
+  AddInfo( ({"angst"}),
+    "Eine richtige Spinnenphobie hab ich.. WUAH!.",
+    "aechzt: ");
+  AddInfo( ({"spinnenphobie","phobie"}),
+    "Ja, genau sowas hab ich....",
+    "arglt: ");
+  AddInfo( ({"geschenke","geschenk"}),
+    "Willst Du mir etwa etwas geben? Ich wuerde mich sehr freuen. "
+    "Ich freue mich immer sehr ueber Geschenke.",
+    "laechelt: ");
+  AddInfo( ({"ladentheke","theke"}),
+    "Hmm... ueber die Ladentheke weis ich jetzt eigentlich nichts "
+    "besonderes zu erzaehlen.",
+    "zuckt mit den Schultern: ");
+  AddInfo( ({"waren","ware","gegenstaende","gegenstand"}),
+    "Ich handle hier mit vielerlei Waren. Angefangen von Keksen ueber "
+    "Pfeifen bis zu allerhand Getraenken die Du bestellen kannst wenn "
+    "Du bei Tisch sitzt.",
+    "erklaert: ");
+  AddInfo( ({"tisch"}),
+    "Der Tisch ist fuer muede Wanderer oder einfach Personen die sich "
+    "hier mal auf der Couch oder dem Schaukelstuhl ausrasten wollen. "
+    "Man kann sich dann ein Getraenk bestellen und ein bisschen ueber "
+    "Abenteuer oder alte Zeiten quatschen." ,
+    "meint: ");
+  AddInfo( ({"regale","regal"}),
+    "In den Regalen liegen einige besonders schoene Gegenstaende. "
+    "Eins davon ist nur fuer Pfeifen.",
+    "sagt: ");
+  AddInfo( ({"verzierungen","verzierung","schnitzereien","schnitzerei"}),
+    "Du meinst wohl die Verzierungen an der Decke... Die hat vor langer "
+    "Zeit mal ein weitgereister Kuenstler in die Decke geschnitzt. Wie "
+    "wuerde ich mal die dort dargestellten Plaetze aufsuchen und ein "
+    "kleines Abenteuer erleben, aber der Laden braucht mich, also bleib "
+    "ich.",
+    "sagt: ");
+  AddInfo( ({"lieblingsgetraenke","lieblingsgetraenk"}),
+    "Meine Lieblingsgetraenke sind Tee, Kaffee, Kakao, Apfelsaft und "
+    "natuerlich Marillenschnaps.",
+    "kichert: ");
+  AddInfo( ({"kuenstler","weitgereister kuenstler"}),
+    "Er hat mir seinen Namen nicht verraten, ich weiss nur dass er durchs "
+    "ganze Huegelland gereist ist.",
+    "sagt: ");
+  AddInfo( ({"tee","kaffee","kakao","apfelsaft","marillenschnaps","schnaps"}),
+    "Das ist eins meiner Lieblingsgetraenke.",
+    "sagt: ");
+  AddInfo( ({"abenteuer","abenteurer"}),
+    "Selber hab ich noch kein furchterregendes Abenteuer erlebt, aber in "
+    "meinen Laden kommen oft Leute die manchmal gar haarstraeubende "
+    "Geschichten erzaehlen.",
+    "sagt: ");
+  AddInfo( ({"geschichten","geschichte","plaetze","klatsch","tratsch"}),
+    "Viele Geschichten werden in meinem Laden erzaehlt, von garstigen "
+    "Bestien, riesigen Drachen, verwegenen Abenteurern, dem Gebirge, "
+    "dem eisigen Norden und der heissen Wueste. Leider oder vielleicht "
+    "auch Gottseidank habe ich selbst noch nie solche Kreaturen gesehen "
+    "und bin noch nie weiter als bis zum Fischerdorf im Sueden gereist. "
+    "Oft kommen auch Leute die mir die neuesten, spannendsten Geruechte "
+    "erzaehlen.",
+    "sagt: ");
+  AddInfo( ({"fischerdorf","dorf"}),
+    "Das Fischerdorf liegt im Sueden. Ich besuche dort manchmal einen "
+    "Freund, Kilian heisst er, vielleicht kennst Du ihn.",
+    "sagt: ");
+  AddInfo( ({"kilian","seebaer"}),
+    "So ein kratzbuerstiger alter Seebaer, ich hol mir bei ihm manchmal "
+    "Farbe.",
+    "sagt: ");
+  AddInfo( ({"drachen","drache","wesen"}),
+    "Ich moechte nie so einem Wesen begegnen.",
+    "sagt: ");
+  AddInfo( ({"bestie","bestien","kreaturen","kreatur"}),
+    "Man hoert manchmal so Geschichten ueber grauenhafte Bestien, "
+    "die einem mit einem Biss verschlingen koennen, ich hoffe das "
+    "sind alles nur Maerchen.",
+    "sagt: ");
+  AddInfo( ({"maerchen"}),
+    "Manch Abenteurer erzaehlt auch Geschichten die mir nicht so recht "
+    "glaubwuerdig erscheinen wollen.",
+    "grinst: ");
+  AddInfo( ({"gebirge"}),
+    "Ich war noch nie dort aber man sagt, dass die Zwerge aus dem "
+    "Gebirge stammen.",
+    "sagt: ");
+  AddInfo( ({"norden","polar"}),
+    "Im hohen Norden waer es mir sicherlich zu kalt.",
+    "zittert: ");
+  AddInfo( ({"wueste"}),
+    "Ui.. dort waers mir bestimmt viel zu heiss, aber ich habe mal "
+    "gehoert, dass dort eine tolle Tabakpflanze wachsen soll.",
+    "erzaehlt begeistert: ");
+  AddInfo( ({"silberland","land"}),
+    "Du befindest Dich mitten im Silberland, in der Stadt Derlim.",
+    "sagt: ");
+  AddInfo( ({"besuch","besuchen"}),
+    "Ich und mein Bruder freuen uns ueber jeden Besuch.",
+    "sagt: ");
+  AddInfo( ({"dinge"}),
+    "Hauptsaechlich stellt mein Bruder Pfeifen her.",
+    "sagt: ");
+  AddInfo( ({"kekse","keks","keksen"}),
+    "Ich backe sie selbst, probier doch mal eins. Den Herzkeks kann ich "
+    "besonders empfehlen.",
+    "sagt: ");
+  AddInfo( ({"herzkeks"}),
+    "Den kannst Du hier kaufen, er ist hauptsaechlich als Geschenk fuer "
+    "jemanden, den man sehr mag gedacht.",
+    "sagt: ");
+  AddInfo( ({"alte leute"}),
+    "Fuer alte Leute ist der Schaukelstuhl reserviert.",
+    "sagt: ");
+  AddInfo( ({"leute","personen"}),
+    "Ja... sowas solls geben.",
+    "grinst: ");
+  AddInfo( ({"wanderer"}),
+    "Manchmal kommen muede Wanderer vorbei um sich bei mir ein bischen "
+    "auszurasten.",
+    "meint: ");
+  AddInfo( ({"bissen","bisse"}),
+    "Mit einem Bissen!.",
+    "warnt: ");
+  AddInfo( ({"geselligkeit"}),
+    "Geselligkeit ist bei uns Hobbits bekannt.",
+    "grinst: ");
+  AddInfo( ({"eigenheiten"}),
+    "Naja wir essen halt viel und so, aber Du wirst schon herausfinden, "
+    "dass wir sehr nett sind.",
+    "sagt: ");
+  AddInfo( ({"burschen","maedels"}),
+    "Meinst Du die Elfen?",
+    "fragt: ");
+  AddInfo( ({"probleme","problem"}),
+    "Ich hab keins, Du etwa schon?",
+    "fragt: ");
+  AddInfo( ({"weg","wege"}),
+    "Es gibt hier viele Wege...",
+    "sagt: ");
+  AddInfo( ({"nordtor","norden"}),
+    "Das liegt im Norden.",
+    "sagt: ");
+  AddInfo( ({"westweg","westen"}),
+    "Der liegt im Westen.",
+    "sagt: ");
+  AddInfo( ({"dickschaedel","dingen"}),
+    "Zwerge haben in manchen Dingen einen ziemlichen Dickschaedel.",
+    "grummelt: ");
+  AddInfo( ({"geier"}),
+    "Frag mal den Geier vielleicht weiss der es.",
+    "lacht: ");
+  AddInfo( ({"gottseidank"}),
+    "Jaja.. Gottseidank!.",
+    "sagt: ");
+  AddInfo( ({"freund","freunde","freunden"}),
+    "Dodo, Kilian und Orw gehoeren zu meinen engeren Freunden.",
+    "sagt stolz: ");
+  AddInfo( ({"farbe"}),
+    "Farbe hol ich mir meist von Kilian.",
+    "sagt: ");
+  AddInfo( ({"mail"}),
+    "Du weisst doch wie man eine Mail schreibt, oder?",
+    "fragt: ");
+  AddInfo( ({"gebiete","gebieten"}),
+    "Orw arbeitet bestimmt schon an neuen Gebieten.",
+    "sagt: ");
+  AddInfo( ({"hauptplatz","platz","hauptstrasse"}),
+    "Der Hauptplatz von Derlim liegt im nordwestlich von hier.",
+    "sagt: ");
+  AddInfo( ({"urlaub"}),
+    "Im Kristallwald Urlaub machen waer bestimmt mal schoen.",
+    "sagt: ");
+  AddInfo( ({"namen","name"}),
+    "Ich heisse Barry!",
+    "sagt: ");
+  AddInfo( ({"barry","ledersohle","pfeifenhaendler","haendler"}),
+    "Das bin ich!",
+    "laechelt: ");
+  AddInfo( ({"huegelland","heimat"}),
+    "Das Huegelland ist meine Heimat.",
+    "sagt: ");
+  AddInfo( ({"decke"}),
+    "Guck nach oben, da ist die Decke.",
+    "grinst: ");
+  AddInfo( ({"sache","gebraeuche","einfuehlungsvermoegen"}),
+    "Fuer Fragen zur Stadtverwaltung wende Dich bitte direkt an Raballion.",
+    "sagt: ");
+  AddInfo( ({"fragen","frage"}),
+    "Du fragst nach einer Frage, was ist denn bei Dir kaputt?",
+    "kichert: ");
+  AddInfo( ({"pfeife","pfeifen"}),
+    "Du kannst bei mir eine kleine Pfeife aus Ton kaufen. Besondere Pfeifen "
+    "kannst Du Dir bei Tobi anfertigen lassen.",
+    "sagt: ");
+  AddInfo( ({"bruder","tobi"}),
+    "Tobi ist mein Bruder, er arbeitet in seiner Pfeifenwerkstatt.",
+    "sagt: ");
+  AddInfo( ({"handwerk","pfeifenherstellung","herstellung"}),
+    "Tobi stellt die Pfeifen her, er versteht sein Handwerk.",
+    "sagt: ");
+  AddInfo( ({"pfeifenkraeuter","kraeuter","pfeifenkraut","kraut"}),
+    "Es gibt viele verschiedene Pfeifenkraeuter. In meinem Laden bekommst "
+    "Du aber nur Langgrundblaetter zu kaufen. Die anderen Kraeuter sind "
+    "zu selten um sie hier anzubieten.",
+    "sagt: ");
+  AddInfo( ({"langgrundblaetter","grundblaetter","blaetter","langgrundblatt",
+             "grundblatt","blatt"}),
+    "Das Langgrundblatt ist das am leichtesten zu findende Pfeifenkraut, "
+    "hier in Derlim.",
+    "sagt: ");
+  AddInfo( ({"grottenkraut","grottenkraeuter"}),
+    "Das Grottenkraut rauche ich am liebsten, leider findet man es "
+    "nirgends in Derlim.",
+    "sagt: ");
+  AddInfo( ({"suedstern","stern","suedsterne","sterne"}),
+    "Der Suedstern waechst nur in sehr sonnigen Regionen.",
+    "sagt: ");
+  AddInfo( ({"nakrafulpflanze","pflanze","nakrafulpflanzen","pflanzen"}),
+    "Davon hab ich schon mal gehoert, ist auch ein Pfeifenkraut. "
+    "Leider ist diese Pflanze so selten, dass ich noch nie eine bekommen "
+    "habe.",
+    "sagt: ");
+  AddInfo( ({"region","regionen"}),
+    "Du bist hier in der Region Huegelland.",
+    "sagt: ");
+  AddInfo( ({"ton","holz"}),
+    "Pfeifen werden von Tobi entweder aus Ton oder aus Holz hergestellt.",
+    "sagt: ");
+  AddInfo( ({"echse","echsen"}),
+    "Die sind gefaehrlich!",
+    "warnt: ");
+  AddInfo( ({"tabakpflanze"}),
+    "Meinst Du die Nakrafulpflanze?",
+    "fragt: ");
+  AddInfo( ({"ringerl"}),
+    "Ich blase tolle Ringerl ...aber wie ich sie mache verrate ich nicht.",
+    "grinst: ");
+  AddInfo( ({"geschenkskarton","karton"}),
+    "Hobbits sind allgemein dafuer bekannt, andere gerne zu beschenken. "
+    "Du kannst hier bei mir einen Geschenkskarton kaufen um Deine "
+    "Geschenke auch schoen zu verpacken.",
+    "sagt: ");
+  AddInfo( ({"rumplaetzchen","plaetzchen"}),
+    "Die Rumplaetzchen die Du bei mir kaufen kannst, sind nach einem alten "
+    "Hausrezept gemacht. Aber sei vorsichtig! Zuviele davon koennen Dich "
+    "ganz schoen betrunken machen.",
+    "sagt: ");
+  AddInfo( ({"hausrezept","rezept"}),
+    "Das Rezept verrate ich natuerlich nicht!",
+    "grinst: ");
+  AddInfo( ({"pudding","schale"}),
+    "Du kannst bei mir eine Schale mit Pudding kaufen. Besonders lecker finde "
+    "ich die zerriebenen Haselnussstuecke darauf.",
+    "sagt: ");
+  AddInfo( ({"haselnussstuecke","nussstuecke","stuecke"}),
+    "Ich pfluecke die Haselnuesse selber.",
+    "sagt stolz: ");
+  AddInfo( ({"haselnuesse","nuesse","haselnuss","nuss"}),
+    "Haselnuesse findet man oft in Derlim, Du brauchst nur genau zu suchen.",
+    "grinst: ");
+
+  // Essen Info
+  AddInfo( ({"essen"}),
+    "Willst Du mir nicht etwas zu Essen bringen?",
+    "fragt hungrig: ");
+
+  AddInfo( ({"aufgabe","quest"}),
+    "Also, Aufgabe habe ich keine fuer Dich, aber Du kannst mir ja trotzdem "
+    "etwas zu Essen bringen.",
+    "meint: ");
+
+// Spezialinfos
+  AddInfo( ({"geruecht","geruechte","geruechten"}),
+    #'geruechteinfo, "erzaehlt: ", 1);
+
+/*
+  AddInfo( ({"",""}),
+    ".",
+    "sagt: ");
+*/
+//  SetProp(P_LOG_INFO, "npc_logfile");
+
+
+/* Zaubersprueche */
+  SetProp(P_SPELLRATE,15);
+  AddSpell(4,150,
+    "Barry rammt Dir seinen Kopf in den Magen.\n",
+    "Barry rammt @WEM seinen Kopf in den Magen.\n",
+     ({DT_AIR,DT_BLUDGEON}),([SP_SHOW_DAMAGE:1]));
+  AddSpell(5,100,
+    "Barry beisst Dir in die Hand.\n",
+    "Barry beisst @WEM in die Hand.\n",
+     DT_PIERCE,([SP_SHOW_DAMAGE:1]));
+
+  AddDefaultSpell(1,150,DS_BLIND,
+    "Barry blaest Dir Pfeifenrauch in die Augen.\n",
+    "Barry blaest @WEM Pfeifenrauch in die Augen.\n");
+
+
+/* Chats */
+
+  SetChats(3, ({
+  "Barry freut sich ueber die neuesten Geruechte.\n",
+  "Barry feilscht mit ein paar Kunden.\n",
+  "Barry warnt: Leg Dich nicht mit den Echsen an!\n",
+  "Barry flucht ueber die Tauben auf den Strassen Derlims.\n",
+  "Barry laesst eine Pfeife pruefend durch seine Finger gleiten.\n",
+  "Barry erzaehlt ein wenig ueber Derlim.\n",
+  "Barry sortiert seine Waren.\n",
+  "Barry seufzt.\n",
+  "Barry grinst Dich an.\n",
+  "Barry steckt seine Haende in die Hosentaschen und gaehnt.\n",
+  "Barry schaut sein gesamtes Sortiment durch.\n",
+  "Barry blickt in seine Kiste.\n",
+  "Barry fragt: Will hier jemand etwas kaufen?\n",
+  "Barry zieht sich die Hose hoch.\n",
+  "Barry isst einen Keks.\n",
+  "Barry raeuspert sich.\n",
+  "Barry wischt ueber die Ladentheke.\n",
+  "Barry wiegt etwas auf der kleinen Waage ab.\n",
+  "Barry putzt das Fenster an der Tuer.\n",
+  "Barry klopft den Teppich aus.\n",
+  "Barry lehnt sich gemuetlich an die Theke.\n",
+  "Barry schneuzt sich die Nase.\n",
+  "Barry reibt sich die Haende.\n",
+  "Barry gruebelt eine Weile vor sich hin.\n",
+  "Barry mustert Dich.\n",
+  "Barry ueberprueft die Regale.\n",
+  "Barry rastet sich ein wenig aus.\n",
+  "Barry wischt sich die Haende in der Schuerze ab.\n",
+  "Barry laechelt Dich an.\n",
+  "Barry putzt seine Pfeife.\n",
+  "Barry gaehnt laut.\n",
+  "Barry schaut sich gemuetlich um.\n"
+  }) );
+
+  SetAttackChats(10, ({
+  "Barry arglt.\n",
+  "Barry schreit: Wieso machst Du das?\n",
+  "Barry sagt: Immer diese Jugend!\n",
+  "Barry tritt Dir gegen das Schienbein.\n",
+  "Barry wird nun echt wuetend.\n",
+  "Barry ruft: Hilfe!\n",
+  "Barry fragt: Musst Du unbedingt einen armen Pfeifenhaendler angreifen?\n",
+  "Barry gibt Dir eine Ohrfeige.\n",
+  "Barry ballt seine behaarten Faeuste.\n",
+  "Barry geht in Deckung.\n"
+  }) );
+
+  AddCmd( ({"nimm"}), "fkt_kisten_diebstahl");
+  AddCmd( ({"stecke","steck","lege","leg"}), "fkt_in_kiste");
+  AddCmd( ({"geruecht"}), "geruecht");
+  geruechtecounter=0;
+
+  SUID;
+
+  CLONEME("/p/armour/cloak/lederschuerze" );
+  CLONEME("/p/armour/trousers/lederhose" );
+  CLONEME("/p/armour/armour/weste" );
+  CLONEME(OBJ"pfeife");
+  CLONEME(OBJ"langgrundblatt");
+  command("trage alles");
+  call_out("blattrauchen",100+random(20));
+  
+  geruecht = SAVERAUM->QueryGeruecht();
+  geruechteverbreiter = SAVERAUM->QueryGeruechteverbreiter();
+}
+
+// Funktion um Geruechte zu verbreiten :-))
+int geruecht(string str)
+{
+  str = TP->_unparsed_args();
+  notify_fail("Welches Geruecht moechtest Du verbreiten?\n ");
+  if(!str) return 0;
+  if(geruechtecounter==1)
+  {
+    if (GERUECHTEVERBREITER(TP))
+    {
+      write("Barry sagt: Ich muss mal dein erstes Geruecht verdauen!\n");
+      return 1;
+    }
+    write("Barry sagt: Im Moment muss ich mal das Geruecht von "
+          +CAP(geruechteverbreiter[0])+" verdauen!\n");
+    return 1;
+  }
+  geruechteverbreiter=({});
+  geruecht="";
+  write("Leise fluesterst Du Barry etwas ins Ohr.\n");
+  tell_room(environment(this_player()),
+        TPN+" fluestert Barry etwas ins Ohr!\n",({ TP }));
+  geruechtecounter=1;
+  geruecht=str;
+  geruechteverbreiter += ({ getuid(TP) });
+  write_file(LOG "geruechte.log",
+    ctime()+": "+CAP(geruechteverbreiter[0])+":\n"+geruecht+"\n");
+  SAVERAUM->SetGeruecht(geruecht);
+  SAVERAUM->SetGeruechteverbreiter(geruechteverbreiter);
+  return 1;
+}
+
+// Barry die alte Tratschtante erzaehlt die Geruechte natuerlich
+// jedem....
+string geruechteinfo(string key)
+{
+  if( sizeof(geruechteverbreiter)==0 )
+  {
+    return "Ich kenne leider keine neuen Geruechte! Mit \"geruecht <text>\" "
+           "kannst Du mir eins zufluestern.";
+  }
+  if (GERUECHTEVERBREITER(TP))
+  {
+    write("Barry sagt: Du hast es mir doch vorhin gerade erzaehlt...\n");
+    tell_room(environment(this_player()),
+          "Barry fluestert "+CAP(TPN)+" das neueste Geruecht ins Ohr!\n",
+          ({ TP }));
+    return geruecht+"\nMit \"geruecht <text>\" kannst Du mir ein "
+                    "Geruecht zufluestern.";
+  }
+  write("Barry erzaehlt: "+CAP(geruechteverbreiter[0])+
+        " hat mir folgendes zugefluestert...\n");
+  tell_room(environment(this_player()),
+        "Barry fluestert "+CAP(TPN)+" das neueste Geruecht ins Ohr!\n",
+        ({ TP }));
+  return geruecht+"\nMit \"geruecht <text>\" kannst Du mir ein "
+                  "Geruecht zufluestern.";
+}
+
+
+// Barry stopft seine Pfeife
+int blattrauchen(string str)
+{
+  if(TO)
+  {
+  TO->command_me("stopfe blatt in pfeife");
+  call_out("pfeifenrauchen",10);
+  }
+  return 1;
+}
+
+int krautrauchen(string str)
+{
+  if(TO)
+  {
+  TO->command_me("stopfe kraut in pfeife");
+  call_out("pfeifenrauchen",10);
+  }
+  return 1;
+}
+
+// Barry raucht Pfeife
+int pfeifenrauchen(string str)
+{
+  if(TO)
+  {
+  TO->command_me("rauche pfeife");
+  }
+  return 1;
+}
+
+
+
+// Mitloggen wenn ein Spieler den NPC killt:
+void die(int poisondeath) {
+  write_file(LOG "npc.kills",
+    ctime()+": "+CAP(getuid(PL))+" killt Barry.\n");
+  EMASTER->AddFeinde(getuid(TP));
+  ::die(poisondeath);
+}
+// Mitloggen wenn ein Spieler vom NPC gekillt wird:
+void NotifyPlayerDeath(object player, object killer, int lostexp) 
+{
+  if(killer == ME)
+    write_file(LOG "npc.deads",
+      ctime()+": Barry hat gerade "+CAP(getuid(player))+" umgebracht.\n");
+}
+
+// Funktion falls jemand versucht etwas aus Barry's Kiste zu nehmen
+int fkt_kisten_diebstahl(string str)
+{
+  string was;
+  string woraus;
+  if(!str) return 0;
+  if (sscanf(str, "%s aus %s", was, woraus))
+  {
+    if(woraus=="kiste")
+    {
+      write("Barry schreit: Haende weg von meiner Kiste!\n");
+      tell_room(environment(this_player()),
+        TPN+" wollte etwas aus Barry's Kiste stehlen!\n",({ TP }));
+      write_file(LOG "kiste.log",
+        ctime()+": "+CAP(getuid(PL))+" wollte "+CAP(was)+" aus der "
+        "Kiste stehlen.\n");
+    }
+  }
+  return 0;
+}
+
+// Man soll keine Sachen in die Kiste stecken koennen wenn Barry da ist
+int fkt_in_kiste(string str)
+{
+  string was;
+  string worein;
+  if(!str) return 0;
+  if (sscanf(str, "%s in %s", was, worein))
+  {
+    if(worein=="kiste")
+    {
+      write("Barry sagt: Wenn Du mir etwas schenken willst, dann gib mirs "
+            "persoenlich!\n");
+      return 1;
+    }
+  }
+  return 0;
+}
+
+// Reactionen wenn Barry etwas vom Spieler bekommt
+void give_notify(object ob)
+{
+  //Langgrundblatt
+  if(ob->id("PFEIFENKRAUTBLATT"))  
+  {
+    say(BS("Barry sagt: Wow, danke! Ich liebe Langgrundblaetter!"));
+  }
+  //Suedstern
+  if(ob->id("PFEIFENKRAUTSTERN"))  
+  {
+    say(BS("Barry sagt: Wow, danke! Den Suedstern findet man sehr selten!"));
+  }
+  //Nakrafulpflanze
+  if(ob->id("PFEIFENKRAUTPFLANZE_0" || "PFEIFENKRAUTPFLANZE_1"))  
+  {
+    say(BS("Barry sagt: Wow, danke! Eine Nakrafulpflanze!!!"));
+  }
+  //Grottenkraut
+  if(ob->id("PFEIFENKRAUTKRAUT"))  
+  {
+    say(BS("Barry sagt: Wow, danke! Ein Grottenkraut bekommt man nicht oft!"));
+    call_out("krautrauchen", 10+random(5));
+  }
+  //Keinen Pudding
+  if(ob->id("haselnusspudding"))
+  {
+    say(BS("Barry seufzt: Schon wieder Pudding, davon habe ich ja selber "
+	   "genug.")+
+	BS("Barry sagt: Trotzdem, danke."));
+    ob->remove(1);
+    return;
+  }
+  //Keine Plaetzchen
+  if(ob->id("rumplaetzchen"))
+  {
+    say(BS("Barry seufzt: Schon wieder ein Rumplaetzchen, davon habe ich ja "
+	   "selber genug.")+
+	BS("Barry sagt: Trotzdem, danke."));
+    ob->remove(1);
+    return;
+  }
+  else  //Anderes
+  {
+    // Wenn er was zu essen bekommt...
+    if(ob->id("Nahrung"))
+      {
+	say(BS("Barry sagt erfreut: Oh, etwas zu Essen! *mjam*"));
+	call_out("auffuttern", 2+random(4), ob);
+	return;
+      }
+    
+    say(BS("Barry huepft erfreut durch den Laden."));
+    write_file(LOG "kiste.log",
+      ctime()+": "+CAP(getuid(PL))+" schenkt Barry "+ob->name(WEN,0)+".\n");
+    call_out("in_kiste1", 4+random(4), ob);
+  }
+}
+
+// Check fuer Hobbits und Gradopfeife
+void auffuttern(object ob)
+{
+  object pf;
+  
+  if(!objectp(ob)) return;
+  if(!TP) return;
+  if(ENV(TP)!=MENV) return;
+  
+  if(lower_case(TP->QueryProp(P_RACE))=="hobbit")
+    if(!present("\nPROtheG_Racetool", TP))
+      {
+	write(BS("Barry bedankt sich herzlich bei Dir.")+
+	      BS("Barry meint: Nimm diese Pfeife als Geschenk an."));
+	say(BS("Barry ueberreicht "+TP->name(WEM)+" etwas."), TP);
+	
+	pf=clone_object(HOBBITTOOL);
+	pf->move(TP, M_NOCHECK);
+	
+	call_out("auffuttern2", 4+random(4), ob);
+	
+	return;
+      }
+  
+  write(BS("Barry bedankt sich herzlich bei Dir."));
+  say(BS("Barry bedankt sich bei "+TP->name(WEM)+"."), TP);
+  
+  call_out("auffuttern2", 4+random(4), ob);
+}
+
+void auffuttern2(object ob)
+{
+  say(BS("Barry isst "+ob->name(WEN)+" auf."));
+
+  ob->remove(1);
+}
+
+// Sequenz wenn der Spieler Barry etwas schenkt
+void in_kiste1(object ob) 
+{
+  switch(random(3))
+  {
+  case 0:
+    say(BS("Barry laesst "+ob->name(WEN,2)+" pruefend durch seine Finger gleiten."));
+    call_out("in_kiste2", 8+random(6), ob);
+    break;
+  case 1:
+    say(BS("Barry untersucht "+ob->name(WEN,2)+" genau."));
+    call_out("in_kiste2", 8+random(6), ob);
+    break;
+  case 2:
+    say(BS("Barry schaut sich "+ob->name(WEN,2)+" genau an."));
+    call_out("in_kiste2", 8+random(6), ob);
+    break;
+  }
+}
+
+void in_kiste2(object ob) 
+{
+  switch(random(3))
+  {
+  case 0:
+    say(BS("Barry kichert gluecklich."));
+    call_out("in_kiste3", 8+random(6), ob);
+    break;
+  case 1:
+    say(BS("Barry ist ganz stolz auf "+ob->name(WEN,2)+"."));
+    call_out("in_kiste3", 8+random(6), ob);
+    break;
+  case 2:
+    say(BS("Barry freut sich sehr ueber "+ob->name(WEN,2)+"."));
+    call_out("in_kiste3", 4+random(4), ob);
+    break;
+  }
+}
+
+void in_kiste3(object ob) 
+{
+  switch(random(3))
+  {
+  case 0:
+    say(BS("Barry sagt: Du bist wirklich ein Schatz!"));
+    call_out("in_kiste4", 8+random(6), ob);
+    break;
+  case 1:
+    say(BS("Barry sagt: Danke fuer "+ob->name(WEN,2)+"!"));
+    call_out("in_kiste4", 8+random(6), ob);
+    break;
+  case 2:
+    say(BS("Barry sagt: Danke, fuer das schoene Geschenk!"));
+    call_out("in_kiste4", 4+random(4), ob);
+    break;
+  }
+}
+
+void in_kiste4(object ob) 
+{
+  TO->command_me("stecke "+ob->QueryProp(P_IDS)[0]+" in kiste");
+}
+
+// init
+init()
+{
+  ::init();
+  if(ENEMY(TP))
+  {
+    say("Barry schreit: Stirb, "+TPN+"!!!\n");
+    TO->Kill(TP);
+    return;
+  }
+  if(interactive(TP)&& member(begruesst,getuid(TP))==-1) 
+    call_out("hallo",0);
+}
+
+// Begruessung des Spielers wenn er/sie den Laden betritt
+void hallo() 
+{ 
+  string pf;
+  
+  if( MENV!=ENV(TP) ) return;
+  begruesst += ({ getuid(TP) });  
+  if (TP->QueryProp(P_RACE)=="Hobbit") // Hobbits werden mit ihrem Namen
+  {                                    // angesprochen
+    switch(random(3))         
+    {
+    case 0:
+      tell_room(environment(TO), "Barry sagt: Hallo, wie gehts "+TPN+"?\n"
+      "Barry sagt: Freut mich, dass Du mich mal wieder besuchst!\n");
+      if(!present("\nhobbittool", TP))
+	write(BS("Barry fragt Dich: Willst Du mir nicht etwas zu Essen "
+		 "bringen?"));
+      break;
+    case 1:
+      tell_room(environment(TO), "Barry freut sich: Hallo, "+TPN+"!\n");
+      if(!present("\nhobbittool", TP))
+	write(BS("Barry fragt Dich: Willst Du mir nicht etwas zu Essen "
+		 "bringen?"));
+      break;
+    case 2:
+      tell_room(environment(TO), "Barry grinst: Was fuehrt Dich zu mir, "
+      +TPN+"?\n");
+      if(!present("\nhobbittool", TP))
+	write(BS("Barry fragt Dich: Willst Du mir nicht etwas zu Essen "
+		 "bringen?"));
+      break;
+    default:
+      tell_room(environment(TO), "Barry sagt: Hi!\n");
+    }
+  }
+  else                                  // Andere Rassen werden nicht
+  {                                     // mit dem Namen angesprochen
+    switch(random(3))         
+    {
+    case 0:
+      tell_room(environment(TO), "Barry sagt: Hallo, wie gehts "
+      +(((int)this_player()->QueryProp(P_GENDER)==FEMALE)?"Frau":"Herr")+" "
+      +capitalize((string)this_player()->QueryProp(P_RACE))+"?\n");
+      break;
+    case 1:
+      tell_room(environment(TO), "Barry staunt: Oh! Ein"
+      +(((int)this_player()->QueryProp(P_GENDER)==FEMALE)?"e":"")+" "
+      +this_player()->QueryProp(P_RACESTRING)[WER]+
+      " in meinem kleinen bescheidenen Laden?\n"
+      "Barry staunt: Wow, solchen Besuch hab ich nicht oft!\n");
+      break;
+    case 2:
+      tell_room(environment(TO), "Barry sagt: Was fuehrt Dich zu mir, "
+      +this_player()->QueryProp(P_RACESTRING)[WER]+ "?\n");
+      break;
+    default:
+      tell_room(environment(TO), "Barry sagt: Hi!\n");
+    }
+  }
+}
+
+
+// Reactions
+void StartReaction(string verb, string gruppe, string adverb, int touch) {
+  if (find_call_out("reaction") != -1) return;
+  switch (gruppe) {
+    case "aengstlich":
+      call_out("reaction", 0, TP, 
+        "beruhigt Dich indem er Dir den Kopf taetschelt.",
+        "beruhigt "+TPN+" indem er "+TP->QueryPronoun(WEM)+" den Kopf taetschelt.");
+      break;
+    case "aergerlich":
+      call_out("reaction", 0, TP,
+        "troestet Dich.",
+        "troestet "+TPN+".");
+      break;
+    case "albern":
+      call_out("reaction", 0, TP,
+        "kichert: Na, Du bist ja ein Spassvogel!",
+        "kichert: Na, Du bist ja ein Spassvogel, "+TPN+"!");
+      break;
+    case "fies":
+      call_out("reaction", 0, TP,
+        "arglt: HE! Aergern gilt nicht, "+TPN+".",
+        "arglt: HE! Aergern gilt nicht, "+TPN+".");
+      break;
+    case "frech":
+      call_out("reaction", 0, TP,
+        "schreit: Nun werd mal nicht gleich frech!",
+        "schreit: Nun werd mal nicht gleich frech, "+TPN+"!");
+      break;
+    case "froh":
+      call_out("reaction", 0, TP,
+        "laechelt froehlich.", 
+        "laechelt froehlich.");
+      break;
+    case "intim":
+      call_out("reaction", 0, TP,
+        "erroetet: Das war aber lieb von Dir.",
+        "erroetet: Das war aber lieb von Dir, "+TPN+".");
+      break;
+    case "nett":
+      call_out("reaction", 0, TP,
+        "knuddelt Dich mit seinen kraeftigen haarigen Armen.",
+        "knuddelt "+TPN+" mit seinen kraeftigen haarigen Armen.");
+      break;
+    case "neutral":
+      call_out("reaction", 0, TP,
+        "grinst Dich an.",
+        "grinst "+TPN+" an.");
+      break;
+    case "traurig":
+      call_out("reaction", 0, TP,
+        "drueckt Dich an seine behaarte Brust und troestet Dich.",
+        "drueckt "+TPN+" an seine behaarte Brust und troestet "+TP->QueryPronoun(WEN)+".");
+      break;
+  }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch) 
+{
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void reaction(object ob, string macher, string andere) 
+{
+  if (present(ob, ENV(TO))) 
+  {
+    tell_object(ob, BS(Name(WER, 1)+" "+macher));
+    tell_room(ENV(TO), BS(Name(WER, 1)+" "+andere), ({ob}));
+  }
+}
+
+reset()
+{
+  ::reset();
+  geruechtecounter=0;
+  begruesst = ({});
+}

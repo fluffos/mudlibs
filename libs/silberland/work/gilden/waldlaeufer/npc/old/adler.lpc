@@ -1,0 +1,368 @@
+/*****************************************************************************
+Die Adler der Gilde
+(c) Lilyth, Torian, Delgo @ Silberland <sl.mud.at>
+06.08.05 - Begin
+
+*****************************************************************************/
+
+//** INCLUDE + INHERIT + DEFINE ********************************************//
+#include "../def.h"
+
+inherit NPC"summons";
+
+int hawk, defend;
+
+//**************************************************************************//
+
+
+
+//** CREATE ****************************************************************//
+void create()
+{
+  if(!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Ein Adler");
+  SetProp(P_LONG,
+    "Der Adler segelt ruhig und gleichmaessig ueber Deinem Kopf. Sein "
+    "stellenweises blau gefaerbtes Gefieder kennzeichnet seine Herkunft. "
+    "Sein spitzer Schnabel und seine scharfen Krallen sind nicht zu "
+    "unterschaetzende Waffen.");
+  SetProp(P_NAME, "Adler");
+  SetProp(P_GENDER, MALE);
+  AddId(({"adler", "\nranger_hawk", NOCONTROL, NOWIMPY, SKILL_NOLEARN
+    ,FEDERN_WUSCHEL }));
+  SetProp(P_RACE, "Adler");
+  AddClass( ({CL_ANIMAL, CL_FLYING }) );
+  SetProp(P_ARTICLE, 1);
+  create_default_npc(15);
+  SetProp(P_FRIEND, 1);
+  SetProp(P_NO_GLOBAL_ATTACK, 1);
+  SetProp(P_HANDS, ({" mit seinen Krallen", QueryProp(P_HANDS)[1],
+                    ({DT_RIP})   }) );
+  SetProp(P_SIZE, 160);
+  SetProp(P_WEIGHT, 45000);
+  SetProp(P_ALIGN, 400);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_HEAL, 0);
+  SetProp(P_AGGRESSIVE, 0);
+  SetProp(P_WIMPY, 0);
+  SetProp(P_NOMAGIC, 0);
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    Name(WER,1)+" kann sowas nicht.\n" }) );
+
+  SetProp(P_MSGIN, "fliegt herein");
+  SetProp(P_MSGOUT, "fliegt");
+  SetProp(P_MMSGIN, "landet hier");
+  SetProp(P_MMSGOUT, "erhebt sich in die Luefte");
+  SetProp(P_DIE_MSG,  " kreischt laut und fliegt davon.\n");
+  SetProp(P_NOCORPSE,  1);
+  SetProp(P_KILL_NAME, "Ein Adler");
+  AddInfo(DEFAULT_INFO, "kann Deine Sprache nicht verstehen.\n");
+  AddInfo(({"lilyth", "torian", "delgo"}), "kreischt.","");
+
+  SetProp(P_SPELLRATE, 0);
+  
+  SetChats(1,
+  ({Name(WER, 1)+" kreischt.\n",
+    Name(WER, 1)+" fliegt seine Runden.\n",
+   }) );
+  SetAttackChats(10,
+  ({Name(WER, 1)+" faengt an zu kratzen.\n",
+    Name(WER, 1)+" flattert wild mit den Fluegeln.\n",
+   }) );
+   
+  hawk=0;
+  defend=0;
+
+
+}
+//**************************************************************************//
+
+
+
+//** Komunikation **********************************************************//
+int order(string action)
+{
+  object *enemies;
+  object enemy;
+  string *s;
+  int i;
+
+  enemies=({});
+  enemy=0;
+
+  std_order(action);
+  
+  //STURZFLUG
+  
+  //ziel angegeben?  
+  s=explode(action, " ");
+  if(sizeof(s)<=1) {owner->Message(BS("Wen soll "+TO->Name(WER, 1)+" mit "
+                    +TO->QueryPossPronoun(MALE, 2)+" Sturzflug angreifen?")); 
+                    return 1;}
+  s[1]=lower_case(s[1]);
+  
+  if(s[0] == "sturzflug"       ||
+     s[0] == "attacke")
+  { 
+    //Im Kampf?
+    if(!(owner->InFight())) 
+    { owner->Message(BS("Das geht nur im Kampf!")); 
+      return 1;}
+    
+    //Schon/Noch Stuzflug aktiv?
+    if( hawk ) 
+    { owner->Message(BS(TO->Name(WER, 1)+" macht doch schon einen "
+                     "Sturzflug!"));
+      return 1;}
+    
+    //Kaempft der Adler mit?
+    if( defend==0)
+    { owner->Message(BS(TO->Name(WER, 1)+" muss schon mit Dir zusammen "
+                     "kaempfen.")); 
+      return 1;}
+    
+    //unter freien Himmel?
+    if( (ENV(TO)->QueryProp(P_INDOORS)) == 1 ) 
+    { owner->Message(BS("Das geht nur im Freien.")); 
+      return 1;} 
+      
+    //Ist das ziel ein Feind?
+    enemies=TO->QueryEnemies()[0];
+    if(sizeof(enemies) == 0 )
+    { owner->Message(BS("'"+CAP(s[1])+"' ist kein Feind."));
+      return 1;}
+    for(i=0; i<=sizeof(enemies)-1; i++)
+    { //ist der Feind im Raum?
+      if(ENV(enemies[i])!=ENV(owner)) 
+      { enemies-=({enemies[i]}); } 
+    }
+    for(i=0; i<=sizeof(enemies)-1; i++)
+    {
+      if(lower_case(enemies[i]->QueryProp(P_NAME))==s[1])
+      { enemy=enemies[i]; i=sizeof(enemies);}
+      else if( (member_array(s[1], (enemies[i]->QueryProp(P_IDS))) ) != -1)
+      { enemy=enemies[i]; i=sizeof(enemies);}
+    }
+    if(!enemy)
+    { owner->Message(BS("'"+CAP(s[1])+"' ist kein anwesender Feind."));
+      return 1;}
+
+    hawk=1;
+    tell_room(ENV(TO), BS(owner->Name(WER,1)+" gibt "+TO->Name(WEM, 1)+" ein "
+                          "Zeichen "+TO->Name(WER, 1)+" steigt in den Himmel "
+                          "hinauf.")
+                          , ({owner}) );
+    owner->Message(BS("Du gibst "+TO->Name(WEM, 1)+" ein Zeichen und "+
+                       TO->Name(WER, 1)+" steigt"
+                      " in den Himmel hinauf."));  
+    TO->move(ROOM "air", M_GO | M_SILENT);
+    call_out("sturzflug_2", 4, enemy); 
+    return 1;
+  } 
+}
+
+//**************************************************************************//
+
+
+
+//** SpezialAttacke ********************************************************//
+int sturzflug_2(object enemy)
+{
+  int dam;
+  string *dam_type;
+  
+  hawk=0;
+  
+  TO->move(ENV(owner), M_GO);
+  if( !enemy ) 
+  { owner->Message(BS(CAP(enemy->Name())+" gibt es nichtmehr!"));   return 1;}
+  if( !present(enemy, ENV(TO)) ) 
+  { owner->Message(BS(CAP(enemy->Name())+" ist nichtmehr hier."));  return 1;}
+  if( !present(enemy, ENV(owner)) ) 
+  { owner->Message(BS(CAP(enemy->Name())+" ist nichtmehr hier."));  return 1;}
+  if( !(owner->IsEnemy(enemy)) ) 
+  { owner->Message(BS(CAP(enemy->Name())+" ist nicht Dein Feind."));return 1;}
+  
+  ENV(TO)->Message(BS(TO->Name(WER, 1)+" bricht aus den Wolken hervor und "
+                      "rast mit unglaublicher Geschwindigkeit auf "
+                      +enemy->Name(WEN)+" zu."));
+  dam_type=({"air", "rip"});
+  dam =(100*owner->QueryProp(P_GUILD_LEVEL)); 
+  dam+=10*QueryProp(P_LEVEL); 
+  if( member_array("\nranger_giant_hawk", (TO->QueryProp(P_IDS) )) )
+  {dam+=random(301);} 
+  else {dam+=random(101);}
+  //dam=1080 .. 1508
+  enemy->Defend(dam, dam_type , 0, TO);
+
+  return 1;
+}
+
+void init()
+{
+  object room; 
+  
+  if(hawk)
+  {
+    if(find_call_out("sturzflug_2") != -1) 
+    { remove_call_out("sturzflug_2"); }
+    owner->Message(BS(TO->Name(WER, 1)+" bricht den Sturzflug ab."));
+    hawk=0;
+  }
+  
+  
+  ::init();
+  
+  if(!(room=ENV(TO))) return;
+
+  if( room->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN]==TT_UNDERWATER )
+  { owner->Message(BS(TO->Name(WER, 1)+" kann nicht tauchen und fliegt "
+                   "davon."));
+    TO->remove(1);}
+
+}
+void Attack(object enemy)
+{
+  if(owner)
+  {  if(ENV(owner) != ENV(TO)) return; }
+  ::Attack(enemy);
+  
+}
+
+//**************************************************************************//
+
+
+
+//** CUSTOMIZE *************************************************************//
+//-- Riesenadler -------------------------------------------------------------
+int shadow_wolf(object caster, int success)
+{
+  int level;
+  
+  
+  // WERTE
+  if(!caster) return 0;
+  if(!success) return 0;
+  
+  owner=caster;
+  
+  if(success < 0) success=0;
+  if(success > 10000) success=10000;
+  
+  level = 23; 
+  level+=random(3); //min +0; max +2
+  if(ENV(owner)->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN] == 4) //FORREST
+  { level+=2; } //max +2 
+  
+  
+  //ANPASSUNG
+  SetProp(P_SHORT, "Ein Riesenadler");
+  SetProp(P_LONG,
+    owner->Name()+" hat Diesen Koenig der Luefte zu sich gerufen um  "
+    "Unterstuetzung im Kampf zu erfahren. Du kannst den Adler nicht genauer "
+    "betrachten da er umherkreist. Doch Du bist Dir sicher die Krallen sind  "
+    "nicht harmlos.");
+  AddId(({"riesenadler", "\nranger_giant_hawk"}));
+  SetProp(P_KILL_NAME, "Ein Riesenadler");
+  //create_default_npc(level)- BEGIN
+  SetProp(P_LEVEL, level);
+  SetProp(P_ATTRIBUTES, ([A_CON: level, A_DEX: level,
+                          A_STR: level, A_INT: level]));
+  SetProp(P_MAX_HP, 30+level*level);
+  SetProp(P_MAX_SP, QueryProp(P_MAX_HP));
+  SetProp(P_HANDS, ({" mit seinen Krallen",
+                    10*level, ({DT_RIP}) }) );
+  SetProp(P_BODY, 4*level);
+  SetProp(P_XP, 0);
+  //create_default_npc(level) - ENDE
+  SetProp(P_MAX_HP, QueryProp(P_MAX_HP)*2);
+  SetProp(P_SIZE, 180+level*3);
+  SetProp(P_WEIGHT, QueryProp(P_SIZE)*600);
+  SetProp(P_ALIGN, 400+random(200));
+  SetProp(P_NOMAGIC, level+6);
+  
+  SetProp(P_RESISTANCE_STRENGTHS ,
+    ([ DT_COLD:      0.2, DT_AIR:      -0.9, DT_LIGHTNING: 0.2 ]) );
+     
+  //ZUSATZFUNKTIONEN
+  owner->AddPursuer(TO);
+  owner->AddDefender(TO);
+  defend=1;
+  
+  return 1;
+}
+
+//-- Der normale Schwarzbaer -------------------------------------------------
+int customize(object caster, int success)
+{
+  int level;
+  object env;
+  
+  // WERTE
+  if(!caster) return 0;
+  if(!success) return 0;
+  
+  owner=caster;
+  if(!living(caster)) env = caster;
+  
+  if(success < 0) success=0;
+  if(success > 10000) success=10000;
+  
+  level =20;
+  level+=(success*3)/10000; //min 0; max +3
+  if(env->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN] == 4) //FORREST
+  { level+=2; } //max +2 
+  
+  //ANPASSUNG  
+  SetProp(P_LONG, 
+    QueryProp(P_LONG)+"Er gehorcht "+to_string(owner->Name())+".");
+  //create_default_npc(level)- BEGIN
+  SetProp(P_LEVEL, level);
+  SetProp(P_ATTRIBUTES, ([A_CON: level, A_DEX: level,
+                          A_STR: level, A_INT: level]));
+  SetProp(P_MAX_HP, 30+level*level);
+  SetProp(P_MAX_SP, QueryProp(P_MAX_HP));
+  SetProp(P_HANDS, ({" mit seinen Krallen",
+                    10*level, ({DT_RIP}) }) );
+  SetProp(P_BODY, 4*level);
+  SetProp(P_XP, 0);
+  //create_default_npc(level) - ENDE
+  SetProp(P_MAX_HP, QueryProp(P_MAX_HP)*3/2);
+  SetProp(P_SIZE, 110+level*3);
+  SetProp(P_WEIGHT, QueryProp(P_SIZE)*200);
+  SetProp(P_ALIGN, 200+random(200));
+  SetProp(P_NOMAGIC, level-15);
+    
+  SetProp(P_RESISTANCE_STRENGTHS ,
+    ([ DT_COLD:      0.2, DT_AIR:      -0.5, DT_LIGHTNING: 0.2 ]) );
+     
+  SetProp(P_MSGOUT, "fliegt hinter "+to_string(owner->Name())
+                    +" hinterher" );
+  SetProp(P_MMSGOUT, "folgt "+to_string(owner->Name()) );
+  
+  //ZUSATZFUNKTIONEN
+  if(living(owner)) {
+    owner->AddPursuer(TO);
+    owner->AddDefender(TO);
+    defend=1;
+  }
+  
+  return 1;
+}
+
+mixed DefendOther(int dam, mixed dam_type, mixed spell, object enemy)
+{ Attack(enemy); return ({dam, dam_type, spell});  } 
+
+//**************************************************************************//
+
+
+
+//** REACTIONS *************************************************************//
+//--Reactions-----------------------------------------------------------------
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{ if(find_call_out("reaction") != -1) return;
+  call_out("reaction", 0, TP, "schreckt zurueck.", "schreckt zurueck."); }
+//**************************************************************************//

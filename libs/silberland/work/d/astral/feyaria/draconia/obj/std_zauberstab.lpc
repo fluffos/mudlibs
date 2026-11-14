@@ -1,0 +1,117 @@
+// revive - Zauberstab zum wiederbeleben von toten
+// 11.9.2004 - Feyaria@SilberLand
+//
+#include "../def.h"
+
+inherit "std/weapon";
+
+void create()
+{
+  string adj;
+
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  adj = ({"blau", "gruen", "rot", "gelb", "schwarz", "weiss", "grau",
+      "violett", "tuerkis", "braun", "orangen", "silbern", "golden"}) [random(13)];
+  SetProp(P_NAME, "Zauberstab");
+  SetProp(P_NAME_ADJ, adj);
+  SetProp(P_GENDER, MALE);
+  SetProp(P_SHORT, Name(WER,0));
+  SetProp(P_LONG, Name(WER,0) + ".");
+  AddId( ({"\nzauberstab", "stab", "zauberstab", "\nastral_zauberstab"}) );
+  AddAdjective( ({adj, adj + "en", adj + "er"}) );
+
+  SetProp(P_WC, 50);
+  SetProp(P_WEAPON_TYPE, WT_CLUB);
+  SetProp(P_NR_HANDS, 1);
+  SetProp(P_SIZE, 50);
+  SetProp(P_WEIGHT, 50);
+  SetProp(P_VALUE, 500);
+  SetProp(P_MATERIAL, ([MAT_PEAR_WOOD: 80, MAT_MISC_MAGIC:20]) );
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_MAGIC, 1);
+  seteuid(getuid(this_object()));
+}
+
+int check()
+{
+  string* filenames;
+  
+  if (!QueryProp(P_WIELDED))
+    return 0;
+
+  notify_fail("Hier funktioniert die Magie dieses Zauberstabes nicht!\n");
+  filenames = explode(file_name(environment(this_player())), "/");
+
+   if (sizeof(filenames) < 6 || filenames[2] != "feyaria" || 
+      member(ALLOWED_ZONES, filenames[3]) == -1)
+    return 0;
+
+
+  notify_fail("Du bist noch zu erschoepft von Deinem letzen Zauber.\n");
+  if (TP->QueryProp(P_NEXT_SPELL_TIME) > time())
+    return 0;
+
+  notify_fail("Du hast doch den Zauberstab erst gerade gezueckt.\n");
+  if (time() - QueryProp(P_EQUIP_TIME) <= 2)
+    return 0;
+
+  return 1;
+}
+
+void after_spell()
+{
+  AddProp("ladungen", -1);
+  if (QueryProp("ladungen") <= 0)
+  {
+    write("Die Magie Deines Zauberstabes hat sich erschoepft.\n");
+    tell_room(environment(this_player()),
+        Name(WER,0) + " loest sich mit einem Funkenschauer auf.\n");
+    TP->AddSp(-random(10));
+    SetProp(P_CURSED, 0);
+    remove(1);
+  }
+}
+
+string _query_short()
+{
+  return Name(WER,0) + " (" + QueryProp("ladungen") + " Ladungen)";
+}
+
+void tell_env(string msg)
+{
+  if (query_once_interactive(environment()))
+    tell_object(environment(), msg);
+  else if (environment()->id("Raum"))
+    tell_room(environment(), msg);
+  else if (environment(environment()) && 
+      query_once_interactive(environment(environment())))
+    tell_object(environment(environment()), msg);
+}
+
+void check_double()
+{
+  object ob;
+  string str;
+
+  if (!this_object() || !stringp(QueryProp(P_NAME)) || !environment()) 
+    return;
+  if (QueryProp(P_NAME) == "Zauberstab der Vernichtung") 
+    str = QueryProp(P_NAME_ADJ)[0] + "er " + lower_case(QueryProp(P_NAME)) + " 2";
+  else
+    str = lower_case(QueryProp(P_NAME)) + " 2";
+  if ((ob = present(str, environment())) && ob != TO)
+  {
+    AddProp("ladungen", ob->QueryProp("ladungen"));
+    tell_env(BS(ob->Name(WER,2) + " verschmilzt mit " + name(WEM,2) + "."));
+    ob->remove();
+  }
+}
+
+varargs int move(mixed dest, int method)
+{
+  call_out("check_double", 0);
+  return ::move(dest, method);
+}

@@ -1,0 +1,97 @@
+mapping prep_wut_der_bestie(object caster, mapping sinfo, int silent)
+{  
+  object ob,pet;
+  
+  //Aenderungen der Werte im sinfo Mapping vermeiden!
+  if(!TestNoTrance(caster, sinfo) || !GuildItemTest(caster, sinfo) ||
+     !FroschTest(caster, sinfo)  || 
+     !IsInFight(caster, sinfo) )
+    return 0;
+    
+  if(!(pet=FindPet(caster))) {
+     tell_object(caster, BS("Dein Tier ist nicht bei Dir."));
+    return 0;
+  }
+
+  if(pet->QueryProp(P_SP) < 10) {
+    tell_object(caster, BS(pet->Name(WER)+" ist zu erschoepft!"));
+    return 0;
+  }
+
+  if(!(pet->QueryFight())) { 
+    tell_object(caster, BS(pet->Name(WER, 1)+" kaempft aber nicht mit Dir zusammen."));
+    return 0;
+  }
+
+  if(pet->QuerySkillAttribute(SA_SPEED) > 100) {
+    tell_object(caster, BS(pet->Name(WER, 1)+" kann seinen Zorn nicht nochmal entfachen!"));
+    return 0;
+  }
+
+  if(!silent){
+    FirstPrepareFuncSuccessfull(caster, sinfo);
+    tell_room(ENV(caster), BS(sprintf("%s schnaubt wild und blickt %s an.",
+            caster->Name(WER), pet->Name(WER)))), ({caster});
+  }
+  
+  return sinfo;
+}
+
+public void sustain_animal_speed(object pet, int speed) {
+  if(!objectp(pet)) return; // tier weg
+  if(!objectp(pet->QueryOwner())) return; // herrchen weg
+
+  if(pet->QueryProp(P_SP) < 5*speed/100 || pet->QueryProp(P_RANGER_PET_SPEED_UNTIL) < time()) {
+    tell_room(ENV(pet), BS(pet->Name(WER)+" schnauft laut und bruhigt sich wieder."));
+    return;
+  }
+
+  pDebug(pet->QueryOwner(), sprintf("wut der bestie :: speed renew = %d\n", speed));
+  pet->ModifySkillAttribute(pet->QueryOwner(), SA_SPEED, 100+speed, 2);
+  pet->AddSp(-10*speed/100);
+  call_out("sustain_animal_speed", 3, pet, speed);
+  return;
+}
+
+int wut_der_bestie(object caster, mapping sinfo)
+{
+  int success, ability, duration, speed;
+  object pet, ob;
+  mixed *oldHands;
+  
+  if(!mappingp(sinfo=prep_wut_der_bestie(caster, sinfo, 1))) return 0;
+  ob=sinfo[SI_ENEMY]; pet=FindPet(caster);
+
+  success=SpellSuccess(caster,sinfo);
+  if(success < (-5000))
+  {
+    tell_room(ENV(caster), BS( pet->Name(WER, 1)+" verliert alle Kampfeslust."));
+    pet->SetProp(P_DISABLE_ATTACK, 5+random(6));
+    return MISSERFOLG;
+  }
+  if(success < 2500) {
+    tell_room(ENV(caster), BS( pet->Name(WER, 1)+" wird friedlicher."));
+    pet->ModifySkillAttribute(caster, SA_SPEED, 50, 10+random(10));
+    return MISSERFOLG;
+  }
+  if(success<0)
+  {
+    tell_object(caster, "Nichts passiert.\n");
+    return MISSERFOLG;
+  }
+
+  ability=sinfo[SI_SKILLABILITY];
+  
+  tell_object(caster, BS(sprintf("Mit einem lauten Bruellen entfesselst du die Wildheit in %s!", pet->name(WEM))));
+  tell_room(ENV(pet), BS(pet->Name(WER)+" bruellt auf und wird rasend!"), ({caster}));
+
+  duration = ability/1000 + success/1000;
+  speed = caster->QueryAttribute(A_INT)*2 + ability/133 + success/333;
+
+  speed += speed * get_equip_bonus(caster, "wut der bestie") / 100;
+  duration += duration * get_equip_bonus(caster, "wut der bestie") / 100;
+
+  pet->SetProp(P_RANGER_PET_SPEED_UNTIL, time()+duration);
+  sustain_animal_speed(pet, speed);
+  return ERFOLG;
+}

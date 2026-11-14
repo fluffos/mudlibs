@@ -1,0 +1,318 @@
+//=========================================================================
+//
+// File:    rwq_netz.c
+// Created by Ronja@SL
+//
+// Project: Rumpelwichtquest
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit "std/thing";
+
+#define FUNMSG "RoomMessage"
+#define IDLETIME 300
+
+string *sp;
+int    nsp, nrw, owner_is_idle;
+
+string owner;
+
+void create()
+{
+  if(!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Ein Netz");
+
+  SetProp(P_NAME, "Netz");
+  SetProp(P_GENDER, NEUTER);
+  AddId( ({"netz", "rankennetz", "RWQ_NETZ", "RWQ_ITEM"}) );
+
+  SetProp(P_MATERIAL, ([MAT_MISC_PLANT:100]) );
+  SetProp(P_WEIGHT, 450);
+  SetProp(P_VALUE, 10);
+  SetProp(P_SIZE, 80);
+  SetProp(P_NODROP, "Wenn Du Dein Netz nicht mehr brauchst, dann zerreisse "
+                    "es doch einfach!\n");
+
+  SetProp(P_NOBUY, 1);
+
+  sp = ({"Wiesu tust du su?"
+        ,"Wiesu tust du armes Rumpelwicht in Netz?"
+        ,"Luss mich rus!"
+        ,"Pfui, pfui, pfui!"
+        ,"Ich muss su meinem Kind!"
+        ,"Wiesu tust du armes Rumpelwicht fangen?"
+        ,"Duckt duch, fungt armes Rumpelwicht!"
+        ,"Hult armes Rumeplwicht us Hoehle, wiesu denn blus?"
+        ,"Uhuhuuuuhuhuuhu."
+        ,"Armes Rumpelwicht hut Ungst!!"
+        ,"Boeses, BOESEEEEEEEEEES, du!"
+        ,"Wiesu du faengst armes, kleines Wicht?"
+        ,"Hilfe! Hilfe! Boeses hat kleines Wicht gefangen!"
+        ,"HILFEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE!!!"
+        ,"Bringt armes kleines Wicht zu boeses Dunkelelf! Wird Wicht schlachten!!"
+        ,"WAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH!!!"
+        });
+
+  nsp           = sizeof(sp);
+  nrw           = 0;
+
+  owner         = 0;
+  owner_is_idle = 0;
+
+  AddCmd("zerreiss|zerreisse&netz|rankennetz",
+    "cmd_zerreissen",
+    "Was moechtest Du zerreissen?\n"
+  );
+}
+
+varargs int move(mixed dest,int method)
+{
+  if(objectp(dest))
+  {
+    if(dest->id("plexu")) method = method | M_NOCHECK;
+  }
+
+  return ::move(dest, method);
+}
+
+string SetOwner(object pl)
+{
+  return (owner = getuuid(pl));
+}
+
+string QueryOwner()
+{
+  return owner;
+}
+
+void removeme(object player)
+{
+  string sp, so;
+
+  sp = "Als Du das Netz nimmst, loesen sich saemtliche Knoten auf. Das "
+       "war aber sehr mangelhaft geknuepft. ";
+
+  so = "Als "+TPN+" das Netz nimmt, loesen sich saemtliche Knoten auf. "
+       "Das war wohl nur sehr mangelhaft geknuepft. ";
+
+  if(nrw == 1)
+  {
+    sp += "Froh, wieder in Freiheit zu sein, fluechtet der gefangene "
+          "Rumpelwicht in Richtung Sternenwald in seine Erdhoehle. ";
+
+    so += "Froh, wieder in Freiheit zu sein, fluechtet der gefangene "
+          "Rumpelwicht in Richtung Sternenwald in seine Erdhoehle. ";
+  }
+  else if(nrw > 1)
+  {
+    sp += "Froh, wieder in Freiheit zu sein, fluechten die gefangenen "
+          "Rumpelwichte in Richtung Sternenwald in ihre Erdhoehle. ";
+
+    so += "Froh, wieder in Freiheit zu sein, fluechten die gefangenen "
+          "Rumpelwichte in Richtung Sternenwald in ihre Erdhoehle. ";
+  }
+
+
+  TP->Message(BS(sp), MSGFLAG_VISUAL);
+  ENV(TP)->Message(BS(so), MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+
+  remove();
+}
+
+void RoomMessage()
+{
+  object pl;
+  int i,r;
+  string s;
+
+  int *chosen;
+
+  if(!owner)                             return;
+  if(!ENV(TO))                           return;
+  if(!(pl=ENV(TO)))                      return;
+  if(!interactive(pl))                   return;
+  if(pl->QueryProp(P_GHOST))             return;
+  if(nrw == 0)                           return;
+  if(find_call_out(FUNMSG) != -1)        return;
+
+  if(owner && (owner != getuuid(pl)))
+  {
+    call_out("removeme", 0);
+    return;
+  }
+
+  if(query_idle(pl) > IDLETIME)
+  {
+    if(owner_is_idle == 0)
+    {
+      owner_is_idle = 1;
+
+      pl->Message("Die Rumpelwichte verstummen auf einmal.\n", MSGFLAG_SOUND);
+
+      if(objectp(ENV(pl)))
+      {
+        ENV(pl)->Message(BS("Die Rumpelwichte in "+pl->name(WESSEN)+" Netz "
+                            "verstummen auf einmal.")
+                        , MSGFLAG_SOUND|MSGFLAG_NO_TP);
+      }
+    }
+  }
+  else
+  {
+    owner_is_idle = 0;
+  }
+
+  if(owner_is_idle == 0)
+  {
+    chosen = ({ });
+    i      = nrw;
+    s      = "";
+
+    while(i--)
+    {
+      r = random(nsp);
+      while(member(chosen,r) > -1) r = random(nsp);
+      chosen += ({ r });
+      s += sp[r] + "\n";
+    }
+
+    tell_object(pl,s);
+
+    if(random(5) == 3)
+    {
+      tell_room(ENV(pl),BS("Die Rumpelwichte in "+pl->Name(WESSEN)+" Netz "
+                         "schreien als ginge es um Leben und Tod."), ({pl}) );
+    }
+  }
+
+  call_out(FUNMSG, random(5) + owner_is_idle * 15);
+}
+
+void StopMessage()
+{
+  while(find_call_out(FUNMSG) != -1) remove_call_out(FUNMSG);
+}
+
+void init()
+{
+  ::init();
+
+  if(!ENV(TO))         return;
+  if(!TP)              return;
+  if(!interactive(TP)) return;
+
+  if(!owner) SetOwner(TP);
+
+  if(owner != getuuid(TP))
+  {
+    call_out("removeme", 0, TP);
+    return;
+  }
+
+  call_out(FUNMSG, 0);
+}
+
+string _query_long()
+{
+  string s;
+
+  s = "Ein Netz aus Ranken aus dem Sternenwald. Es ist sehr reissfest und "
+      "auch etwas klebrig, fast wie ein Fliegenfaenger. Fuer Fliegen "
+      "fangen kann man das Netz allerdings nicht gebrauchen, aber fuer "
+      "das eine oder andere Tier eventuell schon. ";
+
+  switch(nrw)
+  {
+    case 1 : s += "Es befindet sich im Moment ein Rumpelwicht darin. "; break;
+    case 2 : s += "Es befinden sich zwei Rumpelwichte darin. ";break;
+    case 3 : s += "Es befinden sich drei Rumpelwichte in dem Netz."; break;
+    case 4 : s += "Es befinden sich vier Rumpelwichte darin. "; break;
+    case 5 : s += "Es befinden sich fuenf Rumpelwichte darin. ";break;
+    case 6 : s += "Es befinden sich sechs Rumpelwichte in dem Netz."; break;
+    case 7 : s += "Es befinden sich sieben Rumpelwichte darin. "; break;
+    case 8 : s += "Es befinden sich acht Rumpelwichte darin. ";break;
+    case 9 : s += "Es befinden sich neun Rumpelwichte in dem Netz."; break;
+  }
+
+  return BS(s);
+}
+
+void SetRW(int i)
+{
+  nrw = i;
+}
+
+void AddRW(int i)
+{
+  nrw += i;
+  if(nrw < 0) nrw = 0;
+  if(nrw > 8) nrw = 8;
+}
+
+int QueryRW()
+{
+  return nrw;
+}
+
+int cmd_zerreissen(string str)
+{
+  string sp, so;
+
+  if(!present("RWQ_NETZ",TP))
+  {
+    TP->Message(BS("Dazu muesstest Du das Netz erstmal in den Haenden"
+                   "halten."), MSGFLAG_VISUAL);
+    return -1;
+  }
+
+  while(find_call_out(FUNMSG) != -1) remove_call_out(FUNMSG);
+
+  sp = "Du nimmst das Netz und reisst kraeftig daran. ";
+
+  so = TP->Name(WER)+" nimmt ein Netz und zerreisst es. ";
+
+  if(nrw == 1)
+  {
+    sp += "Froh, wieder in Freiheit zu sein, fluechtet der gefangene "
+          "Rumpelwicht in Richtung Sternenwald in seine Erdhoehle. ";
+
+    so += "Froh, wieder in Freiheit zu sein, fluechtet der gefangene "
+          "Rumpelwicht in Richtung Sternenwald in seine Erdhoehle. ";
+  }
+  else if(nrw > 1)
+  {
+    sp += "Froh, wieder in Freiheit zu sein, fluechten die gefangenen "
+          "Rumpelwichte in Richtung Sternenwald in ihre Erdhoehle. ";
+
+    so += "Froh, wieder in Freiheit zu sein, fluechten die gefangenen "
+          "Rumpelwichte in Richtung Sternenwald in ihre Erdhoehle. ";
+  }
+
+
+
+  TP->Message(BS(sp), MSGFLAG_VISUAL);
+  ENV(TP)->Message(BS(so), MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+
+  call_out("remove", 0);
+
+  return 1;
+}
+
+void BecomesNetDead(object pl)
+{
+  if(owner = getuuid(pl))
+  {
+    while(find_call_out(FUNMSG) != -1) remove_call_out(FUNMSG);
+  }
+}
+
+void BecomesNetAlive(object pl)
+{
+  if(owner = getuuid(pl)) call_out(FUNMSG, 0);
+}
+

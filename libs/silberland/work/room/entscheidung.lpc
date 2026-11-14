@@ -1,0 +1,157 @@
+
+/*
+ * Der Raum der Entscheidung
+ * ---
+ * Hierher kommen Spieler bei versuchtem PK.
+ * Sie koennen dann einen von drei Hebeln ziehen, der vielleicht Leben
+ * oder aber den sicheren Tod (zu 66%) bedeutet.
+ *
+ * Das eigentliche Playerkill-Handling ist in einem eigenen Master
+ * untergebracht (dzt. /obj/pkmaster.c), der auch Begnadigungen
+ * seitens des Angegriffenen verwaltet.
+ *
+ * Letzte Aenderung:
+ * 29. Mai 2001, Woody: 2 Minuten Pause vor Hebelziehen, Enter-Message.
+ * 12. Nov 2000, Woody: Leichen werden in die Kapelle in Midas befoerdert.
+ *
+ */
+
+#pragma strong_types
+
+inherit "std/room";
+
+#include <properties.h>
+#include <wizlevels.h>
+#include <language.h>
+#include <moving.h>
+#include <player.h>
+
+#define KAPELLE "/d/ebene/Midas/room/kapelle"
+
+mapping timer = ([ ]);
+
+
+void create()
+{
+  ::create();
+
+  SetProp(P_LIGHT, 1);
+  SetProp(P_INDOORS, 1);
+  SetProp(P_INT_SHORT, "Der Raum der Entscheidung");
+  SetProp(P_INT_LONG,
+    "Du stehst in einem kalten dunklen Verlies - vermutlich nicht ohne Grund. "
+    "An einer Wand kannst Du drei Hebel erkennen, einer von ihnen bedeutet "
+    "Leben, die beiden anderen den sicheren Tod. Mit <ziehe hebel x> kannst "
+    "Du Dich fuer einen der Hebel entscheiden... Viel Glueck, auch wenn Du "
+    "es gar nicht verdient hast!\n\n"
+    "Falls Du nun aber doch irrtuemlich hierher gelangt bist, logge Dich "
+    "mit einem Zweitspieler oder einem Gast ein und klaere dies bitte mit "
+    "einem anwesenden Magier. Wenn Du irrtuemlich einen Spieler angegriffen "
+    "hast, so kann dieser Dich im Rathaus in Midas begnadigen.\n\n");
+
+  SetProp (P_ENVIRONMENT,
+      ([ ENV_TERRAIN:TT_HOUSE, ENV_TEMPERATURE:16 ]) );
+
+  SetProp(P_NO_TPORT, NO_TPORT | NO_TPORT_OUT);
+  SetProp(P_KILL_NAME, "Die gerechte Strafe");
+}
+
+void init()
+{
+  ::init();
+  if (IS_ARCH(this_player())) return;
+  tell_object(this_player(),
+      "\nMach jetzt bloss nichts unueberlegtes, schau Dich gut um!\n\n");
+  timer[getuid(this_player())] = time() + 120;
+  add_action("abc", "", 1);
+}
+
+void reset()
+{
+  int i;
+  mixed ind;
+  object ob;
+
+  ind = m_indices(timer);
+  for (i=sizeof(ind); i-->0; )
+  {
+    if ((ob = find_player(ind[i])) && (environment(ob) != this_object()))
+      efun::m_delete( timer, ind[i] );
+    else if (!ob && !find_netdead(ind[i]))
+      efun::m_delete( timer, ind[i] );
+  }
+}
+
+int abc(string str)
+{
+  string v;
+
+  v=query_verb();
+  if (stringp(v)&&v!=""&&
+      (member( ({"sag", "sage", "nick", "nicke", "nein",
+                 "schau", "schaue"}), v)
+       !=-1||v[0]=='\'')) return 0;
+
+  if (stringp(v) && (v=="zieh" || v=="ziehe"))
+  {
+    if (time() < timer[getuid(this_player())])
+    {
+      write( break_string( "Ueberlege doch noch ein bisschen, bevor Du "
+            "blindlings einen Hebel ziehst!\nBist Du zu Recht hier? Wenn "
+            "nicht, setze Dich doch bitte mit Hilfe Deines Zweitcharakters "
+            "oder einem Gast umgehend mit einem Magier in Verbindung! "
+            "Auch kann der Spieler, den Du (vielleicht unabsichtlich) "
+            "angegriffen hast, Dich im Rathaus in Midas begnadigen!",
+            78, 0, 1) );
+      return 1;
+    }
+    if (stringp(str) && str[0..5]=="hebel ")
+    {
+      int n;
+      if ((n=member(({"1","2","3"}), str[6..])) == -1) {
+        write ("WAS fuer einen Hebel? Es gibt nur 1, 2 oder 3.\n");
+        write ("Entscheide Dich.\n");
+        write ("Jetzt.\n");
+        return 1;
+      }
+      else
+      {
+        efun::m_delete( timer, getuid(this_player()) );
+        write ("\nDu ziehst am Hebel "+(n+1)+", und......\n\n");
+        if (n==random(3)) {
+          write ("Uff - nochmal Glueck gehabt!!\n\n"+
+            "Du verlierst fuer einen Augenblick die Orientierung...\n");
+          this_player()->move("/gilden/abenteurer", M_GO|M_NOCHECK);
+        }
+        else
+        {
+          write ("Ohjeh... das war wohl der falsche Hebel...\n\n");
+          this_player()->die();
+          call_out("leichenraus", 5);
+        }
+      }
+    }
+    else
+      write("Syntax: ziehe hebel <n>\n");
+  }
+  else
+    write("Nix da.\n");
+  return 1;
+}
+
+void leichenraus()
+{
+  object *leichen;
+  int i;
+
+  leichen = filter_objects( all_inventory(this_object()), "id", "Leiche");
+  for (i=sizeof(leichen);i--;)
+    if (leichen[i]->move(KAPELLE, M_NOCHECK) == 1)
+    {
+      Message(leichen[i]->Name()+" verschwindet wie von Geisterhand.\n");
+      KAPELLE->Message( leichen[i]->Name()+
+          " materialisiert sich ploetzlich vor Deinen Augen.\n",
+          MSGFLAG_VISUAL);
+    }
+}
+

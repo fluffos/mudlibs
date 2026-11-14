@@ -1,0 +1,113 @@
+
+mapping friends;
+mapping logon;
+private nosave int force_save;
+
+#define FRIENDSDAT "/players/vrai/log/friends.dat"
+#define MONTHLENGTH 24*3600*60
+
+void create()
+{
+  seteuid(getuid());
+  friends=([]);
+  logon=([]);
+  restore_object(FRIENDSDAT);
+}
+
+int PlayerExists(string wer)
+{
+  return file_size("/save/"+wer[0..0]+"/"+wer+".o")>=0;
+}
+
+void RemoveOld(string wer)
+{
+  int s,i;
+  if (! logon[wer] || ! sizeof(logon[wer])) return;
+  i=0;
+  s=sizeof(logon[wer]);
+  while (logon[wer][i][1]<time()-MONTHLENGTH*2 && i<s)
+    i++;
+  if (i==s)
+    logon[wer]=({});
+  else
+    logon[wer]=logon[wer][i..];
+  force_save=1;
+}
+
+void OverAndOut(string wer,int in,int out)
+{
+  if (! PlayerExists(wer)) return;
+  if (! logon[wer])
+    logon[wer]=({});
+  if (! in) return;
+  if (out-in<5*60) return;
+  logon[wer]+=({({in,out})});
+  RemoveOld(wer);
+}
+
+
+mapping QueryFriends(string wer)
+{
+  if (stringp(wer))
+    return friends[wer];
+  return copy_mapping(friends);
+}
+
+varargs mixed QueryLogon(string wer)
+{
+  if (stringp(wer))
+    return logon[wer];
+  return copy_mapping(logon);
+}
+
+varargs void Friend(string wer,string *f,int nosave)
+{
+  if (! pointerp(f) ) return;
+  if (! PlayerExists(wer)) return;
+  friends[wer]=f;
+  if (! nosave)
+    force_save=1;
+}
+
+void reset()
+{
+  if (force_save)
+    {
+      save_object(FRIENDSDAT);
+      force_save=0;
+    }
+}
+
+int remove()
+{
+  reset();
+  destruct(this_object());
+  return 1;
+}
+
+
+void KillNonPlayers(mapping m,string *n)
+{
+  int i;
+  for (i=0;i<10 && i<sizeof(n);i++)
+    {
+      if (! PlayerExists(n[i]))
+	{
+	  write("Entferne "+n[i]+"\n");
+	  efun::m_delete(m,n[i]);
+	}
+    }
+  if (i<sizeof(n))
+    call_out("KillNonPlayers",5,m,n[i..]);
+}
+
+void Reorg()
+{
+  string *dat;
+  dat=m_indices(logon);
+  KillNonPlayers(logon,dat);
+  dat=m_indices(friends);
+  KillNonPlayers(friends,dat);
+  force_save=1;
+}
+

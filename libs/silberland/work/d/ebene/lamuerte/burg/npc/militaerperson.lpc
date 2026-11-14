@@ -1,0 +1,275 @@
+/*
+     Die Militaerperson
+     
+     Inheritance-Objekt fuer die Soldaten in Kyranda
+     1999 Stahldorn@Silberland
+     
+*/
+
+
+// to do: das AddInfo optimieren!!! Alle Daten werden beim SetMeUp ins Objekt
+// geladen --> besser dynamische Abfrage der Infos beim Rangmaster. 
+
+
+inherit "std/mnpc";
+
+#include <properties.h>
+#include <new_skills.h>
+#include <language.h>
+#include <combat.h> 
+#include <moving.h> 
+#include <mnpc.h>
+#include <defines.h>
+#include <moredef.h>
+#include "files.h"
+#include "soldaten.h"
+
+int firstcreate;
+
+create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  SetProp(P_RACE, "Mensch");
+  SetProp(P_GENDER, MALE);
+  AddId(({"soldat","KyrandaSoldat\n"}));
+
+  SetProp(P_ALIGN, random(900)-200);
+  SetProp(P_MAX_HANDS, 2); 
+
+  SetProp( P_REJECT, REJECT_KEEP);
+  firstcreate=1;
+}
+
+
+
+void SetMeUp(mixed *ranginfo)
+{
+  int groesse, i;
+  string waffe;
+  mixed *curinfo;  
+  
+  SetProp(P_RANGINFO, ranginfo);
+  SetProp(P_PROMOTABLE, 0);
+
+  groesse=RANG_MASTER->QueryGroesse(ranginfo[RANG_NUM]);
+  if(ranginfo[RANG_NAME_ARRAY])
+    SetProp(P_NAME,ranginfo[RANG_NAME_ARRAY]);
+  else
+    SetProp(P_NAME,ranginfo[RANG_NAME]);
+
+  SetProp(P_SHORT, "Ein "+ranginfo[RANG_NAME]);
+  SetProp(P_LONG, "Ein "+ranginfo[RANG_NAME]+" ("+ranginfo[RANG_KUERZEL]+
+                  ") steht vor Dir, das ist deswegen so offensichtlich, "
+                  "da er "+
+                  ranginfo[RANG_ABZEICHEN]+" als Rangabzeichen traegt. "
+                  "Es handelt sich um einen - fuer einen Menschen - "+
+                  RANG_MASTER->QueryKoerperbau(ranginfo[RANG_NUM])+
+                  " und "+
+                  RANG_MASTER->QueryGroesseString(groesse)+
+                  " Kerl "+
+                  RANG_MASTER->QueryMerkmal(ranginfo[RANG_NUM])+
+                  ". Seine Haare sind "+
+                  RANG_MASTER->QueryHaarfarbe(ranginfo[RANG_NUM])+". Als "
+                  "Teil der Garnisonstruppen von Kyranda und des straff "
+                  "organisierten kyrandischen Militaerapparates sorgt er "
+                  "hier fuer Recht und Ordnung." );
+
+  SetProp(P_SIZE, groesse);
+
+  AddId(({ LOWER(ranginfo[RANG_NAME]), LOWER(ranginfo[RANG_KUERZEL]),
+           LOWER(ranginfo[RANG_TYP]) }));
+
+  create_default_npc(ranginfo[RANG_NUM]/3 + 12);
+
+// --------------- Spells
+
+  SetProp(P_SPELLRATE, 10+ranginfo[RANG_NUM]);
+  SetProp(P_SPELLS, 0);
+
+  AddSpell(1,175+ranginfo[RANG_NUM]*3,
+    Name()+" pruegelt wie wildgeworden auf Dich ein.\n",
+    Name()+" pruegelt wie wildgeworden auf @WEN ein.\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(1,80+ranginfo[RANG_NUM]*1,
+    Name()+" tritt Dich in den Unterleib.\n",
+    Name()+" tritt @WEN in den Unterleib.\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(1,120+ranginfo[RANG_NUM]*2,
+    Name()+" sticht Dich ins Bein.\n",
+    Name()+" sticht @WEN ins Bein.\n",
+     DT_PIERCE,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(1,200+ranginfo[RANG_NUM]*4,
+    Name()+" weicht aus und attackiert Dich von hinten.\n",
+    Name()+" weicht aus und attackiert @WEN von hinten.\n",
+     DT_SLASH,([SP_SHOW_DAMAGE:1]));
+     
+
+// --------------- Ausruestung
+
+  if(firstcreate)
+  {
+    firstcreate=0;
+    switch(ranginfo[RANG_TYP])
+    {
+      case RANG_SOLDAT: waffe="kurzschwert"; break;
+      case RANG_CHARGE: 
+      case RANG_UO: waffe="langschwert"; break;
+      case RANG_OFFIZIER: 
+      case RANG_GENERAL: waffe="bihaender"; break;
+      default: break;
+    }
+  
+    seteuid(getuid(this_object()));
+    clone_object("/p/weapon/sword/"+waffe)->move(this_object());
+    command("zuecke schwert");
+
+    if (random(50)<=ranginfo[RANG_NUM])
+      clone_object("/p/armour/armour/kettenhemd")->move(this_object());
+    if (random(80)+20<=ranginfo[RANG_NUM])
+      clone_object("/p/armour/helm/titanhelm")->move(this_object());
+    if (!present("helm") && random(60)<=ranginfo[RANG_NUM])
+      clone_object("/p/armour/helm/kampfhelm")->move(this_object());
+    if (random(85)<=ranginfo[RANG_NUM])
+      clone_object("/p/armour/trousers/kettenhose")->move(this_object());
+    if (random(50)<=ranginfo[RANG_NUM])
+      clone_object("/p/armour/boots/kampfstiefel")->move(this_object());
+    if (random(70)+30<=ranginfo[RANG_NUM])
+      clone_object(OBJ ("titanring.lpc"))->move(this_object());
+    if (random(50)+35<=ranginfo[RANG_NUM])
+      clone_object("/p/armour/gloves/titanhandschuhe")->move(this_object());
+    if (random(20)+50<=ranginfo[RANG_NUM])
+      clone_object(OBJ ("smaragtamulett.lpc"))->move(this_object());
+      // Der Tuepo im "Smaragtamulett" ist Dusty sehr painlich
+  }
+
+  command("ziehe alles an");
+
+
+// --------------- Infos
+
+/*  AddLibrary(SOLDATEN_PATH "soldatenwissen.lib",
+     member(({RANG_SOLDAT, 
+              RANG_CHARGE, 
+              RANG_UO, 
+              RANG_OFFIZIER, 
+              RANG_GENERAL}), 
+             ranginfo[RANG_TYP]) + 1);
+*/
+  for(i=RANG_MASTER->QueryMaxLevel(); i>0; i--)
+  {
+    curinfo=RANG_MASTER->QueryRank(i);
+
+    AddInfo(({ LOWER(curinfo[RANG_NAME]), 
+               LOWER(curinfo[RANG_KUERZEL]) }), 
+             "Ein "+curinfo[RANG_NAME]+" ist vom Rangtyp her ein "+
+             curinfo[RANG_TYP]+". "+
+             (i==1? "Er ist der Niedrigste von allen und kommt noch vor dem "+
+             RANG_MASTER->QueryRank(i+1)[RANG_NAME]: 
+             (i==RANG_MASTER->QueryMaxLevel()?
+             "Er ist der Hoechste von allen und kommt gleich nach dem "+
+             RANG_MASTER->QueryRank(i-1)[RANG_NAME]:             
+             "Er kommt gleich nach dem "+
+             RANG_MASTER->QueryRank(i-1)[RANG_NAME]+
+             " und noch vor dem "+
+             RANG_MASTER->QueryRank(i+1)[RANG_NAME]))+
+             ". Als Abzeichen traegt er "+
+             RANG_MASTER->QueryRank(i)[RANG_ABZEICHEN]+
+             "."
+             , "sagt: ");
+  }
+
+}
+
+
+
+void PromoteMe(int steps)
+{
+  string oldname;
+  int level;
+  string newname;
+
+  if ((level=(QueryProp(P_RANGINFO)[RANG_NUM])) <= 
+      RANG_MASTER->QueryMaxLevel()-steps)
+  {
+    oldname=QueryProp(P_RANGINFO)[RANG_NAME];
+
+    RemoveId(({ LOWER(QueryProp(P_RANGINFO)[RANG_NAME]), 
+                LOWER(QueryProp(P_RANGINFO)[RANG_KUERZEL]),
+                LOWER(QueryProp(P_RANGINFO)[RANG_TYP]) }));
+    SetMeUp(RANG_MASTER->QueryRank(level+steps));
+    newname=QueryProp(P_RANGINFO)[RANG_NAME_ARRAY]?
+            QueryProp(P_RANGINFO)[RANG_NAME_ARRAY][WEM]:
+            QueryProp(P_RANGINFO)[RANG_NAME];
+    tell_room(ENV(TO), 
+      BS("Ein "+oldname+" wird zum "+newname+
+         " befoerdert."));
+  }
+}
+
+
+void salute()
+{
+  if(objectp(TP)) 
+    tell_room(ENV(TO), BS(TO->Name()+" salutiert vor "+TP->name(WEM)+"."));
+}
+
+void help_promote()
+{
+     if(objectp(TP) && ENV(TO)==ENV(TP))
+     {
+        tell_room(ENV(TO), 
+           BS(TP->Name(WER,1)+" befoerdert "+name(WEN)+"."));
+        PromoteMe(1);
+     }
+}
+
+void init()
+{
+  ::init();
+  if (TP!=TO && TP->id("KyrandaSoldat\n"))
+  {
+     call_out("salute",random(6));
+     if(TP->QueryProp(P_RANGINFO)[RANG_NUM]<=QueryProp(P_RANGINFO)[RANG_NUM]) 
+        AddDefender(TP);       
+     else
+     {
+       if(QueryProp(P_PROMOTABLE) && TP->QueryProp(P_RANGINFO)[RANG_NUM]>20)
+       {
+           SetProp(P_PROMOTABLE, 0);
+           call_out("help_promote", 8);
+       }
+     }
+  }
+}
+
+void InformDefend(object enemy) 
+{
+  if(!InFight(TO))
+  {
+    tell_room(ENV(TO), 
+      BS(PO->Name()+
+         " bruellt: "+QueryProp(P_RANGINFO)[RANG_NAME]+
+         "! Stehen Sie nicht so bloed herum! Helfen Sie mir gefaelligst!"));
+    Kill(enemy);
+  }
+}
+
+
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  if( killer == TO )
+    call_out("PromoteMe",1,1);
+}
+
+void reset()
+{
+  ::reset();
+    SetProp(P_PROMOTABLE, 1);
+}
+
+

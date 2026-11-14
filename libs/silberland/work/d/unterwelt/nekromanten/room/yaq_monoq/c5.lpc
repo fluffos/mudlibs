@@ -1,0 +1,189 @@
+/* MP-HEADER - DO NOT MODIFY ANYTHING BEFORE THE #include STATEMENTS!!
+** c5.c  [created using mpen v0.93 (16 Feb 97)]
+** Letzte Aenderung: Mit, 11. Okt 2000, 18:42:42 von Angrox
+** ---
+** 11. Okt 2000  Raum von Angrox angelegt. [mp]
+** 11. Okt 2000  Ausgang 'osten' angeschlossen von Angrox. [mp]
+** ---
+** details: 0, read det: 0, special det: 0, sounds: 0, smells: 0, exits: 2.
+*/
+
+#include <properties.h>
+#include <moving.h>
+#include "../nekro.h"
+#include "../../dungeon.h"
+
+#ifndef ROOM
+#define ROOM(x) ("/d/unterwelt/nekromanten/room/"+x)
+#endif
+//  AddExit ("nordwesten", "./b4");
+//  AddExit ("osten", "./d5");
+
+inherit NEKRO_ISLAND_DIR "room/std_yaq_monoq";
+
+string exit_osten="";
+string exit_nordwesten="";
+
+int acid_hp=0;
+
+
+void create()
+{
+  ::create();
+  // ROOM DESCRIPTION
+  SetProp (P_LIGHT, 0);
+  SetProp (P_INDOORS, 1);
+  SetProp (P_ENVIRONMENT, ([ENV_TEMPERATURE:14]));
+  SetProp (P_NOBARRIER,1);
+  SetProp (P_INT_SHORT, "Auf Yaq'Monoq");
+  SetProp (P_INT_LONG, "Saeureschwaden verhindern hier Deine Sicht. Du kannst "
+      "nicht viel erkennen ausser Saeureschwaden, die Deine Augen, Deine Nase, "
+      "Deine Haut, einfach alles angreifen und veraetzen! Da Du Deine Augen kaum "
+      "offen halten kannst weisst Du nicht mehr wo Du bist.");
+  
+  // ROOM DESCRIPTION END
+
+  // DETAILS START
+  AddDetail( ({ "saeureschwaden", "schwaden"}),
+      "Du siehst nur noch Saeureschwaden, nichts als Saeureschwaden.");
+  AddDetail( ({ "sicht"}),
+      "Sicht? Nein, hier verdecken die Saeureschwaden alles.");
+  AddDetail( ({ "haut"}),
+      "Du siehst das aus Deiner Haut Blut rinnt, Panik steigt in Dir auf.");
+  AddDetail( ({ "blut"}),
+      "Blut rinnt aus Deiner Haut.");
+  AddDetail( ({ "augen"}),
+      "Deine Augen brennen und Du jucken, Deine Panik waechst.");
+  AddDetail( ({ "boden"}),
+      "Den Boden siehst Du hier nicht.");
+  AddDetail( ({ "nase"}),
+      "Wenn Du das Nase nennen willst, bitte, aus ihr tropft Blut auf den Boden.");
+  AddDetail( ({ "panik"}),
+      "Du bist in Panik?");
+
+  // DETAILS END
+
+  // EXITS START
+  AddExit("osten", ([
+        EX_DEST: "./d5",
+        EX_TESTFUNC: "checknekromant",
+        ]));
+  AddExit("nordwesten", ([
+        EX_DEST: "./b4",
+        EX_TESTFUNC: "checknekromant",
+        ]));
+  AddSpecialExit( ({"links","rechts", "vorne","hinten"}), "search_for_exit");
+  // EXITS END
+
+  // ITEMS START
+  // ITEMS END
+  AddCmd( ({"untersuche", "unt"}), "no_explore");
+  AddCmd( ({"breche", "brech"}), "panic");
+
+}
+
+void init() {
+  string *directions;
+  ::init();
+  if(!interactive(TP)) return;
+  directions=({"vorne","hinten","links","rechts"});
+  exit_osten=directions[random(sizeof(directions))];
+  directions-=({exit_osten});
+  exit_nordwesten=directions[random(sizeof(directions))];
+  return ; 
+}
+
+nosave int no_explore(string str) {
+  int hp;
+  write(BS("Du hast keine Zeit hier etwas "
+        "zu untersuchen! RETTE DICH LIEBER!"));
+  hp=random(10)+5;
+  acid_hp+=hp;
+  if(acid_hp > 100 && !present("saeureschwade")) 
+    call_out("acid_demon",0);
+  do_room_damage(TP, hp, "Saeureschwaden");
+  return 1;
+}
+
+varargs string GetExits(object viewer) {
+  if(viewer->QueryProp(P_GUILD)=="nekromanten") {
+    return BS("Es gibt zwei erahnbare Ausgaenge: osten und nordwesten.");
+  }
+  return BS("Du bist komplett verwirrt. Du siehst die Ausgaenge nicht. "
+    "Du kannst nur nach vorne, nach links oder rechts oder vielleicht "
+    "auch nach hinten. Wenn Du nicht mehr weiter weisst kannst Du auch in "
+    "Panik ausbrechen.");
+}
+
+nosave int checknekromant() {
+  int hp;
+  if(TP->QueryProp(P_GUILD)=="nekromanten")
+    return 1;
+  write("Was, wohin? Wohin? WOHIN?\n");
+  hp=random(10);
+  acid_hp+=hp;
+  if(acid_hp > 100 && !present("saeureschwade")) 
+    call_out("acid_demon");
+  if(acid_hp > 1000) acid_hp=100;
+  return 0;
+}
+
+nosave int search_for_exit() {
+  string choosen_dir;
+  int hp;
+  if(TP->QueryProp(P_GUILD)=="nekromanten") return 0;
+  choosen_dir=query_verb();
+  if(choosen_dir == exit_osten) {
+     TP->move(NEKRO_ROOMS+"d5", M_GO, 0, 
+         "stolpert aus Deiner Sicht", "stolpert herein");
+     return 1;
+  }
+  if(choosen_dir == exit_nordwesten) {
+     TP->move(NEKRO_ROOMS+"b4", M_GO, 0, 
+         "stolpert aus Deiner Sicht", "stolpert herein");
+     return 1;
+  }
+  write("Wah! Panik! Wohin musst Du nur gehen?\n");
+  hp=random(20);
+  acid_hp+=hp;
+  if(acid_hp > 100 && !present("saeureschwade")) {
+    acid_hp=0;
+    call_out("acid_demon",0);
+  }
+  do_room_damage(TP, hp, "Panik");
+  return 1;
+}
+
+int panic(string str) {
+  object ob;
+  if(!str) return 0;
+  if(TP->QueryProp(P_GUILD)=="nekromanten") return 0;
+  if(str!="in panik aus") 
+    return 0;
+  if(!present("\ninsanity", TP)) {
+    ob=clone_object(NEKRO_ISLAND_OBJ "insanity");
+    ob->move(TP, M_NOCHECK);
+    ob->Start();
+  }
+  write(BS("Haha. Alles wird gut. Nur schnell weg. Panik. Panik! PANIK!"));
+  say(BS(sprintf("%s bricht in Panik aus!", TP->Name(WER))));
+  return 1;
+}
+
+void acid_demon() {
+  object ob;
+  ob=clone_object(NEKRO_ISLAND_NPC "aciddemon");
+  tell_room(ME, BS("Ploetzlich wird eine Saeureschwade lebendig!"));
+  ob->move(ME, M_NOCHECK);
+  return ;
+}
+
+string test123() {
+  return sprintf("exit_osten -> %s, exit_nordwesten -> %s\n",
+      exit_osten,exit_nordwesten);
+}
+void reset() {
+  ::reset();
+  if(acid_hp > 1000) acid_hp=100;
+  return;
+}

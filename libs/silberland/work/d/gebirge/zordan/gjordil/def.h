@@ -1,0 +1,11 @@
+#define GEBIET "gjordil"
+#include "../def.h"
+
+#define QUESTITEM "\n_gjordil_quest"
+#define QUESTGRIFF "\n_quest_griff"
+#define QUESTAST "\n_quest_ast"
+#define QUESTSCHNUR "\n_quest_schnur"
+#define QUESTFALLE "\n_quest_falle"
+#define QUESTNAME "Hilf Gjordil bei seiner Suche"
+#define QUESTLOG  "/d/gebirge/speedy/trollager/log/"
+#define QUESTSAVE "/d/gebirge/speedy/trollager/log/kraut"

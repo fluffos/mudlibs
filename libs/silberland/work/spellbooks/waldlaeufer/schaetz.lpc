@@ -1,0 +1,248 @@
+mapping prep_schaetz(object caster, mapping sinfo, int silent)
+{  
+  object ob;
+  
+  if(!TestNoTrance(caster, sinfo)) return 0;
+  
+  //Aenderungen der Werte im sinfo Mapping vermeiden!
+  if(!GuildItemTest(caster, sinfo) || !FroschTest(caster, sinfo)|| 
+     !BlindTest(caster, sinfo) )
+    return 0;
+    
+  if(!objectp(ob=sinfo[SI_ENEMY]))
+  {
+     ob = FindVictim(sinfo[SI_SKILLARG], caster, 
+                     "Wen moechtest Du auf Kampfkraft schaetzen?\n");
+     if(!ob) return 0;
+     if(!living(ob))
+     { tell_object(TP, 
+         "Du kannst nur die Kampfkraft von Lebewesen einschaetzen!\n");
+       return 0;    } 
+  }
+  sinfo[SI_ENEMY]=ob;
+  if(!silent){FirstPrepareFuncSuccessfull(caster, sinfo);}
+  return sinfo;
+}
+
+int vergleiche(int i, int l)
+{
+   if( i > 2*l )       {return 5;}
+   else if( i > l )    {return 4;}
+   else if( i > l/5 )  {return 3;}
+   else if( -i > 2*l ) {return 2;}
+   else if( -i > l )   {return 1;}
+   else if( -i > l/5 ) {return 0;}
+   else if( i == 0 )   {return 6;}
+   return 6;
+}
+
+public void check_courier(object caster, object ob) {
+  object task;
+
+  if(RANGER_CHECK_TASK(caster, 18)) return;
+  if(present(RANGER_TASK_COURIER, caster)) return;
+  if(random(10)) return; 
+
+  task = clone_object(OBJ "task_kurier");
+  if(!task->move(caster, M_NOCHECK)) {
+    destruct(task);
+    return;
+  }
+
+  call_out("inform_caster_courier", 0, caster);
+  return;
+}
+
+public void inform_caster_courier(object caster) {
+  tell_object(caster, "Das ist der Kurier des Kultes! Schnell stibizt du ihm eine Nachricht.\n");
+  return;
+}
+
+int schaetz(object caster, mapping sinfo)
+{
+   object ob;
+   int i, l, success;
+   string result, name, s, p, g;
+   string *klasse, *str;
+   float k, j;
+   mapping map;
+
+   if( !mappingp(sinfo=prep_schaetz(caster, sinfo, 1)) ) return 0;
+   ob=sinfo[SI_ENEMY];
+
+  success=SpellSuccess(caster,sinfo);
+  if(success<0)
+  {
+    tell_object(caster, BSC("Du hast Dein Ziel aus den Augen verloren."));
+    return MISSERFOLG;
+  }
+
+  tell_room(ENV(caster), BS(sprintf("%s beobachtet %s ganz genau.", caster->Name(WER), ob->Name(WEN))), ({caster}));
+  
+
+   result="\n+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+          "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+\n";
+   name=ob->Name(WER, 1);
+
+   
+   //Rasse+Klasse
+   klasse=({});
+   if(ob->is_class_member("flying")) {klasse+=({"fliegen"});}
+   if(ob->is_class_member("swimming")) {klasse+=({"schwimmen"});}
+   if(ob->is_class_member("nightvision")) {klasse+=({"in der Nacht sehen"});}
+   s=name+" gehoert zu der Rasse "+CAP(ob->QueryProp(P_RACE));
+   if(sizeof(klasse)>0)
+   {
+     if(sizeof(klasse)==1) {s+=" und kann "+klasse[0];}
+     if(sizeof(klasse)==2) {s+=", kann "+klasse[0]+" und "+klasse[1];}
+     if(sizeof(klasse)==3) {s+=", kann "+klasse[0]+", "+klasse[1]+" und "
+                               +klasse[2];}
+   }
+   s+=".";
+
+   if(GUILD_MASTER->is_archenemy_of(getuid(caster), ob)) {
+    check_courier(caster, ob);
+    s+=" "+name + " gehoert zu deinen Erzfeinden.";
+    if(ob->QueryProp(P_LEVEL) >= caster->QueryProp(P_GUILD_LEVEL)) {
+      s+=" Bei "+ob->QueryPronoun(WEM)+" kannst du dich im Kampf ueben.";
+    }
+  }
+
+   str=explode(break_string(s, 70), "\n");
+   for(i=0; i<=sizeof(str)-1; i++)
+   { result+=sprintf("| %-70s |\n", str[i]); }  
+   
+   
+   //Size
+   i=(caster->QueryProp(P_SIZE))-(ob->QueryProp(P_SIZE));
+   if(i >  200)             {s="sehr viel kleiner als" ;}
+   if(i >  100 && i <  201) {s="viel kleiner als"      ;}
+   if(i >   30 && i <  101) {s="kleiner als"           ;}
+   if(i <  -30 && i > -101) {s="groesser als"          ;}
+   if(i < -100 && i > -201) {s="viel groesser als"     ;}
+   if(i < -200)             {s="sehr viel groesser als";}
+   if(i <   31 && i >  -31) {s="genau so gross wie"    ;}
+   s+=" Du.";
+   result+=sprintf("| %-70s |\n", name+" ist "+s);
+   
+   //Align
+   result+=sprintf("| %-70s |\n", CAP(to_string(ob->QueryPronoun(WER)))+
+           " ist "+RANGERMASTER->GetAlign(ob->QueryProp(P_ALIGN))+".");
+   
+   //Mv, Lps, Mps
+   klasse=({"sehr viel mehr", "viel mehr","mehr","weniger","viel weniger",
+            "sehr viel weniger","die gleiche"}); s="";
+   if(interactive(ob)) //MV - Nur bei Spielern
+   {
+     s+="Du hast ";
+     l=ob->QueryProp(P_MAX_MV);
+     i=(caster->QueryProp(P_MAX_MV))-(l);
+     if( i > 2*l )       {s+=klasse[0];}
+     else if( i > l )    {s+=klasse[1];}
+     else if( i > l/5 )  {s+=klasse[2];}
+     else if( -i > 2*l ) {s+=klasse[3];}
+     else if( -i > l )   {s+=klasse[4];}
+     else if( -i > l/5 ) {s+=klasse[5];}
+     else if( i == 0 )   {s+=klasse[6];}
+     else                {s+=klasse[6];}     
+     s+=" Kondition. ";
+   }
+   s+=CAP(to_string(ob->QueryPronoun(WER)))+" hat ";
+   l=ob->QueryProp(P_MAX_HP);
+   i=(caster->QueryProp(P_MAX_HP))-(l); 
+   s+=klasse[(vergleiche(i,l))]+" Lebensenergie und besitzt ";
+   l=ob->QueryProp(P_MAX_SP);
+   i=(caster->QueryProp(P_MAX_SP))-(l);
+   s+=klasse[(vergleiche(i,l))]+" magische Energie.";
+   str=explode(break_string(s, 70), "\n");
+   for(i=0; i<=sizeof(str)-1; i++)
+   { result+=sprintf("| %-70s |\n", str[i]); }
+   
+   if(sinfo[SI_SKILLABILITY]>5000+random(1000))
+   {
+     //Ausweiche, Zauberabwehr
+     i=ob->QueryProp(P_NOMAGIC); l=caster->QueryProp(P_TOTAL_WC); str=({});
+     if(ob->QueryProp(P_WEAPON))
+     { str=(ob->QueryProp(P_WEAPON))->QueryProp(P_DAM_TYPE);}
+     else
+     { l=(caster->QueryProp(P_HANDS)[1]+1)*2
+         + 10*(caster->QueryAttribute(A_STR))/3; 
+       str=ob->QueryProp(P_HANDS)[2];}
+     //schaden - ruestung - (ges +natuerlich. schutz)/2 (Mittelwert)
+     k=to_float( ((l-(ob->QueryProp(P_TOTAL_AC))-((ob->QueryProp(P_BODY))+(ob->QueryProp(P_ATTRIBUTES)[A_DEX]))/2)) );
+     k=k*(ob->CheckResistance( str )); k=k/10;
+     l=to_int(k);
+     klasse=({"alle", "fast alle","viele","einige","wenige","keine"});
+     s=name;
+     if(!interactive(ob)) //Zauberabwehr nur bei NPC
+     {
+       s+=" kann ";
+       if( i <  1 )                {s+=klasse[5];}
+       else if( i >  0 && i < 21 ) {s+=klasse[4];}
+       else if( i > 20 && i < 41 ) {s+=klasse[3];}
+       else if( i > 40 && i < 66 ) {s+=klasse[2];}
+       else if( i > 65 && i < 91 ) {s+=klasse[1];}
+       else                        {s+=klasse[0];}     
+       s+=" Deiner Spezialangriffe abwehren und";
+     }
+     s+=" wird ";
+     if( l <  -21 )               {s+=klasse[0];}
+     else if( l > -20 && l < 04 ) {s+=klasse[1];}
+     else if( l >  03 && l < 07 ) {s+=klasse[2];}
+     else if( l >  06 && l < 10 ) {s+=klasse[3];}
+     else if( l >  09 && l < 12 ) {s+=klasse[4];}
+     else                         {s+=klasse[5];}     
+     s+="n Attacken ausweichen.";
+     str=explode(break_string(s, 70), "\n");
+     for(i=0; i<=sizeof(str)-1; i++)
+     { result+=sprintf("| %-70s |\n", str[i]); }
+   }
+   
+   //Resistenzen (nur pierce und poison)
+   if( ((k=ob->CheckResistance(({"pierce"})))!=1.0) || 
+       ((j=ob->CheckResistance(({"poison"})))!=1.0) )
+   {
+     if(k!=1.0)
+     {
+       p="durch Pfeile und Messer ";
+       if(!k || k<0.5)          p+="nicht";
+       else if(k>=0.5 && k<1.0) p+="kaum";
+       else if(k>1.0 && k<=1.5) p+="hart";
+       else if(k>1.5)           p+="toedlich";
+       s=CAP(to_string(ob->QueryPronoun(WER)))+" kann "+p+" getroffen "
+         "werden."; 
+     }
+     if(j!=1.0)
+     { g="durch Gift ";
+       if(!j || j<0.5)          g+="nicht";
+       else if(j>=0.5 && j<1.0) g+="kaum";
+       else if(j>=1.0 && j<=1.5)g+="hart";
+       else if(j>1.5)           g+="toedlich";
+       s=CAP(to_string(ob->QueryPronoun(WER)))+" kann "+g+" getroffen "
+         "werden.";
+     }
+     if(k!=1.0 && j!=1.0)
+     { s=CAP(to_string(ob->QueryPronoun(WER)))+" kann "+p+" und "+g+" "
+         "getroffen werden.";  }
+     str=explode(break_string(s, 70), "\n");
+     for(i=0; i<=sizeof(str)-1; i++)
+     { result+=sprintf("| %-70s |\n", str[i]);} 
+   }
+   //Ist der NPC zaehmbar?
+   map=caster->QueryProp(P_NEWSKILLS);
+   if(member(map, "zaehmung"))
+   {
+    if(PETMASTER->is_zaehmbar(caster,(caster->QueryProp(P_NEWSKILLS)["zaehmung"][SI_SKILLABILITY]),ob,1))
+    { result+=sprintf("| %-70s |\n", ob->Name(WER,1)+" laesst sich zaehmen.");}
+   }
+   
+   //P_INFO (muss sein, da nicht im id)
+   if(s=ob->QueryProp(P_INFO))
+   { str=explode(break_string(s, 70), "\n");
+     for(i=0; i<=sizeof(str)-1; i++)
+     { result+=sprintf("| %-70s |\n", str[i]); } }
+   result+="+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+           "~~~~~~~~~~~+\n"; 
+   TP->More(result);
+   return ERFOLG;
+}

@@ -1,0 +1,667 @@
+inherit "/gilden/bardengilde/obj/std_song_effect";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <defines.h>
+#include <new_skills.h>
+#include <moredef.h>
+#include <class.h>
+#include <moving.h>
+#include "/gilden/bardengilde/bardengilde.h"
+#include "bard_song.h"
+
+int sentences;
+int spHeal, hpHeal, spHealRnd, hpHealRnd;
+int food, drink, alcohol, mv;
+int additionalHealTick;
+
+public void create() {
+  if (!is_clone(TO)) return;
+  ::create();
+
+  AddId(({SONG_REGENERATION}));
+
+  setUpkeepMode( ({SK_MUSIC}), CANCEL_COMMAND);
+}
+
+#define MODE_HP 0
+#define MODE_SP 1
+private void setHealPower(int mode) {
+  if(mode == MODE_SP) {
+    spHeal = (int) ((caster->QueryProp(P_GUILD_LEVEL)/3) * factor);
+    spHealRnd =  (int) (success / 3000 * factor);
+    hpHeal = (int) ((caster->QueryProp(P_GUILD_LEVEL)/5) * factor);
+    hpHealRnd = (int) (success / 7000 * factor);
+  } else {
+    hpHeal = (int) ((caster->QueryProp(P_GUILD_LEVEL)/3) * factor);
+    hpHealRnd = (int) (success / 3000 * factor);
+    spHeal = (int) ((caster->QueryProp(P_GUILD_LEVEL)/5) * factor);
+    spHealRnd = (int) (success / 7000 * factor);
+  }
+}
+
+public void prepareSong() {
+  string bardGroup;
+  
+  
+  bardGroup = BARDENMASTER->GetBardGroup(caster);
+
+  if(TALENTMASTER->HasTalent(caster, TALENT_HEILER)) {
+    factor += 0.05;
+    factor += (float) (((float) caster->QueryProp(P_BARD_INSPIRATION_LEVEL)) / 100.0);
+    additionalHealTick = 10 - caster->QueryProp(P_BARD_INSPIRATION_LEVEL);
+    if(additionalHealTick < 1) {
+      additionalHealTick = 1;
+    }
+  } else {
+    additionalHealTick = 0;
+  }
+
+  if(caster->QueryProp(P_TESTPLAYER)) {
+    tell_object(caster, sprintf("additional heal tick = %d\n", additionalHealTick));
+  }
+
+  switch(bardGroup) {
+    case BARD_GROUP_KORRIAX:
+      songName = "Der Winter"; 
+      setHealPower(MODE_HP);
+      mv = (int) (1 + random(success/3333) * factor);
+      food = drink = (int) (5 + random(success/2000) * factor);
+      alcohol = (int) (caster->QueryProp(P_GUILD_LEVEL) * 3 * factor);
+      break;
+    case BARD_GROUP_ALESTRA: 
+      songName = "Der Fruehling"; 
+      food = (int) (1 + random(success/3333) * factor);
+      drink = alcohol = (int) (5 + random(success/2000) * factor);
+      mv = (int) (caster->QueryProp(P_GUILD_LEVEL) * 10 * factor);
+      setHealPower(MODE_SP);
+      break;
+    case BARD_GROUP_SARRIAN:
+      songName = "Der Herbst"; 
+      setHealPower(MODE_HP);
+      drink = (int) (1 + random(success/3333) * factor);
+      mv = alcohol = (int) (5 + random(success/2000) * factor);
+      food = (int) (caster->QueryProp(P_GUILD_LEVEL) * 3 * factor);
+      break;
+    case BARD_GROUP_TIRENA:  
+      songName = "Der Sommer"; 
+      setHealPower(MODE_SP);
+      alcohol = (int) (1 + random(success/3333) * factor);
+      mv = food = (int) (5 + random(success/2000) * factor);
+      drink = (int) (caster->QueryProp(P_GUILD_LEVEL) * 10 * factor);
+      break;
+    default: raise_error("Ungueltige Bardengruppe"); break;
+  }
+
+  sentences = ability/2800;
+  if(sentences < 1) {
+    sentences = 1;
+  } else if(sentences > 3) {
+    sentences = 3;
+  }
+
+  call_out("sequence", 0, bardGroup, 1, 0);
+  if(additionalHealTick) {
+    call_out("additional_heal", additionalHealTick);
+  }
+  return;
+}
+
+public int isValidTarget(object ob) {
+  return living(ob);
+}
+
+
+public void doHpSpHealing(object *targets, int modifier) {
+  int i, skill;
+  object target;
+
+  skill = (int) (caster->UseSkill(SK_MUSIC) / 2000);
+  
+  for(i=0; i<sizeof(targets); ++i) {
+    target = targets[i];
+    if(!objectp(target)) continue;
+    if(!random(3)) {
+      target->AddHp(hpHeal + modifier + random(skill));
+      target->AddSp(spHeal + modifier + random(skill));
+      tell_object(target, BS("Deine Wunden heilen."));
+      tell_room(environment(target), BS(sprintf("%s Wunden verheilen rascher.", target->Name(WESSEN))), ({target}));
+    } else {
+      target->AddHp((hpHeal + modifier + random(skill)) / 2);
+      target->AddSp((spHeal + modifier + random(skill)) / 2);
+    }
+  }
+}
+
+public void doSecondaryHealing(object *targets, int food, int drink, int alcohol, int mv) {
+  int i;
+  object target;
+
+  for(i=0; i<sizeof(targets); ++i) {
+    if(!objectp(targets[i])) continue;
+    target = targets[i];
+    if(targets[i]->QueryProp(P_FOOD) > 0) {
+      if(!random(2)) {
+        targets[i]->eat_food(random(food) * -1);
+        tell_object(target, BS("Du fuehlst dich etwas hungriger."));
+        tell_room(environment(target), BS(sprintf("%s Magen knurrt leise.", target->Name(WESSEN))), ({target}));
+      }
+    }
+    if(targets[i]->QueryProp(P_DRINK) > 0){
+      if(!random(2)) {
+        targets[i]->drink_soft(random(drink) * -1);
+        tell_object(target, BS("Du fuehlst dich etwas durstiger."));
+        tell_room(environment(target), BS(sprintf("%s sieht durstig aus.", target->Name(WESSEN))), ({target}));
+      }
+    }
+    if(targets[i]->QueryProp(P_MV) < targets[i]->QueryProp(P_MAX_MV)) {
+      if(!random(2)) {
+        targets[i]->do_exhaust(random(mv) * -1);
+        tell_object(target, BS("Du fuehlst dich erfrischt."));
+        tell_room(environment(target), BS(sprintf("%s wirkt erfrischter.", target->Name(WER))), ({target}));
+      }
+    }
+
+    if(targets[i]->QueryProp(P_ALCOHOL) > 0) {
+      if(!random(2)) {
+        if(targets[i]->QueryProp(P_GUILD) == "zechpreller") {
+          targets[i]->drink_drink(0, random(alcohol));  
+          tell_object(target, BS("Du fuehlst dich leicht bschwippst."));
+          tell_room(environment(target), BS(sprintf("%s wirkt etwas beschwippst.", target->Name(WER))), ({target}));
+        } else {
+          targets[i]->drink_drink(0, random(alcohol) * -1);
+          tell_object(target, BS("Du fuehlst dich etwas nuechterner."));
+          tell_room(environment(target), BS(sprintf("%s nuechtert merklich aus.", target->Name(WER))), ({target}));
+        }
+      }
+    }
+  }
+}
+
+
+
+public doHealing(int sentence) {
+  object *targets;
+  
+
+  targets = findTargets("isValidTarget");
+  call_out("doHpSpHealing", 0, targets, sentence);
+
+  if(sentence > 1) {
+    call_out("doSecondaryHealing", 0, targets, food, drink, alcohol, mv);
+  }
+}
+
+private object getInstrument() {
+  return call_other("/spellbooks/barden_spells", "getInstrument", caster);
+}
+
+public void tirena_sentence_3(object instrument, int step) {
+  switch(step) {
+    case 0:
+      tell_object(caster, BS("Den dritten Satz spielst du sofort mit wilden, lauten auf und ab wallenden Toenen auf."));
+      tell_room(environment(caster), BS(sprintf("%s spielt wiederum mit wilden, lauten, auf und ab wallenden Toenen auf.",
+                caster->Name(WER), instrument->name(WEM))), ({caster}));
+      break;
+    case 1:
+      tell_object(caster, BS("Du stellst Gewitter und Sturm dar, die nun ueber den Hirten hereingebrochen sind."));
+      tell_room(environment(caster), BS(sprintf("%s stellt Gewitter und Sturm dar, die ueber den Hirten hereingebrochen sind.",
+                caster->Name(WEM))), ({caster}));
+      break;
+    case 2:
+      tell_object(caster, BS(sprintf("Einzelne Toene aus dein%s %s werden Blitze und Hagel, der ueber die Felder hinwegfegt.",
+                  instrument->QueryProp(P_GENDER)==FEMALE?"er":"em", instrument->Name(RAW))));
+      tell_room(environment(caster), BS(sprintf("Einzelne Toene aus %s %s werden Blitze und Hagel,der ueber die Felder hinwegfegt.",
+                caster->Name(WESSEN), instrument->Name(RAW))), ({caster}));
+      break;
+    case 3:
+      tell_object(caster, BS(sprintf("In einigen Zwischensequenzen drueckst du die Furcht des Hirten aus.")));
+      tell_room(environment(caster), BS(sprintf("%s stellt in eigen kurzen Zwischenspielen die Furcht des Hirten vor dem Unwetter dar.",
+                caster->Name(WESSEN))), ({caster}));
+      break;
+    case 4:
+      tell_object(caster, BS(sprintf("Wild und drehend laesst du Klaenge das Bild der sich drehenden und tanzenden Wolken im Wind zeichnen.")));
+      tell_room(environment(caster), BS(sprintf("Wild und drehend laesst %s das Bild der sich drehenden und tanzenden Wolken im Wind in deinem Kopf entstehen.",
+                caster->Name(WER))), ({caster}));
+      break;
+    case 5:
+      tell_object(caster, BS(sprintf("Mit schnellen hohen Toenen, die Blitz, und tiefen Toenen fuer Donner und dann einem letzten, langsamen Klang laesst du das Gewitter und den Satz enden.")));
+      tell_room(environment(caster), BS(sprintf("%s laesst die Musik mit einigen schnellen Toenen fuer die Blitze, und tiefen Toenen fuer den Donner und einem letzten, langsamen Klang enden.",
+                caster->Name(WER))), ({caster}));
+      break;
+  }
+}
+
+public void tirena_sentence_2(object instrument, int step) {
+  switch(step) {
+    case 0:
+      tell_object(caster, BS("Sanft beginnst du den zweiten Satz mit Klaengen, welche den unruhigen Schlaf des Hirten darstellen."));
+      tell_room(environment(caster), BS(sprintf("%s beginnt auf %s sanfte Klaenge zu spielen, welche den unruhigen Schlaf des Hirten darstellen.",
+                caster->Name(WER), instrument->name(WEM))), ({caster}));
+      break;
+    case 1:
+      tell_object(caster, BS("Du mischst tiefe Toene wie fernes Donnern hinzu."));
+      tell_room(environment(caster), BS(sprintf("%s mischt nun ein paar tiefe Toene, wie fernes Donnergrollen, hinzu.",
+                caster->Name(WER))), ({caster}));
+      break;
+    case 2:
+      tell_object(caster, BS("In deinem Klangbild waelzt sich der Hirte mit seinen sanften Toenen unruhig im Schlaf, immer wieder von den tiefen Toenen des Donners aufgeweckt."));
+      tell_room(environment(caster), BS(sprintf("In %s Klangbild waelzt sich der Hirte mit seinen sanften Toenen unruhig im Schlaf, immer wieder von den tiefen Toenen des Donners geweckt.",
+                caster->Name(WESSEN))), ({caster}));
+      break;
+    case 3:
+      tell_object(caster, BS(sprintf("Du entlockst %s ein paar hoehere Klaenge, welche die Blitze in der Nacht darstellen.", instrument->name(WEM, 1))));
+      tell_room(environment(caster), BS(sprintf("%s entlockt %s ein paar hoehere Klaenge, welche die Blitze in der Nacht symbolisieren.",
+                caster->Name(WER), instrument->name(WEM, 1))), ({caster}));
+      break;
+    case 4:
+      tell_object(caster, BS(sprintf("Du laesst nun Donner und Blitz immer lauter und naeher erklingen.")));
+      tell_room(environment(caster), BS(sprintf("%s laesst Donner und Blitz nun oefter und immer lauter, sowie naeher, erklingen.",
+                caster->Name(WER))), ({caster}));
+      break;
+    case 5:
+      tell_object(caster, BS(sprintf("Du beendest den Satz mit einem langezogenen Ton, der auch das Ende des Hirtenschlafs ist.")));
+      tell_room(environment(caster), BS(sprintf("%s endet mit einem langezogenen Ton, der auch das Ende des Hirtenschlafs ist.",
+                caster->Name(WER))), ({caster}));
+      break;
+  }
+}
+
+public void tirena_sentence_1(object instrument, int step) {
+  switch(step) {
+    case 0:
+      tell_object(caster, BS("Langsam hebst du zu schweren Toenen an, die von der Hitze des Sommers kuenden."));
+      tell_room(environment(caster), BS(sprintf("%s blaest in %s und hebt zu schweren Toenen an, die von der Hitze des Sommers kuenden.",
+                caster->Name(WER), instrument->name(WEN))), ({caster}));
+      break;
+    case 1: // TODO
+      tell_object(caster, BS("Deine Klaenge kuenden davon, dass Mensch und Tier in der Sommerglut am Feld arbeiten."));
+      tell_room(environment(caster), BS(sprintf("%s Klaenge kunden davon, wie Mensch und Tier in der Sommerglut am Felde schuften.",
+                caster->Name(WESSEN))), ({caster}));
+      break;
+    case 2:
+      tell_object(caster, BS(sprintf("Trillernd laesst du nun den wilden Ruf eines Kuckucks ertoenen, der aus Baeumen schreit.", instrument->name(WESSEN, 1))));
+      tell_room(environment(caster), BS(sprintf("Trillernd laesst %s nun den wilden Ruf des Kuckucks ertoenen, der aus den Baeumen schreit.",
+                caster->Name(WER))), ({caster}));
+      break;
+    case 3:
+      tell_object(caster, BS(sprintf("Schon laesst du die Klaenge einer sanften Sommerbrise ertoenen, die das Gras im Wind wiegen laesst.")));
+      tell_room(environment(caster), BS(sprintf("Schon laesst %s die Klaenge einer sanften Sommerbrise ertoenen, die das Gras im Wind wiegen.",
+                caster->Name(WER))), ({caster}));
+      break;
+    case 4:
+      tell_object(caster, BS(sprintf("Mit einem Mal wird dein Takt schneller und die Musik wilder. Der streitende Nordwind mischt die Brise auf.")));
+      tell_room(environment(caster), BS(sprintf("Mit einem mal wird %s Takt schneller und die Musik wilder. Der stuermische Nordwind mischt die Brise auf.", 
+        caster->Name(WER))), ({caster}));
+      break;
+    case 5:
+      tell_object(caster, BS(sprintf("Mit den klangmalerischen Klagen der Hirten vor dem heraufziehenden Sturm laesst du den Satz zu Ende gehen.")));
+      tell_room(environment(caster), BS(sprintf("%s zeichnet vor deinem inneren Auge das Klangbild der Hirten, die vor dem heraufziehenden Sturm ihr Leid klagen. Dann verstummt die Musik.",
+                caster->Name(WER))), ({caster}));
+      break;
+  }
+}
+
+public void sarrian_sentence_3(object instrument, int step) {
+  switch(step) {
+    case 0:
+      tell_object(caster, BS("Zu Beginn des dritten Satzes blaest du kraeftig in %s, als waere es ein Jagdhorn!"));
+      tell_room(environment(caster), BS(sprintf("%s blaest drei kraeftige Stoesse in %s, als waere es ein Jagdhorn!",
+                caster->Name(WER), instrument->name(WEM))), ({caster}));
+      break;
+    case 1:
+      tell_object(caster, BS("Du wiederholst den Ruf des Jagdhorns und fuegst einige bellende Toene darunter. Die Jaeger stehen bereit."));
+      tell_room(environment(caster), BS(sprintf("%s wiederholt den Ruf des Jagdhorns und fuegt einige bellende Toene darunter. Es klingt nach einer Jagdgesellschaft, die sich auf in den Wald macht.",
+                caster->Name(WEM))), ({caster}));
+      break;
+    case 2:
+      tell_object(caster, BS(sprintf("Du laesst die Musik aus dein%s %s wild auf und ab springen, wie das Reh, das vor den Jaegern fluechtet..",
+                  instrument->QueryProp(P_GENDER)==FEMALE?"er":"em", instrument->Name(RAW))));
+      tell_room(environment(caster), BS(sprintf("%s laesst die Musik aus %s%s %s wild auf und ab springen, wie das Reh, das vor den Jaegern fluechtet.",
+                caster->Name(WER, 1), caster->QueryPossPronoun(), instrument->QueryProp(P_GENDER)==FEMALE?"er":"em", instrument->Name(RAW))), ({caster}));
+      break;
+    case 3:
+      tell_object(caster, BS(sprintf("Fast schon plastisch stellt deine Musik die Hunde dar, die dem Wild nachhetzen. Dazwischen springt das Reh immer tiefer in den Wald.", instrument->name(WESSEN, 1))));
+      tell_room(environment(caster), BS(sprintf("%s Musik stellt fast schon plastisch die Hunder dar, die dem Wild nach hetzen, das wiederum immer tiefer in den Wald springt.",
+                caster->Name(WESSEN))), ({caster}));
+      break;
+    case 4:
+      tell_object(caster, BS(sprintf("Nun wechselt deine Musik zu langsam, klagenden Harmonien! Das Wild wurde verwundet, doch noch flieht es.")));
+      tell_room(environment(caster), BS(sprintf("Nun wechselt %szu langsamen, klagenden Harmonien! Das Wild wurde verwundet, doch noch flieht es.",
+                caster->Name(WESSEN))), ({caster}));
+      break;
+    case 5:
+      tell_object(caster, BS(sprintf("Am Ende des Satzes laesst du die Musik, wie das erlegte Reh, langsam zu Ende gehen.")));
+      tell_room(environment(caster), BS(sprintf("%s laesst die Musik, wie das erlegte Reh, mit einigen Akkorden langsam zu Ende gehen.",
+                caster->Name(WER))), ({caster}));
+      break;
+  }
+}
+
+public void sarrian_sentence_2(object instrument, int step) {
+  switch(step) {
+    case 0:
+      tell_object(caster, BS("Nach einer kurzen Pause beginnst du mit leisen, beruhigenden Klaengen den zweiten Satz."));
+      tell_room(environment(caster), BS(sprintf("%s spielt auf %s leise und beruhigende Toene, die den Schlaf einer Herbstnacht ankuendigen.",
+                caster->Name(WER), instrument->name(WEM))), ({caster}));
+      break;
+    case 1:
+      tell_object(caster, BS("Gleitend, leise surrend und pfeifend tragen sich die sanften, entspannenden Toene dahin."));
+      tell_room(environment(caster), BS(sprintf("%s laesst leise surrende und pfeifende Toene durch die Luft gleiten. Entspannt atmest du durch.",
+                caster->Name(WER))), ({caster}));
+      break;
+    case 2:
+      tell_object(caster, BS("Deine Musik umspielt dich, wie eine kuehle Brise im Herbst oder sanfter Nebel, der vom Boden aufsteigt."));
+      tell_room(environment(caster), BS(sprintf("%s Musik umspielt dich, wie eine kuehle Brise im Herbst oder sanfter Nebel, der vom Boden aufsteigt.",
+                caster->Name(WESSEN))), ({caster}));
+      break;
+    case 3:
+      tell_object(caster, BS(sprintf("Du fuegst einige dumpfe, laengere Bassnoten hinzu, welche das schwindende Licht und laengere Naechte ankuendigen.", instrument->name(WESSEN, 1))));
+      tell_room(environment(caster), BS(sprintf("%s mischt einige dumpe, laengere Bassnoten hinzu, welche das schwindende Licht und laengere Naechte ankuendigen.",
+                caster->Name(WER))), ({caster}));
+      break;
+    case 4:
+      tell_object(caster, BS(sprintf("Deine Melodie gleitet sanft, wie ein Wiegenlied dahin. Du selbst doest dabei ein wenig ein.")));
+      tell_room(environment(caster), BS(sprintf("%s Melodie gleitet sanft, wie ein Wiegenlied dahin. Du ertappst dich dabei ein wenig wegzudoesen.",
+                caster->Name(WESSEN))), ({caster}));
+      break;
+    case 5:
+      tell_object(caster, BS(sprintf("Mit ein paar sanften Harmonien laesst du den zweiten Satz ausgleiten.")));
+      tell_room(environment(caster), BS(sprintf("%s laesst die Musik mit einigen sanften Harmonien ausgleiten.",
+                caster->Name(WER))), ({caster}));
+      break;
+  }
+}
+
+public void sarrian_sentence_1(object instrument, int step) {
+  switch(step) {
+    case 0:
+      tell_object(caster, BS("Schwungvoll beginnst du einen froehlichen, baeuerlichen Tanz aufzuspielen."));
+      tell_room(environment(caster), BS(sprintf("%s blaest in %s und beginnt so mit Pfeifen und Jauchzen einen baeurerlichen Tanz aufzuspielen.",
+                caster->Name(WER), instrument->name(WEN))), ({caster}));
+      break;
+    case 1: // TODO
+      tell_object(caster, BS("Du wiederholst die Tanzmusik als Ritornell mehrmals, aber in unterschiedlichen Abwandlungen."));
+      tell_room(environment(caster), BS(sprintf("%s wiederholt mit %s die Tanmusik als Ritornell mehrmals, aber in unterschiedlichen Abwandlungen.",
+                caster->Name(WER), instrument->name(WEM))), ({caster}));
+      break;
+    case 2:
+      tell_object(caster, BS(sprintf("Mit einigen auf- und absteigenden Tonfolgen ainimierst du deine Zuhoerer zum ausgelassenen feiern.", instrument->name(WESSEN, 1))));
+      tell_room(environment(caster), BS(sprintf("Mit einigen auf- und absteigenden Tonfolgen animiert %s dich zum ausgelassenen feiern und tanzen.",
+                caster->Name(WER))), ({caster}));
+      break;
+    case 3:
+      tell_object(caster, BS(sprintf("Du laesst die Musik nun in tragende Harmonien abfallen. Wie die derlimschen Weinbauern, die nach dem Tanz erschoepft und trunken ruhen.")));
+      tell_room(environment(caster), BS(sprintf("%s laesst die Musik in tragende Harmonien abfallen. So wie die derlimschen Weinbauern nach dem Tanz erschoepft und trunken ruhen, ruht auch die Musik.",
+                caster->Name(WER))), ({caster}));
+      break;
+    case 4:
+      tell_object(caster, BS(sprintf("Mit einem neuerlichen Aufwallen der Tanzmusik laedst du zu einer abschliessenden Runde ein. Beschwingt, wie der Hobbitwein.")));
+      tell_room(environment(caster), BS(sprintf("Mit einem neuerlichen Aufwallen der Tanzmusik laedt %s zu einer abschliessenden Runde ein. Beschwingt, wie der Hobbitwein.", 
+        caster->Name(WER))), ({caster}));
+      break;
+    case 5:
+      tell_object(caster, BS(sprintf("Du beendest den Satz mit dem selben Thema, mit dem er begann und laesst es leise ausklingen.")));
+      tell_room(environment(caster), BS(sprintf("%s wiederholt das Thema des Herbstesund laesst es leise ausklingen.",
+                caster->Name(WER))), ({caster}));
+      break;
+  }
+}
+
+public void alestra_sentence_3(object instrument, int step) {
+  switch(step) {
+    case 0:
+      tell_object(caster, BS("Nach einer kurzen Pause beginnst du mit froehlicher Melodie den dritten Satz anzukuendigen."));
+      tell_room(environment(caster), BS(sprintf("%s beginnt auf %s eine froehliche Melodie, die den dritten Satz ankuendigt.",
+                caster->Name(WER), instrument->name(WEM))), ({caster}));
+      break;
+    case 1:
+      tell_object(caster, BS("Du laesst deine Melodie zu einer lustigen Tanzmusik werden."));
+      tell_room(environment(caster), BS(sprintf("Die Melodie von %s wird zu einer lustigen Tanzmusik.",
+                caster->Name(WEM))), ({caster}));
+      break;
+    case 2:
+      tell_object(caster, BS(sprintf("Du entlockst dein%s %s eine auf- und abfallende, verspielte Musik.",
+                  instrument->QueryProp(P_GENDER)==FEMALE?"er":"em", instrument->Name(RAW))));
+      tell_room(environment(caster), BS(sprintf("%s entlockt %s%s %s eine auf- und abfallende, verspielte Musik.",
+                caster->Name(WER, 1), caster->QueryPossPronoun(), instrument->QueryProp(P_GENDER)==FEMALE?"er":"em", instrument->Name(RAW))), ({caster}));
+      break;
+    case 3:
+      tell_object(caster, BS(sprintf("Du fuegst einige langsame, tief-getragene Toene hinzu, die Festlichkeit ausdruecken.", instrument->name(WESSEN, 1))));
+      tell_room(environment(caster), BS(sprintf("%s fuegt einige langsame, tief-getragene Toene hinzu, die Festlichkeit ausdruecken.",
+                caster->Name(WER))), ({caster}));
+      break;
+    case 4:
+      tell_object(caster, BS(sprintf("Der Reigen deiner Musik tanzt froehlich auf und ab, wie der Tanz der Nymphen und Feen.")));
+      tell_room(environment(caster), BS(sprintf("Der Reigen von %s Musik tanzt froehlich auf und ab, wie der Tanz von Nymphen und Feen.",
+                caster->Name(WESSEN))), ({caster}));
+      break;
+    case 5:
+      tell_object(caster, BS(sprintf("Mit ein paar letzten, energiereichen Akkorden laesst du den dritten Satz ausklingen.")));
+      tell_room(environment(caster), BS(sprintf("%s laesst den dritten Satz mit energiereichen Akkorden ausklingen.",
+                caster->Name(WER))), ({caster}));
+      break;
+  }
+}
+
+public void alestra_sentence_2(object instrument, int step) {
+  switch(step) {
+    case 0:
+      tell_object(caster, BS("Nach einer kurzen Pause beginnst du langsam den zweiten Satz anzukuendigen."));
+      tell_room(environment(caster), BS(sprintf("%s spielt auf %s langsame Toene, die traege den zweiten Satz des Fruehlings ankuendigen.",
+                caster->Name(WER), instrument->name(WEM))), ({caster}));
+      break;
+    case 1:
+      tell_object(caster, BS("Eine Reihe leichterer Terzen, die vom langsamen Thema getragen werden, stellen das leise Saeuseln der Baeche und Straeucher dar."));
+      tell_room(environment(caster), BS(sprintf("%s stellt mit leichten, saeuselnden Klaengen %s das leise Saeuseln von Baechen und Straeuchern dar.",
+                caster->Name(WER), instrument->name(WESSEN, 1))), ({caster}));
+      break;
+    case 2:
+      tell_object(caster, BS("Unter die ganzen Toene mischst du mit einigen tiefen, abgehackten Noten eine Hommage an einen heiser bellenden Hirtenhund."));
+      tell_room(environment(caster), BS(sprintf("%s mischt ab und an eine tiefere, abgehackte Note hinzu, welche dich an das Bellen eines Hundes erinnert.",
+                caster->Name(WER))), ({caster}));
+      break;
+    case 3:
+      tell_object(caster, BS(sprintf("Zur langsamen Grundmelodie und den gelegentlich heiseren Bell-Noten fuegst du nun auch die tragenden Klaenge eines "
+                  "doesenden Hirten.", instrument->name(WESSEN, 1))));
+      tell_room(environment(caster), BS(sprintf("%s mischt einige tragende Klaenge unter die Grundmelodie des Liedes. Irgendwie erinnert dich das alles an "
+                "das Bild eines Hirten, der auf der Weide doest.",
+                caster->Name(WER))), ({caster}));
+      break;
+    case 4:
+      tell_object(caster, BS(sprintf("Nun hat sich endlich das gesamte Klangbild deines musikalischen Gemaeldes entfaltet.")));
+      tell_room(environment(caster), BS(sprintf("Nun hoerst du die Musik von %s in ihrem ganzen Klang. In deinem Kopf bildet sich das Bild einer schoenen "
+                "Weide im Fruehling, samt grasenden Schafen, Huetehund und schlafendem Hirten. Eine entspannende Szenerie, wie du findest.",
+                caster->Name(WESSEN))), ({caster}));
+      break;
+    case 5:
+      tell_object(caster, BS(sprintf("Langsam laesst du den Satz ausklingen, und laesst einen Tonstrang nach dem anderen auslaufen.")));
+      tell_room(environment(caster), BS(sprintf("%s laesst langsaem eine Melodie nach der anderen der Gesamtkomposition ausklingen.",
+                caster->Name(WER))), ({caster}));
+      break;
+  }
+}
+
+public void alestra_sentence_1(object instrument, int step) {
+  switch(step) {
+    case 0:
+      tell_object(caster, BS("Du spielst ein strahlendes E-Dur-Thema, das das Erwachen des Fruehlings symbolisiert."));
+      tell_room(environment(caster), BS(sprintf("%s spielt auf %s ein strahlendes E-Dur-Thema, das das Erwachen des Fruehlings symbolisiert.",
+                caster->Name(WER), instrument->name(WEM))), ({caster}));
+      break;
+    case 1:
+      tell_object(caster, BS("Elegant spielst du als Uebergang ein kurzes Solo aus gleitenden Toenen."));
+      tell_room(environment(caster), BS(sprintf("%s laesst mit %s einen Uebergang in Form eines Solos aus gleitenden Toenen erklingen.",
+                caster->Name(WER), instrument->name(WEM))), ({caster}));
+      break;
+    case 2:
+      tell_object(caster, BS(sprintf("Die wechselnden Toene %s klingen wie unterschiedliche Vogelstimmen, die sich abwechseln.", instrument->name(WESSEN, 1))));
+      tell_room(environment(caster), BS(sprintf("Die wechselnden Toene von %s %s klingen wie unterschiedliche Vogelstimmen, die sich abwechseln.",
+                caster->Name(WESSEN), instrument->Name(RAW))), ({caster}));
+      break;
+    case 3:
+      tell_object(caster, BS(sprintf("Noch einmal beschwoerst du das Grundthema des Fruehlings. Diesmal in duesterem in E-Moll.")));
+      tell_room(environment(caster), BS(sprintf("%s laesst nochmals das Grundthema des Fruehlings erschallen. Es klingt dumpf und duesterer.",
+                caster->Name(WER))), ({caster}));
+      break;
+    case 4:
+      tell_object(caster, BS(sprintf("Mit hoehen, virtuosen Toenen, gefolgt von dumpfen tragenden tiefen Harmonien stellst du das Spiel von Blitz und Donner dar.")));
+      tell_room(environment(caster), BS(sprintf("%s entlockt %s%s %s abwechselnd virtuose hohe Toene, gefolgt von dumpf-tragenden tiefen Harmonien. Das Bild von "
+                "Blitz und Donner kommt dir in den Sinn. Wie ein kleiner Fruehlingssturm.", caster->Name(WER), caster->QueryPossPronoun(2),
+                instrument->QueryProp(P_GENDER)==FEMALE?"r":"s", instrument->Name(RAW))), ({caster}));
+      break;
+    case 5:
+      tell_object(caster, BS(sprintf("Du beendest den Satz mit dem bekannten Grundthema und laesst es leise ausklingen.")));
+      tell_room(environment(caster), BS(sprintf("%s wiederholt das Grundthema des Fruehlings in strahlendem Klang und laesst es leise ausklingen.",
+                caster->Name(WER))), ({caster}));
+      break;
+  }
+}
+
+public void korriax_sentence_3(object instrument, int step) {
+  switch(step) {
+    case 0:
+      tell_object(caster, BS("Aus dem fulminanten Finale des letzten Satzes beginnst du ein leises Klappern und Klopfen."));
+      tell_room(environment(caster), BS(sprintf("%s beginnt aus dem fulminanten Finale des vorherigen Satzes auf %s ein leises Klappern und Klopfen.",
+                caster->Name(WER), instrument->name(WEM))), ({caster}));
+      break;
+    case 1:
+      tell_object(caster, BS("Du laesst das Klappern und Klopfen zum einem wilden Schlagen, wie ein Fensterladen im Wind, werden."));
+      tell_room(environment(caster), BS(sprintf("%s laesst das Klappern und Klopfen zu einem wilden Schlagen anschwellen, wie ein Fensterladen im Sturm.",
+                caster->Name(WER))), ({caster}));
+      break;
+    case 2:
+      tell_object(caster, BS(sprintf("Mit reibenden Bewegungen über dein%s %s und erzeugst ein Geraeusch, das wie das Sausen des Windes klingt.",
+        (instrument->QueryProp(P_GENDER)?(instrument->QueryProp(P_GENDER)==1?"en":"e"):""), instrument->Name(RAW))));
+      tell_room(environment(caster), BS(sprintf("%s streicht reibend ueber %s und erzeugt ein Geraeusch, das wie das Sauseen des Windes klingt.",
+        caster->Name(WER), instrument->name(WEN))), ({caster}));
+      break;
+    case 3:
+      tell_object(caster, BS(sprintf("Du laesst die Schlaege und Rhythmen dumpfer werden, als wuerde man sich davon entfernen.")));
+      tell_room(environment(caster), BS(sprintf("%s laesst die Schlaege und Rhythmen dumpfer werden, als wuerdest du dich davon entfernen.",
+        caster->Name(WER))), ({caster}));
+      break;
+    case 4:
+      tell_object(caster, BS(sprintf("Mit deinen Fingern trommelst du sacht auf %s und holst das Prasseln des Kaminfeuers aus dem zweiten Satz zurueck.",
+        instrument->name(WEM, 1))));
+      tell_room(environment(caster), BS(sprintf("%s trommelt sacht auf %s und holt das Prasseln des Kaminfeuers aus dem zweiten Satz zurueck.",
+        caster->Name(WER), instrument->name(WEM, 1))), ({caster}));
+      break;
+    case 5:
+      tell_object(caster, BS(sprintf("Sanft laesst du den letzten Satz ausklingen. In den Herzen deiner Zuhoerer laesst du die Waerme des Kaminfeuers zurueck.")));
+      tell_room(environment(caster), BS(sprintf("%s laesst den letzten Satz sanft ausklingen. In deiner Erinnerung bleibt die sanfte Waerme des Kaminfeuers.",
+        caster->Name(WER))), ({caster}));
+      break;
+  }
+}
+
+public void korriax_sentence_2(object instrument, int step) {
+  switch(step) {
+    case 0:
+      tell_object(caster, BS("Ein rascher Rhythmus deiner trommelnden Finger deutet das Prasseln eines Kaminfeuers an."));
+      tell_room(environment(caster), BS(sprintf("%s trommelt rasant mit den Fingern auf %s und deutet so das Prasseln eines Kaminfeuers an.",
+                caster->Name(WER), instrument->name(WEM))), ({caster}));
+      break;
+    case 1:
+      tell_object(caster, BS("Zum raschen Prasseln des Kamins kommt ein langsamerer, dumpferer Rhythmus, der fallenden Regen darstellt."));
+      tell_room(environment(caster), BS(sprintf("%s fuegt zum rasch trommelnden Prasseln des Kamins noch dumpfes Klopfen auf %s hinzu. So als wuerde Regen fallen.",
+                caster->Name(WER), instrument->name(WESSEN, 1))), ({caster}));
+      break;
+    case 2:
+      tell_object(caster, BS("Du wechselst den Rhythmus auf einen vorsichtigen und zoegerlichen Takt. Als wuerde jemand ueber glattes Eis gehen."));
+      tell_room(environment(caster), BS(sprintf("%s aendert den Rhythmus auf einen vorsichtigen und zoegerlichen Takt. Als wuerde jemand ueber glattes Eis gehen.",
+                caster->Name(WER))), ({caster}));
+      break;
+    case 3:
+      tell_object(caster, BS(sprintf("Auf %s fuehrst du nun weitere, beschwingtere Rhythmen ein, welche Eislaeufer darstellen, die sich sicherer bewegen.", instrument->name(WESSEN, 1))));
+      tell_room(environment(caster), BS(sprintf("%s fuehrt nun weitere, beschwingtere Rhythmen in, die Eislaeufer darstellen, welche sich sicherer bewegen.",
+                caster->Name(WER))), ({caster}));
+      break;
+    case 4:
+      tell_object(caster, BS(sprintf("Eine Kaskade beschwingter Rhythmen ergiesst sich. Diese Komposition soll heiteres Vergnuegen auf einem zugefrorenen See darstellen.")));
+      tell_room(environment(caster), BS(sprintf("%s laesst einen Kaskade bschwingter Rhythmen erklingen. Die gesamte Komposition klingt fuer dich wie "
+        "heiteres Wintervergnuegen auf einem zugefrorenen See.",
+                caster->Name(WER))), ({caster}));
+      break;
+    case 5:
+      tell_object(caster, BS(sprintf("Im Finale dieses Satzes stellst du mit einem donnernden Stakkato das Einbrechen der Eisdecke dar.")));
+      tell_room(environment(caster), BS(sprintf("%s fuehrt diesen Satz mit einem donnernden Stakkato dem Finale zu. Offenbar ist die Eisdecke eingebrochen.",
+                caster->Name(WER))), ({caster}));
+      break;
+  }
+}
+
+public void korriax_sentence_1(object instrument, int step) {
+  switch(step) {
+    case 0:
+      tell_object(caster, BS("Mit langsamen, leichten Schlaegen stellst du den winterlichen Schnee nach, der ueber die Landschaft faellt."));
+      tell_room(environment(caster), BS(sprintf("%s stellt mit langsamen, leichten Schlaegen auf %s winterlichen Schnee nach, der ueber die Landschaft faellt.",
+                caster->Name(WER), instrument->name(WEM))), ({caster}));
+      break;
+    case 1:
+      tell_object(caster, BS("Immer langsamer laesst du den Rhythmus pochen, um die erstarrende Kaelte des Eises heraufzubeschwoeren."));
+      tell_room(environment(caster), BS(sprintf("%s laesst den Rhythmus immer langsamer werden, was dich an die erstarrende Kaelte des Eises erinnert.",
+                caster->Name(WER))), ({caster}));
+      break;
+    case 2:
+      tell_object(caster, BS(sprintf("Der Kaelte des Frostes fuegst du nun, auf %s ratschend und schleifend, die Toene des erbarmungslosen Winterwindes hinzu.", instrument->name(WESSEN, 1))));
+      tell_room(environment(caster), BS(sprintf("Ratschend-schleifende Toene von %s %s klingen nun wie der erbarmungslose Winterwind im starren Eis.",
+                caster->Name(WESSEN), instrument->Name(RAW))), ({caster}));
+      break;
+    case 3:
+      tell_object(caster, BS(sprintf("Durch das Schleifen des Windes laesst du dumpfe Schlaege erklingen, die an das Stapfen von Fuessen erinnern.")));
+      tell_room(environment(caster), BS(sprintf("%s laesst dumpfe Schlaege erklingen, die an das Stapfen von Fuessen im Schnee erinnern.",
+                caster->Name(WER))), ({caster}));
+      break;
+    case 4:
+      tell_object(caster, BS(sprintf("Du laesst die stapfenden Fuesse lauter werden und den kalten Winterwind verklingen. Das Bild eines kalten Winterwaldes inspiriert dich.")));
+      tell_room(environment(caster), BS(sprintf("%s laesst auf %s%s %s die stapfenden Schlaege lauter werden und das Schleifen des Windes verklingen. Du stellst dir "
+        "einen kalten Winterwald vor, den du durch durchwanderst.", caster->Name(WER), caster->QueryPossPronoun(2),
+                instrument->QueryProp(P_GENDER)==FEMALE?"r":"s", instrument->Name(RAW))), ({caster}));
+      break;
+    case 5:
+      tell_object(caster, BS(sprintf("Zum Abschluss des Satzes laesst du das dumpfe Stapfen immer schneller werden, bis es wie das Stakkato klappernder Zaehne klingt.")));
+      tell_room(environment(caster), BS(sprintf("%s laesst das dumpfe Stapfen immer schneller werden, bis es an das Klappern von Zaehnen in der Kaelte erinnert und verstummt dann.",
+                caster->Name(WER))), ({caster}));
+      break;
+  }
+}
+
+public void sequence(string bardGroup, int sentence, int step) {
+  string restrRes;
+  object instrument; 
+
+  if(stringp(restrRes=call_other("/spellbooks/barden_spells", "CheckCastWithMusic", caster, ([SI_CAP_NAME: songName])))) {
+    tell_object(caster, BS(restrRes));
+    call_out("endSong", 0);
+    return;
+  }
+
+  if(step > 5) {
+    step = 0;
+    if(++sentence > sentences) {
+      endSong();
+      return;
+    }
+  }
+
+  doHealing(sentence);
+
+  instrument = getInstrument();
+  call_out(sprintf("%s_sentence_%d", bardGroup, sentence), 0, instrument, step);
+  call_out("sequence", 3+random(3), bardGroup, sentence, ++step);
+}
+
+public void additional_heal() {
+  doHealing(1);
+
+  call_out("additional_heal", additionalHealTick);
+}
+
+public void BecomesNetDead(object spieler) {
+  if(spieler == caster) {
+    caster->SetProp(P_NEXT_SPELL_TIME, time()+10);
+    remove(1);
+  }
+}

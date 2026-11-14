@@ -1,0 +1,199 @@
+//=========================================================================
+//
+// File:    verlies1.c
+// Created by Ronja@SL
+//
+// Project: Feen
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit ROOM "verlies0" ;
+
+int schuttmenge;
+
+void create()
+{
+  ::create();
+
+  AddSpecialDetail( ({"schutt","schuttberg"}) , "detail_zustand");
+
+  AddSpecialExit("norden",      "ausgang" );
+  AddExit("osten",         ROOM "verlies2.lpc" );
+  AddExit("suedosten",     ROOM "verlies4.lpc" );
+  AddExit("sueden",        ROOM "verlies3.lpc" );
+
+  AddCmd( ({"grabe","grab"})      , "cmd_graben");
+  AddCmd( CMD_KLETTERN            , "cmd_klettern");
+
+  schuttmenge = 100;
+
+  AddItem(NPC "ratte", REFRESH_DESTRUCT);
+}
+
+void reset()
+{
+  ::reset();
+  schuttmenge = 100;
+  RemoveSpecialExit("loch");
+  RemoveDetail( ({"loch"}) );
+  tell_room(TO,BS("Etwas Geroell rutscht von der Decke herab und kullert "
+                  "den Schuttberg hinab."));
+}
+
+string detail_zustand(string str)
+{
+  string s;
+
+  switch(schuttmenge)
+  {
+    case 91 .. 100 :
+      s = "Der Ausgang nach Norden ist verschuettet.";
+      break;
+
+    case 81 ..  90 :
+      s = "Der Ausgang nach Norden ist verschuettet. "
+          "Allerdings ist ein kleiner Teil des Schuttberges "
+          "abgetragen worden.";
+      break;
+
+    case 71 ..  80 :
+      s = "Der Schuttberg ist schon etwas kleiner geworden.";
+      break;
+
+    case 61 ..  70 :
+      s = "Ein Durchgang im Schutt nimmt schon erste Formen an.";
+      break;
+
+    case 51 ..  60 :
+      s = "Ein guter Teil des Schuttberges ist schon abgetragen.";
+      break;
+
+    case 41 ..  50 :
+      s = "Bald ist ein Durchgang im Schuttberg gegraben.";
+      break;
+
+    case 31 ..  40 :
+      s = "Schimmert da nicht schon etwas Licht durch? Nein, "
+          "das muss eine Taeuschung gewesen sein.";
+      break;
+
+    case 21 ..  30 :
+      s = "Bald muesste doch der Schuttberg durchstossen sein.";
+      break;
+
+    case 11 ..  20 :
+      s = "Ein klitzekleines Loch ist da. Aber es ist viel zu klein "
+          "um durch zu klettern.";
+      break;
+
+    case  1 ..  10 :
+      s = "Noch ein klein wenig graben, und Du hast einen Durchschlupf!";
+      break;
+
+    default        :
+      s = "Ein Loch ist im Schuttberg, gerade gross genug, um "
+          "hineinzuklettern.";
+      break;
+
+  }
+  return BS(s);
+}
+
+int ausgang(string dir)
+{
+  if(schuttmenge > 0)
+  {
+    TELLPLAYER(BS("Der Ausgang nach Norden ist verschuettet."));
+    return 1;
+  }
+
+  TP->move(ROOM "loch:"+getuid(TP), M_GO, "in ein Loch");
+  tell_room(TO,BS("Grade als "+TPN+" durch das Loch verschwindet, stuerzt "
+                  "ein Teil der Decke nach und verschuettet den Ausgang "
+                  "wieder."), ({TP})
+  );
+  RemoveSpecialExit("loch");
+  RemoveDetail( ({"loch"}) );
+  schuttmenge = 100;
+  return 1;
+}
+
+int cmd_graben(string str)
+{
+  string s;
+
+  if(schuttmenge < 1)
+  {
+    TELLPLAYER(BS("Wozu noch weiter graben? Hier ist doch schon ein "
+                  "Durchschlupf. "));
+    return 1;
+  }
+
+  if(present("schaufel",TP))
+  {
+    if(!TP->do_exhaust(75,0)) return 1;
+
+    schuttmenge -= random(10)+15;
+    s = "Du graebst ein gutes Stueck in den Schuttberg hinein. ";
+  }
+  else
+  {
+    if(!TP->do_exhaust(125,0)) return 1;
+
+    schuttmenge -= random(5)+5;
+    s = "Du versuchst einen Durchgang zu graben, aber mit Deinen "
+        "Haenden wird das ein muehsames Unterfangen. ";
+  }
+
+  TELLPLAYER(BS(s+detail_zustand("")));
+  TELLOTHERS(TPN+" graebt wie wild im Schutt herum.\n");
+
+  if(schuttmenge < 1)
+  {
+    AddSpecialExit("loch", "ausgang" );
+    AddDetail( ({"loch","durchschlupf"}) ,
+      "Da ist ein Loch im Schuttberg, gerade gross genug "
+      "damit Du hineinklettern koenntest."
+    );
+  }
+  return 1;
+}
+
+int cmd_klettern(string str)
+{
+  notify_fail("Wohin moechtest Du klettern ?\n");
+
+  if(!str || str == "") return 0;
+  if(!(str == "loch"            ||
+       str == "in loch"         ||
+       str == "hinein"          ||
+       str == "durch loch"      ||
+       str == "durchgang"       ||
+       str == "in durchgang"    ||
+       str == "durch durchgang" )) return 0;
+
+  if(schuttmenge > 30)
+  {
+    TELLPLAYER("Hier ist kein Durchgang.\n");
+    return 1;
+  }
+
+  if(schuttmenge > 0)
+  {
+    TELLPLAYER("Das Loch ist viel zu klein zum durchklettern.\n");
+    return 1;
+  }
+
+  TP->move(ROOM "loch:"+getuid(TP), M_GO, "in ein Loch");
+  tell_room(TO,BS("Grade als "+TPN+" durch das Loch verschwindet, stuerzt "
+                  "ein Teil der Decke nach und verschuettet den Ausgang "
+                  "wieder."), ({TP})
+  );
+  schuttmenge = 100;
+  RemoveSpecialExit("loch");
+  RemoveDetail( ({"loch","durchschlupf"}) );
+  return 1;
+}
+

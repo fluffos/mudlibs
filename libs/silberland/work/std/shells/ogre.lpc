@@ -1,0 +1,322 @@
+
+// SilberLand MUDlib
+//
+// std/shells/ogre  ogre Shell 
+//
+// $Date: 2005/02/02 09:04:35 $
+/* $Revision: 1.12 $
+ * $Log: ogre.c,v $
+ * Revision 1.12  2005/02/02 09:04:35  Feyaria
+ * Resist aenderung und movekosten fuer TT_AIR
+ *
+ * Revision 1.11  2004/01/14 18:03:56  Feyaria
+ * Kein vergiftetes Food mehr automatisch essen.
+ *
+ * Revision 1.10  2002/08/18 21:14:05  Feyaria
+ * query -> _query
+ *
+ * Revision 1.9  2002/08/17 20:56:34  Feyaria
+ * Haar und Augenfarben
+ *
+ * Revision 1.8  2002/01/30 18:17:00  Woody
+ * reset() fuer Blueprint deaktiviert
+ *
+ * Revision 1.7  2000/08/06 15:38:18  Zordan
+ * AddHp(-x) bei Hunger entfernt (das SCROLLTE nur unnoetigerweise!)
+ *
+ * Revision 1.6  1999/01/13 01:36:07  Woody
+ * fressen() bugfixed
+ *
+ * Revision 1.5  1998/09/29 21:15:53  Woody
+ * mampf() von std/food noch this_object() uebergeben
+ *
+ * Revision 1.4  1998/09/20 15:01:00  Woody
+ * Ueberarbeitung (TT_WATER neu, P_AVERAGE_WEIGHT, Resists, Hands, Body)
+ * Optimierungen
+ *
+ * Revision 1.3  1998/06/30 08:06:25  Angrox
+ * fressen() debuggt
+ *
+ * Revision 1.2  1998/03/16 23:01:42  Angrox
+ * Oger starten beim ersten Mal einloggen mit max_food
+ *
+ * Revision 1.1  1998/03/16 22:30:11  mud
+ * Initial revision
+ *
+ */
+
+inherit "std/player/base";
+
+#include <properties.h>
+#include <attributes.h>
+#include <environment.h>
+#include <moving.h>
+#include <combat.h>
+#include <food.h>
+
+nosave int lev, hbonus;
+
+void create()
+{
+  base::create();
+
+  SetDefaultHome("/d/ebene/zordan/ogerhoehle/room/room_d5");
+  SetPrayRoom("/d/ebene/zordan/ogerhoehle/room/room_d5");
+
+  AddId("Ogerspieler");
+  SetProp(P_AVERAGE_SIZE, 250);
+  SetProp(P_AVERAGE_WEIGHT, 200000);
+  SetProp(P_ATTRIBUTES_OFFSETS, ([ A_STR:4, A_DEX:-1, A_CON:6, A_INT:-2 ]) );
+  SetProp(P_MAX_FOOD, 200);
+  SetProp(P_MAX_DRINK, 80);
+  SetProp(P_MAX_ALCOHOL, 60);
+  SetProp(P_FOOD, QueryProp(P_MAX_FOOD));
+  SetProp(P_FOOD_DELAY, 6);
+  SetProp(P_DRINK_DELAY, 13);
+  SetProp(P_ALCOHOL_DELAY, 9);
+  SetProp(P_HP_DELAY, 3);
+  SetProp(P_SP_DELAY, 5);
+  SetProp(P_TEMPERATURE_RANGE,([T_RANGE_MIN:10,T_RANGE_MAX:30]));
+  SetProp(P_ALIGN, -555);
+  SetProp(P_MSGIN,"stapft herein");
+  SetProp(P_MSGOUT,"stapft");
+
+  SetProp(P_BODY, 10);
+  SetProp(P_HANDS, ({ " mit fettigen Ogerhaenden",40,DT_BLUDGEON }) );
+  SetProp(P_RESISTANCE_STRENGTHS,
+      ([ DT_WATER  : -0.2,
+         DT_TERROR :  0.25,
+      ]) );
+
+  SetProp(P_RACE_TT_MV,
+      ([ TT_OTHER:      4,
+         TT_CAVE:       9,
+         TT_HOUSE:      8,
+         TT_HILL:       4,
+         TT_FOREST:     8,
+         TT_TOWN:       7,
+         TT_MOUNTAIN:   8,
+         TT_DESERT:     11,
+         TT_JUNGLE:     10,
+         TT_SWAMP:      14,
+         TT_PLAIN:      4,
+         TT_ARCTIC:     12,
+         TT_UNDERWATER: 16,
+         TT_WATER:      22,
+         TT_ROAD:       5,
+         TT_AIR:        5,]) );
+  SetProp(P_MATERIAL_KNOWLEDGE,
+      ([ MATGROUP_SOLID:-5, MATGROUP_EATABLE:50]) );
+}
+
+void FinalSetup()
+{
+  ::FinalSetup();
+  lev = QueryProp(P_LEVEL);
+  if (lev >= 50) hbonus = 51; else hbonus = lev + 1;    // Hands-Bonus
+}
+
+string _query_race()
+{
+  return "Oger";
+}
+
+string _query_racedescr()
+{
+  return break_string(
+      "Oger sind grosse, plumpe Kreaturen, die als Menschenfresser "
+      "verschriehen sind. Tatsaechlich stillen sie ihren nie endenden "
+      "Hunger an allen Dingen, die nur irgendwie nahrhaft sind. Oger "
+      "haben einen dicken Bauch, haengende Schultern und eine fliehende "
+      "Stirn, in die meist ihr fettiges Haar hineinhaengt.", 78);
+}
+
+int QueryAllowSelect() { return 1; }
+
+_query_hands()
+{
+  mixed h;
+  h=Query(P_HANDS);
+  return ({ h[0], h[1]+hbonus/2+random(hbonus/2+1), h[2] });
+}
+
+nosave int fressen(string str)
+{
+  object ob,next;
+  int poison;
+
+  if (str)
+    command_me("\\iss "+str);
+  else if (sizeof(filter_objects(all_inventory(this_object())+
+          all_inventory(environment(this_object())),"QueryProp",P_FOOD_INFO)))
+  {
+    poison = QueryProp(P_POISON);
+    tell_object(this_object(),
+      "Du frisst alles auf, was in Deine Reichweite kommt.\n");
+    command_me("\\iss alles");
+    if(QueryProp(P_POISON) > poison)
+    {
+      tell_object(this_object(),
+          "Angewidert spuckst Du einen Teil Deiner Mahlzeit wieder aus.\n");
+      environment(this_object())->Message(Name(WER,1) +
+          " spuckt angewidert einen Teil der Mahlzeit wieder aus.\n", 
+          MSGFLAG_VISUAL, ([ MSGFLAG_EXCLUDE : ({this_object()}) ]) ) ;
+      SetProp(P_POISON, poison);
+    }
+  }
+  else
+  {
+    tell_object(this_object(),
+      "Du schaust Dich verzweifelt nach Essbarem um, findest aber nichts.\n");
+    environment(this_object())->Message(Name(WER,1) +
+        " schaut sich verzweifelt nach Essbarem um, findet aber nichts.\n", 
+        MSGFLAG_VISUAL, ([ MSGFLAG_EXCLUDE : ({this_object()}) ]) ) ;
+  }
+  return 1;
+}
+
+int _query_hp_delay()
+{
+  int re;
+  re = Query(P_HP_DELAY);
+  if (!QueryProp(P_FOOD))
+  {
+    re+=9;
+    if(!random(10)) {
+      tell_object(this_object(), 
+        ({ "Dein Magen knurrt!\n",
+           "Du bist am verhungern!\n",
+           "Du musst unbedingt etwas essen!\n",
+           "Dein Hunger bringt Dich fast um!\n",
+           "Mit diesem Loch im Bauch fuehlst Du Dich sehr unwohl!\n",
+           "Du denkst . o O (Ich hab HUUUUUNGER!)\n",
+           "Dein Magen grummelt laut vor sich hin!\n",
+           "Du spuerst starke Schmerzen in Deinem leeren Bauch!\n"
+        })[random(8)]);
+      if(!random(5))
+        fressen(0);
+    }
+  }
+  if (100*QueryProp(P_FOOD)>80*QueryProp(P_MAX_FOOD))
+    return re/2;
+  return re;
+}
+
+int _query_sp_delay() 
+{
+  int re;
+  re = Query(P_SP_DELAY);
+  if (!QueryProp(P_FOOD))
+  {
+    re+=9;
+    if(!random(10)) {
+      tell_object(this_object(), 
+        ({ "Dein Magen knurrt!\n",
+           "Du bist am verhungern!\n",
+           "Du musst unbedingt etwas essen!\n",
+           "Dein Hunger bringt Dich fast um!\n",
+           "Mit diesem Loch im Bauch fuehlst Du Dich sehr unwohl!\n",
+           "Du denkst . o O (Ich hab HUUUUUNGER!)\n",
+           "Dein Magen grummelt laut vor sich hin!\n",
+           "Du spuerst starke Schmerzen in Deinem leeren Bauch!\n"
+        })[random(8)]);
+      if(!random(5))
+        fressen(0);
+    }
+  }
+  if (100*QueryProp(P_FOOD)>80*QueryProp(P_MAX_FOOD))
+    return re/2;
+  return re;
+}
+
+string *_query_racestring()
+{
+  if (QueryProp(P_GENDER) == FEMALE)
+    return ({"Ogerin","Ogerin","Ogerin","Ogerin"});
+  return ({"Oger","Ogers","Oger","Oger"});
+}
+
+nosave mixed *_query_localcmds()
+{
+  return
+    ({
+      ({"friss","fressen",0,0}),
+      ({"fresse","fressen",0,0}),
+      ({"mampf","fressen",0,0}),
+    }) + base::_query_localcmds();
+}
+
+void heart_beat()
+{
+  ::heart_beat();
+  if (!random(500) && interactive(this_object()) &&
+      query_idle(this_object()) > 180 &&
+      (QueryProp(P_FOOD) < QueryProp(P_MAX_FOOD)/2))
+    fressen(0);
+}
+
+void reset()
+{
+  if (file_name()[0..4]=="/std/") {
+    set_next_reset(-1);
+    return;
+  }
+  if (interactive(this_object()) &&
+      (QueryProp(P_FOOD) < QueryProp(P_MAX_FOOD)/2))
+    fressen(0);
+  if ((lev=QueryProp(P_LEVEL)) >= 50)
+    hbonus = 51; else hbonus = lev + 1;         // Hands-Bonus
+  ::reset();
+}
+
+string *_query_default_guild_male_titles()
+{
+      return ({ "der hungrige Oger", "der Suppenschluerfer",
+          "der Topfausschlecker", "das Sabbermaul",
+          "der kleine Gierschlund", "der grosse Gierschlund",
+          "der Fressack", "der Knoedelschlucker",
+          "der Schnitzelverdruecker", "der Schweinshaxenfresser",
+          "der Knochenbeisser", "das Vielfrass",
+          "der Allesfresser", "der Hobbitfresser",
+          "der Zwergenfresser", "der Menschenfresser",
+          "der Elfenfresser", "der Obermampf",
+          "der angehende Ogerseher", "der Ogerseher"});
+}
+
+string *_query_default_guild_female_titles()
+{
+      return ({ "die hungrige Ogerin", "die Suppenschluerferin",
+          "die Topfausschleckerin", "das Sabbermaul",
+          "die kleine Gierschluendin", "die grosse Gierschluendin",
+          "die Fressaeckin", "die Knoedelschluckerin",
+          "die Schnitzelverdrueckerin", "die Schweinshaxenfresserin",
+          "die Knochenbeisserin", "das Vielfrass",
+          "die Allesfresserin", "die Hobbitfresserin",
+          "die Zwergenfresserin", "die Menschenfresserin",
+          "die Elfenfresserin", "die Obermampferin",
+          "die angehende Ogerseherin", "die Ogerseherin" });
+}
+
+mixed RaceDefault(string arg)
+{
+  if (!arg)
+    return 0;
+  switch(arg) {
+    case P_HANDS : return ({" mit fettigen Ogerhaenden",40,DT_BLUDGEON});
+    case P_BODY :  return 10;
+  }
+  return ::RaceDefault(arg);
+}
+
+string *_query_eye_colors()
+{
+  return ({"rot", "hellrot", "dunkelrot", "waessrigweiss", 
+           "hellgelb", "gelb", "dunkelgelb", "weiss"});
+}
+
+string *_query_hair_colors()  
+{
+  return ({"weiss", "hellblond", "mittelblond", "blond", 
+           "dunkelblond", "hellbraun", "braun", "dunkelbraun"});
+}
+

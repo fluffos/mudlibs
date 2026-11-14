@@ -1,0 +1,277 @@
+//mutabo ohne etwas gibt waffentyp an
+//bersa erhoeht speed...
+//mutabo mit typ aendert waffentyp
+/*--------------------------------------------------------------------------
+  Der Wandler, ein dynamische Waffe fuer Seher:
+   * Wichtige Infos:
+     - Gewicht                      3000g
+     - MP-Verlust fuer Wandlung     keinen
+     - LP-Verlust fuer Wandlung     3+random(5)
+     - LP-Verlust bei Fehlschlag    10+random(10)
+   * Sonderfunktionen:
+     - Bei Fehlschlag der Wandlung 
+          * Verfroschung im Kampf
+     - bersa Modus:          
+          * Erhoehung von SA_SPEED, Kosten 15 MP
+          * Beschraenkung auf 5 Anwendung pro ca. 15 min.
+   DIE INFOS hier stimmen nicht mehr genau          
+   * Wandlungsfaehigkeiten//geandert am 22.6. dante  erneut aenderung da bus autraten
+         //stimmt eh alles net:)))
+         
+    hands immer auf 1; da es nen bug gab beim wandeln, man konnte 
+    einen zweihaendigen typ UND ein schild gleichzeitig haben
+         
+     - Axt                        210(WC)    2(Hands)
+     - Speer                      240        1
+     - Keule                      260        2
+     - Peitsche                   200        1
+     - Schwert                    250        2
+-------------------------------------------------------------------------*/   
+#include "../def.h"
+inherit "std/weapon";
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <wizlevels.h>
+#include "files.h"
+#include <new_skills.h>
+
+#define MAX_UCOUNT 50  // Maximale Anzahl der Wandlungen
+#define MAX_BCOUNT 250   // Maximale Anzahl des bersa-Modus
+#define BERSA_COSTS 15 // SP Kosten fuer den bersa-Modus
+#define BERSA_WAIT 700 // Zeit bis zum erneutem Einsatz des bersa-Modus
+#define W_MWC 200      // Waffenklasse 
+#define W_ID "wandler" // Ids werden jetzt auch passend gesetzt!
+
+int wanna_be_a_frog=0; // Falls gesetzt, Verfroschung im Kampf. B.
+int usedcount=0;
+int m_bersa=0;
+int m_bersa_count=0;
+int m_call_out=0;
+string w_winfo="einem Messer";        // Waffenart
+
+create() {
+  if (!is_clone(this_object()) )  return;
+  ::create();
+  SetProp(P_SHORT, "Der Wandler");
+  SetProp(P_LONG, BS( 
+    "Der Wandler ist eigentlich nur die Schwanzspitze von Tireks. Sie "
+    "scheint aus einem sehr harten und zaehen und doch sehr verformbaren "
+    "Material zu sein und leuchtet in einem gruengelben Licht. Auf jeden "
+    "Fall ist sie Dir nicht ganz geheur. Wirf sie lieber weg..."));
+  SetProp(P_LIGHT, 1); 
+  SetProp(P_INFO, "Der Wandler hat ein maechtiges Geheimniss.\n");
+  SetProp(P_NAME,"Wandler");
+  SetProp(P_GENDER,MALE);
+  AddId(({W_ID,"messer"}));
+  SetProp(P_ARTICLE,1);
+  SetProp(P_KILL_NAME,"Ein Wandler");
+  SetProp(P_WEAPON_TYPE,WT_KNIFE);
+  SetProp(P_WC,1);
+  SetProp(P_WC_FIXFACTOR, 0.99);
+  SetProp(P_DAM_TYPE,DT_RIP);
+  SetProp(P_CURSED, 1);
+  
+  SetProp(P_NR_HANDS,1);
+  SetProp(P_MATERIAL,([MAT_MAGIC:50,MAT_MISC_DEAD:50,MAT_SKIN:10, MAT_FLESH:10, MAT_LEATHER:10]));
+  SetProp(P_WEIGHT,3000);
+  SetProp(P_VALUE,20000);
+  SetProp(P_NOBUY,1);
+  SetProp(P_NODROP,"Der Wandler weigert sich!\n");
+  SetWieldFunc(this_object());
+  SetHitFunc(this_object());
+  AddCmd(({"mutabo"}),"wandel");
+  
+}
+
+string extra_look()
+{
+  return( CAP(ENV(TO)->QueryPronoun(WER))+" traegt "+
+      ENV(TO)->QueryPossPronoun(MALE, WEN, SINGULAR)+ " gefuerchteten Wandler "
+          "voller Ehrfurcht und Stolz.\n");
+          }
+
+nosave w_fail(){
+   write("Der Wandler weigert sich, Dir zu gehorchen!\n"
+   "Du fuehlst den puren Hass, der Dir vom Wandler entgegen schlaegt.\n");
+   wanna_be_a_frog=1;
+   return 1;
+}
+nosave w_reject(){
+  write("Ein schrecklicher Fehler ist Dir unterlaufen...\n"
+        "Der Wandler wendet sich gegen Dich.\n"
+        "Der Wandler trifft Dich extrem hart und beruhigt sich dann wieder.\n");
+  tell_room(environment(this_player()),this_player()->name(WER)+" wird "
+        "von einem Wandler hart getroffen!\nKurz darauf ist der Spuk "
+        "vorbei.\n",({this_player()}));
+  this_player()->do_damage(5+random(5));
+  wanna_be_a_frog=1;
+  return 1;
+}
+nosave w_try_it() {                                
+  write("Du konzentrierst Dich auf den Wandler, der daraufhin seine " 
+        "Form Deinen\nWuenschen anpasst.\n");
+  write("Du verspuerst einen leichten Schmerz im Kopf.\n");
+  tell_room(environment(this_player()),this_player()->name(WER)+
+        " konzentriert sich auf einen Wandler, der daraufhin seine "
+        "Form\nveraendert.\n",({this_player()}));
+  this_player()->do_damage(1+random(3));
+  wanna_be_a_frog=0;
+  return 1;
+}
+nosave metamorph(string w_dtype,string w_wtype,int w_wc,int w_hands){
+  SetProp(P_DAM_TYPE, w_dtype);
+  SetProp(P_WEAPON_TYPE,w_wtype);
+  SetProp(P_WC, w_wc);
+  SetProp(P_INFO,"Der Wandler hat sich zu "+w_winfo+" geformt.\n");
+  SetProp(P_NR_HANDS,w_hands);
+  write("Der Wandler verformt sich zu "+w_winfo+".\n");
+  tell_room(environment(this_player()),this_player()->name(WESSEN)+
+        " Wandler verformt sich zu "+w_winfo+".\n",({this_player()}));
+  return 1;
+}
+nosave bersa_wait(){
+  m_call_out=0;
+  m_bersa_count=0;
+  return 1;
+}
+nosave w_set_ids(string w_id) {
+   RemoveId(QueryProp(P_IDS));
+   AddId( ({W_ID,w_id}) );
+   return 1;
+}
+nosave wandel(string str) {
+  int p_sp;
+  if(!str) {
+    write("Der Wandler sieht verdaechtig nach "+w_winfo+" aus.\n");
+    return 1;
+  }
+  notify_fail("Der Wandler versteht Dich nicht!\n");
+  if(str=="exa"||str=="raeps"||str=="bulc"||str=="pihw"||str=="drows"||
+     str=="bersa") {
+    if(usedcount>=MAX_UCOUNT) {
+      write("Du hast den Wandler zu oft gewandelt.\n"
+      "Er verschwindet wieder zu Tireks zurueck.\n");
+      remove("wandler");
+      return 1;
+    }
+    if (str=="bersa") {
+      if(m_bersa_count >= MAX_BCOUNT) {
+        if(!m_call_out) {
+          m_call_out=1;
+          call_out("bersa_wait",BERSA_WAIT);
+        }
+        write("Der Wandler ist zu erschoepft!\n");
+        return 1;
+      }
+      if(m_bersa) {
+        write("Der Wandler glueht doch schon fast vor Zorn! Mehr wirst "
+         "Du nicht erreichen\nkoennen!\n");
+         return 1;
+      }
+      p_sp=this_player()->QueryProp(P_SP);
+      if(p_sp<BERSA_COSTS) {
+        write("Deine magischen Faehigkeiten reichen nicht aus!\n");
+        return 1;
+      }
+      this_player()->SetProp(P_SP,p_sp-BERSA_COSTS);
+      m_bersa=1;
+      m_bersa_count++;
+      write("Der Wandler glueht fast vor Zorn!\n");
+      return 1;
+    }
+    switch(random(100)) {
+      case 0..95:
+        usedcount++;
+        w_try_it();
+        if (str=="exa") {
+          w_winfo="einer Axt";
+          metamorph(({DT_RIP,DT_MAGIC}) ,WT_AXE,W_MWC+80,1);
+          w_set_ids("axt");
+        }
+        if (str=="drows") {
+          w_winfo="einem Schwert";
+          metamorph(({DT_MAGIC,DT_SLASH}),WT_SWORD,W_MWC+99,1);
+          w_set_ids("schwert");
+        }
+        if (str=="raeps") { 
+          w_winfo="einem Speer";
+          metamorph(({DT_MAGIC,DT_PIERCE}),WT_SPEAR,W_MWC+80,1);
+          w_set_ids("speer");
+        }
+        if (str=="bulc")  {
+          w_winfo="einer Keule";
+          metamorph(({DT_MAGIC,DT_BLUDGEON}),WT_CLUB,W_MWC+90,1);
+          w_set_ids("keule");
+        }
+        if (str=="pihw") { 
+          w_winfo="einer Peitsche";
+          metamorph(({DT_MAGIC,DT_WHIP}),WT_WHIP,W_MWC+80,1);
+          w_set_ids("peitsche");
+        }
+        return 1;
+        break;
+      case 96..98:
+        w_reject();
+        return 1;
+        break;
+      default:
+        w_fail();
+        return 1;
+        break;
+    }
+    return 1;
+  }
+  return 0;
+}
+ //ende der umwandlungen
+ 
+WieldFunc() {
+  if (!this_player() || 
+      !query_once_interactive(this_player()) || 
+      IS_SEER(this_player() ||
+      !this_player()->QueryAttribute(A_INT) <= 17)) {
+    write("Du zitterst vor Ehrfurcht vor dem Wandler.\n");
+    return 1;
+  }  
+  write("Seltsam, obwohl der Wandler so eine miese "
+    "Waffe ist, kannst Du ihn nicht\nzuecken...\n");
+  tell_room(environment(this_player()),this_player()->name(WER)+
+    " versucht, einen Wandler zu zuecken. Gibt aber leise "
+    "schluchsend auf.\n",({this_player()}));
+  return 0;
+}
+int HitFunc(object enemy) {
+  object pl;
+  if (!objectp(enemy) || !objectp(pl=QueryProp(P_WIELDED)))
+    return QueryProp(P_WC);
+  if(!this_player()->QueryProp(P_FROG)&&wanna_be_a_frog) {
+    tell_object(this_player(),
+      "Ein magischer Schlag Deines Wandlers trifft Dich!\nPloetzlich laeufst "
+      "Du gruen an und schrumpelst zusammen.\n");
+    tell_room(environment(this_player()),this_player()->name(WER)+" wird "
+      "von einem magischen Schlag eines Wandlers getroffen!\n"
+      "Ploetzlich schrumpelt "+this_player()->name(WER)+" zusammen und\n"
+      "laeuft gruen an.",({this_player()}));
+      this_player()->SetProp(P_FROG,1);
+      return 0;
+   }
+   
+   //fuer THOR: die beiden werte nach SA_SPEED unten 
+   //kann man ja noch aendern...sie amchen die eigentliche
+   //qualitate dieser waffe aus
+   
+   if(m_bersa){
+     pl->ModifySkillAttribute(this_object(),SA_SPEED,500,10);
+     tell_object(this_player(),"Der Wandler schlaegt mit aeussester Wut "
+       "auf Deinen Gegner ein!\n");
+     tell_room(environment(this_player()),this_player()->name(WESSEN)+
+       " Wandler schlaegt mit aeussester Wut auf "+enemy->name(WEN)+ 
+       " ein!\n",({this_player(),enemy}));
+     tell_object(enemy,this_player()->name(WESSEN)+" Wandler schlaegt mit "
+       "aeussester Wut auf Dich ein!\n");
+     m_bersa=0;
+     return 0;
+   }
+   return 0;
+}

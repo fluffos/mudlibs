@@ -1,0 +1,126 @@
+
+int prep_beherrschung(object caster, mapping sinfo)
+{
+  string str;
+  object ob, wer;
+  int cost;
+  if(!(sinfo[SI_SKILLARG]=parse_target(sinfo[SI_SKILLARG]))) {
+    write(BS("Was willst Du beherrschen?"));
+    return 0;
+  } 
+  str=sinfo[SI_SKILLARG];
+  if(!ob=present(str, environment(caster))) {
+    write(BS("So etwas ist hier nicht! Toete etwas, dann kannst Du es "
+        "auch beschwoeren und Deinem Willen unterwerfen!"));
+    return 0;
+  }
+  if(!living(ob)) {
+    write(sprintf("%s! Einen Gegenstand kannst Du nicht unterwerfen!\n", 
+          caster->QueryProp(P_GENDER)==FEMALE?"NAERRIN":"NARR"));
+    return 0;
+  }
+
+  if( !ob->id(NEKRO_IS_CONTROLABLE ) ) {
+    if(ob->is_class_member(CL_UNDEAD))
+      write(BS(sprintf("%s ist keine untote Kreatur, die Du beherrschen "
+         "kannst", ob->Name(WER))));
+    else {
+      write(BS(sprintf("Du kannst %s nicht unterwerfen! Vorher muss "
+              "%s erst tot sein!", ob->name(WEN), 
+              ob->QueryPronoun(WER))));
+      caster->Kill(ob);
+    }
+    return 0;
+  }
+  if( caster->InFight() ) {
+    write(BS("Im Kampf? Toete erst Deine Gegner, dann kannst Du auch sie "
+          "unterwerfen!"));
+    return 0;
+  }
+  if(ob->QueryProp(P_NEKRO_MASTERED_BY) == caster) {
+    write(BS(sprintf("%s! %s ist bereits Deinem Willen unterworfen!", 
+            caster->QueryProp(P_GENDER)==FEMALE?"NAERRIN":"NARR", 
+            ob->Name(WER))));
+    return 0;
+  }
+  if(objectp(caster->QueryProp(P_NEKRO_MASTERED_UNDEADS))) {
+     write("BEI ALLEN NIEDERHOELLEN! DU BEHERRSCHT SCHON EINEN "
+         "UNTOTEN!\n");
+     return 0;
+  }
+  if(ob->QueryProp(P_NEKRO_MASTERED_BY)) sinfo[SI_RAW_SPELLCOST]*=3;
+  if(ob->QueryProp(P_NEKRO_CASTED_BY) != caster) sinfo[SI_RAW_SPELLCOST]*=2;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  write(BS(sprintf("Du deutest mit Deiner linken Hand auf %s und intonierst "
+          "Worte, die %s Deinem Willen unterwerfen sollen!", ob->name(WER),
+          ob->QueryPronoun(WEN))));
+  write(BSA("Iktam Yy'rlem port Hla'tur! Shihaya'zzad ter Ll'artez!", 
+        "Du rufst: "));
+  tell_room(ENV(caster), BS(sprintf("%s deutet mit der linken Hand auf "
+          "%s.", caster->Name(WER), ob->name(WEN))), ({caster}));
+  tell_room(ENV(caster), BSA("Iktam Yy'rlem port Hla'tur! Shihaya'zzad ter "
+        "Ll'artez!", sprintf("%s ruft: ", caster->Name(WER))), ({caster}));
+  return 1;
+}
+
+int beherrschung(object caster, mapping sinfo) 
+{
+  string str;
+  object ob, wer;
+  int succ, nr_undeads, i, mumie, skelett;
+ 
+
+  ob=present(sinfo[SI_SKILLARG], environment(caster));
+  if(!ob) {
+    write(BS(sprintf("%s! Ist nicht mehr hier! Wie kann man nur "
+            "so versagen?!", caster->QueryProp(P_GENDER)==FEMALE?
+            "NAERRIN":"NARR")));
+    return 0;
+  }
+
+  if(ob->QueryProp(P_NEKRO_MASTERED_BY)) sinfo[SI_RAW_SPELLCOST]*=3;
+  if(ob->QueryProp(P_NEKRO_CASTED_BY) != caster) sinfo[SI_RAW_SPELLCOST]*=2;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  
+  if ((succ=SpellSuccess(caster,sinfo)+50*CheckEquip(caster,sinfo[SI_SPELLFUNC])) 
+      <= -random(5000))
+  {
+     write(BS(sprintf(
+       "%s Deine Macht reicht nicht aus um %s zu beherrschen! %s attackiert "
+       "Dich voller Hass! BEI ALLEN NIEDERHOELLEN!", random_fluch(), 
+       ob->name(WEN), CAP(ob->QueryPronoun(WER)))));
+     tell_room(ENV(caster), BS(sprintf("%s attackiert %s voller Hass!", 
+             ob->Name(WER), caster->name(WEN))), ({caster}));
+     ob->Kill(caster);
+     ob->SetAggressive(1);
+     total_fail=1;
+  }
+  if (succ <= 0)
+     return MISSERFOLG;
+
+  caster->SetProp(P_NEKRO_MASTERED_UNDEADS, ob); 
+
+  write(BS(sprintf(
+          "%s Wille ist gebrochen und %s wird Dir ab nun gehorchen! "
+          "Harhar!", ob->Name(WESSEN,2), ob->QueryPronoun(WER))));
+  tell_room(ENV(caster), sprintf("Der Wille von %s scheint gebrochen zu "
+        "sein!\n", ob->name(WEM)), ({caster}));
+
+  ob->SetMaster(caster);
+  
+  return ERFOLG;
+}

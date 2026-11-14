@@ -1,0 +1,86 @@
+// SilberLand MUDlib
+//
+// /p/daemon/wwwguestd.c -- UDP-WWW connection daemon
+//
+// $Date: 1997/03/16 02:39:52 $
+/* $Revision: 1.1 $
+ * $Log: wwwguestd.c,v $
+ * Revision 1.1  1997/03/16 02:39:52  Woody
+ * prepared for revision control
+ *
+ */
+
+// WWWGUESTD.C -- UDP - WWW connection daemon
+
+#include "html.h"
+
+private mapping user;
+private int lastID;
+
+#define ROOM  0   // room where user currently resides
+#define EXITS 1   // room exits
+#define IP    2   // ip address of user
+#define TIME  3   // last checkin time
+
+void create()
+{
+  // ([ userid : ROOM; EXITS; IP; TIME, ... ])
+  user = mapping_allocate(0,3);
+}
+
+private string AddUser(string ip, string start)
+{
+  string id;
+  if(!stringp(ip)) return 0;
+  id = (++lastID)+"@"+ip;
+  user[id, ROOM] = start ? start : "/room/gilde";
+  user[id, IP] = ip;
+  user[id, TIME] = ctime();
+  return id;
+}
+
+private int RemoveUser(string id)
+{
+  if(member(user, id)) m_delete(user, id);
+  else return 0;
+  return 1;
+}
+
+private string MakeHREF(string item, int i)
+{
+  return "<A HREF=\"/cgi-bin/mudguest?EXIT@"+i+"\"+item+"</A>";
+}
+
+int WWWMessage(string msg, string ip, string id)
+{
+  string *cmd, rmsg;
+  if(!(previous_object() == find_object("/secure/udp"))) return -1;
+  if(!ip) return -1;
+  if(!sizeof(cmd = explode(msg, "@"))) return 0;
+  if(cmd[0] == "BEGIN")
+  {
+    string tmp_to;
+    if(id = AddUser(ip, tmp_to = sizeof(cmd)>1 ? cmd[1] : 0))
+      cmd = ({ "MOVE", tmp_to });
+    else return -1;
+  }
+
+  if(!member(user, id))
+  {
+    rmsg = "<TITLE>MorgenGrauen WWW Gast: Time Out</TITLE>"
+         + "Es tut uns leid, aber diese Identifikation ist nicht l&auml;"
+	 + "nger g&uuml;ltig.<P>"
+         + "<A HREF=\"~mud/mudguest.html\">Zur&uuml;ck zum Anfang!</A>";
+  }
+  switch(cmd)
+  {
+  case "MOVE": 
+    if(sizeof(cmd)>1) 
+    {
+      rmsg = "<TITLE>"+cmd[1]->QueryProp(P_INT_SHORT)+"</TITLE>"
+           + cmd[1]->QueryProp(P_INT_LONG) + "<P>"
+           + implode(map_array(m_indices(cmd[1]->QueryProp(P_EXITS))));
+    }    
+  }
+}
+

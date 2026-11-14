@@ -1,0 +1,209 @@
+/*
+ * magische Laterne.
+ * ---
+ *
+ */
+
+inherit "/std/lightsource";
+
+#include <properties.h>
+#include <lightsource.h>
+#include <language.h>
+#include "../def.h"
+
+#define TRUE  1
+#define FALSE 0
+#define QSP	       (PL->QueryProp(P_SP))
+
+#define SPELL_POINTS    10       // Lichtquellen anzuenden kostet 5 MP
+#define CALL_OUT_TIME   100     // mind. alle 100 Sekunden fuel pruefen
+
+/* - global data - */
+nosave private int call_time;
+nosave private int fuel, max_fuel;
+
+/* - prototypes - */
+void test_remove();
+
+int dunkel();
+
+void create()
+{
+  if(!is_clone(this_object()))
+    return;
+
+  ::create();
+  AddId("laterne", "magische laterne");
+  SetProp(P_NAME,"Laterne");
+  SetProp(P_GENDER,FEMALE);
+  SetProp(P_SHORT,"Eine magische Laterne");
+  SetProp(P_LONG,
+      "Du haeltst eine kunstvoll verzierte, magische Laterne in Deinen "
+      "Haenden. Diese wunderschoen gefertigte Laterne besteht zu einem "
+      "grossen Teil aus Bernstein. Instinktiv spuerst Du die Magie, die "
+      "in diesem Stein gefangen ist. Sie wirft einen hellen, leicht "
+      "roetlich schimmernden Lichtschein auf Deine Umgebung.");
+  SetProp(P_INFO,"Ihre magische Energie entfaltet sich oder erlischt, " 
+                 "sobald Du an ihr reibst.");
+  SetProp(P_NOBUY,1);
+  SetProp(P_VALUE,100);
+  SetProp(P_WEIGHT,1000);
+  SetProp(P_MATERIAL,([MAT_AMBER : 70, MAT_LIGHT : 15, MAT_MISC_MAGIC : 15 ])  );
+  SetProp(P_ARTICLE,1);
+  SetProp(P_FUEL,3500);
+  SetProp(P_LIGHTDESC,
+      ({ "glimmend","schwach leuchtend","leuchtend","hell leuchtend",
+         "strahlend","hell strahlend" }) );
+  AddDetail( ({"verzierungen"}),
+    "Die Laterne ist mit magischen Symbolen und Runen verziert.");
+  AddDetail( ({"symbole", "symbolen"}),
+    "Magische Symbole zieren die Laterne.");
+  AddDetail( ({"runen"}),
+    "Es handelt sich um uralte Runenwoerter, deren Bedeutung heutzutage "
+    "niemand mehr kennt.");
+  AddDetail( ({"bedeutung", "runenwoerter"}),
+    "Du weisst nicht genau, was sie bedeuten sollen.");
+  AddDetail( ({"lichtschein"}),
+    "Die Laterne wirf einen hellen, leicht roetlich schimmernden "
+    "Lichtschein auf Deine Umgebung.");
+  AddDetail( ({"umgebung"}),
+    "Deine Umgebung wird durch den hellen Lichtschein der Laterne "
+    "erhellt.");
+  AddDetail( ({"bernstein", "stein"}),
+    "Der Berstein schimmert in roetlichem Licht und ist mit kunstvollen "
+    "Verzierungen uebersaeht.");
+  AddDetail( ({"magie"}),
+    "Du spuerst die Magie die von ihr ausgeht.");
+
+  RemoveCmd(({"zuende","zuend"})); 
+  RemoveCmd(({"loesch","loesche"})); 
+  AddCmd( ({"reibe","reib"}),   "cmdreibe" );
+}
+/*
+ * Lichtquelle anzuenden 
+ */
+
+int cmdreibe(string str)
+{
+  string tmp;
+  mapping env;
+  int fuel;
+
+  _notify_fail( "Reibe an was ?\n" );
+  if (str != "laterne")
+    return FALSE;
+
+  if( environment() != PL ) // Player hat es nicht
+  {
+    _notify_fail( "Erstmal musst Du " + name( WEN, 0 ) + " haben.\n" );
+    return FALSE;
+  }
+
+  fuel = TO->_query_fuel();
+
+  if( TO->_query_lighted() )
+  {
+    dunkel();
+    return 1;
+  }
+
+  if( fuel <= 0 )
+  {
+    _notify_fail( CAP( name( WER, 1 ) ) + " ist aufgebraucht.\n" );
+    test_remove();
+    return FALSE;
+  }
+  
+  if(QSP < SPELL_POINTS)
+  {
+    _notify_fail("Du hast nicht genuegend Magiepunkte zum Anzuenden.\n");
+    return FALSE;
+  } 
+
+  _set_lighted(TRUE);
+  call_time = (fuel < CALL_OUT_TIME)? fuel : CALL_OUT_TIME;
+  call_out( "my_out_of_fuel", call_time );
+  if( set_light( 1 ) == 1 )
+    write( "Du reibst an der Laterne und sie erstrahlt in hellem Licht.\n"
+	  +"Du kannst wieder etwas sehen.\n" );
+  else
+    write( "Du reibst an der Laterne und sie erstrahlt in hellem Licht.\n" );
+  say( PL->Name(WER)
+      + " reibt an der Laterne und sie erstrahlt in hellem Licht.\n" );
+
+  PL->restore_spell_points(-SPELL_POINTS);
+  return TRUE;
+}
+
+int dunkel()
+{
+  int time;
+  fuel = TO->_query_fuel();
+
+  if( ( time = remove_call_out( "my_out_of_fuel" ) ) == -1 )
+    time = 0;
+
+  fuel -= (call_time - time);
+  _set_fuel(fuel);
+  _set_lighted(FALSE);
+
+  if ( set_light( -1 ) == 0 )
+  {
+    write( "Die Laterne schimmert nur noch und es wird dunkel.\n" );
+    say( PL->Name(WER) + " macht das Licht aus.\n" );
+  }
+  else
+  {
+    write( "Die Laterne schimmert nur noch.\n" );
+    say( PL->Name(WER) + " reibt an " + name( WEN, 0 ) + ".\n" );
+  }
+
+  if (pointerp(QueryProp(P_PURSUERS)) &&
+      sizeof(QueryProp(P_PURSUERS)) &&
+      objectp(QueryProp(P_PURSUERS)[0]))
+  {
+    QueryProp(P_PURSUERS)[0]->RemovePursuer(this_object());
+  }
+  Set(P_PURSUERS,0);
+
+  if( fuel <= 0 ) test_remove();
+  return TRUE;
+}
+// fuer writes out_of_fuel() aus der std/lightsource rauskopiert
+my_out_of_fuel()
+{
+  int res;
+
+// warum ist fuel auf 0 gesetzt ?
+  fuel = TO->_query_fuel();
+  fuel -= call_time;
+  _set_fuel(fuel);
+  if( fuel > 0 )
+  {
+    call_time = (fuel < CALL_OUT_TIME)? fuel : CALL_OUT_TIME;
+    call_out( "my_out_of_fuel", call_time );
+    return 1;
+  }
+
+  res = set_light(-1);
+  _set_lighted(FALSE);
+
+  if (environment()==this_player()) {
+    if (res == 0) {
+      write( CAP( name( WER, 1 ) ) + " schimmert nur noch und es wird dunkel.\n" );
+      say( "Es wird dunkel als " + PL->name(WESSEN) + " " + QueryProp(P_NAME)
+	  + " nur noch schimmert.\n" );
+    } else {
+      write( CAP( name( WER, 1 ) ) + " schimmert nur noch.\n" );
+      say( CAP( name( WER, 0 ) ) + " schimmert nur noch.\n" );
+    }
+  }
+  if (pointerp(QueryProp(P_PURSUERS)) &&
+      sizeof(QueryProp(P_PURSUERS)) &&
+      objectp(QueryProp(P_PURSUERS)[0]))
+  {
+    QueryProp(P_PURSUERS)[0]->RemovePursuer(this_object());
+  }
+  Set(P_PURSUERS,0);
+  test_remove();
+}

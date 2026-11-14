@@ -1,0 +1,945 @@
+/* generic map (GEMA) server object
+ * __________________________________________(i) Anatol@Silberland (2012) */
+
+#pragma strict_types
+
+#include <properties.h>
+#include <ansi.h>
+#include <wizlevels.h>
+#include "../defines.h"
+
+#define SAVEFILE "/d/nacht/region/save/gema"
+#define CHIEF_CARTOGRAPHER (["anatol","woody"])
+
+#define DBG(x) if (find_player("anatol") && (find_player("anatol")->QueryProp("debug_map"))) tell_object(find_player("anatol"),x)
+
+#define GEMA_BORDER_ARRAY ({ "`01`30.-", "-.`10","`01`30'-","-'`00","-","-","`01`30|`00 "," `01`30|`00"})
+#define GEMA_POSITION_MARKER  "`31`01X`00"
+
+// Zone Data
+
+#define GEMA_ZONE_MAINTAINER "gema_maintainer"
+#define GEMA_ZONE_HANDLER "gema_handler"
+
+#define GEMA_SPECIAL    -1
+#define GEMA_SPECIAL_ACCESS "access"
+#define GEMA_SPECIAL_DEFAULT "default"
+#define GEMA_SPECIAL_HANDLER "handler"
+
+
+
+public mapping m;            // Mapping Data
+public mapping c;            // Soft Coordinates
+
+nosave string * border_array;
+
+// ----------------------------------------------------------------------
+// low level functions
+
+void PS()
+{
+   printf("%O\n",m);
+   printf("%O\n",c);
+}
+
+
+// ----------------------------------------------------------------------
+// Public Low Level Methods
+// ----------------------------------------------------------------------
+// This functions are *public*, so any map builder client may 
+// do a "precheck". Since none of these methods does an extensive
+// input check, this has to be done by the map builder client, too.
+
+
+varargs public string 
+ProcessToVT100(string input)
+{
+    if (stringp(input)) 
+        return regreplace(
+                   regreplace(
+                        regreplace(
+                            regreplace(input,"``","\a",1),
+                            "`[0-9][0-9]","",1), 
+                       "` "," ",1),
+                   "\a","`",1);
+}
+
+
+varargs public string 
+ProcessToAnsi(string input)
+{
+    if (stringp(input)) 
+        return regreplace(
+                   regreplace(
+                       regreplace(
+                           regreplace(input,"``","\a",1),
+                           "`([0-9][0-9])", "\e[\\1m", 1),
+                       "` "," ",1),
+                   "\a","`",1);
+}
+
+
+// the "Position Marker" marks the player's position. This is done only 
+// on the middle string of the middle grid: Once per map call.
+
+varargs public string 
+InsertPositionMarker(string line)
+{ 
+    int i, count;
+    string ansicode;
+
+    ansicode="";
+    count=0;
+
+    for (i=0;i<(strlen(line)-2);i++)
+    {
+        if (line[i]!='`')
+        {
+            if (++count == 3)
+                return line[0..(i-1)] + GEMA_POSITION_MARKER + 
+                     ansicode + line[(i+1)..];
+        }
+        else 
+        {
+           if (line[i+1]=='`')   // It is a `` (escaped `)
+           {
+               if (++count == 3) // middle char is a real `
+                   return line[0..(i-1)] + GEMA_POSITION_MARKER + 
+                       ansicode + line[(i+2)..];
+               else
+                   i++;
+           }
+           else if  ((line[i+1]>='0') && (line[i+1]<='9') && 
+                (line[i+2]>='0') && (line[i+2]<='9'))
+           {
+               ansicode+=line[i..(i+2)];
+               i+=2;
+           }
+           else 
+               return 0; // illegal escape sequence
+
+        }
+    }
+}
+
+// ----------------------------------------------------------------------
+// Private Low Level Functions
+// ----------------------------------------------------------------------
+
+varargs nosave int 
+authorized(string zone, int cartograph) 
+{
+    string uid;
+    // basic checks...
+    if ((!this_player()) || (this_player()!=this_interactive()) 
+          || process_call()) return 0;
+  
+    // always okay if hardcoded people are at the levers
+    if  (member(CHIEF_CARTOGRAPHER, uid=getuid(this_player())))
+        return 1;
+   
+    // If a zone is given a zone's domain lord gets always full access.
+    if ((stringp(zone)) &&
+           (member((string*)(((mixed)("/secure/master"->get_userinfo( 
+                uid)))[3]),explode(zone,"/")[1])>=0))
+           return 1;
+
+    // No domain lord? Then check if the zone exists as file/directory
+    // path and, if yes, return true if the player has write access.
+    if (call_other("/secure/master","valid_write",zone, uid,0,0))
+        return 1;
+
+    // now that all default issues are done, we'll stuck with 
+    // anything else: People who are issued with map maintenance.
+
+    // no access if the zone does not exist...
+    if ((!member(m,zone)) || (!member(m[zone][GEMA_SPECIAL],GEMA_SPECIAL_ACCESS)))
+         return 0;
+    // else look into the access mapping
+    return (cartograph && (member(m[zone][GEMA_SPECIAL][GEMA_SPECIAL_ACCESS],uid)));
+}
+
+nosave int 
+isDomain(string domain)
+{
+  return sizeof(get_dir("/d/"+domain));
+}
+
+nosave int
+isValidFormedZoneId(string zone)
+{
+    string * parts;
+
+    return (stringp(zone) && (strlen(zone)>4) && (zone[0..2] == "/d/") &&
+        (sizeof(parts=explode(zone,"/"))>1) && (zone[<1..<1] != "/") &&
+        (isDomain(parts[1])) && ((sizeof(get_dir(zone)))||(file_size(zone+".lpc")>1)));
+}
+
+nosave int 
+isValidUID(string uid)
+{
+    return (call_other("/secure/master","get_userinfo",uid)!=0);
+}
+
+nosave int
+isValidHandler(string handler)
+{
+    return (stringp(handler)&&strlen(handler)&&file_size(handler));
+}
+
+
+nosave int
+isValidGemaContent(mixed data)
+{
+    mixed * indices;
+    int i;
+
+    if (pointerp(data))
+    {
+       if ((sizeof(data)==3) &&
+            intp(data[0])  && intp(data[1]) && intp(data[2]))
+           return 1;
+       if ((sizeof(data)==2) &&
+            intp(data[0])  && intp(data[1])) // z shall be 0
+           return 1;
+
+    }
+    else if (mappingp(data))
+    {
+       indices=m_indices(data);
+       for (i=sizeof(indices);i--;)
+           switch (indices[i])
+           {
+               case GEMA_COORDINATES:
+                   if (pointerp(data[GEMA_COORDINATES]) &&
+                       (sizeof(data[GEMA_COORDINATES])==3) &&
+                          intp(data[GEMA_COORDINATES][0])  && 
+                          intp(data[GEMA_COORDINATES][1]) && 
+                          intp(data[GEMA_COORDINATES][2]))
+                       continue;
+                   else
+                       return 0;
+               case GEMA_ZONE:
+                  if ((stringp(data[GEMA_ZONE])) &&
+                      (member(m,data[GEMA_ZONE])))
+                       continue;
+                  else
+                      return 0;
+               default:
+                    return 0;
+                    break;
+           }
+           return 1;
+    }
+    else return 0;
+}
+
+
+nosave int 
+isValidGraticule(string * graticule)
+{
+    if ( (!pointerp(graticule)) || (sizeof(graticule)!=3) ||
+     (!stringp(graticule[0])) || (strlen(graticule[0])<5) ||
+     (!stringp(graticule[1])) || (strlen(graticule[1])<5) ||
+     (!stringp(graticule[2])) || (strlen(graticule[2])<5))
+        return 0;
+    if ((graticule[0][<1]=='`') && (graticule[0][<2]!='`') ||
+        (graticule[1][<1]=='`') && (graticule[1][<2]!='`') ||
+        (graticule[2][<1]=='`') && (graticule[2][<2]!='`'))
+        return 0;
+    return ((strlen(ProcessToVT100(graticule[0]))==5) 
+         && (strlen(ProcessToVT100(graticule[1]))==5)
+         && (strlen(ProcessToVT100(graticule[2]))==5));
+}
+
+
+nosave void
+save()
+{
+    save_object(SAVEFILE);
+}
+
+
+nosave string 
+key(int * coords) 
+{
+    return sprintf("%d|%d|%d",coords[0],coords[1],coords[2]);
+}
+
+
+public int
+query_prevent_shadow()
+{
+    return 1;
+}
+
+
+varargs nosave int 
+err(int code, string message)
+{
+    if ((!message)||(!strlen(message)))
+    {
+        switch (code)
+        {
+            case -1:
+                message="Diese Aktion sieht Dein Berechtigungsprofil "
+                    "bedauerlicherweise nicht vor. Wenn Du das fuer einen "
+                    "Fehler oder Irrtum haeltst, wende Dich bitte an einen "
+                    "der Kartenbetreuer.";
+                 break;
+             case -2:
+                 message="Es ist ein Fehler aufgetreten, der vermutlich mit "
+                     "inkorrekten Parametern zusammenhaengt (ungueltige ZoneID, "
+                     "ungueltiges Kartenfragment...)";
+             case -3:
+                 message="Es ist ein Fehler aufgetreten. Vermutlich erlauben die "
+                     "in der Kartendatenbank hinterlegten Daten Deine Aktion "
+                     "nicht (z.B. ZoneID einfuegen, wenn eine solche ZoneID "
+                     "bereits vorhanden ist).";
+             default:
+                 message="Es ist ein nicht naeher spezifizierter Fehler "
+                     "aufgetreten. Wie bloede. Bitte wende Dich an Anatol "
+                     "oder einen anderen der Kartenbetreuer.";
+         }
+     }
+    write(break_string(message,77,sprintf("GEMA Fehler [%2d]: ",code),1)); 
+    return code;
+}
+
+
+// ----------------------------------------------------------------------
+// ZONE MANAGEMENT
+// ----------------------------------------------------------------------
+
+/* AddZone(zone)
+ * The zone identifier has to start with "/d/<domain>/<anything else>. 
+ * It *may* be the full path to the zone, but not necessarily has to be. 
+ * It always starts with a slash / and ends with a non-slash-character.
+ * A room cannot be associated with a zone automatically if the zone is not 
+ * part of the room's file name.
+ * 
+ * Note that the zone must be an existing path for authorisation management
+ * to work properly.
+ *
+ */
+
+public int 
+AddZone(string zone) 
+{
+    // proceed only if zone is matching "/d/<domain>[/...]*"
+    if (!isValidFormedZoneId(zone))
+        return err(-2, "Das ist keine gueltige ZoneID.");
+    // proceed only if user is authorized to do so...
+    if (!authorized(zone))
+        return err(-1);
+    // proceed only if the zone id does not already exist
+    if (member(m,zone))
+        return err(-3,"Eine ZoneID dieses Namens gibt es schon.");
+   
+     m+=([
+         zone:([GEMA_SPECIAL:([ 
+            GEMA_SPECIAL_ACCESS:([]),
+            GEMA_SPECIAL_DEFAULT: ({"`01`30.---.","`01`30| ? |","`01`30'---'"})
+                 ]),
+                 0:([]) 
+              ])
+          ]);
+
+    save();
+    return 1;
+}
+
+public int 
+DeleteZone(string zone)
+{
+    // proceed only if zone is matching "/d/<domain>[/...]*"
+    if (!isValidFormedZoneId(zone))
+        return err(-2, "Das ist keine gueltige ZoneID.");
+    // proceed only if user is authorized to do so...
+    if (!authorized(zone))
+        return err(-1);
+  
+    // proceed only if the zone id does exist
+
+    if (!member(m,zone))
+        return err(-3,"Eine ZoneID dieses Namens gibt es nicht.");
+
+    // ... and, of course, proceed only, if the zone does 
+    // not hold any map data anymore.
+    if ((sizeof(m[zone])) && (sizeof(m[zone][0])))
+        return err(-3,"Diese Zone enthaelt noch Kartendaten im Basisset und "
+	      "kann daher - vorerst - nicht geloescht werden");
+    m-=([zone]);
+    save();
+    return 1;
+}
+
+
+varargs public int
+IsZone(string zone)
+{
+   return (stringp(zone) && strlen(zone) && member(m,zone));
+}
+
+// TODO: show only zones to the user ...
+varargs public string *
+GetZones(string pattern, int all)
+{
+    string * zoneIDs;
+    int * entries;
+    if (!this_player()) 
+        return 0;
+    if ((!pattern) || (!stringp(pattern)))
+       pattern="";
+    if (all)
+        return sort_array(regexp(m_indices(m),pattern),#'<);
+    else
+        return filter_array(sort_array(regexp(m_indices(m),pattern),#'<),
+              #'authorized,1);
+}
+
+public int
+MoveZone(string old, string new)
+{
+    // proceed only if zone is matching "/d/<domain>[/...]*"
+    if (!isValidFormedZoneId(old))
+        return err(-2, "Die Ausgangs-ZoneID ist keine gueltige ZoneID.");
+
+    // proceed only if the old zone indeed exists.
+    if (!member(m,old))
+        return err(-3,"Eine ZoneID dieses Namens gibt es nicht.");
+    
+    // proceed only if matching domain lord or a chief cartographer
+    if (!authorized(old))
+        return err(-1,"Fuer die Ausgangs-ZoneID ist Dir diese "
+	     "Operation leider nicht gestattet.");
+
+    // proceed only if zone is matching "/d/<domain>[/...]*"
+    if (!isValidFormedZoneId(new))
+        return err(-2, "Die Ziel-ZoneID ist keine gueltige ZoneID.");
+
+    // proceed only if the new zone does not exist, yet.
+    if (member(m,new))
+        return err(-3,"Eine ZoneID dieses Namens gibt es bereits.");
+
+    // proceed only if matching domain lord or a chief cartographer
+    if (!authorized(new))
+        return err(-1, "Fuer die Ziel-ZoneID ist "
+	    "Dir diese Operation leider nicht gestattet.");
+
+    m+=([new:m[old]]);
+    m-=([old]);
+    save();
+    return 1;
+}
+
+// not meant for human interaction
+public string
+GetZoneForRoom(string room_fn)
+{
+    string * parts;
+    int i;
+    if ((!room_fn)||(!stringp(room_fn))||(!strlen(room_fn)))
+        return 0;
+    if (sizeof(parts=explode(room_fn,"/"))<2)
+        return 0;
+    for (i=sizeof(parts);i-->1;) 
+        if (member(m,"/"+implode(parts[0..(i)],"/")))
+            return "/"+implode(parts[0..(i)],"/");
+    return 0;
+}
+
+// ----------------------------------------------------------------------
+// ADDITIONAL ARTIST MANAGEMENT
+// ----------------------------------------------------------------------
+
+public int
+AddArtist(string zone, string uid)
+{
+    if (!authorized(zone))
+        return err(-1);
+    if ((!stringp(uid))|| (!strlen(uid)))
+        return err(-2,"Die Daten zum beauftragten Kuenstler"
+          "passen so gar nicht. Erwartet wird eine uid.");
+    if ((!zone)||(!stringp(zone))||(!isValidFormedZoneId(zone)) ||
+      (!member(m,zone))) 
+        return err(-2, "Die angeforderte ZoneID gibt es nicht.");
+    if (!isValidUID(uid))
+        return err(-2, "Die uid ist nicht valide.");
+    if ((!IS_WIZARD(uid)) && (!IS_LORD(this_player())))
+        return err(-2, "Die uid gehoert nicht zu einem Magier.");
+    if (!member(m[zone][GEMA_SPECIAL],GEMA_SPECIAL_ACCESS))
+        m[zone][GEMA_SPECIAL]+=([GEMA_SPECIAL_ACCESS:([])]);
+    if (member(m[zone][GEMA_SPECIAL][GEMA_SPECIAL_ACCESS],uid))
+        return err(-3, "Diese uid ist dieser ZoneID schon als "
+            "beauftragter Kartographierer zugeordnet.");
+    else 
+        m[zone][GEMA_SPECIAL][GEMA_SPECIAL_ACCESS]+=([uid:1]);
+    save();
+    return 1;
+}
+
+public int
+RemoveArtist(string zone, string uid)
+{
+    if (!authorized(zone))
+        return err(-1);
+    if ((!stringp(uid))|| (!strlen(uid)))
+        return err(-2,"Die Daten zum beauftragenden Kartographierer "
+          "passen so gar nicht. Erwartet wird eine uid.");
+    if ((!zone)||(!stringp(zone))||(!isValidFormedZoneId(zone)) ||
+      (!member(m,zone))) 
+        return err(-2, "Die angeforderte ZoneID gibt es nicht.");
+    if ((!member(m[zone][GEMA_SPECIAL],GEMA_SPECIAL_ACCESS)) ||
+        (!member(m[zone][GEMA_SPECIAL][GEMA_SPECIAL_ACCESS],uid)))
+        return err(-3, "Dieser uid hat diese Privilegien gar nicht.");
+
+    if (!sizeof(m[zone][GEMA_SPECIAL][GEMA_SPECIAL_ACCESS]-=([uid])))
+        m[zone][GEMA_SPECIAL]-=([GEMA_SPECIAL_ACCESS]);
+    save();
+    return 1;
+}
+
+public string *
+QueryArtists(string zone)
+{
+    if ((!zone)||(!stringp(zone))||(!isValidFormedZoneId(zone)) ||
+        (!member(m,zone))) 
+    {
+        err(-2, "Die angeforderte ZoneID gibt es nicht");
+        return 0;
+    }
+    if (!member(m[zone][GEMA_SPECIAL],GEMA_SPECIAL_ACCESS))
+        return 0;
+    else 
+       return 
+           m_indices(m[zone][GEMA_SPECIAL][GEMA_SPECIAL_ACCESS]);
+}
+
+// ----------------------------------------------------------------------
+// HANDLER MANAGEMENT
+// ----------------------------------------------------------------------
+
+public int
+SetHandler(string zone, string handler)
+{
+    if (!authorized(zone))
+       return err(-1);
+
+    if ((!zone)||(!stringp(zone))||(!isValidFormedZoneId(zone)) ||
+      (!member(m,zone))) 
+       return err(-2, "Die angeforderte ZoneID gibt es nicht.");
+
+    // other validation check later, so to allow removing stale object
+    if (!handler)
+    {
+        if (!member(m[zone][GEMA_SPECIAL],GEMA_SPECIAL_HANDLER))
+            return err(-3,"Dieser ZoneID ist kein Handler zugeordnet");
+        else
+           m[zone][GEMA_SPECIAL]-=([GEMA_SPECIAL_HANDLER]);
+        return 1;
+    }
+
+    if ((!stringp(handler))|| (!strlen(handler)))
+       return err(-2,"Die Daten zum Handler passen so gar nicht. "
+          "Erwartet wird ein aboluter Objektpfad.");
+    if (!isValidHandler(handler))
+       return err(-2, "Der Handler ist nicht valide.");
+    m[zone][GEMA_SPECIAL]+=([GEMA_SPECIAL_HANDLER:handler]);
+    save();
+    return 1;
+}
+
+public string *
+QueryHandler(string zone)
+{
+    if ((!zone)||(!stringp(zone))||(!isValidFormedZoneId(zone)) ||
+        (!member(m,zone))) 
+    {
+       err(-2, "Die angeforderte ZoneID gibt es nicht");
+       return 0;
+    }
+    else if (!member(m[zone][GEMA_SPECIAL],GEMA_SPECIAL_HANDLER))
+        return 0;
+    else 
+        return m[zone][GEMA_SPECIAL][GEMA_SPECIAL_HANDLER];
+}
+
+// ----------------------------------------------------------------------
+// DEFAULT GRATICULE MANAGEMENT
+// ----------------------------------------------------------------------
+
+// call by reference - internal use only.
+nosave string *
+query_default_graticule(string zone)
+{
+    if  ((!stringp(zone)) || (!member(m,zone))) 
+        return 0;
+    if (!member(m[zone][GEMA_SPECIAL],GEMA_SPECIAL_DEFAULT))
+        return 0;
+    else 
+        return m[zone][GEMA_SPECIAL][GEMA_SPECIAL_DEFAULT];
+}
+
+public string * 
+QueryDefaultGraticule(string zone) 
+{
+    if  ((!stringp(zone)) || (!member(m,zone))) 
+        return 0;
+
+    if (!member(m[zone][GEMA_SPECIAL],GEMA_SPECIAL_DEFAULT))
+        return 0;
+    else 
+        return ({})+m[zone][GEMA_SPECIAL][GEMA_SPECIAL_DEFAULT];
+}
+
+// Default graticules cannot be deleted.
+
+public int 
+SetDefaultGraticule(string zone, string * graticule)
+{
+    if (!authorized(zone)) 
+        return err(-1,"Das darfst Du leider nicht");
+    if (!isValidFormedZoneId(zone))
+        return err(-2, "Die ZoneID ist ungueltig.");
+    if (!member(m,zone))
+        return err(-3, "Diese ZoneID gibt es nicht.");
+    if (!isValidGraticule(graticule))
+        return err(-2,"Das Segment ist ungueltig.");
+    m[zone][GEMA_SPECIAL]+=([GEMA_SPECIAL_DEFAULT:({})+graticule]);
+    save();
+    return 1;
+}
+
+varargs public int
+QueryGraticuleCount(string zone) 
+{
+    int sum;
+    int * zwsum;
+    if ((!stringp(zone)) || (!member(m,zone)))
+        return 0;
+   
+   zwsum=map_array(m_indices(m[zone])-({GEMA_SPECIAL}),
+       lambda( ({'x,'m}), 
+           ({ #'sizeof , ({ #'[ , 'm, 'x }) }) ), m[zone]);
+   while (sizeof(zwsum))
+   {
+       sum+=zwsum[0];
+       zwsum=zwsum[1..];
+   }
+   return sum;
+}
+
+varargs public int
+QueryGraticuleCountPerSet(string zone, int set) 
+{
+    int sum;
+    int * zwsum;
+    if ((!stringp(zone)) || (!member(m,zone)) ||(set<0)
+         || (!member(m[zone],set)))
+        return 0;
+    return sizeof(m[zone][set]);
+}
+
+varargs public int *
+QuerySets(string zone) 
+{
+    if ((!stringp(zone)) || (!member(m,zone)))
+        return 0;
+    else 
+        return 
+            (m_indices(m[zone]))-({GEMA_SPECIAL});
+}
+
+// ----------------------------------------------------------------------
+// SOFT COORDINATES
+// ----------------------------------------------------------------------
+// used for quick fix issues
+
+public int 
+SetGema(string room_fn, mixed data)
+{
+    if ((!stringp(room_fn))||(!strlen(room_fn)))
+        return -2;
+    if (!authorized (room_fn)) 
+        return -1;
+    if (!file_size((room_fn+".lpc")))
+        return -2;
+    if (!data)
+    {
+        if (!member(c,room_fn))
+            return -3;
+        c-=([room_fn]);
+        save();
+        return 1;
+    }
+    else if (!isValidGemaContent(data))
+         return -2;
+
+    c+=([room_fn:data]);
+    save();
+    return 1;
+}
+
+
+public mixed 
+QueryGema(string room_fn)
+{
+    if (!member(c,room_fn))
+        return 0;
+    if (pointerp(c[room_fn]))
+        return ({})+c[room_fn];
+    if (mappingp(c[room_fn]))
+        return filter_mapping(c[room_fn],#'intp); // do not return byref
+    return 0;
+}
+
+// ----------------------------------------------------------------------
+// GRATICULE-MANAGEMENT
+// ----------------------------------------------------------------------
+
+varargs public int 
+SetGraticule(string zone, int * coord, string * graticule, int set)
+{
+   string mkey;
+
+   if (!isValidFormedZoneId(zone))
+      return err(-2, "Die ZoneID ist ungueltig.");
+   if (!member(m,zone))
+      return err(-3, "Diese ZoneID gibt es nicht.");
+   if (!authorized(zone,1))
+      return err(-1);
+   if ((!(mkey=key(coord))) || (set<0))
+      return err(-2,"Die Koordinaten sind ungueltig.");
+   if (!graticule) 
+   {
+       if ((!member(m[zone],set)) || (!member(m[zone][set],mkey)))
+           return err(-3,"Zu diesen Koordinaten ist nichts hinterlegt - es "
+               "kann nichts geloescht werden.");
+       else
+       {
+           m[zone][set]-=([mkey]);
+           if ((!sizeof(m[zone][set])) && (set))
+               m[zone]-=([set]);
+           save();
+           return 1;
+       }
+   }
+   if (!isValidGraticule(graticule))
+      return err(-2,"Das Fragment ist ungueltig");
+   if (!member(m[zone],set))
+       m[zone]+=([set:([])]);
+   
+   m[zone][set]+=([mkey:({})+graticule]);
+   save();
+   return 1;
+}
+
+
+varargs public string *
+QueryGraticule(string zone, int * coord, int set)
+{
+    string mkey;
+    if (!isValidFormedZoneId(zone))
+    {
+         err(-2, "Die ZoneID ist ungueltig.");
+         return 0;
+    }
+    if (!member(m,zone))
+    {
+         err(-3, "Diese ZoneID gibt es nicht.");
+         return 0;
+    }
+    if (!(mkey=key(coord)))
+    {
+         err(-2,"Die Koordinaten sind ungueltig.");
+         return 0;
+    }
+    if (!member(m[zone],set))
+    {
+         err(-3, "Dieses Kartenset gibt es nicht.");
+         return 0;
+    }
+    if (!member(m[zone][set],mkey))
+    {
+         err(-3, "Dieses Segment ist nicht hinterlegt.");
+         return 0;
+    }
+    return ({})+m[zone][set][mkey];
+}
+
+// internal use for map building only... - returns REFERENCE (so do 
+// not modify this array).
+varargs nosave string *
+query_graticule(string zone, int * coord, int set, int force)
+{
+   if (member(m[zone],set) && member(m[zone][set],key(coord)))
+       return m[zone][set][key(coord)];
+   else if (!force && (member(m[zone][0],key(coord))))
+       return m[zone][0][key(coord)];
+   else 
+       return query_default_graticule(zone);
+}
+
+// ======================================================================
+// ----------------------------------------------------------------------
+// Main MAP method!
+// ----------------------------------------------------------------------
+// ======================================================================
+
+
+// Borderline (haha)
+
+#define GEMA_BORDER_NW    0
+#define GEMA_BORDER_NO    1
+#define GEMA_BORDER_SW    2
+#define GEMA_BORDER_SO    3
+#define GEMA_BORDER_N     4
+#define GEMA_BORDER_S     5
+#define GEMA_BORDER_W     6
+#define GEMA_BORDER_O     7
+
+varargs public string
+Map(string zone, int * coords, int range, int set, int flags)
+{    
+    string *result;
+    string line;
+    int i,j,k;
+    string * tmp;
+    string * gratic;
+
+    if (!coords) 
+         coords=({0,0,0});
+    if (sizeof(coords)==2)
+         coords+=({0});
+    if (sizeof(coords)!=3)
+        return 0;
+    if ( (!stringp(zone)) || (!strlen(zone)) || (!member(m,zone)) ||
+         (abs(coords[0]>1000)) || (abs(coords[1]>1000)) || (abs(coords[0]>1000)) || (range<0))
+        return 0;
+
+    if (flags&GEMA_MAP_FLAG_COORDINATES)
+    {
+        line=sprintf("z=%-4d ",coords[2]);
+        for (j=coords[0]-range-1;j++<coords[0]+range;)
+            line+=sprintf("%|5d ",j)[0..<2];
+        result=({line});
+    }
+    else
+        result=({});
+
+    result+=({((flags&GEMA_MAP_FLAG_COORDINATES)?"     ":"")+
+              border_array[GEMA_BORDER_NW]+
+              sprintf("%"+to_string(5+(5*2*range))+"'"+border_array[GEMA_BORDER_N]+"'s","")+
+              border_array[GEMA_BORDER_NO]});
+
+    for (i=coords[1]+range+1;i-->coords[1]-range;)
+    {
+        if (flags&GEMA_MAP_FLAG_COORDINATES)
+            tmp=({"     "+border_array[GEMA_BORDER_W],
+                sprintf("%5d",i)+border_array[GEMA_BORDER_W],
+                   "     "+border_array[GEMA_BORDER_W]});
+        else
+            tmp=({border_array[GEMA_BORDER_W],
+                border_array[GEMA_BORDER_W],
+                border_array[GEMA_BORDER_W]});
+
+        for (j=coords[0]-range-1;j++<coords[0]+range;)
+        {
+            gratic=query_graticule(zone,({j,i,coords[2]}),set,flags&GEMA_MAP_FLAG_NO_OVERLAY);
+            tmp[0]+=gratic[0]+"`00";
+            if ((flags&GEMA_MAP_FLAG_MARKEDMAP) && (i==coords[1]) && (j==coords[0]))
+                tmp[1]+=InsertPositionMarker(gratic[1])+"`00";
+            else
+                tmp[1]+=gratic[1]+"`00";
+            tmp[2]+=gratic[2]+"`00";
+        }
+        for (k=3;k--;)
+            tmp[k]+=border_array[GEMA_BORDER_O];
+
+        result+=tmp;
+    }
+    result+=({((flags&GEMA_MAP_FLAG_COORDINATES)?"     ":"")+
+              border_array[GEMA_BORDER_SW]+
+              sprintf("%"+to_string(5+(5*2*range))+"'"+border_array[GEMA_BORDER_S]+"'s","")+
+              border_array[GEMA_BORDER_SO]});
+    if (flags&GEMA_MAP_FLAG_COORDINATES)
+        result+=({result[0]});
+    if (set)
+       result+=({sprintf(ANSI_BOLD+"Set %d, %s",
+         set, (flags&GEMA_MAP_FLAG_NO_OVERLAY?"ohne Ueberlagerung":"ueberlagernd"))});
+    if (flags&GEMA_MAP_FLAG_NOANSI) 
+        return ProcessToVT100(implode(result,"\n"))+"\n";
+    else
+        return ProcessToAnsi(implode(result,"\n"))+"\n";
+
+}
+
+public string
+PlayerMap(object room, int range)
+{
+    mixed prop;
+    string zone;
+    int * coords;
+    int set;
+
+    if (!this_player()) 
+        return 0;
+    if (!objectp(room))
+        room=environment(this_player());
+
+    // Check, if coordinates are available...
+    
+    if ( (!isValidGemaContent(
+              prop=QueryGema(file_name(room))))
+         && (!isValidGemaContent(
+              prop=(mixed)environment(this_player())->QueryProp(P_GEMA))))
+        return 0;
+    if (mappingp(prop))
+    {
+       if (member(prop,GEMA_ZONE))
+           zone=prop[GEMA_ZONE];
+       if (member(prop,GEMA_COORDINATES))
+             coords=({})+prop[GEMA_COORDINATES];
+           return 0;
+    }
+    else if (pointerp(prop))
+        coords=({})+prop;
+    else 
+        return 0;
+
+    if ((!zone) && (!zone=GetZoneForRoom(file_name(room))))
+           return 0;
+    if (member(m[zone][GEMA_SPECIAL],GEMA_SPECIAL_HANDLER))  // mind: Call by Ref.
+        catch(set=(int)call_other(m[zone][GEMA_SPECIAL][GEMA_SPECIAL_HANDLER],"ModifyMap",zone, coords)); 
+        
+    if (set<0)
+        return 0;
+
+    return ((Map(zone,coords,(range?range:3),set, 
+         GEMA_MAP_FLAG_MARKEDMAP|((string)(this_player()->QueryProp(P_TTY))!="ansi"?GEMA_MAP_FLAG_NOANSI:0))));
+
+}
+
+
+// ----------------------------------------------------------------------
+// create() does nothing important besides restoring the savefile and
+// initialising some global nosave variables.
+
+public void 
+create()
+{
+    seteuid(getuid(this_object()));
+    if (!restore_object(SAVEFILE))
+    {
+        m=([]);
+        c=([]);
+    }
+    border_array=GEMA_BORDER_ARRAY;
+
+    if ((this_player()) && (IS_WIZARD(this_player())))
+            printf("*** %s loaded with %d zones ***\n",
+                 file_name(this_object()), sizeof(m));
+
+             
+}

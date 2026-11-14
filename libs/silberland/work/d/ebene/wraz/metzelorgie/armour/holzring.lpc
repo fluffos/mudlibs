@@ -1,0 +1,212 @@
+// Holzring - kann Sprachflueche entfernen
+// Pfad beim Schlachtfeld - Druide
+// von Wraz / Mendralim
+
+#include "../def.h"
+
+inherit "std/armour";
+
+int c;
+int last_use = 0;
+int probability = 0;
+int total_removed_alc = 0;
+
+void create()
+{
+  if( !is_clone(TO) ) return;
+
+  ::create();
+
+  c=0;
+
+  SetProp(P_SHORT, "Ein Holzring");
+  SetProp(P_LONG,
+    "Dieser Ring besteht aus Holz. Keine Besonderheiten, nichteinmal "
+    "stabil sieht er aus. Schmeiss ihn lieber gleich weg.");
+
+  SetProp(P_NAME, "Holzring");
+  SetProp(P_GENDER, MALE);
+  AddId( ({"ring", "holzring", "Holzring"}) );
+
+  SetProp(P_MATERIAL, MAT_PEAR_WOOD );
+  SetProp(P_WEIGHT, 5);
+  SetProp(P_SIZE, 3);
+  SetProp(P_VALUE, 2000);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_REMOVE_FUNC, TO);
+
+  SetProp(P_ARMOUR_TYPE, AT_RING );
+  SetProp(P_AC, 1);
+  SetProp(P_QUALITY_DECAY, 30);
+
+  SetProp(P_WEAR_RESTRICTIONS,
+    ([ SR_INCLUDE_GUILD: ({"druidenzirkel",
+     "nekromanten", "bardengilde" }), A_INT: 23 ]) );
+
+  SetProp(P_INFO, BS("Dieser Ring hat magische Kraefte, er kann Dich "
+  "heilen, wenn Du nicht in der Lage bist, Dich verbal korrekt zu "
+  "artikulieren. Er kann Dich sogar vor Trunkenheit schuetzen! Greife "
+  "dazu mit getragenem Ring auf Deine Stirn oder Deinen Mund! "
+  "Ausserdem sind bestimmt nur die intelligentesten aller Gilden "
+  "ueberhaupt in der Lage, den Ring zu kontrollieren.") );
+
+  AddCmd(({"greife","greif"}),"cmd_greifen");
+}
+
+void heart_beat()
+{
+  object player;
+  int alc;
+
+  player = environment(TO);
+
+  if (!player)
+    return;
+  if (!interactive(player))
+    return;
+
+  alc = player->QueryProp(P_ALCOHOL);
+
+  if (alc > 0) player->drink_alcohol(-alc);
+
+  total_removed_alc += alc;
+
+  if(total_removed_alc >= 200)
+  {
+    write(BS(
+        "Der Holzring verpufft in einer uebel nach Schnaps riechenden Dampfwolke."));
+    TO->remove(1);
+    return;
+  }
+}
+
+int alkschutz()
+{
+  if (set_heart_beat(1))
+  {
+    if (TP->QueryProp(P_SP) < 40)
+    {
+      write(BS(
+          "Du greifst Dir auf die Stirn, aber es passier nichts. Du fuehlst, "
+          "dass der Ring aus Dir nicht genug Astralkraft beziehen kann."));
+      return 1;
+    }
+    write(BS("Du fuehlst Dich unfassbar nuechtern!"));
+    TP->AddSp(-(30 + random(20)));
+    return 1;
+  }
+  else if (set_heart_beat(0))
+  {
+    write(BS("Du fuehlst Dich wieder normal nuechtern."));
+    return 1;
+  }
+}
+
+int sprachfluch()
+{
+  if (!present("\nsprachfluch", TP) ||
+      member(all_inventory(TP), present("\nsprachfluch", TP)) == -1)
+  {
+    write(BS(
+        "Du greifst Dir auf die Stirn, und nichts passiert."));
+    return 1;
+  }
+
+  if (TP->QueryProp(P_SP) < 110)
+  {
+    write(BS(
+        "Du greifst Dir auf die Stirn, aber es passier nichts. Du fuehlst, "
+        "dass der Ring aus Dir nicht genug Astralkraft beziehen kann."));
+    return 1;
+  }
+
+  write(BS(
+      "Als Der Holzring an Deiner Hand Deinen Kopf beruehrt, fuehlst Du "
+      "eine wohlige Waerme ... kurz ist Dir schwindelig, dann aber "
+      "bist Du konzentrierter als zuvor. Du spuerst eine angenehme Frische."));
+
+  present("\nsprachfluch")->remove(1);
+  TP->AddSp(-(100 + random(20)));
+
+  if (!last_use) // noch nie benutzt, beim ersten mal kann er nicht kaputt
+                 // werden
+  {
+    last_use = time();
+    return 1;
+  }
+
+  else if ((time() - last_use) > 7200) // letzte benutzung vor > 2h
+  {
+    last_use = time();
+    probability = 10;
+  }
+
+  else if ((time() - last_use) > 600) // letzte benutzung vor 2h bis 10min
+  {
+    probability = 50 - 40 * (time() - last_use) / 6600; // 10 .. 50%
+    last_use = time();
+  }
+
+  else if ((time() - last_use) < 600) // letzte benutzung vor < 10min
+  {
+    probability = 50;
+    last_use = time();
+  }
+
+  if (random(100) < probability)
+  { // previously: c>0 && c>random(200)
+    write(BS(
+        "Der Holzring bleibt irgendwie an Deiner Stirn haften, Du fuehlst, "
+        "wie Dein Gehirn ihn aufsaugt. Er verschwindet."));
+    TP->AddSp(400);
+    TO->remove(1);
+    return 1;
+  }
+
+  // c++;
+
+  return 1;
+}
+
+int cmd_greifen(string str)
+{
+  if(str==""||!str) return 0;
+
+  if(ENV(TO) && ENV(TO)!=TP) return 0;
+
+  notify_fail("Worauf willst Du greifen?\n");
+
+  if(!TO->QueryProp(P_WORN)) {
+      write(BS(
+        "Du musst den Holzring tragen, um seine magischen Kraefte nutzen "
+        "zu koennen!"));
+      return -1; }
+
+  if(str=="auf stirn"||str=="auf meine stirn")
+    return sprachfluch();
+  
+  if(str=="auf mund"||str=="auf meinen mund")
+    return alkschutz();
+
+}
+
+void reset()
+{
+  ::reset();
+
+  if (!is_clone(TO))
+    return;
+
+  if(!interactive(ENV(TO))) set_heart_beat(0);
+
+  else if (query_idle(ENV(TO)) > 30 && set_heart_beat(0))
+    write(BS("Du fuehlst Dich wieder normal nuechtern."));
+}
+
+int RemoveFunc(object me)
+{
+  if (set_heart_beat(0))
+    write(BS("Du fuehlst Dich wieder normal nuechtern."));
+  return 1;
+}

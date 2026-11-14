@@ -1,0 +1,917 @@
+
+/*
+//
+//  Cain, der Identifizierer
+//  (c)Angrox@SL 31.Aug.1998
+//
+*/
+/* 25.07.2024 Wraz
+ * runentausch: Goettliche Runen werden fix in might 4 oder 5 getauscht
+ * 16.03.2024 Wraz
+ * tell_about_godlies() in tell_about_mis() umbenannt, Info ueber alle MIs
+ * 15.02.2024 Wraz
+ * Info ueber die Anzahl der godly magic items, tell_about_godlies()
+ */
+// 27.11.2009 23:48 Eros
+// Alten Pfad eine Lamuerte Burgmauerraumes durch aktuellen ersetzt
+// $Date: 2007/08/22 08:38:38 $
+/* $Revision: 1.32 $
+ * $Log: cain.c,v $
+ * Revision 1.32  2007/08/22 08:38:38  Woody
+ * "/gilden/paladine/" -> "/gilden/paladine", catch(move) -> move(), prototypes
+ *
+ * Revision 1.31  2007/08/21 08:25:59  Woody
+ * is_clone() Test in goto_random_room()
+ *
+ * Revision 1.30  2007/01/05 02:40:33  Woody
+ * Bugfix in create() - blueprint nicht destructen, nur return'en
+ *
+ * Revision 1.29  2006/09/08 12:38:02  Angrox
+ * destruct() -> remove() im init wg. Umstellung auf LD
+ *
+ * Revision 1.28  2006/03/23 13:02:26  Feyaria
+ * namen mitsenden, ring beim remove auch removen
+ *
+ * Revision 1.27  2006/03/22 21:08:26  Feyaria
+ * Ergebnisse auf ebene verkuenden.
+ *
+ * Revision 1.26  2006/03/22 20:09:19  Feyaria
+ * Runentausch
+ *
+ * Revision 1.25  2005/03/08 18:36:03  Feyaria
+ * Runendauer sagen, leere gesockete items nicht als identifiziert markieren
+ *
+ * Revision 1.24  2005/01/16 22:47:07  Feyaria
+ * Cain -> Niac
+ *
+ * Revision 1.23  2004/11/20 10:12:30  Feyaria
+ * tmpmagic erkennen
+ *
+ * Revision 1.22  2004/10/12 19:25:43  Feyaria
+ * set-library
+ *
+ * Revision 1.21  2004/09/13 16:42:41  Feyaria
+ * Besseres Plural-handling
+ *
+ * Revision 1.20  2004/07/19 18:24:34  Woody
+ * Ein paar kleine Typos entfernt, minimale Optimierungen
+ *
+ * Revision 1.19  2004/01/06 18:29:02  Angrox
+ * P_PALADIN_NO_LOCATION eingebaut
+ *
+ * Revision 1.18  2003/10/12 14:07:59  Angrox
+ * Text von GotWord() angepasst (neutral, spielerbezogene Woerter kommen nicht mehr vor)
+ *
+ * Revision 1.17  2003/01/20 22:13:47  Angrox
+ * SID_NOLEARN als ID
+ * SetLetter hinzugefuegt
+ *
+ * Revision 1.16  2002/11/28 13:48:53  Angrox
+ * Cain verschwindet nicht durch reset() wenn er ein item (progress==1) identifiziert und wenn jemand das "wort" komplett hat.
+ *
+ * Revision 1.15  2002/11/18 12:58:06  Angrox
+ * Missing() und do_save() geadded
+ *
+ * Revision 1.14  2002/11/17 13:21:49  Angrox
+ * Das gesuchte Wort wird nun gespeichert
+ *
+ * Revision 1.13  2002/07/29 08:34:54  Angrox
+ * Nun traegt er den Ring auch
+ *
+ * Revision 1.12  2002/07/29 08:26:35  Angrox
+ * Anti-Teleporations-Ring hinzugefuegt
+ *
+ * Revision 1.11  2002/05/18 21:06:14  Angrox
+ * unterwelt pfade auf "basics" geaendert
+ *
+ * Revision 1.10  2002/04/17 12:32:56  Angrox
+ * Mehr Raeume
+ *
+ * Revision 1.9  2001/07/27 11:32:51  Feyaria
+ * andere Raeume, umstellugne auf neue RUNE defines.
+ *
+ * Revision 1.8  2001/06/07 10:49:38  Feyaria
+ * bugfic beim P_INFO setzen.
+ *
+ * Revision 1.7  2001/06/06 08:29:16  Angrox
+ * Abfragen auf Runen und Talisman integriert
+ *
+ * Revision 1.6  2001/05/15 11:50:19  Feyaria
+ * goto_random_room im create
+ *
+ * Revision 1.5  2001/05/14 15:16:26  Angrox
+ * Identifizieren kostet nun 3000 Muenzen
+ * identify()-> text wird in P_INFO gespeichert.
+ *
+ * Revision 1.4  2001/02/17 14:08:52  Woody
+ * more() -> More() (wg. Leserechten)
+ *
+ * Revision 1.3  2000/10/19 11:19:29  Angrox
+ * P_ITEMD_CAIN_TIME added
+ *
+ * Revision 1.2  2000/10/03 20:43:31  Angrox
+ * Chance auf double-godly mittels Propertie P_ITEMD eingebaut
+ *
+ * Revision 1.1  1999/11/04 08:30:05  Angrox
+ * Initial revision
+ *
+ *
+*/
+
+inherit "std/mnpc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <wizlevels.h>
+#include <defines.h>
+#include <moredef.h>
+#include <mnpc.h>
+#include "./itemd.h"
+#include "./itemd_secure.h"
+#include "data/itemd_socketed_data.h"
+#include "/gilden/paladine/paladin_extern.h"
+#include "./charge.h"
+#define BSA(x,y) break_string(x,78,y)
+
+#define CAIN "Niac"
+
+
+nosave int CheckLetter(string str);
+nosave int GotWord();
+string tell_about_geocoin();
+string tell_about_mis();
+
+nosave int progress;
+nosave int money;
+nosave string liste();
+string get_letter="";
+nosave mixed letters;
+string *word;
+nosave string *testbits;
+string testbit;
+nosave int next_is_magic=0;
+
+#define ta(x) if(find_player("angrox")) tell_object(find_player("angrox"), x)
+
+void create()
+{
+  object ob;
+  if (!is_clone(TO))
+    return;
+  ::create();
+  SUID;
+  
+  restore_object(CAIN_SAVE);
+  money=0;
+  progress=0;
+  letters=({({"a","n","g","r","o","x"}),({"f","e","y","a","r","i"}),
+            ({"c","i","r","o","n"}), ({"l","a","m","u","e","r","t"}),
+            ({"c","r","e","a","t","i","v"})});
+  //          0   1   2   3   4   5   6    7    8    9    10
+  testbits=({"!","#","'","/","?","_","_!","_#","_'","_/","_?"});
+  if(!pointerp(word) || !sizeof(word)) {
+    word=letters[random(sizeof(letters))];
+    testbit=testbits[sizeof(word)-1];
+    save_object(CAIN_SAVE);
+  }
+  SetProp(P_SHORT, CAIN +", der Weise");
+  SetProp(P_LONG,
+      "Vor Dir steht ein Mann mittleren Alters. Er traegt einen "
+      "langen, schwarzen Bart und ist in die mystischen Gewaender eines "
+      "Zauberers gewandet. Er traegt einen langen Zauberstab bei sich, "
+      "offenbar ein hochmagisches Artefakt. Er scheint eine Art "
+      "Schweigegeluebde abgelegt zu haben, da er nur das Notwendigste "
+      "redet.");
+
+  SetProp(P_NAME, CAIN);
+  SetProp(P_GENDER, MALE);
+  AddId( ({ lower_case(CAIN)}) );
+  AddId(SID_NOLEARN);
+
+  create_default_npc(50);
+  SetProp(P_KILL_MSG, "Sei nicht so neugierig!");
+  SetProp(P_HANDS, ({" mit seinen Haenden",300,DT_MAGIC}));
+  SetProp(P_XP, QueryProp(P_XP)+150*100); 
+  SetProp(P_RACE, "Mensch");
+  SetProp(P_SIZE, 187);
+  SetProp(P_ALIGN, 0);
+  SetProp(P_MAX_HANDS, 4);
+  SetProp(P_HEAL,20);
+  SetProp(P_AGGRESSIVE,0);
+  SetProp(P_WIMPY, 0);
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_NO_GLOBAL_ATTACK, 1);
+  SetProp(P_NOMAGIC, 60);
+  SetProp(P_NOATTACK, "bricht mit seiner Magie den Kampf sofort ab.");
+  SetProp(P_MNPC_AREA, ({"/d/", "/gilden/"}));
+  SetProp(P_MNPC_WAIT, ({ 15, 40, 40 }));
+  SetProp(P_MNPC_DEFAULTROOM, "/gilden/abenteurer");
+  SetProp(P_MNPC_FLAGS, MOV_INDOORS + MOV_OUTDOORS + MOV_MOVES + MOV_BACKWARDS);
+  SetProp(P_PALADIN_NO_LOCATION, 1);
+
+
+  AddLibrary(ITEMDD+"libs/cain.lib", 1);
+  AddLibrary(ITEMDD+"libs/set.lib", 1);
+  AddInfo( ({"astralring","mystischer astralring", "mystischem astralring", 
+        "mystischen astralring"}), #'tell_about_geocoin, "sagt: ");
+  AddInfo( ({ "magische gegenstaende", "menge magischer gegenstaende",
+        "menge magische gegenstaende"}), #'tell_about_mis, "sagt: "); //'
+
+  AddInfo( DEFAULT_INFO,
+      "Hoer genau zu: Ich rede nicht viel, nur wenn ich einen Auftrag\n"
+      "zum Identifizieren eines magischen Gegenstands bekomme.\n"
+      "Es reicht, wenn Du mir den Gegenstand einfach gibst. Wenn\n"
+      "Du mich nach liste fragst, zeige ich Dir, wer wieviele\n"
+      "magische Gegenstaende gefunden hat.\n"
+      "Ich kann Dir auch etwas ueber die Menge magischer Gegenstaende,\n"
+      "die sich derzeit im gesamten Silberland befindet, sagen.\n"
+      "Das ist aber teuer.",
+      "sagt: " );
+
+  AddInfo("liste", #'liste, "sagt: "); //'
+
+  if(!catch(ob=clone_object("/std/armour")))
+  {
+    ob->SetProp(P_NAME, "Anti-Teleportations-Ring");
+    ob->SetProp(P_SHORT, "Der magische Anti-Teleportations-Ring");
+    ob->SetProp(P_LONG, "Der magische Anti-Teleportations-Ring schuetzt vor "
+        "ungewollten Teleportationsversuchen und bewahrt somit den Besitzer "
+        "vor ungeliebten Ueberraschungen.");
+    ob->SetProp(P_ARMOUR_TYPE, AT_RING);
+    ob->SetProp(P_AC, 1);
+    ob->move(ME, M_NOCHECK);
+    ob->DoWear();
+    ob->AddId( ({"ring", "antiteleportationsring", "anti-teleportations-ring"}) );
+  }
+  AddCmd("runentausch", "runentausch");
+ 
+  call_out("goto_random_room",2);
+}
+
+nosave string liste() {
+  call_out("showlist", 0, TP); 
+  return "Hier!"; 
+}
+
+nosave void showlist(object wem) {
+  if (!wem) return;
+  if (environment() != environment(wem))
+  {
+    tell_room(MENV, CAIN + " sagt: Na gut, dann nicht.\n" + CAIN + " grummelt.\n");
+    return;
+  }
+  tell_room(MENV,
+      sprintf(CAIN + " zeigt %s eine Liste.\n", wem->name(WEM)), ({ wem }) );
+  wem->More(CAIN + " zeigt Dir die Liste.\n" + read_file(ITEMD_READTOPLIST));
+}
+
+void goto_random_room()
+{
+  string *rooms;
+
+  if (!is_clone(TO))
+    return;
+
+  rooms=({
+      "/gilden/abenteurer", 
+      "/gilden/paladine", 
+      "/gilden/berserker",
+      "/gilden/druidenzirkel", 
+      "/gilden/zechpreller", 
+      "/d/dschungel/dante/weg/room/weg1",
+      "/d/dschungel/feyaria/dorf/room/dorf-010",
+      "/d/ebene/lamuerte/burg/mauer/10_05",
+      "/d/ebene/lostboy/steppe/room/kneipe",
+      "/d/ebene/ronja/feenquest/room/turm29",
+      "/d/gebirge/angrox/room/ebene1/bergwerk_r24",
+      "/d/gebirge/angrox/room/ebene3/ebene3_r6",
+      "/d/gebirge/angrox/4elem/room/stadt/stadt_f9",
+      "/d/huegelland/raballion/hobbits/room/laden",
+      "/d/huegelland/zordan/fischerweg/room/a6a9",
+      "/d/huegelland/zordan/holzfaeller/room/room-a2",
+      "/d/huegelland/feyaria/weg/room/huette",
+      "/d/kristallwald/sargola/wald/room/0902",
+      "/d/kristallwald/sargola/lichtung/room/0404",
+      "/d/polar/thor/xandim/room/kneipe",
+      "/d/polar/lamuerte/eishoehle/rooms/19631",
+      "/d/wueste/protheg/kraterrand/room/steg",
+      "/d/unterwelt/zordan/dhrkion/room/laden",
+      "/d/unterwelt/ronja/sternenwald/room/wr_06_06",
+      "/d/unterwelt/ronja/sternenwald/room/th_04_06",
+      "/d/unterwelt/basics/central/room/00-07+12",
+      "/d/wueste/arthoas/erg/room/valley/raum27",
+      "/d/dschungel/dante/tijaraneu/room/ti_pfad11",
+      "/d/wueste/protheg/arrakeen/room/ara_1_2_0",
+      "/d/wueste/protheg/arrakeen/room/ara_5_5_0",
+      });
+
+  ME->move(rooms[random(sizeof(rooms))], M_GO);
+}
+
+void reset() {
+  ::reset();
+  money=0;
+  if(!random(3) && !progress) goto_random_room();
+  call_out("check_geocoin", 2);
+  return;
+}
+
+nosave int give_back(object obj) {
+  tell_room(ENV(ME), sprintf(CAIN + " gibt %s an %s.\n", obj->name(WEN), 
+      TP->name(WER)), ({TP}));
+  tell_object(TP, sprintf(CAIN + " gibt Dir %s.\n", obj->name(WEN)));
+  obj->move(TP, M_NOCHECK|M_SILENT);
+  return 1;
+}
+
+void give_notify(object obj)
+{
+  object ob;
+  int ret;
+  if(progress) {
+    command_me("sag Einen Moment bitte.");
+    give_back(obj);
+    return;
+  }
+  if( !obj->QueryProp(P_WEAPON_TYPE) && !obj->QueryProp(P_ARMOUR_TYPE) && 
+      obj->IsSocketItem()!=SOC_M_RUNE && !obj->IsTalisman()) 
+  {
+    tell_room(ENV(ME), BSA("Tut mir leid, diesen Gegenstand "
+        "kann ich nicht identifizieren.", CAIN + " sagt: "));
+    give_back(obj);
+    return; 
+  }
+  if(next_is_magic && !obj->IsSocketItem() && !obj->IsTalisman()) {
+    ret=call_other(ITEMD, "identify", obj, -1, 100,100, ({0,0,0,0,1}),1,0);
+    if(ret != 1) {
+      if(ret == -4 ) {
+         tell_room(ENV(ME), BSA("Tut mir leid, Du musst damit noch etwas warten.", 
+               CAIN+" sagt: "));
+      }
+      else {
+         tell_room(ENV(ME), BSA("Irgendetwas stimmt nicht. Bitte Magier verstaendigen. "
+               "*tuet* Error "+ret+" *tuet*", CAIN+" sagt: "));
+      }
+      return ::give_notify(obj);
+    }
+    next_is_magic=0;
+    write_file(ITEMD_LOG+"word.log", sprintf("%s: %s -> %s\n", ctime(),
+          CAP(getuid(TP)), obj->QueryProp(P_SHORT)));
+  }
+  if(TP->QueryMoney() < CAIN_COST ) {
+    tell_room(ENV(ME), BSA(sprintf("Tut mir leid, Du hast zu wenig Geld, "
+        "%s. Ich verlange "+CAIN_COST+" Goldmuenzen pro Gegenstand, den ich "
+        "identifizieren soll.", TP->name(WER)), CAIN + " sagt: "));
+    give_back(obj);
+    return; 
+  }
+  SetProp(P_MNPC_AREA, file_name(ENV(ME)));
+  SetProp(P_MNPC_DEFAULTROOM, file_name(ENV(ME)));
+  progress=1;
+  tell_room(ENV(ME), sprintf("%s gibt " + CAIN + " "+CAIN_COST+" Muenzen.\n", TP->Name(WER)),
+      ({TP}));
+  tell_object(TP, "Du gibst " + CAIN + " "+CAIN_COST+" Muenzen.\n");
+  TP->AddMoney(-CAIN_COST);
+  money+=CAIN_COST;
+  call_out("start_ident", 1, obj);
+  return ::give_notify(obj);
+}
+
+nosave void start_ident(object obj) {
+  call_out("identify", 4, obj);
+  tell_room(ENV(ME), CAIN + " untersucht den Gegenstand...\n");
+  return;
+}
+
+string value_weight(object ob)
+{
+  string result, vname;
+  int val;
+
+  if (val = ob->QueryProp(P_VALUE))
+    result = sprintf("%s ha%s einen Wert von %d Muenze%s",
+       capitalize(ob->QueryPronoun(WER)), (ob->QueryProp(P_PLURAL) ? "ben":"t"),
+       val, (val==1 ? "" : "n"));
+  else
+    result =sprintf("%s %s voellig wertlos", capitalize(ob->QueryPronoun(WER)), 
+        (ob->QueryProp(P_PLURAL) != 1 ? "sind":"ist") );
+
+  val = ob->QueryProp(P_TOTAL_WEIGHT);
+  if ( (val >= 6000)  )
+    vname = "in etwa "+((val+500)/1000)+" Kilogramm";
+  else
+  {
+    if (val < 100)
+      vname = "so gut wie nichts";
+    else if (val < 950)
+      vname = "schaetzungsweise "+((val+50)-(val+50)%100)+" Gramm";
+    else
+    {
+      if (val >= 1500)
+        val = val+random(100)-random(100); 
+      if (val >= 2000)
+        val=(val+250)-(val+250)%500;
+      else
+        val=(val+125)-(val+125)%250;
+      vname = "ungefaehr "+
+         ({"","ein","zwei","drei","vier","fuenf","sechs"})[val/1000]+
+         ({"","einviertel","einhalb","dreiviertel"})[(val%1000)/250]+
+         " Kilogramm";
+    }
+  }   
+  result += sprintf(" und wieg%s %s. ",
+    ( ob->QueryProp(P_PLURAL) ? "en" : "t" ), vname);
+  return result;
+}
+
+string ac2string(int ac, string at)
+{
+  switch( 100 * ac / (VALID_ARMOUR_CLASS[at]+1) ) {
+    case 0..20:  return "schlechte";
+    case 21..40: return "mittelmaessige";
+    case 41..60: return "gute";
+    case 61..80: return "sehr gute";
+    case 81..99: return "exzellente";
+    default: return "perfekte";
+  }
+}
+
+string wt(string typ)
+{
+  switch (typ) {
+    case WT_SWORD: return "Schwert";
+    case WT_AXE:   return "Axt";
+    case WT_SPEAR: return "Speer";
+    case WT_CLUB:  return "Keule";
+    case WT_KNIFE: return "Messer"; 
+    case WT_CHAIN: return "Kettenwaffe";
+    case WT_BOW:   return "Bogen";
+    case WT_WHIP:  return "Peitsche";
+    default:       return "unbekannt";
+  }
+}
+
+string wc2string(int wc, int fix)
+{
+  switch(wc*fix + wc*(100-fix)/2+ random(200)-random(200)) {
+    case 0..4000:      return "sehr schlechte";
+    case 4001..6000:   return "schlechte";
+    case 6001..8000:   return "mittelmaessige";
+    case 8001..10000:  return "gute";
+    case 10001..12000: return "sehr gute";
+    case 12001..14000: return "extrem gute";
+    case 14001..17000: return "exzellente";
+    case 17001..20000: return "toedliche";
+    default: return "goettliche";
+  }
+}
+
+string hands(int nr)
+{
+  switch(nr){
+    case 1: return "einhaendige";
+    case 2: return "zweihaendige";
+    default: return "mehrhaendige";
+  }
+}
+
+string mat(object ob)
+{
+  return "/spellbooks/druiden_spells"->GetMaterialString(ob, this_object());
+}
+
+string int2time(int t, int p)
+{
+  string ret;
+  
+  if (t > 10)
+    ret = p ? "halten " : "haelt ";
+  else
+    ret = p ? "werden " : "wird ";
+  if (t > 3000) return ret + "noch eine halbe Ewigkeit";
+  if (t > 2000) return ret + "noch einige Monate";
+  if (t > 1000) return ret + "noch viele Wochen";
+  if (t > 500) return ret + "noch einige Wochen";
+  if (t > 200) return ret + "noch mehr als eine Woche";
+  if (t > 100) return ret + "noch einige Tage";
+  if (t > 50) return ret + "nur noch wenige Tage";
+  if (t > 30) return ret + "nur noch einen Tag";
+  if (t > 10) return ret + "nur noch einige Stunden";
+  if (t > 5) return ret + "sich in wenigen Stunden aufloesen";
+  if (t > 1) return ret + "sich in einer Stunde aufloesen";
+  return ret + "sich bald aufloesen";
+}
+
+nosave varargs void Channel(string msg, string sender) {
+  "/p/daemon/itemd/itemd"->NiacChannel(msg, sender);
+}
+
+nosave int identify(object ob) {
+  string *texte, magic, text, typ, zeichen, *expl, magic_text, rune;
+  int rnd;
+  mapping runes;
+  int *x;
+
+  zeichen="";
+  magic_text="";
+  if( typ=ob->QueryProp(P_ARMOUR_TYPE) )
+  {
+    text=ob->Name(WER,1)+(ob->QueryProp(P_PLURAL)?" sind ":" ist ")+ "eine "+
+      ac2string(ob->QueryProp(P_AC)+ob->QueryProp(P_DAMAGED), typ)+
+      " Ruestung vom Typ "+ typ +". "+ value_weight(ob) +mat(ob)+" ";
+  }
+  else if( typ=ob->QueryProp(P_WEAPON_TYPE) )
+  {
+    text=ob->Name(WER,1)+(ob->QueryProp(P_PLURAL)?" sind ":" ist ")+ "eine "+
+      wc2string(ob->QueryProp(P_WC)+ob->QueryProp(P_DAMAGED), 
+          ob->QueryProp(P_WC_FIX) )+" "+hands(ob->QueryProp(P_NR_HANDS))+ 
+      " Waffe vom Typ "+ wt(typ)+ ". "+value_weight(ob)+ mat(ob)+ " ";
+  }
+  else if(ob->IsSocketItem()==SOC_M_RUNE) {
+    runes=RUNES1+RUNES2+RUNES3+RUNES4+RUNES5;
+    rune=ob->QueryRune();
+    text="Das ist eine maechtige magische Rune. In eine Waffe gesteckt "
+      +runes[rune][2][0]+" und in eine Ruestung gesteckt "
+      +runes[rune][2][1]+". Sie " + int2time((call_other(ITEMD, "QueryRuneMaxAge", ob) + 
+          ob->QueryCreateTime() - time()) / (45 * 60), 0) + ". ";
+  }
+  else if(ob->IsTalisman())
+  {
+    text="Dieser Talisman entfaltet seine Wirkung, wenn Du ihn bei Dir "
+      "traegst. ";
+  }
+  if(sizeof(texte=ob->QueryProp(P_ITEMD))) {
+    magic=sprintf("%s %s auf jeden Fall magisch. Diese%s ", 
+      ob->Name(WER,1), 
+      ob->QueryProp(P_PLURAL) ? "sind" : "ist", 
+      ob->QueryProp(P_WEAPON_TYPE) ? " Waffe" : 
+      (ob->QueryProp(P_ARMOUR_TYPE) ? " Ruestung" : "r Gegenstand"));
+    while(sizeof(texte)) {
+      rnd=random(sizeof(texte));
+      expl=explode(texte[rnd],"'");
+      if(sizeof(expl)==3 && expl[0]=="hat das Zeichen ") {
+        ob->SetProp(P_ITEMD, texte-({texte[rnd]}));
+        if(CheckLetter(expl[1])==2)
+          zeichen=expl[1];
+        ta(sprintf("CAIN: zeichen: %O, testbit: %O, get_letter, %O\n",
+              zeichen, testbit, get_letter));
+      }
+      if(sizeof(texte)>2)
+        magic+=texte[rnd]+", ";
+      else if(sizeof(texte)==2)
+        magic+=texte[rnd]+" und ";
+      else magic+=texte[rnd]+".";
+      texte-=({texte[rnd]});
+    }
+    if(!ob->QueryProp(P_ITEMD_CAIN_TIME) && 
+        (!ob->HasSockets() || ob->HasSockets() != ob->HasFreeSockets())) {
+      if(ob->QueryProp(P_INFO))
+        ob->SetProp(P_INFO, BS(ob->QueryProp(P_INFO)+" "+magic));
+      else 
+        ob->SetProp(P_INFO, BS(magic));
+      ob->SetProp(P_ITEMD_CAIN_TIME, time());
+    }
+  }
+  else if( ob->QueryProp(P_MAGIC) )
+    magic = ob->Name(WER,1)+(ob->QueryProp(P_PLURAL)?" sind":" ist")+
+      " magisch, aber ich kann nichts genaueres erkennen."; 
+  else
+    magic = ob->Name(WER,1)+(ob->QueryProp(P_PLURAL)?" sind":" ist")+
+      " sicher nicht magisch.";
+  if (pointerp(x = ob->QueryProp(P_ITEMD_TMPMAGIC)))
+    magic += sprintf(" %s %s nur auf bestimmte Zeit magisch und %s.",
+      CAP(ob->QueryPronoun(WER)), 
+      ob->IsPlural() ? "sind" : "ist",
+      int2time(x[1], ob->IsPlural()) );
+  tell_room(ENV(ME), BSA(text +magic, CAIN + " spricht: "));
+  call_out("question", 2);
+  if(get_letter==testbit) {
+    call_out("GotWord", 2);
+    get_letter="";
+    give_back(ob);
+    return 1;
+  }
+  if(zeichen!="") {
+    tell_room(ENV(ME), BSA("Ein richtiges Zeichen. Ein paar fehlen Dir "
+          "noch, dann erhaeltst Du die versprochene Belohnung!", 
+          CAIN + " spricht: "));
+  }
+  give_back(ob);
+  progress=0;
+  tell_object(TP, "Cain fragt Dich: Soll ich das auf der Ebene senden? (ja/nein)\n");
+  input_to("question",0,text + magic);
+  return 1;
+}
+
+void question(string str, string msg)
+{
+  if (str == "ja" || str == "j" || str == "y")
+    Channel(msg, capitalize(getuid(TP)));
+  SetProp(P_MNPC_AREA, ({"/d/", "/gilden"}));
+  SetProp(P_MNPC_DEFAULTROOM, "/gilden/abenteurer");
+}
+/*
+nosave int identify(object ob) {
+  string *texte, magic;
+  int rnd;
+  texte=ob->QueryProp(P_ITEMD);
+  magic=sprintf("%s ist auf jeden Fall magisch. %s ", 
+      ob->Name(WER), CAP(ob->QueryPronoun(WER)));
+  while(sizeof(texte)) {
+    rnd=random(sizeof(texte));
+    if(sizeof(texte)>2)
+      magic+=texte[rnd]+", ";
+    else if(sizeof(texte)==2)
+      magic+=texte[rnd]+" und ";
+    else magic+=texte[rnd]+".";
+    texte-=({texte[rnd]});
+  }
+  tell_room(ENV(ME), BSA(magic, CAIN + " spricht: "));
+  SetProp(P_MNPC_AREA, ({"/d/", "/gilden"}));
+  SetProp(P_MNPC_DEFAULTROOM, "/gilden/abenteurer");
+  give_back(ob);
+  progress=0;
+  return 1;
+}
+*/
+
+nosave void teile_mit(string msg, object pl) {
+  pl->Message(break_string(msg,78,CAIN + " teilt Dir mit: "), MSGFLAG_TELL);
+  return;
+}
+
+void catch_tell(string str)
+{
+  string wer, was, *dir, txt;
+  object env, pl;
+  int cost;
+  if(sscanf(str, "%s teilt Dir mit: %s\n", wer, was)==2) {
+    if(strstr(lower_case(was), "wo bist du")==-1) 
+      return ;
+    env=ENV(ME);
+    if(!pl=find_player(lower_case(wer))) return;
+    if(QueryProp(wer) > time() - 4) {
+      teile_mit("Das hast Du doch gerade erst gefragt!", pl);
+      pl->SetProp(P_PARALYZED, 2+random(5));
+      pl->do_damage(1+random(5));
+      return;
+    }
+    pl->do_damage(10+random(5));
+    SetProp(wer, time());
+    if(!random(100)) {
+      teile_mit("Ich sag Dir nicht, wo ich bin! *schmoll*", pl);
+      return; 
+    }
+    if(!env) {
+      teile_mit("Ich weiss nicht, wo ich bin. Hier ist irgendwie nichts!",pl);
+      return ;
+    }
+    dir=explode(file_name(env), "/");
+    if(dir[0]=="d") {
+      teile_mit(sprintf("Ich bin in der Region %s! Ihr nennt den Ort hier "
+           "\"%s\".",
+            CAP(dir[1]), env->QueryProp(P_INT_SHORT)),pl); 
+    }
+    else if(dir[0]=="players")
+      teile_mit("Ich weiss nicht wo ich bin, aber ich bin mir sicher, dass "
+          +CAP(dir[1])+" daran schuld ist.",pl);
+    else if(dir[0]=="gilden") {
+      switch(dir[1]) {
+        case "druidenzirkel": 
+          txt="Ich bin bei den maechtigen Druiden. Hier ist's toll, da bleib "
+            "ich! Ich frag mich nur, warum Anvar seine Haende so komisch "
+            "bewegt und auf mich deutet?";
+          break;
+        case "abenteurer":
+          txt="Ich bin in einer der Abenteurergilden.";
+          break;
+        case "berserker":
+          txt="Melde gehorsamst: Bin bei Kronang! Werde ihn spalten! *HACK*";
+          break;
+        case "paladine":
+          txt="Bin auf der Paladinburg! Werde mich zu Ayla begeben und "
+            "etwas fuer mein Seelenheil opfern. Solltest Du auch tun!";
+          break;
+        case "zechpreller":
+          txt="Jo i wasch ah net <HICKS> wo isch gerarade bin! SCHECHUS "
+            "SCHENK EIN! HEUTE *RUELPS* MACH MA BLAU!";
+          break;
+        default: 
+          txt="Ich bin in irgendeiner schwindligen Gilde! Holt mich raus!";
+      }
+      teile_mit(txt, pl);
+    }
+    else 
+      teile_mit("Ich weiss selber nicht so genau, wo ich bin...",pl);
+  }
+  return ;
+}
+
+nosave int CheckLetter(string str) {
+  int i,x;
+  x=0;
+  str=lower_case(str);
+  if((i=member(word, str))!=-1) {
+    get_letter=set_bit(get_letter, i);
+    ta(sprintf("CAIN: Letter passt, i=%d, word[i]=%s, get_letter=%s\n",
+          i,word[i],get_letter));
+    write_file(ITEMD_LOG+"word.log", sprintf("%s: %s -> Buchstabe '%s'\n",
+          ctime(), getuid(TP), str));
+    x=2;
+  }
+  save_object(CAIN_SAVE);
+  if(get_letter==testbit) return 1;
+  return x;
+}
+
+nosave int GotWord() {
+  tell_room(ENV(ME), BSA("GRATULIERE! Du hast das Wort gefunden das gesucht "
+      "wurde. Als Belohnung wird der naechste Gegenstand, der mir gegeben "
+      "wird, "
+      "extrem hochmagisch. Aber bedenke, ich kann nur Gegenstaende "
+      "verzaubern, die auch ohne meine Hilfe magisch geworden waeren, und "
+      "die noch nicht identifiziert wurden. Waehle also weise. Sollte "
+      "unklug gewaehlt werden, verfaellt mein Geschenk.", CAIN + " spricht: "));
+  next_is_magic=1;
+  word=letters[random(sizeof(letters))];
+  testbit=testbits[sizeof(word)-1];
+  get_letter="";
+  save_object(CAIN_SAVE);
+  SetProp(P_MNPC_AREA, ({"/d/", "/gilden"}));
+  SetProp(P_MNPC_DEFAULTROOM, "/gilden/abenteurer");
+  progress=0;
+  return 1;
+}
+
+mixed QueryWord() {
+  return ({word, get_letter});
+}
+
+string Missing() {
+  int i;
+  string str;
+  str="";
+  for(i=0;i<=sizeof(word)-1;i++) {
+    if(!test_bit(get_letter, i)) {
+      str+=word[i];
+    }
+  }
+  return str;
+}
+
+int SetLetter(string str) {
+  int pos;
+  if(!IS_ARCH(TP)) return -1;
+  if((pos=member(word,str))==-1) return -1;
+  if(test_bit(get_letter,pos)) return 0;
+  return CheckLetter(str);
+}
+
+int NextIsGodly() {
+  if(!IS_ARCH(TP)) return -1;
+  next_is_magic=1;
+  return 1;
+}
+
+int do_save() {
+  save_object(CAIN_SAVE);
+  return 1;
+}
+
+int runentausch(string str)
+{
+  string r1,r2,r3;
+  object o1,o2,o3;
+  string *possible, p;
+  object ob;
+
+  notify_fail("Syntax: runentausch <rune1> <rune2> <rune3>\n");
+  if (!str)
+    return 0;
+  if (sscanf(str, "%s %s %s", r1, r2, r3) != 3)
+    return 0;
+  if (r1 == r2 || r1 == r3 || r2 == r3)
+    return 0;
+  if (!(o1 = present(r1, TP)) || !(o2 = present(r2, TP)) || !(o3 = present(r3, TP)))
+    return 0;
+  if (o1->IsSocketItem() !=SOC_M_RUNE || o2->IsSocketItem() !=SOC_M_RUNE ||
+      o3->IsSocketItem() !=SOC_M_RUNE)
+    return 0;
+  if (TP->QueryMoney() < CAIN_COST ) 
+  {
+    tell_room(ENV(ME), BSA(sprintf("Tut mir leid, Du hast zu wenig Geld, "
+        "%s. Ich verlange "+CAIN_COST+" Goldmuenzen pro Rune, also insgesamt "+
+        (3*CAIN_COST) + " Meunzen!", TP->name(WER)), CAIN + " sagt: "));
+    return 1; 
+  }
+  tell_object(TP, "Du gibst " + CAIN + " "+(3*CAIN_COST)+" Muenzen.\n");
+  TP->AddMoney(-3*CAIN_COST);
+  money += 3*CAIN_COST;
+  possible = RUNE_MIGHT[1] +  RUNE_MIGHT[2] + RUNE_MIGHT[3] + RUNE_MIGHT[4];
+  if(member(RUNE_MIGHT[5],capitalize(r1)) >= 0 || member(RUNE_MIGHT[5],capitalize(r2))  >= 0 ||
+      member(RUNE_MIGHT[5],capitalize(r3))  >= 0)
+    possible = RUNE_MIGHT[4] + RUNE_MIGHT[5];
+  possible -= ({capitalize(r1), capitalize(r2), capitalize(r3)});
+  p = possible[random(sizeof(possible))];
+  ob = clone_object(ITEMDD "obj/runes/rune");
+  ob->SetRune(p);
+  ob->move(TP, M_NOCHECK);
+  str = sprintf("die Rune %s im Tausch gegen die Runen %s, "
+        "%s und %s.\n", p,capitalize(r1),capitalize(r2),capitalize(r3));
+  write(CAIN + " gibt Dir "+ str);
+  say(sprintf(CAIN + " gibt %s %s", TP->name(WEM), str), ({TP}));
+  write_file(ITEMD_LOG "runentausch", sprintf("%s: %s bekommt %s", 
+        dtime(), capitalize(getuid(TP)), str));
+  o1->remove();
+  o2->remove();
+  o3->remove();
+  return 1;
+}
+
+varargs int remove(int silent)
+{
+  if (present("antiteleportationsring"))
+    present("antiteleportationsring")->remove();
+
+  return ::remove(silent);
+}
+
+
+void check_geocoin() {
+  string locfile;
+  string loc;
+  locfile=ITEMDD+"geocoin/loc.txt";
+  loc=read_file(locfile);
+  if(file_size(ITEMDD+"geocoin/location_changed")!=-1) {
+    Channel("Aktuelle Informationen zu unserem Geocoin \"Der mystische Astralring\":", "Niac");
+    Channel("Position: "+loc, "Niac");
+    Channel("Mehr Informationen kann ich geben, wenn ich nach astralring befragt werde.", "Niac");
+    rm(ITEMDD+"geocoin/location_changed");
+  }
+  return;
+}
+
+string tell_about_geocoin() {
+  string txt;
+  string locfile;
+  string loc;
+  locfile=ITEMDD+"geocoin/loc.txt";
+  loc=read_file(locfile);
+  txt="Der mystische Astralring ist nicht nur ein Gegenstand hier im Silberland, sondern er "
+    "ist auch eine real existierende Geocoin, die auf http://www.geocaching.com getrackt wird. Hier "
+    "findest Du auch Informationen, was das alles ueberhaupt ist. :-)\n"
+    "Die URL der Geocoin lautet: http://coord.info/TB2WPEP\n"
+    "Die aktuelle Position ist: "+loc+"\n";
+  return txt;
+}
+
+string tell_about_mis() {
+  int mi_info_cost, i;
+  mapping mi_percent;
+  int *mi_keys;
+  string txt;
+  txt="";
+
+  mi_info_cost = CAIN_COST * 5;
+
+  if(TP->QueryMoney() < mi_info_cost ) {
+  return sprintf("Tut mir leid, Du hast zu wenig Geld, "
+      "%s. Ich verlange "+mi_info_cost+" Goldmuenzen fuer die Information, wieviele "
+      "goettliche Gegenstaende es gibt.", TP->name(WER)); }
+  
+  tell_room(ENV(ME), sprintf("%s gibt " + CAIN + " "+mi_info_cost+" Muenzen.\n", TP->Name(WER)),
+      ({TP}));
+  tell_object(TP, "Du gibst " + CAIN + " "+mi_info_cost+" Muenzen.\n");
+  TP->AddMoney(-mi_info_cost);
+  money+=mi_info_cost;
+
+  mi_percent="/p/daemon/itemd/master/mi_counter"->GetMIPercent();
+  txt+="Es gibt derzeit ";
+
+  mi_keys=sort_array(m_indices(mi_percent),#'>); //'
+  for(i=0;i<sizeof(mi_keys);i++)
+  {
+    switch(mi_percent[mi_keys[i],1])
+    {
+      case 0..10: txt+="gar keine oder fast keine"; break;
+      case 11..20: txt+="wenige"; break;
+      case 21..40: txt+="einige"; break;
+      case 41..60: txt+="viele"; break;
+      case 61..80: txt+="sehr viele"; break;
+      case 81..90: txt+="extrem viele"; break;
+      case 91..95: txt+="unfassbar viele"; break;
+      case 96..100: txt+="nahezu oder tatsaechlich maximal viele"; break;
+      default: txt+="unmoeglich viele (FEHLER, bitte Magier verstaendigen)"; break;
+    }
+    txt+=(" "+mi_percent[mi_keys[i],0]);
+    if(i<sizeof(mi_keys)-2) txt+=", ";
+    else if(i==sizeof(mi_keys)-2) txt+=" und ";
+    else if(i==sizeof(mi_keys)-1) txt+=" im Silberland.\n";
+  
+  }
+
+  return txt;
+}

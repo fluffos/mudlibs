@@ -1,0 +1,237 @@
+//=========================================================================
+//
+// File:    wall-c2.c
+// Created by Zordan@SL
+//
+// Project: Dhrkion
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit ROOM "wall_inh.lpc";
+
+string *steiger;
+
+void create()
+{
+  richtung = "sueden";
+
+  ::create();
+
+  AddDetail( ({ "decke" }), GetDetail("decke")[0..<2]+
+    " Hier scheint die Decke etwas hoeher als sonstwo zu sein.");
+
+  AddDetail( ({ "boden" }), GetDetail("boden")[0..<2]+
+    " Eine kleine Erhebung ist etwas abseits vom Schutzwall.");
+
+  AddDetail( ({ "erhebung" }),
+    "Die Erhebung ist etwas abseits vom Schutzwall und etwa einen halben "
+    "Meter hoch. Sie besteht komplett aus normaler Erde.");
+
+  AddDetail( ({ "erde" }),
+    "Die Erde ist noch recht frisch. Jemand muss sie wohl vor nicht "
+    "allzu langer Zeit hier abgeladen haben.");
+
+  AddDetail( ({ "jemand" }),
+    "Von diesem Jemand ist nichts mehr zu sehen.");
+
+  AddDetail( ({ "zeit" }),
+    "Wenn Du ein wenig Zeit uebrig hast, koenntest Du ja mal auf die "
+    "Erhebung steigen.");
+
+  AddSpecialDetail( ({ "platte" }), "detail_platte" );
+
+  AddCmd( ({ "geh","gehe" })                 , "cmd_gehen" );
+  AddCmd( ({ "steig","steige","besteige" })  , "cmd_steigen" );
+  AddCmd( ({ "entfern","entferne" })         , "cmd_entfernen" );
+  AddCmd( ({ "oeffne","drehe","dreh"
+           , "schiebe","schieb","stosse"
+           ,"stoss","hebe","verschieb"
+           ,"verschiebe"})                   , "cmd_oeffnen" );
+
+  AddExit( "suedwesten"  , ROOM "wall-b3");
+  AddExit( "osten"       , ROOM "wall-d2");
+
+  steiger = ({ });
+}
+
+void init()
+{
+  ::init();
+
+  if(!TP)              return;
+  if(!interactive(TP)) return;
+
+  steiger -= ({ getuuid(TP) });
+}
+
+int cmd_gehen(string str)
+{
+  notify_fail("Worauf moechtest Du steigen?\n");
+
+  if(!str || str == "") return 0;
+  if(!(str == "auf erhebung" ||
+       str == "erhebung"     )) return 0;
+
+  if(member(steiger,getuuid(TP)) != -1)
+  {
+    tell_object(TP, "Aber Du stehst doch schon auf der Erhebung!\n");
+    return -1;
+  }
+
+  tell_object(TP, BS("Du versuchst so einfach auf die Erhebung zu gehen, "
+                     "rutscht aber immer wieder ab. Du solltest es "
+                     "anders versuchen." ));
+  return 1;
+}
+
+int cmd_steigen(string str)
+{
+  string s;
+
+  notify_fail("Worauf moechtest Du steigen?\n");
+
+  if(!str || str == "") return 0;
+
+
+  if(str == "auf erhebung" || str == "erhebung" )
+  {
+    if(member(steiger,getuuid(TP)) != -1)
+    {
+      tell_object(TP, "Aber Du stehst doch schon auf der Erhebung!\n");
+      return -1;
+    }
+
+    s = "Mit wenig Muehe und Not steigst Du auf die Erhebung. ";
+    if(RUNENMASTER->IsQuester(getuuid(TP)))
+    {
+      s += "Dir faellt auf einmal eine kleine Platte in der Decke auf.";
+    }
+    else
+    {
+      s += "Eigentlich ist es ziemlich langweilig hier.";
+    }
+    tell_object(TP, BS(s));
+
+    steiger += ({ getuuid(TP) }) ;
+    return 1;
+  }
+
+  if(str == "runter" || str == "nach unten")
+  {
+    if(member(steiger, getuuid(TP)) != -1)
+    {
+      tell_object(TP, "Du steigst die Erhebung wieder runter.\n");
+      steiger -= ({ getuuid(TP) }) ;
+      return 1;
+    }
+
+    tell_object(TP, "Warum willst Du wo runtersteigen wenn Du nirgends "
+                    "draufstehst?\n");
+    return 1;
+  }
+
+  return 0;
+}
+
+string detail_platte(string str)
+{
+  if(member(steiger,getuuid(TP)) == -1) return 0;
+
+  if(!RUNENMASTER->IsQuester(getuuid(TP))) return 0;
+
+  return BS("Die Platte ist an der Decke angebracht. Vielleicht kann man "
+            "es ja schaffen die Platte irgendwie naeher zu untersuchen "
+            "oder etwas mit ihr zu machen?");
+}
+
+//--------------------------------------------------------------------------
+// Runenquest -> 5. Ort wo eine Rune sein kann
+//--------------------------------------------------------------------------
+
+int cmd_entfernen(string str)
+{
+  object ob, weapon;
+  string was, s;
+
+  if(!RUNENMASTER->IsQuester(getuuid(TP))) return 0;
+  if(member(steiger, getuuid(TP)) == -1)   return 0;
+
+  notify_fail("Was moechtest Du wie entfernen?\n");
+  if(!str || str == "") return 0;
+
+  if(str == "platte")
+  {
+    tell_object(TP, BS("Du stehst zwar jetzt ein wenig hoeher. Aber mit "
+                       "Deinen Haenden kannst Du die Platte nicht "
+                       "erreichen. Du solltest Dir etwas suchen um sie "
+                       "zu entfernen." ));
+    return -1;
+  }
+
+  if(sscanf(str,"platte mit %s",was) != 1) return 0;
+
+  if(!(weapon = present(was,TP)))
+  {
+    tell_object(TP, "Aber das hast Du ja gar nicht!\n");
+    return 1;
+  }
+
+  if(!(weapon->QueryProp(P_WEAPON_TYPE) == WT_SWORD ||
+       weapon->QueryProp(P_WEAPON_TYPE) == WT_CLUB  ))
+  {
+    tell_object(TP, "Damit klappt das leider nicht!\n");
+    return -1;
+  }
+
+  if(TP->QueryProp(P_WEAPON) != weapon)
+  {
+    tell_object(TP, "Du musst "+weapon->name(WEN,2)+" schon zuecken!\n" );
+    return -1;
+  }
+
+  switch(RUNENMASTER->GetRune(getuuid(TP), 5))
+  {
+    case 1:
+      s = "Du entfernst die Platte mit "+weapon->name(WEM,2)+" und eine "
+          "kleine Rune faellt herunter. Geschickt faengst Du sie auf "
+          "und steckst sie ein. Du befestigst die Platte wieder. Ordnung "
+          "muss sein.";
+      break;
+
+    case -1:
+      s = "Du entfernst die Platte mit "+weapon->name(WEM, 2)+" und findest "
+          "eine kleine Rune dahinter. Als Du sie einstecken willst, "
+          "bemerkst Du, dass sie Dir viel zu schwer ist.";
+      break;
+
+    default:
+      s = "Du entfernst die Platte mit "+weapon->name(WEM, 2)+". Doch "
+          "enttaeuscht musst Du feststellen, dass nichts dahinter war. "
+          "Du befestigst die Platte wieder. Ordnung muss sein.";
+      break;
+  }
+
+  tell_object(TP, BS(s));
+
+  return 1;
+}
+
+int cmd_oeffnen(string str)
+{
+  if(!RUNENMASTER->IsQuester(getuuid(TP))) return 0;
+  if(member(steiger,getuuid(TP)) == -1)    return 0;
+
+  notify_fail("Was moechtest Du machen?\n");
+
+  if(!str || str == "")  return 0;
+  if(!(str == "platte")) return 0;
+
+  tell_object(TP, BS("Du kommst einfach nicht nah genug an die Platte "
+                     "heran. Ausserdem sollte man sie besser mit einem "
+                     "Gegenstand entfernen, als sie einfach nur zu "
+                     "oeffnen." ));
+  return 1;
+}
+

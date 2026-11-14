@@ -1,0 +1,94 @@
+// (c) by Thomas Winheller (Padreic@mg.mud.de)
+
+// da dieser Spieler hier rein mathematisch spielt duerfte (wenn kein 
+// programmierfehler vorliegt) die Gewinnchance bei >= 50% liegen
+// Natuerlich nur im Duell, da sonst ja noch die Absprache der Mitspieler
+// entscheident ist.
+
+#include <properties.h>
+#include <npc.h>
+#include "files.h"
+
+inherit "std/npc";
+
+mapping bewertung;
+int     *liste;
+int count;
+
+create()
+{
+  ::create();
+  SetProp(P_SHORT, "Ein Maexchenspieler");
+  SetProp(P_NAME, "Maexchenspieler");
+  SetProp(P_BRIEF, 2);
+  SetProp(MZAHL, 10);
+  SetProp(MMIND, 10);
+  SetProp(P_NOATTACK, "weicht Dir aus.\n"
+    "Bist Du ein so schlechter Verlierer, dass Du es direkt mir roher Gewalt\n"
+    "versuchen musst?\n");
+  AddId(MSPIELER);
+  AddInfo(DEFAULT_INFO, 
+    "Quatsch nicht soviel sondern spiel lieber.", "sagt: ");
+  // Anhand dieser zwei Tabellen kann bewertet werden :)
+  bewertung = ([ 31:0,32:1,41:2,42:3,43:4,51:5,52:6,53:7,54:8,61:9,62:10,63:11,
+    64:12,65:13,11:14,22:15,33:16,44:17,55:18,66:19,21:20]);
+  liste = ({ 21,66,55,44,33,22,11,65,64,63,62,61,54,53,52,51,43,42,41,32,31 });
+  count = 99;
+}
+
+int Glauben(int zahl, int mind, object ob)
+{  return ((bewertung[mind]+bewertung[zahl])<=random(42));  }
+
+int Behaupten(int w1, int w2, int m1, int m2, object ob)
+{
+  if (!ob->gelogen(m1, m2, w1, w2)) // muss ueberhaupt gelogen werden?
+    return w1*10+w2;
+  return liste[random(20-bewertung[m1*10+m2])]; // luege unauffaellig :)
+}
+
+void Play(int zahl, int mind, object ob)
+// gesagte zahl und mindest zahl des vorgaengers, ob = Wuerfelbecher
+{
+  if ((zahl==21)||(!Glauben(zahl, mind, ob))) {
+    count=0; // bin ja auf jeden Fall nochmal mit wuerfeln dran
+    SetProp(MZAHL, 10);
+    SetProp(MMIND, 10);
+    return ob->aufdecken();
+  }
+  SetProp(MMIND, ob->aufrunden(zahl)); // mindestenswurf
+  SetProp(MZAHL, ob->wuerfeln());      // was habe ich gewuerfelt
+}
+
+void StartPlay()
+{
+  set_heart_beat(1);
+  SetProp(P_HB, 1);
+  count=0;
+}
+
+void heart_beat()
+// komm ich nicht drum rum, da er selbst this_player() sein muss
+{
+  object ob;
+  ::heart_beat();
+  if (count>3) return;
+  count++;
+  switch(count) {
+    case 2: // aufdecken oder wuerfeln
+      if (ob=present(WBECHER, this_object()))
+        Play(QueryProp(MZAHL), QueryProp(MMIND), ob);
+      else count=99;
+      return;
+    case 4: // Behaupten was man geworfen hat;
+      if (ob=present(WBECHER, this_object())) {
+        int zahl;
+        int mind;
+        zahl=QueryProp(MZAHL);
+        mind=QueryProp(MMIND);
+        ob->behaupten((string)Behaupten(zahl/10, zahl%10, mind/10, mind%10, ob));
+      }
+      return;
+    default:  // darf eigentlich nie eintreten
+  }
+}
+

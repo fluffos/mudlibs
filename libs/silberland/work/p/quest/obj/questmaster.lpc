@@ -1,0 +1,1041 @@
+// SilberLand MUDlib
+//
+// questmaster.c
+//
+// Questmaster
+//
+//
+// 05.02.2003 Cirion    Initial Revision
+//
+
+#pragma strict_types
+
+#define WANT_QM_TYPES
+#define NEED_QM_PROTOTYPES
+#include "quest.h"
+#include <wizlevels.h>
+#include <properties.h>
+#include <moving.h>
+
+/** Interne Daten */
+int max_QP, all_QP, seer_QP, wiz_QP;
+mapping quests;
+mapping requests;
+string * questmasters;
+
+nosave bool_t is_call;
+
+/****************************************************************************/
+/** Interne Funktionen                                                     **/
+/****************************************************************************/
+
+void create()
+{
+  seteuid(getuid(this_object()));
+  if (is_clone(this_object()))
+  {
+    destruct(this_object());
+  }
+  else
+  {
+    if (!restore_object( QUESTS ))
+    {
+      mapping m;
+
+      max_QP=seer_QP=wiz_QP=0;
+      quests = ([]);
+      requests = ([]);
+      //TODO: Fixme
+      //restore_object("/etc/quests");
+      questmasters = ({"cirion", "angel"});
+      save();
+    }
+  }
+}
+
+string name()
+{
+  return "<Quest>";
+}
+
+void Channel(string msg)
+{
+  if ( !interactive(previous_object()) )
+    return;
+  CHMASTER->send("Abenteuer",this_object(), msg);
+}
+
+nosave bool_t secure()
+{
+  if (!previous_object())
+    return false;
+  if (geteuid(previous_object())==ROOTID)
+    return true;
+  if (geteuid(previous_object()) != geteuid(this_interactive()))
+    return false;
+  if (this_interactive() != this_player())
+    return false;
+  if (!IS_ARCH(this_interactive()) && member(questmasters, geteuid(this_interactive())) == -1)
+    return false;
+  return true;
+}
+
+nosave void save()
+{
+  save_object( QUESTS );
+}
+
+int remove()
+{
+  save_object( QUESTS );
+}
+
+/** apply and evaluate callbacks (of type call_t) */
+mixed Call(call_t call, varargs mixed *extra)
+{
+  mixed ret;
+
+  if (!callp(call))
+    return 0;
+  else
+  {
+    is_call = true;
+    ret = (mixed)apply(#'call_other,call[0],call[1],extra);
+    is_call = false;
+    return ret;
+  }
+}
+
+/** return the playerobject from string or object */
+nosave string playerob(mixed player)
+{
+  if (stringp(player))
+    player = find_player(player);
+  if (objectp(player))
+    return player;
+
+  return 0;
+}
+
+/** return the questobject of the player */
+nosave object questob(string questid, object player)
+{
+  object qo;
+  int i;
+
+  for (i=sizeof(quests[questid, QMQ_OBJECTS]);i-->0;)
+  {
+    string s;
+    s=quests[questid, QMQ_OBJECTS][i];
+    DB(s);
+    qo = find_object(quests[questid, QMQ_OBJECTS][i]);
+    if (qo && (player = environment(qo)))
+    {
+      return qo;
+    }
+  }
+  return 0;
+}
+
+void qmessage(string questid, mixed msg, int lvl)
+{
+  int tell, log;
+
+  if (quests[questid, QMQ_FLAGS] & QF_VVERBOSE)
+  {
+    tell = QE_INFO;
+  }
+  else if (quests[questid, QMQ_FLAGS] & QF_VERBOSE)
+  {
+    tell = QE_WARN;
+  }
+  else
+  {
+    tell = QE_FATAL;
+  }
+  if (quests[questid, QMQ_FLAGS] & QF_LOGVERBOSE)
+  {
+    log = QE_WARN;
+  }
+  else
+  {
+    log = QE_ERROR;
+  }
+  if (intp(msg))
+    msg = QError(msg);
+
+  msg = ({"INFO ", "WARN ", "ERROR", "FATAL"})[lvl] + ": " + msg;
+
+  if (quests[questid, QMQ_FLAGS] & QF_LOGVERBOSE)
+    msg = msg + " [DB]";
+
+  if (lvl >= tell)
+    filter_array(quests[questid, QMQ_WIZARD],
+                 #'tell_object,"DBQ("+questid+") "+msg+"\n");
+  if (lvl >= log)
+    //TODO;
+
+  if (lvl >= QE_FATAL)
+    filter_array(filter_array(questmasters, #'find_player),
+                 #'tell_object,"DBQ("+questid+") "+msg+"\n");
+}
+
+/****************************************************************************/
+/** Spezielle Funktionen, die als Callbacks verwendet werden koennen       **/
+/****************************************************************************/
+
+void OnSolved(string questid, object player, int task)
+{
+  ERROR("OnSolved(pl "+file_name(player)+", task "+task+")", QE_INFO);
+  if (previous_object() != this_object())
+    return;
+
+  if (QTI_END != task)
+  {
+    ERROR("wrong task for OnSolved(pl "+file_name(player)+", task "+task+")", QE_ERROR);
+    return;
+  }
+
+  ERROR("GiveQuest() pl "+file_name(player), QE_WARN);
+  if (!(quests[questid, QMQ_FLAGS] & QF_DEBUG))
+    player->GiveQuest(questid);
+
+  StopQuest(questid, player);
+}
+
+/****************************************************************************/
+/** Funktionen zur Questverwaltung                                         **/
+/****************************************************************************/
+int AddQuestMaster(string uid)
+{
+  if ( !secure()
+    || !IS_GOD(this_interactive()))
+    return Q_ACCESS_DENIED;
+  if (objectp(uid))
+    uid = geteuid(to_object(uid));
+  if (!stringp(uid))
+    return Q_UID_INVALID;
+
+  questmasters += ({ uid });
+  save();
+
+  return Q_SUCCESS;
+}
+
+int RemoveQuestMaster(string uid)
+{
+  if ( !secure()
+    || !IS_GOD(this_interactive()))
+    return Q_ACCESS_DENIED;
+  if (objectp(uid))
+    uid = geteuid(to_object(uid));
+  if (!stringp(uid))
+    return Q_UID_INVALID;
+
+  questmasters -= ({ uid });
+  save();
+
+  return Q_SUCCESS;
+}
+
+int AddQuest(string questid, //)
+             int qp,
+             int xp,
+             mixed * allowedobj,
+             string info,
+             int level,
+             int required,
+             int active,
+             mixed wizards,
+             int solved,
+             string questob,
+             string description,
+             int players,
+             int flags)
+{
+  int i;
+  mapping m;
+
+  if (!secure())
+    return Q_ACCESS_DENIED;
+  if ( !stringp(questid) || strlen(questid) < 5 )
+    return Q_KEY_INVALID;
+  if (member(quests, questid))
+    return Q_KEY_EXISTS;
+  if (!intp(qp))
+    return Q_QP_INVALID;
+  if (!intp(xp) || xp < 0)
+    return Q_XP_INVALID;
+  if (stringp(allowedobj))
+    allowedobj = ({ allowedobj });
+  if (!pointerp(allowedobj))
+    return Q_ALLOWEDOBJ_INVALID;
+  for (i=sizeof(allowedobj);i-->0;)
+  {
+    if (!stringp(allowedobj[i]) || allowedobj[i]=="")
+      return Q_ALLOWEDOBJ_INVALID;
+    allowedobj[i]=to_string("/secure/master"->_get_path(allowedobj[i],0));
+  }
+  if (!stringp(info))
+    return Q_INFO_INVALID;
+  if (!intp(level) || level < 1)
+    return Q_LEVEL_INVALID;
+  if (!intp(required) || required < 0 || required > 2)
+    return Q_REQUIRED_INVALID;
+  if (!intp(active) || active < 0 || active > 1)
+    return Q_ACTIVE_INVALID;
+  if (stringp(wizards))
+    wizards = ({wizards});
+  if (!pointerp(wizards))
+    return Q_WIZARDS_INVALID;
+  for (i=sizeof(wizards);i-->0;)
+  {
+    if (!stringp(wizards[i]) || !"/secure/master"->get_userinfo(wizards[i]))
+      return Q_WIZARDS_INVALID;
+  }
+  wizards = map_array(wizards, #'lower_case/*'*/);
+  if (!intp(solved))
+    return Q_SOLVED_INVALID;
+  if (!stringp(questob) || questob == "")
+    return Q_QUESTOBJ_INVALID;
+  questob = to_string("/secure/master"->_get_path(questob, 0));
+  if (!stringp(description))
+    return Q_DESCRIPTION_INVALID;
+  if (!intp(players) || players < 0)
+    return Q_PLAYERS_INVALID;
+  if (!players)
+    players = 1;
+  if (!intp(flags) || flags > QF_ALL_FLAGS)
+    return Q_FLAGS_INVALID;
+
+  m = allocate_mapping(0,QMQ_SIZE);
+  m[questid, QMQ_ACTIVE] = active;
+  m[questid, QMQ_WIZARD] = wizards;
+  m[questid, QMQ_QP] = qp;
+  m[questid, QMQ_XP] = xp;
+  m[questid, QMQ_LEVEL] = level;
+  m[questid, QMQ_ALLOWEDOBJ] = allowedobj;
+  m[questid, QMQ_SOLVED] = solved;
+  m[questid, QMQ_INFO] = info;
+  m[questid, QMQ_REQUIRED] = required;
+  m[questid, QMQ_OBJECT_FILE] = questob;
+  m[questid, QMQ_DESCRIPTION] = description;
+  m[questid, QMQ_PLAYERS] = players;
+  m[questid, QMQ_FLAGS] = flags;
+  m[questid, QMQ_TASKS] = ([]);
+  m[questid, QMQ_VARIABLES] = ([]);
+  m[questid, QMQ_OBJECTS] = ({});
+  quests += m;
+
+  if (active)
+  {
+    all_QP += qp;
+    if (required == 0 || required == 1)
+      max_QP += qp;
+  }
+  //TODO
+  //QMLOG(sprintf("add: %s %O (%s)",name,quests[name],
+	//	getuid(this_interactive())));
+
+  save();
+
+  return Q_SUCCESS;
+}
+
+mixed QueryQuest(string questid)
+{
+  if (!stringp(questid) || questid == "")
+    return Q_KEY_INVALID;
+  if (!member(quests, questid))
+    return Q_QUEST_NOT_FOUND;
+
+  return filter_mapping(quests, lambda(({'k/*'*/}),
+                                       ({#'==/*'*/,questid,'k/*'*/})));
+}
+
+string QuestInfo(string questid)
+{
+
+}
+
+int RemoveQuest(string questid)
+{
+  mixed *quest;
+
+  if (!secure())
+    return Q_ACCESS_DENIED;
+  if (!stringp(questid) || questid == "")
+    return Q_KEY_INVALID;
+  if (!member(quests, questid))
+    return Q_QUEST_NOT_FOUND;
+  //TODO
+  //QMLOG(sprintf("remove: %s %O (%s)",name,quests[name],
+	//	getuid(this_interactive())));
+  if (quests[questid,QMQ_ACTIVE])
+  {
+    all_QP-=quests[questid,QMQ_QP];
+    if ( quests[questid,QMQ_REQUIRED] == 0
+      || quests[questid,QMQ_REQUIRED] == 1 )
+      max_QP-=quests[questid,QMQ_QP];
+  }
+
+  quests=m_delete(quests, questid);
+  save();
+
+  return Q_SUCCESS;
+}
+
+varargs string * QueryQuestIDs(string regex)
+{
+  string * ind;
+  int i;
+
+  if (!stringp(regex) && regex != "")
+    return m_indices(quests);
+  else
+  ind = m_indices(quests);
+  ind = regexp(ind, regex);
+
+  return ind;
+}
+
+mixed GetQuestID(mixed questobj)
+{
+  int questid;
+
+  if (objectp(questobj))
+    questobj = file_name(questobj);
+  if (!stringp(questobj))
+    return -1;
+  questobj = explode(questobj, "#")[0];
+
+  questid = -1;
+  filter_mapping(quests, lambda(({'k,'q,'o}),
+    ({#'?,({#'==,'o,({#'[,quests,'k,QMQ_OBJECT_FILE})}),({#'=,'q,'k}),0})),
+    &questid, explode(questobj,"#")[0]);
+
+  return questid;
+}
+
+int SetSeerQP(int qp)
+{
+  if (!secure())
+    return Q_ACCESS_DENIED;
+  if ((qp < 1) || (qp > max_QP))
+    return Q_QP_INVALID;
+
+  seer_QP = qp;
+  //TODO
+  //QMLOG(sprintf("set seer qp: %d (%s)",qp,getuid(this_interactive())));
+  if (wiz_QP < qp)
+  {
+    wiz_QP = qp;
+    //TODO
+    //QMLOG(sprintf("adjusted wiz qp: %d (%s)",qp,getuid(this_interactive())));
+  }
+  save();
+
+  return Q_SUCCESS;
+}
+
+int SetWizQP(int qp)
+{
+  if (!secure())
+    return Q_ACCESS_DENIED;
+  if ((qp < 1) || (qp > max_QP))
+    return Q_QP_INVALID;
+
+  wiz_QP = qp;
+  //TODO
+  //QMLOG(sprintf("set wiz qp: %d (%s)",qp,getuid(this_interactive())));
+  save();
+
+  return Q_SUCCESS;
+}
+
+// Query QP conditions
+int QueryNeededQP() { return max_QP * QP_PERCENT / 100; }
+int QuerySeerQP() { return seer_QP; }
+int QueryWizQP() { return wiz_QP; }
+int QueryMaxQP() { return max_QP; }
+int QueryAllQP() { return all_QP; }
+
+int * QueryDontneed(object pl)
+{
+  int i, j, qp_percent, nrgr;
+  string * indices;
+  int * num, * pts, * med, * res;
+
+  nrgr = sizeof(QGROUPS);
+  if(!pl || !objectp(pl))
+    pl = (this_player()?this_player():this_interactive());
+  if(!pl)
+    return allocate(nrgr);
+  num = allocate(nrgr);
+  pts = allocate(nrgr);
+  med = allocate(nrgr);
+  res = allocate(nrgr);
+  indices = m_indices(quests);
+  for (i = sizeof(indices);i-->0;)
+  {
+    // inactive or optional
+    if (!quests[indices[i],QMQ_ACTIVE]||quests[indices[i],QMQ_REQUIRED]==2)
+      continue;
+    j = nrgr-1;
+    while ((quests[indices[i],QMQ_QP] < QGROUPS[j]) && j)
+      j--;
+    num[j]++,pts[j] += quests[indices[i],QMQ_QP];
+  }
+  if (!QueryMaxQP())
+    qp_percent = 0;
+  else
+  {
+    if ((qp_percent = to_int((mixed)pl->QueryProp(P_NEEDED_QP))) < QuerySeerQP())
+      qp_percent = QuerySeerQP();
+    qp_percent = qp_percent*100/QueryMaxQP();
+  }
+  if(!qp_percent)
+    qp_percent = QP_PERCENT;
+  for (i = 0;i < sizeof(QGROUPS);i++)
+  {
+    med[i] = (pts[i]/(num[i]||1)||1);
+    pts[i] -= pts[i]*qp_percent/100;
+    res[i] = (pts[i]%med[i]>0?(pts[i]/med[i]+1):pts[i]/med[i]);
+  }
+  return res;
+}
+
+int QueryReadyForSeerOrWiz(object player, int wiz)
+{
+  int i, j;
+  string * indices;
+  mixed * notsolved;
+  int * groups, * dontneed;
+  int bonus;
+
+  groups = allocate(sizeof(QGROUPS));
+  dontneed = QueryDontneed(player);
+  if (player->QueryProp(P_QP) < player->QueryProp(P_NEEDED_QP))
+    return Q_NOT_ENOUGH_QP;
+  // This is for security:
+  i = wiz ? QueryWizQP() : QuerySeerQP();
+  if (player->QueryProp(P_NEEDED_QP) < i && player->QueryProp(P_QP) < i)
+    return Q_NOT_ENOUGH_QP;
+
+  notsolved=({});
+  indices=m_indices(quests);
+  for (i=sizeof(indices)-1;i>=0;i--)
+  {
+    // inactive or optional
+    if (!quests[indices[i],QMQ_ACTIVE]||quests[indices[i],QMQ_REQUIRED]==2)
+      continue;
+    j=sizeof(QGROUPS)-1;
+    while ((quests[indices[i],QMQ_QP] < QGROUPS[j]) && j) j--;
+    if (!player->QueryQuest(indices[i])) groups[j]++;
+    if (quests[indices[i],QMQ_REQUIRED]==1 && !player->QueryQuest(indices[i]))
+      notsolved+=({indices[i]});
+  }
+  for(i=(sizeof(QGROUPS)-1),bonus=0;i>=0;i--)
+    if((bonus += dontneed[i]-groups[i])<0)
+      break;
+
+  if (!sizeof(notsolved) && bonus >= 0)
+    return Q_TRUE;
+  return Q_FALSE;
+}
+
+int QueryReadyForSeer(object player)
+{
+  return QueryReadyForSeerOrWiz(player, 0);
+}
+
+int QueryReadyForWiz(object player)
+{
+  return QueryReadyForSeerOrWiz(player, 1);
+}
+//OLD: 0:qp,1:xp,2:allobj,3:info,4:level,5:req,6:active,7:wiz,8:solved
+int SetActive(string questid, int flag)
+{
+  if (!secure())
+    return Q_ACCESS_DENIED;
+  if (!member(quests, questid))
+    return Q_QUEST_NOT_FOUND;
+
+  if (flag == 0)
+  {
+    if (quests[questid, QMQ_ACTIVE] == flag)
+      return Q_ALREADY_INACTIVE;
+    quests[questid, QMQ_ACTIVE] = flag;
+    if ( quests[questid, QMQ_REQUIRED] == 0
+      || quests[questid, QMQ_REQUIRED] == 1 )
+      max_QP -= quests[questid, QMQ_QP];
+    all_QP -= quests[questid, QMQ_QP];
+  }
+  else if (flag == 1)
+  {
+    if (quests[questid, QMQ_ACTIVE] == flag)
+      return Q_ALREADY_ACTIVE;
+    quests[questid, QMQ_ACTIVE] = flag;
+    if ( quests[questid, QMQ_REQUIRED] == 0
+      || quests[questid, QMQ_REQUIRED] == 1 )
+      max_QP += quests[questid, QMQ_QP];
+    all_QP += quests[questid, QMQ_QP];
+  }
+  else
+  {
+    return Q_ACTIVE_INVALID;
+  }
+  save();
+  //TODO
+  //QMLOG(sprintf("%s: %s (%s)",(flag?"activate":"deactivate"),name,
+	//	getuid(this_interactive())));
+  return Q_SUCCESS;
+}
+
+/****************************************************************************/
+/** Interne Schnittstelle zum Questobjekt                                  **/
+/****************************************************************************/
+
+int AddTask(int taskid, //)
+             int * requires,
+             call_t * verify,
+             call_t * triggers,
+             string * access,
+             bool_t percent,
+             int players,
+             time_t reset,
+             string description)
+{
+  int i;
+  mixed questid;
+  mapping m;
+
+  questid = GetQuestID(previous_object());
+
+  if (-1 == questid)
+    return Q_KEY_INVALID;
+
+  ERROR("Adding task "+taskid, QE_INFO);
+  if (member(quests[questid,QMQ_TASKS], taskid))
+    return Q_TASKID_INVALID;
+
+  if (!requires)
+    requires = ({});
+  if (!pointerp(requires))
+    return Q_REQUIREMENT_INVALID;
+  foreach(requires, i)
+  {
+    if (!intp(requires[i]))
+      return Q_REQUIREMENT_INVALID;
+    if (!member(quests[questid, QMQ_TASKS],requires[i]))
+      return Q_REQUIREMENT_INVALID;
+  }
+
+  if (!verify)
+    verify = ({});
+  foreach(verify, i)
+    if (!callp(verify[i]))
+      return Q_VERIFY_INVALID;
+
+  if (!triggers)
+    triggers = ({});
+  foreach(triggers, i)
+    if (!callp(triggers[i]))
+      return Q_TRIGGERS_INVALID;
+
+  if (!access)
+    access = ({});
+  foreach(access, i)
+    if (!stringp(access[i]))
+      return Q_ACCESS_INVALID;
+
+  if (!boolp(percent))
+    return Q_PERCENT_INVALID;
+
+  if (!intp(players))
+    return Q_PLAYERS_INVALID;
+
+  if (!timep(reset))
+    return Q_RESET_INVALID;
+
+  if (description && !stringp(description))
+    return Q_DESC_INVALID;
+
+  m = allocate_mapping(0,QMT_SIZE);
+  m[taskid, QMT_REQUIRES]    = requires;
+  m[taskid, QMT_VERIFY]      = verify;
+  m[taskid, QMT_TRIGGERS]    = triggers;
+  m[taskid, QMT_ACCESS]      = access;
+  m[taskid, QMT_PERCENT]     = percent;
+  m[taskid, QMT_PLAYERS]     = players;
+  m[taskid, QMT_RESET]       = reset;
+  m[taskid, QMT_DESCRIPTION] = description;
+  quests[questid,QMQ_TASKS] += m;
+
+  return Q_SUCCESS;
+}
+
+nosave string update_questobject(string oldob, string qofile)
+{
+  object newobj, oldobj;
+
+  DB(oldob);
+  oldobj = find_object(oldob);
+  if (oldobj)
+  {
+    newobj = clone_object(qofile);
+    newobj->SetProp(P_AUTOLOADOBJ, oldobj->QueryProp(P_AUTOLOADOBJ));
+    newobj->move(environment(oldobj),M_NOCHECK|M_SILENT);
+    oldobj->remove();
+    return file_name(newobj);
+  }
+  else
+    return 0;
+}
+
+int reloadquest()
+{
+  int questid;
+
+  questid = GetQuestID(previous_object());
+  if (-1 == questid)
+    return Q_ACCESS_DENIED;
+
+  quests[questid, QMQ_TASKS] = ([]);
+
+  DB(sprintf("%O",quests[questid, QMQ_OBJECTS]));
+  quests[questid, QMQ_OBJECTS] = map_array(quests[questid, QMQ_OBJECTS],
+    #'update_questobject, quests[questid, QMQ_OBJECT_FILE]);
+  quests[questid, QMQ_OBJECTS] -= ({0});
+
+  save();
+  return Q_SUCCESS;
+}
+
+int register()
+{
+  int questid;
+
+  questid = GetQuestID(previous_object());
+  if (-1 != questid)
+    return Q_ACCESS_DENIED;
+
+  if (-1 == member(quests[questid, QMQ_OBJECTS], file_name(previous_object())))
+  {
+    quests[questid, QMQ_OBJECTS] += ({file_name(previous_object())});
+  }
+  save();
+  return Q_SUCCESS;
+}
+
+/****************************************************************************/
+/** Externe Schnittstelle                                                  **/
+/****************************************************************************/
+
+int StartQuest(string questid, mixed player)
+{
+  object qo;
+
+  if (!player = playerob(player))
+    return Q_PLAYER_NOT_FOUND;
+
+  if (!member(quests, questid))
+    return Q_QUEST_NOT_FOUND;
+
+  if (!task_access(QTI_START))
+    return Q_ACCESS_DENIED;
+
+  if (0 < QueryTask(questid, player, QTI_START))
+    return Q_ALREADY_STARTED;
+
+  qo = clone_object(quests[questid, QMQ_OBJECT_FILE]);
+  qo->initialize(questid, getuid(player));
+  qo->move(player,M_NOCHECK|M_SILENT);
+  qo->SetTask(QTI_START, true);
+  quests[questid, QMQ_OBJECTS] += ({file_name(qo)});
+  save();
+
+  return Q_SUCCESS;
+}
+
+int StopQuest(string questid, mixed player)
+{
+  object qo;
+
+  if (!player = playerob(player))
+    return Q_PLAYER_NOT_FOUND;
+
+  if (!member(quests, questid))
+    return Q_QUEST_NOT_FOUND;
+
+  if (!task_access(QTI_START))
+    return Q_ACCESS_DENIED;
+
+  if (1 > QueryTask(questid, player, QTI_START))
+    return Q_NOT_STARTED;
+
+  if (!(qo = questob(questid, player)))
+    return Q_QO_NOT_FOUND;
+
+  qo->remove();
+  if (qo)
+    destruct(qo);
+  quests[questid, QMQ_OBJECTS] -= ({file_name(qo)});
+  save();
+
+  return Q_SUCCESS;
+}
+
+int SetTask(string questid, mixed player, int task)
+{
+  object qo;
+  int i;
+
+  if (!player = playerob(player))
+    return Q_PLAYER_NOT_FOUND;
+
+  if (!member(quests, questid))
+    return Q_QUEST_NOT_FOUND;
+
+  if (!task_access(task))
+    return Q_ACCESS_DENIED;
+
+  if (!(qo = questob(questid, player)))
+    return Q_QO_NOT_FOUND;
+
+  for (i = sizeof(quests[questid,QMQ_TASKS][task,QMT_REQUIRES]); i-->0;)
+    if (QueryTask(questid, player,
+                  quests[questid, QMQ_TASKS][task, QMT_REQUIRES][i]))
+      return Q_REQ_NOT_FULLFILLED;
+
+  for (i = sizeof(quests[questid, QMQ_TASKS][task, QMT_VERIFY]); i-->0;)
+    if (!Call(quests[questid, QMQ_TASKS][task, QMT_VERIFY][i],
+              ({questid, player, task})))
+      return Q_REQ_NOT_FULLFILLED;
+
+  if (quests[questid, QMQ_TASKS][task, QMT_PERCENT])
+    qo->SetTask(task, 100);
+  else
+    qo->SetTask(task, true);
+
+  for (i = sizeof(quests[questid, QMQ_TASKS][task, QMT_VERIFY]); i-->0;)
+    Call(quests[questid, QMQ_TASKS][task, QMT_TRIGGERS][i],
+         ({questid, player, task}));
+
+  return Q_SUCCESS;
+}
+
+int SetTaskTO(string questid, mixed player, int task, int percent)
+{
+  object qo;
+  int i;
+
+  if (!player = playerob(player))
+    return Q_PLAYER_NOT_FOUND;
+
+  if (!member(quests, questid))
+    return Q_QUEST_NOT_FOUND;
+
+  if (!task_access(task))
+    return Q_ACCESS_DENIED;
+
+  if (!(qo = questob(questid, player)))
+    return Q_QO_NOT_FOUND;
+
+  if (0 != percent)
+  {
+    for (i = sizeof(quests[questid,QMQ_TASKS][task,QMT_REQUIRES]); i-->0;)
+      if (QueryTask(questid, player,
+                    quests[questid, QMQ_TASKS][task, QMT_REQUIRES][i]))
+        return Q_REQ_NOT_FULLFILLED;
+
+    for (i = sizeof(quests[questid, QMQ_TASKS][task, QMT_VERIFY]); i-->0;)
+      if (!Call(quests[questid, QMQ_TASKS][task, QMT_VERIFY][i],
+                ({questid, player, task})))
+        return Q_REQ_NOT_FULLFILLED;
+  }
+
+  if (!quests[questid, QMQ_TASKS][task, QMT_PERCENT])
+    return Q_NO_PERCENT_TASK;
+
+  qo->SetTask(task, percent);
+
+  if (100 == percent)
+  {
+    for (i = sizeof(quests[questid, QMQ_TASKS][task, QMT_VERIFY]); i-->0;)
+      Call(quests[questid, QMQ_TASKS][task, QMT_TRIGGERS][i],
+           ({questid, player, task}));
+  }
+
+  return Q_SUCCESS;
+}
+
+int AddTaskPercent(string questid, mixed player, int task, int percent)
+{
+  object qo;
+  int i;
+
+  if (!player = playerob(player))
+    return Q_PLAYER_NOT_FOUND;
+
+  if (!member(quests, questid))
+    return Q_QUEST_NOT_FOUND;
+
+  if (!task_access(task))
+    return Q_ACCESS_DENIED;
+
+  if (!(qo = questob(questid, player)))
+    return Q_QO_NOT_FOUND;
+
+  for (i = sizeof(quests[questid,QMQ_TASKS][task,QMT_REQUIRES]); i-->0;)
+    if (QueryTask(questid, player,
+                  quests[questid, QMQ_TASKS][task, QMT_REQUIRES][i]))
+      return Q_REQ_NOT_FULLFILLED;
+
+  for (i = sizeof(quests[questid, QMQ_TASKS][task, QMT_VERIFY]); i-->0;)
+    if (!Call(quests[questid, QMQ_TASKS][task, QMT_VERIFY][i],
+              ({questid, player, task})))
+      return Q_REQ_NOT_FULLFILLED;
+
+  if (!quests[questid, QMQ_TASKS][task, QMT_PERCENT])
+    return Q_NO_PERCENT_TASK;
+
+  percent += QueryTaskPercent(questid, player, task);
+
+  if (percent > 100)
+    percent = 100;
+
+  qo->SetTask(task, percent);
+
+  if (100 == percent)
+  {
+    for (i = sizeof(quests[questid, QMQ_TASKS][task, QMT_VERIFY]); i-->0;)
+      Call(quests[questid, QMQ_TASKS][task, QMT_TRIGGERS][i],
+           ({questid, player, task}));
+  }
+
+  return Q_SUCCESS;
+}
+
+int SubTaskPercent(string questid, mixed player, int task, int percent)
+{
+  object qo;
+  int i;
+
+  if (!player = playerob(player))
+    return Q_PLAYER_NOT_FOUND;
+
+  if (!member(quests, questid))
+    return Q_QUEST_NOT_FOUND;
+
+  if (!task_access(task))
+    return Q_ACCESS_DENIED;
+
+  if (!(qo = questob(questid, player)))
+    return Q_QO_NOT_FOUND;
+
+  if (!quests[questid, QMQ_TASKS][task, QMT_PERCENT])
+    return Q_NO_PERCENT_TASK;
+
+  percent = (QueryTaskPercent(questid, player, task) - percent);
+
+  if (percent < 0)
+    percent = 0;
+
+  qo->SetTask(task, percent);
+
+  return Q_SUCCESS;
+}
+
+int ToggleTask(string questid, mixed player, int task)
+{
+  object qo;
+  int i;
+
+  if (!player = playerob(player))
+    return Q_PLAYER_NOT_FOUND;
+
+  if (!member(quests, questid))
+    return Q_QUEST_NOT_FOUND;
+
+  if (!task_access(task))
+    return Q_ACCESS_DENIED;
+
+  if (!(qo = questob(questid, player)))
+    return Q_QO_NOT_FOUND;
+
+  if (!QueryTask(questid, player, task))
+  {
+    for (i = sizeof(quests[questid,QMQ_TASKS][task,QMT_REQUIRES]); i-->0;)
+      if (QueryTask(questid, player,
+                    quests[questid, QMQ_TASKS][task, QMT_REQUIRES][i]))
+        return Q_REQ_NOT_FULLFILLED;
+
+    for (i = sizeof(quests[questid, QMQ_TASKS][task, QMT_VERIFY]); i-->0;)
+      if (!Call(quests[questid, QMQ_TASKS][task, QMT_VERIFY][i],
+                ({questid, player, task})))
+        return Q_REQ_NOT_FULLFILLED;
+
+    if (quests[questid, QMQ_TASKS][task, QMT_PERCENT])
+      qo->SetTask(task, 100);
+    else
+      qo->SetTask(task, true);
+
+    for (i = sizeof(quests[questid, QMQ_TASKS][task, QMT_VERIFY]); i-->0;)
+      Call(quests[questid, QMQ_TASKS][task, QMT_TRIGGERS][i],
+           ({questid, player, task}));
+  }
+  else
+    qo->SetTask(task, 0);
+
+  return Q_SUCCESS;
+}
+
+bool_t QueryTask(string questid, mixed player, int task)
+{
+  object qo;
+  int i;
+
+  if (!player = playerob(player))
+    return Q_PLAYER_NOT_FOUND;
+
+  if (!member(quests, questid))
+    return Q_QUEST_NOT_FOUND;
+
+  if (!task_access(task))
+    return Q_ACCESS_DENIED;
+
+  if (!(qo = questob(questid, player)))
+    return Q_QO_NOT_FOUND;
+
+  if (quests[questid, QMQ_TASKS][task, QMT_PERCENT])
+    return (bool_t)(100 == (int)qo->QueryTaskPercent(task));
+
+  return (bool_t)qo->QueryTask(task);
+}
+
+int QueryTaskPercent(string questid, mixed player, int task)
+{
+  object qo;
+  int i;
+
+  if (!player = playerob(player))
+    return Q_PLAYER_NOT_FOUND;
+
+  if (!member(quests, questid))
+    return Q_QUEST_NOT_FOUND;
+
+  if (!task_access(task))
+    return Q_ACCESS_DENIED;
+
+  if (!(qo = questob(questid, player)))
+    return Q_QO_NOT_FOUND;
+
+  if (quests[questid, QMQ_TASKS][task, QMT_PERCENT])
+    return (int)qo->QueryTaskPercent(task);
+  else
+    if (qo->QueryTaskPercent(task))
+      return 100;
+    else
+      return 0;
+}

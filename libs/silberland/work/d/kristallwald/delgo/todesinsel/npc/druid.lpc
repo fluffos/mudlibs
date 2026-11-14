@@ -1,0 +1,523 @@
+/*
+DRUIDEN-LISTE:
+Die Druiden bekommen beim AddItem einen eigenen Namen, nach diesen namen wird 
+Element und Staerke ausgegeben. Dies ist notwendig, wenn ich nicht fuer jeden 
+Druiden ein eigenes File haben moechte, da man create_default_druid nicht im 
+AddItem aendern kann/sollte. Somit gebe ich den Druiden also jeden einem Namen
+und anhand dieses Namens wird er hier eingeordnet: folgende Druiden waren 
+gedacht:
+
+---NAME---  ---ELEMENT---  ---GUILDLEVEL---
+                            (1-3: 1->01-05)
+                            (     2->06-10)
+                            (     3->11-15)
+WEIBLICH:
+
+Jathyl           Feuer              1      
+Untren           Erz                2      
+Myra             Humus              3      
+Ileela           Eis                1      
+Semerra          Humus              1      
+
+MAENNLICH:
+
+Tuldalon         Erz                1      
+Vorith           Wasser             2      
+Leldor           Luft               2      
+Drakith          Feuer              2      
+Sarl             Eis                3      
+
+Level bleibt immer 25, es ist zu bedenken, dass es auf der Insel keine Tanke 
+gibt, insofern sind ab 2 schon alle ne herausforderung (Gruppenopfer)
+*/
+#include "/gilden/druidenzirkel/druiden_extern.h"
+#include "../def.h"
+inherit "std/npc";
+#include <properties.h>
+#include <new_skills.h>
+#include <combat.h>
+#include <moving.h>
+#include "/gilden/waldlaeufer/ranger_tasks.h"
+
+#ifndef P_GUILD_SPELLRATE
+#define P_GUILD_SPELLRATE "guild_spellrate"
+#endif
+/*#ifndef P_SPECIAL_ELEMENT
+#define P_SPECIAL_ELEMENT "special_element"
+#endif*/
+
+#define EHANDS ([\
+                 FEUER  : " mit flammenden Haenden",\
+                 EIS    : " mit scharfen Eiskrallen",\
+                 HUMUS  : " mit giftigen Dornenhaenden",\
+                 WASSER : " mit gigantischen Wasserfaeusten",\
+                 LUFT   : " mit der Kraft eines Wirbelsturms",\
+                 ERZ    : " mit toedlichen Stahldornen",\
+               ])
+
+#define STRAHL ([\
+                 FEUER  : "Feuerball",\
+                 EIS    : "Froststrahl",\
+                 HUMUS  : "Humusstrahl",\
+                 WASSER : "Wasserstrahl",\
+                 LUFT   : "Windstoss",\
+                 ERZ    : "Erzstrahl",\
+               ])
+
+#define AREA ([\
+               FEUER  : "ein Feuersturm rast auf Dich zu",\
+               EIS    : "ein Hagelsturm prasselt hernieder",\
+               WASSER : "eine Sturmflut braust auf Dich zu",\
+               LUFT   : "eine Windhose entsteht",\
+               ERZ    : "die Erde beginnt zu beben",\
+               HUMUS  : "giftige Dornen spriessen aus dem Boden",\
+             ])
+
+
+string element;
+//int glevel;
+mapping element_damage = ([FEUER  : DT_FIRE,
+                           WASSER : DT_WATER,
+                           HUMUS  : DT_POISON,
+                           EIS    : DT_COLD,
+                           LUFT   : DT_AIR,
+                           ERZ    : DT_MAGIC,
+                          ]);
+int c;
+
+void create() {
+  
+  if (!is_clone(TO)) return;
+  ::create();
+
+  c=0; 
+  
+  SetProp(P_SHORT, "Du siehst einen Fehler im Raum-Zeit-Gefuege!");
+  SetProp(P_LONG,  "Du siehst einen Fehler im Raum-Zeit-Gefuege!");
+  SetProp(P_NAME, "Jemand");
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:0,T_RANGE_MAX:90]));
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_GENDER, FEMALE);
+   
+  create_default_npc(28); //sauhart ohne tanke
+
+  SetProp(P_HANDS, ({" mit blossen Haenden ",QueryProp(P_HANDS)[1],
+                     DT_BLUDGEON}));
+
+  AddId( ({"\ndruidenzirkel_npc", "NOWIMPY", "NOCONTROL"}) );
+  SetProp(P_RACE, "Mensch");
+  SetProp(P_SIZE, 190);
+  SetProp(P_WEIGHT, 70000);
+  SetProp(P_ALIGN, 0);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_HEAL,0);
+  SetProp(P_AGGRESSIVE, 0);
+  SetProp(P_WIMPY, 0); 
+  SetProp(P_NOMAGIC,  25); 
+
+  SetProp(P_MSGIN, "wandelt herein");
+  SetProp(P_MSGOUT, "wandelt");
+  SetProp(P_MMSGIN, "wandlet herein");
+  SetProp(P_MMSGOUT, "sagt: Ich muss weg.");
+
+  SetProp(P_DIE_MSG,  " bricht zusammen.\n");
+  SetProp(P_NOCORPSE, 0 );
+  SetProp(P_KILL_NAME, Name(WER, 1));
+
+  AddInfo(DEFAULT_INFO, "braucht Ruhe.\n");
+  AddInfo("Delgo", "Delgo hat mich erschaffen.","sagt: ");
+  AddInfo( ({"todesinsel", "insel"})
+    ,"Das ist die Todesinsel. Sie war noch vor kurzer Zeit der Sammelpunkt der "
+     "Nekromanten, deswegen entsand uns Anvar hierher um ihnen ein Ende zu "
+     "bereiten. Doch die Macht der Nekromanten ist tief und unergruendlich, "
+     "deswegen fanden wir diese geheime Insel verlassen vor, als wir hier "
+     "ankamen."
+    ,"sagt: ");
+  AddInfo( ({"nekromanten", "anvar", "zeit", "sammelpunkt", "ende", "macht"})
+    ,"Anvar wollte die Nekromanten von dieser Insel hier vertreiben, da sie "
+     "hier allein durch ihre Anwesenheit das Gleichgewicht stoerten. "
+     "Doch die finstere Aura und die Wesen die sich hier befanden waren schon "
+     "verschwunden. Wir suchen zur Zeit die Insel nach Spuren ab, um ihr "
+     "neues Versteck ausfindig zu machen. Leider haben wir bis jetzt nichts "
+     "gefunden."
+    ,"sagt: ");
+  AddInfo( ({"wesen", "anwesenheit", "gleichgewicht", "skelette", "aura"})
+    ,"Bis auf einige Skelette ist die unterirdische Insel harmlos geworden. "
+     "Mit den Nekromanten ist auch die boese Aura dieser Insel verschwunden. "
+    ,"sagt: ");
+  AddInfo( ({"versteck", "zeit"})
+    ,"Mit der Zeit werden wir das neue Versteck der Nekromanten finden."
+    ,"sagt: ");
+  AddInfo( ({"spuren", "spur"})
+    ,"Bis auf den Daemon im Westen des oberirdischen Waldes haben wir noch "
+     "nichts gefunden."
+    ,"sagt: ");
+  AddInfo( ({"wald", "kristallwald", "teil"})
+    ,"Ueber den Wald haben wir bisher kaum etwas erfahren. Es scheint einst ein"
+     " ein Teil vom Kristallwald gewesen zu sein. Die Nekromanten muessen ihn "
+     "hier nachgebildet haben, um ihn als Deckung fuer ihre Insel zu verwenden. "
+     "Von oben haetten wir die Insel nie entdeckt, da sie sich kaum vom Ozean "
+     "abhebt."
+    ,"sagt: ");
+  AddInfo( ({"kristall", "deckung", "ozean", "entfernung", "baeume", "baum"})
+    ,"Durch den Kristall sieht man die Insel kaum aus der Entfernung, und "
+     "selbst wenn man sie sieht, denkt man bei den ruhigen Baeumen nicht an "
+     "so etwas Boeses. Durch diese Deckung, weit auf dem Ozean waren sie hier"
+     " lang genug ungestoert. "
+    ,"sagt: ");
+  AddInfo( ({"westen", "daemon", "boeses"})
+    ,"Im Westen befindet sich noch ein aeusserst boesartiger Daemon. Selbst "
+     "mit all unserer Macht konnten wir ihn nicht besiegen. Er hat viele von "
+     "uns getoetet. Ich wuerde Dir nicht empfehlen ihn anzugreifen. Alles was "
+     "wir bekommen haben war eine kurze Vision..."
+    ,"sagt: ");
+  AddInfo( ({"macht"})
+    ,"Die Macht des Boesen ist stark in dem Daemon.","sagt: ");
+  AddInfo( ({"vision"})
+    ,"Wir wissen nicht von Wem oder Was wir sie bekommen haben, aber wir alle "
+     "haben gesehen wie etwas aus Glas mit dem Daemon kaempfte. Mehr werde ich "
+     "Dir nicht sagen, Du bist eh schon viel zu lang hier, VERSCHWINDE!"
+    ,"sagt unwirsch: ");
+    
+
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    " braucht nur Ruhe.\n" }) );
+  SetProp(P_SPELLRATE, 28);
+    
+}
+
+public void init() {
+  ::init();
+
+  if(!id("sarl") && TP->QueryProp(P_GUILD) == "waldlaeufer" && TP->QueryProp(P_GUILD_LEVEL) == 8 && !RANGER_CHECK_TASK(TP, 9)) {
+    call_out("inform_ranger", 0, TP);
+  }
+
+  if(id("sarl") && TP->QueryProp(P_GUILD) == "waldlaeufer" && TP->QueryProp(P_GUILD_LEVEL) == 8 && !RANGER_CHECK_TASK(TP, 9)) {
+    call_out("start_ranger_quest", 0, TP);
+  }
+}
+
+public void inform_ranger(object pl) {
+  command_me("sag Ah, "+pl->name(WER)+"! Raziel schickt dich, richtig? Du solltest Sarl aufsuchen, "
+             "er hat wichtige Nachrichten fuer dich.");
+  return;
+}
+
+public void start_ranger_quest(object pl) {
+  object *inv;
+  int i;
+
+  command_me("sag Ah! Da bist du ja endlich, "+pl->name(WER)+". Komm mit. Ich habe wichtige "
+             "Informationen, die nur fuer deine Ohren bestimmt sind.");
+  tell_room(ENV(TO), Name(WER)+" und "+pl->name(WER)+" gehen davon und besprechen sich.\n", ({pl}));
+  pl->move(ROOM "ranger_quest", M_SILENT|M_NOCHECK);
+  call_other(ROOM "ranger_quest", "StartSequence", pl);
+
+  inv = all_inventory(TO);
+  for(i=0; i<sizeof(inv); ++i) {
+    inv[i]->remove(1);
+  }
+  remove(1);
+  
+  return;
+}
+
+void customize(string str)
+{
+  string idg, ele, mighty;
+  
+  if(c) return;
+  c=1;
+  
+  SetProp(P_GUILD, "druidenzirkel");
+  SetProp(P_NAME, capitalize(str));
+     
+  if( lower_case(str) == "jathyl")
+    {element = FEUER;
+     ele = "feuer";
+     mighty = "enschueler";
+     "/obj/gemmaster"->DistributeGem(2,2,1,1);
+     "/obj/pearlmaster"->DistributePearl(0,1,1,1);
+     SetProp(P_GENDER, FEMALE);
+     SetProp(P_GUILD_LEVEL, 5);}     
+  if( lower_case(str) == "untren")
+    {element = ERZ;
+     ele = "erz";
+     mighty = "";
+     "/obj/gemmaster"->DistributeGem(3,3,1,1);
+     "/obj/pearlmaster"->DistributePearl(1,2,1,1);
+     SetProp(P_GENDER, FEMALE);
+     SetProp(P_GUILD_LEVEL, 8);}
+  if( lower_case(str) == "myra")
+    {element = HUMUS;
+     ele = "humus";
+     mighty = "enmeister";
+     "/obj/gemmaster"->DistributeGem(3,3,1,1);
+     "/obj/pearlmaster"->DistributePearl(1,4,1,1);
+     SetProp(P_GENDER, FEMALE);
+     SetProp(P_GUILD_LEVEL, 15);}
+  if( lower_case(str) == "ileela")
+    {element = HUMUS;
+    ele = "humus";
+     mighty = "enschueler";
+     "/obj/gemmaster"->DistributeGem(3,2,1,1);
+     "/obj/pearlmaster"->DistributePearl(0,1,1,1);
+     SetProp(P_GENDER, FEMALE);
+     SetProp(P_GUILD_LEVEL, 4);}
+  if( lower_case(str) == "semerra")
+    {element = EIS;
+    ele = "eis";
+     mighty = "enschueler";
+     "/obj/gemmaster"->DistributeGem(1,2,1,1);
+     "/obj/pearlmaster"->DistributePearl(1,1,1,1);
+     SetProp(P_GENDER, FEMALE);
+     SetProp(P_GUILD_LEVEL, 3);}
+  if( lower_case(str) == "tuldalon")
+    {element = ERZ;
+    ele = "erz";
+     mighty = "enschueler";
+     "/obj/gemmaster"->DistributeGem(2,2,1,1);
+     "/obj/pearlmaster"->DistributePearl(1,1,1,1);
+     SetProp(P_GENDER, MALE);
+     SetProp(P_GUILD_LEVEL, 4);}
+  if( lower_case(str) == "vorith")
+    {element = WASSER;
+    ele = "wasser";
+     mighty = "e";
+     "/obj/gemmaster"->DistributeGem(3,3,1,1);
+     "/obj/pearlmaster"->DistributePearl(1,2,1,1);
+     SetProp(P_GENDER, MALE);
+     SetProp(P_GUILD_LEVEL, 9);}
+  if( lower_case(str) == "leldor")
+    {element = LUFT;
+    ele = "luft";
+     mighty = "e";
+     "/obj/gemmaster"->DistributeGem(3,2,1,1);
+     "/obj/pearlmaster"->DistributePearl(3,1,1,1);
+     SetProp(P_GENDER, MALE);
+     SetProp(P_GUILD_LEVEL, 7);}
+  if( lower_case(str) == "drakith")
+    {element = FEUER;
+    ele = "feuer";
+     mighty = "e";
+     "/obj/gemmaster"->DistributeGem(3,3,1,1);
+     "/obj/pearlmaster"->DistributePearl(1,2,1,1);
+     SetProp(P_GENDER, MALE);
+     SetProp(P_GUILD_LEVEL, 10);}
+  if( lower_case(str) == "sarl")
+    {element = EIS;
+     ele = "eis";
+     mighty = "enmeister";
+     "/obj/gemmaster"->DistributeGem(4,2,1,1);
+     "/obj/pearlmaster"->DistributePearl(3,2,1,1);
+     SetProp(P_GENDER, MALE);
+     SetProp(P_GUILD_LEVEL, 15);}
+     
+
+  if( (TO->QueryProp(P_GENDER)) == 1)
+    {idg = "druide";}
+  else
+    {idg = "druidin";
+     mighty = mighty + "in";}
+
+  SetProp(P_SHORT, capitalize(ele)+"druid"+mighty+" "+Name());
+  SetProp(P_LONG, 
+    "Was auch immer Druiden hier auf der Insel verloren haben, sie scheinen "
+    "sich sehr damit zu beschaeftigen. Auch "+Name()+" hier beachtet Dich kaum "
+    "sondern ist voll in Konzentration. Ob Du "+Name()+" trotzdem nach der "
+    "Insel fragen kannst?");
+    
+  SetProp(P_XP, QueryProp(P_XP) * 4 / 3);
+  SetProp(P_HANDS, ({EHANDS[element], QueryProp(P_HANDS)[1], 
+                     ({DT_BLUDGEON, element_damage[element]}) }) );
+
+  AddId( ({idg, lower_case(str) }) );
+  SetProp(P_RESISTANCE_STRENGTHS, 
+      ([DT_FIRE:     -0.3, DT_COLD:     -0.3, DT_WATER: -0.3, DT_AIR:   -0.3, 
+        DT_LIGHTNING:-0.1, DT_EXPLOSION: 0.3, DT_SOUND:  0.0, DT_LIGHT:  0.0,
+        DT_MAGIC:    -0.3, DT_ACID:      0.0, DT_POISON:-0.3, DT_TERROR: 0.1])+
+      ([element_damage[element]: -1]) );
+  SetProp(P_KILL_NAME, Name(WER, 1));
+  SetAttackChats(5, ({
+    Name(WER,1)+" sagt: Gib auf, Ich bitte Dich, solange Du noch fliehen "
+    "kannst!\n"}) );
+  SetChats(1, ({
+    Name(WER, 1)+" kniet kurz nieder.\n"}) );
+  
+  SUID;
+  clone_object("/gilden/druidenzirkel/armour/d_amulett")->move(this_object());
+  //clone_object("/gilden/druidenzirkel/armour/e_panzer")->move(this_object());
+  //vorerst rausgenommen, bis der debuggt ist - ich will hier net auch noch im 
+  //die rumpfuschen
+  command("trage alles");
+  
+}
+int psi(float x) 
+{ 
+  float ret;
+
+  if(x > 0.0)
+    ret = 200.0 + 100 * x * exp(1 + x);
+  else if(x < 0.0)
+    ret = 1.0 + 50 * (1 + x) ;
+  else
+    ret = 100.0;
+  
+  return to_int(ret);
+}
+
+string select_element(object enemy)
+{
+  mapping res;
+  mapping p;
+  int i;
+
+  p = ([FEUER:1, WASSER:1, EIS:1, HUMUS:1, LUFT:1, ERZ:1]);
+  if(mappingp(res = enemy->QueryProp(P_RESISTANCE_STRENGTHS)))
+  {
+    p[FEUER] = psi(to_float(res[DT_FIRE]));
+    p[WASSER] = psi(to_float(res[DT_WATER]));
+    p[EIS] = psi(to_float(res[DT_COLD]));
+    p[ERZ] = psi(to_float(res[DT_MAGIC]));
+    p[LUFT] = psi(to_float(res[DT_AIR]));
+    p[HUMUS] = psi(to_float(res[DT_POISON]));
+  } 
+  p[element] *= 3;
+  i = random(p[FEUER] + p[WASSER] + p[LUFT] + p[ERZ] + p[EIS] + p[HUMUS]);
+  if(i < p[FEUER]) return FEUER;
+  if(i < p[FEUER] + p[WASSER]) return WASSER;
+  if(i < p[FEUER] + p[WASSER] + p[LUFT]) return LUFT;
+  if(i < p[FEUER] + p[WASSER] + p[LUFT]+ p[ERZ]) return ERZ;
+  if(i < p[FEUER] + p[WASSER] + p[LUFT]+ p[ERZ] + p[EIS]) return EIS;
+  return HUMUS;
+}
+
+void laehmen(object enemy)
+{
+  tell_object(enemy, break_string(Name(WER,1) + " laehmt Dich durch magische "
+        "Ranken, die aus dem Boden wachsen!\n", 78));
+  say(break_string(Name(WER,1) + " beschwoert magische Ranken aus dem Boden, "
+        "die " + enemy->name(WEN,1) + "behindern.", 78), ({enemy}));
+  enemy->ModifySkillAttribute(this_object(), SA_SPEED, 
+      100 - QueryProp(P_GUILD_LEVEL) * 4, QueryProp(P_GUILD_LEVEL) * 3);
+  enemy->SetProp("laehmen_time", time() + 30); 
+}
+
+void create_elemental()
+{
+  object l;
+
+  say(Name(WER,1) + " beschwoert ein " + capitalize(element) + 
+      "elementar zur Hilfe!\n");
+  l = clone_object("/gilden/druidenzirkel/npc/elementar");
+  l->Customize(element, this_object(), 20000);
+  l->SetProp(ELEMENTAL_CASTER, 0);
+  l->z_kaempfen(this_object(), ({}));
+  l->SetProp(ELEMENTAL_OWNER, this_object());
+  l->move(environment(this_object()), M_GO);
+  SetProp(ELEMENTAL_CASTER, l);
+}
+
+void area_spell()
+{
+  object *enemies;
+  int i;
+  int dam;
+
+  say(Name(WER,1) + " konzentriert sich und "+
+      AREA[element] + "!\n");
+  enemies = PresentEnemies();
+  dam = 150 + QueryProp(P_LEVEL) * (QueryProp(P_GUILD_LEVEL) + random(6)) / 2;
+  for(i = sizeof(enemies) - 1; i >= 0; i--)
+  {
+    enemies[i]->Defend(dam / 2 + random(dam / 2), element_damage[element], 
+      ([SP_SHOW_DAMAGE:1, SP_NAME:"Raumspell", 
+        SP_REDUCE_ARMOUR: ([P_BODY: 1])]), this_object());
+  }
+}
+
+void ball_spell(object enemy, string ele)
+{
+  string strahl;
+  int dam;
+
+  strahl = STRAHL[ele];
+  tell_object(enemy, Name(WER,1) + " wirft einen elementaren " + strahl +
+      " nach Dir.\n");
+  say(Name(WER,1) + " wirft einen elementaren " + strahl + " nach " +
+      enemy->name(WEM,1) + ".\n", ({enemy}));
+  dam = 100 + QueryProp(P_LEVEL) * (QueryProp(P_GUILD_LEVEL) + random(6));
+  if(ele == element)
+    dam = 3 * dam / 2;
+  enemy->Defend(dam / 3 + random(2 * dam / 3), element_damage[ele], 
+      ([SP_SHOW_DAMAGE:1, SP_NAME:strahl, 
+        SP_REDUCE_ARMOUR: ([P_BODY: 1])]), this_object());
+}
+
+void arrow_spell(object enemy, string ele)
+{
+  int dam;
+
+  tell_object(enemy, Name(WER,1) + " feuert einen elementaren " +
+      capitalize(ele) + "pfeil auf Dich ab.\n");
+  say(Name(WER,1) + " feuert einen elementaren " + capitalize(ele) +
+      "pfeil auf " + enemy->name(WEN,1) + " ab.\n", ({enemy}));
+  dam = 50 + QueryProp(P_LEVEL) * (QueryProp(P_GUILD_LEVEL) + random(6)) / 2;
+  if(ele == element)
+    dam = 3 * dam / 2;
+  enemy->Defend(dam / 4 + random(3 * dam / 4), element_damage[ele], 
+      ([SP_SHOW_DAMAGE:1, SP_NAME:capitalize(ele) + "pfeil", 
+        SP_REDUCE_ARMOUR: ([P_BODY: 1])]), this_object());
+}
+void Attack(object enemy)
+{ 
+  if(!QueryProp(P_DISABLE_SPELLS) && (!QueryProp(P_GUILD_SPELLRATE) || 
+        random(100) < QueryProp(P_GUILD_SPELLRATE)) )
+  {
+    if(QueryProp(P_GUILD_LEVEL) > 10)
+    {
+      if(enemy->QuerySkillAttribute(SA_SPEED) >= 100 && !random(3) &&
+          enemy->QueryProp("laehmen_time") - time() < 0)
+        laehmen(enemy);
+      else if(!QueryProp(ELEMENTAL_CASTER) && !random(5))
+        create_elemental();
+      else if(sizeof(PresentEnemies()) > 1 + random(3))
+        area_spell();
+      else if(random(3))
+        ball_spell(enemy, select_element(enemy));
+      else
+        arrow_spell(enemy, select_element(enemy));
+    }
+    else if(QueryProp(P_GUILD_LEVEL) > 5 && random(2))
+      ball_spell(enemy, select_element(enemy));
+    else
+      arrow_spell(enemy, select_element(enemy));
+  }
+  if( objectp(enemy) ) 
+    ::Attack(enemy);
+}
+
+
+//____________________________ Reactions _________________________________//
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+  if(find_call_out("reaction") != -1) return;
+ {
+   call_out("reaction", 0, TP,
+        "konzentriert sich auf die Umgebung.",
+        "murmelt etwas Unverstaendliches.");
+ }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch) {
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void reaction(object ob, string macher, string andere) {
+  if (present(ob, ENV(TO))) {
+    tell_object(ob, BS(Name(WER, 1)+" "+macher));
+    tell_room(ENV(TO), BS(Name(WER, 1)+" "+andere), ({ob}));
+  }
+}

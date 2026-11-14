@@ -1,0 +1,80 @@
+
+int strahlderdunkelheit(object caster, mapping sinfo) 
+{
+  int dam,suc,nr,i;
+  string str;
+  object victim,ob;
+  sinfo[SI_SKILLARG]=parse_target(sinfo[SI_SKILLARG]);
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wen willst Du mit den Strahlen der Dunkelheit "
+                         "vernichten?\n");
+  if (!victim)
+    return 0;
+  if(caster->QueryProp(P_BLIND)) {
+    write(BS(sprintf("DU BIST BLIND, %s, wie willst Du da die "
+        "Strahlen der Dunkelheit zaubern?!?", caster->QueryProp(P_GENDER)==
+        FEMALE?"NAERRIN":"NARR")));
+    return 0;
+  }
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  if ((suc=SpellSuccess(caster,sinfo))<=0)
+    return MISSERFOLG;
+
+  nr=1;
+  if(suc > 9000) {
+    nr=2;
+    if(!random(3))
+      Darkness(victim, caster, suc);
+  }
+
+  if(suc > 9800) nr=3;
+  switch(nr) {
+    case 2: str="schiessen zwei dunkle Strahlen"; break;
+    case 3: str="schiessen drei dunkler Strahlen"; break;
+    default: str="schiesst ein dunkler Strahl"; 
+  }
+  tell_room(ENV(caster), BS(sprintf("Aus den Augen von %s %s "
+          "genau auf die Augen von %s zu!", caster->name(WEM), str,
+          victim->name(WEM,2))), ({victim,caster}));
+  write(BS(sprintf("Aus Deinen Augen %s der Dunkelheit "
+        "auf %s zu! Du wirst %s damit vernichten!", str, victim->name(WEN, 2),
+        victim->QueryPronoun(WEN))));
+  if(victim->QueryProp(P_BLIND)) {
+    tell_room(ENV(caster), BS(sprintf("%s zeigt sich komplett unbeeindruckt!",
+            victim->Name(WER))));
+    return ERFOLG;
+  }
+  else {
+  tell_object(victim,BS(sprintf("Aus den Augen von %s %s "
+        "direkt auf Deine Augen zu! DIESE DUNKELHEIT! Du schreist "
+        "vor Schmerz!", str, caster->Name(WER))));
+  }
+
+  dam=sinfo[SI_SKILLDAMAGE]+(int)(caster->QueryProp(P_GUILD_LEVEL)*2.5);
+  dam+=CheckEquip(caster, sinfo[SI_SPELLFUNC]);
+  dam=DoModificationByAlign(dam, caster, victim);
+  if (dam > sinfo[SI_MAX_DAMAGE] ) dam=sinfo[SI_MAX_DAMAGE];
+ 
+  for(i=1; i<=nr; i++) {
+    if(objectp(victim))
+      TryAttackSpell(victim, dam/4+random(3*dam/4), sinfo[SI_SKILLDAMAGE_TYPE], 
+        ([SP_NAME:sinfo[SI_SPELLFUNC],SP_SHOW_DAMAGE:1]), caster,sinfo);
+  }
+  if(suc > 9000 && !random(10)) {
+    tell_object(victim, BS("Dir wird schwarz vor Augen!"));
+    tell_room(ENV(caster), sprintf("%s torkelt geblendet umher!\n",
+        victim->Name(WER)), ({victim}));
+    victim->SetProp(P_BLIND, ([BLIND_TIME: 2+random(5),
+                               BLIND_MSG : "Diese Schwaerze!! Diese "
+                               "Schwaerze!!\n",
+                               BLIND_END_MSG: "Die unheilige Dunkelheit loest "
+                               "sich von Deinen Augen!\n"]));
+  }
+  return ERFOLG;
+}
+

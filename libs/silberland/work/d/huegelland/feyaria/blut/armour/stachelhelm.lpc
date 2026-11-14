@@ -1,0 +1,120 @@
+//  /d/gebirge/feyaria/blut/armour/stachelhelm.c
+// Der Stachelhelm des Schlachtenwueters
+// 97-04-20  Feyaria@SilberLand
+
+#include "../def.h"
+
+inherit "std/armour";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <new_skills.h>
+
+#define COST 15
+
+int geladen;
+
+create()
+{
+  if( !is_clone(TO) ) return;
+  ::create();
+
+  SetProp(P_SHORT, "Der Stachelhelm des Schlachtenwueters");
+  SetProp(P_LONG, BS( 
+    "Der Stachelhelm des Schlachtenwueters hat einen fast einen halben Meter "
+    "langen Stachel, mit dem man seinen Gegner aufspiessen kann.") );
+  SetProp(P_INFO, BS(
+    "Mit dem Kommando 'helmspiesse <gegner>' kannst Du den Helm im Kampf "
+    "verwenden. Die Konzentration auf diesen Stoss ist aber so schwer, dass "
+    "man dazu "+COST+" Magiepunkte braucht.") );
+  SetProp(P_NAME, ({"der Stachelhelm", "des Stachelhelms",
+                    "dem Stachelhelm", "den Stachenhelm"}) );
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_GENDER, MALE);
+  AddId( ({"helm", "stachelhelm"}) );
+  AddDetail( ({"stachel"}),
+    "Der Stachel dieses Helms is wirklich extrem gefaehrlich. Damit kannst Du "
+    "sicher Deinen Gegner im Kampf aufspiessen.");
+
+  SetProp(P_ARMOUR_TYPE, AT_HELMET );
+  SetProp(P_AC, 8);
+  SetProp(P_MATERIAL, ({MAT_METAL, MAT_IRON}) );
+  SetProp(P_WEIGHT, 700);
+  SetProp(P_VALUE, 2400);
+  SetProp(P_NOBUY, 1);
+
+  SetProp(P_WEAR_RESTRICTIONS, ([A_STR:20, A_DEX:17, P_XP:1000000]) );
+  SetProp(P_WEAR_TEXT, ({ 
+    "Du setzt Dir den Stachelhelm vorsichtig auf den Kopf.\n",
+    " setzt sich den Stachelhelm vorsichtig auf den Kopf.\n"}) );
+
+/*  SetProp(P_COMBATCMDS, (["helmspiesse %s":
+      ([C_MIN:11,C_AVG:36,C_MAX:61,C_DTYPES:({DT_PIERCE}),
+      C_SPCOST:COST, C_REFRESH:300, C_READY:"bereit"])]));
+*/
+
+  AddCmd("helmspiesse", "spiessen");
+  aufladen();
+}
+
+int spiessen(string str, int fastload)
+{
+  object enemy;
+
+  notify_fail("Wen moechtest Du mit Deinem Helm aufspiessen?\n");
+  if( stringp(str) && (enemy=present(str, environment(TP))) )
+  {
+    if (!QueryProp(P_WORN))
+    {
+      write("Du musst dazu den Helm aufsetzen!\n");
+      return 1;
+    }
+    if (!geladen)
+    {
+      write("Du musst Dich erst von Deinem letzten Spiessen erholen!\n");
+      return 1;
+    }
+    if (TP->QueryProp(P_SP)<COST)
+    {
+      write("Du hast nicht genug Magiepunkte dafuer!\n");
+      return 1;
+    }
+    if (PL->QueryProp(P_ATTACK_BUSY))
+    {
+      write("He! Nicht so schnell!\n");
+      return 1;
+    }
+    PL->SetProp(P_ATTACK_BUSY, 1);
+    printf("Du spiesst %s mit Deinem Helm auf.\n", enemy->name(WEN));
+    say(sprintf(BS("%s spiesst %s mit %s Helm auf."), CAP(TPN),
+       enemy->name(WEN), TPPP(FEMALE,WEM,PLURAL) ), enemy );
+    tell_object(enemy, CAP(TPN)+" spiesst Dich mit dem Helm auf.\n");
+    enemy->Defend(111+random(500), DT_PIERCE,
+                  ([SP_NAME:"Helmspiesser", SP_SHOW_DAMAGE:1]), TP);
+    TP->restore_spell_points(-COST);
+    if (fastload) return 1;
+    if (random(200)==13)
+    {
+      write("Leider bricht der Stachel von Deinem Helm ab.\n"
+            "Wuetend wirfst Du ihn weg.\n");
+      remove(1); return 1;
+    }
+    call_out("aufladen", 300);  // 5 Minuten Ladezeit
+    geladen = 0;
+    return 1;
+  }
+  else
+    return 0;
+}
+
+void aufladen()
+{
+  geladen = 1;
+}
+
+int bereit()
+{
+  return (QueryProp(P_WORN) && geladen);
+}
+

@@ -1,0 +1,156 @@
+inherit "/d/ebene/Midas/room/kanal/kanal2_inh";
+
+#include <moving.h>
+#include <player.h>
+#include <properties.h>
+#include <wizlevels.h>
+#include "files.h"
+
+#define SCHLUESSEL "riesenrattenzahn"
+
+int schutt;
+
+create()
+{
+  ::create();
+
+  // AppendProp(P_INT_LONG, "");
+
+  AddDetail ( ({"wand","waende"}),
+      "Die kahlen Waende sind feucht und ziemlich kuehl, wie "
+      "ueberall hier unten. Nur an der Suedwand faellt Dir "
+      "etwas auf.");
+  AddDetail ("boden",
+      "Etwas lockerer Schutt liegt hier am Boden.");
+  AddDetail ("schutt",
+      "Scheint nachgiebig zu sein.");
+  AddDetail ("suedwand",
+      "Du tastest die Suedwand ab und bemerkst eine kleine Vertiefung.");
+  AddDetail ("vertiefung",
+      "Die Vertiefung hat eine seltsame, rechteckige Form. "
+      "Hmmm, sieht so aus als koennte man in sie etwas einsetzen...");
+  AddDetail ("form",
+      "Sie ist rechteckig, wenngleich nicht voellig gleichfoermig.");
+
+  AddExit("westen", "./piazza_d5");
+  AddExit("osten", "./kanal2_f5");
+
+  AddExit("norden",
+      ([ EX_DEST:     "./kanal2_e4",
+         EX_TESTFUNC: "darf_durch",
+         EX_PLMSG:    "Eine Stimme sagt: Wohlan, so trete ein!\n"
+      ]) );
+
+  AddCmd ( ({"setze","setz"}), "setze");
+  AddCmd ( ({"grabe","grab"}), "grabe");
+
+  schutt = 1;
+}
+
+int setze(string str)
+{
+  string was,wo,dummy;
+  object ob;
+
+  notify_fail ("WAS willst Du WO einsetzen oder setzen oder wie oder was?\n");
+  if (!str) return 0;
+  if (sscanf(str, "%s in %s ein%s",was,wo,dummy) != 3) return 0;
+  if (!member( (["vertiefung","suedwand","loch"]), wo ))
+    return notify_fail ("In das kannst Du nichts einsetzen!\n"), 0;
+  ob = present(was,TP);
+  if (!ob && TP->QueryProp(P_GHOST))
+    ob = deep_present(was,TP);  // Geister duerfens auch im deep inv haben ;)
+  if (!ob)
+    return notify_fail (CAP(was)+"? So etwas hast Du nicht dabei!\n"), 0;
+  if (!ob->id(SCHLUESSEL)) {
+    write(break_string("Du versuchst, "+ob->name(WEN,1)+" in die Vertiefung "
+        "einzusetzen, "+ob->QueryPronoun()+" scheint aber irgendwie nicht zu "
+        "passen...", 78));
+    say(break_string(TP->Name()+" versucht, "+ob->name(WEN)+" in eine "
+        "Vertiefung einzusetzen, scheitert aber.", 78));
+    return 1;
+  }
+  write(break_string("Du setzt "+ob->name(WEN,1)+" vorsichtig in die "
+      "Vertiefung ein. Ploetzlich ueberkommt Dich ein seltsames "
+      "Gefuehl...", 78));
+  say(break_string(TP->Name()+" setzt "+ob->name(WEN)+" in eine "
+      "Vertiefung ein und verschwindet ploetzlich vor Deinen Augen!", 78));
+  ob->remove();
+  TP->move(KANAL "kanal2_e6", M_GO | M_SILENT);
+  tell_room(environment(TP), TP->Name()+" erscheint ploetzlich.\n", ({TP}) );
+  return 1;
+}
+
+int grabe(string str)
+{
+  object ob;
+
+  notify_fail("Wo willst Du graben?\n");
+  if (!str) return 0;
+  if (str[0..2]=="in ") str=str[3..];
+  if (str!="schutt" && str!="boden")
+    return notify_fail("Da kannst Du nicht graben.\n"), 0;
+
+  if (schutt) {
+    write(break_string("Du graebst mit blossen Haenden im Schutt und findest "
+        "den alten Zahn einer Riesenratte. Schnell steckst Du ihn ein.", 78));
+    say(TP->Name()+
+        " graebt mit blossen Haenden im Schutt und findet etwas.\n");
+    schutt--;
+    ob=clone_object(OBJ("div/riesenrattenzahn"));
+    ob->move(ME, M_NOCHECK);
+    if (ob->move(TP, M_GET) != 1)
+      write(break_string( "Da Deine Taschen schon vollgestopft sind, faellt "
+            "er Dir wieder zu Boden."));
+  } else {
+    write("Du graebst mit blossen Haenden im Schutt herum, "
+        "findest aber nichts.\n");
+    say(TP->Name()+" graebt erfolglos mit blossen Haenden im Schutt.\n");
+  }
+  return 1;
+}
+
+reset()
+{
+  ::reset();
+  schutt=1;
+}
+
+#define PIAZZA ({ "piazza_b5","piazza_b6","piazza_b7", \
+                  "piazza_c5","piazza_c6","piazza_c7", \
+                  "piazza_d5","piazza_d6","piazza_d7" })
+
+int darf_durch()
+{
+  int i, ok;
+  object ob, *inv;
+
+  if (IS_LEARNING(TP)) {
+    write("Eine Stimme sagt: Freier Eintritt fuer Dich, Magier!\n");
+    return 1;
+  }
+  ok=1;
+  for (i=sizeof(PIAZZA)-1; i>=0; i--)
+  {
+    if (!ob=find_object(KANAL + PIAZZA[i])) {
+      ok=0;
+      break;
+    } else {
+      inv=filter_array(all_inventory(ob), #'living);
+      inv=inv-filter_array(inv, #'query_once_interactive)+
+              filter_array(inv, #'interactive);
+      if (sizeof(inv)) {
+        ok=0;
+        break;
+      }
+    }
+  }
+  if (ok) return 1;
+  write("Eine starke Macht haelt Dich zurueck.\n");
+  say(TP->Name()+
+      " wird von einer starken Macht gehindert, nach Norden zu gehen.\n");
+  tell_room(ME, break_string("Erst wenn das letzte Leben auf der Piazza des "
+      "Todes sein Ende gefunden hat, trete ein!", 78, "Eine Stimme sagt: "));
+  return 0;
+}
+

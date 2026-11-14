@@ -1,0 +1,201 @@
+// /d/dschungel/feyaria/tijara/obj/rbalsam.c
+// Ruestungsbalsam um eine Ruestung geringfuegig zu verbessern
+// 1998-08-03 Feyaria@SilberLand
+
+#include "../def.h"
+
+inherit "/std/thing";
+
+void create()
+{
+  if( !is_clone(this_object()) ) return;
+  ::create();
+  SetProp(P_SHORT, "Ein Flaeschchen mit Ruestungsbalsam");
+  SetProp(P_LONG, BS(
+    "Dieses kleine Flaeschchen mit der Aufschrift 'RB' enthaelt eine "
+    "hellgraue, zaehe Paste. Mit diesem Ruestungsbalsam kann man seine "
+    "Ruestung einschmieren. Dann wird sie haerter und faengt mehr "
+    "Schaden ab.") );
+  SetProp(P_NAME, "Ruestungsbalsam" );
+  SetProp(P_GENDER, MALE);
+  AddId( ({"balsam", "ruestungsbalsam", "flaeschchen"}) );
+  SetProp(P_INFO, BS(
+    "Welche genauen Auswirkungen dieser Ruestungsbalsam haben wird, kannst Du "
+    "nicht erkennen. Vielleicht weis das ja ein Alchemist. Du bist Dir aber "
+    "sicher, dass es auf jeden Fall gute Auswirkungen sein werden.") );
+
+  SetProp(P_MATERIAL, ([MAT_GLASS:40, MAT_MISC_MAGIC:60]) );
+  SetProp(P_VALUE, 500);
+  SetProp(P_WEIGHT, 10);
+  AddCmd( ({"balsamiere", "balsamier", "schmiere", "schmier"}), "schmieren");  
+}
+
+int schmieren(string str)
+{
+  string rue, newdam, s;
+  object r;
+  int i,maxac;
+  int ac,dam,weight;
+  mixed qd;
+  mapping dam_types, t;
+  string *dt;
+
+  notify_fail(
+    "Welche Ruestung willst Du mit dem Ruestungsbalsam einschmieren?\n");
+  if( !str ) return 0;
+  if( sscanf( str, "%s mit ruestungsbalsam ein", rue)!=1 ) return 0;
+  if( !r=present( rue, TP) )
+    return notify_fail("Du hast doch gar kein '"+CAP(str)+"'!\n"),0;
+  if( !r->QueryProp(P_ARMOUR_TYPE) )
+    return notify_fail(r->Name(WER,1)+" ist gar keine Ruestung!\n"),0;
+  if( r->QueryProp(P_ARMOUR_TYPE) == AT_MISC )
+    return notify_fail("Auf "+ r->name(WEN,1)+" kann der Ruestungsbalsam nicht wirken!\n"),0;
+  dam=r->QueryProp(P_DAMAGED);
+  if( r->QueryProp("ruestungsbalsam")>10 && !dam)
+    return notify_fail("Auf "+ r->name(WEN,1)+" wuerde der Ruestungsbalsam keine "
+        "Wirkung haben!\n"),0;
+  write("Du schmierst "+r->name(WEN,1)+" mit dem Ruestungsbalsam ein.\n");  
+  say(CAP_TPN+" behandelt "+r->name(WEN,1)+" mit Ruestungsbalsam.\n");
+  ac=r->QueryProp(P_AC);
+  qd=r->QueryProp(P_QUALITY_DECAY);
+  weight=r->QueryProp(P_WEIGHT);
+  t=r->QueryProp(P_TEMPERATURE_PROTECTION);
+  maxac=VALID_ARMOUR_CLASS[r->QueryProp(P_ARMOUR_TYPE)];
+  if( dam ) // repariert
+  {
+    i=dam*random(100)/100+1;
+    r->Damage(-i);
+    if( i!= 0 )
+      write("Einige Beulen und Kratzer "+r->name(WESSEN,1)+" verschwinden.\n");
+    ac=r->QueryProp(P_AC);
+    dam=r->QueryProp(P_DAMAGED);
+  }
+  if( r->QueryProp("ruestungsbalsam")<10 )
+  {
+    if( random(100) > 25 ) // erhoeht QUALITY_DECAY
+    {
+      if (intp(qd) && qd > 0 && qd < 500)
+        r->SetProp(P_QUALITY_DECAY, qd+5+random(20) );
+      else if (mappingp(qd) && qd[0] > 0 && qd[0] < 500)
+         r->SetProp(P_QUALITY_DECAY, qd+([0:qd[0]+5+random(20)]) ); 
+      write(r->Name(WER,1)+" schau"+ (r->IsPlural() ? "en" : "t") 
+          +" nun viel stabiler aus.\n");
+    }
+    if( random(100) > 50 ) // erhoeht AC
+    {
+      r->SetProp(P_AC,ac+(maxac-ac-dam+2)/3);
+      if( ac!=r->QueryProp(P_AC) )
+        write(r->Name(WER,1)+" "+ (r->IsPlural() ? "sehen" : "sieht")+
+            " gleich viel besser aus.\n");
+    }
+    if( random(100) > 40 ) // reduziert WEIGHT
+    {
+      r->Set(P_WEIGHT, (90+random(10))*weight/100 );
+      if( weight!=r->QueryProp(P_WEIGHT) )
+        write(r->Name(WER,1)+ " schein"+ (r->IsPlural() ? "en" : "t") + 
+           " leichter geworden zu sein.\n");
+    }
+    // Kaelteschutz
+    if( random(100) > 50 && t[T_COLD_PROT] < (maxac == 5 ? 2 : 5) )
+    {
+      r->SetProp(P_TEMPERATURE_PROTECTION,
+          ([T_COLD_PROT:t[T_COLD_PROT]+1, T_HEAT_PROT:t[T_HEAT_PROT]]));
+      write(r->Name(WER,1)+ (r->IsPlural() ? " werden" : " wird") +" gluehend warm.\n");
+    }
+    // Waermeschutz
+    else if( random(100) > 55 && t[T_HEAT_PROT] < (maxac == 5 ? 1 : 2) )
+    {
+      r->SetProp(P_TEMPERATURE_PROTECTION,
+          ([T_COLD_PROT:t[T_COLD_PROT], T_HEAT_PROT:t[T_HEAT_PROT]+1]));
+      write(r->Name(WER,1)+ (r->IsPlural() ? " werden" : " wird") +" ploetzlich eiskalt.\n");
+    }
+    if( random(100) > 60 ) // schuetzt vor zusaetzlichem Schadenstyp
+    {
+      if( mappingp(dam_types=r->QueryProp(P_DAM_PROTECTION)) )
+      {
+        dt = m_indices(MAGICAL_DAMAGE_TYPES) - m_indices(dam_types);
+        newdam = dt[random(sizeof(dt))];
+        t = ([
+            DT_COLD: "weissem",
+            DT_FIRE: "rotem",
+            DT_POISON: "gruenem",
+            DT_ACID: "schwarzem",
+            DT_LIGHTNING: "orangenem",
+            DT_LIGHT: "gelbem",
+            DT_HOLY: "hellem",
+            DT_UNHOLY: "dunklem", 
+            DT_WATER: "blauem", 
+            DT_AIR: "braunem",
+            DT_SOUND: "violettem",
+            DT_TERROR: "grauem",
+            DT_ELECTRIC: "purpurnem",
+            DT_EXPLOSION: "zyanem",
+            DT_MIND: "beigem",
+            DT_MAGIC: "regenbogenfarbenem",
+            ]);
+        s = t[newdam];
+        r->SetProp(P_DAM_PROTECTION, dam_types + 
+            ([newdam: (maxac == 5 ? 2 : 1)]) );
+          write(r->Name(WER,1)+ " leuchte" + (r->IsPlural() ? "n" : "t") + 
+              " kurz in "+s+" Licht auf.\n");
+/*        
+        switch( random(16) )
+        {
+          case 0: newdam=DT_COLD; s="weissem"; break;
+          case 1: newdam=DT_FIRE; s="rotem"; break;
+          case 2: newdam=DT_POISON; s="gruenem"; break;
+          case 3: newdam=DT_ACID; s="schwarzem"; break;
+          case 4: newdam=DT_LIGHTNING; s="orangenem"; break;
+          case 5: newdam=DT_LIGHT; s="gelbem"; break;
+          case 6: newdam=DT_MAGIC; s="regenbogenfarbenem"; break;
+          case 7: newdam=DT_HOLY; s="hellem"; break;
+          case 8: newdam=DT_UNHOLY; s="dunklem"; break;
+          case 9: newdam=DT_WATER; s="blauem"; break;
+          case 10: newdam=DT_AIR; s="braunem"; break;
+          case 11: newdam=DT_SOUND; s="violettem"; break;
+          case 12: newdam=DT_TERROR; s="grauem"; break;
+          case 13: newdam=DT_ELECTRIC; s="purpurnem"; break;
+          case 14: newdam=DT_EXPLOSION; s="zyanem"; break;
+          case 15: newdam=DT_MIND; s="beigem"; break;
+        }
+        if(dam_types[newdam] < 2)
+        {
+          r->SetProp(P_DAM_PROTECTION, 
+              dam_types+([newdam:dam_types[newdam]+1+random(2)*random(2)]) );
+          write(r->Name(WER,1)+ " leuchte" + (r->IsPlural() ? "n" : "t") + 
+              " kurz in "+s+" Licht auf.\n");
+        }
+*/
+
+      }
+    }
+    // Lebens und Magiepunkte
+    if( random(100) > 90 && !mappingp(r->QueryProp(P_M_HEALTH_MOD)) )     
+    {
+      r->SetProp(P_M_HEALTH_MOD, ([P_HP:1+random(5), P_SP:1+random(5)]) );
+      write(BS( "Lebens- und Magiegeister werden in "+r->name(WEM,1)+
+            " gefangen."));
+      if(objectp(r->QueryProp(P_WORN)))
+        r->QueryProp(P_WORN)->UpdateAttributes();
+    }
+    r->SetProp(P_VALUE, r->QueryProp(P_VALUE)+50+random(100));
+  }
+  r->SetProp("ruestungsbalsam", (intp(r->QueryProp("ruestungsbalsam"))?
+      r->QueryProp("ruestungsbalsam")+1:1) );
+  remove();
+  return 1;
+}
+
+void reset()
+{
+  object env;
+  ::reset();
+  if( !is_clone(this_object()) ) return;
+  if (!random(10) && (env = environment()) && !env->Id("NPC") )
+  {
+    while(!query_once_interactive(env) && environment(env))
+      env=environment(env);
+    tell_object(env, "Dein Ruestungsbalsam loest sich in Luft auf.\n");
+    remove();
+  }
+}

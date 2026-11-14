@@ -1,0 +1,947 @@
+void ident_general(object ob, int level);
+void ident_armour(object ob, int level);
+void ident_weapon(object ob, int level);
+void ident_general2(object ob);
+void schaetz(object victim, int l);
+void umgebung(object env);
+
+int archseer;
+
+varargs int prep_erkenntnis(object caster, mapping sinfo, int flag) 
+{
+  object victim;
+
+  if (!sinfo[SI_SKILLARG] || (!(victim = present(sinfo[SI_SKILLARG], caster)) &&
+      !(victim = present(sinfo[SI_SKILLARG], environment(caster))) && 
+      sinfo[SI_SKILLARG] != "umgebung"))
+  {
+    tell_object(caster,
+        "Von wem oder was willst Du genauere Erkenntnis bekommen?\n");
+    return 0;
+  }
+  if (!living(victim) && caster->InFight())
+  {
+    tell_object(caster, "Das geht im Kampf nicht!\n");
+    return 0;
+  }
+  return 1;
+}
+
+int erkenntnis(object caster, mapping sinfo) 
+{
+  object victim;
+  int level;
+  int suc;
+  int abil;
+  string result;
+
+  if (!prep_erkenntnis(caster, sinfo, 1))
+    return 0;
+
+  if (sinfo[SI_SKILLARG] != "umgebung")
+  {
+    victim = present(sinfo[SI_SKILLARG], caster) || 
+      present(sinfo[SI_SKILLARG], environment(caster));
+    if (victim == caster)
+    {
+      tell_object(caster, BS(
+            "Du bist gleich gross, gleich stark und gleich gut im Kaempfen "
+            "wie Du selbst. Aber das ist wohl auch keine Ueberraschung....."));
+      return 0;
+    }
+    if (IS_LEARNER(victim) && !IS_LEARNING(caster))
+    {
+      tell_object(caster, BS(sprintf("%s ist %s und Dir darum haushoch ueberlegen.",
+              victim->Name(WER),
+              (victim->QueryProp(P_GENDER) == FEMALE ?  "eine Magierin" : "ein Magier")))); 
+      return 0;
+    }
+  }
+
+  if (!(sinfo = pay_for_spell(caster, sinfo)))
+    return 0;
+
+  if ((suc = SpellSuccess(caster,sinfo)) <= 0)
+  {
+    if (victim && living(victim))
+      tell_object(victim, sprintf("%s versucht vergeblich, Dich einzuschaetzen.\n",
+            caster->Name(WER,1) ));
+    return MISSERFOLG;
+  }
+
+  level = caster->QueryProp(P_GUILD_LEVEL);
+  if (level >= 10) archseer = 1;
+  if (sinfo[SI_SKILLARG] == "umgebung")
+    umgebung(environment(caster));
+  else if (living(victim))
+  {
+    schaetz(victim, level);
+    tell_object(victim, sprintf("%s schaetzt Dich erfolgreich ein.\n",
+          caster->Name(WER,1) ));
+  }
+  else
+  {
+    if (result = victim->info())
+      tell_object(caster, "An " + victim->name(WEM) + " erkennst Du folgendes:\n"+
+          result);
+    ident_general(victim, level);
+    if (victim->QueryProp(P_ARMOUR_TYPE))
+      ident_armour(victim, level);
+    else if (victim->QueryProp(P_WEAPON_TYPE))
+      ident_weapon(victim, level);
+    if (level > 6);
+      ident_general2(victim);
+  }
+
+  abil = caster->QuerySkill( FIGHT(WT_SPEAR) )[SI_SKILLABILITY];
+  if (victim && abil != MAX_ABILITY) 
+  {
+    if (living(victim) && abil < victim->QueryProp(P_LEVEL) * 400 &&
+        !victim->QueryProp(P_NOATTACK)) 
+      tell_object(caster, BS(sprintf("%s ist %s.\n",
+            victim->Name(WER,1),
+            victim->QueryProp(P_GENDER) == FEMALE ? 
+            "eine wuerdige Trainingspartnerin":"ein wuerdiger Trainingspartner")));
+    else if (victim->QueryProp(P_WEAPON_TYPE) == WT_SPEAR && 
+        victim->QueryProp(P_WC) > abil / 50)
+      tell_object(caster, BS(sprintf("%s eignet sich, um den Speerkampf zu ueben.",
+              victim->Name(WER,1) )));
+  } 
+
+  environment(caster)->Message(BS(sprintf("%s erlangt Erkenntnisse ueber %s.",
+        caster->Name(WER,1), victim ? victim->name(WEN,1) : "die Umgebung" )),
+      MSGFLAG_VISUAL, ([ MSGFLAG_EXCLUDE : ({ caster, victim }) ]) );
+  return ERFOLG;
+}
+
+//&&&----------Hilfefunktionen fuer idet_general-----------------------------
+string magic_text(object ob)
+{
+  string wie;
+  
+  switch (ob->QueryProp(P_MAGIC))
+  {
+    case 1: wie = "magisch"; break;
+    case 2..3: wie = "schwach magisch"; break;
+    case 4..5: wie = "unterdurchschnittlich magisch"; break;
+    case 6..7: wie = "hoch magisch"; break;
+    case 8..9: wie = "sehr hoch magisch"; break;
+    case 10..11: wie = "goettlich"; break;
+    case 12..15: wie = "einzigartig"; break;
+    default: wie = "magisch";
+  }
+  return wie;
+}
+
+string abnutz_text(mixed abn)
+{
+  if (mappingp(abn))
+    abn = abn[0];
+  if (     abn > 900) return "praktisch gar nicht";
+  else if (abn > 500) return "extrem langsam";
+  else if (abn > 300) return "sehr langsam";
+  else if (abn > 200) return "langsam";
+  else if (abn > 120) return "etwas langsamer";
+  else if (abn >  90) return "normal";
+  else if (abn >  70) return "etwas schneller";
+  else if (abn >  50) return "schnell";
+  else if (abn >  30) return "sehr schnell";
+  else if (abn >  10) return "extrem schnell";
+  else if (abn >   0) return "fuerchterlich schnell";
+  else                return "gar nicht";
+}
+
+string sell_text(object ob)
+{
+  string ret;
+  int wert;
+
+  wert = ob->QueryProp(P_VALUE);
+  wert = ( wert > 500 ? (1000 * (wert - 500)) / (wert + 500) + 500 : wert );
+  if (ob->QueryProp(P_NOBUY) && (ob->QueryProp(P_NOSELL) || ob->QueryProp(P_NODROP)))
+    return  (ob->IsPlural() ? "koennen" : "kann") + " weder verkauft noch gekauft werden";
+  else if (ob->QueryProp(P_NOSELL) || !ob->QueryProp(P_VALUE) || ob->QueryProp(P_NODROP))
+    return (ob->IsPlural() ? "koennen" : "kann") + " nicht verkauft werden";
+  else if (wert != ob->QueryProp(P_VALUE))
+    ret = (ob->IsPlural() ? "koennen" : "kann") + " bestenfalls fuer " + wert + " Muenzen verkauft";
+  else 
+    ret = (ob->IsPlural() ? "koennen" : "kann") + " gewinnbringend verkauft";
+  if (ob->QueryProp(P_NOBUY))
+    ret += " aber nicht mehr gekauft";
+  return ret + " werden";
+}
+
+//&&&-----------Generelle Informationen---------------------------------------
+void ident_general(object ob, int level)
+{
+  string mat;
+
+  if (find_object("/spellbooks/druiden_spells"))
+    mat = "/spellbooks/druiden_spells"->GetMaterialString(ob, TP);
+  else
+   mat = CAP(ob->QueryPronoun(WER)) + (ob->IsPlural() ? " bestehen " : " besteht ") + 
+     (ob->MatList(WEM) || "unbekanntem Material") + ".";
+  write(BS(sprintf("%s wieg%s %d Gramm, %s %d Muenze%s wert, %s%s%s%s%s%s und %s.",
+          ob->Name(WER,1), ob->IsPlural() ? "en" : "t",
+          ob->QueryProp(P_WEIGHT), ob->IsPlural() ? "sind" : "ist",
+          ob->QueryProp(P_VALUE), ob->QueryProp(P_VALUE) == 1 ? "" : "n",
+          level > 5 && ob->QueryProp(P_NEVERDROP) ? "bleib"+(ob->IsPlural() ? "en" : "t")+
+          " Dir auch nach einem Tod erhalten, " : "",
+          level > 5 && ob->QueryProp(P_NODROP) ? (ob->IsPlural() ? "lassen" : "laesst") +
+          " sich nicht ablegen, " : "",
+          level > 5 && ob->QueryProp(P_CURSED) ? (ob->IsPlural() ? "sind" : "ist") + " verflucht, " : "",
+          level > 5 && ob->QueryProp(P_AUTOLOADOBJ) ? "bleib"+(ob->IsPlural() ? "en" : "t") + 
+          " Dir auch nach einem Weltuntergang erhalten, " : "",
+          level > 5 && ob->QueryProp(P_MAGIC) ? (ob->IsPlural() ? "sind " : "ist ") + magic_text(ob) + ", " : "",
+          (ob->IsPlural() ? "nutzen" : "nutzt") + " sich " + 
+          abnutz_text(ob->QueryProp(P_QUALITY_DECAY)) + " ab",
+          sell_text(ob)
+          )));
+  write(BS(mat));
+}
+
+//&&&-----------Hilfsfunktionen fuer ident_armour-----------------------------
+string ac_text(int ac, int max)
+{
+  switch (100 * ac / (max || 1))
+  {
+    case 0: return "keinen";
+    case 1..9: return "fast keinen";
+    case 10..19: return "kaum";
+    case 20..29: return "sehr wenig";
+    case 30..39: return "wenig";
+    case 40..49: return "unterdurchschnittlichen";
+    case 50..59: return "mittelmaessigen";
+    case 60..69: return "ueberdurchschnittlichen";
+    case 70..79: return "hohen";
+    case 80..89: return "sehr hohen";
+    case 90..99: return "extrem hohen";
+    default: return "maximalen";
+  }
+}
+
+string eng2ger(string eng)
+{
+  switch(eng)
+  {
+    case WT_SWORD: return "Schwert";
+    case WT_AXE: return "Axt";
+    case WT_CLUB: return "Keule";
+    case WT_KNIFE: return "Dolch";
+    case WT_SPEAR: return "Speer";
+    case WT_WHIP: return "Peitsche";
+    case WT_BOW: return "Bogen";
+    case WT_CHAIN: return "Kettenwaffe";
+    default: return eng;
+  }
+}
+
+string dt_text(string dt)
+{
+  switch(dt)
+  {
+    case DT_SLASH: return "Schnittschaden";
+    case DT_RIP: return "Rissschaden";
+    case DT_PIERCE: return "Stichschaden";
+    case DT_BLUDGEON: return "Schlagschaden";
+    case DT_WHIP: return "Peitschenschaden";
+    case DT_SQUEEZE: return "Quetschschaden";
+    case DT_FIRE: return "Feuerschaden";
+    case DT_MAGIC: return "Magieschaden";
+    case DT_COLD: return "Eisschaden";
+    case DT_ACID: return "Saeureschaden";
+    case DT_TERROR: return "Terrorschaden";
+    case DT_POISON: return "Giftschaden";
+    case DT_HOLY: return "heiligen Schaden";
+    case DT_UNHOLY: return "unheiligen Schaden";
+    case DT_LIGHT: return "Lichtschaden";
+    case DT_SOUND: return "Laermschaden";
+    case DT_WATER: return "Wasserschaden";
+    case DT_LIGHTNING: return "Blitzschlag";
+    case DT_ELECTRIC: return "Stromschaden";
+    case DT_EXPLOSION: return "Explosionsschaden";
+    case DT_AIR: return "Luftschaden";
+    case DT_MIND: return "geistigen Schaden";
+    default: return dt;
+  }
+}
+
+string prot_text(object ob)
+{
+  mapping prot;
+  string ret;
+  string *damtypes;
+  int *damnr;
+  int i;
+
+  if(!mappingp(prot = ob->QueryProp(P_DAM_PROTECTION) )) 
+    return "";
+  if (!sizeof(m_indices(prot) & m_indices(MAGICAL_DAMAGE_TYPES))) 
+    return "";
+
+  ret = "";
+  damtypes = m_indices(prot) - m_indices(PHYSICAL_DAMAGE_TYPES);
+  damnr = m_values(prot);
+  for (i = sizeof(damtypes) - 1; i >= 0; i--)
+  {
+    if (member(MAGICAL_DAMAGE_TYPES, damtypes[i]))
+    {
+      switch(damnr[i])
+      {
+        case 1: break;
+        case 2: ret += "besser "; break;
+        case 3: ret += "stark "; break;
+        default: ret += "extrem "; 
+      }
+      ret += "gegen " + dt_text(damtypes[i]);
+      if (i == 0)
+        ret += ", ";
+      else if (i == 1)
+        ret += " und ";
+      else
+        ret += ", ";
+    }
+  }
+  if (!strlen(ret)) 
+    return "";
+  else
+    return sprintf("schuetz%s zusaetzlich %s",
+      ob->IsPlural() ? "en" : "t", ret);
+}
+
+string cold_prot(int c, int p)
+{
+  string s;
+    s = "stell" + (p ? "en" : "t") + " bei Kaelte ";
+    if (c < -10) s += "eine enorme Belastung";
+    else if (c < -7) s += "eine starke Belastung";
+    else if (c < -4) s += "eine ziemliche Belastung";
+    else if (c < -2) s += "eine spuerbare Belastung";
+    else if (c < -1) s += "eine leichte Belastung";
+    else if (c < 0)  s += "eine geringe Belastung";
+    else if (c == 0) s += "keine Hilfe";
+    else if (c > 10) s += "einen enormen Schutz";
+    else if (c > 7)  s += "einen extrem guten Schutz";
+    else if (c > 4)  s += "einen sehr guten Schutz";
+    else if (c > 2)  s += "einen guten Schutz";
+    else if (c > 1)  s += "einen ganz brauchbaren Schutz";
+    else s += "einen eher geringen Schutz";
+    s += " dar";
+  return s;
+}
+
+string heat_prot(int h, int p)
+{
+  string s;
+
+  if (h < -10) s = "belaste" + (p ? "n" : "t") + " Dich bei Hitze enorm stark";
+  else if (h < -7) s = "bring" + (p ? "en" : "t") + " Dich bei Hitze extrem schnell zum Schwitzen";
+  else if (h < -4) s = "bring" + (p ? "en" : "t") + " Dich bei Hitze schnell zum Schwitzen";
+  else if (h < -2) s = (p ? "lassen" : "laesst") + " Dich bei Hitze leicht schwitzen";
+  else if (h < -1) s = (p ? "lassen" : "laesst") + " Dich bei Hitze leichter schwitzen";
+  else if (h < 0)  s = (p ? "sind" : "ist") + " bei Hitze eine leichte Belastung fuer Dich";
+  else if (h == 0) s = "biete" + (p ? "n" : "t") + " keinen Hitzeschutz";
+  else if (h > 10) s = "schuetz" + (p ? "en" : "t") + " Dich unglaublich gut vor Hitze";
+  else if (h > 7)  s = "biete" + (p ? "n" : "t") + " Dir einen sehr guten Hitzeschutz";
+  else if (h > 4)  s = "biete" + (p ? "n" : "t") + " Dir einen beachtlichen Hitzeschutz";
+  else if (h > 2)  s = "schuetz" + (p ? "en" : "t") + " Dich recht gut vor Hitze";
+  else if (h > 1)  s = "schuetz" + (p ? "en" : "t") + " Dich einigermassen vor Hitze";
+  else s = "schuetz" + (p ? "en" : "t") + " Dich ein wenig vor Hitze";
+  return s;
+}
+
+//&&&-----------Informationen ueber Ruestungen--------------------------------
+void ident_armour(object ob, int level)
+{
+  string ret;
+  mapping map;
+  int c, h;
+  
+  if (mappingp(map = ob->QueryProp(P_TEMPERATURE_PROTECTION)))
+  {
+    c = map[T_COLD_PROT];
+    h = map[T_HEAT_PROT];
+  }
+  else
+    c = h = 0;
+  ret = sprintf("%s %s eine Ruestung%s, %s %s Ruestungschutz%s%s%s%s"
+                "%s %s %s.", 
+        ob->Name(WER,1),
+        (ob->IsPlural() ? "sind" : "ist"),
+        (ob->QueryProp(P_ARMOUR_TYPE) != AT_MISC ? " vom Typ " +
+        ob->QueryProp(P_ARMOUR_TYPE) : ""),
+        (ob->IsPlural() ? "bieten" : "bietet"),
+        ac_text(ob->QueryProp(P_AC), VALID_ARMOUR_CLASS[ob->QueryProp(P_ARMOUR_TYPE)]),
+        level > 5 ? ", " : ".",
+        level > 5 && ob->QueryProp(P_DEFEND_FUNC) ? "besitz" + (ob->IsPlural() ? "en" : "t") + 
+        " eine zusaetzliche Verteidigung, " : "",
+        level > 5 && ob->QueryProp(P_EFFECTIVE_WC) ? "ha" + (ob->IsPlural() ? "ben" : "t") + 
+        " Stacheln, " : "",
+        level >= 10 ? prot_text(ob) : "",
+        " "+ob->Name(WER)+" "+cold_prot(c, ob->IsPlural()), 
+        "und",
+        heat_prot(h, ob->IsPlural())
+        );
+  write(BS(ret));
+}
+
+//&&&-----------Hilfsfunktionen fuer ident_weapon-----------------------------
+string* unique_dam_type(string* dt)
+{ 
+  int i, j;
+  string* ret;
+
+  ret = ({});
+  for(i = 0, j = sizeof(dt); i < j; i++)
+    if(member(ret, dt[i]) == -1)
+      ret += ({dt[i]});  
+  return ret;
+}
+
+string wc_text(int wert)
+{
+  if (     wert == 300) return "maximalen";
+  if (     wert >= 290) return "toedlichen";
+  else if (wert >= 270) return "gewaltigen";
+  else if (wert >= 250) return "extrem viel";
+  else if (wert >= 230) return "sehr viel";
+  else if (wert >= 210) return "viel";
+  else if (wert >= 190) return "einigen";
+  else if (wert >= 170) return "ueberdurchschnittlich viel";
+  else if (wert >= 150) return "durchschnittlich viel";
+  else if (wert >= 130) return "mittelmaessigen";
+  else if (wert >= 110) return "etwas";
+  else if (wert >= 90)  return "wenig";
+  else if (wert >= 70)  return "sehr wenig";
+  else if (wert >= 50)  return "extrem wenig";
+  else if (wert >= 30)  return "fast keinen";
+  else                  return "ueberhaupt keinen";
+}
+
+string wcfix_text(int fix) 
+{
+    if (     fix >= 80) return "perfekt";
+    if (     fix >= 70) return "exzellent";
+    else if (fix >= 60) return "extrem gut";
+    else if (fix >= 50) return "sehr gut";
+    else if (fix >= 40) return "gut";
+    else if (fix >= 30) return "normal";
+    else if (fix >= 20) return "schlecht";
+    else if (fix >= 10) return "sehr schlecht";
+    else                return "extrem schlecht";
+}
+
+string damage_text(mixed damtypes, int level)
+{
+  int i;
+  string ret;
+
+  ret = "";
+  for (i = sizeof(damtypes) - 1; i >= 0; i--)
+  {
+    if (level < 6 && member(MAGICAL_DAMAGE_TYPES, damtypes[i]))
+      continue;
+    ret += dt_text(damtypes[i]);
+    if (i == 0)
+      ret += " ";
+    else if (i == 1)
+      ret += " und ";
+    else
+      ret += ", ";
+  }
+  return ret;
+}
+
+string hand_text(int nr)
+{
+  switch (nr)
+  {
+    case 0: return "keine Hand"; 
+    case 1: return "eine Hand"; 
+    case 2: return "zwei Haende";
+    case 3: return "drei Haende";
+    case 4: return "vier Haende";
+    default: return "sehr viele Haende";
+  } 
+}
+
+//&&&-----------Informationen ueber Waffen------------------------------------
+void ident_weapon(object ob, int level)
+{
+  string ret;
+  ret = sprintf("%s %s eine Waffe%s, mach%s %s Schaden, lieg%s %s in der Hand, "
+      "%smach%s %sund benoetig%s %s zum Zuecken.", 
+        ob->Name(WER,1),
+        (ob->IsPlural() ? "sind" : "ist"),
+        (ob->QueryProp(P_ARMOUR_TYPE) != AT_MISC ? " vom Typ " +
+        eng2ger(ob->QueryProp(P_WEAPON_TYPE)) : ""),
+        (ob->IsPlural() ? "en" : "t"), wc_text(ob->QueryProp(P_WC)),
+        (ob->IsPlural() ? "en" : "t"), wcfix_text(ob->QueryProp(P_WC_FIX)),  
+        (level > 5 && ob->QueryProp(P_HIT_FUNC) ? "mach" + (ob->IsPlural() ? "en" : "t") + 
+        " zusaetzlichen Schaden, " : "") +
+        (level > 5 && ob->QueryProp(P_EFFECTIVE_AC) ? "ha" + (ob->IsPlural() ? "ben" : "t") + 
+        "eine zusaetzliche Verteidigung, " : ""),
+        (ob->IsPlural() ? "en" : "t"), damage_text(unique_dam_type(ob->QueryProp(P_DAM_TYPE)), level),
+        (ob->IsPlural() ? "en" : "t"), hand_text(ob->QueryProp(P_NR_HANDS))
+        );
+  write(BS(ret));
+}
+
+//&&&-----------Hilfsfunktionen fuer ident_general2---------------------------
+string attr_how(int a)
+{
+  if (!archseer) return "";
+  if (a >= 5 || a <= -5) return " extrem";
+  if (a == 4 || a == -4) return " sehr stark";
+  if (a == 3 || a == -3) return " stark";
+  if (a == 2 || a == -2) return "";
+  if (a == 1 || a == -1) return " leicht";
+  return "geringfuegig";
+}
+
+string hpsp_how(int a)
+{
+  if (!archseer) return "";
+  if (a >= 30 || a <= -30) return " extrem";
+  if (a >= 20 || a <= -20) return " sehr stark";
+  if (a >= 10 || a <= -10) return " stark";
+  if (a >= 6 || a <= -6) return "";
+  if (a >= 3 || a <= -3) return " leicht";
+  return " geringfuegig";
+}
+
+string bonus_text(int bonus, int i)
+{
+  string ret;
+  if (!archseer) ret = "";
+  else switch (bonus)
+  {
+    case 0..9: ret = " leicht"; break;
+    case 10..19: ret = " stark"; break;
+    case 20..29: ret = " sehr stark"; break;
+    default: ret = " extrem"; 
+  }
+  if (i == 0)
+    ret += ". ";
+  else if (i == 1)
+    ret += " und ";
+  else
+    ret += ", ";
+  return ret;
+}
+
+string spellcost_text(int bonus)
+{
+  if (!archseer) return "";
+  switch (bonus)
+  {
+    case 0..5: return " leicht";
+    case 6..10: return " stark";
+    case 11..15: return " sehr stark";
+    default: return " extrem"; 
+  }
+}
+
+//&&&-----------Anzeige der magischen Boni-----------------------------------
+void ident_general2(object ob)
+{
+  mapping map;
+  int i, hp, sp, first;
+  int *x;
+  string ret;
+  string plus, minus;
+  string *skills;
+  mixed bonus;
+  
+  if (ob->IsPlural())
+  {
+    plus = "erhoehen";
+    minus = "erniedrigen";
+  }
+  else
+  {
+    plus = "erhoeht";
+    minus = "erniedrigt";
+  }
+  ret = "";
+  first = 0;
+  if (mappingp(map = ob->QueryProp(P_M_HEALTH_MOD)))
+  {
+    hp = map[P_HP];
+    sp = map[P_SP];
+    ret += (first ? CAP(ob->QueryPronoun(WER)) : ob->Name(WER,1)) + " " +
+      (hp ? (hp > 0 ? plus : minus ) + " Deine Lebenskraft" + hpsp_how(hp): "") +
+      (hp && sp ? " und " : "") +
+      (sp ? (sp > 0 ? plus : minus) + " Deine magische Kraft" + 
+       hpsp_how(sp) : "") + ". ";
+    first = 1;
+  }
+  if (mappingp(map = ob->QueryProp(P_M_MAX_HEALTH_MOD)))
+  {
+    hp = map[P_HP];
+    sp = map[P_SP];
+    ret += (first ? CAP(ob->QueryPronoun(WER)) : ob->Name(WER,1)) + " " +
+      (hp ? (hp > 0 ? plus : minus ) + " Deine maximal moegliche "
+       "Lebenskraft" + hpsp_how(hp) : "") +
+      (hp && sp ? " und " : "") +
+      (sp ? (sp > 0 ? plus : minus) + " Deine maximal moegliche "
+       "magische Kraft" + hpsp_how(sp) : "") + ". ";
+    first = 1;
+  }
+  if (mappingp(map = ob->QueryProp(P_M_ATTR_MOD)))
+  {
+    x = allocate(4);
+    x[0] = map[A_STR];
+    x[1] = map[A_DEX];
+    x[2] = map[A_INT];
+    x[3] = map[A_CON];
+    ret += (first ? CAP(ob->QueryPronoun(WER)) : ob->Name(WER,1)) + " " +
+      (x[0] ? ((x[0]>0? plus:minus)+" Deine Kraft"+ attr_how(x[0]) +
+                (x[1]||x[2]||x[3]?((x[1]&&x[2])||(x[1]&&x[3])||(x[2]&&x[3])?
+                                   ", ":" und "):"")):"")+
+       (x[1]?((x[1]>0? plus:minus)+" Deine Geschicklichkeit"+ attr_how(x[1]) +
+              (x[2]||x[3]?(x[2]&&x[3]?", ":" und "):"")):"")+
+       (x[2]?((x[2]>0?plus:minus)+" Deine Intelligenz"+ attr_how(x[2]) +
+              (x[3]?" und ":"")):"")+
+       (x[3]?(x[3]>0?plus:minus)+" Deine Ausdauer"+attr_how(x[3]) :"") + ". "; 
+    first = 1;
+  }
+  if (intp(bonus = ob->QueryProp(P_AMAZONEN_SPELLCOST)) && bonus > 0)
+  {
+    ret += (first ? CAP(ob->QueryPronoun(WER)) : ob->Name(WER,1)) + 
+      " verbillig" + (ob->IsPlural() ? "en" : "t") + 
+      " die Zauberkosten von Amazonen" + spellcost_text(bonus) + ". ";
+  }
+  if (mappingp(map = ob->QueryProp(P_AMAZONEN_BONUS)))
+  {
+    ret += (first ? CAP(ob->QueryPronoun(WER)) : ob->Name(WER,1)) + 
+      " verbesser" + (ob->IsPlural() ? "n" : "t") + " ";
+    for (i = sizeof(skills = m_indices(map)) - 1; i >= 0; i--)
+    {
+      if (skills[i] == "all")
+        ret += "alle Amazonenfaehigkeiten";
+      else
+        ret += capitalize(skills[i]);
+      ret += bonus_text(map[skills[i]], i);
+      first = 1;
+    }
+  }
+  if (intp(bonus = ob->QueryProp(P_TELEPORT_COST)) && bonus > 0)
+  {
+    ret += (first ? CAP(ob->QueryPronoun(WER)) : ob->Name(WER,1)) + 
+      " verringer" + (ob->IsPlural() ? "n" : "t") + 
+      " die Teleportationskosten" + attr_how(bonus) + ". ";
+  }
+  if (strlen(ret))
+  {
+    write(BS(ret));
+  }
+}
+
+string size_text(int size)
+{
+  switch(size)
+  {
+    case 0..30: return "winzig";
+    case 31..70: return "sehr klein";
+    case 71..110: return "klein";
+    case 111..140: return "zwergengross";
+    case 151..175: return "mittelgross";
+    case 176..200: return "gross";
+    case 201..300: return "sehr gross";
+    case 301..400: return "extrem gross";
+    case 401..600: return "riesengross";
+    case 601..800: return "gigantisch gross";
+    case 801..1000: return "haushoch";
+    default: return "berghoch";
+  }
+}
+
+string align_text(int a)
+{
+  if (a >= 1000) return "heiliger";
+  else if (a <= -1000) return "satanischer";
+  else switch(a)
+  {
+    case -999..-700: return "sehr boeser";
+    case -699..-400: return "boeser";
+    case -399..-100: return "frecher";
+    case -99..100: return "neutraler";
+    case 101..400: return "netter";
+    case 401..700: return "guter";
+    case 701..999: return "sehr guter";
+  }
+  return "buggender";
+}
+
+void schaetz(object victim, int l)
+{
+  int v, max, i, s;
+  string result;
+  mapping resist;
+  int *spells;
+
+  result = sprintf(
+          "%s gehoert der Rasse %s an, ist %s, von %s Gesinnung und "
+          "kaempft mit %d Gliedmassen. ",
+          victim->Name(WER,1),
+          stringp(victim->QueryProp(P_RACE)) ?  victim->QueryProp(P_RACE) : "Unbekannt",
+          size_text(victim->QueryProp(P_SIZE)), 
+          align_text(victim->QueryProp(P_ALIGN)),
+          victim->QueryProp(P_MAX_HANDS) );
+  v = victim->QueryProp(P_MAX_HP);
+  if (v > 5000)
+    result += capitalize(victim->QueryPronoun(WER)) + 
+      " haelt beinahe unendlich viel Schaden aus,";
+  else if (v > 2000)
+    result += capitalize(victim->QueryPronoun(WER)) + 
+      " haelt wahnsinnig viel Schaden aus,";
+  else if (v > 1200)
+    result += capitalize(victim->QueryPronoun(WER)) + 
+      " haelt ausserordentlich viel Schaden aus,";
+  else if (v > 900)
+    result += capitalize(victim->QueryPronoun(WER)) + 
+      " haelt extrem viel Schaden aus,";
+  else if (v > 600)
+    result += capitalize(victim->QueryPronoun(WER)) + 
+      " haelt sehr viel Schaden aus,";
+  else if (v > 400)
+    result += capitalize(victim->QueryPronoun(WER)) + 
+      " haelt viel Schaden aus,";
+  else if (v > 200)
+    result += capitalize(victim->QueryPronoun(WER)) + 
+      " haelt einigen Schaden aus,";
+  else if (v > 120)
+    result += capitalize(victim->QueryPronoun(WER)) + 
+      " haelt nur wenig Schaden aus,";
+  else if (v > 80)
+    result += capitalize(victim->QueryPronoun(WER)) + 
+      " haelt nur sehr wenig Schaden aus,";
+  else if (v > 35)
+    result += capitalize(victim->QueryPronoun(WER)) + 
+      " haelt nur extrem wenig Schaden aus,";
+  else 
+    result += capitalize(victim->QueryPronoun(WER)) + 
+      " haelt gar keinen Schaden aus,";
+
+  v = victim->QueryProp(P_TOTAL_AC);
+  if (v > 300)
+    result += " hat eine Haut wie Stahl und";
+  else if (v > 200)
+    result +=  " hat eine extrem gute Ruestung und"; 
+  else if (v > 160)
+    result +=  " hat eine sehr gute Ruestung und"; 
+  else if (v > 120)
+    result +=  " hat eine gute Ruestung und";
+  else if (v > 80)
+    result +=  " hat eine schlechte Ruestung und";
+  else if (v > 40)
+    result +=  " kann Dir keinen nennenswerten "
+      "Widerstand entgegensetzen und";
+  else
+    result += " hat ueberhaupt keine Ruestung und";
+
+  v = victim->QueryProp(P_TOTAL_WC);
+  if (v >= 500)
+    result += " kann Dich mit einem Schlag vernichten. ";
+  else if (v > 300)
+    result += " kann Dich in kleine Stuecke hauen. ";
+  else if (v > 240)
+    result += " kann Dich stark verletzen. ";
+  else if (v > 200)
+    result += " kann Dir hart zusetzen. ";
+  else if (v > 160)
+    result += " kann Dir sehr viel Schaden zufuegen. ";
+  else if (v > 130)
+    result += " kann Dir viel Schaden zufuegen. ";
+  else if (v > 100)
+    result += " kann Dir Schaden zufuegen. ";
+  else if (v > 80)
+    result += " kann Dir etwas Schaden zufuegen. ";
+  else if (v > 60)
+    result +=  " kann Dir nur wenig Schaden zufuegen. ";
+  else if (v > 40)
+    result += " wird Dich kaum verletzen koennen. ";
+  else
+    result += " kann Dich hoechstens kitzeln. ";
+
+  v = victim->QueryProp(P_SPELLRATE);
+  if (v > 80)
+    result += victim->Name(WER,1) + " hat sehr viele Zauber auf Lager";
+  else if (v > 60)
+    result += victim->Name(WER,1) + " hat viele Zauber auf Lager";
+  else if (v > 40)
+    result += victim->Name(WER,1) + " hat einige Zauber auf Lager";
+  else if (v > 20)
+    result += victim->Name(WER,1) + " hat ein paar Zauber auf Lager";
+  else if (v > 10)
+    result += victim->Name(WER,1) + " hat wenige Zauber auf Lager";
+  else if (v > 0)
+    result += victim->Name(WER,1) + " hat fast keine Zauber auf Lager";
+  else
+    result += victim->Name(WER,1) + " hat keine Zauber auf Lager";
+  if (v)
+  {
+    max = s = 0;
+    spells = allocate(sizeof(victim->QueryProp("npc:rate_array")));
+    if (sizeof(victim->QueryProp("npc:rate_array")))
+    {
+      for( i = 0; i < sizeof(victim->QueryProp("npc:rate_array")); i++ )
+      {
+        spells[victim->QueryProp("npc:rate_array")[i]]++;
+      }
+      for( i = 0; i < sizeof(victim->QueryProp(P_SPELLS)); i++)
+      {
+        if( victim->QueryProp(P_SPELLS)[i][0] > max )
+          max = victim->QueryProp(P_SPELLS)[i][0];
+        s += spells[i] * victim->QueryProp(P_SPELLS)[i][0];
+      }
+      s *= v / sizeof(victim->QueryProp("npc:rate_array"));
+      s /= 100;
+      if (max <  500)
+        result += " und";
+      else
+        result += ",";
+      if (s > 500)
+        result += " teilt toedlichen Schaden aus";
+      else if (s > 400)
+        result += " teilt gewaltigen Schaden aus";
+      else if (s > 300)
+        result += " teilt extremen Schaden aus";
+      else if (s > 200)
+        result += " teilt grossen Schaden aus";
+      else if (s > 100)
+        result += " teilt einigen Schaden aus";
+      else if (s > 50)
+        result += " teilt nur wenig Schaden aus";
+      else
+        result += " teilt kaum Schaden aus";
+
+      if (max >= 2000)
+        result += " und kann Dich mit einem Treffer vernichten";
+      else if (max >= 1500)
+        result += " und kann Dich mit einem Treffer zerstoeren";
+      else if (max >= 1000)
+        result += " und kann Dich mit einem Treffer zerfetzen";
+      else if (max >= 700)
+        result += " und kann Dich mit einem Treffer pulverisieren";
+      else if (max >= 500)
+        result += " und kann Dich mit einem Treffer zerschmettern";
+    }
+  }
+  if (victim->QueryProp(P_GUILD) == GUILDNAME)
+  {
+    v = victim->QueryProp(P_GUILD_LEVEL);
+    result += sprintf(". %s ist eine Amazone %s Stufe %s Du",
+        capitalize(victim->QueryPronoun(WER)),
+        (l == v ?  "gleicher" : (l < v ? "hoeherer" : "niedrigerer")), 
+        (l == v ? "wie" : "als") );
+  }
+  else if (victim->QueryProp(P_GUILD))
+    result += sprintf(". %s gehoert der Gilde %s an und ist daher besonders "
+        "gefaehrlich",
+        capitalize(victim->QueryPronoun(WER)), 
+        capitalize(victim->QueryProp(P_GUILD)) );
+
+  write(BS(result + "."));
+
+  result = "";
+  if (l > 5 && (resist = victim->QueryProp(P_RESISTANCE_STRENGTHS)))
+  {
+    v = 0;
+    if (to_float(resist[DT_PIERCE]) > 0.0)
+    {
+      result = " ist anfaellig auf Stichschaden";
+      v = 1;
+    }
+    else if (to_float(resist[DT_PIERCE]) < 0.0)
+    {
+      result = " ist resistent gegen Stichschaden";
+      v = 1;
+    }
+    if (to_float(resist[DT_LIGHTNING]) > 0.0)
+    {
+      if (v)
+        result += " und anfaellig Blitzschlag";
+      else
+        result = "ist anfaellig gegen Blitzschlag";
+      v = 1;
+    }
+    else if (to_float(resist[DT_LIGHTNING]) < 0.0)
+    {
+      if (v)
+        result += " und resistent Blitzschlag";
+      else
+        result = "ist resistent gegen Blitzschlag";
+      v = 1;
+    }
+    if (v)
+      write(BS(victim->Name(WER,1) + result + "."));
+  }
+  if (stringp(victim->QueryProp(P_INFO)))
+    write("Zusaetzlich erkennst Du noch folgendes an " + victim->name(WEM,1) +
+	   ":\n" + BS(victim->QueryProp(P_INFO)));
+}
+
+void umgebung(object env)
+{
+  mapping e;
+  string terrain, region, temp, light;
+
+  if (!mappingp(e = env->QueryProp(P_ENVIRONMENT))) 
+  {
+    write("Dieser Ort hat weder eine Temperatur noch ein Terrain, sehr "
+        "komisch!\n");
+    DB(sprintf("Raum ohne P_ENVIROMENT: %O\n", env));
+    return;
+  }
+
+  switch (e[ENV_TERRAIN])
+  {
+    case TT_OTHER:    terrain = "in einem unbekannten Terrain"; break;
+    case TT_CAVE:     terrain = "in einer Hoehle"; break;
+    case TT_HOUSE:    terrain = "im Inneren eines Hauses"; break;
+    case TT_HILL:     terrain = "im huegeligen Gelaende"; break;
+    case TT_FOREST:   terrain = "im Wald"; break;
+    case TT_TOWN:     terrain = "in einer Stadt"; break;
+    case TT_MOUNTAIN: terrain = "in den Bergen"; break;
+    case TT_DESERT:   terrain = "in einer wuestenaehnlichen Gegend"; break;
+    case TT_JUNGLE:   terrain = "im Dschungel"; break;
+    case TT_SWAMP:    terrain = "im Sumpf"; break;
+    case TT_PLAIN:    terrain = "in einer flachen Gegend"; break;
+    case TT_ARCTIC:   terrain = "in einer arktischen Gegend"; break;
+    case TT_UNDERWATER:terrain = "unter Wasser"; break;
+    case TT_WATER:    terrain = "im oder am Wasser"; break;
+    case TT_ROAD:     terrain = "auf einer Strasse"; break;
+    case TT_AIR:      terrain = "in der Luft"; break;
+  }
+  switch (e[ENV_TEMPERATURE])
+  {
+    case -10000..-50: temp = "toetlich kalt"; break;
+    case -49..-30   : temp = "extrem kalt"; break;
+    case -29..-20   : temp = "eiseskalt"; break;
+    case -19..-10   : temp = "eisig"; break;
+    case  -9..0     : temp = "frostig"; break;
+    case   1..9     : temp = "kalt"; break;
+    case  10..16    : temp = "kuehl"; break;
+    case  17..23    : temp = "angenehm warm"; break;
+    case  24..30    : temp = "warm"; break;
+    case  31..40    : temp = "heiss"; break;
+    case  41..50    : temp = "sehr heiss"; break;
+    case  51..60    : temp = "extrem heiss"; break;
+    case  61..10000 : temp = "toetlich heiss"; break;
+    default         : temp = "undefinierbar kalt oder warm"; break;
+  }
+  switch (env->QueryProp(P_LIGHT)) 
+  {
+    case -10000..-3: light = "unglaublich dunkel"; break;
+    case -2..-1:     light = "sehr dunkel"; break;
+    case 0:          light = "dunkel"; break;
+    case 1:          light = "hell"; break;
+    case 2..3:       light = "sehr hell"; break;
+    case 4..10000:   light = "unglaublich hell"; break;
+    default:         light = "undefinierbar hell oder dunkel";
+  }
+  write(BS(sprintf("Du befindest Dich %s. Es ist hier %s und %s.",
+      terrain, temp, light)));
+}

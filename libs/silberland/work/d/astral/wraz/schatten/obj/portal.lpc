@@ -1,0 +1,125 @@
+// Portal innerhalb der Schattenwelt
+// 
+// Von Wraz / Mendralim
+
+#include "../def.h"
+
+inherit "/std/thing";
+
+string dest_room_path;
+
+void create () 
+{
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_NOGET,1);
+  SetProp(P_NAME,"Loch in den Schatten");
+  SetProp(P_GENDER,MALE);
+  AddId (({"loch","portal","\nportal_within_shadow"}));
+
+  SetProp(P_SHORT,"Ein Loch in den Schatten");
+  SetProp(P_LONG, BS(
+    "Ein grossen, kreisrundes und tiefschwarzes Loch mit wabernden Raendern. "
+    "Du haeltst es fuer ein Portal."
+  ));
+  SetProp (P_MATERIAL, MAT_MAGIC);
+  AddCmd("betritt|betrete&loch|portal","BetreteLoch");
+
+  call_out("Setup",2);
+}
+
+// ------------------------------------------------------------------------------
+//  dest_room: target room for portal, e.g. "sn003" (only room, not the path, not .c)
+//  reverse_room: target room for the corresponding portal, i.e. the room where 
+//   this_object() is be placed, e.g. "sn100"
+void Setup()
+{
+  object dest_room_obj;
+  object reverse_portal;
+
+  if(!QueryProp("dest_room") || !QueryProp("reverse_room")) return;
+
+  dest_room_path = ROOM + QueryProp("dest_room");
+  RMASTER->write_next_room(dest_room_path);
+  call_other(dest_room_path,"???");
+  dest_room_obj = find_object(dest_room_path);
+
+  if(!dest_room_obj)
+  {
+    write(BS("Du siehst einen Fehler im Schattengefuege, der von einem "
+    "Magier, idealerweise Wraz, behoben werden muss."));
+    return;
+  }
+
+  if(sizeof(filter_objects(all_inventory(dest_room_obj),"id","\nportal_within_shadow")) >= 1)
+    return;
+
+  reverse_portal = clone_object(OBJ "portal");
+  reverse_portal->SetProp("reverse_room", QueryProp("dest_room"));
+  reverse_portal->SetProp("dest_room", QueryProp("reverse_room"));
+  reverse_portal->move(dest_room_obj,M_NOCHECK);
+}
+
+// ------------------------------------------------------------------------------
+int BetreteLoch()
+{
+  object player_shadow;
+
+  if(QueryProp(P_CLONE_TIME) > time()-3)
+  {
+    TP->Message(BS("Du willst durch das Loch schreiten, doch es erscheint Dir dann noch "
+      "zu... frisch. Du wartest noch kurz ab."));
+    return -1;
+  }
+
+  // Spieler haben 0, Seher 1 (oder zumindest < 10)
+  if(!query_wiz_level(TP))
+  {
+    TP->Message(BS("Du willst durch das Loch schreiten, wirst aber von den "
+      "Schatten zurueckgedraengt."));
+    ENV(TP)->Message(BS(TPN+" will durch das Loch schreiten, wird aber von den "
+      "Schatten zurueckgedraengt."),MSGFLAG_NO_TP);
+    return -1;
+  }
+
+  if(!dest_room_path) 
+  {
+    write(BS("Du siehst einen Fehler im Schattengefuege, der von einem "
+    "Magier, idealerweise Wraz, behoben werden muss."));
+    return -1;
+  }
+
+  RMASTER->write_next_room(dest_room_path);
+  call_other(dest_room_path,"???");
+  if(!find_object(dest_room_path))
+  {
+    write(BS("Du siehst einen Fehler im Schattengefuege, der von einem "
+    "Magier, idealerweise Wraz, behoben werden muss."));
+    return -1;
+  }
+
+  if(QueryProp(TPN+"_last_shadow_time") < time() - 60*60*24)
+  {
+    player_shadow = clone_object(NPC "spielerschatten");
+    player_shadow->SetOwner(TP);
+    player_shadow->move(ROOM "sn000",M_NOCHECK);
+    SetProp(TPN+"_last_shadow_time", time());
+  }
+
+  TP->Message(BS("Du schreitest durch das Loch in die Dunkelheit."));
+  TP->move(dest_room_path,M_GO,"durch das Loch in die Dunkelheit",
+    "schreitet","kommt durch ein schwarzes Loch herein");
+
+  return 1;
+}
+
+
+// ------------------------------------------------------------------------------
+int remove()
+{
+
+  if(TO && ENV(TO)) tell_room(ENV(TO),BS("Das Loch verschwindet."));
+  ::remove();
+  return 1;
+}

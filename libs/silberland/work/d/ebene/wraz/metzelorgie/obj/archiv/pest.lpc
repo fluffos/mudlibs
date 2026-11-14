@@ -1,0 +1,1491 @@
+// Pest
+// Schlachtfeld
+// von Wraz / Mendralim
+
+// idelschutz ab 350 sekunden, levelschutz bis incl lvl 35
+
+#include "../def.h"
+#include "/gilden/berserker/berserker_extern.h"
+
+inherit "std/thing";
+
+object me=TO;
+int i;                        // Zaehler fuer Meldungen per switch
+int wait;                     // Wartezeit zwischen den Meldungen
+//int beulen_offen;
+int recovery_chance;          // Wahrscheinlichkeit der Selbstheilung
+                              // (nur bei Beulen- und abortiver Pest)
+string old_presay;            // urspruengliches Presay
+string old_title;             // urspruenglicher Titel
+
+mapping informed=([]);        // Liste der Spieler + Zeitpunkt, die vor dem 
+                              // Pestkranken gewarnt wurden
+
+int may_die(int hp, object pl);
+int cmd_brechen(string str);
+void new_title(object player);
+void set_old_title(object player);
+void may_immediately_die(object pl);
+void may_contract_pest(object pl);
+
+void create()
+{
+  if (!is_clone(TO)) return;
+  
+  i=0;
+  wait=10;
+  //beulen_offen=0;
+  recovery_chance=0;
+
+  ::create();
+
+  SetProp(P_SHORT, 0);
+  SetProp(P_LONG, "");
+
+  SetProp(P_NAME, "Pest");
+  SetProp(P_GENDER, FEMALE);
+  AddId("\npest");
+
+
+  SetProp(P_MATERIAL, MAT_MISC_INVIS );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_SIZE, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NODROP, 1);
+  
+  SetProp(P_X_ATTR_MOD, ([]) );
+  SetProp(P_X_HEALTH_MOD, ([]) );
+
+  call_out("pest",10+random(10));
+}
+
+void pest()
+{
+  object pl;
+  
+  if(!ENV(me)) return;
+  
+  if(!query_once_interactive(ENV(me)))
+  { 
+    me->remove(1);
+    return; 
+  }
+  
+  if(!interactive(ENV(me))) return;
+  
+  if(deep_present("\npest 2", ENV(me))) 
+  {
+    me->remove(1); 
+    return; 
+  }
+  
+  pl=ENV(me);
+  
+  if(pl->QueryProp("pest_immunitaet")>time()-(86400*(1+random(4)))) 
+  {
+    me->remove(1); 
+    return;
+  }
+  
+  recovery_chance=(pl->QueryProp(P_MV)*100)/pl->QueryProp(P_MAX_MV);
+  
+  if(pl->QueryProp(P_RESTING)) recovery_chance+=150;
+  if(pl->QueryProp(P_POISON))  recovery_chance-=pl->QueryProp(P_POISON)*10;
+  
+  //tell_object(pl, "test haut hin!\n");
+  
+  switch (i)
+  {
+    case 0:
+      switch(random(100))
+      {
+        case 0..65: i=1; break; // Beulenpest
+        case 66..80: i=50; break; // abortive Pest
+        case 81..100: i=100; break; // Lungenpest
+      }
+      
+// --------------------------------------------------------------------------
+// ----- BEULENPEST ---------------------------------------------------------
+// --------------------------------------------------------------------------
+      
+    case 1: 
+      switch(random(3)) {
+      case 0:
+      tell_object(pl, BS(
+        "Du fuehlst Dich irgendwie nicht wohl.")); break;
+      case 1:
+      tell_object(pl, BS(
+        "Dir wird ein wenig schwindelig.")); break;
+      case 2:
+      tell_object(pl, BS(
+        "Dein Kopf wird warm.")); break; }
+      i++;
+      wait=20;
+    break;
+    
+    case 2:
+      switch(random(4)) {
+      	
+      case 0:
+      tell_object(pl, BS(
+        "Uah, Du hast schreckliche Kopfschmerzen!"));
+      if(!random(3)&&!pl->QueryProp(P_DISABLE_SPELLS))
+        pl->SetProp(P_DISABLE_SPELLS,random(9)); break;
+        
+      case 1:
+      tell_object(pl, BS(
+        "Deine Arme und Beine schmerzen. Du fuehlst Dich benommen."));
+      if(random(2)&&!pl->QueryProp(P_DISABLE_SPELLS)&&
+      !pl->QueryProp(P_DISABLE_ATTACK)) {
+      	pl->SetProp(P_DISABLE_SPELLS,random(9));
+      	pl->SetProp(P_DISABLE_ATTACK,random(7)); } break;
+      
+      case 2:
+      tell_object(pl, BS(
+        "Du fuehlst Dich elendiglich krank. Deine Stirn ist heiss.")); break;
+      
+      case 3:
+      tell_object(pl, BS(
+        "Grrr, Du taumelst! Du hast hohes Fieber, Deine Glieder tun weh."));
+        
+      //ENV(pl)->Message(BS(pl->Name()+" taumelt herum."),
+      //MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+      tell_room(ENV(pl),BS(pl->Name()+" taumelt herum."), ({pl}) );
+      break;  }
+      i++;
+      wait=25+random(6);
+    break;
+    
+    case 3:
+      switch(random(4)) {
+      	
+      case 0:
+      tell_object(pl, BS(
+        "Du hast fast unertraegliche Kopfschmerzen, Dein Gleichgewichtssinn "
+        "versagt Dir den Dienst, Du kippst um."));
+      pl->SetProp(P_LAST_RAMMEN_TIME, time() ); break;
+      
+      case 1:
+      tell_object(pl, BS(
+        "In Deinen Gliedern fuehlst Du abartig starke Schmerzen! Das haeltst "
+        "Du nicht aus, Du schreist!"));
+        
+      //ENV(pl)->Message(BS(
+      //  pl->Name()+" schreit laut vor Schmerz!!"),
+      //MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+      tell_room(ENV(pl),BS(pl->Name()+" schreit laut vor Schmerz!!"), ({pl}) );
+      if(random(2)) me->SetProp(P_X_ATTR_MOD, 
+        me->QueryProp(P_X_ATTR_MOD)+([A_DEX:-1,A_STR:-3]));
+      break;
+      
+      case 2:
+      tell_object(pl, BS(
+        "Dein ganzer Koerper zittert, er ist schwerkrank. Du taumelst, "
+        "Dein Kopf droehnt."));
+        
+      //ENV(pl)->Message(BS(
+      //  pl->Name()+" wankt stoehnend."),
+      //MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+      tell_room(ENV(pl),BS(pl->Name()+" wankt stoehnend."), ({pl}) );
+      if(random(3)) me->SetProp(P_X_HEALTH_MOD, 
+        me->QueryProp(P_X_HEALTH_MOD)+([P_HP:-24])); break;
+      
+      case 3:
+      tell_object(pl, BS(
+        "Du hast extrem hohes Fieber, Dein Wahrnehmungssinn ist stark "
+        "beeintraechtigt."));
+      me->SetProp(P_X_ATTR_MOD, 
+      me->QueryProp(P_X_ATTR_MOD)+([A_INT:-4])); break; }
+      
+      i++;
+      wait=20+random(10);
+    break;
+    
+    case 4:
+      switch(random(3)) {
+      
+      case 0:
+      tell_object(pl, BS(
+        "An einigen Stellen Deines Koerpers bilden sich Schwellungen. "
+        "Du hast unglaubliche Kopfschmerzen.")); break;
+      
+      case 1:
+      tell_object(pl, BS(
+        "Beulen bilden sich an Dir. Kopfschmerzen hast Du, Deine Glieder "
+        "tun fuerchterlich weh."));
+      if(!random(3)&&!pl->QueryProp(P_DISABLE_SPELLS))
+        pl->SetProp(P_DISABLE_SPELLS,random(7)); break;
+        
+      case 2:
+      tell_object(pl, BS(
+        "Dicke Beulen entstehen an Deinem Leib, alles dreht sich..."));
+      if(random(2)) me->SetProp(P_X_HEALTH_MOD, 
+        me->QueryProp(P_X_HEALTH_MOD)+([P_HP:-28])); break; }
+      
+      AddCmd("brich|breche|brech&beulen|beule&auf",
+      #'cmd_brechen,
+      "Willst Du wirklich Deine BEULEN aufbrechen?|Willst Du wirlich Deine "
+      "Beulen AUFbrechen?");
+      
+      i++;
+      wait=25+random(10);
+    break;
+    
+    case 5:
+      switch(random(5)) {
+      	
+      case 0:
+      tell_object(pl, BS(
+        "Plumpe Beulen wachsen aus Deinem Fleisch, sie schmerzen bei "
+        "Beruehrung. Deine Kopfschmerzen sind unertraeglich, Du keuchst."));
+        
+      //ENV(pl)->Message(BS(
+      //  pl->Name()+" keucht. "+capitalize(pl->QueryPronoun())+" sieht sehr "
+      //  "krank aus."),
+      //MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({pl}) ]) ); 
+      
+      tell_room(ENV(pl),
+        BS(pl->Name()+" keucht. "+capitalize(pl->QueryPronoun())+" sieht sehr "
+        "krank aus."), ({pl}) );
+      
+      break;
+      
+      case 1:
+      tell_object(pl, BS(
+        "Du fuehlst Dich totkrank. Die Schmerzen machen Dich wahnsinnig!"));
+      if(!random(3)&&!pl->QueryProp(P_DISABLE_SPELLS))
+        pl->SetProp(P_DISABLE_SPELLS,random(7));
+      if(random(2)) me->SetProp(P_X_HEALTH_MOD, ([P_HP:-(20+random(20)),
+        P_SP:-(20+random(20)) ]) ); break;
+      
+      case 2:
+      tell_object(pl, BS(
+        "Dir ist ganz schwindelig, es dreht sich alles! Du wankst umher. "
+        "Diese ekelhaften Beulen!"));
+        
+      //ENV(pl)->Message(BS(
+      //  pl->Name()+" wankt umher und rempelt Dich an."),
+      //MSGFLAG_SENSE,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+      tell_room(ENV(pl),
+        BS(pl->Name()+" wankt umher und rempelt Dich an."), ({pl}) );
+        
+      pl->AddHp(-random(26)); break;
+      
+      case 3:
+      tell_object(pl, BS(
+        "Deine Beine schmerzen dermassen, dass Du umstuerzt. Dabei faellst "
+        "Du auf eine Beule. Sie platzt auf, Du bruellst auf vor Schmerz!"));
+        
+      //ENV(pl)->Message(BS(
+      //  pl->Name()+" stuerzt um und bruellt vor Schmerz auf!"),
+      //  MSGFLAG_SOUND,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+      tell_room(ENV(pl),
+        BS(pl->Name()+" stuerzt um und bruellt vor Schmerz auf!"),
+        ({pl}) );
+      
+      pl->SetProp(P_LAST_RAMMEN_TIME, time() );
+      //beulen_offen=1;
+      pl->AddHp(-random(36)); break;
+      
+      case 4:
+      tell_object(pl, BS(
+        "Du hast starke Kopfschmerzen, Du fuehlst Dich elend. Die Beulen "
+        "eitern.")); break; }
+      
+      ENV(pl)->Message(BS(
+        "Wuah! "+pl->Name()+" scheint die Beulenpest zu haben, pass auf! "
+        "Sie ist ansteckend!"),
+      MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+      i++;
+      wait=15+random(10);
+    break;
+    
+    case 6:
+    switch(random(4)) {
+      
+      case 0:
+      tell_object(pl, BS(
+        "Die riesigen Beulen eitern stark. Dein Kopf pulsiert. Du koenntest "
+        "die Beulen aufbrechen, ob das gut ist... Du weisst es nicht."));
+      if(!random(3)&&!pl->QueryProp(P_DISABLE_ATTACK))
+        pl->SetProp(P_DISABLE_ATTACK,random(9)); break;
+        
+      case 1:
+      tell_object(pl, BS(
+        "AAAAAAAAAARGH! Diese Schmerzen!! Dir wird kurz schwarz vor den "
+        "Augen... Uff, gerade konntest Du noch stehen bleiben. Du hast "
+        "hohes Fieber."));
+        
+      //ENV(pl)->Message(BS(
+      //  pl->Name()+" kippt fast um."),
+      //MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+      tell_room(ENV(pl), BS(pl->Name()+" kippt fast um."),({pl}) );
+      
+      if(!pl->QueryProp(P_DISABLE_ATTACK)) pl->SetProp(P_DISABLE_ATTACK,2);
+      break;
+      
+      case 2:
+      tell_object(pl, BS(
+        "Aufgrund der starken Schmerzen kannst Du Dich nur noch langsam "
+        "voranschleppen. Du nimmst Deine Umgebung nur noch getruebt wahr."));
+        
+      //ENV(pl)->Message(BS(
+      //  pl->Name(WESSEN)+" Koerper ist von Beulen uebersaeht. Die Beulenpest "
+      //  "hat "+pl->QueryPronoun(MALE,WER,SINGULAR)+" voll erwischt. Pass auf"
+      //  ", dass "+pl->QueryPronoun()+" Dich nicht ansteckt!"),
+      //  MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+      tell_room(ENV(pl), BS(
+        pl->Name(WESSEN)+" Koerper ist von Beulen uebersaeht. Die Beulenpest "
+        "hat "+pl->QueryPronoun(MALE,WER,SINGULAR)+" voll erwischt. Pass auf"
+        ", dass "+pl->QueryPronoun()+" Dich nicht ansteckt!"), ({pl}) );
+        
+      me->SetProp(P_X_ATTR_MOD, me->QueryProp(P_X_ATTR_MOD)+([A_STR:-3]) );
+      pl->do_exhaust(300+random(201)); break;
+      
+      case 3:
+      tell_object(pl, BS(
+        "Alles dreht sich. Dein Kopf ist ein riesiger Wal, Deine Beine und "
+        "Arme bestueckt mit Nadeln, Dein ganzer Koerper uebersaeht von "
+        "Kuerbissen. Du phantasierst..."));
+      if(!pl->QueryProp(P_DISABLE_SPELLS)) 
+        pl->SetProp(P_DISABLE_SPELLS, 10+random(21));
+      if(!pl->QueryProp(P_DISABLE_ATTACK))
+        pl->SetProp(P_DISABLE_ATTACK, 8+random(9));
+      break;  }
+      
+      i++;
+      wait=20+random(21);
+    break;
+    
+    case 7:
+    switch(random(3)) {
+    	
+      case 0:
+      tell_object(pl, BS(
+        "Aaaechz... Dein Gehirn, es pocht. Diese Beulen, ekelhaft eitrig. "
+        "Ob Du sie aufbrechen solltest? Argh, Deine Arme schmerzen."));
+        
+      //ENV(pl)->Message(BS(
+      //  pl->Name()+" aechzt von Schmerzen geplagt. Dicke Beulen uebersaehen "
+      // +pl->QueryPossPronoun(MALE,WEN,SINGULAR)+" Koerper."),
+      //MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({pl}) ]) ); 
+      
+      tell_room(ENV(pl), BS(
+        pl->Name()+" aechzt von Schmerzen geplagt. Dicke Beulen uebersaehen "
+        +pl->QueryPossPronoun(MALE,WEN,SINGULAR)+" Koerper."), ({pl}) );
+      
+      break;
+      
+      case 1:
+      tell_object(pl, BS(
+        "Kopfschmerzen! Unbeschreibliche Kopfschmerzen! Du verlierst "
+        "die Konzentration... und dann noch diese Beulen."));
+      if(!pl->QueryProp(P_DISABLE_SPELLS)) pl->SetProp(P_DISABLE_SPELLS, 4);
+      if(!pl->QueryProp(P_DISABLE_ATTACK)) pl->SetProp(P_DISABLE_ATTACK, 6);
+      break;
+      
+      case 2:
+      tell_object(pl, BS(
+        "Das bringt Dich um, DAS BRINGT DICH UM!!! DIESE SCHMERZEN! Oh, "
+        "ploetzlich wird alles taub ... ah ... das Fieber truebt Deine Sinne. "
+        "Auch die Schmerzwahrnehmung, Erleichterung, kurzfristig..."));
+      me->SetProp(P_X_HEALTH_MOD, me->QueryProp(P_X_HEALTH_MOD)+
+        ([P_SP:-40]) ); break; }
+      
+      i=5;
+      wait=20+random(26);
+    break;
+
+// --------------------------------------------------------------------------
+// ----- ABORTIVE PEST ------------------------------------------------------
+// --------------------------------------------------------------------------
+
+    case 50:
+      switch(random(3)) {
+      	
+      	case 0:
+        tell_object(pl, BS(
+          "Du fuehlst Dich unwohl.")); break;
+        case 1:
+        tell_object(pl, BS(
+          "Dein Kopf tut ein wenig weh.")); break;
+        case 2:
+        tell_object(pl, BS(
+          "Du hast leichte Kopfschmerzen.")); break; }
+        
+        i++;
+        wait=35+random(11);
+      break;
+      
+    case 51:
+      switch(random(3)) {
+      	
+      	case 0:
+      	tell_object(pl, BS(
+      	  "Du hast staerkere Kopfschmerzen. Leichte Schwellungen bilden "
+      	  "sich an Deinem Koerper.")); break;
+      	case 1:
+      	tell_object(pl, BS(
+      	  "Es bilden sich Schwellungen an Deinem Koerper. Deine Glieder "
+      	  "schmerzen ein wenig.")); break;
+      	case 2:
+      	tell_object(pl, BS(
+      	  "Deine Arme tun weh. Kleine Beulen wachsen auf Deinem Koerper. "
+      	  "Was bedeutet das?")); break; }
+      	
+      	i++;
+      	wait=25+random(9);
+      break;
+      
+      case 52:
+      switch(random(4)) {
+      	
+      	case 0:
+      	tell_object(pl, BS(
+      	  "Du bekommst starke Kopfschmerzen. Du glaubst, ein wenig Fieber "
+      	  "zu haben."));
+      	  
+      	//ENV(pl)->Message(BS(
+      	//  pl->Name()+" scheint Kopfschmerzen zu haben."),
+        //MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({pl}) ]) );
+        
+        tell_room(ENV(pl), 
+          BS(pl->Name()+" scheint Kopfschmerzen zu haben."), ({pl}) );
+        
+      	pl->AddHp(-random(30)); break;
+      	
+      	case 1:
+      	tell_object(pl, BS(
+      	  "Du hast Fieber. Deine Glieder tun ein wenig weh, Dein Fleisch "
+      	  "schwillt stellenweise leicht an."));
+      	me->SetProp(P_X_HEALTH_MOD, me->QueryProp(P_X_HEALTH_MOD)+
+      	  ([P_HP:-23]) ); 
+      	  
+      	//ENV(pl)->Message(BS(
+      	//  "Auf "+pl->Name(WESSEN)+" Koerper bilden sich leichte "
+      	//  "Schwellungen"),
+        //MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({pl}) ]) ); 
+        
+        tell_room(ENV(pl), BS(
+          "Auf "+pl->Name(WESSEN)+" Koerper bilden sich leichte "
+      	  "Schwellungen"), ({pl}) );
+        
+        break;
+      	  
+      	case 2:
+      	tell_object(pl, BS(
+      	  "Du hast leichtes Fieber. Dein Kopf schmerzt."));
+      	  
+      	//ENV(pl)->Message(BS(
+      	// pl->Name()+" fuehlt sich nicht wohl."),
+        //MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({pl}) ]) );
+        
+        tell_room(ENV(pl), BS(
+          pl->Name()+" fuehlt sich nicht wohl."), ({pl}) );
+        
+      	break;
+      	
+      	case 3:
+      	tell_object(pl, BS(
+      	  "Dir ist ein bisschen schwindelig. Kopfweh hast Du auch."));
+      	if(!pl->QueryProp(P_DISABLE_SPELLS))
+      	  pl->SetProp(P_DISABLE_SPELLS,4); break; }
+      	
+      	i++;
+      	wait=15+random(21);
+      break;
+      
+      case 53:
+      switch(random(3)) {
+      	
+      	case 0:
+      	tell_object(pl, BS(
+      	  "Kopfschmerzen! Argh!!"));
+      	pl->AddHp(-11); break;
+      	
+      	case 1:
+      	tell_object(pl, BS(
+      	  "Kurz wird Dir so schwindelig, dass Du fast umkippst!"));
+      	if(pl->QueryProp(P_WEAPON))
+      	 {
+      	   tell_object(pl, BS(
+      	     "Deine Waffe faellt Dir aus der Hand!"));
+      	   pl->DoUnwield();
+      	 }
+      	break;
+      	
+      	case 2:
+      	tell_object(pl, BS(
+      	  "Die Schwellungen schmerzen ein wenig. Viel mehr jedoch schmerzt "
+      	  "Dein Kopf."));
+      	  
+      	//ENV(pl)->Message(BS(
+      	//  pl->Name()+" ist nicht ganz gesund."),
+        //  MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({pl}) ]) ); 
+          
+        tell_room(ENV(pl), BS(
+          pl->Name()+" ist nicht ganz gesund."), ({pl}) );
+        
+        break; }
+      	
+      	i=75;
+      	wait=20+random(21);
+     break;
+      
+// --------------------------------------------------------------------------
+// ----- HEILUNG DER BEULENPEST UND ABORTIVEN PEST --------------------------
+// --------------------------------------------------------------------------
+
+    case 75:
+    switch(random(3)) {
+      
+      case 0:
+      tell_object(pl, BS(
+        "Die Beulen schwellen ab, Du fuehlst Dich ein ganz klein wenig "
+        "besser.")); break;
+      case 1:
+      tell_object(pl, BS(
+        "Deine Kopfschmerzen werden schwaecher, auch die Schwellungen "
+        "scheinen zurueck zu gehen.")); break;
+      case 2:
+      tell_object(pl, BS(
+        "Deine Glieder schmerzen noch, aber die Beulen scheinen zu heilen."));
+      break; }
+      
+    //ENV(pl)->Message(BS(
+    //  pl->Name()+" scheint sich zu erholen."),
+    //  MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+    tell_room(ENV(pl), BS(
+      pl->Name()+" scheint sich zu erholen."), ({pl}) );
+      
+      i++;
+      wait=20+random(30);
+    break;
+    
+    case 76:
+    switch(random(3)) {
+      
+      case 0:
+      tell_object(pl, BS(
+        "Das Fieber sinkt, des Schwindelgefuehlt verschwindet langsam."));
+      break;
+      
+      case 1:
+      tell_object(pl, BS(
+        "Die Schmerzen lassen nach. Die Beulen verschwinden allmaehlich. "
+        "Dein Kopf tut noch weh."));
+      break;
+      
+      case 2:
+      tell_object(pl, BS(
+        "Du fuehlst Dich besser, Dein Kopf ist nicht mehr so heiss."));
+      break; }
+      
+      i++;
+      wait=40+random(11);
+    break;
+    
+    case 77:
+    switch(random(3)) {
+      
+      case 0:
+      tell_object(pl, BS(
+        "Du gewinnst Deine Wahrnehmung zurueck, die Beulen sind fast "
+        "komplett verheilt."));
+      break;
+      
+      case 1:
+      tell_object(pl, BS(
+        "Deine Kopfschmerzen sind fast voellig verschwunden, Du "
+        "fuehlst Dich wesentlich besser!"));
+      break;
+      
+      case 2:
+      tell_object(pl, BS(
+        "Deine Glieder schmerzen nicht mehr, die Schwellungen sind beinahe "
+        "vollstaendig verheilt."));
+      break; }
+      
+      i++;
+      wait=30+random(61);
+    break;
+    
+    case 78:
+    pl->SetProp("pest_immunitaet",time());
+    tell_object(pl, BS(
+      "Du hast die Pest ueberwunden! YIEHA!"));
+    pl->command_me("hops");
+    pl->command_me("knuddel alle");
+    set_old_title(pl);
+    me->remove(1);
+    i=-1;
+    wait=10;
+    break;
+    
+// --------------------------------------------------------------------------
+// ----- UEBERGANG BEULENPEST ZU LUNGENPEST ---------------------------------
+// --------------------------------------------------------------------------
+
+   case 90:
+   switch(random(2)) {
+     
+     case 0:
+     tell_object(pl, BS(
+       "Das Fieber und die starken Schmerzen sind wohl nicht genug, "
+       "ploetzlich musst Du stark Husten! AAAAARGH! Das brennt in der "
+       "Lunge!"));
+       
+     //ENV(pl)->Message(BS(
+     //  pl->Name()+" hustet stark."),
+     //  MSGFLAG_SOUND,([MSGFLAG_EXCLUDE:({pl}) ]) ); 
+      
+     tell_room(ENV(pl), BS(
+       pl->Name()+" hustet stark."), ({pl}) );
+    
+    break;
+     
+     case 1:
+     tell_object(pl, BS(
+       "Die Beulen tun weh, Dir ist unglaublich schwindelig, Dein Kopf "
+       "Schmerzt. *HUST* *HUST* Das brennt in der Lunge!"));
+       
+     //ENV(pl)->Message(BS(
+     //  pl->Name()+" hustet ploetzlich stark."),
+     //  MSGFLAG_SOUND,([MSGFLAG_EXCLUDE:({pl}) ]) ); 
+      
+     tell_room(ENV(pl), BS(
+       pl->Name()+" hustet ploetzlich stark."), ({pl}) );
+     
+     break; }
+     
+     i++;
+     wait=25+random(11);
+   break;
+   
+   case 91:
+   switch(random(3)) {
+     
+     case 0:
+     tell_object(pl, BS(
+       "*HUSTHUSTHUST* AAAAAAAAAAAAAAAARRRRRRRRGHHHHH!! Die Schmerzen "
+       "sind unertraeglich beim Husten! Die Beulen eitern stark."));
+       
+     //ENV(pl)->Message(BS(
+     //  pl->Name()+" schreit beim Husten vor Schmerz laut auf!"),
+     //  MSGFLAG_SOUND,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+     tell_room(ENV(pl),BS(
+       pl->Name()+" schreit beim Husten vor Schmerz laut auf!"),
+       ({pl}) );
+       
+     pl->AddHp(-random(50));
+     if(!pl->QueryProp(P_DISABLE_SPELLS))
+       pl->SetProp(P_DISABLE_SPELLS,4+random(11));
+     break;
+     
+     case 1:
+     tell_object(pl, BS(
+       "*KOTZ* *HUST* !! !!!  !!! Du bekommst keine Luft! *HUST* *WUERG* "
+       "Du spuckst einen ekligen schwarzen Batzen aus und ringst nach "
+       "Atem."));
+       
+     //ENV(pl)->Message(BS(
+     //  pl->Name()+" bekommt kaum Luft und spuckt beim Husten ekelhafte, "
+     //  "schlammartige Brocken aus."),
+     //  MSGFLAG_SOUND,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+     tell_room(ENV(pl), BS(
+       pl->Name()+" bekommt kaum Luft und spuckt beim Husten ekelhafte, "
+       "schlammartige Brocken aus."), ({pl}) );
+      
+     pl->AddHp(-random(60));
+     if(!pl->QueryProp(P_DISABLE_ATTACK))
+       pl->SetProp(P_DISABLE_ATTACK,4+random(3));
+     break;
+     
+     case 2:
+     tell_object(pl, BS(
+       "Die dicken Beulen eitern stark weiter. Dein Kopf schmerzt "
+       "fuerchterlich. Ploetzlich hast Du schwere Atemnot! *HUST* *HUST* "
+       "*KOTZ* AAAAAHHHH WIE DAS BRENNT IN DER LUNGE!!"));
+       
+     //ENV(pl)->Message(BS(
+     //  pl->Name()+" hat schwerste Atemnot."),
+     //  MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+     tell_room(ENV(pl), BS(
+       pl->Name()+" hat schwerste Atemnot."), ({pl}) );
+      
+     pl->AddHp(-random(70)); break; }
+     
+     i=110;
+     wait=20+random(31);
+   break;
+
+// --------------------------------------------------------------------------
+// ----- LUNGENPEST ---------------------------------------------------------
+// --------------------------------------------------------------------------
+
+   case 100:
+   switch(random(3)) {
+   	
+     case 0:
+     tell_object(pl, BS(
+       "*HUST**HUST* ploetzlich musst Du stark husten!"));
+       
+     //ENV(pl)->Message(BS(
+     //  pl->Name()+" musst ploetzlich stark husten."),
+     //  MSGFLAG_SOUND,([MSGFLAG_EXCLUDE:({pl}) ]) ); 
+      
+     tell_room(ENV(pl), BS(
+        pl->Name()+" musst ploetzlich stark husten."), ({pl}) );
+      
+     break;
+     
+     case 1:
+     tell_object(pl, BS(
+       "Du fuehlst Dich nicht wohl. Dein Kopf tut weh. *KEUCH* *HUST* "
+       "Du bekommst auf einmal keine Luft!! CHCHRRRCHUUUH Verzweifelt ringst "
+       "Du nach Atem ... langsam geht es wieder."));
+       
+     //ENV(pl)->Message(BS(
+     //  pl->Name()+" hustet stark und bekommt nur schwer Luft."),
+     //  MSGFLAG_SOUND,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+     tell_room(ENV(pl), BS(
+       pl->Name()+" hustet stark und bekommt nur schwer Luft."), ({pl}) );
+      
+     pl->AddHp(-random(40)); break;
+     
+     case 2:
+     tell_object(pl, BS(
+       "Deine Lippen fuehlen sich komisch an. Deine Arme tun weh. *HUST* "
+       "*HUST* Du musst stark husten. DAS BRENNT SCHRECKLICH IN DER LUNGE!!"));
+       
+     //ENV(pl)->Message(BS(
+     //  pl->Name()+" schreit beim Husten vor Schmerzen auf!"),
+     //  MSGFLAG_SOUND,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+     tell_room(ENV(pl), BS(
+       pl->Name()+" schreit beim Husten vor Schmerzen auf!"), ({pl}) );
+     
+     pl->AddHp(-random(29)); break; }
+     
+     i++;
+     wait=30+random(5);
+   break;
+   
+   case 101:
+   switch(random(3)) {
+     
+     case 0:
+     tell_object(pl, BS(
+       "Dir wird schwindelig, Du taumelst. Dann ein kratzen im Hals - "
+       "*HUST* CHGRRRRRR *KOTZ* PFAE! AAARGH SCHMERZ! Deine Lungen brennen, "
+       "Du hustest einen ekelhaft schwarz-blutigen Schleim heraus."));
+       
+     //ENV(pl)->Message(BS(
+     //  pl->Name()+" hustet blutigen Schleim hoch und kann sich kaum "
+     //  "konzentrieren. "+capitalize(pl->QueryPossPronoun(FEMALE,WEN,PLURAL))+
+     //  " Lippen sind blau gefaerbt."),
+     //  MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+     tell_room(ENV(pl), BS(
+       pl->Name()+" hustet blutigen Schleim hoch und kann sich kaum "
+       "konzentrieren. "+capitalize(pl->QueryPossPronoun(FEMALE,WEN,PLURAL))+
+       " Lippen sind blau gefaerbt."), ({pl}) );
+      
+     if(!pl->QueryProp(P_DISABLE_SPELLS))
+       pl->SetProp(P_DISABLE_SPELLS, 2+random(7));
+     if(!pl->QueryProp(P_DISABLE_ATTACK))
+       pl->SetProp(P_DISABLE_ATTACK, random(5));
+     may_die(45,pl);
+     break;
+     
+     case 1:
+     tell_object(pl, BS(
+       "CHCH - CHRRRR - CHRRRRRRRRR - UUUHHH! Du waerst beinahe "
+       "erstickt! Ploetzlich dreht sich alles, Dir wird schwarz vor Augen. "
+       "Du kippst um und bist einige Zeit Bewusstlos."));
+       
+     //ENV(pl)->Message(BS(
+     //  pl->Name()+" kaempft mit dem Atem, kippt dann um und liegt einige "
+     //  "Zeit zuckend am Boden."),
+     //  MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+     tell_room(ENV(pl), BS(
+       pl->Name()+" kaempft mit dem Atem, kippt dann um und liegt einige "
+       "Zeit zuckend am Boden."), ({pl}) );
+      
+     if(!pl->QueryProp(P_DISABLE_SPELLS))
+       pl->SetProp(P_DISABLE_SPELLS, 4+random(3));
+     if(!pl->QueryProp(P_DISABLE_ATTACK))
+       pl->SetProp(P_DISABLE_ATTACK, 4+random(3));
+     pl->SetProp(P_LAST_RAMMEN_TIME, time() );
+     may_die(30+random(30),pl);
+     break;
+     
+     case 2:
+     tell_object(pl, BS(
+       "*HUST* Du hast das Gefuehl, dass das Husten Dir die Lungen zerfetzt. "
+       "Es schmerzt unertraeglich, Du fuehlst Dich halbtot."));
+       
+     //ENV(pl)->Message(BS(
+     //  pl->Name()+" hustet fuerchterlich!"),
+     //  MSGFLAG_SOUND,([MSGFLAG_EXCLUDE:({pl}) ]) );
+       
+     tell_room(ENV(pl), BS(
+       pl->Name()+" hustet fuerchterlich!"), ({pl}) );
+       
+     me->SetProp(P_X_HEALTH_MOD, me->QueryProp(P_X_HEALTH_MOD)+
+       ([P_HP:-(40+random(40)),P_SP:-random(30)]) );
+     break; }
+     
+     i++;
+     wait=20+random(31);
+   break;
+   
+   case 102:
+   switch(random(3)) {
+     
+     case 0:
+     tell_object(pl, BS(
+       "*Roechel* Du tust Dir extrem schwer mit dem Atmen, kannst Dich "
+       "kaum bewegen... *HUUUUST* ARG!"));
+       
+     //ENV(pl)->Message(BS(
+     //  pl->Name()+" atmet schwer und muss staendig husten."),
+     // MSGFLAG_SOUND,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+     tell_room(ENV(pl), BS(
+       pl->Name()+" atmet schwer und muss staendig husten."), ({pl}) );
+      
+     pl->ModifySkillAttribute(pl,SA_SPEED,30+random(30),random(40));
+     may_die(20,pl); break;
+     
+     case 1:
+     tell_object(pl, BS(
+       "*HUST* *HUST* *HUST* *HUST* AAAAAAARGH *ROECHEL* CHCHCHRRRRR "
+       "Du hast schwerste Atemprobleme!!! CHHHHHH *PATSCH* Du kippst vor "
+       "Schwindel um und schlaegst Dir schwer den Kopf an."));
+       
+     //ENV(pl)->Message(BS(
+     //  pl->Name()+" hustet schwer, ringt nach Luft und kippt schliesslich um, "
+     //  "wobei "+pl->QueryPronoun()+" sich den Kopf anschlaegt."),
+     //  MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+     tell_room(ENV(pl), BS(
+       pl->Name()+" hustet schwer, ringt nach Luft und kippt schliesslich um, "
+       "wobei "+pl->QueryPronoun()+" sich den Kopf anschlaegt."),
+       ({pl}) );
+      
+     me->SetProp(P_X_ATTR_MOD, me->QueryProp(P_X_ATTR_MOD)+
+       ([A_INT:-(2+random(4)) ]) );
+     pl->do_exhaust(random(600)); break;
+     may_die(30+random(40),pl);
+     
+     case 2:
+     tell_object(pl, BS(
+       "Deine Lungen brennen, als haettest Du gluehende Kohlen in Dir. Dein "
+       "Kopf schmerzt wie verrueckt, Du bekommst kaum Luft. Totkrank, so "
+       "fuehlst Du Dich."));
+       
+     //ENV(pl)->Message(BS(
+     //  pl->Name()+" schaut sterbenskrank aus."),
+     //  MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+     tell_room(ENV(pl), BS(
+       pl->Name()+" schaut sterbenskrank aus."), ({pl}) );
+      
+     pl->do_exhaust(200+random(300)); break; }
+     
+     i++;
+     wait=15+random(40);
+   break;
+   
+   case 103:
+   switch(random(2)) {
+     
+     case 0:
+     tell_object(pl, BS(
+       "*HUST* *HUST* Das tut SOOO WEH!!"));
+       
+     //ENV(pl)->Message(BS(
+     //  pl->Name()+" bruellt vor Schmerz beim Husten!"),
+     //  MSGFLAG_SOUND,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+     tell_room(ENV(pl), BS(
+       pl->Name()+" bruellt vor Schmerz beim Husten!"), ({pl}) );
+      
+     may_die(random(40),pl); break;
+     
+     case 1:
+     tell_object(pl, BS(
+       "HCHAAA --- CHAAAAAAAA --- CHRRRRRRRRRRR *HUST* *HUST* *KOTZ* "
+       "Unter grausamen Schmerzen spuckst Du einen blutigen Klumpen heraus, "
+       "Du erstickst fast!"));
+       
+     //ENV(pl)->Message(BS(
+     //  pl->Name()+" spuckt einen blutigen Batzen aus. "+
+     //  pl->QueryPronoun()+" sieht so gut wie tot aus."),
+     //  MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+     tell_room(ENV(pl), BS(
+       pl->Name()+" spuckt einen blutigen Batzen aus. "+
+       pl->QueryPronoun()+" sieht so gut wie tot aus."), ({pl}) );
+      
+     pl->do_exhaust(random(500));
+     pl->ModifySkillAttribute(SA_SPEED,40,20+random(30));
+     may_die(20+random(30),pl); break; }
+     
+     i++;
+     wait=20+random(40);
+   break;
+   
+   case 104:
+   switch(random(3)) {
+     
+     case 0:
+     tell_object(pl, BS(
+       "Dein Gehirn fuehlt sich an, als wuerde es gleich explodieren. Du "
+       "hast sehr hohes Fieber, Deine Sinne schwinden. *HUST* *HUST* Du "
+       "fuehlst die Schmerzen beim Husten kaum noch, alles dreht sich."));
+       
+     //ENV(pl)->Message(BS(
+     //  pl->Name()+" starrt bleich durch die Gegend. "
+     //  +capitalize(pl->QueryPossPronoun(FEMALE,WEN,PLURAL))+" Lippen sind "
+     //  "ganz blau, "+pl->QueryPronoun()+" hustet staendig und roechelt."),
+     //  MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+     tell_room(ENV(pl), BS(
+       pl->Name()+" starrt bleich durch die Gegend. "
+       +capitalize(pl->QueryPossPronoun(FEMALE,WEN,PLURAL))+" Lippen sind "
+       "ganz blau, "+pl->QueryPronoun()+" hustet staendig und roechelt."),
+       ({pl}) );
+      
+     pl->ModifySkillAttribute(SA_SPEED,30,20+random(20));
+     me->SetProp(P_X_ATTR_MOD, me->QueryProp(P_X_ATTR_MOD)+
+       ([A_DEX:-(2+random(4)),A_CON:-(1+random(4)),A_STR:-(2+random(6))]) );
+     may_die(30+random(50),pl);
+     break;
+     
+     case 1:
+     tell_object(pl, BS(
+       "*HUST* *HUST* Jedes Mal Husten fuehlt sich an, als wuerde eine Saege "
+       "in Deinen Lungen wetzen und anschliessend ein trollgrosser Stein "
+       "in Deinen Brustkorb geschleudert. Atemnot!"));
+       
+     //ENV(pl)->Message(BS(
+     //  pl->Name()+" hustet kraechzend und atmet schwer. "
+     //  +pl->QueryPronoun()+" sieht schon fast verwesend aus."),
+     //  MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+     tell_room(ENV(pl), BS(
+       pl->Name()+" hustet kraechzend und atmet schwer. "
+       +pl->QueryPronoun()+" sieht schon fast verwesend aus."), ({pl}) );
+      
+     may_die(random(40),pl);
+     break;
+     
+     case 2:
+     tell_object(pl, BS(
+       "Du fuehlst Dich sehr schwach, Dein Kreislauf bricht zusammen. "
+       "*HUST* *SPUCK* WARGH! Das haeltst Du nicht mehr lange durch..."));
+       
+     //ENV(pl)->Message(
+     //  pl->Name()+" hustet stark.\n"
+     //  +pl->Name()+" sieht schwerkrank aus.\n",
+     //  MSGFLAG_SOUND,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+     tell_room(ENV(pl), BS(
+       pl->Name()+" hustet stark.\n"
+       +pl->Name()+" sieht schwerkrank aus.\n"), ({pl}) );
+      
+     pl->do_exhaust(200+random(500));
+     may_die(20+random(40),pl);
+     break; }
+     
+     i=101;
+     wait=20+random(10);
+   break;
+
+//---------------------------------------------------------------------------
+// ----- SCHWARZER TOD ------------------------------------------------------
+// --------------------------------------------------------------------------
+
+   case 200:
+   switch(random(3)) {
+     
+     case 0:
+     tell_object(pl, BS(
+       "Die eitrigen Beulen scheinen sich auszudehnen. Du hast extrem "
+       "hohes Fieber, Deine Dich quaelenden, schmerzenden Glieder lahmen. "
+       "Du siehst Deinen Tod nahe."));
+       
+     //ENV(pl)->Message(BS(
+     //  pl->Name()+" kann sich vor Schmerz kaum noch bewegen. "
+     //  +capitalize(pl->QueryPossPronoun(FEMALE,WEN,PLURAL))+" Bewegungen "
+     //  "verlangsamen sich zusehens, "+pl->QueryPronoun()+" ist so gut "
+     //  "wie tot."),
+     //  MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+     tell_room(ENV(pl), BS(
+       pl->Name()+" kann sich vor Schmerz kaum noch bewegen. "
+       +capitalize(pl->QueryPossPronoun(FEMALE,WEN,PLURAL))+" Bewegungen "
+       "verlangsamen sich zusehens, "+pl->QueryPronoun()+" ist so gut "
+       "wie tot."), ({pl}) );
+      
+     pl->ModifySkillAttribute(SA_SPEED,50-random(40),30+random(20));
+     break;
+     
+     case 1:
+     tell_object(pl, BS(
+       "Dein Kopf tut dermassen weh, dass Du nichts mehr um Dich herum "
+       "wahrnimmst. Die dicken Beulen an Deinem Koerper scheinen sich "
+       "auszudehnen, Dir ist schwindelig."));
+       
+     //ENV(pl)->Message(BS(
+     //  "Die Beulen auf "+pl->Name(WESSEN)+" Koerper werden immer groesser."),
+     //  MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+     tell_room(ENV(pl), BS(
+       "Die Beulen auf "+pl->Name(WESSEN)+" Koerper werden immer groesser."),
+       ({pl}) );
+      
+     if(!pl->QueryProp(P_DISABLE_SPELLS))
+       pl->SetProp(P_DISABLE_SPELLS,12+random(31)); break;
+       
+     case 2:
+     tell_object(pl, BS(
+       "Gliederschmerzen, dicke Eiterbeulen, die sich nun ausbreiten. Alles "
+       "dreht sich... nein, DU drehst Dich! *KRACH* und schon liegst Du "
+       "auf dem Boden."));
+       
+     //ENV(pl)->Message(BS(
+     //  pl->Name()+" beginnt ploetzlich zu wanken, dreht sich ein und kracht "
+     //  "auf den Boden."),
+     //  MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+     tell_room(ENV(pl), BS(
+       pl->Name()+" beginnt ploetzlich zu wanken, dreht sich und kracht "
+       "auf den Boden."), ({pl}) );
+      
+     pl->SetProp(P_LAST_RAMMEN_TIME, time() );
+     if(!pl->QueryProp(P_DISABLE_SPELLS))
+       pl->SetProp(P_DISABLE_SPELLS, 4+random(3));
+     if(!pl->QueryProp(P_DISABLE_ATTACK))
+       pl->SetProp(P_DISABLE_ATTACK, 4+random(3)); break; }
+     
+     i++;
+     wait=10+random(61);
+   break;
+     
+     case 201:
+     switch(random(2)) {
+       
+       case 0:
+       tell_object(pl, BS(
+         "Bei jedem Schritt lahmen Deine Beine, vor Schmerz. Du fuehlst "
+         "Dich schwach, sehr schwach. Deine Haut beginnt sich schwarz zu "
+         "Faerben, das ueberlebst Du nicht mehr lange."));
+         
+       //ENV(pl)->Message(BS(
+       //  pl->Name(WESSEN)+" Haut beginnt sich schwarz zu faerben."),
+       //  MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+       tell_room(ENV(pl), BS(
+         pl->Name(WESSEN)+" Haut beginnt sich schwarz zu faerben."),
+         ({pl}) );
+      
+       pl->do_exhaust(400+random(500)); break;
+       
+       case 1:
+       tell_object(pl, BS(
+         "Deine Arme versagen Dir den Dienst, diese starken Schmerzen sind "
+         "unertraeglich! Die Beulen werden immer groesser, die Haut faerbt "
+         "sich stellenweise schwarz."));
+         
+       //ENV(pl)->Message(BS(
+       //  pl->Name()+" stoehnt vor Schmerz auf. "
+       //  +capitalize(pl->QueryPossPronoun(FEMALE,WEN,SINGULAR))+
+       //  "Haut ist an einigen Stellen schwarz, von Blut unterlaufen."),
+       //  MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({pl}) ]) );
+       
+       tell_room(ENV(pl), BS(
+         pl->Name()+" stoehnt vor Schmerz auf. "
+         +capitalize(pl->QueryPossPronoun(FEMALE,WEN,SINGULAR))+
+         "Haut ist an einigen Stellen schwarz, von Blut unterlaufen."),
+         ({pl}) );
+       
+       if(!pl->QueryProp(P_DISABLE_ATTACK))
+       pl->SetProp(P_DISABLE_ATTACK, 8+random(9)); break; }
+       
+       i++;
+       wait=15+random(71);
+     break;
+     
+     case 202:
+     switch(random(2)) {
+       
+       case 0:
+       tell_object(pl, BS(
+         "Die Schwaerze breitet sich unter Deiner Haut immer weiter aus. "
+         "Sie schmerzt unertraeglich bei Beruehrung. Dein Kopf haemmert, "
+         "Du wirst nicht mehr lange leben, das fuehlst Du."));
+         
+       //ENV(pl)->Message(BS(
+       //  pl->Name()+" ist totkrank. "
+       //  +capitalize(pl->QueryPossPronoun(FEMALE,WEN,SINGULAR))+
+       //  " Haut faerbt sich schwarz, das kann nicht gut sein."),
+       //  MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({pl}) ]) );
+       
+       tell_room(ENV(pl), BS(
+         pl->Name()+" ist totkrank. "
+         +capitalize(pl->QueryPossPronoun(FEMALE,WEN,SINGULAR))+
+         " Haut faerbt sich schwarz, das kann nicht gut sein."),
+         ({pl}) );
+       
+       me->SetProp(P_X_HEALTH_MOD, me->QueryProp(P_X_HEALTH_MOD)+
+         ([P_HP:-25,P_SP:-18]) ); break;
+       
+       case 1:
+       tell_object(pl, BS(
+         "Die ekelhaften Eiterbeulen brechen teilweise auf. Die Haut auf "
+         "Deinem Kranken Koerper wird schwarz. Die Kopfschmerzen "
+         "spuerst Du fast gar nicht mehr, das Fieber versetzt Dich in einen "
+         "Trancezustand."));
+         
+       //ENV(pl)->Message(BS(
+       //  pl->Name()+" gibt unverstaendliche Laute von sich. Unter der Haut"
+       //  "  "+capitalize(pl->QueryPossPronoun(NEUTER,WESSEN,SINGULAR))+
+       //  "Koerpers sammelt sich Blut, es Faerbt ihn schwarz."),
+       //  MSGFLAG_SOUND,([MSGFLAG_EXCLUDE:({pl}) ]) );
+         
+       tell_room(ENV(pl), BS(
+         pl->Name()+" gibt unverstaendliche Laute von sich. Unter der Haut"
+         "  "+capitalize(pl->QueryPossPronoun(NEUTER,WESSEN,SINGULAR))+
+         "Koerpers sammelt sich Blut, es Faerbt ihn schwarz."),
+         ({pl}) );
+         
+       pl->ModifySkillAttribute(SA_SPEED,80-random(40),20+random(20));
+       //beulen_offen=1; 
+       break; }
+       
+       i++;
+       wait=30+random(41);
+     break;
+     
+     case 203:
+     switch(random(3)) {
+      
+      case 0:
+      tell_object(pl, BS(
+        "Ploetzlich reisst Deine Haut an einer Stelle auf! Blut sickert "
+        "langsam heraus. Du starrst es an, wie gelaehmt. Dann fuehlst Du "
+        "ein Kribbeln. Deine Muskeln erschlaffen, Dein Blick wird Schwarz "
+        "....."));
+        
+      //ENV(pl)->Message(BS(
+      //  "Ploetzlich beginnt "+pl->Name()+" aus einer Wunde zu bluten. Mit "
+      //  "offenem Mund starrt "+pl->QueryPronoun()+" das Blut an, beginnt "
+      //  "zu wanken, und kippt um."),
+      //  MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+      tell_room(ENV(pl), BS(
+        "Ploetzlich beginnt "+pl->Name()+" aus einer Wunde zu bluten. Mit "
+        "offenem Mund starrt "+pl->QueryPronoun()+" das Blut an, beginnt "
+        "zu wanken, und kippt um."), ({pl}) );
+      
+      may_immediately_die(pl);
+      me->remove(1);
+      break;
+      
+      case 1:
+      tell_object(pl, BS(
+        "Dir ist schwindelig, Du wankst und stuerzt zu Boden. Als Du wieder "
+        "erwachst, liegst Du in einer Blutlacke. Einmal blickst Du noch nach "
+        "oben, dann verlassen Dich Deine Kraefte ....."));
+        
+      //ENV(pl)->Message(BS(
+      //  pl->Name()+" stuerzt auf einmal zu Boden. "
+      //  +pl->QueryPossPronoun(FEMALE,WEN,SINGULAR)+
+      //  " schwarze Haut reisst auf und Blut spritzt in einer Fontaene "
+      //  "heraus."),
+      //  MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({pl}) ]) );
+      
+      tell_room(ENV(pl), BS(
+        pl->Name()+" stuerzt auf einmal zu Boden. "
+        +pl->QueryPossPronoun(FEMALE,WEN,SINGULAR)+
+        " schwarze Haut reisst auf und Blut spritzt in einer Fontaene "
+        "heraus."), ({pl}) );
+      
+      may_immediately_die(pl);
+      me->remove(1);
+      break;
+      
+      case 2:
+      tell_object(pl, BS(
+        "Dein Kopf schmerzt unertraeglich, Deine Glieder spuerst Du vor "
+        "Qual kaum noch. Was ist das? Eine warme, klebrige Fluessigkeit "
+        "laeuft Deinen Arm hinab. Das muss das Blut eines Feindes sein! "
+        "Du blickst auf Deine Brust - ein Riss in Deiner schwarzen Haut. "
+        "Es ist Dein eigenes Blut. Dir wird schwummrig ....."));
+      may_immediately_die(pl);
+      me->remove(1);
+      break; }
+      
+      i=-1;
+      wait=10;
+    break;
+     
+  }
+  
+  if(i>3) new_title(pl);
+  
+  if(i>99 && i<105) may_contract_pest(pl);
+  
+  if(i<75&&i>0&&recovery_chance>
+    200+random(100)-(random(13)/10)*random(100)-(random(22)/20)*random(150) )
+  // ich mag lange formeln!
+    i=75; // man wird geheilt (nur moeglich bei Beulenpest und abortiver Pest)
+  
+  if(i>4&&i<8&&random(100)<7) i=100; // Uebergang zur Lungenpest
+  else if(i>4&&i<8&&random(100)<3) i=200; // Schwarzer Tod
+  
+  switch(i)
+  {
+    case 1..6: // beulen
+      call_out("warn",0,1, pl); break;
+      
+    case 90..104: // lungen
+      call_out("warn",0,2, pl); break;
+      
+    case 200..203: // schwarz
+      call_out("warn",0,3, pl); break;
+      
+    default: break;
+  }
+  
+  if(i>-1) call_out("pest",wait);
+  return;
+}
+
+// BECOMESNETALIVE -----------------------------------------------------------
+
+void BecomesNetAlive(object player)
+{
+  call_out("pest",0);
+  return;
+}
+
+// MAY DIE -------------------------------------------------------------------
+
+void may_die(int hp, object pl)
+{
+  if(!hp||!pl) return;
+  if(!interactive(pl)) return;
+  
+  if(query_idle(pl)>350)
+  { 
+    pl->AddHp(-hp); 
+    if(pl->QueryProp(P_HP)<100) pl->SetProp(P_HP, 100); 
+  }
+  // idelnde spieler (5 minuten) mindestens 100 lp
+  else pl->do_damage(hp,me);
+  return;
+}
+
+// MAY IMMEDIATELY DIE -------------------------------------------------------
+
+void may_immediately_die(object pl)
+{
+  if(query_idle(pl)<350) pl->die(1);
+  else pl->AddHp(-500);
+  set_old_title(pl);
+  me->remove(1);
+  return;
+}
+
+// CMD BRECHEN ---------------------------------------------------------------
+
+int cmd_brechen(string str)
+{
+  tell_object(TP, BS(
+    "Du brichst eine Deiner Beulen auf und schreist laut vor Schmerz! Eiter "
+    "gemischt mit Blut sickert aus der Wunde, das haettest Du nicht tun "
+    "sollen!"));
+  
+  tell_room(ENV(TP), BS(
+    TPN+" bricht eine Beule auf seinem Koerper auf und schreit wild auf!"),
+    ({TP}) );
+  
+  TP->AddHp(-(30+random(40)) );
+  
+  return 1;
+}
+
+// NEW_TITLE -----------------------------------------------------------------
+
+void new_title(object player)
+{
+  if(!player) return;
+  if(!query_once_interactive(player)) return;
+  
+  if(player->QueryProp(P_PRESAY)!="Pestkranker "||
+     player->QueryProp(P_PRESAY)!="Pestkranke ")
+    old_presay=player->QueryProp(P_PRESAY);
+       
+  if(player->QueryProp(P_TITLE)!=""||
+     player->QueryProp(P_TITLE) )
+   old_title=player->QueryProp(P_TITLE);
+  
+  player->SetProp(P_TITLE, "");
+  
+  if(player->QueryProp(P_GENDER)==FEMALE)
+    player->SetProp(P_PRESAY, "Pestkranke");
+  
+  else player->SetProp(P_PRESAY, "Pestkranker");
+  
+  return;
+}
+
+// SET OLD TITLE -------------------------------------------------------------
+
+void set_old_title(object player)
+{
+  if(!player) return;
+  if(!query_once_interactive(player)) return;
+  
+  player->SetProp(P_TITLE, old_title);
+  player->SetProp(P_PRESAY, old_presay);
+  
+  return;
+}
+
+// SET I ---------------------------------------------------------------------
+
+int set_i(int new_i)
+{
+  if(new_i<0) return -1;
+  
+  i=new_i;
+  return i;
+}
+
+// MAY CONTRACT PEST ---------------------------------------------------------
+
+void may_contract_pest(object pl)
+{
+  object *players;
+  object victim;
+  int counter;
+  
+  if(!ENV(pl)) return;
+  if( random(100) > 40 ) return;
+  
+  players=filter_array(all_inventory(ENV(pl)), #'interactive);
+  players=filter_array(players, "not_tp");
+  
+  victim=players[random( sizeof(players) )];
+  
+  if( victim->QueryProp(P_LEVEL) <= 35 ) return;
+  if( !member(informed, victim->Name()) || 
+       informed[victim->Name()]>time()-10 ) return;
+       
+  tell_object( pl, BS(
+    "*KEUCH* *HUST* Du hustest "+victim->Name()+" voll ins Gesicht!"));
+  
+  tell_object( victim, BS(
+    pl->Name()+" hustet Dir ins Gesicht! So ein Ferkel!"));
+  
+  tell_room( ENV(victim), BS(
+    pl->Name()+" hustet "+victim->Name()+" ins Gesicht. So ein Ferkel!"),
+    ({victim,pl}) );
+    
+  call_other(OBJ "pest", "???");
+  
+  if(!present(find_object(OBJ "pest"), victim))
+    clone_object(OBJ "pest")->move(victim, M_NOCHECK);
+    
+  return;
+}
+
+// NOT TP --------------------------------------------------------------------
+
+int not_tp(object player)
+{
+  if(player==ENV(TO)) return 0;
+  else return 1;
+}
+
+// WARN ----------------------------------------------------------------------
+
+void warn(int type, object pl)
+{
+  string *mes;
+  object *players;
+  int counter;
+  
+  if(!ENV(pl)) return;
+  
+  players=filter_array(all_inventory(ENV(pl)), #'interactive);
+  players=filter_array(players, "not_tp");
+  
+  if(!players) return;
+  
+  mes=({  
+    /*0*/ "bug, bitte melden", // buffer
+    
+    /*1*/ getcolor("bred")+getcolor("bold")+
+          "ACHTUNG:\n"+getcolor("none")+
+          ENV(TO)->Name()+" ist pestkrank! DIE PEST IST ANSTECKEND! Halte "
+          "Dich von "+ENV(TO)->QueryPronoun(WEM)+" fern!\n"
+          "Das ist eine ernste Warnung!\n",
+          
+    /*2*/ getcolor("bred")+getcolor("bold")+
+          "!!! ACHTUNG !!!\n"+getcolor("none")+getcolor("bold")+
+          ENV(TO)->Name()+" ist SCHWER pestkrank! DIE PEST IST ANSTECKEND! "
+          "Sie kann leicht zum TOD fuehren!\n"
+          "Das ist eine SEHR ERNSTZUNEHMENDE Warnung!!\n"+getcolor("none"),
+          
+    /*3*/ getcolor("bred")+getcolor("bold")+getcolor("blink")+
+          "-- !!! ACHTUNG !!! --\n"+getcolor("none")+getcolor("bold")+
+          ENV(TO)->Name()+" ist SEHR SCHWER pestkrank! DIESE FORM DER PEST "
+          "IST TOEDLICH UND ANSTECKEND!\n"
+          "VERSCHWINDE SOFORT!\n"
+          "Diese WARNUNG ist ernstzunehmen!\n"+getcolor("none")
+      });
+  
+  for(counter=0;counter<sizeof(players);counter++)
+  {
+    if(!member(informed, players[counter]->Name())) informed[players[counter]]=0;
+    
+    if( informed[players[counter]->Name()]>=(time()-80) && 
+        informed[players[counter]->Name()]!=0)
+      continue;
+
+      tell_object( players[counter], mes[type] );
+      informed[players[counter]->Name()]=time();
+  }
+  
+  return;
+}
+
+// QUERY TIME ----------------------------------------------------------------
+
+int query_time(string asdf)
+{
+  return informed[asdf];
+}

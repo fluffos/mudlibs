@@ -1,0 +1,188 @@
+//--Die Zaehmung -------------------------------------------------------------
+/*Problem: spaetere Spells brauchen eine eindeutige Rassenzuordnung. Da aber 
+viele NPC mit Rassen wie "Tier" oder "npc" oder voelligen neuschoepfungen 
+"eierlegendewollmilchsau" rumlaufen, ist es unmoeglich alle rassen einfach zu
+uebernehmen. Daher alle Tier-Rassen des Muds auflisten und Kategorien*/
+
+mixed switch_ranger_pet_race(object ob)
+{
+  string *woelfe, *katzen, *voegel, *spinnen, *kleintiere, *riesen;
+  string *panzertiere, *huftiere, *baeren, *echsen, *finsekten, *insekten;
+  mixed all, position;
+  int i, k;
+  
+  if(!ob) return 0;
+
+//Die Tier-Kategorien (!!!erstes element nie aendern!!!)
+  woelfe=({"wolf", "fraggle", "schakal", "wolfshund", "werwolf", "polarwolf", 
+          "schneewolf", "sandwolf", "hund", "hunde", "waldwolf", "eiswolf"});
+  katzen=({"katze", "katzen", "tiger", "wildkatze","puma", "raubkatze",
+           "schneeleopard", "sandloewe", "sandtiger", "loewe", "leopard", 
+           "gepard", "panther", "panter", "jaguar"});  
+  baeren=({"baer", "schwarzbaer", "grizzly", "eisbaer", "baeren", 
+           "grizzlys", "braunbaer"});  
+  riesen=({"riese", "nashorn", "mammut", "elefant", "bueffel", "nashoerner"});
+  voegel=({"vogel", "fledermaus", "voegel", "schleiereule", "waldkauz", 
+           "pinguin", "eule", "spechte", "specht", "baumschreier", 
+           "buntfalke", "silberfalke", "sperber", "steinadler", "wanderfalke"
+         , "rothe", "huhn", "falke", "geier", "uhu", "adler"});
+  spinnen=({"spinne", "spinnentier", "skorpion", "riesenspinne", "tarantel"});
+  panzertiere=({"panzertier", "schalentier", "krustentier", "krebs", 
+                "schildkroete", "hummer", "sandkrebs"});
+  huftiere=({"huftier", "pferd", "kamel", "esel", "rind","steinboecke", 
+             "hirsch", "reh", "stier", "wildschwein", "elch", "rentier", 
+             "zebra", "schwein", "einhorn", "antilope", "kuh", "gnu", "kuehe"
+           , "bock", "ziege", "boecke", "ziegen"});
+  echsen=({"echse", "schlange", "wurm", "sandwurm", "riesenechse", "eidechse",
+           "krokodil", "alligator", "todesviper", "kobra", "schlangen", 
+           "echsen", "vipern", "kobras", "wuermer", "viper"});
+  finsekten=({"f_insekt", "gelsen", "biene", "wespe", "hornisse", "gelse", 
+              "fliege", "schmetterling", "falter", "moskito", "libelle"});
+  insekten=({"insekt", "ameise", "huepfer", "assel", "made", "kaefer", 
+             "termite", "raupe", "maulwurfsgrille", "kakerlake", "schnecke", 
+             "frosch", "froesche", "grille", "insekten"});
+  kleintiere=({"kleintier", "ratte", "affe" , "hase", "kaninchen", 
+               "karnickel", "otter", "hoernchen", "maulwurf", "biber", "igel"
+             , "nagetier", "fuchs", "erdmaennchen", "schafe", "schaf", 
+               "frettchen", "waschbaer", "zebramaus", "maus", "ente", 
+               "schneehase", "schneemaus", "dachs", "marder", "hamster", 
+               "stinktier", "erdhoernchen", "mungo", "chamaeleon", "kroete"});
+  all=({woelfe, katzen, baeren, riesen, voegel, spinnen, panzertiere, 
+        huftiere, echsen, finsekten, insekten, kleintiere});
+
+  for(k=0; k<=sizeof(all)-1; k++)
+  {
+    position=all[k];
+    
+    //Passt evtl. gleich die Rasse?
+    if( member_array(lower_case(ob->QueryProp(P_RACE)), all[k]) != -1)
+    { return position[0]; break;}
+    
+    //id() abfragen
+    for(i=0; i<=sizeof(all[k])-1; i++)
+    { 
+      if( ob->id(position[i]) )
+      {return position[0]; break; } 
+    }
+    
+  }
+  
+  return 0;
+}
+
+int prep_zaehmung_test(object caster, mapping sinfo)
+{
+  object ob;
+  int success, ability, max_level, max_level_diff;
+  
+  success=SpellSuccess(caster,sinfo);
+  ability=sinfo[SI_SKILLABILITY];
+  max_level=30; //hier spater Skillpointabfrage, level erhoehen
+  max_level_diff=5;
+  
+  if(!FroschTest(caster, sinfo) || 
+     !AnimalTest(caster,sinfo)  ||
+     !BlindTest(caster,sinfo)     )
+    return 0;
+
+  //Nur ein gezaehmtes Tier pro Ranger  
+  if(caster->QueryProp(P_RANGER_PET)==1)
+  { tell_object(caster, BS("Du hast noch ein gezaehmtes Tier!"));
+    return 0;}
+    
+  //Gibt es das objekt?
+  ob = FindVictim(sinfo[SI_SKILLARG], caster, 
+         "Welches Tier moechtest Du zaehmen?\n");
+  if(!ob) return 0;
+
+  // id "NOZAEHMUNG"
+  if( member(ob->QueryProp(P_IDS), "NOZAEHMUNG") != -1 )
+  { tell_object(caster, BS("Du kannst das nicht zaehmen."));
+    return 0;}
+  
+  // Falls es irgendwann mal spielbare Tierrassen gibt
+  if( interactive(ob) )
+  { tell_object(caster, BS("Netter Versuch."));
+    return 0;}
+  
+  // Ist es ein Tier?
+  if( !(ob->is_class_member(CL_ANIMAL)) )
+  { tell_object(caster, BS("Das ist kein Tier!"));
+    return 0;}
+  
+  //Ist das Objekt ein Bewacher?
+  if(ob->QueryProp(P_GUARD))
+  { tell_object(caster, BS("Dieses Tier darfst Du nicht zaehmen."));
+    return 0;}
+    
+  //Neue Methode
+  /*if( (ob->QueryGuardProtection())+1 > ability/100)
+  { tell_object(caster, BS("Dieses Tier darfst Du nicht zaehmen."));
+    return 0;}*/
+    
+  //Level-gerecht?
+  if( (ob->QueryProp(P_LEVEL) > 30) ||  
+      ((caster->QueryProp(P_LEVEL))-(ob->QueryProp(P_LEVEL)) < max_level_diff))
+  { tell_object(caster, BS("Du bist nicht erfahren genug fuer dieses Tier. "
+                        "Suche Dir ein anderes."));
+    return 0;}
+    
+  //Passt es in die Kategorien?
+  if( !switch_ranger_pet_race(ob) )
+  { tell_object(caster, BS("Mit Diesem Tier koenntest Du nichts anfangen."));
+    return 0;}  
+    
+  return 1;
+  
+}
+
+int prep_zaehmung(object caster, mapping sinfo) 
+{ 
+  object ob;
+  
+  if(!prep_zaehmung_test(caster, sinfo)) {return 0;}
+  
+  ob = FindVictim(sinfo[SI_SKILLARG], caster, 
+         "Welches Tier moechtest Du zaehmen?\n");
+  if(!ob) return 0;  
+  
+  caster->SetProp(P_TMP_ATTACK_HOOK, ({ time()+sinfo[SI_PREPARE_TIME]+2, 
+                                    caster, "zaehmung_hook"}) );
+  tell_room(ENV(caster), BS(caster->Name()+" kniet vor "+ob->Name(WEM, 1)+
+                         " nieder und schaut beruhigend in die Augen von "
+                         +ob->Name(WEM)+"."), ({caster}) );
+  tell_object(caster, BS("Du kniest nieder und schaust "+ob->Name(WEM, 1)+" "
+                         "direkt in die Augen. Der Kampf der Geister "
+                         "beginnt."));
+  ob->Kill(caster);
+  return 1;
+}
+ 
+int zaehmung(object caster, mapping sinfo)
+{
+  object pet, ob;
+  int success, ability, max_level, max_level_diff;
+  string pet_category;
+  
+  success=SpellSuccess(caster,sinfo);
+  ability=sinfo[SI_SKILLABILITY];
+  max_level=30; //hier spater Skillpointabfrage, level erhoehen
+  max_level_diff=5;
+  
+  if(!prep_zaehmung_test(caster, sinfo)) {return 0;}
+
+  ob = FindVictim(sinfo[SI_SKILLARG], caster, 
+         "Welches Tier moechtest Du zaehmen?\n");
+  if(!ob) return 0;
+ 
+  pet_category=switch_ranger_pet_race(ob);
+    
+  caster->StopHuntFor(ob);
+  ob->StopHuntFor(caster);
+  tell_object(caster, BS("Du hast es geschafft!"));
+  pet=clone_object(NPC"pet");
+  pet->customize(caster, ob, pet_category);
+  //Rest geschieht im pet
+    
+  return ERFOLG;
+}

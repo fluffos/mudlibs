@@ -1,0 +1,102 @@
+#include "../def.h"
+#include "/gilden/nekromanten/nekro_properties.h"
+
+inherit NPC "std_npc";
+
+private int carryCorpse;
+
+public void create() {
+
+    if(!is_clone(this_object())) return;
+    ::create();
+    SetProp(P_LONG, "Eine ausgezehrte Leiche, bereits verfaulend und das Fleisch von "
+                    "den Knochen fallend steht vor dir. Maden und Geschmeiss bohren "
+                    "sich durch das Fleisch, ein gruenes gluehen erfuellt die schleimigen "
+                    "Augen. Die Haende zu krummen Klauen verkrampft, das Maul mit "
+                    "spitzen Zaehnen bestueckt starrt dich dieses Monster hungrig an.");
+    SetProp(P_NAME, "Zombie");
+    SetProp(P_NAME_ADJ, "hungernd");
+    SetProp(P_GENDER, MALE);
+    SetProp(P_RACE, "Untoter");
+    SetProp(P_SIZE, 160);
+    SetProp(P_MSGIN, "schlurft herein");
+    SetProp(P_MMSGIN, "schlurft");
+    AddId(({"zombie", "untoter"}));
+    AddAdjective(({"hungernder", "hungernde", "hungernden", "hungerndem"}));
+
+    SetProp(P_CAVE_FACTION, F_WITCHDOCTOR);
+    create_dungeon_npc(12+random(10));
+
+    SetProp(P_CONTROLLABLE_BY_NEKRO, 1);
+    
+    SetProp(P_HANDS, ({" mit ekelhaften Klauen", QueryProp(P_HANDS)[1], DT_RIP }));
+    SetProp(P_RESISTANCE_STRENGTHS, ([
+        DT_HOLY: 0.5, DT_LIGHT: 0.3,
+        DT_UNHOLY: -0.5, DT_TERROR: -0.3, DT_POISON: -1.0,
+        DT_PIERCE: -0.1, DT_BLUDGEON: 0.1, DT_SQUEEZE: 0.1, 
+        DT_COLD: -0.2, DT_FIRE: 0.3
+    ]));
+
+    SetProp(P_DIE_MSG, " faellt mit einem widerlichen Schmatzen zu Boden.\n");
+
+    SetProp(P_SPELLRATE, 20);
+    AddSpell(3, 180,
+       Name(WER) + " zerreisst dich mit seinen Klauen.\n",
+       Name(WER) + " zerreisst @WEN mit seinen Klauen.\n",
+       DT_RIP, ([SP_SHOW_DAMAGE: 1]));
+
+    AddSpell(1, 250,
+        Name(WER) + " beisst ein Stueck aus dir heraus und verschlingt es!\n",
+        Name(WER) + " beisst ein Stueck aus @WEM heraus und verschlingt es!\n",
+        DT_PIERCE, "selfHeal", ([SP_SHOW_DAMAGE: 1]));
+
+    carryCorpse = 0;
+}
+
+public void selfHeal(object enemy, int damage, mixed dam_type) {
+    AddHp(20 + random(20));
+}
+
+public void handleCorpse(object corpse) {
+    if(!objectp(corpse)) return;
+
+    command_me("nimm alles aus leiche");
+
+    if(!carryCorpse && random(10) > 6) {
+        command_me("emote nimmt die Leiche und schleift sie hinter sich her.");
+        carryCorpse = 1;
+    } else {
+        command_me("emote verschlingt die Leiche gierig.");
+        command_me("emote ruelpst.");
+        AddHp(20);
+    }
+
+    corpse->remove(1);
+    return;
+}
+
+public string _query_short() {
+    return "Ein hungernder Zombie" + (carryCorpse?" schleift eine Leiche hinter sich her":"");
+}
+
+public void init() {
+    ::init();
+
+    if(objectp(present("Leiche", environment(this_object())))) {
+        call_out("handleCorpse", 2, present("Leiche", environment(this_object())));
+    }
+
+    if(objectp(present("\ngwenshara_evil_cave_witch", environment(TO))) && carryCorpse) {
+        call_out("handOverCorpse", 2);
+    }
+}
+
+public void handOverCorpse() {
+    object witch;
+    if(!objectp(witch = present("\ngwenshara_evil_cave_witch", environment(TO)))) return;
+
+    tell_room(environment(TO), BS(Name(WER) + " uebergibt Sheraxdina die Leiche, die er herumschleppt."));
+    carryCorpse = 0;
+    witch->createHungryDead(1);
+    return;
+}

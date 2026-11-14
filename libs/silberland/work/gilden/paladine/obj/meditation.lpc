@@ -1,0 +1,322 @@
+
+// Meditationsobj der Paladine
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <new_skills.h>
+#include <moving.h>
+#include <wizlevels.h>
+
+#include "../paladin.h"
+#include "../blessing.h"
+
+string title;
+
+string medtype = "default";
+
+create() {
+  if (!is_clone(this_object())) return;
+  ::create();
+  
+  title="";
+  AddId (({PALADINITEM, "\nmeditation"}));
+  SetProp (P_SHORT, 0); 
+  SetProp (P_GENDER, FEMALE);
+  SetProp (P_WEIGHT, 0);
+  SetProp (P_NODROP, 1);
+  SetProp (P_NEVERDROP, 1);
+  SetProp (P_MAGIC, 1);
+  if(getuid(previous_object())!="GUILD.pal_spells") {
+   call_out("remove_me", 0);
+   return 0;
+  }
+}
+
+
+int settype(string type)
+{
+  //tell_object(ENV(ME), sprintf("Type set to: %s\n", type));
+  medtype = type;
+}
+
+void set_med_mod(int suc)
+{
+  return;
+}
+
+string extra_look() {
+  object player;
+  if(!player=ENV(ME)) return "";
+  if(player->QueryProp(P_GENDER)==FEMALE)
+    return "Sie ist in eine tiefe Meditation zu Dusty versunken.\n";
+  else 
+    return "Er ist in eine tiefe Meditation zu Dusty versunken.\n";
+}
+
+int start_remove(int endtime, int steptime, int suc) {
+  object plob;
+  if((plob=ENV(ME)) && interactive(plob)) {
+    title=plob->QueryProp(P_TITLE);
+    plob->Set(P_TITLE, symbol_function("med_title", TO), F_QUERY_METHOD);
+    plob->SetProp(P_RESTING, time() );
+    call_out("remove_me", endtime);
+
+    if (IS_LORD(ENV(ME)))
+      tell_object(ENV(ME), sprintf("MED: %s\n", medtype));
+
+    if (medtype == "konzentration")
+      {
+        call_out("do_spirit_seq", steptime, steptime, suc);
+        set_med_mod(suc);
+      }
+    else 
+      call_out("do_heal",steptime,steptime,suc);
+  } else {
+    call_out("remove",0);
+  }
+  return 1;
+}
+
+// Hier wird dem Spieler eine nette geschichte erzaehlt
+void do_spirit_seq(int steptime, int suc)
+{
+  object player;
+
+  if (ENV(ME) && interactive(ENV(ME)))
+    player = ENV(ME);
+  else
+    {
+      call_out("remove_me", 0);
+      return;
+    }
+
+  switch (random(16))
+    {
+      case 1:
+        tell_object(player, BS("Dusty scheint Dein Flehen zu "
+          "erhoeren."));
+        break;
+      case 2:
+        tell_object(player, BS("Du spuerst wie Deine magischen "
+          "Kraefte sich verstaerken."));
+        break;
+      case 3:
+        tell_object(player, BS("Dein Koerper scheint voellig "
+          "schwerelos zu sein."));
+        break;
+      case 4:
+        tell_object(player, BS("Du fuehlst die Staerke Dustys in "
+          "Deinen Gliedmassen."));
+        break;
+      case 5:
+        tell_object(player, BS("Du spuerst die magische Energie "
+          "auf Deiner Haut prickeln."));
+        player->AddSp(2+random(3));
+        break;
+      case 6:
+        tell_object(player, BS("Dein Geist erhebt sich wie ein "
+          "gewaltiger Vogel in die Luefte."));
+        break;
+      case 7:
+        tell_object(player, BS("Dusty schenkt Dir neue Kraft."));
+        player->AddHp(1+random(3));
+        break;
+      case 8:
+        tell_object(player, BS("Du nimmst Deine Umwelt nichtmehr wahr."));
+        break;
+
+      case 9..15:
+        break;
+
+      default:
+        tell_object(player, BS("Du vertiefst Deine Bindung zu Dusty "
+          "durch tiefe Meditation.")); 
+
+    }
+
+  if (find_call_out("do_spirit_seq") != -1) return;
+
+  call_out("do_spirit_seq", steptime, steptime, suc);
+}
+
+
+string med_title() {
+  return title+" (meditierend)";
+}
+
+remove_me() {
+  object player, room;
+  if(player=ENV(ME)) 
+    tell_object(player, "Du erwachst wieder aus Deiner tiefen Meditation.\n");
+  if(room=ENV(player))
+    tell_room(room, sprintf("%s erwacht wieder aus %sr tiefen Meditation.\n",
+        player->name(WER),player->QueryPossPronoun(2)), ({player}));
+  if(player) {
+    player->SetProp(P_RESTING, 0 );
+    player->SetProp(P_LAST_AWAKE_TIME, time() );
+    player->SetProp(P_PARALYZED, 0);
+    player->Set(P_TITLE, 0, F_QUERY_METHOD);
+  }
+
+  if(HAS_BLESSING(player, BLESSING_REVELATION)) {
+    tell_object(player, BS("Durch deine Meditation hat Dusty dir ihre Weisheit offenbart. Du fuehlst die "
+                           "Erleuchtung und Dustys Weisheit durch die Stroemen. EHRE SEI DUSTY!"));
+    player->SetProp(P_TMP_PALADINE_REVELATION_END, time() + player->QueryProp(P_GUILD_LEVEL)*15 + random(player->QueryAttribute(A_INT)*2));
+  }
+
+  call_out("remove",0);
+}
+
+void BecomesNetDead(object player) {
+  remove_me();
+}
+
+do_heal(int steptime,int suc) {
+  object player, help_ob;
+  int level,wert, align;
+  mapping map;
+
+  if(player=ENV(ME)) {
+    level=player->QueryProp(P_GUILD_LEVEL);
+    if (level<5) level=5;
+    player->AddHp(level/5+random(level/3));
+    if (random(suc) > 5000) {  // SP ideln durch P_RESTING schon viel schneller
+      player->AddSp(random(1+level/5));
+    }
+    if (random(suc) > 3000) {
+      align=player->QueryProp(P_ALIGN);
+      if(align+level/4 <= 1111) {
+        player->SetProp(P_ALIGN, align+level/4);
+      }
+    }
+    if (level>8) {
+      if((help_ob=present("DANTE_ZOMBIE_VIRUS", player)) && !random(5)) {
+        tell_object(player, BS("Du fuehlst den daemonischen Makel "
+              "von Deinem Koerper schwinden."));
+        call_other(help_ob, "setze_alte_werte");
+        if(objectp(help_ob)) help_ob->remove();
+      }
+/* P_MV heilung durch P_RESTING
+      wert=player->QueryProp(P_MV);
+      if(wert+level/4 < player->QueryProp(P_MAX_MV)) {
+        player->SetProp(P_MV, wert+level/4);
+      }
+*/      
+    }
+    if (level>10) { 
+      if (random(suc) > 2000 && random(1111)<align) {
+        wert=player->QueryProp(P_FOOD);
+        if(wert > 10) {
+          player->SetProp(P_FOOD, wert-random(5));
+        }
+      }
+      if (random(suc) > 2000 && random(1111)<align) {
+        wert=player->QueryProp(P_DRINK);
+        if(wert > 10) {
+          player->SetProp(P_DRINK, wert-random(5));
+        }
+      }
+      if (random(suc) > 2000 && random(1111)<align) {
+        wert=player->QueryProp(P_ALCOHOL);
+        if(wert > 10) {
+          player->SetProp(P_ALCOHOL, wert-random(5));
+        }
+      }
+    }
+    if (level>12) {
+      if (random(suc) > 3000) {
+        if(mappingp(map=player->QueryProp(P_DEAF))) {
+          wert=map[DEAF_TIME];
+          if (wert > 0) {
+            map[DEAF_TIME]--;
+            player->SetProp(P_DEAF,map);
+          }
+        }
+      }
+      if (random(suc) > 3000) {
+        if(mappingp(map=player->QueryProp(P_BLIND))) {
+          wert=map[BLIND_TIME];
+          if (wert > 0) {
+            map[BLIND_TIME]-=4;
+            player->SetProp(P_BLIND,map);
+          }
+        }
+      }
+    }
+    if (find_call_out("do_heal") != -1) return;
+    if (!random(5)) {
+      switch(random(16)) {
+        case 0:
+          tell_object(player,BS(
+            "In Deinen Gedanken erscheint Dusty's Abbild."));
+          break;
+        case 1:
+          tell_object(player,BS(
+            "Du bist weiterhin in eine tiefe Meditation versunken."));
+          break;
+        case 2:
+          tell_object(player,BS(
+            "Dusty erhoert und regeneriert Dich."));
+          break;
+        case 3:
+          tell_object(player,BS(
+            "Du bist ganz ruhig und gelassen."));
+          break;
+        case 4:
+          tell_object(player,BS(
+            "Du nimmst Deine Umwelt nicht mehr wahr."));
+          break;
+        case 5:
+          tell_object(player,BS(
+            "Dusty scheint Dich wirklich zu erhoeren."));
+          break;
+        case 6:
+          tell_object(player,BS(
+            "Dein Koerper ist wie versteinert ob der Meditation."));
+          break;
+        case 7:
+          tell_object(player,BS(
+            "Du spuerst wie Dusty in Deinen Geist eindringt."));
+          break;
+        case 8:
+          tell_object(player,BS(
+            "Wilde Zeichen bilden sich in Deinen Gedanken."));
+          break;
+        case 9:
+          tell_object(player,BS(
+            "Du siehst ein wunderschoenes Licht."));
+          break;
+        case 10:
+          tell_object(player,BS(
+            "Eine beruhigende Waerme steigt aus Deinem Inneren auf."));
+          break;
+        case 11:
+          tell_object(player,BS(
+            "Ruhe und Gelassenheit durchstroemen Deinen Koerper."));
+          break;
+        case 12:
+          tell_object(player,BS(
+            "Dein Vertrauen in die Goetter verstaerkt sich."));
+          break;
+        case 13:
+          tell_object(player,BS(
+            "Die Meditation erfrischt Deinen Koerper und Deinen Geist."));
+          break;
+        case 14:
+          tell_object(player,BS(
+            "Nichts kann Dich in Deiner Meditation stoeren."));
+          break;
+        default:
+          tell_object(player,BS(
+            "Das Gute durchfaehrt Deinen Koerper."));
+          break;
+      }
+    }
+    call_out("do_heal",steptime,steptime,suc);
+  } else {
+    call_out("remove_me",0);
+  }
+}

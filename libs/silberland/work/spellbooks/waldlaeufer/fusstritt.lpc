@@ -1,0 +1,125 @@
+//-- Der Fusstritt/Die Fussfege ----------------------------------------------
+mapping prep_fusstritt(object caster, mapping sinfo, int silent) 
+{
+  object ob;
+    
+  if(!GuildItemTest(caster, sinfo) ||
+     !FroschTest(caster, sinfo) || 
+     !BlindTest(caster,sinfo)     )
+    return 0;
+    
+  ob=FindEnemyVictim(sinfo[SI_SKILLARG], caster, "Wen willst Du treten?\n");
+  if(!ob) return 0;
+  sinfo[SI_ENEMY]=ob;
+  if(!silent){FirstPrepareFuncSuccessfull(caster, sinfo);} 
+  return sinfo;
+}
+
+int fusstritt(object caster, mapping sinfo)
+{
+  object ob, *boots;
+  int dam, abil, i, skill, sturm, success, can_see, ac, ewc;
+  string *imsg;
+  mapping m;
+
+  can_see = caster->QueryProp(P_TESTPLAYER) || IS_WIZARD(caster);
+
+  if(!mappingp(sinfo=prep_fusstritt(caster, sinfo, 1))) return 0;
+  ob=sinfo[SI_ENEMY];
+ 
+  success=SpellSuccess(caster,sinfo);
+  if(success < (-5000))
+  {
+    tell_object(caster, BSC("Du hast zuviel Kraft in den Tritt gelegt und "
+                        "verlierst das Gleichgewicht."));
+    tell_room( ENV(caster), 
+               BS(caster->Name(WER, 1)+" geht zu Boden.") ,
+               ({caster}) );
+    caster->SetProp(P_LAST_RAMMEN_TIME, time());
+    caster->SetProp(P_DISABLE_ATTACK, 1);
+    caster->AddHp(-random(5));
+    return MISSERFOLG;
+  }
+  if(success<0)
+  {
+    tell_object(caster, BSC("Du verschaetzt Dich in der Distanz und trittst "
+                        "ins Leere."));
+    return MISSERFOLG;
+  }
+  
+  
+  //Schaden ermitteln
+  dam=sinfo[SI_SKILLDAMAGE];
+
+  skill=R_SKILLMASTER->HasSkill(getuid(caster), AKROBATIK);
+
+  abil=sinfo[SI_SKILLABILITY];
+  dam+=abil/200; 
+  if(sturm) {
+    dam+=(sturm)*100;
+    sinfo[SI_SKILLDAMAGE_TYPE] = ({DT_BLUDGEON, DT_LIGHTNING});
+  }
+
+  boots = caster->QueryArmours(AT_BOOT);
+  if(sizeof(boots)) {
+    ac = boots[0]->QueryProp(P_AC);
+    dam += 10 * caster->QueryAttribute(A_STR) * ac / VALID_ARMOUR_CLASS[AT_BOOT];
+
+    if(boots[0]->QueryProp(P_EFFECTIVE_WC)) {
+      dam += random(boots[0]->QueryProp(P_EFFECTIVE_WC));
+    }
+  } else {
+    ac = 0;
+    dam -= random(100);
+    tell_object(caster, BS("Ohne Schuhe traust du dich nicht ganz so fest zutreten."));
+  }
+
+
+  sinfo[SI_SKILLDAMAGE]=dam;
+  
+  tell_object(caster, BS("Du trittst "+ob->Name(WEN)+" mit ganzer Kraft."));  
+  tell_room(ENV(caster), BS(ob->Name()+" wird von "+caster->Name(WEM)+" mit "
+                         "einer geschickten Bewegung getreten."), ({caster}));  
+  
+  imsg=({"Durch Deinen kraeftigen Tritt, kommt "+ob->name(WER, 1)+" aus dem "
+         "Gleichgewicht.",
+         "Kurz vor dem Tritt duckst Du Dich ab und trittst "+ob->name(WEN, 1)+
+         " kraeftig gegen die Knie.",
+         "Du trittst so kraeftig in "+ob->name(WESSEN, 1)+" Unterleib, dass "+
+         ob->QueryPronoun()+" vor Schmerzen einknickt.",
+        ob->Name(WER, 1)+" stolpert zurueck und faellt zu Boden."});
+
+  dam = ExecuteAttackSpell(ob,caster,sinfo,([SP_NAME:"Fusstritt",SP_SHOW_DAMAGE:1]), ATTACK_SPELL_NOWEAPON);
+
+  if(!objectp(ob)) return ERFOLG;
+
+  // Gegner kann umfallen.
+  if(dam > 0 && ob->QueryProp(P_LAST_RAMMEN_TIME)+5 < time() && !ob->QueryProp(P_DISABLE_ATTACK) &&
+     !ob->id(NOFALLDOWN) && !ob->is_class_member(CL_FLYING) && !ob->id("geist")) {
+    
+     i = caster->QueryAttribute(A_STR)*1000*ac/2+success*5+sinfo[SI_SKILLABILITY]*2;
+     if(can_see) {
+      tell_object(caster, sprintf("fusstritt :: falldown weight check :: i=%d weight=%d\n", i, ob->QueryProp(P_WEIGHT)));
+     }
+
+     if(objectp(present(ODE_OF_STORMS_ID, caster))) i += caster->QueryProp(P_GUILD_LEVEL) * 1000;
+
+     if(ob->QueryProp(P_WEIGHT) < i) {
+      i = random(caster->QueryAttribute(A_STR)*(2+skill)+ac+sinfo[SI_SKILLABILITY]/10000);
+      if(can_see) {
+        tell_object(caster, sprintf("fusstritt :: falldown check :: i=%d/%d dc=%d\n", i, caster->QueryAttribute(A_STR)*(2+sturm+skill), ob->QueryAttribute(A_STR)));
+      }
+
+      if(objectp(present(ODE_OF_STORMS_ID, caster))) i += caster->QueryProp(P_GUILD_LEVEL);
+
+      if(i > ob->QueryAttribute(A_STR))  {    
+        ob->SetProp(P_DISABLE_ATTACK, random(success/2000));
+        tell_object(caster, BS(imsg[random(sizeof(imsg))]));
+        tell_room(ENV(caster),BS(ob->Name(WER, 1)+" faellt zu Boden."));      
+        ob->SetProp(P_LAST_RAMMEN_TIME, time()+sinfo[SI_SPELLFATIGUE]);
+      }
+    }
+  }
+
+  return ERFOLG;
+}

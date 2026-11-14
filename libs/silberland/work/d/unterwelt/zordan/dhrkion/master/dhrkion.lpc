@@ -1,0 +1,150 @@
+//=========================================================================
+//
+// File:    dhrkion.c
+// Created by Zordan@SL
+//
+// Project: Dhrkionmaster
+//
+//=========================================================================
+
+#include "../def.h"
+
+nosave string *feinde;
+nosave mapping permfeinde;
+
+#define MAXKILLS   500
+#define MINUSKILLS 250
+
+mapping saveload;
+
+query_prevent_shadow() { return 1; }
+
+void create()
+{
+  if (is_clone(TO))
+  {
+    destruct(TO);
+    return;
+  }
+
+  seteuid(getuid(this_object()));
+
+  feinde     = ({ });
+  saveload   = ([ ]);
+  permfeinde = ([ ]);
+
+  if(restore_object(DHRKIONLOG))
+  {
+    permfeinde = saveload;
+  }
+}
+
+void reset()
+{
+  feinde = ({ });
+}
+
+int addfeind(object player)
+{
+  if(IS_LEARNER(player))                            return  0;
+  if(member(feinde,getuid(player)) != -1)           return -1;
+  if(strstr(file_name(player),"dhrkion") > -1)      return -2;
+
+  feinde += ({ getuid(player) });
+
+  domainshout(
+    "Die Wachen bruellen: "+player->Name()+" greift uns an!\n",
+    "^/d/unterwelt/zordan/dhrkion/*",1
+  );
+
+  return 1;
+}
+
+int checkfeind(object enemy)
+{
+  if(IS_LEARNER(enemy) || !interactive(enemy))      return 0;
+  if(strstr(file_name(enemy),"dhrkion") > -1)       return 0;
+  if(member(feinde,getuid(enemy)) > -1)             return 1;
+
+  if((member(permfeinde,getuid(enemy)) > 0) &&
+     (permfeinde[getuid(enemy),0]      > MAXKILLS)) return 1;
+
+  return 0;
+}
+
+void feindtot(object player)
+{
+  domainshout(
+    "Die Wachen jubeln: "+player->Name()+" wurde besiegt!\n",
+    "^/d/unterwelt/zordan/dhrkion/*",1
+  );
+
+  feinde -= ({ getuid(player) });
+
+  permfeinde[getuid(player),0] -= MINUSKILLS;
+  if(permfeinde[getuid(player),0] < 0) permfeinde[getuid(player),0] = 0;
+
+  saveload = permfeinde;
+  save_object(DHRKIONLOG);
+}
+
+void addkiller(object player)
+{
+  object item;
+
+  if(IS_WIZARD(player))    return;
+  if(!interactive(player)) return;
+
+  if((item=present("\npaladintaskitem", player)) &&
+     (item->GetTask(11, player)                  ))
+  {
+    item->SetVar(item->GetVar()+1);
+  }
+
+  call_other("/gilden/paladine/master/npcmaster","delfen_kill",player);
+
+  permfeinde[getuid(player),0]++;
+  saveload = permfeinde;
+  save_object(DHRKIONLOG);
+}
+
+string getfeinde()
+{
+  int i;
+  string *out;
+
+  out = ({ });
+  i = sizeof(feinde);
+  while(i--)
+  {
+    if(find_living(feinde[i])) out += ({ CAP(feinde[i]) });
+  }
+
+  if(sizeof(out) == 0) out = ({ "Keine" });
+
+  return implode(out,", ") + ".";
+}
+
+string getpermfeinde() {
+  int i;
+  string out,*namen;
+  out="";
+  namen=sort_array(m_indices(permfeinde),#'>);
+  for (i=0;i<sizeof(permfeinde);i++) {
+    if (permfeinde[namen[i],0] > MAXKILLS ) {
+      out+=sprintf("*  %-12s mit %4d ungeraechten Toetungen\n",
+           CAP(namen[i]),permfeinde[namen[i],0]);
+    }
+  }
+  if (out == "" ) out="*  Keine.\n";
+  return out;
+}
+
+// fuer Protheg ...
+int getfeindkills(object player)
+{
+  if (member(permfeinde, getuid(player)) <= 0) return -1;
+
+  return permfeinde[getuid(player),0];
+}
+

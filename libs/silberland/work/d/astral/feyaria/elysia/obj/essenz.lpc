@@ -1,0 +1,122 @@
+// Essenz fuer Gildenbonus
+// 28.10.2004 Feyaria@SilberLand
+
+#include "../def.h"
+#include "/p/daemon/itemd/itemd.h"
+#include "../../gilden.h"
+
+
+inherit "std/thing";
+
+int salbe;
+mapping prop = ([
+    0: "rot"; 
+       "verstaerkt nun die Faehigkeiten eines Berserkers"; 
+       ([P_BERSERKER_BONUS : (["all": 5]) ]),
+    1: "gruen"; 
+       "laesst Dich nun elementare Gewalten leichter handhaben"; 
+       ([P_ITEMD_ELEMENTAL_VALUE: 3]),
+    2: "weiss"; 
+       "erleichtert nun Gebete an Dusty"; 
+       ([P_PALADIN_SPELLCOST: 3]),
+    3: "schwarz"; 
+       "erleichtert nun unheilige Anrufungen"; 
+       ([P_NEKRO_SPELLCOST: 3, 
+         P_NEKRO_BONUS: (["all": 5]) ]),
+    4: "blau"; 
+       "verbessert nun die Faehigkeiten eines Zechprellers"; 
+       ([P_ZECHPRELLER_SPELLCOST: 3,
+         P_ZECHPRELLER_BONUS: (["all": 5]), 
+         P_ZECHPRELLER_REDUCE_ALC: 10]),
+    5: "gelb"; 
+       "verringert nun die Teleportationskosten"; 
+       ([P_TELEPORT_COST: 2]),
+    6: "bunt"; 
+       "laesst Dich nun mehr magische Gegenstaende finden"; 
+       ([ITEMD_PROB_CHANGE: 5]),
+    7: "violett"; 
+       "bleibt Dir nun bei einem Tod erhalten"; 
+       ([P_NEVERDROP: 1]),
+/*
+    8: "golden"; 
+       "verbessert nun die Faehigkeiten einer Amazone"; 
+       ([P_AMAZONEN_SPELLCOST: 3, 
+         P_AMAZONEN_BONUS: (["all": 5]) ]),
+*/         
+    ]);
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+  salbe = random(sizeof(prop));
+  SetProp(P_NAME, "Essenz");
+  SetProp(P_NAME_ADJ, prop[salbe,0] );
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_SHORT, Name(WER,0));
+  SetProp(P_LONG,
+    "Ein kleines Doeschen mit " + name(WEM,0) + ". Du fragst Dich, welche Wirkung "
+    "sie haben wird, wenn Du sie auf einem Gegenstand auftraegst.");
+  AddId( ({"essenz"}) );
+  AddAdjective( ({prop[salbe,0], prop[salbe,0]+"e", prop[salbe,0]+"en", 
+        prop[salbe,0]+"er"}) );
+  SetProp(P_INFO, 
+      "Diese Essenz " + regreplace(prop[salbe,1], "nun ", "", 0) + "." );
+
+  SetProp(P_MATERIAL, ([MAT_CERAMIC: 20, MAT_FAT:70, MAT_MAGIC:10]) );
+  SetProp(P_WEIGHT, 10);
+  SetProp(P_SIZE, 10);
+  SetProp(P_VALUE, 1000);
+
+  AddCmd( ({"trage", "trag"}), "cmd_auftragen");
+  SUID;
+}
+
+int cmd_auftragen(string str)
+{
+  string wen, was;
+  object ob;
+  string *props;
+  int i, type, balsam;
+  string old_info, info;
+  
+  if (!str || sscanf(str, "%s auf %s auf", was, wen) != 2 || !id(was)) 
+    return notify_fail("Was willst auf was auftragen?\n"), 0;
+
+  if (!objectp(ob = present(wen, TP)))
+    return notify_fail("Aber Du hast ja gar kein '" + wen+ "'!\n"), 0;
+
+  if (ob->QueryProp(P_WEAPON_TYPE))      type = 1;
+  else if (ob->QueryProp(P_ARMOUR_TYPE)) type = 2;
+  else                                   type = 0;
+  if (!type || 
+      ob->QueryProp(P_WEAPON_TYPE) == WT_MISC || 
+      ob->QueryProp(P_ARMOUR_TYPE) == AT_MISC)
+    return notify_fail("Diese Essenz kannst Du nur auf Waffen und Ruestungen "
+        "auftragen!\n"), 0;
+
+  props = m_indices(prop[salbe, 2]);
+  notify_fail("Diese Essenz wuerde auf " + ob->name(WEM,1) + " keine Wirkung haben!\n");
+  for (i = sizeof(props) - 1; i >= 0; i--)
+    if (ob->QueryProp(props[i]))
+      return 0;
+  if ((balsam = ob->QueryProp(({"", "waffenbalsam", "ruestungsbalsam"})[type])) >= 10)
+    return 0;
+
+  info = "Diese " + ({"", "Waffe", "Ruestung"})[type] + " " + prop[salbe, 1] + ".\n";
+  write(BS(Name(WER,1) + " zieht vollstaendig in " + ob->name(WEN,1) + 
+        " ein und uebertraegt ihre Wirkung. " + info));
+  tell_room(ENV(TP),BS(
+      sprintf("%s traegt %s auf %s auf.", capitalize(TPN), name(WEN,1), 
+        ob->name(WEN,0))), ({TP}));
+  if (!stringp(old_info = ob->QueryProp(P_INFO)))
+    old_info = "";
+  ob->SetProp(P_INFO, old_info + regreplace(info, "nun ", "", 0));
+  for (i = sizeof(props) - 1; i >= 0; i--)
+    ob->SetProp(props[i], prop[salbe, 2][props[i]]);
+  ob->SetProp(({"", "waffenbalsam", "ruestungsbalsam"})[type], balsam + 1);
+  remove();
+  return 1;
+}

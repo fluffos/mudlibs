@@ -1,0 +1,169 @@
+/addworld -T'telnet' Silberland atpforest.tuwien.ac.at 4711
+
+/def sl = /world Silberland
+
+;-------------- FUNKTIONSTASTEN-BELEGUNG FUER ALLE MUDS ----------------
+
+/def F8 = /arrow_on_off%;
+/def F11 = &-1%;
+/def F12 = &-0%;
+
+/def -b'^[[11~' = /F1%;
+/def -b'^[[12~' = /F2%;
+/def -b'^[[13~' = /F3%;
+/def -b'^[[14~' = /F4%;
+/def -b'^[[15~' = /F5%;
+/def -b'^[[17~' = /F6%;
+/def -b'^[[18~' = /F7%;
+/def -b'^[[19~' = /F8%;
+/def -b'^[[20~' = /F9%;
+/def -b'^[[21~' = /F10%;
+/def -b'^[[23~' = /F11%;
+/def -b'^[[24~' = /F12%;
+/def -i -b'^[[A' = /_up
+/def -i -b'^[[B' = /_down
+/def -i -b'^[[C' = /_right
+/def -i -b'^[[D' = /_left
+/def -i -b'^[[5~' = /_PgUp
+/def -i -b'^[[6~' = /_PgDown
+/def -i -b'^[[^@' = /_Pos1
+/def -i -b'^[[e' = /_End
+
+/def -p5 -F -aCyellow -t'*Di*aus der Ferne*' 
+/def -p5 -F -aCyellow -t'*Deine*aus der Ferne*'
+/def -p5 -F -auCgreen -t'* ruft:*' 
+/def -p5 -F -aCgreen -t'* sagt:*'
+/def -p5 -F -aCmagenta -t'*teilt Dir mit:*'
+/def -p5 -F -aCcyan  -t'*Allgemein:*'
+/def -p5 -F -aCyellow -t'*Wizard:*'
+/def -p5 -F -aCred -t'*LPC:*'
+/def -p5 -F -aCred -t'*Debug:*'
+/def -p5 -F -auCblue -t'Du rufst:*'
+/def -p5 -F -aCgreen -t'Du sagst:*'
+/def -p5 -F -aCmageanta -t'Du teilst * mit:*'
+/def -p5 -F -aCyellow -t'Du *aus der Ferne*'
+/def -p5 -F -aB -t'*sichtbaren Ausga*'
+/def -p5 -F -aB -t'*sichtbare Ausgaenge*'
+
+
+; ------------------------- Teile-mit-Erleichterungen ----------------------
+/def -p100 -F -mregexp -t'teilt Dir mit:' = \
+    /set sender=$(/last %PL)%; \
+    /while ( substr(%sender, 0, 2) =~ "> " ) \
+       /set sender=$[substr(sender, 2)]%; \
+    /done%; \
+    /if ( sendera !~ sender )  \
+       /set senderb=%sendera%; \
+       /set sendera=%sender%;  \
+    /endif
+/def F9 = /test input (" ")%; /dokey DLINE%; \
+   /set verb=tm%; \
+   /input %verb %sendera%; /test input (" ")
+; (Letzer Absender eines "teile-mit" auf F-9)
+/def F10 = /test input (" ")%; /dokey DLINE%; \
+   /set verb=tm%; \
+   /input %verb %senderb%; /test input (" ")
+;         (Vorletzer Absender eines "teile-mit" auf F-10)
+
+
+/set arrow_flag=0
+
+/def _up = /dokey_up%;
+/def _down = /dokey_down%;
+/def _right = /dokey_right%;
+/def _left = /dokey_left%;
+/def _PgUp = /DOKEY RECALLB%;
+/def _PgDown = /DOKEY RECALLF%;
+/def _Pos1 = /DOKEY HOME%;
+/def _End = /DOKEY END
+
+/def arrow_on_off = \
+	/if (arrow_flag) \
+	  /arrow_off%;\
+	/else \
+	  /arrow_on%;\
+	/endif%;\
+	/toggle arrow_flag
+
+/def arrow_on = \
+	/echo -abCbgred Cursor-Movement-Mode ON!%;\
+	/undef _up%;\
+	/undef _down%;\
+	/undef _right%;\
+	/undef _left%;\
+	/undef _PgUp%;\
+	/undef _PgDown%;\
+	/undef _Pos1%;\
+	/undef _End%;\
+	/def _up = n%;\
+	/def _down = s%;\
+	/def _right = o%;\
+	/def _left = w%;\
+	/def _PgUp = no%;\
+	/def _PgDown = so%;\
+	/def _Pos1 = nw%;\
+	/def _End = sw
+
+/def arrow_off = \
+	/echo -abCbgred Cursor-Movement-Mode OFF!%;\
+	/undef _up%;\
+	/undef _down%;\
+	/undef _right%;\
+	/undef _left%;\
+	/undef _PgUp%;\
+	/undef _PgDown%;\
+	/undef _Pos1%;\
+	/undef _End%; \
+	/def _up = /dokey_up%;\
+	/def _down = /dokey_down%;\
+	/def _right = /dokey_right%;\
+	/def _left = /dokey_left%;\
+	/def _PgUp = /DOKEY RECALLB%;\
+	/def _PgDown = /DOKEY RECALLF%;\
+	/def _Pos1 = /DOKEY HOME%;\
+	/def _End = /DOKEY END
+
+;prompt.tf  (c) Stahldorn
+;benoetigte Makrofiles: keine
+
+
+/def -F -h"PROMPT *> " catch_prompt = /test prompt ("%* ") 
+/set prelp=0
+
+/def pre = \
+	/if ((%1 =~ "zeit") | (%1 =~ "time")) \
+	   /undef catch_prompt%;\
+	   /def -F -h"PROMPT *> " catch_prompt = /test prompt ("$$(/time %%%H:%%%M:%%%S) > ") %;\
+	   /set prelp=0%;\
+	/elseif (%1 =~ "off") \
+	   /undef catch_prompt%;\
+	   /def -F -h"PROMPT *> " catch_prompt = /test prompt ("%%* ")%;\
+	   /set prelp=0%;\
+	/elseif (%1 =~ "lp") \
+	   /undef catch_prompt%;\
+	   /def -F -h"PROMPT *> " catch_prompt = /test prompt ("LP: %%lpold > ")%;\
+	   /set prelp=1%;\
+	/elseif (%1 =~ "mp") \
+	   /undef catch_prompt%;\
+	   /def -F -h"PROMPT *> " catch_prompt = /test prompt ("MP: %%mpold > ")%;\
+	   /set prelp=1%;\
+	/elseif (%1 =~ "lpmp") \
+	   /undef catch_prompt%;\
+	   /def -F -h"PROMPT *> " catch_prompt = /test prompt ("LP: %%lpold MP: %%mpold > ")%;\
+	   /set prelp=1%;\
+	/elseif (%1 =~ "mplp") \
+	   /undef catch_prompt%;\
+	   /set prelp=1%;\
+	   /def -F -h"PROMPT *> " catch_prompt = /test prompt ("MP: %%mpold LP: %%lpold > ")%;\
+	/elseif (%1 =~ "string") \
+	   /undef catch_prompt%;\
+	   /set prelp=0%;\
+	   /def -F -h"PROMPT *> " catch_prompt = /test prompt ("%-1 ")%;\
+	/else \
+	   /echo %% Options for pre: time, lp, mp, lpmp, mplp, string <text>, off.%;\
+	/endif%;\
+	/DOKEY NEWLINE
+
+
+
+

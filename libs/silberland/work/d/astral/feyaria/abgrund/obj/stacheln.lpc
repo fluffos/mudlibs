@@ -1,0 +1,126 @@
+// Stacheln eines Daemons
+// 2005-03-05  Feyaria@SilberLand
+
+inherit "std/thing";
+
+#include "../def.h"
+
+void create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  SetProp(P_SHORT, "Daemonenstacheln");
+  SetProp(P_LONG, 
+    "Die maechtigen Stacheln eines Daemons. Sie sind spitz und schauen sehr "
+    "gefaehrlich aus. Wenn man keine Angst vor Daemonen hat, kann man sie an "
+    "der Sohle von Stiefeln befestigen.");
+  SetProp(P_NAME, "Daemonenstacheln");
+  SetProp(P_PLURAL, 1);
+  SetProp(P_GENDER, NEUTER);
+  AddId( ({"stacheln", "daemonenstacheln"}) );
+
+  SetProp(P_VALUE, 1500);
+  SetProp(P_WEIGHT, 233);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_MATERIAL, MAT_MISC_UNHOLY);
+
+  AddCmd( ({"befestige", "befestig"}), "befestigen");
+}
+
+mapping new_material( mapping m1, mapping m2, int w1, int w2)
+{
+  mapping newmat, newmat1, newmat2;
+  string *mat, *mat2;
+  int *perc, *perc2;
+  int w, i;
+
+  w = w1 + w2;
+  mat = m_indices(m1);
+  perc = m_values(m1);
+  mat2 = m_indices(m2);
+  perc2 = m_values(m2);
+  newmat1 = ([]);
+  newmat2 = ([]);
+
+  for (i = sizeof(mat) - 1; i >= 0; i--)
+    newmat1+=([mat[i]:perc[i]*w1/w]);
+  for (i = sizeof(mat2) - 1; i >= 0; i--)
+    newmat2+=([mat2[i]:perc2[i]*w2/w]);
+//  DB(sprintf("%O\n%O\n",newmat1,newmat2));
+  mat += mat2;
+
+  newmat = ([]);
+  while (sizeof(mat))
+  {
+    newmat += ([mat[0]: newmat1[mat[0]] + newmat2[mat[0]] ]);
+    mat -= ({mat[0]});
+  }
+//  DB(sprintf("NEWMAT: %O\n", newmat));
+
+  w = 0;
+  for (i = sizeof(newmat) - 1; i >= 0; i--)
+    w += m_values(newmat)[i];
+
+  if (w != 100)
+    newmat[m_indices(newmat)[0]] = m_values(newmat)[0] + 100 - w;
+
+//  DB(sprintf("NEWMAT: %O\n", newmat));
+  return newmat;
+}
+
+int befestigen(string str)
+{
+  string s1, s2;
+  object boots;
+  string *old_adj, *mat, *mat2;
+  int i,ac, w1,w2,w,*perc, *perc2;
+  mapping newmat, newmat1, newmat2;
+
+  notify_fail("Was willst Du an was befestigen?\n");
+  if (!str) return 0;
+  if (sscanf(str, "%s an %s", s1, s2) != 2) return 0;
+  if (!id(s1)) 
+    return notify_fail("Das kannst Du nicht an "+CAP(s2)+" befestigen!\n"),0;
+  if (!boots = present(s2, TP))
+    return notify_fail("Aber Du hast ja gar kein "+CAP(s2)+"!\n"),0;
+  if (boots->QueryProp(P_ARMOUR_TYPE) != AT_BOOT)
+    return notify_fail("Du kannst die Daemonenstacheln nur an Stiefeln "
+        "befestigen!\n"),0;
+  /*if (function_exists("long",boots)[0..4] != "/std/" || 
+      function_exists("short",boots)[0..4] != "/std/")
+    return notify_fail( BS("Irgendwie ist "+boots->name(WER,1)+" nicht "
+        "geeignet, um die Daemonenstacheln daran zu befestigen.")),0;*/
+  if (boots->QueryProp(P_EFFECTIVE_WC))
+    return notify_fail(BS("An "+boots->name(WEM,1)+" kannst Du die Daemonenstacheln "
+        "nicht befestigen, weil da schon stacheln oder so etwas aehnliches "
+        "befestigt sind.")),0;
+  if (boots->QueryProp(P_WEIGHT) > 3000)
+    return notify_fail(BS("An "+boots->name(WEM,1)+" kannst Du die Daemonenstacheln "
+        "nicht befestigen, weil "+boots->QueryPronoun(WER)+" sonst zu schwer "
+        "wuerde.")),0;
+  
+  write("Du befestigst die Daemonenstacheln an "+boots->name(WEM,1)+".\n");
+  say(CAP_TPN+" befestigt Daemonenstacheln an "+boots->name(WEM,0)+".\n", ({TP}) );
+
+  boots->SetProp(P_SHORT, boots->QueryProp(P_SHORT)+ " mit Daemonenstacheln");
+  boots->SetProp(P_LONG, boots->QueryProp(P_LONG)+ "Maechtige Daemonenstacheln "
+      "sind darauf befestigt.");
+  boots->AddAdjective( ({"stachelbewehrt", "stachelbewehrte", 
+        "stachelbewehrten", "stachelbewehrter"}) );
+  if (!old_adj = boots->QueryProp(P_NAME_ADJ))
+    old_adj = ({});
+  boots->SetProp(P_NAME_ADJ, old_adj+ ({"stachelbewehrt"}) );
+
+  if( (ac = boots->QueryProp(P_AC)) < VALID_ARMOUR_CLASS[AT_BOOT] - boots->QueryProp(P_DAMAGED))
+    boots->SetProp(P_AC, ac + 1);
+  boots->Set(P_WEIGHT, 
+      w = ((w1 = boots->QueryProp(P_WEIGHT)) + (w2 = QueryProp(P_WEIGHT))) );
+  boots->SetProp(P_TOTAL_WEIGHT, boots->QueryProp(P_WEIGHT));
+  boots->SetProp(P_MATERIAL, 
+      new_material(boots->QueryProp(P_MATERIAL), QueryProp(P_MATERIAL), w1, w2));
+  boots->SetProp(P_EFFECTIVE_WC, 150+random(100));
+  remove();
+  return 1;
+}
+  

@@ -1,0 +1,278 @@
+inherit "/gilden/bardengilde/obj/std_song_effect";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <defines.h>
+#include <new_skills.h>
+#include <moredef.h>
+#include "/gilden/bardengilde/bardengilde.h"
+#include "bard_song.h"
+
+int duration, wcFix, canRecharge, remainingTicks, wcReduction, permanentWield;
+object wieldFunc, unwieldFnc, hitFunc;
+
+public void create() {
+    if (!is_clone(TO)) return;
+    ::create();
+  
+    AddId(({SONG_DANCING_ITEM}));
+
+    SetProp(P_NOGET, 1);
+
+    setSilentEnd(1);
+    setUpkeepMode(0, CANCEL_COMMAND);
+}
+
+private string remainingTicksText() {
+    string msg;
+    switch(remainingTicks) {
+        case 4: msg = "%s tanzt voll Energie wild herum."; break;
+        case 3: msg = "%s tanzt in wilden Drehungen und Spiralen."; break;
+        case 2: msg = "%s schwebt in langsamen Kreisen um dich herum."; break;
+        case 1: msg = "%s wirkt schon sehr muede und kann dem Takt des Tanzes kaum noch folgen."; break;
+        default: msg = "%s tanzt eigentlich gar nicht mehr."; break;
+    }
+
+    return sprintf(msg, victim->Name(WER, 1));
+}
+
+public int CanRecharge() {
+    return canRecharge;
+}
+
+public int overwrite_wc_fix() {
+    int r;
+
+    r = wcFix;
+    if(TALENTMASTER->HasTalent(TALENT_TAMBOURMAJOR)) {
+        r += 5 * caster->QueryProp(P_BARD_INSPIRATION_LEVEL);
+    }
+
+    return r;
+}
+
+public int overwrite_nr_hands() {
+    return 1;
+}
+
+public int overwrite_dancing_weapon() {
+    return 1;
+}
+
+public string overwrite_wielded_text() {
+    switch(remainingTicks) {
+        case 4: return "wild tanzend"; break;
+        case 3: return "tanzend"; break;
+        case 2: return "langsam tanzend"; break;
+        case 1: return "muede"; break;
+        default: return "erschoepft"; break;
+    }
+    return "???";
+}
+
+public string* overwrite_wield_text() {
+    if(lowerstring(songName) == "sturm der klingen") {
+        return ({victim->Name(WER, 2) + " vollfuehrt wilde und zornige Drehungen um dich.\n", 
+                 victim->Name(WER, 1) + " beginnt wilde und zornige Drehungen um " + caster->name(WEN, 1) + " zu vollfuehren.\n"});
+    } else {
+        return ({victim->Name(WER, 2) + " beginnt um dich herum zu tanzen.\n", 
+                victim->Name(WER, 1) + " beginnt um " + caster->name(WEN, 1) + " zu tanzen.\n"});
+    }
+}
+
+public object overwrite_wield_func() {
+    return this_object();
+}
+
+public object overwrite_unwield_func() {
+    return this_object();
+}
+
+public object overwrite_hit_func() {
+    return this_object();
+}
+
+// eine tanzende Waffe kann nicht verflucht werden...
+public string overwrite_cursed() {
+    if(permanentWield)
+        return sprintf("%s tanzt um dich herum. Du kannst %s nicht wegstecken!\n", victim->Name(WER), victim->QueryPronoun(WEN));
+    return 0;
+}
+
+public int WieldFunc(object waffe, int silent) {
+    if(objectp(wieldFunc) && !wieldFunc->WieldFunc(waffe, silent)) {
+        call_out("endSong", 0);
+        return 0;
+    }
+
+    return 1;
+}
+
+public int UnwieldFunc(object waffe, int silent) {
+    if(objectp(unwieldFnc) && !unwieldFnc->UnwieldFunc(waffe, silent)) {
+        return 0;
+    }
+
+    call_out("endSong", 0);
+    return 1;
+}
+
+public int HitFunc(object enemy) {
+    int extBonus, success;
+
+    extBonus = 0;
+    if(objectp(hitFunc)) {
+        extBonus = hitFunc->HitFunc(enemy);
+    }
+
+    if(BARDENMASTER->HasHeroPathLevel(caster, HERO_KHARTAK, 2)) {
+        success = caster->UseSkill(SK_HEROISM(HERO_KHARTAK));
+        if(caster->QueryProp(P_TESTPLAYER)) {
+            tell_object(caster, sprintf("tanz der saebel :: khartak_second_attack :: success = %d chance = 1:%d\n",
+                        success, 11-(success/1000)+1));
+        }
+        if(!random(11-(success/1000))) {
+            call_out("khartak_additional_attack", 4-random(caster->QueryProp(P_BARD_INSPIRATION_LEVEL)));
+        }
+    }
+
+    return extBonus - wcReduction;
+}
+
+public void khartak_additional_attack() {
+    object enemy;
+    int dam;
+    string *dtypes;
+
+    if(!objectp(caster)) return;
+    if(sizeof(caster->PresentEnemies()) < 1) return;
+
+    enemy = caster->PresentEnemies()[random(sizeof(caster->PresentEnemies()))];
+    tell_object(caster, BS(sprintf("%s vollfuehrt einen zusaetzlichen Angriff gegen %s!", victim->Name(WER, 1), enemy->name(WEN, 1))));
+    tell_object(enemy, BS(sprintf("%s vollfuehrt eine zusaetzliche Attacke gegen dich!", victim->Name(WER, 1))));
+    tell_room(environment(caster), BS(sprintf("%s %s vollfuehrt eine zusaetzliche Attacke gegen %s!", 
+              caster->Name(WESSEN, 1), victim->name(WER), enemy->name(WEN, 1))), ({caster, enemy}));
+
+    dam = victim->QueryProp(P_WC) - wcReduction;
+    dtypes = victim->QueryProp(P_DAM_TYPE);
+    if(caster->QueryProp(P_TESTPLAYER)) {
+        tell_object(caster, sprintf("tanz der saebel :: khartak_additional_attack :: dam = %d dtypes = %O enemy=%O\n", dam, dtypes, enemy));
+    }
+
+    enemy->Defend(dam, dtypes, ([SP_PHYSICAL_ATTACK:1, SP_RECURSIVE:1, SP_SHOW_DAMAGE: 1]), caster);
+}
+
+public void prepareSong() {
+    int wc, r;
+    object ob;
+
+    wieldFunc  = victim->QueryProp(P_WIELD_FUNC);
+    unwieldFnc = victim->QueryProp(P_UNWIELD_FUNC);
+    hitFunc    = victim->QueryProp(P_HIT_FUNC);
+
+    wc    = (int) (victim->QueryProp(P_WC) * (ability/20000.0 + success/40000.0)); // 100 % WC gibts nur bei max ability und success
+    wc    = modifyBySkillAttribute(wc, SA_DAMAGE);
+    wc    = (int) (wc * factor);
+    if(wc > victim->QueryProp(P_WC)) {
+        wc = victim->QueryProp(P_WC);
+    }
+    wcReduction = victim->QueryProp(P_WC) - wc;
+
+    wcFix = (int) (victim->QueryProp(P_WC_FIX) * (caster->QueryAttribute(A_DEX)/100 + (success/40000.0))); // wc_fix auf basis geschick und erfolg
+    wcFix = (int) (wc * factor);
+
+    if(wcFix > 50 && !BARDENMASTER->HasHeroPathLevel(caster, HERO_KHARTAK, 2)) wcFix = 50;
+    else if(wcFix > 80) wcFix = 80;
+    
+    victim->Set(P_WC_FIX, symbol_function("overwrite_wc_fix", this_object()), F_QUERY_METHOD);
+    victim->Set(P_NR_HANDS, symbol_function("overwrite_nr_hands", this_object()), F_QUERY_METHOD);
+    victim->Set(P_WIELDED_TEXT, symbol_function("overwrite_wielded_text", this_object()), F_QUERY_METHOD);
+    victim->Set(P_WIELD_TEXT, symbol_function("overwrite_wield_text", this_object()), F_QUERY_METHOD);
+    victim->Set(P_WIELD_FUNC, symbol_function("overwrite_wield_func", this_object()), F_QUERY_METHOD);
+    victim->Set(P_UNWIELD_FUNC, symbol_function("overwrite_unwield_func", this_object()), F_QUERY_METHOD);
+    victim->Set(P_HIT_FUNC, symbol_function("overwrite_hit_func", this_object()), F_QUERY_METHOD);
+    victim->Set(P_BARD_DANCING_WEAPON, symbol_function("overwrite_dancing_weapon", this_object()), F_QUERY_METHOD);
+    victim->Set(P_CURSED, symbol_function("overwrite_cursed", this_object()), F_QUERY_METHOD);
+
+    if(objectp(ob=call_other("/spellbooks/barden_spells", "getInstrument", caster))) {
+        if(ob->QueryProp(P_NR_HANDS) > 1) {
+            if(caster->QueryProp(P_TESTPLAYER)) {
+                tell_object(caster, sprintf("%s :: instrument hands overwriten ob=%O\n", songName, ob));
+            }
+            ob->Set(P_NR_HANDS, symbol_function("overwrite_nr_hands", this_object()), F_QUERY_METHOD);
+            ob->DoUnwear(1);
+            ob->DoWear(1);
+        }
+    }
+
+    // haelt maximal 20 + 10 + 8 = 38 Minuten -> 2-3 mal pro stunde casten um dauerhaft die waffe zu haben
+    duration = (ability/5000) * 10 * 60 + (success/2000) * 60 + (caster->QueryAttribute(A_INT) / 5) * 60;
+    duration = modifyBySkillAttribute(duration, SA_DURATION);
+    duration = (int) (duration * factor);
+
+    remainingTicks = 4;
+
+    call_out("reduceRemainingTicks", duration/4);
+
+    if(caster->QueryProp(P_TESTPLAYER)) {
+        tell_object(caster, sprintf("%s :: wc=%d (%d-%d) wc_fix=%d duration=%d\n", songName, victim->QueryProp(P_WC) - wcReduction, victim->QueryProp(P_WC), wcReduction, wcFix, duration));
+    }
+
+    r=victim->wield_me();
+    if(!r || caster->QueryProp(P_WEAPON) != victim) {
+        if(caster->QueryProp(P_TESTPLAYER)) {
+            tell_object(caster, sprintf("%s :: wield failed r=%d\n", songName, r));
+        }
+
+        tell_object(caster, BS("Du konntest die Waffe nicht zum tanzen bringen!"));
+        remove(1);
+        return;
+    }
+
+    permanentWield = 0;
+
+    SetProp(P_WIELDED, caster); // notwendig fuer macneh hitfuncs
+}
+
+public void reduceRemainingTicks() {
+    remainingTicks--;
+    if(remainingTicks <= 2) {
+        canRecharge;
+    }
+
+    tell_object(caster, BS(remainingTicksText()));
+    return;
+}
+
+public void onEndSong() {
+    object ob;
+
+    if(objectp(victim)) {
+        tell_object(caster, BS(sprintf("%s hoert auf zu tanzen.", victim->Name(WER, 1))));
+    }
+
+    if(objectp(ob=call_other("/spellbooks/barden_spells", "getInstrument", caster))) {
+        ob->Set(P_NR_HANDS, 0, F_QUERY_METHOD);
+        ob->DoUnwear(1);
+        ob->DoWear(1);
+    }
+
+    permanentWield = 0;
+}
+
+public void NotifyPlayerDeath(object victim, object killer, int lost_xp) {
+    if(victim == caster) {
+        call_out("endSong",0);
+    }
+}
+
+public void BecomesNetAlive(object spieler) {
+    if(spieler == caster) {
+        victim->DoUnwield();
+    }
+}
+
+public string extra_look() {
+    return sprintf("%s tanzt um %s herum.\n", victim->Name(WER, 2), caster->QueryPronoun(WEN));
+}

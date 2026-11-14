@@ -1,0 +1,307 @@
+/*
+ **
+ ** Angrox Zauberwerkstatt
+ ** 10.02.1997 by Angrox@Silberland
+ ** EMail:mzehetma@tks.fh-sbg.ac.at
+ **
+ ** "I have taken all my knowledge to be my province."
+ **                                   -Francis Bacon, 1592
+ */
+
+
+inherit "std/room";
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include <player.h>
+#include <defines.h>
+#include <moredef.h>
+#include "../files.h"
+#include "/p/daemon/skillmaster/skillmaster.h"
+int gem=0;
+int first_time=0;
+int iron=1;
+mapping old_exits=([]);
+mapping long_adds=([]);
+varargs int Collapse(string source_room);
+
+
+
+void create()
+{
+  ::create();
+  if(!random(10)) gem=1;
+  SetProp(P_KILL_NAME, "Steinschlag");
+  AddCmd(({"schuerfe", "schuerf"}), "GemSearch");
+  AddCmd(({"grabe", "grab"}), "DiggingInTheDirt");
+  AddDetail(({"gold", "edelsteine"}), 
+      "Du koenntest hier danach schuerfen.");
+}
+
+void init()
+{
+  ::init();
+  if(!first_time) {
+    if(!GetDetail("waende"))
+      AddDetail("waende", 
+          "Die Waende bestehen aus Stein.");
+    AddDetail("waende", GetDetail("waende")+
+        "Hier koenntest Du vielleicht nach Gold oder Edelsteinen "
+        +"schuerfen.");
+    first_time=1;
+  }
+}
+
+void reset()
+{
+  if(!random(7)) {gem++; iron++;}
+  if(gem>1) gem=1;
+  if(iron>2) iron=2;
+  ::reset();
+}
+
+string int_long(mixed viewer, mixed viewpoint, int shortflag)
+{
+  int i;
+  string return_string, *which;
+  return_string="";
+  which=m_values(long_adds);
+  if(i=sizeof(which))
+    for(i-=1;i>=0;i--)
+      return_string+=which[i]+" ";
+  return ::int_long(viewer, viewpoint, shortflag)+BS(return_string);
+}
+
+
+int GemSearch(string str)
+{
+  object thing, *gems;
+  string *mat;
+  int ret, suc, ex;
+
+  if(!str) {
+    write("Nach was willst Du schuerfen?\n");
+    return 1;
+  }
+  if(!present("spitzhacke", TP)) {
+    write("Du hast nichts passendes zum Schuerfen dabei.\n");
+    return 1;
+  }
+  if(TP->id("Elfenspieler"))
+    ex=350;
+  else
+    ex=200;
+  if(TP->QueryProp(P_MV) < ex) {
+    write("Raste lieber etwas, das ist im Moment zu anstrengend fuer Dich.\n");
+    return 1;
+  }
+  TP->do_exhaust(ex);
+  if((str=="nach gold"|| str=="gold") && gem>0) {
+    thing=clone_object(OBJ("nugget"));
+    gem--;
+  }
+  if((str=="nach eisen"|| str=="eisen") && iron>0) {
+    thing=clone_object("/p/std/skills/sewing_tanning/obj/eisen");
+    iron--;
+  }
+  else if(gem>0 && (str=="edelstein" || str=="edelsteine" || 
+        str=="nach edelstein" || str=="nach edelsteine"))
+  {
+    gems = call_other("/obj/gemmaster", "DistributeGem", 1, 0, 1, 0);
+    if (sizeof(gems))
+    {
+      thing = gems[0];
+      gem--;
+    }
+  }
+
+  if(!thing) {
+    write("Du schuerfst ... findest aber nichts.\n");
+    tell_room(ME, BS(sprintf("%s nimmt eine Spitzhacke und graebt herum.",
+            TP->Name(WER))), ({TP}));
+    return 1;
+  }
+
+  suc=SKILLMASTER->UseSkill(TP, SK_PROSPECT);
+
+
+  if(suc < -3000) {
+    write(BS("Du beginnst zu schuerfen, als sich ploetzlich ein paar "
+          +"Felsbrocken loesen und auf Dich niederprasseln."));
+    tell_room(ME, BS(sprintf("%s beginnt zu graben, als ploetzlich von "
+            "der Decke ein paar Felsbrocken herunterprasseln.", 
+            TP->Name(WER))), ({TP}));
+    TP->do_damage(50+random(20));
+    if(!random(10)) Collapse();
+    catch(thing->remove());
+    return 1;
+  }
+  else if (suc < 0) {
+    write("Du schuerfst ... findest aber nichts.\n");
+    tell_room(ME, BS(sprintf("%s nimmt eine Spitzhacke und graebt herum.",
+            TP->Name(WER))), ({TP}));
+    catch(thing->remove());
+    return 1;
+  }
+  
+  mat=m_indices(thing->QueryProp(P_MATERIAL));
+  if((MATERIALDB->MaterialName(mat[0],0,TP))!=
+      (MATERIALDB->MaterialName(mat[0]))) 
+  {
+    write(BS("Du graebst etwas aus. Aber da Du es nicht kennst, "
+          +"wirfst Du es weg."));
+    tell_room(ME, BS(sprintf("%s graebt mit einer Spitzhacke, wirft Steine "
+            "hinter sich, scheint aber nichts wirklich wichtiges zu finden.",
+            TP->Name(WER))), ({TP}));
+    return 1;
+  }
+  if(thing->move(TP)==ME_TOO_HEAVY) {
+    write(BS("Du findest etwas ... aber es ist Dir zu schwer, "
+          +"so dass es zu boden faellt."));
+    thing->move(ME, M_NOCHECK);
+    return 1;
+  }
+  write(BS("Du packst die Spitzhacke und beginnst zu graben ... "
+        +"Ploetzlich faellt Dir was auf. "
+        +"Du findest etwas Glaenzendes. Schnell schiebst Du es ein. "
+        +"Hoffentlich hat Dich keiner dabei gesehen.\n"));
+  tell_room(ME, BS(sprintf("%s nimmt eine Spitzhacke und graebt herum.\n",
+          TP->Name(WER))), ({TP}));
+  write_file(LOG("treasure_found"), sprintf("%s: %s findet %O (%s)\n",
+        dtime(time()),CAP(getuid(TP)), thing, file_name(ME)));
+  return 1;
+}
+
+
+/* Hoppala. Ist etwa der Gang eingestuerzt? :) */
+varargs int Collapse(string source_room)
+{
+  mapping exits;
+  string *dest_rooms, *directions, long;
+  int which_one;
+  exits=QueryProp(P_EXITS);
+  dest_rooms=m_values(exits);
+  directions=m_indices(exits);
+  //tell_object(find_player("angrox"),sprintf("%O\n", ME));
+  if(!sizeof(directions))
+    return 0;
+  if(!source_room) {
+    which_one=random(sizeof(dest_rooms));
+    //tell_object(find_player("angrox"),"NoSourceRoom\n");
+    RemoveExit(directions[which_one]);
+  }
+  else {
+    if((which_one=member(dest_rooms, (source_room+".lpc")))!=-1) {
+      RemoveExit(directions[which_one]);
+      //tell_object(find_player("angrox"), 
+      //     sprintf("Source ok! Destroom: which:%d\n", which_one));
+    }
+    else { 
+      /*
+         tell_object(find_player("angrox"), "error\n");
+         tell_object(find_player("angrox"),sprintf("which_one:%d\n"
+         +"source_room:%s\nAusgaenge nach:%O\n", which_one, source_room, 
+         dest_rooms));
+         */
+      return 0;
+    }
+  }
+  tell_room(ME, sprintf("Ploetzlich bricht ein Teil der Decke herab und "
+        +"der Weg nach %s ist blockiert!\n", CAP(directions[which_one])));
+  /* tell_object(find_player("angrox"), sprintf("which_one:%d\nDir:%s\n"
+     +"Room:%s\n", which_one, directions[which_one], 
+     dest_rooms[which_one]+"\b\b")); */
+  if(!source_room)
+    call_other(dest_rooms[which_one], "Collapse", file_name(ME));
+  old_exits+=([directions[which_one]:dest_rooms[which_one]]);
+  long="Der Ausgang nach "+CAP(directions[which_one])+" ist verschuettet.";
+  long_adds+=([directions[which_one]:long]);
+  AddDetail(directions[which_one],
+      "Dieser Ausgang ist verschuettet. Vielleicht kannst Du ihn "
+      +"ja mit einer Schaufel freigraben?");
+  return 1;
+}
+
+int DiggingInTheDirt(string str)
+{
+  string was, wohin, wie, *directions, *rooms, race;
+  int which_one, abil, suc;
+  mapping skill;
+  if(old_exits==([]))
+    return 0;
+  if(!str) {
+    write("Was willst du wie graben?\n");
+    return 1;
+  }
+  if(sscanf(str, "%s nach %s %s", was, wohin, wie)!=3) {
+    write("Was willst Du wie in welche Richtung freigraben?\n");
+    return 1;
+  }
+  if(was!="ausgang" && was !="durchgang" && was!="weg" && was!="stollen" &&
+      was!="hoehle") {
+    write("Das kannst Du nicht freigraben.\n");
+    return 1;
+  }
+  if(wie!="frei") {
+    write("Du kannst hier nur was freigraben.\n");
+    return 1;
+  }
+  directions=m_indices(old_exits);
+  rooms=m_values(old_exits);
+  if((which_one=member(directions, lower_case(wohin)))==-1) {
+    write("Dieser Ausgang ist doch frei!\n");
+    return 1;
+  }
+  if(!present("schaufel", TP)) {
+    write("Aber Du hast ja gar keine Schaufel dabei.\n");
+    return 1;
+  }
+  if(TP->QueryProp(P_MV) < 500) {
+    write("Raste lieber etwas, dass ist im Moment zu anstrengend fuer Dich.\n");
+    return 1;
+  }
+  TP->do_exhaust(500);
+  suc=SKILLMASTER->UseSkill(TP, SK_DIGGING);
+  if(suc < 0) {
+    write("Du graebst und graebst, aber das Gestein rutscht immer "
+        +"wieder nach!!!\n");
+    tell_room(ME, sprintf("%s versucht den Ausgang nach %s freizugraben, aber es "
+          +"rutscht immer mehr Gestein nach.\n", TP->Name(WER),
+          CAP(directions[which_one])), ({TP}));
+    TP->do_damage(random(10)+5);
+    return 1;
+  }
+  
+  AddExit(directions[which_one], rooms[which_one]);
+  old_exits=m_delete(old_exits, directions[which_one]);
+  long_adds=m_delete(long_adds, directions[which_one]);
+  RemoveDetail(directions[which_one]);
+  write(BS("Du nimmst die Schaufel, beginnst zu graben und nach einiger "
+        +"Zeit schaffst Du es, den Ausgang freizuraeumen."));
+  tell_room(ME, sprintf("%s nimmt eine Schaufel und graebt den Ausgang Richtung %s "
+        +"frei.\n", TP->Name(WER), directions[which_one]), ({TP}));
+  call_other(rooms[which_one], "OpenExit", file_name(ME), TP);
+  return 1;
+}
+
+int OpenExit(string dest, object pl)
+{
+  int which_one;
+  string *rooms, *dirs;
+  rooms=m_values(old_exits);
+  dirs=m_indices(old_exits);
+  if((which_one=member(rooms, (dest+".lpc")))==-1) return 0;
+  tell_room(ME, sprintf("Aus dem verschuettetem Ausgang ist urploetzlich "
+        +"ein Geraeusch zu hoeren. Auf einmal wird %s sichtbar, den "
+        +"Durchgang mit einer Schaufel freigrabend.\n", pl->Name()));
+  RemoveDetail(dirs[which_one]);
+  old_exits=m_delete(old_exits, dirs[which_one]);
+  long_adds=m_delete(long_adds, dirs[which_one]); 
+  AddExit(dirs[which_one], rooms[which_one]);
+}
+
+mixed QueryMappings()
+{
+  return({old_exits, long_adds});
+}
+

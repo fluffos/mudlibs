@@ -1,0 +1,220 @@
+/*
+** Cocktail  Yara@SL
+** ---
+** 2005-12-13  1.0  Yara  initial version
+*/
+
+inherit "/std/thing";
+
+#include "../def.h"
+
+object owner;
+int counter;
+
+mapping props;
+mapping msg;
+
+#define C_EX 1
+#define C_TRINK 2
+#define C_NIPP 3
+#define C_SCHLUERF 4
+
+create() {
+  if(!is_clone(TO)) return;
+
+  ::create(({"trink","trinke","schluerf","schluerfe"}));
+
+  counter = 10;
+
+  AddId(({"cocktailglas","cocktail","\ny_cocktail",
+          "glas","drink","getraenk"}));
+
+  SetProp(P_SHORT, "Ein leckerer Cocktail");
+  SetProp(P_LONG, "Ein leckerer Cocktail.");
+  SetProp (P_NAME, "Cocktail");
+  SetProp (P_GENDER, MALE);
+  SetProp (P_WEIGHT, 400);
+  SetProp(P_MATERIAL, ([ MAT_ALCOHOL : 50, MAT_MISC : 50 ]) );
+  SetProp(P_INFO,"Du kannst diesen Cocktail trinken, "
+                 "schluerfen, nippen oder austrinken.");
+  SetProp(P_SMELL, "Mmhmmm, der duftet wirklich lecker.\n");
+
+  AddCmd(({"trinke","trink"}),"cmdTrinke");
+  AddCmd(({"nippe","nipp"}),"cmdNippe");
+  AddCmd(({"schluerfe","schluerf"}),"cmdSchluerfe");
+  AddCmd(({"stosse","stoss"}), "cmdAnstossen");
+
+  props = (["drink": 0, "alcohol": 0]);
+
+  msg = (["msg_trink": "",
+          "msg_room_trink": "",
+          "msg_ex": "",
+          "msg_room_ex": "",
+          "msg_nipp": "",
+          "msg_room_nipp": "",
+          "msg_schluerf": "",
+          "msg_room_schluerf": "",
+          "msg_leer": "",
+          "msg_room_leer": "" ]);
+
+}
+
+string getOwnerUId() {
+  if(owner) return getuid(owner);
+  else return "";
+}
+
+void setDrink(mixed drinkProps, object pl) {
+/*
+0  drinkProps = ({drinks[drinkNr,0],    //name
+1                 drinks[drinkNr,3],    //short
+2                 drinks[drinkNr,4],    //ids
+3                 drinks[drinkNr,5]     //long
+4                 drinks[drinkNr,6],    //msg
+5                 drinks[drinkNr,7],    //props
+6                 drinks[drinkNr,9]     //details
+               });
+*/
+  int i;
+  mixed newIds;
+  mixed arr;
+
+  newIds = ({});
+  owner = pl;
+
+  //short anpassen
+  drinkProps[1] = owner->Name(WESSEN) + " " + drinkProps[0];
+  //ids anpassen
+  for(i=0;i<sizeof(drinkProps[2]);i++) {
+    newIds += ({ lower_case(owner->name(WESSEN)) +
+                 " " +
+                 drinkProps[2][i] });
+  }
+
+  //name faelle anpassen
+  arr = ({drinkProps[0],drinkProps[0],drinkProps[0],drinkProps[0]});
+
+  SetProp (P_NAME,       arr);
+  SetProp(P_SHORT,       drinkProps[1]);
+  AddId(                 drinkProps[2]);
+  AddId(                 newIds);
+  SetProp(P_LONG,        drinkProps[3]);
+
+  props = drinkProps[5];
+
+  msg = drinkProps[4];
+
+  for(i=0;i<sizeof(drinkProps[6]);i++)
+    AddDetail(drinkProps[6][i,0],drinkProps[6][i,1]);
+
+}
+
+
+int trinke(string str, int type) {
+  int cnt;
+  string msg_pl, msg_room;
+
+  if(!id(str) || environment(ME) != TP) return 0;
+
+  switch (type) {
+    case C_EX:
+      cnt = 10;
+      msg_pl = msg["msg_ex",0];
+      msg_room = TP->Name() + " " + msg["msg_room_ex",0];
+      break;
+    case C_TRINK:
+      cnt = 2;
+      msg_pl = msg["msg_trink",0];
+      msg_room = TP->Name() + " " + msg["msg_room_trink",0];
+      break;
+    case C_NIPP:
+      cnt = 1;
+      msg_pl = msg["msg_nipp",0];;
+      msg_room = TP->Name() + " " + msg["msg_room_nipp",0];
+      break;
+    case C_SCHLUERF:
+      cnt = 2;
+      msg_pl = msg["msg_schluerf",0];;
+      msg_room = TP->Name() + " " + msg["msg_room_schluerf",0];
+      break;
+  }
+
+  if(cnt > counter) cnt = counter;
+  counter -= cnt;
+
+  if(counter < 1 && type != C_EX) {
+    write(break_string(msg["msg_leer",0],78));
+    say(break_string(TP->Name() + " " + msg["msg_room_leer",0]));
+  }
+  else {
+    write(break_string(msg_pl, 78));
+    say(break_string(msg_room ,78));
+  }
+
+  TP->drink_drink( (props["drink",0])*cnt/10,
+                   (props["alcohol",0])*cnt/10,
+                   1);
+
+  if(counter < 1) remove();
+
+  return 1;
+}
+
+
+int cmdTrinke(string str) {
+  string what;
+  notify_fail("Was willst Du trinken?\n");
+  if(!str) return 0;
+
+  if(sscanf(str,"%s aus",what) == 1) return trinke(what, C_EX);
+  else return trinke(str, C_TRINK);
+}
+
+int cmdNippe(string str) {
+  string what;
+  notify_fail("Was willst Du nippen?\n");
+  if(!str) return 0;
+
+  if(sscanf(str,"an %s",what) == 1) return trinke(what, C_NIPP);
+  return trinke(str, C_NIPP);
+}
+
+int cmdSchluerfe(string str) {
+  string what;
+  notify_fail("Was willst Du schluerfen?\n");
+  return trinke(str, C_SCHLUERF);
+}
+
+int cmdAnstossen(string str) {
+  string pln;
+  object env, pl;
+
+  notify_fail("Mit wem willst Du anstossen?\n");
+
+  if(!str) return 0;
+  if(environment(ME) != TP) return -1;
+  if(sscanf(str, "mit %s an", pln) != 1) return 0;
+
+  if(TP->id(pln)) {
+    write(BS("Du willst doch nicht mit Dir selbst anstossen."));
+    return -1;
+  }
+
+  env = environment(TP);
+  pl=present(pln, env);
+  if(!pl) return 0;
+
+  pln = capitalize(pln);
+
+  if(!present("cocktail", pl)) {
+    write(BS(pln + " hat leider keinen Cocktail in den Haenden."));
+    say(BS(TP->Name() + " will mit " + pln + " anstossen."), ({TP,pl}));
+    tell_object(pl, BS(TP->Name() + " will mit Dir anstossen."));
+  }
+  else {
+    write(BS("Du stoesst mit " + pln + " an."));
+    say(BS(TP->Name() + " stoesst mit " + pln + " an."), ({TP,pl}));
+    tell_object(pl, BS(TP->Name() + " stoesst mit Dir an."));
+  }
+  return 1;
+}

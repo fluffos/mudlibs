@@ -1,0 +1,171 @@
+/*
+** Ein Gelsenstich
+*/
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include <defines.h>
+#include <moredef.h>
+
+#define NERVDAUER 20            // 20 Meldungen insgesamt
+#define KRATZ_BLOCK 30          // 30 Sekunden nach Kratzen bringt nochmal nix
+#define MAX_PROLONG 5           // max. 5 mal durch Kratzen verlaengern
+
+string wo;
+int n,p;
+int last_kratz;
+
+mixed wo = ({ "am linken Arm", "am rechten Arm", "auf der Stirn",
+              "am Hals", "am Ohr", "auf der Nase" });
+
+mapping wo2 = ([ "auf nase" : "auf der nase", "auf stirn" : "auf der stirn",
+                 "linken arm" : "am linken arm",
+                 "rechten arm" : "am rechten arm",
+                 "stirn" : "auf der stirn", "hals" : "am hals",
+                 "ohr" : "am ohr", "nase" : "auf der nase" ]);
+
+
+void create()
+{
+  string str;
+
+  if (!is_clone(this_object())) return;  // (return on BP)
+
+  ::create();
+
+  AddId ( ({"stich","gelsenstich", "gelse\nstich"}) );
+  //SetProp (P_INVIS, 1);
+  //SetProp (P_SHORT, "Ein Gelsenstich");
+  SetProp (P_SHORT, 0);
+  SetProp (P_LONG, "Der Gelsenstich juckt Dich gewaltig.\n");
+  SetProp (P_NAME, "Gelsenstich");
+  SetProp (P_GENDER, MALE);
+  SetProp (P_WEIGHT, 0);
+  SetProp (P_VALUE, 0);
+  SetProp (P_NODROP, "So leicht wirst Du den Stich nicht los!\n");
+  SetProp (P_NEVERDROP, 1);
+  SetProp (P_MATERIAL, MAT_MISC);
+  wo = wo[random(sizeof(wo))];
+
+  n = p = 0;
+  call_out("nerv",5+random(10));
+  AddCmd( ({ "kratz", "kratze" }), "kratze" );
+}
+
+
+void init()
+{
+  ::init();
+  if (TP)
+    write("Die Gelse sticht Dich "+wo+"!\n");
+}
+
+
+string extra_look()
+{
+  if (environment() && living(environment()))
+    return capitalize(environment()->QueryPronoun(WER)) +
+      " hat einen dicken roten Gelsendippel " + wo + ".\n";
+  else
+    remove();
+}
+
+
+void nerv()
+{
+  string txt;
+
+  if (!environment() ||
+      (!living(environment()) && !query_once_interactive(environment())))
+  {
+    remove();
+    return;
+  }
+  if (++n > NERVDAUER)
+  {
+    tell_object(environment(),
+        "Endlich ist Dein Gelsenstich abgeklungen!\n");
+    remove();
+    return;
+  }
+  txt = ({
+    "Der Gelsenstich "+wo+" juckt gewaltig.\n",
+    "Dein Gelsenstich schwillt weiter an.\n",
+    "Verdammt, warum musste Dich die Gelse auch ausgerechnet "+wo+" stechen?\n",
+    "Waaaah, Du wirst noch wahnsinnig, so sehr juckt Dich der Gelsenstich!\n",
+    "Du verspuerst das Beduerfnis, Dich "+wo+" zu kratzen.\n",
+    "Du verfluchst alle Gelsen dieser Welt.\n",
+    }) [random(6)];
+  tell_object(environment(), txt);
+  environment()->AddHp(-1);
+  call_out("nerv",5+random(20));
+}
+
+
+void besser()
+{
+  if (!environment() ||
+      (!living(environment()) && !query_once_interactive(environment())))
+  {
+    remove();
+    return;
+  }
+  tell_object(environment(),
+      "Aaaaah, besser, das Jucken laesst (zumindest voruebergehend) nach.\n");
+  call_out("aargh",60+random(30));
+}
+
+
+void aargh()
+{
+  if (!environment() ||
+      (!living(environment()) && !query_once_interactive(environment())))
+  {
+    remove();
+    return;
+  }
+  tell_object(environment(),
+      "Aaaaaargh, der Gelsenstich faengt wieder an, zu jucken!!\n");
+  environment()->AddHp(-3);
+
+  if ( (p++ < MAX_PROLONG) && (n > 0) && (n < NERVDAUER + 5) )
+    n++;        // kleine Strafe ;-)
+
+  call_out("nerv",5+random(10));
+}
+
+
+int kratze(string str)
+{
+  int bringt_nix;
+
+  if (!str ||
+      (!id(str) && (str != lower_case(wo)) && (wo2[str] != lower_case(wo))))
+    return notify_fail("Was willst Du kratzen?\n"),0;
+
+  bringt_nix = (time() < last_kratz + KRATZ_BLOCK);
+
+  write("Du kratzt Dich" + (bringt_nix ? " nochmal" : "") +
+      " genuesslich " + wo + ". Aaaaah, tut das gut!\n");
+  environment(this_player())->Message(
+      TP->Name(WER) + " kratzt sich" + (bringt_nix ? " nochmal" : "") +
+      " genuesslich " + wo + ".\n",
+      MSGFLAG_VISUAL | MSGFLAG_NO_TP );
+
+  if (time() < last_kratz + KRATZ_BLOCK)
+    return 1;
+
+  last_kratz = time();
+  while (remove_call_out("nerv") != -1) /* continue */ ;
+  while (remove_call_out("besser") != -1) /* continue */ ;
+  call_out("besser",6);
+
+  return 1;
+}
+
+string QueryWhere()
+{
+  return wo;
+}

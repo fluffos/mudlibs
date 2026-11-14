@@ -1,0 +1,571 @@
+
+inherit "std/npc";
+
+#include <properties.h>
+#include <moving.h>
+#include <language.h>
+#include <defines.h>
+#include "party.h"
+
+/* Partymonster IX 93 (c) Keto Design:
+   sag Partymonster gib <player|mir|allen> <objekt>
+                    hole susanne
+                    verschwinde
+*/   
+
+//Kirk sagt: Aeh, nicht REQUESTED_AMOUNT, sonder P_GIVEN_AMOUNT heisst das Ding
+//Kirk sagt: Lass das PM einfach das Geld annhemen und vernichten
+
+//5/8/95: Clont nur Sachen aus der Liste
+
+// BUGFIX 04-06-1996 by Mupfel:
+// 'Susanne' ist nicht in /players/hate/monster/susanne.c sondern in
+// /d/inseln/hate/monster/susanne.c
+
+nosave int grins_an;
+
+int *allowed;
+
+create()
+{
+  object ob;
+  if(!is_clone(this_object())) return;
+  ::create();
+  SetProp(P_NAME, "Partymonster");
+  SetProp(P_GENDER, NEUTER);
+  SetProp(P_SHORT, "Das Partymonster");
+  SetProp(P_ALIGN, 1000);
+  SetProp(P_LONG, 
+  "Das Partymonster ist da. Frohsinn! Stimmung! Es hat immer alles fuer\n"+
+  "eine Party dabei und hat noch nie eine Party ausgelassen ...   - K -\n"+
+  "Sagen Sie einfach ihre Wuensche dem Partymonster und es erfuellt sie:\n"+
+  "sag Partymonster gib wem was\n"+
+  "                 hole susanne\n"+
+  "                 hole stripper\n"+
+  "                 verschwinde\n");
+
+  AddId("monster");
+  AddId("partymonster");
+  set_living_name("partymonster");
+  SetProp(P_RACE, "partymonster");
+  SetProp(P_LEVEL, 19);
+  SetProp(P_SIZE, 198);
+  SetProp(P_MAX_HP, 75);
+  SetProp(P_HP, 75);
+  SetProp(P_XP, 0);
+  SetProp(P_HANDS, ({" mit einem Kissen", 5}) );
+  SetProp(P_AC, 100);
+  SetProp(P_MSGOUT,"eilt zur naechsten Party");
+  SetProp(P_MSGOUT,"eilt zur naechsten Party");
+  SetProp(P_NOCORPSE,1);
+  SetProp(P_DIE_MSG," raeumt auf und eilt zur naechsten Party.\n");
+  grins_an=1;
+  seteuid(getuid(this_object()));
+  allowed=({});
+
+  add_object(OBJ("eissch"));
+
+  add_object(OBJ("eisvan"));
+  add_object(OBJ("eiserd"));
+  add_object(OBJ("eiswald"));
+  add_object(OBJ("o_ei"));
+  add_object(OBJ("keks"));
+  add_object(OBJ("kissen"));
+  add_object(OBJ("torte"));
+  add_object(OBJ("joint"));
+  add_object(OBJ("kuchen"));
+  add_object(OBJ("tee"));
+  add_object(OBJ("cola"));
+  add_object(OBJ("flepi"));
+
+  add_object(OBJ("lolli"));
+  add_object(OBJ("dickmann"));
+  add_object(OBJ("twix"));
+  add_object(OBJ("rpause"));
+  add_object(OBJ("reis"));
+  add_object(OBJ("chips"));
+  add_object(OBJ("mon_cherie"));
+  add_object(OBJ("pappnase"));
+  add_object(OBJ("tafel"));
+  add_object(OBJ("polster"));
+
+  if (!living(ob=previous_object()))
+    if(!living(ob=environment(previous_object())))
+     return;
+  log_file (LOGFILE, dtime(time())+": Partymonster geklont von "
+             +ob->name()+"\n");
+  call_out ("die", MAX_PARTY_DAUER);
+}
+
+add_object(str)
+{
+  object o;
+  string err;
+  if (err=catch(o=clone_object(str)))
+    log_file(LOGFILE, "Clone "+to_string(o)+" error: "+err+"\n");
+  else
+  {
+    o->move(this_object());
+    o->SetProp(P_NODROP,0);
+    o->SetProp(P_VALUE,0);
+    o->SetProp(P_PARTY_ID,1);
+    allowed+=({str});
+  }
+}
+
+give_notify(obj)
+{
+  string ding;
+
+  ding=obj->QueryProp(P_NAME);
+
+  if(obj->id("geld"))
+    {
+     tell_room(environment(), 
+        "Partymonster sagt: Danke, aber ich bin unbestechlich.\n", 
+        ({this_object()}));
+       obj=present("geld",this_object());
+       give_obj(obj,this_player());
+      return;
+    }
+
+  if (!present(lower_case(ding+" 2"),this_object())  || 
+      explode(file_name(obj),"#")[0] =="/obj/money")
+  {
+    tell_room(environment(), 
+       present("geld",this_object()) ? 
+       "Partymonster sagt: Danke, aber ich bin unbestechlich.\n" : 
+       "Partymonster sagt: Danke, aber das kann ich nicht annehmen.\n",
+       ({this_object()}));
+    // Falls Geld dem Partymonster gegeben wird! Alles Geld das es bekommen
+    // hat zurueck geben!
+    // if(present("geld",this_object())) obj=present("geld",this_object());
+    write(obj);
+    if (this_player()->QueryProp(P_INVIS))
+      drop_obj( obj);
+    else
+      give_obj(obj,this_player());
+
+    if (environment(obj) == this_object()) 
+      if(!drop_obj(obj)) obj->remove();
+    log_file(LOGFILE, dtime(time())+" "+
+          TPN+" hat mir '"+ding+"' gegeben und ich habe es abgelehnt.\n");
+
+    return 1;
+  }
+
+  log_file(LOGFILE, dtime(time())+" "+ TPN+" hat mir '"+ding+"' gegeben.\n");
+
+  write("Das Partymonster sagt: Prima! Danke fuer "+obj->name(WEN, 1)+".\n");
+  call_out("action",4,TO,obj);
+  return 1;
+}
+
+die()
+{
+  object *list, obj;
+  int i ;
+
+  // Alles mitnehmen was noch rumliegt und vom Partymonster ausgegeben wurde:
+    /*
+  list = all_inventory(environment()) ;
+  for( i = 0; i < sizeof( list ); i++ )
+    if (list[i]->QueryProp(P_PARTY_ID)) list[i]->remove();
+    */
+  // let's do the same with closures B-) :
+
+  map_array(all_inventory(environment()),
+	    lambda(({'o}),
+                   ({#'?,({#'call_other,'o,"QueryProp","party_id"}),
+                         ({#'call_other, 'o, "remove"})
+                   })
+                  )
+           );
+
+  // Alles im Partymonster weg:
+  list = all_inventory(TO) ;
+  for( i = 0; i < sizeof( list ); i++ )
+    list[i]->remove();
+
+  // Gaeste aufraeumen:
+  if ( (obj=present("susanne")) && !query_once_interactive(obj))  
+    {
+     present("susanne")->remove();
+     say("Susanne winkt und geht davon.\n");
+   }
+  if ( (obj=present("max")) && !query_once_interactive(obj))  
+    {
+     present("max")->remove();
+     say("Max gruesst und verlaesst euch.\n");
+   }
+  if ( (obj=present("rosie")) && !query_once_interactive(obj))  
+    {
+     obj->remove();
+     say("Rosie winkt euch zu.\n");
+   }
+  if ( (obj=present("tom")) && !query_once_interactive(obj))  
+    {
+     obj->remove();
+     say("Tom verneigt sich.\n");
+   }
+  log_file(LOGFILE, dtime(time())+" verschwindet.\n");
+  ::die() ;
+}
+
+catch_tell(str)
+{
+  string s1, s2, s3;
+  object obj;
+  
+  if (!str || str=="") return;
+/*
+  if (sscanf(str,"%s tritt%sPartymonster",s1,s2))
+  {
+    say_str(capitalize(name())+" sagt: Aua, wieso trittst Du mich, "+s1+"?\n");
+    return;
+    }
+*/
+  if (grins_an && sscanf(str,"%s grinst%s",s1,s2))
+    {
+    if (s1!=capitalize(name(WER,1)))
+      {
+      say_str(capitalize(name(WER,1))+" grinst"+s2);
+      grins_an=0;
+      call_out("yes_grins",30);
+      return;
+    }
+    return;
+  }
+
+  if (grins_an && sscanf(str,"%s bricht vor Lachen zusammen.%s",s1,s2))
+    {
+      say_str(capitalize(name(WER,1))+" grinst "+s1+" an.\n");
+      grins_an=0;
+      call_out("yes_grins",30);
+      return;
+    }
+
+/* Ab hier nur alles was man dem Partymonster sagt:*/
+
+  if (!sscanf(str,"%s sagt: Partymonster %s",s1,s2)) return;
+
+  if (sscanf(str,"%s sagt: Partymonster gib %s %s\n",s1,s2,s3))
+    {
+   if (s3 == "alles") {pm_say("Das koennte Dir so passen ;)"); return;}
+   // if (s2 == "mir") {call_out("gebe",0,s1,s3,1); return;}
+   if (s2 == "mir") {call_out("gebe",0,TP->name(RAW),s3,1); return;}
+   if (s2 == "allen") {call_out("runde",0,s3); return;}
+   call_out("gebe",0,s2,s3,1);
+   return;
+ }
+
+
+  if (sscanf(str,"%s sagt: Partymonster hole susanne",s1))
+    {
+   if (present("susanne",environment()))
+     {pm_say("Susanne ist doch schon da!"); return;}
+   if (!obj=find_living("susanne") || (obj && query_once_interactive(obj)) )
+      obj=clone_object(MON("susanne"));
+   if (obj) 
+     { 
+     obj->move(environment(),M_TPORT);
+     obj->seteuid(getuid(obj));
+   }
+   if (present("max",environment()))
+     {pm_say("Max ist doch schon da!"); return;}
+   if (!obj=find_living("max") || (obj && query_once_interactive(obj)) )
+      obj=clone_object(MON("max"));
+   if (obj) 
+     { 
+     obj->move(environment(),M_TPORT);
+     say_str("Susanne gibt Max einen dicken Kuss.\n");
+     obj->seteuid(getuid(obj));
+   }
+   return;
+ }
+
+  // Die beiden Stripper von Rufus holen:
+  if (sscanf(str,"%s sagt: Partymonster hole stripper",s1))
+    {
+   if (present("rosie",environment()))
+     pm_say("Rosie ist doch schon da!");
+   else 
+    {
+    if (!obj=find_living("rosie") || (obj && query_once_interactive(obj)) )
+      obj=clone_object(MON("rosie2"));
+    if (obj) 
+      { 
+      obj->move(environment(),M_TPORT);
+      obj->seteuid(getuid(obj));
+      }
+    }
+   if (present("tom",environment()))
+     {pm_say("Tom ist doch schon da!"); return;}
+   if (!obj=find_living("tom") || (obj && query_once_interactive(obj)) )
+      obj=clone_object(MON("tom"));
+   if (obj) 
+     { 
+     obj->move(environment(),M_TPORT);
+     say_str("Rosie streicht Tom luesternd durchs Haar.\n");
+     obj->seteuid(getuid(obj));
+   }
+   return;
+ }
+
+  if (sscanf(str,"%s sagt: Partymonster %s\n",s1,s2))
+    {
+    if (s2 =="verschwinde")
+      {die(); return 1;}
+    if (!s2) s2=" ";
+    s2=explode(s2,"\n");
+    if (sizeof(s2))
+      s2=implode(s2," ");
+    else
+      return;
+    say_str(capitalize(name())+" sagt: Wieso \""+s2+"\"? \n");
+    return;
+  }
+
+}
+
+say_str(str)
+{
+  call_out("do_say",0,str);
+}
+
+do_say(str)
+{
+  say(str);
+}
+
+pm_say(str)
+{
+  say("Das Partymonster sagt: "+str+"\n");
+}
+
+write_say(whom,teil1,dir,wem,teil2)
+{
+  object *list, env ;
+  int i ;
+
+  tell_object(whom,teil1+dir+teil2);
+
+  if (!(env=environment())) return 0;
+  if (living(env)) env=environment(env); 
+  list = all_inventory( env ) ;
+  for( i = 0; i < sizeof( list ); i++ )
+    if( query_once_interactive(list[i]) && list[i] != whom )
+       tell_object(list[i],teil1+wem+teil2);
+}
+
+yes_grins()
+{
+  grins_an=1;
+}
+
+gebe(spieler, objekt, logmode) 
+{
+ object ziel,obj;
+ string filename_obj;
+ if(spieler=="" || spieler == 0)
+   {pm_say("Wem?"); return 0;}
+ if(objekt=="" || objekt == 0 )
+   {pm_say("Was?"); return 0;}
+ obj=present(LOWER(objekt),this_object());
+ if(obj==0)
+   {
+     if(obj=present(LOWER(objekt)))
+       {pm_say(capitalize(obj->name(WER,0))+" liegt doch am Boden rum.");
+        return 0;}
+     else
+       {pm_say(capitalize(objekt)+" habe ich nicht!"); return 0;}
+   }
+ if(obj->QueryProp(P_NODROP))
+   {pm_say(capitalize(obj->name(WER,0))+
+           " darf ich nicht hergeben!"); return 0;}
+ if(!obj->QueryProp(P_PARTY_ID))
+   {
+     pm_say(capitalize(obj->name(WER,0))+
+           " wurde mir zugeschummelt und gebe nicht anderen her!");
+     log_file(LOGFILE, dtime(time())+" "+
+           TPN+" hat mir "+obj->name(WEN,0)+" zugeschummelt. ("+
+           to_string(obj)+")\n");
+     drop_obj(obj);
+     if(environment(obj)==this_object()) obj->remove();
+     return 0;
+   }
+
+ ziel=present(LOWER(spieler),environment());
+ if(ziel==0) 
+   {pm_say(capitalize(spieler)+" sehe ich hier nicht!"); return 1;}
+ if(present(LOWER(objekt),ziel))
+   {pm_say(capitalize(ziel->name(WER,0))+" hat doch schon "+
+           obj->name(WEN,0)+"!"); return 1;}
+ if(present("pappnase",ziel))
+   {pm_say(capitalize(ziel->name(WER,0))+" hat eine Pappnase auf und kriegt nix mehr."); return 1;}
+   
+ filename_obj=explode(file_name(obj),"#")[0];
+ // Auf Haten Wunsch testet das Partymonster ob es dann Ding geclont hat:
+ if( member_array(filename_obj,allowed) ==-1)
+   {pm_say(obj->name()+" geb ich nicht mehr her!"); return 1;}
+ obj = clone_object(filename_obj);
+ if(!obj) 
+   {pm_say("Ich kann '"+filename_obj+"' nicht klonen !"); return 0;}
+
+ write_say(ziel,"Das Partymonster gibt ","Dir",ziel->name(WEM,1)," "+
+           obj->name(WEN,0)+".\n"); 
+/* do_say(
+   "Das Partymonster gibt "+ziel->name(WEM,1)+" "+obj->name(WEN,0)+".\n");
+*/
+ obj->SetProp(P_VALUE,1); // Ein Pfand fuer das Verkaufen im Laden.
+ obj->SetProp(P_NOBUY,1);
+ obj->SetProp(P_PARTY_ID,1);
+ obj->move(ziel,M_GIVE);
+ if (!query_once_interactive(ziel))
+         call_out("action",random(5)+4,ziel,obj);
+
+ log_file(LOGFILE,
+           logmode ? ziel->name(WER,1)+" bekommt "+obj->name(WEN,0)+
+                     " von "+TPN+".\n"
+                   : ziel->name(WER,1)+" ");
+//write_file("/players/ketos/log/party.log",
+//           "Gibt "+ziel->name(WEM,1)+" "+obj->name(WEN,0)+".\n");
+ return 1;
+ }
+
+runde(s3)
+{
+  object *list, env ;
+  int i ;
+  if (!(env=environment())) return 0;
+  if (living(env)) env=environment(env); 
+  list = all_inventory( env ) ;
+  for( i = 0; i < sizeof( list ); i++ )
+    if( living( list[i] ) && list[i] != TO && !(list[i]->QueryProp(P_INVIS)) )
+      if(!gebe(list[i]->name(RAW)||"",s3,0)) break;
+  if (present(s3,this_object()))
+    log_file(LOGFILE,
+           "bekommen "+present(s3,this_object())->name(WEN,0)+" von "+
+           TPN+".\n");
+}
+
+testp(name)
+{
+if (pointerp(name)) return name[WER];
+return name||"";
+}
+
+action(npc,obj)
+{
+  string objekt;
+  objekt=LOWER(testp(obj->QueryProp(P_NAME)));
+  if (present("woody"))
+    TW("Aktion:"+npc->name(WER,0)+"+"+objekt+"\n");
+
+  npc->seteuid(getuid(npc)); // Damit der npc was tun kann!
+
+  if (objekt=="polster")
+    {
+   npc->command_me("wirf polster nach "+ziele(npc));
+  }
+  if (objekt=="joint")
+    {
+    npc->command_me("rauche joint");
+  }
+  if (objekt=="tasse tee")
+    {
+    npc->command_me("trink tee");
+    obj->remove();
+  }
+  if (objekt=="stueck kuchen")
+    {
+    npc->command_me("iss kuchen");
+    obj->remove();
+  }
+  /*
+  if (objekt=="stueck kuchen")
+    {
+    npc->command_me("iss kuchen");
+    obj->remove();
+  }
+  */
+  if (objekt=="fisch")
+    {
+    npc->command_me("wirf fisch nach anthea");
+  }
+  if (objekt=="flepi")
+    {
+    npc->command_me("oeffne flepi");
+    npc->command_me("trink flepi");
+  }
+  if (objekt=="cola")
+    {
+    npc->command_me("oeffne cola");
+    npc->command_me("trink cola");
+  }
+  if (objekt=="softeis")
+    {
+    npc->command_me("iss eis");
+  }
+  if (objekt=="osterei")
+    {
+    npc->command_me("iss ei");
+  }
+  if (objekt=="kissen")
+    {
+    npc->command_me("wirf kissen nach "+ziele(npc));
+  }
+  if (objekt=="sahnetorte")
+    {
+    npc->command_me("wirf torte "+ziele(npc));
+  }
+  if (objekt=="bunny")
+    {
+    npc->command_me("knuddle bunny");
+  }
+  if (objekt=="kuss")
+    {
+    npc->command_me("puste ketos");
+  }
+  if (objekt=="dickmann")
+    {
+    npc->command_me("wirf dickmann zu ketos");
+  }
+  if (objekt=="lolli")
+    {
+    npc->command_me("lecke lolli");
+  }
+  if (objekt=="handvoll reis")
+    {
+    npc->command_me("wirf reis");
+  }
+  if (objekt=="ueberraschungsei")
+    {
+    npc->command_me("iss ei");
+  }
+  if (objekt=="twix")
+    {
+    npc->command_me("iss twix");
+  }
+  if (objekt=="mon cherie")
+    {
+    npc->command_me("iss cherie");
+  }
+}
+
+ziele(npc)
+{
+  object *list, env ;
+  int i ;
+  if (!(env=environment())) return 0;
+  if (living(env)) env=environment(env); 
+  list = all_inventory( env ) ;
+  for( i = 0; i < sizeof( list ); i++ )
+    if( !living( list[i] ) || list[i] == npc || 
+        !query_once_interactive(list[i]) )
+          list -= ({list[i]});
+  if (!sizeof(list)) return npc->QueryProp(P_NAME);
+ if (sizeof(list)) return testp(list[random(sizeof(list))]->QueryProp(P_NAME));
+}
+
+

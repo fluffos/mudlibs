@@ -1,0 +1,677 @@
+/*
+//
+// Der Gildenmaster fuer die Paladingilde
+//
+// Angrox@Silberland
+//
+// 22.05.1998
+//
+// Updates:
+//          22.05.1998 Aenderung Druidenmaster -> Paladinmaster
+//          16.12.1200 History-funs von druidenmaster.c uebernommen
+//           
+*/
+#include <wizlevels.h>
+#include <language.h>
+#include <config.h>
+#include <new_skills.h>
+#include <properties.h>
+#include <defines.h>
+#include <moredef.h>
+#include "/gilden/paladine/paladin.h"
+//Globale Variablen
+mixed saveload;
+nosave mapping paladins=([ ]);
+nosave mapping top=([ ]);
+nosave mapping lvl16quest=(["player": 0, "time":0]);
+nosave string *number_one;
+nosave int *xp_per_level=XP_PER_LEVEL;
+nosave int *money_per_level=MONEY_PER_LEVEL;
+nosave string *history=({});
+nosave int *hist_time=({});
+nosave string *mhistory=({});
+nosave int *mhist_time=({});
+nosave int dusty_age=0;
+nosave mapping songlocs=([]);
+nosave int tribunal_runs=0;
+nosave object *tribunal_members=({});
+//Prototypen
+int UpdateMemberLevels();
+int SetNumberOne();
+
+create() {
+  if (is_clone(this_object())) {
+    destruct(this_object());
+    return 1;
+  }
+  seteuid(getuid(this_object()));
+  if (restore_object(MEMBERLIST))
+     paladins=saveload;
+  if (restore_object(TOPLIST))
+     top=saveload;
+  if (restore_object(LVL16LIST))
+     lvl16quest=saveload;
+   saveload=0;
+  SetNumberOne();    
+  catch(dusty_age=to_int(read_file(LOG("dusty_age.txt"))));
+}
+
+nomask query_prevent_shadow() { return 1; }
+
+int QueryDustyAge() {
+  return dusty_age;
+}
+
+
+void reset() {
+  if(ctime()[11..12]=="00") {
+    catch(dusty_age=to_int(read_file("/gilden/paladine/log/dusty_age.txt")));
+  }
+  SetNumberOne();    
+}
+
+nosave int CheckIfAllowed() {
+  object ob;
+  string fname;
+  ob=previous_object();
+  fname=file_name(ob);
+  if(!IS_ARCH(getuid(ob)) && member(UID_ALLOWED, getuid(ob))==-1) { 
+    tell_angrox(sprintf("Versuchte Aenderung im Gildenmaster der Paladine "
+         +"von %s (direkt!)\n", CAP(getuid(ob))));
+    tell_zordan(sprintf("Versuchte Aenderung im Gildenmaster der Paladine "
+         +"von %s (direkt!)\n", CAP(getuid(ob))));
+  
+    write_secure_log(ctime()+": Versuchte Aenderung im Gildenmaster "
+             +"von "+CAP(getuid(ob))+" (direkt!)\n");
+    return 0;      
+  }
+  return 1;
+}
+
+nosave mixed object2string(mixed name) {
+  if(objectp(name)) return getuid(name);
+  if(stringp(name)) return lower_case(name);
+  return 0;
+}
+
+nosave mixed string2object(mixed name) {
+  if(objectp(name)) return name;
+  if(stringp(name))
+    if(name=find_player(name) || name=find_netdead(name)) return name;
+  return 0;
+}
+
+//
+//  Backuphandling
+//
+int DoBackup() {
+  if (!CheckIfAllowed()) return -2;
+  saveload=paladins;
+  save_object(MEMBERBACKUP);
+  saveload=0;
+  rm (BACKUP("backup.log"));
+  write_file(BACKUP("backup.log"),
+             "Letztes Backup: "+dtime(time())+"\n");
+  return 1;
+}
+
+int DoRestore() {
+  if(!CheckIfAllowed()) return -2;
+  if(restore_object(MEMBERBACKUP))
+      save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+ 
+
+
+/*
+//
+// Taskhandling
+//
+*/
+
+int CheckTask(mixed pl, int nr) {
+ if(!pl=object2string(pl)) return -3;
+ if(!member(paladins, pl)) return 0;
+ if(!stringp(paladins[pl, 4])) return 0;
+ return test_bit(paladins[pl, 4], nr);       
+}
+
+int SetTask(mixed pl, int nr) {
+  string tasks;
+  if(!pl=object2string(pl)) return -3;
+  if(!member(paladins, pl))
+    return 0;
+  if (!CheckIfAllowed()) return -2;
+  if(!stringp(paladins[pl, 4])) tasks="";
+  else 
+    tasks=paladins[pl, 4];
+  tasks=set_bit(tasks, nr);
+  paladins[pl, 4]=tasks;
+  saveload=paladins;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+int DeleteTask(mixed pl, int nr) {
+  string tasks;
+  if(!pl=object2string(pl)) return -3;
+  if(!member(paladins, pl))
+    return 0;
+  if (!CheckIfAllowed()) return -2;
+  if(!stringp(paladins[pl, 4])) tasks="";
+  else 
+    tasks=paladins[pl, 4];
+  tasks=clear_bit(tasks, nr);
+  paladins[pl, 4]=tasks;
+  saveload=paladins;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+/* 
+//   Neues Mitglied hinzufuegen 
+//   Format: ([Name:Stufe;xp;Geld;SpielerLevel;Tasks;Align;]) 
+//                    0   1   2         3        4     5
+*/
+int AddMember(mixed pl, int xp, int lvl) {
+  if(!pl=object2string(pl)) return -3;
+  if(member(paladins, pl))
+    return 0;
+  if (!CheckIfAllowed()) return -2;
+  paladins+=([pl:1;xp+xp_per_level[0];({money_per_level[0],0});lvl;"";0;({});0]);
+  saveload=paladins;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+int ChangeMemberFile() {
+  mapping help_map;
+  int i;
+  string *p_namen;
+  help_map=([]);
+  p_namen=m_indices(paladins);
+  for(i=sizeof(p_namen)-1;i>=0;i--) {
+    help_map+=([p_namen[i]:paladins[p_namen[i],0];
+                           paladins[p_namen[i],1];
+                           paladins[p_namen[i],2];
+                           paladins[p_namen[i],3];
+                           paladins[p_namen[i],4];
+                           paladins[p_namen[i],5];
+                           ({});
+                           0]);
+  } 
+  paladins=help_map;
+  saveload=paladins;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+/* Mitglied loeschen */
+int DeleteMember(mixed pl) {
+  if(!pl=object2string(pl)) return -1;
+  if(!CheckIfAllowed()) return -2;
+  if(!member(paladins, pl))
+    return -3;
+  paladins=m_delete(paladins, pl);
+  saveload=paladins;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+int AdvanceLevel(mixed pl) {
+  int lev;
+  string pl_str;
+  if(!pl=string2object(pl)) return -1;
+  if(!CheckIfAllowed()) return -2;
+  pl_str=getuid(pl);
+  if(!member(paladins, pl_str)) return -3;
+  lev=pl->QueryProp(P_GUILD_LEVEL);
+  paladins[pl_str,0]=lev;
+  paladins[pl_str,1]=(pl->QueryProp(P_XP))+pl->QueryProp(P_TOTAL_LOST_XP)+
+    xp_per_level[lev-1];
+  if(!pointerp(paladins[pl_str,2]))
+    paladins[pl_str,2]=({money_per_level[lev-1], 0});
+  else
+    paladins[pl_str,2][0]=money_per_level[lev-1];
+  paladins[pl_str,3]=pl->QueryProp(P_LEVEL);
+  paladins[pl_str,5]=pl->QueryProp(P_ALIGN);
+  saveload=paladins;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+mixed QueryMemberEntry(string pl) {
+  if(!member(paladins, pl)) return 0;
+  return ({paladins[pl],paladins[pl,3],paladins[pl,1],paladins[pl,5], 
+      paladins[pl,2][0],paladins[pl,2][1],paladins[pl,4]});
+}
+
+mixed QueryMembers() {
+  return m_indices(paladins);
+}
+
+/* Levels updaten */
+int UpdateMemberLevels() {
+  int i;
+  object pl;
+  string *names;
+  names=m_indices(paladins);
+  for(i=sizeof(names)-1; i>=0;i--) {
+    if(pl=find_player(names[i])) {
+      paladins[names[i], 0]=pl->QueryProp(P_GUILD_LEVEL);
+      paladins[names[i], 3]=pl->QueryProp(P_LEVEL);
+      paladins[names[i], 5]=pl->QueryProp(P_ALIGN);
+    } else {
+      paladins[names[i], 0]=call_other(SAVEMASTER, "QueryFileProp", names[i],
+         P_GUILD_LEVEL);
+      if (mappingp(paladins[names[i], 0]))
+        paladins[names[i], 0]=paladins[names[i], 0]["paladine"];
+      paladins[names[i], 3]=call_other(SAVEMASTER, "QueryFileProp", names[i],
+         P_LEVEL);
+      paladins[names[i], 5]=call_other(SAVEMASTER, "QueryFileProp", names[i],
+         P_ALIGN);
+    }
+  }
+  saveload=paladins;
+  save_object(MEMBERLIST);
+  return 1;
+}
+
+int CheckXp(mixed pl, int cur_xp) {
+  if(!pl=object2string(pl)) return -1;
+  if(!member(paladins, pl)) return -3;
+  if(paladins[pl, 0] > cur_xp)
+    return 0;
+  else return 1;
+}
+
+int GetXpDifference(mixed pl) {
+  int diff;
+  if(!pl=string2object(pl)) return -1;
+  if(!member(paladins, getuid(pl))) return -3;
+  diff=paladins[getuid(pl), 1]-(pl->QueryProp(P_XP)+pl->QueryProp(P_TOTAL_LOST_XP));
+  if(diff<0) return 0;
+  else return diff;
+}
+
+int SetXp(mixed pl, int needed_xp) {
+  if(!pl=object2string(pl)) return -1;
+  if(!CheckIfAllowed()) return -2;
+  if(!member(paladins, pl)) return -3;
+  paladins[pl, 1]=needed_xp;
+  saveload=paladins;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+int SacrificeMoney(mixed pl, int money) {
+  if(!pl=object2string(pl)) return -1;
+  if(!CheckIfAllowed()) return -2;
+  if(!member(paladins, pl)) return -3;
+  if(money > 0) 
+    paladins[pl, 2][0]-=money;
+  paladins[pl, 2][1]+=money;
+  if(paladins[pl,2][0]<0) paladins[pl,2][0]=0;
+  if(paladins[pl,2][1]<0) paladins[pl,2][1]=0;
+  saveload=paladins;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+int GetMoneyDifference(mixed pl) {
+  if(!pl=object2string(pl)) return -1;
+  if(!member(paladins, pl)) return -3;
+  return paladins[pl, 2][0];
+}
+
+int GetSacrificedMoney(mixed pl) {
+  if(!pl=object2string(pl)) return -1;
+  if(!member(paladins, pl)) return -3;
+  return paladins[pl, 2][1];
+}
+
+// Farben setzen uns auslesen
+int SetColors(mixed pl, mixed colors) {
+  if(!pl=object2string(pl)) return -1;
+  if(!member(paladins, pl)) return -3;
+  paladins[pl,6]=colors;
+  saveload=paladins;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+mixed QueryColors(mixed pl) {
+  if(!pl=object2string(pl)) return -1;
+  if(!member(paladins, pl)) return -3;
+  return paladins[pl,6];
+}
+
+// History des mages_shout
+int AddMagesHistory(string presay, string msg) {
+  int i;
+  
+  if ( sizeof(mhistory) > 20 )
+  {
+    mhistory=mhistory[1..<1];
+    mhist_time=mhist_time[1..<1];
+  }
+  mhistory+=({implode(({presay, msg}), "&&*%%")});
+  mhist_time+=({time()});
+  return 1;
+}
+mixed QueryMagesHistory() {
+  return ({mhist_time,mhistory}); 
+}
+
+// History des guild_shout
+int AddHistory(string presay, string msg, int invis) {
+  int i;
+  
+  if ( sizeof(history) >  PHIST_LEN )
+  {
+    history=history[1..<1];
+    hist_time=hist_time[1..<1];
+  }
+  history+=({implode(({presay, msg, to_string(invis)}), "&&*%%")});
+  hist_time+=({time()});
+  if(interactive(TP))
+    write_file(PHIST_LOG, sprintf("%s - %s%s", dtime(time()), 
+         presay, msg));
+  write_file(PHIST_ALL_LOG, sprintf("%s - %s%s", dtime(time()), 
+         presay, msg));
+  return 1;
+}
+
+mixed QueryHistory() {
+  return ({hist_time,history}); 
+}
+
+
+/* Den Besten herausfiltern und in einer Variablen speichern. */
+int SetNumberOne() {
+  int i, *topratings, bestrating;
+  bestrating=0;
+  topratings=m_indices(top);
+  for(i=sizeof(topratings)-1;i>=0;i--)
+    if(topratings[i]>bestrating) bestrating=topratings[i];
+  number_one=top[bestrating];
+  return 1; 
+}
+
+/* Den Besten ausgeben */
+mixed QueryNumberOne() {
+  return number_one;
+}
+
+/* Berechnung der Wertung */
+int CalculateRating(string player, int rating, int stufe, mixed align) {
+  int last;
+  float mod;
+  object pl;
+  int gstufe;
+  if(!intp(align)) align=0;
+  //rating+=3*stufe+align/35+(GetSacrificedMoney(player)/1000000);
+  rating+=align/100+(2*stufe)+3*(int)log((float)(GetSacrificedMoney(player)+1.1));
+  gstufe=paladins[lower_case(player),0];
+  rating+=gstufe*200;
+  if(!pl=find_player(player)) {
+    if (pl=find_netdead(player))
+      last=pl->QueryProp(P_LAST_LOGOUT);
+    else
+      last=call_other(SAVEMASTER, "QueryFileProp", player, P_LAST_LOGOUT);
+    if((time()-2592000)>last) {         // 3600*24*30 = 30 tage
+      mod=1-((time()-2592000-last)/86400)*0.05;
+      if((rating=(int)(rating*mod))<gstufe*50) rating=gstufe*50+stufe;
+    }
+  }
+  return rating;
+}
+
+/* Fuers Austreten -> Raus aus der Topliste */
+int DeleteTopEntry(string player) {
+  int *topratings, i; 
+  string *topnames;
+  if (!CheckIfAllowed()) return -2;
+  topnames=m_values(top);
+  topratings=m_indices(top);
+  for(i=sizeof(topnames)-1;i>=0;i--) 
+    if(member(topnames[i], player)!=-1) 
+      top[topratings[i]]-=({player});
+  saveload=top;
+  save_object(TOPLIST);
+  return 1;
+}
+
+/* Topliste updaten */
+int UpdateTopList() {
+  string *names, *topnames;
+  int rating, i, j, *topratings, test;
+  object pl;
+  names=m_indices(paladins);
+  top=([]);
+  //topnames=m_values(top);
+  //topratings=m_indices(top);
+  for(i=sizeof(names)-1;i>=0;i--) {
+    rating=0;
+    if(query_wiz_level(names[i])<3) {
+      if(((pl=find_player(names[i]))||(pl=find_netdead(names[i]))) &&
+         !pl->QueryProp(P_TESTPLAYER))
+        rating=CalculateRating(names[i], pl->QueryProp(P_GUILD_RATING), 
+               pl->QueryProp(P_LEVEL), pl->QueryProp(P_ALIGN));
+      else {
+        if(!call_other(SAVEMASTER, "QueryFileProp", names[i], P_TESTPLAYER))
+          rating=CalculateRating(names[i],
+            call_other(SAVEMASTER, "QueryFileProp", names[i], P_GUILD_RATING), 
+            call_other(SAVEMASTER, "QueryFileProp", names[i], P_LEVEL),
+            call_other(SAVEMASTER, "QueryFileProp", names[i], P_ALIGN));
+      }      
+    }
+    if(rating) {
+      //for(j=sizeof(topnames)-1;j>=0;j--) 
+      //  if(member(topnames[j], names[i])!=-1) 
+      //    top[topratings[j]]-=({names[i]});
+      if(!member(top, rating)) 
+        top+=([rating:({names[i]})]);
+      else top[rating]+=({names[i]});
+    }   
+  }
+  for(i=sizeof(m_indices(top))-1;i>=0;i--) 
+    if(!sizeof(m_values(top)[i]))
+      top=m_delete(top, m_indices(top)[i]);
+  saveload=top;
+  save_object(TOPLIST);
+  return 1;   
+}
+
+/* Topliste in file 'toplist.read' schreiben, Ausgabe ueber 'more' */
+int MakeReadList() {
+  int *arm, i, j, tabs, tabs2, gstufe, stufe, nummer, money;
+  float best, fac;
+  string name, element, align;
+  UpdateMemberLevels();
+  rm(REALTOPLIST);
+  nummer=1;
+  write_file(REALTOPLIST, sprintf("(Stand: %s)\n\n", dtime()));
+  write_file(REALTOPLIST, "    Name\tGstufe  Sstufe\t  Geopfert\t"
+      +"Gesinnung\tWertung\n");
+  write_file(REALTOPLIST, "-----------------------------------------"
+                     +"------------------------------\n");
+  arm=sort_array(m_indices(top), #'>); //');
+  best=(float)arm[sizeof(arm)-1];
+  for(i=sizeof(arm)-1;i>=0;i--) {
+   if(arm[i]) {
+      for(j=sizeof(top[arm[i]])-1;j>=0;j--) {
+        name=CAP(top[arm[i]][j]);
+        fac=(float)(arm[i]/best)*100;
+        align=call_other("/std/player/base", "al_to_title", 
+            paladins[lower_case(name),5]);
+        tabs=1; //+(int)(strlen(name)/8);
+        if (strlen(name) < 4) tabs++;
+        tabs2=2-(int)(strlen(align)/8);
+        money=GetSacrificedMoney(lower_case(name));
+        gstufe=paladins[lower_case(name), 0];
+        stufe=paladins[lower_case(name), 3];
+        if(!gstufe || nummer>=100) continue;
+        if(arm[i]<100)
+	  write_file(REALTOPLIST, sprintf("%2d. %s%*'\t's%2d\t%3d\t%10d\t%s"
+              "%*'\t's%s\n", nummer, name, tabs, "", gstufe, stufe, money, 
+              align, tabs2, "", "  -.---"));
+        else 
+	 write_file(REALTOPLIST, sprintf("%2d. %s%*'\t's%2d\t%3d\t%10d\t%s"
+              "%*'\t's%7.3f\n", nummer, name, tabs, "", gstufe, stufe, money, 
+              align, tabs2, "", fac));
+        nummer++;
+      }
+    }
+  }
+  return 1;
+}
+
+
+int SetQuestLvl16(mixed pl, int expire) {
+
+  if(!pl=object2string(pl)) return -1;
+  if(!CheckIfAllowed()) return -2;
+  if(!mappingp(lvl16quest) || lvl16quest["player"]  != 0) return 0;
+  lvl16quest["player"]=pl;
+  lvl16quest["time"]=expire;
+  saveload=lvl16quest;
+  save_object(LVL16LIST);
+  return 1;
+}
+
+mapping QueryQuestLvl16() {
+  return lvl16quest;
+}
+
+int QuestLvl16Free() {
+  if(lvl16quest["player"] == 0) return 1;
+  return 0;
+}
+
+int SetQuestLvl16Solved() {
+  lvl16quest=(["player":0,"time":0]);
+  saveload=lvl16quest;
+  save_object(LVL16LIST);
+  return 1;
+}
+
+
+/*
+//
+// return: 0 - Kein Saenger in dem Raum
+//         x - Anzahl der Saenger
+//
+int CheckLocationSingers(string room) {
+  if(!member(songlocs, room)) {
+    return 0;
+  }
+  return sizeof(songlocs[room]);
+}
+
+//
+// return: 0 - Kein Raum
+//         1 - singers() aufgeraeumt
+//
+int CheckSingingLocation(string room) {
+  string *singers;
+  string *correct;
+  int i;
+  correct=({});
+  if(!member(songlocs, room)) {
+    return 0;
+  }
+  for(i=sizeof(singers)-1;i>=0;i--) {
+    if( file_name(ENV(find_player(singers[i]))) == room)
+      correct+=({singers[i]});
+  }
+  songlocs[room]=correct;
+  return 1;
+
+}
+
+//
+// return: 1 - Add successful - Neuer Raum
+//         2 - Player singt bereits im Raum
+//         3 - Einstimmen in den Gesang
+//
+int AddSingingLocation(string room, mixed pl) {
+  string *singers;
+  pl=object2string(pl);
+  if(!member(songlocs, room)) {
+    songlocs+=([room:({pl})]);
+    return 1;
+  }
+  singers=songlocs[room];
+  if(member(singers, pl)!=-1)
+    return 2;
+  singers+=({pl});
+  return 3;
+}
+
+//
+// return: 0 - Room existiert nicht
+//         1 - Erfolgreich geloescht
+//
+int RemoveSingingLocation(string room) {
+  if(!member(songlocs, room)) {
+    return 1;
+  }
+  songlocs=m_delete(songlocs, room);
+  return 1;
+}
+
+int RemoveSinger(string room, mixed pl) {
+  string *singers;
+  pl=object2string(pl);
+  if(!member(songlocs, room)) {
+    return 0;
+  }
+  singers=songlocs[room];
+  if(member(singers, pl)==-1)
+    return 0;
+  singers-=({pl});
+  songlocs[room]=singers;
+  if(!sizeof(singers))
+    RemoveSingingLocation(room);
+  return 1;
+  
+}
+
+mapping ShowSingingLocation() {
+  return songlocs;
+}
+*/
+/*
+int tribunal_start() {
+  if(!tribunal_runs) {
+    tell_object(PO, BS("Paladin! Es laeuft gerade ein anderes "
+          "Tribunal!"));
+    return 0;
+  }
+  tribunal_members=({});
+  tribunal_runs=1;
+  call_out("tribunal_ends", 300);
+  tribunal_members+=({PO});
+  return 1;
+}
+
+int tribunal_add(object pl) {
+  if(member
+}
+
+int tribunal_approve() {
+
+}
+*/

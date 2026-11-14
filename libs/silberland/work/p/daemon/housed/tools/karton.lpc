@@ -1,0 +1,437 @@
+/*
+ * /p/daemon/housed/tools/karton.c - die Bedienkonsole fuer Regionsmagier,
+ * um bequem Haeuser an-, ab- und umhaengen zu koennen. Das Tool ist daher
+ * eigentlich nur fuer (aktive) Regionsmagier sinnvoll. Infos kann sich 
+ * aber eigentlich jeder anzeigen lassen...
+ *
+ * (c) 1998-2000 Mud Silberland - Adrian Holzwarth / Anatol@Silberland
+ *
+ * 2012-01-25 Anatol            Beschreibung des Upgrades hinzugefuegt
+ * 2016-01-11 Woody             "haus info <region> <regex>" implementiert
+ */
+
+#pragma strict_types
+
+#include <properties.h>
+#include <wizlevels.h>
+#include "../sys/housed.h"
+#include "../sys/housed_priv.h"
+#include "../sys/upgrade.h"
+#include <language.h>
+
+inherit "/std/tool";
+
+private nosave int SetShort(string rawstring) {
+  string s, owner;
+  if (((environment())||(this_player())) && 
+      (owner=getuid(environment(this_object())||this_player())))
+    s=capitalize(((s=owner)[<1]=='s'||s[<1]=='x'||s[<1] =='z')?s+="' ": 
+                                                               s+="s ");
+  else
+    s=QueryArticle(); 
+  SetProp(P_SHORT , s+rawstring);
+  return 1;
+}
+
+private nosave string cP(string filename) {
+  if (!this_player()) return filename;
+  else 
+   return  
+     (string)"/secure/master"->make_path_absolute(filename,this_player());
+}
+
+private nosave int isLord() {
+  return ((this_player()) && ((IS_ELDER(this_player())) ||
+    (sizeof(((mixed)
+         ("/secure/master"->get_userinfo(getuid(this_player()))))[3])) || 
+    (getuid(this_object())==getuid(this_player()))));
+}
+
+private nosave int isMaster() {
+  return ((this_player()) && 
+      (member(HOUSED_CARETAKER,getuid(this_player()))!=-1));
+}
+         
+public string _query_long() {
+  if (!this_player()) return "";
+  else return break_string(
+      "Oje, der Umzugskarton hat auch schon bessere Zeiten erlebt. "
+      "Und sein abblaetternder Aufdruck \"A.at.l-Um.ue.e\" "
+      "sagt Dir auch nichts. "
+      +(IS_WIZARD(this_player())?
+      "Aber (!) mit ihm kann man an Seherhaeusern herumwursteln. "
+      "Syntax: \n"
+      "  haus info [<besitzer>|<region> [<regex>]]\n":"")
+      +(isMaster()?
+      "  haus neu <besitzer> <nr>\n"
+      "  haus loeschen <besitzer> <nr>\n":"")
+      +(isLord()?
+      "  haus anhaengen <besitzer> <nr> <pfad>|hier <eingang>\n"
+      "  haus abhaengen <besitzer> <nr>\n"
+      "  haus umhaengen <besitzer> <nr> [<pfad>|hier] [<eingang>]\n":"")
+      +(isMaster()?
+      "  haus vergroessern <besitzer> <nr> <raumzahl>\n"
+      "  haus verkleinern  <besitzer> <nr> <raumzahl>\n"
+      "  haus GAU <code> (VORSICHT DAMIT!)\n":"")
+      +(isLord()?
+      "Man kann nur dort an- oder abhaengen, wo man auch "
+      "Regionsmagier ist.\n":"")
+      +(isMaster()?
+      "  haus upgrade neu <objektpfad> <typ> <info> <nr>\n"
+      "  haus upgrade aendern <lfdnr> <objektpfad> <typ> <info> <nr>\n"
+      "  haus upgrade anzeigen [<lfdnr>]\n":"")
+      
+      ,77,0,1);
+}
+
+
+nomask void create() {
+  if (!is_clone(this_object())) return;
+    ::create();
+    
+  seteuid(getuid(this_object()));
+  SetProp(P_LONG, "Wasndas?\n");
+  SetShort("Umzugskarton");
+  SetProp(P_WEIGHT,0);
+  SetProp(P_MATERIAL,MAT_PAPER); 
+  SetProp(P_NODROP,"Lass mal, vielleicht ziehst Du mal um.\n");
+  SetProp(P_NEVERDROP,1);
+  SetProp(P_AUTOLOADOBJ,1);
+  SetProp(P_NOBUY,1);
+  SetProp(P_NOSELL,1);
+  SetProp(P_VALUE,0);
+  SetProp(P_NAME,"Umzugskarton");
+  SetProp(P_GENDER,MALE);
+  AddId(({"TOOL","karton","umzugskarton","haus-tool","haustool",
+        "\a\n\a\tol_tool"}));
+  AddCmd("haus","cmdHaus");
+}
+
+nosave int evalErr(int err) {
+  string e;
+  if (err==1) {
+    printf("Hat geklappt.\n");
+    HOUSED_KLOG(sprintf("Erfolgreicher Aufruf durch %s:\n%s %s\n", 
+         capitalize(getuid(this_player())),
+         query_verb(),this_player()->_unparsed_args()));
+    return 1;
+  }
+  else switch (err) {
+    case   0: e="Hat nicht geklappt";err=1;break;
+    case  -1: e="Zugriff verweigert";break;
+    case  -2: e="Ungueltiger Hausbesitzer";break;
+    case  -3: e="Haus existiert bereits";break;
+    case  -4: e="Der Anschlussraum ist ein geclontes Objekt";break;
+    case  -5: e="Der Anschlussraum ist kein Raum";break;
+    case  -6: e="Unzulaessige Anschlussrichtungen";break;
+    case  -7: e="VC-Objekt fuer das Haus konnte nicht erzeugt werden";break;
+    case  -8: e="Das Haus existiert gar nicht";break;
+    case  -9: e="Das sind aber viel zu viele Raeume";break;
+    case  -10: e="Ungueltige Raumnummer";break;
+    case  -11: e="Anschlussraum konnte nicht geladen werden";break;
+    case  -12: e="Anschlussraum gehoert keiner Region an";break;
+    case  -13: e="Anschlussraum gehoert keiner Region an";break;
+    case  -14: e="Du bist in der Anschlussregion kein Regionsmagier";break;
+    case  -15: e="Dir bist in der Abhang-Region kein Regionsmagier";break;
+    case  -16: e="Das Haus ist bereits angeschlossen";break;
+    case  -17: e="Das Haus ist nicht angeschlossen";break;
+    case  -18: e="Anschlussraum verweigert Anschluss";break;
+    case  -19: e="Das Haus hat bereits einen Ausgang der Gegenrichtung";break;
+    default:   e="Total unbekannter Fehler, aua";break;
+  }
+  printf("Fehler %d: %s.\n",err,e);
+    HOUSED_KELOG(sprintf("Fehlgeschlagener Aufruf durch %s:\n%d: %s\n%s %s\n",
+       capitalize(getuid(this_player())),(err==1?0:err), e,
+         query_verb(),this_player()->_unparsed_args()));
+  return err;
+}
+
+nosave int showUpgrader(int n) {
+  mixed m;
+
+  if (!m=(mixed)HOUSED_UPGRADE->QueryUpgrade(n))
+     write("Fehler: Ein Upgrade mit dieser laufenden Nummer existiert"
+       " (noch) nicht.\n");
+  else
+   printf("Eintrag mit laufender Nummer %d:\n"
+    "--------------------------------\n"
+    "Upgrader:    %s\nUpgrade-Typ: %s (%s)\n"
+    "Fuer HausNr: %d\nSpielerinfo:  %s\n",n,m[HOUSED_UPGRADE_FN],
+    (m[HOUSED_UPGRADE_TYPE]==HDUPT_ROOM?"Raum":
+    (m[HOUSED_UPGRADE_TYPE]==HDUPT_GOODIE?"Goodie":
+    "Unbekannt")),
+    to_string(m[HOUSED_UPGRADE_INFO]),
+    (int)m[HOUSED_UPGRADE_HOUSENO],to_string(m[HOUSED_UPGRADE_DESC]));
+}
+        
+nosave mixed produceUpgradeArray(string s1,string s2,string s3,string s4, string s5) {
+  mixed m;
+  int n;
+  string dummy;
+  m=({0,0,0,0,0});
+
+  if ((!stringp(s1))||(!s1)||(s1==""))
+    return "Welches Objekt bitte soll den Zugriff haben!?";
+  else if (sizeof(explode(s1=cP(s1),"#"))>1) 
+    return "Bitte NUR Blueprints eintragen - keine Clones!";
+  else m[HOUSED_UPGRADE_FN]=s1;
+ 
+  switch (s2) {
+    case "r":
+      if ((!s3)||(s3==""))
+        return "Fehlende Raumanzahl...";
+      else if ((sscanf(s3,"%d%s",n,dummy)!=2)||(dummy!="")) 
+        return "Die Anzahl der Raeume, die vergeben werden, eine Integer "
+          "sein.";
+      else if (n<=0)
+        return "Die Anzahl der Raeume sollte schon positiv sein!";
+      else m[HOUSED_UPGRADE_INFO]=n;
+      break;
+    case "g":
+      if ((!s3)||(s3==""))
+        return "Fehlender Filename des Goodies.";
+      else if (sizeof(explode(s3=cP(s3),"#"))>1) 
+        return "Bitte als Goodie NUR Blueprints eintragen - keine Clones!";
+      else m[HOUSED_UPGRADE_INFO]=s3;
+      break;
+    default:
+      return "Ungueltiger Upgrade-Typ. Bisher gibt es nur (g)oodies und"
+        " (r)aeume.";
+      break;
+  }
+
+  if ((!s4)||(s4=="")||(sscanf(s4,"%d%s",n,dummy)!=2)||(dummy!="")) 
+    return "Fehlende Hausnummer.";
+  else m[HOUSED_UPGRADE_HOUSENO]=n;
+  
+  if ((!s5) || (s5=="")) s5="Irgendwas";
+    m[HOUSED_UPGRADE_DESC]=s5;
+  return m;
+}
+
+nosave int cmdHaus(string s) {
+  string s1, s2, s3, s4, s5,sr;
+  string b, p, e, dummy;
+  int n, rz;
+  mixed m;
+  
+  if ((!this_player())||(this_player()!=this_interactive())) return 0;
+  if (!IS_WIZARD(this_player())) {
+    remove();
+    return 0;
+  }
+  if (process_call()) return 0;
+  s=(string)this_player()->_unparsed_args();
+  if ((!s)||(s=="")) {
+    write("Du musst schon angeben, was Du tun oder sehen moechtest.\n");
+    return 1;
+  }
+  if ((sscanf(s, "%s %s",s1, s2)<1) || (s1==""))
+    s1=s;
+  switch (s1) {
+    case "anhaengen":
+    case "anh":
+    case "an":
+      if(!isLord()) return 0;
+      if ((!s2)||(sscanf(s2, "%s %d %s %s",b, n, p, e)!=4))
+        write("Fehler: Die Argumentzahl stimmt nicht.\n"
+         "Verwendung: haus anhaengen <besitzer> <nr> <pfad>|hier <eingang>\n");
+      else {
+        if ((p=="hier")&&(this_player())&&(environment(this_player())))
+          p=file_name(environment(this_player()));
+        else p=cP(p);
+        return evalErr((int)HOUSED->ConnectHouse(b, n, p, e));
+      }
+      break;
+    case "abhaengen":
+    case "abh":
+    case "ab":
+      if(!isLord()) return 0;
+      notify_fail("Syntax: haus abhaengen <besitzer> [<nr>]\n");
+      if ((!s2)||(sscanf(s2, "%s %d%s",b, n, dummy)!=3) || (dummy!="")) 
+        write("Fehler: Die Argumentzahl stimmt nicht.\n"
+              "Verwendung: haus abhaengen <besitzer> [<nr>]\n");
+      else return evalErr((int)HOUSED->DisconnectHouse(b, n));
+      break;
+    case "umhaengen":
+    case "umh":
+    case "um":
+      if(!isLord()) return 0;
+      if ((!s2)||(sscanf(s2, "%s %d %s %s",b, n, p, e)!=4))
+        write("Fehler: Anzahl der Argumente stimmt nicht.\n"
+         "Verwendung: haus umhaengen <besitzer> [<nr>] [<pfad>|hier] "
+         "[<eingang>]\nNicht uebergebene <pfad> oder <eingang> behalten "
+         "ihrem alten Wert.\n");
+      else {
+        if ((p=="hier")&&(this_player())&&(environment(this_player())))
+          p=file_name(environment(this_player()));
+        else p=cP(p);
+        return evalErr((int)HOUSED->ReconnectHouse(b, n, cP(p), e));
+      }
+      break;
+    case "info":
+      if (sscanf(s, "%s %s %s",s1, s2, s3) == 3) {
+        m = (string) HOUSED->GetInfo(s2);
+        m = explode(m, "\n");
+        // m = filter_array(m, ({ #'regexp }) );
+        m = regexp(m, s3);
+        m = implode(m, "\n");
+      }
+      else
+        m = (string) HOUSED->GetInfo(s2);
+      this_player()->More(m);
+      break;
+    case "neu":  
+      if(!isMaster()) return 0;
+      if ((!s2)||(sscanf(s2, "%s %d%s",b, n, dummy)!=3) || (dummy!="")) 
+        write("Fehler: Argumente passten nicht.\n"
+            "Verwendung: haus neu <besitzer> <nr>\n");
+      else return evalErr((int)HOUSED->NewHouse(b, n));
+      break;
+    case "loeschen":
+      if(!isMaster()) return 0;
+      if ((!s2)||(sscanf(s2, "%s %d%s",b, n, dummy)!=3) || (dummy!="")) 
+        write("Fehler: Argumente passten nicht.\n"
+            "Verwendung: haus loeschen <besitzer> <nr>\n");
+      else return evalErr((int)HOUSED->DeleteHouse(b, n));
+      break;
+    case "vergroessern":
+    case "vergr":
+    case "gr":
+      if(!isMaster()) return 0;
+      if ((!s2)||(sscanf(s2, "%s %d %d%s",b, n, rz, dummy)!=4) || (dummy!="")
+         || (!rz)) 
+        write("Fehler: Argumente passten nicht.\n"
+          "Syntax: vergroessern <besitzer> <nr> <raumzahl>\n");
+      else return evalErr((int)HOUSED->AddRoom(b, n, rz));
+      break;
+    case "verkleinern":
+    case "verkl":
+    case "kl":
+      if(!isMaster()) return 0;
+      if ((!s2)||(sscanf(s2, "%s %d %d%s",b, n, rz, dummy)!=4) || (dummy!="")
+         || (!rz)) 
+        write("Fehler: Argumente passten nicht.\n"
+          "Verwendung: verkleinern <besitzer> <nr> <raumzahl>\n");
+      else return evalErr((int)HOUSED->DeleteRoom(b, n, rz));
+      break;
+    case "GAU":
+      if(!isMaster()) return 0;
+      if ((!s2)||(sscanf(s2, "%d%s", rz, dummy)!=2) || (dummy!=""))
+        write("Verwendung: haus GAU <code>\n"
+       "Dieser Befehl zerstoert ALLE VIRTUELLEN OBJEKTE, die der "
+       "virtual_compiler\ndes Hausmanagements erzeugt hat, ist daher "
+       "nur bei absoluter Notwendigkeit\nzu verwenden. Der "
+       "zu uebergebende Code ist uebrigens 1093...\n");
+      else return evalErr((int)VIRTUAL_COMPILER->NuclearStrike(rz));
+      break;
+    case "up":
+    case "upgrade":
+    case "upg":
+      if(!isMaster()) return 0;
+      if (!s2)
+        this_player()->More(
+        "  haus upgrade neu <objektpfad> <typ> <info> <nr> <beschr>\n"
+        "  haus upgrade aendern <lfdnr> <objektpfad> <typ> <info> <nr> <beschr>\n"
+        "  haus upgrade anzeigen [<lfdnr>]\n\n"
+    "<objektpfad> - Dateiname des Objektes, was im HouseD das Upgrade "
+    "ausloesen\n"
+    "               darf. NUR dieses Objekt kann und darf das dann.\n"
+    "       <typ> - Handelt es sich um einen (r)aum oder um anderes "
+    "(g)oodie?\n"
+    "      <info> - Bei Raeumen muss hier die Anzahl der Raeume stehen, die\n"
+    "               vergeben werden soll, bei Goodies muss natuerlich der\n"
+    "               Dateiname aufgefuehrt werden.\n"
+    "        <nr> - Und fuer welches Seherhaus (0, 1, 2, ...) soll es "
+    "gelten?\n"
+    "               Im Moment gibt es nur ein Seherhaus je Spieler, also "
+    "macht\n"
+    "               alles ausser 0 hier kaum wirklich Sinn.\n"
+    "     <lfdnr> - Wenn ein vorhandener Eintrag modifiziert werden soll, "
+    "muss\n"
+    "               hier die Nummer des Eintrags stehen. VORSICHT! Bereits\n"
+    "               entstandener 'Schaden' wird damit nicht rueckgaengig\n"
+    "               gemacht, sollte das Upgrade bereits ausgeloest worden\n"
+    "               sein, wird es in den betroffenen Haeusern nachtraeglich\n"
+    "               nicht veraendert!\n"
+    "    <beschr> - Moeglichst kurze Beschreibung, die spaeter von Spielern\n"
+    "               gelesen werden kann.\n");
+      else {
+        sscanf(s2,"%s %s",dummy,sr);
+        switch (efun::explode(s2," ")[0]) {
+          case "anz":
+          case "anzeigen":
+            if (!sr)
+              this_player()->More((string)HOUSED_UPGRADE->ListUpgrades());
+            else if ((sscanf(sr,"%d%s",n,dummy)!=2)||(dummy!="")||(n<0))
+              write("Verwendung: haus upgrade anzeigen [<lfdnr>]\n"
+                "Das, was Du grade eingegeben hattest, macht keinen Sinn.\n");
+            else 
+              showUpgrader(n);
+            break;
+          case "neu":
+            if ((!sr)||(sscanf(sr,"%s %s %s %s %s",s1,s2,s3,s4,s5)!=5))
+              printf("Fehler: Die Argumentzahl stimmt nicht.\n");
+            else {
+              if (stringp(m=produceUpgradeArray(s1,s2,s3,s4,s5)))
+                printf("Fehler: %s\n",(string)m);
+              else if (!(HOUSED_UPGRADE->AddUpgrade(m[HOUSED_UPGRADE_FN],
+                      m[HOUSED_UPGRADE_HOUSENO], m[HOUSED_UPGRADE_TYPE],
+                      m[HOUSED_UPGRADE_INFO], m[HOUSED_UPGRADE_DESC])))
+                printf("Fehler: Das Eintragen schlug fehl. Argumente "
+                    "ueberpruefen?\n");
+              else {
+                showUpgrader(((int)HOUSED_UPGRADE->QueryTotalUpgrades())-1);
+                printf("Die laufende Nummer fuer den neuen Eintrag ist: %d\n",
+                    (int)HOUSED_UPGRADE->QueryTotalUpgrades()-1);
+              }
+            }
+            break;
+          case "aend":
+          case "aendern":
+            n=-1;
+            if ((!sr)||(sscanf(sr,"%d %s",n,sr)!=2)) {
+              if (n<0) 
+              write("Fehler: Du solltest schon die laufende Nummer des "
+                  "Eintrags, den Du ersetzen\nmoechtest, mit uebergeben.\n");
+              else 
+              write("Fehler: Du solltest schon die neuen Daten auch mit "
+                  "uebergeben.\n");
+            }
+            else if ((!sr)||(sscanf(sr,"%s %s %s %s %s",s1,s2,s3,s4,s5)!=5))
+              printf("Fehler: Die Argumentzahl stimmt nicht.\n");
+            else {
+              if (stringp(m=produceUpgradeArray(s1,s2,s3,s4,s5)))
+                printf("Fehler: %s\n",(string)m);
+              else if ((n<0)||(n>=(int)HOUSED_UPGRADE->QueryTotalUpgrades()))
+                 printf("Fehler: Bitte bleibe im Rahmen 0 <= X <= %d\n",
+                     (int)HOUSED_UPGRADE->QueryTotalUpgrades()-1);
+              else {
+                printf("ALT: ");
+                showUpgrader(n);
+                if (!(HOUSED_UPGRADE->ModifyUpgrade(n,m[HOUSED_UPGRADE_FN],
+                      m[HOUSED_UPGRADE_HOUSENO], m[HOUSED_UPGRADE_TYPE],
+                      m[HOUSED_UPGRADE_INFO],m[HOUSED_UPGRADE_DESC])))
+                  printf("Fehler: Das Aktualisieren schlug fehl. Argumente "
+                    "ueberpruefen?\n");
+                else {
+                  printf("\nNEU: ");
+                  showUpgrader(n);
+                }
+              }
+            }
+            break;
+          default: 
+            write("Upgrade... aber was? Kuck' Dir den Karton besser "
+                "nochmal an...\n");
+            break;
+        }
+      }
+      break;
+    default: 
+      write("Bitte was? Kuck' Dir den Karton besser nochmal an...\n");
+      break;
+  }
+  return 1;
+}
+

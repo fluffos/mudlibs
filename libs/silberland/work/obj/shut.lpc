@@ -1,0 +1,195 @@
+/*
+ * Armageddon, der Weltenvernichter
+ * Shutdown-Daemon -- die Messages muessen wohl nochmal ueberarbeitet werden
+ *
+ */
+
+inherit "std/npc";
+
+#include <properties.h>
+#include <defines.h>
+#include <language.h>
+#include <moving.h>
+#include "/secure/wizlevels.h"
+
+string *messages= ({
+   "Blitz und Donner hallen durch die Welt.",
+   "Erdbeben erschuettern die Welt und bringen Haeuser zum Einsturz.",
+   "Die Einwohner dieser Welt beginnen, vor Deinen Augen zu verschwimmen.",
+   "Violette Wolken tuermen sich am Himmel auf ... blutiger Regen faellt hernieder.",
+   "Lava aus unzaehligen Vulkanen fliesst und verbrennt, was sie beruehrt.",
+   "Die Fluesse und Meere dieser Welt beginnen zu verdampfen.",
+   "Der Himmel verdunkelt sich, Sterne und Sonne beginnen zu verloeschen.",
+   "Um Dich herum siehst Du nur noch brennende Truemmer. Das Ende der Welt muss nun\nunmittelbar bevorstehen."
+   });
+
+int restzeit;
+
+int _query_restzeit()
+{
+  return restzeit+find_call_out("NextStep");
+}
+
+void create()
+{
+  ::create();
+  AddId("armageddon");
+  set_living_name("armageddon");
+  SetProp(P_SHORT, "Armageddon, der Weltenvernichter");
+  SetProp(P_NAME, "Armageddon");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_XP, 0);
+  SetProp(P_FORCE_MURDER_MSG, 1);
+  SetProp(P_NOATTACK, "will nicht Dich vernichten, sondern die ganze Welt!");
+  if (!IS_ARCH(this_player()) && !IS_ARCH(this_interactive()))
+    destruct(this_object());
+}
+
+varargs string text_time(int sec, int flag)
+{
+  string s;
+  int tage, stunden, minuten, sekunden;
+  
+  sekunden=sec;
+  tage=sekunden/86400;
+  stunden=(sekunden%86400)/3600;
+  minuten=(sekunden%3600)/60;
+  sekunden=sec%60;
+  s="";
+  if (sec>=86400)
+  {
+    s+=tage+" Tag"+(tage==1 ? ", " : (flag ? "en, " : "e, "));
+  }
+  if (sec>=3600)
+  {
+    s+=stunden+" Stunde"+(stunden==1 ? ", " : "n, ");
+  }
+  if (sec>=60)
+  {
+    s+=minuten+" Minute"+(minuten==1 ? "" : "n");
+  }
+  s+=(sec/60?" und ":" ")+sekunden+" Sekunde"+(sekunden==1 ? "" : "n");
+  return s;
+}
+
+string _query_long()
+{
+  return break_string("Dies ist Armageddon, der Weltvernichter. Als Du ihn ansiehst, blickt er auf und fluestert Dir zu: Noch "+text_time(_query_restzeit())+" muessen vergehen, ehe ich die Welt vernichte.\n",80,0);
+}
+
+void shut(int minutes)
+{
+  int a,b,c;
+
+  if (!IS_ARCH(this_interactive()))
+    return;
+
+  a=b=c=0;
+  move("/gilden/abenteurer",M_GO);
+  if (intp(minutes))
+    c = minutes;
+  
+  else if (stringp(minutes))
+  {
+    if(sscanf(minutes,"%d:%d:%d",a,b,c)==3)
+      c += b*60+a*24*60;
+    else if(sscanf(minutes,"%d:%d",b,c)==2)
+      c += b*60;
+    else if(sscanf(minutes,"%d",c)==1)
+      ;
+  }
+
+  while (remove_call_out("NextStep")>=0);
+  restzeit=c*60;
+  call_out("NextStep",0,restzeit);
+}
+
+void SHOUT(mixed str)
+{
+  int i;
+  
+  str = explode(break_string(str,60),"\n");
+  for (i=0;i<sizeof(str);i++)
+  {
+    write("Armageddon ruft: "+str[i]+"\n");
+    shout("Armageddon ruft: "+str[i]+"\n");
+  }
+}
+
+nosave void NextStep(int seconds)
+{
+  int neu;
+
+  if (seconds<=0)
+  {
+    SHOUT("Ich starte das Spiel jetzt neu !");
+    shutdown("");
+    return;
+  }
+  if (seconds<=600)
+  {
+    SHOUT("Teile mir mit, wenn Du in den Laden gebracht werden willst!");
+  }
+  if (seconds>2*86400) 
+    neu=seconds-5*3600;
+  else if (seconds>4800)
+    neu=seconds-1800;
+  else
+    neu=seconds*3/4-10;
+  restzeit=neu;
+  call_out("NextStep",seconds-neu,neu);
+  SHOUT("In "+text_time(seconds,1)+
+      " werde ich die Welt zerstoeren und neu erschaffen!");
+  if (neu<900 && find_call_out("ArmasShout")==-1)
+    call_out("ArmasShout",random(99)+5);
+}
+
+void ArmasShout()
+{
+  string s;
+  call_out("ArmasShout",36+random(36));
+  write(s=messages[random(sizeof(messages))]+"\n");
+  shout(s);
+}
+
+void catch_tell(string str)
+{
+  string who,what;
+  object ob;
+  
+  if (sscanf(str, "%s teilt Dir mit: %s", who, what) != 2)
+    return;
+  if (!this_player()) return;
+  if (strstr(what, "laden") != -1) {
+    if (_query_restzeit()<600)
+    {
+      this_player()->move("/d/ebene/Midas/room/laden",M_TPORT);
+      return;
+    }
+    call_out("tell", 0, 
+      "Es ist noch zu frueh! Probiers 10 Minuten vor dem Ende nochmal!");
+  }
+  else if (sizeof(regexp(({what}), "wie *lange|zeit"))) {
+    call_out("tell", 0, "In "+ text_time(_query_restzeit(),1)+
+        " werde ich die Welt zerstoeren und neu erschaffen!");
+  }
+  return;
+}
+
+void tell(string text)
+{
+  tell_object(this_player(), 
+      break_string( text, 78,"Armageddon teilt Dir mit: "));
+}
+
+int remove()
+{
+  write("Armageddon doesn't want to be removed!\n");
+  return 0;
+}
+
+int do_damage(int dam, mixed enemy)
+{
+  return 0;
+}

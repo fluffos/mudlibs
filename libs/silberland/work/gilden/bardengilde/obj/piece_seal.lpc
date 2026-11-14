@@ -1,0 +1,141 @@
+inherit "/gilden/bardengilde/obj/std_song_effect";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <defines.h>
+#include <new_skills.h>
+#include <moredef.h>
+#include "/gilden/bardengilde/bardengilde.h"
+#include "bard_song.h"
+
+object *pacifiedCreatures;
+
+public void create() {
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+  pacifiedCreatures = ({ });
+
+  SetProp(P_SHORT, "Das gruen-gelblich glimmende Siegel des alten Paktes ist in den Boden eingebrannt");
+  SetProp(P_LONG, "Dieses Siegel ist ein Zeichen eines alten Feenpaktes, der fuer die Wahrung von Frieden "
+                  "und Freundschaft steht. Jeder der es erblickt wird unfaehig zu gewalttaetigen Handlungen. "
+                  "Es schafft eine Zone der Ruhe und Erholung.");
+  SetProp(P_NOGET, "Das Siegel ist eher metaphysisch als real. Du kannst es nicht nehmen.");
+  SetProp(P_INFO, "Dieses Siegel verstroemt ein Gefuehl der Friedfertigkeit.");
+  SetProp(P_MAGIC, 1);
+  SetProp(P_INVIS, 0);
+
+  AddId(({SONG_PIECE, "siegel"}));
+  
+  setEndMessages(({"Das Siegel des alten Paktes verschwindet.", "Das Siegel des alten Paktes verlischt mit einem leisen Seufzen."}));
+  setUpkeepMode(({}), CANCEL_COMMAND);
+  setSilentEnd(0);
+
+  AddCmd( ({"toete", "toet"}), "cmd_nokillhere");
+}
+
+public int cmd_nokillhere(string str) {
+  write(BS("So lange das Siegel wirkt kannst du hier niemanden angreifen!"));
+  return 1;
+}
+
+
+public void prepareSong() {
+  int duration;
+
+  duration = ability/100 + success / 100 + caster->QueryAttribute(A_INT)*10;
+  duration = modifyBySkillAttribute(duration, SA_DURATION);
+
+  if(caster->QueryProp(P_TESTPLAYER)) {
+    tell_object(caster, sprintf("%s :: duration=%d\n", songName, duration));
+  }
+
+  SetProp(P_LONG, QueryProp(P_LONG)+"Es wurde von " + caster->name(WEM, 1)+" hier beschworen.");
+
+  set_heart_beat(1);
+
+  call_out("endSong", duration);
+  return;
+}
+
+public int isEligibleTarget(object pl) {
+  return environment(pl) == environment(TO) && (pl->InFight() || pl->QueryProp(P_AGGRESSIVE));
+}
+
+public void pacifyCreature(object pl) {
+  object *enemies;
+  int i;
+
+  if(caster->QueryProp(P_TESTPLAYER)) {
+    tell_object(caster, sprintf("%s :: pacifying target ob=%O\n", songName, pl));
+  }
+
+  if(!isEligibleTarget(pl)) {
+    if(caster->QueryProp(P_TESTPLAYER)) {
+      tell_object(caster, sprintf("%s :: pacifying target ob=%O - not eligible\n", songName, pl));
+    }
+    return;
+  }
+
+  tell_object(pl, BS("Das Siegel am Boden glimmt auf und Friedfertigkeit breitet sich in dir aus."));
+  tell_room(environment(pl), sprintf("Das Siegel glimmt auf und %s wirkt friedfertig.\n", pl->name(WER, 1)));
+
+  enemies = pl->PresentEnemies();
+  for(i=0; i<sizeof(enemies); ++i) {
+    pl->StopHuntFor(enemies[i]);
+  }
+
+  pl->Set(P_AGGRESSIVE, symbol_function("no_aggressive", this_object()), F_QUERY_METHOD);
+
+  return;
+}
+
+public int no_aggressive() {
+  return 0;
+}
+
+public void init() {
+  ::init();
+
+  if(!living(TP)) return;
+  if(isEligibleTarget(TP) && member(pacifiedCreatures, TP) < 0) {
+    pacifyCreature(TP);
+  }
+}
+
+public void heart_beat() {
+  object *targets;
+  int i;
+  
+  targets = filter_array(all_inventory(environment(TO)), "isEligibleTarget");
+  if(sizeof(targets) > 0) {
+    for(i=0; i<sizeof(targets); ++i) {
+      pacifyCreature(targets[i]);
+    }
+  }
+
+  targets = pacifiedCreatures;
+  if(sizeof(targets) > 0) {
+    for(i=0; i<sizeof(targets); ++i) {
+      if(environment(targets[i]) != environment(TO)) {
+        targets[i]->Set(P_AGGRESSIVE, 0, F_QUERY_METHOD);
+        pacifiedCreatures -= ({ targets[i] });
+      }
+    }
+  }
+
+  targets = all_inventory(environment(TO));
+  if(sizeof(targets) > 0) {
+    for(i=0; i<sizeof(targets); ++i) {
+      if(!living(targets[i])) continue;
+      if(random(3)) continue;
+      targets[i]->AddHp(random(3));
+      targets[i]->AddSp(random(3));
+      if(targets[i]->QueryProp(P_DISABLE_ATTACK) > 0) targets[i]->SetProp(P_DISABLE_ATTACK, targets[i]->QueryProp(P_DISABLE_ATTACK)-random(5));
+      if(targets[i]->QueryProp(P_DISABLE_SPELLS) > 0) targets[i]->SetProp(P_DISABLE_SPELLS, targets[i]->QueryProp(P_DISABLE_SPELLS)-random(5));
+      if(targets[i]->QueryProp(P_NEXT_SPELL_TIME) > time()) targets[i]->SetProp(P_NEXT_SPELL_TIME, targets[i]->QueryProp(P_NEXT_SPELL_TIME)-random(5));
+    }
+  }
+}

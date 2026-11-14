@@ -1,0 +1,217 @@
+inherit "/std/thing";
+
+#include "../def.h" 
+#include "../well_level.h"
+
+string colorstring();
+int query_might();
+
+int colornumber=0;
+int might=1;
+
+void create()
+{
+  if( !is_clone(this_object())) return;
+  ::create();
+  if(member(ALLOWED_UIDS, getuid(previous_object())) == -1) {
+    raise_error("Illegales Clonen einer Ampulle!");
+    destruct();
+    return;
+  }
+
+  SetProp(P_SHORT,"Eine leere Ampulle");
+  SetProp(P_LONG, 
+   "Du haeltst eine leere Ampulle in den Haenden. Sie besteht aus Glas und hat ein kleines "+
+   "Brunnenzeichen eingraviert.");
+  SetProp(P_INFO,break_string(
+    "In diese Ampulle kannst Du magische Fluessigkeiten einfuellen. Jedoch "
+    "laesst der Boden dieser Ampulle jegliche Fluessigkeit durchsickern, "
+    "ausser es handelt sich dabei um eine Fluessigkeit aus dem wandernden Brunnen. "
+    "Hast Du zwei gefuellte Ampullen so kannst Du sie miteinander mischen. "
+    "Allerdings musst Du dazu das Rezept kennen. Mit 'erinnere an <farbe> ampulle' "
+    "kannst Du Dich an das jeweilige Rezept und seine Wirkung erinnern."),78);  
+  SetProp(P_VALUE, 500);
+  SetProp(P_WEIGHT, 30);
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_NAME,"Ampulle");
+  SetProp(P_NAME_ADJ, "leer");
+  AddAdjective("leere");
+  SetProp(P_KILL_NAME, "Eine explosive Mischung");
+  AddId( ({"ampulle", "\nbrunnenampulle","leerebrunnenampulle",
+        "leerebrunnenampulle"}) );
+
+  AddCmd( ({"trink","trinke"}), "trink_func");
+  AddCmd( ({"misch","mische","mixe","mix"}), "mix_func"); 
+  AddCmd( ({"erinner", "erinnere"}), "erinnern_func");
+}
+
+int set_color(int col)
+{
+  this_object()->RemoveId(colorstring()+"brunnenampulle");
+  this_object()->RemoveId(colorstring()+"rbrunnenampulle");
+  SetProp(P_NAME_ADJ,0);
+  RemoveAdjective(colorstring());
+  colornumber=col;
+  SetProp(P_NAME_ADJ, AMPULLENMASTER->adjective(colornumber));
+  AddAdjective( colorstring());
+  SetProp(P_SHORT,"Eine "+colorstring()+" Ampulle");
+  SetProp(P_LONG, 
+         "Du haeltst eine "+colorstring()+" Ampulle in den Haenden. Sie besteht aus Glas und hat ein kleines "+
+         "Brunnenzeichen eingraviert.");
+  this_object()->AddId(colorstring()+"brunnenampulle");
+  this_object()->AddId(colorstring()+"rbrunnenampulle");
+  return 1;
+}
+
+void set_might(int m)
+{
+  might=m;
+}
+
+int query_might()
+{
+  return might;
+}
+
+void empty_flask(int breakflask)
+{
+  int w, nr;
+  object ob;
+
+  set_color(0);
+  set_might(0);
+  w = well_level(TP);
+  if (ob = present("ampullentasche", this_player()))
+    nr = ob->number_of_potions();
+  else
+    nr = 0;
+  if(breakflask == -1 || !w || random(10000) > 9950 + w * 4 || 
+      (!random(10+w) && deep_present("\nbrunnenampulle"  +  to_string(50 - nr), TP)))
+  {
+    write("Eine Ampulle zerbricht.\n");
+    say("Eine Ampulle von "+this_player()->name(WEM,1)+" zerbricht.\n");
+    call_out("remove",0);
+    return;
+  }
+ return;
+}
+
+int query_colornumber()
+  {
+   return colornumber;
+  }
+
+string colorstring()
+{
+  return AMPULLENMASTER->colorstring(colornumber);
+}
+
+int mix_func(string str)
+{
+  object flask1,flask2,flask3; 
+  string str2,str3;
+  int f1,f2,ff;
+  string *parts, *parts2;;
+  notify_fail("Was willst Du mixen?"+
+     " ('mixe <farbe> ampulle mit <farbe> ampulle')\n");
+  if(!str) return 0;
+  if(sscanf(str,"%s ampulle mit %s ampulle",str2,str3)!=2)
+    return 0;
+
+  if(str2=="leere" || str3=="leere")
+  {
+   write("Mit leeren Ampullen kann man nichts mixen.\n");
+   return 1;
+  } 
+  if(!flask3=present("leerebrunnenampulle",this_player()) ) 
+  {
+    write("Du hast keine leere Ampulle zum Mixen.\n");
+    return 1;
+  } 
+  if((!flask1=present(str2+"brunnenampulle",this_player())) || (!flask2=present(str3+"brunnenampulle",this_player()) ))
+  {
+    write ("Fehlt da nicht eine Ampulle?\n");
+    return 1;
+  }
+  if(flask1->query_colornumber()==flask2->query_colornumber())
+  {
+    write ("Zwei gleiche Ampullen? Das funktioniert nicht.\n");
+    return 1;
+  }
+  write(break_string("Du mischt den Inhalt "+flask1->name(WESSEN,1)+" und "+
+        flask2->name(WESSEN,1)+" zusammen und fuellst alles in die leere "
+        "Ampulle.",78));
+  say(this_player()->Name()+" mischt zwei Ampullen miteinander.\n",
+      ({this_player()}) );
+  f1=flask1->query_colornumber();
+  f2=flask2->query_colornumber();
+  if(f2<f1) 
+  {
+    ff=f1;
+    f1=f2;
+    f2=ff;
+  }
+   
+  if(!(ff= AMPULLENMASTER->mischen(f1,f2)))
+  {
+    write("Du hast beim Mischen etwas falsch gemacht und die Ampullen "
+        "explodieren.\n");
+    say("Die Ampullen explodieren! Da hat "+this_player()->name()+" wohl "
+        "etwas falsch gemacht.\n", ({this_player()}) );
+    this_player()->do_damage(20+random(flask1->query_might()+flask2->query_might()));
+    if(flask1!=this_object()) flask1->remove();
+    if(flask2!=this_object()) flask2->remove();
+    if(flask3!=this_object()) flask3->remove();
+    remove();
+    return 1;
+  }
+  flask3->set_color(ff);
+  flask3->set_might(flask1->query_might()+flask2->query_might());
+  flask1->empty_flask(0);
+  flask2->empty_flask(0);
+  write("Du hast nun "+flask3->name(WEN,0)+".\n");
+  
+  return 1;
+
+}
+
+int trink_func(string str)
+{
+  int drink, breakflask;
+  notify_fail("Was willst Du trinken?\n");
+  if(!id(str)) return 0;
+  drink=this_player()->QueryProp(P_DRINK) + 3 - well_level(TP) / 9 + colornumber / 10;
+  if (drink > this_player()->QueryProp(P_MAX_DRINK))
+  {
+    write("Soviel kannst Du beim besten Willen nicht mehr trinken...\n");
+    return 1;
+  }
+
+  if(colorstring()=="leere") {
+    write("Leere Ampullen kann man nicht trinken.\n");
+    say(this_player()->QueryProp(P_NAME)+" versucht, eine leere Ampulle zu trinken.\n");
+    return 1;
+  }
+
+  this_player()->SetProp(P_DRINK,drink);
+  write("Du trinkst "+name(WEN)+"...........\n");
+  if(!breakflask=AMPULLENMASTER->effekt(colornumber,might,this_player()))
+    write(".....und nichts passiert.\n");
+  say(this_player()->QueryProp(P_NAME)+" trinkt "+name(WEN,0)+".\n");
+  empty_flask(breakflask);
+  return 1;
+}
+
+int erinnern_func(string str)
+{
+  string farbe;
+
+  if (!well_level(TP))
+    return 0;
+  notify_fail("Willst Du Dich an eine farbige Ampulle erinnern?\n"
+      "Syntax: erinnere an <farbe> ampulle.\n");
+  if (!str || sscanf(str, "an %s ampulle", farbe) != 1)
+    return 0;
+  write(AMPULLENMASTER->check_rezept(farbe));
+  return 1;
+}

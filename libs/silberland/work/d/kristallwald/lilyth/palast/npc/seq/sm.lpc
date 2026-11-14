@@ -1,0 +1,141 @@
+//=========================================================================
+//
+// File:    sequencer.c
+// Created by Torian
+// Credits to Protheg
+//
+// Project: Sequenzer fuer Mahmud (Palast von Lilyth)
+//
+//=========================================================================
+
+#include "/d/kristallwald/lilyth/palast/def.h"
+#ifndef DEBUG
+#define DEBUG "/players/torian/master/master"
+#endif
+
+// File auslesen und starten der Sequence
+// fname == filename
+// who == spielerobject
+// fin == Funktionsname der Funktion die am Ende aufgerufen wird
+int StartSequence(string fname, object who, string fin)
+{
+  string *sequence;
+  if(find_call_out("NextSequence") != -1) return 0;
+
+  if(file_size(fname)<0) return -1;
+
+  sequence=explode(read_file(fname), "\n");
+
+  call_out("NextSequence", 0, 0, who, sequence, fin);
+
+  return 1;
+}
+
+// && -> 'Torian', &? -> 'Torians'
+// &! -> 'er' (= &1)
+// &2 -> 'ihn'
+// &3 -> 'ihm'
+// &4 -> 'ihn'
+// &= -> 'sein' oder 'ihr'     > besessenes Objekt ist m oder n, 1. Fall, Singular
+// &# -> 'seine' oder 'ihre'    >   - " - ist f, 1. Fall, Singular
+string FormatString(string str, object pl)
+{
+  if (!pl)
+    pl=this_player();
+  if (!str || str=="") return str;
+  str=implode(explode(str,"&&"),pl->Name(WER,2));
+  str=implode(explode(str,"&?"),pl->Name(WESSEN,2));
+  str=implode(explode(str,"&!"),pl->QueryPronoun(WER));
+  str=implode(explode(str,"&1"),pl->QueryPronoun(WER));
+  str=implode(explode(str,"&2"),pl->QueryPronoun(WESSEN));
+  str=implode(explode(str,"&3"),pl->QueryPronoun(WEM));
+  str=implode(explode(str,"&4"),pl->QueryPronoun(WEN));
+  str=implode(explode(str,"&="),pl->QueryPossPronoun(1));
+  str=implode(explode(str,"&#"),pl->QueryPossPronoun(2));
+  return str;
+}
+
+// Step == Position in der Sequence
+// player == spielerobject
+// sequence == array mit sequence
+// ret == Funktionsname der Funktion die am Ende aufgerufen wird
+void NextSequence(int step, object pl, string *sequence, string ret)
+{
+  string str, how, who;
+  int time;
+
+  if(step == sizeof(sequence))
+  {
+    DEBUG->Msg("Step groesser als Sequence");
+    return;
+  }
+
+  str=sequence[step++];
+
+  sscanf(str,"%s %d %s", how, time, who);
+
+//  DEBUG->Msg("Wie: "+how+" Zeit: "+time);
+
+  if(!how && str[0..2]=="end") how="end";
+
+  if(step > sizeof(sequence))
+  {
+    DEBUG->Msg("Step groesser als Sequence");
+    return;
+  }
+
+  if(!who && how != "end")
+  {
+    DEBUG->Msg("Indent nicht gesetzt! Abbruch der Sequenz!!!");
+    return;
+  }
+
+  if(ENV(pl) != ENV(TO))
+  {
+    ENV(TO)->Message(break_string("Sowas unhoefliches, mitten in der Geschichte zu "
+    "verschwinden.", 78, TO->Name()+" sagt empoert: "), MSGFLAG_SOUND);
+
+    if(ret!=0 && stringp(ret))
+      call_other(ME, ret, pl);
+
+    return;
+  }
+
+  switch(how)
+  {
+    case "all":
+      while((str=sequence[step++])[0..1]!="**" && step < sizeof(sequence))
+//	      ENV(pl)->Message(break_string(FormatString(str, pl), 78, who+": "),
+//	               MSGFLAG_SOUND);
+        tell_room(ENV(pl), break_string(FormatString(str, pl), 78, who+": "));
+	  tell_room(ENV(pl),"\n");
+      break;
+    case "plr":
+      while((str=sequence[step++])[0..1]!="**" && step < sizeof(sequence))
+  	    tell_object(pl, BS(FormatString(str, pl)));
+  	  tell_object(pl,"\n");
+      break;
+    case "mix":
+      while((str=sequence[step++])[0..1]!="**" && step < sizeof(sequence))
+	      tell_object(pl, BS(FormatString(str, pl)));
+	    tell_object(pl,"\n");
+      while((str=sequence[step++])[0..1]!="**" && step < sizeof(sequence))
+	      tell_room(ENV(pl), BS(FormatString(str, pl)), ({ pl }));
+	    tell_room(ENV(pl),"\n");
+      break;
+    case "fun":
+      funcall(sequence[step++]);
+      break;
+    case "end":
+      if(ret!=0 && stringp(ret))
+	      call_other(ME, ret, pl);
+      return;
+    default:
+      DEBUG->Msg("*** Sequencer Fehler in ("+step+")");
+      break;
+  }
+
+  call_out("NextSequence", time, step, pl, sequence, ret);
+  return;
+
+}

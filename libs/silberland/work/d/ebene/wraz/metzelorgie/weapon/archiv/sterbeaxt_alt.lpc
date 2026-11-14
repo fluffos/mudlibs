@@ -1,0 +1,362 @@
+// Axt des Sterbens
+// von Wraz / Mendralim
+//  .. release 2 ..
+// updated 07-2020
+
+#include "../def.h"
+
+//#define TPU getuid(this_player())
+#define mio 1000000
+#define PHP TP->QueryProp(P_HP)
+#define PMHP TP->QueryProp(P_MAX_HP)
+
+inherit "std/weapon";
+
+mapping lostxp=([ "d.ebene.wraz": 30000000 ]);
+mapping tode=([ "d.ebene.wraz": 10 ]);
+
+mapping all_colors;
+
+string color, gem_name, wielded_by;
+
+int specified_wc, specified_wc_fix, start_wc, start_wc_fix, gems;
+int hit_func_on=0, heldenbonus;
+int schlachtfeldbonus, todesnaehe;
+
+int cvalue;
+
+int new_wc(string who) // ------ WC BERECHNUNG ------------------------------
+{
+  if(!tode[who]) return start_wc; // noch kein tod -> nix erhoehen
+  if(!hit_func_on) return start_wc; // zuerst muss die Axt mit Edelsteinen
+                                    // gefuellt werden
+  if(specified_wc>=290) return 290; // WC 290 -> nicht mehr erhoehen
+
+  if(lostxp[who]<=40*mio)
+    specified_wc=start_wc+((lostxp[who]/mio)*5)/4;
+    //maximal 280, aber ueber 40 mio lost 290
+
+  else specified_wc=290;
+
+  return specified_wc;
+}
+
+int new_wc_fix(string who) // ------- WC_FIX BERECHNUNG ---------------------
+{
+  if(!tode[who]) return start_wc_fix; // wie oben
+  if(!hit_func_on) return start_wc_fix; // wie oben
+  if(specified_wc_fix>=30) return 30; // WC_FIX 30 -> nicht mehr erhoehen
+
+  if(tode[who]<=10)
+    specified_wc_fix=start_wc_fix+tode[who];
+    // maximal 30
+  else specified_wc_fix=30;
+
+  return specified_wc_fix;
+}
+
+void create()
+{
+  if(!is_clone(TO)) return;
+
+  ::create();
+
+  gems=0;
+  all_colors = mkmapping(({"saphir","diamant","smaragd","rubin","bernstein"}),
+    ({"saphirblau","diamantweiss","smaragdgruen","rubinrot",
+  "bernsteinbraun"}));
+  gem_name = m_indices(all_colors)[random(5)];
+  color = all_colors[ gem_name ];
+
+  start_wc=230;
+  start_wc_fix=20;
+
+  specified_wc=start_wc;
+  specified_wc_fix=start_wc_fix;
+
+  SetProp(P_SHORT, "Die Axt des Sterbens");
+  SetProp(P_LONG,
+    "Dieses Beil sieht eigentlich sehr schlicht aus, ein doppelseitiges "
+    "Axtblatt befestigt an einem Eichenholzstiel. Keine besonderen "
+    "Verzierungen oder Schnoerkeleien. Halt, doch! Eine seltsame "
+    "Ausnehmung befindet sich genau an der Stelle, wo der Stiel im "
+    "Beil verschwindet.");
+
+  AddDetail( ({"axtblatt", "metall"}),
+    "Das Axtblatt besteht aus Metall.");
+
+  AddDetail( ({"eichenholzstiel","holz","stiel","eichenholz"}),
+    "Der Stiel der Axt besteht eindeutig aus Eichenholz.");
+
+  AddDetail( ({"verzierungen","schnoerkeleien","schnoerkel"}),
+    "Nichts dergleichen, nur eine Ausnehmung.");
+
+  AddDetail( ({"ausnehmung"}),
+    "Sie schimmert "+color+".");
+
+  SetProp(P_NAME, "Axt des Sterbens");
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({"axt", "beil", "sterbeaxt", "axt des sterbens"}) );
+
+  SetProp(P_MATERIAL, ([MAT_STEEL:30, MAT_OAK:69, MAT_MISC_MAGIC:1]) );
+
+  SetProp(P_ARTICLE, 1);
+  SetProp(P_WEIGHT, 5000);
+  SetProp(P_SIZE, 120);
+  SetProp(P_VALUE, 10000);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NEVERDROP, 1);
+
+  SetProp(P_QUALITY_DECAY, 200); // default: 140
+  SetProp(P_WEAPON_TYPE, WT_AXE );
+  SetProp(P_WC, specified_wc);
+  SetProp(P_WC_FIX, specified_wc_fix);
+  SetProp(P_DAM_TYPE, DT_SLASH );
+  SetProp(P_NR_HANDS, 2);
+  SetProp("waffenbalsam", 10);
+
+  SetProp(P_WIELD_FUNC, TO );
+  SetProp(P_UNWIELD_FUNC, TO );
+  SetProp(P_HIT_FUNC, TO );
+
+  SetProp(P_WC_BONUS,(["Axtkaempfer":60, "Axtexperte":130, "Axtmeister":250,
+                       "meisterschlaechter":400]));
+
+  SetProp(P_WIELD_RESTRICTIONS, ([A_STR:10, P_LEVEL:10, P_XP:2500000]) );
+
+  SetProp(P_INFO, BS("Diese Waffe bezieht Kraft aus Deinen TODEN!"));
+
+  AddCmd( ({"stecke","steck","stopfe", "setze"}), "cmd_edelstein");
+}
+
+int WieldFunc(object waffe) { // --- WIELD FUNC -----------------------------
+  wielded_by=TPU;
+  if(wielded_by == "d.ebene.wraz") hit_func_on = 1; // Meisterschlaechter
+  if(hit_func_on) write(BS( "Du fuehlst den TOD in Dir!"));
+
+  if(!member(tode,   wielded_by)) tode[wielded_by]=0;
+  if(!member(lostxp, wielded_by)) lostxp[wielded_by]=0;
+
+  TO->SetProp(P_WC, new_wc(wielded_by) - QueryProp(P_DAMAGED));
+  // jeder nur seine eigenen tode!
+  TO->SetProp(P_WC_FIX, new_wc_fix(wielded_by) );
+
+  if(WMASTER->is_hero(TPU)) heldenbonus=60;
+  else heldenbonus=0; // heldenbonus
+
+  return 1;
+}
+
+int UnwieldFunc(object waffe) { // --- UNWIELD FUNC -------------------------
+  if(wielded_by == "d.ebene.wraz") hit_func_on = 0; // Meisterschlaechter
+  wielded_by="nobody";
+  if(hit_func_on) (BS( "Das Gefuehl des TODES weicht aus Dir."));
+  heldenbonus=0;
+  specified_wc=start_wc;
+  specified_wc_fix=start_wc_fix;
+  return 1;
+}
+
+int HitFunc( object enemy ) { // --- HIT FUNC ! -----------------------------
+
+  if(!hit_func_on) return 0;
+
+  schlachtfeldbonus=0;
+  if(enemy->id("\nschlachtfeld")) schlachtfeldbonus=1; // alle schlachtfeld-npc
+
+  // bei < 10% HP schlaegt die Axt haerter zu (Update 2020)
+  todesnaehe=0;
+  if(PHP <= (PMHP / 10) && PHP >= 0)
+  {
+    // maximum bei 0 bzw 1 von 500 HP: 5000
+    // bei exakt 0 HP: Fixanteil von 1000
+    todesnaehe = PHP == 0 ?
+                 1000 + (random( (10*PMHP/5)*4 )) :
+                 random((10 * PMHP)/PHP);
+    if( todesnaehe > 200 )
+      write(BS("Die Naehe zum TOD laesst Dich noch haerter zuschlagen!"));
+  }
+
+  if(tode[wielded_by] <= 10 && lostxp[wielded_by] <= 40*mio)
+  return 3 +
+  todesnaehe + // Random bereits bei Variablen-Wertzuweisung
+  random(heldenbonus)+
+  schlachtfeldbonus*20 + // Bonus auf dem Schlachtfeld
+  tode[wielded_by]+
+  random(lostxp[wielded_by]/(2*mio)); // maximal 33
+  // 2 mio lostxp = 1 (random)
+  // 1 tod = 1 fix
+
+  else if(tode[wielded_by] > 10 && lostxp[wielded_by] <= 40*mio)
+  return 15 +
+  todesnaehe +
+  random(heldenbonus)+
+  schlachtfeldbonus*25 + // Bonus auf dem Schlachtfeld
+  ((tode[wielded_by]-10)/2)+
+  random(lostxp[wielded_by]/(2*mio)-
+  2); // maximal eigentlich unbegrenzt
+  // aber nur noch jeder 2te tod bringt 1
+
+  else if(tode[wielded_by] <= 10 && lostxp[wielded_by] > 40*mio)
+  return 3 +
+  todesnaehe +
+  random(heldenbonus)+
+  schlachtfeldbonus*25 + // Bonus auf dem Schlachtfeld
+  tode[wielded_by]+
+  random(20+
+    (lostxp[wielded_by]/(5*mio))); // auch unbegrenzt
+    // 5 mio lostxp = 1 (random)
+
+  else return 20 +
+  todesnaehe +
+  random(heldenbonus)+
+  (tode[wielded_by]-10) +
+  schlachtfeldbonus*35 + // Bonus auf dem Schlachtfeld
+  random(20 +
+    (lostxp[wielded_by]/(4*mio)) +
+    ((tode[wielded_by]-5)/2)); // unbegrenzt
+    // wer so oft stirbt, soll was davon haben :)
+}
+
+// --- NOTIFY PLAYER DEATH --------------------------------------------------
+void NotifyPlayerDeath(object victim, object killer, int lost_xp)
+{
+  int newxp, deads;
+
+  if(TO->QueryProp(P_WIELDED)!=victim) return;
+
+  if(hit_func_on) victim->Message(BS(
+    "Die Axt des Sterbens wird durch Deinen TOD maechtiger!!"));
+
+  lostxp[getuid(victim)] += lost_xp;
+  tode[getuid(victim)] += 1;
+
+  TO->SetProp(P_WC, new_wc(getuid(victim)) - QueryProp(P_DAMAGED));
+  TO->SetProp(P_WC_FIX, new_wc_fix(getuid(victim)) );
+}
+
+void new_details(object player, string str) // NEW DETAILS ------------------
+{
+  object gem;
+  gem=present(str,player);
+  gem->remove();
+
+  player->Message(BS(
+    "Du stopfst den Edelstein in die Axt des Sterbens und ploetzlich "
+    "spuerst Du den nackten TOD! Die Ausnehmung verschwindet und das "
+    "Axtblatt leuchtet ploetzlich "+color+"."));
+  TO->RemoveDetail("ausnehmung");
+  TO->RemoveDetail( ({"verzierungen","schnoerkeleien","schnoerkel"}) );
+  TO->AddDetail( ({"verzierungen","schnoerkeleien","schnoerkel"}),
+   "Nichts dergleichen.");
+  TO->SetProp(P_LONG,
+   "Dieses Beil sieht eigentlich sehr schlicht aus, ein doppelseitiges "
+   "Axtblatt befestigt an einem Eichenholzstiel. Keine besonderen "
+   "Verzierungen oder Schnoerkeleien. Die Klinge schimmert "
+    +color+".");
+  TO->AddDetail("klinge",
+   "Sie schimmert "+color+".");
+  TO->RemoveCmd( ({"stecke","steck","stopfe", "setze"}) );
+  hit_func_on=1;
+  return;
+}
+
+int cmd_edelstein(string str) // --- CMD EDELSTEIN --------------------------
+{
+  object gem;
+  string was;
+  string wohin;
+
+  if(!str||str=="") return 0;
+
+  notify_fail("Willst Du etwas in die Ausnehmung an der Axt stecken?\n"
+  		"'stecke <gegenstand> in ausnehmung'\n");
+
+  if( sscanf(str,"%s in %s",was,wohin)==2)
+  {
+    if(wohin!="ausnehmung"&&wohin!="axt") return 0;
+
+    if(!present(was,TP)) {
+      write(BS("Sowas hast Du doch gar nicht!"));
+      return -1; }
+
+    if(was=="diamanten"||was=="saphire"||was=="smaragde"||was=="rubine"||
+       was=="bernsteine") {
+      write(BS("Das funktioniert nicht, es passt nur ein Edelstein in die "
+      "Ausnehmung."));
+      return -1; }
+
+    gem=present(was,TP);
+
+    if( was == gem_name )
+    {
+      if(gems<13)
+      {
+       write(BS(
+         "Du steckst den "+capitalize(gem_name)+" in die Axt des Sterbens und "
+         "fuehlst, wie die Macht des TODES staerker wird, aber die Ausnehmung "
+         "bleibt noch erhalten."));
+       gems++;
+       gem->remove();
+       return -1;
+      }
+       else
+       {
+        new_details(TP, gem_name);
+        return 1;
+       }
+    }
+    else
+    {
+      write(BS( "Nichts passiert."));
+      return -1;
+    }
+
+  }
+}
+
+int set_collector_value(int value)
+{
+  cvalue=value;
+  return cvalue;
+}
+
+int query_collector_value()
+{
+  return cvalue;
+}
+
+int query_lostxp(string who) { return lostxp[who]; }
+int query_tode(string who) { return tode[who]; }
+
+// DEATH-XP manuell setzen (nur Wraz oder Erzmagier)
+int set_lostxp(string playername, int newlostxp)
+{
+  if(TP && (getuid(TP) == "wraz" || query_wiz_level(TP) >=66) )
+  {
+      lostxp[playername] = newlostxp;
+      TO->SetProp(P_WC, new_wc(playername) - QueryProp(P_DAMAGED));
+
+      WMASTER->axe_manual_log(playername, newlostxp, "xp", "success");
+
+      return lostxp[playername];
+  }
+      WMASTER->axe_manual_log(playername, newlostxp, "xp", "fail");
+  return 0;
+}
+
+// DEATH-Count manuell setzen (nur Wraz oder Erzmagier)
+int set_deaths(string playername, int newdeathcount)
+{
+  if(TP && (getuid(TP) == "wraz" || query_wiz_level(TP) >=66) )
+  {
+      tode[playername] = newdeathcount;
+      TO->SetProp(P_WC_FIX, new_wc_fix(playername) );
+
+      WMASTER->axe_manual_log(playername, newdeathcount, "death-count", "success");
+
+      return tode[playername];
+  }
+      WMASTER->axe_manual_log(playername, newdeathcount, "death-count", "fail");
+  return 0;
+}

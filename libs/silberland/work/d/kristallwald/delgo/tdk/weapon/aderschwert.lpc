@@ -1,0 +1,522 @@
+/* 
+Das Aderschwert (C) by Delgo@Silberland 2004
+Nach extremer Metzelarbeit ist dieses zu erhalten, von daher sehr maechtig.
+Man kann einmal eines der Rituale durchfuehren.
+    - das beste Item, es hat im Rohzustand WC 150. Doch kann man es entweder
+      den 7 Elementen, dem Licht oder dem Schatten weihen. Diese Ritual 
+      kostet den durchfuehrenden ca. 250-300 lps. Es ist nur einmal moeglich!
+      WC bleibt immer 150? Balancesache, ich schraubs erstmal hoch :-).
+      Bsp.: 
+        Feuerdruide weiht es am Feuermonolithen -> reines DT_FIRE
+        Wasserdruide weiht es am Wassermonolithen -> reines DT_WATER
+        Humusdruide weiht es am Humusmonolithen -> reines DT_POISON 
+        (vergiftet aber nicht)
+        Luftdruide weiht es am Luftmonolithen -> reines DT_AIR
+        Eisdruide weiht es am Eismonolithen -> reines DT_ICE
+        Erzdruide weiht es am Erzmonolithen -> reines DT_STONE (gibs das
+        noch?)
+        Geistdruide weiht es am Geistmonolithen -> reines DT_MAGIC
+        (hier sollte Balance mal Vorschlag machen, ich glaube WC 150 und 
+        DT_MAGIC is bissi straff, evtl. DT_MIND?)
+        Paladin weiht es am Altar der Paladine -> DT_HOLY/DT_LIGHT
+        Nekromant weiht es am Altar der Nekromanten -> DT_UNHOLY
+        
+27.04.2007 - DT_MAGIC -> DT_MIND
+
+*/
+inherit "std/weapon";
+#include "../def.h"
+
+#include <properties.h>
+#include <combat.h>
+
+#define DAM 200
+
+int ritual, weight, wc;
+string color, desc;
+mixed material, damage;
+
+void create()
+{
+  if (!is_clone(this_object()) )  return;
+  ::create();
+  
+  color="grau";
+  desc="Ein normales Stahlgrau.";
+  weight=1000;
+  material=([MAT_STEEL:100]);
+  wc=170;
+  damage=({DT_SLASH});
+  
+  SetProp(P_SHORT, "Ein "+color+"es Aderschwert");
+  SetProp(P_LONG, 
+    "Du haelst ein "+color+"es Aderschwert in den Haenden. Die Adern, welche" 
+    " die feine Stahlklinge durchziehen, leuchten "+color+". Der "
+    "Griff scheint recht gewoehnlich."
+    );
+  AddDetail( ({"klinge", "stahlklinge"}), 
+    "Sie wird von feinen Adern durchzogen.");
+  AddDetail( ({"adern"}), 
+    "Sie leuchten "+color+". "+desc+"");
+  AddDetail( ({"griff"}), 
+    "Er besteht wie die Klinge aus Stahl. Du erkennst neun Runen.");
+  AddDetail( ({"runen"}), 
+    "Sie heissen: Licht, Schatten, Feuer, Eis, Humus, Wasser, Luft, Erz und "
+    "Geist.");
+  SetProp(P_NAME, "Aderschwert");
+  SetProp(P_GENDER, NEUTER);
+  AddId( ({"aderschwert", "schwert"}) );
+  SetProp(P_MATERIAL, material );
+  SetProp(P_WEIGHT, weight);
+  SetProp(P_SIZE, 150);
+  SetProp(P_VALUE, 6000);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 0);
+  SetProp(P_NEVERDROP, 0);
+  SetProp(P_QUALITY_DECAY, 90);
+  SetProp(P_WEAPON_TYPE, WT_SWORD );
+  SetProp(P_WC, wc);
+  SetProp(P_WC_FIX, 35);
+  SetProp(P_DAM_TYPE, damage );
+  SetProp(P_NR_HANDS, 1);
+  SetProp(P_WIELD_RESTRICTIONS, ([SR_SEER: 1,
+                                  P_LEVEL: 45]) );
+  SetProp(P_INFO, BS(
+    "Eine Stimme setzt sich in deinem Kopf fest: Wenn die Klinge im Grau "
+    "des Stahls erleuchtet, so weihe es einer Rune an dem Ort ihrer "
+    "hoechsten Konzentration und diese Macht faehrt in die Klinge und "
+    "verhilft ihr zu altem Glanz. Doch dafuer will ich Dein Blut!"
+  ));
+  SetProp(P_KILL_NAME, "Die Seele eines Schwertes");
+  
+  ritual=1; //Ritual darf einmal vollzogen werden
+  
+  AddCmd( ({"weih", "weihe"}), "cmd_weihen");
+}
+
+int cmd_weihen(string str)
+{
+  string gilde, room;
+  
+  if(!str || str == "") return 0;
+  gilde=TP->QueryProp(P_GUILD);
+  room=file_name(ENV(TP));
+  notify_fail(BS("Was genau willst Du mit dem Schwert tun?")); 
+  if(!ritual)
+  {
+    TP->Message("Das Schwert wurde schon geweiht!\n", MSGFLAG_VISUAL);
+    return 1;
+  }
+  if(str == "schwert licht" || str == "aderschwert licht")
+  {
+    if(room != "/gilden/paladine")
+    {
+      TP->Message(BS("Dazu musst Du an einem Ort der Heiligkeit sein!")
+                  , MSGFLAG_VISUAL); 
+      return 1;
+    }
+    if(gilde != "paladine")
+    {
+      TP->Message(BS("Dazu musst Du im Dienste der Paladine stehen!")
+                  , MSGFLAG_VISUAL); 
+      return 1;
+    }
+    TP->Message(BS("Du kniest Dich nieder und laesst Dich bei dem Ritual "
+                "von dem Geist der Klinge leiten."), MSGFLAG_VISUAL);
+    TP->SetProp(P_PARALYZED, ([PARALYZE_TIME: 5, 
+							PARALYZE_MSG: "Du bist mitten in einem Ritual!\n", 
+							PARALYZE_MSG_OTHER: "%s ist ganz starr.\n", 
+							PARALYZE_END: "Das Ritual endet!\n",
+							PARALYZE_END_OTHER: "%s erwacht aus der Starre.\n"]));
+    call_out("seq1", 2, TP, "light");
+    return 1;
+  }
+  if(str == "schwert schatten" ||
+     str == "aderschwert schatten" ||
+     str == "schwert schatten" ||
+     str == "aderschwert schatten")
+  {
+    if(room != "/gilden/nekromanten")
+    {
+      TP->Message(BS("Dazu musst Du am Altar der Untoten sein!")
+                  , MSGFLAG_VISUAL); 
+      return 1;
+    }
+    if(gilde != "nekromanten")
+    {
+      TP->Message(BS("Dazu musst Du im Dienste der Nekromanten stehen!")
+                  , MSGFLAG_VISUAL); 
+      return 1;
+    }
+    TP->Message(BS("Du kniest Dich nieder und laesst Dich bei dem Ritual "
+                "von dem Geist der Klinge leiten."), MSGFLAG_VISUAL);
+    TP->SetProp(P_PARALYZED, ([PARALYZE_TIME: 5, 
+							PARALYZE_MSG: "Du bist mitten in einem Ritual!\n", 
+							PARALYZE_MSG_OTHER: "%s ist ganz starr.\n", 
+							PARALYZE_END: "Das Ritual endet!\n",
+							PARALYZE_END_OTHER: "%s erwacht aus der Starre.\n"]));                
+    call_out("seq1", 2, TP, "shadow");
+    return 1;    
+  }
+  if(str == "schwert feuer" ||
+     str == "aderschwert feuer")
+  {
+    if(room != "/d/huegelland/angrox/druidenzirkel/room/f_monolith")
+    {
+      TP->Message(BS("Dazu musst Du naeher an der Rune sein!")
+                  , MSGFLAG_VISUAL); 
+      return 1;
+    }
+    if(gilde != "druidenzirkel")
+    {
+      TP->Message(BS("Dazu musst Du im Dienste der Druiden stehen!")
+                  , MSGFLAG_VISUAL); 
+      return 1;
+    }
+    TP->Message(BS("Du kniest Dich nieder und laesst Dich bei dem Ritual "
+                "von dem Geist der Klinge leiten."), MSGFLAG_VISUAL);
+    TP->SetProp(P_PARALYZED, ([PARALYZE_TIME: 5, 
+							PARALYZE_MSG: "Du bist mitten in einem Ritual!\n", 
+							PARALYZE_MSG_OTHER: "%s ist ganz starr.\n", 
+							PARALYZE_END: "Das Ritual endet!\n",
+							PARALYZE_END_OTHER: "%s erwacht aus der Starre.\n"]));                
+    call_out("seq1", 2, TP, "fire");
+    return 1;     
+  }
+  if(str == "schwert wasser" ||
+     str == "aderschwert wasser")
+  {
+    if(room != "/d/huegelland/angrox/druidenzirkel/room/w_monolith")
+    {
+      TP->Message(BS("Dazu musst Du naeher an der Rune sein!")
+                  , MSGFLAG_VISUAL); 
+      return 1;
+    }
+    if(gilde != "druidenzirkel")
+    {
+      TP->Message(BS("Dazu musst Du im Dienste der Druiden stehen!")
+                  , MSGFLAG_VISUAL); 
+      return 1;
+    }
+    TP->Message(BS("Du kniest Dich nieder und laesst Dich bei dem Ritual "
+                "von dem Geist der Klinge leiten."), MSGFLAG_VISUAL);
+    TP->SetProp(P_PARALYZED, ([PARALYZE_TIME: 5, 
+							PARALYZE_MSG: "Du bist mitten in einem Ritual!\n", 
+							PARALYZE_MSG_OTHER: "%s ist ganz starr.\n", 
+							PARALYZE_END: "Das Ritual endet!\n",
+							PARALYZE_END_OTHER: "%s erwacht aus der Starre.\n"]));                
+    call_out("seq1", 2, TP, "water");
+    return 1;     
+  }
+  if(str == "schwert eis" ||
+     str == "aderschwert eis")
+  {
+    if(room != "/d/huegelland/angrox/druidenzirkel/room/e_monolith")
+    {
+      TP->Message(BS("Dazu musst Du naeher an der Rune sein!")
+                  , MSGFLAG_VISUAL); 
+      return 1;
+    }
+    if(gilde != "druidenzirkel")
+    {
+      TP->Message(BS("Dazu musst Du im Dienste der Druiden stehen!")
+                  , MSGFLAG_VISUAL); 
+      return 1;
+    }
+    TP->Message(BS("Du kniest Dich nieder und laesst Dich bei dem Ritual "
+                "von dem Geist der Klinge leiten."), MSGFLAG_VISUAL);
+    TP->SetProp(P_PARALYZED, ([PARALYZE_TIME: 5, 
+							PARALYZE_MSG: "Du bist mitten in einem Ritual!\n", 
+							PARALYZE_MSG_OTHER: "%s ist ganz starr.\n", 
+							PARALYZE_END: "Das Ritual endet!\n",
+							PARALYZE_END_OTHER: "%s erwacht aus der Starre.\n"]));                
+    call_out("seq1", 2, TP, "ice");
+    return 1;     
+  }
+  if(str == "schwert humus" ||
+     str == "aderschwert humus")
+  {
+    if(room != "/d/huegelland/angrox/druidenzirkel/room/h_monolith")
+    {
+      TP->Message(BS("Dazu musst Du naeher an der Rune sein!")
+                  , MSGFLAG_VISUAL); 
+      return 1;
+    }
+    if(gilde != "druidenzirkel")
+    {
+      TP->Message(BS("Dazu musst Du im Dienste der Druiden stehen!")
+                  , MSGFLAG_VISUAL); 
+      return 1;
+    }
+    TP->Message(BS("Du kniest Dich nieder und laesst Dich bei dem Ritual "
+                "von dem Geist der Klinge leiten."), MSGFLAG_VISUAL);
+    TP->SetProp(P_PARALYZED, ([PARALYZE_TIME: 5, 
+							PARALYZE_MSG: "Du bist mitten in einem Ritual!\n", 
+							PARALYZE_MSG_OTHER: "%s ist ganz starr.\n", 
+							PARALYZE_END: "Das Ritual endet!\n",
+							PARALYZE_END_OTHER: "%s erwacht aus der Starre.\n"]));                
+    call_out("seq1", 2, TP, "humus");
+    return 1;     
+  }
+  if(str == "schwert luft" || 
+     str == "aderschwert luft" || 
+     str == "schwert wind" || 
+     str == "aderschwert wind")
+  {
+    if(room != "/d/huegelland/angrox/druidenzirkel/room/l_monolith")
+    {
+      TP->Message(BS("Dazu musst Du naeher an der Rune sein!")
+                  , MSGFLAG_VISUAL); 
+      return 1;
+    }
+    if(gilde != "druidenzirkel")
+    {
+      TP->Message(BS("Dazu musst Du im Dienste der Druiden stehen!")
+                  , MSGFLAG_VISUAL); 
+      return 1;
+    }
+    TP->Message(BS("Du kniest Dich nieder und laesst Dich bei dem Ritual "
+                "von dem Geist der Klinge leiten."), MSGFLAG_VISUAL);
+    TP->SetProp(P_PARALYZED, ([PARALYZE_TIME: 5, 
+							PARALYZE_MSG: "Du bist mitten in einem Ritual!\n", 
+							PARALYZE_MSG_OTHER: "%s ist ganz starr.\n", 
+							PARALYZE_END: "Das Ritual endet!\n",
+							PARALYZE_END_OTHER: "%s erwacht aus der Starre.\n"]));                
+    call_out("seq1", 2, TP, "air");
+    return 1;     
+  }
+  if(str == "schwert erz" ||
+     str == "aderschwert erz")
+  {
+    if(room != "/d/huegelland/angrox/druidenzirkel/room/ee_monolith")
+    {
+      TP->Message(BS("Dazu musst Du naeher an der Rune sein!")
+                  , MSGFLAG_VISUAL); 
+      return 1;
+    }
+    if(gilde != "druidenzirkel")
+    {
+      TP->Message(BS("Dazu musst Du im Dienste der Druiden stehen!")
+                  , MSGFLAG_VISUAL); 
+      return 1;
+    }
+    TP->Message(BS("Du kniest Dich nieder und laesst Dich bei dem Ritual "
+                "von dem Geist der Klinge leiten."), MSGFLAG_VISUAL);
+    TP->SetProp(P_PARALYZED, ([PARALYZE_TIME: 5, 
+							PARALYZE_MSG: "Du bist mitten in einem Ritual!\n", 
+							PARALYZE_MSG_OTHER: "%s ist ganz starr.\n", 
+							PARALYZE_END: "Das Ritual endet!\n",
+							PARALYZE_END_OTHER: "%s erwacht aus der Starre.\n"]));                
+    call_out("seq1", 2, TP, "stone");
+    return 1;     
+  }
+  if(str == "schwert geist" ||
+     str == "aderschwert geist")
+  {
+    if(room != "/d/huegelland/angrox/druidenzirkel/room/no_monolith")
+    {
+      TP->Message(BS("Dazu musst Du naeher an der Rune sein!")
+                  , MSGFLAG_VISUAL); 
+      return 1;
+    }
+    if(gilde != "druidenzirkel")
+    {
+      TP->Message(BS("Dazu musst Du im Dienste der Druiden stehen!")
+                  , MSGFLAG_VISUAL); 
+      return 1;
+    }
+    TP->Message(BS("Du kniest Dich nieder und laesst Dich bei dem Ritual "
+                "von dem Geist der Klinge leiten."), MSGFLAG_VISUAL);
+    TP->SetProp(P_PARALYZED, ([PARALYZE_TIME: 5, 
+							PARALYZE_MSG: "Du bist mitten in einem Ritual!\n", 
+							PARALYZE_MSG_OTHER: "%s ist ganz starr.\n", 
+							PARALYZE_END: "Das Ritual endet!\n",
+							PARALYZE_END_OTHER: "%s erwacht aus der Starre.\n"]));                
+    call_out("seq1", 2, TP, "ghost");
+    return 1;     
+  }
+  return 0;
+}
+int seq1(object pl, string arg)
+{
+  pl->Message(BS("Der Geist des Schwertes fuehrt die Klinge an Deinen "
+              "Unterarm. Langsam schneidet sich die Klinge tief ins "
+              "Fleisch ... ")
+              ,MSGFLAG_VISUAL);
+  call_out("seq2", 2, pl, arg);
+}
+int seq2(object pl, string arg)
+{
+  pl->Message(BS("Du beisst die Zaehne zusammen, als sich die Adern des "
+              "Schwertes mehr und mehr mit Deinem Blut fuellen. Doch "
+              "laesst Dich die Seele in dem Schwert noch keinen Schmerz "
+              "fuehlen, Noch nicht ... ")
+              ,MSGFLAG_VISUAL);
+  call_out("seq3", 2, pl, arg);
+}
+int seq3(object pl, string arg)
+{
+  pl->Message(BS("Du spuerst, wie das Schwert sich vollgesogen hat. Du "
+              "glaubst zu hoeren, wie sich der Geist an Deinem Blut "
+              "erfreut.")
+              ,MSGFLAG_VISUAL);
+  call_out("seq4", 2, pl, arg);
+}
+int seq4(object pl, string arg)
+{
+  pl->Message(BS("Das Schwert beginnt nun, die Energie der Umgebung "
+              "aufzunehmen. Es verwandelt Dein Blut ...")
+              ,MSGFLAG_VISUAL);
+  call_out(arg, 1, pl);
+}
+
+int light(object pl)
+{
+  color="weiss";
+  desc="Weiss wie das Licht.";
+  weight=1000;
+  material=([MAT_STEEL:50, MAT_MISC_HOLY:50]);
+  wc=180;
+  damage=({DT_HOLY, DT_LIGHT});
+  pl->Message(BS("Das Schwert leuchtet kurz "+color+" auf und der Geist "
+              "laesst Dich und Deinen Koerper frei."), MSGFLAG_VISUAL);
+  call_out("end", 0);
+  pl->do_damage(DAM);
+  return 1;
+}
+int shadow(object pl)
+{
+  color="schwarz";
+  desc="Schwarz wie die Schatten.";
+  weight=1000;
+  material=([MAT_STEEL:50, MAT_SHADOW:50]);
+  wc=180;
+  damage=({DT_UNHOLY});
+  pl->Message(BS("Das Schwert leuchtet kurz "+color+" auf und der Geist "
+              "laesst Dich und Deinen Koerper frei."), MSGFLAG_VISUAL);
+  call_out("end", 0);
+  pl->do_damage(DAM); // sollen ja nur highlevler durchfuehren koennen, das 
+  //kriegen auch feeen hin
+  return 1;
+}
+int fire(object pl)
+{
+  color="rot";
+  desc="Rot wie die Glut eines Feuers.";
+  weight=1200;
+  material=([MAT_STEEL:50, MAT_FIRE:50]);
+  wc=185;
+  damage=({DT_FIRE});
+  pl->Message(BS("Das Schwert leuchtet kurz "+color+" auf und der Geist "
+              "laesst Dich und Deinen Koerper frei."), MSGFLAG_VISUAL);
+  call_out("end", 0);
+  pl->do_damage(DAM);
+  return 1;
+}
+int water(object pl)
+{
+  color="blau";
+  desc="Blau wie das Meer.";
+  weight=1100;
+  material=([MAT_STEEL:50, MAT_WATER:50]);
+  wc=185;
+  damage=({DT_WATER});
+  pl->Message(BS("Das Schwert leuchtet kurz "+color+" auf und der Geist "
+              "laesst Dich und Deinen Koerper frei."), MSGFLAG_VISUAL);
+  call_out("end", 0);
+  pl->do_damage(DAM);
+  return 1;
+}
+int ice(object pl)
+{
+  color="violett";
+  desc="Violett wie die farbe der Eisdruiden.";
+  weight=1050;
+  material=([MAT_STEEL:50, MAT_ICE:50]);
+  wc=185;
+  damage=({DT_COLD});
+  pl->Message(BS("Das Schwert leuchtet kurz "+color+" auf und der Geist "
+              "laesst Dich und Deinen Koerper frei."), MSGFLAG_VISUAL);
+  call_out("end", 0);
+  pl->do_damage(DAM);
+  return 1;
+}
+int humus(object pl)
+{
+  color="gruen";
+  desc="Gruen wie der Wald.";
+  weight=1100;
+  material=([MAT_STEEL:50, MAT_WOODEN_PLANT:50]);
+  wc=185;
+  damage=({DT_POISON});
+  pl->Message(BS("Das Schwert leuchtet kurz "+color+" auf und der Geist "
+              "laesst Dich und Deinen Koerper frei."), MSGFLAG_VISUAL);
+  call_out("end", 0);
+  pl->do_damage(DAM);
+  return 1;
+}
+int air(object pl)
+{
+  color="cyan";
+  desc="Cyan wie der Himmel.";
+  weight=900;
+  material=([MAT_STEEL:50, MAT_AIR:50]);
+  wc=185;
+  damage=({DT_AIR});
+  pl->Message(BS("Das Schwert leuchtet kurz "+color+" auf und der Geist "
+              "laesst Dich und Deinen Koerper frei."), MSGFLAG_VISUAL);
+  call_out("end", 0);
+  pl->do_damage(DAM);
+  return 1;
+}
+int stone(object pl)
+{
+  color="gelb";
+  desc="gelb wie das Erz.";
+  weight=1350;
+  material=([MAT_STEEL:50, MAT_MISC_STONE:50]);
+  wc=185;
+  damage=({DT_SLASH}); //DT_STONE gibts nimma, also halt besseres schwert
+  pl->Message(BS("Das Schwert leuchtet kurz "+color+" auf und der Geist "
+              "laesst Dich und Deinen Koerper frei."), MSGFLAG_VISUAL);
+  call_out("end", 0);
+  pl->do_damage(DAM);
+  return 1;
+}
+int ghost(object pl)
+{
+  color="hell";
+  desc="Du weist nicht, wo Du diese Farbe schonmal gesehn hast.";
+  weight=800;
+  material=([MAT_STEEL:50, MAT_MAGIC:50]);
+  wc=185;
+  damage=({DT_MIND});
+  pl->Message(BS("Das Schwert leuchtet kurz "+color+" auf und der Geist "
+              "laesst Dich und Deinen Koerper frei."), MSGFLAG_VISUAL);
+  call_out("end", 0);
+  pl->do_damage(DAM);
+  return 1;
+}
+int end()
+{
+  SetProp(P_SHORT, "Ein "+color+"es Aderschwert");
+  SetProp(P_LONG, 
+    "Du haelst ein "+color+"es Aderschwert in den Haenden. Die Adern, welche" 
+    " die feine Stahlklinge durchziehen, leuchten "+color+". Der "
+    "Griff scheint recht gewoehnlich."
+    );
+  AddDetail( ({"klinge", "stahlklinge"}), 
+    "Sie wird von feinen Adern durchzogen.");
+  AddDetail( ({"adern"}), 
+    "Sie leuchten "+color+". "+desc+"");
+  AddDetail( ({"griff"}), 
+    "Er besteht wie die Klinge aus Stahl. Du erkennst acht Runen.");
+  AddDetail( ({"runen"}), 
+    "Sie heissen: Licht, Schatten, Feuer, Eis, Humus, Wasser, Luft, Erz und "
+    "Geist.");
+  SetProp(P_MATERIAL, material );
+  SetProp(P_WEIGHT, weight);
+  SetProp(P_WC, wc);
+  SetProp(P_DAM_TYPE, ({DT_SLASH}) + damage);
+  ritual=0;
+}

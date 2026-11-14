@@ -1,0 +1,186 @@
+inherit "std/thing";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <defines.h>
+#include <new_skills.h>
+#include <moredef.h>
+#include <moving.h>
+#include "/gilden/bardengilde/bardengilde.h"
+
+object caster, magicEye;
+int duration;
+mapping exitShorts = ([
+  "o": "osten",
+  "no": "nordosten",
+  "n": "norden",
+  "nw": "nordwesten",
+  "w": "westen",
+  "sw": "suedwesten",
+  "s": "sueden",
+  "so": "suedosten",
+  "ob": "oben",
+  "nob": "nordoben",
+  "oob": "ostoben",
+  "noob": "nordostoben",
+  "soob": "suedostoben",
+  "sob": "suedoben",
+  "swob": "suedwestoben",
+  "wob": "westoben",
+  "nwob": "nordwestoben",
+  "u": "unten",
+  "nu": "nordunten",
+  "nou": "nordostunten",
+  "ou": "ostunten",
+  "sou": "suedostunten",
+  "su": "suedunten",
+  "swu": "suedwestunten",
+  "wu": "westunten",
+  "nwu": "nordwestunten"
+]);
+
+private int modifyBySkillAttribute(int baseVal, string skillAttribute) {
+  return (int) (baseVal * (caster->QuerySkillAttribute(skillAttribute) / 100.0));
+}
+
+public void create() {
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+//--Beschreibungen---------------------------------------------------------
+
+  SetProp(P_SHORT, 0);
+  SetProp(P_LONG,
+    "Ein Bardenlied");
+
+//--Namen------------------------------------------------------------------
+
+  SetProp(P_NAME, "Die Strasse gleitet fort");
+  SetProp(P_GENDER, NEUTER);
+  SetProp(P_INVIS, 1);
+  AddId(({SONG_FEAR, BARD_UPKEEP_EFFECT}));
+  SetProp(P_BARD_UPKEEP_MODES, ({SK_SINGING, SK_MUSIC}));
+
+//--Eigenschaften----------------------------------------------------------
+
+  SetProp(P_MATERIAL, MAT_MAGIC );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_SIZE, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NEVERDROP, 1);
+}
+
+private void request_input() {
+  tell_object(caster, sprintf("Was soll das Lied tun [%d]? ", duration));
+    input_to("next_action");
+}
+
+
+public void Setup(object _caster, int _ability, int _success, float factor) {
+  int mv;
+
+  caster = _caster;
+
+  duration = (_ability/2000) + (_success/2000);
+  duration = (int) (duration*factor);
+  duration = modifyBySkillAttribute(duration, SA_DURATION);
+
+  if(caster->QueryProp(P_TESTPLAYER)) {
+    tell_object(caster, sprintf("factor=%.2f ability=%d success=%d -> duration=%d\n", factor, _ability, _success, duration));
+  }
+
+  magicEye = clone_object("/gilden/bardengilde/npc/magic_eye");
+  magicEye->Setup(caster);
+  if((mv=magicEye->move(environment(caster), M_NOCHECK|M_GO)) != 1) {
+    tell_object(caster, BS(sprintf("Das Lied konnte sich nicht manifestieren! (%d)", mv)));
+    magicEye->remove(1);
+    remove(1);
+    return;
+  }
+
+  tell_object(caster, "Du nimmst die Welt nun durch die Melodie deines Liedes wahr:\n"
+                      "> Mit <beende> kannst du jederzeit aufhoeren dieses Lied zu spielen.\n"
+                      "> Mit <schau> kannst du die aktuelle Umgebung deines Liedes sehen.\n"
+                      "> Waehrend du dieses Lied spielst kannst du nur Ausgaenge nutzen!\n\n");
+  request_input();
+}
+
+private int isValidExit(string cmd) {
+  mapping exits;
+  mixed *exitStrings;
+
+  exits = environment(magicEye)->QueryProp(P_EXITS);
+  if(!exits) {
+    return 0;
+  }
+
+  exitStrings = m_indices(exits);
+  return member(exitStrings, cmd) >= 0;
+}
+
+private void getEyeViewport() {
+  tell_object(caster, environment(magicEye)->int_long(caster, caster));
+}
+
+private void moveMagicEye(string direction) {
+  magicEye->command_me(direction);
+  duration--;
+  getEyeViewport();
+}
+
+public void next_action(string input) {
+  if(!objectp(magicEye) || !objectp(environment(magicEye))) {
+    tell_object(caster, BS("Die Verbindung zu deiner Melodie wurde unterbrochen!"));
+    call_out("end_song", 0);
+    return;
+  }
+
+  if(input == "beende" || input == "beend") {
+    tell_object(caster, BS("Du beendest 'Die Strasse gleitet fort' und langsam kehren deine Sinne zu dir zurueck."));
+    tell_room(environment(caster), BS(sprintf("%s hoert auf 'Die Strasse gleitet fort' zu singen und zu muszieren.",
+              caster->Name(WER, 1))), ({caster}));
+    call_out("end_song", 3);
+    return;
+  }
+
+  if(input == "schau" || input == "schaue") {
+    getEyeViewport();
+    request_input();
+    return;
+  }
+
+  if(member(exitShorts, input)) {
+    input = exitShorts[input];
+  }
+
+  if(isValidExit(input)) {
+    moveMagicEye(input);
+    if(duration <= 0) {
+      tell_object(caster, BS("Die Melodie des Liedes loest sich auf..."));
+      call_out("end_song", 0);
+      return;
+    }
+    request_input();
+  } else {
+    tell_object(caster, BS("Das ist kein Ausgang aus diesem Raum!"));
+    request_input();
+  }
+
+  
+
+}
+
+public void end_song() {
+  if(objectp(magicEye)) {
+    magicEye->die();
+  }
+  remove(1);
+}
+
+void BecomesNetAlive(object spieler) {
+  request_input();
+}

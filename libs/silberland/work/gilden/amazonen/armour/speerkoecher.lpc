@@ -1,0 +1,138 @@
+// Speerkoecher fuer mehrere Speere
+// 2000-10-14 Feyaria@SilberLand
+
+#include "../def.h"
+
+inherit "std/container";
+inherit "std/armour";
+
+
+void create()
+{
+  if( !is_clone(TO) ) return;
+  armour::create();
+  container::create();
+  
+  SetProp(P_SHORT, "Ein Speerkoecher");
+  SetProp(P_LONG,  
+    "Ein lederner Speerkoecher, in dem man mehrere Wurfspeer stecken kann, "
+    "um nach einem Speerwurf schnell den naechsten Speer zuecken zu koennen.");
+  SetProp(P_NAME, "Speerkoecher");
+  SetProp(P_GENDER, MALE);
+  AddId( ({"koecher", "speerkoecher", "\namazonen_item"}) );
+  SetProp(P_INFO,
+      "Speere in diesem Koecher lassen sich direkt zuecken, dabei wird "
+      "ein bereits gezueckter anderer Speer in den Koecher gesteckt, was "
+      "ein sehr schnelles wechseln der Waffe erlaubt.");
+
+  SetProp(P_ARMOUR_TYPE, AT_MISC );
+  SetProp(P_AC, 0);
+  SetProp(P_MATERIAL, ([MAT_LEATHER:100]) );
+  SetProp(P_WEIGHT, 200);
+  SetProp(P_VALUE, 500);
+  SetProp(P_MAX_WEIGHT, 30000);
+  SetProp(P_WEIGHT_PERCENT, 1);
+  SetProp(P_NOBUY,1);
+  SetProp(P_WORN_TEXT, "umgehaengt");
+  SetProp(P_WEAR_RESTRICTIONS, ([P_GUILD: "amazonen"]) );
+  
+  AddCmd( ({"zuecke", "zueck"}), "cmd_zuecken");
+}
+
+varargs int PreventInsert(object ob) 
+{
+  if ( !(TO->QueryWorn()) ) {
+    write("Du musst Dir den Speerkoecher umhaengen.\n");
+    return 1;
+  }
+  if ( ob->QueryProp(P_WEAPON_TYPE)!=WT_SPEAR ) {
+    write("Du kannst nur Speere in den Speerkoecher stecken.\n");
+    return 1;
+  }
+  return ::PreventInsert(ob); 
+}
+
+varargs int PreventLeave(object ob, mixed dest)
+{
+  return ::PreventLeave(ob, dest);
+}
+
+void init()
+{
+  container::init();
+  armour::init();
+}
+
+string short()
+{
+  string s;
+  int i;
+  if (!(s=QueryProp(P_SHORT)) || QueryProp(P_INVIS)) return 0;
+  i = sizeof(all_inventory());
+  return s+ (i ? " mit " + i + " Speer" + (i == 1 ? "" : "en"): "") + 
+    (QueryProp(P_WORN) ? " ("+(QueryProp(P_WORN_TEXT) || "getragen")+")":"") +
+    ".\n";
+}
+
+varargs int remove(int silent)
+{
+  DoUnwear(silent);
+  if (!QueryProp(P_WORN))
+    return container::remove(silent);
+}
+
+varargs move(mixed dest, int method)
+{
+  DoUnwear(method & M_SILENT);
+  if ((method & M_NOCHECK) || (!QueryProp(P_WORN)))
+    return ::move(dest, method);
+}
+
+string extra_look()
+{
+  int i;
+  if (environment() && (i = sizeof(all_inventory())))
+  return sprintf("%s traegt %d Speer%s in %s Speerkoecher.\n",
+      capitalize(environment()->QueryPronoun()), i,
+      (i == 1 ? "": "e"), environment()->QPP(MALE, WEN));
+  else
+    return "";
+}
+
+int cmd_zuecken(string str)
+{
+  object *obs;
+  object wea;
+  object wer;
+  if (!sizeof(all_inventory()) || !(wer =QueryProp(P_WORN)))
+    return 0;
+
+  if (!sizeof(obs = filter_objects(all_inventory(), "id", str)))
+    return 0;
+
+  if (objectp(wea = wer->QueryProp(P_WEAPON)))
+    wea->DoUnwield();
+  if (wer->QueryProp(P_WEAPON))
+    return -1;
+
+  if (wea)
+  {
+    tell_object(wer,
+        sprintf("Du steckst %s in den Speerkoecher und nimmst %s heraus.\n",
+          wea->name(WEN,1), obs[0]->name(WEN,1)));
+    wea->move(TO, M_PUT);
+  }
+  else
+    tell_object(wer,
+        sprintf("Du nimmst %s aus dem Speerkoecher.\n",
+          obs[0]->name(WEN,1)));
+  if (obs[0]->move(wer, M_GET) == ME_TOO_HEAVY)
+  {
+    tell_object(wer,
+        sprintf("Leider kannst Du %s nicht mehr tragen!\n", 
+          obs[0]->name(WEN,1)));
+    return -2;
+  }
+  obs[0]->wield_me();
+  return 1;
+}

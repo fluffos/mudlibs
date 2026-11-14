@@ -1,0 +1,414 @@
+/////////////////////////////////////////////////////////////////////////////
+//                                                                         //
+//     npcm.c                                                              //
+//     Der NPC-Master fuer die Unterwassergebiete                          //
+//                                                                         //
+//     Erstellt: 06/08/99                                                  //
+//                                                                         //
+//     Letzte Aenderung: siehe Date                                        //
+//                                                                         //
+//     (c) by Cirion@Silberland                                            //
+//                                                                         //
+//                                                                         //
+//                                                                         //
+/////////////////////////////////////////////////////////////////////////////
+
+#include "./npcm.h"
+
+//version data
+#define DATE "06/08/1999"
+#define VERSION "v0.1"
+#define VERSION_HIST ({"v0.1  : first release"})
+
+#pragma strong_types  //alles schoen ordentlich
+
+inherit "/std/thing";  //std...
+inherit "/players/cirion/service/fun";  //fuer write_log
+
+//variable declaration
+nosave mapping all_npcs;  //all registered npcs reside here
+nosave object *action_queue_o;  //this is kind of a queue, the next action
+                               //to call will be on top
+nosave int *action_queue_t; //this is the time it will take place
+
+//variables for errorhandling;
+nosave string error;
+nosave object bugger;
+
+//function declaration
+nosave void InitNPCM();  //Initialize mappings etc.
+varargs int AddNPC(int stat); //Should be called by npc 
+varargs int RemoveNPC(object npc);  //Should be called by npc
+varargs int ActivateNPC(int stat);  //Activate proceduring    
+varargs int AddToQueue(int itime,object npc);  //Add action to queue
+nosave void next_queue_action();  //circling the actions
+varargs void Status(string what); //Status request
+nosave void status_action();  //action status
+nosave void status_npc();  //npc status
+nosave void status_general();  //general status
+nosave void status_none();  //no status
+
+void create()
+{
+  if (is_clone(TO)) 
+  {
+    bugger=previous_object();
+    error="Tried to clone npcm from "+file_name(bugger)+" (uid:"+getuid(bugger)+")\n";
+    DBME(error);
+    LOGERR(error);
+    error+="\tYou cannot clone npcm.lpc";
+    //LOGREP(getuid(bugger),error);
+    TELLBUGGER(bugger,error);
+    TO->remove();
+    if (TO)
+      destruct(TO);
+    return;
+  }
+  ::create();
+  LOGEVENT("NPC-Master created.");
+  AddId(({"npcm"}));
+  InitNPCM();
+}
+
+nosave void InitNPCM()
+{
+  LOGEVENT("InitNPCM called.");
+  all_npcs=([]);
+  action_queue_o=({});
+  action_queue_t=({});  
+  return;
+}
+
+varargs int AddNPC(int stat)
+{
+  object npc;
+  
+  if (!PO)
+  {
+    error="AddNPC call from unknown or destructed object.";
+    DBME(error);
+    LOGERR(error);
+    return 0;
+  }
+  npc=PO;
+  if (!living(npc)||query_once_interactive(npc))
+  {
+    error="AddNPC call from invalid object: "+file_name(npc)+" (uid: "+getuid(npc)+").";
+    DBME(error);
+    LOGERR(error);
+    if (find_player(getuid(npc)))
+    {
+      error+="\n\tAddNPC should only be called by NPCs.";
+      TELLBUGGER(find_player(getuid(npc)),error);
+    }
+    return 0;
+  }
+  if (-1!=member((m_indices(all_npcs)),npc))  //already registered
+    return 1;
+  //Everything seems pretty fine, so register it
+  stat=stat?stat:0;
+  all_npcs+=([npc:(["status":stat])]);
+  return 1;
+}  
+
+varargs int ActivateNPC(int stat)
+{
+  object npc;
+  
+  if (!PO)
+  {
+    error="ActivateNPC call from unknown or destructed object.";
+    DBME(error);
+    LOGERR(error);
+    return 0;
+  }
+  npc=PO;
+  if (!living(npc)||query_once_interactive(npc))
+  {
+    error="ActivateNPC call from invalid object: "+file_name(npc)+" (uid: "+getuid(npc)+").";
+    DBME(error);
+    LOGERR(error);
+    if (find_player(getuid(npc)))
+    {
+      error+="\n\tActivateNPC should only be called by NPCs.";
+      TELLBUGGER(find_player(getuid(npc)),error);
+    }
+    return 0;
+  }
+  if (-1==member(m_indices(all_npcs),npc))
+    all_npcs+=([npc:(["status":(stat?1:0)])]);
+  else 
+    all_npcs[npc]["status"]|=(stat?1:0);
+  return 1;
+}
+
+varargs int RemoveNPC(object npc)
+{
+  if (!npc)
+    npc=PO;
+  if (!PO)
+  {
+    error="RemoveNPC call from unknown or destructed object.";
+    DBME(error);
+    LOGERR(error);
+    return 0;
+  }
+  all_npcs=m_delete(all_npcs,npc);
+  return 1;
+}
+
+varargs int AddToQueue(int itime,object npc)
+{
+  int i;
+  
+  if (!npc)
+  {
+    if (!PO)
+    {
+      error="AddToQueue call from unknown or destructed object.";
+      DBME(error);
+      LOGERR(error);
+      return 0;
+    }
+    npc=PO;
+  }
+  if (itime==0)
+  {
+    error="Invalid argument 'int itime' to AddToQueue: "+file_name(npc)+" (uid: "+getuid(npc)+").";
+    DBME(error);
+    LOGERR(error);
+    if (find_player(getuid(npc)))
+    {
+      error+="\n\tAddToQueue must be called with time argument > 0.";
+      TELLBUGGER(find_player(getuid(npc)),error);
+    }
+    return 0;
+  }
+  itime+=time();
+  if (!living(npc)||query_once_interactive(npc))
+  {
+    error="AddToQueue call for invalid object: "+file_name(npc)+" (uid: "+getuid(npc)+").";
+    DBME(error);
+    LOGERR(error);
+    if (find_player(getuid(npc)))
+    {
+      error+="\n\tAddToQueue should only be called by NPCs.";
+      TELLBUGGER(find_player(getuid(npc)),error);
+    }
+    return 0;
+  }
+  if (-1==member(m_indices(all_npcs),npc))
+  {
+    all_npcs+=([npc:(["status":NPC_STATUS_ACTIVE])]);
+  }
+  if (sizeof(action_queue_t)==0)
+  {
+    action_queue_t=({itime});
+    action_queue_o=({npc});
+    while (-1!=find_call_out("next_queue_action"))
+      remove_call_out("next_queue_action");
+    call_out("next_queue_action",action_queue_t[0]-time());
+  }
+  else 
+  {
+    FORALL(i,action_queue_t)
+    {
+      if (action_queue_t[i]<=itime)
+      {
+        action_queue_t=action_queue_t[0..i]+({itime})+action_queue_t[i+1..<1];
+        action_queue_o=action_queue_o[0..i]+({npc})+action_queue_o[i+1..<1];
+        while (-1!=find_call_out("next_queue_action"))
+          remove_call_out("next_queue_action");
+        call_out("next_queue_action",action_queue_t[0]-time());
+        return 1;
+        break;
+      }        
+    }
+    action_queue_t=({itime})+action_queue_t;
+    action_queue_o=({npc})+action_queue_o;
+    while (-1!=find_call_out("next_queue_action"))
+      remove_call_out("next_queue_action");
+    call_out("next_queue_action",action_queue_t[0]-time());
+    return 1;
+  }
+}
+
+void next_queue_action()
+{
+  while (-1!=find_call_out("next_queue_action"))
+    remove_call_out("next_queue_action");
+  while (sizeof(action_queue_t)&&action_queue_t[0]<=time())
+  {
+    if (!action_queue_o[0])
+      RemoveNPC(action_queue_o[0]);
+    else if (all_npcs[action_queue_o[0]]["status"]&NPC_STATUS_ACTIVE)
+      action_queue_o[0]->NextAction();
+    action_queue_t=action_queue_t[1..<1];
+    action_queue_o=action_queue_o[1..<1];
+  }
+  if (sizeof(action_queue_t))
+    call_out("next_queue_action",action_queue_t[0]-time());
+  return;
+}
+
+nosave void status_action()
+{
+  string text;
+  int i;
+  
+  text=   "\t+--------------------------------------------+\n"
+          "\t|            Status of NPC-Master            |\n"
+          "\t|        (c) '99 by Cirion@Silberland        |\n"
+          "\t+--------------------------------------------+\n"
+          "\t| Action queue                               |\n"
+          "\t|                                            |\n"
+          "\t| Size of queue: "
+             +sprintf("%:4d",sizeof(action_queue_t))+
+                                 "         Time: "
+             +sprintf("%:8-s",explode(dtime(time()),", ")[2])+
+                                                        " |\n"
+          "\t|                                            |\n"
+          "\t| NPC                Action         start at |\n"
+          "\t|                                            |\n"
+          ;
+  for (i=0;i<sizeof(action_queue_t);i++)
+  {
+    if (action_queue_o[i])
+      text+=
+          "\t| "
+             +sprintf("%:18-s",action_queue_o[i]->Name())+
+                                " "
+             +sprintf("%:14-s",action_queue_o[i]->QueryNextAction())+
+                                                " "      
+             +sprintf("%:8-s",explode(dtime(action_queue_t[i]),", ")[2])+
+                                                        " |\n"
+          ;                                             
+    else
+      RemoveNPC(action_queue_o[i]);  
+  }
+  if (i==0)
+    text+=
+          "\t| none                                       |\n"
+          ;
+  text+=
+        "\t|                                            |\n"
+        "\t+--WARNING:----------------------------------+\n"
+        "\t| This feature can be very cpu-intensive.    |\n"
+        "\t+--------------------------------------------+\n"
+        ;
+  write(text);  
+}
+
+nosave void status_npc()
+{
+  string text;
+  string *npc_indices;
+  int i;
+  
+  npc_indices=m_indices(all_npcs);
+  text=   "\t+--------------------------------------------+\n"
+          "\t|            Status of NPC-Master            |\n"
+          "\t|        (c) '99 by Cirion@Silberland        |\n"
+          "\t+--------------------------------------------+\n"
+          "\t| NPC List                                   |\n"          
+          "\t|                                            |\n"
+          "\t| Number of registered npcs : "
+             +sprintf("%:4d",sizeof(npc_indices))+
+                                              "           |\n"
+          "\t|                                            |\n"
+          "\t| NPC                 A                      |\n"
+          "\t|                                            |\n"
+          ;
+  for (i=0;i<sizeof(npc_indices);i++)
+  {
+    text+=
+          "\t| "
+             +sprintf("%:18-s",npc_indices[i]->Name())+
+                        " "
+             +sprintf("%:2d",all_npcs[npc_indices[i]]["status"])+
+                                   "                      |\n"
+          ;
+  }
+  if (i==0)
+  {
+    text+=
+          "\t| none                                       |\n"
+          ;
+  }
+  text+=
+          "\t|                                            |\n"
+          "\t+--WARNING:----------------------------------+\n"
+          "\t| This feature can be very cpu-intensive.    |\n"
+          "\t+--------------------------------------------+\n"
+          ;
+  write(text);
+}
+
+nosave void status_none()
+{
+  string text;
+
+  text=   "\t+--------------------------------------------+\n"
+          "\t|            Status of NPC-Master            |\n"
+          "\t|        (c) '99 by Cirion@Silberland        |\n"
+          "\t+--------------------------------------------+\n"
+          "\t|                                            |\n"
+          "\t|  Not yet available.                        |\n"
+          "\t|                                            |\n"
+          "\t+--------------------------------------------+\n"
+          ;
+
+  write(text);
+}
+
+nosave void status_general()
+{
+  string text;
+
+  text=   "\t+--------------------------------------------+\n"
+          "\t|            Status of NPC-Master            |\n"
+          "\t|        (c) '99 by Cirion@Silberland        |\n"
+          "\t+--------------------------------------------+\n"
+          "\t| Registerd NPCs:"
+             +sprintf("%:4d",sizeof(all_npcs))+
+                                 "         Time: "
+             +sprintf("%:8-s",explode(dtime(time()),", ")[2])+
+                                                        " |\n"
+          "\t|                                            |\n"
+          "\t| Entries in action queue:"
+             +sprintf("%:4d",sizeof(action_queue_t))+
+                                          "               |\n"
+          "\t|                                            |\n"
+          "\t| Next NPC in queue: "
+             +sprintf("%:13-s",sizeof(action_queue_o)?(action_queue_o[0]?action_queue_o[0]->Name():"-illegal-"):"-none-")+
+                                               " in"
+             +(sizeof(action_queue_t)?sprintf("%:5d",action_queue_t[0]-time()):"    -")+                                               
+                                                      " s |\n"
+          "\t|                                            |\n"
+          "\t+--additional info---------------------------+\n"
+          "\t| action, npc                                |\n"
+          "\t+--------------------------------------------+\n"
+          ;	
+  write(text);
+}
+
+varargs void Status(string what)
+{  
+  
+  if (!what)
+  {
+    status_general();
+  }
+  else if (-1!=member(({"action","act"}),what))
+  {
+    status_action();
+  }
+  else if (-1!=member(({"npc","npcs"}),what))
+  {
+    status_npc();
+  }
+  else
+  {
+    status_none();
+  }
+}

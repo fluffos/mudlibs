@@ -1,0 +1,10 @@
+#define SMARAGD_ROOM "/d/dschungel/feyaria/felseninsel/room/felsen"
+#define RUBIN_ROOM "/d/gebirge/angrox/room/ebene4/ebene4_x12y3"
+#define SAPHIR_ROOM "/d/ebene/ronja/feenquest/room/turm39"
+#define DIAMANT_ROOM "/d/polar/lamuerte/eishoehle/rooms/19628"
+#define AMETHYST_ROOM "/d/wueste/gwenshara/echsendorf/room/tempel"
+
+#define DRACHENQUEST "Die Krone des Drachenkoenigs"
+#define DRACHENQUESTLOG LOG "drachenkrone"
+#define DRACHENQUESTID "\ndrachenquest"
+#define DRACHENQUESTKRONE "\ndrachenquest_krone"

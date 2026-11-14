@@ -1,0 +1,433 @@
+// SilberLand MUDlib
+//
+// std/npc/spells.c -- Einige Default-Spells fuer NPCs
+//
+// $Date: 2005/03/18 23:30:53 $
+/* $Revision: 1.12 $
+ * $Log: spells.c,v $
+ * Revision 1.12  2005/03/18 23:30:53  Feyaria
+ * dauer von blind und taubheit reduziert
+ *
+ * Revision 1.11  2005/01/06 12:06:28  Feyaria
+ * DS_DRAIN_MANA
+ *
+ * Revision 1.10  2004/09/18 21:35:17  Feyaria
+ * array von schadenstypen jetzt bei mass_damage
+ *
+ * Revision 1.9  2004/07/29 00:55:46  Feyaria
+ * mass_fear verbessert
+ *
+ * Revision 1.8  2003/12/27 13:19:38  Feyaria
+ * NOWIMPY beruecksichtigen bei FEAR-Spells
+ *
+ * Revision 1.7  2003/10/30 09:47:35  Angrox
+ * Typofix: SP_SHOWDAMAGE -> SP_SHOW_DAMAGE
+ *
+ * Revision 1.6  2003/10/09 18:01:48  Feyaria
+ * SHOWDAMAGE bei allen spells
+ *
+ * Revision 1.5  2002/09/26 18:17:45  Feyaria
+ * REDUCE_AC und REDUCE_WC mit TakeFlaw statt Damage
+ *
+ * Revision 1.4  2002/04/23 21:38:20  Feyaria
+ * drop_obj mit flag beim disarm
+ *
+ * Revision 1.3  2001/05/20 19:36:21  Zordan
+ * unsichtbare Ruestungen werden nicht mehr beruecksichtigt
+ * bei Damage und Curse
+ *
+ * Revision 1.2  2001/03/28 16:15:51  Feyaria
+ * Weitere Spells hinzugefuegt
+ *
+ * Revision 1.1  1998/10/20 00:38:19  Woody
+ * Initial revision
+ *
+ */
+
+
+#define NEED_PROTOTYPES
+
+#include <combat.h>
+#include <npc/combat.h>
+#include <language.h>
+#include <properties.h>
+#include <wizlevels.h>
+#include <health.h>
+#include <config.h>
+#include <thing/properties.h>
+#include <thing/description.h>
+#include <new_skills.h>
+
+mixed gift, blind, deaf, paralyze, mass_blind, mass_deaf, mass_poison;
+int mass_fear_damage, mass_damage, mass_blind_damage, mass_deaf_damage;
+int mass_poison_damage, slow, antimagic, ac_reduce, wc_reduce;
+int drain_mana;
+
+object *PresentEnemies();
+
+varargs void AddDefaultSpell(int rate, int damage, string type, 
+                             string msg1, string msg2, mixed special )
+{
+  switch (type)
+  {
+    case DS_POISON :
+      AddSpell(rate,damage,
+        msg1?msg1:Name(WER,1)+" vergiftet Dich.\n",
+        msg2?msg2:Name(WER,1)+" vergiftet @WEN.\n",
+        DT_POISON,"DefaultSpell_Poison", ([SP_SHOW_DAMAGE:1]) );
+      if( special ) gift = special; else gift = 1;
+      break;
+    case DS_FROG :
+      AddSpell(rate,damage,
+        msg1?msg1:Name(WER,1)+" verwandelt Dich in einen Frosch.\n",
+        msg2?msg2:Name(WER,1)+" verwandelt @WEN in einen Frosch.\n",
+        DT_WATER,"DefaultSpell_Frog", ([SP_SHOW_DAMAGE:1]) );
+      break;
+    case DS_BLIND :
+      AddSpell(rate,damage,
+        msg1?msg1:Name(WER,1)+" blendet Dich.\n",
+        msg2?msg2:Name(WER,1)+" blendet @WEN.\n",
+        DT_LIGHT,"DefaultSpell_Blind", ([SP_SHOW_DAMAGE:1]) );
+      if( special ) blind = special; 
+      else blind = QueryProp(P_LEVEL)/4;
+      break;
+    case DS_DEAF :
+      AddSpell(rate,damage,
+        msg1?msg1:Name(WER,1)+" laesst Dich ertauben.\n",
+        msg2?msg2:Name(WER,1)+" laesst @WEN ertauben.\n",
+        DT_SOUND,"DefaultSpell_Sound", ([SP_SHOW_DAMAGE:1]) );
+      if( special ) deaf = special;
+      else deaf = QueryProp(P_LEVEL)*3;
+      break;
+    case DS_PARALYZE :
+      AddSpell(rate,damage,
+        msg1?msg1:Name(WER,1)+" paralysiert Dich.\n",
+        msg2?msg2:Name(WER,1)+" paralysiert @WEN.\n",
+        DT_MAGIC,"DefaultSpell_Paralyze", ([SP_SHOW_DAMAGE:1]) );
+      if( special ) paralyze = special;
+      else paralyze = 1+QueryProp(P_LEVEL)/10;
+      break;
+    case DS_DISARM :
+      AddSpell(rate,damage,
+        msg1?msg1:Name(WER,1)+" entwaffnet Dich.\n",
+        msg2?msg2:Name(WER,1)+" entwaffnet @WEN.\n",
+        DT_BLUDGEON,"DefaultSpell_Disarm", ([SP_SHOW_DAMAGE:1]) );
+      break;
+    case DS_FEAR :
+      AddSpell(rate,damage,
+        msg1?msg1:Name(WER,1)+" erschreckt Dich.\n",
+        msg2?msg2:Name(WER,1)+" erschreckt @WEN.\n",
+        DT_TERROR,"DefaultSpell_Fear", ([SP_SHOW_DAMAGE:1]) );
+      break;
+    case DS_CURSE_WEAPON :
+      AddSpell(rate,damage,
+        msg1?msg1:Name(WER,1)+" verflucht Deine Waffe.\n",
+        msg2?msg2:Name(WER,1)+" verflucht @WESSEN Waffe.\n",
+        DT_UNHOLY,"DefaultSpell_CurseWeapon", ([SP_SHOW_DAMAGE:1]) );
+      break;
+    case DS_CURSE_ARMOUR :
+      AddSpell(rate,damage,
+        msg1?msg1:Name(WER,1)+" verflucht Deine Ruestung.\n",
+        msg2?msg2:Name(WER,1)+" verflucht @WESSEN Ruestung.\n",
+        DT_UNHOLY,"DefaultSpell_CurseArmour", ([SP_SHOW_DAMAGE:1]) );
+      break;
+    case DS_REDUCE_WC :
+      AddSpell(rate,damage,
+        msg1?msg1:Name(WER,1)+" zerstoert Deine Waffe.\n",
+        msg2?msg2:Name(WER,1)+" zerstoert @WESSEN Waffe.\n",
+        DT_UNHOLY,"DefaultSpell_ReduceWC", ([SP_SHOW_DAMAGE:1]) );
+      if( special ) wc_reduce = special;
+      else wc_reduce = QueryProp(P_LEVEL)*10;
+      break;
+    case DS_REDUCE_AC :
+      AddSpell(rate,damage,
+        msg1?msg1:Name(WER,1)+" zerstoert Deine Ruestung.\n",
+        msg2?msg2:Name(WER,1)+" zerstoert @WESSEN Ruestung.\n",
+        DT_UNHOLY,"DefaultSpell_ReduceAC", ([SP_SHOW_DAMAGE:1]) );
+      if( special ) ac_reduce = special;
+      else ac_reduce = QueryProp(P_LEVEL)*4;
+      break;
+    case DS_SLOW :
+      AddSpell(rate,damage,
+        msg1?msg1:Name(WER,1)+" verlangsamt Deine Bewegung.\n",
+        msg2?msg2:Name(WER,1)+" verlangsamt @WESSEN Bewegung.\n",
+        DT_COLD,"DefaultSpell_Slow", ([SP_SHOW_DAMAGE:1]) );
+      if( special ) slow = special;
+      else slow = 1+QueryProp(P_LEVEL)/10;
+      break;
+    case DS_ANTIMAGIC :
+      AddSpell(rate,damage,
+        msg1?msg1:Name(WER,1)+" umhuellt Dich mit einer Anti-Magie-Aura.\n",
+        msg2?msg2:Name(WER,1)+" umhuellt @WEN mit einer Anti-Magie-Aura.\n",
+        DT_MAGIC,"DefaultSpell_AntiMagic", ([SP_SHOW_DAMAGE:1]) );
+      if( special ) antimagic = special;
+      else antimagic = 1+QueryProp(P_LEVEL)/10;
+      break;
+    case DS_DRAIN_MANA :
+      AddSpell(rate,damage,
+        msg1?msg1:Name(WER,1)+" saugt Dir Deine Magiepunkte ab.\n",
+        msg2?msg2:Name(WER,1)+" saugt @WEM die MAgiepunkte ab.\n",
+        DT_MAGIC,"DefaultSpell_DrainMana", ([SP_SHOW_DAMAGE:1]) );
+      if( special ) drain_mana = special;
+      else drain_mana = 5 + QueryProp(P_LEVEL) * QueryProp(P_LEVEL) / 20;
+      break;
+    case DS_MASS_FEAR :
+      mass_fear_damage=damage;
+      AddSpell(rate,1,
+        msg1?msg1:Name(WER,1)+" erschreckt Dich.\n",
+        msg2?msg2:Name(WER,1)+" erschreckt Dich.\n",
+        DT_TERROR, "DefaultSpell_MassFear");
+      break;
+    case DS_MASS_DAMAGE :
+      mass_damage=damage;
+      AddSpell(rate,1,
+        msg1?msg1:Name(WER,1)+" fuegt Dir gewaltigen Schaden zu.\n",
+        msg2?msg2:Name(WER,1)+" fuegt Dir gewaltigen Schaden zu.\n",
+        stringp(special) || pointerp(special) ? special : DT_MAGIC, 
+        "DefaultSpell_MassDamage");
+      break;
+    case DS_MASS_BLIND :
+      mass_blind_damage=damage;
+      AddSpell(rate,1,
+        msg1?msg1:Name(WER,1)+" blendet Dich.\n",
+        msg2?msg2:Name(WER,1)+" blendet Dich.\n",
+        DT_LIGHT,"DefaultSpell_MassBlind");
+      if( special ) mass_blind = special; 
+      else mass_blind = QueryProp(P_LEVEL)*2;
+      break;
+    case DS_MASS_DEAF :
+      mass_deaf_damage=damage;
+      AddSpell(rate,1,
+        msg1?msg1:Name(WER,1)+" laesst Dich ertauben.\n",
+        msg2?msg2:Name(WER,1)+" laesst Dich ertauben.\n",
+        DT_SOUND,"DefaultSpell_MassDeaf");
+      if( special ) mass_deaf = special; 
+      else mass_deaf = QueryProp(P_LEVEL)*3;
+      break;
+    case DS_MASS_POISON :
+      mass_poison_damage=damage;
+      AddSpell(rate,1,
+        msg1?msg1:Name(WER,1)+" vergiftet Dich.\n",
+        msg2?msg2:Name(WER,1)+" vergiftet Dich.\n",
+        DT_POISON, "DefaultSpell_MassPoison");
+      if( special ) mass_poison = special; 
+      else mass_poison = 1;
+      break;
+  }
+}
+
+void DefaultSpell_Poison(object enemy, int damage, mixed dam_type)
+{
+  enemy->AddPoison(gift);
+}
+
+void DefaultSpell_Frog(object enemy, int damage, mixed dam_type)
+{
+  enemy->SetProp(P_FROG, 1);
+}
+
+void DefaultSpell_Blind(object enemy, int damage, mixed dam_type)
+{
+  if( !enemy->QueryProp(P_BLIND) )
+    enemy->SetProp(P_BLIND, blind );
+}
+
+void DefaultSpell_Deaf(object enemy, int damage, mixed dam_type)
+{
+  if( !enemy->QueryProp(P_DEAF) )
+    enemy->SetProp(P_DEAF, deaf );
+}
+
+void DefaultSpell_Paralyze(object enemy, int damage, mixed dam_type)
+{
+  if( !enemy->QueryProp(P_PARALYZED) )
+    enemy->SetProp(P_PARALYZED, paralyze );
+}
+
+void DefaultSpell_Disarm(object enemy, int damage, mixed dam_type)
+{
+  object ob;
+  if(ob=enemy->QueryProp(P_WEAPON))
+  {
+    enemy->drop_obj(ob,1);
+  }
+  else
+    enemy->do_damage(10, this_object());
+}
+
+void DefaultSpell_Fear(object enemy, int damage, mixed dam_type)
+{
+  enemy->SetProp(P_WIMPY, enemy->QueryProp(P_HP)+1);
+  enemy->CheckWimpyAndFlee();
+  if( enemy->id("NOWIMPY") )
+    enemy->SetProp(P_WIMPY, 0);
+}
+
+void DefaultSpell_CurseWeapon(object enemy, int damage, mixed dam_type)
+{
+  object ob;
+  if((ob=enemy->QueryProp(P_WEAPON)) && !ob->QueryProp(P_CURSED))
+    ob->SetProp(P_CURSED, 
+      ob->Name(WER,1)+" ist verflucht und laesst sich nicht mehr wegstecken!\n");
+}
+
+void DefaultSpell_CurseArmour(object enemy, int damage, mixed dam_type)
+{
+  object ob;
+  object *armours;
+ 
+  armours =filter_objects(enemy->QueryProp(P_ARMOURS),"QueryProp",P_SHORT);
+  armours-=filter_objects(armours,"QueryProp",P_INVIS);
+  
+  if( sizeof(armours) )
+  {
+    ob=armours[random(sizeof(armours))];
+    if(ob->QueryProp(P_ARMOUR_TYPE)!=AT_MISC && !ob->QueryProp(P_CURSED) )
+    {
+      ob->SetProp(P_CURSED, 
+        ob->Name(WER,1)+" ist verflucht und laesst sich nicht mehr ausziehen\n");
+    }
+  }
+}
+
+void DefaultSpell_ReduceWC(object enemy, int damage, mixed dam_type)
+{
+  object ob;
+  if((ob=enemy->QueryProp(P_WEAPON)) && ob->QueryProp(P_QUALITY_DECAY))
+  {
+    ob->TakeFlaw(random(wc_reduce));
+    tell_object(enemy, ob->Name(WER,1)+" nimmt Schaden.\n");
+  }
+}
+
+void DefaultSpell_ReduceAC(object enemy, int damage, mixed dam_type)
+{
+  object ob;
+  object *armours;
+
+  armours = enemy->QueryArmours() - enemy->QueryArmours(AT_MISC);
+
+  if( sizeof(armours))
+  {
+    if( (ob=armours[random(sizeof(armours))])->QueryProp(P_AC) && 
+        ob->QueryProp(P_QUALITY_DECAY))
+    {
+      ob->TakeFlaw(random(ac_reduce));
+      tell_object(enemy, ob->Name(WER,1)+(ob->IsPlural()?" nehmen":" nimmt")+
+          " Schaden.\n");
+    }
+  }
+}
+
+void DefaultSpell_Slow(object enemy, int damage, mixed dam_type)
+{
+  if (!enemy->QueryProp(P_DISABLE_ATTACK))
+    enemy->SetProp(P_DISABLE_ATTACK, slow);
+}
+
+void DefaultSpell_AntiMagic(object enemy, int damage, mixed dam_type)
+{
+  if (!enemy->QueryProp(P_DISABLE_SPELLS))
+    enemy->SetProp(P_DISABLE_SPELLS, antimagic);
+}
+
+void DefaultSpell_DrainMana(object enemy, int damage, mixed dam_type)
+{
+  enemy->AddSp(-1 - random(drain_mana));
+}
+
+void DefaultSpell_MassFear(object enemy, int damage, mixed dam_type)
+{
+  object *enemies;
+  int i;
+  mixed dir;
+  
+  enemies = PresentEnemies(); 
+  if( enemies && sizeof(enemies) )
+  {
+    for( i=sizeof(enemies)-1;i>=0;i--)
+    {
+      enemies[i]->Defend(random(mass_fear_damage), dam_type, 
+        ([SP_SHOW_DAMAGE:1,SP_NAME:"mass_fear"]), this_object() );
+      if( enemies[i] && present(enemies[i], environment()))
+      {
+        dir = enemies[i]->QueryProp(P_WIMPY_DIRECTION);
+        enemies[i]->SetProp(P_WIMPY_DIRECTION, 0);
+        enemies[i]->SetProp(P_WIMPY, enemies[i]->QueryProp(P_HP)+1);
+        enemies[i]->CheckWimpyAndFlee();
+        enemies[i]->SetProp(P_WIMPY_DIRECTION, dir);
+        if( enemies[i]->id("NOWIMPY") )
+          enemies[i]->SetProp(P_WIMPY, 0);
+      }
+    }
+  }
+}
+
+void DefaultSpell_MassDamage(object enemy, int damage, mixed dam_type)
+{
+  object *enemies;
+  int i;
+  
+  enemies = PresentEnemies(); 
+  if( enemies && sizeof(enemies) )
+  {
+    for( i=sizeof(enemies)-1;i>=0;i--)
+      enemies[i]->Defend(random(mass_damage), dam_type, 
+        ([SP_SHOW_DAMAGE:1,SP_NAME:"mass_damage"]), this_object() );
+  }
+}
+
+void DefaultSpell_MassBlind(object enemy, int damage, mixed dam_type)
+{
+  object *enemies;
+  int i;
+  
+  enemies = PresentEnemies(); 
+  if( enemies && sizeof(enemies) )
+  {
+    for( i=sizeof(enemies)-1;i>=0;i--)
+    {
+      if( !enemies[i]->QueryProp(P_BLIND) )
+        enemies[i]->SetProp(P_BLIND, mass_blind );
+      enemies[i]->Defend(random(mass_blind_damage), dam_type, 
+        ([SP_SHOW_DAMAGE:1,SP_NAME:"mass_blind"]), this_object() );
+    }
+  }
+}
+
+void DefaultSpell_MassDeaf(object enemy, int damage, mixed dam_type)
+{
+  object *enemies;
+  int i;
+  
+  enemies = PresentEnemies(); 
+  if( enemies && sizeof(enemies) )
+  {
+    for( i=sizeof(enemies)-1;i>=0;i--)
+    {
+      if( !enemies[i]->QueryProp(P_DEAF) )
+        enemies[i]->SetProp(P_DEAF, mass_deaf );
+      enemies[i]->Defend(random(mass_deaf_damage), dam_type, 
+        ([SP_SHOW_DAMAGE:1,SP_NAME:"mass_deaf"]), this_object() );
+    }
+  }
+}
+
+void DefaultSpell_MassPoison(object enemy, int damage, mixed dam_type)
+{
+  object *enemies;
+  int i;
+  
+  enemies = PresentEnemies(); 
+  if( enemies && sizeof(enemies) )
+  {
+    for( i=sizeof(enemies)-1;i>=0;i--)
+    {
+      enemies[i]->AddPoison( mass_poison );
+      enemies[i]->Defend(random(mass_poison_damage), dam_type, 
+        ([SP_SHOW_DAMAGE:1,SP_NAME:"mass_poison"]), this_object() );
+    }
+  }
+}
+
+

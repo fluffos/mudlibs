@@ -1,0 +1,1118 @@
+// ARCOMAGIE - spielidee aus M&M7
+//             zugehoerige karten aus M&M7 weitere Karten aus M&M8
+// 25.03.00 Archon: - erstellt 
+/*
+ Rev 1.17 18.01.2003 Archon: anpassungen an sl
+*/
+
+#include "../spiel.h"
+inherit "std/thing";
+#include <properties.h>
+#include <wizlevels.h>
+#include <defines.h>
+#include <moving.h>
+
+#define KARTENSTAPEL ({ 3, 3, 3, 3, 3 })
+
+private mixed* spieler = ({ ({0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,""}), ({0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,""}) });
+private object sp1 = 0;
+private object sp2 = 0;
+private int rundenzahl;
+private int zuganzahl;
+private int zielturm;
+private int zielr;
+private int resplus;
+private int startturm;
+private int startmauer;
+private int startsteine;
+private int startjuwelen;
+private int startmonster;
+private int spiel_art;
+private int zug = 0; //wer ist dran 0 keiner (kein spiel) - Speiler 1|Spieler 2
+private int karteabwerfen; //karte wird abgeworfen
+private int noch_ein_zug; //nicht noetig - wenn karte abwerfen -> automatisch neuer zug
+                  //sonst wird beim ausspielen der karte kein neuer zug angefangen ...
+private string k1, k2, k3;
+private mixed karten_stapel = ({ ({}), ({}) });
+
+void spielende();
+void zug_ausfuehren(int karte);
+int gewonnen_test();
+void raus(object pl);
+object LiefereSpieler(int welchen);
+void call_nachricht_npc_zug(object wer,int karteabwerfen);
+void call_nachricht_npc_ende(int wie,object wer);
+void benachrichtige_npc_ende(int w);
+void benachrichtige_npc_zug(object wer,int w);
+int cmd_spielhilfe(string str);
+
+private void k_save(string help);
+private void berechne_karten_stapel(int anz, int hand);
+private void neue_karte(int welche);
+
+void tell_own(string text);
+
+void create()
+{
+  if (!is_clone(ME)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein Arcospiel");
+  SetProp(P_LONG, "Ein Arcospiel. Vor Dir liegen zwei grosse, gut gemischte "
+                  "Haufen von Spielkarten auf dem Tisch. Wenn Du noch einen "
+                  "Gegner findest, kannst Du ja ein Spiel wagen. Mehr Infos "
+                  "zum Spiel erfaehrst Du mit \"spielhilfe\".");
+  SetProp(P_NAME, "Arcospiel");
+  SetProp(P_PLURAL, "");
+  AddId(({"spiel","arcospiel","karten"}));
+  SetProp(P_GENDER, NEUTER);
+  SetProp(P_NOGET, "Du kannst doch nicht einfach das Spiel klauen.\n");
+
+  AddCmd(({"spielhilfe"}), #'cmd_spielhilfe);  
+  AddCmd(({"spielinfo"}),"cmd_spielinfo");
+  AddCmd(({"spieler"}),"cmd_spielerinfo");
+  AddCmd(({"spielerexakt"}),"cmd_spielinfo3");
+  AddCmd(({"mitspielen","beitreten"}),"cmd_mitspielen");
+  AddCmd(({"spiel","spiele"}),"cmd_lege");
+  AddCmd(({"wirf","werf","werfe"}),"cmd_abwerfen");
+  AddCmd(({"spielstart"}),"cmd_spielstart");
+  AddCmd(({"spielausstieg","aufgeben","aufgabe"}), "cmd_spielausstieg");
+  AddCmd(({"zeig","zeige"}),"cmd_liste");
+  AddCmd(({"zeig","zeige"}),"cmd_zeigen");
+  AddCmd(({"anzeige"}),"cmd_anzeige");
+  AddCmd(({"schubse"}),"cmd_schubse");
+}
+
+private void k_save(string help)
+{
+  k1 = k2;
+  k2 = k3;
+  k3 = help;
+}
+
+int cmd_zeigen(string str)
+{
+  if (!S_STANDARD->check_cmd(str,
+       "letzte|letzen",
+       "Was willst Du zeigen?"))
+    return 0;
+
+  if (!zug)
+  {
+    write("Aber es spielt doch gar keiner.\n");
+    return 1;
+  }
+  write("Hier nochmal die letzten 3 gespielten Karten:\n");
+  if (!k1)
+  {
+    if (!k2 && !k3)
+      write("Es wurde noch keine Karte gespielt.\n");
+    else
+      write("Oh! Noch sind nicht 3 Zuege gemacht worden.\n");
+  }
+  write("\n");
+  if (k1) write(k1);
+  if (k2) write(k2);
+  if (k3) write(k3);
+
+  return 1;
+}
+
+int nicht_raus(object wer)
+{
+  string sn;
+  if (wer == sp1 || wer == sp2)
+  {
+    sn = wer->name(WER, NAME_AUTO|NAME_CAP);
+    if (zug) spielende();
+    if (zug)
+    {
+      tell_room(environment(ME), sn + " will einfach das Spiel verlassen!\n", ({wer}));
+      tell_object(wer, "Du kannst doch nicht einfach das Spiel verlassen!\n");
+      return 0;
+    }
+    else
+    {
+      raus(wer);
+      return 1;
+    }
+  }
+}
+
+void eintragen(int was) //0 patt, 1 gewonnen 1, 2 gewonnen 2, 3 gewonnen 1 durch aufgabe, 4 gewonnen 2 durch aufgabe
+{
+  int ep;
+  int ep1,ep2;
+  float zug;
+  object xpt;
+  ep1=0; ep2=0;
+  ep=100+random(500)+spiel_art*100;
+  if (zuganzahl<10) ep/=2;
+  if (zuganzahl>100) zug=1.0; else zug=to_float(zuganzahl)/100.0;
+  switch(was)
+  {
+    case 0: 
+      if (objectp(spieler[0][0]) && interactive(spieler[0][0])) ep1=750;
+      if (objectp(spieler[1][0]) && interactive(spieler[1][0])) ep2=750;
+    break; //patt
+    case 1: 
+      if (objectp(spieler[0][0]) && interactive(spieler[0][0])) ep1=ep;
+      if (objectp(spieler[1][0]) && interactive(spieler[1][0])) ep2=to_int(zug*to_float(ep)/2.0*to_float(spieler[1][ARCO_TURM])/to_float(zielturm));
+    break; //spieler 1 gewonnen
+    case 2: 
+      if (objectp(spieler[0][0]) && interactive(spieler[0][0])) ep1=to_int(zug*to_float(ep)/2.0*to_float(spieler[0][ARCO_TURM])/to_float(zielturm));
+      if (objectp(spieler[1][0]) && interactive(spieler[1][0])) ep2=ep;
+    break; //spieler 2 gewonnen
+  }
+//TODO frage ob ep-vergeben?
+ep1=0;
+ep2=0;
+  if (ep1>0) 
+  {
+    spieler[0][0]->AddExp(ep1);
+    write_file(LOG "epvergabe.log",spieler[0][0]->name(WER,1)+" hat "+ep1+" XPs bekommen.\n");
+  }
+  if (ep2>0)
+  {
+    spieler[1][0]->AddExp(ep2);
+    write_file(LOG "epvergabe.log",spieler[1][0]->name(WER,1)+" hat "+ep2+" XPs bekommen.\n");
+  }
+  ARCO_TOP->eintragen(was, spiel_art, spieler[0][ARCO_NAME], spieler[1][ARCO_NAME]);
+  benachrichtige_npc_ende(was);
+}
+
+int cmd_liste(string str)
+{
+  int welche;
+
+  if (!S_STANDARD->check_cmd(str,
+       "liste",
+       "Syntax Zeige Liste X"))
+    return 0;
+
+  if (!str || sscanf(lower_case(str), "liste %d", welche) != 1 ||
+      welche < 1 || welche > 5)
+    return write("Die Syntax ist zeige liste X. Wenn X fuer 1, 2, 3, 4 oder 5 steht.\n5 ist eine Gesamtuebersicht.\n"),1;
+
+  PL->More(ARCO_TOP->liste(welche-1));
+
+  return 1;
+}
+
+int cmd_spielhilfe(string in)
+{
+  string str;
+  str =
+    "\nSPIELHILFE\n----------\n\n"
+    "Dies ist ein Arco-Spiel. Es koennen nur 2 Spieler spielen. Jeder Spieler "
+    "zieht seine Karten von einem eigenen Stapel. Die Siegbedingungen sind je "
+    "nach Spiel unterschiedlich [siehe Spiele].\n"
+    "Doch es gilt immer: Bau Deinen Turm auf, zerstoere den des Gegners oder "
+    "sammle eine bestimmte Menge von Ressourcen/Vorraeten, bevor es der Gegner "
+    "tut.\n\n"
+    "Aufbau der Spielinfo:\n---------------------\n\n"
+    "*****************************************************************************\n"
+    "* Dein Name        Zug bei Dir|Gegner (Wer ist dran?)           Name Gegner *\n"
+    "*                         Siegbedingungen                                   *\n"
+    "* Steine   +Steinbruch/Anzahl Vorrat an Steinen  |Balkendiagramm++   selbes *\n"
+    "* Juwelen  +Magie     /Anzahl Vorrat an Juwelen  |Balkendiagramm++   fuer   *\n"
+    "* Monster  +Zoo       /Anzahl Vorrat an Monstern |Balkendiagramm++   Gegner *\n"
+    "* Turm                 Hoehe des Turms           |Balkendiagramm++          *\n"
+    "* Mauer                Hoehe der Mauer           |Balkendiagramm++          *\n"
+    "*                                                                           *\n"
+    "*---------------------------------------------------------------------------*\n"
+    "*     Liste der Karten (von 1 bis 6 durchnummeriert)                        *\n"
+    "*****************************************************************************\n\n"
+    "Die Zahlen hinter dem + geben an, wieviele Einheiten einer Ressource Du pro "
+    "Runde gutgeschrieben bekommst. Auch wenn Du mehr als einen Zug pro Runde "
+    "machen darfst, erhaeltst Du nur einmal die entsprechenden Ressourcen. Die "
+    "Anzahl der Vorraete gibt an, wieviele Rohstoffe Dir fuer Deinen aktuellen "
+    "Zug zur Verfuegung stehen. Die Balkendiagramme zeigen Dir, wie weit Du "
+    "(oder Dein Gegner) noch vom Ziel entfernt bist (ist). "
+    "(Die Mauer hat keine Relevanz fuer den Sieg, kann aber Deinen Turm schuetzen.)\n\n"
+    "Karten:\n-------\n\n"
+    "Du benoetigst fuer jede Karte eine bestimmte Anzahl an Ressourcen, um sie "
+    "auszuspielen. Die Art der Ressource und ihre benoetigte Menge stehen gleich "
+    "hinter der Kartennummer. Die Kosten werden automatisch von Deinen Vorraeten "
+    "abgezogen. Die Beschreibung hinter den Kosten gibt an, was die Karte "
+    "bewirkt.\n\n"
+    "Spiele:\n-------\n\n"
+    "Mit \"spielstart x\" wird ein neues Spiel begonnen. Folgende Spiele gibt es.\n"
+    "Fuer alle Spiele gilt: Hat ein Spieler einen Turm von 0, hat er verloren.\n\n"
+    "Spiel- |    Startbedingungen    |         Ziel\n"
+    "nummer | Turm Mauer Resourcen-  | Turm o. eine Resource\n"
+    "       |            generatoren |         auf\n"
+    "-------------------------------------------------------\n"
+    "  1    |  15    5      +2       |  30      100\n"
+    "-------------------------------------------------------\n"
+    "  2    |  20    5      +2       |  50      150\n"
+    "-------------------------------------------------------\n"
+    "  3    |  30   15      +4       | 100      300\n"
+    "-------------------------------------------------------\n"
+    "  4    |  20   10      +1       | 150      400\n"
+    "-------------------------------------------------------\n\n";
+    "  5    |  alles frei waehlbar   | alles frei waehlbar\n"
+    "-------------------------------------------------------\n\n";
+  str +=
+    "Befehle im Spiel:\n-----------------\n\n"
+    "spielhilfe:         Du erhaeltst diese Anzeige\n\n"
+    "mitspielen/         Du trittst dem Spiel bei, sofern nicht schon 2\n"
+    "beitreten:          Spieler mitspielen.\n\n"
+    "spielstart x:       Du startest ein neues Spiel, sofern 2 Spieler\n"
+    "                    mitspielen.\n"
+    "                    Bei 'spielstart 5' kann man eigenen Werte festlegen.\n\n"
+    "spielstart x ohne:  Du startest ein neues Spiel, sofern 2 Spieler\n"
+    "turm|ressourcen     mitspielen.\n"
+    "                    Doch wird dieses Spiel ohne Ressourcen|Turm gespielt.\n\n"
+    "spielausstieg/      Du verlaesst das Spiel. Sofern es schon gestartet\n"
+    "aufgeben/aufgabe:   wurde, verlierst Du es.\n\n"
+    "spiele karte x:     Du spielst die Karte x (1->6) - alle Aktionen werden\n"
+    "                    ausgefuehrt.\n\n"
+    "wirf karte x ab:    Du wirfst die Karte x (1->6) ab - dies kann im Spiel\n"
+    "                    verlangt werden, oder jedesmal dann, wenn Du keine\n"
+    "                    Karte mangels Ressourcen spielen kannst bzw.\n"
+    "                    keine spielen willst.\n\n"
+    "spielinfo:          Zeigt Dir Deine Spielinformationen.\n"
+    "                    Wenn Du nicht mitspielst, bekommst Du die allg.\n"
+    "                    Infos des aktuellen Spiels.\n\n"
+    "zeige letzte karten:Zeigt nochmals die letzten 3 gespielten Karten.\n\n"
+    "zeige liste X:      Zeigt eine Topliste.\n"
+    "                    Es werden erst Spieler mit >10 Spielen angezeigt.\n\n"
+    "spieler <name>:     Zeigt Dir Informationen ueber einen bestimmten Spieler.\n\n"
+    "anzeige:            Schaltet zwischen alter/neuer Spielinfoanzeige hin und her.\n\n\n"
+    "Ergaenzende Informationen:\n"
+    "Dieses Spiel beruht auf einem Kartenspiel, welches in Might&Magic 7 sowie 8 umgesetzt "
+    "wurde. Dort koennt ihr das Spiel auch einmal mit Grafik bewundern. Das hier vorliegende "
+    "Spiel umfasst die Kartenvarianz von M&M8. Leider konnte ich (Archon) nicht "
+    "herausfinden, wie oft die jeweiligen Karten in einem Kartenstapel vorhanden sind, "
+    "so dass hier alle Karten gleichoft vorhanden sind.\n\n"
+    "Das Spiel wurde von Archon programmiert (Maerz 2000, archon@wunderland).\n";
+  PL->More(break_string(str));
+
+  return 1;
+}
+
+int spielinfo(string str)
+{
+  spielende();
+  if (!zug)
+    return notify_fail("Das Spiel hat doch noch gar nicht angefangen.\n"),0;
+
+  if (sp1 == PL && interactive(sp1))
+    ARCO_ANZEIGE->zeige(spieler[0], spieler[1], zug, zielturm, zielr, zuganzahl);
+  else if (sp2 == PL && interactive(sp2))
+    ARCO_ANZEIGE->zeige(spieler[1], spieler[0], (zug % 2) + 1, zielturm, zielr, zuganzahl);
+  else
+    ARCO_ANZEIGE->zeige2(spieler[0], spieler[1], zug, zielturm, zielr, zuganzahl, PL);
+
+  return 1;
+}
+
+int cmd_spielinfo3(string str)
+{
+  string sn;
+
+  if (!IS_WIZARD(PL)) return 0;
+  if (!zug)
+    return notify_fail("Das Spiel hat doch noch gar nicht angefangen.\n"),0;
+
+  if (!str)
+  {
+    write("Von welchem Spieler willst Du denn die Informationen sehen?\n");
+    return 1;
+  }
+
+  str = lower_case(str);
+  sn = sp1->QueryProp(P_NPC) ? sp1->name(WER, NAME_DEF|NAME_CAP) : capitalize(getuid(sp1));
+  sn = lower_case(sn);
+  if (sn==str)
+  {
+    ARCO_ANZEIGE->zeige3(spieler[0], spieler[1], zug, zielturm, zielr, PL, zuganzahl);
+    return 1;
+  }
+
+  sn = sp2->QueryProp(P_NPC) ? sp2->name(WER, NAME_DEF|NAME_CAP) : capitalize(getuid(sp2));
+  sn = lower_case(sn);
+  if (sn==str)
+  {
+    ARCO_ANZEIGE->zeige3(spieler[1], spieler[0], zug, zielturm, zielr, PL, zuganzahl);
+    return 1;
+  }
+
+  write(break_string("Aber " + CAP(str) + " spielt doch gar nicht mit!"));
+  return 1;
+}
+
+void spielende()
+{
+  if (zug)
+  {
+    if (!sp1 || !sp2)
+    {
+      zug = 0; /*ende gemacht? destructet ect ...*/
+    }
+    else if (!interactive(sp1) && query_once_interactive(sp1)) 
+    { 
+      tell_room(environment(), spieler[0][ARCO_NAME] + " ist dem Spiel entschwunden.\n");
+      zug=0;
+      eintragen(4);
+    }
+    else if (!interactive(sp2) && query_once_interactive(sp2)) 
+    { 
+      tell_room(environment(), spieler[1][ARCO_NAME] + " ist dem Spiel entschwunden.\n"); 
+      zug=0;
+      eintragen(3);
+    }
+    else if (!present(sp1,environment(ME))) 
+    { 
+      tell_room(environment(), "Ups - "+spieler[0][ARCO_NAME] + " ist ja gar nicht mehr hier.\n"); 
+      zug=0;
+      eintragen(4);
+    }
+    else if (!present(sp2,environment(ME))) 
+    { 
+      tell_room(environment(), "Ups - "+spieler[1][ARCO_NAME] + " ist ja gar nicht mehr hier.\n"); 
+      zug=0;
+      eintragen(3);
+    }
+    if (!zug)
+    {
+      karteabwerfen = 0;
+      sp1 = 0; sp2 = 0;
+    }
+  }
+}
+
+private void berechne_karten_stapel(int anz, int hand)
+{
+  int s, *arr, t, x,i,j;
+  s = KARTENSTAPEL[spiel_art-1];
+
+    karten_stapel = ({ ({}), ({}) });
+  for (i = s; i--;)
+  {
+    arr = ({});
+    for (j = anz; j--;)
+      arr += ({ j });
+    t = sizeof(arr);
+    while (t) { karten_stapel[0] += ({ x = arr[random(t--)] }); arr -= ({ x }); }
+    arr = ({});
+    for (j = anz; j--;)
+      arr += ({ j });
+    t = sizeof(arr);
+    while (t) { karten_stapel[1] += ({ x = arr[random(t--)] }); arr -= ({ x }); }
+  }
+
+  if (hand)  // karten abziehen, die die spieler auf der hand halten
+  {
+    s = 6;
+    while (s--)
+    {
+      karten_stapel[0] -= ({ spieler[0][ARCO_KARTE1+s] });
+      karten_stapel[1] -= ({ spieler[1][ARCO_KARTE1+s] });
+    }
+  }
+}
+
+void startwerte(int welche,int ohne)
+{
+  int a;
+  string sn;
+  a = ARCO_KARTEN->liefere_anzahl();
+
+  zuganzahl = 0;
+  rundenzahl = 0;
+  spiel_art = welche;
+  startsteine=10;
+  startjuwelen=10;
+  startmonster=10;
+  switch (welche)
+  {
+    case 1: zielturm =  30; zielr = 100; resplus = 2; startmauer =  5; startturm = 15; startsteine=5; startjuwelen=5; startmonster=5; break;
+    case 2: zielturm =  50; zielr = 150; resplus = 2; startmauer =  5; startturm = 20; break;
+    case 3: zielturm = 100; zielr = 300; resplus = 4; startmauer = 15; startturm = 30; break;
+    case 4: zielturm = 150; zielr = 400; resplus = 1; startmauer = 10; startturm = 20; break;
+  }
+
+  switch(ohne)
+  {
+    case 1: zielr=10000; break;
+    case 2: zielturm=10000; break;
+  }
+
+  berechne_karten_stapel(a, 0);
+  sn = sp1->QueryProp(P_NPC) ? sp1->name(WER, NAME_DEF|NAME_CAP) : capitalize(getuid(sp1));
+  spieler[0] = ({ sp1, startturm, startmauer, resplus, resplus, resplus, startsteine, startjuwelen, startmonster, 0, 0, 0, 0, 0, 0, sn });
+  zug = 1;
+  neue_karte(0); neue_karte(1); neue_karte(2);
+  neue_karte(3); neue_karte(4); neue_karte(5);
+  sn = sp2->QueryProp(P_NPC) ? sp2->name(WER, NAME_DEF|NAME_CAP) : capitalize(getuid(sp2));
+  spieler[1] = ({ sp2, startturm, startmauer, resplus, resplus, resplus, startsteine, startjuwelen, startmonster, 0, 0, 0, 0, 0, 0, sn });
+  zug = 2;
+  neue_karte(0); neue_karte(1); neue_karte(2);
+  neue_karte(3); neue_karte(4); neue_karte(5);
+}
+
+int cmd_mitspielen(string str)
+{
+  string sn;
+
+  spielende();
+
+  if (zug) 
+    return write("Aber es spielen doch schon zwei Spieler.\n"), 1;
+
+  if (sp1 && sp2)
+    return write("Leider haben sich schon 2 Spieler eingetragen.\n"), 1;
+
+  if (PL==sp1)
+    return write("Du spielst doch schon mit.\n"), 1;
+
+  sn = PL->QueryProp(P_NPC) ? PL->name(WER, NAME_DEF|NAME_CAP) : capitalize(getuid(PL));
+  if (PL->QueryProp(P_NPC) && !PL->id("\nkonsta"))
+    return write("Du darfst hier nicht spielen.\n"), 1;
+
+  if (file_name(environment(ME))==(ROOM "tisch1") ||
+     file_name(environment(ME))==(ROOM "tisch2"))
+  {
+    write("Du trittst dem Spiel bei und machst es Dir im Sessel gemuetlich.\n");
+    tell_room(environment(ME), break_string(sn + " tritt dem Spiel bei und macht es sich in einem Sessel gemuetlich."), ({ PL }));
+  }
+  else
+  {
+    write("Du trittst dem Spiel bei.\n");
+    tell_room(environment(ME), sn + " tritt dem Spiel bei.\n", ({ PL }));
+  }
+
+  if (!sp1)
+    sp1 = PL;
+  else
+    sp2 = PL;
+
+  return 1;
+}
+
+int mitspielen_npc(object wer)
+{
+  spielende();
+  if (!environment() || zug || sp1 && sp2 || wer == sp1 || wer == sp2) 
+    return 0;
+
+  if (!sp1)
+    sp1 = wer;
+  else
+    sp2 = wer;
+
+  return 1;
+}
+
+// gum
+int liefere_zuganzahl() { return zuganzahl; }
+
+void zug_start()
+{
+  int sp;
+  sp = zug-1;
+
+  ++zuganzahl; //erster spieler wieder dran
+  if (!sp) ++rundenzahl;
+  karteabwerfen = 0;
+  spieler[sp][ARCO_STEINE] += spieler[sp][ARCO_STEINBRUCH];
+  spieler[sp][ARCO_JUWELEN] += spieler[sp][ARCO_MAGIE];
+  spieler[sp][ARCO_MONSTER] += spieler[sp][ARCO_ZOO];
+  if (interactive(spieler[0][0]))
+    ARCO_ANZEIGE->zeige(spieler[0], spieler[1], zug==1 ? 1 : 2, zielturm, zielr, zuganzahl);
+  if (interactive(spieler[1][0]))
+    ARCO_ANZEIGE->zeige(spieler[1], spieler[0], zug==1 ? 2 : 1, zielturm, zielr, zuganzahl);
+  tell_object(spieler[zug-1][ARCO_PLAYER], "Du bist jetzt dran.\n");
+  tell_object(spieler[(zug % 2)][ARCO_PLAYER], spieler[zug-1][ARCO_PLAYER]->name(WER, NAME_AUTO|NAME_CAP) + " ist jetzt dran.\n");
+  benachrichtige_npc_zug(spieler[zug-1][ARCO_PLAYER], karteabwerfen);
+}
+
+private void neue_karte(int welche)
+{
+  int anzahl;
+  if (!sizeof(karten_stapel[0]))
+  {
+    anzahl = ARCO_KARTEN->liefere_anzahl();
+    tell_room(environment(this_object()),
+      "Die Kartenstapel sind aufgebraucht und werden neu gemischt.\n");
+    berechne_karten_stapel(anzahl, 1);
+  }
+  spieler[zug-1][ARCO_KARTE1+welche] = karten_stapel[zug-1][0];
+  karten_stapel[zug-1] = karten_stapel[zug-1][1..];
+}
+
+int cmd_spielstart(string str)
+{
+  int welches;
+  string wie,tmp;
+  int ohne;
+  if (!sp1 || !sp2)
+    return write("Dafuer muessen schon 2 Spieler mitspielen.\n"), 1;
+
+  if (zug)
+    write("Aber das Spiel hat doch schon angefangen.\n"), 1;
+  if (!str || sscanf(str,"%d",welches)!=1 || welches < 1 || welches > 5)
+    return notify_fail("Die Syntax ist 'spielstart X'. X steht dabei fuer 1, 2, 3, 4 oder 5.\n"),0;
+
+  if (welches==5)
+  {
+    if (sscanf(str,"%d %d %d %d %d %d",welches,startturm,startmauer,resplus,zielturm,zielr)!=6)
+      return notify_fail("Die Syntax fuer das Spiel 5 ist\nspielstart 5 <turmstart> <mauerstart> <ressourcen> <zielturm> <zielressourcen>\n"),0;
+    if (startturm<10)
+    {
+      tell_room(environment(ME),"Der Startturm muß mindestens 10 hoch sein - Automatisch gesetzt.\n");
+      startturm=10;
+    }    
+    if (startmauer<0)
+    {
+      tell_room(environment(ME),"Hm soll das ein Graben sein?\nStartmauer muß mindestens 0 sein - Automatisch gesetzt.\n");
+      startmauer=0;
+    }    
+    if (resplus<1)
+    {
+      tell_room(environment(ME),"Aber ein wenig Ressourcen sollen wohl doch pro Runde dazu kommen.\nRessourcenplus muß mindestens 1 sein - Automatisch gesetzt.\n");
+      resplus=1;
+    }    
+    if (zielturm<startturm+10)
+    {
+      tell_room(environment(ME),"Also dafuer lohnt es sich ja gar nicht zu starten\nZielturm muss mindestens +10 vom Startturm sein - Automatisch gesetzt.\n");
+      zielturm=startturm+10;
+    }
+    if (zielr<50)
+    {
+      tell_room(environment(ME),"Also dafuer lohnt es sich ja gar nicht zu starten\nZielressourcen muessen mindestens 50 sein - Automatisch gesetzt.\n");
+      zielr=50;
+    }
+    if (startturm>50)
+    {
+      tell_room(environment(ME),"Wolkenkratzer schon zum Start?\nDer Startturm darf maximal 50 hoch sein - Automatisch gesetzt.\n");
+      startturm=50;
+    }    
+    if (startmauer>50)
+    {
+      tell_room(environment(ME),"Habt wohl Angst?\nStartmauer darf maximal 50 sein - Automatisch gesetzt.\n");
+      startmauer=50;
+    }    
+    if (resplus>5)
+    {
+      tell_room(environment(ME),"Wollt wohl reich werden?\nRessourcenplus darf maximal 5 sein - Automatisch gesetzt.\n");
+      resplus=5;
+    }    
+    if (zielturm>300 && zielr>500)
+    {
+      tell_room(environment(ME),"Das Spiel soll doch irgendwann noch zu Ende gehen, oder?\nZielturm darf maximal 300 ODER Zielressourcen duerfen maximal 500 sein - Automatisch gesetzt.\n");
+      zielturm=300;
+      zielr=500;
+    }
+    if (zielturm>10000)
+    {
+      tell_room(environment(ME),"Absolutes Max fuer Turm ist 10.000 - Automatisch gesetzt.\n");
+      zielturm=10000;
+    }
+    if (zielr>10000)
+    {
+      tell_room(environment(ME),"Absolutes Max fuer Ressourcen ist 10.000 - Automatisch gesetzt.\n");
+      zielr=10000;
+    }    
+  }
+
+  ohne=0;
+  if (sscanf(str,"%s ohne %s",tmp,wie)==2)
+  {
+    if (lower_case(wie)=="ressourcen") { ohne=1; }
+    else if (lower_case(wie)=="turm") { ohne=2; }
+    else { write("Tippfehler liegt vor - ohne Turm oder Ressourcen?\n"); return 1; }
+  }
+
+  if (PL == sp1 || PL == sp2)
+  {
+    tell_room(environment(ME), "Ein neues Spiel wird gestartet.\n");
+    if (welches==5) tell_room(environment(ME),"ACHTUNG - Spiel wird nicht gewertet!\n");
+    switch(ohne)
+    {
+      case 1: tell_room(environment(ME),"Es wird ohne erreichen von Zielressourcen gespielt. (auf 10.000 gesetzt).\n"); break;
+      case 2: tell_room(environment(ME),"Es wird ohne erreichen von einem Zielturm gespielt. (auf 10.000 gesetzt).\n"); break;
+    }
+    startwerte(welches,ohne);
+    zug = 1;
+    karteabwerfen = 0;
+    zug_start();
+    return 1;
+  }
+
+  write("Du bist doch gar kein Spieler. Das kannst Du nicht.\n");
+  return 1;
+}
+
+void raus(object pl)
+{
+  string sn;
+
+  if (!objectp(pl)) return;
+  sn = PL->QueryProp(P_NPC) ? PL->name(WER, NAME_DEF|NAME_CAP) : capitalize(getuid(PL));
+  if (pl == sp1 || pl == sp2)
+  {
+    tell_room(environment(), sn + " verlaesst das Spiel.\n",({pl}));
+    tell_object(pl, "Du verlaesst das Spiel.\n");
+    if (zug)
+    {
+      tell_room(environment(), sn + " hat das Spiel aufgegeben und damit verloren.\n",({pl}));
+      tell_object(pl, "Du hast das Spiel damit verloren.\n");
+      eintragen(pl == sp1 ? 4 : 3);
+      call_out("raus", 1, pl == sp1 ? sp2 : sp1);
+    }
+    zug = 0;
+    karteabwerfen = 0;
+    sp1 = 0; sp2 = 0;
+    return;
+  }
+  tell_object(pl, "Aber Du spielst doch gar nicht.\n");
+}
+
+varargs int verlasse_spiel_npc(object pl, int force)
+{
+  if (!force && zug) return 0;
+  if (sp1 == pl || sp2 == pl)
+  {
+    zug = 0;
+    karteabwerfen = 0;
+    sp1 = 0; sp2 = 0;
+    return 1;
+  }
+
+  return 0;
+}
+
+int verlasse_spiel_npc_force(object pl)
+{
+  return verlasse_spiel_npc(pl, 1);
+}
+
+int cmd_spielausstieg(string str)
+{
+  raus(PL);
+  return 1;
+}
+
+int cmd_lege(string str)
+{
+  int karte;
+
+  if (!S_STANDARD->check_cmd(str,
+       "karte",
+       "Willst Du eine Karte spielen?"))
+    return 0;
+
+  if (!stringp(str)) return 0;
+  str = lower_case(str);
+  spielende();
+  if (!zug) 
+    return write("Aber es wird doch gar nicht gespielt!\n"), 1;
+
+  if (PL != sp1 && PL != sp2)
+    return write("Aber Du spielst doch gar nicht mit.\n"), 1;
+
+  if (PL == sp1 && zug != 1 || PL == sp2 && zug != 2)
+    return write("Du bist doch gar nicht dran.\n"), 1;
+
+  if (karteabwerfen)
+    return write("Du musst doch aber eine Karte abwerfen. Syntax: werfe karte X ab.\n"), 1;
+
+  if (sscanf(str, "karte %d", karte) != 1)
+    return write("Du Syntax ist SPIELE KARTE X. Wenn X fuer 1 bis 6 steht.\n"), 1;
+
+  if (karte < 1 || karte > 6)
+    return write("Du musst eine Karte zwischen 1 und 6 waehlen.\n"), 1;
+
+  --karte;
+  if (!(ARCO_KARTEN->kann_ausspielen(karte, spieler[zug-1])))
+    return write("Du kannst diese Karte nicht spielen. Du hast nicht genug Resourcen.\n"), 1;
+
+  tell_object(spieler[zug-1][ARCO_PLAYER], "Du spielst '" + ARCO_KARTEN->liefere_karte(spieler[zug-1][ARCO_KARTE1+karte])[0] + "':\n"+
+    ARCO_KARTEN->liefere_beschreibung(karte, spieler[zug-1], spieler[zug-1][ARCO_PLAYER], 0, BS_STDLEN) + "\n");
+  tell_object(spieler[zug % 2][ARCO_PLAYER], spieler[zug-1][ARCO_PLAYER]->name(WER, NAME_AUTO|NAME_CAP) + " spielt '"+
+    ARCO_KARTEN->liefere_karte(spieler[zug-1][ARCO_KARTE1+karte])[0] + "':\n"+
+    ARCO_KARTEN->liefere_beschreibung(karte, spieler[zug-1], spieler[zug % 2][ARCO_PLAYER], 0, BS_STDLEN) + "\n");
+  tell_own(spieler[zug-1][ARCO_PLAYER]->name(WER, NAME_AUTO|NAME_CAP) + " spielt '"+
+    ARCO_KARTEN->liefere_karte(spieler[zug-1][ARCO_KARTE1+karte])[0] + "':\n"+
+    ARCO_KARTEN->liefere_beschreibung2(karte, spieler[zug-1], BS_STDLEN) + "\n");
+  k_save(spieler[zug-1][ARCO_NAME] + " hat gespielt '"+
+    ARCO_KARTEN->liefere_karte(spieler[zug-1][ARCO_KARTE1+karte])[0] + "':\n"+
+    ARCO_KARTEN->liefere_beschreibung2(karte, spieler[zug-1], BS_STDLEN) + "\n");
+  zug_ausfuehren(karte);
+
+  return 1;
+}
+
+int cmd_abwerfen(string str)
+{
+  int karte;
+  if (!str) return 0;
+  if (!S_STANDARD->check_cmd(str,
+       "karte",
+       "Was willst Du abwerfen?"))
+    return 0;
+
+  str = lower_case(str);
+  spielende();
+  if (!zug) 
+    return write("Aber es wird doch gar nicht gespielt.\n"), 1;
+ 
+  if (PL != sp1 && PL != sp2)
+    write("Aber Du spielst doch gar nicht mit.\n"), 1;
+
+  if (PL == sp1 && zug != 1 || PL == sp2 && zug != 2)
+    write("Du bist doch gar nicht dran.\n"), 1;
+
+  if (sscanf(str, "karte %d", karte) != 1)
+    return write("Die Syntax ist WERFE KARTE X AB. Wenn X fuer 1 bis 6 steht.\n"), 1;
+
+  if (karte < 1 || karte > 6)
+    return write("Du musst eine Karte zwischen 1 und 6 waehlen.\n"), 1;
+
+  --karte;
+  if (!ARCO_KARTEN->kann_abwerfen(karte, spieler[zug-1]))
+    return write("Diese Karte darfst Du nicht abwerfen.\n"), 1;
+
+  tell_object(spieler[zug-1][ARCO_PLAYER], "Du wirfst '"+
+    ARCO_KARTEN->liefere_karte(spieler[zug-1][ARCO_KARTE1+karte])[0] + "' ab:\n"+
+    ARCO_KARTEN->liefere_beschreibung(karte, spieler[zug-1], spieler[zug-1][ARCO_PLAYER], 0, BS_STDLEN) + "\n");
+  tell_object(spieler[zug % 2][ARCO_PLAYER], spieler[zug-1][ARCO_PLAYER]->name(WER, NAME_AUTO|NAME_CAP) + " wirft '"+
+    ARCO_KARTEN->liefere_karte(spieler[zug-1][ARCO_KARTE1+karte])[0] + "' ab:\n"+
+    ARCO_KARTEN->liefere_beschreibung(karte, spieler[zug-1], spieler[zug % 2][ARCO_PLAYER], 0, BS_STDLEN) + "\n");
+  tell_own(spieler[zug-1][ARCO_PLAYER]->name(WER, NAME_AUTO|NAME_CAP) + " wirft '"+
+    ARCO_KARTEN->liefere_karte(spieler[zug-1][ARCO_KARTE1+karte])[0] + "' ab:\n"+
+    ARCO_KARTEN->liefere_beschreibung2(karte, spieler[zug-1], BS_STDLEN) + "\n");
+  k_save(spieler[zug-1][ARCO_NAME] + " hat '"+
+    ARCO_KARTEN->liefere_karte(spieler[zug-1][ARCO_KARTE1+karte])[0] + "' abgeworfen:\n"+
+    ARCO_KARTEN->liefere_beschreibung2(karte, spieler[zug-1], BS_STDLEN) + "\n");
+
+  neue_karte(karte);
+  if (gewonnen_test())
+  {
+    sp1 = 0; sp2 = 0;
+    zug = 0;
+    return 1;
+  }
+
+  if (karteabwerfen)
+  {
+    ++zuganzahl;
+    karteabwerfen = 0; //kein neuer zug - einfach weiter machen
+    if (interactive(spieler[zug-1][0]))
+      ARCO_ANZEIGE->zeige(spieler[zug-1], spieler[zug % 2], zug, zielturm, zielr, zuganzahl);
+//    if (interactive(spieler[1][0]))
+//      ARCO_ANZEIGE->zeige(spieler[1], spieler[0], (zug % 2) + 1, zielturm, zielr, zuganzahl);
+    tell_object(spieler[zug-1][ARCO_PLAYER], "Du kannst noch einen Zug spielen.\n");
+    tell_object(spieler[zug % 2][ARCO_PLAYER], spieler[zug-1][ARCO_PLAYER]->name(WER, NAME_AUTO|NAME_CAP) + " darf noch einen Zug spielen.\n");
+    benachrichtige_npc_zug(spieler[zug-1][ARCO_PLAYER], karteabwerfen);
+  }
+  else
+  {
+    zug = (zug % 2) + 1;
+    zug_start();
+  }
+  return 1;
+}
+
+void zug_ausfuehren(int karte)
+{
+  ARCO_KARTEN->aktion_ausfuehren(karte, spieler[zug-1], spieler[zug % 2]);
+  if (gewonnen_test())
+  {
+    sp1 = 0;
+    sp2 = 0;
+    zug = 0;
+    return;
+  }
+  karteabwerfen = ARCO_KARTEN->karte_abwerfen(karte, spieler[zug-1]);
+  noch_ein_zug = ARCO_KARTEN->neuer_zug(karte, spieler[zug-1]);
+  neue_karte(karte);
+  if (gewonnen_test())
+  {
+    sp1 = 0;
+    sp2 = 0;
+    zug = 0;
+    return;
+  }
+  if (karteabwerfen || noch_ein_zug) 
+  {
+    ++zuganzahl;
+    if (interactive(spieler[zug-1][0]))
+      ARCO_ANZEIGE->zeige(spieler[zug-1], spieler[zug % 2], zug, zielturm, zielr, zuganzahl);
+// nur aktiven spieler anzeigen
+//    if (interactive(spieler[1][0]))
+//      ARCO_ANZEIGE->zeige(spieler[1], spieler[0], zug, zielturm, zielr, zuganzahl);
+    if (karteabwerfen)
+    {
+      tell_object(spieler[zug-1][ARCO_PLAYER], "Du musst jetzt eine Karte abwerfen.\n");
+      tell_object(spieler[zug % 2][ARCO_PLAYER], spieler[zug-1][ARCO_PLAYER]->name(WER, NAME_AUTO|NAME_CAP) + " muss jetzt eine Karte abwerfen.\n");
+      benachrichtige_npc_zug(spieler[zug-1][ARCO_PLAYER], karteabwerfen);
+    }
+    else
+    {
+      tell_object(spieler[zug-1][ARCO_PLAYER], "Du kannst noch einen Zug spielen.\n");
+      tell_object(spieler[zug % 2][ARCO_PLAYER], spieler[zug-1][ARCO_PLAYER]->name(WER, NAME_AUTO|NAME_CAP) + " darf noch einen Zug spielen.\n");
+      benachrichtige_npc_zug(spieler[zug-1][ARCO_PLAYER], karteabwerfen);
+    }
+    return;
+  }
+
+  zug = (zug % 2) + 1;
+  zug_start();
+}
+
+int gewonnen_test()
+{
+  int g1,g2;
+  g1 = 0;
+  g2 = 0;
+
+  if (spieler[0][ARCO_TURM] >= zielturm) g1 = 1;
+  if (spieler[0][ARCO_STEINE] >= zielr) g1 = 1;
+  if (spieler[0][ARCO_JUWELEN] >= zielr) g1 = 1;
+  if (spieler[0][ARCO_MONSTER] >= zielr) g1 = 1;
+  if (spieler[0][ARCO_TURM] == 0) g2 = 1;
+  if (spieler[1][ARCO_TURM] >= zielturm) g2 = 1;
+  if (spieler[1][ARCO_STEINE] >= zielr) g2 = 1;
+  if (spieler[1][ARCO_JUWELEN] >= zielr) g2 = 1;
+  if (spieler[1][ARCO_MONSTER] >= zielr) g2 = 1;
+  if (spieler[1][ARCO_TURM] == 0) g1 = 1;
+  if (g1 && g2)
+  {
+    tell_room(environment(ME), "Das Spiel endet mit einem Patt.\n");
+    eintragen(0);
+    return 1;
+  }
+  if (g1)
+  {
+    tell_object(spieler[0][ARCO_PLAYER], "Du hast das Spiel gewonnen.\n");
+    tell_room(environment(ME), spieler[0][ARCO_PLAYER]->name(WER, NAME_AUTO|NAME_CAP)+
+      " hat das Spiel gewonnen.\n", ({spieler[0][ARCO_PLAYER]}));
+    eintragen(1);
+    return 1;
+  }
+  if (g2)
+  {
+    tell_object(spieler[1][ARCO_PLAYER], "Du hast das Spiel gewonnen.\n");
+    tell_room(environment(ME), spieler[1][ARCO_PLAYER]->name(WER, NAME_AUTO|NAME_CAP)+
+      " hat das Spiel gewonnen.\n", ({spieler[1][ARCO_PLAYER]}));
+    eintragen(2);
+    return 1;
+  }
+
+  return 0;
+}
+
+object LiefereSpieler(int welchen)
+{
+  if (welchen == 1) return sp1;
+  return sp2;
+}
+
+void benachrichtige_npc_ende(int wie)
+{
+  object wer;
+  if (sp1 && sp1->id("\nkonsta")) 
+  { 
+    wer = sp1;
+    switch (wie)
+    {
+      case 0: wie = 2; break; //patt
+      case 1: wie = 0; break; //gewonnen sp1
+      case 2: wie = 1; break; //gewonnen sp2
+    }
+  }
+  else if (sp2 && sp2->id("\nkonsta")) 
+  { 
+    wer = sp2; 
+    switch (wie)
+    {
+      case 0: wie = 2; break;
+      case 1: wie = 1; break;
+      case 2: wie = 0; break;
+      case 3: wie = 4; break;
+      case 4: wie = 3; break;
+    }
+  }
+  if (wer)
+    call_out("call_nachricht_npc_ende", 1, wie, wer);
+}
+
+void call_nachricht_npc_ende(int wie, object wer)
+{
+  wer->spiel_ende(wie);
+}
+
+int is_npc_dran(object npc)
+{
+  return (spieler[zug-1][ARCO_PLAYER] == npc);
+}
+
+int cmd_schubse(string str)
+{
+  object ob;
+  if (!S_STANDARD->check_cmd(str,
+       "konsta",
+       "Wen willst Du schubsen?"))
+    return 0;
+
+  ob=0;
+  if (!zug)
+  {
+    write("Das Spiel laeuft doch gar nicht.\n");
+    return 1;
+  }
+  if (find_call_out("call_nachricht_npc_zug")!=-1)
+  {
+    write("Konsta denkt gerade nach.\n");
+    return 1;
+  }
+  if (sp1 && sp1->id("\nkonsta")) ob=sp1;
+  if (sp2 && sp2->id("\nkonsta")) ob=sp2;
+  if (!objectp(ob) || !ob->id("\nkonsta")) 
+  {
+    write("Konsta spielt gar nicht mit.");
+    return 1;
+  }
+  if (!is_npc_dran(ob))
+  {
+    write("Konsta ist gar nicht dran.");
+    return 1;
+  }
+  write("Du schubst Konsta an.\n");
+  say(PL->name(WER,1)+" schubst Konsta an.\n");
+  while (remove_call_out("call_nachricht_npc_zug")!=-1) ;
+  benachrichtige_npc_zug(ob,karteabwerfen);
+  return 1;
+}
+
+void benachrichtige_npc_zug(object wer, int karteabwerfen)
+{
+  if (wer && wer->id("\nkonsta") && is_npc_dran(wer))
+  {
+    call_out("call_nachricht_npc_zug", 1, wer, karteabwerfen);
+  }
+}
+
+void call_nachricht_npc_zug(object wer, int karteabwerfen)
+{
+  wer->spiele_zug(karteabwerfen);
+}
+
+int spielt_npc_mit(object npc)
+{
+  if (!npc) return 0;
+  if (sp1 == npc || sp2 == npc) return 1;
+  return 0;
+}
+
+//liefere npc alle relevanten daten
+mixed* liefere_npc_spieler_daten()
+{
+  return spieler;
+}
+
+int karte_abwerfen_npc(int karte, object wer)
+{
+  if (!is_npc_dran(wer)) return 0;
+  if (!ARCO_KARTEN->kann_abwerfen(karte, spieler[zug-1]))
+    return 0;  	
+
+  tell_object(spieler[zug % 2][ARCO_PLAYER], spieler[zug-1][ARCO_PLAYER]->name(WER, NAME_AUTO|NAME_CAP) + " wirft '"+
+    ARCO_KARTEN->liefere_karte(spieler[zug-1][ARCO_KARTE1+karte])[0] + "' ab:\n"+
+    ARCO_KARTEN->liefere_beschreibung(karte, spieler[zug-1], spieler[zug % 2][ARCO_PLAYER], 0, BS_STDLEN) + "\n");
+  tell_own(spieler[zug-1][ARCO_PLAYER]->name(WER, NAME_AUTO|NAME_CAP) + " wirft '"+
+    ARCO_KARTEN->liefere_karte(spieler[zug-1][ARCO_KARTE1+karte])[0] + "' ab:\n"+
+    ARCO_KARTEN->liefere_beschreibung2(karte, spieler[zug-1], BS_STDLEN) + "\n");
+  k_save(spieler[zug-1][ARCO_NAME] + " hat '"+
+    ARCO_KARTEN->liefere_karte(spieler[zug-1][ARCO_KARTE1+karte])[0] + "' abgeworfen:\n"+
+    ARCO_KARTEN->liefere_beschreibung2(karte, spieler[zug-1], BS_STDLEN) + "\n");
+  neue_karte(karte);
+  if (gewonnen_test())
+  {
+    sp1 = 0;
+    sp2 = 0;
+    zug = 0;
+    return 1;
+  }
+  if (karteabwerfen)
+  {
+    ++zuganzahl;
+    karteabwerfen = 0; //kein neuer zug - einfach weiter machen
+// npc braucht keine ansicht, und spieler ist ja nochmal nicht dran
+//    if (interactive(spieler[0][0]))
+//      ARCO_ANZEIGE->zeige(spieler[0], spieler[1], (zug % 2) + 1, zielturm, zielr, zuganzahl);
+//    if (interactive(spieler[1][0]))
+//      ARCO_ANZEIGE->zeige(spieler[1], spieler[0], (zug % 2) + 1, zielturm, zielr, zuganzahl);
+    tell_object(spieler[zug % 2][ARCO_PLAYER], spieler[zug-1][ARCO_PLAYER]->name(WER, NAME_AUTO|NAME_CAP) + " darf noch einen Zug spielen.\n");
+    benachrichtige_npc_zug(spieler[zug-1][ARCO_PLAYER], karteabwerfen);
+  }
+  else
+  {
+    zug = (zug % 2) + 1;
+    zug_start();
+  }
+
+  return 1;
+}
+
+int karte_spielen_npc(int karte, object wer)
+{
+  if (!is_npc_dran(wer)) return 0;
+  if (!(ARCO_KARTEN->kann_ausspielen(karte, spieler[zug-1])))
+    return 0;
+
+  tell_object(spieler[zug % 2][ARCO_PLAYER], spieler[zug-1][ARCO_PLAYER]->name(WER, NAME_AUTO|NAME_CAP) + " spielt '"+
+    ARCO_KARTEN->liefere_karte(spieler[zug-1][ARCO_KARTE1+karte])[0] + "':\n"+
+    ARCO_KARTEN->liefere_beschreibung(karte, spieler[zug-1], spieler[zug % 2][ARCO_PLAYER], 0, BS_STDLEN) + "\n");
+  tell_own(spieler[zug-1][ARCO_PLAYER]->name(WER, NAME_AUTO|NAME_CAP) + " spielt '"+
+    ARCO_KARTEN->liefere_karte(spieler[zug-1][ARCO_KARTE1+karte])[0] + "':\n"+
+    ARCO_KARTEN->liefere_beschreibung2(karte, spieler[zug-1], BS_STDLEN) + "\n");
+  k_save(spieler[zug-1][ARCO_NAME] + " hat gespielt '" +
+    ARCO_KARTEN->liefere_karte(spieler[zug-1][ARCO_KARTE1+karte])[0] + "':\n"+
+    ARCO_KARTEN->liefere_beschreibung2(karte, spieler[zug-1], BS_STDLEN) + "\n");
+  zug_ausfuehren(karte);
+
+  return 1;
+}
+
+int liefere_zielturm()
+{
+  return zielturm;
+}
+
+int liefere_zielr()
+{
+  return zielr;
+}
+
+int cmd_spielerinfo(string str)
+{
+  tell_object(PL,ARCO_TOP->einzeln(capitalize(str)));
+  return 1;
+}
+
+int cmd_anzeige(string str)
+{
+  if (PL->QueryProp(P_ARCO_ALTE_ANZEIGE))
+  {
+    write("Du erhaelst jetzt die neue Anzeige.\n");
+    PL->SetProp(P_ARCO_ALTE_ANZEIGE,0);
+    return 1;
+  }
+  PL->SetProp(P_ARCO_ALTE_ANZEIGE,1);
+  write("Du erhaelst jetzt die alte Anzeige.\n");
+  return 1;
+}
+
+void tell_own(string text)
+{
+  object *hoerer;
+  int i;
+  hoerer=filter_array(all_inventory(environment()), #'interactive);
+  hoerer-=({sp1,sp2});
+  map_objects(hoerer,"Message",text); //,"arco");
+}

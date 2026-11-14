@@ -1,0 +1,84 @@
+mixed prep_magielied(object caster, mapping sinfo)
+{
+    object target, song;
+
+    sinfo = prepare_song(caster, sinfo);
+    if(sinfo == 0) {
+      return 0;
+    }
+
+    target = FindVictim(sinfo[SI_SKILLARG], caster, 0);
+    if(objectp(target))
+    {
+      if(!living(target))
+      {
+        write(BS("Fuer dieses Ziel kannst Du dieses Lied nicht singen!"));
+        return 0;
+      }
+    }
+    else target = caster;
+
+    if(objectp(song=present(SONG_MAGIC_WARD, target))) {
+        if(TALENTMASTER->HasTalent(caster, TALENT_KANON)) {
+         if(!song->CanRecharge()) {
+            write(BS("Dieser Zauber kann noch nicht erneuert werden."));
+            return 0;
+         }
+        }else {
+            write(BS("Du wirst bereits von den Musen geschuetzt"));
+            return 0;
+        }
+    }
+    
+    if(!paySpellCost(caster, sinfo, 1)) return 0;
+ 
+    if(sinfo[SI_CAP_NAME] == "Angaras magische Wehr") play_song_text(SPELLSEQ("angaras_magische_wehr.seq"), caster);
+    else play_song_text(SPELLSEQ("spell_ward.seq"), caster);
+    return sinfo;
+}
+
+int magielied(object caster, mapping sinfo)
+{
+  object song, target;
+  int suc, abil;
+  float factor;
+  string bg;
+
+  /* Spellkosten :) */
+  if(!paySpellCost(caster, sinfo)) return 0;
+
+  // GELUNGEN?
+  if((suc=SpellSuccess(caster,sinfo))<=0)
+  {
+    // TODO negative effekte
+     return MISSERFOLG;
+  }
+
+  abil = sinfo[SI_SKILLABILITY];
+
+  target = FindVictim(sinfo[SI_SKILLARG], caster, 0);
+  if(!objectp(target)) target = caster;
+
+  if(objectp(song = present(SONG_MAGIC_WARD, target))) {
+    song->remove(1);
+  }
+
+  if(target->QueryProp(P_TMP_DEFEND_HOOK) != 0) {
+    write(BS(sprintf("%s wird bereits geschuetzt!", target->Name(WER, 1))));
+    return 0;
+  }
+
+  song = clone_object(OBJ("magic_ward"));
+  if(song->move(target, M_NOCHECK) != 1)
+  {
+    write(BS("Etwas behindert die Zauberwirkung!"));
+    song->remove(1);
+    return 0;
+  }
+
+  bg = call_other("/gilden/bardengilde/master/bardenmaster", "GetBardGroup", caster);
+
+  factor = ((float) CheckEquip(caster, "lorica der musen"))/100.0;
+  song->Setup(caster, target, bg, abil, suc, factor);
+  return ERFOLG;
+}

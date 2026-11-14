@@ -1,0 +1,164 @@
+/*
+  Eine Guerteltasche fuer allerlei Kleinkram
+
+  Prinzip vom Elsurionguertel
+*/
+
+#pragma strong_types;
+
+inherit "std/container";
+inherit "std/armour";
+inherit "std/armour/description";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <moving.h>
+#include "../def.h"
+
+create()
+{
+  if(!is_clone(TO)) return;
+
+  armour::create();
+  container::create();
+  description::create();
+  
+  SetProp(P_SHORT, "Eine Guerteltasche");
+  SetProp(P_LONG, 
+	  BS("Diese Guerteltasche ist fuer allerlei kleinen Krimskrams. "
+	     "Sie besteht aus Leder und hat einen kleinen Riemen zum "
+	     "Umschnallen."));
+
+  SetProp(P_NAME, "Guerteltasche");
+  SetProp(P_INFO, 
+	  BS("In die Guerteltasche passt viel Kleinzeug rein, jedoch keine "
+	     "Waffen, oder Ruestungen."));
+
+  SetProp(P_GENDER, FEMALE);
+  AddId(({"tasche", "guerteltasche"}));
+  
+  SetProp(P_ARMOUR_TYPE, AT_MISC);
+  SetProp(P_AC, 0);
+  SetProp(P_MATERIAL, ([MAT_LEATHER:98,MAT_GOLD:2]));
+  SetProp(P_WEIGHT, 200);
+  SetProp(P_VALUE, 300);
+
+  SetProp(P_MAX_WEIGHT, 8000);
+  Set(P_WEIGHT_PERCENT, 25);
+
+  SetProp(P_NOBUY,1);
+
+  SetProp(P_WORN_TEXT, "umgeschnallt");
+
+  SetProp(P_WEAR_TEXT,
+	  ({"Du schnallst Dir die Guertentasche um.\n",
+	      " schnallt sich eine Guerteltasche um.\n"}));
+
+  SetProp(P_UNWEAR_TEXT,
+	  ({"Du schnallst Dir die Guertentasche wieder ab.\n",
+	      " schnallt eine Guerteltasche ab.\n"}));
+  
+  AddDetail(({"krimskrams","kleinzeug","zeug","zeugs"}),
+	    "Allerlei Krimskrams passt in die Guerteltasche");
+
+  AddDetail(({"riemen"}),
+	    "Mit dem Riemen kann man sich die Guerteltasche umschnallen.\n");
+
+  AddDetail(({"gold","schnalle","goldschnalle"}),
+	    "Am Riemen ist eine kleine goldene Schnalle angebracht.\n");
+
+  AddCmd(({"schnalle","schnall"}), "schnallenfkt");
+}
+
+nosave int schnallenfkt(string str)
+{
+  notify_fail(BS("Was willst Du Dir um- oder abschnallen?"));
+  if(!str) return 0;
+
+  if(str=="tasche um"||str=="guerteltasche um")
+    {
+      if(ME->QueryProp(P_WORN)==TP)
+	return notify_fail(BS("Aber Du hast doch die Guerteltasche bereits "+
+			      "umgeschnallt!?")), 0;
+
+      return ME->DoWear();
+    }
+
+  if(str=="tasche ab"||str=="guerteltasche ab")
+    {
+      if(ME->QueryProp(P_WORN)!=TP)
+	return notify_fail(BS("Aber Du hast doch die Guerteltasche bereits "+
+			      "umgeschnallt!?")), 0;
+
+      return ME->DoUnwear();
+    }
+
+  return 0;
+}
+
+varargs int PreventInsert(object ob) 
+{
+  if(ob->QueryProp(P_WC))
+    return write(BS(ob->Name()+" wuerde die Guerteltasche doch "
+		    "zerreissen!")), 1;
+
+  if(ob->QueryProp(P_AC) &&
+     member(({AT_ARMOUR, AT_HELMET, AT_CLOAK,AT_BOOT, AT_SHIELD, AT_TROUSERS, 
+		AT_BRACERS, AT_BELT}), ob->QueryProp(P_ARMOUR_TYPE) )!=-1)
+    return write(BS("Fuer "+ob->Name()+" ist die Guerteltasche nicht "
+		    "stark genug!")), 1;
+  
+  if(ob->QueryProp(P_SIZE) >= 50)
+    return write(BS(ob->Name(WER,1)+" ist doch viel zu gross fuer diesen "
+		    "Guertel.\n")), 1;
+  
+  return ::PreventInsert(ob); 
+}
+
+void init()
+{
+  container::init();
+  armour::init();
+}
+
+string long() 
+{
+  string descr, inv_descr;
+  
+  descr=process_string(armour::long());
+
+  if(!QueryProp(P_TRANSPARENT)) return descr;
+  
+  inv_descr=make_invlist(TP, all_inventory(TO), 0);
+  if(inv_descr!="")
+    descr+=capitalize(QueryPronoun()) + " enthaelt:\n" + inv_descr;
+
+  return descr;
+}
+
+string short()
+{
+  string s;
+
+  if (!(s=QueryProp(P_SHORT)) || QueryProp(P_INVIS)) return 0;
+
+  return s+(QueryProp(P_WORN) ?
+	    " ("+(QueryProp(P_WORN_TEXT) || "getragen")+").\n":".\n");
+}
+
+varargs int remove(int silent)
+{
+  DoUnwear(silent);
+
+  if (!QueryProp(P_WORN))
+    return container::remove(silent);
+}
+
+varargs move(mixed dest, int method)
+{
+  DoUnwear(method & M_SILENT);
+
+  if ((method & M_NOCHECK) || (!QueryProp(P_WORN)))
+    return ::move(dest, method);
+}

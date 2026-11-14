@@ -1,0 +1,171 @@
+// riesenkraft.c 
+// Das Object zum Riesenkraft-Spell 
+// 1998-08-10  Feyaria@SilberLand
+// 1998-09-29  Woody - angepasst
+
+#include <moredef.h>
+#include <defines.h> 
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <wizlevels.h>
+#include "../def.h"
+#include "../epic/berserkerstufe11.h"
+
+#define LOGRK LOG "Riesenkraft.log"
+
+inherit "std/thing";
+
+private static object owner;
+
+void create()
+{
+  if( !is_clone(TO) ) return;
+  ::create();
+
+  SetProp(P_SHORT, 0);
+  SetProp(P_LONG, 0); 
+  SetProp(P_NAME, "Riesenkraft");
+  AddId( ({"\nberserker_riesenkraft", "STR_BUFF"}) );
+
+  // SetProp(P_ARMOUR_TYPE, AT_MISC );
+  // SetProp(P_AC, 0);
+  SetProp(P_MATERIAL, MAT_MAGIC );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_VALUE, 0 );
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_INVIS, 1);
+  seteuid(getuid(this_object()));
+
+  AddCmd( ({"reiss", "reisse"}), "reissen");
+}
+
+
+varargs int move(mixed dest, int method)
+{
+  int res;
+  res = ::move(dest,method);
+  if (objectp(dest)) {
+    if ((dest->QueryProp(P_GUILD) != "berserker") && !IS_WIZARD(dest) && 
+        !( TP && TP->QueryProp(P_GUILD_LEVEL) > 10) )
+      call_out("remove",0);
+  }
+  if (res == 1) owner = dest;
+  return res;
+}
+
+void kraft(int dauer, int bonus, int hp, int level11, int max_hp)
+{
+  int malus;
+
+  if(!owner) 
+    return call_out("remove",0);
+  if(dauer > 333 + 111 * (level11 + 1)) 
+    dauer = 333 + 111 * (level11 + 1);
+  if( file_name(PO)!="/spellbooks/berserker_spells" )
+  {
+#ifdef DEBUG
+    write_file( LOGRK,
+        sprintf("%s: Illegal call from %O [owner:%O]\n",
+            dtime(time()), previous_object(), owner));
+#endif
+    call_out("remove",0);
+    return;
+  }
+
+  malus = -bonus / (3 + level11);
+#ifdef DEBUG
+  write_file( LOGRK, sprintf("%s: %O [%d] for %d seconds (%d hp)\n",
+      dtime(time()), owner, bonus, dauer, hp));
+#endif
+  SetProp(P_X_ATTR_MOD, ([A_STR: bonus]) );
+  if (hp && !present("HP_BUFF", owner))
+  {
+    SetProp(P_X_HEALTH_MOD, ([P_HP: hp]) );
+    AddId("HP_BUFF");
+  }
+  SetProp(P_X_MAX_HEALTH_MOD, ([P_HP: max_hp]) );
+  owner->UpdateAttributes();
+
+  call_out("ende", dauer, owner, dauer/3, malus);
+}
+
+void ende(object wer, int dauer, int malus)
+{
+  object ob;
+  if (!owner) return call_out("remove",0);
+  
+#ifdef DEBUG
+   write_file( LOGRK, sprintf("%s: %O [%d] for %d seconds\n",
+      dtime(time()), owner, malus, dauer));
+#endif
+  tell_object(owner, 
+    "Deine Riesenkraft verlaesst Dich - Du brichst erschoepft zusammen.\n");
+  SetProp(P_X_ATTR_MOD, ([A_STR: malus]) );
+  SetProp(P_X_HEALTH_MOD, ([P_HP: 0]) );
+  owner->UpdateAttributes();
+  if (ob = present("\nberserker_stirnband", owner))
+    ob->ForceReport();
+  if (BMASTER->GetMight(owner) & M_HEART)
+    dauer /= 10;
+  else
+    owner->AddHp(-random(30));
+  if (dauer > 30)
+    dauer = 30;
+  if (owner->QueryProp(P_GUILD_LEVEL) > 10)
+    dauer -= random(10);
+  if (dauer < 0)
+    dauer = 0;
+  call_out("ende2", dauer, wer);
+}
+
+void ende2(object wer)
+{
+  object ob;
+
+  if (!owner) {
+#ifdef DEBUG
+    write_file(LOGRK,sprintf("%s: Lost owner!\n",dtime(time())));
+#endif
+    call_out("remove",0);
+    return;
+  }
+  tell_object(owner, "Du erholst Dich von Deiner Erschoepfung.\n");
+  SetProp (P_X_ATTR_MOD, 0 );
+  owner->UpdateAttributes();
+  if(ob = present("\nberserker_stirnband", owner))
+    ob->ForceReport();
+  remove();
+}
+
+int reissen(string str)
+{
+  object ob;
+  
+  notify_fail("Was willst Du ausreissen?\n");
+  if( !str ) 
+    return 0;
+  if( str != "baeume aus" && str != "baum aus" ) 
+    return 0;
+  if( ENV(TP)->GetDetail("baum") ) {
+    if( present("\nberserker_baum", ENV(TP) ) )
+      write("Dieser Baum wurde schon ausgerissen!\n");
+    else 
+    {
+      write("Mit Deinen Riesenkraeften reisst Du einen Baum aus.\n");
+      say(CAP_TPN+" reisst mit Riesenkraeften einen Baum aus.\n");
+      ob = clone_object("/gilden/berserker/obj/baum");
+      ob->SetProp(P_SHORT,"Ein von "+TPN+" ausgerissener Baum");
+      ob->SetProp(P_LONG, ob->QueryProp(P_LONG)+"Der Baum wurde von "+
+          TPN+" ausgerissen.");
+      ob->move(ENV(TP), M_NOCHECK);
+    }
+  }
+  else
+    write("Leider findest Du hier keinen geeigneten Baum zum Ausreissen.\n");
+  return 1;
+}
+

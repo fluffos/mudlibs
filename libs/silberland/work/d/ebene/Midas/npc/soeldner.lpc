@@ -1,0 +1,155 @@
+/*
+** Soeldner, Midas  (w) Woody@SL
+** ---
+** 1996-03-04  1.0  Release
+** 1996-10-21  1.1  Bisschen Feintuning, mehr random, weniger P_BODY und Geld
+** 1996-11-08  1.2  Spell nicht mehr magic, show damage
+** 1998-07-05  1.3  midas.lib
+*/
+
+inherit "std/mnpc";
+// inherit "std/inpc/select";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <mnpc.h>
+#include <new_skills.h>
+// #include <inpc.h>
+
+#include "../midas.h"
+
+// init()
+// Wird aufgerufen, sobald sich zwei Objekte, von denen mindestens eines
+// ein Living ist, begegnen. this_player() (TP) ist in diesem Fall das
+// entsprechende Objekt, das uns begegnet - wir pruefen, ob es sich um
+// einen anderen Soeldner handelt, und wenn ja, kommt er in unsere
+// Defender-Liste. Es verteidigen sich somit alle Soeldner, die einander
+// begegnen (Alternative: per Master; aber irgendwie unlogisch... wenn
+// sich zwei Soeldner nie begegnen, koennen sie auch nicht Informationen
+// ueber ihre Feinde austauschen, oder? Handy werden sie ja doch keins
+// haben :)).
+//
+init()
+{
+  ::init();
+  if (TP && TP->id("Soeldner")) AddDefender(TP);
+}
+
+create()
+{
+  object ob;
+
+  if (!is_clone(this_object())) return;  // (return on BP)
+
+  ::create();
+  AddId ( ({"soeldner", "Soeldner"}) );
+  SetProp (P_GENDER, MALE);
+  SetProp (P_NAME, "Soeldner");
+  SetProp (P_SHORT, "Ein Soeldner");
+  SetProp (P_LONG, "Der Soeldner versieht eher unmotiviert seinen "
+    "Wachdienst. Er sieht Dich etwas verschlafen aber durchaus "
+    "kampfbereit aus seiner Uniform aus an.");
+  SetProp (P_ALIGN, 80+random(30));
+  create_default_npc(13+random(3));
+  // SetProp (P_LEVEL, 9);
+  // SetProp (P_MAX_HP, 180+random(40));
+  // SetProp (P_MAX_SP, 200);
+  // SetProp (P_XP, 200000);
+  // SetProp (P_BODY, 40);
+  SetProp (P_SIZE, 160+random(20));
+  SetProp (P_RACE, "Mensch");
+  SetProp (P_MAX_HANDS, 2);
+  SetProp (P_HANDS, ({" mit blossen Haenden", 60, DT_BLUDGEON}) );
+
+  // set_living_name("soeldner");
+  // (nur bei starken und v.a. unique Monstern sinnvoll)
+
+  // euid setzen, damit Ausruestung gecloned werden kann
+  SUID;
+
+  // Ausruestung
+  CLONEME ("/p/armour/armour/lederruestung");
+  CLONEME ("/p/armour/shield/kupferschild");
+  if( random(100) < 50 ) CLONEME("/p/armour/helm/lederhelm");
+  if( random(100) < 5 ) CLONEME("/p/armour/boots/lederstiefel");
+  if( random(100) < 5 ) CLONEME("/p/armour/gloves/lederhandschuhe");
+  command ("trage alles");
+  CLONEME ("/p/weapon/sword/saebel");
+  command ("zuecke saebel");
+  ob = CLONEOB ("/obj/money");
+  ob->SetProp(P_AMOUNT, 100+random(45)*10);
+  ob->move(ME);
+
+  SetProp(P_SPELLRATE,15);
+
+  AddSpell(1,120, 
+    "Der Soeldner rafft sich auf und schlaegt Dir ins Gesicht.\n",
+    "Der Soeldner schlaegt @WEM ins Gesicht.\n",
+    DT_BLUDGEON, ([SP_SHOW_DAMAGE:1]) );
+
+  SetAttackChats(6, ({
+    "Der Soeldner ruft verzweifelt nach Hilfe.\n",
+    "Der Soeldner verteidigt sich etwas unmotiviert.\n"}) );
+
+  SetProp (P_DIE_MSG, " stirbt etwas widerwillig.\n");
+  SetProp (P_DEFAULT_INFO,
+      "jammert: \"Wann ist endlich mein Dienst aus...\"\n");
+  AddInfo ("soeldner", "nickt.\n");
+  AddInfo ("kampfsoldat", "sagt: Der Kerl sollte mir lieber helfen!\n");
+
+  AddLibrary( NPC "midas.lib", 3 );
+
+  SetProp( P_REJECT, ({ REJECT_KEEP,
+    "Der Soeldner freut sich und bedankt sich artig.\n" }) );
+
+  ///// MOVING NPC PROPERTIES ----------------------------------------------
+
+  // Er rennt in allen Raeumen beginnend mit "/d/ebene/Midas/room/room" rum.
+  // also zum Beispiel NICHT am Wachweg (".../wachweg*.lpc")
+  SetProp (P_MNPC_AREA, ROOM "room");
+
+  // Bevor er sich das erste Mal bewegt, wartet er 10+rnd(20) heartbeats,
+  // bei jedem weiteren Mal 60 + random (120)
+  SetProp (P_MNPC_WAIT, ({ 10+random(20), 60, 120 }));
+
+  // sollte sich der arme Kerl mal verirren, wird er in einen
+  // bestimmten Default Room teleportiert (so dieser geladen ist...)
+  SetProp (P_MNPC_DEFAULTROOM, ROOM "room_a5");
+
+  // Schliesslich werden noch einige Eigenschaften gesetzt: Er soll sich
+  // fortbewegen (MOV_MOVES), das allerdings nur im Freien (MOV_OUTDOORS)
+  // die einzelnen MOV_* Konstanten einfach aufaddieren, siehe /sys/mnpc.h
+  SetProp (P_MNPC_FLAGS, MOV_OUTDOORS + MOV_MOVES);
+
+  ///// MOVING NPC PROPERTIES END ------------------------------------------
+
+}
+
+// InformDefend()
+// Wird aufgerufen, sobald ein Feind einen unserer Freunde (Defender)
+// angreift. Weil uns nix besseres einfaellt machen wir hier nix
+// vorerst mal anderes als den Gegner anzugreifen...
+//
+void InformDefend(object enemy)
+{
+  Kill(enemy);
+}
+
+// Ich will DOOFE Soeldner. Die sind viel zu faul, um nach dem
+// Tod eines Spielers alles aus der Leiche zu nehmen geschweige
+// denn sich um die beste Ruestung und Waffe zu kuemmern. Punkt.
+// (Aber *wenn* man das mal braucht: s.u., so geht das... Und:
+// nicht vergessen, die entsprechenden inpc Sachen zu inheriten)
+/*
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  command_me("nimm alles aus leiche");
+  command_me("ziehe alles aus");
+  command_me("trage_beste_ruestungen");
+  command_me("zuecke_beste_waffe");
+  command_me("trage alles");
+}
+*/
+

@@ -1,0 +1,96 @@
+
+/*
+** gb_sequencer.c
+** Sequencer fuer die Grottenbahn
+** ---
+** Mar 25, 1997  Woody
+*/
+
+#include <properties.h>
+#include <moving.h>
+#include <defines.h>
+#include <moredef.h>
+#include "../files.h"
+
+mapping allowed=([]);
+string prefix;
+string *seq;
+int cur;
+
+
+// Laedt das angegebene Programm (Sequenz) und fuehrt es sofort aus
+//
+void LoadProgram(string filename)
+{
+  while (remove_call_out("Step") != -1) /* continue */ ;
+  seq=explode(read_file(filename), "\n");
+  cur=0;
+  prefix="";
+  call_out("Step", 0);
+}
+
+// Macht einen Schritt im angegebenen Programm (bis pause/chain/ende)
+//
+void Step()
+{
+  string s,cmd,arg,k,d;
+
+  while (cur < sizeof(seq))
+  {
+    s=seq[cur++];
+    if (s[0]=='#') continue;
+    sscanf(s,"%s %s", cmd, arg);
+    if (!cmd) cmd=s;
+    // write(sprintf("cmd: %O, arg: %O\n",cmd,arg));
+
+    switch (cmd)
+    {
+      case "pause":
+        call_out("Step", to_int(arg));
+        return;
+      case "chain":
+        if (arg[0] != '/') arg=prefix+arg;
+        LoadProgram(arg);
+        return;
+      case "prefix":
+        prefix=arg;
+        break;
+      case "**":
+        while ((s=seq[cur++]) != "**" )
+          tell_room (ME, s+"\n");
+        break;
+      case "clone":
+        if (arg[0] != '/') arg=prefix+arg;
+        clone_object(arg)->move(ME, M_NOCHECK);
+        break;
+      case "clonetp":
+        if (arg[0] != '/') arg=prefix+arg;
+        clone_object(arg)->move(TP, M_NOCHECK);
+        break;
+      case "allow":
+        allowed += ([ arg:1 ]);
+        break;
+      case "deny":
+        allowed += ([ arg:0 ]);
+        break;
+      case "AddDetail":
+        sscanf(arg,"%s:%s",k,d);
+        ME->AddDetail (explode(k,","), break_string(d,78));
+        break;
+      case "RemoveDetail":
+        ME->RemoveDetail (explode(arg,","));
+        break;
+      case "Temp":
+        ME->SetProp (P_ENVIRONMENT, ([ENV_TEMPERATURE:to_int(arg)]));
+        break;
+      default:
+        tell_room (ME, "PARSE ERROR AT LINE #"+cur+" !!\n");
+    }
+  }
+}
+
+int QueryAllowed(string name)
+{
+  return member(allowed,name);
+}
+

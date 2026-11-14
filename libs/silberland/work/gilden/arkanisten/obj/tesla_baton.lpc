@@ -1,0 +1,155 @@
+
+#include "../waechter.h"
+
+inherit "std/armour";
+
+object owner;
+
+void create() 
+{
+  if( !is_clone(TO) ) return;
+  ::create();
+
+  SetProp(P_LONG,
+    "Der Blitzstab wird mit der Schildhand gefuehrt. Es handelt sich um einen Metallstab "
+    "der mit Draehten eng umwickelt wurde. Am unteren Ende befindet sich ein ederumwickelter "
+    "Griff, in dessen Knauf ein Bernstein eingelassen wurde. Um den Blitzstab zu aktivieren "
+    "wird der Bernstein mit Schafwolle gerieben, was statische Ladung erzeugt." );
+  SetProp(P_INFO, BS("Der Blitzstab ist ein leidlicher Schild, schockt aber dafuer deine Feinde.") );
+  SetProp(P_GENDER, MALE);
+  AddId( ({TESLA_BATON_ID, "blitzstab", "stab"}) );
+
+  SetProp(P_ARMOUR_TYPE, AT_SHIELD );
+  SetProp(P_MATERIAL, ([ MAT_IRON: 80, MAT_COPPER: 10, MAT_AMBER: 5, MAT_LEATHER: 5]) );
+  SetProp(P_WEIGHT, 1000);
+  SetProp(P_VALUE, 10000);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_QUALITY_DECAY, 200);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+
+  SetProp(P_WEAR_FUNC, TO );
+  SetProp(P_REMOVE_FUNC, TO );
+  SetProp(P_DEFEND_FUNC, TO );
+
+  SetProp(P_WEAR_RESTRICTIONS, ([P_GUILD: GUILD]) );
+
+  SetProp(P_WEAR_TEXT, ({"Du nimmst den Blitzstab in die Schildhand.\n", " nimmt einen Blitzstab in die Schildhand.\n"}));
+  SetProp(P_UNWEAR_TEXT, ({"Du steckst den Blitzstab in dein Bandolie.\n", " steckt einen Blitzstab in das Bandolier.\n"}));
+}
+
+public string _query_name() {
+    if(!objectp(owner)) return "Blitzstab";
+
+    return owner->Name(WESSEN)+" Blitzstab";
+}
+
+public string _query_short() {
+    if(!objectp(owner)) return "Ein Blitzstab";
+
+    return owner->Name(WESSEN)+" Blitzstab";
+}
+
+public void setup(object caster) {
+    owner = caster;
+}
+
+
+int WearFunc(object me) {
+    if(me != TO) return 0;
+    if(!ABILITY_SERVICE->get_ability_by_name(TESLA_BATON)->has_learned(TP)) {
+        tell_object(TP, BS("Du kannst mit so einem Ding doch gar nicht umgehen!"));
+        remove(1);
+        return 0;
+    }
+    
+    tell_object(owner, BS("Du reibst ein Stueck Wolle an dem Blitzstab und ein Summen zeigt dir, dass er jetzt aktiv ist."));
+    return 1;
+}
+
+int RemoveFunc(object me) {
+    call_out("remove", 0, 1);
+  return 1;
+}
+
+int DefendFunc (mixed dam_type, int spell, object enemy) {
+    object ab;
+    mapping sinfo;
+
+    ab = ABILITY_SERVICE->get_ability_by_name(TESLA_BATON);
+    if(objectp(ab) && ab->has_learned(owner)) {
+        sinfo = ([
+            SI_SKILLABILITY: owner->QuerySkillAbility(TESLA_BATON), 
+            SI_ABILITY_SILENT: 1,
+            SI_ABILITY_NOLEARN: random(5),
+            SI_SKILLARG: enemy,
+        ]);
+
+        ab->use(owner, sinfo);
+    }
+
+    return 0;
+}
+
+public int _query_ac() {
+    if(!objectp(owner)) return 0;
+    return owner->QuerySkillAbility(TESLA_BATON) / 2000;
+}
+
+public void activate_pulse_generator(object caster, mapping sinfo, int skillcheck) {
+    int duration, damage, tickSpeed;
+
+    if(!objectp(caster)) return;
+    if(caster != owner) return;
+
+    duration = sinfo[SI_SKILLABILITY] / 50 + skillcheck / 100;
+    damage = 100 + sinfo[SI_SKILLABILITY] / 100 + skillcheck / 200;
+    tickSpeed = 10 - sinfo[SI_SKILLABILITY] / 1000 - skillcheck / 200;
+    if(tickSpeed < 2) tickSpeed = 2;
+
+    pDebug(caster, sprintf("pulse_generator :: duration=%d, damage=%d, tickSpeed=%d\n", duration, damage, tickSpeed));
+
+    call_out("pulse_tick", 2 + random(tickSpeed), caster, damage, duration, tickSpeed);
+
+    return;
+}
+
+public void pulse_tick(object caster, int damage, int duration, int tickSpeed) {
+    object *enemies, enemy;
+    mapping sinfo;
+
+    if(!objectp(caster)) return;
+    if(!objectp(owner)) return;
+    if(caster != owner) return;
+    if(duration < 1) {
+        tell_object(caster, BS("Der Pulsgenerator entlaedt sich und der Blitzstab ist wieder normal."));
+        tell_room(ENV(caster), BS("Der Blitzstab von "+caster->Name(WER)+" entlaedt sich mit einem leisen Summen."), ({caster}));
+        return;
+    }
+
+    enemies = caster->PresentEnemies();
+    if(sizeof(enemies) < 1) {
+        call_out("pulse_tick", 4 + random(tickSpeed), caster, damage, duration, tickSpeed);
+        return;
+    }
+
+    tell_object(caster, BS("Der Blitzstab entlaedt sich mit einem lauten Knall und ein Blitz schiesst in alle Richtungen!"));
+    tell_room(ENV(caster), BS("Der Blitzstab von "+caster->Name(WER)+" entlaedt sich mit einem lauten Knall und ein Blitz schiesst in alle Richtungen!"), ({caster}));
+
+    if(sizeof(enemies) < 1) {
+        tell_room(ENV(caster), BS("Der Blitz geht ins Leere."), ({caster}));
+        call_out("pulse_tick", 4 + random(tickSpeed), caster, damage, duration, tickSpeed);
+        return;
+    }
+
+    foreach(enemies, enemy, {
+        if(objectp(enemy) && enemy != caster) enemy->Defend(damage, DT_ELECTRIC, ([SP_NAME: "Pulsgenerator", SP_SHOW_DAMAGE: 1]), caster);
+    });
+
+   call_out("pulse_tick", 4 + random(tickSpeed), caster, damage, duration, tickSpeed);
+    return;
+}
+
+public int query_pulse_active() {
+    return find_call_out("pulse_tick") != -1;
+}

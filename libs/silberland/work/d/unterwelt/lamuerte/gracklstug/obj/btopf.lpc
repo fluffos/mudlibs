@@ -1,0 +1,139 @@
+inherit "std/thing"; 
+#include <language.h>
+#include <properties.h>
+#include <combat.h>
+#include <moving.h>
+
+int fill_value=0;
+int expcnt=0;
+string *fillers;
+
+string fill_status();
+
+create()
+
+{ if(!is_clone(this_object())) return;
+  thing::create();
+  SetProp(P_SHORT,"@@fill_status@@");
+  SetProp(P_LONG, 
+   "Ein Blumentopf aus Gracklstug.");
+
+  SetProp(P_NODROP,1);
+  SetProp(P_VALUE,76);
+  SetProp(P_WEIGHT,200);
+  SetProp(P_GENDER, MALE);
+  SetProp(P_NAME,"Blumentopf");
+  
+  AddId( ({"\nSPRENGTOPF","topf","blumentopf"}));
+ 
+  seteuid(getuid());
+
+  AddCmd(({"steck","stecke"}),"do_fill");
+
+  fillers = ({ });
+}
+
+int do_register(string str, string what) {
+  object ob;
+  int x;
+  if(!ob=deep_present(what,this_player())){
+    write("Das hast du nicht dabei.\n");
+    return 1;
+  }
+  else if(member(fillers,str)==-1){
+    write("Du steckst "+ob->name(WEN,1)+" in den Blumentopf.\n");
+    if(fill_value < 6 ) fill_value++;
+    write(fill_status()+" erfreut nun dein Auge.\n");
+    if(fill_value==5) write("Du erzeugst einen Bombenblumentopf.\nMan kann ihn zuenden.\n");
+    fillers +=({ str });
+    ob->remove( 1 );
+    //for(x=0;x<sizeof(fillers);x++) write(fillers[x]+"\n");
+    return 1;
+  }
+  else{
+    write ("Du hast "+ob->name(WEN,1)+" bereits in den Blumentopf gesteckt.\n");
+    return 1;
+  }
+} 
+  
+do_fill(string str){
+  string what, where;
+
+  if(sscanf(str,"%s in %s",what,where)!=2)
+    return 0;
+
+  if(where != "topf" && where != "blumentopf")
+    return 0;
+
+  if(what=="zange" || what == "beisszange")
+    return do_register("\nBEISSZANGE",what);
+  
+  if(what=="zucker" || what == "staubzucker")
+    return do_register("\nSTAUBZUCKER",what);
+  
+  if(what=="salz" || what == "unkrautsalz")
+    return do_register("\nUNKRAUTSALZ",what);
+  
+  if(what=="faden" || what == "zuendfaden")
+    return do_register("\nZUENDFADEN",what);
+  
+  if(what=="pulver" || what == "zuendpulver")
+    return do_register("\nZUENDPULVER",what);
+
+  return 0;
+}
+
+int do_explode(){
+  object *people;
+  int i;
+  expcnt++;
+  if(expcnt<5) {
+    call_out("do_explode",2+random(4));
+  tell_room(environment(this_object()),
+      "Der Zuendfaden des Bombenblumentopfs wird kurzer!\n");
+  return 1;
+  }
+  tell_room(environment(this_object()),
+      "* B O O O O M * Der Bombenblumentopf explodiert.\n");
+
+  people=filter_array(all_inventory(environment(this_object())), #'interactive );
+
+ for(i=sizeof(people)-1;i>=0;i--)
+  { if (present(people[i]))
+    {tell_object(people[i],"Die Bombe explodiert! Du bist blind und taub!\n");
+     people[i]->SetProp(P_BLIND,1);
+     people[i]->SetProp(P_DEAF,1);
+
+    }
+   }
+  this_object()->remove( 1 ) ;
+}
+  
+do_ignite(string str){
+  notify_fail("Was willst Du zuenden?\n");
+
+  if(!str) return 0;
+
+  if (str=="topf" || str=="bombe" || str== "bombenblumentopf" || str =="blumentopf") {
+    write("Du zuendest den Bombenblumentopf an und wirfst ihn weg.\n");
+    tell_room(environment(this_player()),this_player()->QueryProp(P_NAME)+" zuendet den Bombenblumentopf an und wirft ihn weg.\n",({ this_player() }));
+    this_object()->move(environment(this_player()),M_NOCHECK);
+    SetProp(P_NOGET, "Nein die gezuendete Bombe nimmst Du nicht!\n");
+    call_out("do_explode",3);
+    return 1;
+  }
+    return 0;
+}
+
+string fill_status(){
+  if(!fill_value) return "Ein leerer Blumentopf";
+  if(fill_value==1) return "Ein leicht modifizierter Blumentopf";
+  if(fill_value==2) return "Ein ganz schoen modifizierter Blumentopf";
+  if(fill_value==3) return "Ein verdammt viel modifizierter Blumentopf";
+  if(fill_value==4) return "Ein Blumentopf der annaehrnd wie eine Bombe aussieht";
+  if(fill_value==5) {
+    AddId( ({"\nSPRENGTOPF","topf","blumentopf","bombe","bombenblumentopf"}));
+    AddCmd(({"zuend","zuende"}),"do_ignite");
+    return "Ein Bombenblumentopf";
+  }
+}

@@ -1,0 +1,193 @@
+inherit "std/thing";
+
+#include "../def.h"
+#include <properties.h>
+#include <language.h>
+
+#define LISTE ZONE "list/topwaffensterberliste.read"
+
+mapping liste;
+
+string _query_long();
+
+void create()
+{
+  if (!is_clone(TO))
+    return;
+  ::create();
+  SetProp(P_SHORT, "Ein Hackstock");
+  SetProp(P_KILL_NAME, "Ein Hieb auf einen Hackstock");
+  SetProp(P_WEIGHT, 7000);
+  SetProp(P_GENDER, MALE);
+  AddId(({"hackstock"}));
+  SetProp(P_NAME, "Hackstock");
+  SetProp(P_NOGET, "Der Hackstock passt hier am besten her.\n");
+  seteuid(getuid(this_object()));
+
+  AddCmd("schlag|schlage&scharte&in&hackstock",
+         "cmd_scharteschlagen",
+         "Willst Du eine SCHARTE in den Hackstock schlagen?|"
+         "Willst Du eine Scharte IN den Hackstock schlagen?|"
+         "Willst Du eine Scharte in den HACKSTOCK schlagen?");
+}
+
+string _query_long()
+{
+  string text;
+  text = "Der Hackstock hat eine seltsame Ausstrahlung. Er ist bedeckt "
+         "mit vielen kleinen und einigen grossen Scharten.\n";
+
+  if (!read_file(LISTE) || read_file(LISTE) == "")
+    text += "Bei genauerer Betrachtung erkennst Du noch keine besondere "
+            "Scharte. Du koenntest, mit der richtigen Waffe, vielleicht "
+            "eine Scharte in den Hackstock schlagen.";
+  else
+    text += "Du siehst Dir die Scharten genauer an:\n" + read_file(LISTE);
+  if (TP)
+    TP->More(text);
+  return "";
+}
+
+int match_item(string str, string *ids);
+
+int cmd_scharteschlagen()
+{
+  object weapon;
+  string id;
+  int timestamp;
+  int tode;
+  int lostxp;
+  int lostxp2;
+  int damage;
+  mixed ids;
+
+  string todesadj;
+  string additionaltext;
+
+  weapon = TP->QueryProp(P_WEAPON);
+
+  if (!weapon)
+  {
+    TP->Message(BS("Du hast doch gar keine Waffe gezueckt!"));
+    return -1;
+  }
+
+  // eigentlich gibts eine Funktion object->id("name"), kA was ich da falsch gemacht hab (Syntax error...)
+  // geht jetzt auch mit match_item (abgeschaut aus std/thing/description)
+  ids = weapon->QueryProp(P_IDS); 
+  if(!match_item("\nsterbewaffe",ids))
+  {
+    TP->Message(BS("Du hast nicht die richtige Waffe gezueckt."));
+    return -1;
+  }
+
+  else if(match_item("\nsfrare",ids) || match_item("\nsfunique",ids))
+  {
+    TP->Message(BS("Du holst weit aus und willst wild zuschlagen, doch im Schwung bremst "
+      "sich " + weapon->Name() + " wie von selbst ab und beruehrt schliesslich "
+      "kaum wahrnehmbar eine ganz bestimmte Scharte am Hackstock."));
+    ENV(TP)->Message(BS(
+                       TPN + " holt weit aus und beruehrt dann, immer langsamer werdend, "
+                       "mit " + weapon->Name(WEM) + " eine ganz bestimmte Scharte "
+                       "am Hackstock."),
+                   MSGFLAG_NO_TP);
+    return -1;
+  }
+
+  timestamp = time();
+  tode = to_int(weapon->query_tode(TPU));
+  lostxp = to_int(weapon->query_lostxp(TPU));
+  lostxp2 = to_int(weapon->query_lostxp2(TPU));
+
+  if (!tode)
+    tode = 0;
+  if (!lostxp)
+    lostxp = 0;
+  if (!lostxp2)
+    lostxp2 = 0;
+
+  // Hat noch keinen Zeitstempel? Dann setzen.
+  if (!weapon->QueryProp("sterbelist_timestamp"))
+    weapon->SetProp("sterbelist_timestamp", timestamp);
+
+  // Zeitstempel auslesen
+  timestamp = weapon->QueryProp("sterbelist_timestamp");
+
+  // Eindeutige Waffen-Player-Kombinations-ID
+  id = TPU + "_" + to_string(timestamp);
+
+  if (tode > 0)
+    liste = LMASTER->save_weapon_list(id, tode, lostxp, weapon->name(WEM, 2),
+                                      lostxp2);
+
+  switch (tode)
+  {
+  case 0:
+    todesadj = "nicht wahrnehmbare";
+    additionaltext = "";
+    break;
+  case 1..2:
+    todesadj = "kratzige";
+    additionaltext = "";
+    break;
+  case 3..6:
+    todesadj = "gruselige";
+    additionaltext = "";
+    break;
+  case 7..13:
+    todesadj = "duestere";
+    additionaltext = "Wucht";
+    break;
+  case 14..26:
+    todesadj = "furchteinfloessende";
+    additionaltext = "Wucht";
+    break;
+  case 27..50:
+    todesadj = "schockierende";
+    additionaltext = "Wucht des Einschlags";
+    break;
+  case 51..100:
+    todesadj = "schaurige";
+    additionaltext = "grosse Wucht des Einschlags";
+    break;
+  case 101..200:
+    todesadj = "wahnsinnige";
+    additionaltext = "gigantische Wucht des Einschlags";
+    break;
+  case 201..400:
+    todesadj = "toedliche";
+    additionaltext = "unfassbare Gewalt des Einschlags erzeugt "
+                     "eine Explosion und";
+  case 401..800:
+    todesadj = "TOEDLICHE";
+    additionaltext = "unfassbar zerstoererische Gewalt des Einschlags erzeugt "
+                     "eine gigantische Explosion und";
+  case 801..1600:
+    todesadj = "!TOEDLICHE!";
+    additionaltext = "unfassbar zerstoererische Gewalt des Einschlags erzeugt "
+                     "eine kolossale Explosion und";
+    break;
+  default:
+    todesadj = "!!TOEDLICHE!!";
+    additionaltext = "unbeschreibliche Gewalt des Einschlags erzeugt Risse im Raum-Zeit-Gefuege, "
+                     "ein Avatar von Wraz erscheint kurz um die Ordnung wiederherzustellen, die "
+                     "Druckwelle ";
+  }
+
+  TP->Message(BS(
+      "Du holst weit aus und schlaegst mit " + weapon->name(WEM, 2) +
+      " eine " + todesadj + " Scharte in den Hackstock." + (additionaltext == "" ? " Du verletzt Dich auch noch dabei." : " Die " + additionaltext + " schleudert Dich rueckwaerts zu Boden.")));
+
+  ENV(TP)->Message(BS(
+                       TPN + " holt weit aus und schlaegt mit " + weapon->name(WEM, 2) +
+                       " eine " + todesadj + " Scharte in den Hackstock." + (additionaltext == "" ? " " + capitalize(TP->QueryPronoun()) + " verletzt sich dabei." : " Die " + additionaltext + " schleudert " + TP->name(WEN) + " rueckwaerts zu Boden!")),
+                   MSGFLAG_NO_TP);
+
+  damage = tode < 5 ? random(20) : tode + random(tode);
+  if (TP->QueryProp(P_HP) - damage < 0)
+    TP->die();
+  else
+    TP->AddHp(tode < 5 ? -random(20) : -damage);
+
+  return 1;
+}

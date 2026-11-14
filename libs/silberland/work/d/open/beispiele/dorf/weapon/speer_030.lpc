@@ -1,0 +1,165 @@
+//=========================================================================
+//
+// File:    speer_030.c
+// Created by Feyaria@SL
+//
+// Project: testgebiet
+//
+// Ein Speer, welchen man einhaendig und zweihaendig zuecken kann. Fuer
+// beide Arten braucht man ungleich viel Staerke, fuer einhaendifzuecken
+// viel mehr. Dafuer kann man noch etwas anderes tragen, zB einen Schild.
+//
+// Eine einfache, programmtechnisch aber unschoene Loesung. Eine verbesserte
+// Version ist speer_031.
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit "std/weapon";
+
+void create()
+{
+  if(!is_clone(this_object())) return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Ein Speer");
+  SetProp(P_LONG,
+    "Ein langer Speer mit einer scharfen Spitze, Du kannst ihn mit einer "
+    "oder mit beiden Haenden fuehren, allerdings braucht man mehr Kraft, "
+    "um den Speer mit nur einer Hand effektiv im Kampf einzusetzen."
+  );
+  SetProp(P_GENDER, MALE);
+  SetProp(P_NAME, "Speer");
+  AddId( ({"speer"}) );
+
+//-------------------------------------------------------------------------
+// Auch in Waffen kann man Details einbauen, diese kann man aber erst
+// untersuchen, wenn man zuerst die Waffe untersucht hat.
+//-------------------------------------------------------------------------
+  AddDetail( ({"spitze", "stahl"}),
+      "Die Spitze dieses Speers wurde aus Stahl gefertigt.");
+
+  SetProp(P_VALUE, 200);
+  SetProp(P_WEIGHT, 1000);
+  SetProp(P_MATERIAL, ([ MAT_MISC_WOOD : 80, MAT_STEEL: 20 ]) );
+
+  SetProp(P_WEAPON_TYPE, WT_SPEAR);
+  SetProp(P_DAM_TYPE, DT_PIERCE);
+  SetProp(P_WC, 170);
+  SetProp(P_WC_FIX, 45);
+  SetProp(P_NR_HANDS, 2);
+
+//-------------------------------------------------------------------------
+// Text fuer "inv" -> "Ein Speer (mit beiden Haenden gezueckt)"
+//    Default waere "gezueckt"
+//-------------------------------------------------------------------------
+
+  SetProp(P_WIELDED_TEXT, "mit beiden Haenden gezueckt");
+
+//-------------------------------------------------------------------------
+// Text, der beim Zuecken ausgegeben wird. Den ersten Text sieht der
+// Spieler selber, den zweiten sehen alle anderen im Raum.
+//-------------------------------------------------------------------------
+
+  SetProp(P_WIELD_TEXT, ({ "Du zueckst den Speer mit beiden Haenden.\n",
+                          " zueckt einen Speer mit beiden Haenden.\n" }) );
+//-------------------------------------------------------------------------
+// Text fuers Wegstecken der Waffe.
+//-------------------------------------------------------------------------
+
+  SetProp(P_UNWIELD_TEXT, ({ "Du steckst den Speer zurueck.\n",
+                            " steckt den Speer zurueck.\n" }) );
+
+//-------------------------------------------------------------------------
+// Hier wird nun festgelegt, welche Bedingungen der Spieler efuellen muss,
+// um diese Waffe zuecken zu koennen. Zusaetzlich zu diesen Restriktionen
+// muss man fuer jede Waffe ein A_DEX von (P_WC/10)-5 haben, also in
+// unserem Fall sind das 12 Geschicklichkeit.
+// Aufpassen muss man auch, dass NPCs diese Anfoderungen auch erfuellen
+// muessen, wenn sie diese Waffe zuecken wollen. Die Attribute eines
+// NPCs entsprechen standardmaessig seiner Stufe, also muss ein NPC
+// mindestens Stufe 12 sein, um diesen Speer zuecken zu koennen.
+// siehe auch /std/restriction_checker.c
+//-------------------------------------------------------------------------
+
+  SetProp(P_WIELD_RESTRICTIONS, ([A_STR:10]) );
+
+//-------------------------------------------------------------------------
+// Wir brauchen ein Kommando, damit man von einhaendiger auf zweihaendige
+// Fuehrung wechseln kann.
+//-------------------------------------------------------------------------
+  AddCmd( ({"fuehre", "fuehr"}), "cmd_fuehren");
+}
+
+
+int cmd_fuehren(string str)
+{
+  string was;
+
+  notify_fail("Was willst Du fuehren?\n");
+  if( !str ) return 0;
+  if( sscanf(str, "%s mit beiden haenden", was) == 1 && id(was) )
+  {
+    if( QueryProp(P_NR_HANDS) == 2 )
+    {
+      write("Aber Du fuehrst den Speer doch schon mit beiden Haenden!\n");
+      return -1;
+    }
+    // Das Aendern von P_NR_HANDS und P_WIELD_RESTRICTIONS hat keine
+    // Auswirkung, wenn die Waffe schon gezueckt ist, daher erlauben wir
+    // es nur, wenn sie nicht gezueckt ist.
+    // in P_WIELDED wird das Spielerobjekt des Zueckenden gespeichert
+    if( QueryProp(P_WIELDED) )
+    {
+      write("Du musst den Speer zuerst wegstecken, um ihn anders "
+            "zu fuehren!\n");
+      return -1;
+    }
+    write("Du fuehrst den Speer jetzt mit beiden Haenden.\n");
+    SetProp(P_NR_HANDS, 2);
+    SetProp(P_WIELDED_TEXT, "mit beiden Haenden gezueckt");
+    SetProp(P_WIELD_TEXT, ({ "Du zueckst den Speer mit beiden Haenden.\n",
+                            " zueckt einen Speer mit beiden Haenden.\n" }) );
+    SetProp(P_WIELD_RESTRICTIONS, ([A_STR:10]) );
+    return 1;
+  }
+  // einer wird durch die mudlib herausgefiltert, daher reagiert diese
+  // funktion auch auf "fuehre speer mit einer hand"
+  // Wenn wir wirklich auf das "einer" pruefen wollten, koennten wir
+  // statt str auch lower_case(TP->_unparsed_args()) verwenden, wo die
+  // Eingabe des Spielers ohne mudlibseitige Veraenderung gespeichert ist.
+  else if( sscanf(str, "%s mit hand", was) == 1 && id(was) )
+  {
+    if( QueryProp(P_NR_HANDS) == 1 )
+    {
+      write("Aber Du fuehrst den Speer doch schon mit einer Hand!\n");
+      return -1;
+    }
+    if( QueryProp(P_WIELDED) )
+    {
+      write("Du musst den Speer zuerst wegstecken, um ihn anders "
+            "zu fuehren!\n");
+      return -1;
+    }
+    write("Du fuehrst den Speer jetzt mit einer Hand.\n");
+    SetProp(P_NR_HANDS, 1);
+    SetProp(P_WIELDED_TEXT, "mit einer Hand gezueckt");
+    SetProp(P_WIELD_TEXT, ({ "Du zueckst den Speer mit einer Hand.\n",
+                            " zueckt einen Speer mit einer Hand.\n" }) );
+    // In der Beschreibung steht, dass man mehr Kraft braucht, um den
+    // Speer nur mit einer Hand zu zuecken, daher setzen wir nun hoehere
+    // wield-restrictions
+    SetProp(P_WIELD_RESTRICTIONS, ([A_STR:15]) );
+    return 1;
+  }
+  return 0;
+}
+
+//-------------------------------------------------------------------------
+// Das einzige unschoene an diese Waffe ist die Tatsache, dass die Werte
+// fuer beidhaendige Fuehrung sowohl in create() als auch in cmd_fuehren()
+// vorkommen. Wie sich das eleganter loesen laesst, siehe speer_031.c
+//-------------------------------------------------------------------------
+

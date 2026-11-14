@@ -1,0 +1,153 @@
+#pragma strong_types
+
+#include "../zauberer.h"
+
+inherit "std/thing";
+inherit Z_DIR "zfun.lpc";
+
+#include <properties.h>
+#include <defines.h>
+#include <moredef.h>
+#include <combat.h>
+#include <moving.h>
+
+mapping shields = ([]);
+
+// Spell caster
+object caster;
+// Resistance modifier (precent)
+int fac = 0;
+// Align dependent Vulnerability
+string align_vul;
+// Align dependent Resistance
+string align_res;
+
+void create()
+{
+
+   if (!is_clone(this_object()))
+     return;
+
+   thing::create();
+
+   SetProp(P_NAME, "Schildgenerator");
+   SetProp(P_NOGET, 1);
+
+   SetProp(P_SHORT, "Ein Schildgenerator");
+
+   SetProp(P_KILL_NAME, "Ein magischer Schild");
+
+   AddId(({ "schildgenerator"}));
+}
+
+void AddShield(object pl)
+{
+  object shield;
+
+  // totes klump kriegt nix
+  if (!objectp(pl) || !living(pl)) return;
+
+  if (!shield = clone_object(Z_SHIELD)) return 0;
+
+  shield->move(pl, M_SILENT | M_NOCHECK);
+
+  pl->SetProp(P_ARMOURS, pl->QueryProp(P_ARMOURS) + ({ shield }));
+
+  shield->set_generator(this_object());
+
+  shields += ([ pl: shield ]);
+}
+
+void startup(object pl, int success)
+{
+  int align;
+
+  caster = pl;
+
+ 
+  // 1% ist untergrenze
+  if (success < 1000) success = 1000;
+
+  call_out("remove", success/100+random(success/100));
+
+  fac = success/1000;
+
+  fac = (int) (fac + (fac * align2fac(align = pl->QueryProp(P_ALIGN)) / 100));
+
+  // Untergrenze faktor
+  if (fac<15) fac = 15;
+
+  // Align dependent resistances and vulnerabilities
+  if (align < 0)
+    {
+      align_vul = DT_HOLY;
+      align_res = DT_UNHOLY;
+    }
+  else
+    {
+      align_vul = DT_UNHOLY;  
+      align_res = DT_HOLY;
+    }
+
+  if (IS_MAINTAINER(getuid(caster)))
+    {
+      tell_object(caster, 
+        sprintf("Shield startup! Pl: %O Succ: %d Fac: %d align: %d afac: %d\n", caster, 
+        success, fac, align, align2fac(align)));
+    }
+ } 
+
+void NukeShields()
+{
+  object *pls;
+  int i;
+
+  pls = m_indices(shields);
+
+  for (i = 0; i < sizeof(pls); i++)
+    shields[pls[i], 0]->remove();
+}
+
+void NotifyHpLoss(int loss)
+{
+  int sp;
+  int hp;
+
+  loss /= 4;
+
+  loss += random(loss);
+
+  if ((sp = caster->QueryProp(P_SP))>loss)
+    caster->AddSp(-loss);
+  else
+    {
+      caster->SetProp(P_SP, 0);
+      caster->do_damage(sp-loss);
+    }
+}
+
+int QueryFactor(string dam_type)
+{
+
+  if (dam_type == align_vul)
+    return (100 - 30);
+  else if (dam_type == align_res)
+    return (fac + 10 + random(10));
+
+  return fac;
+}
+
+void init()
+{
+  ::init();
+  if (interactive(this_player()) || this_player()->QueryProp(P_FRIEND))
+    AddShield(this_player());
+}
+
+int remove(int silent)
+{
+  if (ENV(ME)) 
+    tell_room(ENV(ME), 
+      BS("Der Schild von " + CAP(getuid(caster)) + " loest sich auf."));
+  ::remove(silent);
+}

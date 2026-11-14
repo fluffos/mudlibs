@@ -1,0 +1,80 @@
+//#define DBW(x) if (find_player("wraz")) tell_object(find_player("wraz"),(x))
+
+mapping prep_blaue_flamme(object caster, mapping sinfo, int silent)
+{  
+  object ob;
+  
+  //Aenderungen der Werte im sinfo Mapping vermeiden!
+  if(!GuildItemTest(caster, sinfo) ||
+     !FroschTest(caster, sinfo)  || 
+     !IsInFight(caster, sinfo)   ||
+     !KnifeTest(caster, sinfo)   ||
+     !BlindTest(caster,sinfo)     )
+    return 0;
+    
+  if(present(FLAME_CONTROL_ID, caster)) {
+    tell_object(caster, BS("Du bist bereits von der Wildheit des Ebers erfuellt."));
+    return 0;
+  }
+
+  if(pointerp(caster->QueryProp(P_TMP_ATTACK_HOOK)) && caster->QueryProp(P_TMP_ATTACK_HOOK)[0] <= time()) {
+    tell_object(caster, BS("Deine Angriffe werden bereits durch etwas beeinflusst."));
+    return 0;
+  }
+
+  
+  if(!silent){FirstPrepareFuncSuccessfull(caster, sinfo);}
+  return sinfo;
+}
+
+int blaue_flamme(object caster, mapping sinfo)
+{
+  object ob;
+  int ability, success, i;
+ 
+  if(!mappingp(sinfo=prep_blaue_flamme(caster, sinfo, 1))) return 0;
+
+  success=SpellSuccess(caster,sinfo);
+  if(success < (-7500))
+  {
+    tell_object(caster, BSC("Die Rage, in die du faellst verbrennt einen Teil einer Energie!"));
+    caster->AddSp(-10-random(40));
+    caster->AddHp(-10-random(40));
+    return MISSERFOLG;
+  }
+  if(success<0)
+  {
+    tell_object(caster,BSC("Du schnaubst, doch es gelingt dir nicht die Wildheit des Ebers zu kanalisieren."));
+    return MISSERFOLG;
+  }
+
+  ability=sinfo[SI_SKILLABILITY];
+  i=time()+1+(8*ability/1000);
+  //DBW(sprintf("blaue_flamme :: i before bonus=%d\n", i));
+  // Wraz: die Original Formel erzeugt einen int overflow (mit get_equip_bonus() um die 40),
+  //   weil i ja nahe an time() ist und somit schon bei ca. 1.7 milliarden:
+  // i += i * get_equip_bonus(caster, "trance des wilden ebers") / 100;
+  // daher Korrektur:
+  i += (6*ability/1000) * get_equip_bonus(caster, "trance des wilden ebers") / 100;
+  
+  if(!objectp(ob=clone_object(OBJ "eber_trance"))) {
+    tell_object(caster,BS("Ein Fehler ist aufgetreten(blaue_flamme/flame)."));
+    return 0;
+  }
+  ob->move(caster, M_NOCHECK);
+
+  //DBW(sprintf("blaue_flamme :: i=%d, ability=%d, success=%d\n", i, ability, success));
+  //DBW(sprintf("blaue_flamme :: get_equip_bonus=%d\n", get_equip_bonus(caster, "trance des wilden ebers")));
+
+  if(!(ob->customize(ability,success,i,R_SKILLMASTER->HasSkill(getuid(caster), SPEED_TWO)))) { 
+    tell_object(caster,BS("Ein Fehler ist aufgetreten. (blaue_flamme/customize)."));
+    return 0;
+  }
+  
+  tell_object(caster, BS("Du schnaubst laut auf und bruellst animalisch. Die Wildheit des Ebers ergreift "
+                         "von dir Besitz!"));
+  tell_room(ENV(caster), BS(caster->Name(WER, 1)+" schnaubt laut auf und bruellt animalisch, wie ein wilder Eber!")
+                       , ({caster}) );
+  caster->SetProp(P_TMP_ATTACK_HOOK, ({i,ob,"attack_hook"}) );
+  return ERFOLG;
+}

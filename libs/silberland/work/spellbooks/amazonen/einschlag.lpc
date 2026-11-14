@@ -1,0 +1,95 @@
+// Einschlag: Massiver Angriff aus der Luft (Himmelsritt), trifft alle Feinde.
+
+varargs int prep_einschlag(object caster, mapping sinfo, int flag)
+{
+  if (!present("\namz_himmelsritt", caster))
+  {
+    tell_object(caster, "Ohne Himmelsritt kannst Du keinen Einschlag ausfuehren.\n");
+    return 0;
+  }
+
+  if (!caster->InFight())
+  {
+    tell_object(caster, "Du musst im Kampf sein, um einen Einschlag auszufuehren.\n");
+    return 0;
+  }
+
+  if (!caster->QueryProp(P_AMAZONEN_ASCENT))
+  {
+    tell_object(caster, "Du bist nicht hoch genug in der Luft fuer einen Einschlag.\n");
+    return 0;
+  }
+
+  if (!pay_for_spell(caster, sinfo, !flag))
+    return 0;
+
+  return 1;
+}
+
+
+int einschlag(object caster, mapping sinfo)
+{
+  object *victims, hr;
+  int suc, bonus, ascent, ability, i;
+  mapping sinfo2;
+
+  if (!prep_einschlag(caster, sinfo, 1))
+    return 0;
+
+  victims = caster->PresentEnemies();
+  if (!pointerp(victims) || !sizeof(victims))
+  {
+    tell_object(caster, "Du hast gerade niemanden zum Treffen.\n");
+    return 0;
+  }
+
+  if ((suc = SpellSuccess(caster, sinfo)) <= 0)
+    return MISSERFOLG;
+
+  ascent = caster->QueryProp(P_AMAZONEN_ASCENT);
+  if (ascent < 1) ascent = 1;
+  if (ascent > 10) ascent = 10;
+
+  bonus = CheckEquip(caster, sinfo[SI_SPELLFUNC]);
+  ability = sinfo[SI_SKILLABILITY];
+  if (ability < 0) ability = 0;
+
+  // Grundschaden aus sinfo, skalieren mit Hoehe, Erfolg und Faehigkeit.
+  sinfo[SI_SKILLDAMAGE] += bonus + ascent * 50 + suc / 300 + ability / 2500;
+  sinfo[OFFSET(SI_SKILLDAMAGE)] += bonus / 2 + ascent * 50 + suc / 600 + ability / 5000;
+  if(sinfo[SI_SKILLPOINTS] > 1) {
+    sinfo[SI_SKILLDAMAGE] = (int) ( sinfo[SI_SKILLDAMAGE] * 1.3);
+    sinfo[OFFSET(SI_SKILLDAMAGE)] = (int) (sinfo[OFFSET(SI_SKILLDAMAGE)] * 1.3);
+  }
+  sinfo[SI_MAX_DAMAGE] += (caster->QueryProp(P_GUILD_LEVEL) - 8) * 35
+                          + bonus * 2 + ascent * 120 + suc / 40 + ability / 500;
+  sinfo[SI_SKILLDAMAGE_TYPE] = ({DT_AIR, DT_LIGHTNING});
+
+  environment(caster)->Message(BS(sprintf("%s stuerzt aus der Hoehe herab und entlaedt einen gewaltigen Einschlag!",
+        caster->Name(WER,1))),
+      MSGFLAG_VISUAL, ([ MSGFLAG_EXCLUDE : ({ caster }) ]) );
+
+  tell_object(caster, "Du stuerzt aus der Hoehe herab und laesst Wind und Blitze auf Deine Feinde niederfahren!\n");
+
+  for (i = sizeof(victims) - 1; i >= 0; i--)
+  {
+    if (!objectp(victims[i])) continue;
+    tell_object(victims[i], BS(sprintf("Ein gewaltiger Windstoss und Blitze treffen Dich, als %s herabstuerzt!",
+          caster->Name(WER,1) )));
+    sinfo2 = copy_mapping(sinfo);
+    TryDefaultAttackSpell(victims[i], caster, sinfo2, sinfo2[SI_SPELL]);
+    if(objectp(victims[i]) && sinfo[SI_SKILLPOINTS] > 2) {
+      tell_room(ENV(victims[i]), BS(sprintf("%s wird zu Boden geschleudert!", victims[i]->Name(WER))));
+      victims[i]->SetProp(P_LAST_RAMMEN_TIME, time());
+      victims[i]->SetProp(P_DISABLE_ATTACK, 2);
+    }
+  }
+
+  // Nach dem Einschlag endet der Himmelsritt, wir landen wieder.
+  hr = present("\namz_himmelsritt", caster);
+  if (objectp(hr))
+    hr->remove(1);
+  caster->SetProp(P_AMAZONEN_ASCENT, 0);
+
+  return ERFOLG;
+}

@@ -1,0 +1,263 @@
+// ~(w) Feyaria 2004
+// ~der Sammler.. tauscht Set-Items
+//
+// 2010-04-18 Gwenshara
+// Tauscht auch Fragmente
+//
+
+
+#include "../def.h"
+
+#define CHANGE_COST 25
+
+inherit NPC "std_well_npc";
+
+int geld = 0;
+mapping FRAG_CHANGE = (["wasser": (["luft": 0.33, "eis": 0.2, "feuer": 0.125]), 
+                        "luft":   (["wasser": 3.0, "eis": 0.33, "feuer": 0.2]), 
+                        "eis":    (["wasser": 5.0, "luft": 3.0, "feuer": 0.33]), 
+                        "feuer":  (["wasser": 8.0, "luft": 5.0, "eis": 3.0])]);
+
+void create()
+{
+  object ob;
+  if (!is_clone(this_object())) return;
+  
+  ::create(); 
+  
+  SetProp(P_SHORT, "Murgo, der Sammler und Tauscher");
+  SetProp(P_LONG, 
+      "Murgo ist ein kleiner Gaffo, der fuer seine grossen Leidenschaft "
+      "bekannt ist, das Sammeln und Tauschen. Momentan hat er sich auf "
+      "die Artefakte alter Helden spezialisiert. Unter seinem schaebigen "
+      "Umhang kannst Du einige gruene Ruestungsteile erkennen.");
+  SetProp(P_ARTICLE,0);
+  SetProp(P_AGGRESSIVE,0);
+  SetProp(P_NAME, "Murgo");
+  SetProp(P_RACE, "Gaffo");
+  SetProp(P_SIZE, 155);
+  SetProp(P_GENDER, MALE);
+  SetProp(P_NOATTACK,"sagt: Bring mir lieber was zum Tauschen!");
+  AddId(({"\nmurgo","murgo", "gaffo"}));
+  create_default_npc(25);
+  SetProp(P_ALIGN, -70);
+  SetProp(P_MAX_HANDS, 2); 
+  SetProp(P_HANDS, ({" mit seinen Gaffohaenden",234,DT_BLUDGEON}));
+          
+  SetProp(P_MSGIN, "sucht hier nach interessanten Dingen");
+  SetProp(P_MSGOUT, "erweitert seine Suche");
+
+  SetProp( P_REJECT, REJECT_KEEP);
+
+  AddInfo( DEFAULT_INFO,"sagt: Das hat nichts mit Sammeln und Tauschen zu tun!\n");
+
+  AddLibrary("/p/daemon/itemd/libs/set.lib", 1);
+  AddInfo( ({"brunnen", "sammeln", "sammelleidenschaft"}),
+      "Der Brunnen ist der einzige Ort, an dem meine Sammelleidenschaft "
+      "noch Erfolg hat. Ich sammle naemlich die Artefakte von alten Helden!", 
+      "sagt: ");
+  AddInfo( ({"tauschen", "tausch"}),
+      "Nach dem Sammeln ist das Tauschen meine zweite Leidenschaft. Ich "
+      "tausche die Artefakte der alten Helden gegen andere ein. Gib mir dazu "
+      "einfach drei solche Sachen und ich geb Dir eines von meinen.", "sagt: ");
+  AddInfo( ({"leidenschaft", "leidenschaften"}),
+      "Sammeln und Tauschen.", "sagt: ");
+  AddInfo( ({"held", "helden", "alte helden", "alten helden"}),
+      "Z.B. Arcon, Flammara, Khartak usw.", "zaehlt auf: ");
+  AddInfo( ({"artefakte", "artefekt", "waffen", "waffe", "ruestungen", "ruestung"}),
+      "Damit meine ich die Waffen und Ruestungen der alten Helden.", "erklaert: ");
+  AddInfo( ({"sammlung"}),
+      "Meine Sammlung ist schon sehr gross, daher weiss ich fast alles ueber "
+      "die alten Helden.", "sagt: ");
+  AddInfo( ({"andruil", "atreju", "dejot"}),
+      "Der hat auch das Zeug zu einem echten Helden!", "sagt: ");
+  AddInfo( ({"aradia", "larifari"}),
+      "Die hat auch das Zeug zu einer echten Heldin!", "sagt: ");
+  AddInfo( ({"feyaria"}),
+      "Feyaria hat mich erschaffen!", "sagt: ");
+  AddInfo( ({"gaffo"}),
+      "Ja, ich bin ein Gaffo!", "sagt: ");
+  AddInfo( ({"gaffodorf"}),
+      "Haha! Das Gaffodorf ist so gut versteckt, dass niemand es finden kann!", 
+      "lacht: ");
+  AddInfo( ({"fragmente","fragment"}),
+      "Ich transmutiere auch Fragmente! Gib sie mir dazu einfach. Aber Achtung! "
+      "Die Transmutation wirkt nur im Verhaeltnis 1:5!", "sagt: ");
+  AddInfo( ({"wasserfragmente","wasserfragment"}),
+      "Wasserfragmente haben zu wenig Energie, um transmutiert zu werden.", "sagt: ");
+  AddInfo( ({"feuerfragment","feuerfragmente"}),
+      "Feuerfragmente haben so viel Energie, dass sie in alle anderen "
+      "Elemente transmutiert werden koennen!", "sagt: ");
+  AddInfo( ({"eisfragmente","eisfragment"}),
+      "Eisfragmente haben so viel Energie, dass ich sie in Luft und Wasser "
+      "verwandeln kann.", "sagt: ");
+  AddInfo( ({"luftragment","luftfragmente"}),
+      "Luftfragmente haben so wenig Energie, dass ich sie nur in Wasser "
+      "verwandeln kann.", "sagt: ");
+}
+
+void select_element(string what, object who, string *possible, object frags, string element)
+{
+  if(!objectp(who) || !objectp(frags)) return;
+  if(member(possible, what) < -1)
+  {
+    command_me("sag Dann eben nicht!");
+    frags->move(TP, M_GET|M_NOCHECK);
+    return;
+  }
+
+  what = lower_case(what);
+  call_out("change_frags", 0, who, frags, element, what);
+  return;
+}
+
+void change_frags(object who, object old, string from, string to, float changeRate)
+{
+  object new;
+  int amount;
+
+  if(!objectp(old)) return;
+
+  amount = (int) (old->QueryProp(P_AMOUNT) * changeRate);
+  who->AddSp(-(CHANGE_COST));
+
+  command("sag Bitte! Ich tausche Deine "+old->QueryProp(P_AMOUNT)+
+	     " "+CAP(from)+"fragmente gegen "+amount+" "+CAP(to)+
+	     "fragmente!");
+
+  if(!objectp(new=present("\n"+to+"frag", who)))
+  {
+    new = clone_object(FRAGS+to+"fragment");
+    new->SetProp(P_AMOUNT, amount);
+  }
+  else
+    new->AddAmount(amount);
+
+  if(new->move(who, M_GET|M_NOCHECK|M_SILENT) != 1)
+  {
+    tell_room(ENV(TO), BS(amount+" "+to+"fragmente fallen zu Boden."));
+    new->move(ENV(TO), M_PUT|M_NOCHECK);
+  }
+  WLOG(LOGS "frags/tausch.log", getuid(who)+" tauscht "+old->QueryProp(P_AMOUNT)+
+       " "+from+"fragmente in "+amount+" "+to+"fragmente.");
+  old->remove(1);
+  return;
+}
+
+private string getFragmentType(object ob) {
+  if(ob->id("\nwasserfrag")) return "wasser";
+  if(ob->id("\nluftfrag"))   return "luft";
+  if(ob->id("\neisfrag"))    return "eis";
+  if(ob->id("\nfeuerfrag"))  return "feuer";
+  return "";
+}
+
+public void transmuteFragments(string toType, object ob) {
+  float changeRate;
+  int minimalFragsNeeded;
+  string fromType;
+
+  if(member(({"wasser", "luft", "eis", "feuer"}), toType) < 0) {
+    command("sag Du kannst nur in Wasser, Luft, Eis oder Feuer transmutieren!");
+    ob->move(TP, M_GET|M_NOCHECK);
+    return;
+  }
+
+  fromType = getFragmentType(ob);
+
+  if(fromType == toType) {
+    command("sag Das macht keinen Sinn!");
+    ob->move(TP, M_GET|M_NOCHECK);
+    return;
+  }
+
+  changeRate = FRAG_CHANGE[fromType][toType];
+  minimalFragsNeeded = (int) (1 / changeRate);
+  if(minimalFragsNeeded < 1) {
+    minimalFragsNeeded = 1;
+  }
+
+  if(ob->QueryProp(P_AMOUNT) < minimalFragsNeeded)
+  {
+    command("sag Du brauchst mindestens "+minimalFragsNeeded+" Fragmente zum Transmutieren!");
+    ob->move(TP, M_GET|M_NOCHECK);
+    return;
+  }
+  
+  call_out("change_frags", 0, TP, ob, fromType, toType, changeRate);
+}
+
+void give_notify(object ob)
+{
+  object ob2;
+  object ob3;
+  object ob4;
+
+  string *frag_change, tmp, elem;
+  int i;
+
+  if (file_name(ob)[0..19] == "/p/daemon/itemd/set/")
+  {
+    if (ob3 = present("ITEMD_SET_ITEM 3"))
+    {
+      ob2 = present("ITEMD_SET_ITEM 2");
+      call_other(FRAGS "fragmaster", "GenerateSet", 
+          ({file_name(ob)[20..23], file_name(ob2)[20..23], file_name(ob3)[20..23]}) );
+      if (ob4 = present("ITEMD_SET_ITEM", TP))
+      {
+        write(Name(WER,1) + " gibt Dir "+ob4->name(WEN,1)+" im Tausch.\n");
+        tell_room(MENV, Name(WER,1) + " gibt " + TP->name(WEM) + " " +
+            ob4->name(WEN) + " im Tausch.\n", ({TP}) );
+        WLOG(LOGS "items/tausch.log", "tauscht " + ob->QueryProp(P_NAME) + ", " +
+            ob2->QueryProp(P_NAME) + " und " + ob3->QueryProp(P_NAME) + 
+            " gegen " + ob4->QueryProp(P_NAME));
+        ob->remove();
+        ob2->remove();
+        ob3->remove();
+      }
+      else
+      {
+        command("sag Leider habe ich nichts zu tauschen fuer Dich. Hier hast "
+            "Du Deine Sachen wieder zurueck.");
+        ob->move(TP, M_NOCHECK);
+        ob2->move(TP, M_NOCHECK);
+        ob3->move(TP, M_NOCHECK);
+      }
+    }
+    else if (present("ITEMD_SET_ITEM 2"))
+      command("sag Bring mir noch so ein Artefakt, dann tausche ich die "
+          "drei gegen eines aus meiner Sammlung.");
+    else
+      command("sag Bring mir noch zwei solcher Artefakte, dann tausche ich die "
+          "drei gegen eines aus meiner Sammlung.");
+  }
+  // Fragmente tauschen
+  else if(ob->id("\nfrag"))
+  {
+    if(TP->QueryProp(P_SP) < CHANGE_COST) {
+      command("sag Du hast zu wenig Magie zum transmutieren!");
+      ob->move(TP, M_GET|M_NOCHECK);
+    } else {
+      command("sag In welche Art von Fragment soll ich transformieren? (gib ein: wasser, luft, eis, feuer)");
+      input_to("transmuteFragments", 0, ob);
+    }
+  }
+  else
+    ::give_notify(ob);
+}
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+  if (random(2) && find_call_out("react") == -1)
+    call_out("react",0);
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+    StartReaction(verb, gruppe, adverb, touch);
+}
+
+void react()
+{
+  command_me("sag Tausch doch lieber was mit mir!");
+}

@@ -1,0 +1,242 @@
+//=========================================================================
+//
+// File:    platz_060.c
+// Created by Ronja
+//
+// Project: beispielgebiet
+//
+// Eine Heilstelle wird aufgezeigt (AddHp). Desweiteren werden Probleme
+// aufgezeigt, wenn der Spieler Netztot wird bzw stirbt. Mit beiden
+// Situationen muss man eigentlich immer rechnen, wenn der Spieler
+// einen bestimmten Status im Raum einnimmt (hier: er sitzt auf einer
+// Bank oder nicht). Loesungen werden mit BecomesNetDead und
+// NotifyPlayerDeath aufgezeigt.
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit "std/room"; //wir erben alle eigenschaften des Standardraumes
+
+#define MAX_PERSONEN 1 // Anzahl der Leute, die auf der Bank platzen haben
+                       // Bewusst niedrig gewaehlt, damit man schon mit wenigen
+                       // Spielern einen Effekt sieht.
+
+string *spieler_bank;  // Array, welches die Leute aufnimmt, die auf der
+                       // Bank sitzen
+
+void create()
+{
+  ::create();
+
+  SetProp(P_INT_SHORT, "Der Ort der Heilung");
+  SetProp(P_INT_LONG,
+    "Hier ist der Ort der Heilung, wo die Heilerin des Ortes wohnt.");
+
+  SetProp(P_LIGHT, 1);
+  SetProp(P_INDOORS, 0);
+  SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE: 25, ENV_TERRAIN: TT_TOWN]) );
+
+  AddDetail( ({"boden"}) ,
+    "Du stehst drauf.");
+
+  AddDetail( ({"himmel"}) ,
+    "Der Himmel zeigt nichts besonderes.");
+
+  AddDetail( ({"ort"}) ,
+    "Hier kann man geheilt werden. Dazu muss man sich auf "
+    "die Bank setzen. ");
+
+  AddDetail( ({"bank"}) ,
+    "Man kann sich drauf setzen oder auch wieder aufstehen.");
+
+//-------------------------------------------------------------------------
+// Der Spieler kann sich setzen und auch wieder aufstehen
+//-------------------------------------------------------------------------
+
+  AddCmd( ({"setz","setze","sitz"})        , "cmd_setzen");
+  AddCmd( ({"steh","stehe"})               , "cmd_stehen");
+
+//-------------------------------------------------------------------------
+// Und nun noch die Ausgaenge
+// hier wird es jetzt etwas komplizierter, denn wir muessen ja schauen,
+// ob der Spieler auf der Bank sitzt. Dazu wird die erweiterte Syntax
+// von AddExit benutzt. Dort koennen wir eine Funktion angeben, die
+// vor dem verlassen des Raumes aufgerufen wird und das verlassen des Raums
+// auch verhindern kann.
+//
+// EX_DEST gibt den Zielraum an. EX_TESTFUNC unsere Funktion zum Testen
+//-------------------------------------------------------------------------
+
+  AddExit ("suedwesten", ([ EX_DEST:     ROOM "wiese_030",
+                            EX_TESTFUNC: "exit_test" ]) );
+
+//-------------------------------------------------------------------------
+// Nicht vergessen unser Spielerarray zu initialisieren
+//-------------------------------------------------------------------------
+
+  spieler_bank = ({ }); // intialisieren mit leerer Menge
+}
+
+//-------------------------------------------------------------------------
+// Die Funktion, welche testet, ob der Spieler den Raum verlassen darf
+// oder nicht. Den Spieler muessen wir ueber this_player() (TP) ermitteln,
+// die Funktion bekommt die vom Spieler eingegebene Richtung mitgeteilt
+// welche wir zwar nicht brauchen, aber zumindest im Funktonskopf angegeben
+// werden muss. Die Funktion muss 0 zurueckgeben, wenn das verlassen
+// unterbunden werden soll, sonst 1
+//-------------------------------------------------------------------------
+
+int exit_test(string dir)
+{
+//-------------------------------------------------------------------------
+// Wir testen erstmal, ob es ueberhaupt ein Spieler ist, der da durch will,
+// wenn nicht, dann lasses wir "es" durch
+//-------------------------------------------------------------------------
+
+  if(!TP)              return 1;
+  if(!interactive(TP)) return 1;
+
+//-------------------------------------------------------------------------
+// Wenn der Spieler nicht auf der Bank sitzt, lassen wir ihn weg
+//-------------------------------------------------------------------------
+
+  if(member(spieler_bank, getuuid(TP)) == -1) return 1;
+
+//-------------------------------------------------------------------------
+// ansonsten: Meldung und 0 zurueckgeben
+//-------------------------------------------------------------------------
+
+  tell_object(TP, BS("Aber Du sitzt doch auf der Bank! Du solltest erst "
+                     "aufstehen. "));
+
+  return 0;
+}
+
+//-------------------------------------------------------------------------
+// hinsetzen
+//-------------------------------------------------------------------------
+
+int cmd_setzen(string str)
+{
+  notify_fail("Worauf moechtest Du Dich setzen?\n");
+
+  if(!str || str == "") return 0;
+  if(!(str == "auf bank"         ||
+       str == "bank"             )) return 0;
+
+//-------------------------------------------------------------------------
+// Wenn der Spieler schon auf der Bank sitzt:
+//-------------------------------------------------------------------------
+
+  if(member(spieler_bank,getuuid(TP)) != -1)
+  {
+    tell_object(TP,BS("Aber Du sitzt doch schon!"));
+    return -1; // syntax ok, aber unsinnig, daher -1
+  }
+
+//-------------------------------------------------------------------------
+// ist noch platz auf der Bank?
+//-------------------------------------------------------------------------
+
+  if(sizeof(spieler_bank) >= MAX_PERSONEN)
+  {
+    tell_object(TP,"Auf der Bank ist kein Platz mehr.\n");
+    return -1;
+  }
+
+//-------------------------------------------------------------------------
+// ok, spieler merken und Meldung ausgeben
+//-------------------------------------------------------------------------
+
+  spieler_bank += ({ getuuid(TP) });
+  tell_object(TP,"Du setzt Dich auf die Bank.\n");
+
+  TO->Message(TP->Name()+" setzt sich auf die Bank.\n"
+             ,MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+
+  return 1;
+}
+
+//-------------------------------------------------------------------------
+// jetzt das aufstehen
+//-------------------------------------------------------------------------
+
+int cmd_stehen(string str)
+{
+  notify_fail("Wovon moechtest Du aufstehen?\n");
+
+  if(!str || str == "") return 0;
+  if(!(str == "auf"           ||
+       str == "von bank auf"  )) return 0;
+
+//-------------------------------------------------------------------------
+// sitzt der Spieler ueberhaupt?
+//-------------------------------------------------------------------------
+
+  if(member(spieler_bank,getuuid(TP)) == -1)
+  {
+    tell_object(TP,"Aber Du sitzt doch gar nicht auf der Bank?\n");
+    return -1;
+  }
+
+//-------------------------------------------------------------------------
+// ansonsten spieler austragen & Meldungen
+//-------------------------------------------------------------------------
+
+  spieler_bank -= ({ getuuid(TP) });
+  tell_object(TP, "Du stehst wieder von der Bank auf.\n");
+
+
+  TO->Message(BS(TP->Name()+" steht von der Bank auf und es ist wieder ein "
+              "Platz frei."), MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+
+  return 1;
+}
+
+//-------------------------------------------------------------------------
+// Jetzt muessen wir noch einige Eventualitaeten beruecksichtigen:
+// - der Spieler kann sich ausloggem, waehrend er sitzt
+// - der Verbindung kann verloren gehen, wenn er sitzt
+// - er koennte sterben, wenn er sitzt
+//-------------------------------------------------------------------------
+
+//-------------------------------------------------------------------------
+// BecomesNetDead wird aufgerufen, sofern ein Spieler aus welchem Grunde
+// auch immer nicht mehr eingeloggt ist
+//-------------------------------------------------------------------------
+
+void BecomesNetDead(object player)
+{
+//-------------------------------------------------------------------------
+// Wenn der Spieler auf der Bank sitzt und er sich ausloggt oder sonstwas
+// lassen wir ihn von der Bank purzeln
+//-------------------------------------------------------------------------
+
+  if(member(spieler_bank,getuuid(player)) != -1)
+  {
+    spieler_bank -= ({ getuuid(player) });
+
+    TO->Message(player->Name()+" nickt ein und faellt von der Bank.\n"
+               , MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+  }
+}
+
+//-------------------------------------------------------------------------
+// Wenn der Spieler sterben sollte, entfernen wir ihn einfach und still-
+// schweigend aus dem Array. Es sollte jedem klar sein, dass er dann
+// nicht mehr auf der Bank sitzt
+//-------------------------------------------------------------------------
+
+void NotifyPlayerDeath(object player, object killer, int lost_xp)
+{
+//-------------------------------------------------------------------------
+// Das Testen, ob der Spieler im Array drinsteht, sparen wir uns gleich
+// auch, wenn er nicht drinsteht, passiert auch nichts
+//-------------------------------------------------------------------------
+
+  spieler_bank -= ({ getuuid(player) });
+}
+
+
+

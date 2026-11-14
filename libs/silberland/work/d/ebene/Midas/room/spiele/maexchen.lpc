@@ -1,0 +1,437 @@
+// (c) by Thomas Winheller (Padreic@mg.mud.de)
+
+inherit "/d/ebene/woody/std/mtisch";
+inherit "std/room";
+
+#include <properties.h>
+#include <defines.h>
+#include <daemon.h>
+#include <config.h>
+#include <moving.h>
+#include "/d/ebene/woody/std/files.h"
+
+#define SAVEFILE "/d/ebene/save/maexchen"
+#define ESSEN    "Salzstangen_essen_maexchen"
+#define ROOM     "/d/ebene/Midas/room/"
+#define LOGFILE  "/wiz/woody/maexchen"
+
+nosave mixed* gruppe;
+nosave int listchange;
+mapping daten; // (["playeruid": Siegpunkte; gespielte Spiele, Schnitt]);
+mapping great_games; // ({ ({datum, spielernamen,...}), ... })
+
+void CalculateValues() // berechnet alle ratings neu
+{
+  int i,k;
+  string* list;
+  string key;
+  for (i=sizeof(list=m_indices(daten))-1;i>=0;i--)
+  {
+     key=list[i];
+     daten[key,2]=1.0*daten[key,0]/daten[key,1];
+     if ((k=daten[key,1])<5) daten[key,2]=daten[key,2]*(0.2*k);
+  }
+  listchange=1;
+}
+
+create()
+{
+  mapping map;
+  listchange=1;
+  gruppe=({});
+  seteuid(getuid(this_object()));
+  if (!restore_object(SAVEFILE)) {
+    daten=allocate_mapping(0,3);
+    great_games=({ ({ 0, "Niemand" }), ({ 0, "Niemand" }), 
+      ({ 0, "Niemand" }), ({ 0, "Niemand" }), ({ 0, "Niemand" }), 
+      ({ 0, "Niemand" }), ({ 0, "Niemand" }), ({ 0, "Niemand" }), 
+      ({ 0, "Niemand" }), ({ 0, "Niemand" }) });
+  }
+  room::create();
+  map=Query(P_COMMANDS);
+  mtisch::create();
+  Set(P_COMMANDS, Query(P_COMMANDS)+map);
+  AddId("holztisch");
+  SetProp(P_SHORT, "Ein Maexchentisch");
+  SetProp(P_LONG, 
+    "Ein schoener alter Holztisch, wie er in jedem gemuetlichen Lokal stehen "
+    "koennte. Auf ihm liegen eine Liste, ein Regelbuch, eine Dose mit "
+    "Erdnuessen und eine Packung Salzstangen. Ausserdem entdeckst Du eine "
+    "Top-Maexchenliste.\n");
+  AddDetail(({"salzstangen", "packung salzstangen"}),
+    "Ganz normale Salzstangen halt, wie Du sie aus RL eigentlich schon zur "
+    "Genuege kennen solltest :).\n");
+  AddDetail(({"dose mit erdnuessen", "erdnuesse", "dose"}),
+    "In der Dose befinden sich gesalzende Erdnuesse.\n");
+
+  AddDetail(({"topliste", "topmaexchen", "top-maexchen",
+        "topmaexchenliste", "top-maexchenliste", "maexchenliste"}),
+      "Du kannst sie lesen.\n");
+
+  AddCmd(({"esse", "iss", "nimm"}), "essen");
+  AddCmd(({"sag", "sage", "'"}), "sagen");
+
+  move(ROOM "spiele/maexchen_raum", M_NOCHECK);
+
+  catch(CHMASTER->new("Maexchen", this_object(),
+        "Der Kanal fuer Spieler :)"));
+  catch(CHMASTER->join("Maexchen", this_object()));
+}
+
+
+private nosave string po_list()
+{
+  int i;
+  string s;
+
+  for (i=1,s=file_name(previous_object(0)); previous_object(i); i++)
+    s=sprintf("%s <- %s",s,file_name(previous_object(i)));
+  return s;
+}
+
+varargs int remove()
+{
+  if (this_interactive())
+    log_file(LOGFILE,
+        sprintf("[%s] TI:%O,TP:%O,PO:%s,verb:%O\n",
+          dtime(time()), this_interactive(),this_player(),
+          po_list(),query_verb()));
+  else
+    log_file(LOGFILE,
+        sprintf("[%s] being removed by %s (TP=%O)\n",
+          dtime(time()), po_list(), this_player()));
+  return 0;
+}
+
+nosave int _query_article()
+{ return (Query(P_NAME)=="Tisch"); }
+
+void reset()
+{
+  ::reset();
+  tell_room(this_object(), break_string("Ein geschaeftiger, kleiner Hobbit "
+        "kommt vorbei, fuellt ein paar Erdnuesse und Salzstangen nach, und "
+        "verschwindet still und leise wieder.", 78));
+}
+
+nosave int sagen()
+{
+  if (TP->QueryProp(ESSEN)>time())
+  {
+    tell_room(this_object(), break_string(TP->Name(WER)+
+      " versucht zu reden, verteilt dabei aber erstmal nur die Salzstangen\n"
+      " in "+(TP->QueryProp(P_GENDER)==FEMALE ? "ihrem" : "seinem")+
+      " Mund ueber den ganzen Tisch.",78), ({ TP }));
+    write("Du versuchst etwas zu sagen, verteilst dabei aber erstmal\n"
+        "nur die Salzstangen in Deinem Mund ueber den ganzen Tisch.\n");
+    TP->SetProp(ESSEN, 0);
+    return 1;
+  }
+  return 0;
+}
+
+nosave int essen(string was)
+{
+  object* inv;
+  int i;
+  notify_fail("WAS moechtest Du essen?\n");
+  switch(was)
+  {
+    case "erdnuss":
+    case "erdnuesse":
+      if (TP->QueryProp(ESSEN)>time())
+      {
+        write("Du hast doch den ganzen Mund noch voller Salzstangen.\n");
+        return 1;
+      }
+      switch(random(3))
+      {
+        case 0:
+          tell_room(environment(TP), break_string(TP->Name(WER)+
+              " legt sich eine Erdnuss auf "+
+              (TP->QueryProp(P_GENDER)==FEMALE ? "ihre" : "seine")+
+              " linke Hand und schnippt sie dann mit "+
+              (TP->QueryProp(P_GENDER)==FEMALE ? "ihrem" : "seinem")+
+              " rechten Daumen in "+
+              (TP->QueryProp(P_GENDER)==FEMALE ? "ihren" : "seinen")+
+              " Mund.", 78), ({ TP }));
+          write("Du nimmst Dir eine Erdnuss, legst sie auf Deine linke Hand "
+              "und schnippst\nsie dann geschickt mit Deinem rechten Daumen "
+              "in Deinen Mund.\n");
+          return 1;
+        case 1:
+          tell_room(environment(TP), break_string(TP->Name(WER)+
+              " nimmt sich eine Handvoll Erdnuesse, formt eine Faust"
+              " und laesst sie von hoch ueber dem Kopf in "+
+              (TP->QueryProp(P_GENDER)==FEMALE ? "ihren" : "seinen")+
+              " weit geoeffneten Mund fallen.",78), ({ TP }));
+          write("Du nimmst Dir eine volle Hand Erdnuesse, formst eine Faust "
+              "und laesst sie von\nhoch ueber Deinem Kopf in Deinen weit "
+              "geoeffneten Mund fallen.\n");
+          return 1;
+        default:
+          write("Gesucht sind noch Ideen fuer ein paar schoene "
+              "Essbeschreibungen, wenn Du\nmit <idee> ein paar "
+              "absetzt, werden sie sicher bald hier eingebaut werden.\n");
+          return 1;
+      }
+    case "salzstange":
+    case "salzstangen":
+      if (TP->QueryProp(ESSEN)>time())
+      {
+        write("Du hast doch den ganzen Mund noch voller Salzstangen.\n");
+        return 1;
+      }
+      switch(random(5))
+      {
+        case 0: 
+          tell_room(environment(TP), break_string(TP->Name(WER)+
+              " fischt sich eine Salzstange mit vielen Salzkruemeln aus der "
+              "Tuete, knabbert erst das eine, dann das andere Ende ab und "
+              "beisst sie dann in der Mitte durch, um ihr zum Schluss mit "
+              "einem gezielten *knabber* im Genick den Garaus zu machen.",78),
+              ({ this_player() }));
+          write(break_string("Du fischst Dir eine Salzstange mit vielen "
+              "Salzkruemeln aus der Tuete, knabberst erst das eine, dann "
+              "das andere Ende ab und beisst sie dann in der Mitte durch, "
+              "um ihr zum Schluss mit einem gezielten *knabber* im Genick "
+              "den Garaus zu machen.\n"));
+          return 1;
+        case 1:
+          inv=all_inventory();
+          inv -= ({ this_player() });
+          if ((i=sizeof(inv))>0)
+          {
+            i=random(i);
+            tell_room(environment(TP), break_string(TP->Name(WER)+
+               " wuehlt knisternd in der Tuete, greift sich dann das Objekt "+
+               (TP->QueryProp(P_GENDER)==FEMALE ? "ihrer" : "seiner")+
+               " Begierde, beisst die Haelfte ab und verfuettert die andere "
+               "Haelfte an "+inv[i]->Name(WEN)+".",78), ({ TP, inv[i] }));
+            write(break_string("Du wuehlst knisternd in der Tuete, greifst "
+               "Dir dann das Objekt Deiner Begierde, beisst die Haelfte ab "
+               "und verfuetterst die andere Haelfte an "+
+               inv[i]->Name(WEN)+".", 78));
+            tell_object(inv[i], break_string(TP->Name(WER)+
+               " wuehlt knisternd in der Tuete, greift sich dann das Objekt "+
+               (TP->QueryProp(P_GENDER)==FEMALE ? "ihrer" : "seiner")+
+               " Begierde, beisst die Haelfte ab und verfuettert die "
+               "andere Haelfte an Dich.", 78));
+            return 1;
+          }
+        case 2:
+          tell_room(environment(TP), break_string(TP->Name(WER)+
+              " greift gedankenverloren in die Salzstangentuete und"
+              " angelt sich eine Salzstange, die "+TP->QueryPronoun()+
+              " auch gleich verspeist.",78), ({ this_player() }));
+          write("Du greifst gedankenverloren in die Salzstangentuete und "
+              "angelst Dir eine\nSalzstange, die Du auch gleich verspeist.\n");
+          return 1;
+        case 3:
+          tell_room(environment(TP), break_string(TP->Name(WER)+
+              " nimmt eine Salzstange zwischen Mittel- und Zeigefinger,"
+              " fuehrt sie langsam zum Mund und saugt genuesslich"
+              " daran.",78), ({ this_player() }));
+          write("Du nimmst eine Salzstange zwischen Mittel- und Zeigefinger, "
+              "fuehrst sie\nlangsam zum Mund und saugst genuesslich daran.\n");
+          return 1;
+        default:
+          tell_room(environment(TP), break_string(TP->Name(WER)+
+              " greift sich eine Handvoll Salzstangen und steckt sie"
+              " sich alle gleichzeitig in "+
+              this_player()->QueryPossPronoun(MALE,WEN)+" Mund.",78),
+              ({ this_player() }));
+          write("Du greifst Dir eine Handvoll Salzstangen und steckst sie "
+              "Dir alle\ngleichzeitig in den Mund.\n");
+          TP->SetProp(ESSEN, time()+120);
+          return 1;
+      }
+  }
+}
+
+void init()
+{
+  ::init();
+  if (!present(PL, ME) || member(gruppe, PL)!=-1) return;
+  gruppe=({ PL }) + gruppe;
+  if (sizeof(gruppe)!=1) return;
+  Set(P_NAME, "");
+  catch(CHMASTER->send("Maexchen", this_object(),
+        "Eine neue gesellige Maexchen-Runde beginnt bald! "
+        "Wer teilnehmen will, sollte sich bald am Spieltisch einfinden!",
+        MSG_SAY));
+  Set(P_NAME, "Tisch");
+}
+
+void exit()
+{
+  if (!previous_object()->QueryProp(LOSE_ROUND))
+    gruppe-=({ previous_object() }); // hat ja ueberhaupt nicht gespielt
+  else
+  {
+    int i, j;
+    if ((i=member(gruppe, PO))!=-1)
+    {
+      j=sizeof(all_inventory())-1;
+      gruppe[i]=gruppe[j];
+      gruppe[j]=capitalize(getuid(PO));
+    }
+  }
+  previous_object()->SetProp(ESSEN, 0);
+  ::exit();
+}
+
+void SetPlaying()
+{
+  if (!present(this_player(), this_object())) return;
+  gruppe=all_inventory();
+  gruppe-=filter_objects(gruppe, "QueryGuest");
+  ::SetPlaying();
+}
+
+void winning(object pl)
+{
+  int i,j;
+  string txt;
+  if ((i=sizeof(gruppe))>1 && query_once_interactive(pl))
+  {
+    if (gruppe[0]!=pl)
+    {
+      write("Fehler beim Aktualisieren der Topliste aufgetreten!\n"
+           +"Bitte Woody verstaendigen.\n");
+      ::winning(pl);
+      return;
+    }
+    j=i/3;
+    if (j && stringp(gruppe[1])) daten[lower_case(gruppe[1]),0]+=j;
+    daten[getuid(pl),0]+=(i-j);
+    daten[getuid(pl),1]+=1;
+    daten[getuid(pl),2]=1.0*daten[getuid(pl),0]/daten[getuid(pl),1];
+    if ((j=daten[getuid(pl),1])<5)
+      daten[getuid(pl),2]=daten[getuid(pl),2]*(0.2*(float)j);
+    j=sizeof(gruppe)-1;
+    if (j>1 && stringp(gruppe[1]))
+      txt=gruppe[2];
+    for (;j>0;j--)
+      if (stringp(gruppe[j]))
+      {
+        int k;
+        string key;
+        if (j==1) {
+           if (!txt) txt=gruppe[1];
+           else txt+=" und "+gruppe[1];
+        }
+        else if (j>2) txt+=", "+gruppe[j];
+        key=lower_case(gruppe[j]);
+        daten[key,1]+=1;
+        daten[key,2]=1.0*daten[key,0]/daten[key,1];
+        if ((k=daten[key,1])<5) daten[key,2]=daten[key,2]*(0.2*(float)k);
+      }
+      else
+      {
+        if (objectp(gruppe[j])) daten[getuid(gruppe[j]),1]+=1;
+        log_file(LOGFILE,
+            sprintf("%s: gruppe[%d]=%O\n",dtime(time()), j, gruppe[j]));
+      }
+    Set(P_NAME, "");
+    catch(CHMASTER->send("Maexchen", this_object(), pl->Name(WER)+
+          " hat gerade eine Partie Maexchen gegen "+txt+" gewonnen.",
+          MSG_SAY));
+    Set(P_NAME, "Tisch");
+    if (i >= (sizeof(great_games[9])) )
+    {
+      gruppe[0]=capitalize(getuid(pl));
+      gruppe=({ time() }) + gruppe; // i++; da gruppe groesser wird
+      j=0;
+      while (i<sizeof(great_games[j])) j++; // i, ist eigentlich i+1
+      for (i=9;i>j;i--)
+        great_games[i]=great_games[i-1];
+      great_games[j]=gruppe;
+    }
+    listchange=1;
+    gruppe=({});
+    save_object(SAVEFILE);
+  }
+  ::winning(pl);
+}
+
+void greatest_games()  // Top 10
+{
+   int i, j, k;
+   string text;
+   write_file(SAVEFILE+".lst", "Die groessten Maexchenrunden im "+
+       MUDNAME+":\n");
+   for (i=0;i<10;i++) {
+     text="Am "+dtime(great_games[i][0])[5..<11]+" um "
+         +dtime(great_games[i][0])[<8..<4]+" spielten: ";
+     switch(k=sizeof(great_games[i])-1) {
+       case 0: write("Fehler! Bitte Magier verstaendigen.\n"); return;
+       case 1: text+=great_games[i][1]; break;
+       default:
+         text+=great_games[i][1];
+         for (j=2;j<k;j++)
+           text+=", "+great_games[i][j];
+         text+=" und "+great_games[i][k]+".";
+     }
+     text=break_string(text, 74, 4);
+     if (i==9)
+       text[0..3]="10. ";
+     else text[1..3]=(string)(i+1)+". ";
+     write_file(SAVEFILE+".lst", text);
+   }
+}
+
+nosave int greater_fun(string a, string b)
+{ 
+   int j;
+   float i1,i2;
+   i1=(float)daten[a,2];
+   i2=(float)daten[b,2];
+   if ((float)i2<(float)i1) 
+     return 0;
+   if ((float)i1<(float)i2) return 1;
+   j=daten[a,0]-daten[b,0];
+   if (j<0) return 1;
+   if (j>0) return 0;
+   j=daten[a,1]-daten[b,1];
+   if (j<0) return 0;
+   if (j>0) return 1;
+   return (a>b);
+}
+
+void best_players() // Topliste wird an this_player() ausgegeben
+{
+   int i;
+   write_file(SAVEFILE+".lst",
+       "Die Besten Maexchen-Spieler aller Zeiten:\n"
+       "     Name:                   Siegpkt.      Spiele     Rating\n");
+   map_array(sort_array(m_indices(daten), "greater_fun")[0..100],
+     lambda( ({'x, 'y}), ({#'write_file, SAVEFILE+".lst",
+             ({#'sprintf, "%3O  %-16s   %10d   %10d       %-6O\n", 
+             ({#'=, 'y, ({#'+, 'y, 1})}), ({#'capitalize, 'x}), 
+             ({#'[, daten, 'x, 0}),({#'[, daten, 'x, 1}),
+             ({#'[, daten, 'x, 2}) }) }) ), &i );
+}
+
+int lies(string str)
+{
+   switch(str) {
+     case "topliste":
+     case "topmaexchen":
+     case "top-maexchen":
+     case "topmaexchenliste":
+     case "top-maexchenliste":
+     case "maexchenliste":
+       if (listchange) {
+          (void)rm(SAVEFILE+".lst");
+          greatest_games();
+          write_file(SAVEFILE+".lst", "\n");
+          best_players();
+          listchange=0;
+       }
+       this_player()->More(read_file(SAVEFILE+".lst"));
+       return 1;
+     default: return ::lies(str);
+   }
+}
+

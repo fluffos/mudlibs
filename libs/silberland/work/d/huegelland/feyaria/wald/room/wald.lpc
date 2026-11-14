@@ -1,0 +1,372 @@
+#include "../def.h"
+#include <exploration.h>
+#include "/p/daemon/skillmaster/skillmaster.h"
+
+inherit "std/room";
+
+mapping map, reset_details;
+string sound_rascheln();
+string *search = ({});   // Wer hat hier schon nach pflanzen gesucht
+string plant = 0;  // welche pflanze gibts hier
+mapping plants = ([
+    "/d/wasser/woody/obj/blume": -2000; 10,
+    "/d/wasser/aaliyah/hexenstadt/obj/beifuss": -1000; 1000,
+    "/d/wasser/aaliyah/hexenstadt/obj/engelswurz": 4000; 4000,
+    "/d/wasser/aaliyah/hexenstadt/obj/jblueten": -1000; 1000,
+    "/d/wasser/aaliyah/hexenstadt/obj/johkraut": 1000; 1000,
+    "/d/wasser/aaliyah/hexenstadt/obj/melisse": 1000; 1000,
+    "/d/wasser/aaliyah/hexenstadt/obj/tauskraut": 3000; 3000,
+    "/d/wasser/aaliyah/hexenstadt/obj/teufelsauge": 4000; 4000,
+    "/d/dschungel/feyaria/tijara/obj/wirsel": 1000; 3000,
+    "/d/dschungel/feyaria/tijara/obj/giftefeu": 3000; 5000,
+    "/d/dschungel/feyaria/tijara/obj/wunder": 10000; 10000,
+    ]);
+
+void create()
+{
+  string *npc;
+
+  if(!is_clone(TO)) return;
+  ::create();
+  PO->CustomizeObject();
+
+  AddSmell( ({DEFAULT_SMELL, "geruch", "waldgeruch"}), 
+      "Du riechst typischen Waldgeruch.");
+  AddSound( ({DEFAULT_SOUND, "geraeusche", "waldgeraeusche"}), 
+      "Du hoerst typische Waldgeraeusche.");
+ 
+  npc = ({NPC "fuchs",  NPC "fuchs", NPC "fuchs", NPC "fuchs", 
+          NPC "schlange", NPC "schlange", NPC "schlange", NPC "schlange", 
+          NPC "frosch", NPC "frosch",  NPC "frosch",  NPC "frosch", 
+          NPC "hirsch",  NPC "hirsch", NPC "hirsch", NPC "hirsch", 
+          NPC "hoernchen", NPC "hoernchen", NPC "hoernchen", NPC "hoernchen", 
+          NPC "marder", NPC "marder", NPC "marder", NPC "marder", 
+          NPC "reh", NPC "reh", NPC "reh", NPC "reh", 
+          NPC "baer", NPC "baer", NPC "baer",
+          NPC "hirschkaefer",  NPC "hirschkaefer", NPC "hirschkaefer", 
+          NPC "mistkaefer",NPC "mistkaefer", NPC "mistkaefer",
+          NPC "luchs", NPC "luchs", 
+          NPC "waldloewe", NPC "waldloewe",
+          NPC "spinne", NPC "spinne",
+          "/d/ebene/Silberwald/npc/wildkaninchen",
+          "/d/ebene/Silberwald/npc/wildschwein",
+          "/d/ebene/Silberwald/npc/hase",
+          "/d/ebene/Silberwald/npc/uhu",
+          "/d/ebene/Silberwald/npc/biber",
+          "/d/huegelland/feyaria/weg/npc/specht",
+          "/d/huegelland/feyaria/weg/npc/huegelkatze",
+          "/d/huegelland/feyaria/weg/npc/dachs",
+          "/d/huegelland/feyaria/weg/npc/waldwolf",
+          "/d/huegelland/zordan/fischerweg/npc/wiesel",
+          "/d/kristallwald/sargola/dorf/npc/mschnabl",
+          "/d/kristallwald/sargola/lichtung/npc/eule",
+          "/d/huegelland/orw/pfeifenladen/npc/zufallstier"});
+
+  if (random(100) < NPC_CHANCE)
+    AddItem( npc, REFRESH_DESTRUCT,
+        ([P_MNPC_DEFAULTROOM: file_name(TO), 
+          P_MNPC_AREA: ROOM,
+          P_MNPC_FLAGS: MOV_OUTDOORS + MOV_BACKWARDS + MOV_MOVES + MOV_MAYLOAD,
+          P_HEAL: 5 + random(50)]) ); 
+  if (random(100) < NPC_CHANCE2)
+    AddItem( npc, REFRESH_DESTRUCT,
+        ([P_MNPC_DEFAULTROOM: file_name(TO), 
+          P_MNPC_AREA: ROOM,
+          P_MNPC_FLAGS: MOV_OUTDOORS + MOV_BACKWARDS + MOV_MOVES + MOV_MAYLOAD,
+          P_HEAL: 10 + random(30)]) ); 
+
+  AddCmd( ({"trink", "trinke"}), "cmd_trinken");
+  AddCmd( ({"sammel", "sammle"}), "cmd_sammeln");
+  AddCmd( ({"pflueck", "pfluecke"}), "cmd_pfluecken");
+  AddCmd( ({"greif", "greife"}), "cmd_greifen");
+  AddCmd( ({"stehle", "stiehl", "stehl"}), "cmd_stehlen");
+  AddCmd( ({"grabe", "grab" }), "cmd_graben");
+  AddCmd( ({"faelle", "faell" }), "cmd_faellen");
+
+  AddSound( ({"rascheln"}), #'sound_rascheln);
+  map = ([]);
+  reset_details = ([]);
+  set_next_reset(20 * 60);
+  if (!random(7))
+    plant = m_indices(plants)[random(sizeof(plants))];
+  else
+    plant = 0;
+}
+
+void reset()
+{
+  ::reset();
+  map = ([]);
+  if (sizeof(reset_details))
+    walk_mapping(reset_details, "AddDetail");
+  reset_details = ([]);
+  set_next_reset(20 * 60);
+  search = ({});
+  if (!random(7))
+    plant = m_indices(plants)[random(sizeof(plants))];
+  else
+    plant = 0;
+}
+
+void init()
+{
+  ::init();
+  call_out("sense", 2);
+}
+
+void sense()
+{
+  object ob;
+
+  if (!plant || !objectp(TP) || !present(TP) || !interactive(TP) || 
+      member(search, getuid(TP)) != -1) 
+    return;
+  search += ({getuid(TP)});
+  if (SKILLMASTER->UseSkill(TP, SK_SENSE, plants[plant], -random(5000)) > 0)
+  {
+    if (SKILLMASTER->UseSkill(TP, SK_HERBALLORE, plants[plant, 1], -random(2000)) >0)
+    {
+      ob = clone_object(plant);
+      write(BS(sprintf("Du findest eine seltene Pflanze, die Du sofort pflueckst. "
+          "Es handelt sich dabei um %s.", ob->name(WEN))));
+      if (ob->move(TP, M_GET) < 0)
+      {
+        printf("Du kannst %s nicht tragen!\n", ob->name(WEN));
+        ob->move(TO, M_NOCHECK);
+      }
+      WLOG(LOG "pflanzen", sprintf("findet %s", ob->name(WEN)));
+    }
+    else
+    {
+      if (!random(5))
+        write(BS("Du findest hier ein seltsame Pflanze, aber da Du sie nicht "
+              "kennst, wendest Du Dich wieder anderen Dingen zu."));
+    }
+  }
+}
+
+
+int cmd_trinken(string str)
+{
+  string *nutzer;
+
+  if (!GetDetail("wasser")) 
+    return 0;
+  notify_fail("Was willst Du trinken?\n");
+  if (str != "wasser" && str != "aus baechlein") 
+    return 0;
+
+  write("Du trinkst etwas Wasser aus dem Baechlein und fuehlst Dich "
+      "erfrischt.\n");
+  say(TP->Name() + " trinkt Wasser aus dem Baechlein.\n");
+  if (!pointerp(nutzer = map["trinken"]))
+    nutzer = ({});
+  if (member(nutzer, getuid(TP)) == -1)
+  {
+    TP->heal_self(TRINK_HEAL + random(TRINK_HEAL));
+    map["trinken"] = nutzer + ({ getuid(TP) });
+    find_object(ROOM "waldmaster")->give_fp("wald_trinken", EP_DETAIL);
+  }
+  return 1;
+}
+
+int cmd_sammeln(string str)
+{
+  string *nutzer;
+
+  if (!GetDetail("pilzesammler")) 
+    return 0;
+  notify_fail("Was willst Du sammeln?\n");
+  if (str != "pilz" && str != "pilze") 
+    return 0;
+
+  if (!pointerp(nutzer=map["sammeln"]))
+    nutzer = ({});
+  if (member(nutzer, getuid(TP)) == -1)
+  {
+    write("Du sammelst ein paar Pilze und isst sie sofort auf.\n");
+    say(TP->Name() + " sammelt ein paar Pilze und isst sie auf.\n");
+    if (GetDetail("giftpilz"))
+      TP->AddPoison(1 + random(2));
+    else
+      TP->heal_self(PILZ_HEAL + random(PILZ_HEAL));
+    find_object(ROOM "waldmaster")->give_fp("wald_sammeln", EP_EXIT);
+    map["sammeln"] = nutzer + ({ getuid(TP) });
+  }
+  else
+  {
+    write(BS("Du schaust Dich genauer um, findest aber dann doch keinen Pilz, "
+        "der Dir gefaellt, also gibst Du das Pilzesammeln auf."));
+  }
+  return 1;
+}
+
+int cmd_pfluecken(string str)
+{
+  string *nutzer;
+
+  if (!GetDetail("waldblumenpfluecker")) 
+    return 0;
+  notify_fail("Was willst Du pfluecken?\n");
+  if (str != "blume" && str != "waldblume" && str != "blumen" && 
+      str != "waldblumen") 
+    return 0;
+  if (!pointerp(nutzer=map["pfluecken"]))
+    nutzer = ({});
+  if (member(nutzer, getuid(TP)) == -1)
+  {
+    write("Du pflueckst ein paar Waldblumen.\n");
+    say(TP->Name() + " pflueckt ein paar Waldblumen.\n");
+    switch(random(5))
+    {
+      case 0: CLONE("/d/seher/feyaria/obj/blume", TP); break;
+      case 1: CLONE("/d/huegelland/xorgan/koehler/obj/blumen", TP); break;
+      default: CLONE("/d/wasser/woody/obj/blume", TP); break;
+    }
+    map["pfluecken"] = nutzer + ({ getuid(TP) });
+    find_object(ROOM "waldmaster")->give_fp("wald_pfluecken", EP_CMD);
+  }
+  else
+  {
+    write("Du hast hier doch schon Blumen gepflueckt!\n");
+  }
+  return 1;
+}
+
+int cmd_greifen(string str)
+{
+  object ob;
+
+  if (GetDetail("loch") && (str == "in loch" || str = "in erdloch")) 
+  {
+    if (!map["greifen"] )
+    {
+      write("Du greifst in das Loch und scheuchst ein kleines Tierchen auf.\n");
+      say(TP->Name() + " scheucht ein kleines Tierchen auf.\n");
+      ob = clone_object("/d/huegelland/orw/pfeifenladen/npc/zufallstier");
+      ob->SetProp(P_MNPC_DEFAULTROOM, file_name(TO));
+      ob->SetProp(P_MNPC_AREA, ROOM);
+      ob->move(TO, M_GO);
+      map["greifen"] = 1;
+      find_object(ROOM "waldmaster")->give_fp("wald_greifen", EP_INFO);
+    }
+    else
+    {
+      write("Das Loch ist leer.\n");
+    }
+    return 1;
+  }
+  if (GetDetail("oeffnung") && str == "in oeffnung") 
+  {
+    if (!map["oeffnung"] )
+    {
+      write(BS("Du greifst in die Oeffnung und findest eine Raupe, die sich "
+            "gerade in einen Kokon einspinnen wollte. Da sie lecker aussieht, "
+            "isst Du die Raupe sofort auf, uebrig bleibt nur etwas "
+            "Raupenseide."));
+      say(TP->Name() + " fummelt an einem Stamm herum.\n");
+      ob = clone_object("/p/std/skills/sewing_tanning/obj/raupenseide");
+      ob->move(TP, M_GET|M_NOCHECK);
+      map["oeffnung"] = 1;
+      TP->heal_self(RAUPEN_HEAL + random(RAUPEN_HEAL));
+      find_object(ROOM "waldmaster")->give_fp("wald_greifen", EP_INFO);
+    }
+    else
+    {
+      write("Die Oeffnung ist leer.\n");
+    }
+    return 1;
+  }
+  notify_fail("Wo hinein willst Du greifen?\n");
+  return 0;
+}
+
+int cmd_stehlen(string str)
+{
+  object ob;
+
+  if (!GetDetail("vogeleier")) 
+    return 0;
+  notify_fail("Was willst Du stehlen?\n");
+  if (str != "eier" && str != "vogeleier") 
+    return 0;
+  write("Du stiehlst die Vogeleier aus dem Vogelnest und isst sie sofort auf.\n");
+  say(TP->Name() + " findet ein paar Vogeleier, die " + TP->QueryPronoun(WER) +
+      " sofort aufisst.\n");
+  TP->heal_self(EIER_HEAL + random(EIER_HEAL));
+  reset_details["vogelnest"] = GetDetail("vogelnest");
+  reset_details["vogeleier"] = GetDetail("vogeleier");
+  RemoveDetail("vogeleier");
+  AddDetail("vogelnest", "Das Vogelnest ist leer.");
+  find_object(ROOM "waldmaster")->give_fp("wald_stehlen", EP_PUB);
+  return 1;
+}
+
+int cmd_graben(string str)
+{
+  string *nutzer;
+
+  if (!GetDetail("wurzelliebhaber")) 
+    return 0;
+  notify_fail("Was willst Du ausgraben?\n");
+  if (str != "wurzel" && str != "wurzel aus" && str != "nach wurzel") 
+    return 0;
+
+  if (!pointerp(nutzer=map["graben"]))
+    nutzer = ({});
+  if (member(nutzer, getuid(TP)) == -1)
+  {
+    write("Du graebst eine schmackhafte Wurzel aus und isst sie sofort auf.\n");
+    say(TP->Name() + " wuehlt im Boden herum und isst etwas.\n");
+    TP->heal_self(WURZEL_HEAL + random(WURZEL_HEAL));
+    map["graben"] = nutzer + ({ getuid(TP) });
+    find_object(ROOM "waldmaster")->give_fp("wald_graben", EP_MISC);
+  }
+  else
+  {
+    write(BS("Du faengst an zu graben, aber dann merkst Du, dass diese "
+          "Wurzel doch nicht essbar isst und gibt auf."));
+  }
+  return 1;
+}
+
+int cmd_faellen(string str)
+{
+  object ob;
+
+  if (!GetDetail("holzfaeller")) 
+    return 0;
+  notify_fail("Was willst Du faellen?\n");
+  if (str != "baum") 
+    return 0;
+  notify_fail("Du musst eine Axt gezueckt haben, um einen Baum zu faellen.\n");
+  if (!objectp(ob = TP->QueryProp(P_WEAPON)) || ob->QueryProp(P_WEAPON_TYPE) != WT_AXE)
+    return 0;
+  write(BS("Du versuchst, einen Baum zu faellen, schafft es aber nur, "
+        "ein kleines Holzstueckchen aus dem Stamm zu schlagen."));
+  say(BS(TP->Name() + " versucht, einen Baum zu faellen, schafft es aber nur, "
+        "ein kleines Holzstueckchen aus dem Stamm zu schlagen."));
+  CLONEME("/p/std/skills/sewing_tanning/obj/holz");
+  reset_details["stamm"] = GetDetail("stamm");
+  reset_details["holz"] = GetDetail("holz");
+  reset_details["holzfaeller"] = GetDetail("holzfaeller");
+  AddDetail("holz", 
+    "Ein kleines Holzstueckchen wurde aus dem Stamm herausgeschlagen, "
+    "scheinbar ist das Holz zu hart, um den Baum faellen zu koennen.");
+  AddDetail("stamm", GetDetail("holz"));
+  RemoveDetail("holzfaeller");
+  find_object(ROOM "waldmaster")->give_fp("wald_stehlen", EP_PUB);
+  return 1;
+}
+
+string sound_rascheln()
+{
+  if( GetDetail("rascheln") )
+  {
+    find_object(ROOM "waldmaster")->give_fp("wald_rascheln", EP_SENSE);
+    return BS("Du lauscht aufmerksam dem Rascheln, kannst es aber nicht naeher "
+        "identifizieren.");
+  }
+  else
+    return "Du kannst nichts Besonderes hoeren.\n";
+}

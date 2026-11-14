@@ -1,0 +1,190 @@
+#include "../def.h"
+#include "../ranger.h"
+#include "../ranger_tasks.h"
+#define owner environment(this_object())
+
+inherit "std/thing";
+
+int stage;
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+//--Beschreibungen---------------------------------------------------------
+  SetProp(P_SHORT, "Eine Schnitzeljagd");
+
+//--Namen------------------------------------------------------------------
+
+  SetProp(P_NAME, "Schnitzeljagd");
+  SetProp(P_GENDER, NEUTER);
+  AddId(({"QUESTOBJ", RANGER_TASK_SCHNITZELJAGD}));
+
+//--Eigenschaften----------------------------------------------------------
+
+  SetProp(P_MATERIAL, MAT_MAGIC );
+  SetProp(P_WEIGHT, 0);;
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NEVERDROP, 1);
+
+  stage = 0;
+}
+
+public int _query_invis() {
+  return (stage!=1&&stage!=7);
+}
+
+public int QueryStage() {
+  return stage;
+}
+
+public string _query_short() {
+  if(stage == 1) {
+    return "Eine blutbefleckte Nachricht";
+  } else if(stage == 7) {
+    return "Ein zerknuellter Zettel";
+  }
+
+  return 0;
+}
+
+public string _query_long() {
+  if(stage == 1) {
+    return "Es handelt sich um einen einfachen Zettel, auf den eine Nachricht "
+           "gekritzelt wurde. Einige Blutflecken verschmieren den Text.";
+  } else if(stage == 7) {
+    return "Du haeltst einen zerknuellten Zettel in der Hand, auf den etwas geschrieben wurde.";
+  }
+
+  return 0;
+}
+
+public void HugenKilled() {
+  stage = 1;
+  owner->Message("Du nimmst eine blutbefleckte Nachricht aus Hugens Leiche.");
+  AddCmd( "lies|lese|les&nachricht|blutbefleckte nachricht|zettel", "cmd_lesen_stg1", "Was willst du lesen?");
+  AddId(({"zettel", "nachricht"}));
+}
+
+public int cmd_lesen_stg1() {
+  if(stage == 1) {
+    write(BS("Auf der Nachricht steht: ")+"\n");
+    write("Gruss dir H...n,\n"
+          "A.l. schickt .... .it dies.. Waffe zu dir. Sie ist von ... Fein..n .u.ty. geschaffen, ...\n"
+          "wird uns gr...e. ..id bringen. Zer.....e sie in v.. Teile. Ich hole sie bei S..n..ufg...\n"
+          "ab.\n"
+          "Ehre sei Dusty,\n"
+          "..ona..r, Hauptmann von .r......\n\n");
+    write(BS("Leider ist die Nachricht so verschmiert, dass du nicht mehr alles erkennen kannst. "
+            "Das muss dir als Hinweis reichen. Wenn du herausfindest, wer Hugen die Waffe gebracht "
+            "hat, dann kannst du ihn zum Reden bringen!"));
+    return 1;
+  } else if(stage == 7) {
+    write(BS("Auf dem Zettel steht:")+"\n");
+    write("  Bring die Teile unter die Stadt, wo kein Leben verweilen darf. Unser Freund wird\n"
+          "  unter dem Nachthimmel dort auf dich warten.\n");
+    write("\nWo das wohl sein koennte? Vielleicht kannst du von diesem 'Freund' etwas in Erfahrung\n"
+          "bringen?\n");
+    return 1;
+  }
+
+  return 0;
+}
+
+public void BronawarKilled(object bronwar) {
+  if(stage != 1) return;
+
+  if(objectp(bronwar)) {
+    bronwar->StopHuntFor(owner);
+    owner->StopHuntFor(bronwar);
+  }
+
+  stage = 2;
+  owner->Message("Du haeltst Bronawar die blutschmierte Nachricht ins Gesicht und er stammelt:\n");
+  owner->Message("  'Jarlaxle hat mich dazu gezwungen! Er hat mich erpresst und ich habe die '\n");
+  owner->Message("  'Waffe von ihm bekommen. Bitte toete mich nicht! Ich werde mich meiner   '\n");
+  owner->Message("  'Straffe stellen.'\n");
+  owner->Message("\n");
+  owner->Message("Du laesst vom verwundeten Zwerg ab und er verzieht sich.\n");
+  owner->command_me("denk Wenn ich diesen Jarlaxle finde, dann kann er mir verraten woher er die Waffe hat!");
+  RemoveId(({"zettel", "nachricht"}));
+  return;
+}
+
+public void JarlaxleDetected() {
+  if(stage != 2) return;
+
+  stage = 3;
+  owner->command_me("denk Das ist dieser Bursche. Nach ein paar saftigen Schlagen wird er schon alles ausspucken!");
+
+  return;
+}
+
+public void JarlaxleKilled(object jarlaxle) {
+  if(stage != 3 && stage != 2) return;
+
+  if(objectp(jarlaxle)) {
+    jarlaxle->StopHuntFor(owner);
+    owner->StopHuntFor(jarlaxle);
+    jarlaxle->command_me("sag Stop! Stop! Ich verrate dir alles!");
+    jarlaxle->command_me("sag Ich habe eine Kiste mit einer Waffe von Odania erhalten. Sie hat mir aufgetragen "
+                        "den alten Zwergen bei der Stadwache zu erpressen, damit er sie zu den Paladinen bringt "
+                        "und sie dort zerlegt werden kann! Einer der Agenten von ihr muss sie dann abgeholt "
+                        "haben.");
+    jarlaxle->command_me("echo versteckt sich im Schatten.");
+    jarlaxle->remove(1);
+  }
+  stage = 4;
+
+  owner->command_me("denk Die Waffenmeisterin der Dunkelelfenkoenigin? Hat doch erst ein anderer Dunkelelf mich ausgetrickst... "
+                    "Jetzt ist wohl die Zeit fuer Rache gekommen!");
+  return;
+}
+
+public void OdaniaKilled() {
+  if(stage != 4) return;
+
+  owner->Message(break_string("Pass auf du Lurch! Ich wusste nichts von Odanias Machenschaften und solch einen ungeschickten Verrat "
+                              "in meinem Volk finde ich wiederlich. Letztens erst haben meine Sklaven beobachtet, wie sie sich mit "
+                              "einem Kaesehandler aus Midas getroffen hat.", 78, "Die Dunkelelfenkoenigin teilt Dir mit: "), MSGFLAG_TELL);
+
+  stage = 5;
+}
+
+public void AlbinKilled() {
+  if(stage != 5) return;
+
+  owner->command_me("denk Hat bis zum Schluss durchgehalten. Irgendwo muss er doch hier etwas versteckt haben, dass mir weiterhilft...");
+  stage = 6;
+  return;
+}
+
+public void StashFound() {
+  if(stage != 6) return;
+
+  owner->Message("In dem Geiheimversteck findest du einen zerknuellten Zettel.");
+  stage = 7;
+  AddId(({"zettel", "nachricht"}));
+  return;
+}
+
+public void PiazzaBetreten() {
+  if(stage != 7) return;
+  RemoveId(({"zettel", "nachricht"}));
+  owner->command_me("denk Hier muss ich richtig sein. Die Piazza des Todes... wer wohl dieser Freund im Nachthimmel ist?");
+  stage = 8;
+  return;
+}
+
+public void NachtkaempferKilled() {
+  if(stage != 8) return;
+
+  owner->Message("Aus der Leiche nimmst du ein Emblem mit einer schwarzen Rose darauf.");
+  owner->command_me("denk Hm. Das Symbol kenne ich nicht. Raziel wird sicher wissen, wo wir weiter suchen sollten.");
+  RANGER_SET_TASK(owner, 16);
+  remove(1);
+}

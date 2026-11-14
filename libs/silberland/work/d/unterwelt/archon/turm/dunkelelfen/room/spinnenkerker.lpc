@@ -1,0 +1,1186 @@
+// Raum wird fuer jeden Spieler einzeln erzeugt virtual_room!!
+// Deshalb wird auch auf Raummeldungen verzichtet, bis auf moegliche Magier
+// ist man alleine im Raum
+// Hinweis - jedem wird die Waffen abgenommen (weggesteckt)
+//           damit man hier keine cursed weapon los wird, 
+//           gibt es frueher ein schutz, das man hier mit einer solchen
+//           waffe nicht landen kann
+//         - Man kann im Raum weder Ende noch Schlafe ein machen (vr)
+//           Schutz gegen Disconnect ... (BecomesNetDead) ... 
+//           man wird rausgemoved und landet beim erneuten einloggen
+//           etwas weiter vorne in der quest
+//
+// 05.04.2003 erstellt: Archon
+/*
+ bearbeitet: 13.07 2011 Clementine
+ bearbeitet: 06.06.2007 Clementine@SL
+ bearbeitet: 27.12.2004 Clementine@SL
+ Rev 1.4 04.09.2003 Archon: kleine umstellung
+ Rev 1.3 02.09.2003 Archon: rep
+ Rev 1.2 30.07.2003 Archon: rep
+ Rev 1.1 21.07.2003 Archon: rep
+ Rev 1.0 05.04.2003 Archon: erstellt
+*/
+
+#pragma strict_types
+#include "../def.h"
+inherit "std/room";
+
+//commandos die immer erlaubt sind - schlaf (ein) und ende ist nie erlaubt
+//ein schutz vor BecomesNetDead ist aber vorhanden ...
+#define ausnahmen ({"typo","bug","idee","teile","hilfe","schau","mschau", \
+                    "info","wer","kwer","unt","untersuche","zeit","inv", \
+                    "i","inventur","sag","'","denke","gruebel","verb", \
+                    "schaue","denk","sage" })
+//commandos die nach und nach erlaubt werden
+#define commandos ({({"verkante","verkanten","streck","strecke","strecken"}), \
+                    ({}), \
+                    ({"taste","tasten","ertaste","ertasten"}), \
+                    ({"roll","rolle","rollen"}), \
+                    ({"schieb","schieben","schiebe"}), \
+                    ({"tritt","trete","treten","tret"}), \
+                    ({"schneide","schneiden","durchschneiden","losschneiden"}), \
+                    ({}), \
+                    ({"steck","stecke","stecken"}), \
+                    ({"zuende","zuenden","anzuenden","zuend"}) })
+
+#define AUSGANG  ROOM "tunnel_01" //schutz bei disconnect des spielers
+#define POS_FUSSFREI 2
+#define POS_ARMFREI 7
+#define POS_FREI 10
+#define POS_MAX  11
+
+void create();
+string detail_position();
+string detail_koerper();
+string detail_rest();
+string detail_boden();
+string detail_kopf();
+string detail_fuss();
+string detail_netz();
+string detail_spinne();
+string detail_faeden();
+string detail_arm();
+mixed detail_plan();
+mixed detail_stein();
+mixed detail_mulde();
+mixed detail_dolch();
+mixed detail_fackel();
+mixed detail_seite();
+mixed detail_wippe();
+mixed detail_norden();
+mixed detail_loch();
+mixed detail_hebel();
+string smell_geruch();
+
+string _query_int_long();
+
+int cmd_verkante(string str);
+int cmd_strecke(string str);
+int cmd_taste(string str);
+int cmd_rolle(string str);
+int cmd_schiebe(string str);
+int cmd_trete(string str);
+int cmd_befreie(string str);
+int cmd_schneide(string str);
+int cmd_fasse(string str);
+int cmd_ziehe(string str);
+
+int exit_norden();
+int exit_loch();
+
+void init();
+int istlichtquelle(object was);
+void wegdamit(object was);
+int istgezuecktewaffe(object ob);
+void ablegen(object was);
+void set_start(object pl);
+int abc(string str);
+void reset();
+void BecomesNetDead(object spieler);
+varargs mixed make_invlist(object viewer, mixed inv, int flags);
+varargs string GetExits( object viewer );
+mixed get_check_cmd(string in,string erlaubt,string fehler);
+
+//aufruf beim anzuenden der gefundenen fackel
+public void fackel_angezuendet(object fackel, object pl);
+public string query_pos();
+
+int    pos;   //fuer Position im Befreiungsversuch
+
+void create()
+{
+  ::create();
+  pos=-1; //nicht gestartet
+
+  SetProp(P_INDOORS,1);
+  SetProp(P_LIGHT,1);
+  SetProp(P_ENVIRONMENT,([ENV_TEMPERATURE:20, ENV_TERRAIN:TT_CAVE]));
+  SetProp(P_INT_SHORT,"In einem Tunnel");
+//damit schutz in tunnel_01 nicht umgangen wird und man nicht anders raus kommt
+  SetProp(P_NO_TPORT,NO_TPORT);
+  SetProp(P_NOQUIT,1); //eigentlich unnoetig da ende eh nicht zugelassen
+
+  AddDetail(({"hoehle"}),#'_query_int_long);
+  AddDetail(({"wesen","dunkelelfen","dunkelefe","gastgeber",
+              "dunkelelfenkrieger","dunkelelfenmagier",
+              "dunkelelfenpriesterinnen","dunkelelfenpriesterin"}),
+    "Zum Glueck ist zur Zeit keiner da. Vielleicht kannst Du Dich von hier "
+    "befreien, bevor Dich einer dieses dreckigen Dunkelelfenpriesterinnen "
+    "abholt und zu einer Opferung schleift.");
+  AddDetail(({"opfer"}),
+    "Das bist wohl Du.");
+  AddDetail(({"opferung","lage"}),
+    "Du willst Dir lieber die Opferung gar nicht erst vorstellen, "
+    "denn Du waerst dabei in keiner vorteilhaften Position.");
+  AddDetail(({"position"}),#'detail_position);
+  AddDetail(({"weile","warten"}),
+    "Die Zeit vergeht.");
+  AddDetail(({"zeit"}),
+    "Viel hast Du davon nicht.");
+  AddDetail(({"glueck"}),
+    "Das koenntest Du hier gebrauchen, um mit heiler Haut zu entkommen.");
+  AddDetail(({"haut","gaensehaut"}),
+    "Hoffentlich wird sie Dir nicht bei lebendigem Leib abgezogen.");
+  AddDetail(({"leib","koerper"}),#'detail_koerper);
+  AddDetail(({"teil","koerperteil","koerperteile","teile"}),
+    "Du koenntest Deinen Kopf, Deine Arme, Deine Haende, "
+    "Deine Beine, Deine Fuesse und den gesamten Rest, wie "
+    "Deinen Oberkoerper untersuchen.");
+  AddDetail(({"rest","oberkoerper","ruecken"}),#'detail_rest);
+  AddDetail(({"decke"}),
+    "Die Decke ist nicht nur abstossend tiefschwarz, sondern auch noch "
+    "von ekligen duennen Spinnenfaeden ueberzogen.");
+  AddDetail(({"boden"}),#'detail_boden);
+  AddDetail(({"kopf"}),#'detail_kopf);
+  AddDetail(({"fuss","fuesse","bein","beine"}),#'detail_fuss);
+  AddDetail(({"netz","spinnnetz","spinnennetze","spinnennetz","netzes"}),
+    #'detail_netz);
+  AddDetail(({"mitte"}),
+    "Du weisst doch bestimmt wie ein Spinnennetz aussieht, oder? "
+    "Dann weisst Du bestimmt auch, dass es eine Mitte hat.");
+  AddDetail(({"spinne","spinnen","erschafferin"}),#'detail_spinne);
+  AddDetail(({"wand","waende","stelle","stellen"}),
+    "Die Waende sehen unheimlich aus. Dunkle klebrige Stellen und "
+    "Spinnweben wechseln sich gegenseitig ab. Igitt Du willst "
+    "die Waende nicht anfassen muessen.");
+  AddDetail(({"zentimeter","millimeter"}),
+    "Ohje Deine Allgemeinbildung laesst zu wuenschen uebrig.");
+  AddDetail(({"bildung","allgemeinbildung"}),
+    "Du hast doch eine, oder?");
+  AddDetail(({"weben","spinnweben","spinnenweben"}),
+    "Du siehst an den Waenden viele kleine Spinnennetze, Spinnenfaeden "
+    "und Spinnenweben. Igitt - Du willst hier raus.");
+  AddDetail(({"art","arten","faden","faeden","spinnenfaeden",
+              "spinnenfaden","spinnfaden","spinnfaeden"}),#'detail_faeden);
+  AddDetail(({"moeglichkeit","flucht","fluchtmoeglichkeit","weg"}),
+    "Du willst hier nur mit heiler Haut heraus.");
+  AddDetail(({"ausgang"}),
+    "Du wuenschst Dir einen Ausgang herbei.");
+  AddDetail(({"reste"}),
+    "Viel ist davon nicht mehr uebrig.");
+  AddDetail(({"spielraum"}),
+    "Glaubst Du den hier zu finden?");
+  AddDetail(({"hand","haende","arm","arme"}),#'detail_arm);
+  AddDetail(({"finger"}),
+    "Du bewegst Deine Finger. Schoen jeder einzelne gehorcht "
+    "dem Befehl Deines Hirns.");
+  AddDetail(({"hirn","gehirn","gehirns","hirns"}),
+    "Oh hast Du es gefunden? Nun nix wie rein damit in Deinen Kopf.");
+  AddDetail(({"befehl","befehle"}),
+    "Wen willst Du hier befehligen?");
+  AddDetail(({"scharf","scharfes","spitz","spitzes"}),
+    "Was meinst Du damit?");
+  AddDetail(({"messer"}),
+    "Du siehst hier keins.");
+  AddDetail(({"anfang"}),
+    "Alles faengt irgendwo an.");
+  AddDetail(({"gegenstand","gegenstaende"}),
+    "Welchen Gegenstand meinst Du denn?");
+  AddDetail(({"chance"}),
+    "Du musst selbst die kleinste Chance nutzen, um hier heraus "
+    "zu kommen.");
+  AddDetail(({"plan"}),#'detail_plan);
+  AddDetail(({"stein"}),#'detail_stein);
+  AddDetail(({"ueberblick","gegebenheit","gegebenheiten","umgebung"}),
+    "Schau Dich ruhig um, soweit wie es Dir moeglich ist.");
+  AddDetail(({"zahn","zaehne"}),
+    "Das haettest Du beinahe vergessen, natuerlich hast Du "
+    "auch Zaehne.");
+  AddDetail(({"schmerz","schmerzen"}),
+    "Ohh mud Du pusten.");
+  AddDetail(({"muskel","muskeln","beinmuskel","beinmuskeln"}),
+    "Hast Du nichts besseres zu tun, als gerade jetzt Deine "
+    "Muskeln zu untersuchen?");
+  AddDetail(({"ruck"}),
+    "Aehm ja - was wolltest Du damit erfahren?");
+  AddDetail(({"mulde"}),#'detail_mulde); 
+  AddDetail(({"form","formen"}),
+    "Und nimmt Dein Plan langsam Formen an?");
+  AddDetail(({"dolch"}),#'detail_dolch);
+  AddDetail(({"fackel"}),#'detail_fackel);
+  AddDetail(({"hilfe"}),
+    "Die haettest Du jetzt bitter noetig.");
+  AddDetail(({"seite"}),#'detail_seite);
+  AddDetail(({"licht"}),
+    "Dies ist wohl ein besonderes 'Geschenk' Deiner Gastgeber, "
+    "um Dir Deine missliche Lage vor Augen zu fuehren.");
+  AddDetail(({"geschenk"}),
+    "Haha, Du findest dies ganz lustig.");
+  AddDetail(({"auge","augen","spiegel"}),
+    "Natuerlich hast Du Augen, womit koenntest Du sonst Deine "
+    "Umgebung sehen, doch Deine eigenen Augen zu untersuchen "
+    "geht ohne Spiegel ueber Deine Moeglichkeiten.");
+  AddDetail(({"sinn"}),
+    "Ist Dir langweilig? Oder weshalb gruebelst Du jetzt "
+    "darueber nach?");
+  AddDetail(({"wunder"}),
+    "Ein Wunder koenntest Du jetzt gebrauchen.");
+  AddDetail(({"geruch","verbranntem","luft"}),
+    "Rieche lieber!");
+  AddDetail(({"hilfsmittel","mittel","aktion"}),
+    "Was koennte Dir helfen hier heraus zu kommen?");
+  AddDetail(({"wunde","wunden","brandwunde","brandwunden"}),
+    "Hast Du welche? Das heilt schon wieder.");
+  AddDetail(({"vertrauen","selbstvertrauen"}),
+    "Hast Du welches?");
+  AddDetail(({"wippe"}),#'detail_wippe);
+  AddDetail(({"norden"}),#'detail_norden);
+  AddDetail(({"loch"}),#'detail_loch);
+  AddDetail(({"hebel"}),#'detail_hebel);
+  
+  AddSound(({DEFAULT_SOUND}),
+    "Nicht nur hier drinnen ist es leise, auch von draussen "
+    "hoerst Du nichts.");
+  AddSmell(({DEFAULT_SMELL,"geruch","verbranntem","luft"}),
+    #'smell_geruch);
+  
+  AddCmd("verkante|verkanten&fuss|bein&rechten|recht|rechte|rechtes","cmd_verkante",
+       "Was willst Du verkanten?|"
+       "Welchen Fuss beziehungsweise welches Bein willst Du verkanten?");
+  AddCmd("streck|strecke|strecken&fuss|bein&rechten|recht|rechte|rechtes","cmd_strecke",
+       "Was willst Du strecken?|"
+       "Welchen Fuss beziehungsweise welches Bein willst Du strecken?");
+  AddCmd("taste|tasten|ertaste|ertasten&boden&fuss|bein","cmd_taste",
+       "Was willst Du abtasten?|Womit willst Du den Boden abtasten?");
+  AddCmd("roll|rolle|rollen","cmd_rolle");
+  AddCmd("schieb|schiebe|schieben&dolch&auf&stein|wippe","cmd_schiebe_dolch",
+       "Was willst Du worauf schieben?|"
+       "Du willst wohl den Dolch AUF etwas schieben?|"
+       "Worauf willst Du den Dolch schieben?");
+  AddCmd("schieb|schiebe|schieben&fackel&auf&stein|wippe","cmd_schiebe_fackel",
+       "Was willst Du worauf schieben?|"
+       "Du willst wohl die Fackel AUF etwas schieben?|"
+       "Worauf willst Du die Fackel schieben?");
+  AddCmd("tritt|trete|treten|tret","cmd_trete");
+  AddCmd("schneide|schneiden|durchschneiden|losschneiden&"
+         "faden|faeden|spinnfaden|spinnfaeden|spinnenfade|spinnenfaeden&"
+         "durch|ab|los","cmd_schneide",
+         "Was willst Du schneiden?|Willst Du die Faeden DURCHschneiden?");
+  AddCmd("befreie|befreien","cmd_befreie");
+  AddCmd("fass|fasse|fassen&wand|waende","cmd_fasse",
+         "Was willst Du anfassen?");
+  AddCmd("zieh|ziehe|ziehen&hebel&rechts|rechten","cmd_ziehe_rechts",
+         "Woran willst Du ziehen?|An welchem Hebel willst Du ziehen?");
+  AddCmd("zieh|ziehe|ziehen&hebel&links|linken","cmd_ziehe_links",
+         "Woran willst Du ziehen?|An welchem Hebel willst Du ziehen?");
+  AddCmd("kriech|krieche|kriechen&loch","cmd_krieche",
+         "Wo hinein willst Du kriechen?");
+}
+
+string detail_position()
+{
+  if (pos>=POS_FREI) 
+    return break_string("Deine Position ist noch immer nicht rosig. "
+      "Jederzeit koennten die Dunkelelfen kommen und Dich zu Deiner "
+      "Opferung abholen, aber wenigstens haengst Du nicht mehr im "
+      "Spinnennetz.");
+  return break_string("Deine Position ist hoffnungslos. "
+    "Jederzeit koennten die Dunkelelfen kommen und Dich zu Deiner "
+    "Opferung abholen und Du kannst, solange Du hier im Spinnennetz "
+    "haengst, ueberhaupt nichts dagegen unternehmen.");
+}
+
+string detail_koerper()
+{
+  if (pos>=POS_FREI)
+    return break_string("Dein Koerper gehorcht Dir wieder, nachdem er nicht "
+      "mehr im Spinnennetz fest haengt.");
+  return break_string("Du - also Dein Koerper - haengt im Spinnennetz fest. "
+    "Doch zum Glueck gibt es einzelne Koerperteile, die nicht oder nur "
+    "teilweise fest haengen.");        
+}
+
+string detail_rest()
+{
+  if (pos>=POS_FREI)
+    return "Du bist frei.\n";
+  return "Leider haengst Du damit im Spinnennetz fest.\n";
+}
+
+string detail_boden()
+{
+  if (pos>=POS_FREI)
+    return break_string("Der Boden ist eklig glitschig und voller "
+      "duenner Spinnfaeden. Sieh nur zu, dass Du hier raus kommst.");
+  if (pos>=POS_FUSSFREI)
+    return break_string("Wenn Du mit Deinem Fuss tastest, kannst "
+     "Du Dir einen Ueberblick ueber die Gegebenheiten am Boden "
+     "verschaffen.");
+  return break_string(
+    "Leider kannst Du Deinen Kopf nicht genuegend bewegen, "
+    "um den Boden zu sehen. Aber vielleicht kannst Du etwas mit "
+    "Deinem Fuss ertasten?");
+}
+
+string detail_kopf()
+{
+  if (pos>=POS_FREI)
+    return "Zum Glueck sitzt Dein Kopf noch dort wo er soll.\n";
+  return break_string(
+    "Zum Glueck kannst Du wenigstens Deinen Kopf ein wenig "
+    "bewegen, auch wenn dies aufgrund einiger Spinnfaeden nur "
+    "begrenzt moeglich ist.");
+}
+
+string detail_fuss()
+{
+  if (pos>=POS_FREI)
+    return "Fuesse, Beine alles noch dran - Du atmest erleichtert auf.\n";
+  if (pos>=POS_FUSSFREI)
+    return break_string(
+      "Zum Glueck konntest Du eines Deiner Beine befreien. Mit etwas "
+      "Geduld, kannst Du mit Deinem Fuss den Boden abtasten und Gegenstaende "
+      "bewegen. Vielleicht kannst Du Dich so befreien ...");
+  return break_string(
+    "Deine Fuesse und Beine haengen im Spinnnetz von einzelnen Spinnfaeden "
+    "gehalten fest. Doch es fuehlt sich so an, als ob Du Dein rechtes Bein "
+    "mit etwas verkanten und strecken befreien koenntest, da dieser nur von "
+    "einigen wenigen duennen Faeden festgehalten wird.");
+}
+
+string detail_netz()
+{
+  if (pos>=POS_FREI)
+    return break_string(
+      "Zwar hast Du das das grosse Spinnennetz zerstoert, doch kannst "
+      "Du noch immer einige Reste sehen. Du bekommst eine Gaensehaut "
+      "und bist nur froh, dass Du Dich wieder frei bewegen kannst. "
+      "Nun musst Du nur noch einen Weg hier heraus finden.");
+  return break_string(
+    "Du haengst in einem riesigen Spinnennetz fest. So sehr Du auch ziehst "
+    "und zerrst, Du kommst einfach nicht los. Panik ueberkommt Dich, doch "
+    "auch diese hilft Dir nicht. Schweissueberstroemt haengst Du weiterhin "
+    "im Netz fest. Wieder klarer im Kopf erkennst Du, dass es zwei Arten "
+    "von Spinnenfaeden gibt.");
+}
+
+string detail_spinne()
+{
+  if (pos>=POS_FREI)
+    return break_string(
+      "Das Netz ist weg, doch hoffentlich kommt nicht noch die Erschafferin "
+      "hier her, denn noch immer waerst, ohne Fluchtmoeglichkeit Du ein "
+      "leichtes Opfer fuer eine solch grosse Spinne.");
+  return break_string(
+    "Hoffentlich kommt nicht noch die Erschafferin dieses Netzes hier her. "
+    "So wehrlos wie Du jetzt bist, koenntest Du nichts gegen eine solche "
+    "grosse Spinne ausrichten.");
+}
+
+string detail_faeden()
+{
+  if (pos>=POS_FREI)
+    return break_string(
+      "Zum Glueck sind die Spinnenfaeden nun verbrannt. Nur ein paar "
+      "verkohlte Reste kannst Du noch sehen.");
+  return break_string(
+    "Auch wenn Du im Spinnennetz gefangen bist, kannst Du doch erkennen, "
+    "dass Dich zwei verschiedenen Arten von Faeden fest halten. Die einen "
+    "sind duenner und lassen Dir einen kleinen Spielraum - haettest "
+    "Du einen Messer oder etwas aehnliches, koenntest Du sie bestimmt "
+    "durchschneiden. Die anderen hingegen sind dick und ein Messer wuerde "
+    "Dir bei diesen nicht helfen. Aber brennbar sehen die Faeden alle "
+    "aus - nur womit solltest Du sie anzuenden?");
+}
+
+string detail_arm()
+{
+  if (pos>=POS_FREI)
+    return break_string(
+      "Tut es gut die Arme und Haende wieder frei zu bewegen.");
+  if (pos>=POS_ARMFREI)
+    return break_string(
+      "Deine Haende und Arme hast Du nun befreit, doch hilft "
+      "Dir das nicht wirklich weiter, denn der Rest Deines Koerpers "
+      "haengt an dicken Spinnenfaeden fest. Bei diesen wird "
+      "Dir auch der Dolch nicht helfen. Aber vielleicht findest Du "
+      "hier etwas anderes, um diese zu zerstoeren ...");
+  return break_string(
+    "Deine Arme und Haende haengen in den duennen Faeden des "
+    "Spinnennetzes fest. Nur Deine rechte Hand kannst Du ein "
+    "wenig bewegen. Haettest Du einen etwas Scharfes oder Spitzes "
+    "in dieser, koenntest Du vielleicht den Spinnenfaden, "
+    "welcher diese Hand und Arm fest haelt durchschneiden.");
+}
+
+mixed detail_plan()
+{
+  if (pos<=POS_FUSSFREI || pos>=POS_FREI) return 0;
+  switch(pos)
+  {
+    case 3:
+     return break_string("Du solltest vielleicht erst einmal den "
+      "ertasteten Stein in die Mulde rollen. Danach kann man den "
+      "vielleicht als Wippe nutzen, um Gegenstaende hinauf "
+      "zu schleudern. Auch wenn Du nicht glaubst, dass dies "
+      "eine gute Idee ist, scheint es doch Deine einzige Chance "
+      "zu sein.");
+    break;
+    case 4:
+     return break_string("So der leichte Teil waere geschafft. "
+      "Der Stein liegt direkt vor Deinem Fuss, nun solltest Du "
+      "versuchen den Dolch so auf die abgeflachte obere Seite des "
+      "Steines zu schieben, dass Du so auf die Spitze treten kannst, "
+      "dass der Dolch hinauf zu Deiner Hand geschleudert wird. "
+      "Dafuer brauchst Du unheimlich viel Glueck.");
+    break;
+    case 5:
+     return break_string("Nun beginnt die Stunde der Wahrheit. "
+      "Der Dolch liegt fuer Deinen aberwitzigen Plan genau richtig. "
+      "Mit viel Glueck wird dieses, wenn Du kraeftig auf die Spitze des "
+      "Dolches trittst direkt in Deine Hand fliegen. Das Schlimmste, "
+      "was Dir passieren kann, ist das der Dolch danach ausserhalb "
+      "Deiner reichweite liegt, oder Du Dein eigenes Herz triffst. "
+      "Aber egal wie, tot bist Du dann auf jeden Fall. Entweder "
+      "gleich oder etwas spaeter bei Deiner Opferung.");
+    break;
+    case 6:
+     return break_string("Nachdem Du nun in Deiner rechten Hand "
+      "den Dolch haelts, wie waere es, wenn Du endlich Deine Arme "
+      "befreist, indem Du die duennen Spinnenfaeden durchschneidest, "
+      "welche diese halten?");
+    break;
+    case 7:
+     return break_string("So jetzt brauchst Du Die Fackel. "
+      "Zunaechst solltest Du sie genauso wie den Dolch auf "
+      "den Stein schieben.");
+    break;
+    case 8:
+     return break_string("Du wischst Dir den Schweiss aus dem "
+      "Gesicht. Du hast es fast geschafft. Jetzt musst Du nur "
+      "noch die Fackel fangen, wenn Du sie genau wie Du es bei "
+      "dem Dolch gemacht hast, kraeftig auf diese trittst. "
+      "Hoffentlich fliegt sie Dir dann direkt in Deine "
+      "Haende.");
+    break;
+    case 9:
+     return break_string("Worauf wartest Du - los zuende die "
+      "Fackel an.");
+    break;
+    default:
+     return "Null Plan.\n"; //kann nicht vorkommen
+    break;
+  }
+}
+
+mixed detail_stein()
+{
+  if (pos<=POS_FUSSFREI) return 0;
+  if (pos>=POS_FREI)
+    return break_string(
+      "Du siehst einen runden Stein, der in einer Mulde "
+      "liegt und oben eine abgeflachte Seite besitzt. Man koennte "
+      "auf ihn Gegenstaende platzieren, ohne dass diese von ihm "
+      "herunter fallen wuerden.");
+  if (pos==3)
+    return break_string("Du hast neben Deinem Fuss einen Stein ertastet.");
+  if (pos==5)
+    return break_string("Auf dem Stein liegt ein Dolch - jedenfalls "
+      "hoffst Du dies, da Du diesen gerade auf den Stein geschoben "
+      "hast.");
+  return break_string("Du hast den vorher ertasteten Stein in eine "
+    "Mulde gerollt. Nun liegt der Stein so, dass oben eine abgeflachte "
+    "Seite ist, auf welcher Gegenstaende liegen koennten, ohne von "
+    "dem runden Stein herunter zu rutschen.");
+}
+
+mixed detail_mulde()
+{
+  if (pos<=POS_FUSSFREI) return 0;
+  if (pos==3)
+    return break_string("Direkt vor Deinem rechten Fuss ist eine Mulde, "
+      "dort wuerde der ertastete Stein genau hinein passen.");
+  return 
+    "In der Mulde liegt ein Stein, den Du selber dorthin gerollt hast.\n";
+}
+
+mixed detail_dolch()
+{
+  if (pos<=POS_FUSSFREI) return 0;
+  if (pos>5) return 0;
+  if (pos==5) return "Der Dolch liegt jetzt auf dem Stein.\n";
+  return "Auf dem Boden kannst Du einen Dolch ertasten.\n";
+}  
+
+mixed detail_fackel()
+{
+  if (pos<=POS_FUSSFREI) return 0;
+  if (pos>8) return 0;
+  return "Auf dem Boden kannst Du eine Fackel ertasten.\n";
+}  
+
+mixed detail_seite()
+{
+  if (pos<=3) return 0;
+  return break_string(
+    "Der runde Stein, welcher auf dem Boden liegt hat oben eine "
+    "abgeflachte Seite, auf der etwas liegen kann, ohne das es herunter "
+    "rutscht.");
+}
+
+mixed detail_wippe()
+{
+  if (pos<=POS_FUSSFREI) return 0;
+  return break_string("Der runde Stein kann vielleicht als Wippe "
+    "benutzt werden, um Gegenstaende hoch zu schleudern.");
+}
+
+mixed detail_norden()
+{ 
+  if (!mappingp(QueryProp(P_NEW_EXITS))) return 0;
+  if (!mappingp(QueryProp(P_NEW_EXITS)["norden"])) return 0;
+  return break_string("Im Norden kannst Du den Kerker durch die "
+    "durchscheinende Wand verlassen. Doch solltest Du dies nicht "
+    "versuchen, da Du ansonsten nur wieder hier im Kerker landen "
+    "wuerdest.");
+}
+
+mixed detail_loch()
+{
+  if (!mappingp(QueryProp(P_NEW_EXITS))) return 0;
+  if (!mappingp(QueryProp(P_NEW_EXITS)["loch"])) return 0;
+  return break_string("Unter dem Hebel ist ein schmales Loch. "
+    "Wenn Du hier ungesehen heraus willst, wird Dir wohl nichts "
+    "anderes uebrig bleiben, als Dein Glueck dort zu suchen.");
+}
+
+mixed detail_hebel()
+{
+  if (pos<POS_MAX) return 0;
+  return "Es gibt einen rechten und einen linken Hebel.\n";
+}
+
+string smell_geruch()
+{
+  if (pos<POS_FREI) 
+    return "Es riecht hier verwest.\n";
+  return break_string(
+    "Es riecht hier verbrannt, dies ist auch kein Wunder nachdem Du das "
+    "Netz verbrannt hast.");
+}
+
+string _query_int_long()
+{
+  string ret;
+  switch(pos)
+  {
+    case 9:
+      ret="Nun schau Dich nicht so neugierig um, hier hat sich nichts "
+          "veraendert. Zuende lieber endlich Deine Fackel an und "
+          "brenne damit das verdammte Netz ab. Danach hast Du noch "
+          "genug Zeit nach einem Ausgang zu suchen.";
+    break;
+    case 8:
+      ret="Zur Zeit interessiert Dich Deine Umgebung ueberhaupt nicht. "
+          "Du hoffst nur, dass Du die Fackel faengst, wenn Du gleich "
+          "versuchen wirst sie mit Deinen Fuessen hinaufzuschleudern. "
+          "Wenn dies nicht klappt, war alles umsonst und Du bleibst "
+          "bis zur Opferung hier gefangen.";
+    break;
+    case 7:
+      ret="Du fuehlst Dich schon viel besser. Immerhin hast Du jetzt "
+          "Deine Arme befreit. Doch Du solltest Dich nicht zu frueh "
+          "freuen. Noch musst Du auch den Rest aus dem Netz befreien "
+          "und dann noch einen Weg hier heraus finden.";
+    break;
+    case 6:
+      ret="Innerlich jubelst Du, denn Dein aberwitziger Plan hat geklappt. "
+          "Du haeltst den Dolch in Deiner Hand. Wie waere es, wenn Du ihn "
+          "nun dazu benutzt, um wenigstens Deine Haende und Arme zu "
+          "befreien. Auch wenn Du Deinen Oberkoerper leider so nicht "
+          "befreien kannst, da dieser von dicken Spinnweben gehalten "
+          "wird.";
+    break;
+    case 5:
+      ret="Zur Zeit interessiert Dich Deine Umgebung ueberhaupt nicht. "
+          "Du hoffst nur, dass Du den Dolch, welcher vor Dir auf einem "
+          "Stein liegt, irgendwie hinauf in Deine Hand bekommst. "
+          "Langes Warten hat wohl kaum einen Sinn.";
+    break;
+    case 4:
+      ret="Trotzdem Du im Spinnennetz gefangen bist, ist es Dir gelungen "
+          "einen Stein direkt vor Deinen Fuessen in einer Mulde zu "
+          "platzieren. Wie Du nun ertasten konntest, ist die obere Seite "
+          "des Steines ist abgeflacht. Ausserdem hattest Du schon einen Dolch "
+          "und eine Fackel am Boden ertastest. Nur wie bekommst Du diese "
+          "Hilfsmittel hinauf in Deine Haende, wo sie Dir etwas bringen "
+          "koennten?";
+    break;
+    case 3:
+      ret="Noch immer bist Du im Spinnennetz gefangen, doch nun kannst "
+          "Du nicht nur Deinen Kopf leicht, sondern auch Dein rechtes "
+          "Bein komplett bewegen. Mit der Hilfe Deines Fusses konntest "
+          "Du Dir sogar einen kleinen Ueberblick ueber die Gegebenheiten "
+          "am Boden verschaffen. Du weisst, dass dort eine Mulde ist, "
+          "sowie ein Stein, eine Fackel und ein Dolch liegen. Und einen "
+          "Plan hast Du jetzt auch, oder?";
+    break;
+    case 2:
+      ret="Noch immer bist Du im Spinnennetz gefangen, doch nun kannst "
+          "Du nicht nur Deinen Kopf leicht, sondern auch Dein rechtes "
+          "Bein komplett bewegen. Vielleicht kann Dir dies helfen Dich "
+          "hier zu befreien. Leider kannst Du noch immer nicht Deine "
+          "Arme und Haende befreien, so sehr Du Dich auch bemuehst. "
+          "Aber irgend einen Weg muss es einfach geben.";
+    break;
+    case 1:
+      ret="Trotz verkantetem rechtem Bein bist Du weiterhin im Spinnennetz "
+          "gefangen. Aber wenn Du diesen streckst, kannst Du wenigstens "
+          "den rechten Fuss befreien. Du weisst zwar noch nicht, was "
+          "Dir dies bringen sollen. Aber dadurch waere ein Anfang gemacht. "
+          "Jedenfalls solltest Du etwas unternehmen, bevor die "
+          "Dunkelelfenpriesterinnen kommen und Dich abholen.";
+    break;
+    case 0:
+      ret="Du bist in einem grossen Spinnennetz gefangen. Du kannst "
+          "weder Deine Beine noch Deine Haende ruehren, denn "
+          "diese haengen, wie der Rest Deines Koerpers, an den "
+          "zentimeterdicken Spinnenfaeden des Netzes fest. Nur Deinen Kopf "
+          "kannst Du leicht bewegen und erkennst so das grosse Spinnennetz, "
+          "in welchem Du haengst. Es sieht ganz so aus, als ob Du hier "
+          "nicht wegkommst, bevor die Dunkelelfenpriesterinnen "
+          "Dich fuer die Opferung abholen.";
+    break;
+    default:
+      ret="Du bist in einer Hoehle, welche voller Spinnweben ist. "
+          "Aus dem grossen Netz konntest Du Dich zum Glueck befreien. "
+          "Nun zeugt nur noch der Geruch von Verbranntem davon, "
+          "dass es je existiert hat. Doch noch bist Du nicht wirklich "
+          "frei. Noch immer umgeben Dich an den Waenden Unmengen von "
+          "Spinnenweben und Du siehst keinen Weg hier heraus.";
+    break;
+  }
+  return break_string(ret);
+}
+
+int cmd_verkante(string str)
+{
+  if (pos==0)
+  {
+    pos=1;
+    write(break_string(
+      "Du verkantest Deinen rechten Fuss. Wenn Du ihn jetzt streckst, muesstest "
+      "Du ihn eigentlich befreien koennen."));
+    return 1;
+  }
+  if (pos==1)
+    return notify_fail("Aber Dein Fuss ist doch schon verkantet.\n"),0;
+  return notify_fail("Was soll Dir das jetzt bringen?\n"),0;
+}
+
+int cmd_strecke(string str)
+{
+  if (pos==1)
+  {
+    pos=2;
+    write(break_string(
+      "Du streckst Deinen rechten Fuss und spannst alle Deine Beinmuskeln "
+      "an. Langsam ist der Schmerz im Fuss nicht mehr auszuhalten, und es "
+      "sieht so aus, als ob dies alles nichts bringt, doch dann gibst Du "
+      "Dir noch einen Ruck und beisst die Zaehne zusammen. Ploetzlich "
+      "loest sich Dein Bein von dem Spinnenfaden und Deine Ferse kracht "
+      "auf den Boden. Hurra, Dein rechtes Bein ist frei."));
+    return 1;
+  }
+  if (pos==0)
+    return notify_fail("Dies bringt jetzt noch nichts.\n"),0;
+  return notify_fail("Was soll Dir das jetzt bringen?\n"),0;
+}
+
+int cmd_taste(string str)
+{
+  if (pos<POS_FUSSFREI) return 0;
+  if (pos==2 || pos==3)
+  {
+    pos=3;
+    write(break_string("Vorsichtig tastest Du mit Deinem Fuss den "
+      "Boden ab. Direkt vor Deinem Fuss kannst Du eine Mulde ertasten. "
+      "Rechts daneben liegt ein etwa handgrosser runder Stein und "
+      "daneben ertastest Du eine Fackel. Auf der anderen Seite der "
+      "Mulde kannst Du einen langen spitzen Gegenstand, vielleicht "
+      "einen Dolch, erfuehlen. Du gruebelst eine Weile vor Dich hin "
+      "und ein Plan beginnt in Deinem Kopf Formen anzunehmen."));
+    return 1;
+  }
+  if (pos>=POS_FREI)
+    return notify_fail("Was soll dies jetzt noch bringen?\n"),0;
+  if (pos==POS_ARMFREI)
+    return notify_fail(break_string(
+      "Du weisst Doch das auf dem Boden noch eine Fackel liegt. "
+      "Nun weiter im Plan und hole Dir diese Fackel.")),0;
+  if (pos==4)
+  {
+    write(break_string("Vorsichtig tastest Du mit Deinem Fuss den "
+      "Boden ab. Direkt vor Deinem Fuss liegt in einer Mulde ein "
+      "etwa handgrosser runder Stein und weiter rechts eine Fackel. "
+      "Auf der anderen Seite des Steines kannst Du einen langen "
+      "spitzen Gegenstand, vielleicht einen Dolch, erfuehlen. "
+      "Wie soll es jetzt weiter gehen? Was sieht Dein Plan jetzt vor?"));
+    return 1;
+  }
+  if (pos==5)
+  {
+    write(break_string("Nun taste hier nicht soviel rum, sonst "
+      "faellt Dir nur der Dolch wieder runter. Tritt endlich auf "
+      "diesen kraeftig drauf und hoffe, dass er so hochschnellt, "
+      "das Du ihn mit einer Hand fassen kannst. Sehr wahrscheinlich "
+      "ist dies zwar nicht, aber es ist Deine einzige Chance."));
+    return 1;
+  }
+  write("Nun taste hier nicht soviel rum, Du hast wichtigeres zu tun.\n");
+  return 1;
+}
+
+int cmd_rolle(string str)
+{
+  mixed ret;
+  //umgehen der default-meldungen von augen rollen
+  if (pos<3)
+    return 0;
+
+  ret=get_check_cmd(str,
+       "stein&in&loch|mulde",
+       "Was willst Du rollen?|"
+       "Willst Du den Stein vielleicht IN etwas rollen?|"
+       "Wohin willst Du den Stein rollen?");
+
+  if (intp(ret) && ret!=1) return 0;
+  if (stringp(ret))
+  {
+    write(ret);
+    return 1;
+  }
+
+  if (pos==3)
+  {
+    pos=4;
+    write(break_string("Du stellst Deinen Fuss neben den Stein und "
+      "rollst diesen in die Mulde. Nun liegt dieser fest direkt vor "
+      "Deinen Fuessen und Du koenntest ihn als Wippe dazu benutzen "
+      "etwas zu Dir hinauf zu schleudern."));
+    return 1;
+  }
+  write("Du hast den Stein doch schon in die Mulde gerollt.\n");
+  return 1;
+}
+
+int cmd_schiebe_dolch(string str)
+{
+  if (pos<4) return 0;
+  if (pos>5)
+    return notify_fail("Aber Du hast den Dolch doch schon.\n"),0;
+  if (pos==4)
+  {
+    pos=5;
+    write(break_string(
+          "Du schiebst vorsichtig mit Deinem Fuss den Dolch "
+          "auf den Stein hinauf. Dabei gehst Du ganz langsam vor, damit Dir "
+          "der Dolch ja nicht abrutscht. Als schon langsam Deine Muskeln "
+          "anfangen zu zittern hast Du es endlich geschafft. Nun drehst "
+          "Du noch die Dolchspitze in Richtung Deiner rechten Hand und "
+          "sprichst danach schnell ein Gebet und hoffst, dass Dein Plan "
+          "auf geht."));
+    return 1;
+  }
+  return 
+    notify_fail("Aber der Dolch liegt doch schon auf dem Stein.\n"),0;
+}
+
+int cmd_schiebe_fackel(string str)
+{
+  if (pos<4) return 0;
+  if (pos<7)
+     return notify_fail("Die Fackel brauchst Du noch nicht.\n"),0;
+  if (pos>8)
+     return notify_fail("Aber die Fackel hast Du doch schon.\n"),0;
+  if (pos==7)
+  {
+    pos=8;
+     write(break_string(
+          "Du schiebst nun mit mehr Selbstvertrauen die Fackel vorsichtig "
+          "auf den Stein hinauf. Obwohl die Fackel groesser und klobiger "
+          "als der Dolch ist, geht es mit ihr sehr einfach. Schon nach "
+          "kurzer Zeit liegt die Fackel genau so, wie Du es willst. "
+          "Wenn Du jetzt kraeftig auf den Stiel der Fackel trittst, "
+          "solltest Du sie eigentlich mit Deinen freien Haenden fangen "
+          "koennen."));
+    return 1;
+  }
+  return 
+    notify_fail("Aber die Fackel liegt doch schon auf dem Stein.\n"),0;
+}
+
+int cmd_trete(string str)
+{
+  mixed ret;
+  object ob;
+  //umgehen der default-meldungen von augen rollen
+  if (pos<4 || pos>8)
+    return 0;
+  
+  if (pos<7)
+   ret=get_check_cmd(str,
+       "spitze|dolch&auf",
+       "Worauf willst Du kraeftig treten?|"
+       "Willst Du vielleicht AUF etwas kraeftig treten?");
+  else
+   ret=get_check_cmd(str,
+       "fackel|stil&auf",
+       "Worauf willst Du kraeftig treten?|"
+       "Willst Du vielleicht AUF etwas kraeftig treten?");
+
+  if (intp(ret) && ret!=1) return 0;
+  if (stringp(ret))
+  {
+    write(ret);
+    return 1;
+  }
+  switch(pos)
+  {
+    case 5:
+      write(break_string("Du konzentrierst Dich und sprichst schnell eine "
+        "Gebet. Dann trittst Du kraeftig auf die Spitze des Dolches, wodurch "
+        "diese hinauf, und zu Deiner Freude, direkt in Deine Hand fliegt. "
+        "Ein kurzer Schmerz durchzuckt diese, bevor Deine Finger sich um "
+        "den Griff des Dolches schliessen. Trotz der Schmerzen kannst "
+        "Du nur jubeln. Geschafft. Vielleicht kannst Du Dich nun doch "
+        "befreien."));
+       PL->AddHp(-10);
+       ob=clone_object(WEAPON "dolch");
+       ob->move(PL,M_SILENT|M_NOCHECK);
+       ob->wield_me(1);
+       pos=6;
+    break;
+    case 8:
+      if (sizeof(filter_array(all_inventory(PL),#'istgezuecktewaffe)))
+        return notify_fail("Du solltest erst Deine gezueckte Waffe wegstecken.\n"),0;
+      write(break_string("Jetzt nachdem Du Deine Haende frei hast, "
+        "hoffst Du die Fackel leicht zu fangen. Doch ist diese viel "
+        "schwerer und unfoermiger als der Dolch, so dass es noch immer "
+        "leicht daneben gehen kann. Trotz dieser Bedenken trittst Du "
+        "einfach kraeftig auf die Fackel drauf, diese fliegt nach oben "
+        "und Du kannst sie gerade so noch mit Deiner linken Hand erfassen "
+        "und fest halten. Schnell nimmst Du die Fackel an Dich heran, "
+        "bevor sie Dir noch aus der Hand faellt. Nun kannst Du endlich "
+        "das Spinnennetz zerstoeren und Dich befreien."));
+       ob=clone_object(OBJ "fackel");
+       ob->move(PL,M_SILENT|M_NOCHECK);
+       pos=9;
+    break;
+    default:
+      write("Das macht jetzt wohl wenig Sinn.\n");
+    break;
+  }
+  return 1;
+}
+
+int cmd_befreie(string str)
+{
+  if (pos<6) return 0;
+  write("Willst Du etwas durchschneiden?\n");
+  return 1;
+}
+
+int cmd_schneide(string str)
+{
+  if (pos<6) return 0;
+  if (pos==6)
+  {
+    pos=7;
+    write(break_string("Du verrenkst Dir fast die rechte Hand, als "
+      "Du Dein Handgelenk so verdrehst, dass Du den Spinnenfaden, "
+      "welcher diese Hand fest haelt, zerschneiden kannst. Als Du es "
+      "endlich geschafft hast, kannst Du mit dem freien Arm nun "
+      "auch Deinen anderen Arm befreien. Doch leider ist es Dir nicht "
+      "moeglich sonst noch Faeden durchzuschneiden, da die anderen "
+      "Spinnenfaeden, welche Dich halten, viel dicker sind. Bei diesen "
+      "kann Dir der Dolch nicht mehr helfen."));
+    return 1;
+  }
+  return notify_fail(break_string("Du findest keine Spinnenfaeden, "
+    "die Du durchschneiden koenntest.")),0;
+}
+
+int cmd_fasse(string str)
+{
+  if (pos<POS_FREI) return 0;
+  write(break_string("Du faesst die Wand an. Obwohl Du Dich ekelst "
+    "in den klebrigen Spinnenweben herumzutasten, haelst Du es tapfer "
+    "durch. Dann endlich findest Du etwas. Hier sind zwei Hebel. "
+    "Ob sie Dir einen Weg nach draussen eroeffnen?"));
+  pos=POS_MAX;
+  return 1;
+}
+
+int cmd_ziehe_rechts(string str)
+{
+  if (pos<POS_MAX) return 0;
+  if (mappingp(QueryProp(P_NEW_EXITS)["norden"]))
+     return notify_fail("Aber das hast Du doch schon gemacht.\n"),0;
+  write(break_string("Du ziehst an dem rechten Hebel. Schon waehrend "
+      "Du dies tust, beginnt die Wand im Norden zu verschwimmen und "
+      "wird, als der Hebel gezogen ist, voellig durchsichtig."));
+  AddExit("norden",#'exit_norden);
+  return 1;
+}
+
+int cmd_ziehe_links(string str)
+{
+  if (pos<POS_MAX) return 0;
+  if (mappingp(QueryProp(P_NEW_EXITS)["loch"]))
+    return notify_fail("Aber das hast Du doch schon gemacht.\n"),0;
+  write(break_string("Du ziehst an dem linken Hebel. Mit einem "
+    "schabenden Geraeusch oeffnet sich ein schmales Loch direkt "
+    "unter den Hebel."));
+  AddExit("loch",#'exit_loch);
+  return 1;
+}
+
+int cmd_krieche(string str)
+{
+  if (!mappingp(QueryProp(P_NEW_EXITS)["loch"])) return 0;
+  return notify_fail("Benutze doch einfach den Ausgang.\n"),0;
+}
+
+int exit_norden()
+{
+  write(break_string("Vorsichtig schleichst Du nach Norden. Doch so "
+    "sehr Du Dich auch anstrengst, kaum hast Du die Wand erreicht, "
+    "als Dich ein unsichtbarer Waechter erfasst und zurueck in den "
+    "Kerker schleudert."));
+  PL->AddHp(-100);
+  return 1; 
+}
+
+int exit_loch()
+{
+  write(break_string("Widerstrebend kriechst Du in das klebrige Loch "
+    "hinein. Du robbst und robbst eine halbe Ewigkeit lang, bis Du "
+    "ploetzlich spuerst, wie vor Dir kein Boden mehr ist und Du in "
+    "die Tiefe purzelst."));
+  PL->move(ROOM "tunnel_01",M_GO,"","verschwindet","faellt von der Decke");
+  PL->AddHp(-(random(41)+10));
+  P_ARCHON_QUESTMASTER->advance_quest(PL); //4->5
+  call_out("remove",1,1); //raum zerstoeren
+  return 1;
+}
+
+void init()
+{
+  ::init();
+  if (!PL) return;
+  set_start(PL);
+}
+
+//alles was licht macht - naja wichtig sind eigentlich nur fackeln 
+int istlichtquelle(object was)
+{
+  if (!objectp(was)) return 0; 
+  if (was->id("Lichtquelle")) return 1;
+  return 0;
+}
+
+//remove? oder doch was anderes? gibt es wichtige lichtquellen? unique?
+void wegdamit(object was)
+{
+  if (objectp(was)) was->remove(1);
+}
+
+//mit gezueckter Waffe gehts nicht weiter ... waffe kann icht verflucht sein
+//schutz ist in tunnel_01 ...
+int istgezuecktewaffe(object ob)
+{
+  if (!objectp(ob) || !ob->QueryProp(P_WIELDED)) return 0;
+  return 1;
+}
+
+void ablegen(object was)
+{
+  if (objectp(was)) was->DoUnwield(1);
+}
+
+void set_start(object pl)
+{
+  object *inv;
+  string zusatz;
+  
+  add_action("abc","",1);
+  if (pos>=0) return;
+  pos=0;
+//alle fakeln zerstoeren - die soll man aus dem raum holen
+  inv=all_inventory(pl);
+  map_array(filter_array(inv,#'istlichtquelle),#'wegdamit);
+//alle gezueckte Waffen finden ...
+  inv=filter_array(inv,#'istgezuecktewaffe);
+  if (sizeof(inv))
+  {
+    map_array(inv,#'ablegen);
+    zusatz="entwinden sie Dir Deine Waffe und stecken sie "
+           "Dir hoehnisch grinsend in Dein Inventar, welches sie "
+           "noch durchsuchen, ";
+  }
+  else
+    zusatz="durchsuchen sie noch Deine Sachen, ";
+  tell_object(pl,break_string(
+    "Du wirst von einigen Dunkelelfen grob weggezogen und in eine "
+    "andere Hoehle verfrachtet. Dort werfen diese Dich ruecklings "
+    "in einen riesiges Spinnennetz, in welchem Du haengen bleibst "
+    "und Dich nicht mehr ruehren kannst. Danach "+zusatz+
+    "waehrend sie etwas von verhasstem Licht "
+    "faseln. Dies erledigt ueberlassen sie Dich Deinem Schicksal "
+    "und verschwinden aus dem Raum, ohne das Du sehen koenntest, "
+    "wie sie dies angestellt haben. Nachdem sie Dich verlassen "
+    "haben erscheint ein unnatuerliches Licht im Raum."));
+}
+
+int abc(string str)
+{
+  string verb;
+  string *commands;
+  int i;
+  
+  if (pos>=POS_FREI) return 0; //wir koennen uns wieder bewegen ...
+
+  if (IS_LEARNING(PL))
+  {
+    tell_object(PL,"Info: mschau ist eingeschaltet - "
+                   "erlaubte Eingaben werden nicht geprueft.\n");
+    return 0;
+  }
+
+  verb=query_verb();
+  if (!strlen(verb)) return 1; // kann eigentlich nie sein ..
+  if (member_array(query_verb(),ausnahmen)!=-1) return 0;
+  if (verb[0]=='-') return 0; //die ebenen erlauben
+
+//test auf alle erlaubten commandos im raum
+  commands=({});
+  for (i=0;i<=pos;i++) commands+=commandos[i];
+  if (member_array(query_verb(),commands)!=-1) return 0;
+  tell_object(PL,
+    "Du haengst im Netz fest, und kannst dies zur Zeit nicht.\n");
+  return 1;
+}
+
+//wenn keiner da ist, den clone zertoeren ...
+void reset()
+{
+  ::reset();
+  if (sizeof(filter_array(all_inventory(ME),#'interactive))) return;
+  remove(1);
+}
+
+void BecomesNetDead(object spieler)
+{
+  spieler->move(AUSGANG,M_SILENT|M_NOCHECK);
+  remove(1);
+}
+
+varargs mixed make_invlist(object viewer, mixed inv, int flags)
+{
+  if (pos>=POS_FREI) return ::make_invlist(viewer,inv,flags);
+  return ""; //man sieht am anfang nix (man kann ja den kopf nicht bewegen)
+}
+
+varargs string GetExits( object viewer )
+{
+  if (pos>=POS_FREI) return ::GetExits(viewer);
+  return 0;
+}
+
+mixed get_check_cmd(string in,string erlaubt,string fehler)
+{
+  string *words, *groups, *synon, *errmsg;
+  int i,l,max,missing;
+
+  if (!stringp(erlaubt) || !strlen(erlaubt)) return 1; //das commando ist erlaubt
+  if (!stringp(fehler)) 
+  { 
+    raise_error("Fehlermeldung fehlt.\n"); 
+    return 0; 
+  }
+  if (!stringp(in) || !strlen(in)) 
+  {
+    return efun::explode(fehler,"|")[0]+"\n";
+  }
+  words  = efun::explode(lower_case(in)," ");
+  groups = efun::explode(erlaubt,"&");
+  missing = -1;
+  l=sizeof(groups);
+  for (i=0;i<l;i++)
+  {
+    synon = efun::explode(groups[i], "|");
+    if (!sizeof(synon & words)) 
+    { // Kein Synonym gefunden?
+       missing = i;
+       break;
+    }
+  }
+  if (missing>=0) 
+  { // Schluesselwort fehlt
+     if ((max=sizeof(errmsg=efun::explode(fehler, "|")))>missing)
+     {
+        return errmsg[missing]+"\n";
+     }
+     return errmsg[max-1]+"\n";
+  }
+  return 1;
+}
+
+public void fackel_angezuendet(object fackel, object pl)
+{ //einige schutz ...
+  if (pos!=POS_FREI-1) return;
+  if (!objectp(fackel)) return;
+  if (environment(fackel)!=pl) return;
+  if (!fackel->_query_lighted()) return;
+  tell_object(pl,break_string(
+    "Kaum brennt Deine Fackel haeltst Du sie an das Spinnennetz, "
+    "welches sofort Feuer faengt und in kuerzester Zeit lichterloh "
+    "brennt. Mit einem Ruck kannst Du Dich befreien und bist "
+    "heilfroh, auch wenn Du Dir bei dieser Aktion einige Brandwunden "
+    "zugezogen hast."));
+  pos=POS_FREI;
+  return;
+}
+
+public string query_pos()
+{
+  return sprintf("POS (%d/%d) bei\n%d = Fuss befreit\n%d = Arme befreit\n"
+                 "%d = vom Netz befreit\n",
+                 pos,POS_MAX,POS_FUSSFREI,POS_ARMFREI,POS_FREI);
+}
+
+//alle kommandos unterdruecken
+//pos:info
+//0: Ganz fest   - hinweiss, das man einen fuss frei bekommen koennte
+//2: 1 Fuss frei - man kann ein langen opferdolch und einen stein ertasten
+//                 Hinweis, das man den Stein naeher heran rollen koennte
+//3: Stein rollen
+//4: Stein liegt - man muss mit dem fuss den dolch auf den stein heben
+//5: Dolch liegt - man muss auf den Dolch kraeftig treten
+//6: dolch bewegen - (schneiden) hand befreien ...
+//7: hand frei   - fakel schieben
+//8: fakel liegt - drauf treten ...
+//9: Fakel haben - anzuenden
+//10: befreit     - auswegsuchen

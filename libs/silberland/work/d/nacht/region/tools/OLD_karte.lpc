@@ -1,0 +1,542 @@
+/* Dovenya, Karte
+ * __________________________________________(i) Anatol@Silberland (2012) */
+
+#pragma strict_types
+
+#include "../defines.h"
+#include <ansi.h>
+
+#define RANGE_DEFAULT 2
+#define RANGE_SMALL 1
+#define RANGE_LARGE 3
+#define RANGE_MAX 10
+
+inherit "/std/thing";
+
+#define DBG(x) if (find_player("anatol") && (find_player("anatol")->QueryProp("debug_map"))) tell_object(find_player("anatol"),x)
+
+private nosave string * raw;
+private nosave string * processed;
+private nosave string * processed_marked;
+private nosave int * pos;
+
+nosave int isWizardEdition() 
+{
+    return ((this_player()==this_interactive())
+         &&(!process_call())
+	 &&(IS_WIZARD(this_interactive()))
+	 &&(environment(this_object())==this_player()));
+}
+
+nosave int isLimitedEdition() 
+{
+    return ((isWizardEdition()) &&
+        (member(((string*)("/secure/master"->get_userinfo(getuid(this_player()))))[3],"nacht")>=0));
+}
+
+public string 
+_query_short() 
+{
+    return (living(environment())?"De":"E")+"ine Landkarte der Nacht"+
+      (isWizardEdition()
+          ?(isLimitedEdition()
+	      ?" (Limitierte Ausgabe)"
+	      :" (Ausgabe fuer Magier)")
+	  :"");
+}
+
+public string
+_query_long() {
+    return break_string("Eine uebersichtliche Landkarte der Nacht. Sie "
+        "glitzert und funkelt geradezu vor williger Magie. Du kannst "
+	"davon ausgehen, dass sie Dir im Hoheitsgebiet der Nacht, wenn "
+	"irgendwie moeglich, treue Dienste leistet.",77)+
+	                   "Syntax..: 'karte [klein|gross]'\n"+
+        (isWizardEdition()?"Magier..: 'karte <x> <y> [<z>] [<groesse>]'.\n":"")+
+	(isLimitedEdition()?"RM Nacht: 'seg[ment] [...|hilfe]'\n":"");
+}
+
+public int
+_query_autoloadobj()
+{
+    return isWizardEdition();
+}
+
+nosave int
+wizMap(int x, int y, int z, int r, int mark, int mono)
+{
+    printf("Karte %d/%d/%d (r=%d)%s\n",
+        x,y,z,r,(mono?", monochrom":""));
+    printf(MAP_SERVER->Map(x,y,z,r,mark,mono));
+    return 1;
+}
+
+nosave int 
+cmdKarte(string s) 
+{
+    int * pos;
+    int range;
+    int x, y, z;
+    int mono;
+    string rstr;
+
+    if (file_name(environment(this_player()))[0..7]!="d/nacht/")
+    {
+        if (!isWizardEdition()) 
+        {
+            notify_fail(break_string(this_object()->Name(WER)+
+                 " funktioniert leider nur im Hoheitsgebiet der Nacht."));
+	    return 0;
+        }
+	else
+	    pos=({0,0,0});
+    }
+    
+    switch ((string)this_player()->QueryProp(P_TTY))
+    {
+        case "ansi":
+	    mono=0;
+	    break;
+	case "vt100":
+	    mono=1;
+	    break;
+        default:
+	    notify_fail(break_string("Um die Karte grafisch wahrnehmen zu koennen, "
+	        "musst Du Deine Terminaleinstellung auf 'vt100' (schwarz/weiss) "
+		"oder 'ansi' (farbig) einstellen. Nutze hierfuer den Befehl "
+		"'stty vt100|ansi|dumb'.",77));
+	    return 0;
+    }    
+
+    if (environment(this_player())->QueryProp(P_NACHT_COORDINATES)) 
+    {
+        pos=(int*)(environment(this_player())->QueryProp(P_NACHT_COORDINATES));
+    }
+
+    if ((!s) ||(!stringp(s)) || (!strlen(s)))
+         range = RANGE_DEFAULT; 
+    else if (s=="gross")
+         range = RANGE_LARGE;
+    else if (s=="klein")
+        range = RANGE_SMALL;
+
+    if ((!isWizardEdition()) && (!range))  
+    {
+        notify_fail("Das hat jetzt leider nicht funktioniert.\n"
+	    "Probier' doch 'karte klein', 'karte gross' oder einfach nur 'karte'\n");
+	return 0;
+    }
+    if (range) 
+    {
+	if ((sizeof(pos)<3)  || (!intp(pos[0])) || (!intp(pos[1])) || (!intp(pos[2])))
+	{
+	    notify_fail("Die Magie der Karte versagt... unerwartet.\n");
+
+	}
+        write(MAP_SERVER->Map(pos[0],pos[1],pos[2],range,1, mono));
+        return 1;
+    }
+    // ** wizards only, no standard player syntax here **
+
+    notify_fail(sprintf("Mit '%s' hat die Karte jetzt so grade nix anfangen koennen...\n",s));
+
+    // check: 'karte <range as number>'
+    if ((sscanf(s, "%d%s",x, rstr)==2) && (rstr==""))
+         return wizMap(pos[0],pos[1],pos[2],(x<0?0:(x>RANGE_MAX?RANGE_MAX:x)), 1, mono);
+
+    // check: 'karte <x> <y>'
+    if ((sscanf(s, "%d %d%s",x,y, rstr)==3) && (rstr==""))
+         return wizMap(x,y,0,RANGE_DEFAULT,0,mono);
+
+    // check: 'karte <x> <y> <z>'
+    if ((sscanf(s, "%d %d %d%s",x,y,z, rstr)==4) && (rstr==""))
+         return wizMap(x,y,z,RANGE_DEFAULT,0,mono);
+
+    // check: 'karte <x> <y> <range>'
+    if ((sscanf(s, "%d %d %s",x,y, rstr)==3) && (rstr!=""))
+    {
+        if (rstr=="gross")
+	    range=RANGE_LARGE;
+	else if (rstr=="klein")
+	    range=RANGE_SMALL;
+	else  
+	     // integer values would be parsed as coordinate z.
+	    return 0;
+         return wizMap(x,y,0,range,0,mono);
+    }
+
+    // check: 'karte <x> <y> <z> <range>'
+    if ((sscanf(s, "%d %d %d %s",x,y,z, rstr)==4) && (rstr!=""))
+    {
+        if (rstr=="gross")
+	    range=RANGE_LARGE;
+	else if (rstr=="klein")
+	    range=RANGE_SMALL;
+	else 
+	    range=abs(to_int(rstr));
+        return wizMap(x,y,z,(range>RANGE_MAX?RANGE_MAX:range),0,mono);
+    }
+    return 0;
+}
+
+nosave int 
+resetGraticule() 
+{
+    raw=({":::::","::`32``O`00::",":::::"});
+    processed=({":::::","::"+ANSI_GREEN+"O"+ANSI_NORMAL+"::",":::::"});
+    processed_marked=({":::::","::"+ANSI_RED+ANSI_BOLD+"X"+ANSI_NORMAL+"::",":::::"});
+    pos=({-999,-999,999});
+    return 1;
+}
+
+
+
+/*
+0123456789012345678901234567890123456789012345678901234567890123456789012345678
+.-----------------------------------------------------------------------------.
+|  Aktuelles Segment                   std       'X'    : Codes:    RR `31`41 |
+| ~~~~~~~~~~~~~~~~~~                .-------. .-------. : BB `01    GG `32`42 |
+| 0: "............................" | XXXXX | | XXXXX | : NN `00    YY `33`43 |
+| 1: "............................" | XXXXX | | XXXXX | : Mitte ``  BB `34`44 |
+| 2: "1234567890123456789012345678" | XXXXX | | XXXXX | : BB `30`40 PP `35`45 |
+|                                   '-------' '-------' : WW `37`47 CC `36`46 |
+'-----------------------------------------------------------------------------'
+*/
+
+nosave int 
+showGraticule() 
+{
+    printf(ANSI_BOLD+ANSI_BLACK+
+        ".--------------------------------------"
+	"---------------------------------------."+ANSI_NORMAL+"\n");
+
+    printf(ANSI_BOLD+ANSI_BLACK+"|"+ANSI_NORMAL+"  %-16s "
+        "                   std       'X'    "+ANSI_BOLD+
+	ANSI_BLACK+":"+ANSI_NORMAL+" Codes:    "+
+	ANSI_RED+"R"+ANSI_BOLD+"R"+ANSI_NORMAL+" `31`41 "+
+	ANSI_BOLD+ANSI_BLACK+"|"+ANSI_NORMAL+"\n",
+	    to_string(pos[0])+" "+
+	    to_string(pos[1])+" "+
+	    to_string(pos[2]));
+
+    printf(ANSI_BOLD+ANSI_BLACK+"|                                   "
+        ".-------. .-------. : "+ANSI_NORMAL+ANSI_BOLD+"BB"+ANSI_NORMAL+
+	" `01    "+ANSI_GREEN+"G"+ANSI_BOLD+"G"+ANSI_NORMAL+" `32`42 "+
+	ANSI_BOLD+ANSI_BLACK+"|"+ANSI_NORMAL+"\n");
+
+    printf(ANSI_BOLD+ANSI_BLACK+"|"+ANSI_NORMAL+" 0: \""+
+        sprintf("%-29s",raw[0]+"\" ")+ANSI_BOLD+ANSI_BLACK+" | "+
+        ANSI_NORMAL+processed[0]+ANSI_NORMAL+ANSI_BOLD+ANSI_BLACK+" | | "+
+        ANSI_NORMAL+processed_marked[0]+
+	ANSI_NORMAL+ANSI_BOLD+ANSI_BLACK+" | : "+
+	ANSI_NORMAL+"NN `00    "+ANSI_YELLOW+"Y"+ANSI_BOLD+"Y"+
+	ANSI_NORMAL+" `33`43 "+
+	ANSI_BOLD+ANSI_BLACK+"|"+ANSI_NORMAL+"\n");
+
+    printf(ANSI_BOLD+ANSI_BLACK+"|"+ANSI_NORMAL+" 1: \""+
+        sprintf("%-29s",raw[1]+"\" ")+ANSI_BOLD+ANSI_BLACK+" | "+
+        ANSI_NORMAL+processed[1]+ANSI_NORMAL+ANSI_BOLD+ANSI_BLACK+" | | "+
+        ANSI_NORMAL+processed_marked[1]+ANSI_NORMAL+
+	ANSI_BOLD+ANSI_BLACK+" | : "+
+	ANSI_NORMAL+"Mitte ``  "+ANSI_BLUE+"B"+ANSI_BOLD+"B"+
+	ANSI_NORMAL+" `34`44 "+
+	ANSI_BOLD+ANSI_BLACK+"|"+ANSI_NORMAL+"\n");
+
+    printf(ANSI_BOLD+ANSI_BLACK+"|"+ANSI_NORMAL+" 2: \""+
+        sprintf("%-29s",raw[2]+"\" ")+ANSI_BOLD+ANSI_BLACK+" | "+
+        ANSI_NORMAL+processed[2]+ANSI_NORMAL+ANSI_BOLD+ANSI_BLACK+" | | "+
+        ANSI_NORMAL+processed_marked[2]+ANSI_NORMAL+ANSI_BOLD+
+	ANSI_BLACK+" | : "+
+	ANSI_NORMAL+ANSI_BLACK"B"+ANSI_BOLD+"B"+ANSI_NORMAL+" `30`40 "+
+	ANSI_PURPLE+"P"+ANSI_PURPLE+"P"+ANSI_NORMAL+" `35`45 "+
+	ANSI_BOLD+ANSI_BLACK+"|"+ANSI_NORMAL+"\n");
+
+    printf(ANSI_BOLD+ANSI_BLACK+"|                                   "
+        "'-------' '-------' : "+ANSI_NORMAL+ANSI_WHITE+"W"+ANSI_BOLD+
+	"W"+ANSI_NORMAL+
+	" `37'47 "+ANSI_CYAN+"C"+ANSI_BOLD+"C"+ANSI_NORMAL+" `36`46 "+
+	ANSI_BOLD+ANSI_BLACK+"|"+ANSI_NORMAL+"\n");
+
+    printf(ANSI_BOLD+ANSI_BLACK+
+        "'--------------------------------------"
+	"---------------------------------------'"+ANSI_NORMAL+"\n");
+
+    return 1;
+}
+
+nosave int
+showHelp()
+{
+    printf(
+      "------------------------------------------------------------------------\n"
+      "seg[ment] ...\n"
+      " (ohne)               - Aktuelles Segment in Arbeit anzeigen\n"
+      " h[ilfe]|?              - Diese Hilfeseite\n"
+      " r[eset]                - Aktuelles Segment in Arbeit ruecksetzen\n"
+      " [0..2] <string>        - Segment Zeile 0/1/2 setzen auf <string>\n"
+      " p[os]  [<x> <y> <z>]   - Positionsdaten setzen/anzeigen\n"
+      " l[oad] [<x> <y> <z>]   - Segmentrohdaten aus Archiv holen\n"
+      " s[ave] [<x> <y> <z>]   - Segmentrohdaten in Archiv legen\n"
+      " c[ommit] [<x> <y> <z>] - Segment an Position x/y/z aufspielen\n"
+      " d[elete] [<x> <y> <z>] - Segment aus der Karte loeschen\n"
+      " rb|rollback            - moeglicher Rollback der Karte anzeigen\n"
+      " rb|rollback !          - moeglichen Rollback der Karte durchfuehren\n"
+      "------------------------------------------------------------------------\n"
+      "(statt einem Koordinatentripel kann auch 'hier' angegeben werden)\n"
+      );
+    return 1;
+}
+
+nosave int 
+recalcAndShow()
+{
+    string * tmp;
+    tmp=explode(raw[1],"``");
+    if (sizeof(tmp)!=2) 
+    {
+        write("ARRRRGH! Zeichenkette 1 muss genau ein "
+	   "Doppelbacktick `` enthalten!\n");
+         tmp=({"  ", "O  "});
+    }
+    tmp=({})+raw+tmp;
+    tmp=(string*)(MAP_SERVER->EncodeGraticule(tmp));
+    processed=({tmp[0],tmp[3]+tmp[4],tmp[2]});
+    processed_marked=({tmp[0],tmp[3]+ANSI_BOLD+ANSI_RED+
+        "X"+ANSI_NORMAL+tmp[4][1..],tmp[2]});
+    showGraticule();
+    return 1;
+}
+
+nosave int
+updateLine(int l,string s) 
+{
+    if ((l<0)||(l>2)||(!stringp(s))||(strlen(s)<5)) 
+        return 0;
+    // first and last sign is " ? ---> remove them
+    if ((s[0..0]=="\"")&&(s[<1..<1]=="\""))
+        raw[l]=s[1..<2];
+    else
+        raw[l]=s;
+    return 1;
+}
+
+varargs nosave int 
+err(string s)
+{
+   printf("Fehler: %s\n",(s?s:"Hat leider nicht geklappt."));
+   return 1;
+}
+
+nosave int
+cmdSegment(string s)
+{
+    string * args;
+    string * lines;
+    string cmd;
+    int * tpos;
+    string dummy1,dummy2;
+    tpos=({-9999,-9999,-9999});
+
+    if (!isLimitedEdition()) return 0;
+    s=(string)(this_player()->_unparsed_args());
+
+    notify_fail(break_string(sprintf(
+       "Leider hat '%s' jetzt nichts geholfen...\n",
+       s),77));
+
+    // no args:
+    if ((!s)||(!stringp(s))||(!strlen(s)))
+        return showGraticule();
+
+    // ?, hilfe, h: 
+    else if ((s=="?")||(s=="hilfe")||(s=="h"))
+        return showHelp();
+    // r, reset
+    else if ((s=="r")||(s=="reset")) 
+    {
+        printf("Setze Segment zurueck...\n");
+        return resetGraticule();
+    }
+    // rb, rollback (show rollback)
+    else if ((s=="rb")||(s=="rollback")) 
+    {
+        MAP_SERVER->ShowUndo();
+        return 1;
+    }
+    // rb !, rollback ! (do rollback)
+    else if ((s=="rb !")||(s=="rollback !")) 
+    {
+        MAP_SERVER->Undo();
+        return 1;
+    }
+
+    // todo: 0..2, p, pos, l load, s, save, c, commit, d, delete
+
+    args=explode(s," ");
+    switch (args[0])
+    {
+	case "0":
+	case "1":
+	case "2":
+	    printf("Aktualisieren von Zeile %s...\n", args[0]);
+	    if (strlen(s)>2) 
+	    {
+	        if (updateLine(to_int(args[0]),s[2..]))
+		    return recalcAndShow();
+	        else 
+                    return err();
+	    }
+            else
+	    {
+	        write("Nehme Leerzeichenkette an...\n");
+	        if (updateLine(to_int(args[0]),"     "))
+		    return recalcAndShow();
+	        else 
+                    return err();
+	    }   
+	    break;
+	default: 
+    }
+
+    // todo: p, pos, l, load, s, save, c, commit, d, delete
+    // every command of these take positions.
+
+    if (sizeof(args)==1)
+    {
+        printf("Verwende gemerkt Position: %d |%d | %d\n",
+	    pos[0],pos[1],pos[2]);
+        tpos=({})+pos;
+    }
+    else if (sizeof(args)>4)
+    {
+        return err("Das sind zu viele Argumente.");
+    }
+    else if ((sscanf(s,"%s %d %d %d%s",
+         dummy1,tpos[0],tpos[1],tpos[2],dummy2)==5)
+	 || (dummy1=="")
+	 || (dummy2==""))
+    { 
+        printf("Position uebergeben:       %d | %d | %d\n",
+	    tpos[0],tpos[1],tpos[2]);
+    }
+    else if ((sizeof(args)==2) && (args[1]=="hier"))
+    {
+       if (file_name(environment(this_player()))[0..7] !=
+             "d/nacht/")
+           return err("Nee, natuerlich funktioniert "
+	         "das nur in der Region 'Nacht'.");
+       else
+           if (tpos=(int*)(environment(this_player())->QueryProp(
+	         P_NACHT_COORDINATES)))   
+	   {
+	      if ( (sizeof(tpos)<3) || (!intp(tpos[0]))
+	          || (!intp(tpos[1])) || (!intp(tpos[2])))
+              {
+	          return err("Der Raum hat ungueltige Koordinaten.");
+	      }
+	      else
+                  printf("Position des Raumes:       %d | %d | %d\n",
+	              tpos[0],tpos[1],tpos[2]);
+	   }
+	   else
+	       return err("Der Raum hat leider keine Koordinaten.");
+    }
+    else
+        return err(sprintf("Das hat von den Argumenten '%s' "
+	     "so gar nicht geklappt",s));
+
+
+    switch (args[0])
+    {
+        case "p":
+	case "pos":
+	    write("Position setzen...\n");
+	    if (sizeof(args)==1)
+	    {
+	        printf("Derzeit gemerkte Position: %d | %d | %d\n",
+		    pos[0],pos[1],pos[2]);
+		return 1;
+            }
+	    else
+	    {
+	        pos=tpos;
+	        printf("NEUE Position gemerkt:     %d | %d | %d\n",
+		    pos[0],pos[1],pos[2]);
+                return 1;
+	    }
+	    break;
+	case "l":
+	case "load":
+	    write("Aus dem Archiv holen...\n");
+            if (!(lines=(string*)MAP_STORE->Retrieve(tpos[0],tpos[1],tpos[2])))
+	    {
+	        write("Da ist nichts im Archiv gespeichert.\n");
+		return 1;
+	    }
+	    else 
+	    {
+	        raw=lines;
+		return recalcAndShow();
+            }
+	    break;
+        case "c":
+	case "commit":
+	    write("In die Karte aufspielen...\n");
+            if ((int)(MAP_SERVER->UpdateGraticule(tpos[0],
+	         tpos[1],tpos[2],raw))==1)
+                write(MAP_SERVER->Map(tpos[0],tpos[1],tpos[2],1));
+	    else
+	        return err("Map wollte nicht aktualisieren.");
+	    // fall-thru!
+	case "s":
+	case "save":
+	    write("Ins Archiv legen...\n");
+            printf("Ergebnis: %d\n",
+	        (int)(MAP_STORE->Store(tpos[0],tpos[1],tpos[2],raw)));
+	    return 1;
+            break;
+        case "d":
+	case "delete":
+	    write("Aus Karte loeschen...\n");
+            if(MAP_SERVER->DeleteGraticule(tpos[0],
+	         tpos[1],tpos[2]))
+                write("OK!\n");
+	    else
+	        return err("Map wollte nicht loeschen.");
+	    return 1;
+	    break;
+        default:
+	    return 0;
+    }
+               
+    return 0;
+}
+
+public void
+create() {
+    if (!is_clone(this_object())) 
+        return;
+    ::create();
+
+    SetProp(P_SHORT,0);
+    SetProp(P_LONG,
+        "Wow, ein ultrahochmagische Karte.");
+    SetProp(P_NAME,"Landkarte");
+    AddAdjective(({"magisch","ultrahochmagisch"}));
+    SetProp(P_GENDER,FEMALE);
+    // AddId(({"karte","landkarte","uebersichtskarte", "\n\acht_karte"}));
+    AddId(({"carte"}));
+  
+    SetProp(P_WEIGHT,0);
+    SetProp(P_VALUE,0);
+    SetProp(P_NODROP,0);
+    SetProp(P_NEVERDROP,1);
+    SetProp(P_MATERIAL,([MAT_PAPER:1,MAT_EMERALD:2,MAT_MAGIC:97]));
+  
+    AddCmd("carte","cmdKarte");
+    // AddCmd(({"seg","segment"}),"cmdSegment");
+
+    resetGraticule();
+}
+
+

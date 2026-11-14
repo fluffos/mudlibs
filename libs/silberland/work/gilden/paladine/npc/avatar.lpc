@@ -1,0 +1,1230 @@
+
+/*
+//
+//  Ayla, der Paladin-Gilden-NPC
+//  Zordan@SL
+//
+//  16.11.2001 alignmenterhoiehung im reset und wenn dusty kommt nur wenn <1000
+*/
+
+inherit "std/npc";
+inherit "std/npc/spells";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <wizlevels.h>
+#include "../paladin.h"
+
+// Prototypes
+void waiting_check();
+void DoKneeFall();
+// Globvars
+nosave int perg_count, hb_time;
+nosave mapping waiting_for=(["dusty":0, "angrox":0, "zordan":0, "stahldorn":0]);
+nosave mapping ruest;
+nosave int helpvar=0; 
+nosave int cnt=0;
+nosave string *get_angry=({});
+nosave string last_env_for_axe="";
+nosave int shout_for_help=1;
+nosave object choosen_one=0;
+
+void create() {
+  if (!is_clone(TO)) return;
+  ::create();
+  // Einer fuer alle, alle fuer einen!
+  call_other(NPCMASTER,"add_npc");
+  perg_count=5;
+  ruest=([ AT_GLOVE:    "/p/armour/gloves/panzerhandschuhe.lpc";
+                        "/d/ebene/ronja/feenquest/armour/spitz.lpc";
+                        "/p/armour/gloves/lederhandschuhe.lpc";
+                        "/p/armour/gloves/kettenhandschuhe.lpc",
+           AT_RING:     "/d/gebirge/eros/ruestung/platinring.lpc";
+                        "/p/armour/ring/ring.lpc";
+                        "/d/gebirge/angrox/obj/astralring.lpc";
+                        "/d/unterwelt/zordan/dhrkion/armour/hornring.lpc",
+           AT_AMULET:   "/d/ebene/lamuerte/burg/obj/smaragtamulett.lpc";
+                        "/p/armour/amulet/amulett.lpc";
+                        "/d/ebene/lamuerte/wwald/obj/kamulett.lpc";
+                        "/p/armour/amulet/amulett.lpc",
+           AT_BOOT:     "/p/armour/boots/eisenstiefel";
+                        "/p/armour/boots/lederstiefel.lpc";
+                        "/d/gebirge/eros/ruestung/baerenpranken.lpc";
+                        "/p/armour/boots/lederschuhe.lpc",
+           AT_BELT:     "/d/dschungel/feyaria/tijara/armour/guertel.lpc";
+                        "/p/armour/belt/guertel.lpc";
+                        "/d/dschungel/feyaria/tijara/armour/guertel.lpc";
+                        "/p/armour/belt/guertel.lpc",
+           AT_BRACERS:  "/p/armour/bracers/mithrilarmschienen.lpc";
+                        "/d/polar/lamuerte/eishoehle/obj/eisschienen.lpc";
+                        ARMOUR("p_armschienen");
+                        "/p/armour/bracers/plattenzeug.lpc",
+           AT_CLOAK:    "/d/gebirge/dusty/zwerge/obj/umhang.lpc";
+                        "/d/gebirge/angrox/obj/fumhang.lpc";
+                        "/p/armour/cloak/umhang.lpc";
+                        "/p/armour/cloak/seidenumhang.lpc",
+           AT_TROUSERS: "/p/armour/trousers/kettenhose.lpc";
+                        "/d/ebene/obj/ruestung/beinschienen.lpc";
+                        ARMOUR("p_beinschienen");
+                        "/p/armour/trousers/mithrilbeinlinge",
+           AT_ARMOUR:   "/d/gebirge/eros/ruestung/schuppenpanzer.lpc";
+                        "/p/armour/armour/titanpanzer.lpc";
+                        "/p/armour/armour/kettenhemd.lpc";
+                        ARMOUR("p_khemd"),
+           AT_HELMET:   "/p/armour/helm/mithrilhelm.lpc";
+                        "/d/gebirge/angrox/4elem/obj/armour/loewenhelm.lpc";
+                        "/p/armour/helm/titanhelm.lpc";
+                        ARMOUR("p_helm"),
+  ]);
+
+  SetProp(P_SHORT, "Ayla von Schattengrund");
+  SetProp(P_LONG,
+    "Vor Dir steht ein bildschoene Frau mittleren Alters. Ihre heilige "
+    "Ausstrahlung stellt allerdings ihr Aussehen bei Weitem in den Schatten. "
+    "Du bist fast der Meinung eine hell leuchtende Aura umgibt sie. "
+    "Ihr langes Haar, ihr wohlgeformter Koerper und ihr gutmuetiges Gesicht "
+    "taeuschen aber auch nicht ueber ihre absolut erstklassige Kondition und "
+    "Kampferfahrung, vor allem gegen das Boese, hinweg.");
+  SetProp(P_NAME, "Ayla");
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({ISPALADIN, "ayla", "frau", "paladin" , "\n_ayla", GUILDNPC_ID }));
+  set_living_name("ayla");
+
+  create_default_npc(50);
+  set_heart_beat(1);
+  if(find_player("dusty")) waiting_for["dusty"]=1;
+  if(find_player("angrox")) waiting_for["angrox"]=1;
+  if(find_player("zordan")) waiting_for["zordan"]=1;
+
+  SetProp(P_GUILD, "paladine");
+  SetProp(P_GUILD_LEVEL, 16);
+
+  call_other("/gilden/paladine","learn_paladin_skills", 10000);
+  ModifySkill("behandle",      10000);
+  ModifySkill("behandle",      ([SI_PREPARE_TIME:0, SI_SPELLCOST:0,
+                                 SI_SKILLRESTR_USE:([SR_FREE_HANDS:0]) ]) );
+  ModifySkill("waffensegen",   10000);
+  ModifySkill("waffensegen",   ([SI_PREPARE_TIME:0, SI_SPELLCOST:0]) );
+  ModifySkill("zielattacke",   10000);
+  ModifySkill("zielattacke",   ([SI_PREPARE_TIME:0, SI_SPELLCOST:0]) );
+  ModifySkill("behandle",      10000);
+  ModifySkill("behandle",      ([SI_PREPARE_TIME:0, SI_SPELLCOST:0]) );
+  ModifySkill("heiligengebet", 10000);
+  ModifySkill("heiligengebet", ([SI_PREPARE_TIME:0, SI_SPELLCOST:0]) );
+  ModifySkill("spiegelschild", 10000);
+  ModifySkill("spiegelschild", ([SI_PREPARE_TIME:0, SI_SPELLCOST:0]) );
+  ModifySkill("goetterschutz", 10000);
+  ModifySkill("goetterschutz", ([SI_PREPARE_TIME:0, SI_SPELLCOST:0,
+                                 SI_SKILLRESTR_USE:([SR_FREE_HANDS:0]) ]) );
+  ModifySkill("talisman", 10000);
+  ModifySkill("talisman", ([SI_PREPARE_TIME:0, SI_SPELLCOST:0,
+                                 SI_SKILLRESTR_USE:([SR_FREE_HANDS:0]) ]) );
+
+  SetProp(P_HANDS, ({" mit ihren heiligen Haenden",300,DT_HOLY}));
+  SetProp(P_XP, QueryProp(P_XP)+150*100); // Bonus fuer Spells
+  SetProp(P_RACE, "Mensch");
+  SetProp(P_SIZE, 187);
+  SetProp(P_ALIGN, 1000);
+  SetProp(P_MAX_HANDS, 4);
+  SetProp(P_HEAL,20);
+  SetProp(P_WIMPY, 0);
+  SetProp(P_AGGRESSIVE, ([P_RACE:(["Dunkelelf":0.02]),
+                        P_GUILD:(["nekromanten":1])]));    
+  SetProp(P_RESISTANCE_STRENGTHS , 
+    ([
+      DT_SLASH:     -0.7, DT_BLUDGEON:  -0.4, DT_PIERCE: -0.4, DT_SQUEEZE:-0.4, 
+      DT_WHIP:      -0.4, DT_RIP:       -0.4,
+      DT_FIRE:      -0.4, DT_COLD:      -0.3, DT_WATER:  -0.4, DT_AIR:    -0.3, 
+      DT_LIGHTNING: -0.3, DT_EXPLOSION: -0.3, DT_SOUND:  -0.3, DT_LIGHT:  -0.3,
+      DT_ELECTRIC:  -0.3, DT_ACID:       0.0, DT_POISON: -0.3, DT_TERROR: -1.0,
+      DT_HOLY:      -1.0, DT_UNHOLY:     0.0, DT_MAGIC:  -0.7 ]) );
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_NOMAGIC,45);
+
+  SetProp(P_MSGIN, "kommt sanften Schrittes an");
+  SetProp(P_MSGOUT, "geht sanften Schrittes");
+  SetProp(P_MMSGIN, "erscheint in einer Rauchwolke");
+  SetProp(P_MMSGOUT, "verschwindet mit Knall und Schwefelduft");
+
+  SetProp(P_DIE_MSG,  " verschwindet in einer grellen Wolke.\n");
+  SetProp(P_NOCORPSE, 1 );
+  SetProp(P_MURDER_MSG, "Am Ende wird doch das Gute siegen!");
+  SetProp(P_KILL_NAME, "Ayla");
+  SetProp(P_KILL_MSG, "Gegen das Gute kann man nicht siegen!");
+
+  
+  SetProp(P_LOG_INFO, "gilden/ayla.log");
+
+  AddLibrary(LIBS("allgemein.lib"), 1);
+  AddLibrary(LIBS("ayla.lib"),      5);
+  AddLibrary(LIBS("schenke.lib"),   1);
+  AddLibrary(LIBS("schmied.lib"),   1);
+  AddLibrary(LIBS("laden.lib"),     1);
+  AddLibrary(LIBS("drache.lib"),    1);
+  AddLibrary(LIBS("nekromanten.lib"),    1);
+
+  
+  SetProp( P_REJECT, ({ REJECT_GIVE,
+    "Ayla sagt: Vielen Dank. Aber ich brauche @WEN nicht.\n" }) );
+
+  SetProp(P_SPELLRATE,95);
+
+  AddSpell(3,500,
+    "Ayla macht eine Drehung und erwischt Dich mit ihrem Schwert hart.\n",
+    "Ayla macht eine Drehung und erwischt @WEN mit ihrem Schwert hart.\n",
+     DT_SLASH,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(3,500,
+     "Ayla segnet Dich und Du verlierst einen Teil Deiner Bosheit.\n",
+     "Ayla segnet @WEN .\n",
+      DT_HOLY, "alignspell", ([SP_SHOW_DAMAGE:1]));
+
+  AddDefaultSpell(2, 600, DS_REDUCE_WC, 
+     "Ayla zerstoert einen Teil Deiner Waffe.\n",
+     "Ayla zerstoert einen Teil @WESSEN Waffe.\n" );
+
+  AddDefaultSpell(2, 600, DS_REDUCE_AC,
+     "Ayla zerstoert einen Teil Deiner Ruestung.\n",
+     "Ayla zerstoert einen Teil @WESSEN Ruestung.\n" );
+
+  AddDefaultSpell(2, 700, DS_BLIND,
+     "Ayla beschwoert einen grellen Blitz auf Dich und Du wirst blind.\n",
+     "Ayla beschwoert einen grellen Blitz auf @WEN .\n" );
+  
+  AddDefaultSpell(2, 700, DS_PARALYZE,
+     "Die Macht Dusty's laesst Dich erstarren!\n",
+     "Die Macht Dusty's laesst @WEN erstarren!\n" );
+
+  AddDefaultSpell(1, 1200, DS_FEAR,
+     "Ayla schlaegt Dich mit einem sehr hartem Schwerthieb aus dem "
+     "Saal raus.\n",
+     "Ayla schlaegt @WEN mit einem sehr hartem Schwerthieb aus dem "
+     "Saal raus.\n" );
+
+  AddSpell(1,2500,
+      "Dustys Macht straft Dich!\n",
+      "Dustys Macht straft @WEN!\n",
+      DT_HOLY, ([SP_SHOW_DAMAGE:1]));
+      
+  SetChats(1, ({
+    "Die Aura um Ayla leuchtet kurz hell auf.\n",
+    "Ayla laechelt Dich an.\n",
+    "Ayla haelt ein kurzes Gebet zu Dusty.\n",
+    "Du spuerst eine heilige Anwesenheit.\n",
+    "Die Haare von Ayla wehen im Wind.\n",
+    "Ayla strahlt ueber das ganze Gesicht.\n",
+    "Ayla fragt: Moechtest Du nicht fuer das Gute eintreten?\n",
+    "Ayla versinkt kurz in Gedanken.\n"}) );
+
+  SetAttackChats(100, ({
+    "@@attackspell@@" }) );
+
+  SUID;
+  CLONEME(ARMOUR("wappenrock") );
+  CLONEME( "/p/armour/cloak/umhang.lpc" );
+  CLONEME( "/p/armour/belt/guertel.lpc" );
+  CLONEME( "/p/armour/boots/lederstiefel.lpc" );
+  CLONEME( "/p/armour/amulet/amulett.lpc" );
+  CLONEME( "/p/armour/ring/ring.lpc" );
+  CLONEME( "/d/gebirge/eros/ruestung/platinring.lpc" );
+  CLONEME( ARMOUR("p_armschienen") );
+  CLONEME( ARMOUR("p_beinschienen") );
+  CLONEME( ARMOUR("p_helm") );
+  CLONEME( ARMOUR("p_khemd") );
+  // solang dieses schutzschild so dermassen buggt, wird
+  // es NICHT gecloned!!!! ZORDAN, sauer
+  // catch(CLONEME("/gilden/nekromanten/obj/mana"));
+  command("trage alles");
+  
+  
+  AddInfo(({"neuem wappenrock", "neuer wappenrock",
+            "neuem rock",       "neuer rock"}), "@@NewRock@@", 
+            "sagt: ");
+  AddInfo( ({ "standarte", "heilige standarte", 
+              "heilige standarte der paladine", "paladinstandarte"}),
+            "@@FlagPosition@@", "sagt: ");
+
+//  AddInfo(({"pergament"}), "@@Pergament@@", 
+//            "sagt: ");
+
+  AddInfo(DEFAULT_INFO, ({
+    "fragt: Was genau meinst Du denn jetzt?\n",
+    "sagt: Dusty kennt auf alles eine Antwort, frag sie doch mal.\n",
+    "schaut Dich nur laechelnd an.\n",
+    "sagt: Darueber habe ich noch nie nachgedacht.\n",
+    "sagt: Bete zu Dusty und Du wirst Erleuchtung finden.\n" }) );
+  AddInfo(({"wappenrock","rock"}), "@@Wappenrock@@", 
+            "sagt: ");
+  AddInfo(({"fertigkeiten", "faehigkeiten"}),"@@fertigkeiten@@","");
+  
+  AddInfo( ({"schatzkammer"}), "@@schatzkammer@@", "spricht: ");
+
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Misc
+//////////////////////////////////////////////////////////////////////////////
+
+int _query_wimpy() { return 0; }
+
+nomask query_prevent_shadow() { return 1; }
+
+
+void init() {
+  ::init();
+  if(interactive(TP) && getuid(TP)=="juny") {
+    call_out("greet_juny", 0);
+  }
+  if(interactive(TP) && getuid(TP)=="sennah") {
+    call_out("greet_sennah", 0);
+  }
+  if(choosen_one && TP == choosen_one) {
+    call_out("give_quest", 0);
+  }
+  if(call_other(NPCMASTER,"IsFeind",TP)) Kill(TP);
+  if(present("faehnchen", ME)) 
+    call_out("faehnchen", 0);
+}
+
+void faehnchen() {
+  command_me("schwenke faehnchen");
+}
+
+
+varargs int remove(int arg) {
+  call_other(NPCMASTER,"del_npc");
+  ::remove(arg);
+}
+
+void reset() {
+  object ob,*inv,what,neu, flag,pl;
+  int nr;
+  string name;
+  if(!is_clone(TO)) return ::reset();
+  shout_for_help=1;
+  call_other(ROOM("burg_schatzkammer"), "???");
+  if(!random(2)) {
+    call_out("tell_about_nekro", random(30)+30);
+  }
+  flag=find_object(ROOM("burg_schatzkammer"))->QueryProp("standarte");
+  if(flag && ENV(flag) && (file_name(ENV(flag)) != ROOM("burg_schatzkammer"))) {
+    command_me("prufe Paladine! Die Standarte ist noch immer nicht "
+        "in der Schatzkammer!");
+  }
+  
+  if (ob=present("glasschwert",ME)) {
+    command_me("stecke glasschwert weg");
+    command_me("emote laesst ein Glasschwert in einem hellen Blitz verschwinden.");
+    ob->remove();
+  }
+  perg_count=5;
+  get_angry=({});
+  switch (random(10)) {
+    case 0..6:
+      inv=QueryProp(P_ARMOURS);
+      nr=-1;
+      if (sizeof(inv)>4) {
+        while (nr==-1) {
+          nr=random(sizeof(inv));
+          what=inv[nr];
+          if (what->QueryProp(P_ARMOUR_TYPE) == AT_MISC) nr=-1;
+        }
+        nr=-1;
+        while (nr==-1) {
+          nr=random(4);
+          if (neu) neu->remove();
+          neu=clone_object(ruest[what->QueryProp(P_ARMOUR_TYPE),nr]);
+          if (what->Name() == neu->Name()) nr=-1;
+        }
+        if (MENV) {
+          tell_room(MENV,BS(
+            "Ayla versinkt fuer einen kurzen Moment in tiefster "
+            "Konzentration..." ));
+          name=what->Name();
+          what->SetProp(P_CURSED,0);
+          what->DoUnwear(0);
+          what->remove();
+          tell_room(MENV,BS(
+            CAP(name)+" verschwindet in einem grellen Blitz." ));
+          neu->SetProp(P_CURSED,0);
+          neu->move(ME,M_SILENT + M_NOCHECK);
+          if(!random(10))
+            catch(find_object(ITEMD)->identify(neu, 1, 100, 100, 
+                ({100,300,500,700,1300})));
+          tell_room(MENV,BS(
+            CAP(neu->Name())+" entsteht in Aylas heiligen Haenden." ));
+          command_me("trage alles");
+          tell_room(MENV,BS(
+            "Ayla fluestert leise: Danke Dusty."));
+        }
+      }
+      break;
+
+    case 7..9:
+    default:
+      if (MENV) {
+        inv=all_inventory(MENV);
+        tell_room(MENV,BS(
+          GUILDNPC_NAME+" reisst auf einmal die Haende gen Decke."));
+        tell_room(MENV,break_string(
+          "Gepriesene Dusty, gibt mir die Kraft diesen Armen hier Deine "
+          "Macht zu zeigen!",78,GUILDNPC_NAME+" ruft: "));
+        for (nr=0;nr<sizeof(inv);nr++) {
+          if(interactive(inv[nr]) && !InFight(inv[nr]) && !IS_WIZARD(inv[nr])){
+            name=inv[nr]->Name();
+            switch (random(4)) {
+              case 0:
+                tell_object(inv[nr],BS(
+                  GUILDNPC_NAME+" beruehrt Deine Stirn und und Du fuehlst "
+                  "Dich erfrischt und gestaerkt."));
+                tell_room(MENV,BS(
+                  GUILDNPC_NAME+" beruehrt die Stirn von "+name+
+                  "."), ({ inv[nr] }) );
+                inv[nr]->heal_self(30+random(30));
+                break;
+              case 1:
+                tell_object(inv[nr],BS(
+                  GUILDNPC_NAME+" faesst Dir kurz auf den Magen. Du hast "
+                  "auf einmal das Verlangen nach was zu Essen und Trinken."));
+                tell_room(MENV,BS(
+                  GUILDNPC_NAME+" faesst den Magen von "+name+
+                  " an."), ({ inv[nr] }) );
+                inv[nr]->SetProp(P_FOOD, 0);
+                inv[nr]->SetProp(P_DRINK, 0);
+                inv[nr]->SetProp(P_ALCOHOL, 0);
+                break;
+              case 2:
+                if(inv[nr]->QueryProp(P_ALIGN)<1000 )
+                {
+                  tell_object(inv[nr],BS(
+                        GUILDNPC_NAME+" segnet Dich. Deine Gesinnung hat sich in "
+                        "Richtung des Guten veraendert."));
+                  tell_room(MENV,BS(
+                        GUILDNPC_NAME+" segnet "+name+
+                        "."), ({ inv[nr] }) );
+                  inv[nr]->SetProp(P_ALIGN,
+                      inv[nr]->QueryProp(P_ALIGN)+25+random(25));
+                }
+                break;
+              default:
+              case 3:
+                tell_object(inv[nr],BS(
+                  GUILDNPC_NAME+" umfasst Deine Beinmuskeln. Du fuehlst Dich "
+                  "auf einmal flink wie ein Wiesel."));
+                tell_room(MENV,BS(
+                  GUILDNPC_NAME+" umfasst die Beinmuskeln von "+name+
+                  "."), ({ inv[nr] }) );
+                inv[nr]->SetProp(P_MV,inv[nr]->QueryProp(P_MAX_MV));
+                break;
+            }
+          }
+        }
+      }
+      break;
+  }
+  if(call_other(PALADINMASTER, "QuestLvl16Free")) {
+    call_out("check_paladin_quest", 10);
+  }
+  else if(time() > call_other(PALADINMASTER, "QueryQuestLvl16")["time"]) {
+    pl=find_player(call_other(PALADINMASTER, "QueryQuestLvl16")["player"]);
+    if(!pl) {
+      pl=find_netdead(call_other(PALADINMASTER, "QueryQuestLvl16")["player"]);
+      if(pl) {
+        ob=clone_object(OBJ("msg"));
+        ob->Setup("Du hast versagt, Paladin! Die dreissig Tage sind um "
+          "und das Herz des Boesen wurde nicht geopfert!", "Ayla teilt Dir"
+          "mit");
+        ob->move(pl);
+      }
+    }
+    else {
+      pl->Message(BSA("Du hast versagt Paladin! Die dreissig Tage sind um "
+            "und das Herz des Boesen wurde nicht geopfert! Doch sorge Dich "
+            "nicht, es wird ein Wuerdiger gefunden werden, der diese Aufgabe "
+            "uebernehmen wird, der Du nicht gewachsen warst!", "Ayla teilt "
+            "Dir mit: "));
+    }
+    call_other(PALADINMASTER, "SetQuestLvl16Solved");
+  }
+  ::reset();
+}
+
+string fertigkeiten() {
+  call_other(ENV(TO), "faehigkeiten");
+  return "";
+}
+
+string schatzkammer() {
+  object room, *inv;
+  string roomname, txt;
+  int i, value;
+  
+  txt="Die Schatzkammer ist ein geheimer Ort. Darin bewahren wir die "
+    "Kostbarkeiten der Burg auf. Ein Anteil der Opfergaben wird "
+    "ebensfalls in die Schatzkammer transferiert. Im Moment befinden "
+    "sich ";
+  value=0;
+  roomname=ROOM("burg_schatzkammer2");
+  call_other(roomname, "???");
+  room=find_object(roomname);
+  inv=all_inventory(room); 
+  for(i=sizeof(inv)-1;i>=0;i--) 
+    value+=inv[i]->QueryProp(P_VALUE);
+  if(value>0) 
+    txt+="zusaetzliche Opfergaben im Wert von "+value+" Muenzen in der Kammer.";
+  else
+    txt+="keine Opfergaben in der Schatzkammer.";
+  return txt;
+}
+
+
+//////////////////////////////////////////////////////////////////////////////
+// Erwartete Personen
+//////////////////////////////////////////////////////////////////////////////
+
+void heart_beat() {
+  object *all;
+  int i;
+  string names;
+  ::heart_beat();
+  waiting_check();
+  TO->SetProp(P_HB,1);
+  hb_time=time();
+  cnt++;
+  if(cnt==30) {
+    names=ctime()[11..18]+": ";
+    all=users();
+    for(i=sizeof(all)-1;i>=0;i--) {
+      if(!is_clone(all[i])) {
+        names+=getuid(all[i])+" ";
+      }
+    }
+    rm(LOG("online"));
+    write_file(LOG("online"), sprintf("%s", names));
+    call_out("smscheck", 0); // Auswerten der teilemits per sms
+    cnt=0;
+  }
+}
+
+
+
+void smscheck() {
+  string text, *msgs, *smstell;
+  object pl;  
+  int i;
+  if(!text=read_file("/gilden/paladine/log/tell.txt")) return; 
+  rm("/gilden/paladine/log/tell.txt");
+  msgs=explode(text, "\n");
+  for(i=sizeof(msgs)-1;i>=0;i--) {
+    smstell=explode(msgs[i],";;"); 
+    if(pl=find_player(lower_case(smstell[1]))) {
+       pl->Message(break_string(smstell[2]+" (Absender: "+smstell[0]+")", 
+             78,"*** SMS Mitteilung: "), MSGFLAG_TELL);
+    }  
+  }
+  return;
+}
+
+void waiting_check() {
+  object dusty, angrox, zordan, stahldorn;
+  string zeit;
+  zeit=dtime(time());
+  dusty=find_player("dusty");
+  zordan=find_player("zordan");
+  angrox=find_player("angrox");
+  stahldorn=find_player("stahldorn");
+  if(objectp(dusty) && !waiting_for["dusty"]) {
+    if(!dusty->QueryProp(P_INVIS)) {
+      if(zeit[5..11]=="20. Nov" && !helpvar) {
+        command_me("prufe PALADINE! Unsere Goettin ist erschienen "
+            "und sie hat heute Geburtstag!");
+        shout("Ayla von Schattengrund ruft: Herrin Dusty!\n");
+        shout(BSA("Alles Gute zu Eurem Geburtstag, Herrin!", "Ayla von "
+            "Schattengrund ruft: "));
+        shout("Mythar ruft: Herrin! Alles Gute!\n");
+        shout("Ardare ruft: Auch von mir die allerbesten Glueckwuensche, "
+            "Herrin!\n");
+        shout(BSA("Moegen die Elemente stehts mit Euch sein, Goettin! "
+            "Auch von den Druiden alles Gute!", "Anvar ruft: "));
+        shout(BSA("Dusty! Moege Deine Axt stehts vom Blut Deiner "
+            "Feinde geschaerft bleiben! Alles Gute!", "Kronang bruellt: "));
+        shout(BSA("Wasch isch losch? Hab ich wasch <Hicks> verpascht?", 
+            "Zechus lallt lauthals: "));
+        helpvar=1;    
+      }
+      else 
+      {
+        command_me("prufe Paladine! Unsere Goettin ist erschienen! Lasst sie "
+            +"uns preisen! Heilig! Heilig! Heilig!");
+        shout("Ayla von Schattengrund ruft: Herrin Dusty!\n");
+      }
+      waiting_for["dusty"]=1;
+      DoKneeFall();
+    }
+  }
+  if(objectp(angrox) && !waiting_for["angrox"]) {
+    if(!angrox->QueryProp(P_INVIS)) {
+      command_me("prufe Ah! Lord Angrox! Seid herzlichst willkommen! "
+          "Keine besonderen Vorkommnisse seit Eurem letzten Besuch!");
+      waiting_for["angrox"]=1;
+    }
+  }
+  if(objectp(zordan) && !waiting_for["zordan"]) {
+    if(!zordan->QueryProp(P_INVIS)) {
+      if(!helpvar && zeit[5..11]==" 4. Mai") 
+        command_me("prufe Lord Zordan! Alles Gute zu Eurem Geburtstag! Ihr "
+            "haltet Euch fuer Euer Alter fabelhaft!");
+      else       
+        command_me("prufe Lord Zordan! Seid herzlich willkommen!");
+      waiting_for["zordan"]=1;
+    }
+  }
+  if(objectp(stahldorn) && !waiting_for["stahldorn"]) {
+    if(!stahldorn->QueryProp(P_INVIS)) {
+      if(!helpvar && zeit[5..11]=="26. Mai") 
+        command_me("prufe Herre Stahldorn! Seid herzlichst willkommen "
+           "an diesem besonderen Tag!"); 
+      else       
+        command_me("prufe Herre Stahldorn! Seid herzlichst willkommen!");
+      waiting_for["stahldorn"]=1;
+    }
+  }
+  
+
+  if((!objectp(dusty)||dusty->QueryProp(P_INVIS)) && waiting_for["dusty"]) {
+    command_me("prufe Paladine! Dusty hat uns verlassen! Lasst uns beten, "
+        +"auf das sie bald wieder erscheinen moege!");
+    waiting_for["dusty"]=0;
+  }
+
+  if((!objectp(angrox)||angrox->QueryProp(P_INVIS)) && 
+      waiting_for["angrox"]) 
+  {
+    waiting_for["angrox"]=0;
+  }
+  if((!objectp(zordan)||zordan->QueryProp(P_INVIS)) && 
+      waiting_for["zordan"]) 
+  {
+    waiting_for["zordan"]=0;
+  }
+  if((!objectp(stahldorn)||stahldorn->QueryProp(P_INVIS)) && 
+      waiting_for["stahldorn"]) 
+  {
+    waiting_for["stahldorn"]=0;
+  }
+  return;
+}
+
+
+void DoKneeFall() {
+  string *members; 
+  object *spieler, rock;
+  int i;
+  members=call_other(PALADINMASTER, "QueryMembers");
+  spieler=users();
+  for(i=sizeof(spieler)-1;i>=0; i--) {
+    if(member(members, getuid(spieler[i]))!=-1 && 
+        rock=present(WAPPENROCK, spieler[i]))
+    {
+      rock->KneeDown();
+      spieler[i]->heal_self(random(10)+5);
+      if( spieler[i]->QueryProp(P_ALIGN)<1000 )
+        spieler[i]->SetProp(P_ALIGN, spieler[i]->QueryProp(P_ALIGN)+random(15));
+    }
+  }
+  return;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Logs
+//////////////////////////////////////////////////////////////////////////////
+
+void die(int poisondeath) {
+  if((time()-hb_time)>4) { // Dann hat wohl der Herzschlag ausgesetzt -> bug
+    heal_self(3000);
+    return;
+  }
+  call_other(NPCMASTER, "del_npc", TP);
+  write_file(LOG("npc.kills"), sprintf(
+      "%s: %s killt Ayla (LVL:%d, GLVL:%d-%s)\n",
+      ctime(),CAP(getuid(TP)), TP->QueryProp(P_LEVEL), 
+      TP->QueryProp(P_GUILD_LEVEL), TP->QueryProp(P_GUILD)));
+  command_me("prufe PALADINE! Sofort zur Burg! Wir ... NEIN, DUSTY STEH "
+      "MIR ...");
+  ::die(poisondeath);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp) {
+  if (killer==ME) {
+    write_file(LOG("npc.kills"), sprintf(
+      "%s: Ayla killt %s (LVL:%d, GLVL:%d-%s, lXP:%d)\n",
+      ctime(),CAP(getuid(player)), player->QueryProp(P_LEVEL), 
+      player->QueryProp(P_GUILD_LEVEL), 
+      stringp(player->QueryProp(P_GUILD))?player->QueryProp(P_GUILD):"???",
+      lostexp));
+    command_me("prufe Ein Frevler weniger!");
+  }
+}
+
+
+//////////////////////////////////////////////////////////////////////////////
+// Defend -> Clonen des Schwertes
+//////////////////////////////////////////////////////////////////////////////
+
+int Defend(int dam, mixed dam_type, mixed spell, object enemy) {
+  object ob;
+  int al,en;
+  SetProp(P_ALIGN, 1000);
+  if (!present("glasschwert",ME)) {
+    ob=clone_object("/p/magic/glasschwert");
+    ob->move(ME,M_NOCHECK|M_SILENT);
+  }
+  if (!QueryProp(P_WEAPON)) {
+    command_me("zuecke glasschwert");
+  }
+  if ((al=enemy->QueryProp(P_ALIGN)) > 100) {
+    if (random(100) < 10) {
+      tell_object(enemy,
+        "Die gute Seite in Dir laesst Deinen eigenen Angriff abschwaechen.\n");
+    }
+    dam-=al/(5+random(6));
+    if (dam<0) dam=0;
+  }
+  call_other(NPCMASTER,"help_me",enemy);
+  en=(sizeof(PresentEnemies()))*100;
+  if(en>600) en=600;
+  if(en>=100 && !random(2)) ME->ModifySkillAttribute(ME,SA_SPEED,en,4);
+  TO->SetProp(P_SP,TO->QueryProp(P_MAX_SP));
+  return ::Defend(dam, dam_type, spell, enemy);
+}
+
+varargs void ModifySkillAttribute(object caster, string atrname, int value, int duration, mixed fun) {
+  if (PO && PO!=TO && getuid(PO)!="GUILD.paladine") return;
+  ::ModifySkillAttribute(caster, atrname, value, duration, fun);
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Spells
+//////////////////////////////////////////////////////////////////////////////
+
+void alignspell(object enemy, int damage, mixed dam_type) {
+  enemy->SetProp(P_ALIGN,enemy->QueryProp(P_ALIGN)+10+random(10));
+  enemy->Defend(damage, dam_type, ([SP_SHOW_DAMAGE:1,SP_NAME:"Align"]), TO); 
+  return;
+}
+
+
+//////////////////////////////////////////////////////////////////////////////
+// Clonetest
+//////////////////////////////////////////////////////////////////////////////
+
+
+
+int clonetest() {
+  CLONEME( "/p/armour/gloves/panzerhandschuhe.lpc");
+  CLONEME( "/d/ebene/ronja/feenquest/armour/spitz.lpc");
+  CLONEME( "/p/armour/gloves/lederhandschuhe.lpc");
+  CLONEME( "/d/ebene/ronja/feenquest/armour/spitz.lpc");
+  CLONEME( "/d/gebirge/eros/ruestung/platinring.lpc");
+  CLONEME( "/p/armour/ring/ring.lpc");
+  CLONEME( "/d/gebirge/angrox/obj/astralring.lpc");
+  CLONEME( "/d/unterwelt/zordan/dhrkion/armour/hornring.lpc");
+  CLONEME( "/d/ebene/lamuerte/burg/obj/smaragtamulett.lpc");
+  CLONEME( "/p/armour/amulet/amulett.lpc");
+  CLONEME( "/d/ebene/lamuerte/wwald/obj/kamulett.lpc");
+  CLONEME( "/p/armour/amulet/amulett.lpc");
+  CLONEME( "/d/unterwelt/amazora/dimension/obj/saeureschuhe.lpc");
+  CLONEME( "/p/armour/boots/lederstiefel.lpc");
+  CLONEME( "/d/gebirge/eros/ruestung/baerenpranken.lpc");
+  CLONEME( "/p/armour/boots/lederschuhe.lpc");
+  CLONEME( "/d/dschungel/feyaria/tijara/armour/guertel.lpc");
+  CLONEME( "/p/armour/belt/guertel.lpc");
+  CLONEME( "/d/dschungel/feyaria/tijara/armour/guertel.lpc");
+  CLONEME( "/p/armour/belt/guertel.lpc");
+  CLONEME( "/p/armour/bracers/mithrilarmschienen.lpc");
+  CLONEME( "d/polar/lamuerte/eishoehle/obj/eisschienen.lpc");
+  CLONEME( ARMOUR("p_armschienen"));
+  CLONEME( "/p/armour/bracers/plattenzeug.lpc");
+  CLONEME( "/d/gebirge/dusty/zwerge/obj/umhang.lpc");
+  CLONEME( "/d/gebirge/angrox/obj/fumhang.lpc");
+  CLONEME( "/p/armour/cloak/umhang.lpc");
+  CLONEME( "/p/armour/cloak/seidenumhang.lpc");
+  CLONEME( "/p/armour/trousers/kettenhose.lpc");
+  CLONEME( "/d/ebene/obj/ruestung/beinschienen.lpc");
+  CLONEME( ARMOUR("p_beinschienen"));
+  CLONEME( ARMOUR("p_beinschienen"));
+  CLONEME( "/d/gebirge/eros/ruestung/schuppenpanzer.lpc");
+  CLONEME( "/p/armour/armour/titanpanzer.lpc");
+  CLONEME( "/p/armour/armour/kettenhemd.lpc");
+  CLONEME( ARMOUR("p_khemd"));
+  CLONEME( "/p/armour/helm/mithrilhelm.lpc");
+  CLONEME( "/d/gebirge/angrox/4elem/obj/armour/loewenhelm.lpc");
+  CLONEME( "/p/armour/helm/titanhelm.lpc");
+  CLONEME( ARMOUR("p_helm"));
+  return 1;
+}  
+
+
+//////////////////////////////////////////////////////////////////////////////
+// Gildensachen
+//////////////////////////////////////////////////////////////////////////////
+
+string Wappenrock() {
+  if(TP->QueryProp(P_GUILD)!="paladine")
+    return "Der Wappenrock ist eine Gabe von Dusty an uns Paladine. Er ist "
+           "ein Zeichen fuer unsere Hingabe.";
+  if(!present(WAPPENROCK, TP)) {
+    call_out("GiveRock",0, TP);
+    return "Bei Dusty, wo ist Dein Wappenrock hin? Hier, nimm einen Neuen.";
+  }
+  return "Der Wappenrock den Du traegst ist eine Gabe von Dusty an uns. Er "
+         "ist ein Zeichen fuer unsere Mitgliedschaft im auserwaehlten Kreis "
+         "der Paladine.";
+}
+
+string FlagPosition() {
+  object flag, env_flag;
+  
+  flag=find_object(ROOM("burg_schatzkammer"))->QueryProp("standarte");
+  if(!flag)
+    return "Dusty steh uns bei! Die heilige Standarte ist vernichtet!";
+  env_flag=ENV(flag);
+  if(!env_flag)
+    return "Dusty hat uns die Standarte entzogen! Sie schwebt nun im "
+      "absoluten Nichts zwischen den Welten!";
+  if(file_name(env_flag) == ROOM("burg_schatzkammer"))
+    return "Die heilige Standarte befindet sich in der Schatzkammer! "
+      "Damit ruht der Segen Dustys auf uns.";
+  if(living(env_flag))
+    return sprintf("Bei Dusty! %s hat die Standarte gestohlen und "
+        "befindet sich damit auf der Flucht!", env_flag->Name());
+  if(!living(env_flag))
+    return sprintf("Bei Dusty! Die heilige Standarte befindet sich an "
+      "einem Ort der '%s' genannt wird! Hole sie und bringe sie mir!",
+      env_flag->QueryProp(P_INT_SHORT));
+  return "Bei Dusty! Ich kann nicht erkennen wo sich die Standarte befindet!";
+    
+}
+
+string NewRock() {
+  object ob;
+  if(TP->QueryProp(P_GUILD)!="paladine")
+    return "Du gehoerst nicht zu dem auserwaehlten Kreis der Paladine.";
+  if(!ob=present(WAPPENROCK, TP)) {
+    call_out("GiveRock",0, TP);
+    return "Bei Dusty. Du hast wohl Deinen Wappenrock verloren. Hier "
+           "hast Du einen Neuen.";
+  }
+  ob->SetProp(P_CURSED, 0);
+  ob->remove();
+  call_out("GiveRock",0, TP);
+  return "Ein nagelneuer Wappenrock. Bitte sehr.";
+}
+
+void GiveRock(object pl) {
+  object ob;
+  write("Ayla gibt Dir einen Wappenrock.\n");
+  tell_room(ENV(TP),BS("Ayla gibt "+CAP(getuid(TP))+" einen Wappenrock.\n"),
+           ({TP}));
+  ob=CLONEOB(ARMOUR("wappenrock"));
+  ob->move(TP, M_NOCHECK);
+  return;
+}
+
+string Pergament() {
+  object ob;
+  if(perg_count<1) 
+    return "Tut mir leid, aber ich habe keine mehr. Komm doch "
+           "spaeter nochmal vorbei.";
+  if(deep_present("pergament", TP))
+    return "Aber Du hast doch schon ein Pergament.";
+//  ob=clone_object(OBJ("pergament"));
+//  ob->move(TP, M_NOCHECK);
+  perg_count--;
+  return "Hier bitte. Und viel Spass beim lesen.";
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Spells
+//////////////////////////////////////////////////////////////////////////////
+
+string attackspell() {
+  object en;
+  if(!present(AMARYLLION, ME) && (QueryProp(P_HP) < QueryProp(P_MAX_HP)/2)) {
+    command_me("stecke schwert zurueck");
+    command_me("talisman");
+    return "";
+  }
+  if(shout_for_help && QueryProp(P_HP) < 600) {
+     shout_for_help=0;
+     command_me("prufe Paladine! Helft mir!");
+     call_other(NPCMASTER, "RequestHelp", 100);
+     return "";
+  }
+  if(QueryProp(P_HP) < 200 && !random(QueryProp(P_HP)/2)) {
+    command_me("behandle");
+    return "";
+  }
+  if(!present("\nspiegelschild", ME)) {
+    command_me("spiegelschild");
+    return "";
+  }
+  if(!ME->QueryProp(P_TMP_DEFEND_HOOK)) {
+    command_me("goetterschutz");
+    return "";
+  }
+  if (en = QueryEnemy()) {
+    if (random(3)) {
+      command_me("zielattacke");
+    } else {
+      command_me("heiligengebet");
+    }
+    return "";
+  }
+  // ME->SetProp(P_NEXT_SPELL_TIME,time());
+  // ME->SetProp(P_LAST_SPELL_TIME,time());
+  return "";
+}
+
+
+//////////////////////////////////////////////////////////////////////////////
+// Reactions
+//////////////////////////////////////////////////////////////////////////////
+
+void StartReaction(string verb, string gruppe, string adverb, int touch) {
+  //if(TPN=="Angrox" || TPN=="Zordan") return;
+  if(TP->QueryGuest()) return;
+  if(TP->QueryProp(P_RACE)=="Dunkelelf" && 
+      member(({"fies", "frech", "boese", "intim"}), gruppe)==-1)
+  {
+    call_out("react_on_delf", 0);
+    return;
+  }
+  switch(gruppe) {
+    case "nett"      : call_out("gut", 0); 
+                       break;
+    case "gut"      :  call_out("gut", 0); 
+                       break;
+    case "intim"     : call_out("intim", 0); 
+                       break;
+    case "fies"      : call_out("boese", 0);
+                       break;
+    case "frech"     : call_out("boese",0); 
+                       break;
+    case "boese"     : call_out("boese",0);
+                       break;
+    case "traurig"   : call_out("traurig", 0); 
+                       break;
+    case "aengstlich": call_out("traurig", 0);
+                       break;
+    case "aergerlich": call_out("aergerlich", 0); 
+                       break;
+    case "froh"      : call_out("lustig", 0); 
+                       break;
+    case "albern"    : call_out("lustig", 0); 
+                       break;
+    default          : break;                   
+  }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+    return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void react_on_delf() {
+  string *delftext;
+  if(!TP || !present(TP,MENV)) return;
+  if(!random(30)) {
+    command_me("sag Das wirst Du buessen, in Dusty's Namen!");
+    ME->Kill(TP);
+  }
+  else {
+    delftext=({"Verschwinde, Du Ausgeburt der Unterwelt!",
+             "Moege Dusty Dich dafuer vernichten!",
+             "Noch einmal, und Du wirst in der Hoelle schmoren!"});
+    command_me("sag "+delftext[random(sizeof(delftext))]);
+  }
+}
+
+
+void gut() {
+  string *guttext;
+  if(!TP || !present(TP,MENV)) return;
+  guttext= ({ "Moege Dusty Dich beschuetzen, ",
+              "Dusty mit Dir, ",
+              "Dusty's Segen mit Dir, ",
+              "Moege Dusty Deine Wege erleuchten, " });
+  command_me("sag " + guttext[random(sizeof(guttext))] + TPN+ "!");
+}
+
+void intim() {
+  string *intimtext;
+  if(!TP || !present(TP,MENV)) return;
+  if(TP->QueryProp(P_RACE)=="Dunkelelf") {
+    command_me("sag DU WAGST ES, DU AUSGEBURT DER UNTERWELT !?!?");
+    ME->Kill(TP);
+    return;
+  }
+  if(TP->QueryProp(P_GENDER)==MALE) {
+    intimtext=({"Kein Interesse, ",
+                "Nein, ",
+                "Werde einmal ein Mann, dann sehen wir weiter, ",
+                "Mit einem Waschlappen wie Dir fange ich bestimmt nichts an, ",
+                "Was soll ich mit einem Versager wie Dir, ",
+                "Geh spielen, ",
+                "Mit Dir? Verschwinde, "});
+  }
+  else {
+    intimtext=({"Vielleicht heute abend, ",
+                "Ich hab Dienst, ", 
+                "Mhhhh, heute abend nach Dienstschluss, ",
+                "Vielleicht heute abend, ",
+                "Hmmm, das waere zu ueberlegen, ",
+                "Heute hat mich Yeza schon gefragt, "});
+  }
+  command_me("sag " + intimtext[random(sizeof(intimtext))] + TPN+ "!");
+}
+
+void boese() {
+  string *boestext;
+  if(!TP || !present(TP,MENV)) return;
+  if(TP->QueryProp(P_RACE)=="Dunkelelf") {
+    command_me("sag STIRB, DU AUSGEBURT DER UNTERWELT!");
+    ME->Kill(TP);
+    return;
+  }
+  boestext=({ "Verschwinde, oder ich toete Dich, ",
+              "Ich lass mich nicht von Dir provozieren. Noch einmal, "
+              "und ich toete Dich, ",
+              "Noch einmal, und ich beschwoere Dusty's Zorn auf "
+              +"Dich herab, "});
+  if(member(get_angry, getuid(TP))==-1) { 
+    command_me("sag " + boestext[random(sizeof(boestext))] + TPN + "!" );
+    get_angry+=({getuid(TP)});
+   }
+  else { 
+    if(IS_WIZARD(TP))
+      command_me("sag Wenn Du kein Magier waerest, wuerde ich Dich toeten!");
+    else
+      Kill(TP);
+  }
+  return;
+}
+
+void lustig() {
+  if(!TP || !present(TP,MENV)) return;
+  command_me("lache");
+}
+
+void aergerlich() {
+  if(!TP || !present(TP,MENV)) return;
+  command_me("sag Ruhe hier, "+TPN+"!");
+}
+
+void troesten() {
+  if(!TP || !present(TP,MENV)) return;
+  command_me("sag Dusty wird Dir beistehen, "+TP->Name(WER)+"!");
+}
+
+void give_notify(object ob) {
+  if(ob->id(PALADIN_STANDARTE)) {
+    command_me("sag Dusty sei Dank! Du hast die Standarte zurueckgebracht!");
+    command_me(sprintf("prufe Dusty sei gepriesen! %s hat die Standarte "
+          "zurueckgebracht!", TP->Name(WER)));
+    ob->move(ROOM("burg_schatzkammer"), M_NOCHECK);
+    tell_room(ENV(ME), "Die Standarte verschwindet mit einem hellen "
+        "Leuchten!\n");
+    TP->SetProp(P_ALIGN, TP->QueryProp(P_ALIGN)+300);
+    TP->SetProp(P_XP, TP->QueryProp(P_XP)+10000);
+    return ;
+  }
+  return ::give_notify(ob);
+}
+
+void greet_juny() {
+  object juny;
+  juny=find_player("juny");
+  if(juny && ENV(juny)==ENV(ME)) {
+    command_me("sag Juny! Moege Dusty stets Ihre schuetzende Hand ueber "
+        "Dich halten!");
+    tell_room(ENV(ME), "Ayla laechelt.\n");
+  }
+  return ;
+}
+void greet_sennah() {
+  object sennah;
+  sennah=find_player("sennah");
+  if(sennah && ENV(sennah)==ENV(ME)) {
+    command_me("sag Moege Dusty Deine Wege stets erleuchten, Ritter der "
+        "Goettin!");
+    tell_room(ENV(ME), "Ayla laechelt Sennah an.\n", ({sennah}));
+    tell_object(sennah, "Ayla laechelt Dich an.\n");
+  }
+  return ;
+}
+
+
+int filter_paladin_quest_player(object ob) {
+  if(IS_LEARNING(ob) || ob->QueryProp(P_TESTPLAYER)) return 0;
+  if(ob->QueryProp(P_GUILD) == "paladine" &&
+     ob->QueryProp(P_GUILD_LEVEL) == 15 &&
+     ob->QueryProp(P_LEVEL) >= 60 &&
+     query_idle(ob) < 120 && 
+     ob->QueryProp(P_ALIGN) > 1100 &&
+     ENV(ob) != ENV(ME)) 
+  {
+    return 1;
+  }
+  return 0;
+}
+
+varargs void check_paladin_quest(int override) {
+  int x,i;
+  object *pal;
+  pal=filter_array(users(), "filter_paladin_quest_player");
+  x=random(700);
+  if(file_size(LOG("lvl16quest_rnd")) > 300000)
+     rm(LOG("lvl16quest_rnd"));
+   write_file(LOG("lvl16quest_rnd"), sprintf("%s: x=%d, *pal = ", 
+         dtime(time()), x));
+  for(i=sizeof(pal)-1;i>=0;i--) {
+    write_file(LOG("lvl16quest_rnd"), sprintf("%s, ", getuid(pal[i])));
+  }
+  write_file(LOG("lvl16quest_rnd"),"\n");
+  if(!sizeof(pal)) return;
+  if(override) x=0;
+  TELL("angrox", sprintf("*** Ayla: lvl 16 Quest: x = %d/500\n",x));
+  if(x != 0) return; // nur wenn x == 0 ist solls hier weitergehen
+  choosen_one=pal[random(sizeof(pal))];
+  choosen_one->Message(BSA("Paladin! Komm auf die Burg zum Rapport! Ich "
+        "habe eine Aufgabe fuer Dich!", "Ayla teilt Dir mit: "), 
+      MSGFLAG_TELL);
+  write_file(LOG("lvl16quest"), sprintf("%s: %s -> Rapportbefehl!\n", 
+          dtime(time()), getuid(choosen_one)));
+  call_out("paladin_missed_quest", 300);
+  return;
+}
+
+void paladin_missed_quest() {
+   if(!objectp(choosen_one))
+     return;
+   choosen_one->Message(BSA("Gut, wenn Du nicht kommst suche ich mir einen "
+         "Anderen fuer diese ehrenvolle Aufgabe.", "Ayla teilt Dir mit: "),
+          MSGFLAG_TELL);
+   write_file(LOG("lvl16quest"), sprintf("%s: %s -> kam nicht zu Ayla! "
+           "Questende!\n", dtime(time()), getuid(choosen_one)));
+   choosen_one=0;
+   return ;
+}
+
+void give_quest()  {
+   if(!present(choosen_one, ENV(ME)))
+     return ;
+   if(find_call_out("paladin_missed_quest") != -1) 
+     remove_call_out("paladin_missed_quest");
+   command_me(sprintf("sag Ahhh, %s, Du bist hier. Sehr gut. Ich habe eine "
+         "dringliche Aufgabe fuer Dich.", choosen_one->name(WER)));
+   write_file(LOG("lvl16quest"), sprintf("%s: %s -> kommt bei Ayla an!\n",
+           dtime(time()), getuid(choosen_one)));
+   call_out("give_quest2", 8);
+   return ;
+}
+
+void give_quest2() {
+   if(!present(choosen_one, ENV(ME))) {
+     paladin_missed_quest();
+     return;
+   }
+   command_me("sag Es gibt ein Bedrohung fuer das Silberland, welcher "
+         "wir entgegenwirken muessen. Wir koennen die Bedrohung durch den "
+         "alten Feind, durch DAS BOESE, nicht entgueltig beenden, aber wir "
+         "koennen Zeit fuer die Verteidigung unser Welt herausholen.");
+   call_out("give_quest3", 8);
+   return ;
+}
+
+void give_quest3() {
+   if(!present(choosen_one, ENV(ME))) {
+     paladin_missed_quest();
+     return;
+   }
+   command_me("sag DAS BOESE ist gerade wieder am erstarken. Du musst einen "
+       "Teil der Essenz des Boesen, das sogenannte 'Herz des Boesen' "
+       "erbeuten und hier am Altar Dusty opfern. Damit koennen wir genuegend "
+       "Zeit erlangen, die das Silberland braucht um nicht von den Horden "
+       "des Boesen ueberrannt zu werden.");
+   call_out("give_quest4", 8);
+}
+
+void give_quest4() {
+   if(!present(choosen_one, ENV(ME))) {
+     paladin_missed_quest();
+     return;
+   }
+   command_me("sag Nimmst Du die Aufgabe an, Paladin?");
+   write ("\nWas moechtest Du Ayla antworten (ja/nein) ?\n");
+   input_to("give_quest5");
+}
+
+void give_quest5(string str) {
+   if(str != "ja" && str != "nein") {
+     write ("\nWas moechtest Du Ayla antworten (ja/nein) ?\n");
+     input_to("give_quest5");
+     return ;
+   }
+   if(str=="nein") {
+     tell_room(ENV(ME), BSA("Nein, Ayla, ich bin nicht bereit dafuer. "
+           "Es tut mir leid...", TPN+" sagt: "), ({TP}));
+     tell_object(TP, BSA("Nein, Ayla, ich bin nicht bereit dafuer. Es tut "
+           "mir leid...", "Du sagst: "));
+     choosen_one=0;
+     command_me("sag Tritt mir aus den Augen.");
+     write_file(LOG("lvl16quest"), sprintf("%s: %s -> lehnt die Quest ab!\n",
+           dtime(time()), getuid(choosen_one)));
+     return;
+   }
+   if(str=="ja") {
+     tell_room(ENV(ME), BSA("Ja, Ayla, ich bin bereit! Ich bin bereit mein "
+           "Leben fuer diese Sache in die Waagschale zu werfen! Ich werde "
+           "das Herz des Boesen finden und opfern!", TPN+" sagt stolz: "),
+         ({TP}));
+     tell_object(TP, BSA("Ja, Ayla, ich bin bereit! Ich bin bereit mein "
+           "Leben fuer diese Sache in die Waagschale zu werfen! Ich werde "
+           "das Herz des Boesen finden und opfern!", "Du sagst stolz: "));
+     write_file(LOG("lvl16quest"), sprintf("%s: %s -> nimmt die Quest an!\n",
+           dtime(time()), getuid(choosen_one)));
+     call_out("give_quest6", 2);
+   }
+   return;
+}
+ 
+void give_quest6() {
+   if(!present(choosen_one, ENV(ME))) {
+     paladin_missed_quest();
+     return;
+   }
+   command_me("sag Gut so, Paladin! Dann mache Dich auf den Weg! Die Zeit "
+       "draengt. Du musst DAS BOESE innerhalb von zehn Tagen vernichten, "
+       "sonst hast Du versagt!");
+   write_file(LOG("lvl16quest"), sprintf("%s: %s -> wird als Quester fix "
+           "eingetragen!\n", dtime(time()), getuid(choosen_one)));
+   call_other(PALADINMASTER, "SetQuestLvl16", choosen_one, time()+10*24*3600);
+   choosen_one=0;
+   return ;
+}
+
+void tell_about_nekro() {
+  switch(random(3)) {
+    case 0: tell_room(ENV(ME), "Ayla seufzt.\n"); 
+            command_me("sag Dunkle Zeiten brechen an ...");
+            break;
+    case 1: command_me("sag Sie sind wieder da. Bei Dusty ...");
+            break;
+    case 2: command_me("sag Die Verdammten sind auf dem Vormarsch ...");
+  }
+  return ;
+}

@@ -1,0 +1,289 @@
+/* SilberLand MUDlib
+ *
+ * /secure/potionmaster.c -- potion master object
+ *
+ * $Date: 2004/01/22 22:35:44 $
+ * $Revision: 1.5 $
+ * $Log: potionmaster.c,v $
+ * Revision 1.5  2004/01/22 22:35:44  Woody
+ * Die meisten func's akzeptieren nun auch Strings, strict_types
+ *
+ * Revision 1.4  1997/05/15 15:56:29  Woody
+ * ListsTotal als #define
+ *
+ * Revision 1.3  1997/04/19 21:38:48  Feyaria
+ * auf 5 Listen reduziert, jeweils 2 ZTs aus einer Liste -> 10 versch. ZTs
+ *
+ * Revision 1.2  1997/03/16 23:38:30  Woody
+ * Dump- und Savefiles nun in /secure/ARCH/
+ *
+ * Revision 1.1  1997/03/15 23:35:29  Woody
+ * prepared for revision control
+ *
+ * 1996-10-18  Woody
+ * RemoveList() auf Uebergabe von string erweitert
+ *
+ * 1996-10-10  Woody
+ * RoomsPerList und RoomsTotal geaendert
+ *
+ */
+
+/*
+   Das "Potion-Handling" laeuft ueber eine AList. Die Raeume, die Potions ent-
+   halten koennen, bekommen eine Zahl zugeordnet. Eine AList hat die Raumnamen
+   als Schluessel, die Raumnummern als  Elemente.
+   Es existieren 8 weitere AListen, die die "aktiven" Raeume enthalten.
+   Einem Spieler wird beim ersten Einloggen eine Liste von 76 Raeumen (ueber
+   ihre Nummerns spezifiziert) gegeben. Dabei werden ihm je RoomsPerList
+   Raeume aus der ersten bis siebten Liste und 6 Raeume aus der achten Liste
+   zugeordnet.
+   Die Raeume sollten nach Schwierigkeit sortiert sein (die einfachsten in
+   der ersten, die schwersten in der achten Liste). So ist gewaehrleistet, das
+   der Spieler die ersten Advances relativ einfach, die letzten dafuer umso
+   schwerer erreicht.
+*/
+
+#pragma strict_types
+
+#include "/secure/config.h"
+#include "/secure/wizlevels.h"
+
+#define ListsTotal 5
+#define RoomsPerList 2
+#define RoomsTotal 10
+
+// #define ListsTotal 8
+// #define RoomsPerList 10
+// #define RoomsTotal 80
+
+#define POTIONDUMP "/secure/ARCH/TRAENKE"
+#define DUMP(str) write_file(POTIONDUMP,str)
+#define TW(x) if (find_player("woody")) tell_object(find_player("woody"),x)
+
+mixed *all_rooms;
+mixed *active_rooms;
+int nextroom;
+
+void save_info()
+{
+  save_object("/secure/ARCH/potions");
+}
+
+int secure()
+{
+  if (!previous_object()) return 0;
+  if (geteuid(previous_object())==ROOTID) return 1;
+  if (geteuid(previous_object()) != geteuid(this_interactive())) return 0;
+  if (this_interactive() != this_player()) return 0;
+  if (!IS_ARCH(this_interactive())) return 0;
+  return 1;
+}
+
+void create()
+{
+  int i;
+
+  seteuid(getuid(this_object()));
+  if (!restore_object("/secure/ARCH/potions"))
+  {
+      all_rooms = ({({}),({})});
+      active_rooms = allocate(ListsTotal);
+      for (i=0; i<ListsTotal; i++) active_rooms[i] = ({ });
+  }
+  all_rooms = order_alist(all_rooms);
+}
+
+int AddPotionroom(string roomname)
+{
+  if (!secure()) return 0;
+  if (!stringp(roomname) || roomname=="") return -1;
+  roomname = (string) "/secure/master"->_get_path(roomname,0);
+  if (catch(call_other(roomname,"???"))) return -2;
+  //if (roomname[0..12]!="/room/potion/") return -4;
+  if (assoc(roomname, all_rooms, -1)!=-1) return -3;
+  all_rooms=insert_alist(roomname, nextroom, all_rooms);
+  nextroom++;
+  save_info();
+  return nextroom;
+}
+
+int ChangeRoomPath(string oldpath, string newpath)
+{
+  int num;
+
+  if (!secure()) return 0;
+  if (!stringp(oldpath) || oldpath == "") return -1;
+  if (!stringp(newpath) || newpath == "") return -2;
+  oldpath = (string) MASTER->_get_path(oldpath,0);
+  newpath = (string) MASTER->_get_path(newpath,0);
+  if (assoc(oldpath,all_rooms,-1) == -1) return -3;
+  if (assoc(newpath,all_rooms,-1) != -1) return -4;
+  if (catch(call_other(newpath,"???"))) return -5;
+  num=assoc(oldpath, all_rooms);
+  all_rooms=remove_alist(oldpath,all_rooms);
+  all_rooms=insert_alist(newpath, num, all_rooms);
+  save_info();
+  return num;
+}
+
+int ActivateRoom(string roomname, int listno)
+{
+  int nummer;
+  int i;
+
+  if (!secure()) return 0;
+  if (listno<0 || listno>=ListsTotal) return -1;
+  nummer=assoc(roomname, all_rooms, -1);
+  if (nummer==-1) return -2;
+  for (i=0;i<ListsTotal;i++)
+      if (member_array(nummer,active_rooms[i])!=-1) return -3;
+  active_rooms[listno]+=({nummer});
+  save_info();
+  return 1;
+}
+
+int DeactivateRoom(string roomname)
+{
+  int nummer, i, pos;
+
+  if (!secure()) return 0;
+  nummer=assoc(roomname, all_rooms,-1);
+  if (nummer==-1) return -1;
+  i=0;
+  while (i<ListsTotal && (pos=member_array(nummer, active_rooms[i]))==-1)
+    i++;
+  if (pos==-1) return -2;
+  //if (sizeof(active_rooms[i])<11) return -3;
+  active_rooms[i]=active_rooms[i][0..pos-1]+active_rooms[i][pos+1..<1];
+  return 1;
+}
+
+int *_create_list(int listno, int anz)
+{
+  mixed *list, tmp;
+  int i, j;
+
+  list = ({ });
+  tmp = active_rooms[listno][0..<1];
+  while (anz > 0)
+  {
+    anz--;
+    if (!sizeof(tmp))
+    {
+      // write("Fehler ! Liste konnte nicht erzeugt werden ! PANIC !\n");
+      return list;
+    }
+    if (sizeof(tmp) == 1)
+    {
+      list += tmp;
+      tmp = ({ });
+    }
+    else
+    {
+      j = random(sizeof(tmp));
+      list += ({ tmp[j] });
+      tmp = tmp[0..j-1] + tmp[j+1..<1];
+    }
+  }
+  return list;
+}
+
+int *InitialList()
+{
+  mixed *list;
+  int i;
+
+  list = ({ });
+
+  for (i = 0; i < ListsTotal; i++)
+    list += _create_list(i, RoomsPerList);
+
+  // folgende 2 Zeilen von Vrai eingefuegt, um das Dilemma von
+  // 'zuwenigen' ZT's zu ueberbruecken:
+  // Jeder Spieler kann 80 ZT's finden, unabhaengig davon, obs
+  // auch 80 ZT's gibt (manche koennen dann halt mehrfach
+  // gefunden werden).   *** 22.08.95  Vrai ***
+  //
+  // Es sind zwar nur noch 10 ZT's, das heisst also, dass nur
+  // noch zwei ZTs durch die folgenden Zeilen zugeordnet werden.
+  // Diese sind zufaellig aus zwei der acht Listen gewaehlt.
+  // Will man verhindern, dass ZTs mehrfach erhalten werden
+  // koennen, muesste man bei den oberen Zeilen was aendern.
+  // *** 17.03.97  Woody ***
+  //
+  // Jetzt gibts nur mehr 5 Listen, von denen jeweils 2 ZTs 
+  // ausgewaehlt werden. So hat jeder Spieler dann wirklich
+  // 10 verschiedene ZTs. Beim Eintragen neuer ZTs sollte man
+  // darauf achten, dass alle 5 Listen in etwa gleich gross sind.
+  // *** 19.04.97 Feyaria ***
+
+  while (sizeof(list) < RoomsTotal && i < 500) { // i ist ein maxtry counter
+    list+=_create_list(random(ListsTotal),1);
+    ++i;
+  }
+
+  return list;
+}
+
+int HasPotion(mixed room)
+{
+  return assoc(stringp(room) ? room :
+               (explode(file_name(room),"#")[0]), all_rooms, -1);
+}
+
+int InList(mixed room, mixed list)
+{
+  room = assoc(stringp(room) ? room :
+               (explode(file_name(room),"#")[0]), all_rooms, -1);
+  if (room==-1) return 0;
+  if (member_array(room, list)==-1) return 0;
+  return 1;
+}
+
+int *RemoveList(mixed room, mixed list)
+{
+  room = assoc(stringp(room) ? room :
+               (explode(file_name(room),"#")[0]), all_rooms, -1);
+  if (room == -1) return list;
+  if ((room = member_array(room, list)) == -1) return list;
+  return list[0..room-1] + list[room+1..<1];
+}
+
+int DumpList()
+{
+  int i,j,k,s;
+	int *LIST;
+
+  rm(POTIONDUMP);
+	LIST=all_rooms[1];
+  for (i=0;i<ListsTotal;i++)
+  {
+		LIST-=active_rooms[i];
+    s = sizeof(active_rooms[i]);
+    DUMP(sprintf("################## Liste %d ################## (%d)\n\n",
+		 i,s));
+    for (j=0;j<s;j++)
+    {
+      DUMP(sprintf("%3d. ",active_rooms[i][j]));
+      k=member_array(active_rooms[i][j],all_rooms[1]);
+      if (k==-1)
+        DUMP("KEIN ZUGEORDNETER RAUM !!\n");
+      else
+        DUMP(all_rooms[0][k]+"\n");
+    }
+    DUMP("\n\n");  
+  }
+	s=sizeof(LIST);
+	DUMP(sprintf("################## Inaktiv ################## (%d)\n\n",s));
+	for (j=0;j<s;j++)
+	{
+		DUMP(sprintf("%3d. ",LIST[j]));
+		k=member_array(LIST[j],all_rooms[1]);
+		if (k==-1)
+		  DUMP("KEIN ZUGEORDNETER RAUM !!\n");
+		else
+		   DUMP(all_rooms[0][k]+"\n");
+	}
+	DUMP("\n\n");
+  return 1;
+}

@@ -1,0 +1,202 @@
+//
+// Der STD-Raum fuer meine Vorstellung des VCs
+//
+// Verwendung nur mit ausdruecklicher Genehmigung
+//
+// Iwo@SL <jens@pages.at>
+//
+
+#pragma strong_types
+
+#include <wizlevels.h>
+#include <properties.h>
+#include "def.h"
+#include <ansi.h>
+
+#define TO efun::this_object()
+
+
+// Prototypes
+void create();
+string _query_int_short();
+string int_long();
+varargs string GetExits( object viewer );
+
+
+// Global
+private nosave string mydomain = "UNDEFINIERT";
+
+
+void create()
+{
+  if (!is_clone(TO)) return;
+  seteuid(getuid(TO));
+}
+
+string _query_int_short()
+{
+  return break_string("Im Zugriffskontrollraum fuer die Region "
+                       + upperstring(mydomain), 78);
+}
+
+
+void Customize()
+{
+  ACVC->CustomizeObject();
+}
+
+
+private nosave string invlist(object who, object *inv)
+{
+  int i, iswiz;
+  string descr;
+
+  descr="";
+  iswiz = IS_LEARNER(who) && who->QueryProp(P_WANTS_TO_LEARN);
+
+  for (i=0;i<sizeof(inv);i++)
+    {
+      string sh;
+      if (inv[i]==who) continue;
+      sh = inv[i]->short();
+      if (iswiz)
+        {
+          if (sh) sh=sh[0..<2]+" ["+file_name(inv[i])+"]\n";
+          else sh = "["+file_name(inv[i])+"]\n";
+        }
+      if (sh) descr += sh;
+
+    }
+  return descr;
+}
+
+
+string int_long()
+{
+  string outstr;
+
+  outstr = ""; 
+  if (IS_LEARNER(this_player()) && this_player()->QueryProp(P_WANTS_TO_LEARN))
+    outstr  += sprintf("[%s|uid:%s:%s]\n",
+      file_name(this_object()),
+      getuid(this_object()),
+      geteuid(this_object()));
+  outstr += sprintf("Im Zugriffskontrollraum fuer die Region %s\n\n",
+    mydomain);
+
+  outstr += "Kommandos:\n";
+  outstr += "  add <name>|* <file>|<directory> r|w|x|worldwriteable*\n";
+  outstr += "  del <name>|* [<file>|<directory>]\n";
+  outstr += "  show\n";
+  outstr += "  notify\n";
+  outstr += "  test <name> <file>|<directory>\n";
+  outstr += "\n* Grossbuchstaben setzten rekursive Rechte.\n";
+  outstr += "\nBenutzerrechte gehen vor allgemeinen('*') Rechten.\n";
+  outstr += "File-Rechte gehen vor Verzeichnisrechte.\n";
+  outstr += "Rekursivrechte werden nur angewendet wenn kein anderes\n";
+  outstr += "Recht zutrifft.\n";
+  outstr += "Dadurch ergibt sich, dass auch Auschlussrechte ('x') \n";
+  outstr += "vergeben werden koennen.\n"; 
+  outstr += "Benachrichtigung ist "; 
+  if (ACMASTER->QueryNotify(getuid(this_player())))
+    outstr += ANSI_GREEN + "Eingeschaltet\n" + ANSI_NORMAL;
+  else outstr += ANSI_RED + "Ausgeschaltet\n" + ANSI_NORMAL;
+  outstr += "Hilfe gibts mit: mhilfe\n";
+  outstr += GetExits();
+  outstr+=invlist(this_player(), all_inventory(this_object()));
+
+  return outstr;
+
+}
+
+
+
+void SetupDomain(string domain)
+{
+  //if (previous_object() != find_object(ACVC)) return 0;
+  mydomain = upperstring(domain);
+}
+
+
+
+varargs string GetExits( object viewer )
+{
+  string *domains;
+  string *numbers;
+  int n;
+
+  return "Es gibt einen sichtbaren Ausgang: raus\n";
+  
+}
+
+
+void init()
+{
+  if (this_player() && this_player()->QueryProp(P_INVIS))
+    tell_room(this_object(), sprintf("(%s) betritt den Raum.\n", capitalize(getuid(this_player()))));
+  add_action("_normalfunction", "", 1);
+}
+
+
+int _normalfunction()
+{
+  string verb;
+  string *domains;
+
+  verb = query_verb();
+
+  if (verb == "raus")
+    return this_player()->move(ACMAIN, 3);
+
+  switch(verb)
+    {
+    	case "add":
+    	  return ACMASTER->AddRight(
+    	                     this_player(),
+    	                     mydomain, 
+    	                     this_player()->_unparsed_args()
+    	                     );
+    	  break;
+    	case "del":
+    	  return ACMASTER->DelRight(
+    	                     this_player(),
+    	                     mydomain,
+    	                     this_player()->_unparsed_args()
+    	                     );
+    	  break;
+    	case "show":
+    	  return ACMASTER->ShowRight(
+    	                     this_player(),
+    	                     mydomain,
+    	                     this_player()->_unparsed_args()
+    	                     );
+    	  break;
+    	case "test":
+    	  return ACMASTER->TestRight(
+    	                     this_player(),
+    	                     mydomain,
+    	                     this_player()->_unparsed_args()
+    	                     );
+        case "notify":
+	  return ACMASTER->ToggleNotify(
+	                     this_player()
+			     );
+          break;
+        case "mhilfe":
+	  this_player()->more(ACDOC);
+	  return 1;
+    	  break;
+    }
+
+  return 0;  
+}
+
+int _query_debug()
+{
+  return 1;
+}
+
+varargs int remove(int silent)
+{
+  destruct(TO);
+}

@@ -1,0 +1,105 @@
+
+#include "../def.h"
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+
+create() {
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein kleiner Felsstein");
+  SetProp(P_LONG,  "Das ist ein kleiner Felsstein. Er hat eine etwas "
+                   "rundliche Form und ist ganz grau. An seinen Ecken "
+                   "ist der Felsstein ein wenig scharf." );
+  SetProp(P_INFO,  "Huch, der Stein passt aber erstaunlich gut in Deine "
+                   "Wurfhand!?!");
+  SetProp(P_NAME,     "Felsstein");
+  SetProp(P_NAME_ADJ, "klein");
+  SetProp(P_KILL_NAME, "Ein zu hart geworfener Felsstein");
+  
+  AddAdjective( ({"kleiner","kleiner"}) );
+  SetProp(P_GENDER, MALE);
+  AddId( ({"felsstein","stein","\n_zordan_felsstein"}) );
+
+  SetProp(P_MATERIAL, MAT_STONE );
+  SetProp(P_WEIGHT, 500);
+  SetProp(P_VALUE, 10);
+  SetProp(P_NOBUY, 1);
+  
+  AddCmd( ({ "wirf","werf","werfe" }), "wirffkt" );
+}
+
+int wirffkt(string str) {
+  string wen, wohin;
+  object ob;
+  
+  notify_fail("Was moechtest Du wohin werfen?\n");
+  if(!str) return 0;
+  if( (sscanf(str,"%s nach %s",wen,wohin) != 2) && 
+      (sscanf(str,"%s auf %s", wen,wohin) != 2) &&
+      (sscanf(str,"%s %s", wen,wohin) != 2)) return 0;
+  if(!id(wen)) return 0;
+  if(TP->InFight()) {
+    write("Im Kampf kannst Du den Felsstein nicht werfen!\n");
+    return 1;
+  }
+  if (wohin=="runter" || wohin=="unten" || wohin=="hinunter") {
+    if(file_name(ENV(TP)) != ROOM "ergvor") {
+      write("Das geht hier (leider) nicht!\n");
+      return 1;
+    }
+    write("Du nimmst den Felsstein in die Hand und wirfst ihn auf den Pfad.\n");
+    call_other( ROOM "erg3", "???");
+    ME->move(   ROOM "erg3", M_NOCHECK);
+    tell_room(  ROOM "erg3", BS(
+      "Auf einmal saust ein kleiner Felsstein an Deinem Kopf vorbei und "
+      "landet vor Deinen Fuessen!"));
+    return 1;
+  }
+  ob=present(wohin,ENV(TP));
+  if(ob) {
+    if(!living(ob)) {
+      write("Du kannst den Felsstein nur auf andere Levewesen werfen!\n");
+      return 1;
+    }
+    if(query_once_interactive(TP) && query_once_interactive(ob)) {
+      write(BS(
+        "Du traust Dich nicht den Felsstein auf einen anderen Spieler "
+        "zu werfen!"));
+      return 1;
+    }
+    
+    if((!query_once_interactive(ob)) && 
+       (present("\n_zordan_felsstein",ob) ||
+        ob->QueryProp("felsstein_throw"))) {
+      write(BS(
+        "Auf "+ob->name(WEN)+" wurde schon einmal ein Felsstein geworfen. Du hast "
+        "daher Mitleid und wirfst den Felsstein nicht ein weiteres Mal."));
+      return 1;
+    }
+    ob->SetProp("felsstein_throw",1);
+    write(BS(
+      "Du wirfst den Felsstein auf "+ob->name(WEN)+" und triffst "+
+      ob->QueryPronoun(WESSEN)+" hart."));
+    say(BS(
+      CAP_TPN+" wirft einen kleinen Felsstein auf "+ob->name(WEN)+".\n"),
+      ({ TP,ob }) );
+    tell_object(ob,BS(
+      CAP_TPN+" wirft einen kleinen Felsstein auf Dich und trifft Dich hart!"));
+    ME->move(ob, M_NOCHECK);
+    ob->do_damage(5+random(5),TP);
+    if(ob && !query_once_interactive(ob)) {
+      if(random(10)>5) {
+        ob->Kill(TP);
+      } else {
+        ob->command_me("wirf felsstein nach "+getuid(TP));
+      }
+    }
+    return 1;
+  }
+  return 0;
+}

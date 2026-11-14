@@ -1,0 +1,1156 @@
+/* SilberLand MUDlib
+ *
+ * /secure/login.c -- login object
+ *
+ * $Date: 2008/03/27 10:20:41 $
+ * $Revision: 1.34 $
+ * $Log: login.c,v $
+ * Revision 1.34  2008/03/27 10:20:41  Woody
+ * Bugfix for P_SECOND comparision (if players with non-string values logged in)
+ *
+ * Revision 1.33  2005/03/08 11:04:44  Woody
+ * Rassenbeschreibung nun auch mit "<nr>?" abrufbar
+ *
+ * Revision 1.32  2004/09/23 01:17:00  Woody
+ * Groebere Umstrukturierungen, 2ti-Regelung erst NACH Passworteingabe pruefen
+ *
+ * Revision 1.31  2004/06/25 09:13:25  Feyaria
+ * Spieler mit grossbuchstaben im Namen verhindern
+ *
+ * Revision 1.30  2003/05/20 08:42:05  Woody
+ * Bugfix
+ *
+ * Revision 1.29  2003/05/20 00:17:17  Woody
+ * Gleichzeitiges Login Magier+Zweitie nicht mehr moeglich
+ * (wozu gibts Testis!!!)
+ *
+ * Revision 1.28  2003/03/17 17:35:50  Woody
+ * Erhoehung von MAXUSERS von 100 auf 150
+ *
+ * Revision 1.27  2002/11/06 16:41:11  Woody
+ * Geboren-Meldung auf -Info: ins Spielerobjekt verlagert
+ *
+ * Revision 1.26  2002/11/06 15:06:51  mud
+ * Zweitie-Regelung beim Login ueberpruefen und vollziehen
+ * (nur 1 Zweitspieler pro Kalendertag erlaubt)
+ *
+ * Revision 1.25  2002/08/30 15:51:47  Crea
+ * localhost may enter always
+ *
+ * Revision 1.24  2002/08/30 15:40:38  Crea
+ * small bugfix for maylogin
+ *
+ * Revision 1.23  2002/08/30 15:16:05  Crea
+ * added MayLogin for lockgame
+ *
+ * Revision 1.22  2002/08/19 11:03:10  Feyaria
+ * ein Fee -> eine Fee
+ *
+ * Revision 1.21  2002/01/29 22:57:16  Woody
+ * Invis-Flag bei Reconnect() und start_player() mit uebergeben
+ *
+ * Revision 1.20  2001/07/30 15:12:17  Woody
+ * Gaeste bekommen eine eigene Shell (std/shells/guest)
+ *
+ * Revision 1.19  2001/06/07 08:43:34  Crea
+ * added loginmaster handling
+ *
+ * Revision 1.18  2001/02/16 15:42:37  Woody
+ * neue /log/ Struktur beruecksichtigt
+ *
+ * Revision 1.17  2000/11/30 12:56:58  Woody
+ * Im Dezember /etc/WELCOME.xmas als Einlogg-Screen
+ *
+ * Revision 1.16  2000/08/08 19:21:34  Zordan
+ * Logfile fuer /log/ILLEGAL aufgeraeumt
+ *
+ * Revision 1.15  1999/11/03 18:25:27  Zordan
+ * Neue Spieler koennen keine ex. Livings mehr sein
+ *
+ * Revision 1.14  1999/08/18 20:44:09  Zordan
+ * P_AWAY wird bei Reconnect geloescht
+ *
+ * Revision 1.13  1999/08/17 21:42:58  Zordan
+ * Neue Spieler bekommen Msg auf dem Info-Kanal
+ *
+ * Revision 1.12  1999/05/25 11:09:10  Woody
+ * inherit /secure/mini_telnetneg - Security
+ *
+ * Revision 1.11  1999/05/19 15:36:41  Woody
+ * Policy-Handling, Timeout bei diversen Prompts verlaengern
+ *
+ * Revision 1.10  1999/04/13 19:33:10  Woody
+ * Maximale Spieleranzahl erhoeht
+ *
+ * Revision 1.9  1999/03/01 17:30:24  Woody
+ * telnetneg inheriten (telnet negotiations)
+ *
+ * Revision 1.8  1999/02/22 20:16:12  Woody
+ * invis login leicht geaendert
+ *
+ * Revision 1.7  1999/02/10 18:33:15  Woody
+ * Fehlgeschlagene Logins genauer anzeigen
+ *
+ * Revision 1.6  1998/09/20 13:32:22  Woody
+ * Kosmetische Korrekturen, invis login handling geaendert
+ *
+ * Revision 1.5  1998/05/17 14:27:41  Woody
+ * Invis Login auch mit '-name' moeglich
+ *
+ * Revision 1.4  1998/05/17 13:22:18  Woody
+ * Mitloggen neuer Spieler (PLAYER_CREATE), invis einloggen
+ *
+ * Revision 1.3  1997/10/14 18:19:31  Woody
+ * MAXUSERS auf 60 erhoeht
+ *
+ * Revision 1.2  1997/06/11 12:19:42  Woody
+ * MAXUSERS auf 50 erhoeht
+ *
+ * Revision 1.1  1997/03/15 23:09:29  Woody
+ * prepared for revision control
+ *
+ * 1997/01/21  Woody@SL  'rip' beim Einloggen jetzt fuer alle Erzis
+ *                       Syntax: "<loginname> rip <ip-adresse>"
+ * 1996/11/20  Woody@SL  WELCOME.localhost beim einloggen von Inside
+ * 1996/10/12  Woody@SL  Gaeste kriegen den guestremover ins inventory
+ *                       gecloned, dadurch werden sie destructed, wenn
+ *                       sie netztot werden.
+ * 1996/10/05  Woody@SL  Limit von drei Versuchen zum erfolgreichen login
+ * 1996/10/02  Woody@SL  TimeBanish Support, Setzen von P_CREATION_DATE
+ * 1996/07/13  Woody@SL  bugfixing (Bug von Anatol gemeldet):
+ *                       Es war moeglich, zwei Spieler "Xyz" und "XyZ"
+ *                       einzuloggen. Ausserdem konnte sich nach Eingabe
+ *                       von "neu" und VOR Eingabe des gewuenschten Namens
+ *                       nicht gleichzeitig noch jemand neu einloggen.
+ *                       Durch Verschieben von der "Anmeldung unter diesem
+ *                       Namen laeuft bereits"-Abfrage in newplayer()
+ *                       sind beide Probleme (hofftl.) geloest. Auf
+ *                       diese Art ist es ausserdem weiterhin moeglich,
+ *                       Namen mit Grossbuchstaben drin anzulegen.
+ * 1996/04/06  Woody@SL  bugfixing - es gab massive Probs, wenn man beim
+ *                       1. Einloggen bei der EMail-Abfrage disconnectete!
+ * 1996/04/02  Woody@SL  "neu" fuer neuen Charakter, "remoteip" -> "rip"
+ * 1996/02/22  Woody@SL  general debugging
+ * 1996/01/23  Woody@SL  "Schoen, dass Du wieder da bist, NAME"
+ */
+
+/*
+ * This object is cloned for every user trying to log in 
+ * We are still running root.
+ *
+ * login.c looks up the username in the secure/PASSWD file. If it is
+ * found, the password is checked. If the user is already logged in,
+ * he will be reconnected to the running object. If the other object
+ * is still interactive, that will be disconnected before the user is
+ * reconnected to that object.
+ *
+ * If the user is not in PASSWD, a new entry with level 0 is created.
+ * All PASSWD writing is done in secure/master.c.
+ *
+ */
+
+// Erweiterung auf defines von Mupfel@AnderLand
+// MAXUSERS   max. Anzahl gleichzeitig eingeloggter Benutzer (definiert im GD)
+// MAXPLAYER1 max. Anzahl Spieler (Magier koennen noch einloggen)
+// MAXPLAYER2 max. Anzahl Spieler und Magier (Erzmagier koennen noch einloggen)
+
+#define MAXUSERS    150
+#define MAXPLAYER1  MAXUSERS-15
+#define MAXPLAYER2  MAXUSERS-5
+
+#define LOGINMASTER "/secure/loginmaster"
+ 
+#define ROWS        (Query(P_TTY_ROWS) || 20)
+#define MIN(a,b)    (((a)<(b))?(a):(b))
+
+
+/* Variablen des secure save file */
+int level;
+string password, name, shell, loginfailfrom;
+int loginfails, loginfaildate;
+mixed *domains;
+int creation_date;
+nosave int guestx;
+nosave string *policy;
+
+#ifndef DEBUG
+#define DEBUG(x) if(find_player("debugger"))tell_object(find_player("debugger"),x)
+#endif
+
+#include "config.h"
+#include <properties.h>
+#include <moving.h>
+#include "/secure/wizlevels.h"
+#include <telnet.h>
+#include "/secure/login_defs.h"
+
+inherit "/secure/mini_telnetneg";
+
+#define GUESTMASTER "/secure/guestmaster"
+nosave string loginname;
+nosave string cap_name;
+nosave object myself;
+nosave string *userentry;
+nosave string banish;
+nosave mixed *races;
+nosave string my_ip;
+nosave int count, invis;
+
+nomask string loginname() { return loginname ? loginname : ""; }
+
+//Wir zeigen, was wir alles koennen. Zumindest so Telnet-technisch gesehen ;-)
+nosave void SendTelopts()
+{
+    efun::binary_message(({
+        IAC,DO,TELOPT_LINEMODE,
+            IAC,WILL,TELOPT_EOR,
+            IAC,DO,TELOPT_NAWS,
+            IAC,DO,TELOPT_TTYPE,
+            IAC,DO,TELOPT_XDISPLOC,
+            IAC,DO,TELOPT_ENVIRON,
+            IAC,DO,TELOPT_NEWENV,
+            IAC,DO,TELOPT_TSPEED,
+            }),3);
+
+    TN=(["sent":([
+                  TELOPT_LINEMODE:0;DO;0,
+                  TELOPT_EOR:WILL;0;0,
+                  TELOPT_NAWS:0;DO;0,
+                  TELOPT_TTYPE:0;DO;0,
+                  TELOPT_ENVIRON:0;DO;0,
+                  TELOPT_NEWENV:0;DO;0,
+                  TELOPT_XDISPLOC:0;DO;0,
+                  TELOPT_TSPEED:0;DO;0,
+                  ])]);
+}
+
+/*
+ * This is the function that gets called by /secure/master for every user
+ */
+nosave nomask logon()
+{
+  count = 0;
+  invis = 0;
+  loginname = "logon";
+  myself = this_player();
+  // binary_message(({255,253,34}));
+  SendTelopts();
+
+  if (query_ip_number(this_object())=="127.0.0.1")
+    cat("/etc/WELCOME.localhost");
+  else if (ctime()[4..6]=="Dec" && file_size("/etc/WELCOME.xmas") > 0)
+    cat("/etc/WELCOME.xmas");
+  else
+    cat("/etc/WELCOME");
+
+  write(NAME_QUESTION);
+  input_to("logon2");
+  call_out("time_out", 180);
+  return 1;
+}
+
+nosave logon2(str)
+{
+  object ob;
+  int i,len,arg,ret,lock;
+  string st1,st2,banished_txt;
+
+  if (!str || ( (str == "") && (++count >= 3) ))
+  {
+    write("\nHmm... das war wohl nix. Versuchs nochmal!\n\n");
+    destruct(this_object());
+    return 0;
+  }
+  if (str == "")
+  {
+    write(NAME_QUESTION);
+    input_to("logon2");
+    return 1;
+  }
+  count = 0;
+  if (loginname != "logon") {
+    log_file("game/ILLEGAL",
+        sprintf("[%s]: Illegal patch of login: loginname = %O\n",
+          ctime(), loginname));
+    destruct(this_object());
+    return 0;
+  }
+  if (str[0..3]=="GET ")
+  {
+    cat("/etc/HTMLREDIRECT");
+    destruct(this_object());
+    return;
+  }
+
+  // make str lowercase, set cap_name
+  str = lower_case(str);
+
+  // game lock mechanism
+  lock = LOGINMASTER->QueryGameLock();
+  if (lock && (my_ip != "127.0.0.1"))
+  {
+    if ( (query_wiz_level(str) < lock) &&
+         !LOGINMASTER->MayLogin(str) )
+    {
+      write("Aus Sicherheitsgruenden ist es Dir temporaer nicht erlaubt, "
+          "das Spiel zu betreten.\n");
+      write("Versuch es doch in ein paar Minuten noch einmal!\n");
+      destruct(this_object());
+      return;
+    }
+  }
+
+  // special login commands
+  if ( (sscanf(str,"%s rip %s",st1,st2)==2) && IS_ARCH(st1) )
+  {
+    str = st1;
+    my_ip = st2;
+    write("Ok, IP-Adresse gesetzt.\n");
+  }
+  if ( (sscanf(str,"%s inv",st1) || sscanf(str,"-%s",st1)) && IS_WIZARD(st1) )
+  {
+    str = st1;
+    invis = 1;
+    write("Ok, unsichtbares Einloggen.\n");
+  }
+
+  // valid name?
+  if (!valid_name(str))
+  {
+    write(NAME_QUESTION);
+    input_to("logon2");
+    return 1;
+  }
+
+  if (sscanf(str,"gast%d",arg) == 1)
+  {
+    write( "Du meinst wohl 'Gast' ...\n" );
+    str = "gast";
+  }
+
+  // now, str is final so we can set loginname and cap_name
+  loginname = str;
+  cap_name = capitalize(str);
+
+  /* See if player is tbanished */
+  if (i = __MASTER_OBJECT__->QueryTBanished(str))
+  {
+    write( sprintf(
+         "\nAufgrund Deiner Spielpause kannst Du leider erst wieder\n"
+        +"am %s wieder ins Mud kommen. Bis dann!\n\n\n",
+          (i == -1 ? "St. Nimmerleinstag" :
+           funcall(symbol_function('dtime),i)[0..16])));
+    destruct(this_object());
+  }
+
+  // site banish?
+  my_ip = query_ip_number(this_object());
+  ret = LOGINMASTER->IsBanished(my_ip);
+  if (ret) {
+    banished_txt = LOGINMASTER->QueryBanishedText(my_ip);
+    write("\nSorry, die Accounts von dieser Adresse wurden gesperrt.\n" +
+        banished_txt + "\n\n");
+    destruct(this_object());
+    return;
+  }
+
+  /* read the secure save file to see if character already exists */
+  if (str!="gast" && !restore_object(__MASTER_OBJECT__->secure_savefile(str)))
+  {
+    if (str != "neu")
+    {
+      write("Tut mir leid, diesen Namen kenne ich nicht.\n");
+      write("Versuch einen anderen (oder \"neu\"): ");
+      loginname="logon";
+      input_to("logon2");
+      return 1;
+    }
+
+    /*
+     * Neuer Spieler.
+     */
+
+    /*
+    my_ip = query_ip_number(this_object());
+    if (my_ip != "127.0.0.1")
+    {
+      write(
+          break_string("\nSorry, aber gerade in letzter Zeit wurden zuviele "
+            "unsinnige Charaktere angelegt und nur noch teilweise geloescht. "
+            "Da dies die Kapazitaeten des Rechners unnoetig belastet und "
+            "bei den Administratoren des Muds auf wenig Gegenliebe stoesst, "
+            "sehen wir uns leider gezwungen, das selbstaendige Anlegen von "
+            "Charakteren voruebergehend zu unterbinden.\n\n"
+            "Wenn Du ernsthaft im Silberland spielen willst, so schreibe "
+            "doch einfach eine E-Mail an mud@sl.mud.at mit dem gewuenschten "
+            "Namen (max. 11 Buchstaben), Deiner gewuenschten Rasse, dem "
+            "Geschlecht und Deiner E-Mail-Adresse und, woher Du vom "
+            "Silberland gehoert hast.\n\n"
+            "Wir bitten um Verstaendnis.\n\n", 78, 0, 1));
+      destruct(this_object());
+      return;
+    }
+    */
+
+    write(
+   "\n       -----------------------------------------------------------\n"
+     "       Bitte beachte, dass es hier eine Policy gibt, die fuer alle\n"
+     "       Teilnehmer verpflichtend gilt.  Ein Verstoss gegen die dort\n"
+     "       festgelegten Regeln kann zum Ausschluss aus dem Spiel (also\n"
+     "       der Loeschung Deines/Deiner Charakters/-e) fuehren!\n\n"
+     "       Du kannst diese Policy jetzt mit '?' lesen.  Spaeter kannst\n"
+     "       Du sie jederzeit mit 'hilfe policy' nochmals lesen.\n"
+     "       -----------------------------------------------------------\n\n"
+     "Erkennst Du die Policy an? [ja/nein/?] -> ");
+
+    input_to("acceptpolicy");
+    return 1;
+  }
+  else
+  {
+    if (str == "gast") {
+      load_player_object(1);
+      return 1;
+    }
+
+    write("Schoen, dass Du wieder da bist, "+cap_name+"!\n");
+    if (password == "" || !password) {
+      write("Du hast KEIN PASSWORT!\n");
+      write("Benutze den \"passwort\"-Befehl, um das zu aendern !\n");
+      load_player_object();
+      return 1;
+    }
+    write("Passwort: ");
+    input_to("check_password",1);
+    return 1;
+  }
+}
+
+nosave void policy_more(string str, int n);
+
+nosave void acceptpolicy(string str)
+{
+  if (stringp(str)) str=lower_case(str);
+  if (str=="ja" || str=="j")
+  {
+    write("\n"
+        "              Du erkennst die Policy in diesem MUD an. :-)\n\n\n");
+    write("\n"
+        "Namenswahl\n"
+        "----------\n\n"
+        "Als naechstes geht es darum, dass Du Dir einen Namen gibst.\n"
+        "Bedenke, dass Du hier in einem Fantasy-Mud spielen willst,\n"
+        "entsprechend stellen stimmige Namen natuerlich auch eine\n"
+        "Bereicherung des Spieles dar.\n\n"
+        "Provozierende Namen hingegen haben hier in der Regel keine\n"
+        "allzuhohe Lebenserwartung (siehe auch Policy).\n\n"
+        "Beachte, dass etliche Namen auch gesperrt (\"gebanisht\")\n"
+        "sind, teilweise aus naheliegenden Gruenden (Schimpfworte,\n"
+        "etc.), teilweise, weil bereits NPCs (sogenannte non-playing\n"
+        "characters, also Monster) so heissen. In diesem Fall musst\n"
+        "Du wohl oder uebel einen anderen Namen waehlen.\n\n");
+    write("Wie willst Du Dich denn nennen? ");
+    input_to("newplayer");
+    return;
+  }
+  if (str=="nein" || str=="n")
+  {
+    write("\n"
+        "           Du erkennst die Policy in diesem MUD NICHT an.  :-(\n\n\n"
+        "Solltest Du es Dir doch noch einmal anders ueberlegen,\n"
+        "so bist Du jederzeit wieder herzlich willkommen!\n\n\n");
+    destruct(this_object());;
+    return;
+  }
+  if (str=="?")
+  {
+    if (!policy) {
+      policy=explode(read_file("/etc/POLICY"),"\n");
+      if (!pointerp(policy)) {
+        write("Fataler Fehler! Bitte Erzmagier verstaendigen!\n");
+        destruct(this_object());;
+        return;
+      }
+    }
+    policy_more("",0);
+    return;
+  }
+  write("Erkennst Du die Policy an? [ja/nein/?] -> ");
+  input_to("acceptpolicy");
+  return;
+}
+
+nosave void policy_more(string str, int n)
+{
+  int i;
+
+  remove_call_out("time_out");
+  call_out("time_out", 240);
+  if (!stringp(str)) {
+    input_to("policy_more", 0, n);
+    return;
+  }
+  if (str=="q") {
+    write("\nErkennst Du die Policy an? [ja/nein/?] -> ");
+    input_to("acceptpolicy");
+    return;
+  }
+  if (str=="h") {
+    write("\nZulaessige Befehle:\n\n"
+          "<Zeile>    -- Springe zu Zeile <Zeile>\n"
+          "q          -- Verlassen des Pagers\n\n");
+    write(sprintf("--Mehr-- (%d%%) ", MIN(100*(n-1)/sizeof(policy),100)));
+    input_to("policy_more", 0, n);
+    return;
+  }
+  if (sscanf(str,"%d",i))
+    if ((--i>=sizeof(policy)) || (i<0)) {
+      write("Ungueltige Zeilenzahl!\n");
+      write(sprintf("--Mehr-- (%d%%) ", MIN(100*(n-1)/sizeof(policy),100)));
+      input_to("policy_more", 0, n);
+      return;
+    }
+    else
+      n=i;
+  else if (strlen(str)) {
+    write("Ungueltiger Befehl! Zulaessig: <Zeile>, 'h', 'q'\n");
+    write(sprintf("--Mehr-- (%d%%) ", MIN(100*(n-1)/sizeof(policy),100)));
+    input_to("policy_more", 0, n);
+    return;
+  }
+  write(implode(policy[n..n+ROWS-2],"\n")+"\n");
+  n+=ROWS-1;
+  if (n < sizeof(policy)) {
+    write(sprintf("--Mehr-- (%d%%) ", MIN(100*(n-1)/sizeof(policy),100)));
+    input_to("policy_more", 0, n);
+  } else {
+    write("\nErkennst Du die Policy an? [ja/nein/?] -> ");
+    input_to("acceptpolicy");
+  }
+  return;
+}
+
+nosave newplayer(str)
+{
+  object *user,npc;
+  mixed txt;
+  int i;
+
+  remove_call_out("time_out");
+  call_out("time_out", 180);
+  if (!str || ( (str == "") && (++count >= 3) ))
+  {
+    write("\nHmm... das war wohl nix. Versuchs nochmal!\n\n");
+    destruct(this_object());
+    return 0;
+  }
+  if (str=="ende") {
+    write("\nAdios! Man sieht sich!\n\n");
+    destruct(this_object());
+    return 0;
+  }
+  /* new character */
+  loginname = str = lower_case(str);
+  cap_name = capitalize(str);
+  if ( strlen(str) < 3 )
+  {
+    write("Der Name ist zu kurz.\n");
+    write("Versuch einen anderen: ");
+    input_to("newplayer");
+    return 1;
+  }
+  if (!valid_name(str)) {
+    write("Wie willst Du Dich denn nennen? ");
+    input_to("newplayer");
+    return 1;
+  }
+  if ((txt=__MASTER_OBJECT__->QueryBanished(str)))
+  {
+    write(txt+"\n");
+    write("Gib Dir einen anderen Namen: ");
+    input_to("newplayer");
+    return 1;
+  }
+  for (i=0; i<strlen(str); i++)
+  {
+    if (str[i]<'a' || str[i]>'z') {
+      write("Der Name ist nicht zulaessig.\n");
+      write("Versuch einen anderen: ");
+      input_to("newplayer");
+      return 1;
+    }
+  }
+  for(i=sizeof(user=users())-1;i>=0;i--)
+  {
+    if(file_name(user[i])[0..7]=="/secure/"&&user[i]!=this_object())
+    {
+      if(user[i]->loginname()==loginname)
+      {
+        write("Eine Anmeldung fuer diesen Namen laeuft bereits.\n");
+        destruct(this_object());
+        return;
+      }
+    }
+  }
+  if (i=__MASTER_OBJECT__->QueryTBanished(str))
+  {
+    write (sprintf("Es gibt schon einen Spieler mit diesem Namen.\n"
+        +"Allerdings kann er/sie erst am %s wieder ins Mud kommen.\n",
+          (i == -1 ? "St. Nimmerleinstag" :
+           funcall(symbol_function('dtime),i)[0..16])));
+    write("Gib Dir einen anderen Namen: ");
+    input_to("newplayer");
+    return 1;
+  }
+  if (restore_object(__MASTER_OBJECT__->secure_savefile(str)))
+  {
+    write("Einen Spieler dieses Namens gibt es hier schon.\n");
+    write("Versuch einen anderen Namen: ");
+    input_to("newplayer");
+    return 1;
+  }
+  // Suche nach ex. NPC's, ist nicht banish und ex. nicht !!! -> Loggen
+  npc=find_living(lower_case(str)) || find_living(str);
+  if (objectp(npc) && !query_once_interactive(npc)) {
+    log_file("game/TOBANISH",sprintf("[%s]: %12s (von %s).\n",
+      ctime(), str, query_ip_name(this_object())));
+    write("Diesen Namen traegt bereits ein NPC!\n");
+    write("Gib Dir einen anderen Namen:\n");
+    input_to("newplayer");
+    return 1;
+  }
+  /* Initialize the new secure savefile */
+  name = str;
+  password = "";
+  level = 0;
+  domains = ({ });
+  shell = "";
+  creation_date = time();
+
+  write("Ok, neuer Spieler '"+cap_name+"'.\n");
+  write("Waehle ein Passwort: ");
+  input_to("new_password",1);
+  return 1;
+}
+
+sorry() {
+  cat("/etc/SORRY");
+  destruct(this_object());
+}
+
+nosave new_password(str) {
+  write("\n");
+  password = str;
+  if (lower_case(str)==lower_case(loginname))
+  {
+    write("Das ist zu einfach zu erraten. Nimm bitte ein anderes.\n");
+    write("Bitte gib ein Passwort an: ");
+    input_to("new_password",1);
+    return 1;
+  }
+  if (strlen(str)<6)
+  {
+    write("Das Passwort muss wenigstens 6 Zeichen lang sein.\n");
+    write("Bitte gib ein Passwort an: ");
+    input_to("new_password",1);
+    return 1;
+  }
+  write("\nZur Erinnerung: Es ist  v e r b o t e n, andere Spieler anzugreifen!\n");
+  write("Das gilt auch fuer Froesche, bei denen \"Ein Frosch namens XXXXX\" steht.\n\n");
+  write("Passwort bitte nochmal eingeben: ");
+  input_to("again_password",1);
+  return 1;
+}
+
+nosave again_password(str)
+{
+  write("\n");
+  if (str != password) {
+    write("Die Passwoerter stimmten nicht ueberein!\n");
+    destruct(this_object());
+    return 1;
+  }
+  else
+    write("Passwort akzeptiert.\n\n");
+
+  password = crypt(password,0);
+  // Secure Savefile das erste mal schreiben:
+  save_object(SECURESAVEPATH+loginname[0..0]+"/"+loginname);
+  __MASTER_OBJECT__->RemoveFromCache(loginname);
+  load_player_object();
+  return 1;
+}
+
+nosave check_password(str)
+{
+  write("\n");
+  if (crypt(str,password) != password)
+  {
+    write("Falsches Passwort!\n");
+    log_file("game/LOGINFAIL",
+        sprintf("[%s]: PASSWORD: %O %O\n",
+          ctime(), query_ip_name(this_object()), loginname));
+    loginfails++;
+    loginfaildate = time();
+    loginfailfrom = query_ip_name(this_object());
+    // Loginfail im Secure Savefile erfassen:
+    save_object(SECURESAVEPATH+loginname[0..0]+"/"+loginname);
+    __MASTER_OBJECT__->RemoveFromCache(loginname);
+    destruct(this_object());
+    return 1;
+  }
+  if (name)
+  {
+    save_object(SECURESAVEPATH+loginname[0..0]+"/"+loginname);
+    __MASTER_OBJECT__->RemoveFromCache(loginname);
+  }
+  if (loginfails)
+  {
+    write(loginfails + " fehlgeschlagene" + (loginfails == 1 ? "r" : "") +
+        " Login-Versuch" + (loginfails == 1 ? "" : "e") +
+        " seit dem letzen erfolgreichen Login.\n");
+    write(sprintf("Zuletzt am %s von %s.\n\n",
+          dtime(loginfaildate), loginfailfrom));
+    loginfails = loginfaildate = loginfailfrom = 0;
+    save_object(SECURESAVEPATH + loginname[0..0] + "/" + loginname);
+    __MASTER_OBJECT__->RemoveFromCache(loginname);
+  }
+  load_player_object();
+  return 1;
+}
+
+nosave select_race()
+{
+  int i;
+  string s;
+
+  races=get_dir("/std/shells/*.lpc");
+  for (i=0;i<sizeof(races);i++)
+  {
+    races[i]=__MASTER_OBJECT__->_get_path("std/shells/"+races[i],0);
+    s=races[i];
+    if (stringp(s) && strlen(s)>2) races[i]=s[0..strlen(s)-3];
+    s=0;
+    if (catch(s=call_other(races[i],"QueryAllowSelect")) || !s)
+      s=0;
+    else
+      if (catch(s=call_other(races[i],"QueryProp",P_RACE)))
+	s=0;
+    if (!s)
+      races[i]=0;
+    else
+      races[i]=({races[i],s});
+  }
+  races-=({0});
+  if (sizeof(races)==1)
+  {
+    write("Es gibt nur eine Rasse, Du hast also keine Wahl.\n");
+    shell = races[0][0];
+    __MASTER_OBJECT__->set_player_object(loginname, shell);
+    return load_player_ob_2(shell);
+  }
+  ask_race_question();
+}
+
+nosave ask_race_question()
+{
+  int i;
+
+  write(
+"Du musst Dich jetzt entscheiden, welcher Rasse Du in dieser Welt angehoeren\n"
+"moechtest. Alle Rassen haben verschiedene Vor- und Nachteile, insgesamt aber\n"
+"gleich gute Chancen. Auch das Startgebiet haengt von der ausgewaehlten Rasse\n"
+"ab. Im Normalfall kann die Rasse nicht mehr gewechselt werden, nachdem sie\n"
+"einmal ausgewaehlt wurde. Ueberlege Dir Deine Entscheidung also gut.\n"
+"Derzeit stehen folgende Rassen zur Auswahl:\n\n");
+  for (i=0;i<sizeof(races);i++)
+  {
+    printf("% 2d. %-30s   ",i+1,capitalize(races[i][1]));
+    if (i%2==0) write("| "); else write("\n");
+  }
+  if (sizeof(races)%2!=0) write("\n");
+  write("\nDurch Eingabe einer Ziffer waehlst Du die Rasse aus, durch Eingabe eines \"\?\"\n"+
+        "gefolgt von einer Ziffer erhaelst Du naehere Informationen ueber eine Rasse.\n"+
+        "Ein \"\?\" allein wiederholt diese Liste.\n"+
+        "\nWas willst Du sein: ");
+  input_to("get_race_answer");
+  return;
+}
+
+nosave get_race_answer(str)
+{
+  int i, num;
+
+  remove_call_out("time_out");
+  call_out("time_out", 180);
+
+  if (str=="?")
+    return ask_race_question();
+
+  if (str[<1] == '?')
+    str = "?" + str[0..<2];
+
+  if (sscanf(str,"?%d",num))
+  {
+    if (num<1 || num>sizeof(races))
+    {
+      write(sprintf("Das geht nicht.\n\nWas willst Du sein (1..%d, ?): ",
+          sizeof(races)));
+      input_to("get_race_answer");
+      return;
+    }
+    write(break_string(call_other(races[num-1][0],
+        "QueryProp", P_RACE_DESCRIPTION), 78, 0, 1)+
+        "\nWas willst Du sein: ");
+    input_to("get_race_answer");
+    return;
+  }
+  if (str && strlen(str)) {
+    for (i=0;i<sizeof(races);i++)
+      if (lower_case(str)==lower_case(races[i][1])) {
+        str=to_string(i+1);
+        break;
+      }
+    if (sscanf(str,"%d",num) && num>=1 && num<=sizeof(races))
+    {
+      write("Ok, Du bist jetzt ein"+(races[num-1][1]=="Fee"?"e":"")+" "
+          +capitalize(races[num-1][1]+".\n"));
+      shell=races[num-1][0];
+      __MASTER_OBJECT__->set_player_object(loginname,shell);
+      load_player_ob_2(shell, 0, 1);
+      return;
+    }
+  }
+  write(sprintf("Wie bitte?\n\nWas willst Du sein (1..%d, ?): ",
+      sizeof(races)));
+  input_to("get_race_answer");
+}
+
+nosave load_player_object(guestflag)
+{
+  string obname;
+  string err, fname;
+  object ob;
+  object *seconds;
+  int was_interactive;
+  int ret, mpbw, mpba;
+
+  if (!guestflag)       // Fuer Nicht-Gaeste folgt jetzt das 2ti-Handling:
+  {
+    err = loginname;
+    if ((ret = LOGINMASTER->QuerySecondAllowed(&err)) <= 0)
+    {
+      switch (ret)
+      {
+        case LOGIN_MAXIMUM_REACHED:
+          write("Tut uns leid, aber am heutigen Tag kann nur Dein "
+              "Zweitspieler namens "+capitalize(err)+" einloggen!\n");
+          break;
+        case LOGIN_WRONG_MARK:
+          write("Du hast eine illegale Zweitspielermarkierung. "
+              "Bitte verstaendige einen Erzmagier.\n");
+          break;
+        case LOGIN_WIZARD_ONLINE:
+          write("Du kannst Deinen Zweitspieler nicht einloggen, "
+              "wenn Du als Magier online bist!\n");
+          break;
+        case LOGIN_ANOTHER_SECOND_ONLINE:
+          write("Dein Zweitspieler " + capitalize(err) +
+              " ist doch noch online!\n");
+          break;
+        default:
+          write("Irgendetwas ist schiefgelaufen (Code " + ret + "). "
+              "Versuche, einen Erzmagier zu verstaendigen!\n");
+      }
+      destruct(this_object());
+      return 1;
+    }
+    if (ret == LOGIN_REGISTERED)
+      write("Du wurdest als Zweitspieler registriert.\n"
+          "Es ist Dir somit heute nicht mehr moeglich, "
+          "andere Zweitspieler einzuloggen.\n");
+
+    // Zwei weitere moegliche Faelle:
+    // a) Login ist 2ti von einem eingeloggten Magier
+    err = LOGINMASTER->QueryFirst(loginname);
+    if (err && find_player(err = lower_case(err)) && IS_LEARNER(err))
+    {
+      write("Du kannst nicht einloggen, solange " +
+          capitalize(err) + " noch am Spiel teilnimmt!\n");
+      destruct(this_object());
+      return 0;
+    }
+
+    // b) Login ist Magier und 1ti von eingeloggtem Zweitie
+    if (IS_LEARNER(loginname))
+    {
+      seconds = filter_array(
+          filter_array( users(),
+            lambda(
+              ({ 'x }),
+              ({ #'stringp, ({ #'call_other, 'x, "QueryProp", "second" }) })
+              ) ),
+          lambda(
+            ({ 'x }),
+            ({ #'==,
+               ({ #'lower_case,
+                  ({ #'call_other, 'x, "QueryProp", "second" }) }),
+               loginname }) ) );
+
+      switch (sizeof(seconds))
+      {
+        case 0:
+          break;
+        case 1:
+          write("Du kannst nicht einloggen, solange Dein Zweitspieler " +
+              capitalize(getuid(seconds[0])) + " noch am Spiel teilnimmt!\n");
+          destruct(this_object());
+          return 0;
+        default:
+          write(break_string(
+                "Du kannst nicht einloggen, solange Deine Zweitspieler (" +
+                implode(
+                  map_array( map_array( seconds, #'getuid ), #'capitalize ),
+                  ", ") + ") noch am Spiel teilnehmen!", 78));
+          destruct(this_object());
+          return 0;
+      }
+    }
+  }
+
+  // Spieleranzahl-Limits auswerten
+  mpbw = LOGINMASTER->QueryMaxPlayersButWiz();
+  mpba = LOGINMASTER->QueryMaxPlayersButArch();
+  if ( sizeof(users()) >= mpbw && !IS_WIZARD(loginname) )
+  {
+    write("Die maximale Spielerzahl wurde bereits erreicht!!!\n"
+        "Aus technischen Gruenden duerfen sich nur noch Magier einloggen.\n"
+        "Versuch es spaeter noch einmal ...\n");
+    destruct(this_object());
+    return 1;
+  }
+  else if ( sizeof(users()) >= mpba && !IS_ARCH(loginname) )
+  {
+    write("Die maximale Spieler- und Magierzahl wurde bereits erreicht!!!\n"+
+	"Aus technischen Gruenden duerfen sich nur noch Erzmagier einloggen.\n"+
+        "Versuch es spaeter noch einmal ...\n");
+    destruct(this_object());
+    return 1;
+  }
+  if ((fname=__MASTER_OBJECT__->secure_isavefile(loginname)) != "")
+  {
+    save_object(SECURESAVEPATH+loginname[0..0]+"/"+loginname);
+    __MASTER_OBJECT__->RemoveFromCache(loginname);
+    // Just to be sure ...
+    rm(fname+".o");
+    log_file("game/REACTIVATE",
+        sprintf("[%s]: %s reactivated\n", ctime(), capitalize(loginname) ));
+  }
+  if (guestflag)
+  {
+    guestx = GUESTMASTER ? GUESTMASTER->new_guest() : 0;
+    if (!guestx)
+    {
+      write("Derzeit kein Gastlogin moeglich!\n");
+      destruct(this_object());
+    }
+    loginname = "gast"+guestx;
+    cap_name = capitalize(loginname);
+    name=cap_name;
+    ob = find_player(loginname);
+    if (ob)
+    {
+      if (interactive(ob))
+        tell_object(ob,
+            "Ein anderer Spieler moechte diesen Gastzugang jetzt benutzen. "
+            "Wenn es Dir hier\ngefallen hat, ueberleg Dir doch einen "
+            "Charakternamen und komm unter diesem\nNamen wieder!\n");
+      destruct(ob);
+    }
+  }
+  else                                  // Test if we are already playing
+  {
+    was_interactive=0;
+    ob = find_player(loginname);
+    if (!ob)
+      ob=find_netdead(loginname);
+    if (ob) {
+      write("Du nimmst schon am Spiel teil!\n");
+      write("Du verwendest Deine alte sterbliche Huelle...\n\n");
+      if (interactive(ob)) {
+	/* The other object is still interactive; reconnect that "soul"
+	   to a dummy object and destruct that, thus disconnecting the
+	   other probably linkdead user. The real "body" is still
+	   there for reconnecting by login.c */
+	remove_interactive(ob);
+	was_interactive=1;
+      }
+
+      /* Now reconnect to the old body */
+      exec(ob, this_object());
+      if (ob->QueryProp(P_LEVEL)==-1)      // If not initialized DO THAT !!!
+        ob->start_player(cap_name,my_ip);  // Woody@SL, 1996-04-06
+      else {
+        ob->SetProp(P_AWAY,0);
+        ob->Reconnect(was_interactive, my_ip, invis);
+      }
+      call_out("remove", 1);
+      return 1;
+    }
+  }
+  /* read player object from passwd file */
+  if (stringp(shell) && shell != "") {
+    load_player_ob_2(shell,guestflag);
+  }
+  else {
+    if ( loginname!="" && !guestflag )
+    {
+      select_race();
+    }
+    else
+      if (guestflag)
+        load_player_ob_2("std/shells/guest",guestflag);
+      else
+        load_player_ob_2("std/shells/human",guestflag);
+  }
+  return 1;
+}
+
+varargs nosave int load_player_ob_2(string obname, int guestflag, int newflag)
+{
+  object blueprint;
+  string err,ob_name;
+  object ob,old_ob;
+
+  /* start player activity */
+  if (newflag)
+    write_file("/log/game/PLAYER_CREATE", sprintf("[%s %s, %s]: %s (%s)\n",
+        ctime()[4..9], ctime()[20..], ctime()[11..18],
+        cap_name, query_ip_name(this_object())));
+  log_file("game/ENTER",
+      sprintf("[%s]: %11s (%s)\n",
+        ctime()[0..15], capitalize(name), query_ip_name(this_object())));
+  seteuid(loginname);
+
+  /* load the "real" player object */
+  /* If some asshole has moved the blueprint */
+  blueprint = find_object(obname);
+  if (blueprint && environment(blueprint))
+    destruct(blueprint);
+
+  err = catch(ob = clone_object(obname));
+  if (err)
+  {
+    log_file("error/SHELLS", "Failed to load shell "+obname+", "+
+	     dtime(time())+", "+loginname+"\n"+err+"\n\n");
+    write("Konnte das passende Playerobjekt nicht laden. Lade stattdessen\n"+
+	  "das Objekt Mensch. BITTE ERZMAGIER BENACHRICHIGEN !\n");
+    err=catch(ob=clone_object("std/shells/human"));
+  }
+  if (!ob||err) {
+    write("Error on loading "+shell+"\nError = "+err+"\n");
+    destruct(this_object());
+    return 1;
+  }
+
+  if (guestflag)
+    catch(GUESTMASTER->set_guest(guestx,ob));
+
+  ob_name = explode(file_name(ob),"#")[0];
+  if ( (strlen(ob_name) > 11) && (ob_name[0..11] == "/std/shells/") )
+    ob_name = ob_name[11..];
+
+  ob_name = ob_name + ":" + lower_case(cap_name);
+
+  if (!guestflag)
+  {
+    if (old_ob = find_object(ob_name))
+    {
+      catch(old_ob->remove());
+      if (old_ob)
+	destruct(old_ob);
+    }
+    rename_object(ob,ob_name);
+  }
+
+  // Objekt ausfuehren (mit interactive "verbinden")
+  exec(ob,this_object());
+
+  // Objekt "starten"
+  ob->start_player(cap_name, my_ip, invis);
+
+  // Daten aus Secure Savefile in Spielerobjekt uebertragen
+  ob->SetProp("creation_date", creation_date);
+  ob->Set("creation_date", SAVE|SECURED|PROTECTED, F_MODE_AS);
+
+  // Login-Objekt zerstoeren
+  destruct(this_object());
+}
+
+
+/*
+ * Check that a player name is valid. Only allow
+ * lowercase letters.
+ */
+nosave valid_name(str)
+{
+  int i, length;
+  if (str == "logon") {
+    write("Der Name wuerde nur Verwirrung stiften.\n");
+    return 0;
+  }
+  length = strlen(str);
+  if (length > 11) {
+    write("Dein Name ist zu lang, nimm bitte einen anderen.\n");
+    return 0;
+  }
+  i=0;
+  while(i<length) {
+    if (str[i] < 'a' || str[i] > 'z') {
+      write("Unerlaubtes Zeichen im Namen: " + str + "\n");
+      write("Benutze bitte nur Buchstaben.\n");
+      return 0;
+    }
+    i += 1;
+  }
+  return 1;
+}
+
+/*
+ *   With arg = 0 this function should only be entered once!
+ */
+void create()
+{
+  if (myself)
+    return;
+  loginname = "logon";
+  creation_date = -1;
+  catch(call_other("/secure/merlin","?"));
+  loginfails=loginfaildate=loginfailfrom=0;
+}
+
+/* for debugging purpose */
+int query_wiz_level() { return 0; }
+int query_level() { return 0; }
+string short() { return "<Einloggender Teilnehmer>.\n"; }
+string query_real_name() { return "<logon>"; }
+
+int query_prevent_shadow() { return 1; }
+
+void time_out() {
+  write("\n\nTime out!\n\n");
+  destruct(this_object());
+}
+
+int remove()
+{
+  destruct(this_object());
+  return 1;
+}
+
+void _telnet_neg(mixed cmd,mixed opt,mixed args)
+{
+  if (opt==34 && cmd==251)
+    binary_message(({255,250,34,1,1,255,240}));
+}
+

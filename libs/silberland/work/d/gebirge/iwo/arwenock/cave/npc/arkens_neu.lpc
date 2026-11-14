@@ -1,0 +1,294 @@
+
+inherit "std/npc";
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include <combat.h>
+#include <mnpc.h>
+#include <moving.h>
+#include <defines.h>
+#include <moredef.h>
+#include <wizlevels.h>
+#include <new_skills.h>
+
+#include "../../def.h"
+
+#include "../arkens_equip.h"
+
+string last = "";
+string prev_last;
+
+// Prototypes
+void PostMove();
+
+create()
+{
+  object ob;
+
+  if (!IS_CLONE(ME)) return;
+
+  ::create();
+
+  AddId( ({"arkens", "\narkens", "NOWIMPY"}) );
+
+  enable_commands();
+
+  seteuid(getuid(this_object()));
+
+  SetProp(P_NAME, "Arkens");
+
+  SetProp(P_GENDER, MALE);
+
+  SetProp(P_ARTICLE, 1);
+
+  SetProp(P_SHORT, "Ein Arkens");
+
+  SetProp(P_LONG, "Der fuerchteinfloessende Arkens starrt Dich mit "
+    "mordluesteren Augen an. Das blutverschmierte Gesicht ist leicht " 
+    "behaart und mit Narben uebersaet. Beinahe schwarz ist die "
+    "Lederartige Haut und die dreckigen Finger sind mit kurzen, "
+    "scharfen Krallen ausgestattet und die spaerliche Koerperbehaarung "
+    "erinnert irgendwie an "
+    "Borsten. Die staemmigen Beine wirken etwas verdreht, aber "
+    "trotzdem moechtest Du keinen Tritt von ihnen einfangen."); 
+
+  create_default_npc(15+random(15));
+
+  SetProp(P_ATTRIBUTES, 
+            ([ A_INT: 7, A_STR: 30, A_DEX: 30, A_CON: 30 ]));
+
+  SetProp(P_MAX_HP, 800);
+  SetProp(P_MAX_SP, 800);
+  SetProp(P_HP, QueryProp(P_MAX_HP));
+  SetProp(P_SP, QueryProp(P_MAX_SP));
+
+  SetProp(P_HANDS, ({ " mit seinen Klauen", 600, DT_RIP })); 
+  SetProp(P_BODY, 100);
+  SetProp(P_XP, QueryProp(P_MAX_HP)*QueryProp(P_HANDS)[1]*5);
+  SetProp(P_RACE, "Arkens");
+  SetProp(P_SIZE, 160);
+  SetProp(P_ALIGN, -700);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_HEAL, -5);
+  SetProp(P_WIMPY, 0);
+  SetProp(P_MSGIN, "stampft herein");
+  SetProp(P_MSGOUT,"stapft");
+  SetProp(P_MMSGIN, "tritt aus dem Schatten");
+  SetProp(P_MMSGOUT, "laeuft weg");
+
+    //  ob->Damage(14+random(100));
+  SetProp(P_SPELLRATE, 25);
+  AddSpell(9, 1, "", "", DT_RIP, "claw_spell", ([SP_SHOW_DAMAGE:1]));
+
+  SetProp(P_MNPC_AREA, "/d/gebirge/iwo/arwenock/");
+
+  SetProp(P_MNPC_WAIT, ({ 10, 5, 1 }));
+
+  SetProp(P_MNPC_DEFAULTROOM, "/d/gebirge/iwo/arwenock/room/room_B-04");
+
+  SetProp(P_MNPC_FLAGS, MOV_MOVES);
+
+  call_out("Walk", QueryProp(P_MNPC_WAIT)[0]);
+
+  reset();
+}
+
+
+int _area_check(string exit, mapping m_exits, string env)
+{
+  string area;
+  string format;
+  
+  area = QueryProp(P_MNPC_AREA);
+  format = sprintf("%%%d.%ds", strlen(area), strlen(area));
+  
+  // We're to slow... faster!
+  return (sprintf(format, m_exits[exit]["ex_dest", 0]) == area
+          && m_exits[exit]["ex_dest", 0] != env);
+}
+
+int _move(string dst)
+{
+  call_other(dst, "???");
+  return this_object()->move(dst, M_TPORT | M_NOCHECK);
+}
+
+
+int Walk()
+{
+  mapping exits;
+  string *exit_cmds;
+  string *poss_exits;
+  object env;
+  int num_exits;
+  int i;
+
+  if (!QueryProp(P_MNPC_FLAGS) & MOV_MOVES) return 0;
+
+  if (EnemyPresent())
+    {
+      while (remove_call_out("Walk") != -1);
+   
+      call_out("Walk", 
+        QueryProp(P_MNPC_WAIT)[1] 
+        + random(QueryProp(P_MNPC_WAIT)[2]));
+      return 1;
+    }
+
+ 
+  if (!env = environment(this_object()))
+    return 0;
+
+  if (!exits = copy_mapping(env->QueryProp(P_NEW_EXITS)))
+    return 0;
+ 
+  // Lose all exits out of area
+  exits = filter_mapping(exits, "_area_check", this_object(), 
+            exits, file_name(env), last);
+
+  if ((num_exits = sizeof(exits))<1)
+    // Fuck, none left... how did we get here?
+    _move(QueryProp(P_MNPC_DEFAULTROOM)); // Go home
+
+  else
+    {
+
+      exit_cmds = m_indices(exits);
+ 
+      poss_exits = ({ });
+ 
+      if (num_exits > 1)
+        {
+          for (i = 0; i < num_exits; i++)
+	    {
+	      TMI(sprintf("%O vs %O", exits[exit_cmds[i]]["ex_dest", 0], last));
+              if (exits[exit_cmds[i]]["ex_dest",0] != last)
+                poss_exits += ({ exit_cmds[i] });
+	    }
+        }
+      else poss_exits = exit_cmds;
+  
+
+      prev_last = last;
+
+      last = file_name(env);
+
+      command(poss_exits[random(sizeof(poss_exits))]);
+
+      // We're lost
+      if (file_name(environment(this_object())) == last && last == prev_last)
+        _move(QueryProp(P_MNPC_DEFAULTROOM)); // Go home
+   }
+ 
+  while (remove_call_out("Walk") != -1);
+   
+  call_out("Walk", 
+    QueryProp(P_MNPC_WAIT)[1] 
+    + random(QueryProp(P_MNPC_WAIT)[2]));
+
+  init();
+  PostMove();  
+   
+  return 1;
+} 
+
+
+
+
+
+void claw_spell(object enemy, int damage, mixed dam_type)
+{
+
+  if (!objectp(enemy)) return;
+
+  tell_room(ENV(ME), BS(ME->Name(WER) + " rammt " + enemy->name(WEM)
+    + " die Klauen tief in den Leib."), ({ enemy }));
+  tell_object(enemy, BS(ME->Name(WER) + " rammt Dir die Klauen tief in den Leib."));
+
+  damage = 150+random(150);
+
+  if (!query_once_interactive(enemy))
+    damage = damage * 4;
+
+  enemy->Defend(damage, DT_RIP,
+    ([SP_NAME:"arkens_claw", SP_SHOW_DAMAGE:1]),TO);
+}
+
+
+
+init()
+{
+  if (TP && !TP->id("\narkens") && !TP->QueryProp(P_INVIS) && !IS_LEARNER(TP))
+    {
+      if (TP) call_out("claw_spell", 0, TP, 0, DT_RIP);
+      if (TP) Kill(TP);
+      if (TP && interactive(TP))
+        AMASTER->NotifyArkensWake();
+    }
+  ::init();
+}
+
+void reset()
+{
+  if (!is_clone(this_object())) return;
+  AMASTER->RegisterArkens(ME);
+  ::reset();
+}
+
+
+varargs void die (int pd)
+{
+  AMASTER->NotifyArkensKill(QueryProp(P_KILLER));
+  ::die(pd);
+}
+
+
+varargs int remove (int s)
+{
+  AMASTER->UnRegisterArkens(ME);
+  return ::remove(s);
+}
+
+
+int is_doorguard(object ob)
+{
+  return ob->id("\narkensdoorguard");
+}
+
+void PostMove()
+{
+  object *guards;
+  
+  AMASTER->RegisterArkens(ME);
+
+  if (!ENV(ME)) return;
+
+  if (ENV(ME)->id("\nhaupttor"))
+    {
+      guards = filter_array(all_inventory(environment(this_object())),
+        "is_doorguard");
+      if (sizeof(guards)<4)
+        {
+	  AddId( ({ "\narkensdoorguard" }));
+	  SetProp(P_MNPC_FLAGS, 0);
+	}
+      if (!InFight() && ENV(ME)->schliesse_was("haupttor"))
+        AMASTER->NotifyTownTaken();
+    }
+
+  ENV(ME)->ArkensOpenDoor();
+
+  command_me("nimm alles");
+  command_me("trage alles");
+  //command_me("zuecke schwert");
+}
+
+
+void NotifyPlayerDeath(object vic, object killer, int lxp)
+{
+  if (ENV(ME)->id("\nhaupttor"))
+    if (!InFight() && ENV(ME)->schliesse_was("haupttor"))
+      AMASTER->NotifyTownTaken();
+  ::NotifyPlayerDeath(vic, killer, lxp);
+}

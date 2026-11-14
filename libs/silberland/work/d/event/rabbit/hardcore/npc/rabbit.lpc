@@ -1,0 +1,337 @@
+//
+// DAS KARNICKEL von Angrox@SL 
+//
+//
+// 14.03.2000 Angrox
+//            Optimierungen
+//
+inherit "std/npc";
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <defines.h>
+#include <moredef.h>
+
+#define RABBITMASTER "/d/event/rabbit/master/hardcore/master/rabbitmaster"
+
+#define TMAINT(x) tell_object(find_player("iwo"), x)
+
+#define RABBITID "testrabbit"
+
+nosave int befruchtet;
+nosave string event_area = "/";
+nosave int gender = 0;
+nosave int exhausted = 0;
+
+void create() {
+  if (!is_clone(this_object())) return;
+  ::create();
+  befruchtet=0;
+  AddId (({"karnickel", RABBITID}));
+  SetProp (P_GENDER, NEUTER);
+  SetProp (P_NAME, "Karnickel");
+  SetProp (P_SHORT, "Ein Karnickel");
+  SetProp (P_LONG,
+           "Ui, ein kleines, suesses Karnickel. Es blickt Dich mit "
+          +"mit zwei grossen Augen herzig an, die fast unter den zwei "
+          +"weichen Schlappohren verschwinden.\n"
+          +"                 ,                \n"
+          +"                /|                \n"
+          +"               / |   ,-~ /        \n"
+          +"              Y :|  //  /         \n"
+          +"              | jj /( .^          \n"
+          +"              >-\"~\"-v\"            \n"
+          +"             /       Y            \n"
+          +"            jo  o    |            \n"
+          +"           ( ~T~     j            \n"
+          +"            >._-' _./             \n"
+          +"           /   \"~\"  |             \n"
+          +"          Y     _,  |             \n"
+          +"         /| ;-\"~ _  l             \n"
+          +"        / l/ ,-\"~    \\            \n"
+          +"       \\//\\/       .- \\           \n"
+          +"         Y        /    Y          \n"
+          +"         l       I     !          \n"
+          +"         ]\\      _\\    /\"\\        \n"
+          +"        (\" ~----( ~   Y.  )       \n"
+          +"    ~~~~~~~~~~~~~~~~~~~~~~~~~~    \n"
+          +"So einem kleinem, unschuldigen Karnickel koenntest Du "
+          +"niemals etwas antun.");
+  SetProp (P_ALIGN, 0);
+  create_default_npc(1);
+  SetProp (P_SIZE, 30);
+  SetProp (P_MAX_HP, random(10)+5);
+  SetProp (P_WIMPY, QueryProp(P_MAX_HP)-5);
+  SetProp (P_HP, QueryProp(P_MAX_HP));
+  SetProp (P_WEIGHT, 2000);
+  SetProp (P_RACE, "kaninchen");
+  SetProp (P_MAX_HANDS, 2);
+  switch(random(38)) {
+    case 0..30: SetProp(P_CORPSE, 0);
+    case 31..35: SetProp(P_CORPSE, "/obj/money"); break;
+    case 36: SetProp(P_CORPSE, "/p/magic/magiestein"); break;
+    case 37: SetProp(P_CORPSE, "/p/std/dragons/obj/schuppe"); break;
+  }
+  SetProp(P_CORPSE_FLAGS, COR_NOSETWEIGHT);
+  SetProp (P_XP, 0);
+  SetProp (P_DIE_MSG, " blickt Dich noch einmal traurig an und stirbt.\n");
+  SetProp (P_HANDS, ({" mit kleinen Pfoetchen", 10, DT_BLUDGEON}) );
+  SetProp(P_MSGIN, "hoppelt herein");
+  SetProp(P_MSGOUT, "hoppelt nach");
+  SetProp(P_MMSGIN, "hoppelt herein");
+  SetProp(P_MMSGOUT, "hoppelt nach");
+
+  //gender = call_other(RABBITMASTER, "GiveSex", ME);
+
+}
+
+void init()
+{
+  // Speedup by aborting init
+  return;
+}
+
+
+int WannaF(object father)
+{
+  if (gender == MALE) return 0;
+
+  if (befruchtet) return 0;
+
+  befruchtet = 1;
+
+  return 1;
+}
+
+
+
+private nosave void PossibleOpp(object ob)
+{
+  // Prueft ob ob ein gueltiges Weibchen ist,
+  // und befruchtet uU gleich
+
+  if (exhausted || !ob->id(RABBITID)) return;
+
+  if (ob->WannaF(ME))
+    {
+      // EXHAUST 
+
+      return;
+    }
+
+  return;
+
+}
+
+
+private nosave void FindOpposite()
+{
+  if (ENV(ME))
+    {
+      raise_error("stupid fault");
+      remove();
+    }
+  filter_array(all_inventory(ENV(ME)), "PossibleOpp");
+}
+
+
+int ValidDest(string dest)
+{
+  TMAINT(sprintf("%s vs %s %O\n", dest, event_area, strstr(dest, event_area, 0)));
+  return strstr(dest, event_area, 0) > -1;
+}
+
+
+
+
+
+int DoWalk()
+{
+  mapping m_exits;
+  string *exits;
+
+  int i, j, num_exits;
+
+  if (!objectp(ENV(ME))) return -1;
+
+  m_exits = ENV(ME)->QueryProp(P_EXITS);
+
+  if (!mappingp(m_exits)) return -2;
+
+  exits = m_indices(m_exits);
+
+  num_exits = sizeof(exits);
+
+  i = random(num_exits);
+
+  j = 0;
+
+  // Darf sich dort hin bewegen?
+  if (!ValidDest(m_exits[exits[i], 0]))
+    {
+      // Mehr als 1 exit?
+      if (num_exits < 2) return -3;
+      else
+        while (!ValidDest(m_exits[exits[i], 0]))
+          {
+            // Wenn nach 5 versuchen kein gueltiger
+            // exit, dann ab in den defaultroom
+            if (++j > 5) return -4;
+
+            i = random(sizeof(exits));
+          }
+    }
+
+  // Wir ham an gueltigen exit, hin dort
+  command_me(exits[i]);
+
+  if (gender == MALE) FindOpposite();
+
+}
+
+
+varargs void die(int pd)
+{
+  RABBITMASTER->RabbitDied(ME, PO);
+  ::die(pd);
+}
+
+
+
+/*
+set_sex(int sex)
+{
+ my_sex=sex;
+ if (sex==MALE)
+   {
+    SetProp(P_MSGIN, "hoppelt herein und schaut sich "
+                    +"nach einem Weibchen um");
+    SetProp(P_MSGOUT, "sucht ein Weibchen und hoppelt");
+    SetProp(P_MMSGIN, "hoppelt herein und schaut sich nach "
+                    +"einem Weibchen um");
+    SetProp(P_MMSGOUT, "sucht ein Weibchen und hoppelt");
+   }
+ else 
+   {
+    SetProp(P_MSGIN, "hoppelt herein und schaut sich nach "
+                    +"einem Maennchen um");
+    SetProp(P_MSGOUT, "sucht ein Maennchen und hoppelt");
+    SetProp(P_MMSGIN, "hoppelt herein und schaut sich nach "
+                     +"einem Maennchen um");
+    SetProp(P_MMSGOUT, "sucht ein Maennchen und hoppelt");
+   }
+}
+
+void init()
+{
+  int i;
+  mixed back;
+  ::init();
+  zeit=time();
+  if(zeug) return;
+  ta(sprintf("RAB: INIT, PO: %O, TP: %O\n", PO, TP));
+  zeug=1;
+  if(befruchtet && zeit > erschoepfung && my_sex==FEMALE)
+  {
+    back=call_other(RABBITMASTER, "CloneRabbit", gen);     
+    if(objectp(back)) {
+      back->move(ENV(ME), M_GO, "","wird geworfen", "wird geworfen");  
+
+    }
+    erschoepfung=zeit+4;
+    befruchtet=0; 
+    zeug=0;
+  } 
+  if(my_sex==MALE && erschoepfung < zeit) 
+    VersucheZeugung();
+  call_out("remove_zeug", 0);
+}
+
+void remove_zeug() {
+  zeug=0; 
+}
+
+int Zeugung(object partner)
+{
+ //ta("RAB: Zeugung()\n");
+ if(befruchtet) return 0;
+ if(my_sex!=FEMALE) return 0;
+ if(partner->query_sex()!=MALE) return 0;
+ befruchtet=1;
+ erschoepfung=time()+6;
+ father=partner;
+ zeug=0;
+ return 1;
+}
+
+int VersucheZeugung() {
+  object *rab, ob, env;
+  int size;
+  env=ENV(ME);
+  zeit=time();
+  //ta("RAB: VersucheZeugung()\n");
+  rab=filter_array(all_inventory(env), "is_female");
+  rab-=({ME});
+  rab-=({0});
+  //ta(sprintf("RAB: %O\n",rab));
+  size=sizeof(rab);
+  if(!size || size>10) return 0;
+  //if(size>5) rab=rab[0..4];
+  erschoepfung=zeit+6;
+  rab[random(size-1)]->Zeugung(ME);
+  zeug=0;
+  return 1;
+}
+
+
+int query_sex() {
+  return my_sex; 
+}
+
+int is_rabbit() {
+  return 1; 
+}
+
+int is_female(object ob) {
+  if(ob->is_ready_female_rabbit()) return 1;
+  return 0 ;
+}
+
+int is_ready_female_rabbit() {
+  if(my_sex==FEMALE && !befruchtet && erschoepfung < time()) return 1;
+  return 0;
+}
+
+int set_exhausted(int x) {
+  erschoepfung=x; 
+  return 1;
+}
+
+void die(int poisondeath)
+{
+  call_other(RABBITMASTER, "KillRabbit", ME, TP);
+  ::die(poisondeath);
+  return;
+}
+
+
+void remove()
+{
+ call_other(RABBITMASTER, "RemoveRabbit", ME);
+ ::remove();
+ return ;
+}
+
+void AddGen(int parent_gen)
+{
+  gen=parent_gen+1;
+  return ;
+}
+
+void SetLevel(int x) {
+  create_default_npc(x);
+  return ;
+}
+
+*/

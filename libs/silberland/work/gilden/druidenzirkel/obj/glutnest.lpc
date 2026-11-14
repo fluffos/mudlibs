@@ -1,0 +1,111 @@
+inherit "std/thing";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <moving.h>
+#include "/gilden/druidenzirkel/druiden.h"
+#include <new_skills.h>
+#include "/gilden/berserker/berserker_extern.h"
+#include <wizlevels.h>
+
+private int power;
+private object caster;
+private mapping originalEnv;
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+//--Beschreibungen---------------------------------------------------------
+  SetProp(P_LONG,
+    "Einige Stellen hier sind mit glattem Eis ueberzogen. Wenn du nicht Acht gibst, "
+    "koenntest du leicht darauf ausrutschen. Es verstroemt eine unnatuerliche Kaelte.");
+
+//--Namen------------------------------------------------------------------
+
+  SetProp(P_INFO, "Dieses Glutnest ist eine elementare Manifestation des Feuers und "
+                  "wurde von einem Druiden beschworen.");
+  SetProp(P_NAME, "Glatteis");
+  SetProp(P_GENDER, FEMALE);
+  AddId(({"nest", "glutnest", "\ndruid_hotspot", DRUID_ID_ELEMENTAL_BOOST(FEUER)}));
+
+//--Eigenschaften----------------------------------------------------------
+
+  SetProp(P_MATERIAL, MAT_FIRE);
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_SIZE, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NOGET, 1);
+}
+
+public string _query_short() {
+  string adj;
+
+  switch(power) {
+    case 0 .. 10: adj = "winziges"; break;
+    case 11 .. 20: adj = "kleines"; break;
+    case 21 .. 30: adj = "ansehnliches"; break;
+    case 31 .. 40: adj = "grosses"; break;
+    case 41 .. 50: adj = "sehr grosses"; break;
+    case 51 .. 60: adj = "riesiges"; break;
+    default: adj = "infernales"; break;
+  }
+
+  return sprintf("Ein %s Glutnest knistert hier", adj);
+}
+
+public string elemental_room() {
+  return FEUER;
+}
+
+public int _query_druid_elemental_boost_bonus() {
+  return power;
+}
+
+public void Start(int _power, object _caster) {
+  power = _power;
+  caster = _caster;
+  if(ENV(TO)->Query(P_ELEMENTAL_ROOM, F_QUERY_METHOD) == 0) {
+    ENV(TO)->Set(P_ELEMENTAL_ROOM, symbol_function("elemental_room", TO), F_QUERY_METHOD);
+  }
+  
+  originalEnv = ENV(TO)->QueryProp(P_ENVIRONMENT);
+  if(ENV(TO)->Query(P_ENVIRONMENT, F_QUERY_METHOD) == 0) {
+    ENV(TO)->Set(P_ENVIRONMENT, symbol_function("room_environment", TO), F_QUERY_METHOD);
+  }
+  call_out("end", 30);
+}
+
+public mapping room_environment() {
+  mapping e;
+
+  if(originalEnv == 0) {
+    return ([ENV_TEMPERATURE: (power/5)]);
+  }
+
+  e = copy_mapping(originalEnv);
+  e[ENV_TEMPERATURE] = e[ENV_TEMPERATURE] + (power/5);
+
+  return e;
+}
+
+public void AddStrength(int _power) {
+  power += _power;
+  while(find_call_out("end") != -1) remove_call_out("end");
+  call_out("end", 30);
+  if(power > 66) {
+    power = 66;
+    return;
+  }
+  tell_room(ENV(TO), BS("Das Glutnest wird weiter angefacht."));
+}
+
+public void end() {
+  tell_room(environment(TO), BS("Das Glutnest verlischt qualmend."));
+  remove(1);
+}

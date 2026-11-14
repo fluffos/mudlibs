@@ -1,0 +1,111 @@
+
+varargs int prep_speerzauber(object caster, mapping sinfo, int flag)
+{
+  object spear, gem;
+
+  if (!sinfo[SI_SKILLARG] || !(gem = present(sinfo[SI_SKILLARG], caster)) ||
+      file_name(gem)[0..9] != "/obj/gems/")
+  {
+    tell_object(caster,
+      "Welchen Edelstein willst Du fuer den Speerzauber verwenden?\n");
+    return 0;
+  }
+  if (!member(gem2dt, explode(file_name(gem)[10..], "#")[0]))
+  {
+    tell_object(caster,
+        "Dieser Edelstein ist fuer den Speerzauber nicht geeignet!\n");
+    return 0;
+  }
+  if (!objectp(spear = caster->QueryProp(P_WEAPON)) || 
+      spear->QueryProp(P_WEAPON_TYPE) != WT_SPEAR)
+  {
+    tell_object(caster, BSC("Du musst einen Speer gezueckt haben, um ihn " 
+        "mit einem Edelstein verzaubern zu koennen!"));
+    return 0;
+  }
+  if (sizeof(spear->QueryProp(P_DAM_TYPE) & m_indices(MAGICAL_DAMAGE_TYPES)))
+  {
+    tell_object(caster, BSC(sprintf("%s verfuegt bereits ueber einen magischen "
+            "Schadenstyp und kann daher nicht noch weiter verzaubert werden.", 
+            spear->Name(WER,1) )));
+    return 0;
+  }
+  if (!pay_for_spell(caster, sinfo, !flag))
+    return 0;
+  return 1;
+}
+
+
+int speerzauber(object caster, mapping sinfo) 
+{
+  int suc;
+  object spear, gem;
+  string gem_string, aura, dt;
+  int time, wc_bonus, wc;
+
+  if (!prep_speerzauber(caster, sinfo, 1))
+    return 0;
+  gem = present(sinfo[SI_SKILLARG], caster);
+  dt = gem2dt[ explode(file_name(gem)[10..], "#")[0] ]; 
+  aura = gem2dt[ explode(file_name(gem)[10..], "#")[0], 1 ]; 
+  spear = caster->QueryProp(P_WEAPON);
+
+  if ((suc = SpellSuccess(caster,sinfo)) <= 0)
+  {
+    gem->AddAmount(-1);
+    return MISSERFOLG;
+  }
+
+  environment(caster)->Message(BS(sprintf("%s nimmt %s und verzaubert damit %s.",
+          caster->Name(WER,1), gem->name(WEN,0),
+          spear->name(WEN,0) )),
+      MSGFLAG_VISUAL, ([ MSGFLAG_EXCLUDE : ({caster}) ]) );
+
+  tell_object(caster, BSC(sprintf("Du nimmst %s und laesst die Magie des "
+          "Edelsteins in %s fliessen. %s wird von einer %s Aura umhuellt.",
+          gem->name(WEN,0), spear->name(WEN,0), 
+          spear->Name(WER,1), aura)));
+
+  spear->SetProp(P_DAM_TYPE, spear->QueryProp(P_DAM_TYPE) + ({dt}) );
+  wc_bonus = 0;
+  if (sinfo[SI_SKILLPOINTS] > 2)
+  {
+    wc = spear->QueryProp(P_WC);
+    wc_bonus = wc / 10;
+    if (wc_bonus > 0)
+      spear->SetProp(P_WC, wc + wc_bonus);
+    if(spear->QueryProp(P_WC) > 300)
+      spear->SetProp(P_WC, 300);
+  }
+  gem->AddAmount(-1);
+
+  time = (3 + random(3)) * caster->QueryProp(P_GUILD_LEVEL) * 
+    (suc + sinfo[SI_SKILLABILITY]) / MAX_ABILITY;
+  if (sinfo[SI_SKILLABILITY] == MAX_ABILITY)
+    time *= 2;
+
+  if(sinfo[SI_SKILLPOINTS] > 1) time *= 2;
+  call_out("normal", time, caster, spear, dt, wc_bonus);
+
+  return ERFOLG;
+}
+
+void normal(object caster, object spear, string dt, int wc_bonus)
+{
+  if (objectp(spear))
+  {
+    spear->SetProp(P_DAM_TYPE, spear->QueryProp(P_DAM_TYPE) - ({dt}) );
+    if (wc_bonus > 0)
+    {
+      int wc;
+
+      wc = spear->QueryProp(P_WC);
+      wc = (wc > wc_bonus ? wc - wc_bonus : 0);
+      spear->SetProp(P_WC, wc);
+    }
+    if (objectp(caster))
+      tell_object(caster, 
+          sprintf("\nDer Speerzauber auf %s laesst wieder nach.\n\n",
+            spear->name(WEM,1)));
+  }
+}

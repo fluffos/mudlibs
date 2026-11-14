@@ -1,0 +1,723 @@
+/* Die Heiligen Hallen der Sternenpriester. Ort zur Erlangung von
+ * Weisheit und Entscheidungskraft - Ausloesen der Rassenwechselprozedur.
+ * ____________________________________(i) Anatol@Silberland (1999-2012) */
+
+// 08.10.2013 16:27:41 Anatol
+// Fix in GetPlayerRace(), "formloser" hat im Switch gefehlt
+
+#pragma strict_types
+
+#include "../defines.h"
+
+inherit STD "room";
+
+#define PRIEST_NAME "myrrwhyn"
+#define PRIEST NPC PRIEST_NAME
+#include <properties.h>
+#include <wizlevels.h>    
+#include <moving.h>      
+#include <new_skills.h>      
+
+int session;
+string peo;                // Rasse der Sequenz
+string * seq;              // Sequenz-Zeichenketten
+object holo;
+
+#define S_READY                 0
+#define S_CALLPRIEST            1
+#define S_DEMONSTRATION         3
+#define S_LEAVEPRIEST           4
+
+public int prevent_shadow(object o) { return 1; }
+
+public void create() {
+  ::create(); 
+  peo=0;
+  session=0;
+
+  seteuid(getuid(this_object()));
+
+  AddExit("sueden", ([EX_DEST:ROOM "gang",
+         EX_PLMSG:"Mit ein wenig Wehmut im Herzen verlaesst Du die Halle.\n",
+         EX_TESTFUNC:"mayLeave",
+         EX_MSG:"durch das Portal aus der Halle"]));
+
+  SetProp(P_INT_SHORT,"Die Heiligen Hallen");
+  SetProp(P_INT_LONG, /* Hohepriester = Moradeykanjoa */
+      "Du befindest Dich in den Heiligen Hallen der Sternenpriester "
+      "der Wandlung. Direkt vor Dir, in der Mitte des kreisrunden Saales, "
+      "siehst Du ein marmornes Podest, um die in einem weiten Kreis "
+      "dreizehn Saeulen angeordnet sind. Ausser dem Portal im Sueden "
+      "faellt sonst nichts Weiteres auf.");
+  AddDetail("mitte",
+      "Direkt in der Mitte des Saales erhebt sich ein mittelgrosses "
+      "marmornes Podest, strahlend weiss und glaenzend.");
+  AddDetail(({"halle","hallen"}),
+      "Es ist ein wenig uebertrieben, hier von einer Halle zu sprechen, "
+      "doch duerfte der Saal selbst mit fuenfzehn Elfenschritten nicht "
+      "zu durchmessen sein.");
+  AddDetail(({"elfenschritt","elfenschritte","schritt","schritte"}),
+      "Grosse Schritte.");
+  AddDetail(({"sternenpriester","priester"}),
+      "Naja... ist wohl gerade keiner da, hm?");
+  AddDetail("wandlung",
+      "So wie es viele verschiedene Zweige des Druidenzirkels gibt, "
+      "so unterscheiden sich auch die Kreise der Sternenpriester. Die "
+      "Heiligen Hallen hier gehoeren zu den Priestern aus dem Kreis der "
+      "Wandlung.");
+  AddDetail("druidenzirkel",
+      "Der Druidenzirkel befindet weit weg, wenn Du Dich fuer ihn "
+      "interessierst, fragst Du besser ein wenig herum.");
+  AddDetail(({"zweig","zweige"}),
+      "Die verschiedenen Richtungen der Sternenpriester werden Kreise, "
+      "nicht Zweige, genannt.");
+  AddDetail("saal",
+      "Ja, schau' Dich ruhig um, es gibt zwar nicht viel zu sehen, aber "
+      "das wenige hier ist beeindruckend!");
+  AddDetail("portal",
+      "Das Portal ist, wie sollte es auch anders sein, mit weissem Marmor "
+      "eingefasst und besitzt keine Tore. Es duerfte der Weg aus den "
+      "Heiligen Hallen sein, den die gehen, die unentschlossen sind oder "
+      "die Heilige Wandlung verweigert wurde.");
+  AddDetail("weg",
+      "Der Weg nach draussen fuehrt durch das Portal. Bist Du unentschlossen "
+      "oder wurde Dir das \"Geschenk\" der Wandlung verweigert, so nimm ihn.");
+  AddDetail("geschenk",
+      "Nur der Tod ist umsonst. Und selbst fuer den muss man normalerweise "
+      "auch noch etwas tun.");
+  AddDetail("tod",
+      "Hier sollte er Dich nicht ereilen.");
+  AddDetail(({"tor","tore"}),
+      "Keine Tore zu sehen, das Portal ist immer offen.");
+  AddDetail("kreise",
+      "Hier wird es nur Priester aus dem Kreis der Wandlung geben.");
+  AddDetail("boden",
+      "Der Boden scheint hier aus spiegelblank poliertem weissen Marmor "
+      "zu bestehen. Nicht der kleinste Kratzer ist zu sehen.");
+  AddDetail("kratzer","Nicht der kleinste Kratzer!");
+  AddDetail("marmor",
+      "Der Marmor ist schneeweiss und... seltsam, er fuehlt sich angenehm "
+      "warm an.");
+  AddDetail(({"waende","wand"}),
+      "Du kannst die Waende von hier aus durch die Saeulen sehen, sie sind "
+      "schneeweiss und vermutlich aus dem selben Marmor wie alles "
+      "andere hier auch.");
+  AddDetail("decke",
+      "Die Decke ist kuppelfoermig und schneeweiss. Es gibt keine Fackeln "
+      "oder Kerzen, dafuer strahlt die ganze Decke irgendwie ein sanftes "
+      "angenehmes Licht ab.");
+  AddDetail("licht",
+      "Das Licht scheint aus der Decke direkt zu stammen, sie strahlt ein "
+      "sanftes und angenehmes Licht ab.");
+  AddDetail(({"saeule","saeulen","kreis"}),
+      "Die Saeulen teilen den runden Saal in einen aeusseren und einen "
+      "inneren Teil, was jedoch nicht von Bedeutung zu sein scheint. Sie "
+      "sind alle voellig glatt und ebenso schneeweiss wie Boden, Waende und "
+      "Decke.");
+  AddDetail(({"bedeutung","teil"}),
+      "Du misst der Trennung in einen aeusseren und inneren Teil des Saales "
+      "keine Bedeutung zu und wirst damit richtig liegen.");
+  AddDetail("trennung",
+      "Du bist Dir mehr und mehr sicher, dass die Trennung in aeusseren und "
+      "inneren Teil eher unbeabsichtigt erfolgt ist.");
+  AddDetail(({"kerze","kerzen","fackel","fackeln"}),
+      "Nichts, nichts dergleichen. Faszinierend.");
+  AddSmell(DEFAULT_SMELL,
+      "Es riecht ein wenig nach Weihrauch.");
+  AddSound(DEFAULT_SOUND,
+      "Von irgendwoher dringt leiser liturgischer Gesang an Deine Ohren.");
+  AddDetail(({"ohren","ohr"}), "Wer Ohren hat, der hoere.");
+  AddSound("gesang",
+      "Der Gesang wirkt irgendwie beruhigend auf Dich, so voller Wuerde, so "
+      "... sanft majestaetisch (?) klingen die wortlosen Melodien.");
+  AddSound("wuerde",
+      "Der Gesang wirkt wirklich erhaben.");
+  AddSound(({"melodien","musik","liebe","sanftmut"}),
+      "Oh, welch' Sanftmut, welch' Liebe steckt in dieser Musik...");
+  AddSmell("weihrauch",
+      "Naja, Du bist Dir nicht sicher, aber es riecht schon ein wenig heilig "
+      "und andaechtig, es wird wohl Weihrauch sein...");
+  AddDetail("ordnung",
+      "Ja, doch, wirklich, scheint alles voellig ok.");
+  AddSpecialDetail(({"zylinder","podest"}),"detailPodest");
+  AddSpecialDetail(({"flaeche","platte","hand","abdruck"}),"detailHand");
+  AddDetail(({"platz","durchmesser"}),
+      "Auf dem Podest ist wohl ausreichend Platz, irgendwelche Dinge "
+      "vorzufuehren.");
+  AddDetail("massstab",
+      "Geltende Massstaebe sind wichtig, man bedenke, was \"huefthoch\" "
+      "aus den Blickwinkeln verschiedener Leute bedeuten koennte.");
+  AddDetail("leute",
+      "Oehm. Schau Dich um?");
+  AddDetail("blickwinkel",
+      "Vielleicht willst Du hier Deinen Blickwinkel aendern?");
+  AddDetail(({"umrisse","umriss"}),
+      "Hm, diese Flaeche symbolisiert eindeutig eine linke Hand.");
+  AddDetail("vertiefung",
+      "In die Vertiefung ist ein huehnereigrosser und geheimnisvoll "
+      "funkelnder Sternenstein eingelassen.");
+  AddDetail("fassung",
+      "Die Fassung in der Vertiefung ist - man sehe und staune - nicht "
+      "aus weissem Marmor, sondern aus einem Dir nicht bekannten Material, "
+      "welches vermutlich die hohen magischen (oder sonstigen) Kraefte "
+      "mehr entgegenzusetzen hat.");
+  AddDetail("material",
+      "Es glaenzt hellgolden, mehr kannst Du nicht erkennen.");
+  AddDetail("sternenstein",
+      "Wieviel mag dieser Sternenstein wert sein, wozu ist er in der Lage? "
+      "Mit Sternensteinen seiner Groesse kann man Welten erschaffen! Blau "
+      "und geheimnisvoll funkelt und strahlt das Kleinod aus seiner Fassung, "
+      "zieht Dich mehr und mehr in seinen Bann. Die Dimensionen scheinen "
+      "sich zu erweitern, hinter den tiefen Rhythmen des Sternensteins "
+      "oeffnen sich Horizonte... doch der Fokus weigert sich, sich Deinen "
+      "Gedankenmustern anzupassen und der Kontakt bricht.");
+  AddDetail(({"groesse","welten","kleinod","bann","dimensionen","rhythmen",
+        "horizonte","fokus","gedankenmuster","kontakt","wissen","weisheit",
+        "kraefte","magie"}),
+      "Dies ist nicht der Ort, um Wissen und Weisheit ueber Sternensteine "
+      "und ihre buendelnden Kraefte zu erlangen, die Heiligen Hallen sind "
+      "der Wandlung gewidmet.");
+  AddDetail("ort","Du befindest Dich in den Heiligen Hallen der "
+      "Sternenpriester der Wandlung.");
+  SetProp(P_NOMAGIC,100);   
+  SetProp(P_LIGHT,1);   
+  SetProp(P_INDOORS,1);  
+  SetProp(P_ENVIRONMENT,([ENV_TEMPERATURE:24,ENV_TERRAIN:TT_CAVE]));
+
+  AddCmd(({"leg","lege"}),"cmdLege");
+  AddCmd(({"muto"}),"cmdMuto");
+  AddCmd("referat","cmdReferat");
+
+  SetStupids(({"heiligen"}));
+  SetFailMessages(({
+        "Die Heiligkeit des Ortes hat Dich verwirrt.\n",
+        "Der ferne Gesang klingt wirklich wundervoll.\n",
+        "Der Marmor ist schon sehr interessant.\n",
+        "Oh, wenn es doch nur ueberall so ruhig und friedlich waere...\n"}));
+  SetProp(P_GEMA,({0,0,0}));
+}
+
+nosave string detailPodest() {
+  string s;
+
+  if (!this_player()) return "";
+
+  s="Das kreisrunde Podest ist - wie sollte es auch anders sein - "
+    "aus schneeweissem Marmor. Es ist eigentlich nur ein etwa " 
+    "kniehoher Zylinder mit einem Durchmesser von etwa drei Schritt (wobei "
+    "da eindeutig elfische Massstaebe angelegt wurden). Auffallend ist sowohl "
+    "die Vertiefung in der Mitte des Podestes als auch ein Art Abdruck einer "
+    "Hand am Rand. ";
+  if (session==S_DEMONSTRATION)
+    s+="Zwei Gestalten stehen auf dem Podest.";
+  return break_string(s,77);
+}
+
+nosave string detailHand() {
+  string s1, s2;
+  object priest;
+
+  if (!this_player()) return "";
+  
+  if (((priest=find_object(PRIEST)) && 
+      (environment(priest)==this_object())) || (session!=S_READY))
+    return break_string(
+      "Schwach und roetlich schimmert eine handfoermige Flaeche am Podestrand."
+      " Vermutlich macht es jetzt auch keinen Sinn, die eigene Hand auf sie "
+      "zu legen. Jedenfalls hast Du ein entsprechendes Gefuehl.",77);
+  else return break_string(
+      "Gruenlich schimmert eine handfoermige Flaeche am Podestrand. "
+      "Du bist Dir irgendwie sicher, dass etwas passieren muesste, wenn "
+      "Du Deine Hand auf die Flaeche legst.",77);
+}
+ 
+nosave int cmdLege(string s) { /* notify_fail-Handling nicht drin. */
+  object priest;
+
+  if ((!this_player()) || (!s)) return 0;
+
+  if (sizeof(regexp(({s}),
+          "^(rechte |)hand auf (flaeche|abdruck|platte|hand)$"))) {
+    say(break_string(this_player()->Name(WER)+" legt eine Hand auf die "
+          "handfoermige leuchtende Flaeche des Podestes, doch es passiert "
+          "irgendwie nichts aufregendes.",77));
+    write(break_string(
+        "Du legst Deine rechte Hand auf die leuchtende Flaeche, doch "
+        "es passiert nichts. Jetzt, wo Du so Deine Hand und die Umrisse "
+        "des Abdrucks im Vergleich siehst - vielleicht solltest Du mal die "
+        "_linke_ Hand versuchen?"));
+    return 1;
+  }
+  else if (sizeof(regexp(({s}),
+          "^linke hand auf (flaeche|abdruck|hand|platte)$"))) {
+    if (((priest=find_object(PRIEST)) && 
+      (environment(priest)==this_object())) || (session!=S_READY)) {
+      say(break_string("Zoegernd legt "+this_player()->name(WER)+" "+
+            this_player()->QueryPossPronoun(FEMALE,WEN,SINGULAR)+" Hand "
+            "auf die Flaeche. Es scheint "+this_player()->QueryPronoun(WEN)+
+            " nicht zu ueberraschen, dass nichts geschieht.",77));
+      write(break_string(
+            "Eigentlich glaubst Du ja selbst nicht daran, dass irgendetwas "
+            "passiert, aber Du versuchst es trotzdem und legst Deine linke "
+            "Hand auf den schwach roetlich leuchtenden handfoermigen Abdruck. "
+            "Und da, es passiert: Nichts. Du bist irgendwie nicht "
+            "ueberrascht.",77));
+    }
+    else {
+      say(break_string("Vorsichtig legt "+this_player()->name(WER)+" "+
+            this_player()->QueryPossPronoun(FEMALE,WEN,SINGULAR)+" Hand "
+            "auf die gruenlich schimmernde Flaeche. Es blitzt kurz hellblau "
+            "auf und die Farbe schlaegt zu einem schwachen, roetlichem "
+            "Gluehen. Mit einem Laecheln nimmt "+this_player()->name(WER)+
+            " seine Hand wieder zurueck.",77));
+      write(break_string("Vorsichtig legst Du Deine linke Hand auf die "
+            "gruenlich schimmernde Flaeche. Mit einem blaeulichen Aufblitzen "
+            "und einem kleinen Waermeimpuls schlaegt die Farbe des "
+            "handfoermigen Abdrucks in ein roetliches Gluehen um. Du hast "
+            "das Gefuehl, dass das genuegen sollte und nimmst Deine Hand "
+            "langsam wieder vom Podest.",77));
+      while (remove_call_out("callPriest")!=-1);
+      session=S_CALLPRIEST;
+      call_out("callPriest",8,0,this_player());
+    }
+    return 1;
+  }
+  else return 0;
+}
+
+public void LeavePriest(int i) {
+  object priest;
+  if (getuid(previous_object())!=getuid(this_object())) return;
+  switch(i) {
+    case 0:
+      session=S_LEAVEPRIEST;
+      call_out("LeavePriest",4,1);
+      break;
+    case 1:
+      if ((!priest=find_object(PRIEST)) ||
+          (environment(priest)!=this_object())) return;
+      tell_room(this_object(),
+          "Myrrwhyn betritt das Podest und verschwindet lautlos.\n");
+      priest->move("/room/void",M_GO|M_SILENT|M_NOCHECK);
+      priest->remove();
+      call_out("LeavePriest",4,2);
+      break;
+    default:
+      tell_room(this_object(),break_string(
+            "Die Farbe des Abdrucks springt vom "
+          "roetlichen Schimmern spontan auf ein gruenes Leuchten ueber.",77));
+      session=S_READY;
+      break;
+  }
+  return;
+}
+   
+
+nosave int cmdMuto(string s) { 
+
+  if ((!this_player()) || (!s) || (!stringp(s)) || (s!="corpus"))
+    return 0;
+  
+  notify_fail("Warte, warte, da tut sich doch grade was...!\n");
+  if (session == S_CALLPRIEST) return 0;
+  notify_fail("Warte, lass' den Priester erstmal gehen.\n");
+  if (session == S_LEAVEPRIEST) return 0;
+  notify_fail("Im Moment ist hier schon Magie im Einsatz, warte noch.\n");
+  if (session == S_DEMONSTRATION) return 0;
+  notify_fail("Warum auch immer, im Moment geht es nicht.\n");
+  if (session != S_READY) return 0;
+  notify_fail("Du bist leider ohne sterbliche Huelle unterwegs, "
+      "so wird das nichts.\n");
+  if (this_player()->QueryProp(P_GHOST)) return 0;
+  write(break_string(
+    "Du schliesst die Augen, atmest tief durch und konzentrierst Dich "
+    "auf Dein physisches Selbst. Ploetzlich bilden sich Worte einer fremden "
+    "Sprache in Deinen Gedanken - Du fuehlst, was Du tun musst, steigst auf "
+    "das Podest und sprichst sie aus.\nDu fuehlst, wie die Magie nach Dir "
+    "greift und Dich erfasst.",77,0,1));
+  say(break_string(sprintf(
+    "%s schliesst die Augen und atmet ruhig und tief durch.\nPloetzlich "
+    "zuckt %s, steigt auf das Podest und spricht laut und bestimmt "
+    "fremdartige Worte in einer gutural klingenden Sprache.",
+   this_player()->Name(WER), this_player()->QueryPronoun(WER)),77,0,1));
+ 
+  this_player()->move(ROOM "vc/wechsel:"+getuid(this_player()),
+     M_GO|M_NO_SHOW,0, "verschwindet in gueldenem Funkenregen",
+     "verweilt nun hier");
+  catch((ROOM "vc/wechsel:"+
+    getuid(this_player()))->StartSequence(this_player()));
+  return 1;
+}
+
+nosave void callPriest(int cycle, object caller) {
+  object priest;
+
+  switch (cycle) {
+    case 0:
+      tell_room(this_object(),
+        "Du vernimmst einen Klang wie das 'Oooohmmmm' eines weit entfernten "
+        "Chores.\n");
+      call_out("callPriest",6,1,caller);
+      break;
+    case 1:
+      tell_room(this_object(),break_string(
+        "Der harmonische Klang wird ploetzlich sehr viel lauter und die "
+        "Luft ueber dem Podest scheint zu flirren!",77));
+      call_out("callPriest",4,2,caller);
+      break;
+    case 2:
+      tell_room(this_object(),
+          "Auf dem Podest materialisiert sich ein Priester und der Klang "
+          "verhallt.\n");
+      if (priest=find_object(PRIEST))
+        priest->remove();
+      priest=0;
+      if ((catch(call_other(PRIEST,"???")))
+          ||(!priest=find_living(PRIEST_NAME))) {
+        tell_room(this_object(),"Doch die Materialisation bricht "
+            "ab und das Podest verbleibt leer.\nIrgendetwas aendert seine "
+            "Farbe.\n");
+        session=S_READY;
+      }
+      else {
+        priest->move(this_object(),M_GO,0,0,"tritt vom Podest herunter");
+        call_out("callPriest",4,3,caller);
+      }
+      break;
+    case 3:
+      if (priest=find_living(PRIEST_NAME)) {
+        priest->Greet(caller);
+        session=S_READY;
+      }
+      else {
+        tell_room(this_object(),"Irgendetwas aendert seine Farbe.\n");
+        session=S_READY;
+      }
+      break;
+    default:
+      tell_room(this_object(),
+          "Unvorhergesehenes passiert (-> Anatol Bescheid sagen!).\n");
+      break;
+  }
+  return;
+}
+
+// Verkraftet statt eines Spielerobjekts auch eine Rassenbezeichnung
+// in der Rohform.
+
+public string GetPlayerRace(mixed pl, int flag) {
+  string r;
+  mixed ret;
+ 
+  if ( (!pl) || ((!objectp(pl)) && (!stringp(pl))))
+     return 0;
+  if ( objectp(pl) && query_once_interactive(pl) && (!(pl->QueryGuest())))
+     // r=explode(file_name(pl),":")[0][1..];
+     r=(string)(((mixed)"/secure/master"->get_userinfo(getuid(pl)))[4])[12..];
+  else if (stringp(pl))
+    r=lowerstring((string)pl);
+  else
+    return 0;   // Objekt, aber kein Spieler (oder ein Gast)
+  switch (r) {
+    case "unshaped": 
+    case "formloser": 
+      ret=({"Formloser","Formlose","der bisher Unentschlossenen"});
+      break;
+    case "orc": 
+    case "ork": 
+      ret=({"Ork","Orkin","der krummzahnig grummelnden Gruenhaeute"});
+      break;
+    case "feline": 
+      ret=({"Feline","Felinin","der kratzenden Katzen"});
+      break;
+    case "gnom": 
+      ret=({"Gnom","Gnomfrau","der erfinderischen Knollnasen"});
+      break;
+    case "goblin": 
+      ret=({"Goblin","Goblinfrau","der kleinen pelzigen Allesfresser"});
+      break;
+    case "elf": 
+      ret=({"Elf","Elfin","der spitzohrigen Kristallwaldbewohner"});
+      break;
+    case "dwarf": 
+    case "zwerg": 
+      ret=({"Zwerg","Zwergin","der baertigen Bergbauer"});
+      break;
+    case "hobbit": 
+      ret=({"Hobbit","Hobbitfrau","des kleinen Volks der Schlemmer"});
+      break;
+    case "human": 
+    case "mensch": 
+      ret=({"Mensch","Menschenfrau","des menschlichen Teils der Welt"});
+      break;
+    case "fairy": 
+    case "fee": 
+      ret=({"Fee","Feenwesen","der kleinen magischen Flatterfrauen"});
+      break;
+    case "darkelf": 
+    case "dunkelelf": 
+      ret=({"Dunkelelf","Dunkelelfin","der schwarzhaeutigen Fieslinge"});
+      break;
+    case "ogre": 
+    case "oger": 
+      ret=({"Oger","Ogerin","der schmierigen Allesfresser"});
+      break;
+    case "troll": 
+      ret=({"Troll","Trollfrau","der Gattung 'Muskelprotz mit Spatzenhirn'"});
+      break;
+    case "nachtelf":
+      ret=({"Nachtelf","Nachtelfin","der goldaeugigen Telepathen"});
+      break;
+    case "magier":
+      ret=({"Magier","Magierin","der Schoepfer und Bewahrer"});
+      break;
+    default:
+      ret=({0,0,0});
+      break;
+  }
+  return ret[flag];
+}
+
+public void DoShout(string p) {
+  object pl;
+  string s;
+  if (!pl=find_player(p)) return;
+  if (getuid(previous_object())!=getuid(this_object())) return;
+
+  s=break_string(sprintf("Vernimm meine Worte, Volk des Silberlands! "
+    "%s ist nun "
+    +( (int)pl->QueryProp(P_GENDER)==FEMALE?"eine Angehoerige":
+    "ein Angehoeriger")+" %s! Moege %s Herz hoeher "
+    "schlagen und %s Geist in %s neuen "
+    "Gestalt Glueck und Frieden finden!",(string)pl->Name(WER),
+    (GetPlayerRace(pl,2)?(string)GetPlayerRace(pl,2):
+     "der Fehler"),
+    (string)pl->QueryPossPronoun(NEUTER,WER,SINGULAR),
+    (string)pl->QueryPossPronoun(MALE,WER,SINGULAR),
+    (string)pl->QueryPossPronoun(FEMALE,WEM,SINGULAR)),77,
+    "Sternenpriester Myrrwhyn ruft: ",0);
+  shout(s);
+  if (this_player()) tell_object(this_player(),s);
+  return;
+}
+#define IXMONTHS 23328000  /* 60*60*24*30*9 */
+
+
+public void reset() {
+  call_other(ROOM "susagep","???"); // Pegasus pingen
+  ::reset();
+  return;
+}
+
+public int GetInterval(object pl) { 
+  int fl,i;
+
+  if (( (!pl) || (!objectp(pl)) || (!query_once_interactive(pl)) ) ||
+      (GetPlayerRace(pl,0)=="Formloser"))
+    return 0;
+
+  fl=(int)((mixed *)("/secure/master"->get_userinfo(getuid(pl))))[5];
+  return (((i=(IXMONTHS+fl-time()))>0)?i:
+      ((i=(IXMONTHS+(int)pl->QueryProp(P_LAST_RACE_CHANGE)-time()))>0)?i:0);
+}
+
+public mixed GetChoices(object pl, int flag) {
+  string * races;
+  int i;
+  mapping restr;
+  object o;
+  string g;
+
+  if ( (pl) && (objectp(pl)) && (!query_once_interactive(pl)) )
+    return 0;
+  races=get_dir("/std/shells/*.lpc");
+  for (i=sizeof(races)-1;i>=0;i--) {
+    if ((catch(call_other("/std/shells/"+races[i][0..<3],"???"))) ||
+      (!(o=find_object("/std/shells/"+races[i][0..<3]))) ||
+      (!(o->QueryAllowSelect())))  // Untote haben hier "0"
+      races-=({races[i]});
+    else
+      races[i]=(string)o->_query_race();
+  }
+  races-=({"Formloser"});  // Auf Formlose darf man nie wechseln
+
+  // nur wenn das Spielerobjekt existiert, kann die Liste weiter
+  // passend eingegrenzt werden.
+
+  if ((pl) && (objectp(pl))) {
+    races-=({(string)GetPlayerRace(pl,0)}); // Shadows!
+  
+    if (((int)(pl->QueryProp(P_GENDER)))!=FEMALE)  // Extrawurst...
+      races-=({"Fee"});
+
+    if (g=(string)pl->QueryProp(P_GUILD)) {
+      if ((!catch(restr=(mapping)call_other("/gilden/"+g,"QueryProp",P_GUILD_RESTRICTIONS)))) {
+        if ((mappingp(restr)) && (member(restr,SR_EXCLUDE_RACE)))
+           races-=(restr[SR_EXCLUDE_RACE]);
+      // Gilden werden nochmals gefragt:
+      //    public int PreventPlayerRaceChange(string race, string player);
+        races-=filter_array(races, "PreventPlayerRaceChange","/gilden/"+g,getuid(pl));
+      }
+    }
+  }
+  if (!flag)
+    return races;
+  if (!sizeof(races)) return 0;
+  if (sizeof(races)==1) return races[0];
+  else return implode(races[0..<2],", ")+" und "+races[<1];
+}
+
+nosave int mayLeave() {
+  if (session!=S_READY) {
+    write("Du kannst jetzt nicht einfach abhauen, warte lieber noch!\n");
+    return 0;
+  }
+  else if (((GetPlayerRace(this_player(),0))=="Formloser") 
+      && (!(this_player()->TimeTillRaceChangeLeft()))) {
+    write(break_string(
+        "Du wurdest von der Magie der Wandlung gerufen, Du kannst hier "
+        "in Deiner formlosen Gestalt nicht mehr hinaus!",77));
+    return 0;
+  }
+  else return 1;
+}
+
+varargs void StartReferSequence(string race, int flag) {
+  string file;
+  object priest;
+  int i;
+
+  if (!race) return;
+  if (session==S_DEMONSTRATION) return;
+  if (find_call_out("sequence")!=-1) return;
+  seq=get_dir(SEQUENCES_DIR "*.seq");
+  if ((!sizeof(seq)) || (member(seq,race+".seq")==-1) ||
+      (!strlen(file="\n"+read_file(SEQUENCES_DIR +race+".seq")))) {
+    tell_room(this_object(),break_string(
+      "... doch vergeblich mueht sich der Sternenpriester um "
+      "die erzaehlende Gunst der Magie, wurde jener doch nicht bekannt "
+      "gemacht das, worum Myrrwhyn nun bittet. Anatol Bescheid geben: "
+      "Fehler 1",77));
+    return;  // Hack fuer das Testen.
+  }
+  seq=regexplode(file,"\n[0-9][0-9]*: *\n")[1..];
+  if (sizeof(seq)%2) {
+    tell_room(this_object(),break_string(
+      "Irgendwo knister es ziemlich boese... da ging etwas schief mit den "
+      "Maechten der Magie. Sag doch Anatol mal Bescheid: Fehler 2",77));
+    return;
+  }
+  for (i=(sizeof(seq)-2);i>=0;i-=2)
+    seq[i]=explode(seq[i][1..],":")[0];
+  seq+=({20,"Die Informationsreihe endet hier, die magische Projektion auf "
+      "dem Podest wird noch fuer etwa zwei Minuten aufrecht erhalten."});
+  if (previous_object()!=(priest=find_object(PRIEST)))
+    return 0;
+  else if (!(priest->SequenceStarted())) {
+    tell_room(this_object(),break_string(
+      "Im goettlichen Gefuege der Magier zeigen sich Risse. MIST, das sollte "
+      "aber nicht sein! Anatol Bescheid sagen: Fehler 3",77));
+    return;
+  }
+  peo=race;
+  call_out("sequence",2,(flag?0:1));
+
+}
+
+int cmdReferat(string race) {
+  if ((!this_interactive()) || (this_player()!=this_interactive()) || 
+      (getuid(this_interactive())!=getuid(this_object()))) return 0;
+  StartReferSequence(race,1);
+  return 1;
+}
+
+public string SeqLine(string s) {
+  return sprintf("       o  %|55s  o",implode(filter_array(explode(s," "),
+    #'strlen)," "));
+}
+
+varargs nosave void sequence(int which) {
+  int next;
+  object o;
+  string * ind;
+
+  if (find_call_out("sequence")!=-1) return;
+
+  switch (which) {
+    case 1:
+      tell_room(this_object(),break_string(
+        "Myrrwhyn murmelt leise etwas vor sich hin, schliesst die Augen "
+        "und verfaellt in tiefste Konzentration. Nichts auf der Welt scheint "
+        "ihn jetzt erreichen zu koennen...",77));
+      session=S_DEMONSTRATION;
+      call_out("sequence",6,2);
+      return;
+      break;
+    case 2:
+      tell_room(this_object(),break_string(
+        "Leise klingt von irgendwoher ein 'Ooohmmm...' und der Sternenstein, "
+        "der in der Oberflaeche des Podestes eingelassen wurde, faengt an, "
+        "geheimnisvoll blau zu leuchten.",77));
+      call_out("sequence",8,3);
+      return;
+      break;
+    case 3:
+      if ((!(holo=clone_object(NPC "hologramm")))||
+	      (!(holo->Customize(peo)))) {
+        if (holo) {
+	  holo->remove();
+	}
+        tell_room(this_object(),break_string(
+          "Doch die Magie spielt dies Spiel nicht mit, der allgegenwaertige "
+          "Klang verhallt.", 77));
+        session=S_READY;
+        if (o=find_object(PRIEST)) {
+          o->SequenceEnded();
+	}
+      }
+      else {
+        holo->move(this_object(),M_GO|M_SILENT);
+        tell_room(this_object(),break_string(
+          "Im Strahlen des Sternensteins materialisieren sich zwei Gestalten, "
+            "das leise 'Ooohmmm...' verhallt wieder.",77));
+        call_out("sequence",12,4);
+      }
+      return;
+      break;
+    case 4:
+      tell_room(this_object(),break_string(
+        "Von irgendwoher beginnt eine klare und volltoenende Stimme zu "
+        "sprechen.",77));
+      call_out("sequence",to_int(seq[0])+4);
+      return;
+      break;
+    default:
+      tell_room(this_object(),
+          implode(map_array(({""})+explode(break_string(seq[1],55),"\n")+
+              ({""}), "SeqLine"), "\n")+"\n");
+      seq=seq[2..];
+      if (sizeof(seq))
+        call_out("sequence",to_int(seq[0]));
+      else
+        call_out("sequence",120,5);
+      return;
+      break;
+    case 5:
+      tell_room(this_object(),break_string(
+        "Die Gestalten auf dem Podest werden durchscheinend und "
+        "verschwinden wieder, das blaue Leuchten des Sternensteins laesst "
+        "nach.",77));
+      if (holo)
+        holo->remove();
+      call_out("sequence",6,6);
+      return;
+      break;
+    case 6:
+      if (o=find_object(PRIEST))
+          o->SequenceEnded();
+      session=S_READY;
+      break;
+  }
+}
+
+

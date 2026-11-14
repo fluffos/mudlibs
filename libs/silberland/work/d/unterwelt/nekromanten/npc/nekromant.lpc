@@ -1,0 +1,137 @@
+/*
+   ** Ein Nekromant
+   ** Angrox@SL
+   ** 03.04.2001
+   **
+   **
+*/
+
+
+inherit "/gilden/obj/necromancer_npc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <mnpc.h>
+#include <class.h>
+#include "../dungeon.h"
+string name;
+
+string *dolche;
+
+create()
+{
+  object ob;
+  object cash;
+  string *races,race;
+  string *defiams,defiam;
+  int gender;
+  if (!is_clone(this_object())) return;
+  ::create();
+  dolche=({"dolch","fleischermesser", "hiebdolch", "jagdmesser",
+    "langdolch","messer","meucheldolch","obsidiandolch","spitzdolch",
+    "steindolch","stilett"});
+  races=({"Mensch", "Oger", "Troll", "Hobbit", "Zwerg", "Dunkelelf"});
+  catch(name=call_other(NNPCMASTER, "GetName"));
+  defiams=DIFAM_ADJ;
+  defiam=defiams[random(sizeof(defiams))];
+  gender=random(2)+1;
+  race=races[random(sizeof(races))];
+  SetProp(P_RACE, race);
+  race=race+(gender==FEMALE?"in":"");
+  if(race=="Hobbitin") race="Hobbitfrau";
+  if(race=="Menschin") race="Menschenfrau";
+  SetProp(P_GENDER, gender);
+  SetProp(P_NEKRO_LOG_DEATH, NEKRO_ISLAND_DIR+"log/npc.kills");
+  SetProp(P_NEKRO_LOG_PLAYERDEATH, NEKRO_ISLAND_DIR+"log/player.kills");
+  if(name) {
+    SetProp(P_NAME,CAP(name));
+    SetProp(P_KILL_NAME,CAP(name));
+    SetProp(P_SHORT, sprintf("%s, %s %s%s Nekromant%s", CAP(name), 
+          gender==FEMALE?"eine":"ein", defiam,gender==FEMALE?"e":"er",
+          gender==FEMALE?"in":""));
+    SetProp(P_LONG, sprintf("%s %se %s, %s vor Dir steht, ist in eine "
+        "schwarze Kutte gehuellt. Das Gesicht kannst Du dank der tief ins "
+        "Gesicht gezogenen Kapuze kaum erkennen, doch siehst Du bleiche "
+        "Haut durchschimmern.",gender==FEMALE?"Die":"Der",defiam,race
+         ,gender==FEMALE?"die":"der"));
+    AddId( ({gender==FEMALE?"nekromantin":"nekromant", lower_case(name),
+        NEKRO_GUARD_ID}));
+    SetProp(P_ARTICLE, 0);
+  } 
+  else {
+    SetProp(P_NAME, gender==FEMALE?"Nekromantin":"Nekromant");
+    SetProp(P_KILL_NAME,  gender==FEMALE?"Eine Nekromantin":"Ein Nekromant");
+    AddId( ({gender==FEMALE?"nekromantin":"nekromant", NEKRO_GUARD_ID}));
+    SetProp(P_SHORT, sprintf("Ein%s %s%s Nekromant%s", gender==FEMALE?"e":"",
+          defiam,gender==FEMALE?"e":"er",gender==FEMALE?"in":""));
+    SetProp(P_LONG, sprintf("Vor Dir steht ein%s %se Nekromant%s, %s in eine "
+          "komplett schwarze Kutte gehuellt ist. Nur ein bisschen bleiche "
+          "Haut ist unter der vorgezogenen Kapuze zu sehen. Irgendwie kommt "
+          "%s Dir sehr bedrohlich vor.",gender==FEMALE?"e":"", defiam,
+          gender==FEMALE?"in":"", gender==FEMALE?"die":"der", 
+          QueryPronoun(WER)));
+    SetProp(P_ARTICLE,1);
+  }
+  SetProp(P_AGGRESSIVE, 0);
+  // DEFAULT NECROMANCER NPC START
+  create_necromancer_npc(20+random(10),random(3)+4,random(7)+1);
+  set_guild_spellrate(20+QueryProp(P_LEVEL));
+  // DEFAULT NECROMANCER NPC END
+  SetProp(P_AGGRESSIVE, 
+      ([ 0:0.1, P_GUILD: (["nekromanten":0.0, "abenteurer":0.03, 
+                           "dunkelelfen":0.01, "paladine":1.0]) ]));
+  SetProp(P_BODY, QueryProp(P_BODY) + 40);
+  SetProp(P_HANDS, ({" mit bleichen Fingern", 200, DT_BLUDGEON}));
+  SetProp(P_ALIGN, -800);
+
+  SetProp(P_SIZE, 170+random(50));
+  SetProp( P_DIE_MSG, " bricht mit einem Fluch auf den Lippen zusammen.\n");
+  SetProp(P_MNPC_AREA, NEKRO_ISLAND_MOVING );
+  SetProp(P_MNPC_WAIT, ({ 15, 40, 40 }));
+  SetProp(P_MNPC_DEFAULTROOM, NEKRO_ROOMS+"e1");
+  SetProp(P_MNPC_FLAGS, MOV_INDOORS + MOV_OUTDOORS + MOV_MOVES + 
+      MOV_BACKWARDS);
+
+  AddLibrary(LIBS "nekro.lib");
+
+  SUID;
+  cash=CLONEOB("/obj/money");
+  cash->SetProp(P_AMOUNT, random(100));
+  cash->move(ME);
+  CLONEME("/p/armour/ring/ring");
+  CLONEME("/p/armour/boots/sandalen");
+  CLONEME(NEKRO_ISLAND_ARMOUR+"kutte");
+  if(QueryProp(P_GUILD_LEVEL)>5) {
+    CLONEME(NEKRO_ISLAND_WEAPON+"blutdolch");
+  }
+  else {
+    AddId("Messerexperte");
+    CLONEME("/p/weapon/knife/"+dolche[random(sizeof(dolche))]);
+  }
+  if(random(6) < QueryProp(P_GUILD_LEVEL))
+    CLONEME(NEKRO_ISLAND_OBJ+"heiltrank");
+  command_me("zuecke dolch");
+  command_me("zuecke messer");
+  command_me("zuecke stilett");
+  command_me("trage alles");
+
+  if(!random(5)) CLONEME("/p/std/skills/reading/books/guild_buffs/nekro_spellcost_1");
+  
+}
+
+
+varargs void die(int poisondeath) {
+  if(name)
+    call_other(NNPCMASTER, "RemoveName", CAP(name));
+  name="";
+  return ::die(poisondeath);
+}
+
+varargs int remove(int silent) {
+  if(name)
+    call_other(NNPCMASTER, "RemoveName", CAP(name));
+  name="";
+  return ::remove(silent);
+}

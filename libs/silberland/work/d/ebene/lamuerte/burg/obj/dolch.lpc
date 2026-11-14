@@ -1,0 +1,137 @@
+inherit "std/weapon";
+
+#include <properties.h>
+#include <combat.h>
+#include <defines.h>
+#include <moredef.h>
+#include <new_skills.h>
+#include <combat.h>
+
+int zeit, first_use;
+#define COST 3
+
+create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+  if(file_name(PO)!="/p/daemon/itemd/itemd") {
+    raise_error("Illegales Clonen des Uniques! ");
+    destruct();
+    return;
+  }
+  zeit=time();
+  SetProp(P_SHORT,"Der Mithrildolch");
+  SetProp(P_LONG,
+   "Der Dolch hat eine lange sehr scharfe Klinge. Der Griff ist mit einem "+
+   "wertvollen Stoffband umwickelt, um im Kampf nicht aus der Hand zu gleiten. "
+   "Dadurch leigt er ganz ausgezeichnet in der Hand. Jeder Dieb oder Meuchler "
+   "wuerde Dich um diese herrliche Waffe beneiden.");
+  SetProp(P_NAME, "Mithrildolch");
+  AddId( ({"dolch","mithril","mithrildolch" }));
+  SetProp(P_GENDER, MALE);
+  SetProp(P_WC, 145);
+  SetProp(P_WC_FIX, 85);
+  SetProp(P_WC_BONUS, (["dieb":200]) );
+  SetProp(P_WEIGHT,  800);
+  SetProp(P_VALUE, 8000); 
+  SetProp(P_NOBUY,1);
+  SetProp(P_WEAPON_TYPE, WT_KNIFE);
+  SetProp(P_DAM_TYPE, DT_PIERCE);
+  SetProp(P_NR_HANDS, 1);
+  SetProp(P_MATERIAL, ([MAT_MITHRIL:95, MAT_CLOTH:5]) );
+  SetProp(P_QUALITY_DECAY,150);
+  SetProp (P_WIELD_RESTRICTIONS, ([P_XP: 300000,
+                                   A_DEX: 15,
+                                   A_STR: 12,     
+                                   A_CON: 10,
+                                   A_INT: 10   ]));
+                                    
+  SetProp(P_INFO,
+   "Dieser Dolch wurde einst fuer einen Dieb angefertigt. Er eignet sich\n"+
+   "um Gegner aufzuschlitzen. (syntax: schlitze <gegner>)\n");
+
+  AddCmd(({"schlitz","schlitze"}),"sfunc");
+
+  SetProp(P_WIELD_FUNC, TO);
+  SetProp(P_HIT_FUNC, TO);
+}
+
+int sfunc(string str, int fastload)
+{
+  object enemy;
+
+  notify_fail("Wen moechtest Du mit Deinem Mithrildolch aufschlitzen?\n");
+  if( stringp(str) && (enemy=present(str, environment(TP))) )
+  {
+    if (!QueryProp(P_WIELDED))
+    {
+      write("Du musst dazu den Dolch zuecken!\n");
+      return 1;
+    }
+    if ( first_use > time() )
+    {
+      write( "Du hast den Dolch doch gerade erst gezueckt!\n");
+      return 1;
+    }
+    if ( zeit > time() )
+    {
+      write("So schnell hintereinander kannst Du niemanden aufschlitzen!\n");
+      return 1;
+    }
+    if (TP->QueryProp(P_SP)<COST)
+    {
+      write("Du hast nicht genug Magiepunkte dafuer!\n");
+      return 1;
+    }
+    if (PL->QueryProp(P_ATTACK_BUSY))
+   {
+      write("He! Nicht so schnell!\n");
+      return 1;
+    }
+    PL->SetProp(P_ATTACK_BUSY, 4);
+    printf("Du schlitzt %s mit dem Mithrildolch auf.\n", enemy->name(WEN));
+    say(sprintf(BS("%s schlitzt %s mit %s Mithrildolch auf."), CAP(TPN),
+       enemy->name(WEN), TPPP(FEMALE,WEM) ), ({enemy,TP}) );
+    tell_object(enemy, CAP(TPN)+" schlitzt Dich mit dem Mithrildolch auf.\n ");
+   
+    enemy->Defend(90+random(90+11*(this_player()->QueryAttribute(A_DEX))),
+         DT_PIERCE, ([SP_NAME:"aufschlitzen", SP_SHOW_DAMAGE:1,
+         SP_REDUCE_ARMOUR:([AT_HELMET:0, AT_BRACERS:0, AT_BOOT:0, AT_AMULET:0,
+                            AT_GLOVE:0, AT_TROUSERS:0, AT_RING:0, AT_BELT:0])
+         ]), TP);
+    TP->AddSp(-COST);
+    if( enemy && !enemy->QueryProp(P_DISABLE_ATTACK) )
+      enemy->SetProp(P_DISABLE_ATTACK, 1+random(2));
+    if (fastload) return 1;
+    if (random(1551)==13)
+    {
+      write("Das war zu viel fuer Deinen Mithrildolch.\n"
+            "Der Mithrildolch bricht auseinander und nichts bleibt uebrig.\n");
+      remove(1); return 1;
+    }
+    zeit=time()+2*60; // nach 2 minuten gehts wieder;
+    return 1;
+  }
+  else
+    return 0;
+}
+
+int bereit()
+{
+  return (QueryProp(P_WORN) && zeit<time());
+}
+
+int WieldFunc()
+{
+  first_use = time() + 10; 
+  return 1;
+}
+
+int HitFunc(object enemy)
+{
+  if( !random(50) )
+  {
+    write("Du schlitzt "+ enemy->name(WEM) + " den Bauch auf.\n");
+    return 100 + random(500);
+  }
+}

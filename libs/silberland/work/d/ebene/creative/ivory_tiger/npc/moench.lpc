@@ -1,0 +1,421 @@
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include "../files.h"
+#include "../quest.h"
+
+inherit "std/npc";
+inherit "std/player/moneyhandler";
+inherit "std/npc/sequencer";
+inherit "std/npc/spells";
+
+#define ta(x) tell_object(find_player("angrox"), x)
+
+int given_ob;
+object quester;
+object balsam;
+string qinfo1, qinfo2, qinfo3, qinfo4, qinfo5, qinfo6;
+
+string recipe();
+string legacy();
+string ivhelp();
+string moss();
+string fat();
+string heart();
+string pot();
+
+create() {
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  SetProp(P_SHORT, "Vannor, der Moench");
+  SetProp(P_LONG, BS(
+      "Vannor ist der geborene Bibliothekar. Er hat einen kleinen Kneifer"
+     +" auf der Nase und traegt eine Kutte mit einer Kordel. Er ist von"
+     +" Kind auf schon Moench gewesen und hat sich voll und ganz der"
+     +" Wissenschaft verschrieben. Er tut den ganzen Tag nichts weiter"
+     +" als Buecher lesen und kopieren, um Wissen zu erhalten."));
+  AddDetail("kneifer", BS(
+            "Vannor traegt einen kleinen Kneifer auf der Nase."));
+  AddDetail("kordel", BS(
+            "Die Kordel dient wohl nur als Dekoration, denn mit dem dicken"
+           +" Bauch verliert Vannor seine Kutte sicher nicht."));
+  AddDetail("bauch", BS(
+            "Vannor trinkt wohl gern ab und zu ein Bier."));
+  AddDetail("kutte", BS(
+            "Vannor traegt eine braune schlichte Kutte, um die eine Kordel"
+           +" geschlungen ist."));
+  AddDetail("nase", BS(
+            "Vannor hat so wie fast ein jeder auch eine Nase."));
+  SetChats(3, ({
+           "Vannor sagt: Ich suche vergeblich ein verschollenes Rezept!\n",
+           "Vannor sagt: Hast Du das verschollene Rezept gesehen?\n",
+           "Vannor murmelt etwas ueber ein verschollenes Rezept.\n",
+           "Vannor kopiert in Windeseile eine Buchseite und grinst zufrieden.\n",
+           "Vannor huestelt verlegen.\n",
+           "Vannor blaettert eine Buchseite um.\n",
+           "Vannor gruebelt lange ueber das vor ihm liegende Buch nach.\n"
+           }));
+  SetProp(P_WEIGHT, 130000);
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_NAME, "Vannor");
+  SetProp(P_GENDER, MALE);
+  AddId(({"moench", "vannor"}));
+  create_default_npc(30);
+  SetProp(P_ALIGN, 800);
+  SetProp(P_MAX_HANDS, 2); 
+  SetProp(P_MAX_SP, 850);
+  SetProp(P_RACE, "Mensch");
+  SetProp(P_SIZE, 170);
+  SetProp(P_NOATTACK, "knurrt: Und wer soll den ganzen Stapel Buecher da noch kopieren?");
+  AddLibrary(NPC("npc.lib"), 5, 1);
+  SetProp(P_DEFAULT_INFO, "blaettert eine Buchseite um und beachtet Dich nicht.\n");
+ 
+  seteuid(getuid(this_object()));
+
+  RegisterGive("zettel", ({
+               ({"sag Hmm, Du willst naeheres drueber wissen? Zeig mal her.", 2}),
+               ({"sag Na ok, ich werde sehen was ich tun kann.", 3}),
+               ({"quest", 4}) }));
+  qinfo1=read_file(NPC("quest1.txt"));
+  qinfo2=read_file(NPC("quest2.txt"));
+  qinfo3=read_file(NPC("quest3.txt"));
+  qinfo4=read_file(NPC("quest4.txt"));
+  qinfo5=read_file(NPC("quest5.txt"));
+  qinfo6=read_file(NPC("quest6.txt"));
+
+  clone_object(ARMOUR("kutte"))->move(TO);
+  command_me("trage kutte");
+  clone_object(ARMOUR("kordel"))->move(TO);
+  command_me("trage kordel");
+  AddMoney(200+random(200));
+  add_action("q", "quest");
+  AddInfo(({"zutat", "zutaten", "rezept"}), #'recipe, "sagt: ");
+  AddInfo("vermaechtnis", #'legacy, "sagt: ");
+  AddInfo("hilfe", #'ivhelp, "sagt: ");
+  AddInfo(({"eisherz", "herz"}), #'heart, "sagt: ");
+  AddInfo(({"moospulver", "pulver", "moos"}), #'moss, "sagt: ");
+  AddInfo("fett", #'fat, "sagt: ");
+  AddInfo("behaelter", #'pot, "sagt: ");
+  AddInfo("schriften", "Schriften ueber Schriften, ich kopiere schon nichts mehr anderes. Aber"
+         +" Beruf ist Beruf...", "flucht: ");
+  AddInfo("beruf", "Ich kopiere Buecher, wie Du vielleicht schon festgestellt hast.", "sagt: ");
+  AddInfo("medizin", "Ich habe nur ein paar medizinische Buecher kopiert, ansonsten kenn ich"
+         +" mich damit nicht aus!", "sagt: ");
+  AddInfo(({"saufbecher", "becher", "meisterschaft", "saufmeisterschaft"}),
+          "Die Saufmeisterschaft, ich erinnere mich. Ich hab dazu nie Zeit, ich muss Buecher kopieren.", "sagt: ");
+  AddInfo("zeit", "Ich habe keine Zeit. Stoer mich nicht beim Buecherkopieren.", "sagt: ");
+  AddInfo(({"buecher", "buch", "buecherkopieren", "kopieren", "leben"}),
+          "Buecher kopiere ich den ganzen Tag lang. Buecher sind mein Leben.", "sagt: ");
+  AddInfo("tag", "Tagein, tagaus, nix als Buecher kopieren. Manchmal kann einem das ganz schoen"
+         +" auf die Nerven gehen...", "sagt: ");
+  AddInfo("nerven", "Ich habe Nerven wie Drahtseile, sonst wuerd ich den Beruf hier nicht"
+         +" mehr machen.", "sagt: ");
+  AddInfo(({"seile", "drahtseile"}), "Haettest Du solche Nerven wie ich, so wuerdest Du auch"
+         +" Buecher kopieren!", "grinst: ");
+  AddInfo(({"elsurion"}), "Elsurion ist ein Kraeuterhaendler in Tijara. Er ist auch ein begnadeter "
+      "Kraeutermischer.", "sagt: ");
+  AddInfo(({"tijara"}), "Dort gibt es bestimmt viele Buecher zum Kopieren.", "sagt: ");
+  AddInfo(({"mischer", "kraeutermischer"}), "Das waere nichts fuer mich. Ich kopiere lieber Buecher.", "sagt: ");
+  given_ob=0;
+}
+
+int zettel(object o) {
+  int ivory_questitems, i;
+  object *all_inv;
+  object b;
+  if (given_ob) {
+    command_me("sag Jetzt warte doch mal, ich bin noch mit jemand andrem beschaeftigt.");
+    give_obj(o, this_interactive());
+    return 0;
+  }
+  quester=this_interactive();
+  if (o->id(IV_RECIPE_UNID)) {
+    if (present(IV_QUEST_ITEM, quester)) {
+      command_me("sag Wieso gibst Du mir das Ding schon wieder? Ich habe Dir schon"
+                +" alles erklaert!");
+      give_obj(o, quester);
+      return 0;
+    }
+    if (quester->QueryQuest(IV_QUEST)) {
+      command_me("sag Ich bitte Dich, Du hast den Zettel doch schon deuten koennen!");
+      command_me("emote vernichtet den Zettel augenblicklich.");
+      o->remove();
+      return 0;
+    }
+    o->remove();
+    given_ob=1;
+    return 1;
+  }
+  if (o->id(IV_NOTEPAD)) {
+    if (!o->QueryCnt()) {
+      command_me("sag Der Notizblock ist doch leer! Erst bringen, wenn er voll ist.");
+      give_obj(o, quester);
+      return 0;
+    }
+    if (quester->QueryQuest(IV_QUEST)) {
+      command_me("sag Das Buch kenn ich doch schon, aber danke, ich stell es"
+                +" zu den andren als weitere Kopie.");
+      o->remove();
+      return 0;
+    }
+    o->remove();
+    o=clone_object(OBJ("zutaten"));
+    give_obj(o, quester);
+    given_ob=2;
+    return 1;
+  }
+  ivory_questitems=0;
+  if (o->id(IV_POT)) {
+    if (o->query_owner()!=getuid(quester)) {
+      command_me("Du bist nicht derjenige, der den Tiegel auch wirklich geholt hat!");
+      command_me("emote grummelt und wirft den Tiegel weg.");
+      o->move(ENV(TO));
+      return 0;
+    }
+    all_inv=all_inventory(o);
+    for (i=sizeof(all_inv)-1; i >= 0; i--) {
+      if (all_inv[i]->id(IV_MOSSPOWDER) || all_inv[i]->id(IV_FAT) ||
+          all_inv[i]->id(IV_HEARTPOWDER))
+      {
+        ivory_questitems++;
+      }
+    }
+    if (sizeof(all_inv)>3) ivory_questitems=0;
+    if (ivory_questitems != 3) {
+      command_me("sag Also, ich glaube da stimmt was mit den Zutaten nicht, wenn"
+                +" ich mich recht an die Rezeptur erinnere...");
+      give_obj(o, quester);
+      return 0;
+    }
+    if (quester->QueryQuest(IV_QUEST)) {
+      command_me("sag Den Tiegel hast Du mir schon gegeben. Nun solltest Du selber"
+                +" wissen, wie Du damit umgehen musst.");
+      give_obj(o, quester);
+      return 0;
+    }
+    if (b=deep_present(IV_QUEST_ITEM, quester))
+      b->set_flag(IV_GIVE_POT);
+    given_ob=3;
+    return 1;
+  }
+  if (o->id(IV_IMBUE)) {
+    b=deep_present(IV_QUEST_ITEM, quester);
+    if (!b) {
+      command_me("sag Irgendwas stimmt hier nicht. Du solltest einen Erzmagier"
+          +" verstaendigen.");
+      o->remove();
+      return 0;
+    }
+    if (!b->check_completed()) {
+      command_me("sag Du Cheater! Du kannst den Balsam gar nicht mit rechten"
+          +" Dingen bekommen haben! Ich habe natuerlich dem Sherriff"
+          +" eine Mail mit Deinem Namen geschickt, er wird sich um"
+          +" Dich kuemmern...");
+      o->remove();
+      return 0;
+    }
+    given_ob=4;
+    return 1;
+  }
+  command_me("sag Hm, damit kann ich eigentlich wenig anfangen.");
+  give_obj(o, quester);
+  return 0;
+}
+
+catch_tell(str) {
+  sequencer::catch_tell(str);
+  npc::catch_tell(str);
+}
+
+give_notify(ob) {
+  sequencer::give_notify(ob);
+  npc::give_notify(ob);
+}
+
+int q() {
+  object o,b;
+
+  switch (given_ob) {
+    case 1: (o=clone_object(OBJ("feder")))->move(TO); // feder gegeben
+	    o->start_quest(quester);
+	    o->set_flag(IV_QUEST_START);
+            command_me("sag "+qinfo1);
+            call_out("q1", 2, o, quester);
+//            call_out("pencil", 2, o, quester);
+            break;
+    case 2: command_me("sag "+qinfo2); // infos fuer rezept
+            call_out("q2", 2, 1, 4);
+            break;
+    case 3: command_me("sag "+qinfo5);
+            o=present(IV_POT, TO);
+            give_obj(o, quester);
+            given_ob=0;
+            break;
+    case 4: command_me("sag "+qinfo6);
+            o=present(IV_IMBUE, ME);
+            give_obj(o, quester);
+            call_out("q3", 2);
+//            here is the GiveQuest...
+              quester->GiveQuest(IV_QUEST);
+//            ab jetzt kann der balsam verwendet werden!
+            break;
+    default: command_me("sag Aeh irgendwas stimmt da nicht, Du hast mir"
+                       +" wohl was falsches gegeben.");
+             IV_LOGQUEST(getuid(quester), "Fehler bei Vannor, given_ob falsch");
+             break;
+  }
+  return 1;
+}
+
+string recipe() {
+  object f;
+  
+  f=present(IV_QUEST_ITEM, TP);
+  if (!f) {
+    call_out("command_me", 0, "emote seufzt.");
+    return "Wenn ich bloss wuesste wo ich dieses alte Rezept hingelegt hab. Ich hab es"
+          +" doch an einem sicheren Ort aufbewahrt! Ich bin dauernd beim Buecherkopieren,"
+          +" da wird man so leicht vergesslich...";
+  }
+  if (!f->check_flag(IV_GIVE_BOOK))
+    return "Ich weiss leider nicht, welche Zutaten man genau fuer das Vermaechtnis"
+          +" benoetigt, aber ich bin sicher, dass die Loesung in dem Buch"
+          +" zu finden ist, das ich schon seit langem suche.";
+  return "Ja, sehr wohl, Du brauchst fluessiges Fett, Moospulver"
+    +" und das Herz einer Eisschlange, das Du irgendwie noch zerkleinern musst."
+    +" Weiters benoetigst Du noch einen Tiegel, in dem"
+    +" man das ganze zusammenmischen kann.";
+}
+
+string legacy() {
+  if (TP->QueryQuest(IV_QUEST)) {
+    return "Du hast mir doch schon einmal bei der Zutatenliste geholfen! Hast"
+          +" Du Dir denn nichts davon gemerkt? "+recipe();
+  }
+  return "Ja, das Vermaechtnis der Tigergilde, nach dem bin ich auch auf der Suche."
+        +" Vielleicht moechtest Du mir ja dabei helfen.";
+}
+
+string ivhelp() {
+  if (TP->QueryQuest(IV_QUEST))
+    return "Du hast mir schon geholfen... Nun solltest Du wohl allein in der Lage sein,"
+          +" Dir einen Balsam zu mischen.";
+  if (!present(IV_QUEST_ITEM, TP))
+    return "Du musst mir schon das Rezept suchen, das ich verloren habe...";
+  return "Du hilfst mir doch schon! "+recipe();
+}
+
+
+void react(object to, string vic, string oth) {
+  if (present(to, ENV(TO))) {
+    tell_object(to, BS(Name(WER, 1)+" "+vic+"."));
+    tell_room(ENV(TO), BS(Name(WER, 1)+" "+oth+"."), ({to}));
+  }
+}
+
+void StartReaction(string verb, string gruppe, string adverb, int touch) {
+  if (find_call_out("react")!=-1)
+    return;
+  call_out("react", 0, TP, "schimpft: Wo hab ich bloss das verschollene Rezept liegenlassen",
+                           "schimpft: Wo hab ich bloss das verschollene Rezept liegenlassen");
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch) { 
+    return StartReaction(verb, gruppe, adverb, touch);
+}
+
+string heart() {
+  object f;
+  
+  f=present(IV_QUEST_ITEM, TP);
+  if (f && f->check_flag(IV_GIVE_BOOK))
+    return "Du benoetigst das Herz der Eisschlange. Wo sie sich genau befindet, kann ich"
+          +" Dir leider nicht genau sagen, aber ich denke mal, dass sie sich dort aufhalten"
+          +" wird, wo sie sich wohl fuehlt, also eher dort wo es kalt ist. Ich habe von"
+          +" einem Xandim, der hier einmal bei Heriolf auf ein Bier war, gehoert, dass"
+          +" er schon so ein Tier gesehen hat.";
+  return "Ich habe zwar davon schon mal in einem Buch gelesen, kann mich jedoch nicht mehr daran"
+        +" erinnern...";
+}
+
+string moss() {
+  object f;
+  
+  f=present(IV_QUEST_ITEM, TP);
+  if (f && f->check_flag(IV_GIVE_BOOK))
+    return "Eine weitere Zutat fuer den Balsam ist Moospulver. Es gibt ganze Buecher ueber"
+      +" die Herstellung von Moospulver, aber eigentlich steht in allen nur drin, dass man"
+      +" als Grundzutat Moos benoetigt. Und Moos findet sich ueblicherweise dort, wo es"
+      +" feucht beziehungsweise nass ist...";
+  return "Ich habe zwar davon schon mal in einem Buch gelesen, kann mich jedoch nicht mehr daran"
+        +" erinnern...";
+}
+
+string fat() {
+  object f;
+  
+  f=present(IV_QUEST_ITEM, TP);
+  if (f && f->check_flag(IV_GIVE_BOOK))
+    return "Ah, Du meinst das Fett, das als Zutat erwaehnt wird? Nunja, es gibt nur einige"
+      +" alte Ueberlieferungen, dass man Fett hauptsaechlich in Kuechen verwendet, alternativ"
+      +" werden aber auch einige Fackeln oder Lampen mit fluessigem Fett betrieben.";
+  return "Ich habe zwar davon schon mal in einem Buch gelesen, kann mich jedoch nicht mehr daran"
+        +" erinnern...";
+}
+
+string pot() {
+  object f;
+  
+  f=present(IV_QUEST_ITEM, TP);
+  if (f && f->check_flag(IV_GIVE_BOOK))
+    return "Behaelter, Behaelter, lass mich mal nachdenken... Irgendwo wird in den alten"
+      +" Schriften zum Vermaechtnis ein spezieller Behaelter erwaehnt, der auch in der"
+      +" Medizin oft eine grosse Rolle spielt. Eventuell fragst Du mal den alten Apotheker"
+      +" danach, ach nein, der ist ja schon lange tot :( aber vielleicht findest Du ja in"
+      +" seiner Apotheke noch etwas brauchbares.";
+  return "Ich habe zwar davon schon mal in einem Buch gelesen, kann mich jedoch nicht mehr daran"
+        +" erinnern...";
+}
+
+void q1(object what, object where) {
+  what->move(where, M_GIVE|M_NOCHECK);
+  say(ME->Name(WER)+" gibt "+where->name(WEM)+" "+
+      what->name(WEN)+".\n", where );
+  if (living(where))
+    tell_object(where, ME->Name(WER,1)+" gibt Dir "+what->name(WEN)+".\n");
+  given_ob=0;
+}
+
+void q2(int state) {
+  object b;
+  int next_time;
+
+  switch (state) {
+    case 1: command_me("emote gruebelt lange nach."); next_time=14; break;
+    case 2: command_me("sag "+qinfo3); next_time=20; break;
+    case 3: command_me("emote kratzt sich verzweifelt am Kopf."); next_time=18; break;
+    case 4: command_me("sag "+qinfo4);
+            next_time=0;
+            if (b=deep_present(IV_QUEST_ITEM, quester))
+              b->set_flag(IV_GIVE_BOOK);
+            given_ob=0;
+            break;
+    default:
+  }
+  if (next_time)
+    call_out("q2", next_time, ++state);
+}
+
+void q3() {
+  object b;
+
+  command_me("sag Ach ja, und bei der Gelegenheit nehm ich mir gleich"
+      +" wieder meine Schreibfeder von Dir zurueck ;)");
+  if (b=deep_present(IV_QUEST_ITEM, quester))
+    b->remove();
+  given_ob=0;
+}
+

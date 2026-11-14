@@ -1,0 +1,110 @@
+#include <wizlevels.h>
+#include <language.h>
+#include <config.h>
+#include <new_skills.h>
+#include <mnpc.h>
+#include <moving.h>
+#include <properties.h>
+#include <wizlevels.h>
+#include <defines.h>
+#include <moredef.h>
+#include <class.h>
+#define CODES "/d/ebene/Midas/save/tombola_codes"
+#define WINNERS "/d/ebene/Midas/save/tombola_winners"
+#define LOG "/d/ebene/Midas/log/tombola.log"
+
+
+//Globale Variablen
+mixed saveload;
+nosave string *tcodes=({});
+nosave mapping twinners=([]);
+
+
+
+void create() 
+{
+  SUID;
+  if (restore_object(CODES))
+     tcodes=saveload;
+  if (restore_object(WINNERS))
+     twinners=saveload;
+  saveload=0;
+}
+
+/*
+  saveload=killed_paladin_list;
+  save_object(SACRIFICE_LIST);
+  saveload=0;
+  */
+
+
+int AddCode(string str) {
+  if(member(tcodes,str)!=-1) {
+    return -1;
+  }
+  tcodes+=({str});
+  saveload=tcodes;
+  save_object(CODES);
+  saveload=0;
+  return 1;
+}
+
+int RemoveCode(string str) {
+  if(member(tcodes,str)==-1) {
+    return -1;
+  }
+  tcodes-=({str});
+  saveload=tcodes;
+  save_object(CODES);
+  saveload=0;
+  return 1;
+}
+
+int AddWinner(object pl, string tcode,int duration) {
+  string pl_uuid;
+  pl_uuid=getuuid(pl);
+  if(member(twinners, pl_uuid)) {
+    write_file(LOG,sprintf("%s: %s ist bereits im winners file\n", 
+          dtime(time()), pl->Name(WER)));
+    return -1;
+  }
+  if(member(tcodes, tcode)==-1) {
+    write_file(LOG,sprintf("%s: %s gibt einen UNGUELTIGEN Code ein (%s)\n", 
+          dtime(time()), pl->Name(WER),tcode));
+    return -2;
+  }
+  write_file(LOG,sprintf("%s: %s gibt einen gueltigen Code ein (%s)\n", 
+          dtime(time()), pl->Name(WER),tcode));
+  RemoveCode(tcode);
+  twinners+=([pl_uuid:time()+duration]);
+  saveload=twinners;
+  save_object(WINNERS);
+  saveload=0;
+  return 1;
+}
+
+int RemoveWinner(object pl) {
+  string pl_uuid;
+  pl_uuid=getuuid(pl);
+  if(!member(twinners, pl_uuid)) 
+    return -1;
+  twinners=m_delete(twinners, pl_uuid);
+  write_file(LOG,sprintf("%s: %s wird als Gewinner entfernt!\n", 
+          dtime(time()), pl->Name(WER)));
+  saveload=tcodes;
+  save_object(CODES);
+  saveload=0;
+  return 1;
+}
+
+int CheckWinner(object pl) {
+  string pl_uuid;
+  pl_uuid=getuuid(pl);
+  if(!member(twinners, pl_uuid)) 
+    return -1;
+  if(time() > twinners[pl_uuid]) {
+    RemoveWinner(pl);
+    return -2;
+  }
+  return 1;
+}

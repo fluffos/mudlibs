@@ -1,0 +1,545 @@
+/*
+ Dungeon master
+ Iwo@SL
+*/
+ 
+#pragma strong_types
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <defines.h>
+#include <wizlevels.h>
+#include <moredef.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <ansi.h>
+
+#include "../def.h"
+
+#include "../functions/debug.lpc"
+
+
+#define M_START 0
+#define M_END 1
+#define M_NPCS 2
+#define M_HEALS 3
+#define M_TRAPS 4
+
+#define M_ACTIVE 5
+#define M_LASTRESET 6
+#define M_MAP 7
+#define M_ROOMS 8
+
+mapping maps = ([]);
+
+int started;
+
+// Ok, time to build the object
+void create()
+{
+  // No Copy of this object should exist
+  if( is_clone(TO) ) return;
+  ::create();
+
+
+  // set euid
+  seteuid(getuid(TO));  
+  restore_object(DUNGMASTER);
+
+  started = 0;
+}
+
+
+
+string Z2Map(int z)
+{
+  return DUNGMAP(sprintf("map%d.asc", z));
+}
+
+
+
+string Coord2Room(int x, int y, int z)
+{
+  return sprintf("room:%d:%d:%d", x, y, z);
+}
+
+
+
+int ShowMap(int z)
+{
+  if (!member(maps, z)) return 0;
+  tell_object(TP, implode(maps[z,M_MAP],"\n")+"\n");
+  tell_object(TP, sprintf("Rooms: %O  Npcs: %O\nTraps: %O  Heals: %O\nStart: %O  End: %O\nReset: %O\n",
+                    sizeof(maps[z,M_ROOMS]), maps[z,M_NPCS], maps[z,M_TRAPS], maps[z,M_HEALS],
+		    maps[z,M_START], maps[z,M_END], maps[z,M_LASTRESET]));
+  return 1;
+}
+
+
+// Extract all rooms from a map
+mixed QueryRooms(int z)
+{
+  string *rooms;
+  int x,y;
+
+  rooms = ({});
+
+  // Fetch all rooms
+  for (y=0;y<sizeof(maps[z,M_MAP]);y++)
+    for (x=0;x<strlen(maps[z,M_MAP][y]);x++)
+      if (strstr("oDGU", maps[z,M_MAP][y][x..x])>-1)
+        rooms += ({ sprintf("room:%d:%d:%d", x, y, z) });
+
+  if (sizeof(rooms)<0) raise_error("No rooms");
+  
+  return rooms;
+}
+
+
+
+void LoadMap(int z)
+{
+  string str_read;
+  string *a_read;
+  string *helper;
+  string *rooms;
+  int x,y;
+  int i;
+
+  if (z<1 || z >100) return;
+
+  helper = ({});
+  
+  // Read Mapfile
+  if (!str_read = read_file(Z2Map(z)))
+    {
+      // MYDEBUG
+      // Map can't be read - load default map
+      if (!str_read = read_file(Z2Map(1))) raise_error("No maps available");
+    }
+    
+  a_read = explode(str_read, "\n");
+
+  // Fetch Map settings
+  for (i=0;i<sizeof(a_read);i++)
+    {
+      // Map data
+      if (a_read[i][0..0]==":")
+        {
+	  maps[z,M_MAP] += ({ a_read[i] });
+	  continue;
+	}
+      // Parse header
+      helper = explode(a_read[i], ":");
+      switch(helper[0])
+        {
+          case "START":
+	    maps[z,M_START] = sprintf("room:%s:%d",implode(explode(helper[1],","),":"),z); 
+	    break;
+	  case "END":
+	    maps[z,M_END] = sprintf("room:%s:%d",implode(explode(helper[1],","),":"),z);
+	    break;
+	  case "NPCS":
+	    maps[z,M_NPCS] = to_int(helper[1]);
+	    break;
+	  case "HEALPOINTS":
+	    maps[z,M_HEALS] = to_int(helper[1]);
+	    break;
+	  case "TRAPS":
+	    maps[z,M_TRAPS] = to_int(helper[1]);
+	    break;
+	  default: break;
+	}
+    }
+
+
+  call_out("LoadRooms", 0, z);
+
+  return;
+}
+
+
+void LoadRooms(int z)
+{
+  maps[z, M_ROOMS] = QueryRooms(z);
+}
+
+
+int SetNpcLvl(int z)
+{
+  return DUNGNPCMINLVL+random(5)+z;
+}
+
+
+string QueryField(int x, int y, int z)
+{
+
+  return maps[z,M_MAP][y][x..x];  
+}
+
+mixed QuerySurround(int x, int y, int z)
+{
+  // Array will keep near fields
+  //   701
+  //   6X2
+  //   543
+  string *surr;
+
+  surr = ({ QueryField( x+0 , y-1 , z ), // Nord
+            QueryField( x+1 , y-1 , z ), // Nordost
+	    QueryField( x+1 , y+0 , z ), // Ost
+	    QueryField( x+1 , y+1 , z ), // Suedost
+	    QueryField( x+0 , y+1 , z ), // Sued
+	    QueryField( x-1 , y+1 , z ), // Suedwest
+	    QueryField( x-1 , y+0 , z ), // West
+	    QueryField( x-1 , y-1 , z ), // Nordwest
+         });
+
+  return surr;
+}
+
+string Int2Dir(int value)
+{
+  string *dirs;
+  
+  dirs = DUNGDIRARR;
+  
+  if (value>sizeof(dirs)) return "BUGGYEXIT";
+  	    
+  return dirs[value];
+}
+
+
+mixed Dir2Exit(int dir, int x, int y, int z, int guarded)
+{
+  string *dirs;
+  if (dir > sizeof(DUNGDIRMAP)) return ([ "BUGGYEXIT":"BUGGYEXIT"]);
+
+  dirs = DUNGDIRARR;
+
+  if (guarded)
+    // GUARDED EXIT
+    return ([ dirs[dir]: ([EX_DEST:  DUNGROOM(sprintf("%s",
+                                       Coord2Room(
+                                         DUNGDIRMAP[dirs[dir], 0] + x,
+                                         DUNGDIRMAP[dirs[dir], 1] + y,
+                                         DUNGDIRMAP[dirs[dir], 2] + z))),
+                           EXG_ID:  "\ndungguard",
+                           EXG_PLMSG: "Du wirst nicht vorbeigelassen.\n",
+                           EXG_RMMSG: "@Wer@ wird nicht vorbeigelassen.\n"])]); 
+                                   
+  // NORMAL EXIT
+  return ([ dirs[dir]: DUNGROOM(sprintf("%s",
+                         Coord2Room(DUNGDIRMAP[dirs[dir], 0] + x,
+                            DUNGDIRMAP[dirs[dir], 1] + y,
+                            DUNGDIRMAP[dirs[dir], 2] + z)))
+         ]);
+}
+
+
+string QueryLong(int x, int y, int z)
+{
+  return DUNGINTLONG[random(sizeof(DUNGINTLONG))];
+}
+
+
+int NeedsGuard(int x, int y, int z)
+{
+  if (QueryField(x,y,z)== "G")
+    return 1;
+  return 0;    
+}
+
+
+string QueryShort(int x, int y, int z)
+{
+  return sprintf("%s auf Ebene %d", DUNGINTSHORT, z);
+}
+
+
+
+string NextLevelStart(int dunglvl)
+{
+  string start;
+  if (!member(maps, dunglvl+1)) raise_error("No Next Level");
+
+  start = maps[dunglvl+1,M_START];
+ 
+  return DUNGROOM(start);
+}
+
+
+string PrevLevelEnd(int dunglvl)
+{
+  string end;
+  
+  if (dunglvl == 1) return sprintf("%seingang3", DUNGPATH);
+
+  end = maps[dunglvl-1,M_END];
+
+  return DUNGROOM(end);
+}
+
+
+
+
+
+int startup()
+{
+  int z;
+
+  if (started) return 0;
+  
+  // Clear maps
+  maps = ([]);
+  
+  for (z=1;z<100;z++)
+    {
+      maps += ([z: 0; 0; 0; 0; 0; 0; 0; ({}); ({}); 0; 0,]);
+      call_out("LoadMap", 0 , z);
+    }
+
+  call_out("ResetCheck", 30);
+
+  started = 1;
+
+  return 1;
+}
+
+
+mixed save()
+{
+  return save_object(DUNGMASTER);
+}
+
+
+
+mixed GiveExits(int x, int y, int z)
+{
+  int i;
+  string *surr;
+  mapping m_exits;
+  int hx, hy, hz;
+  object guard;
+  
+  m_exits = ([]);
+  
+  surr = QuerySurround(x,y,z);
+
+
+  for (i=0;i<sizeof(surr);i++)
+    {
+      if (surr[i]==":") continue;
+      if (strstr(DUNGDIRVALIDSYM[i], surr[i])!=-1)
+        if (strstr("<>^v", surr[i])==-1)
+          m_exits += Dir2Exit(i, x, y, z, 0); // NORMAL EXIT
+        else
+          m_exits += Dir2Exit(i, x, y, z, 1); // GUARDED EXIT
+    }
+
+  switch(QueryField(x,y,z))
+    {
+      case "U":
+        if (z<=1)
+          m_exits += ([ "oben": DUNGROOM("../eingang3"), ]);
+        else
+          m_exits += ([ "oben": DUNGROOM( sprintf("%s", maps[z-1,M_END]) ) ]);
+	break;
+      case "D":
+        if (z<100)
+          m_exits += ([ "unten": ([EX_DEST: "/room/void",
+                                   EX_TESTFUNC: "MayDescend",
+                                   EX_FUNC: "Descend"])]); 
+        break;
+    }
+
+  return m_exits;
+}
+
+
+
+
+int InitMap(int z)
+{
+  if (maps[z,M_ACTIVE]==1) return 0;
+
+  // Place NPCs
+  call_out("InitNpc", 0, z);
+
+  // Set Traps
+  call_out("SetTraps", 0, z);
+  
+  // Set Heals
+  call_out("SetHeals", 0, z);
+
+  maps[z,M_ACTIVE] = 1;
+
+  maps[z,M_LASTRESET] = time();
+
+  return 1;
+}
+
+
+void SetTraps(int z)
+{
+  int i;
+  int num_traps;
+  string *rooms;
+  string room;
+  
+  rooms = maps[z,M_ROOMS];
+  
+  while (num_traps < maps[z,M_TRAPS])
+    {
+      room = rooms[random(sizeof(rooms))];
+      rooms -= ({ room });
+      call_other(DUNGROOM(room), "AddTrap");
+      num_traps++;
+    }
+
+  return; 
+}
+
+
+void SetHeals(int z)
+{
+  int i;
+  int num_heals;
+  string *rooms;
+  string room;
+  
+  rooms = maps[z,M_ROOMS];
+  
+  while (num_heals < maps[z,M_HEALS])
+    {
+      room = rooms[random(sizeof(rooms))];
+      rooms -= ({ room });
+      call_other(DUNGROOM(room), "AddHeal");
+      num_heals++;
+    }
+
+  return; 
+ 
+}
+
+
+// This loads exit and entrance
+mixed LoadInOut(int z)
+{
+  string start, end;
+  
+  start = maps[z,M_START];
+  end = maps[z,M_END];
+  
+  call_other(DUNGROOM(start), "???");
+  call_other(DUNGROOM(end), "???");
+}
+
+
+
+void InitNpc(int z)
+{
+  int npcs;
+  object ob_npc, ob;
+  int i;
+  int crystals;  
+  int lvl;
+  string dungnpc, dungcrystal;
+  
+  npcs  = 0;
+  lvl = z+DUNGNPCMINLVL;
+  dungnpc = DUNGNPC("npc");
+  dungcrystal = DUNGOBJ("crystal");
+  
+  // Normal NPCs
+  while(npcs < maps[z,M_NPCS])
+    {
+      ob_npc = clone_object(dungnpc);
+      ob_npc->SetNpcLvl(lvl);
+      ob_npc->move(DUNGROOM( sprintf("%s",maps[z,M_ROOMS][random(sizeof(maps[z,M_ROOMS]))]) ), M_GO);
+      if (crystals < 8)
+        {
+          ob = clone_object(dungcrystal);
+          ob->move(ob_npc, M_NOCHECK);
+          ob->SetColor(z, DUNGCRYSTALCOLORS[crystals]);
+          crystals++;
+        }
+      npcs++;
+    }
+  
+  return;  
+}
+
+
+
+void ResetCheck()
+{
+  int z;
+
+  mydb( ({ "ResetCheck" }) );
+  
+  for (z=0;z<sizeof(maps);z++)
+    {
+      if (maps[z,M_LASTRESET]+3600+144*z < time() && maps[z,M_ACTIVE])
+        {
+	  mydb( ({ sprintf("Reset: %d", maps[z,M_LASTRESET]+3600+144*z) }));
+          call_out("UnLoadMap", 0, z);
+        }
+    }
+
+  while(find_call_out("ResetCheck") != -1)
+    remove_call_out("ResetCheck");
+
+  call_out("ResetCheck", 600);
+}
+
+
+void UnLoadMap(int z)
+{
+  int i;
+  string room;
+  object ob;
+  
+  mydb( ({ sprintf("UnloadMap (%d)", z) }) );
+  
+  for (i=0;i<sizeof(maps[z,M_ROOMS]);i++)
+    {
+      room = maps[z,M_ROOMS][i];
+      if (!ob=find_object(DUNGROOM(room))) continue;
+      if (present("Interactive", ob)) continue;
+      call_other(ob, "remove");
+    }
+
+  maps[z,M_ACTIVE] = 0;
+}
+
+
+int IsActive (int z)
+{
+  return maps[z,M_ACTIVE];
+}
+
+
+int DeactivateMap(int z)
+{
+  maps[z,M_ACTIVE] = 0;
+  return 1;
+}
+
+int DestructMap(int z)
+{
+  notify_fail("Keine solche Karte!\n");
+  if (!member(maps, z))
+    return 0;
+
+  notify_fail("Diese Karte ist gerade aktiv!\n");
+  if (IsActive(z)) return 0;
+
+  mydb( ({ sprintf("Karte %d entladen!\n", z) }));
+
+  return 1;
+}
+

@@ -1,0 +1,577 @@
+/****************************************************************************
+ seil_raum.c, (C) 2002 by Carador for Silberland
+****************************************************************************/
+
+#pragma strong_types
+#include "../def.h"
+#include <verben.h>
+
+inherit RD_ROOM;
+
+mapping entered;
+
+private object query_oben()
+{
+  return RD_TOOLS->load_object(RD_ROOMDIR"r1");
+}
+
+public object query_unten()
+{
+  object wolke,unten;
+  wolke = RD_TOOLS->load_object(RD_OBJDIR"wolke");
+  unten = environment(wolke);
+  if (!unten) {
+    wolke->move(RD_WOLKENSTART, M_NOCHECK);
+    unten = environment(wolke);
+  }
+  return unten;
+}
+
+string query_unten_raum()
+{
+  object unten;
+  unten = query_unten();
+  if (is_clone(unten)) return RD_WOLKENSTART;
+  return RD_TOOLS->program_name(unten);
+}
+
+status is_seil_unten()
+{
+  object unten;
+  unten = query_unten();
+  if (!unten) return 0;
+  if (present("\nridu#seil_unten", unten)) return 1;
+  return 0;
+}
+
+status is_seil_raum()
+{
+  return 1;
+}
+
+status is_seil_oben()
+{
+  if (present("\nridu#seil_oben", query_oben())) return 1;
+  return 0;
+}
+
+private mixed unten_test() {
+  if (is_seil_unten()) return 1;
+  message("\
+Huihui, lieber nicht, denn unterhalb von Dir ist kein Seil. Und Du moechtest \
+doch sicher nicht runterfallen.");
+  return 0;
+}
+
+private status xaver_armour(object ob)
+{
+  return ob->id("lederstiefel") || ob->id("arbeitshemd");
+}
+
+private status no_xaver_armour(object ob)
+{
+  return !xaver_armour(ob) &&
+         !ob->QueryProp(P_NODROP) &&
+         !ob->QueryProp(P_NEVERDROP);
+}
+
+private mixed oben_test() {
+  object ridu, korb;
+  object *arm, *falsch, *richtig, wea;
+  mixed msg;
+
+  if (!is_seil_oben()) {
+    message("\
+Huihui, lieber nicht, denn oberhalb von Dir ist kein Seil. Und fliegen kannst \
+Du leider nicht. Zumindest nicht nach oben.");
+    return 0;
+  }
+
+  ridu = find_object(RD_NPCDIR"ridu");
+  if (!ridu) return 1;     // kein Ridu, als darf man einfach hoch
+  ridu->walk_to(1,1);      // raumnummer, forceflag
+  if (!present("\nridu#ridu", query_oben())) return 1;  // wo isser bloss?
+
+  arm = this_player()->QueryArmours();
+  richtig = filter_array(arm, #'xaver_armour);
+  falsch = filter_array(arm, #'no_xaver_armour);
+
+  msg = ({});
+
+  if (sizeof(richtig) < 2) {
+    if (!sizeof(richtig))
+      msg += ({ "Xaver hat Lederstiefel und ein Arbeitshemd an, an Dir sehe "
+                "ich nichts von beidem." });
+    else
+      msg += ({ "Xaver hat Lederstiefel und ein Arbeitshemd an, an Dir sehe "
+                "ich nur ", M_AKK, richtig[0], "." });
+  }
+
+  wea = this_player()->QueryProp(P_WEAPON);
+
+  if (!wea) 
+    msg += ({ " Und Xaver hat eine gezueckte Mistgabel, die ich an Dir "
+              "komplett vermisse." });
+  else if (!wea->id("mistgabel"))
+    msg += ({ " Und Xaver hat eine gezueckte Mistgabel und nicht ",
+                M_AKK, wea, "." });
+
+  if (sizeof(falsch)) msg += ({ " Hey, ", M_AKK, falsch, "habe ich an Xaver noch nie "
+        "gesehen!" });
+
+  if (!present("milchkanne", this_player()))
+    msg += ({ " Wenn Du Xaver sein willst, wo ist dann Deine Milchkanne? "
+              "Hmm?" });
+   
+
+  if (sizeof(msg)) {
+    msg = ({ "Hey, was willst Du denn hier? Verschwinde. Ich "
+             "warte hier auf Xaver." }) + msg +
+          ({ "Demzufolge kannst Du nicht Xaver sein!" });
+
+    message(({
+      ({ M_WRITE, "Du kletterst und kletterst weiter nach oben. Bald siehst "
+         "Du oben etwas Grosses, Dunkles und Hoelzernes naeherkommen, was "
+         "sich bald als die Unterseite eines Schiffsrumpfes herausstellt." }),
+      ({ M_WRITE, "Als Du gerade auf der Hoehe der Reling anlangst, bemerkst "
+         "Du jemanden oben stehen und hoerst ihn lauthals schimpfen: " }) + msg,
+      ({ M_ROOM, query_oben(), "Ridu schaut ueber die Reling nach unten "
+         "und faengt lauthals an zu schimpfen: " }) + msg,
+      ({ M_WRITE, "Eine kraeftige Hand stoesst Dich nach unten und Du "
+         "rutschst ein ganzes Stueck nach unten, bevor Du Dich wieder "
+         "festhalten kannst." }) }));
+    return 0;
+  }
+  if (!(korb = present("weidenkorb", this_player()))) {
+#define RIDU_NOXAVER2 "\
+Mensch Xaver, Servus. Haste wohl Deinen Weidenkorb vergessen? Oder gab's \
+heute keine Pferdeaepfel im Pferdestall? Auf jeden Fall brauche ich dringend \
+frische Pferdeaepfel. Bitte geh sofort und hol mir welche!"
+    message(({
+      ({ M_WRITE, "Fix kletterst Du am Seil nach oben, bis Du an der Reling "
+         "des Schiffs angelangt bist, oben angekommen hoerst Du eine "
+         "vertraute Stimme: "RIDU_NOXAVER2 }),
+      ({ M_ROOM, query_oben(), "Ridu schaut ueber die Reling und ruft "
+         "nach unten: "RIDU_NOXAVER2 }),
+      ({ M_WRITE, "Eine kraeftige Hand schubst Dich wieder nach unten." })
+    }));
+    return 0;
+  }
+
+  if (!present("pferdeapfel", korb)) {
+#define RIDU_NOXAVER3 "\
+Na mit einem leeren Korb brauchst Du mir nicht kommen. Ich brauche \
+unbedingt neue Pferdeaepfel!"
+    message(({
+      ({ M_WRITE, "Wieselflink kletterst Du am Seil nach oben, bis "
+         "Dich an der Reling eine Stimme bremst: "RIDU_NOXAVER3 }),
+      ({ M_ROOM, query_oben(), "Ridu schaut ueber die Reling und ruft "
+         "nach unten: "RIDU_NOXAVER3 }),
+      ({ M_WRITE, "Eine kraeftige Hand schubst Dich wieder nach unten." })}));
+    return 0;
+  }
+
+#define RIDU_YEAHXAVER "\
+Spitze, Xaver, da bist Du ja, komm schnell hoch und gib mir die \
+Aepfel aus Deinem Korb! Hab ich Dir eigentlich schonmal erzaehlt, \
+warum ich die Pferdeaepfel brauche?"
+  
+  message(({
+    ({ M_WRITE, "Du bist noch gar nicht ganz oben, da hoerst Du schon "
+       "eine Stimme rufen: "RIDU_YEAHXAVER }),
+    ({ M_ROOM, query_oben(), "Ridu schaut ueber die Reling und ruft "
+       "nach unten: "RIDU_YEAHXAVER }),
+    ({ M_WRITE, "Fix kletterst Du ueber die Reling." })
+  }));
+  return 1;
+}
+
+private string my_long()
+{
+  string desc;
+ 
+  desc = "\
+Du haengst jetzt irgendwie in der Luft. Nicht im uebertragenen Sinn, sondern \
+woertlich, was viel schlimmer ist. Um Dich herum ist nichts als weisser Nebel \
+und das Seil an dem Du haengst. ";
+
+  if (is_seil_unten()) desc = desc + "\
+Na gut, ganz so schlimm ist es doch nicht, denn Du koenntest einfach wieder \
+am Seil nach unten klettern. ";
+  else if (is_seil_oben()) desc = desc + "\
+Na gut, ganz so schlimm ist es doch nicht, denn Du koenntest einfach wieder \
+am Seil nach oben klettern. ";
+  else desc = desc + "\
+Hmm, eigentlich ist es voellig unlogisch, dass ein kurzes Stueck Seil, das \
+weder unten noch oben festgemacht ist, einfach so in der Luft bleibt. Aber \
+es ist sicher besser fuer Deine Gesundheit, dass das Seil mit der Logik auf \
+dem Kriegsfuss steht und eine Vorlesung ueber 'Einfuehrung in die Logik I' \
+solltest Du jetzt auch nicht halten. ";
+  return break_string(desc, 78);
+}
+
+private string seil_long()
+{
+  string da, weg;
+  if (!is_seil_oben() && !is_seil_unten()) return "\
+So, nun haengst Du also hier an einem kurzen Stueck Seil im nebligen Himmel. \
+Unterhalb von Dir nichts und oben erst recht nicht. Also insbesondere kein \
+Seil, um dran rauf oder runterzuklettern. Hoffentlich hast Du jetzt eine \
+Idee.";
+  if (is_seil_unten()) {
+     da = "unten";
+     weg = "oben";
+  } else { 
+     da = "oben";
+     weg = "unten";
+  }
+ 
+return "\
+Ist schon seltsam, das Seil ist nirgends festgebunden, es endet einfach so \
+hier in der Luft. Es ist, als ob es von einer unsichtbaren Kraft festgehalten \
+werden wuerde. Gut, wenn Du nach "+da+" willst, ist es kein Problem. Aber \
+solltest Du eigentlich lieber nach "+weg+" wollen, so koennte es schwierig \
+werden. Ob es da hilfreich ist, dass Dir gerade die Geschichte von dem \
+einfaellt, dessen Seil zu kurz war und er es daraufhin "+da+" abgeschnitten und \
+"+weg+" rangebunden hat, bleibt fraglich.";
+}
+
+
+private void seil_inv_check(object o)
+{
+  if (o->id("seil")) {
+    message("Ein ploetzlicher Windstoss erfasst Dein Seil und weht es davon");
+    o->move(this_object(), M_PUT);
+    o->remove(o);
+  }
+}
+
+void init()
+{
+  RD_ROOM::init();
+  if (is_seil_unten() || is_seil_oben())
+    filter_array(all_inventory(this_player()), #'seil_inv_check);
+
+  entered[this_player()->query_real_name()] = time();
+  if (find_call_out("kraft_loop") < 0) call_out("kraft_loop", 20);
+}
+
+void create()
+{
+  RD_ROOM::create();
+  
+  entered = ([]);
+
+  SetProp(P_RD_RIDU_AREA,1);
+  SetProp(P_LIGHT, 1);
+  SetProp(P_INT_SHORT, "Am Seil");
+  SetProp(P_INT_LONG, #'my_long);
+  AddExit("oben", ([ EX_DEST:RD_ROOMDIR"r1",
+                     EX_TESTFUNC:#'oben_test ]));
+  AddExit("unten", ([ EX_FUNC:#'query_unten_raum,
+                      EX_TESTFUNC:#'unten_test ]));
+  AddDetails(({
+    "wolke", #'my_long,
+    "himmel", "So schlimm isses noch nicht, dass Du schon befuerchten "
+              "muesstest, gleich in den Himmel zu kommen.",
+    "seil", #'seil_long,
+    ({ "nebel", "weissen nebel" }), "\
+Der Nebel erinnert Dich an ein Bild, das Du mal gesehen hast, und zwar hiess \
+das: 'Weisse Katze im Schnee'.",
+    "luft", "Die Luft hier oben ist echt gut. Du hast vielleicht Nerven, "
+       "Dich jetzt und hier fuer Luft zu interessieren.",
+    "schiff", "Na ob da jetzt Deine Fantasie nicht mit Dir durchgeht? Ein "
+       "Schiff? In der Wolke?"
+  }));
+
+  AddDetailAction("seil", ({ "ziehe <me>", "ziehe an <me>", "ziehe am <me>",
+    "zieh <me>", "zieh an <me>", "zieh am <me>" }), "ziehe_seil", "\
+Liebe nicht, nicht dass es sich loest und Du runterfaellst.");
+  AddDetailAction(
+    "seil", 
+     ({ "schneide <me> oben ab", "schneide <me> oberhalb ab",
+        "schneid <me> oben ab", "schneid <me> oberhalb ab" }),
+     "schneide_oben"
+  );
+  AddDetailAction(
+    "seil", 
+     ({ "schneide <me> unten ab", "schneide <me> unterhalb ab",
+        "schneid <me> unten ab", "schneid <me> unterhalb ab" }),
+     "schneide_unten"
+  );
+  AddErrorMessage("schneide", "\
+Du koenntest das Seil oberhalb oder unterhalb abschneiden, also ganz einfach \
+'schneide seil unterhalb ab'.");
+  AddErrorMessage("schneid", "\
+Du koenntest das Seil oberhalb oder unterhalb abschneiden, also ganz einfach \
+'schneide seil unterhalb ab'.");
+
+  AddRule("ruf nach oben <text>", "ruf_oben");
+  AddRule("rufe nach oben <text>", "ruf_oben");
+  AddRule("ruf nach unten <text>", "ruf_unten");
+  AddRule("rufe nach unten <text>", "ruf_unten");
+  AddRule("binde <object> oben an", "binde_oben");
+  AddRule("binde <object> oberhalb an", "binde_oben");
+  AddRule("binde <object> unten an", "binde_unten");
+  AddRule("binde <object> unterhalb an", "binde_unten");
+  AddRule("binde <object> oben ran", "binde_oben");
+  AddRule("binde <object> oberhalb ran", "binde_oben");
+  AddRule("binde <object> unten ran", "binde_unten");
+  AddRule("binde <object> unterhalb ran", "binde_unten");
+  AddErrorMessage("binde", "\
+Du koenntest das Seil - vorausgesetzt Du hast eins bei Dir - oberhalb oder \
+unterhalb des Stueckes Seil, an dem Du haengst, ranbinden, um es in diese \
+oder jene Richtung zu verlaengern, also 'binde seil unterhalb an'.");
+  AddCmd(CMD_NEHMEN+({ "leg", "lege" }), "nimms_nicht");
+  AddRule("glaube <text>", "glaube_fliegen", RD_LIBDIR"mover");
+  AddRule("glaub <text>", "glaube_fliegen", RD_LIBDIR"mover");
+  AddRule("meditier", "meditiere", RD_LIBDIR"mover");
+  AddRule("meditiere", "meditiere", RD_LIBDIR"mover");
+  AddRule("meditier <text>", "meditiere", RD_LIBDIR"mover");
+  AddRule("meditiere <text>", "meditiere", RD_LIBDIR"mover");
+  AddErrorMessage("glaub","Moechtest Du vielleicht ans Fliegen glauben?");
+  AddErrorMessage("glaube","Moechtest Du vielleicht ans Fliegen glauben?");
+  AddCmd("spring", "do_springe");
+  AddCmd("springe", "do_springe");
+  AddCmd(({ "kletter", "klettere" }), "do_kletter");
+}
+
+status do_kletter(string str)
+{
+  message("\
+Ja, klar, Du kletterst ja auch schon wie ein Weltmeister. Du haengst \
+ja sogar kletternderdings am Seil und ueberlegst, wie Du jetzt weiter \
+nach oben oder unten kommen kannst. Sollte dieses Problem aber schon \
+geloest sein - Glueckwunsch!!! - dann kannst Du einfach nach 'oben' \
+oder 'unten' gehen.");
+  return 1;
+}
+
+status do_springe(string str)
+{
+  message("Du traust Dich nicht.");
+  return 1;
+}
+
+status nimms_nicht(string str)
+{
+  message("\
+Du bist mit Am-Seil-Haengen und In-Der-Luft-Rumbaumeln viel zu beschaeftigt, \
+als dass Du jetzt in Deinen Taschen oder sonstwo rumfummeln koenntest.");
+  return 1;
+}
+
+status schneide_check()
+{
+  object w;
+
+  return !!( (w = this_player()->QueryProp(P_WEAPON)) &&
+             ( w->QueryProp(P_WEAPON_TYPE) == WT_SWORD ||
+               w->QueryProp(P_WEAPON_TYPE) == WT_AXE ||
+               w->QueryProp(P_WEAPON_TYPE) == WT_KNIFE ) );
+}
+
+private void my_tell(object ob, string str)
+{
+  if (environment(ob) && environment(ob)->is_ridu_reling())
+    message(({ ({ M_TARGETS, ({ ob }), str }) }));
+}
+
+
+status do_action(string verb, mapping args) {
+  object ob;
+
+  switch(verb) {
+    case "ruf_unten" :
+      message(({
+        ({ M_ROOM, query_unten(),
+           break_string(args[G_TEXT], 78, "Jemand ruft von oben: ") }),
+        ({ M_WRITE, break_string(args[G_TEXT], 78, "Du rufst nach unten: ") }),
+        ({ M_SAY, break_string(args[G_TEXT], 78, 
+           this_player()->Name() + " ruft nach unten: ") }) }));
+      return 1;
+    case "ruf_oben" :
+      filter_array(users(), #'my_tell,
+        break_string(args[G_TEXT], 78, "Jemand ruft von unten: "));
+      message(({
+        ({ M_WRITE, break_string(args[G_TEXT], 78, "Du rufst nach oben: ") }),
+        ({ M_SAY, break_string(args[G_TEXT], 78, 
+           this_player()->Name() + " ruft nach oben: ") }) }));
+      return 1;
+      
+    case "binde_oben" :
+      if (environment(args[G_OBJECT]) != this_player()) {
+        notify_fail("Das hast Du aber nicht.\n");
+        return 0;
+      }
+      if (!args[G_OBJECT]->id("seil")) {
+        message("Das eignet sich nicht zum Ranbinden.");
+        return 1;
+      }
+      if (is_seil_oben() || is_seil_unten()) {
+        message("\
+Gerade als Du das Seil anbinden willst, kommt ein kraeftiger Windstoss und \
+blaest Dir das Seil aus den Haenden.");
+       args[G_OBJECT]->remove();
+       return 1;
+      }
+      message(({
+        ({ M_WRITE, "Ein bisschen ungschickt zwar, aber dennoch effektiv "
+           "bindest Du ein Ende des Seils oben an das Seil, an dem Du "
+           "haengst. Das andere Ende wirfst Du gekonnt nach oben. Und da "
+           "Du fest dran glaubst, bleibt es auch oben." }),
+        ({ M_ROOM, query_oben(), "Das Ende eines Seils taucht von unten "
+           "her auf und bleibt in der Luft stehen wie bei einem "
+           "indischen Seil-Floeten-Trick." }) }));
+      RD_ROOMDIR"r1"->set_seil(args[G_OBJECT]);
+      return 1;
+    case "binde_unten" :
+      if (environment(args[G_OBJECT]) != this_player()) {
+        notify_fail("Das hast Du aber nicht.\n");
+        return 0;
+      }
+      if (!args[G_OBJECT]->id("seil")) {
+        message("Das eignet sich nicht zum Ranbinden.");
+        return 1;
+      }
+      if (is_seil_oben() || is_seil_unten()) {
+        message("\
+Gerade als Du das Seil anbinden willst, kommt ein kraeftiger Windstoss und \
+blaest Dir das Seil aus den Haenden.");
+       args[G_OBJECT]->remove();
+       return 1;
+      }
+      message(({
+        ({ M_WRITE, "Dieser Knoten gelingt Dir besser. Relativ muehelos "
+           "bindest Du ein Ende des Seils unten an das Seil, an dem Du "
+           "haengst. Das andere Ende laesst Du hinunterfallen." }),
+        ({ M_ROOM, query_unten(), "Das Ende eines Seils wird von oben "
+           "herunter gelassen." }) }));
+      RD_OBJDIR"wolke"->set_seil(args[G_OBJECT]);
+      return 1;
+    case "schneide_oben" :
+      if (!is_seil_oben()) {
+        message("Aber oben ist doch gar kein Seil zum Abschneiden.");
+        return 1;     
+      }
+      if (!schneide_check()) {
+        message("Zum Schneiden braucht man aber schon eine gezueckte, "
+          "scharfe Klinge, oder nicht?");
+        return 1;
+      }
+      ob = present("\nridu#seil_oben", query_oben());
+      ob->remove();
+      ob = clone_object("/obj/seil");
+      ob->move(this_player(),M_NOCHECK); // Absicht ohne Check!
+      message(({
+        ({ M_WRITE, "Kurz und schmerzlos schneidest Du das Seil "
+           "oberhalb von Dir ab und schnappst es Dir." }),
+        ({ M_SAY, M_PL_BEST, "schneidet das Seil oberhalb ab." }),
+        ({ M_ROOM, query_oben(), "Das Seil loest sich ploetzlich und "
+           "faellt nach unten." })
+      }));
+      return 1;
+    case "schneide_unten" :
+      if (!is_seil_unten()) {
+        message("Aber unten ist doch gar kein Seil zum Abschneiden.");
+        return 1;     
+      }
+      if (!schneide_check()) {
+        message("Zum Schneiden braucht man aber schon eine gezueckte, "
+          "scharfe Klinge, oder nicht?");
+        return 1;
+      }
+      ob = present("\nridu#seil_unten", query_unten());
+      ob->remove();
+      ob = clone_object("/obj/seil");
+      ob->move(this_player(),M_NOCHECK); // Absicht ohne Check!
+      message(({
+        ({ M_WRITE, "Ein bisschen mulmig ist Dir schon dabei, aber Du tust "
+           "es trotzem: Du schneidest das Seil unterhalb von Dir ab und " 
+           "schnappst es Dir." }),
+        ({ M_SAY, M_PL_BEST, "schneidet das Seil unterhalb ab." }),
+        ({ M_ROOM, query_unten(), "Das Seil wird ploetzlich nach oben gezogen." })
+      }));
+      return 1;
+  }
+  return RD_ROOM::do_action(verb,args);
+}
+
+private status my_present(string n)
+{
+  object p;
+  return !!( (p=find_player(n)) &&
+           present(p) );
+}
+
+void update_entered()
+{
+  entered = filter_mapping(entered, #'my_present);
+}
+
+mixed is_seil_besetzt()
+{
+  update_entered();
+  if (m_sizeof(entered)) return find_player(m_indices(entered)[0])->Name();
+}
+
+
+private void my_raus_check(string name, int entertime)
+{
+  object pl;
+  object unten;
+  
+  pl = find_player(name);
+  if (!pl || !present(pl)) return;
+  unten = RD_TOOLS->load_object(RD_OBJDIR"wolke");
+  if (unten) unten = environment(unten);
+  if (!unten) return;
+
+  switch((time() - entertime)) {
+    case 0..40:
+      return;
+
+    case 41..80:
+      message(({ ({ M_TARGETS, ({ pl }), "Deine Arme werden lang und laenger. "
+       "Zumindest fuehlt sichs so an. Du solltest schauen, dass Du bald "
+       "hier rauskommst." }) }));
+      return;
+   
+    case 81..120:
+      message(({ ({ M_TARGETS, ({ pl }), "Lang kannst Du Dich nicht mehr "
+        "halten und was passiert, wenn Dir die Kraft ausgeht, kannst Du "
+        "Dir bestimmt selber denken." }) }));
+      return;
+
+    default :
+      if (is_seil_unten()) {  // Nochmal Glueck gehabt
+        message(({
+         ({ M_TARGETS, ({ pl }), "So, jetzt isses soweit. Vor Entkraeftung "
+            "kannst Du Dich am Seil nicht mehr halten und rutschst in die "
+            "Tiefe." }),
+         ({ M_EXCLUDE, ({ pl }), pl, "rutscht in die Tiefe." }),
+         ({ M_ROOM, unten, "Ploetzlich rutscht", M_BEST, pl, "von oben"
+             " kommend am Seil runter." }) }));
+        pl->move(unten,M_NOCHECK|M_SILENT);
+      } else {
+        message(({
+         ({ M_TARGETS, ({ pl }), "So, jetzt isses soweit. Vor Entkraeftung "
+            "entgleitet das Seil Deinen Haenden und Du stuerzt in die "
+            "Tiefe." }),
+         ({ M_EXCLUDE, ({ pl }), pl, "stuerzt in die Tiefe." }),
+         ({ M_ROOM, unten, "Ploetzlich faellt", M_BEST, pl, "vom "
+             "Himmel und landet direkt vor Deinen Fuessen." }) }));
+        pl->move(unten,M_NOCHECK|M_SILENT);
+        pl->AddHp(-(pl->QueryProp(P_HP)/2));
+      }
+      return;
+   }
+}
+
+void kraft_loop()
+{
+  update_entered();
+  if (find_call_out("kraft_loop") >-1 || !m_sizeof(entered)) return;
+  walk_mapping(entered, #'my_raus_check);
+  call_out("kraft_loop", 20);
+}

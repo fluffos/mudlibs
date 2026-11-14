@@ -1,0 +1,83 @@
+#include "../../arkanisten.h"
+
+inherit GUILD_FOLDER "abilities/ability.lpc";
+
+public void create() {
+    if(is_clone(TO)) return;
+
+    ::create();
+    SetProp(P_ABILITY_NAME, "Explodierende Munition");
+    SetProp(P_ABILITY_DESCRIPTIPON, 
+        "tbd");    
+    SetProp(P_ABILITY_TYPE, ABILITY_TYPE_ACTIVE);
+    SetProp(P_ABILITY_BASE_ATTRIBUTE, A_INT);
+    SetProp(P_ABILITY_CASTVERB, CAST_VERB_LOAD);
+    SetProp(P_ABILITY_GROUP, ({ABILITY_GROUP_GADGET_POWERUP, ABILITY_GROUP_GADGETS}));
+    SetProp(P_ABILITY_REQUIRES, ({HANDCROSSBOW, SMOKEBOMB}));
+    SetProp(P_ABILITY_COST, 0);
+}
+
+public mapping prepare_use(object user, mapping sinfo) {
+    sinfo = ::prepare_use(user, sinfo);
+    if(!sinfo) return 0;
+
+    if(user->QueryProp(P_WATCHER_EXPLODING_AMMO) > 0) {
+        tell_object(user, BS("Du hast noch "+user->QueryProp(P_WATCHER_EXPLODING_AMMO)+" Schuss ueber."));
+        return 0;
+    }
+    
+    tell_object(user, BS("Du nimmst ein paar Stuecke Papier, Schwarzpulver und Munition zur Hand."));
+    tell_room(ENV(user), BS(user->Name(WER)+" nimmt ein paar Dinge in die Hand und beginnt zu basteln."), ({user}));
+
+    sinfo[SI_PREPARE_TIME] = 8;
+    sinfo[SI_SPELLFATIGUE] = 4;
+    sinfo[SI_RAW_SPELLCOST] = ([
+        P_SP: 50,
+        P_MV: 100
+    ]);
+
+    return sinfo;
+}
+
+public void failed(object caster, mapping sinfo, int sc) {
+    tell_object(caster, BS("Das Papier wickelt sich wieder auf und das Schwarzpulver rieselt auf den Boden."));
+    ::failed(caster, sinfo, sc);
+    return;
+}
+
+public void success(object caster, mapping sinfo, int skillcheck) {
+    int shots, c;
+    object w, enemy;
+
+    if(caster->QueryProp(P_WATCHER_EXPLODING_AMMO) > 0) {
+        sprintf("explosive_bolts :: active sinfo=%O\n", sinfo);
+        // aktive anwendung durch den kampfskill
+        if(!objectp(w = caster->QueryProp(P_WEAPON))) return; // nur mit waffe
+        if(!(w->id(CAN_EXPLOSIVE_AMMO_ID))) return; // nur mit pistole
+        if(!objectp(enemy = sinfo[SI_ENEMY] || sinfo[SI_SKILLARG])) return;
+
+        c = caster->QuerySkillAbility(EXPLODING_AMMUNITION) / 1000;
+        if(!random(15-c)) {
+            tell_room(ENV(enemy), BS(enemy->Name(WER)+" stolpert nach einer Explosion verwirrt herum."));
+            enemy->SetProp(P_DISABLE_ATTACK, 1);
+        }
+        caster->SetProp(P_WATCHER_EXPLODING_AMMO, caster->QueryProp(P_WATCHER_EXPLODING_AMMO) - 1);
+        if(caster->QueryProp(P_WATCHER_EXPLODING_AMMO) <= 0) {
+            tell_object(caster, BS("Deine explosive Munition ist aufgebraucht."));
+            caster->SetProp(P_WATCHER_EXPLODING_AMMO, 0);
+            unregister_attack_ability(caster);
+        }
+
+        return;
+    }
+
+    shots = sinfo[SI_SKILLABILITY] / 500 + skillcheck / 800;
+    
+    tell_object(caster, BS(sprintf("Du hast kleine jetzt %d kleine Papiertueten mit Schwarzpulver und Munition gebaut. "
+                                   "Sie dienen jetzt als explosive Munition, die deine Armbrust verschiesst.", shots)));
+    tell_room(ENV(caster), BS(caster->Name(WER)+" dreht kleinen Papiertueten mit einem schwarzen Pulver darin."), ({caster}));
+
+    caster->SetProp(P_WATCHER_EXPLODING_AMMO, shots);
+    register_attack_ability(caster);
+    return;
+}

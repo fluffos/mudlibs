@@ -1,0 +1,263 @@
+//
+// Runen
+// (c) angrox@silberland, feyaria@silberland
+// Nur zur Verwendung im Silberland!
+//
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include <defines.h>
+#include <moredef.h>
+#include <wizlevels.h>
+#include "../../itemd.h"
+#include "../../data/itemd_socketed_data.h"
+
+nosave string rune="";
+nosave string info="";
+nosave int create_time=0;
+nosave int remove_rune_abort_log_timer=0;
+nosave string rune_name_add="";
+void rune_age();
+
+void create()
+{
+  if( !is_clone(TO) ) return;
+  ::create();
+
+  SetProp(P_SHORT, "Die Rune 'An'"); 
+  SetProp(P_LONG, "Du haeltst einen alten, kleinen Gegenstand aus "
+      "Elfenbein in Deiner Hand. Auf der glatten Oberflaeche ist "
+      "das Zeichen fuer die Rune 'Amn' tief eingritzt.");
+  SetProp(P_NAME, "Rune 'An'");
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({ITEMD_RUNE_ID, "rune"}) );
+  SetProp(P_MATERIAL, MAT_IVORY );
+  SetProp(P_WEIGHT, 1); 
+  SetProp(P_MAGIC, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_VALUE, 100);
+  AddSpecialDetail("zeichen", "runendetail");
+  SetProp(P_ITEMD_MIGHT, RUNE_ID);
+  // Aktivieren nach Schonfrist "Don,  1. Aug 2024, 00:00:00" --> Runen von Runenzweities
+  //  loesen sich sofort nach dem Einloggen auf
+  if(time() > 1722463200)
+    call_out("rune_age",0);
+}
+
+string runendetail()
+{
+  return "Das Zeichen fuer die Rune '"+rune+"' ist tief eingeritzt.\n";
+}
+
+string _query_name() {
+  return "Rune '"+rune+"'"+rune_name_add;
+}
+
+string _query_short() {
+  return "Die Rune '"+rune+"'"+rune_name_add;
+}
+
+string _query_long() {
+  return BS("Du haeltst einen alten, kleinen Gegenstand aus "
+      "Elfenbein in Deiner Hand. Auf der glatten Oberflaeche ist "
+      "das Zeichen fuer die Rune '"+rune+"' tief eingritzt.");
+}
+
+string _query_info() {
+  int max_age;
+  int diff;
+  if(find_object(ITEMD))
+    max_age=call_other(ITEMD, "QueryRuneMaxAge", TO);
+  if(!max_age)
+    return info;
+  diff=time() - create_time;
+  if(diff > (max_age-84600)) 
+    return info+"\n"+BS("In weniger als einem Tag wird diese Rune ihre "
+        "Macht verlieren!");
+  if(diff > (max_age-604800))
+    return info+"\n"+BS("In weniger als einer Woche wird diese Rune ihre "
+        "Macht verlieren!");
+  if(diff > (max_age-2592000))
+    return info+"\n"+BS("In weniger als einem Monat wird diese Rune ihre "
+        "Macht verlieren!");
+      
+}
+
+int IsSocketItem() {
+  return SOC_M_RUNE;
+}
+
+varargs int SetRune(string str, int c_time, string addname) {
+  if(!IS_ARCH(TP) && getuid(TP)!="wraz" && (member(({"/p/daemon/corpsed/corpsed", 
+            "/p/daemon/itemd/cain", "/p/daemon/itemd/itemd",
+            "/p/daemon/itemd/obj/runes/runebag"}), 
+          explode(file_name(PO), "#")[0])==-1))
+  {
+    return 0;
+  }
+  if(rune != "") return 0;
+  AddId(lower_case(str));
+  rune=str;
+  if(!c_time) 
+    create_time=time();
+  else 
+    create_time=c_time;
+  if(!addname) 
+    rune_name_add="";
+  else {
+    if(rune_name_add==" ")
+      rune_name_add="";
+    else 
+      rune_name_add=addname;
+  }
+  call_out("CheckRune",0);
+  call_out("RegisterRune", random(10)+4);
+  return 1;
+}
+
+string QueryRune() {
+  return rune;
+}
+
+int SetRuneInfo(string str) {
+  if(info != "") return 0;
+  info=str;
+  return 1;
+}
+
+
+void _set_autoloadobj(mixed data)
+{
+  if(mappingp(data)) {
+    if(sizeof(data)==2) {
+      info=data["info"];
+      rune=data["rune"];
+      AddId(lower_case(rune));
+    }
+    else if(sizeof(data)==3) {
+      info=data["info"];
+      rune=data["rune"];
+      create_time=data["create_time"];
+      AddId(lower_case(rune));
+    }
+    if(!intp(create_time)) {
+      TELL("wraz", sprintf("*** RUNE %s hat keine create_time! ENV: %O\n",
+            rune,ENV(ME)));
+      create_time=time();
+    }
+  }
+  log_file("daemon/RUNE_AUTOLOAD",sprintf("%s AUTOLOAD rune=%s %O create_time=%s\n",
+        dtime(time()),rune,ME,dtime(create_time)));
+  call_out("CheckRune",0);
+  call_out("RegisterRune", random(20)+2);
+  return;
+}
+
+// Und hier wird gespeichert
+mapping _query_autoloadobj()
+{
+  return (["info": info, "rune":rune, "create_time":create_time]);
+}
+
+int CheckRune()
+{
+  string * allrunes;
+  allrunes=m_indices(RUNES1+RUNES2+RUNES3+RUNES4+RUNES5);
+  if( member(allrunes, rune) !=-1) 
+    return 1;
+  if( MENV )
+    tell_object(MENV, "Die Rune '"+rune+"' loest sich auf!\n");
+  call_out("remove", 0);
+  return 1;
+}
+
+void RegisterRune() {
+  if (!find_object(ITEMD))
+  {
+    call_out("RegisterRune", 600);
+    return;
+  }
+  call_other(ITEMD, "RegisterRune", ME);
+  return;
+}
+
+mixed remove() {
+  if (find_object(ITEMD))
+    call_other(ITEMD, "DeRegisterRune", ME);
+  return ::remove();
+}
+
+void reset() {
+  if (!is_clone(ME))
+    return
+  ::reset();
+  rune_age();
+}
+
+void rune_age()
+{
+  int max_age;
+  object ob;
+  if (!find_object(ITEMD))
+  {
+    log_file("daemon/RUNE_AUTOLOAD",sprintf("%s rune_age() abort: ITEMD not found %s %O ENV=%O create_time=%s\n",
+            dtime(time()),rune,ME,ENV(ME),dtime(create_time)));
+    return;
+  }
+  max_age=call_other(ITEMD, "QueryRuneMaxAge", TO);
+  if(!max_age)
+  {
+    log_file("daemon/RUNE_AUTOLOAD",sprintf("%s rune_age() abort: max_age unavailable %s %O ENV=%O create_time=%s\n",
+            dtime(time()),rune,ME,ENV(ME),dtime(create_time)));
+    return;
+  }
+  if(!create_time) {
+    create_time=time();
+    log_file("daemon/RUNE_AUTOLOAD",sprintf("%s rune_age() abort: set create_time=time() %s %O ENV=%O create_time=%s\n",
+            dtime(time()),rune,ME,ENV(ME),dtime(create_time)));
+    return;
+  }
+  if((time() - create_time) > (max_age-2592000)) 
+    rune_name_add=" *";
+  if((time() - create_time) > (max_age-604800)) 
+    rune_name_add=" **";
+  if((time() - create_time) > (max_age-84600)) 
+    rune_name_add=" ***";
+  if(((time() - create_time) > max_age &&                  // Rune abgelaufen UND
+     QueryProp("last_taken_from_bag") < time()-(60*10)) || // Rune nicht gerade aus Beutel genommen
+     (time() - create_time) > max_age+(200*60*60*24)) {   // ODER: Rune nicht viel zu alt ("failsafe" Abfrage -> jedenfalls Aufloesung)
+    if((objectp(ob = ENV(ME)) && interactive(ob)) ||
+        (ob && objectp(ob = ENV(ob)) && interactive(ob)))  {
+      tell_object(ENV(ME), "Deine Rune '"+rune+"' hat sich gerade "
+          "aufgeloest!\n");
+      log_file("daemon/RUNE_AUTOLOAD",sprintf("%s REMOVE RUNE %s %O ENV=%O create_time=%s\n",
+            dtime(time()),rune,ME,ENV(ME),dtime(create_time)));
+      remove();
+      return;
+    }
+    else if (remove_rune_abort_log_timer <= 0) {
+      log_file("daemon/RUNE_AUTOLOAD",sprintf("%s REMOVE RUNE: ABORT %s %O ENV=%O create_time=%s\n",
+            dtime(time()),rune,ME,ENV(ME),dtime(create_time)));
+      remove_rune_abort_log_timer = 24*7; // 1 Woche lang nicht mehr loggen
+    }
+    else {
+      remove_rune_abort_log_timer--;
+    }
+  }
+}
+
+int QueryCreateTime() {
+  return create_time;
+}
+
+int SetCreateTime(int x) {
+  if(!IS_ARCH(TP) && getuid(TP)!="wraz") {
+    TP->Message(BS("Das darf nur ein Erzmagier!"));
+    return create_time;
+  }
+  create_time=x;
+  return create_time;
+}

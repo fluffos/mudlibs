@@ -1,0 +1,452 @@
+/* SilberLand MUDlib
+ *
+ * /secure/loginmaster.c -- some loginhandling
+ *
+ * $Date: 2006/04/10 00:35:09 $
+ * $Revision: 1.6 $
+ * $Log: loginmaster.c,v $
+ * Revision 1.6  2006/04/10 00:35:09  Feyaria
+ * mapping einmal die woche ueberpruefen
+ *
+ * Revision 1.5  2004/09/23 01:18:05  Woody
+ * gg.falls LOGIN_REGISTERED zurueckgeben
+ *
+ * Revision 1.4  2003/06/25 10:41:02  Crea
+ * second-player handling, fixes
+ *
+ * Revision 1.3  2002/08/30 15:16:21  Crea
+ * added MayLogin for lockgame
+ *
+ * Revision 1.2  2001/06/19 08:39:34  Crea
+ * prepared for strong_types
+ *
+ * Revision 1.1  2001/06/07 08:42:00  Crea
+ * Initial revision
+ *
+ *
+ */
+
+#pragma strong_types
+
+#include <properties.h>
+#include "/secure/config.h"
+#include "/secure/wizlevels.h"
+#include "/secure/login_defs.h"
+
+/* mapping slots */
+
+#define SLOT_SECOND 0
+#define SLOT_DAY 1
+
+/*
+   Datenstrukturen:
+   login_restrictions:     mapping mit IP-Adressen, die geblocked werden. (+ Begründung)
+   gamelock:               Game ist gelocked ab (Magier)Level
+   second_slots:           Zweitieregelung - ein Zweitie spielbar pro Kalendertag
+*/
+
+void save_me();
+int secure();
+void log(string type, string what, string who);
+void create();
+int LockGame(int level);
+varargs int SiteBanish(string ip, string why);
+string QueryBanishedText(string ip);
+int IsBanished(string ip);
+int SetMaxPlayersButWiz(int p);
+int SetMaxPlayersButArch(int p);
+int QueryGameLock();
+int MayLogin(string player);
+int AddMayLogin(string player);
+int RemoveMayLogin(string player);
+int QuerySecondAllowed(string second);
+int ClearSecondSlot(string player);
+mapping SecondSlots();
+string QueryFirst(string second);
+string QueryLockString();
+string QueryBanishString();
+string Dump();
+
+
+int gamelock;
+int max_players_but_wiz;
+int max_players_but_arch;
+mapping login_restrictions;
+string *may_login;
+mapping second_slots;
+mapping properties;
+
+
+void save_me()
+{
+  save_object(LOGIN_RESTRICTIONS);
+}
+
+
+int secure()
+{
+//  tell_object(find_player("creative"), sprintf("ti: %O, po: %O, tp: %O\n", 
+//              this_interactive(), previous_object(), this_player()));
+  if (!previous_object()) return 0;
+  if (geteuid(previous_object())==ROOTID) return 1;
+  if (geteuid(previous_object()) != geteuid(this_interactive())) return 0;
+  if (this_interactive() != this_player()) return 0;
+  if (!IS_ARCH(this_interactive())) return 0;
+  return 1;
+}
+
+
+void log(string type, string what, string who)
+{
+  if (!secure())
+    return;
+  log_file(LOGIN_RES_LOG, sprintf("%s: [%s] %-40s (%s)\n", ctime(time()), type, what, capitalize(who)));
+}
+
+
+void create()
+{
+  login_restrictions=([]);
+  may_login=({});
+  second_slots=allocate_mapping(0, 2);
+  seteuid(getuid(this_object()));
+  if (!restore_object(LOGIN_RESTRICTIONS)) {
+    login_restrictions=([]);
+    may_login=({});
+    second_slots=allocate_mapping(0, 2);
+  }
+  if (max_players_but_wiz==0)
+    max_players_but_wiz=MAXPLAYERS-MAXWIZ;
+  if (max_players_but_arch==0)
+    max_players_but_arch=MAXPLAYERS-MAXARCH;
+  log(ACTIVATE, "initialised with "+sizeof(login_restrictions)+" sitebans", getuid(this_object()));
+  log(ACTIVATE, "max plr but wiz / arch: "+max_players_but_wiz+" / "+max_players_but_arch, getuid(this_object()));
+}
+
+
+int LockGame(int level)
+{
+  if (!secure())
+    return 0;
+  gamelock=level;
+  if (gamelock < MINLOCK_LVL)
+    gamelock=0;
+  if (gamelock > MAXLOCK_LVL)
+    gamelock=MAXLOCK_LVL;
+  save_me();
+  log(LOCKGAME, "locked by level "+gamelock, getuid(this_interactive()));
+  return 1;
+}
+
+
+varargs int SiteBanish(string ip, string why)
+{
+  if (!secure())
+    return 0;
+  if (IsBanished(ip))
+    return 0;
+  if (!stringp(why))
+    why=DEFAULT_RESTRICTION_STRING;
+  login_restrictions+=([ip:why]);
+  log(SITEBAN, "banished site "+ip, getuid(this_interactive()));
+  save_me();
+  return 1;
+}
+
+
+int SiteUnBanish(string ip)
+{
+  if (!secure())
+    return 0;
+  if (!IsBanished(ip))
+    return 0;
+  login_restrictions=m_delete(login_restrictions, ip);
+  log(SITEBAN, "unbanished site "+ip, getuid(this_interactive()));
+  save_me();
+  return 1;
+}
+
+
+int ClearBanishList()
+{
+  if (!secure())
+    return 0;
+  login_restrictions=([]);
+  log(SITEBAN, "cleared all sitebanish entries", getuid(this_interactive()));
+  save_me();
+  return 1;
+}
+
+
+string QueryBanishedText(string ip)
+{
+  string *ips, *why;
+  int b;
+  
+  if (!secure())
+    return 0;
+  ips=m_indices(login_restrictions);
+  b=member(ips, ip);
+  if (b>=-1) {
+    why=m_values(login_restrictions);
+    return why[b];
+  }
+  else
+    return "";
+}
+
+int IsBanished(string ip)
+{
+  string *ips, *why;
+  int b;
+  
+  if (!secure())
+    return 0;
+  ips=m_indices(login_restrictions);
+  return member(ips, ip)!=-1;
+}
+
+
+int QueryGameLock()
+{
+  return gamelock;
+}
+
+
+string QueryLockString()
+{
+  string str, plr;
+  int i;
+
+  str="The game is"+(gamelock?"":" not")+" locked"+(gamelock?" by level "+gamelock:"")+".\n";
+  plr="";
+  for (i=sizeof(may_login)-1; i>=0; i--)
+    plr+=may_login[i]+", ";
+  if (strlen(plr)>3)
+    plr=plr[0..<3]+".";
+  plr=break_string(plr, 78);
+  if (sizeof(may_login))
+     str+="The following players may login if game is locked:\n"+plr;
+  return str;
+}
+
+
+string QueryBanishString()
+{
+  int i;
+  string str, *ips, *why;
+
+  ips=m_indices(login_restrictions);
+  why=m_values(login_restrictions);
+  if (!sizeof(ips))
+    str="There are no sites currently banished.\n";
+  else {
+    str="The following sites are banished now:\n\n";
+    for (i=sizeof(ips)-1; i>=0; i--)
+      str+=sprintf(" %s: %s\n", ips[i], why[i]);
+  }
+  return str;
+}
+  
+
+int SetMaxPlayersButWiz(int p)
+{
+  if (!secure())
+    return 0;
+  if (p>=MAXPLAYERS-MAXWIZ)
+    return 0;
+  max_players_but_wiz=p;
+  log(SETPLRS, "set max players but wiz to "+p, getuid(this_interactive()));
+  save_me();
+  return 1;
+}
+
+
+int QueryMaxPlayersButWiz()
+{
+  return max_players_but_wiz;
+}
+
+
+int SetMaxPlayersButArch(int p)
+{
+  if (!secure())
+    return 0;
+  if (p>=MAXPLAYERS-MAXARCH)
+    return 0;
+  max_players_but_arch=p;
+  log(SETPLRS, "set max players but arch to "+p, getuid(this_interactive()));
+  save_me();
+  return 1;
+}
+
+int AddMayLogin(string player) {
+  mixed *u;
+
+  if (!secure())
+    return 0;
+  u=call_other(MASTER, "get_userinfo", player);
+  if (!u)
+    return 0;
+  may_login+=({ player });
+  save_me();
+  return 1;
+}
+
+int MayLogin(string player) {
+  if (!secure())
+    return 0;
+  if (member(may_login, player)==-1)
+    return 0;
+  return 1;
+}
+
+int RemoveMayLogin(string player) {
+  if (!secure())
+    return 0;
+  if (member(may_login, player)==-1)
+    return 0;
+  may_login-=({ player });
+  save_me();
+  return 1;
+}
+
+
+int QueryMaxPlayersButArch() {
+  return max_players_but_arch;
+}
+
+
+int check_second(object user, string second) {
+  return lower_case(user->QueryProp(P_SECOND) || "") == lower_case(second);
+}
+
+int QuerySecondAllowed(string second) {
+  string day;
+  string player, p;
+  mixed *w;
+  object *u;
+
+  if (!secure())
+    return LOGIN_FALSE;
+  second=lower_case(second);
+  /* Magier die P_SECOND gesetzt haben duerfen */
+  if (IS_LEARNER(second))
+    return LOGIN_OK;
+  p=QueryFirst(second);
+  if (!p)
+    return LOGIN_OK;
+  if (!stringp(p))
+    return LOGIN_WRONG_MARK;
+  player=lower_case(p);
+  /* existiert erstie? */
+  w=call_other(MASTER, "get_userinfo", player);
+  if (!w)
+    // nein, trotzdem login_ok, spieler bekommen via base eine meldung
+    return LOGIN_OK;
+  /* erzmagier duerfen mehrere 2ties haben */
+  if (IS_ARCH(player))
+    return LOGIN_OK;
+  day=ctime()[4..9]+ctime()[<5..];
+  if (member(second_slots, player)) {
+    /* check ob zweitie noch existiert (playerdelete, selbstlöschung, ...) */
+    w = call_other( MASTER, "get_userinfo", second_slots[player, SLOT_SECOND] );
+    if ( !w ) {
+      // weg mit der datenleiche
+      ClearSecondSlot( player );
+    } else {
+      /* magier duerfen nicht zweitie und magier gleichzeitig einloggen */
+      if (IS_LEARNER(player) && find_player(player))
+        return LOGIN_WIZARD_ONLINE;
+      /* selber zweitie ? */
+      if (second_slots[player, SLOT_SECOND]==second)
+        return LOGIN_OK;
+      else {
+        /* selber kalendertag? */
+        if (second_slots[player, SLOT_DAY]==day) {
+          second=second_slots[player, SLOT_SECOND];
+          return LOGIN_MAXIMUM_REACHED;
+        } else {
+          /* anderer 2ty online? */
+          u = filter_array(users(), #'check_second, p);
+          if (sizeof(u)>=1) {
+            second=u[0]->Name();
+            return LOGIN_ANOTHER_SECOND_ONLINE;
+          }
+        }
+      }
+    }
+  }
+  /* neuen 2ty eintragen */
+  if (!IS_DOMAINMEMBER(player))
+  {
+    second_slots += ([ player: second; day ]);
+    save_me();
+  }
+  return LOGIN_REGISTERED;
+}
+
+string QueryFirst(string second) {
+  string first;
+
+  if (!secure())
+    return 0;
+  if (find_player(second)) {
+    properties=find_player(second)->QueryProperties();
+  } else if (find_netdead(second)) {
+    properties=find_netdead(second)->QueryProperties();
+  }
+  else
+    restore_object("/save/"+second[0..0]+"/"+second);
+  if (!properties)
+    return 0;
+  first = properties[P_SECOND];
+  properties = 0;
+  return first;
+}
+
+mapping SecondSlots() {
+  if (!secure())
+    return 0;
+  return copy_mapping(second_slots);
+}
+
+int ClearSecondSlot(string player) {
+  if ( !secure() )
+    return 0;
+  if ( member( second_slots, player ) ) {
+    second_slots = m_delete( second_slots, player );
+    return 1;
+  }
+}
+
+string Dump() {
+  return QueryLockString()+"\n"+QueryBanishString()+"\n";
+}
+
+nosave int CheckSecondSlots(string player, string second, string date)
+{
+  if (!call_other( MASTER, "get_userinfo", player ) || // Spieler existiert nicht mehr
+      !call_other( MASTER, "get_userinfo", second ) || // Zweitie existiert nicht mehr
+      QueryFirst(player) ||                            // Spieler ist jetzt selber zweitie  
+      IS_DOMAINMEMBER(player)                          // Erstspieler ist Magier
+     )
+  {
+    second_slots = m_delete( second_slots, player );
+    return 1;
+  }
+  return 0;
+}
+
+void reset()
+{
+  if ( !secure() )
+    return ;
+  if (dtime()[0..2] == "Son" && dtime()[19..20] == " 5")
+  {
+    walk_mapping(second_slots, "CheckSecondSlots");
+    save_me();
+  }
+  set_next_reset(3500);
+}
+

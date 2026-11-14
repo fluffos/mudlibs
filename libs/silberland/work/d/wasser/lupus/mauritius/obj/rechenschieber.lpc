@@ -1,0 +1,167 @@
+/*
+ * rechenschieber.c
+ *
+ * Der Euro-Taschenrechner
+ *
+ * Tool zur Umrechnung der Whrungen von Lndern, die den Euro eingefhrt 
+ * haben.
+ *
+ */
+
+inherit "std/thing";
+
+#include <properties.h>
+#include "rechenschieber.h"
+
+create()
+{
+
+  if(IS_BLUE(ME)) return;
+  ::create();
+
+  seteuid(getuid(TO));
+
+  SetProp(P_SHORT, "Ein Rechenschieber");
+  SetProp(P_LONG, 
+    "Der Rechenschieber besteht aus zwei Teilen. Der "
+	"innere, Zunge genannt, kann im anderen, der "
+	"Koerper heisst, verschoben werden. Auf Koerper und "
+	"Zunge befinden sich Markierungen. "
+	"Der Rechenschieber hat eine kleine Anleitung auf die "
+	"Unterseite gedruckt.");
+		     
+  SetProp(P_NAME,"Rechenschieber");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_WEIGHT, 100);
+  SetProp(P_VALUE, 100 );
+  AddId(({ "rechenschieber", "schieber", "rechner" }));
+
+  AddDetail( ({ "unterseite" }),
+	"Auf der Unterseite des Rechenschiebers ist eine Anleitung "
+	"abgedruckt.");
+	     
+  AddDetail( ({ "anleitung" }),
+	"Die Anleitung besteht aus lauter kleinen Buchstaben, die Du "
+	"lesen kannst.");
+	     
+  AddDetail( ({ "buchstaben" }),
+	"Die Anleitung besteht aus vielen Buchstaben.");
+	     
+  AddReadDetail( ({ "unterseite", "anleitung", "buchstaben" }),
+	"Der Rechenschieber soll das Umrechnen verschiedener "
+	"Waehrungen in SilberLand-Muezen erleichtern.\n"
+	"Hierzu stehen die Befehle ´rechne´ und ´wliste´ zur "
+	"Verfuegung. Die Anleitung zu diesen Befehlen kannst Du mit "
+	"der Syntax ´lies rechne´ beziehungsweise ´lies wliste´ "
+	"nachlesen.");
+	     
+  AddReadDetail( ({ "wliste" }),
+	"Mit dem Befehl ´wliste´ erhaetst Du ein Liste aller am Euro "
+    "teilnehmenden Laender, ihrer Waehrungen, des "
+	"Umrechnungskurses und vor allem der Kuerzel ihrer "
+	"Waehrungen, die als Angaben bei der Funktion ´rechne´ "
+	"notwendig sind.");
+		 
+  AddReadDetail( ({ "rechne" }),
+	"Der Befehl ´rechne´ soll das Leben mit der neuen Waehrung "
+	"Euro ein wenig erleichtern.\n"
+	"Die Syntax lautet: ´rechne <betrag> <kuerzel> in <kuerzel> "
+	"um´.\n"
+	"Das Kuerzel besteht dabei aus einem dreistelligen Code "
+	"fuer die Waehrung, aus der - beziehungsweise in die - der "
+	"Betrag umgerechnet werden soll. Diese Kuerzel lassen sich "
+	"Uebrigens mit dem Befehl ´wliste´ abfragen.\n\n"
+	"Besipiel: rechne 9,99 dem in ats um");
+		
+  
+  AddCmd(({"rechne" }), "euro_calc" );       // Euro-Rechner.
+  //AddCmd(({"shilfe", "rhilfe"}), "s_help" ); // Hilfe.
+  AddCmd(({"wliste"}), "w_list" );           // Waehrungsliste.
+
+}
+
+euro_calc(str)
+{
+  string waehrung1, waehrung2, s_menge, ganz, dezimal;
+  float menge, erg, erg_e;
+
+  str=this_player()->_unparsed_args();
+  notify_fail("Was willst Du denn ausrechnen?\n");
+  if( !str ) return 0;
+  sscanf( str, "%s %s in %s", s_menge, waehrung1, waehrung2 );
+  if( strlen( waehrung2 )>3 ) 
+    {
+      waehrung2 = slice_array( waehrung2, 0, 2 );
+    }
+  if( member_array( waehrung1, m_indices(kurse))==-1 )
+    {
+      notify_fail("Ein Waehrung mit dem Kuerzel "+upperstring(waehrung1)
+		  + " existiert nicht.\n");
+      return 0;
+    }
+  if( member_array( waehrung2, m_indices(kurse))==-1 )
+    {
+      TELLL( waehrung2 );
+      notify_fail("Ein Waehrung mit dem Kuerzel "+waehrung2
+		  + " existiert nicht.\n");
+      return 0;
+    }
+
+
+  if( strstr( s_menge, "," )==-1 &&  strstr( s_menge, "." )==-1 )
+    {
+      menge = to_float( s_menge);
+    }
+  if( strstr( s_menge, "," )!=-1 )
+    {
+      sscanf( s_menge, "%s,%s", ganz, dezimal );
+      menge = to_float( ganz+"."+dezimal );
+    }
+  if( strstr( s_menge, "." )!=-1 )
+    {
+      menge = to_float( s_menge );
+    }
+
+
+
+  // Ergebnisberechnung
+
+  erg = cur2cur(menge, waehrung1, waehrung2 ); //Berechnen
+  erg = to_int(100*erg+0.5)/100.0;             // Runden
+
+  erg_e = cur2cur(menge, waehrung1, "eur" ); // Berechnen
+  erg_e = to_int(100*erg_e+0.5)/100.0;       // Runden
+
+  // Ergebnisausgabe
+
+  write( to_string(menge)+" "+kurse[waehrung1,2]+" sind umgerechnet "
+	     + to_string( erg )+" "
+	     + kurse[waehrung2,2]+" oder "
+	     + to_string( erg_e )+" "
+	     + kurse["eur",2]+"\n"
+	 );
+  TELLL( TPNAM+" hat gerade den Euro-Rechner benutzt.\n" );
+  return 1;
+}
+
+float cur2cur(float x, string str1, string str2)
+{
+  return ( 
+	  (x/kurse[ str1, 3 ])*kurse[ str2, 3]
+	  );
+}
+
+/* ---------------------------------------------------------------------------
+ *   Eine Liste der Waehrungen.
+ * Syntax: wliste
+ *
+ * Die Liste ist als ASCII-Datei in liste.txt abgelegt.
+ */
+
+w_list()
+{
+  this_player()->More( read_file( MAUOBJ("wliste")) );
+  return 1;
+}
+
+

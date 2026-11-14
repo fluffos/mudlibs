@@ -1,0 +1,217 @@
+//////////////////////////
+// der Zusammenklebespell
+// des Thanatodendron
+//////////////////////////
+
+inherit "std/thing";
+
+#include "../def.h"
+
+object partner;
+object owner;
+
+string wished_dir;
+string locked_dir;
+string *current_exits;
+string *current_special_exits;
+int initialized;
+
+void anfrage_angenommen(string str);
+varargs int gehen(string str, int frager);
+varargs int special_gehen(string str, int frager);
+
+void create () {
+  ::create();
+  if (!is_clone(TO)) return;
+
+  SetProp(P_SHORT, "Eine extrem klebrige Schicht Harz");
+  SetProp(P_LONG, "Zaehes, unglaublich klebriges Harz, ueberall auf "
+    "Deinem Koerper.\n");
+  SetProp(P_NAME, 0);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_WEIGHT, 0);
+
+  AddId(({"harz", "\nstick_spell", "\nstick"}));
+
+  call_out("remove", 150);
+}
+
+
+void init() {
+
+  ::init();
+  if (!initialized) call_out("initialize_spell", 0);
+  //siehe PreventFollow: TO->move(ENV(TO), ist ein uebler hack, ja
+}
+
+
+void initialize_spell() {
+  object *partners;
+  int i;
+  object env;
+
+  if ((IS_WIZARD(ENV(TO))&&ENV(TO)->name())!="joscherl"|| 
+      ENV(TO)->QP(P_INVIS)!=0)
+    {
+    TO->remove();
+    return;
+    }
+  //keine Magier ausser mir und schon gar keine invis...sicherheitshalber
+
+  initialized=1; //siehe init
+  owner=ENV(TO); 
+  //livings im Raum:
+  partners=
+    filter_array(all_inventory(ENV(ENV(TO))), #'interactive)-({ENV(TO)});
+  //Raum:
+  env=all_environment(this_object())[<1];
+  //exitnamen:
+  current_exits=m_indices( ENV(owner)->QP(P_EXITS));//exitnamen
+  //special_exitnamen:
+  current_special_exits=m_indices(ENV(owner)->QP(P_SPECIAL_EXITS));
+    //specialexitnamen
+
+  //wer aller ausser owner hat das item im raum?
+  for (i=0;i<=sizeof(partners)-1;i++)
+    {
+     if(sizeof(partners)&&!present("\nstick_spell", partners[i]))
+       partners-=({partners[i]});
+    }
+
+  //wenn jemand, dann erster im array partner,
+  //wenn niemand, ->remove
+  if (sizeof(partners)) partner=partners[0];
+  else 
+    {
+    // CHECK("Kein Partner!! \n"); 
+    TO->remove();
+    return;
+    }
+
+  //tell_object(owner, "initialize_spell: ok\n");
+
+  SetProp(P_LONG, 
+    TO->QP(P_LONG)+"Es verbindet Dich und " +partner->Name()+" wie "
+    "siamesische Zwillinge.\n");
+  owner->AddPursuer(TO);
+
+  AddCmd(current_special_exits, "filter_exits");
+  AddCmd(current_exits,"filter_exits");
+  AddCmd(m_indices(env->QP(P_COMMANDS)), "room_commands");
+  
+  //tell_object(owner, "COMMANDS:"
+   // +implode(m_indices(TO->QueryProp(P_COMMANDS)), ", ")+"\n");  
+
+  tell_object(owner, "Verflucht, Du bist voellig mit "+partner->Name()+
+    " verklebt und kannst Dich nicht mehr ohne "+
+    (partner->QP(P_GENDER)==1?"ihn":"sie")+" bewegen !\n");
+}
+
+
+int filter_exits() {
+
+  /*tell_object(
+    MENV, "folgende Partner: "+file_name(owner)+" "+file_name(partner)+"\n");
+  tell_object(
+    owner, "filter_exits: aufgerufen\nQuery_verb: "+query_verb()+"\n");*/
+
+  if (query_verb()&&query_verb()==locked_dir)
+    {
+    tell_object(owner, "Query_verb=locked_dir\n");
+    anfrage_angenommen(locked_dir);
+    return 1;
+    }
+  else 
+    {
+    wished_dir=query_verb();
+    tell_object(owner, "Du kannst nur nach "+UPPER(wished_dir)+" gehen, "
+      "wenn das "+partner->Name()+" jetzt auch eingibt...ihr klebt aneinander "
+      "wie siamesische Zwillinge !! \n");
+    tell_object(partner, owner->Name()+" will nach "+UPPER(wished_dir)+
+      " gehen. Du musst das auch tun, sonst kommt ihr nirgendswohin, "
+      "zusammengeklebt wie ihr seid !! \n"); 
+    present("\nstick_spell", partner)->partner_anfrage(wished_dir);
+    return 1; 
+    }
+}
+
+int room_commands() {
+  tell_object(owner, "Nein, das kannst Du nicht tun. "+partner->Name()+
+    ", "+(partner->QP(P_GENDER)==1?"der":"die")+
+    " an dir klebt, ist dabei viel zu hinderlich.\n");
+  return 1;
+}
+
+int PreventFollow(object dest) {
+
+  if (!dest) return 1;
+
+  if (environment() || this_player() || this_interactive())
+    { 
+    current_exits=m_indices(dest->QP(P_EXITS));
+    locked_dir=0;
+
+    RemoveCmd(0);
+    AddCmd(current_exits, "filter_exits");
+    AddCmd(current_special_exits, "filter_exits");
+    AddCmd(m_indices(dest->QP(P_COMMANDS)), "room_commands");
+
+    //tell_object(owner, "COMMANDS:"
+    //  +implode(m_indices(TO->QueryProp(P_COMMANDS)), ", ")+"\n"); 
+
+    TO->move(owner); 
+   }
+  else return 2;
+  return 1;    
+}
+
+void partner_anfrage(string str) {
+  locked_dir=str;
+  tell_object(owner, "partner_anfrage:"+locked_dir+"\n"); 
+}
+
+void anfrage_angenommen(string str){
+  
+  locked_dir=0;
+  tell_object(owner, "anfrage_angenommen aufgerufen.\n");
+  if (member_array(str, current_special_exits)!=-1)
+    {
+    special_gehen(str);
+    present("\nstick_spell", partner)->special_gehen(str, 1);    
+    }
+  else
+    {
+    gehen(str);
+    present("\nstick_spell", partner)->gehen(str, 1);
+    }
+}
+
+varargs int gehen(string str, int frager) {
+  if (!frager) tell_object(owner, "Na endlich will "+partner->Name()+
+    " in die gleiche Richtung !!!\n");
+  else tell_object(owner, "Endlich tust Du "+partner->Name()+" den "
+    "Gefallen !!!\n");
+  tell_object(owner, "Zusammen humpelt ihr nach "+UPPER(str)+"\n");  
+  owner->move((ENV(owner)->QP(P_EXITS))[str], M_GO||M_SILENT);
+  wished_dir=0;
+  locked_dir=0;
+  return 1;
+}
+
+varargs int special_gehen(string str, int frager) {
+  string exitfunk;
+  tell_object(owner, "special_gehen aufgerufen\n");
+  exitfunk=to_string(ENV(owner)->QP(P_SPECIAL_EXITS)[str]);
+  tell_object(owner, exitfunk+"\n");
+  tell_object(owner, file_name(owner)+"\n");
+  tell_object(owner, file_name(this_interactive())+"\n");
+
+  call_other(ENV(owner),exitfunk, str);
+
+  wished_dir=0;
+  locked_dir=0;
+
+  return 1;
+}
+

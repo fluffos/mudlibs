@@ -1,0 +1,649 @@
+/*
+** Cocktailbar Yara@SL
+** ---
+** 2005-12-13  1.0  Yara  initial version
+** 2006-03-18  1.1  Yara  getSeats() um sicherzustellen, dass seats-Objekt
+**                        existiert
+*/
+
+inherit "std/room";
+
+#include "../def.h"
+#include <bank.h>
+#include "../obj/drinks.h"
+
+
+int money;
+object theke;
+object seats;
+
+void m_init();
+string detTheke(string key);
+string detHocker(string key);
+string detPlatz(string key);
+void parkDrink(object drink);
+int test_exit(string str);
+
+// Initialisierung der Barhocker
+object getSeats() {
+  if(!seats) {
+    seats = clone_object(OBJ + "seat");
+    seats->initSeats(5,"sitzt auf einem Barhocker");
+  }
+  return seats;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+void create() {
+  ::create();
+
+  SetProp( P_INT_SHORT, "Eine gemuetliche Cocktailbar" );
+  SetProp( P_INT_LONG,
+    "Du befindest Dich hier in der Cocktailbar \"Las Midas\". Es ist noch recht frueh "
+    "und so triffst Du hier nur wenige Gaeste an. Hinter der in einem Bogen verlaufenden "
+    "Theke steht Josh, der Barkeeper, beruehmt fuer seine leckeren Cocktails. Vor der "
+    "Theke siehst Du gepolsterte Barhocker. Im Raum verteilt sind einige runde Tische, "
+    "umstellt mit bequem aussehenden Sesseln und Sofas. Das ganze Ambiente ist in "
+    "warmes Licht getaucht." );
+  SetProp( P_LIGHT, 1 );
+  SetProp( P_INDOORS, 1 );
+  SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE: 25, ENV_TERRAIN: TT_HOUSE]) );
+
+//Wir brauchen eine Theke. Hier wird die Blue-Print geladen...
+  call_other (OBJ + "theke", "???");
+  theke = find_object(OBJ + "theke");
+  
+  AddId("bar");
+
+  AddCmd(({"bestelle","bestell","kaufe","kauf"}), "cmdKaufe");
+  AddCmd(({"menue","zeige"}), "cmdMenue");
+  AddCmd(({"nimm","nehme"}), "cmdNimm");
+  AddCmd(({"stell","stelle"}), "cmdStelle");
+  AddCmd(({"spendiere","spendier"}), "cmdSpendiere");
+  AddCmd(({"setz","sitz","setze","sitze"}), "cmdSitze");
+  AddCmd(({"stehe","steh"}), "cmdStehe");
+  AddCmd(({"fuehle","fuehl"}), "cmdFuehle");
+
+  AddDetail(({"cocktailbar","bar"}), "Interessiert schaust Du Dich um.");
+  AddDetail("gast", "Er sitzt an der Theke und trinkt einen Cocktail.");
+  AddDetail(({"theke"}),#'detTheke);
+  AddDetail(({"barhocker","hocker"}), #'detHocker);
+  AddDetail(({"raum","las","las midas"}), QueryProp(P_INT_LONG));
+  AddDetail(({"midas"}), "Du befindest Dich in Midas.");
+  AddDetail("ambiente","Der ganze Raum mit allem drin.");
+  AddDetail("licht",
+    "Hier gibt es einige Lichtquellen. Kerzen auf den Tischen ergaenzen "
+    "die Beleuchtung durch froehlich flackernde Oellampen aus buntem Glas. "
+    "Die Oberseite der Theke leuchtet gruenlich.");
+  AddDetail("kerzen",
+    "Auf den Tischen sind ueberall Kerzen verteilt, die leise vor sich "
+    "hin flackern.");
+  AddDetail("plaetze", "Es sind noch genug frei.");
+  AddDetail(({"lichtquellen"}),"Da waeren die Kerzen und bunte Oellampen, "
+    "die Theke wirft leuchtend gruenes Licht.");
+  AddDetail(({"beleuchtung"}),"Das Licht schafft eine angenehme Atmosphaere.");
+  AddDetail(({"atmosphaere"}),"Du fuehlst Dich richtig wohl hier.");
+  AddDetail(({"oellampen"}),"Ueberall sind bunte Oellampen verteilt, sie haengen "
+    "an den Waenden und von der Decke herab. Einige groessere stehen zwischen den "
+    "Sitzgruppen auf dem Boden.");
+  AddDetail(({"glas"}),"Das Glas der Oellampen ist in verschiedenen warmen "
+    "und leuchtenden Farben gefaerbt.");
+  AddDetail(({"farben"}),"Orange zum Beispiel.");
+  AddDetail(({"orange","beispiel"}),"Nur eine von vielen Farben.");
+  AddDetail(({"oberseite"}),"Die Oberseite der Theke ist aus einem Dir "
+    "unbekannten Material gefertigt und leuchtet hellgruen.");
+  AddDetail(({"material"}),"Das Material ist halbtransparent und sieht "
+    "aus wie Milchglas.");
+  AddDetail(({"milchglas"}),"Das sieht aus wie Milchglas, ob es sich auch so "
+    "anfuehlt?");
+  AddDetail(({"gruenes licht","gruen"}),"Was verursacht nur so ein gruenes Leuchten?");
+  AddDetail(({"gluehwuermchen","wuermchen"}),"Das koennten tatsaechlich "
+    "Gluehwuermchen sein. Du staunst.");
+  AddDetail(({"leuchten"}),"Das Leuchten scheint sich staendig ein wenig zu "
+    "veraendern, fast glaubst Du unter der milchigen Oberseite leuchtende "
+    "umherschwirrende Punkte zu erkennen.");
+  AddDetail(({"punkte"}),"Du erkennst nichts genaues, was koennte das nur sein?");
+  AddDetail(({"gaeste"}),
+    "Du siehst nur wenige Gaeste. Einige haben es sich mit ihren Cocktails "
+    "an den Tischen bequem gemacht, andere stehen an der Theke und "
+    "unterhalten sich angeregt.");
+  AddDetail(({"einige","einige gaeste"}),"Einige Gaeste sitzen an den Tischen und "
+    "schluerfen ihre Cocktails.");
+  AddDetail(({"andere","andere gaeste"}),"Sie stehen da mit ihren Cocktails und "
+    "unterhalten sich.");
+  AddDetail(({"shaker","mixbecher"}), "Darin mixt Josh die Zutaten seiner Cocktails.\n");
+  AddDetail(({"limetten"}), "Die braucht Josh fuer seine Cocktails.\n");
+  AddDetail(({"glaeser","glas"}), "Glaeser duerfen in einer Cocktailbar natuerlich "
+    "nicht fehlen, oder willst Du etwa Deinen Cocktail aus einem Holzbecher trinken?\n");
+  AddDetail(({"holzbecher","becher"}),
+    "Nein, darin kann man keine Cocktails servieren.\n");
+  AddDetail(({"bogen"}), "Die Theke verlaeuft in einem eleganten Bogen und bietet "
+    "so Platz fuer die Gaeste.");
+  AddDetail(({"platz"}),#'detPlatz);
+  AddDetail(({"cocktail","cocktails"}),"Natuerlich gibts in einer Cocktailbar "
+    "Cocktails. Beim Anblick der Getraenke der anderen Gaeste "
+    "bekommst Du ploetzlich Durst, als haettest Du die Wueste durchquert.");
+  AddDetail(({"anblick"}),"Die sehen echt lecker aus.");
+  AddDetail(({"getraenke"}),"Fruchtig, lecker, eisgekuehlt.");
+  AddDetail(({"durst"}),"Dein Mund ist ganz trocken.");
+  AddDetail(({"mund"}),"Du hast Durst!");
+  AddDetail(({"wueste"}),"Hast Du schon mal die Wueste durchquert? Dann weisst "
+    "Du, was Durst ist.");
+  AddDetail(({"tische"}),"Du siehst kleine und runde, eckige und auch ovale "
+    "Tische. Um sie sind Sofas und Sessel angeordnet.");
+  AddDetail(({"kleine tische", "runde tische", "eckige tische", "ovale tische"}),
+    "Eine nette kleine Ansammlung von Tischen.");
+  AddDetail(({"ansammlung"}), "Die Ansammlung von Sitzgruppen setzt sich "
+    "nach Sueden hin in einen weiteren Teil der Bar fort. In der Mitte des "
+    "Raumes gibt es genug freie Flaeche um zu musikalischer Begleitung zu tanzen.");
+  AddDetail(({"sitzgruppen"}),"Sessel und Sofas um Tische herum angeordnet.");
+  AddDetail(({"sueden"}),"Geh doch mal hin, dann siehst Du mehr.");
+  AddDetail(({"mitte"}),"Dort wird der Teppich durch einen glatt geschliffenen "
+    "Holzboden ersetzt.");
+  AddDetail(({"flaeche"}),"Im Moment tanzt dort niemand, das liegt "
+    "wahrscheinlich an der fehlenden musikalischen Begleitung.");
+  AddDetail(({"moment"}),"Jetzt gerade.");
+  AddDetail(({"begleitung"}),"Im Moment spielt hier keine Musik. Wie schade.");
+  AddDetail(({"musik"}), "Vielleicht haben sich die Musiker verspaetet oder "
+    "es ist noch zu frueh.");
+  AddDetail(({"musiker"}),"Wo bleiben sie nur?");
+  AddDetail(({"teil"}),"Die Bar erweitert sich nach Sueden hin.");
+  AddDetail(({"sessel"}),"Bequeme Sessel in denen man entspannt seine "
+    "Cocktails geniessen kann.");
+  AddDetail(({"sofas"}),"Richtig gemuetlich.");
+  AddDetail(({"boden"}),"Der Boden ist mit dunkelrotem Teppich ausgelegt.");
+  AddDetail(({"decke"}),"Von der Decke haengen Oellampen aus buntem Glas.");
+  AddDetail(({"waende","wand"}),"Die Waende werden von Bildern geschmueckt, "
+    "zwischen denen hier und da Oellampen den Raum erhellen.");
+  AddDetail(({"bilder"}),"Du schaust Dir die Bilder naeher an und ordnest "
+    "sie spontan unter moderner Kunst ein.");
+  AddDetail(({"kunst","moderne kunst"}),"Was anderes kannst Du daran leider nicht erkennen, "
+    "moderne Kunst eben.");
+  AddDetail(({"teppich"}),"Der dunkelrote Teppich sieht vor der Bar ein wenig "
+    "abgetreten aus.");
+  AddDetail(({"holzboden"}),"Darauf kann man gut tanzen.");
+  AddDetail(({"regal"}),"In einem grossen Regal hinter der Theke siehst Du "
+    "die verschiedensten Glaeser, Flaschen und diverse andere Dinge, die "
+    "Josh fuer seine Arbeit braucht.");
+  AddDetail(({"flaschen"}),"In den meisten ist Alkohol drin.");
+  AddDetail(({"alkohol"}),"Dies ist schliesslich keine Saftbar.");
+  AddDetail(({"saftbar"}),"In einer Saftbar gibts nur Saft.");
+  AddDetail(({"saft"}),"Saft ist neben Alkohol eine wichtige Zutat fuer Cocktails.");
+  AddDetail(({"zutat"}),"Alkohol, Saft, Fruechte...");
+  AddDetail(({"fruechte"}),"Du bekommst richtig Appetit.");
+  AddDetail(({"appetit"}),"Bestell Dir doch einfach einen Cocktail.");
+  AddDetail(({"dinge"}),"Dies und das, alles was man eben so braucht.");
+  AddDetail(({"arbeit"}),"Josh mixt hier Cocktails.");
+  AddDetail(({"kakao","sahne","chilisosse","fluessigkeit","fluessigkeiten","wodka","zitronensaft","tomatensaft","rum",
+    "bananensaft","kirschlikoer","grenadine","champagner","kirschsaft","orangensaft","moosbeerensaft","pfirsichlikoer",
+    "zuckersirup","tequila","cointreau","cola","saft","saefte"}), "Das verwendet Josh fuer seine Cocktails.");
+  AddDetail(({"selleriestange","orangenscheibe","cocktailkirsche","strohhalm","palmblaetter","papier","karambolescheibe"}),
+    "Damit dekoriert Josh seine Cocktails.");
+
+  AddSound(DEFAULT_SOUND,
+    "Du hoerst allgemeines Stimmengemurmel und hin und wieder Geraeusche, die "
+    "Josh bei seiner Arbeit macht.");
+  AddSound(({"geraeusche","arbeit"}), "Du hoerst den Shaker und das "
+    "Klirren von Glaesern.");
+  AddSound(({"shaker"}), "Er macht... shakende Geraeusche?");
+  AddSound(({"musik","begleitung"}), "Leider hoerst Du keine Musik.");
+  AddSound(({"stimmengemurmel","gaeste","andere"}), "Du kannst nicht genau "
+    "hoeren, was die anderen Gaeste sagen.");
+  AddSound(({"klirren","glaeser"}), "Die Glaeser klirren nur leise, "
+    "Josh ist geschickt genug, keine kaputt zu machen.");
+
+  AddSmell(DEFAULT_SMELL,
+    "Es riecht angenehm hier.");
+
+//  AddSmell(({""}), "");
+//  AddRoomMessage( ({""}),30,"func");
+//  AddItem( "item" , REFRESH_DESTRUCT);
+
+  AddExit( "sueden", ([EX_DEST: ROOM+"bar2", EX_TESTFUNC: "test_exit"]) );
+//TODO
+  AddExit( "osten", ([EX_DEST: "/d/ebene/Midas/room/spiele/maexchen_raum", EX_TESTFUNC: "test_exit"]) );
+
+  AddItem( NPC + "josh" , REFRESH_DESTRUCT);
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// sorgt dafuer, dass nur anwesende player auf den barhockern sitzen
+void m_init(){
+  int i;
+  object* ob;
+  ob = getSeats()->getSittingPlayers();
+
+  for(i=0;i<sizeof(ob);i++)
+    if(ob[i] && !present(ob[i]))
+        getSeats()->removePlayer(ob[i]);
+}
+
+//////////////////////////////////////////////////////////////////////////////
+void reset() {
+  object ob;
+  string owner;
+  int lifeTime;
+  mixed removeList;
+  int i;
+  
+  removeList = ({});
+  
+  if(!theke) {
+    call_other (OBJ + "theke", "???");
+    theke = find_object(OBJ + "theke");
+  }
+  
+
+  for(ob=first_inventory(theke);ob;ob=next_inventory(ob)) {
+    owner = ob->getOwnerUId();
+    lifeTime = time() - ob->QueryProp(P_CLONE_TIME);
+    
+    if(!find_living(owner) || lifeTime > 10800)   
+      removeList += ({ob});
+  }
+  
+  i = 0;
+  while(i<sizeof(removeList)) {
+    removeList[i]->remove();
+    i++;
+  }
+  
+  if(present("josh") && i)
+    tell_room(TO, "Josh raeumt ein paar Glaeser von der Theke ab.\n");
+  
+  if (money) {
+    ZENTRALBANK->PayIn(money);
+    money = 0;
+  }
+  ::reset();
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// wer sitzt kann nicht gehn 
+int test_exit(string str) {
+  int i;
+
+  if(!TP) return 1;
+  
+  if(getSeats()->playerSeated(TP)) {
+    write("Du solltest vorher aufstehen.\n");
+    return 0;
+  }
+
+  if(str == "osten") {
+    object *ob;
+
+    ob = deep_inventory(TP);
+    for(i=0;i<sizeof(ob);i++)
+      if(ob[i]->id("\ny_cocktail")) {
+        parkDrink(ob[i]);
+        printf("Du stellst %s auf der Theke ab.\n", ob[i]->name(WEN,0));
+        say(BS(sprintf("%s stellt %s auf der Theke ab.", 
+            TP->Name(), ob[i]->name(WEN,0))), TP);
+      }
+  }
+  return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// theke ist eine blue-print
+string detTheke(string key) {return theke->long();}
+
+//////////////////////////////////////////////////////////////////////////////
+// die barhocker
+string detHocker(string key) {
+  string str;
+  int cnt, fs;
+
+  m_init();
+
+  cnt = getSeats()->getSeatedCount();
+
+  str = (cnt==1 ? "Auf einem Barhocker sitzt " : "Auf den Barhockern sitzen ");
+  if(cnt == 0) 
+    str += "zur Zeit keine Gaeste";
+  else
+    str += getSeats()->getFormattedNames(TP);
+
+  str += ". Es sind ";
+  fs = getSeats()->getFreeSeatCount();
+  str += (fs== 0 ? "keine" : to_string(fs));
+  str += " Plaetze frei.";
+  
+  return break_string(str);
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// wieviele barhocker sind frei?
+string detPlatz(string key) {
+  int cnt;
+  string str;
+
+  if(getSeats()->playerSeated(TP))
+    return BS("Auf Deinem Barhocker sitzend, hast Du hier wirklich reichlich Platz.");
+
+  str = "An der Theke ist reichlich Platz, ";
+
+  if(getSeats()->getSeatedCount() == 0)
+    str += "auch alle Barhocker sind noch frei.";
+  else if(getSeats()->getSeatCount() - getSeats()->getSeatedCount() == 0)
+    str += "aber leider sind alle Barhocker belegt, Du musst also stehen.";
+  else 
+    str += "es sind auch noch " + to_string(getSeats()->getFreeSeats()) +
+                  " Barhocker frei.";
+
+  return BS(str);
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// drink auf der theke abstellen
+void parkDrink(object drink) {
+  drink->move(theke,M_PUT);
+
+  //log
+  log_file(LOG+"theke.log", dtime(time()) + ": "+TP->Name()+" stellt "
+    +drink->QueryProp(P_SHORT)+" ab\n");
+}
+
+//////////////////////////////////////////////////////////////////////////////
+void MoneyIn(int amount) { money += amount; }
+
+//////////////////////////////////////////////////////////////////////////////
+int findDrinkId(string str) {
+  int i;
+  
+  if(member( drinks, (int)str )) return (int)str;
+  
+  for(i=1;i<=sizeof(drinks);i++) {
+    if( member(drinks[i,4],str) != -1 ) {
+      return i;
+    }
+  }
+  return 0;
+}
+
+// das was der barkeeper tut um den drink zu mixen
+mixed getMixChats(int drinkNr) {return drinks[drinkNr,8];}
+
+int getDrinkValue(int drinkNr) {return drinks[drinkNr,2];}
+string getDrinkName(int id) {return drinks[id, 0];}
+
+//////////////////////////////////////////////////////////////////////////////
+mixed getDrinkProps(int drinkNr) {
+  mixed arr;
+  arr = ({drinks[drinkNr,0],    //name
+          drinks[drinkNr,3],    //short
+          drinks[drinkNr,4],    //ids
+          drinks[drinkNr,5],    //long
+          drinks[drinkNr,6],    //msg
+          drinks[drinkNr,7],     //props
+          drinks[drinkNr,9]     //details
+        });
+
+  return arr;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+mixed getDrinkIds() {
+  int i, j;
+  string tmp;
+
+  tmp = "";
+
+  for(i=1;i<=sizeof(drinks);i++)
+    for(j=0;j<sizeof(drinks[i,4]);j++)
+      tmp += drinks[i,4][j] + "|";
+
+  return explode(tmp, "|");
+}
+
+//////////////////////////////////////////////////////////////////////////////
+int cmdSitze(string str) {
+  int ret, i;
+  notify_fail("Worauf willst Du Dich setzen?\n");
+  m_init();
+
+  if(str != "auf hocker" &&
+     str != "auf barhocker" &&
+     str != "barhocker" &&
+     str != "hocker" )  return 0;
+
+  ret = getSeats()->seatPlayer(TP);
+  switch (ret) {
+    case -2:  write("Du sitzt doch schon auf einem Barhocker!\n");
+              break;
+    case 0:   write("Leider sind alle Barhocker besetzt.\n");
+              break;
+    default:  write("Du setzt Dich auf einen Barhocker.\n");
+              say(TP->Name() + " setzt sich auf einen Barhocker.\n");
+  }
+  return 1;
+}
+
+
+//////////////////////////////////////////////////////////////////////////////
+int cmdStehe(string str) {
+  int ret;
+
+  notify_fail("Wovon willst Du aufstehen?\n");
+  if(str != "auf" && str != "von hocker auf")
+    return 0;
+
+  ret = getSeats()->removePlayer(TP);
+  if(ret == -1) {
+    write("Aber Du sitzt doch gar nicht auf einem Barhocker!\n");
+    return -1;
+  }
+  else {
+    write("Du stehst von einem Barhocker auf.\n");
+    say(TP->Name() + " steht von einem Barhocker auf.\n",TP);
+    return 1;
+  }  
+}
+
+//////////////////////////////////////////////////////////////////////////////
+int cmdKaufe(string str) {
+  int drinkNr;
+  object josh;
+  
+  notify_fail("Was willst Du kaufen?\n");
+  
+  if(!str) return 0;
+  
+  if(!(josh=present("josh"))) {
+    write("Der Barkeeper ist leider nicht da.\n");
+    return 1;
+  }
+  
+  drinkNr = findDrinkId(str);
+  if(!drinkNr) return 0;
+  
+  printf("Du bestellst einen %s.\n", getDrinkName(drinkNr));
+  say(sprintf("%s bestellt einen %s.\n",
+            TP->Name(), getDrinkName(drinkNr)), TP);
+
+  josh->work(drinkNr,TP); //Auftrag an Josh
+  
+  return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+int cmdSpendiere(string str) {
+  int drinkNr;
+  object josh;
+  mixed arr;
+  object pl;
+  
+  notify_fail("Wem willst Du was spendieren?\n");
+  
+  if(!str) return 0;
+  
+  if(!(josh=present("josh"))) {
+    write("Der Barkeeper ist leider nicht da.\n");
+    return 1;
+  }
+  
+  arr = explode(str," ");
+
+  if(sizeof(arr)<2) return 0;
+
+  if(!(pl=present(arr[0]))) return 0;
+
+  str = implode(arr[1..]," ");
+  
+  drinkNr = findDrinkId(str);
+  if(!drinkNr) return 0;
+
+  printf("Du spendierst %s einen %s.\n", pl->Name(), getDrinkName(drinkNr));
+  say(sprintf("%s spendiert %s einen %s.\n", 
+            TP->Name(), pl->Name(), getDrinkName(drinkNr)), ({TP,pl}));  
+  tell_object(pl, BS(TP->Name() + " spendiert Dir einen "
+                     + getDrinkName(drinkNr) +"."));    
+
+//Auftrag an Josh
+  josh->work(drinkNr,pl);
+  
+  return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+int cmdMenue(string str) {
+  int i;
+
+  notify_fail("Tippe \"menue\".\n");
+  if(str) return 0;
+
+  write("Du schaust Dir die Barkarte an:\n");
+  write("* L A S * M I D A S * * * * * * * * * * * * * * * *\n");
+  write(sprintf("*%49s*\n"," "));
+  write(sprintf("*%5s %-30s %-5s %-6s*\n"," "," ""Getraenke","Preis","Alk"));
+  write(sprintf("*%49s*\n"," "));
+  for(i=1;i<=sizeof(drinks);i++) {
+    write(sprintf("*%5d. %-30s %4d %3s   *\n",
+                    i,drinks[i,0],drinks[i,2],drinks[i,1]));
+  }
+  write(sprintf("*%49s*\n"," "));
+  write("* * * * * * * * * * * * * * * * * * * * * * * * * *\n\n");
+  
+  return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+int cmdNimm(string str) {
+  int nr;
+  object drink;
+  string what;
+  int i;
+  mixed tmp;
+  mixed arr;
+  mixed thekeInv;
+  
+  notify_fail("Was willst Du von wo nehmen?\n");
+  
+  if(!str) return 0;
+
+  if(sscanf(str, "%s von theke", what) != 1)
+    return 0;
+  
+  arr = explode(what, " ");
+
+  if(sscanf(arr[sizeof(arr)-1], "%d", nr) != 1)
+    nr = 1;
+  else {
+    arr = arr[0..<2];
+    what = implode(arr, " ");
+  }
+  
+  if(nr < 1) return 0;
+  
+  tmp = ({});
+  thekeInv = all_inventory(theke);
+  for(i=0;i<sizeof(thekeInv);i++) {
+    if(thekeInv[i]->id(what))
+      tmp += ({i});
+  }
+
+  if(nr > sizeof(tmp)) return 0;
+  nr = tmp[nr-1];
+  drink = thekeInv[nr];
+
+  switch (drink->move(TP,M_GET)) {
+    case ME_TOO_HEAVY:
+      write(break_string("Du kannst das Glas nicht mehr tragen.",78));
+      break;
+    case ME_TOO_MUCH:
+      write(break_string("Du hast schon zu viele Gegenstaende bei Dir.",78));
+      break;
+    default:
+      write(break_string(
+        "Du nimmst " + drink->QueryProp(P_SHORT) + " von der Theke.",78));
+      say(break_string(
+        TP->Name() + " nimmt " + drink->QueryProp(P_SHORT) + " von der Theke.",78));
+  }
+            
+  return 1;   
+}
+
+//////////////////////////////////////////////////////////////////////////////
+int cmdStelle(string str) {
+  object ob;
+  mixed tmp;
+  object drink;
+  string what;
+  mixed arr;
+  int nr;
+  
+  notify_fail("Was willst Du worauf stellen?\n");
+  if(!str) return 0;
+  if(sscanf(str, "%s auf theke", what) != 1 )
+    return 0;
+     
+  arr = explode(what, " ");
+  if(sscanf(arr[sizeof(arr)-1], "%d", nr) != 1)
+    nr = 1;
+  else {
+    arr = arr[0..<2];
+    what = implode(arr, " ");
+  }
+
+  if(nr < 1) return 0;
+  
+  tmp = ({});
+  for(ob=first_inventory(TP);ob;ob=next_inventory(ob)) {
+    if(ob->id(what))
+      tmp += ({ob});
+  }
+
+  if(nr > sizeof(tmp)) return 0;
+  drink = tmp[nr-1];
+  
+  if(!drink->id("\ny_cocktail")) {
+    write(break_string(
+      "Das kannst Du nicht auf der Theke abstellen.",78));
+    return 1;
+  }
+  
+  parkDrink(drink);
+  
+  write(break_string(
+    "Du stellst " + drink->name(WEN) + " auf der Theke ab.",78));
+  say(break_string(
+    TP->Name() + " stellt " + drink->name(WEN) + " auf der Theke ab.",78));
+
+  return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+int cmdFuehle(string str) {
+  notify_fail("Was willst Du fuehlen?\n");
+  if(str!="milchglas" &&
+     str!="oberseite" && 
+     str!="theke" &&
+     str!="material") return 0;
+
+  write(BS("Die Oberseite der Theke fuehlt sich gar nicht wie Glas an, "
+        "sondern eher wie Holz, warm und etwas rauh. Das erklaert aber "
+        "immer noch nicht woher das eigenartige Leuchten kommt."));
+
+  return 1;
+}

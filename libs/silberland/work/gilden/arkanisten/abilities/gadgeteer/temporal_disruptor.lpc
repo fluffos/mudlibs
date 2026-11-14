@@ -1,0 +1,110 @@
+#include "../../arkanisten.h"
+
+inherit GUILD_FOLDER "abilities/ability.lpc";
+
+public void create() {
+    if(is_clone(TO)) return;
+
+    ::create();
+    SetProp(P_ABILITY_NAME, CAP(TEMPORAL_DISRUPTOR));
+    SetProp(P_ABILITY_DESCRIPTIPON, 
+        "Der Zeitverzerrer ist ein kleines Geraet, das eine kurze Zeitblase erzeugt. "
+        "Innerhalb dieser Blase vergeht die Zeit fuer dich langsamer - oder fuer deine Gegner "
+        "schneller. Fuer dich sieht es jedenfalls so aus, als ob deine Gegner langsamer waeren.");    
+    SetProp(P_ABILITY_TYPE, ABILITY_TYPE_ACTIVE);
+    SetProp(P_ABILITY_BASE_ATTRIBUTE, A_INT);
+    SetProp(P_ABILITY_CASTVERB, CAST_VERB_ACTIVATE);
+    SetProp(P_ABILITY_GROUP, ({ABILITY_GROUP_GADGETS}));
+    SetProp(P_ABILITY_COST, ([
+        P_SP: 50,
+        P_MV: 200,
+    ]));
+    SetProp(P_ABILITY_REQUIRES, ({GADGET_OVERDRIVE}));
+    SetProp(P_ABILITY_MIN_GUILD_LEVEL, 31);
+}
+
+public mapping prepare_use(object user, mapping sinfo) {
+    object *enemies;
+
+    if(user->QueryProp(P_ACTIVE_TEMPORAL_DISRUPTOR) > time()) {
+        tell_object(user, BS("Du kannst den Zeitverzerrer erst wieder benutzen, wenn die Wirkung abgeklungen ist."));
+        return 0;
+    }
+
+    if(get_free_hands(user) < 1) {
+        tell_object(user, BS("Du musst eine freie Hand haben, um den Zeitverzerrer zu aktivieren!"));
+        return 0;
+    }
+
+    enemies = filter_array(all_inventory(ENV(user)), "valid_target");
+    enemies -= ({ user });
+    if(sizeof(enemies) < 1) {
+        tell_object(user, BS("Ohne Gegner macht das keinen Sinn."));
+        return 0;
+    }
+
+    tell_object(user, BS("Du drueckst den grossen roten Knopf auf dem Zeitverzerrer..."));
+    tell_room(ENV(user), BS(user->Name(WER)+" drueckt einen grossen, roten Knopf..."), ({user}));
+
+    sinfo[SI_PREPARE_TIME] = 2 + random(4);
+
+    return ::prepare_use(user, sinfo);
+}
+
+public void failed(object user, mapping sinfo, int skillcheck) {
+    if(skillcheck < -3000) {
+        tell_object(user, BS("... ploetzlich vergeht die Zeit um dich herum schneller!"));
+        tell_room(ENV(user), BS("... scheint " + user->name(WER)+ " unheimlich zaeh und langsam!"), ({user}));
+        user->ModifySkillAttribute(user, SA_SPEED, 50 - random(25), 5 + random(5));
+        return ::failed(user, sinfo, skillcheck);
+    }
+
+    tell_room(ENV(user), BS("... nichts passiert?!"), ({user}));
+    tell_object(user, BS("... nichts passiert?!"));
+    
+    return ::failed(user, sinfo, skillcheck);
+}
+
+public int valid_target(object ob) {
+    return living(ob) && !query_once_interactive(ob) && !ob->QueryProp(P_NOATTACK) && !ob->QueryProp(P_FRIEND);
+}
+
+public void success(object user, mapping sinfo, int skillcheck) {
+    object *enemies, enemy;
+    int duration, idx;
+
+    enemies = filter_array(all_inventory(ENV(user)), "valid_target");
+    enemies -= ({ user });
+    if(sizeof(enemies) < 1) {
+        tell_object(user, BS("... aber es gibt keine Gegner mehr hier."));
+        return;
+    }
+
+    duration = skillcheck / 1000 + sinfo[SI_SKILLABILITY] / 2222 + random(10);
+
+    tell_room(ENV(user), BS("... ploetzlich scheint die Zeit um " + user->Name(WESSEN) + " herum langsamer zu vergehen!"), ({user}));
+    foreach(idx, enemies, enemy, {
+        tell_object(enemy, BS("Du hast ploetzlich das gefuehl, als ob die Zeit um dich herum schneller vergeht!"));
+        enemy->ModifySkillAttribute(user, SA_SPEED, 100 - sinfo[SI_SKILLABILITY] / 200, duration);
+        if(!user->IsEnemy(enemy)) enemy->Kill(user);
+        pDebug(user, sprintf("temporal_disruptor :: success :: enemy=%O duration=%d speed=%d\n", enemy, duration, 100 - sinfo[SI_SKILLABILITY] / 200));
+    });
+
+    if(skillcheck > 7000) {
+        // time for user is sped up too
+        tell_object(user, BS("Deine eigene Zeit scheint sich ebenfalls zu beschleunigen!"));
+        user->ModifySkillAttribute(user, SA_SPEED, 100 + sinfo[SI_SKILLABILITY] / 200, duration);
+        pDebug(user, sprintf("temporal_disruptor :: success :: self duration=%d speed=%d\n", duration, 100 + sinfo[SI_SKILLABILITY] / 200));
+    }
+
+    user->Set(P_ACTIVE_TEMPORAL_DISRUPTOR, time() + duration);
+    call_out("end_message", duration, user);
+
+    return;
+}
+
+public void end_message(object user) {
+    if(!objectp(user)) return;
+    tell_object(user, BS("Die Wirkung des Zeitverzerrers klingt ab."));
+    tell_room(ENV(user), BS("Die Wirkung der Zeitverzerrung um " + user->Name(WESSEN) + " klingt ab."), ({user}));
+}

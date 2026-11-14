@@ -1,0 +1,827 @@
+// Bumerang.c  (c) ketos@morgengrauen. Vielen Dank an Ketos@Morgengrauen!
+
+#include <combat.h>
+#include <properties.h>
+#include <attributes.h>
+#include <moving.h>
+#include <language.h>
+#include <new_skills.h>  // fuer SP_SHOW_DAMAGE und Konsorten
+#include "../files.h"
+inherit "std/thing";
+
+// 25/6/95 ABFANGQUOTE von 1:8 auf 1:20
+// 25/6/95 FRESSRATE von 1:2000 auf 1:3000
+#define ABFANG_QUOTE 20        /* 1 : ABFANGQUOTE */
+
+#define KOLLIS_QUOTE 2         /* 1 : KOLLISIONSQUOTE */
+#define FRESS_QUOTE  3000      /* 1 : AUFFRESSQUOTE */
+
+// The bumerang flies there in case of no exits in the start room
+#define BUFFER_ROOM ROOM "bumiraum" 
+
+// zerstoerung und fehler des Bumerangs:
+#define ELOG(x) write_file("/players/amazora/log/bumerang_exp.log"," "+x+"")
+
+// werfen, fangen und kaempfen des Bumerangs:
+#define LOGL "/players/amazora/log/bumerang.log"
+//#define LLOG(x) write_file(LOGL," "+x+"")
+#define LLOG(x) nop()
+
+// Der Spieler duckt sich umd dem Bumerang auszuweichen.
+// gespeichert wird die Zeit zu der sich ein Spieler geduckt hat.
+#define P_IS_DUCKED "p_is_ducked"
+// Hier wird der Helm den der Spieler traegt gespeichert oder
+// eine negative Zahl das er keinen traegt. Diese Zahl wird hoch zu 0
+// gezaehlt und dann wieder ueberprueft ob er einen Helm traegt.
+#define KP_HELM_WORN "kp_hworn"
+
+// Minimale Groesse um den Bumerang zu werfen und zu fangen:
+#define MIN_SIZE 30
+
+object werfer; // Der Werfer
+object werfenv;// Bumerang wurde dort geworfen und gekehrt dorthin zurueck
+object enemy;  // Der Feind, 0= kein Feind
+int phase;
+mapping defend_info; // 'Spell-Infos' und Kampfausgaben in 'Defend'
+nop() {}
+
+query_werfer(){ return werfer; }
+
+create()
+{
+// Fuer den Seherladen
+  SetProp(P_VALUE, 1800);                 //Preis
+  SetProp(P_IDS,({"bumerang","ding"}));   //Ids zum kaufen
+// short braucht das fuer name()
+  SetProp(P_NAME, "Bumerang" );
+  SetProp(P_GENDER, MALE);
+
+  if(!is_clone(this_object())) return;
+::create();
+  seteuid(getuid());
+  SetProp(P_SHORT, "Ein Bumerang@@fliegt@@");
+  SetProp(P_LONG, 
+   "In geschickten Haenden kann es eine toedliche Wurfwaffe sein.\n"+
+  "(siehe auch 'hilfe bumerang') - Ketos@Morgengrauen Design -\n");
+  AddId(({"bumerang"}));
+
+// C_MIN, C_AVG, C_MAX: Der min/durschschn/max zu erwartende Schaden
+//   bei der Anwendung dieses Befehls
+// C_DTYPES: Die moeglichen Schadenstypen die verursacht werden koennen
+// C_HEAL: Um wieviel das Objekt den Anwender heilt.
+
+  SetProp(P_COMBATCMDS,(["wirf bumerang":
+                         ([C_MIN:0,C_AVG:15,C_MAX:24,
+                           C_DTYPES:({DT_BLUDGEON,DT_PIERCE})
+                          ])
+                        ])
+         );
+
+  SetProp(P_NAME, "Bumerang" );
+  SetProp(P_GENDER, MALE);
+  SetProp(P_MATERIAL, MAT_OAK);
+  SetProp(P_WEIGHT, 400);  
+  SetProp(P_VALUE, 1800);
+  SetProp(P_NOBUY, 1);
+  enemy=0;
+  defend_info = ([SP_NAME:"Bumerang", // Damit ist der Bumerang 'abfangbar'
+                  SP_SHOW_DAMAGE:({   // jeweils Schaden > Wert, Meldungen: Opfer, Taeter, Rest
+                    ({ -1, "Du weichst dem Bumerang geschickt aus.", 
+                           "@WER1 weicht dem Bumerang gerade noch rechtzeitig aus.",
+                           "@WER1 weicht dem Bumerang gerade noch rechtzeitig aus." }),
+                    ({  0, "Der Bumerang rasiert Dir ein Haarbueschel ab.",
+                           "Der Bumerang rasiert @WEM1 ein Haarbueschel ab.",
+                           "Der Bumerang rasiert @WEM1 ein Haarbueschel ab." }),
+                    ({  2, "Der Bumerang trifft Dich am Kopf.",
+                           "Der Bumerang trifft @WEN1 am Kopf.",
+                           "Der Bumerang trifft @WEN1 am Kopf." }),
+                    ({  4, "Der Bumerang trifft Dich hart am Kopf.",
+                           "Der Bumerang trifft @WEN1 hart am Kopf.",
+                           "Der Bumerang trifft @WEN1 hart am Kopf." }),
+                    ({  8, "Der Bumerang trifft Dich sehr hart am Kopf.",
+                           "Der Bumerang trifft @WEN1 sehr hart am Kopf.",
+                           "Der Bumerang trifft @WEN1 sehr hart am Kopf." }),
+                    ({ 15, "Der Bumerang schlaegt Dir den Kopf ein.",
+
+                      "Der Bumerang schlaegt @WEM1 den Kopf ein.",
+                           "Der Bumerang schlaegt @WEM1 den Kopf ein." }),
+                    ({ 24, "Der Bumerang zerschmettert Dir den Kopf in kleine Stueckchen.",
+                           "Der Bumerang zerschmettert @WEM1 den Kopf in kleine Stueckchen.",
+                           "Der Bumerang zerschmettert @WEM1 den Kopf in kleine Stueckchen." }),
+                    ({ 40, "Der Bumerang zermatscht Dir den Kopf zu Brei.",
+                           "Der Bumerang zermatscht @WEM1 den Kopf zu Brei.",
+                           "Der Bumerang zermatscht @WEM1 den Kopf zu Brei." }),
+                    ({ 70, "Der Bumerang pulverisiert Dir den Kopf.",
+                           "Der Bumerang pulverisiert @WEM1 den Kopf.",
+                           "Der Bumerang pulverisiert @WEM1 den Kopf." }),
+                    ({ 100,"Der Bumerang zerstaeubt Dir den Kopf.",
+                           "Der Bumerang zerstaeubt @WEM1 den Kopf.",
+                           "Der Bumerang zerstaeubt @WEM1 den Kopf." }),
+                    ({ 150,"Der Bumerang atomisiert Dir den Kopf.",
+                           "Der Bumerang atomisiert @WEM1 den Kopf.",
+                           "Der Bumerang atomisiert @WEM1 den Kopf." })
+    })
+ ]);
+ }
+init()
+{
+::init();
+  add_action("hilfe","hilfe");
+  add_action("werfe","werfe");
+  add_action("werfe","wirf");
+  add_action("fange","fange");
+  add_action("fange","fang");
+  add_action("pick_me","nimm");
+  add_action("ducke","duck",1);
+  add_action("eat","friss");
+  add_action("eat","iss");
+
+}
+            
+fliegt() { return (phase!=0) ? " schwirrt durch die Luefte" :""; }
+query_bum_flying() { return (phase!=0); }
+query_enemy() { return enemy; }
+short() { return capitalize(name(WER,0))+fliegt()+".\n"; }
+
+AddHP(person,hp)
+  { 
+    int h,max;
+    if(!person || !living(person)) return;
+    h=person->QueryProp(P_HP)+hp;
+    if(h>max=person->QueryProp(P_MAX_HP)) hp=max;
+    return person->SetProp(P_HP,hp);
+  }
+
+eat(arg) // eat me!
+{
+  if(!id(arg)) return 0;
+  if(phase==1) 
+    write("Das schmackhafte Stueck Holz fliegt an Deiner Nase vorbei.\n");
+  if(this_player()->QueryProp(P_LEVEL)<5)
+   write("Du beisst Dir Deine Zaehnchen am Bumerang aus.\n");
+  if(this_player()->QueryProp(P_FOOD)>50)
+    {
+    write("Dein Magen meutert beim Anblick dieses unverdaulichen Stueck Holzes!\n");
+    return 1;
+    }
+  // Bumi heilt und blaeht!
+  AddHP(this_player(),15);
+  this_player()->SetProp(P_FOOD,this_player()->QueryProp(P_FOOD)+50);
+
+  write("Du schnappt Dir "+name(WEN,1)+" und frisst ihn geraeuschvoll auf. Wohlbekomm's!\n");
+  say(this_player()->name(WER,1)+" schnappt sich "+name(WEN,1)+
+      " und frisst ihn geraeuschvoll auf.\n", this_player());
+  if(werfer && environment(werfer)!=environment()) tell_object(werfer,
+    "Jemand nebenan frisst gerade D"+name(WEN,0)+" geraeuschvoll auf.\n");
+  stop_heart_beat();
+  remove(); 
+  return 1;
+}
+ducke(arg)
+{
+ int duck_time;
+
+ if(arg!="dich") return 0;
+ duck_time=this_player()->QueryProp(P_IS_DUCKED);
+ if(duck_time && 
+    ( ( time() - duck_time ) <= 3 ) ) 
+   {
+    write("Du bist bereits geduckt.\n");
+    return 1;
+  }
+
+ write("Du duckst Dich.\n");
+ say(TPN+"duckt sich.\n");
+ this_player()->SetProp(P_IS_DUCKED,time());
+ return 1;
+}
+pick_me(arg)
+{
+  // pick me if I do not fly:
+  if(!id(arg)) return 0;
+  if(phase!=0) return 0;
+  if(environment()==this_player()) return 0;
+  this_player()->pick_obj(this_object());
+  return 1;
+}
+
+hilfe(arg)
+{
+  if (arg != "bumerang") return 0;
+  this_player()->more("/players/amazora/hilfe.bumerang");
+  return 1;
+}
+
+werfe(arg)
+{
+ string s1,s2;
+
+ object target;
+
+  if (!arg || arg=="") return 0;
+  if (this_player()->QueryProp(P_SIZE)<MIN_SIZE ||
+      this_player()->QueryProp(P_FROG))
+    { write("Du bist zu klein um den Bumerang zu werfen.\n"); return 1;}
+
+  if (arg == "alles weg")
+    {
+      fliege(0);
+      return 0;
+    }
+  if (id(arg) || arg == "bumerang weg")
+    {
+      if (this_player()!= environment())
+        if(!present("bumerang",this_player()))
+          { write("Du musst den Bumerang erstmal kriegen.\n"); return 1;}
+        else return 0;
+      fliege(0);
+      return 1;
+   }
+  if (sscanf(arg,"%s nach %s",s2,s1) )
+    {
+      if(id(s2))
+          { 
+      if (this_player()!=environment())
+        if(!present("bumerang",this_player()))
+          { write("Du musst den Bumerang erstmal kriegen.\n"); return 1;}
+        else return 0;
+      if( (!target=present(LOWER(s1),environment(this_player())))
+                || !target->short() ) // Rumata
+        { write("Nach wem willst Du Deinen Bumerang werfen?\n"); return 1;}
+      if(target==this_player())
+        { write("Du koennest Dich treffen!\n"); return 1;}
+      fliege(target);
+      return 1;
+    }
+    }
+  return 0;
+}
+ 
+#define P_BUMI_NOTIFY_FAIL "bumi_notify_fail"
+
+
+my_notify_fail(level,str)
+{
+    mixed notify_bumi;
+
+    if(!this_player()->QueryProp(P_ACTUAL_NOTIFY_FAIL)) return set_my_notify_fail(level,str);
+//    write(this_player()->QueryProp(P_ACTUAL_NOTIFY_FAIL));
+    notify_bumi=this_player()->QueryProp(P_BUMI_NOTIFY_FAIL);
+
+    if(!notify_bumi) return set_my_notify_fail(level,str);
+
+    if(notify_bumi[0] < time()-1) return set_my_notify_fail(level,str);
+
+    if(notify_bumi[1] < level) return set_my_notify_fail(level,str);
+
+    return 0;
+}
+
+set_my_notify_fail(level,str)
+{
+//    write( ":"+to_string(level)+":"+str) ;
+  this_player()->SetProp(P_BUMI_NOTIFY_FAIL,({time(),level}));
+  return notify_fail(str);
+}
+
+erase_my_notify_fail()
+  { return this_player()->SetProp(P_BUMI_NOTIFY_FAIL,0); }
+
+fange(arg)
+{
+  object tp;
+  
+  if (!id(arg)) return notify_fail("Was willst du fangen?\n");
+
+  if ((tp=this_player()) == environment())
+    return my_notify_fail(1,"Du hast den Bumerang doch schon.\n");
+  if (phase == 0) return my_notify_fail(2,"Der Bumerang liegt am Boden.\n");
+
+  if (tp->QueryProp(P_GHOST))
+    {  
+      write("Du greifst nach dem Bumerang,"+
+            " aber er fliegt durch Dich hindurch!\n");
+      say(tp->name()+" versucht den Bumerang zu fangen.\n");
+      return 1;
+    }
+
+  // Kleine Leute koennen den Bumi nicht fangen
+  if(tp->QueryProp(P_SIZE)<MIN_SIZE)
+     return my_notify_fail(4,"Du huepfst hoch um den Bumerang zu fangen, aber leider bis du noch zu klein.\n");
+
+  // Wenn ein Spieler zu ungeschickt ist entwischt der Bumerang. 18.8.96
+  if (tp->QueryAttribute(A_DEX)*5<random(75))
+     return my_notify_fail(4,"Du stellst Dich zu ungeschickt an und "+name(WER,1)+" entwischt Dir.\n");
+
+  // 17/6/95 Ketos: no catch during combat in first 2 flying phases:
+ if (enemy && ( phase == 1 ))
+     return my_notify_fail(4,"Du reagierst zu langsam und "+name(WER,1)+" entwischt Dir.\n");
+
+  // 17/6/95 Ketos: no catch during combat if thrower is present:
+  if (tp!=werfer 
+      && werfer 
+      && (enemy || sizeof((werfer->QueryEnemies())[0]) )
+      && query_once_interactive(werfer) 
+//      && environment(werfer)==environment(this_object())
+     )
+        return my_notify_fail(3,werfer->name()+" schaut Dich vorwurfvoll an und der Bumerang fliegt an Dir vorbei.\n");
+
+  if((tp->QueryProp(P_MAX_HANDS))==(tp->QueryProp(P_USED_HANDS)))
+    {
+    write("Du musst eine Hand frei haben, um den Bumerang zu fangen!\n");
+    return 1;
+  }
+
+  erase_my_notify_fail();
+stop_heart_beat();
+
+  if(werfer && environment(werfer)!=environment(this_object()))
+    tell_object(werfer,"Etwas nebenan hat gerade D"+name(WEN,0)+" abgefangen.\n");
+
+  move(tp,M_GET|M_NOCHECK|M_SILENT);
+  say(tp->name()+" faengt "+name(WEN,1)+" geschickt.\n");
+  write("Du faengst "+name(WEN,1)+" geschickt.\n");
+  LLOG(tp->name()+" faengt");
+
+  return 1;
+}
+
+void test_enemy(object werfer)
+{
+  // Verhindern das unangreibare Monster angeriffen werden
+  // in dem erst der Spieler angreift und dann getestet wird ob 
+  // der Gegner noch Feind ist.        21.9.94 - Ketos -
+  if(enemy && !query_once_interactive(enemy))
+  {
+  // werfer->Attack(enemy);
+    enemy->Defend(1,DT_BLUDGEON,1,werfer);
+    if(!enemy->IsEnemy(werfer)) enemy=0;
+  }
+  return ;
+}
+
+void fliege(object target)
+{
+  int i;
+  string enemy_name;
+
+  if(!werfer = environment()) return;
+  if(!werfenv = environment(werfer)) return;
+
+  if((werfer->QueryProp(P_MAX_HANDS))==(werfer->QueryProp(P_USED_HANDS)))
+    {
+    write("Du musst eine Hand frei haben, um den Bumerang zu werfen!\n");
+    return;
+  }
+ enemy = target;
+  enemy_name = enemy ? " nach "+enemy->name(WEM,1) : "";
+  
+
+  say(TPN+" wirft "+name(WEN,1)+enemy_name+".\n");
+  write("Du wirfst "+name(WEN,1)+enemy_name+".\n");
+  LLOG(TPN+" wirft"+enemy_name+"\n");
+
+  test_enemy(werfer);
+
+  if ( !enemy && sizeof((werfer->QueryEnemies())[0]) ) enemy = TO;
+
+  SetProp(P_NOGET,"Du solltest versuchen den Bumerang zu fangen!\n");
+  move(werfenv, M_NOCHECK|M_SILENT);
+  phase=1; //naechste Phase 2 
+  set_heart_beat(1); //HERZ AN
+}
+heart_beat()
+{
+  // Ohne Feinde fliege langsam: 
+  // say(to_string(enemy));
+  // TK("@");
+  if(!enemy) phase=-phase;
+  if(phase<0) return;
+
+  phase+=1;
+  switch(phase)
+    {
+    case 1:  // ERROR: heart_beat wurde mit phase=0 aufgerufen
+
+    case 2:  // 1. Angriffsflug
+      flieg_im_kreis();
+      break;
+    case 3:  // fliege in angrenzenden Raum
+      flieg_weg();
+      break;
+    case 4:  // 2. Angriffsflug
+  flieg_im_kreis();
+      break;
+    case 5:  // fliege in vorherigen Raum
+      flieg_zurueck();
+      break;
+    case 6:  // 3. Angriffsflug
+      flieg_im_kreis();
+      break;
+    case 7:  // beende Flug: (in Boden bohren) oder (fangen lassen)
+      lande();
+      break;
+    case 8:  // Monster wirft Bumerang wieder
+      npc_wirft();
+      break;
+
+    default: // ERROR: Herz abschalten und Bumerang auf den Boden
+      absturz();
+      break;
+    }
+}
+
+flieg_weg() // fliege in einen angrenzenden Raum
+{
+  mapping out;
+  mixed *exits;
+  string dir,exit;
+
+
+  if(!werfenv=environment()) return error("no env");
+  out = werfenv->QueryProp(P_EXITS);
+  exits = m_indices(out);
+  if (sizeof(exits))
+    {
+      exit = exits[random(sizeof(exits))];
+      dir = out[exit];
+      if(member(dir, '#') != -1)  dir = explode(dir, "#")[1];
+      exit = "nach "+capitalize(exit);
+    }
+  else
+   {
+      exit = "davon";
+      dir = BUFFER_ROOM;
+    }
+
+  tell_room(werfenv,capitalize(name(WER,1))+" fliegt "+exit+".\n");
+  if(!move(dir,M_TPORT|M_NOCHECK|M_SILENT)) return error("move_weg"); 
+  tell_room(environment(),capitalize(name(WER,1))+" fliegt herein.\n");
+}
+
+flieg_zurueck() // fliege in vorherigen Raum: Abwurfsort
+{
+  if(!werfenv) return error("move_back2");
+  tell_room(environment(),capitalize(name(WER,1))+" fliegt zurueck.\n");
+  if(!move(werfenv, M_TPORT|M_NOCHECK|M_SILENT)) return error("move_back");
+  tell_room(werfenv,capitalize(name(WER,1))+" fliegt wieder herein.\n");
+}
+
+flieg_im_kreis() // Angriffsflug !
+{
+ object *alive, *enemies; // Lebende im Raum, Feinde
+  object obj, env;         // dummy, Der Umgebungsraum
+  string to_victim, to_others; // Meldungen an Gegner, an alle anderen
+  string bumi;             // captalize name of bumerang
+  int i,hp;                // i, hitpoints                
+  int kampfkraft;          // 0 = Nur Spass, 1-5 = Ernst! Kampfstufe
+  int flying_bumerangs;    // Anzahl der fliegenden Bumerangs im Raum
+  object second_bum;       // 2. Bumerang zum Zusammenstossen
+  int duck_time;
+  int auswahl;             // Wert fuer switch
+
+  int new_hp;
+  string en_wer,en_wen,en_wem;
+  mixed helm;
+
+  if (!env=environment()) return stop_heart_beat();
+
+  // Umgebung nach Spielern, Gegnern und fliegenden Bumerangs absuchen
+  alive = ({ });
+  flying_bumerangs = 1;
+ for( obj=first_inventory(env); obj; obj=next_inventory(obj) )
+    {
+      if( living(obj) ) alive += ({obj});
+      else if( obj->query_bum_flying() && obj != this_object() )
+        {
+          second_bum = obj;
+
+          flying_bumerangs+=1;
+        }
+    }
+
+  // Sind mehr als 2 Bumerangs in der Luft: Zusammenstoss moeglich
+  if( flying_bumerangs >= 3 && !random(KOLLIS_QUOTE)
+  // In the buffer room bumerang must not collide 
+      && file_name(environment()) != BUFFER_ROOM)
+    {
+      tell_room(env,"Zwei Bumerangs stossen in der Luft zusammen"+
+                    " und stuerzen ab.\n");
+      second_bum->absturz();
+      return;
+    }
+
+  // Lebt Werfer noch ? Nein, dann zurueck fliegen und abstuerzen.
+  if( !living(werfer) ) 
+    {
+      // Falls der Werfer tot ist, stuerzt der Bumerang ab,
+      // wenn er wieder am Abwurfsort ist.
+      if (env == werfenv) absturz();
+      return;
+    }
+
+
+  // Gegner hier und lebend ?
+  if(enemy && (environment(enemy) != env || !living(enemy) ) )
+    enemy = 0;
+
+  // Gegner gleich Werfer => Kein Gegner, keine Selbstverletzung 9.12.94
+  if(enemy == werfer)
+    enemy = 0;
+    // Kein Gegner: Gegner suchen, wenn der Werfer anwesend ist
+  if(!enemy && environment(werfer)==env)
+    {
+    enemies = werfer->QueryEnemies()[0];
+    if(sizeof(enemies))
+      {
+        enemy = enemies[random(sizeof(enemies))];
+        // Gegner bereits tot (25.1.95 Ketos) oder nicht da ?
+        // Dann suche Gegner aus.
+        if(!enemy || (enemy && environment(enemy)!=env) ) 
+          for( enemy = 0, i = sizeof(enemies) ; --i >= 0; )
+            if(enemies[i] && environment(enemies[i])==env) 
+              {enemy=enemies[i]; break;}
+      }
+    else 
+      enemy = 0;
+    }
+
+  // 22/7/95 NPC duerfen keine NPC mit dem Bumerang angreifen
+  // sollte eigentlich nicht gehen, ist zur Sicherheit drin
+  if(werfer && !query_once_interactive(werfer) && 
+     enemy && !query_once_interactive(enemy)) enemy=0;
+  
+  // Kampfkraft des Bumerangs berechnen
+  if (enemy) 
+    {
+    kampfkraft = (werfer->QueryAttribute(A_DEX)+1)/5
+                 -random(enemy->QueryProp(P_TOTAL_AC))/35;
+                      // 10.4.95 divisor von 55 auf 50 erniedrigt - Ketos -
+                      // 2.8.95 A_DEX auf /5 erhoeht
+                      //        AC/47 auf AC/30
+ 
+
+    if (kampfkraft<1) kampfkraft = 1;
+    // Falls jemand dem Wolpertingern etwas zu leide tun moechte !
+     if (!query_once_interactive(enemy) && 
+         ( (!random(FRESS_QUOTE) && 
+            (enemy->QueryProp(P_SIZE)>=MIN_SIZE ||enemy->QueryProp(P_SIZE)==0) 
+            ) 
+           ||  enemy->QueryProp(P_RACE) == "Wolpertinger"
+         )
+        )
+      {
+       AddHP(enemy,20); // Bumi heilt.  
+       tell_room(env,capitalize(enemy->name(WER,1))+
+            " schnappt sich "+name(WEN,1)+" und frisst ihn geraeuschvoll auf.\n");
+       if(environment(werfer)!=env) tell_object(werfer,
+           "Etwas nebenan frisst gerade D"+name(WEN,0)+" geraeuschvoll auf.\n");
+       LLOG("BUMERANG "+werfer->name(WER,1)+" GEFRESSEN von "+
+            capitalize(enemy->name(WEM,1)+"\n"));
+       ELOG(dtime(time())+": BUMERANG "+werfer->name(WER,1)+" GEFRESSEN von "+
+            capitalize(enemy->name(WEM,1)+"\n"));
+       stop_heart_beat();
+       remove();
+       return;
+     }
+    }
+  else
+    kampfkraft = 0;
+  if(enemy) // 5.9.96: Ein aufgesetzter Helm schuetzt vor dem Bumerang:
+    {
+      // Haben wir beim gegener schon eine getragenen Helm gefunden ?
+      helm=enemy->QueryProp(KP_HELM_WORN);
+
+      // Traegt der Gegner diesen Helm noch ?
+      if(objectp(helm) && helm->QueryProp(P_WORN)!=enemy) helm=0;
+
+      // Suche einen Helm beim Gegner und merke Dir diesen fuer den Kampf.
+      // Falls kein Helm gefunden ist schaue in 5 Runden wieder nach.
+      if(intp(helm) && helm>=0)
+        {
+#define FORALL(x, y) for(x=first_inventory(y);x;x=next_inventory(x))
+          FORALL(helm,enemy)
+            {
+              if(helm->id(AT_HELMET) && helm->QueryProp(P_WORN)==enemy)
+                {
+                break;
+                }      
+            }
+          if(!objectp(helm)) helm=-5;  // nix gefunden
+        }
+
+      // Kein_helm_da_flag verringern
+      if(intp(helm)) enemy->SetProp(KP_HELM_WORN,helm+1);
+
+      // Dieser Helm schuetzt!
+      if(objectp(helm)) kampfkraft-=to_int(helm->QueryProp(P_AC)/5)+random(1);
+    }
+
+
+
+  // Immer noch keine Gegner? Dann Spassgegner aussuchen
+  if (!enemy)
+    {
+      if (sizeof(alive))
+        enemy = alive[random(sizeof(alive))];
+        else
+        {
+        tell_room(env,"Der Bumerang fliegt im Kreis herum.\n");
+        return;
+      }
+      kampfkraft=0;
+    }
+
+  //9.12.94 alive -= ({enemy});
+
+  // Abfangen des Bumerang vom Gegner
+  if (enemy && !query_once_interactive(enemy) && enemy != werfer && 
+      random(ABFANG_QUOTE) == 0 && phase !=1 &&
+      // Kleine und ungeschicke Gegner fangen nicht mehr so leicht. 
+      (enemy->QueryProp(P_SIZE)>=MIN_SIZE ||
+      enemy->QueryProp(P_SIZE)==0) &&
+      enemy->QueryAttribute(A_DEX)*5>random(75)
+     )
+    {
+    tell_room(environment(),capitalize(enemy->name(WER,1))+
+                   " faengt "+name(WEN,1)+" ab.\n");
+    if(environment()!=werfenv)
+       tell_object(werfer,"Etwas nebenan hat D"+name(WEN,0)+" abgefangen.\n");
+    LLOG("BUMERANG "+werfer->name(WER,1)+" abgefangen von "+
+        capitalize(enemy->name(WEM,1)+"\n"));
+    move(enemy,M_GET|M_NOCHECK|M_SILENT);
+    SetProp(P_NOGET,0);
+
+    if (sizeof(werfer->QueryEnemies()[0])) enemy = werfer;
+    phase=7; // naechste Phase=8: Monster wirf den Bumerang 
+    return;
+    }
+
+/*
+  duck_time=enemy->QueryProp(P_IS_DUCKED);
+  if(duck_time && time() - duck_time <=3)
+    {
+     kampfkraft=kampfkraft-random(1)-1;
+     if(kampfkraft<0) kampfkraft=0;
+  TK("!");
+     }
+*/
+
+  // Kampfmeldungen und Hitpoints auswaehlen
+
+  auswahl=random(4)+kampfkraft;
+
+  // Der Feind ist zu klein, der Bumerang fliegt drueber!
+  if(enemy->QueryProp(P_SIZE)!=0 &&
+     enemy->QueryProp(P_SIZE)<MIN_SIZE)
+    {
+     kampfkraft=0;
+     auswahl=-2;
+    }
+
+  bumi=capitalize(name(WER,1));
+  // Defaultwerte fuer die beiden Strings setzen:
+  // (sonst gibts bei (*) eventuell ein Problem)
+  // btw: die Texte zu 'case 4' abwaerts fehlen!
+  to_others = bumi+" fliegt so umher.\n";
+to_victim = bumi+" fliegt so umher.\n";
+
+  switch(auswahl)
+    {
+    case -2:
+      to_others = bumi+" fliegt ueber "+
+                   enemy->name(WEM,1)+" hinweg.\n";
+      to_victim = bumi+" fliegt weit ueber Dir vorbei.\n";    
+      hp=0;
+      break;
+    case 0:
+      to_others = bumi+" zischt an "+
+                   enemy->name(WEM,1)+" vorbei.\n";
+      to_victim = bumi+" zischt an Dir vorbei.\n";    
+      hp=0;
+      break;
+    case 1:
+      to_others = bumi+" schwirrt knapp an "+
+                   enemy->name(WESSEN,1)+" Kopf vorbei.\n";
+      to_victim = bumi+" schwirrt knapp an Deinem Kopf vorbei.\n";
+   hp=0;
+      break;
+    case 2:
+      to_others = capitalize(enemy->name(WER,1))+
+                   " weicht "+name(WEM,1)+" gerade noch rechtzeitig aus.\n";
+      to_victim = "Du weichst "+name(WEM,1)+" geschickt aus.\n";
+      hp=0;
+      break;
+    case 3:
+      to_others = bumi+" rasiert "+
+                   enemy->name(WEM,1)+" ein Haarbueschel ab.\n";
+      to_victim = bumi+" rasiert Dir ein Haarbueschel ab.\n";
+      hp=random(1)+1;
+      break;
+    case 4:
+      hp=random(2)+2;
+      break;
+    case 5:
+      hp=random(4)+4;
+      break;
+  case 6:
+      hp=random(8)+8;
+      break;
+    default:
+      hp=random(10)+16;
+      break;
+    }
+
+
+  // Soll ich dem Gegner weh tun?
+  if (kampfkraft>0) 
+  {
+    LLOG((to_string(hp)?to_string(hp):"") + ":" +
+         (enemy->name()?enemy->name():""));
+    enemy->InsertEnemy(werfer);
+
+    // tell_room(env,to_string(hp));
+
+    // enemy->SetProp(P_VULNERABILITY,({DT_BLUDGEON,DT_SLASH,DT_PIERCE}));
+   enemy->Defend(11*hp,({DT_BLUDGEON,DT_PIERCE}),defend_info,werfer);
+    // tell_room(env,":"+to_string(new_hp)+",");
+  }
+  else
+  {  
+    // nur eine Spassrunde ohne Kampf (*), siehe oben
+    tell_object(enemy,to_victim);
+    tell_room(env,to_others,({enemy}));
+    enemy=0;
+  } 
+
+  return;
+}
+
+
+lande() // Bumerang faellt zu boden oder wird im Kampf gefangen.
+{
+  if ( enemy && werfer && environment() == environment(werfer) && 
+        werfer->QueryProp(P_GHOST) == 0)
+    {
+  tell_object(werfer,"Du faengst "+name(WEN,1)+" geschickt.\n");
+      move(werfer,M_GET|M_NOCHECK|M_SILENT);
+
+      if (!query_once_interactive(werfer))
+        {
+          tell_room(environment(),capitalize(werfer->name(WER,1))+
+                                " faengt "+name(WEN,1)+".\n");
+          SetProp(P_NOGET,0);
+          return; //HERZ bleibt an: npc wirft den Bumerang wieder!
+        }
+    }
+  else
+    tell_room(environment(),capitalize(name(WER,1))+" bohrt sich in den Boden.\n");
+
+  stop_heart_beat();
+}
+
+npc_wirft() // npc wirft den Bumerang
+{
+  werfer = environment();
+if (!living(werfer)) return stop_heart_beat();
+  if (query_once_interactive(werfer)) return stop_heart_beat();
+  werfenv = environment(werfer);
+  if (!werfenv) return stop_heart_beat();     
+
+  SetProp(P_NOGET,"Du solltest versuchen den Bumerang zu fangen!\n");
+  tell_room(werfenv,capitalize(werfer->name(WER,1))+" wirft "+name(WEN,1)+".\n");
+  move(werfenv, M_NOCHECK|M_SILENT);
+
+  if (sizeof(werfer->QueryEnemies()[0])) enemy= (enemy ? enemy :TO);
+  else enemy=0;
+
+  phase=1; // naechste Phase = 2
+}
+
+absturz()
+{
+  if(!phase) return;
+  stop_heart_beat();
+  LLOG("ABSTURZ:");
+}
+
+error(arg)
+{
+  stop_heart_beat();
+  LLOG("ERROR("+to_str(arg)+"):"+to_str(werfer->name()) );
+}
+
+stop_heart_beat()
+{
+  set_heart_beat(0); //HERZ AUS
+  SetProp(P_NOGET,0);
+  phase=0;
+  return 0;
+}
+
+to_str(arg) { return (to_string(arg) ? to_string(arg) : ""); }
+
+
+
+
+

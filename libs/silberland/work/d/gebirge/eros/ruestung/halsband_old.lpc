@@ -1,0 +1,210 @@
+/*
+** Halsband
+** 1996-05-17 Eros
+ng
+
+**
+** 27 Mar 2000: Feyaria: von call_out auf time umgestellt
+** 17 Aug 98:   Angrox:  Aufladen nicht mehr, wenn netztot
+**              Woody:   Bugfix in der RemoveFunc
+*/
+
+inherit "std/armour";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+
+#include "../berg.h"
+
+#define HEALTIME 480
+#define P_HEAL_TIME "halsband_heal_time"
+int ready;
+int restzeit;
+create()
+{
+  if (!is_clone(this_object()))
+     return;
+  ::create();
+  ready = 0;
+  AddId (({"halsband","band", "\nnein"}));
+  SetProp (P_SHORT, "Ein Halsband");
+  SetProp (P_LONG, BS("Dieses Halsband sieht wirklich praechtig aus. "
+    "Viele kleine Steine, die in ihm fein eingebettet sind, strahlen "
+    "und glitzern im Licht."));
+  SetProp (P_NAME, "Halsband");
+  SetProp (P_GENDER, NEUTER);
+  SetProp (P_WEIGHT, 100);
+  SetProp (P_VALUE, 1900);
+  SetProp (P_NOBUY, 1);
+  SetProp (P_ARMOUR_TYPE, AT_MISC);
+  SetProp (P_AC, 0);
+//  SetProp(P_WEAR_FUNC, TO );
+//  SetProp(P_REMOVE_FUNC, TO );
+  SetProp(P_INFO, "Dieses Halsband besitzt tatsaechlich magische "+
+    "Kraefte. Jedoch wirkt die Magie \ndes Bandes nur, wenn "+
+    "es Deine Haut spuert. Dies bedeutet auch, dass Du es \nzuerst "+
+    "mit Deinen Kraeften aufladen musst, bevor es Dir helfen kann.\n"
+    "Die Zauberworte lauten: \n"
+    "\t'heile mich silberkraft' -> Du wirst wieder stark sein \n"
+    "\t'heile mich silbermagie' -> Du wirst wieder zaubern koennen \n"
+    "\t'heile mich silbermacht' -> Du wirst stark und kannst wieder "
+    "zaubern \n");	
+  SetProp (P_MATERIAL, ([MAT_LEATHER:80, MAT_JEWEL:20]) );
+
+  AddSpecialDetail ( ({"halsband", "band"}), "halsband_det");
+  AddDetail (({"steine", "stein"}),
+    BS("Sie glitzern nicht nur hell, sie scheinen auch eine sehr positive "
+    "Kraft auszustrahlen."));
+  AddDetail (({"kraft", "kraefte", "magie"}), 
+    BS("Dieses Band besitzt sicher "
+    "magische Kraefte. Identifiziere es einmal mit Deinen magischen "
+    "Kraeften."));
+
+  AddCmd(({"heile", "heil"}), "silberkraft");
+  
+  SetProp(P_HEAL_TIME, time() );
+  restzeit=0;
+}
+
+/*do_wear(string str, int silent)
+{
+  if (present("\nnein 2"))
+    {
+    write(BS("Das Halsband teilt Dir mit: "
+    "Leider darfst Du mich nicht zweimal anziehen, denn die Magier haben "
+    "es mir strengstens verboten. *sniff* :(("));
+    return 1;
+    }
+  return ::do_wear(str, silent);
+}*/
+
+
+string halsband_det()
+{
+  string l;
+  l="Dieses Halsband sieht wirklich praechtig aus. "
+    "Viele kleine Steine, die in ihm fein eingebettet sind, strahlen "
+    "und glitzern ";
+  if ( time()-QueryProp(P_HEAL_TIME)<HEALTIME ||
+      time()-QueryProp(P_EQUIP_TIME)<HEALTIME/2 )
+    l+="im Licht.";
+  else
+    l+="sehr hell im Licht.";
+  return BS(l);
+}
+
+int silberkraft(string str)
+{
+  string was;
+  if (QueryWorn()!=this_player())
+  {
+    notify_fail(BS("Die Kraft des Halsbandes kann nur auf Dich uebergehen, "
+    "wenn Du es auch angezogen hast."));
+    return 0;
+  }
+
+  if ( time()-QueryProp(P_HEAL_TIME)<HEALTIME ||
+      time()-QueryProp(P_EQUIP_TIME)<HEALTIME/2 )
+  {
+    notify_fail(BS("So wie jeder magische Gegenstand muss auch das Halsband "
+        "erst wieder seine magischen Kraefte erlangen."));
+    return 0;
+  }
+
+  if(!str) return 0;
+
+  if( this_player()->InFight() && this_player()->QueryProp(P_ATTACK_BUSY) )
+  {
+    notify_fail("Du bist zu erschoepft, um Dich zu heilen!\n"); 
+    return 0;  
+  }
+  
+  if (str=="mich silbermagie")
+  {
+    this_player()->AddSp(85+random(30));
+    was="Magie.";
+  }
+  else if (str=="mich silberkraft")
+  {
+    this_player()->AddHp(85+random(30));
+    was="Kraft.";
+  }
+  else if (str=="mich silbermacht")
+  {
+    this_player()->heal_self(40+random(20));
+    was="Macht.";
+  }
+  else
+  {
+    notify_fail("Was soll Dich heilen?\n"); 
+    return 0;  
+  }
+
+  write(BS("Eine magische Aura huellt Dich ein, und gibt Dir wieder "+was));
+  
+  say(BS("Eine magische Aura huellt "+this_player()->name(WER,RAW)+" kurz "
+      "ein, und gibt "+this_player()->QueryPronoun(WEM)+" neue "+was));
+  SetProp(P_HEAL_TIME, time() );
+  if( this_player()->InFight() )
+    this_player()->SetProp(P_ATTACK_BUSY, 1+random(3));
+  return 1;
+}
+
+/*
+int WearFunc(object me)
+{
+  while(find_call_out("aufladen")!=-1);
+  if(!ready) {
+    if(interactive(TP))
+      call_out("aufladen", 480);
+    return 1;
+  }
+  return 1;
+}
+
+int RemoveFunc(object me, int silent)
+{
+  object who;
+  who=QueryProp(P_WORN);
+  while(remove_call_out("aufladen")!=-1);
+  if( !silent && who)
+  {
+    tell_object(who,BS(
+        "Beim Ausziehen verliert Dein Halsband seine magische Aura. "
+           "Es braucht fuer seine Dienste Deine koerperliche Naehe."));
+    tell_room(ENV(MENV),
+        BS(who->Name(WER)+" nimmt "+
+            who->QueryPossPronoun(NEUTER,WEN,SINGULAR)+
+            " Halsband ab, wobei die magische Aura "+
+            who->QueryPossPronoun(NEUTER,WESSEN,SINGULAR)+
+            " Halsbandes verschwindet."),({who}));
+  }
+  ready=0;
+  return 1;
+}
+
+aufladen()
+{
+  restzeit=-1;
+  ready=1;
+}
+*/
+
+BecomesNetDead(object wer) {
+  if(wer==QueryProp(P_WORN)) {
+//    restzeit=find_call_out("aufladen");
+//    while(remove_call_out("aufladen")!=-1);
+    restzeit=time()-QueryProp(P_HEAL_TIME);
+  } 
+}
+
+BecomesNetAlive(object wer) {
+  if(wer==QueryProp(P_WORN)) {
+//    if((find_call_out("aufladen")==-1) && (restzeit>=0) && 
+//       (!ready) && (QueryWorn() == wer))
+//      call_out("aufladen", restzeit);
+    SetProp(P_HEAL_TIME, time()-restzeit);
+  }
+}
+

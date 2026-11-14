@@ -1,0 +1,554 @@
+// Master fuer Mechanus
+// 2.1.2004 Feyaria@SilberLand
+
+#include "../def.h"
+
+object* npcs = ({});
+object* players = ({});
+int event = 0;
+int eventtime = 0;
+int new_event_time = 0;
+int callout = 0;
+
+void StartEvent(int nr);
+string QueryEventInfo();
+
+void create()
+{
+  if (is_clone(TO))
+  {
+    destruct(TO);
+    return;
+  }
+  SUID;
+  restore_object(MASTERSAVE);
+  if (callout)
+    StartEvent(event - 1);
+  npcs -= ({0});
+}
+
+// Shout nur innerhalb der MachanusZone
+void ZoneShout(string str)
+{
+  if (TP && strstr(file_name(environment(TP)), ZONE) != -1)
+    write("\n\n" + str + "\n\n");
+  domainshout("\n\n" + str + "\n\n",  ZONE, 1);
+}
+
+// einen NPC hinzufuegen
+void AddNpc(object npc)
+{
+  npcs += ({npc});
+}
+
+// Die NPCs einer Runde clonen und in die richtigen Raeume moven
+void CloneNpcs(int nr)
+{
+  object ob;
+  int i;
+  string room;
+
+  for (i = 1; i <= nr; i++)
+  {
+    room = ROOM + to_string(nr) + "_" + to_string(i);
+    call_other(room, "???");
+    if (!objectp(ob=present(to_string(nr), find_object(room))) )
+    {
+      ob = clone_object(NPC + to_string(nr));
+      ob->move(room, M_GO);
+    }
+    AddNpc(ob);
+  }
+}
+
+// Event aus
+varargs void EndEvent(int silent)
+{
+  int i;
+
+  if (!event)
+    return;
+  if (!silent)
+    ZoneShout("Eine Menge Zahlen wirbelt wie wild durch den Raum!\n");
+  while (remove_call_out("EndEvent") != -1) ;
+  write_file(LOG "event", 
+      dtime(time()) + ": EndEvent " + to_string(event) + "\n");
+  DB(sprintf("MECHANUSEVENT: %d Ende\n", event));
+
+  new_event_time = time() + (30 + 60 * (10 - event)) * 60, 10;
+  event = 0;
+  eventtime = 0;
+  if (i = sizeof(npcs))
+    for (--i; i >= 0; i--)
+      if (objectp(npcs[i]))
+        npcs[i]->remove();
+
+  save_object(MASTERSAVE);
+}
+
+// Event starten
+void StartEvent(int nr)
+{
+  if (!nr || event || time() < new_event_time ||
+      find_call_out("StartEvent") != -1) return;
+  callout = 0;
+  if (nr == 10 && !sizeof(players)) // Event nicht starten, wenn niemand
+    return;                         // in der Zone ist
+  CloneNpcs(nr);
+  event = nr;
+  if (nr != 10)
+  {
+    ZoneShout(sprintf("Du hoerst einen Gong %d mal schlagen.\n", nr));
+    eventtime = time() + EVENT_TIME[nr] * 60;
+  }
+  write_file(LOG "event", 
+      dtime(time()) + ": StartEvent " + to_string(nr) + "\n");
+  call_out("EndEvent",  EVENT_TIME[nr] * 60);
+  DB( QueryEventInfo() );
+  save_object(MASTERSAVE);
+}
+
+// NPC removen und pruefen, ob diese Runde in der richtigen Zeit beendet wurde
+void RemoveNpc(object npc)
+{
+  npcs -= ({npc});
+  save_object(MASTERSAVE);
+}
+
+// Zufaellige Sachen kleinen
+int RandomLoot()
+{
+  if (!random(WSALBE_CHANCE))
+    CLONELOG( WSALBE, PO )
+  else if (!random(RSALBE_CHANCE))
+    CLONELOG( RSALBE, PO )
+  MAGIC_WANDS
+  else
+    return 1;
+}
+
+// Nach dem Tod bekommen die NPCs Schen zugeteilt
+void DeadNpc(object npc)
+{
+  object ob;
+  int i;
+
+  RemoveNpc(npc);
+  if (!eventtime)
+  {
+    eventtime = time() + EVENT_TIME[event] * 60;
+    call_out("EndEvent",  EVENT_TIME[event] * 60);
+  }
+#ifdef FULL_LOOT        
+  if (RandomLoot() || random(10 - npc->QueryProp(P_MECHANUS_NR)))
+#endif
+  switch (npc->QueryProp(P_MECHANUS_NR))
+  {
+    case 10:
+      ob = clone_object(MONEY);
+      ob->AddAmount(99);
+#ifdef FULL_LOOT        
+      ob->AddAmount(900);
+#endif
+      ob->move(npc, M_NOCHECK);
+      break;
+    case 9:
+      PEARLMASTER->DistributePearl(9, 0, 0, npc);
+      break;
+    case 8:
+      GEMMASTER->DistributeGem(8, 0, 2, npc, GEMARRAY);
+      break;
+    case 7:
+      ob = clone_object(MONEY);
+      ob->AddAmount(776);
+#ifdef FULL_LOOT        
+      ob->AddAmount(7000);
+#endif
+      ob->move(npc, M_NOCHECK);
+      break;
+    case 6:
+      ob = clone_object(ARMOUR "hextonringteil");
+      ob->move(npc, M_NOCHECK);
+#ifdef FULL_LOOT
+      if (random(2))
+      {
+        ob = clone_object(ARMOUR "hextonringteil");
+        ob->move(npc, M_NOCHECK);
+      }
+#endif
+      break;
+    case 5:
+      if( random(12) )
+      {
+        ob = clone_object(MAGIESTEIN);
+#ifdef FULL_LOOT        
+        ob->AddAmount(4);
+#endif
+        ob->move(npc, M_NOCHECK);
+      }
+      else
+        clone_object(ARMOUR "lufthandschuhe")->move(npc, M_NOCHECK);
+      break;
+    case 4:
+      if( random(11) )
+#ifdef FULL_LOOT        
+        for(i = 0; i < 4; i++)
+#endif
+          clone_object(RUESTUNGSBALSAM)->move(npc, M_NOCHECK);
+      else
+        clone_object(ARMOUR "armschienen")->move(npc, M_NOCHECK);
+      break;
+    case 3:
+      if( random(10) )
+#ifdef FULL_LOOT        
+        for(i = 0; i < 3; i++)
+#endif
+          clone_object(WAFFENBALSAM)->move(npc, M_NOCHECK);
+      else
+        clone_object(ARMOUR "guertel")->move(npc, M_NOCHECK);
+      break;
+    case 2:
+#ifdef FULL_LOOT        
+      for (i = 0; i < 2; i++)
+#endif
+        clone_object(RGA)->move(npc, M_NOCHECK);
+      break;
+    case 1:
+      if (random(2))
+        clone_object(ARMOUR "primusruestung")->move(npc, M_NOCHECK);
+      else
+        clone_object(WEAPON "primuswaffe")->move(npc, M_NOCHECK);
+      BOSS_LOOT;
+      break;
+  }
+  if (npc->QueryProp(P_MECHANUS_NR) == event)
+  {
+    npcs -= ({0});
+    if (!sizeof(npcs))
+    {
+      if (event == 1)
+      {
+        ZoneShout("Die Macht von Primus ist bezwungen!\n");
+        event = 0;
+        eventtime = 0;
+        callout = 10;
+        while (remove_call_out("EndEvent") != -1) ;
+        new_event_time = time() + 3600 * 23;
+      }
+      else if (eventtime > time())
+      {
+        ZoneShout("Die Macht der Zahlen schwindet.\n");
+        callout = event - 1;
+        event = 0;
+        eventtime = 0;
+        while (remove_call_out("EndEvent") != -1) ;
+        call_out("StartEvent", 20 + random(10), callout);
+      }
+      else
+      {
+        EndEvent();
+      }
+    }
+  }
+  save_object(MASTERSAVE);
+}
+
+// Fuer die Abfrage, in welcher Runde der Event gerade ist
+int QueryEvent()
+{
+  npcs -= ({0});
+  if (find_call_out("StartEvent") != -1)
+    return callout;
+  if ((!sizeof(npcs) && event) || (eventtime && eventtime < time()))
+    EndEvent(1);
+  if (eventtime && eventtime < time())
+    return -1;
+  return event;
+}
+
+// genauere Informationen ueber das Event
+string QueryEventInfo()
+{
+  if (!eventtime)
+  {
+    if (new_event_time > time())
+      return sprintf("MECHANUSEVENT: nicht gestartet, start: %s\n", dtime(new_event_time));
+    else
+      return sprintf("MECHANUSEVENT: nicht gestartet.\n");
+  }
+  return sprintf("MECHANUSEVENT: Runde: %2d, lebende npcs: %2d, Zeit: %d Min %d Sek\n", 
+      event, sizeof(npcs), (eventtime - time()) / 60, (eventtime - time()) % 60);
+}
+
+void EventInfo()
+{
+  write(QueryEventInfo());
+}
+
+int QueryEventTime()
+{
+  if (new_event_time > time())
+    return new_event_time - time();
+  else 
+    return 0;
+}
+
+int CheckPlayers()
+{
+  int i;
+  object *del;
+
+  del = ({});
+  for (i = sizeof(players) - 1; i >= 0; i--)
+  {
+    if (!objectp(players[i]) || !interactive(players[i]) || 
+        !environment(players[i]) || 
+        file_name(environment(players[i]))[0..31] != ROOM )
+      del += ({players[i]});
+  }
+  players -= del + ({0});  
+  return sizeof(players);
+}
+
+void AddPlayer(object player)
+{
+  if (member(players, player) == -1)
+  {
+    players += ({player});
+    if (CheckPlayers() > GROUPSIZE && find_call_out("MoveAllOut") == -1)
+      call_out("MoveAllOut", 0);
+  }
+}
+
+object* QueryPlayers()
+{
+  return players;
+}
+
+void MoveAllOut()
+{
+  int i;
+
+  for (i = sizeof(players) - 1; i >= 0; i--)
+  {
+    tell_object(players[i], BS(
+          "Die Anwesenheit von zu vielen Spielern zerstoert das "
+          "fragile Gleichgewicht dieser Ebene! Deine Umgebung loest "
+          "sich auf und Du landest im Nexus."));
+    players[i]->move(NEXUS, M_SILENT | M_NOCHECK);
+  }
+  players = ({});
+}
+
+int MayEnter()
+{
+  CheckPlayers();
+  if (sizeof(players) >= GROUPSIZE)
+    return 0;
+  else
+    return 1;
+}
+
+// Im Reset Event check und gegebenenfalls beenden.
+void reset()
+{
+  QueryEvent();
+  CheckPlayers();
+}
+
+nosave string* uhr = ({
+"-------------------\n"
+"\\*****************/\n"
+" \\***************/\n"
+"  \\*************/\n"
+"   \\***********/\n"
+"    \\*********/\n"
+"     \\*******/\n"
+"      \\*****/\n"
+"       \\***/\n"
+"        |*|\n"
+"       /   \\\n"
+"      /     \\\n"
+"     /       \\\n"
+"    /         \\\n"
+"   /           \\\n"
+"  /             \\\n"
+" /               \\\n"
+"/                 \\\n"
+"-------------------\n",
+
+"-------------------\n"
+"\\                 /\n"
+" \\***************/\n"
+"  \\*************/\n"
+"   \\***********/\n"
+"    \\*********/\n"
+"     \\*******/\n"
+"      \\*****/\n"
+"       \\***/\n"
+"        |*|\n"
+"       /   \\\n"
+"      /     \\\n"
+"     /       \\\n"
+"    /         \\\n"
+"   /           \\\n"
+"  /             \\\n"
+" /               \\\n"
+"/*****************\\\n"
+"-------------------\n",
+
+"-------------------\n"
+"\\                 /\n"
+" \\               /\n"
+"  \\*************/\n"
+"   \\***********/\n"
+"    \\*********/\n"
+"     \\*******/\n"
+"      \\*****/\n"
+"       \\***/\n"
+"        |*|\n"
+"       /   \\\n"
+"      /     \\\n"
+"     /       \\\n"
+"    /         \\\n"
+"   /           \\\n"
+"  /             \\\n"
+" /***************\\\n"
+"/*****************\\\n"
+"-------------------\n",
+
+"-------------------\n"
+"\\                 /\n"
+" \\               /\n"
+"  \\             /\n"
+"   \\***********/\n"
+"    \\*********/\n"
+"     \\*******/\n"
+"      \\*****/\n"
+"       \\***/\n"
+"        |*|\n"
+"       /   \\\n"
+"      /     \\\n"
+"     /       \\\n"
+"    /         \\\n"
+"   /           \\\n"
+"  /*************\\\n"
+" /***************\\\n"
+"/*****************\\\n"
+"-------------------\n",
+
+"-------------------\n"
+"\\                 /\n"
+" \\               /\n"
+"  \\             /\n"
+"   \\           /\n"
+"    \\*********/\n"
+"     \\*******/\n"
+"      \\*****/\n"
+"       \\***/\n"
+"        |*|\n"
+"       /   \\\n"
+"      /     \\\n"
+"     /       \\\n"
+"    /         \\\n"
+"   /***********\\\n"
+"  /*************\\\n"
+" /***************\\\n"
+"/*****************\\\n"
+"-------------------\n",
+
+"-------------------\n"
+"\\                 /\n"
+" \\               /\n"
+"  \\             /\n"
+"   \\           /\n"
+"    \\         /\n"
+"     \\*******/\n"
+"      \\*****/\n"
+"       \\***/\n"
+"        |*|\n"
+"       /   \\\n"
+"      /     \\\n"
+"     /       \\\n"
+"    /*********\\\n"
+"   /***********\\\n"
+"  /*************\\\n"
+" /***************\\\n"
+"/*****************\\\n"
+"-------------------\n",
+
+"-------------------\n"
+"\\                 /\n"
+" \\               /\n"
+"  \\             /\n"
+"   \\           /\n"
+"    \\         /\n"
+"     \\       /\n"
+"      \\*****/\n"
+"       \\***/\n"
+"        |*|\n"
+"       /   \\\n"
+"      /     \\\n"
+"     /*******\\\n"
+"    /*********\\\n"
+"   /***********\\\n"
+"  /*************\\\n"
+" /***************\\\n"
+"/*****************\\\n"
+"-------------------\n",
+
+"-------------------\n"
+"\\                 /\n"
+" \\               /\n"
+"  \\             /\n"
+"   \\           /\n"
+"    \\         /\n"
+"     \\       /\n"
+"      \\     /\n"
+"       \\***/\n"
+"        |*|\n"
+"       /   \\\n"
+"      /*****\\\n"
+"     /*******\\\n"
+"    /*********\\\n"
+"   /***********\\\n"
+"  /*************\\\n"
+" /***************\\\n"
+"/*****************\\\n"
+"-------------------\n",
+
+"-------------------\n"
+"\\                 /\n"
+" \\               /\n"
+"  \\             /\n"
+"   \\           /\n"
+"    \\         /\n"
+"     \\       /\n"
+"      \\     /\n"
+"       \\   /\n"
+"        |*|\n"
+"       /***\\\n"
+"      /*****\\\n"
+"     /*******\\\n"
+"    /*********\\\n"
+"   /***********\\\n"
+"  /*************\\\n"
+" /***************\\\n"
+"/*****************\\\n"
+"-------------------\n",
+});
+
+string ShowTime()
+{
+  int t;
+
+  if (!eventtime || !event)
+    return "Die Sanduhr scheint still zu stehen.\n";
+ 
+    t = 9 - 9 * (eventtime - time()) / (EVENT_TIME[event] * 60);
+  if (t >= 0 && t < sizeof(uhr))
+    return uhr[t];
+  EndEvent(1);
+  return "Die Sanduhr ist in einem sehr komischen Zustand.\n";
+}
+

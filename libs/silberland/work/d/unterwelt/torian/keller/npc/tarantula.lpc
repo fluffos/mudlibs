@@ -1,0 +1,264 @@
+inherit "std/npc";
+inherit "/std/npc/spells.lpc";
+
+#include <properties.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <npc.h>
+#include "../def.h"
+
+#define E2 ROOM "raumE2"
+#define F3 ROOM "raumF3"
+#define F2 ROOM "raumF2"
+
+string InfoFunc(string text);
+int IsDelf(object player);
+
+void create() {
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Tarantula");
+  SetProp(P_LONG,
+    "Tarantula ist eine riesige schwarze Spinne mit langen "
+    "haarigen Beinen und einem grossen chitingepanzerten "
+    "Koerper. Sie klappert genuesslich mit ihren gefaehrlich "
+    "aussehenden Kiefernzangen herum, mit denen sie ihre Opfer "
+    "in der Regel sorgfaeltig auseinandernimmt, nachdem sie sie "
+    "mit ihrem toedlichen Gift zuvor geschwaecht hat. Ihre acht "
+    "boesartig glitzernden Augen starren Dich lauernd an und "
+    "beobachten jeden Deiner Schritte. Sie sieht sehr hungrig aus.");
+
+  SetProp(P_NAME, "Tarantula");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:0,T_RANGE_MAX:30]));
+  AddId(({"tarantula", "spinne", "hoehlenspinne", "riesenhoehlenspinne"}));
+
+  AddClass(CL_ANIMAL);
+
+  create_default_npc(35); // Questnpc, muss nicht gekillt werden fuer Quest
+  SetProp(P_HANDS, ({" mit ihren Beinen",QueryProp(P_HANDS)[1],DT_RIP}));
+//  SetProp(P_XP, QueryProp(P_XP)+y*100); // Bonus fuer Spells 
+  SetProp(P_RACE, "Spinne");
+  SetProp(P_SIZE, 300+random(100));
+  SetProp(P_WEIGHT, 120000+random(15000));
+  SetProp(P_ALIGN, -100+random(200)); // um neutral
+  SetProp(P_MAX_HANDS, 8);
+  SetProp(P_HEAL,1);
+  SetProp(P_AGGRESSIVE,0);
+  SetProp(P_WIMPY, 0);
+  SetProp(P_RESISTANCE_STRENGTHS , 
+    ([DT_FIRE: -0.2]) );
+  SetProp(P_NOMAGIC,0);
+  SetProp(P_MSGIN, "krabbelt flink herein");
+  SetProp(P_MSGOUT, "krabbelt flink");
+  SetProp(P_MMSGIN, "krabbelt flink herein");
+  SetProp(P_MMSGOUT, "krabbelt flink");
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_DIE_MSG,  " bricht zusammen.\n");
+  SetProp(P_NOCORPSE, 0 );
+  SetProp(P_KILL_NAME, "Tarantula");
+  SetProp(P_KILL_MSG, ({"verspeisst die Leiche.", MSG_EMOTE}));
+
+  AddDetail("beine",
+    "Die langen, stark behaarten Beine der Spinne zucken leicht "
+    "und strecken sich tastend nach Dir aus.");
+  AddDetail("koerper",
+    "Der riesige Koerper der Spinne wird durch undurchdringliches Chitin "
+    "geschuetzt.");
+  AddDetail("chitin",
+    "Undurchdringliches Chitin schuetzt den Koerper der Spinne vor "
+    "nahezu allen Angriffen.");
+  AddDetail("angriffe",
+    "Du solltest es Dir wirklich gruendlich ueberlegen, ob Du diese "
+    "Spinne angreifen willst, denn es koennte sehr boese enden.");
+  AddDetail("kiefernzangen",
+    "Ihre Kiefernzangen sehen wirklich aeusserst gefaehrlich aus. Es ist "
+    "sicherlich sehr schmerzhaft, wenn sie ihr Opfer damit packt und langsam "
+    "ein Koerperteil nach dem anderen abtrennt...");
+  AddDetail(({"koerperteil", "regel" }),
+    "Diese Art von Spinnen liebt es, ihre Opfer zuerst durch ihr starkes "
+    "Gift zu laehmen und dann langsam auseinanderzunehmen.");
+  AddDetail("opfer",
+    "Du betest instaendig, dass nicht Du das naechste Opfer sein wirst.");
+  AddDetail("art",
+    "Du siehst die groesste Riesenhoehlenspinne vor Dir, die Du jemals gesehen hast.");
+  AddDetail("gift",
+    "Im Mundraum der Spinne befinden sich Giftdruesen, mit denen sie ihr "
+    "toedliches Gift in die hilflosen Koerper ihrer Opfer hineinspritzt.");
+  AddDetail("mundraum",
+    "Dort befinden sich die Giftdruesen.");
+  AddDetail("giftdruesen",
+    "Die Giftdruesen befinden sich hinter den Kieferzangen im Mundraum "
+    "der Spinne.");
+  AddDetail("augen",
+    "Lauernd starren Dich die glitzernden Augen der Spinne an. Sie "
+    "scheint wirklich sehr grossen Hunger zu verspueren.");
+  AddDetail("hunger",
+    "Vielleicht koenntest Du sie mit etwas zu Fressen besaenftigen.");
+// SpecialDetail noch machen
+  AddDetail("fressen",
+    "Hm, was koennte solch eine Spinne denn nur fressen wollen... mal "
+    "abgesehen von frischen Zwergen natuerlich?");
+  AddDetail("schritte",
+    "Jeder Deiner Schritte wird aufmerksam von der Spinne beaeugt.");
+
+  AddInfo(DEFAULT_INFO, "funkelt Dich kalt an.\n");
+
+  AddInfo( ({"opfer", "lloth", "fressen", "hunger"}), 
+    #'InfoFunc,"\b\b\b\b\b\b\b\b\b\b",1);
+
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    "Kaut lustlos auf @WEN herum und laesst es wieder fallen.\n" }) );
+
+  SetProp(P_SPELLRATE,50);
+  AddSpell(4,850,
+    "Tarantula beisst Dich mit ihren kraeftigen Kieferzangen.\n",
+    "Tarantula beisst @WEN mit ihren kraeftigen Kieferzangen.\n",
+     DT_PIERCE,([SP_SHOW_DAMAGE:1]));
+  AddSpell(6,600,
+    "Tarantula peitscht Dich mit einem gesponnenen Faden.\n",
+    "Tarantula peitscht @WEN mit einem gesponnenen Faden.\n",
+     DT_WHIP,([SP_SHOW_DAMAGE:1]));
+/*  AddSpell(1,1500,
+    "Tarantula \n",
+    "Tarantula ",
+     DT_MIND,([SP_SHOW_DAMAGE:1]));
+*/  
+  AddDefaultSpell(2,950,DS_POISON,
+    "Tarantula vergiftet Dich!\n",
+    "Tarantula vergiftet @WEN!\n",
+    ([SP_SHOW_DAMAGE:1]));
+
+  SetChats(10, ({
+    "Die Tarantula mustert Dich kalt.\n",
+    "Die Tarantula sucht ein Opfer.\n",
+    "Die Tarantula bewegt ihre acht Augen wachsam in Deine Richtung.\n"}) );
+  SetAttackChats(10, ({
+    "Die Tarantula wickelt Dich in einen langen Faden ein.\n",
+    "Die Tarantula starrt Dich hypnotisierend aus ihren acht Augen an.\n",
+    "Die Tarantula krabbelt wuetend hin und her.\n"}) );
+
+  SUID;
+
+}
+
+void die(int poisondeath) 
+{
+  object qitem;
+  
+  write_file(LOG "npc.kills",
+    ctime()+": "+(CAP(getuid(QueryProp(P_KILLER)||TP))||"<Unbekannt>")+" killt die Tarantula.\n");
+  
+  if(qitem = present( QUESTITEM, TP)) // Questitem vorhanden? Ich hoffe TP geht ;)
+  {
+    if(!qitem->QuerySpinne()) // Log scroll reduzieren
+    {
+      qitem->SetSpinne();
+      write_file(QUESTLOG "quest.log", 
+      dtime(time())+": "+CAP(getuid(TP))+" toetet Tarantula!\n" );
+    }
+  }
+
+  ::die(poisondeath);
+
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp) {
+  if(killer == ME)
+    write_file(LOG "npc.deads",
+      ctime()+": Eine Tarantula hat gerade "+CAP(getuid(player))+" umgebracht.\n");
+}
+
+int _query_wimpy() { return 0; }
+
+// Reactions
+void StartReaction(string verb, string gruppe, string adverb, int touch) {
+  if (find_call_out("reaction") != -1) return;
+  switch (gruppe) {
+    case "aergerlich":
+    case "fies":
+      call_out("reaction", 0, TP,
+        "funkelt veraergert und greift Dich an.",
+        "funkelt veraergert und greift "+TP->name(WEN)+" an.");
+      Kill(TP);
+      break;
+    default :
+      call_out("reaction", 0, TP,
+        "starrt Dich an.",
+        "starrt Dich an.");
+  }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch) {
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void reaction(object ob, string macher, string andere) {
+  if (present(ob, ENV(TO))) {
+    tell_object(ob, BS(Name(WER, 1)+" "+macher));
+    tell_room(ENV(TO), BS(Name(WER, 1)+" "+andere), ({ob}));
+  }
+}
+
+string InfoFunc(string text)
+{
+  string s, s2;
+  s = "";
+  s2 = "Tarantula funkelt Dich kalt an.\n";
+
+  switch(text)
+  {
+  	case "opfer":
+  	  s = "Die Stimme schnarrt: Bring mir ein Opfer!\n";
+  	  break;
+  	case "fressen":
+  	  s = "Die Stimme raunt leise: Ich muss unbedingt etwas zu\n"
+  	     +"Die Stimme raunt leise: Fressen finden...\n";
+  	  break;
+  	case "lloth":
+  	  s = "Eine Stimme wispert in Deinem Kopf: Lloth hat Dich sicher\n"
+  	     +"Eine Stimme wispert in Deinem Kopf: geschickt meinen\n"
+  	     +"Eine Stimme wispert in Deinem Kopf: Hunger zu stillen.\n";
+  	  break;
+  	case "hunger":
+  	  s = "Die Stimme raunt leise: Ich habe Huuuuunger...\n";
+  	  break;
+  	default :
+      s = s2;
+      break;
+  }
+  if(IsDelf(this_player()))
+  {
+  	return s;
+  }
+  return s2;
+  
+}
+
+int IsDelf(object player)
+{
+  if(player->QueryProp(P_RACE) == "Dunkelelf") { return 1; }
+  return 0;
+}
+void init()
+{
+  ::init();
+
+  if(!TP)              return;
+  if(!interactive(TP)) return;
+
+  call_out("begruessung", 0, TP);
+}
+
+void begruessung(object player)
+{
+  if(IsDelf(player))
+  {
+  	tell_object(player,BS("Eine wispernde Stimme in Deinem Kopf raunt leise: Ah, ein "
+  	              +"Diener Lloths, Du kommst bestimmt, um mir "
+  	              +"ein Opfer zu bringen."));
+  }
+  return;
+}

@@ -1,0 +1,440 @@
+inherit "std/armour";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <defines.h>
+#include <new_skills.h>
+#include <moredef.h>
+#include <class.h>
+#include <moving.h>
+#include "/gilden/bardengilde/bardengilde.h"
+
+object victim, caster, wornItem;
+float exhaustReduction, factor;
+int flying, duration, canRecharge, ability, success;
+mapping overwrittenMovingCost;
+
+string *strophen = ({
+  // Ebene
+  "Als Freund aller Welt, da komm ich weit hinaus.\n"
+  "In Midas fing die Reise an.\n"
+  "Bei Albin ging es los,\n"
+  "Richtung Gaffodorf, zum Osttor 'raus!\n",
+  "In Kyranda traf ich einst,\n"
+  "Einen Helden, wie sonst keinen.\n"
+  "'Nen Drachen erschlug er feinst,\n"
+  "Nach Genuss von siebzig Weinen!\n",
+  // Huegelland
+  "Tief im Silberwald,\n"
+  "Bei Anvar knapp vorbei,\n"
+  "Fand ich als lust'ger Wanderer,\n"
+  "Ein buntes Osterei!\n",
+  "Von Derlim, so dann,\n"
+  "In's Fischerdorf geht's toll!\n"
+  "Da halt ich mich ran,\n"
+  "Schleich mich vorbei am Zoll!\n",
+  // Kristallwald
+  "Im See von Rhodonit liegt eine Insel,\n"
+  "Ich war schon dort, sie ist sehr schoen,\n"
+  "Verliebte lassen sich dort seh'n.\n"
+  "Schau doch mal vorbei, geniess die Traeumerei!\n",
+  "Im Al Haskin-Doore kehr ich beim Reisen ein,\n"
+  "Geniesse dort den beer'gen Elfenwein.\n"
+  "In Elessar, dem Heim der Elfen alt,\n"
+  "Hoch droben, erbaut auf Wipfeln im Wald.\n",
+  // Gebirge
+  "Ein riesiger Vogel-Rok, so maechtig und gross,\n"
+  "Er lebt im Gebirge bei Steinen und Moos.\n"
+  "Tief drunt in den Bergen, in zwergischen Hoehlen,\n"
+  "Da kann sich der Barde die Kehle gut oelen!\n",
+  "In der hoechsten Stadt in den Bergen,\n"
+  "Kann man wohl beschauen,\n"
+  "Was alle Rassen schaffen,\n"
+  "Wenn sie aufeinander bauen!\n",
+  // Dschungel
+  "In suedlichen Teil vom Silberland,\n"
+  "Da ist eine Insel beruehmt fuer ihren Strand!\n"
+  "Doch gleich nebenan, bei Wasser und Sand,\n"
+  "Da sieht man den maechtigen Dschungelrand!\n",
+  "Dort findet man nicht nur die freundlichen Elfen,\n"
+  "Auch gib'ts einen Stamm, der will dich nur zugern fressen!\n"
+  "Doch fette Oger sind es keine,\n"
+  "sondern Kannibalen ohne Leine!\n",
+  // Wueste
+  "Durch die Hitze der Wueste bin ich gewandert,\n"
+  "Vom Waechter der Oase zum See von Arrakeen.\n"
+  "Zu Fuss bin ich genganen, das Wuesteschiff gekentert.\n"
+  "Bei der Oase angekommen, hab ich nie 'was schoen'res gesehen!\n",
+  "Von Arrakeen bin ich gegangen,\n"
+  "Beim Krater hat es mich gefangen,\n"
+  "Am Basar bin ich einkaufen gegangen.\n"
+  "Die Wueste hab ich verlassen,\n"
+  "Am Hafen Quaul mit einer Galeass'n.\n",
+  // Wasser
+  "Oh Wanderer, oh sei gewarnt!\n"
+  "Sag nicht, ich haett' dich nicht gemahnt.\n"
+  "Hast du noch dein Leben gern,\n"
+  "So halte dich von Knarkh weit fern!\n",
+  "Statt mit Piraten auf Karperfahrt,\n"
+  "Oder auf die Insel voller Zombies,\n"
+  "Segel besser nach Mauritius,\n"
+  "Und fuetter einen Vogel mit 'ner Nuss!\n",
+  // Polar
+  "Im hohen Norden da ist es recht kalt,\n"
+  "Viel Schnee und Eis bedecken dort den Wald.\n"
+  "Dort leben die Xandims und noch viel mehr,\n"                                        
+  "Rentier und Weihnachtsmann kommen von dort her!\n",
+  "Im Norden faellt der Schnee und glitzert Eis,\n"
+  "Doch die Feuer Smoerskys brennen heiss.\n"
+  "Frieren Walfaenger auch manchmal arg,\n"
+  "Ihre froehlichen Lieder erklingen den ganzen Tag!\n",
+  // unterwelt
+  "Nicht nur auf der Erden, sondern auch d'runter kannst du wandern,\n"
+  "Im Dunkel leben dort Elfen, nicht die Hellen, doch die andren.\n"
+  "Ihre Stadt liegt im Dunkel, wo sie Runen ihren schutz anvertrauen\n"
+  "Allen voran steht ihre Koenigin, wunderschoen-schaurig anzuschauen.\n",
+  "Im Dunkel der Unterwelt,\n"
+  "Gibt es auch was dem Aug' gefaellt.\n"
+  "In einem Wald voller Wichte, am Himmel voller Sterne,\n"
+  "Scheint ein weisses Einhorn heller als meine Laterne.\n",
+  // Luft
+  "Bist du denn am End, gegangen durch die Welt.\n"
+  "Durch Meer und unter Grund, bleibt dir nur das Himmelsfeld.\n"
+  "Steig hinauf auf den weissen Schimmel,\n"
+  "Und besuch' die Feen im Himmel!\n"
+});
+
+string *refrain = ({
+  "Hey! Hey! Hey! Ich bin ein Freund aller Welt,\n"
+  "Wenn ich's brauch, schnorr ich mir Geld!\n",
+  "Hi-dideli-ho! Ich bin ein Freund aller Welt,\n"
+  "Ich wandere hier durch, weil es mir gefaellt!",
+  "Tralalala! Ich bin ein Freund aller Welt,\n"
+  "Reise hin, wo es mir gefaellt.",
+  "Huchezulejoh! Ich bin ein Freund aller Welt,\n"
+  "Kein Weg belibt mir verstellt!",
+});
+
+public void create() {
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+//--Beschreibungen---------------------------------------------------------
+
+  SetProp(P_SHORT, "Ein Wanderlied");
+  SetProp(P_LONG,
+    "Ein Reiselied.");
+
+//--Namen------------------------------------------------------------------
+
+  SetProp(P_NAME, "Aller Welten Freund");
+  SetProp(P_GENDER, NEUTER);
+
+  AddId(({SONG_TRAVELLER, BARD_UPKEEP_EFFECT}));
+
+//--Eigenschaften----------------------------------------------------------
+
+  SetProp(P_MATERIAL, MAT_MAGIC );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_SIZE, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NO_DAMAGE_DESTRUCT, 1);
+
+  SetProp(P_ARMOUR_TYPE, AT_MISC );
+  SetProp(P_AC, 0);
+
+  SetProp(P_CURSED, 
+      BS("Dieser Gegenstand wurde durch das Lied 'Aller Welten Freund'"
+         "geschaffen. Um ihn auszuziehen musst du dieses Lied beenden."));
+
+  SetProp(P_WEAR_FUNC, this_object());
+
+  flying = 0;
+
+  AddCmd("beende|beend&aller|'aller&welten&freund|freund'", "cmd_end_prematurely", "Welches Lied willst du beenden?");
+}
+
+public int cmd_end_prematurely() {
+  call_out("end_song", 0);
+  return 1;
+}
+
+public void sing_lines() {
+  string lines;
+  if(find_call_out("sing_lines") >= 0) return;
+  lines = strophen[random(sizeof(strophen))];
+
+  tell_object(victim, break_string(lines, 75, "Du singst: ", BS_LEAVE_MY_LFS));
+  tell_room(environment(victim), break_string(lines, 75, victim->Name(WER, 1)+" singt: ", BS_LEAVE_MY_LFS), ({victim}));
+}
+
+public mapping GetMovingCosts() {
+  if(!random(20)) {
+    call_out("sing_lines", 0);
+  }
+  return overwrittenMovingCost;
+}
+
+
+private void changeMovingPointCosts(int _ability, int _success, float factor) {
+  mapping movingCosts, reducedMovingCosts;
+  mixed* terrains;
+  int i, cost;
+  object vitim;
+
+  victim = this_player();
+
+  if(!victim->QueryProp(P_RACE_TT_MV)) {
+    return;
+  }
+
+  exhaustReduction = ((0.4 * (_ability/10000.0)) + (0.2 * (_success/10000.0))) * factor;
+  victim->SetProp("original_" + P_RACE_TT_MV, victim->QueryProp(P_RACE_TT_MV));
+
+  movingCosts = victim->QueryProp(P_RACE_TT_MV);
+  terrains = m_indices(movingCosts);
+  overwrittenMovingCost = ([ ]);
+  for(i=0; i<sizeof(terrains); ++i) {
+    cost =  (int) (movingCosts[terrains[i]] * (1.0-exhaustReduction));
+    overwrittenMovingCost += ([ terrains[i]: cost ]);
+  }
+  victim->Set(P_RACE_TT_MV, symbol_function("GetMovingCosts", this_object()), F_QUERY_METHOD);
+  victim->Set(P_MSGIN, symbol_function("GetMsgIn", this_object()), F_QUERY_METHOD);
+  victim->Set(P_MSGOUT, symbol_function("GetMsgOut", this_object()), F_QUERY_METHOD);
+  return;
+}
+
+public string GetMsgIn() {
+  return "kommt 'Aller Welten Freund' singend herein";
+}
+
+public string GetMsgOut() {
+  return "geht 'Aller Welten Freund' traellernd";
+}
+
+private void enableTemperatureProtection(int _success, int _ability, float factor) {
+  int hot, cold;
+
+  cold = random(2 * _success +  _ability) / 2500 + this_player()->QueryProp(P_GUILD_LEVEL);
+  cold = (int) (cold * factor);
+  hot = random(2 * _success +  _ability) / 2500 + this_player()->QueryProp(P_GUILD_LEVEL);
+  hot = (int) (hot * factor);
+
+  SetProp(P_TEMPERATURE_PROTECTION, ([ T_COLD_PROT: cold, T_HEAT_PROT: hot ]) );
+  tell_object(this_player(), BS("Die Temperatur deiner Umgebung fuehlt sich angenehmer an."));
+}
+
+private void enableUnderwaterBreath() {
+  tell_object(this_player(), BS("Du kannst nun unter Wasser atmen."));
+  AddId("\nwaterbreath");
+}
+
+private void enableFlying() {
+  tell_object(this_player(), BS("Dir wachsen zwei regenbogenfarben Vogelschwingen."));
+  this_player()->AddClass(CL_FLYING);
+  flying = 1;
+}
+
+private void adaptDescriptions(object _caster) {
+    string bardGroup;
+    string short, long, *id, type;
+    string refId;
+    int gender;
+
+    bardGroup = "/gilden/bardengilde/master/bardenmaster"->GetBardGroup(_caster);
+
+    switch(bardGroup) {
+        case BARD_GROUP_KORRIAX:
+            short = "Federhut des Wanderers";
+            long  = "Dieser abgetragene Schlapphut hat eine "
+                    "regebogenfarbene, lange Feder angesteckt, "
+                    "die bei jedem Schritt lustig wackelt.";
+            type  = AT_HELMET;
+            id = ({"hut", "federhut", "wanderhut", 
+                   "federhut des wanderers"});
+            gender = MALE;
+	          refId = "federhut des wanderers";
+            break;
+        case BARD_GROUP_ALESTRA:
+            short = "Halstuch des Wanderers";
+            long  = "Dieses Halstuch schillert in allen Farben des "
+                    "Regenbogens. Allerdings scheint es schon sehr "
+                    "abgetragen und hat einige ekelige Dreckflecken.";
+            type  = AT_AMULET;
+            gender = NEUTER;
+            id    = ({"halstuch", "tuch", "halstuch des wanderers"});
+	    refId = "halstuch des wanderers";
+            break;
+        case BARD_GROUP_SARRIAN:
+            short = "Wanderstiefel des Wanderers";
+            long  = "Diese ausgelatschten Stiefel schillern in allen "
+                    "Farben des Regenbogens. Allerdings riechen sie auch "
+                    "schon etwas nach altem Kaese...";
+            type  = AT_BOOT;
+            id    = ({"stiefel", "wanderstiefel", 
+                      "wanderstiefel des wanderers" });
+	    refId = "wanderstiefel des wanderers";
+            gender = FEMALE;
+            break;
+        default:
+            short = "Mantel des Wanderers";
+            long  = "Dieser regenbogenfarbene Mantel schuetzt sicher gut "
+                    "gegen alle Wettereinfluesse. Er ueber und ueber mit "
+                    "dem Staub der Strasse bedeckt.";
+            type  = AT_CLOAK;
+            id    = ({"mantel", "wandermantel", "mantel des wanderers"});
+	    refId = "mantel des wanderers";
+            gender = MALE;
+            break;
+    }
+
+    SetProp(P_SHORT, short);
+    SetProp(P_LONG, sprintf("%s\nDieser Gegenstand wurde durch die "
+            "Magie von %s geschaffen.", long, _caster->Name(WEM)));
+    SetProp(P_ARMOUR_TYPE, type);
+    SetProp(P_GENDER, gender);
+    SetProp(P_NAME, short);
+
+    SetProp("refId", "bardenallerweltenfreunditem");
+
+    AddId( id );
+    AddId( QueryProp("refId") );
+
+    return;
+}
+
+public void Setup(object _caster, object _victim, int _ability, int _success, float _factor) {
+  int wearRet;
+  string wearCmd;
+  object *armours;
+
+  if(!objectp(_caster) || !objectp(_victim)) {
+    remove(1);
+  }
+
+  adaptDescriptions(_caster);
+
+  victim = _victim;
+  ability = _ability;
+  success = _success;
+  caster  = _caster;
+  factor  = _factor;
+
+  if(victim == caster) {
+    armours = caster->QueryArmours(QueryProp(P_ARMOUR_TYPE));
+    if(sizeof(armours) < 1) wornItem = 0;
+    else wornItem = armours[0];
+
+ 	  wearCmd = sprintf("zieh %s an", QueryProp("refId"));
+  	wearRet = victim->command_me(wearCmd);
+  } else {
+    tell_object(_victim, 
+	BS(sprintf("%s erscheint. Du wirst angenehme Reisen erleben, wenn "
+           "du %s traegst.", Name(WER), name(WEN, 1))));
+  }
+  
+  duration = (ability / 50) + (random(success) / 50) + (caster->QueryProp(P_GUILD_LEVEL) * 5);
+  if (success >= MAX_ABILITY)
+    duration *= 2;
+  duration = (int) (duration * factor);
+
+  call_out("warn_halftime", duration/2);
+}
+
+public int WearFunc(object me, int silent) {
+  changeMovingPointCosts(ability, success, factor);
+
+  if(ability > 5000) {
+    enableTemperatureProtection(success, ability, factor);
+  }
+
+  if(ability > 7000) {
+    enableUnderwaterBreath();
+  }
+
+  if(ability > 9000 && !victim->is_class_member(CL_FLYING)) {
+    enableFlying();
+  }
+
+  if(success > MAX_ABILITY && TALENTMASTER->HasTalent(caster, TALENT_LANDSTREICHER)) {
+    // bei crit -> no autoattack
+    this_player()->SetProp(P_NOAGGRESSIVE, 1);
+    tell_object(this_player(), BS("Eine friedvolle Aura geht von dir aus."));
+  }
+
+  return 1;
+}
+
+public void warn_halftime() {
+  tell_object(victim, BS("Die Melodie von 'Aller Welten Freund' wird leiser."));
+  call_out("warn_end", duration/4);
+}
+
+public void warn_end() {
+  tell_object(victim, BS("Du wirst bald aufhoeren 'Aller Welten Freund' zu singen."));
+  canRecharge = 1;
+  call_out("end_song", duration/4);
+}
+
+public void end_song() {
+  SetProp(P_CURSED, 0);
+  tell_object(victim, BS("Du beendest das Lied 'Aller Welten Freund'."));
+  tell_room(environment(victim), BS(victim->Name(WER, 1)+" beendet das Lied 'Aller Welten Freund'."), ({victim}));
+  remove(1);
+}
+
+public int CanRecharge() {
+  return canRecharge;
+}
+
+public string extra_look() {
+  if(flying) {
+    return sprintf("Zwei regenbogenfarbene Vogelschwingen wachsen aus %sm Ruecken.\n", QueryProp(P_WORN)->QueryPossPronoun(FEMALE, WEN));
+  }
+  return "";
+}
+
+varargs int remove(int silent) {
+  if(objectp(victim)) {
+    if(victim && flying) {
+      tell_object(victim, BS("Deine Regenbogenfluegel loesen sich auf."));
+      victim->RemoveClass(CL_FLYING);
+    }
+
+    if(QueryProp(P_WORN)) {
+      DoUnwear(0);
+    }
+
+    victim->SetProp(P_NOAGGRESSIVE, 0);
+    //victim->SetProp(P_RACE_TT_MV, victim->QueryProp("original_" + P_RACE_TT_MV));
+    victim->Set(P_RACE_TT_MV, 0, F_QUERY_METHOD);
+    victim->Set(P_MSGIN, 0, F_QUERY_METHOD);
+    victim->Set(P_MSGOUT, 0, F_QUERY_METHOD);
+    victim->SetProp("original_" + P_RACE_TT_MV, 0);
+
+    if(objectp(wornItem) && objectp(present(wornItem, victim))) {
+      wornItem->DoWear();
+    }
+  }
+  return ::remove(silent);
+}
+
+void NotifyPlayerDeath(object victim, object killer, int lost_xp) {
+  remove(1);
+}
+
+void init() {
+  ::init();
+  if(!environment(this_object()) || !interactive(environment(this_object()))) {
+    remove(1);
+  }
+}
+
+public string *GetVerses() {
+  return strophen;
+}

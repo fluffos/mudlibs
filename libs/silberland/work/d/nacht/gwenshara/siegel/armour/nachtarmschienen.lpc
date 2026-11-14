@@ -1,0 +1,127 @@
+#include "../def.h"
+#include "/gilden/waldlaeufer/def_extern.h"
+#include "/p/daemon/itemd/itemd.h"
+
+inherit "std/armour";
+
+private int stachel;
+
+void create()
+{
+  if( !is_clone(TO) ) return;
+
+  ::create();
+
+//--Beschreibungen---------------------------------------------------------
+
+  SetProp(P_SHORT, "Die Unterarmplatten des Nachtwandlers");
+  SetProp(P_LONG,
+    "Diese Armschienen bestehen aus den ledgigen Knochenplatten des Nachtwandlers, "
+    "die zuvor dessen Unterarme bildeten. Sie sind von schwarzer Farbe und "
+    "verstroemen einen purpurenen Nebel. Schleimiger Eiter und dickes Blut "
+    "tropfen immer noch daran herab. Kleine nachwachsende Stacheln, die daraus "
+    "hervorwachsen eigenen sich wunderbar als Wurfmesser, die du werfen kannst.");
+
+//--Namen------------------------------------------------------------------
+
+  SetProp(P_NAME, "Unterarmplatten des Nachtwandlers");
+  SetProp(P_PLURAL, 1);
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({"platten", "unterarmplatten", THROWING_KNIFE_ID}) );
+
+//--Eigenschaften----------------------------------------------------------
+
+  SetProp(P_MATERIAL, ([MAT_CHITIN: 70, MAT_MISC_UNHOLY: 15, MAT_MISC_MAGIC: 15]) );
+  SetProp(P_WEIGHT, 1000);
+  SetProp(P_VALUE, 5000);
+  SetProp(P_NOBUY, 1);
+  
+//--Ruestungseigenschaften-------------------------------------------------
+
+  SetProp(P_ARMOUR_TYPE, AT_BRACERS );
+  SetProp(P_AC, 8);
+  SetProp(P_QUALITY_DECAY, 120);
+  SetProp(P_WC, 120);
+  SetProp(P_DAM_TYPE, ({DT_PIERCE, DT_UNHOLY}));
+
+  AddProp(P_DAM_PROTECTION, PHYSICAL_DAMAGE_TYPES + ([DT_UNHOLY: 1, DT_LIGHT: 1]) );
+  SetProp(P_WEAR_RESTRICTIONS, ([SR_SEER: 1]) );
+
+  SetProp(P_INFO, BS("Diese Unterarmplatten eignen sich besonders fuer die Messerkaampftechnik "
+                     "der Waldlaeufer, da sie schnelles Ziehen von Messern erlauben. Ausserdem "
+                     "kannst du Wurfmesser hineinstecken, die du dann bei Gelegenheit im Kampf "
+                     "wirfst."));
+  SetProp(P_ITEMD_NO_MAGIC, 1);
+  SetProp(P_MAGIC, 1);
+
+  SetProp(P_RANGER_BONUS, (["ausweiden":25, "messerwurf": 25]));
+  SetProp(P_RANGER_SPELLCOST, 5);
+
+  SetProp(P_M_HEALTH_MOD,([P_HP:1,P_SP:1]));
+
+  AddCmd(CMD_WERFEN, "cmd_werfen");
+  stachel = 1;
+}
+
+public void RangerKnifeThrownAt(object enemy) {
+  if(!random(5) && !enemy->QueryProp(P_DISABLE_ATTACK)) {
+    tell_room(ENV(enemy), BS(enemy->name(WER)+" verzieht das Geischt vor Schmerzen."));
+    enemy->SetProp(P_DISABLE_ATTACK, 1);
+  }
+  return;
+}
+
+
+public int cmd_werfen(string str) {
+  string target, what;
+  object victim;
+  int fix, r, dc;
+
+  notify_fail("Was willst du auf wen werfen?\n");
+  if(!str || str == "") return 0;
+  if(sscanf(str, "%s auf %s", what, target) != 2) return 0;
+  if(what != "stachel" && what != "stacheln" && what != "nachtwandlerstachel" && what != "nachtwandlerstacheln") return 0;
+
+  if(!stachel) {
+      write(BS("Du hast keinen Nachtwandlerstachel mehr. Warte bis einer nachgewachsen ist."));
+      return -1;
+  }
+
+  notify_fail("Dein Ziel ist gar nicht hier!");
+  if(!objectp(victim=present(target, ENV(TP)))) return 0;
+  
+  if(query_once_interactive(victim)) {
+      write(BS("Du wirfst den Stachel lieber nicht auf andere Spieler..."));
+      return -1;
+  }
+
+  if(!living(victim)) {
+      write(BS("Mit einem *PLONK* prallt der Nachtwandlerstachel von "+victim->name(WEM)+" ab. Sofort waechst ein neuer nach."));
+      say(BS(TPN+" wirft einen Nachtwandlerstachel gegen "+victim->name(WEN)+" und er prallt ab."));
+      return 1;
+  }
+
+  write(BS("Mit einem kraeftigen Wurf schleuderst du einen Nachtwandlerstachel auf "+victim->name(WEN)+"."));
+  say(BS(TPN+" wirft einen Nachtwandlerstachel auf "+victim->name(WEN)+"."));
+
+  r = random(TP->QueryAttribute(A_DEX));
+  dc = random(victim->QueryAttribute(A_DEX));
+  if(r > dc) {
+       fix = QueryProp(P_WC) * QueryProp(P_WC_FIX) / 100;
+      victim->Defend(fix+TP->QueryAttribute(A_DEX)+random(QueryProp(P_WC)-fix), ({DT_PIERCE}), 
+                     ([SP_NAME: "Wurfmesser", SP_SHOW_DAMAGE: 1, SP_PHYSICAL_ATTACK: 1]), TP);
+      RangerKnifeThrownAt(victim);
+  } else {
+      write(BS("Du verfehlst."));
+  }
+
+  call_out("nachwachsen", 4+random(4));
+  stachel = 0;
+  return 1;
+}
+
+public void nachwachsen() {
+  stachel = 1;
+  tell_object(ENV(TO), BS("Ein neuer Nachtwandlerstachel ist nachgewachsen."));
+  return;
+}

@@ -1,0 +1,123 @@
+/*
+ * Pforte ins Totenreich
+ *
+ * Erzeugt einen Geist, der seinen Moerder verfolgt und nervt. Ist zwischen
+ * Mitternacht und 1 Uhr frueh billiger (10 MP)
+ *
+ * Kosten: 40 MP
+ * Level : 1 
+ * Objekte: /gilden/nekromanten/npc/geist
+ *
+ * Spruch kann nicht durch Skillpunkte verbessert werden!
+ *
+ * Status: anschlussreif
+ *
+ */
+// Archon 29.07.2003: sinfo uebergabe
+
+mixed check_pforte_ins_totenreich(object caster, mapping sinfo, int silent) 
+{
+  object corpse;
+  if( caster->InFight() ) 
+  {
+    if (!silent)
+     write(BSC("Im Kampf bist Du zu beschaeftigt, um eine Pforte ins "
+          "Totenreich zu oeffnen."));
+    return 0;
+  }
+  if(!sinfo[SI_SKILLARG])
+  {
+    if (!silent)
+     write("Ohne eine Leiche kannst Du keine Pforte ins Totenreich oeffnen!\n");
+    return 0;
+  }
+  corpse=present(sinfo[SI_SKILLARG], ENV(caster));
+  if(!objectp(corpse)) 
+  {
+    if (!silent)
+     write(BSC(random_fluch()+" Sowas ist nicht hier!"));
+    return 0;
+  }
+  if(!corpse->id("Leiche") )
+  {
+    if (!silent)
+     write("Ohne eine Leiche kannst Du keine Pforte ins Totenreich oeffnen!\n");
+    return 0;
+  }
+  if(corpse->QueryProp(P_NOMAGIC) == "dusty") {
+    write(BSC("BEI ALLEN NIEDERHOELLEN! Die Leiche ist gesegnet und Du kannst "
+        "keine Pforte ins Totenreich oeffnen! VERFLUCHTE PALADINE!"));
+    return 0;
+  }
+  if(corpse->QueryProp("nekro_ghost")) {
+    write(BSC("Der Geist dieser Leiche wurde bereits gerufen!"));
+    return 0;
+  }
+  return corpse;
+}
+
+mixed prep_pforte_ins_totenreich(object caster, mapping sinfo) 
+{
+  object corpse;
+  corpse=check_pforte_ins_totenreich(caster,sinfo,0);
+  if(!objectp(corpse)) 
+    return 0;
+  sinfo[SI_ENEMY]=corpse;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }                                  
+  write(BS("Du hebst beschwoerend Deine Arme in die Hoehe ...\n"));
+  say(BS(sprintf("%s hebt beschwoerend %se Arme in die Hoehe...\n", 
+          caster->Name(WER), caster->QueryPossPronoun(WESSEN))));
+  return sinfo;
+}
+  
+int pforte_ins_totenreich(object caster, mapping sinfo)
+{
+  int succ;
+  string str;
+  object corpse;
+
+  corpse=sinfo[SI_ENEMY];
+  str=sinfo[SI_SKILLARG];
+  if (!corpse && (!corpse=check_pforte_ins_totenreich(caster, sinfo,1)))
+  {
+    write(BSC(sprintf("%s! Die Leiche ist verschwunden! Wie kann man nur "
+            "so versagen?!", caster->QueryProp(P_GENDER)==FEMALE?
+            "NAERRIN":"NARR",CAP(str))));
+    return 0;
+  }
+
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+
+  if ((succ=SpellSuccess(caster,sinfo)) <= -random(2500))
+  {
+     write(BSC(
+       random_fluch()+" Das Oeffnen der Pforte ist Dir total misslungen! "
+       "Der Geist faehrt in seinen alten Koerper und wendet sich gegen Dich!"));
+     say(BS(sprintf(
+       "Ploetzlich wird die Leiche lebendig und greift %s an!",
+       caster->name(WEN) )), ({caster}) );
+     CloneZombie(corpse, caster, -succ+random(5000))->Kill(caster);
+     total_fail=1;
+     return MISSERFOLG;
+  }
+  if (succ <= 0) 
+  {
+    write(BS(random_fluch()+" Nichts passiert!"));
+    return MISSERFOLG;
+  }
+
+  write(BSC("Du oeffnest eine Pforte ins Totenreich. Aus den unendlichen Tiefen "
+      "des Geisterreiches holst Du die Seele dieser Leiche zurueck in die Welt. "
+      "Voller Hass auf alles Leben wird sich der Geist jetzt an seinem Moerder "
+      "raechen!"));
+  say(BS(CAP_TPN+" oeffnet eine Pforte ins Totenreich und ein Geist kommt an, "
+        "der sich jetzt an seinem Moerder raechen wird."));
+  CloneGhost( corpse, caster, succ);
+  UseBlood();
+  return ERFOLG;
+}

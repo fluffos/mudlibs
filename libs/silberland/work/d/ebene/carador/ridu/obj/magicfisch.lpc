@@ -1,0 +1,197 @@
+/****************************************************************************
+ magicfisch.c, (C) 2002 by Carador for Silberland
+****************************************************************************/
+
+/*
+
+Name   : Ein Minifisch
+Pfad   : /d/ebene/carador/ridu/obj/magicfisch.c
+Wert   : 0
+Gewicht: 300
+Fundort: Bei einer der magischen Entladungen auf dem Schiff kommt es dazu,
+         dass der Fisch an der Kabinenwand in /d/ebene/carador/ridu/room/r5
+         jeden Spieler im Raum mit kleinen Fischen ueberflutet 
+         (20 ins Inv und 20 in jeden Container des Spielers, also nur, falls
+         sie reinpassen/ers tragen kann).
+         Und genau einer dieser Minifische ist magisch. Was das heisst, kommt
+         gleich.
+Aufwand: Mittel: man muss an Bord des Schiffs gelangen und so lange fahren,
+         bis es zur Fischentladung kommt. Wann diese kommt, ist Zufall.
+         Kann gleich die erste sein, kann aber auch erst nach 7 Minuten
+         kommen.
+Details:
+- alle 60 Sekunden macht der Fisch eine Aktion:
+  * ist er in einem Container, so huepft er raus
+  * ist der Container zu, geht der Fisch kaputt
+  * liegt er im Raum, so huepft er ins Inv eines beliebigen ausgewaehlten
+    Livings
+  * ist er bei einem Living im Inv, so huepft er in das Inv eines anderen
+    anwesenden Livings, ist kein anders Living da, bleibt er da, wo er ist
+    und gibt dem Living, das ihn traegt, 4-6 SP zurueck, je nach Fischalter
+- der Fisch hat eine Lebensdauer von 24 Stunden, danach zerstoert er sich
+  von selbst
+- ein clone von magicfisch ist erstmal nicht magisch. Er muss erst bei
+  /d/ebene/carador/ridu/lib/fischmaker als solcher angemeldet werden!
+  Will man zum ausprobieren einen magischen haben, muss man
+  im fischmaker->tmp_magic() aufrufen. Das clont einen, macht ihn magisch
+  und schiebt ihn TP ins INV.
+- es kann nur ein Fisch im gleichen INV existieren. Treffen zwei aufeinander,
+  frisst der eine den anderen auf.
+
+*/
+
+
+#pragma strong_types
+#include "../def.h"
+
+inherit RD_THING;
+
+int crea_time;
+
+private string my_long()
+{
+  switch((time() - crea_time) / 21600) {   // ab 86400 zerstoert sich der fisch
+                                           // d.h. werte von 0 bis 3 moeglich
+    case 0:  
+      return "\
+Ein silberner, kleiner, glitschiger Minifisch. Er ist in tadellosem Zustand.";
+      return "\
+Der kleiner, glitschige Minisch ist nicht mehr ganz taufrisch.";
+    case 1:
+      return "\
+Mittlerweilen ist der kleine Fisch schon ein bisschen angegammelt.";
+    case 2:
+      return "\
+Der Fisch riecht schon ein bisschen streng, sieht aber noch immer wie ein \
+Fisch aus";
+    default :
+      return "\
+Der Fisch, falls man ihn ueberhaupt noch so bezeichnen kann, stinkt \
+inzwischen gewaltig zum Himmel.";
+  }
+}
+
+void create()
+{
+  ::create();
+  SetProp(P_NAME, "Minifisch");
+  AddId(({ "fisch", "minifisch" }));
+  SetProp(P_GENDER, MALE);
+  SetProp(P_SHORT, "Ein Minifisch");
+  SetProp(P_LONG, #'my_long);
+  SetProp(P_WEIGHT, 300);
+  SetProp(P_VALUE, 0);
+  crea_time = time();
+  AddRule("zertrampel <me>", "zertrampel");
+  AddRule("zertrample <me>", "zertrampel");
+  AddRule("iss <me>", "iss");
+  AddRule("esse <me>", "iss");
+  AddRule("ess <me>", "iss");
+  SetProp(P_MATERIAL, MAT_FLESH);
+  SetProp(P_SIZE, 15);
+}
+
+status do_action(string verb, mapping args)
+{
+  switch(verb) {
+    case "iss" :
+      message("Nein, beim besten Willen nicht. So weit geht Deine "
+              "Ueberwindungskraft nun wirklich nicht. Da wuerdest "
+              "Du ihn lieber zertrampeln.");
+      return 1;
+    case "zertrampel" :
+      if (environment() == this_player()) {
+        move(environment(this_player()), M_PUT);
+        message(({ ({ M_PL_BEST, M_PL_VERB, "leg", M_ME_AKK, "ab." }) }));
+      }
+      message(({ ({ "Wie ein Wilder", M_PL_VERB, "trampel", M_PL_BEST,
+        "auf dem Minifisch herum, bis er Brei ist." }) }));
+      remove();
+      return 1;
+  }
+}
+
+void my_action()
+{
+  int i, sp;
+  object pl, r, *liv, *env, cont, *konkurrenz;
+
+  if (time() - crea_time > 86400) {
+    if (environment()) message(({ ({ M_TARGETS, ({ environment() }),
+       "\
+Der kleine Fisch zerfaellt ploetzlich und zurueck bleibt nichts ausser \
+ein paar Schuppen, die langsam zu Boden rieseln." }) }));
+    remove();
+    return;
+  }
+
+  if (!environment()) return;
+
+  konkurrenz = filter_objects(all_inventory(environment()) - 
+    ({ this_object() }), "id", "\nridu#magicfisch");
+
+  if (sizeof(konkurrenz)) {
+    message(({ ({ "Mit einem lauten 'Happppps' verschluckt der eine kleine "
+      "Fisch ploetzlich den anderen kleinen Fisch." }) }));
+    konkurrenz[0]->remove();
+    return;
+  }
+
+  env = all_environment(this_object());
+  r = env[<1];
+  liv = filter_array(all_inventory(r), #'living);
+  for (i=sizeof(env);i--;) {
+    if (living(env[i])) {
+      pl = env[i];
+      break;
+    }
+  }
+
+#if 0
+  if (!pl) return;  // fisch liegt einfach nur im raum rum
+#endif
+
+  if (pl && !living(cont = environment())) {    // Fisch ist in Tasche
+    if ( cont->QueryProp(P_CNT_STATUS) ||   // container geschlossen
+         move(r,M_PUT) < 0) {
+      message(({({ M_TARGETS, ({ pl}), M_ME, "erstickt in ",
+       M_DAT_POSS, pl, cont, "." }) }));
+      remove();
+      return;
+    }
+    move(pl,M_NOCHECK);
+    message(({ ({ M_TARGETS, ({ pl }), M_ME, "huepft ploetzlich aus ",
+       M_DAT_POSS, pl, cont, "direkt in Deine Haende." }) }));
+    return;
+  }
+
+  if (pl) liv -= ({ pl });
+  if (!sizeof(liv)) {
+    if (pl) {
+      sp = (time()-crea_time) / 21600;
+      if (sp>3)sp=3;    // 0 bis drei
+      sp=3-sp;          // nur andersrum
+      sp = 3 + sp;      // fisch heilt 4 bis 6 sp
+      pl->AddSp(sp);
+      message(({ ({ M_TARGETS, ({ pl }), "\
+Ein kleiner Fisch fuehlt sich kurzzeitig ganz warm an." }) }));
+    }
+    return;
+  }
+  i = random(sizeof(liv));
+  if (pl) message(({
+    ({ M_ROOM, r, M_ME, "huepft ploetzlich von ", M_DAT, pl,
+       "zu", M_DAT, liv[i], "." })
+  }));
+    else
+    message(({ ({ M_ROOM, r, M_ME, "huepft ploetzlich zu", M_DAT, liv[i],
+          "." }) }));
+    
+  move(liv[i], M_NOCHECK);
+}
+
+void reset()
+{
+  if (!id("\nridu#magicfisch")) remove();
+  else my_action();
+}

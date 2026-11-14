@@ -1,0 +1,407 @@
+string damage_type_de(string dt);
+
+int erkennelied(object caster, mapping sinfo)
+{
+  object ob, env;
+  int suc, abil, tmpI;
+  string itemName, zusatz;
+
+  sinfo = prepare_song(caster, sinfo);
+  if(sinfo == 0) return 0;
+
+  if(!sinfo[SI_SKILLARG]) {
+    write("Welches Objekt moechtest Du denn naeher beaeugen?\n");
+    return 0;
+  }
+
+  itemName = sinfo[SI_SKILLARG];
+  zusatz = itemName[strlen(itemName)-8..strlen(itemName)];
+  if(zusatz == " im raum") {
+      env = environment(caster);
+      itemName = itemName[0..strlen(itemName)-9];
+  } else {
+    env = caster;
+    itemName = sinfo[SI_SKILLARG];
+  }
+
+  if(caster->QueryProp(P_TESTPLAYER)) write("itemName = '" + itemName + "' zusatz = '" + zusatz+ "'\n");
+
+  if(!objectp(ob=present(itemName, env))) {
+    ob = present(itemName, environment(caster));
+    if(!objectp(ob)) {
+      write(BS("Sowas findest du hier nicht."));
+      return 0;
+    }
+  }
+
+  if(living(ob)) {
+    write("Dieses Lied wirkt nicht auf Lebwesen.\n");
+    return 0;
+  }
+
+  if(caster->InFight()){
+      write("Jetzt ist wohl nicht der geeigntete Zeitpunkt dafuer!\n");
+      return 0;
+  }
+
+  if(!paySpellCost(caster, sinfo)) return 0;
+  abil = sinfo[SI_SKILLABILITY];
+
+  // HIER LIEDTEXT
+  tell_room(environment(caster), BS(sprintf("%s spielt eine kurze, rhythmische Melodie.\n", caster->Name(WER))), ({caster}));
+  tell_object(caster, BS("Du spielst eine kurze, rhythmische Melodie.\n"));
+  
+  if( (suc=SpellSuccess(caster,sinfo))<=0 )
+  {
+    total_fail=1;
+    return MISSERFOLG;
+  }
+
+  call_out("erkenne_erfolg", 0, caster, ob, abil);
+  return ERFOLG;
+}
+
+public void erkenne_erfolg(object caster, object ob, int abil) {
+  string wie, level, abn_str;
+  int abn;
+  mapping mat;
+  int ac, bla;
+  string help, aus;
+
+  if(!objectp(ob)) {
+    tell_object(caster, BS("Nanu?! Wo ist es denn hin?"));
+    return;
+  }
+
+
+  tell_room(environment(caster), BS(sprintf("Das Musikstueck findet Resonanz in %s. %s lauscht angestrengt.", ob->name(WEM, 1), caster->Name(WER))), ({caster}) );
+  tell_object(caster, BS(sprintf("%s gibt in Resonanz mehrere Toene von sich. Du lauschst angestrengt und erkennst:", ob->Name(WER, 1))));
+
+  // INFO
+  if(ob->info(caster))
+  {
+    write(BS("-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-="));
+    write(BS("Du erkennst etwas Besonderes an "+ob->name(WEM, 1)+":"));
+    write(BS(ob->info(caster)));
+  }
+      
+  // INSTRUMENTEN STUFE
+  if(ob->QueryProp(P_INSTRUMENT_LEVEL) != 0)
+  switch(ob->QueryProp(P_INSTRUMENT_LEVEL))
+  {
+    case 1:  level="leicht"; break;
+    case 2:  level="durchschnittlich schwer"; break;
+    case 3:  level="schwer"; break;
+    case 4:  level="sehr schwer"; break;
+    case 5:  level="unglaublich schwer"; break;
+    default: level="von Sterblichen nicht";
+  }
+  
+  // ABNUTZUNG
+  abn=ob->QueryProp(P_QUALITY_DECAY);
+  if(      abn>900 ) abn_str="extrem wenig";
+  else if( abn>500 ) abn_str="ausgesprochen wenig";
+  else if( abn>300 ) abn_str="sehr wenig";
+  else if( abn>200 ) abn_str="auffallend wenig";
+  else if( abn>120 ) abn_str="ueberdurchschnittlich wenig";
+  else if( abn>90  ) abn_str="ziemlich gewoehnlich";
+  else if( abn>70  ) abn_str="ueberdurchschnittlich schnell";
+  else if( abn>50  ) abn_str="auffallend schnell";
+  else if( abn>30  ) abn_str="sehr schnell";
+  else if( abn>10  ) abn_str="ausgesprochen schnell";
+  else if( abn>0   ) abn_str="extrem schnell";
+  else               abn_str="gar nicht";
+      
+  write(BS("-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-="));
+  write(capitalize(ob->name(WER,1))+ 
+  (level!=0?" ist "+level+" zu spielen und":"")+" nuetzt sich "+abn_str+" ab.\n");
+  
+   
+
+   // BARDEN INFOS
+  if(ob->QueryProp(P_INSTRUMENT_TYPE)) {
+    if(ob->QueryProp(P_INSTRUMENT_TYPE) == BARD_GROUP_INSTRUMENT[call_other("/gilden/bardengilde/master/bardenmaster", "GetBardGroup", caster)]) {
+      write(BS(ob->Name(WER, 1) + " ist genau die richtige Art von Instrument fuer dich."));
+    } else {
+      write(BS("Andere Barden koennen damit sicher mehr anfangen."));
+    }
+
+    if(ob->QueryProp(P_INSTRUMENT_LEVEL) > convertGuildLevelToInstrumentLevel(caster->QueryProp(P_GUILD_LEVEL))) {
+      write(BS("Dieses Insturment ist fuer dich zu schwierig zu spielen."));
+    } else if(ob->QueryProp(P_INSTRUMENT_LEVEL) < convertGuildLevelToInstrumentLevel(caster->QueryProp(P_GUILD_LEVEL))) {
+      write(BS("Dieses Instrument kann deine Kunst nicht gut genug ausdruecken. Such dir ein Besseres!"));
+    } else {
+      write(BS("Dieses Instrument ist deinem Niveau angemessen."));
+    }
+  }
+            
+
+  // ANZAHL DER HAENDE
+  if(intp(ob->QueryProp(P_HANDS))) {
+    switch( ob->QueryProp(P_HANDS) )
+    {
+      case 0: wie = "keine Hand"; break;
+      case 1: wie = "eine Hand"; break;
+      case 2: wie = "zwei Haende"; break;
+      case 3: wie = "drei Haende"; break;
+      case 4: wie = "vier Haende"; break;
+      default: wie = "sehr viele Haende";
+    } 
+    write("Du benoetigst "+wie+", um "+ob->QueryPronoun(WEN)+" zu verwenden.\n");
+  }
+  
+  
+  // MATERIAL ERKENNUNG  
+  if( (mat=ob->QueryProp(P_MATERIAL)) && (pointerp(mat)) )
+  {
+    if (sizeof(mat))
+    write(break_string(sprintf("%s besteh%s aus %s.", ob->Name(WER,1),
+          (ob->IsUnit() && ob->QueryProp("u_req") != 1 ? "en" : "t"),
+	  ob->MatList(WEM) || "unbekanntem Material"), 78));
+  }
+  else if (mappingp(mat))
+  {
+    write(break_string(sprintf("%s besteh%s aus %s.", ob->Name(WER,1),
+          (ob->IsUnit() && ob->QueryProp("u_req") != 1 ? "en" : "t"),
+	   ob->MaterialList(WEM,caster) || "unbekanntem Material"), 78));
+  }
+  
+  // HITZE | KAELTE
+  if (mappingp(mat=ob->QueryProp(P_TEMPERATURE_PROTECTION)))
+  {
+    int c,h;
+    string s;
+    s=ob->Name(WER,1);
+    c=mat[T_COLD_PROT];
+    h=mat[T_HEAT_PROT];
+    if (c) {
+      s+=" stell"+(ob->IsPlural() ? "en" : "t")+" bei Kaelte ";
+      if (c < -10) s+="eine enorme Belastung";
+      else if (c < -5) s+="eine ziemliche Belastung";
+      else if (c < -2) s+="eine spuerbare Belastung";
+      else if (c < -1) s+="eine leichte Belastung";
+      else if (c < 0)  s+="eine geringe Belastung";
+      else if (c > 10) s+="einen enormen Schutz";
+      else if (c > 5)  s+="einen sehr guten Schutz";
+      else if (c > 2)  s+="einen guten Schutz";
+      else if (c > 1)  s+="einen ganz brauchbaren Schutz";
+      else s+="einen eher geringen Schutz";
+      s+=" dar"+(h ? " und" : "");
+     }
+     if (h) {
+      if (h < -10) s+=" belaste"+(ob->IsPlural() ? "n" : "t")+
+        " Dich"+(c<-10 ? " auch" : "")+ " bei Hitze enorm stark";
+      else if (h < -5) s+=" bring"+(ob->IsPlural() ? "en" : "t")+
+        " Dich bei Hitze schnell zum Schwitzen";
+      else if (h < -2) s+=" "+(ob->IsPlural() ? "lassen" : "laesst")+
+        " Dich bei Hitze leicht schwitzen";
+      else if (h < -1) s+=" "+(ob->IsPlural() ? "lassen" : "laesst")+
+        " Dich bei Hitze leichter schwitzen";
+      else if (h < 0)  s+=" "+(ob->IsPlural() ? "sind" : "ist")+
+        " bei Hitze eine leichte Belastung fuer Dich";
+      else if (h > 10) s+=" schuetz"+(ob->IsPlural() ? "en" : "t")+
+        " Dich unglaublich gut vor Hitze";
+      else if (h > 5)  s+=" biete"+(ob->IsPlural() ? "n" : "t")+
+        " Dir einen beachtlichen Hitzeschutz";
+      else if (h > 2)  s+=" schuetz"+(ob->IsPlural() ? "en" : "t")+
+        " Dich recht gut vor Hitze";
+      else if (h > 1)  s+=" schuetz"+(ob->IsPlural() ? "en" : "t")+
+        " Dich einigermassen vor Hitze";
+      else s+=" schuetz"+(ob->IsPlural() ? "en" : "t")+
+        " Dich ein wenig vor Hitze";
+     }
+     if (c || h) {
+      write(break_string(s+".",78));
+     }
+  }
+
+  // Kaufbar?
+  if(ob->QueryProp(P_NOBUY))
+    write(BS(ob->Name(WEN, 1)+" wirst Du bei keinem Haendler finden."));
+
+  // Verkaufbar?
+  if(ob->QueryProp(P_NOSELL))
+    write(BS(ob->Name(WEN, 1)+" "+(ob->IsPlural() ? "sind" : "ist")+
+          " bei Haendlern nicht beliebt."));
+
+  // Weglegbar?
+  if(ob->QueryProp(P_NODROP))
+    write(BS(ob->Name(WEN, 1)+" "+(ob->IsPlural() ? "koennen" : "kann")+
+          " nicht abgelegt werden."));
+
+  // Nehmbar?
+  if(ob->QueryProp(P_NOGET))
+    write(BS(ob->Name(WEN, 1)+" "+(ob->IsPlural() ? "koennen" : "kann")+
+          " von Dir nicht genommen werden."));
+
+  // Todessicher?
+  if(ob->QueryProp(P_NEVERDROP))
+    write(BS(ob->Name(WEN, 1)+" "+(ob->IsPlural() ? "werden" : "wird")+
+          " den Tod ueberdauern."));
+
+  // Rebootfest
+  if(ob->QueryProp(P_AUTOLOADOBJ))
+    write(BS(ob->Name(WEN, 1)+" "+(ob->IsPlural() ? "werden" : "wird")+
+          " dem Weltuntergang trotzen."));
+  
+  // Spellbonus
+  if(mappingp(ob->QueryProp(P_BARDEN_BONUS)) && abil > 5000)
+    write(BS(ob->Name(WEN, 1)+" "+
+       (ob->IsPlural() ? "verbessern" : "verbessert")+
+          " die Wirkung Deiner Stuecke."));
+
+  // Zauberkosten verringert
+  if(ob->QueryProp(P_BARDEN_SPELLCOST) && abil > 5000)
+    write(BS(ob->Name(WEN, 1)+" "+
+         (ob->IsPlural() ? "optimieren" : "optimiert")+
+          " den Magieverbrauch Deiner Lieder."));
+
+  // MagicItem
+  if(ob->QueryProp(P_MAGIC))
+     write(BS(ob->Name(WEN, 1)+" "+
+         (ob->IsPlural() ? "tragen" : "traegt")+
+          " die Magie eines Liedes in sich."));
+
+  // Verflucht?
+  if(ob->QueryProp(P_CURSED) && abil > 7000)
+    write(BS(ob->Name(WEN, 1)+" "+(ob->IsPlural() ? "sind" : "ist")+
+          " von einem ueblen Fluch betroffen."));
+
+  // Besondere Info
+  if(abil > 6000)
+  {
+    // WAFFENINFOS
+    if(ob->QueryProp(P_WEAPON_TYPE))
+    {
+      int wc, i;
+      string *schaden;
+
+      wc = (int) (100*ob->QueryProp(P_WC)/MAX_WEAPON_CLASS);
+      switch(wc)
+      {
+        case 0 .. 10:  help = "mieserable"; break;
+        case 11 .. 20: help = "sehr schlechte"; break;
+        case 21 .. 30: help = "akzeptable"; break;
+        case 31 .. 40: help = "unterdurchschnittliche"; break;
+        case 41 .. 50: help = "durchschnittliche"; break;
+        case 51 .. 60: help = "ueberdurchschnittliche"; break;
+        case 61 .. 70: help = "gute"; break;
+        case 71 .. 80: help = "sehr gute"; break;
+        case 81 .. 90: help = "meisterliche"; break;
+        case 91 .. 99: help = "unglaubliche"; break;
+        default:       help = "goettliche"; break;
+      }
+
+      write(BS(ob->Name(WEN, 1)+" "+(ob->IsPlural() ? "sind" : "ist")+
+            " "+(ob->IsPlural() ? "" : "eine")+" "+help+" "+
+            (ob->IsPlural() ? "Waffen" : "Waffe")+"."));
+
+      wc = ob->QueryProp(P_WC_FIX);
+      switch(wc)
+      {
+        case 0 .. 10:  help = "mieserabel"; break;
+        case 11 .. 20: help = "sehr schlecht"; break;
+        case 21 .. 30: help = "akzeptabel"; break;
+        case 31 .. 40: help = "unterdurchschnittlich"; break;
+        case 41 .. 50: help = "durchschnittlich"; break;
+        case 51 .. 60: help = "ueberdurchschnittlich"; break;
+        case 61 .. 70: help = "gut"; break;
+        case 71 .. 80: help = "sehr gut"; break;
+        case 81 .. 90: help = "meisterlich"; break;
+        case 91 .. 99: help = "unglaublich gut"; break;
+        default:       help = "goettlich"; break;
+      }
+
+      write(BS(ob->Name(WER, 1)+" "+(ob->IsPlural() ? "liegen" : "liegt")+
+            " "+help+" in der Hand."));
+
+      schaden = ({});
+
+     if(!pointerp(ob->QueryProp(P_DAM_TYPE)))
+        schaden += ({damage_type_de(ob->QueryProp(P_DAM_TYPE))});
+     else
+        for(i = 0; i<sizeof(ob->QueryProp(P_DAM_TYPE)); ++i)
+          schaden += ({damage_type_de(ob->QueryProp(P_DAM_TYPE)[i])});
+
+      aus = "";
+      if(sizeof(schaden))
+      {
+        for(i=0; i<sizeof(schaden); ++i)
+        {
+          if(i == sizeof(schaden)-1 && sizeof(schaden) > 1) aus += " und ";
+          else if(sizeof(schaden) > 1 && i!=0) aus += ", ";
+          aus+=schaden[i];
+        }
+        write(BS(ob->Name(WER, 1)+" "+(ob->IsPlural() ? "verursachen" : "verursacht")+
+              " Schaden durch "+aus+"."));
+      }
+    }
+
+    // RUESTUNGSINFO
+    if(ob->QueryProp(P_ARMOUR_TYPE) && ob->QueryProp(P_ARMOUR_TYPE) != AT_MISC)
+    {	      
+      bla = VALID_ARMOUR_CLASS[ob->QueryProp(P_ARMOUR_TYPE)];
+      ac = (int) (100*ob->QueryProp(P_AC)/bla);
+
+      switch(ac)
+      {
+        case 0 .. 10:  help = "mieserablen"; break;
+        case 11 .. 20: help = "sehr schlechten"; break;
+        case 21 .. 30: help = "akzeptablen"; break;
+        case 31 .. 40: help = "unterdurchschnittlichen"; break;
+        case 41 .. 50: help = "durchschnittlichen"; break;
+        case 51 .. 60: help = "ueberdurchschnittlichen"; break;
+        case 61 .. 70: help = "guten"; break;
+        case 71 .. 80: help = "sehr guten"; break;
+        case 81 .. 90: help = "meisterlichen"; break;
+        case 91 .. 99: help = "unglaublich guten"; break;
+        default:       help = "besten"; break;
+      }
+
+      if(ob->QueryProp(P_GENDER) == NEUTER) aus = "ein";
+      else if(ob->QueryProp(P_GENDER) == MALE) aus = "einen";
+      else aus = "eine";
+      write(BS(ob->Name(WER, 1)+" "+(ob->IsPlural() ? "bieten fuer" : "bietet fuer "+
+             aus)+" "+ob->QueryProp(P_ARMOUR_TYPE)+" "+help+" Schutz."));
+    }
+  }
+
+  if(abil>6000)
+    write(BS("Du kannst "+ob->QueryPronoun(WEN)+" fuer maximal "
+	     +ob->QueryProp(P_VALUE)+" Muenzen versetzen."));
+
+  write(BS("-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-"  
+          +"=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-="));
+}
+
+
+string damage_type_de(string dt)
+{
+  switch(dt)
+  {
+    case DT_SLASH: return "Schnitte";
+    case DT_RIP: return "Risse";
+    case DT_PIERCE: return "Stiche";
+    case DT_BLUDGEON: return "Schlaege";
+    case DT_WHIP: return "Peitschenhiebe";
+    case DT_SQUEEZE: return "Quetschungen";
+    case DT_FIRE: return "Flammen";
+    case DT_MAGIC: return "Magie";
+    case DT_COLD: return "Kaelte";
+    case DT_ACID: return "Veraetzungen";
+    case DT_TERROR: return "Furcht";
+    case DT_POISON: return "Vergiftungen";
+    case DT_HOLY: return "heilige Macht";
+    case DT_UNHOLY: return "unheilige Kraft";
+    case DT_LIGHT: return "Licht";
+    case DT_SOUND: return "Laerm";
+    case DT_WATER: return "Wasser";
+    case DT_LIGHTNING: return "Blitze";
+    case DT_ELECTRIC: return "Elektrizitaet";
+    case DT_EXPLOSION: return "Explosionen";
+    case DT_AIR: return "Luft";
+    case DT_MIND: return "geistige Angriffe";
+    default: return dt;
+  }
+}
+

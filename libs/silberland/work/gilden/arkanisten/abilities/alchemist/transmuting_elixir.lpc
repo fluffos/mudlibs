@@ -1,0 +1,114 @@
+#include "../../arkanisten.h"
+
+inherit GUILD_FOLDER "abilities/ability.lpc";
+
+public void create() {
+    if(is_clone(TO)) return;
+
+    ::create();
+    SetProp(P_ABILITY_NAME, CAP(TRANSMUTING_ELIXIR));
+    SetProp(P_ABILITY_DESCRIPTIPON, 
+       "Das transmutierende Elixir veraendert deinen Koerper, sodass seine "
+       "Widerstandskraft gegen koerperliche Schaeden gestaerkt wird. Allerdings "
+       "geschieht dies dadurch, dass ein Teil der anderen Widerstandskraft "
+       "umgelenkt wird.");    
+    SetProp(P_ABILITY_TYPE, ABILITY_TYPE_ACTIVE);
+    SetProp(P_ABILITY_BASE_ATTRIBUTE, A_INT);
+    SetProp(P_ABILITY_CASTVERB, CAST_VERB_DRINK);
+    SetProp(P_ABILITY_GROUP, ({ABILITY_GROUP_ALCHEMY}));
+    SetProp(P_ABILITY_COST, ([
+        P_HP: 5,
+        P_SP: 25
+    ]));
+    SetProp(P_ABILITY_REQUIRES, ({ MUTAGENIC_ELIXIR }));
+}
+
+public mapping prepare_use(object user, mapping sinfo) {
+    object victim;
+
+    if(get_free_hands(user) < 2) {
+        tell_object(user, BS("Du musst eine zwei freie Haende haben, um das Elixier zu mischen!"));
+        return 0;
+    }
+
+    victim = user;
+
+    if(objectp(present(TRANSMUTING_ELIXIR_ID, victim))) {
+        tell_object(victim, BS("Du stehst bereits unter einem solchen Effekt."));
+        return 0;
+    }
+
+    tell_object(user, BS("Du beginnst, das Elixier zu mischen."));
+    tell_room(ENV(user), BS(user->Name(WER)+" beginnt verschiedene Phiolen zu mischen."), ({user}));
+
+    sinfo[SI_PREPARE_TIME] = 10;
+    sinfo[SI_SKILLARG] = victim;
+
+    return ::prepare_use(user, sinfo);
+}
+
+public void failed(object user, mapping sinfo, int skillcheck) {
+    object victim;
+    victim = sinfo[SI_SKILLARG];
+
+    tell_object(user, BS("Die Fluessigkeit reagiert nicht richtig und ist unbrauchbar."));
+    tell_room(ENV(user), BS(user->Name(WER)+" sieht enttaeuscht auf eine Phiole."), ({user}));
+    
+    return ::failed(user, sinfo, skillcheck);
+}
+
+public void success(object user, mapping sinfo, int skillcheck) {
+    object victim;
+    int duration, i;
+    float resistance, skill_factor;
+    mapping resistances;
+    string *dtypes;
+
+    victim = sinfo[SI_SKILLARG];
+    if(!objectp(victim)) {
+        tell_object(user, BS("Nanu? Dein Ziel ist nicht mehr da!"));
+        return;
+    }
+
+    tell_object(victim, BS("Die Fluessigkeit beginnt orange zu schaemuen und rasch trinkst du sie. Ploetzlich veraendert sich deine Haut und wird haerter und widerstandsfaehiger."));
+    tell_room(ENV(victim), BS(user->Name(WER)+" trinkt rasch eine schaeumende Fluessigkeit und bekommt eine harte Hornhaut."), ({victim}));
+
+    // Both sinfo[SI_SKILLABILITY] and skillcheck are between 0 and 10000
+    // We'll average them, normalize to [0.0, 1.0], then scale to [0.0, 0.7]
+    skill_factor = ((to_float(sinfo[SI_SKILLABILITY]) + to_float(skillcheck)) / 2.0) / 10000.0;
+    resistance = skill_factor * 0.7;
+
+    // duration between 30 sec (30) and 10 min (600)
+    // We'll use the same skill_factor to interpolate
+    duration = 30 + to_int(skill_factor * (600 - 30));
+
+    // Apply the effect (example, you may need to adapt to your system)
+    resistances = ([]);
+    dtypes = m_indices(PHYSICAL_DAMAGE_TYPES);
+    for(i=0;i<sizeof(dtypes);++i) {
+        resistances[dtypes[i]] = -resistance;
+    }
+
+    dtypes = m_indices(MAGICAL_DAMAGE_TYPES);
+    for(i=0;i<sizeof(dtypes);++i) {
+        resistances[dtypes[i]] = (resistance/2.0);
+    }
+
+    pDebug(victim, sprintf("transmuting_elixir :: resistances=%O\n", resistances));
+
+    victim->AddResistanceModifier(resistances);
+    victim->UpdateResistanceStrengths();
+
+    call_out("remove_resistances", duration, victim);
+
+    pDebug(user, sprintf("transmutive_elixir :: duration=%d resistanceBonus=%.2f resistanceMalus=%.2f\n", duration, -resistance, resistance/2.0));
+
+    return;
+}
+
+public void remove_resistances(object victim) {
+    victim->RemoveResistanceModifier();
+    victim->UpdateResistanceStrengths();
+    pDebug(victim, sprintf("transmutive_elixir :: resistances removed\n"));
+    tell_object(victim, BS("Die Wirkung des transmutativen Elixirs endet. Deine Resistenzen werden wieder normal."));
+}

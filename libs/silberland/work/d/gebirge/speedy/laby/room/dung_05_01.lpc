@@ -1,0 +1,214 @@
+//=========================================================================
+//
+// File:    dung_05_01.c
+// Created by Speedy
+//
+// Project: Sarumans Quest (Finde die verlorene Schriftrolle)
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit ROOM "dung-inh";
+
+void create()
+{
+  ::create();
+
+  ltext2 = "An einer Wand siehst Du einen Kasten stehen. ";
+
+  AddDetail( ({"wand","waende","mauer","mauern"}),
+    "An einer Wand steht ein Kasten. "
+  );
+
+  AddDetail( ({"holz"}),
+    "Das Holz ist verrottet, und in einem furchtbaren Zustand. "
+  );
+
+  AddDetail( ({"zustand"}),
+    "Der Zustand des Holzes ist nicht gut, es ist schon verfault und "
+    "verrottet. "
+  );
+
+  AddDetail( ({"vorderseite"}),
+    "An der Vorderseite des Kastens befindet sich ein Schloss. "
+  );
+
+  AddSpecialDetail( ({"kasten"})   , "detail_kasten" );
+  AddSpecialDetail( ({"schloss"})  , "detail_schloss" );
+  AddSpecialDetail( ({"deckel"})   , "detail_deckel" );
+  AddSpecialDetail( ({"schaufel"}) , "detail_schaufel" );
+
+  AddCmd( CMD_OEFFNEN, "cmd_oeffnen" );
+  AddCmd( ({"brich","breche","brech"}), "cmd_brechen" );
+  AddCmd( ({"schau","schaue"}), "cmd_schauen" );
+  AddCmd( CMD_NEHMEN, "cmd_nehmen" );
+  AddCmd( ({"schliess","schliesse"}), "cmd_schliessen" );
+
+  AddExit( "osten", GETEXIT("06_01") );
+}
+
+string detail_kasten(string str)
+{
+  if(!SMASTER->QueryFlag(TPUID,F_KASTEN_AUF))
+    return BS("Der Kasten besteht aus Holz, an seiner Vorderseite siehst "
+              "Du ein Schloss. Im Augenblick ist der Kasten zu. ");
+
+  if(!SMASTER->QueryFlag(TPUID,F_GET_SCHAUFEL))
+    return "Der Kasten ist geoeffnet, und eine Schaufel liegt darin.\n";
+
+  return "Der Kasten ist geoeffnet.\n";
+}
+
+string detail_schaufel(string str)
+{
+  if(!SMASTER->QueryFlag(TPUID,F_KASTEN_AUF))
+    return "Sowas siehst Du da nicht!\n";
+
+  if(!SMASTER->QueryFlag(TPUID,F_GET_SCHAUFEL))
+    return "Im Kasten liegt eine sehr stabil aussehende Schaufel.\n";
+
+  return "Sowas siehst Du da nicht!\n";
+}
+
+string detail_schloss(string str)
+{
+  if(!SMASTER->QueryFlag(TPUID,F_KASTEN_AUF))
+    return "Das Schloss haengt an dem Kasten, und ist zu.\n";
+
+  return "Das Schloss ist kaputt.\n";
+}
+
+string detail_deckel(string str)
+{
+  if(!SMASTER->QueryFlag(TPUID,F_KASTEN_AUF))
+    return "Der Deckel ist aus Holz und verschliesst den Kasten.\n";
+
+  return "Der Deckel des Kastens ist kaputt.\n";
+}
+
+int cmd_oeffnen(string str)
+{
+  notify_fail( "Was willst Du oeffnen?\n" );
+  if(!str || str == "") return 1;
+
+  if(str == "kasten")
+  {
+    if(!SMASTER->QueryFlag(TPUID,F_KASTEN_AUF))
+    {
+      TELLPLAYER(BS("Das waere ja kein Problem, wenn das Schloss nicht da "
+                    "waere. "));
+      return 1;
+    }
+
+    TELLPLAYER("Der Kasten ist schon offen.\n");
+    return 1;
+  }
+
+  if(str == "schloss")
+  {
+    if(!SMASTER->QueryFlag(TPUID,F_KASTEN_AUF))
+    {
+      TELLPLAYER(BS("Aber Du hast keinen Schluessel, vielleicht geht es "
+                    "irgendwie anders auf. "));
+      return 1;
+    }
+
+    TELLPLAYER("Das Schloss ist aber schon kaputt.\n");
+    return 1;
+  }
+
+  return 0;
+}
+
+int cmd_brechen(string str)
+{
+  notify_fail("Was willst Du aufbrechen?\n");
+  if(!str || str == "") return 0;
+  if(!(str == "schloss auf")) return 0;
+
+  if(!SMASTER->QueryFlag(TPUID,F_KASTEN_AUF))
+  {
+    TELLPLAYER(BS("Du schlaegst gegen das Schloss und zerstoerst es, "
+                  "schliesslich machst Du den Kasten auf und dabei bricht "
+                  "der Deckel ab. "));
+    SMASTER->SetFlag(TPUID,F_KASTEN_AUF);
+    return 1;
+  }
+
+  TELLPLAYER("Das Schloss ist schon kaputt, hier kann man nichts mehr "
+             "aufbrechen.\n");
+  return 1;
+}
+
+int cmd_schauen(string str)
+{ // absichtlich kein notify_fail
+  if(!(str == "in kasten")) return 0;
+
+  if(!SMASTER->QueryFlag(TPUID,F_KASTEN_AUF))
+  {
+    TELLPLAYER("Dazu musst Du den Kasten erst oeffnen.\n");
+    return 1;
+  }
+
+  if(SMASTER->QueryFlag(TPUID,F_GET_SCHAUFEL))
+  {
+    TELLPLAYER("Der Kasten ist leer.\n");
+    return 1;
+  }
+
+  TELLPLAYER("Du schaust in den Kasten, und siehst eine Schaufel darin "
+             "liegen.\n");
+  return 1;
+}
+
+int cmd_nehmen(string str)
+{
+  object ob;
+
+  notify_fail("Was willst Du nehmen?\n");
+  if(!str || str == "") return 0;
+
+  if(!SMASTER->QueryFlag(TPUID,F_KASTEN_AUF))   return 0;
+  if( SMASTER->QueryFlag(TPUID,F_GET_SCHAUFEL)) return 0;
+
+  if(!(str=="schaufel aus kasten" || str=="schaufel")) return 0;
+
+  ob = clone_object(OBJ "schaufel");
+  if(ob->move(TP, M_GET|M_SILENT) != 1)
+  {
+    TELLPLAYER("Du kannst aber nichts mehr tragen.\n");
+    ob->remove();
+    return 1;
+  }
+
+  TELLPLAYER("Du nimmst die Schaufel aus dem Kasten.\n");
+  SMASTER->SetFlag(TPUID,F_GET_SCHAUFEL);
+  return 1;
+}
+
+int cmd_schliessen(string str)
+{
+  notify_fail( "Was willst Du schliessen?\n" );
+  if(!str || str == "") return 0;
+  if(!(str == "deckel" || str=="kasten")) return 0;
+
+  if(SMASTER->QueryFlag(TPUID,F_KASTEN_AUF))
+  {
+    TELLPLAYER("Der Deckel ist kaputt, da kann man nichts mehr schliessen.\n");
+    return 1;
+  }
+
+  TELLPLAYER("Aber der Kasten ist doch zu.\n");
+  return 1;
+}
+
+
+
+
+
+
+
+
+
+

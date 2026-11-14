@@ -1,0 +1,195 @@
+inherit "/std/thing";
+
+#include "def.h"
+#define REZEPT_SEITEN 10 
+
+int PL_MOVED=0;
+object IS_BAKING=0;
+
+string *level_names = 
+({  "PLACEHOLDER",
+    "Kochanfaenger",
+    "Kochlehrling",
+    "Kochamateuer",
+    "Koch",
+    "erfahrener Koch",
+    "Kochexperte",
+    "Haubenkoch",
+    "Zweihaubenkoch",
+    "Dreihaubenkoch",
+    "Meisterkoch",
+    });
+
+string *skill_names =
+({ "PLACEHOLDER",
+   "wirklich schlecht",
+   "schlecht",
+   "mittelmaessig",
+   "durchschnittlich",
+   "gut",
+   "ueberdurchschnittlich gut",
+   "sehr gut",
+   "perfekt",
+   "mehr als perfekt",
+   "meisterhaft"
+   });
+
+/*
+ * Sandwich:    Fleisch + Brot
+ * Steak:       Fleisch + Gewuerze
+ * Filet:       Fleisch + Sauce
+ * Pastete:     Fleisch + Teig
+ * Kuchen:      Frucht + Teig
+ * Creme:       Frucht + Zucker
+ */
+
+string *all_fruits = ({"Apfel", "Birne", "Erdbeere", "Himbeere", "Marille", 
+    "Ribisel", "Stachelbeere", "Zwetschke", "Zwergananas", "Passionsfrucht", 
+    "Mango", "Mandastromo", "Banane", "Papaya", "Heidelbeere"});
+
+string *all_meat = ({ "Baerenfleisch", "Katzenfleisch", "Rindfleisch",
+    "Drachenfleisch", "Zwergenfleisch", "Gnomenfleisch", "Hobbitfleisch",
+    "Pferdefleisch", "Menschenfleisch", "Ogerfleisch", "Schweinefleisch",
+    "Hasenfleisch", "Schafsfleisch", "Trollfleisch", "Wolfsfleisch"});
+
+mixed rezept_liste=
+({ 
+ ({ "seite", "skill", "Name", "Short", ({"Zutaten"}), "file", "extra" }),
+ ({ 1, 0, "Teig", "Teig", ({"ei", "mehl", "milch"}), "teig", 0 }),
+ ({ 1, 0, "kandierte Fledermausfluegel", "kandierte Fledermausfluegel", ({"fledermausfluegel", "zucker"}), "batwings", 0 }),
+ ({ 4, 4250, "Fischsuppe", "Fischsuppe", ({"fisch", "gewuerze"}), "suppe", 0 }),
+
+ ({ 5, 5050, "Pilzsuppe", "Pilzsuppe", ({"steinpilz", "champignon", "eierschwammerl"}), "suppe", 0 }),
+ ({ 7, 6400, "Fischrollen", "Fischrollen", ({"fisch", "fledermausfluegel"}), "fishrolls", 0 }),
+ ({ 8, 7900, "frittierte Feenfluegel", "frittierte Feenfluegel", ({"feenfluegel", "honig"}), "fairywings", 0 }),
+ ({ 8, 8100, "knusprig gebackenes Elfenohr", "knusprig gebackenes Elfenohr", ({"elfenohr", "honig"}), "/players/angrox/misc/e_ohr", 0 }),
+ ({ 9, 8500, "Champignonomlett", "Champignonomlett", ({"champignon", "mehl", "ei"}), "omlett", 0 }),
+ ({ 9, 9200, "Spezialgulasch", "Spezialgulasch", ({"rindfleisch", "pferdefleisch", "schweinefleisch", "gewuerze"}), "gulasch", 0 }),
+
+ ({ 10, 9500, "Wolf im Schafspelz", "Wolf im Schafspelz", ({"wolfsfleisch", "schafsfleisch", "gewuerze"}), "wolfschaf", 0 }),
+ 
+ ({ 10, 10000, "Confutter", "Confutter", ({"drachenfleisch", "magiepfeffer"}), "stat_food", 0 }),
+ ({ 10, 10000, "Intfutter", "Intfutter", ({"elfenohr", "feenfluegel", "schlangenei", "magiepfeffer"}), "stat_food", 0 }),
+ ({ 10, 10000, "Geschickfutter", "Geschickfutter", ({"hasenfleisch", "katzenfleisch", "hobbitfleisch", "gnomenfleisch", "magiepfeffer"}), "stat_food", 0 }),
+ ({ 10, 10000, "Kraftfutter", "Kraftfutter", ({"baerenfleisch", "ogerfleisch", "zwergenfleisch", "trollfleisch", "magiepfeffer"}), "stat_food", 0 }),
+ ({ 10, 10000, "Geheimniseintopf", "Geheimniseintopf", ({"geheimnisfleisch", "gewuerze", "magiepfeffer"}), "geheimniseintopf", 0 }),
+
+ ({ 7, 6900, "Schokoladekuchen", "Schokoladekuchen", ({"kakao", "teig", "zucker"}), "kuchen", 0 }),
+ });
+
+
+void create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  SetProp(P_SHORT, "Eine Kochstelle");
+  SetProp(P_LONG, 
+    "Diese Kochstelle bietet alles was das Herz eines Koches erfreut. "
+    "Eine grosse Feuerstelle zum Kochen, dazu jede Menge Toepfe und Pfanne, "
+    "Messer zum Schneiden, Loeffeln zum Umruehren und einge ganze Menge "
+    "anderer Kuechenwerkzeuge."
+    "Was Du alles kochen kannst, siehst Du mit 'kochrezepte'.");
+  SetProp(P_NAME, "Kochstelle");
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({"kochstelle", "\nsbaking_cookingpoint"}) );
+
+  SetProp(P_MATERIAL, ([MAT_STEEL:60, MAT_WOOD:20, MAT_FIRE:20]) );
+  SetProp(P_WEIGHT, 120000);
+  SetProp(P_VALUE, 5500);
+  SetProp(P_SIZE, 130);
+//  SetProp(P_NOGET, 1);
+
+  AddDetail( ({"feuerstelle", "feuer", "hitze"}),
+      "Das Feuer hat gerade die richtige Hitze zum Kochen.");
+  AddDetail( ({"toepfe", "topf", "pfanne", "pfannen"}),
+      "Es sind genug Toepfe und Pfannen fuer alle moeglichen Gerichte da.");
+  AddDetail( ({"messer", "loeffel", "kuechenwerkzeug", "kuechenwerkzeuge"}),
+      "Es sind je Menge Kuechenwerkzeuge hier, alles was man so zum Kochen "
+      "braucht.");
+
+
+  AddCmd( ({"koche", "koch"}), "cmd_kochen");
+  AddCmd( ({"rezepte", "kochrezepte"}), "cmd_rezepte");
+
+  seteuid(getuid(this_object()));
+}
+
+varargs mixed player_tries_to_move(mixed dest, int methods, string direction, 
+  string textout, string textin)
+{
+  PL_MOVED=1;
+  if(MENV->QueryProp(P_GHOST))
+  {
+    while(remove_call_out("sew_now") != -1);
+    return ({dest, methods, direction, textout, textin});
+  }
+  return(break_string("Du solltest Dich nicht bewegen waehrend Du kochst.",78));
+}
+
+int cmd_kochen(string str)
+{
+  int suc;
+
+  if (objectp(IS_BAKING) && present(IS_BAKING, ENV(TO)))
+    notify_fail("Hier kocht schon " + IS_BAKING->name(WER) + "!\n");
+  call_other(SKILLMASTER, "???");
+  suc = SKILLMASTER->UseSkill(this_player(), SK_BAKING); 
+  IS_BAKING = TP;
+  return 1;
+}
+
+string zutatenstring(string* zutaten)
+{
+  string ret;
+  int i;
+
+  ret = "";
+  for (i = 0; i < sizeof(zutaten); i++)
+  {
+    ret += capitalize(zutaten[i]);
+    if (i == sizeof(zutaten) - 1)
+      ret += ".";
+    else if (i == sizeof(zutaten) - 2)
+      ret += " und ";
+    else
+      ret += ", ";
+  }
+  return ret;
+}
+
+int cmd_rezepte(string str)
+{
+  int x;
+  int y;
+  int j_skill;
+
+  call_other(SKILLMASTER, "???");
+  j_skill=SKILLMASTER->QuerySkill(this_player(),SK_BAKING);
+  
+  y=0;
+  notify_fail("Welche Seite der Kochrezepte haettes Du gerne? kochrezepte "
+      "<1.."+REZEPT_SEITEN+">\n");
+
+  if(to_int(str) < 1 || to_int(str) > REZEPT_SEITEN) return 0;
+  
+  
+  write("----------------------------------------------------------------\n");
+  write("In Ausbildungsstufe "+str+" ("+level_names[to_int(str)]+") kannst Du \n");
+  write("mit Deinem momentanen Koennen folgendes herstellen:\n");
+  write("----------------------------------------------------------------\n");
+  for (x=1;x<=sizeof(rezept_liste)-1;x++)
+  {
+    if(to_int(str)==to_int(rezept_liste[x][0])&&(j_skill>=rezept_liste[x][1])){
+
+    y++;
+    write(sprintf("%2d. %s \n      Zutaten: %s\n",
+      x,rezept_liste[x][3],
+      zutatenstring(rezept_liste[x][4])));
+    }
+  }
+  if(!y) write ("Noch gar nichts.\n");
+  write("----------------------------------------------------------------\n");
+  return 1;
+}
+

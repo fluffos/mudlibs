@@ -1,0 +1,328 @@
+// /d/dschungel/feyaria/kueste/room/krater.c
+// Magischer Krater 
+// 1999-02-07  Feyaria@SilberLand
+
+#include "../def.h"
+#include <ansi.h>
+#include "/p/daemon/skillmaster/skillmaster.h"
+#include "/gilden/berserker/berserker_extern.h"
+inherit "std/room";
+
+#define TAGUON "/d/dschungel/iwo/krater/npc/kraterwaechter.lpc"
+#define SCHATZRAUM "/d/dschungel/iwo/krater/room/schatzraum.lpc"
+
+int edelsteine;
+int *magie;
+int aktiv;
+
+void create()
+{
+  ::create();
+
+  SetProp(P_INT_SHORT, "Beim magischen Krater" );
+  SetProp(P_INT_LONG, 
+    "Du befindest Dich in einer Unterwasserhoehle. Die Waende sind mit Algen "
+    "bewachsen. In der Mitte der Hoehle befindet sich ein grosser Krater, "
+    "aus dem Licht in allen Regenbogenfarben strahlt. "
+    "Durch ein kleines Loch kannst Du diese Hoehle wieder verlassen (was Du "
+    "schleunigst tun solltest, falls Dein Luftvorrat zu Ende geht)." );
+  SetProp(P_LIGHT, 1 );
+  SetProp(P_INDOORS, 1 );
+  SetProp(P_ENVIRONMENT,([ENV_TEMPERATURE: 25, ENV_WATER:1000,
+                          ENV_TERRAIN:TT_UNDERWATER]) );
+  SetProp(P_KILL_NAME, "Ertrinken");
+ 
+  AddDetail( ({"hoehle", "unterwasserhoehle"}),
+    "Du befindest Dich in einer mit Algen bewachsen Unterwasserhoehle. "
+    "Das Auffaelligste ist der grosse Krater in der Mitte, aus dem "
+    "regenbogenfarbenes Licht kommt.");
+  AddDetail( ({"algen", "alge", "wand", "waende", "decke"}),
+    "Die Waende, Boden und Decke sind dicht mit Algen bewachsen.");
+  AddDetail( ({"mitte"}),
+    "In der Mitte der Hoehle befindet sich der grosse Krater.");
+  AddDetail( ({"licht"}),
+    "Aus dem Krater strahl Licht in allen Regenbogenfarben. Es scheint sich "
+    "um einen magischen Krater zu handeln."); 
+  AddSpecialDetail( ({"krater"}), "det_krater");
+  AddDetail( ({"kraterrand", "rand"}),
+    "Der Kraterrand glitzert wie ein Edelstein, tatsaechlich kannst Du "
+    "einige Edelsteinsplitter erkennen.");
+  AddDetail( ({"edelstein", "edelsteine"}),
+    "Dir kommt der Gedanke, Edelsteine in den Krater zu werfen.");
+  AddDetail( ({"splitter", "edelsteinsplitter"}),
+    "Die Splitter stammen sicher von Edelsteinen, die frueher einmal in den "
+    "Krater geworfen worden sind. Du kannst auch Abdruecke von runden "
+    "Objekten erkennen.");
+  AddDetail( ({"objekten", "objekte"}),
+    "Die runden Objekte haben etwa die gleiche Form wie Perlen.");  
+  AddDetail( ({"perle", "perlen"}),
+    "Ob man auch Perlen in den Krater werfen kann?");
+  AddDetail( ({"farben", "regenbogenfarben", "regenbogenfarbe", "farbe"}),
+    "Das Licht, das aus dem Krater kommt, hat alle Farben des Regenbogens: "
+    "Rot, Orange, Gelb, Gruen, Blau und Violett.");
+  AddDetail( ({"regenbogen"}),
+    "Einen Regenbogen siehst Du hier nicht, nur das Licht hier hat die "
+    "selben Farben wie ein Regenbogen.");
+  AddDetail( ({"rot", "orange", "gelb", "gruen", "blau", "violett"}),
+    "Eine Regenbogenfarbe.");
+  AddDetail( ({"loch"}),
+    "Durch ein kleines Loch kannst Du wieder nach draussen ins Meer "
+    "schwimmen.");
+  AddDetail( ({"meer"}),
+    "Ins offene Meer kommst Du durch das kleine Loch.");
+  AddDetail( ({"luft", "luftvorrat", "ende"}),
+    "Wenn Dein Luftvorrat zu Ende geht, solltest Du so schnell wie "
+    "moeglich hier raus.");
+  AddDetail( ({"wasser"}),
+    "Das Meerwasser ist hellblau und sehr klar.");
+  AddDetail( ({"meerwasser"}),
+    "Das Meerwasser ist Salzwasser.");
+  AddDetail( ({"salzwasser"}),
+    "Das Salzwasser ist Meerwasser.");
+  AddDetail( ({"salz"}),
+    "Das Salz ist im Meerwasser geloest. Sehen kann man es nicht.");
+  AddDetail( ({"boden", "meeresboden"}),
+    "Der Meeresboden besteht aus Sand und ist dicht mit Algen bewachsen.");
+  AddDetail( ({"sand"}),
+    "Der Boden besteht aus Sand.");
+  AddDetail( ({"oeffnung", "platte"}),
+    "Die Oeffnung in der Platte hat die gleiche Form wie das Horn eines Drachen");
+
+  AddDetail( ({ "eingang" }),
+    "Er scheint in den Schlund zu fuehren...");
+  AddDetail( ({ "ausmasse" }),
+    "Wahrlich gigantische!");
+
+  AddSound( ({DEFAULT_SOUND, "blubb"}),
+    "*Blubb Blubb*");
+
+  AddCmd( ({"wirf", "werfe"}), "werfen");
+  AddCmd( ({"aktiviere", "aktivier"}), "aktivieren");
+
+  AddCmd( ({ "tauch", "tauche" }), "dive");
+
+  AddExit("raus", "./unterwasser");
+
+  AddItem( TAGUON, REFRESH_DESTRUCT);
+  
+  edelsteine=0;
+}
+
+
+int dive(string str)
+{
+  string *valid;
+
+  valid = ({ "in krater", "in schlund", "krater", "schlund",
+             "in schlund hinein", "in krater hinein" });
+
+  notify_fail("Wohin moechtest Du tauchen?\n");
+
+  if (member(valid, str) == -1) return 0;
+
+  tell_room(ME, BS(TP->Name(WER) + " taucht in den Schlund des "
+    "Kraters hinab."), ({ TP }));
+  tell_object(TP, BS("Beherzt nimmst Du all Deinen Mut zusammen und "
+    "tauchst todesmutig in den Schlund des Kraters hinab."));
+  tell_object(TP, "\n" + BS("Gerade, als Du glaubst dies sei Dein "
+    "Ende, erkennst Du eine kleine Abzweigung in der Wand des "
+    "Schlotes, und beschliesst kurzerhand abzubiegen."));
+
+  return TP->move(SCHATZRAUM, M_SILENT + M_NOCHECK);
+
+}
+
+
+void reset()
+{
+  ::reset();
+  edelsteine=0;
+  aktiv=0;
+}
+
+int werfen(string str)
+{
+  string was;
+  object ob;
+  int coins, wieviel,help;
+
+  notify_fail("Was willst Du wo hineinwerfen?\n");
+  if( !str ) return 0;
+  if( sscanf( str, "%s in krater", was)==1 ) 
+  {
+    if(! ob=present(was, TP) ){
+      write("Aber ein \'"+CAP(was)+"\' hast Du Doch gar nicht!\n");
+      return 1;
+    }
+    if(ob->QueryProp(P_CURSED) || ob->QueryProp(P_NODROP) ) {
+      write(BS("Du versuchst, "+ob->name(WEN,1)+" loszuwerden, aber das "
+        "scheint nicht zu klappen."));
+      return 1;
+    }
+    if( !aktiv)
+    {
+      write(BS("Der Krater scheint nicht aktiv zu sein. Vielleicht hast Du "
+          "ja etwas dabei mit dem Du den Krater aktivieren kannst."));
+      return 1;
+    }
+    if( ob->IsUnit() && (ob->id("EDELSTEIN") || ob->id("PERLE")) ) {
+      ob->id(was);
+      wieviel= ob->QueryProp(P_REQUESTED_AMOUNT);
+      edelsteine+=wieviel;
+      write(BS("Du wirfst "+ob->name(WEN,1)+" in den magischen Krater und "
+        "das helles Leuchten wird etwas staerker."));
+      say(BS(CAP_TPN+" wirft "+ob->name(WEN,1)+" in den magischen Krater und "
+        "das helles Leuchten wird etwas staerker."));
+      coins=ob->QueryCoinsPerUnits()[0];
+      switch( coins/10+random(coins) ) {
+        case 700..9999: magie[4]+=wieviel; break; 
+        case 400..699: magie[3]+=wieviel; break;
+//        case 500..9699: magie[3]+=wieviel; break;
+        case 100..399:  magie[2]+=wieviel; break;
+        case 50..99:  magie[1]+=wieviel; break;
+        case 1..49:     magie[0]+=wieviel; break;
+      }
+      WLOG( LOG "krater",": "+ob->name(WER,1)+ sprintf(" -> %d, "
+          "({%d,%d,%d,%d,%d})", edelsteine, 
+          magie[0], magie[1], magie[2], magie[3], magie[4]));
+      ob->AddAmount(-wieviel);
+      if( edelsteine >= 111 )
+        tell_room(TO, "Magische Funken fliegen aus dem Krater.\n");
+    }
+    else if( ob->QueryProp(P_ARMOUR_TYPE) || ob->QueryProp(P_WEAPON_TYPE)) {
+      write(BS("Du wirfst "+ob->name(WEN,1)+" in den magischen Krater und "
+        "ein helles Leuchten kommt aus dem Krater."));
+      say(BS(CAP_TPN+" wirft "+ob->name(WEN,1)+" in den magischen Krater und "
+        "ein helles Leuchten kommt aus dem Krater."));
+      DB(sprintf(ANSI_GREEN+ANSI_BOLD+"*** Krater: %O   %s, Anzahl= %d  "
+          "magie= ({%d,%d,%d,%d,%d}) ***"+ANSI_NORMAL+"\n", TP, ob->name(WER,1), edelsteine, 
+          magie[0], magie[1], magie[2], magie[3], magie[4]));
+      if( random(100) < edelsteine ) {
+        was= ob->name(WEN,1);
+        TP->SetProp("itemd_time", 0);
+        if( help=call_other("/p/daemon/itemd/itemd", "identify",ob, -1, 100, 100, 
+              ({magie[0],
+                magie[0]+magie[1],
+                magie[0]+magie[1]+magie[2], 
+                magie[0]+magie[1]+magie[2]+magie[3],
+                magie[0]+magie[1]+magie[2]+magie[3]+magie[4]}), 1)) 
+        {
+          tell_room(TO, BS("Eine gewaltige Lichtexplosion erfuellt den "
+            "Raum. Die magische Kraft der Edelsteine fliesst in "+was+
+            " hinein und verwandelt "+ob->QueryPronoun(WEN)+" in "+
+            ob->QueryProp(P_SHORT)+"." ));
+          switch(ob->QueryProp(P_MAGIC))
+          {
+            case 1..7: wieviel = 1357; break;
+            case 8..9: wieviel = 999; break;
+            default: wieviel = 555; break;
+          }
+          ob->SetProp(P_ITEMD_TMPMAGIC, ({wieviel,wieviel}));
+          ob->SetProp(P_ITEMD, (ob->QueryProp(P_ITEMD) || ({}))+({"beinhaltet die "
+                "temporaere Magie des Kraters"}));
+          ob->SetProp(P_BERSERKER_WAFFENKUNDE, 0);
+          WLOG( LOG "krater", ": MAGIC: "+was+" -> "+ob->QueryProp(P_SHORT));
+        }
+        else {
+          tell_room(TO, BS("Das Licht leuchtet kurz auf, dann passiert "
+            "aber nichts. "+ob->Name(WER,1)+ " kann die Magie der "
+            "Edelsteine scheinbar nicht aufnehmen."));
+          WLOG( LOG "krater", ": "+ob->Name(WER,1)+
+              " kann nicht magisch werden");
+        }
+//        write("help = "+help+"\n");   
+// Bitte wenn wer hier rumexperimentiert, die debug meldungen wieder wegtun, danke, Feyaria.
+      }
+      else {
+        tell_room(TO, BS("Die Magie der Edelsteine war zu schwach, um "+
+          ob->name(WEN,1)+" magisch zu machen."));  
+        WLOG( LOG "krater", ": "+ob->name(WER,1)+" misslungen");
+      }
+      edelsteine = 0;
+      aktiv=0;
+      magie = ({0,0,0,0,0});
+    }
+    else {
+      write(BS("Du wirfst "+ob->name(WEN,1)+" in den magischen Krater, "
+        "aber nichts passiert."));
+      say(BS(CAP_TPN+" wirft "+ob->name(WEN,1)+" in den magischen Krater, "
+        "aber nichts passiert."));
+      WLOG( LOG "krater", ": "+ ob->name(WER)+" verschwendet");
+      if( ob->IsUnit() ) {
+        ob->id(was);
+        ob->AddAmount(- ob->QueryProp(P_REQUESTED_AMOUNT) );
+      }
+      else 
+        ob->remove();
+    }
+    return 1;
+  }
+  else 
+    return 0;
+}
+
+void init()
+{
+  ::init();
+  if (TP && interactive(TP)&& !IS_LEARNER(TP)  && 
+      !present("\nwaterbreath", TP) && !present("\nertrinken", TP) && 
+      !TP->id("WATERBREATH"))
+  {
+    CLONE(OBJ "ertrinken", TP);
+  }
+}
+
+int aktivieren(string str)
+{
+  string was,womit;
+  object ob;
+  notify_fail("Was willst Du womit aktivieren?\n");
+  if(!str) return 0;
+  if( sscanf( str, "%s mit %s", was, womit)==2 ) 
+  {
+    if( was!="krater")
+      return notify_fail("'"+CAP(was)+"' kannst Du hier nicht aktivieren!\n"),0;
+    if( !ob=present(womit, TP) )
+      return write("'"+CAP(womit)+"' hast Du doch gar nicht!\n"),1;
+    if(! ob->id("\nwasserdrachenhorn") )
+      return write("Damit kannst Du den Krater nicht aktiveren!\n"),1;
+    if (present("\nkraterwaechter"))
+      return write("Taguon stellt sich Dir in den Weg.\n"), 1; 
+    if( aktiv)
+      return write("Aber der Krater ist doch schon aktiv!\n"),1;
+    write("Du aktivierst den Krater mit dem Wasserdrachenhorn.\n");
+    say(TP->Name(WER,1)+" aktiviert den Krater mit einem Wasserdrachenhorn.\n");
+    magie=({10,20,30,0,0});
+    if(random(10) && SKILLMASTER->UseSkill(TP, SK_LUCK, 1500) < 0 ) 
+    {
+      tell_room(ENV(TP), "Das Wasserdrachenhorn loest sich auf.\n");
+      ob->remove();
+    }
+    else
+    {
+      tell_object(TP, "Du hast Glueck und das Wasserdrachenhorn loest sich "
+          "nicht auf.\n");
+    }
+    aktiv=1;
+    return 1;
+  }
+  return 0;
+}
+
+string det_krater()
+{
+
+  if( aktiv )
+    return  BS(
+        "Der Krater ist kreisrund und erhebt sich in der Mitte der Hoehle. "
+        "Magisches Licht in allen Farben des Regenbogens strahlt aus dem Krater "
+        "heraus. Der Kraterrand glitzert als waere er aus Edelsteinen und "
+        "Perlen gemacht. Sicher werden alle Sachen, die man in den Krater "
+        "wirft, magisch. Der Schlund hat gewaltige Ausmasse - gerade so, "
+        "als bilde er einen Eingang.");
+  else
+    return BS(
+        "Der Krater ist kreisrund und erhebt sich in der Mitte der Hoehle. "
+        "Er ist mit einer dicken Platte verschlossen, in der sich eine "
+        "Oeffnung befindet, die wie das Horn eines Drachen aussieht.");
+}

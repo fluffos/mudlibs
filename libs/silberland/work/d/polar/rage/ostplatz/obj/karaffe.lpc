@@ -1,0 +1,183 @@
+// Karaffe mit Wein, speziell fuer Hobbits geeignet
+// Filename: karaffe.c
+// File by Rage, Maerz 01
+
+inherit "std/food";
+
+#include "../def.h"
+#include <food.h>
+
+int verdreckt, schluck;
+int getrunken;
+object trinkender_spieler;
+
+void create()
+{
+  if ( !is_clone(TO) )  return;
+  ::create(({"trink","trinke"}));
+
+  verdreckt = 2;
+  schluck = 5;
+
+  SetProp( P_SHORT, "Ein total verdrecktes Gefaess" );
+  SetProp( P_LONG,
+    "Auf diesem Gefaess sind noch so viele Futterreste, dass man beim besten "
+    "Willen nicht erkennen kann, um welche Art von Gefaess es sie handelt. " );
+//DETAILS
+  AddDetail( ({ "reste","futterreste","stroh","moos","kastanien","kastanie" }),
+    "Auf dem Gefaess befinden sich noch diverse Futterreste, wie Stroh, Moos und "
+    "auch Teile von Kastanien." );
+  AddDetail( "art",
+    "Die Art des Gefaesses laesst sich wegen der Futterreste nicht erkennen. Mach "
+    "doch was dagegen!" );
+//END DETAILS
+
+  SetProp( P_NAME, "Gefaess" );
+  SetProp( P_GENDER, NEUTER );
+  AddId( ({ "gefaess","\nkaraffe" }) );
+  SetProp( P_MATERIAL,
+           ([ MAT_CERAMIC:100-10*schluck, MAT_MISC_FLUID:10*schluck ]) );
+  SetProp( P_WEIGHT, 1000+100*schluck );
+  SetProp( P_VALUE, 100 );
+  
+  SetProp( P_FOOD_INFO,([
+           F_HEAL: ({ 5+random(8),5+random(8) }),
+           F_SOAK: 3,
+           F_ALCOHOL:2,
+           F_POISON:0,
+           F_MSG_ROOM: "nimmt einen Schluck aus der Karaffe." 
+                        ]) );
+
+  AddCmd( ({ "wisch","wische" }), "cmd_wischen" );
+}
+
+int dreck()
+{
+  return verdreckt;
+}
+int dreckminimierer()
+{
+  verdreckt--;
+}
+
+SetKaraffenzustand()
+{
+  RemoveDetail( ({ "reste","futterreste","stroh","moos",
+                   "kastanien","kastanie" }) );
+  RemoveDetail( "art" );
+  if ( verdreckt )
+  {
+    SetProp( P_SHORT, "Eine leicht verschmutzte Karaffe" );
+    SetProp( P_LONG,
+      "Du hast eine praechtige Karaffe mit zwei kleinen Griffen auf den Seiten. "
+      "Hoechstwahrscheinlich stammt sie aus Hobbithaenden und wird somit mit "
+      "Wein gefuellt sein. Ausserdem steckt oben in der Oeffnung ein Stoppel. "
+      "Sie ist noch ein wenig verdreckt, aber vielleicht kannst Du sie noch "
+      "irgendwie saeubern." );
+  }  
+  else
+  {
+    SetProp( P_SHORT, "Eine schoene Karaffe" );
+    SetProp( P_LONG,
+      "Du hast eine praechtige Karaffe mit zwei kleinen Griffen auf den Seiten. "
+      "Hoechstwahrscheinlich stammt sie aus Hobbithaenden und wird somit mit "
+      "Wein gefuellt sein. Ausserdem steckt oben in der Oeffnung ein Stoppel." );
+  }
+//DETAILS
+  AddDetail( ({ "griff","griffe","seite","seiten" }),
+    "Dort, wo die Karaffe nach oben hin schmal zulaeuft, sind zwei kleine "
+    "Griffe angebracht." );
+  AddDetail( ({ "hobbithaende","hobbithand" }),
+    "So wie die Karaffe aussieht, nimmst Du an, dass sie aus Hobbithaenden "
+    "stammt." );
+  AddDetail( "wein",
+    "Ob Wein oder etwas darin ist, wirst Du erst feststellen, wenn Du davon "
+    "trinkst." );
+  AddDetail( ({ "oeffnung","stoppel" }),
+    "Die Karaffe wurde natuerlich mit einem Stoppel zugemacht, denn sonst "
+    "geht der gute Wein darin womoeglich verloren, aber beim Trinken kannst "
+    "Du ihn ohnehin rausnehmen." );
+//END DETAILS
+
+  SetProp( P_NAME, "Karaffe" );
+  SetProp( P_GENDER, FEMALE );
+  AddId("karaffe");
+}
+
+varargs int eat(string what, object pl)
+{
+  if (!objectp(pl)) pl=this_player();
+  if (!objectp(pl)) return 0;
+
+  notify_fail( "Woraus moechtest Du trinken\n" );
+  if (!what) return 0;
+  
+  if (time() < getrunken && TP == trinkender_spieler )
+    return write(BS("Du bist vom vorigen Schluck noch so gesaettigt.")), 1;
+  if ( verdreckt )
+    return write(BS("Das Gefaess ist viel zu verdreckt, um daraus zu trinken.")), 1;
+  return ::eat(what, pl);
+}
+
+void BeimEssen()
+{
+  getrunken = time()+60;
+  trinkender_spieler = TP;
+}
+int second_life(object pl)
+{
+  if ( schluck > 1 )
+  {
+    write( BS(
+      "Du ziehst den Stoppel, nimmst einen Schluck vom koestlichen Wein "
+      "und fuehlst Dich gleich gestaerkt und gluecklicher. Darauf steckst "
+      "Du den Stoppel wieder rein.") );
+    if ( TP->QueryProp(P_RACE) == "hobbit" )
+    {
+      write(
+        "Als Hobbit mundet Dir der Wein besonders gut.\n" );
+      TP -> heal_self(3+random(3));
+    }
+    schluck--;
+    return 1;
+  }
+  write( BS(
+    "Du nimmst einen Schluck vom koestlichen Wein und fuehlst Dich "
+    "gleich gestaerkt und gluecklicher. Da die Karaffe jetzt leer ist, "
+    "wirfst Du sie achtlos weg.") );
+  return 0;
+}
+
+//COMMANDS
+int cmd_wischen(string str)
+{
+  string was, wovon;
+  notify_fail ( "Was willst Du wovon wischen?\n" );
+  if ( !str || str=="" ) return 0;
+  if ( sscanf(str,"%s von %s", was, wovon) != 2 ) return 0;
+  if ( member( ({ "reste","futterreste" }), was) != -1 )
+  {
+    if ( wovon == "gefaess" )
+    {
+      if ( verdreckt == 2 )
+      {
+      	write( BS(
+      	  "Du wischst einmal die ganzen Futterreste vom Gefaess und stellst "
+      	  "fest, dass es sich dabei um eine Karaffe handelt.") );
+      	say(
+      	  TPN+" wischt ein wenig Dreck von einem Gefaess.\n" );
+      	SetKaraffenzustand();
+      	verdreckt--;
+      	return 1;
+      }
+      write( BS(
+        "Es gibt keine Futterreste mehr, die Du von dem Gefaess "
+        "wischen koenntest.") );
+      return -1;
+    }
+    write(
+      "Wovon willst Du die Futterreste wischen?\n" );
+    return -1;
+  }
+}
+//END COMMANDS

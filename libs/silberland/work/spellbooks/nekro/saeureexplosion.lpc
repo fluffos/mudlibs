@@ -1,0 +1,160 @@
+/*
+alias geifer zaubere 'geifer der verdammten' auf &*
+ * Geifer der Verdammten
+ *
+ * Man greift einen Gegner mit dem Geifer an, dabei
+ * explodiert dieser und trifft jeden anderen Feind im Raum
+ * mit ca einhalben Angriffswert
+ *
+ * Kosten: 50 MP
+ * Level : 5 
+ * Schaden : 300 ... 555 (wird mit DoSpellModification() + skp modifiziert)
+ *
+ * Skillpunktefaehig (dam)
+ *
+ * Status: anschlussreif
+ * 07.12.2003 Feyaria: Bugfix fuer skillarg leer und gegner weg 
+// 22.12.2003 Feyaria: maximale Gegneranzahl
+ *
+ */
+
+public void acidSplash(object victim, object caster, int skp, mapping sinfo) {
+  if(!objectp(victim)) return;
+  if(4+random(11) > skp) return;
+
+  tell_room(ENV(victim), BS(sprintf("Aetzende Saeure bleibt auf %s Haut zurueck.", victim->name(WESSEN, 2))));
+  call_out("acid_burn", 0, victim, skp, caster);
+  return;
+}
+
+public void acid_burn(object victim, int skp, object caster) {
+  if(!objectp(victim) || !objectp(caster)) return;
+  victim->Defend(skp*10 + random(skp/2)*10, DT_ACID, ([SP_SHOW_DAMAGE:
+    ({
+      ({ -1, "",
+              "",
+              ""}),
+      ({  0, "Die Saeure juckt etwas.",
+              "@WER1 fuehlt sich unwohl!",
+              "@WER1 fuehlt sich unwohl!"}),
+      ({  5, "Die Saeure brennt auf deiner Haut.",
+              "@WER1 jault kurz auf, als die Saeure @WESSEN1 Haut veraetzt!",
+              "@WER1 jault kurz auf, als die Saeure @WESSEN1 Haut veraetzt!" }),
+      ({ 10, "Deine Haut wirft Blasen, wo die Saeure sie veraetzt.",
+              "@WESSEN1 Haut wirft Blasen!",
+              "@WESSEN1 Haut wirft Blasen!" }),
+      ({ 15, "Du schreist vor Schmerzen, als sich die Saeure durch deine Haut und Knochen frisst!",
+              "@WER1 schreit vor Schmerz, als sich die Saeure durch Haut und Knochen frisst!",
+              "@WER1 schreit vor Schmerz, als sich die Saeure durch Haut und Knochen frisst!"}),
+    })]), caster);
+
+  if(!random(2+skp/2)) {
+    tell_room(ENV(victim), BS(sprintf("Die Saeure auf %s loest sich in schwarzen Rauch auf.", victim->name(WEM, 2))));
+  } else {
+    call_out("acid_burn", 2, victim, skp, caster);
+  }
+}
+
+object saeureexplosion_find_victim(object caster, mapping sinfo, int silent)
+{
+  object victim;
+  if (!victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,0))
+  {
+    if (!silent)
+     write("Wen willst Du mit dem Geifer der Verdammten vernichten?\n");
+    return 0;
+  }
+  return victim;
+}
+
+mixed prep_saeureexplosion(object caster, mapping sinfo)
+{
+  object victim;
+
+  victim=saeureexplosion_find_victim(caster,sinfo,0);
+  if (!victim) return 0;
+  sinfo[SI_ENEMY]=victim;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }                           
+  return sinfo;
+}
+
+int saeureexplosion(object caster, mapping sinfo)
+{
+  object *victims;
+  object victim;
+  int succ, i, dam, damage, skp, max;
+  string str;
+
+  victim=sinfo[SI_ENEMY];
+  str=sinfo[SI_SKILLARG];
+  if (!present_victim(victim,caster) || 
+      !objectp(victim=saeureexplosion_find_victim(caster,sinfo,1)))
+  {
+    write(BSC(sprintf("%s! %s ist nicht mehr hier! Wie kann man nur "
+            "so versagen?!", caster->QueryProp(P_GENDER)==FEMALE?
+            "NAERRIN":"NARR",CAP(str||"Dein Feind"))));
+    return 0;
+  }
+
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+
+  if ((succ=SpellSuccess(caster,sinfo))<=0)
+    return MISSERFOLG;
+
+  write(BSC("Dein purer Hass formt in Deinen Haenden eine Kugel aus "
+        "nachtschwarz schaeumenden Geifer, die Du auf "
+        +victim->name(WEN,2)+" wirfst."));
+  tell_object(victim, BS(sprintf("%s wirft ein schwarzes, schaeumendes "
+          "Etwas auf Dich.", caster->Name(WER,1))));
+  say(BS(sprintf(
+          "%s formt in %s Haenden eine nachtschwarze Kugel aus "
+          "schaeumenden Geifer und wirft "
+          "sie voller Hass auf %s.", caster->Name(WER), 
+          victim->QueryPossPronoun(WESSEN,3),victim->name(WEN,2))), 
+      ({caster, victim}) );
+
+  dam = sinfo[SI_SKILLDAMAGE] + caster->QueryAttribute(A_INT) * 
+    caster->QueryProp(P_GUILD_LEVEL)*caster->QueryProp(P_GUILD_CIRCLE) *
+    succ/ (10 *MAX_ABILITY);
+  skp=get_skillpoints(caster,"geifer der verdammten");
+  dam=get_dam_with_skillpoints(dam,skp);
+
+  damage=sinfo[OFFSET(SI_SKILLDAMAGE)]+random(DoModificationByAlign(dam, caster, victim));
+  TryAttackSpell(victim, damage, sinfo[SI_SKILLDAMAGE_TYPE], ([SP_NAME:"Saeureexplosion",SP_SHOW_DAMAGE:1]), caster, sinfo);
+
+  acidSplash(victim, caster, skp, sinfo);
+
+  if (sizeof(victims=FindGroup(caster,-1)) > (objectp(victim) ? 1 : 0)) {
+    tell_room(environment(caster), "Der daemonische Geifer explodiert.\n");
+
+    max = caster->QueryProp(P_GUILD_LEVEL) - 4 +        // 2 bis 3
+          (caster->QueryProp(P_GUILD_CIRCLE) -1) / 3 +  // 0 bis 2
+          sinfo[SI_SKILLABILITY] / MAX_ABILITY +        // 0 bis 1
+          skp / 3;                                      // 0 bis 3
+    if( sizeof(victims) - 1 < max )                     // 2 bis 9 
+      max = sizeof(victims) - 1;
+
+    for(i=max; i>=0; i--) {
+      if (victims[i] != victim) {
+        tell_object(victims[i], BS("Der Geifer trifft Dich!\n"));
+        damage=sinfo[OFFSET(SI_SKILLDAMAGE)]/2+random(DoModificationByAlign((50+skp)*dam/100, caster, victims[i]));
+        TryAttackSpell(victims[i], damage, sinfo[SI_SKILLDAMAGE_TYPE], ([SP_NAME:"Saeureexplosion",SP_SHOW_DAMAGE:1]), caster, sinfo);
+        acidSplash(victim, caster, skp, sinfo);
+      }
+    }
+  }
+
+  UseBlood();
+  return ERFOLG;
+}
+

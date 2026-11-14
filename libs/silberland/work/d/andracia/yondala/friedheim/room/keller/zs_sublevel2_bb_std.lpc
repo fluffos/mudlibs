@@ -1,0 +1,292 @@
+#include "../def.h"
+
+inherit KELLER+"zs_sublevel2_raw.lpc";
+
+#include <properties.h>
+
+#define SKILLMASTER "/p/daemon/skillmaster/skillmaster"
+#define SK_BERGBAU "sk_bergbau"
+#define SK_GLUECK "sk_glueck"
+
+mapping ABBAU_AUSGAENGE=([
+    "osten":"", 
+    "westen":"",
+    "norden":"",
+    "sueden":""]);
+int ABBAU_ANZ_AUSGAENGE=0;
+
+void set_abbau(mapping ausgaenge, int anzahl)
+{
+	ABBAU_AUSGAENGE=ausgaenge;
+	ABBAU_ANZ_AUSGAENGE=anzahl;
+	return;
+}
+
+string oppo(string richtung)
+{
+  switch(richtung) {
+  case "osten": return "westen";
+  case "westen": return "osten";
+  case "sueden": return "norden";
+  case "norden": return "sueden";
+  default: return 0;
+  }
+}
+
+void DoCrash() 
+{
+  object ob, next;
+  string *richtungen;
+  int i;
+ 	
+  tell_room(TO, "Ein verdaechtiges Knirschen kommt aus der Decke, Hier kann jeder Zeit die Decke einbrechen. \n");
+  for(ob=first_inventory(TO);ob;) {
+    next=next_inventory(ob);
+    if(living(ob))
+    {
+	    call_out("DoCrash", 15);
+	    return;
+    }
+    if( ob->remove() != 1 )
+    {
+	    call_out("DoCrash", 15);
+	    return;
+    }
+    ob=next;
+  }
+  // ausgaenge schliessen
+  richtungen = m_indices(ABBAU_AUSGAENGE);
+  for( i=sizeof(richtungen)-1; i>=0;  i--)
+  {
+    if( ABBAU_AUSGAENGE[richtungen[i]]!="" )
+    {
+      RemoveExit(richtungen[i]);
+      to_object(ABBAU_AUSGAENGE[richtungen[i]])->RemoveExit(oppo(richtungen[i]));
+      tell_room(to_object(ABBAU_AUSGAENGE[richtungen[i]]),BS("Mit lautem Gepolter stuerzt der Gang im "+
+	      capitalize(oppo(richtungen[i]))+" ein."));
+    }
+  }
+}
+
+void reset()
+{
+	::reset();
+	if( !random(6) ) DoCrash();
+}
+
+void create() 
+{
+  ::create();
+
+  AddCmd( ({"grabe", "schuerfe", "bergbau" }), "graben_start" );
+
+}
+
+void graben(int glueck)
+{
+  object *objekte, ob;
+  int suc;
+  if( !glueck || !interactive(TP) )
+  {
+    write("Du graebst Dich ein gutes Stueck vorwaerts, findest aber keine Bodenschaetze.\n");
+    // Ausgabe an Leute im Raum?
+    return;
+  }
+  else
+  {
+  	suc=SKILLMASTER->UseSkill(TP, SK_GLUECK, -1000, 0, 1);
+  	if(suc > 0 ) { objekte="/obj/gemmaster"->DistributeGem(1, 0, 0, TP); ob=objekte[0];}
+    else 
+    { 
+      switch(random(2))
+      {
+        case 1: ob=clone_object("/d/gebirge/yason/erzabbau/obj/kohlebrocken.lpc"); break;
+        default: ob=clone_object("/d/gebirge/yason/erzabbau/obj/eisenerzbrocken.lpc");
+      }
+      ob->move(TP, M_GET);
+    }
+    // objekte="/obj/gemmaster"->DistributeGem(1, 0, 0, TP);
+    // ob=objekte[0];
+    write("Du graebst Dich ein gutes Stueck vorwaerts und findest tatsaechlich "+ob->name(WEN)+".\n");
+    // Ausgabe an Leute im Raum?
+    return;
+  }
+}
+
+int check_raum(string str)
+{
+  if(find_call_out(str)!=-1) return -1;
+  else return 1;
+}
+
+int graben_start(string richtung)  
+{
+  object zielraum, ob;
+  string *rause;
+  int anzahl, glueck, suc, temp;
+  // pruefung Kampf
+  notify_fail( "Waehrend eines Kampfs kannst Du nicht graben.\n" );
+  if( TP->InFight() ) return 0; 
+  // pruefung der Spitzhacker
+  notify_fail( "Ohne Spitzhacke kannst Du nicht graben.\n" );
+  if( !ob=present("spitzhacke", TP) ) return 0; 
+  // auch gezueckt?
+  notify_fail( "Du musst Deine Spitzhacke gezueckt haben, um zu Graben.\n" );
+  if( ob->QueryProp(P_WIELDED)!=TP) return 0; 
+  // erschoepft?
+  if( interactive(TP) )
+  {
+    notify_fail( "Dazu bist Du leider zu erschoepft.\n" );
+    if( TP->QueryProp(P_MV)<30 ) return 0; 
+  }
+  // aufbereitung richtung
+  notify_fail( "In welche Richtung willst Du graben?\n" );
+  if( !richtung || richtung=="") return 0;
+  if( richtung!="norden" && richtung!="sueden" && richtung!="osten" && richtung!="westen" )
+    sscanf( richtung, "nach %s", richtung);
+  if( richtung!="norden" && richtung!="sueden" && richtung!="osten" && richtung!="westen" )
+    return 0;
+  rause=m_indices(QueryProp(P_EXITS));
+  notify_fail( "Nach "+capitalize(richtung)+" wurde schon ein Gang gegraben.\n" );
+  if( member(rause, richtung)!=-1 ) return 0;
+  //pruefung auf grabearbeiten
+  if(find_call_out("graben_"+richtung)!=-1) 
+    {
+       write("Nach "+capitalize(richtung)+" wird schon von jemandem gegraben.\n");
+       return 1;
+    }
+  if(ABBAU_AUSGAENGE[richtung]=="")
+    {
+       write("Du versuchst nach "+capitalize(richtung)+" zu graben, aber der Fels ist einfach zu hart.\n");
+       return 1;
+    }
+  else
+    {
+    	 call_other(ABBAU_AUSGAENGE[richtung], "???", 0);
+    	 notify_fail( "FEHLER!\n" );
+       if( !zielraum=to_object(ABBAU_AUSGAENGE[richtung]) ) return 0;
+       if( call_other(zielraum, "check_raum", "graben_"+oppo(richtung))!=1)       
+       {
+	       write("Du hoerst Grabegeraeusche, die auf dich zukommen und hoerst auf.\n");
+         return 1;
+       }
+    }
+  // Paralyze setzen  
+  TP->SetProp(P_PARALYZED, ([
+        PARALYZE_TIME: -1,
+        PARALYZE_MSG: "Du bist beschaeftigt mit Grabearbeiten.\n",
+        PARALYZE_MSG_OTHER: "%s grummelt etwas waehrend des Grabens.\n",
+        PARALYZE_END: "",
+        PARALYZE_END_OTHER: ""]) );
+
+
+  //Bergbauskill
+  suc=SKILLMASTER->UseSkill(TP, SK_BERGBAU, 0, 0, 0 );
+  anzahl=4+random(3);
+
+  if( suc >= 9000 )  glueck=anzahl;    
+  else if( suc >= 6000) glueck=anzahl-random(4);    
+  else if( suc >= 3000) glueck=1+random(4);
+  else if( suc >= 1000) glueck=1+random(2);    
+  else if( suc >= 0) glueck=random(2);    
+  else glueck=0;    
+	  
+  //garben, graben, graben
+  write("Du beginnst nach "+capitalize(richtung)+" zu graben.\n");
+  say( TP->Name()+" faengt an einen Gang nach "+capitalize(richtung)+" zu graben.\n");
+  call_out("graben_"+richtung, 5, anzahl, glueck);
+  return 1;
+}
+
+
+void CheckCrash()
+{
+  // genug Ausgaenge geoeffnet?
+  if(sizeof(QueryProp(P_EXITS) ) != ABBAU_ANZ_AUSGAENGE) return;
+  DoCrash();	
+}
+
+void CreateExit(string richtung)
+{
+  AddExit(richtung, ABBAU_AUSGAENGE[richtung]);
+  //pruefung auf einsturzgefahr
+  call_out("CheckCrash",3);
+  return;
+}
+
+void angekommen(string richtung)
+{
+  object zielraum;
+  //ausgaenge oeffnen
+  zielraum=to_object(ABBAU_AUSGAENGE[richtung]);
+  CreateExit(richtung);
+  zielraum->CreateExit(oppo(richtung));
+  // Paralyze nehmen
+  TP->SetProp(P_PARALYZED, 0);
+  //im Zielraum ankommen
+  tell_object(TP, "Du hast ein gutes Stueck Gang gegraben.\n");
+  TP->move(zielraum, M_GO, 
+    "", "hat ein gutes Stueck Gang nach "+capitalize(richtung)+" gegraben", "bricht durch die Wand im "+capitalize(oppo(richtung)) );
+  TP->do_exhaust( 35, 0 ); 
+  return;
+}
+  
+void graben_osten(int anzahl, int glueck)
+{
+  //fertig?
+  if( anzahl==0 )
+  {
+    angekommen("osten");
+    return;
+  }
+  //textausgabe
+  if( random(anzahl)<glueck) {glueck--; graben(1);} else graben(0);
+  if( !random(3)) {tell_room(TO, TP->Name()+" graebt weiter nach Osten.\n", ({TP}) );}
+  call_out("graben_osten",5,anzahl-1, glueck);
+  return;
+}
+
+void graben_westen(int anzahl, int glueck)
+{
+  //fertig?
+  if( anzahl==0 )
+  {
+    angekommen("westen");
+    return;
+  }
+  //textausgabe
+  if( random(anzahl)<glueck) {glueck--; graben(1);} else graben(0);	
+  if( !random(3)) {tell_room(TO, TP->Name()+" graebt weiter nach Westen.\n", ({TP}));}
+  call_out("graben_westen",5,anzahl-1, glueck);
+  return;
+}
+
+void graben_sueden(int anzahl, int glueck)
+{
+  //fertig?
+  if( anzahl==0 )
+  {
+    angekommen("sueden");
+    return;
+  }
+  //textausgabe
+  if( random(anzahl)<glueck) {glueck--; graben(1);} else graben(0);	
+  if( !random(3)) {tell_room(TO, TP->Name()+" graebt weiter nach Sueden.\n", ({TP}));}
+  call_out("graben_sueden",5,anzahl-1, glueck);
+  return;
+}
+
+void graben_norden(int anzahl, int glueck)
+{
+  //fertig?
+  if( anzahl==0 )
+  {
+    angekommen("norden");
+    return;
+  }
+  //textausgabe
+  if( random(anzahl)<glueck) {glueck--; graben(1);} else graben(0);	
+  if( !random(3)) {tell_room(TO, TP->Name()+" graebt weiter nach Norden.\n", ({TP}));}
+  call_out("graben_norden",5,anzahl-1, glueck);
+  return;
+}

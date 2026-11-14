@@ -1,0 +1,366 @@
+#pragma strong_types
+
+inherit "std/room";
+
+#include "./def.h"
+
+int table_status;     //  0 .. nichts verschoben
+                      // +1 .. Stuhl verschoben
+                      // +2 .. Tisch verschoben
+
+int carpet_status;  // Wurde schon ein NPC gecloned in diesem Reset-Zyklus?
+
+
+void reset_values()
+{
+   table_status = 0;
+   carpet_status = 0;
+}   
+
+void SetNewInfo ()
+{
+   string room_info;
+   
+   room_info = "Du befindest Dich in einer kleinen, einfachen Blockhuette "+
+               "mitten im Dschungel. Sie besteht genau genommen "+
+               "nur aus einem einzigen Raum mit Fenstern und einer Tuer ins "+
+               "Freie. Von hier aus kannst Du auch gut die Dachbalken und "+
+               "das Schilf sehen, welches das Innere der Huette vor Regen "+
+               "schuetzt. ";
+           
+   if ( carpet_status )
+      room_info += "In der linken hinteren Ecke steht ein Bett, daneben "+
+                   "ein Tisch und ein Stuhl welche offensichtlich dort "+
+                   "nicht ihren angestammten Platz haben. In der Mitte der "+
+                   "Huette kannst Du am Boden eine Falltuere ausmachen, "+
+                   "welche frueher wohl von dem nun zusammengerollten "+
+                   "Teppich verdeckt wurde. ";
+   else
+     switch ( table_status )
+     {
+     	case 0: {
+     		  room_info += "In der linken hinteren Ecke steht ein Bett "+
+     		               "und in der Mitte der Huette kannst Du, auf "+
+     		               "einem grossen Teppich stehend, "+
+                               "einen Tisch und einen Stuhl ausmachen. ";
+                  break;
+                }
+     	case 1: {
+                  room_info += "In der linken hinteren Ecke steht ein Bett, "+
+                               "daneben ein Stuhl welcher offensichtlich dort "+
+                               "nicht seinen angestammten Platz hat. In der "+
+                               "Mitte der Huette kannst Du, auf einem grossen "+
+                               "Teppich stehend, einen Tisch ausmachen. ";
+                  break;
+     	        }
+     	case 2: {
+                  room_info += "In der linken hinteren Ecke steht ein Bett, "+
+                               "daneben ein Tisch welcher offensichtlich dort "+
+                               "nicht seinen angestammten Platz hat. In der "+
+                               "Mitte der Huette kannst Du, auf einem grossen "+
+                               "Teppich stehend, einen Stuhl ausmachen. ";
+                  break;     		
+     	        }
+     	case 3: {
+                  room_info += "In der linken hinteren Ecke steht ein Bett, "+
+                               "daneben ein Tisch und ein Stuhl welche "+
+                               "offensichtlich dort nicht ihren "+
+                               "angestammten Platz haben. In der Mitte der "+
+                               "Huette ist ein grosser Teppich auf dem Boden "+
+                               "ausgebreitet. ";
+                  break;     		
+     	        }
+     }        
+           
+    room_info += "In der rechten unteren Ecke, nahe dem Eingang siehst Du einen "+
+                 "Lehmofen, der den Bewohnern dieser Huette wahrscheinlich "+
+                 "als Kochstelle dient.";
+                 
+   SetProp( P_INT_LONG, break_string( room_info, 78));      
+}
+
+void reset ()
+{
+  reset_values();
+  RemoveExit("unten");
+  RemoveDetail( ({"falltuer", "falltuere"}) );
+  SetNewInfo ();
+  say ("Es geht ein Rumpeln durch den Raum, fuer einen Moment wackeln sogar die Waende!\n");
+  ::reset();
+}
+
+int push_table ( string args )
+{
+   int action;
+   
+   action = 0;
+   
+   notify_fail ("Was moechtest Du verschieben?\n");
+   
+   if ( strlen (args) < 5 )
+      return 0;
+      
+   if ( args[0 .. 4] == "stuhl" )
+      action = 1;
+      
+   if ( args[0 .. 4] == "tisch" )
+      action = 2;
+      
+   if ( ! action )
+      return 0;
+      
+   switch ( table_status )
+   {
+     case 0: {
+     	      if ( action == 1 )
+     	      {
+     	        write ("Du schiebst den Stuhl vom Teppich herunter.\n");
+     	        say(TP->name()+" schiebt den Stuhl vom Teppich herunter.\n");
+     	      }
+     	      else
+     	      {
+                write ("Du schiebst den Tisch vom Teppich herunter.\n");
+                say(TP->name()+" schiebt den Tisch vom Teppich herunter.\n");
+     	      }
+              table_status += action;
+              SetNewInfo ();
+              return 1;
+            }
+     case 1: {
+     	      if ( action == 1 )
+     	      {
+     	        notify_fail ("Der Stuhl wurde bereits verschoben!\n");
+     	        return 0;
+     	      }
+     	      table_status += action;
+     	      write ("Du schiebst den Tisch vom Teppich herunter.\n");
+     	      say(TP->name()+" schiebt den Tisch vom Teppich herunter.\n");
+              SetNewInfo ();      
+     	      return 1;
+     	    }
+     case 2: {
+     	      if ( action == 2 )
+     	      {
+     	        notify_fail ("Der Tisch wurde bereits verschoben!\n");
+     	        return 0;
+     	      }
+     	      table_status += action;
+     	      write ("Du schiebst den Stuhl vom Teppich herunter.\n");
+     	      say(TP->name()+" schiebt den Stuhl vom Teppich herunter.\n");
+     	      SetNewInfo();
+     	      return 1;     	        
+     	   }
+     case 3: {
+     	      if ( action == 2 )
+     	        notify_fail ("Der Tisch wurde bereits verschoben!\n");
+     	      else
+     	        notify_fail ("Der Stuhl wurde bereits verschoben!\n");
+     	      return 0;
+             }
+   } 
+}
+
+int carpet ( string args )
+{
+   string test;
+   object dieb;
+   
+   if ( !stringp(args) )
+   {
+      write ("Was moechtest Du wegrollen?\n");
+      return 1;
+   }
+   
+   if ( sscanf (args, "teppich weg%s", test) != 1 )
+   {
+      write ("Was moechtest Du wegrollen?\n");
+      return 1;
+   }
+   
+   if ( carpet_status )
+   {
+      write ("Der Teppich wurde bereits weggerollt!\n");
+      return 1;
+   }
+   
+   if ( table_status < 3 )
+   {
+      write ("Auf dem Teppich stehen noch Moebel!\n");
+      return 1;
+   }
+   
+   write ("Du rollst den Teppich weg und findest darunter eine Falltuere.\n");
+   say(TP->name()+" rollt den Teppich weg und legt eine Falltuere frei.\n");
+   
+   carpet_status = 1; // Teppich weggerollt
+   
+   SetNewInfo();
+   
+   if ( !objectp(dieb = present ("Meisterdieb", TO)) )
+      dieb = AddItem(NPC "meisterdieb");
+   AddGuardedExit( "unten", ROOM "keller", "Meisterdieb", dieb->name()+
+                   " laesst Dich nicht ueber "+
+                   dieb->QueryPossPronoun(FEMALE, 3, 1)+" Leiche.\n");
+  
+   AddDetail( ({ "falltuere", "falltuer" }),
+              "Unter dem Teppich befand sich eine Falltuere, die nun freigelegt wurde." );
+  
+  return 1;
+}
+
+int close_windows ( string args )
+{
+   notify_fail ("Was moechtest Du schliessen?\n");
+   if ( args != "fensterladen" && args != "fensterlaeden" && args != "oeffnungen" && 
+        args != "oeffnung")
+      return 0;
+   
+   write ( "Das laesst Du besser sein, sonst bemerkt man noch Deine Anwesenheit hier!\n" );
+   
+   return 1;
+   
+}
+
+void create()
+{
+  ::create();
+
+  SetProp( P_LIGHT, 1 );
+  SetProp (P_NO_MNPC, 1);  
+  SetProp( P_INT_SHORT, "Eine kleine Huette im Dschungel" );
+  SetProp( P_INT_LONG, break_string( "Du befindest Dich in einer kleinen, "+
+           "einfachen Blockhuette mitten im Dschungel. "+
+           "Sie besteht genau genommen nur aus einem einzigen Raum mit "+
+           "Fenstern und einer Tuer ins Freie. Von hier aus kannst Du "+
+           "auch gut die Dachbalken und das Schilf sehen, welches das "+
+           "Innere der Huette vor Regen schuetzt. In der linken hinteren "+
+           "Ecke steht ein Bett und in der Mitte der Huette kannst Du, auf "+
+           "einem grossen Teppich stehend, einen Tisch und einen Stuhl "+
+           "ausmachen. In der rechten unteren Ecke, nahe dem Eingang "+
+           "siehst Du einen Lehmofen, der den Bewohnern dieser "+
+           "Huette wahrscheinlich als Kochstelle dient.", 78));
+
+  SetProp(P_INDOORS, 1);
+
+  SetProp(P_ENVIRONMENT,([ENV_TEMPERATURE: 25, ENV_TERRAIN: TT_HOUSE]) );
+
+  AddDetail( "temperatur",
+             "Hier ist es schattig und kuehl verglichen zum Dschungel.\n" );
+             
+  AddDetail( ({ "huette", "blockhuette", "raum", "innere" }),
+             QueryProp(P_INT_LONG) );
+             
+  AddDetail( ({ "tijara", "stadt", "hauptstadt" }),
+             "Tijara ist die Hauptstadt der Region Dschungel.\n" );
+             
+  AddDetail( ({ "region", "dschungel", "freie" }),
+             "Diese Huette befindet sich mitten im Dschungel, wenn Du mehr "+
+             "ueber seine Geheimnisse erfahren willst, waere es vielleicht "+
+             "besser wenn Du raus gehst und etwas forscht.\n" );
+                
+  AddDetail( ({ "geheimnisse", "geheimnis" }),
+             "Davon gibt es genug im Dschungel.\n" );
+             
+  AddDetail( ({ "tuer", "schlaufe", "eingang" }), 
+             "Die Tuere ist aus Schilf geflochten und mit einer Schlaufe "+
+             "eingehaengt, sie laesst sich also nicht abschliessen.\n" );
+             
+  AddDetail( "schilf",
+             "Schilf waechst ausschliesslich in feuchten Gebieten.\n" );
+             
+  AddDetail( "gebiete",
+             "In eben solchen wie dem Dschungel.\n" );
+             
+  AddDetail( "fenster",
+             "Die Huette hat zwei Fenster, welche aus nicht viel mehr "+
+             "als Oeffnungen in den Waenden bestehen.\n" );
+              
+  AddDetail( ({ "oeffnungen", "oeffnung" }),
+             "Mit Fensterlaeden aus Schilf kann man diese Oeffnungen "+
+             "schliessen.\n" );
+             
+  AddDetail( ({"fensterlaeden", "fensterlaeden" }),
+             "Sie helfen Wind und Wetter draussen zu halten.\n" );
+             
+  AddDetail( ({"wind", "wetter", "regen", "klima" }),
+             "Das Klima ist im Dschungel ziemlich feucht, und es regnet "+
+             "es auch sehr oft.\n" );
+             
+  AddDetail( ({ "dachbalken", "dach", "balken" }),
+             "Das Dach ist, wie Du von hier aus sehen kannst, mit Schilf "+
+             "gedeckt. Die hoelzernen Dachbalken sehen sehr stabil aus.\n" );
+             
+  AddDetail( "boden",
+             "Der Boden besteht aus fest gestampftem Lehm und wurde mit Schilf abgedeckt.\n" );
+
+  AddDetail( "lehm",
+             "Der Lehm wurde am Boden festgestampf und mit Schilf abgedeckt "+
+             "und er wurde als Baumaterial fuer einen Ofen verwendet.\n" );
+             
+  AddDetail( ({ "baumaterial", "material", "materialien", "baumaterialien" }),
+             "Lehm, Schilf und Holz sind die haeufigsten Baumaterialien im Dschungel.\n" );
+
+  AddDetail( ({ "wand", "waende" }),
+             "Die Waende bestehen aus solidem Holz.\n" );
+
+  AddDetail( ({ "holzsorte", "sorte", "holz" }),
+             "Du schaffst es nicht dieses Holz einer bestimmten Holzsorte zuzuordnen.\n" );
+
+  AddDetail( "decke",
+             "Das Dach ist mit Schilf gedeckt.\n" );
+
+  AddDetail( ({ "ofen", "lehmofen", "kochstelle" }),
+             "Dieser Ofen dient den Bewohnern der Huette wohl als Kochstelle.\n" );
+
+  AddDetail( "bewohner",
+             "Man munkelt dass sich in der Gegend ein Versteck fuer Diebe "+
+             "und andere Gauner befindet. Vielleicht ist es ja diese Huette, "+
+             "wer weiss.\n" ); 
+
+  AddDetail( ({ "gegend", "versteck" }),
+             "Irgendwo im Dschungel ...\n" );
+
+  AddDetail( ({ "diebe", "gauner", "dieb" }),
+             "Nimm Dich besser vor ihnen in Acht!\n" );
+             
+  AddDetail( "acht",
+             "Pass einfach auf Dich auf.\n" );           
+             
+  AddDetail( ({ "ecke", "ecken", "eck" }),
+             "Dieser Raum hat vier Ecken. In der linken hinteren siehst Du ein Bett und in der rechten vorderen einen Lehmofen.\n" );
+
+  AddDetail( "bett",
+             "Ein einfaches Bett steht im linken hinteren Eck der Huette.\n" );
+             
+  AddDetail( ({ "mobilar", "moebel", "tisch", "stuhl" }), 
+             "Das karge Mobiliar besteht aus einem Tisch und einem Stuhl.\n" );
+    
+  AddDetail( ({ "teppich", "mitte" }),
+             "Ein schoen gefertigter Teppich ziert den Boden in der Mitte des Raumes.\n" );
+    
+  AddDetail( "hitze",
+             "Im Dschungel ist es sehr heiss.\n" );
+    
+  AddSmell( DEFAULT_SMELL,
+            "Hier riecht es nach frischer Luft.\n" );
+            
+  AddSmell( "luft",
+            "Ein wenig Luft tut Dir bei dieser Hitze gut.\n" );
+     
+  AddSound( DEFAULT_SOUND,
+            "Durch die Fenster dringen verschiedenste Geraeusche.\n" );
+            
+  AddSound( ({ "geraeusche", "geraeusch" }),
+            "Diese Geraeusche stammen sicher aus dem umliegenden Dschungel." );
+
+  AddSound( "dschungel",
+            "Da gehst Du am besten raus um die Geraeusche besser zu hoeren.\n" );
+
+  AddExit("raus", ([ EX_DEST : "./vorraum",
+                     EX_MSG  : "aus der Huette hinaus"]) );
+
+  AddCmd ( ({ "rolle", "roll" }), "carpet" );
+  AddCmd ( ({ "verschiebe", "schiebe", "schieb" }), "push_table" );
+  AddCmd ( ({ "schliesse", "schliess" }), "close_windows" );
+  
+}

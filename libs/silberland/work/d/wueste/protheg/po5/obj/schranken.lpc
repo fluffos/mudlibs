@@ -1,0 +1,215 @@
+
+#include "../def.h"
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include <vt100.h>
+
+#define STMASTER "/obj/sehertormaster"
+
+string *allowed;
+string *cmds;
+string short;
+mapping exit;
+object victim;
+
+
+create() 
+{
+  if (!is_clone(TO)) return;
+  ::create();
+  
+  short="Ein hoelzerner Schranken";
+  SetProp(P_LONG,
+	  "Ein ganz normaler Schranken, bestehend aus 2 Metallstangen und einem "+
+	  "daruebergelegten Holzbalken als Schranken.\n");
+  SetProp(P_INFO, "An dem kommt man nicht so einfach vorbei...\n");
+  SetProp(P_NAME, "Schranken");
+  SetProp(P_GENDER, MALE);
+  AddId(({"holzschranken","schranken"}));
+
+  SetProp(P_MATERIAL, ([MAT_MISC_WOOD:80,MAT_MISC_METAL:20]));
+  SetProp(P_WEIGHT, 200000);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOGET, "So sehr Du Dich auch anstrengst, der Schranken ruehrt sich "+
+	  "nicht!\n");
+  allowed=cmds=({});
+  AddCmd(({"zahle","zahl"}),"zoll");
+  call_out("noallowed",120);
+}
+
+string short() {
+  if(TP)
+    if(TP->QueryProp(P_TTY)=="ansi")
+      SetProp(P_SHORT, VT_BROWN+short+VT_NORMAL);
+    else
+      SetProp(P_SHORT, short);
+  return ::short();
+}
+
+reset()
+{
+  ::reset();
+  allowed=({});
+}
+
+Block(string *cmd)
+{
+  object ob;
+  
+  cmds=cmd;
+  if(member(cmds,"teleportier")>-1)
+    {
+      if(!ob=present("sehertor",MENV))
+	{
+	  DB("*** PO5: Schranken: kein Sehertor gefunden!!\n");
+	  return 1;
+	}
+      ob->RemoveCmd(cmds);
+      AddCmd(cmds,"noportal");
+    }
+  else
+    {
+      exit=environment(ME)->QueryProp(P_NEW_EXITS)[cmds[0]];
+      environment(ME)->RemoveExit(cmds);
+      AddCmd(cmds,"noexit");
+      short="Ein hoelzerner Schranken blockiert \'"+cmds[0]+"\'";
+    }
+}
+
+zoll(string str)
+{
+  object tp;
+  int zoll;
+  
+  notify_fail("Die Syntax lautet: zahle zoll.\n");
+  if(!str) return 0;
+  if(str=="zoll")
+    {
+      tp=TP;
+      if(member(allowed,getuid(TP))>-1)
+	{
+	  write(PO5->GetName()+" sagt: Du brauchst jetzt nicht noecheinmal "+
+		"zahlen.\n");
+	  return 1;
+	}
+      zoll=tp->QueryProp(P_LEVEL)*50;
+      if(tp->QueryMoney()<zoll)
+	{
+	  write(PO5->GetName()+" meint: Du hast die geforderten "+zoll+
+		" Muenzen nicht!\n");
+	  return 1;
+	}
+      write("Du bezahlst widerwillig den Zoll und "+PO5->GetName()+" laesst Dich "+
+	    "passieren.\n"); 
+      tp->AddMoney(-zoll);
+      allowed+=({getuid(tp)});
+      PO5->Payin(zoll);
+      return 1;
+    }
+  return 0;
+}
+
+noallowed()
+{
+  allowed=({});
+  call_out("noallowed",120);
+}
+
+noportal(string str)
+{
+  if(member(allowed,getuid(TP))<0)
+    return write(PO5->GetName()+" meint: Du musst erst Wegzoll bezahlen! Fuer Dich"+
+		 " nur "+TP->QueryProp(P_LEVEL)*50+" Muenzen.\n"+
+		 "--> Syntax: \'zahle zoll\'\n"),1;
+  write("Man laesst Dich durch...\n");
+  STMASTER->Teleport(str);
+  return 1;
+}
+
+noexit(string str)
+{
+  notify_fail("In welche Richtung willst Du gehen?\n");
+  if(str) return 0;
+  if(member(allowed,getuid(TP))<0)
+    return write(PO5->GetName()+" meint: Du musst erst Wegzoll bezahlen! Fuer Dich"+
+		 " nur "+TP->QueryProp(P_LEVEL)*50+" Muenzen.\n"+
+		 "--> Syntax: \'zahle zoll\'\n"),1;
+  write("Man laesst Dich durch...\n");
+  TP->move(exit["ex_dest"],M_GO|M_NOCHECK,exit["ex_msg"]);
+  return 1;
+}
+
+UnBlock()
+{
+  object ob;
+  
+  if(member(cmds,"teleportier")>-1)
+    {
+      if(!ob=present("sehertor",MENV))
+	{
+	  DB("*** PO5: Schranken: kein Sehertor gefunden!!\n");
+	  return 1;
+	}
+      ob->AddCmd(cmds,"tele");
+      RemoveCmd(cmds);
+    }
+  else
+    {
+      environment(ME)->AddExit(cmds,exit);
+      RemoveCmd(cmds);
+    }
+  remove();
+  return 1;
+}
+
+init()
+{
+  object tp;
+  
+  ::init();
+
+  tp=TP;
+  
+
+  if(!victim)
+    if(query_once_interactive(tp)&&(getuid(tp)!="protheg")&&
+       (tp->QueryMoney()>15000)&&(!random(10)))
+      call_out("fangen",0,tp);
+}
+
+fangen(object whom)
+{
+  tell_object(whom, "Ploetzlich packt Dich eine Hand im Genick und zerrt Dich "+
+	      "zurueck...\n");
+  victim=whom;
+  whom->move(MENV,M_NOCHECK|M_SILENT|M_NO_SHOW);
+  AddCmd("","donothing",1);
+  write(PO5->GetName()+" sagt: So! Mal sehen, was Du uns schenken willst!\n");
+  call_out("ausnehmen",10);
+}
+
+donothing(string str)
+{
+  if(TP==victim)
+    return write(PO5->GetName()+" haelt Dich gerade fest.\n"),1;
+  return 0;
+}
+
+ausnehmen()
+{
+  int geld;
+  
+  if(!victim) return;
+  geld=victim->QueryMoney()/10;
+  victim->AddMoney(-geld);
+  PO5->Payin(geld);
+  DB("*** PO5: Schranken "+victim->name(WER,1)+" loost "+geld+" Muenzen.\n");
+  write("Du wirst einen Teil, deines Geldes los...\n");
+  say(PO5->GetName()+" erleichtert "+victim->name(WEN,1)+" um ein paar "+
+      "Muenzen.\n",victim);
+  RemoveCmd("");
+  victim=0;
+}

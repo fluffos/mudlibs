@@ -1,0 +1,1511 @@
+inherit "std/armour";
+
+#include "/gilden/bardengilde/bardengilde.h"
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <wizlevels.h>
+#include <moving.h>
+#include <ansi.h>
+#include <new_skills.h>
+
+
+#define P_BARD_SHOW_REPORT "bard_show_report"
+#define QM "/secure/questmaster"
+
+nosave object owner;
+nosave string owner_name;
+//nosave int lastHP, lastSP, changedHP, changedSP;
+nosave int aktiv=0;
+nosave int teleportation=0;
+nosave string *history=({});
+nosave int lastReportTime=0;
+string bardeninfo();
+
+// for the report
+int lastHp, lastSp;
+int callout=0;
+
+// heldenpfade
+private string heroMode;
+private int heroPathSaveIntA;
+private int heroPathSaveIntB;
+private int heroPathSaveIntC;
+private int heroPathSaveStringA;
+private int heroPathSaveStringB;
+
+create()
+{
+  if( !is_clone(TO) ) return;
+  ::create();
+
+  lastHp = 0;
+  lastSp = 0;
+
+  heroMode = "";
+  
+  SetProp(P_SHORT, "Eine Bardenbrosche");
+  SetProp(P_LONG, 
+	  BS("Die Brosche hat die Form eines Notenschluessels und ist das Erkennungszeichen "
+	     +"der Bardengilde. Die Brosche ist aus Kupfer und von einem "
+	     +"leichten Schimmern umgeben.\n"));
+  AddDetail(({"erkennungszeichen", "notenschluessel"}),
+	    "Der Notenschluessel ist das Erkennungszeichen der Bardengilde.\n");
+  AddDetail(("kupfer"),
+	    "Ganz gewoehnliches Kupfer.");
+  AddDetail(({"schimmern", "schutz"}),
+	    "Das Schimmern scheint Dir etwas Schutz zu geben.\n"); 
+  SetProp(P_NAME, "Bardenbrosche");
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({"brosche", "bardenbrosche", "\nbardenbrosche"}) );
+  SetProp(P_ARMOUR_TYPE, AT_MISC);
+  SetProp(P_AC, 0);
+  SetProp(P_MATERIAL, ([MAT_BRONCE:90, MAT_MISC_MAGIC:10]));
+  SetProp(P_WEIGHT, 10);
+  SetProp(P_VALUE, 1000);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_AUTOLOADOBJ, 1);
+  SetProp(P_MAGIC, 1);
+  SetProp(P_CURSED, 0);
+  SetProp(P_INFO, "Mit 'bhilfe' siehst du, was du mit der Brosche machen kannst.");
+  SetProp(P_WORN_TEXT, "angesteckt");
+  SetProp(P_NO_DAMAGE_DESTRUCT, 1);
+  
+  AddCmd(({"bsinge", "bsing"}), "brufen");
+  AddCmd(({"bwuschel", "bwuschle"}), "bwuschel");
+  AddCmd(({"bbegruesse", "bhi"}), "bbegruesse");
+  AddCmd ("bwer", "bwer");
+  AddCmd(({"bwink", "bwinke"}), "bwinken");
+  AddCmd(({"bknuddle", "bknuddel"}), "bknuddeln");
+  AddCmd(({"bverneige", "bverneig"}), "bverneige");
+  AddCmd(({"bnerve", "bnerv"}), "bnerve");
+  AddCmd(({"bhist", "bhistory"}), "ShowHistory");
+  AddCmd(({"breport", "brep"}), "Report");
+  AddCmd(({"bfarben"}), "Colors");
+  AddCmd(({"bstatus"}), "Status");
+  AddCmd(({"bupdate"}), "Update");
+  AddCmd(({"bhilfe"}), "Hilfe");
+  AddCmd(({"binfo"}), "Info");
+}
+
+public void NotifyPlayerDeath(object victim, object killer, int lost_xp) {
+  if(victim == QueryProp(P_WORN)) {
+    // beim sterben geht alle inspiration verloren
+    victim->SetProp(P_BARD_INSPIRATION, 0);
+    victim->SetProp(P_BARD_INSPIRATION_LEVEL, 0);
+  }
+}
+
+public mapping  _query_temperature_protection() {
+  object owner;
+  if(!objectp(owner=QueryProp(P_WORN))) return 0;
+  if(BARDENMASTER->HasHeroPathLevel(owner, HERO_FLAMMARA, 3)) {
+    return ([T_COLD_PROT: owner->QueryProp(P_BARD_INSPIRATION_LEVEL) * 4,
+             T_HEAT_PROT: owner->QueryProp(P_BARD_INSPIRATION_LEVEL) * 4]);
+  }
+
+  return 0;
+}
+
+string bardeninfo()
+{
+  string text;
+  text="Mit der Brosche kannst du folgende Aktionen ausfuehren:\n\n";
+  text += "Kommunikiation:\n";
+  text += sprintf("%-10s %s\n", "bsinge", "Teile anderen Barden etwas mit.");
+  text += sprintf("%-10s %s\n", "bhist", "Sieh nach, was andere Barden dir mitgeteilt haben");
+  text += "\nReport:\n";
+  text += sprintf("%-10s %s\n", "breport", "Aktiviere oder deaktiviere den Bardenreport");
+  text += sprintf("%-10s %s\n", "bfarben", "Aktiviere oder deaktiviere Farbausgabe.");
+  text += "\nEmotes:\n";
+  text += sprintf("%-10s %s\n", "bknuddel", "Knuddel alle anwesenden barden");
+  text += sprintf("%-10s %s\n", "bwinke", "Winke den anderen Barden zu");
+  text += sprintf("%-10s %s\n", "bwuschel", "Verwuschel die Haare der anwesenden Barden.");
+  text += sprintf("%-10s %s\n", "bhi", "Gruesse die anwesenden Barden.");
+  text += sprintf("%-10s %s\n", "bverneige", "Verneige dich vor allen anwesenden Barden.");
+  text += sprintf("%-10s %s\n", "benrve", "Nerve anwesende Barden mit deinem Gesang.");
+  text += "\nSonstiges:\n";
+  text += sprintf("%-10s %s\n", "bupdate", "Hol dir eine neue Brosche.");
+  text += sprintf("%-10s %s\n", "bwer", "Zeigt dir, welche Barden gerade online sind.");
+  text += sprintf("%-10s %s\n", "binfo", "Zeigt dir eine spezielle Bardenform von 'info'");
+  return text;
+}
+
+public int Hilfe() {
+  write(bardeninfo());
+  return 1;
+}
+
+public int Update() {
+  object brosche, owner;
+  if(!objectp(owner=QueryProp(P_WORN)))
+  {
+    write("Dazu musst du die Brosche tragen!\n");
+    return -1;
+  }
+  
+  brosche = clone_object(ARMOUR("bbrosche"));
+  owner->Message(BSA("Hier hast du eine neue Brosche!", "Artyrian teilt Dir mit: "),MSGFLAG_TELL);
+  TO->DoUnwear();
+  brosche->move(owner);
+  brosche->DoWear();
+  brosche->SetProp(P_BARD_DISPLAY_COLOR, QueryProp(P_BARD_DISPLAY_COLOR));
+  brosche->SetProp(P_BARD_SHOW_REPORT, QueryProp(P_BARD_SHOW_REPORT));
+  TO->remove();
+  return 1;
+}
+
+
+private int isColorActive() {
+  object wearer;
+  wearer = QueryProp(P_WORN);
+  if(!objectp(wearer)) {
+    return 0;
+  }
+  return wearer->QueryProp(P_BARD_DISPLAY_COLOR);
+}
+
+public int Colors(string args) {
+  notify_fail("Aktiviere oder deaktiviere Farbunterstuetzung.\nsyntax: bfarben ein|aus\n");
+  if(member(({"ein", "aus"}), args) == -1) return 0;
+
+  if(args == "ein") {
+    this_player()->SetProp(P_BARD_DISPLAY_COLOR, 1);
+    write(BS("Farben ein."));
+  } else {
+    this_player()->SetProp(P_BARD_DISPLAY_COLOR, 0);
+    write(BS("Farben aus."));
+  }
+
+  return 1;
+}
+
+private int isReportActive() {
+  return QueryProp(P_BARD_SHOW_REPORT);
+}
+
+int Report(string args) {
+  notify_fail("Aktiviere oder deaktiviere die Statusanzeige.\nsyntax: breport ein|aus\n");
+  if(member(({"ein", "aus"}), args) == -1) return 0;
+
+  if(isReportActive() && args == "ein") {
+    write(BS("Der Bardenreport ist bereits aktiv!"));
+    return -1;
+  } else if(!isReportActive() && args == "aus") {
+    write(BS("Der Bardenreport ist doch gar nicht aktiv!"));
+    return -1;
+  }
+
+  if(args == "ein") {
+    SetProp(P_BARD_SHOW_REPORT, 1);
+    write(BS("Report ein."));
+  } else {
+    SetProp(P_BARD_SHOW_REPORT, 0);
+    write(BS("Report aus."));
+  }
+
+  return 1;
+}
+
+string int2stars(int i)
+{
+  string str;
+  str = "";
+  for(;i>0;--i)
+    str+="*";
+  return str;
+}
+
+private void checkAngaraProtecton(object bard) {
+  if(BARDENMASTER->HasHeroPathLevel(bard, HERO_ANGARA, 3)) {
+    heroMode = HERO_ANGARA;
+    call_out("activate_angara_protection", 4, bard);
+  }
+}
+
+public int WearFunc(object ob) {
+  if ( (TP->QueryProp(P_GUILD)!= "bardengilde") && (!(IS_WIZARD(TP))) ){
+    write("Die Bardenbrosche verschwindet ploetzlich!\n");
+    call_out("remove",0);
+    return 1;
+  }    
+
+  TALENTMASTER->EnableHeroPassive(TP);
+
+  return 1;
+}
+
+public int RemoveFunc(object ob, int silent) {
+  if(ob != TO) return 1;
+
+  if(!objectp(TP)) return 0;
+
+  if ( (TP->QueryProp(P_GUILD)!= "bardengilde") && (!(IS_WIZARD(TP))) ){
+    write("Die Bardenbrosche verschwindet ploetzlich!\n");
+    call_out("remove",0);
+    return 1;
+  }    
+
+  TALENTMASTER->DisableHeroPassive(TP);
+  return 1;
+}
+
+int WieldFunc(object ob)
+{
+  if( (TP->QueryProp(P_GUILD)!= "bardengilde") &&
+      (!(IS_WIZARD(TP))) )
+    {
+      write("Was machst DU denn mit einer Bardenbrosche?\n");
+      call_out("remove",0);
+      return 1;
+    }
+  return 1; 
+}
+
+int ShowHistory()
+{
+  int i;
+ string *msgs;
+ write(BS("-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-"  
+	  +"=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-="));
+ write(BS("Folgendes haben Dir die Barden mitgeteilt:\n"));
+ write(BS("-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-"  
+	  +"=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-="));
+ for(i=0;i<=sizeof(history)-1;i++) {
+   msgs=explode(history[i],"&&*%%");
+   write(BS(msgs[0]));
+   write(BSA(msgs[2], msgs[1]));
+ }
+ write(BS("-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-"  
+	  +"=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-="));
+ return 1;
+}
+
+int AddHistory(string presay, string msg)
+{
+  int i;
+  string timestring;
+  timestring=dtime(time())[19..26];
+  if(sizeof(history)>5)
+    history-=({history[0]});
+  history+=({implode(({timestring, presay, msg}), "&&*%%")});
+  return 1;
+}
+
+mixed QueryHistory()
+{
+  return history;
+}
+
+int isPlayerIgnoringCall(object spieler) {
+  string *ignores;
+  ignores = spieler->QueryProp(P_IGNORE);
+
+  if(sizeof(ignores) && (member(ignores, "bsinge")!=-1 || member(ignores, "bsing")!=-1)) {
+    return 1;
+  }
+
+  return 0;
+}
+
+int isPlayerPosessingGuildItem(object spieler) {
+  return objectp(present(BARDENBROSCHE, spieler));
+}
+
+int isPlayerBard(object spieler) {
+  return spieler->QueryProp(P_GUILD) == "bardengilde";
+}
+
+int isPlayerEligibleForCall(object spieler) {
+  if(isPlayerIgnoringCall(spieler)) {
+    return 0;
+  }
+
+  if(IS_WIZARD(spieler) && isPlayerPosessingGuildItem(spieler)) {
+    return 1;
+  }
+
+  if(isPlayerBard(spieler) && isPlayerPosessingGuildItem(spieler)) {
+    return 1;
+  }
+
+  return 0;
+}
+
+private int isNumberOne(object pl) {
+  string *number_one;
+
+  number_one = call_other(BARDENMASTER, "QueryNumberOne");
+  if(number_one == 0) {
+    return 0;
+  }
+
+  return member(number_one, getuid(TP)) != -1;
+}
+
+string* getCallPresay(object player) {
+  if(member(({"andyl", "gwenshara"}), getuid(TP)) != -1) {
+    return ({"Soundmagier ", "Soundmagier "});
+  }
+
+  if(isNumberOne(this_player())) {
+    return ({"Meisterbarde ", "Meisterbardin "});
+  }
+  
+  return ({"Barde ", "Bardin "});
+}
+
+private void addToHistory(string prefix, string text, object pl) {
+  object guildItem;
+
+  guildItem = present(BARDENBROSCHE, pl);
+  if(objectp(guildItem)) {
+    guildItem->AddHistory(prefix, text);
+  }
+}
+
+private void callToPlayer(string *presay, object currentPlayer, object target) {
+  string prefix;
+  prefix = presay[currentPlayer->QueryProp(P_GENDER)-1] + CAP(getuid(TP))+" teilt euch mit: ";
+
+  addToHistory(prefix, currentPlayer->_unparsed_args(), target);
+  tell_object(target, BSA(currentPlayer->_unparsed_args(), prefix));
+  return;
+}
+
+int brufen(string str)
+{
+  int i, no_msg;
+  object *spieler;
+  string *presay, pre;
+  object amulett;
+  no_msg=0;
+  notify_fail("Was moechtest Du denn den Barden mitteilen?\n");
+
+  if (!stringp(str)) return 0;
+  spieler=users();
+  
+  presay = getCallPresay(this_player());
+
+  for(i=sizeof(spieler)-1;i>=0; i--) {
+    if(spieler[i]==TP) {
+      write(break_string(TP->_unparsed_args(), 78,  "Du teilst den Barden mit: "));
+      addToHistory("Du teilst den Barden mit: ", this_player()->_unparsed_args(), this_player());
+    } else if(isPlayerEligibleForCall(spieler[i])) {
+      callToPlayer(presay, this_player(), spieler[i]);
+   }
+  }
+
+  return 1;
+}
+
+int bknuddeln(string str)
+{
+  int i;
+  object *spieler, amulett;
+  spieler=users();
+  for(i=sizeof(spieler)-1;i>=0; i--)
+    {    
+      if ( ((spieler[i]->QueryProp(P_GUILD)=="bardengilde")) ||
+	   ((IS_WIZARD(spieler[i])) && (amulett=present(BARDENBROSCHE, spieler[i]))) ) 
+	{
+	  if(spieler[i]==TP)
+	    write(BS("Du knuddelst alle anwesenden Barden aus "
+		     +"der Ferne."));
+	  else 
+	    {
+	      if(getuid(TP)=="andyl")
+		{
+		  tell_object(spieler[i], sprintf("Soundmagier Andyl "
+						  +"knuddelt Dich aus der Ferne.\n", TP->name()));
+		}
+	      else
+		{
+		  if(TP->QueryProp(P_GENDER)==MALE)
+		    tell_object(spieler[i], sprintf("Dein Bardenkollege %s "
+						    +"knuddelt Dich aus der Ferne.\n", TP->name()));
+		  else 
+		    tell_object(spieler[i], sprintf("Deine Bardenkollegin %s "
+						    +"knuddelt Dich aus der Ferne.\n", TP->name()));
+		}
+	    }
+	}      
+    }
+  return 1;
+}
+
+
+
+int bnerve(string str)
+{
+  int i;
+  object amulett, *spieler;
+  spieler=users();
+  for(i=sizeof(spieler)-1;i>=0; i--)
+    {    
+      if ( ((spieler[i]->QueryProp(P_GUILD))=="bardengilde") ||
+	   ((IS_WIZARD(spieler[i])) && (amulett=present(BARDENBROSCHE, spieler[i]))) )
+	{
+	  if(spieler[i]==TP)
+	    write(BS("Du nervst alle anwesenden Barden aus "
+                     +"der Ferne."));
+	  else 
+	    {
+	      if(getuid(TP)=="andyl")
+		{
+		  tell_object(spieler[i], sprintf("Soundmagier Andyl "
+						  +"nervt Dich aus der Ferne.\n", TP->name()));
+		}
+	      else
+		{
+		  if(TP->QueryProp(P_GENDER)==MALE)
+		    tell_object(spieler[i], sprintf("Dein Bardenkollege %s "
+						    +"nervt Dich aus der Ferne.\n", TP->name()));
+		  else 
+		    tell_object(spieler[i], sprintf("Deine Bardenkollegin %s "
+						    +"nervt Dich aus der Ferne.\n", TP->name()));
+		}
+	   }
+	}      
+    }
+  return 1;
+}
+
+
+
+int bbegruesse(string str)
+{
+  int i;
+  object amulett, *spieler;
+  spieler=users();
+  for(i=sizeof(spieler)-1;i>=0; i--)
+    {    
+      if ( ((spieler[i]->QueryProp(P_GUILD))=="bardengilde") ||
+	   ((IS_WIZARD(spieler[i])) && (amulett=present(BARDENBROSCHE, spieler[i]))) )
+	{
+	  if(spieler[i]==TP)
+	    write(BS("Du begruesst alle anwesenden Barden aus "
+                     +"der Ferne."));
+	  else 
+	    {
+	      if(getuid(TP)=="andyl")
+		{
+		  tell_object(spieler[i], sprintf("Soundmagier Andyl "
+						  +"begruesst Dich aus der Ferne.\n", TP->name()));
+		}
+	      else
+		{
+		  if(TP->QueryProp(P_GENDER)==MALE)
+		    tell_object(spieler[i], sprintf("Dein Bardenkollege %s "
+						    +"begruesst Dich aus der Ferne.\n", TP->name()));
+		  else 
+		    tell_object(spieler[i], sprintf("Deine Bardenkollegin %s "
+						    +"begruesst Dich aus der Ferne.\n", TP->name()));
+		}
+	    }
+	}      
+    }
+  return 1;
+}
+
+
+
+int bverneige(string str)
+{
+  int i;
+  object amulett, *spieler;
+  spieler=users();
+  for(i=sizeof(spieler)-1;i>=0; i--)
+    {    
+
+      if ( ((spieler[i]->QueryProp(P_GUILD))=="bardengilde") ||
+	   ((IS_WIZARD(spieler[i])) && (amulett=present(BARDENBROSCHE, spieler[i]))) )
+	{
+	  if(spieler[i]==TP)
+	    write(BS("Du verneigst Dich vor alle anwesenden Barden aus "
+                     +"der Ferne."));
+	  else 
+	    {
+	      if(getuid(TP)=="andyl")
+		{
+		  tell_object(spieler[i], sprintf("Soundmagier Andyl verneigt "
+						  +"sich vor Dir aus der Ferne.\n", TP->name()));
+		}
+	      else
+		{
+		  if(TP->QueryProp(P_GENDER)==MALE)
+		    tell_object(spieler[i], sprintf("Dein Bardenkollege %s verneigt "
+						    +"sich vor Dir aus der Ferne.\n", TP->name()));
+		  else 
+		    tell_object(spieler[i], sprintf("Deine Bardenkollegin %s verneigt "
+						    +"sich vor Dir aus der Ferne.\n", TP->name()));
+		}
+	    }
+	}      
+    }
+  return 1;
+}
+
+
+
+
+int bwuschel(string str)
+{
+  int i;
+  object amulett, *spieler;
+  spieler=users();
+  for(i=sizeof(spieler)-1;i>=0; i--)
+    {    
+      if ( ((spieler[i]->QueryProp(P_GUILD))=="bardengilde") ||
+	    ((IS_WIZARD(spieler[i])) && (amulett=present(BARDENBROSCHE, spieler[i]))) )
+	{
+	  if(spieler[i]==TP)
+	    write(BS("Du verwuschelst allen anwesenden Barden die Haare aus "
+		     +"der Ferne."));
+	  else 
+	    {
+	      if(getuid(TP)=="andyl")
+		{
+		  tell_object(spieler[i], sprintf("Soundmagier Andyl "
+						  +"verwuschelt Dir die Haare aus der Ferne.\n", TP->name()));
+		}
+	      else
+		{
+		  if(TP->QueryProp(P_GENDER)==MALE)
+		    tell_object(spieler[i], sprintf("Dein Bardenkollege %s "
+						    +"verwuschelt Dir die Haare aus der Ferne.\n", TP->name()));
+		  else 
+		    tell_object(spieler[i], sprintf("Deine Bardenkollegin %s "
+						    +"verwuschelt Dir die Haare aus der Ferne.\n", TP->name()));
+		}
+	    }
+	}  
+    }
+  return 1;
+}
+
+int bwinken(string str)
+{
+  int i;
+  object amulett, *spieler;
+  spieler=users();
+  for(i=sizeof(spieler)-1;i>=0; i--)
+    {    
+      if ( ((spieler[i]->QueryProp(P_GUILD))=="bardengilde") ||
+	    ((IS_WIZARD(spieler[i])) && (amulett=present(BARDENBROSCHE, spieler[i]))) )
+	{
+	  if(spieler[i]==TP)
+	    write(BS("Du winkst allen anwesenden Barden aus der Ferne zu."));
+	  else 
+	    {
+	      if(getuid(TP)=="andyl")
+		{
+		  tell_object(spieler[i], sprintf("Soundmagier Andyl "
+						  +"winkt Dir aus der Ferne zu.\n", TP->name()));
+		}
+	      else
+		{
+		  if(TP->QueryProp(P_GENDER)==MALE)
+		    tell_object(spieler[i], sprintf("Dein Bardenkollege %s "
+						    +"winkt Dir aus der Ferne zu.\n", TP->name()));
+		  else 
+		    tell_object(spieler[i], sprintf("Deine Bardenkollegin %s "
+						    +"winkt Dir aus der Ferne zu.\n", TP->name()));
+		}
+	    }
+	}  
+    }
+  return 1;
+}
+
+int bwer(string str)
+{
+ int i;
+ object *spieler, p;
+ string bards, group;
+ bards="";
+ write("\n.-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=.\n");  
+ write("| Folgende Barden sind anwesend: |\n");
+ write(BS("-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-="));
+
+  spieler=filter_array(users(), "IsMember", BARDENMASTER);
+  for(i=sizeof(spieler)-1;i>=0; i--) {    
+    if(!spieler[i]->QueryProp(P_INVIS)) {
+      group=CAP(call_other(BARDENMASTER,"GetBardGroup",spieler[i]));
+      if(getuid(spieler[i]) == "gwenshara") continue;
+      if(!stringp(group)) group="unbekannt";
+      bards+= sprintf("%s(%d/%s), ", spieler[i]->Name(WER), spieler[i]->QueryProp(P_GUILD_LEVEL), group);
+    }
+  }
+
+  if(objectp(p=find_player("gwenshara")) && !p->QueryProp(P_INVIS)) {
+    bards += sprintf("%s(Soundmagier), ", p->Name(WER));
+  }
+
+  write(BS(bards+"\b\b\n"));
+  write(BS("-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=")); 
+  return 1;
+}
+
+void init()
+{
+  object ob, pl;
+  ::init();
+  if(!living(MENV))
+    call_out("remove",0);
+
+  if( ((MENV->QueryProp(P_GUILD)!= "bardengilde")) &&
+      (!IS_WIZARD(MENV)) )
+    {
+      write("Die Brosche loest sich auf einmal in Nichts auf!\n");
+      call_out("remove",0);
+      return 0;
+    }
+  
+  pl = environment(this_object());
+  if(this_player() != pl) return 0;
+
+  DoWear();
+  tell_object(pl, "Deine Kreativitaet beginnt langsam in Dir zu arbeiten.\n");
+  pl->SetProp(P_WEAR_FUNC, TO);
+  pl->SetProp(P_REMOVE_FUNC, TO); 
+
+  if(query_once_interactive(pl)) {
+    pl->AddHpHook(this_object()); // fuer "echte" Spieler gibt es den report
+  }
+
+  call_out("decreaseInspiration", 60);
+}
+
+public void decreaseInspiration() {
+  object owner;
+  int reduction, iLvl;
+
+  owner = QueryProp(P_WORN);
+
+  if(!objectp(owner)) {
+    return;
+  }
+
+  if(time() - owner->QueryProp(P_BARD_LAST_INSPIRED) > 59) {
+    iLvl = owner->QueryProp(P_BARD_INSPIRATION_LEVEL);
+    reduction = iLvl * iLvl;
+    if(iLvl>5) reduction += random(iLvl*2);
+    call_other("/spellbooks/barden_spells", "accumulateInspiration", owner, -reduction);
+  }
+
+  if(interactive(owner)) {
+    call_out("decreaseInspiration", 60);
+  }
+}
+
+private string colorizeReport(string reportLine, int currentHp, int maxHp) {
+  string color;
+  int percentage;
+
+  if(!isColorActive()) {
+    return reportLine;
+  }  
+
+  percentage = (int) (((float) currentHp / (float) maxHp) * 100.0);
+  switch(percentage) {
+    case 0..20: color=ANSI_RED;
+                break;
+    case 21..40: color=ANSI_BLUE;
+                break;
+    case 41..60: color=ANSI_CYAN;
+                break;
+    case 61..80: color=ANSI_YELLOW;
+                break;
+    case 81..100: color=ANSI_GREEN;
+                break;
+    default: color=ANSI_NORMAL;
+  }
+
+  return sprintf("%s%s%s%s", ANSI_BOLD, color, reportLine, ANSI_NORMAL);
+}
+
+private string getReiseliedStatusDisplay() {
+  object owner, ob;
+  
+  owner = QueryProp(P_WORN);
+  if(!objectp(owner)) {
+    return "-";
+  }
+
+  if(objectp(ob=present(SONG_TRAVELLER, owner))) {
+    if(ob->CanRecharge()) return "r";
+    return "R";
+  }
+
+  return "-";
+}
+
+private string getLorcaStatusDisplay() {
+  object owner, ob;
+  
+  owner = QueryProp(P_WORN);
+  if(!objectp(owner)) {
+    return "-";
+  }
+
+  ob = present(SONG_MAGIC_WARD, owner);
+  if(!objectp(ob)) {
+    return "-";
+  }
+
+  if(ob->CanRecharge()) {
+    return "l";
+  } 
+
+  return "L";
+}
+
+private string getAttackStatusDisplay() {
+  object owner, ob;
+  
+  owner = QueryProp(P_WORN);
+  if(!objectp(owner)) {
+    return "-";
+  }
+
+  ob = present(SONG_PASSIVE_DMG, owner);
+  if(!objectp(ob)) {
+    return "-";
+  }
+
+  if(ob->CanRecharge()) {
+    return "e";
+  } 
+
+  return "E";
+}
+
+private string getLightStatus() {
+  object owner, ob;
+  
+  owner = QueryProp(P_WORN);
+  if(!objectp(owner)) {
+    return "-";
+  }
+
+  ob = present(SONG_STERNE, owner);
+  if(!objectp(ob)) {
+    return "-";
+  }
+
+  if(ob->CanRecharge()) {
+    return "s";
+  } 
+
+  return "S";
+}
+
+private string getZauberliedStatusDisplay() {
+  object owner, ob;
+  
+  owner = QueryProp(P_WORN);
+  if(!objectp(owner)) {
+    return "-";
+  }
+  ob = present(SONG_SPELLBUFF, owner);
+  if(!objectp(ob)) {
+    return "-";
+  }
+
+  if(ob->CanRecharge()) {
+    return "z";
+  } 
+
+  return "Z";
+}
+
+private string getHeldenliedDisplay() {
+  object owner, ob;
+  
+  owner = QueryProp(P_WORN);
+  if(!objectp(owner)) {
+    return "-";
+  }
+  ob = present(SONG_BUFF, owner);
+  if(!objectp(ob)) {
+    return "-";
+  }
+
+  if(ob->CanRecharge()) {
+    return "h";
+  } 
+
+  return "H";
+}
+
+private string getAuraChargeCountDisplay() {
+  object owner, aura;
+  
+  owner = QueryProp(P_WORN);
+  if(!objectp(owner)) {
+    return "--";
+  }
+
+  aura = present(SONG_SMALL_AURA, owner);
+  if(!objectp(aura)) {
+    return "--";
+  }
+
+  return sprintf("%2d", aura->getCharges());
+
+}
+
+private string getFlags(object owner) {
+    string flags;
+    int h;
+    flags = "";
+
+    if(owner->QueryProp(P_MV)*100/owner->QueryProp(P_MAX_MV)<10)
+      flags+="M";
+    else flags+="-";
+
+    if(owner->QueryProp(P_DEAF))
+      flags+="T";
+    else flags+="-";
+
+    if(owner->QueryProp(P_BLIND))
+      flags+="B";
+    else flags+="-";
+
+    if(h=owner->QueryProp(P_POISON))
+    {
+      if(h<=3) flags+="v"; else flags+="V";
+    }
+    else flags+="-";
+
+    if(owner->QueryProp(P_FROG))
+      flags+="F";
+    else flags+="-";
+
+    if(h=owner->QueryProp(P_ALCOHOL))
+    {
+      if(h<=20) flags+="a"; else flags+="A";
+    }
+    else flags+="-";
+
+    if(owner->QueryProp(P_PARALYZED))
+      flags+="P";
+    else flags+="-";
+
+    if(objectp(present("\nsprachfluch", owner)))
+      flags+="S";
+    else flags+="-";
+
+    if(time()<owner->QueryProp(P_NEXT_SPELL_TIME))
+      flags+="N";
+    else flags+="-";
+
+
+    return flags;
+}
+
+int isBardicProtection(object ob) {
+  if(!objectp(ob)) {
+    return 0;
+  }
+  return ob->id(SONG_SCHUTZ);
+}
+
+private object findShield(object owner) {
+  object *defenders;
+  
+  defenders = owner->QueryProp(P_DEFENDERS);
+  if(!pointerp(defenders) || sizeof(defenders) == 0) {
+    return 0;
+  }
+
+  defenders = filter_array(defenders, "isBardicProtection");
+  if(sizeof(defenders) == 0) {
+    return 0;
+  }
+
+  return defenders[0];
+}
+
+private string getShieldStatus(object owner) {
+  object shield;
+  int percentage;
+
+  shield = findShield(owner);
+  if(owner->QueryProp(P_GUILD_LEVEL) < 4 || !objectp(shield)) {
+    return "------";
+  }
+
+  percentage = (int) (shield->QueryVolume() * 100.0 / shield->QueryMaxVolume());
+
+  return sprintf("[%3d%%]", percentage);
+}
+
+private string getInspirationString(object owner) {
+  string inspirationStr;
+  int i, lvl;
+
+  inspirationStr = "";
+  lvl = owner->QueryProp(P_BARD_INSPIRATION_LEVEL);
+  i=0;
+
+  for(;lvl>5;lvl--) {
+    inspirationStr += "*";
+    i++;
+  }
+
+  lvl -= i;
+
+  i=0;
+  for(;lvl>0;lvl--) {
+    inspirationStr += "#";
+    i++;
+  }
+
+  for(i=5-strlen(inspirationStr); i>0; --i) {
+    inspirationStr += "-";
+  }
+
+  return inspirationStr;
+}
+
+public void rynoxaIdle(object pl) {
+  TALENTMASTER->rynoxaIdleUp(pl);
+}
+
+#define REPORT_TEMPLATE "- LP: %3d/%3d (%s%3d) MP: %3d/%3d (%s%3d) -%s-[%s%s%s%s%2s%s%s]-[%s][%s]"
+public void printReport(int force) {
+  int currentHp, currentSp, maxHp, maxSp, hpDiff, spDiff;
+  object owner;
+  string reportLine, hpDiffSign, spDiffSign, hasZauberlied, auraCharges, hasReiselied,
+         hasLorica, hasAttack;
+
+  if(!isReportActive()) {
+    return;
+  }
+
+  owner = QueryProp(P_WORN);
+  if(!objectp(owner)) {
+    return;
+  }
+
+  // Als Geist braucht man keinen Report, weil keine Stats
+  if (owner->QueryProp(P_GHOST)) {
+    return;
+  }
+
+  // Rynoxa Heldenkraft aufrufen
+  if(BARDENMASTER->HasHeroPathLevel(owner, HERO_RYNOXA, 3)) {
+    call_out("rynoxaIdle", 0, owner);
+  }
+
+  /* report nur 1 mal pro sekunde */
+  /*if(lastReportTime == time() && !owner->InFight() && !force) {
+    return;
+  }
+  lastReportTime = time();*/
+  
+  hasReiselied = getReiseliedStatusDisplay();
+  hasZauberlied = getZauberliedStatusDisplay();
+  auraCharges   = getAuraChargeCountDisplay();
+  hasLorica     = getLorcaStatusDisplay();
+  hasAttack     = getAttackStatusDisplay();
+  
+  currentHp = owner->QueryProp(P_HP);
+  currentSp = owner->QueryProp(P_SP);
+  maxHp     = owner->QueryProp(P_MAX_HP);
+  maxSp     = owner->QueryProp(P_MAX_SP);
+  hpDiff    = currentHp - lastHp;
+  spDiff    = currentSp - lastSp;
+
+  // keine aenderung, kein force, kein report
+  if(!spDiff && !hpDiff && !force) {
+    return;
+  }
+
+  // nur HP Erhoehung wird nicht sofort angezeigt, ausser 'callout' ist schon gesetzt
+  if( (currentHp > lastHp) && (currentSp == lastSp) && (currentSp < maxSp) && !callout)
+  {
+    callout = 1;
+    call_out("NotifyHpChange",0,force);
+    return;
+  }
+
+  // Vergleich und Ausgabe
+  if (force || (currentHp < lastHp) || (currentHp != lastHp && (currentSp == maxSp || callout)) ||
+     (currentSp != lastSp))
+  {
+
+    if(hpDiff >= 0) {
+      hpDiffSign = "+";
+    } else {
+      hpDiffSign = "-";
+      hpDiff *= -1;
+    }
+
+    if(spDiff >= 0) {
+      spDiffSign = "+";
+    } else {
+      spDiffSign = "-";
+      spDiff *= -1;
+    }
+
+    reportLine = sprintf(REPORT_TEMPLATE, currentHp, maxHp, hpDiffSign, hpDiff, currentSp, maxSp, spDiffSign, 
+      spDiff, getShieldStatus(owner), hasLorica, hasAttack, hasReiselied, hasZauberlied, auraCharges, 
+      getLightStatus(), getHeldenliedDisplay(),
+      getFlags(owner), getInspirationString(owner));
+
+    reportLine = colorizeReport(reportLine, currentHp, maxHp);
+    tell_object(owner, sprintf("%s\n", reportLine));
+
+    lastHp = currentHp;
+    lastSp = currentSp;
+  }
+
+  if(callout) callout = 0;
+
+  return;
+}
+
+varargs void NotifyHpChange(int force) {
+  if(!objectp(QueryProp(P_WORN))) return;
+  if(interactive(QueryProp(P_WORN)) && find_call_out("decreaseInspiration") < 0) {
+    call_out("decreaseInspiration", 60);
+  }
+
+  if(QueryProp(P_WORN)->InFight() || force) printReport(force);
+  //else call_out("printReport", 0, 0);
+  else printReport(force);
+}
+
+
+int Status(string args) {
+  NotifyHpChange(1);
+  return 1;
+}
+
+public void BecomesNetDead(object player) {
+  if(player != QueryProp(P_WORN)) return;
+  
+  while(remove_call_out("decreaseInspiration") != -1);
+
+  TALENTMASTER->DisableHeroPassive(player);
+}
+
+public void BecomesNetAlive(object player) {
+  if(player != QueryProp(P_WORN)) return;
+  if(find_call_out("decreaseInspiration") == -1) {
+    call_out("decreaseInspiration", 60);
+  }
+
+  TALENTMASTER->EnableHeroPassive(player);
+}
+
+/***** HELDENPFADE *******/
+
+public void activate_angara_protection(object bard) {
+  TALENTMASTER->HeroPassive_Angara(bard);
+}
+
+public void captureGrimValues() {
+  mixed *hands;
+
+  hands = environment(TO)->QueryProp(P_HANDS);
+  heroPathSaveStringA = hands[0];
+  heroPathSaveIntA    = hands[1];
+  heroPathSaveStringB = hands[2];
+}
+
+public mixed* grimm_hands_override() {
+  int iLevel, success, damage;
+  string handsString;
+
+  iLevel = environment(TO)->QueryProp(P_BARD_INSPIRATION_LEVEL);
+  if(iLevel <= 0) {
+    return ({heroPathSaveStringA, heroPathSaveIntA, heroPathSaveStringB}); // normale haende
+  }
+
+  success = environment(TO)->UseSkill(SK_HEROISM(HERO_GRIMM));
+  switch(iLevel) {
+    case 1: handsString = "mit grossen Faeusten"; break;
+    case 2: handsString = "mit rieseigen Faeusten"; break;
+    case 3: handsString = "mit den Pranken eines Riesen"; break;
+    case 4: handsString = "mit den gewaltigen Pranken eines Riesen"; break;
+    default: handsString = "mit der Verkoerperung von Grimms Faeusten"; break;
+  }
+
+  damage = heroPathSaveIntA + ((int) (iLevel*30*((float) success/MAX_ABILITY)));
+
+  if(environment(TO)->QueryProp(P_TESTPLAYER))
+    tell_object(environment(TO), sprintf("grimm_hands_override :: str = '%s' success = %d damage = %d\n", 
+      handsString, success, damage));
+
+  return ({handsString, damage, DT_BLUDGEON});
+
+}
+
+public void enableGrimm() {
+  captureGrimValues();
+  environment(TO)->Set(P_HANDS, symbol_function("grimm_hands_override", TO), F_QUERY_METHOD);
+  tell_object(environment(TO), BS("Grimms Staerke faehrt dir in die Glieder. "
+                                  "Deine Faeuste werden stark wie die eines Riesen!"));
+}
+
+public void disableGrimm() {
+  environment(TO)->Set(P_HANDS, 0, F_QUERY_METHOD);
+  tell_object(environment(TO), BS("Grimms Staerke verlaesst dich. Du wirst wieder klein und schwach."));
+}
+
+public void captureNogiValues() {
+  heroPathSaveIntA = environment(TO)->QueryProp(P_BODY);
+  if(environment(TO)->QueryProp(P_TESTPLAYER))
+    tell_object(environment(TO), sprintf("brosche :: captureNogiValues :: body = %d\n", heroPathSaveIntA));
+}
+
+public int nogi_body_override() {
+  int success, protectionSum, i, bodyNew;
+  float bonus;
+  object *armours, bard;
+
+  if(!objectp(bard=environment(TO))) return heroPathSaveIntA;
+
+  success = bard->UseSkill(SK_HEROISM(HERO_NOGI));
+  bonus = (1 + bard->QueryProp(P_BARD_INSPIRATION_LEVEL)) * 0.05 * ((float) success/MAX_ABILITY);
+
+  armours = bard->QueryArmours();
+  for(i=0; i<sizeof(armours); ++i) {
+    protectionSum += armours[i]->QueryProp(P_AC);
+  }
+
+  bodyNew = (int) (heroPathSaveIntA + protectionSum * bonus);
+
+  if(bard->QueryProp(P_TESTPLAYER))
+    tell_object(bard, sprintf("nogi_body_override :: success = %d totalProtection = %d bonus = %.2f body(old) = %d body(new) = %d\n",
+                success, protectionSum, bonus, heroPathSaveIntA, bodyNew));
+
+  return bodyNew;
+}
+
+public void enableNogi() {
+  captureNogiValues();
+  environment(TO)->Set(P_BODY, symbol_function("nogi_body_override", TO), F_QUERY_METHOD);
+  tell_object(environment(TO), BS("Ein flackerndes leuchten durchfaehrt deine Ruestung. "
+                                  "Nogis Heldenmacht verstaerkt ihren Schutz!"));
+}
+
+public void disableNogi() {
+  environment(TO)->Set(P_BODY, 0, F_QUERY_METHOD);
+  tell_object(environment(TO), BS("Nogis Heldenmacht verlaesst dich. Deine Ruestung wird wieder normal."));
+}
+
+public int fraggin_max_food() {
+  return heroPathSaveIntA + QueryProp(P_WORN)->QueryProp(P_BARD_INSPIRATION_LEVEL) * 5;
+}
+
+public int fraggin_max_drink() {
+  return heroPathSaveIntB + QueryProp(P_WORN)->QueryProp(P_BARD_INSPIRATION_LEVEL) * 7;
+}
+
+public int fraggin_max_alcohol() {
+  return heroPathSaveIntB + QueryProp(P_WORN)->QueryProp(P_BARD_INSPIRATION_LEVEL) * 8;
+}
+
+
+public void enableFraggin() {
+  heroPathSaveIntA = environment(TO)->QueryProp(P_MAX_FOOD);
+  heroPathSaveIntB = environment(TO)->QueryProp(P_MAX_DRINK);
+  heroPathSaveIntC = environment(TO)->QueryProp(P_MAX_ALCOHOL);
+
+  environment(TO)->Set(P_MAX_FOOD, symbol_function("fraggin_max_food", TO), F_QUERY_METHOD);
+  environment(TO)->Set(P_MAX_DRINK, symbol_function("fraggin_max_drink", TO), F_QUERY_METHOD);
+  environment(TO)->Set(P_MAX_ALCOHOL, symbol_function("fraggin_max_alcohol", TO), F_QUERY_METHOD);
+}
+
+/* Customized Info Anzeige */
+
+private string exhausted_text()
+{
+  int p;
+
+  // Anzahl der verbleibenden Moving Points in Prozent:
+  p = 100 * TP->QueryProp(P_MV) / TP->QueryProp(P_MAX_MV);
+
+  switch (p)
+  {
+    case 0..5:   return "Du bist im Moment schwer erschoepft.";
+    case 6..15:  return "Du bist ziemlich ausser Atem.";
+    case 16..30: return "Du bist etwas erschoepft.";
+    case 31..50: return "Du spuerst erste Anzeichen der Erschoepfung.";
+    default:     return "";
+  }
+}
+
+private string weight_text()
+{
+  int p;
+
+  // Gewicht in Prozent ausrechnen:
+  p = 100 * (TP->QueryProp(P_TOTAL_WEIGHT) - TP->QueryProp(P_WEIGHT) )
+          / TP->QueryProp(P_MAX_WEIGHT);
+
+  // Durch etwaige Antigewichte kann der Wert auch unter 0 sinken:
+  if (p < 0) p = 0;
+
+  switch (p)
+  {
+    case  0..50:  return "";
+    case 51..60: return "Du traegst einiges Gewicht mit Dir herum.";
+    case 61..70: return "Du bist ziemlich beladen.";
+    case 71..80: return "Du bist schwer beladen.";
+    case 81..90: return "Du bist sehr schwer beladen.";
+    case 91..95: return "Du bist extrem schwer beladen.";
+    case 96..100: return "Das schwere Gewicht zwingt Dich fast zu Boden.";
+    default:     return "Du schleppst mehr als Du eigentlich tragen kannst.";
+  }
+}
+
+private string score(string arg)
+{
+  string ret;
+  mixed ind;
+  int level, n;
+
+  // Einzige Ausnahme von der Balkenanzeige: max. 20% vom naechsten Level
+  if ((TP->LpLevel() == (TP->QueryProp(P_LEVEL)+1)) && (TP->LevelPerc(TP->LpLevel()+1) < 20))
+    level = TP->QueryProp(P_LEVEL);
+  else
+    level = TP->LpLevel();
+
+  ind = TP->QueryProp(P_ATTRIBUTES);
+
+  if(TP->QueryProp(P_NO_ASCII_ART) || arg == "-k")
+  {
+    ret = sprintf(
+      "Du bist: %s\n"+
+      "%d Lebenspunkte (max: %d), %d Erfahrungspunkte\n"
+      "%d Magiepunkte (max: %d), %d Abenteuerpunkte (max: %d)\n"
+      "%d Attributpunkte, Stufe %d (%d Prozent zur Stufe %d)\n\n"
+      "Ausdauer: %s, Kraft: %s\n"
+      "Intelligenz: %s, Geschicklichkeit: %s\n",
+      capitalize(TP->short() || "\n"),
+      TP->QueryProp(P_HP), TP->QueryProp(P_MAX_HP),
+      TP->QueryProp(P_XP),
+      TP->QueryProp(P_SP), TP->QueryProp(P_MAX_SP),
+      TP->QueryProp(P_QP), QM->QueryAllQP(),
+      TP->QueryProp(P_AP),
+      level, TP->LevelPerc( level + 1 ), level + 1,
+      sprintf("%d (%+d)", ind[A_CON], TP->QueryAttributeOffset(A_CON)),
+      sprintf("%d (%+d)", ind[A_STR], TP->QueryAttributeOffset(A_STR)),
+      sprintf("%d (%+d)", ind[A_INT], TP->QueryAttributeOffset(A_INT)),
+      sprintf("%d (%+d)", ind[A_DEX], TP->QueryAttributeOffset(A_DEX))
+    );
+  }
+  else
+  {
+    ret = sprintf(
+      "Du bist: %s"+
+      "+-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-+\n"
+      "| Lebenspunkte:      %3d (%3d) | Erfahrungspunkte: %10d |\n"
+      "| Magiepunkte:       %3d (%3d) | Abenteuerpunkte: %4d (%4d) |\n"
+      "| Attributpunkte:           %2d | Stufe %d [%-'.'*s] %d |\n"
+      "+-=-=-=-=-=-=-=-=-=-=-=-=-=-=-+-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-+\n"
+      "| Ausdauer:           %8s | Kraft:              %8s |\n"
+      "| Intelligenz:        %8s | Geschicklichkeit:   %8s |\n"+
+      "+-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-+\n",
+      capitalize(TP->short() || "\n"),
+      TP->QueryProp(P_HP), TP->QueryProp(P_MAX_HP),
+      TP->QueryProp(P_XP),
+      TP->QueryProp(P_SP), TP->QueryProp(P_MAX_SP),
+      TP->QueryProp(P_QP), QM->QueryAllQP(),
+      TP->QueryProp(P_AP),
+      level,
+      (n = 18 - strlen(to_string(level)) - strlen(to_string(level + 1))),
+      sprintf("%'#'*s", TP->LevelPerc( level + 1 ) * n / 100, ""),
+      level + 1,
+      sprintf("%d (%+d)", ind[A_CON], TP->QueryAttributeOffset(A_CON)),
+      sprintf("%d (%+d)", ind[A_STR], TP->QueryAttributeOffset(A_STR)),
+      sprintf("%d (%+d)", ind[A_INT], TP->QueryAttributeOffset(A_INT)),
+      sprintf("%d (%+d)", ind[A_DEX], TP->QueryAttributeOffset(A_DEX))
+    );
+  }
+
+  return ret;
+}
+
+private string glvl_progress() {
+  int percent, x;
+  x=call_other(BARDENMASTER, "GetXpDifference", TP, 
+               TP->QueryProp(P_XP));
+  percent=10 - (10*x/XP_PER_LEVEL[TP->QueryProp(P_GUILD_LEVEL)-1]);
+  if(percent < 0) percent = 0;
+  if(percent > 10) percent = 10;
+
+  if(TP->QueryProp(P_GUILD_LEVEL) < 15) {
+    return sprintf(
+      "%2d [%-'.'*s] %2d",
+      TP->QueryProp(P_GUILD_LEVEL),
+      10,
+      sprintf("%'#'*s", percent, ""),
+      TP->QueryProp(P_GUILD_LEVEL) + 1);
+  } else {
+    return sprintf("%' '18|s", "["+TP->QueryProp(P_GUILD_LEVEL)+"]");
+  }
+}
+
+private string alignmentBar() {
+  int align, i, pos;
+  string ret;
+
+  align = TP->QueryProp(P_ALIGN);
+  if(align > 1000) align = 1000;
+  else if(align < -1000) align = -1000;
+
+  align += 1000;
+
+  pos = 21 - ((int) (21 * (align/2000.0)));
+
+  ret =  "Heilig [";
+  for(i=0; i<pos; ++i) ret+= "-";
+  ret += "#";
+  for(i=1; i<(21-pos); ++i) ret += "-";
+  ret += "] Satanisch";
+  return ret;
+}
+
+// [X] Aller Welten Freund [X] Band der Freundschaft 
+
+private string aura_name() {
+  switch(TP->QueryProp(P_BARD_GROUP)) {
+    case BARD_GROUP_ALESTRA: return "Flamme bin ich"; break;
+    case BARD_GROUP_TIRENA: return "Windlied der Sylphen"; break;
+    case BARD_GROUP_KORRIAX: return "Des Todes drei Trommelschlaege"; break;
+    case BARD_GROUP_SARRIAN: return "Lied vom Sturmvogel"; break;
+  }
+
+  return "???";
+}
+
+private string regeneration_name() {
+  switch(TP->QueryProp(P_BARD_GROUP)) {
+    case BARD_GROUP_ALESTRA: return "Der Fruehling"; break;
+    case BARD_GROUP_TIRENA: return "Der Sommer"; break;
+    case BARD_GROUP_KORRIAX: return "Der Winter"; break;
+    case BARD_GROUP_SARRIAN: return "Der Herbst"; break;
+  }
+
+  return "???";
+}
+
+private string passive_combat_name() {
+  switch(TP->QueryProp(P_BARD_GROUP)) {
+    case BARD_GROUP_ALESTRA: return "Haette ich ein Herz"; break;
+    case BARD_GROUP_TIRENA: return "Vana-o isil ar elena"; break;
+    case BARD_GROUP_KORRIAX: return "Toetet das Biest"; break;
+    case BARD_GROUP_SARRIAN: return "Wiegenlied des Leids"; break;
+  }
+
+  return "???";
+}
+
+private string protection_name() {
+  switch(TP->QueryProp(P_BARD_GROUP)) {
+    case BARD_GROUP_ALESTRA: return "Schildsang der Walkueren"; break;
+    case BARD_GROUP_TIRENA: return "Ballade vom Drachentoeter"; break;
+    case BARD_GROUP_KORRIAX: return "Zwergisches Ahnenlied"; break;
+    case BARD_GROUP_SARRIAN: return "Stolze Mauer am Fluss"; break;
+  }
+
+  return "???";
+}
+
+private string active_spells() {
+  string ret;
+
+  ret = sprintf("| [%s] %-25.25s [%s] %-25.25s |\n", (getReiseliedStatusDisplay()=="-"?" ":"X"), "Aller Welten Freund", (getShieldStatus(TP)=="------"?" ":"X"), protection_name());
+  ret += sprintf("| [%s] %-25.25s [%s] %-25.25s |\n", (getZauberliedStatusDisplay()=="-"?" ":"X"), "Lied der Zauber", (getLorcaStatusDisplay()=="-"?" ":"X"), "Lorica der Musen");
+  ret += sprintf("| [%s] %-25.25s [%s] %-25.25s |\n", (getLightStatus()=="-"?" ":"X"), "Ode an die Sterne", (getHeldenliedDisplay()=="-"?" ":"X"), "Ruf der Helden");
+  ret += sprintf("| [%s] %-25.25s [%s] %-25.25s |\n", (present(SONG_REGENERATION, TP)?"X":" "), regeneration_name(), (getAttackStatusDisplay()=="-"?" ":"X"), passive_combat_name());
+  ret += sprintf("| [%s] %-25.25s%30-s |\n", (getAuraChargeCountDisplay()=="--"?" ":"X"), aura_name(), "");
+  return ret;
+}
+
+public int Info(string args) {
+  string *strings, gift, ret, tmp, *ind;
+  int i, val, sz;
+
+  // aus base.c
+  if (TP->QueryProp(P_GHOST)) {
+    write("Im ewigen Leben gibt es keine Punkte.\n");
+    return 1;
+  }
+
+  strings=({"","","",""});
+  i=0;
+  if (val=TP->QueryProp(P_POISON) ) {
+    strings[i]=(val<4 ? "leicht vergiftet" : "vergiftet");
+    i++;
+  }
+  if(TP->QueryProp(P_BLIND) ) {
+    strings[i]="blind";
+    i++;
+  }
+  if(TP->QueryProp(P_DEAF) ) {
+    strings[i]="taub";
+    i++;
+  }
+  if(TP->QueryProp(P_FROG) ) {
+    strings[i]="ein Frosch";
+    i++;
+  }
+
+  gift="";
+  if( i ) {
+    for( sz=0;sz<i;sz++)
+      gift += strings[sz]+ (sz==i-1?".":(sz==i-2?" und ":", "));
+    gift = "Du bist " + gift + "\n";
+  }
+  if ((tmp=exhausted_text()) != "")
+    gift += tmp + "\n";
+  if ((tmp=weight_text()) != "")
+    gift += tmp + "\n";
+
+
+  ret = score(args);
+
+  ret += sprintf(
+    "| Bardengilde (%7s) %s Inspiration: %s |\n",
+    capitalize(TP->QueryProp(P_BARD_GROUP)),
+    glvl_progress(),
+    getInspirationString(TP)
+    );
+  ret += sprintf("|%61s|\n", "");
+  ret += active_spells();
+  ret += sprintf("|%61s|\n", "");
+  if(TP->QuerySkill("sieben schritte") != 0) ret += sprintf("| Aktueller Begleiter: %38-s |\n", (TP->QueryProp(P_BARD_CHARMED)?TP->QueryProp(P_BARD_CHARMED)->Name(WER, 1):"niemand"));
+  if(TP->QuerySkill("tanz der saebel") != 0 ||
+     TP->QuerySkill("sturm der klingen") != 0)
+       ret += sprintf("| Tanzende Waffe: %43-s |\n", (present(SONG_DANCING_ITEM, TP)&&objectp(TP->QueryProp(P_WEAPON))?TP->QueryProp(P_WEAPON)->Name(WER):"keine"));
+  ret += "+-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-+\n";
+
+  ret += sprintf("| %59|s |\n", alignmentBar());
+  gift = implode(
+    map_array(
+      explode(gift, "\n"),
+      lambda(({'x}), ({#'sprintf, "| %-59s |", 'x }) ) ), "\n");
+
+  ret += break_string(gift, 0, "", BS_LEAVE_MY_LFS);
+  ret += sprintf("| Vorsicht-Modus: %3d%:-40s |\n", 
+                 TP->QueryProp(P_WIMPY),
+                 (TP->QueryProp(P_WIMPY_DIRECTION) ? ", Fluchtrichtung: "+to_string(TP->QueryProp(P_WIMPY_DIRECTION)) : ""));
+  ret += sprintf("| Alter: %-52s |\n", TP->get_age());
+  ret += "+-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-+\n";
+  ind = explode(break_string(TP->Forschung(), 59), "\n");
+    for (i=0;i<sizeof(ind);i++)
+      ret += sprintf("| %-59s |\n", to_string(ind[i]));
+  ret += "+-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-+\n";
+  TP->More(ret);
+  return 1;
+}

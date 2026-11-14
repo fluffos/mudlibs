@@ -1,0 +1,140 @@
+
+/*
+** Schluessel fuer verwahrlostes Haus und Questobjekt
+** ---
+** 1997-02-17  Woody  Release
+** ---
+** Anmerkungen: Dieser Schluessel ist autoload und sichert in Flags ab,
+**   was der Spieler schon von der Quest erledigt hat. Es ist kein
+**   herkoemmlicher Schluessel, weil er in virtuellen Raeumen sperrt,
+**   und der Doormaster sonst fuer jeden Spieler eine eigene Tuer ver-
+**   walten muesste - das ueberlassen wir also lieber dem Raum.
+**   Beim Setzen der Flags werden diverse Sicherheitschecks durchlaufen,
+**   die sicherstellen, dass der Spieler die Quest wirklich selber
+**   macht und nicht alles von einem bestechlichen Magier gesetzt
+**   bekommt :-)
+**   Der Schluessel loest sich bei Reset in Luft auf, wenn er irgendwo
+**   achtlos rumliegt (was theoretisch gar nicht passieren kann, nichtmal
+**   bei Tod des Spielers) - der Spieler muss sich dann eben einen neuen
+**   holen...
+*/
+
+inherit "std/thing";
+
+#include <properties.h>
+#include "files.h"
+
+private nosave string flags;
+
+string SetFlag (int what);
+string ToggleFlag (int what);
+string ClearFlag (int what);
+int TestFlag (int what);
+string QueryFlags ();
+int CountFlags ();
+
+create()
+{
+  if (!is_clone(ME)) return;
+  ::create();
+  AddId ( ({ "schluessel", "eisenschluessel", QO_ID }) );
+  SetProp (P_SHORT, "Ein kleiner Eisenschluessel");
+  SetProp (P_LONG,
+    "Dieser kleine Schluessel aus Eisen wurde Dir von Verian ueberreicht. "
+    "Du solltest ihn nicht verlieren, denn er hat nur diesen einen!\n");
+  SetProp (P_NAME, "Schluessel");
+  SetProp (P_GENDER, MALE);
+  SetProp (P_VALUE, 0);
+  SetProp (P_WEIGHT, 0);
+  SetProp (P_NOSELL, 1);
+  SetProp (P_NOBUY, 1);
+  SetProp (P_NODROP, 1);
+  SetProp (P_NEVERDROP, 1);
+  SetProp (P_MATERIAL, MAT_IRON);
+  flags=" ";
+  SetFlag (F_FINDET_BLUMEN);
+}
+
+reset()
+{
+  object env;
+  int i;
+
+  ::reset();
+  if (!is_clone(ME)) return;
+  i=0; env=ME;
+  while (env=environment(env))
+    if (query_once_interactive(env)) { i=1; break; }
+  if (!i)
+  {
+    call_out("remove", 0);
+    if (MENV && !living(MENV))
+      tell_room(MENV, "Ein Schluessel zerfaellt.\n");
+  }
+  else
+  {
+    if (!TestFlag(F_BLUMEN) && !TestFlag(F_FINDET_BLUMEN))
+      // external call wg. previous_object() in SetFlag()
+      ME->SetFlag (F_FINDET_BLUMEN);
+  }
+}
+
+mixed _query_autoloadobj()
+{
+  return flags;
+}
+
+void _set_autoloadobj(mixed str)
+{
+  if (stringp(str)) return flags=str; else return 0;
+}
+
+string SetFlag (int what)
+{
+  if (this_player()!=this_interactive()) return 0;
+  if (getuid(previous_object())!=getuid()) return 0;
+  if ((what >= 0) && (what <= FLAGS))
+    flags = set_bit(flags, what);
+  return flags;
+}
+
+string ToggleFlag (int what)
+{
+  if (this_player()!=this_interactive()) return 0;
+  if (getuid(previous_object())!=getuid()) return 0;
+  if ((what >= 0) && (what <= FLAGS))
+    if (test_bit(flags, what))
+      flags = clear_bit(flags, what);
+    else
+      flags = set_bit(flags, what);
+  return flags;
+}
+
+string ClearFlag (int what)
+{
+  if (this_player()!=this_interactive()) return 0;
+  if (getuid(previous_object())!=getuid()) return 0;
+  if ((what >= 0) && (what <= FLAGS))
+    flags = clear_bit(flags, what);
+  return flags;
+}
+
+int TestFlag (int what)
+{
+  if ((what >= 0) && (what <= FLAGS)) return test_bit(flags, what);
+  else return 0;
+}
+
+string QueryFlags ()
+{
+  return flags;
+}
+
+int CountFlags ()
+{
+  int i,n;
+  for (i=n=0; i<=DO_FLAGS; i++)
+    if (test_bit(flags, i)) n++;
+  return n;
+}
+

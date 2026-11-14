@@ -1,0 +1,412 @@
+inherit "std/weapon";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <new_skills.h>
+#include <defines.h>
+#include <moredef.h>
+#include <wizlevels.h>
+#include <ansi.h>
+#include <vt100.h>
+#include "../itemd.h"
+#include "../itemd_secure.h"
+
+
+int SetSocketNumber(int value);
+nosave int CheckPermissions();
+int reinit(object ob);
+nosave int use_socket(string str);
+nosave int Hitfunc_gpearl(object enemy);
+void GenerateObjHitfuncs();
+
+
+private nosave string long_val;
+private nosave int free_sockets;
+private nosave int used_sockets;
+private nosave string *socket_items;
+private nosave int *type_of_soc_item;
+private nosave string *hitfuncs;
+private nosave object *obj_hitf;
+private nosave string *gpearl_region;
+private nosave int is_autoload;
+private nosave int *item_ids;
+private nosave int *tmp_magic;
+
+
+create()
+{
+  if (!is_clone(TO) )  return;
+
+  ::create();
+
+  long_val="";
+  free_sockets=0;
+  used_sockets=0;
+  socket_items=({});
+  type_of_soc_item=({});
+  hitfuncs=({});
+  obj_hitf=({});
+  item_ids=({0,0,0,0,0,0,0}); // Anzahl gleich der goessten SOC_X ID (siehe
+                              // itemd.h
+  is_autoload==-1;
+  
+
+  SetProp(P_NOBUY,1);
+  AddId( ({"waffea", "ITEMD_sockel_waffe"}) );
+  AddCmd( ({"stecke","steck"}), "use_socket");
+  AddAdjective( ({"gesockelt", "gesockelte", "gesockeltes", "gesockelten"}) );
+}
+
+nosave int CheckPermissions() {
+  if(!PO) return 0;
+  if(PO==ME) return 1;
+  if(!IS_ARCH(TI) && file_name(PO)!=ITEMD && getuid(TP)!="wraz") {
+    TELL("angrox", sprintf("ITEMD: Illegales Veraendern von socket_weapon\n"
+          "TP:%O\nPO: %O\nTI:%O\n",TP,PO,TI));
+    return 0;
+  }
+  return 1;
+}
+
+string _query_long() {
+  string txt;
+  int i; 
+  txt=long_val;
+  if(free_sockets) {
+    if(free_sockets==1)
+      txt+="Es befindet sich ein freier Sockel ";
+    else 
+      txt+="Es befinden sich "+free_sockets+" freie Sockel ";
+  }
+  else 
+    txt+="Es befindet sich kein freier Sockel ";
+  if(sizeof(socket_items)) {
+    if(used_sockets==1)
+      txt+="und ein belegter Sockel (";
+    else 
+      txt+="und "+used_sockets+" belegte Sockel (";
+    for(i=0;i<=sizeof(socket_items)-1;i++) {
+      txt+=socket_items[i]+", ";
+    }
+    txt+="\b\b) ";
+  }
+  txt+="in der Waffe.";
+  return BS(txt);
+}
+
+void init() {
+  ::init();
+}
+
+
+int reinit(object ob) {
+  mapping properties;
+  int i;
+  mixed ind, val;
+  string *not_set;
+  //if(!CheckPermissions());
+  not_set=({"clone_time","commands","cloner","last_use"});
+  properties=ob->__query_properties(ob,0)[0];
+  ind=m_indices(properties);
+  val=m_values(properties);
+  is_autoload=-1;
+  for(i=sizeof(ind)-1;i>=0;i--) {
+    if(member(not_set,ind[i])==-1) 
+      SetProp(ind[i],val[i]);
+    if(ind[i]=="long") long_val=val[i];
+  } 
+  if(QueryProp(P_INFO))
+    SetProp(P_INFO, QueryProp(P_INFO)+BS(sprintf("Diese Waffe ist gesockelt. Du "
+          "kannst alle Sockel mit speziellen Gegenstaenden auffuellen. "
+          "Die Syntax dazu lautet 'stecke <item> in %s'. Sind alle "
+          "Sockel gefuellt wird sich die (hoffentlich) magische Energie "
+          "der eingesetzten Gegenstaende entfalten.", QueryProp(P_NAME))));
+  else 
+    SetProp(P_INFO, BS(sprintf("Diese Waffe ist gesockelt. Du "
+          "kannst alle Sockel mit speziellen Gegenstaenden auffuellen. "
+          "Die Syntax dazu lautet 'stecke <item> in %s'. Sind alle "
+          "Sockel gefuellt wird sich die (hoffentlich) magische Energie "
+          "der eingesetzten Gegenstaende entfalten.", QueryProp(P_NAME))));
+
+  SetProp(P_SHORT, QueryProp(P_SHORT)+" (gesockelt)");
+  SetProp(P_HIT_FUNC, TO);
+  AddDetail("sockel", 
+      "Die Sockel sind kleine Einbuchtungen in der Waffe. Sie schimmern in "
+      "einer magischen Aura");
+  AddDetail("aura", 
+      "Eindeutig magisch. Mehr vermagst Du leider nicht zu sagen.");
+  return 1;
+} 
+
+
+int HitFunc(object enemy) {
+  int i, dam;
+  if(!sizeof(obj_hitf)) return 0;
+  obj_hitf-=({0});
+  dam=0;
+  for(i=sizeof(obj_hitf)-1;i>=0;i--) {
+    dam+=call_other(obj_hitf[i], "HitFunc", enemy);
+  }   
+  if(sizeof(gpearl_region)) 
+    dam+=Hitfunc_gpearl(enemy);
+  return dam;
+}
+
+int AddHitFunc(string hit_obj) {
+  object ob;
+  if(!CheckPermissions()) return 0;
+  if (member(hitfuncs, hit_obj) == -1)
+  {
+    hitfuncs+=({hit_obj});
+  }
+  GenerateObjHitfuncs();
+  return 1;
+}
+
+
+void GenerateObjHitfuncs() {
+  int i;
+  object ob;
+  for (i=sizeof(hitfuncs);i--;i>=0) {
+    call_other(hitfuncs[i], "???");
+    if((ob=find_object(hitfuncs[i])) && member(obj_hitf, ob)==-1) {
+      obj_hitf+=({ob}); 
+    }
+  }
+  obj_hitf-=({0});
+  return;
+}
+
+void reset()
+{
+  string *temp;
+  if (!is_clone(this_object()))
+    return;
+  ::reset();
+}
+
+int SetAuto(int x) {
+  if(!CheckPermissions()) return 0;
+  is_autoload=x;
+  return 1;
+}
+
+int QueryAuto() {
+  return is_autoload;
+}
+
+mixed QueryHitFuncProps() {
+  return ({hitfuncs, obj_hitf, gpearl_region});
+}
+
+int AddGpearlValues(string region) {
+  if(!CheckPermissions()) return 0;
+  gpearl_region+=({region});
+  return 1;
+}
+
+
+int SetSocketNumber(int value) {
+  //if(!CheckPermissions()) return 0;
+  if(value < 1) value=1;
+  if(value > 6) value=6;
+  free_sockets=value;
+  return 1;
+}
+
+int HasSockets() {
+  return free_sockets+used_sockets; 
+}
+
+int HasFreeSockets() {
+  return free_sockets;
+}
+
+nosave int use_socket(string str) {
+  string was,was2, u_name;
+  int amount,type_of;
+  object ob, thing;
+  if(!str) return 0;
+  if(sscanf(str, "%s in %s", was, was2)!=2) return 0;
+  if(!ob=present(was, TP)) return 0;
+  if(!thing=present(was2,TP)) return 0;
+  if(thing!=this_object()) return 0;
+  if(!thing->QueryProp(P_WEAPON_TYPE) && !thing->QueryProp(P_ARMOUR_TYPE))
+    return 0;
+  if(!thing->HasSockets()) {
+    return 0;
+  }
+  if(!thing->HasFreeSockets()) {
+    write(BS(sprintf("%s hat keine freien Sockel mehr!", CAP(was2))));
+    return 1;
+  }
+  if(!ob->id("EDELSTEIN") && !ob->id("PERLE") && !ob->IsSocketItem()) {
+    write(BS("Das kannst Du nicht in einen Sockel stecken!"));
+    return 1;
+  }
+  if(TP->QueryProp(P_GHOST)) {
+    write("Als Geist kannst Du das nicht!\n");
+    return 1;
+  }
+  if(TP->InFight()) {
+    write("Nicht im Kampf!\n");
+    return 1;
+  }
+  if(ob->IsUnit()) 
+    write(BS(sprintf("Du steckst einen %s in einen freien Sockel %s hinein.",
+            ob->Query(P_NAME)[0], thing->name(WESSEN))));
+  else 
+    write(BS(sprintf("Du steckst %s in einen freien Sockel %s hinein. ",
+          ob->name(WEN), thing->name(WESSEN))));
+  tell_room(ENV(TP), BS(sprintf("%s steckt etwas in %s.",
+        TP->Name(WER), thing->name(WEN))),({TP}));
+  free_sockets--;
+  used_sockets++;
+
+  if(ob->id("PERLE"))
+    type_of=SOC_M_PEARL;
+  else if(ob->id("EDELSTEIN"))
+    type_of=SOC_M_GEM;
+  else
+    type_of=ob->IsSocketItem();
+
+  item_ids[type_of]++; // Fuer die Auswertung des ITEMD TOOLS
+  
+  if(ob->IsUnit()) {
+    SetProp(P_WEIGHT, QueryProp(P_WEIGHT)+ob->Query("u_gpu")[0]);
+    SetProp(P_VALUE, QueryProp(P_VALUE)+ob->Query("u_cpu")[0]);
+    socket_items+=({ob->Query(P_NAME)[0]});
+    type_of_soc_item+=({type_of});
+    ob->AddAmount(-1);
+  }
+  else {
+    SetProp(P_WEIGHT, QueryProp(P_WEIGHT)+ob->QueryProp(P_WEIGHT));
+    SetProp(P_VALUE, QueryProp(P_VALUE)+ob->QueryProp(P_VALUE));
+    socket_items+=({ob->QueryProp(P_NAME)});
+    type_of_soc_item+=({type_of});
+    ob->remove(); 
+  }
+  if(!free_sockets) {
+    find_object(ITEMD)->DoSocketedItem(socket_items,type_of_soc_item,0);
+    RemoveCmd( ({"stecke","steck"}) );
+  }
+  return 1;
+}
+
+// Fuer Riesenperlen
+nosave int Hitfunc_gpearl(object enemy) {
+  int i, gpearl_value;
+  gpearl_value=0;
+  for(i=sizeof(gpearl_region)-1;i>=0;i--)
+    if(sizeof(explode(file_name(enemy), gpearl_region))!=2)
+      gpearl_value+=50;
+  return gpearl_value;  
+}
+
+
+// Eventuelles Autoload
+void _set_autoloadobj(mixed data)
+{
+  object old;
+  int i;
+  if(is_autoload==-1) return 0;
+  if(mappingp(data) && (sizeof(data)==10 || sizeof(data)==11)){
+    free_sockets=data["free_sockets"];
+    used_sockets=data["used_sockets"];
+    socket_items=data["socket_items"];
+    hitfuncs=data["hitfuncs"];
+    obj_hitf=data["obj_hitf"];
+    gpearl_region=data["gpearl_region"];
+    type_of_soc_item=data["type_of_soc_item"];
+    for (i = sizeof(type_of_soc_item) - 1; i >= 0; i--)
+      item_ids[type_of_soc_item[i]]++;
+    SetProp(P_ITEMD_SOC_OLDITEM, data["old_item"]);
+    if(objectp(old=clone_object(data["old_item"]))) {
+      reinit(old);
+      old->remove();
+      find_object(ITEMD)->DoSocketedItem(socket_items,type_of_soc_item,1);
+      find_object(ITEMD)->RegisterNewItem(this_object(), SOC_ID);
+    }
+    else {
+      call_out("remove", 0);
+      return ;
+    }
+    // muss nach REINIT gesetzt werden: 
+    if (pointerp(tmp_magic=data["tmp_magic"]))
+      SetProp(P_ITEMD_TMPMAGIC, ({ tmp_magic[0], tmp_magic[1]-1}) );
+    else
+      call_out("decrease_autoload",0); // alte runenwoerter
+    is_autoload=data["is_autoload"];
+    // long_val=data["long_val"];
+    call_out("GenerateObjHitfuncs", 2);
+  }
+  return;
+}
+
+
+void decrease_autoload() {
+  is_autoload-=1;
+  SetProp(P_ITEMD_TMPMAGIC, ({3000, 1000 * (is_autoload + 1)}));
+  if(is_autoload == -1) {
+    remove();
+  }
+  return ;
+}
+
+
+// Und hier wird gespeichert
+mixed _query_autoloadobj()
+{
+  if(is_autoload==-1) return 0;
+  return (["type_of_soc_item": type_of_soc_item, 
+           "gpearl_region": gpearl_region,
+           "long_val": long_val,
+           "used_sockets": used_sockets,
+           "free_sockets": free_sockets,
+           "obj_hitf": obj_hitf,
+           "socket_items": socket_items,
+           "hitfuncs": hitfuncs,
+           "old_item": QueryProp(P_ITEMD_SOC_OLDITEM),
+           "is_autoload": is_autoload,
+           "tmp_magic": QueryProp(P_ITEMD_TMPMAGIC),
+           ]);
+}
+
+mixed SocketedItems() {
+  return item_ids;
+}
+
+
+string name(int casus, int daemon)
+{
+  string n;
+  n=::name(casus, daemon);
+  if (is_autoload > -1 && this_player() && this_player()->QueryProp(P_TTY)=="ansi" &&
+      previous_object() && strstr(file_name(previous_object()), "itemd") == -1 )
+    return VT_CYAN+n+VT_NORMAL;
+  return n;
+}
+
+string Name(int casus, int daemon)
+{
+  string n;
+  n=::name(casus, daemon);
+  if (is_autoload > -1 && this_player() && this_player()->QueryProp(P_TTY)=="ansi" &&
+      previous_object() && strstr(file_name(previous_object()), "itemd") == -1 )
+    return VT_CYAN+capitalize(n)+VT_NORMAL;
+  return capitalize(n);
+}
+
+string short()
+{
+  string s;
+  if(QueryProp(P_WIELDED)) 
+    s=" ("+(QueryProp(P_WIELDED_TEXT)||"gezueckt")+")"; 
+  else 
+    s="";
+  if (is_autoload > -1 && this_player() && this_player()->QueryProp(P_TTY)=="ansi" &&
+      previous_object() && strstr(file_name(previous_object()), "itemd") == -1 )
+     return VT_CYAN+QueryProp(P_SHORT)+VT_NORMAL+s+".\n"; 
+  return QueryProp(P_SHORT)+s+".\n";
+}

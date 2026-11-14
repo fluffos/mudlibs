@@ -1,0 +1,121 @@
+/*-----------------------------------------------------------------------------\
+| Soundex-Master 0.1                                   (C) by Hotaru, 11.07.01 |
+\-----------------------------------------------------------------------------*/
+
+#pragma strong_types
+
+#include <properties.h>
+#include <language.h>
+#include <defines.h>
+#include <moredef.h>
+
+// === Function prototypes ================================================== \\
+
+string SoundexVal(string letter);
+
+// === Functions that can be called from outside ============================ \\
+
+// Returns the soundex code for a given name
+varargs string GetSoundexCode(string name, int len)
+{
+  int i, wordlen;
+  string finalcode, thischar, lastchar, thisval, lastval, modifier;
+  if (name == "") return "";
+  if (!len) len = 5; // default length is 5
+
+  // Do some preprocessing and cut plural endings etc. off German words
+  if (strlen(name) > 5) {
+    name = regreplace(name, "ern\\>", "er", 1);
+    name = regreplace(name, "en\\>", "e", 1);
+    name = regreplace(name, "dos\\>", "do", 1);
+  }
+
+  finalcode = capitalize(extract(name,0,0));
+  lastval = SoundexVal(extract(name,0,0));
+
+  wordlen=1;
+  for (i=1;i<strlen(name);i++) {
+    thischar = extract(name,i,i);
+    thisval = SoundexVal(thischar);
+    if (thischar != lastchar) wordlen++; // count different characters
+    lastchar = thischar;
+    if (thisval == lastval) continue; // ignore double characters
+    if (strstr("08",thisval) == -1) {
+      // If "h" or "w" separates two consonants with the same code, ignore one
+      if (lastval=="8") {
+        if (extract(finalcode,-1,-1) != thisval) finalcode += thisval;
+      } else {
+        finalcode += thisval;
+      }
+    }
+    lastval = thisval;
+  }
+  while (strlen(finalcode)<len) finalcode += "0";
+
+  // Non-standard: Add an average word length identifier
+  switch (wordlen) {
+    case 1 .. 2: modifier = "1-"; break;
+    case 3 .. 5: modifier = "2-"; break;
+    case 6 .. 9: modifier = "3-"; break;
+    default:     modifier = "4-"; break;
+  }
+
+  return "@"+modifier+finalcode[0..len-1];
+}
+
+// Rewrites a given library (see "man AddLibrary") and adds soundex codes
+void RewriteLibrary(string filename)
+{
+  string *thefile, *details, tmpstr;
+  int i, u, tmpint, siz, madechanges;
+  if (file_size(filename) < 0) return; // Return if file doesn't exist
+  thefile = explode(read_file(filename),"\n");
+  if (!sizeof(thefile)) return; // Return if no lines could be found
+  // Parse file
+  for (i=0;i<sizeof(thefile);i++) {
+    // Found info line
+    if (sscanf(thefile[i], "info:%d:%s", tmpint, tmpstr) == 2) {
+      details = explode(tmpstr,",");
+      // Filter all existing soundex codes out
+      details = regexp(details, "^[^@]");
+      // Create new soundex codes for all details
+      siz = sizeof(details);
+      for (u=0;u<siz;u++) {
+        tmpstr = GetSoundexCode(details[u]);
+        if ((tmpstr != "") && (member(details,tmpstr) == -1)) {
+          details += ({ tmpstr });
+        }
+      }
+      // Any changes?
+      tmpstr = "info:" + tmpint + ":" + implode(details,",");
+      if (tmpstr != thefile[i]) {
+        madechanges = 1;
+        //write(tmpstr + "\n");
+        thefile[i] = tmpstr;
+      }
+    }
+  }
+  // Only rewrite file if necessary
+  if (madechanges) {
+    if (!rm(filename)) return; // Couldn't delete file -> stop
+    write_file(filename, implode(thefile, "\n") + "\n");
+  }
+}
+
+// === Internal stuff ======================================================= \\
+
+string SoundexVal(string letter)
+{
+  int pos;
+
+  pos  =  strstr("abcdefghijklmnopqrstuvwxyz", lower_case(letter));
+  if (pos == -1) return "";
+  return extract("01230128022455012673018207",pos,pos);
+}
+
+void create()
+{
+  // Don't allow master to be cloned
+  if (is_clone(this_object())) { destruct(this_object()); return; }
+  seteuid(getuid());
+}

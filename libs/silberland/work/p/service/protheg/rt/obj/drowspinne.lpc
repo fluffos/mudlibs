@@ -1,0 +1,795 @@
+/*
+** Die Obsidianspinne der SpinnenkriegerInnen
+**
+** 2004-Jan-23  1.45  PROtheG  Komplettueberarbeitung und Anpassung an das
+**                             neue Format
+**
+** 2004-Jan-23  1.46  PROtheG  Erzwungenes Update, wegen Bug beim ignore-
+**                             handling
+**
+** 2004-Mai-17  1.47  PROtheG  gettitle P_FROG liefert jetzt ""
+**
+** 2004-Jul-01  1.48  PROtheG  Report_normal und Report_kurz verfeinert
+**
+** 2004-Jul-01  1.49  PROtheG  Ignorieren komplett ueberarbeitet
+**
+** 2005-Feb-04  1.50  PROtheG  spinfo leicht ueberarbeitet
+**
+*/
+
+#pragma strong_types;
+
+#include "../def.h"
+#include <ansi.h>
+#include <exploration.h>
+
+inherit STD "rt";
+
+#define DHRKIONMASTER "/d/unterwelt/zordan/dhrkion/master/dhrkion"
+#define QM "/secure/questmaster"
+
+#define SOULFILE SOUL "Dunkelelf"
+
+#define DUNKEL 10
+
+//Somit ist moeglich "blabla"+C+"blabla"+N
+#define C GetColor()
+#define S(x) GetColor(x)
+#define N NormalColor()
+
+nosave int dunkel, lastlogin; 
+
+varargs nosave string huefe(int flag);
+
+//Liefert die aktuelle Versionsnummer
+int Version() { return 50;}
+
+nomask void create()
+{
+  if(!is_clone(ME)) return;  // (return on BP)
+  ::create();
+
+  SetProp(P_SHORT, "Eine kleine Spinne");
+  SetProp(P_LONG,
+	  BS("Eine kleine Spinne aus Obsidian, die Euch wertvolle Dienste "
+	     "leisten wird, solange Ihr sie auf der Schulter tragt. Sie "
+	     "ist von Lloth persoenlich geweiht worden, also achtet auf sie!"));
+  SetProp(P_NAME, "Spinne");
+  SetProp(P_GENDER, FEMALE);
+  AddId(({"spinne", "spinnentool"}));
+
+  SetProp(P_WEIGHT, 150);
+  SetProp(P_MATERIAL, ([MAT_OBSIDIAN:90,MAT_MISC_UNHOLY:10]));
+
+  SetProp(P_NOSELL,
+	  "Ihr hoert eine Stimme im Kopf: 'Wage es bloss nicht!'\n");
+
+  SetProp(P_INFO,
+	  "Lauscht, welche Dienste Euch die Spinne bieten kann!\n");
+
+  AddDetail("dienste",
+	    "Lauscht, welche Dienste sie Euch bieten kann!\n");
+  
+  SetProp(P_SOUND, CLOSURE(huefe));
+  
+  AddCmd("spreport", "Report");
+  
+  //Cmds fuer die Drow-komunikation
+  AddCmd(({"spruf","sprufe"}), "Rufen");
+  AddCmd(({"sphist"}), "History");
+  AddCmd(({"spwink","spwinke"}), "spwink");
+  AddCmd(({"spdunkel"}), "spdunkel");
+  AddCmd(({"sphass"}), "sphass"); 
+
+  AddCmd(({"spinfo"}), "spinfo");
+  AddCmd(({"spwer"}), "spwer");
+  AddCmd(({"spfarbe","spfarben"}), "spfarbe");
+
+  AddCmd(({"sppresay"}), "sppresay");
+
+  //Anzeige der Feinde von Dhrkion...
+  AddCmd(({"spfeinde"}),"spfeinde");
+
+  //Hilfeanzeige
+  AddCmd(({"sphilfe"}), "sphilfe");
+
+  GetColor(1);
+  
+  SUID;
+
+  // r* commands:
+  init_soul_cmds(1);
+}
+
+//Liefert den Filename zum Masterobjekt
+string Master()
+{
+  return RTM "spinnenmaster";
+}
+
+// liefert den String fuers ignorieren (ignoriere bla)
+string IgnoriereID()
+{
+  return "spinne";
+}
+
+// liefert den String fuer die Rasse
+string Rasse()
+{
+  return "Dunkelelf";
+}
+
+// Meldung fuer Report wenn absolut fit
+string absolut_fit()
+{
+  return "Ihr seid nun wieder absolut fit.";
+}
+
+// Report Zeilen normal
+string Report_normal(int hp, int maxhp, int sp, int maxsp)
+{
+  string ret;
+  
+  ret="* Ihr habt nun ";
+  
+  if(hp==maxhp)
+    ret+="volle Lebenspunkte und ";
+  else
+    ret+=""+hp+" von "+maxhp+" Lebenspunkte und ";
+  
+  if(sp==maxsp)
+    ret+="volle Magiepunkte.";
+  else
+    ret+=""+sp+" von "+maxsp+" Magiepunkte.";
+  
+  return ret;
+}
+
+// Report Zeilen kurz
+string Report_kurz(int hp, int maxhp, int sp, int maxsp)
+{
+  string ret;
+  
+  ret="* ";
+  
+  if(hp==maxhp)
+    ret+="LP: "+hp+" und ";
+  else
+    ret+="LP: "+hp+" von ("+maxhp+") und ";
+  
+  if(sp==maxsp)
+    ret+="MP: "+sp;
+  else
+    ret+="MP: "+sp+" von ("+maxsp+")";
+  
+  return ret;
+}
+
+// Spezialbehandlungen von Aufenthaltsorten bei werliste
+string Region(string str)
+{
+  if(strstr(str, "/d/unterwelt/zordan/dhrkion")==0)
+    return "Dhrkion";
+  
+  if(strstr(str, "/d/unterwelt/protheg/av")==0)
+    return "ArdulVhier";
+  
+  return "";
+}
+
+//Wird ausgegeben, wenn sich das Tool selbst erneuert
+string Erneuern_Meldung()
+{
+  return BS(C+"Irgendwas scheint mit Eurer Spinne zu geschehen!"+N);
+}
+
+//Meldung wenn die History noch leer ist
+string History_leer()
+{
+  return BS("In letzter Zeit war es recht ruhig...");
+}
+
+//Ueberschrift der History
+string History_msg()
+{
+  return "";
+}
+
+// <Spieler> <History_format> huhu
+//zb: Protheg teilte Dir mit: huhu
+string History_format()
+{
+  return "teilte Euch mit: ";
+}
+
+//NotifyFail beim rufen
+string Rufen_syntax()
+{
+  return BS("Was wollt Ihr Eurem Volk mitteilen?");
+}
+
+// <Spieler> <Rufen_format> huhu
+//zb: Protheg teilt Dir mit: huhu
+string Rufen_format()
+{
+  return "teilt Euch mit: ";
+}
+
+//Format der Rufenausgabe an den Spieler
+string Rufen_msg()
+{
+  return "Ihr teilt den Dunkelelfen mit: ";
+}
+
+varargs nosave string huefe(int flag)
+{
+  string ret, rcmds;
+  int i;
+  
+  rcmds="";
+
+  //Formatierung der r* commands. fuer seher keine mpkosten
+  if(IS_SEER(TP))
+    {
+      for(i=sizeof(soulcmds)-1;i>=0;i--)
+	if(i==0)
+	  rcmds+="und "+soulcmds[i][0]+".";
+	else
+	  rcmds+=soulcmds[i][0]+", ";
+      
+      rcmds=break_string(rcmds, 60, " ", BS_NO_PARINDENT);
+    }
+  else
+    {
+      for(i=sizeof(soulcmds)-1;i>=0;i--)
+	if(i==0)
+	  rcmds+="und "+soulcmds[i][0]+"("+soulcmds[i,2]+").";
+	else
+	  rcmds+=soulcmds[i][0]+"("+soulcmds[i,2]+"), ";
+      
+      rcmds=break_string(rcmds, 60, " ", BS_NO_PARINDENT);
+      
+      rcmds+="Die Zahlen in den Klammern sind die Magiepunkte, die Euch die\n"
+	"Aktionen kosten werden.\n \n";
+      
+    }
+  
+  ret="\n \n"
+    "Ich kann Euch jederzeit darueber informieren, wie es mit Eurer\n"
+    "Lebensenergie und Eurer Zauberkraft aussieht.\n \n"
+    "Die Kommandos dazu lauten wie folgt:\n"
+    " <spreport ein>   baut eine telepathische Verbindung mit mir auf.\n"
+    " <spreport aus>   bricht die Verbindung wieder ab.\n \n"
+    "Ausserdem ermoegliche ich Euch einige zusaetzliche Kommandos:\n"+
+    rcmds+
+    "\nLloth hat jedoch noch mehr zu sagen...\n"
+    " 'Durch meine Kraft, die Euch umgibt und durchdringt ist es\n"
+    "  Euch moeglich ueber grosse Distanzen mit den anderen\n"
+    "  Dunkelelfen zu kommunizieren!'\n \n"
+    "  Ihr koennt Euch zurufen mit:    sprufe <text>\n"
+    "  Vergangene Rufe seht Ihr bei:   sphist\n \n"
+    "  Infobefehle:\n"
+    "    spwer, spinfo, spfarbe\n \n"
+    "  Weitere Befehle sind:\n"
+    "    spwinke, spdunkel, sphass, spfeinde, sppresay.\n \n"
+    "  Hilfe zu den Befehlen erhaltet Ihr mit:  sphilfe\n \n"
+    "                                                         Ver 1."+Version()+"\n";
+
+  //in der Hilfefunktion brauchen wir kein document-format
+  if(flag) return ret;
+  
+  TP->More(make_document(ret));
+  return "";
+}
+
+nosave int sphilfe(string str)
+{
+  string ret;
+
+  if(str) str=explode(str, " ")[0];
+
+  switch(str)
+    {
+    case "spreport": 
+      ret="Der 'spreport' informiert Euch jeweils ueber den Zustand\n"
+	"Eurer Lebens- und Magiepunkte.\n"
+	"Moegliche Einstellungen sind:\n"
+	"* spreport normal    - Schaltet den Report normal ein.\n"
+	"* spreport kurz      - Schaltet den Report kurz ein.\n"
+	"* spreport farbe     - Schaltet den Report in Farbe ein.\n"
+	"* spreport farbekurz - Schaltet den Report faerbig und\n"
+	"                       kurz ein.\n"
+	"* spreport aus       - Schaltet den Report wieder aus.\n";
+      break;
+    case "spinfo": 
+      ret="In 'spinfo' habt Ihr eine Alternative zu der normalen\n"
+	"Infoanzeige bei 'info'.\n"
+	"Die einzelnen Angaben sollten Euch eigentlich genuegen\n"
+	"fuer den Kampf gegen das Gute.\n \n"
+	"Je nach Farbeinstellung 'spfarbe' habt Ihr hier ein anderes\n"
+	"Farbbild.\n"
+	"Einige unwichtige Angaben werden im Normalfall unterdrueckt.\n";
+      break;
+    case "spwer": 
+      ret="Mit 'spwer' seht Ihr die Dunkelelfen Taktikliste:\n \n"
+	"*  Welcher Deiner Brueder/Schwestern ist anwesen?\n"
+	"*  Ist er/sie wuerdig? (traegt eine Spinne)\n"
+	"*  Oder traegt er/sie gar noch einen Teddy\n"
+	"*  Ist er/sie anwesend, oder idle?\n"
+	"*  Was fuer eine Waffe hat er/sie gezueckt?\n"
+	"*  Ist er/sie von boeser Gesinnung?\n"
+	"*  Wo befindet er/sie sich?\n"
+	"*  Mit wem kaempft er/sie denn in dem Augenblick (optional)\n\n"
+	"Mit 'spwer kurz' seht Ihr das ganze etwas kompakter.\n";
+    break;
+    case "spfarben":
+    case "spfarbe": 
+      ret="Mit '"+str+"' habt ihr 3 verschiedene Farbeinstellungen:\n \n"
+	"* spfarbe 0  -  Keine Farben.\n"
+	"* spfarbe 1  -  Spezialfarbeinstellung 1.\n"
+	"* spfarbe 2  -  Spezialfarbeinstellung 2.\n \n"
+	"Welche Euch besser gefaellt, muesst Ihr selbst entscheiden.\n";
+    break;
+    case "sprufe": 
+      ret="Mit 'sprufe' habt Ihr die Moeglichkeit, den Anderen etwas\n"
+	"mitzuteilen, ohne dass andere Rassen mithoeren koennen.\n"
+	"Mit 'sphist' koennt Ihr die Rufe nocheinmal lesen.\n";
+    break;
+    case "sphist": 
+      ret="Mit 'sphist' erweist Euch Lloth die Gnade, vergangene Rufe\n"
+	"von 'sprufe' nocheinmal in einer, nach der Zeit geordneten\n"
+	"Liste zu sehen.\n"
+	"Jedoch ist die Liste in ihrer Groesse beschraenkt.\n";
+    break;
+    case "spfeinde": 
+      ret="Mit 'spfeinde' seht Ihr, genau aufgelistet, die aktuellen\n"
+	"und auch die ewigen Feinde von Eurer Heimatstadt Dhrkion.\n";
+    break;
+    case "spdunkel": 
+      ret="Mit 'spdunkel' koennt Ihr einen Teil Eurer Macht aufwenden,\n"
+	"um den anderen Dunkelelfen dunkle Gruesse zu uebersenden.\n"
+	"Ihr koennt mit 'spdunkel <name>' auch jemand Bestimmten gruessen.\n";
+    break;
+    case "spwinke":
+    case "spwink": 
+      ret="Mit '"+str+"' koennt Ihr den anderen Dunkelelfen zuwinken.\n"; 
+      break;
+    case "sphass": 
+      ret="Mit 'sphass' koennt Ihr die Anderen an Eurem Hass und\n"
+	"Eurer Abscheu dem Guten gegenueber teilhaben lassen.\n";
+    break;
+    case "sppresay":
+      ret="Mit 'sppresay' koennt Ihr Euch das Dunkelelfen-Presay welches\n"
+	"z.B. bei 'spwer' gezeigt wird, permanent als Presay setzen.\n\n"
+	"Mit 'sppresay loeschen' wird Euer Presay geloescht.\n";
+      break;
+    case "allgemein":
+      ret=huefe(1);
+      break;
+    case "ignoriere":
+    case "ignorieren":
+      ret=ignorieren_hilfe_text();
+      break;
+    default: 
+      ret="Mit 'sphilfe' koennt Ihr Euch ueber folgende Themen informieren:\n \n"
+	"sphilfe <spreport>   Wie steht es um Eure Lebenskraft und Magie?\n"
+	"        <spinfo>     Ein etwas anderes 'info'.\n"
+	"        <spwer>      Welcher Dunkelelf ist anwesend?\n"
+	"        <spfarbe>    3 verschiedene Farbeinstellungen.\n"
+	"        <sppresay>   Dunkelelfen-Presay fix setzen.\n"
+	"        <sprufe>     Teilt den anderen Dunkelelfen etwas mit.\n"
+	"        <sphist>     Wer hat Euch wann, was mitgeteilt?\n"
+	"        <spfeinde>   Die Feinde der Dunkelelfen!\n"
+	"        <spdunkel>   Versendet dunkle Gruesse.\n"
+	"        <spwink>     Winkt eurem Dunkelelfenvolk zu.\n"
+	"        <sphass>     Teilt den Anderen Euren Hass mit!\n"
+	"        <allgemein>  Allgemeine Uebersicht.\n"
+	"        <ignoriere>  Uebersicht der Ignorieremoeglichkeiten.\n";
+    }
+  return TP->More(make_document(ret)),1;
+}
+
+void BecomesNetAlive(object who)
+{
+  xpdiff=-1;
+
+  if((ENV(ME)) && (ENV(ME)==who))
+    {
+      netalivebug=0;
+      
+      call_out("erneuern", 0);
+      
+      //DB("*** Spinnentool BecomesNetAlive in "+sprintf("%O\n",who));
+      
+      xpdiff=who->QueryProp(P_XP);
+      
+      if(time()-lastlogin > 1000 && !IS_WIZARD(who))
+	{
+	  tell_object(who, 
+	  BS("Die kleine Spinne auf Deiner Schulter blickt Dich an "
+	     "und ploetzlich hoerst Du eine durchdringende Stimme in "
+	     "Deinem Kopf:")+
+	  BS(({"  'Mehre meinen Ruhm, oder erwarte meine Strafe!'",
+		 "  'Moege Dich meine Dunkelheit begleiten!'",
+		 "  'Finsternis und Verwuestung ueber das Silberland!'",
+		 "  'Toetet ein paar stinkende Elfen fuer mich!'",
+		 "  'Opfert mir ein paar Feen!'",
+		 "  'Diesmal will ich die Verwuestung von Derlim!'",
+		 "  'Mich duerstet nach dem Blut von Midas' Buergern!'",
+		 "  'Nieder mit Elessar! Tod den Elfen!'",
+		 "  'Ruhm und Ehre fuer mich! Lloth, Deine Goettin!'",
+		 "  'Geh und erkunde das feindliche Oberland fuer mich!'",
+		 "  'Schneidet den Elfen die Ohren ab!'",
+		 "  'Bringt mir ein paar Zwerge als Sklaven!'",
+		 "  'Drachenblut, Drachenblut, Drachenblut!!'"})[random(13)]));
+	  lastlogin=time();
+	}
+    }
+}
+
+nosave int spfeinde(string str)
+{
+  string ret;
+  object m;
+
+  catch(call_other(DHRKIONMASTER, "???"));
+	  
+  if(m=find_object(DHRKIONMASTER))
+    {
+      ret="Dhrkions ewige Feinde:\n";
+      ret+=m->getpermfeinde();
+      ret+="\nZur Zeit wuetet in Dhrkion rum:\n";
+      ret+=(m->getfeinde() == "Keine." ? "* Niemand.\n": m->getfeinde())+"\n";
+    }
+  else 
+    return 1;
+
+  return write(make_document(ret)),1;
+}
+
+string Titel(object pl)
+{
+  string ret;
+  
+  if(!pl->QueryProp(Listener()))
+    if(!present(RACETOOLID, pl))
+      return "Unwuerdige"+FM(pl," ","r ");
+    else
+      pl->SetProp(Listener(), 1);
+  
+  if(pl->QueryProp(P_FROG))
+    return "";
+  
+  if(pl->QueryProp(P_GUILD)=="spinnenkrieger")
+    ret="Spinnen";
+  else
+    ret="Drow";
+
+  if(IS_WIZARD(pl))
+    ret+="magier"+FM(pl,"in "," ");
+  else 
+    {
+      if(pl->QueryProp(P_GUILD)=="druidenzirkel")
+	return "Drowdruid"+FM(pl,"in ","e ");
+
+      if(pl->QueryProp(P_GUILD)=="zechpreller")
+	return "Drowsaeufer"+FM(pl,"in "," ");
+
+      if(pl->QueryProp(P_GUILD)=="berserker")
+	return "Drowberserker"+FM(pl,"in "," ");
+      
+      if(pl->QueryProp(P_GUILD)=="nekromanten")
+	return "Drownekromant ";
+      
+      if(IS_SEER(pl))
+	ret+=""+FM(pl,"priesterin ","krieger ");
+      else
+	ret+="elf"+FM(pl,"e "," ");
+    }
+
+  return ret;
+}
+
+nosave int spfarbe(string str)
+{
+  notify_fail("Syntax: spfarbe 0 | 1 | 2\n");
+  if(!str) return 0;
+  
+  switch(to_int(str))
+    {
+    case 0: 
+      Setting(0); 
+      return write("Farbmodus wird auf normal gesetzt.\n"), 1; 
+      break;
+
+    case 1: 
+      Setting(1); 
+      return write("Farbmodus wird auf spezial1 gesetzt.\n"), 1; 
+      break;
+
+    case 2: 
+      Setting(2); 
+      return write("Farbmodus wird auf spezial2 gesetzt.\n"), 1; 
+      break;
+
+    default : 
+      return 0;
+    }
+  
+  return 0;
+}
+
+nosave int sppresay(string str)
+{
+  string np, op;
+
+  notify_fail(BS("Ihr koennt mit 'sppresay' nur Euer Dunkelelfen-Presay "
+		 "setzen!")+
+	      BS("Ihr koennt aber auch mit 'sppresay loeschen' das Presay "
+		 "entfernen."));
+  
+  if(strlen(str)) 
+    if(str=="loeschen")
+      {
+	if(!strlen(TP->QueryProp(P_PRESAY)))
+	  return write(BS("Ihr hattet doch gar kein Presay gesetzt!?")), 1;
+	
+	TP->SetProp(P_PRESAY, "");
+	
+	return write(BS("Euer Presay wurde geloescht.")), 1;
+      }
+    else
+      return 0;
+  
+  np=Titel(TP);
+  
+  if(strlen(op=TP->QueryProp(P_PRESAY)))
+    if(np!=op)
+      write(BS("Euer voriges Presay '"+op+"' wird ersetzt."));
+  
+  TP->SetProp(P_PRESAY, np[0..<2]);
+  
+  write(BS("Ihr seid nun:")+
+	BS(np+CAP(getuid(TP))+" "+(TP->QueryProp(P_TITLE) || "")));
+  
+  return 1;
+}
+
+nosave int spinfo(string str)
+{
+  object tp;
+  mapping at;
+  int xp;
+  
+  tp=TP;
+
+  if(tp->QueryProp(P_GHOST))
+    return write("Geister haben keine Punkte!\n"),1;
+  
+  at=tp->QueryProp(P_ATTRIBUTES);
+
+  if(xpdiff<=0) xpdiff=tp->QueryProp(P_XP);
+
+  xp=tp->QueryProp(P_XP);
+
+  write(sprintf(
+    "\n"+C+"                                    /   \\\n"
+    "                            )      ((   ))     (\n"
+    "                           /|\\      ))_((     /|\\"+N+"\n"
+    " _                   "+C+"     / | \\    (/\\|/\\)   / | \\ "+N+"                        _ \n"
+    "| |----------------------"+C+"/"+N+"--"+C+"|"+N+"-"+C+"voV"+N+"---"+C+"\\`|'/"+N+"--"+C+"Vov"+N+"-"+C+"|"+N+
+    "--"+C+"\\"+N+"-----------------------| |\n"
+    "| | %29.29-s  "+C+" (o o)     "+N+"  %25s | |\n"
+    "| |                                 "+C+"`\\Y/'"+N+"                                 | |\n"
+    "| | Erfahrung:        %10d                                          | |\n"
+    "| | Unterschied:      %10d    Leben: %30s | |\n"
+    "| | Abenteuer:       %4d [%4d]    Magie: %30s | |\n"
+    "| | Stufe: %21s                                          | |\n"
+    "| |-----------------------------------------------------------------------| |\n"
+    "| | Intelligenz:         %8-s   %37.37-s | |\n"
+    "| | Ausdauer:            %8-s   Zustand:%28-s  | |\n"
+    "| | Kraft:               %8-s   %14-s %-s   | |\n"
+    "| | Geschicklichkeit:    %8-s   %s %16s | |\n"
+    "| |_______________________________________________________________________| |\n"
+    "(@)                 "+C+" l   /\\ /       ( (       \\ /\\   l "+N+"                   (@)\n"
+    "                    "+C+" l /   V         \\ \\       V   \\ l\n"
+    "                     l/              _) )_          \\I\n"
+    "                                     `\\ /'\n"
+    "                                       `"+N+"\n",
+
+    Titel(tp)+CAP(getuid(tp)),
+    CAP(tp->QueryProp(P_GUILD))+" ["+tp->QueryProp(P_GUILD_LEVEL)+"]",
+    xp, xp-xpdiff, 
+    Balken(tp->QueryProp(P_HP), tp->QueryProp(P_MAX_HP), setting, tp->QueryProp(P_WIMPY)),
+    tp->QueryProp(P_QP), QM->QueryAllQP(),
+    Balken(tp->QueryProp(P_SP), tp->QueryProp(P_MAX_SP), setting,0),
+    Stufenpunkte(tp),
+    sprintf("%d [%+d]", at[A_INT], tp->QueryAttributeOffset(A_INT)),
+    (tp->QueryProp(P_WIMPY) ? 
+     sprintf("Vo: %3d %30-s",tp->QueryProp(P_WIMPY),
+	     (tp->QueryProp(P_WIMPY_DIRECTION) ? 
+	      "Ri: "+tp->QueryProp(P_WIMPY_DIRECTION) : "")):""),
+    sprintf("%d [%+d]", at[A_CON], tp->QueryAttributeOffset(A_CON)),
+    Zustand(tp),
+    sprintf("%d [%+d]", at[A_STR], tp->QueryAttributeOffset(A_STR)),
+    Gesinnung(tp), Gewicht(tp),
+    sprintf("%d [%+d]", at[A_DEX], tp->QueryAttributeOffset(A_DEX)),
+    Erschoepfung(tp), (tp->QueryMoney() ? tp->QueryMoney()+" Muenzen" : "")
+    ));
+
+  GetColor(1);
+  return 1;
+}
+
+nosave int sphass(string str)
+{
+  object *drow;
+  string me,what,bla,who;
+  int i;
+
+  if(TP->QueryProp(P_INVIS)) return write("Das geht nur, wenn Du sichtbar bist!!\n"),1;
+  
+  //Alle Drow, keine ignorierenden, nicht manselbst
+  drow=Alle_Anwesenden(TP); 
+
+  me=Titel(TP)+CAP(getuid(TP));
+  
+  what=({"Tod den ",
+	   "Zur Hoelle mit den ",
+	   "Tod und Verderben den ",
+	   "Nieder mit den "})[random(4)];
+  bla=({"verruchten ",
+	  "stinkigen ",
+	  "verfluchten ",
+	  "frevelhaften ",
+	  "ekelhaft guten ",
+	  "seicherlhaften "})[random(5)];
+  who=({"Elfen",
+	  "Feen",
+	  "Paladinen",
+	  "Feinden",
+	  "Zwergen"})[random(5)];
+
+  for(i=sizeof(drow)-1;i>=0;i--)
+    tell_object(drow[i], 
+		BS(me+" groehlt Euch zu: "+what+bla+who+"!!"));
+  
+  write(BS("Ihr groehlt den Anderen zu: "+what+bla+who+"!!"));
+  return 1;
+}
+
+nosave int spdunkel(string str)
+{
+  object *drow;
+  object pl;
+  string me;
+  mixed m;
+  
+  int i;
+
+  if(TP->QueryProp(P_INVIS)) 
+    return write(BS("Das geht nur, wenn Du sichtbar bist!!")), 1;
+    
+  if(strlen(str))
+    {
+      m=match_living(str, 1);
+      if(m==-1)
+        return write(BS("Das war nicht eindeutig!")), 1;
+      if(m==-2)
+	return write(BS("Wen meint Ihr denn?")), 1;
+      
+      if(pl=find_player(m))
+        {
+          if(pl==TP)
+	    return write(BS("Euch selbst?!")), 1;
+	  
+          if(pl->QueryProp(P_RACE)!=Rasse())
+            return write(BS("Nur Dunkelelfen kommt dieses Privileg zugute!")), 1;
+	  
+	  if(is_ignoring(pl, getuid(TP)))
+	    return write(BS(CAP(getuid(TP))+" ignoriert Euch, oder Euren Befehl.")), 1;
+	  
+          me=Titel(TP)+CAP(getuid(TP));
+	  
+          if(dunkel<=time() && (TP->QueryProp(P_SP)>DUNKEL))
+	    {
+              tell_object(pl,
+           		  BS("Eine Aura des Boesen legt sich ueber Euch!")+
+			  BS(me+" sendet Euch dunkle Gruesse und einen Teil "+
+			     TP->QueryPossPronoun(FEMALE, WESSEN)+
+			     " Macht!"));
+	      
+              write(BS("Ihr sendet Gruesse und einen Teil Eurer dunklen Macht an "+CAP(m)+"."));
+	      
+	      if(!IS_WIZARD(pl))
+		{
+		  TP->AddSp(-DUNKEL);
+		  pl->AddSp(DUNKEL);
+		}
+	      
+	      dunkel=time()+300+random(100);
+	    }
+	  else
+	    {
+	      tell_object(pl,
+			  BS("Eine Aura des Boesen legt sich ueber Euch!")+
+			  BS(me+" uebersendet Euch dunkle Gruesse.")+
+			  BS("Ihr dankt "+TP->name(WEM)+" aus der Ferne."));
+
+	      write(BS("Ihr uebersendet dunkle Gruesse an "+CAP(m)+".")+
+		    BS(CAP(m)+" dankt Euch aus der Ferne."));
+	    }
+        }
+      else return write(BS("Wen meint Ihr denn?")), 1;
+    }
+  else
+    {
+      //Alle Drow, keine ignorierenden, nicht manselbst
+      drow=Alle_Anwesenden(TP);
+      
+      me=Titel(TP)+CAP(getuid(TP));
+      
+      for(i=sizeof(drow)-1;i>=0;i--)
+	tell_object(drow[i], 
+		    BS("Eine Aura des Boesen legt sich ueber Euch!")+
+		    BS(me+" huellt alle Dunkelelfen aus der Ferne in "
+		       "Lloths Finsternis."));
+      
+      write(BS("Ihr sendet einen Teil Eurer Finsternis an Euer Volk."));
+    }
+  
+  return 1;
+}
+
+nosave int spwink(string str)
+{
+  object *drow;
+  string me;
+  int i;
+
+  if(TP->QueryProp(P_INVIS)) 
+    return write("Das geht nur, wenn Du sichtbar bist!!\n"),1;
+  
+  drow=Alle_Anwesenden(TP);
+  drow-=({TP});
+
+  me=Titel(TP)+CAP(getuid(TP));
+  
+  if(!str) str="";  
+  if(str[0]=='/') 
+    str=str[1..<1]+" ";
+  else
+    str="";
+  
+  for(i=sizeof(drow)-1;i>=0;i--)
+    tell_object(drow[i], me+" winkt Euch "+str+"aus der Ferne zu.\n");
+
+  write("Ihr winkt Eurem Volk "+str+"aus der Ferne zu.\n");
+  return 1;
+}
+
+nosave int spwer(string str)
+{
+  if(str && str!="kurz")
+    return write(BS("Spwer [kurz]")), 1;
+  
+  TP->More(make_document(who_list("Folgende Dunkelelfen sind anwesend:\n",
+				  strlen(str), 1)));
+  
+  return 1;
+}
+
+string extra_look()
+{
+  return capitalize(environment()->QueryPronoun())+
+    " hat eine kleine Spinne auf "+
+    environment()->QueryPossPronoun(2,2) + " Schulter sitzen.\n";
+}
+
+void hau_ab(object who)
+{
+  tell_object(who, "Die Spinne bruellt: 'Du bist kein Dunkelelf!!'\nDann "+
+	      "laeuft sie weg und verschwindet in irgendeiner Spalte.\n");
+ 
+  call_out("remove", 0);
+}

@@ -1,0 +1,1205 @@
+/*
+** Vom original Kristallpanzer fuer Elfenwaechter
+** 2 Panzer koennen untereinander Spieler tauschen ;)
+**
+** 2002-13-08  PROtheG  Errors werden nun mitgeloggt.
+**
+** 2002-13-09  PROtheG  Aenderungen, damits der Balance gefaellt
+**                      Uffz, zuviele Aenderungen zum einzeln auflisten
+**
+** 2002-22-09  PROtheG  Nun muss der "Partner" ebenfalls den Panzer fuer
+**                      den Teleport aktivieren
+**
+** 2002-23-09  PROtheG  Regexp-matching auf gesperrte filenames
+**
+** 2002-30-09  PROtheG  Vorbereitung auf Verwaltung durch itemd
+*/
+
+#include "../def.h"
+#include <ansi.h>
+#include <vt100.h>
+
+inherit "std/armour";
+
+#define TIME2RECOVER 518
+#define SPELLPAUSE 120
+#define MANACOST 55
+#define THEVOID "/room/void"
+#define NO_TPORT_SAVE LOG "tkpanzer_no_teleport"
+#define LOGFILE LOG "tkpanzer_transfers"
+
+nosave int activated, next, timeout, preparing;
+nosave object counterpart;
+
+void storno_koerper_tausch()
+{
+  if(preparing)
+    tell_object(MENV,
+		BS("Dein Kristallpanzer wird wieder still..."));
+
+  SetProp(P_SHORT, "UiThors, der pulsierende Kristallpanzer");
+  preparing=0;
+}
+
+void create()
+{
+  if(!is_clone(ME)) return;
+  ::create();
+  
+  if(file_name(previous_object())!="/p/daemon/itemd/itemd") 
+    {
+      raise_error("Illegales Clonen des Uniques! ");
+      
+      destruct();
+      
+      return;
+    }
+
+  AddId(({"kristallpanzer", "panzer", "\nTRANSPORTKRISTALLPANZER"}));
+  SetProp(P_SHORT, "Ein Kristallpanzer");
+  SetProp(P_LONG, 
+	  BS("Ein silbern schimmernder Panzer, der ganz aus Kristall zu sein "
+	     "scheint. Er ist unglaublich leicht und hindert kaum im Kampf."));
+  
+  AddDetail(({"kristall"}),
+	    "Der Kristall schimmert geheimnisvoll...");
+  
+  SetProp(P_INFO, 
+	  BS("Der Kristallpanzer kommt Dir irgendwie seltsam vor..."));
+  
+  SetProp(P_NAME, "Kristallpanzer");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_WEIGHT, 850);
+  SetProp(P_VALUE, 800);
+  SetProp(P_MATERIAL, MAT_QUARTZ);
+  SetProp(P_ARMOUR_TYPE, AT_ARMOUR);
+  SetProp(P_AC, 29);
+  
+  SetProp(P_ITEMD_NO_MAGIC, 1);
+  
+  SetProp(P_WEAR_FUNC, TO);
+  SetProp(P_REMOVE_FUNC, TO);
+  
+  SUID;
+  
+  activated=0;
+  timeout=0;
+}
+
+int WearFunc(object me, int silent) 
+{
+  object pl;
+  
+  if(!activated) return 1;
+  
+  if(!interactive(MENV)) return 0;
+  
+  if(!objectp(counterpart))
+    {
+      write(BS("Dein Kristallpanzer beginnt ploetzlich zu vibrieren..."));
+      
+      RemoveCmd(0);
+      
+      call_out("wegmitdir", 0);
+      
+      return 0;
+    }
+  
+  if(!objectp(pl=counterpart->QueryWorn())) return 1;
+  
+  if(IS_SEER(MENV))
+    if(IS_SEER(pl)) 
+      return 1;
+    else
+      return write(BS("Dein Kristallpanzer laesst sich nicht anziehen, da "+
+		      CAP(getuid(pl))+" noch kein"+
+		      (pl->QueryProp(P_GENDER)==FEMALE ? "e Seherin":" Seher")+
+		      " ist!")), 0;
+  
+  if((!IS_SEER(MENV)) && (!IS_SEER(pl))) return 1;
+  
+  return write(BS("Dein Kristallpanzer laesst sich nicht anziehen, da "+
+		  CAP(getuid(pl))+" bereits Seher"+
+		  (pl->QueryProp(P_GENDER)==FEMALE ? "in":"")+
+		  " ist und Du noch nicht!")), 0;
+}         
+
+int RemoveFunc(object me, int silent)
+{
+    object pl;
+  
+  if(!activated) return 1;
+  
+  if(!objectp(counterpart))
+    {
+      write(BS("Dein Kristallpanzer beginnt ploetzlich zu vibrieren..."));
+      
+      RemoveCmd(0);
+      
+      call_out("wegmitdir", 0);
+      
+      return 1;
+    }
+  
+  if(preparing)
+    {
+      storno_koerper_tausch();
+      counterpart->storno_koerper_tausch();
+    }
+
+  return 1;
+}
+
+void wegmitdir()
+{
+  DoUnwear();
+  
+  if(MENV)
+    tell_object(MENV, 
+	BS("Der Kristallpanzer zerbroeckelt in kleine Kristallteilchen!"));
+  
+  remove(1);
+}
+
+void init()
+{
+  if(!is_clone(ME)) return;
+  ::init();
+  
+  if(!MENV)
+    {
+      call_out("remove", 0);
+      return;
+    }
+
+  if(activated) return;
+  
+  if(present("\nTKP_ACTIVATED", MENV))
+    {
+      if(interactive(MENV))
+	tell_object(MENV,
+	    BS("Der Kristallpanzer beginnt ploetzlich zu vibrieren..."));
+      else
+	tell_room(MENV,
+	  BS("Der Kristallpanzer beginnt ploetzlich zu vibrieren..."));
+      
+      call_out("zerspringen", 4);
+      return;
+    }
+  
+  if(present("\nTRANSPORTKRISTALLPANZER 2", MENV))
+    call_out("activate", 3);
+}
+
+void zerspringen()
+{
+  if(!present("\nTKP_ACTIVATED", MENV)) return;
+  
+  if(interactive(MENV))
+    tell_object(MENV,
+		BS("Der Kristallpanzer vibriert immer heftiger, bis er "
+		   "schliesslich in lauter kleine Kristallsplitter "
+		   "zerbroeckelt."));
+  else
+    tell_room(MENV,
+	      BS("Der Kristallpanzer vibriert immer heftiger, bis er "
+		 "schliesslich in lauter kleine Kristallsplitter "
+		 "zerbroeckelt."));
+  
+  remove(1);
+}
+
+int keine_magier(object pl)
+{
+  if(!objectp(pl)) return 0;
+  
+  if(IS_WIZARD(pl)) return 0;
+  
+  return 1;
+}
+
+varargs void activate(object what)
+{
+  object cp;
+  object *pls;
+  string s;
+  int i;
+
+  if(activated) return;
+  
+  SetProp(P_CURSED, 0);  
+  DoUnwear();
+  
+  if(!objectp(what))
+    {
+      if(!cp=present("\nTRANSPORTKRISTALLPANZER 2", MENV)) return;
+      
+      cp->activate(ME);
+      
+      if(interactive(MENV))
+	{
+	  tell_object(MENV, 
+		      BS("Ploetzlich beginnt der Kristallpanzer mit dem "
+			 "zweite Kristallpanzer in einem eigenartigen "
+			 "Rythmus an zu schwingen..."));
+	  
+	  pls=filter_array(users(), "keine_magier");
+	  
+	  s=BS(CAP(getuid(MENV))+" hat soeben UiThors entdeckt!!");
+	  
+	  for(i=sizeof(pls)-1;i>=0;i--)
+	    tell_object(pls[i], s);
+
+	  DB("*** Zwillingspanzer entdeckt: "+CAP(getuid(MENV))+"\n");
+	  
+	  write_file(LOGFILE,
+		     dtime()+": "+CAP(getuid(MENV))+" aktiviert UiThors.\n");
+	}
+    }
+  else
+    cp=what;
+
+  activated=1;
+  counterpart=cp;
+
+  RemoveId("\nTRANSPORTKRISTALLPANZER");
+  AddId(({"ITEMD_UNIQUE_ITEM","NODESTRUCT","UNZERSTOERBAR",
+	    "\nTKP_ACTIVATED","uithors"}));
+	 
+  SetProp(P_WEAR_RESTRICTIONS, ([P_FROG:1, P_LEVEL:15, P_XP:2000000]));
+  
+  SetProp(P_INFO,
+	  BS("Dieser Kristallpanzer scheint eine Haelfte der sagenumwobenen "
+	     "UiThors zu sein. Werden beide Teile getragen, kann "
+	     "man mit dem elfischen Wort 'rhoathranna' den "
+	     "Teleportationszauber der Ruestungen aktivieren.")+
+	  BS("Mit dem elfischen Wort 'taith' kann man die ungefaehre Position "
+	     "des zweiten Teiles herausfinden, falls er einmal verloren "
+	     "gegangen ist."));
+  
+  //Bissi besser darfs sein, ist ja restricted;  
+  SetProp(P_VALUE, 15000);
+  SetProp(P_AC, 39);
+  
+  AddProp(P_DAM_PROTECTION, ([DT_MAGIC:1]));
+  SetProp(P_TEMPERATURE_PROTECTION, ([ T_COLD_PROT:5, T_HEAT_PROT:1 ]));
+  
+  SetProp(P_QUALITY_DECAY, 0);
+  SetProp(P_MAGIC, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NEVERDROP, 1);
+  
+  SetProp(P_SHORT, "UiThors, der pulsierende Kristallpanzer");
+  SetProp(P_NAME_ADJ, "pulsierend");
+  AddAdjective(({"pulsierender","pulsierenden"}));
+  
+  SetProp("itemd", 
+	  ({"kommt im Silberland nur zwei mal vor", 
+	      "schuetzt vor mehr Schaeden", 
+	      "nuetzt sich ueberhaupt nicht ab", 
+	      "veraendert den Temperaturschutz", 
+	      "ist wertvoller", "ist unzerstoerbar",
+	      "wehrt zusaetzlichen Schaden ab"}));
+  
+  SetProp(P_LONG,
+	  BS("UiThors ist ein silbern schimmernder Panzer, der ganz aus "
+	     "Kristall zu sein scheint. Er ist unglaublich leicht und "
+	     "hindert kaum im Kampf.")+
+	  BS("Der Legende nach gibt es im Silberland ueberhaupt nur zwei "
+	     "dieser Ruestungen. Du kannst Dich gluecklich schaetzen, diese "
+	     "eine davon in Deinen Haenden zu halten. ")+
+	  BS("Er ist von einer seltsamen, magischen Aura umgeben."));  
+  
+  AddCmd(({"rhoathranna"}), "koerper_tausch");
+  AddCmd(({"taith"}), "wo_ist_das_gegenstueck");
+}
+
+nosave int wo_ist_das_gegenstueck(string str)
+{
+  object ecp;
+  string *fn;
+  string wo;
+  
+  if(!activated) return 0;
+
+  notify_fail("");
+  
+  if(objectp(counterpart))
+    if(objectp(ecp=ENV(counterpart)))
+    {
+      if(QueryWorn()!=TP) 
+	return write(BS("Dazu musst Du den Kristallpanzer tragen.")), 0;
+      
+      write(BS("Du konzentrierst Dich auf den Kristallpanzer und intonierst "
+	       "das uralte elfische Wort 'taith' ..."));
+      
+      if(!ecp->id("Raum"))
+	{
+	  if(interactive(ecp))
+	    if(ecp==TP)
+	      return write(BS("Du hast den zweiten Kristallpanzer doch bei "
+			      "Dir?!")), 1;
+	    else
+	      return write(BS("Du kannst erkennen, dass "+CAP(getuid(ecp))+
+			      " den zweiten Kristallpanzer hat.")), 1;
+	  
+	  if(query_once_interactive(ecp))
+	    return write(BS("Du kannst erkennen, dass "+CAP(getuid(ecp))+
+			    " den zweiten Kristallpanzer im Reich der "
+			    "Netztoten bei sich hat.")), 1;
+	  
+	  if(living(ecp))
+	    return write(BS("Du kannst erkennen, dass "+ecp->name(WER)+
+			    " den zweiten Kristallpanzer erbeutet hat.")), 1;
+	  
+	  if((ENV(ecp)) && (interactive(ENV(ecp))))
+	    return write(BS("Du kannst erkennen, dass "+CAP(getuid(ENV(ecp)))+
+			    " den zweiten Kristallpanzer hat.")), 1;
+
+	  if((ENV(ecp)) && (query_once_interactive(ENV(ecp))))
+	    return write(BS("Du kannst erkennen, dass "+CAP(getuid(ENV(ecp)))+
+			    " den zweiten Kristallpanzer im Reich der "
+			    "Netztoten bei sich hat.")), 1;
+	  
+	  return write(BS("Du kannst es nicht genau erkennen, aber scheinbar "
+			  "befindet sich zweite Kristallpanzer irgendwo in "
+			  "einer Kiste oder einem Beutel...")), 1;
+	}
+      
+      fn=explode(file_name(ecp), "/");
+      
+      switch(fn[0])
+	{
+	case "d":
+	  wo=CAP(fn[1]);
+	  
+	  if(fn[1]=="seher")
+	    wo="Seherhaus";
+	  break;
+	  
+	case "gilden":
+	  wo="Gildengebiet";
+	  break;
+	case "players":
+	  wo="Magiergebiet";
+	default:
+	  wo="Unauffindbar";
+	}
+      
+      return write(BS("Du kannst es nicht genau erkennen, aber scheinbar "
+		      "liegt der zweite Kristallpanzer irgendwo einsam und "
+		      "verlassen herum ("+wo+").")), 1;
+    }
+
+  write(BS("Dein Kristallpanzer beginnt ploetzlich zu vibrieren..."));
+  
+  if(QueryWorn()==TP) DoUnwear();
+  
+  write(BS("Der Kristallpanzer zerbroeckelt in kleine Kristallteilchen!"));
+  
+  RemoveCmd(0);
+  
+  call_out("remove", 0);
+  
+  return 1;
+}
+
+varargs int PathOk(object who)
+{
+  string *excluded;
+  string path;
+  int i;
+
+  if(!ENV(who)) return 0;
+  
+  if(is_clone(ENV(who))) return 0;
+  
+  path=explode(file_name(ENV(who)), "#")[0];
+  
+  if(file_date(path+".lpc")==0) return 0;
+  
+  excluded=explode(read_file(NO_TPORT_SAVE), "\n");
+
+  for(i=sizeof(excluded)-1;i>=0;i--)
+    if(sizeof(regexp(({path}), "^"+excluded[i])))
+      return 0;
+
+  return 1;
+}
+
+int QueryPreparing()
+{
+  return preparing;
+}
+
+nosave int koerper_tausch(string str)
+{
+  object pl2;
+  
+  if(!activated) return 0;
+  
+  if(!objectp(counterpart))
+    {
+      write(BS("Dein Kristallpanzer beginnt ploetzlich zu vibrieren..."));
+      
+      if(QueryWorn()==TP) DoUnwear();
+      
+      write(BS("Der Kristallpanzer zerbroeckelt in kleine Kristallteilchen!"));
+      
+      RemoveCmd(0);
+      
+      call_out("remove", 0);
+      
+      return 1;
+    }
+
+  if(preparing)
+    {
+      while (remove_call_out("koerper_tausch_final")!=-1);
+      
+      preparing=0;
+      
+      counterpart->storno_koerper_tausch();
+      
+      return write(BS("Du legst Dir beide Haende auf die Brust und sprichst "
+		      "die elfischen Worte 'Rhoathranna'")+
+		   BS("Der Kristallpanzer wird wieder still...")), 1;
+    }
+  
+  if(QueryWorn()!=TP) 
+    return write(BS("Dazu musst Du den Kristallpanzer tragen.")), 1;
+  
+  if(TP->InFight())
+    return write(BS("Du kannst Dich im Kampf darauf nicht konzentrieren!")), 1;
+  
+  if(TP->QueryProp(P_RESTING))
+    return write(BS("Dazu solltest Du erst einmal fertigrasten!")), 1;
+  
+  if(!objectp(pl2=ENV(counterpart)))
+    return write(BS("Der Kristallpanzer kann sein Gegenstueck nicht "
+		    "fokussieren!")), 1;
+  
+  if(pl2->InFight())
+    return write(BS(pl2->Name(WER)+" kaempft gerade. Der Kristallpanzer "
+		    "kann sein Gegenstueck nicht genau fokussieren!")), 1;
+  
+  if(!interactive(pl2))
+    return write(BS("Der Kristallpanzer kann sein Gegenstueck nicht "
+		    "fokussieren!")), 1;
+  
+  if(counterpart->QueryWorn()!=pl2)
+    return write(BS("Dazu muss "+pl2->name(WER)+" den Kristallpanzer "
+		    "tragen.")), 1;
+
+  if(pl2->QueryProp(P_RESTING))
+    return write(BS("Dazu sollte "+CAP(getuid(pl2))+" erst einmal "
+		    "fertigrasten!")), 1;
+  
+  if(present(pl2, ENV(TP)))
+    return write(BS("Du denkst Dir, dass das nur Verschwendung von Energie "
+		    "waere.")), 1;
+  
+  if(TP->QueryProp(P_SP)<MANACOST)
+    return write(BS("Dazu reicht Deine Magie nicht aus!")), 1;
+  
+  if(pl2->QueryProp(P_SP)<MANACOST)
+    return write(BS("Dazu reicht "+pl2->name(WESSEN)+
+		    " Magie nicht aus!")), 1;
+
+  if(counterpart->QueryPreparing())
+    {
+      tell_object(TP,
+		  BS("Du legst Dir beide Haende auf die Brust und sprichst "
+		     "die elfischen Worte 'Rhoathranna'")+
+		  BS("Dein Kristallpanzer beginnt ploetzlich zu summen und "
+		     "das Bild vor Deinen Augen beginnt zu verschwimmen..."));
+      
+      tell_object(pl2,
+		  BS(CAP(getuid(TP))+" hat nun ebenfalls den Kristallpanzer "
+		     "aktiviert..."));
+      
+      SetProp(P_SHORT, "UiThors, der pulsierende Kristallpanzer (aktiviert)");
+
+      preparing=1;
+      
+      call_out("koerper_tausch_final", 3);
+      
+      counterpart->stopit();
+      
+      TP->SetProp(P_PARALYZED,
+	  ([PARALYZE_TIME: 5,
+	    PARALYZE_MSG: "Du befindest Dich in einem seltsamen Sog.\n"]));
+
+      pl2->SetProp(P_PARALYZED,
+	  ([PARALYZE_TIME: 5,
+	    PARALYZE_MSG: "Du befindest Dich in einem seltsamen Sog.\n"]));
+      
+      return 1;
+    }
+    
+  if(next>time())
+    return write(BS("Die Magie der beiden Kristallpanzer hat sich noch "
+		    "nicht wieder erholt, du solltest noch etwas "
+		    "warten!")), 1;
+
+  if(ENV(TP)->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN]==TT_UNDERWATER)
+    return write(BS("Die Magie Deines Kristallpanzers wirkt unter Wasser "
+		    "nicht.")), 1;
+
+  if(ENV(pl2)->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN]==TT_UNDERWATER)
+    return write(BS("Die Magie von "+pl2->name(WESSEN)+" Kristallpanzer "
+		    "wirkt unter Wasser nicht.")), 1;
+
+  if((!PathOk(TP)) || (ENV(TP)->QueryProp(P_NO_TPORT)))
+    return write(BS("Die Magie Deiner Umgebung erlaubt keine Teleportation.")),
+      1;
+  
+  if((!PathOk(pl2)) || (ENV(pl2)->QueryProp(P_NO_TPORT)))
+    return write(BS("Die Magie von "+pl2->name(WESSEN)+" Umgebung erlaubt "
+		    "keine Teleportation.")), 1;
+
+  tell_object(TP,
+	      BS("Du legst Dir beide Haende auf die Brust und sprichst die "
+		 "elfischen Worte 'Rhoathranna'")+
+	      BS("Dein Kristallpanzer beginnt ploetzlich zu summen und das "
+		 "Bild vor Deinen Augen beginnt zu verschwimmen..."));
+  
+  tell_object(pl2,
+	      BS("Dein Kristallpanzer beginnt ploetzlich leicht zu summen...")+
+	      BS(CAP(getuid(TP))+" hat die Magie der beiden Panzer aktiviert.")+
+	      BS("Du musst nun ebenfalls mit dem elfischen Wort 'rhoathranna' "
+		 "Deine Ruestung aktivieren, sodass der Teleportationszauber "
+		 "aktiviert werden kann.")+
+	      BS("Lange hast Du dafuer jedoch nicht Zeit."));
+  
+  SetProp(P_SHORT, "UiThors, der pulsierende Kristallpanzer (aktiviert)");  
+
+  call_out("koerper_tausch_final", 30);
+  
+  preparing=1;
+
+  return 1;
+}
+
+void next_time()
+{
+  next=time()+TIME2RECOVER;
+}
+
+void stopit()
+{
+  if((PO) && (explode(file_name(PO), "#")[0]==explode(file_name(TO), "#")[0]))
+    while(remove_call_out("koerper_tausch_final")!=-1);
+}
+
+void koerper_tausch_final()
+{
+  object pl, pl2, env_pl, env_pl2;
+
+  if(!activated) return;
+  
+  if(!objectp(counterpart))
+    {
+      tell_object(pl,BS("Dein Kristallpanzer beginnt ploetzlich zu vibrieren..."));
+
+      if(QueryWorn()==pl) DoUnwear();
+      
+      tell_object(pl,BS("Der Kristallpanzer zerbroeckelt in kleine Kristallteilchen!"));
+      
+      RemoveCmd(0);
+      
+      call_out("remove", 0);
+      
+      return;
+    }
+
+  if(!interactive(pl=MENV))
+    {
+      counterpart->storno_koerper_tausch();
+      storno_koerper_tausch();
+      return;
+    }
+
+  if(QueryWorn()!=pl)
+    {
+      tell_object(pl,BS("Fuer die Teleportation musst Du den Kristallpanzer tragen."));
+
+      counterpart->storno_koerper_tausch();
+      storno_koerper_tausch();
+
+      return;
+    }
+  
+  if(!objectp(pl2=ENV(counterpart)))
+    {
+      tell_object(pl,BS("Der Kristallpanzer kann sein Gegenstueck nicht "
+	       "fokussieren!"));
+      
+      counterpart->storno_koerper_tausch();
+      storno_koerper_tausch();
+      
+      return;
+    }
+    
+  if(!interactive(pl2))
+    {
+      tell_object(pl,BS("Der Kristallpanzer kann sein Gegenstueck nicht "
+	       "fokussieren!"));
+      
+      counterpart->storno_koerper_tausch();
+      storno_koerper_tausch();
+      
+      return;
+    }
+  
+  if(!counterpart->QueryPreparing())
+    {
+      tell_object(pl,BS(pl2->Name(WER)+" hat den Kristallpanzer nicht aktiviert!"));
+      
+      counterpart->storno_koerper_tausch();
+      storno_koerper_tausch();
+      
+      return;
+    }
+  
+  if(counterpart->QueryWorn()!=pl2)
+    {
+      tell_object(pl,BS("Fuer die Teleportation muss "+pl2->name(WER)+" den "
+	       "Kristallpanzer tragen."));
+      
+      counterpart->storno_koerper_tausch();
+      storno_koerper_tausch();
+      
+      return;
+    }
+
+  if((!objectp(env_pl=ENV(pl))) ||
+     (!objectp(env_pl2=ENV(pl2))))
+    {
+      counterpart->storno_koerper_tausch();
+      storno_koerper_tausch();
+      
+      return;
+    }
+
+  if(pl->InFight())
+    {
+      tell_object(pl,
+		  BS("Du kannst Dich im Kampf nicht auf die Teleportation "
+		     "konzentrieren!"));
+
+      tell_object(pl2,
+		  BS(pl->Name(WER)+" kann sich im Kampf nicht auf die "
+		     "Teleportation konzentrieren!"));
+
+      counterpart->storno_koerper_tausch();
+      storno_koerper_tausch();
+      
+      return;
+    }
+
+  if(pl2->InFight())
+    {
+      tell_object(pl2, 
+		  BS("Du kannst Dich im Kampf nicht auf die Teleportation "
+		     "konzentrieren!"));
+
+      tell_object(pl,
+		  BS(pl2->Name(WER)+" kann sich im Kampf nicht auf die "
+		     "Teleportation konzentrieren!"));
+
+      counterpart->storno_koerper_tausch();
+      storno_koerper_tausch();
+      
+      return;
+    }
+  
+  if((present(pl2, env_pl)) || 
+     (pl->QueryProp(P_RESTING)) || (pl2->QueryProp(P_RESTING)))
+    {
+      tell_object(pl,
+		  BS("Ploetzlich erfasst Dich eine Rueckkoppelung von "+
+		     pl2->name(WESSEN)+" Kristallpanzer..."));
+
+      pl->AddHp(-5-random(2));
+
+      tell_object(pl2,
+		  BS("Ploetzlich erfasst Dich eine Rueckkoppelung von "+
+		     pl->name(WESSEN)+" Kristallpanzer..."));
+
+      pl2->AddHp(-5-random(2));
+
+      counterpart->storno_koerper_tausch();
+      storno_koerper_tausch();
+
+      return;
+    }
+
+  if((env_pl->QueryProp(P_ENVIRONMENT)) &&
+     (env_pl->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN]==TT_UNDERWATER))
+    {
+      tell_object(pl,
+		  BS("Die Magie Deines Kristallpanzers wirkt unter Wasser "
+		     "nicht."));
+      
+      tell_object(pl2,
+		  BS("Die Magie von "+pl->name(WESSEN)+" Kristallpanzer "
+		     "wirkt unter Wasser nicht."));
+      
+      counterpart->storno_koerper_tausch();
+      storno_koerper_tausch();
+      
+      return;
+    }
+  
+  if((env_pl2->QueryProp(P_ENVIRONMENT)) &&
+     (env_pl2->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN]==TT_UNDERWATER))
+    {
+      tell_object(pl2,
+		  BS("Die Magie Deines Kristallpanzers wirkt unter Wasser "
+		     "nicht."));
+      
+      tell_object(pl,
+		  BS("Die Magie von "+pl2->name(WESSEN)+" Kristallpanzer "
+		     "wirkt unter Wasser nicht."));
+      
+      counterpart->storno_koerper_tausch();
+      storno_koerper_tausch();
+      
+      return;
+    }
+  
+  if(pl->QueryProp(P_SP)<MANACOST)
+    {
+      tell_object(pl,
+		  BS("Da Du nicht maechtig genug bist, die Magie des "
+		     "Kristallpanzers zu beherrschen, erfasst Dich eine "
+		     "magische Rueckkoppelung..."));
+
+      tell_object(pl2,
+		  BS(pl->Name(WER)+" ist nicht maechtig genug, um die Magie "
+		     "des Kristallpanzers zu beherrschen!"));
+      
+      pl->AddSp(-MANACOST);
+
+      counterpart->storno_koerper_tausch();
+      storno_koerper_tausch();
+
+      return;
+    }
+    
+  if(pl2->QueryProp(P_SP)<MANACOST)
+    {
+      tell_object(pl2,
+		  BS("Da Du nicht maechtig genug bist, die Magie des "
+		     "Kristallpanzers zu beherrschen, erfasst Dich eine "
+		     "magische Rueckkoppelung..."));
+
+      tell_object(pl,
+		  BS(pl2->Name(WER)+" ist nicht maechtig genug, um die Magie "
+		     "des Kristallpanzers zu beherrschen!"));
+      
+      pl2->AddSp(-MANACOST);
+
+      counterpart->storno_koerper_tausch();
+      storno_koerper_tausch();
+
+      return;
+    }
+
+  if((!PathOk(pl)) || (ENV(pl)->QueryProp(P_NO_TPORT)))
+    {
+      tell_object(pl,
+		  BS("Die Magie Deiner Umgebung erlaubt keine Teleportation"));
+
+      tell_object(pl2,
+		  BS("Die Magie von "+pl->name(WESSEN)+" Umgebung erlaubt "
+		     "keine Teleportation"));
+      
+      counterpart->storno_koerper_tausch();
+      storno_koerper_tausch();
+
+      return;
+    }
+  
+  if((!PathOk(pl2)) || (ENV(pl2)->QueryProp(P_NO_TPORT)))
+    {
+      tell_object(pl,
+		  BS("Die Magie von "+pl2->name(WESSEN)+" Umgebung erlaubt "
+		     "keine Teleportation"));
+      
+      tell_object(pl2,
+		  BS("Die Magie Deiner Umgebung erlaubt keine Teleportation"));
+      
+      counterpart->storno_koerper_tausch();
+      storno_koerper_tausch();
+
+      return;
+    }
+
+  pl->SetProp(P_PARALYZED, 0);
+
+  pl->AddSp(-MANACOST-random(20));
+  
+  tell_object(pl,
+	      BS("Der Kristallpanzer huellt Dich in eine dimensionale Blase. "
+		 "Das Bild vor Deinen Augen verschwimmt immer mehr..."));
+
+  pl2->SetProp(P_PARALYZED, 0);
+  
+  pl2->AddSp(-MANACOST-random(20));
+  
+  tell_object(pl2,
+	      BS("Der Kristallpanzer huellt Dich in eine dimensionale Blase. "
+		 "Das Bild vor Deinen Augen verschwimmt immer mehr..."));
+
+  next_time();
+  counterpart->next_time();
+  
+  call_other(THEVOID, "???");
+
+  pl2->move(THEVOID, M_TPORT+M_NO_SHOW+M_NO_ATTACK+M_SILENT);
+  if(!present(pl2, find_object(THEVOID)))
+    {
+      tell_object(pl,
+		  BS("Ploetzlich erfasst Dich eine Rueckkoppelung und die "
+		     "Energie des Kristallpanzers entlaedt sich!")), 1;
+      
+      DB("*** TKPANZER ("+CAP(getuid(pl))+" - "+pl2->name(WER)+") "
+	 ": pl2 not present in VOID!!\n");
+      
+      write_file(LOGFILE,
+		 dtime()+" :\n"+
+		 "  "+CAP(getuid(pl))+" - "+file_name(env_pl)+"\n"+
+		 "  "+pl2->name(WER)+" - "+file_name(env_pl2)+"\n"+
+		 " Error: pl2 not present in VOID after move.\n");
+      
+      return;
+    }
+  
+  pl->move(THEVOID, M_TPORT+M_NO_SHOW+M_NO_ATTACK+M_SILENT);
+  if(!present(pl, find_object(THEVOID)))
+    {
+      tell_object(pl,
+		  BS("Ploetzlich erfasst Dich eine Rueckkoppelung und die "
+		     "Energie des Kristallpanzers entlaedt sich!")), 1;
+
+      tell_object(pl2,
+		  BS("Ploetzlich erfasst Dich eine Rueckkoppelung und die "
+		     "Energie des Kristallpanzers entlaedt sich!")), 1;
+      
+      pl2->move(env_pl2, M_NOCHECK+M_NO_SHOW+M_NO_ATTACK+M_SILENT);
+
+      DB("*** TKPANZER ("+CAP(getuid(pl))+" - "+pl2->name(WER)+") "
+	 ": pl not present in VOID!!\n");
+
+      write_file(LOGFILE,
+		 dtime()+" :\n"+
+		 "  "+CAP(getuid(pl))+" - "+file_name(env_pl)+"\n"+
+		 "  "+pl2->name(WER)+" - "+file_name(env_pl2)+"\n"+
+		 " Error: pl not present in VOID after move.\n");
+      
+      return;
+    }
+  
+  pl2->move(env_pl, M_TPORT+M_NO_SHOW+M_NO_ATTACK+M_SILENT);
+  if(!present(pl2, env_pl))
+    {
+      tell_object(pl2,
+		  BS("Ploetzlich erfasst Dich eine Rueckkoppelung und die "
+		     "Energie des Kristallpanzers entlaedt sich!")), 1;
+
+      tell_object(pl,
+		  BS("Ploetzlich erfasst Dich eine Rueckkoppelung und die "
+		     "Energie des Kristallpanzers entlaedt sich!")), 1;
+
+      pl2->move(env_pl2, M_NOCHECK+M_NO_SHOW+M_NO_ATTACK+M_SILENT);
+      pl->move(env_pl, M_NOCHECK+M_NO_SHOW+M_NO_ATTACK+M_SILENT);
+      
+      DB("*** TKPANZER ("+CAP(getuid(pl))+" - "+pl2->name(WER)+") "
+	 ": pl2 not present in env_pl!!\n");
+      
+      write_file(LOGFILE,
+		 dtime()+" :\n"+
+		 "  "+CAP(getuid(pl))+" - "+file_name(env_pl)+"\n"+
+		 "  "+pl2->name(WER)+" - "+file_name(env_pl2)+"\n"+
+		 " Error: pl2 not present in env_pl after move.\n");
+      
+      return;
+    }
+  
+  pl->move(env_pl2, M_TPORT+M_NO_SHOW+M_NO_ATTACK+M_SILENT);
+  if(!present(pl, env_pl2))
+    {
+      tell_object(pl,
+		  BS("Ploetzlich erfasst Dich eine Rueckkoppelung und die "
+		     "Energie des Kristallpanzers entlaedt sich!")), 1;
+
+      tell_object(pl2,
+		  BS("Ploetzlich erfasst Dich eine Rueckkoppelung und die "
+		     "Energie des Kristallpanzers entlaedt sich!")), 1;
+      
+      pl2->move(env_pl2, M_NOCHECK+M_NO_SHOW+M_NO_ATTACK+M_SILENT);
+      pl->move(env_pl, M_NOCHECK+M_NO_SHOW+M_NO_ATTACK+M_SILENT);
+      
+      DB("*** TKPANZER ("+CAP(getuid(pl))+" - "+pl2->name(WER)+") "
+	 ": pl not present in env_pl2!!\n");
+      
+      write_file(LOGFILE,
+		 dtime()+" :\n"
+		 "  "+CAP(getuid(pl))+" - "+file_name(env_pl)+"\n"+
+		 "  "+pl2->name(WER)+" - "+file_name(env_pl2)+"\n"+
+		 " Error: pl not present in env_pl2 after move.\n");
+      
+      return;
+    }
+  
+  tell_object(pl,
+	      BS("Langsam wird Dein Blick wieder scharf und Du findest Dich an "
+		 "einem anderen Ort wieder..."));
+  
+  tell_room(env_pl2, BS(pl2->Name(WER)+" sieht ploetzlich anders aus..."),
+	    ({pl}));
+  
+  tell_object(pl2,
+	      BS("Langsam wird Dein Blick wieder scharf und Du findest Dich "
+		 "an einem anderen Ort wieder..."));
+  
+  tell_room(env_pl, BS(pl->Name(WER)+" sieht ploetzlich anders aus..."),
+	    ({pl2}));
+  
+  DB("*** TKPANZER ("+CAP(getuid(pl))+" - "+pl2->name(WER)+") : Alles Ok!\n");
+  
+  if(pl->QueryProp(P_NEXT_SPELL_TIME)< time()+SPELLPAUSE)
+    pl->SetProp(P_NEXT_SPELL_TIME, time()+SPELLPAUSE);
+  
+  storno_koerper_tausch();
+  counterpart->storno_koerper_tausch();
+  
+  if(pl2->QueryProp(P_NEXT_SPELL_TIME)< time()+SPELLPAUSE)
+    pl2->SetProp(P_NEXT_SPELL_TIME, time()+SPELLPAUSE);
+
+  write_file(LOGFILE,
+	     dtime()+" :\n"
+	     " "+CAP(getuid(pl))+" - "+file_name(env_pl)+"\n"
+	     " "+CAP(getuid(pl2))+" - "+file_name(env_pl2)+"\n");
+}
+
+void reset()
+{
+  if(!is_clone(ME)) return;
+  ::reset();
+  
+  if(!MENV) 
+    {
+      call_out("remove", 0);
+      
+      return;
+    }
+  
+  if(query_once_interactive(MENV))
+    {
+      timeout=0;
+
+      return;
+    }
+  
+  if(timeout > 2)
+    {
+      if(objectp(counterpart))
+	counterpart->remove();
+      
+      call_out("remove", 0);
+      
+      return;
+    }
+  
+  timeout++;
+}
+
+varargs int remove(int silent)
+{
+  SetProp(P_CURSED, 0);
+  
+  return ::remove(silent);
+}
+
+string name(int casus, int daemon)
+{
+  string n;
+
+  n=::name(casus, daemon);
+
+  if(!activated) return n;
+  
+  if((TP) && (TP->QueryProp(P_TTY)=="ansi"))
+    return VT_GREEN+VT_TA_B+n+VT_NORMAL;
+  else 
+    if((TP) && (TP->QueryProp(P_TTY)=="vt100"))
+      return VT_TA_B+n+VT_NORMAL;
+
+  return n;
+}
+
+string Name(int casus, int daemon)
+{
+  return capitalize(name(casus,daemon));
+}
+
+string short()
+{
+  string s;
+
+  if(QueryProp(P_WORN)) 
+    s=" ("+(QueryProp(P_WORN_TEXT)||"getragen")+")"; 
+  else 
+    s="";
+  
+  if(!activated) return QueryProp(P_SHORT)+s+".\n";
+  
+  if((TP) && (TP->QueryProp(P_TTY)=="ansi"))
+    return VT_GREEN+VT_TA_B+QueryProp(P_SHORT)+VT_NORMAL+s+".\n"; 
+  else 
+    if((TP) && (TP->QueryProp(P_TTY)=="vt100"))
+      return VT_TA_B+QueryProp(P_SHORT)+VT_NORMAL+s+".\n";
+
+  return QueryProp(P_SHORT)+s+".\n";
+}
+
+mixed Dump()
+{
+  return ({activated, counterpart, (counterpart ? environment(counterpart) : "NO ENVIRONMENT!")});
+}
+
+/*
+Absender: Woody
+Abgesandt aber von: Woody
+An: Protheg
+Cc: Rage, Woody, Zordan
+Datum: Fre, 13. Sep 2002, 14:24:47
+Titel: Dein Balance-Antrag "R: Zwillingsruestung (Koerpertauscher)"
+
+Hallo Protheg!
+
+Dein Antrag wird von der Balance ohne nochmalige Pruefung GENEHMIGT,
+vorausgesetzt, Du fuehrst noch im folgenden erklaerte Aenderung(en)
+durch.
+
+Bemerkungen: Unique, und Stimmung. Und Rest: siehe Kommentare...
+
+Dein Antrag vom Die, 13. Aug 2002, 13:29:14:
+Betreffend: R: Zwillingsruestung (Koerpertauscher)
+---------------------------------------------------------------------------
+Filename:  /d/kristallwald/protheg/elessar/armour/tkpanzer.c
+P_ARMOUR_TYPE: Panzer                                                          
+P_AC: 29
+P_DAM_PROTECTION: nope
+P_TEMPERATURE_PROTECTION: nope
+DefendFunc(): nein
+Beschraenkungen (P_WEAR_RESTRICTIONS o.ae.): wenn zwillingsruestung aktiviert 
+-> P_WEAR_RESTRICTIONS, ([P_FROG:1, P_LEVEL:10, P_XP:2000000]));
+Beschaffung/Aufwand: Ziemlich harter NPC (Kristallinwesen), welches durch 
+physischen Schaden nur schwer verletzbar ist (Staerke kann man nachjustieren 
+;) )
+Vor-/Nachteile: Liegt die Ruestung mehr als 1 reset herum und ist aktiviert, 
+so loest sie sich auf...
+Besonderheiten: Werte sind aus dem Standard-Kristallpanzer der Elfenwaechter 
+in Elessar uebernommen... P_VALUE habe ich hinuntergesetzt...
+Bemerkungen: Hat man 2 dieser (nichtaktiven) Ruestungen im Inv beginnen sie 
+sich zu veraendern und sind fortan voneinander abhaengig. Ueber ein Cmd kann 
+man im 5 minuten-abstand und mit 55MP Kosten (fuer beide Spieler) den standort 
+mit einem spieler tauschen (beide muessen jeweils einen aktiven panzer 
+tragen). Zusaetzlich gibt es ein Cmd, mit dem man den ungefaehren Standort des 
+Objektes herausbekommt, wenn das Gegenstueck verloren gegangen ist.
+---------------------------------------------------------------------------
+
+Kommentare:
+---------------------------------------------------------------------------
+Kommentar von Zordan vom Don, 22. Aug 2002, 23:18:36:
+Ich finde, es sollte ohne Kompromiss auch einfach mal schiefgehen koennen,
+d.h. die Teleportation findet einfach nicht statt, oder einer der Spieler
+landet irgendwo im Mud. Was mich ein wenig befaellt ist, dass man einem
+"Missbrauch" da niemals einen Riegel vorschieben kann. Ich kann mit einem
+Level 1 Spieler jederzeit meinen High Level Player "retten". Also das mindeste
+ist, dass die Teleportation nicht im Kampf geht, besser sogar, der letzte
+Kampf muss MINDESTENS 1 Minute her sein! Daran aendert die 5 Minuten Regel
+Abstand auch nichts, die ich vielleicht sogar hoeher ansetzen wuerde. Was
+passiert, wenn ich die Ruestung einem Frosch-NPC gebe?
+Achja, bei zerspringen() ist es unnoetig, zwischen tell_object und tell_room
+zu unterscheiden. Es geht ja immer richtigerweise an MENV.
+Der andere Spieler sollte irgendwie zumindest die Chance zum Einspruch haben.
+Evtl. ueber die Ignore-Liste?
+Die Kosten sollten ein wenig Random() sein, dass macht es interessanter.
+Hm, vielleicht sollte der Level-Unterschied zwischen den beiden Spielern <=20
+sein? *gruebel* ich hab irgendwie doch ein ungutes Gefuehl bzgl. Missbrauch.
+Ist das wirklich alles gut durchdacht von dir Protheg ????
+Es gibt ja z.B. auch Gebiete, wo man nicht rauskommen soll. Und diese haben
+auch nicht unbedingt NOTELEPORT gesetzt.
+---------------------------------------------------------------------------
+Kommentar von Rage vom Don, 29. Aug 2002, 12:15:28:
+Dieses Mal ein Kommentar, ohne extra einen Blick auf das File selbst zu
+werfen:
+Die Idee der Zwillingsruestung (merkwuerdiger Name) gefaellt mir schon mal
+sehr gut. Das jetzt ein aber kommt, ist auch klar ;-)
+* Der Panzer sollte erst fuer Seher zu tragen sein, damit keine                
+Rettungsaktionen mit 1lvl Spieler stattfinden koennen.
+* Der Zeitpunkt, ab dem man den Panzer wieder einsezten kann sollte random
+zwischen 8 und 12 Minuten liegen, auf alle Faelle deutlich mehr als 5 Minuten.
+* Beiden Spielern soll eindeutig klar sein, dass sie zu einem gewissen
+Zeitpunkt vertauscht werden, womit ich meine, dass man, wie Zordan schon
+gesagt hat, sowas wie ein Veto hat.
+* Ich stimme Zordan zu, dass der letzte Kampf doch eine gewisse Zeit
+zurueckliegen sollte.
+* MP fuer die Verwendung duerfen ruhig an die 80 sein und ein wenig mit
+random.
+* Kann noch nicht abschaetzen, wie leicht die Ruestung wirklich zu bekommen
+ist, aber falls tatsaechlich dann 100 Leute mit dem Panzer herum rennen, waere
+ich auf eine Beschraenkung von etwa 10 Zwillingspaaren, wobei wuenschenswert
+waere, wenn es bei Erstie mit Zweitie zusammen nicht funktioniert.
+Ich denke, das war das wichtigste von meinem Standpunkt.
+---------------------------------------------------------------------------
+Kommentar von Woody vom Mon,  2. Sep 2002, 16:09:38:
+Aaaaalso jetzt mal mein Senf... ich stimme Zordan und Rage zwar
+punktuell zu, wuerde aber nicht ganz so weit gehen, aus einem
+ganz klaren Grund heraus:                                        
+
+Die Zwillingsruestung (was fuer ein stimmungsloser Name! Bitte
+irgendwas symbolisches gegenteiliges finden, so wie "Licht" vs.
+"Schatten", aber was anderes (sonst waers zu sehr MG-ig *g*) )
+sollte unbedingt ein UNIQUE Item sein. Es kann nicht sein, dass
+es mehrere gibt und die Leute wie wild (trotz aller Beschraenkungen)
+einander in der Gegend rum-tausch-transen. Der Touch des "Beson-
+deren" sollte in dem Fall besonders stark spuerbar sein.
+
+Also:
+- Nur fuer Seher (Euer Argument mit Level 1 stimmt uebrigens nicht,
+  da sie ja dzt. schon auf Level >= 10 und 200k XP begrenzt ist)
+- auf keinen Fall wirksam bei NPCs
+- Letzter Kampf: 1 Minute waer OK finde ich, grad so dass man
+  nicht mitten aus dem Kampf rausgerissen wird, aber doch aus
+  einer brenzligen Situation gerettet werden kann.
+- Kosten: mir persoenlich egal solange >= 50 MP
+- Aufladezeit: 10 Minuten erscheint mir auch sinnvoll
+- Ablauf waer wohl besser wenn:
+    1) Spieler A signalisiert Bereitschaft zum Tausch                          
+    2) Spieler B loest Tausch aus
+    3) Spieler A kann vor Ausloesung seine Bereitschaft auch
+       wieder zurueckziehen
+  So waere gewaehrleistet, dass es zu keinen ungewollten
+  Taeuschen kommt.
+- 1ti und 2ti miteinander tauschen: bin ich auch dagegen.
+  2ti soll kein Rausklopp-Charakter fuern 1ti sein...
+- Wenn es unique ist, sehe ich uebrigens auch keinen Grund mehr,
+  dass es sich um eine eher schlechte Ruestung handelt, dann darf
+  sie auch mehr P_AC haben...
+
+Wie gesagt: Unique! Das ist das wichtigste.
+---------------------------------------------------------------------------
+
+Diese Nachricht wurde automatisch verschickt,
+wenn Du mit dem 'r' Kommando darauf antwortest,
+geht die Antwort direkt an Woody, der diesen
+Antrag abgeschlossen hat.
+
+In der Balance entscheidungsbefugt sind: Rage, Woody, Zordan.
+*/

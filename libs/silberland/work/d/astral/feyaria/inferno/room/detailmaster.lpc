@@ -1,0 +1,161 @@
+#include "../def.h"
+
+#define SAVEFILE ROOM "detailmaster"
+#define TEXTFILE ROOM "feuer.hpp"
+
+string *text_short;
+mapping text_long;
+mapping text_details;
+
+void Parse();
+void Customize(object room);
+
+void create()
+{
+  if(is_clone(this_object()))
+  {
+    destruct(this_object());
+    return;
+  }
+
+  seteuid(getuid(this_object()));
+
+  text_short   = ({ });
+  text_long    = ([ ]);
+  text_details = ([ ]);
+
+  restore_object(SAVEFILE);
+
+  return;
+}
+
+string *ExtractDetails(string s)
+{
+  string *temp;
+  int i;
+
+  temp = explode(s," ");
+  i = sizeof(temp);
+  while(i--) temp[i] = lowerstring(regreplace(temp[i],"[^a-zA-z]","",0));
+
+  temp = m_indices(mkmapping(temp));
+
+  return temp;
+}
+
+void Customize(object room)
+{
+  string s,race_s,det,fname,fpath;
+  int i,n;
+
+  string *todo,*done,*temp;
+
+  if(!objectp(room))
+  {
+    DB(sprintf("Ungueltiger Aufruf DETAILMASTER->Customize(%O)",room));
+    return;
+  }
+
+  todo = ({});
+  done = ({ });
+
+  fpath = file_name(room);
+  fname = explode(fpath,"/")[<1];
+
+  room->SetProp(P_INT_SHORT,text_short[random(sizeof(text_short))]);
+
+  s = "";
+  temp = sort_array(m_indices(text_long), #'<);
+
+  i = sizeof(temp);
+  while(i--)
+  {
+    n = sizeof(text_long[temp[i],0]);
+    s += text_long[temp[i],0][random(n)]+" ";
+  }
+  room->SetProp(P_INT_LONG, s);
+
+  temp = ExtractDetails(s);
+  i = sizeof(temp);
+  while(i--) if(member(text_details,temp[i])) todo += ({ temp[i] });
+
+  while(sizeof(todo))
+  {
+    det = todo[0];
+    todo -= ({ det });
+    done += ({ det });
+
+    if(member(text_details,det))
+    {
+      n = sizeof(text_details[det,0]);
+      s = text_details[det,0][random(n)];
+      room->AddDetail( ({det}), s);
+
+      temp = ExtractDetails(s);
+
+      i = sizeof(temp);
+      while(i--)
+      {
+        if((member(todo,temp[i])       == -1) &&
+           (member(done,temp[i])       == -1) &&
+           (member(text_details,temp[i])   )  ) todo += ({ temp[i]  });
+      }
+    }
+  }
+}
+
+void Parse()
+{
+  string *lines,s,currentdetail,*words,*z;
+  int nlines,i,j,key;
+
+  text_short   = ({ });
+  text_long    = ([ ]);
+  text_details = ([ ]);
+  words = ({ });
+  currentdetail = "";
+
+  lines = explode(read_file(TEXTFILE),"\n");
+  nlines = sizeof(lines);
+  DB(sprintf("%d read from %s",sizeof(lines),TEXTFILE));
+
+  for(i=0;i<nlines;i++) if((lines[i][0..0] != "#") || strlen(lines[i]) > 2)
+  {
+    if(lines[i][0..1] == "S:")
+    {
+      s = lines[i][2..];
+      words += explode(lines[i][2..]," ");
+      text_short += ({ s });
+    }
+    if(lines[i][0..1] == "L:")
+    {
+      sscanf(lines[i],"L:%d:%s",key,s);
+      if(member(text_long,key))
+      {
+        text_long[key,0] += ({ s });
+      }
+      else
+      {
+        text_long += ([key: ({ s }) ]);
+      }
+    }
+    if(lines[i][0..1] == "T:")
+    {
+      s = lines[i][2..];
+      if(member(text_details,currentdetail))
+      {
+        text_details[currentdetail,0] += ({ s });
+      }
+      else
+      {
+        text_details += ([currentdetail: ({ s }) ]);
+      }
+    }
+    if(lines[i][0..1] == "D:")
+    {
+      currentdetail = lines[i][2..];
+    }
+  }
+
+  save_object(SAVEFILE);
+}

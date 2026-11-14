@@ -1,0 +1,73 @@
+varargs int prep_abwehrhaltung(object caster, mapping sinfo, int flag) 
+{
+  if (caster->QueryProp(P_TMP_DEFEND_HOOK))
+  {
+    tell_object(caster, "Du hast schon einen aktiven Schutz!\n");
+    return 0;
+  }
+
+  if(!caster->InFight()) {
+    tell_object(caster, "Die Abwehrhaltung macht nur im Kampf Sinn!\n");
+    return 0;
+  }
+
+  if (!sizeof(caster->QueryArmours(AT_SHIELD)) )
+  {
+    tell_object(caster, "Du musst einen Schild tragen haben, um " 
+        "in Abwehrhaltung gehen zu koennen!\n");
+    return 0;
+  }
+  
+  if (!pay_for_spell(caster, sinfo, !flag))
+    return 0;
+
+  return 1;
+}
+
+int abwehrhaltung(object caster, mapping sinfo) 
+{
+  int suc;
+  int prot;
+  int dur;
+  object ob;
+
+  if (!prep_abwehrhaltung(caster, sinfo, 1))
+    return 0;
+
+  if ((suc = SpellSuccess(caster,sinfo)) <= 0)
+    return MISSERFOLG;
+
+  environment(caster)->Message(BS(sprintf("%s nimmt mit erhobener Waffe eine abwehrende Haltung ein.", caster->Name(WER,1))),
+      MSGFLAG_VISUAL, ([ MSGFLAG_EXCLUDE : ({ caster }) ]) );
+  tell_object(caster, "Du bringst deinen Speer in Position, um deine Gegner zu treffen, wenn sie dich attackieren.\n");
+
+  dur = 2+2*caster->QueryAttribute(A_DEX)/3+(suc/2000);
+  if (sinfo[SI_SKILLABILITY] == MAX_ABILITY)
+    dur *= 2 + random(2);
+
+  ob = clone_object("/gilden/amazonen/obj/awh");
+  if(ob->move(caster, M_NOCHECK) != 1)
+  {
+    destruct(ob);
+    tell_object(caster, "Du kannst die Abwehrhaltung nicht einnehmen.\n");
+    return 0;
+  } 
+
+  ob->start_remove(dur);
+  ob->setup(caster, suc, sinfo[SI_SKILLABILITY], sinfo[SI_SKILLPOINTS]);
+  caster->SetProp(P_TMP_DEFEND_HOOK, ({time()+dur, ob, "Abwehrhaltung"}));
+
+  if(present(GUILD_ITEM, caster)) present(GUILD_ITEM, caster)->RegisterEffect();
+  call_out("RemoveAbwehrhaltung", dur, caster);
+
+  return ERFOLG;
+}
+
+public void RemoveAbwehrhaltung(object caster)
+{
+  object *props;
+  tell_object(caster, "Du senkst deine Waffe und beendest die Abwehrhaltung.\n");
+  caster->SetProp(P_TMP_DEFEND_HOOK, 0);
+  if(objectp(present(GUILD_ITEM, caster))) present(GUILD_ITEM, caster)->UnregisterEffect("abwehrhaltung");
+}
+

@@ -1,0 +1,110 @@
+// Sonnenstrahl: Orakel-Angriffsspruch, trifft ein Ziel mit Licht und Feuer
+// und kann blenden.
+
+varargs int prep_sonnenstrahl(object caster, mapping sinfo, int flag)
+{
+  object victim;
+
+  victim = FindEnemyVictim(sinfo[SI_SKILLARG], caster,
+      "Wen willst Du mit einem Sonnenstrahl treffen?\n");
+  if (!victim)
+    return 0;
+
+  if (!pay_for_spell(caster, sinfo, !flag))
+    return 0;
+
+  environment(caster)->Message(BS(sprintf("Gleißendes Licht sammelt sich um %s Haende.",
+        caster->Name(WESSEN, 1))),
+      MSGFLAG_VISUAL, ([MSGFLAG_EXCLUDE: ({caster})]) );
+
+  return 1;
+}
+
+
+int sonnenstrahl(object caster, mapping sinfo)
+{
+  object victim;
+  int suc, bonus, dam, ability;
+  int blind_chance, blind_len;
+  object *friends, heal_target;
+  int heal;
+
+  victim = FindEnemyVictim(sinfo[SI_SKILLARG], caster,
+      "Wen willst Du mit einem Sonnenstrahl treffen?\n");
+  if (!victim)
+    return 0;
+
+  if (!prep_sonnenstrahl(caster, sinfo, 1))
+    return 0;
+
+  if ((suc = SpellSuccess(caster, sinfo)) <= 0)
+    return MISSERFOLG;
+
+  bonus = CheckEquip(caster, sinfo[SI_SPELLFUNC]);
+  ability = sinfo[SI_SKILLABILITY];
+  if (ability < 0) ability = 0;
+
+  sinfo[SI_SKILLDAMAGE] += bonus + suc / 300 + ability / 2000;
+  sinfo[OFFSET(SI_SKILLDAMAGE)] += bonus / 2 + suc / 600 + ability / 4000;
+  sinfo[SI_MAX_DAMAGE] += (caster->QueryProp(P_GUILD_LEVEL) - 5) * 25
+                          + bonus * 2 + suc / 60 + ability / 500;
+  sinfo[SI_SKILLDAMAGE_TYPE] = ({DT_LIGHT, DT_FIRE});
+
+  if(sinfo[SI_SKILLPOINTS] > 1) {
+    sinfo[SI_SKILLDAMAGE] += random(200);
+  }
+
+  environment(caster)->Message(BS(sprintf("%s entlaedt einen sengenden Sonnenstrahl auf %s.",
+        caster->Name(WER,1), victim->name(WEN,1))),
+      MSGFLAG_VISUAL, ([ MSGFLAG_EXCLUDE : ({ caster, victim }) ]) );
+
+  tell_object(caster, BSC(sprintf("Du entlaedst einen sengenden Sonnenstrahl auf %s.\n",
+        victim->name(WEN,1) )));
+  tell_object(victim, BS(sprintf("Ein sengender Sonnenstrahl trifft Dich aus %s Richtung!\n",
+        caster->Name(WESSEN,1) )));
+
+  dam = TryDefaultAttackSpell(victim, caster, sinfo, sinfo[SI_SPELL]);
+
+  // Kleiner Sonnenfunke: heilt zufaellig einen Verbuendeten (oder Dich).
+  friends = FindGroup(caster, 1);
+  if (!pointerp(friends)) friends = ({});
+  friends = (friends + ({caster})) - ({0});
+  if (sizeof(friends))
+  {
+    heal_target = friends[random(sizeof(friends))];
+    if (objectp(heal_target))
+    {
+      heal = 5 + random(21); // 5..25
+      heal *= (sinfo[SI_SKILLPOINTS] > 2 ? 2 : 1);
+      heal_target->AddHp(heal);
+      if (heal_target == caster)
+        tell_object(caster, BS("Ein warmer Sonnenfunke staerkt Dich.\n"));
+      else
+      {
+        tell_object(heal_target, BS("Ein warmer Sonnenfunke staerkt Dich.\n"));
+        tell_object(caster, BS(sprintf("Ein warmer Sonnenfunke staerkt %s.\n",
+              heal_target->name(WEN,1) )));
+      }
+    }
+  }
+
+  // Blendchance nur, wenn auch etwas durchkam.
+  if (dam > 0 && objectp(victim))
+  {
+    blind_chance = 10 + ability / 1200 + suc / 1500;
+    if (blind_chance > 40) blind_chance = 40;
+
+    if (!victim->QueryProp(P_BLIND) && random(100) < blind_chance)
+    {
+      blind_len = 2 + ability / 3000 + suc / 3000;
+      if (blind_len > 10) blind_len = 10;
+
+      tell_object(victim, BS("Du wirst vom grellen Licht geblendet!\n"));
+      tell_object(caster, BS(sprintf("%s wird vom grellen Licht geblendet!\n",
+            victim->name(WER,1) )));
+      victim->SetProp(P_BLIND, blind_len);
+    }
+  }
+
+  return ERFOLG;
+}

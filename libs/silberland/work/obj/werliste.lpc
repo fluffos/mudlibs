@@ -1,0 +1,456 @@
+/*
+** werliste.c -- Erzeugt die "wer" Ausgabe
+** ---
+** 06-04-08     Feyaria Namen in bold
+** 06-03-04     Feyaria zeilenlaenge beruecksichtigen
+** 06-01-12     Woody   Geister im 'kwer' grau anzeigen
+** 03-10-06     Feyaria Anzeig des Orts auf 30 Zeichen beschraenkt
+** 03-09-04     Woody   cleanup() auch bei Rueckgabe als Array (www-who)
+** 03-08-15     Woody   P_ALIGN_STRING nur bei Magiern anzeigen
+** 03-08-05     Woody   P_LOCATION auswerten
+** 02-10-10     Woody   Zweitiemarkierung auswerten
+** 02-08-13     Woody   Gildenstufe bei 'wer -r' anzeigen
+** 02-08-07     Woody   Variablen KWER_MAGIER/KWER_ERWARTET auswerten
+** 02-08-07     Woody   Stark ueberarbeitet, 'wer -r' Format implementiert
+** 01-11-18     Woody   Gilde bei Array-Returns inkludieren
+** 00-06-25     Woody   ANSI-Sequenzen ausfiltern
+** 99-04-08     Woody   'I' ab 10 Minuten idle
+** 98-11-26     Woody   'i' erst ab 2 Minuten idle
+** 97-05-11     Feyaria [l] fuer Learner, Level 10
+** 97-10-02     Woody   query_editing() auch noch abfragen
+** 97-09-03     Woody   kwer Codes fuer (i)dle, (z)eitung, (p)ost und (w)eg
+** 97-08-21     Woody   Alph-Sort bedingt jetzt kein kwer mehr
+** 97-07-01     Woody   QueryWhoListe(): obs==2 moeglich -> gibt Array zurueck
+** 97-06-28     Woody   mal wieder ueberarbeitet und optimiert, Backspaces
+**                      u.ae. richtig behandeln, ueberlange Titel kuerzen
+** 97-02-12     Woody   [Q] Questmagier, Level 30
+** 97-02-02     Woody   P_ALIGN_STRING
+** 96-10-10     Woody   Invis Magier jetzt im "wer" schoener formatiert
+** 96-06-10     Woody   Query(P_RACE)||QueryProp()
+** 96-05-16     Woody   Query(P_RACE) statt QueryProp()
+** 96-05-08     Woody   Ort rechtsbuendig ausgeben
+** 96-04-05     Woody   Alignment nur ausgeben, wenn vorhanden
+** 96-01-26     Woody   Gibt nun auch Alignment des Spielers aus
+** 95-05-12	Mupfel	[L] (Learnerlevel 15) ersetzt durch
+**			[g] (Gastmagierlevel 20)
+**                      [H] (Hilfsmagier) ersetzt durch
+**                      [X] (Magier fuer besondere Aufgaben)
+**                      neu: [Z] Seher- und Magierzweitis
+*/
+
+#pragma strong_types
+
+inherit "/std/user_filter";
+
+#include <properties.h>
+#include <wizlevels.h>
+#include <ansi.h>
+#include <new_skills.h>
+
+#define SPACES(n) sprintf("%*s",n,"")
+
+mixed *erwarte;
+
+#define MIN(a,b)    (((a) > (b)) ? (b) : (a))
+#define ABS(a)      (((a) < 0) ? -(a) : (a))
+
+#define COL_OFFSET(sp) ((maxi/4)*sp+((sp<=maxi%4)?sp:maxi%4))
+
+#define WL_SHORT 0x01
+#define WL_VERT  0x02
+#define WL_ALPHA 0x04
+#define WL_RACE  0x08
+
+
+// als Funktion statt als define, da als lfun-Closure genutzt
+private nosave int is_alph_greater(object a, object b)
+{
+  return geteuid(a) > geteuid(b);
+}
+
+
+// keine Ahnung, wer sich _die_ Berechnungsgrundlage ausgedacht hat.
+// Aber da sie schon uralt ist, bleibt sie auch drin ;-)
+private nosave int is_greater(object a,object b)
+{
+  int a1,b1;
+
+  a1 = 26000 * query_wiz_level(a) +
+      26 * MIN( 2121, ABS(a->QueryProp(P_LEVEL)) ) + getuid(a)[0]-'a';
+
+  b1 = 26000 * query_wiz_level(b) +
+      26 * MIN( 2121, ABS(b->QueryProp(P_LEVEL)) ) + getuid(b)[0]-'a';
+
+  return a1 > b1;
+}
+
+
+varargs private nosave string where(object ob, int shorten)
+{
+  mixed ret;
+
+  if (!objectp(ob))
+    return "unbekannt";
+
+  if (stringp(ob->QueryProp(P_LOCATION)))
+  {
+    ret = ob->QueryProp(P_LOCATION);
+    if (country(ob) != ret)
+      ret += sprintf( " (ueber %s)", country(ob) );
+    if (shorten && (strlen(ret) > 30))
+      ret = ret[strlen(ret)-30..];
+    return ret;
+  }
+  else
+    return country(ob);
+}
+
+
+string stat(object ob, int ist_magier)
+{
+  int l;
+
+  l = query_wiz_level(ob);
+
+  // Testspieler
+  if ( ob->QueryProp(P_TESTPLAYER) && l < LEARNER_LVL )
+    return (l < SEER_LVL ? "t" : "T");
+
+  // Zweitspieler
+  if ( ob->QueryProp(P_SECOND))
+  {
+    // sichtbar markiert (egal ob namentlich)?
+    if (ob->QueryProp(P_SECOND_MARK) >= 0)
+    {
+      if ( l < SEER_LVL )
+          return "z";
+      else if ( l < LEARNER_LVL )
+          return "Z";
+    }
+    // unsichtbar markiert, aber Magier?
+    else if (ist_magier)
+    {
+      if ( l < SEER_LVL )
+          return "n";
+      else if ( l < LEARNER_LVL )
+          return "N";
+    }
+  }
+
+  if (l < SEER_LVL)
+    return "s";
+
+  switch (l)
+  {
+    case SEER_LVL .. LEARNER_LVL-1:
+      return "S";
+    case LEARNER_LVL .. INACTIVEWIZ_LVL-1:
+      return "l";
+    case INACTIVEWIZ_LVL .. WIZARD_LVL-1:
+      return "a";
+    case WIZARD_LVL .. DOMAINMEMBER_LVL-1:
+      return "m";
+    case DOMAINMEMBER_LVL .. FULLWIZ_LVL-1:
+      return "M";
+    case FULLWIZ_LVL .. SPECIAL_LVL-1:
+      return "V";
+    case SPECIAL_LVL .. LORD_LVL-1:
+      return "X";
+    case LORD_LVL .. ELDER_LVL-1:
+      return "R";
+    case ELDER_LVL .. ARCH_LVL-1:
+      return "W";
+    case ARCH_LVL .. GOD_LVL-1:
+      return "E";
+    default:
+      return "G";
+  }
+}
+
+private nosave string morestat( object ob )
+{
+  if (ob->id("mailer")) return "p";
+  else if (ob->id("zeitung")) return "z";
+  else return "e";
+}
+
+private nosave string idlestat( object ob, int ist_magier )
+{
+  object x;
+  string idle;
+
+  if      (query_idle(ob) >= 3600) idle = "U";
+  else if (query_idle(ob) >= 1800) idle = "u";
+  else if (query_idle(ob) >=  600) idle = "I";
+  else if (query_idle(ob) >=  120) idle = "i";
+  else idle = ".";
+
+  return
+    ( ( x = query_input_pending(ob) ) ? morestat(x) :
+      ( query_editing(ob) ? "e" : "." ) ) +
+    ( ob->QueryProp(P_AWAY) ? "w" : "." ) +
+    idle +
+    stat(ob,ist_magier);
+}
+
+nosave string UnANSI(string str)
+{
+  if (stringp(str))
+    return regreplace(str, "(\e\\[[0-9]*[HJm])|\a", "", 1);
+  else
+    return str;
+}
+
+private nosave string cleanup(string str)
+{
+  if (!stringp(str)) return str;
+  // Dann sooft wie moeglich 'x\b' entfernen
+  while (str != (str = regreplace(str, "[^\b]\b", "", 1)));
+  // Alle uebrig gebliebenen '\b' und ANSI Sequenzen fliegen raus
+  return UnANSI(regreplace(str, "\b", "", 1));
+}
+
+private nosave string cleanup_short(string str)
+{
+  if (!stringp(str)) return str;
+  // Erst \n und trailing '.' raus
+  str = regreplace(str, "\n|\.\n$", "", 1);
+  return cleanup(str);
+}
+
+
+varargs private nosave mixed QueryView( object ob, int ist_magier, int flags,
+                                        int obs, string tty )
+{
+  int erw, al;
+  string ret, s, s2, *reta;
+  string a_prefix, prefix, normal;      // ANSI und Char Prefix, reset
+  mixed race, guild;
+  int l;
+  string a,b;
+
+  // Invis Spieler werden nur von Magiern gesehen!
+  if ( !ist_magier && ob->QueryProp(P_INVIS) )
+    return "";
+
+  l = 78;
+  prefix = "";
+  a_prefix = "";
+  ret = capitalize(getuid(ob));
+
+  a=b="";
+  if (this_player())
+  {
+    race = this_player()->QueryProp(P_FILESYS);
+    l = this_player()->QueryProp(P_SCREENWIDTH);
+    if ( member(({"ansi", "vt100"}), this_player()->QueryProp(P_TTY)) != -1) 
+    {
+      a = ANSI_BOLD;
+      b = ANSI_NORMAL;
+    }
+  }
+  if (!mappingp(race))
+    race = ([ ]);
+
+  switch(tty)
+  {
+    case "ansi":
+      if(IS_LEARNER(ob))
+        a_prefix = race["KWER_MAGIER"] ?
+          getcolor(race["KWER_MAGIER"]) : ANSI_UNDERL;
+
+      if(ob->QueryProp(P_FROG))
+	a_prefix += ANSI_GREEN;
+      else if(ob->QueryProp(P_GHOST))
+	a_prefix += ANSI_BOLD + ANSI_BLACK;
+
+      if ( pointerp(erwarte) && member( erwarte, ret ) != -1 )
+        a_prefix += race["KWER_ERWARTET"] ?
+           getcolor(race["KWER_ERWARTET"]) : ANSI_RED;
+
+      normal = ANSI_NORMAL;
+      break;
+
+    default:
+      if ( pointerp(erwarte) && member( erwarte, ret ) != -1 )
+        prefix = "*";
+      else
+        prefix = "";
+
+      normal = "";
+  }
+
+  if ( ret == ROOTID )
+    ret = "Logon";
+
+  // kwer
+  if (flags & WL_SHORT)
+  {
+    /*
+    if (getuid(this_player())=="woody")
+      tell_object(find_player("woody"),
+          sprintf("** ob=%O,ret=%s\n",ob,ret));
+    */
+    if ( ob->QueryProp(P_INVIS) )
+      ret = sprintf( "%s%-13'.'s%s%s", a_prefix, prefix + "(" + ret + ")",
+          strlen(prefix + ret) > 11 ? idlestat(ob,ist_magier)[1..]
+                                    : idlestat(ob,ist_magier),
+          normal );
+    else
+      ret = sprintf( "%s%-13'.'s%s%s", a_prefix, prefix + ret,
+          idlestat(ob,ist_magier), normal );
+  }
+  // Rueckgabe als "Fat Array"? (fuer /secure/udp/www.who.c)
+  else if (obs == 2)
+  {
+    reta =
+      ({ ob,
+         stat(ob,ist_magier),
+         cleanup(ob->QueryProp(P_PRESAY)) || "",
+         ob->QueryProp(P_TITLE) ? cleanup(" " + ob->QueryProp(P_TITLE)) : "",
+         cleanup(ob->QueryProp(P_RACE)) || "unbekannt",
+         capitalize(ob->QueryProp(P_GUILD) ||
+                    ob->QueryProp("default_guild") || "(Keine)"),
+         (IS_LEARNER(ob) ? cleanup(ob->QueryProp(P_ALIGN_STRING)) : 0) ||
+             ob->al_to_title(ob->QueryProp(P_ALIGN)) ||
+             "neutral",
+         where(ob)
+       });
+    return reta;
+  }
+  // wer -r
+  else if (flags & WL_RACE)
+  {
+    race = ob->QueryProp(P_RACESTRING);
+    if (pointerp(race)) race = race[0];
+    if (!stringp(race)) race = ob->QueryProp(P_RACE);
+    guild = ob->QueryProp(P_GUILD);
+
+    ret = sprintf( "[%s] %-13s %15s / %-19s %22s", stat(ob,ist_magier),
+                   ob->QueryProp(P_INVIS) ? "(" + ret + ")" : ret,
+                   stringp(race) ? capitalize(race)[0..14] : "<keine Rasse>",
+                   (stringp(guild) ? capitalize(guild)[0..18] :
+                                     "<keine Gilde>") +
+                   " (" + ob->QueryProp(P_GUILD_LEVEL) + ")",
+                   "[" + where(ob,1)[0..19] + "]" );
+  }
+  // Default wer
+  else
+  {
+    if ( ob->short() )
+      ret = ob->short()[0..<3];       // .\n abzwicken
+    else
+      ret = "(" + ret + ")";          // invis
+
+
+    // Erst ANSI-Codes, \n und \b behandeln...
+    ret = cleanup_short(ret);
+
+    // Rasse
+    if (s = ob->QueryProp(P_RACE)) s = " - " + s;
+    else s = " - Irgendwas";
+
+    // Alignment
+    al = ob->QueryProp(P_ALIGN);
+    s += sprintf(
+           " (%s)",
+           (IS_LEARNER(ob) ? UnANSI(ob->QueryProp(P_ALIGN_STRING)) : 0) ||
+           (function_exists("al_to_title", ob) ? ob->al_to_title(al)
+                                               : "neutral") );
+
+    // Eingeloggt von...
+    s2 = " [" + where(ob,1) + "]";
+
+    if (strlen(ret) + strlen(s) + strlen(s2) > l - 4)
+    {
+      // 1. Froesche und Geister nicht Presay-kuerzen
+      if (ob->QueryProp(P_FROG) || ob->QueryProp(P_GHOST)) {
+        ret = ret[ 0 .. l-7-strlen(s)-strlen(s2)-1 ] + "...";
+      }
+      else
+      {
+        // 2a. Bei allen anderen erstmal das Presay wegkuerzen:
+        ret = ret[ strlen(cleanup(ob->QueryProp(P_PRESAY) || "")) .. ];
+        // 2b. Wenn immer noch zulang, hinten weiter kuerzen:
+        if (strlen(ret) + strlen(s) + strlen(s2) > l - 4)
+          ret = ret[ 0 .. l-7-strlen(s)-strlen(s2)-1 ] + "...";
+      }
+    }
+    al = strlen(ret) + strlen(s) + strlen(s2);
+    ret += s + SPACES(l - 4 - al) + s2;
+
+    ret = "[" + stat(ob,ist_magier) + "] " + ret;
+    // Name bold machen
+    ret = regreplace(ret, capitalize(getuid(ob)), a+capitalize(getuid(ob))+b, 1);
+  }
+
+  if (obs)
+    return ({ob,ret});
+  else
+    return ret;
+}
+
+
+varargs string* QueryWhoListe(int ist_magier, int flags, int obs,
+			      string arg, int old)
+{
+  mixed pl;
+  string *pls;
+  string *s;
+  int i,j,k,*t,maxi;
+  int width;
+
+  pl = filter_users(arg);
+
+  if (flags & WL_ALPHA)
+    pl = sort_array(pl,#'is_alph_greater);
+  else
+    pl = sort_array(pl,#'is_greater);
+
+  flags = flags & ~WL_ALPHA;
+
+  erwarte = 0;
+  if (flags & WL_SHORT) {
+    if (previous_object() && query_once_interactive(previous_object()))
+      erwarte=previous_object()->QueryProp(P_WAITFOR);
+    if (!pointerp(erwarte))
+      erwarte=({});
+  }
+
+  pls = map_array(pl, #'QueryView, ist_magier, flags,
+        obs, previous_object()->QueryProp(P_TTY), old) - ({""});
+
+  if (!(flags & WL_SHORT))
+    return pls;
+
+  maxi = sizeof(pls);
+  width = previous_object()->QueryProp(P_SCREENWIDTH) / 19 || 4;
+  s = allocate(maxi/width+(maxi%width==0?0:1));
+  if (flags & WL_VERT) { // senkrecht sortieren !
+    t = ({ // wird so nur einmal berechnet
+      0, COL_OFFSET(1), COL_OFFSET(2), COL_OFFSET(3), maxi
+    });
+    for (i=0;i<sizeof(s);i++) {
+      s[i]="";
+      for(j=0;j<width;j++) {
+        if ((k=i+t[j])<t[j+1] && pls[k]!="")
+          s[i]+=pls[k];
+        if( j<3 )
+          s[i]+="  ";
+      }
+    }
+  } else {
+    for (i=0;i<maxi;i++) {
+      if (!s[i/width])
+        s[i/width]="";
+      if (pls[i]!="")
+        s[i/width]+=pls[i];
+      if ((i%width!=width-1) && i<maxi-1)
+        s[i/width]+="  ";
+    }
+  }
+  erwarte=({});
+  return (({sprintf("%72|s", "Liste der Mitspieler vom "+dtime(time())+
+      sprintf(" (%d Teilnehmer)",maxi)),""})+s);
+}
+

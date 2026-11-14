@@ -1,0 +1,120 @@
+// -- Die Kraeutermixtur ------------------------------------------------------
+mapping prep_kraeutermixtur(object caster, mapping sinfo, int silent) {
+  string str, kl;
+  object ob, bandolier;
+  mixed kraut;
+
+  if (!GuildItemTest(caster, sinfo)) return 0;
+  if (!IsNotInFight(caster, sinfo)) return 0;
+  if (!(str = sinfo[SI_SKILLARG])) {
+    tell_object(
+      caster,
+      BS("Auf welches Kraut willst Du die " "Kraeutermixtur anwenden?")
+    );
+    return 0;
+  }
+
+  str = lower_case(str);
+  if (member(HERBS_MASTER->QueryKraeuterliste(), str) == -1) {
+    tell_object(caster, BS("Mit so einem Kraut kannst Du nichts anfangen."));
+    return 0;
+  }
+
+  bandolier = present(BANDOLIER_ID, caster);
+  if(objectp(bandolier) && bandolier->HasKraut(str)) {
+      kraut = str;
+      if(!bandolier->CanPutMixture(lower_case(str)+"mixtur")) {
+        tell_object(caster, BS("Du kannst keine weitere "+capitalize(str+"mixtur")+" an dein Bandolier binden."));
+        return 0;
+      }
+  } else {
+    if (!(kraut = present("\n_" + str, caster))) {
+      if (!(ob = present(FOOD_CONTAINER_ID, caster))) {
+        tell_object(caster, BS("Du hast das gesuchte Kraut nicht."));
+        return 0;
+      }
+      if (!(kraut = present("\n_" + str, ob))) {
+        tell_object(caster, BS("Du hast das gesuchte Kraut nicht."));
+        return 0;
+      }
+    }
+
+    if (kraut->QueryProp(P_RANGER_HERBMIX_ACTIVATED)) {
+      write("Das ist bereits eine Kraeutermixtur!\n");
+      return 0;
+    }
+  }
+
+  sinfo[SI_ENEMY] = kraut;
+
+  if (!silent) {
+    FirstPrepareFuncSuccessfull(caster, sinfo);
+  }
+
+  return sinfo;
+}
+
+int kraeutermixtur(object caster, mapping sinfo) {
+  object bandolier;
+  int success;
+  string name;
+  mapping finfo;
+  mixed kraut, *herbData;
+
+  if (!mappingp(sinfo = prep_kraeutermixtur(caster, sinfo, 1))) return 0;
+
+  kraut = sinfo[SI_ENEMY];
+
+  if(stringp(kraut)) {
+    bandolier = present(BANDOLIER_ID, caster);
+    if(!bandolier->HasKraut(kraut)) {
+      write(BS("Du hast das entsperchende Kraut nicht mehr in deinem Bandolier!"));
+      return 0;
+    } else {
+      write(BS("Du holst das entsprechende Kraut aus deinem Bandolier hervor."));
+    }
+  }
+
+  success = SpellSuccess(caster, sinfo);
+  if (success < 0) {
+    tell_object(caster, BS("Deine Mixtur ist misslungen und nicht zu gebrauchen."));
+    if(objectp(kraut)) kraut->remove(1);
+    return MISSERFOLG;
+  }
+
+  if(objectp(kraut)) {
+    name = kraut->QueryProp(P_NAME);
+    
+    tell_object(caster, BS( "Du zerreibst " + name + " zwischen den Haenden und presst den Saft heraus. Die Mixtur aus " + name + " ist nun bereit."));
+    tell_room(ENV(caster), BS(caster->Name() + " bereitet eine kleine Kraeutermixtur aus " + name + " vor."), ({caster}));
+
+    if(objectp(bandolier = present(BANDOLIER_ID, caster))) {
+      bandolier->PushMixture(lower_case(name)+"mixtur", ({caster, (sinfo[SI_SKILLABILITY] / 1000)}), ({kraut->QueryProp(P_HEAL_STRENGTH), kraut->QueryProp(P_HEAL_TYPE)}));
+      tell_object(caster, BS("Die fertige Mixtur hast du an deinem Bandolier verstaut."));
+    } else {
+      kraut->SetProp(P_RANGER_HERBMIX_ACTIVATED, ({caster, (sinfo[SI_SKILLABILITY] / 1000)}));
+      kraut->SetProp(P_NAME, "Kraeutermixtur aus " + name);
+      kraut->AddId(({"mixtur", "kraeutermixtur", lower_case(name) + "mixtur"}));
+      kraut->SetProp(P_SHORT, "Eine Kraeutermixtur aus " + name);
+      kraut->SetProp(P_LONG, "Diese Kraeutermixtur ist ein dicker Saft aus der Essenz von " + name +".\n" + kraut->QueryProp(P_LONG));
+      kraut->SetProp(P_GENDER, FEMALE);
+      finfo = kraut->QueryProp(P_FOOD_INFO);
+      finfo[F_VERB] = "trinken";
+      kraut->SetProp(P_FOOD_INFO, finfo);
+      kraut->AddCmd(({"trink", "trinke"}), "eat");
+    }
+  } else if(stringp(kraut)) {  
+    kraut = bandolier->PopKraut(kraut);
+    name = kraut->QueryProp(P_NAME);
+    herbData = ({kraut->QueryProp(P_HEAL_STRENGTH), kraut->QueryProp(P_HEAL_TYPE)});
+
+    tell_object(caster, BS( "Du nimmst " + name + " aus deinem Bandolier und zerreibst es zwischen den Haenden und presst den Saft heraus. Die Mixtur aus " + name + " ist nun bereit."));
+    tell_room(ENV(caster), BS(caster->Name() + " bereitet eine kleine Kraeutermixtur aus " + name + " vor."), ({caster}));
+
+
+    bandolier->PushMixture(lower_case(name)+"mixtur", ({caster, (sinfo[SI_SKILLABILITY] / 1000)}), herbData);
+    tell_object(caster, BS("Die fertige Mixtur hast du an deinem Bandolier verstaut."));
+  }
+
+  return ERFOLG;
+}

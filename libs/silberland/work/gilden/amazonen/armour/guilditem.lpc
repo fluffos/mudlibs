@@ -1,0 +1,1306 @@
+// guild_item.c
+// Gildenitem der Amazonen
+// 2005-01-25  Feyaria@SilberLand
+
+
+inherit "std/armour";
+
+#include "../def.h"
+#include <ansi.h>
+
+#define REPORT_NORMAL 1
+#define REPORT_DIFF 2
+#define REPORT_LINKS 4
+#define REPORT_RECHTS 8
+#define REPORT_PROZENT 16
+#define REPORT_FARBE 32
+#define REPORT_SCROLL 64
+#define REPORT_KOMPAKT 128
+#define REPORT_MAX 256
+
+
+nosave int *history = ({});
+nosave int lastHP, lastSP, aktiv = 0;
+nosave int lasthp, lastsp;
+nosave object owner;
+nosave int armod, farbe, kompakt, report, max;
+nosave string areportfarbe;
+nosave int startxp, startlostxp, starttime, deads;
+nosave int powerregain, regaining;
+nosave string *beurteilt;
+nosave mapping report_colors;
+nosave int last_report_time;
+nosave int callout;
+nosave string a1, a2, a3, a4, a5, a6, special;
+nosave int lastpower;
+nosave int noscroll = 0, scroll = 0, scrollHP = 0, scrollSP = 0;
+nosave object *load = ({});
+
+void activate(object ob);
+int areportmodus(string str);
+varargs void NotifyHpChange();
+
+void create()
+{
+  if( !is_clone(TO) ) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein Amazonenamulett");
+  SetProp(P_LONG,  
+    "Dieses wunderschoene Amulett ist das Zeichen der Zugehoerigkeit zur "
+    "Gilde der Amazonen. An einer mit kleinen bunten Federn verzierten "
+    "Lederschnur haengt ein grosser Saphir, der von kleinen Perlen umgeben "
+    "ist. Es erleichtert einer echten Amazonen viele Sachen. Was es alles "
+    "kann, sieht man mit <hilfe amazonenamulett>.");
+  SetProp(P_NAME, "Amazonenamulett");
+  SetProp(P_GENDER, NEUTER );
+  AddId( ({"amulett", "amazonenamulett", "\namazonen_amulet", GUILD_ITEM}) );
+  
+  SetProp(P_ARMOUR_TYPE, AT_MISC );
+  SetProp(P_AC, 0);
+  SetProp(P_MATERIAL, 
+      ([MAT_LEATHER: 75, MAT_SAPPHIRE: 10, MAT_PEARL:5, MAT_FEATHER: 10]) );
+  SetProp(P_WEIGHT, 50);
+  SetProp(P_VALUE, 0 );
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_AUTOLOADOBJ, 1);
+  SetProp(P_NO_DAMAGE_DESTRUCT, 1);
+  SetProp(P_QUALITY_DECAY, 0);
+  SetProp(P_MAGIC, 1);
+  
+  SetProp(P_WORN_TEXT, "um den Hals gehaengt");
+  SetProp(P_REMOVE_FUNC, TO);
+  SetProp(P_WEAR_FUNC, TO);
+  
+  AddCmd( "agilde", "gilde");
+  AddCmd(({"atm"}), "arufe");
+  AddCmd( "awer", "awer");
+  AddCmd( "beurteile", "skills");
+  AddCmd( "befoerdere", "advance");
+  AddCmd( "lehre", "teach");
+  AddCmd( "amahist", "amahist");
+  AddCmd( "areport", "areport" );
+  AddCmd( "areportmodus", "areportmodus");
+  AddCmd( "areportfarben", "areportfarben");
+  AddCmd( "xplog", "xplog");
+  AddCmd( "hilfe", "hilfe");
+
+  beurteilt = ({});
+  report_colors = (["B":ANSI_BLACK,
+                    "R":ANSI_RED,
+                    "G":ANSI_GREEN,
+                    "Y":ANSI_YELLOW,
+                    "B":ANSI_BLUE,
+                    "P":ANSI_PURPLE,
+                    "C":ANSI_CYAN,
+                    "W":ANSI_WHITE,
+                    "N":ANSI_NORMAL]);
+  areportfarbe = "RPCYG";
+}
+
+int hilfe(string str)
+{
+  if (str != "amazonenamulett")
+    return 0;
+  write( BS(
+    "Das Amazonenamulett ist Zeichen Deiner Mitgliedschaft in der Gilde "
+    "der Amazonen. Ohne es kannst "
+    "Du die Faehigkeiten einer Amazone nicht richtig nutzen, darum sollte "
+    "man es immer tragen.")+BS(
+    "Ab Amazonenstufe 3 kannst Du anderen Amazonen etwas mitteilen. "
+    "(atm <text>). Mit ahist kann man sich die letzen gerufenen Texte "
+    "nochmal anzeigen lassen.")+BS(
+    "Mit 'awer' kann man schauen, welche Amazonen anwesend sind.")+BS(
+    "Mit 'areport ein|aus' kann man den Reportmodus ein- und ausschalten "
+    "(statt dem Teddy). " 
+    "Mit areportmodus kann man sich den genauen Reportmodus einstellen. "
+    "Mit areportfarben kann man sich die Farbanzeige des Areports umstellen.")+
+    "Mit 'xplog' kannst Du mitverfolgen, wieviele Erfahrungspunkte Du "
+    "machst.\nMit 'xplog reset' kannst Du diesen Wert wieder auf 0 setzen.\n"+
+    BS("Ignorieren kann man: amazonen.atm, amazonen.atm.<name> ")
+    );
+  return 1;
+}
+
+int WearFunc(object ob, int silent)
+{
+  object wearer;
+  string orden;
+  int ac;
+
+  wearer = environment();
+  if (!objectp(wearer)) return 1;
+  if(wearer->QueryProp(P_GUILD) != GUILDNAME && !IS_WIZARD(wearer))
+  {
+    write("Wie kommst DU denn zu einem Amazonenamulett?\n");
+    call_out("remove", 0);
+    return 1;
+  }
+
+  if(interactive(wearer)) {
+    /*orden = AMASTER->QueryMemberEntry(getuid(wearer))[15];
+    if ((orden == AMAZONEN_ORDEN_ORAKEL || orden == AMAZONEN_ORDEN_VALKYRE) && ob != this_object())
+    {
+      if ((ac = ob->QueryProp(P_AC)) > 5 && (100 * ac > 
+          AMA_AC_FAKTOR * VALID_ARMOUR_CLASS[ob->QueryProp(P_ARMOUR_TYPE)] || 
+          ob->QueryProp(P_WEIGHT) > AMA_WEIGHT + AMA_WEIGHT_AC * ac))
+      {
+        if (!silent)
+          tell_object(wearer, BS(sprintf("%s ist zu schwer, Du fuehlst Dich in Deinen "
+                "Bewegungen eingeschraenkt.", ob->Name(WER,1))));
+        load += ({ob});
+      }
+      return 1;
+    }*/
+    SetProp("orden", AMASTER->QueryMemberEntry(getuid(wearer))[15]);
+  }
+
+  wearer->SetProp(P_WEAR_FUNC, this_object());
+  if (wearer->QueryProp(P_GUILD) == GUILDNAME)
+    call_out("activate", 0, wearer);
+  else if (!IS_WIZARD(wearer))
+  {
+    write("Wie kommst DU denn zu einem Amazonenamulett?\n");
+    call_out("remove", 0);
+    return 1;
+  }
+  wearer->SetProp(P_TMP_AMAZONEN_LISTENER, 1);
+  return 1;
+}
+
+int RemoveFunc(object ruestung, int silent)
+{
+  object wearer;
+  wearer = QueryProp(P_WORN);
+  if (!objectp(wearer)) return 1;
+  if (aktiv) 
+    activate(0);
+  wearer->SetProp(P_TMP_AMAZONEN_LISTENER, 0);
+  return 1;
+}
+ 
+int xpreset()
+{ 
+  startxp = TP->QueryProp(P_XP);
+  startlostxp = TP->QueryProp(P_TOTAL_LOST_XP);
+  starttime = time();
+  deads = TP->QueryProp(P_DEADS);
+  return 1;
+}
+  
+int xplog(string str)
+{
+  int zeit, xp, lost, nrdeads;
+
+  if (!QueryProp(P_WORN)) return 0;
+  if (str == "reset")
+  {
+    write("Das Erfahrungspunkte-log steht nun auf Null.\n");
+    return xpreset();
+  }
+  write(sprintf("Du hast %d Erfahrungspunkte in %s Minuten ermetzelt.\n",
+        xp = (QueryProp(P_WORN)->QueryProp(P_XP)) - startxp,
+      (zeit = (time() - starttime)) / 60));
+  if (zeit)
+  {
+    write(sprintf("Das %s ein Schnitt von %d Erfahrungspunkten pro Stunde.\n",
+        zeit < 3600 ? "waere" : "ist",
+        zeit > 300 ? to_int(xp * 3600. / zeit) : xp * 12));
+    if ((lost = (QueryProp(P_WORN)->QueryProp(P_TOTAL_LOST_XP) - startlostxp)) > 0 )
+    {
+      nrdeads = (QueryProp(P_WORN)->QueryProp(P_DEADS)) - deads;
+      write(sprintf("Leider hast Du auch %d Erfahrungspunkte durch %s verloren,\n"
+          "sonst haettest Du einen Schnitt von %d.\n",
+          lost, 
+          (nrdeads == 1 ? "einen Tod" : nrdeads + " Tode"),
+          to_int((xp + lost) * 3600. / zeit)));
+    }
+  }
+  return 1;
+}
+
+void BecomesNetAlive(object wer) 
+{
+  xpreset();
+}
+ 
+void init()
+{
+  ::init();
+  if (present(GUILD_ITEM " 2", MENV)) 
+  { 
+    call_out("remove",0);
+    return;
+  }
+  if (TP != MENV) return 0;
+  report = AMASTER->GetReportModus(MENV);
+  if (report & REPORT_NORMAL)  armod = 0;
+  if (report & REPORT_DIFF)    armod = 1;
+  if (report & REPORT_RECHTS)  armod = 2;
+  if (report & REPORT_LINKS )  armod = 3;
+  if (report & REPORT_PROZENT) armod = 4;
+  if (report & REPORT_FARBE)   farbe = 1;
+  if (report & REPORT_SCROLL)  noscroll = 10;
+  if (report & REPORT_KOMPAKT) kompakt = 1;
+  if (report & REPORT_MAX)     max = 1;
+  if (strlen(areportfarbe = AMASTER->GetReportColors(MENV)) != 5)
+    areportfarbe = "RPCYG";
+  DoWear();
+  xpreset();
+  TP->SetProp(P_GUILD_ITEM, this_object());
+}
+
+int gilde()
+{
+  if(!TP->QueryProp(P_TESTPLAYER))
+    return 0;
+  notify_fail("Das geht nur von der Abenteuerergilde aus.\n");
+  if(ENV(TP)->QueryProp(P_INT_SHORT)!="Die beruehmte Abenteurergilde")
+    return 0;
+  TP->move(GUILD, M_TPORT);
+  return 1;
+}
+
+string short()
+{ 
+  if (QueryProp(P_WORN) && TP && TP != QueryProp(P_WORN) &&
+      QueryProp(P_WORN)->QueryProp(P_GUILD) != GUILDNAME)
+    return 0;
+  return ::short();
+}
+
+int arufe(string str)
+{
+  int i;
+  string b, n, pre, text;
+  object* spieler;
+  object guilditem;
+  string* ignore;
+  
+  notify_fail("Was moechtest Du allen Amazonen mitteilen?\n");
+  if (!stringp(str)) return 0;
+  spieler = users();
+  text = TP->_unparsed_args();
+  if (objectp(TP->QueryProp(P_PERM_STRING)))
+    text = call_other(TP->QueryProp(P_PERM_STRING),"permutate_string",text)||"";
+  pre = (member( GUILD_WIZARDS, getuid(TP)) != -1 ? 
+      "Amazonenkoenigin ":  "Amazone ") + CAP(getuid(TP))+ 
+    " teilt Euch mit: ";
+  for (i = sizeof(spieler) - 1; i >= 0; i--)
+  {
+    if (!pointerp(ignore = spieler[i]->QueryProp(P_IGNORE)))
+      ignore = ({});
+    if ((spieler[i]->QueryProp(P_TMP_AMAZONEN_LISTENER) ||
+        getuid(spieler[i]) == "feyaria") &&  
+        member( ignore, "amazone.atm" ) == -1 &&
+        member( ignore, "amazone.atm."+getuid(TP) ) == -1 &&
+        member( ignore, getuid(TP) ) == -1) 
+    {
+      switch (spieler[i]->QueryProp(P_TTY)) 
+      {
+        case "ansi": b = ANSI_CYAN; n = ANSI_NORMAL; break; 
+        case "vt100": b = ANSI_BOLD; n = ANSI_NORMAL; break;
+        default: b = ""; n = "";
+      }
+      if (spieler[i] == TP)
+         write(break_string(text + n, TP->QueryProp(P_SCREENWIDTH), 
+              b + "Du teilst den Amazonen mit: "));
+      else 
+      {
+        tell_object(spieler[i], break_string(text + n,
+          spieler[i]->QueryProp(P_SCREENWIDTH), b + pre));
+        if (guilditem = present(GUILD_ITEM, spieler[i])) 
+          guilditem->AddHistory(pre, text);
+      }
+    }
+  }
+  return 1;
+}
+
+nosave int amahist() 
+{
+  int i;
+  string *msgs;
+
+  write("Die Amazonen haben folgendes mitgeteilt:\n");
+  write("-----------------------------------------------"
+       +"-------------------------------\n");
+  for(i=0;i<=sizeof(history)-1;i++) {
+    msgs=explode(history[i],"&&*%%");
+    if(sizeof(msgs) == 3)
+    {
+      write(BS(msgs[0]));
+      write(break_string(msgs[2], TP->QueryProp(P_SCREENWIDTH), msgs[1]));
+    }
+  }
+  write("-----------------------------------------------"
+       +"-------------------------------\n");
+  return 1;  
+}
+
+int AddHistory(string presay, string msg) 
+{
+  int i;
+  string timestring;
+  timestring = dtime(time())[19..26];
+  if(sizeof(history)>=10)
+    history -= ({history[0]});
+  history += ({implode(({timestring, presay, msg}), "&&*%%")});
+  return 1;
+}
+
+int is_amazone(object pl)
+{
+  if( (pl->QueryProp(P_GUILD) == GUILDNAME || 
+        member( GUILD_WIZARDS, getuid(pl)) != -1 ||
+        pl->QueryProp(P_TMP_AMAZONEN_LISTENER)) && 
+      (!pl->QueryProp(P_INVIS) || IS_LEARNER(TP)))
+    return 1;
+  else
+    return 0;
+}
+
+int sort_amazonen(object pl1, object pl2)
+{
+  if (query_wiz_level(pl1) * 10000 +
+      pl1->QueryProp(P_GUILD_LEVEL) * 100 + 
+      pl1->QueryProp(P_LEVEL) 
+      > 
+      query_wiz_level(pl2) * 10000 +
+      pl2->QueryProp(P_GUILD_LEVEL) * 100 + 
+      pl2->QueryProp(P_LEVEL))
+    return 1;
+  else 
+    return 0;
+}
+
+int awer(string str)
+{
+  int i;
+  object *spieler;
+  string amazone, presay, titel, b, n, special, orden;
+  string lauscher, ret;
+  object gb;
+  mixed entry;
+
+  lauscher = "";
+  switch(TP->QueryProp(P_TTY))
+  {
+    case "ansi": 
+    case "vt100": b = ANSI_BOLD; n = ANSI_NORMAL; break;
+    default: b = ""; n = "";
+  }
+  if (!gb = find_object(GUILD))
+  {
+    write("BUG IN DER AMAZONENGILDE!!! Sofort Feyaria verstaendigen!!!!\n");
+    return 1;
+  }
+  amazone = "Folgende Amazonen sind anwesend:\n";
+  amazone += sprintf("%-40s %-12s %-17s %-10s\n",
+      b+"Name"+n, "Orden", "Status", "Rasse");
+  spieler = filter_array(users(), "is_amazone");
+  spieler = sort_array(spieler, "sort_amazone", this_object() );
+  for(i = sizeof(spieler) - 1; i >= 0; i--)
+  {    
+    titel = presay = "";
+    if (member( GUILD_WIZARDS, getuid(spieler[i])) != -1) 
+      presay = "Amazonenkoenigin ";
+/*
+    else if( IS_LEARNER(spieler[i]) ) 
+      presay = "amazonemagier" +
+        (spieler[i]->QueryProp(P_GENDER) == FEMALE ? "in " : " ");
+    else if( spieler[i]->QueryProp(P_TESTPLAYER)) 
+      presay = "amazonetester" +
+        (spieler[i]->QueryProp(P_GENDER) == FEMALE ? "in " : " ");
+*/
+    else if( IS_LEARNER(spieler[i]) ) 
+    {
+      if (spieler[i]->QueryProp(P_INVIS))
+        lauscher += "("+CAP(getuid(spieler[i])) + "), ";
+      else
+        lauscher += CAP(getuid(spieler[i])) + ", ";
+      continue;
+    }
+    else if( spieler[i]->QueryProp(P_TESTPLAYER)) 
+    {
+      lauscher += CAP(getuid(spieler[i])) + ", ";
+      continue;
+    }
+    else 
+      titel = spieler[i]->QueryProp(P_GUILD_TITLE);
+
+    orden = "-";
+    if (member(GUILD_WIZARDS, getuid(spieler[i])) != -1)
+      orden = "Magie";
+    else if (pointerp(entry = AMASTER->QueryMemberEntry(getuid(spieler[i]))) &&
+             sizeof(entry) > POS_ORDER &&
+             stringp(entry[POS_ORDER]) && sizeof(entry[POS_ORDER]))
+      orden = entry[POS_ORDER];
+
+    ret = " ";
+    if(TP->QueryProp(P_GUILD_LEVEL) > 11 && 
+        spieler[i]->QueryProp(P_GUILD_LEVEL) < 10 && 
+        (member( GUILD_WIZARDS, getuid(TP)) != -1  || 
+         (!IS_LEARNER(TP) && !TP->QueryProp(P_TESTPLAYER))))
+    {
+      switch(spieler[i]->QueryProp(P_GUILD_LEVEL))
+      {
+        case 1: ret=gb->Test2(spieler[i],2);break;
+        case 2: ret=gb->Test3(spieler[i],2);break;
+        case 3: ret=gb->Test4(spieler[i],2);break;
+        case 4: ret=gb->Test5(spieler[i],2);break;
+        case 5: ret=gb->Test6(spieler[i],2);break;
+        case 6: ret=gb->Test7(spieler[i],2);break;
+        case 7: ret=gb->Test8(spieler[i],2);break;
+        case 8: ret=gb->Test9(spieler[i],2);break;
+        case 9: ret=gb->Test10(spieler[i],2);break;
+      }
+      if(!ret)
+        ret=RES_CHECKER->check_restrictions(spieler[i], 
+            gb->QueryProp(P_GUILD_LEVELS)[spieler[i]->QueryProp(P_GUILD_LEVEL)+1]);
+    }
+    if(!ret)
+      special = "(aufstiegsfaehig)";
+    else if( spieler[i]->InFight() ) 
+      special = "(kaempfend)";
+    else if(spieler[i]->QueryProp(P_GHOST) )
+      special = "(tot)";
+    else if(query_idle(spieler[i]) > 100 * 60 )
+      special = "(URIDLE)";
+    else if(query_idle(spieler[i]) > 30 * 60 )
+      special = "(uridle)";
+    else if(query_idle(spieler[i]) > 10 * 60 )
+      special = "(Idle)";
+    else if(query_idle(spieler[i]) > 3 * 60 )
+      special = "(idle)";
+    else if (environment(spieler[i]) && 
+             file_name(environment(spieler[i])) == GUILD &&
+             !IS_WIZARD(spieler[i]) ) 
+    {
+      if (spieler[i]->QueryProp(P_GUILD_LEVEL) > 10)
+        special = "(lehrend)";
+      else
+        special = "(lernend)";
+    }
+    else
+      special = "";
+    amazone += sprintf("%-40s %-12s %-17s %-10s\n", 
+        presay + b + CAP(getuid(spieler[i])) + n + " " + titel,
+        orden,
+        special, spieler[i]->QueryProp(P_RACE) );
+  }
+  write(amazone + "\n");
+  write(BS("Zusaetzlich lauschen noch: " + lauscher[0..<3]));
+  return 1;
+}
+
+int skills(string str)
+{
+  object wer, gb;
+  int i, wert;
+  string *arm, s;
+  mapping res;
+  string *ignore;
+
+  if (TP->QueryProp(P_GUILD_LEVEL) < 10 ) return 0;
+  notify_fail("Wen willst Du beurteilen?\n");
+  if (!str) return 0;
+  if (!wer = present(str, ENV(TP))) return 0;
+  if (wer->QueryProp(P_GUILD) != GUILDNAME)
+    return notify_fail("Du kannst nur Amazonen beurteilen.\n"),0;
+  if (present(GUILD_NPC_ID, ENV(TP)) && !IS_ARCH(TP))
+  {
+    write(GUILD_NPC_NAME + " kann das besser!\n");
+    return 1;
+  }
+  if (wer == TP)
+  {
+    write("Du kannst Dich nicht selber beurteilen!\n");
+    return 1;
+  }
+  if (wer->InFight() || TP->InFight())
+  {
+    write("Im Kampf geht das nicht.\n");
+    return 1;
+  }
+  if (IS_LEARNER(wer) && !IS_WIZARD(TP))
+  {
+    write(wer->Name() + " entzieht sich durch Magie Deiner Beurteilung.\n");
+    return 1;
+  }
+  if (!gb = find_object(GUILD))
+  {
+    write("BUG IN DER AMAZONENGILDE!!! Sofort Feyaria verstaendigen!!!!\n");
+    return 1;
+  }
+  if (!query_once_interactive(wer))
+  {
+    write(wer->Name(WER,1) + " ist Amazonenstufe " + wer->QueryProp(P_GUILD_LEVEL)+".\n");
+    return 1;
+  }
+  if( !pointerp(ignore = wer->QueryProp(P_IGNORE)) )
+    ignore = ({});
+  if( member( ignore, "amazonen.beurteile" )!=-1 ||
+      member( ignore, getuid(TP)) != -1)
+  {
+    write(wer->Name(WER,1) + " will sich nicht beurteilen lassen.\n");
+    return 1;
+  }
+  if( wer->QueryProp(P_GUILD_RATING) == MAX_ABILITY)
+  {
+    write(wer->Name(WER,1)+" hat perfekte Amazonenfertigkeiten!\n");
+    if(TP->QueryProp(P_GUILD_LEVEL) >= 12 && gb->lvl12check(wer))
+    {
+      s = gb->int2string(AMASTER->GetTeaching(wer));
+      tell_object(wer, CAP_TPN+" sagt: Das Lehren von Amazonenfaehigkeiten "
+          "beherrscht Du "+s+".\n");
+      write(wer->Name()+ "beherrscht das Lehren von Amazonenfaehigkeiten " +
+          s + ".\n");
+    }
+    return 1;
+  }
+  res = wer->QueryProp(P_NEWSKILLS);
+  arm = sort_array(m_indices(res),#'<);
+  for (i = sizeof(arm)-1;i>=0;i--)
+  {
+    if(arm[i] != "Evade" && arm[i] != "Fight_spear")
+    {
+      s = gb->int2string(wer->QuerySkillAbility(arm[i]));
+      tell_object(wer,CAP_TPN+" sagt: "+capitalize(arm[i])+" beherrscht Du "+
+           s+".\n");
+      write(wer->Name()+ " beherrscht "+capitalize(arm[i])+" "+s+".\n");
+    }
+  }   
+  s = gb->int2string(wer->QuerySkillAbility("Fight_spear"));
+  tell_object(wer,CAP_TPN+" sagt: Den Speerkampf beherrscht Du "+s+".\n");
+  write(wer->Name()+ " beherrscht den Speerkampf "+s+".\n");
+
+  s = gb->int2string(wer->QuerySkillAbility("Evade"));
+  tell_object(wer,CAP_TPN+" sagt: Das Ausweichen beherrscht Du "+
+      s+".\n");
+  write(wer->Name()+" beherrscht das Ausweichen "+s+".\n");
+
+  if ((wert = wer->QueryProp(P_GUILD_RATING)) < 1501) wert = 1501;
+  s = gb->int2string(wert);
+  tell_object(wer,CAP_TPN+" sagt: Insgesamt betrachtet bist Du "+s+".\n"); 
+  tell_room(ENV(TP), sprintf("%s klaert %s ueber %s Fertigkeiten auf.\n", 
+      CAP_TPN, capitalize(getuid(wer)), 
+      wer->QueryPossPronoun(FEMALE, WEN, PLURAL)), ({wer,TP}) );
+  tell_object(TP,wer->Name(WER,1)+" ist Amazonenstufe "+
+      wer->QueryProp(P_GUILD_LEVEL) +" und insgesamt "+ s+".\n");    
+
+  if (TP->QueryProp(P_GUILD_LEVEL) > 10 && interactive(wer) && 
+      member(beurteilt, getuid(wer)) == -1 && 
+      wer->QueryProp(P_GUILD_RATING) != MAX_ABILITY )
+  {
+    AMASTER->AddTeaching(TP, 1, wer->Name(WEN) + " beurteilt");
+    beurteilt += ({getuid(wer)});
+  }
+  return 1;
+}
+
+int advance(string str)
+{
+  object wer, gb;
+  string ret;
+  string *ignore;
+
+  if (TP->QueryProp(P_GUILD_LEVEL) < 11) return 0;
+  notify_fail("Wen willst Du befoerdern?\n");
+  if (!str) return 0;
+  if (!wer = present(str, ENV(TP))) return 0;
+  if (wer->QueryProp(P_GUILD) != GUILDNAME)
+    return notify_fail("Du kannst nur Amazonen befoerdern.\n"),0;
+  if (present(GUILD_NPC_ID, ENV(TP)) && TP->QueryProp(P_GUILD_LEVEL) < 12)
+    return write(GUILD_NPC_NAME + " kann das besser!\n"), 1;
+  if (wer == TP)
+    return write("Du kannst Dich nicht selber befoerdern!\n"), 1;
+  if (wer->InFight() || TP->InFight())
+    return write("Im Kampf geht das nicht.\n"), 1;
+
+  // gs 11 kann bis 9 befoerdern, gs 12 dann bis 10
+  if (((IS_LEARNER(wer) || wer->QueryProp(P_TESTPLAYER)) && !IS_WIZARD(TP)) || 
+      TP->QueryProp(P_GUILD_LEVEL) - wer->QueryProp(P_GUILD_LEVEL) < 3 ||
+      !interactive(wer))
+    return write(wer->Name()+" kann von Dir nicht befoerdert werden.\n"), 1;
+  if (!gb = find_object(GUILD))
+    return write("BUG IN DER AMAZONENGILDE!!! Sofort Feyaria verstaendigen!!!!\n"), 1;
+
+  if (!pointerp(ignore = wer->QueryProp(P_IGNORE)))
+    ignore = ({});
+  if (member(ignore, "amazonen.befoerdere" )!=-1 || 
+      member(ignore, getuid(TP)) != -1)
+    return write(wer->Name(WER,1) + " will sich nicht befoerdern lassen.\n"), 1;
+
+  switch (wer->QueryProp(P_GUILD_LEVEL))
+  {
+    case 1: ret = gb->Test2(wer,2);break;
+    case 2: ret = gb->Test3(wer,2);break;
+    case 3: ret = gb->Test4(wer,2);break;
+    case 4: ret = gb->Test5(wer,2);break;
+    case 5: ret = gb->Test6(wer,2);break;
+    case 6: ret = gb->Test7(wer,2);break;
+    case 7: ret = gb->Test8(wer,2);break;
+    case 8: ret = gb->Test9(wer,2);break;
+    case 9: ret = gb->Test10(wer,2);break;
+  }
+  if (!ret) 
+  {
+    ret = RES_CHECKER->check_restrictions(wer, 
+        gb->QueryProp(P_GUILD_LEVELS)[wer->QueryProp(P_GUILD_LEVEL) + 1]);
+    if (!stringp(ret))
+    {
+      ret = " auf die naechste Amazonenstufe!\n";
+      write("Du befoerderst "+wer->name(WEN)+ ret);
+      tell_object(wer, TP->Name(WER) + " befoerdert Dich"+ ret);
+      say(TP->Name(WER) + " befoerdert "+wer->name(WEN)+ ret, ({wer, TP}));
+      gb->remote_advance(wer, TP);
+      AMASTER->AddTeaching(TP, wer->QueryProp(P_GUILD_LEVEL)*10, wer->Name(WEN) + 
+          " auf Stufe "+ wer->QueryProp(P_GUILD_LEVEL) + " befoerdert");
+      return 1;
+    }
+  }
+  write(break_string( wer->Name(WER)+ ", Du kannst noch nicht auf die "
+      "naechste Stufe aufsteigen:"+ret ,78, "Du sagst: "));
+  say(break_string(wer->Name(WER)+ ", Du kannst noch nicht auf die "
+      "naechste Stufe aufsteigen:"+ret ,78, TP->Name(WER)+ " sagt: "));
+  if (member(beurteilt, getuid(wer)) == -1)
+  {
+    AMASTER->AddTeaching(TP, 1, wer->Name(WEM) + " nicht befoerdert");
+    beurteilt += ({getuid(wer)});
+  }
+  return 1;
+}
+
+int teach(string str)
+{
+  object pl, gb;
+  string wer, was;
+  int ret;
+  string *ignore;
+
+  if (TP->QueryProp(P_GUILD_LEVEL) < 11) 
+    return 0;
+  if (!str ) 
+    return 0;
+  if (sscanf(str, "%s %s",wer, was) != 2 ) 
+    return write("Wem willst Du was lehren?\n"),1;
+  if (!pl = present(wer, ENV(TP))) 
+    return write("Wem willst Du was lehren?\n"),1;
+  if (pl->QueryProp(P_GUILD) != GUILDNAME)
+    return notify_fail("Du kannst nur Amazonen etwas lehren.\n"),0;
+  if (present(GUILD_NPC_ID, ENV(TP)))
+    return write(GUILD_NPC_NAME + " kann das besser!\n"), 1;
+  if (pl == TP)
+    return write("Du kannst Dir selber nichts beibringen!\n"), 1;
+  if (pl->InFight() || TP->InFight())
+    return write("Im Kampf geht das nicht.\n"), 1;
+  if (((IS_LEARNER(pl) || pl->QueryProp(P_TESTPLAYER) ) && !IS_WIZARD(TP)) 
+      || !interactive(pl))
+    return write(pl->Name(WEM,1)+" kannst Du nichts lehren.\n"), 1;
+  if (!gb = find_object(GUILD))
+    return write("BUG IN DER AMAZONENGILDE!!! Sofort Feyaria verstaendigen!!!!\n"), 1;
+
+  if (!pointerp(ignore = pl->QueryProp(P_IGNORE)))
+    ignore = ({});
+  if (member(ignore, "amazonen.befoerdere") !=-1 ||
+      member(ignore, "amazonen.lehre") != -1 ||
+      member(ignore, getuid(TP)) != -1)
+    return write(pl->Name(WER,1) + " will sich nicht belehren lassen.\n"), 1;
+
+  if ((ret = gb->LearnSpell(was, pl)) == 1)
+  {
+    AMASTER->AddTeaching(TP, pl->QueryProp(P_GUILD_LEVEL)*5,
+        pl->Name(WEM) + " " + CAP(was) +" gelehrt");
+    tell_object(pl, TP->Name()+" bringt Dir '"+CAP(was)+"' bei.\n");
+    gb->spell_log(pl, was);
+  }
+  return ret;
+}
+
+void reset()
+{
+  ::reset();
+  if (!is_clone(TO)) return;
+  beurteilt = ({});
+}
+
+void NoReport()
+{
+  regaining++;
+}
+
+void ForceReport()
+{
+  regaining = -1;
+}
+
+void UnregisterEffect(string effect)
+{
+  switch(effect)
+  {
+    case STRAHLENKRANZ:  a1 = "----"; break;
+    case AMAZON_LIFE:    a2 = "----"; break;
+    case AMAZON_SPEED:   a3 = "----"; break;
+    case AMAZON_SELF:    a4 = "----"; break;
+    case "himmelsritt":  
+    case "sonnenspeer":
+    case "schildwall":
+      a5 = "----"; break;
+    case "heldenaura":
+    case "sturzflug":
+    case "abwehrhaltung":
+    case "speertanz":
+      a6 = "----"; break;
+  }
+  ForceReport();
+  if (owner && owner->QueryProp(P_HP) == owner->QueryProp(P_MAX_HP) &&
+      owner->QueryProp(P_SP) == owner->QueryProp(P_MAX_SP))
+    NotifyHpChange();
+}
+
+void RegisterEffect()
+{
+  if (!owner) return;
+  if (present(STRAHLENKRANZ, owner))  a1 = "(SK)"; 
+  else                                a1 = "----";
+
+  if (present(AMAZON_LIFE, owner))    a2 = "(LK)";
+  else                                a2 = "----";
+
+  if (present(AMAZON_SPEED, owner))   a3 = "(SL)"; 
+  else                                a3 = "----";
+
+  if (present(AMAZON_SELF, owner))    a4 = "(SB)"; 
+  else                                a4 = "----";
+
+  if(present("\namz_himmelsritt", owner)) a5 = "(HR)";
+  else if(owner->QueryProp(P_AMAZONEN_SONNENSPEER)) a5 = "(SS)";
+  else if(owner->QueryProp(P_AMAZONEN_SCHILDWALL))  a5 = "(SW)";
+  else                                         a5 = "----";
+
+  if(owner->QueryProp(P_AMAZONEN_STURZFLUG)) a6 = "(SF)";
+  else if (present("\namz_heldenaura", owner)) a6 = "(HA)";
+  else if(owner->QueryProp(P_TMP_DEFEND_HOOK)) a6 = "(AH)";
+  else if(owner->QueryProp(P_AMAZONEN_SPEAR_BONUS)) a6 = "(ST)";
+  else                                         a6 = "----";
+
+}
+
+varargs void NotifyHpChange()
+{
+  int    hp, mhp, hpdiff, sp, msp, spdiff, i;
+  string c, c1;
+  object teddy;
+  object ob;
+  
+  // Sicherheits-Check
+  if (!previous_object() || !owner || (owner != previous_object() && 
+        this_object() != previous_object() && 
+        getuid(previous_object()) != "GUILD.amazonen") )
+    return;
+
+  // Ausschalten wenn aktiv == 0 (z.B. nach Tod)
+  if (!aktiv)
+  {
+    if (owner != find_netdead(getuid(owner)))
+      owner->RemoveHpHook(ME);   // geht nur bei nicht-netztoten Spielern
+    return;
+  }
+
+  // Test auf Geist
+  if (owner->QueryProp(P_GHOST) || 
+      owner->QueryProp(P_HP) < 0 || 
+      !living(owner))
+    return;
+
+  if(regaining > 0)
+  {
+    regaining--;
+    return;
+  }
+  
+  // Powerregain bei Lebenskraft
+  if (powerregain && lastpower != time() && regaining != -1)
+  {
+    lastpower = time();
+    if (powerregain >= 3)
+    {
+      regaining = 1;
+      owner->AddSp(powerregain / 3);
+    }
+    regaining = 1;
+    owner->AddHp(powerregain);
+  }
+
+  if (kompakt && time() == last_report_time && regaining != -1)
+  {
+    if( !callout )
+    {
+      callout = 1;
+      call_out("NotifyHpChange",0);
+    }
+    return;
+  }
+
+  // aktuelle Werte ermitteln
+  hp = owner->QueryProp(P_HP);
+  mhp = owner->QueryProp(P_MAX_HP);
+  sp = owner->QueryProp(P_SP);
+  msp = owner->QueryProp(P_MAX_SP);
+  if (noscroll &&
+      hp - scrollHP >= 0 && hp - scrollHP < 5 &&
+      sp - scrollSP >= 0 && sp - scrollSP < 5)
+  {
+    scroll += hp - scrollHP + sp - scrollSP;
+    scrollHP = hp;
+    scrollSP = sp;
+    if (regaining != -1 && scroll < noscroll &&
+        !(hp == mhp && hp != lastHP) &&
+        !(sp == msp && sp != lastSP))
+      return;
+  }
+  scroll = 0;
+  scrollHP = hp;
+  scrollSP = sp;
+
+  if (i = owner->QueryProp(P_POISON))
+  {
+    switch(i)
+    {
+      case 1..3: special = "(gift)----"; break;
+      case 4..9: special = "(Gift)----"; break;
+      case 10..15: special = "(GIFT)----"; break;
+    }
+  }
+  else if (owner->QueryProp(P_PARALYZED) )
+    special = "(gelaehmt)";
+  else if (owner->QueryProp(P_FROG) )
+    special = "(Frosch)--";
+  else if (owner->QueryProp(P_BLIND) )
+    special = "(blind)---";
+  else if (owner->QueryProp(P_DEAF) )
+    special = "(taub)----";
+  else if (owner->QueryProp(P_MV) < 200 )
+    special = "(muede)---";
+  else if (owner->QueryProp(P_FOOD) > owner->QueryProp(P_MAX_FOOD) - 10 ) 
+    special = "(satt)----";
+  else if (owner->QueryProp(P_DRINK) > owner->QueryProp(P_MAX_DRINK) - 10 ) 
+    special = "(voll)----";
+  else if (owner->QueryProp(P_ALCOHOL) > owner->QueryProp(P_MAX_ALCOHOL) - 10 ) 
+    special = "(trunken)-";
+  else 
+    special = "----------";
+
+  // Faerbige Ausgabe
+  if (farbe)
+  {
+    if (owner->QueryProp(P_TTY) == "ansi")
+    {
+      i = 5 * hp / (mhp + 1);
+      c = ANSI_BOLD + report_colors[areportfarbe[i..i]];
+/*
+      switch(100*hp/mhp)
+      {
+        case 0..20:   c=ANSI_BOLD+ANSI_RED; break;
+        case 21..40:  c=ANSI_BOLD+ANSI_PURPLE; break;
+        case 41..60:  c=ANSI_BOLD+ANSI_CYAN; break;
+        case 61..80:  c=ANSI_BOLD+ANSI_GREEN; break;
+        case 81..100: c=ANSI_BOLD+ANSI_YELLOW; break;
+      }
+*/      
+    }
+    else
+      c = ANSI_BOLD;
+    c1 = ANSI_NORMAL;
+  }
+  else
+  {
+    c = "";
+    c1 = "";
+  }
+
+  
+  spdiff = sp - lastsp;
+  hpdiff = hp - lasthp;
+  // Vergleich und Ausgabe
+  if( ((hp < lastHP) || (hp > lastHP && (sp == msp || callout)) || 
+        (sp != lastSP)) || regaining == -1)
+  {
+    switch (armod)
+    {
+      case 0: 
+        tell_object(owner, 
+            sprintf("%sDu hast jetzt %d (%d) Lebenspunkte und %d (%d) "
+              "Magiepunkte.%s\n",
+              c, hp, mhp, sp, msp, c1));
+        break;
+      case 1:
+        tell_object(owner,
+            sprintf( "%sDu hast jetzt %3d (%3d) Lebenspunkte (%+4d) und "
+              "%3d (%3d) Magiepunkte (%+4d).%s\n",
+              c, hp, mhp, hpdiff, sp, msp, spdiff, c1));
+        break;
+      case 2:
+        if (max)
+          tell_object(owner,
+              sprintf( "%s--- LPs: %3d/%3d (%+4d)  MPs: %3d/%3d (%+4d) -%s-%s"
+                "-%s-%s---%s\n", 
+                c, hp, mhp, hpdiff, sp, msp, spdiff, a1, a2, a3, special, c1));
+        else
+          tell_object(owner,
+              sprintf( "%s---- LPs: %3d (%+4d)  MPs: %3d (%+4d) ----%s-%s"
+                "-%s-%s-%s-%s-%s-%s\n", 
+                c, hp, hpdiff, sp, spdiff, a1, a2, a3, a4, a5, a6, special, c1));
+        break;
+      case 3:
+        if (max)
+          tell_object(owner,
+              sprintf("%s-%s-%s-%s-%s-%s-%s-%s LPs: "
+                "%3d/%3d (%+4d), MPs: %3d/%3d (%+4d)%s\n", 
+                c, a1, a2, a3, a4, a5, a6, special, hp, mhp, hpdiff, sp, msp, spdiff, c1));
+        else
+          tell_object(owner,
+              sprintf("%s---%s-%s-%s-%s-%s-%s-%s-- LPs: "
+                "%3d (%+4d), MPs: %3d (%+4d)%s\n", 
+                c, a1, a2, a3, a4, a5, a6, special, hp, hpdiff, sp, spdiff, c1));
+        break;
+      case 4:  
+        tell_object(owner,
+            sprintf("%sLP:%3d%% MP:%3d%% %s %s %s %s %s %s %s%s\n", 
+              c,
+              100 * hp / mhp, 100 * sp / msp, 
+              a1 != "----" ? a1 : "", 
+              a2 != "----" ? a2 : "",
+              a3 != "----" ? a3 : "", 
+              a4 != "----" ? a4 : "", 
+              a5 != "----" ? a5 : "",
+              a6 != "----" ? a6 : "",
+              special != "----------" ? regreplace(special,"-","",1) : "",
+              c1));
+    }
+    lasthp = hp; 
+    lastsp = sp;
+    last_report_time = time();
+    if(regaining == -1) regaining = 0;
+    callout = 0;
+    lastHP = hp; 
+  }
+  else if( !callout && (hp > lastHP+1) )
+  {
+    callout = 2;
+    call_out("NotifyHpChange",0);
+  }
+  else 
+  {
+    callout = 0;
+    lastHP = hp; 
+  }
+
+  // neue Werte merken
+  lastSP = sp;
+}
+
+void reactivate(object ob)
+{
+  if (objectp(ob)) 
+  {
+    owner = ob;
+    aktiv = 1;
+    ob->AddHpHook(ME);
+//    scrollHP = ob->QueryProp(P_HP);
+//    scrollSP = ob->QueryProp(P_SP);
+    lasthp = scrollHP = lastHP = ob->QueryProp(P_HP);
+    lastsp = scrollSP = lastSP = ob->QueryProp(P_SP);
+    ForceReport();
+    NotifyHpChange();
+  }
+}
+
+int is_activate()
+{
+  return aktiv;
+}
+
+void activate(object ob)
+{
+  if (objectp(ob)) 
+  {
+    owner = ob;
+    aktiv = 1;
+    ob->AddHpHook(ME);
+    lasthp = lastHP = ob->QueryProp(P_HP);
+    lastsp = lastSP = ob->QueryProp(P_SP);
+    ForceReport();
+    RegisterEffect();
+    NotifyHpChange();
+  } 
+  else 
+  {
+    if (ob = (owner || TP)) 
+      ob->RemoveHpHook(ME);
+    owner = aktiv = 0;
+  }
+}
+
+int areport(string str)
+{
+  notify_fail("Syntax: areport ein|aus.\n");
+  if (!str) 
+  {
+    ForceReport();
+    NotifyHpChange();
+    tell_room(ENV(TP), 
+        sprintf("%s hat jetzt %d (%d) Lebenspunkte und %d (%d) Magiepunkte.\n",
+       CAP_TPN, TP->QueryProp(P_HP), TP->QueryProp(P_MAX_HP),
+       TP->QueryProp(P_SP), TP->QueryProp(P_MAX_SP)), ({TP}));
+    return 1;
+  }
+  switch (str)
+  {
+    case "ein":
+      if (aktiv && objectp(owner))
+        write("Der Report-Modus ist schon eingeschaltet!\n");
+      else {
+        write("Report-Modus ist jetzt eingeschaltet.\n");
+        activate(TP);
+      }
+      break;
+    case "aus":
+      if (!aktiv)
+        write("Der Report-Modus ist doch schon ausgeschaltet!\n");
+      else { 
+        write("Report-Modus ist nun ausgeschaltet.\n");
+        activate(0);
+      }
+      break;
+    default:
+      return areportmodus(str);
+  }
+  return 1;
+}
+
+int remove(int x)
+{
+  if (aktiv && TP) TP->RemoveHpHook(ME);
+  return ::remove(x);
+}
+
+int Setreport()
+{
+  if (armod == 0)      report = REPORT_NORMAL;
+  else if (armod == 1) report = REPORT_DIFF;
+  else if (armod == 2) report = REPORT_RECHTS;
+  else if (armod == 3) report = REPORT_LINKS;
+  else if (armod == 4) report = REPORT_PROZENT;
+  report += farbe * REPORT_FARBE + !!noscroll * REPORT_SCROLL + 
+    kompakt * REPORT_KOMPAKT + max * REPORT_MAX;
+
+  AMASTER->SetReportModus(owner, report);
+  return 1;
+}
+
+int areportmodus(string str)
+{
+  notify_fail("Areportmodus info fuer genauere Informationen.\n"); 
+  if (!str) return 0;
+  if (str == "normal" ) 
+  {
+    armod = 0;
+    write("Amazonenreportmodus normal!\n");
+    return Setreport();
+  }
+  if( str == "diff" ) 
+  {
+    armod = 1;
+    write("Amazonenreportmodus mit Differenzanzeige!\n");
+    return Setreport();
+  }
+  if( str == "links" ) 
+  {
+    armod = 2;
+    write("Amazonenreportmodus links!\n");
+    return Setreport();
+  }
+  if( str == "rechts" ) 
+  {
+    armod = 3;
+    write("Amazonenreportmodus rechts!\n");
+    return Setreport();
+  }
+  if( str == "farbe" )
+  {
+    if( farbe ) 
+    {
+      farbe = 0;
+      write("Amazonenreport ohne Farben!\n");
+    }
+    else 
+    {
+      farbe = 1;
+      write("Amazonenreport mit Farben!\n");
+    }
+    return Setreport();
+  } 
+  if (str[0..5] == "scroll")
+  {
+    if (sscanf(str, "scroll %d", noscroll) != 1)
+    {
+      noscroll = 0;
+      write("Amazonenreport mit normalem Raufidlen!\n");
+    }
+    else 
+    {
+      printf("Amazonenreport mit weniger Scroll beim Raufidlen! (jeden %d Punkt)\n",
+          noscroll);
+    }
+    return Setreport();
+  }
+  if (str == "prozent" )
+  {
+    armod = 4;
+    write("Amazonenreportmodus Prozent!\n");
+    return Setreport();
+  }
+  if (str == "kompakt" )
+  {
+    if (kompakt) 
+    {
+      kompakt = 0;
+      write("Amazonenreportmodus normal (Jede Aenderung wird angezeigt!i)\n");
+    }
+    else 
+    {
+      kompakt = 1;
+      write("Amazonenreportmodus Kompakt (Nur eine Meldung je Herzschlag)!\n");
+    }
+    return Setreport();
+  }
+  if (str == "max") 
+  {
+    if (max) 
+    {
+      max = 0;
+      write("Amazonenreportmodus ohne Maximale Lebenspunkten.\n");
+    }
+    else
+    {
+      max = 1;
+      write("Amazonenreportmodus mit maximalen Lebenspunkten.\n");
+    }
+    return Setreport();
+  }
+  if (str == "info")
+  {
+    write("Folgende Reportmodi stehen zur Verfuegung:\n"
+      "   normal    Normaler Reportmodus wie vom Teddy.\n"
+      "   diff      Differenz der lps und mps wird zusaetzlich angezeigt.\n"
+      "   links     Kurze Anzeige auf linker Blidschirmseite.\n"
+      "   rechts    Kurze Anzeige auf rechter Blidschirmseite.\n"
+      "   prozent   Lebens und Magiepunkte in Prozent angeben.\n"
+      "\n"
+      "   farbe     Wechselt zwischen faerbiger und normaler Anzeige.\n"
+      "             Benoetigt ansi-faehiges Terminal ( stty ansi)\n"
+      "             ansonsten wird nur Fett-Schrift verwendet.\n"   
+      "   scroll x  Weniger Scrollen beim Raufidlen.\n"
+      "             Nur jeder xte Punkt wird angezeigt.\n"
+      "   kompakt   Nur eine Meldung je Herzschlag.\n"
+      "   max       Man sieht auch die maximale Lebenspunkte.\n"+
+      "\n");
+    write("Zur Zeit: "+
+        (armod == 0 ? "normal" : (armod == 1 ? "diff" : (
+            armod == 2 ? "links" : (armod == 3 ? "rechts" : "prozent")))) +
+        (farbe ? " mit Farbe" : " ohne Farbe")+
+        (noscroll ? " mit weniger Scroll (" + noscroll + ")" : "")+
+        (kompakt ? " kompakt" : "") + 
+        (max ? " mit maximalen Punkten" : "") + "\n");
+    return 1;
+  }
+  return 0;
+}
+
+nosave int areportfarben(string cols) 
+{
+  string *colors;
+  string new_col;
+  mapping valid_colors;
+  int i;
+
+  valid_colors = ([
+      "schwarz":"B",
+      "rot":"R",
+      "gruen":"G",
+      "gelb":"Y",
+      "blau":"B",
+      "lila":"P",
+      "zyan":"C",
+      "weiss":"W",
+      "normal":"N"]);
+  if (TP->QueryProp(P_TTY) == "dumb")
+    return notify_fail("Du musst vorher mittels 'stty' die Farben aktivieren!\n"),0;
+  if (!cols || cols == "hilfe") 
+  {
+    write(
+      "Hier kannst Du die farbliche Anzeige des Amazonenreports umstellen.\n"
+      "Fuer jede der 5 Abstufungen kann eine eigene Farbe gewaehlt werden.\n"
+      "Syntax: areportfarben farbe1 farbe2 farbe3 farbe4 farbe5\n"
+      "Moegliche Farben: schwarz, rot, gruen, gelb, blau, lila, zyan, weiss.\n"
+      "areportfarben standard setzt die Werte wieder auf den normalen Wert.\n"
+      "Aktuelle Einstellung: ");
+    for (i = 0; i < 5; i++)
+      write(report_colors[areportfarbe[i..i]] + "***" + ANSI_NORMAL+" ");
+    write("\n");
+    return 1;
+  }
+  if (cols == "standard") 
+  {
+    areportfarbe = "RPCYG";
+    write("Ok, Standard Farben (Rot, Lila, Zyan, Gelb, Gruen) gesetzt!\n");
+    AMASTER->SetReportColors(TP, areportfarbe);
+    return 1; 
+  }
+  colors = explode(cols, " ");
+  new_col = "";
+  if (sizeof(colors) != 5) 
+    return notify_fail("Es muessen fuenf Farben angegeben werden!\n"),0;
+
+  for (i = 0; i <= sizeof(colors) - 1; i++) 
+  {
+    if (!member(valid_colors, colors[i])) 
+    {
+      write(sprintf("Falsche Farbe: %s!\n", colors[i]));
+      return -1;
+    }
+    new_col += valid_colors[colors[i]];
+  }
+  areportfarbe = new_col;
+  write("Ok, Farben gesetzt!\n");
+  AMASTER->SetReportColors(TP, areportfarbe);
+  return 1;
+}  
+     
+void PowerRegain(int regain, int dur)
+{
+  if (file_name(PO) != SPELLBOOK) return;
+  powerregain = regain;
+  call_out("RemoveRegain", dur);  
+}
+
+void RemoveRegain()
+{
+  powerregain=0;
+}
+
+string QueryVersion() 
+{
+  return LATEST_GUILDITEM_VERSION;
+}
+
+int QueryLoad()
+{
+  load -= ({0});
+  load &= environment()->QueryProp(P_ARMOURS);
+  return sizeof(load);
+}

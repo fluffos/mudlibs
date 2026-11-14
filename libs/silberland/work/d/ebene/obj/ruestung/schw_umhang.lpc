@@ -1,0 +1,141 @@
+/*
+** Schwarzer Umhang
+** ---
+** (w) 1997-02-01 Woody@SL
+** 30.01.99  Woody  Nur noch wenn getragen dunkler, bei NIGHTVISION dafuer -3
+** 20.11.00  Woody  Fuer Idler verdunkelt er nicht mehr
+*/
+
+inherit "std/armour";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <class.h>
+
+nosave int idler;
+
+
+void create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  AddAdjective ("schwarzer", "schwarzen");
+  AddId ("umhang");
+  SetProp (P_SHORT, "Ein schwarzer Umhang");
+  SetProp (P_LONG,
+    "Ein dunkelschwarzer Umhang aus einem sehr feinen Material. Kleine "
+    "Knoepfe aus feinem Silber zieren ihn und eine seltsame, magische "
+    "Aura scheint ihn zu umgeben. Er ist bestimmt aeusserst wertvoll.");
+  SetProp (P_NAME, "Umhang");
+  SetProp (P_NAME_ADJ, "schwarz");
+  SetProp (P_GENDER, MALE);
+  SetProp (P_WEIGHT, 280);
+  SetProp (P_VALUE, 1200);
+  SetProp(P_LIGHT, 0);          // Erst beim Anziehen verdunkeln
+  SetProp (P_DEFEND_FUNC, this_object());
+  SetProp (P_WEAR_FUNC, this_object());
+  SetProp (P_REMOVE_FUNC, this_object());
+
+  SetProp (P_ARMOUR_TYPE, AT_CLOAK);  // siehe sys/combat.h
+  SetProp (P_AC, 6);
+  SetProp (P_INFO, break_string("Der schwarze Umhang scheint Feuer und Licht "
+      "auf magische Weise zu absorbieren, und so seinem Traeger sowohl "
+      "Nutzen als auch Nachteile zu bringen.",78));
+  SetProp (P_MATERIAL, ([MAT_SILK:95,MAT_SILVER:5]) );
+
+  AddDetail ("knoepfe", "Kleine silberne Knoepfe, auf denen ein "
+    "seltsames Symbol eingepraegt ist.");
+  AddDetail ("symbol", "Das Symbol scheint eine Flamme darzustellen.");
+  AddDetail ("flamme", "Was das Symbol wohl zu bedeuten hat...?");
+  AddDetail ("aura",
+      "Du spuerst sie zwar irgendwie, aber sehen kannst Du sie nicht...");
+  AddDetail ("material", "Es ist sehr fein und geschmeidig.");
+  AddDetail ("silber", "Ein sehr wertvolles Material.");
+  AddDetail ("seide", "Sie fuehlt sich sehr geschmeidig an.");
+}
+
+int DefendFunc(string *dtyp, mixed spell, object enemy)
+{
+  int prot,f,l;
+  prot = 0;
+  if (random(10) > 3) return 0;                 // nicht immer...
+  if (!enemy) return 0;
+  if (enemy->QueryProp(P_RACE)=="Troll")
+  {
+    tell_object (QueryProp (P_WORN),
+      "Dein Umhang drueckt ein wenig schmerzend auf Deine Schultern.\n");
+    prot -= random(10);
+  }
+  else if ((f=(member(dtyp, DT_FIRE) >= 0)) ||
+           (l=(member(dtyp, DT_LIGHT) >= 0)))
+  {
+    // Wir kommen zwar ueber die Grenzen, aber nicht immer,
+    // und das nur sehr geringfuegig
+    prot = 4 + random(6);
+    tell_object (QueryProp (P_WORN),
+        "Der schwarze Umhang faengt ein wenig von dem "+
+        (f ? "Feuer" : "Licht")+" ab.\n");
+  }
+  return prot;
+}
+
+private nosave void EsWird(object pl, string was)
+{
+  mixed u;
+  int i;
+
+  if (!objectp(pl)) return;
+  u=all_inventory(environment(pl));
+  u=filter_array(u,#'living);
+  for (i=sizeof(u)-1; i>=0; i--)
+    if (!u[i]->CannotSee(1))
+      tell_object(u[i], "Es wird ein wenig "+was+".\n");
+}
+
+nosave void SetMyLight(object pl, int x)
+{
+  if (!pl) x=0;         // Sicherheitsmassnahme...
+  SetProp(P_LIGHT, x);
+  if (x<0) EsWird(pl,"dunkler"); else EsWird(pl,"heller");
+}
+
+int WearFunc(object ruest, int silent)
+{
+  while (remove_call_out("SetMyLight") != -1) /* continue */ ;
+  if (this_player()->is_class_member(CL_NIGHTVISION))
+    call_out("SetMyLight", 2, this_player(), -3);
+  else
+    call_out("SetMyLight", 2, this_player(), -1);
+  idler = 0;
+  return 1;
+}
+
+int RemoveFunc(object ruest, int silent)
+{
+  while (remove_call_out("SetMyLight") != -1) /* continue */ ;
+  call_out("SetMyLight", 2, this_player(), 0);
+  if (idler && !silent)
+    tell_object(this_player(),
+        "Der schwarze Umhang absorbiert wieder etwas dunkle Energie.\n");
+  idler = 0;
+  return 1;
+}
+
+void reset()
+{
+  object pl;
+
+  ::reset();
+  if (!objectp(pl=QueryProp(P_WORN)))
+    SetProp(P_LIGHT, 0);                // Sicherheitsmassnahme :)
+  else if (!idler && interactive(pl) && query_idle(pl) > 600)   // 10 min
+  {
+    idler++;
+    tell_object(pl, "Der schwarze Umhang verliert durch Deine "
+        "Passivitaet an dunkler Energie.\n");
+    call_out("SetMyLight", 2, this_player(), 0);
+  }
+}
+

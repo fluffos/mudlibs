@@ -1,0 +1,276 @@
+//=========================================================================
+//
+// File:    schmiede_040.c
+// Created by Ronja
+//
+// Project: testgebiet
+//
+// Ein Feuer kann mittels AddCmd an- und ausgemacht werden. Je nach Zustand
+// aendert sich die Umgebung des Raumes (Temperatur). say/write, tell_object/
+// tell_room und Message zur Ausgabe an die Spieler werden vorgestellt und
+// diskutiert.
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit "std/room"; //wir erben alle eigenschaften des Standardraumes
+
+//-------------------------------------------------------------------------
+// Hier wird ein etwas komplexeres Kommando in den Raum eingefuegt. Man soll
+// ein Feuer an und ausmachen koennen. Dazu machen wir uns zwei defines,
+// das erhoeht die Lesbarkeit des Codes. Denk bitte daran, dass dein Code
+// leicht lesbar bleibt, auch fuer andere. Denn wenn es einen Bug geben
+// sollte und du bist nicht anwesend, erleichterst du es den anderen
+// Magiern, deinen Source schnell zu verstehen und den Bug schnell zu
+// finden und zu beheben. "Schmutzige" Programmierung, hacks und
+// Statements, die zig Sachen in einer Zeile erledigen, moegen am
+// Anfang schnell getippt sein. Doch spaetestens wenn du nach einiger
+// Zeit selbst ueber dein Elaborat nachdenken musst, wirst du froh sein,
+// wenn dieses sauber kodiert ist. Darum spendiere die wenigen Sekunden,
+// die es laenger dauert, und schreibe sauberen Code.
+//-------------------------------------------------------------------------
+
+#define AN 1
+#define AUS 0
+
+//-------------------------------------------------------------------------
+// Jetzt brauchen wir noch
+// eine Variable, die uns angibt, ob das Feuer an oder aus ist.
+//-------------------------------------------------------------------------
+
+int feuer;
+
+void create()
+{
+  ::create();
+
+//-------------------------------------------------------------------------
+// Wenn der Raum geladen wird, legen wir fest, dass das Feuer an ist
+//-------------------------------------------------------------------------
+
+  feuer = AN;
+
+  SetProp(P_INT_SHORT, "In einer Schmiede");
+  SetProp(P_INT_LONG,
+    "Du befindest Dich in einer Schmiede. Am meisten fasziniert Dich hier "
+    "das grosse Feuer in der Mitte, alles andere ist mehr oder wenig "
+    "uninteressant. ");
+
+//-------------------------------------------------------------------------
+// Da ein Feuer an ist, heizen wir mit 50 Grad ordentlich ein
+// Da wir in einem Haus sind, setzen wir die Umgebung TT_HOUSE
+//-------------------------------------------------------------------------
+
+  SetProp(P_LIGHT, 1);
+  SetProp(P_INDOORS, 1); //wir befinden uns innerhalb eines Raumes!
+  SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE: 50, ENV_TERRAIN: TT_HOUSE]) );
+
+  AddDetail( ({"boden"}) ,
+    "Du stehst darauf.");
+
+  AddDetail( ({"decke"}) ,
+    "Die ist schon da.");
+
+  AddDetail( ({"wand","waende"}) ,
+    "Waeren sie nicht da, wuerdest Du im Freien stehen.");
+
+  AddDetail( ({"mitte"}) ,
+    "In der Mitte der Schmiede steht eine grosse Esse.");
+
+//-------------------------------------------------------------------------
+// Bei dem Detail "schmiede" machen wir es uns wieder einfach und geben
+// einfach nochmal die Langbeschreibung des Raumes aus.
+//-------------------------------------------------------------------------
+
+  AddDetail( ({"schmiede"}) ,
+    QueryProp(P_INT_LONG)
+  );
+
+//-------------------------------------------------------------------------
+// Bei der Beschreibung des Details "feuer" das uebliche Spielchen
+//-------------------------------------------------------------------------
+
+  AddSpecialDetail( ({"feuer","esse"}), "detail_feuer");
+
+//-------------------------------------------------------------------------
+// Zwei Kommandos im Raum, eines um das Feuer anzuzuenden, eines um
+// es zu loeschen
+//-------------------------------------------------------------------------
+
+  AddCmd( ({"loesche","loesch"})      , "cmd_loeschen");
+  AddCmd( ({"zuend","zuende"})        , "cmd_zuenden");
+
+  AddItem(NPC "schmied_030", REFRESH_DESTRUCT);
+
+  AddExit("osten", ROOM "wiese_030");
+}
+
+string detail_feuer(string str)
+{
+  string s;
+
+  if(feuer == AN)
+  {
+    s = "Hell lodern die Flammen in der Esse und verbreiten eine ziemliche "
+        "Hitze. ";
+  }
+  else
+  {
+    s = "Nur dunkelrot glimmt die Glut in der Esse. ";
+  }
+
+//-------------------------------------------------------------------------
+// Eigentlich muesste man jetzt noch die Details Flammen, Glut und Hitze
+// beschreiben. Fuer jedes  waere eine AddSpecialDetail noetig. Wir Wollen
+// dieses Beispiel aber nicht uebertreiben und ueberlassen die Loesung
+// dem geneigten Leser.
+//-------------------------------------------------------------------------
+
+  return BS(s);
+}
+
+//-------------------------------------------------------------------------
+// Funktion zum loeschen des Feuers
+//-------------------------------------------------------------------------
+
+int cmd_loeschen(string str)
+{
+  notify_fail("Was moechtest Du loeschen?\n"); //Fehlermeldung nicht vergessen
+
+  if(!str || str == "") return 0; //nichts angegeben, wir fuehlen uns nicht
+                                  //nicht zustaendig
+
+  if(!(str == "feuer"         ||            //nicht esse oder feuer, da
+       str == "esse"          )) return 0;  //fuehlen wir uns auch nicht
+                                            //zustaendig
+
+//-------------------------------------------------------------------------
+// Um Spieler oder den anderen Spielern etwas mitzuteilen, gibt es
+// mehrere Varianten.
+//
+// Viele benutzen say/write. "write" Gibt eine Meldung an den Spieler aus,
+// welcher das Kommando ausgeloest hat (this_player()), say eine Meldung
+// an alle anderen Spieler. say/write sind einfach zu codieren, da sie
+// wenig Klammern brauchen, und von daher haeufig in aelteren Sourcen
+// verwendet werden. say/write ist aber auch extrem unflexibel und nimmt
+// keine Ruecksicht auf blinde/taube Spieler. Bei neuen Projekten
+// sollte man von say/write Abstand nehmen.
+//
+// Groessere Moeglichkeiten als say/write bieten
+// tell_object: gibt etwas an ein bestimmtes Objekt aus
+// tell_room  : gibt etwas an alle in einem Raum aus, wobei man
+//              bestimmte Objekte ganz gezielt ausschliessen kann
+// Message    : gibt Meldungen an Objekte/Raeume aus. Zusaetzlich kann man
+//              angeben, ob das, was ausgegeben wird, sehbar/fuehlbar/hoerbar
+//              ist. Blinde oder Taube Spieler bekommen diese nachricht dann
+//              nicht.
+//
+// In diesen Beispielen wird das flexible Message() verwendet, wenn eine
+// sichtbare/hoerbare Nachricht ausgegeben wird, ansonsten wird tell_object
+// tell_room verwendet.
+//
+// say/write sollten nicht mehr verwendet werden, da unflexibel und in
+// Faellen von Taubheit/Blindheit schichtweg falsch ist.
+//-------------------------------------------------------------------------
+
+//-------------------------------------------------------------------------
+// Wenn das Feuer aus ist, dann gibt es auch nichts zu loeschen
+//-------------------------------------------------------------------------
+
+  if(feuer == AUS)
+  {
+    tell_object(TP,"Aber das Feuer ist doch schon aus!\n"); //kein BS, da der
+                                                            //satz eh kurz ist
+                                                            //aber dann das \n
+                                                            //nicht vergessen
+
+    return -1; //erinnerst du dich? Die Syntax ist korrekt, aber es war wegen
+               //der Umstaende keine sinnvolle Aktion. Daher hier mit -1
+               //zurueckkehren
+  }
+
+//-------------------------------------------------------------------------
+// So, jetzt noch Meldungen an den Spieler und den Raum. Puuuh, und schon
+// haben wir wieder zwei neue Details, die beschrieben werden muessen:
+// Wasser und Eimer. So schwer ist es, schoene und inhaltlich geschlossene
+// Raume zu schreiben. Wir lassen aber Eimer und Wasser mal einfach so sein.
+//-------------------------------------------------------------------------
+
+  tell_object(TP,"Du nimmst einen Eimer Wasser und loeschst das Feuer.\n");
+
+//-------------------------------------------------------------------------
+// Blinde Spieler sollen nicht sehen, was der andere gerade tut.
+// Es ist sichtbar, was der andere Spieler tut, also MSGFLAG_VISUAL,
+// und natuerlich soll die Nachricht nicht noch einmal an den Spieler
+// ausgegeben werden, der das Feuer geloescht hat, denn der hat ja
+// gerade eben eine eigene Meldung bekommen: MSGFLAG_NO_TP)
+//-------------------------------------------------------------------------
+
+
+  TO->Message(BS(TP->Name()+" nimmt einen Eimer Wasser und loescht das "
+              "Feuer."), MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+
+//-------------------------------------------------------------------------
+// So, jetzt das Feuer ausmachen und dadurch wird es natuerlich kaelter.
+//-------------------------------------------------------------------------
+
+  feuer = AUS;
+  SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE: 25, ENV_TERRAIN: TT_HOUSE]) );
+
+//-------------------------------------------------------------------------
+// Properties koennen jederzeit veraendert werden, nicht nur im create!
+//-------------------------------------------------------------------------
+
+  return 1; // syntax ok, aktion sinnvoll, daher 1 zurueckgeben
+}
+
+int cmd_zuenden(string str)
+{
+
+//-------------------------------------------------------------------------
+// Fehlermeldung setzen und schauen, ob wir ueberhaupt gemeint sind.
+// Sollte ja nun bekannt sein.
+//-------------------------------------------------------------------------
+
+  notify_fail("Was moechtest Du anzuenden?\n");
+
+  if(!str || str == "") return 0;
+  if(!(str == "feuer"         ||
+       str == "esse"          ||
+       str == "feuer an"      ||
+       str == "esse an"       )) return 0;
+
+//-------------------------------------------------------------------------
+// Falls das Feuer an ist, geht's natuerlich nicht an....
+//-------------------------------------------------------------------------
+
+  if(feuer == AN)
+  {
+    tell_object(TP,"Aber das Feuer brennt doch schon!\n");
+
+    return -1; //Syntax ok, aber Aktion nicht sinnvoll!
+  }
+
+//-------------------------------------------------------------------------
+// Sodele, jetzt noch ein paar Meldungen
+//-------------------------------------------------------------------------
+
+  tell_object(TP,"Du pustest in die Glut und zuendest das Feuer wieder an.\n");
+
+  TO->Message(BS(TP->Name()+" pustet in die Glut und zuendet das Feuer "
+              "wieder an."), MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+
+//-------------------------------------------------------------------------
+// Feuer anmachen und dem Raum wieder ordentlich einheizen!
+//-------------------------------------------------------------------------
+
+  feuer = AN;
+  SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE: 50, ENV_TERRAIN: TT_HOUSE]) );
+
+  return 1;
+}
+
+
+
+

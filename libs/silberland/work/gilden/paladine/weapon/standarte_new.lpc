@@ -1,0 +1,286 @@
+/*
+   Die heilige Standarte
+   (c) Angrox@SL
+   25. Aug. 1998
+*/
+// $Date: 2006/09/08 12:40:11 $
+/* $Revision: 1.4 $
+ * $Locker:  $
+ * $Log: standarte.c,v $
+ * Revision 1.4  2006/09/08 12:40:11  Angrox
+ * destruct() -> remove() (LD Mud)
+ *
+ * Revision 1.3  2006/01/09 09:06:58  Angrox
+ * npc_time added
+ *
+ * Revision 1.2  2004/12/20 13:30:15  Angrox
+ * Ayla rufen debuggt, ENV checking debuggt
+ *
+ * Revision 1.1  2002/05/28 14:09:22  Angrox
+ * Initial revision
+ *
+ */
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <new_skills.h>
+#include <defines.h>
+#include <moredef.h>
+#include <wizlevels.h>
+#include <class.h>
+#include <moving.h>
+#include <mnpc.h>
+#include "../paladin.h"
+inherit "/std/weapon";
+
+int log_per_reset=1;
+int npc_time=0;
+
+void ayla_cmd(string str);
+
+void create()
+{
+  if( !is_clone(TO) ) return;
+  ::create();
+
+  if(file_name(previous_object())!="/p/daemon/itemd/itemd") {
+    raise_error("Illegales Clonen des Uniques! ");
+    remove();
+    return;
+  }
+
+  SetProp(P_SHORT, "Die Standarte der Paladine");
+  SetProp(P_LONG, 
+      "Die Standarte der Paladine ist eine ueberlange "
+      "Stosslanze mit dem Wappen der Paladine am oberen "
+      "Ende. Das Wappen ist auf hellem Tuch aufgebracht und "
+      "zeigt zwei gekreuzte Schwerter, in deren Mitte sich "
+      "eine Rose befindet.");
+     
+  SetProp(P_ARTICLE, 0);
+  //SetProp(P_NAME_ADJ, "heilig");
+  SetProp(P_NAME, ({"die heilige Standarte der Paladine",
+                    "der heiligen Standarte der Paladine", 
+                    "der heiligen Standarte der Paladine", 
+                    "die heilige Standarte der Paladine"})); 
+
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({"standarte", PALADINITEM, PALADIN_STANDARTE}) ); 
+
+  SetProp(P_INFO,
+      "Jeder Paladin kann exzellent mit dieser Waffe umgehen. "
+      "Sie trifft vor allem boese Gegner.");
+  
+  SetProp(P_WEAPON_TYPE, WT_SPEAR);
+  SetProp(P_WC, 200);
+  SetProp(P_WC_FIXFACTOR, 0.5);
+  SetProp(P_DAM_TYPE, ({DT_PIERCE, DT_HOLY}) );
+  SetProp(P_QUALITY_DECAY, 300);
+  SetProp(P_NR_HANDS, 2);
+  SetProp(P_VALUE, 7500);
+  SetProp(P_WEIGHT, 3300);
+  SetProp(P_WIELD_RESTRICTIONS, ([P_LEVEL:30, A_STR:25]) );
+  SetProp(P_MATERIAL, ([MAT_TITANIUM:60, MAT_STEEL:40]) ); 
+  SetProp(P_WIELD_FUNC, TO);    
+  SetProp(P_HIT_FUNC, TO);
+  SetProp(P_NOSELL, 1);
+  call_out("set_room_prop", 2);
+}
+
+void set_room_prop() {
+  if(ENV(ME)) 
+    ENV(ME)->SetProp("standarte", ME);
+}
+
+int WieldFunc() {
+  if(TP->QueryProp(P_ALIGN)<200) {
+    write("Du bist zu boese, um die Standarte zuecken zu koennen.\n");
+    return 0;
+  }
+  return 1;
+}
+
+int HitFunc(object enemy) {
+  int align;
+  int dam;
+  dam=0;
+  if(ENV(ME)->QueryProp(P_ALIGN)<0) {
+    ME->DoUnwield();
+    return 0;
+  }
+  align=enemy->QueryProp(P_ALIGN);
+  dam-=align/20;
+  if(enemy->is_class_member(CL_DARKELF) || enemy->is_class_member(CL_DEMON) ||
+      enemy->is_class_member(CL_UNDEAD)) 
+  {
+    dam*=2;
+  }
+  if(MENV->QueryProp(P_GUILD)=="paladine")
+    dam+=40;
+  return dam;
+}
+
+int BecomesNetDead(object wer) {
+   object pl, room;
+   call_other(ROOM("burg_schatzkammer"), "???");
+   pl=ENV(ME);
+   if(!pl)
+     ME->move(ROOM("burg_schatzkammer"), M_NOCHECK);
+   room=ENV(pl);
+   if(room && (wer == pl))
+     ME->move(room, M_NOCHECK);
+   else
+     ME->move(ROOM("burg_schatzkammer"), M_NOCHECK);
+   return 1;
+}
+
+void init() {
+  ::init();
+  call_out("container_check", 2);
+  if(ENV(ME) && IS_LEARNER(ENV(ME)) && log_per_reset) {
+    write_file(LOG("standarte.log"), sprintf("%s: Standarte in %O\n", 
+          dtime(time()), ENV(ME)));
+    log_per_reset=0;
+  }
+}
+
+void container_check() {
+  object env_me;
+  env_me=ENV(ME);
+  if(env_me && ENV(env_me)) {
+    if(env_me->QueryProp(P_CONTAINER) && !living(env_me)) {
+      tell_object(ENV(env_me), BS("Die heilige Standarte materialisiert "
+            "sich wieder in Deinem Gepaeck."));
+      ME->move(ENV(env_me), M_NOCHECK);
+    }
+  }
+  return ;
+}
+
+void reset() {
+  object pl,attacker; 
+  int i, nekro_island;
+  ::reset();
+  log_per_reset=1;
+  nekro_island=0;
+  if(!is_clone(TO)) return ;
+  catch(find_object(ROOM("burg_schatzkammer"))->SetProp("standarte", ME));
+  pl=ENV(ME);
+  if(file_name(pl))==ROOM("burg_schatzkammer") {
+    // Standarte ist in der Schatzkammer -> dann amchen wir nix
+    return ;
+  }
+  if(!objectp(pl)) { // Kein ENV? -> rueckmoven
+    ME->move(ROOM("burg_schatzkammer"), M_NOCHECK);
+    ayla_cmd("prufe Dusty sei gepriesen! Die heilige "
+            "Standarte befindet sich wieder in unserer Hand!");
+  }
+  // Auf der Nekromanteninsel passiert niemanden etwas. HarHar
+  if(objectp(ENV(pl)) && file_name(ENV(pl))[0..24] == 
+      "/d/unterwelt/nekromanten") 
+  {
+    nekro_island=1;
+  }
+  if(living(pl)) { // Standarte ist in einem Living
+    if(IS_LEARNER(pl)) { // In einem Magier -> rueckmoven
+      ME->move(ROOM("burg_schatzkammer"), M_NOCHECK);
+      ayla_cmd("prufe Dusty sei gepriesen! Die heilige "
+              "Standarte befindet sich wieder in unserer Hand!");
+      return ;
+    }
+    else if(query_once_interactive(pl)) { // In einem Spieler
+      // Paladine werden aufgefordert die Standarte zurueck zu bringen
+      if(pl->QueryProp(P_GUILD) == "paladine")  {
+        ayla_cmd(sprintf("prufe %s! Bring die heilige Standarte zu "
+                "mir!", pl->Name()));
+        return ;
+      }
+      else if (!nekro_istland) {
+        // Andere Spieler werden von Paladinwaechtern attackiert
+        for(i=random(2)+1 ; i>=0; i-- ) {
+          attacker=clone_object(NPC("waechter"));
+          attacker->SetProp(P_MNPC_FLAGS, 0);
+          attacker->move(ENV(pl), M_GO);
+          attacker->commend_me(sprintf("sag Im Namen Dustys! Stirb, %s!", 
+              pl->name()));
+          pl->AddPursuer(attacker);
+          attacker->Kill(pl);
+          return ;
+        }
+      }
+    }
+    else {
+      npc_time++;
+      // Noattack NPCs verlieren die Standarte
+      if(pl->QueryProp(P_NOATTACK)) {
+        tell_room(ENV(pl), BS(sprintf("Ploetzlich verschwindet die Standarte "
+              "aus %s Besitz.", pl->name(WESSEN))));
+        ME->move(ROOM("burg_schatzkammer"), M_NOCHECK);
+        ayla_cmd("prufe Dusty sei gepriesen! Die heilige "
+                "Standarte befindet sich wieder in unserer Hand!");
+        return ;
+      }
+      // Lvl 21 npcs werden angegriffen
+      else if(pl->QueryProp(P_LEVEL) < 21 && !nekro_island) {
+        attacker=clone_object(NPC("waechter"));
+        attacker->SetProp(P_MNPC_FLAGS, 0);
+        attacker->move(ENV(pl), M_GO);
+        attacker->commend_me(sprintf("sag Im Namen Dustys! Stirb, %s!", 
+             pl->name()));
+        pl->AddPursuer(attacker);
+        attacker->Kill(pl);
+        return ;
+      }
+      // Lvl 49 Npcs behalten die Standarte nicht
+      else if (pl->QueryProp(P_LEVEL) >= 49 || npc_time >=20 ){
+        tell_room(ENV(pl), BS(sprintf("Ploetzlich verschwindet die Standarte "
+              "aus %s Besitz.", pl->name(WESSEN))));
+        ME->move(ROOM("burg_schatzkammer"), M_NOCHECK);
+        ayla_cmd("prufe Dusty sei gepriesen! Die heilige "
+                "Standarte befindet sich wieder in unserer Hand!");
+        npc_time=0;
+        return ;
+      }
+    } 
+  }
+  if(nekro_island) {
+    // Auf der Nekroinsel soll sie auf jeden Fall bleiben
+    return;
+  }
+  // Wenn die Standarte IRGENDWO rumliegt, dann moven wir sie 
+  // zufaellig zurueck:
+  if(!random(8)) {
+    ME->move(ROOM("burg_schatzkammer"), M_NOCHECK);
+  }
+  return ;
+}
+
+void remove(int silent) {
+  ::remove(silent);
+}
+
+varargs int move(mixed dest, int method, string dir, string textout,
+    string textin) 
+{
+  int x;
+  object last_env;
+  last_env=ENV(ME);
+  SetProp("last_env", last_env) ;
+  x= ::move(dest,method,dir,textout,textin);  
+  if(ENV(ME) && file_name(ENV(ME))==ROOM("burg_schatzkammer") && 
+      last_env && file_name(last_env) != ROOM("burg_schatzkammer"))
+  {
+    ayla_cmd("Dusty sei gepriesen! Die Standarte ist wieder in unserem "
+        "Besitz!");
+  }
+  return x;
+}
+
+void ayla_cmd(string str) {
+  object ayla;
+  if( ayla = find_living("ayla"))
+     ayla->command_me(str);
+  return;
+}
+

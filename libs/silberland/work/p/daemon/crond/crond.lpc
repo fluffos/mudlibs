@@ -1,0 +1,755 @@
+/*     _______________
+ *     c r o n j o b s  fuer das Silberland
+ *     ~~~~~~~~~~~~~~~
+ *
+ * (c) 1998-2000 MUD Silberland - Adrian Holzwarth / Anatol@Silberland
+ *
+ * =====> Dokumentation siehe crond/crontab.bsp und crond/doku.txt!
+ *
+ * <min> <std> <tag> <monat> <wochentag>   <objektpfad> <funktion>
+ * 
+ * Erlaubte Werte:     min:          0-59
+ *                     std:          0-23
+ *                     tag:          1-31
+ *                     monat:        1-12   (Jan-Dez)
+ *                     wochentag:    0-6    (Son-Sam)
+ *
+ *    Bedeutung                 Eintrag              interne Repraesentation
+ * --------------------------------------------------------------------------
+ *    Pure Zahl, z.B.           5                     5
+ *    Aufzaehlung, z.B.         1,5,12,34             ({1,5,12,34})
+ *    Bereich, z.B.             1-5                   ({({1,5})})
+ *    Einen "immer!"            *                     ({})
+ * --------------------------------------------------------------------------
+ * WICHTIG: Keine Leerzeichen bei den einzelnen Eintraegen, auch nicht nach
+ *          den Kommata! ("1, 4, 5" wuerde einen Fehler erzeugen)
+ *
+ *
+ *  Das Format des Crontabmappings...:
+ *  ([ "uid":     // z.B. "anatol" oder "seher"   
+ *    ([ "crontab_a":  ({ ({ min, std, tag, monat, wochentag, obj, fun }),
+ *                        ({ min, std, tag, monat, wochentag, obj, fun }),
+ *                        ... }); time_einlesedatum,
+ *       "crontab_b":  ({ ({ min, std, tag, monat, wochentag, obj, fun }),
+ *                        ({ min, std, tag, monat, wochentag, obj, fun }),
+ *                        ... }), time_einlesedatum,
+ *                     ... ]),... ])
+ * 
+ * Das Format der Cronjobliste...:
+ * ([      0: ({ ({ obj, fun }), ({ obj, fun }), ... }),
+ *      1093: ({ ({ obj, fun }), ({ obj, fun }), ... }),
+ *    ... ])
+ *              Wobei die Keys die "Minuten des Tages" sind. Das Mapping
+ *              wird also maximal 1440 regulaere Eintraege erhalten,
+ *              Cron selbst haengt noch einen selbstaufrufenden Eintrag
+ *              an, der fuer 24:00:00 Uhr anberaumt ist :).
+ *
+ *
+ *
+ * 1999-02-18 Revision 0.10   Ausnahmeregelung fuer die Gildenverzeichnisse,
+ *                            dort kann /gilden/bla/crontab auch /gilden/bla
+ *                            ansprechen - Angrox wollte das unbedingt :o).
+ *
+ * 1999-03-06 Revision 0.11   Fehlersuche - "+1" in updateCronjoblist(),
+ *                            Konventionalisieren der global deklarierten
+ *                            Funktionen, Entfernen der HANDLER-Restriktion,
+ *                            Verlegen nach /p/daemon.
+ *
+ * 2000-11-15 Revision 0.12   Cron zieht um - ins crond. (include geaendert)
+ *                            Des weiteren Logging geaendert - loggt jetzt
+ *                            nach /log/daemon, und nur die fatals ohne 
+ *                            Rotation...
+ */
+
+#pragma strict_types
+
+#define HANDLER   "anatol"
+#define DB(x) if (find_player(HANDLER)) tell_object(find_player(HANDLER),x)
+
+#define VERSION "0.13 beta"
+#define LOGDIR "daemon/"
+#define LOGTIME (dtime(time())[5..])
+#define LOG_ERROR(x) log_file(LOGDIR "crond.err.fatal", sprintf("%s: %s\n", \
+          LOGTIME,x),50000,1)
+#define LOG_JOBERROR(x) log_file(LOGDIR "crond.err.jobs", sprintf("%s: %s\n", \
+          LOGTIME,x),50000,0)
+#define LOG_JOB(x) log_file(LOGDIR "crond.jobs", sprintf("%s: %s\n", \
+          LOGTIME,x),50000,0)
+#define LOG_TIME(x) log_file(LOGDIR "crond.err.time", sprintf("%s: %s\n", \
+          LOGTIME,x),50000,0)
+#define LOG_HIST(x) log_file(LOGDIR "crond.hist", sprintf("%s: %s\n", \
+          LOGTIME,x),50000,0)
+#define LOG_TABS(x) log_file(LOGDIR "crond.tabs", sprintf("%s: %s", \
+          LOGTIME,x),50000,0)
+
+#define SAVEFILE "/p/daemon/crond/crond"
+#define MAP_WEEK (["Son":0,"Mon":1,"Die":2,"Mit":3,"Don":4,"Fre":5,"Sam":6])
+#define MAP_MONTH (["Jan":1,"Feb":2,"Mar":3,"Mae":3,"Apr":4,"Mai":5,\
+            "Jun":6,"Jul":7,"Aug":8,"Sep":9,"Okt":10,"Nov":11,"Dez":12])
+
+#define VALID_REGEXP \
+"^(/players/[a-z][a-z]*/crontab|\
+/gilden/[a-z][a-z]*/crontab|\
+/p/(service|daemon)/[a-z][a-z]*/crontab|\
+/d/[a-z][a-z]*/crontab|\
+/d/[a-z][a-z]*/[a-z][a-z]*/crontab)$"
+
+#include "/p/daemon/crond/crond.h"
+#include <properties.h>
+#include <wizlevels.h>
+
+#define X_MIN   0
+#define X_HOUR  1
+#define X_DAY   2
+#define X_MONTH 3
+#define X_WDAY  4
+#define X_OBJ   5
+#define X_FUN   6
+
+mapping ct;            /* crontabs, werden in Savefile abgelegt */
+
+nosave mapping cjl;    /* cronjob-liste */
+
+
+// Globale Variablen zeugen von unsauberer Programmierung.
+// ...aber solange es seinen Zweck so formidabel erfuellt, 
+// neige zumindest ich zur generoesen Toleranz.   - Anatol
+
+nosave string c_line;
+nosave string c_error;
+nosave int c_char;
+
+nosave int this_minute;
+nosave int this_hour;
+nosave int this_day;
+nosave int this_wday;
+nosave int this_month;
+
+nomask varargs nosave void updateCronjoblist(int flag);
+
+ /* UKM-Funktionen */ 
+
+nomask void save() { save_object(SAVEFILE); }
+
+nomask nosave string i2str(int i) { return to_string(i); }
+
+nomask nosave string * reduce_to_obj_arr(string * list) {
+  return ({list[X_OBJ],list[X_FUN]});
+}
+
+ /* ------------------------------------------------------------------------
+  * *argl* Ein etwas verkrampfter Umweg ueber dtime(time()), um bloss nicht
+  * ueber die Sommerzeit/Winterzeit-Differenzen zu stolpern...            */
+
+nomask nosave int getTodaySeconds() {
+  string d1, d3;
+  int d2,d4, h, m, s;
+
+  if ((sscanf(dtime(time()),"%s, %d. %s %d, %d:%d:%d",d1, d2, 
+           d3, d4, h, m, s)!=7) ) {
+    LOG_ERROR("Zeiteinlesen fehlgeschlagen.");
+    return -1;
+  } 
+  else return ((h*60*60)+(m*60)+s);
+}
+
+ /* ------------------------------------------------------------------------
+  * otime() ist nur fuer ein bestimmtes Format zustaendig und wird nur von
+  * der Ausgabefunktion benoetigt.                                        */
+
+nomask nosave string otime(int t) {
+  string res, dummy1, wstr,dummy2;
+  int day, hour, min, sec, year;
+   if (sscanf(dtime(t),"%s, %d. %s 19%d, %d:%d:%d%s",
+      dummy1,day, wstr,year, hour,min,sec,dummy2)!=8)
+     return "?!?";
+   else return sprintf("%02d.%02d.%02d %02d:%02d:%02d",day, MAP_MONTH[wstr],
+      year, hour, min, sec);
+}
+
+ /* ------------------------------------------------------------------------
+  * Filterfunktionen werden gebraucht, um festzustellen, wann welche 
+  * Eintraege gemacht werden muessen. Waere wohl auch kuerzer gegangen.   */
+
+nomask nosave int filter_month(mixed * arg) {
+  if (intp(arg[X_MONTH])) return (arg[X_MONTH]==this_month);
+  switch (sizeof(arg[X_MONTH])) {
+    case 0: return 1; break; 
+    case 1: return ((arg[X_MONTH][0][0]<=this_month)&&
+         (arg[X_MONTH][0][1]>=this_month)); break;
+    default: return (member(arg[X_MONTH],this_month)!=-1); break;
+  }  
+  return 1093;
+}
+
+nomask nosave int filter_wday(mixed * arg) {
+  if (intp(arg[X_WDAY])) return (arg[X_WDAY]==this_wday);
+  switch (sizeof(arg[X_WDAY])) {
+    case 0: return 1; break; 
+    case 1: return ((arg[X_WDAY][0][0]<=this_wday) && 
+         (arg[X_WDAY][0][1]>=this_wday)); break;
+    default: return (member(arg[X_WDAY],this_wday)!=-1); break;
+  }  
+  return 1093;
+}
+
+nomask nosave int filter_day(mixed * arg) {
+  if (intp(arg[X_DAY])) return (arg[X_DAY]==this_day);
+  switch (sizeof(arg[X_DAY])) {
+    case 0: return 1; break; 
+    case 1: return ((arg[X_DAY][0][0]<=this_day)&&
+         (arg[X_DAY][0][1]>=this_day)); break;
+    default: return (member(arg[X_DAY],this_day)!=-1); break;
+  }  
+  return 1093;
+}
+
+nomask nosave int filter_hour(mixed * arg) {
+  if (intp(arg[X_HOUR])) return (arg[X_HOUR]==this_hour);
+  switch (sizeof(arg[X_HOUR])) {
+    case 0: return 1; break; 
+    case 1: return ((arg[X_HOUR][0][0]<=this_hour)&&
+         (arg[X_HOUR][0][1]>=this_hour)); break;
+    default: return (member(arg[X_HOUR],this_hour)!=-1); break;
+  }  
+  return 1093;
+}
+
+nomask nosave int filter_minute(mixed * arg) {
+  if (intp(arg[X_MIN])) return (arg[X_MIN]==this_minute);
+  switch (sizeof(arg[X_MIN])) {
+    case 0: return 1; break; 
+    case 1: return ((arg[X_MIN][0][0]<=this_minute)&&
+      (arg[X_MIN][0][1]>=this_minute)); break;
+    default: return (member(arg[X_MIN],this_minute)!=-1); break;
+  }  
+  return 1093;
+}
+
+ /* ------------------------------------------------------------------------
+  * Hilfsfunktionen fuer das Einlesen und Ueberpruefen der crontabs...    */
+
+nomask nosave void chkValue(int i, int minim, int maxim) {
+  if (i<minim) c_error="Wert(e) unterhalb des zulaessigen Minimums";
+  else if (i>maxim) c_error="Wert(e) oberhalb des zulaessigen Maximums";
+  return;
+}
+
+nomask nosave mixed getValue(string str, int minim, int maxim) {
+  mixed * res;
+  string dummy;
+  int i,j;
+  
+  if ((!str) || (!stringp(str)) || (str=="")) {
+    c_error="Interner Fehler roemisch-katholisch eins";
+    return 0;
+  }
+  if ((sscanf( str, "%d%s",i,dummy)==2) && (dummy=="")) {
+    chkValue(i,minim, maxim);
+    return i;
+  }
+  else if ((sscanf(str,"%d-%d%s", i,j,dummy)==3) && (dummy=="")) {
+    chkValue(i,minim, maxim);
+    chkValue(j,minim, maxim);
+    return ({({i,j})});
+  }
+  else {
+    res=({}); 
+    while (sscanf(str,"%d%s",i,dummy)==2) {
+      chkValue(i,minim, maxim);
+      res+=({i});
+      if ((strlen(dummy)>1) && (dummy[0]==','))
+        str=dummy[1..];
+      else break;
+    }
+    return res;
+  }
+}
+
+ /* ------------------------------------------------------------------------
+  * Hilfsfunktionen fuer die Ausgabe... nicht weiter tragisch.            */
+
+nomask nosave string printValue(mixed arg) {
+  string * strs;
+  
+  if (intp(arg)) return to_string(arg);
+  if ((pointerp(arg)) && (!sizeof(arg))) return "*";
+  if ((pointerp(arg)) && (sizeof(arg)==1) && 
+     (pointerp(arg[0])) && (sizeof(arg[0])==2)) 
+       return sprintf("%d-%d",arg[0][0],arg[0][1]);
+  if (pointerp(arg)) return implode(map_array(arg,"i2str",this_object()) ,",");
+  return "??";
+}
+
+ /* ------------------------------------------------------------------------
+  * Die Funktion, die die Jobliste ausgibt, dient ausschliesslich zu
+  * Kontroll- und Debugzwecken von aussen, wird intern nicht aufgerufen.  */
+
+nomask varargs public string PrintCronjobs(string arg) {
+  int *ia,i,j,sz;
+  string msg;
+
+  msg="";
+  sz=sizeof(ia=sort_array(m_indices(cjl),#'>));
+  for ( i=0;i<sz;i++) 
+    for (j=sizeof(cjl[ia[i]])-1;j>=0;j--)
+      msg+=sprintf("%2d:%02d Uhr: %s->%s()\n",
+         ia[i]/60,ia[i]%60,cjl[ia[i]][j][0], 
+    cjl[ia[i]][j][1]);
+   return msg;
+}
+
+ /* ------------------------------------------------------------------------
+  * Diese Funktion ist uneingeschraenkt von aussen aufrufbar - niemand soll
+  * am Ueberpruefen seiner crontab gehindert werden. Argument ist entweder
+  * der volle crontab-pfad oder eine uid (z.B. "seher" oder "anatol").    */
+  
+nomask varargs public string PrintCrontabs(string arg) {
+  string *s,*t,ctfn,wiz,msg;
+  int i,j,k,sz;
+  mixed *x;
+
+  ctfn=wiz=0;
+  msg="";
+  if ((arg) && (stringp(arg)) && (strlen(arg))) {
+    if (arg[0]=='/') ctfn=arg;
+    else wiz=lowerstring(arg);
+  }
+  for (i=sizeof(s=sort_array(m_indices(ct),#'<))-1;i>=0;i--)
+    for (j=sizeof(t=sort_array(m_indices(ct[s[i]]),#'<))-1;j>=0;j--) {
+      if (((!wiz)||(wiz==s[i])) && ((!ctfn)||(ctfn==t[j]))) {
+        msg+=sprintf("%s, %s (%d) vom %s\n"
+            "---------------------------------------------------------------"
+            "-------------\n",
+            capitalize(s[i]), capitalize(t[j]),
+          sz=sizeof(ct[s[i]][t[j]]),otime(ct[s[i]][t[j],1]));
+          for (k=0;k<sz;k++) {
+            x=ct[s[i]][t[j]][k];
+            msg+=sprintf("%-20s %s %s\n",sprintf("%2s %2s %2s %2s %2s",
+              printValue(x[X_MIN]),
+              printValue(x[X_HOUR]),
+              printValue(x[X_DAY]),
+              printValue(x[X_MONTH]),
+              printValue(x[X_WDAY])),
+              (x[X_OBJ]), (x[X_FUN]));
+          }
+      msg+=sprintf("====================================================="
+        "=======================\n");
+      }
+    }
+  return msg;
+}  
+
+ /* ------------------------------------------------------------------------
+  * Diese Funktion hat es in sich, sie ist naemlich dafuer verantwortlich, 
+  * dass sie den call_out zum naechstrichtigen Zeitpunkt bemisst und startet.
+  * Insbesondere um den Tageswechsel herum ist das nicht ganz einfach, denn
+  * wir koennen ja noch im alten Tag sein, falls der call_out eine Sekunde 
+  * zu kurz griff...                                                       */
+
+nomask nosave void updateCallOut() {  
+  int  sot, co, nj;
+ 
+  while ((remove_call_out("nextJob"))!=-1);  
+  sot=getTodaySeconds();
+  if (!sizeof(cjl)) {          
+    LOG_ERROR("updateCallOut: Cronjob-Liste LEER!");
+    return;
+  } 
+  nj=sort_array(m_indices(cjl),#'>)[0];
+  if ((co=(nj*60)-sot)<0)   /* *jammer* Mist, doch noch vor Mitternacht */
+    co+=86400;             
+  call_out("nextJob",co,nj);
+}
+
+ /* ------------------------------------------------------------------------
+  * Genau hier - und nur hier - werden die verteilten Jobs aufgerufen. 
+  * Der Gedanke, dies grundsaetzlich mit euid(0) geschehen zu lassen, wurde
+  * verworfen: Ohne effektive User-ID koennen keine Objekte geladen werden.
+  * this_player() ist im Regelfall 0, kann aber rein technisch jedes Living
+  * sein - also nicht darauf verlassen.                                   */
+
+nomask nosave void processJobs(mixed * jobs) {
+  string err;
+
+  while(sizeof(jobs)) {
+    DB(sprintf("CRON: %s %s->%s()\n",dtime(time())[19..],
+          jobs[0][0],jobs[0][1]));
+    if (err=catch(call_other(jobs[0][0],jobs[0][1])))
+      LOG_JOBERROR(sprintf("%s->%s(): %s",jobs[0][0], jobs[0][1],err));
+    else
+      LOG_JOB(sprintf("%s->%s()",jobs[0][0],jobs[0][1]));
+    jobs=jobs[1..];
+  }
+  return;
+}
+
+ /* ------------------------------------------------------------------------
+  * nextJob wird ge-call_out-ed und bearbeitet einfach den Job cjl[nj], im
+  * Glauben daran, dass da auch was drinsteht. Die Fehlermeldung sollte, bei
+  * konsistenter Wissensbasis, nie auftreten. Danach wird updateCallOut 
+  * erneut beauftragt, den naechsten call_out zu errechnen und zu starten. */
+
+nomask nosave void nextJob(int nj) {  
+  string err;
+  mixed * jobs;
+  
+  jobs=cjl[nj];
+  cjl-=([nj]);   /* ARGL! */
+  if(!sizeof(jobs)) {
+    LOG_ERROR("nextJob: Job-Eintrag leer!?");
+  }
+  else 
+    processJobs(jobs);
+  if (sizeof(cjl))     /* NATUERLICH! cjl kann eigentlich nie leer werden! */
+    updateCallOut();
+  return;
+}  
+
+ /* ------------------------------------------------------------------------
+  * Im reset(), also alle 30-60 Minuten, wird der call_out neu gestartet. 
+  * Das hat bei langen Pausen den Vorteil, dass Zeitinkonsistenzen (z.B.
+  * durch Mudlag hervorgerufen) im einstelligen Sekundenbereich bleiben
+  * und eher selten groesser als 10 Sekunden sein werden. Den call_out
+  * wegzulassen, wenn der naechste Reset ohnehin vorher kommen wuerde, ist
+  * mir etwas zu unsicher - weiss der Kuckuck.                            */
+
+nomask public void reset() {
+  int i,j,nj;
+  if ((i=find_call_out("nextJob"))==-1) {
+    LOG_ERROR("Reset: Kein call_out gefunden!");
+    return;
+  }
+  else {
+    if (!sizeof(cjl)) {
+      LOG_ERROR("Reset: Cronjob-Liste LEER!");
+      return;
+    }
+    else {
+      nj=sort_array(m_indices(cjl),#'>)[0];
+      if ((nj*60)<getTodaySeconds()) {
+        LOG_ERROR("Reset: Cronjobliste VERFALLEN!");
+        updateCronjoblist();
+      }
+      if ((j=((nj*60)-(getTodaySeconds()+i))) && ((j<-2) || (j>2)))
+      LOG_TIME(sprintf("Zeitinkonsistenz: %+d",j));
+      updateCallOut();
+    }
+  }
+  call_out("???",2);  /* ? */
+}
+
+ /* ------------------------------------------------------------------------
+  * Die Frage scheint trivial: Darf der Aufrufende diese crontab abmelden 
+  * oder eintragen/updaten? Die Antwort beweist: Soooo trivial ist die Frage 
+  * dann doch nicht gewesen, man denke an Regionsmagier und ihre Rechte.   */
+
+nomask varargs string validCrontabAccess(string arg, int force) {
+  string *pathparts,wiz;
+   
+  c_error=0; 
+  if (!this_player()) return 0;
+  if ((this_player()!=this_interactive()) && (force)) return 0;
+  wiz=getuid(this_player());
+  if ((!arg) || (!stringp(arg)) || (!strlen(arg))) 
+    c_error="crontab-Dateiname muss als Argument mituebergeben werden";
+  else if (arg[0]!='/') 
+    c_error="crontab-Dateiname muss absolut (mit / beginnend)"
+      " angegeben werden";
+  else if (strlen(arg)>120) 
+    c_error="crontab-Dateiname definitiv zu lang";
+  else if ((string)("/secure/master"->make_path_absolute(arg))!=arg)
+    c_error="contab-Dateipfad muss absolut sein";
+  if (c_error) return wiz; 
+  pathparts=explode(arg,"/");
+  if (pathparts[<1]!="crontab")
+    c_error="Es ist als Basename nur 'crontab' zugelassen";
+  else if (!sizeof(regexp(({arg}),VALID_REGEXP)))
+    c_error="Gueltige crontabs sind nur:\n  /d/<region>/crontab\n"
+     "  /d/<region>/<mitarbeiter>/crontab\n  /players/<magier>/crontab\n"
+     "  /gilden/<gilde>/crontab\n  /p/service/<magier>/crontab\n"
+     "  /p/daemon/<subdir>/crontab";
+  else if ((!("/secure/master"->valid_write(arg,wiz))) && (!force))
+    c_error="Fehlende Schreibrechte";
+
+  // "uid" des Eintrags festlegen:
+
+  if (pathparts[0]=="d") {
+    if (sizeof(pathparts)==3)
+      wiz=pathparts[1];
+    else wiz=pathparts[2];
+  }
+  else if (pathparts[0]=="gilden")
+    wiz=pathparts[1];
+  else if (pathparts[0]=="players")
+    wiz=pathparts[1];
+  else if (pathparts[0]=="p") 
+    wiz=pathparts[2];
+ return wiz;
+}  
+
+ /* ------------------------------------------------------------------------
+  * Das Anmelden einer crontab ist offensichtlich nicht einfach. Nicht jeder
+  * darf jede crontab anmelden, nicht alle Pfade sind zugelassen und auch
+  * nicht alle Eintraege sind syntaktisch korrekt. Gewisse Dinge (z.B. der
+  * 31.2.) werden nicht ueberprueft; aber es gilt auch hier: Der gesunde
+  * Menschenverstand vermeidet, richtig angewendet, die schlimmsten Fehler.*/
+
+nomask varargs public void UpdateCrontab(string arg, int force) {
+  mixed * newentries, *newentry;
+  string * part,ctdir,wiz;
+  int i;
+
+  if ((!this_player())||
+      (!this_interactive())||
+      (this_player()!=this_interactive())) return;
+  if ((force) && (getuid(this_player())!=HANDLER))
+    return;
+  wiz=validCrontabAccess(arg, force);
+  if (c_error) {
+    write(break_string(sprintf("Fehler: %s",c_error),78,0,1));
+    return;
+  }
+  if (file_size(arg)<=0)
+    return printf("Fehler: crontab-Datei inexistent oder "
+      "keine regulaere Datei.\n",c_error);
+  i=1;
+  newentries=({});
+  while (strlen(c_line=read_file(arg,i++,1))) {
+    if (((c_line[c_char=0])=='#')||(c_line[c_char]=='\n')) continue; 
+    part=regexp(regexplode(c_line,"  *"),"[^ ]");
+    if (sizeof(part)!=7) {
+      printf("Parserfehler, zuviele/zuwenige Trenner auf der Zeile\n%s",
+        c_line);
+      continue;
+    }
+    if (strlen(part[X_FUN])<=1) {
+      printf("Parserfehler, Funktionsname ungueltig\n%s",c_line);
+      continue;
+    }
+    part[X_FUN]=part[X_FUN][0..<2];
+    newentry=({0,0,0,0,0,0,0});
+    c_error=0;
+    newentry[X_MIN]=getValue(part[X_MIN],0,59);
+    if (c_error) {
+      printf("Fehler(\"Minuten\"): %s\n%s",c_error,c_line); continue; }
+    newentry[X_HOUR]=getValue(part[X_HOUR],0,23);
+    if (c_error) {
+      printf("Fehler(\"Stunden\"): %s\n%s",c_error,c_line); continue; }
+    newentry[X_DAY]=getValue(part[X_DAY],1,31);
+    if (c_error) {
+      printf("Fehler(\"Tag\"): %s\n%s",c_error,c_line); continue; }
+    newentry[X_MONTH]=getValue(part[X_MONTH],1,12);
+    if (c_error) {
+      printf("Fehler(\"Monat\"): %s\n%s",c_error,c_line); continue; }
+    newentry[X_WDAY]=getValue(part[X_WDAY],0,6);
+    if (c_error) {
+      printf("Fehler(\"Wochentag\"): %s\n%s",c_error,c_line); continue; }
+    newentry[X_OBJ]=part[X_OBJ];
+    if (c_error) {
+      printf("Fehler(\"Objekt\"): %s\n%s",c_error,c_line); continue; }
+    ctdir=arg[0..<8];
+    if (((!strlen(newentry[X_OBJ])>strlen(ctdir))|| 
+       ((newentry[X_OBJ][0..(strlen(ctdir)-1)])!=ctdir))&&
+       (!((strlen(newentry[X_OBJ])>8) && 
+       (newentry[X_OBJ][0..7]=="/gilden/") &&
+       (ctdir==newentry[X_OBJ]+"/")))) {
+      printf("Fehler: Objekt nicht in fuer crontab gueltigem Pfad\n%s",c_line); 
+        continue; 
+    }
+    newentry[X_FUN]=part[X_FUN];
+    if (c_error) {
+      printf("Fehler(\"Funktion\"): %s\n%s",c_error,c_line); continue; }
+    newentries+=({newentry});
+  }
+  LOG_HIST(sprintf("UPDATE von %s (%s)",arg,
+        capitalize(getuid(this_player())||"niemand?")));
+  if (!sizeof(newentries)) {
+    write(break_string(sprintf(
+      "Die crontab %s enthaelt keine gueltigen Eintraege.\n", arg),77));
+    if ((member(ct,wiz)) && (member(ct[wiz],arg))) {
+      printf("Eintrag \"%s\" im Cron geloescht.\n",arg);
+      ct[wiz]-=([arg]); 
+      if (!sizeof(ct[wiz])) {
+        printf("Eintrag der uid \"%s\" wird, da leer, "
+         "entfernt.\n",capitalize(wiz));
+        ct-=([wiz]);
+      }
+    }
+    LOG_TABS(sprintf("UPDATE von %s (%s)\n", arg,
+          capitalize(getuid(this_player())||"niemand?"))+PrintCrontabs()+"\n");
+    return;
+  }
+  if (!member(ct,wiz)) 
+    ct+=([wiz:([])]);
+  if (member(ct[wiz],arg)) 
+    ct[wiz]-=([arg]);
+  ct[wiz]+=([arg:newentries;time()]); 
+  write(break_string(sprintf(
+    "Eingelesen: crontab \"%s\" (%d %s)\n", 
+     arg, sizeof(newentries), (sizeof(newentries)==1?"Eintrag":"Eintraege")),
+     78));
+  updateCronjoblist();
+  save();
+  LOG_TABS(sprintf("UPDATE von %s (%s)\n", arg,
+        capitalize(getuid(this_player())||"niemand?"))+PrintCrontabs()+"\n");
+  return;
+}  
+
+ /* ------------------------------------------------------------------------
+  * Wenn die ganzen Zugriffsrecht-Abfragen nicht waeren, wuerde auch diese
+  * Funktion deutlich kuerzer ausfallen. Wie der Name schon sagt, sie ist 
+  * fuer das Abmelden einer Crontab zustaendig.                           */
+
+nomask varargs public void RemoveCrontab(string arg, int force) {
+  string wiz;
+ 
+  if ((!this_player())||
+      (!this_interactive())||
+      (this_player()!=this_interactive())) return;
+  if ((force) && (getuid(this_player())!=HANDLER))
+    return;
+  wiz=validCrontabAccess(arg, force);
+  if (c_error) {
+    write(break_string(sprintf("Fehler: %s",c_error),78));
+    return;
+  }
+  if (!member(ct,wiz)) {
+    printf("Die uid \"%s\" hat ueberhaupt keine crontab angemeldet.\n",wiz);
+    return; 
+  }
+  if (!member(ct[wiz],arg))  {
+    printf("Die crontab \"%s\" ist nicht angemeldet.\n",arg);
+    return; 
+  }
+  printf("Melde crontab \"%s\" (%d %s) ab.\n",arg,sizeof(ct[wiz][arg]),
+    (sizeof(ct[wiz][arg])==1?"Eintrag":"Eintraege"));
+  ct[wiz]-=([arg]);
+  if (!sizeof(ct[wiz])) {
+    printf("Unter uid \"%s\" sind keine crontabs mehr angemeldet.\n"
+      "Der Eintrag wird entfernt.\n",capitalize(wiz));
+    ct-=([wiz]);
+  }
+  updateCronjoblist();
+  save();
+  LOG_TABS(sprintf("REMOVE von %s (%s)\n",
+    arg, capitalize(getuid(this_player())||"niemand?"))+PrintCrontabs()+"\n");
+  LOG_HIST(sprintf("REMOVE von %s (%s)",arg,
+        capitalize(getuid(this_player())||"niemand?")));
+  return;
+}
+
+ /* ------------------------------------------------------------------------
+  * Hier wird die Cronjobliste auf den aktuellen Stand gebracht. Diese
+  * Funktion wird beim Laden und bei jeder (noch so kleinen) Crontab-
+  * Aenderung aufgerufen, aber auch um Mitternacht, wenn der neue Tag
+  * begruesst wird. Da nicht garantiert ist, dass es 0:00:00 Uhr ist (es
+  * koennte, bedingt durch die call_out()-Unschaerfe, z.B. auch 23:59:58 Uhr 
+  * sein), wird es stellenweise etwas kompliziert, da man den neuen Tag 
+  * mittels provokantem "Uhrvorstellen" erzwingen muss. */
+
+nomask varargs nosave void updateCronjoblist(int flag) {
+  int i,j,vt, *jb;
+  mixed * l, *l2, *l3;
+  string * wiz, * corega_tabs;
+
+     /* Zunaechst alle moeglichen Eintraege in eine Liste fassen, 
+      * die man dann nach Belieben durch Filter schicken kann. */
+
+  l=({});            
+  if (sizeof(wiz=sort_array(m_indices(ct),#'<)))
+    for (i=sizeof(wiz)-1;i>=0;i--)
+      if (sizeof(corega_tabs=sort_array(m_indices(ct[wiz[i]]),#'<)))
+        for (j=sizeof(corega_tabs)-1;j>=0;j--)
+            l+=ct[wiz[i]][corega_tabs[j]];
+
+
+        /* Eh bien, jetzt muessen wir den Kram noch filtern. Um sicher-
+         * zustellen, dass wir auch beim Mitternachtsaufruf wirklich den
+         * richtigen Tag haben, stellen wir fuer das Filtern bei jenem 
+         * Aufruf einfach um sechs Stunden vor. */
+
+  cjl=([]); 
+  i=time();
+  if (flag) 
+      i+=(60*60*6);    
+  this_wday=MAP_WEEK[dtime(i)[0..2]];
+  this_month=MAP_MONTH[dtime(i)[9..11]];
+  this_day=to_int(dtime(i)[5..6]);
+  l=filter_array(l, "filter_month", this_object());
+  l=filter_array(l, "filter_day", this_object());
+  l=filter_array(l, "filter_wday", this_object());
+  if (sizeof(l))
+    for (this_hour=0;this_hour<24;this_hour++) 
+      if (sizeof(l2=filter_array(l, "filter_hour", this_object())))
+        for (this_minute=0;this_minute<60;this_minute++) 
+          if (sizeof(l3= filter_array(l2, "filter_minute", this_object())))
+            cjl[(this_hour*60)+this_minute]=
+              map_array(l3,"reduce_to_obj_arr",this_object());
+  
+        /* Im Falle des Mitternachtsaufruf ersparen wir uns das sinnlose 
+         * Discarding der veralteten Auftraege natuerlich */
+
+  if (!flag) {            
+    vt=(getTodaySeconds()/60)+1;
+    jb=sort_array(m_indices(cjl),#'>);
+    while (sizeof(jb)) {
+      if (jb[0]<vt) 
+        cjl-=([jb[0]]);
+      else
+        break;
+      jb=jb[1..];
+    }
+  }
+        /* Wichtig: Das Eintragen des naechsten Mitternachts-Aufrufs und
+         * das Abarbeiten eventuell vorhandener Eintraege fuer 0:00:00 Uhr, 
+         * was ja rein zeitlich zum selben Zeitpunkt wie der Mitternachts-
+         * aufruf ablaeuft. */
+  
+  if ((flag) && (member(cjl,0))) {
+    processJobs(cjl[0]);
+    cjl-=([0]);
+  }
+  
+  cjl+=([1440:({({CRON,"MorningHasBroken"})})]);
+  updateCallOut();
+} 
+    
+
+ /* ------------------------------------------------------------------------
+  * Aufgerufen vom cron selbst, aber via call_other(), das heisst,
+  * previous_object() muss mit this_object() identisch sein. Was wir
+  * dann auch gleich ueberpruefen... dann wird die Cronjobliste (mit "1", 
+  * damit klar ist, dass es der 0:00:00-Aufruf ist) auf den neuen Tag
+  * vorbereitet. */
+
+nomask public void MorningHasBroken() {
+  if (previous_object()!=this_object()) return;  /* No chance */
+  updateCronjoblist(1);  
+} 
+
+ /* ------------------------------------------------------------------------
+  * Create - beim Laden eines Objektes wird immer versucht, create()
+  * aufzurufen, was wir uns natuerlich auch ohne Vererbung zu Nutze machen.
+  * Aber mehr als die Cronjob-Liste zu initialisieren, tun wir hier nicht
+  * wirklich - die Meldung mag nett sein, aber ist nicht ueberlebenswichtig. */
+
+nomask void create() {
+  if (is_clone(this_object())) 
+    return (void)destruct(this_object());
+  seteuid(getuid(this_object()));
+  if (!restore_object(SAVEFILE)) 
+    ct=([]);
+  updateCronjoblist();
+  LOG_HIST(sprintf("CROND %s GELADEN. (%O|%O|%O)", VERSION,
+    this_player(), this_interactive(),previous_object())); 
+  if (this_player())
+    tell_object(this_player(),sprintf("CROND %s: %s: Hi %s!\n",VERSION,
+    LOGTIME, (string)this_player()->Name(WER)));
+}
+
+nomask int query_prevent_shadow(object obj) {
+  LOG_ERROR(sprintf("Tried to shadow! (%O|%O)",obj, this_interactive()));
+  return 1;
+}
+

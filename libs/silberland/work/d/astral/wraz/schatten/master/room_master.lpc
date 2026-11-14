@@ -1,0 +1,189 @@
+// room_master
+// verwaltet Raeume in der Schattenwelt
+// Wraz / Mendralim
+
+// to create a room "by hand", use: write_next_room(string room_path)
+// e.g. xcall room_master->write_next_room("/d/astral/wraz/schatten/room/sn099")
+
+#include "../def.h"
+
+void create()
+{
+    if (is_clone(TO))
+    {
+        destruct(TO);
+        return;
+    }
+    seteuid(getuid(TO)); // fuer zugriff auf dateien benoetigt
+
+    return;
+}
+
+// converts integers to their equivalent string, including leading zeros
+string get_lead_zeros(int i)
+{
+    if (i <= 0)
+        return "000";
+    else if (i <= 9)
+        return "00" + i;
+    else if (i <= 99)
+        return "0" + to_string(i);
+    else if (i <= 999)
+        return to_string(i);
+    else
+        return "ERROR";
+}
+
+// returns a random number [0..2] with highest probability for 0
+int room_random(int no_of_exits)
+{
+    if (!no_of_exits || no_of_exits < 0)
+        no_of_exits = 3;
+    return random(DIVIDEND_RAND) / DIVISOR * random(no_of_exits);
+}
+
+// forward and backward default exits, and their possible random changes
+mapping get_def_exits(string forward_dir, string back_dir, int number)
+{
+    mapping def_exits;
+    string *forward_exits;
+    string *back_exits;
+    string *forward_rooms;
+    string *back_rooms;
+    int *forw_r_no;
+    int *back_r_no;
+
+    switch (forward_dir)
+    {
+    case "norden":
+        forward_exits = ({"norden", "nordosten", "nordwesten"});
+        break;
+    case "osten":
+        forward_exits = ({"osten", "nordosten", "suedosten"});
+        break;
+    case "sueden":
+        forward_exits = ({"sueden", "suedosten", "suedwesten"});
+        break;
+    case "westen":
+        forward_exits = ({"westen", "suedwesten", "nordwesten"});
+        break;
+    }
+
+    switch (back_dir)
+    {
+    case "norden":
+        back_exits = ({"norden", "nordosten", "nordwesten"});
+        break;
+    case "osten":
+        back_exits = ({"osten", "nordosten", "suedosten"});
+        break;
+    case "sueden":
+        back_exits = ({"sueden", "suedosten", "suedwesten"});
+        break;
+    case "westen":
+        back_exits = ({"westen", "suedwesten", "nordwesten"});
+        break;
+    }
+
+    forw_r_no = ({"sn" + get_lead_zeros(number + 1),
+                  "sn" + get_lead_zeros(number + 2),
+                  "sn" + get_lead_zeros(number + 3)});
+
+    back_r_no = ({"sn" + get_lead_zeros(number - 1),
+                  "sn" + get_lead_zeros(number - 2),
+                  "sn" + get_lead_zeros(number - 3)});
+
+    def_exits = ([1:forward_exits[0]; forward_exits[1]; forward_exits[2]; forw_r_no[0]; forw_r_no[1]; forw_r_no[2],
+                  2:back_exits[0]; back_exits[1]; back_exits[2]; back_r_no[0]; back_r_no[1]; back_r_no[2]]);
+
+    return def_exits;
+}
+
+// extra exits
+mapping get_extra_exits(int number)
+{
+    mapping extra_exits;
+
+    switch (number)
+    {
+        case 10:
+        extra_exits = ([1:"westen";ROOM + "lagerplatz"]);
+        break;
+
+        case AZA_ROOM:
+        extra_exits = ([1:"turm";ROOM + "turm_1"]);
+        break;
+
+        case TEMP_LAST_ALLOWED_ROOM:
+        extra_exits = ([1:"lehmgolem";METZELORGIE + "room/p02"]);
+        break;
+    }
+
+    return extra_exits;
+}
+
+// create the room files on demand
+//  room_path needs to be the full path, e.g.: "/d/astral/wraz/schatten/room/sn034"
+int write_next_room(string room_path)
+{
+    string room_path_ext;
+    object room;
+
+    if(!room_path) return -1;
+
+    room_path_ext = room_path + ".lpc";
+
+    if (file_size(room_path_ext) >= 0)
+        return -2; // file already exists
+
+    if (find_object(room_path))
+        return -3; // file does not exist, but room still exists as object
+
+    if (!write_file(room_path_ext, read_file(ROOM + "sn_template.lpc")))
+        return 0; // write_file failed
+    
+    call_other(room_path,"???");
+    room = find_object(room_path);
+
+    if(!room) return -4; // room could not be loaded
+
+    return 1;
+}
+
+// initialize first room
+varargs int initialize_first_room(string room_filename, string forward_dir, string back_dir, int room_number, int flag)
+{
+    string room_path;
+    object room;
+
+    room_path = ROOM + room_filename;
+
+    if (file_size(room_path + ".lpc") == -1 || 
+        file_size(room_path + ".lpc") == -2)
+        return -1; // room does not exist
+
+    room = find_object(room_path);
+
+    if (!room)
+    {
+        call_other(room_path, "???"); // load the room
+        room = find_object(room_path);
+    }
+
+    if (!room)
+        return -1; // room could not bee loaded
+
+    room->set_room_no(room_number, flag);
+    room->set_def_exits(get_def_exits(forward_dir, back_dir, room_number),forward_dir,back_dir);
+    //room->refresh_exits(); // deaktiviert wel set_def_exits() selbst refresh_exits() aufruft
+
+    return 1;
+}
+
+// temporary room blocking while shadow is under development
+int is_room_blocked(int room_no, string def_forw_dir)
+{
+    if(def_forw_dir == "norden" && room_no >= TEMP_LAST_ALLOWED_ROOM) return 1;
+    
+    return 0;
+}

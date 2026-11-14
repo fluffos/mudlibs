@@ -1,0 +1,102 @@
+mapping prep_messerwurf(object caster, mapping sinfo, int silent) 
+{
+  object weapon, ob;
+  
+  if(!GuildItemTest(caster, sinfo) || !FroschTest(caster, sinfo) || 
+     !KnifeTest(caster,sinfo)   ||
+     !BlindTest(caster,sinfo)     )
+    return 0;
+
+  if(!objectp(weapon=present(THROWING_KNIFE_ID, caster))) {
+    weapon=caster->QueryProp(P_WEAPON);
+    if(weapon->QueryProp(P_CURSED)) { 
+      tell_object(caster, BS("Die Waffe ist verflucht, das geht nicht!")); 
+      return 0;
+    }
+    if(weapon->QueryProp(P_WEAPON_TYPE) != WT_KNIFE) {
+      tell_object(caster, BS("Du kannst nur Messer werfen!"));
+      return 0;
+    }
+  }
+
+  if(!objectp(ob=sinfo[SI_ENEMY])) { 
+    ob=FindEnemyVictim(sinfo[SI_SKILLARG], caster, "Auf wen willst du dein Messer werfen?\n");
+    if(!ob) return 0;
+    sinfo[SI_ENEMY]=ob;
+  }
+
+  if(!silent) {
+    FirstPrepareFuncSuccessfull(caster, sinfo);
+  }
+  return sinfo;
+}
+
+int messerwurf(object caster, mapping sinfo) 
+{
+  object ob, weapon, *knifes, newknife;
+  int dam, ability, success, rounds;
+  mixed dts;
+
+  if(!mappingp(sinfo=prep_messerwurf(caster, sinfo, 1))) return 0;
+  ob=sinfo[SI_ENEMY];
+
+  weapon = present(THROWING_KNIFE_ID, caster) || caster->QueryProp(P_WEAPON); 
+
+  success=SpellSuccess(caster,sinfo);
+  if(success<0)
+  {
+    tell_object(caster, BSC("Du wirfst dein Messer viel zu spaet."));
+    tell_room( ENV(caster),  BS(caster->Name(WER,1)+" wirft "+weapon->name(WEN,0)+" weg."), ({caster}) );
+    if(!weapon->id(THROWING_KNIFE_ID)) {
+      weapon->move(ENV(caster), M_NOCHECK | M_SILENT);
+    } else {
+      weapon->AddAmount(-1);
+      if(objectp(newknife=present(THROWING_KNIFE_ID, ENV(caster)))) {
+        newknife->AddAmount(1);
+      } else {
+        newknife = clone_object(WEAPON "wurfmesser");
+        if(newknife->move(ob, M_NOCHECK|M_SILENT) != 1) newknife->remove();
+      }
+    }
+    return MISSERFOLG;
+  }
+  
+  tell_object(caster, BS("Du wirfst dein Messer auf "+ob->name(WEN, 1)+"."));
+  tell_room(ENV(caster), BS(caster->Name(WER, 1)+" schleudert ein Messer auf "
+                           +ob->name(WEN, 1)+"."), ({caster}));                
+
+  if(!weapon->id(THROWING_KNIFE_ID)) {
+    weapon->DoUnwield(1);
+    weapon->move(ob, M_NOCHECK | M_SILENT);
+    ExecuteAttackSpell(ob, caster, sinfo, ([SP_SHOW_DAMAGE:1]), ATTACK_SPELL_KNIFE);
+  } else {
+    rounds = 1 * caster->QuerySkillAttribute(SA_SPEED) / 100;
+    if(rounds < 1) rounds = 1;
+    
+    caster->AddSp(-1 * (rounds-1)); // Pro zusaetzlichem messer 5 MP
+
+    for(;rounds > 0; rounds--) {
+      if(!objectp(ob)) break; // gegner tot#
+      weapon->AddAmount(-1);
+      if(objectp(newknife=present(THROWING_KNIFE_ID, ob))) {
+        newknife->AddAmount(1);
+      } else {
+        newknife = clone_object(WEAPON "wurfmesser");
+        if(newknife->move(ob, M_NOCHECK|M_SILENT) != 1) newknife->remove();
+      }
+
+      // neu setzen wegen der schleife
+      sinfo[SI_SKILLDAMAGE] = 50;
+      sinfo[OFFSET(SI_SKILLDAMAGE)] = 0;
+      
+      ExecuteAttackSpell(ob, caster, sinfo, ([SP_SHOW_DAMAGE:1]), ATTACK_SPELL_KNIFE, weapon, (rounds!=1));
+
+      if(!objectp(weapon)) break; // alle messer verbraucht.
+    }
+  }
+
+  if(objectp(ob) && objectp(weapon)) weapon->RangerKnifeThrownAt(ob);
+
+  return ERFOLG;
+}
+

@@ -1,0 +1,253 @@
+inherit "std/thing";
+
+#include <properties.h>
+#include <properties.h>
+#include <language.h>
+#include <wizlevels.h>
+#include <defines.h>
+#include <moredef.h>
+
+
+
+#define VERSION "1.17"
+
+
+#define INVIS_SPERRE
+
+#define INV_TEST(x,y,z) (IS_LEARNER(x) && IS_LEARNER(y) && \
+                         z->QueryProp(P_INVIS))
+#define WIZ_NAME(pl,genitiv) ("("+capitalize(getuid(pl))+ \
+    (genitiv ? (strstr("xsz",getuid(pl)[<1..])!=-1?"'":"s"):"")+")")
+
+
+create()
+{
+  if (!is_clone(this_object())) return;  // (return on BP)
+  ::create();
+  
+  
+  SetProp(P_SHORT, "Eine Massageliege");
+  SetProp(P_LONG,
+    "Mit dieser Liege kann man Personen aus der Ferne massieren "
+    "wenn Sie es verdient haben. Sie besteht aus Stahl und ist "
+    "dick mit plueschig-flauschigem Samt ueberzogen. ");
+  SetProp(P_NAME, "Massageliege");
+  SetProp(P_GENDER, FEMALE);
+  AddId("liege", "massageliege");
+  SetProp(P_WEIGHT, 100);
+  SetProp (P_MATERIAL, ([MAT_VELVET:20,MAT_MAGIC:10,MAT_STEEL:70]));
+  SetProp(P_NEVERDROP, 1);  // Liege wird beim Tod nicht in die Leiche gelegt
+  SetProp(P_AUTOLOADOBJ, 1);//brauchst mir datt Ding ned immer neu clonen ;)
+SetProp(P_NODROP, 1);
+
+
+  SetProp(P_NOSELL,
+      "Du wirst doch Deine Massageliege nicht verkaufen wollen, oder?\n");
+  
+
+  AddCmd(({"rmassiere","rmassier"}), "rmassiere");
+  AddCmd(({"rstreichel","rstreichle"}), "rstreichel");
+  AddCmd(({"rverwoehne","rverwoehn"}), "rverwoehne");
+  
+}
+
+
+rmassiere(str)
+{
+  return rbefehl (str,
+    ({ "Wen willst Du aus der Ferne massieren?\n",
+       "Dich selbst? Aus der Ferne???\n",
+       "Wie willst Du @@WEN@@ massieren?\n",
+       "%s massiert Dich@@WIE@@@@FERN@@.\n",
+       "Du massierst @@WEN@@@@WIE@@@@FERN@@.\n",
+       "%s massiert @@WEN@@@@WIE@@.\n" }), 1);
+}
+
+rstreichel(str)
+{
+  return rbefehl (str,
+    ({ "Wen willst Du aus der Ferne streicheln?\n",
+       "Dich selbst? Aus der Ferne???\n",
+       "Wie willst Du @@WEN@@ streicheln?\n",
+       "%s streichelt Dich@@WIE@@@@FERN@@.\n",
+       "Du streichelst @@WEN@@@@WIE@@@@FERN@@.\n",
+       "%s streichelt @@WEN@@@@WIE@@.\n" }), 1);
+}
+
+rverwoehne(str)
+{
+  return rbefehl (str,
+    ({ "Wen willst Du aus der Ferne verwoehnen?\n",
+       "Dich selbst? Aus der Ferne???\n",
+       "Wie willst Du @@WEN@@ verwoehnen?\n",
+       "%s verwoehnt Dich@@WIE@@@@FERN@@.\n",
+       "Du verwoehnst @@WEN@@@@WIE@@@@FERN@@.\n",
+       "%s verwoehnt @@WEN@@@@WIE@@.\n" }), 1);
+}
+string extra_look()
+{
+  return capitalize(environment()->QueryPronoun())+
+    " hat eine Massageliege unter "+
+    environment()->QueryPossPronoun(MALE,WEN) + " Arm geklemmt.\n";
+}
+string _in(string a, mapping m)
+{
+  if (member(m,lower_case(a)))
+    return m[a];
+  else
+    return "";
+}
+
+string ParseAdverben(string str, object ob)
+{
+  string *advpart;
+  mixed quotedpart;
+  mapping adverben;
+
+  if (!str) return 0;
+  str=" "+str;
+  adverben=ob->QueryStdAdverbs()+ob->QueryAdverbs();
+  advpart=explode(str,"/");
+  if (sizeof(advpart)>1)
+      quotedpart=" "+implode(advpart[1..],"/");
+  else
+    quotedpart="";
+  advpart=regexplode(advpart[0],"\\<[^, ]*\\>");
+  advpart=map_array(advpart,#'_in,adverben) - ({""});
+  return sizeof(advpart) ? ob->CountUp(advpart)+quotedpart : quotedpart[1..];
+}
+
+/*
+explode_str() - ersetzt @@...@@ Makros
+-------------
+str ......... der String
+ob .......... das Objekt, dessen Name eingesetzt werden soll
+adv ......... Adverben
+fern ........ 0: Naehe, 1: aus der Ferne
+*/
+varargs string explode_str(string str, object ob, string adv, int fern)
+{
+  string s,s1,s2,x;
+  s2=str;
+  s="";
+  while (sscanf(s2, "%s@@%s@@%s", s1, x, s2) == 3)
+  {
+    switch (x)
+    {
+      case "WER":    if (fern>0 && INV_TEST(TP,ob,ob)) s+=s1+WIZ_NAME(ob,0);
+                     else s+=s1+ob->name(WER);
+                     break;
+      case "WESSEN": if (fern>0 && INV_TEST(TP,ob,ob)) s+=s1+WIZ_NAME(ob,1);
+                     else s+=s1+ob->name(WESSEN);
+                     break;
+      case "WEM":    if (fern>0 && INV_TEST(TP,ob,ob)) s+=s1+WIZ_NAME(ob,0);
+                     else s+=s1+ob->name(WEM);
+                     break;
+      case "WEN":    if (fern>0 && INV_TEST(TP,ob,ob)) s+=s1+WIZ_NAME(ob,0);
+                     else s+=s1+ob->name(WEN);
+                     break;
+      case "WIE":    s+=s1+adv; break;
+      case "FERN":   if (fern>0) s+=s1+" aus der Ferne"; else s+=s1; break;
+    }
+  }
+  s+=s2;
+  return s;
+}
+
+/*
+rbefehl()
+---------
+str ......... der String, wie er beim Befehl angehaengt wurde
+form ........ ein Array mit den diversen Meldungen:
+  form[0].... Fehlermeldung, wenn str leer ist
+  form[1].... Fehlermeldung, wenn Spieler == Zielperson
+  form[2].... sprintf Fehlermeldung bei nicht parse-baren Adverben
+              "...%s...", Zielperson->Name(casus)
+  form[3].... sprintf Maske fuer Zielperson
+              "%s...%s...%s.\n", Spieler, Adverben, ["Ferne"]
+  form[4].... sprintf Maske fuer Spieler
+              "...%s...%s...%s.\n", Zielperson->Name(casus), Adverben, ["Ferne"]
+  form[5].... sprintf Maske fuer Raum
+              "%s...%s...%s...", Spieler, Zielperson->Name(casus), Adverben
+sp........... Kosten (spellpoints)
+---
+Anmerkungen:
+
+["Ferne"]  ist " aus der Ferne", wenn die Spieler in verschiedenen Raeumen
+           stehen, sonst ein Leerstring ("").
+Adverben   werden wie soul-Adverben geparsed, ihnen wird ausserdem ein
+           Space vorangestellt (um sie fuer die sprintf Maske optional
+           zu machen).
+*/
+
+varargs int rbefehl(string str, string *form, int sp, int nearonly)
+{
+  string *s, adv;
+  mixed ob;
+  object room;
+  int i, ferne;
+
+  if (MENV != TP)
+    return notify_fail("Dazu musst Du "+name(WEN,1)+" erst einmal "+
+      "an Dich nehmen!\n"), 0;
+  if (!IS_SEER(TP) && (TP->QueryProp(P_SP) < sp))
+    return notify_fail("Dazu hast Du zuwenig Magiepunkte!\n"), 0;
+  notify_fail(form[0]);
+  str=TP->_unparsed_args();
+  if (!stringp(str) || str=="") return 0;
+  s = explode (str, " ");
+  if (!i=sizeof(s)) return 0;
+  s[0]=LOWER(s[0]);
+  ob=find_player(s[0]) || match_living(s[0]);
+    // ergibt:  - Spielerobjekt oder
+    //          - String (passender Spielername) oder
+    //          - Integer (-1: multiple matches, -2: no matches)
+  if (stringp(ob)) ob=find_player(ob);
+    // Jetzt: - Spielerobjekt oder
+    //        - Integer (0 oder -2: nicht da, -1: mehrere da)
+
+#ifdef INVIS_SPERRE
+  if (objectp(ob) && !IS_WIZARD(TP) && ob->QueryProp(P_INVIS)) ob=0;
+#endif
+
+  if (!objectp(ob)) {
+    if (ob==-1)
+      return notify_fail("Das war nicht eindeutig!\n"), 0;
+    else
+      return notify_fail("Kein solcher Spieler!\n"), 0;
+  }
+  if (ob==TP) return notify_fail(form[1]), 0;
+  if (i<2) adv="";
+  else
+  {
+    if (!adv=ParseAdverben(implode(s[1..], " "), TP))
+      return notify_fail (sprintf(explode_str(form[2], ob))), 0;
+    else
+      if (strlen(adv)) adv=" "+adv;
+  }
+
+  // aus der Ferne?
+  // (Bei der Gelegenheit ausserdem gleich room und ferne setzen)
+  ferne=(room=ENV(TP)) != ENV(ob);
+
+  if (nearonly && ferne) {
+    write(ob->Name(WER)+" ist zuweit weg von Dir...\n");
+    return 1;
+  }
+  // Nun die eigentliche Ausgabe:
+  // tell_object (ob, BS(sprintf(explode_str(form[3], ob, adv, ferne), TPN)));
+  if (ob->Message(BS(
+      capitalize(sprintf(explode_str(form[3], ob, adv, ferne),
+          INV_TEST(ob,TP,TP) ? WIZ_NAME(TP,0) : TPN))))==-1)
+    write(ob->Name(WER)+" ignoriert Dich oder diesen Befehl.\n");
+  else {
+    write (BS(capitalize(sprintf(explode_str(form[4], ob, adv, ferne)))));
+    if (!ferne)
+      tell_room(
+          room, BS(capitalize(
+              sprintf(explode_str(form[5], ob, adv, -1), TPN))), ({TP,ob}) );
+  }
+  if (!IS_SEER(TP) && sp)
+    TP->AddSp(-sp);
+  return 1;
+}

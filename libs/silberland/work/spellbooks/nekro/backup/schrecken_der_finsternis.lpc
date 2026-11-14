@@ -1,0 +1,92 @@
+
+int prep_terror(object caster, mapping sinfo)
+{
+
+  if( !FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+      "Wen willst Du mit dem Schrecken der Finsternis ueberziehen?\n"))
+    return 0;
+  if(environment(caster)->QueryProp(P_TOTAL_LIGHT) >0)
+    return write("Aber hier ist es doch viel zu hell fuer den Schrecken der "
+      "Finsternis!\n"),0;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }                
+
+  return 1;
+}
+
+int terror(object caster, mapping sinfo) 
+{
+  object victim;
+  int succ, dam;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+      "Wen willst Du mit dem Schrecken der Finsternis belegen?\n");
+  if (!victim)
+    return 0;
+  if(environment(caster)->QueryProp(P_TOTAL_LIGHT) >0)
+    return write("Aber hier ist es doch viel zu hell fuer den Schrecken der "
+      "Finsternis!\n"),0;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  if (SpellSuccess(caster,sinfo)<=0)
+    return MISSERFOLG;
+
+  if (!is_living(victim)) {
+    write(BS(victim->Name(WER,1) + " ist gar kein lebendes Wesen und kann "
+          "daher nicht erschreckt werden - Deine Magie verpufft "
+          "wirkungslos."));
+    return ERFOLG;
+  }
+  
+  write(BS(sprintf("Du belegst %s mit dem einem furchbaren Schrecken der "
+          "Finsternis, der %s Herz umklammern wird.", victim->name(WEN, 2),
+          victim->QPP(WESSEN))));
+  tell_object(victim,BS(sprintf("%s belegt Dich mit den furchtbaren Schrecken "
+          "der Finsternis. Deine fuerchterlichsten Alptraeume werden "
+          "Realitaet!", caster->Name(WER))));
+  say(BS(sprintf("%s belegt %s mit Schrecken der Finsternis. %s wimmert wie "
+      "ein kleines Kind.", caster->Name(WER), victim->name(WEN, 2),
+      CAP(victim->QueryPronooun(WER)))), ({victim, caster}) );
+
+  dam=sinfo[SI_SKILLDAMAGE]+caster->QueryProp(P_GUILD_LEVEL)*
+    caster->QueryProp(P_GUILD_CIRCLE);
+  dam+=CheckEquip(caster, sinfo[SI_SPELLFUNC]);
+  dam=sinfo[OFFSET(SI_SKILLDAMAGE)]+ 
+      random(DoModificationByAlign(dam, caster, victim));
+  dam=TryAttackSpell(victim, dam, sinfo[SI_SKILLDAMAGE_TYPE],
+    ([SP_NAME:"Nekromantenterror",SP_SHOW_DAMAGE:1]), caster, sinfo);
+  if( victim && random(100) > victim->QueryProp(P_NOMAGIC))
+  {
+    if (random(succ+sinfo[SI_SKILLABILITY]) > random(12000) && dam>50 ) {
+      victim->SetProp(P_DISABLE_ATTACK,1+random(3));
+      tell_object(victim, "Du faellst vor Schreck zu Boden.\n");
+      tell_room(environment(caster), victim->Name(WER,1)+" faellt vor "
+          "Schreck zu Boden.\n", ({victim}) );
+    } 
+    else if (victim->QueryProp(P_HP) < victim->QueryProp(P_MAX_HP)/10 &&
+             !victim->id("NOWIMPY")) {
+      tell_room(environment(caster), victim->Name(WER,1)+" fluechtet "
+          "voller Entsetzen.\n", ({victim}) );
+      victim->SetProp(P_WIMPY, victim->QueryProp(P_HP)+1);
+      victim->CheckWimpyAndFlee();
+    }
+    else if (victim->QueryProp(P_LEVEL) < caster->QueryProp(P_LEVEL)/4+
+        caster->QueryProp(P_GUILD_LEVEL) + caster->QueryProp(P_GUILD_CIRCLE)) {
+      victim->move("/room/npcasylraum", M_GO, "", "versteckt sich", "");
+      call_out("move_back",2+2*random(7), victim, environment(caster));
+    }
+  } 
+  return ERFOLG;
+}
+
+void move_back(object wen, object wohin)
+{
+  wen->move(wohin, M_GO, "", "", "traut sich wieder heraus");
+}

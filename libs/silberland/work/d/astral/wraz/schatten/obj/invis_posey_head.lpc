@@ -1,0 +1,109 @@
+// Schattenwelt
+// von Wraz / Mendralim
+// Invis Objekt bei Posey-Leiche um Kopf abtrennbar zu machen
+
+#include "../def.h"
+
+inherit "/std/thing";
+
+object corpse;
+
+void create () 
+{
+  if (!is_clone(TO)) return;
+  ::create();
+
+  //SetProp(P_NOGET,1);
+  AddId(({"\ninvis_posey_head"}));
+
+  SetProp(P_SHORT,0);
+  SetProp(P_LONG, 0);
+  AddCmd("trenne|schneide&kopf&von&leiche","behead",
+    "Was moechtest Du abtrennen?");
+  AddCmd("koepfe&leiche","behead",
+    "Was moechtest Du koepfen?");
+
+  call_out("add_details_to_corpse",1);
+}
+
+// ------------------------------------------------------------------------------
+int behead()
+{
+  object corpse;
+  int new_align;
+  object head;
+
+  if(!corpse=present(QueryProp("posey_corpse_id"), ENV(TO)) ) 
+  {
+    TO->remove();
+    return -1;
+  }
+
+  if(!present("messer", TP) && !present("axt", TP) && !present("schwert", TP))
+  {
+    TP->Message(BS("Ohne einen scharfen Gegenstand schaffst Du das nicht."));
+    return -1;
+  }
+
+  TP->Message(BS("Du trennst den Kopf der Leiche ab und steckst ihn ein. Ein boeser "
+    "Schauer ueberkommt Dich. Die von Dir geschaendete Leiche verschwindet kurz "
+    "darauf einfach."));
+  ENV(TP)->Message(BS(TPN+" trennt den Kopf von Poseys Leiche ab und steckt ihn ein! Was fuer "
+    "eine satanische Tat! Die geschaendete Leiche verschwindet kurz "
+    "darauf einfach."), MSGFLAG_NO_TP);
+  
+  new_align = TP->QueryProp(P_ALIGN) - 300 - random(100);
+  new_align = new_align < -1000 ? -1000 : new_align;
+  TP->SetProp(P_ALIGN, new_align);
+  corpse->remove();
+
+  head = clone_object(OBJ "posey_head");
+
+  if(head->move(TP,M_GET) == ME_TOO_HEAVY || head->move(TP,M_GET) == ME_TOO_MUCH)
+  {
+    head->move(ENV(TP));
+    TP->Message(BS("Du kannst den Kopf nicht mehr tragen, also laesst Du ihn fallen."));
+  }
+
+  TO->remove();
+
+  return 1;
+}
+
+// ------------------------------------------------------------------------------
+void add_details_to_corpse()
+{
+  if(!QueryProp("posey_corpse_id") ||
+    !corpse=present(QueryProp("posey_corpse_id"), ENV(TO)) ) return; // wird von posey.c gesetzt
+
+  corpse->AddId("\nposey_corpse"); // fuer Ahtawqa zur Identifikation
+
+  corpse->SetProp("corpse_decay",120); // default: 30; langsamerer decay
+
+  // Hinweis fuer Spieler:
+  if(objectp(TO)) ENV(TO)->Message(BS("Irgendetwas ist seltsam an der Leiche."));
+
+  corpse->SetProp(P_LONG, corpse->QueryProp(P_LONG)+
+    "Ein boeser Gedanke ueberkommt Dich."); 
+  corpse->AddDetail( ({"gedanke",""}),
+    "Der nackte, helle Hals der Leiche blitzt Dich an. Mit einem scharfen Gegenstand... "
+    "Bist Du wirklich so boese?");
+}
+
+// ------------------------------------------------------------------------------
+void init() 
+{
+  ::init();
+
+  if(QueryProp(P_CLONE_TIME) > time()-4) return; // damit es nicht mit clone & move clashed
+
+  if(TO && ENV(TO) && !present(QueryProp("posey_corpse_id"), ENV(TO)) && corpse && ENV(corpse))
+    TO->move(ENV(corpse),M_NOCHECK);
+}
+
+// ------------------------------------------------------------------------------
+void reset()
+{
+  ::reset();
+  if(!ENV(TO) || !present(QueryProp("posey_corpse_id"), ENV(TO)) ) TO->remove();
+}

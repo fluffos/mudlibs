@@ -1,0 +1,246 @@
+// SilberLand MUDlib
+//
+// /p/daemon/inews.c -- International News
+//
+// $Date: 2004/09/16 16:17:50 $
+/* $Revision: 1.7 $
+ * $Log: inews.c,v $
+ * Revision 1.7  2004/09/16 16:17:50  Woody
+ * Zeile 3 enthaelt nunmehr Datum, Anpassungen fuer news.orf.at
+ *
+ * Revision 1.6  2000/01/24 13:13:24  Zordan
+ * Vorerst einmal auf ORF umgestellt (testweise)
+ *
+ * Revision 1.5  1998/09/20 13:24:25  Woody
+ * Neuer channeld
+ *
+ * Revision 1.4  1998/02/25 12:27:48  Woody
+ * Diverse Bugfixes, besseres (korrektes) Handling bei fehlendem Subheader
+ *
+ * Revision 1.3  1998/02/05 19:45:40  Woody
+ * Bugfix fuer Meldungen ohne Subline (bzw. Leerstring stattdessen)
+ *
+ * Revision 1.2  1998/01/19 17:53:45  Woody
+ * Komplett ueberarbeitet (Nachrichten von Mond / Radio Wien)
+ *
+ * Revision 1.1  1997/03/16 02:28:52  Woody
+ * prepared for revision control
+ *
+ */
+
+// INEWS.C -- International News
+/*
+ * Der inews-daemon sorgt dafuer, dass die Nachrichten, die extern
+ * zur Verfuegung gestellt werden, regelmaessig ausgelesen und ver-
+ * arbeitet werden. Das Newsfile hat eine entsprechende, vorgegebene
+ * Struktur:
+ *
+ *   Schlagzeile (idR. ein Wort)
+ *   Titelzeile (etwas laenger)
+ *   Datum als Unixtime  (war frueher: Codezeile ("nummer|quelle|thema|(ON|OFF)"))
+ *   Nachrichtentext [..]
+ *   Delimiterzeile ("-- ")
+ *
+ * Dieses File wird regelmaessig ausgelesen, geparsed, und geloescht.
+ *
+ */
+
+
+#pragma strong_types
+#pragma combine_strings
+
+#include <daemon.h>
+#include <config.h>
+#include <properties.h>
+
+#define NEWSFILE "/p/daemon/save/INEWS"
+#define PROVIDER "ORF"
+#define RUBRIK "nachrichten"
+#define ADMIN "woody"
+#define CHANNEL "Nachrichten"
+#define CHANNEL_ONLY_HEADLINES
+
+#define DEBUG(str) tell_object(find_player(ADMIN), sprintf("|\\| %O\n",str))
+
+#define MIN(a,b) (a<b ? a : b)
+#define MAX(a,b) (a>b ? a : b)
+
+mixed data = ({});
+mixed msg;
+
+nosave void NewsUpdate();
+nosave void Ticker(int step);
+nosave void InformPlayers(string group, string text);
+
+
+void create()
+{
+  seteuid(getuid(this_object()));
+  call_out("NewsUpdate", 0);
+}
+
+string name() { return "<"+PROVIDER+">"; }
+
+nosave void NewsUpdate()
+{
+  mixed *art;
+  mixed tmp;
+  int i,n;
+
+  while (remove_call_out("NewsUpdate") != -1);
+  call_out("NewsUpdate", (3600-(time()%3600)));
+
+  tmp = read_file(NEWSFILE);
+  if (tmp)
+    data = (pointerp(data) ? data : ({})) + explode(tmp, "-- \n") - ({ 0, "" });
+
+  if (!tmp || !sizeof(data)) {
+    CHMASTER->join(CHANNEL, this_object());
+    CHMASTER->send(CHANNEL, this_object(),
+        "Derzeit liegen keine neuen Meldungen vor. "
+        "Die naechsten Nachrichten werden in "+
+        ((30+find_call_out("NewsUpdate"))/60)+" Minuten gesendet.",
+        MSG_SAY);
+    return;
+  }
+
+  call_out("Ticker", 3, 0);
+  rm(NEWSFILE);
+
+  // Artikel veroeffentlichen
+  n=0;
+  for (i=0; i<sizeof(data); i++)
+  {
+    tmp = data[i];
+    art = explode(data[i], "\n");
+
+    /*
+    if (strstr(art[1], "|") != -1)
+      art = ({ art[0], "" }) + art[2..];
+    else
+      art = art[0..1] + art[3..];
+    */
+
+    art = ({ RUBRIK, PROVIDER, 0, 0,
+          sprintf("[%s] %s", art[0], art[1]),
+          break_string(
+              sprintf( "%s\n%s: %s\n\n",
+                       dtime(to_int(art[2]))[0..<4], art[0], art[1] ) +
+              implode( art[3..], "\n" ) + "\n\n", 78, 0, 1) });
+
+    if ( (NEWSSERVER->WriteNote(art,1) > 0) ||
+         ( (NEWSSERVER->RemoveNote(RUBRIK,0) > 0) &&
+           (NEWSSERVER->WriteNote(art,1) > 0) ) )
+      n++;
+    else if (find_player(ADMIN))
+      tell_object(find_player(ADMIN),
+          "[INews:] Fehler bei Posten eines Artikels, bitte pruefen!\n");
+  }
+  if (n)
+    InformPlayers(RUBRIK,
+        "* Extrablatt! "+n+" neue Artikel von "+PROVIDER+
+        " in Rubrik \""+RUBRIK+"\".\n");
+}
+
+nosave void Ticker(int step)
+{
+  string text;
+
+  if (!sizeof(data) && (step < 4)) return;
+  switch (step)
+  {
+    // Ankuendigung
+    case 0:
+      text = "In Kuerze Schlagzeilen aus aller Welt.";
+      CHMASTER->join(CHANNEL, this_object());
+      CHMASTER->send(CHANNEL, this_object(), text, MSG_SAY);
+      call_out("Ticker", 15, 1);
+      break;
+
+    // Schlagzeile
+    case 1:
+      msg = explode(data[0], "\n");
+      text = sprintf("[%s] %s", dtime(to_int(msg[2]))[<8..<4], msg[0] );
+      if (strlen(msg[1]) && (text[<1] != ':')) text += ":";
+
+      CHMASTER->join(CHANNEL, this_object());
+      CHMASTER->send(CHANNEL, this_object(), text, MSG_SAY);
+      call_out("Ticker", 3, 2);
+      break;
+
+    // Titel (laengere Schlagzeile...)
+    case 2:
+      text = msg[1];
+      if (!strlen(text))        // Ohje, die Subheadline fehlt
+      {
+#ifdef CHANNEL_ONLY_HEADLINES
+        data = data[1..];
+        if (sizeof(data))
+          Ticker(1);
+        else
+          Ticker(4);
+#else
+        Ticker(3);
+#endif
+        return;
+      }
+      CHMASTER->join(CHANNEL, this_object());
+      CHMASTER->send(CHANNEL, this_object(), text, MSG_SAY);
+#ifdef CHANNEL_ONLY_HEADLINES
+      data = data[1..];
+      if (sizeof(data))
+        call_out("Ticker", MAX(strlen(text)/10, 5), 1);
+      else
+        call_out("Ticker", 5, 4);
+#else
+      call_out("Ticker", 5, 3);
+#endif
+      break;
+
+    // Eigentlicher Text
+    case 3:
+      text = implode(msg[3..], "\n");
+      data = data[1..];
+      CHMASTER->join(CHANNEL, this_object());
+      CHMASTER->send(CHANNEL, this_object(), text, MSG_SAY);
+      if (sizeof(data))
+        call_out("Ticker", MAX(strlen(text)/20, 5), 1);
+      else
+        call_out("Ticker", 5, 4);
+      break;
+
+    // Ende, Credits...
+    case 4:
+#ifdef CHANNEL_ONLY_HEADLINES
+      text = "Ende der Meldungen. Naehere Informationen sind der "
+        "Zeitungsrubrik \""+RUBRIK+"\" zu entnehmen. Die naechsten "
+        "Nachrichten werden in "+
+        ((30+find_call_out("NewsUpdate"))/60)+" Minuten gesendet.";
+#else
+      text = "Ende der Meldungen. Die naechsten Nachrichten werden "
+        "in "+((30+find_call_out("NewsUpdate"))/60)+" Minuten gesendet.";
+#endif
+
+      CHMASTER->join(CHANNEL, this_object());
+      CHMASTER->send(CHANNEL, this_object(), text, MSG_SAY);
+      break;
+  }
+}
+
+nosave void InformPlayers(string group, string text)
+{
+  object *players;
+  int i;
+  mixed data;
+
+  players=users();
+  for (i=sizeof(players)-1;i>=0;i--) {
+    data=players[i]->QueryProp(P_WAITFOR);
+    if (pointerp(data)&&(member(data,"Zeitung")>-1)) {
+      data=players[i]->QueryProp(P_READ_NEWS);
+      if (mappingp(data)&&(data[group]>0))
+        tell_object(players[i],text);
+    }
+  }
+}
+

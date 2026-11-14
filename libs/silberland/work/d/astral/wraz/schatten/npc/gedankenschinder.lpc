@@ -1,0 +1,523 @@
+// Gedankenschinder (nicht untot)
+// Schattenwelt, NPC Endgegner Raum 399
+// Von Wraz / Mendralim
+
+#include "../def.h"
+inherit "/std/npc/spells";
+inherit "std/npc";
+inherit NPC "npc.lpc";
+
+#define DEFAULT_INDENT "spricht in Deinen Gedanken: "
+#define DEFAULT_SILENT "scheint sich telepathisch zu unterhalten.\n"
+
+object *dominated_players = ({});
+object *tentacled_players = ({});
+
+void create()
+{
+  if(!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Die Gedankenschinderin");
+  set_living_name("gedankenschinderin");
+  SetProp(P_LONG,
+    "Oktopusartige Tentakel ragen aus dem Gesicht der Gedankenschinderin, deren "
+    "Gestalt ansonsten humanoid wirkt. Ihre Haut ist blass bis dunkel violett, "
+    "die Augen starren aus schwarzen Schlitzen boese zu Dir.");
+
+  AddDetail( ({"tentakel"}),
+    "Mehrere Tentakel ragen aus dem Gesicht der Gedankenschinderin und schlaengeln "
+    "durch die Luft.");
+
+  AddDetail( ({"gesicht"}),
+    "Das Gesicht ist blass violett. Tentakel ragen daraus hervor, dort, wo sich "
+    "der Mund befinden muesste.");
+    
+  AddDetail( ({"mund"}),
+    "Mund kannst Du keinen erkennen, aber mehrere Tentakel.");
+    
+  AddDetail( ({"gestalt"}),
+    "Insgesamt wirkt die Gedankenschinderin humanoide.");
+
+  AddDetail( ({"haut"}),
+    "Blass violett im Gesicht, die Haende wirken eher dunkel violett.");
+
+  AddDetail( ({"haende", "finger", "krallen"}),
+    "Die Haende der Gedankenschinderin haben nur vier Finger und sind mit langen "
+    "Krallen besetzt.");
+
+  AddDetail( ({"augen","schlitze"}),
+    "Die Augen der Gedankenschinderin sind boese, schwarze Schlitze, die alles "
+    "und jeden scheinbar mit ihrem Blick vergiften.");
+
+  AddDetail( ({""}),
+    "");
+
+
+  SetProp(P_NAME, "Gedankenschinderin");
+  SetProp(P_GENDER, FEMALE);
+  //SetProp(P_ARTICLE, 0);
+  AddId(({"gedankenschinderin", "gedankenschinder"}));
+  AddId(({"NOWIMPY", "\nschattenweltnpc", "\nschattenwache"}));
+
+  SetProp(P_INFO, BS("Die Gedankenschinderin wird versuchen, Dein Gehirn zu "
+    "essen!"));
+
+  // level = 40 (-> wird noch erhoeht basierend auf Raumnummer),
+  // maxhp = 0 (-> wird berechnet), incorp = 0 (-> nicht incorporeal)
+  create_default_shadownpc(40,0,0);
+  RemoveClass(({CL_UNDEAD})); // nicht untot
+
+  SetProp(P_AGGRESSIVE, ([P_TESTPLAYER:(["Wraz":0.0, 0:0.1])])); // 
+
+  SetProp(P_RACE, "Gedankenschinder");
+  SetProp(P_SIZE, 182);
+  SetProp(P_WEIGHT, 65000);
+  SetProp(P_ALIGN, -1000);
+  SetProp(P_HANDS, ({" mit Haenden und Tentakeln", QueryProp(P_HANDS)[1] , ({DT_BLUDGEON}) }) );
+  SetProp(P_MAX_HANDS, 2);
+
+  SetProp(P_RESISTANCE_STRENGTHS, 0);
+  SetProp(P_RESISTANCE_STRENGTHS, ([DT_MIND: -0.9]) );
+
+  SetProp(P_NOMAGIC,10);
+
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    Name(WER,1)+" nimmt @WEN nicht.\n" }) );
+
+  SetProp(P_LOG_INFO, "/wraz/fragen_schatten");
+
+  SetProp(P_MSGIN, "schwebt herein");
+  SetProp(P_MSGOUT, "schwebt davon");
+  SetProp(P_MMSGIN, "erscheint");
+  SetProp(P_MMSGOUT, "verschwindet");
+
+  SetProp(P_NOCORPSE, 1 );
+
+  AddInfo(DEFAULT_INFO, "durchbohrt Deinen Verstand.\n",
+  0,DEFAULT_SILENT);
+
+  AddInfo( ({"hilfe"}),
+  "lacht in Deinem Kopf veraechtlich.\n",
+  0,DEFAULT_SILENT);
+
+  AddInfo( ({"wraz","gebieter","maechtige"}),
+  DEFAULT_INDENT+"Wraz ist der Gebieter, der Maechtige.",
+  0,DEFAULT_SILENT);
+
+  AddInfo( ({"brandisborgel"}),
+  DEFAULT_INDENT+"Der aermliche Daemon.\n",
+  0,DEFAULT_SILENT);
+
+  AddInfo( ({"schattendrachin","schattendrache","vagghuthcerrvnippintaa"}),
+  DEFAULT_INDENT+"Eine edle Kreatur.\n",
+  0,DEFAULT_SILENT);
+
+  AddInfo( ({"aza"}),
+  DEFAULT_INDENT+"Die Magierin ist famos.\n",
+  0,DEFAULT_SILENT);
+
+  AddInfo( ({"avatare","avatar","abbilder"}),
+  DEFAULT_INDENT+"Wraz' kleine Trolle.\n",
+  0,DEFAULT_SILENT);
+
+  AddInfo( ({"fingernagel"}),
+  DEFAULT_INDENT+"Eines von Wraz' Abbildern.\n",
+  0,DEFAULT_SILENT);
+
+  SetChats(1,
+  ({Name(WER,1)+" gleitet umher.\n"
+  ,"","","","","",""
+   }));
+
+
+  SetProp(P_SPELLRATE,65);
+
+  AddDefaultSpell(30, 1350, DS_MASS_DAMAGE,
+    "Quaelende Gedanken zermartern Dich!\n",
+    "Quaelende Gedanken zermartern @WEN!\n",
+    DT_MIND, ([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(30, 300, 
+    BS(Name(WER,1)+" schlaegt mit einem Tentakel nach Dir."),
+    BS(Name(WER,1)+" schlaegt mit einem Tentakel nach @WEM."),
+    DT_BLUDGEON, "AttachTentacle", ([SP_SHOW_DAMAGE:1]));
+
+  // Dominiert einen Spieler, der dann als Schutzschild dient
+  AddSpell(30, 300,
+    BS("Mit mentaler Kraft trachtet "+name(WER,1)+" nach Deinem Geist."),
+    BS("Mit mentaler Kraft trachtet "+name(WER,1)+" nach @WESSEN Geist."),
+    DT_MIND, "DominatePlayer", ([SP_SHOW_DAMAGE:1]));
+
+  SUID;
+}
+
+// ------------------------------------------------------------------------------
+void RemoveDominatedPlayer(object pl)
+// Entfernt einen Spieler aus der dominated_players Liste
+{
+  if(!pl) return;
+  if(!sizeof(dominated_players)) return;
+  if(member(dominated_players,pl) == -1) return;
+  dominated_players -= ({pl});
+}
+
+// ------------------------------------------------------------------------------
+void RemoveTentacledPlayer(object pl)
+// Entfernt einen Spieler aus der tentacled_players Liste
+{
+  if(!pl) return;
+  if(!sizeof(tentacled_players)) return;
+  if(member(tentacled_players,pl) == -1) return;
+  tentacled_players -= ({pl});
+}
+
+// ------------------------------------------------------------------------------
+void DominatePlayer(object enemy, int damage, mixed dam_type)
+// Dominiert einen Spieler, der dann als Schutzschild dient
+{
+  object domination;
+
+  if(!damage) 
+  {
+    //DB(BS("* damage = 0 in DominatePlayer()"));
+    return;
+  }
+  switch(random(enemy->QueryAttribute(A_INT)))
+  {
+    case 0..10:
+    // attach domination
+    ENV(TO)->Message(BS(Name(WER, 1)+" uebernimmt die Kontrolle ueber "+
+      enemy->Name()+"!"),
+      MSGFLAG_VISUAL, ([MSGFLAG_EXCLUDE: ({enemy})]));
+    enemy->Message(BS(Name(WER, 1)+" uebernimmt die Kontrolle ueber Dich!"
+      ),MSGFLAG_SENSE);
+
+    //enemy->SetProp(P_NOMOVE, Name(WER, 1)+" zwingt Dich, hier zu bleiben!\n"); // NOMOVE ueberfluessig wegen DisableCommands() in domination
+    //enemy->StopHuntFor(TO,1); // ist jetzt in domination->Setup()
+    //TO->StopHuntFor(enemy,1);
+
+    dominated_players += ({enemy});
+
+    domination = clone_object(OBJ "domination");
+    domination->move(enemy,M_NOCHECK);
+    domination->Setup(enemy,TO);
+    break;
+
+    case 11..15:
+    // failed (but almost)
+    ENV(TO)->Message(BS(Name(WER, 1)+" versucht "+
+      enemy->Name()+" zu kontrollieren, "+enemy->QueryPronoun()+
+      " kann aber unter schwerer Anstrengung widerstehen!"),
+      MSGFLAG_VISUAL, ([MSGFLAG_EXCLUDE: ({enemy})]));
+    enemy->Message(BS(Name(WER, 1)+" versucht Dich zu kontrollieren. "
+      "Mit Willenskraft schaffst Du es gerade noch, zu widerstehen!"),
+      MSGFLAG_SENSE);
+    break;
+
+    default:
+    // failed
+    ENV(TO)->Message(BS(Name(WER, 1)+" versucht "+
+      enemy->Name()+" zu kontrollieren, "+enemy->QueryPronoun()+
+      " widersteht aber erfolgreich!"),
+      MSGFLAG_VISUAL, ([MSGFLAG_EXCLUDE: ({enemy})]));
+    enemy->Message(BS(Name(WER, 1)+" versucht Dich zu kontrollieren. "
+      "Du widerstehst dem Angriff!"),
+      MSGFLAG_SENSE);
+    return;  
+  }
+}
+
+// ------------------------------------------------------------------------------
+int Flee_()
+// Flucht durch Teleportation bei wenig HP
+{
+  int room_nr, i, was_in_fight;
+  object pl;
+
+  if(ENV(TO)) room_nr = ENV(TO)->get_room_no(); // zuerst direkt aus Raum abfragen
+  else room_nr = TO->QueryProp("shadow_room_no"); // fallback
+  if(!room_nr)
+  {
+    DB(BS("ERROR in gedankenschinder: room_nr not found in Flee_()"));
+    write("ERROR: room_nr not found!\n");
+    return 0;
+  }
+
+  room_nr += 1+random(2); // Fluchtraum zufaellig auswaehlen
+
+  if(room_nr > 999) return 0; // weiter geht's nicht (so weit kommt er aber eh nicht)
+
+  if(!read_file(ROOM "sn"+room_nr)) RMASTER->write_next_room(ROOM "sn"+room_nr,"norden");
+  call_other(ROOM "sn"+room_nr,"???");
+  if(!find_object(ROOM "sn"+room_nr))
+  {
+    write("ERROR: room not found!\n");
+    return 0;
+  }
+
+  ENV(TO)->Message(BS(Name(WER,1)+" teleportiert sich davon!"),
+      MSGFLAG_VISUAL);
+
+  move(ROOM "sn"+room_nr,M_NOCHECK+M_SILENT);
+
+  (ROOM "sn"+room_nr)->Message(BS(Name(WER,1)+" teleportiert herein."),
+    MSGFLAG_VISUAL);
+  
+  // Tentakel-behaftete players werden mitgeschliffen
+  for(i=0; i<sizeof(tentacled_players); i++)
+  {
+    if(!pl = tentacled_players[i]) continue;
+    if(!present("\nshadow_attached_tentacle",pl)) continue;
+
+    // Messages im alten Raum
+    ENV(pl)->Message(BS(pl->Name(WER,1)+
+      " wird an einem Tentakel von "+name(WEM,1)+" mitgeschliffen!"),
+      MSGFLAG_VISUAL, ([MSGFLAG_EXCLUDE: ({pl})]));
+    pl->Message(BS("Du wirst an einem Tentakel von "+
+      name(WEM,1)+" mitgeschliffen!"),
+      MSGFLAG_SENSE);
+
+    // Move & Begruessungsschlag (des Spielers auf Gedankenschinder) verhindern
+    if(IsEnemy(pl))
+    {
+      was_in_fight = 1;
+      pl->StopHuntFor(TO,1);
+      TO->StopHuntFor(pl,1);
+    }
+    pl->move(ROOM "sn"+room_nr,M_NOCHECK+M_SILENT);
+    if(was_in_fight) TO->Kill(pl);
+
+    // Messages im neuen Raum
+    ENV(pl)->Message(BS(pl->Name(WER,1)+
+      " wird an einem Tentakel von "+name(WEM,1)+" hereingeschliffen!"),
+      MSGFLAG_VISUAL, ([MSGFLAG_EXCLUDE: ({pl})]));
+  }
+
+  return 1;
+}
+
+// ------------------------------------------------------------------------------
+void EatBrain(object pl)
+{
+  int dam;
+  int was_in_fight;
+  object tentacle;
+
+  if(!pl) return;
+  if(!TO || !ENV(TO) || !ENV(pl) || ENV(TO) != ENV(pl)) // nicht im gleichen ENV
+  {
+    if(tentacle = present("\nshadow_attached_tentacle",pl))
+    {
+      tentacle->RemoveTentacle();
+      RemoveTentacledPlayer(pl);
+    }
+    return;
+  }
+
+  // Hat keinen Tentakel
+  if(!tentacle = present("\nshadow_attached_tentacle",pl)) 
+  {
+    RemoveTentacledPlayer(pl);
+    return;
+  }
+
+  dam = 10+random(700); // * pl->CheckResistance(({DT_MIND,DT_SQUEEZE})));
+
+  ENV(TO)->Message(BS(Name(WER, 1)+" saugt an "+
+      pl->Name(WESSEN)+" Gehirn!")+
+      BS(pl->Name()+" bruellt in Agonie!"),
+      MSGFLAG_VISUAL, ([MSGFLAG_EXCLUDE: ({pl})]));
+  pl->Message(BS(Name(WER, 1)+" saugt physisch und psychisch an Deinem "
+    "Gehirn, Dir wird schwindlig und uebel!"),
+      MSGFLAG_SENSE);
+
+  if(IsEnemy(pl)) was_in_fight = 1;
+  pl->Defend(dam, ({DT_MIND,DT_SQUEEZE}), 0, TO);
+  if(!was_in_fight) {
+    pl->StopHuntFor(TO,1);
+    TO->StopHuntFor(pl,1);
+  }
+  
+  if(pl->QueryProp(P_SP) > 0)
+    tentacle->SetProp(P_X_ATTR_MOD,([
+      A_INT: tentacle->QueryProp(P_X_ATTR_MOD)[A_INT]-random(5)
+      ]));
+  pl->UpdateAttributes();
+
+  if(find_call_out("EatBrain")<=20) call_out("EatBrain",2+2*random(3),pl);
+}
+
+// ------------------------------------------------------------------------------
+void AttachTentacle(object enemy, int damage, mixed dam_type)
+{
+  object tentacle;
+  int roll;
+
+  if(!damage) return;
+  roll = random(enemy->QueryAttribute(A_DEX)+enemy->QueryAttribute(A_STR)); // 0..80
+  //DB(BS("* roll = "+roll+" in AttachTentacle()"));
+  switch(roll)
+  {
+    case 0..20:
+    // attach tentacle
+    if(present("\nshadow_attached_tentacle",enemy)) return; // hat schon einen Tentakel
+    ENV(TO)->Message(BS(Name(WER, 1)+" saugt sich mit einem Tentakel an "+
+      enemy->Name(WESSEN)+" Kopf fest!"),
+      MSGFLAG_VISUAL, ([MSGFLAG_EXCLUDE: ({enemy})]));
+    enemy->Message(BS(Name(WER, 1)+" saugt sich mit einem Tentakel an Deinem "
+      "Kopf fest!"),MSGFLAG_SENSE);
+
+    tentacle = clone_object(OBJ "attached_tentacle");
+    tentacle->move(enemy,M_NOCHECK);
+    tentacle->Setup(enemy,TO);
+    tentacle->SetProp(P_X_ATTR_MOD,([A_INT:-1-random(5)]));
+    enemy->UpdateAttributes();
+    if(member(tentacled_players,enemy) == -1) tentacled_players += ({enemy});
+    if(find_call_out("EatBrain")<=20) call_out("EatBrain",2,enemy);
+    break;
+
+    case 21..30:
+    ENV(TO)->Message(BS(Name(WER, 1)+" versucht sich mit einem Tentakel an "+
+      enemy->Name(WESSEN)+" Kopf festzusaugen, "+enemy->QueryPronoun()+
+      " kann sich aber wieder losreissen!"),
+      MSGFLAG_VISUAL, ([MSGFLAG_EXCLUDE: ({enemy})]));
+    enemy->Message(BS(Name(WER, 1)+" saugt sich mit einem Tentakel an Deinem "
+      "Kopf fest, aber Du schaffst es, Dich wieder loszureissen!"),
+      MSGFLAG_SENSE);
+    break;
+
+    default:
+    ENV(TO)->Message(BS(Name(WER, 1)+" kann den Tentakel nicht an "+
+      enemy->Name(WESSEN)+" Kopf festsaugen."),
+      MSGFLAG_VISUAL, ([MSGFLAG_EXCLUDE: ({enemy})]));
+    enemy->Message(BS(Name(WER, 1)+" kann den Tentakel nicht an Deinem Kopf "
+      "festsaugen."),
+      MSGFLAG_SENSE);
+    return;    
+  }
+}
+
+// ------------------------------------------------------------------------------
+void HealSpell(object enemy, int damage, mixed dam_type)
+{
+  int healing;
+  healing = 1000+random(500);
+  TO->AddHp(healing);
+}
+
+// ------------------------------------------------------------------------------
+void BlindSpell(object enemy, int damage, mixed dam_type)
+{
+  enemy->SetProp(P_BLIND, ([BLIND_TIME:30+random(15),
+    BLIND_MSG:BS("Du siehst nur die schreckliche Dunkelheit in Brandisborgels leerer Augenhoehle!"),
+    BLIND_END_MSG:BS("Der Terror weicht aus Dir, und Du kannst wieder sehen.")]));
+}
+
+// ------------------------------------------------------------------------------
+void SlowSpell(object enemy, int damage, mixed dam_type)
+{
+  enemy->ModifySkillAttribute(TO,SA_SPEED,50-random(26),6+random(5));
+}
+
+//--Defend--------------------------------------------------------------
+int Defend(int dam, string *dtypelist, int spell, object enemy)
+{
+  object pl;
+  int dam2;
+  int was_in_fight;
+  int i;
+
+  // Flucht bei wenig HP
+  if(QueryProp(P_HP) <= (QueryProp(P_MAX_HP)/4) && !random(3) && find_call_out("Flee_") == -1)
+    call_out("Flee_",0);
+
+  // Check ob Spieler in dominated_players Liste auch noch das domination Objekt hat
+  //  -> wenn nicht, aus Liste entfernen
+  if(sizeof(dominated_players) && 
+    (!enemy || !present("\nshadow_domination",enemy))) RemoveDominatedPlayer(enemy);
+
+  // Defend abbrechen wenn Spieler in dominated_players Liste (dh Angriff wird nicht durchgefuehrt)
+  if(sizeof(dominated_players) && member(dominated_players,enemy) != -1) return 0;
+
+  // Befehlige einen zufaellig ausgewaehlten dominierten Spieler als Schutzschild zu fungieren, 
+  //  leite einen Teil des Schadens an diesen Spieler weiter, gib eine Meldung an den Spieler und den Raum aus
+  if(sizeof(dominated_players) && !random(3))
+  {
+    pl = dominated_players[random(sizeof(dominated_players))];
+    // sicherstellen, dass der Schutzschild-Spieler nicht gegen seinen eigenen Angriff verteidigt
+    // das probieren wir hoechstens 13 mal (weil's so eine schone Zahl ist :))
+    for(i=0; i<13; i++)
+    {
+      if(pl != enemy) break;
+      pl = dominated_players[random(sizeof(dominated_players))];
+      break;
+    }
+    dam2 = dam / 2 + random(dam / 2);
+    dam -= dam2;
+
+    // TODO: hier noch andere Messages wie " wirft sich zwischen Dich und den Angriff!"
+    //   oder: " bruellt 'NEEEEIN!' und wirft sich zwischen Dich und den Angriff!"
+
+    ENV(TO)->Message(BS(Name(WER, 1)+" befiehlt "+pl->name(WEM)+" sich schuetzend vor "
+      +QueryPronoun()+" zu stellen!"),
+      MSGFLAG_VISUAL, ([MSGFLAG_EXCLUDE: ({pl})]));
+    pl->Message(BS(Name(WER, 1)+" befiehlt Dir, Dich schuetzend vor "+QueryPronoun()+" zu stellen!"),
+      MSGFLAG_SENSE);
+
+    if(enemy->IsEnemy(pl)) was_in_fight = 1;
+    pl->Defend(dam2, dtypelist, spell, enemy);
+    if(!was_in_fight || (query_once_interactive(pl) && query_once_interactive(enemy)))
+    {
+      pl->StopHuntFor(enemy,1);
+      enemy->StopHuntFor(pl,1);
+    }
+  }
+
+  return ::Defend(dam, dtypelist, spell, enemy);
+}
+
+// ------------------------------------------------------------------------------
+//int _query_paralyzed() {return 0;}
+//nosave int _set_paralyzed(mixed para) {return 0;}
+
+// ------------------------------------------------------------------------------
+void die(int poisondeath)
+{
+  object start_room;
+
+  DropShadowItems(10000000); // 1000% Chance-Basis (siehe npc.c)
+  CLONEME(ARMOUR "schattenarmreife");
+  if(!random(2)) CLONEME(ARMOUR "schattenarmreife");
+  CLONEME(ARMOUR "schattenring");
+  if(!random(2)) CLONEME(ARMOUR "schattenring");
+  CLONEME(ARMOUR "schattenamulett");
+  if(!random(2)) CLONEME(ARMOUR "schattenamulett");
+  if(!random(2)) CLONEME(ARMOUR "schattenhelm");
+  if(!random(2)) CLONEME(ARMOUR "schattenguertel");
+
+  "/obj/pearlmaster"->DistributePearl(25,100,1,TO,({"oktopusperle","krakenperle"}));
+
+  // Boss Resetzeit (siehe ROOM sn_template.c)
+  if(start_room = find_object(ROOM + "sn" + RMASTER->get_lead_zeros(QueryProp("shadow_room_no"))))
+    call_other(start_room, "SetProp", "last_boss_death", time());
+  else DB(BS("Gedankenschinder: Raum "+QueryProp("shadow_room_no")+" nicht gefunden!") );
+
+  CallNPCKillLog();
+
+  ::die(poisondeath);
+}
+
+// ------------------------------------------------------------------------------
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  CallPlayerDeathLog(player, killer, lostexp);
+}
+
+// ------------------------------------------------------------------------------
+void reset()
+{
+ ::reset();
+ if(!is_clone(TO)) return;
+}

@@ -1,0 +1,237 @@
+/*
+** Wache, Derlim  (w) Raballion
+** ---
+** 1997-09-29  0.1  urfassung, kopie von Soeldner Midas
+** 1997-10-07  0.2  kampfechse als begleiter
+** 1997-10-14  0.3  Infos fuer die Leute zum fragen
+** 1997-10-28  0.4  buettel <--> kampfechse
+*/
+
+inherit "std/mnpc";
+inherit "std/inpc/select";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <mnpc.h>
+#include <new_skills.h>
+#include <inpc.h>
+#include <wizlevels.h>
+
+#include "../def.h"
+
+#define pddeb(x) if (find_player("raballion")) tell_object(find_player("raballion"),(x))
+
+string lizard_name;
+
+void init()
+{
+  ::init();
+  if (TP && TP->id("HOBBIT")) AddDefender(TP);
+}
+
+void create()
+{
+  object ob;
+
+  if (!is_clone(this_object())) return;  // (return on BP)
+  ::create();
+
+  lizard_name="keine_echse";
+  AddId( ({ "\nbuettel", "wache", "buettel", "hobbit",
+            "hobbitbuettel", "Messerkaempfer", "HOBBIT" }) );
+  SetProp(P_GENDER, MALE);
+  SetProp(P_SHORT, "Ein Hobbitbuettel");
+  SetProp(P_NAME, "Buettel");
+  SetProp(P_ALIGN, 80+random(30));
+  create_default_npc(13+random(3));
+  SetProp(P_RESISTANCE_STRENGTHS, ([DT_TERROR: -0.1, DT_MAGIC: -0.1, 
+          DT_SOUND: 0.2, DT_LIGHTNING: 0.1, DT_POISON: 0.1 ]) );
+  SetProp(P_SIZE, 90+random(20));
+  SetProp(P_RACE, "Hobbit");
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_HANDS, 
+      ({" mit blossen Haenden", QueryProp(P_HANDS)[1], DT_BLUDGEON}) );
+  
+  SetProp(P_MSGOUT, "meint, hier ist alles in Ordnung und geht weiter");
+  SetProp(P_MSGIN, "kommt an, um nach dem Rechten zu sehen");
+  SetProp(P_MNPC_AREA, ROOM );
+  SetProp(P_MNPC_WAIT, ({ 10+random(20), 60, 120 }));
+  SetProp(P_MNPC_DEFAULTROOM, ROOM "wachraum" );
+  SetProp(P_MNPC_FLAGS, MOV_OUTDOORS + MOV_MOVES);
+
+  SUID;
+
+  ob = CLONEOB ("/obj/money");
+  ob->SetProp(P_AMOUNT, 100+random(45)*10);
+  ob->move(ME);
+  CLONEME( "/p/armour/armour/messingruestung");
+  CLONEME( "/p/armour/shield/messingschild");
+  if( random(100) < 30 ) CLONEME(ARMOUR "messinghelm");
+  if( random(100) < 25 ) CLONEME("/p/armour/trousers/messingbeinschienen");
+  if( random(100) < 20 ) CLONEME("/p/armour/bracers/messingarmschienen");
+  if( random(100) < 15 ) CLONEME(ARMOUR "handschuhe");
+  command("trage alles");
+  if (random(2))
+  {
+    CLONEME(WEAPON"stab");
+    command("zuecke stab");
+  }
+  else
+  {
+    CLONEME("/p/weapon/knife/dolch");
+    command("zuecke dolch");
+  }
+  SetProp(P_SPELLRATE,15);
+  SetProp(P_DIE_MSG, " stirbt, obwohl er sich an das Leben klammert, widerwillig.\n");
+  SetProp(P_DEFAULT_INFO,
+      "jammert: \"Wann ist endlich mein Dienst aus...\"\n");
+
+
+// standart infos fuer anfaenger und sonstige frager
+  AddLibrary( NPC "infos.lib", 1);
+
+  AddInfo(({"wache", "wachen", "buettel"}),
+    "Ja wir Buettel achten auf Ruhe und Ordnung hier in Derlim. "+
+    "Mach also keinen Mist oder lass Dich dabei erwischen.", "sagt: ");
+  AddInfo(({"kampfwache", "kampfechse", "kampfwachen", "kampfechsen"}),
+    "Die haben wir uns wegen den haeufigen Seherueberfaellen zugelegt "+
+    "und sind gar nicht so billig. "+
+    "Irgendwie muessen wir uns ja schuetzen.", "sagt: ");
+  AddInfo(({"ruhe", "ordnung"}),
+    "Fuer Ruhe und Ordnung in Derlim sind wir Wachen zustaendig.", 
+    "sagt stolz: ");
+  AddInfo(({"mist", "dreck"}),
+    "Damit meinte ich eigentlich Du sollst keinem auf die Nerven gehen "+
+    "und niemanden angreifen. Vor allem keinen anderen Spieler.", 
+    "sagt aergerlich: ");
+  AddInfo(({"seher"}),
+    "Wenn Du mehr ueber Seher wissen willst, dann tippe doch einfach: "+
+    "hilfe seher ein.", "sagt belehrend: ");
+  AddInfo(({"seherueberfaelle"}),
+    "Diese Seher kommen immer hier rein und hauen alles um, aber dagegen haben "
+    "wir uns ein paar Kampfechsen kommen lassen von \"Meckermann\". "+
+    "Die sind nicht schlecht und essen nicht viel.", "sagt: ");
+  AddInfo(({"meckermann"}),
+    "Fuer naeheres musst Du die Stadtverwaltung fragen. Die haben uns diese "+
+    "Kampfechsen besorgt und wissen sicher auch die genaue Bestellnummer.",
+    "sagt: ");
+  AddInfo(({"bestellnummer", "bestellnummern", "nummer", "nummern", "bestellen"}),
+    "Woher soll ich das wissen, dafuer haben wir doch die Stadtverwaltung.",
+    "sagt: ");
+  SetProp(P_LOG_INFO, "raballion/hobbits");
+
+  add_select_commands();
+  
+  call_out("setz_namen",0);
+
+}
+
+int Defend(int dam, mixed dam_type, mixed spell, object enemy)
+{
+  object kobj;
+  if( !present(lizard_name, MENV) )
+  {
+    if( kobj = find_living(lizard_name) )
+    {
+      DB(sprintf("%O\n",kobj));
+      command_me("sag Dann rufe ich eine grosse Kampfechse.");
+      command_me("emote zieht ein Horn hervor, tutet hinein und steckt es wieder weg.");
+      kobj->move(environment(this_object()),M_TPORT, name(WEM,1)+" zu Hilfe",
+            "eilt", "eilt "+name(WEM,1)+ " zu Hilfe");
+    }
+  }
+  return ::Defend(dam, dam_type, spell, enemy);
+}
+
+void InformDefend(object enemy)
+{
+  Kill(enemy);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  command_me("nimm alles aus leiche");
+  command_me("ziehe alles aus");
+  command_me("trage_beste_ruestungen");
+  command_me("zuecke_beste_waffe");
+  command_me("trage alles");
+}
+
+void setz_namen()
+{
+  if (!TO)
+    return;
+  if( QueryProp(P_NAME)=="Buettel" )
+    SetProp (P_NAME, "Do");
+  SetProp (P_ARTICLE, 0);
+  AddId(LOWER(name(RAW)));
+
+  SetProp (P_SHORT, Name(WER,1)+", der Hobbitbuettel");
+  SetProp (P_LONG,
+    Name(WER,1)+", der Hobbitbuettel versieht eher unmotiviert seinen "
+    "Wachdienst. Er will etwas Essen gehen und muss dabei "
+    "nach der oeffentlichen Ordnung sehen.");
+
+  AddSpell(1,120, 
+    Name(WER,1)+" rafft sich auf und schlaegt Dir ins Gesicht.\n",
+    Name(WER,1)+" schlaegt @WEM ins Gesicht.\n",
+    DT_BLUDGEON, ([SP_SHOW_DAMAGE:1]) );
+
+  SetAttackChats(6, ({
+    Name(WER,1)+" ruft verzweifelt nach Hilfe.\n",
+    Name(WER,1)+" verteidigt sich etwas unmotiviert.\n"}) );
+
+  AddInfo(LOWER(name(RAW)), "nickt.\n");
+
+  SetProp( P_REJECT, ({ REJECT_KEEP,
+    Name(WER,1)+" freut sich und bedankt sich artig.\n" }) );
+ 
+  set_living_name(LOWER(name(RAW)));
+
+  switch( LOWER(name(RAW)) )
+  {
+    case "do": lizard_name="cisss"; break;
+    case "re": lizard_name="disss"; break;
+    case "mi": lizard_name="eisss"; break;
+    case "fa": lizard_name="fisss"; break;
+    case "so": lizard_name="gisss"; break;
+    case "la": lizard_name="aisss"; break;
+    case "si": lizard_name="hisss"; break;
+  }
+}
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+  if( gruppe=="fies" && random(2) )
+    call_out("kill",2+random(4));
+  if( gruppe=="fies")
+    call_out("fies",0);
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+  StartReaction(verb, gruppe, adverb, touch);
+}
+
+void fies()
+{
+  command_me("sag Lass das!");
+}
+
+void kill()
+{
+  if( IS_LEARNING(TP) )
+    command_me("sag Wenn Du kein Magier waerest, wuerde ich Dich jetzt "
+               "toeten, "+TPN+"!"); 
+  else
+    Kill(TP);
+}
+/*
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  write_file(LOG "deads",
+    ctime()+": "+Name(WER,1)+" hat gerade "+CAP(getuid(PL))+" umgebracht.\n");
+}
+*/

@@ -1,0 +1,122 @@
+// ~(w) Lamuerte 2000
+// ~Tarnmantelbiest / BrunnenZone
+// ~Pfad:   /d/ebene/lamuerte/brunnen/npc/tarnbiest.c
+// ~Level:  5-8 bzw. 10 bis enemy->level/2 infight
+// ~Hands:  150,DT_UNHOLY WC: default AC: default 
+// ~Spells: (Rate: 2) "hold spell", kein Weglaufen moeglich, Kampf jedoch wird fortgesetzt
+// ~        (Rate: 10) 50+random(20*LEVEL) DT_AIR Spell.
+// ~R.Str:  SLASH:-0.1,BLUDGEON:-0.1,PIERCE:-0.1,SQUEEZE:0,WHIP:0,RIP:0,
+// ~        FIRE:-0.2,COLD:-0.3,WATER:-0.2,AIR:-0.2,LIGHTNING:-0.2,EXPLOSION:-0.2,SOUND:0,
+// ~        LIGHT:0,ELECTRIC:-0.4,ACID:0,POISON:0,TERROR:0,HOLY:0,UNHOLY:0,MAGIC:0
+// ~Special:Nimmt Gestalt des gegners an, MinLvl.10 bzw. defaultnpc(gegenerlevel/2)
+
+#include "../def.h"
+
+inherit NPC "std_well_npc";
+
+void create()
+{
+  if (!is_clone(this_object())) return;
+  
+  ::create(); 
+  SetProp(P_SHORT,"Ein Tarnmantel Biest");
+  SetProp(P_LONG, 
+      "Du siehst ein kleines Tarnmantelbiest vor Dir. Es hat eine steinharte "
+      "Haut, welche grau gesprenkelt ist. Seine Augen sind rot, so rot, das "
+      "man sie nicht uebersehen kann. Dieses Biest scheint unheimlich boese "
+      "zu sein. Komisch das es gar nicht aggressiv ist. "
+      "Vielleicht solltest Du es lieber in Ruhe lassen und weiterwandern. ");
+  SetProp (P_MNPC_WAIT, ({20, 40, 60}));
+
+  SetProp(P_AGGRESSIVE,0.1+0.07*to_int(well_level()));
+  SetProp(P_NAME, "Tarnmantelbiest");
+  SetProp(P_RACE, "Daemon");
+  SetProp(P_SIZE, 30+random(22));
+  SetProp(P_GENDER, NEUTER);
+  AddId(({"\nbrunnenpc","tarnbiest","biest","tarnmantelbiest","daemon"}));
+  create_default_npc(20);
+  SetProp(P_ALIGN, -900);
+  SetProp(P_MAX_HANDS, 2); 
+  SetProp(P_HANDS, ({" mit seinen getarnten Haenden",150,DT_UNHOLY})); 
+  SetProp(P_SPELLRATE, 50 + to_int(well_level()));
+
+  SetProp(P_RESISTANCE_STRENGTHS, ([ 
+    DT_SLASH      :-0.1,    DT_BLUDGEON    :-0.1,    DT_PIERCE     :-0.1,
+    DT_SQUEEZE    :0,       DT_WHIP        :0,       DT_RIP        :0,
+    DT_FIRE       :-0.2,    DT_COLD        :-0.3,    DT_WATER      :-0.2,    
+    DT_AIR        :-0.2,    DT_LIGHTNING   :-0.2,    DT_EXPLOSION  :-0.2, 
+    DT_SOUND      :0,       DT_LIGHT       :0,       DT_ELECTRIC   :-0.4,    
+    DT_ACID       :0,       DT_POISON      :0,       DT_TERROR     :0,     
+    DT_HOLY       :0.1,     DT_UNHOLY      :0,       DT_MAGIC      :0]) );
+  
+  SetProp(P_NOMAGIC,25);
+//  SetProp(P_WIMPY,100);
+  
+  SetProp(P_MSGIN, "schleicht herein");
+  SetProp(P_MSGOUT, "schleicht");
+  SetProp(P_KILL_MSG, "Gut getarnt ist halb gewonnen :)");
+
+  SetProp( P_REJECT, REJECT_KEEP);
+  AddInfo( DEFAULT_INFO,"ignoriert Dich komplett.");
+  SetChats(1, ({
+    "Das Tarnmantelbiest versucht sich in einem Schatten zu tarnen.\n",
+  }) );
+
+
+  AddSpell(1, 200 + 30 * to_int(well_level()),
+      "  Das Tarnmantelbiest saugt Dir Dein Leben aus.\n",
+      "  @WER schreit laut, als ein Tarnmantelbiest @PWEM einen Teil des Lebens aussaugt.\n",
+      DT_MIND, "spell_tarn", ([SP_SHOW_DAMAGE:1]));
+
+  SUID;
+}
+
+
+void spell_tarn( object enemy, int damage, mixed dam_type)
+{
+  string dammsg;
+  mixed *damtype;
+  int dam, level;
+  object ob,fake;
+
+  fake=enemy;
+  
+  if(this_object()->QueryProp("tarned")!=1) {
+    tell_object(enemy,"\n  "+this_object()->QueryProp(P_SHORT)+" tarnt sich als DU SELBST!\n\n");
+    level=15+enemy->QueryProp(P_LEVEL)/3;
+    if (level < 20) level = 20;
+    else if (level > 35 + to_int(well_level())) level = 35 + to_int(well_level());
+    create_default_npc(level);
+    SetProp(P_XP, QueryProp(P_XP)*3/2);
+    SetProp(P_ARTICLE,fake->QueryProp(P_ARTICLE));
+    SetProp(P_GENDER, fake->QueryProp(P_GENDER));
+    SetProp(P_NAME, fake->QueryProp(P_NAME));
+    set_living_name("tarnmantelbiest");
+    if (interactive(fake))
+      SetProp(P_SHORT, fake->QueryProp(P_PRESAY)+QueryProp(P_NAME)+" " +fake->QueryProp(P_TITLE));
+    else
+      SetProp(P_SHORT, fake->QueryProp(P_SHORT));
+    SetProp(P_LONG, fake->long());
+    AddId(lower_case(QueryProp(P_NAME)));
+    SetProp(P_MSGIN, fake->QueryProp(P_MSGIN));
+    SetProp(P_MSGOUT, fake->QueryProp(P_MSGOUT));
+    SetProp(P_SIZE, fake->QueryProp(P_SIZE));
+    if(ob=fake->QueryProp(P_WEAPON)) {
+      dammsg=" mit " + ob->name(WEM,0);
+      damtype=ob->QueryProp(P_DAM_TYPE);
+      dam=ob->QueryProp(P_WC);
+     }
+    else {
+      dammsg=fake->QueryProp(P_HANDS)[0];
+      damtype=fake->QueryProp(P_HANDS)[2];
+      dam=fake->QueryProp(P_HANDS)[1];
+         }
+
+    SetProp(P_HANDS, ({dammsg, 400+dam, damtype}));
+    SetProp("tarned",1);
+    return ;
+    
+  }
+  return;
+}
+

@@ -1,0 +1,520 @@
+// SilberLand Mudlib
+//
+// std/unit.c -- Standard Unit Objekt
+//
+// $Date: 2005/03/28 10:00:41 $
+/* $Revision: 1.21 $
+ * $Log: unit.c,v $
+ * Revision 1.21  2005/03/28 10:00:41  Feyaria
+ * P_NAME_ADJ in short beruecksichtigt.
+ *
+ * Revision 1.20  2004/09/20 12:24:01  Woody
+ * Pruefung auf !amount in id() vor ::id() gezogen
+ *
+ * Revision 1.19  2001/07/30 21:57:53  Feyaria
+ * RAW beruecksichtigen in name
+ *
+ * Revision 1.18  1999/09/17 22:25:32  Woody
+ * Automatisches Update von P_LAST_CONTENT_CHANGE in _set_amount()
+ *
+ * Revision 1.17  1999/03/09 03:37:03  Woody
+ * Bugfix in _query_u_req() und IsPlural
+ *
+ * Revision 1.16  1999/03/03 01:44:52  Woody
+ * IsEqual(), _query_u_req(), move() neugeschrieben (gt. Padreic@MG)
+ *
+ * Revision 1.15  1999/01/16 03:02:08  Woody
+ * Dativ-Plural korrekt deklinieren
+ * (dennoch Umstellung auf thing::name() wuenschenswert!)
+ *
+ * Revision 1.14  1998/11/04 18:28:19  Woody
+ * Bugfix in move() fuer Gewichtsberechnung
+ *
+ * Revision 1.13  1998/10/20 00:16:46  Woody
+ * name() ueberarbeitet, beruecksichtigt nun auch P_NAME_ADJ
+ *
+ * Revision 1.12  1998/10/19 23:14:04  Woody
+ * Some fixes, IsPlural()
+ *
+ * Revision 1.11  1997/10/19 19:40:43  Woody
+ * ClonedOther() -> NotifyClone(), #define U_REQ P_REQUESTED_AMOUNT
+ *
+ * Revision 1.10  1997/10/16 15:44:05  Woody
+ * ClonedOther(), P_NODROP, P_NOGET Handling, MayAddWeight() Objekt uebergeben
+ *
+ * Revision 1.9  1997/10/14 14:56:11  Woody
+ * Units muessen um sich zu vereinigen nun auch gleiche P_SHORT haben
+ *
+ * Revision 1.8  1997/09/17 14:19:59  Woody
+ * QueryPronoun() eingefuegt
+ *
+ * Revision 1.7  1997/08/30 21:57:17  Woody
+ * Minor Bugfix in _set_amount() (auf <1 statt auf ==0 pruefen)
+ *
+ * Revision 1.6  1997/06/25 11:36:08  Woody
+ * AddSingularId nimmt auch Arrays entgegen, neu: RemoveSingularId,
+ * dito fuer AddPluralId() und RemovePluralId()
+ *
+ * Revision 1.5  1997/03/13 03:20:18  Woody
+ * prepared for revision control
+ *
+ * Revision 1.4  96/10/07  Woody
+ * P_GIVEN_OBJECT auch setzen, wenn Empfaenger Objekt bereits hatte und
+ * Geber nicht alles von seinem Objekt hergibt; ausserdem in diesem
+ * Fall auch P_GIVEN_AMOUNT setzen.
+ *
+ * Revision 1.3  96/05/25  18:00:00  Woody
+ * short() Aenderungen wieder retour
+ *
+ * Revision 1.2  96/04/19  01:00:00  Woody
+ * BUGFIX (err= Klammerung war falsch bei other unit clone),
+ * check_leave() bugfix
+ *
+ * Revision 1.1  96/04/07  17:30:00  Woody
+ * P_GIVEN_OBJECT entsprechend MG mudlib implementiert
+ *
+ * Revision 1.0  22/02/96  23:00:00  Hadra
+ * short() geaendert
+ */
+
+inherit "std/thing";
+
+#define NEED_PROTOTYPES
+
+#define TW(x) tell_object(find_player("woody"), x+"\n")
+
+#include <properties.h>
+#include <thing/properties.h>
+#include <defines.h>
+#include <language.h>
+#include <moving.h>
+
+#define U_GPU   "u_gpu"
+#define U_CPU   "u_cpu"
+#define U_IDS   "u_ids"
+#define U_REQ   P_REQUESTED_AMOUNT
+#define IS_EQUAL(x) (objectp(x) && (IsEqual(x) && x->IsEqual(ME)))
+#ifndef BLUE_NAME
+#define BLUE_NAME(x) (explode(file_name(x),"#")[0])
+#endif
+
+// Interface
+void AddAmount(int am);
+void AddSingularId(mixed str);
+void RemoveSingularId(mixed str);
+void AddPluralId(mixed str);
+void RemovePluralId(mixed str);
+void SetCoinsPerUnits(int coins,int units);
+int *QueryCoinsPerUnits();
+void SetGramsPerUnits(int grams,int units);
+int *QueryGramsPerUnits();
+int  IsEqual(object ob);
+int  IsUnit();
+int  IsPlural();
+void NotifyClone(object other);
+
+nosave string lastverb;
+
+// Hilfsfunktionen
+
+nosave void check_leave()
+{ if (Query(P_AMOUNT)<1) remove(); }
+
+nosave void envchk()
+{ if (!environment()) remove(); }
+
+// create(), reset(), remove()
+
+void create()
+{
+  ::create();
+  Set(U_IDS,({({}),({})}));
+  Set(P_AMOUNT,1);
+  Set(U_GPU,({1,1}));
+  Set(U_CPU,({0,1}));
+  SetProp(P_ARTICLE,0);
+  Set(U_REQ,1);
+  if (is_clone(ME)) call_out("envchk",1);
+  AddId("Unit");
+}
+
+void reset()
+{
+  if (!is_clone(ME)) return;
+  if (Query(P_AMOUNT)<1) remove();
+  else ::reset();
+}
+
+varargs int remove()
+{
+  if (lastverb==query_verb() && Query(P_AMOUNT)>Query(U_REQ)) {
+    SetProp(P_AMOUNT, Query(P_AMOUNT)-Query(U_REQ));
+    return 1;
+  }
+  return (int)::remove();
+}
+
+// property query/set functions
+
+nosave string _query_name()
+{
+  if (Query(U_REQ)==1)
+    return ((string *)Query(P_NAME))[0];
+  return ((string *)Query(P_NAME))[1];
+}
+
+nosave void _set_name(mixed names)
+{
+  if(!names)
+    return Set(P_NAME,({"",""}));
+  if(stringp(names))
+    return Set(P_NAME,({names,names}));
+  if(pointerp(names))
+    switch(sizeof(names))
+    {
+      case 0:
+        return Set(P_NAME,({"",""}));
+      case 1:
+	if(!stringp(names[0]))
+	   names[0]="";
+	return Set(P_NAME,({names[0],names[0]}));
+      default:
+	if(!stringp(names[0]))
+	   names[0]="";
+	if(!stringp(names[1]))
+	   names[1]="";
+	return Set(P_NAME,names[0..1]);
+      }
+}
+
+nosave int _query_value()
+{
+  int *cpu;
+
+  cpu=Query(U_CPU);
+  return (Query(U_REQ)*cpu[0])/cpu[1];
+}
+
+nosave void _set_value(int num)
+{
+  SetCoinsPerUnits(num, Query(U_REQ));
+}
+
+nosave int _query_weight()
+{
+  int *gpu;
+  int req;
+
+  gpu=Query(U_GPU);
+  if ((req=Query(U_REQ))<=0) return 0;
+  return MAX(1,(req*gpu[0])/gpu[1]);
+}
+
+nosave void _set_weight(int num)
+{
+  SetGramsPerUnits(num, Query(U_REQ));
+}
+
+nosave int _query_total_weight()
+{
+  int *gpu;
+  int req;
+
+  gpu=Query(U_GPU);
+  if ((req=Query(P_AMOUNT))<1) return 0;
+  return MAX(1,(req*gpu[0])/gpu[1]);
+}
+
+nosave void _set_amount(int am)
+{
+  if (am != Query(P_AMOUNT))
+  {
+    object env;
+    env=this_object();
+    while (env=environment(env))
+      env->Set(P_LAST_CONTENT_CHANGE,time());
+  }
+  if (am < 1) call_out("check_leave",1);
+  Set(P_AMOUNT,am);
+  Set(U_REQ,am);
+}
+
+nosave int _query_u_req()
+{
+  if (lastverb!=query_verb()) {
+    lastverb=query_verb();
+    return Set(U_REQ, Query(P_AMOUNT));
+  }
+  return Query(U_REQ);
+}
+
+nosave int _set_u_req(int req)
+{
+  lastverb=query_verb();
+  return Set(U_REQ, req);
+}
+
+// unit functions (lfuns)
+
+void AddSingularId(mixed str)
+{
+  string *ids;
+
+  if (!pointerp(str))
+    str=({str});
+  ids=Query(U_IDS);
+  Set(U_IDS,({ids[0]+str,ids[1]}));
+}
+
+void RemoveSingularId(mixed str)
+{ if(stringp(str))
+    str=({str});
+  if(pointerp(str))
+    return Set(U_IDS,({Query(U_IDS)[0]-str,Query(U_IDS)[1]}));
+}
+
+void AddPluralId(mixed str)
+{
+  string *ids;
+
+  if (!pointerp(str))
+    str=({str});
+  ids=Query(U_IDS);
+  Set(U_IDS,({ids[0],ids[1]+str}));
+}
+
+void RemovePluralId(mixed str)
+{ if(stringp(str))
+    str=({str});
+  if(pointerp(str))
+    return Set(U_IDS,({Query(U_IDS)[0],Query(U_IDS)[1]-str}));
+}
+
+void SetCoinsPerUnits(int coins,int units)
+{
+  if (coins<0||units<=0) return;
+  Set(U_CPU,({coins,units}));
+}
+
+void SetGramsPerUnits(int grams,int units)
+{
+  if (grams<0||units<=0) return;
+  Set(U_GPU,({grams,units}));
+}
+
+int *QueryCoinsPerUnits()
+{
+  return Query(U_CPU);
+}
+
+int *QueryGramsPerUnits()
+{
+  return Query(U_GPU);
+}
+
+void AddAmount(int am)
+{
+  _set_amount(am+Query(P_AMOUNT));
+}
+
+int IsEqual(object ob)
+{
+  if (ob==this_object()) return 0; // das ist ZU gleich :)
+  return (BLUE_NAME(ME)==BLUE_NAME(ob));
+}
+
+int IsUnit()
+{
+  return 1;
+}
+
+int IsPlural()
+{
+  return Query(U_REQ) != 1;
+}
+
+varargs string name(int casus, int demon, int plural)
+{
+  int req, last;
+  mixed n_adj;
+  string adj;
+
+  if (!(req=Query(U_REQ)))
+    return 0;
+
+  if( casus==RAW )
+    return req==1?Query(P_NAME)[0]:(req+" "+Query(P_NAME)[1]);
+
+  if (pointerp(n_adj=QueryProp(P_NAME_ADJ)))
+    adj = implode(map_array(n_adj, #'DeclAdj, casus,
+        demon && (req==1), req != 1), "");
+  if (!stringp(adj)) adj = "";
+
+  if (req==1)
+    return QueryArticle((casus > WEN ? WER : casus), demon, 1) + adj +
+      Query(P_NAME)[0];
+
+  if (casus!=WEM)
+    return sprintf("%d %s%s", req, adj, Query(P_NAME)[1]);
+
+  last=Query(P_NAME)[1][<1];
+  return sprintf("%d %s%s%s", req, adj, Query(P_NAME)[1],
+      (last!='s' && last!='n' ? "n" : ""));
+}
+
+string QueryPronoun(int casus)
+{
+  if (Query(U_REQ) == 1)
+    return ::QueryPronoun(casus);
+
+  switch(casus) {
+    case WESSEN: return "ihrer";
+    case WEM:    return "ihnen";
+    default:     return "sie";
+  }
+}
+
+string short()
+{
+  int req;
+  string* n_adj;
+  string adj;
+
+  if (!lastverb||query_verb()!=lastverb) Set(U_REQ,req=Query(P_AMOUNT));
+  else req=Query(U_REQ);
+  if (req<1 || QueryProp(P_INVIS)) return 0;
+
+  if (pointerp(n_adj=QueryProp(P_NAME_ADJ)))
+    adj = implode(map_array(n_adj, #'DeclAdj, WER, 0, req != 1), "");
+  if (!stringp(adj)) adj = "";
+
+  if (req==1)
+    return sprintf("%s%s%s.\n",
+        capitalize( QueryArticle(WER,0,1)), adj, Query(P_NAME)[0]);
+  else
+    return sprintf("%d %s%s.\n",req, adj, Query(P_NAME)[1]);
+}
+
+varargs string long()
+{
+  int req;
+
+  req = Query(U_REQ);
+  if (QueryProp(P_LONG))
+    return process_string(QueryProp(P_LONG)) +
+           sprintf("Davon siehst Du %s.\n",
+                  (req==1 ? DeclAdj("ein", WEN)[0..<2] : to_string(req)));
+  else
+    return sprintf("Du siehst %s.\n",name(WEN));
+}
+
+int id(string str)
+{
+  int i,amount;
+  string s1,s2,*ids;
+
+  if (!str) return 0;
+  lastverb=query_verb();
+  amount=Query(P_AMOUNT);
+
+  if (!amount || !(ids=Query(U_IDS)))
+    return 0;
+
+  if (::id(str))
+  {
+    Set(U_REQ,amount);
+    return 1;
+  }
+  if (match_item(str,ids[1]))
+  {
+    Set(U_REQ,amount);
+    return 1;
+  }
+  if (match_item(str,ids[0]))
+  {
+    Set(U_REQ,1);
+    return 1;
+  }
+  if (sscanf(str,"%s %s",s1,s2) && s1[0..3]=="alle" && 
+      match_item(s2,ids[1]))
+  {
+    Set(U_REQ,amount);
+    return 1;
+  }
+  if (sscanf(str,"%d %s",i,s1)==2 && i==1 &&
+      match_item(s1,ids[0]))
+  {
+    Set(U_REQ,1);
+    return 1;
+  }
+  if (sscanf(str,"%d %s",i,s1)==2 && match_item(s1,ids[1]) &&
+      i<=amount && i>0)
+  {
+    Set(U_REQ,i);
+    return 1;
+  }
+  lastverb=0;
+  return 0;
+}
+
+void NotifyClone(object other) {  }
+
+// Neues MG-move() - hoehere Kompatibilitaet zu herkoemmlichen Objekten
+varargs int move(mixed dest,int method)
+{
+  int i, amount;
+  mixed env;
+
+  amount=Query(P_AMOUNT);
+  if (!(method & (M_MOVE_ALL|M_FORCE_SPLIT)) && amount!=Query(U_REQ)) {
+     env=environment(); // wird nur benoetigt bei amount!=U_REQ
+     if (env) env->query_weight_contents();
+     // wenn in einem alten Paket das Gewicht noch nicht neu berechnet
+     // wurde muss dies geschehn solange die Muenzen im Paket noch das
+     // volle Gewicht haben...
+     Set(P_AMOUNT, Query(U_REQ));
+  }
+  i=::move(dest, method);
+  if (i!=1) {
+    if (env) {
+      Set(P_AMOUNT, amount); // verfruehte Aenderung rueckgaengig machen...
+      // ohne move auch keine Aenderung an P_LAST_CONTENT_CHANGE noetig
+    }
+    return i;
+  }
+  if (env) { // schliesst automatisch < amount != Query(P_AMOUNT) > mit ein!
+    if (env==environment() && !(method & M_NOCHECK)) {
+      // Objekt wurde nur an den Anfang des inventory bewegt, sonst nichts...
+      Set(P_AMOUNT, amount); // verfruehte Aenderung rueckgaengig machen...
+      env=this_object();
+      while (env=environment(env))
+        env->Set(P_LAST_CONTENT_CHANGE,time()); // wurde beim ::move veraendert
+    }
+    else { // verbleibende Muenzen zurueck moven
+      object temp;
+      temp=clone_object(BLUE_NAME(ME));
+      temp->SetProp(P_AMOUNT, amount-Query(U_REQ));
+      temp->move(env, M_NOCHECK);
+      NotifyClone(temp);
+    }
+  }
+  // wenn man in frisch geclonten Muenzen die noch kein environment haben
+  // per Hand U_REQ auf einen Wert != P_AMOUNT setzt, so gehen die
+  // Restmuenzen verloren (man behaelt ja eh keinen Zeiger darauf).
+  if (method & M_NOCHECK) return 1;
+  for(i=sizeof(env=all_inventory(environment()))-1; i>=0; i--) {
+    if (IS_EQUAL(env[i])) { // feature, bitte nicht ausbauen!!!
+      Set(P_AMOUNT, Query(P_AMOUNT)+env[i]->Query(P_AMOUNT));
+      env[i]->Set(P_AMOUNT, 0);
+      env[i]->remove();
+    }
+  }
+  if (Query(U_REQ)<1) Set(U_REQ, Query(P_AMOUNT));
+  if (Query(P_AMOUNT)<1) call_out("check_leave",1);
+  // nur voruebergehend, wird spaeter in put_and_get.c integriert
+  // da inzwischen keine Sonderbehandlung mehr noetig
+  Set(P_GIVEN_OBJECT, this_object());
+  Set(P_GIVEN_AMOUNT, Query(U_REQ));
+  return 1;
+}
+

@@ -1,0 +1,199 @@
+inherit "std/thing";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <defines.h>
+#include <new_skills.h>
+#include <moredef.h>
+#include <class.h>
+#include <moving.h>
+#include "/gilden/bardengilde/bardengilde.h"
+#include "bard_song.h"
+
+public object caster, victim;
+public int ability, success, cancelOninteract, endDelay, endSilent;
+public string songName, *endMessage;
+public float factor;
+
+public void create() {
+    if(!is_clone(TO)) return;
+    ::create();
+
+    SetProp(P_SHORT, 0);
+    SetProp(P_INVIS, 1);
+    SetProp(P_WEIGHT, 0);  
+    SetProp(P_VALUE, 1);
+    SetProp(P_NOBUY, 1); 
+    SetProp(P_NODROP, 1);
+    SetProp(P_NOGET, 1);
+    SetProp(P_NEVERDROP, 1);
+    SetProp(P_NOSELL, 1);
+
+    caster = 0;
+    cancelOninteract = 0;
+    victim = 0;
+    songName = "unbekanntes Lied";
+    endSilent = 0;
+    endMessage = ({"Du beendest das Lied '%s'.", "%s beendet das Lied '%s'."});
+
+}
+
+// Aendert die Meldung, die ausgegeben wird, wenn das Lied beendet wird
+// Das Array muss zwei Elemente beinhalten:
+//  [0]: wird dem Spieler ausgageben, %s = Liedname
+//  [1]: wird an die Umgebung ausgegeben, erstes %s = Spielername zweites %s = Liedname
+public void setEndMessages(string *msg) {
+    endMessage = msg;
+}
+
+// wird aufgerufen, um zu pruefen, ob der Spieler das Lied vorzeitig beenden kann.
+// Um ein vorzeitiges Beenden unter bestimmten Bedingungen zu unterbinden, kann diese
+// Funktion uberschrieben werden und muss dann 0 zurueck geben.
+public int canEndSong() {
+    return 1;
+}
+
+// Wird aufgerufen, sobald ein Lied beendet wird. Hier koennen Abfragen, checks
+// oder Aktionen gesetzt werden, die beim Ende des Liedes durchgefuehrt werden
+// muessen (z.B. properties zuruecksetzen, call_outs einfangen, etc.)
+public void onEndSong() {
+    return;
+}
+
+// muss implementiert werden, um den Spell vorzubereiten. Wird aus Setup() heraus 
+// durch das Spellbook aufgerufen
+public varargs void prepareSong() {
+    return;
+}
+
+
+// Wird aufgerufen, wenn ein Lied vorzeitig abgebrochen wird duch 'beende <lied>'
+public void onCancelSong() {
+    return;
+}
+
+public int modifyBySkillAttribute(int baseVal, string skillAttribute) {
+    return (int) (baseVal * (caster->QuerySkillAttribute(skillAttribute) / 100.0));
+}  
+
+public varargs void Setup(string _songName, object _caster, int _ability, int _success, float _factor, object _victim) {
+    caster = _caster;
+    victim = _victim;
+    ability = _ability;
+    success = _success;
+    songName = _songName;
+    if(!floatp(_factor)) factor = 0.0;
+    else factor = _factor;
+
+    if(caster->QueryProp(P_TESTPLAYER)) {
+        tell_object(caster, BS(sprintf("new song effect :: %s :: caster=%O abil=%d success=%d factor=%.2f victim=%O\n", 
+                               songName, caster, ability, success, factor, victim)));
+    }
+
+    prepareSong(caster, ability, success, victim);
+}
+
+protected varargs void setUpkeepMode(string *skills, int cancelMode) {
+    if(!cancelMode) cancelMode = CANCEL_NO;
+
+    if(pointerp(skills)) {
+        AddId( ({BARD_UPKEEP_EFFECT}) );
+        SetProp(P_BARD_UPKEEP_MODES, skills);
+    }
+
+    switch(cancelMode) {
+        case CANCEL_COMMAND:
+            AddCmd( ({"beende", "beend"}), "cmd_cancel_song");
+            break;
+        case CANCEL_INTERACT:
+            cancelOninteract = 1;
+            break;
+        default: 
+            raise_error("illegal cancel mode");
+            break;
+    }
+}
+
+public void endSong() {
+    if(!endSilent && objectp(caster)) {
+        tell_object(caster, BS(sprintf(endMessage[0], songName)));
+        tell_room(environment(caster), BS(sprintf(endMessage[1], caster->Name(WER, 1), songName)), ({caster}));
+    }
+    onEndSong();
+    if(endDelay) {
+        caster->SetProp(P_NEXT_SPELL_TIME, time() + endDelay);
+    }
+    remove(1);
+}
+
+public int cmd_cancel_song(string str) {
+    if(this_player() != caster) return 0;
+    
+    notify_fail("Welches Lied moechtest du beenden?\n");
+    if(this_player()->_unparsed_args(1) != lowerstring(songName) &&
+    this_player()->_unparsed_args(1) != "'"+lowerstring(songName)+"'") return 0;
+
+    if(!canEndSong()) {
+        return -1;
+    }
+
+    onCancelSong();
+  
+    endSong();
+    return 1;
+}
+
+public int cancel_song_on_interact() {
+    if(!canEndSong()) return 0;
+    endSong();
+    return 1;
+}
+
+public void init() {
+    ::init();
+
+    if(cancelOninteract) {
+        add_action("cancel_song_on_interact", "", 1);
+    }
+  }
+
+// setzt nach ende eines Liedes nochmal eine Zauberverzoergerung
+public void setEndSpellDelay(int seconds) {
+    endDelay = seconds;
+}
+
+private int defaultTargetFilter(object ob) {
+    return 1;
+}
+
+public varargs object* findTargets(string filter, int n, object env) {
+    object *all, *targets, t;
+    
+    if(!n) n = 1;
+    if(!stringp(filter)) filter="defaultTargetFilter";
+    if(!objectp(env)) env = environment(caster);
+    
+    all = filter_array(all_inventory(env), filter);
+    targets = ({});
+    if(TALENTMASTER->HasTalent(caster, TALENT_FORTE_FORTISSIMO)) {
+      n += caster->QueryProp(P_BARD_INSPIRATION_LEVEL);
+    }
+  
+    n = modifyBySkillAttribute(n, SA_EXTENSION);
+    if(n>sizeof(all)) n = sizeof(all);
+  
+    while(n > 0) {
+      t = all[random(sizeof(all))];
+      if(member(targets, t) < 0) {
+        targets += ({ t });
+        n--;
+      }
+    }
+  
+    return targets;
+  }
+
+  public void setSilentEnd(int silent) {
+      endSilent = silent;
+  }

@@ -1,0 +1,123 @@
+// /d/dschungel/feyaria/dorf/room/fluss.c
+// 1997-08-21 Feyaria@SilberLand
+
+inherit "std/room";
+
+#include "../def.h"
+
+void create()
+{
+  ::create();
+
+  SetProp(P_INT_SHORT, "Mitten im Fluss" );
+  SetProp(P_INT_LONG,
+    "Du bist mitten im Fluss und die Krokodile sind hinter Dir her. "
+    "Hoffentlich schaffst Du es noch, das rettende Ufer zu erreichen, bevor "
+    "die Krokodile Dich zerfleischt haben.");
+  SetProp(P_LIGHT, 2 );
+  SetProp(P_INDOORS,0);
+  SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE:30,ENV_TERRAIN:TT_UNDERWATER,
+                             ENV_WATER:500]));
+  SetProp(P_NOMAGIC, 1000);
+
+  AddDetail( ({"ufer"}),
+    "Das rettende Ufer ist noch weit entfernt.");
+  AddDetail( ({ "fluss" }),
+    "Du bist mitten im Fluss und von Krokodilen umgeben.");
+  AddDetail( ({ "krokodil", "krokodile" }),
+    "Gleich haben die Krokodile Dich erreicht.");
+  AddDetail( ({"himmel", "sonne"}),
+    "Die Sonne brennt vom Himmel und erwaermt das Wasser. Erfrieren wirst "
+    "Du hier sicher nicht.");
+  AddDetail( ({"boden", "wasser"}),
+    "Unter Dir ist nur Wasser.");
+
+  AddSound( ({DEFAULT_SOUND, "rauschen", "fluss"}),
+    "Du hoerst das Rauschen des Flusses.");
+  AddSmell( ({DEFAULT_SMELL, "angst", "schweis", "angstschweiss"}),
+    "Du riechst nur Deinen Angstschweiss.");
+
+  AddItem( NPC "krokodil", REFRESH_DESTRUCT, ([P_AGGRESSIVE:1]) );
+
+  AddCmd( ({"schwimme", "schwimm"}), "cmd_schwimmen");
+}
+
+
+void init()
+{
+  ::init();
+  if (TP && query_once_interactive(TP) )
+    call_out("kroko",0);
+}
+
+void kroko()
+{
+  write("Mitten im Fluss haben Dich die Krokodile erwischt!\n"
+        "Du schwimmst so schnell wie moeglich ans naechstgelegene Ufer.\n");
+  call_out("schwimmen",2,0);
+}
+
+void schwimmen(int nums)
+{
+  if( !TP || ENV(TP) != TO ) return;
+  write("Du schwimmst so schnell wie moeglich ans Ufer.\n");
+  if( !random(3) || nums>=3)
+    call_out("ufer",2);
+  else
+   call_out("schwimmen",2,++nums);
+}
+
+void ufer()
+{
+  if( !TP || ENV(TP) != TO ) return;
+  write("Du naeherst Dich dem rettenden Ufer.\n");
+  call_out("rettung",2);
+}
+
+void rettung()
+{
+  if( !TP || ENV(TP) != TO ) return;
+  write(BS( "Schnell kletterst Du aus dem Wasser und bist erleichtert, dass Du "
+            "Dein Leben noch einmal von den Krokodilen hast retten koennen.") );
+  TP->move(ROOM "weg1", M_GO, "ans Ufer", "kletter ans Ufer", "kommt von "
+     "Krokodilen verfolgt ans Ufer geschwommen");
+}
+
+int cmd_schwimmen(string str)
+{
+  if (str == "ans ufer" || str == "ufer")
+  {
+    kroko();
+    return 1;
+  }
+  notify_fail("Wohin willst Du schwimmen?\n");
+  return 0;
+}
+
+void reset()
+{
+  object ob,next;
+  ::reset();
+  for(ob=first_inventory(TO);ob;)
+  {
+    next=next_inventory(ob);
+    if( !living(ob) )
+    {
+      if(random(2))
+      {
+         tell_room(TO, ob->Name(WER,2)+ " wird ans Ufer getrieben.\n");
+         ob->move(ROOM "weg1", M_NOCHECK);
+      }
+      else
+      {
+        write_file(LOG "fluss", dtime(time())+" "+
+          ob->Name()+" versinkt im Fluss.\n");
+        tell_room(TO, ob->Name(WER,2)+ " geht unter.\n");
+        ob->remove();
+        if( ob ) destruct(ob);
+      }
+    }
+    ob=next;
+  }
+}
+

@@ -1,0 +1,139 @@
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include "../files.h"
+
+inherit "std/npc";
+inherit "std/player/moneyhandler";
+inherit "std/npc/sequencer";
+
+string tpn;
+
+create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  SetProp(P_SHORT, "Hannelore, die gutmuetige Wirtin");
+  SetProp(P_LONG, BS(
+          "Das ist Hannelore, die liebe Wirtin. Sie kuemmert sich um ihre"
+	 +" Gaeste wie um ihren eigenen Sohn. Jeden Wunsch kann sie Dir von"
+	 +" Deinen Augen ablesen und sie hat immer ein vergnuegtes Laecheln"
+	 +" auf den Lippen."));
+  AddDetail(({"laecheln", "lippen"}), BS(
+            "Hannelore laechelt Dich freundlich an."));
+  
+  SetProp(P_WEIGHT, 90000);
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_NAME, "Hannelore");
+  SetProp(P_GENDER, FEMALE);
+  AddId(({"wirtin", "hannelore", "han\nelore"}));
+  create_default_npc(20);
+  SetProp(P_ALIGN, 500);
+  SetProp(P_XP, 220000);
+  SetProp(P_MAX_HANDS, 2); 
+  SetProp(P_MAX_SP, 450);
+  SetProp(P_MAX_HP, 700);
+  SetProp(P_SPELLRATE, 60);
+  SetProp(P_RACE, "Mensch");
+  SetProp(P_SIZE, 170);
+  SetProp(P_DEFAULT_INFO, "nimmt ein neues Glas und poliert es sauber.\n");
+ 
+  AddInfo(({"trank", "heiltrank"}), 
+          "Ein Heiltrank, lass mich mal ueberlegen... Ja, davon weiss"
+	 +" ich was. Dafuer solltest"
+	 +" Du eine Schwarzwurzel dabeihaben, eine Schlangenhaut, ein Pfefferminzblaettchen,"
+	 +" einen Kuheuter, eine kleine Prise Schwarzpulver und ein Hundehaar."
+	 +" Das alles gibst Du mir in dieser Reihenfolge und Du wirst mit einem"
+	 +" Heiltrank belohnt. Zuallerletzt solltest Du mir noch fuer meine"
+	 +" Muehe 50 Muenzen geben. Aber gib acht... Du musst unbedingt alle"
+	 +" Teile bei Dir haben, sonst wird das ganze nichts!", "sagt: ");
+  SetProp(P_HANDS, ({" mit ihrem patschnassen Handtuch", 100, DT_WHIP}));
+  AddSpell(20, 100, 
+    BS("Hannelore nimmt ein altes kaputtes Glas und wirft es Dir ins Gesicht."),
+    "Hannelore nimmt ein altes kaputtes Glas und wirft es @WEM ins Gesicht.\n",
+    DT_BLUDGEON, ([SP_SHOW_DAMAGE:1]) );
+  AddSpell(1, 200, BS(
+           "Hannelores Wirt knallt Dir aus der Kueche eine Pfanne ueber den Schaedel."), BS(
+	   "Hannelores Wirt knallt @WEM aus der Kueche eine Pfanne ueber den Schaedel."),
+	   DT_FIRE, ([SP_SHOW_DAMAGE:1]) );
+  AddSpell(5, 300, BS(
+           "Hannelore wuergt Dich fest."), BS(
+	   "Hannelore wuergt @WEN fest."),
+	   DT_BLUDGEON,  ([ SP_SHOW_DAMAGE:1 ]) );
+
+  SetProp(P_RESISTANCE, ({ DT_FIRE, DT_AIR, DT_WATER }));
+  enable_commands();
+  add_action("heiltrank", "hmmm");
+  seteuid(getuid(this_object()));
+  set_living_name("hannelore");
+  RegisterGive("gotsome", ({
+               ({ "sage Mal sehen was Du da hast...", 1}), 
+               ({ "hmmm", 1})
+	       }) );
+}
+
+allrem()
+{
+  object inv, oinv;
+  inv=first_inventory(TO);
+  while (inv) {
+    oinv=inv;
+    inv=next_inventory(inv);
+    oinv->remove();
+  }
+}
+
+reset()
+{
+  ::reset();
+  allrem(); 
+}
+
+gotsome(obj)
+{
+  tpn=lower_case(this_interactive()->QueryProp(P_NAME));
+  return obj->id("geld");
+}
+
+heiltrank()
+{
+  if (!(present("\nswurz") && present("\nshaut") && present("\nsminz")
+     && present("\nseuter") && present("\nspulver")
+     && present("\nshaar") )) {
+     say("Hannelore schnaubt: Da fehlt noch was!\n");
+     return 1;
+  }
+  if (TO->QueryMoney()<50) {
+    say("Hannelore seufzt: Das Geld reicht doch alle mal nicht!\n");
+    return 1;
+  }
+  allrem();
+  say("Hannelore sagt: Ok, dann mach ich mich ans Mischen!\n");
+  call_out("trank2", 5);
+  return 1;
+}
+
+trank2()
+{
+  say("Hannelore verschwindet schnell in der Kueche und holt etwas.\n");
+  call_out("trank3", 2);
+  return 1;
+}
+
+trank3()
+{
+  clone_object(OBJ("heiltrank"))->move(TO, M_SILENT|M_NOCHECK);
+  write_file(LOG("heiltrank"), sprintf("%s: %s\n", dtime(time()), CAP(tpn)));
+  command_me("gib heiltrank an "+tpn);
+  return 1;
+}
+
+give_notify(ob)
+{
+  sequencer::give_notify(ob);
+  npc::give_notify(ob);
+}
+

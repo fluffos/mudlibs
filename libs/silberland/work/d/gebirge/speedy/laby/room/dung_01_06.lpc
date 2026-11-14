@@ -1,0 +1,282 @@
+//=========================================================================
+//
+// File:    dung_01_06.c
+// Created by Speedy
+//
+// Project: Sarumans Quest (Finde die verlorene Schriftrolle)
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit ROOM "dung-inh";
+
+#define MAXHEBEL 10
+
+int *stellung;
+
+void create()
+{
+  ::create();
+
+  ltext2 = "In einer Ecke siehst Du weiters eine grosse Kiste stehen. ";
+
+  AddSpecialDetail( ({"kiste"}),            "detail_kiste" );
+  AddSpecialDetail( ({"vorderseite"}),      "detail_vorderseite" );
+  AddSpecialDetail( ({"schloss"}),          "detail_schloss" );
+  AddSpecialDetail( ({"vertiefung"}),       "detail_vertiefung" );
+  AddSpecialDetail( ({"hebel"}),            "detail_hebel" );
+
+  AddDetail( ({"rueckseite"}),
+    "An der Rueckseite der Kiste kannst Du entdeckst Du nahe am Boden einige "
+    "Kratzer. "
+   );
+
+  AddDetail( ({"ecke"}),
+    "Die Ecken sind finster, in einer steht eine Kiste. "
+  );
+
+  AddDetail( ({"metall"}),
+    "Das Metall ist schoen glatt und fein gearbeitet, ziemlich weit unten "
+    "kannst Du einige Kratzer in der Kiste erkennen. "
+  );
+
+  AddDetail( ({"kratzer"}),
+    "Die Kratzer scheinen ganz frisch zu sein, aber woher die kommen "
+    "koennten ist Dir unklar. "
+  );
+
+  AddDetail( ({"deckel"}),
+    "Der Deckel ist ebenfalls aus Metall, er ist rechteckig."
+  );
+
+  AddCmd( ({"brich","breche","zerstoere","demoliere"}), "cmd_brechen" );
+  AddCmd( ({"schiebe","schieb"}),                       "cmd_schieben" );
+  AddCmd( ({"hebel"}),                                  "cmd_hebel" );
+  AddCmd( ({"stelle", "stell"}),                        "cmd_stellen" );
+
+  AddExit( "osten", GETEXIT("02_06") );
+
+}
+
+string detail_hebel(string str)
+{
+  if(SMASTER->QueryStatus(TPUID,S_KISTE_WEG))
+    return BS("Du siehst "+MAXHEBEL+" Hebel, die man rauf und runter stellen "
+              "kann. Mit 'hebel' kannst Du die aktuelle Stellungen ansehen. "
+              "Mit 'stelle hebel <nr> <rauf | runter>' kannst Du die "
+              "Position eines Hebels aendern. ");
+
+  return NICHTDA;
+}
+
+string detail_vertiefung(string str)
+{
+  if(SMASTER->QueryStatus(TPUID,S_KISTE_WEG))
+    return BS("Die Vertiefung ist ca. 30 cm tief, und Du siehst mehrere Hebel "
+              "darin. ");
+
+  return NICHTDA;
+}
+
+string detail_schloss(string str)
+{
+  if(!SMASTER->QueryFlag(TPUID,F_KISTE_OFFEN))
+    return BS("Das Schloss ist sehr robust, aber leider hast Du keinen "
+              "passenden Schluessel dafuer. ");
+
+  return BS("Das Schloss ist kaputt und voellig zerstoert, das kann man "
+            "nicht mehr verwenden. ");
+}
+
+string detail_vorderseite(string str)
+{
+  if(!SMASTER->QueryFlag(TPUID,F_KISTE_OFFEN))
+    return BS("An der Vorderseite der Kiste haengt ein Schloss, dass den "
+              "Deckel mit der Kiste versperrt. ");
+
+  return BS("An der Vorderseite der Kiste haengt ein kaputtes Schloss, "
+            "irgendwer hat das aufgebrochen. ");
+}
+
+string detail_kiste(string str)
+{
+  if(!SMASTER->QueryFlag(TPUID,F_KISTE_OFFEN))
+    return BS("In der Ecke steht eine grosse Kiste, ziemlich schwer, und "
+              "komplett aus Metall. An der Vorderseite der Kiste haengt ein "
+              "Schloss. ");
+
+  return BS("In der Ecke steht eine grosse Kiste, ziemlich schwer, und "
+            "komplett aus Metall. An der Vorderseite der Kiste war ein "
+            "Schloss, das jetzt aufgebrochen ist. Die Kiste ist offen und "
+            "leer. " );
+}
+
+int cmd_schieben(string str)
+{
+  int code,i,f;
+
+  notify_fail("Was willst Du schieben?\n");
+  if(!str || str == "") return 0;
+  if(!(str == "kiste weg" || str == "kiste")) return 0;
+
+  if(SMASTER->QueryStatus(TPUID,S_KISTE_WEG))
+  {
+    TELLPLAYER("Du schiebst die Kiste wieder an ihre urspruengliche "
+               "Position.\n");
+    SMASTER->ClearStatus(TPUID,S_KISTE_WEG);
+    return 1;
+  }
+
+  TELLPLAYER(BS("Du schiebst die Kiste zur Seite und entdeckst darunter eine "
+                "kleine Vertiefung. ") );
+  SMASTER->SetStatus(TPUID,S_KISTE_WEG);
+
+  code = 158 + random(866);
+  while(code == SMASTER->QueryCode1(TPUID)) code = 158 + random(866);
+  stellung = ({ });
+  f = 1 << (MAXHEBEL-1);
+
+  for(i=0;i<MAXHEBEL;i++)
+  {
+    stellung += ({code/f});
+    code = code % f;
+    f = f >> 1;
+  }
+  return 1;
+}
+
+int cmd_brechen(string str)
+{
+  notify_fail("Was moechtest Du aufbrechen?\n" );
+  if(!(str == "kiste auf"   ||
+       str == "schloss auf" )) return 0;
+
+  if(SMASTER->QueryFlag(TPUID,F_KISTE_OFFEN))
+  {
+    TELLPLAYER("Aber die Kiste ist ja schon aufgebrochen.\n");
+    return 1;
+  }
+
+  TP->SetProp(P_KILLER, TO);
+  SetProp(P_KILL_NAME, "Rohe Gewalt");
+  SetProp(P_KILL_MSG, "Tut weh, gell?");
+
+  TELLPLAYER(BS("Du trittst ein paar mal kraeftig gegen das Schloss und "
+                "verstauchst Dir Deinen Fuss. Aber die Kiste springt auf. "));
+  TP->do_damage(10+random(20));
+  SMASTER->SetFlag(TPUID,F_KISTE_OFFEN);
+  return 1;
+}
+
+int cmd_hebel(string str)
+{
+  string *s,out;
+  int i,xpos;
+
+  notify_fail("Was moechtest Du tun?\n");
+
+  if(!SMASTER->QueryStatus(TPUID,S_KISTE_WEG)) return 0;
+
+  s = ({ });
+
+//                  1         2         3         4         5
+//        01234567890123456789012345678901234567890123456789012345678
+  s += ({"          <1>  <2>  <3>  <4>  <5>  <6>  <7>  <8>  <9>  <10>"});
+  s += ({"rauf                                                       "});
+  s += ({"                                                           "});
+  s += ({"           +----+----+----+----+----+----+----+----+----+  "});
+  s += ({"                                                           "});
+  s += ({"runter                                                     "});
+
+
+  for(i=0;i < MAXHEBEL;i++)
+  {
+    xpos = 5*i+11;
+    if(stellung[i])
+    {
+      s[1][xpos..xpos] = "*";
+      s[2][xpos..xpos] = "|";
+    }
+    else
+    {
+      s[5][xpos..xpos] = "*";
+      s[4][xpos..xpos] = "|";
+    }
+  }
+
+  TELLPLAYER(implode(s,"\n") + "\n");
+//  TELLPLAYER(sprintf("Stellung: %O\n",stellung));
+  return 1;
+}
+
+int cmd_stellen(string str)
+{
+  int i,nummer,code;
+  string position,s;
+
+  notify_fail("Was moechtest Du worauf stellen?\n");
+
+  if(!str || str == "") return 0;
+  if(!SMASTER->QueryStatus(TPUID,S_KISTE_WEG)) return 0;
+  if(sscanf(str,"hebel %d %s",nummer,position) != 2) return 0;
+
+  if(nummer < 1 || nummer > 10)
+  {
+    TELLPLAYER("Einen Hebel mit solch einer Nummer gibt es nicht.\n");
+    return 1;
+  }
+
+  if(!(position == "rauf" || position == "runter"))
+  {
+    TELLPLAYER("In welche Position moechtest Du den Hebel stellen?\n");
+    return 1;
+  }
+
+  if(position == "rauf")
+  {
+    if(stellung[nummer-1] == 1)
+    {
+      s = "Dieser Hebel steht schon auf der Position 'rauf'. ";
+    }
+    else
+    {
+      s = "Du stellst den Hebel Nummer "+nummer+" auf die Position "
+          "'rauf'. ";
+      stellung[nummer-1] = 1;
+    }
+  }
+  else
+  {
+    if(stellung[nummer-1] == 0)
+    {
+      s = "Dieser Hebel steht schon auf der Stellung 'runter'. ";
+    }
+    else
+    {
+      s = "Du stellst den Hebel Nummer "+nummer+" auf die Position "
+          "'runter'. ";
+      stellung[nummer-1] = 0;
+    }
+  }
+
+  code = 0;
+  for(i=0;i<MAXHEBEL;i++) code += stellung[i]<<i;
+
+  if((present("\nspy_zettel",TP))         &&
+     (code == SMASTER->QueryCode1(TPUID)) &&
+     (SMASTER->QueryDoorStatus(TPUID,"E") == DOORCLOSED))
+  {
+    s += "In der Ferne hoerst Du ein leises rumpeln. ";
+    SMASTER->SetDoorStatus(TPUID,"E",DOOROPENED);
+  }
+
+  if(IS_WIZARD(TP)) s += "Magierinfo: Code = " + code + ".";
+
+  TELLPLAYER(BS(s));
+  return 1;
+}
+
+
+
+

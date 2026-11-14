@@ -1,0 +1,901 @@
+// /gilden/berserker/kronang.c   
+// Der Gildemeister der Berserker
+// 1997-10-11  Feyaria@SilberLand
+
+inherit "std/npc";
+inherit "/std/restriction_checker";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <new_skills.h>
+#include <moving.h>
+#include <wizlevels.h>
+#include "../def.h"
+
+void ausruesten();
+string stirnband();
+string new_stirnband();
+string faehigkeiten();
+string beitreten();
+string austreten();
+string lernen();
+string stufe9();
+string stufe10();
+string *axt;
+string *balsamchance;
+int balsam;
+int callout_counter;
+
+#define AXTCHANCE 20
+
+int _query_wimpy() { return 0; }
+int _query_disable_attack() { return 0; }
+int _query_disable_spells() { return 0; }
+int _query_poison() { return 0; }
+int _query_frog() { return 0; }
+
+public string barden_liedquest() {
+  object task;
+  if(TP->QueryProp(P_GUILD) == "bardengilde" && 
+     !mappingp(TP->QuerySkill("toetet das biest") &&
+    "/gilden/bardengilde/master/bardenmaster"->GetBardGroup(TP) == "korriax") &&
+    !objectp(present("\nbard_gs8_task", TP))) {
+      task = clone_object("/gilden/bardengilde/obj/quest/gs8_korriax_task");
+      if(task->move(TP, M_GET|M_NOCHECK) != 1) {
+        return "Fehler - Bardenaufgabe konnte nicht vergeben werden!";
+      }
+      return "Hab ich mir doch gedacht, dass so ein Baenkelsaenger mich nochmal aufsuchen wird. "
+             "Frueher hab ich Korriax dabei geholfen die wahre Berserkerwut zu verstehen! Und dir "
+             "kann ich auch helfen.\n"
+             "Nachdem du ja kein Berserker bist kann ich dir das Wueten nicht einfach beibringen. "
+             "Damit du aber trotzdem so richtig wuetend werden kannst, gibt es eine Froschart, deren "
+             "Gift den Zorn entfesselt. Ich hab gehoert, dass es Schmuggler geben soll, die solche "
+             "Froesche illegal importieren.\n"
+             "Wenn du an einem solchen Frosch geleckt hast, brauchst du nur noch einen wuerdigen Gegner, "
+             "um deiner Wut freien Lauf zu lassen! Ich denke so ein Braunbaer, wie ich ihn mit blossen "
+             "Haenden erwuergt habe, waere genau das richtige fuer dich.";
+    } else {
+      return "Barden haben ja keine Ahnung von echter Wut! Das einzige Lied, dass "
+             "wir Berserker singen ist der Schlachtruf. Allerdings habe ich dem "
+             "Barden Korriax frueher mal geholfen die echte Berserkerwut zu verstehen.";
+    }
+}
+
+void create()
+{
+ 
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Kronang, der Meister der Berserker");
+  SetProp(P_LONG, BS(
+    "Kronang ist der Meister der Berserkergilde. Frueher war er einmal "
+    "ein gefuerchteter Kaempfer, aber nun hat er sich hier zurueckgezogen, "
+    "um seinen Schuelern die Kampfkunst der Berserker beizubringen. "
+    "Es ist ueber 2 Meter gross und hat gewaltige Muskeln. Obwohl sein Haar "
+    "schon grau ist, ist er sicher noch ein gefaehrlicher Gegner."));
+  SetProp(P_NAME, "Kronang");
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_GENDER, MALE);
+  AddId( ({"kronang", "meister", "\ngildenmeister", "BERSERKER",
+           "berserker", "berserkermeister"}) );
+  set_living_name("kronang");
+  SetProp(P_SMELL, "Kronang riecht stark nach Schweiss.\n");
+  AddDetail( ({"muskel", "muskeln"}), 
+    "Einen so muskoloesen Menschen wie Kronang hast Du noch nie "
+    "gesehen. Sicher kann er Dich mit seiner Axt in Stuecke hauen.");
+
+  create_default_npc(50);
+  SetProp(P_HANDS, ({" mit seinen riesigen Faeusten", 3000, DT_BLUDGEON}));
+  SetAttribute(A_STR, 95);
+  SetProp(P_XP, 70000000);
+  SetProp(P_BODY, 500);
+  SetProp(P_RACE, "Mensch");
+  SetProp(P_SIZE, 200+random(10) );
+  SetProp(P_ALIGN, 100);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_NOMAGIC, 80);
+  SetProp(P_HP_DELAY, 0);
+
+  SetProp(P_GUILD, "berserker");
+  SetProp(P_GUILD_LEVEL, 12);
+  call_other("/gilden/berserker","learn_berserker_skills", 10000, 10000); 
+  ModifySkill(SK_CASTING, 8000 ); 
+  //ModifySkill("blutrausch",   10000);
+  //ModifySkill("blutrausch",   ([SI_PREPARE_TIME:0, SI_SPELLCOST:0]) );
+  
+  SetProp(P_MSGIN, "stapft herein");
+  SetProp(P_MSGOUT, "stapft");
+  SetProp(P_MMSGIN, "stampft herein");
+  SetProp(P_MMSGOUT, "stampft weit weg");
+
+  SetProp(P_DIE_MSG,  " stirbt einen Berserkertod.\n");
+
+  AddInfo(DEFAULT_INFO, ({
+    "grummelt: So ein Bloedsinn!\n",
+    "sagt neugierig: Gibts das wirklich?\n",
+    "sagt: Aha.\n",
+    "fragt: Meinst Du das wirklich so?\n",
+    "sagt: Na so was!\n",
+    "sagt: Pah!\n",
+    "sagt: Frag doch einen Druiden!\n",
+    "schaut Dich erstaunt an.\n",
+    "sagt: Sowas ist nichts fuer einen echten Berserker!\n",
+    "ignoriert Deine Frage.\n",
+    "scheint Dich nicht verstanden zu haben.\n",
+    "fragt: Warum fragst Du mich das?\n",
+    "bruellt: Was willst Du, Du Feigling!\n",
+    "schreit: Lass mich doch damit in Ruhe!\n",
+    "knirscht mit seinen Zaehnen.\n",
+    "fragt: Willst Du nicht lieber etwas ueber die Berserker erfahren?\n"}) );
+  AddLibrary(NPC "kronang.lib", 2); 
+  AddLibrary( "/d/dschungel/feyaria/tijara/npc/spieler.lib",1); 
+  AddInfo("feyaria", "Feyaria hat mich erschaffen.","sagt: ");
+  AddInfo( ({"stirnband", "blutrotes stirnband"}), #'stirnband);
+  AddInfo( ({"neuem stirnband", "neues stirnband"}), CL(new_stirnband));
+  AddInfo( ({"skills","faehigkeiten", "fertigkeiten"}), #'faehigkeiten, 1);
+  AddInfo( ({"lerne", "lernen", "lern"}), #'lernen, 1);
+  AddInfo( ({"stufe 9", "stufe neun", "gildenstufe 9"}), #'stufe9 ); 
+  AddInfo( ({"stufe 10", "stufe zehn", "gildenstufe 10"}), #'stufe10 );
+  AddInfo( ({"zauberlied", "toetet das biest", "bardenlied"}), #'barden_liedquest, "sagt: ");
+
+  SetProp(P_LOG_INFO, "gilden/kronang");  
+
+  SetProp( P_REJECT, ({ REJECT_DESTRUCT,
+    "Kronang zerstoert @WEN voller Berserkerwut!\n" }) );
+
+  SetChats(2, ({
+    "Kronang sagt: Die Berserkergilde ist die beste aller Gilden!\n",
+    "Kronang schaerft seine Axt.\n",
+    "Kronang massiert seinen gewaltigen Oberarm.\n",
+    "Kronang konzentriert sich und staerkt seinen Willen.\n",
+    "Kronang schaut grimmig durch die Gegend.\n",
+    "Kronang wuetet herum und schuechtert Dich gewaltig ein.\n", 
+    "Kronang spannt seine Muskeln an.\n",
+    "Kronang prueft seine Ausruestung.\n",
+    "Kronang steckt einen Edelstein in seine Berserkeraxt.\n",
+    "Kronang knirscht mit den Zaehnen.\n",
+    "Kronang spannt seinen gewaltigen Bizeps an.\n",
+    "Kronang laesst seine Axt pfeifend durch die Luft sausen.\n",
+    "Kronang schaut Dich veraechtlich an.\n"}) );
+  //SetAttackChats(100, ({
+  //  "@@use_spell@@" }) );
+ 
+  axt = ({});  
+  balsamchance = ({});
+  balsam = 3;
+  callout_counter = 0;
+  SUID;
+  ausruesten();
+  call_out("berserker_info", 10);
+
+  AddCmd( ({"bitte", "bitt"}), "cmd_bitten");
+}
+
+int cmd_bitten(string str)
+{
+  if(!(str == "kronang um axt" ||
+       str == "kronang um meisteraxt" ||
+       str == "kronang um berserkeraxt" ||
+       str == "kronang um gildenmeisteraxt")) return 0;
+
+  if(call_other(BMASTER, "FetchAxe", TP) == -1)
+    command_me("sag Du bist nicht wuerdig diese Waffe zu erlangen!");
+  else
+    command_me("sag Hier nimm diese maechtige Axt als Lohn fuer Deine Muehen!");
+  return 1;
+}
+
+void Attack(object enemy) 
+{
+  object *shield;
+
+  if (!present("\nberserker_blutrausch")) 
+  {
+    SetProp(P_LAST_WUETEN_TIME, time() );
+    command_me("blutrausch"); 
+  }
+  if (!random(10) && sizeof(shield = enemy->QueryArmours(AT_SHIELD)))
+  {
+    tell_object(enemy, "Kronang zertruemmert Deinen Schild.\n");
+    tell_room(MENV, "Kronang zertruemmert "+enemy->name(WESSEN,1)+" Schild.\n", 
+        ({enemy}));
+    shield[0]->remove();
+  }
+  return ::Attack(enemy);
+}
+
+int Defend(int dam, mixed dtype, int spell, object enemy)
+{
+  if (!query_once_interactive(enemy) && enemy->QueryProp(P_FRIEND))
+  {
+    enemy->remove();
+    return 0;
+  }
+  if (!random(5) && !enemy->QueryProp(P_DISABLE_ATTACK))
+    enemy->SetProp(P_DISABLE_ATTACK, 1 + random(2));
+  else if (!random(5) && !enemy->QueryProp(P_DISABLE_SPELLS))
+    enemy->SetProp(P_DISABLE_SPELLS, 1 + random(2));
+  if (time() - (enemy->QueryProp(P_LAST_MOVE)) <= 6)
+    dam /= 5;
+  else if (dam > 900) 
+    dam = 900;
+  return ::Defend(dam, dtype, spell, enemy);
+}
+
+
+void heart_beat()
+{
+  int i;
+  object *enemies;
+
+  ::heart_beat();
+  if(InFight() && !random(4) && sizeof(enemies = PresentEnemies()) >= 3)
+  {
+    tell_room(environment(this_object()),
+        "Kronang macht einen brutalen Rundumschlag!\n");
+    for(i = sizeof(enemies) - 1; i >= 0; i--)
+    {
+      enemies[i]->SetProp(P_PARALYZED, 1 + random(2));
+      enemies[i]->Defend(500 + random(500), DT_SLASH, 
+          ([SP_NAME:"rundumschlag", SP_SHOW_DAMAGE:1, SP_PHYSICAL_ATTACK:1]), 
+          this_object());
+    }
+  }
+}
+/*
+string use_spell()
+{
+  object en;
+  if( en = QueryEnemy() )
+  {
+    if( !present("\nberserker_blutrausch", ME) )
+      command_me("blutrausch"); 
+  }
+  return "";
+}
+*/
+
+void reset()
+{
+  object ob;
+  ::reset();
+  if( !is_clone(TO) ) return; 
+  if( !random(3) )
+    call_out("new_equip",10 );
+  else if( !random(10) )
+    call_out("berserker_info", 10);
+  if( (ob=find_player("sisqui")) && !random(5) && !present("sisqui", MENV) )
+    tell_object(ob, "Kronang knuddelt Dich aus der Ferne.\n");
+  axt = ({});
+  balsamchance = ({});
+  balsam++;
+  heal_self(3000);
+}
+
+void destruct_equip()
+{
+  object ob, next;
+  for(ob=first_inventory();ob;)
+  {
+    next=next_inventory(ob);
+    ob->remove(1);
+    if( ob ) destruct(ob);
+    ob=next;
+  }
+}
+
+void new_equip()
+{
+  if( MENV )
+    tell_room(MENV,"Kronang besorgt sich eine neue Ausruestung.\n");
+  destruct_equip();
+  ausruesten();
+}
+
+void ausruesten()
+{
+  if( random(100)<80 )  // Ruestung
+    switch(random(18) )
+    {
+      case 0: CLONEME( "/p/armour/armour/titanpanzer"); break;
+      case 1: CLONEME( "/p/armour/armour/eisenpanzer"); break;
+      case 2: CLONEME( "/d/ebene/lamuerte/wwald/obj/ogerpanzer"); break;
+      case 3: CLONEME( "/d/dschungel/feyaria/tijara/armour/bronzepanzer");
+              break;
+      case 4: CLONEME( "/d/gebirge/angrox/obj/kettenhemd"); break;
+      case 5: CLONEME( "/p/armour/armour/lederruestung"); break;
+      case 6: CLONEME( "/p/armour/armour/mithrilpanzer"); break;
+      case 7: CLONEME( "/d/gebirge/eros/ruestung/schuppenpanzer"); break;
+      case 8: CLONEME( "/p/armour/armour/ringelpanzer"); break;
+      case 9: CLONEME( "/p/armour/armour/plattenpanzer"); break;
+      case 10:CLONEME( "/p/armour/armour/kettenhemd"); break;
+      case 11:CLONEME( "/d/gebirge/angrox/4elem/obj/armour/diamantpanzer");
+              break;
+      case 12:CLONEME( "/d/gebirge/angrox/4elem/obj/armour/steinpanzer"); break;
+      case 13:CLONEME( "/d/gebirge/thor/hoehlenquest/armour/kpanzer"); break;
+      case 14:CLONEME("/d/gebirge/speedy/trollager/armour/schwtrollruestung");
+              break;
+      case 15: CLONEME( "/d/dschungel/dante/stein/armour/dstpanzer"); break;
+      case 16:CLONEME( "/d/wasser/stahldorn/knarkh/obj/knarkhpanzer"); break;
+      case 17:CLONEME( "/d/wasser/stahldorn/knarkh/obj/p_knarkhpanzer"); break;
+    }
+  if( random(100)<90 ) // Helm
+    switch(random(12) )
+    {
+      case 0: CLONEME( "/d/ebene/obj/ruestung/platinhelm"); break;
+      case 1: CLONEME( "/p/armour/helm/mithrilhelm"); break;
+      case 2: CLONEME( "/d/ebene/lamuerte/wwald/obj/ogerhelm"); break;
+      case 3: CLONEME( "/p/armour/helm/bronzehelm"); break;
+      case 4: CLONEME( "/p/armour/helm/kettenhaube"); break;
+      case 5: CLONEME( "/p/armour/helm/knochenhelm"); break;
+      case 6: CLONEME( "/p/armour/helm/topfhelm"); break;
+      case 7: CLONEME( "/p/armour/helm/kampfhelm"); break;
+      case 8: CLONEME( "/p/armour/helm/titanhelm"); break;
+      case 9: CLONEME( "/d/gebirge/angrox/4elem/obj/armour/steinhelm"); break;
+      case 10:CLONEME( "/d/wasser/stahldorn/knarkh/obj/knarkhhelm"); break;
+      case 11:CLONEME( "/d/wasser/stahldorn/knarkh/obj/p_knarkhhelm"); break;
+    }
+  if( random(100)<90 ) // Umhang
+    switch(random(11) )
+    {
+      case 0: CLONEME( "/p/armour/cloak/umhang"); break;
+      case 1: CLONEME( "/d/ebene/obj/ruestung/otterfell"); break;
+      case 2: CLONEME( "/d/ebene/obj/ruestung/gaffoumhang"); break;
+      case 3: CLONEME( "/p/armour/cloak/wolfsfell"); break;
+      case 4: CLONEME( "/d/dschungel/feyaria/kueste/armour/jaguarfell"); break;
+      case 5: CLONEME( "/d/gebirge/eros/ruestung/grizzlyfell"); break;
+      case 6: CLONEME( "/p/armour/cloak/baerenfell"); break;
+      case 7: CLONEME( "/d/gebirge/dusty/zwerge/obj/umhang"); break;
+      case 8: CLONEME( "/p/armour/cloak/pelzmantel"); break;
+      case 9: CLONEME( "/d/gebirge/thor/plateau/armour/pumafell"); break;
+      case 10:CLONEME( "/d/dschungel/dante/weg/armour/dtigerfell"); break;
+    }
+  if( random(100)<65 ) // Hose
+    switch(random(6) )
+    {
+      case 0: CLONEME( "/p/armour/trousers/fellhose"); break;
+      case 1: CLONEME( "/p/armour/trousers/bronzebeinschienen");break;
+      case 2: CLONEME( "/p/armour/trousers/messingbeinschienen");break;
+      case 3: CLONEME( "/d/ebene/obj/ruestung/beinschienen"); break;
+      case 4: CLONEME( "/p/armour/trousers/kettenhose"); break;
+      case 5: CLONEME( "/d/wasser/stahldorn/knarkh/obj/knarkhhose"); break;
+    }
+  if( random(100)<40 ) // Armschienen 
+    switch(random(4) )
+    {
+      case 0: CLONEME( "/p/armour/bracers/titanarmschienen"); break;
+      case 1: CLONEME( "/d/ebene/obj/ruestung/armschienen"); break;
+      case 2: CLONEME( "/d/ebene/lamuerte/burg/obj/trollschienen"); break;
+      case 3: CLONEME( "/p/armour/bracers/mithrilarmschienen"); break;
+    }
+  if( random(100)<40 ) // Handschuhe
+    switch(random(5) )
+    {
+      case 0: CLONEME( "/p/armour/gloves/lederhandschuhe"); break;
+      case 1: CLONEME( "/d/gebirge/eros/ruestung/wolfspfoten"); break;
+      case 2: CLONEME( "/p/armour/gloves/kettenhandschuhe"); break;
+      case 3: CLONEME( "/p/armour/gloves/panzerhandschuhe"); break;
+              break;
+      case 4: CLONEME( "/p/armour/gloves/titanhandschuhe"); break;
+    }
+  if( random(100)<50 ) // Schuhe
+    switch(random(7) )
+    {
+      case 0: CLONEME( "/p/armour/boots/lederstiefel"); break;
+      case 1: CLONEME( "/p/armour/boots/sandalen"); break;
+      case 2: CLONEME( "/d/gebirge/eros/ruestung/baerenpranken"); break;
+      case 3: CLONEME( "/p/armour/boots/eisenstiefel"); break;
+      case 4: CLONEME( "/p/armour/boots//kampfstiefel"); break;
+      case 5: CLONEME( "/d/ebene/lamuerte/burg/obj/osternstiefel"); break;
+      case 6: CLONEME( "/d/wasser/stahldorn/knarkh/obj/knarkhstiefel"); break;
+    }
+  if( random(100)<20 ) // Ring 
+    switch(random(4) )
+    {
+      case 0: CLONEME( "/d/gebirge/eros/ruestung/platinring"); break;
+      case 1: CLONEME( "/d/gebirge/speedy/trollager/armour/trollring"); break;
+      case 2: CLONEME( "/d/ebene/lamuerte/burg/obj/titanring"); break;
+      case 3: CLONEME( "/p/armour/ring/ring"); break;
+    }
+  if( random(100)<20 ) // Amulett 
+    switch(random(4) )
+    {
+      case 0: CLONEME( "/d/gebirge/eros/ruestung/federnamulett"); break;
+      case 1: CLONEME( "/d/dschungel/feyaria/tijara/armour/amulett"); break;
+      case 2: CLONEME( "/d/ebene/lamuerte/burg/obj/smaragtamulett"); break;
+      case 3: CLONEME( "/p/armour/amulet/amulett"); break;
+    }
+  CLONEME( ARMOUR "stirnband" );
+  command("trage alles");
+  CLONEME( WEAPON "berserkeraxt" );
+  present("axt")->SetProp(P_BERSERKER_WAFFENKUNDE, "kronang");
+  present("axt")->SetProp(P_CURSED, 1);
+  command("zuecke axt");
+}
+
+
+// Mitloggen wenn einen Spieler den NPC killt:
+void die(int poisondeath)
+{
+  WLOG( LOG "Kronang", " schafft das unmoegliche und killt Kronang");
+  ::die(poisondeath);
+}
+
+// Mitloggen wenn der NPC einen Spielerkillt:
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  if( killer== ME )
+  write_file( LOG "Kronang" , dtime(time()) + " "+ 
+    player->Name()+" stirbt den Heldentod. ( -"+ lostexp+" XP )\n");
+  //  command("nimm alles aus leiche");
+  //command("trage alles");
+}
+
+
+string stirnband()
+{
+  if( TP->QueryProp(P_GUILD) == "berserker" )
+  {
+    if(! present("\nberserker_stirnband", TP) )
+    {
+      CLONE( ARMOUR "stirnband", TP );
+      return "sagt: Oh! Du hast Dein Stirnband vergessen? Hier hast "
+        "Du ein neues,\nKronang sagt: aber pass diesmal besser darauf auf!\n";
+    }
+    return "ermahnt Dich: Pass immer gut auf Dein Stirnband auf!\n";
+  }
+  return "sagt: Nur als Berserker versteht man den Wert dieses Stirnbandes!\n";
+}
+
+string new_stirnband() {
+  if( TP->QueryProp(P_GUILD) == "berserker" )
+  {
+    if(present("\nberserker_stirnband", TP) ) {
+      present("\nberserker_stirnband", TP)->remove(1);
+    }
+    CLONE( ARMOUR "stirnband", TP );
+    return "sagt: Hier hast Du ein neues Stirnband, "+TPN+".\n";
+  }
+  return "sagt: Nur Berserker brauchen ein Stirnband!\n";
+}
+
+string faehigkeiten()
+{
+  call_other(MENV, "faehigkeiten");
+  return "";
+}
+
+string beitreten()
+{
+  call_other(MENV, "beitreten");
+  return "";
+}
+ 
+string austreten()
+{
+  call_other(MENV, "austreten");
+  return "";
+}
+ 
+string lernen()
+{
+  call_other(MENV, "lernen");
+  return "";
+}
+ 
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+  if( TPN=="Feyaria") 
+  {
+    if( random(2) ) call_out("feyaria",0);
+    return;
+  }
+  if ((gruppe=="nett" || gruppe=="intim") && find_call_out("gut")==-1) 
+    call_out("gut",0);
+  else if ((gruppe=="fies" || gruppe=="frech") && find_call_out("boese")==-1)
+    call_out("boese",0);
+  else if ((gruppe=="traurig" || gruppe=="aengstlich" || gruppe=="aergerlich")
+      && find_call_out("troesten")==-1 )
+    call_out("troesten",0);
+  else if ((gruppe=="froh" || gruppe=="albern") && find_call_out("lustig")==-1)
+    call_out("lustig",0);
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+  StartReaction(verb, gruppe, adverb, touch);
+}
+
+void feyaria()
+{
+  switch( random(2) ){
+    case 0: command_me("emote verneigt sich ehrfuerchtig vor Feyaria.");
+            break;
+    case 1: command_me("laechelt Feyaria an.\n");
+            break;
+  }
+}
+
+void gut()
+{
+  string *guttext;
+  if( TPN == "Sisqui" & random(7) )
+  {
+    switch( random(3) ){
+      case 0: tell_object(TP, "Kronang laechelt Dich an.\n");
+              tell_room(MENV, "Kronang laechelt "+TPN+" an.\n", ({TP}) );
+              break;
+      case 1: tell_object(TP, "Kronang knuddelt Dich.\n");
+              tell_room(MENV, "Kronang knuddelt "+TPN+".\n", ({TP}) );
+              break;
+      case 2: tell_object(TP, "Kronang umarmt Dich.\n");
+              tell_room(MENV, "Kronang umarmt "+TPN+".\n", ({TP}) );
+              break;
+    }
+    return;
+  }
+  guttext= ({ "Hoer auf, mich zu belaestigen, ",
+              "Was soll das, ",
+              "Ich mag das nicht, ",
+              "Geh lieber kaempfen, " });
+  command_me("sag " + guttext[random(sizeof(guttext))] + TPN+ "!");
+}
+
+void boese()
+{
+  string *boestext;
+  boestext=({ "Das merk ich mir, ", 
+              "Ich lass mich nicht von Dir provozieren, ",
+              "Willst Du, dass ich Dich zerschmettere, "});
+command_me("sag " + boestext[random(sizeof(boestext))] + TPN + "!" );
+}
+
+void lustig()
+{
+  if( TP->QueryProp(P_GUILD)=="berserker" && 
+      TP->QueryProp(P_GUILD_LEVEL) > 6 )
+    command_me("sag Verhalte Dich doch wie ein echter Berserker, "+TPN+"!");
+  else
+    command_me("sag Aus Dir wird nie ein richtiger Berserker, "+TPN+"!");
+}
+
+void troesten()
+{
+  if( TP->QueryProp(P_GUILD)=="berserker" && 
+      TP->QueryProp(P_GUILD_LEVEL) > 4 )
+    command_me("sag Ein Berserker muss immer hart bleiben, "+TPN+"!");
+  else
+    command_me("sag "+CAP_TPN+" ist ein Schwaechling!");
+}
+
+void antwort(object pl,string ret)
+{
+  tell_object(pl,ret);
+}
+
+void reset_callout_counter()
+{
+  callout_counter = 0;
+}
+
+void catch_tell(string str)
+{
+  object pl, ob;
+  string ret,ret2;
+
+  if (!str) return;
+  if (!pl=find_player(lower_case(explode(str," ")[0])) ) return;
+  if (pl->QueryProp(P_GUILD)!="berserker" ) return;
+  if (callout_counter > 10) return;
+  else if (!callout_counter) 
+  {
+    call_out("reset_callout_counter", 2);
+    callout_counter++;
+  }
+  else callout_counter++;
+  if ((strstr(str, "teilt Dir mit: ") != -1) && 
+      ( strstr(str, "erhoehen") != -1 || strstr(str, "anforderungen") != -1 ))
+  {
+    switch(pl->QueryProp(P_GUILD_LEVEL))
+    {
+      case 1: ret=MENV->Test2(pl,1);break;
+      case 2: ret=MENV->Test3(pl,1);break;
+      case 3: ret=MENV->Test4(pl,1);break;
+      case 4: ret=MENV->Test5(pl,1);break;
+      case 5: ret=MENV->Test6(pl,1);break;
+      case 6: ret=MENV->Test7(pl,1);break;
+      case 7: ret=MENV->Test8(pl,1);break;
+      case 8: ret=MENV->Test9(pl,1);break;
+      case 9: ret=MENV->Test10(pl,1);break;
+      case 10:        
+      case 11: call_out("antwort",2,pl,break_string( "Fuer die naechste Stufe "
+                     "musst Du Dich schon etwas mehr anstrengen!", 78,
+                     "Kronang teilt Dir mit: "));
+               return;
+      case 12: call_out("antwort",2,pl,break_string( "Wozu willst Du noch  "
+                     "erhoehen? Hoeher geht es nicht!", 78,
+                     "Kronang teilt Dir mit: "));
+               return;
+      default: ret="Kronang teilt Dir mit: Du kannst nicht mehr erhoehen!\n";
+    }
+    if (!ret) 
+    {
+      ret=check_restrictions(pl, MENV->QueryProp(P_GUILD_LEVELS)[
+          pl->QueryProp(P_GUILD_LEVEL)+1]);
+      if( stringp(ret) )
+        ret="Kronang teilt Dir mit: "+ret;
+      else
+        ret="Kronang teilt Dir mit: Komm sofort her und erhoehe Deine Stufe!\n";
+    }
+    else
+      ret="Kronang teilt Dir mit: Du kannst leider noch nicht erhoehen!\n";
+    call_out("antwort",2,pl,ret);
+  }
+  if( strstr(str, "teilt Dir mit: ") != -1 && strstr(str, "stirnband") != -1 )
+  {
+    if( ob = present("\nberserker_stirnband", pl) )
+      ob->remove(1);
+    CLONE( ARMOUR "stirnband", pl );
+  }
+}
+
+varargs void
+ModifySkillAttribute(object caster, string atrname, int value, int duration,
+                         mixed fun) 
+{
+  if (previous_object() && previous_object()!=this_object() && 
+      getuid(previous_object())!="GUILD.berserker")
+    return;
+  ::ModifySkillAttribute(caster, atrname, value, duration, fun);
+}
+
+string stufe9()
+{
+  int level, str, con, dex;
+  level=45; str=27, dex=24, con=24;
+  switch( TP->QueryProp(P_RACE) )
+  {
+    case "Dunkelelf": str=26; break;
+    case "Elf": str=25; break;
+    case "Hobbit": str=26; break;
+  }
+  tell_room(MENV, break_string(
+    "Um auf Stufe neun aufzusteigen, musst Du als "+TP->QueryProp(P_RACE)+ 
+    " mindestens Spielerstufe "+level+ " sein und 25 Millionen "
+    "Erfahrungspunkte, eine Kraft von "+str+", eine Ausdauer von "
+    +con+" und eine Geschicklichkeit von "+dex+" haben. Ausserdem musst Du "
+    "fast alle Faehigkeiten meisterhaft beherrschen und "
+    "alle bis auf die optionalen Abenteuer gespielt haben. Und natuerlich "
+    "musst Du auch noch acht Millionen Punkte an Kampferfahrung sammeln, "
+    "aber das geht ja mit Blutrausch schnell.", 78, "Kronang sagt: "));
+  return "sagt: Dann kannst Du Schlachtruf lernen.";
+}
+
+string stufe10()
+{
+  int level, str, con, dex;
+  level=55; str=30, dex=25, con=30;
+  switch( TP->QueryProp(P_RACE) )
+  {
+    case "Elf": str=26; con=29; break;  
+    case "Hobbit": str=27; con=29; break;
+    case "Mensch": str=29; break;
+    case "Dunkelelf": str=27; con=28; break;
+  }
+  tell_room(MENV, break_string(
+    "Um auf Stufe zehn aufzusteigen, musst Du als "+TP->QueryProp(P_RACE)+ 
+    " mindestens Spielerstufe "+level+ " sein und 55 Millionen "
+    "Erfahrungspunkte, eine Kraft von "+str+", eine Ausdauer von "
+    +con+" und eine Geschicklichkeit von "+dex+" haben. An Kampferfahrung "
+    "musst Du zwanzig Millionen Punkte sammeln. Du musst alle "
+    "Faehigkeiten perfekt beherrschen und ausserdem musst Du "
+    "fast alle Abenteuer gespielt haben. Du musst den Riesen in der "
+    "Unterwelt toeten, denn dann kannst Du seine Kraft uebernehmen "
+    "und selber Riesenkraft lernen. Dann hast Du fast den Gipfel des "
+    "Berserkertums erreicht! Du bist dann auch "
+    "erfahren genug, um andere Berserker zu beurteilen.", 78, 
+    "Kronang sagt: "));
+  return "sagt: Bis jetzt haben erst sehr wenige Berserker diese Anforderungen erfuellt.";
+}
+void init()
+{
+  ::init();
+  if (TP != TO && TP->QueryProp(P_GUILD) == "berserker" && 
+      TP->QueryProp(P_GUILD_LEVEL) > random(10) &&
+      find_call_out("gruss") == -1)
+    call_out("gruss",0);
+}
+
+void gruss()
+{
+  int zeit;
+  object wea;
+  if(!objectp(TP)) return;
+
+  if( present(TP, MENV) )
+  {
+    if( IS_WIZARD(TP) )
+    {
+      command("sag Welche Ehre, "+TPN+"!");
+      if( getuid(TP)=="feyaria" )
+        feyaria(); 
+    }
+    else if( TP->QueryProp(P_GUILD_LEVEL)==10 && member(axt, getuid(TP))==-1 &&
+        !IS_LEARNER(TP) && !present("berserkeraxt", TP) ) 
+    {
+      axt += ({getuid(TP)});
+      if( !random(AXTCHANCE) )
+      {
+        command("sag Aufgrund Deiner Verdienste borge ich Dir fuer kurze Zeit "
+            "eine Berserkeraxt.");
+        CLONE( WEAPON "miniberserkeraxt", TP);
+        WLOG( LOG "Miniberserkeraxt", "bekommt eine Miniberserkeraxt von Kronang");
+      }
+    }
+    else if (TP->QueryProp(P_GUILD_LEVEL) == 12)
+    {
+      switch (random(4))
+      {
+        case 0: command("sag Hallo Gildenmeisterkollege :)"); break;
+        case 1: command("sag Willkommen, Kollege " + TPN + "."); break;
+        case 2: command("sag Hallo " + TPN +"! Bleibst Du laenger hier? "
+                    "Dann mach ich mal kurz Pause."); break;
+        case 3:
+          if (BMASTER->GetTeaching(getuid(TP)) < MAX_ABILITY)
+            command("sag Du musst Dich noch im Lehren ueben, " + TPN + 
+                ", bis Du wuerdig fuer die Axt des Gildenmeisters bist.");
+          else
+            command("sag Du bist ein wuerdiger Berserkergildenmeister, " +
+                TPN + "!");
+          break;
+      }
+    }
+    else
+    {
+      zeit = (time() - TP->QueryProp(P_LAST_WUETEN_TIME)) / 60;
+      if (!(wea = TP->QueryProp(P_WEAPON)) ||
+          wea->QueryProp(P_WEAPON_TYPE) != WT_AXE)
+      {
+        command("sag Ohne eine vernueftige Axt brauchst Du mir gar nicht "
+            "unter die Augen kommen, "+TPN+"!");
+        TP->command_me("raus");
+      }
+      else if (!stringp(wea->QueryProp(P_BERSERKER_WAFFENKUNDE)) ||
+          strstr(wea->QueryProp(P_BERSERKER_WAFFENKUNDE), getuid(TP)) == -1) 
+        command("sag Mach doch mal 'Waffenkunde' auf Deine Axt, "+TPN+"!");
+      else if (zeit > 10 && zeit < 1000 && !random(3)) 
+        command("sag Du hast schon "+zeit+" Minuten nicht mehr "
+                    "gewuetet, "+TPN+"!"); 
+      else 
+      {
+        switch( random(4) )
+        {
+          case 0: command("sag Willkommen, Berserker "+TPN+"!"); break;
+          case 1: command("sag Was kann ich Dir beibringen, "+TPN+"?"); break;
+          case 2: command("sag Wann hast Du das letze Mal gewuetet, "+TPN+"?"); break;
+          case 3: command("sag Zeig mir mal Deine Axt, "+TPN+"!"); break;
+        }
+      }
+    }
+  }
+}
+
+void give_notify(object ob)
+{
+  string wie;
+  if( ob->QueryProp(P_WEAPON_TYPE)==WT_AXE)
+  {
+    if( stringp(wie=ob->QueryProp(P_NAME)) && wie[0..6] == "Kronang" && 
+        ob->QueryProp(P_MAGIC) == 10 )
+    {
+      command("sag Oh! du hast meine Axt gefunden! Als Dank gebe ich Dir meine Berserkeraxt!");
+      write("Kronang gibt Dir die Berserkeraxt.\n");
+      say("Kronang gibt "+TP->name(WEM)+" die Berserkeraxt .\n", ({TP,}) );
+      WLOG( LOG "Berserkeraxt", "bekommt eine Berserkeraxt von Kronang fuer "+ob->short());
+      ob=clone_object(WEAPON "berserkeraxt");
+      ob->SetProp(P_NAME, "Kronangs Berserkeraxt");
+      ob->SetProp(P_SHORT, "Kronangs Berserkeraxt");
+      ob->move(TP, M_NOCHECK);
+      return;
+    }
+    switch(ob->QueryProp(P_WC) )
+    {
+      case 0..90: wie="unbrauchbare"; break;
+      case 91..150 :wie="brauchbare"; break;
+      case 151..200: wie="schoene"; break;
+      case 201..250: wie="tolle"; break;
+      case 251..280: wie="herrliche"; break;
+      case 281..300: wie="wunderbare"; break;
+    }
+    if( balsam > 2 && member(balsamchance, getuid(TP)) == -1 )
+    {
+      balsamchance += ({ getuid(TP) });
+      if( !ob->QueryProp("waffenbalsam") && random(3) &&
+          ob->QueryProp(P_WC) > 150 && ob->QueryProp(P_NR_HANDS) == 2)
+      {    
+        command("sag Du solltest diese "+wie+" Axt besser pflegen, "+TPN+"!");
+        command("emote schmiert "+ob->name(WEN)+" mit Waffenbalsam ein.\n");
+        ob->SetProp("waffenbalsam",1);
+        ob->Damage(-100);
+        if( ob->QueryProp(P_WC) < MAX_WEAPON_CLASS-10 )
+          ob->SetProp(P_WC, ob->QueryProp(P_WC)+random(10) );
+        if( ob->QueryProp(P_WC_FIX) < 50 )
+          ob->SetProp(P_WC_FIX, ob->QueryProp(P_WC_FIX)+2+random(5));
+        if( ob->QueryProp(P_QUALITY_DECAY) != 0 )
+          ob->SetProp(P_QUALITY_DECAY, ob->QueryProp(P_QUALITY_DECAY)+random(20) );
+        balsam = 0;
+      }
+    }
+    else
+      command("sag Eine "+wie+" Axt hast Du da, "+TPN+"!");
+    write("Kronang gibt Dir "+ob->name(WEN,1)+" wieder zurueck.\n");
+    say("Kronang gibt "+TP->name(WEM)+" "+
+        TP->QueryPossPronoun( ob->QueryProp(P_GENDER),WEN,SINGULAR)+" "
+        +ob->name(RAW)+" wieder zurueck.\n", ({TP,}) );
+    ob->move(TP, M_NOCHECK);
+  }
+  else
+    return ::give_notify(ob);
+}
+  
+void berserker_info() 
+{
+  mapping berserker;
+  string *names;
+  string text;
+  int i, gender, level;
+  mapping leveltxt;
+  object ob;
+   
+  text="%s %s.";
+  leveltxt = ([
+      12: "";"ist Berserkergildenmeister und mir ebenbuertig"; 
+          "ist Berserkergildenmeisterin und mir ebenbuertig",
+      11: ""; "ist eine Berserkerlegende"; "ist eine Berserkerlegende",
+      10: ""; "ist ein legendaerer Berserkermeister";
+          "ist eine legendaerer Berserkermeisterin",
+       9: ""; "ist ein Berserkermeister. Vielleicht ist er auch mal so gut, "
+          "um in den Status eines legendaeren Berserkers aufzusteigen";
+          "ist eine Berserkermeisterin. Vielleicht ist sie auch mal so gut, "
+          "um in den Status einer legendaeren Berserkerin aufzusteigen",
+       8: ""; "ist ein blutruenstiger Berserker";
+          "ist eine blutruenstige Berserkerin",
+       7: ""; "ist ein Berserker der Gildenstufe 7"; 
+          "ist eine Berserkerin der Gildenstufe 7",
+       6: ""; "ist ein Berserker der Gildenstufe 6";
+          "ist eine Berserkerin der Gildenstufe 6",
+       5: ""; "ist ein Berserker der Gildenstufe 5";
+          "ist eine Berserkerin der Gildenstufe 5",
+       4: ""; "ist ein Berserker der Gildenstufe 4";
+          "ist eine Berserkerin der Gildenstufe 4",
+       3: ""; "ist ein Berserker der Gildenstufe 3";
+         "ist eine Berserkerin der Gildenstufe 3",
+       2: ""; "ist ein Berserker der Gildenstufe 2";
+          "ist eine Berserkerin der Gildenstufe 2",
+       ]);
+  call_other(INFOLIB_MASTER, "???");
+  berserker=call_other(BMASTER, "QueryAll");
+  names=m_indices(berserker);
+  if(!pointerp(names)) return;
+  for(i=sizeof(names)-1;i>=0;i--) 
+  {
+    if(!IS_LEARNER(names[i]) && berserker[names[i],1] > 4)
+    {
+      if(!INFOLIB_MASTER->GetInfo( NPC "kronang.lib", names[i], 2, this_object() ))
+      {
+        if((ob=find_player(names[i])) || (ob=find_netdead(names[i])))
+          gender = ob->QueryProp(P_GENDER);
+        else
+          gender = MALE;
+        if (stringp(leveltxt[berserker[names[i],1],gender]))    // (woody)
+          AddInfo(({names[i]}), 
+              sprintf(text, CAP(names[i]), leveltxt[berserker[names[i],1],gender]),
+              "sagt: ");
+      }
+    }
+  }
+}
+

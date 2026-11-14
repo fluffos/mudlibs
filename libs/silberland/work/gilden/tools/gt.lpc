@@ -1,0 +1,603 @@
+//
+//  GildenTool 
+//  (c) by Angrox@SilberLand
+//  email: angrox@atpforest.tuwien.ac.at
+//
+//  Tool zur Kontrolle verschiedener Funktionen der Gilden
+//  Abgestimmt auf die Gilden des Silberlandes
+//  
+//  13. Dezember 1998
+//
+//  Etliche Programmteile wurden mit freundlicher Genehmigung von 
+//  Zordan@SL uebernommen. Diese Teile sind gekennzeichnet
+//
+
+
+
+
+// HISTORY: 
+//
+//      13.12.1998      1st. Release
+//      15.12.1998      gssk added 
+//      28.08.1999      +nekromanten 
+//      29.08.1999      gmsk,grsk,gs added
+//      21.06.2001      gsk verbessert
+//      04.11.2003      Patch fuer lange spellnamen der Nekromanten
+//      15.12.2003      gs bei nekromanten richtig
+//      29.04.2005      gsks - sortierte skills anzeigen
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <moving.h>
+#include <defines.h>
+#include <moredef.h>
+#include <new_skills.h>
+#include <ansi.h>
+#include <wizlevels.h>
+#include "./gt.h"
+inherit "std/thing";
+
+// DEFINES
+#define VERSION "0.06"
+#define LAST_CHANGE "21.06.2001"
+#define TA(x) if(find_player("angrox")) tell_object(find_player("angrox"),x)
+#define LINE1 "=============================================================================="
+#define LINE2 "+============================================================================+"
+
+// VARIABLEN
+private string *color;
+
+// PROTOTYPES
+nosave int SetColors(string terminal);
+nosave string array2string(mixed array);
+
+nosave int GTHelp();
+nosave varargs int gilden_skills(string str, int flag);
+
+create() {
+  
+  if( !is_clone(TO) ) return;
+  ::create();
+  SetColors(TP->QueryProp(P_TTY));
+  TA(sprintf("%s***%s Gildentool von %s geclont!\n", ANSI_RED, 
+      ANSI_NORMAL, CAP(getuid(TP))));
+  SetProp(P_LONG, sprintf(
+    "%s\nDas Gildentool v%s (%s)\nDieses Tool dient zum Warten "
+    "der Gilden des SilberLandes.\nFolgende Gilden werden "
+    "unterstuetzt:\n\t%s- Abenteurer\n\t- Druidenzirkel\n\t- Paladine\n\t"
+    "- Berkserker\n\t- Nekromanten%s\n\n"
+    "Hilfe mit <ghilfe>.\n%s\n", LINE1, VERSION, LAST_CHANGE, color[4],
+    color[0],LINE1));
+  SetProp(P_NAME, TP->Name(WESSEN)+" Gildentool v"+VERSION);
+  SetProp(P_SHORT, TP->Name(WESSEN)+" Gildentool v"+VERSION);
+  SetProp(P_GENDER, NEUTER);
+  AddId( ({"gt", "gildentool", "tool", "kontrolltool"}) );
+  SetProp(P_MATERIAL, ([MAT_MISC:100]));
+  SetProp(P_WEIGHT, 1); 
+  SetProp(P_VALUE, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, "Das GT wuerdest Du niemals hergeben!\n");
+  SetProp(P_AUTOLOADOBJ, 1);
+  if(!IS_LORD(TP) && member(GILDENMAGIER, getuid(TP)) == -1) 
+      call_out("remove", 0);
+}
+
+init() {
+  string termiWIZARDnal;
+  ::init();
+  add_action("GHelp", "ghilfe");
+  add_action("gilden_skills", "gsk");
+  add_action("gilden_skills_sortet", "gsks");
+  add_action("gci","gci");
+  add_action("gssk", "gssk");
+  add_action("gska", "gska");
+  add_action("grsk", "grsk");
+  add_action("gmsk", "gmsk");
+  add_action("gs", "gs");
+  SetColors(TP->QueryProp(P_TTY));  
+}
+//
+// HILFFUNKTIONEN
+//
+nosave int SetColors(string terminal) {
+  // Farbgebung von Zordan@SL
+  color = ({ 0,0,0,0,0 });
+  if(terminal=="ansi") {
+    color[0] = ANSI_NORMAL;
+    color[1] = ANSI_BOLD;
+    color[2] = ANSI_UNDERL;
+    color[3] = ANSI_BLUE;
+    color[4] = ANSI_RED;
+  } else if (terminal=="vt100") {
+    color[0]=ANSI_NORMAL;
+    color[1]=ANSI_BOLD;
+    color[2]=ANSI_BOLD;
+    color[3]=ANSI_NORMAL;
+    color[4]=ANSI_NORMAL;
+  } else {
+    color[0]=color[1]=color[2]=color[3]=color[4]=ANSI_NORMAL;
+  }
+
+}
+
+nosave string array2string(mixed array) {
+  int i, len, pos;
+  string text; 
+  mixed hlp;
+  text="";
+  if(mappingp(array)) return "Too complex arguments";
+  if(!pointerp(array)) 
+    return implode(explode(sprintf("%O", array), "\n"), " ");
+  for(i=sizeof(array)-1;i>=0;i--) {
+    if(pointerp(array[i]))
+      hlp=array2string(array[i]);
+    else 
+      hlp=array[i];
+    if(stringp(hlp))
+      hlp=implode(explode(hlp, "\n"), " ");
+    text+=sprintf("%O, ",hlp);
+  }
+  //text+="\b\b";
+  return text;
+}
+
+//
+// Hilfeseite
+//
+nosave int GHelp() {
+  string txt, hlpline;
+  txt="| %-30s | %-41s |\n";
+  hlpline=sprintf("+%*'='s+%*'='s+\n",32,"",43,"");
+  write(sprintf("\n%s\n| %s%|74s%s |\n%s\n",LINE2,color[1],
+      "-=- Funktionen des Gildentools -=-",color[0],LINE2));
+  write(sprintf(txt, "Name", "Funktion"));
+  write(hlpline);
+  write(sprintf(txt, "ghilfe", "Hilfeseite aufrufen"));
+  write(sprintf(txt, "gci <gilde|alle>", "Gildenitem(s) clonen"));
+  write(sprintf(txt, "gsk <spieler>", "Skills anzeigen"));
+  write(sprintf(txt, "gsks <spieler>", "Skills sortiert anzeigen"));
+  write(sprintf(txt, "gssk <spieler> <skill>", "Speziellen Skill anzeigen"));
+  write(sprintf(txt, "gska <spieler> <attrib>", "Skillattribut anzeigen"));
+  write(sprintf(txt, "grsk <spieler> <skill>", "Skill loeschen"));
+  write(sprintf(txt, "#gask <spieler> <skill>", "Skill der eigenen Gilde "
+      "setzen"));
+  write(sprintf(txt, "gmsk <spieler> <skill> <wert>", "Skillwert veraendern"));
+  write(sprintf(txt, "gs <spieler>", "Spielereintrag im Gildensavefile "
+      "zeigen"));
+  write(hlpline+"\n");
+      
+  return 1;
+}
+
+
+nosave mapping newskills;
+
+int skill_sort(string a, string b)
+{
+  int skill1, skill2;
+
+  if (mappingp(newskills[a]))
+    skill1 = newskills[a]["si_abil"];
+  else if (intp(newskills[a]))
+    skill1 = newskills[a];
+  else return 0;
+  if (mappingp(newskills[b]))
+    skill2 = newskills[b]["si_abil"];
+  else if (intp(newskills[b]))
+    skill2 = newskills[b];
+  else return 0;
+  if (skill1 == skill2)
+    return a > b;
+  if (skill1 < skill2)
+    return 1;
+  return 0;
+}
+
+
+// 
+// Ausgabe der Gildenskills. Mit freundlicher Genehmigung von Zordan@SL
+//  
+nosave varargs int gilden_skills(string str, int flag) {
+  object pl;
+  mapping all;
+  int anzahl,i,mittel,skill,usr,summe;
+  string gilde,*skills,dummy;
+  if (!str) str=getuid(TP);
+  notify_fail("*** gsk: Spieler "+color[4]+CAP(str)+color[0]+" nicht gefunden !\n");
+  if (!str) return 0;
+  if (!pl=find_player(str)) { pl=find_living(str); }
+  if (!pl)                  { pl=find_netdead(str); }
+  if (!pl) return 0;
+  all=pl->QueryProperties();
+  gilde=all["guild"];
+  if(!gilde) { gilde=all["default_guild"]; }
+  if(!gilde) { gilde="abenteurer"; }
+  write("+=============================================================================\n");
+  write("| Gildenrating von "+color[1]+CAP(str)+color[0]+" ("+CAP(gilde)+"), "+
+      "Gildenstufe: "+pl->QueryProp(P_GUILD_LEVEL)+", Spielerstufe: "+
+      pl->QueryProp(P_LEVEL)+"\n");
+  newskills=all["newskills"];
+  if (!mappingp(newskills)) {
+    write("+=============================================================================\n");
+    write("| Hat gar keine Skills !!!\n");
+    write("+=============================================================================\n");
+    return 1;
+  }
+  if (!newskills[gilde]) {
+    write("+=============================================================================\n");
+    write("| Gehoert keiner Gilde an !?!\n");
+    write("+=============================================================================\n");
+    return 1;
+  }
+  write("+================+=======+========+===========================================\n");
+write("| Spellname:     | Skill | USR:  |   INT: "+pl->QueryAttribute(A_INT)+
+    ", CON: "+pl->QueryAttribute(A_CON)+", STR: "+pl->QueryAttribute(A_STR)+
+    ", DEX: "+pl->QueryAttribute(A_DEX)+"\n");
+  write("+================+=======+========+===========================================\n");
+  newskills = newskills[gilde];
+  if (flag)
+    skills=sort_array(m_indices(newskills),"skill_sort");
+  else
+    skills=sort_array(m_indices(newskills),#'>);
+  anzahl=sizeof(skills);
+  for (i=0;i<anzahl;i++) {
+    dummy = skills[i];
+    dummy = dummy[0..14];
+    write("| "+dummy+"..............."[strlen(dummy)..]);
+    usr=0;
+    if (mappingp(newskills[skills[i]])) {
+      skill=newskills[skills[i]]["si_abil"];
+      if(lower_case(skills[i])[0]==skills[i][0]) // Spell
+        usr=newskills[skills[i]]["si_usr"];
+      else usr=0; // Skill
+    } else if (intp(newskills[skills[i]])) {
+      skill=newskills[skills[i]];
+    } else {
+      skill=-1;
+    }
+    mittel+=skill;
+    summe+=usr;
+    printf("| %5d | %6d | ",skill,usr);
+    write("******************************************"[0..(skill*41/10000)]);
+    write("\n");
+  }
+  mittel/=anzahl;
+  write("+================+=======+=======+============================================\n");
+  printf("| Anzahl: %s%2d%s   Mittel: %s%5d%s   Summe: %s%7d%s   HP: %3d/%3d   SP: %3d/%3d.\n",
+      color[1], anzahl, color[0], 
+      color[1], mittel, color[0],
+      color[1], summe, color[0],
+      pl->QueryProp(P_HP), pl->QueryProp(P_MAX_HP),
+      pl->QueryProp(P_SP), pl->QueryProp(P_MAX_SP) 
+      );
+  write("+=============================================================================\n");
+  return 1;
+}
+
+nosave int gilden_skills_sortet(string str) {
+  return gilden_skills(str, 1);
+}
+
+//
+// Gildenitems clonen
+//
+nosave varargs int gci(string str) {
+  object gi;
+  string error;
+  if(!str) {
+    write("*** Syntax: gci <gilde|alle>\n");
+    return 1;
+  }
+  str=lower_case(str);
+  switch(str) {
+    case "druidenzirkel":
+      if(gi=present("\ndruidenamulett", TP))
+        gi->remove();
+      error=(CLONE(DRUIDEN_DIR("armour/d_amulett"), TP));
+      break;
+    case "paladine":
+      if(gi=present("\npaladinwappenrock", TP))
+        gi->remove();
+      error=catch(CLONE(PALADIN_DIR("armour/wappenrock"), TP));
+      break;
+    case "berserker":
+      if(gi=present("\nberserker_stirnband", TP))
+        gi->remove();
+      error=catch(CLONE(BERSERKER_DIR("obj/stirnband"), TP));
+      break;
+    case "zechpreller":
+      if(gi=present("\nz_17erschluessel", TP))
+        gi->remove();
+      error=catch(CLONE(ZECHPRELLER_DIR("armour/z_17erschluessel"), TP));
+      break;
+    case "nekromanten":
+      if(gi=present("\nSchaedelmaske", TP))
+        gi->remove();
+      error=catch(CLONE(NEKROMANTEN_DIR("armour/maske"), TP));
+      break;
+    case "alle":
+      if(gi=present("\ndruidenamulett", TP))
+        gi->remove();
+      error=catch(CLONE(DRUIDEN_DIR("armour/d_amulett"), TP));
+      if(gi=present("\npaladinwappenrock", TP))
+        gi->remove();
+      error=catch(CLONE(PALADIN_DIR("armour/wappenrock"), TP));
+      if(gi=present("\nberserker_stirnband", TP))
+        gi->remove();
+      error=catch(CLONE(BERSERKER_DIR("obj/stirnband"), TP));
+      if(gi=present("\nz_17erschluessel", TP))
+        gi->remove();
+      error=catch(CLONE(ZECHPRELLER_DIR("obj/z_17erschluessel"), TP));
+      if(gi=present("\nSchaedelmaske", TP))
+        gi->remove();
+      error=catch(CLONE(NEKROMANTEN_DIR("armour/maske"), TP));
+      break;
+    default: error="Unbekanntes Kriterium!!";
+  }
+  if(stringp(error)) 
+    write("*** "+error+"\n");
+  else write("*** Item(s) geclont.\n");
+  return 1;
+}
+
+nosave int gssk(string str) {
+  string pl_name, skill_name, *vals, *vals2,txt, hlpline;
+  object pl;
+  mapping skill, s_book;
+  int i, j;
+
+  s_book=SPELLBOOKS;
+  str=TP->_unparsed_args();
+  txt="| %-30s | %-41s |\n";
+  hlpline=sprintf("+%*'='s+%*'='s+\n",32,"",43,"");
+  if(!str) {
+    write("*** Syntax: gssk <spieler> <skill>\n");
+    return 1;
+  }
+  if(sscanf(str, "%s %s", pl_name, skill_name)!=2) {
+    write("*** Syntax: gtssk <spieler> <skill>\n");
+    return 1;
+  } 
+  pl_name=lower_case(pl_name);
+  if (!pl=find_player(pl_name))  
+    pl=find_living(pl_name);
+  if (!pl)                   
+    pl=find_netdead(pl_name);
+  if (!pl) { 
+    write("*** Spieler "+CAP(pl_name)+" nicht gefunden!\n");
+    return 1;
+  }
+  if(!mappingp(skill=pl->QuerySkill(skill_name))) {
+    write("*** Skill "+CAP(skill_name)+" nicht in Spieler gefunden!\n");
+    return 1;
+  }
+  write(sprintf("\n%s\n| %s%|74s%s |\n%s\n",LINE2,color[1],
+      sprintf("-=- %s-skill von %s -=-", CAP(skill_name), CAP(pl_name)),
+      color[0],LINE2));
+  for(i=sizeof(vals=m_indices(skill))-1;i>=0;i--) {
+    write(sprintf(txt, vals[i], array2string(skill[vals[i]])[<41..]));
+  }
+  write(hlpline);
+  if(member(s_book, pl->QueryProp(P_GUILD))) {
+    skill=call_other(s_book[pl->QueryProp(P_GUILD)], "QuerySpell", skill_name);
+    if(skill) {
+      for(i=sizeof(vals=m_indices(skill))-1;i>=0;i--) {
+        if(mappingp(skill[vals[i]])) {
+          write(sprintf(txt, vals[i], ""));
+          for(j=sizeof(vals2=m_indices(skill[vals[i]]))-1;j>=0;j--) {
+            write(sprintf(txt, "    "+vals2[j], 
+                array2string(skill[vals[i]][vals2[j]])[<41..]));
+          }
+        }
+        else
+          write(sprintf(txt, vals[i], array2string(skill[vals[i]])[<41..]));
+      }
+    }
+    write(hlpline);
+  }
+  return 1;
+}
+
+//
+// Skillattribute anzeigen
+//
+nosave int gska(string str) {
+  string txt, hlpline, *attr;
+  object pl;
+  int i;
+  txt="| %-30s | %-41s |\n";
+  hlpline=sprintf("+%*'='s+%*'='s+\n",32,"",43,"");
+  attr=({SA_SPEED, SA_DAMAGE, SA_QUALITY, SA_DURATION, SA_EXTENSION,
+      SA_RANGE, SA_ENEMY_SAVE});
+  
+  if(str) {
+    if (!pl=find_player(str))  
+      pl=find_living(str);
+    if (!pl)                   
+      pl=find_netdead(str);
+    if (!pl) { 
+      write("*** Spieler "+CAP(str)+" nicht gefunden!\n");
+      return 1;
+    }
+  }
+  else { pl=TP; }
+  write(sprintf("\n%s\n| %s%|74s%s |\n%s\n",LINE2,color[1],
+      sprintf("-=- Skillattribute von %s -=-", CAP(getuid(pl))),
+      color[0],LINE2));
+  for(i=sizeof(attr)-1;i>=0;i--) {
+    write(sprintf(txt, attr[i], to_string(pl->QuerySkillAttribute(attr[i]))));
+  }
+  write(hlpline);
+  return 1;
+}
+
+//
+// Skill loeschen *ARCH ONLY*
+//
+nosave int grsk(string str) {
+  string pl_name, skill_name;
+  object pl;
+  int i, j;
+  str=TP->_unparsed_args();
+  if(!str) {
+    write("*** Syntax: grsk <spieler> <skill>\n");
+    return 1;
+  }
+  if(sscanf(str, "%s %s", pl_name, skill_name)!=2) {
+    write("*** Syntax: grsk <spieler> <skill>\n");
+    return 1;
+  } 
+  pl_name=lower_case(pl_name);
+  if (!pl=find_player(pl_name))  
+    pl=find_living(pl_name);
+  if (!pl)                   
+    pl=find_netdead(pl_name);
+  if (!pl) { 
+    write("*** Spieler "+CAP(pl_name)+" nicht gefunden!\n");
+    return 1;
+  }
+  if(!pl->QuerySkill(skill_name)) {
+    write("*** Skill "+CAP(skill_name)+" nicht in Spieler gefunden!\n");
+    return 1;
+  }
+  pl->SetProp(P_NEWSKILLS, m_delete(pl->QueryProp(P_NEWSKILLS),skill_name));
+  write("\n*** SKILL '"+CAP(skill_name)+"' in Spieler "+CAP(pl_name)+
+      " geloescht!\n");
+  return 1;
+}
+
+//
+// Skillwert modifizieren 
+//
+nosave int gmsk(string str) {
+  string pl_name, skill_name;
+  object pl;
+  int old_val, new_val, wert;
+  str=TP->_unparsed_args();
+  if(!str) {
+    write("*** Syntax: gmsk <spieler> <skill> <wert>\n");
+    return 1;
+  }
+  if(sscanf(str, "%s %s %d", pl_name, skill_name, wert)!=3) {
+    write("*** Syntax: gmsk <spieler> <skill> <wert>\n");
+    return 1;
+  } 
+  pl_name=lower_case(pl_name);
+  if (!pl=find_player(pl_name))  
+    pl=find_living(pl_name);
+  if (!pl)                   
+    pl=find_netdead(pl_name);
+  if (!pl) { 
+    write("*** Spieler "+CAP(pl_name)+" nicht gefunden!\n");
+    return 1;
+  }
+  if(!pl->QuerySkill(skill_name)) {
+    write("*** Skill "+CAP(skill_name)+" nicht in Spieler gefunden!\n");
+    return 1;
+  }
+  old_val=pl->QuerySkill(skill_name)["si_abil"];
+  pl->ModifySkill(skill_name, wert);
+  new_val=pl->QuerySkill(skill_name)["si_abil"];
+  write("\n*** Skill "+CAP(skill_name+" in Spieler "+CAP(pl_name)+ " von "
+        +old_val+" auf "+new_val+" veraendert!\n"));
+  return 1;
+}
+
+
+nosave int gs(string str) {
+  string pl_name, guild_name, *gilden,*g_master,hlpline,txt;
+  int i;
+  object pl;
+  mixed entry,x;
+  mapping guildmaster;
+  
+  txt="| %-30s | %-41O |\n";
+  hlpline=sprintf("+%*'='s+%*'='s+\n",32,"",43,"");
+  guildmaster=GILDENMASTER;
+  gilden=m_indices(guildmaster);
+  g_master=m_values(guildmaster);
+  str=TP->_unparsed_args();
+  if(!str) {
+    write("*** Syntax: gs <spieler>\n");
+    return 1;
+  }
+  if(sscanf(str, "%s", pl_name)!=1) {
+    write("*** Syntax: gs <spieler>\n");
+    return 1;
+  }
+  if(pl = find_player(pl_name) || pl = find_netdead(pl_name) ) {
+    guild_name=pl->QueryProp(P_GUILD);
+    if( member(gilden,guild_name)!=-1 ) 
+      if(!entry=call_other(guildmaster[guild_name], "QueryMemberEntry", pl_name)) 
+        guild_name=0;
+  }
+  if( !guild_name ) {
+    for(i=sizeof(guildmaster)-1;i>=0;i--) {
+      write("*** Suche in: "+CAP(gilden[i])+" ...\n");
+      if(entry=call_other(g_master[i], "QueryMemberEntry", pl_name)) {
+        guild_name=gilden[i];
+        break;
+      }
+    }
+  }
+  if(!guild_name) {
+    write("*** Spieler "+CAP(pl_name)+" in keiner Gilde gefunden.\n");
+    return 1;
+  } 
+  write(sprintf("\n%s\n| %s%|74s%s |\n%s\n",LINE2,color[1],
+      sprintf("-=- Spieler: %s, Gilde: %s -=-", CAP(pl_name), CAP(guild_name)),
+      color[0],LINE2));
+  switch(guild_name) {
+    case "druidenzirkel":
+      write(sprintf(txt, "needed XP+LXP", entry[0]));
+      write(sprintf(txt, "Gildenstufe", entry[1]));
+      write(sprintf(txt, "Element", entry[2]));
+      break;
+    
+   case "paladine":
+      write(sprintf(txt, "Gildenstufe", entry[0]));
+      write(sprintf(txt, "Spielerstufe", entry[1]));
+      write(sprintf(txt, "needed XP+LXP",  entry[2]));
+      write(sprintf(txt, "Align",  entry[3]));
+      write(sprintf(txt, "Geld fuer naechste Stufe",  entry[4]));
+      write(sprintf(txt, "Gesamt geopfert", entry[5]));
+      write(sprintf(txt, "Tasks", entry[6]));
+      break;
+      
+   case "zechpreller":
+      write(sprintf(txt, "needed XP+LXP", entry[0]));
+      write(sprintf(txt, "Gildenstufe", entry[1]));
+      break;
+      
+   case "berserker":
+      write(sprintf(txt, "needed XP+LXP", entry[0]));
+      write(sprintf(txt, "Gildenstufe", entry[1]));
+      write(sprintf(txt, "Spielerstufe", entry[2]));
+      write(sprintf(txt, "Rasse", entry[3]));
+      write(sprintf(txt, "Waffe", entry[4]));
+      write(sprintf(txt, "Reportmodus", entry[5]));
+      write(sprintf(txt, "Macht", entry[6]));
+      write(sprintf(txt, "Lehre", entry[7]));
+      write(sprintf(txt, "Reportfarbe", entry[8]));
+      break;
+   
+   case "nekromanten":
+      write(sprintf(txt, "Gildenstufe", entry[0]));
+      write(sprintf(txt, "Innerer Kreis", entry[1]));
+      write(sprintf(txt, "needed XP",  entry[2]));
+      write(sprintf(txt, "Spielerstufe", entry[3]));
+      write(sprintf(txt, "Align",  entry[4]));
+      write(sprintf(txt, "Geopferter Paladin",  entry[5][0]));
+      write(sprintf(txt, "Lost XP fuer naechsten Stufe",  entry[6]));
+      write(sprintf(txt, "Lost XP seit Beitritt",  entry[7]));
+      write(sprintf(txt, "NPC Levels fuer naechste Stufe", entry[8]));
+      write(sprintf(txt, "NPC Levels seit Beitritt", entry[9]));
+      write(sprintf(txt, "Anzahl der geopferten NPCs", entry[10]));
+      write(sprintf(txt, "NPCs fuer naechsten Grad", entry[11]));
+      break;
+  } 
+  write(hlpline+"\n");
+  return 1;
+}

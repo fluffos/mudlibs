@@ -1,0 +1,182 @@
+//#define _DEBUG_
+#include "../../pcgd_intern.h"
+
+private int cursorX, cursorY, width, height;
+private mixed* layout;
+
+public void create() {
+    if(!is_clone(this)) return;
+    cursorX = cursorY = width = height = 0;
+    layout = ({ });
+}
+
+public varargs void Initialize(mixed initialLayout, int _width, int _height) {
+    DB(sprintf("MapLayout (%O) :: Initialize :: initialLayout=%O _width=%d _height=%d\n", this, initialLayout, _width, _height))
+
+    if(!initialLayout) layout = ({ });
+    else layout = initialLayout;
+
+    // TODO automatically calculate width and height if not given
+    if(!_width || !_height) raise_error("missing width or height");
+
+    width = _width;
+    height = _height;
+
+    DB(sprintf("MapLayout (%O) :: Initialize :: return\n", this))
+}
+
+public void SetCursor(int _x, int _y) {
+    DB(sprintf("MapLayout (%O) :: SetCursor :: cursor=(%d,%d)\n", this, _x, _y))
+    cursorX = _x;
+    cursorY = _y;
+    DB(sprintf("MapLayout (%O) :: SetCursor :: return newCursor=(%d,%d)\n", this, cursorX, cursorY))
+}
+
+public void incrementCursorY() {
+    cursorY++;
+    DB(sprintf("MapLayout (%O) :: incrementCursorY :: newCursor=(%d,%d)\n", this, cursorX, cursorY))
+}
+
+public void incrementCursorX() {
+    cursorX++;
+    DB(sprintf("MapLayout (%O) :: incrementCursorX :: newCursor=(%d,%d)\n", this, cursorX, cursorY))
+}
+
+public int getCurrentCursorX() {
+    return cursorX;
+}
+
+public int getCurrentCursorY() {
+    return cursorY;
+}
+
+public mixed* Map() {
+    return layout;
+}
+
+private mapping* buildCoordinateLine(int width) {
+    mapping* m;
+
+    DB(sprintf("MapLayout (%O) :: buildCoordinateLine :: width=%d\n", this, width))
+
+    m = ({ });
+    for(;width>0;--width) {
+        m += ({ ([PCG_L_TYPE: MAP_NODE_UNUSED, PCG_L_EXITS: 0]) });
+    }
+
+    DB(sprintf("MapLayout (%O) :: buildCoordinateLine :: return\n", this))
+
+    return m;
+}
+
+public void AppendColumn() {
+    int i;
+
+    DB(sprintf("MapLayout (%O) :: AppendColumn\n", this))
+
+    for(i=0; i<height; ++i) {
+        if(sizeof(layout[i]) <= width) {
+            layout[i] += ({ ([PCG_L_TYPE: MAP_NODE_UNUSED, PCG_L_EXITS: 0]) });
+            DB(sprintf("MapLayout (%O) :: AppendColumn :: added column at y=%d\n", this, i))
+        }
+    }
+
+    width++;
+
+    DB(sprintf("MapLayout (%O) :: AppendColumn :: return newWidth=%d\n", this, width))
+}
+
+public void AppendRow() {
+    DB(sprintf("MapLayout (%O) :: AppendRow\n", this))
+
+    layout += ({ buildCoordinateLine(width) });
+    height++;
+
+    DB(sprintf("MapLayout (%O) :: AppendRow :: return newHeight=%d\n", this, height))
+}
+
+public void SetTypeAt(string type, int x, int y) {
+    DB(sprintf("MapLayout (%O) :: SetType :: type=%s cursor=(%d,%d) x=%d y=%d\n", this, type, cursorX, cursorY, x, y))
+    layout[y][x][PCG_L_TYPE] = type;
+}
+
+public void SetType(string type) {
+    SetTypeAt(type, cursorX, cursorY);
+}
+
+public void AddExitAt(int exitFlag, int x, int y) {
+    DB(sprintf("MapLayout (%O) :: AddExit :: exitFlag=%d cursor=(%d,%d) x=%d y=%d\n", this, exitFlag, cursorX, cursorY, x, y))
+    layout[y][x][PCG_L_EXITS] = layout[y][x][PCG_L_EXITS]|exitFlag;    
+}
+
+public void AddExit(int exitFlag) {
+    AddExitAt(exitFlag, cursorX, cursorY);
+}
+
+// Removes all unused fields in the map
+public void CleanLayout() {
+    int x, y;
+
+    DB(sprintf("MapLayout (%O) :: CleanLayout\n", this))
+
+    for(y=0;y<height;++y) {
+        for(x=0;x<width;++x) {
+            DB(sprintf("MapLayout (%O) :: CleanLayout :: checking node :: coordinate=(%d,%d) type=%s\n", this, x, y, layout[y][x][PCG_L_TYPE]))
+            if(layout[y][x][PCG_L_TYPE] == MAP_NODE_UNUSED) {
+                layout[y][x] = 0;
+                DB(sprintf("MapLayout (%O) :: CleanLayout :: remove node :: coordinate=(%d,%d) \n", this, x, y))
+            }
+        }
+    }
+
+    DB(sprintf("MapLayout (%O) :: CleanLayout :: return\n", this))
+}
+
+// Adds a straight path on the X axis (x0->->->->x1) starting at fromX ending at toX on the given y coordinate
+public void AddLinearPathX(int fromX, int toX, int y) {
+    int h;
+
+    if(fromX > toX) { // reverse from and two, path is always drawn from lower to higher coordinate
+        h = toX;
+        toX = fromX;
+        toX = h;
+    }
+
+    DB(sprintf("MapLayout (%O) :: AddLinearPathX :: fromX=%d toX=%d y=%d\n", this, fromX, toX, y))
+
+    for(h=fromX; h<toX; ++h) {
+        AddExitAt(PCG_EXIT_EAST, h, y);
+        AddExitAt(PCG_EXIT_WEST, h+1, y);
+        SetTypeAt(MAP_NODE_UNDEF, h, y);        
+    }
+
+    SetTypeAt(MAP_NODE_UNDEF, toX, y);
+}
+
+// Adds a straight path on the y axis 
+// y0
+// |
+// o
+// |
+// y1 
+// starting at fromY ending at toY on the given X coordinate
+public void AddLinearPathY(int fromY, int toY, int x) {
+    int h;
+
+    if(fromY > toY) { // reverse from and two, path is always drawn from lower to higher coordinate
+        h = toY;
+        toY = fromY;
+        toY = h;
+    }
+
+    DB(sprintf("MapLayout (%O) :: AddLinearPathY :: fromY=%d toY=%d x=%d\n", this, fromY, toY, x))
+
+    for(h=fromY; h<toY; ++h) {
+        AddExitAt(PCG_EXIT_SOUTH, x, h);
+        AddExitAt(PCG_EXIT_NORTH, x, h+1);
+        SetTypeAt(MAP_NODE_UNDEF, x, h);        
+    }
+
+    SetTypeAt(MAP_NODE_UNDEF, x, toY);
+}
+

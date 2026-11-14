@@ -1,0 +1,314 @@
+// Schattenwelt
+// Wraz / Mendralim
+// Schattenwelt NPC erben von hier
+
+#include "../def.h"
+
+//inherit "std/npc";
+inherit "/std/thing/description";
+//inherit "std/thing/properties";
+inherit ZONE "std/std.lpc";
+
+string room_before_hiding;
+object player_before_hiding;
+int diff_int;
+int diff_int_hp;
+int room_no;
+
+// ------------------------------------------------------------------------------
+int env_room_no()
+{
+  /*if(find_player("wraz")) find_player("wraz")->Message(BS(
+    "TO; "+
+    to_string(TO)+
+    ", ENV(TO): "+ (TO?to_string(ENV(TO)):"<none>") +
+    ", previous_object(); "+to_string(previous_object()) +
+    ", previous_object()->get_room_no(); "+to_string(previous_object()->get_room_no())
+  ));*/
+  if(previous_object() && previous_object()->get_room_no()) 
+    return previous_object()->get_room_no();
+  else if(ENV(TO) && ENV(TO)->get_room_no()) return ENV(TO)->get_room_no();
+  else if(previous_object() && ENV(previous_object()) && ENV(previous_object())->get_room_no())
+    return ENV(previous_object())->get_room_no();
+  return 0;
+}
+
+// ------------------------------------------------------------------------------
+// fuegt bis zu 10 level hinzu (also sollte man hoechstens level = 40 setzen)
+// max hp: logistisch; bei raum 10: 363 HP, raum 100: 970 HP, raum 250: 4.8k HP,
+//   raum 350: 12.9k HP, raum 500: 40k HP, raum 650: 67k HP, raum 1000: knapp 80k HP
+varargs void create_default_shadownpc(int level, int maxhp, int incorp, int hplimit)
+{
+  int hands;
+
+  if(hplimit <= 0) hplimit = 80000;
+
+  diff_int = difficulty_int(env_room_no());
+  diff_int_hp = difficulty_int(env_room_no(),hplimit,0.011);
+
+  if(level < 1) return;
+
+  AddId(({"NOWIMPY", "\nschattenweltnpc", "\nschattenwache"}));
+
+  // Level
+  room_no = env_room_no();
+  level = level+(room_no > 1000 ? 1000 : room_no)/100;
+  SetProp(P_LEVEL, level);
+
+  // HP
+  if (maxhp<=0) maxhp=(int) (diff_int_hp * (95.0+random(11))/100); 
+  SetProp(P_MAX_HP, maxhp);
+  SetProp(P_MAX_SP, maxhp);
+
+  // Hands, Body, XP
+  if (level<3)
+    hands=30;
+  else if (level<30)
+    hands=10*level;
+  else
+    hands=450+(level-30)*20;
+  SetProp(P_HANDS, ({" mit immaterieller Beruehrung", hands , ({DT_TERROR}) }) );
+  SetProp(P_BODY, level*4);
+  SetProp(P_XP, (int) (1.1*maxhp*hands*5)); // default: maxhp*hands*5
+
+  // Resistances, Temperature
+  if(!incorp) SetProp(P_RESISTANCE_STRENGTHS, SHADOW_DEF_RESISTANCE_STR);
+  else SetProp(P_RESISTANCE_STRENGTHS, SHADOW_INC_DEF_RESISTANCE_STR);
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:-100,T_RANGE_MAX:100]));
+
+  SetProp(P_AGGRESSIVE,([
+    P_RACE:(["Elf":0.3,"Fee":0.7,"Dunkelelf":0.05,"Untoter":0.0]),
+    P_GUILD:(["paladine":0.9,"nekromanten":0.0,"druidenzirkel":0.3]),
+    0:0.1])); 
+
+  SetProp(P_WIMPY, 0);
+
+  AddClass(({CL_NIGHTVISION,CL_UNDEAD}));
+}
+
+// ------------------------------------------------------------------------------
+int divide(int i, int j) { return (i/j > 0 ? i/j : 1); }
+
+// ------------------------------------------------------------------------------
+void DropShadowItems(int ppm_chance)
+{
+  object ob;
+  int i, message_done, *chance_list, item_ppm_chance;//, diff_int; // Entfernt 27.12.23, diff_int ist eine Globalvariable
+  string *item_list;
+
+  if(!ppm_chance) ppm_chance = 100000; // Default: 10% (==100.000 ppm) Drop-Wahrscheinlichkeit
+  
+  item_list = ({
+    OBJ "m_balsam",   // 1
+    ARMOUR "schattenpanzer",  // 2
+    OBJ "schattenlinse",  // 3
+    OBJ "g_balsam",  // 4
+    "/d/astral/feyaria/frostania/obj/wsalbe", // 5
+    OBJ "antischatten", // 6
+    OBJ "schattenleine", // 7
+    OBJ "schattenpacktaschen", // 8
+    OBJ "portalrolle", // 9
+    "/d/astral/feyaria/frostania/obj/rsalbe", // 10
+    "/d/dschungel/feyaria/tijara/obj/rbalsam.lpc", // 11
+    "/d/dschungel/feyaria/tijara/obj/wbalsam.lpc", // 12
+    ARMOUR "schatten" + ({"amulett","armreife","beinkleid","cape","guertel","handschuhe",
+      "helm","ring","stiefel"})[random(9)], // 13
+    OBJ "schattenfluch" // 14
+    });
+  // Zuordnung zu item_list nach Index
+  chance_list = ({
+    ppm_chance,   // 1
+    divide(ppm_chance,20),  // 2
+    divide(ppm_chance,100),  // 3
+    divide(ppm_chance,50), // 4
+    ppm_chance,  // 5
+    divide(ppm_chance,1000), // 6
+    divide(ppm_chance,100), // 7
+    divide(ppm_chance,100), // 8
+    divide(ppm_chance,1000), // 9
+    divide(ppm_chance,200), // 10
+    divide(ppm_chance,500), // 11
+    divide(ppm_chance,500), // 12
+    divide(ppm_chance,100000), // 13
+    divide(ppm_chance,20) // 14
+    });
+
+  for(i=0;i<sizeof(item_list);i++)
+  {
+    item_ppm_chance = chance_list[i];
+    //diff_int = difficulty_int(env_room_no()); // Entfernt 27.12.23, diff_int ist eine Globalvariable
+
+    // reduzierter debug
+    if(i==5) DB("  chance is 1 : "+(1000000/(item_ppm_chance+item_ppm_chance/20*diff_int))+
+    " ("+explode(item_list[i],"/")[<1]+")\n");
+
+    if(!random(1000000/(item_ppm_chance+item_ppm_chance/20*diff_int)))
+    {
+      ob=clone_object(item_list[i]);
+      DB("    "+ob->Name(RAW)+" drops\n");
+      ob->SetProp("shadow_room_no",QueryProp("shadow_room_no"));
+      ob->SetProp("shadow_difficulty",QueryProp("shadow_difficulty"));
+      ob->SetProp("shadow_difficulty_int",QueryProp("shadow_difficulty_int"));
+      ob->move(ENV(TO),M_PUT);
+      if(!message_done) 
+      {
+        ENV(TO)->Message(BS("Etwas Schattiges stroemt zu Boden."));
+        message_done = 1;
+      }
+    }
+  }
+
+  // Edelsteine
+  if(random(15)<=diff_int)
+  {
+    "/obj/gemmaster"->DistributeGem(0,1+2*diff_int,1,TO,({"opal","onyx"}));
+  }
+
+  // 'Angebot'
+
+  if(!random(1000000/(divide(ppm_chance,50)+divide(ppm_chance,50)/10*diff_int)))
+  {
+    ob = clone_object(OBJ "angebot");
+    ob->Setup("geber");
+    ob->move(TP,M_NOCHECK);
+    TP->Message("\n\n"+
+      BS("Du fuehlst nach diesem glorreichen Sieg die seltene Gelegenheit, eine*r Seher*in "
+        "das Angebot zu unterbreiten, die Schatten zu betreten (<unterbreite spieler*in angebot>).")+
+      "\n\n");
+  }
+}
+
+// ------------------------------------------------------------------------------
+void unhide()
+{
+  int _methods;
+
+  _methods = M_GO | M_NO_ATTACK; // M_GO + M_NO_ATTACK
+  if(QueryProp(P_INVIS)) _methods |= M_SILENT;
+
+  if(!TO) return;
+
+  if(player_before_hiding && 
+    interactive(player_before_hiding) &&
+    ENV(player_before_hiding) &&
+    strstr(file_name(ENV(player_before_hiding)),ROOM +"s") != -1)
+      TO->move(ENV(player_before_hiding), _methods);
+
+  else if(file_size(room_before_hiding + ".lpc") >= 0)
+  {
+    call_other(room_before_hiding,"???");
+    TO->move(room_before_hiding, _methods);
+  }
+
+  else
+  {
+    call_other("/room/npcasylraum","???");
+    TO->move("/room/npcasylraum", _methods);
+  }
+}
+
+// ------------------------------------------------------------------------------
+varargs void hide(object enemy, int damage, mixed dam_type, string room_file_name)
+{
+  mapping details;
+  string *keys;
+  int _methods;
+
+  // TODO: CHECK THIS VS. NEXT IF!
+  if(!TO || !ENV(TO)) return;
+
+  // kein room_file_name mitgeliefert, UND NPC hat keine Umgebung -> return
+  if(!room_file_name && (!TO || !ENV(TO))) return;
+
+  // kein room_file_name mitgeliefert: dann nimm die Umgebung des NPC als room_file_name
+  if(!room_file_name) room_file_name = file_name(ENV(TO));
+
+  // NPC ist bereits im hidden_npc_room -> return
+  if(strstr(room_file_name,ROOM "hidden_npc_room") != -1) return;
+
+  // NPC ist nicht in der Schattenwelt -> return
+  if(strstr(room_file_name,ROOM) == -1) return;
+
+  room_before_hiding = room_file_name;
+  if(enemy) player_before_hiding = enemy;
+
+  // ev. spaeter einbauen: npc in Detail "versteckt"
+  // -> Detail untersuchen, npc kommt wieder
+  //details = ENV(TO)->QueryProp(P_DETAILS);
+  //keys = m_indices(details);
+
+  call_other(ROOM + "hidden_npc_room", "???");
+  _methods = M_NOCHECK | M_SILENT;
+  //if(QueryProp(P_INVIS)) _methods |= M_SILENT;
+  if (!QueryProp(P_INVIS)) 
+    ENV(TO)->Message(BS(TO->Name(WER,1)+" verschwindet."),MSGFLAG_VISUAL);
+  TO->move(ROOM + "hidden_npc_room", _methods);
+
+  if(find_call_out("unhide") == -1) call_out("unhide",20+random(400));
+}
+
+// ------------------------------------------------------------------------------
+// Wird nur von Schatten-NPC aufgerufen, nicht von den "Guten" (zB Dogrok, Aza, etc.)
+void CallPlayerDeathLog(object player, object killer, int lostexp)
+{
+  string npc_name;
+  npc_name = (pointerp(TO->QueryProp(P_NAME))?TO->QueryProp(P_NAME)[0]:TO->QueryProp(P_NAME));
+  DB(BS("CallPlayerDeathLog called, killer & TO: "+to_string(killer)+" "+to_string(TO)));
+  if(killer == TO) LOGMASTER->DoPlayerDeathLog(
+    QueryProp("shadow_room_no"),  
+    QueryProp(P_LEVEL), 
+    QueryProp("shadow_difficulty_int"),
+    getuid(player), 
+    lostexp, 
+    npc_name);
+}
+
+// ------------------------------------------------------------------------------
+// Wird ebenfalls nur von den Schatten-NPC aufgerufen
+void CallNPCKillLog()
+{
+  string tp_name, npc_name;
+  if(!TP) return;
+  if(interactive(TP)) tp_name = TPU;
+  else tp_name = lower_case(TP->Name(RAW)); // TP kann auch ein NPC sein (Krieger*innen)
+
+  npc_name = (pointerp(TO->QueryProp(P_NAME))?TO->QueryProp(P_NAME)[0]:TO->QueryProp(P_NAME));
+  LOGMASTER->DoNPCKillLog(
+    QueryProp("shadow_room_no"), 
+    QueryProp(P_LEVEL), 
+    QueryProp("shadow_difficulty_int"), 
+    tp_name, 
+    npc_name);
+}
+
+// ------------------------------------------------------------------------------
+void leiche_verwandeln(string summoned_npc_file)
+{
+  object corpse;
+
+  if(!summoned_npc_file) summoned_npc_file = explode(file_name(TO),"#")[0];
+  corpse = present("Leiche",ENV(TO));
+  if (!corpse) return;
+  if (file_name(corpse)[0..10] != "/std/corpse") return;
+
+  // Gesegnete Leiche kann nicht mehr verwandelt werden
+  if (strstr(corpse->QueryProp(P_SHORT)," gesegnet)") > 0)
+  {
+    ENV(TO)->Message(BS(
+      TO->Name(WER)+" beruehrt die gesegnete Leiche, doch mit "
+      "einem gequaelten, markerschuetternden Schrei zuckt "+TO->QueryPronoun(WER)+" sofort "
+      "von der Leiche zurueck!"),
+      MSGFLAG_VISUAL);
+    TO->AddHp(-(50+random(100)));
+  }
+  else
+  {
+    ENV(TO)->Message(BS(
+      TO->Name(WER)+" beruehrt die Leiche, die sich daraufhin "
+      "zu schrecklichem, untoten Dasein erhebt!"),MSGFLAG_VISUAL);
+    clone_object( summoned_npc_file ) -> move( ENV(TO) , M_NOCHECK );
+    corpse->remove();
+  }
+
+  return;
+}

@@ -1,0 +1,338 @@
+/*
+** Beamter, Midas  (w) Woody@SL
+** ---
+** 1997-09-10  1.0  Release
+** 1997-09-27  1.1  Midaskarte auf Anfrage
+** 1998-07-05  1.2  midas.lib
+** 2001-05-25  1.3  P_NAME ADJECTIVE'iert, XP angepasst
+*/
+
+inherit "std/npc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <wizlevels.h>
+#include "/secure/warnings.h"
+
+#include "../midas.h"
+
+#ifdef LOGF
+#undef LOGF
+#define LOGF "/d/ebene/log/midaskarte.log"
+#endif
+
+mapping karte_gegeben;
+
+string midaskarte();
+string warnings();
+string erwartet();
+string ignoriert();
+
+// mit P_NAME = ({ "Beamter", ADJECTIVE }) nicht mehr noetig:
+/*
+varargs string name(int casus, int demon)
+{
+  if (demon)
+    return ::name(casus,1);     // auf jeden Fall bestimmten Artikel...
+  else                          // (will mir die laestige Prueferei sparen)
+    return ::name(casus,demon)+(casus==WER ? "r" : "");
+}
+*/
+
+void create()
+{
+  object ob;
+
+  if (!is_clone(this_object())) return;  // (return on BP)
+
+  ::create();
+  AddId ( ({"beamter", "beamten", "portier"}) );
+  SetProp (P_GENDER, MALE);
+  SetProp (P_NAME, ({ "Beamter", ADJECTIVE }) );
+  SetProp (P_SHORT, "Ein Beamter");
+  SetProp (P_LONG, "Der Beamte blickt Dich freundlich an. Bestimmt "
+      "hilft er Dir gerne weiter, solange es nicht zuviel Arbeit "
+      "bedeutet. Das beste ist wohl, wenn Du nett und hoeflich "
+      "bist, denn ohne ein freundliches Wiehern des Amtsschimmels "
+      "geht auch in dieser Stadt gar nichts.");
+  SetProp (P_ALIGN, 80+random(30));
+  create_default_npc(10+random(3));
+  SetProp (P_SIZE, 160+random(20));
+  SetProp (P_RACE, "Mensch");
+  SetProp (P_MAX_HANDS, 2);
+  SetProp (P_HANDS, ({" mit blossen Haenden", 50, DT_BLUDGEON}) );
+  SetProp (P_XP, 4000 * QueryProp(P_LEVEL));    // 40k - 48k
+
+  // euid setzen, damit Ausruestung gecloned werden kann
+  SUID;
+
+  // Ausruestung
+  CLONEME (OBJ("ruestung/patschen"));
+  command ("trage alles");
+  CLONEME (OBJ("waffe/stift"));
+  command ("zuecke stift");
+  ob = CLONEOB ("/obj/money");
+  ob->SetProp(P_AMOUNT, 50+random(4)*10);
+  ob->move(ME);
+
+  SetAttackChats(6, ({
+      "Der Beamte jammert: Waer ich nur schon endlich in Pension!\n",
+      "Der Beamte notiert sich Deinen Namen.\n" }) );
+
+  SetProp (P_DIE_MSG, " aechzt: Auch eine Art von Feierabend...\n"
+      "Der Beamte faellt tot zu Boden.\n");
+  SetProp (P_DEFAULT_INFO,
+      ({ "fragt: Ham'S ueberhaupt an Ausweis?\n",
+         "fragt: San'S ang'meldet?\n",
+         "sagt: Erst amal Stempelmarken kaufen, ja?!\n",
+         "sagt: Wir ham Mittagspause!\n",
+         "deutet auf ein Schild und sagt: Da steht der Parteienverkehr.\n",
+         "scheint Dich nicht gehoert zu haben.\n"
+      }));
+  AddInfo ( ({"rathaus"}),
+      "sagt: Da san'S grad!");
+  AddInfo ( ({"beamter","beamten","beamte"}),
+      "nickt Dir im Halbschlaf zu.\n");
+  AddInfo ( ({"marken","stempelmarken"}),
+      "Die gibts bestimmt im Laden zu kaufen! Von mir kriegen'S "
+      "sowas naemlich ned!", "sagt: ");
+  AddInfo ( ({"anmeldung"}),
+      "Naja Anmeldung muss schon sein, damit alles seine Ordnung hat! "
+      "Ich hab nur im Moment kein Anmeldeformular mehr...",
+      "sagt: ");
+  AddInfo ( ({"formular","formulare"}),
+      "Formulare gibt es viele, sagen'S mir erst amal, welches "
+      "genau Sie meinen!", "sagt: ");
+  AddInfo ( ({"anmeldeformular"}),
+      "Die sind mir leider ausgegangen, aber vielleicht kommt ja "
+      "bald einmal eine Lieferung!", "sagt: ");
+  AddInfo ( ({"lieferung"}),
+      "Wann genau waass i a ned, schaun'S afoch wieda amoi vurbei!",
+      "sagt: ");
+  AddInfo ( ({"arbeit"}),
+      "Was, wie, wo???", "ruft in panischer Angst: ");
+  AddInfo ( ({"mittagspause", "pause"}),
+      "Ah, schon soweit? Fein! Gleich einlegen!",
+      "sagt erfreut: ");
+  AddInfo ( ({"parteienverkehr"}),
+      "Immer nur Dienstags, von vierzehn Uhr bis vierzehn Uhr fuenfzehn.",
+      "sagt: ");
+  AddInfo ( ({"pension"}),
+      "Wissen'S wann ich endlich in Pension gehn kann?", "fragt Dich: ");
+  AddInfo ( ({"ausweis"}),
+      "Mi frogn'S da? Da miassn'S si scho selber drum kuemmern! Oba "
+      "ihr Strafregister les i eana gern vor!",
+      "sagt: ");
+  AddInfo ( ({"abteilung","abteilungen"}),
+      "Naja, es gibt da eine fuer Hochzeiten, eine fuer Scheidungen, i "
+      "glaub das is sogoar diesoelbe, oba sicha bin i ma do ned. "
+      "Jo und a Buero fuer Stadtgestaltung oda sowas sinnloses gibt's "
+      "a no. Ansonsten schaun'S afoch amoi auffe!",
+      "sagt: ");
+
+  AddInfo ( ({"hilfe"}),
+      "Neben dem was ich so ueber die Stadt weiss, kann ich auch noch "
+      "Auskunft geben ueber Ihr aktuelles Strafregister, das erwartet "
+      "werden und das ignoriert werden von Ihnen. Ich kann Menschen auch "
+      "bei ihrem Buergerrecht helfen.", "sagt: ");
+  AddInfo ( ({"midas", "stadt"}),
+      "Ja, Midas ist eine schoene Stadt! Allerdings kann man sich wenn "
+      "man hier neu ist, relativ leicht verlaufen... ich haette da eine "
+      "von der Stadtverwaltung gesponserte Karte, wo die wichtigsten Orte "
+      "verzeichnet sind!", "sagt: ");
+  AddInfo( ({"fibel", "buergerrecht", "recht", "buergerfibel"}),
+      "Jeder Mensch, der in Midas geboren wurde, hat das Anrecht ein Buerger "
+      "der Stadt zu werden. Mit diesem Recht erhaelt man... naja, das Recht "
+      "Die Buergerfibel zu tragen. Sie zeichnet dich als einen Buerger von "
+      "Midas aus und kann recht nuetzlich sein. Um das Buergerrecht zu "
+      "beantragen, tippe einfach <beantrage buergerrecht>", "erklaert: ");
+  AddInfo ("karte", #'midaskarte);
+  AddInfo( ({ "register","strafregister","verwarnung","verwarnungen" }),
+      #'warnings, "sagt: ");
+  AddInfo( ({ "erwartet", "erwarten", "erwarte" }),
+      #'erwartet, "sagt: ");
+  AddInfo( ({ "ignoriert", "ignorieren", "ignoriere" }),
+      #'ignoriert, "sagt: ");
+
+  AddLibrary( NPC "midas.lib", 3 );
+
+  SetProp( P_REJECT, ({ REJECT_KEEP,
+    "Der Beamte sagt: Wolln'S mich bestechen???\n"
+    "Der Beamte mustert @WEN und sagt: Na gut, bevor Sie's weghaun...\n" }) );
+
+  karte_gegeben = ([]);
+
+  AddCmd("beantrage|beantrag&recht|buerger|buergerrecht|fibel|buergerfibel", "cmd_fibel", "Was willst du beantragen?");
+
+}
+
+public int cmd_fibel() {
+  object ob;
+
+  if(TP->QueryProp(P_RACE) != "Mensch") {
+    command_me("sag Das kannst du nur als Mensch!");
+    return -1;
+  }
+
+  if(TP->QueryMoney() < 1000) {
+    command_me("sag Dieser Antrag kostet dich eine kleine Verwaltungsgebuehr von 1000 Muenzen, die du leider nicht hast.");
+    return -1;
+  }
+
+  if(!TP->QueryQuest("Hilf dem Schwammerlsucher")) {
+    command_me("sag Hm... ja. Also so einfach ist das nicht! Damit du das Buergerrecht erhalten "
+               "kannst, musst du beweisen, dass du hilfsbereit bist. Der alte Schwammerlsucher "
+               "irrt noch im Silberwald herum, obwohl seine Frau dringend auf die Schwammerl wartet "
+               "fuer das Mittagessen. Beweise deine Hilfsbereitschaft, in dem du dem armen Mann "
+               "bei seiner Suche hilfst.");
+    return -1;
+  }
+
+  clone_object("/p/service/protheg/rt/obj/menschenfibel")->move(TP, M_NOCHECK);
+  write(BS("Du fuellst unheimlich viel Zettelwerk mit immer den selben Fragen aus. Dann stempelt der Beamte "
+           "das Ganze ungeschaut ab und kassiert noch 1000 Muenzen von dir! Immerhin bekommst du die "
+           "Buergerfibel ausgehaendigt..."));
+  say(BS("Der Beamte handelt rasch einen Antrag von "+TPN+" ab wofuer eine verdaechtig hohe Geldsumme fliesst."), ({TP}));
+  return 1;
+}
+
+void reset()
+{
+  ::reset();
+  karte_gegeben = ([]);
+}
+
+void init() {
+  ::init();
+
+  if(TP->QueryProp(P_RACE) == "Mensch") {
+    call_out("buergerinfo", 0, TP);
+  }
+}
+
+public void buergerinfo(object who) {
+  if(!present("\menschen_rt", who) && who->QueryProp(P_RACE) == "Mensch" && interactive(who)) {
+    command_me("sag Willkommen, "+who->name(WER)+"! Bist du hier um dein "
+               "Buergerrecht zu beantragen?");
+  }
+  return;
+}
+
+string midaskarte()
+{
+  object ob;
+  if (member(karte_gegeben, getuid(TP))) {
+    return "erinnert sich.\n"+
+      break_string(
+        "Moment, Sie ham erst kuerzlich eine Karte bekommen, die san teuer in "
+        "der Herstellung, also bitte wenn Sie sich ein wenig gedulden, bis "
+        "eine neue Lieferung kommt, die paar Restexemplare muss ich fuer "
+        "andere aufheben!\nKommen'S einfach in ein paar Tagen nochmal vorbei!",
+        78, "Der Beamte sagt: ", 1);
+  }
+  else if (present("midaskarte",TP))
+    return "wundert sich: Aber Sie haben doch ohnehin eine Karte!\n";
+  else {
+    karte_gegeben += ([ getuid(TP) ]);
+    ob=clone_object(OBJ("div/midaskarte"));
+    ob->move(TP,M_NOCHECK);
+    say(Name(WER,1)+" gibt "+TP->name(WEM)+" eine Karte.\n", TP);
+    write(Name(WER,1)+" gibt Dir eine Karte.\n");
+    write_file (LOGF,
+      dtime(time())+": Beamter gibt "+CAP(getuid(TP))+
+      " eine Midaskarte.\n");
+
+    return "sagt: Da bitt' schoen! Und viel Spass noch!\n";
+  }
+}
+
+string warnings() {
+  mapping w;
+  mixed *ww;
+  string str;
+  int i, len;
+
+  if (!(w=TP->QueryProp(P_WARNINGS)) || sizeof(w)==0) {
+    return "Du hast noch keine Verfehlungen begangen!\n";
+  }
+  ww=m_values(w);
+  str="Du hast folgendes Strafregister:\n";
+  len=sizeof(ww);
+  for (i=0; i<len; i++) {
+    str+=sprintf("Verwarnung #%d von %s: %s\n", i+1, capitalize(ww[i][W_WARNED_BY]), ww[i][W_CAUSE]);
+  }
+  return str;
+}
+
+
+object *checkfor(string prop, string against)
+{
+  mixed u;
+  u = filter_objects( users(), "QueryProp", prop);
+  u = filter_array( u,
+        lambda( ({'x}), ({ #'!=,
+            -1,
+            ({ #'member,
+               ({ #'call_other, 'x, "QueryProp", prop }),
+               against
+            }),
+          }) ) );
+
+  if (!IS_LEARNING(TP))
+    u -= filter_objects( u, "QueryProp", P_INVIS );
+
+  return u;
+}
+
+
+mixed map_obj_check(object ob, string what)
+{
+  if (-1 != member(ob->QueryProp(P_IGNORE), "erwarteabfrage"))
+    return "Jemandem";
+  else
+    return ob->name(WEM);
+}
+
+
+string erwartet()
+{
+  mixed u;
+
+  u = checkfor(P_WAITFOR, capitalize(getuid(TP)));
+  if (!sizeof(u))
+    return "Ohje, Du wirst ja von niemandem erwartet!";
+
+  // u = map_objects( u, "name", WEM );
+  u = map_array( u, #'map_obj_check );
+  u = sort_array( u, #'> );
+
+  if (sizeof(u) == 1)
+    return "Du wirst derzeit nur von " + u[0] + " erwartet.";
+
+  return "Du wirst von " +
+    implode( u[0..<2], ", " ) + " und " +
+    u[<1] + " erwartet.";
+}
+
+
+string ignoriert()
+{
+  mixed u;
+
+  u = checkfor(P_IGNORE, getuid(TP));
+  if (!sizeof(u))
+    return "Freu Dich, Du wirst derzeit von niemandem ignoriert!";
+
+  u = map_objects( u, "name", WEM );
+  u = sort_array( u, #'> );
+
+  if (sizeof(u) == 1)
+    return "Du wirst derzeit nur von " + u[0] + " ignoriert.";
+
+  return "Ohje, Du wirst ja von " +
+    implode( u[0..<2], ", " ) + " und " +
+    u[<1] + " ignoriert.";
+}

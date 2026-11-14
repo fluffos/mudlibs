@@ -1,0 +1,118 @@
+/*
+  Marktschreier-System fuer Neuigkeiten im Feldlager.
+  basierend auf dem News-System (Jof@MG)
+
+  Datenstrukturen:
+ 
+  Eine Nachricht ist ein Array mit den folgenden Elementen:
+    0         (*) string time;
+    1             string title;
+    2             string message;
+    
+  Die mit (*) gekennzeichneten Eintraege setzt der Daemon selber
+
+  Funktionen:
+    Returnvalues:  0 = Parameter error
+                   1 = Ok.
+
+    Diese Returnvalues stehen fuer alle Funktionen
+
+  WriteNote(message); klar
+   -1 = Max number of msgs exceeded
+
+  RemoveNote(notenumber); notenummer>=0;
+   -1 = No such note
+
+  GetLastNewsTime();
+  gibt zurueck, wann die letzte Message aufgehaengt wurde.  
+*/
+
+// #include "/secure/wizlevels.h"
+// #include <language.h>
+// #include <config.h>
+#include "files.h"
+#include "news.h"
+
+#define TI_PO() (this_interactive()||previous_object())
+
+mixed *saveload; // Diese Variable ist als einzige nicht nosave und dient
+                 // Uebertragen von Daten in/aus savefiles
+
+nosave mixed *news=({ ({ }) });
+
+create()
+{
+  if (is_clone(this_object())) {
+    destruct(this_object());
+    return 1;
+  }
+  seteuid(getuid(this_object()));
+  if (!restore_object(MSG_PATH+"LagerNews")) {
+    news=allocate(1);
+    news[0]=allocate(0);
+  }
+  else
+    news=saveload;
+}
+
+WriteNote(message,keepname)
+{
+  int uidok,tmp;
+  string name;
+
+  if (!pointerp(message) || sizeof(message)!=3) return 0;
+//  uidok=(geteuid(previous_object())=="creative");
+  uidok=1;
+
+  if (!TI_PO() && !uidok) return -3;
+  
+  message[M_TIME]=time();
+  news+=({message});
+
+  DEBUG("lnews","Neue Msg von "+CAP(getuid(TI_PO()))+".");
+  
+  save_news();
+  return 1;
+}
+
+RemoveNote(note)
+{
+  int l,num;
+
+  if (note<0) return 0;
+
+  l=sizeof(news);
+  if (l<=note)
+    return -3;
+
+  news=news[0..note-1]+news[note+1..];
+
+  DEBUG("lnews", "Achtung, Artikel "+note+" geloescht.");
+
+  save_news();
+  return 1;
+}
+
+nosave save_news()
+{
+  saveload=news;
+  save_object(MSG_PATH+"LagerNews");
+  saveload=0;
+}
+
+query_prevent_shadow()
+{
+  return 1;
+}
+
+string GetLastNewsTime()
+{
+  string str;
+  
+  if (!pointerp(news))
+    str="Es gibt noch keine Neuigkeiten.";
+  else
+    str=news[sizeof(news)-1][M_TIME];
+  return str;
+}
+

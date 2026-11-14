@@ -1,0 +1,592 @@
+// Amazonmenmaster
+// 14-10-2000 Feyaria@SilberLand
+
+#include "../def.h"
+
+//Globale Variablen
+mixed saveload;
+nosave mapping members = ([ ]);
+nosave mapping top = ([ ]);
+nosave string *number_one;
+nosave string *history=({});
+nosave int *hist_time=({});
+
+int SetNumberOne();
+
+void create() 
+{
+  if (is_clone(this_object())) {
+    destruct(this_object());
+    return;
+  }
+  seteuid(getuid(this_object()));
+  if (restore_object(MEMBERLIST))
+     members = saveload;
+  if (restore_object(TOPLIST))
+     top = saveload;
+     saveload = 0;
+  SetNumberOne();    
+}
+
+void save()
+{
+  saveload = members;
+  save_object(MEMBERLIST);
+  saveload = 0;
+}
+
+nosave varargs int CheckSecurity(mixed uid,int flag)
+{
+  if (!flag && intp(uid) && uid==1)
+  {
+    flag=1;
+    uid = previous_object();
+  }
+  if (!uid)
+    uid = previous_object();
+  if (!stringp(uid))
+    uid = getuid(uid);
+  if (IS_ARCH(uid))
+    return 1;
+  if (uid == getuid(this_object()))
+    return 1;
+  if (member(GUILD_WIZARDS, uid) != -1)
+    return 1;
+  return 0;
+}
+
+nosave int CheckIfAllowed() 
+{
+  object ob;
+  string fname;
+
+  ob = previous_object();
+  fname = file_name(ob);
+  if (!CheckSecurity(ob)) 
+  { 
+    MASTER->runtime_error(sprintf("Versuchte Aenderung im Gildenmaster "
+          "der Amazonen von %s (direkt!)\n", CAP(getuid(ob))), 
+          "gilden/amazonen/master/amazonenmaster.lpc", "", 69);
+    return 0;      
+  }
+  return 1;
+}
+
+nosave mixed object2string(mixed name) 
+{
+  if (objectp(name)) return getuid(name);
+  if (stringp(name)) return lower_case(name);
+  return 0;
+}
+
+nosave mixed string2object(mixed name) 
+{
+  if (objectp(name)) return name;
+  if (stringp(name))
+    if (name = find_player(name) || name = find_netdead(name)) return name;
+  return 0;
+}
+
+//
+//  Backuphandling
+//
+int DoBackup() 
+{
+  if (!CheckIfAllowed()) return -2;
+  saveload = members;
+  save_object(MEMBERBACKUP);
+  saveload = 0;
+  rm(LOG "backup.log");
+  write_file(LOG "backup.log",
+             "Letztes Backup: "+dtime(time())+"\n");
+  return 1;
+}
+
+int DoRestore() 
+{
+  if (!CheckIfAllowed()) return -2;
+  if (restore_object(MEMBERBACKUP))
+      save_object(MEMBERLIST);
+  saveload = 0;
+  return 1;
+}
+ 
+
+/*
+//
+// Taskhandling
+//
+*/
+
+int CheckTask(mixed pl, int nr) 
+{
+ if (!pl = object2string(pl)) return -3;
+ if (!member(members, pl)) return 0;
+ if (!stringp(members[pl, POS_TASKS])) return 0;
+ return test_bit(members[pl, POS_TASKS], nr);       
+}
+
+int SetTask(mixed pl, int nr) 
+{
+  string tasks;
+  if (!pl = object2string(pl)) return -3;
+  if (!member(members, pl))
+    return 0;
+  if (!CheckIfAllowed()) return -2;
+  if (!stringp(members[pl, POS_TASKS])) tasks = "";
+  else 
+    tasks = members[pl, POS_TASKS];
+  tasks = set_bit(tasks, nr);
+  members[pl, POS_TASKS] = tasks;
+  save();
+  return 1;
+}
+
+int DeleteTask(mixed pl, int nr) 
+{
+  string tasks;
+  if (!pl = object2string(pl)) return -3;
+  if (!member(members, pl))
+    return 0;
+  if (!CheckIfAllowed()) return -2;
+  if (!stringp(members[pl, POS_TASKS])) tasks = "";
+  else 
+    tasks = members[pl, POS_TASKS];
+  tasks = clear_bit(tasks, nr);
+  members[pl, POS_TASKS] = tasks;
+  save();
+  return 1;
+}
+
+/* 
+//   Format: ([Name:int,int,int,int,string,string,string,int,int,int,0,0,0,0,0])
+//                   0   1   2   3   4       5        6   7   8   9  A B C D E
+//            
+//  0  ... Gildenstufe (POS_GLVL)
+//  1  ... XP fuer naechste Stufe (POS_XP)
+//  2  ... Spielerstufe (POS_LEVEL)
+//  3  ... Align (POS_ALIGN)
+//  4  ... Tasks (POS_TASKS)
+//  5  ... Rasse (POS_RACE)
+//  6  ... Waffe (POS_WEAPON)
+//  7  ... Report (POS_REPORT)
+//  8  ... Farben (POS_REPCOLOR)
+//  9  ... Ausfasszeit (POS_ARMOUR)
+*/
+
+
+int AddMember(mixed pl, string orden) 
+{
+  string pl_str;
+  string waffe, player, rasse;
+  int xp, level, report, align;
+
+  if (!pl = string2object(pl)) return -3;
+  if (member(members, pl_str))
+    return 0;
+  if (!CheckIfAllowed()) return -2;
+  if (objectp(pl) || (pl = find_player(player)) || (pl = find_netdead(player)))
+  {
+    if( pl->QueryProp(P_WEAPON) )
+      waffe = pl->QueryProp(P_WEAPON)->QueryProp(P_NAME);
+    else
+      waffe = "  -  ";
+    level = pl->QueryProp(P_LEVEL);
+    rasse = pl->QueryProp(P_RACE);
+    pl_str = getuid(pl);
+  }
+  else
+  {
+    level = 1;
+    waffe = "  -  ";
+    rasse = "????";
+    pl_str = lower_case(pl);
+  }
+  report = 0;
+  xp = pl->QueryProp(P_XP);
+  level = pl->QueryProp(P_LEVEL);
+  align = pl->QueryProp(P_ALIGN);
+  members += ([pl_str: 1; xp; level; align; ""; rasse; waffe; report; 0; 0; 0; 0; 0; 0; 0; orden]);
+  save();
+  return 1;
+}
+
+
+// Zum Hinzufuegen von eintragen im mapping
+int ChangeMemberFile() 
+{
+  mapping help_map;
+  int i;
+  string *namen;
+  return 0; // Wenn nichts zu aendern ist, bitte immer diese Zeile
+            // drinnenlassen (Sicherheitsgruende)
+  help_map = ([]);
+  namen = m_indices(members);
+  for (i = sizeof(namen) - 1; i >= 0; i--) 
+  {
+    help_map += ([namen[i]:members[namen[i], 0];
+                           members[namen[i], 1];
+                           members[namen[i], 2];
+                           members[namen[i], 3];
+                           members[namen[i], 4];
+                           members[namen[i], 5];
+                           members[namen[i], 6];
+                           members[namen[i], 7];
+                           members[namen[i], 8];
+                           members[namen[i], 9];
+                           members[namen[i], 10];
+                           members[namen[i], 11];
+                           members[namen[i], 12];
+                           members[namen[i], 13];
+                           members[namen[i], 14];
+                           members[namen[i], 15]
+                           ]);
+  } 
+  members = help_map;
+  save();
+  return 1;
+}
+
+/* Mitglied loeschen */
+int DeleteMember(mixed pl) 
+{
+  if (!pl = object2string(pl)) return -1;
+  if (!CheckIfAllowed()) return -2;
+  if (!member(members, pl))
+    return -3;
+  members = m_delete(members, pl);
+  save();
+  return 1;
+}
+
+// Alle Mitglieder ausgeben
+mixed QueryMembers() 
+{
+  return m_indices(members);
+}
+
+// Eintrag im Savefile ausgeben
+mixed QueryMemberEntry(string pl) 
+{
+  if(!member(members,pl)) return 0;
+  return ({members[pl,0], members[pl,1], members[pl,2], members[pl,3], 
+           members[pl,4], members[pl,5], members[pl,6], members[pl,7], 
+           members[pl,8], members[pl,9], members[pl,10], members[pl,11],
+           members[pl,12], members[pl,13], members[pl,14], members[pl,15]}); 
+}
+
+int SetOrder(mixed pl, string orden)
+{
+  if (!pl = object2string(pl)) return -1;
+  if (!member(members, pl)) return -3;
+  if (!CheckIfAllowed()) return -2;
+  if (!stringp(orden)) return -4;
+  members[pl, POS_ORDER] = orden;
+  save();
+  return 1;
+}
+
+
+/* Levels updaten */
+int UpdateMemberLevels() 
+{
+  int i;
+  object pl;
+  string *names;
+  names=m_indices(members);
+  for (i = sizeof(names) - 1; i >= 0; i--) 
+  {
+    if ((pl = find_player(names[i]))||(pl = find_netdead(names[i]))) 
+    {
+      members[names[i], POS_GLVL] = pl->QueryProp(P_GUILD_LEVEL);
+      members[names[i], POS_LEVEL] = pl->QueryProp(P_LEVEL);
+      members[names[i], POS_ALIGN] = pl->QueryProp(P_ALIGN);
+      members[names[i], POS_RACE] = pl->QueryProp(P_RACE);
+      if (pl->QueryProp(P_WEAPON))
+        members[names[i], POS_WEAPON] = pl->QueryProp(P_WEAPON)->QueryProp(P_NAME);
+    } 
+    else 
+    {
+      members[names[i], POS_GLVL] = call_other(SAVEMASTER, "QueryFileProp", names[i],
+         P_GUILD_LEVEL);
+      // Das richtige Gildenlevel muss ausgelesen werden : 
+      if (mappingp(members[names[i], POS_GLVL]))
+        members[names[i], POS_GLVL] = members[names[i], 0][GUILDNAME];
+      members[names[i], POS_LEVEL] = call_other(SAVEMASTER, "QueryFileProp", names[i],
+         P_LEVEL);
+      members[names[i], POS_ALIGN] = call_other(SAVEMASTER, "QueryFileProp", names[i],
+         P_ALIGN);
+    }
+  }
+  save();
+  return 1;
+}
+
+int CheckXp(mixed pl, int cur_xp) 
+{
+  if (!pl = object2string(pl)) return -1;
+  if (!member(members, pl)) return -3;
+  if (members[pl, POS_XP] > cur_xp)
+    return 0;
+  else return 1;
+}
+
+int GetXpDifference(mixed pl) 
+{
+  int diff;
+
+  if (!pl = string2object(pl)) return -1;
+  if (!member(members, getuid(pl))) return -3;
+  diff = members[getuid(pl), POS_XP] - (pl->QueryProp(P_XP) + pl->QueryProp(P_TOTAL_LOST_XP));
+  if (diff < 0) return 0;
+  else return diff;
+}
+
+int SetXp(mixed pl, int needed_xp)
+{
+  if (!pl = object2string(pl)) return -1;
+  if (!member(members, pl)) return -3;
+  if (!CheckIfAllowed()) return -2;
+  members[pl, POS_XP] = needed_xp;
+  save();
+  return 1;
+}
+
+
+// Reportmodus abspeichern und auslesen
+int SetReportModus(mixed pl, int report)
+{
+  if (!pl = object2string(pl)) return -1;
+  if (!member(members, pl)) return -3;
+  members[pl, POS_REPORT] = report;
+  save();
+  return 1;
+}
+
+int GetReportModus(mixed pl)
+{
+  if (!pl = object2string(pl)) return -1;
+  if (!member(members, pl)) return -3;
+  return members[pl, POS_REPORT];
+}
+
+// Farben setzen uns auslesen
+int SetReportColors(mixed pl, mixed colors) 
+{
+  if (!pl = object2string(pl)) return -1;
+  if (!member(members, pl)) return -3;
+  members[pl, POS_REPCOLOR] = colors;
+  saveload = members;
+  save_object(MEMBERLIST);
+  saveload = 0;
+  return 1;
+}
+
+mixed QueryColors(mixed pl) 
+{
+  if (!pl = object2string(pl)) return -1;
+  if (!member(members, pl)) return -3;
+  return members[pl, POS_REPCOLOR];
+}
+
+// Letztes Mal Ruestung ausgefasst
+varargs int SetArmourTime(mixed pl, int t) 
+{
+  if (!pl = object2string(pl)) return -1;
+  if (!member(members, pl)) return -3;
+  if (!t) t = time();
+  members[pl, POS_ARMOUR] = t;
+  saveload = members;
+  save_object(MEMBERLIST);
+  saveload = 0;
+  return 1;
+}
+
+mixed QueryArmourTime(mixed pl) 
+{
+  if (!pl = object2string(pl)) return -1;
+  if (!member(members, pl)) return -3;
+  return members[pl, POS_ARMOUR];
+}
+
+// History des guild_shout
+int AddHistory(string presay, string msg) 
+{
+  int i;
+  
+  if ( sizeof(history) > 10 )
+  {
+    history = history[1..<1];
+    hist_time = hist_time[1..<1];
+  }
+  history += ({implode(({presay, msg}), "&&*%%")});
+  hist_time += ({time()});
+  return 1;
+}
+
+mixed QueryHistory() 
+{
+  return ({hist_time,history}); 
+}
+
+/* Den Besten herausfiltern und in einer Variablen speichern. */
+int SetNumberOne() 
+{
+  int i, *topratings, bestrating;
+
+  bestrating = 0;
+  topratings = m_indices(top);
+  for (i = sizeof(topratings) - 1; i >= 0; i--)
+    if (topratings[i] > bestrating) bestrating = topratings[i];
+  number_one = top[bestrating];
+  return 1; 
+}
+
+/* Den Besten ausgeben */
+mixed QueryNumberOne() 
+{
+  return number_one;
+}
+
+/* Berechnung der Wertung */
+int CalculateRating(string player, int rating, int stufe) 
+{
+  int last, lxp, gsu;
+  float mod;
+  object pl;
+
+  rating += 10 * stufe + 100 * members[player,0];
+  if (pl = find_player(player) || pl = find_netdead(player))
+    last = pl->QueryProp(P_LAST_LOGIN);
+  else
+    last = call_other(SAVEMASTER, "QueryFileProp", player, P_LAST_LOGIN);
+  if((time() - 3600 * 24 * 90) > last) {         // 90 tage
+    mod = 1 - ((time() - 3600 * 24 * 90 - last) / 86400) * 0.05;
+    if ((rating = (int)(rating * mod)) < 0) rating = 1;
+  }
+  return rating;
+}
+
+/* Fuers Austreten -> Raus aus der Topliste */
+int DeleteTopEntry(string player) 
+{
+  int *topratings, i; 
+  string *topnames;
+
+  if (!CheckIfAllowed()) return -2;
+  topnames = m_values(top);
+  topratings = m_indices(top);
+  for (i = sizeof(topnames) - 1; i >= 0; i--) 
+    if (member(topnames[i], player) != -1) 
+      top[topratings[i]] -= ({player});
+  saveload = top;
+  save_object(TOPLIST);
+  return 1;
+}
+
+/* Topliste updaten */
+int UpdateTopList() 
+{
+  string *names, *topnames;
+  int rating, i, j, *topratings;
+  object pl;
+
+  names = m_indices(members);
+  top = ([]);
+  //topnames=m_values(top);
+  //topratings=m_indices(top);
+  for(i = sizeof(names) - 1; i >= 0; i--) 
+  {
+    rating = 0;
+    if (query_wiz_level(names[i]) < 111) // TODO <3 im realbetrieb
+    {
+      if( ((pl = find_player(names[i])) || (pl = find_netdead(names[i]))) &&
+         !pl->QueryProp(P_TESTPLAYER))
+      {
+        rating = CalculateRating(names[i], pl->QueryProp(P_GUILD_RATING), 
+               pl->QueryProp(P_LEVEL));
+      }
+      else 
+      {
+        if (!call_other(SAVEMASTER, "QueryFileProp", names[i], P_TESTPLAYER))
+          rating = CalculateRating(names[i],
+            call_other(SAVEMASTER, "QueryFileProp", names[i], P_GUILD_RATING), 
+            call_other(SAVEMASTER, "QueryFileProp", names[i], P_LEVEL));
+      }      
+    }
+    if (rating) 
+    {
+      //for(j=sizeof(topnames)-1;j>=0;j--) 
+      //  if(member(topnames[j], names[i])!=-1) 
+      //    top[topratings[j]]-=({names[i]});
+      if (!member(top, rating)) 
+        top += ([rating: ({names[i]})]);
+      else top[rating] += ({names[i]});
+    }   
+  }
+  for (i = sizeof(m_indices(top)) - 1; i >= 0; i--) 
+    if (!sizeof(m_values(top)[i]))
+      top = m_delete(top, m_indices(top)[i]);
+  saveload = top;
+  save_object(TOPLIST);
+  return 1;   
+}
+
+/* Topliste in file 'toplist.read' schreiben, Ausgabe ueber 'more' */
+int MakeReadList() 
+{
+  int *arm, i, j, tabs, tabs2, gstufe, sstufe, nummer, rasse, waffe;
+  float best, fac;
+  string name, align;
+
+  UpdateMemberLevels();
+  rm(REALTOPLIST);
+  nummer = 1;
+  write_file(REALTOPLIST, "Nr.   Name      Gstufe  Sstufe  "
+                          "Wertung     Rasse         bevorzugte Waffe\n");
+  write_file(REALTOPLIST, "-----------------------------------------"
+                     +"------------------------------\n");
+  arm = sort_array(m_indices(top), #'>); //');
+  for (i = sizeof(arm) - 1; i >= 0; i--) 
+  {
+    if (arm[i]) 
+    {
+      if (i == sizeof(arm) - 1)
+      {
+        best = (float)arm[i];
+      }
+     if (best == 0.0 || best == 0 ) best = 1.0;
+      for (j = sizeof(top[arm[i]]) - 1; j >= 0; j--) 
+      {
+        name = CAP(top[arm[i]][j]);
+        fac = (float)(arm[i] / (best ? best : 1)) * 100;
+        gstufe = members[lower_case(name), POS_GLVL];
+        sstufe = members[lower_case(name), POS_LEVEL];
+        rasse = members[lower_case(name), POS_RACE] || "";
+        waffe = members[lower_case(name), POS_WEAPON] || "";
+//        if(nummer < 200 && !IS_LEARNER(lower_case(name)) && gstufe > 1 &&
+        if (nummer < 200 && gstufe > 1 &&
+            stringp(name) && intp(gstufe) && intp(sstufe) && stringp(rasse) &&
+            stringp(waffe) ) 
+        {
+          if (arm[i] == 1)
+            write_file(REALTOPLIST, 
+                sprintf("%3d. %11-s  %2d     %3d       -.---   %9|s %26|s\n", 
+            nummer, name, gstufe, sstufe, rasse, waffe)); 
+          else 
+            write_file(REALTOPLIST, 
+                sprintf("%3d. %11-s  %2d     %3d     %7.3f   %9|s %26|s\n", 
+                        nummer, name, gstufe, sstufe, fac, rasse, waffe));
+          nummer++;
+        }
+      }
+    }
+  }
+  return 1;
+}
+
+mapping QueryAll() 
+{
+  return members; 
+}
+

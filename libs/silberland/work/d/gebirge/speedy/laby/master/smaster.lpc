@@ -1,0 +1,312 @@
+//=========================================================================
+//
+// File:    smaster.c
+// Created by Ronja
+//
+// Project: Sarumans Quest (Finde die verlorene Schriftrolle)
+//
+//=========================================================================
+
+#include "../def.h"
+
+#include <ansi.h>
+
+#define SAVEFILE "/d/" REGION "/" MAGIERNAME "/" GEBIET "/master/smaster"
+
+mapping queststatus;
+string *listener;
+
+void create()
+{
+  if(is_clone(this_object()))
+  {
+    destruct(this_object());
+    return;
+  }
+
+  seteuid(getuid(this_object()));
+
+  queststatus = ([ ]);
+  listener    = ({ });
+
+  restore_object(SAVEFILE);
+  return;
+}
+
+void Msg(string s)
+{
+  object pl;
+  int i;
+
+  write_file(LOG "saruman.log", ctime()+": "+s+".\n");
+
+  i = sizeof(listener);
+  while(i--)
+  {
+    pl = find_player(listener[i]);
+
+    if(pl && interactive(pl) && IS_LORD(pl))
+    {
+      s = BSI(s + ".", "SARUMAN: ");
+      if(pl->QueryProp(P_TTY)) s = ANSI_BOLD+ANSI_RED+s+ANSI_NORMAL;
+      tell_object(pl, s);
+    }
+  }
+}
+
+void AddListener(string uid)
+{
+  if(member(listener, uid) == -1)
+  {
+    listener += ({ uid });
+    save_object(SAVEFILE);
+    Msg("Neuer Listener: "+CAP(uid));
+  }
+}
+
+void RemoveListener(string uid)
+{
+  if(member(listener, uid) != -1)
+  {
+    listener -= ({ uid });
+    save_object(SAVEFILE);
+    Msg("Listener entfernt: "+CAP(uid));
+  }
+}
+
+void Reload()
+{
+  queststatus = ([ ]);
+  restore_object(SAVEFILE);
+}
+
+int IsQuester(string uuid)
+{
+  return member(queststatus, uuid);
+}
+
+string *QueryQuester()
+{
+  return m_indices(queststatus);
+}
+
+void DeleteQuester(string uuid)
+{
+  if(!IsQuester(uuid)) return;
+
+  queststatus = m_delete(queststatus, uuid);
+  save_object(SAVEFILE);
+}
+
+int CheckFlag(int flag)
+{
+  string s;
+
+  if(flag > 999)
+  {
+    Msg(sprintf("Ungueltiger Flagwert %d in %O!",flag,PO));
+    return 0;
+  }
+
+  if((flag < 0) || (flag >= N_FLAGS))
+  {
+    Msg(sprintf("Flagrange %d ausserhalb [0..%d] in %O", flag, N_FLAGS, PO));
+    return 0;
+  }
+
+  return 1;
+}
+
+int CheckStatus(int flag)
+{
+  string s;
+
+  if(flag < 1000)
+  {
+    Msg(sprintf("Ungueltiger Status %d in %O",flag,PO));
+    return 0;
+  }
+
+  flag -= 1000;
+
+  if((flag < 0) || (flag >= N_STATUS))
+  {
+    Msg(sprintf("Statusrange %d ausserhalb [0..%d] in %O", flag, N_STATUS, PO));
+    return 0;
+  }
+
+  return 1;
+}
+
+int SetFlag(string uuid, int flag)
+{
+  if(!CheckFlag(flag)) return 0;
+  if(!IsQuester(uuid)) return 0;
+
+  queststatus[uuid, 3][flag..flag] = "1";
+  save_object(SAVEFILE);
+  return 1;
+}
+
+int QueryFlag(string uuid, int flag)
+{
+  if(!CheckFlag(flag)) return 0;
+  if(!IsQuester(uuid)) return 0;
+
+  return queststatus[uuid, 3][flag..flag]=="1"?1:0;
+}
+
+int SetStatus(string uuid, int flag)
+{
+  if(!CheckStatus(flag)) return 0;
+  if(!IsQuester(uuid))   return 0;
+
+  flag -= 1000;
+
+  queststatus[uuid, 4][flag..flag] = "1";
+  save_object(SAVEFILE);
+
+  return 1;
+}
+
+int ClearStatus(string uuid, int flag)
+{
+  if(!CheckStatus(flag)) return 0;
+  if(!IsQuester(uuid))   return 0;
+
+  flag -= 1000;
+
+  queststatus[uuid, 4][flag..flag] = "0";
+  save_object(SAVEFILE);
+
+  return 1;
+}
+
+int QueryStatus(string uuid, int flag)
+{
+  if(!CheckStatus(flag)) return 0;
+  if(!IsQuester(uuid))   return 0;
+
+  flag -= 1000;
+
+  return queststatus[uuid, 4][flag..flag]=="1"?1:0;
+}
+
+int SetDoorStatus(string uuid, string door, string stat)
+{
+  if(!IsQuester(uuid))   return 0;
+
+  queststatus[uuid, 5][door,0] = stat;
+  save_object(SAVEFILE);
+
+  return 1;
+}
+
+string QueryDoorStatus(string uuid, string door)
+{
+  if(!IsQuester(uuid))   return DOORCLOSED;
+
+  return queststatus[uuid, 5][door,0];
+}
+
+int QueryTime(string uuid)
+{
+  if(!IsQuester(uuid))   return 0;
+
+  return queststatus[uuid, 0];
+}
+
+int QueryCode1(string uuid)
+{
+  if(!IsQuester(uuid))   return 0;
+
+  return queststatus[uuid, 1];
+}
+
+int QueryCode2(string uuid)
+{
+  if(!IsQuester(uuid))   return 0;
+
+  return queststatus[uuid, 2];
+}
+
+int SetWarning(string uuid, int flag)
+{
+  if(!IsQuester(uuid))   return 0;
+
+  queststatus[uuid, 6][flag..flag] = "1";
+  save_object(SAVEFILE);
+
+  return 1;
+}
+
+int QueryWarning(string uuid, int flag)
+{
+  if(!IsQuester(uuid))   return 0;
+
+  return queststatus[uuid, 6][flag..flag]=="1"?1:0;
+}
+
+int QueryProgress(string uuid)
+{
+  string flags;
+  int i, sum;
+
+  if(!IsQuester(uuid))   return 0;
+
+  flags = queststatus[uuid, 3];
+  sum = 0;
+  i = strlen(flags);
+  while(i--) if(flags[i..i] == "1") sum++;
+
+  return (100 * sum) / N_FLAGS;
+}
+
+int StartQuest(string uuid)
+{
+  int i, code1, code2;
+  mapping doorstatus;
+  string flags, stati, warning;
+
+  if(IsQuester(uuid)) queststatus = m_delete(queststatus, uuid);
+
+  doorstatus =
+  (["B":DOORCLOSED;"05_02";"06_02"
+   ,"D":DOORCLOSED;"04_03";"03_03"
+   ,"E":DOORCLOSED;"07_01";"08_01"
+   ,"F":DOORCLOSED;"06_05";"07_05"
+   ,"G":DOORCLOSED;"02_05";"03_05"
+   ,"H":DOORCLOSED;"03_08";"02_08"
+   ,"I":DOORCLOSED;"06_08";"07_08"
+   ,"J":DOORCLOSED;"07_09";"08_09"
+   ,"K":DOORCLOSED;"06_04";"05_04"
+   ]);
+
+  flags = "";
+  i = N_FLAGS;
+  while(i--) flags += "0";
+
+  stati = "";
+  i = N_STATUS;
+  while(i--) stati += "0";
+
+  code1 =  158 + random(866);
+  code2 = 1567 + random(8433);
+
+  warning = "00";
+
+  queststatus += ([uuid:time();code1;code2;flags;stati;doorstatus;warning]);
+
+  SetStatus(uuid, S_KRAFTFELD);
+
+  return 1;
+}
+
+int QueryTimeLimit(string uuid)
+{
+  if(!IsQuester(uuid)) return 0;
+
+  if((queststatus[uuid, 0] + QUESTTIME) <= time()) return 1;
+
+  return 0;
+}

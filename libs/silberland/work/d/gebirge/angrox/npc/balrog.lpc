@@ -1,0 +1,282 @@
+/* 
+//  DER Balrog
+//
+//  Angrox@SL 
+//
+//  xx-xx-1996
+//
+//
+//   Updates: 01.07.1997: 
+//               Gildenpruefung hinzugefuegt
+*/
+
+
+inherit "std/inpc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include "../files.h"
+#include <new_skills.h>
+#include <class.h>
+#include <wizlevels.h>
+#include <moving.h>
+#include "../steintafelquest.h"
+
+int AdjustMySelf(object player);
+int hitpoints, old_level=17;
+int schale;
+int kampf=0;
+
+
+void create()
+{
+  object ob;
+  if (!is_clone(this_object())) return;  
+  ::create();
+  hitpoints=300;
+  schale=0;
+  SetProp(P_SHORT, "Ein Balrog");
+  SetProp(P_LONG,BS(
+         "Der Balrog ist ein fast 3 Meter hoher Koloss. Sein Kopf "
+        +"aehnelt Dem eines Stieres, zu graesslich grausamen Fratze "
+        +"verzerrt und Riesige Hoerner lassen die Bedrohlichkeit "
+        +"noch steigen. Sein ganzer Koerper ist mit schwarz-roten "
+        +"Hornplatten bedeckt, es scheint so, als wuerden "
+        +"sie teilweise brennen."));
+        
+  SetProp(P_NAME, "Balrog");
+  SetProp(P_GENDER, MALE);
+  AddId(({"balrog", "Balrog"}));
+  create_default_npc(17);
+  SetProp (P_HANDS, ({"mit Klauen", 200, DT_BLUDGEON}) );
+  SetProp(P_ALIGN, -1000);      
+  SetProp(P_RACE, "Daemon");
+  SetProp(P_SIZE, 300);        
+  SetProp(P_XP, QueryProp(P_XP)+9000*100);  
+
+  SetProp(P_MAX_HP, 1000);
+  SetProp(P_HP, 250);
+  
+  SetProp(P_RESISTANCE_STRENGTHS, ([ 
+    DT_SLASH      :0.0,     DT_BLUDGEON    :0,       DT_PIERCE     :0,
+    DT_SQUEEZE    :0,       DT_WHIP        :0,       DT_RIP        :0,
+    DT_FIRE       :-0.8,    DT_COLD        :0.2,     DT_WATER      :0.3,    
+    DT_AIR        :0,       DT_LIGHTNING   :0,       DT_EXPLOSION  :-0.2, 
+    DT_SOUND      :0,       DT_LIGHT       :-0.4,    DT_ELECTRIC   :0,    
+    DT_ACID       :0,       DT_POISON      :0 ,      DT_TERROR     :-0.7,     
+    DT_HOLY       :0.2,     DT_UNHOLY      :-0.7,    DT_MAGIC      :0]) );
+  SetProp(P_DIE_MSG, " stirbt mit einem entsetzlichen Aufschrei.\n");
+  SetProp(P_KILL_NAME, "Der Balrog");
+  SetProp(P_KILL_MSG, "Narr! Du sterblicher Narr!! HAHAHAHA!");
+  SetProp(P_MSGIN, "erscheint");
+  SetProp(P_MSGOUT, "geht");
+  SetProp(P_MMSGIN, "tritt aus einem Schatten");
+  SetProp(P_MMSGOUT, "verschwindet in einem Schatten");
+  AddClass(CL_DEMON);
+  SetChats(2, ({
+    "Der Balrog sieht Dich mit flammenden Blick an.\n",
+    "Der Balrog knallt mit der Peitsche.\n",
+    "Der Balrog atmet Flammen aus.\n",
+  }) );
+
+  // Spells gehoeren dazu
+
+  SetProp(P_SPELLRATE, 35);
+  SetProp(P_NOMAGIC, 5); 
+  AddSpell(3, 600,
+    "Der Balrog huellt Dich in Flammen ein.\n",
+    "Der Balrog huellt @WEN mit Flammen ein.\n",
+    ({DT_FIRE}), ([SP_SHOW_DAMAGE:1]));
+  AddSpell(1, 800,
+    "Der Balrog attackiert Dich mit Magie.\n",
+    "Der Balrog attackiert @WEN mit Magie.\n",
+    DT_MAGIC, ([SP_SHOW_DAMAGE:1]));
+  
+  SUID;
+  clone_object(OBJ("fpeitsche"))->move(ME);  // brennende Peitsche
+  command("zuecke peitsche");
+  clone_object(OBJ("fumhang"))->move(ME);
+  if(!random(3)) {
+    ob=clone_object("/gilden/druidenzirkel/armour/elementarring");
+    ob->set_ring_element("feuer");
+    ob->move(ME, M_NOCHECK);
+  }
+  AddDetail(({"platten", "hornplatten"}), BS(
+              "Sie scheinen guten Schutz zu bieten.\n"));
+  AddDetail("maehne", BS(
+              "Die Maehne des Balrog scheint aus Flammen zu bestehen.\n"));
+  AddDetail("flammen", BS("Ueberall am Balrog.\n"));
+  AddDetail ("peitsche", BS("Sie sieht sehr gefaehrlich aus.\n"));
+  AddDetail ("hoerner", BS("Die Hoerner sehen gefaehrlich aus ... Du hast Angst.\n"));
+
+}
+
+int Defend(int dam, string dam_type, mixed spell, object enemy)
+{
+  SetProp(P_WIMPY, 0);
+  return ::Defend(dam, dam_type, spell, enemy);
+ 
+}
+
+void reset() {
+  kampf=0;
+  return ::reset();
+}
+
+void init()
+{
+ object ob;
+ int anzahl;
+ if (present("steintafel", TP))
+    SetProp(P_AGGRESSIVE, 1);
+ if(!kampf)
+   AdjustMySelf(TP);
+ ::init();
+}
+
+int AdjustMySelf(object player)
+{
+ object *inv;
+ int level, p_level, body,i, modifier;
+ body=112;
+ modifier=0;
+ if(ME->InFight()) return 0;
+ if(interactive(player))
+   if(!player->QueryQuest(TAFELQUEST)) {
+     hitpoints=250;
+     create_default_npc(17);
+     SetProp(P_HP, 250);
+     return 0;
+   }
+ if(IS_WIZARD(player)) 
+   return 0;
+ if ( (level=player->QueryProp(P_LEVEL))>45 ) 
+   level=30+level/3;// Balancefix Feyaria
+ //level=(int)(p_level*2/3);
+ body+=(int)(level*0.6);
+ inv=all_inventory(ENV(ME));
+ for(i=sizeof(inv)-1;i>=0;i--) {
+   if(!IS_WIZARD(inv[i])) {
+     if(living(inv[i]) && !interactive(inv[i]) && inv[i]!=ME) {
+       level+=1;
+       modifier+=1;
+       SetProp(P_SPELLRATE, QueryProp(P_SPELLRATE)+5);
+     }
+     if(interactive(inv[i]) && !IS_WIZARD(inv[i]) && inv[i]!=TP) {
+       if(inv[i]->QueryProp(P_GUILD)!="abenteurer")
+         level+=inv[i]->QueryProp(P_GUILD_LEVEL)/4;
+       body+=random(5)+15;
+       SetProp(P_SPELLRATE, QueryProp(P_SPELLRATE)+5);
+       if(inv[i]->QueryProp(P_TOTAL_WC)>230) {
+         body+=(player->QueryProp(P_TOTAL_WC))-230;
+         modifier+=1;
+       }
+     }
+   }
+ } 
+ if(level<old_level) level=old_level;
+ if(level>55) level=55;// Balancefix Feyaria
+ create_default_npc(level);
+ if(level<43 && schale) {
+   if(present("obsidianschale", ME))
+     present("obsidianschale", ME)->remove();
+   schale=0;
+ }
+ if(level>=45 && !schale && !random(4)) {
+   CLONEME(OBJ("obsidianschale"));
+   schale=1;
+ }
+ old_level=level;
+ hitpoints=(level*(15+random(5)+modifier))>QueryProp(P_MAX_HP)?
+            QueryProp(P_MAX_HP):(level*(15+random(5)+modifier));
+ if(schale) hitpoints=(int)(hitpoints*2);
+ if(QueryProp(P_BODY)>body) body=QueryProp(P_BODY);
+ if(schale) body=(int)(2*body);
+ SetProp(P_BODY, body);
+ if(QueryProp(P_HP)>hitpoints) hitpoints=QueryProp(P_HP);
+ if(hitpoints>QueryProp(P_MAX_HP)*2/3) hitpoints=QueryProp(P_MAX_HP)*2/3;// Balancefix Feyaria
+ SetProp(P_HP, hitpoints);
+ if( QueryProp(P_SPELLRATE)>85 ) SetProp(P_SPELLRATE, 85);// Balancefix Feyaria 
+ return 1;
+}
+
+int _set_hp(int hp)
+{
+  if (hp>hitpoints) hp=hitpoints;
+  return Set(P_HP, hp);
+}
+
+void die(int poisondeath)
+{ 
+  object spieler, item;
+  spieler=ME->QueryProp(P_KILLER) || this_player();
+
+  if(item=present(QUESTRING, spieler)) {
+    item->set_balrog_killed();
+  } 
+  // 30.06.2008: fuer Gwenshara (angrox)
+  if (item = present("\nzechpreller_quest_11",spieler)) {
+     item->Mark(poisondeath);
+  }
+
+
+  if((spieler->QueryProp(P_GUILD))=="druidenzirkel" &&
+     (spieler->QueryProp(P_GUILD_LEVEL))==5)
+    {
+     call_other("/gilden/druidenzirkel/master/druidenmaster",
+                "SetTask", spieler, 6);
+     call_other("/gilden/druidenzirkel", "LogTask", spieler, 6);
+    }
+  if((item=present("\npaladintaskitem", TP)) && item->GetTask(10, TP)) {
+    item->SetFlag(0);
+  }
+  write_file(LOG("balrog.kills"),
+    dtime(time())+": "+CAP(getuid(TP))+" toetet den Balrog("+
+     QueryProp(P_LEVEL)+"/"+schale+").\n");
+
+  if (!IS_LEARNER(spieler))
+    environment()->BalrogDied();
+
+  // Neue Tafel einstellen
+  call_other( EBENE2("ebene2_r14"), "NeueTafel" );
+  find_object(EBENE2("ebene2_r14"))->SetProp("balrog_level", 
+      QueryProp(P_LEVEL));
+  ::die(poisondeath);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+ object ob;
+ int anzahl;
+ if( killer == TO )
+    write_file(LOG ("balrog.kills"),
+       sprintf( ctime()+": Der Balrog(%d) hat gerade "+CAP(getuid(player))
+       +" umgebracht - %d EP!\n", QueryProp(P_LEVEL),lostexp));
+  call_out("pluendern",0);
+  return ;
+}
+
+void pluendern()
+{
+ command_me("nimm alles aus leiche");
+ command_me("iss leiche");
+}
+
+Attack(object enemy) {
+  kampf=1;
+  return ::Attack(enemy);
+}
+
+
+void catch_tell(string str)
+{
+  string wer, was, *dir, txt;
+  object env, pl;
+  int cost;
+  if(sscanf(str, "%s teilt Dir mit: %s\n", wer, was)==2) {
+    TELL("angrox", sprintf("TELL an Balrog: %s -> %s\n",wer, was));
+    if(!random(5) && InFight() ) 
+      AddHp(50+random(50));
+  }
+}

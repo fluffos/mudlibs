@@ -1,0 +1,365 @@
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include <defines.h>
+#include <moredef.h>
+#include <wizlevels.h>
+#include "../../itemd.h"
+#include "../../data/itemd_socketed_data.h"
+#include "/p/daemon/skillmaster/skillmaster.h"
+
+#define SKILLMASTER "/p/daemon/skillmaster/skillmaster"
+#define LOW_RUNE_EXTRA_LIFE 1000000 // 11 Tage
+#define DEFAULT_RUNE_ETRA_LIFE 3000000 // 34 Tage
+#define SPECIAL_RUNE_EXTRA_LIFE 9000000 // 104 Tage
+#define TW(x) if(find_player("wraz"))tell_object(find_player("wraz"),x)
+
+nosave string *runes=({});
+int rune_extra_life=DEFAULT_RUNE_ETRA_LIFE;
+
+// Prototyping
+void RegisterBag();
+string rune_age(int max_age, int create_time);
+string fish_smell();
+void check_runes_in_bag();
+
+create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+  SetProp(P_SHORT, "Ein Runenbeutel");
+  AddId(({"beutel", "runenbeutel"}));
+  SetProp(P_NAME, "Runenbeutel");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_WEIGHT, 500);
+  SetProp(P_VALUE, 20000);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_INFO, BS("Der Runenbeutel kann Runen in sich aufnehmen. Durch "
+        "die magische Macht des Beutels wird er selber dabei auch nicht "
+        "schwerer. Das magische Aspik im Beutel konserviert die Runen ein "
+        "wenig und verlaengert so ihre die Lebensdauer, solange sie im "
+        "Beutel sind. Du kannst Runen hineinstecken (stecke rune|runenname "
+        "in runenbeutel) und die Runen auf verschiedene Art und Weise "
+        "suchen und herausnehmen (nimm rune|rune <nr>|runenname aus "
+        "runenbeutel)."));
+  AddDetail(({"zeichen"}),
+      "Der Beutel ist ueber und ueber mit seltsamen Zeichen ueberzogen.");
+  AddDetail(({"aspik","magisches aspik","gelee"}),
+      "Das Aspik ist eine Art magischer Gelee, das die Runen konserviert. "
+      "Es riecht ein wenig fischig.");
+  AddDetail(({"fisch","fischgeruch"}), #'fish_smell); //'
+  SetProp(P_SMELL, #'fish_smell); //');
+  SetProp(P_MATERIAL, ({MAT_LEATHER,MAT_MAGIC}));
+  SetProp(P_ITEMD_MIGHT, RUNE_ID);
+  AddCmd( ({ "steck", "stecke" }), "insert_into" );
+  AddCmd( ({ "nimm", "nehme" }), "take_from" );
+
+  // Aktivieren nach Schonfrist "Don,  1. Aug 2024, 00:00:00" --> Runen von Runenzweities
+  //  loesen sich sofort auf
+  if(time() > 1722463200)
+    call_out("check_runes_in_bag",0);
+}
+/*
+int testSpecial() {
+  rune_extra_life=SPECIAL_RUNE_EXTRA_LIFE;
+}
+*/
+int deniedToSell(object pl) {
+  int skillcheck, chance;
+  skillcheck=SKILLMASTER->UseSkill(pl, SK_LUCK, 10000);
+  if(skillcheck > 0) {
+    TW(sprintf(" * %s RUNEBAG sold by seershop: SK_LUCK check passed! skillcheck=%d runebag=%O pl=%O\n",dtime(time()),skillcheck,TO,pl));
+    chance = 100;
+  }
+  else if(skillcheck<(-18000)) { // Wenn der Skillcheck sehr schlecht ist, ist der Beutel vl auch schlecht
+    TW(sprintf(" * %s RUNEBAG sold by seershop: SK_LUCK check critically failed! skillcheck=%d runebag=%O pl=%O\n",dtime(time()),skillcheck,TO,pl));
+    chance = 10000;
+  }
+  else {
+    TW(sprintf(" * %s RUNEBAG sold by seershop: SK_LUCK check failed! skillcheck=%d runebag=%O pl=%O\n",dtime(time()),skillcheck,TO,pl));
+    chance = 200;
+  }
+  if(chance < 10000 && !random(chance)) { // Selten ist ein Beutel besonders gut
+    rune_extra_life=SPECIAL_RUNE_EXTRA_LIFE;
+    log_file("daemon/RUNEBAG_SPECIAL",sprintf("%s SPECIAL_RUNE_EXTRA_LIFE %O previous_object()=%O\n",dtime(time()),TO,previous_object()));
+    TW(sprintf(" * %s SPECIAL_RUNE_EXTRA_LIFE RUNEBAG! %O previous_object()=%O pl=%O\n",dtime(time()),TO,previous_object(),pl));
+  }
+  else if(random(chance) > 5000) {
+    rune_extra_life=LOW_RUNE_EXTRA_LIFE;
+    log_file("daemon/RUNEBAG_SPECIAL",sprintf("%s LOW_RUNE_EXTRA_LIFE %O previous_object()=%O\n",dtime(time()),TO,previous_object()));
+    TW(sprintf(" * %s LOW_RUNE_EXTRA_LIFE RUNEBAG! %O previous_object()=%O pl=%O\n",dtime(time()),TO,previous_object(),pl));
+  }
+  else TW(sprintf(" * %s RUNEBAG sold by seershop (no special) %O\n",dtime(time()),TO));
+
+  return 0;
+}
+
+string fish_smell() {
+  if(rune_extra_life==SPECIAL_RUNE_EXTRA_LIFE)
+    return BS("Du schnueffelst zwar vorsichtig an dem Aspik, aber der massive "
+      "Fischgeruch, der Dir entgegenschlaegt, laesst Dir schwarz vor Augen werden. "
+      "Gerade erfaengst Du Dich noch, bevor Du ohnmaechtig wirst. Du bist Dir "
+      "sicher, dass dies ein aussergewoehnlich gut konservierender Runenbeutel ist! "
+      "Ein sehr seltenes Stueck! Nach einem Weltuntergang allerdings wird der Beutel "
+      "wieder normal sein.");
+  else if(rune_extra_life==LOW_RUNE_EXTRA_LIFE)
+    return BS("Du riechst vorsichtig an dem Aspik. Der Fischgeruch ist dermassen "
+      "schwach ausgepraegt, dass Du Dir sicher bist, einen besonders schlechten "
+      "Runenbeutel erworben zu haben. Naechstes Mal hast Du hoffentlich mehr "
+      "Glueck.");
+  else 
+    return BS("Es ist Dir unerklaerlich, warum Dir diese Eingebung jetzt kommt, waehrend "
+      "Du am Runenbeutel riechst, aber "
+      "Du meinst, dass das Aspik mit sehr viel Glueck besonders gut konservieren "
+      "koennte. Dieser Beutel ist aber definitiv normal.");
+}
+
+string _query_long() {
+  string txt;
+  string *rune_txt;
+  int i;
+  txt=BS("Ein Runenbeutel, der ueber und ueber mit seltsamen Zeichen ueber"
+      "saeht ist. Du spuerst, dass sich folgende Runen im Beutel befinden: ");
+  if(!sizeof(runes))
+    txt+="Keine\n";
+  else {
+    for(i=0;i<=sizeof(runes)-1;i++) {
+      rune_txt=explode(runes[i],"__"); 
+      txt+=sprintf("%2d. Eine Rune '%s' %s\n", i,rune_txt[0],rune_txt[2]);
+    }
+  }
+  return txt;   
+}
+
+int insert_into(string str) {
+  string was,wohin, unique_name;
+  object rune;
+  int create_time;
+  string rune_name;
+  if(!str) return 0;
+  str=TP->_unparsed_args();
+  if(sscanf(str,"%s in %s", was, wohin)!=2) {
+    return 0;
+  }
+  if(member(({"runenbeutel","beutel"}), wohin)==-1) {
+    return 0;
+  } 
+  if(!(rune=present(was,TP))) {
+    write(BS("So etwas hast Du nicht bei Dir!"));
+    return 1;
+  }
+  if(!rune->id(ITEMD_RUNE_ID)) {
+    write(BS("Du kannst nur Runen in den Runenbeutel stecken."));
+    return 1;
+  }
+  create_time=rune->QueryCreateTime();
+  rune_name=rune->QueryRune();
+  unique_name=rune_name+"__"+to_string(create_time)+"__ ";
+  if(member(runes, unique_name)!=-1) {
+    write(BS("Diese Rune kannst Du nicht in den Beutel stecken!"));
+    return 1;
+  }
+  runes+=({unique_name});
+  rune->remove();
+  write(BS("Du steckst die Rune '"+rune_name+"' in das magische Aspik im Runenbeutel. "
+        "Mit einem *Pflotsch* wird sie darin aufgenommen."));
+  RegisterBag();
+  if(ENV(TP)) 
+    tell_room(ENV(TP), sprintf("%s steckt eine Rune mit einem *Pflotsch* in den Runenbeutel.\n",
+          TP->Name(WER)),({TP}));
+  return 1;
+}
+
+int take_from(string str) {
+  string was,wohin,unique_name,age;
+  object rune,ob;
+  string rune_name;
+  mixed help;
+  int i,nummer,mv_ret,max_age;
+  nummer=-1;
+  str=TP->_unparsed_args();
+  // stringp ist besser hier @Gwenshara
+  if(!stringp(str)) return 0;
+  if(sscanf(str,"%s aus %s", was, wohin)!=2) {
+    return 0;
+  }
+  sscanf(str, "%s %d aus %s", was, nummer, wohin);
+  if(member(({"runenbeutel","beutel"}), wohin)==-1) {
+    return 0;
+  } 
+  if(!sizeof(runes)) {
+    write(BS("Du greifst in den Beutel, findest jedoch nichts."));
+    return 1;
+  }
+  if(intp(nummer) && nummer !=-1 && was == "rune") {
+    if(nummer >= 0 && nummer<=(sizeof(runes)-1))
+      unique_name=runes[nummer];
+  }
+  else if(was == "rune") {
+    unique_name=runes[sizeof(runes)-1];
+  }
+  else {
+    for (i=sizeof(runes)-1;i>=0;i--) {
+      if (was==lower_case(explode(runes[i],"__")[0])) {
+        unique_name=runes[i];
+        break;
+      }
+    }
+  }
+  if(!unique_name) {
+    write(BS("Du greifst in den Beutel, findest jedoch nichts."));
+    return 1;
+  }
+  help=explode(unique_name,"__");
+  rune=clone_object(ITEMDD+"obj/runes/rune");
+  if(help[2]==" ") help[2]="";
+  rune->SetRune(help[0],to_int(help[1]), help[2]);
+  mv_ret=rune->move(TP, M_GET);
+  if(mv_ret == ME_TOO_HEAVY) {
+    write(BS("Die Rune ist Dir zu schwer!"));
+    rune->remove();
+    return 1;
+  }
+  if(mv_ret == ME_TOO_MUCH) {
+    write(BS("Du kannst keine weiteren Gegenstaende mehr tragen!"));
+    rune->remove();
+    return 1;
+  }
+  runes-=({unique_name});
+  RegisterBag();
+  write(BS(sprintf("Du greifst in den Beutel, und die Rune '%s' "
+          "materialisiert sich in Deinen Haenden.", help[0])));
+  if(ENV(TP)) 
+    tell_room(ENV(TP),BS(sprintf("%s nimmt eine Rune aus dem Runenbeutel.", 
+            TP->Name(WER))),({TP}));
+
+  max_age=call_other(ITEMD, "QueryRuneMaxAge", help[0]);
+  age=rune_age(max_age,to_int(help[1]));
+  if(time()>1722463200 && // Aktivieren nach Schonfrist "Don,  1. Aug 2024, 00:00:00
+     age=="X") { // Extralife abgelaufen; dh wird sich sofort aufloesen
+    if((objectp(ob = ENV(ME)) && interactive(ob)) ||
+      (ob && objectp(ob = ENV(ob)) && interactive(ob)))
+    {
+      tell_object(ENV(ME), BS("Deine Rune '"+help[0]+"' hat sich gerade "
+        "aufgeloest!"));
+      log_file("daemon/RUNE_AUTOLOAD",sprintf("%s RUNE OUTSIDE BAG REMOVES INSTANTLY %s %O ENV=%O create_time=%s\n",
+          dtime(time()),help[0],ME,ENV(ME),dtime(to_int(help[1]))));
+    }
+    rune->remove();
+    return 1;
+  }
+  else if(strstr(age," -")!=-1) { // Normallebenszeit abgelaufen; dh wird sich ausserhalb des Beutels beim naechsten Reset aufloesen
+    if((objectp(ob = ENV(ME)) && interactive(ob)) ||
+      (ob && objectp(ob = ENV(ob)) && interactive(ob))) 
+    {
+      rune->SetProp("last_taken_from_bag",time());
+      tell_object(ENV(ME), BS("Deine Rune '"+help[0]+"' existiert nur noch dank der "
+        "konservierdenden Magie des Runenbeutels. Sie wird sich in Kuerze aufloesen!"));
+      log_file("daemon/RUNE_AUTOLOAD",sprintf("%s RUNE OUTSIDE BAG REMOVES NEXT RESET %s %O ENV=%O create_time=%s\n",
+          dtime(time()),help[0],ME,ENV(ME),dtime(to_int(help[1]))));
+    }
+  }
+  return 1;
+}
+
+mapping _query_autoloadobj()
+{
+  return (["runes": runes]);
+}
+
+void _set_autoloadobj(mixed data)
+{
+  if(mappingp(data)) {
+    if(sizeof(data)==1) {
+      runes=data["runes"];
+    }
+  }
+  log_file("daemon/RUNE_AUTOLOAD",sprintf("%s AUTOLOAD RUNEBAG: %O\n",
+        dtime(time()),implode(runes," ")));
+  call_out("RegisterBag", random(20)+2);
+  return;
+}
+
+void RegisterBag() {
+  call_other(ITEMD, "RegisterBagRunes", ME, runes);
+  return ;
+}
+
+mixed QueryRunes() {
+  return runes;
+}
+
+void check_runes_in_bag() {
+  int i,max_age;
+  string *help, age;
+  string *to_delete;
+  object ob;
+  to_delete=({});
+  for(i=sizeof(runes)-1;i>=0;i--) {
+    help=explode(runes[i],"__");
+    max_age=call_other(ITEMD, "QueryRuneMaxAge", help[0]);
+    age=rune_age(max_age,to_int(help[1]));
+    if(age=="X") { // Extralife abgelaufen --> aufloesen
+      if((objectp(ob = ENV(ME)) && interactive(ob)) ||
+        (ob && objectp(ob = ENV(ob)) && interactive(ob))) 
+      {
+        tell_object(ENV(ME), BS("Deine Rune '"+help[0]+"' hat sich gerade "
+          "aufgeloest!"));
+        log_file("daemon/RUNE_AUTOLOAD",sprintf("%s REMOVE RUNE %s %O ENV=%O create_time=%s\n",
+            dtime(time()),help[0],ME,ENV(ME),dtime(to_int(help[1]))));
+      }
+      to_delete+=({runes[i]});
+    } else { 
+      runes[i]=implode(({help[0],help[1],age}),"__");
+    }
+  }
+  runes-=to_delete;
+  RegisterBag();
+  return;
+}
+
+string rune_age(int max_age, int create_time)
+{
+  string rune_name_add;
+  rune_name_add=" ";
+
+  if((time() - create_time) > max_age)
+    rune_name_add=" -"; // Normallebenszeit abgelaufen --> Aufloesung ausserhalb des Beutels beim naechsten Reset
+  else if((time() - create_time) > (max_age-84600)) // ca. 1 Tag
+    rune_name_add=" ***";
+  else if((time() - create_time) > (max_age-604800)) // 7 Tage
+    rune_name_add=" **";
+  else if((time() - create_time) > (max_age-2592000)) // 30 Tage
+    rune_name_add=" *";
+
+  if((time() - create_time) > max_age+rune_extra_life)
+  {
+    rune_name_add="X"; // Extralife abgelaufen --> fix Aufloesung
+    call_out("check_runes_in_bag",0);
+  }
+  else if((time() - create_time) > (max_age+rune_extra_life-84600)) // ca. 1 Tag
+    rune_name_add+=" ###";
+  else if((time() - create_time) > (max_age+rune_extra_life-604800)) // 7 Tage
+    rune_name_add+=" ##";
+  else if((time() - create_time) > (max_age+rune_extra_life-2592000)) // 30 Tage
+    rune_name_add+=" #";
+
+  return rune_name_add;
+}
+
+void reset() {
+  if(!is_clone(ME))
+    return;
+  ::reset();
+  if(sizeof(runes)) 
+    check_runes_in_bag();
+  return;
+}
+
+varargs int remove(int silent) {
+  call_other(ITEMD, "DeRegisterBag", ME);
+  return ::remove(silent);
+}

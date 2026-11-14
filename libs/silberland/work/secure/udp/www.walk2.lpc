@@ -1,0 +1,258 @@
+/* SilberLand MUDlib
+ *
+ * /secure/udp/www.walk.c -- WWW Guest Walker Client
+ *
+ * $Date: 2005/01/30 01:36:44 $
+ * $Revision: 1.2 $
+ * $Log: www.walk.c,v $
+ * Revision 1.2  2005/01/30 01:36:44  Woody
+ * < durch &lt; ersetzen
+ *
+ * Revision 1.1  1997/03/16 00:51:17  Woody
+ * prepared for revision control
+ *
+ */
+
+// MorgenGrauen MUDlib Contribution
+
+#pragma strong_types
+#pragma combine_strings
+
+#include <www.h>
+
+inherit UDPPATH+"/www.crypt";
+
+#include <properties.h>
+
+#define TAB \
+"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789(){}[]-_+:;.,/"
+#define PASSWD "7d.4A37d;Hs[."
+#define CRYPT(str, tab, pwd)	_crypt(str, tab, pwd)
+#define DECRYPT(str, tab, pwd)	_decrypt(str, tab, pwd)
+
+#define NUMBER(i)	(([1:"einen",2:"zwei",3:"drei",4:"vier",5:"f&uuml;nf",\
+			   6:"sechs",7:"sieben",8:"acht",9:"neun"])[i])
+
+// global variables
+// YOU NEED TO DEFINE, WHERE SOMEONE MAY GO OR NOT GO!
+
+
+// DEFINE STARTINGPOINTS
+private mapping StartPoints = ([ "Menschen" : "/gilden/abenteurer",
+                                 "Zwerge"   : "/d/gebirge/dusty/zwerge/room/kapelle",
+                              ]);
+
+// HERE DEFINE AREAS WHERE A WWW GUEST MAY RUN AROUND
+private string *Paths = ({ "/gilden/",
+			   "/d/ebene/Midas/room/",
+                           "/d/ebene/Silberwald/room/",
+	       	           "/d/ebene/creative/feldlager/",
+			   "/d/gebirge/dusty/weg/",
+			   "/d/gebirge/dusty/zwerge/",
+			   "/d/gebirge/eros/room/",
+			   "/d/wasser/woody/fischerdorf/room/",
+                        });
+
+// EXCLUDE ALL ROOMS WITH PARTIAL PATHS LIKE BELOW
+private string *PathsExclude = ({"/d/ebene/Midas/room/kanal2",});
+
+
+// prototypes
+private string CreateLink(object item, string url, string type);
+private void StraightExits(string dir, string file, mapping exits);
+private int Validate(string file);
+private string CRYPT(string str, string tab, string passwd);
+private string DECRYPT(string str, string tab, string passwd);
+
+string Request(mapping cmds)
+{
+  string file, text;
+  object obj;
+  
+  if (!sizeof(cmds)) return ERROR("Anfrage ung&uuml;ltig!");
+  if(!sizeof(cmds) || !cmds[ROOM]) 
+    return "Such Dir einen Anfangspunkt aus:<P>"
+	 +"<UL><LI>"
+	 +implode(map_array(m_indices(StartPoints), 
+			  lambda(({'i}),
+			  ({#'+, ({#'+, ({#'+, ({#'+, "<A HREF=\"walk.php?"+ROOM+"=", 'i}), "\">"}), 'i}), "</A>"}))),
+                   "<LI>")+"</UL>";
+  else
+    if(member(StartPoints, cmds[ROOM]))
+      cmds[ROOM] = CRYPT(StartPoints[cmds[ROOM]], TAB, PASSWD);
+
+  file = DECRYPT(cmds[ROOM], TAB, PASSWD);
+  if(!Validate(file))
+    return "<H1>"+MUDNAME+" -- MudWWW Zugang</H1><TT>"
+	 + "Hier geht es zwar noch weiter, aber aus gewissen Gr&uuml;nden "
+	 + "k&ouml;nnen wir den Zugang weiter nicht erlauben!<P>"
+	 + "Allerdings kannst Du auch richtig "
+	 + "<A HREF=\"http://"+MUDHOST+"/\">"+MUDNAME+" spielen</A>. "
+         + "Da geht es dann "
+	 + "hier auch weiter.<P>"
+	 + "Im Moment bleibt Dir nur die M&ouml;glichkeit, "
+	 + "wieder zur&uuml;ck zu gehen.</A>"
+	 + "</TT>";
+  text = "";
+
+  // HERE COMES YOUR OWN SPECIAL ROOM/DETAILS ETC DESCRIPTION!!!!
+
+  // load the room, if it doesn't already exists
+  if(!(obj = find_object(file)))
+  {
+    file->__DoesThisRoomExist();
+    obj = find_object(file);
+  }
+  if(obj)
+  {
+    int i, light;
+    mapping exits;
+    object *items;
+    closure query;
+
+    query = symbol_function("QueryProp", obj = find_object(file));
+    if(light = funcall(query, P_LIGHT) > 0)
+    {
+      // it needs to be bright to see whats there!
+      // put the short description in the first line and the long one as
+      // body underneath the shadow line
+      text = "<H1>"+funcall(query, P_INT_SHORT)+"</H1>"
+           + "<PRE>"+funcall(query, P_INT_LONG);
+
+      // now lets have a look at the items (not details!)
+      if(sizeof(items = all_inventory(obj)))
+      {
+	string *shorts;
+         // if there is an aggressive monster there don't allow further
+         // processing, just allow to go back (one could map!)
+	 if(sizeof(map_objects(items, "QueryProp", P_AGGRESSIVE)-({0})))
+	   return "<H1>Gefahr!</H1>"
+                 +"<PRE>"
+		 + "In diesem Raum ist es so gef&auml;hrlich, dass Du "
+                 +"lieber sofort zur&uuml;ck gehst.</PRE>";
+
+         // try to wrap the items with links
+         if(sizeof(shorts = map_array(items, #'CreateLink, 
+                                             "walk.php?"+ROOM+"="+
+				         CRYPT(file, TAB, PASSWD)+
+				         "&"+BACK+"="+"walk.php?"+cmds[BACK],
+                                             DETAIL) - ({0})))
+           text+="<BR>Du siehst hier:<UL><LI>"+implode(shorts, "<LI>")+"</UL>";
+         else text += "Hier steht und liegt niemand und nichts herum.";
+      }
+      text += "</PRE>";
+    } 
+    else // if it's too dark just display the following text
+      text = "<H1>Irgendwo</H1><PRE>"
+           + "Es ist zu dunkel, um etwas zu sehen.</PRE>";
+
+    // is there a details to be shown?
+    if(cmds[DETAIL])
+    {
+      string det;
+      object item;
+      // don't show items, when it's dark or it is not found or
+      // when the item is invisible
+      cmds[DETAIL]=lower_case(cmds[DETAIL]);
+
+      if (light <= 0)
+      {
+        det = "Hier ist es zu dunkel, um " + capitalize(cmds[DETAIL]) +
+          " genauer sehen zu koennen!";
+      }
+      else
+      {
+        det = funcall(query, P_DETAILS)[cmds[DETAIL]] ||
+          "\"" + capitalize(cmds[DETAIL]) + "\" kannst Du hier nicht sehen!"
+          "<br />Es ist m&ouml;glicherweise entfernt worden.";
+
+        item = present(cmds[DETAIL], obj);
+        if (objectp(item) && !item->QueryProp(P_INVIS))
+        {
+          string wwwinfo;
+          det = item->long();
+          if (wwwinfo = item->QueryProp(P_WWWINFO)) det += wwwinfo;
+          if (query_once_interactive(item))
+            det += "\nMehr Information zu <A HREF=\"finger.php?"
+                + "user="+getuid(item)+"&"+BACK+"=walk.php?"+cmds[BACK]+"\">"
+                + capitalize(getuid(item))+"</A>!";
+        }
+      }
+      if(pointerp(det)) det = (string)det[0];
+      text += "<HR><H3>"+capitalize(cmds[DETAIL])+"</H3>"
+	   + "<PRE>"+det+"</PRE><HR>";
+    }
+
+    // now display the exits
+    text += "<H3>";
+    exits = funcall(query, P_EXITS);
+    walk_mapping(exits, #'StraightExits, exits);
+    if(!light || !(i = sizeof(exits))) 
+      text += "Es gibt hier keine sichtbaren Ausg&auml;nge!";
+    else 
+    {
+      string *ind;
+      text += "Es gibt hier "+NUMBER(i)
+            + " sichtbare"+(i==1?"n Ausgang":" Ausg&auml;nge")+": ";
+      for(i = 0; i < sizeof(ind = m_indices(exits)); i++)
+        text += "<A HREF=\"walk.php?"
+	      + ROOM+"="+CRYPT(exits[ind[i]], TAB, PASSWD)
+	      + "&"+BACK+"=walk.php?"+cmds[BACK]+"\">"
+	      + ind[i]+"</A> ";
+    }
+    text += "</H3>";
+
+  }
+  // this should never occur!
+  else return "<H1>Der Raum ist momentan nicht verf&uuml;gbar!</H1>";
+  return text
+       + "<FORM ACTION=\"walk.php\">"
+       + "Was m&ouml;chtest Du n&auml;her betrachten? "
+       + "<INPUT TYPE=\"hidden\" NAME=\""+ROOM+"\" VALUE=\""
+       + CRYPT(file, TAB, PASSWD)+"\">"
+       + "<INPUT TYPE=text NAME=\""+DETAIL+"\">"
+       + "<INPUT TYPE=submit VALUE=\"Ansehen!\"></FORM><BR>";
+}
+
+// extra functions
+
+// CreateLink() -- create a link to with a special input type
+private string CreateLink(object item, string url, string type)
+{
+  string s, *tmp; mixed nm; int i;
+  if((s = item->short()) && (nm = item->QueryProp(P_NAME)))
+  {
+    s = regreplace(s, "<", "\\&lt;", 1);
+    if(pointerp(nm)) nm = nm[0];
+    if(member(nm, ' ') != -1) nm = item->QueryProp(P_IDS)[<1];
+    if((i = member(tmp = regexplode(s, nm), nm)) == -1) i = 0;
+    tmp[i] = "<A HREF=\""+url+"&"
+           + "&"+type+"="+lower_case(nm)+"\">"+tmp[i]+"</A>";
+    return implode(tmp, "");
+  }
+}
+
+private void StraightExits(string dir, string file, mapping exits)
+{
+  int i;
+  if((i = member(file, '#')) != -1)
+    file = file[i+1..];
+  exits[dir] = file;
+}
+
+// Validate()
+private int Validate(string file)
+{
+  int i;
+
+	if(file[0]!='/')
+	  file = "/"+file;
+
+  i = sizeof(PathsExclude);
+  while(i--)
+    if(strstr(file, PathsExclude[i]) > 0) return 0;
+  i = sizeof(Paths);
+  while(i--)
+    if(strstr(file, Paths[i]) != -1) return 1;
+  return 0;
+}

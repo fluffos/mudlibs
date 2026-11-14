@@ -1,0 +1,412 @@
+/*
+  Schildlied der Barden:
+    Das Ziel erhaelt einen magischen Schild, der Schadenspunkte absorbiert.
+
+    Anzahl der in Summe absorbierte Schandespunkte = 
+      (success/20 + ability/10) * GS/5 * (1.0 + A_INT/60) in Schadenspunkten
+      --> min. 150 (= 2 normale treffer), max. 10000 (= 40 zerschmettern)
+      --> wird jeweils um den absorbierten Wert reduziert, bestimmt also nur die Wirkungsdauer
+
+    Chance auf Schadensreduktion = 
+      A_DEX / 45 in Prozent
+      --> min. 30% (DEX 15 ist Vorraussetzung fuer GS 4) bis max. 89% (bei GS 40)
+      --> bestimmt, ob ueberhaupt Schaden beim Angriff reduziert wird
+
+    Schadensreduktion = 
+      (abil/200) + A_INT/2 + random(A_INT/2 + success/200)
+    --> mindestens 15 + 6 + random(6) = 1 bis 27 = 1 oder 2 LeP
+    --> maximal 100 + 20 + random(20 + 100) = 120 + random(120) = 120 bis 240 = 12 bis 24 LeP
+*/
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <defines.h>
+#include <moredef.h>
+#include <new_skills.h>
+#include "/gilden/bardengilde/bardengilde.h"
+
+string group, *dt, *msg;
+int volume, chance, reductionRange, reductionBase, maxVolume, active;
+object owner;
+
+create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+  
+  AddId (SONG_SCHUTZ);
+  SetProp (P_SHORT, 0);
+  SetProp (P_NAME, "Schildlied");
+  SetProp (P_GENDER, NEUTER);
+  SetProp (P_MAGIC, 1);
+  SetProp (P_WEIGHT, 0);
+  SetProp (P_NOBUY, 1);
+  SetProp (P_NODROP, 1);
+  SetProp (P_NEVERDROP, 1);
+  SUID;
+
+  active = 0;
+}
+
+private int modifyBySkillAttribute(int baseVal, string skillAttribute) {
+  return (int) (baseVal * (owner->QuerySkillAttribute(skillAttribute) / 100.0));
+}
+
+private void configureByBardGroup(string group) {
+  int hasTalent;
+  hasTalent = TALENTMASTER->HasTalent(owner, TALENT_ALTE_GESCHICHTEN);
+
+  switch(group)
+  {
+    case BARD_GROUP_ALESTRA: 
+      dt = ({DT_FIRE, DT_EXPLOSION});
+      if(hasTalent) dt += ({DT_PIERCE});
+      msg = ({"Deine Ruestung vibriert im Schall einer Zaubermelodie!", 
+              "Die Ruestung von " + owner->name(WEM, 1) + " vibriert vor Magie!"});
+      break;
+    case BARD_GROUP_TIRENA:  
+      dt = ({DT_AIR, DT_COLD});
+      if(hasTalent) dt += ({DT_BLUDGEON});
+      msg = ({"Ein Schild aus Toenen und Musik bildet sich vor dir!", 
+              "Ein Schild aus Toenen und Musik bildet sich vor " + owner->name(WEM, 1) + "."});
+      break;
+    case BARD_GROUP_KORRIAX: 
+      dt = ({DT_TERROR, DT_UNHOLY});
+      if(hasTalent) dt += ({DT_SLASH});
+      msg = ({"Der Angriff gleitet an einem harten Schallpanzer ab.", 
+              "Der Angriff gleitet an " + owner->name(WESSEN, 1) + " Schallpanzer ab."});
+      break;
+    case "sarrian": 
+      dt = ({DT_LIGHTNING, DT_LIGHT});
+      if(hasTalent) dt += ({DT_RIP});
+      msg = ({"Eine Schallmauer rast gegen den Angriff und schwaecht ihn ab!", 
+              "Eine Schallmauer rast von " + owner->name(WEM, 1) + " vor und schwaecht den Angriff ab!"});
+      break;
+    default:        
+      raise_error("Undefinierte Bardengruppe!");
+      remove(1);
+      return;
+  }
+  return;
+}
+
+private void setVolume(int intelligence, int ability, int success, int guildLevel, float factor) {
+  volume = (int) ((success/20 + ability/10) * ((guildLevel<3?1:guildLevel/3)) * (1.0 + (intelligence/100) ));
+  volume = (int) (volume * factor);
+  volume = modifyBySkillAttribute(volume, SA_DURATION);
+
+  if(TALENTMASTER->HasTalent(owner, TALENT_BANNSAENGER)) {
+    volume = (int) (volume * (1.0 + 0.1 * (owner->QueryProp(P_BARD_INSPIRATION_LEVEL))));
+  }
+
+  if(BARDENMASTER->HasHeroPathLevel(owner, HERO_KHARTAK, 2)) {
+    // Khartak fokussiert statt Verteidigung mehr auf den Angriff
+    volume = (int) (volume * 0.7);
+  }
+
+  if(owner->QueryProp(P_GUILD) == "bardengilde")
+    volume = (int) (volume * 0.5);
+  else volume = (int) (volume * 0.4);
+  maxVolume = volume;
+
+  // Logging
+  write_file(LOG ("setVolume"),
+    sprintf("%20s %7s maxVol=%5d int=%2d abil=%5d suc=%5d glvl=%2d factor=%3d, SA_DUR=%3d, INSP_LVL=%2d, BANNS.=%d, KHARTAK=%d\n", 
+                ctime()[<20..],CAP(getuid(owner)),
+                maxVolume,intelligence,ability,success,guildLevel,to_int(100*factor),
+                modifyBySkillAttribute(100, SA_DURATION), to_int(owner->QueryProp(P_BARD_INSPIRATION_LEVEL)),
+                TALENTMASTER->HasTalent(owner, TALENT_BANNSAENGER),
+                BARDENMASTER->HasHeroPathLevel(owner, HERO_KHARTAK, 2) ));
+  return;
+}
+
+private void setChance(int dexterity, float factor) {
+  chance =  (int) ( ((float) (owner->QueryAttribute(A_DEX) / 45.0)) * 100.0);
+  chance = (int) (chance * factor);
+
+  if(TALENTMASTER->HasTalent(owner, TALENT_BANNSAENGER)) {
+    chance += owner->QueryProp(P_BARD_INSPIRATION_LEVEL) * 2;
+  }
+
+  if(chance > 95) {
+    chance = 95;
+  }
+  return;
+}
+
+private void setReduction(int intelligence, int ability, int success, float factor) {
+  float rangeFactor;
+
+  reductionBase = (int) ((intelligence / 2.0) + (ability / 200.0));
+  reductionBase = (int) (reductionBase * factor);
+  reductionBase = modifyBySkillAttribute(reductionBase, SA_DAMAGE);
+
+  if(TALENTMASTER->HasTalent(owner, TALENT_BANNSAENGER)) {
+    reductionBase = (int) (reductionBase * (1.0 + 0.1 * (owner->QueryProp(P_BARD_INSPIRATION_LEVEL))));
+  }
+
+  if(owner->QueryProp(P_GUILD) == "bardengilde")
+    reductionBase = reductionBase > 240 ? 240 : reductionBase; // Cap auf 240 fuer Barden
+  else reductionBase = reductionBase > 100 ? 100 : reductionBase; // Cap auf 100 fuer andere
+
+  rangeFactor = 1.0 + success * 0.00003; // 33% bei 10000 success (132% bei 20000) = bis zu 66% der basis
+
+  reductionRange = (int) (reductionBase * rangeFactor);
+
+  if(BARDENMASTER->HasHeroPathLevel(owner, HERO_KHARTAK, 2)) {
+    // Khartak fokussiert statt Verteidigung mehr auf den Angriff
+    reductionRange = (int) (reductionRange * 0.7);
+    reductionBase = (int) (reductionBase * 0.7);
+  }
+
+  // Logging
+  write_file(LOG ("setReduction"),
+    sprintf("%20s %7s rBase=%3d rRange=%3d int=%2d abil=%5d suc=%5d factor=%3d, SA_DAM=%3d, INSP_LVL=%2d, BANNS.=%d, KHARTAK=%d\n", 
+                ctime()[<20..],CAP(getuid(owner)),
+                reductionBase,reductionRange,intelligence,ability,success,to_int(100*factor),
+                modifyBySkillAttribute(100, SA_DAMAGE), to_int(owner->QueryProp(P_BARD_INSPIRATION_LEVEL)),
+                TALENTMASTER->HasTalent(owner, TALENT_BANNSAENGER),
+                BARDENMASTER->HasHeroPathLevel(owner, HERO_KHARTAK, 2)));
+
+  return;
+}
+
+private void writeActivationMessage(string group) {
+  string *messages;
+  if(BARDENMASTER->HasHeroPathLevel(owner, HERO_NOGI, 2)) {
+    messages = ({"Eine magische Vibration und regenbogenfarbenes Schillern geht durch deine Ruestung und haertet sie.",
+                    owner->Name(WESSEN, 1) + " Ruestung vibriert, schillert in allen Farben des Regenbogens und haertet sich."});
+  } else {
+  switch(group) {
+      case BARD_GROUP_ALESTRA:
+        messages = ({"Deine Ruestung vibriert kurz und gibt die Tonleiter von sich.",
+                    owner->Name(WESSEN, 1) + " Ruestung vibriert kurz und gibt die Tonleiter von sich."});
+        break;
+      case BARD_GROUP_TIRENA:
+        messages = ({"Fuer einen kurzen Moment bildet sich ein regenbogenfarbener Schild vor dir und Musik erfuellt die Luft.",
+                    "Fuer einen kurzen Moment bildet sich ein regenbogenfarbener Schild vor " + owner->name(WEM, 1) + " und Musik erfuellt die Luft."});
+        break;
+      case BARD_GROUP_KORRIAX:
+        messages = ({"Im Takt von Paukenschlaegen legen sich verhaertete Toene um dich und bilden einen harten Panzer.",
+                    "Im Takt von Paukenschlaegen legen sich verhaertete Toene um " + owner->name(WEN, 1) + " und bilden einen harten Panzer."});
+        break;
+      default:
+        messages = ({"Um dich herum bildet sich mit einem Knall eine Mauer aus Schall.",
+                    "Um " + owner->name(WEN, 1) + " bildet sich mit einem lauten Knall eine Mauer aus Schall."});
+        break;
+    }
+  }
+
+  tell_object(owner, BS(messages[0]));
+  tell_room(environment(owner), BS(messages[1]), ({owner}));
+  return;
+}
+
+void setup(string group, int ability, int success, int guildLevel, float factor, object target) {
+  owner  = target;
+  
+  configureByBardGroup(group);
+
+  setVolume(owner->QueryAttribute(A_INT), ability, success, guildLevel, factor);
+  setChance(owner->QueryAttribute(A_DEX), factor);
+  setReduction(owner->QueryAttribute(A_INT), ability, success, factor);
+
+  owner->AddDefender(this_object());
+  owner->AddPursuer(this_object());
+
+  writeActivationMessage(group);
+  active = 1;
+
+  SetProp("owner", owner);
+  owner->SetProp("barden_schildlied", this_object());
+
+  if(owner->QueryProp(P_TESTPLAYER)) {
+    tell_object(owner, sprintf("schutzlied :: volume = %d chance = %d reductionBase = %d reductionRange = %d\n", 
+                volume, chance, reductionBase, reductionRange));
+  }
+  // Logging
+  write_file(LOG ("schutz_setup"),
+    sprintf("%s %s abil=%d suc=%d glvl=%d fac=%d volume=%d chance=%d redBase=%d redRange=%d\n", 
+                ctime()[<20..],CAP(getuid(owner)),
+                ability, success, guildLevel, to_int(100*factor), volume, chance, reductionBase, reductionRange));
+  return;
+}
+
+public void init() {
+  ::init();
+
+  if(active && volume <= 0) {
+    call_out("end", 0);
+  }
+
+  if(!active) return;
+
+  if(!objectp(owner)) {
+    remove(1);
+    return;
+  }
+
+  if(query_once_interactive(owner)) {
+    if(!find_player(getuid(owner))) {
+      if(find_call_out("delayedRemove") == -1) {
+        call_out("delayedRemove", 30);
+      }
+    }
+  }
+
+  if(this_player() == owner) {
+    owner->AddDefender(this_object());
+    owner->AddPursuer(this_object());
+  }
+}
+
+void end()
+{
+  if(objectp(owner)) {
+    tell_object(owner, BS("Deine Schutzmeldodie verklingt!"));
+    owner->RemoveDefender(this_object());
+    owner->RemovePursuer(this_object());
+  }
+  remove(1);
+}
+
+public int QueryVolume() {
+  return volume;
+}
+
+public int QueryMaxVolume() {
+  return maxVolume;
+}
+
+public int* QueryReduction() {
+  return ({reductionBase, reductionRange});
+}
+
+public int CanRecharge() {
+  return volume <= (int) (maxVolume * 0.1);
+}
+
+private int modifyReductionByDamageType(int reduction, mixed dam_type) {
+  string *dtypes;
+  float factor;
+  int i, success;
+
+  if(!pointerp(dam_type)) {
+    dtypes = ({ dam_type });
+  } else {
+    dtypes = dam_type;
+  }
+
+  factor = 1.0;
+
+  if(member(dtypes, DT_SOUND) >= 0) factor += 0.3;
+  if(member(dtypes, dt) >= 0) factor += 0.2;
+  if(member(dtypes, DT_MAGIC) >= 0) factor += 0.1;
+
+  if(BARDENMASTER->HasHeroPathLevel(owner, HERO_NOGI, 2)) {
+    success = owner->UseSkill(SK_HEROISM(HERO_NOGI));
+    for(i=0;i<sizeof(dtypes); ++i) {
+      if(member(PHYSICAL_DAMAGE_TYPES, dtypes[i])) {
+        factor += success/40000.0;
+        break; // Bonus gegen physischen Schutz gibt es nur 1 mal, auch 
+               // wenn der Angriff mehrere physische Schadensarten beinhaltet
+      }
+    }
+  }
+
+  return (int) (reduction * factor);
+}
+
+private int reduceDamage(int dam, mixed dam_type, float reductionFactor) {
+  int reduction, reductionCap;
+  reduction = reductionBase + random(reductionRange-reductionBase);
+  reduction = (int) (reduction * reductionFactor);
+  if(reduction > volume) {
+    reduction = volume;
+  }
+
+  reduction = modifyReductionByDamageType(reduction, dam_type);
+  // max. 45-65% des Schadens werden vom Schutz absorbiert
+  // Vgl. Berserker Eisenhaut: 20-41%
+  reductionCap = (int) (dam*(0.45+random(21)/100.0));
+  if(reduction > reductionCap) {
+    reduction = reductionCap;
+  }
+
+  volume -= reduction;
+  dam -= reduction;
+
+  return dam;
+}
+
+mixed DefendOther(int dam, mixed dam_type, mixed spell,object enemy) {
+  int chanceRoll, original_dam, i;
+  float reductionFactor;
+  mixed *dam_type2;
+  string dam_type_str;
+
+  if(!objectp(owner)) {
+    remove(1);
+    return ({dam, dam_type, spell});
+  }
+
+  if(dam <= 0) {
+    return ({dam, dam_type, spell});
+  }
+
+  chanceRoll = 1+random(100);
+
+  if(chanceRoll > chance) {
+    reductionFactor = 0.15; // nur 15% des eigentlichen Schutzes
+  } else {
+    reductionFactor = 1.0;
+    tell_object(owner, BS(msg[0]));
+    tell_room(environment(owner), BS(msg[1]), ({owner}));  
+  }
+
+  original_dam = dam;
+  dam = reduceDamage(dam, dam_type, reductionFactor);
+
+  if(volume <= 0) {
+    call_out("end", 0);
+  }
+  
+  // Logging
+  dam_type2 = ({});
+  if(pointerp(dam_type))
+    for(i=0;i<sizeof(dam_type);i++) 
+      if(stringp(dam_type[i])) dam_type2 += ({dam_type[i][0..1]});
+  else if(stringp(dam_type)) dam_type2 += ({dam_type[0..1]});
+  dam_type_str = (pointerp(dam_type2) ? implode(dam_type2, ",") : to_string(dam_type2));
+  dam_type_str = (strlen(dam_type_str) > 8 ? dam_type_str[0..4] + "." + dam_type_str[<2..] : dam_type_str);
+  write_file(LOG ("schutz"),
+	      sprintf("%s dam %3d-%3d=%3d (%3s) %-8s %-7s vs %s\n",
+         ctime()[<20..],original_dam,(original_dam-dam),dam,to_string(dam*100/original_dam)+"%",
+         dam_type_str,
+         ((strlen(getuid(owner)) > 7) ?
+          getuid(owner)[0..2] + "." + getuid(owner)[<3..] :
+          CAP(getuid(owner))),
+         ((strlen(to_string(enemy->Name(RAW))) <= 15) ?
+         to_string(enemy->Name(RAW)) :
+         (to_string(enemy->Name(RAW))[0..6] + "." + to_string(enemy->Name(RAW))[<7..]))
+         ));
+
+  return ({dam, dam_type, spell});
+}
+
+public void BecomesNetDead(object pl) {
+  if(pl == owner) {
+    if(find_call_out("delayedRemove") == -1) {
+      call_out("delayedRemove", 30);
+    }
+  }
+}
+
+public void delayedRemove() {
+  if(find_netdead(getuid(owner))) {
+    remove(1);
+  }
+}

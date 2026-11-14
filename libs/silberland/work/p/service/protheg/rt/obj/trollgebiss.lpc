@@ -1,0 +1,592 @@
+/*
+** Das Gebiss eines Bergpumas, nur fuer Trolle ;)
+**
+** 2004-Jul-01  1.1  PROtheG  Fertigprogrammiert ;)
+**
+** 2005-Feb-04  1.2  PROtheG  trollinfo leicht ueberarbeitet
+**
+** 2006-May-09  1.3  PROtheG  Titel (FM fuer nichtseher vergessen)
+**
+** 2008-Jun-16  1.4  PROtheG  verdrehte FM funktionen gefixed
+**
+*/
+
+#pragma strong_types;
+
+#include "../def.h"
+#include <ansi.h>
+#include <exploration.h>
+
+inherit STD "rt";
+
+#define QM "/secure/questmaster"
+
+#define SOULFILE SOUL "Troll"
+
+//Somit ist moeglich "blabla"+C+"blabla"+N
+#define C GetColor()
+#define S(x) GetColor(x)
+#define N NormalColor()
+
+nosave int lastlogin; 
+
+//Liefert die aktuelle Versionsnummer
+int Version() { return 4;}
+
+nomask void create()
+{
+  if(!is_clone(ME)) return;  // (return on BP)
+  ::create();
+
+  SetProp(P_SHORT, "Das Gebiss eines maechtigen Bergpumas");
+  SetProp(P_LONG,
+	  BS("Du hast dieses Gebiss eines maechtigen Bergpumas von Gjordil "
+	     "bekommen. Achte darauf und verliere es nicht, dann "
+	     "wird es Dir viele Dienste erweisen koennen."));
+  SetProp(P_NAME, "Gebiss");
+  SetProp(P_GENDER, NEUTER);
+  AddId(({"gebiss", "pumagebiss", "bergpumagebiss"}));
+  
+  SetProp(P_WEIGHT, 400);
+  SetProp(P_MATERIAL, ([MAT_BONE:99,MAT_FLESH:1]));
+  
+  SetProp(P_NOSELL,
+	  "Du kannst das Gebiss doch nicht einfach verkaufen!\n");
+  
+  SetProp(P_INFO,
+	  "Dieses maechtige Gebiss kann Dir viele Dienste erweisen.");
+
+  AddDetail("dienste", CLOSURE(huefe));
+  
+  AddCmd("trollreport", "Report");
+  
+  //Cmds fuer die Komunikation
+  AddCmd(({"trollgroehle","trollgroehl"}), "Rufen");
+  AddCmd(({"trollhist"}), "History");
+  AddCmd(({"trollwink","trollwinke"}), "trollwink");
+  
+  AddCmd(({"trollinfo"}), "trollinfo");
+  AddCmd(({"trollwer"}), "trollwer");
+  AddCmd(({"trollfarbe","trollfarben"}), "trollfarbe");
+
+  AddCmd(({"trollpresay"}), "trollpresay");
+
+  //Hilfeanzeige
+  AddCmd(({"trollhilfe"}), "trollhilfe");
+  
+  GetColor(1);
+  
+  SUID;
+
+  // r* commands:
+  init_soul_cmds(1);
+}
+
+//Liefert den Filename zum Masterobjekt
+string Master()
+{
+  return RTM "trollmaster";
+}
+
+// liefert den String fuers ignorieren (ignoriere bla)
+string IgnoriereID()
+{
+  return "gebiss";
+}
+
+// liefert den String fuer die Rasse
+string Rasse()
+{
+  return "Troll";
+}
+
+// Meldung fuer Report wenn absolut fit
+string absolut_fit()
+{
+  return "Troll jetzt wieder fit!";
+}
+
+// Report Zeilen normal
+string Report_normal(int hp, int maxhp, int sp, int maxsp)
+{
+  string ret;
+  
+  ret="* Troll ";
+  
+  if(hp==maxhp)
+    ret+="volle Lebenspunkte und ";
+  else
+    ret+=""+hp+" von "+maxhp+" Lebenspunkte und ";
+  
+  if(sp==maxsp)
+    ret+="volle Magiepunkte.";
+  else
+    ret+=""+sp+" von "+maxsp+" Magiepunkte.";
+  
+  return ret;
+}
+
+// Report Zeilen kurz
+string Report_kurz(int hp, int maxhp, int sp, int maxsp)
+{
+  string ret;
+  
+  ret="* ";
+  
+  if(hp==maxhp)
+    ret+="LP: "+hp+" und ";
+  else
+    ret+="LP: "+hp+" von ("+maxhp+") und ";
+  
+  if(sp==maxsp)
+    ret+="MP: "+sp;
+  else
+    ret+="MP: "+sp+" von ("+maxsp+")";
+  
+  return ret;
+}
+
+// Spezialbehandlungen von Aufenthaltsorten bei werliste
+string Region(string str)
+{
+  if(strstr(str, "/d/gebirge/speedy/trollager")==0)
+    return "Trolllager";
+  
+  return "";
+}
+
+//Wird ausgegeben, wenn sich das Tool selbst erneuert
+string Erneuern_Meldung()
+{
+  return BS(C+"Trolls Bergpumagebiss schimmert kurz..."+N);
+}
+
+//Meldung wenn die History noch leer ist
+string History_leer()
+{
+  return BS("In letzter Zeit war ruhig...");
+}
+
+//Ueberschrift der History
+string History_msg()
+{
+  return "Troll Gegroehle!\n";
+}
+
+// <Spieler> <History_format> huhu
+//zb: Protheg teilte Dir mit: huhu
+string History_format()
+{
+  return "groehlte Troll zu: ";
+}
+
+//NotifyFail beim rufen
+string Rufen_syntax()
+{
+  return BS("Was Troll andere Troll zugroehlen?");
+}
+
+// <Spieler> <Rufen_format> huhu
+//zb: Protheg teilt Dir mit: huhu
+string Rufen_format()
+{
+  return "groehlt Troll zu: ";
+}
+
+//Format der Rufenausgabe an den Spieler
+string Rufen_msg()
+{
+  return "Troll groehlen andere Troll zu: ";
+}
+
+varargs nosave string huefe(int flag)
+{
+  string ret, rcmds;
+  int i;
+  
+  rcmds="";
+
+  //Formatierung der r* commands. fuer seher keine mpkosten
+  if(IS_SEER(TP))
+    {
+      for(i=sizeof(soulcmds)-1;i>=0;i--)
+	if(i==0)
+	  rcmds+="und "+soulcmds[i][0]+".";
+	else
+	  rcmds+=soulcmds[i][0]+", ";
+      
+      rcmds=break_string(rcmds, 60, " ", BS_NO_PARINDENT);
+    }
+  else
+    {
+      for(i=sizeof(soulcmds)-1;i>=0;i--)
+	if(i==0)
+	  rcmds+="und "+soulcmds[i][0]+"("+soulcmds[i,2]+").";
+	else
+	  rcmds+=soulcmds[i][0]+"("+soulcmds[i,2]+"), ";
+      
+      rcmds=break_string(rcmds, 60, " ", BS_NO_PARINDENT);
+      
+      rcmds+="Zahlen in Klammern Magiepunkte, die die\n"
+	"Aktionen kosten.\n \n";
+      
+    }
+  
+  ret="\n \n"
+    "Troll immer schauen koennen Magie und Leben mit:\n \n"
+    "  <trollreport ein>   Anzeigen.\n"
+    "  <trollreport aus>   Nicht Anzeigen.\n \n"
+    "Andere Befehle von Beergpumagebiss!\n"
+    +rcmds+" \n"
+    "  Groehlen mit andere Troll:  trollgroehle <text>\n"
+    "  Groehlen von andere Troll:  trollhist\n \n"
+    "  Wo andere Troll:            trollwer\n"
+    "  Wie gut Troll:              trollinfo\n"
+    "  Bunt:                       trollfarbe\n"
+    "  Winken zu andere Troll:     trollwink\n"
+    "  Presay setzen:              trollpresay\n"
+    "  Hilfe fuer Troll:           trollhilfe\n \n"
+    "                                                         Ver 1."+Version()+"\n";
+
+  //in der Hilfefunktion brauchen wir kein document-format
+  if(!flag) return ret;
+  
+  TP->More(make_document(ret));
+  return "";
+}
+
+nosave int trollhilfe(string str)
+{
+  string ret;
+
+  if(str) str=explode(str, " ")[0];
+
+  switch(str)
+    {
+    case "trollreport": 
+      ret="Mit 'trollreport' wissen ueber Magie und Leben.\n"
+	"* trollreport normal    - Report normal.\n"
+	"* trollreport kurz      - Report wenig Buchstaben.\n"
+	"* trollreport farbe     - Report bunt.\n"
+	"* trollreport farbekurz - Report bunt und\n"
+	"                          wenig Buchstaben.\n"
+	"* trollreport aus       - Report aus.\n";
+      break;
+    case "trollinfo": 
+      ret="'trollinfo' zeigt wie gut Troll sein! Gleich wie 'info'.\n"
+	"Mit 'trollfarbe' auch bunt!\n";
+      break;
+    case "trollwer": 
+      ret="Mit 'trollwer' Troll sehen wo andere Troll:\n \n"
+	"*  Welche Troll da?\n"
+	"*  Wenn nix Bergpumagebiss dann 'Stinker(in)'\n"
+	"*  Troll idle?\n"
+	"*  Troll Waffe?\n"
+	"*  Troll nett?\n"
+	"*  Wo steht Troll?\n"
+	"*  Mit wem kaempfen Troll gerade (optional)\n\n"
+	"Mit 'trollwer kurz' kleinere Liste!\n";
+    break;
+    case "trollfarben":
+    case "trollfarbe": 
+      ret="Mit '"+str+"' einstellen ob bunt! Brauchen Troll 'stty ansi'\n"
+	"* trollfarbe aus  -  Nicht bunt.\n"
+	"* trollfarbe ein  -  Bunt.\n";
+    break;
+    case "trollgroehle": 
+      ret="Mit 'trollgroehle' Troll groehlen zu andere Troll.\n"
+	"Mit 'trollhist' Troll sehen was andere Troll groehlen.\n";
+    break;
+    case "trollhist": 
+      ret="Mit 'trollhist' Troll sehen was andere Troll groehlen mit 'trollgroehle'";
+    break;
+    case "trollwinke":
+    case "trollwink": 
+      ret="Mit '"+str+"' Troll winken zu andere Troll.";
+      break;
+    case "trollpresay":
+      ret="Mit 'trollpresay' Troll setzen Troll-presay wie bei 'trollwer'.\n"
+	"Mit 'trollpresay loeschen' Troll-presay weg.\n";
+      break;
+    case "allgemein":
+      ret=huefe();
+      break;
+    case "ignoriere":
+    case "ignorieren":
+      ret=ignorieren_hilfe_text();
+      break;
+    default: 
+      ret="Mit 'trollhilfe' Troll sehen folgendes:\n"
+	"trollhilfe <trollreport>   Magie und Leben?\n"
+	"           <trollinfo>     Troll 'info'.\n"
+	"           <trollwer>      Wo andere Troll?\n"
+	"           <trollfarbe>    Bunt oder nicht bunt.\n"
+	"           <trollpresay>   Troll-presay setzen.\n"
+	"           <trollgroehle>  Groehlen zu andere Troll.\n"
+	"           <trollhist>     Groehlen von andere Troll.\n"
+	"           <trollwink>     Winken zu andere Troll.\n"
+	"           <allgemein>     Uebersicht.\n"
+        "           <ignoriere>     Uebersicht von Ignorieren.\n";
+    }
+  return TP->More(make_document(ret)),1;
+}
+
+void BecomesNetAlive(object who)
+{
+  xpdiff=-1;
+
+  if((ENV(ME)) && (ENV(ME)==who))
+    {
+      netalivebug=0;
+      
+      call_out("erneuern", 0);
+      
+      xpdiff=who->QueryProp(P_XP);
+      
+    }
+}
+
+string Titel(object pl)
+{
+  string ret;
+  
+  if(!pl->QueryProp(Listener()))
+    if(!present(RACETOOLID, pl))
+      return "";
+    else
+      pl->SetProp(Listener(), 1);
+  
+  if(pl->QueryProp(P_FROG))
+    return "";
+  
+  ret="Troll";
+
+  if(IS_WIZARD(pl))
+    return ret+"magier"+FM(pl,"in "," ");
+
+  if(pl->QueryProp(P_GUILD)=="zechpreller")
+    return ret+"saeufer"+FM(pl,"in "," ");
+  
+  if(pl->QueryProp(P_GUILD)=="berserker")
+    return ret+"berserker"+FM(pl,"in "," ");
+  
+  if(pl->QueryProp(P_GUILD)=="nekromanten")
+    return ret+"nekromant ";
+
+  if(pl->QueryProp(P_GUILD)=="paladine")
+    return ret+"paladin ";
+  
+  return ret+FM(pl,"frau "," ");
+}
+
+nosave int trollfarbe(string str)
+{
+  notify_fail(BS("Syntax: trollfarbe ein | aus"));
+  if(!str) return 0;
+  
+  if(str=="aus")
+    {
+      Setting(0); 
+
+      return write(BS("Keine Farbe.")), 1; 
+    }
+  
+  if(TP->QueryProp(P_TTY)!="ansi")
+    return write(BS("Troll nicht 'stty ansi' gemacht!")), 1;
+  
+  Setting(1); 
+  
+  return write(BS("Farben! Farben!")), 1; 
+}
+
+nosave int trollpresay(string str)
+{
+  string np, op;
+
+  notify_fail(BS("Mit 'trollpresay' setzen Troll-presay.")+
+	      BS("Mit 'trollpresay loeschen' loeschen Troll-presay."));
+  
+  if(strlen(str)) 
+    if(str=="loeschen")
+      {
+	if(!strlen(TP->QueryProp(P_PRESAY)))
+	  return write(BS("Troll nicht Presay gesetzt!?")), 1;
+	
+	TP->SetProp(P_PRESAY, "");
+	
+	return write(BS("Troll Presay jetzt geloescht.")), 1;
+      }
+    else
+      return 0;
+  
+  np=Titel(TP);
+  
+  if(strlen(op=TP->QueryProp(P_PRESAY)))
+    if(np!=op)
+      write(BS("Troll Presay '"+op+"' werden ersetzt."));
+  
+  TP->SetProp(P_PRESAY, np[0..<2]);
+  
+  write(BS("Troll jetzt:")+
+	BS(np+CAP(getuid(TP))+" "+(TP->QueryProp(P_TITLE) || "")));
+  
+  return 1;
+}
+
+nosave string Hunger(int food, int max_food, int drink, int max_drink)
+{
+  string ret;
+  int f, d;
+  
+  f=food*100/max_food;
+  d=drink*100/max_drink;
+  
+  ret="";
+  
+  switch(f)
+    {
+    case 26 ..  50 : ret+="VIEL HUNGER"; break;
+    case 51 ..  75 : ret+="Hunger"; break;
+    case 76 ..  90 : ret+="etwas Hunger"; break;
+    case 91 .. 100 : ret+="Essen satt"; break;
+    default : ret+="ARG HUNGER"; break;
+    }
+  
+  if((f < 50 && d > 50) ||
+     (f > 50 && d < 50))
+    ret+=" aber ";
+  else 
+    ret+=" und ";
+  
+  switch(d)
+    {
+    case 26 ..  50 : ret+="VIEL DURST"; break;
+    case 51 ..  75 : ret+="Durst"; break;
+    case 76 ..  90 : ret+="etwas Durst"; break;
+    case 91 .. 100 : ret+="Trinken satt"; break;
+    default : ret+="ARG DURST"; break;
+    }
+  
+  return ret+".";
+}
+
+nosave int trollinfo(string str)
+{
+  object tp;
+  mapping at;
+  int xp;
+  
+  tp=TP;
+
+  if(tp->QueryProp(P_GHOST))
+    return write("Tote Troll nix Punkte!\n"),1;
+  
+  at=tp->QueryProp(P_ATTRIBUTES);
+
+  if(xpdiff<=0) xpdiff=tp->QueryProp(P_XP);
+
+  xp=tp->QueryProp(P_XP);
+
+  write(sprintf(
+"      "+C+" _..._        ___        ___        ___        ___        _..._\n"
+"     ,'   `::.    ,~  `:.    ,~  `:.    ,~  `:.    ,~  `:.    ,'   `::.\n"
+"    :      `:::  :     `::  :     `::  :     `::  :     `::  :      `:::\n"
+"    :      .:::  :     .::  :     .::  :     .::  :     .::  :      .:::\n"
+"    :      .:::   `.  .;'    `.  .;'    `.  .;'    `.  .;'   :      .:::\n"
+"    :      .:::     `.'        `.'        `.'        `.'     :.     .:::\n"
+"    :.     .::'"+N+"%45|s"+C+" `:     .:::\n"
+"    `:     .:: "+N+"%46|s"+C+" :     .::'\n"
+"     :     .:: "+N+"%46|s"+C+" :.    .::\n"
+"      :    ::' "+N+"%46|s"+C+" `:   .::\n"
+"       \\   `:               "+N+"%s"+C+"              :  .::\n"
+"        \\   :.,:                                            :..' .::\n"
+"         `.  :.: "+N+"  %s"+C+"  :`: .;'\n"
+"           `.;:: "+N+"  %s"+C+"  : ;:'\n"
+"           :'.::                                            :  ::\n"
+"          :' .::. "+N+"%40|s"+C+" .:  .::\n"
+"         :'   ::: "+N+"%40|s"+C+" :'   .::\n"    
+"         :    `::  "+N+"%s"+C+":    .::\n"
+"         :    .:: "+N+"%39|s"+C+" .:    .::\n"
+"        :'    .::. "+N+"%37|s"+C+" .:    .:::\n"
+"        :     .:::    ,:.       ,:.      .:.       .:.   :'    .:::\n"
+"        :     .:::  ,'  `:.   ,'  `:.  ,'  `:.   ,'  `:. :     .:::\n"
+"        :     .::: :     ::: :     ::::     ::: :     ::::     .:::\n"
+"         `._ .::'   `._.::'   `._.::'  `._.::'   `._.::'  `._ .::'"+N+"\n",
+Titel(tp)+CAP(getuid(tp))+" ("+tp->QueryProp(P_GUILD_LEVEL)+")",
+"("+Gesinnung(tp)+")", 
+"Kaempfen: "+xp+(xp-xpdiff ? " Heute: "+(xp-xpdiff):""),
+"Aufgaben: "+sprintf("%4d", tp->QueryProp(P_QP))+" ["+ QM->QueryAllQP()+"]", 
+Stufenpunkte(tp), 
+Balken(tp->QueryProp(P_HP), tp->QueryProp(P_MAX_HP), setting, tp->QueryProp(P_WIMPY),39),
+Balken(tp->QueryProp(P_SP), tp->QueryProp(P_MAX_SP), setting,0,39),
+
+"Kraft: "+sprintf("%d [%+d]", at[A_STR], tp->QueryAttributeOffset(A_STR))+
+" Ausdauer: "+sprintf("%d [%+d]", at[A_CON], tp->QueryAttributeOffset(A_CON)),
+"Klug: "+sprintf("%d [%+d]", at[A_INT], tp->QueryAttributeOffset(A_INT))+
+" Geschick: "+sprintf("%d [%+d]", at[A_DEX], tp->QueryAttributeOffset(A_DEX)),
+Erschoepfung(tp)+Gewicht(tp),
+Zustand(tp),
+Hunger(tp->QueryProp(P_FOOD), tp->QueryProp(P_MAX_FOOD),
+       tp->QueryProp(P_DRINK), tp->QueryProp(P_MAX_DRINK))
+));
+
+  GetColor(1);
+  return 1;
+}
+
+nosave int trollwink(string str)
+{
+  object *oger;
+  string me;
+  int i;
+
+  if(TP->QueryProp(P_INVIS)) 
+    return write(BS("Nur wenn Troll sichtbar sein!")), 1;
+  
+  oger=Alle_Anwesenden(TP);
+  oger-=({TP});
+
+  me=Titel(TP)+CAP(getuid(TP));
+  
+  if(!str) str="";  
+  if(str[0]=='/') 
+    str=str[1..<1]+" ";
+  else
+    str="";
+  
+  for(i=sizeof(oger)-1;i>=0;i--)
+    tell_object(oger[i], me+" winken Troll "+str+"aus der Ferne zu.\n");
+
+  write("Troll winken alle andere Troll "+str+"aus der Ferne zu.\n");
+  return 1;
+}
+
+nosave int trollwer(string str)
+{
+  if(str && str!="kurz")
+    return write(BS("Syntax: trollwer [kurz]")), 1;
+  
+  TP->More(make_document(who_list("Alle Troll in Silberland:\n",
+				  strlen(str), 1)));
+  
+  return 1;
+}
+
+string extra_look()
+{
+  return capitalize(environment()->QueryPronoun())+
+    " traegt das maechtige Gebiss eines Bergpumas bei sich.\n";
+}
+
+void hau_ab(object who)
+{
+  tell_object(who, 
+	      BS("Du hoerst ploetzlich ein ohrenbetaeubendes Bruellen und "
+		 "laesst vor Schreck das Gebiss fallen...")+
+	      BS("Es zerspringt dabei in tausend Teile..."));
+  
+  RemoveCmd(0);
+ 
+  call_out("remove", 0);
+}
+

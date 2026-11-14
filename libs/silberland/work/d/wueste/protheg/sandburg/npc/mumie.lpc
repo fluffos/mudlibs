@@ -1,0 +1,135 @@
+/*
+** Eine Waechtermumie
+**
+*/
+
+#include "../def.h"
+
+inherit MOST "mynpc";
+
+void create()
+{
+  string adj;
+
+  if(!is_clone(ME)) return;
+  ::create();
+
+  adj=({"halbverrottet","ausgedoerrt","eingefallen","halbverwest","stinkend",
+	  "schmatzend","sabbernd","verwesend"})[random(8)];
+  
+  SetProp(P_SHORT, "Eine "+adj+"e Mumie");
+  SetProp(P_LONG, 
+	  BS("Eine vertrocknete, alte Mumie. Irgendeine unheilige Magie "
+	     "scheint sie jedoch am 'Leben' zu halten!\n"));
+  SetProp(P_NAME,"Mumie");
+  SetProp(P_NAME_ADJ, adj);
+  AddId(({"mumie",SANDBURG}));
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_RACE, "Untoter");
+  create_default_npc(15);
+  SetProp(P_AGGRESSIVE, 1);
+  SetProp(P_TRANSPARENT, 0);
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:0,T_RANGE_MAX:70]));
+  SetProp(P_BODY, 130);
+  SetProp(P_HANDS, ({" mit giftigen Bandagen", 150, DT_POISON}));
+  SetProp(P_ALIGN, -500-random(100));
+  SetProp(P_SIZE, 160+random(30));
+  AddClass(CL_UNDEAD);
+  SetProp(P_RESISTANCE, ({DT_COLD, DT_POISON,DT_AIR,DT_SOUND,DT_TERROR}));
+  SetProp(P_VULNERABILITY, ({DT_FIRE,DT_WATER}));
+  SetProp(P_NOCORPSE, 1);
+  SUID;
+
+  SetProp(P_REJECT, ({ REJECT_DROP, "Die Mumie will Dein Zeug nicht!\n" }) );
+  SetProp(P_DIE_MSG, " loest sich mit gewaltigem Gestank auf.\n");
+  
+  SetProp(P_MSGIN, "schlurft herein");
+  SetProp(P_MSGOUT, "schlurft");
+  SetProp(P_MMSGIN, "schlurft herein");
+  SetProp(P_MMSGOUT, "schlurft hinaus");
+
+  SetProp(P_SPELLRATE, 10);
+
+  AddSpell(2,250,
+	   "Die Mumie reisst Dir tiefe Kratzer in Deine Haut.\n",
+	   "Die Mumie reisst tiefe Kratzer in @WESSEN Haut.\n",
+	   ({DT_RIP,DT_POISON}));
+  AddSpell(2,260,
+	   "Die Mumie reisst Dich an Deinen Haaren.\n",
+	   "Die Mumie reisst @WEM ein Haarbueschel aus.\n",
+	   ({DT_RIP}));
+  AddSpell(1, 350,
+	   "Die Mumie bruellt Dich graesslich an und spuckt dabei!\n",
+	   "Die Mumie bruellt @WEN graesslich an.\n",
+	   ({DT_SOUND,DT_POISON}));
+
+
+  SetProp(P_MNPC_AREA, ROOM "burg");
+  SetProp(P_MNPC_WAIT, ({ 10, 40, 40 }));
+  SetProp(P_MNPC_DEFAULTROOM, ROOM "burg_1_0_1");
+  SetProp(P_MNPC_FLAGS, MOV_OUTDOORS + MOV_MOVES + MOV_BACKWARDS);
+}
+
+int Defend(int dam, mixed dam_type, mixed spell, object enemy)
+{
+  if(!pointerp(dam_type))
+    dam_type=({dam_type});
+  
+  if(sizeof(dam_type & ({DT_MAGIC,DT_UNHOLY,DT_HOLY})))
+    if(!random(5))
+      {
+	tell_object(enemy, 
+		    BS("Die Mumie zwinkert Dir zu, als sie durch Deine "
+		       "Magie gestaerkt wird!"));
+	
+	heal_self(dam*2);
+	
+	return ::Defend(0, dam_type, spell, enemy);
+      }
+    else
+      return ::Defend(dam*1/4, dam_type, spell, enemy);
+  
+  return ::Defend(dam, dam_type, spell, enemy);
+}
+
+void die(int poisondeath) 
+{
+  object *inv;
+  int i;
+  
+  SetProp(P_KILL_NAME, "Eine grosse Giftwolke");
+  
+  inv=filter_array(all_inventory(environment(TO)), CLOSURE(living));
+  inv-=({TO});
+  
+  for(i=sizeof(inv)-1;i>=0; i--)
+    if(random(2))
+      {
+	tell_object(inv[i], 
+		    BS("Der Mumie entweicht eine gruene Wolke...\n"+
+		       "Du schaffst es nicht rechtzeitig auszuweichen und atmest das Gift ein!\n"));
+	inv[i]->Defend(150+random(200), DT_POISON, 0, TO);
+      }
+    else
+      tell_object(inv[i], 
+		  BS("Der Mumie entweicht eine gruene Wolke...\n"+
+		     "Du schaffst es jedoch rechtzeitig, ihr auszuweichen.\n"));
+  
+  ::die(poisondeath);
+}
+
+init()
+{
+  ::init();
+  
+  if(TP && TP->id(SANDBURG)) AddDefender(TP);
+}
+
+void InformDefend(object enemy)
+{
+  if(!InFight())
+    tell_room(ENV(TO), "Die Mumie stuerzt sich in den Kampf!\n");
+
+  Kill(enemy);
+}
+

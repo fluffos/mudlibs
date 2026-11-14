@@ -1,0 +1,255 @@
+
+inherit "std/room";
+
+#include <properties.h>
+#include <moving.h>
+#include <defines.h>
+#include <moredef.h>
+#include <wizlevels.h>
+#include <environment.h>
+#include <combat.h>
+
+#include "../def.h"
+
+#pragma strong types;
+
+
+int heal_used = 0;
+int level;
+
+#include  "../functions/heal_functions.lpc"
+#include  "../functions/trap_functions.lpc"
+
+void create()
+{
+  if(!IS_CLONE(TO)) return;
+  ::create();
+  SetProp (P_LIGHT, 0);
+  SetProp (P_INDOORS, 1);
+  SetProp (P_INT_SHORT, "short");
+  SetProp (P_INT_LONG, "long");
+  SetProp (P_ENVIRONMENT, ([ ENV_TEMPERATURE:22, ENV_TERRAIN:TT_CAVE ]));
+
+  AddDetail( ({ "boden" }), "Der dreckige Boden ist bepflastert mit Resten "
+    "von vormals lebendigem oder totem organischen Material. Dir grausts.");
+  AddDetail( ({ "material" }), "So genau moechtest Du die eigentlich nicht "
+    "sehen.");
+  AddDetail( ({ "decke" }), "Das Gestein an der Decke wirkt bedrohlich "
+    "locker. Aber vielleicht ist das auch nur Deine Angst vor geschlossenen "
+    "Raeumen. Jedenfalls ist Dir mulmig zumute.");
+  AddDetail( ({ "erdinneres" }), "Da bist Du. Eindeutig.");
+  AddDetail( ({ "gedanken" }), "Versuchs mal mit denken?");
+  AddDetail( ({ "krieger" }), "Ein grosser starker - so wie Du es bist.");
+  AddDetail( ({ "waende", "wand", "felswaende" }), "Die schroffen felsigen Waende wirken "
+    "bedrueckend nahe - und die Tatsache, dass Du nicht recht weit siehst ist "
+    "Dir nicht recht geheuer.");
+  AddDetail( ({ "gestein", "fels" }), "Steinharter Fels - etwas schroff "
+    "vielleicht - welchen Ursprunges diese Gaenge sind weisst Du aber nicht.");
+  AddDetail( ({ "gaenge", "gang" }), "Ein den Fels wie Adern durchziehendes "
+    "Hoehlensystem.");
+  AddDetail( ({ "system" }), "Du solltest dDich gegen das System auflehnen!");
+  AddDetail( ({ "ritze", "spalte", "ritzen", "spalten" }), "Der schroffe "
+    "Fels beherbergt soviele Risse und Spalten dass jeder Meter Tage "
+    "erfordern wuerde sie abzusuchen.");
+  AddDetail( ({ "erde", "erdreich" }), "Von Erde kann man hier kaum reden. "
+    "Obwohl hie und da hat verfaulendes Material etwas humusaehnliches "
+    "gebildet.");
+  AddDetail( ({ "ecke", "ecken" }), "Hiervon gibt es unglaublich viele hier. "
+    "Sie sind dunkel und fast immer entzieht sich ihr Inhalt Deinem "
+    "Blickfeld.");
+  AddDetail( ({ "reste" }), "Die Reste stammen wohl von frueher einmal "
+    "mehr oder weniger lebendigen Wesen.");
+  AddDetail( ({ "wesen" }), "Denen wirst Du noch frueh genug begegnen.");
+  AddDetail( ({ "weg", "wege" }), "Eigentlich sind es keine Wege hier sondern "
+    "Gaenge und Hoehlen. Du benutzt sie halt als Wege.");  
+  AddDetail( ({ "schatten" }), "Durch die vielen Ecken, Risse und Kanten "
+    "entstehen ueberall Schatten welche alles moegliche beherbergen koennten.");
+  AddDetail( ({ "gefahr" }), "Sie lauert hier ueberall - Du solltest beser "
+    "auf der Hut sein.");
+  AddDetail( ({ "hut" }), "BLAH!");
+      
+   
+  AddSmell(DEFAULT_SMELL, "Es ist der Geruch des Todes und der Verwesung.");
+  AddSound(DEFAULT_SOUND, "Es scheint Dir als wuerde die Erde ganz leise "
+    "atmen.");
+    
+  previous_object()->CustomizeObject(); 
+}
+
+
+void AddEscapePoint(int z)
+{
+  //failsave
+  if (!z) z = 20; // QueryProp(P_DUNGLEVEL);
+  RemoveDetail("wand");
+  AddDetail("wand", "An der Wand siehst Du eine quadratische "
+    "Metallplatte.");
+  AddDetail( ({ "platte", "metallplatte", "oberflaeche" }),
+    "Also Du die Platte genauer betrachtest faellt Dir auf dass ein "
+    "Relief die ansich glatte Oberflaeche ziert.");
+  AddDetail( ({ "relief" }), DUNGRUNES[(z-20)/5]);
+  AddCmd( ({ "reibe", "reib", "rubbel", "rubbe" }), "EscapeCmd");
+  AddCmd( ({ "leg", "lege" }), "GetRune");
+}
+
+
+int GetRune(string str)
+{
+  object ob;
+
+  notify_fail("Wo moechtest Du Deine Hand hinlegen?\n");
+  if (str != "hand auf relief" 
+      && str != "hand auf platte"
+      && str != "hand auf metallplatte"
+      && str != "hand auf oberflaeche") return 0; 
+
+  tell_room(ME, BS(TP->Name(WER) + " legt seine Hand auf die Wand."), ({ TP }));
+  tell_object(TP, BS("Du legst Deine Hand auf das Relief."));
+  
+  if (present(sprintf("\ndungrunelvl%d", QueryProp(P_DUNGLEVEL)), TP))
+    return 0;
+
+  ob = clone_object(DUNGOBJ("rune"));
+  
+  ob->SetLevel(QueryProp(P_DUNGLEVEL));
+  
+  ob->move(TP, M_GET + M_NOCHECK);
+  
+  tell_object(TP, BS("Eine kleine Rune materialisiert sich in Deiner "
+                     "Hand welche Du sofort einsteckst."));    
+
+  return 1;
+}
+
+int EscapeCmd(string str)
+{
+  string cmd;
+  object rune;
+  
+  cmd = TP->query_verb();
+  
+  if (cmd=="reib") cmd += "en";
+  else if (cmd="rubbe") cmd += "ln";
+  else cmd += "n";
+  
+  
+  notify_fail(sprintf("Was willst Du %s?\n", cmd));
+  if (!str || !rune = present(str, TP)) return 0;
+
+  tell_room(ENV(TP), BS(TP->Name(WER) + " reibt an etwas herum."), ({ TP }));
+
+  notify_fail("Du reibst an der Rune rum.\n");
+  if (rune->QueryProp(P_DUNGLEVEL)!=QueryProp(P_DUNGLEVEL)) return 0;
+
+  tell_object(TP, "Die Rune leuchtet auf.\n");
+
+  call_out("Escape", 2, TP);
+  
+  return 1;
+}
+
+
+void Escape(object pl)
+{
+  return pl->move(DUNGPATH "eingang3", M_GO, 0,
+                    "zerfaellt zu Staub",
+                    "steigt vom Altar");  
+}
+
+
+void AddAdvance()
+{
+  AddSpecialExit("unten", "Advance");
+  SetProp(P_DUNG_NO_UNLOAD, 1);
+}
+
+varargs int Advance()
+{
+  object ob;
+
+  // Hmm
+  if (!interactive(TP)) return 0;
+
+
+  if (IS_WIZARD(TP)) 
+    call_out("NextLevel", 0, TP);
+  
+  notify_fail("Eine magische Barriere haelt Dich zurueck.\n");
+  if (!ob = present("\ndungcrystaloctahedron", ME)) return 0;
+  
+  if (ob->QueryProp(P_DUNGLEVEL)!=QueryProp(P_DUNGLEVEL)) return 0;
+
+  DUNGMASTER->LoadInOut(QueryProp(P_DUNGLEVEL)+1);
+
+  call_out("NextLevel", 0, TP);
+  return 1;
+}
+
+int NextLevel(object pl)
+{
+  DUNGTOPMASTER->NotifyLvlDesc(pl, QueryProp(P_DUNGLEVEL)+1);
+  return pl->move(DUNGMASTER->NextLevelStart(QueryProp(P_DUNGLEVEL)), M_GO, 0,
+                    "schreitet nach unten zur naechsten Ebene",
+                    "kommt herunter");
+}
+
+
+void AddRegress()
+{
+  AddSpecialExit("oben", "Regress");
+  SetProp(P_DUNG_NO_UNLOAD, 1);
+}
+
+varargs int Regress()
+{
+  object ob;
+  int z;
+
+  // Hmm
+  if (!interactive(TP)) return 0;
+  
+  z=QueryProp(P_DUNGLEVEL);
+  
+  if (z>1) DUNGMASTER->LoadInOut(z-1);
+  
+  call_out("PrevLevel", 2, TP);
+  return 1;
+}
+
+int PrevLevel(object pl)
+{
+  return pl->move(DUNGMASTER->PrevLevelEnd(QueryProp(P_DUNGLEVEL)), M_GO, 0,
+                    "schreitet nach oben zur vorigen Ebene",
+                    "kommt herauf");
+}
+
+
+void init()
+{
+  object lastroom;
+  string troom;
+  ::init();
+  
+  call_out("CallTrap", 0);
+
+  if (DUNGMASTER->IsActive(QueryProp(P_DUNGLEVEL))) return;
+  DUNGMASTER->InitMap(QueryProp(P_DUNGLEVEL));
+}
+
+
+void remove()
+{
+  ::remove();
+}
+
+void reset()
+{
+  object *inv;
+  ::reset();
+  
+  if(present("Interactive", ME)) return;
+  
+  if (DUNGMASTER->IsActive(QueryProp(P_DUNGLEVEL))
+      && sizeof(all_inventory(ME))>0) return;
+  call_out("remove", 2);
+}

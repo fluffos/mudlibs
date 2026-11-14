@@ -1,0 +1,304 @@
+inherit "std/room";
+
+#include <moving.h>
+#include <player.h>
+#include <properties.h>
+#include <language.h>
+#include "../desert.h"
+#include "cave.h"
+
+string d_mission(string str);
+string d_ptahla(string str);
+string d_temp(string str);
+
+void release_slave(object slave);
+
+#define MIN_TIME_FOR_ENSLAVEMENT 300
+
+nosave string *marked = ({});
+
+create()
+{
+  ::create();
+  
+  SetProp(P_INT_SHORT, "In einem Berg");
+  SetProp(P_INT_LONG,  
+	  BS("Sackgasse. Der einzige Weg ist zurueck nach Nordwesten, woher " 
+	     "Du gekommen bist. Auch hier ist der Fels angenehm kuehl. Und nun "
+	     "weisst Du auch woher die Lichter stammten, die Du zuvor noch als "
+	     "so geheimnisvoll empfunden hattest."));
+  
+  SetProp(P_LIGHT, 0);
+  SetProp(P_INDOORS, 1);
+  SetProp(P_ENVIRONMENT,([ENV_TEMPERATURE: 15, ENV_TERRAIN:TT_CAVE]));
+
+  SetProp(P_NOQUIT, 1);
+  
+  AddDetail(({"waende"}),
+	    "Die Waende rings um Dich herum wurden, worauf der Fels schliessen " 
+	    "laesst, in grosser Eile bearbeitet. Vermutlich bestand grosses " 
+	    "Interesse daran, moeglichst schnell ins Innere des Berges vorzustossen. "
+	    "An manchen Stellen wird des oefteren noch gearbeitet, da an den Waenden "
+	    "sonst keine Fackeln haengen wuerden, kombinierst Du detektivisch.");
+  AddDetail(({"stellen"}),
+	    "An vielen Stellen wird hier versucht, tiefer in das Berginnere "
+	    "vorzudringen.");
+  AddDetail(({"berginnere", "innere"}),
+	    "Naja, sehr weit sind sie ja noch nicht gekommen, urteilst Du kritisch. " 
+	    "Vielleicht solltest Du ihnen helfen?");
+  AddDetail(({"licht", "lichter"}),
+	    "An den Waenden haengen Fackeln, die den Raum erhellen, zumindest hell "
+	    "genug beleuchten, dass gearbeitet werden kann, und sich die Arbeiter "
+	    "hier nicht gegenseitig die Koepfe einschlagen.");
+  AddDetail(({"koepfe", "kopf"}),
+	    "Du fasst Dir an den Kopf und stellst fest, dass alles dort ist, wo es " 
+	    "hingehoert. Ob Du damit zufrieden bist oder nicht sei dahingestellt.");
+  AddDetail(({"ausweg", "weg"}),
+	    "Der einzige Ausweg ist der nach Nordwesten.");
+  AddDetail(({"wand"}),
+	    "Hier sieht die eine wie die andere aus.");
+  AddDetail(({"arbeiter"}),
+	    "Momentan scheint keiner anwesend zu sein, versuch Dein Glueck einfach " 
+	    "spaeter noch einmal.");
+  AddDetail(({"kraft"}),
+	    "Andererseits muss man doch auch kraeftig sein, um gegen den Fels "
+	    "ueberhaupt anzukommen.");
+  AddDetail(({"berg"}),
+	    "Du bist hier im Inneren des Berges. In einer relativ kleinen Hoehle.");
+  AddDetail(({"eile"}),
+	    "In der Ruhe liegt die Kraft!");
+  AddDetail(({"interesse"}),
+	    "Was wohl die Erbauer dieser Hoehlen angetrieben haben mag?");
+  AddDetail(({"boden"}),
+	    "Der Boden ist genaugenommen ziemlich einfach nur ein Boden, aber hin "
+	    "und wieder kannst Du darauf Blutflecken entdecken.");
+  AddDetail(({"flecken", "blutflecken", "blut"}),
+	    "Stellenweise ist es noch sehr frisch. Scheinbar herrschen hier rauhe "
+	    "Sitten unter den Arbeitern.");
+  AddDetail(({"sitten"}),
+	    "Ja, heutzutage sind die Sitten rauh, und man muss schon acht geben, "
+	    "dass einen die anderen nicht unterkriegen. Besonders schlimm zb waere "
+	    "es einfach so und ganz spontan versklavt zu werden.");
+  AddDetail(({"decke"}), 
+	    ([
+	      0: 
+	      "Die Decke ueber Dir ist genauso kahl und feucht " 
+	      "wie der uebrige Fels hier ueberall.", 
+	      "zwerg": 
+	      "Die Decke ist viel zu weit " 
+	      "entfernt, um genaueres feststellen zu koennen, aber vermutlich ist "
+	      "sie genauso kalt und kahl wie der uebrige Fels.", 
+	      "troll":
+	      "Naja, auf deine Zehenspitzen darfst Du Dich nicht stellen, sonst "
+	      "stoesst Du Dir den Kopf an der kahlen kalten Decke."]));
+  AddDetail(({"fels"}),
+	    "Er ist kalt und kahl. Ausserdem wurde er nicht sehr sorgfaeltig " 
+	    "bearbeitet, scheinbar war es wichtiger den Raum moeglichst rasch " 
+	    "fertig zu stellen, als auf Feinheiten zu achten.");
+  AddDetail(({"feinheiten"}),
+	    "Hier wurde nicht auf Feinheiten geachtet, der Fels ist rauh und sehr " 
+	    "ungleichmaessig.");
+  AddDetail(({"hoehle", "raum"}), 
+	    ME->QueryProp(P_INT_LONG));
+  AddDetail(({"wohltat"}),
+	    "Du geniesst die angenehme Temperatur hier.");
+  AddDetail(({"ruhe"}),
+	    "Glaubst Du wirklich, dass Du erfolgreich sein wirst, wenn Du 'Ruhe' " 
+	    "untersuchst?");
+  AddSound(DEFAULT_SOUND,
+	   "Du hoerst Du wie die Sklavenarbeiter hier unaufhoerlich den Fels "
+	   "bearbeitet.");
+  AddSound(({"ruhe"}),
+	   "Aber hier ist es doch garnicht ruhig.");
+  
+  AddSpecialDetail(({"mission"}), "d_mission");
+  AddSpecialDetail(({"ptahla"}), "d_ptahla");
+  AddSpecialDetail(({"temperatur"}), "d_temp");
+  
+  AddItem(NPC "sarbeiter", REFRESH_DESTRUCT);
+  AddItem(NPC "sarbeiter", REFRESH_DESTRUCT);
+  AddItem(NPC "saufseher", REFRESH_DESTRUCT);
+  
+  AddExit("nordwesten", VALLEY "cave01");	
+}
+
+string d_mission(string str)
+{
+  if(present("\nfree_souls", TP))
+    return BS("Hat Dich der Moench nicht ausgesandt, um eine " 
+	      "delikate Angelegenheit zu regeln?");
+  
+  if(present("\fennek", TP))
+    return BS("Wolltest Du Ptahla nicht etwas bringen?");
+  
+  return BS("Du befindest Dich derzeit auf keiner Mission, "
+	    "oder etwa doch?");
+}
+
+string d_ptahla(string str)
+{
+  if(present("\fennek", TP))
+    return BS("Hier wirst Du sie sicher nicht finden, sie ist " 
+	      "und bleibt wo sie hingehoert.");
+  
+  return "Sowas siehst Du da nicht.\n";
+}
+
+string d_temp(string str)
+{
+  object ob;
+  
+  if(ob = deep_present("thermometer", TP))
+    return BS("Um die Temperatur zumindest ungefaehr zu erfahren " 
+	      "koenntest Du doch einmal Dein Thermometer untersuchen.");
+  
+  return BS("Tsja, haettest Du ein Thermometer bei Dir, so " 
+	    "koenntest Du einen Blick darauf werfen, aber so musst Du Dich leider " 
+	    "damit begnuegen, dass es hier herinnen angenehm kuehl ist.");
+}
+
+init()
+{
+  ::init();
+  
+//  if((!TP->id("\nslave")) &&(!TP->id("\noverseer")) 
+  if(interactive(TP) && present("sklavenaufseher", ME))
+    mark_player_for_enslavement(TP);
+}
+
+void mark_player_for_enslavement(object slave)
+{
+  marked+=({getuid(slave)});
+  
+  call_out("enslave_player", MIN_TIME_FOR_ENSLAVEMENT, slave);
+}
+
+void enslave_player(object slave)
+{
+  if(((member(marked, getuid(slave))!=-1)) && 
+     present(slave, this_object()) &&
+     (!slave->InFight()) &&
+     (!slave->id("\nslave")) && 
+     present("sklavenaufseher", ME))
+    {
+      slave->SetProp(P_PARALYZED,([PARALYZE_TIME:-1, 
+      PARALYZE_MSG: "Der Sklavenaufseher droht Dir mit der Peitsche.\n",
+      PARALYZE_MSG_OTHER: "",
+      PARALYZE_END: "",
+      PARALYZE_END_OTHER: ""]));
+      
+      tell_object(slave, 
+		  BS("Der Sklavenaufseher hat genug davon, dass Du hier " 
+		     "tatenlos herumhaengst, und versklavt Dich kurzer Hand. "
+		     "Noch bevor Du es ueberhaupt registrierst, hast Du schon "
+		     "Ketten um Deine Beine, und eine Spitzhacke in der Hand."));
+      
+      call_out("player_works", 12, slave);
+    }
+}
+
+void player_works(object slave)
+{
+  if((present("sklavenaufseher")) && (objectp(slave)) && (present(slave)))
+    {
+      tell_object(slave, 
+		  BS("Ja so schnell geht das. Vor kurzem wolltest Du noch einfach " 
+		     "das Leben geniessen, Abenteuer bestehen, und siehe da, nun "
+		     "bist Du versklavt, und kannst hier schuften."));
+      
+      call_out("player_still_works", 12, slave);
+    }
+  else
+    release_slave(slave);
+}
+
+void player_still_works(object slave)
+{
+  if((present("sklavenaufseher")) && (objectp(slave)) && (present(slave)))
+    {
+      tell_object(slave, 
+		  BS("Schoen langsam legt sich Deine Aufregung wieder, und Du machst "
+		     "Dir schon mal Gedanken ueber eventuelle Fluchtmoeglichkeiten. "
+		     "Schliesslich hast Du keine Lust, bis an das Ende Deines Lebens "
+		     "hier mit ner bloeden Spitzhacke den Fels zu bearbeiten."));
+      
+      call_out("p_asks_for_water", 12, slave);
+    }
+  else
+    release_slave(slave);
+}
+
+void p_asks_for_water(object slave)
+{
+  if((present("sklavenaufseher")) && (objectp(slave)) && (present(slave)))
+    {
+      tell_object(slave, 
+		  BS("Waehrend Du so den Fels tracktierst, und ueber Deinen "
+		     "Fluchtplan sinnierst, stellst Du ploetzlich fest, dass "
+		     "die Arbeit einen ganz schoen durstig macht."));
+      
+      tell_object(slave, 
+		  BS("Du fragtst den Sklavenaufseher: Ich habe Durst, kann ich "
+		     "Wasser haben?"));
+	
+      call_out("overseer_hurts_p", 12, slave);
+    }
+  else
+    release_slave(slave);
+}
+
+void overseer_hurts_p(object slave)
+{
+  if((present("sklavenaufseher")) && (objectp(slave)) && (present(slave)))
+    {
+      tell_object(slave, 
+		  BS("Der Sklavenaufseher schwingt seine Peitsche, und peitscht Dich "
+		     "mit den Worten: Ihr duerft hier nicht sprechen!, aus."));
+      
+      SetProp(P_KILL_NAME, "Ein unbarmherziger Sklavenaufseher");
+      slave->do_damage(40);
+      
+      tell_object(slave, 
+		  BS("Haettest Du die Antwort gekannt, haettest Du sicher nicht " 
+		     "gefragt, dessen bist Du Dir sicher. Aber nun ist Dein Wille "
+		     "zur Flucht in Dir bereits zur Besessenheit geworden."));
+
+      call_out("slave_flees", 12, slave);
+    }
+  else
+    release_slave(slave);
+}
+
+void slave_flees(object slave)
+{
+  if((present("sklavenaufseher")) && (objectp(slave)) && (present(slave)))
+    {
+      tell_object(slave, 
+		  BS("Aaaaah, jetzt endlich wendet sich der Aufseher kurz ab, denn " 
+		     "das ist der Augenblick, auf den Du so sehnsuechtig gewartet "
+		     "hast. Du nutzt die Gunst der 'Stunde', holst mit der Hacke "
+		     "weit aus, und mit einem maechtigen Hieb durchtrennst Du Deine "
+		     "Fussfessel, und bist noch in der naechsten Sekunde eine "
+		     "Staubwolke!"));
+		
+      call_out("free_slave", 0, slave);
+    }
+  else
+    release_slave(slave);
+}
+
+
+void free_slave(object slave)
+{
+  marked -=({getuid(slave)});
+  
+  slave->SetProp(P_PARALYZED, 0);
+  slave->move(VALLEY "raum35", M_GO, "raus", "fluechtet", "kommt an");
+}
+
+void release_slave(object slave)
+{
+  marked -=({getuid(slave)});
+  
+  slave->SetProp(P_PARALYZED, 0);
+}

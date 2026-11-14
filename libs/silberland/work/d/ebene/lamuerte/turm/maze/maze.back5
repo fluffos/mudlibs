@@ -1,0 +1,513 @@
+inherit "/std/room";
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include "maze.h"
+#include "vt100.h"
+
+#define X(c) c%SIZEX
+#define Y(c) c/SIZEX
+#define WALLSIZE 3
+
+#define PATH  "/d/ebene/lamuerte/turm/maze/"
+
+private mixed *m;         // maze
+private mixed *mconf;   // maze config
+private mixed *todo;    // contains the coordinate pairs of all positions
+                        // that haven´t been processed yet
+private int spacesleft; // nr. of free spaces in maze
+private int lastX, lastY;
+private int show_progress;
+private int processing;
+private int inverted;
+
+build_rooms();
+
+void create()
+{
+  ::create();
+   m = 0;
+   mconf = 0;
+   todo = 0;
+   SetProp(P_INT_SHORT, "Der Labyrinthkontrollraum " );
+   SetProp(P_INT_LONG, "Du stehst im Labyrinthkontrollraum.\nFolgende Kommandos stehen hier zur Verfuegung:\n"+
+             "   - maze           (calculate maze data to array)\n"
+             "   - display        (display map)\n"
+             "   |- display write (display & write map to disk)\n"
+             "   - build          (create maze zone on disk)\n"
+             "   - delmaze        (delete maze zone from disk)\n"
+             );
+
+//   AddCmd( "invert", "do_invert" );
+   AddCmd( "display", "show_maze" );
+   AddCmd( "maze","test_maze" );
+   AddCmd( "build","do_build" );
+   AddCmd( "delmaze","do_del" );
+}
+
+void reset() {
+   ::reset();
+   m = 0;
+   mconf = 0;
+   todo = 0;
+}
+
+private string mazechar(int x) {
+   if (inverted) 
+      switch(x) {
+         case WALL: return " ";
+         case ROOM: return "#";
+         default: return "?";
+      }
+   else
+      switch(x) {
+         case WALL: return "#";
+         case ROOM: return " ";
+         default: return "?";
+      }
+}
+
+int do_invert(string arg) {
+   inverted = 1 - inverted;
+   write( "Maze will be displayed inverted now!!!\n" );
+   return 1;
+}
+
+int show_maze(string arg) {
+   int x,y;
+   string s;
+
+   if (get_eval_cost()<10000)
+      return 1;
+
+   if (!m || !pointerp(m)) {
+      printf( "No maze created yet!\n" );
+      return 1;
+   }
+
+   s = "";
+   for(y=SIZEY-1;y>=0;y--) {
+      s += sprintf( "\n     " );
+        for(x=0;x<SIZEX;x++) {
+         s += sprintf( "%s", mazechar(m[y][x]) );
+        }
+   }
+   tell_room( this_object(), sprintf(VT_CLS+"Current Maze (spacesleft=%d): \n%s\n\n", spacesleft, s) );
+   if (arg=="write") {
+     if (file_size(PATH+"maze.map")>0) rm("./maze.map");
+     write_file(PATH+"maze.map",s);
+     write_file(PATH+"maze.map","\n"); 
+     write("written maze.map\n");
+   }
+   return 1;
+}
+
+
+int del_maze(int x,int y) {
+  int z;
+  string file;
+  object droom,*people;
+
+   if (!m || !pointerp(m)) {
+      printf( "Any maze must be in the array to delete the Files!\n" );
+      return 1;
+   }
+
+    while((get_eval_cost() > MIN_EVAL) && y<SIZEY) {
+      if (x==0) y++;
+      while((get_eval_cost() > MIN_EVAL) && x<SIZEX) {
+      x++;
+         file=PATH+"x"+to_string(x)+"y"+to_string(y)+".c";
+           if(file_size(file)>0) {
+               if(droom=find_object(file)) {
+                  people=filter_array(all_inventory(droom), #'interactive );
+                    for(z=sizeof(people)-1;z>=0;z--) {
+                       if(present(people[z]),droom) {
+                          tell_object(people[z],"Die Waende fangen an sich zu verschieben. Du verlierst die Orientierung.");
+                          people[z]->move(PATH+"rebuildroom.c", M_NOCHECK, "faellt", "in den Tod", "faellt herein");
+                       }
+                    }
+                  droom->remove();
+               }
+           }
+      rm(file);
+
+      }
+      x=0;
+   }
+
+
+   if(y<SIZEY) {
+     call_out("del_maze",1,x,y-1);
+     return 1;
+   }
+
+   x=0;y=0;z=0;
+  write("FINISHED!!!\n");
+ return 1;
+}
+
+
+int do_del(){
+  write("Starting to delete maze files...\n");
+  del_maze(0,0);
+  return 1;
+}
+
+int build_exits(int x,int y) {
+  string *ex;
+  ex=allocate(15);
+  ex=({ });
+   if (!m || !pointerp(m)) {
+      printf( "No maze created yet!\n" );
+      return 1;
+   }
+
+    while((get_eval_cost() > MIN_EVAL) && y<SIZEY-1) {
+      if (x==0) y++;
+      while((get_eval_cost() > MIN_EVAL) && x<SIZEX-1) {
+      x++;
+         if(mazechar(m[y][x])==" ") {
+          if(mazechar(m[y-1][x])==" ") ex+=({"sueden"});  //WOSN
+          if(mazechar(m[y+1][x])==" ") ex+=({"norden"});
+          if(mazechar(m[y][x-1])==" ") ex+=({"westen"});
+          if(mazechar(m[y][x+1])==" ") ex+=({"osten"});
+          build_rooms(x,y,ex);
+  ex=({ });
+        }
+      }
+      x=0;
+     }
+   if(y<SIZEY-1) {
+     call_out("build_exits",1,x,y-1);
+     return 1;
+   }
+
+   x=0;y=0;
+  write("FINISHED!!!\n");
+ return 1;
+}
+
+
+int do_build(){
+  write("Starting to build maze files...\n");
+  build_exits(0,0);
+  return 1;
+}
+
+
+int build_rooms(int posx, int posy, string *exits) {
+  string data;
+  string file;
+  int x;
+
+
+      data  = "inherit \"std/room\";\n";
+      data += "#include <properties.h>\n";
+      data += "#include <language.h>\n\n";
+      data += "void create() {\n";
+      data += "  ::create();\n";
+      data += "  SetProp( P_INT_SHORT, \"In einem Labyrinth\");\n";
+      data += "  SetProp( P_INT_LONG, \"Du stehst inmitten eines Labyrinths und hast keine \"+\n";
+      data += "  \"Ahnung wohin Du gehen sollst. Es ist alles so verwirrend aehnlich hier drinn. \"+\n";
+      data += "  \"Hoffentlich findest Du jemals wieder raus.\" );\n";
+      data += "  SetProp( P_LIGHT, 1);\n";
+
+for(x=0;x<=sizeof(exits)-1;x++) {
+   //wosn 
+         if(exits[x]=="sueden") data+= "   AddExit(\"sueden\",\""+PATH+"x"+to_string(posx)+"y"+to_string(posy-1)+"\");\n"; 
+         if(exits[x]=="norden") data+= "   AddExit(\"norden\",\""+PATH+"x"+to_string(posx)+"y"+to_string(posy+1)+"\");\n"; 
+         if(exits[x]=="westen") data+= "   AddExit(\"westen\",\""+PATH+"x"+to_string(posx-1)+"y"+to_string(posy)+"\");\n"; 
+         if(exits[x]=="osten") data+= "   AddExit(\"osten\",\""+PATH+"x"+to_string(posx+1)+"y"+to_string(posy)+"\");\n"; 
+
+}
+      data += "}\n";
+// write(data);
+ file="x"+to_string(posx)+"y"+to_string(posy)+".c"; 
+ if (file_size(file)>0) return 1;
+// if(rm("file")==0) write("not deled");
+
+ write_file( file, data );
+
+return 1;
+
+} 
+
+del_file(string file)
+{if(file_size(file)==-1) rm("file");
+ return 1;
+}
+  
+
+/* allocate the maze, check the sizes, add the borderwall and create the
+   todo-list */
+private int init_maze(int szY, int szX) {
+   int line,x;
+
+   if (szX<9)
+      return ERR_XSIZE;
+   if (szY<9)
+      return ERR_YSIZE;
+   
+   /* sizes must be odd, and we need 2 spaces for the borders */ 
+   if ( !(szX % 2) )
+      szX+=3;
+   else
+      szX+=2;
+
+   if ( !(szY % 2) )
+      szY+=3;
+   else
+      szY+=2;
+
+   /* write fixed sizes back to config structure */
+   mconf[IDX_SIZEY] = szY; 
+   mconf[IDX_SIZEX] = szX; 
+
+   /* allocate array and set maze border as wall */
+   m = 0;
+   todo = ({ });
+   m = allocate(szY);
+   for(line=0;line<szY;line++) {
+      m[line] = allocate(szX);
+      m[line][0] = WALL;
+      m[line][szX-1] = WALL;
+   }
+
+   for(x=0;x<szX;x++) {
+      m[0][x] = WALL;
+      m[szY-1][x] = WALL;
+   }
+   
+   // fill the todo list
+#if 0
+   for(line=0;line<szY;line+=2) {
+      for(x=0;x<szX;x+=2) {
+         todo += ({ line*szX+x });
+      }
+   }
+#else
+   for(line=0;line<szY;line+=2)
+      todo += ({ line*szX, (line+1)*szX-1 });
+   for(x=0;x<szX;x+=2)
+      todo += ({ x, (szY-1)*szX+x });
+#endif
+
+   /* remove corners */
+   todo -= ({ 0, szX-1, (szY-1)*szX, szY*szX-1 });
+   
+   spacesleft = (szY-3)*(szX-3)/4;
+
+
+   return SUCCESS;
+}
+
+private int *getfree( int x, int y ) {
+   int i, szY, szX;
+   int *rtc;
+
+   szY = SIZEY;
+   szX = SIZEX;
+
+   if (x<0 || y<0 || x>=szX || y>=szY)
+      return 0;
+
+   rtc = ({ });
+   for(i=0;i<=WEST;i++) {
+      switch(i) {
+         case NORTH:
+            if (y>3 && !m[y-1][x] && !m[y-2][x])
+               rtc += ({ i });
+            break;
+         case SOUTH:
+            if (y<szY-5 && !m[y+1][x] && !m[y+2][x])
+               rtc += ({ i });
+            break;
+         case EAST:
+            if (x<szX-5 && !m[y][x+1] && !m[y][x+2])
+               rtc += ({ i });
+            break;
+         case WEST:
+            if (x>3 && !m[y][x-1] && !m[y][x-2])
+               rtc += ({ i });
+            break;
+      }
+   }
+
+   if (sizeof(rtc))
+      return rtc;
+   else
+      return 0;
+}
+
+private int acquire_new_work_space() {
+   int sz;
+   int new;
+   sz = sizeof(todo);
+   new = todo[random(sz)];
+   lastX = new % SIZEX;
+   lastY = new / SIZEX;
+}
+
+private void build_wall(int x, int y, int dir) {
+   switch(dir) {
+      case NORTH:
+         m[y-1][x] = WALL;
+         m[y-2][x] = WALL;
+         lastX = x;
+         lastY = y-2;
+         break;
+      case SOUTH:
+         m[y+1][x] = WALL;
+         m[y+2][x] = WALL;
+         lastX = x;
+         lastY = y+2;
+         break;
+      case EAST:
+         m[y][x+1] = WALL;
+         m[y][x+2] = WALL;
+         lastX = x+2;
+         lastY = y;
+         break;
+      case WEST:
+         m[y][x-1] = WALL;
+         m[y][x-2] = WALL;
+         lastX = x-2;
+         lastY = y;
+         break;
+   }
+   if (getfree(lastX,lastY))
+      todo += ({ lastY*SIZEX+lastX });
+   else
+      todo -= ({ lastY*SIZEX+lastX });
+
+   spacesleft--;
+}
+
+static int maze_creation() {
+   int next, sz, x, y;
+   int *fr;
+   while (get_eval_cost() > MIN_EVAL &&
+         spacesleft > 0 &&
+         (sz=sizeof(todo)) > 0) {
+      /*
+         next = todo[random(sz)];
+      // todo -= ({next});
+      x = next % SIZEX;
+      y = next / SIZEY;
+       */
+      fr = getfree(lastX,lastY);
+      if (show_progress)
+         show_maze("");
+      if (sizeof(fr)) {
+         next = fr[random(sizeof(fr))];
+         x = lastX % SIZEX;
+         y = lastY / SIZEX;
+         build_wall(lastX,lastY,next);
+      } else {
+         todo -= ({ lastY*SIZEX+lastX }); 
+         acquire_new_work_space();
+      }
+   }
+
+   if (get_eval_cost()<=MIN_EVAL && spacesleft>0 && sizeof(todo)) {
+      call_out("maze_creation",2);
+   } else { // really finished
+      if (show_progress)
+         show_maze("");
+      show_progress = 0;
+      processing = 0;
+      tell_room(this_object(), "FINISHED!!!\n" );
+   }
+
+   if (spacesleft>0)
+      return ERR_EVAL;
+   else {
+      return SUCCESS;
+   }
+}
+
+/* the main function needed to create a maze 
+   return codes: see header file
+*/
+private int build_random_maze(mixed *mazeconfig) {
+   int rtc;
+
+   if (processing)
+      return ERR_PROC;
+
+   if (!mazeconfig || !pointerp(mazeconfig) || sizeof(mazeconfig)<MIN_NR_OF_PARAMS)
+      return ERR_PARAM;
+
+   mconf = mazeconfig;
+   mazeconfig = 0;
+
+   if ((rtc=init_maze(SIZEY,SIZEX))!=SUCCESS)
+      return rtc; 
+
+   acquire_new_work_space();
+   lastX = -1;
+   lastY = -1;
+   processing = 1;
+   if ((rtc=maze_creation())!=SUCCESS)
+      return rtc;
+
+   return SUCCESS;
+}
+
+/* this functions sends the msg to either a player or to a logfile */
+void output(mixed *mc, string msg) {
+   printf( msg +"\n" );
+}
+
+/* this function is a wrapper for the real fun, to make it easier to
+   print appropriate error/status msgs
+
+   mazeconfig structure:
+   { string name, int szY, int szX, mixed *connects }
+*/
+nomask varargs int create_maze(mixed *mazeconfig, int silent) {
+   int rtc;
+
+   rtc = build_random_maze(mazeconfig);
+   if (!silent) {
+      switch(rtc) {
+         case     SUCCESS: output( mazeconfig, sprintf("success") ); break;
+         case   ERR_PARAM: output( mazeconfig, sprintf("paramerror") ); break;
+         case   ERR_XSIZE: output( mazeconfig, sprintf("xsizeerror") ); break;
+         case   ERR_YSIZE: output( mazeconfig, sprintf("ysizeerror") ); break;
+         case   ERR_EVAL:  output( mazeconfig, sprintf("evalcosterror") ); break;
+         default: output( mazeconfig, sprintf("Unknown return code %d!\n", rtc) ); 
+      }
+   }
+
+   return rtc;
+}
+
+int test_maze(string arg) {
+   string *expl;
+   int x,y;
+   x = 40;
+   y = 30;
+   write( "Creating a random maze with "+x+"X"+y+" fields.\n" );
+   if (arg) {
+      expl = explode(arg, " " );
+      if (sizeof(expl)>0)
+         if (to_int(expl[0])==1)
+            show_progress = 1;
+         else
+            show_progress = 0;
+      if (sizeof(expl)==3) {
+         x = to_int(expl[1]);
+         y = to_int(expl[2]);
+      }
+   }
+   create_maze( ({"test_maze",y,x,0}), 0 );
+   return 1;
+}
+
+/* DEVELOPMENT FUNS */
+mixed *dumpmaze() { return m;}
+mixed *dumpconf() { return mconf;}
+mixed *dumptodo() { return todo;}

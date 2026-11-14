@@ -1,0 +1,238 @@
+/*
+***********************************************
+** Ring-Paar, das ausgetauscht werden kann    *
+**                                            *
+** date: 24-12-97 by Sargola@Silberland       *
+** Email: a9504778@unet.univie.ac.at          *
+***********************************************
+**
+** Updates: 03-11-98 : gleichgeschlechtliche beziehungen gestattet :)
+**  2002-05-03  PROtheG  Neuueberarbeitung, Material geaendert...
+*/
+
+#include "../def.h"
+
+inherit "std/armour";
+
+nosave string angebot;
+
+string frage_angebot();
+void setze_angebot(string str);
+
+angebot_weg();
+
+void create()
+{
+  if(!is_clone(this_object())) return;
+  ::create();
+  
+  angebot = "";
+  AddId(({"\n_insel_ringe", "paar", "goldringe", "ringpaar", "ringe"}));
+
+  SetProp(P_SHORT, "Ein Paar Goldringe");
+  SetProp(P_LONG, 
+	  BS("Ein Paar einfacher, aber schoen geformter Ringe aus Gold."));
+  	
+  SetProp(P_INFO, 
+	  BS("Irgendetwas sagt Dir, dass Du die Ringe mit einer Person, "
+	     "die Du sehr liebst, tauschen solltest."));
+  
+  SetProp(P_NAME, "Paar Ringe");
+  SetProp(P_GENDER, NEUTER);
+  SetProp(P_WEIGHT, 100);
+  SetProp(P_VALUE, 150);
+  SetProp(P_NOBUY, 1);
+
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NODROP, 1);
+
+  SetProp(P_MATERIAL, ({MAT_GOLD}));
+  
+  SetProp(P_MAGIC, 1);
+  SetProp(P_ITEMD_NO_MAGIC, 1);
+
+  SetProp(P_ARMOUR_TYPE, AT_MISC);
+  SetProp(P_AC, 0);
+  
+  SetProp(P_NO_DAMAGE_DESTRUCT, 1);
+  
+  AddCmd(({"tausche","tausch"}), "tausche");
+}
+
+nosave int tausche(string str)
+{
+  object partner, ringe, vringtp, vringpa;
+  string wem, was;
+  int i;
+  
+  notify_fail(BS("Mit wem moechtest Du was tauschen?"));
+  if(!str) return 0;
+  
+  if(sscanf(str, "%s mit %s",was, wem)!=2) return 0;
+  
+  if(!was || !wem) return 0;
+
+  if(was!="ring" && was!="ringe") return 0;
+
+  partner=find_living(wem);
+  
+  notify_fail(CAP(wem) +" ist leider gerade nicht im Silberland.\n");   
+  if(!objectp(partner)) return 0;
+
+  notify_fail(CAP(wem) +" ist leider nicht in der Naehe.\n");
+  if(!present(partner, ENV(TP))) return 0;
+  
+  ringe=present("\n_insel_ringe", partner);
+  
+  if(!objectp(ringe))
+    return write(BS(CAP(wem) + " kann mit Dir keine Ringe tauschen, weil"+
+		    (partner->QueryProp(P_GENDER)==MALE ? " er ":" sie ")+
+		    "keine Ringe hat.")), 1;
+  
+  if(partner==TP)
+    return write(BS("Hmm... Du kannst die Ringe nicht mit Dir selbst "
+		    "tauschen!")), 1;
+  
+  if(partner->QueryProp(P_SECOND)==CAP(getuid(TP)))
+    return write(BS("Du willst Dich doch nicht mit deinem Zweiti verloben, "
+		    "oder??")), 1;
+  
+  /* Auf Wunsch von Nicole disabled ;)
+
+   if(TP->QueryProp(P_GENDER) == partner->QueryProp(P_GENDER) )
+   {
+      if(TP->QueryProp(P_GENDER) == 1)
+      {
+	notify_fail("Du willst doch keine Liebesbeziehung mit einem Mann.\n");
+	return 0;
+      }
+      else
+      {
+	notify_fail("Du willst doch keine Liebesbeziehung mit einer Frau beginnen, oder?\n");
+	return 0;
+      }
+   }
+  */
+  
+  if(present("\n_insel_liebesring",TP))
+    {
+      write(BS("Du hast Dein Herz ja schon jemandem geschenkt! Du wirfst die "
+	       "Ringe weg."));
+      remove(1);
+      
+      return 1;
+    }
+  
+  // Wir eroeffnen das Angebot ... :)))
+  if(frage_angebot() != "") // noch frisch im Reigen
+    if(getuid(partner) == frage_angebot()) // will mit gleichem Partner tauschen
+      {
+	write(BS(partner->Name()+" tauscht mit Dir die Ringe aus."));
+	tell_object(partner, BS(TPN+" tauscht mit Dir die Ringe aus."));
+	tell_room(ENV(TP), 
+		  BS(TPN+" und "+partner->Name()+" tauschen ihre Ringe "
+		     "aus."), ({TP, partner}));
+	
+	//********* neuen Ring Clonen ***********//
+	vringtp=clone_object(ARMOUR "vring");
+	
+	if(vringtp->move(TP, M_GET)==ME_TOO_HEAVY)
+	  {
+	    vringtp->remove(1);
+	    
+	    tell_object(partner, 
+			BS(TPN+" traegt offenbar zuviel und kann daher "
+			   "nicht mit Dir die Ringe tauschen."));
+	    
+	    return write(BS("Du bist ja viel zu ueberladen! Wie willst Du "
+			    "so die Ringe tauschen?")), 1;
+	  }
+	
+	vringtp->setze_partner(CAP(getuid(partner)));
+	
+	vringpa=clone_object(ARMOUR "vring");
+	
+	if(vringpa->move(partner, M_GET)==ME_TOO_HEAVY)
+	  {
+	    vringpa->remove(1);
+	    vringtp->remove(1);
+	    
+	    tell_object(partner, "Du kannst den Verlobungsring nicht mehr "
+			"tragen.");
+
+	    return write(BS(partner->Name()+" traegt offenbar zuviel und kann "
+			    "daher den Ring nicht annehmen.")), 1;
+
+	  }
+	
+	vringpa->setze_partner(CAP(getuid(TP)));
+	
+	ringe->remove(1);
+	
+	RemoveCmd(({"tausche","tausch"}));
+	
+	call_out("remove", 0);
+
+	PRO("*** Verlobungsringe getauscht: "+CAP(getuid(partner))+" + "+
+	    CAP(getuid(TP))+"\n");
+	
+	return 1;
+      }
+    else // will nicht, aber neues Angebot :))
+      {
+	write(BS("Schade! "+CAP(frage_angebot())+" haette gerne mit Dir "
+		 "getauscht.")+
+	      BS(" Du bietest "+partner->Name()+" an, die Ringe "
+		 "auszutauschen."));
+
+	tell_object(find_player(frage_angebot()), 
+		    BS("Schade! "+TPN+" will nicht mit Dir die Ringe "
+		       "austauschen."));
+
+	tell_object(partner, 
+		    BS(TPN+" moechte gern mit Dir "+
+		       (TP->QueryProp(P_GENDER)==FEMALE ? "ihre":"seine")+
+		       " Ringe tauschen."));
+
+	ringe->setze_angebot(getuid(TP));
+	
+	setze_angebot("");
+	
+	if(find_call_out("angebot_weg")==-1)
+	  call_out("angebot_weg",60,ringe );
+	
+	return 1;
+      }
+  else	// jungfraeuliches Angebot
+    {
+      ringe->setze_angebot(getuid(TP));
+
+      write(BS("Du bietest "+partner->Name()+" an, die Ringe zu tauschen."));
+
+      tell_object(partner, 
+		  BS(TPN+" moechte gern mit Dir "+
+		     (TP->QueryProp(P_GENDER)==FEMALE ? "ihre":"seine")+
+		     " Ringe tauschen."));
+      
+      if(find_call_out("angebot_weg")==-1)
+	call_out("angebot_weg",15, ringe);
+
+      return 1;
+    }
+}
+   
+void setze_angebot(string str)
+{
+  angebot = str;
+}
+
+string frage_angebot()
+{
+  return angebot;
+}
+   
+// Wenn man 15 secs nix macht, ist das Angebot ungueltig
+angebot_weg(object ringe)
+{
+  ringe->setze_angebot("");
+}

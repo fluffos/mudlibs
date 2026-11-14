@@ -1,0 +1,1530 @@
+/************************************************
+** Shardin                                      *
+**                                              *
+** date: 25-01-97 by Sargola@Silberland         *
+** Email: a9504778@unet.univie.ac.at            *
+*************************************************
+** Updates: 24-04-97 : Nun ist sie eine wirkliche Heilerin!      
+** Updates: 10-07-97 : Sie kann nun auch Kretze und Besessenheit heilen     
+** Updates: 30-07-97 : Infos fuer die 2 neuen Quests, Traenke
+** 
+**  2002-04-16  PROtheG  Neuueberarbeitung
+**  2002-04-24  PROtheG  give_notify ueberarbeitet
+**  2002-05-09  PROtheG  Spells erweitert (heilen, aura)
+**  2003-02-24  PROtheG  Heilen erweitert um Zahnlosigkeit
+*/
+
+#include "../def.h"
+
+inherit "std/npc";
+
+#define WLOG(f,x) write_file(f,sprintf("%s  %s "+x+".\n",dtime(time()),TPN));
+
+nosave int hat_floete, aura;
+
+nosave string dolch(string str); //weitere info nach dem pflock
+nosave string floete(string str);
+void teil1();
+void teil2();
+void teil3();
+void teil4();
+void teil5();
+void eil6();
+
+string hilfe ();
+string pflockinfo(string str);
+string ritual();
+
+int entgifte();
+int entgeiste();
+int entfrosche();
+int heile(string str);
+int kein_geld();
+int zuwenig_geld(int kosten);
+int reinlegen(int kosten);
+int heile_finger(object finger);
+string finger();
+int heile_zahn(object zahn);
+string zahn();
+
+nosave void sfkt(string str)
+{
+  command_me("sage "+str);
+}
+
+// Trank-Variablen
+nosave mapping trank_kaeufer;
+
+//*******************************************
+// defines fuer die Kosten der Heilung
+//*******************************************
+#define KOSTEN_ENTFROSCHEN 200
+#define KOSTEN_ENTGIFTEN 200
+#define KOSTEN_ENTGEISTEN 600
+#define KOSTEN_TAUBHEIT 300
+#define KOSTEN_BLINDHEIT 700
+#define KOSTEN_KLEINER_MILAR 2500
+#define KOSTEN_GROSSER_MILAR 5000
+#define KOSTEN_KLEINER_PALANTAR 2500
+#define KOSTEN_GROSSER_PALANTAR 5000
+#define KOSTEN_KLEINER_SANDAR 5000
+#define KOSTEN_GROSSER_SANDAR 7500
+
+#define KOSTEN_BACKSPEECH 30000
+#define KOSTEN_KRETZE 1700
+#define KOSTEN_BESESSENHEIT 3840
+#define KOSTEN_ZAHN 1999
+#define KOSTEN_FINGER 1000
+
+void create()
+{
+  if(!is_clone(ME)) return;
+  ::create();
+  
+  hat_floete=0;
+  trank_kaeufer=([]);
+  
+  SetProp(P_SHORT, "Die Heilerin Shardin");
+  SetProp(P_LONG, 
+	  BS("Vor Dir steht die Heilerin Shardin. Obwohl Du sie nicht als "
+	     "solche erkannt haettest. Eine lange, braunliche Kutte, die "
+	     "mit einem Strick um die Huefte gehalten wird, kleidet sie. "
+	     "Auf dem Strick haengt bei ihrer linken Hand ein kleines "
+	     "Ledersaeckchen. Sie traegt Sandalen aus Leder, eine Kapuze "
+	     "und blickt Dich aus dunklen Augen an."));
+
+  SetProp(P_DIE_MSG, 
+	  " erhellt den ganzen Raum mit einer Bewegung ihrer Finger "
+	  "und ist weg.\n");
+
+  SetProp(P_NAME, "Shardin");
+  SetProp(P_GENDER, FEMALE);
+  AddId(({"shardin", "heilerin","mensch"}));
+
+  create_default_npc(21);
+
+  set_living_name("shardin");
+
+  SetProp(P_SIZE, 165);
+
+  SetProp(P_HANDS,({" mit blossen Haenden", 
+		      QueryProp(P_HANDS)[1],DT_BLUDGEON}));
+
+  SetProp(P_ALIGN, 500);
+
+  SetProp(P_ARTICLE, 0);
+
+  SetProp(P_RACE, "Mensch");
+
+  SetProp(P_XP, 0);
+
+  SetProp(P_MSGOUT, "schlurft weiter");
+  SetProp(P_MSGIN, "schlurft herein");
+
+  SetChats(5, ({
+    "Shardin rebelt Kraeuter in eine Schale.\n",
+      "Shardin studiert interessiert ein Lehrbuch.\n",
+      "Shardin beginnt leise eine Beschwoerungsformel zu summen.\n",
+      "Shardin ist in Trance gefallen.\n",
+      "Shardin wirkt sehr beschaeftigt - Du solltest sie nicht stoeren.\n"}));
+
+  AddInfo(({"stadt","elessar"}),
+	  "Elessar nennt man die versteckt Stadt der Waldelfen.", 
+	  "sagt: ");
+
+  AddInfo("zaubertrank",
+	  "Ich kann eine Menge Traenke brauen. Jedoch suchst Du, so nehme "
+	  "ich wohl an, andere Traenke.",
+	  "sagt: ");
+
+  AddInfo(({"elf","elfin","waldelfe","waldelfin","elfen","waldelfen"}),
+	  "Die Elfen leben zurueckgezogen in Elessar.", 
+	  "sagt: ");
+
+  AddInfo(({"see","see von rhondonit"}),
+	  "Den See hast Du ja schon auf dem Weg hierher gesehen, oder?",
+	  "fragt: ");
+
+  AddInfo(({"mann","eesthil","schmied"}),
+	  "Das ist der Mann der armen Salina.", 
+	  "sagt: ");
+
+  AddInfo("haendler",
+	  "Den hab ich nur einmal getroffen. Da kann ich Dir nicht viel "
+	  "erzaehlen.", 
+	  "sagt: ");
+
+  AddInfo(({"zutaten","kraeuter","heilkraut","heilkraeuter"}),
+	  "Kraeuter sind die Grundlage fuer heilende Salben und Traenke.", 
+	  "sagt: ");
+
+  AddInfo("trance",
+	  "Du musst noch viel lernen, bis ich Dir solche Dinge erklaere.",
+	  "sagt: ");
+
+  AddInfo("midas",
+	  "Midas ist die Hauptstadt der Menschen.",
+	  "sagt: ");
+
+  AddInfo("menschen",
+	"Da musst Du schon Menschen fragen.","sagt: ");
+
+  AddInfo(({"buch","lehrbuch","werk"}),
+	  "Dies ist ein altes, sehr seltenes Werk ueber die Kunst der "
+	  "Naturheilkunde.",
+	  "sagt: ");
+
+  AddInfo(({"spezialgebiet","gebiet","heilkunde","naturheilkunde"}),
+	  "Die Heilkunde ist die mein Spezialgebiet.",
+	  "sagt: ");
+
+  AddInfo("kunst",
+	"Die Heilkunde ist wahrlich eine Kunst!",
+	  "sagt: ");
+
+  AddInfo(({"geschichten","musik"}),
+	  "Elfen verstehen es vorzueglich, durch Musik alte Geschichten zu "
+	  "erzaehlen.", 
+	  "sagt: ");
+
+  AddInfo(({"heilen","dienste","heilung","dienst","preis","preise"}),
+	  "sagt: Ich kann Dir folgende Dienste anbieten:\n"
+	  "\n"
+"     Entfroschen . . . . . . . . . . . "+KOSTEN_ENTFROSCHEN+" Muenzen\n"
+"     Entgeisten  . . . . . . . . . . . "+KOSTEN_ENTGEISTEN+" Muenzen\n"
+"     Taubheit heilen . . . . . . . . . "+KOSTEN_TAUBHEIT+" Muenzen\n"
+"     Blindheit heilen  . . . . . . . . "+KOSTEN_BLINDHEIT+" Muenzen\n"
+"     Entgiften . . . . . . . . . . . . "+KOSTEN_ENTGIFTEN+" Muenzen\n"
+"     Kretze  . . . . . . . . . . . . . "+KOSTEN_KRETZE+" Muenzen\n"
+"     Abgehackte Finger . . . . . . . . "+KOSTEN_FINGER+" Muenzen\n"
+"     Zahnmedizin . . . . . . . . . . . "+KOSTEN_ZAHN+" Muenzen\n"
+"     Besessenheit  . . . . . . . . . . "+KOSTEN_BESESSENHEIT+" Muenzen\n"
+"     Heile Tschubax Fluch  . . . . . . "+KOSTEN_BACKSPEECH+" Muenzen\n"
+"\n"
+"     kleinen Milar . . . . . . . . . . "+KOSTEN_KLEINER_MILAR+" Muenzen\n"
+"     starker Milar . . . . . . . . . . "+KOSTEN_GROSSER_MILAR+" Muenzen\n"
+"     kleinen Palantar  . . . . . . . . "+KOSTEN_KLEINER_PALANTAR+" Muenzen\n"
+"     starker Palantar  . . . . . . . . "+KOSTEN_GROSSER_PALANTAR+" Muenzen\n"
+"     kleinen Sandar  . . . . . . . . . "+KOSTEN_KLEINER_SANDAR+" Muenzen\n"
+"     starker Sandar  . . . . . . . . . "+KOSTEN_GROSSER_SANDAR+" Muenzen\n"	
+	  "Mit zB \"entfrosche\" oder mit \"heile blindheit\" "
+	  "kannst Du ihre Dienste\nin Anspruch nehmen.\n");
+  
+  AddInfo("besessenheit",
+	  "Besessenheit ist eine wahrlich ueble Sache. Sie zwingt "
+	  "Dich zu Handlungen, die Du bei klarem Bewusstsein nie "
+	  "tun wuerdest. Eine fremde Macht hat dann die Kontrolle "
+	  "ueber Deinen Koerper.\n", 
+	  "sagt: ");
+  	
+  AddInfo("kontrolle",
+	  "Die Kontrolle hast ja normalerweise Du selbst.", 
+	  "sagt: ");
+  	
+  AddInfo("macht",
+	  "Ich kann Dir nicht sagen, wer oder was von Dir Besitz "
+	  "ergreifen kann. Sei jedoch auf der Hut.", 
+	  "sagt: ");
+  
+  AddInfo("hut",
+	  "Tja, das ist eine klassische Kopfbedeckung.",
+	  "sagt: ");
+  
+  AddInfo("kopfbedeckung",
+	  "Typischerweise ein Hut. :)", 
+	  "sagt: ");
+  
+  AddInfo("kretze",
+	  "Die Kretze wird nur von Untoten uebertragen. Sie ist sehr "
+	  "ansteckend und fuehrt ohne Hilfe unweigerlich zum Tode.", 
+	  "sagt: ");
+  	
+  AddInfo("unote",
+	  "Ich selbst habe noch nie welche gesehen, bin jedoch in der Lage, "
+	  "die Kretze zu heilen.", 
+	  "sagt: ");
+  	
+  AddInfo("tschubax",
+	  "Tschubax ist ein zwergischer Druide aus Felonia.",
+	  "sagt: ");
+  	
+  AddInfo(({"fluch","tschubax fluch"}),
+	  "Tschubax Fluch trifft all jene, die es wagen, ihn anzugreifen.",
+	  "sagt: ");
+  	
+  AddInfo("druide",
+	  "Ich kenne nur Tschubax, den Druiden.",
+	  "sagt: ");
+  
+  AddInfo("felonia",
+	  "Felonia ist die Stadt der Zwerge.",
+	  "sagt: ");
+ 	
+  AddInfo(({"zwerg","zwerge"}),
+	  "Die Zwerge leben in Felonia unter der Erde.",
+	  "sagt: ");
+  		
+  AddInfo("lage",
+	  "So mancher Abenteurer war in misslicher Lage...",
+	  "sinniert: ");
+  
+  AddInfo(({"frosch","entfroschen"}),
+	  "Solltest Du in der misslichen Lage sein, ein Frosch zu sein, "
+	  "kann ich Dich davon heilen.", 
+	  "sagt: ");
+	  	
+  AddInfo(({"geister","geist","entgeisten"}),
+	  "Wenige Heiler sind faehig, Geister wieder in Lebewesen "
+	  "zu wandeln. Fuer einen angemessenen Preis bin ich bereit, das "
+	  "zu tun.", 
+	  "sagt: ");
+  
+  AddInfo(({"heiler","heilerin"}),
+	  "Ich gelte zurecht als Heilerin.",
+	  "sagt stolz: ");
+  
+  AddInfo("lebewesen",
+	  "Hmm... Was willst Du da genau wissen?",
+	  "fragt: ");
+  	
+  AddInfo("taubheit",
+	  "Hoerst Du mich? Nein, war ein Spass. Taubheit heilen ist eine "
+	  "leichte Uebung.", 
+	  "sagt: ");
+  	
+  AddInfo("spass",
+	  "sagt: Davon versteh ich viel!\n"
+	  "Shardin grinst Dich an.\n");
+  
+  AddInfo(({"blind","blinder","blindheit"}),
+	  "sagt: Selten musste ich Blindheit heilen. Vermutlich, weil kein\n"
+	  "Shardin sagt: Blinder es bisher schaffte, durch das Labyrinth zu "
+	  "kommen.\n"
+	  "Shardin lacht verschmitzt.\n");
+  
+  AddInfo("labyrinth",
+	  "Ich glaub, Du kennst es schon. Es dient nur zu meinem Schutz gegen "
+	  "Wanderer, die andauernd irgendwelche Wehwechen haben.",
+	  "sagt: ");
+  	
+  AddInfo("wehwehchen",
+	  "Mehr als Wehwechen sind es meist nicht.",
+	  "sagt: ");
+  	
+  AddInfo("schutz",
+	  "Ich will meine Zeit mit dem Studium der Naturheilkunde verbringen "
+	  "und nicht mit so einfachen Dingen wie dem Entgiften.", 
+	  "sagt: ");
+  	
+  AddInfo(({"wanderer","abenteurer"}),
+	  "Wanderer wie Du, die unvorsichtig waren und die Natur "
+	  "missachteten.",
+	  "sagt: ");
+  	
+  AddInfo(({"vergiftungen","entgiften","gift","gift heilen"}),
+	  "Schon viele Abenteurer musste ich von Vergiftungen heilen.", 
+	  "sagt: ");
+  	
+  AddInfo(({"trank","heiltrank"}),
+	  "Der Zubereitung von Heiltraenken widme ich die meiste Zeit meiner "
+	  "Forschung. Durch die richtige Kombination von Wurzeln, Knollen und "
+	  "Kraeutern braue ich einfache Heiltraenke. Ich beherrsche die "
+	  "beiden traditionellen Heiltraenke, den Milar und Palantar, "
+	  "perfekt.",
+	  "sagt: ");
+
+  AddInfo(({"punkte","lebenspunkte","magiepunkte"}),
+	  "Also was das ist, musst Du schon selbst wissen!",
+	  "grummelt: ");
+  
+  AddInfo(({"einfacher milar","starker milar","milar"}),
+	  "Der Milar ist ein einfacher Heiltrank welcher Deine Lebenspunkte "
+	  "erhoeht. Traditionell gibt es einen kleinen und einen grossen "
+	  "Milar.",
+	  "sagt: ");
+  
+  AddInfo( ({"kleiner palantar","starker palantar","palantar"}),
+	   "Der Palantar ist ein einfach zu bereitender Trank, welcher Deine "
+	   "Magiepunkte erhoeht. Wie beim Milar gibt es einen kleinen "
+	   "und einen grossen Palantar.",
+	   "sagt: ");
+  
+  AddInfo(({"sandar","kleiner sandar","starker sandar"}),
+	  "Der Sandar ist ein schwierig zu bereitender Trank, welcher Deine "
+	  "Lebens- und Magiepunkte erhoeht. Es gibt einen kleinen und einen "
+	  "grossen Sandar.",
+	  "sagt: "); 
+
+  AddInfo("kraeuter",
+	  "Nur das geuebte Auge erkennt, welche Pflanzen Unkraut und welche "
+	  "heilende Wirkung haben.",
+	  "sagt: ");
+  	
+  AddInfo("auge",
+	  "Durch jahrelanges Ueben laesst sich diese Faehigkeit erwerben.",
+	  "sagt: ");
+  	
+  AddInfo("faehigkeit",
+	  "Die Faehigkeit, die heilenden von den gewoehlichen Pflanzen zu "
+	  "unterscheiden, lernt man nur nach jahrelangem Ueben.",
+	  "sagt: ");
+  	
+  AddInfo(({"graeser","unkraut","pflanze","pflanzen"}),
+	  "Es gibt viele Pflanzen und Graeser, die, in richtiger Kombination "
+	  "heilende Wirkung haben.",
+	  "sagt: ");
+  	
+  AddInfo("kunst",
+	  "Heilen ist eine Kunst!",
+	  "sagt: ");
+  
+  AddInfo("kombination",
+	  "Die richtige Kombination finden, das ist die Kunst der Heiler.",
+	  "sagt: ");
+  	
+  AddInfo(({"zusammenwirken","wirkung"}),
+	  "Die Wirkung ergibt sich nicht aus einzelnen Pflanzen und deren "
+	  "Extrakten, sondern aus dem Zusammenwirken derselben.",
+	  "sagt: ");
+  
+  AddInfo(({"pflanzenextrakte","extrakte"}),
+	  "Durch das Extrahieren der Wirkstoffe, wird es erst moeglich, "
+	  "Heiltraenke zu brauen.",
+	  "sagt: ");
+  	
+  AddInfo(({"grundlagen","wurzel","wurzeln","knollen","knolle"}),
+	  "In Alkohol eingelegte Knollen und Wurzeln bilden neben Pflanzen"
+	  "extrakten die Grundlage fuer viele Traenke",
+	  "sagt: ");
+  	
+  AddInfo("unkraut",
+	  "Wertvolle Pflanzen von Unkraut zu unterscheide, das ist die Kunst "
+	  "der Heiler.",
+	  "sagt: ");
+  	
+  AddInfo(({"uebung","ueben"}),
+	  "Den Beruf des Heilers erlernt man nur nach langer Ausbildung und "
+	  "Uebung.",
+	  "sagt: ");
+  	
+  AddInfo("ausbildung",
+	  "Du musst einen Heiler finden, der Dich ausbilden will.",
+	  "sagt: ");
+  	
+  AddInfo(({"ausbildung zum heiler","heilerausbildung","andere heiler"}),
+	  "Ich habe leider keine Zeit, Dich darin zu schulen.",
+	  "sagt: ");
+
+  AddInfo("wuestling",
+	  "Hast Du ihn auch schon entdeckt?",
+	  "grinst: ");
+
+  AddInfo(({"blume","blumen","gras","bueschel","bueschel gras"}),
+	  "Was willst Du denn damit?",
+	  "fragt: ");
+
+  AddInfo("syntax",
+	  "Du kleiner Schelm!",
+	  "grinst: ");
+
+  AddInfo("beruf",
+	  "Auch Heilen ist ein Beruf.",
+	  "sagt: ");
+  
+  AddInfo("forschung",
+	  "Ich beschraenke mich nicht darauf, bereits bekannte Traenke zu "
+	  "brauen. Vielmehr erforsche ich die Moeglichkeiten, hier im "
+	  "Kristallwald neue Rezepturen zu entdecken.",
+	  "sagt: ");
+  	
+  AddInfo(({"moeglichkeiten","rezepturen"}),
+	  "Welche das sind, daran forsche ich noch.",
+	  "sagt: ");
+  
+  AddInfo("natur",
+	  "Die Natur bildet die Grundlage fuer alles was wir tun.",
+	  "sagt: ");
+  	
+  AddInfo("studium",
+	  "Das Studium das Dich zum Heiler macht ist langwierig und "
+	  "schwierig.",
+	  "sagt: ");
+  	
+  AddInfo("zubereitung",
+	  "Darueber kann ich Dir nichts Genaues sagen. Das Wissen darf nur "
+	  "zwischen Heilern weitergegeben werden.", 
+	  "sagt: ");
+  	
+  AddInfo(({"beschwoerungsformel","formel","kombination","wissen"}),
+	  "laechelt Dich geheimnisvoll an.");
+  
+  AddInfo("moerser",
+	  "Das ist eines der Grundwerkzeuge von Heilern.",
+	  "sagt: ");
+  	
+  AddInfo("werkzeuge",
+	  "Ich brauche Werkzeuge zum Rebeln, Pfluecken, Zerhacken von "
+	  "Pflanzen und aehnlichen Dingen.",
+	  "sagt: ");
+  	
+  AddInfo(({"zerhacken","rebeln","pfluecken"}),
+	  "Ja, das kann man alles mit Pflanzen machen!",
+	  "sagt: ");
+  	
+  AddInfo(({"gebirge","almandin","almandin-gebirge"}),
+	  "Du befindest Dich mitten drin.",
+	  "sagt: ");
+
+  AddInfo(({"wald","kristallwald"}),
+	  "Das ist der Wald, durch den Du hierher gekommen bist.", 
+	  "sagt: ");
+
+  AddInfo("ritual",CLOSURE(ritual));
+
+  AddInfo(({"melodie","lied"}), 
+	  "Was Du spielen sollst, das kann ich Dir nicht sagen.", 
+	  "sagt: ");
+  
+  AddInfo("beschwoerungsformel", 
+	  "Ich verstehe mich mit der Heilung lebender Kreaturen.", 
+	  "sagt: ");
+  
+  AddInfo("floete",CLOSURE(floete));
+
+  AddInfo("emthal",
+	  "Der Name Emthal habe ich noch nie gehoert. Du solltest Dich "
+	  "vielleicht in Elessar umhoeren.",
+	  "sagt: ");
+
+  AddInfo("quader",	
+	  "Wanderer berichteten mir, einen Quader aus kristallinem Gestein "
+	  "gefunden zu haben. Aber keiner wollte mir sagen, wo er sich "
+	  "befindet.",
+	  "sagt: ");
+  
+  AddInfo("baaleth",
+	  "Baaleth ist eine junge Nachfahrin von Lorendiel. Du wirst sie in "
+	  "Elessar finden.",
+	  "sagt: ");
+
+  AddInfo("lorendiel",
+	  "Lorendiel war vor langer Zeit elfischer Magier.",
+	  "sagt: ");
+
+  AddInfo("archmage",
+	  "Aerendil hat, wenn ich mich nicht irre, tiefes Wissen ueber ihn.",
+	  "sagt: ");
+
+  AddInfo("lager",
+	  "Das ist leider leer.",
+	  "sagt: ");
+
+  SUID;
+
+  CLONEME("/p/armour/cloak/robe");
+  CLONEME("/p/armour/belt/guertel");
+
+  command("ziehe alles an");
+
+  SetProp(P_NOCORPSE, 1);
+
+  AddInfo("finger",CLOSURE(finger));
+  
+  AddInfo(({"zaehne","zahn","tschahn","tschaehne","zahnmedizin",
+	      "tschahnmeditschin"}), CLOSURE(zahn));
+  
+  AddInfo(({"zaehneputzen","putzen"}),
+	  "Hm, Deine Zaehne gehoeren wieder einmal geputzt!",
+	  "meint entsetzt: ");
+  
+  AddInfo("shardin",
+	  "Ja, so nennt man mich im Allgemeinen...", 
+	  "sagt: ");
+
+  AddInfo("sargola",
+	  "Sargola ist mein Schoepfer.",
+	  "sagt: ");
+
+  AddInfo(({"hueter","aerendil"}),
+	  "Aerendil ist der Hueter der Bibliothek in Elessar. Wenn Du Fragen "
+	  "zur Geschichte der Elfen oder dieser Gegend hast, frage ihn.",
+	  "sagt: ");
+
+  AddInfo("quest",
+	  "Na so leicht ist es auch wieder nicht.",
+	  "grinst: ");
+
+  AddInfo(({"staub","rindenstaub"}),
+	  "Tja, der ist ziemlich nutzlos.",
+	  "sagt: ");
+
+  AddInfo("bibliothek",
+	  "In ihr schlummert ein sagenhaftes Wissen. Sieh Dich dort ruhig "
+	  "einmal um.",
+	  "sagt: ");
+
+  AddInfo(({"bann","schwingungen"}),
+	  "Liebliche Schwingungen eines alten elfischen Liedes koennen den "
+	  "Bann des Spruches brechen.",
+	  "sagt: ");
+  
+  AddInfo("wissen",
+	  "Vielleicht kannst Du Deine Frage praezesieren?",
+	  "fragt: ");
+
+
+  //***************************************************
+  //Wird nun per give_object abgehandelt
+  //***************************************************
+  AddInfo(({"pflock","holz","holzpflock"}), CLOSURE(pflockinfo));
+  
+  AddInfo(({"spielen","spiel","floetenspiel","floetenspielen"}), 
+	  "Du wirst das Floetenspiel erst lernen muessen. Das kann ich Dir "
+	  "aber auch nicht zeigen. Ich denke, Elfen koennen schoene Weisen "
+	  "auf der Floete spielen...",
+	  "sagt: ");
+
+  AddInfo(({"artefakt","dolch"}), CLOSURE(dolch));
+
+  AddInfo("hilfe",
+	  "Wobei soll ich Dir denn helfen?", 
+	  "fragt: ");
+
+  AddInfo(({"schmiedin","salina"}), 
+	  "Oh ja, die Arme! Ihr Mann ist im Kristall gefangen. "
+	  "Nun sucht sie seit langer Zeit schon das richtige Holz fuer die "
+	  "Floete. Wenn mir jemand so ein Holz bringen koennte, koennt ich "
+	  "ihr vielleicht helfen.",
+	  "sagt: ");
+  
+  AddInfo(({"stoff","kristall"}),
+	  "Alles hier im Kristallwald ist aus diesem Stoff.",
+	  "seufzt: ");
+
+  SetProp(P_SPELLRATE,35);
+  
+  SetProp(P_REJECT,({
+    REJECT_DROP, "Wie kommst Du auf die Idee, das ich das verwenden "
+      "koennte?\n"})); 
+
+  AddSpell(3,70,   
+	   "Shardin blendet Dich mit einem Blitz.\n",
+	   "Shardin blendet @WEN mit einem Blitz.\n",
+	   DT_LIGHTNING,([SP_SHOW_DAMAGE:1]));
+  
+  AddSpell(1,110,    
+	   "Shardin trifft Dich mit einem Feuerstoss.\n",
+	   "Shardin trifft @WEN mit einem Feuerstoss.\n",
+	   DT_FIRE,  ([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(2,1,
+	   "Shardin heilt sich.\n",
+	   "Shardin heilt sich,\n",
+	   DT_MAGIC, "heilenspell");
+
+  AddSpell(1,1,
+	   "Shardin wirbelt herum...\n",
+	   "Shardin wirbelt herum...\n",
+	   DT_MAGIC, "auraspell");
+
+  SetAttackChats(10, ({
+    "Shadin kreischt: \"Deine Gedaerme kann ich gut brauchen!\"\n",
+      "Shardin konzentriert sich...\n"}));
+
+  AddCmd(({"entfrosche"}), "entfrosche");
+  AddCmd(({"entgeiste"}), "entgeiste");
+  AddCmd(({"entgifte"}), "entgifte");
+  AddCmd(({"heile","heil"}),"heile");
+  AddCmd(({"kauf","kaufe"}),"kaufe");
+}
+
+void heilenspell(object enemy, int damage, mixed dam_type)
+{
+  heal_self(30+random(10));
+}
+
+void auraspell(object enemy, int damage, mixed dam_type)
+{
+  if((!aura) && (!random(2)))
+    {
+      tell_room(MENV,
+		BS("Eine magische Schutzaura bildet sich um Shardin..."));
+      aura=1;
+    }
+}
+
+void reset()
+{	
+	::reset();
+	trank_kaeufer =([]);
+}
+
+//******************************************************************
+
+string ritual()
+{
+  if(!present("\neesthilquest",TP))
+    return "sagt: Das geht Dich nichts an.\n";
+	
+  return "sagt: Das Ritual fuer die Floete.\n";
+}
+
+void give_notify(object ob)
+{ 
+  object temp;
+  string ow;
+  
+  if(ob->id("\n_sawer_finger")==1)
+    {
+      heile_finger(ob);
+      return;
+    }
+  
+  if(!present("\neesthilquest", TP))
+    return sfkt("Danke! Das kann ich gut brauchen.");
+ 
+  if((!ob->id("\neesthildolch")) && (!ob->id("eesthilpflock")) &&
+     (!ob->id("holzfloete")))
+    {
+      write(BS("Shardin sagt: Danke. Wer weiss, vielleicht kann ich das mal "
+	       "brauchen.")+
+	    BS("Shardin laesst Dein Geschenk schnell verschwinden."));
+
+      ob->remove(1);
+
+      return;
+    } 
+  
+  if(present("holzfloete", TP))
+    {
+      write("Shardin sagt: Ich hab Dir doch schon eine Floete geschnitzt!\n");
+
+      give_obj(ob,TP);
+
+      return;
+   }
+   
+  //Wenn er den Pflock hergibt und den Dolch nicht hat
+  //**************************************************
+   
+  if(ob->id("eesthilpflock"))
+    if(ob->query_owner() == TP->query_real_name())
+      {
+	if(present("\nupflock", TP) )
+	  {
+	    if(present("\neesthildolch", TP))
+	      if((find_call_out("teil1")==-1) &&
+		 (find_call_out("teil2")==-1) &&
+		 (find_call_out("teil3")==-1) &&
+		 (find_call_out("teil4")==-1) &&
+		 (find_call_out("teil5")==-1))
+		{
+		  write(BS("Shardin sagt: Gut! Du hast den Dolch! Beginnen "
+			 "wir also..."));
+		
+		  ob=present("\nupflock", TP);
+		  
+		  if(objectp(ob)) ob->remove();
+		  ob = present("eesthilpflock",TP);
+		  if(objectp(ob)) ob->remove();
+		  ob=present(  "eesthildolch",TP);
+		  if(objectp(ob)) ob->remove();
+		  
+		  call_out("teil1",3);
+		  return;
+		} 
+	      else
+		//sein pflock, upflock ist da und kein dolch
+		{
+		  sfkt("Du solltest doch den Dolch von den Haendlern aus der "
+		       "Gegend um Elessar besorgen.\n");
+		  give_obj(ob,TP);
+		  return;
+		}
+	  }
+	else
+	  //sein pflock, upflock ist nicht da
+	  {	
+	    sfkt("Sehr gut! Das ist genau die Art Holz, nach der Salina schon "
+		 "lange gesucht hat. Es steht nun nichts mehr im Wege, den "
+		 "armen Eesthil zu retten. Doch ... hmmmm .... oooohhhh ..... "
+		 "Leider fehlt noch ein Artefakt fuer das Ritual. Ich "
+		 "benoetige einen Dolch, der in kaltem Feuer geschmiedet "
+		 "wurde. Eesthil beherrscht diese Kunst - der kann Dir aber "
+		 "nicht helfen glaub ich.");
+	    sfkt("Versuch Dein Glueck in der Gegend von Elessar. Es wird "
+		 "berichtet, dass dort des oefteren Haendler mit Eesthils "
+		 "Schmiedekunstwerken reisen. Vielleicht kannst Du dort "
+		 "einen erwerben.");
+	    
+	    give_obj(ob,TP);
+	    
+	    if(!present("\nupflock", TP))
+	      CLONE(OBJ "upflock", TP);
+	    
+	    return;
+	  }
+      }
+    else
+      {
+	sfkt("Es gehen seltsame Schwingungen von dem Holz aus. Hast "
+	     "auch wirklich Du es gefunden??");
+	
+	give_obj(ob, TP);
+	
+	return;
+      }
+  
+  if(ob->id("\neesthildolch", TP))
+    if(present("\nupflock", TP))
+      {
+	if((find_call_out("teil1")==-1) &&
+	   (find_call_out("teil2")==-1) &&
+	   (find_call_out("teil3")==-1) &&
+	   (find_call_out("teil4")==-1) &&
+	   (find_call_out("teil5")==-1))
+	  {
+	    sfkt("Gut! Du hast den Dolch! Beginnen wir also...");
+	    
+	    ob=present("\nupflock", TP);
+	    if(objectp(ob)) ob->remove();
+	    
+	    ob=present("eesthilpflock",TP);
+	    if(objectp(ob)) ob->remove();
+	    
+	    ob=present("\neesthildolch",TP);
+	    if(objectp(ob)) ob->remove();
+	    
+	    call_out("teil1",3);
+	    return;
+	  }
+      }
+    else
+      {
+	sfkt("Ich brauche zuerst den Pflock.");
+	give_obj(ob, TP);
+	return;
+      }
+}
+
+void teil1()
+{  
+  SetProp(P_CHAT_CHANCE, 0);
+
+  if(!present(TP, MENV)) return;
+
+  write("Shardin legt den Pflock und das Messer auf den Tisch.\n\n\n");
+
+  call_out("teil2",3);
+}
+
+void teil2()
+{
+  if(!present(TP, MENV)) return;
+
+  write("Sie versinkt in Trance und beginnt sanft von links nach rechts "
+	"zu schwingen.\n\n\n");
+
+  call_out("teil3",3);
+}
+
+void teil3()
+{   
+  if(!present(TP, MENV)) return;
+
+  write("Sie formt kleine Kreise - Du glaubst, sie faellt gleich um!\n\n\n");
+
+  call_out("teil4",3);
+}
+
+void teil4()
+{
+  if(!present(TP, MENV)) return;
+
+  write("Der Koerper beginnt sich zu schuetteln - es dringt nun wohl eine "
+	"fremde Macht\nin sie ein.\n\n\n");
+  
+  call_out("teil5",3);
+}
+
+void teil5()
+{
+  if(!present(TP, MENV)) return;
+
+  write("Jetzt wird sie ganz still! Jetzt geht es los.....\n\n\n");
+
+  call_out("teil6",5);
+}
+
+void teil6()
+{   
+  object ob;
+  
+  if(!present(TP, MENV)) return;
+
+  write(BS("Ploetzlich beginnt Shardin wie irr mit dem Messer aus dem Pflock "
+	   "eine Floete zu schnitzen!! Sie schnitzt, dass die Schnipsel nur "
+	   "so fliegen! Nach genau 2 Minuten ist sie fertig!")+"\n");
+
+  sfkt("Toll was? Die Floete haettest auch Du schnitzen koennen - aber "
+       "ich mach das nur wegen der Show, Du verstehst?");
+
+  write(BS("Shardin grinst Dich an.")+"\n");
+
+  sfkt("Hier ist die Floete deren Klang Eesthil helfen wird. Geh zu ihm "
+       "und spiel Dein schoenstes Lied.");
+
+  ob=clone_object(OBJ "floete");
+  
+  ob->move(TP,M_NOCHECK);
+  ob->SetProp(P_LONG, ob->QueryProp(P_LONG)+"Sie gehoert "+TPN+".\n");
+  ob->set_owner(TP->query_real_name());
+  hat_floete=1;
+  
+  SetProp(P_CHAT_CHANCE, 5);
+}
+
+string floete(string str)
+{
+  if(!present("\neesthilquest",TP))
+    return "schaut Dich fragend an.\n";
+
+  if(present("\nfloete",TP))
+    return sfkt("Ja, Du hast sie ja schon vor mir bekommen! Geh und spiel "
+		"bei Eesthil - die Schwingungen werden ihn erwecken."), 0;
+
+  sfkt("Nur eine Floete, die aus einem Holz geschnitzt ist, welches "
+       "dem Kristall-Spruch widerstehen konnte, kann Eesthil retten. "
+       "Die Schwingungen der Floete erwecken ihn wieder zum Leben.");
+  
+  return 0;
+} 
+
+nosave string dolch(string str)
+{
+  if(!present("\neesthilquest", TP))
+    return "sagt: Hmm...darueber weiss ich nichts.\n";
+
+  return "sagt: Wenn Du einen Dolch hast, gib ihn mir doch mal.\n";
+}
+
+//Frage nach Pflock od Holzpflock
+string pflockinfo(string str)
+{
+  if(!present("\neesthilquest",TP))
+    return "schaut Dich fragend an.\n";
+
+  return "sagt: Wenn Du einen Holzpflock hast, gib ihn mir doch mal.\n";
+}
+
+//**************************************************************************
+// Routinen fuer die Heilung
+//**************************************************************************
+
+void kein_geld()
+{
+  write(BS("Shardin sagt: Du hast leider kein Geld bei Dir!"));
+}
+
+void zuwenig_geld(int kosten)
+{
+  write(BS("Shardin sagt: Tut mir leid, aber ich muss dafuer "
+	   +kosten+" Muenzen verlangen."));
+}
+
+void reinlegen(int kosten)
+{
+  sfkt("Sowas, Du bist ja gar nicht krank! Dein Geld behalte ich mir "
+       "weil Du mich reinlegen wolltest!");
+  TP->AddMoney(-kosten);
+  WLOG( "/d/kristallwald/sargola/log/shardin.heal", "war gar nicht krank!!");
+}
+
+void entfrosche()
+{
+  if(!TP->QueryMoney())
+    return kein_geld();
+  
+  if(TP->QueryMoney() < KOSTEN_ENTFROSCHEN)
+    return zuwenig_geld(KOSTEN_ENTFROSCHEN);
+  
+  if(!TP->QueryProp(P_FROG))
+    return reinlegen(KOSTEN_ENTFROSCHEN);
+  
+  write(BS("Shardin murmelt seltsam klingende Woerter, nimmt aus einer "
+	   "Schale einen Klecks Salbe und reibt ihn auf Deine gruene Haut. "
+	   "Ploetzlich beginnt alles zu ziehen...")+"\n"
+	"Shardin sagt: Du bist nun kein Frosch mehr.\n");
+  TP->AddMoney(-KOSTEN_ENTFROSCHEN);
+  
+  TP->SetProp(P_FROG, 0);
+  WLOG( "/d/kristallwald/sargola/log/shardin.heal", "ist nun kein Frosch mehr");
+}
+
+void entgeiste()
+{
+  if(!TP->QueryMoney())
+    return kein_geld();
+  
+  if(TP->QueryMoney() < KOSTEN_ENTGEISTEN)
+    return zuwenig_geld(KOSTEN_ENTGEISTEN);
+  
+  if(!TP->QueryProp(P_GHOST))
+    return reinlegen(KOSTEN_ENTGEISTEN);
+  
+  write(BS("Shardin nimmt ein schwarzes Tuch aus Samt und wirft es ueber "
+	   "Dich.")+
+	"Shardin befiehlt: \"Halt nun still!!\".\n\n"+
+	BS("Du wartest eineige Zeit, bemerkst nur ein leises melodisches "
+	   "Summen. Dann reisst Shardin Dir das Tuch wieder runter.")+"\n"
+	"Shardin sagt: Du bist nun kein Geist mehr.\n");
+
+  TP->AddMoney(-KOSTEN_ENTGEISTEN);
+
+  TP->SetProp(P_GHOST, 0);
+  WLOG( "/d/kristallwald/sargola/log/shardin.heal", "ist kein Geist mehr");
+}
+
+void entgifte()
+{
+  if(!TP->QueryMoney())
+    return kein_geld();
+  
+  if(TP->QueryMoney() < KOSTEN_ENTGIFTEN)
+    return zuwenig_geld(KOSTEN_ENTGIFTEN);
+  
+  if(TP->QueryProp(P_POISON) <= 0)
+    return reinlegen(KOSTEN_ENTGIFTEN);
+	
+  write(BS("Shardin legt 5 verschiedene Kraeuter und eine braeunliche Wurzel "
+	   "in eine Schale, schuettet eine durchsichtige Fluessigkeit dazu "
+	   "und zerstampft das das Ganze mit einem Moerser.")+"\n"
+	"Shardin sagt: \"Trink das!\"\n\n"
+	"Du machst vorsichtig einen Schluck.\n\n"
+	"Du sagst: Baeh!! Was ist denn das??\n"
+	"Shardin sagt: Entweder, Du willst die Vergiftung heilen, oder nicht!\n\n"
+	"Du trinkst wider Willens das Getraenk aus.\n"
+	"Shardin sagt: Du bist nun nicht mehr vergiftet.\n");
+
+  TP->AddMoney(-KOSTEN_ENTGIFTEN);
+
+  TP->SetProp(P_POISON, 0);
+	
+  WLOG( "/d/kristallwald/sargola/log/shardin.heal", "ist nicht mehr vergiftet");
+}
+
+nosave int heile(string str)
+{
+  object ob;
+  
+  notify_fail(BS("Shardin fragt: Was soll ich denn heilen?"));
+  if(!str) return 0;
+  
+  if(!TP->QueryMoney())
+    return kein_geld(), 1;
+  
+  // BACKSPEECH
+  if(str=="fluch"||str=="tschubax fluch"||strstr(str, "tschubax")!=-1)
+    {
+      if(TP->QueryMoney() < KOSTEN_BACKSPEECH)
+	return zuwenig_geld(KOSTEN_BACKSPEECH), 1;
+      
+      if(!present("\nbackspeech",TP))
+	return reinlegen(KOSTEN_BACKSPEECH), 1; 
+		
+      write(BS("Shardin betrachtet Dich eingehend. Selten hat sie einen "
+	       "staerkeren Fluch gesehen.")+
+	    BS("Shardin nimmt Deine Zunge, zieht sie auf eine unglaubliche "
+	       "Laenge!")+
+	    BS("Shardin laesst Deine Zunge zurueckschnalzen und Du kannst "
+	       "nun wieder reden."));
+	 
+      TP->AddMoney(-KOSTEN_BACKSPEECH);
+      if(ob=present("\nbackspeech",TP)) ob->remove(1);
+      
+      WLOG("/d/kristallwald/sargola/log/shardin.heal", "kann wieder normal reden");
+      return 1;
+      
+    }	//ENDE BACKSPEECH
+  
+  // KRETZE HEILEN
+  if(str=="kretze")
+    {
+      if(TP->QueryMoney() < KOSTEN_KRETZE)
+	return zuwenig_geld(KOSTEN_KRETZE), 1;
+      
+      if(!present("\nkretze",TP))
+	return reinlegen(KOSTEN_KRETZE), 1;
+      
+      write(BS("Shardin sagt: Oberkoerper freimachen!")+"\n"+
+	    BS("Du machst Deinen Oberkoerper frei und Shardin beginnt, "
+	       "Dir eine fuerchterlich stinkende Paste auf die Haut zu "
+	       "schmieren.")+"\n"+
+	    BS("Deine Augen beginnen von dem stechenden Geruch zu traenen.")+
+	    BS("Shardin sagt: Ich weiss, die Paste stinkt. Aber dafuer ist "
+	       "Deine Kretze jetzt")+
+	    BS("Shardin sagt: geheilt."));
+	 
+      TP->AddMoney(-KOSTEN_KRETZE);
+
+      if(ob=present("\nkretze",TP)) ob->remove(1);
+
+      WLOG( "/d/kristallwald/sargola/log/shardin.heal", "hat keine Kretze mehr");
+      return 1;
+    }	//ENDE KRETZE
+  
+  //*************************
+  // Besessenheit heilen
+  //*************************
+  if(str=="besessenheit")
+    {
+      if(TP->QueryMoney() < KOSTEN_BESESSENHEIT)
+	return zuwenig_geld(KOSTEN_BESESSENHEIT), 1;
+      
+      if(!present("\nbesessenheit",TP))
+	return reinlegen(KOSTEN_BESESSENHEIT), 1;
+			
+		
+      write(
+"Shardin sagt: Ich muss den Geist vertreiben, der Deinen Koerper beherrscht.\n"
++"Shardin sagt: Dazu ist es noetig, dass ich von Deinem Koerper Besitz ergreife.\n"
++"Shardin sagt: Wunder Dich also nicht...vertraue mir...\n\n"
++"Shardin setzt sich im Lotussitz auf den Boden und beginnt sich zu kontemplieren.\n\n"
++"Wie schon auf der Lichtung beginnt sich ein Wind zu heben...obwohl Du doch\n"
++"in der Berghoehle stehst...\n"
++"Der Wind beginnt zu tosen und Du merkst, dass es zwei Strudel sind, die\n"
++"gegeneinander ringen.\n\n\n"
++"Nach wuesten Stuermen zeichnet sich ein Sieg des einen Strudels ab.\n"
++"Shardins Gesichtsausdruck entspannt sich.\n"
++"Shardin sagt erschoepft: Der Geist ist nun gebannt.\n");
+	 
+      TP->AddMoney(-KOSTEN_BESESSENHEIT);
+      if(ob=present("\nbesessenheit",TP)) ob->remove();
+      WLOG( "/d/kristallwald/sargola/log/shardin.heal", "ist nicht mehr besessen");
+      return 1;
+      
+    }	//ENDE KRETZE
+  
+  //****************************************
+  // Taubheit heilen
+  //****************************************
+  if(str=="taubheit")
+    {
+      if(TP->QueryMoney() < KOSTEN_TAUBHEIT)
+	return zuwenig_geld(KOSTEN_TAUBHEIT), 1;
+      
+      if(!TP->QueryProp(P_DEAF))
+	return reinlegen(KOSTEN_TAUBHEIT), 1;
+	
+      write(
+"Shardin nimmt aus einer Lade eine lange, staehlern glaenzende Nadel.\n"
++"Shardin kommt auf Dich zu und grinst Dich dabei seltsam an.\n\n"
++"Du bist Dir nicht sicher, was jetzt kommt...\n\n"
++"Shardin sagt: Nun halt mal schoen still...\n\n"
++"Shardin stockert gute 5 Minuten in Deinem Ohr herum.\n\n"
++"Shardin sagt: Uiuiui, was haben wir denn da? So einen dicken Pfropfen \n"
++"Shardin sagt: Ohrenschmalz hab ich mein Leben lang noch nicht gesehen.\n"
++"Shardin sagt: Das naechste Mal wasch Dir die Ohren besser!\n\n");
+
+      TP->AddMoney(-KOSTEN_TAUBHEIT);
+
+      TP->SetProp(P_DEAF, 0);
+
+      WLOG( "/d/kristallwald/sargola/log/shardin.heal", "kann wieder hoeren"); 
+      return 1;
+      
+    }  //ENDE TAUBHEIT
+  
+  //**************************
+  // Blindheit
+  //**************************
+  if(str=="blindheit")
+    {
+      if(TP->QueryMoney() < KOSTEN_BLINDHEIT)
+	return zuwenig_geld(KOSTEN_BLINDHEIT), 1;
+	
+      if(!TP->QueryProp(P_BLIND))
+	return reinlegen(KOSTEN_BLINDHEIT), 1;
+	
+      write(
+"Shardin taucht ihre Finger in eine schwarze Salbe und beginnt langsam Deine\n"
++"Augen damit einzureiben.\n\n"
++"Du spuerst, wie Blitze durch Deine Augen fahren!!\n\n"
++"Shardin sagt: Ja, das kann etwas weh tun...\n\n"
++"Shardin sagt: Du hast es ueberstanden und bist nicht mehr blind.\n");
+      
+      TP->AddMoney(-KOSTEN_BLINDHEIT);	
+	
+      TP->AddHp(-10-random(15));
+
+      TP->SetProp(P_BLIND, 0);
+
+      WLOG( "/d/kristallwald/sargola/log/shardin.heal", "kann wieder sehen");
+      
+      return 1;
+      
+    }  //ENDE Blindheit
+  return 0;
+}
+
+
+//*************************************************
+// Heiltraenke
+//**************************************************
+nosave int kaufe(string str)
+{
+  int heavy, amount;
+  object ob;
+  string groesse, art;
+  string *ex;
+
+  notify_fail(BS("Was moechtest Du kaufen?"));
+  if(!str) return 0;
+
+  
+  if(!TP->QueryMoney())
+    return kein_geld(), 1;
+
+/*
+   if(!IS_WIZARD(TP))
+   {
+	tell_object(TP, "Shardin sagt: Mein Lager ist gerade leer.\n");
+	return 1;
+   }
+*/
+	
+	
+  if(str=="milar" ||str=="palantar" || str=="sandar")
+    return write(BS("Shardin fragt: Den grossen oder den kleinen?")), 1;
+  
+  if(sscanf(str, "%s %s", groesse, art) != 2) return 0;
+  
+  art=CAP(art);
+  
+  if(groesse!="grossen" && groesse!="kleinen") return 0;
+  
+  if(art !="Milar" && art!="Palantar" && art!="Sandar") return 0;
+  
+  if(!member(trank_kaeufer,getuid(TP)))
+    trank_kaeufer[getuid(TP)] = 3 + random(3);
+  
+  if(trank_kaeufer[getuid(TP)])
+    {
+      switch(groesse)
+	{
+	case "kleinen":
+	  switch(art)
+	    {
+	    case "Milar":
+	      if(TP->QueryMoney() < KOSTEN_KLEINER_MILAR)
+		return zuwenig_geld(KOSTEN_KLEINER_MILAR), 1;
+	      
+	      ob=clone_object(OBJ "trank");
+	      
+	      ob->set_values(1,50,0,5,15);
+	      
+	      if(ob->move(TP, M_GET)==ME_TOO_HEAVY)
+		{
+		  ob->remove(1);
+		  
+		  return write(BS("Shardin sagt: Du kannst ihn ja nicht "
+				  "mehr tragen!!")), 1;
+		}
+	      
+	      TP->AddMoney(-KOSTEN_KLEINER_MILAR);
+	      
+	      break;
+	      
+	    case "Palantar":
+	      if(TP->QueryMoney() < KOSTEN_KLEINER_PALANTAR)
+		return zuwenig_geld(KOSTEN_KLEINER_PALANTAR), 1;
+
+	      ob = clone_object(OBJ "trank");
+	      
+	      ob->set_values(3,0,50,5,15);
+	      
+	      if(ob->move(TP, M_GET)==ME_TOO_HEAVY)
+		{
+		  ob->remove(1);
+		  
+		  return write(BS("Shardin sagt: Du kannst ihn ja nicht "
+				  "mehr tragen!!")), 1;
+		}
+	      
+	      TP->AddMoney(-KOSTEN_KLEINER_PALANTAR);
+	      
+	      break;
+
+	    case "Sandar":
+	      if(TP->QueryMoney() < KOSTEN_KLEINER_SANDAR)
+		return zuwenig_geld(KOSTEN_KLEINER_SANDAR), 1;
+
+	      ob = clone_object(OBJ "trank");
+		
+	      ob->set_values(5,50,50,5,15);
+	      
+	      if(ob->move(TP, M_GET)==ME_TOO_HEAVY)
+		{
+		  ob->remove(1);
+		  
+		  return write(BS("Shardin sagt: Du kannst ihn ja nicht "
+				  "mehr tragen!!")), 1;
+		}
+	      
+	      TP->AddMoney(-KOSTEN_KLEINER_SANDAR);
+	      
+	      break;
+	    }
+	  
+	  break;
+	  
+	case "grossen":
+	  switch(art)
+	    {
+	    case "Milar":
+	      if(TP->QueryMoney() < KOSTEN_GROSSER_MILAR)
+		return zuwenig_geld(KOSTEN_GROSSER_MILAR), 1;
+
+	      ob = clone_object(OBJ "trank");
+	      
+	      ob->set_values(2,25,0,3,8);
+
+	      if(ob->move(TP, M_GET)==ME_TOO_HEAVY)
+		{
+		  ob->remove(1);
+		  
+		  return write(BS("Shardin sagt: Du kannst ihn ja nicht "
+				  "mehr tragen!!")), 1;		
+		}
+
+	      TP->AddMoney(-KOSTEN_GROSSER_MILAR);
+	      
+	      break;
+	      
+	    case "Palantar":
+	      if(TP->QueryMoney() < KOSTEN_GROSSER_PALANTAR)
+		return zuwenig_geld(KOSTEN_GROSSER_PALANTAR), 1;
+
+	      ob = clone_object(OBJ "trank");
+		
+	      ob->set_values(4,0,25,3,8);
+	      
+	      if(ob->move(TP, M_GET)==ME_TOO_HEAVY)
+		{
+		  ob->remove(1);
+		  
+		  return write(BS("Shardin sagt: Du kannst ihn ja nicht "
+				  "mehr tragen!!")), 1;		
+		}
+	      
+	      TP->AddMoney(-KOSTEN_GROSSER_PALANTAR);
+	      
+	      break;
+	      
+	    case "Sandar":
+	      if(TP->QueryMoney() < KOSTEN_GROSSER_SANDAR)
+		return zuwenig_geld(KOSTEN_GROSSER_SANDAR), 1;
+
+	      ob = clone_object(OBJ "trank");
+	      
+	      ob->set_values(6,25,25,3,8);
+
+	      if(ob->move(TP, M_GET)==ME_TOO_HEAVY)
+		{
+		  ob->remove(1);
+		  
+		  return write(BS("Shardin sagt: Du kannst ihn ja nicht "
+				  "mehr tragen!!")), 1;		
+		}
+
+	      TP->AddMoney(-KOSTEN_GROSSER_SANDAR);
+	      
+	      break;
+	    }
+	}
+    
+      write(BS("Shardin verkauft Dir einen "+groesse+" "+CAP(art)+"."));
+  
+      trank_kaeufer[getuid(TP)]--;
+      
+      WLOG("/d/kristallwald/sargola/log/shardin.kauf", 
+	   " kauft einen "+groesse+" "+capitalize(art));
+      
+      return 1;
+    }
+  else
+    return write(BS("Shardin sagt: Leider kann ich diesen Trank nicht in "
+		    "meinem Lager finden.")+
+		 BS("Shardin sagt: Komm doch bitte spaeter wieder.")), 1;
+  
+  return 0;	
+}
+
+void heile_finger(object finger)
+{
+  if(!objectp(finger)) return;
+  if(!TP) return;
+
+  if(!TP->QueryMoney())
+    return kein_geld();
+  
+  if(TP->QueryMoney() < KOSTEN_FINGER)
+    return zuwenig_geld(KOSTEN_FINGER);
+
+  tell_object(TP, 
+	      "Shardin haelt Dir ein Tuch mit aetzendem Geruch unter die Nase."
+	      "\n\n"
+	      "Dir wird ploetzlich schwarz um die Augen."
+	      "\n\n"+
+	      BS("Du oeffnest die Augen wieder und siehst, wie Shardin gerade "
+		 "noch zwei riesige Nadeln verschwinden laesst.")+
+	      "Gut, dass Du da nicht zusehen musstest.\n");
+	
+  TP->AddMoney(-KOSTEN_FINGER);
+
+  WLOG( "/d/kristallwald/sargola/log/shardin.heal", "hat wieder Finger");
+
+  finger->remove();
+}
+
+string finger()
+{
+  object f;
+	
+  if(f = deep_present("\n_sawer_finger",TP))
+    {
+      sfkt("Das sieht boese aus. Ich versuche, Dir zu helfen.");
+
+      heile_finger(f);
+
+      return "grinst Dich verschmitzt an.\n";
+    }
+
+  return "schaut Dich fragend an.\n";
+}
+
+void heile_zahn(object zahn)
+{
+  if(!objectp(zahn)) return;
+  if(!TP) return;
+
+  if(!TP->QueryMoney())
+    return kein_geld();
+  
+  if(TP->QueryMoney() < KOSTEN_ZAHN)
+    return zuwenig_geld(KOSTEN_ZAHN);
+
+  tell_object(TP, 
+	      BS("Shardin nimmt Dir den Zahn ab und taucht ihn in eine "
+		 "seltsame, dunkle Fluessigkeit...")+
+	      "\n\n"+
+	      BS("Du nimmst den Zahn und setzt ihn auf die gebrochene Stelle "
+		 "zurueck. Es beginnt etwas zu kribbeln in Deinem Mund.")+
+	      "\n\n"+
+	      BS("Nach ein paar Sekunden ist das Kribbeln vorbei und der "
+		 "Zahn haelt, als waere er nie abgebrochen gewesen!"));
+	
+  TP->AddMoney(-KOSTEN_ZAHN);
+
+  WLOG( "/d/kristallwald/sargola/log/shardin.heal", "hat wieder alle Zaehne");
+  
+  if(TP->QueryProp(P_PERM_STRING)==zahn)
+    TP->SetProp(P_PERM_STRING, 0);
+  
+  zahn->remove();
+}
+
+string zahn()
+{
+  object z;
+	
+  if(z=present("\nlispeln",TP))
+    {
+      sfkt("Das sieht boese aus. Ich versuche, Dir zu helfen.");
+
+      heile_zahn(z);
+
+      return "grinst Dich verschmitzt an.\n";
+    }
+
+  return "meint: Deine Zaehne koenntest Du mal wieder putzen!\n";
+}
+
+int Defend(int dam, string *dtl, mixed spell, object enemy)
+{
+  if(!pointerp(dtl))
+    dtl=({dtl});
+  
+  if(!aura) 
+    return ::Defend(dam, dtl, spell, enemy);
+
+  if(!sizeof(dtl & (m_indices(PHYSICAL_DAMAGE_TYPES))))
+    {
+      tell_room(MENV, 
+		BS("Die Schutzaura rund um Shardin leuchtet auf..."));
+
+      dam=1;
+
+      if(!random(4))
+	{
+	  tell_room(MENV,
+		    BS("Shardins Schutzaura loest sich auf..."));
+
+	  aura=0;
+	}
+    }
+  
+  return ::Defend(dam, dtl, spell, enemy);
+}
+
+void init()
+{
+  if(!is_clone(ME)) return;
+  ::init();
+  
+  if(!TP) return;
+  if(!interactive(TP)) return;
+  
+  call_out("check_for_diseases", 2, TP);
+}
+
+void check_for_diseases(object who)
+{
+  int flag;
+  
+  if(!objectp(who)) return;
+  if(ENV(who)!=MENV) return;
+  
+  if(present("\n_sawer_finger", who))
+    sfkt("Oh, Dir fehlt ja ein Finger!"), flag=1;
+  
+  if(present("\nlispeln", who))
+    sfkt("Hm, Dir fehlt ein Zahn. Autsch!"), flag=1;
+  
+  if(present("\nbesessenheit", who))
+    sfkt("Du bist von einem boesen Geist besessen!"), flag=1;
+  
+  if(present("\nkretze", who))
+    sfkt("Igitt! Du hast ja die Kretze!"), flag=1;
+  
+  if(present("\nbackspeech", who))
+    sfkt("Ah, hast Du Dich an Tschubax vergriffen, gell?"), flag=1;
+  
+  if(who->QueryProp(P_DEAF))
+    tell_object(who, BS("Shardin deutet auf Deine Ohren und nickt wissend.")), flag=1;
+  
+  if(who->QueryProp(P_BLIND))
+    sfkt("Oh, Du hast Dein Augenlicht verloren."), flag=1;
+  
+  if(who->QueryProp(P_POISON))
+    sfkt("Du bist ja vergiftet!"), flag=1;
+  
+  if(who->QueryProp(P_GHOST))
+    sfkt("Du bist ein Geist!!!!"), flag=1;
+  
+  if(who->QueryProp(P_FROG))
+    sfkt("Igitt, Du bist ein schleimiger Frosch!"), flag=1;
+  
+  if(flag)
+    sfkt("Komm, lass Dich heilen, "+CAP(getuid(who))+"!");
+}

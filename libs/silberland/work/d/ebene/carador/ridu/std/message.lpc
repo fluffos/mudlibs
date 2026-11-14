@@ -1,0 +1,634 @@
+/**************************************************************************
+ message.c,
+ messages - a convenient way to construct output. (Mentar@Tubmud)
+ Ins deutsche uebertragen und fuer Silberland angepasst 
+ von Carador@SilberLand, September 2000
+**************************************************************************/
+
+#pragma strong_types
+#include "../def.h"
+
+#include RD_SYSDIR"ctype.h"
+
+#include <lpctypes.h>
+#include <thing/language.h>
+
+#define TEXT 0
+#define TARGETS 1
+#define SPECIALS 2
+#define EXCLUDES 3
+
+inherit RD_STDDIR"array";
+
+private nosave int     sec_delay;
+private nosave status  presence;
+
+varargs string my_break_string(string str)
+{
+  int pos;
+
+  pos = strstr(str, " sagt: ");
+  if (pos < 0) pos = strstr(str, " ruft: ");
+  if (pos >-1 && pos < 30)
+    return break_string(str[(pos+7)..], 78, str[0..pos+6], BS_LEAVE_MY_LFS);
+  return break_string(str, 78, 0, BS_LEAVE_MY_LFS);
+}
+
+private varargs string _query_g_suffix(mixed gen, int casus, int anzahl)
+{
+  if (objectp(gen)) gen = gen->QueryProp(P_GENDER);
+  return ({ ({ ({"","e"}), ({"es","er"}), ({"em","en"}), ({"","e"}) }),
+            ({ ({"","e"}), ({"es","er"}), ({"em","en"}), ({"en","e"}) }),
+            ({ ({"e","e"}), ({"er","er"}), ({"er","en"}), ({"e","e"}) }) })
+    [gen][casus][anzahl];
+}
+
+varargs string describe(object o, int fall, int article) 
+{
+  string s;
+
+  if (article == -1)
+    return o->QueryName() || o->short() || (living(o)?"Jemand":"Etwas");
+
+  return o->name(fall, article) || (living(o)?"Jemand":"Etwas");
+}
+
+
+/************************************
+ * String s1: Message to ob alone   *
+ * String s2: Message to all but ob *
+ ************************************/
+
+string add_space(string a, string b)
+{
+  if (b[0..0] == "~") return b[1..];
+  return ((a != "" && a[<1..<1] != " " && isalpha(b[0]))?" " : "") + b;
+}
+
+mapping message_add (mapping data, string s1, string s2, object ob)
+{
+  string tmp;
+  int i;
+  object *who;
+  data[SPECIALS] = (data[SPECIALS] - data[EXCLUDES]) + data[EXCLUDES];
+  if (ob && member(data[SPECIALS],ob) < 0)
+    data[SPECIALS] += ({ ob });
+  for (i=sizeof(data[SPECIALS]);i--; )
+    if (!data[data[SPECIALS][i]])
+      if (member(data[TARGETS],data[SPECIALS][i]) >= 0)
+	data[data[SPECIALS][i]] = data[TEXT];
+      else // if we're not a target  have no own message yet
+	data[data[SPECIALS][i]] = "";
+  who = (data[TARGETS] & data[SPECIALS]) - data[EXCLUDES];
+  if (s1) {
+    if (member(who,ob) >= 0) {
+      tmp = add_space(data[ob], s1);
+      data[ob] += tmp;
+    }
+  }
+  if (s2)
+  {
+    for (i=sizeof(who);i--; )
+      if (who[i] != ob) {
+        tmp = add_space(data[who[i]], s2);
+	data[who[i]] += tmp;
+      }
+    tmp = add_space(data[TEXT], s2);
+    data[TEXT] +=  tmp;
+  }
+  return data;
+}
+
+public void write_message (mapping data, int delay, object pl)
+{
+object *receivers, *specials;
+string out;
+int i;
+
+  if (delay)
+    call_out ("write_message", delay, data, 0, pl);
+  else
+  {
+    if (pl && !present(pl))
+      return;
+    if (data[TEXT]=="")
+      return;
+    out = my_break_string(capitalize(data[TEXT]));
+    // all targets which have no special message get the 'standard'-message
+    specials = data[SPECIALS] || ({});
+    receivers = data[TARGETS] - specials;
+    m_delete (data, TEXT);
+    m_delete (data, TARGETS);
+    m_delete (data, SPECIALS);
+    m_delete (data, EXCLUDES);
+    map_array(receivers,#'tell_object,out);
+    // all special targets (also excludes!) get their own message
+    receivers = specials;
+    for (i=sizeof(receivers); i--; )
+      if (!(objectp(receivers[i]) && 
+	    data[receivers[i]] && strlen(data[receivers[i]])))
+	continue;
+      else 
+	tell_object (receivers[i], 
+                     my_break_string(capitalize(data[receivers[i]])));
+  }
+}
+
+void parse_verb (mapping out, mixed verb, mixed pl)
+{
+  status plural;
+  if (!pointerp(verb))
+    verb=({ verb + "st", verb + "t" });
+  plural=(objectp(pl) && pl->IsPlural()) ||
+         (pointerp(pl) && (sizeof(pl)>1 ||
+                           (sizeof(pl)==1 && pl[0]->IsPlural())));
+  if (pointerp(pl)) {
+    if (sizeof(pl))
+      message_add(out,verb[0],verb[!plural],pl[0]);
+    return;
+  }
+  message_add(out, verb[0], verb[!plural], pl);
+  return;
+}
+
+void enumerate (mapping out, mixed *data, int fall, int article, string pltext)
+{
+int i,size;
+mixed *arr;
+
+  if (!pointerp(data)) data = ({ data });
+
+  arr = allocate(sizeof(data));
+  // Evaluate closures first
+  for (i=0 ; i<sizeof(data) ; i++)
+  {
+    if (!data[i])
+      continue;
+    if (closurep(data[i]))
+      data[i] = funcall(data[i]);
+    if (objectp(data[i]))
+      arr[i] = describe(data[i], fall, article);
+    else
+      arr[i] = data[i];
+  }
+  size = sizeof(data);
+  for (i=0 ; i<size ; i++)
+  {
+    if (arr[i])
+    {
+      message_add(out, pltext||"Du", arr[i], data[i]);
+      switch (size-i)
+      {
+	case 1:	break;
+	case 2:	message_add (out, " und ", " und ", 0);
+		break;
+	default:message_add (out, ", ", ", ", 0);
+		break;
+      }
+    }
+  }
+}
+
+string parse_message (mixed *what)
+{
+mapping out;
+mixed *data, h;
+mixed str, str2, str3;
+int i, j, delay;
+object who, o;
+
+  // sound is traveling outwards  inwards
+  if (living(this_object())||!this_player())
+    who = this_object();
+  else
+    who = this_player();
+  if (environment(who))
+  {
+    data = ({environment(who)})+all_inventory(environment(who))+
+	    all_inventory(who);
+    out = 
+      ([ 0:"", 
+	 1:filter_array(data,#'living)
+      ]);
+  }
+  else
+  {
+    data = filter_array(all_inventory(who)+({who}),#'living);
+    if (!sizeof(data))
+    {
+      data = ({environment(this_player()||who)});
+      if (environment(this_player()||who))
+        data += all_inventory(environment(this_player()||who));
+      data += all_inventory(this_player()||who);
+      data = filter_array(data,#'living);
+      data -= ({ 0 });
+    }
+    out = ([ 0:"", 1:data ]);
+  }
+
+  // Copy the array to preserve closures
+  data = what[0..];
+
+  out[EXCLUDES] = ({});
+  out[SPECIALS] = ({});
+  for (i=0 ; i<sizeof(data) ; i++)
+  {
+    if (!data[i])
+      continue;
+    if (objectp(data[i]))
+    {
+      str = describe(data[i]);
+      if (!str)
+        if (living(data[i]))
+      str = "Jemand";
+        else
+      str = "Etwas";
+      message_add (out, "Du", str, data[i]);
+      continue;
+    }
+    if (pointerp(data[i]))
+    {
+      enumerate(out, data[i], 0,0,"Du");
+      continue;
+    }
+    // Ugh Jun-16-1995 to allow passing of closures as arguments to
+    // M_APPLY  M_CALL
+    if (closurep(data[i]))
+    {
+      data[i] = funcall(data[i]);
+      i--;
+      continue;
+    }
+    switch (to_string(data[i]))
+    {
+      case M_WRITE:		out[TARGETS] = ({ this_player() });
+				continue;
+      case M_SAY:		out[TARGETS] -= ({ this_player() });
+				out[EXCLUDES] = ({ this_player() });
+      				continue;
+      case M_NAME:		str = describe(data[++i], 0, -1);
+      				if (!str)
+      				  str = "Jemand";
+      				message_add(out, str, str, this_player());
+      				continue;
+      case M_PL_NAME:		str = describe(this_player(), 0, -1);
+      				if (!str)
+      				  str = "Jemand";
+      				message_add(out, str, str, this_player());
+      				continue;
+      case M_ME_NAME:		str = describe(this_object(), 0, -1);
+      				if (!str)
+      				  str = "Jemand";
+      				message_add(out, str, str, this_player());
+      				continue;
+      case M_PRONOUN:	        if (pointerp(data[++i]) && sizeof(data[i])==1)
+	                          data[i]=data[i][0];
+	                        if (pointerp(data[i])) {
+				  map_array(out[TARGETS]-data[i],
+					    lambda(({ 'x }),
+						   ({ #'message_add,out,"sie",
+						      "",'x })));
+				  map_array(data[i] & out[TARGETS],
+					    lambda(({ 'x }),
+						   ({ #'message_add,out,
+						      "ihr","",'x })));
+				}
+				else {
+				  str = data[i]->QueryPronoun();
+				  if (!str)
+				    str = "es";
+				  message_add(out, "Du", str, data[i]);
+				}
+      				continue;
+      case M_PL_PRONOUN:	str = this_player()->QueryPronoun();
+      				if (!str)
+      				  str = "es";
+      				message_add(out, "Du", str, this_player());
+      				continue;
+      case M_ME_PRONOUN:	str = this_object()->query_pronoun();
+      				if (!str)
+      				  str = "es";
+      				message_add(out, "Du", str, this_object());
+      				continue;
+      case M_BEST:              enumerate(out, data[++i], 0, 1, "Du");
+                                continue;
+      case M_PL:		str = describe(this_player());
+                                message_add(out,"Du",str,this_player());
+                                continue;
+      case M_ME:		str = describe(this_object());
+				message_add(out, "Du", str, this_object());
+				continue;
+      case M_PL_BEST:           str = describe(this_player(),0,1);
+                                message_add(out,"Du",str,this_player());
+                                continue;
+      case M_ME_BEST:		str = describe(this_object(),0,1);
+				message_add(out, "Du", str, this_object());
+				continue;
+
+      case M_DAT :              enumerate(out, data[++i], 2, 0, "Dir");
+                                continue;
+      case M_DAT_BEST :         enumerate(out, data[++i], 2, 1, "Dir");
+                                continue;
+      case M_PL_DAT :           enumerate(out, ({ this_player() }), 2,0,"Dir");
+                                continue;
+      case M_ME_DAT :           enumerate(out, ({ this_object() }), 2,0,"Dir");
+                                continue;
+      case M_PL_DAT_BEST:       enumerate(out, ({ this_player() }), 2,1,"Dir");
+                                continue;
+      case M_ME_DAT_BEST:       enumerate(out, ({ this_object() }), 2,1,"Dir");
+                                continue;
+      case M_PL_DAT_POSS :      str = describe(data[++i], 2);
+                                str2 = this_player()->QueryPossPronoun(data[i]);
+                                if(str[0..2] == "ein") {
+                                  str = str[3..];
+                                  message_add(out,
+                                            "Dein" + str,
+                                            str2 + str,
+                                            this_player());
+                                } else message_add(out,str,str, this_player());
+                                continue;
+      case M_ME_DAT_POSS :      str = describe(data[++i], 2);
+                                str2 = this_object()->QueryPossPronoun(data[i]);
+                                if(str[0..2] == "ein") {
+                                  str = str[3..];
+                                  message_add(out,
+                                            "Dein" + str,
+                                            str2 + str,
+                                            this_object());
+                                } else message_add(out,str,str,this_object());
+                                continue;
+      case M_DAT_POSS :         o = data[++i];       
+                                str = describe(data[++i], 2);
+                                str2 = o->QueryPossPronoun(data[i]);
+                                if(str[0..2] == "ein") {
+                                  str = str[3..];
+                                  message_add(out,
+                                            "Dein" + str,
+                                            str2 + str,
+                                            o);
+                                } else message_add(out,str,str,o);
+
+                                continue;
+      case M_DAT_IHM :          message_add(out, 
+                                            "Dir", 
+                                            data[++i]->QueryPronoun(2), 
+                                            data[i]);
+                                continue;
+      case M_PL_DAT_IHM :       message_add(out, 
+                                            "Dir", 
+                                            this_player()->QueryPronoun(2), 
+                                            this_player());
+                                continue;
+      case M_ME_DAT_IHM :       message_add(out, 
+                                            "Dir", 
+                                            this_object()->QueryPronoun(2), 
+                                            this_object());
+                                continue;
+      case M_DAT_SICH :         message_add(out, "Dir", "sich", data[++i]);
+                                continue;
+      case M_PL_DAT_SICH :      message_add(out, "Dir", "sich", this_player());
+                                continue;
+      case M_ME_DAT_SICH :      message_add(out, "Dir", "sich", this_object());
+                                continue;
+
+
+
+      case M_AKK :              enumerate(out, data[++i], 3, 0, "Dich");
+                                continue;
+      case M_AKK_BEST :         enumerate(out, data[++i], 3, 1, "Dich");
+                                continue;
+      case M_PL_AKK :           enumerate(out, ({ this_player() }), 3,0,"Dich");
+                                continue;
+      case M_ME_AKK :           enumerate(out, ({ this_object() }), 3,0,"Dich");
+                                continue;
+      case M_PL_AKK_BEST:       enumerate(out, ({ this_player() }), 3,1,"Dich");
+                                continue;
+      case M_ME_AKK_BEST:       enumerate(out, ({ this_object() }), 3,1,"Dich");
+                                continue;
+      case M_PL_AKK_POSS :      str = describe(data[++i], 3);
+                                str2 = this_player()->QueryPossPronoun(data[i]);
+                                if(str[0..2] == "ein") {
+                                  str = str[3..];
+                                  message_add(out,"Dein"+str,str2+str,
+                                            this_player());
+                                } else message_add(out,str,str,this_player());
+                                continue;
+      case M_ME_AKK_POSS :      str = describe(data[++i], 3);
+                                str2 = this_object()->QueryPossPronoun(data[i]);
+                                if(str[0..2] == "ein") {
+                                  str = str[3..];
+                                  message_add(out,
+                                            "Dein" + str,
+                                            str2 + str,
+                                            this_object());
+                                } else message_add(out,str,str,this_object());
+                                continue;
+      case M_NOM_POSS :         o = data[++i];       
+                                str = describe(data[++i], 0);
+                                str2 = o->QueryPossPronoun(data[i]);
+                                if(str[0..2] == "ein") {
+                                  str = str[3..];
+                                  message_add(out,
+                                            "Dein" + str,
+                                            str2 + str,
+                                            o);
+                                } else message_add(out, str, str, o);
+                                continue;
+      case M_AKK_POSS :         o = data[++i];       
+                                str = describe(data[++i], 3);
+                                str2 = o->QueryPossPronoun(data[i]);
+                                if(str[0..2] == "ein") {
+                                  str = str[3..];
+                                  message_add(out,
+                                            "Dein" + str,
+                                            str2 + str,
+                                            o);
+                                } else message_add(out,str,str,o);
+                                continue;
+      case M_AKK_IHN :          message_add(out, 
+                                            "Dich", 
+                                            data[++i]->QueryPronoun(3), 
+                                            data[i]);
+                                continue;
+      case M_PL_AKK_IHN :       message_add(out, 
+                                            "Dich", 
+                                            this_player()->QueryPronoun(3), 
+                                            this_player());
+                                continue;
+      case M_ME_AKK_IHN :       message_add(out, 
+                                            "Dich", 
+                                            this_object()->QueryPronoun(3), 
+                                            this_object());
+                                continue;
+      case M_AKK_SICH :         message_add(out, "Dich", "sich", data[++i]);
+                                continue;
+      case M_PL_AKK_SICH :      message_add(out, "Dich", "sich", this_player());
+                                continue;
+      case M_ME_AKK_SICH :      message_add(out, "Dich", "sich", this_object());
+                                continue;
+      case M_POSS        :      message_add(out, "Dein", 
+                                            data[++i]->QueryPossPronoun(),
+                                            data[i]);
+                                continue;
+      case M_ME_POSS        :   message_add(out, "Dein", 
+                                            this_object()->QueryPossPronoun(),
+                                            this_object());
+                                continue;
+      case M_PL_POSS        :   message_add(out, "Dein", 
+                                            this_player()->QueryPossPronoun(),
+                                            this_player());
+                                continue;
+
+
+      case M_TEXT:		message_add(out,data[++i][0],data[i][1],
+					    data[++i]);
+                                continue;
+      case M_PL_TEXT:		message_add(out,data[++i][0],data[i][1],
+					    this_player());
+                                continue;
+      case M_SAYS :             message_add(out, 
+                                   (str = describe(this_object(),WER,1)+
+                                          " sagt: "),
+                                   str, 0);
+                                continue;
+      case M_ME_TEXT:		message_add(out,data[++i][0],data[i][1],
+					    this_object());
+                                continue;
+      case M_VERB:              parse_verb (out, data[++i], data[++i]);
+                                continue;
+      case M_PL_VERB:           parse_verb (out, data[++i], this_player());
+                                continue;
+      case M_ME_VERB:           parse_verb (out, data[++i], this_object());
+                                continue;
+      case M_CANCEL:		i = sizeof(data);
+      				out[1]  = 0;
+      				continue;
+      case M_ROOM:              if (objectp(data[i+1]) ||
+                                    stringp(data[i+1]))
+                                  data[i+1] = ({ data[i+1] });
+                                if (!pointerp(data[i+1]))
+                                  continue;
+                                data[i+1] = filter_array(flatten_array(
+                                            map_array(data[i+1],
+                                            #'all_inventory
+                                            )),#'living);
+	                        // fall through
+      case M_TARGETS:		if (objectp(data[++i]))
+				  data[i] = ({ data[i] });
+				if (!pointerp(data[i]))
+				  continue;
+				out[TARGETS] = data[i];
+				continue;
+      case M_EXCLUDE:		if (objectp(data[++i]))
+				  data[i] = ({ data[i] });
+				if (!pointerp(data[i]))
+				  continue;
+				out[EXCLUDES] = data[i];
+				continue;
+      case M_DELAY:		sec_delay = data[++i];
+      				delay += data[i];
+      				continue;
+      case M_PRESENT:		presence = 1;
+      				continue;
+      case M_ALWAYS:		presence = 0;
+      				continue;
+      case M_DEFAULT:		sec_delay = 0;
+      				presence = 1;
+      				continue;
+      case M_APPLY:		data[i..i+2]=({apply(data[i+1],data[i+2])});
+				i--;
+				continue;
+      case M_CALL:		apply(data[i+1],data[i+2]);
+      				i += 2;
+				continue;
+      default :
+                                if (stringp(data[i]) || intp(data[i]))
+                                   {
+                                     message_add (out, data[i], data[i], 0);
+                                     continue;
+                                   }
+    }
+  }
+  if (out[TARGETS])
+  {
+    if (presence)
+      write_message(out, delay, this_player());
+    else
+      write_message(out, delay, 0);
+  }
+}
+
+public void message (mixed messagedata)
+{
+int delay, i, *when;
+mapping out;
+mixed tmp, *data;
+
+#if 0
+  presence = 1; // Ugh Oct-12-1995
+#endif
+  if (typeof(messagedata) != T_POINTER) {
+    if (strlen(""+messagedata) && (""+messagedata)[<1..<1] != "\n")
+      messagedata = ""+my_break_string(""+messagedata);
+    return write(messagedata);
+  }
+
+  data  = messagedata[0..];
+  when  = allocate(sizeof(data));
+  delay = 0;
+  out   = 0;
+  for (i=0 ; i<sizeof(data) ; i++)
+  {
+    when[i] = -1;
+    switch(typeof(data[i]))
+    {
+      case T_CLOSURE:	data[i] = funcall(data[i--]);
+			break;
+      case T_NUMBER:	delay += data[i];
+			break;
+      case T_STRING:	if (!(delay + sec_delay))
+      			  write_message(([ 0:data[i],
+					   1:({this_player()}) ]),
+					   0, 0);
+			else
+			  when[i] = (delay += sec_delay);
+    			break;
+      case T_SYMBOL:	switch (to_string(data[i]))
+    			{
+			  case "delay":		sec_delay = data[++i];
+			  			when[i] = -1;
+			  			break;
+			  case "present":	presence = 1;
+		      				break;
+			  case "always":	presence = 0;
+						break;
+			  case "default":       sec_delay = 0;
+						presence = 1;
+						break;
+    			}
+    			break;
+      case T_POINTER:	if (!(delay + sec_delay))
+      			  parse_message(data[i]);
+			else
+			  when[i] = (delay += sec_delay);
+      default:		break;
+    }
+  }
+  for (i=sizeof(data)-1 ; i>=0 ; i--)
+  {
+    if ((when[i] <= 0) || !data[i])
+      continue;
+    if (stringp(data[i]))
+      write_message(([ 0:data[i],
+		       1:({this_player()}) ]),
+		       when[i], 0);
+    else
+      call_out(#'parse_message, when[i], data[i]);
+  }
+}
+
+int query_message_busy()
+{
+  return (find_call_out("write_message") > -1) || (find_call_out(#'parse_message) > -1);
+}
+

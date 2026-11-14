@@ -1,0 +1,180 @@
+#include "/mail/post.h"
+
+inherit "/d/wueste/durian/behaelter.lpc";
+#include <properties.h>
+#include <moving.h>
+
+string adress,sender,stempel;
+mixed stamps;
+int sendtime;
+
+
+create() {
+  seteuid(getuid());
+  (::create());
+  SetProp(P_NAME,"Paket");
+  SetProp(P_GENDER,0);
+  SetProp(P_MAX_WEIGHT,50000);
+  AddId("paket");
+  AddId("postpaket");
+  AddId("gelbes paket");
+  AddId("gelbes postpaket");
+  SetProp(P_VALUE,5);
+  stamps=({});
+}
+
+
+QueryAdress() { return adress; }
+SetSendTime(int t) { sendtime=(intp(t) && t) ? t : time(); }
+QuerySendTime() { return sendtime; }
+AddStamp(index) {  stamps+=({index}); }
+//SetPoststempel(string text) { return stempel=text; }
+QueryPoststempel() { return stempel; }
+QuerySender() { return sender; }
+SetSender(arg) { return sender=arg; }
+QueryStamps() { return stamps; }
+
+QueryStampValue() {
+  int i,val;
+  val=0;
+  for (i=sizeof(stamps)-1;i>=0;i--) val+=STAMPSERV->QueryStampPrice(stamps[i]);
+  return val;
+}
+
+
+QueryStampsUsed() {
+  return (sizeof(stamps) && stamps[0][0]=='@');
+}
+
+
+long() {
+  string descr, inv_descr;
+
+  descr="Ein gelbes Postpaket. Man kann Sachen hineinstecken und herausnehmen,\n";
+  if( !QueryProp(P_TRANSPARENT) ) descr+="Es ist geschlossen.\n";
+  else {
+    inv_descr = make_invlist( this_player(), all_inventory(this_object()) );
+
+    if ( inv_descr != "" )                   
+      descr += "Es ist geoeffnet und enthaelt:\n" + inv_descr;
+    else descr += "Es ist geoeffnet und leer.\n";
+  }
+  if (!sizeof(stamps)) descr+="Das Paket ist nicht frankiert. Du kannst Briefmarken draufkleben.\n";
+  else descr+="Das Paket ist mit "+QueryStampValue()+" Muenzen frankiert.\n"+
+    (QueryStampsUsed() ? "Die Marken sind gestempelt, Du kannst sie abloesen.\n"
+     : "Die Marken sind noch ungebraucht. Du kannst weitere Marken dazukleben.\n");
+  if (!adress) descr+="Es ist noch nicht adressiert, Du kannst es mit\n\
+ 'adressiere paket an <spieler>' adressieren.\n";
+  else descr+="Es ist an "+((this_player() && adress==geteuid(this_player())) ? "Dich" : capitalize(adress) )+" adressiert.\n";
+  if (sender) descr+="Absender ist "+capitalize(sender)+".\n";
+  if (stempel) descr+="Du erkennst den Poststempel:\n  \""+stempel+"\"\n";
+  return descr;
+}
+
+short()    {
+  return "Ein gelbes Postpaket ("+ (offen ? "geoeffnet" : "geschlossen" )+").\n";
+}
+
+
+QueryOffen() { return offen; }
+
+
+init() {
+  (::init());
+  add_action("Frankiere","bekleb",1);
+  add_action("Frankiere","frankier",1);
+  add_action("Klebe","kleb",1);
+  add_action("Abloesen","loes");
+  add_action("Abloesen","loese");
+  add_action("Adressiere","adressier",1);
+  add_action("Adressiere","addressier",1);  /* common typo ;-) */
+}
+
+
+Adressiere(arg) {
+  string what,to;
+  int test;
+  if (!arg || (sscanf(arg,"%s an %s",what,to)!=2)) return notify_fail("Vielleicht 'adressiere paket an spieler' oder sowas?\n"),0;
+  if (present(what)!=this_object()) 
+    return notify_fail("Was willst Du adressieren?\n"),0;
+  adress=lower_case(to);
+  write("Du schreibst den Namen "+capitalize(adress)+" in das Adressfeld des Paketes.\n\
+Hoffentlich stimmt der Empfaenger!\n");
+  return 1;
+}
+
+
+StampThem(arg) {
+  int i;
+  if (arg) stempel=arg;
+  for (i=sizeof(stamps)-1;i>=0;i--) stamps[i]="@"+stamps[i];
+  SetSendTime();
+}
+
+
+Frankiere(string arg) {
+  string what,with;
+  int test;
+  object stamp;
+  if (!arg) return notify_fail("Vielleicht 'frankiere paket mit marke' oder sowas?\n"),0;
+  if (sscanf(arg,"%s mit %s",what,with)!=2) {
+    what=arg; 
+    with="briefmarke";
+  }
+  stamp=present(with,this_player());
+  if (present(what)!=this_object()) 
+    return notify_fail("Was willst Du frankieren oder bekleben?\n"),0;
+  if (QueryStampsUsed()) return notify_fail("\
+Auf dem Paket sind noch gestempelte Marken drauf. Wenn Du es noch einmal\n\
+verwenden willst, solltest Du die erst einmal abloesen.\n"),0;
+  if (!stamp) return notify_fail("Du hast keine solche Briefmarke!\n"),0;
+  if (!(with=stamp->QueryIndex()) || stamp->QueryUsed()) 
+    return notify_fail("Du darfst nur postfrische Briefmarken auf Pakete kleben.\n"),0;
+  
+  tell_room(environment(this_player()),this_player()->name()+
+	    " klebt eine Briefmarke auf ein Paket.\n",({this_player()}));
+  write(break_string("Du klebst "+stamp->short()+" auf das Paket.\n",78));
+  AddStamp(with);
+  stamp->remove();
+  return 1;
+}
+  
+
+Klebe(arg) {
+  string a1,a2;
+  if (!arg || sscanf(arg,"%s auf %s",a1,a2)!=2) 
+    return notify_fail("Meinst Du so etwas wie 'klebe marke auf paket' ?\n"),0;
+  return Frankiere(a2+" mit "+a1);
+}
+
+
+Abloesen(arg) {
+  string what,from;
+  mixed txt;
+  object stamp;
+  int i;
+  from=0;
+  txt=({});
+  if (!arg || (sscanf(arg,"%s ab",what)!=1 && sscanf(arg,"%s von %s ab",what,from)!=2) || (what!="marken" && what!="briefmarken" && what!="marke" && what!="briefmarke") || (from && present(from)!=this_object()))
+    return notify_fail("Was willst Du abloesen? (und evtl. von was?)\n"),0;
+
+  tell_room(environment(this_player()),this_player()->name()+
+	    " loest Briefmarken von einem Paket ab.\n",({this_player()}));
+
+  if (!sizeof(stamps)) return notify_fail("Da sind keine Marken drauf.\n"),0;
+  for (i=sizeof(stamps)-1;i>=0;i--) {
+    stamp=clone_object(STAMP);
+    stamp->SetIndex(stamps[i]);
+    stamp->move(this_player(),M_NO_SHOW);
+    txt+=({stamp->short()});
+  }
+  what=implode(txt[0..<2],", ")
+    +((sizeof(stamps)>=2) ? " und " : "")
+      + txt[<1];
+  stamps=({});
+  write(break_string("Du loest "+what+" von dem Paket ab.\n",78));
+  stempel=0;
+  return 1;
+}
+
+

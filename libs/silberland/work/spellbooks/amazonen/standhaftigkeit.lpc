@@ -1,0 +1,80 @@
+// Standhaftigkeit: Schildmaid-Buff (Stufe 12)
+// Erhoeht max. HP (P_X_HEALTH_MOD), senkt max. SP waehrend der Dauer und
+// verhindert einmalig den Tod via P_TMP_DIE_HOOK.
+
+#include "/gilden/amazonen/def.h"
+#include <new_skills.h>
+
+varargs int prep_standhaftigkeit(object caster, mapping sinfo, int flag)
+{
+  mixed hook;
+
+  if (present(AMAZON_STANDHAFTIGKEIT, caster))
+  {
+    tell_object(caster, "Du bist bereits standhaft.\n");
+    return 0;
+  }
+
+  hook = caster->QueryProp(P_TMP_DIE_HOOK);
+  if (pointerp(hook) && sizeof(hook) >= 3 && intp(hook[0]) && time() < hook[0])
+  {
+    tell_object(caster, "Eine andere Macht schuetzt Dich bereits vor dem Tod.\n");
+    return 0;
+  }
+
+  if (!pay_for_spell(caster, sinfo, !flag))
+    return 0;
+
+  return 1;
+}
+
+int standhaftigkeit(object caster, mapping sinfo)
+{
+  int suc, dur, glevel, ability;
+  int hp_bonus, sp_penalty;
+  object ob;
+
+  if (!prep_standhaftigkeit(caster, sinfo, 1))
+    return 0;
+
+  if ((suc = SpellSuccess(caster, sinfo)) <= 0)
+    return MISSERFOLG;
+
+  glevel = caster->QueryProp(P_GUILD_LEVEL);
+  ability = sinfo[SI_SKILLABILITY];
+  if (ability < 0) ability = 0;
+
+  dur = 30 + (2 * suc + ability) / 800 + glevel * 6;
+  if (dur < 60) dur = 60;
+  if (dur > 300) dur = 300;
+  if (ability == MAX_ABILITY)
+    dur *= 5 + random(5);
+  if(sinfo[SI_SKILLPOINTS] > 1) dur += 30;
+
+  hp_bonus = 15 + glevel * 2 + ability / 800 + suc / 600;
+  if (hp_bonus < 20) hp_bonus = 20;
+  if (hp_bonus > 120) hp_bonus = 120;
+  if(sinfo[SI_SKILLPOINTS] > 1) hp_bonus *= 2;
+
+  sp_penalty = -(10 + hp_bonus * 2 / 3);
+  if (sp_penalty > -10) sp_penalty = -10;
+  if (sp_penalty < -120) sp_penalty = -120;
+
+  environment(caster)->Message(
+      BS(sprintf("%s richtet sich standhaft auf und wirkt ploetzlich unbeugsam.",
+            caster->Name(WER, 1))),
+      MSGFLAG_VISUAL, ([ MSGFLAG_EXCLUDE : ({ caster }) ]) );
+  tell_object(caster, BS("Du atmest tief durch und wirst standhaft. Ein Teil Deiner magischen Kraft weicht.\n"));
+
+  ob = clone_object(OBJ "standhaftigkeit");
+  if (ob->move(caster, M_NOCHECK) != 1)
+  {
+    destruct(ob);
+    tell_object(caster, "Du kannst Deine Standhaftigkeit nicht sammeln.\n");
+    return 0;
+  }
+
+  ob->setup(caster, hp_bonus, sp_penalty, dur);
+  return ERFOLG;
+}
+

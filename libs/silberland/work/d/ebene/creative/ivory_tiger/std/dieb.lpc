@@ -1,0 +1,162 @@
+inherit "std/mnpc";
+inherit "std/npc/spells";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <mnpc.h>
+#include <new_skills.h>
+#include <wizlevels.h>
+#include "/sys/living/life.h"
+
+#include "../files.h"
+#include "race_includes.lpc"
+
+int CheckObject(object ob);
+void try_klau();
+
+void create()
+{
+  ::create();
+  SetProp(P_MNPC_AREA, ROOM(""));
+  SetProp(P_LOG_INFO, 1);
+  SetProp(P_MNPC_WAIT, ({ 15, 30, 120 }));
+  SetProp(P_MNPC_DEFAULTROOM, ROOM("o4"));
+  SetProp(P_MNPC_FLAGS, MOV_INDOORS + MOV_MOVES);
+  call_other(THIEFMASTER, "RegisterThief",TO);
+  seteuid(getuid(TO));
+}
+
+void init()
+{
+  ::init();
+
+  if (ENV(TO) && present("geld", ENV(TO)))
+    call_out("command_me", 0, "nimm geld");
+  if (TP && TP->id("Dieb"))
+    AddDefender(TP);
+  return;
+}
+
+void catch_tell(string str)
+{
+  if (random(1000) < 50)
+    try_klau();
+  return;
+}
+
+void try_klau()
+{
+  object ob;
+  object *victim, *items;
+  int i, v;
+
+  victim=({});
+  if (ENV(TO)) {
+    for (ob=first_inventory(ENV(TO)); ob; ob=next_inventory(ob)) {
+      if (living(ob) && ob!=TO)
+        if (!IS_LEARNER(ob) && !ob->QueryProp(P_TESTPLAYER))
+          victim+=({ob});
+    }
+    items=({});
+    if ((i=sizeof(victim))) {
+      v=random(i);
+      items=filter_array(all_inventory(victim[v]), "CheckObject");
+      if (sizeof(items)) {
+        i=random(sizeof(items));
+        call_out("klau", 0, victim[v], items[i]);
+      }
+    }
+  }
+  return;
+}
+
+int CheckObject(object ob) {
+  if(ob->QueryProp(P_WORN)) return 0;
+  if(ob->QueryProp(P_WIELDED)) return 0;
+  if (ob->QueryProp(P_NODROP) || ob->QueryProp(P_NEVERDROP)
+      || ob->QueryProp(P_NOGET) || ob->QueryProp(P_CURSED)
+      || ob->QueryProp(P_IVORY) || ob->QueryProp(P_INVIS))
+  {
+    return 0;
+  }
+  return 1;
+}
+
+
+void klau(object vic, object what)
+{
+  if (present(vic, ENV(TO)) && present(what, vic)) {
+    if (what->move(TO, M_GIVE|M_SILENT)==1) {
+      tell_object(vic, CAP(name(WER))+" klaut Dir "+what->name(WEN)+".\n");
+      tell_room(ENV(TO), (CAP(name(WER))+" klaut "+vic->name(WEM)+" "+what->name(WEN)+".\n", ({ vic })));
+    }
+    else
+      tell_object(vic, CAP(name(WER))+" wollte Dir "+what->name(WEN)+" abnehmen, hat aber versagt.\n");
+  }
+  return;
+}
+
+varargs void die( int poisondeath )
+{
+  object ob;
+
+  ob=present("schluessel");
+  if (ob)
+    call_other(KEYMASTER, "RemoveKey", ob);
+  return ::die(poisondeath);
+}
+
+int remove()
+{
+  call_other(THIEFMASTER, "RemoveThief",TO);
+  return ::remove();
+}
+
+void heart_beat()
+{
+  int h;
+
+  ::heart_beat();
+  if (InFight() && (h=QueryProp(P_HELPERS))) {
+    SetProp(P_MAX_HELPERS, h-1);
+    call_other(THIEFMASTER,"Help",TO);
+  }
+  else
+    if (!InFight())
+      SetProp(P_HELPERS, QueryProp(P_MAX_HELPERS));
+  return;
+}
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+  while(find_call_out("react")!=-1) ;
+  switch (gruppe) {
+    case "fies":
+      call_out("react", 0, TP, "grummelt Dich an", "grummelt "+TPN+" an"); break;
+    case "frech":
+      call_out("react", 0, TP, "gibt Dir eine Ohrfeige", "gibt "+TPN+" eine Ohrfeige");
+      TP->reduce_hit_point(4); break;
+    case "intim":
+      call_out("react", 0, TP, "schreit: LASS DAS!!! Ich will das nicht",
+               "schreit: LASS DAS!!! Ich will das nicht"); break;
+  }
+  return;
+}
+
+void react(object to, string vic, string oth)
+{
+  if (present(to, ENV(TO))) {
+    tell_object(to, BS(Name(WER, 1)+" "+vic+"."));
+    tell_room(ENV(TO), BS(Name(WER, 1)+" "+oth+"."), ({to}));
+  }
+  return;
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+  StartReaction(verb, gruppe, adverb, touch);
+  return;
+}
+

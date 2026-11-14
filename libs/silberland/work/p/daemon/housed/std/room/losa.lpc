@@ -1,0 +1,171 @@
+/*
+ * housed/std/room/losa.c - Lade- und Speicherroutinen der Raeume.
+ * Wie auch in usercmd.c habe ich hier recht wenig geaendert (bzw. aendern
+ * muessen), so dass der Lorbeeren fuer mich nicht viele uebrig bleiben,
+ * sondern Wargon@MG der Dank gebuehrt. Hm, das #pragma ist natuerlich von
+ * mir.
+ *
+ * (c) 1998 Adrian Holzwarth / Anatol@Silberland
+ *
+ *  1999 05 11 Revision 0.1    reset()-Abfrage auf dieses Objekt eingebaut.
+ *
+ *  2000 07 01 Revision 0.2    Ack. QueryProp()/Set()/SetProp() Lichthandling 
+ *                             [ restore_object() umgeht SetProp(P_LIGHT, ...), 
+ *                             aber SetProp() zaehlt ueber set_light() den 
+ *                             Lichtzaehler hoch.... sch....ade. ;) ]
+ *
+ *  2000 12 04 Revision 0.3    Methode Liquidate() hinzugefuegt...
+ *
+ *  2000 02 25 Revision 0.4    reset()-Abfrage umgestellt. Gna, Umzieherei...
+ */
+
+#pragma strict_types
+
+#define NEED_PROTOTYPES
+#include "../../sys/house.h"
+#include "../../sys/housed.h"
+#include <properties.h>
+#include <wizlevels.h>
+#include <thing/properties.h>
+
+private int csaved;
+
+public void AddExit(mixed cmd, mixed dest);
+public varargs object AddItem(mixed what, mixed ref, mixed props);
+
+public void create() {
+  Set(H_SPECIAL, SAVE|SECURED, F_MODE);
+  Set(H_SPECIAL, ([]));
+  Set(H_OWNSMELLS, SAVE, F_MODE_AS);
+  Set(H_OWNSMELLS, ([]));
+  Set(H_OWNSOUNDS, SAVE, F_MODE_AS);
+  Set(H_OWNSOUNDS, ([]));
+}
+/*
+public varargs int AddSpecial(int typ, string key, mixed extra) {
+  if (!this_interactive() || (!IS_ARCH(this_interactive()) &&
+      (getuid(this_object())!=getuid(this_interactive()))))
+    return -1;
+  if (typ != HS_EXIT && typ != HS_ITEM)
+    return 0;
+  Set(H_SPECIAL, Query(H_SPECIAL) + ([ key : typ; extra ]));
+  Save();
+  return 1;
+}
+
+public void RemoveSpecial(string key) {
+  if (!this_interactive() || (!IS_ARCH(this_interactive()) &&
+      (getuid(this_object())!=getuid(this_interactive()))))
+    return;
+  Set(H_SPECIAL, m_delete(Query(H_SPECIAL), key));
+  Save();
+}
+*/
+public void reset() {
+  if (file_name(this_object())[0..(strlen(VIRTUAL)-1)]!=VIRTUAL) return;
+  if (QueryOwner() &&
+      !sizeof(filter_array(all_inventory(),#'interactive)) && !csaved)
+    Save(1);
+}
+
+public void Liquidate(string own_savefile) {
+  string fn;
+
+  if (previous_object()!=find_object(SEERHOUSEMASTER))
+    return;
+  if (file_size(fn=sprintf("%s%s.o",HOUSED_HOUSES_SAVEDIR,QueryOwner(1))) >0)
+    rm(fn);
+  destruct(this_object());
+}
+
+
+public varargs void Save(int crunched) {
+  mixed o1, o2, o3;
+  closure pc;
+
+  o3 = 0;
+  if (!(o1 = Query(P_DETAILS)))
+    Set(P_DETAILS, QueryProp(P_DETAILS));
+  if (!(o2 = Query(P_READ_DETAILS)))
+    Set(P_READ_DETAILS, QueryProp(P_READ_DETAILS));
+  // DB(sprintf("P_SOUNDS enthaelt: %O\n",QueryProp(P_SOUNDS)));
+  // DB(sprintf("P_SMELLS enthaelt: %O\n",QueryProp(P_SMELLS)));
+  Set(H_OWNSOUNDS, QueryProp(P_SOUNDS));
+  Set(H_OWNSMELLS, QueryProp(P_SMELLS));
+  // DB(sprintf("H_OWNSMELLS enthaelt: %O\n",QueryProp(H_OWNSMELLS)));
+  if (csaved = crunched) {
+    pc = symbol_function("PCrunch", HOUSED);
+    Set(P_DETAILS, funcall(pc, Query(P_DETAILS)));
+    Set(P_READ_DETAILS, funcall(pc, Query(P_READ_DETAILS)));
+    Set(H_OWNSOUNDS, funcall(pc, QueryProp(H_OWNSOUNDS)));
+    Set(H_OWNSMELLS, funcall(pc, QueryProp(H_OWNSMELLS)));
+    o3 = Query(H_COMMANDS);
+    Set(H_COMMANDS, funcall(pc, o3));
+  }
+  save_object(HOUSED_HOUSES_SAVEDIR+QueryOwner(1));
+  Set(P_DETAILS, o1);
+  Set(P_READ_DETAILS, o2);
+  if (o3)
+    Set(H_COMMANDS, o3);
+  HOUSED_PATHFINDER->UpdateExits(QueryProp(P_EXITS));
+}
+
+public void Load() {
+  mapping special;
+  mixed prop;
+  int i;
+  int cnt;
+  string *sp;
+ 
+  restore_object(HOUSED_HOUSES_SAVEDIR+QueryOwner(1)); 
+  if (pointerp(prop=Query(P_DETAILS))) {
+    Set(P_DETAILS,([]));
+    for (i=sizeof(prop)-1; i>=0; i--)
+      this_object()->AddDetail(prop[i][0], prop[i][1]);
+  }
+  else SetProp(P_DETAILS, prop);
+  if (pointerp(prop=Query(H_OWNSMELLS))) {
+    Set(P_SMELLS,([]));
+    for (i=sizeof(prop)-1; i>=0; i--)
+      this_object()->AddSmell(prop[i][0], prop[i][1]);
+  }
+  else SetProp(P_SMELLS, prop);
+  if (pointerp(prop=Query(H_OWNSOUNDS))) {
+    Set(P_SOUNDS,([]));
+    for (i=sizeof(prop)-1; i>=0; i--)
+      this_object()->AddSound(prop[i][0], prop[i][1]);
+  }
+  else SetProp(P_SOUNDS, prop);
+  if (pointerp(prop = Query(P_READ_DETAILS))) {
+    Set(P_READ_DETAILS,([]));
+    for (i=sizeof(prop)-1; i>=0; i--)
+      this_object()->AddReadDetail(prop[i][0], prop[i][1]);
+  }
+  else SetProp(P_READ_DETAILS, Query(P_READ_DETAILS));
+  if (pointerp(prop=Query(H_COMMANDS))) {
+    Set(H_COMMANDS, ([]));
+    for (i=sizeof(prop)-1; i>=0; i--)
+      this_object()->AddUserCmd(prop[i][0], 0, prop[i][1], prop[i][2]);
+  }
+  if (environment())
+    environment()->Set(" never clean ", 1);
+  if (previous_object() && file_name(previous_object())==HOUSED) {
+    /*
+    if (special = Query(H_SPECIAL)) {
+      for (cnt = sizeof(sp=m_indices(special))-1; cnt >=0; cnt--)
+      switch(special[sp[cnt]]) {
+        case HS_ITEM:
+        AddItem(HOUSED_SPECIALS_DIR+sp[cnt], REFRESH_DESTRUCT);
+        break;
+        case HS_EXIT:
+        AddExit(sp[cnt], special[sp[cnt],1]);
+        break;
+      }
+    }*/
+  }
+  i=QueryProp(P_LIGHT);
+  Set(P_LIGHT,0);
+  SetProp(P_LIGHT,i);
+}
+
+

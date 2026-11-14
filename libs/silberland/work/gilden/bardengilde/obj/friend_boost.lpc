@@ -1,0 +1,328 @@
+inherit "/gilden/bardengilde/obj/std_song_effect";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <defines.h>
+#include <new_skills.h>
+#include <moredef.h>
+#include <moving.h>
+#include "/gilden/bardengilde/bardengilde.h"
+#include "bard_song.h"
+
+private int tickSpeed, effectPower, remainingTicks, victimBody, casterBody, bodyBonus;
+private string *effects;
+
+public void create() {
+    if (!is_clone(TO)) return;
+  
+    ::create();
+    AddId(({SONG_FRIEND_BOOST}));
+}
+
+#define P_PERCENTAGE(o, x, y) (100 * o->QueryProp(x) / o->QueryProp(y))
+
+private void nextTick() {
+    call_out("tick", 30+random(tickSpeed));
+}
+
+public varargs void prepareSong() {
+    effects = ({ });
+
+    tickSpeed = 60 - ability/500 - success/500;
+
+    remainingTicks = ability/2000 + success / 3333 + caster->QueryProp(P_GUILD_LEVEL) / 2;
+    remainingTicks = modifyBySkillAttribute(remainingTicks, SA_DURATION);
+
+    effectPower = (caster->QueryProp(P_LEVEL) + victim->QueryProp(P_LEVEL)) / 5;
+    effectPower = modifyBySkillAttribute(effectPower, SA_DAMAGE);
+
+    effects += ({"sendHp", "sendSp"});
+
+    if(ability > 9000 && TALENTMASTER->HasTalent(caster, TALENT_AGITATOR)) {
+        effects += ({"boostHp", "boostSp"});
+    }
+
+    if(success > 8000) {
+        effects += ({"increaseSpeed"});
+    }
+
+    if(success > 9500) {
+        if(victim->Query(P_BODY, F_QUERY_METHOD) == 0) {
+            victimBody = victim->QueryProp(P_BODY);
+            victim->Set(P_BODY, symbol_function("victim_body_change", TO), F_QUERY_METHOD);
+        }
+        if(caster->Query(P_BODY, F_QUERY_METHOD) == 0) {
+            casterBody = caster->QueryProp(P_BODY);
+            caster->Set(P_BODY, symbol_function("caster_body_change", TO), F_QUERY_METHOD);
+        }
+        effects += ({"boostDefense"});
+    }
+
+    /*if(suucess > 9000) {
+        effects += ({"boostCombat"});
+    }*/
+
+    if(caster->QueryProp(P_TESTPLAYER)) {
+        tell_object(caster, sprintf("%s :: tickSpeed=%d remainingTicks=%d effectPower=%d effects=%O\n",
+                    songName, tickSpeed, remainingTicks, effectPower, effects));
+    }
+
+    tell_object(caster, BS(sprintf("Mit einem mal verschmelzen deine Gedanken und Gefuehle mit denen %s.", 
+                victim->name(WESSEN, 1))));
+    tell_object(victim, BS(sprintf("Mit einem mal verschmelzen deine Gedanken und Gefuehle mit denen %s.", 
+                caster->name(WESSEN, 1))));
+    tell_room(environment(caster), BS(sprintf("Ein sanftes, synchrones Summen geht von %s und %s aus.", 
+              caster->name(WEM, 1), victim->name(WEM, 1))), ({caster, victim}));
+
+    call_out("tick", 0);
+}
+
+public int victim_body_change() {
+    return victimBody + bodyBonus;
+}
+
+public int caster_body_change() {
+    return casterBody + bodyBonus;
+}
+
+public void boostDefense() {
+    while(find_call_out("reset_body_bonus") != -1) remove_call_out("reset_body_bonus");
+
+    if(environment(caster) == environment(victim)) {
+        tell_object(caster, BS(sprintf("Die Gegenwart von %s staerkt deine Verteidigung.", victim->name(WEM, 1))));
+        tell_object(victim, BS(sprintf("Die Gegenwart von %s staerkt deine Verteidigung.", caster->name(WEM, 1))));
+        bodyBonus = effectPower;
+    } else {
+        tell_object(caster, BS(sprintf("Deine Freundschaft zu %s staerkt deine Verteidigung etwas.", victim->name(WEM, 1))));
+        tell_object(victim, BS(sprintf("Deine Freundschaft zu %s staerkt deine Verteidigung etwas.", caster->name(WEM, 1))));
+        bodyBonus = effectPower / 2;
+    }
+
+    call_out("reset_body_bonus", 6 + random(20));
+}
+
+
+private object cloneBonusFor(object target) {
+    object bonus;
+
+    if(!objectp(bonus=present("\nbarden_bonus", target))) {
+        bonus = clone_object(OBJ("bonus"));
+        bonus->move(target, M_GET|M_NOCHECK);
+    }
+
+    return bonus;
+}
+
+public int hasHigherHp(object a, object b) {
+    return a->QueryProp(P_HP) > b->QueryProp(P_HP);
+}
+
+public void sendHp() {
+    object *rankedTargets, sender, receiver;
+    int loss, gain, casterHp, victimHp;
+
+    victimHp = (victim->QueryProp(P_HP) >= victim->QueryProp(P_MAX_HP) ? 99999 : victim->QueryProp(P_HP));
+    casterHp = (caster->QueryProp(P_HP) >= caster->QueryProp(P_MAX_HP) ? 99999 : caster->QueryProp(P_HP));
+
+    if(casterHp > victimHp) {
+        sender = caster; receiver = victim;
+    } else if(victimHp > casterHp) {
+        sender = victim; receiver = caster;
+    } else {
+        tell_object(caster, BS(sprintf("Das Band deiner Freundschaft zu %s schliesst deine Wunden.", victim->name(WEM, 1))));
+        tell_object(victim, BS(sprintf("Das Band deiner Freundschaft zu %s schliesst deine Wunden.", caster->name(WEM, 1))));
+        caster->AddHp(effectPower/2);
+        victim->AddHp(effectPower/2);
+        return;
+    }
+    
+    tell_object(sender, BS(sprintf("Durch das Band eurer Freundschaft sendest du %s einen Teil deiner Lebenskraft.",
+                receiver->name(WEM, 1))));
+    tell_object(receiver, BS(sprintf("%s sendet dir ueber das Band eurer Freundschaft einen Teil %ser Lebenskraft.",
+                sender->Name(WER, 1), sender->QueryPossPronoun())));
+
+    loss = effectPower;
+    gain = effectPower;
+
+    if(TALENTMASTER->HasTalent(caster, TALENT_HEILER)) {
+        loss -= caster->QueryProp(P_BARD_INSPIRATION_LEVEL);
+        gain += caster->QueryProp(P_BARD_INSPIRATION_LEVEL);
+    }
+
+    if(environment(sender) != environment(receiver)) {
+        loss /= 2;
+        gain /= 2;
+    }
+
+    sender->AddHp(-loss);
+    receiver->AddHp(gain);
+    return;
+}
+
+public void sendSp() {
+    object sender, receiver;
+    int loss, gain, casterSp, victimSp;
+
+    victimSp = (victim->QueryProp(P_SP) >= victim->QueryProp(P_MAX_SP) ? 99999 : victim->QueryProp(P_SP));
+    casterSp = (caster->QueryProp(P_SP) >= caster->QueryProp(P_MAX_SP) ? 99999 : caster->QueryProp(P_SP));
+
+
+    if(caster->QueryProp(P_SP) > victim->QueryProp(P_SP)) {
+        sender = caster; receiver = victim;
+    } else if(victim->QueryProp(P_SP) > caster->QueryProp(P_SP)) {
+        sender = victim; receiver = caster;
+    } else {
+        tell_object(caster, BS(sprintf("Das Band deiner Freundschaft zu %s regeneriert deine magische Kraft.", victim->name(WEM, 1))));
+        tell_object(victim, BS(sprintf("Das Band deiner Freundschaft zu %s regeneriert deine magische Kraft.", caster->name(WEM, 1))));
+        caster->AddSp(effectPower/2);
+        victim->AddSp(effectPower/2);
+        return;
+    }
+    
+    tell_object(sender, BS(sprintf("Durch das Band eurer Freundschaft sendest du %s einen Teil deiner Magie.",
+                receiver->name(WEM, 1))));
+    tell_object(receiver, BS(sprintf("%s sendet dir ueber das Band eurer Freundschaft einen Teil %ser Magie.",
+                sender->Name(WER, 1), sender->QueryPossPronoun())));
+    loss = effectPower;
+    gain = effectPower;
+            
+    if(TALENTMASTER->HasTalent(caster, TALENT_HEILER)) {
+        loss -= caster->QueryProp(P_BARD_INSPIRATION_LEVEL);
+        gain += caster->QueryProp(P_BARD_INSPIRATION_LEVEL);
+    }
+
+    if(environment(sender) != environment(receiver)) {
+        loss /= 2;
+        gain /= 2;
+    }
+
+
+    sender->AddSp(-loss);
+    receiver->AddSp(gain);
+    return;
+}
+
+public void boostHp() {
+    object bonus;
+    int bonusPoints;
+
+    bonusPoints = 1 + random(caster->QueryProp(P_GUILD_LEVEL) / 3);
+    bonusPoints = modifyBySkillAttribute(bonusPoints, SA_DAMAGE);
+    if(environment(caster) != environment(victim)) {
+        bonusPoints /= 2;
+    }
+
+    if(caster->QueryProp(P_TESTPLAYER)) {
+        tell_object(caster, sprintf("%s :: bonus hp = %d\n", songName, bonusPoints));
+    }
+
+    bonus = cloneBonusFor(caster);
+    bonus->SetProp(P_X_HEALTH_MOD, ([P_HP: bonusPoints]));
+    tell_object(caster, BS(sprintf("Das Band deiner Freundschaft zu %s staerkt deine Lebenskraft.", victim->name(WEM, 1))));
+    bonus->SetTimeout(effectPower * 2);
+    bonus->SetEndMessage("Die Staerkung deiner Lebenskraft laesst nach.");
+    caster->UpdateAttributes();
+
+    bonus = cloneBonusFor(victim);
+    bonus->SetProp(P_X_HEALTH_MOD, ([P_HP: bonusPoints]));
+    tell_object(victim, BS(sprintf("Das Band deiner Freundschaft zu %s staerkt deine Lebenskraft.", caster->name(WEM, 1))));
+    bonus->SetTimeout(effectPower * 2);
+    bonus->SetEndMessage("Die Staerkung deiner Lebenskraft laesst nach.");
+    victim->UpdateAttributes();
+
+    return;
+}
+
+
+public void boostSp() {
+    object bonus;
+    int bonusPoints;
+
+    bonusPoints = 1 + random(caster->QueryProp(P_GUILD_LEVEL) / 3);
+    bonusPoints = modifyBySkillAttribute(bonusPoints, SA_DAMAGE);
+    if(environment(caster) != environment(victim)) {
+        bonusPoints /= 2;
+    }
+
+    if(caster->QueryProp(P_TESTPLAYER)) {
+        tell_object(caster, sprintf("%s :: bonus sp = %d\n", songName, bonusPoints));
+    }
+
+    bonus = cloneBonusFor(caster);
+    bonus->SetProp(P_X_HEALTH_MOD, ([P_SP: bonusPoints]));
+    tell_object(caster, BS(sprintf("Das Band deiner Freundschaft zu %s staerkt deine Magie.", victim->name(WEM, 1))));
+    bonus->SetTimeout(effectPower * 2);
+    bonus->SetEndMessage("Die Staerkung deiner magischen Kraft laesst nach.");
+    caster->UpdateAttributes();
+
+    bonus = cloneBonusFor(victim);
+    bonus->SetProp(P_X_HEALTH_MOD, ([P_SP: bonusPoints]));
+    tell_object(victim, BS(sprintf("Das Band deiner Freundschaft zu %s staerkt deine Magie.", caster->name(WEM, 1))));
+    bonus->SetTimeout(effectPower * 2);
+    bonus->SetEndMessage("Die Staerkung deiner magischen Kraft laesst nach.");
+    victim->UpdateAttributes();
+
+    return;
+}
+
+public void increaseSpeed() {
+    tell_object(caster, BS(sprintf("Das Band deiner Freundschaft zu %s beschwingt deine Angriffe!", victim->name(WEM, 1))));
+    tell_object(victim, BS(sprintf("Das Band deiner Freundschaft zu %s beschwingt deine Angriffe!", caster->name(WEM, 1))));
+
+    if(environment(caster) == environment(victim)) {
+        caster->ModifySkillAttribute(caster, SA_SPEED, 200, effectPower/2);
+        victim->ModifySkillAttribute(caster, SA_SPEED, 200, effectPower/2);
+    } else {
+        caster->ModifySkillAttribute(caster, SA_SPEED, 150, effectPower/2);
+        victim->ModifySkillAttribute(caster, SA_SPEED, 150, effectPower/2);
+    }
+    
+    return;
+}
+
+public void tick() {
+    string effectFun;
+
+    if(!objectp(caster)) remove(1);
+    if(!objectp(victim)) {
+        endSong();
+        return;
+    }
+
+    if(find_netdead(getuid(victim))) {
+        endSong();
+        return;
+    }
+
+    if(victim->QueryProp(P_MAX_SP) == 0 || caster->QueryProp(P_MAX_HP) == 0 ||
+       victim->QueryProp(P_MAX_HP) == 0 || caster->QueryProp(P_MAX_SP) == 0 ) {
+        endSong();
+       }
+
+    effectFun = effects[random(sizeof(effects))];
+
+    if(effectFun == "sendHp" &&
+       P_PERCENTAGE(caster, P_HP, P_MAX_HP) >= 100 && 
+       P_PERCENTAGE(victim, P_HP, P_MAX_HP) >= 100) {
+           nextTick();
+           return;
+    }
+
+    if(effectFun == "sendSp" &&
+       P_PERCENTAGE(caster, P_SP, P_MAX_SP) >= 100 && 
+       P_PERCENTAGE(victim, P_SP, P_MAX_SP) >= 100) {
+           nextTick();
+           return;
+    }
+
+    call_out(effectFun, 0);
+
+    if(--remainingTicks > 0) nextTick();
+    else endSong();
+}
+
+public void BecomesNetDead(object pl) {
+    if(pl != caster) return;
+    endSong();
+}

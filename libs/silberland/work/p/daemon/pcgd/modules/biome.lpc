@@ -1,0 +1,154 @@
+#include "../pcgd_intern.h"
+
+// TODO use internal cache for biomes
+
+nosave mapping biomes;
+
+public void create() {
+    biomes = ([ ]);
+}
+
+private string cleanLine(string line) {
+    line = regreplace(line, "\r", "", 1);
+    line = regreplace(line, "\n", "", 1);
+    return line;
+}
+
+private void loadBiomeEnvironment(string path) {
+    string line, *parts, file;
+    int currentLine;
+    mapping env;
+
+    env = ([ ]);
+    file = sprintf("%s%s", path, F_NAME_ENVIRONMENT);
+
+    for(currentLine = 0; (line = read_file(file, currentLine, 1)) != 0; ++currentLine) {
+        line = cleanLine(line);
+        if(line[0] == '#') continue; // ignore comments
+        if(strlen(line) == 0) continue;
+
+        parts = explode(line, "=");
+        if(sizeof(parts) != 2) {
+            raise_error(sprintf("invalid biome environment description (file %s line %d)", file, currentLine+1));
+            return;
+        }
+
+        parts[0] = regreplace(parts[0], " ", "", 1);
+        if(member(ENVIRONMENT_ALLOWED_KEYS, parts[0]) < 0) {
+            raise_error(sprintf("invalid biome environment key '%s' (file %s line %d)", parts[0], file, currentLine+1));
+            return;
+        }
+
+        env[parts[0]] = regreplace(parts[1], " ", "", 1);
+    }
+
+    biomes[path][BIOME_IND_ENVIRONMENT] = env;
+
+    return;
+}
+
+private void loadBiomeDescription(string path) {
+    string content, bucket, file, *exp, str;
+    int currentLine, state, help;
+    mixed *biomeInfo;   
+
+    //          ({ mapping:long, mapping:synonyms, mapping:details })
+    biomeInfo = ({ ([]), ([]), ([]) });
+    file = sprintf("%s%s", path, F_NAME_DESCRIPTION);
+    state = STATE_NONE;
+    for(currentLine = 0; (content = read_file(file, currentLine, 1)) != 0; ++currentLine) {
+        content = cleanLine(content);
+
+        if(strlen(content) == 0) continue;
+        if(content[0..0] == "#") continue; // kommentare ignorieren
+
+        if(content[0..0] == "[") { // neue section
+            if(content[0..4] == "[long") {
+                if(content[5..5] == ":") {
+                    help = strstr(content[6..], " ");
+                    bucket = content[6..5+help];
+                    
+                    // bucket chance
+                    if( (help=strstr(content, "chance=")) >= 0) {
+                        help = to_int(content[help+7..help+10]);
+                    }
+                    else help = 100;
+
+                    biomeInfo[0][bucket] = ({help, ({ })});
+                }
+                state = STATE_LONG;
+            } else if(content[0..10] == "[synonyms]") {
+                state = STATE_SYNONYMS;
+            } else if(content[0..7] == "[detail:") {
+                exp = explode(content[8..strstr(content, "]")-1], "|");
+                if(sizeof(exp) < 1) {
+                    raise_error("PCG syntax error: invalid detail definition");
+                    return;
+                }
+                state = STATE_DETAIL;
+                for(help=0; help<sizeof(exp); ++help) { // init all details with empty content arrays
+                    biomeInfo[BIOME_IND_DESCR_DETAILS][lower_case(exp[help])] = ({ });
+                }
+            }
+            continue;
+        }
+
+        switch(state) {
+            case STATE_LONG:
+                biomeInfo[BIOME_IND_DESCR_LONG][bucket][1] += ({ content });
+                break;
+            case STATE_SYNONYMS:
+                content = regreplace(content, " ", "", 1);
+                exp = explode(content, "=");
+                if(sizeof(exp) != 2) raise_error("PCG syntax error: invalid synonym definition");
+                if(strstr(content, "|") < 0) biomeInfo[BIOME_IND_DESCR_SYNONYMS][exp[0]] = ({ exp[1] });
+                else biomeInfo[BIOME_IND_DESCR_SYNONYMS][exp[0]] = explode(exp[1], "|");
+                break;
+            case STATE_DETAIL:
+                // exp stores the details this section describes
+                for(help=0; help<sizeof(exp); help++) { // add the current line to all details
+                    biomeInfo[BIOME_IND_DESCR_DETAILS][lower_case(exp[help])] += ({ content });
+                }
+        }
+    }
+    biomes[path][BIOME_IND_DESCR_LONG] = biomeInfo;
+}
+
+public int LoadBiome(string path) {
+    string *dir, dirName;
+    int i;
+
+    if(path[strlen(path)..strlen(path)] != "/") path += "/";
+    dirName = path;
+    if(dirName[strlen(dirName)-1..] != "*") dirName += "*";
+
+    if(member(biomes, path)) {
+        return 2; // bereits geladen
+    }
+
+    dir = get_dir(dirName);
+    if(sizeof(dir) < 1) return PCG_R_BIOME_INVALID_DIR; // dir does not exist
+
+                   // 0: BIOME_IND_DESCRIPTION // 1: BIOME_IND_ENVIRONMENT
+    biomes[path] = ({ ({}), ([ ]) });
+
+    for(i=0; i<sizeof(dir); ++i) {
+        switch(dir[i]) {
+            case F_NAME_DESCRIPTION: loadBiomeDescription(path); break;
+            case F_NAME_ENVIRONMENT: loadBiomeEnvironment(path); break;
+        }
+    }
+    
+    return 1;
+}
+
+public mixed GetBiome(string path) {
+    if(path[strlen(path)..strlen(path)] != "/") path += "/";
+
+    if(!member(biomes, path)) return 0;
+    return biomes[path];
+}
+
+public mapping GetAllBiomes() {
+    return biomes;
+}

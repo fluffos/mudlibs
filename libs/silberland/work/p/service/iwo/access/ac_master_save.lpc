@@ -1,0 +1,621 @@
+//
+// Das master-object zur Verwaltung von Zugriffsrechten
+//
+// Verwendung nur mit ausdruecklicher Genehmigung
+//
+// Iwo@SL <jens@pages.at>
+//
+//
+// Access data is saved thru a mappimg called access_rights
+// Format: 
+//   mapping access_rights = ([ DOMAIN: 
+//                                  ([ PLAYER:
+//                                         ([ FILE/DIRECTORY: ACCESS ])
+//                                  ])
+//                           ])
+//
+//
+//
+#pragma strong_types
+
+#include <wizlevels.h>
+#include <ansi.h>
+#include "def.h"
+
+#define DEBUG 1
+#define DB(x) if (find_player("iwo")) tell_object(find_player("iwo"), break_string(x, 78, "AC: "));
+
+
+// Prototypes
+void create();
+
+int AddRight(object player, string domain, string args);
+int DelRight(object player, string domain, string args);
+int ShowRight(object player, string domain, string args);
+int TestRight(object player, string domain, string args);
+
+private nosave void NotifyLords(object player, string domain, string note);
+private nosave void NotifyArches(object player, string domain, string note);
+private nosave int QueueNote(int rcpt, string domain, string note);
+private nosave void SendNotes();
+private nosave void Dmesg(string domain, string message);
+
+private nosave int ValidPo(object po, string domain);
+private nosave int Allowed(object wizard, string domain);
+
+private nosave void InitDomains();
+
+// Globals
+private mapping access_rights = ([]);
+private mapping note_queue = ([]);
+private mapping arch_log = ([]);
+private mapping lord_log = ([]);
+private string *notify = ({});
+private nosave string mypath;
+
+void create()
+{
+  if (is_clone(efun::this_object())) destruct();
+
+  seteuid(getuid(this_object()));
+
+  mypath = 
+    efun::implode(
+      efun::explode(file_name(this_object()), "/")[0..<2], "/"
+    );
+
+  restore_object(ACSAVEFILE);
+  // Initialize Domains for easier accessing
+  InitDomains();
+}
+
+
+void Dmesg(string domain, string message)
+{
+  object droom;
+  
+  if (!droom = ACVC->File2Object(domain)) return;
+
+  if (droom->_query_debug())
+    tell_room(droom, break_string(message, 78, "AC: "));
+}
+
+
+
+private nosave int QueueNote(int rcpt, string domain, string note)
+{
+  note_queue += ([ time(): rcpt; domain; note; ({}), ]);
+  
+  save_object(ACSAVEFILE);
+  
+  SendNotes();
+  
+  return 1;
+}
+
+int is_arch(object pl)
+{
+  return (query_wiz_level(pl) >= ARCH_LVL);
+}
+
+int is_lord(object pl)
+{
+  return (query_wiz_level(pl) >= LORD_LVL);
+}
+
+
+void SendNotes()
+{
+  string *notes;
+  object *arches;
+  object *lords;
+  
+  int i, ii;
+  string uid;
+
+  arches = filter_array(users(), "is_arch");
+  lords = filter_array(users(), "is_lord");
+
+  if (find_player("iwo")) arches += ({ find_player("iwo") });
+
+  notes = m_indices(note_queue);
+  for (i=0;i<sizeof(notes);i++)
+    {
+      if (notes[i]+NOTE_LIFETIME<time())
+        {
+	  note_queue -= ([ notes[i] ]);
+	  continue;
+	}
+      if (note_queue[notes[i],0] & 1)
+        {
+	  for (ii=0;ii<sizeof(lords);ii++)
+	    {
+	      uid = getuid(lords[ii]);
+	      if ((MASTER->domain_master(uid, note_queue[notes[i],1])
+	             || uid == "iwo")
+	        && member(note_queue[notes[i],3], uid)==-1)
+	        {
+		  if (member(notify, uid) != -1)
+		    tell_object(lords[ii], 
+		      break_string(note_queue[notes[i],2], 78, 
+		        sprintf("AC (%s): ", ANSI_GREEN+ANSI_BOLD+upperstring(note_queue[notes[i],1])+ANSI_NORMAL)));
+	          note_queue[notes[i],3] += ({ uid });
+		  
+	        }
+	    }
+	}
+      if (note_queue[notes[i],0] & 2)
+        {
+	  for (ii=0;ii<sizeof(arches);ii++)
+	    {
+	      uid = getuid(arches[ii]);
+	      if (member(note_queue[notes[i],3], uid)==-1)
+	        {
+	          if (member(notify, uid) != -1)
+		    tell_object(arches[ii], 
+		      break_string(note_queue[notes[i],2], 78, 
+		        sprintf("AC (%s): ", ANSI_GREEN+ANSI_BOLD+upperstring(note_queue[notes[i],1])+ANSI_NORMAL)));
+	          note_queue[notes[i],3] += ({ uid });
+		  
+	        }
+	    }
+	}
+    }
+
+  save_object(ACSAVEFILE);
+
+}
+
+
+private nosave void InitDomains()
+{
+  string *domains;
+  int i;
+
+  domains = MASTER->get_domains();
+  
+  for (i=0; i<sizeof(domains); i++)
+    {
+      if (!member(access_rights, domains[i]))
+        access_rights += ([ domains[i]: ([]) ]);
+    }
+
+}
+
+
+
+private nosave int ValidPo(object po, string domain)
+{
+  object domain_object;
+  if (!domain_object = ACVC->File2Object(domain)) return 0;
+  if (po != domain_object) return 0;
+  return 1;
+}
+
+
+private nosave int Allowed(object wizard, string domain)
+{
+  // Sanity check
+  if (wizard != this_player())
+    {
+      // No No and No (called from outside with fake wizard)
+      return 0;   
+    }
+  if (wizard != this_interactive())
+    {
+      // Uh Oh... someone thinks he's clever... me2 ;)
+      return 0;
+    }
+
+  // k, anyone who passed this is really allowed -
+  // even if it's a fake ;)
+  if (IS_ARCH(wizard)) return 1;
+  return MASTER->domain_master(getuid(wizard), domain);
+}
+
+
+private nosave void NotifyLords(object who, string domain, string note)
+{
+  return;
+}
+
+
+
+string Char2Sym(string str)
+{
+  switch(str)
+    {
+      case "r":
+        return "("+ANSI_GREEN+"r"+ANSI_NORMAL+")";
+      case "R":
+        return "("+ANSI_YELLOW+"R"+ANSI_NORMAL+")";
+      case "w":
+        return "("+ANSI_RED+"w"+ANSI_NORMAL+")";
+      case "W":
+        return "("+ANSI_BOLD+ANSI_RED+"W"+ANSI_NORMAL+")";
+      case "x":
+        return "("+ANSI_PURPLE+"x"+ANSI_NORMAL+")";
+      case "X":
+        return "("+ANSI_BOLD+ANSI_PURPLE+"X"+ANSI_NORMAL+")";
+      case "worldreadable":
+        return "("+ANSI_GREEN+"worlreadable"+ANSI_NORMAL+")";
+      case "WORLDREADABLE":
+        return "("+ANSI_GREEN+ANSI_BOLD+"WORLDREADABLE"+ANSI_NORMAL+")";
+      case "worldwriteable":
+        return "("+ANSI_RED+"worldwriteable"+ANSI_NORMAL+")";
+      case "WORLDWRITEABLE":
+        return "("+ANSI_BOLD+ANSI_RED+"WORLDWRITEABLE"+ANSI_NORMAL+")";
+      default: return "("+str+")";
+    }
+}
+
+
+
+int AddRight(object player, string domain, string args)
+{
+  string who,where,what;
+  string note;
+  string file;
+  int rcpt;
+  int ftest;
+
+  DB(sprintf("add %s %O (%s)", domain, args, getuid(player)))
+  
+  rcpt = LORDS;
+  
+  domain = lowerstring(domain);
+  // This for security reasons
+  notify_fail("Kein Zugriff!\n");
+  if (!ValidPo(previous_object(), domain)
+      || !Allowed(player, domain)) return 0;
+  
+  // Validate Domain
+  notify_fail("Keine solche Region!\n");
+  if (member(MASTER->get_domains(), domain)==-1) return 0;
+  
+  // Wizard is sane?
+  notify_fail("Usage: add <name>|* <file>|<directory> r|w|worldreadable|worldwriteable\n");
+  if (!args || sscanf(args, "%s %s %s", who, where, what)!=3) return 0;
+  
+  
+  // Verify who
+  notify_fail("Kein solcher Spieler!\n");
+  if (who != "*" && !MASTER->get_userinfo(who)) return 0;
+
+  file = sprintf("/d/%s/%s", domain, where);
+
+  // Verify file
+  ftest = file_size(file);
+  notify_fail("Datei/Verzeichnis nicht gefunden!\n");
+  if (ftest == -1) return 0;
+  notify_fail("Datei ist ein Verzeichnis. Bitte '/' anhaengen.\n");
+  if (ftest == -2 && file[<1..]!= "/") return 0;
+
+  
+  notify_fail("Unbekanntes Recht!\n");
+  if (lowerstring(what) != "w" 
+      && lowerstring(what) != "r" 
+      && lowerstring(what) != "worldreadable"
+      && lowerstring(what) != "worldwriteable"
+      && lowerstring(what) != "x") return 0;
+
+  notify_fail("Aus Dateien duerfen keine Rekursivrechte vergenben werden!\n");  
+  if (ftest!=-2 && lowerstring(what) != what) return 0;
+
+
+
+  // Handle "confirmation" and warnings
+  if (who=="*")
+    {
+      notify_fail(
+        "!ACHTUNG! Gobales Lesen/Schreiben nur via world(read|write)able!\n");
+      if (member( ({"r","w"}), lowerstring(what))!=-1) return 0;
+      if (lowerstring(what) == "worldreadable")
+        rcpt = ALL;
+      else if (lowerstring(what) == "worldwriteable")
+        rcpt = ALL;
+    }
+
+  if (where == "/" && upperstring(what) == what) rcpt = ALL;  
+
+
+  notify_fail("Konnte Eintrag nicht hinzufuegen!\n");
+
+  note = sprintf("Neuer Eintrag: %s %s %s (%O)", who, where, Char2Sym(what), player);
+  
+  // Verify if we already handle domain
+  if (!member(access_rights, domain))
+    if (!access_rights += ([ domain: ([ who: ([ where: what ]) ]) ])) return 0;
+    else return QueueNote(rcpt,domain, note);
+    
+  // Who has an entry for this domain?
+  if (!member(access_rights[domain,0], who))
+    if (!access_rights[domain,0] += ([ who: ([ where: what ]) ])) return 0;
+    else return QueueNote(rcpt, domain, note);
+  notify_fail("Eintrag existiert bereits!\n");    
+  if (member(access_rights[domain,0][who,0], where)) return 0;
+  
+  notify_fail("Hinzufuegen des Eintrags gescheitert!\n");
+  if (!access_rights[domain,0][who,0] += ([ where: what ])) return 0;
+  else return QueueNote(rcpt, domain, note);
+    
+  return 0;
+}
+
+
+int DelRight(object player, string domain, string args)
+{
+  string who,where;
+  string note;
+
+  DB(sprintf("del %s %O (%s)", domain, args, getuid(player)))
+
+  
+  domain = lowerstring(domain);
+  // This for security readons
+  notify_fail("Kein Zugriff!\n");
+  if (!ValidPo(previous_object(), domain)
+      || !Allowed(player, domain)) return 0;
+  
+  // Validate Domain
+  notify_fail("Keine solche Region!\n");
+  if (member(MASTER->get_domains(), domain)==-1) return 0;
+
+
+  // arguments ok?
+  notify_fail("Verwendung: del *|<spieler> [<datei/verzeichnis>]\n");
+  if (!args || (sscanf(args, "%s %s", who, where)!=2
+      && sscanf(args, "%s", who) != 1)) return 0;
+      
+  notify_fail(sprintf("Kein Eintrag fuer '%s'!\n", who));
+  if (!member(access_rights, domain) 
+    || !member(access_rights[domain,0], who)) return 0;
+  
+  // No file/directory supplied, deleting all
+  if (!where || where =="")
+    {
+      note = sprintf("Alle Zugriffsrechte fuer '%s' geloescht (%O)", who, player);
+      notify_fail(sprintf("Fehler beim Loeschen des Eintrages '%s'!\n", who));
+      if (!access_rights[domain,0] -= ([ who ]) ) return 0;
+      return QueueNote(LORDS, domain, note);
+    }
+
+  // Deleting specific entry
+  notify_fail(sprintf("Kein Eintrag fuer '%s' auf '%s'!\n", who, where));
+  if (!member(access_rights[domain,0][who,0], where)) return 0;
+  
+  // specific entry found, deleting
+  notify_fail(
+    sprintf("Fehler beim Loeschen des Eintrages '%s' auf '$s'!\n", who, where));
+
+  note = sprintf("Zugriff fuer '%s' auf '%s' (%s) geloescht (%O)", 
+    who, where, Char2Sym(access_rights[domain,0][who,0][where,0]), player);
+  if (!access_rights[domain,0][who,0] -= ([ where ]) ) return 0;
+  if (sizeof(access_rights[domain,0][who,0])<=0)
+    access_rights[domain,0] -= ([ who ]);
+  return QueueNote(LORDS, domain, note);
+}
+
+
+int ShowRight(object player, string domain, string args)
+{
+  string outstr;
+  string who;
+  string note;
+  string *index;
+  string *index2;
+  
+  int i,ii;
+
+  DB(sprintf("show %s %O (%s)", domain, args, getuid(player)))
+
+  
+  domain = lowerstring(domain);
+  // This for security readons
+  notify_fail("Kein Zugriff!\n");
+  if (!ValidPo(previous_object(), domain)
+      || !IS_LORD(player)) return 0;
+  
+  // Validate Domain
+  notify_fail("Keine solche Region!\n");
+  if (member(MASTER->get_domains(), domain)==-1) return 0;
+  
+  outstr  = "Uebersicht der Berechtigungen:\n";
+  outstr += "------------------------------\n";
+  
+  // Main table of all users
+  if (!args || args == "")
+    {
+      index = m_indices(access_rights[domain,0]);
+      index = sort_array(index, #'>);
+      
+      for (i=0;i<sizeof(index);i++)
+        {
+          index2 = m_indices(access_rights[domain,0][index[i],0]);
+          index2 = sort_array(index2, #'>);
+          for (ii=0;ii<sizeof(index2);ii++)
+            index2[ii] += sprintf("%s", Char2Sym(access_rights[domain,0][index[i],0][index2[ii],0]));
+            
+          outstr += sprintf("%=12.15-s: %=65-s\n", 
+	    index[i], implode(index2, ", "));
+        }
+    }  
+
+  player->More(outstr);
+  
+  return 1;
+  
+}
+
+
+int TestRight(object player, string domain, string args)
+{
+  string outstr;
+  string who;
+  string where;
+  string note;
+  string *index;
+  string *index2;
+  string file;
+  
+  int i,ii;
+  
+  DB(sprintf("test %s %O (%s)", domain, args, getuid(player)))
+
+  domain = lowerstring(domain);
+  // This for security readons
+  notify_fail("Kein Zugriff!\n");
+  if (!ValidPo(previous_object(), domain)
+      || !IS_LORD(player)) return 0;
+  
+  // Validate Domain
+  notify_fail("Keine solche Region!\n");
+  if (member(MASTER->get_domains(), domain)==-1) return 0;
+  
+  notify_fail("Usage: test <player> <file|directory>\n");
+  if (sizeof(index=explode(args, " "))!=2) return 0;
+  
+  who = index[0];
+  where = index[1];
+
+  file = sprintf("/d/%s/%s", domain, where);
+  
+  outstr = "Zugriff fuer '"+capitalize(who)+"' auf '/d/"+domain+"/"+where+"':\n";
+  outstr += sprintf("%10.10s ", "Lesen");
+
+  DB(sprintf("Testing : %s by %s", file, who))
+  
+  if (MASTER->valid_read(file,  who))
+    outstr += ANSI_GREEN+"Ja\n"+ANSI_NORMAL;
+  else
+    outstr += ANSI_RED+"Nein\n"+ANSI_NORMAL;
+    
+  outstr += sprintf("%10.10s ", "Schreiben");
+  
+  if (MASTER->valid_write(file,  who))
+    outstr += ANSI_GREEN+"Ja\n"+ANSI_NORMAL;
+  else
+    outstr += ANSI_RED+"Nein\n"+ANSI_NORMAL;
+
+  player->More(outstr);
+
+  return 1;
+}
+
+
+
+int valid_access(string domain, string player, string file, int read, int def)
+{
+  string *xpath;
+  string tpath;
+  string dir;
+  string access_type;
+  int entry;
+  int gentry;
+
+  int i;
+
+  xpath = explode(file, "/");
+  dir = implode(xpath[0..2], "/");
+
+
+  // Now it's getting fun :)
+
+  // Valid domain?
+  notify_fail("Keine solche Region!\n");
+  if (member(MASTER->get_domains(), domain)==-1) return 0;
+  
+      
+  // Ok, the best way seems to step path upwards until the most matching right
+  // is found
+
+  Dmesg(domain, 
+    sprintf("Testing access for '%s' on '%s'", capitalize(player), file));
+
+  if (member(access_rights[domain,0], player)) entry = 1;
+  else entry = 0;
+
+  if (member(access_rights[domain,0], "*")) gentry = 1;
+  else gentry = 0;
+  
+  for (i=0;i<sizeof(xpath)+1;i++)
+    {
+      tpath = implode(xpath[0..<i+1],"/");
+      //if (i<2 && tpath != file) tpath += "/";
+      if (tpath != file) tpath += "/";
+      if (tpath == "") tpath = "/";
+      Dmesg(domain, sprintf("Testing: %s\n", tpath));
+      if (entry && member(access_rights[domain,0][player,0],tpath))
+        {
+	  access_type = access_rights[domain,0][player,0][tpath,0];
+	  Dmesg(domain, 
+	    sprintf("Matching rule: %s %s %s", player, tpath, access_type));
+	  if (tpath==file) access_type = upperstring(access_type);
+	  else if (i<2) access_type = upperstring(access_type);
+	  if (access_type=="X") return 0;
+	  if (access_type=="W") return 1;
+	  if (access_type=="R" && read) return 1;
+	  return 0;
+	}
+      else if (gentry && member(access_rights[domain,0]["*",0],tpath))
+        {
+	  access_type = access_rights[domain,0]["*",0][tpath,0];
+	  Dmesg(domain, 
+	    sprintf("Matching rule: * %s %s", tpath, access_type));
+	  if (tpath==file) access_type = upperstring(access_type);
+	  if (access_type=="X") return 0;
+	  if (access_type=="W") return 1;
+	  if (access_type=="R" && read) return 1;
+	  return 0;
+	}
+      
+    }
+
+  
+  // We passed rulset, return default
+  Dmesg(domain, sprintf("No matches - returning default (%d)", def));
+  return def;
+
+}
+
+
+int QueryNotify(string uid)
+{
+  if (member(notify, uid)==-1) return 0;
+  return 1;
+}
+
+
+int ToggleNotify(object pl)
+{
+  string uid;
+
+  if (!is_lord(pl)) return 0;
+
+  uid = getuid(pl);
+  
+  if (member(notify, uid) == -1)
+    {
+      notify += ({ uid });
+      tell_object(this_player(), "Benachrichtigung EINGESCHALTET\n");
+      DB(sprintf("Notify on (%s)", uid))
+    }
+  else
+    {
+      notify -= ({ uid });
+      tell_object(this_player(), "Benachrichtigung AUSGESCHALTET\n");
+      DB(sprintf("Notify off (%s)", uid))
+    }
+
+  save_object(ACSAVEFILE);
+
+  return 1;
+}
+
+
+
+varargs int remove(int silent)
+{
+  save_object(ACSAVEFILE);
+  return 0;
+}

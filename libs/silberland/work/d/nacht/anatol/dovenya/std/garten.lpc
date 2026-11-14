@@ -1,0 +1,169 @@
+/* standardraum fuer den Garten
+ * _____________________________________(i) Anatol@Silberland (1998-2012) */
+
+
+#pragma strict_types
+
+#include "../defines.h"
+#include <combat.h>
+
+inherit DOVENYA "std/room";
+
+
+void create() {
+  ::create();
+
+  SetProp(P_INDOORS,0);
+  SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE:22,
+                           ENV_TERRAIN:TT_FOREST,
+                           ])); 
+  SetProp(P_INT_SHORT,"Dovenya, im Garten des Friedens");
+  SetProp(P_INT_LONG,
+    "Ts, da hat einer die Garten-P_INT_LONG nicht gesetzt...");
+  AddSpecialDetail("see","detailSee");
+  AddSpecialDetail(({"geist","geister"}),"detailGeist");
+  AddSpecialDetail(({"kopf","wasseroberflaeche","oberflaeche",
+        "wasser","koepfe"}),"detailKopf");
+}
+
+/* Die Funktion entscheidet, ob derjenige auf den See oder in den See
+ * bewegt werden soll - und laesst es gegebenenfalls bleiben - zumindest
+ * beim Reinspringen sollte der Betreffende halbwegs entkleidet sein :> */
+
+nosave mixed seeExitTestfunc() {
+  object * o;
+  if (this_player()) {
+    if (this_player()->QueryProp(P_GHOST)) {
+      write("Du schwebst auf den See des Lebens.\n");
+      this_player()->move(ROOM "uebersee",M_GO|M_NOCHECK,0,
+       "schwebt lautlos in die Nebelschwaden ueber den See",
+       "schwebt vom Garten herein");
+      return 1;
+    }
+    o=(object *)this_player()->QueryProp(P_ARMOURS);
+    for (;sizeof(o);o=o[1..]) 
+      if (member(({AT_ARMOUR, AT_TROUSERS, AT_BOOT, AT_CLOAK}),
+        o[0]->QueryProp(P_ARMOUR_TYPE))!=-1) {
+        write("Deine Kleidung wuerde sich schnell voll Wasser saugen und "
+            "Dich sehr\nbeim Schwimmen behindern, Du ueberlegst es Dir "
+            "doch anders.\n");
+        return 1;
+      }
+    write("Du huepfst (*PLATSCH*) in den See des Lebens!\n");
+    this_player()->move(ROOM "see",M_GO|M_NOCHECK,0,
+     "huepft mit einem lauten *PLATSCH* in den See",
+     "macht einen Huepfer und *PLATSCH* landet neben Dir im See");
+    return 1;
+  }
+  return 0;
+}
+
+/* Wer den See untersucht, sollte schon sehen, ob jemand in ihm schwimmt
+ * oder darueber schwebt... */
+  
+nosave string detailSee() {
+  string res,err1,err2;
+  object * lsee, * luebersee;
+
+  if (err1=catch(lsee=(object *)call_other(ROOM "see","GetVis")))
+    write_file(LOG "errors.log",sprintf("%s: see: %s\n",
+          dtime(time()),err1));
+  if (err2=catch(luebersee=(object *)call_other(ROOM "uebersee","GetVis")))
+    write_file(LOG "errors.log",sprintf("%s: uebersee: %s\n",
+          dtime(time()),err2));
+  res="Der See des Lebens strahlt einen gewissen Frieden aus, ";
+  if (err1) 
+    res+="obwohl ein kleiner hutzliger Magier auf seiner Wasser"
+    "oberflaeche herumhuepft und wie bloede mit einem Schild \"BUG!!\" "
+    "winkt. Besser Du gibst mal Anatol Bescheid... ";
+  else if (!sizeof(lsee))
+    res+="unberuehrt ist die Wasseroberflaeche des Sees. ";
+  else if (sizeof(lsee)==1)
+    res+="ein Frieden, der wohl genossen wird, schaut doch da ein Kopf "
+      "aus dem Wasser heraus. ";
+  else 
+    res+="ein Friede, der nur von den aus dem Wasser "
+        "herausschauenden Koepfen getruebt wird. ";
+  if (err2) 
+    res+="Ueber dem See schwebt ein haesslicher kleiner Wuesten"
+    "magier und winkt mit einem knallroten Schild, auf dem in gelber "
+    "Aufschrift steht: \"Buuuuuuuuug!!\". Am betsen, Du gibst Anatol "
+    "Bescheid... ";
+  else if (!sizeof(luebersee))
+    res+="Ueber dem See ziehen langsam konturlose Nebelschwaden hin und "
+       "her, was dem See etwas geheimnisvoller aussehen laesst. ";
+  else if (sizeof(luebersee)==1)
+    res+="Ueber dem See ziehen langsam konturlose Nebelschwaden hin und "
+       "her, wobei eine eher wie der Geist eines Verstorbenen aussieht...";
+  else
+    res+="Ueber dem See ziehen langsam zahlreiche konturlose Nebelschwaden "
+      "hin und her und du kannst deutlich einige Geister von verstorbenen "
+      "Spielern ausmachen.";
+  return break_string(res,77);
+}
+
+nosave string getLivingList(object * livings, int casus) {
+  string res;
+  if (!sizeof(livings)) return "";
+  res=(string)livings[0]->name(casus);
+  if (sizeof(livings)==1) return res;
+  livings=livings[1..];
+  while(sizeof(livings)>1) {
+    res+=", "+livings[0]->name(casus);
+    livings=livings[1..];
+  }
+  return (res+=" und "+livings[0]->name(casus));
+}
+
+/* en detail: Wer schwebt ueber dem See? */
+
+nosave string detailGeist() {
+  string res,err;
+  object * lv;
+
+  if (err=catch(lv=(object *)call_other(ROOM "uebersee","GetVis"))) {
+    write_file(LOG "errors.log",sprintf("%s: uebersee: %s\n",
+          dtime(time()),err));
+    res="Du siehst keine Geister, dafuer ein ziemlich fettes Schild: FEHLER!"
+        " ... besser, Du gibst Anatol Bescheid.";
+  }
+  else if (!sizeof(lv))
+    res="Du siehst keinen einzigen Geist!";
+  else if (sizeof(lv)==1)
+    res=sprintf("Du siehst nur %s unsterblichen Geist ueber dem See, den Du "
+        "von hier aus allerdings nicht naeher betrachten kannst.",
+        lv[0]->name(WESSEN));
+  else 
+    res=sprintf("Du siehst die unsterblichen Geister von %s, die ein wenig "
+        "rastlos ueber dem See hin und herschweben. Naeher betrachten kannst "
+        "Du sie von hier aus nicht.",(string)getLivingList(lv,WEM));
+  return break_string(res,77);
+}
+
+/* ... und wer schwimmt im See herum? */
+
+nosave string detailKopf() {
+  string res,err;
+  object * lv;
+
+  if (err=catch(lv=(object *)call_other(ROOM "see","GetVis"))) {
+    write_file(LOG "errors.log",sprintf("%s: see: %s\n",
+          dtime(time()),err));
+    res="Du siehst keine Koepfe, dafuer ein ziemlich fettes Schild: FEHLER!"
+        " ... besser, Du gibst Anatol Bescheid.";
+  }
+  else if (!sizeof(lv))
+    res="Du siehst keinen einzigen Kopf aus dem Wasser schauen, die Wasser"
+      "oberflaeche liegt ruhig und unberuehrt.";
+  else if (sizeof(lv)==1)
+    res=sprintf("Du siehst nur %s Kopf aus dem etwas unruhigen Wasser "
+        "herausschauen, den Du "
+        "von hier aus allerdings nicht naeher betrachten kannst.",
+        lv[0]->name(WESSEN));
+  else 
+    res=sprintf("Was da in dem See wohl los ist? Aus dem Wasser schauen die"
+        " Koepfe von %s heraus, die Wasseroberflaeche ist ziemlich unruhig. "
+        "Wenn Du mehr wissen willst, musst Du wohl ins Wasser.",
+        (string)getLivingList(lv,WEM));
+  return break_string(res,77);
+}

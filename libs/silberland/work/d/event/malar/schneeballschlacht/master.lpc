@@ -1,0 +1,188 @@
+/* 
+ * Der Schneeballschlacht-Master!
+ *
+ * Idee: Jeder Spieler bekommt ein paar Schneebaelle und
+ *       muss so viele Spieler, wie nur moeglich abschiessen!
+ *       
+ * Belohnung: Der Sieger erhaelt eine Packung Eis am Stiel!
+ *
+ * by Silvana@Silma (daniel.eder@kabsi.at)
+*/
+#include <ansi.h>
+#include <moredef.h>
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+
+object *players, snowman;
+mapping stand;
+int multiply;
+
+string* SortMapping();
+
+string name() { return "Ein Schneemann";}
+
+void create()
+{
+  if(is_clone(this_object()))
+  {
+    destruct(this_object());
+    return;
+  }
+
+  seteuid(getuid(this_object()));
+  stand   = ([ ]);
+  multiply = 1;
+
+//  SetProp(P_NAME, "Ein Schneemann");
+  return;
+}
+
+/* Test-Fun */
+int no_wizzs(object usr)
+{
+//  if (member(({"feyaria", "fey"}), getuid(usr)) != -1 ) return 1; else return 0;
+  if (query_wiz_level(usr) > 1) return 0; // keine Magier
+  if (strstr(file_name(usr), "#") != -1) return 0; // Keine Gaeste und einloggenden
+  if (usr->QueryProp(P_TESTPLAYER)) return 0; // Event Funktioniert, keine Testspieler
+  return 1;
+}
+
+/* Starten wir das Event! */
+void Start()
+{
+  int i, n;
+  players = filter_array(users(), "no_wizzs");
+  n       = sizeof(players);
+//  snowman = clone_object("/d/polar/lamuerte/eishoehle/npc/snowman");
+//  snowman->move("/d/event/malar/schneeballschlacht/room", M_NOCHECK);
+
+  for(i=0; i<n; i++)
+  {
+    clone_object("/d/event/malar/schneeballschlacht/snowball")->move(players[i], M_NOCHECK);
+    tell_object(players[i], break_string(
+    "Die Schneeballschlacht kann beginnen! Schiesse so viele "
+    "Spieler wie nur moeglich ab! Die syntax dazu lautet: "
+    "schiesse <name> mit schneeball ab! Los gehts!", 78,
+    "Ein Schneemann teilt Dir mit: "));
+
+    stand += ([getuid(players[i]): 0; ({ })]);
+  }
+
+  call_other(CHMASTER, "join","Event", this_object());
+  call_other(CHMASTER, "send", "Event", this_object(),
+  "Auf gehts! Jeder von euch hat einen Schneeball erhalten, mit dem "
+  "er oder sie so viele Spieler, wie nur moeglich abschiessen soll! "
+  "Wer die meisten erwischt bekommt auch eine tolle Belohnung!\n"
+  "Los! Auf gehts!", MSG_SAY);
+
+  call_out("Zwischenzeit", 150);
+}
+
+void Zwischenzeit()
+{
+  call_other(CHMASTER, "join","Event", this_object());
+  call_other(CHMASTER, "send", "Event", this_object(),
+  "Die Haelfte der Zeit ist um! Also legt euch noch ein Mal "
+  "voll ins Zeug und schiesst was ihr nur koennt!", MSG_SAY);
+
+  call_out("Finale", 105);
+}
+
+void Finale()
+{
+  call_other(CHMASTER, "join","Event", this_object());
+  call_other(CHMASTER, "send", "Event", this_object(),
+  "Jetzt befinden wir uns im Finale! Jeder Schuss zaehlt nun doppelt!", MSG_SAY);
+
+  multiply = 2;
+
+  call_out("Ende", 45);
+}
+
+void Ende()
+{
+  string* sorted;
+  int i, n;
+  string s;
+  object winner;
+  
+  sorted = SortMapping();
+  n      = sizeof(sorted);
+  s      = "";
+
+  if(n<=0) s+= "Leider hat niemand an dem Event teilgenommen :(\n"; 
+  else
+  {
+    for(i=0; i<n; i++)
+    {
+      // Kommentar (Elisa): Diese wueste Zeile is nur so wuest wegen der Formatierung
+      // ich hoff das passt Dir auch so fuers SilberLand, da kenn ich die ML nicht :-)
+      s += sprintf("%s %d Treffer", capitalize(sorted[i]), stand[sorted[i]]);
+      if (i < n-2) s += ", ";
+      else if ( i == n-2) s+= " und ";
+      else s += ".";
+    }
+
+    if(winner = find_player(sorted[0])) 
+    {
+    /* Den Preis clonen */
+    clone_object("/d/event/malar/schneeballschlacht/eispackerl")->move(winner, M_NOCHECK);
+    tell_object(winner,
+        "\nDa Du die Schneeballschlacht gewonnen hast, bekommst Du Deine Belohnung:\n"
+        "!!!Eine Schachtel voller Eis!!!\n\n");
+    }
+  }
+
+  call_other(CHMASTER, "join","Event", this_object());
+  call_other(CHMASTER, "send", "Event", this_object(),
+  "Die Schneeballschlacht ist beendet! Das Ergebnis sieht so aus:\n"
+  +s+"\nIch hoffe es hat euch allen Spass gemacht!\nDem Gewinner "+
+  capitalize(sorted[0])+" wuensche ich viel Spass mit seinem Preis!\n", MSG_SAY);
+
+  for(i=0; i<sizeof(players); ++i)
+  {
+    // Schneeball ausm Spieler
+    if(players[i] && present("\nevent_snowball", players[i]))
+      present("\nevent_snowball", players[i])->remove(1);
+  }
+
+  multiply = 1;
+}
+
+void ScoreUp(string uid, string uid2)
+{
+  if(!member(stand, uid) || member(stand[uid, 1], uid2) > -1) return;
+  stand[uid, 0]+=multiply;
+  stand[uid, 1]+=({ uid2 });
+}
+
+string* SortMapping()
+{
+  mapping top;
+  string *re;
+  int i, j, *reihung, *score;
+  string *uid;
+
+  if (m_sizeof(stand) <= 0) return ({});
+
+  top      = ([]);
+  re       = ({});
+  uid      = m_indices(stand);
+  score    = m_values(stand);
+  
+  for (i = sizeof(uid) - 1; i >= 0; i--) 
+  {
+    if (!member(top, score[i])) 
+      top += ([score[i]:({uid[i]})]);
+    else 
+      top[score[i]] += ({uid[i]});
+  }
+  reihung = sort_array(m_indices(top), #'>) - ({0});
+
+  for (i = sizeof(reihung) - 1; i >= 0; i--)
+    for (j = sizeof(top[reihung[i]]) - 1; j >= 0; j--)
+      re += ({top[reihung[i]][j]});
+ 
+  return re;
+}

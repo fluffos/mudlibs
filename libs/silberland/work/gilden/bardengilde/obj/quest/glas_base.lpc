@@ -1,0 +1,145 @@
+#include <properties.h>
+#include <language.h>
+#include <defines.h>
+#include <moredef.h>
+#include "/gilden/bardengilde/bardengilde.h"
+
+inherit "std/thing";
+inherit "/gilden/bardengilde/obj/std_spellprovider";
+
+object bard;
+int stage;
+int resetCount;
+
+mixed stages = ({
+    ({NEUTER, "Weinglas", "Weinglaeser reagieren empfindlich auf sehr schrille Toene.", ({"glas", "weinglas"}), "schrill"}),
+    ({FEMALE, "Bierflasche", "Bierflaschen reagieren empfindlich auf tiefe Toene.", ({"flasche", "bierflasche"}), "tief"}),
+    ({MALE, "Bierhumpen", "Bierhumpen virbrieren stark bei lauten Toenen.", ({"humpen", "bierhumpen"}), "laut"}),
+    ({FEMALE, "Sektfloete", "Sektfloeten werden bei exterem hohen Toenen rissig.", ({"floete", "sektfloete"}), "extrem hoch"})
+});
+
+string *schreiarten = ({"schrill", "sanft", "tief", "laut", "hoch", "leise", "extrem hoch", "jaemmerlich"});
+string requiredAdjective;
+
+public void reset() {
+    ::reset();
+    if(++resetCount>1) {
+        remove(1);
+    }
+}
+
+private void setupStage(int stageNr) {
+    mixed stage;
+
+    stage = stages[stageNr];
+    SetProp(P_GENDER, stage[0]);
+    SetProp(P_SHORT, sprintf("%s %s", QueryArticle(WER, 0, 0), stage[1]));
+    SetProp(P_NAME, stage[1]);
+    SetProp(P_INFO, stage[2]);
+
+    if(stageNr != 0) {
+        RemoveId(stages[stageNr-1][3]);
+    }
+
+    AddId(stage[3]);
+    requiredAdjective = stage[4];
+
+   tell_room(environment(this_player()), sprintf("Zechus stellt %s auf.\n", name(WEN, 1)));
+    return;
+}
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+  stage = 0;
+  resetCount = 0;
+
+//--Beschreibungen---------------------------------------------------------
+
+  SetProp(P_LONG, "Es handelt sich um @@wasBinIch@@. Es ist Teil einer Wette "
+                  "zwischen Zechus und @@bardenName@@. @@bardenPronoun@@ muss "
+                  "es nur mit Kraft @@bardenPossPronoun@@ Stimme zerschmettern.");
+
+//--Namen------------------------------------------------------------------
+  AddId(({"\nbarden_glas_q1"}));
+
+//--Eigenschaften----------------------------------------------------------
+
+  SetProp(P_MATERIAL, MAT_GLASS );
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NOGET, "Das ist Teil einer Wette. Angreifen ist verboten!\n");
+
+  AddCmd(({"schrei", "schrei"}), "cmd_schreien");
+}
+
+public int cmd_schreien(string arg) {
+    if(this_player() != bard) return 0;
+    
+    if(member(schreiarten, arg) == -1) {
+        write("Wie willst du schreien? (" + implode(schreiarten, ", ") + ")\n");
+        return -1;
+    }
+
+    tell_object(this_player(), sprintf("Du schreist %s\n", arg));
+    tell_room(environment(this_player()), sprintf("%s schreit %s.\n", this_player()->Name(WER), arg));
+
+    if(arg == requiredAdjective) {
+        tell_room(environment(this_object()), Name(WER, 1)+ " zersplittert!\n");
+        if(++stage >= sizeof(stages)) {
+            LearnBardSpell(this_player(), "schrei des verderbens", 
+            "Mit diesem Lied kannst du deinen Feinden schaden.",
+            "spiele 'schrei des verderbens' auf <gegner>");
+        } else {
+            setupStage(stage);
+        }
+        return 1;
+    } else {
+        tell_room(environment(this_object()), BS("Nichts passiert.\n"));
+        tell_room(environment(this_object()), BS(sprintf("Zechus lacht lallend und raeumt %s wieder weg.", name(WEN, 1))), ({this_player()}));
+        remove(1);
+        return -1;
+    }
+    return -1;
+}
+
+public string wasBinIch() {
+    return this_object()->name(WER, 1);
+}
+
+public string bardenName() {
+    if(objectp(bard)) {
+        return bard->name(WER, 1);
+    }
+    return "irgendwer";
+}
+
+public string bardenPronoun() {
+    if(objectp(bard)) {
+        return capitalize(bard->QueryPronoun(WER));
+    }
+    return "Es";
+}
+
+public string bardenPossPronoun() {
+    if(objectp(bard)) {
+        return bard->QueryPossPronoun(bard->QueryProp(P_GENDER), WESSEN);
+    }
+    return "seiner";
+}
+
+public void bind(object player) {
+    if(player->QueryProp(P_GUILD) != "bardengilde") {
+        remove();
+        return;
+    }
+
+    bard = player;
+    AddId(sprintf("\nbard_glas_" + geteuid(bard)));
+
+    setupStage(0);
+}

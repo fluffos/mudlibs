@@ -1,0 +1,86 @@
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <moving.h>
+#include <new_skills.h>
+#include "../paladin.h"
+#include "../blessing.h"
+
+inherit "/std/npc";
+
+public void create() {
+    if(!is_clone(TO)) return;
+    ::create();
+
+    SetProp(P_SHORT, "Ein engelsgleiches Schimmern schwebt hier");
+    SetProp(P_NAME, "Schimmern");
+    SetProp(P_GENDER, NEUTER);
+    SetProp(P_NAME_ADJ, "engelsgleich");
+    SetProp(P_LONG, "Nebelhaft und engelsgleich schimmert etwas vor dir in der Luft. "
+                    "Du kannst seine Form nicht genau erkennen, doch du spuehrst, dass "
+                    "es sich um einen Geist des Guten und des Schutzes handelt.");
+    SetProp(P_FRIEND, 1);
+    SetProp(P_NOATTACK, "ist nicht koerperlich und kann nicht angegriffen werden.");
+    SetProp(P_REJECT, ({REJECT_DROP, "@CAP_WER faehllt durch das Schimmern zu Boden." }));
+    SetProp(P_NOCORPSE, 1);
+    SetProp(P_DIE_MSG, " verblasst langsam.\n");
+
+    SetProp(P_MSGIN, "schwebt herein");
+    SetProp(P_MSGOUT, "schwebt");
+    SetProp(P_MMSGIN, "entsteht in einem sanften Licht");
+    SetProp(P_MMSGOUT, "verblasst langsam");
+
+    create_default_npc(20 + random(6));
+
+    AddId(({ID_BLESSING_ANGEL, "schimmern", "engel", "schutzengel", "NOWIMPY", "NOCONTROL"}));
+
+    //AddInfo(DEFAULT_INFO, "gibt leise singende Geraeusche von sich.");
+
+    set_next_reset(600);
+}
+
+public void init() {
+    ::init();
+
+    if(interactive(TP) && (TP->QueryProp(P_ALIGN) > 100 || TP->QueryProp(P_GUILD) == "paladine")) {
+        call_out("register_defend", 2, TP);
+    }
+}
+
+public void register_defend(object pl) {
+    if(!objectp(pl)) return;
+    if(environment(pl) != environment(TO)) return;
+
+    tell_object(pl, BS("Die engelsgleiche Gestalt legt dir schuetzend die Hand auf die Schulter."));
+    pl->AddDefender(TO);
+}
+
+public mixed DefendOther(int dam, mixed dam_type, mixed spell, object enemy) {
+    int absorbed;
+
+    if(!random(2)) return ({dam, dam_type, spell});
+
+    absorbed = random(dam/2);
+    if(enemy->QueryProp(P_ALIGN) < 0) absorbed -= enemy->QueryProp(P_ALIGN) / 100;
+    if(stringp(dam_type) && dam_type == DT_UNHOLY || pointerp(dam_type) && member(dam_type, DT_UNHOLY) > -1)
+        absorbed += random(dam/2);
+
+    if(absorbed >= dam) {
+        tell_room(ENV(TO), Name(WER) + " faengt den gesamten Angriff ab.\n");
+        absorbed = dam;
+    } else if(absorbed) {
+        tell_room(ENV(TO), Name(WER) + " faengt einen Teil des Angriffs ab.\n");
+    }
+
+    SetProp(P_HP, QueryProp(P_HP) - absorbed/2);
+    if(QueryProp(P_HP) <= 0) call_out("die", 0);
+
+    return({dam - absorbed, dam_type, spell});
+}
+
+public void reset() {
+    ::reset();
+    if(!is_clone(TO)) return;
+
+    die();
+}

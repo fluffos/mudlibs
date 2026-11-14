@@ -1,0 +1,155 @@
+/*
+ Group object
+ Iwo@SL
+*/
+ 
+#pragma strong_types
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <defines.h>
+#include <wizlevels.h>
+#include <moredef.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <ansi.h>
+
+#include "../group.h"
+
+#define MYVERSION "1.0.0"
+
+// Function predefines
+int EnvCheck        ();
+void BecomesNetDead (object pl);
+void reset          ();
+varargs int remove  (int silent);
+int greport         (string str);
+varargs int TellP   (object pl, string txt, string istr);
+
+void create()
+{
+  if( !is_clone(TO) ) return;
+  ::create();
+
+  seteuid(getuid(TO));
+
+  SetProp(P_SHORT, 0);
+  SetProp(P_NAME, "\ngobj");
+  AddId( ({"\ngobj"}) );
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_AUTOLOADOBJ, 1);
+  
+  SetProp(P_GROUPREPORT, 1);
+  SetProp(P_GROUPREPORT_COLOR, 1);
+  SetProp(P_GROUPREPORT_LEVEL, 1);
+  SetProp(P_GROUPREPORT_COLSET, 
+            ({ ANSI_GREEN, ANSI_CYAN, ANSI_YELLOW, ANSI_RED }));
+  
+  AddCmd( ({ "g", "gruppe" }), "gcommand");
+  AddCmd( ({ "greport" }), "greport");
+//  AddCmd( ({ "gd" }), "remove");
+  
+}
+
+// Command parser, processed at GROUPMASTER
+int gcommand (string str)
+{
+  GROUPMASTER->ParseGCommand(TP->_unparsed_args());
+  return 1;
+}
+
+// Reason enough to leave a group
+void BecomesNetDead(object pl)
+{
+  GROUPMASTER->LeaveGroup(pl,1);
+  return;
+}
+
+// Me got valid environment? Prevent object from lying around
+int EnvCheck()
+{
+  if (!environment(ME) || !query_once_interactive(ENV(ME)))
+    {
+      call_out("remove", 0);
+      return 0;
+    }
+  return 1;
+}
+
+void reset()
+{
+  // Nono, never query blues env :)
+  if (IS_BLUE(TO) ) { ::reset(); return; }
+  if (!EnvCheck()) ::reset();
+  // Autoupdate roxx :)
+  if (TO) GROUPMASTER->CheckGobjVersion(TO, MYVERSION);
+  ::reset();
+}
+
+
+varargs int remove(int silent)
+{
+  if (IS_BLUE(TO)) { return ::remove(); }
+  GROUPMASTER->LeaveGroup(ENV(ME), 1);
+  return ::remove();
+}
+
+// Configuration section
+int greport(string str)
+{
+  string command;
+  string value;
+  string *split;
+  
+  if (!str) str = "settings";
+  
+  split = explode(str, " ");
+  
+  if (sizeof(split)<2) value = "print";
+  else value = split[1];
+  command = split[0];
+  
+  switch (command)
+    {
+      case "farben":
+        if (value == "ein") SetProp(P_GROUPREPORT_COLOR,1);
+	else SetProp(P_GROUPREPORT_COLOR,0);
+        break;
+      case "level":
+        if (value == "2") SetProp(P_GROUPREPORT_LEVEL,2);
+	else SetProp(P_GROUPREPORT_LEVEL, 1);
+	break;
+      case "ein":
+        SetProp(P_GROUPREPORT,1);
+	break;
+      case "aus":
+        SetProp(P_GROUPREPORT,0);
+	break;
+      default:
+        TellP(TP, "Syntax: greport ein|aus|farben <0|1>|level <1|2>");
+	TellP(TP, "Aktuelle Einstellungen:");
+	TellP(TP, sprintf("  Der Gruppenreport ist %sgeschaltet.", QueryProp(P_GROUPREPORT)?"ein":"aus"));
+	TellP(TP, sprintf("  Level  .. %d", QueryProp(P_GROUPREPORT_LEVEL)));
+	TellP(TP, sprintf("  Farben .. %s", QueryProp(P_GROUPREPORT_COLOR)?"ein":"aus"));
+    }
+  return 1;
+}
+
+
+// Tell Player Text
+varargs int TellP (object pl, string txt, string istr)
+{
+  if (!pl || !txt) return 0;
+  
+  if (istr)
+    tell_object(pl, break_string(txt, 78, istr));
+  else
+    tell_object(pl, break_string(txt, 78));
+  return 1;
+}
+

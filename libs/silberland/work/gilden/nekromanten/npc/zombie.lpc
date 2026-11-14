@@ -1,0 +1,160 @@
+// 12.10.1999 Angrox
+//            SetAggressive hinzugefuegt
+// 06.11.2000 angrox
+//            SetSkeleton geaendert (corpse nun mixed)
+// 20.05.2003 archon
+//            anpassung auf /p/std/npc/nekro_npc, 
+//            alles rausgeworfen, was nicht genutzt wurde (copy/paste)
+
+inherit "/p/std/npc/nekro_npc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <new_skills.h>
+#include <class.h>
+#include "../def.h"
+
+void create()
+{
+ 
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein Zombie");
+  SetProp(P_LONG,
+    "Eine halbverweste wandelnde Leiche. Die Haut, oder besser gesagt die "
+    "Oberflaeche dieser Kreatur ist mit eitrigen Wunden bedeckt, die einen "
+    "furchtbaren Geruch ausstroemen. " );
+  SetProp(P_NAME, ({ "Zombie", "Zombies", "Zombie", "Zombie"}) );
+  SetProp(P_GENDER, MALE);
+  AddId( ({ "zombie", "Nekromantenzombie" }));
+
+  SetProp(P_RACE, "Untoter");
+  SetProp(P_ALIGN, -600);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_NOCORPSE, 1);
+  SetProp(P_NO_GLOBAL_ATTACK, 1);
+  SetProp(P_FRIEND, 1);
+  SetProp(P_MAX_POISON, 0);
+  SetProp(P_TEMPERATURE_RANGE, ([0:-276, 1:500]));
+  SetProp(P_DIE_MSG, " loest sich in seine stinkenden Einzelteile auf.\n");
+
+  SetProp(P_MSGIN, "schlurft herein");
+  SetProp(P_MSGOUT, "schlurft");
+  SetProp(P_MMSGIN, "verschwindet ploetzlich.");
+  SetProp(P_MMSGOUT, "taucht ploetzlich auf");
+
+  SetProp(P_SMELL, "Der Zombie stinkt nach Verwesung.\n");
+  AddDetail( ({ "wunden", "wunde" }), 
+    "Die Haut des Zombies hat sich bereits zu grossen Teilen aufgeloest. "
+    "Darunter sieht verfaultes Fleisch hervor." );
+  AddDetail( ({ "haut" }), 
+    "Pfui, sieht die Haut graesslich aus." );
+  AddClass(CL_ZOMBIE);
+
+}
+
+void SetZombie(mixed corpse, mixed caster, int succ)
+{
+  int level, maxlevel;
+  string str;
+ 
+  if(objectp(caster)) {
+    SetProp(P_NEKRO_CASTED_BY, caster);
+    SetProp(P_LONG, QueryProp(P_LONG)[0..<2] + 
+      caster->Name()+" hat diesen Untoten beschworen.");
+    //  SetProp(P_SHORT, "Ein "+corpse->QueryProp(P_RACE)+"zombie");
+    //  AddId(lower_case(corpse->QueryProp(P_RACE))+"zombie");
+  }
+  if(intp(corpse)) {
+    str="eines Menschens";
+    level=corpse;  
+    SetProp(P_SIZE, 150+random(80));
+  }
+  else {
+    str=implode(explode(corpse->QueryProp(P_LONG), " ")[5..<1], " ") [0..<3];
+    SetProp(P_SIZE, corpse->QueryProp(P_SIZE));
+    
+    if(!objectp(caster)) 
+      maxlevel=23+random(10);
+    else  {
+        maxlevel=(caster->QueryAttribute(A_INT)/4)
+                  +caster->QueryProp(P_GUILD_LEVEL)
+                  +caster->QueryProp(P_GUILD_CIRCLE)
+                  + (5*succ/10000);
+        maxlevel=(succ*maxlevel/(4*10000))+3*maxlevel/4;
+        maxlevel=(3*maxlevel/4)+call_other(NEKRO_SPELLS, 
+            "DoModificationByAlign", maxlevel/4, caster);
+        if (maxlevel > 30) maxlevel = 30;
+    }
+    level=2*corpse->QueryProp(P_LEVEL)/3;
+    if( level > maxlevel )  
+      level=maxlevel;
+    TELL("angrox", sprintf("ZOMBIE: maxlvl = %d, npclvl = %d, level= %d\n",
+            maxlevel,corpse->QueryProp(P_LEVEL), level));
+  }
+  SetProp(P_SHORT, "Der Zombie "+str );
+
+  create_default_npc(level);
+  SetProp(P_HANDS, ({" mit verwesenden Haenden", 50+level*5+succ/100,
+                     DT_BLUDGEON }));
+  SetProp(P_XP, 0);
+  SetProp(P_MAX_HP, level*10 + succ/100); // maximal 300+100
+  SetProp(P_MAX_SP, QueryProp(P_MAX_HP));
+  SetProp(P_BODY, level*3);
+
+  SetProp(P_SPELLRATE, 5+level);
+
+  AddSpell(1,level*4+succ/40,   // Lv.30 & max.success: 120+250
+    "Der Zombie bohrt seine Finger in Deinen Koerper.\n",
+    "Der Zombie bohrt seine Finger in @WESSEN Koerper.\n",
+    DT_PIERCE,([SP_SHOW_DAMAGE:1]));
+  AddSpell(1,level*5+succ/50,   // Lv.30 & max.success: 150+200
+    "Der Zombie wirft einen unheiligen Zauber nach Dir.\n",
+    "Der Zombie wirft einen unheiligen Zauber nach @WEM.\n",
+    DT_UNHOLY,([SP_SHOW_DAMAGE:1]));
+
+  SetResetRemove();
+  
+  return;
+}
+
+int AdjustResistance(object corpse) 
+{
+  string *lastdam;
+  mapping res;
+  int i;
+  if(!mappingp(res=corpse->QueryProp(P_RESISTANCE_STRENGTHS)))
+    res=([]);
+  res+=([DT_UNHOLY: -0.5, DT_HOLY:0.5, DT_LIGHT:0.2 ]);
+
+  lastdam=corpse->QueryProp(P_LAST_DAMTYPES);
+  if(pointerp(lastdam)) {
+    for(i=sizeof(lastdam)-1;i>=0;i--) {
+      if(res[lastdam[i]]) {
+        res[lastdam[i]]=res[lastdam[i]]+0.5;
+      }
+      else {
+        res[lastdam[i]]=0.5;
+      }
+    } 
+  }
+  SetProp(P_RESISTANCE_STRENGTHS, res);
+  return 1;
+}
+
+public void EnableRageMode(int chance) {
+  SetProp("rage", 1);
+  SetProp("rage_chance", 10-chance);
+}
+
+public void Attack(object enemy) {
+  if(QueryProp("rage") && !random(QueryProp("rage_chance")) && QuerySkillAttribute(SA_SPEED) <= 100) {
+    tell_room(ENV(TO), Name(WER,1)+" verfaellt in wilde Raserei, als ihn die Gier nach Gehirnen uebermannt!\n");
+    ModifySkillAttribute(TO, SA_SPEED, 200, random(3+QueryProp("rage_chance")));
+  }
+
+  ::Attack(enemy);
+  return;
+}

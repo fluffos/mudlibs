@@ -1,0 +1,436 @@
+//=========================================================================
+//
+// File:    karte.c
+// Created by Zordan@SL
+//
+// Project: Labyrinth Unterwelt
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+
+int *maze,x,y,z,*stackx,*stacky,*stackz;
+int startx,starty,startz,endex,endey,endez;
+int plx,ply,plz;
+string *map;
+
+void moveplayer(int mov);
+
+void init()
+{
+  ::init();
+
+  if (MENV && !interactive(MENV)) call_out("remove",0);
+}
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Eine kleine Karte");
+  SetProp(P_LONG,
+    "Diese kleine Karte zeigt Dir an, wo Du im Labyrinth schon gewesen "
+    "bist. Du brauchst sie dafuer nur zu lesen. ( X=Raum, @=Standort, "
+    "U=Unten, O=Oben, wobei Unten Oben vorgezogen wird )"
+  );
+
+  SetProp(P_NAME, "Karte");
+  SetProp(P_CURSED, 1);
+  SetProp(P_NODROP, "Niemals wuerdest Du Deine Karte hergeben.\n");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_MATERIAL, MAT_PAPER );
+
+  AddId( ({ "karte",KARTE,"NOUNCURSE","NODESTRUCT" }) );
+  AddId(SID_NOLEARN);
+
+  SetProp(P_WEIGHT, 100);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+
+  AddCmd( ({ "lies","les","lese" }) , "liesfkt" );
+
+  stackx = ({ });
+  stacky = ({ });
+  stackz = ({ });
+
+  x=y=z=0;
+
+  startx=starty=startz=endex=endey=endez=0;
+
+  plx=ply=plz=0;
+}
+
+int getexits()
+{
+  int i;
+
+  if ((i = plx+x*ply+x*y*plz) < sizeof(maze)) // Bugfix Feyaria
+    return maze[i];
+  else
+    return 0;
+}
+
+int createmaze(int a,int b)
+{
+  int visit,actx,acty,dir,temp;
+  int *dirs;
+
+  x=a;
+  y=b;
+
+  if ((x<3) || (x>38) || (y<3) || (y>38)) return -1;
+
+  maze=allocate(x*y);
+  visit=x*y-1;
+  actx=x/2;
+  acty=y/2;
+  startx=random(x);
+  starty=0;
+  startz=0;
+  endex=random(x);
+  endey=y-1;
+  endez=0;
+  plx=startx;
+  ply=starty;
+  plz=startz;
+  stackx = ({ });
+  stacky = ({ });
+
+  while (visit > 0)
+  {
+    dirs = ({ });
+    temp=actx+x*acty;
+
+    if (((acty-1) >= 0) && (maze[temp-x] == 0)) dirs+=({ M_NORDEN });
+    if (((acty+1)  < y) && (maze[temp+x] == 0)) dirs+=({ M_SUEDEN });
+    if (((actx-1) >= 0) && (maze[temp-1] == 0)) dirs+=({ M_WESTEN });
+    if (((actx+1)  < x) && (maze[temp+1] == 0)) dirs+=({ M_OSTEN });
+
+    if (sizeof(dirs) > 0)
+    {
+      stackx+= ({ actx });
+      stacky+= ({ acty });
+      visit--;
+
+      dir=dirs[random(sizeof(dirs))];
+
+      switch(dir)
+      {
+        case M_NORDEN: maze[temp]+=M_NORDEN;
+                       maze[temp-x]+=M_SUEDEN;
+                       acty--;
+                       break;
+
+        case M_SUEDEN: maze[temp]+=M_SUEDEN;
+                       maze[temp+x]+=M_NORDEN;
+                       acty++;
+                       break;
+
+        case M_WESTEN: maze[temp]+=M_WESTEN;
+                       maze[temp-1]+=M_OSTEN;
+                       actx--;
+                       break;
+
+        case M_OSTEN:  maze[temp]+=M_OSTEN;
+                       maze[temp+1]+=M_WESTEN;
+                       actx++;
+                       break;
+
+        default:       write("Unknown Error...\n");
+      }
+
+    }
+    else
+    {
+      do
+      {
+        temp=sizeof(stackx)-1;
+        actx=stackx[temp];
+        acty=stacky[temp];
+        stackx=stackx[0..<2];
+        stacky=stacky[0..<2];
+      } while(maze[actx+x*acty] == 0);
+    }
+  }
+
+  maze[startx+x*starty]+=M_EINGANG;
+  maze[endex+x*endey]+=M_AUSGANG;
+
+  return 1;
+}
+
+int showmaze()
+{
+  int i,j;
+
+  if (x<3)
+  {
+    write("Erst generieren Du Nase ;)\n");
+    return -1;
+  }
+
+  for (i=0;i<y;i++)
+  {
+    for (j=0;j<x;j++)
+    {
+      write("*");
+      if (maze[j+x*i] & M_OSTEN) write("-"); else write(" ");
+    }
+
+    write("\n");
+
+    for (j=0;j<x;j++)
+    {
+      if (maze[j+x*i] & M_SUEDEN) write("| "); else write("  ");
+    }
+
+    write("\n");
+  }
+
+  return 1;
+}
+
+int create3dmaze(int a,int b,int c)
+{
+  int visit,actx,acty,actz,dir,temp,i,j;
+  int *dirs;
+
+  x=a;
+  y=b;
+  z=c;
+
+  if ((x<3) || (x>15) || (y<3) || (y>15) || (z<3) || (z>15)) return -1;
+
+  maze=allocate(x*y*z);
+  map=allocate(y*2*z);
+
+  for (i=0;i<z;i++)
+  {
+    for (j=0;j<y*2;j++)
+    {
+      map[i*y*2+j]=".............................."[0..x*2-2];
+    }
+  }
+
+  visit=x*y*z-1;
+  actx=x/2;
+  acty=y/2;
+  actz=z/2;
+  startx=random(x);
+  starty=0;
+  startz=0;
+
+  endex=random(x);
+  endey=y-1;
+  endez=z-1;
+
+  plx=startx;
+  ply=starty;
+  plz=startz;
+
+  moveplayer(0);
+
+  stackx = ({ });
+  stacky = ({ });
+  stackz = ({ });
+
+  while (visit > 0)
+  {
+    dirs = ({ });
+
+    temp=actx+x*acty+x*y*actz;
+
+    if (((acty-1) >= 0) && (maze[temp-x] == 0)) dirs+=({ M_NORDEN });
+    if (((acty+1)  < y) && (maze[temp+x] == 0)) dirs+=({ M_SUEDEN });
+    if (((actx-1) >= 0) && (maze[temp-1] == 0)) dirs+=({ M_WESTEN });
+    if (((actx+1)  < x) && (maze[temp+1] == 0)) dirs+=({ M_OSTEN });
+    if (((actz-1) >= 0) && (maze[temp-x*y] == 0)) dirs+=({ M_OBEN });
+    if (((actz+1)  < z) && (maze[temp+x*y] == 0)) dirs+=({ M_UNTEN });
+
+    if (sizeof(dirs) > 0)
+    {
+      stackx+= ({ actx });
+      stacky+= ({ acty });
+      stackz+= ({ actz });
+
+      visit--;
+
+      dir=dirs[random(sizeof(dirs))];
+
+      switch(dir)
+      {
+        case M_NORDEN: maze[temp]+=M_NORDEN;
+                       maze[temp-x]+=M_SUEDEN;
+                       acty--;
+                       break;
+
+        case M_SUEDEN: maze[temp]+=M_SUEDEN;
+                       maze[temp+x]+=M_NORDEN;
+                       acty++;
+                       break;
+
+        case M_WESTEN: maze[temp]+=M_WESTEN;
+                       maze[temp-1]+=M_OSTEN;
+                       actx--;
+                       break;
+
+        case M_OSTEN:  maze[temp]+=M_OSTEN;
+                       maze[temp+1]+=M_WESTEN;
+                       actx++;
+                       break;
+
+        case M_UNTEN:  maze[temp]+=M_UNTEN;
+                       maze[temp+x*y]+=M_OBEN;
+                       actz++;
+                       break;
+
+        case M_OBEN:   maze[temp]+=M_OBEN;
+                       maze[temp-x*y]+=M_UNTEN;
+                       actz--;
+                       break;
+
+        default:       write("Unknown Error...\n");
+
+      }
+
+    }
+    else
+    {
+      do
+      {
+        temp=sizeof(stackx)-1;
+        actx=stackx[temp];
+        acty=stacky[temp];
+        actz=stackz[temp];
+        stackx=stackx[0..<2];
+        stacky=stacky[0..<2];
+        stackz=stackz[0..<2];
+      } while(maze[actx+x*acty+x*y*actz] == 0);
+    }
+  }
+
+  maze[startx+x*starty+x*y*startz]+=M_EINGANG;
+  maze[endex+x*endey+x*y*endez]+=M_AUSGANG;
+
+  return 1;
+}
+
+
+
+int show3dmaze()
+{
+  int i,j,k;
+
+  if (z<3)
+  {
+    write("Erst generieren Du Nase ;)\n");
+    return -1;
+  }
+
+  for (k=0;k<z;k++)
+  {
+    for (i=0;i<y;i++)
+    {
+      for (j=0;j<x;j++)
+      {
+        if (maze[j+x*i+k*x*y] & M_UNTEN) write("U"); else write("*");
+        if (maze[j+x*i+k*x*y] & M_OSTEN) write("-"); else write(" ");
+      }
+
+      write("\n");
+
+      for (j=0;j<x;j++)
+      {
+        if (maze[j+x*i+k*x*y] & M_SUEDEN) write("| "); else write("  ");
+      }
+
+      write("\n");
+    }
+
+    write("\n");
+  }
+
+  return 1;
+}
+
+void moveplayer(int mov)
+{
+  int dir;
+
+  switch (mov)
+  {
+    case M_NORDEN: ply--; break;
+    case M_SUEDEN: ply++; break;
+    case M_WESTEN: plx--; break;
+    case M_OSTEN:  plx++; break;
+    case M_UNTEN:  plz++; break;
+    case M_OBEN:   plz--; break;
+    default:              break;
+  }
+
+  dir=getexits();
+
+  if (dir & M_UNTEN)
+  {
+    map[plz*y*2+ply*2][plx*2..plx*2]="U";
+  }
+  else if (dir & M_OBEN)
+  {
+    map[plz*y*2+ply*2][plx*2..plx*2]="O";
+  }
+  else
+  {
+    map[plz*y*2+ply*2][plx*2..plx*2]="X";
+  }
+
+  if (dir & M_NORDEN)
+  {
+    map[plz*y*2+ply*2-1][plx*2..plx*2]="|";
+  }
+
+  if (dir & M_SUEDEN)
+  {
+    map[plz*y*2+ply*2+1][plx*2..plx*2]="|";
+  }
+
+  if (dir & M_WESTEN)
+  {
+    map[plz*y*2+ply*2][plx*2-1..plx*2-1]="-";
+  }
+
+  if (dir & M_OSTEN)
+  {
+    map[plz*y*2+ply*2][plx*2+1..plx*2+1]="-";
+  }
+
+}
+
+int liesfkt(string str)
+{
+  int i,j;
+
+  notify_fail("Was willst Du lesen?\n");
+  if (str != "karte" ) return 0;
+
+  for (j=0;j<y*2-1;j++)
+  {
+    if ((ply==j/2) && (j%2 == 0))
+    {
+      write(map[plz*y*2+j][0..plx*2-1]+"@"+map[plz*y*2+j][plx*2+1..x*2-1]+"\n");
+    }
+    else
+    {
+      write(map[plz*y*2+j]+"\n");
+    }
+  }
+
+  return 1;
+}
+

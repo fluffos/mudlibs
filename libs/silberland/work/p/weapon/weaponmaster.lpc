@@ -1,0 +1,158 @@
+/*
+ * /p/weapon/weaponmaster.c
+ *
+ * Weapon Logger
+ * Sorgt fuer Logging der verwendenden Objekte
+ *
+ */
+
+
+#include <properties.h>
+#include <combat.h>
+
+#define SAVEFILE "/p/weapon/save/weapons"
+
+// globals
+mapping weapons;
+mapping armours;
+mapping maxclass;
+
+// prototypes
+void Register(string weapon, string cloner);
+void RegisterArmour(string armour, string cloner);
+CheckWeapon( object ob, string w );
+CheckArmour( object ob, string a );
+void Dump();
+
+// ---------------------------------------------------------------------------
+
+void create()
+{
+  string err;
+  seteuid(getuid());
+  if (!restore_object(SAVEFILE)) {
+    weapons = ([]);
+    armours = ([]);
+    maxclass = ([]);
+    save_object(SAVEFILE);
+  }
+  if (!mappingp(maxclass)) {
+    maxclass = ([]);
+    save_object(SAVEFILE);
+  }
+}
+
+void reset()
+{
+  Dump();
+}
+
+void Register(string weapon, string cloner)
+{
+  // Clonende Magier nicht loggen
+  if ( find_object(cloner) && interactive(find_object(cloner)) )
+    return;
+  
+  if( cloner[0..15]=="/p/daemon/itemd/" || cloner[0..10]=="/obj/tools/") return;
+  if ( !member( weapons, weapon ) ) {
+    weapons[weapon] = ({ cloner });
+  } else
+    if ( member( weapons[weapon], cloner ) == -1 ) {
+      weapons[weapon] += ({ cloner });
+    }
+  save_object(SAVEFILE);
+  call_out( "CheckWeapon", 0, previous_object(), weapon );
+}
+
+void RegisterArmour(string armour, string cloner)
+{
+  // Clonende Magier nicht loggen
+  if ( find_object(cloner) && interactive(find_object(cloner)) )
+    return;
+
+  if( cloner[0..15]=="/p/daemon/itemd/" || cloner[0..10]=="/obj/tools/") return;
+  if ( !member( armours, armour ) ) {
+    armours[armour] = ({ cloner });
+  } else
+    if ( member( armours[armour], cloner ) == -1 ) {
+      armours[armour] += ({ cloner });
+    }
+  save_object(SAVEFILE);
+  call_out( "CheckArmour", 0, previous_object(1), armour );
+}
+
+void CheckWeapon( object ob, string w )
+{
+  int n;
+  if (!objectp(ob)) return;
+  if ((n=ob->QueryProp(P_WC) + ob->QueryProp(P_DAMAGED)) > maxclass[w]) {
+    maxclass[w] = n;
+    save_object(SAVEFILE);
+  }
+}
+
+void CheckArmour( object ob, string a )
+{
+  int n;
+  if (!objectp(ob)) return;
+  if ((n=ob->QueryProp(P_AC) + ob->QueryProp(P_DAMAGED)) > maxclass[a]) {
+    maxclass[a] = n;
+    save_object(SAVEFILE);
+  }
+}
+
+void Dump()
+{
+  int i,j;
+  string ret;
+  string *ind;
+  string *obs;
+
+  obs = ({});
+
+  ret = "\naw-Logger-Dump vom "+dtime()+"\n"+
+    "----------------------------------------------\n";
+
+  ret += "\nWaffen:\n-------\n\n";
+
+  ind = sort_array( m_indices( weapons ), #'< );
+  for (i = sizeof(ind); i-->0; )
+  {
+    ret += sprintf( "%s%s\n  ", ind[i],
+        (maxclass[ind[i]] ? " ["+maxclass[ind[i]]+"]": "") );
+    ret += implode( sort_array( weapons[ind[i]], #'> ), "\n  " ) + "\n\n";
+    obs -= weapons[ind[i]];     // no duplicates...
+    obs += weapons[ind[i]];
+  }
+
+  ret += "\nRuestungen:\n-----------\n\n";
+
+  ind = sort_array( m_indices( armours ), #'< );
+  for (i = sizeof(ind); i-->0; )
+  {
+    ret += sprintf( "%s%s\n  ", ind[i],
+        (maxclass[ind[i]] ? " ["+maxclass[ind[i]]+"]": "") );
+    ret += implode( sort_array( armours[ind[i]], #'> ), "\n  " ) + "\n\n";
+    obs -= armours[ind[i]];     // no duplicates...
+    obs += armours[ind[i]];
+  }
+
+  obs = sort_array( obs, #'> );
+  ret += "\nVerwender:\n----------\n\n";
+  ret += implode( obs, "\n" );
+
+  rm(SAVEFILE+".dump");
+  write_file(SAVEFILE+".dump", ret);
+}
+
+void DeleteWeapon(string weapon)
+{
+  weapons = m_delete(weapons, weapon);
+}
+
+void DeleteArmour(string armour)
+{
+  armours = m_delete(armours, armour);
+}
+
+

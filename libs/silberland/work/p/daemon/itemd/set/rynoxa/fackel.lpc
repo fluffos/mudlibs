@@ -1,0 +1,133 @@
+#include "../def.h"
+
+inherit ITEMD_SET_PATH "std_set_weapon";
+
+#define COST 7
+int zeit, first_use;
+
+void create() 
+{
+  if( !is_clone(this_object()) ) return;
+  ::create();
+
+  SetProp(P_SET, "Rynoxas Lichterspiel");
+  SetProp(P_SET_ITEM, "Rynoxas Fackel");
+  SetProp(P_NR_SET_ITEMS, 5);
+  SetProp(P_SET_BONUS, ([
+        0:([P_M_HEALTH_MOD:([P_HP:0,P_SP:0]), P_WC_FIX:10]),
+        1:([P_M_HEALTH_MOD:([P_HP:0,P_SP:1]), P_WC_FIX:25]),
+        2:([P_M_HEALTH_MOD:([P_HP:1,P_SP:2]), P_WC_FIX:40]),
+        3:([P_M_HEALTH_MOD:([P_HP:2,P_SP:3]), P_WC_FIX:60]),
+        4:([P_M_HEALTH_MOD:([P_HP:3,P_SP:4]), P_WC_FIX:80]),
+        ]));
+  SetProp(P_ITEMD, ({"gehoert zu Rynoxas Lichterspiel", 
+        "entfaltet die volle Wirkung erst gemeinsam mit anderen Sachen",
+        "wehrt zusaetzlichen Schaden ab", 
+        "erhoeht Lebenspunkte und Magiepunkte",
+        "erhoeht oder erniedrigt Attribute",
+        "nuetzt sich fast gar nicht ab",
+        "liegt viel besser in der Hand",
+        "greift mit magischem Schaden an",
+        "kann nur von guten oder neutralen Wesen verwendet werden"}) );
+  SetProp(P_SHORT, QueryProp(P_SET_ITEM));
+  SetProp(P_LONG,
+    "Rynoxas Fackel ist eine kleine Klinge aus reinstem Licht, die man "
+    "wie ein Messer verwenden kann."
+    "Du wunderst Dich, welche seltsame Magie das Licht in diese Form "
+    "gebannt hat." );
+  SetProp(P_INFO,
+      BS("Wenn Du die komplette Ausruestung von Rynoxa traegst, kannst Du "
+        "einen hellen Lichtstrahl aus der Fackel auf boese Gegner abfeuern. "
+        "Kommando: lichtstrahl <gegner>"));
+  SetProp(P_NAME, QueryProp(P_SET_ITEM));
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({"fackel", "rynoxas fackel" }) );
+
+  SetProp(P_WEAPON_TYPE, WT_KNIFE );
+  SetProp(P_NR_HANDS, 1);
+  SetProp(P_WC, 120);
+  SetProp(P_WC_FIX, 10);
+  SetProp(P_DAM_TYPE, ({DT_BLUDGEON, DT_LIGHT}) );
+  SetProp(P_MATERIAL, ([MAT_LIGHT: 100]) );
+  SetProp(P_WEIGHT, 500);
+  SetProp(P_VALUE, 1000);
+  SetProp(P_QUALITY_DECAY, 1000);
+
+  SetProp(P_HIT_FUNC, TO );
+
+  SetProp(P_WIELD_RESTRICTIONS, ([A_INT:20,SR_BAD:-300]) );
+  AddCmd( ({"lichtstrahl"}), "lichtstrahl");
+  zeit=time();
+  SetProp(P_WIELD_FUNC, TO);
+  SetProp(P_UNWIELD_FUNC, TO);
+}
+
+int HitFunc (mixed dam_type, int spell, object enemy) 
+{
+  if(QueryProp(P_WIELDED)->QueryProp(P_ALIGN)>-300)
+    return setmight()*setmight();
+  else
+    return call_out("DoUnwield",0),-200;
+}
+
+int WieldFunc(object waffe, int silent)
+{
+  first_use=time()+10;
+  SetProp(P_LIGHT, 1);
+  return ::WieldFunc(waffe, silent);
+}
+
+int UnwieldFunc(object waffe, int silent)
+{
+  SetProp(P_LIGHT, 0);
+  return ::UnwieldFunc(waffe, silent);
+}
+
+void reset()
+{
+  ::reset();
+  if( !is_clone(this_object()) ) return;
+  if (!QueryProp(P_WIELDED))
+    SetProp(P_LIGHT, 0);
+}
+
+int lichtstrahl(string str)
+{
+  object enemy;
+  int m2;
+  notify_fail("Wen moechtest Du mit dem Lichtstrahl angreifen?\n");
+  if( stringp(str) && (enemy=present(str, environment(TP))) )
+  {
+    if( enemy==TP)
+      return notify_fail("Selbstmord ist auch keine Loesung!\n"),0;
+    if (!QueryProp(P_WIELDED))
+      return notify_fail("Du musst dazu die Fackel zuecken!\n"),0;
+    if( first_use > time() )
+      return notify_fail("Du hast die Fackel doch gerade erst gezueckt!\n"),0;
+    if( zeit > time() )
+      return notify_fail("Die Fackel muss sich erst vom letzen Lichtstrahl "
+          "erholen!\n"),0;
+    if (TP->QueryProp(P_SP)<COST)
+      return notify_fail("Du hast nicht genug Magiepunkte dafuer!\n"),0;
+    if (TP->QueryProp(P_ATTACK_BUSY))
+      return notify_fail("He! Nicht so schnell!\n"),0;
+    if( environment(TP)->query_light(0)<0 )
+      return notify_fail("Hier ist es nicht hell genug dafuer!\n"),0;
+    TP->SetProp(P_ATTACK_BUSY, 4);
+    printf("Ein gewaltiger Lichstrahl trifft %s.\n", enemy->name(WEN));
+    say(BS("Ein Lichstrahl aus "+TP->name(WESSEN)+" Fackel trifft "+
+       enemy->name(WEN)+".\n"), enemy );
+    tell_object(enemy, "Ein Lichstrahl aus "+TP->name(WESSEN)+ 
+        " Fackel trifft Dich.\n");
+    m2=setmight()*setmight();
+    enemy->Defend((m2+1)*20+random(50*m2), DT_LIGHT, 
+      ([SP_NAME:"Rynoxas Lichstrahl", SP_PHYSICAL_ATTACK:0, SP_SHOW_DAMAGE:1]),
+      TP);
+    TP->AddSp(-COST);
+    zeit=time()+(20-m2)*60;
+    return 1; 
+  }
+  else
+    return 0;
+}

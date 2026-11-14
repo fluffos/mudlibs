@@ -1,0 +1,155 @@
+inherit "/gilden/bardengilde/obj/std_song_effect";
+
+#include <properties.h>
+#include <combat.h>
+#include <defines.h>
+#include <new_skills.h>
+#include <moredef.h>
+#include <class.h>
+#include <moving.h>
+#include "/gilden/bardengilde/bardengilde.h"
+#include "bard_song.h"
+#include "/gilden/bardengilde/barden_skills.h"
+
+private int speed, duration;
+private string group;
+private nosave mapping messages = ([
+    BARD_GROUP_ALESTRA: ({
+        "Deine Finger gleiten in irrwitzigem Tempo ueber die Saiten.",
+        "Du spielst Toene, die die unendlichkeit des Weltalls darstellen.",
+        "Mit deinen Harmonien preist du die Maechtigkeit des Sternenwalls.",
+        "Deine Klaenge deuten Unheimliches hinter den Sternen an.",
+        "Mit monumentaler Musik kuendest du von den unendlichen Weiten der Sterne."
+    }),
+    BARD_GROUP_KORRIAX: ({
+        "Mit kraeftigen, lauter werdenden Schlaegen baust du Spannung auf.",
+        "Ein ausholender Trommelwirbeld kuendet von dem Flug des Drachen. ",
+        "Mit lauten und leisen Schlaegen laesst du die Stimme des Drachen erschallen.",
+        "Ein abschwellender Wirbel versinnbildlicht maechtige Schwingen die ueber dich gleiten.",
+        "Drei droehnende Schlage symbolisieren Blitze, die die Wolkendecke spalten."
+    }),
+    BARD_GROUP_SARRIAN: ({
+        "Du versetzt dein Glasinstrument in ueberirdische Schwingungen und laesst die Luft erzittern.",
+        "Die saeuselnd-heulenden Geraeusches deiner Musik erinnern an das Heulen der Zombiegoetzen",
+        "Einige zischende Harmonien zerren an deinen Nerven.",
+        "Geschickt beschwoerst du auf- und abschwellendes Heulen herauf.",
+        "Dein Glasinstrument leuchtet in unheimlichen Gruen, als du es in Schwingung versetzt."
+    }),
+    BARD_GROUP_TIRENA: ({
+        "Deine Toene und Harmonien kuenden vom Anbrechen des Morgens.",
+        "Mit einer geschickt gespielten Melodie zeichnest du das Bild der Morgenroete.",
+        "Dein Spiel lobt die kraeftige Hitze der Sonne.",
+        "Mit deiner Musik erwaermst du die Herzen deiner Zuhoerer.",
+        "Geschickt gleiten deine Finger ueber dein Instrument und verzaubernde Melodien ertoenen."
+    }),
+    HERO_XULGSCH: ({
+        "Du spielst dramatisch tiefe Harmonien.",
+        "Deine Musik laesst Gaensehaut ueber deinen Ruecken laufen.",
+        "Dein Instrument klingt, als wuerden irgendwo Vampire und Werwoelfe heulen.",
+        "Ein ploetzlicher, lauter Ton aus deinem Instrument laesst alle erschrocken auffahren.",
+        "Die Harmonien, die du spielst, klingen dysharmonisch und verdreht.",
+        "Die Musik wird zu einer Kakophonie des Grauens!",
+        "Das Dumpfe brummen deines Instruments loest unangenehmes Gruseln aus."
+    })
+]);
+
+public void create() {
+    
+
+     if (!is_clone(TO)) return;
+    ::create();
+  
+    AddId(({SONG_ROOM_DAMAGE}));
+
+    SetProp(P_NOGET, 1);
+
+    setSilentEnd(0);
+    setUpkeepMode(({SK_MUSIC}), CANCEL_COMMAND);
+}
+
+public void prepareSong() {
+    speed = (7 - (ability/2000));
+    duration = caster->QueryProp(P_LEVEL) / 5 +           // 8 - 20
+               caster->QueryProp(P_GUILD_LEVEL) / 3 +     // 4 - 5
+               random(ability/333) +                      // 9 - 30
+               random(success/1000) +                     // 0 - 20
+               caster->QueryAttribute(A_DEX) / 2 +        // 10-20
+               random(caster->QueryAttribute(A_DEX) / 4); // 0 - 10 = 21 - 105 sekunden
+    duration = modifyBySkillAttribute(duration, SA_DURATION);
+    duration = (int) (duration * factor);
+
+    if(query_once_interactive(caster)) group = BARDENMASTER->GetBardGroup(caster);
+    else group = caster->QueryProp(P_BARD_GROUP);
+
+    if(songName == "Fest der Schatten") {
+        group = HERO_XULGSCH;
+    }
+
+    if(caster->QueryProp(P_TESTPLAYER) || caster->QueryProp(P_NPC)) {
+        tell_object(caster, sprintf("%s :: speed=%d duration=%d\n", songName, speed, duration));
+    }
+
+    call_out("increaseEffect", speed);
+    call_out("endSong", duration);
+}
+
+private void summonCreature() {
+    object ob;
+    int r;
+
+    ob = clone_object(OBJ("room_damage"));
+    r = ob->move(environment(caster), M_NOCHECK|M_PUT|M_SILENT);
+    if(r != 1) {
+        tell_object(caster, BS("Die Macht des Liedes konnte sich hier nicht manifestieren!"));
+        if(caster->QueryProp(P_TESTPLAYER) || caster->QueryProp(P_NPC)) {
+            tell_object(caster, sprintf("%s :: move failed :: object=%O retCode=%d\n", songName, ob, r));
+        }
+        ob->remove(1);
+        endSong();
+        return;
+    }
+
+    if(!objectp(ob)) return;
+    ob->Setup(songName, caster, ability, success, factor, victim);
+    caster->SetProp(P_BARD_ROOM_DAMAGE, ob);
+    return;
+}
+
+public void increaseEffect() {
+    object ob;
+    int powerUp;
+
+    if(!objectp(caster)) {
+        remove(1);
+    }
+
+    ob = "/spellbooks/barden_spells"->getInstrument(caster);
+    if(!objectp(ob) && !caster->QueryProp(P_NPC)) {
+        tell_object(caster, BS("Da du kein Instrument in der Hand hast beendest du das Lied."));
+        endSong();
+        return;
+    }
+
+    tell_object(caster, BS(messages[group][random(sizeof(messages[group]))]));
+
+    if(!objectp(ob=caster->QueryProp(P_BARD_ROOM_DAMAGE))) {
+        summonCreature();
+    } else {
+        if(environment(ob) != environment(caster)) {
+            tell_object(caster, BS("Du spuerst, wie sich die Macht dieses Lieds an einem anderen Ort aufloest..."));
+            caster->QueryProp(P_BARD_ROOM_DAMAGE)->timeout();
+        } else {    
+            if(caster->QueryProp(P_NPC)) 
+                powerUp = caster->QueryProp(P_GUILD_LEVEL) / 2 +  random(caster->QueryProp(P_GUILD_LEVEL))  + caster->QueryProp(P_LEVEL) / 8;
+            else
+                powerUp = (ability/2000) + (caster->UseSkill(SK_MUSIC)/1000) + random(success/3333);
+            powerUp = modifyBySkillAttribute(powerUp, SA_DAMAGE);
+            if(TALENTMASTER->HasTalent(caster, TALENT_TAMBOURMAJOR)){
+                powerUp = (int) (powerUp * (1.0 + caster->QueryProp(P_BARD_INSPIRATION_LEVEL)/100));
+            }
+            ob->ChangePower(powerUp);
+        }
+    }
+
+    call_out("increaseEffect", speed);
+}

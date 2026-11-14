@@ -1,0 +1,200 @@
+//=========================================================================
+//
+// File:    torfn.c
+// Created by Ronja@SL
+//
+// Project: moor
+//
+//=========================================================================
+
+inherit "std/thing";
+
+#include "../def.h"
+
+string owner;
+
+void create()
+{
+  if (!is_clone(TO) ) return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Ein Stueck nasser Torf");
+
+  SetProp(P_LONG,
+    "Ein nasses Stueck Torf. Damit kann man nichts anfangen. Wenn es "
+    "trocken waere, dann koennte man es wenigstens anzuenden. Aber so ist "
+    "es eigentlich nutzlos."
+  );
+
+  SetProp(P_NAME, "Stueck Torf");
+  SetProp(P_GENDER, NEUTER);
+  AddId( ({"torf","stueck torf","\nTORFNASS"}) );
+
+  SetProp(P_NAME_ADJ, ({"nass"}) );
+  AddAdjective( ({"nassen","nasser","nassem","nasses","nasse"}) );
+
+  SetProp(P_MATERIAL, ([MAT_MISC_HERBAL:80,MAT_EARTH:10,MAT_WATER:10]) );
+  SetProp(P_WEIGHT, 5000);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+
+  AddCmd( ({"trockne"})                          , "cmd_trocknen");
+  AddCmd( ({"press","presse","drueck","druecke"}), "cmd_pressen");
+
+  owner = "";
+}
+
+void removeme(object pl)
+{
+  object room;
+
+  if(!pl)               return;
+  if(!interactive(pl))  return;
+  if(!(room = ENV(pl))) return;
+
+  tell_room(room, BS("Als "+pl->Name()+" "+TO->name(WEN,1)+" nimmt, faellt "+
+                     TO->QueryPronoun()+" herunter und zerbroeselt."), ({pl}) );
+
+  tell_object(pl, BS("Als Du "+TO->name(WEN,1)+" nimmst, faellt "+
+                     TO->QueryPronoun()+" herunter und zerbroeselt."));
+
+  remove();
+}
+
+void removeme2()
+{
+  object env;
+
+  env = ENV(TO);
+
+  if(interactive(env))
+  {
+    tell_object(env, BS("Als Du "+name(WEN,1)+" nimmst, zerbricht "+
+                        QueryPronoun(WER)+". Aergerlich wirfst Du die Reste "
+                        "weg."));
+
+    tell_room(ENV(env), BS(env->Name(WER)+" nimmt ein Stueck Torf, welches "
+                           "aber sofort zerbricht. Aergerlich wirft "+
+                           env->QueryPronoun(WER)+" die Reste weg."),
+                        ({ env }) );
+    remove();
+  }
+}
+
+varargs int move(mixed dest, int method,
+                 string dir, string textout, string textin)
+{
+  object env;
+
+  env = ENV(TO);
+
+  if(!env) return ::move(dest,method,dir,textout,textin);
+
+  if(!(env->id("Raum") || interactive(env)))
+  {
+    SetProp(P_NODROP, 1);
+    call_out("removeme2",0);
+  }
+
+  return ::move(dest,method,dir,textout,textin);
+}
+
+void init()
+{
+  object pl;
+
+  ::init();
+
+  if(!(pl = ENV(TO)))  return;
+  if(!interactive(pl)) return;
+
+  if(owner == "")
+  {
+    owner = getuuid(pl);
+    return;
+  }
+
+  if(owner != getuuid(pl))
+  {
+    call_out("removeme",0,pl);
+  }
+}
+
+void SetOwner(string uuid)
+{
+  owner = uuid;
+}
+
+string QueryOwner()
+{
+  return owner;
+}
+
+int cmd_trocknen(string str)
+{
+  notify_fail("Was willst Du trocknen?\n");
+
+  if(-1 == member(({"torf","torfsoden"}),str))
+  {
+    return 0;
+  }
+
+  TELLPLAYER(BS("Das wuerde viel zu lange dauern. Aber Du koenntest "
+                "natuerlich versuchen, den Torf auszupressen, so dass das "
+                "Wasser herauslaeuft und der Torf trocken wird."
+  ));
+  return 1;
+}
+
+int cmd_pressen(string str)
+{
+  notify_fail("Was moechtest Du auspressen?\n");
+
+  if(!str || str == "") return 0;
+  if(!(str == "torf"         ||
+       str == "torf aus"     )) return 0;
+
+  if(TP->QueryAttribute(A_STR) < 15)
+  {
+
+    TELLPLAYER(BS("Du nimmst alle Deine Kraefte zusammen und drueckst wie " +
+                  (TP->QueryProp(P_GENDER)==MALE ? "ein Wilder" : "eine Wilde") +
+                  " auf dem Torf herum, aber Deine Kraefte reichen bei "
+                  "weitem nicht aus, um das Wasser aus dem Torf "
+                  "herauszupressen und ihn somit zu trocknen."
+    ));
+
+    TELLOTHERS(BS(TPN+" nimmt alle "+TP->QueryPossPronoun(FEMALE, WEN, PLURAL)+
+                  " Kraefte zusammen und drueckt wie " +
+                  (TP->QueryProp(P_GENDER)==MALE ? "ein Wilder" : "eine Wilde") +
+                  " auf dem Torf herum, aber "+
+                  TP->QueryPossPronoun(FEMALE, WEN, PLURAL)+
+                  " Kraefte reichen bei weitem nicht aus, um das Wasser aus "
+                  "dem Torf herauszupressen und ihn somit zu trocknen."
+    ));
+
+    return -1;
+  }
+
+  TELLPLAYER(BS("Du sammelst all deine Kraefte und presst das ganze Wasser "
+                "aus dem Torf heraus. Leider drueckst Du viel zu stark zu, "
+                "so dass du den nun trockenen Torf vollstaendig "
+                "zerbroeselst. "
+  ));
+
+  TELLOTHERS(BS(TPN+" sammelt all "+TP->QueryPossPronoun(FEMALE, WEN, PLURAL)+
+                " Kraefte und presst das ganze Wasser aus dem "
+                "Torf heraus. Leider drueckt "+TP->QueryPronoun(WER)+
+                " viel zu stark zu, so dass "+TP->QueryPronoun(WER)+
+                " den nun trockenen Torf vollstaendig zerbroeselst. "
+  ));
+
+  MOORMASTER->Msg(TPUID+" zerdrueckt den nassen Torf");
+
+  RemoveCmd( ({"trockne","press","presse","drueck","druecke"}) );
+  call_out("remove",0);
+
+  return 1;
+}
+

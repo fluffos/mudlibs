@@ -1,0 +1,262 @@
+// /d/gebirge/feyaria/blut/weapon/baxt.c
+// Die Axt eines Berserkers
+// 1997-01-20  Feyaria@SilberLand
+
+#include "../def.h"
+
+inherit "std/weapon";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <new_skills.h>
+#include <wizlevels.h>
+
+#define COST 100
+
+/*  Rubin:       feuerrot, DT_FIRE , Zwergenmine (angrox)
+    Aquamarin:   wasserblau, DT_WATER, Feenschloss (trogor)
+    Topas:       sonnengelb, DT_AIR, Dschungel (dante)
+    Smaragd:     giftgruen, DT_POISON, Dschungel (dante)
+    Saphir:      eisblau, DT_COLD, Dschungel (dante)
+    Opal:        magisch in allen Farben schillernd, DT_MAGIC, Dschungel (dante)
+    Lapislazuli: aetzend gruen, DT_ACID, Dschungel (dante)
+    Onyx:        schrecklich schwarz, DT_TERROR, ??? (???)
+    Perle:       berauschend schoen, DT_SOUND, Korallenriff (feyaria)
+    Bernstein:   leuchtend gelb, DT_LIGHT, Kristallwald (sargola)
+    Granat:      dunkelrot, DT_LIGHTNIG, ??? (???)
+    Zirkon:      braun, DT_ELECTIRC, ??? (???)
+    Diamant:     durchsichtig, DT_EXPLOSION, Dschungel (dante)
+*/
+
+#define RUBIN 1
+#define AQUAMARIN 2
+#define TOPAS 3
+#define SMARAGD 4
+#define SAPHIR 5
+#define OPAL 6
+#define LAPISLAZULI 7
+#define ONYX 8
+#define PERLE 9
+#define BERNSTEIN 10
+#define GRANAT 11
+#define ZIRKON 12
+#define DIAMANT 13
+
+int geladen, gezueckt, edelstein;
+string *dt;
+
+create()
+{
+  if (!is_clone(TO) )  return;
+
+  ::create();
+  dt=({DT_SLASH, DT_FIRE, DT_WATER, DT_AIR, DT_POISON, DT_COLD,
+       DT_MAGIC, DT_ACID, DT_TERROR, DT_SOUND, DT_LIGHT, DT_LIGHTNING,
+       DT_ELECTRIC, DT_EXPLOSION});
+
+  SetProp(P_SHORT, "Eine Berserkeraxt");
+  SetProp(P_LONG, BS( 
+    "Das ist die Axt eines Berserkers. Sie hat einen langen Holzstiel und "
+    "ein grosses, doppelschneidiges Axtblatt. Am Ende des Holzstiels "
+    "befindet sich unterhalb des Griffes eine kleine Einbuchtung.") );
+  SetProp(P_INFO, BS(
+    "Mit dieser Axt kann man sicher versuchen, den Kopf eines Feindes "
+    "abschlagen. Dazu musst Du nur 'koepfe <name>' eingeben. Die "
+    "Konzentration fuer diesen Schlag kostet aber "+COST+" Magiepunkte.") );
+  SetProp(P_NAME, "Berserkeraxt");
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({"berserkeraxt", "axt", "baxt", "\nberserkeraxt"}) );
+  AddDetail( ({"stiel", "holzstiel"}),
+    "Der Holzstiel ist ueber einen Meter lang und hat einen ledernen Griff "
+    "am unteren Ende. Dort befindet sich auch eine kleine Einbuchtung. Am "
+    "oberen Ende ist das grosse Axblatt angebracht.");
+  AddDetail( ({"blatt", "axtblatt"}),
+    "Das Axtblatt hat zwei grosse, scharfe Schneiden und ist aus einem "
+    "sehr hartem Stahl geschmiedet.");
+  AddSpecialDetail( ({"einbuchtung"}), "einbucht");
+
+  SetProp(P_WEAPON_TYPE, WT_AXE );
+  SetProp(P_WC, 275);
+  SetProp(P_SPECIAL_WC, (["BERSERKER": 500]) );
+  SetProp(P_DAM_TYPE, ({DT_SLASH, DT_RIP}) );
+  SetProp(P_NR_HANDS, 2);
+  SetProp(P_MATERIAL, ([MAT_WOOD:60, MAT_IRON:40]) )  ;
+  SetProp(P_WEIGHT, 3500);
+  SetProp(P_VALUE, 9000);
+  SetProp(P_NOBUY, 1);
+
+  SetProp(P_WIELD_FUNC, TO );
+  SetProp(P_HIT_FUNC, TO );
+
+  AddCmd( ({"koepf", "koepfe"}), "koepfen");
+  AddCmd( ({"steck", "stecke", "reinstecke"}), "stecken");
+
+/*  SetProp(P_COMBATCMDS, (["koepfe %s":
+      ([C_MIN:10,C_AVG:90,C_MAX:161,C_DTYPES:({DT_SLASH}),
+      C_SPCOST:COST, C_REFRESH:3600, C_READY:"bereit"])]));*/
+  geladen=1;
+}
+
+int WieldFunc(object waffe)
+{
+  if( TP->id("BERSERKER") || IS_SEER(TP) )
+  {
+    if( TP->QueryProp(P_GUILD) != "berserker" )
+    {
+      write("Du musst schon ein Berserker sein, um diese Axt verwenden zu "
+            "koennen.\n");
+      return 0;
+    }
+    write("Ein Gefuehl der Macht durchdringt Dich.\n");
+    return 1;
+  }
+  write("Dazu bist Du noch nicht erfahren genug.\n");
+  return 0;
+}
+
+int HitFunc( object enemy )
+{
+  int l;
+  if( TP->QueryProp(P_SP)+TP->QueryAttribute(A_DEX)+(l=enemy->QueryProp(P_LEVEL)) 
+      > random(350) && (edelstein || (TP->id("berserker")&& !random(5)) ) )
+  {
+    write("Die Axt schlaegt besonders stark zu.\n");
+    if ( !random(10) )
+    {
+      edelstein=0;
+      write("Die Kraft des Edelsteins hat sich verbraucht.\n");
+      SetProp(P_DAM_TYPE, ({DT_SLASH, DT_RIP}) );
+    }
+    if( TP->QueryProp(P_SP)>l )
+    {
+      TP->restore_spell_points(-l);
+      return TP->QueryAttribute(A_STR)*8+l*( 5+random(10) );
+    }
+    TP->SetProp(P_SP, 0);
+    return random(100);
+  }
+  return 0;
+}
+
+int koepfen(string str, int fastload)
+{
+  object enemy;
+  
+  notify_fail("Wen moechtest Du koepfen?\n");
+  if( stringp(str) && (enemy=present(str, environment(TP))) )
+  {
+    if (!QueryProp(P_WIELDED) )
+    {
+      notify_fail("Du musst dazu die Berserkeraxt zuecken!\n");
+      return 0;
+    }
+    if (!geladen)
+    {
+      write("So schnell kannst Du diesen Schlag nicht wiederholen!\n");
+      return 1;
+    }
+    
+    if (TP->QueryProp(P_SP)<COST)
+    {
+      write("Du hast nicht genug Magiepunkte dafuer!\n");
+      return 1;
+    }
+    if (PL->QueryProp(P_ATTACK_BUSY))
+    {
+      write("He! Nicht so schnell!\n");
+      return 1;
+    }
+    PL->SetProp(P_ATTACK_BUSY, 1);
+    printf("Du schlaegst %s den Kopf ab.\n", enemy->name(WEM));
+    say( sprintf( "%s schlaegt %s den Kopf ab.\n", CAP(TPN),
+       enemy->name(WEN) ), ({enemy, TP}) );
+    tell_object(enemy, CAP(TPN)+" schlaegt Dir den Kopf ab.\n");
+    enemy->Defend( TP->QueryAttribute(A_STR)*20+random(1111)+edelstein*random(30),
+         dt[edelstein],([SP_NAME:"Koepfschlag", SP_SHOW_DAMAGE:1]), TP);
+    TP->restore_spell_points(-COST);
+    if (fastload) return 1;
+    if( edelstein )
+    {
+      edelstein=0;
+      write("Die Kraft des Edelsteins hat sich verbraucht.\n");
+      SetProp(P_DAM_TYPE, ({DT_SLASH, DT_RIP}) );
+    }
+    call_out("aufladen", 600);  // 10 Minuten Ladezeit
+    geladen = 0;
+    return 1; 
+  }
+  else
+    return 0;
+}
+
+void aufladen() 
+{ 
+  geladen = 1;
+}
+
+int bereit()
+{
+  return (QueryProp(P_WIELDED) && geladen);
+}
+
+string einbucht()
+{
+  if( edelstein )
+    return "In der kleinen Einbuchtung befindet sich ein kleiner Edelstein.\n"; 
+  else
+    return BS("Die Einbuchtung ist so klein, dass man nur einen kleinen "
+              "Edelstein dort hineinstecken koennte.");
+}
+
+int stecken(string str)
+{
+  string was;
+  object ob;
+  notify_fail("Was willst Du wo hinein stecken?\n");
+  if( !str) return 0;
+//  if( sscanf(str, "%s in einbuchtung",was)!=1 )
+  was=str;
+  {
+    if( ob=present(was,TP) )
+    {
+//      if( ob->QueryProp(P_MATERIAL)==MAT_JEWEL )
+      {
+        if(!edelstein)
+        {
+          if( ob->id("rubin") )       edelstein=RUBIN;
+          if( ob->id("aquamarin") )   edelstein=AQUAMARIN;
+          if( ob->id("topas") )       edelstein=TOPAS;
+          if( ob->id("smagard") )     edelstein=SMARAGD;
+          if( ob->id("saphir") )      edelstein=SAPHIR;
+          if( ob->id("opal") )        edelstein=OPAL;
+          if( ob->id("lapislazuli") ) edelstein=LAPISLAZULI;
+          if( ob->id("onyx") )        edelstein=ONYX;
+          if( ob->id("perle") )       edelstein=PERLE;
+          if( ob->id("bernstein") )   edelstein=BERNSTEIN;
+          if( ob->id("granat") )      edelstein=GRANAT;
+          if( ob->id("zirkon") )      edelstein=ZIRKON;
+          if( ob->id("diamant") )     edelstein=DIAMANT;
+          if(!edelstein)
+          {
+            write("Der Edelstein passt nicht!\n");
+            return 1;
+          }
+//          SetProp(P_DAM_TYPE, ({DT_SLASH, DT_RIP})+({dt[edelstein]}) );
+          SetProp(P_DAM_TYPE, ({dt[edelstein]}) );
+          write("Du steckst "+ob->name(WEN)+" in die Einbuchtung hinein.\n");
+          ob->remove();
+          return 1;
+        }
+        else
+          notify_fail("Da steckt schon ein Edelstein in der Einbuchtung.\n");
+      }
+//      else
+//        notify_fail( CAP(ob->name(WER))+" ist doch gar kein Edelstein!\n");
+    }
+    else 
+      notify_fail(CAP(was)+"? Sowas hast Du doch gar nicht!\n");
+  }
+  return 0;
+}
+

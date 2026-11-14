@@ -1,0 +1,185 @@
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include "../files.h"
+#include "../quest.h"
+
+inherit "std/npc";
+
+
+string schmuck();
+string info_add();
+
+int key;
+
+create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  SetProp(P_SHORT, "Birn, der Friseur");
+  SetProp(P_LONG, #'info_add);
+  SetProp(P_WEIGHT, 110000);
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_NAME, "Birn");
+  SetProp(P_GENDER, MALE);
+  AddId("friseur");
+  AddId("birn");
+  create_default_npc(25);
+  SetProp(P_ALIGN, -500);
+  SetProp(P_MAX_HANDS, 2); 
+  SetProp(P_MAX_SP, 850);
+  SetProp(P_SPELLRATE, 60);
+  SetProp(P_RACE, "Zwerg");
+  SetProp(P_SIZE, 150);
+  SetProp(P_DEFAULT_INFO, "klappert uninteressiert mit seiner Schere.\n");
+ 
+  SetProp(P_HANDS, ({" mit der spitzen Schere und einem Rasiermesser", 140, DT_PIERCE}));
+  
+  AddSpell(2, 450, BS(
+           "Birn schuettet Dir sein schaerfstes Rasierwasser ins Gesicht."), BS(
+	   "Birn schuettet @WEM sein schaerfstes Rasierwasser ins Gesicht."),
+	   DT_ACID, ([SP_SHOW_DAMAGE:1]) );
+  AddSpell(5, 600, BS(
+           "Birn schnippelt Dir eine kleine Punkerfrisur, ARGH!"), BS(
+	   "Birn schnippelt an @WEM herum und schafft eine kleine Punkfrisur."),
+	   DT_TERROR, ([SP_SHOW_DAMAGE:1]) );
+
+  SetProp(P_RESISTANCE_STRENGTHS, ([ DT_COLD:-0.7, DT_WATER:0.6, DT_FIRE:-0.5, 
+                                     DT_MAGIC: 0.2, DT_POISON: -0.4 ]));
+  seteuid(getuid(this_object()));
+  AddLibrary(NPC("npc.lib"), 2, 1);
+  AddInfo(({"auswahl", "spezialauswahl", "schmuck", "schmuckstueck"}), 
+        #'schmuck, 0, "fluestert @WEM etwas zu.\n");
+  AddInfo("frisur", 
+      "Mit 'frisurliste' siehst Du eine Auswahl aller moeglichen Frisuren, "
+      "die ich, momentan kann. Wenn Dir eine Frisur nicht mehr gefaellt, "
+      "dann solltest Du einen Druiden fragen, die wissen was man dann macht. "
+      "Alternativ kannst Du auch Yeza oder Nell fragen, die wissen auch "
+      "Bescheid.", "sagt: ");
+  AddInfo( ({"yeza", "nell"}),
+      "kichert nur.", "");
+  AddInfo( ({"druide", "druiden"}),
+      "Die wissen alles ueber Enthaarung!", "sagt grinsend: ");
+  AddInfo( ({"enthaarung"}),
+      "lacht Dich aus.", "");
+
+  clone_object(ARMOUR("schuerze"))->move(TO);
+  command_me("trage schuerze");
+  key=1;
+}
+
+string info_add() {
+  string add;
+  add="";
+  if(TP->QueryProp(P_GENDER) == FEMALE)
+    add="Er laechelt Dich an. Das solltest du auch machen!";
+  return BS(
+      "Birn ist wahrlich ein Meister seines Fachs. Er kann mit "
+      "der Schere und dem Rasiermesser umgehen wie kein Zweiter. So gut "
+      "wie er ist kann er einen Hobbit sicherlich in ein paar Minuten "
+      "enthaaren, eventuell sogar ein Fellknaeuel wie Nell. "+add);
+}
+
+reset() {
+  key=1;
+  ::reset();
+}
+
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+  if (find_call_out("react")!=-1)
+    return;
+  switch (gruppe) {
+    case "nett":
+      call_out("react", 0, TP); break;
+    case "intim":
+      call_out("react", 0, TP); break;
+  }
+}
+
+void react(object to, string vic)
+{
+  if (present(to, ENV(TO))) {
+    if (to->QueryProp(P_GENDER)==FEMALE) {
+      tell_object(to, BS(Name(WER, 1)+" fluestert Dir zu: Hast Du schon meine Spezialauswahl an Schmuck gesehen?"));
+      tell_room(ENV(TO), BS(Name(WER, 1)+" fluestert "+to->Name(WER, 1)+" etwas zu."), ({ to }));
+    }
+    else {
+      tell_room(ENV(TO), BS(Name(WER, 1)+" schimpft: Lass mich bloss mal mit der Schere an Deine Haare!"));
+    }
+  }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+string schmuck() {
+  if (TP->QueryProp(P_GENDER)==FEMALE) {
+    return "sagt: Moechtest Du ein exquisites Stueck sehen, so antworte mir mit ja.";
+  }
+  else {
+    return "sagt: Frag doch mal Heriolf danach.";
+  }
+}
+
+catch_tell(str) {
+  string who, what, out1, out2;
+  object ob;
+
+  if (!str)
+    return ::catch_tell(str);
+  if (sscanf(str, "%s antwortet Dir: %s\n", who, what)==2) {
+    what=lower_case(what);
+    if (what == "ja" || what == "mit ja") {
+      if (TP->QueryProp(P_GENDER)!=FEMALE) {
+        call_out("to", 0, TP, Name(WER, 1)+" fluestert Dir zu: Nein, Du bekommst von mir nichts!\n");
+        call_out("tr", 0, Name(WER, 1)+" sagt: "+who+" will hier scheinbar die Ehre der Diebe beleidigen!\n", ({TP}));
+        call_out("command_me", 2, "emote schuettelt sich angewidert.");
+        return;
+      }
+      call_out("to", 0, TP, Name(WER, 1)+" fluestert Dir zu: Hier, schau mal wie schoen der ist...\n");
+      call_out("tr", 0, Name(WER, 1)+" strahlt ueber das ganze Gesicht.\n", ({}));
+
+      out1=Name(WER, 1)+" nimmt einen Ring aus der Tasche und klemmt eine kleine Diamantlupe"
+        +" in sein rechtes Auge. Leider ist er so ungeschickt und ihm faellt"
+        +" dabei der Ring aus der Hand.";
+      out2=Name(WER, 1)+" dreht den Ruecken zu Dir und kramt etwas ungeschickt"
+        +" in seinen Taschen.";
+      if (key && !deep_present(IV_JK4_KEY, TP)) {
+        out1+=" Beim Versuch, den Ring wieder aufzuheben faellt im ein kleiner Schluessel aus der Tasche,"
+          +" den Du sofort einsteckst.";
+        out2+=" Ploetzlich bueckt er sich verzweifelt, und irgendetwas"
+          +" faellt ihm aus der Tasche, das "+TP->Name()+" sofort einsteckt.";
+        ob=clone_object(OBJ("keyjk4"));
+        call_out("key_move", 3, ob, TP);
+        IV_LOGQUEST(getuid(TP), "mit Birn gesprochen");
+        key=0;
+      } else {
+        out1+=" "+Name(WER, 1)+" erroetet leicht und steckt den verlorenen Ring wieder ein.";
+        out2+=" "+Name(WER, 1)+" erroetet leicht, bueckt sich und hebt etwas auf.";
+      }
+
+      call_out("to", 3, TP, BS(out1));
+      call_out("tr", 3, BS(out2), ({TP}));
+    }
+  }
+}
+
+void tr(string str, mixed other) {
+  tell_room(ENV(TO), str, other);
+}
+
+void to(object dest, string str) {
+  tell_object(dest, str);
+}
+
+void key_move(object key, object dest) {
+  key->move(dest, M_NOCHECK);
+}
+

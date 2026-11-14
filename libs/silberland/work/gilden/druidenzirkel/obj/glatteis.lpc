@@ -1,0 +1,137 @@
+inherit "std/thing";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <moving.h>
+#include "/gilden/druidenzirkel/druiden.h"
+#include <new_skills.h>
+#include "/gilden/berserker/berserker_extern.h"
+#include <wizlevels.h>
+
+private int power;
+private object caster;
+private mapping originalEnv;
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+//--Beschreibungen---------------------------------------------------------
+
+  SetProp(P_SHORT, "Der Boden hier ist mit Stellen aus glattem Eis ueberzogen");
+  SetProp(P_LONG,
+    "Einige Stellen hier sind mit glattem Eis ueberzogen. Wenn du nicht Acht gibst, "
+    "koenntest du leicht darauf ausrutschen. Es verstroemt eine unnatuerliche Kaelte.");
+
+//--Namen------------------------------------------------------------------
+
+  SetProp(P_INFO, "Dieses Glatteis ist eine elementare Manifestation des Eises und "
+                  "wurde von einem Druiden beschworen.");
+  SetProp(P_NAME, "Glatteis");
+  SetProp(P_GENDER, FEMALE);
+  AddId(({"eis", "stellen", "glatteis", "\ndruid_frozen_floor", DRUID_ID_ELEMENTAL_BOOST(EIS)}));
+
+//--Eigenschaften----------------------------------------------------------
+
+  SetProp(P_MATERIAL, MAT_ICE);
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_SIZE, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NOGET, 1);
+}
+
+public string elemental_room() {
+  return EIS;
+}
+
+public int _query_druid_elemental_boost_bonus() {
+  return power;
+}
+
+public void Start(int _power, object _caster) {
+  power = _power;
+  caster = _caster;
+  ENV(TO)->Set(P_ELEMENTAL_ROOM, symbol_function("elemental_room", TO), F_QUERY_METHOD);
+  
+  originalEnv = ENV(TO)->QueryProp(P_ENVIRONMENT);
+  if(ENV(TO)->Query(P_ENVIRONMENT, F_QUERY_METHOD) == 0) {
+    ENV(TO)->Set(P_ENVIRONMENT, symbol_function("room_environment", TO), F_QUERY_METHOD);
+  }
+
+  call_out("do_stumble", 2+random(6));
+  call_out("end", 30);
+}
+
+public mapping room_environment() {
+  mapping e;
+
+  if(originalEnv == 0) {
+    return ([ENV_TEMPERATURE: -(power/5)]);
+  }
+
+  e = copy_mapping(originalEnv);
+  e[ENV_TEMPERATURE] = e[ENV_TEMPERATURE] - (power/5);
+
+  return e;
+}
+
+public int isValidTarget(object o) {
+  return caster->IsEnemy(o) && living(o);
+}
+
+public void do_stumble() {
+  object *targets, t, debuff;
+  int dc, i;
+
+  dc = caster->QueryProp(P_GUILD_LEVEL) + power/2 + caster->QueryAttribute(A_INT);
+
+  targets = filter_array(all_inventory(ENV(TO)), "isValidTarget");
+  if(sizeof(targets) > 0) {
+    for(i=0; i<sizeof(targets); ++i) {
+      t = targets[i];
+      if(!objectp(t)) continue;
+      if(t->QueryProp(P_LAST_RAMMEN_TIME)+10 > time() || objectp(present("\ndruid_glatteis_fallen", t))) continue;
+
+      if(IS_LEARNER(caster)) {
+        tell_object(caster, sprintf("glatteis :: dc=%d dex=%d\n", dc, t->QueryAttribute(A_DEX)));
+      }
+
+      if(random(t->QueryAttribute(A_DEX)) < random(dc) ) {
+        debuff = clone_object("/gilden/bardengilde/obj/bonus");
+        debuff->AddId("\ndruid_glatteis_fallen");
+        debuff->SetProp(P_X_ATTR_MOD, ([A_DEX: t->QueryAttribute(A_DEX)/2]));
+        debuff->SetEndMessage(sprintf("Du rappelst dich wieder auf."));
+        debuff->SetTimeout(caster->QueryAttribute(A_INT)/4);
+        if(debuff->move(t, M_NOCHECK) != 1) {
+          debuff->remove(1);
+        } else {
+          t->UpdateAttributes();
+          tell_object(t, BS("Du rutscht auf dem glatten Eis aus."));
+          tell_room(ENV(t), BS(t->Name(WER, 1) + " rutscht auf dem glatten Eis aus."), ({t}));
+        }
+        t->SetProp(P_LAST_RAMMEN_TIME, time());
+      }
+    }
+  }
+
+  call_out("do_stumble", 2+random(6));
+  return;
+}
+
+public void AddStrength(int _power) {
+  power += _power;
+  if(power > 33) power = 33;
+  while(find_call_out("end") != -1) remove_call_out("end");
+  call_out("end", 30);
+  tell_room(ENV(TO), BS("Das Eis wird fester und glatter."));
+}
+
+public void end() {
+  tell_room(environment(TO), BS("Das glatte Eis schmilzt."));
+  remove(1);
+}

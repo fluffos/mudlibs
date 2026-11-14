@@ -1,0 +1,245 @@
+//dante sl 2000-2001
+
+inherit "std/room";
+
+#include <moving.h>
+#include <properties.h>
+#include <language.h>
+#include <mnpc.h>
+#include "/d/dschungel/dante/tijaraneu/room/std_zolom.lpc"
+
+#define LOG "/d/dschungel/dante/tijaraneu/log/"
+#define TIME_MASTER "/d/dschungel/dante/tijaraneu/obj/time_master"
+
+
+int exits_versperrt=1;
+string wer="";
+
+int event_moeglich=1;
+object event_zolom;
+int belohnung=100;
+int counter=0;
+int wieviele=0;
+int zaehler=0;
+
+int ort;
+
+
+/*
+   int check_who()  {
+
+   object prev;
+
+   prev=previous_object();     
+
+   if(!prev) return 0;
+
+   if(getuid(prev)=="dante") { return 1;  }
+
+   if(interactive(prev))  {
+   write_file("/d/dschungel/dante/weg/log/event",
+
+//LOG"event_raum_geladen",
+
+ctime()+": "+CAP(getuid(prev))+" laed den Raum!!!\n");
+return 0;
+}
+return 1;  }
+*/
+
+
+create()
+{
+  ::create();
+
+
+  //if(!check_who()) { return; }
+
+  std_zolom();
+
+
+  SP(P_INT_LONG, "\t"+BS(
+        "Das ist die Hoehle der Zolome. Zolome sind riesengrosse, wurmartige Kreaturen, "
+        "die am liebsten in sumpfigen Hoehlen wohnen. "
+        "Der Legende nach soll es irgendwo ein uraltes, noch viel groesseres "
+        "Zolom geben, von dem alle Zolome dieser Welt abstammen, doch kein "
+        "Lebender hat es je gesehen. "
+        "Ueberall sieht man den Schleim "
+        "und den Dung der Wuermer, so dass man weder den Boden noch die Waende genauer "
+        "erkennen kann. Der Schleim ist dick und zaehfluessig und schwappt langsam hin "
+        "und her. Der Dung stapelt sich teilweise meterhoch auf und es riecht hier "
+        "sehr streng."
+        " Doch hier ist etwas Besonderes! Du bist wirklich bis ins Nest der Zolome "
+        "vorgedrungen. Tausende braun-weisse Eier liegen hier im Schleim herum!!! "
+        "Hier kommen also diese Kreaturen her!!!")+"@@exit_fun@@");
+
+
+  AD("nest",
+      "Du stehst mitten im Nest der Zolome! Hier unten, gut versteckt entwickeln "
+      "sich die Wuermer in Eiern und schluepfen dann, wenn sie reif sind, aus.");
+  AD(({"eier","ei"}),
+      "Die Eier liegen sicher zu tausenden im Schleim herum und ernaehren sich irgendwie "
+      "vom Dung. Sie haben harte Schalen, die man sicher nicht zerschlagen kann!");
+  AD("schalen",
+      "Die Schalen sind wie ein Panzer und schuetzen sie so. Zusaetzlich sind die "
+      "Eier auch noch von einer dicken Schicht Dung geschuetzt.");
+  AD("schicht",
+      "Sie haelt einiges aus!");
+
+  AD("panzer",
+      "Der Panzer ist aber gegen Feuer empfindlich und so versuchen Riesen "
+      "sie auch zu zerstoeren in dem sie die Eier anzuenden.");
+  AD("feuer",
+      "Normales Feuer erreicht aber nicht die notwendige Temperatur!");
+  AD("temperatur",
+      "Es muss schon ein besonderes Feuer sein um die Eier anzuzuenden!!!!");
+
+
+  ASE("osten", "check_osten");
+
+  ACD(({"brenne","brenn"}), "exit_weg");
+  ASD(({"dung","ausgang","ausgaenge"}), "exit_fun");
+
+  ASD("rohr", "go_weg");
+
+  AIT(ZNPC"urzolom", REFRESH_DESTRUCT);
+
+  ACD(({"zuende","zuend"}),"loese_zolomevent_aus");
+
+}
+
+int loese_zolomevent_aus(string str)   {
+
+  object da;	
+  object zolom;
+  NF("Was willst Du hier anzuenden?! Die Eier?!\n");
+
+  if(!str) { return 0; }
+
+  if(str=="eier"||str=="eier an")   {
+    if(!present("zolom_burn", TP))  {
+      write(BS(
+            "Du hast nichts geeignetes um so ein heisses Feuer zu erzeugen!"));
+      return 1;
+    }
+
+    zolom=present("zolom", environment(TP));
+    if(zolom)  {
+      write(BS( "Das Urzolom greift Dich an!!!"));
+      say(BS( "Das Urzolom greift "+TPN+" an!"));
+      zolom->Kill(TP);
+      zolom->SP(P_AGGRESSIVE, 1);       
+    }	
+    TIME_MASTER->ist_event_moeglich( getuid(TP), time() );	
+
+    return 1;
+  }
+  return 0;  
+}
+
+
+//ende master funcs
+
+string go_weg()  {
+
+  if( present("zolom", TO) && (!random(5))   )  {
+    return (
+        "Das Zolom liegt leider momentan direkt vor dem Rohr.\n");
+  }
+
+  write((
+        "Du schaust Dir das Rohr an und kommst ihm zu nahe. Der Sog reisst "
+        "dich fort und nach sehr schneller, kurzer Fahrt durch das Rohr kommst "
+        "Du irgendwo anders wieder heraus.\n"));
+  return  TPM(ZROOM"ti_pfad5", M_GO+M_NO_SHOW,
+      "von einem Sog ins Rohr gezogen", "wird",
+      "wird ploetzlich von dem Rohr ausgespuckt");
+
+}
+
+string exit_fun()  {
+  if(exits_versperrt!=0)  {
+    return 
+      BS("Momentan liegt hier enorm viel Dung der Zolome herum, der die Ausgaenge "
+          "zu blockieren scheint.\n");
+  }
+
+  if(exits_versperrt==0)   {
+    return 
+      BS("Momentan sieht man hier nicht so viel Dung der Zolome herumliegen. "+wer+" "
+          "hat alle Ausgaenge freigebrannt.\n");
+  }      	                		
+}
+
+
+int exit_weg(string str)  {
+  NF("Was willst Du hier wegbrennen?!\n");
+
+  if( str=="dung weg"||
+      str=="dung ab"||
+      str=="ausgang frei"||
+      str=="ausgaenge frei")  {
+
+    write(BS(
+          "Du entzuendest einen kleinen Feuerball und versuchst damit die Ausgaenge freizu "
+          "brennen."));
+    say(BS(
+          CAP_TPN+" entzuendet einen kleinen Feuerball und versucht die Ausgaenge freizubrennen."));
+
+
+    if(exits_versperrt!=0)  {
+      BURNER
+
+        BURN
+        write(BS(
+              "Du brennst die Ausgaenge frei."));
+      say(BS(
+            CAP_TPN+" brennt die Ausgaenge frei."));
+      wer=CAP(getuid(TP));
+
+      exits_versperrt=0;
+      return 1; 
+    }
+
+
+    if(exits_versperrt==0)  {
+      write(BS(
+            "Die Ausgaenge sind momentan nicht durch Dung der Zolome versperrt. "
+            ""+wer+" hat sie schon freigebrannt."));
+      return 1; 
+    }
+    return 0; 
+  }
+  return 0; 
+}
+
+reset()  {
+  ::reset();
+  if(exits_versperrt==0)  {
+
+    if(!random(3))  {
+
+      tell_object(TO,
+          "Der Dung der Zolome versperrt wieder die Ausgaenge.\n");
+      exits_versperrt=1;  
+    }    
+  }
+}
+
+
+int check_osten()  {
+
+  if(exits_versperrt!=0)  {
+    write(BS(
+          "Du schaffst es nicht ueber den Dung der Zolome hinweg "
+          "nach Osten zu gelangen."));
+    return 1;    
+  }   
+
+  if(exits_versperrt==0)   {
+
+    TPM(ZROOM"z7", M_GO, "nach Osten");
+    return 1;              }
+
+}		
+

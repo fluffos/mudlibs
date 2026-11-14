@@ -1,0 +1,170 @@
+#include <language.h>
+#include <properties.h>
+#include <material.h>
+#include <container.h>
+#include "../files.h"
+#include "../quest.h"
+#include <moving.h>
+
+inherit "std/container";
+
+void do_write(string s);
+
+create()
+{
+  if (!is_clone(this_object())) return;
+
+  ::create();
+  SetProp(P_NAME, "Laterne");
+  SetProp(P_SHORT, "Eine Laterne");
+  SetProp(P_INFO, BS(
+          "Du schaust Dir die Laterne genauer an, und stellst fest, dass sie ein"
+	  +" hervorragendes Behaeltnis fuer brennbare Materialien ist."));
+  SetProp(P_WEIGHT, 240);
+  SetProp(P_MAX_WEIGHT, 400);
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_MATERIAL, ([MAT_CERAMIC:5, MAT_GLASS:60, MAT_IRON:25, MAT_MISC_METAL:10]));
+  SetProp(P_IVORY, 1);
+  AddId("laterne");
+  AddId(IV_LANTERN);
+  SetProp(P_VALUE, 200);
+  AddCmd(({"zuend", "zuende"}), "light");
+}
+
+int PreventInsert(object o)
+{
+  string f;
+  object b;
+
+  f=explode(file_name(o), "#")[0];
+  switch (f) {
+    case OBJ("zunder"): if (present("zunder", TO)) {
+                          write("Das ist doch schon drin!\n");
+                          return 1;
+                        }
+			if ((b=present("kohle")) && b->query_burning()) {
+			  do_write("Der Zunder in der Laterne entzuendet sich sofort an der gluehenden Kohle.\n");
+			  o->set_burning(TI->name(WER));
+			  return 0;
+			}
+			return 0;
+    case OBJ("kohle"): if (present("kohle", TO)) {
+                         write("Das ist doch schon drin!\n");
+                         return 1;
+                       }
+		       if ((b=present("zunder")) && b->query_burning()) {
+			 do_write("Die Kohle in der Laterne entzuendet sich sofort am brennenden Zunder und beginnt zu glimmen.\n");
+			 o->set_burning();
+			 return 0;
+		       }
+                       return 0;
+    default: return 1;
+  }
+}
+
+string long() {
+  string s;
+  object k, z;
+  
+  s="Du siehst eine huebsche kleine Laterne, die wohl dazu dient, sanft gedimmtes"
+    +" Licht zu verbreiten. Das Glas ist leicht getoent, um nur wirklich zartes"
+    +" Licht durchzulassen.";
+  z=present("zunder", TO);
+  k=present("kohle", TO);
+  if (z) {
+    if (k) {
+      s+=" Darin befindet sich ein Stueck Zunder und ein Stueck Kohle.";
+    }
+    s+=" Darin befindet sich ein Stueck Zunder.";
+  }
+  else if (k) {
+    s+=" Du kannst ein Stueck Kohle darin erkennen.";
+  }
+  else {
+    s+=" Um die Laterne zum Leuchten zu bringen, solltest Du geeignete brennbare Materialien"
+      +" hineinlegen und diese auch an geeigneter Stelle entzuenden.";
+  }
+  if (z && z->query_burning())
+    s+=" Der Zunder darin brennt lichterloh.";
+  if (k && k->query_burning())
+    s+=" Die Kohle darin glimmt vor sich hin und verbreitet durch das getoente Glas einen angenehm"
+      +" dumpfen Lichtton. Eine starke Hitze geht von der gluehenden Kohle aus.";
+  return BS(s);
+}
+
+start_burn() {
+  object z, k;
+
+  if (explode(file_name(previous_object()), "#")[0]!=ROOM("l3"))
+    return;
+  if (query_burning())
+    return;
+  z=present("zunder");
+  if (objectp(z) && !z->query_burning()) {
+    do_write("Der Zunder in der Laterne beginnt sofort zu brennen.\n");
+    z->set_burning(getuid(TP));
+  }
+  if ((k=present("kohle")) && !k->query_burning()) {
+    if (z && z->query_burning()) {
+      do_write("Die Kohle in der Laterne beginnt durch den brennenden Zunder sofort zu glimmen.\n");
+      k->set_burning();
+    }
+    else {
+      do_write("Der Funken ist zu schwach, um das Stueck Kohle in der Laterne zu entfachen.\n");
+    }
+  }
+}
+
+query_burning() {
+  object o;
+
+  if ((o=present("zunder")) && o->query_burning())
+    return 1;
+  if ((o=present("kohle")) && o->query_burning())
+    return 1;
+  return 0;
+}
+
+void do_write(string s) {
+  object e;
+
+  if (!s)
+    return;
+  e=ENV(TO);
+  if (!e)
+    return;
+  if (e->id("Raum"))
+    tell_room(e, s);
+  else
+    tell_object(e, s);
+}
+
+varargs int move(mixed dest, int method) {
+  int ret;
+  object b, o;
+
+  ret=::move(dest, method);
+  if (objectp(dest) && dest->id("Spieler")) {
+    b=deep_present(IV_QUEST_ITEM, dest);
+    o=present("kohle");
+    if (b && o && !b->query_flag(IV_INFLAME_COAL) && o->query_burning())
+      b->set_flag(IV_INFLAME_COAL);
+  }
+  return ret;
+}
+
+int light(string str) {
+  notify_fail("Was willst Du anzuenden?\n");
+  if (!str)
+    return 0;
+  if (str=="")
+    return 0;
+  if (!(str=="laterne" || str=="laterne an"))
+    return 0;
+  write(BS(
+        "Du kannst die Laterne nur mit einem speziellen Funken anzuenden. Er koennte von einer"
+       +" magischen, festmontierten Fackel stammen. Ausserdem benoetigst Du spezielle brennbare"
+       +" Materialien in der Laterne, damit sie so richtig zum Leuchten gebracht wird."));
+  return 1;
+}
+

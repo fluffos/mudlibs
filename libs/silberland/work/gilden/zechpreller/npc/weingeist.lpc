@@ -1,0 +1,1040 @@
+//=========================================================================
+//
+// File: weingeist.c
+// Created by Gwenshara@SL
+//
+// Project: Zechprellergilde
+//
+//
+// 10.12.2009 by Gwenshara
+// 	Druidensicher gemacht, erbe angepasst
+//=========================================================================
+
+#include "../zech.h"
+#include "../talents.h"
+#include <moredef.h>
+#include <new_skills.h>
+#include <ansi.h>
+#include <properties.h>
+#include <class.h>
+#include <moving.h>
+#include <npcmaster.h>
+#include <food.h>
+#define TG(x) if(find_player("gwenshara")) tell_object(find_player("gwenshara"), BS("WG: "+x+"\n"));
+#define ELEMENTAL_CASTER "e_caster"
+#define ELEMENTAL_OWNER "e_owner"
+
+inherit "std/npc";
+inherit "/std/npc/spells";
+
+object master, locked;
+int skillab, suc, fight, magic, follow, killing, spellrate, glvl,
+    defending;
+
+void FindAndKill();
+void StopFindAndKill();
+int SpellLevel();
+
+string maybeinfo()
+{
+  string str;
+  str = "Ich kann im Kampf helfen (sag weingeist kaempfe mit mir), die "
+        "Kampfunterstuetzung beenden (sag weingeist kaempfe nicht mit mir), "
+        "meinem Meister folgen (sag weingeist folge mir) und stehen bleiben "
+        "(sag weingeist bleib stehen). Vielleicht ist es auch erwuescht, dass "
+        "ich ohne besondere Faehigkeiten kaempfe (sag weingeist benutze keine magie), "
+        "oder das ich Magie nutzen soll (sag weingeist benutze magie). Sollten"
+	" wir uns verlieren, und du moechtest wissen wo ich bin kann ich Dir "
+	"das mitteilen! (teile <deinname>weingeist mit wo bist du). Solltest "
+	"Du wollen, dass ich verschwinde, obwohl ich in an einem anderen "
+	"Ort bin, kann ich dies ebenso! (teile <deinname>weingeist mit "
+	"verschwinde). Ich kann auch zu Dir kommen, wenn ich an einem "
+	"anderen Ort bin. (teile <deinname>weingeist mit komm her)";
+
+  if(objectp(master) && master->QueryProp(P_GUILD_LEVEL) > 10)
+  {
+    str+="Ausserdem vermag ich auch zu heilen (sag weingeist heile mich). ";
+  }
+  if(skillab >= 10000)
+  {
+    str+="Ich bin gegen einen gewissen Anteil an Magie dazu bereit meinen "
+         "Meister zu alkoholisieren (sag weingeist alkoholisiere mich).";
+  }
+  if(ERBMASTER->QueryErbe(getuid(TP)) == ERBE_ZECHUS)
+  {
+   /* str+="Da mein Meister das Erbe von Zechus angetreten hat, bin ich dazu "
+         "in der Lage euch das toeten eines Gegners zu ermoeglichen "
+         "(sag weingeist toete nicht) oder bis zum Tod zu kaempfen (sag "
+         "weingeist toete). ";*/
+    str+="Da mein Meister ein Erbe von Zechus Prellus ist kann ich Dir folgendes "
+         "anbieten:\n";
+    if(!locked)
+      str+="Auf Geheiss meines Meisters folge ich jemand anders und "
+           "erfuelle dessen Wuensche (sag weingeist folge <spieler>).";
+    str+="Ich kann Dich verteidigen, ohne anzugreifen! (sag weingeist "
+         "verteidige mich [nicht])!";
+  }
+  if(SpellLevel() > 9999)
+    str+=" Durch die Macht meines Meisters kann ich mit euch verschmelzen! "
+         "(sag weingeist verschmelze)";
+  return str;
+}
+
+void create()
+{
+  if(!is_clone(TO)) return;
+
+  ::create();
+  locked  = 0;
+  master  = 0;
+  killing = 1;
+  magic   = 1;
+
+//--Beschreibungen---------------------------------------------------------
+
+  SetProp(P_SHORT, "Ein durchscheinender Weingeist");
+  SetProp(P_LONG,
+    "Vor Dir ragt die beeindruckende Gestalt eines echten Weingeists auf. "
+    "Sein Oberkoerper sieht aus, wie der eines stattlichen Kaempfers. Er "
+    "scheint aus fliessendem Alkohol zu bestehen. Sein Unterleib hingegen "
+    "ist nur eine schwebende Alkoholwolke. Er ist fast schon durchsichtig. "
+    "Einzig die Stroemungen des Alkohols verhindern, dass du ganz durch "
+    "ihn zu blicken vermagst."
+  );
+
+//--Namen------------------------------------------------------------------
+
+  SetProp(P_NAME, "Weingeist");
+  SetProp(P_GENDER, MALE);
+  AddId(({"geist", "weingeist", "\nzechpreller_weingeist", "NOCONTROL",
+          "NOWIMPY", "SKILL_NOLEARN"}));
+  AddClass( ({CL_EXPLOSIVE, CL_FLYING}) );
+  SetProp(P_ARTICLE, 1);
+
+//--Eigenschaften----------------------------------------------------------
+
+  create_default_npc(0);
+
+  SetProp(P_HANDS, ({" mit seinen starken Haenden"
+                    ,QueryProp(P_HANDS)[1]
+                    , ({DT_BLUDGEON})
+                    })
+  );
+
+  SetProp(P_RACE, "Geist");
+  SetProp(P_SIZE, 200);
+  SetProp(P_WEIGHT, 5000);
+  SetProp(P_ALIGN, 0);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_HEAL, 0);
+  SetProp(P_AGGRESSIVE, 0);
+  SetProp(P_WIMPY, 0);
+  SetProp(P_NOMAGIC, 0);
+  SetProp(P_XP, 0);
+  SetProp(P_NO_SCORE, 1);
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:-60, T_RANGE_MAX:60]));
+
+  SetProp(P_RESISTANCE_STRENGTHS ,
+    ([ DT_FIRE:      0.5, DT_COLD:     -0.1, DT_WATER:      -0.3
+     , DT_AIR:      -0.3, DT_LIGHTNING: 0.0, DT_EXPLOSION:  -0.5
+     , DT_SOUND:     0.0, DT_LIGHT:     0.0, DT_ELECTRIC:    0.1
+     , DT_ACID:     -0.3, DT_POISON:   -0.3, DT_TERROR:      0.0
+     , DT_HOLY:      0.0, DT_UNHOLY:    0.0, DT_MAGIC:      -0.1
+     , DT_MIND:     -0.1, DT_SLASH:     0.0, DT_BLUDGEON:    0.0
+     , DT_PIERCE:    0.0, DT_SQUEEZE:   0.0, DT_WHIP:        0.0
+     , DT_RIP:       0.0
+     ])
+  );
+
+//--Bewegungen-------------------------------------------------------------
+
+  SetProp(P_MSGIN, "schwebt herein");
+  SetProp(P_MSGOUT, "schwebt");
+  SetProp(P_MMSGIN, "schwebt herein");
+  SetProp(P_MMSGOUT, "schwebt weiter");
+
+//--Tod--------------------------------------------------------------------
+
+  SetProp(P_DIE_MSG,  " loest sich in Luft auf.\n");
+  SetProp(P_NOCORPSE, 1 );
+  SetProp(P_MURDER_MSG, "Aus isch! Gemma tschu Lars!");
+
+//--Infos------------------------------------------------------------------
+
+  AddInfo(DEFAULT_INFO, ({"beachtet Dich gar nicht.\n",
+                          "blickt starr gerade aus.\n",
+                          "blubbert unverstaendlich.\n",
+                          "fragt: Willscht no wasch trink?\n",
+                          "sagt: Prooooscht!\n"}));
+
+  AddInfo(GILDENMAGIER, "Dasch isch einer von den Ma <HICKS> Magiern, die "
+          "die Tschechprellergilde gemacht ham!","sagt: ");
+
+  AddInfo( ({"dienst","dienste","befehle"}),#'maybeinfo, "sagt: ");
+
+  //SetProp(P_SPELLRATE, 15);
+  SetProp(P_FRIEND, 1);
+}
+
+int SpellLevel()
+{
+    int spellrating;
+    object pl;
+
+    pl=master;
+    if(!objectp(pl)) return 0;
+
+    spellrating = 0;
+    spellrating += pl->QuerySkillAbility("Booze");
+    spellrating += pl->QuerySkillAbility("Fight_club");
+    spellrating += pl->QuerySkillAbility("alkoholisiere");
+    spellrating += pl->QuerySkillAbility("alkoholwolke");
+    spellrating += pl->QuerySkillAbility("anhauchen");
+    spellrating += pl->QuerySkillAbility("destilliere");
+    spellrating += pl->QuerySkillAbility("dunstpanzer");
+    spellrating += pl->QuerySkillAbility("groehlen");
+    spellrating += pl->QuerySkillAbility("identifiziere");
+    spellrating += pl->QuerySkillAbility("prelle");
+    spellrating += pl->QuerySkillAbility("ruelpser");
+    spellrating += pl->QuerySkillAbility("rumkugeln");
+    spellrating += pl->QuerySkillAbility("schaetz");
+    spellrating += pl->QuerySkillAbility("staenkern");
+    spellrating += pl->QuerySkillAbility("torkeln");
+    spellrating += pl->QuerySkillAbility("trunkspruch");
+    spellrating += pl->QuerySkillAbility("uebergeben");
+    spellrating += pl->QuerySkillAbility("weingeist");
+
+    if(pl->QueryProp(P_GUILD_LEVEL) > MAX_GUILD_LEVEL)
+    {
+      string erbe;
+      erbe = call_other(ERBMASTER, "QueryErbe", pl);
+      
+      if(erbe ==ERBE_ARTANOK)
+        spellrating += pl->QuerySkillAbility("improvisiere");
+      if(erbe ==ERBE_LANESTRA)
+        spellrating += pl->QuerySkillAbility("trinklied");
+      if(erbe ==ERBE_TARXES)
+        spellrating += pl->QuerySkillAbility("donnerruelpser");
+      if(erbe ==ERBE_ZECHUS)
+        spellrating += pl->QuerySkillAbility("fahne");
+    }
+
+    spellrating = (int) (spellrating/19);
+
+    return spellrating;
+}
+
+void SetMaster(object m, int abil, int success)
+{
+//  if(!PO) return;
+//  if(strstr(load_name(PO), "/gilden/zechpreller") != 0) return;
+
+  int lvl;
+  object equip;
+
+  if(!objectp(m)) return;
+  
+  master = m;
+  skillab = abil;
+  suc = success;
+
+  if(abil>6000)
+  {
+    AddSpell(1, 300,
+           "Der Weingeist feuert einen Strahl aus Alkohol "
+           "auf Dich ab!\n",
+           "Der Weingeist feuert einen Strahl aus Alkohol "
+           "auf @WEN ab!\n",
+           ({DT_WATER, DT_POISON}), ([SP_SHOW_DAMAGE:1]));
+  }
+
+  glvl = (int) (abil/1000);
+  glvl = glvl-3;
+  if(glvl < 0) glvl = 0;
+  SetProp(P_GUILD_LEVEL, glvl);
+
+  lvl = (int) (abil+suc)*100/20000;
+  lvl = (int) (lvl*0.4);
+  if(lvl < 5) lvl = 5;
+  if(lvl > 30) lvl = 30; // sollte nicht passieren koennen!
+
+  pDebug(m, sprintf("weingeist :: lvl = %d\n", lvl));
+  lvl += ZTMASTER->GetTalent(m, ZT_CELLAR_MASTER)*2;
+  pDebug(m, sprintf("weingeist :: lvl = %d\n", lvl));
+
+  create_default_npc(lvl);
+  SetProp(P_HANDS, ({" mit seinen starken Haenden"
+                    ,QueryProp(P_HANDS)[1]
+                    ,({DT_BLUDGEON})
+                    }));
+  
+  
+  /* Bonus bei: */
+  if(success > 8000 && abil > 8500)
+  {
+    switch(random(4))
+    {
+      case 0: SetProp(P_SHORT, "Ein boeser Weingeist");
+              SetProp(P_ALIGN, (int) -(suc/1000));
+              AddAdjective( ({"boese","boeser","boesen","boesem"}));
+              SetProp(P_NAME_ADJ, "boes");
+              break;
+      case 1: SetProp(P_SHORT, "Ein guter Weingeist");
+              SetProp(P_ALIGN, (int) (suc/1000));
+              AddAdjective( ({"gut","guter","guten","gutem"}));
+              SetProp(P_NAME_ADJ, "gut");
+              break;
+      case 2: SetProp(P_SHORT, "Ein wuetender Weingeist");
+              SetProp(P_HANDS, ({" mit seinen starken Haenden"
+                                 ,QueryProp(P_HANDS)[1]+50
+                                 ,({DT_BLUDGEON})
+                                }));
+              AddAdjective( ({"wuentend","wuetender","wuetenden","wuentendem"}));
+              SetProp(P_NAME_ADJ, "wuetend");
+              break;
+      default: equip = clone_object(OBJ("dunstmantel"));
+               equip->SetVars(-1, 30);
+               equip->move(TO, M_NOCHECK);
+               equip->DoWear(1);
+               break;          
+    }
+  }
+  SetProp(P_LONG, QueryProp(P_LONG)+"Dieser Weingeist wurde von "+
+                  master->Name(WEM)+" gerufen.");
+  spellrate = ((skillab/100)-30<0?0:(skillab/100)-30);
+  SetProp(P_SPELLRATE, spellrate);
+  SetProp(P_MAX_SP, (int) (5*(skillab/100)));
+  m->SetProp(P_TMP_ZECHPRELLER_WINEGHOST, TO);
+  SetProp(P_XP, 0);
+  set_living_name(getuid(master)+"weingeist");
+  enable_commands();
+  SetProp(ELEMENTAL_CASTER, m);
+  SetProp(ELEMENTAL_OWNER, m);
+  return;
+}
+
+void do_spell(object enemy)
+{
+  string name, ename;
+  name = TO->Name(WER);
+ /* if(find_player("gwenshara"))
+    tell_object(find_player("gwenshara"), BS("do_spell -- GLVL: "+glvl));*/
+  if(glvl<2 || QueryProp(P_SP) < 10) return;
+  switch(random(glvl))
+  {
+    default:
+    case 1: // fallthrough
+    case 2: tell_room(ENV(TO), BS("BOEEEEERP! "+name+" ruelpst "+enemy->Name(WEN)+" an. Pfui, das stinkt!"),
+		      ({enemy}));
+	    tell_object(enemy, BS(name+" ruelpst Dich an. BOEEEEERP!"));
+	    AddSp(-10);
+	    enemy->Defend(150+random(50), DT_AIR, ([SP_SHOW_DAMAGE:1]), TO);
+	    break;
+    case 3:
+    case 4: if(objectp(present("fackel", TO)))
+	    {
+	      tell_room(ENV(TO), BS(name+" haucht "+enemy->Name(WEM)+" eine Flammenlanze entgegen!"),
+		      ({enemy}));
+	      tell_object(enemy, BS(name+" haucht Dir eine Flammenlanze entgegen!"));
+	      enemy->Defend((int) 450+random(50)*(glvl/9), DT_FIRE, ([SP_SHOW_DAMAGE:1]), TO);
+	    } 
+	    else
+	    {
+	      tell_room(ENV(TO), BS(name+" haucht "+enemy->Name(WEM)+" eine Dunstwolke entgegen!"),
+		      ({enemy}));
+	      tell_object(enemy, BS(name+" haucht Dir eine Dunstwolke entgegen!"));
+	      enemy->Defend((int) 250+random(50)*(glvl/9), ({DT_POISON, DT_AIR}), ([SP_SHOW_DAMAGE:1]), TO);
+	    }
+	    AddSp(-25);
+	    break;
+  }
+  return;
+}
+
+void InformDefend(object enemy)
+{
+  if(!fight) return;
+  if(!InFight()) command_me("emote lallt: Auf in den Kampf! <HICKS>");
+ // tell_object(find_player("gwenshara"), "Weingeist - InformDefend - Kill: "+Kill(enemy));
+  call_out("Kill", 4, enemy);
+  return;
+}
+
+void ActionDefend(int sw)
+{
+  if(fight)
+  {
+    command_me("sag Aber isch kaempf doch schschon mit Dihir!");
+    return;
+  }
+  if(sw==defending)
+  {
+    command_me("sag Dasch tu isch schon! <HICKS>!");
+    return;
+  }
+
+  if(sw)
+  {
+    if(locked) locked->AddDefender(TO);
+    else master->AddDefender(TO);
+    command_me("sag Nun halt isch Schlaege von Dia ab!");
+  }
+  else
+  {
+    if(locked) locked->RemoveDefender(TO);
+    else master->RemoveDefender(TO);
+    command_me("sag Nun halt isch keine Schlaehaege mehr ab!");
+  }
+  defending=sw;
+  return;
+}
+
+void ActionFight(int sw)
+{
+  if(defending)
+  {
+    command_me("sag Aber isch halt schon Schlaehaege von Dir ab!");
+    return;
+  }
+  if(sw == fight)
+  {
+    command_me("sag Aber dasch tu ich doch <HICKS> schon!");
+    return;
+  }
+
+  if(defending)
+  {
+    command_me("sag Ich verteidige Dich doch schon!");
+    return;
+  }
+
+  if(sw == 1)
+  {
+    if(locked)
+    {
+   //   locked->AddDefender(TO);
+      call_out("FindAndKill", 2);
+    }
+    else
+    {
+     // master->AddDefender(TO);
+      call_out("FindAndKill", 2);
+    }
+
+    command_me("nick");
+    command_me("sag Jetsch verteidige ich Dich!");
+  }  
+  else if(sw == 0)
+  {
+    if(locked)
+    {
+      locked->RemoveDefender(TO);
+      StopFindAndKill();
+    }
+    else
+    {
+      master->RemoveDefender(TO);
+      StopFindAndKill();
+    }
+
+    command_me("nick");
+    command_me("sag Jetsch verteidige ich Dich nicht mehr!");
+  }
+  else
+  {
+    raise_error("Illegaler Schalterwert (Fight) "+sw);
+  }
+  fight = sw;
+  return;
+}
+
+private void ActionFollow(int sw)
+{
+  if(sw == follow)
+  {
+    command_me("sag Aber dasch tu ich doch <HICKS> schon!");
+    return;
+  }
+
+
+  if(sw == 1)
+  {
+    if(locked)
+       locked->AddPursuer(TO);
+    else
+      master->AddPursuer(TO);
+
+    command_me("nick");
+    command_me("sag Jetsch komm ich mit Dir <HICKS> mit!");
+  }  
+  else if(sw == 0)
+  {
+    if(locked)
+      locked->RemovePursuer(TO);
+    else
+      master->RemovePursuer(TO);
+
+    command_me("nick");
+    command_me("sag Jetsch komm ich ni<HICKS>cht mehr mit!");
+  }
+  else
+  {
+    raise_error("Illegaler Schalterwert (Follow) "+sw);
+  }
+  
+  follow = sw;
+  return;
+}
+
+private void ActionMagic(int sw)
+{
+  if(sw == magic)
+  {
+    command_me("sag Aber dasch tu ich doch <HICKS> schon!");
+    return;
+  }
+
+
+  if(sw == 1)
+  {
+    SetProp(P_SPELLRATE, spellrate);
+
+    command_me("nick");
+    command_me("sag Von nun an benutsch ich meine Tschauber!");
+  }  
+  else if(sw == 0)
+  {
+    SetProp(P_SPELLRATE, 0);
+          
+    command_me("nick");
+    command_me("sag Gut, dann tschauber ich nicht mehr!");
+  }
+  else
+  {
+    raise_error("Illegaler Schalterwert (Magic) "+sw);
+  }
+  
+  magic = sw;
+  return;
+}
+
+private void ActionHeal()
+{
+  int heal;
+  float factor;
+
+  heal = (int) (skillab/100)+(suc/100);
+
+  // Bei anderen Diensten wirds schwaecher
+  if(fight)
+    heal=(int)(heal*0.5);
+  if(defending)
+    heal=(int)(heal*0.5);
+
+  // Heilung an Status des Geists anpassen
+  factor = (float)(QueryProp(P_HP)/QueryProp(P_MAX_HP));
+
+  heal=(int) (heal*factor);
+
+  
+  if(locked)
+  {
+    tell_room(ENV(locked), BS("Der Weingeist faehrt in "+locked->Name(WEN)+
+              " ein."), ({locked}));
+    tell_object(locked, BS("Der Weingeist faehrt in Dich ein."));
+    locked->AddHp(heal);
+    locked->AddSp(heal);
+  }
+  else
+  {
+    tell_room(ENV(master), BS("Der Weingeist faehrt in "+master->Name(WEN)+
+              " ein."), ({master}));
+    tell_object(master, BS("Der Weingeist faehrt in Dich ein."));
+    master->AddHp(heal);
+    master->AddSp(heal);
+  }
+  
+  master->SetProp(P_TMP_ZECHPRELLER_WINEGHOST, 0);
+  remove(1);
+  return;
+}
+
+private void ActionDrunk()
+{
+  int alc;
+  alc = (int) (skillab/100)+(suc/100);
+  
+  if(locked)
+  {
+   if(ENV(locked))
+   {
+    tell_room(ENV(locked), BS("Der Weingeist verfluessigt sich und fliesst "
+              "in "+locked->Name(WESSEN)+" Mund."), ({locked}));
+    tell_object(locked, BS("Der Weingeist verfluessigt sich und fliesst in "
+                "Deinen Mund! Mmmmmh Alkohol!"));
+   }
+    locked->SetProp(P_ALCOHOL, 
+                   (QueryProp(P_ALCOHOL)+alc>QueryProp(P_MAX_ALCOHOL)?QueryProp(P_MAX_ALCOHOL):
+                    QueryProp(P_ALCOHOL)+alc));
+  }
+  else
+  {
+   if(ENV(master))
+   {
+    tell_room(ENV(master), BS("Der Weingeist verfluessigt sich und fliesst "
+              "in "+master->Name(WESSEN)+" Mund."), ({master}));
+    tell_object(master, BS("Der Weingeist verfluessigt sich und fliesst in "
+                "Deinen Mund! Mmmmmh Alkohol!"));
+   }
+    master->SetProp(P_ALCOHOL, 
+                   (QueryProp(P_ALCOHOL)+alc>QueryProp(P_MAX_ALCOHOL)?QueryProp(P_MAX_ALCOHOL):
+                    QueryProp(P_ALCOHOL)+alc));
+  }
+
+  master->SetProp(P_TMP_ZECHPRELLER_WINEGHOST, 0);
+  remove(1);
+  return;
+}
+
+private void ActionAllowKilling(int sw)
+{
+  if(sw == killing)
+  {
+    command_me("sag Aber dasch tu ich doch <HICKS> schon!");
+    return;
+  }
+
+
+  if(sw == 1)
+  {
+    command_me("nick");
+    command_me("sag Gut, ab jetsch toet ich meine Geg <HICKS> Gegner!");
+  }  
+  else if(sw == 0)
+  {
+    command_me("nick");
+    command_me("sag Von nun an toet ich meine Gegner nicht!");
+  }
+  else
+  {
+    raise_error("Illegaler Schalterwert (AllowKilling) "+sw);
+  }
+  
+  killing = sw;
+  return;
+}
+
+void ActionLock(string text)
+{
+  object ob;
+  object mstein;
+  string pl;
+  if(sscanf(text, "weingeist folge %s\n", pl) != 1) return;
+  if(!stringp(pl)) return;
+
+  if(!fight && !defending)
+  {
+    command_me("sag Aber wasch soll ich fuer den tun?! Kaempfen <HICKS!> oder schuetschen?");
+    return;
+  }
+
+  if(!ob = present(pl, ENV(TO)))
+  {
+    command_me("sag Hier isch kein "+capitalize(pl)+"! <HICKS>");
+    return;
+  }
+
+  if(!living(ob))
+  {
+    command_me("sag Aber "+ob->name(WER, 1)+" lebt nicht!");
+    return;
+  }
+  
+  if(ob->QueryProp(P_GUILD) == "druidenzirkel")
+  {
+    command_me("sag Buaeh! Scho einem Nuechtling folg ich nicht!");
+    return;
+  }
+
+  if(call_other("/spellbooks/druiden_spells", "QueryOwnCreature",
+                ob,0,2)>0 || ob->QueryProp(P_TMP_ZECHPRELLER_WINEGHOST))
+  {
+    command_me("sag "+ob->Name(WER)+" hat schon einen Kampfgefaehrten!");
+    return;
+  }
+
+  if(!(mstein = present("\nmagiestein", master)))
+  {
+     command_me("sag Meischter! Ihr muescht mir die Kra <HICKS> Kraft "
+                "einesch Magiesteins zur Verfue <HICKS> Verfuegung stellen!"
+                );
+     return;
+  }
+  if(master->QueryProp(P_SP) < 150)
+  {
+    command_me("sag Meischter! Ihr habt dertscheit nicht genug magische "
+               "Kraft!");
+    return;
+  }
+
+  locked = ob;
+  mstein->AddAmount(-1);
+  master->AddSp(-150);
+  master->SetProp(P_TMP_ZECHPRELLER_WINEGHOST, 0);
+  master->RemoveDefender(TO);
+  StopFindAndKill();
+  master->RemovePursuer(TO);
+  locked->SetProp(P_TMP_ZECHPRELLER_WINEGHOST, TO);
+  follow = 0; // nicht mehr folgen
+  fight  = 0; // nicht mehr kaempfen
+  command_me("sag In Ordnung Meischter! Nun gehor <HICKS> gehorche ich "+
+             capitalize(pl)+"!");
+  SetProp(P_LONG, QueryProp(P_LONG)+"Er hoert auf die Befehle von "+
+                  locked->Name(WEM)+"!");
+  SetProp(ELEMENTAL_OWNER, locked);
+  return;
+}
+
+void ActionFusion()
+{
+  object pl, fusion;
+
+  pl=(objectp(locked)?locked:master);
+
+  if(pl->InFight())
+  {
+    command_me("sag Im Kampf geht dasch nicht!");
+    return;
+  }
+
+  if(fight || defending)
+  {
+    command_me("sag Isch hab aber schon <HICKS!> 'nen andern Auftrag!");
+    return;
+  }
+
+  if(present("\nzechpreller_fusion", pl))
+  {
+    command_me("sag In euch schteckt schon ein Weingeischt!");
+    return;
+  }
+
+  if(!present("\nsiebzehnerschluessel", master))
+    return;
+
+ /* if(present("\nsiebzehnerschluessel", master)->GetBoosts() > 2)
+  {
+    command_me("sag Ihr koennt jetscht nicht mehr gestaerkt werden! <HICKS!>");
+    command_me("sag Wart noch ein bisscherl!");
+    return;
+  }*/
+
+  command_me("sag Wie ihr wuentscht Mei<HICKS!>schter!");
+  fusion = clone_object(OBJ("fusion"));
+  if(!objectp(fusion))
+  {
+    command_me("sag Irgendwas stimmt nicht! Melde diesen Fehler bitte einem Gildenmagier!");
+    return;
+  }
+
+  tell_room(ENV(TO), 
+      BS("Der Weingeist loest sich auf und verbindet sich mit "+pl->Name(WEM)+"."), ({pl}));
+  tell_object(pl,
+      BS("Der Weingeist loest sich auf und verbindet sich mit Dir."));
+
+  fusion->move(pl, M_GET|M_NOCHECK);
+  fusion->SetVars(pl, 180+random(180));
+
+  present("\nsiebzehnerschluessel", master)->ObtainBoost();
+
+  call_out("die", 0);
+  return;
+}
+
+
+void befehle(string str)
+{
+  string who, what;
+  
+  if(InFight())       return;
+  if(sscanf(str,"%s sagt: %s", who, what)==2)
+  {
+    if(!objectp(master)) return;
+    if(!find_living(lower_case(who))) return;
+    if(getuid(find_living(lower_case(who))) !=
+      (locked==0?getuid(master):getuid(locked)) )  return;
+    //tell_object(find_player("gwenshara"), "asdf");
+
+    /* Fight actions */
+    if( strstr(what, "weingeist kaempfe mit mir", 0) > -1 ) ActionFight(1);
+    else if( strstr(what, "weingeist kaempfe nicht mit mir", 0) > -1) 
+         ActionFight(0);
+    
+    /*Follow me...*/
+    else if( strstr(what, "weingeist folge mir", 0) > -1) ActionFollow(1);
+    else if( strstr(what, "weingeist bleib stehen", 0) > -1) ActionFollow(0);
+
+    /*Use the force!*/
+    else if( strstr(what, "weingeist benutze keine magie", 0) > -1) ActionMagic(0);
+    else if( strstr(what, "weingeist benutze magie", 0) > -1) ActionMagic(1);
+
+    /*Heal up!*/
+    else if( strstr(what, "weingeist heile mich", 0) > -1 && 
+             master->QueryProp(P_GUILD_LEVEL) > 10)
+         ActionHeal();
+
+    /*Get drunk!*/
+    else if( strstr(what, "weingeist alkoholisiere mich", 0) > -1&&
+             skillab >= 10000)
+         ActionDrunk();
+
+    /*Don't kill them...*/
+    else if(strstr(what, "weingeist toete nicht", 0) > -1 && 
+            ERBMASTER->QueryErbe(getuid(master)) == ERBE_ZECHUS)
+         ActionAllowKilling(0);
+    else if(strstr(what, "weingeist toete", 0) > -1 &&
+            ERBMASTER->QueryErbe(getuid(master)) == ERBE_ZECHUS)
+         ActionAllowKilling(1);
+
+    /*Follow him! */
+    else if( strstr(what, "weingeist folge") > -1
+            && ERBMASTER->QueryErbe(getuid(master)) == ERBE_ZECHUS &&
+            locked == 0)
+           ActionLock(what);
+
+    /*Verschwinde!*/
+    else if( strstr(what, "weingeist verschwinde") > -1)
+    {
+            call_out("die", 0);
+    }
+
+    /*Call to the Arms!*/
+    if(ERBMASTER->QueryErbe(getuid(master)) == ERBE_ZECHUS)
+    {
+      if( strstr(what, "weingeist verteidige mich nicht") > -1)
+        ActionDefend(0);
+      else if( strstr(what, "weingeist verteidige mich") > -1)
+        ActionDefend(1);
+    }
+
+    if(SpellLevel() > 9999)
+    {
+      if( strstr(what, "weingeist verschmelze") > -1)
+	ActionFusion();
+    }
+  }
+}
+
+void catch_tell(string str)
+{
+  object ob;
+  string who, what;
+  if(sscanf(str,"%s teilt Dir mit: %s", who, what)==2)
+  {
+    //TG(who+" teilt seinem Wingeist mit: "+what);
+    if(!objectp(ob=find_player(lower_case(who))))
+    {
+      //TG("no such player!!!");
+      return;
+    }
+
+    if(getuid(find_living(lower_case(who))) !=
+      (locked==0?getuid(master):getuid(locked)) )
+    {
+      //TG(who+"is not master/locked");
+      return;
+    }
+
+    if(strstr(what, "wo bist du")>-1)
+    {
+      ob->Message("Dein Weingeist teilt Dir mit: Ich bin an einem Ort namens \""
+		  +ENV(TO)->QueryProp(P_INT_SHORT)+"\"!\n", MSGFLAG_TELL);
+      return;
+    }
+   
+   if(strstr(what, "komm her")>-1)
+   {
+     if(ob->QueryProp(P_ALCOHOL) < 10)
+     {
+       ob->Message("Dein Weingeist teilt Dir mit: Du brauchst mehr Alkohol dafuer!\n",
+		   MSGFLAG_TELL);
+       return;
+     }
+     ob->SetProp(P_ALCOHOL, ob->QueryProp(P_ALCOHOL)-10);
+     move(ENV(ob), M_GO);
+     return;
+   } 
+
+   if(strstr(what, "verschwinde")>-1)
+   {
+     ob->Message("Dein Weingeist teilt Dir mit: Lebt wohl, Meister!\n", MSGFLAG_TELL);
+     call_out("die", 1);
+     return;
+   }
+  }
+  call_out("befehle", 0, str); 
+}
+
+// Attack ueberschreiben
+void Attack(object enemy)
+{
+  //if(enemy->QueryProp(P_HP)*100/enemy->QueryProp(P_MAX_HP) > 10 && !killing)
+  if(random(100) < QueryProp(P_SPELLRATE) && !QueryProp(P_DISABLE_SPELLS)) 
+    do_spell(enemy);
+  ::Attack(enemy);
+  return;
+}
+
+void NotifyPlayerDeath(object victim, object killer, int lost_xp)
+{
+  if(geteuid(victim) == geteuid((locked==0?master:locked)))
+  {
+    call_out("die", 2);
+    if(locked && objectp(locked))
+    { 
+      locked->RemovePursuer(TO); 
+      locked->SetProp(P_TMP_ZECHPRELLER_WINEGHOST, 0);
+    }
+    else if(objectp(master))
+    {
+      master->RemovePursuer(TO);
+      locked->SetProp(P_TMP_ZECHPRELLER_WINEGHOST, 0);
+    }
+  }
+}
+
+void die(int poisondeath)
+{
+  if(objectp(present("dunstpanzer", TO)))
+    present("dunstpanzer", TO)->remove(1);
+  if(objectp(master) || objectp(locked))
+  {
+    (locked==0?master:locked)->SetProp(P_TMP_ZECHPRELLER_WINEGHOST, 0);
+    (locked==0?master:locked)->AddExp((int)QueryProp(P_XP)/2);
+  }
+
+  ::die(poisondeath);
+}
+
+void BecomesNetDead(object pl)
+{
+  if( (objectp(master) || objectp(locked)) &&
+      geteuid(pl) == geteuid((locked==0?master:locked)))
+  {
+    call_out("die", 2);
+    (locked==0?master:locked)->RemovePursuer(TO);
+    (locked==0?master:locked)->SetProp(P_TMP_ZECHPRELLER_WINEGHOST, 0);
+  }
+}
+
+void FindAndKill()
+{
+  object *e;
+  int i;
+  if(objectp(locked))      e = locked->PresentEnemies();
+  else if(objectp(master)) e = master->PresentEnemies();
+  else return;
+  if(sizeof(e))
+    for(i=0; i<sizeof(e); ++i)
+      Kill(e[i]);
+
+  call_out("FindAndKill", 2);
+  return;
+}
+
+void StopFindAndKill()
+{
+  while(find_call_out("FindAndKill")!=-1)
+    remove_call_out("FindAndKill");
+  return;
+}
+
+int _query_alcohol()
+{
+ return QueryProp(P_MAX_ALCOHOL);
+}
+
+// Fuer die Gildenstufen
+void give_notify(object ob)
+{
+  int *heal;
+  if(ob->id("fackel"))
+  {
+    //ob->set_lighted(1);
+    //tell_room(ENV(TO), BS(Name(WER)+" zuendet die Fackel an."));
+    command_me("zuende fackel an");
+  }
+  else if(ob->id("\nzechpreller_drink"))
+  {
+    command_me("sag <HICKS!> Danke!");
+    heal = ob->QueryProp(P_FOOD_INFO)[F_HEAL];
+    AddHp(heal[0]);
+    AddSp(heal[1]);
+    ob->remove(1);
+  }
+  else
+  {
+    tell_room(ENV(TO), BS(Name(WER)+" wirft "+ob->Name(WEN)+" weg."));
+    ob->move(ENV(TO), M_PUT);
+    return;
+  }
+  return;
+}
+
+mixed DefendOther(int dam,mixed dam_type,mixed spell,object enemy)
+{
+  int self_damage;
+  object who;
+  if(fight || !defending) return 0;
+  if(!ENV(TO)) return 0;
+
+  who=(objectp(locked)?locked:master);
+
+  if(random(2) &&
+     (member(dam_type, DT_ACID)>-1 ||
+      member(dam_type, DT_AIR)>-1 ||
+      member(dam_type, DT_POISON)>-1))
+  {
+    self_damage=dam/4;
+    dam/=10;
+    tell_object(who, Name(WER,1) + " wehrt eine Attacke fuer Dich ab!\n");
+  }
+
+  else if(random(2))
+  {
+    self_damage=dam;
+    dam/=2;
+    tell_object(who, Name(WER,1) + " schwaecht eine Attacke fuer Dich ab!\n");
+  }
+
+  if(self_damage>0)
+    Defend(self_damage, dam_type, 
+	  ([SP_SHOW_DAMAGE:
+	     ({
+               ({ -1, "Du nimmst keinen Schaden.",
+                      "@WER nimmt keinen Schaden.",
+                      ""}),
+               ({  0, "Du wirst von der Attacke gestriffen.",
+                      "@WER1 wird von der Attacke gestriffen!",
+                      "@WER1 wird von der Attacke gestriffen!"}),
+               ({  5, "Du erleidest einen leichten Treffer!",
+                      "@WER1 wird leicht getroffen!",
+                      "@WER1 wird leicht getroffen!" }),
+               ({ 10, "Du nimmst Schaden!",
+                      "@WER1 nimmt Schaden!",
+                      "@WER1 nimmt Schaden!" }),
+               ({ 15, "Du nimmst grossen Schaden!",
+                      "@WER1 nimmt grossen Schaden!",
+                      "@WER1 nimmt grossen Schaden!"}),
+               ({ 20, "Du erleidest eine gefaehrliche Verletzung!",
+                      "@WER1 erleidet eine gefaehrliche Verletzung!",
+                      "@WER1 erleidet eine gefaehrliche Verletzung!"}),
+               ({ 25, "Ein Teil Deines Koerpers loest sich auf!",
+                      "Ein Teil @WESSEN1 Koerpers loest sich auf!",
+                      "Ein Teil @WESSEN1 Koerpers loest sich auf!"}),
+	       ({ 50, "Du wirst toedlich getroffen!",
+                      "@WER1 wird toedlich getroffen!",
+                      "@WER1 wird toedlich getroffen!" })
+             })
+	   ]), TO);
+}

@@ -1,0 +1,340 @@
+/*
+ * Schaetz
+ *
+ *
+ * Kosten: 
+ * Level : 3
+ * Objekte:
+ * Damage:
+ *
+ */
+
+nosave int general_info(object victim, object caster);
+nosave string res_text(int resist);
+
+int schaetz(object caster, mapping sinfo) 
+{
+  object victim;
+  int *res_res, *res_vul, *values, suc, i;
+  string result, name_vic;
+  mixed *indices;
+  mapping res;
+  string extra_res, extra_vul;
+
+  values=({});
+  indices=({});
+  victim=FindVictim(sinfo[SI_SKILLARG],caster, "Wen oder was "
+              +"willst Du denn einschaetzen?\n");
+  if (!victim)
+    return 0;
+  if(!living(victim)) {
+    printf(BS("Du kannst nur Lebewesen einschaetzen."));
+    return 0;
+  }
+  sinfo=DoSpellModification(HUMUS, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  printf(BS(sprintf("Du musterst %s und laesst elementare Kraefte "
+                   +"durch Dich fliessen...", victim->name(WEN))));
+  tell_room(ENV(caster), sprintf("%s mustert %s.\n", caster->Name(WER), 
+            victim->name(WEN)), ({victim, caster}));
+  tell_object(victim, sprintf("%s mustert Dich.\n", caster->Name(WER)));
+  if ((suc=SpellSuccess(caster,sinfo))<=0) {
+      printf(BS("...aber Du kannst nichts erkennen.\n"));
+      return MISSERFOLG;
+  }
+  if(victim==caster) {
+    printf(BS("Du schaetzt Dich und kommst zu folgendem Schluss:"));
+    printf(BS("Du bist so gut wie Du. Waer ja schlimm wenns "
+           +"anders waere."));
+    return ERFOLG;
+  }
+  printf(BS("Schliesslich kommst Du zu folgendem Schluss:\n"));
+  printf("------------------------------------------------"
+         +"------------------------------\n");
+  /* General Information */
+  general_info(victim, caster);
+  /* End */
+
+  res = ([DT_FIRE: "Feuer",
+          DT_WATER: "Wasser",
+          DT_AIR: "Luft",
+          DT_COLD: "Eis",
+          DT_BLUDGEON: "Erz",
+          DT_MAGIC: "Magie",
+        ]);
+  extra_res = extra_vul = "";
+  name_vic=victim->name();
+  if(victim->QueryProp(P_RESISTANCE_STRENGTHS)) {
+    values=m_values(victim->QueryProp(P_RESISTANCE_STRENGTHS));
+    indices=m_indices(victim->QueryProp(P_RESISTANCE_STRENGTHS));
+  }
+  res_vul=({});
+  res_res=({});
+  for(i=sizeof(values)-1;i>=0;i--) {
+    if((float)values[i]<0.0) 
+    {
+      res_res+=({i});
+      if( member( res, indices[i] ))
+        extra_res += res_text((int)(100*values[i]))+" gegen "+res[indices[i]]+", ";
+    }
+    if((float)values[i]>0.0) 
+    {
+      res_vul+=({i});
+      if( member( res, indices[i] ))
+        extra_vul += res_text((int)(100*values[i]))+" gegen "+res[indices[i]]+", ";
+    }
+  }
+  if(suc>6000){
+    if(sizeof(res_vul)>0)
+      printf(BS(CAP(name_vic)+" hat Verwundbarkeiten"+
+            (strlen(extra_vul)?", unter anderem ist "+victim->QueryPronoun(WER)+ 
+             " "+ extra_vul+"\b\b":"")+ ".\n"));
+    else 
+      printf(BS(CAP(name_vic)+" hat keine Verwundbarkeiten.\n"));
+    if(sizeof(res_res)>0)
+      printf(BS(CAP(name_vic)+" ist gegen ein paar Schaeden resistent oder immun"+
+            (strlen(extra_res)?", unter anderem ist "+victim->QueryPronoun(WER)+
+             " "+extra_res+"\b\b":"")+ ".\n"));
+    else 
+      printf(BS(CAP(name_vic)+" ist gegen nichts resistent "
+            +"oder immun.\n"));
+  }
+  printf("------------------------------------------------"
+        +"------------------------------\n");
+  return ERFOLG;
+}
+
+/* Fuer 'schaetz' spell */
+int general_info(object victim, object caster)
+{
+  int hp, sp, ac, size, i, nomagic_vic;
+int hp_vic, sp_vic, ac_vic, size_vic, spellrate_vic, align;
+  string result, name_vic;
+
+  sp_vic=victim->QueryProp(P_MAX_SP);
+  ac_vic=victim->QueryProp(P_TOTAL_AC);
+  size_vic=victim->QueryProp(P_SIZE);
+  name_vic=victim->name(WER);
+  hp_vic=victim->QueryProp(P_MAX_HP);
+  nomagic_vic=victim->QueryProp(P_NOMAGIC);
+  spellrate_vic=victim->QueryProp(P_SPELLRATE);
+  align=victim->QueryProp(P_ALIGN);
+  if(!size_vic) size_vic=1;
+
+  sp=caster->QueryProp(P_MAX_SP);
+  ac=caster->QueryProp(P_TOTAL_AC);
+  hp=caster->QueryProp(P_MAX_HP);    
+  size=caster->QueryProp(P_SIZE);
+  if(!size) size=1;
+
+  result=CAP(name_vic);
+  switch(100*size_vic/size) 
+  {
+    case 0..20   : result+=" ist sehr viel kleiner als Du.\n";
+                   break;
+    case 21..50  : result+=" ist viel kleiner als Du.\n";
+                   break;
+    case 51..80  : result+=" ist kleiner als Du.\n";
+                   break;
+    case 81..130 : result+=" ist etwa gleich gross wie Du.\n";
+                   break;
+    case 141..180: result+=" ist groesser als Du.\n";
+                   break;
+    case 181..350: result+=" ist viel groesser als Du.\n";
+                   break;
+    case 351..500: result+=" ist SEHR viel groesser als Du.\n";
+                   break;
+    case 501..800: result+=" ueberragt Dich um Haeuser.\n";
+                   break;
+    default      : result+=" ist gross wie ein Berg.\n";
+  }
+  printf(BS(result));
+  result="Absolut gesehen haelt "+name_vic;
+  if(!hp) hp=1;
+  switch(100*hp_vic/hp) {
+    case 0..20   : result+=" im Gegensatz zu Dir gar "
+                           "nichts aus.\n";
+                   break;
+    case 21..50  : result+=" im Gegensatz zu Dir "
+                           "sehr wenig aus.\n";
+                   break;
+    case 51..80  : result+=" etwas weniger als Du aus.\n";
+                   break;
+    case 81..150 : result+=" etwa gleich viel wie Du aus.\n";
+                   break;
+    case 151..200: result+=" im Gegensatz zu Dir viel aus.\n";
+                   break;
+    case 201..400: result+=" im Gegensatz zu Dir sehr viel "
+                           "aus.\n";
+                   break;
+    case 401..600: result+=" im Gegensatz zu Dir enorm viel "
+                           "aus.\n";
+                   break;
+    case 601..800: result+=" extrem viel aus. Du fuehlst Dich wie "
+                          "ein kleines Wuerstchen.\n";
+                   break;     
+    case 801..1000:result+=" im Gegensatz zu Dir unglaublich viel " 
+                           "aus. Sieh Dich bloss vor, sonst "
+                           "stehst Du bald vor Lars!\n";
+                   break;
+    default      : result+=" soviel Schaden aus, dass " +
+                           victim->QueryPronoun(WER) + 
+                           " fuer Dich so gut wie unbesiegbar ist! Du "
+                           "zitterst vor Ehrfurcht.\n";
+  }
+  printf(BS(result));
+  result=CAP(name_vic);
+  if(!sp) sp=1;
+  switch(100*sp_vic/sp) 
+  {
+    case 0..20   : result+=" hat so gut wie keine "
+                           "magischen Kraefte.\n";
+                   break;
+    case 21..50  : result+=" hat weit weniger magische "
+                           "Energie als Du.\n";
+                   break;
+    case 51..80  : result+=" hat etwas weniger magische "
+                          "Energie als Du.\n";
+                   break;
+    case 81..120 : result+=" ist etwa gleich magisch aktiv "
+                          "wie Du.\n";
+                   break;
+    case 121..180: result+=" hat mehr magische Energie "
+                          "als Du.\n";
+                   break;
+    case 181..250: result+=" hat viel mehr magische "
+                          "Energie als Du.\n";
+                   break; 
+    case 251..400: result+=" ist mit sehr viel mehr "
+                          "magischer Energie gesegnet als Du.\n";
+                   break;
+    case 401..600: result+=" ist in Sachen Magie extrem "
+                          "maechtiger als Du.\n";
+                   break;
+    case 601..800: result+=" hat im Gegensatz zu "
+                           "Dir unglaublich hohe und extrem "
+                           "maechtige magische Kraefte.";
+                   break;     
+    case 801..1000:result+=" hat im Gegensatz zu "
+                          "Dir so unglaublich "
+                          "grosse magische Kraefte, dass Du vor "
+                          "Ehrfurcht erzitterst.\n";
+                   break;
+    default      : result+=" hat im Gegensatz zu Dir gottgleiche "
+                          "magische Kraefte! Du erzitterst vor "
+                          "Ehrfurcht!\n";
+  }
+  printf(BS(result));
+  result=CAP(name_vic);
+  switch(nomagic_vic) 
+  {
+    case 0      : result+=" kann keine Zauber abwehren.\n";
+                   break;
+    case 1..15  : result+=" kann nur wenige Zauber abwehren.\n";
+                   break;
+    case 16..30 : result+=" kann ein paar Zauber abwehren.\n";
+                   break;
+    case 31..45 : result+=" kann relativ viele Zauber abwehren.\n";
+                   break;
+    case 46..60 : result+=" wehrt etwa die Haelfte aller Zauber ab.\n";
+                   break;
+    case 61..75 : result+=" wehrt sehr viele Zauber ab.\n";
+                   break;
+    case 76..99 : result+=" wehrt beinahe alle Zauber ab.\n";
+                   break;
+    case 100    : result+=" wehrt alle Zauber ab.\n";
+                   break;
+    default      : result+=" wehrt alle Zauber ab.\n";
+  }
+  printf(BS(result));
+  result=CAP(name_vic);
+  if(interactive(victim)) result+=" kann zaubern.\n";
+  else
+  switch(spellrate_vic) 
+  {
+    case 0      : result+=" kann keine Zauber sprechen.\n";
+                   break;
+    case 1..15  : result+=" kann nur wenige Zauber sprechen.\n";
+                   break;
+    case 16..30 : result+=" kann ein paar Zauber sprechen.\n";
+                   break;
+    case 31..45 : result+=" kann relativ viele Zauber sprechen.\n";
+                   break;
+    case 46..60 : result+=" spricht viele Zauber.\n";
+                   break;
+    case 61..75 : result+=" spricht sehr viele Zauber.\n";
+                   break;
+    case 76..99 : result+=" spricht beinahe immer einen Zauber.\n";
+                   break;
+    case 100    : result+=" spricht immer einen Zauber.\n";
+                   break;
+    default      : result+=" spricht immer einen Zauber.\n";
+  }
+  printf(BS(result));
+  result=CAP(name_vic);
+  switch(ac_vic) 
+  {
+    case 0..40   : result+=" hat so gut wie keinen Schutz.\n";
+                   break; 
+    case 41..80  : result+=" kann Dir nicht viel entgegensetzen.\n";
+                   break;
+    case 81..120 : result+=" hat eine gute Ruestung oder natuerlichen "
+                          "Schutz.\n";
+                   break; 
+    case 121..160: result+=" hat eine maechtige Ruestung oder "
+                          "natuerlichen Schutz.\n";
+                   break;
+    case 161..200: result+=" hat eine extrem maechtige Ruestung oder "
+                          "einen uebernatuerlichen Schutz.\n"; 
+                   break;
+    case 201..250: result+=" scheint vom Element Erz selbst vollkommen "
+                          "geschuetzt zu sein.\n";
+                   break;
+    case 251..350: result+=" ist beinahe wie unverwundbar.\n";  
+                   break;
+    default      : result+=" ist durch normale Waffen nicht mehr zu "
+                          "verletzen und scheint einen extrem "
+                          "machtvollen uebernatuerlichen Schutz zu "
+                          "haben.\n"; 
+  }
+  printf(BS(result));
+  result=CAP(name_vic);
+  if(align<=-1000) result+=" scheint das Boese selbst zu sein!\n";
+  else if (align<-600) result+=" ist von diabolischer Gesinnung.\n";
+  else if (align<-400) result+=" ist extrem boese.\n";
+  else if (align<-200) result+=" ist von boeser Gesinnung.\n";
+  else if (align<-50) result+=" ist zu frech um neutral zu sein.\n";
+  else if (align<50) result+=" steht allem neutral gegenueber.\n";
+  else if (align<200) result+=" scheint ziemlich nett zu sein.\n";
+  else if (align<400) result+=" ist von guter Gesinnung.\n";
+  else if (align<600) result+=" ist von aussergewoehnlich guter "
+                            +"Gesinnung.\n";
+  else if (align<1000) result+=" scheint schon fast heilig zu sein.\n";
+  else result+=(victim->QueryProp(P_GENDER)==FEMALE?" ist eine Heilige!\n":
+      " ist ein Heiliger!\n");
+  printf(BS(result));
+  return 1;
+}
+
+nosave string res_text(int resist)
+{
+  switch(resist)
+  {
+    case -100: return "immun"; 
+    case -99..-75: return "beinahe immun"; 
+    case -74..-50: return "extrem resistent"; 
+    case -49..-25: return "resistent"; 
+    case -24..-1: return "leicht resistent"; 
+    case 0: return "gar nicht";              
+    case 1..25: return "leicht anfaellig"; 
+    case 26..50: return "anfaellig"; 
+    case 51..75: return "sehr anfaellig"; 
+    case 76..100: return "extrem anfaellig";
+    default: return "unglaublich stark anfaellig";
+  }
+}
+

@@ -1,0 +1,1044 @@
+// zech_spells - Das Spellbook der Zechpreller
+// $Date: 2004/06/21 21:16:10 $
+/* $Revision: 1.5 $
+ * $Log: zech_spells.c,v $
+ * Revision 1.5  2004/06/21 21:16:10  Gwenshara
+ * bugfix fuer Alctest, spell dunstmantel neu
+ *
+ * Revision 1.4  2004/02/29 15:10:33  Feyaria
+ * QueryPossPronoun an einigen stellen
+ *
+ * Revision 1.3  2003/11/20 23:14:50  Feyaria
+ * Plural, destillieren in Fass, glueck beim prellen
+ *
+ * Revision 1.2  2002/08/21 09:58:54  Feyaria
+ * Typofix von irgendwem am 21.Okt 2001
+ *
+ * Revision 1.1  2000/08/15 18:51:08  Zordan
+ * Initial revision
+ *
+ */
+ 
+
+
+/*
+// DAS SPELLBOOK DER ZECHPRELLER
+//
+// Angrox@SL, Stahldorn@SL, Feyaria@SL
+// Dezember/Jaenner 97/98
+//
+// 
+// "We have drunken all our alcohol to write this stuff" ;)   
+*/
+
+
+#include <moving.h>
+#include <properties.h>
+#include <language.h>
+#include <attributes.h>
+#include <combat.h>
+#include <wizlevels.h>
+#include <new_skills.h>
+#include <pub.h> // muss bei zechprellern einfach sein :)
+#include "/gilden/zechpreller/zech.h"
+#include "/p/daemon/skillmaster/skillmaster.h"
+
+inherit "/std/spellbook";
+
+mixed globvar;
+
+void create() 
+{
+  ::create();
+  SetProp(P_GLOBAL_SKILLPROPS,
+          ([SI_SPELLFATIGUE:2, 
+            SI_SKILLLEARN:1,
+            SI_SKILLLEARN_ATTRIBUTE:A_CON, 
+            OFFSET(SI_SKILLLEARN):1,
+            SI_SKILLRESTR_USE: ([SR_FUN:"Alctest"])
+          ]));
+
+  AddSpell("prelle",0,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:1]),
+            SI_DIFFICULTY: 100,
+            SI_TIME_MSG: "Wart' erscht mal, schonscht dawischens <Hicks> "
+                         "Dich!!!\n"
+           ]));           
+  AddSpell("identifiziere",12,1); 
+  AddSpell("schaetz",5,2);
+  AddSpell("ruelpser",10,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:2]), 
+             SI_SKILLDAMAGE:50,
+             OFFSET(SI_SKILLDAMAGE):50,           
+	     SI_SKILLDAMAGE_TYPE:({DT_SOUND, DT_POISON}) 
+           ]));
+  AddSpell("uebergeben",27,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:3]), 
+	     SI_SPELLFATIGUE: 10,
+	     SI_PREPARE_TIME: 4,
+             SI_PREPARE_MSG: "Du steckst Dir den Finger ganz tief in den Hals ...\n"
+           ]));
+  AddSpell("destilliere", 30,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:4]),
+             SI_SPELLFATIGUE: 3
+           ]));
+  AddSpell("anhauchen",20,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:4]),
+             SI_SKILLDAMAGE:100,
+             OFFSET(SI_SKILLDAMAGE):50,
+	     SI_SKILLDAMAGE_TYPE:({DT_POISON, DT_AIR}) 
+           ]));
+  AddSpell("rumkugeln",30,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:5]), 
+             SI_SKILLDAMAGE:100,
+             OFFSET(SI_SKILLDAMAGE):50,           
+	     SI_SKILLDAMAGE_TYPE:({DT_SQUEEZE}) 
+           ]));
+  AddSpell("staenkern",50,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:6]), 
+	     SI_SPELLFATIGUE: 4
+           ]));  
+  AddSpell("groehlen", 30, 
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:6]), 
+	     SI_SPELLFATIGUE: 2,
+	     SI_PREPARE_TIME: 2,
+             SI_PREPARE_MSG: "Du faengst an zu groehlen ...\n",
+             SI_SKILLDAMAGE:50,
+             OFFSET(SI_SKILLDAMAGE):50,          
+	     SI_SKILLDAMAGE_TYPE:({DT_TERROR, DT_POISON}), 
+           ]));
+   AddSpell("dunstpanzer", 20,
+ 	   ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:7]),
+ 	     SI_SPELLFATIGUE:6,
+             SI_PREPARE_TIME:3,
+             SI_PREPARE_MSG: "Du spuerst die Kraft des Alkohols in Dir aufsteigen ...\n",
+ 	     ]));
+  AddSpell("alkoholisiere", 25,
+	   ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:7]),
+	     SI_SPELLFATIGUE:4,
+	     SI_PREPARE_TIME:3,
+	     SI_PREPARE_MSG:"Du laesst Dich vom Alkohol durchfluten...\n",
+	     SI_SKILLDAMAGE_TYPE:({DT_POISON}),
+	     SI_SKILLDAMAGE:150,
+	     OFFSET(SI_SKILLDAMAGE):70,
+             SI_DIE_MSG:"stirbt an einer Alkoholvergiftung.\n"
+	     ]));
+
+}
+
+string Alctest(object caster, mapping sinfo)
+{
+  if(caster->QueryProp(P_ALCOHOL)<=10) {
+    write(BS("Dein Schaedel brummt, Deine Haende zittern, trink "
+         +"erst mal ein paar Glaeschen, dann gehts Dir sicher "
+         +"wieder besser.\n"));
+    return "";
+  }
+  if(!present(GILDENOBJ, caster)) {
+    write(BS("Ohne Siebzehnerschluessel kannst Du nicht zaubern.\n"));
+    return "";
+  }
+  return 0;
+}
+
+static int total_fail;
+
+void Misserfolg(object caster, string spell, mapping sinfo)
+{
+  int old_abil;
+  
+  if (!total_fail)
+    write("Der Schauberschpruch ischt <HICKS> mischglueckt.\n");
+  total_fail = 0;  // gleich zuruecksetzen
+  old_abil = sinfo[SI_SKILLABILITY];
+  Learn(caster, spell, sinfo);
+  sinfo=caster->QuerySkill(spell);
+  if (old_abil < (mappingp(sinfo) ? sinfo[SI_SKILLABILITY] : sinfo))
+    write("Jetscht hascht glernt!\n");
+  else
+    write("Nix hascht g'lernt! :(\n");
+    
+}
+
+int prelle(object caster, mapping sinfo) 
+{
+  string drink_id, *help, wirt_name; 
+  mixed drinks;
+  int i, j, drink_number, suc, lucky;
+  object wirt, kneipe;
+  drink_number=-1;
+
+  kneipe=ENV(caster);
+  if(!(drinks=kneipe->query_drink())) {
+     write(BS("Uuupsch. Scho wasch bloedesch. Dasch isch "
+         +"ja gar <Hicks!> keine Kneipe."));
+     return 0;
+  }
+  if(!sinfo[SI_SKILLARG]) {
+     write(BS("Wasch willscht denn prellen? *sabber*"));
+     return 0;
+  }
+  drink_id=sinfo[SI_SKILLARG];
+  for(i=sizeof(drinks)-1;i>=0;i--)
+    if(member(drinks[i][1], lower_case(drink_id))!=-1) 
+      drink_number=i;
+  if(drink_number==-1) {
+    write(BS("Dasch gibtsch ja gar net... Verflikscht noch mal."));
+    say(BS(sprintf("%s sieht verwirrt aus.\n", caster->Name())));
+    return 0;
+  }
+  if(kneipe->query_ban(getuid(caster))) {
+    kneipe->ban_msg(caster);
+    return 0;
+  }
+  if(kneipe->QueryProp(P_PUB_FLAGS) & PUB_NEEDSKEEPER) 
+    if(!wirt=present(kneipe->QueryProp(P_PUBKEEPER_ID), kneipe)) {
+      write(BS(sprintf("Wenn %s nicht da ist, kannst Du auch nicht "
+          +"Prellen. Dass gilt auch fuer "
+          +"Dich!\n", kneipe->QueryProp(P_PUBKEEPER_NAME))));
+      return 0;
+    }
+  lucky=random(150);
+  suc=SpellSuccess(caster, sinfo);
+  if(suc<0 || !lucky) {
+    if(!objectp(wirt)) wirt_name="man";
+    else wirt_name=wirt->Name();
+    if(suc<-50 || !lucky) {
+      if(SKILLMASTER->UseSkill(caster, SK_LUCK) > 0 )
+      {
+        write(BS(sprintf("Nochmal Glueck gehabt, fast haette %s Dich "
+                "erwischt!", wirt_name)));
+      }
+      else
+      {
+        write(BS(sprintf("Upsch! %s hat Dich erwischt und erteilt Dir "
+                +"Lokalverbot.\n", CAP(wirt_name))));
+        tell_room(kneipe, BS(sprintf("%s versucht %s Zeche zu prellen, "
+                +"jedoch erwischt %s %s und erteilt %s Lokalverbot.\n",
+                caster->Name(WER), caster->QueryPossPronoun(FEMALE,WEN,SINGULAR),
+                wirt_name, caster->QueryPronoun(WEN),
+                caster->QueryPronoun(WEM))), ({caster}));
+        kneipe->set_ban(getuid(caster));
+      }
+    }
+    if(suc<-1500 && objectp(wirt)) {
+      if (!wirt->QueryProp(P_NOATTACK)) {
+        if(!random(4) && SKILLMASTER->UseSkill(caster, SK_LUCK) > 0 )
+        {
+          write(BS(sprintf("Nochmal Glueck gehabt, fast haette %s Dich "
+                  "erwischt!", wirt_name)));
+        }
+        else
+        {
+          write(BS(
+                sprintf("%s ist so sauer auf Dich, dass %s Dich attackiert!\n",
+                  wirt->Name(), wirt->QueryPronoun())));
+          tell_room(kneipe, BS(sprintf("%s ist so sauer auf %s, dass %s %s "
+                  +"attackiert.\n", wirt->Name(), caster->Name(WEN), 
+                  wirt->QueryPronoun(), caster->QueryPronoun(WEN))), ({caster}));
+          wirt->Kill(caster);
+        }
+        kneipe->set_ban(getuid(caster), random(3)+1);
+      }
+    }
+    return MISSERFOLG;
+  }
+
+  write(BS("Du bestellst so unauffaellig, dass Du nichts zu zahlen "
+          +"brauchst.\n"));
+  tell_room(kneipe, sprintf("%s bestellt so unauffaellig, dass %s nichts "
+      +"zu zahlen braucht.\n", caster->Name(WER), caster->QueryPronoun(WER)),
+      ({caster}));
+  if(!(caster->drink_drink(drinks[drink_number][5], drinks[drink_number][4])))
+    return ERFOLG;
+  ENV(caster)->drink_it(drinks[drink_number], caster, caster);
+  return ERFOLG;
+}
+
+
+int schaetz(object caster, mapping sinfo) 
+{
+   object victim;
+   int hpdiff, wcdiff, acdiff, alc, alc_vic;
+   int hp, vhp, wc, vwc, ac, vac, gen, val;
+   string result;
+   string vname, vnamegen;
+
+   victim=FindVictim(sinfo[SI_SKILLARG],caster,
+                     "Wasch willscht denn *ruelps* einschaetzen?\n");
+   if (!victim)
+     return 0;
+   if (SpellSuccess(caster,sinfo)<=0)
+      return MISSERFOLG;
+
+   if (!living(victim))
+   {
+     result = sprintf("Du glubscht %s an und kommst zu folgendem Schluss:\n",
+                      victim->name(WEN));
+     if (val = victim->QueryProp(P_VALUE)/100)
+       result += sprintf("%s ha%s einen Wert von %d %s.\n",
+                      capitalize(victim->name(WER,1)),
+                      victim->IsPlural() ?  "ben" : "t",
+                      val, (val==1 ? "Schnaps" : "Schnaepsen"));
+     else
+       result += sprintf("%s %s ist nicht einmal einen Schnaps wert.\n",
+                      capitalize(victim->name(WER,1)),
+                      victim->IsPlural() ?  "sind" : "ist");
+
+     if (victim->IsUnit())
+       val = victim->QueryProp(P_WEIGHT);
+     else
+       val = victim->QueryProp(P_TOTAL_WEIGHT);
+
+     if (val > 100)
+       result += sprintf("%s wieg%s %.1f Liter Bier.\n",
+                      capitalize(victim->QueryPronoun()),
+                      victim->IsPlural()? "en" : "t",
+                      to_float(val)/1000);
+     else
+       result += sprintf("%s wieg%s so gut wie nichts.\n",
+                      capitalize(victim->QueryPronoun()),
+                      victim->IsPlural()? "en" : "t");
+
+     write (result);
+     return ERFOLG;
+   }
+
+   hp = caster->QueryProp(P_HP);    vhp = victim->QueryProp(P_HP);
+   wc = caster->QueryProp(P_TOTAL_WC);  vwc = victim->QueryProp(P_TOTAL_WC);
+   ac = caster->QueryProp(P_TOTAL_AC);  vac = victim->QueryProp(P_TOTAL_AC);
+   hpdiff = hp - vhp;
+   wcdiff = wc - vwc;
+   acdiff = ac - vac;
+   vname = victim->name(WER, 1);
+   vnamegen = victim->name(WESSEN, 1);
+   gen = victim->QueryProp(P_GENDER);
+
+   if (hpdiff > 2*vhp)
+      result = "Du bist " + victim->name(WEM, 1) + " haushoch ueberlegen.\n";
+   else if (hpdiff > vhp)
+      result = "Du bist viel staerker als " + vname + ".\n";
+   else if (hpdiff > vhp/5)
+      result = "Du bist staerker als " + vname + ".\n";
+   else if (-hpdiff > 2*hp)
+      result = capitalize(vname) + " ist Dir haushoch ueberlegen.\n";
+   else if (-hpdiff > hp)
+      result = capitalize(vname) + " ist viel staerker als Du.\n";
+   else if (-hpdiff > hp/5)
+      result = capitalize(vname) + " ist staerker als Du.\n";
+   else
+      result = capitalize(vname) + " ist etwa gleich stark wie Du.\n";
+   write(result);
+
+   if (acdiff > 2*vac)
+      result = "Deine Ruestung ist unglaublich viel besser als die " 
+     + vnamegen + ".\n";
+   else if (acdiff > vac)
+      result = "Deine Ruestung ist viel besser als die " + vnamegen + ".\n"; 
+   else if (acdiff >vac/5)
+      result = "Deine Ruestung ist besser als die " + vnamegen + ".\n";
+   else if (-acdiff > 2*ac)
+      result = "Die Ruestung " + vnamegen 
+     + " ist unglaublich viel besser als Deine.\n";
+   else if (-acdiff > ac)
+      result = "Die Ruestung " + vnamegen + " ist viel besser als Deine.\n";
+   else if (-acdiff > ac/5)
+      result = "Die Ruestung " + vnamegen + " ist besser als Deine.\n";
+   else
+      result = "Eure Ruestungen sind etwa gleich gut.\n";
+   write(result);
+
+   if (wcdiff > 2*vwc)
+      result = "Deine Waffe ist eigentlich zu gut fuer diesen Gegner.\n";
+   else if (wcdiff > vwc)
+      result = "Deine Waffe ist viel besser als die " +vnamegen + ".\n";
+   else if (wcdiff > vwc/5)
+      result = "Deine Waffe ist besser als die " +vnamegen + ".\n";
+   else if (-wcdiff > 2*wc)
+      result = "Die Waffe " + vnamegen 
+     + " laesst Deine ganz mickrig aussehen.\n";
+   else if (-wcdiff > wc)
+      result = "Die Waffe " + vnamegen + " ist viel besser als Deine.\n";
+   else if (-wcdiff > wc/5)
+      result = "Die Waffe " + vnamegen + " ist besser als Deine.\n";
+   else
+      result = "Eure Waffen sind etwa gleich gut.\n";
+
+  result += capitalize(victim->QueryPronoun(WER) || "es");
+  if ((val = victim->QueryProp(P_ALIGN)) <= -1000)
+    result += " ist von satanischer Gesinnung.\n";
+  else if (val <= -200)
+    result += " ist von boeser Gesinnung.\n";
+  else if (val <= -40)
+    result += sprintf(" ist ein%s unfreundliche%s Zeitgenoss%s.\n",
+        (gen == FEMALE ? "e" : ""), (gen == FEMALE ? "" : "r"),
+        (gen == FEMALE ? "in" : "e") );
+  else if (val <= 40)
+    result += " sieht die Welt mit neutralen Augen.\n";
+  else if (val <= 200)
+    result += " ist eigentlich ganz nett.\n";
+  else if (val < 1000)
+    result += " ist von guter Gesinnung.\n";
+  else
+    result += " strahlt eine gewisse Heiligkeit aus.\n";
+
+  result += capitalize(victim->QueryPronoun(WER) || "es");
+  alc_vic=victim->QueryProp(P_ALCOHOL);
+  if(!alc=caster->QueryProp(P_ALCOHOL)) alc=1;
+  switch(100*alc_vic/alc) {
+    case 0..20   : result+=" ist im Gegensatz zu Dir ekelerregend "
+                         +"nuechtern. PFUI!\n";
+                   break;
+    case 21..50  : result+=" hat ein bisschen Alkohol im Blut.\n";
+                   break;
+    case 51..80  : result+=" hat eine beachtliche Menge Alkohol "
+                         +"im Blut.\n";
+                   break;
+    case 81..130 : result+=" ist etwa gleich betrunken wie Du.\n";
+                   break;
+    case 141..180: result+=" hat mehr Alkohol im Blut als Du! "
+                         +"Du musst sofort mehr Alkohol trinken!\n";
+                   break;
+    case 181..350: result+=" ist im Gegensatz zu Dir ein echter "
+                         +"Zechpreller.\n";
+                   break;
+    case 351..500: result+=" hat im Gegensatz zu Dir soviel Alkohol "
+                         +"im Blut, dass man damit schon feiern "
+                         +"koennte.\n";
+                   break;
+    default      : result+=" besteht im Gegensatz zu Dir aus reinem Alkohol! "
+                         +"Trink "+victim->QueryPronoun(WEN)+" doch aus.\n";
+  }
+   write(result);
+   return ERFOLG;
+ 
+}
+
+
+int identifiziere(object caster, mapping sinfo) 
+{
+  object ob;
+  string* fi;
+  // string cn;
+  string result;
+  mapping mat;
+
+  ob=FindVictim(sinfo[SI_SKILLARG], caster,
+                "Wasch moechtescht denn identifitschieren?\n");
+  if (!ob)
+    return 0;
+
+  // cn = caster->name();
+   if (SpellSuccess(caster,sinfo)<=0)
+    return MISSERFOLG;
+  if (result=ob->info(caster) || ob->QueryProp(P_INFO))
+    printf("Du identifizierst %s.\n%s", ob->name(WEN, 1), 
+           result);
+  else
+    printf("Du kannst nichts besonderes an %s erkennen.\n",
+           ob->name(WEM, 1));
+
+  /*
+   *  Materialerkennung
+   */
+  if ( /* caster->QueryProp(P_LEVEL)>=10 && */  // keine Levelbeschr. im SL
+      (mat=ob->QueryProp(P_MATERIAL)) && (pointerp(mat)))
+  {
+    // 'lebende Materie' bei NPCs kommt nicht so dolle, aber livings
+    // sollte man schon identifizieren koennen, wg. enable_commands()
+    // (Mupfel@AL)
+    // Anm. Woody: Im SL haben wir MAT_LIVING (noch) nicht
+    // if (living(ob)) mat -= ({MAT_LIVING});
+
+    if (sizeof(mat))
+      write(break_string(sprintf("%s besteh%s aus %s.",
+          ob->Name(WER,1), (ob->IsPlural() ? "en" : "t"),
+          ob->MatList(WEM) || "unbekanntem Material"), 78));
+  }
+  else if (mappingp(mat) && sizeof(mat-([MAT_MISC_LIVING]) ))
+  {
+    write(break_string(sprintf("%s besteh%s aus %s.",
+        ob->Name(WER,1), (ob->IsPlural() ? "en" : "t"),
+        ob->MaterialList(WEM, caster) || "unbekanntem Material"), 78));
+  }
+  if (mappingp(mat=ob->QueryProp(P_TEMPERATURE_PROTECTION)))
+  {
+    int c,h;
+    string s;
+    s=ob->Name(WER,1);
+    c=mat[T_COLD_PROT];
+    h=mat[T_HEAT_PROT];
+    if (c) {
+      s+=" stell"+(ob->IsPlural() ? "en" : "t")+" bei Kaelte ";
+      if (c < -10) s+="eine enorme Belastung";
+      else if (c < -5) s+="eine ziemliche Belastung";
+      else if (c < -2) s+="eine spuerbare Belastung";
+      else if (c < -1) s+="eine leichte Belastung";
+      else if (c < 0)  s+="eine geringe Belastung";
+      else if (c > 10) s+="einen enormen Schutz";
+      else if (c > 5)  s+="einen sehr guten Schutz";
+      else if (c > 2)  s+="einen guten Schutz";
+      else if (c > 1)  s+="einen ganz brauchbaren Schutz";
+      else s+="einen eher geringen Schutz";
+      s+=" dar"+(h ? " und" : "");
+    }
+    if (h) {
+      if (h < -10) s+=" belaste"+(ob->IsPlural() ? "n" : "t")+
+        " Dich"+(c<-10 ? " auch" : "")+ " bei Hitze enorm stark";
+      else if (h < -5) s+=" bring"+(ob->IsPlural() ? "en" : "t")+
+        " Dich bei Hitze schnell zum Schwitzen";
+      else if (h < -2) s+=" "+(ob->IsPlural() ? "lassen" : "laesst")+
+        "t Dich bei Hitze leicht schwitzen";
+      else if (h < -1) s+=" "+(ob->IsPlural() ? "lassen" : "laesst")+
+        " Dich bei Hitze leichter schwitzen";
+      else if (h < 0)  s+=" "+(ob->IsPlural() ? "sind" : "ist")+
+        " bei Hitze eine leichte Belastung fuer Dich";
+      else if (h > 10) s+=" schuetz"+(ob->IsPlural() ? "en" : "t")+
+        "t Dich unglaublich gut vor Hitze";
+      else if (h > 5)  s+=" biete"+(ob->IsPlural() ? "n" : "t")+
+        "t Dir einen beachtlichen Hitzeschutz";
+      else if (h > 2)  s+=" schuetz"+(ob->IsPlural() ? "en" : "t")+
+        "t Dich recht gut vor Hitze";
+      else if (h > 1)  s+=" schuetz"+(ob->IsPlural() ? "en" : "t")+
+        "t Dich einigermassen vor Hitze";
+      else s+=" schuetz"+(ob->IsPlural() ? "en" : "t")+
+        " Dich ein wenig vor Hitze";
+    }
+    if (c || h) {
+      write(break_string(s+".",78));
+    }
+  }
+
+  return ERFOLG;
+}
+
+
+int ruelpser(object caster, mapping sinfo) 
+{
+  object victim;
+  int suc, alc, max_alc;
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wen magscht denn anruelpschen?\n");
+  if (!victim)
+    return 0;
+  alc=caster->QueryProp(P_ALCOHOL);
+  max_alc=caster->QueryProp(P_MAX_ALCOHOL);  
+  if(suc=SpellSuccess(caster,sinfo)<=0)
+     return MISSERFOLG;
+  if((100*alc/max_alc)<20) {
+    write(sprintf("Du ruelpst %s an.\n", victim->name(WEN)));
+    tell_object(victim, sprintf("%s ruelpst Dich an. So ein "
+                +"Ferkel!\n", caster->Name(WER))); 
+    tell_room(environment(caster), 
+             BS(sprintf("BOEEEEERP! %s ruelpst %s an. Pfui, das stinkt!",
+                        caster->Name(WER), victim->name(WEN))), 
+             ({victim,caster}));
+    return 1;
+  }
+  write(BS(sprintf("Du ruelpst %s mit einem ekelerregendem BOEEEEEEERP "
+                 +"an. Du fuehlst Dich erleichtert.", victim->name(WEN))));
+  tell_object(victim, BS(sprintf("%s ruelpst Dich an. BOEEEEEERP!!! "
+              +"Pfui, das stinkt als haette %s seit Jahren nicht mehr "
+              +"Zaehne geputzt. Dir wird speiuebel.",caster->Name(WER), 
+               caster->QueryPronoun(WER))));
+  tell_room(environment(caster), 
+             BS(sprintf("BOEEEEERP! %s ruelpst %s an. Pfui, das stinkt!",
+                        caster->Name(WER), victim->name(WEN))), 
+             ({victim,caster}));
+  sinfo[SI_SKILLDAMAGE]+=alc*suc/MAX_ABILITY;
+  TryDefaultAttackSpell(victim,caster,sinfo,
+                        ([SP_NAME:"Ruelpser",SP_SHOW_DAMAGE:1]));
+  caster->SetProp(P_ALCOHOL, alc - 3);  //man wird ja etwas nuechterner :))
+  return ERFOLG;
+}
+
+
+int anhauchen(object caster, mapping sinfo) 
+{
+  object victim,fackel;
+  int suc, alc, max_alc, dam;
+  
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wen magscht denn anhauchen?\n");
+  if (!victim)
+    return 0;
+  alc=caster->QueryProp(P_ALCOHOL);
+  max_alc=caster->QueryProp(P_MAX_ALCOHOL);  
+  if(suc=SpellSuccess(caster,sinfo)<=0)
+     return MISSERFOLG;
+
+  if((100*alc/max_alc)<20) {
+    write(sprintf("Du hauchst %s ins Gesicht.\n", victim->name(WEM)));
+    tell_object(victim, BS(sprintf("%s haucht Dir ins Gesicht. "
+                +"%s Fahne huellt Dich ein und bringt Dich beinahe zum "
+                 "Erbrechen!\n", CAP(caster->QueryPossPronoun(WER,FEMALE)),
+                               caster->Name(WER)))); 
+   tell_room(environment(caster), 
+             BS(sprintf("%s haucht %s ins Gesicht. Pfui, das stinkt!\n",
+                        caster->Name(WER), victim->name(WEM))), 
+             ({victim,caster}));
+    return 1;
+  }
+
+  if((fackel=present("fackel", caster)) && 
+      (fackel->_query_lighted()))
+  {
+    write(BS(sprintf("Du nimmst Deine Fackel und hauchst %s eine hochprozentige "
+            +"Flammenlanze entgegen.\n", victim->name(WEM))));
+    tell_object(victim, BS(sprintf("%s nimmt %s Fackel und haucht Dir eine "
+            +"hochprozentige Flammenlanze entgegen.\n",caster->Name(WER), 
+            caster->QueryPossPronoun(WER,FEMALE))));
+    tell_room(environment(caster), 
+        BS(sprintf("%s nimmt eine Fackel und haucht %s eine "
+            +"hochprozentige Flammenlanze entgegen.\n",
+            caster->Name(WER), victim->name(WEM))), 
+        ({victim,caster}));
+    sinfo[SI_SKILLDAMAGE_TYPE] = DT_FIRE;
+    dam=300*alc/max_alc+50+random(50)*suc/MAX_ABILITY;
+  }
+  else
+  {
+    write(BS(sprintf("Wow, das ist Dir gut gelungen! %s wankt, als Du %s "
+            +"mit Deiner Fahne einnebelst!\n", 
+            victim->Name(WEN), victim->QueryPronoun(WEN))));
+    tell_object(victim, BS(sprintf("%s haucht Dir eine schreckliche Fahne ins "
+            +"Gesicht. Du merkst, wie Dir leicht schwummrig wird...\n",
+            caster->Name(WER))));
+    tell_room(environment(caster), 
+        BS(sprintf("%s haucht %s an. Pfui, das stinkt!\n",
+            caster->Name(WER), victim->name(WEN))), 
+        ({victim,caster}));
+    dam=3*alc*suc/MAX_ABILITY;
+  }
+  sinfo[SI_SKILLDAMAGE]+=dam;
+  TryDefaultAttackSpell(victim,caster,sinfo,
+                        ([SP_NAME:"Anhauchen",SP_SHOW_DAMAGE:1]));
+  caster->SetProp(P_ALCOHOL, alc - 3);  //man wird ja etwas nuechterner :))
+  return ERFOLG;
+}
+
+int uebergeben(object caster, mapping sinfo)
+{
+  int i, suc, alc, max_alc, food, drink;
+  object npc, *npcs;
+
+  suc=SpellSuccess(caster,sinfo);
+  caster->SetProp(P_DISABLE_ATTACK,5);
+  alc=caster->QueryProp(P_ALCOHOL);
+  max_alc=caster->QueryProp(P_MAX_ALCOHOL);  
+  if(((food=caster->QueryProp(P_FOOD))<caster->QueryProp(P_MAX_FOOD)/3) &&
+    ((drink=caster->QueryProp(P_DRINK))<caster->QueryProp(P_MAX_DRINK)/3)) 
+  {
+    write(BS("Du kannscht doch gar nicht ..."));
+    return 0;
+  }
+  if (suc<-3000)
+  {
+    total_fail=1;
+    npcs=FindGroup(caster, -1);
+    if(sizeof(npcs=npcs-filter_objects(npcs, "QueryProp", P_NOATTACK)))
+    {
+      npc=npcs[random(sizeof(npcs))];
+      tell_object(caster, BS(sprintf("Hoppala! *ruelps* %s "
+           +"war doch glatt im Weg. Sowas. Jetscht ische%s sauer!\n",
+           npc->Name(WER), npc->QueryProp(P_GENDER)==MALE?"r":"")));
+      tell_room(ENV(caster), BS(sprintf("%s uebergibt sich und "
+            +"trifft versehentlich %s.\n", caster->Name(WER), 
+            npc->name(WEN))), ({caster}));
+      if(!npc->QueryProp(P_NOATTACK))
+        npc->Kill(caster);
+    }
+  }
+  if(suc<=0)
+    return MISSERFOLG;
+  //tell_angrox(sprintf("Org.Food:%d\n", food));
+  food-=food*suc/(2*MAX_ABILITY);
+  drink-=drink*suc/(2*MAX_ABILITY);
+  //tell_angrox(sprintf("Food:%d\n", food));
+  write(BS("Du uebergibschtt Dich auf den Boden und fuehlscht Dich ... "
+      +"schuper!\n"));
+  tell_room(ENV(caster), BS(sprintf("%s uebergibt sich auf den Boden. "
+      +"Pfui, das sieht aus ... *wuerg*\n", caster->Name(WER))), 
+      ({caster}));
+  caster->SetProp(P_FOOD, (int)food);
+  caster->SetProp(P_DRINK, (int)drink);
+  return ERFOLG;
+}
+
+
+int rumkugeln(object caster, mapping sinfo) 
+{
+  object *victims;
+  int suc, alc, max_alc, i;
+
+  victims=FindGroup(caster, -1);
+  if(!sizeof(victims)) 
+   {
+     write("Aber esch ischt doch niemand da! <Hicks!>\n");
+     return 0;
+   }
+  alc=caster->QueryProp(P_ALCOHOL);
+  max_alc=caster->QueryProp(P_MAX_ALCOHOL);  
+  if(suc=SpellSuccess(caster,sinfo)<=0)
+     return MISSERFOLG;
+
+  if((100*alc/max_alc)<45) {
+    write("Du kugelst am Boden herum. Alle schauen Dich entgeistert an.\n");
+    tell_room(environment(caster),BS(
+                sprintf("%s kugelt wie bloed am Boden herum. "
+                +"Ist %s angesoffen???\n", caster->Name(WER),
+                caster->QueryPronoun(WER))), ({caster})); 
+    return 1;
+  }
+  write(BS(sprintf("Du kugelst am Boden herum und rempelst die Umstehenden "
+                 +"an. Du fuehlst Dich wie eine Rumkugel.\n")));
+  tell_room(environment(caster), 
+             BS(sprintf("%s kugelt wie bloed am Boden herum und "
+                        "rempelt dabei alle brutal an, auch Dich!\n",
+                        caster->Name(WER))), ({caster})), 
+
+  sinfo[SI_SKILLDAMAGE]+=2*alc*suc/MAX_ABILITY;
+  for(i=sizeof(victims)-1;i>=0;i--)
+  {
+    TryDefaultAttackSpell(victims[i],caster,sinfo,
+                        ([SP_NAME:"Rumkugeln",SP_SHOW_DAMAGE:1]));
+  }
+
+  return ERFOLG;
+}
+
+int staenkern(object caster, mapping sinfo) 
+{
+  object victim;
+  int suc, alc, max_alc;
+  
+  if(caster->InFight())
+    {
+      write("Nicht, wenn die alle auf Dich draufhaun! <Hicks!>\n");
+      return 0;
+    }
+  victim=FindVictim(sinfo[SI_SKILLARG],caster,
+                         "Wen magscht denn anschtaenkern?\n");
+  if (!victim)
+    return 0;
+  if(interactive(victim) || victim->QueryProp(P_NOATTACK)) {
+    write(BS("Lasch den Luschi doch <HICKS> in Ruh ... desch bringt "
+        +"eh niksch.\n"));
+    return 0;
+  }
+  if(!living(victim)) {
+    write("Dasch lebt net, dasch bringtsch net.\n");
+    return 0;
+  }
+  alc=caster->QueryProp(P_ALCOHOL);
+  max_alc=caster->QueryProp(P_MAX_ALCOHOL);  
+  if(suc=SpellSuccess(caster,sinfo)<=0)
+     return MISSERFOLG;
+
+  if((100*alc/max_alc)<33) {
+    write(sprintf("Du staenkerst %s nuechtern an. \n"
+                  "%s lacht Dich aus.\n", victim->name(WEN), 
+                  CAP(victim->QueryPronoun(WER))));
+    tell_object(victim, BS(sprintf("%s plustert sich vor Dir auf und "
+                +"staenkert sinnlos herum. Am besten nicht beachten.", 
+                caster->Name(WER)))); 
+    tell_room(environment(caster), 
+             BS(sprintf("%s plustert sich vor %s auf und will %s anstaenkern, "
+                        "was aber einen ziemlich laecherlichen Eindruck macht.",
+                        caster->Name(WER), victim->name(WEN), victim->QueryPronoun(WEN))), 
+             ({victim,caster}));
+    return 1;
+  }
+  write(BS(sprintf("Du staenkerst %s wild und brutal an. %s wird dabei "
+                 +"ziemlich eingeschuechtert.", victim->name(WEN),
+                   CAP(victim->QueryPronoun(WER)))));
+
+  tell_object(victim, BS(sprintf("%s plustert sich vor Dir auf, rempelt "
+              +"Dich an und spuckt Dir ins Gesicht. Jetzt ist %s dran!", 
+              caster->Name(WER), caster->QueryPronoun(WER)))); 
+  tell_room(environment(caster), 
+           BS(sprintf("%s plustert sich vor %s auf, rempelt %s an und "
+                      "spuckt %s ins Gesicht.",
+                      caster->Name(WER), victim->name(WEM),
+                      victim->QueryPronoun(WEN), 
+                      victim->QueryPronoun(WEM))), 
+           ({victim,caster}));
+
+  victim->SetProp(P_DISABLE_ATTACK, random(7*suc/MAX_ABILITY)+2);
+  victim->Kill(caster);
+  caster->Kill(victim);
+
+  return ERFOLG;
+}
+
+int destilliere(object caster, mapping sinfo)
+{
+  int suc, alc, max_alc;
+  string str, help, help2;
+  object ob, fass;
+  
+  if(!str=sinfo[SI_SKILLARG]) { 
+    write("Wasch willscht destillililieren?\n");
+    return 0;
+  }
+  if(sscanf(TP->_unparsed_args(), "%s in %s", help, help2)==2 )
+  {
+    if( !(fass=present(help2, caster)) )
+    {
+      write("Aber Du hascht ja gar kein "+CAP(help2)+"!\n");
+      return 0;
+    }
+    if( !fass->id("\nzechpreller_fass"))
+    {
+      write("Da rein kannscht ja gar nix destillieren, Du Saufnase!\n");
+      return 0;
+    }
+    str = help;
+  }
+  if(!ob=present(str,caster)) { 
+    write("Ab dasch hascht gar net!!\n");
+    return 0;
+  }
+  if(living(ob)) {
+    write("Das Dingsch, das "+ob->name(WEN)+", dasch lebt *ruelps* ja!!\n");
+    return 0;
+  } 
+  if(ob->QueryProp(P_CURSED) || ob->QueryProp(P_MAGIC) || 
+     ob->id("QUESTOBJ") )
+  {
+    write( break_string("Eine unbekannte Macht hindert Dich daran, "+
+      ob->name(WEN)+ " zu destillieren.",78));
+    return 0;
+  } 
+  if(ob->IsUnit()) {
+    write("Dasch geht net, dasch sind ja tschu viele!\n");
+    return 0;
+  } 
+  if( ob->QueryProp(P_KEEP_ON_SELL) == getuid(caster) )
+  {
+    write("Aber dasch wolltescht doch behalten!\n");
+    return 0;
+  }
+  if( ob->QueryProp(P_WIELDED) )
+    ob->DoUnwield();
+  if( ob->QueryProp(P_WORN) )
+    ob->DoUnwear();
+  if(ob->QueryProp(P_WIELDED)) {
+    write("Schteck "+ ob->name(WEN,1)+ " <HICKS> doch erscht mal weg!\n");
+    return 0;
+  }
+  if( ob->QueryProp(P_WORN)) {
+    write("Tschieh "+ ob->name(WEN,1)+ " zuerscht aus!\n");
+    return 0;
+  }
+  if( !ob->QueryProp(P_VALUE)) {
+    write(ob->Name(WER)+" verwandelt sich nur in Wasser.\nDu musst Dich "
+        +"uebergeben!\n");
+    say(caster->Name(WER)+" destilliert aus "+ob->name(WEM)+" eine "
+        +"klare Fluessigkeit.\n");
+    ob->remove();
+    return 0;
+  }
+  if (suc=SpellSuccess(caster,sinfo)<=0) {
+    total_fail=1;
+    write("Mischt, Du schaffscht es net, Allohol aus "+ob->name(WEM)+
+        " tschu *ruelps* destililiern.\n");
+    if( ( ob->QueryProp(P_WC)>70 || ob->QueryProp(P_WEIGHT)>500 )
+        && !random(3) )
+    {
+      write("AUUUUU! Und weh hascht Dir auch noch getan! :(\n");
+      caster->AddHp(-random( 1+(10000-suc)/500 ));
+    }
+    return MISSERFOLG;
+  }
+  switch(random(2))
+  {
+    case 0:
+      tell_object(caster,
+        "Du deschtillierst aus "+ ob->name(WEM)+" Allohol und "
+        +(fass?"fuellst ihn in "+fass->name(WEN,1)+".":"trinscht ihn gleich! PROSCHT!")+
+          "\n");
+      tell_room(environment(caster), caster->Name(WER) +
+        " destilliert aus " + ob->name(WEM)+" ein Paar Tropfen einer "
+        +"klaren Fluessigkeit.\n", ({caster}) );
+      break;
+    case 1:
+      tell_object(caster,sprintf(
+        "Du schtarrst %s an und konzentrierst Dich ...\n"
+        +"Du groehlst: MATERIE SCHU ALLOHOL!!!!\n"
+        +"%s verwandelt sich in klaren Allohol, den Du "
+        +(fass?"in "+fass->name(WEN,1)+" einfuellst":"sofort austrinkst")+
+          ".\n", ob->name(WEN), ob->Name(WER)));  
+      tell_room(environment(caster), sprintf(
+        "%s starrt %s an und plaerrt: MATERIE SCHU ALLOHOL!!!!\n",
+        caster->Name(WER), ob->name(WEN))+sprintf(
+        "%s verwandelt sich reinen Alkohol, den %s "+
+        (fass?"in "+fass->name(WEN,0)+" einfuellt":"sofort austrinkt")+".\n",
+         ob->Name(WER), caster->Name(WER)),
+          ({caster}));
+      break;
+  }
+  if( ( ob->QueryProp(P_WC)>100 || ob->QueryProp(P_WEIGHT)>1000 )
+      && !random(3) )
+  {
+    write("Leider verletscht Du Dich dabei selber.\n");
+    caster->AddHp(-random(1+(10000-suc)/1000));
+  }
+  if( fass )
+  {
+    alc=(ob->QueryProp(P_VALUE)/270)+(ob->QueryProp(P_WEIGHT)/550)+
+      suc/1200+(sinfo[SI_SKILLABILITY]/MAX_ABILITY)*3;
+    fass->AddAlcohol(alc);
+  }
+  else
+  {
+    max_alc=caster->QueryProp(P_MAX_ALCOHOL);
+    alc=caster->QueryProp(P_ALCOHOL);
+    alc+=(ob->QueryProp(P_VALUE)/250)+(ob->QueryProp(P_WEIGHT)/500)+
+      suc/1000+(sinfo[SI_SKILLABILITY]/MAX_ABILITY)*5;
+    if(alc>max_alc) alc=max_alc;
+    caster->SetProp(P_ALCOHOL, alc);
+  }
+  ob->remove();
+  return ERFOLG;
+}
+
+int groehlen(object caster, mapping sinfo) 
+{
+  object victim, ob;
+  int suc, alc, max_alc, speed, spellrate1, spellr;
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wen magscht niedergroehlen?\n");
+  if (!victim)
+    return 0;
+  if(interactive(victim)) {
+    write(BS("Lasch den Luschi doch <HICKS> in Ruh ... desch bringt "
+        +"eh niksch.\n"));
+    return 0;
+  }
+  if(!living(victim)) {
+    write("Dasch lebt net, dasch bringtsch net.\n");
+    return 0;
+  }
+  if(present("\ngroehlen", victim)) {
+    write("Den hascht schon angegroeeeehlt!!!\n");
+    return 0;
+  }
+  if(!(spellrate1=victim->QueryProp(P_SPELLRATE))) {
+    write("Dasch nutscht bei dem niksch!\n");
+    return 0;
+  }
+  alc=caster->QueryProp(P_ALCOHOL);
+  max_alc=caster->QueryProp(P_MAX_ALCOHOL);  
+  if((suc=SpellSuccess(caster,sinfo))<=0)
+     return MISSERFOLG;
+
+  if((100*alc/max_alc)<20) {
+    write(sprintf("Du ververschuchst tschu groehlen, <HICKs> "
+                 +"aber Deine Kehle ischt so trocken.\n"));
+    tell_room(environment(caster), 
+          BS(sprintf("%s oeffnet %s Mund und ein paar Sandkoerner "
+          +"wehen heraus. Puh, %s muss eine trockene Kehle haben.",
+          caster->Name(WER), caster->QueryPossPronoun(MALE,WEN,SINGULAR),
+          caster->QueryPronoun(WEN))), 
+          ({caster}));
+    return 1;
+  }
+  write(BS(sprintf("Du holst tiiiiiiiief Atem und groehlscht %s "
+      +"deine beschten Trinklieder mit voller Wucht insch Geschicht.\n", 
+      victim->Name(WER), victim->QueryPronoun(WEM))));
+  tell_room(environment(caster), 
+      BS(sprintf("%s holt tief Luft und groehlt %s die aergsten "
+      +"Trinklieder, die Du je gehoert hast, ins Gesicht.\n Du erroetest.\n",
+      caster->Name(WER), victim->name(WEM))),({victim,caster}));
+  spellr=(int)(spellrate1*0.95*(1-((float)suc/MAX_ABILITY)));
+   speed=5+(int)((random(8)+7)*2*(float)suc/MAX_ABILITY);
+  ob=clone_object(OBJ("groehlen"));
+  ob->move(TP, M_NOCHECK);
+  ob->SetVariables(caster, speed, spellr, spellrate1);
+  TryDefaultAttackSpell(victim,caster,sinfo,
+                        ([SP_NAME:"Groehlen",SP_SHOW_DAMAGE:1]));
+  caster->SetProp(P_ALCOHOL, alc-3);
+  return ERFOLG;
+}
+
+int dunstpanzer(object caster, mapping sinfo) 
+{
+  int alc, suc;
+  object mantel;
+  alc=caster->QueryProp(P_ALCOHOL);
+
+  if(100*alc/caster->QueryProp(P_MAX_ALCOHOL) < 30) // zu wenig alk...
+  {
+    write(sprintf("Die Kraft des Alkohols entgleitet Dir wieder...\n"+
+          "Nach ein paar Bierchen gehts bestimmt wieder besser.\n"));
+    return 1;
+  }
+
+  if((suc=SpellSuccess(caster,sinfo))<=0)
+    return MISSERFOLG;
+
+  write(BS(sprintf("Du ruelpst laut und eine Wolke aus wunderbarem Alkoholdunst "+
+          "huellt Dich ein wie ein Mantel.")));
+  tell_room(environment(caster),
+      BS(sprintf("%s ruelpst laut und eine stinkende Alkoholwolke bildet sich "+
+          "um %s.", caster->Name(WER), caster->QueryPronoun())), ({caster}));
+
+  mantel=clone_object(OBJ("dunstmantel"));
+  mantel->move(caster, M_NOCHECK);
+  mantel->DoWear(1);
+  mantel->SetVars((int) ((sinfo[SI_SKILLABILITY]/10)-((MAX_ABILITY-sinfo[SI_SKILLABILITY])/10)), //dauer
+      (int) ((sinfo[SI_SKILLABILITY]/1000)*4)); //schutz
+
+  caster->SetProp(P_ALCOHOL, (int) (alc-(alc/2)-random(alc/2)));
+  return ERFOLG;
+}
+
+int alkoholisiere(object caster, mapping sinfo)
+{
+  int alc, suc, spent_alc;
+  object alko, victim;
+  victim=FindVictim(sinfo[SI_SKILLARG],caster,
+                         "Wen magscht alloholisieren?\n");
+  if (!victim)
+    return 0;
+  
+  alc=caster->QueryProp(P_ALCOHOL); 
+  if(suc=SpellSuccess(caster,sinfo)<=0)
+     return MISSERFOLG;
+
+  if(100*alc/caster->QueryProp(P_MAX_ALCOHOL) < 40) // zu wenig alk...
+  {
+    write(sprintf("Irgendwie kommt nicht genug Alkohol in Dein Hirn.\n"));
+    return 1;
+  }
+
+  write(sprintf("Als sich genug Allohol in Deinem Hirn angesammelt hat "+
+	  "uebertraegst Du ihn auf %s.\nJetsch fuehlscht Dich gleich nuechterner.\n",
+	  victim->name()));
+  tell_room(environment(caster),sprintf(
+	   "%s Gesicht wird rot vor Konzentration.\n%s wird ganz gruen im Gesicht.\n",
+	   caster->Name(WESSEN), victim->Name(WER)), ({caster, victim}));
+  tell_object(victim,sprintf(
+	     "%s scheint hoch konzentriert und Dir wird ploetzlich furchtbar schlecht.\n",
+	     caster->Name(WER)));
+
+  if(suc+sinfo[SI_SKILLABILITY] > (MAX_ABILITY-sinfo[SI_SKILLABILITY])*2)
+  {
+    alko=clone_object(OBJ("alkoholiker"));
+    alko->SetVar((int) ((sinfo[SI_SKILLABILITY]/1000)+alc/20),
+		 (10+(int)((random(8)+7)*2*(float)suc/MAX_ABILITY)));
+    alko->move(victim, M_NOCHECK);
+    victim->SetProp(P_ALCOHOL, (int) victim->QueryProp(P_ALCOHOL)+alc/2);
+
+    tell_room(environment(victim),sprintf(
+	     "%s scheint ploetzlich betrunkener.\n", victim->Name(WER)));
+  }
+
+  TryDefaultAttackSpell(victim,caster,sinfo,
+                        ([SP_NAME:"Alkoholisieren",SP_SHOW_DAMAGE:1])); 
+
+  caster->SetProp(P_ALCOHOL, alc-(alc/2));
+  return ERFOLG;
+}
+

@@ -1,0 +1,910 @@
+inherit "/std/room";
+
+#include "def.h"
+#undef ROOM
+#include "maze.h"
+#include "level.h"
+#include "vt100.h"
+#include "/p/daemon/crond/crond.h"
+
+#define X(c) c%SIZEX
+#define Y(c) c/SIZEX
+#define WALLSIZE 3
+
+#define ALL 0
+#define WATER 3
+#define AIR 4
+#define ICE 2
+#define FIRE 1 
+
+//#define PATH  "/d/ebene/lamuerte/brunnen/rooms/"
+
+nosave mixed *m;       // maze
+nosave mixed *mconf;   // maze config
+nosave mixed *todo;    // contains the coordinate pairs of all positions
+// that haven´t been processed yet
+nosave int spacesleft; // nr. of free spaces in maze
+nosave int lastX, lastY;
+nosave int show_progress;
+nosave int processing;
+nosave int inverted;
+nosave int downx,downy;
+
+nosave int levels=10;  //Amount of levels
+nosave int currlevel=0;  //Current level
+nosave int msizedirx=29,msizediry=29;  //Maze size
+nosave int fountains=130; //%% Chance that room has fountain
+nosave int fountains_level=7; //+x%% per well-level
+nosave int npcchance=60; //% Chance that room has a NPC 
+nosave int npcchance2=15; //% Chance that room has a second NPC 
+nosave int npcchance3=4; //% Chance that room has a third NPC 
+nosave int mystchance=2; //% Chance that room has a myst (nomagic-NPC)
+
+string TESTFILE=ROOMS "level1/x1y1.lpc";//Test if maze is built up or not
+string DEFPATH= ROOMS; //path where level dirs are
+string NEXTLEVELPATH=""; //path where next level dir is, to build down exit
+string PREVLEVELPATH=""; //path where previous level dir is, to build down exit
+string REPATH=ROOMS; //rebuildroom
+string DESCPATH=ZONE; //standard description
+string PATH="";
+
+mapping npcs;
+string* uniques;
+int dbs;
+
+build_rooms();
+test_maze();
+
+void create()
+{
+  ::create();
+  m = 0;
+  mconf = 0;
+  todo = 0;
+  dbs = 0;
+  SetProp(P_INT_SHORT, "Der Kontrollraum des Brunnens der zehn Schrecken" );
+  SetProp(P_INT_LONG, "Du stehst im Kontrollraum des Brunnens der zehn Schrecken.\n"
+      "Folgende Kommandos stehen hier zur Verfuegung:\n"+
+      "   - display x      (display map 1-"+levels+")\n"
+      "   - build          (create all "+levels+" levels)\n"
+      "   - delmaze        (delete all "+levels+" levels)\n"
+      );
+
+  AddCmd( "display", "view_map" );
+  AddCmd( "build","do_build" );
+  AddCmd( "delmaze","do_del" );
+
+  npcs=([ // Name         min;max;room;unique//level
+      "ascomoid":         1; 3; ALL;   0,  // 20-25
+      "basilisk":         3; 8; ALL;   0,  // 29-38
+      "beholder":         2; 7; ALL;   0,  // 26-35
+      "berbalang":        1; 3; ALL;   0,  // 10-14
+      "djinni_malik":     9;10; AIR;   0,  // 38-40
+      "djinni_wesier":    9;10; AIR;   0,  // 45-48
+      "djinni_kalif":    10;10; AIR;   1,  // 55
+      "dao_sabri":        9;10; ICE;   0,  // 38-40
+      "dao_hetman":       9;10; ICE;   0,  // 45-48
+      "dao_khan":        10;10; ICE;   1,  // 55
+      "doppelganger":     6;10; ALL;   0,  // 37-43
+      "drakanbiest":      7;10; ALL;   0,  // 39-45
+      "dwarfs":           1; 6; ALL;   0,  // 21-30
+      "efreeti_mushir":   9;10; FIRE;  0,  // 38-40
+      "efreeti_amir":     9;10; FIRE;  0,  // 45-48
+      "efreeti_sultan":  10;10; FIRE;  1,  // 55
+      "eisfrosch":        1; 4; ICE;   0,  // 16-25
+      "eraditor":         6;10; ALL;   0,  // 38-40
+      "eraditor_klein":   5; 9; ALL;   0,  // 32-34
+      "erinnerungsnetz":  2; 6; ALL;   0,  // 25-30
+      "feuerfrosch":      1; 4; FIRE;  0,  // 20-25
+      "feuerpilz":        1; 3; FIRE;  0,  // 15-19
+      "fledermaus":       1; 4; ALL;   0,  // 8-11
+      "fungus":           1; 5; ALL;   0,  // 10-14
+      "galebdur":         3; 7; ALL;   0,  // 25-30
+      "gasspore":         1; 4; ALL;   0,  // 14-28
+      "gorgone":          6; 9; ALL;   0,  // 35-37
+      "hirnsauger":       1; 4; ALL;   0,  // 13-19
+      "hoellenhund":      2; 9; ALL;   0,  // 20-40
+      "hoellenkatze":     2; 9; ALL;   0,  // 15-35
+      "horgar":           3; 9; ALL;   0,  // 20-40
+      "kristallschlamm":  1; 3; ALL;   0,  // 13-16
+      "marid_mufti":      9;10; WATER; 0,  // 38-40
+      "marid_atabeg":     9;10; WATER; 0,  // 45-48
+      "marid_padisha":   10;10; WATER; 1,  // 55
+      "medusa":           6; 9; ALL;   0,  // 35-39
+      "medusa_alt":       8;10; ALL;   0,  // 40-44
+      "myst":             1;10; ALL;   0,  // 5 (no-attack,no-magic)
+      "netz":             3; 8; ALL;   0,  // 30-35
+      "neo-otyugh":       8;10; ALL;   0,  // 38-48
+      "otyugh":           7;10; ALL;   0,  // 30-40
+      "phycomid":         1; 5; ALL;   0,  // 20-21
+      "pudding":          1; 4; ALL;   0,  // 13-17
+      "pyrohydra":        6; 9; ALL;   0,  // 30-32
+      "remorhaz":         4;10; ALL;   0,  // 30-39
+      "sandling":         3; 6; ALL;   0,  // 25-29
+      "schattendaemon":   6;10; ALL;   0,  // 35-37
+      "schimmelpilz":     1; 5; ALL;   0,  // 20-24
+      "schwertdaemon":    7;10; ALL;   0,  // 38-40
+      "seelenraeuber":    5;10; ALL;   0,  // 30-40
+      "skelettfledermaus":1; 6; ALL;   0,  // 15-17
+      "sporenpilz":       1; 4; ALL;   0,  // 15-19
+      "sschlange":        1; 5; ALL;   0,  // 17-20
+      "steinfresser":     1; 6; ALL;   0,  // 20-24
+      "sturmdaemon":      7;10; AIR;   0,  // 35-37
+      "taer":             1; 3; ALL;   0,  // 15
+      "tarnbiest":        2;10; ALL;   0,  // 20-40
+      "terrordaemon":     8;10; ALL;   0,  // 40-42
+      "tessalhydra":      7;10; ALL;   0,  // 40-42
+      "tessalgorgon":     7;10; ALL;   0,  // 40-42
+      "tessaltrice":      6;10; ALL;   0,  // 35-37
+      "thassalos":        5; 9; ALL;   0,  // 35-37
+      "thonisdaemon":     9;10; ALL;   0,  // 42-44
+      "todestentakel":    8;10; ALL;   0,  // 35-40
+      "vampirnebel":      1; 4; ALL;   0,  // 15-19
+      "varragoin":        1; 6; ALL;   0,  // 19-22
+      "vielfrass":        1; 3; ALL;   0,  // 15-17
+      "wasserlaeufer":    1; 8; WATER; 0,  // 25-30
+      "wasserpilz":       1; 3; WATER; 0,  // 15-19
+      "winterwolf":       2; 9; ALL;   0,  // 25-35
+      "xorn":             3; 8; ALL;   0,  // 24-30
+      "dasboese":        10;10; ALL;   1,  // 66
+      "sammler":          1; 1; ALL;   1,  // 25 (no-attack)
+      ]);
+      uniques=({});
+      seteuid(getuid(this_object()));
+}
+
+void reset() {
+  ::reset();
+  m = 0;
+  mconf = 0;
+  todo = 0;
+}
+
+nosave string mazechar(int x) 
+{
+  if (inverted) 
+    switch(x) {
+      case WALL: return " ";
+      case ROOM: return "#";
+      default: return "?";
+    }
+  else
+    switch(x) {
+      case WALL: return "#";
+      case ROOM: return " ";
+      default: return "?";
+    }
+}
+
+//function to check if user is allowed to rebuild or not
+int check_user() {
+  if(PO_IS_CRON)
+    return 1;
+  if (!this_player())
+    return 0;
+  if(IS_ARCH(this_player()) || getuid(this_player())=="lamuerte")
+    return 1;
+
+  write("Du fuchtelst an den Hebeln des Kontrollzentrums herum, aber bist zu\n"
+        "ungeschickt, es zu bedienen.\n");
+  say(this_player()->Name()+" fuchtelt ungeschickt an einigen Hebeln herum.\n");
+  return 0;
+}
+
+
+int do_invert(string arg) {
+  inverted = 1 - inverted;
+  write( "Maze will be displayed inverted now!!!\n" );
+  return 1;
+}
+
+int show_maze(string arg) {
+  int x,y;
+  string s;
+  string t;
+
+  if (get_eval_cost()<10000)
+    return 1;
+
+  if (!m || !pointerp(m)) {
+    printf( "No maze created yet!\n" );
+    return 1;
+  }
+
+  s = "";
+  t = "      12345678901234567890123456789";
+  for(y=SIZEY-1;y>=0;y--) {
+    s += "\n     ";
+    t += sprintf( "\n  %2d ", y );
+    for(x=0;x<SIZEX;x++) {
+      s += sprintf( "%s", mazechar(m[y][x]) );
+      t += sprintf( "%s", mazechar(m[y][x]) );
+    }
+    t += sprintf(" %2d", y);
+  }
+  t += "\n      12345678901234567890123456789";
+  arg="write";
+  if (arg!="write") 
+    tell_room( this_object(), 
+        sprintf(VT_CLS+"Current Maze (spacesleft=%d): \n%s\n\n", spacesleft, s) );
+  if (arg=="write") {
+    if (file_size(PATH+"maze.map")>0) rm(PATH+"maze.map");
+    write_file(PATH+"maze.map", s+"\n");
+    if (file_size(PATH+"maze.wizmap")>0) rm(PATH+"maze.wizmap");
+    write_file(PATH+"maze.wizmap", t+"\n"); 
+    //     write("written maze.map\n");
+  }
+  return 1;
+}
+
+
+int del_maze(int x,int y) {
+  int z;
+  string file;
+  object droom,*people;
+
+  if (!m || !pointerp(m)) {
+    printf( "Any maze must be in the array to delete the Files!\n" );
+    return 1;
+  }
+  if (file_size(PATH+"maze.map")>0) rm(PATH+"maze.map");
+  if (file_size(PATH+"maze.wizmap")>0) rm(PATH+"maze.wizmap");
+
+  while((get_eval_cost() > MIN_EVAL) && y<SIZEY) {
+    if (x==0) y++;
+    while((get_eval_cost() > MIN_EVAL) && x<SIZEX) {
+      x++;
+      file=PATH+"x"+to_string(x)+"y"+to_string(y)+".lpc";
+      if(file_size(file)>0) {
+        if(droom=find_object(file)) {
+          people=filter_array(all_inventory(droom), #'interactive );
+          for(z=sizeof(people)-1;z>=0;z--) {
+            if(present(people[z]),droom) {
+              tell_object(people[z],
+                  "Die Waende fangen an sich zu verschieben.\n"
+                  "Du verlierst die Orientierung.\n\n");
+              people[z]->move(REPATH+"rebuildroom.lpc", M_NOCHECK, 
+                  "in den Tod", "faellt", "faellt herein");
+            }
+          }
+          droom->remove();
+        }
+      }
+      rm(file);
+
+    }
+    x=0;
+  }
+
+
+  if(y<SIZEY) {
+    call_out("del_maze",1,x,y-1);
+    return 1;
+  }
+
+  x=0;y=0;z=0;
+  write("File deleted: +"+PATH+"\n");
+  return 1;
+}
+
+
+int do_del(){
+  int x;
+
+  if (!check_user())
+    return 1;
+
+  if(file_size(TESTFILE)==-1)
+  {
+    tell_room(this_object(),"Maze is NOT built, try build.\n");
+    return 1;
+  }
+  tell_room(this_object(),"Saving Corpses\n");
+  call_other(CORPSE "master", "recover_corpses");
+
+  tell_room(this_object(),"Deleting Levels\n");
+  for(x=1;x<=levels;x++){
+    tell_room(this_object(),"Deleting Level: "+x+"\n");
+    call_out("del_all",x*30,x);
+  }
+  return 1;
+
+}
+
+
+int del_all(int l){
+  test_maze();
+  PATH="";
+  PATH=DEFPATH+"level"+to_string(l)+"/";
+  del_maze(0,0);
+  return 1;
+}
+
+
+
+nosave int build_exits(int x,int y) {
+  string *ex;
+  ex=allocate(15);
+  ex=({ });
+  if (!m || !pointerp(m)) {
+    printf( "No maze created yet!\n" );
+    return 1;
+  }
+
+  while((get_eval_cost() > MIN_EVAL) && y<SIZEY-1) {
+    if (x==0) y++;
+    while((get_eval_cost() > MIN_EVAL) && x<SIZEX-1) {
+      x++;
+//  y=SIZEY;
+//  x=SIZEX;
+//  while((get_eval_cost() > MIN_EVAL) && y>0) {
+//    if (x==SIZEX) y--;
+//    while((get_eval_cost() > MIN_EVAL) && x>0) {
+//      x--;
+      if(mazechar(m[y][x])==" ") {
+        if(mazechar(m[y-1][x])==" ") ex+=({"sueden"});  //WOSN
+        if(mazechar(m[y+1][x])==" ") ex+=({"norden"});
+        if(mazechar(m[y][x-1])==" ") ex+=({"westen"});
+        if(mazechar(m[y][x+1])==" ") ex+=({"osten"});
+        build_rooms(x,y,ex);
+        ex=({ });
+      }
+    }
+//    x=SIZEX;
+    x=0;
+  }
+  if(y<SIZEY-1) {
+    call_out("build_exits",1,x,y-1);
+    return 1;
+  }
+
+  x=0;y=0;
+  tell_room(this_object(),"Done files in: "+PATH+"\n");
+  return 1;
+}
+
+
+int do_build(){
+  int x;
+  currlevel=0;
+
+  if (!check_user()) return 1;
+
+  if(file_size(TESTFILE)!=-1)
+  {
+    tell_room(this_object(),"Maze is built already, try delmaze.\n");
+    return 1;
+  }
+
+  uniques=({});
+  tell_room(this_object(),"Generating Levels\n"); 
+  for (x=1;x<=levels;x++){
+    tell_room(this_object(),"Generating Level: "+x+"\n"); 
+    call_out("build_all",x*30,x);
+  }
+  return 1;
+}
+
+nosave int build_all(int l){
+
+  PATH="";
+  NEXTLEVELPATH="";
+  PREVLEVELPATH="";
+  PATH=DEFPATH+"level"+to_string(l)+"/";
+  NEXTLEVELPATH=DEFPATH+"level"+to_string(l+1)+"/";
+  PREVLEVELPATH=DEFPATH+"level"+to_string(l-1)+"/";
+  currlevel=l;
+
+  test_maze();
+
+  //get random down exit
+  downx=0;
+  downy=0;
+  while (mazechar(m[downy][downx])!=" ")
+  {
+
+    downx=random(msizedirx-1)+1;
+    downy=random(msizediry-1)+1;
+    // downx=random(levels)+1;
+    // downy=random(levels)+1;
+  }
+
+  show_maze("write");
+  build_exits(0,0);
+  return 1;
+}
+
+nosave string* get_npcs(int level, int element)
+{
+  int i;
+  string* possible;
+  string* selected;
+  string* names;
+  string npc;
+  names=m_indices(npcs);
+  possible=({});
+  for (i=sizeof(names)-1; i>=0; i--)
+  {
+    if (level >= npcs[names[i],0]  && level <= npcs[names[i],1] && 
+        (npcs[names[i],2] == ALL || npcs[names[i],2] == element) &&
+        member(uniques,names[i] ) == -1 )
+    {
+      possible += ({names[i]});
+    }
+  }
+  selected=({});
+  for(i=1+random(4); i>=0; i--)
+  { 
+    if( !sizeof(possible) ) break;
+    npc = possible[random(sizeof(possible))];
+    possible -= ({npc});
+    if( npcs[npc,3]==1 )
+    {
+      if( !random(7))
+      {
+        uniques += ({npc});
+        return ({npc});
+      }
+    } 
+    else
+      selected += ({npc});
+  }
+  return selected;
+}
+
+nosave int build_rooms(int posx, int posy, string *exits) {
+  string data;
+  string file;
+  string* npcs;
+  int x,i;
+  data="";
+
+  //Read room descs from files depends on amount of exits
+  if (sizeof(exits)==1){
+    data+=read_file(DESCPATH+"room.desc");
+    data+="   SetProp(P_INT_LONG,\""+desc1()+"\");\n";
+  }
+  else if (sizeof(exits)==2){
+    data+=read_file(DESCPATH+"room.desc");
+    data+="   SetProp(P_INT_LONG,\""+desc2()+"\");\n";
+  }
+  else if (sizeof(exits)==3){
+    data+=read_file(DESCPATH+"room.desc");
+    data+="   SetProp(P_INT_LONG,\""+desc3()+"\");\n";
+  }
+  else if (sizeof(exits)==4){
+    data+=read_file(DESCPATH+"room.desc");
+    data+="   SetProp(P_INT_LONG,\""+desc4()+"\");\n";
+  }
+
+  /*Roomkind:
+    1..Fire   -> FEUER
+    2..Cold   -> EIS
+    3..Water  -> WASSER
+    4..Normal -> HUMUS
+    Add Details to rooms...
+    */
+
+  if (roomkind==1) { 
+    data+="   SetProp(P_ENVIRONMENT,([ENV_TEMPERATURE: 25+random(20), ENV_TERRAIN:TT_CAVE]) );\n";
+    data+="   SetProp(P_ELEMENTAL_ROOM,\"feuer\");\n"; 
+  }
+  else if (roomkind==2) { 
+    data+="   SetProp(P_ENVIRONMENT,([ENV_TEMPERATURE: -25+random(20), ENV_TERRAIN:TT_CAVE]) );\n";
+    data+="   SetProp(P_ELEMENTAL_ROOM,\"eis\");\n"; 
+  }
+  else if (roomkind==3) { 
+    data+="   SetProp(P_ENVIRONMENT,([ENV_TEMPERATURE: 15+random(10), ENV_TERRAIN:TT_CAVE]) );\n";
+    data+="   SetProp(P_ELEMENTAL_ROOM,\"wasser\");\n"; 
+  }
+  else if (roomkind==4) { 
+    data+="   SetProp(P_ENVIRONMENT,([ENV_TEMPERATURE: 10+random(10), ENV_TERRAIN:TT_CAVE]) );\n";
+    data+="   SetProp(P_ELEMENTAL_ROOM,\"humus\");\n"; 
+  }
+
+
+  //Zwecks "wo" command
+  data+="   SetProp(P_ZONE, \"Level "+to_string(currlevel)+"\");\n";
+
+  if (roomkind==1) data+=read_file(DESCPATH+"detail1.desc");
+  else if (roomkind==2) data+=read_file(DESCPATH+"detail2.desc");
+  else if (roomkind==3) data+=read_file(DESCPATH+"detail3.desc");
+  else if (roomkind==4) data+=read_file(DESCPATH+"detail4.desc");
+
+  if (random(100)<npcchance )
+  {
+    if( sizeof(npcs=get_npcs(currlevel, roomkind)) )
+    {
+      data+="  AddItem( ({";
+      for( i=sizeof(npcs)-1; i>=0; i--)
+        data+="\""+NPC+npcs[i]+"\", ";
+      data+="}), REFRESH_"+(sizeof(npcs)==1?"NONE":"DESTRUCT")+");\n";
+    }
+  }
+  if (random(100)<npcchance2 )
+  {
+    if( sizeof(npcs=get_npcs(currlevel, roomkind)) )
+    {
+      data+="  AddItem( ({";
+      for( i=sizeof(npcs)-1; i>=0; i--)
+        data+="\""+NPC+npcs[i]+"\", ";
+      data+="}), REFRESH_"+(sizeof(npcs)==1?"NONE":"DESTRUCT")+");\n";
+    }
+  }
+  if (random(100)<npcchance3 )
+  {
+    if( sizeof(npcs=get_npcs(currlevel, roomkind)) )
+    {
+      data+="  AddItem( ({";
+      for( i=sizeof(npcs)-1; i>=0; i--)
+        data+="\""+NPC+npcs[i]+"\", ";
+      data+="}), REFRESH_"+(sizeof(npcs)==1?"NONE":"DESTRUCT")+");\n";
+    }
+  }
+  if (random(100)<mystchance )
+  {
+    data+="  AddItem( \""+NPC+"myst\", REFRESH_DESTRUCT);\n";
+  }
+
+
+  for(x=0;x<=sizeof(exits)-1;x++) {
+    //Add connection exits
+    if(exits[x]=="sueden") 
+      data+= "   AddExit(\"sueden\",\""+PATH+"x"+to_string(posx)+"y"+to_string(posy-1)+"\");\n"; 
+    else if(exits[x]=="norden") 
+      data+= "   AddExit(\"norden\",\""+PATH+"x"+to_string(posx)+"y"+to_string(posy+1)+"\");\n"; 
+    else if(exits[x]=="westen") 
+      data+= "   AddExit(\"westen\",\""+PATH+"x"+to_string(posx-1)+"y"+to_string(posy)+"\");\n"; 
+    else if(exits[x]=="osten") 
+      data+= "   AddExit(\"osten\",\""+PATH+"x"+to_string(posx+1)+"y"+to_string(posy)+"\");\n"; 
+  }
+
+  //Fontaenen einfuegen
+  if(random(1000)<fountains+currlevel*fountains_level) {
+    data+= "AddItem(\""+POTIONS+"fontaene\", REFRESH_REMOVE);\n";
+  }
+
+
+  //Zufaelliger Ausgang nach unten und oben...
+  if(currlevel<levels)
+  {
+    if(posx==downx && posy==downy)
+    {
+      data+= "   AddExit(\"wurmloch\",([ EX_DEST : \""+NEXTLEVELPATH+"x1y1"+"\", EX_MSG : \"in eine tiefere Dimension.\", EX_PLMSG : \"Du faellst durch ein Wurmloch in eine tiefere Dimension dieses Gebietes.\\nDu bist ein wenig orientierungslos.\\n\" ]) );\n"; 
+      write("Down/Up exit Level"+currlevel+" OK!!\n");
+    }
+  }
+
+  if(currlevel>=2)
+  {
+    if(posx==downx && posy==downy)
+    {
+      data+= "   AddExit(\"dimensionssprung\",([ EX_DEST : \""+PREVLEVELPATH+"x1y1"+"\", EX_MSG : \"in eine hoehere Dimension.\", EX_PLMSG : \"Du wirst durch einen Dimensionssprung in eine hoehere Dimension dieses Gebietes gewirbelt.\\nDu fuehlst Dich orientierungslos.\\n\" ]) );\n"; 
+    }
+  }
+
+  if(currlevel==1){
+    if(posx==1 && posy==1){
+      data+="AddSpecialExit(\"kraftfeld\", \"rausfkt\");\n\}\n\n";
+      data+="rausfkt()\n\{\n";
+      data+="  if (interactive(this_player()))\n";
+      data+="  {\n";
+      data+="    this_player()->move(\"/d/ebene/lamuerte/burg/shop/loewenherz\",M_TPORT,\"aus dem Brunnen\",\"teleportiert\",\"teleportiert herein\");\n";
+      data+="    if (find_living(\"wellentrancenpc\"))\n";
+      data+="      find_living(\"wellentrancenpc\")->brunnen_out_msg();\n";
+      data+="  }\n";
+      data+="  return 1;\n";
+      write("Down/Up exit Level"+currlevel+" OK!!\n");
+    }
+  }
+
+
+
+  data += "}\n";
+
+
+  file=PATH+"x"+to_string(posx)+"y"+to_string(posy)+".lpc"; 
+  if (file_size(file)>0) return 1;
+
+  write_file( file, data );
+  return 1;
+
+} 
+
+del_file(string file)
+{
+  if(file_size(file)==-1) rm("file");
+  return 1;
+}
+
+
+/* allocate the maze, check the sizes, add the borderwall and create the
+   todo-list */
+nosave int init_maze(int szY, int szX) {
+  int line,x;
+
+  if (szX<9)
+    return ERR_XSIZE;
+  if (szY<9)
+    return ERR_YSIZE;
+
+  /* sizes must be odd, and we need 2 spaces for the borders */ 
+  if ( !(szX % 2) )
+    szX+=3;
+  else
+    szX+=2;
+
+  if ( !(szY % 2) )
+    szY+=3;
+  else
+    szY+=2;
+
+  /* write fixed sizes back to config structure */
+  SIZEY = szY; 
+  SIZEX = szX; 
+
+  /* allocate array and set maze border as wall */
+  m = 0;
+  todo = ({ });
+  m = allocate(szY);
+  for(line=0;line<szY;line++) {
+    m[line] = allocate(szX);
+    m[line][0] = WALL;
+    m[line][szX-1] = WALL;
+  }
+
+  for(x=0;x<szX;x++) {
+    m[0][x] = WALL;
+    m[szY-1][x] = WALL;
+  }
+
+  // fill the todo list
+#if 0
+  for(line=0;line<szY;line+=2) {
+    for(x=0;x<szX;x+=2) {
+      todo += ({ line*szX+x });
+    }
+  }
+#else
+  for(line=0;line<szY;line+=2)
+    todo += ({ line*szX, (line+1)*szX-1 });
+  for(x=0;x<szX;x+=2)
+    todo += ({ x, (szY-1)*szX+x });
+#endif
+
+  /* remove corners */
+  todo -= ({ 0, szX-1, (szY-1)*szX, szY*szX-1 });
+
+  spacesleft = (szY-3)*(szX-3)/4;
+
+
+  return SUCCESS;
+}
+
+nosave int *getfree( int x, int y ) {
+  int i, szY, szX;
+  int *rtc;
+
+  szY = SIZEY;
+  szX = SIZEX;
+
+  if (x<0 || y<0 || x>=szX || y>=szY)
+    return 0;
+
+  rtc = ({ });
+  for(i=0;i<=WEST;i++) {
+    switch(i) {
+      case NORTH:
+        if (y>3 && !m[y-1][x] && !m[y-2][x])
+          rtc += ({ i });
+        break;
+      case SOUTH:
+        if (y<szY-5 && !m[y+1][x] && !m[y+2][x])
+          rtc += ({ i });
+        break;
+      case EAST:
+        if (x<szX-5 && !m[y][x+1] && !m[y][x+2])
+          rtc += ({ i });
+        break;
+      case WEST:
+        if (x>3 && !m[y][x-1] && !m[y][x-2])
+          rtc += ({ i });
+        break;
+    }
+  }
+
+  if (sizeof(rtc))
+    return rtc;
+  else
+    return 0;
+}
+
+nosave int acquire_new_work_space() {
+  int sz;
+  int new;
+  sz = sizeof(todo);
+  new = todo[random(sz)];
+  lastX = new % SIZEX;
+  lastY = new / SIZEX;
+}
+
+nosave void build_wall(int x, int y, int dir) {
+  switch(dir) {
+    case NORTH:
+      m[y-1][x] = WALL;
+      m[y-2][x] = WALL;
+      lastX = x;
+      lastY = y-2;
+      break;
+    case SOUTH:
+      m[y+1][x] = WALL;
+      m[y+2][x] = WALL;
+      lastX = x;
+      lastY = y+2;
+      break;
+    case EAST:
+      m[y][x+1] = WALL;
+      m[y][x+2] = WALL;
+      lastX = x+2;
+      lastY = y;
+      break;
+    case WEST:
+      m[y][x-1] = WALL;
+      m[y][x-2] = WALL;
+      lastX = x-2;
+      lastY = y;
+      break;
+  }
+  if (getfree(lastX,lastY))
+    todo += ({ lastY*SIZEX+lastX });
+  else
+    todo -= ({ lastY*SIZEX+lastX });
+
+  spacesleft--;
+}
+
+nosave int maze_creation() {
+  int next, sz, x, y;
+  int *fr;
+  while (get_eval_cost() > MIN_EVAL &&
+      spacesleft > 0 &&
+      (sz=sizeof(todo)) > 0) {
+    /*
+       next = todo[random(sz)];
+    // todo -= ({next});
+    x = next % SIZEX;
+    y = next / SIZEY;
+    */
+    fr = getfree(lastX,lastY);
+    if (show_progress)
+      show_maze("");
+    if (sizeof(fr)) {
+      next = fr[random(sizeof(fr))];
+      x = lastX % SIZEX;
+      y = lastY / SIZEX;
+      build_wall(lastX,lastY,next);
+    } else {
+      todo -= ({ lastY*SIZEX+lastX }); 
+      acquire_new_work_space();
+    }
+  }
+
+  if (get_eval_cost()<=MIN_EVAL && spacesleft>0 && sizeof(todo)) {
+    call_out("maze_creation",2);
+  } else { // really finished
+    if (show_progress)
+      show_maze("");
+    show_progress = 0;
+    processing = 0;
+    //      tell_room(this_object(), "FINISHED!!!\n" );
+  }
+
+  if (spacesleft>0)
+    return ERR_EVAL;
+  else {
+    return SUCCESS;
+  }
+}
+
+/* the main function needed to create a maze 
+   return codes: see header file
+   */
+nosave int build_random_maze(mixed *mazeconfig) {
+  int rtc;
+
+  if (processing)
+    return ERR_PROC;
+
+  if (!mazeconfig || !pointerp(mazeconfig) || sizeof(mazeconfig)<MIN_NR_OF_PARAMS)
+    return ERR_PARAM;
+
+  mconf = mazeconfig;
+  mazeconfig = 0;
+
+  if ((rtc=init_maze(SIZEY,SIZEX))!=SUCCESS)
+    return rtc; 
+
+  acquire_new_work_space();
+  lastX = -1;
+  lastY = -1;
+  processing = 1;
+  if ((rtc=maze_creation())!=SUCCESS)
+    return rtc;
+
+  return SUCCESS;
+}
+
+/* this functions sends the msg to either a player or to a logfile */
+void output(mixed *mc, string msg) {
+  printf( msg +"\n" );
+}
+
+/* this function is a wrapper for the real fun, to make it easier to
+   print appropriate error/status msgs
+
+   mazeconfig structure:
+   { string name, int szY, int szX, mixed *connects }
+   */
+nomask nosave varargs int create_maze(mixed *mazeconfig, int silent) {
+  int rtc;
+
+  rtc = build_random_maze(mazeconfig);
+  if (!silent) {
+    switch(rtc) {
+      case     SUCCESS: break;
+      case   ERR_PARAM: output( mazeconfig, sprintf("paramerror") ); break;
+      case   ERR_XSIZE: output( mazeconfig, sprintf("xsizeerror") ); break;
+      case   ERR_YSIZE: output( mazeconfig, sprintf("ysizeerror") ); break;
+      case   ERR_EVAL:  output( mazeconfig, sprintf("evalcosterror") ); break;
+      default: output( mazeconfig, sprintf("Unknown return code %d!\n", rtc) ); 
+    }
+  }
+
+  return rtc;
+}
+
+int test_maze(string arg) {
+  string *expl;
+  int x,y;
+  x = msizedirx;
+  y = msizediry;
+  //   write( "Creating a random maze with "+x+"X"+y+" fields.\n" );
+  if (arg) {
+    expl = explode(arg, " " );
+    if (sizeof(expl)>0)
+      if (to_int(expl[0])==1)
+        show_progress = 1;
+      else
+        show_progress = 0;
+    if (sizeof(expl)==3) {
+      x = to_int(expl[1]);
+      y = to_int(expl[2]);
+    }
+  }
+  create_maze( ({"test_maze",y,x,0}), 0 );
+  return 1;
+}
+
+int view_map(string str){
+  string show;
+  int i;
+  if (!str) return 1;
+  if(sscanf(str,"%d",i)==1 && i<1 || i>10) {
+    write("Range: 1-10\n");
+    return 1;
+  }
+
+  if (file_size(ROOMS "level"+to_string(i)+"/maze.map")<=0){
+    write("No map found, maybe zone is not built yet.\n");
+    return 1;
+  }
+
+  show=read_file(ROOMS "level"+to_string(i)+"/maze.map");
+  tell_object(this_player(),show);
+  return 1;
+}
+
+/* DEVELOPMENT FUNS */
+mixed *dumpmaze() { return m;}
+mixed *dumpconf() { return mconf;}
+mixed *dumptodo() { return todo;}

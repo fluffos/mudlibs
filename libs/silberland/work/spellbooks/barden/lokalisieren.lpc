@@ -1,0 +1,109 @@
+private int mayScry(object caster, object victim) {
+  object room;
+  string *ign;
+
+  if(victim==caster) {
+    tell_object(caster, BS("Dich selbst zu suchen macht wohl wenig Sinn, oder? Du bist hier!"));
+    return 0;
+  }
+
+  if(present(victim,ENV(caster))) {
+    tell_object(caster, BS(sprintf("%s steht doch direkt neben Dir!", victim->name(WER))));
+    return 0;
+  }
+
+  if(IS_WIZARD(victim) || victim->QueryProp(P_TESTPLAYER)) {
+    tell_object(caster, BS("Dein Lied wird von einer magischen Barriere reflektiert, die Magier und Testspieler schuetzt."));
+    return 0;
+  }
+
+  if( !room = ENV(victim) ) {
+    tell_object(caster, BS(victim->Name(WER) + " schwebt im Nichts herum! BUG! Magier benachrichtigen!"));
+    return 0;
+  }
+
+  if(file_name(room)[0..8] == "/players/" || sizeof(filter_array(all_inventory(room), "is_wizard"))) {
+    tell_object(caster, BS("Eine magische Macht blockiert Deinen Zauber!"));
+    return 0;
+  }
+
+  if (file_name(room)[0..11] == "/room/death/") {
+    tell_object(caster, BS("Der Blick ins Reich der Toten bleibt Dir verwehrt!"));
+    return 0;
+  }
+
+  if (interactive(victim) && pointerp(ign = victim->QueryProp(P_IGNORE))) {
+    if (member(ign, "beobachte") != -1 || member(ign, getuid(caster)) != -1 || member(ign, getuid(caster)+".beobachte") != -1) {
+      tell_object(caster, BS(victim->Name(WER)+" moechte nicht beobachtet werden."));
+      return 0;
+    }
+  }
+
+  return 1;
+}
+
+public int lokalisieren(object caster, mapping sinfo) {
+  int success;
+  object ob, victim;
+  float factor;
+
+  if(caster->InFight()) {
+    tell_object(caster, BS("Im Kampf fehlt dir die Zeit dafuer!"));
+    return 0;
+  }
+
+  if(!sinfo[SI_SKILLARG]) {
+    tell_object(caster, BS("Wen oder was moechtest du mit diesem Lied aufspuehren?\n"));
+    return 0;
+  }
+  
+  sinfo = prepare_song(caster, sinfo);
+  if(sinfo == 0) {
+      return 0;
+  }
+
+  if((!(victim=find_player(sinfo[SI_SKILLARG])) && !(victim=find_living(sinfo[SI_SKILLARG]))) || (victim && victim->QueryProp(P_INVIS))) {
+    tell_object(caster, BS("Dein Lied verhallt im nichts. Es scheint als wuerde dein Ziel nicht existieren."));
+    return 0;
+ }
+
+  if(!mayScry(caster, victim)) {
+    return 0;
+  }
+
+  tell_object(caster, BS("Du stimmst laute Musik an und entsendest deine Stimme an einen fernen Ort..."));
+  tell_room(environment(caster), BS(sprintf("%s beginnt laute Musik zu spielen und zu singen.", caster->Name(WER, 1))));
+
+  if(!paySpellCost(caster, sinfo)) return 0;
+
+  success = SpellSuccess(caster, sinfo);
+  if(success <= 0) {
+    tell_object(caster, BS("Es gelingt dir nicht deine Stimme an einen anderen Ort zu senden!"));
+    tell_room(environment(caster), BS(sprintf("%s macht fuerchterlichen Krach und schreit laut.", caster->Name(WER, 1))), ({caster}));
+    if(success <= -1500) {
+      tell_object(caster, BS("Das Echo deiner Musik erzeugt eine mentale Rueckkopplung. "
+                             "Du siehst alles verschwimmen und verzerrt! Ein lautes brummen erfuellt deine Ohren!"));
+      tell_room(environment(caster), BS(sprintf("%s taumelt verwirrt umher und haelt sich den Kopf.", caster->Name(WER, 1))), ({caster}));
+
+      caster->SetProp(P_PARALYZED, ([PARALYZE_TIME: (success/1000) * -1,
+                                     PARALYZE_MSG: "Du taumelst verwirrt herum.\n",
+                                     PARALYZE_MSG_OTHER: "%s taumelt verwirrt herum.\n",
+                                     PARALYZE_END: "Deine Sinne normalisieren wish wieder.\n",
+                                     PARALYZE_END_OTHER: "%s erholt sich wieder.\n"]));
+      caster->SetProp(P_BLIND, (success/1000) * -1);
+      caster->SetProp(P_DEAF, (success/1000) * -1);
+    }
+    return MISSERFOLG;
+  }
+
+  factor = 1.0 + ((float) CheckEquip(caster, lower_case(sinfo[SI_CAP_NAME]))/100.0);
+
+  ob = clone_object(OBJ("scry"));
+  if(ob->move(caster) != 1) {
+    tell_object(caster, BS("Das Lied kann sich nicht manifestieren. Vielleicht "
+                "stoeren Deine vielen Gegenstaende?"));
+  }  
+  ob->Setup(sinfo[SI_CAP_NAME], caster, sinfo[SI_SKILLABILITY], success, factor, victim);
+
+  return ERFOLG;
+}

@@ -1,0 +1,385 @@
+#include "../files.h"
+#include "../sys/vt100.h"
+#include "../sys/sea.h"
+#include <moving.h>
+
+#define ABS(x) (x>=0?x:-x)
+#define NOVAL  "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+#define INDENT "                                                        "
+
+int width, height;
+mixed *cities;
+string *map;
+
+nosave mapping ply;
+
+nosave mixed *rooms;
+nosave int radi;
+
+create()
+{
+  int i;
+  object *w;
+  if (is_clone(this_object())) {
+    destruct(TO);
+    return;
+  }
+  
+  restore_object(OV_MAP);
+  ply=([ ]);
+  rooms=({ });
+  for (i=0; i<height; i++) {
+    w=allocate(width);
+    rooms+=({ w });
+  }
+  radi=random(RAD_RND)+RAD_OFF;
+  call_out("weather", random(WTH_CHG_RND)+WTH_CHG_OFF);
+  DEBUG("smstr", sprintf("%d, %d\n", width, height));
+}
+
+weather()
+{
+  int newr, i, abx, aby, ox, oy, abtr;
+  mixed plp;
+
+  while (!remove_call_out("weather")) ;
+  newr=random(RAD_RND)+RAD_OFF;
+  if (newr>radi) {
+    plp=m_indices(ply);
+    for (i=sizeof(plp)-1; i>=0; i--)
+      tell_object(plp[i], "Das Wetter hat sich verbessert, Du siehst wieder weiter.\n");
+  } 
+  if (newr<radi) {
+    plp=m_indices(ply);
+    for (i=sizeof(plp)-1; i>=0; i--) {
+      if (newr==RAD_OFF) {
+        abtr=0;
+        abx=random(DIFF_RND)+DIFF_OFF;
+	aby=random(DIFF_RND)+DIFF_OFF;
+	ox=ply[plp[i]][0];
+	oy=ply[plp[i]][1];
+	if (query_xy(ox+abx, oy+aby)==OV_WATER) {
+	  ox+=abx; oy+=aby; abtr=1;
+	}
+	else
+	  if (query_xy(ox+abx, oy)==OV_WATER) {
+	    ox+=abx; abtr=1;
+	  }
+	  else
+	    if (query_xy(ox, oy+aby)==OV_WATER) {
+	      oy+=aby; abtr=1;
+	    }
+	if (abtr) {
+	  tell_object(plp[i], "Der hohe Seegang hat Dich um ein gutes Stueck abgetrieben.\n");
+	  remove_player(plp[i]);
+	  init_new_player(plp[i], ox, oy);
+	}
+      }
+      tell_object(plp[i], "Das Wetter hat sich verschlechtert, Du siehst nicht mehr so weit.\n");
+    }
+  }
+  radi=newr;
+  call_out("weather", random(WTH_CHG_RND)+WTH_CHG_OFF);
+}
+
+string query_xy(int mx, int my)
+{
+  if (mx>=0 && mx<=height-1 && my>=0 && my<=height-1)
+    return map[my][mx..mx];
+  return NOVAL[0..0];
+}
+
+string query_city(int mx, int my)
+{
+  int i;
+
+  for (i=sizeof(cities)-1; i>=0; i--)
+    if (cities[i][0]==mx && cities[i][1]==my)
+      return cities[i][2];
+  return "";
+}
+
+string query_x(int my, int l, int r)
+{
+  int d, i, cont;
+  string n, o, out;
+  mixed *plpos;
+  int *liv;
+
+  if (l>r) {
+    d=l; l=r; r=d;
+  }
+  if (my<0 || my>height-1)
+    return VT_WHITE+VT_B_RED+NOVAL[0..(r-l+1)];
+  o="";
+  out="";
+  plpos=m_values(ply);
+  liv=({ });
+  for (i=sizeof(plpos)-1; i>=0; i--)
+    if (my==plpos[i][1] && member(liv, plpos[i][0])==-1)
+      liv+=({ plpos[i][0] });
+  for (d=l; d<=r; d++) {
+    cont=0;
+    for (i=sizeof(liv)-1; i>=0; i--)
+      if (d==liv[i]) {
+        out+=OV_PLY_COL+OV_PLY;
+        o="(";
+        cont=1;
+      }
+    if (!cont) {
+      n=map[my][d..d];
+	  if (n!=o)
+	    switch (n) {
+  	      case OV_WATER:    out+=OV_WATER_COL; break;
+	   	  case OV_MOUNTAIN: out+=OV_MOUNTAIN_COL; break;
+		  case OV_HILL:     out+=OV_HILL_COL; break;
+		  case OV_BRIDGE:   out+=OV_BRIDGE_COL; break;
+		  case OV_GRASS:    out+=OV_GRASS_COL; break;
+		  case OV_FOREST:   out+=OV_FOREST_COL; break;
+		  case OV_PATH:     out+=OV_PATH_COL; break;
+                  case OV_REEF:     out+=OV_REEF_COL; break;
+          case OV_DESERT:   out+=OV_DESERT_COL; break;
+          case OV_CITY:     out+=OV_CITY_COL; break;
+          case OV_OTHERS:   out+=OV_OTHERS_COL;
+	    }
+	  out+=n;
+	  o=n;
+    }
+  }
+  return out;
+}
+
+string query_surround(object pl)
+{
+  int i, dx, d, x, y, sqrad;
+  string s;
+
+  if (!member(ply, pl))
+    return "";
+
+  sqrad=radi*radi;
+  x=ply[pl][0];
+  y=ply[pl][1];
+
+  s=VT_CLS+"\n";
+  for (i=y-radi; i<y; i++) {
+    d=ABS(y-i);
+    dx=to_int(sqrt(to_float(sqrad-d*d)+1));
+    s+=INDENT[0..10+radi-dx]+query_x(i, x-dx, x+dx)+VT_NORMAL+"\n";
+  }
+  s+=INDENT[0..10]+query_x(i, x-radi, x+radi)+VT_NORMAL+"\n";
+  for (i=y+1; i<=y+radi; i++) {
+    d=ABS(i-y);
+    dx=to_int(sqrt(to_float(sqrad-d*d)+1));
+    s+=INDENT[0..10+radi-dx]+query_x(i, x-dx, x+dx)+VT_NORMAL+"\n";
+  }
+  
+  s+=VT_NORMAL+"\n\n";
+  return s;
+}
+
+string query_long(object pl)
+{
+  string des;
+
+  switch (query_xy(ply[pl][0], ply[pl][1])) {
+    case OV_WATER:    des="Du bist im Wasser."; break;
+    case OV_MOUNTAIN: des="Du bist auf dem Berg."; break;
+	case OV_HILL:     des="Du stehst auf einem kleinen Huegel."; break;
+	case OV_BRIDGE:   des="Du befindest Dich auf einer Bruecke."; break;
+	case OV_GRASS:    des="Du stehst inmitten einer grossen gruenen Wiese."; break;
+	case OV_FOREST:   des="Du stehst mitten im Wald."; break;
+	case OV_PATH:     des="Du befindest Dich direkt auf dem Weg."; break;
+    case OV_DESERT:   des="Rund um Dich siehst Du nur Sand."; break;
+    case OV_CITY:     des="Du solltest in der Stadt stehen."; break;
+    case OV_OTHERS:   des="Du weisst nicht genau, wo Du bist."; break;
+    default:          des="Du bist hier falsch.";
+  }
+  return des+"\n";
+}
+
+object init_room(int x, int y)
+{
+  object o;
+
+  if (!(o=rooms[y][x])) {
+    o=clone_object(OV_ROOM);
+    o->set_xy(x, y);
+	rooms[y][x]=o;
+  }
+  // tell_object(find_player("creative"), sprintf("%O", rooms[y]));
+  return o;
+}
+
+int remove_room(int x, int y)
+{
+  object o;
+
+  if ((o=rooms[y][x]) && sizeof(all_inventory(rooms[y][x])))
+    return 0;
+  if (o) {
+    o->remove();
+    rooms[y][x]=0;
+  }
+  return 1;
+}
+
+mixed init_new_player(object p, int mx, int my)
+{
+  object o;
+
+  ply+= ([ p: ({ mx, my }) ]);
+  
+//  if (find_player("creative"))
+//    tell_object(find_player("creative"), sprintf("%O\n", ply));
+
+  return init_room(mx, my);
+}
+
+int remove_player(object p)
+{
+  remove_room(ply[p][0], ply[p][1]);
+  if (member(ply, p))
+    ply-=([ p ]);
+}
+
+
+int move_north(object pl)
+{
+  int x, y;
+
+  if (!member(ply, pl))
+    return 0;
+  x=ply[pl][0];
+  y=ply[pl][1];
+  
+  y--;
+  switch (query_xy(x, y)) {
+    case OV_CITY:     pl->move(query_city(x,y), M_GO, "auf die Insel", "paddelt", "paddelt ans Ufer und steigt aus dem Boot aus"); 
+                      remove_player(pl);
+                      return 1;
+    case OV_WATER:    break;
+    default:          if (y<1) y=1;
+                      else y++;
+  }
+  if (ply[pl][1]==y) {
+    tell_object(pl, "Du kannst nicht dorthin paddeln!\n");
+    return 1;
+  }
+  ply[pl][1]=y;
+  pl->move(init_room(x, y), M_GO, "nach Norden", "paddelt", "paddelt herein");
+  remove_room(x, y+1);
+  return 1;
+}
+
+int move_south(object pl)
+{
+  int x, y;
+
+  if (!member(ply, pl))
+    return 0;
+  x=ply[pl][0];
+  y=ply[pl][1];
+
+  y++;
+  switch (query_xy(x, y)) {
+    case OV_CITY:     pl->move(query_city(x,y), M_GO, "auf die Insel", "paddelt", "paddelt ans Ufer und steigt aus dem Boot aus"); 
+                      remove_player(pl);
+                      return 1;
+    case OV_WATER:    break;
+    default:          if (y>height-2) y=height-2;
+                      else y--;
+  }
+  if (ply[pl][1]==y) {
+    tell_object(pl, "Du kannst nicht dorthin paddeln!\n");
+    return 1;
+  }
+  ply[pl][1]=y;
+  pl->move(init_room(x, y), M_GO, "nach Sueden", "paddelt", "paddelt herein");
+  remove_room(x, y-1);
+  return 1;
+}
+
+int move_west(object pl)
+{
+  int x, y;
+
+  if (!member(ply, pl))
+    return 0;
+  x=ply[pl][0];
+  y=ply[pl][1];
+
+  x--;
+  switch (query_xy(x, y)) {
+    case OV_CITY:     pl->move(query_city(x,y), M_GO, "auf die Insel", "paddelt", "paddelt ans Ufer und steigt aus dem Boot aus"); 
+                      remove_player(pl);
+                      return 1;
+    case OV_WATER:    break;
+    default:          if (x<1) x=1;
+                      else x++;
+  }
+  if (ply[pl][0]==x) {
+    tell_object(pl, "Du kannst nicht dorthin paddeln!\n");
+    return 1;
+  }
+  ply[pl][0]=x;
+  pl->move(init_room(x, y), M_GO, "nach Westen", "paddelt", "paddelt herein");
+  remove_room(x+1, y);
+  return 1;
+}
+
+int move_east(object pl)
+{
+  object lastenv;
+  int x, y;
+
+  if (!member(ply, pl))
+    return 0;
+  x=ply[pl][0];
+  y=ply[pl][1];
+
+  x++;
+  switch (query_xy(x, y)) {
+    case OV_CITY:     pl->move(query_city(x,y), M_GO, "auf die Insel", "paddelt", "paddelt ans Ufer und steigt aus dem Boot aus"); 
+                      remove_player(pl);
+                      return 1;
+    case OV_WATER:    break;
+    default:          if (x>width-2) x=width-2;
+                      else x--;
+  }
+  if (ply[pl][0]==x) {
+    tell_object(pl, "Du kannst nicht dorthin paddeln!\n");
+    return 1;
+  }
+  ply[pl][0]=x;
+  pl->move(init_room(x, y), M_GO, "nach Osten", "paddelt", "paddelt herein");
+  remove_room(x-1, y);
+  return 1;
+}
+
+debug_rooms()
+{
+  int i;
+  object *r;
+
+  r=({});
+  for (i=0; i<height; i++)
+    r += ({ rooms[i] - ({ 0 }) });
+  r-=({ });
+  printf("%O", r - ({ }) );  
+}
+
+query_ply()
+{
+  int i;
+  object *o;
+
+  // o=m_indices(ply);
+  printf("%O\n", ply);
+/*  for (i=sizeof(o)-1; i>=0; i--) {
+    if (!find_player(o[i]))
+      remove_player(o[i]);
+    printf("%O: %d, %d\n", o[i], ply[o[i]][0], ply[o[i]][1]);
+  } */
+}
+

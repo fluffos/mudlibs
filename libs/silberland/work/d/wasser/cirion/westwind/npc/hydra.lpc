@@ -1,0 +1,371 @@
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include "../def.h"
+
+#define INTTOSTRING ({"null","ein","zwei","drei","vier"\
+                     ,"fuenf","sechs","sieben","acht","neun"})
+#define WWHAT(x) ({"beisst","beisst","beisst","zerfleischt","zerfleischt"})[x-1]
+#define WHOW(x) ({"hart","sehr hart","extrem hart","beinah","regelrecht"})[x-1]
+
+// wie hart beisst das viech
+#define FIXATTACK       75
+#define RANDOMATTACK    50
+
+inherit "std/npc";
+inherit SERVICE"/fun";
+
+nosave int heads,maxheads;
+nosave object * killedhead;
+nosave int * headhp;
+nosave mapping damage=([]);
+
+void create() {
+  int i;
+
+  if (!is_clone(TO)) return;
+  ::create();
+
+  heads=random(3)+3;
+  maxheads=9;
+  headhp=({});
+  for (i=heads;i-->0;)
+    headhp+=({300});
+
+  SetProp(P_NAME, "Hydra");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:-45,T_RANGE_MAX:90]));
+  AddId(({"hydra","tier","monster"}));
+  set_living_name("hydra");
+
+  create_default_npc(40);
+  SetProp(P_HANDS, ({" mit Ihren riesigen Klauen"
+                    ,250
+                    // 50% rip, 25% pierce, 25% slash
+                    ,({DT_PIERCE,DT_RIP,DT_RIP,DT_SLASH})}));
+  SetProp(P_MAX_HP, 600+heads*300+random(100));
+//  SetProp(P_BODY, );
+//  SetProp(P_XP, QueryProp(P_XP)+y*100); // Bonus fuer Spells
+  SetProp(P_RACE, "Drache");
+  SetProp(P_INFO, "In der Legende ist die Hydra fuer Ihre "
+                  "Regenerationsfaehigkeit bekannt.");
+  SetProp(P_SIZE, 1000);
+  SetProp(P_ALIGN, -850);
+  SetProp(P_MAX_HANDS, 2);
+//  SetProp(P_AGGRESSIVE,0);
+  SetProp(P_RESISTANCE_STRENGTHS , 
+    ([DT_FIRE:     -0.2, DT_COLD:     -0.2, DT_WATER:  -0.7, DT_AIR:    0.2, 
+      DT_LIGHTNING: 0.3, DT_EXPLOSION:-0.1, DT_SOUND:  -0.2, DT_LIGHT:  0.2,
+      DT_ELECTRIC:  0.3, DT_ACID:     -0.2, DT_POISON: -0.5, DT_TERROR:-0.5,
+      DT_HOLY:     -0.5, DT_UNHOLY:   -0.2, DT_MAGIC:   0.0, DT_SLASH: -0.2,
+      DT_BLUDGEON: -0.4, DT_RIP:      -0.2, DT_SQUEEZE:-0.4, DT_PIERCE:-0.2,
+      DT_WHIP:     -0.4]) );
+//  SetProp(P_ARTICLE, 0);
+  SetProp(P_NOMAGIC,0);
+
+  SetProp(P_MSGIN, "stampft drohend herein");
+  SetProp(P_MSGOUT, "stampft");
+  SetProp(P_MMSGIN, "erscheint in einer Rauchwolke");
+  SetProp(P_MMSGOUT, "verschwindet mit Knall und Schwefelduft");
+
+  SetProp(P_DIE_MSG,  " bricht toetlich getroffen zusammen.\n");
+  SetProp(P_NOCORPSE, 0 );
+  SetProp(P_KILL_NAME, "Eine Hydra");
+
+  AddInfo(DEFAULT_INFO, "schnaubt nur boese.\n");
+
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    "Die Hydra kann nichts tragen.\n" }) );
+
+  SUID;
+  
+// clonen
+}
+
+Attack(object enemy)
+{
+  int i;
+
+  switch (heads)
+  {
+    case 0: // nu is sie platt
+      tell_room(environment(),
+        "Der verbleibende Kopf der Hydra zuckt unkontrolliert.\n");
+      break;
+    case 1: // fuchtteufelswild
+        call_out("Bite",0,(random(3)+3),"Der Letzte Kopf");
+        call_out("Bite",0,(random(3)+3),"Der Letzte Kopf");
+        call_out("Bite",0,(random(3)+3),"Der Letzte Kopf");
+      break;
+    case 2..9: // 'normales' Verhalten
+      for (i=random(heads-1)+1;i>0;i--)
+        call_out("Bite",0,(random(5)+1),"Einer der Koepfe");
+      break;
+  }    
+  ::Attack(enemy);
+}
+
+// Was koennen die Koepfe?
+// - Normal beissen
+// - 
+Bite(int power,string who)
+{
+  object en;
+
+  if (en=GetEnemy(random(2)+1))
+  {
+    tell_room(environment(),sprintf(
+      "%s schnappt nach %s und %s %s %s.\n",
+      who,en->name(),WWHAT(power),en->QueryPronoun(WEN),WHOW(power)),({en}));
+    tell_object(en,sprintf(
+      "%s schnappt nach Dir und %s Dich %s.\n",who,WWHAT(power),WHOW(power)));
+    en->Defend(power*FIXATTACK+random(power*RANDOMATTACK), DT_RIP,
+          ([SP_NAME:"LargeBite", SP_SHOW_DAMAGE:1]), TO);
+  }
+}
+
+
+Defend(int dam, string dam_type, mixed spell, object enemy) 
+{
+  string en_name;
+  object ob;
+  int which,damdone;
+
+  if(interactive(enemy)) 
+  { // Speichern der Schaeden.
+    en_name=getuid(enemy);
+    if(!member(damage, en_name))
+      damage+=([en_name:dam]);
+    else 
+      damage[en_name]=(damage[en_name]+dam)/2; 
+  }
+
+  which=random(2+heads);
+  if (which<2)
+  { // Koerpertreffer
+    damdone=::Defend(dam, dam_type, spell, enemy);
+    if (damdone>50&&random(2))
+      tell_room(environment(),
+        "Der Koerper der Hydra zuckt unter dem schweren Treffer zusammen.\n");
+  }
+  else
+  { // Kopftreffer
+    which-=2;
+    damdone=::Defend(to_int(dam*0.9), dam_type, spell, enemy);
+    headhp[which]-=damdone;
+    if (headhp[which]<0)
+      call_out("KillHead",0,(which&&random(2)),dam_type);
+    else if (damdone>50)
+      tell_room(environment(),
+        "Der getroffene Kopf der Hydra zuckt unter dem schweren Treffer zurueck.\n");
+  }
+}
+
+
+void AddHead()
+{
+  if (heads>=maxheads) 
+    return;
+  tell_room(environment(),break_string(
+    "Einen Moment lang kreischt die Hydra wie in Pein auf, "
+    "dann waechst mit erschreckender Geschwindigkeit ein "
+    "weiterer Kopf mit einem langen Hals aus Ihrem Koerper!"));
+  heads++;
+  headhp+=({280});
+  SetProp(P_MAX_HP,QueryProp(P_MAX_HP)+300);
+  AddHp(280);
+}
+
+void KillHead(int h, string dam_type)
+{
+  if (heads==1)
+  {
+    tell_room(environment(),break_string(
+      "Der letzte Kopf der Hydra ist schwer getroffen. Noch einmal baeumt "
+      "sie sich laut bruellend auf, ein schierer Verzweiflung scheint sie "
+      "gleich mehrere Koepfe nachwachsen lassen zu wollen, die jedoch "
+      "nur klein und kuemmerlich herunterhaengen."));
+    heads--;
+    SetProp(P_MAX_HP,QueryProp(P_MAX_HP)-300);
+    while(remove_call_out("AddHead")!=-1);
+    call_out("die",2);
+  }
+  else
+  {
+    if ( ( pointerp(dam_type) && -1!=member(dam_type,DT_FIRE) )
+      || dam_type==DT_FIRE)
+    {
+      maxheads--;
+    }
+    else
+    {
+      if (random(heads+2)<3)
+        call_out("AddHead",15+random(15));
+      if (random(heads)<5)
+      call_out("AddHead",30+random(15));
+    }
+    tell_room(environment(),break_string(
+      "Einer der Koepfe der Hydra kreischt in Agonie auf, dann wird "
+      "er von einem schweren Treffer vom Koerper getrennt und faellt "
+      "leblos zu Boden."));
+    heads--;
+    headhp=headhp[0..h-1]+headhp[h+1..<1];
+    SetProp(P_MAX_HP,QueryProp(P_MAX_HP)-300);
+    do_damage(20);
+  }
+}
+
+int legal_enemy(object en)
+{
+  if (interactive(en)||!query_once_interactive(en))
+    return 1;
+  return 0;
+}
+
+// GetEnemy() (c) by Angrox@Silberland
+//
+// Hier holen wir uns unseren naechsten Gegner
+// flag: 0 ... meisten LP 
+//       1 ... wenigsten LP
+//       2 ... meisten Schaden verursachend
+//       3 ... wenigsten Schaden verursachend
+mixed GetEnemy(int flag) 
+{
+  int i, x, eval, old_eval;
+  object *en;
+  string en_name;
+
+  old_eval=0;
+  if(sizeof(en=filter_array(PresentEnemies(), #'legal_enemy))<1) return 0;
+  for(i=sizeof(en)-1;i>=0;i--) {
+    en_name=getuid(en[i]);
+    if(!flag || flag==1) 
+      eval=en[i]->QueryProp(P_MAX_HP)-en[i]->QueryProp(P_HP);
+    if(flag==2 || flag==3)
+      eval=damage[en];
+    if(!flag && eval<old_eval) x=i;
+    if(flag==1 && eval>old_eval) x=i;
+    if(flag==2 && eval>old_eval) x=i;
+    if(flag==3 && eval<old_eval) x=i;
+    old_eval=eval;
+  }
+  return en[x];
+}
+
+string IntToString(int val)
+{
+  return INTTOSTRING[val];
+}
+
+string short()
+{
+  return "Eine "+IntToString(heads)+"koepfige, blauschwarze Hydra.\n";
+}
+
+string long()
+{
+  string str;
+
+  str=break_string("Vor Dir ragt eine riesige, geschuppte Hydra auf. "
+      "Sie hat den massigen Koerper eines grossen Drachen und einen "
+      "langen, dicken Schwanz, an dessen Ende eine Art Flosse zu " 
+      "erkennen ist. Waehrend die grossen Schuppen auf Ihrem Koerper "
+      "blauschwarz gefaerbt sind und fast metallisch zu glaenzen "
+      "scheinen, ist Ihre Bauchseite mit kleineren und etwas heller "
+      "gefaerbten Schuppen bedeckt. Die Hydra bewegt sich auf vier "
+      "riesigen Beinen fort, an deren Enden gefaehrliche, fast einen "
+      "Meter lange, schwarze Klauen zu erkennen sind, und zumindest "
+      "mit den vorderen beiden Beinen kann sie sicher auch zuschlagen. "
+      "Das gefaehrlichste an Ihr sind jedoch Ihre "+IntToString(heads)+
+      " Koepfe, die jeweils ein spitzes Horn tragen und deren ewig "
+      "wachsame, liedlose Augen Dich lauernd beobachten.");
+  return str;
+}
+
+
+void die(int poisondeath) {
+  while(remove_call_out("AddHead")!=-1);/*
+  write_log( "../log/hydra.kills",
+    ctime()+": "+CAP(getuid(PL))+" killt die Hydra.\n");*/
+  ::die(poisondeath);
+}
+/*
+void NotifyPlayerDeath(object player, object killer, int lostexp) {
+  if(killer == ME)
+    write_log( "../log/hydra.deads",
+      ctime()+": Die Hydra hat gerade "+CAP(getuid(player))+" umgebracht.\n");
+}
+*/
+int _query_wimpy() { return 0; }
+
+/*
+// Reactions
+void StartReaction(string verb, string gruppe, string adverb, int touch) {
+  if (find_call_out("reaction") != -1) return;
+  switch (gruppe) {
+    case "aengstlich":
+      call_out("reaction", 0, TP, 
+        "",
+        "");
+      break;
+    case "aergerlich":
+      call_out("reaction", 0, TP,
+        "",
+        "");
+      break;
+    case "albern":
+      call_out("reaction", 0, TP,
+        "",
+        "");
+      break;
+    case "fies":
+      call_out("reaction", 0, TP,
+        "",
+        "");
+      break;
+    case "frech":
+      call_out("reaction", 0, TP,
+        "",
+        "");
+      break;
+    case "froh":
+      call_out("reaction", 0, TP,
+        "", 
+        "");
+      break;
+    case "intim":
+      call_out("reaction", 0, TP,
+        "",
+        "");
+      break;
+    case "nett":
+      call_out("reaction", 0, TP,
+        "",
+        "");
+      break;
+    case "neutral":
+      call_out("reaction", 0, TP,
+        "",
+        "");
+      break;
+    case "traurig":
+      call_out("reaction", 0, TP,
+        "",
+        "");
+      break;
+  }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch) {
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void reaction(object ob, string macher, string andere) {
+  if (present(ob, ENV(TO))) {
+    tell_object(ob, BS(Name(WER, 1)+" "+macher));
+    tell_room(ENV(TO), BS(Name(WER, 1)+" "+andere), ({ob}));
+  }
+}
+*/

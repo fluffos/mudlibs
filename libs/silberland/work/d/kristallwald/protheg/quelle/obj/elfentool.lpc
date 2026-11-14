@@ -1,0 +1,1646 @@
+/*
+** Nimrondels Traene (Elfenitem)
+**
+** Urspruenglich von Woodys Teddy
+** Urspruenglich die Obsidianspinne der SpinnenkriegerInnen
+**
+** ---
+** 1996-04-11  1.0  Woody    Initial Release
+** 1996-04-25  1.1  Woody    @@WER@@, @@WIE@@ usw. statt %s
+** 1997-04-01  1.2  Woody    Adverbparsing bei Quotes jetzt wie soul,
+**                           match_living() zum Auffinden von Spielern,
+**                           Magier koennen andere invis Mags 'aergern' :),
+**                           Message() statt tell_object() (ignoriere geht),
+**                           'ignoriere spieler.teddy'
+** 1997-04-04  1.3  Woody    Adverbparsing Bugfix
+** 1997-08-30  1.4  Woody    Bugfix: unbekanntes Adverb -> "" statt " "
+**                           zudem nun knuddel/wuschel/kuschel/waschbar
+** 1997-09-09  1.5  Woody    P_AUTOLOADOBJ wird in move() gesetzt,
+**                           dann verdoppelt er sich auch nimmer bei renew
+** 1997-09-14  1.6  Woody    jammert, wenn man ihn fallenlaesst, bzw. freut
+**                           sich, wenn man ihn an sich nimmt. Und ab sofort
+**                           ist er sogar renew-sicher :).
+** 1997-12-07  1.8  Woody    'lehne' :)
+** 1998-01-02  1.9  Woody    capitalize() beim rbefehl()
+** 1998-11-11  1.10 Woody    Fuer Seher und Magier sind Verben nun gratis,
+**                           Magier sehen untereinander nun (Name)
+** 2002-05-13  1.11 PROtheG  Spinnensachen raus, an Elfen angepasst...
+** 2002-06-01  1.12 PROtheG  Saemtliche funs ueberarbeitet, Hilfe angepasst,
+**                           nimknuddel/nimwink. nimrufe/nimhist aktiviert
+**
+** 2002-06-16  1.13 PROtheG  Regionsanzeige bei nimwer fuer Seher
+**
+** 2002-06-27  1.14 PROtheG  BecomesNetAlive() check und evtl. upgrade
+**
+** 2002-07-01  1.15 PROtheG  gettitle - Anzeige ob Traene
+**
+** 2002-07-03  1.16 PROtheG  Bug in spfeinde gefixed.
+**
+** 2002-07-03  1.17 PROtheG  Kleine erweiterung in nimwer
+**
+** 2002-07-21  1.18 PROtheG  nimhist erweitert
+**
+** 2002-08-14  1.19 PROtheG  nimwer 'kurz' eingefuehrt
+**
+** 2002-08-24  1.20 PROtheG  nimpresay eingefuehrt, spieler koennen sich
+**                           das Elfenspezifische Presay setzen, auch 
+**                           Nichtseher
+**
+** 2002-08-28  1.21 PROtheG  Bug bei rgrinse, rwink gefixed
+**
+** 2002-09-03  1.22 PROtheG  rwuschel um die Haarfarbe erweitert 
+**                           von feyarias fteddy
+**
+** 2002-10-30  1.23 PROtheG  rhuepf, rbeneid, rstups, rnick, rlach,
+**                           rgrummel
+**
+** 2002-11-23  1.24 PROtheG  r-verben werden nun dynamisch ueber ein 
+**                           externes file eingelesen
+**
+** 2002-12-10  1.25 PROtheG  fehlende BS() bei r-verben_notify_fails raus
+**
+** 2003-04-02  1.26 PROtheG  Minizusammenfassung bei nimwer
+**
+** 2003-02-07  1.27 PROtheG  match_living -> playeronly flag
+**
+** 2003-09-03  1.28 PROtheG  anpassung der align-strings
+**
+** basierend auf:
+**   Vrai's Freundschaftsband (Adverbparsing),
+**   Mupfel's sprechender Stein (LP/MP Anzeige),
+**   Diddl-Maus (Ideen fuer diverse r-Verben)
+**
+** Was r-Verben angeht: funktioniert im Grunde gleich wie die
+** Diddl-Maus, erlaubt hierbei aber relativ komplexes Parsing bzw.
+** Wortstellungen durch Makros.
+**
+** Ausserdem wird "in der Ferne" nicht ausgegeben, wenn sich Spieler
+** und Zielperson im selben Raum befinden (in diesem Fall wird
+** ausserdem zusaetzlich eine Raummeldung an alle anderen anwesenden
+** Spieler ausgegeben).
+**
+** Zur Erweiterung der r* Befehle am besten vorher den Header zur
+** Funktion rbefehl() durchlesen!! (ist die letzte Funktion, ganz
+** unten)
+**
+** Ach ja, fast haett ichs vergessen: Anders als bei der Maus kann
+** man mit diesem Teddy Adverben verwenden, genau wie bei allen
+** Standardverben (rwuschel woody froe = Du verwuschelst Woodys
+** Haare froehlich aus der Ferne.). Quoted Adverbs wieder per /
+** hintendran, wie gewohnt.
+**
+** Weiters kann das Aufspueren von unsichtbaren Magiern mit diesem
+** Teddy gegebenenfalls per #define INVIS_SPERRE verhindert werden.
+**
+*/
+
+#pragma strong_types;
+
+#include "../def.h"
+#include <ansi.h>
+#include <exploration.h>
+
+inherit "std/thing";
+inherit MOST "std_things";
+
+#define VER 28
+
+#define ELFENTOOL "\nelfentool"
+#define QM "/secure/questmaster"
+
+#define NIMRONDEL OBJ "nimrondel"
+
+#define ELESSARMASTER "/d/kristallwald/sargola/dorf/npc/wmaster"
+#define SOULFILE OBJ "soul"
+#define ELFLISTENER "tmp_elf_listener"
+
+#define PROCHECK(x) if(getuid(x)=="protheg") return 0
+
+// Reporteinstellungen
+#define NORMAL      0
+#define KURZ        1
+#define SPEZIAL     2
+#define SPEZIALKURZ 3
+
+#define C +GetColor()+
+#define G +GetColor(999)+
+#define B +GetColor(666)+
+#define O +NormalColor()+
+
+/*
+** Wird folgende Zeile aktiviert, so koennen unsichtbare Magier
+** mit dem Teddy nicht mehr aufgespuert werden, andernfalls
+** heissts halt wieder "Jemand" etc.
+*/
+#define INVIS_SPERRE
+
+#define INV_TEST(x,y,z) (IS_LEARNER(x) && IS_LEARNER(y) && \
+                         z->QueryProp(P_INVIS))
+#define WIZ_NAME(pl,genitiv) ("("+capitalize(getuid(pl))+ \
+    (genitiv ? (strstr("xsz",getuid(pl)[<1..])!=-1?"'":"s"):"")+")")
+
+nosave int lastHP, lastSP, aktiv=0, show, dunkel, setting, xpdiff, souldate;
+nosave object owner;
+nosave string owner_name,currentcolor;
+nosave mapping soulcmds;
+
+varargs nosave string huefe(int flag);
+nosave varargs int rbefehl(string str, string *form, int sp, int nearonly);
+varargs void init_soul_cmds(int force);
+
+string NormalColor()
+{
+  if(setting)
+    return ANSI_NORMAL;
+  else
+    return "";
+}
+
+varargs string GetColor(int i)
+{
+  if(!i)
+    return currentcolor;
+
+  if(!setting) 
+    return currentcolor="";
+
+  if(i==999)
+    return ANSI_GREEN;
+
+  if(i==666)
+    return ANSI_YELLOW;
+
+  return currentcolor=({ANSI_RED,ANSI_BLUE,ANSI_CYAN,ANSI_PURPLE,
+			  ANSI_WHITE,ANSI_YELLOW})[random(5)];
+}
+
+nomask void create()
+{
+  if (!is_clone(ME)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Nimrondels Traene");
+  SetProp(P_LONG,
+	  BS("Nimrondels Traene ist eine kleine Perle aus purem Wasser, "
+	     "welche durch die magische Beruehrung eines Elfen zu einem "
+	     "festen Edelstein erstarrt ist."));
+
+  SetProp(P_NAME, ({"Nimrondels Traene","Nimrondels Traene",
+		      "Nimrondels Traene","Nimrondels Traene"}));
+  SetProp(P_GENDER, FEMALE);
+
+  AddId(({"traene", "nimrondeltraene","nimrondels traene","nimrondelstraene", 
+	    ELFENTOOL}));
+  
+  SetProp(P_WEIGHT, 150);
+  SetProp(P_VALUE, 200);
+  SetProp(P_MATERIAL, ([MAT_WATER:90,MAT_MAGIC:10]));
+  SetProp(P_MAGIC, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_ITEMD_NO_MAGIC, 1);
+  SetProp(P_NODROP, "Nicht doch! Die Traene koennte zerfliessen...\n");
+  lastHP = lastSP = -1;
+  setting=0;
+
+  SetProp(P_ARTICLE, 0);
+
+  SetProp(P_NOSELL,
+	  "Der Haendler wuerde den wahren Wert dieser Wasserperle nicht "
+	  "erkennen!\n");
+
+  SetProp(P_INFO,
+	  BS("Kein wahrer Elf traegt einen Teddy mit sich herum! Im "
+	     "Gegenteil! Er koennte die Traene sogar stoeren."));
+  
+  AddDetail(({"perle","wasserperle","beruehrung"}),
+	    "Durch die magische Beruehrung eines Elfen ist das Wasser zu "
+	    "einer Perle geworden.");
+  
+  AddDetail(({"edelstein"}),
+	    "Nimrondels Traene ist wohl der kostbarste Edelstein, den es im "
+	    "Kristallwald zu finden gibt.");
+
+  AddDetail("wasser", CLOSURE(huefe));
+  
+  AddCmd("nimreport", "Report");
+  
+  //Cmds fuer die Elfenkomunikation
+  AddCmd(({"nimruf","nimrufe"}), "nimrufen");
+  AddCmd(({"nimhist","nimhistory"}), "nimhist");
+  AddCmd(({"nimwink","nimwinke"}), "nimwink");
+  AddCmd(({"nimknuddel","nimknuddle","nimknuddele"}), "nimknuddel");
+
+  AddCmd(({"niminfo"}), "niminfo");
+  AddCmd(({"nimwer"}), "nimwer");
+  AddCmd(({"nimfeind","nimfeinde"}), "nimfeinde");
+  AddCmd(({"nimfarbe","nimfarben"}), "nimfarbe");
+
+  AddCmd(({"nimpresay"}), "nimpresay");
+
+  AddCmd(({"nimhilfe"}), "nimhilfe");
+
+  GetColor(1);
+  
+  SUID;
+  
+  // r* commands:
+  init_soul_cmds(1);
+}
+
+void reset()
+{
+  if(!is_clone(ME)) return;
+  ::reset();
+  
+  call_out("init_soul_cmds", 5+random(10));
+}
+
+string info()
+{
+  if((MENV) && (query_once_interactive(MENV)))
+    if(present("universal-teddy", MENV))
+      return BS("Kein wahrer Elf traegt einen Teddy mit sich herum! Im "
+		"Gegenteil! Er koennte die Traene sogar stoeren.");
+  return BS("Das Wasser der Traene glitzert geheimnisvoll.");
+}
+
+void Setting(int i)
+{
+  setting=i;
+  GetColor(1);
+}
+
+varargs nosave string huefe(int flag)
+{
+  string ret, rcmds;
+  int i;
+  
+  rcmds="";
+  
+  if(IS_SEER(TP))
+    {
+      for(i=sizeof(soulcmds)-1;i>=0;i--)
+	if(i==0)
+	  rcmds+="und "+soulcmds[i][0]+".";
+	else
+	  rcmds+=soulcmds[i][0]+", ";
+      
+      rcmds=break_string(rcmds, 60, " ", BS_NO_PARINDENT);
+    }
+  else
+    {
+      for(i=sizeof(soulcmds)-1;i>=0;i--)
+	if(i==0)
+	  rcmds+="und "+soulcmds[i][0]+"("+soulcmds[i,2]+").";
+	else
+	  rcmds+=soulcmds[i][0]+"("+soulcmds[i,2]+"), ";
+      
+      rcmds=break_string(rcmds, 60, " ", BS_NO_PARINDENT);
+    
+  
+      rcmds+="Die Zahlen in den Klammern sind die Magiekosten.\n \n";
+      
+    }
+  
+  ret="\n \n"
+    "Nimrondels Traene kann Dir anzeigen, wie es um Deine\n"
+    "Lebensenergie und Zauberkraft bestellt ist.\n \n"
+    "Der Befehl dazu lautet:\n"
+    " 'nimreport [ein|kurz|spezial|spezialkurz|aus]'\n \n"
+    "Nimrondels Traene bietet Dir weiters folgende RVerben an:\n"+
+    rcmds+
+    "Einige Befehle nur fuer Elfen:\n"
+    " 'nimwer, nimfeinde, niminfo, nimfarbe, nimpresay'\n \n"
+    "RVerben nur fuer Elfen:\n"
+    " 'nimwinke, nimknuddel'\n"
+    "Hilfe zu den Befehlen erhaelst Du mit:\n"
+    " 'nimhilfe'\n \n"
+    "Ignorieren kannst Du jemanden mit:\n"
+    " 'ignoriere name, ignoriere name.traene'\n"
+    "Oder jegliche Aktionen der Traene ignorieren:\n"
+    " 'ignoriere traene'\n"
+    "                                                         Ver 1."+VER+"\n";
+  if(flag) return ret;
+  
+  TP->More(make_dokument(ret));
+  return "";
+}
+
+nosave int nimhilfe(string str)
+{
+  string ret;
+
+  if(str) str=explode(str, " ")[0];
+
+  switch(str)
+    {
+    case "nimreport": 
+      ret="Der 'nimreport' informiert Dich, wie es um Deine "
+	"Lebensenergie und Zauberkraft bestellt ist.\n"
+	"Moegliche Einstellungen sind:\n"
+	"* nimreport normal      - Schaltet den Report normal ein.\n"
+	"* nimreport kurz        - Schaltet den Report kurz ein.\n"
+	"* nimreport spezial     - Schaltet den Report in Farbe ein.\n"
+	"* nimreport spezialkurz - Schaltet den Report faerbig und\n"
+	"                         kurz ein.\n"
+	"* nimreport aus         - Schaltet den Report wieder aus.\n";
+      break;
+    case "niminfo": 
+      ret="In 'niminfo' hast Du eine eher zu Elfen passende Version\n"
+	"der normalen Infoanzeige bei 'info'.\n"
+	"Mit 'nimfarbe' kannst Du die Anzeige sogar in wunderschoenen\n"
+	"Farben darstellen lassen.\n"
+	"Einige unwichtige Angaben werden im Normalfall unterdrueckt.\n";
+      break;
+    case "nimwer": 
+      ret="Mit 'nimwer' siehst Du, wer aus dem Elfenvolk anwesend ist.\n"
+	"*  Wer ist anwesend?\n"
+	"*  Ist er/sie anwesend, oder idle?\n"
+	"*  Was fuer eine Waffe hat er/sie gezueckt?\n"
+	"*  Welche Gesinnung hat er/sie?\n"
+	"*  Wo befindet er/sie sich?\n\n"
+	"Mit 'nimwer kurz' siehst Du das ganze etwas kompakter.\n";
+    break;
+    case "nimfarben":
+    case "nimfarbe": 
+      ret="Mit '"+str+" ein|aus' kannst Du die Farbanzeige einstellen.\n";
+    break;
+    case "nimruf": 
+    case "nimrufe": 
+      ret="Mit '"+str+"' hast Du die Moeglichkeit, den anderen Elfen\n"
+	"etwas mitzuteilen, ohne dass andere Rassen mithoeren koennen.\n"
+	"Mit 'nimhist' kannst Du die Rufe nocheinmal lesen.\n";
+    break;
+    case "nimhist": 
+      ret="Mit 'nimhist' kannst Du versuchen, die Echos der zuletzt\n"
+	"gerufenen Meldungen zu erhaschen...\n"
+	"Jedoch ist die Liste in ihrer Groesse beschraenkt.\n";
+    break;
+    case "nimwinke":
+    case "nimwink": 
+      ret="Mit '"+str+"' kannst Du den anderen Elfen zuwinken.\n"; 
+      break;
+    case "nimknuddel":
+    case "nimknuddle":
+    case "nimknuddele": 
+      ret="Mit '"+str+"' kannst Du die anderen Elfen alle knuddeln.\n"; 
+      break;
+    case "nimfeind":
+    case "nimfeinde":
+      ret="Mit '"+str+"' siehst Du die derzeitigen Feinde von Elessar.\n"+
+	(IS_SEER(TP) ? 
+	 "Mit '"+str+" <name>' siehst Du die Frevel, die <name> bereits\n"
+	 "an Elessar begangen hat.\n":"");
+      break;
+    case "nimpresay":
+      ret="Mit 'nimpresay' kannst Du Dir Dein Elfen-Presay, welches\n"
+	"z.B. bei 'nimwer' gezeigt wird, permanent als Presay setzen.\n\n"
+	"Mit 'nimpresay loeschen' kannst Du Dein Presay entfernen.\n";      
+      break;
+    case "allgemein":
+      ret=huefe(1);
+      break;
+    default: 
+      ret="Mit 'nimhilfe' kannst Du Dich ueber Folgendes informieren:\n \n"
+	"nimhilfe <nimreport>  Wie sieht es mit Leben u. Magie aus?\n"
+	"         <niminfo>    Ein etwas anderes 'info'.\n"
+	"         <nimwer>     Eine Liste aller anwesenden Elfen.\n"
+	"         <nimfarbe>   Farbeinstellungen?\n"
+	"         <nimpresay>  Das Elfenpresay fix setzen.\n"
+	"         <nimrufe>    Den anderen Elfen etwas zurufen?\n"
+	"         <nimhist>    Wer hat den Elfen etwas zugerufen?\n"
+	"         <nimfeinde>  Die Feinde von Elessar!\n"
+	"         <nimwink>    Winkt den anwesenden Elfen zu.\n"
+	"         <nimknuddel> Knuddelt alle anwesenden Elfen.\n"
+	"         <allgemein>  Allgemeine Uebersicht.\n";
+    }
+  return TP->More(make_dokument(ret)),1;
+}
+
+void activate(object ob)
+{
+  if (objectp(ob)) 
+    {
+      aktiv = 1;
+      owner = ob;
+      owner_name = getuid(owner);
+      ob->AddHpHook(ME);
+      lastHP = ob->QueryProp(P_HP);
+      lastSP = ob->QueryProp(P_SP);
+    } 
+  else 
+    {
+      if (ob=(owner||TP)) ob->RemoveHpHook(ME);
+      owner = owner_name = aktiv = 0;
+    }
+}
+
+public varargs void erneuern(int force)
+{
+  object neue_traene;
+
+  if(!is_clone(ME)) return;
+
+  if((!force) && (NIMRONDEL->GetCurrentVersion()==VER))  return;
+  
+  RemoveCmd(0);
+  
+  SetProp(P_INVIS, 1);
+  
+  //Neue Traene
+  //neue_traene=clone_object(explode(file_name(ME), "#")[0]);
+  neue_traene=clone_object("/p/service/protheg/rt/obj/nimrondel");
+  neue_traene->move(MENV, M_NOCHECK);
+
+  if(aktiv) neue_traene->activate(MENV);
+
+  neue_traene->Setting(setting);
+
+  activate(0);
+  
+  call_out("remove", 0);
+}
+
+void BecomesNetAlive(object who)
+{
+  if(ENV(ME)==who)
+    {
+      if(NIMRONDEL->GetCurrentVersion()!=VER) 
+	return erneuern(1);
+      
+      xpdiff=who->QueryProp(P_XP);
+    }
+}
+
+nosave int nimfeinde(string str)
+{
+  int i,z;
+  string ret;
+  object *feinde;
+  string *f;
+    
+  catch(call_other(ELESSARMASTER, "???"));
+	
+  if((!str) || (!IS_SEER(TP)))
+    {
+      if(!sizeof(feinde=ELESSARMASTER->getfeinde()))
+	return write(BS("In Elessar herrscht zur Zeit Frieden.")), 1;
+      
+      ret="";
+      f=({});
+
+      for(i=sizeof(feinde)-1;i>=0;i--)
+	if(objectp(feinde[i]))
+	  f+=({CAP(getuid(feinde[i]))});
+      
+      f=sort_array(f, CLOSURE(>));
+      
+      if(sizeof(f)==1)
+	ret+=BS(" "+f[0]+".");
+      else
+	{
+	  ret+=(implode(f[0..<2], ", "));
+	  
+	  ret+=" und "+f[<1]+".";
+	  ret=break_string(ret, 40, "* ",BS_LEAVE_MY_LFS|BS_NO_PARINDENT);
+	}
+      ret="Die aktuellen Feinde von Elessar:\n"+ret;
+    }
+  else 
+    {
+      if(!find_player(str))
+	return write(BS("Spieler "+CAP(str)+" kann ich nicht finden.")), 1;
+
+      i=ELESSARMASTER->getfeindkills(find_player(str))[0];
+      z=ELESSARMASTER->getfeindkills(find_player(str))[1];
+
+      if(i==-1)
+	return write(BS(CAP(str)+" hat noch keine bekannten Frevel an Elessar "
+			"begangen.")), 1;
+      
+      ret="Begangene Frevel an Elessar:\n"
+	"============================\n";
+      ret+=BS("* "+CAP(str)+" mit "+(i?i+" Toetung(en)":"")+
+	      (z? (i? " und ":"")+z+" Zivilen Vergehen":"")+".");
+    }
+
+  return write(make_document(ret)),1;
+}
+
+nosave varargs string gettitle(object who, int flag)
+{
+  string ret;
+
+  if((!flag) && ((who->QueryProp(P_INVIS)) || (who->QueryProp(P_FROG))))
+    return "";
+  
+  // Jaja muss sein ;)
+  if(getuid(who)=="protheg")
+    return "Drowmagier ";
+
+  if(!present(ELFENTOOL, who))
+    return "";
+
+  if(IS_WIZARD(who))
+    return "Hochelfenmagier"+(who->QueryProp(P_GENDER)==FEMALE ? "in ":" ");
+
+  if(IS_SEER(who))
+    ret="Hochelf";
+  else
+    ret="Elf";
+  
+  if(who->QueryProp(P_GUILD)=="druidenzirkel")
+    return ret+"endruid"+(who->QueryProp(P_GENDER)==FEMALE?"in ":"e ");
+  
+  if(who->QueryProp(P_GUILD)=="zechpreller")
+	return ret+"ensaeufer"+(who->QueryProp(P_GENDER)==FEMALE?"in ":" ");
+  
+  if(who->QueryProp(P_GUILD)=="berserker")
+    return ret+"enberserker"+(who->QueryProp(P_GENDER)==FEMALE?"in ":" ");
+
+  if(who->QueryProp(P_GUILD)=="paladine")
+    return ret+"enpaladin ";
+  
+  return ret+(who->QueryProp(P_GENDER)==FEMALE?"e ":" ");
+}
+
+nosave int is_elf(object who)
+{
+  if(who->QueryProp(P_RACE)=="Elf") return 1;
+  else return 0;
+}
+
+nosave int is_higher(object a, object b)
+{
+  if((a->QueryProp(P_LP))>(b->QueryProp(P_LP))) return 1;
+  else return 0;
+}
+
+nosave int is_not_ignoring(object pl, string str)
+{
+  string *ign;
+  
+  if(!interactive(pl)) return 0;
+  if(!pointerp(ign=pl->QueryProp(P_IGNORE))) return 0;
+  
+  if((member(ign, str+".traene")==-1) &&
+     (member(ign, "traene")==-1) && 
+     (member(ign, str)==-1))
+    return 1;
+  else
+    return 0;
+}
+
+string getalign(int i)
+{
+  string ret;
+
+  if(i<= -1200) ret="diabolisch";
+  else
+    switch(i)
+      {
+      case -1199 .. -1000: ret="satanisch";  break;
+      case  -999 ..  -800: ret="sehr boese"; break;
+      case  -799 ..  -500: ret="boese";      break;
+      case  -499 ..  -200: ret="gemein";     break;
+      case  -199 ..   -40: ret="frech";      break;
+      case   -39 ..    39: ret="neutral";    break;
+      case    40 ..   199: ret="nett";       break;
+      case   200 ..   499: ret="lieb";       break;
+      case   500 ..   799: ret="gut";        break;
+      case   800 ..   999: ret="sehr gut";   break;
+      default:             ret="heilig";
+      }
+  
+  return ret;
+}
+
+nosave string erschoepfung(object tp)
+{
+  int p, c;
+
+  p = 100 * tp->QueryProp(P_MV) / tp->QueryProp(P_MAX_MV);
+  c=setting;
+  
+  switch (p)
+    {
+    case 0..5:   
+      return (c ? ANSI_RED : "")+
+	sprintf("%28|s", "STOPP!! LUFT!!")+
+	(c ? ANSI_NORMAL : "");
+    case 6..15:  
+      return (c ? ANSI_YELLOW : "")+
+	sprintf("%28|s", "Du bist total ausser Atem.")+
+	(c ? ANSI_NORMAL : "");
+    case 16..30: 
+      return (c ? ANSI_GREEN : "")+
+	sprintf("%28|s", "Du bist etwas erschoepft.")+
+	(c ? ANSI_NORMAL : "");
+    default:     
+      return duplicate(" ", 28);
+    }
+}
+
+nosave string gewicht(object tp)
+{
+  int p, c;
+
+  p = 100 * (tp->QueryProp(P_TOTAL_WEIGHT) - tp->QueryProp(P_WEIGHT) )
+    / tp->QueryProp(P_MAX_WEIGHT);
+  c=setting;
+
+  switch (p)
+    {
+    case  0 ..  50: 
+      return "";
+    case 51 ..  60: 
+      return (c ? ANSI_GREEN : "")+
+	sprintf("%22|s", "Du bist etwas beladen")+(c ? ANSI_NORMAL : "");
+    case 61 ..  70: 
+      return (c ? ANSI_GREEN : "")+
+	sprintf("%22|s", "Du bist ziemlich beladen")+(c ? ANSI_NORMAL : "");
+    case 71 ..  80: 
+      return (c ? ANSI_YELLOW : "")+
+	sprintf("%22|s", "Du bist schwer beladen")+(c ? ANSI_NORMAL : "");
+    case 81 ..  90: 
+      return (c ? ANSI_YELLOW : "")+
+	sprintf("%22|s", "Du bist sehr beladen")+(c ? ANSI_NORMAL : "");
+    case 91 ..  95: 
+      return (c ? ANSI_RED : "")+
+	sprintf("%22|s", "Du bist extrem beladen!")+(c ? ANSI_NORMAL : "");
+    default:
+      return (c ? ANSI_RED : "")+
+	sprintf("%22|s", "Du bist UFFF!! beladen!")+(c ? ANSI_NORMAL : "");
+    }
+}
+
+nosave string balken(int aktuell, int max, int colorflag, int wimpy)
+{
+  string ret;
+  int i,w,s;
+  
+  if(aktuell > max) aktuell=max;
+
+  i=(aktuell*200/max)/5;
+  if(wimpy) w=(wimpy*200/max)/5;
+
+  ret=duplicate(" ",40);
+  
+  if(!colorflag)
+    {
+      if(wimpy)
+	if(aktuell<=wimpy)
+	  ret=duplicate("+",w)+duplicate("-",40-w);
+	else
+	  ret=duplicate("+", w)+duplicate("#",i-w)+duplicate("-",40-i);
+      else
+	ret=duplicate("#",i)+duplicate("-",40-i);
+
+      ret=sprintf("%3d",aktuell)+" ["+sprintf("%3d",max)+"] "+ret;
+    }
+  else
+    {
+      if(wimpy)
+	if(aktuell<=wimpy)
+	  ret=ANSI_BG_BLUE+ret[0..w-1]+ANSI_BG_RED+ret[w..<0]+ANSI_NORMAL;
+	else
+	  ret=ANSI_BG_BLUE+ret[0..w-1]+ANSI_BG_GREEN+ret[w..i-1]+ANSI_BG_RED+ret[i..<0]+ANSI_NORMAL;
+      else
+	ret=ANSI_BG_GREEN+ret[0..i-1]+ANSI_BG_RED+ret[i..<0]+ANSI_NORMAL;
+      ret=sprintf("%3d",aktuell)+" ["+sprintf("%3d",max)+"] "+ret;
+    }
+  return ret;
+}
+
+nosave string stupse(object pl)
+{
+  string ret;
+  int i, lvl, rlvl;
+  
+  if((pl->LpLevel()==(pl->QueryProp(P_LEVEL)+1))
+     && (pl->LevelPerc(pl->LpLevel()+1) < 20))
+    lvl=pl->QueryProp(P_LEVEL);
+  else
+    lvl=pl->LpLevel();
+
+  if(((lvl+1) < pl->QueryProp(P_LEVEL)) ||
+     (lvl > pl->QueryProp(P_LEVEL)))
+    rlvl=pl->QueryProp(P_LEVEL);
+  
+  i=pl->LevelPerc(lvl+1)/10;
+
+  if(!setting)
+    ret=sprintf("%10'-'-s", duplicate("#",i));
+  else
+    {
+      ret=duplicate(" ", 10);
+      ret=ANSI_BG_GREEN+ret[0..i-1]+ANSI_BG_RED+ret[i..<0]+ANSI_NORMAL;
+    }
+  
+  return sprintf("%3d+ [%s] %3d", lvl, ret, (rlvl ? rlvl : lvl+1));
+}
+
+nosave string zustand(object tp)
+{
+  string ret;
+  int tmp;
+
+  if(!tp) return "";
+
+  ret="";
+
+  if(tp->QueryProp(P_FROG))       
+    ret+=" Frosch";
+
+  if(tmp=tp->QueryProp(P_POISON)) 
+    ret+=(tmp > 5 ? " GIFT!":" Gift");
+
+  if(tp->QueryProp(P_BLIND))      
+    ret+=(tp->QueryProp(P_BLIND)[BLIND_TIME] > 15 ? " BLIND!" : " Blind");
+
+  if(tp->QueryProp(P_DEAF))
+    ret+=(tp->QueryProp(P_DEAF)[DEAF_TIME] > 15 ? " TAUB!" : " Taub");
+
+  return ret;
+}
+
+nosave int nimpresay(string str)
+{
+  string np, op;
+
+  notify_fail(BS("Du kannst mit 'nimpresay' nur das Elfen-Presay setzen!")+
+	      BS("Du kannst aber auch mit 'nimpresay loeschen' das Presay "
+		 "loeschen."));
+
+  if(strlen(str)) 
+    if(str=="loeschen")
+      {
+	if(!strlen(TP->QueryProp(P_PRESAY)))
+	  return write(BS("Du hattest doch gar kein Presay gesetzt!?")), 1;
+	
+	TP->SetProp(P_PRESAY, "");
+	
+	return write(BS("Dein Presay wurde geloescht.")), 1;
+      }
+    else
+      return 0;
+
+  
+  np=gettitle(TP, 1);
+  
+  if(strlen(op=TP->QueryProp(P_PRESAY)))
+    if(np==op)
+      write(BS("Dein voriges Presay '"+op+"' wird ersetzt."));
+  
+  np=np[0..<2];
+  
+  TP->SetProp(P_PRESAY, np);
+  
+  write(BS("Du bist nun:")+
+	BS(np+" "+CAP(getuid(TP))+" "+(TP->QueryProp(P_TITLE) || "")));
+  
+  return 1;
+}
+
+nosave int nimfarbe(string str)
+{
+  notify_fail(BS("Syntax: nimfarbe ein|aus"));
+  if(!str) return 0;
+  
+  if(str=="aus")
+    {
+      Setting(0); 
+      return write(BS("Nimrondels Traene siehst Du jetzt in Schwarz/Weiss.")), 
+	1;
+    }
+
+  if(str=="ein")
+    {
+      Setting(1); 
+      return write(BS("Nimrondels Traene siehst Du jetzt in Farbe.")), 1;
+    }
+  
+  return 0;
+}
+
+nosave int niminfo(string str)
+{
+  object tp;
+  mapping at;
+  int xp;
+
+  tp=TP;
+
+  if(str && IS_WIZARD(TP))
+    if(!tp=find_player(str))
+      return write(BS("Spieler nicht gefunden!")), 1;
+
+  if(tp->QueryProp(P_GHOST))
+    return write(BS("Geister haben keine Punkte!")), 1;
+  
+  at=tp->QueryProp(P_ATTRIBUTES);
+
+  if(!xpdiff) xpdiff=tp->QueryProp(P_XP);
+
+  xp=tp->QueryProp(P_XP);
+
+  write(sprintf(
+    " "B"+-----"O"\n"
+    " "B"|"O" %35.35-s  %20s         "C":. ,.."O"\n"
+    " "B"|"O"                                                                 "C".' :~.':_.,"O"\n"
+    "   Leben: %s     "C".'   ::.::'.'"O"\n"
+    "   Magie: %s    "C":     ::'  .:"O"\n"
+    "                                                              "C"`.:    .:  .:/"O"\n"
+    "   Erfahrung:        %10d %28-s  "C"`::--.:'.::'"O"\n"
+    "   %28s %s    "G"|. _"C":===-'"O"\n"
+    "   Abenteuer:       %4d [%4d] %22s         "G"/ /"O"\n"
+    "   Stufe: %21s                "G",---.---.    __,','"O"\n"
+    "   ____________________________               "G"(~`.  \\   )   )','.,---.."O"\n"
+    "                                               "G"`v`\\ | ,' .-'.:,'_____   `."O"\n"
+    "   Intelligenz:         %8-s                   "G")|/.-~.--~~--.   ~~~-. \\"O"\n"
+    "   Ausdauer:            %8-s %9|s      "G"__/-'_.-~        \"\"---.._`.|"O"\n"
+    "   Kraft:               %8-s           "G"_.-~~_.-~                     \"\"'"O"\n"
+    "   Geschicklichkeit:    %8-s    "G"_..--~~_.(~~"O"\n"
+    " "B"|"O"                      "G"__...---~~~_..--~~"O"      %18|s           "B"|"O"\n"
+    " "B"|"O" %16s  "G",'___...---~~~"O"      %35.35|s "B"|"O"\n"
+    " "B"+-----                                                                 -----+"O"\n",
+    gettitle(tp)+CAP(getuid(tp)),
+    CAP(tp->QueryProp(P_GUILD))+" ["+tp->QueryProp(P_GUILD_LEVEL)+"]",
+    balken(tp->QueryProp(P_HP), tp->QueryProp(P_MAX_HP), setting, 
+	   tp->QueryProp(P_WIMPY)),
+    balken(tp->QueryProp(P_SP), tp->QueryProp(P_MAX_SP), setting,0),
+    xp, zustand(tp), 
+    (xp-xpdiff ? "Unterschied:      "+sprintf("%10d",xp-xpdiff) : ""), 
+    erschoepfung(tp),
+    tp->QueryProp(P_QP), QM->QueryAllQP(), gewicht(tp),
+    stupse(tp),
+    sprintf("%2d [%2+d]", at[A_INT], tp->QueryAttributeOffset(A_INT)), 
+    sprintf("%2d [%2+d]", at[A_CON], tp->QueryAttributeOffset(A_CON)), 
+    getalign(tp->QueryProp(P_ALIGN)),
+    sprintf("%2d [%2+d]", at[A_STR], tp->QueryAttributeOffset(A_STR)), 
+    sprintf("%2d [%2+d]", at[A_DEX], tp->QueryAttributeOffset(A_DEX)),
+    (tp->QueryProp(P_WIMPY) ? sprintf("Vo: %3d",tp->QueryProp(P_WIMPY)):""),
+    (tp->QueryMoney() ? tp->QueryMoney()+" Muenzen" : ""),
+    (tp->QueryProp(P_WIMPY) ? (tp->QueryProp(P_WIMPY_DIRECTION) ? 
+			       "Ri: "+tp->QueryProp(P_WIMPY_DIRECTION):""):
+     "")));
+
+  GetColor(1);
+  return 1;
+}
+
+nosave int nimwink(string str)
+{
+  object *elfs;
+  string me;
+  int i;
+
+  if(TP->QueryProp(P_INVIS)) 
+    return write(BS("Das geht nur, wenn Du sichtbar bist!!")),1;
+  
+  elfs=filter_array(users(), "is_elf");
+  elfs=filter_array(elfs, CLOSURE(is_not_ignoring), getuid(TP));
+  elfs-=({TP});
+  
+  me=gettitle(TP)+CAP(getuid(TP));
+  
+  if(!str) str="";  
+  if(str[0]=='/') 
+    str=str[1..<1]+" ";
+  else
+    str="";
+  
+  for(i=sizeof(elfs)-1;i>=0;i--)
+    tell_object(elfs[i], BS(me+" winkt allen Elfen "+str+"aus der Ferne zu."));
+  
+  write(BS("Du winkst allen Elfen "+str+"aus der Ferne zu."));
+
+  return 1;
+}
+
+nosave int nimknuddel(string str)
+{
+  object *elfs;
+  string me;
+  int i;
+
+  if(TP->QueryProp(P_INVIS)) 
+    return write(BS("Das geht nur, wenn Du sichtbar bist!!")),1;
+  
+  elfs=filter_array(users(), "is_elf");
+  elfs=filter_array(elfs, CLOSURE(is_not_ignoring), getuid(TP));
+  elfs-=({TP});
+
+  me=gettitle(TP)+CAP(getuid(TP));
+  
+  if(!str) str="";  
+  if(str[0]=='/') 
+    str=str[1..<1]+" ";
+  else
+    str="";
+  
+  for(i=sizeof(elfs)-1;i>=0;i--)
+    tell_object(elfs[i], BS(me+" knuddelt alle Elfen "+str+"aus der Ferne."));
+
+  write(BS("Du knuddelst alle Elfen "+str+"aus der Ferne."));
+
+  return 1;
+}
+
+int nimwer(string str)
+{
+  string ret, n, li, reg;
+  object *elfs, *listeners;
+  object en, we;
+  int i, siz;
+
+  elfs=filter_array(users(), "is_elf");
+  elfs=sort_array(elfs, "is_higher");
+
+  ret="Folgende Elfen sind anwesend:\n \n";
+
+  ret+=sprintf("%25-s %6s %20-s%10s\n%64'-'s\n","Name","","Waffe","Gesinnung",""); 
+  
+  siz=0;
+  
+  for(i=sizeof(elfs)-1;i>=0;i--)
+    {
+      if(!IS_WIZARD(TP)) if(elfs[i]->QueryProp(P_INVIS)) continue;
+      
+      siz++;
+
+      en=elfs[i]->InFight();
+      we=elfs[i]->QueryProp(P_WEAPON);
+      
+      n=gettitle(elfs[i]);
+      
+      if((IS_SEER(TP)) && (ENV(elfs[i])))
+        {
+	  string *fn;
+	  
+	  fn=explode(file_name(ENV(elfs[i])), "/");
+
+	  switch(fn[0])
+	    {
+	    case "d":
+	      reg=sprintf(" (%s)", CAP(fn[1]));
+
+	      if(fn[1]=="seher")
+		reg=" (Seherhaus)";
+		
+	      if(fn[1]=="kristallwald")
+		if(((fn[1]=="sargola") && (fn[2]=="dorf")) ||
+		   ((fn[1]=="protheg") && (fn[2]=="elessar")))
+		  reg=" (Elessar)";
+	      break;
+	    case "gilden":
+	      reg=" (Gilden)";
+	      break;
+	    case "players":
+	      reg=" (Magiergebiet)";                              
+	      break;
+	    case "room":
+	      if(fn[1]=="death")
+		reg=" (Bei Lars)";
+	      break;
+	    default:
+	      reg="";
+	    }
+	}
+      else
+	reg="";
+            
+      ret+=sprintf("%25-s %6s %20.20-s %10s\n - Standort: %-50.50s\n%s", 
+		   n+CAP(getuid(elfs[i])),
+		   (query_idle(elfs[i])>120 ? 
+		    (query_idle(elfs[i])>1800 ? "(IDLE)":"(idle)"):""),
+		   (we ? extract_colors(we->Name(RAW)) : ""),
+		   getalign(elfs[i]->QueryProp(P_ALIGN)),
+		   (ENV(elfs[i]) ? ENV(elfs[i])->QueryProp(P_INT_SHORT)+reg: 
+		    "Im Nirvana"),
+		   (en ? " - Im Kampf mit: "+en->Name(WER)+"\n" : "")+
+		   (str=="kurz" ? "":"\n"));
+    }
+
+  listeners=users()-elfs;
+  li="";
+
+  for(i=sizeof(listeners)-1;i>=0;i--)
+    if((listeners[i]->QueryProp(ELFLISTENER)) && 
+       (!listeners[i]->QueryProp(P_INVIS)) &&
+       (getuid(listeners[i])!="protheg"))
+      li+=CAP(getuid(listeners[i]))+"-";
+  
+  if(sizeof(elfs)>1)
+    ret+=BS("Es sind insgesamt "+siz+" Elfen anwesend.")+"\n";
+  else
+    ret+=BS("Du bist "+(TP->QueryProp(P_GENDER)==FEMALE ? "die einzige Elfe":
+			"der einzige Elf")+" im Silberland.");
+
+  if(strlen(li))
+    ret+="Stille Lauscher:\n"+implode(explode(li, "-"), ", ")+"\n";
+  
+  TP->More(make_dokument(ret));
+  return 1;
+}
+
+nosave int nimhist(string str)
+{
+  object pl;
+  string ret;
+
+  if(pl=ENV(ME))
+    if(interactive(pl))
+      if(pl==TP)
+	if(strlen(ret=NIMRONDEL->QueryHistory()))
+	  pl->More(ret);
+	else
+	  write(BS("In letzter Zeit war es recht ruhig..."));
+
+  return 1;
+}
+
+nosave int nimrufen(string str)
+{
+  object *plr;
+  string pre;
+  int i;
+
+  notify_fail(BS("Was willst Du den anderen Elfen zurufen?"));
+  if(!str) return 0;
+  
+  if(!TP) return 0;
+  if(!MENV) return 0;
+  if(TP!=MENV) return 0;
+  
+  if(TP->QueryProp(P_INVIS)) 
+    return write(BS("Das geht nur, wenn Du sichtbar bist!!")),1;
+  
+  plr=users()-({TP});
+  
+  str=TP->_unparsed_args();
+  
+  pre=gettitle(TP);
+  pre+=CAP(getuid(TP))+" ruft Dir zu: ";
+
+  pre=break_string(str, 78, pre);
+  
+  for(i=sizeof(plr)-1;i>=0;i--)
+    {
+      if(plr[i]->QueryProp(ELFLISTENER))
+	if(is_not_ignoring(plr[i], getuid(TP)))
+	  tell_object(plr[i], pre);
+    }
+  
+  if(!IS_SEER(TP)) TP->AddSp(-1);
+  
+  write(break_string(str, 78, "Du rufst den anderen Elfen zu: "));
+  
+  NIMRONDEL->AddHistory(pre);
+  
+  return 1;
+}
+
+string extra_look()
+{
+  return capitalize(environment()->QueryPronoun())+
+    " traegt eine von Nimrondels Traenen.\n";
+}
+
+void NotifyHpChange()
+{
+  int    hp, mhp, sp, msp, prz;
+  string col;
+  
+  // Sicherheits-Check
+  if (!previous_object() || !owner || (owner != previous_object()))
+    return;
+
+  // Ausschalten wenn aktiv == 0 (z.B. nach Tod)
+  if (!aktiv)
+  {
+    SetProp(P_NODROP, 0);
+    if (owner!=find_netdead(getuid(owner)))
+      owner->RemoveHpHook(ME);   // geht nur bei nicht-netztoten Spielern
+    return;
+  }
+
+  // Test auf Geist
+  if (owner->QueryProp(P_GHOST))
+    return;
+
+  // aktuelle Werte ermitteln
+  hp = owner->QueryProp(P_HP);
+  mhp = owner->QueryProp(P_MAX_HP);
+  sp = owner->QueryProp(P_SP);
+  msp = owner->QueryProp(P_MAX_SP);
+
+  // Vergleich und Ausgabe
+  if((hp < lastHP) || (hp != lastHP && sp == msp) || (sp != lastSP))
+    {
+      switch(show)
+	{
+	case KURZ:
+	  tell_object(owner,
+		      "* LP: "+hp+" ("+mhp+") MP: "+sp+" ("+msp+")\n");
+	  if((hp==mhp) && (sp==msp))
+	    tell_object(owner, "Du bist jetzt wieder absolut fit.\n");
+	  break;
+	case SPEZIAL:
+	  switch (hp*100/mhp)
+	    {
+	    case  0 ..  20: col=ANSI_RED+ANSI_BOLD;    break;
+	    case 21 ..  40: col=ANSI_BLUE+ANSI_BOLD;   break;
+	    case 41 ..  60: col=ANSI_CYAN+ANSI_BOLD;   break;
+	    case 61 ..  80: col=ANSI_YELLOW+ANSI_BOLD; break;
+	    case 81 .. 100: col=ANSI_GREEN+ANSI_BOLD;  break;
+	    default: col=ANSI_NORMAL;
+	    }
+	  tell_object(owner,
+		      col+"* Du hast jetzt "+hp+" von "+mhp+" Lebenspunkten "
+		      "und "+sp+" von "+msp+" Magiepunkten."+ANSI_NORMAL+"\n");
+	  if((hp==mhp) && (sp==msp))
+	    tell_object(owner, 
+			col+"* Du bist jetzt wieder absolut fit."+ANSI_NORMAL+
+			"\n");
+	  break;
+	case SPEZIALKURZ:
+	  switch (hp*100/mhp)
+	    {
+	    case  0 ..  20: col=ANSI_RED+ANSI_BOLD;    break;
+	    case 21 ..  40: col=ANSI_BLUE+ANSI_BOLD;   break;
+	    case 41 ..  60: col=ANSI_CYAN+ANSI_BOLD;   break;
+	    case 61 ..  80: col=ANSI_YELLOW+ANSI_BOLD; break;
+	    case 81 .. 100: col=ANSI_GREEN+ANSI_BOLD;  break;
+	    default: col=ANSI_NORMAL;
+	    }
+	  tell_object(owner,
+		      col+"* LP: "+hp+" ("+mhp+") MP: "+sp+" ("+msp+")"+ANSI_NORMAL+"\n");
+	  if((hp==mhp) && (sp==msp))
+	    tell_object(owner, 
+			col+"* Du bist jetzt wieder absolut fit."+ANSI_NORMAL+
+			"\n");
+	  break;
+	default:
+	  tell_object(owner,
+		      "* Du hast jetzt "+hp+" von "+mhp+" Lebenspunkten und "+
+		      sp+" von "+msp+" Magiepunkten.\n");
+	  if((hp==mhp) && (sp==msp))
+	    tell_object(owner, "* Du bist jetzt wieder absolut fit.\n");
+	}
+    }
+  // neue Werte merken
+  lastHP = hp; lastSP = sp;
+}
+
+nosave int Report(string str)
+{
+  if(MENV != TP)
+    return call_out("remove", 0), 0;
+
+  notify_fail("Syntax: nimreport ein|aus|kurz|spezial|spezialk.\n");
+
+  switch (str)
+    {
+    case "ein":
+    case "n":
+    case "normal":
+      if (aktiv && objectp(owner))
+	if(show==NORMAL)
+	  write("Der Report-Modus normal ist schon eingeschaltet!\n");
+	else
+	  {
+	    show=NORMAL;
+	    write("Der Report-Modus wird auf normal umgestellt!\n");
+	  }
+      else 
+	{
+	  write("Report-Modus ist jetzt eingeschaltet.\n");
+	  activate(TP);
+	  show=NORMAL;
+	}
+      break;
+    case "a":
+    case "aus":
+      if (!aktiv)
+        write("Der Report-Modus ist doch schon ausgeschaltet!\n");
+      else 
+	{ 
+	  write("Report-Modus ist nun ausgeschaltet.\n");
+	  activate(0);
+	}
+      break;
+    case "k":
+    case "kurz":
+      if(aktiv && objectp(owner))
+	if(show==KURZ)
+	  write("Der Report-Modus kurz ist schon eingeschaltet!\n");
+	else
+	  {
+	    show=KURZ;
+	    write("Der Report-Modus wird auf kurz umgestellt!\n");
+	  }
+      else
+	{
+	  write("Report-Modus kurz ist jetzt eingeschaltet.\n");
+	  activate(TP);
+	}
+      show=1;
+      break;
+    case "s":
+    case "spezial":
+      if(aktiv && objectp(owner))
+	if(show==SPEZIAL)
+	  write("Der Report-Modus spezial ist schon eingeschaltet!\n");
+	else
+	  {
+	    show=SPEZIAL;
+	    write("Der Report-Modus wird auf spezial umgestellt!\n");
+	  }
+      else 
+	{
+	  write("Report-Modus spezial ist jetzt eingeschaltet.\n");
+	  activate(TP);
+	}
+      show=2;
+      break;
+    case "sk":
+    case "spezialk":
+    case "skurz":
+    case "spezialkurz":
+      if(aktiv && objectp(owner))
+	if(show==SPEZIALKURZ)
+	  write("Der Report-Modus spezialkurz ist schon eingeschaltet!\n");
+	else
+	  {
+	    show=SPEZIALKURZ;
+	    write("Der Report-Modus wird auf spezialkurz umgestellt!\n");
+	  }
+      else 
+	{
+	  write("Report-Modus spezialkurz ist jetzt eingeschaltet.\n");
+	  activate(TP);
+	}
+      show=3;
+      break;
+    default:
+      return 0;
+    }
+  return 1;
+}
+
+void zerrinnen(object who)
+{
+  tell_object(who, BS("Als Du die kleine Wasserperle beruehrst, zerfliesst "
+		      "sie ploetzlich..."));
+
+  RemoveCmd(0);
+
+  call_out("remove", 0);
+}
+
+varargs int move(mixed dest, int method)
+{
+  int res;
+  object env;
+  
+/*
+  if(objectp(dest))
+    catch(present(ELFENTOOL, dest)->remove());
+  else
+    catch(present(ELFENTOOL, find_object(dest))->remove());
+*/
+
+  res=::move(dest,method);
+  
+  env=MENV;
+  
+  if((IS_LEARNER(env)) || env->QueryProp(P_TESTPLAYER))
+    SetProp(P_AUTOLOADOBJ, 1);        // fuer Magier autoload
+  else
+    SetProp(P_AUTOLOADOBJ, 0);
+
+  if((interactive(env)) && (env->QueryProp(P_RACE)!="Elf") &&
+     (!IS_WIZARD(env)))
+    call_out("zerrinnen",0,env);
+  else
+    {
+      if((interactive(env)) && ((env->QueryProp(P_RACE)=="Elf") ||
+				(getuid(env)=="protheg")))
+	{
+	  env->SetProp(ELFLISTENER, 1);
+	  DB("*** Activating Property ELFLISTENER in "+CAP(getuid(env))+
+	     ". Version 1."+VER+"\n");
+	}
+
+      if(!xpdiff) xpdiff=env->QueryProp(P_XP);
+      
+      call_out("checkowner", 1);
+    }
+    
+  return res;
+}
+
+void checkowner()
+{
+  if (aktiv && !objectp(owner) && stringp(owner_name)) 
+    {
+      owner = find_player(owner_name);
+      if(!objectp(owner)) 
+	activate(0);
+      else 
+	activate(owner);
+    }
+}
+
+int remove(int x)
+{
+  if((TP) && (MENV) && (TP==MENV))
+    {
+      if(aktiv) MENV->RemoveHpHook(ME);
+      if(!(present(ELFENTOOL, TP)))
+	MENV->SetProp(ELFLISTENER, 0);
+    }
+  
+  return ::remove(x);
+}
+
+// ---------------------------------------------------------------------------
+
+varargs void init_soul_cmds(int force)
+{
+  string *cmds;
+  string *tmp;
+  int i;
+  
+  if((!force) && (file_date(SOULFILE)==souldate)) return;
+  
+  souldate=file_date(SOULFILE);
+  
+  DB(BS("*** Traenensoul in "+sprintf("%O", (MENV||TP||"-"))+ 
+	" Rehashing from file ("+ctime(souldate)+")"));
+  
+  soulcmds=([]);
+  
+  cmds=explode(read_file(SOULFILE), "\n");
+  
+  for(i=sizeof(cmds)-1;i>=0;i--)
+    {
+      tmp=explode(cmds[i], "##");
+      
+      if(sizeof(tmp)!=9)
+	{
+	  DB("*** Traenensoul: Fehler beim Einlesen ("+i+")\n");
+	  continue;
+	}
+      
+      soulcmds+=([i:explode(tmp[0],","); ({ tmp[1], tmp[2], tmp[3], tmp[4],
+		  tmp[5], tmp[6]}); tmp[7]; tmp[8]]);
+      
+      AddCmd(soulcmds[i], "traenensoulcmd");
+    }
+}
+
+nosave int traenensoulcmd(string str)
+{
+  int i;
+  
+  for(i=sizeof(soulcmds)-1;i>=0;i--)
+    if(member(soulcmds[i], query_verb())!=-1)
+      return rbefehl (str, soulcmds[i,1], to_int(soulcmds[i,2]), 
+		      to_int(soulcmds[i,3]));
+  
+  return 0;
+}
+
+string _in(string a, mapping m)
+{
+  if (member(m,lower_case(a)))
+    return m[a];
+  else
+    return "";
+}
+
+string ParseAdverben(string str, object ob)
+{
+  string *advpart;
+  mixed quotedpart;
+  mapping adverben;
+
+  if (!str) return 0;
+  str=" "+str;
+  adverben=ob->QueryStdAdverbs()+ob->QueryAdverbs();
+  advpart=explode(str,"/");
+  if (sizeof(advpart)>1)
+      quotedpart=" "+implode(advpart[1..],"/");
+  else
+    quotedpart="";
+  advpart=regexplode(advpart[0],"\\<[^, ]*\\>");
+  advpart=map_array(advpart,CLOSURE(_in),adverben) - ({""});
+  return sizeof(advpart) ? ob->CountUp(advpart)+quotedpart : quotedpart[1..];
+}
+
+/*
+explode_str() - ersetzt @@...@@ Makros
+-------------
+str ......... der String
+ob .......... das Objekt, dessen Name eingesetzt werden soll
+adv ......... Adverben
+fern ........ 0: Naehe, 1: aus der Ferne
+*/
+varargs string explode_str(string str, object ob, string adv, int fern)
+{
+  string s,s1,s2,x;
+  s2=str;
+  s="";
+
+  while (sscanf(s2, "%s@@%s@@%s", s1, x, s2) == 3)
+    {
+      switch (x)
+	{
+	case "WER":    
+	  if (fern>0 && INV_TEST(TP,ob,ob)) s+=s1+WIZ_NAME(ob,0);
+	  else s+=s1+ob->name(WER);
+	  break;
+
+	case "WESSEN": 
+	  if (fern>0 && INV_TEST(TP,ob,ob)) s+=s1+WIZ_NAME(ob,1);
+	  else s+=s1+ob->name(WESSEN);
+	  break;
+
+	case "WEM":
+	  if (fern>0 && INV_TEST(TP,ob,ob)) s+=s1+WIZ_NAME(ob,0);
+	  else s+=s1+ob->name(WEM);
+	  break;
+
+	case "WEN":
+	  if (fern>0 && INV_TEST(TP,ob,ob)) s+=s1+WIZ_NAME(ob,0);
+	  else s+=s1+ob->name(WEN);
+	  break;
+
+	case "WIE":
+	  s+=s1+adv; 
+	  break;
+
+	case "FERN":   
+	  if (fern>0) s+=s1+" aus der Ferne"; 
+	  else s+=s1; 
+	  break;
+	  
+	case "HAARFARBE":
+	  s+=s1+ob->QueryProp(P_HAIR_COLOR)+"e ";
+	  break;
+	  
+	case "HAARFARBEN":
+	  s+=s1+ob->QueryProp(P_HAIR_COLOR)+"en ";
+	  break;	}
+    }
+  
+  s+=s2;
+  
+  return s;
+}
+
+/*
+  
+rbefehl()
+---------
+str ......... der String, wie er beim Befehl angehaengt wurde
+form ........ ein Array mit den diversen Meldungen:
+  form[0].... Fehlermeldung, wenn str leer ist
+  form[1].... Fehlermeldung, wenn Spieler == Zielperson
+  form[2].... sprintf Fehlermeldung bei nicht parse-baren Adverben
+              "...%s...", Zielperson->Name(casus)
+  form[3].... sprintf Maske fuer Zielperson
+              "%s...%s...%s.\n", Spieler, Adverben, ["Ferne"]
+  form[4].... sprintf Maske fuer Spieler
+              "...%s...%s...%s.\n", Zielperson->Name(casus), Adverben, ["Ferne"]
+  form[5].... sprintf Maske fuer Raum
+              "%s...%s...%s...", Spieler, Zielperson->Name(casus), Adverben
+sp........... Kosten (spellpoints)
+---
+Anmerkungen:
+
+["Ferne"]  ist " aus der Ferne", wenn die Spieler in verschiedenen Raeumen
+           stehen, sonst ein Leerstring ("").
+Adverben   werden wie soul-Adverben geparsed, ihnen wird ausserdem ein
+           Space vorangestellt (um sie fuer die sprintf Maske optional
+           zu machen).
+*/
+  
+varargs int rbefehl(string str, string *form, int sp, int nearonly)
+{
+  string *s, adv;
+  mixed ob;
+  object room;
+  int i, ferne;
+
+  PROCHECK(TP);
+
+  if(MENV != TP)
+    return notify_fail(BS("Dazu musst Du "+name(WEN,1)+" erst einmal "
+			  "an Dich nehmen!")), 0;
+  if(!IS_SEER(TP) && (TP->QueryProp(P_SP) < sp))
+    return notify_fail("Dazu hast Du zuwenig Magiepunkte!\n"), 0;
+
+  notify_fail(BS(form[0]));
+  
+  str=TP->_unparsed_args();
+  
+  if (!stringp(str) || str=="") return 0;
+  
+  s=explode (str, " ");
+  if(!i=sizeof(s)) return 0;
+
+  s[0]=LOWER(s[0]);
+
+  ob=find_player(s[0]) || match_living(s[0], 1);
+  // ergibt:  - Spielerobjekt oder
+  //          - String (passender Spielername) oder
+  //          - Integer (-1: multiple matches, -2: no matches)
+  if (stringp(ob)) ob=find_player(ob);
+  // Jetzt: - Spielerobjekt oder
+  //        - Integer (0 oder -2: nicht da, -1: mehrere da)
+  
+#ifdef INVIS_SPERRE
+  if (objectp(ob) && !IS_WIZARD(TP) && ob->QueryProp(P_INVIS)) ob=0;
+#endif
+  
+  if (!objectp(ob)) 
+  {
+    if (ob==-1)
+      return notify_fail("Das war nicht eindeutig!\n"), 0;
+    else
+      return notify_fail("Kein solcher Spieler!\n"), 0;
+  }
+
+  if (ob==TP) return notify_fail(BS(form[1])), 0;
+
+  if (i<2) adv="";
+  else
+  {
+    if (!adv=ParseAdverben(implode(s[1..], " "), TP))
+      return notify_fail (BS(sprintf(explode_str(form[2], ob)))), 0;
+    else
+      if (strlen(adv)) adv=" "+adv;
+  }
+  
+  // aus der Ferne?
+  // (Bei der Gelegenheit ausserdem gleich room und ferne setzen)
+  ferne=(room=ENV(TP)) != ENV(ob);
+
+  if(nearonly && ferne)
+    return write(BS(ob->Name(WER)+" ist zuweit weg von Dir...")), 1;
+
+  if(s=ob->QueryProp(P_IGNORE))
+    if(member(s, lower_case(getuid(TP))+".traene") != -1)
+      return write(BS(ob->Name(WER)+" ignoriert Nimrondels Traene. (Wie "
+		      "gemein...)\n")), 1;
+
+  // Nun die eigentliche Ausgabe:
+  // tell_object (ob, BS(sprintf(explode_str(form[3], ob, adv, ferne), TPN)));
+  if(ob->Message(BS(CAP(sprintf(explode_str(form[3], ob, adv, ferne),
+          gettitle(TP)+(INV_TEST(ob,TP,TP) ? WIZ_NAME(TP,0) : TPN)))))==-1)
+    write(ob->Name(WER)+" ignoriert Dich oder diesen Befehl.\n");
+  else 
+  {
+    write (BS(CAP(sprintf(explode_str(form[4], ob, adv, ferne)))));
+    if (!ferne)
+      tell_room(room, BS(CAP(
+	  sprintf(explode_str(form[5], ob, adv, -1), gettitle(TP)+TPN))), 
+	  ({TP,ob}) );
+  }
+
+  if (!IS_SEER(TP) && sp)
+    TP->AddSp(-sp);
+
+  return 1;
+}
+
+/*
+
+    _______________________________________________________________________
+  /                                                                      / \
+ |                                                                      | O |
+ |    Bericht 2439 von Zwergengrabtrupp 28                              |\_/
+ |    ------------------------------------                              |
+ |                                                                      |
+ |    Betreff: Auftrag von 'Rat von Elessar' - Freilegung Gebirgsweg.   |
+ |    =======                                                           |
+ |                                                                      |
+ |    Haben Teile des Weges ins Gebirge hinauf freigelegt, doch weiter, |
+ |    als bis 'Nimrondels Quelle' war uns zu gefaehrlich. Steinschlaege |
+ |    haben immer wieder alles verschuettet.                            |
+ |                                                                      |
+ |    Haben Lager abgebrochen, weitere Ausgrabungen gestoppt.           |
+ |                                                                      |
+ |    Der Weg zur Quelle ist jedoch frei und halbwegs sicher.           |
+ |                                                                      |
+ |                                                                      |
+ |                                             Bergzwerg Gurke.         |__
+ |                                                                      |/ \
+ |                                                                      | O |
+  \                                                                      \ /
+   `----------------------------------------------------------------------'
+*/
+

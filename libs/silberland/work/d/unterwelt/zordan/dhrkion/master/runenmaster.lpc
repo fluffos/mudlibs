@@ -1,0 +1,606 @@
+//=========================================================================
+//
+// File:    master.c
+// Created by Ronja@SL
+//
+// Project: Runenquest
+//
+//=========================================================================
+
+#include "../def.h"
+
+#include <ansi.h>
+#include <wizlevels.h>
+
+#include "runes.lpc"
+
+#define SAVEFILE "/d/" REGION "/" MAGIERNAME "/" GEBIET "/master/runenmaster"
+
+mapping runenquest;
+string *listener;
+
+void create()
+{
+  if (is_clone(this_object()))
+  {
+    destruct(this_object());
+    return;
+  }
+
+  seteuid(getuid(this_object()));
+
+  runenquest = ([ ]);
+  listener   = ({ });
+
+  restore_object(SAVEFILE);
+
+  return;
+}
+
+int IsQuester(string uuid)
+{
+  return member(runenquest, uuid);
+}
+
+void DeleteQuester(string uuid)
+{
+  if(!IsQuester(uuid)) return;
+  runenquest = m_delete(runenquest, uuid);
+  save_object(SAVEFILE);
+}
+
+void StartQuest(string uuid)
+{
+  string *words, *sorceress, *questwords, *questchars, questsorceress;
+  int *questpos, *questplaces, *numbers;
+
+  mapping char2rune;
+
+  int i, j;
+  string s;
+
+  if(IsQuester(uuid)) return;
+
+  words =
+  ({"lloth","dunkelheit","dhrkion","spinne","goettin","gebet"
+   ,"finster","boese","licht","sonne","strahl","zunnxa","mystixfis"
+   ,"fies","stadt","hoehle","unterwelt","zauber","magie","runen"
+   ,"hoelle","dunkelelf","gnome","macht","koenigin","silberland"
+   ,"fledermaus"
+   });
+
+  questwords = ({ });
+
+  while(sizeof(questwords) < 4)
+  {
+    s = words[random(sizeof(words))];
+    if(member(questwords,s) == -1) questwords += ({ s });
+  }
+
+  questchars = ({"","","",""});
+  questpos   = ({0,0,0,0});
+
+  while( (questchars[0] == questchars[1]) ||
+         (questchars[0] == questchars[2]) ||
+         (questchars[0] == questchars[3]) ||
+         (questchars[1] == questchars[2]) ||
+         (questchars[1] == questchars[3]) ||
+         (questchars[2] == questchars[3])  )
+  {
+    for (i = 0;i < 4;i++)
+    {
+      j             = random(strlen(questwords[i]));
+      questpos[i]   = j;
+      questchars[i] = questwords[i][j..j];
+    }
+  }
+
+  questplaces = ({ });
+
+  while(sizeof(questplaces) < 4)
+  {
+    j = random(8)+1;
+    if(member(questplaces,j) == -1) questplaces += ({ j });
+  }
+
+  sorceress =
+  ({"sedda","shardin","walpurgis","gefjon","wetterwachs","lotuvaria"
+   ,"lena","baaleth","serona","salina"
+   });
+
+  questsorceress = sorceress[random(sizeof(sorceress))];
+
+  numbers = ({ });
+  for(i=1;i<27;i++) numbers += ({ i });
+
+  char2rune = ([ ]);
+  for(i=1;i<27;i++)
+  {
+    j = numbers[random(sizeof(numbers))];
+    numbers -= ({ j });
+    char2rune += ([to_string(({i+96})): j]);
+  }
+
+  runenquest += ([uuid
+                 :ctime(time())   // Startzeitpunkt der Quest;          ( 0)
+                 ;questwords      // die ausgewaehlten 4 Woerter;       ( 1)
+                 ;questpos        // die fehlenden Stellen der Woerter  ( 2)
+                 ;({-1,-1,-1,-1}) // stelle an der rune eingesetzt ist  ( 3)
+                 ;({"","","",""}) // buchstabe der eingesetzten rune    ( 4)
+                 ;questplaces     // die 4 orte, an denen eine rune
+                                  // gefunden werden kann               ( 5)
+                 ;questsorceress  // name der zauberin (schlusswort)    ( 6)
+                 ;char2rune       // uebersetzungstabelle char <-> rune ( 7)
+                 ;""              // hinweis fuer spieler (6 chars)     ( 8)
+                 ]);
+
+  save_object(SAVEFILE);
+}
+
+string Translate(string uuid, string str)
+{
+  string *ret, s, f, n, f1, f2;
+  int i, j, len;
+  mapping char2rune;
+  object pl;
+
+  if(!str || str == "") return "";
+  if(!IsQuester(uuid))  return "";
+
+  char2rune = runenquest[uuid, 7];
+  str       = lower_case(str);
+  ret       = ({"","","","","","",""});
+
+  pl = find_player(explode(uuid, "_")[0]);
+
+  if(pl && objectp(pl) && interactive(pl) && pl->QueryProp(P_TTY))
+  {
+    f  = ANSI_GREEN+ANSI_BOLD;
+    n  = ANSI_NORMAL;
+    f2 = ANSI_BLUE+ANSI_BOLD;
+    f1 = ANSI_CYAN+ANSI_BOLD;
+  }
+  else
+  {
+    f = "";
+    n = "";
+    f2 = "";
+    f1 = "";
+  }
+
+  len = strlen(str);
+
+  for(i=0;i<len;i++)
+  {
+    j       = char2rune[str[i..i], 0];
+
+    ret[0] += f2+" "+"_______"[0..strlen(runes[j,0])+1]+"  ";
+    ret[1] += f2+"/"+"       "[0..strlen(runes[j,0])+1]+f1+"\\ ";
+    ret[2] += f2+"\\ "+n+f+runes[j,0]+f1+" / ";
+    ret[3] += f2+"| "+n+f+runes[j,1]+f1+" | ";
+    ret[4] += f2+"| "+n+f+runes[j,2]+f1+" | ";
+    ret[5] += f2+"/ "+n+f+runes[j,3]+f1+" \\ ";
+    ret[6] += f2+"\\"+f1+"_______"[0..strlen(runes[j,0])+1]+"/ "+n;
+  }
+
+  s = implode( ret, "\n");
+//tell_object(find_player("ronja"), sprintf("%s",s));
+  return s;
+}
+
+string QuerySorceress(string uuid)
+{
+  if(!IsQuester(uuid)) return "";
+
+  return runenquest[uuid, 6];
+}
+
+int IsRuneHere(string uuid, int place)
+{
+  if(place < 0)        return 0;
+  if(place > 8)        return 0;
+  if(!IsQuester(uuid)) return 0;
+
+  if(member(runenquest[uuid, 5],  place) > -1) return 1;
+  if(member(runenquest[uuid, 5], -place) > -1) return -1;
+
+  return 0;
+}
+
+int RuneFound(string uuid, int place)
+{
+  int p;
+
+  if(place < 0)        return 0;
+  if(place > 8)        return 0;
+  if(!IsQuester(uuid)) return 0;
+
+  p = member(runenquest[uuid,5],  place);
+  if(p == -1)          return 0;
+
+  runenquest[uuid,5][p] = -runenquest[uuid,5][p];
+
+  save_object(SAVEFILE);
+  return 1;
+}
+
+int GetRune(string uuid, int place)
+{
+  object pl, rune;
+  int p;
+  string s;
+
+  if(!IsQuester(uuid))             return 0;
+  if(IsRuneHere(uuid, place) != 1) return 0;
+
+  pl = find_player(explode(uuid, "_")[0]);
+
+  rune = clone_object(OBJ "rune");
+
+  if(rune->move(pl, M_GET) == 1)
+  {
+    p = member(runenquest[uuid, 5], place);
+    s = runenquest[uuid, 1][p];
+    p = runenquest[uuid, 2][p];
+    s = s[p..p];
+
+    rune->SetProp(P_LONG, Translate(uuid, s));
+    rune->SetChar(s);
+    rune->SetPlace(place);
+
+    RuneFound(uuid, place);
+
+    return 1;
+  }
+
+  rune->remove();
+  return -1;
+}
+
+string GetWord(string uuid, int wno)
+{
+  string s, chr;
+  int p;
+
+  if(!IsQuester(uuid)) return "";
+  if(wno < 0)          return "";
+  if(wno > 3)          return "";
+
+  s = runenquest[uuid, 1][wno];
+  p = runenquest[uuid, 2][wno];
+
+  s = s[0..p-1] + s[p+1..];
+
+  chr = runenquest[uuid, 4][wno];
+  p   = runenquest[uuid, 3][wno];
+
+  if(p == -1) return s;
+
+  return s = s[0..p-1] + chr + s[p..];
+}
+
+int PutRune(string uuid, int wno, int place, string chr)
+{
+  if(!IsQuester(uuid)) return 0;
+  if(wno < 0)          return 0;
+  if(wno > 3)          return 0;
+
+  runenquest[uuid, 4][wno] = chr;
+  runenquest[uuid, 3][wno] = place;
+
+  save_object(SAVEFILE);
+  return 1;
+}
+
+string TakeRune(string uuid, int wno)
+{
+  string chr;
+
+  if(!IsQuester(uuid)) return "";
+  if(wno < 0)          return "";
+  if(wno > 3)          return "";
+
+  chr = runenquest[uuid, 4][wno];
+
+  runenquest[uuid, 4][wno] = "";
+  runenquest[uuid, 3][wno] = -1;
+
+  save_object(SAVEFILE);
+  return chr;
+}
+
+int QueryRuneStatus(string uuid, int wno)
+{
+  if(!IsQuester(uuid)) return -1;
+
+  if(wno < 0)          return -2;
+  if(wno > 3)          return -2;
+
+  if(runenquest[uuid, 3][wno] == -1) return 1;
+
+  return 0;
+}
+
+string QueryRune(string uuid, int wno)
+{
+  string chr;
+
+  if(!IsQuester(uuid)) return "";
+  if(wno < 0)          return "";
+  if(wno > 3)          return "";
+
+  return runenquest[uuid, 4][wno];
+}
+
+string GetRuneDescription(string uuid, string str, int n)
+{
+  int j;
+
+  if(!IsQuester(uuid)) return "";
+
+  j = runenquest[uuid, 7][str[0..0], 0];
+
+  return runes[j, n+3];
+}
+
+int QueryAllDone(string uuid)
+{
+  int i, ok;
+
+  if(!IsQuester(uuid)) return 0;
+
+  ok = 0;
+
+  if((runenquest[uuid, 5][0] < 0) &&
+     (runenquest[uuid, 5][1] < 0) &&
+     (runenquest[uuid, 5][2] < 0) &&
+     (runenquest[uuid, 5][3] < 0)  ) ok = 1;
+
+  for(i = 0; i < 4; i++)
+  {
+    if(runenquest[uuid, 1][i] != GetWord(uuid, i)) ok = 0;
+  }
+
+  return ok;
+}
+
+string QueryQuestion(string uuid)
+{
+  if(!IsQuester(uuid)) return "";
+
+  return runenquest[uuid, 8];
+}
+
+int SetQuestion(string uuid, string s)
+{
+  if(!IsQuester(uuid)) return 0;
+
+  runenquest[uuid, 8] = s;
+  save_object(SAVEFILE);
+
+  return 1;
+}
+
+int CheckQuestion(string uuid, string str)
+{
+  string s;
+  int i, p, ok;
+
+  if(!IsQuester(uuid))                return  0;
+  if(strlen(str) != 6)                return -3;
+  if(strlen(QueryQuestion(uuid)) > 0) return -6;
+
+  ok = 0;
+
+  if((runenquest[uuid, 5][0] < 0) &&
+     (runenquest[uuid, 5][1] < 0) &&
+     (runenquest[uuid, 5][2] < 0) &&
+     (runenquest[uuid, 5][3] < 0)  ) ok = 1;
+
+  if(!ok) return -5;
+
+  ok = 1;
+
+  for(i = 0; i < 6; i++)
+  {
+    if((str[i] < 97) || (str[i] > 122)) ok = 0;
+  }
+
+  if(!ok) return -4;
+
+  ok = 1;
+
+  for(i = 0; i < 4; i++)
+  {
+    s = runenquest[uuid, 1][i];
+    p = runenquest[uuid, 2][i];
+    s = s[p..p];
+    if(strstr(str, s, 0) != -1) ok = 0;
+  }
+
+  if(!ok) return -1;
+
+  ok = 1;
+
+  if(str[0] == str[1] ||
+     str[0] == str[2] ||
+     str[0] == str[3] ||
+     str[0] == str[4] ||
+     str[0] == str[5] ||
+
+     str[1] == str[2] ||
+     str[1] == str[3] ||
+     str[1] == str[4] ||
+     str[1] == str[5] ||
+
+     str[2] == str[3] ||
+     str[2] == str[4] ||
+     str[2] == str[5] ||
+
+     str[3] == str[4] ||
+     str[3] == str[5] ||
+
+     str[4] == str[5]  ) ok = 0;
+
+  if(!ok) return -2;
+
+  return 1;
+}
+
+void Msg(string s)
+{
+  object pl;
+  int i;
+
+  write_file(LOG "runenquest.log",ctime()+": "+s+".\n");
+
+  i = sizeof(listener);
+  while(i--)
+  {
+    pl = find_player(listener[i]);
+
+    if(!pl)              return;
+    if(!interactive(pl)) return;
+    if(!IS_LORD(pl))     return;
+
+    s = BSI(s+".", "RUNEN: ");
+    if(pl->QueryProp(P_TTY)) s = ANSI_BOLD+ANSI_RED+s+ANSI_NORMAL;
+    tell_object(pl, s);
+  }
+}
+
+void Out(string str, int l)
+{
+  tell_object(TP, "| " + str + sprintf("%" + (l-strlen(str)-4) + "s", " ") +
+                  "|\n");
+  return;
+}
+
+void QueryQuest(string uuid)
+{
+  object pl;
+  int l, i, j, p;
+  string z1, z2, npl, s, z;
+
+  if(!TP)              return;
+  if(!interactive(TP)) return;
+
+  if(!IS_LORD(TP))
+  {
+    Msg(CAP(getuid(TP)) + "versuchte grade, sich Details fuer die "
+        "Runenquest anzusehen");
+    return;
+  }
+
+  z1 = "+==============================================================="
+       "=============+\n";
+  l  = strlen(z1);
+  z2 = "+---------------------------------------------------------------"
+       "-------------+\n";
+
+  if(strstr(uuid, "_",0) == -1)
+  {
+    pl = find_player(uuid);
+    if(!pl) pl = find_netdead(uuid);
+    if(!pl)
+    {
+      Out("Der Spieler *"+uuid+"* konnte nicht gefunden werden.",l);
+      tell_object(TP, z2);
+      return;
+    }
+    else
+    {
+      uuid = getuuid(pl);
+    }
+
+  }
+
+  tell_object(TP, z1);
+  Out("Uebersicht ueber die Runenquest fuer *"+uuid+"*",l);
+  tell_object(TP, z2);
+
+  npl = CAP(explode(uuid, "_")[0]);
+  if(!IsQuester(uuid))
+  {
+    Out("Der Spieler "+npl+" ist nicht als Questspieler eingetragen.",l);
+    tell_object(TP, z2);
+    return;
+  }
+
+  Out(npl + " hat die Quest gestartet am: " + runenquest[uuid, 0], l);
+  Out("", l);
+
+  z = "     Woerter: ";
+
+  for(i=0;i<4;i++)
+  {
+    s = runenquest[uuid, 1][i];
+    p = runenquest[uuid, 2][i];
+
+    s = s[0..p-1] +"*"+ s[p..p] +"*"+ s[p+1..];
+
+    z += s;
+    if(i < 3) z += ", ";
+  }
+  Out(z, l);
+
+  z = "Runenwoerter: ";
+
+  for(i=0;i<4;i++)
+  {
+    z += GetWord(uuid, i);
+    if(i < 3) z += ", ";
+  }
+  Out(z, l);
+
+  Out("", l);
+
+  z = "Verstecke: ";
+
+  for(i=0;i<4;i++)
+  {
+    j = runenquest[uuid, 5][i];
+    if(j < 0)
+    {
+      z += sprintf("%d*", -j);
+    }
+    else
+    {
+      z += sprintf("%d", j);
+    }
+
+    if(i < 3) z+= ", ";
+  }
+
+  Out(z,  l);
+  Out("", l);
+
+  Out("Der Name der Zauberin lautet: " + runenquest[uuid, 6], l);
+
+  if(runenquest[uuid, 8] != "")
+  {
+    Out("Uebersetzt wurden folgende Buchstaben: " + runenquest[uuid, 8], l);
+  }
+
+  tell_object(TP, z1);
+}
+
+void AddListener(string uid)
+{
+  if(member(listener, uid) == -1)
+  {
+    listener += ({ uid });
+    save_object(SAVEFILE);
+    Msg("Neuer Listener: "+CAP(uid));
+  }
+}
+
+void RemoveListener(string uid)
+{
+  if(member(listener, uid) != -1)
+  {
+    listener -= ({uid});
+    save_object(SAVEFILE);
+    Msg("Listener entfernt: "+CAP(uid));
+  }
+}

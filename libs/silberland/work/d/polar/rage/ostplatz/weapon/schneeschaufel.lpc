@@ -1,0 +1,375 @@
+// Schneeschaufel, zum Schnee wegraeumen
+// Filename: schneeschaufel.c
+// File by Rage, September 02
+
+inherit "std/weapon";
+
+#include "../def.h"
+#include <moving.h>
+#include <combat.h>
+#include <environment.h>
+
+int rostig, rostmax;
+int delle;
+object geschlagener;
+
+void create()
+{
+  if (!is_clone(TO) ) return;
+  ::create();
+
+  rostig = random(36);
+  rostmax = 35;
+  delle = 0;
+
+  SetProp( P_SHORT, "Eine Schneeschaufel" );
+  SetProp( P_INFO,
+    "Mit dieser Schneeschaufel kannst Du sicher gut Schnee wegschaufeln." );
+  SetProp( P_NAME, "Schneeschaufel" );
+  SetProp( P_GENDER, FEMALE );
+  
+//DETAILS
+  AddDetail( "zweck",
+    "Welchen Zweck koennte eine Schneeschaufel so haben?" );
+  AddDetail( "stiel",
+    "Der Stiel ist gerade so lange, dass Du ihn mit beiden Haenden halten "
+    "kannst, um damit bequem schaufeln zu koennen." );
+  AddDetail( "holz",
+    "Nach kurzer Begutachtung stellst Du fest, dass es sich um Birkenholz "
+    "handelt." );
+  AddDetail( "begutachtung",
+    "Selbige laesst sich selten selbst begutachten." );
+  AddDetail( "birkenholz",
+    "Aus Birkenholz ist der Stiel dieser Schneeschaufel." );
+  AddDetail( "metall",
+    "Nachdem die Schaufel billig und gleichzeitig stabil sein soll, ist das "
+    "Schaufelblatt aus Eisen." );
+  AddDetail( ({ "schaufelblatt","blatt" }),
+    "Das Blatt dieser Schneeschaufel ist breit und leicht gebogen, um moeglichst "
+    "viel Schnee damit wegschippen zu koennen." );
+  AddDetail( "schnee",
+    "Wozu wirst Du wohl sonst eine Schneeschaufel brauchen?" );
+  AddDetail( "eisen",
+    "Eisen ist zwar nicht hundertprozentig sicher gegen Rost, aber dafuer billig "
+    "und erfuellt seinen Zweck. Außerdem kommst Du erst jetzt drauf, dass Du "
+    "mit der Schaufel einem Gegner sicher eins ueberziehen koenntest." );
+  AddSpecialDetail( ({ "delle","kopfform" }), "detailDelle" );
+  AddSpecialDetail( "rost", "detailRost" );
+  AddDetail( ({ "weg","gegner" }),
+    "Einfach alle, die Dir ueber den Weg laufen." );
+//END DETAILS
+
+  AddId( ({"schaufel","schneeschaufel","\nSCHNEESCHAUFEL"}) );
+  SetProp( P_MATERIAL, ([ MAT_BIRCH_WOOD:30, MAT_IRON:70 ]) );
+  SetProp( P_WEIGHT, 1500 );
+  SetProp( P_VALUE, 240 );
+  SetProp( P_ROSTZUSTAND, rostig );
+
+  SetProp( P_WEAPON_TYPE, WT_CLUB );
+  SetProp( P_WC, 50 );
+  SetProp( P_DAM_TYPE, DT_BLUDGEON );
+  SetProp( P_NR_HANDS, 2);
+
+  AddCmd( ({ "schipp","schippe","schaufel","schaufle" }), "cmd_schaufeln" );
+  AddCmd( ({ "zieh","ziehe" }), "cmd_ziehen" );
+}
+
+string _query_long()
+{
+  string text;
+
+  text = "Diese ";
+  switch ( QueryProp(P_ROSTZUSTAND) )
+  {
+    case 0..4:
+      text += "rostfreie ";
+    break;
+    case 5..13:
+      text += "ganz leicht verrostete ";
+    break;
+    case 14..22:
+      text += "zu einem betraechtlichen Teil verrostete ";
+    break;
+    case 23..31:
+      text += "sehr stark vom Rost angegriffene ";
+    break;
+    default:
+      text += "vom Rost uebersaehte ";
+    break;
+  }
+  text += "Schneeschaufel ist recht einfach gehalten, erfuellt aber sicher "
+          "ihren Zweck. Der Stiel ist aus Holz und das Blatt, das darauf "
+          "gesteckt wurde, ist - wie es nicht anders zu erwarten war - aus Metall.";
+  if ( delle )
+    text += " Nicht zu uebersehen ist ausserdem die riesige Delle, die sie "
+            "irgendwann abbekommen hat und wie eine Kopfform aussieht.";
+  return BS( text );
+}
+//SPECIALDETAILS
+string detailRost()
+{
+  string text;
+
+  switch ( QueryProp(P_ROSTZUSTAND) )
+  {
+    case 0..4:
+      text = "Von Rost ist auf der Schaufel keine Spur zu sehen.";
+    break;
+    case 5..13:
+      text = "Die ersten Rostflecken zeichnen sich auf der Schaufel ab.";
+    break;
+    case 14..22:
+      text = "Die Schaufel muss schon oft verwendet worden sein, denn sie "
+             "hat mittlerweile schon groessere Rostflecken.";
+    break;
+    case 23..31:
+      text = "Grosse Rostflecken zeichnen sich schon ueberall auf der "
+             "Schaufel ab, die dem Eisen immer staerker zusetzen.";
+    break;
+    default:
+      text = "Die Schaufel scheint schon aus mehr Rost als Eisen zu bestehen. "
+             "Die wird sicher nicht mehr lange halten.";
+    break;
+  }
+  return BS( text );
+}
+
+string detailDelle()
+{
+  if ( delle )
+    return BS(
+      "Als Du Dir die Delle genauer betrachtest, kommst Du der Ueberzeugung, dass "
+      "es sich um die Gesichtsform von "+geschlagener->Name(WEM)+" handelt." );
+  return "Sowas siehst Du da nicht!\n";
+}
+//END SPECIALDETAILS
+
+//COMMANDS
+int cmd_schaufeln(string str)
+{
+  notify_fail ( "Was willst Du wegschaufeln?\n");
+ 
+  if( !objectp(QueryProp(P_WIELDED)) )
+  {
+    write(
+      "Um etwas wegzuschaufeln, solltest Du die Schaufel besser zuecken.\n");
+    return -1;
+  }
+  
+  if ( delle )
+  {
+    write(
+      "Die Schneeschaufel hat so eine gewaltige Delle, dass Du damit keinen "
+      "Schnee mehr wegschippen kannst.\n" );
+    return -1;
+  }
+
+  if ( ENV(TP) -> QueryProp(P_INDOORS) )
+  {
+    write( BS(
+      "Bist Du nicht auch der Meinung, dass es sehr unwahrscheinlich ist, dass "
+      "Du hier Schnee zum Schaufeln entdecken wirst?") );
+    if ( ENV(TP) -> QueryProp(P_ENVIRONMENT)[ENV_TERRAIN] == TT_CAVE )
+      say(
+        TPN+" will doch glatt mitten in einer Hoehle Schneeschaufeln.\n" );
+    else
+      say(
+        TPN+" will doch glatt mitten in einem Haus Schneeschaufeln.\n" );
+  }
+  else
+  {
+    switch( ENV(TP) -> QueryProp(P_ENVIRONMENT)[ENV_TERRAIN] )
+    {
+      case TT_CAVE:
+      case TT_HOUSE:
+      {
+        write( BS(
+          "Hier wirst Du nichts finden, was Du mit einer Schneeschaufel "
+          "wegschippen koenntest. Versuch es doch eher unter freiem Himmel.") );
+        say(
+          "Du wunderst Dich, was "+TPN+" hier mit einer Schneeschaufel "
+          "vorhat.\n" );
+      }
+      break;
+      case TT_ARCTIC:
+      {
+        if ( member( ({ "schnee","neuschnee" }),str) != -1 )
+        {
+          if ( rostig > rostmax )
+          {
+            write( BS(
+              "Als Du gerade den Schnee wegschippen willst, bricht Dir die "
+              "Schaufel wegen des verrostenden Zustandes aus dem Griff "
+              "heraus. Da sie somit unbrauchbar ist, schleuderst Du sie "
+              "veraergert weg.") );
+            say(
+              TPN+" schleudert eine unbrauchbare Schneeschaufel weg.\n" );
+            remove(1);
+            return 1;
+          }
+          write( BS(
+            "Total motiviert schippst Du den Schnee vom Weg zur Seite, damit "
+            "die anderen nach Dir, den Weg einfacher passieren koennen.") );
+          say(
+            TPN+" schippt ein Lied traellend den Schnee vom Weg.\n" );
+          rostig++;
+          return 1;
+        }
+        return 0;
+      }
+      break;
+      case TT_TOWN:
+      {
+      	if ( member(ENV(TP)->QueryProp(P_DETAILS), "schnee") != -1 )
+      	{
+      	  if ( member( ({ "schnee","neuschnee" }),str) != -1 )
+          {
+            if ( rostig > rostmax )
+            {
+              write( BS(
+                "Als Du gerade den Schnee wegschippen willst, bricht Dir die "
+                "Schaufel wegen des verrostenden Zustandes aus dem Griff "
+                "heraus. Da sie somit unbrauchbar ist, schleuderst Du sie "
+                "veraergert weg.") );
+              say(
+                TPN+" schleudert eine unbrauchbare Schneeschaufel weg.\n" );
+              remove(1);
+              return 1;
+            }
+            if ( ( ENV(TP)->schneebedeckt() ) && ( !(ENV(TP)->schnee_da()) ) )
+            {
+              write( BS(
+                "Die Stellen, die noch vorher mit Schnee bedeckt waren und das Eis "
+                "verdeckten, legst Du nun mit der Schneeschaufel frei, indem Du den "
+                "Schnee an den Wegrand schippst.") );
+              say(
+                TPN+" schippt mit "+TP->QueryPossPronoun(FEMALE,WEM,SINGULAR)+
+                " Schaufel den Schnee vom Weg und legt dabei ein paar Eisstellen "
+                "frei.\n" );
+              ENV(TP) -> SetEisfrei();
+              return 1;
+            }
+            write( BS(
+              "Total motiviert schippst Du den Schnee vom Weg zur Seite, damit "
+              "die anderen nach Dir, den Weg einfacher passieren koennen.") );
+            say(
+              TPN+" schippt ein Lied traellend den Schnee vom Weg.\n" );
+            rostig++;
+            return 1;
+          }
+          write(
+            "Willst Du den Schnee hier in der Stadt beiseite Schaufeln?\n" );
+          return 1;
+        }
+      	return 0;
+      }
+      break;
+      default:
+        write(
+          "Es bringt einfach ueberhaupt nichts, hier mit der Schneeschaufel "
+          "etwas zu machen.\n" );  
+      break;
+    }
+  }
+  return 1;
+}
+
+int cmd_ziehen(string str)
+{
+  object spieler;
+  string wem;
+
+  notify_fail( "Willst Du wem eins mit der Schaufel ueberziehen?\n" );
+
+  if ( !str || str == "" ) return 0;
+  
+  if( !objectp(QueryProp(P_WIELDED)) )
+  {
+    write(
+      "Solange die Schaufel nicht gezueckt ist, kannst Du niemandem eine "
+      "ueberziehen.\n");
+    return 1;
+  }
+  
+  if ( sscanf( str, "%s eins ueber", wem) != 1 ) return 0;
+  if ( objectp(spieler=present(wem, ENV(TP))) )
+  {
+    if ( query_once_interactive(spieler))
+    {
+      if ( spieler == TP )
+      {
+        write( BS(
+          "Du bist tatsaehlich so verrueckt und ziehst Dir mit der Schneeschaufel "
+          "selbst eine ueber. Dir tut der Kopf weh, Blut rinnt Dir von der Stirn "
+          "und ausserdem hat die Schaufel jetzt eine gewaltige Delle.") );
+        say(
+          TPN+" schlaegt sich mit der Schaufel selbst ins Gesicht und "
+          "Blutspritzer fliegen in der Gegend rum.\n" );
+        TP -> AddHp(-random(15));
+        if ( delle )
+        {
+          write( BS(
+            "Der Schlag war allerdings so heftig, dass der Griff abbricht und Du "
+            "das nun nutzlose Werkzzeug achtlos wegwirfst.") );
+          say(
+            "Beim Schlag zerbricht der Griff der Schaufel, worauf "+TP->Name(WER)+
+            " diese achtlos wegwirft.\n" );
+          remove(1);
+          return -1;
+        }
+        geschlagener = spieler;
+        delle = 1;
+        return -1;
+      }
+      write( BS(
+        "Hinterhaeltig wie Du bist, holst Du mit der Schneeschaufel weit aus und "
+        "ziehst "+spieler->Name(WEM)+" eins über, dass sogar ein gewaltiger Abdruck "
+        "von "+spieler->QueryPronoun(WEM)+" in der Schaufel zurueckbleibt. Ich "
+        "wuerde an Deiner Stelle mich schnell aus dem Staub machen, denn "+
+        spieler->QueryPronoun(WER)+" ist jetzt sicher sauer auf Dich.") );
+      tell_object( spieler, BS(
+        TPN+" zieht Dir hinterhaeltigerweise eins ueber, dass Dir Blut von der "
+        "Stirn runterrinnt und sogar ein Abdruck deines Kopfes in der Schaufel "
+        "zurueckbleibt. Du denkst . . O ( wenn ich "+TP->Name(WEN)+" in die "
+        "Finger bekomme ).") );
+      tell_room( ENV(TP), BS(
+        TPN+" zieht "+spieler->Name(WEM)+" mit einer Schneeschaufel eins ueber, "
+        "dass das Blut spritzt und sogar ein Abdruck von "+spieler->QueryPronoun(WEM)+
+        " auf der Schaufel zurueckbleibt."), ({ spieler, TP }) );
+      if ( delle )
+        {
+          write( BS(
+            "Der Schlag war allerdings so heftig, dass der Griff abbricht und Du "
+            "das nun nutzlose Werkzzeug achtlos wegwirfst.") );
+          tell_object( spieler,
+            "Beim Schlag auf Deinen Kopf zerbricht der Griff der Schaufel, worauf "
+            +TP->Name(WER)+" diese achtlos wegwirft.\n" );
+          tell_room( ENV(TP),
+            "Beim Schlag zerbricht der Griff der Schaufel, worauf "+TP->Name(WER)+
+            " diese achtlos wegwirft.\n", ({ spieler,TP }) );
+          remove(1);
+          return -1;
+        }
+      geschlagener = spieler;
+      delle = 1;
+      return 1;
+    }
+    if ( living(spieler) )
+    {
+      write( BS(
+        "Du holst gerade weit mit der Schaufel aus, um "+spieler->Name(WEM)+
+        " eins ueberzuziehen, doch im letzten Moment entscheidest Du Dich anders, "
+        "weil Du meinst, dass es vielleicht doch nicht so klug waere.") );
+      say(
+        TPN+" will wohl "+spieler->Name(WEM)+" eins mit der Schaufel ueberziehen, "
+        "bricht den Vorgang allerdings feige ab." );
+      return 1;
+    }
+    else
+    {
+      write("Geht ned!\n");
+      return -1;
+    } 
+  }
+}
+//END COMMANDS

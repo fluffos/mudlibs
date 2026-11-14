@@ -1,0 +1,164 @@
+/*
+ * Elementarhand
+ *
+ *
+ * Kosten: 
+ * Level :  
+ * Objekte:
+ * Damage:
+ *
+ */
+
+int elementarhand_check(object caster, mapping sinfo) 
+{
+  mapping msgs;
+  string element;
+  object *gloves;
+  if(!caster->InFight() && caster->QueryProp(P_GUILD_LEVEL)<10) 
+  {
+    printf("Nur im Kampf kannst Du Deine Haende verwandeln.\n");
+    return 0;
+  }
+  if(caster->Query(P_HANDS, F_QUERY_METHOD)) {
+    printf("Deine Haende sind bereits verwandelt.\n");
+    return 0;
+  }
+  msgs=([
+      FEUER  : "des Feuers" ,
+      EIS    : "des Eises",
+      HUMUS  : "des Humus",
+      WASSER : "des Wassers",
+      LUFT   : "der Luft",
+      ERZ    : "des Erzes",
+      GEIST  : "des Geistes",
+      ]);
+
+  if( sizeof(gloves=caster->QueryArmours(AT_GLOVE)) && 
+      stringp(element=gloves[0]->QueryProp(P_DRUID_HAND_DAMAGE_TYPE)) &&
+      member(msgs,element))
+    ;
+  else
+    element=call_other(DRUIDENMASTER, "GetDruidElement", getuid(caster));
+  write_color("Du laesst die elementaren Kraefte "+msgs[element]+
+      " in Deine Haende fliessen.\n", element, caster);
+
+  sinfo[SI_ELEMENT] = element;
+  return 1;
+}
+
+int elementarhand(object caster, mapping sinfo) 
+{
+  object ob, amulett;
+  string cn, element, hand_msg;
+  mapping msgs;
+  int suc, dam, dur;
+  mixed old_dam;
+  object *gloves;
+ 
+  msgs=([
+      FEUER  : " mit flammenden Haenden",
+      EIS    : " mit scharfen Eiskrallen",
+      HUMUS  : " mit giftigen Dornenhaenden",
+      WASSER : " mit gigantischen Wasserfaeusten",
+      LUFT   : " mit der Kraft eines Wirbelsturms",
+      ERZ    : " mit toetlichen Stahldornen",
+      GEIST  : " mit Haenden aus reinster Magie"
+      ]);
+ 
+  ob=present(DRUIDENAMULETT, caster);
+  
+  if( sizeof(gloves=caster->QueryArmours(AT_GLOVE)) && 
+      stringp(element=gloves[0]->QueryProp(P_DRUID_HAND_DAMAGE_TYPE)) &&
+      member(msgs,element))
+    ;
+  else
+    element=call_other(DRUIDENMASTER, "GetDruidElement", getuid(caster));
+  sinfo=DoSpellModification(element, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  cn = caster->Name();
+  say(sprintf("%s reibt die Haende aneinander...\n", cn));
+  write_color("Du reibst Deine Haende aneinander...\n",element,caster,1);
+  if((suc=SpellSuccess(caster,sinfo))<=0) 
+  {
+    say(sprintf("...doch nur kleine schwarze Kruemel fallen zu Boden.\n"));
+    printf("...doch nur kleine schwarze Kruemel fallen zu Boden.\n");
+    return MISSERFOLG;
+  }        
+  old_dam=caster->QueryProp(P_HANDS)[2];
+  if(pointerp(old_dam)) old_dam=old_dam[0];
+  dam=25+caster->QueryProp(P_HANDS)[1]+suc*(2*caster->QueryAttribute(A_INT)+
+        caster->QueryAttribute(A_DEX)+
+        caster->QueryAttribute(A_STR))/MAX_ABILITY +
+        (sinfo[SI_SKILLABILITY] == MAX_ABILITY ? 15 : 0);
+  if(dam<50) dam=50;
+  if(dam>150) dam=150;
+  caster->SetProp(E_HANDS, ({msgs[element], dam, 
+        ({ELEMENT_DAMAGE[element], DT_BLUDGEON })}));
+  dur=caster->QueryProp(P_GUILD_LEVEL)*5+25*suc/MAX_ABILITY +
+    (sinfo[SI_SKILLABILITY] == MAX_ABILITY ? 15 : 0);
+  dur=SpellEnhanceModifier(caster, HUMUS, dur);
+  ob->DoSetHands(dur);
+  call_out("stop_hands", dur, caster);
+  switch(element)
+  {
+    case EIS: 
+      hand_msg="...und lange, scharfe Eiskrallen verstaerken %s Haende!\n";
+      break;
+    case LUFT:
+      hand_msg="...und wilde, wirbelnde Luftstroemungen legen sich um %s "
+        "Haende!\n";
+      break;
+    case ERZ:
+      hand_msg="...und ein dicker Erzpanzer mit vielen metallisch "
+        "glitzernden Spitzen legt sich um %s Haende!\n";
+      break;
+    case FEUER:
+      hand_msg="...und wild zuengelnde Flammen umgeben %s Haende!\n";
+      break;
+    case WASSER:
+      hand_msg="...und gurgelnde Wellen elementaren Wassers beginnen um %s "
+        "Haende zu stroemen!\n";
+      break;
+    case HUMUS:
+      hand_msg="...und Dornenranken aus elementarem Humus wickeln sich um "
+        "%s Haende!\n";
+      break;
+    case GEIST:
+      hand_msg="...und langsam legen sich die reinen, magischen Energien des "
+        "Element Geist um %s Haende!\n";
+  }
+  say(BS(sprintf(hand_msg, caster->name(WESSEN))) );
+  caster->Set(P_HANDS, symbol_function("myhands", TO), F_QUERY_METHOD); 
+  write_color(BS(sprintf(hand_msg, "Deine" )), element, caster, 1);
+  return ERFOLG;
+  
+}
+
+nosave mixed myhands() 
+{
+  int hand_dam;
+  object ob;
+  ob=previous_object();
+  return ob->QueryProp(E_HANDS);
+}
+
+void stop_hands(object pl) 
+{
+ object ob;
+ if(pl) {
+   if(ob=present(DRUIDENAMULETT, pl)) 
+   {
+     ob->RemoveSetHands();
+   }
+   write_color("Deine Haende werden wieder normal.\n","",pl, 1);
+   say(sprintf("%s Haende werden wieder normal.\n", pl->Name(WESSEN)));
+   pl->Set(P_HANDS, 0, F_QUERY_METHOD);
+   pl->SetProp(E_HANDS, 0);
+ }
+ return ;
+}

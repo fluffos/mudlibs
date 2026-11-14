@@ -1,0 +1,126 @@
+int isBardicProtection(object ob) {
+  if(!objectp(ob)) {
+    return 0;
+  }
+  return ob->id(SONG_SCHUTZ);
+}
+
+object isAlreadyDefednded(object target) {
+  object lied;
+  int i;
+
+  lied = target->QueryProp("barden_schildlied");
+  if(objectp(lied)) {
+    return lied;
+  }
+
+  return 0;
+}
+
+
+mapping prep_schildlied(object caster, mapping sinfo)
+{
+  object target, oldShield;
+  string bardGroup;
+
+  sinfo = prepare_song(caster, sinfo);
+  if(sinfo == 0) {
+    return 0;
+  }
+
+  target = FindVictim(sinfo[SI_SKILLARG], caster, 0);
+  if(!objectp(target)) target = caster;
+
+  if(objectp(oldShield = isAlreadyDefednded(target))) {
+    if(TALENTMASTER->HasTalent(caster, TALENT_KANON)) {
+      if(!oldShield->CanRecharge()) {
+        tell_object(caster, BS("Der Schutz kann noch nicht erneuert werden."));
+        return 0;
+      }
+    } else {
+      if(target == caster) {
+        tell_object(caster, BS("Du wirst bereits geschuetzt."));
+      } else {
+        tell_object(caster, BS(sprintf("%s wird bereits geschuetzt.", target->Name(WER, 1))));
+      }
+      return 0;
+    }
+  }
+
+  if(!paySpellCost(caster, sinfo, 1)) return 0;
+
+  tell_room(environment(caster), BS(sprintf("%s holt tief Luft.", caster->Name(WER, 1))), ({caster}));
+  if(sinfo[SI_CAP_NAME] == "Kriegslied der Zwerge") play_song_text(SPELLSEQ("kriegslied_der_zwerge.seq"), caster);
+  else play_song_text(SPELLSEQ("schildlied_"+BARDENMASTER->GetBardGroup(caster)+".seq"), caster);
+
+  return sinfo;
+}
+
+int schildlied(object caster, mapping sinfo)
+{
+  object target, schutz;
+  int abil, suc, duration;
+  float factor;
+  string bg, song;
+  
+  if(!paySpellCost(caster, sinfo)) return 0;
+
+  target = FindVictim(sinfo[SI_SKILLARG], caster, 0);
+  if(!objectp(target)) target = caster;
+  
+  if(environment(target) != environment(caster)) {
+    tell_object(caster, BS(sprintf("Nanu?! wo ist denn %s hin?", target->name(WER, 1))));
+    return 0;
+  }
+
+  // GELUNGEN?
+  if((suc=SpellSuccess(caster,sinfo))<=0)
+  {
+    tell_room(ENV(caster), BS("Nichts geschieht..."));
+    return MISSERFOLG;
+  }
+
+  tell_object(target, BS("Die Melodie legt sich schuetzend um Dich."));
+  tell_room(ENV(target), BS("Eine Melodie legt sich schuetzend um "+target->Name(WER)+"."), ({target}));
+
+  // Recharge mit richtigem Talent
+  if(objectp(schutz = isAlreadyDefednded(target))) {
+    schutz->remove(1);
+  }
+
+  schutz = clone_object(OBJ("schutz"));
+
+  // Move
+  if(schutz->move(environment(target), M_NOCHECK) != 1)
+  {
+    tell_object(target, BS("Etwas verhindert die Schutzwirkung!"));
+    schutz->remove(1);
+    return ERFOLG;
+  }
+
+  abil = sinfo[SI_SKILLABILITY];
+  bg = call_other("/gilden/bardengilde/master/bardenmaster", "GetBardGroup", caster);
+
+  switch(bg)
+  {
+    case "alestra": song = "ballade vom drachentoeter";
+                    break;
+    case "tirena":  song = "schildsang der walkueren";
+                    break;
+    case "korriax": song = "zwergisches ahnenlied";
+                    break;
+    case "sarrian": song = "stolze mauer am fluss";
+                    break;
+    default: raise_error("Undefinierte Bardengruppe!");
+             break;
+  }
+
+  factor = 1.0 + ((float) CheckEquip(caster, song)/100.0);
+  if(TALENTMASTER->HasTalent(caster, TALENT_BANNSAENGER)) {
+    factor += 0.05 + ((float) caster->QueryProp(P_BARD_INSPIRATION_LEVEL)) / 100.0;
+  }
+
+  schutz->setup(bg, abil, suc, caster->QueryProp(P_GUILD_LEVEL), factor, target);  
+
+  return ERFOLG;
+}

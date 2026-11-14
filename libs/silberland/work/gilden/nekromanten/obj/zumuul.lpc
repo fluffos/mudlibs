@@ -1,0 +1,207 @@
+// Objekt zum Spruch Beruehrung von Zum-uul
+// 03.06.2003 Archon: bugfix beim test auf query_once_interactive
+//                    test nun auf query_once_interactive(TP) &&
+//                    query_once_interactive(victim)
+
+inherit "std/thing";
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <new_skills.h>
+#include <defines.h>
+#include <moredef.h>
+#include <class.h>
+#include "../nekro.h"
+
+private nosave object caster;
+private nosave int suc;
+private nosave int dam;
+private nosave int skp;
+private nosave int no_touch=0;
+
+void create() 
+{
+  if(!is_clone(TO)) return;
+  ::create();
+  SetProp(P_SHORT, 0);
+  SetProp(P_WEIGHT, 0);  
+  SetProp(P_VALUE, 1);
+  SetProp(P_NOBUY, 1); 
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_INVIS, 1);
+  AddId(({ZUM_UUL_OBJ}));
+  AddCmd("beruehre", "touch");
+  SUID;
+}
+
+int Setup(object _caster, int _dam, int _suc, int _skp) 
+{
+  object maske;
+  caster=_caster;
+  suc=_suc;
+  dam=_dam;
+  skp=_skp;
+  maske=present(NEKRO_GUILDITEM_ID, caster);
+  if(maske)
+    maske->RegisterSpellEffect(0);
+  return 1;
+}
+
+int touch(string str) 
+{
+  object victim;
+  mapping res;
+  string txt, logtxt;
+  int heal, debuff;
+
+  if(no_touch) return 0;
+  if(!str) 
+  {
+    write("Wen moechtest Du beruehren?\n");
+    return 1;
+  }
+  if(!victim=present(str, ENV(TP))) 
+  {
+    write("So etwas befindet sich nicht hier im Raum.\n");
+    return 1;
+  }
+  if(!living(victim) || victim->is_class_member(CL_UNDEAD) ||
+      victim->is_class_member(CL_DEMON))
+  {
+    write(BS("Bei allen Niederhoellen! Du kannst nur ein lebendiges "
+          "Wesen beruehren!"));
+    return 1;
+  }
+  if(caster == victim) {
+    write(BS("Bei allen Niederhoellen! Heb' Dir das fuer Deine Opfer "
+          "auf!\n"));
+    return 1;
+  }
+  if((query_once_interactive(victim) && 
+     query_once_interactive(TP) &&
+     call_other ("/obj/pkmaster", "PK_allowed", ENV(TP), TP, victim)!= 1 ) ||
+      victim->QueryProp(P_NOATTACK) || victim->QueryProp(P_FRIEND)) 
+  {
+    write(BS(sprintf("Du beruehrst %s.", victim->name(WEN))));
+    tell_object(victim, sprintf("%s beruehrt Dich.\n", TP->Name(WER)));
+    tell_room(ENV(TP), sprintf("%s beruehrt %s\n", TP->Name(WER), 
+          victim->name(WEN)), ({TP,victim}));
+    no_touch=1;
+    call_out("do_remove", 0);
+    return 1;
+  }
+  if (suc < 9500-skp*300) 
+  {
+    if(skp/3 + random(TP->QueryAttribute(A_DEX)+skp+TP->QueryProp(P_GUILD_CIRCLE)) < 
+        random(victim->QueryAttribute(A_DEX)) &&
+        !victim->QueryProp(P_BLIND) && !victim->QueryProp(P_DISABLE_ATTACK))
+    {
+      write(BS(sprintf("Bei allen Niederhoellen! Du versuchst %s zu "
+              "beruehren, aber %s weicht aus!",
+              victim->name(WEN), victim->QueryPronoun(WER))));
+      tell_object(victim,BS(sprintf("%s versucht Dich zu beruehren, aber "
+              "Du weichst gekonnt aus!", TP->Name(WER))));
+      tell_room(ENV(TP), BS(sprintf("%s versucht %s zu beruehren, aber %s "
+              "weicht gekonnt aus.", TP->Name(WER), victim->name(WEN),
+              victim->QueryPronoun(WER))), ({TP, victim}));
+      no_touch=1;
+      call_out("do_remove", 0);
+      return 1;
+    }
+  }
+  res=victim->QueryProp(P_RESISTANCE_STRENGTHS);
+  heal=(int)(random(dam/2)+dam/4);
+  logtxt=sprintf("%s: TP:%O, suc = %d, dam = %d, heal = %d, skp = %d, "
+    "enemy res = %O\n", dtime(time()),caster, suc, dam, heal, skp, 
+        mappingp(res)?res[DT_UNHOLY]:0);
+  write_file(LOG+"beruehrung_von_zum_uuhl", logtxt);
+  res=victim->QueryProp(P_RESISTANCE_STRENGTHS);
+  if(mappingp(res) && member(res,DT_UNHOLY)) 
+    dam=(int)(dam*(1.0+res[DT_UNHOLY]));
+  switch(dam) {
+    case 0..10 : txt="%s zuckt kurz zusammen!"; break;
+    case 11..20: txt="%s zuckt in Schmerz zusammen."; break;
+    case 21..30: txt="%s verkrampft sich leicht."; break;
+    case 31..40: txt="%s verkrampft sich."; break;
+    case 41..50: txt="%s stoehnt vor Schmerzen."; break;
+    case 51..60: txt="%s schreit vor Schmerzen."; break;
+    case 61..70: txt="%s schreit in furchtbaren Schmerzen auf."; break;
+    case 71..80: txt="%s bruellt vor Schmerz kann sich kaum noch halten.";
+                 break;
+    case 81..90: txt="%s kreischt voller Schmerzen und bricht fast "
+                 "bewusstlos nieder.";break;
+    default: txt="%s bruellt wie ein Tier vor Schmerzen und kann sich kaum "
+             "noch halten.";
+  }
+  write(BS(sprintf("Voller Hass beruehrst Du %s! %s Ahhhh %s Lebensenergie "
+          "durchflutet Dich!", 
+          victim->name(WEN), sprintf(txt,CAP(victim->QueryPronoun(WER))), 
+          victim->QueryPossPronoun(WEM))));
+  tell_object(victim, BS(sprintf("%s beruehrt Dich mit einem gehaessigen "
+          "Laecheln. Ploetzlich durchzucken Dich gewaltige Schmerzen "
+          "und Du spuerst, wie Dir gewaltsam ein Teil Deiner Lebensessenz "
+          "entrissen wird.", TP->Name(WER))));
+  tell_room(ENV(TP), BS(sprintf("%s beruehrt %s. %s",TP->Name(WER), 
+          victim->name(WEN), sprintf(txt, CAP(victim->QueryPronoun(WER)))
+          )), ({TP, victim}));
+  if(victim->QueryProp(P_HP) < dam) {
+    dam=victim->QueryProp(P_HP);
+    heal=(int)(random(2*dam/3)+dam/3);
+  }
+  TP->AddHp(heal);
+  victim->AddHp(-dam);
+  victim->Kill(TP);
+
+  if(skp>3 && TP->QueryProp(P_BLIND)) {
+      tell_object(caster, BS("Die Beruehrung uebertraegt deine Blindheit auf dein Opfer!"));
+      victim->SetProp(P_BLIND, caster->QueryProp(P_BLIND));
+      caster->SetProp(P_BLIND, 0);
+  }
+
+  if(skp>3 && TP->QueryProp(P_DEAF)) {
+    tell_object(caster, BS("Die Beruehrung uebertraegt deine Taubheit auf dein Opfer!"));
+    victim->SetProp(P_DEAF, caster->QueryProp(P_DEAF));
+    caster->SetProp(P_DEAF, 0);
+  }
+  
+  if(skp>7 && TP->QueryProp(P_POISON)) {
+    heal = random(1+skp);
+    if(heal >= TP->QueryProp(P_POISON)) {
+      tell_object(TP, BS("Die Beruehrung uebertraegt deine Vergiftung auf dein Opfer!"));
+    } else {
+      tell_object(TP, BS("Die Beruehrung uebertraegt einen Teil deiner Vergiftung auf dein Opfer!"));
+    }
+    victim->AddPoison((heal>TP->QueryProp(P_POISON)?TP->QueryProp(P_POISON):heal));
+    TP->AddPoison(-heal);
+  }
+
+  if(skp > 9 && !query_once_interactive(victim) && !victim->QueryProp("nekro_zumuul_touch")) {
+    tell_room(ENV(victim), BS(sprintf("%s bleibt nach der Beruehrung verkrueppelt zurueck.", victim->Name(WER, 1))));
+    debuff = (TP->QueryProp(P_GUILD_LEVEL)-1)*7 + TP->QueryProp(P_GUILD_CIRCLE);
+    if(TP->QueryProp(P_TESTPLAYER)) {
+      write(sprintf("debuff: %d\n", debuff));
+    }
+    victim->SetProp(P_HP_DELAY, debuff);
+    victim->SetAttribute(A_STR, victim->QueryAttribute(A_STR)-debuff/2-random(debuff/2));
+    victim->SetAttribute(A_DEX, victim->QueryAttribute(A_DEX)-debuff/2-random(debuff/2));
+    victim->SetProp(P_HANDS, ({"mit verkrueppelten Gliedmassen", victim->QueryProp(P_HANDS)[1]-debuff/2-random(debuff/2), victim->QueryProp(P_HANDS)[2]}));
+    victim->SetProp(P_LONG, victim->QueryProp(P_LONG) + sprintf("%s wurde durch unheilige Magie verkrueppelt.", CAP(victim->QueryPronoun())));
+  }
+
+  no_touch=1;
+  call_out("do_remove", 0);
+  return 1;
+}
+
+void do_remove()
+{
+  object maske;
+
+  write("Deine Haende werden wieder normal!\n");
+  maske=present(NEKRO_GUILDITEM_ID, TP);
+  if(maske)
+    maske->DeRegisterSpellEffect(0);
+  remove();
+}

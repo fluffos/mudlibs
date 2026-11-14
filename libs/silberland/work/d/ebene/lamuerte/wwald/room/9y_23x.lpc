@@ -1,0 +1,231 @@
+// -Bugfix 27.11.2001
+//  P_ALCOHOL check dynamisiert. (Danke an Iwos Bugmeldung in den OOE Nachrichten)
+
+inherit "std/room";
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include <defines.h>
+#include <exploration.h>
+#include "files.h"
+#define KREUZUNG "/d/ebene/creative/feldlager/room/a3_a2"
+
+mapping runterfaller;
+
+void create()
+{
+  ::create();
+
+  runterfaller=([]);
+
+  SetProp(P_INT_SHORT, "Auf einer schwankenden Bruecke" );
+  SetProp(P_INT_LONG,
+      "Du befindest Dich auf einer kleinen, wackligen Bruecke, die ueber das "
+      "kleine Baechlein fuehrt, das die Ostallee begleitet. Waehrend der Bach "
+      "unter Dir gemaechlich vor sich hin plaetschert, knarren die Planken "
+      "der kleinen Bruecke schon recht bedrohlich, und Du fragst Dich, "
+      "wie lange sie Dich wohl noch tragen werden... Nach kurzem Ueberlegen "
+      "beschliesst Du, rasch weiterzugehen.");
+
+  SetProp(P_LIGHT, 1);
+  SetProp(P_INDOORS, 0);
+  SetProp(P_NO_MNPC, 1);	// MNPCs sollen hier erst gar nicht rein
+  SetProp(P_ENVIRONMENT,([ENV_TEMPERATURE: 21, ENV_TERRAIN:TT_PLAIN]) );
+
+  AddDetail ( ({"bruecke"}),
+      "Die kleine Bruecke mit ihren schmalen Holzplanken fuehrt ueber das "
+      "kleine Baechlein unter Dir. Offenbar wurden hier noch nie groessere "
+      "Lasten befoerdert, sonst waere die Bruecke wohl schon laengst "
+      "eingebrochen...");
+  AddDetail ( ({"lasten"}),
+      "Groessere Lasten ueber diese wacklige Bruecke zu befoerdern, ist wohl "
+      "illusorisch. Man kann schon froh sein, ueberhaupt das andere Ufer "
+      "zu erreichen...");
+  AddDetail ( ({"planken", "holzplanken" ,"planke", "holzplanke"}),
+      "Die Holzplanken wurden notduerftig mit Tauen verbunden und schwanken "
+      "im Wind hin und her. Du fuehlst Dich alles andere als sicher auf "
+      "diesem wackligen Untergrund. Auf einer der Planken befindet sich "
+      "eine Schnitzerei.");
+  AddDetail( "schnitzerei",
+      "Hmm. Wer sich da wohl gespielt hat? Irgendwie sieht das aus als ob "
+      "in der Planke ein Loch waere. ");
+  AddDetail( "loch",
+      "Du schaust durch das Loch in der Planke. Hups! Da steht ja der "
+      "Wasserdaemon unten. ");
+  AddDetail( ({"daemon", "wasserdaemon"}),
+      "Der steht unter der Bruecke im Wasser. Du stehst auf der Bruecke. "
+      "Da koennte man ja runterspucken!");
+  AddDetail ( ({"boden", "untergrund"}),
+      "Der Boden, auf dem Du stehst, ist alles andere als fest.\n");
+  AddDetail ( ({"taue"}),
+      "Die Taue verbinden die Holzplanken der Bruecke notduerftig, wirken "
+      "allerdings nicht sonderlich vertrauenserregend. Dir wird mulmig.");
+  AddDetail ( ({"wind"}),
+      "Eine Windboe erfasst die kleine Bruecke und schwenkt sie bedrohlich "
+      "hin und her.");
+  AddDetail ( ({"windboe", "boe"}),
+      "Solltest Du nicht allmaehlich weitergehen? Du koenntest sonst noch "
+      "eine unangenehme Ueberraschung erleben...");
+  AddDetail ( ({"bach", "baechlein"}),
+      "Das Baechlein unter Dir plaetschert zwischen seinen Ufern leise vor "
+      "sich hin. Das Wasser ist sehr rein und klar, aber bestimmt hundekalt...");
+  AddDetail ( ({"wasser"}),
+      "Wer weiss... "
+      "vielleicht machst Du ja noch eines Tages Bekanntschaft damit?");
+  AddDetail ( ({"ueberraschung", "bekanntschaft"}), "Wart's nur ab!\n");
+  AddDetail ( ({"ufer"}),
+      "Noerdlich und suedlich des Baches ist sowas wie ein Ufer auszumachen, "
+      "an dem Du einige Gegenstaende liegen sehen kannst...");
+  AddDetail ( ({"gegenstaende", "dinge"}),
+      "An den Ufern kannst Du diverse Gegenstaende liegen sehen, die "
+      "Abenteurer offenbar verloren haben, als sie in den Bach geplumpst "
+      "sind... leider siehst Du keine Moeglichkeit, da ran zu kommen...");
+  AddDetail ( ({"moeglichkeit"}),
+      "Nein, wirklich nicht. Zumindest vorlaeufig...\n");
+  AddDetail( "himmel",
+      "Himmelblauer Himmel.");
+
+  AddSound (DEFAULT_SOUND,
+      "Das Baechlein unter Dir plaetschert leise vor sich hin, und die "
+      "Bruecke, sie knarrt bedrohlich im Wind...");
+  AddSound( ({"wind"}),
+      "Der eigentlich eher sanfte Wind reicht bereits, um die wacklige "
+      "Bruecke zum Knarren zu bringen... Dir wird unwohl.");
+  AddSound( ({"bruecke", "knarren"}),
+      "Das Knarren hoert sich aeusserst bedrohlich an...");
+  AddSound( ({"bach", "baechlein", "plaetschern"}),
+      "Das Baechlein plaetschert, gluckst, rauscht leise vor sich hin...\n");
+
+
+  AddSpecialExit("sueden","sfunc");
+  AddSpecialExit("norden","nfunc");
+  AddCmd(({"spuck","spucke"}),"spfunc");
+}
+
+
+int spfunc(string str)
+{
+  string was,wen,*spucker;
+  int treffer;
+
+  if (!str)
+  {
+    notify_fail("Wohin willst Du spucken?\n");
+    return 0;
+  }
+  if ((str == "runter") ||
+      (str == "in loch") ||
+      (sscanf(str,"auf %s",wen)==1 && member_array(wen, 
+     ({ "daemon", "demon", "wasserdaemon", "wasserdemon" }))!=-1 )) 
+  {
+    if (find_call_out("daneben")!=-1)
+      {
+      write( "Du hast nicht genug Schleim zum Spucken!\n");
+      return -1;
+
+    } 
+    treffer=random(100);
+    write (
+        "Du spuckst in das Loch. Du siehst wie Deine Spucke immer tiefer faellt.\n");
+    if (treffer>90)
+    {
+      EPMASTER->GiveExplorationPoint("spucken", EP_MISC);
+      write("Volltreffer!\nDu freust Dich.\nEndlich hast Du dem doofen "+
+      "Wasserdaemonen mal eins ausgewischt.\n");
+      return 1;
+    }
+    call_out("daneben",5);
+  }
+  return -1;
+
+} 
+
+void daneben()
+{
+  string *arr;
+  arr=({"noerdlich","suedlich","westlich","oestlich","nordoestlich",
+      "nordwestlich","suedoestlich","suedwestlich"});
+
+  write("Du spuckst " + arr[random(7)] + " am Daemon vorbei.\n");
+  call_out("aufreg",2);
+}  
+
+void aufreg()
+{
+  write("Der Daemon ruft: Lass das "+
+    this_player()->QueryProp(P_NAME)+
+    "!!!!\n"+
+    "Der Daemon ruft: Sonst toete ich Dich, wenn DU das naechste mal von\n"+
+    "Der Daemon ruft: der Bruecke faellst!\n");
+}
+
+
+/*
+void getchya()
+{
+
+  EPMASTER->GiveExplorationPoint("spucken", EP_MISC);
+
+  write("Volltreffer!\nDu freust Dich.\nEndlich hast Du dem doofen "+
+    "Wasserdaemonen mal eins ausgewischt.\n");
+
+}
+*/
+
+int sfunc()
+{
+  object ob;
+  int alc,max_alc;
+  int rnd;
+  ob=this_player();
+  alc=this_player()->QueryProp(P_ALCOHOL);
+  max_alc=this_player()->QueryProp(P_MAX_ALCOHOL);
+
+  if (!member(runterfaller, getuid(this_player())) &&
+      (ob->QueryProp(P_GUILD)!="zechpreller" || !random(3) ) &&
+      random(alc)>=((max_alc *  80) / 100) && !ob->QueryProp(P_GHOST))
+  { 
+    write ("Beim Versuch weiter nach Sueden zu gehen, purzelst Du "+
+        "ins Wasser.\n\n"); 
+    say(this_player()->QueryProp(P_NAME)+" faellt in den Burggraben.\n");
+    ob->move(ROOM("wasser"),M_GO+M_SILENT);
+    runterfaller+=([getuid(this_player()):1]);
+    return 1;
+  }
+  ob->move(KREUZUNG,M_GO,"nach Sueden");
+  return 1;
+}
+
+
+
+int nfunc()
+{
+  object ob;
+  int alc,max_alc;
+  int rnd;
+  ob=this_player();
+  alc=this_player()->QueryProp(P_ALCOHOL);
+  max_alc=this_player()->QueryProp(P_MAX_ALCOHOL);
+
+  if (!member(runterfaller, getuid(this_player())) &&
+      (ob->QueryProp(P_GUILD)!="zechpreller" || !random(3) ) &&
+      random(alc)>=((max_alc *  80) / 100) && !ob->QueryProp(P_GHOST))
+  { 
+    write ("Beim Versuch weiter nach Norden zu gehen, purzelst Du "+
+        "ins Wasser.\n\n"); 
+    say(this_player()->QueryProp(P_NAME)+" faellt von der Bruecke.\n");
+    ob->move(ROOM("wasser"),M_GO+M_SILENT);
+    runterfaller+=([getuid(this_player()):1]);
+    return 1;
+  }
+  ob->move(ROOM("10y_23x.lpc"),M_GO,"nach Norden");
+  return 1;
+}
+
+void reset()
+{
+  ::reset();
+  runterfaller=([]);
+}
+

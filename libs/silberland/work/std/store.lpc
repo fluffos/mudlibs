@@ -1,0 +1,211 @@
+// SilberLand MUDlib
+//
+// std/store.c -- base storage room
+//
+// $Date: 2004/01/14 12:43:50 $
+/* $Revision: 3.4 $
+ * $Log: store.c,v $
+ * Revision 3.4  2004/01/14 12:43:50  Feyaria
+ * Sicherheitsabfrage im aufraeumen, objekt koennte sich selbst zerstoert haben
+ *
+ * Revision 3.3  1999/10/21 08:02:38  Feyaria
+ * Bugfix in int_long
+ *
+ * Revision 3.2  1998/05/12 13:06:49  Woody
+ * Obligatorischer Bugfix :): std/room/restrictions, name() verwenden
+ *
+ * Revision 3.1  1998/05/12 12:01:21  Woody
+ * int_short(), int_long(), GetDetail(), container/description
+ * und container/restrictions inheriten
+ *
+ * Revision 3.0  1997/03/13 03:14:42  Woody
+ * prepared for revision control
+ *
+ * Revision 2.9  1995/07/11  16:56:30  Jof
+ * *** empty log message ***
+ *
+ * Revision 2.8  1995/07/11  16:54:49  Jof
+ * *** empty log message ***
+ *
+ * Revision 2.7  1995/07/11  14:27:26  Jof
+ * Ask bank for values now (runtime changeable!)
+ *
+ * Revision 2.6  1995/07/10  17:26:06  Jof
+ * Only call bank if sum!=0 to keep logs clean
+ *
+ * Revision 2.5  1995/07/10  07:32:17  Jof
+ * use bank.h
+ *
+ * Revision 2.4  1995/02/06  19:44:14  Jof
+ * RCS-Logs aufgeraeumt (leere Logs raus usw)
+ *
+*/
+
+
+#define ANZ 3
+#include <properties.h>
+#include <bank.h>
+#include <moving.h>
+#include <wizlevels.h>
+
+inherit "/std/thing/properties";
+inherit "/std/room/items";
+inherit "/std/container/description";
+inherit "/std/room/restrictions";
+
+mixed *all,all2;
+object shop;
+int sum;
+int store_percent_left;
+
+_set_store_percent_left()
+{
+  store_percent_left=ZENTRALBANK->_query_store_percent_left();
+}
+
+_register_shop(ob)
+{
+  shop=ob;
+}
+
+void create()
+{
+  seteuid(getuid());
+  properties::create();
+  items::create();
+  _set_store_percent_left();
+}
+
+void init()
+{
+  add_action("welt","welt");
+}
+
+int welt()
+{
+  this_player()->move(shop || "/gilden/abenteurer", M_GO, "zurueck");
+  return 1;
+}
+
+void clean_double() {}
+
+void reset()
+{
+  items::reset();
+  _set_store_percent_left();
+  all=all_inventory(this_object());
+  if (sizeof(all)==0)
+  {
+    all=0;
+    return;
+  }
+  all2=order_alist(({({}),({})}));
+  call_out("aufraeumen",random(10));
+  if (sum)
+    if (!shop)
+      ZENTRALBANK->PayIn(sum);
+    else
+      shop->_add_money(sum);
+  sum=0;
+} 
+
+void aufraeumen()
+{
+  int i;
+  int size;
+  mixed element,got;
+
+  i=30;
+  size=sizeof(all);
+  if (i>=size) 
+    i=size-1;
+  while (i>0)
+  {
+    // Sicherheitsabfrage, objekt koennte sich selbst zerstoert haben
+    if (objectp(all[size-1-i])) 
+    {
+      element=explode(file_name(all[size-1-i]),"/")[0];
+      if (element=="players"||element=="d")
+        element=explode(file_name(all[size-1-i]),"#")[0];
+      else
+        element=all[size-1-i]->short()+explode(file_name(all[size-1-i]),"#")[0];
+      got=assoc(element,all2);
+      if (pointerp(got))
+      {
+        if (got[1]<ANZ-1) 
+        {
+          got[1]++;
+          all2=insert_alist(element,got,all2);
+        } 
+        else 
+        {
+          sum+=all[size-1-i]->QueryProp(P_VALUE)*store_percent_left/100;
+          catch(all[size-1-i]->remove());
+          if (all[size-1-i])
+            destruct(all[size-1-i]);
+        }
+      } 
+      else 
+        all2=insert_alist(element,({all[size-1-i],1}),all2);
+    }
+    i--;
+  }
+  if (size<31)
+    all=({});
+  else
+    all=all[0..size-31];
+  if (!sizeof(all))
+  {
+    all=0;
+    all2=0;
+  } 
+  else
+    call_out("aufraeumen",0);
+} 
+
+int clean_up(int refcount) { return 1; }
+
+int _query_current_money()
+{
+  return sum;
+}
+
+varargs string int_short(mixed viewer, mixed viewpoint, int shortflag)
+{
+  return "Ein Lagerraum"+
+    (IS_LEARNING(viewer) ? " ["+file_name(this_object())+"]" : "")+
+    ".\n";
+}
+
+varargs string int_long(mixed viewer, mixed viewpoint, int shortflag)
+{
+  object *allinv;
+  string *items;
+  int i;
+
+  allinv=all_inventory(this_object())-({viewpoint});
+
+  if (!IS_LEARNING(viewer))
+    return break_string("Du stehst in einem Lagerraum, in dem Du "
+        "eigentlich ueberhaupt nichts verloren hast. Mit "
+        "'welt' gelangst Du wieder in den zugehoerigen Laden.", 78);
+
+  for (i=sizeof(allinv)-1; i>=0; i--)
+    if (allinv[i] && !allinv[i]->short()) allinv[i]=0;
+  allinv-=({0});
+  items=map_objects(allinv, "name");
+
+  return "["+file_name(this_object())+"]\n"
+    "Du stehst im Lagerraum von "+
+    (objectp(shop) ? file_name(shop) : "<unbekannt>")+".\n"+
+    "Es gibt einen sichtbaren Ausgang: welt.\n"+
+    "Inhalt ("+sizeof(allinv)+" Objekte):\n"+
+    break_string(capitalize(implode(items, ", ")), 78);
+    // make_invlist(viewer, allinv, shortflag);
+}
+
+varargs string GetDetail(mixed key, mixed race)
+{
+  return "Hier gibt es keine Details.\n";
+}
+

@@ -1,0 +1,154 @@
+inherit "std/thing";
+#include <properties.h>
+#include <combat.h>
+#include <defines.h>
+#include <moredef.h>
+#include <ansi.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <wizlevels.h>
+#include "../bardengilde.h"
+
+float currentMod;
+
+void create()
+{
+  if(!is_clone(TO))
+    return;
+
+  ::create();
+
+  SetProp(P_SHORT, 0);
+  SetProp(P_INVIS, 1);
+  SetProp(P_WEIGHT, 0);  
+  SetProp(P_VALUE, 1);
+  SetProp(P_NOBUY, 1); 
+  SetProp(P_NODROP, 1);
+  SetProp(P_NOGET, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NOSELL, 1);
+  AddId(({ SONG_FEAR_BUILDUP }));
+  currentMod = 0.0;
+}
+
+public int Setup(object victim) {
+    if(!living(victim)) {
+        return 0;
+    }
+
+    if(environment(this_object()) != victim) {
+        if(this_object()->move(victim, M_NOCHECK|M_SILENT) != 1) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+private int modifyBySkillAttribute(object caster, int baseVal, string skillAttribute) {
+    return (int) (baseVal * (caster->QuerySkillAttribute(skillAttribute) / 100.0));
+}
+
+public int increase_fear(object caster, float modStep, float fearCap) 
+{
+    string selfMsg, othMsg;
+    object victim;
+    int dmg, fearDiff, singSuccess;
+
+    victim = environment(this_object());
+    if(!objectp(victim)) {
+        remove(1);
+        return -1;
+    }
+
+    while(find_call_out("reduce_fear") > -1) {
+        remove_call_out("reduce_fear");
+    }
+
+    if(currentMod < fearCap) {
+        currentMod += modStep;
+    }
+
+    singSuccess = caster->UseSkill(SK_SINGING);
+
+    dmg = modifyBySkillAttribute(caster, (int) ((singSuccess/800) + random(singSuccess/600) + ((currentMod-1.0))*100), SA_DAMAGE);
+    dmg = victim->Defend(dmg, DT_MIND,
+        ([SP_NAME: "der besuch des raben", SP_SHOW_DAMAGE:
+          ({
+             ({ -1, "Du widerstehst dem geistigen Angriff von " + caster->name(WEM, 1 + "."),
+                    "@WER1 widersteht deinem geistigen Angriff.",
+                    ""}),
+             ({  0, "Dir wird ganz mulmig zu Mute.",
+                    "@WER1 blickt sich unsicher um.",
+                    "@WER1 blickt sich unsicher um."}),
+             ({  5, "Ein nervoeses Flattern macht sich in deiner Magegegend breit.",
+                    "@WER1 wirkt ganz nervoes.",
+                    "@WER1 wirkt ganz nervoes." }),
+             ({ 10, "Wirre Gedanken machen sich in deinem Kopf breit.",
+                    "@WER1 blickt sich verwirrt um.",
+                    "@WER1 blickt sich verwirrt um." }),
+             ({ 15, "In deinem Kopf machen sich fremde Stimmen breit.",
+                    "@WER1 bekommt einen fiebrig-wahnsinnigen Blick.",
+                    "@WER1 bekommt einen fiebrig-wahnsinnigen Blick."}),
+             ({ 20, "Zwischen den Spalten der Welt greifen tentakelartige Arme nach deinem Verstand!!!",
+                    "@WESSEN1 Kopf rollt irre herum und @WER1 bruellt unverstaendliche Worte.",
+                    "@WESSEN1 Kopf rollt irre herum und @WER1 bruellt unverstaendliche Worte."}),
+             ({ 25, "Dein Verstand wird unter den kosmischen Wahrheiten zerschmettert.",
+                    "@WER1 verfaellt in wilde Zuckungen und spuckt unsaegliche Worte rufend Schaum.",
+                    "@WER1 verfaellt in wilde Zuckungen und spuckt unsaegliche Worte rufend Schaum."}),
+         })]), caster);
+    if(caster->QueryProp(P_TESTPLAYER)) {
+        tell_object(caster, sprintf("br suc = %d -> dmg = %d\n", singSuccess, dmg));
+    }
+
+    if(!objectp(victim)) {
+        remove(1);
+        return 0;
+    }
+
+    fearDiff = ((int) (currentMod*50)) + (singSuccess/1000);
+    if(fearDiff > 80) fearDiff = 80;
+
+    if(fearDiff > random(100 + victim->QueryAttribute(A_INT))) {
+        if(objectp(victim)) {
+            tell_object(victim, "Verwirrung ergreift deinen Geist!\n");
+            tell_room(environment(victim), sprintf("%s taumelt verwirrt umher!\n", victim->Name(WER, 1)), ({victim}));
+            victim->SetProp(P_DISABLE_ATTACK, 1);
+        }
+    }
+
+    call_out("reduce_fear", 8, victim);
+    return 0;
+}
+
+public void reduce_fear(object victim) {
+    if(!objectp(victim)) {
+        remove(1);
+        return;
+    }
+
+    currentMod -= 0.1;
+
+    if(currentMod <= 0.0) {
+        tell_object(victim, BS("Der Wahnsinn hat sich gelegt. Du bist nun wieder bei Sinnen."));
+        tell_room(environment(victim), BS(sprintf("%s scheint wieder bei Sinnen zu sein.", victim->Name(WER))));
+        remove(1);
+    } else {
+        tell_object(victim, BS("Dein Verstand wird etwas klarar."));
+        tell_room(environment(victim), BS(sprintf("%s beruhigt sich etwas.", victim->Name(WER))), ({victim}));
+    }
+
+    call_out("reduce_fear", 8, victim);
+}
+
+public float QueryCurrentMod() {
+    return 1.0 + currentMod;
+}
+
+public void init() {
+    ::init();
+
+
+    if(!living(environment(this_object()))) {
+        remove(1);
+    }
+}

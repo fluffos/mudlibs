@@ -1,0 +1,836 @@
+///////////////////////////////////////////////////
+// Lib:  Standardklasse fuer Pflanzen
+// Silberlandmudlib
+// Autoren: Angel@SL / Khory@GL
+// File:  <path>+std_plant.c
+// Datum: 15.07.2002
+///////////////////////////////////////////////////
+
+inherit "std/thing.lpc";
+
+#include "../sys/std_plant.h"
+#include "../sys/oekosystem.h"
+#include <moving.h>
+#include "/p/daemon/skillmaster/skillmaster.h"
+
+
+// DEFINES
+#define bp get_bp(QueryProp(P_PLANT_LIFECYCLE)[QueryProp (P_PLANT_LIFE_PERIODE), 0])
+
+// Globals
+mapping herbalists;  // Mapping der Spieler fuer die die Pflanze bekannt ist ([ "name": zeit, erfolg ])
+mapping scouts;      // Mapping der Spieler die die Pflanze entdeckt haben ([ "name": zeit, erfolg ])
+mixed   tmp_blind;   // Hilfsarray mit den Spielern, die Pflanze nicht sehen. Es sollte NICHT direkt
+                     // verwendet werden, sondern nur ueber get_blind() abgefragt werden!
+
+// Hier waechst die Pflanze
+void reset ()
+{
+  // Die Blueprint braucht nicht altern
+  if ( !is_clone( this_object() ) )
+     return;
+
+  // Befindet sich ein Clone im Nichts dann loescht er sich selbst
+  if ( !objectp (environment( this_object() ) ) )
+  {
+	 remove();
+	 return;
+  }
+
+  // Waechst die Pflanze noch?
+  if ( !QueryProp (P_PLANT_IS_GROWING) )
+  {
+	 if ( !pointerp ( QueryProp (P_PLANT_WITHERS) ) )
+	    return;
+
+     if ( QueryProp (P_PLANT_RESET_COUNT) >= QueryProp (P_PLANT_WITHERS)[1] )
+	 {
+		 if ( objectp (environment( this_object() ) ) )
+		 {
+		    SetProp (P_PLANT_LIFE_PERIODE, QueryProp (P_PLANT_WITHERS)[0]);
+		    SetProp (P_PLANT_WITHERS, 0); // Einmal verwelken reicht!
+		    tell_room ( environment( this_object() ), "Die Pflanze verwelkt.\n");
+	     }
+		 return;
+	 }
+     SetProp (P_PLANT_RESET_COUNT, QueryProp (P_PLANT_RESET_COUNT) + 1 );
+     return;
+  }
+
+  // Sofern die Pflanze gestorben ist oder geerntet wurde
+  if ( QueryProp ( P_PLANT_LIFECYCLE) == 0)
+  {
+	 // Die Pflanze kommt wieder ins "keimlingsstadium"
+	 reset_plant (1);
+	 SetProp (P_IDS, bp->QueryProp(P_IDS) );
+	 manage_details ();
+	 return;
+  }
+
+  // Ist der Lebenszyklus der Pflanze beendet?
+  if ( QueryProp (P_PLANT_RESET_COUNT) >= QueryProp (P_PLANT_LIFECYCLE)[QueryProp (P_PLANT_LIFE_PERIODE), 1] )
+  {
+	 SetProp (P_PLANT_RESET_COUNT, 0 );
+	 // Es die Pflanze geht in das naechste Stadium ueber bzw. stirbt ab
+     if ( member ( QueryProp (P_PLANT_LIFECYCLE), QueryProp (P_PLANT_LIFE_PERIODE) + 1) )
+     {
+        SetProp (P_PLANT_LIFE_PERIODE, QueryProp (P_PLANT_LIFE_PERIODE) + 1 );
+        SetProp (P_IDS, bp->QueryProp(P_IDS) );
+        if ( objectp(environment( this_object() )) && stringp( bp->QueryProp( P_PLANT_CHANGE_MSG ) ) )
+           tell_room ( environment( this_object() ),  break_string( bp->QueryProp( P_PLANT_CHANGE_MSG )+".", 78 ), get_blind() );
+        manage_details ();
+        return;
+     }
+     else
+     {
+	    // Lebt die Pflanze eine weitere Saison?
+	    if ( QueryProp (P_PLANT_IS_PERENNIAL) > QueryProp (P_PLANT_SEASON_COUNT) )
+	    {
+		   // Fuer die Pflanze beginnt eine neue Saison
+		   SetProp (P_PLANT_SEASON_COUNT, QueryProp (P_PLANT_SEASON_COUNT) + 1 );
+		   // Die Pflanze wird zurueckgesetzt auf "ausgewachsen"
+		   reset_plant ( QueryProp(P_PLANT_FULLY_GROWN) );
+		   SetProp (P_IDS, bp->QueryProp(P_IDS) );
+           if ( objectp(environment( this_object() )) && stringp( bp->QueryProp( P_PLANT_CHANGE_MSG ) ) )
+              tell_room ( environment( this_object() ),  break_string( bp->QueryProp( P_PLANT_CHANGE_MSG )+".", 78 ), get_blind() );
+		   manage_details ();
+		   return;
+	    }
+	    else
+	    {
+		   // Die Pflanze kommt wieder ins "keimlingsstadium"
+		   reset_plant (1);
+		   SetProp (P_PLANT_SEASON_COUNT, 0);
+		   SetProp (P_IDS, bp->QueryProp(P_IDS) );
+		   manage_details ();
+		   return;
+	    }
+     }
+  }
+  else
+  {
+	 // Ein weiterer Reset
+	 SetProp (P_PLANT_RESET_COUNT, QueryProp (P_PLANT_RESET_COUNT) + 1 );
+  }
+}
+
+int do_harvest ( string args )
+{
+  object result;
+
+  notify_fail ("Was moechtest Du pfluecken?\n");
+  
+  if ( !member ( QueryProp(P_PLANT_HARVESTABLE), args ) )
+     return 0;
+
+  switch ( QueryProp(P_PLANT_HARVESTABLE)[args] )
+  {
+	case HARVEST_BLOOM: {
+		                   result = harvest_blossoms ( QueryProp (P_PLANT_LIFE_PERIODE), QueryProp (P_PLANT_SEASON_COUNT), QueryProp (P_PLANT_WAS_HARVESTED) );
+		                   if ( !objectp (result) )
+		                   {
+			                  notify_fail ("Du siehst hier keine Blueten, die Du ernten koenntest.\n");
+			                  return 0;
+		                   }
+		                   tell_room (environment (this_player()), this_player()->name()+" erntet eine Bluete.\n", ({ this_player() }));
+		                   write ("Du erntest eine Bluete.\n");
+		                   result->move ( this_player(), M_GET );
+		                   return 1;
+	                    }
+
+	case HARVEST_FRUIT: {
+		                   result = harvest_fruit ( QueryProp (P_PLANT_LIFE_PERIODE), QueryProp (P_PLANT_SEASON_COUNT), QueryProp (P_PLANT_WAS_HARVESTED) );
+		                   if ( !objectp (result) )
+		                   {
+			                  notify_fail ("Du siehst hier keine Fruechte, die Du ernten koenntest.\n");
+			                  return 0;
+	                       }
+	                       tell_room (environment (this_player()), this_player()->name()+" erntet eine Frucht.\n", ({ this_player() }));
+	                       write ("Du erntest eine Frucht.\n");
+		                   result->move ( this_player(), M_GET );
+		                   return 1;
+	                    }
+
+	case HARVEST_PLANT: {
+		                   notify_fail ("Du hast die Pflanze doch schon abgeerntet!\n");
+		                   if ( !QueryProp(P_PLANT_IS_GROWING) )
+		                      return 0;
+
+		                   result = harvest_plant ( QueryProp (P_PLANT_LIFE_PERIODE), QueryProp (P_PLANT_SEASON_COUNT), QueryProp (P_PLANT_WAS_HARVESTED) );
+		                   if ( !objectp (result) )
+		                   {
+			                  notify_fail ("Sowas ist hier nicht zu erkennen.\n");
+			                  return 0;
+		                   }
+		                   tell_room (environment (this_player()), this_player()->name()+" erntet eine Pflanze.\n", ({ this_player() }));
+		                   write ("Du erntest eine Pflanze.\n");
+		                   result->move ( this_player(), M_GET );
+		                   return 1;
+	                    }
+
+	default: return 0;
+  }
+
+}
+
+int do_violent_harvest ( string args )
+{
+  object result;
+  string id_string, dummy;
+
+  notify_fail ("Was moechtest Du ausreissen?\n");
+ 
+  if ( !stringp (args) )
+     return 0;
+
+  sscanf(args, "%s %s", id_string, dummy);
+
+  if (dummy != "ab" && dummy != "aus")
+     return 0;
+
+  if ( !member ( QueryProp(P_PLANT_HARVESTABLE), id_string ) )
+     return 0;
+
+  switch ( QueryProp(P_PLANT_HARVESTABLE)[id_string] )
+  {
+	case HARVEST_BLOOM: {
+		                   result = harvest_blossoms ( QueryProp (P_PLANT_LIFE_PERIODE), QueryProp (P_PLANT_SEASON_COUNT), QueryProp (P_PLANT_WAS_HARVESTED) );
+		                   if ( !objectp (result) )
+		                   {
+			                  notify_fail ("Du siehst hier keine Blueten, die Du abrupfen koenntest.\n");
+			                  return 0;
+		                   }
+		                   tell_room (environment (this_player()), this_player()->name()+" rupft eine Bluete ab.\n", ({ this_player() }));
+		                   write ("Du rupfst eine Bluete ab.\n");
+		                   result->move ( this_player(), M_GET );
+		                   return 1;
+	                    }
+
+	case HARVEST_FRUIT: {
+		                   result = harvest_fruit ( QueryProp (P_PLANT_LIFE_PERIODE), QueryProp (P_PLANT_SEASON_COUNT), QueryProp (P_PLANT_WAS_HARVESTED) );
+		                   if ( !objectp (result) )
+		                   {
+			                  notify_fail ("Du siehst hier keine Fruechte, die Du abreissen koenntest.\n");
+			                  return 0;
+	                       }
+	                       tell_room (environment (this_player()), this_player()->name()+" reisst eine Frucht ab.\n", ({ this_player() }));
+	                       write ("Du reisst eine Frucht ab.\n");
+		                   result->move ( this_player(), M_GET );
+		                   return 1;
+	                    }
+
+	case HARVEST_PLANT: {
+		                   notify_fail ("Du hast die Pflanze doch schon ausgerissen!\n");
+		                   if ( !QueryProp(P_PLANT_IS_GROWING) )
+		                      return 0;
+
+		                   result = harvest_plant ( QueryProp (P_PLANT_LIFE_PERIODE), QueryProp (P_PLANT_SEASON_COUNT), QueryProp (P_PLANT_WAS_HARVESTED) );
+		                   if ( !objectp (result) )
+		                   {
+			                  notify_fail ("Sowas ist hier nicht zu erkennen.\n");
+			                  return 0;
+		                   }
+		                   tell_room (environment (this_player()), this_player()->name()+" reisst eine Pflanze aus.\n", ({ this_player() }));
+		                   write ("Du reisst die Pflanze aus.\n");
+		                   result->move ( this_player(), M_GET );
+		                   return 1;
+	                    }
+
+	default: return 0;
+  }
+
+}
+
+object get_bp ( string path )
+{
+   object ob;
+
+   if ( !stringp (path) )
+      return 0;
+
+   call_other ( path, "???", 0);
+
+   ob = find_object (path);
+
+   return ob;
+}
+
+int prevent_get ( string args )
+{
+  if ( !stringp (args) )
+     return 0;
+
+  if ( !member ( QueryProp(P_PLANT_HARVESTABLE), args ) ||
+               ( QueryProp(P_PLANT_IS_GROWING) &&
+               (!member (scouts, this_player()->query_real_name()) ||
+                !scouts[this_player()->query_real_name(), 1]) ) )
+  {
+	 notify_fail ("Hier ist kein "+capitalize(args)+"!\n");
+	 return 0;
+  }
+
+  notify_fail ("Was moechtest Du nehmen?\n");
+
+  if ( (args == "frucht" && !count_fruit()) || (args == "blueten" && !count_bloom()) )
+     return 0;
+
+  notify_fail ("Nehmen kannst Du von dieser Pflanze nichts, nur ernten.\n");
+  return 0;
+}
+
+void create ()
+{
+  ::create();
+
+  herbalists = ([]);
+  scouts = ([]);
+
+  SetProp (P_SHORT, "Eine Pflanze");
+  //SetProp (P_INVIS, 1);
+  SetProp (P_UNIDENTIFIED_SHORT, "Eine unbekannte Pflanze");
+  SetProp (P_LONG, "Du siehst eine ganz normale Pflanze");
+  SetProp (P_UNIDENTIFIED_LONG, "Du siehst eine Dir unbekannte Pflanze");
+  SetProp (P_NAME, "Pflanze");
+  SetProp (P_UNIDENTIFIED_NAME, "Pflanze" );
+  SetProp (P_PLURAL, "Pflanzen");
+  SetProp (P_UNIDENTIFIED_PLURAL, "Pflanzen");
+  SetProp (P_ADJECTIVES, ({ "gewoehnlich" }) );
+  SetProp (P_UNIDENTIFIED_NAME_ADJ, ({ "unbekannt" }) );
+  SetProp (P_ARTICLE, 1);
+  SetProp (P_UNIDENTIFIED_ARTICLE, 1);
+  SetProp (P_GENDER, FEMALE);
+  SetProp (P_UNIDENTIFIED_GENDER, FEMALE);
+  SetProp (P_NOGET, "Das kannst Du nicht mitnehmen.\n");
+  SetProp (P_INFO, "Das ist auf jeden Fall eine Pflanze, soviel ist sicher.\n");
+
+  // Initialisierung der Pflanzenspezifischen Werte:
+  SetProp (P_PLANT_SPAWNS_FRUIT, 0);    // Pflanze hat keine Fruechte
+  SetProp (P_PLANT_SPAWNS_BLOSSOM, 0);  // ...     hat keine Blueten
+  SetProp (P_PLANT_WITHERS, 0);         // ...	   verwelkt nicht
+  SetProp (P_PLANT_IS_PERENNIAL, 0);    // ...     lebt nur eine Saison
+  SetProp (P_PLANT_POLLINATION, 0);     // ...     wird nicht bestaeubt
+  SetProp (P_PLANT_REPRODUCTION, 0);    // ...     ist steril
+  SetProp (P_HIDDEN, -1000);            // ...     ist nicht schwer zu erspaehen
+  SetProp (P_ID_SKILL, SK_HERBALLORE);  // ...     das Talent zum Erkennen von Pflanzen ist Pflanzenkunde
+  SetProp (P_LORE_DIFFICULTY, 0);       // ...     hat keine Erschwernis auf Pflanzenkunde
+  SetProp (P_PLANT_WAS_HARVESTED, 0);   // ...     es wurde noch nichts geernter
+  SetProp (P_PLANT_LIFE_PERIODE, 0);    // ...     vor Beginn des Lebenszyklus
+  SetProp (P_PLANT_SEASON_COUNT, 0);    // ...     hat noch keinen Saison hinter sich
+  SetProp (P_PLANT_TYPE, HERB);         // ...     ist ein Kraut
+  SetProp (P_PLANT_FULLY_GROWN, 0);     // ...     ist sofort ausgewachsen
+  SetProp (P_PLANT_IS_GROWING, 1);      // ...     waechst noch
+  SetProp (P_PLANT_RESET_COUNT, 0);     // ...     entsteht gerade (noch ausserhalb des Zyklus)
+  SetProp (P_PLANT_CHANGE_MSG, 0);      // ...     gibt keine Meldung aus beim Wechsel des Lebenszyklus
+  SetProp (P_PLANT_HARVESTABLE, ([]));  // ...     hat nichts zu ernten
+                                        // ...     braucht folgendes Klima:
+  SetProp (P_PLANT_NEEDS_CLIMATE, ([ FERTILITY: 0, HUMIDITY: 0, TEMPERATURE: 0, TERRAIN_TYPE: ({ TT_OTHER }) ]) );
+                                        // ...     toleriert diese Abweichungen vom gewuenschten Klima:
+  SetProp (P_PLANT_CLIMATIC_TOLERANCE, ([ FERTILITY: 0, HUMIDITY: 0, TEMPERATURE: 0 ]) );
+  SetProp (P_PLANT_PERSISTENCE, 50);    // ...     kann sich durchschnittlich gut behaupten
+
+  // Aufbau des Lebenszyklus:
+  // ([ ID: filename; duration ])
+  SetProp (P_PLANT_LIFECYCLE, 0);      // Pflanze hat keinen Lebenszyklus
+
+  AddId (({"pflanze"}));
+
+  AddCmd ( ({"pfluecke", "pflueck", "ernte"}), "do_harvest" );
+  AddCmd ( ({"rupfe", "reisse", "rupf", "reiss"}), "do_violent_harvest" );
+  AddCmd ( ({ "nimm", "nehme"}), "prevent_get" );
+}
+
+// Die ganze Pflanze ernten
+object harvest_plant ( int life_periode, int cycle, int state )
+{
+   string crops;
+   object result;
+
+   if ( !mappingp ( QueryProp( P_PLANT_LIFECYCLE ) ) )
+      return 0;
+
+   if ( QueryProp(P_PLANT_IS_GROWING) && (!member (scouts, this_player()->query_real_name()) || !scouts[this_player()->query_real_name(), 1]) )
+      return 0;
+
+   crops = QueryProp( P_PLANT_LIFECYCLE )[life_periode];
+   if ( stringp ( crops ) )
+   {
+     result = clone_object ( crops );
+     result->SetProp (P_PLANT_WAS_HARVESTED, state ); // Wie viele Fruechte/Blueten wurden geerntet?
+     result->SetProp (P_PLANT_SEASON_COUNT, cycle);   // Die Pflanze wird mit voller Groesse geerntet.
+     result->SetProp (P_PLANT_IS_GROWING, 0);         // Die Pflanze hat aufgehoert zu wachsen
+     result->set_herbalists (herbalists);             // Uebertragen der Pflanzenkundigen
+   }
+   else
+     result = 0;
+
+   // Die Pflanze kommt im naechsten Reset wieder ins "keimlingsstadium"
+   reset_plant (0);
+   SetProp(P_IDS, ({}) );
+   return result;
+}
+
+// Fruechte der Pflanze ernten
+object harvest_fruit ( int life_periode, int cycle, int state )
+{
+   string crops;
+   object result;
+
+   if ( !mappingp ( QueryProp( P_PLANT_SPAWNS_FRUIT ) ) )
+      return 0;
+
+   if ( QueryProp(P_PLANT_IS_GROWING) && (!member (scouts, this_player()->query_real_name()) || !scouts[this_player()->query_real_name(), 1]) )
+      return 0;
+
+   crops = QueryProp( P_PLANT_SPAWNS_FRUIT )[life_periode, 0];
+   if ( stringp (crops) )
+   {
+      if ( state < ( QueryProp( P_PLANT_SPAWNS_FRUIT ) [ life_periode, 1] ) * ( cycle + 1 ) )
+      {
+	     SetProp(P_PLANT_WAS_HARVESTED, QueryProp(P_PLANT_WAS_HARVESTED) + 1);
+         result = clone_object ( crops );
+         result->set_herbalists (herbalists); // Uebertragen der Pflanzenkundigen
+      }
+      else
+         result = 0; // Nichts mehr da zu ernten!
+   }
+   else
+     result = 0; // Es ist nicht Erntezeit!
+   return result;
+}
+
+// Blueten der Pflanze ernten
+object harvest_blossoms ( int life_periode, int cycle, int state )
+{
+   string crops;
+   object result;
+
+   if ( !mappingp ( QueryProp( P_PLANT_SPAWNS_BLOSSOM ) ) )
+      return 0;
+
+   if ( QueryProp(P_PLANT_IS_GROWING) && (!member (scouts, this_player()->query_real_name()) || !scouts[this_player()->query_real_name(), 1]) )
+      return 0;
+
+   crops = QueryProp( P_PLANT_SPAWNS_BLOSSOM )[life_periode, 0];
+   if ( stringp (crops) )
+   {
+      if ( state < ( QueryProp( P_PLANT_SPAWNS_BLOSSOM ) [ life_periode, 1] ) * ( cycle + 1 ) )
+      {
+	     SetProp(P_PLANT_WAS_HARVESTED, QueryProp(P_PLANT_WAS_HARVESTED) + 1);
+         result = clone_object ( crops );
+         result->set_herbalists (herbalists); // Uebertragen der Pflanzenkundigen
+      }
+      else
+         result = 0; // Nichts mehr da zu ernten!
+   }
+   else
+     result = 0; // Es ist nicht Erntezeit!
+   return result;
+}
+
+int count_fruit ()
+{
+  int amount;
+
+   if ( !mappingp ( QueryProp( P_PLANT_SPAWNS_FRUIT ) ) )
+      return 0;
+
+  amount = ( QueryProp( P_PLANT_SPAWNS_FRUIT ) [QueryProp(P_PLANT_LIFE_PERIODE), 1] ) * ( QueryProp (P_PLANT_SEASON_COUNT) + 1 );
+  amount -= QueryProp ( P_PLANT_WAS_HARVESTED );
+
+  if (amount <= 0)
+     return 0;
+  else
+     return amount;
+}
+
+int count_bloom ()
+{
+  int amount;
+
+   if ( !mappingp ( QueryProp( P_PLANT_SPAWNS_BLOSSOM ) ) )
+      return 0;
+
+  amount = ( QueryProp( P_PLANT_SPAWNS_BLOSSOM ) [QueryProp(P_PLANT_LIFE_PERIODE), 1] ) * ( QueryProp (P_PLANT_SEASON_COUNT) + 1 );
+  amount -= QueryProp ( P_PLANT_WAS_HARVESTED );
+
+  if (amount <= 0)
+     return 0;
+  else
+     return amount;
+}
+
+string percent_to_words ( int value )
+{
+   switch (value)
+   {
+      case 0:  return "beinahe keine"; break;
+      case 1 .. 10: return "sehr wenige"; break;
+      case 11 .. 20: return "ein paar"; break;
+      case 21 .. 30: return "einige"; break;
+      case 31 .. 40: return "mehrere"; break;
+      case 41 .. 50: return "etliche"; break;
+      case 51 .. 60: return "relativ viele"; break;
+      case 61 .. 70: return "eine Menge"; break;
+      case 71 .. 80: return "eine groessere Menge"; break;
+      case 81 .. 90: return "eine grosse Menge"; break;
+      case 91 .. 100: return "viele"; break;
+      case 101 .. 200: return "sehr viele"; break;
+      case 201 .. 300: return "extrem viele"; break;
+      case 301 .. 400: return "unglaublich viele"; break;
+      default : return "massenhaft viele"; break;
+   }
+}
+
+string fruit_look ()
+{
+   int number;
+
+   number = count_fruit();
+   switch (number)
+   {
+      case 0:       return "keine Fruechte"; break;
+      case 1:       return "eine Frucht"; break;
+      case 2 .. 10: return to_string ( number )+" Fruechte"; break;
+      default : return percent_to_words ( count_fruit()*100 / QueryProp( P_PLANT_SPAWNS_FRUIT ) [QueryProp(P_PLANT_LIFE_PERIODE), 1] )+" Fruechte"; break;
+   }
+}
+
+string bloom_look ()
+{
+   int number;
+
+   number = count_bloom();
+   switch (number)
+   {
+      case 0:       return "keine Blueten"; break;
+      case 1:       return "eine Bluete"; break;
+      case 2 .. 10: return to_string ( number )+" Blueten"; break;
+      default : return percent_to_words ( count_bloom()*100 / QueryProp( P_PLANT_SPAWNS_BLOSSOM ) [QueryProp(P_PLANT_LIFE_PERIODE), 1] )+" Blueten"; break;
+   }
+}
+
+void check_plant ( int mode )
+{
+   if (mode == 0) // Pflanzenkunde
+   {
+      if ( QueryProp(P_PLANT_IS_GROWING) )
+      {
+         if ( herbalists[this_player()->query_real_name()] < time() )
+         {
+            if ( SKILLMASTER->UseSkill(this_player(), QueryProp(P_ID_SKILL)) < bp->QueryProp(P_LORE_DIFFICULTY) )
+	       herbalists += ([ this_player()->query_real_name(): time() + 3600; 0]);
+            else
+	       herbalists += ([ this_player()->query_real_name(): time() + 3600; 1]);
+         }
+      }
+      else
+      {
+         if (!member (herbalists, this_player()->query_real_name()))
+         {
+            if ( SKILLMASTER->UseSkill(this_player(), QueryProp(P_ID_SKILL)) < bp->QueryProp(P_LORE_DIFFICULTY) )
+   	       herbalists += ([ this_player()->query_real_name(): time() + 3600; 0]);
+            else
+               herbalists += ([ this_player()->query_real_name(): time() + 3600; 1]);
+         }
+      }	
+   }
+   else // Pruefung auf Sinnenschaerfe
+   {
+      if ( scouts[this_player()->query_real_name()] < time() && QueryProp(P_PLANT_IS_GROWING) )
+      {
+         if ( SKILLMASTER->UseSkill(this_player(), SK_SENSE) < bp->QueryProp(P_HIDDEN) )   	
+       	    scouts += ([ this_player()->query_real_name(): time() + 3600; 0]);
+         else
+            scouts += ([ this_player()->query_real_name(): time() + 3600; 1]);
+      }   	
+   }
+}
+
+string short ()
+{
+   string sh;
+
+   if ( !objectp (bp) )
+      return 0;
+
+   // Wird die Funktion von einem Nichtspieler-Objekt benoetigt
+   // gib das identifizierte short zurueck:
+   if ( !objectp(this_player()) )
+	  if (stringp(sh=funcall(bp->QueryProp( P_SHORT ))) && sh!="")
+         return break_string(sh,78,0);
+      else
+         return 0;
+
+   check_plant (1); // Pruefung auf Sinnenschaerfe
+
+   // Wenn der Spieler die Pflanze nicht entdeckt ist sie unsichtbar
+   if ( QueryProp(P_PLANT_IS_GROWING) && (!member (scouts, this_player()->query_real_name()) || !scouts[this_player()->query_real_name(), 1]) )
+      return 0;
+
+   check_plant (0); // Pruefung auf Pflanzenkunde
+
+   if ( member (herbalists, this_player()->query_real_name()) && herbalists[this_player()->query_real_name(), 1] )
+   {
+     if ( member ( QueryProp(P_PLANT_LIFECYCLE), QueryProp (P_PLANT_LIFE_PERIODE) ) )
+	    if (stringp(sh=funcall(bp->QueryProp( P_SHORT ))) && sh!="")
+           return break_string(sh+".",78,0);
+     else
+        return 0;
+   }
+   else
+   {
+     if ( member ( QueryProp(P_PLANT_LIFECYCLE), QueryProp (P_PLANT_LIFE_PERIODE) ) )
+	    if (stringp(sh=funcall(bp->QueryProp(P_UNIDENTIFIED_SHORT))) && sh!="")
+           return break_string(sh+".",78,0);
+     else
+        return 0;
+
+   }
+}
+
+varargs string name(int casus, int demon)
+{
+   string result;
+   
+   if ( !objectp (bp) )
+      return "irgendwas";
+
+   // Wenn der Spieler die Pflanze nicht entdeckt ist sie unsichtbar
+   if ( QueryProp(P_PLANT_IS_GROWING) && (!member (scouts, this_player()->query_real_name()) || !scouts[this_player()->query_real_name(), 1]) )
+      return "irgendwas";
+   
+   if ( bp->QueryProp(P_ARTICLE) )
+      result =  bp->QueryArticle(casus, demon) + bp->QueryProp(P_UNIDENTIFIED_NAME);
+   else
+      result = bp->QueryProp(P_UNIDENTIFIED_NAME);
+   if ( !stringp (result) )
+      return "irgendwas";
+   else
+      return result;
+}
+
+string long ()
+{
+   if ( !objectp (bp) )
+      return "Sowas ist hier nicht zu erkennen.\n";
+
+   check_plant (0); // Pruefung auf Pflanzenkunde
+
+   // Wenn der Spieler die (!wachsende!) Pflanze nicht entdeckt ist sie unsichtbar
+   if ( QueryProp(P_PLANT_IS_GROWING) && (!member (scouts, this_player()->query_real_name()) || !scouts[this_player()->query_real_name(), 1]) )
+      return "Sowas ist hier nicht zu erkennen.\n";
+
+   if ( member (herbalists, this_player()->query_real_name()) && herbalists[this_player()->query_real_name(), 1] )
+   {
+      if ( !QueryProp(P_PLANT_SPAWNS_FRUIT) && !QueryProp(P_PLANT_SPAWNS_BLOSSOM) )
+      {
+         if ( member ( QueryProp(P_PLANT_LIFECYCLE), QueryProp (P_PLANT_LIFE_PERIODE) ) )
+            return  break_string (bp->QueryProp(P_LONG)[0..<2] + ".", 78, 0);
+         else
+            return 0;
+      }
+      if ( member ( QueryProp(P_PLANT_LIFECYCLE), QueryProp (P_PLANT_LIFE_PERIODE) ) )
+         return break_string (bp->QueryProp(P_LONG)[0..<2] + ", "+custom_query_pronoun(WER, 0, QueryProp(P_GENDER))+
+                                                      " traegt " + fruit_look() +" und " + bloom_look()+ ".", 78, 0);
+      else
+         return 0;
+   }
+   else
+   {
+      if ( !QueryProp(P_PLANT_SPAWNS_FRUIT) && !QueryProp(P_PLANT_SPAWNS_BLOSSOM) )
+      {
+         if ( member ( QueryProp(P_PLANT_LIFECYCLE), QueryProp (P_PLANT_LIFE_PERIODE) ) )
+            return break_string (bp->QueryProp(P_UNIDENTIFIED_LONG) + ".", 78, 0);
+         else
+            return 0;
+      }
+      if ( member ( QueryProp(P_PLANT_LIFECYCLE), QueryProp (P_PLANT_LIFE_PERIODE) ) )
+         return break_string (bp->QueryProp(P_UNIDENTIFIED_LONG) + ", "+custom_query_pronoun(WER, 0, QueryProp(P_UNIDENTIFIED_GENDER))+
+                                                                   " traegt " + fruit_look() +" und " + bloom_look()+ ".", 78, 0);
+      else
+         return 0;
+
+   }
+}
+
+void manage_details ()
+{
+   if ( stringp (QueryProp(P_PLANT_SPAWNS_BLOSSOM)[QueryProp(P_PLANT_LIFE_PERIODE)]) )
+   {
+      AddDetail ( ({ "bluete", "blueten" }), #'bloom_detail );
+   }
+   else
+	  RemoveDetail ( ({ "bluete", "blueten" }) );
+
+   if ( stringp (QueryProp(P_PLANT_SPAWNS_FRUIT)[QueryProp(P_PLANT_LIFE_PERIODE)]) )
+   {
+      AddDetail ( ({ "frucht", "fruechte" }), #'fruit_detail );
+   }
+   else
+	  RemoveDetail ( ({ "frucht", "fruechte" }) );
+}
+
+object get_bloom ()
+{
+   if ( !mappingp ( QueryProp( P_PLANT_SPAWNS_BLOSSOM ) ) )
+      return 0;
+
+   call_other(( QueryProp( P_PLANT_SPAWNS_BLOSSOM ) [QueryProp(P_PLANT_LIFE_PERIODE), 0] ), "???", 0);
+   return find_object ( ( QueryProp( P_PLANT_SPAWNS_BLOSSOM ) [QueryProp(P_PLANT_LIFE_PERIODE), 0] ) );
+}
+
+object get_fruit ()
+{
+   if ( !mappingp ( QueryProp( P_PLANT_SPAWNS_FRUIT ) ) )
+      return 0;
+
+   call_other(( QueryProp( P_PLANT_SPAWNS_FRUIT ) [QueryProp(P_PLANT_LIFE_PERIODE), 0] ), "???", 0);
+   return find_object ( ( QueryProp( P_PLANT_SPAWNS_FRUIT ) [QueryProp(P_PLANT_LIFE_PERIODE), 0] ) );
+}
+
+void reset_plant ( int lp )
+{
+   SetProp (P_PLANT_LIFE_PERIODE, lp);
+   SetProp (P_PLANT_WAS_HARVESTED, 0);
+   SetProp (P_PLANT_RESET_COUNT, 0);
+}
+
+string bloom_detail ( string det )
+{
+  string path, lg;
+
+  path = QueryProp(P_PLANT_SPAWNS_BLOSSOM)[QueryProp(P_PLANT_LIFE_PERIODE)];
+
+  if (!stringp (path))
+     return 0;
+
+  if ( !count_bloom() )
+     return "Scheinbar wurden alle Blueten bereits abgeerntet.";
+
+  if ( member (herbalists, this_player()->query_real_name()) && herbalists[this_player()->query_real_name(), 1] )
+  {
+	 if ( det == "blueten" )
+        return "Du siehst "+bloom_look()+".\n";
+	 else
+	    if (stringp(lg=funcall(get_bp(path)->QueryProp(P_LONG))) && lg!="")
+           return break_string(lg[0..<2]+".",78,0);
+  }
+  else
+  {
+	 if ( det == "blueten" )
+        return "Du siehst "+bloom_look()+".\n";
+	 else
+	    if (stringp(lg=funcall(get_bp(path)->QueryProp(P_UNIDENTIFIED_LONG))) && lg!="")
+           return break_string(lg+".",78,0);
+  }
+}
+
+string fruit_detail ( string det )
+{
+  string path, lg;
+
+  path = QueryProp(P_PLANT_SPAWNS_FRUIT)[QueryProp(P_PLANT_LIFE_PERIODE)];
+
+  if (!stringp (path))
+     return 0;
+
+  if ( !count_fruit() )
+     return "Scheinbar wurden alle Fruechte bereits abgeerntet.";
+
+  if ( member (herbalists, this_player()->query_real_name()) && herbalists[this_player()->query_real_name(), 1] )
+  {
+	 if ( det == "fruechte" )
+        return "Du siehst "+fruit_look()+".\n";
+	 else
+	    if (stringp(lg=funcall(get_bp(path)->QueryProp(P_LONG))) && lg!="")
+           return break_string(lg[0..<2]+".",78,0);
+  }
+  else
+  {
+	 if ( det == "fruechte" )
+        return "Du siehst "+fruit_look()+".\n";
+	 else
+	    if (stringp(lg=funcall(get_bp(path)->QueryProp(P_UNIDENTIFIED_LONG))) && lg!="")
+           return break_string(lg+".",78,0);
+  }
+}
+
+void set_herbalists ( mapping m )
+{
+   herbalists = m;
+}
+
+mapping get_herbalists ()
+{
+   return herbalists;
+}
+
+void set_scouts ( mapping m )
+{
+   scouts = m;
+}
+
+mapping get_scouts ()
+{
+   return scouts;
+}
+
+void filter_blind ( string key, int zeit, int erfolg )
+{
+   object ob;
+
+   if ( !erfolg )
+   {
+	  ob = present ( key, environment (this_object()) );
+	  if (objectp (ob))
+	     tmp_blind += ({ ob });
+   }
+}
+
+mixed get_blind (  )
+{
+   tmp_blind = ({ });
+
+   if ( !objectp(environment (this_object())) )
+      return tmp_blind;
+
+   walk_mapping ( scouts, "filter_blind", this_object(), 0 );
+
+   return tmp_blind;
+}
+
+
+// Wenn ein Spieler mit einer Pflanze interagiert, wird sie fuer alle Anwesenden sichtbar
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+   if (find_call_out("reveal")!= -1) return;
+   call_out ( "reveal", 0);
+}
+
+void reveal()
+{
+   mixed bystanders;
+   int i;
+   
+   // Hat der Spieler die Pflanze noch nicht entdeckt, so kann er sie auch keinem andern zeigen
+   if (!member (scouts, this_player()->query_real_name()) || !scouts[this_player()->query_real_name(), 1])
+      return 0;
+      
+   bystanders = filter_array( all_inventory(environment(this_player())), #'interactive );
+   
+   for ( i = sizeof(bystanders) - 1; i >= 0; i--)
+   {
+      if (!member (scouts, bystanders[i]->query_real_name()) || !scouts[bystanders[i]->query_real_name(), 1])
+      {
+         scouts += ([ bystanders[i]->query_real_name(): time() + 3600; 1]);
+         tell_object ( bystanders[i], "Dir faellt nun eine Pflanze auf, die Du vorher uebersehen hast!\n" );
+      }
+   }
+}
+
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+   return StartReaction(verb, gruppe, adverb, touch);
+}
+

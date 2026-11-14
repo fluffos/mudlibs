@@ -1,0 +1,106 @@
+// Sehnenstich: verlangsamt den Gegner fuer kurze Zeit, wenn getroffen.
+
+varargs int prep_sehnenstich(object caster, mapping sinfo, int flag)
+{
+  object victim, spear;
+
+  if (!caster->InFight())
+  {
+    tell_object(caster, "Du musst im Kampf sein, um gezielt nach Sehnen zu stechen.\n");
+    return 0;
+  }
+
+  victim = FindEnemyVictim(sinfo[SI_SKILLARG], caster,
+      "Wen willst Du mit einem Sehnenstich treffen?\n");
+  if (!victim)
+    return 0;
+
+  if (caster->QueryProp(P_DISABLE_ATTACK))
+  {
+    tell_object(caster, "Du bist kampfunfaehig und kannst keinen Sehnenstich setzen!\n");
+    return 0;
+  }
+
+  if (!objectp(spear = caster->QueryProp(P_WEAPON)))
+  {
+    tell_object(caster, "Ohne Waffe kannst Du keine Sehnen verletzen.\n");
+    return 0;
+  }
+
+  if (spear->QueryProp(P_WEAPON_TYPE) != WT_SPEAR)
+  {
+    tell_object(caster, "Dafuer brauchst Du einen Speer in der Hand!\n");
+    return 0;
+  }
+
+  if (!pay_for_spell(caster, sinfo, !flag))
+    return 0;
+
+  sinfo[SI_ENEMY] = victim;
+  return 1;
+}
+
+
+int sehnenstich(object caster, mapping sinfo)
+{
+  object victim, spear;
+  int suc, bonus, speed, dur, dam;
+
+  if (!prep_sehnenstich(caster, sinfo, 1))
+    return 0;
+
+  victim = FindEnemyVictim(sinfo[SI_SKILLARG], caster, "");
+  if (!victim)
+    return 0;
+
+  if ((suc = SpellSuccess(caster, sinfo)) <= 0)
+    return MISSERFOLG;
+
+  spear = caster->QueryProp(P_WEAPON);
+  bonus = CheckEquip(caster, sinfo[SI_SPELLFUNC]);
+
+  sinfo[SI_SKILLDAMAGE] += (spear ? spear->QueryProp(P_WC) / 2 : 0) + bonus;
+  sinfo[OFFSET(SI_SKILLDAMAGE)] += (spear ? spear->QueryProp(P_WC_FIX) / 2 : 0) + bonus / 2;
+  sinfo[SI_MAX_DAMAGE] += caster->QueryProp(P_GUILD_LEVEL) * 12 + bonus;
+
+  environment(caster)->Message(BS(sprintf("%s sticht blitzschnell nach den Sehnen von %s.",
+        caster->Name(WER,1), victim->name(WEM,1))),
+      MSGFLAG_VISUAL, ([ MSGFLAG_EXCLUDE : ({ caster, victim }) ]) );
+
+  tell_object(caster, BSC(sprintf("Du zielst auf die Sehnen von %s und stichst zu.\n",
+        victim->name(WEM,1))));
+  tell_object(victim, BS(sprintf("%s sticht schmerzhaft in Deine Sehnen!",
+        caster->Name(WER,1))));
+
+  dam = TryDefaultAttackSpell(victim, caster, sinfo, sinfo[SI_SPELL]);
+  pDebug(caster, sprintf("Sehnenstich Schaden = %d\n", dam));
+
+  if (!objectp(victim) || victim->QueryProp(P_GHOST))
+    return ERFOLG;
+
+  // Verlangsamen: niedrigere Werte bedeuten langsameres Handeln.
+  speed = 75 - (suc / 200);
+  if (speed < 45) speed = 45;
+  speed -= 5 * sinfo[SI_SKILLPOINTS];
+
+  dur = 6 + caster->QueryProp(P_GUILD_LEVEL) / 2 + sinfo[SI_SKILLABILITY] / 2000 +
+        suc / 3000;
+
+  if (random(3 * caster->QueryProp(P_GUILD_LEVEL) + sinfo[SI_SKILLABILITY] / 2) <
+      victim->QueryProp(P_NOMAGIC))
+  {
+    tell_object(caster, sprintf("%s laesst den Stich kaum wirken.\n",
+          victim->name(WER,1)));
+    return ERFOLG;
+  }
+
+  victim->ModifySkillAttribute(caster, SA_SPEED, speed, dur);
+  pDebug(caster, sprintf("sehnenstich :: speed=%d duration=%d\n", speed, dur));
+
+  tell_object(victim, "Deine Bewegungen werden traege - der Stich hat Deine Sehnen erwischt!\n");
+  if (environment(victim))
+    environment(victim)->Message(BS(sprintf("%s bewegt sich ploetzlich deutlich langsamer.",
+          victim->Name(WER,1))),
+        MSGFLAG_VISUAL, ([ MSGFLAG_EXCLUDE : ({ victim }) ]) );
+  return ERFOLG;
+}

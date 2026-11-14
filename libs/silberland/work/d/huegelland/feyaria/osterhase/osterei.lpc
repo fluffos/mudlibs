@@ -1,0 +1,223 @@
+// Osterei fuer Osterhasenquest
+
+#include <properties.h>
+#include <language.h>
+#include <food.h>
+#include "../def.h"
+#include "./oh.h"
+
+#define FEY_EI_ID "fey\nosterei"
+
+inherit "std/food";
+
+int farbe;
+mapping farbmap, farbconvert;
+
+int faerben(int neufarbe);
+
+void create()
+{
+  if(!is_clone(this_object())) return;
+  ::create();
+  SetProp( P_SHORT, "Ein Hasenei" );
+  SetProp( P_LONG, BS(
+    "Du haeltst tatsaechlich ein Hasenei in der Hand! Nie haettest Du "
+    "gedacht, dass so etwas moeglich ist. Aber scheinbar gibt es doch noch "
+    "Wunder in dieser Welt. Das Ei ist etwas groesser als ein Huehnerei und "
+    "sicher hervorragend fuer das Eierfaerben geeignet."));
+  AddId(({"ei",FEY_EI_ID}));
+  SetProp(P_NAME, "Hasenei");
+  SetProp(P_GENDER, NEUTER);
+  SetProp(P_WEIGHT, 3);
+  SetProp(P_NOBUY,1);
+  SetProp(P_NOSELL,1);
+  SetProp(P_NODROP,1);
+  SetProp(P_NEVERDROP,1);
+  SetProp(P_VALUE,0);
+  SetProp (P_FOOD_INFO, 
+    ([F_HEAL:400, F_SOAK:3, F_ALCOHOL:0, F_POISON:0]));
+  AddCmd(({"pecke","brich","oeffne","zerbrich","breche","zerbreche"}),
+	"eibrechen");
+  farbe=0;
+  farbmap=([0:"weiss", 1:"gelb", 2:"gruen", 3:"gruen", 4:"blau", 5:"gruen",
+            6:"tuerkis", 7:"gruen", 8:"rot", 9:"orange", 10:"braun", 11:"rosa",
+            12:"violett", 13:"rosa", 14:"braun", 15:"schwarz"]);
+  farbconvert=(["rot":8, "blau":4, "gruen":2, "gelb":1]);       
+  faerben(1+random(15));
+}
+
+BeimEssen()
+{
+  write("Du isst das "+name()+". Es schmeckt phantastisch.\n");
+  say (this_player()->name(WER,2) + " isst ein leckeres "+name()+".\n");
+  return ::BeimEssen();
+}
+
+int eibrechen (string str)
+{
+  int pos, rnd;
+  object wem;
+  object anderes_ei;
+
+  notify_fail("Was moechtest du machen? (\"pecke ei [mit <wem>]\")\n");
+  if (!str) return 0;
+  if ((pos = strstr(str, " mit ")) != -1)
+  {
+    if (!id(str[0..pos-1])) return 0;
+    wem = present(str[pos+5..], environment(this_player()));
+    if (!wem)
+      return write(capitalize(str[pos+5..]) +
+          " ist leider im Raum nicht anwesend!\n"), 1;
+    if (!interactive(wem))
+      return write("Du kannst nur mit anderen Spielern Ei pecken!\n"), 1;
+    if (wem == this_player())
+      return write("Fordere lieber andere Spieler heraus als Dich selbst!\n"), 1;
+    anderes_ei = present(FEY_EI_ID, wem);
+    if (!anderes_ei)
+      return write(wem->Name() + " hat leider kein Osterei!\n"), 1;
+
+    // Handelt es sich um die Antwort auf eine Forderung?
+    // (im Spieler setzen, damits auch bei mehreren Eiern klappt)
+    if (wem->QueryProp("osterei_peck_gefordert") == getuid(this_player()))
+    {
+      wem->SetProp("osterei_peck_gefordert", 0);        // Prop loeschen
+
+      rnd = random(100);
+      if (rnd < 45)
+      {
+        // GEWINN
+        write(
+            break_string(
+              "Du holst mit Deinem Osterei etwas aus und peckst gegen " +
+              wem->name(WESSEN,1) + " Osterei.\n"
+              "YEEESSSS!!! Dein Ei hat ueberlebt, das von " +
+              wem->name(WEM,1) + " ist jetzt ganz zerdepscht.\n", 78, 0, 1));
+        tell_object(wem,
+            break_string(
+              this_player()->Name(WER,1) + " holt mit " +
+              this_player()->QueryPossPronoun(NEUTER, WEM) +
+              " Osterei aus und peckt schwungvoll gegen Deines.\n"
+              "Und - oh weh! - Deine Eierschale bricht und ist jetzt "
+              "ganz zerdepscht!\nVeraergert wirfst Du das Ei weg.\n",
+              78, 0, 1));
+        tell_room(environment(this_player()),
+            break_string(
+              this_player()->Name(WER) + " peckt mit " +
+              this_player()->QueryPossPronoun(NEUTER, WEM) +
+              " Osterei gegen das von " + wem->name(WEM) + ".\n" +
+              wem->Name(WESSEN,1) + " Eierschale bricht! " +
+              this_player()->Name(WER) + " gewinnt also dieses Duell.\n",
+              78, 0, 1),
+            ({ this_player(), wem }) );
+        anderes_ei->remove(1);
+      }
+      else if (rnd < 90)
+      {
+        // VERLUST
+        write(
+            break_string(
+              "Du holst mit Deinem Osterei etwas aus und peckst gegen " +
+              wem->name(WESSEN,1) + " Osterei.\n"
+              "Oh nein!! Deine Eierschale zerbricht!! Das Ei von " +
+              wem->name(WEM,1) + " ist hingegen unversehrt!\n"
+              "Veraergert wirfst Du das Ei weg.\n", 78, 0, 1));
+        tell_object(wem,
+            break_string(
+              this_player()->Name(WER,1) + " holt mit " +
+              this_player()->QueryPossPronoun(NEUTER, WEM) +
+              " Osterei aus und peckt schwungvoll gegen Deines.\n"
+              "Aber Deine Eierschale haelt stand, das Ei von " +
+              this_player()->Name(WEM,1) + " hingegen bricht!\n", 78, 0, 1));
+        tell_room(environment(this_player()),
+            break_string(
+              this_player()->Name(WER) + " peckt mit " +
+              this_player()->QueryPossPronoun(NEUTER, WEM) +
+              " Osterei gegen das von " + wem->name(WEM) + ".\n" +
+              this_player()->Name(WESSEN,1) + " Eierschale bricht! " +
+              wem->Name(WER) + " gewinnt also dieses Duell.\n",
+              78, 0, 1),
+            ({ this_player(), wem }) );
+        remove(1);
+      }
+      else
+      {
+        // UNENTSCHIEDEN
+        write(
+            break_string(
+              "Du holst mit Deinem Osterei etwas aus und peckst gegen " +
+              wem->name(WESSEN,1) + " Osterei.\n"
+              "Aber was ist das!? Die Eierschalen beider Eier zerbrechen!!\n"
+              "Veraergert wirfst Du das Ei weg.\n",
+              78, 0, 1));
+        tell_object(wem,
+            break_string(
+              this_player()->Name(WER,1) + " holt mit " +
+              this_player()->QueryPossPronoun(NEUTER, WEM) +
+              " Osterei aus und peckt schwungvoll gegen Deines.\n"
+              "Aber was ist das!? Die Eierschalen beider Eier zerbrechen!!\n"
+              "Veraergert wirfst Du das Ei weg.\n",
+              78, 0, 1));
+        tell_room(environment(this_player()),
+            break_string(
+              this_player()->Name(WER) + " peckt mit " +
+              this_player()->QueryPossPronoun(NEUTER, WEM) +
+              " Osterei gegen das von " + wem->name(WEM) + ".\n"
+              "Aber was ist das!? Die Eierschalen beider Eier zerbrechen!!\n"
+              "Das Duell endet also unentschieden.\n",
+              78, 0, 1),
+            ({ this_player(), wem }) );
+        anderes_ei->remove(1);
+        remove(1);
+      }
+      return 1;
+    }
+    else
+    {
+      this_player()->SetProp("osterei_peck_gefordert", getuid(wem));
+      write("Du forderst " + wem->name(WEN,1) + " zum Ei pecken heraus.\n");
+      tell_object(wem,
+          this_player()->Name(WER,1) + " fordert Dich zum Ei pecken heraus.\n"
+          "Du kannst die Herausforderung mit \"pecke ei mit "+
+          getuid(this_player()) + "\" annehmen.\n");
+      tell_room(environment(this_player()),
+          this_player()->Name(WER) +
+          " fordert " +
+          wem->name(WEN) + " zum Ei pecken heraus.\n",
+          ({ this_player(), wem }) );
+    }
+
+    return 1;
+  }
+  if (!id(str)) return 0;
+  write("Du zerbrichst " + name(WEN,1) + ".\n");
+  say(this_player()->Name(WER,2) + " zerbricht ein "+CAP(str)+".\n");
+  tell_room( ENV(TP), 
+    "Ein putziges kleines Haeschen huepft heraus und hoppelt davon.\n");
+  call_out("remove",0,1);
+  return 1;
+}
+
+int faerben(int neufarbe)
+{
+  string farbe1, farbe2;
+  farbe = neufarbe;
+  farbe2=farbmap[farbe];
+  if( farbe2=="orange" ) farbe1="oranges";
+  else if ( farbe2=="rosa" ) farbe1=farbe2;
+  else farbe1=farbe2+"es";
+  SetProp( P_SHORT, "Ein " + farbe1 + " Osterei");
+  SetProp( P_LONG , BS(
+    "Du haeltst ein schoenes, " + farbe1 + " Osterei in der Hand. "
+    "Sicher ist es sehr lecker. Du kannst es selber essen oder es aufpecken."));
+  SetProp(P_NAME, "Osterei");
+  SetProp(P_NAME_ADJ, farbe2 );
+  AddId( ({"osterei", "osterhasenei"}) );
+  SetProp(P_ADJECTIVES, 0);
+  AddAdjective( ({farbe2, farbe1, farbe2+"em", farbe2+"en"}) );
+}
+
+string query_farbe()
+{
+  return farbmap[farbe];
+}
+

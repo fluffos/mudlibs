@@ -1,0 +1,356 @@
+inherit "std/thing";
+
+
+#define MAX_WASSER 300000
+#define MAX_LUFT 100000
+#define MAX_EIS 50000
+#define MAX_FEUER 15000
+
+#include <properties.h>
+#include <language.h>
+#include "../def.h"
+
+#ifndef P_X_MAX_HEALTH_MOD
+#define P_X_MAX_HEALTH_MOD "x_max_health_mod"
+#endif
+
+int f,w,e,l;
+string *fragtypes=({"feuerfragment","wasserfragment","luftfragment","eisfragment",
+                    "feuerfragmente","wasserfragmente","luftfragmente","eisfragmente"});
+mapping races = ([
+    "Zwerg" : ""; "Zwergenheld"; "Zwergenheldin",
+    "Elf" : ""; "Elfenheld"; "Elfenheldin",
+    "Mensch" : ""; "Menschenheld"; "Menschenheldin",
+    "Hobbit" : ""; "Hobbitheld"; "Hobbitheldin",
+    "Fee" : ""; "Feenheldin"; "Feenheldin",
+    "Oger" : ""; "Ogerheld"; "Ogerheldin",
+    "Troll" : ""; "Trollheld"; "Trollheldin",
+    "Dunkelelf" : ""; "Dunkelelfenheld"; "Dunkelelfenheldin",
+    "Untoter" : ""; "Lich"; "Lich",
+    ]);
+string old_race = "";
+string hero_race = "";
+
+int set_modifiers();
+
+void _set_autoloadobj( mixed args )
+{
+ f=args[0];w=args[1];e=args[2];l=args[3];
+}
+
+_query_autoloadobj()
+{
+  return ({f,w,e,l});
+}
+
+void create()
+{
+  if (!is_clone(this_object()))
+    return;
+  ::create();
+  e=f=w=l=0;
+  SetProp(P_NAME,"Seelenkristall");
+  SetProp(P_SHORT,"Seelenkristall");
+  SetProp(P_LONG,
+      "Ein Seelenkristall. Mit 'fusioniere' kannst Du elementare Fragmente mit "
+      "ihm verbinden. Mit 'fragreport' kannst Du allen im Raum stehenden "
+      "Spielern zeigen wieviel Energie Dein Kristall hat. Mit 'fragliste' "
+      "kannst Du Dir anzeigen lassen wieviel Energie Dein Kristall hat.");
+  AddId( ({"\nfragkristall","kristall","seelenkristall", "NODESTRUCT"}) );
+  SetProp(P_GENDER, MALE);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_MAGIC, 10);
+  SetProp(P_VALUE, 0);
+  
+  AddCmd(({"fusioniere","fusion"}), "fusefunc");
+  AddCmd(({"fragreport"}), "frepfunc");
+  AddCmd(({"fraglist","fragliste"}), "writerep");
+
+  seteuid(getuid(this_object()));
+}
+
+string rep()
+{
+  return sprintf(
+      "-------------------------------------------\n"
+      "| Wasserelementarenergie: (%6d/%6d) |\n"
+      "| Luftelementarenergie:   (%6d/%6d) |\n"
+      "| Eiselementarenergie:    (%6d/%6d) |\n"
+      "| Feuerelementarenergie:  (%6d/%6d) |\n"
+      "-------------------------------------------\n",
+      w,MAX_WASSER,l,MAX_LUFT,e,MAX_EIS,f,MAX_FEUER);
+}
+
+int frepfunc(string str)
+{
+  if (this_player() != environment())
+    return 0;
+  write("Du zeigst allen den Fuellstand Deines Seelenkristalls.\n");
+  say(this_player()->Name(WER,1)+" zeigt Dir "+
+      this_player()->QueryPossPronoun(MALE,WER,SINGULAR)+
+      " Seelenkristall.\n");
+  say(rep());
+  write(rep());
+  return 1;
+}
+
+int writerep(string str)
+{
+  if (this_player() != environment())
+    return 0;
+  write(rep());
+  return 1;
+}
+
+static void full_kristall()
+{
+  int i;
+  write(break_string("Dein Seelenkristall leutet ganz hell auf und ein "
+        "Gefuehl von unbegrenzter Macht ueberflutet Dich. Du fuehlst Dich "
+        "ploetzlich wie einer der grossen Helden aus alten Zeiten."));
+  this_player()->heal_self(500);
+  call_other(FRAGS "kristallmaster", "Channel", 
+      capitalize(getuid(this_player())) + " hat soeben seinen Seelenkristall "
+      "vollstaendig angefuellt und ist nun ein echter Held.");
+
+  for (i = 1; i <= 78; i++)
+    call_other(POTIONS "ampullenmaster", "player_rezept", i);
+}
+
+int fragcheck(object fragment, int fragamount)
+{
+  if(fragamount>fragment->QueryProp(P_AMOUNT) || fragamount<1){
+    write("So viele Fragmente dieser Art hast Du nicht.\n");
+    return 0;
+  }
+  return 1;
+}
+
+int fusefunc(string arg)
+{
+  string fragtype;
+  int fragamount;
+  object fragment;
+
+  fragamount=0; 
+
+  if (this_player() != environment())
+    return 0;
+  notify_fail("Nein, so nicht.\n");
+  if(!arg) return 0;
+
+  if (sscanf(arg,
+        "%d %s", fragamount, fragtype) != 2 && member(fragtypes,arg)==-1 ){
+    write("Es muss z.B. fusioniere 10 feuerfragmente heissen.\n");
+    return 1;
+  }
+  else
+  {
+    if (member(fragtypes,arg)!=-1){
+      fragamount=1;
+      fragtype=arg;
+    }
+    if (member(fragtypes,fragtype)==-1) {
+      write("Es koennen nur Feuer, Wasser, Eis und Luftfragmente fusioniert werden.\n");
+      return 1;
+    }
+    if (fragtype[0..8]=="feuerfrag") {
+      if (!fragment=deep_present("\nfeuerfrag",this_player())){
+        write("Du hast ja gar keine echten Feuerfragmente bei Dir!\n");
+        return 1;
+      }
+      if (!fragcheck(fragment, fragamount)) return 1;
+      if (f + fragamount > MAX_FEUER) {
+        write("So viele Fragmente passen in diesen Kristall nicht hinein.\n");
+        return 1;
+      }
+      f=f+fragamount;
+    }
+    if (fragtype[0..8]=="eisfragme") {
+      if (!fragment=deep_present("\neisfrag",this_player())){
+        write("Du hast ja gar keine echten Eisfragmente bei Dir!\n");
+        return 1;
+      }
+      if (!fragcheck(fragment, fragamount)) return 1;
+      if (e + fragamount > MAX_EIS) {
+        write("So viele Fragmente passen in diesen Kristall nicht hinein.\n");
+        return 1;
+      }
+      e=e+fragamount;
+    }
+    if (fragtype[0..8]=="wasserfra") {
+      if (!fragment=deep_present("\nwasserfrag",this_player())){
+        write("Du hast ja gar keine echten Wasserfragmente bei Dir!\n");
+        return 1;
+      }
+      if (!fragcheck(fragment, fragamount)) return 1;
+      if (w + fragamount > MAX_WASSER) {
+        write("So viele Fragmente passen in diesen Kristall nicht hinein.\n");
+        return 1;
+      }
+      w=w+fragamount;
+    }
+    if (fragtype[0..8]=="luftfragm") {
+      if (!fragment=deep_present("\nluftfrag",this_player())){
+        write("Du hast ja gar keine echten Luftfragmente bei Dir!\n");
+        return 1;
+      }
+      if (!fragcheck(fragment, fragamount)) return 1;
+      if (l + fragamount > MAX_LUFT) {
+        write("So viele Fragmente passen in diesen Kristall nicht hinein.\n");
+        return 1;
+      }
+      l=l+fragamount;
+    }
+  } 
+  write_file(LOGS "frags/"+getuid(this_player())+".log", 
+      sprintf("%s: %6d Wasser, %6d Luft, %6d Eis, %6d Feuer\n",
+        dtime(time()), w, l, e, f));
+  fragment->AddAmount(-fragamount);
+  if (fragamount==1)
+  {
+    write("Du fusionierst das Fragment mit dem Seelenkristall.\n"
+        "Der Seelenkristall flackert ein wenig auf.\n");
+    say(break_string(this_player()->Name(WESSEN)+" Seelenkristall flackert ein "
+          "wenig auf, als ein Fragment mit "+this_player()->QueryPronoun(WEM)+
+          " fusioniert.",78));
+  }
+  else
+  {
+    write("Du fusionierst die Fragmente mit dem Seelenkristall.\n"
+        "Der Seelenkristall blitzt kurz auf.\n");
+    say(break_string(this_player()->Name(WESSEN)+" Seelenkristall blitzt kurz "
+          "auf, als Fragmente mit "+this_player()->QueryPronoun(WEM)+
+          " fusionieren.",78));
+  }
+  set_modifiers();
+  call_other(FRAGS "kristallmaster", "fragused", fragtype[0..8], fragamount);
+  call_other(FRAGS "kristallmaster", "set_frags", getuid(this_player()),
+      w, l, e, f);
+  if (w == MAX_WASSER && l == MAX_LUFT && e == MAX_EIS && f == MAX_FEUER)
+    full_kristall();
+  return 1;          
+}
+
+mixed _query_noget()
+{
+  if(present("\nfragkristall", this_player()))
+    return write("Du hat doch schon einen Seelenkristall!!\n"),1;
+  return 0;
+}
+
+int inside_well()
+{
+  return strstr(file_name(environment(environment())), ROOMS) != -1;
+}
+
+int set_modifiers()
+{
+  int faktor;
+  object pl;
+
+  if( !objectp(pl = environment()) || !environment(pl) ) 
+    return 0;
+  if(inside_well())
+  {
+    faktor = 8;
+    pl->AddResistanceModifier( ([
+          DT_WATER: -0.4 * w / MAX_WASSER,
+          DT_AIR: -0.4 * l / MAX_LUFT,
+          DT_COLD: -0.4 * e / MAX_EIS,
+          DT_FIRE: -0.4 * f / MAX_FEUER,
+          ]), "seelenkristall");
+  }
+  else
+  {
+    faktor = 1;
+    pl->RemoveResistanceModifier("seelenkristall");
+  }
+
+  SetProp(P_X_ATTR_MOD, ([
+        A_DEX: faktor * w / MAX_WASSER,
+        A_INT: faktor * l / MAX_LUFT,
+        A_CON: faktor * e / MAX_EIS,
+        A_STR: faktor * f / MAX_FEUER,
+        ]) );
+  SetProp(P_X_HEALTH_MOD, ([
+        P_SP: 5 * faktor * w / MAX_WASSER + 5 * faktor * l / MAX_LUFT,
+        P_HP: 5 * faktor * e / MAX_EIS + 5 * faktor * f / MAX_FEUER,
+        ]) );
+  RemoveId("\nseelenkristall_held");
+  if (w == MAX_WASSER && l == MAX_LUFT && e == MAX_EIS && f == MAX_FEUER)
+  {
+    SetProp(P_X_MAX_HEALTH_MOD, ([ P_HP: 10, P_SP:10]) );
+    AddId("\nseelenkristall_held");
+    old_race = pl->QueryProp(P_RACE);
+    hero_race = races[old_race, pl->QueryProp(P_GENDER)];
+    pl->Set(P_RACE,  symbol_function("race", this_object()), F_QUERY_METHOD);
+    pl->AddResistanceModifier( ([
+          DT_WATER: -0.05, 
+          DT_AIR: -0.05,
+          DT_COLD: -0.05,
+          DT_FIRE: -0.05,
+          ]), "voller_seelenkristall");
+  }
+  pl->UpdateAttributes();
+  return 1;
+}
+
+string race()
+{ 
+  if (previous_object(1) && (file_name(previous_object(1)) == "/obj/werliste" ||
+        file_name(previous_object(1)) == "/p/daemon/fingerd"))
+    return hero_race;
+  else
+    return old_race;
+}
+
+void reset()
+{
+  int heal;
+
+  if(!is_clone(this_object())) 
+    return;
+  ::reset();
+
+  if(set_modifiers())
+  {
+    heal = 100 * w / MAX_WASSER + 100 * l / MAX_LUFT + 
+        100 * e / MAX_EIS + 100 * f / MAX_FEUER;
+    if (inside_well())  // Im Brunnen immer Heilung
+      environment()->heal_self(heal);
+    else if (heal == 400) // Ausserhalb nur bei vollen Kristall
+      environment()->heal_self(100+random(300));
+  }
+  set_next_reset(15 * 60);
+}
+
+void init()
+{
+  int *frags;
+
+  ::init();
+  if( query_once_interactive(environment()) )
+  {
+    frags = call_other(FRAGS "kristallmaster", "query_frags", getuid(environment()));
+    if( e * l * w * f == 0 && pointerp(frags))
+    { 
+      w = frags[0];
+      l = frags[1];
+      e = frags[2];
+      f = frags[3];
+    }
+    else if( !pointerp(frags))
+      call_other(FRAGS "kristallmaster", "set_frags", getuid(this_player()), 
+          w, l, e, f);
+  }
+  set_modifiers();
+}
+
+void BecomesNetAlive(object spieler)
+{
+  set_modifiers();
+}

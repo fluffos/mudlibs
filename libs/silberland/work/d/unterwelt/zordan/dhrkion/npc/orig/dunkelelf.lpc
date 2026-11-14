@@ -1,0 +1,206 @@
+
+inherit "/d/unterwelt/basics/central/npc/std_darkelf";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <new_skills.h>
+#include <moving.h>
+#include <mnpc.h>
+#include "../def.h"
+
+void create() {
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein Dunkelelf");
+  SetProp(P_LONG,
+    "Vor Dir steht ein Dunkelelf mittleren Alters. Es geht wohl seiner "
+    "alltaeglichen Arbeit nach und beachtet Dich auch nicht weiter. Sein "
+    "typisch weisses Haar haengt schon ein wenig ueber seine dunkelroten "
+    "Augen.");
+  SetProp(P_NAME, "Dunkelelf");
+  SetProp(P_GENDER, MALE);
+  AddId( ({"dunkelelf","elf","\ndunkelelf"}) );
+
+  create_default_darkelf(11,12);
+  SetProp(P_HANDS, ({" mit seinen Haenden",120+random(20),DT_BLUDGEON}));
+  SetProp(P_SIZE, 190+random(20));
+  SetProp(P_ALIGN, -600+random(4)*200);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_RESISTANCE_STRENGTHS ,
+    ([DT_FIRE:      0.2, DT_COLD:      0.1, DT_WATER:  0.0, DT_AIR:    0.0,
+      DT_LIGHTNING: 0.2, DT_EXPLOSION: 0.2, DT_SOUND:  0.0, DT_LIGHT:  0.2,
+      DT_ELECTRIC:  0.0, DT_ACID:      0.0, DT_POISON: 0.0, DT_TERROR: 0.0,
+      DT_HOLY:      0.2, DT_UNHOLY:    -0.2, DT_MAGIC:  -0.2 ]) );
+
+  SetProp(P_MSGIN, "kommt herein");
+  SetProp(P_MSGOUT, "wandert weiter");
+
+  SetProp(P_MNPC_AREA, ( ROOM "weg") );
+  SetProp(P_MNPC_WAIT, ({ 10, 40, 20 }));
+  SetProp(P_MNPC_DEFAULTROOM, ROOM "weg-d5");
+  SetProp(P_MNPC_FLAGS, MOV_OUTDOORS + MOV_INDOORS + MOV_MOVES + MOV_BACKWARDS);
+
+  SetProp(P_DIE_MSG,  " verflucht Dich und geht Lars besuchen.\n");
+
+  AddInfo(DEFAULT_INFO, "beachtet Deine Frage nicht.\n");
+
+  SetProp(P_LOG_INFO, "dhrkion.log");
+  AddLibrary( NPC "dhrkion.lib",1);
+
+  AddInfo("zordan", "Ich mag ihn sehr.","sagt: ");
+
+  SetProp( P_REJECT, ({ REJECT_KEEP,
+    "Der Dunkelelf sagt: Danke.\n" }) );
+
+  SetProp(P_SPELLRATE,30);
+
+  AddSpell(4,150,
+    "Der Dunkelelf schiesst einen magischen Pfeil auf Dich ab.\n",
+    "Der Dunkelelf schiesst einen magischen Pfeil auf @WEN ab.\n",
+     DT_MAGIC,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(4,180,
+    "Der Dunkelelf huellt Dich in eine tiefe Dunkelheit.\n",
+    "Der Dunkelelf huellt @WEN in eine tiefe Dunkelheit.\n",
+     DT_TERROR,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(1,230,
+    "Der Dunkelelf gibt Dir eine harte Kopfnuss.\n",
+    "Der Dunkelelf gibt @WEN eine harte Kopfnuss.\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1]));
+
+  SetAttackChats(10, ({
+    "Der Dunkelelf schreit um Hilfe.\n",
+    "Der Dunkelelf schaut Dir tief in die Augen.\n",
+    "Der Dunkelelf verflucht Dich.\n",
+    "Der Dunkelelf sagt: Du wirst dafuer im Gefaengnis landen!\n",
+    "Der Dunkelelf versucht zu Lloth zu beten.\n"}) );
+
+  SUID;
+  switch( random(2)) {
+    case 0:  CLONEME( WEAPON "kurzbogen" );
+             command("zuecke kurzbogen"); break;
+    case 1:  CLONEME(WEAPON "diamantschwert" );
+             command("zuecke schwert"); break;
+  }
+  CLONEME( "/p/armour/lederstiefel" );
+  CLONEME( "/p/armour/lederhandschuhe" );
+  CLONEME( "/d/huegelland/zordan/holzfaeller/armour/arbeitsgewand" );
+  CLONEME( ARMOUR "hose" );
+  command("trage alles");
+}
+
+void init() {
+  ::init();
+  if(TP && DHRKIONMASTER->checkfeind(TP)) {
+    if (random(100) < TP->QueryProp(P_LEVEL)) {
+      if (!IsEnemy(TP)) {
+        call_out("angriff",0,TP,"Der Dunkelelf erkennt Dich als Feind und greift Dich deshalb an.\n");
+        Kill(TP);
+      }
+    }
+  }
+  if (TP && TP->id("\ndunkelelf")) AddDefender(TP);
+  if (TP && TP->id("\ndunkelelfin")) AddDefender(TP);
+}
+
+int Defend(int dam, mixed dam_type, mixed spell, object enemy) {
+  DHRKIONMASTER->addfeind(enemy);
+  ::Defend(dam, dam_type, spell, enemy);
+}
+
+void InformDefend(object enemy) {
+  if (random(100) < enemy->QueryProp(P_LEVEL)) {
+    if (!IsEnemy(enemy)) {
+      call_out("angriff",0,enemy,"Der Dunkelelf hilft seinen Freunden und greift Dich an.\n");
+      Kill(enemy);
+    }
+  }
+}
+
+void angriff(object enemy,string str) {
+  if (enemy && present(enemy)) {
+    tell_object(enemy,str);
+  }
+}
+
+void die(int poisondeath) {
+//  DHRKIONMASTER->addkiller(PL); passiert im std_darkelf
+  ::die(poisondeath);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp) {
+  if(killer == ME) {
+    write_file(LOG "spieler.deads",
+      ctime()+": "+CAP(getuid(player))+" wurde von einem Dunkelelfen getoetet ("+lostexp+").\n");
+    DHRKIONMASTER->feindtot(player);
+  }
+}
+
+void StartReaction(string verb, string gruppe, string adverb, int touch) {
+  switch (gruppe) {
+    case "aengstlich":
+      call_out("reaction", 0, TP,
+        "sagt: "+TPN+" ist sicher kein Dunkelelf.",
+        "sagt: "+TPN+" ist sicher kein Dunkelelf.");
+      break;
+    case "aergerlich":
+      call_out("reaction", 0, TP,
+        "sagt: Lass Deine Wut an einem anderen aus, "+TPN+"!",
+        "sagt: Lass Deine Wut an einem anderen aus, "+TPN+"!");
+      break;
+    case "albern":
+      call_out("reaction", 0, TP,
+        "kichert.",
+        "kichert.");
+      break;
+    case "fies":
+      call_out("reaction", 0, TP,
+        "sagt: Nanana, "+TPN+".",
+        "sagt: Nanana, "+TPN+".");
+      break;
+    case "frech":
+      call_out("reaction", 0, TP,
+        "sagt: Nanana, "+TPN+".",
+        "sagt: Nanana, "+TPN+".");
+      break;
+    case "froh":
+      call_out("reaction", 0, TP,
+        "ist das ziemlich egal.",
+        "ist das ziemlich egal.");
+      break;
+    case "intim":
+      call_out("reaction", 0, TP,
+        "schmeichelt sich an Dich ran.",
+        "schmeichelt sich an "+TPN+" ran.");
+      break;
+    case "nett":
+      call_out("reaction", 0, TP,
+        "sagt: Lass Dich damit bloss nicht erwischen, "+TPN+".",
+        "sagt: Lass Dich damit bloss nicht erwischen, "+TPN+".");
+      break;
+    case "neutral":
+      call_out("reaction", 0, TP,
+        "sagt: Mir doch schnuppe, "+TPN+".",
+        "sagt: Mir doch schnuppe, "+TPN+".");
+      break;
+    case "traurig":
+      call_out("reaction", 0, TP,
+        "sagt: Wein Dich woanders aus, "+TPN+".",
+        "sagt: Wein Dich woanders aus, "+TPN+".");
+      break;
+  }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch) {
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void reaction(object ob, string macher, string andere) {
+  if (present(ob, ENV(TO))) {
+    tell_object(ob, BS(Name(WER, 1)+" "+macher));
+    tell_room(ENV(TO), BS(Name(WER, 1)+" "+andere), ({ob}));
+  }
+}

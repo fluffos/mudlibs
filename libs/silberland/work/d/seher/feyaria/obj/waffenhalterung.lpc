@@ -1,0 +1,181 @@
+/* 
+ * Ein geraeumiger Kleiderwaffenhalterung.
+ * ---
+ * (w) written by Woody
+ * ---
+ * 2002-01-15  Initial release (basierend auf Anatols Regal).
+ * 2002-01-18  Kerben, leichter gemacht
+ *
+ * Haelt sich an die Begrenzungen der Seherhausmoebel (moebel.h)
+ * Man kann es beschriften.
+ *
+ */
+
+
+#pragma strict_types 
+
+#include <properties.h>
+#include <moving.h>
+#include "/d/seher/sys/moebel.h"
+
+inherit "/d/seher/anatol/std/container_closeable";
+
+string beschriftung;
+
+public void create()
+{
+  ::create();
+  if (!is_clone(this_object())) return;
+
+  beschriftung = 0;
+  AddId( ({ "waffenhalterung","halterung",MOEBEL_ID }) );
+  SetProp(P_SHORT, "Eine Waffenhalterung");
+  SetProp(P_LONG, "Eine Waffenhalterung.\n");
+  SetProp(P_NAME, "Waffenhalterung");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_WEIGHT, 10000);
+  SetProp(P_WEIGHT_PERCENT, 100);
+  SetProp(P_TOTAL_OBJECTS, 30);
+  SetProp(P_MAX_WEIGHT, 200000); 
+  SetProp(P_SIZE, 220);
+  SetProp(P_VALUE, 3000);  
+  SetProp(P_MATERIAL, ([ MAT_MISC_WOOD:90, MAT_STEEL:10 ]) );
+
+  AddCmd( ({ "beschrift", "beschrifte" }), "cmdBeschrifte" );
+  AddSpecialDetail( ({ "schild", "beschriftung"}), "detBeschriftung" );
+
+}
+
+
+nosave string detBeschriftung()
+{
+  if (!beschriftung) return
+    "Das Schild ist leer, die Waffenhalterung unbeschriftet. Das musst Du aendern!\n";
+  else
+    return break_string("Jemand hat mit krakeligen Buchstaben '"+
+        beschriftung+"' auf das Schild an der Waffenhalterung gemalt.", 78);
+}
+
+
+nosave int cmdBeschrifte(string wiebitte)
+{
+  string schrift, waffenhalterung;
+
+  notify_fail("Was willst Du beschriften?\n");
+  if ( !wiebitte || !this_player() || !interactive(this_player()) )
+    return 0;
+
+  if (id(wiebitte)) {
+    write("Beschrifte ... mit ...?\n");
+    return 1;
+  }
+  if (!wiebitte = (string) this_player()->_unparsed_args())
+    return 0;   // kann eigtl. nie passieren :)
+  if (sscanf(wiebitte,"%s mit %s",waffenhalterung, schrift)!=2) {
+    notify_fail("Beschrifte ... mit ...?\n");
+    return 0;
+  }
+  if (!id(waffenhalterung)) {
+    notify_fail("Das kannst Du wohl nicht beschriften.\n");
+    return 0;
+  }
+  if (beschriftung) {
+    write("Auf dem Schild der Waffenhalterung steht bereits klar und "
+        "deutlich:\n'"+beschriftung+"'. Kriegst Du nicht wieder runter. :(\n");
+    return 1;
+  }
+  if ((!schrift) || (schrift=="")) {
+    write("Guter Ansatz, aber mit was moechtest Du die Waffenhalterung "
+        "beschriften?\n");
+    return 1;
+  }
+  if (strlen(schrift) > 25) {
+    write("Mmmh, so viel passt da nicht drauf, fasse Dich ein wenig "
+        "kuerzer.\n");
+    return 1;
+  }
+  beschriftung = schrift;
+  AddId(lowerstring(beschriftung)+" Waffenhalterung");
+  SetProp(P_INFO, "Diese Waffenhalterung wurde von " +
+      capitalize(getuid(this_player())) + " beschriftet.\n");
+
+  write(break_string("Du schreibst in grossen lesbaren Buchstaben '"+
+        beschriftung+"' auf das Schild an der Waffenhalterung, trittst dann zurueck "
+        "und bewunderst Dein Werk! Wow!",77));
+  say(break_string(this_player()->Name(WER)+" schreibt langsam in grossen "
+        "wackeligen Buchstaben etwas auf ein Schild an einer Waffenhalterung "
+        "(Du siehst, wie "+
+        this_player()->QueryPossPronoun(FEMALE,WER,SINGULAR)+" Zunge an "
+        "den Lippen kreist, ist wohl gar nicht so einfach, so ganz ohne... "
+        "huch, ohne Stift). Dann tritt "+this_player()->QueryPronoun(WER)+
+        " zurueck und bewundert "+
+        this_player()->QueryPossPronoun(NEUTER,WEN,SINGULAR)+
+        " Werk.",77));
+  return 1;
+}
+
+
+public string long()
+{
+  if (QueryProp(P_CNT_STATUS) || !sizeof(all_inventory(this_object())))
+    return break_string("Eine Waffenhalterung, ideal um viele Waffen darin "
+        "auzubewahren. Links befindet sich ein kleines Schild, das geradezu "
+        "darauf wartet, genauer betrachtet zu werden.", 76);
+    else
+      return break_string("Eine "+ (beschriftung ?
+            "mit " + beschriftung + " beschriftete" : "unbeschriftete") +
+          " Waffenhalterung,\nin ihr befinden sich:\n",78,0,1)+
+          make_invlist(this_player(),all_inventory(this_object()),0);
+}
+
+
+varargs int PreventInsert(object ob)
+{
+  if ((!environment()) || 
+      ((member(inherit_list(environment()),"std/room.lpc"))<0)) {
+    write("Solange Du die Waffenhalterung mit Dir herumtraegst, wird das nichts.\n");
+    return 1;
+  }
+  if (!ob->QueryProp(P_WEAPON_TYPE)) {
+    write("Aber die Waffenhalterung kann doch nur Waffen aufnehmen!\n");
+    return 1;
+  }
+  return ::PreventInsert(ob);
+}
+ 
+
+int move(mixed dest, int method)
+{
+  if (sizeof(all_inventory(this_object()))) {
+    write("Also mit Inhalt ist Dir die Waffenhalterung *WIRKLICH* zu schwer.\n"
+      "Raeum sie doch erst mal aus, bevor Du sie in der Gegend rumtraegst.\n");
+    return ME_TOO_HEAVY;
+  }
+  else if (objectp(dest) && 
+    ((member(inherit_list(dest),"std/room.lpc"))>=0) &&
+    (present(MOEBEL_ID+" "+MAX_MOEBEL_ALLOWED,dest))) {
+     write("Da steht bereits genug herum, findest Du nicht?\n");
+    return ME_CANT_BE_DROPPED;
+  }
+  else return ::move(dest, method);
+}
+
+
+public string short()
+{
+  string s;
+
+  s = "Eine "+ (beschriftung?"["+beschriftung+"] ":"unbeschriftete ") +
+      GetContainerStatusString() + "e Waffenhalterung ";
+  switch (sizeof(all_inventory(this_object()))) {
+    case 0: return s+="(leer).\n";
+    case 1..5: return s+="(duenn bestueckt).\n";
+    case 6..10: return s+="(etwas gefuellt).\n";
+    case 11..22: return s+="(halb vollgestellt).\n";
+    case 23..29: return s+="(ziemlich voll).\n";
+    case 30..34: return s+="(vollgestellt).\n";
+    case 35: return s+="(randvoll).\n";
+    default: return s+="(berstend voll).\n";
+  }
+  return "Hae?.\n";
+}

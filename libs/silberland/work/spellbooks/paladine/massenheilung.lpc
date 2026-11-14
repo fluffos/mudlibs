@@ -1,0 +1,170 @@
+// SilberLand MUDlib
+//
+// spellbooks/paladine/massenheilung.c
+//
+// $Date: 2004/12/15 00:50:35 $
+/* $Revision: 1.3 $
+ * $Log: massenheilung.c,v $
+ * Revision 1.3  2004/12/15 00:50:35  Feyaria
+ * XP von geheilten hp und gefaehrlichkeit der lage abhaengig.
+ *
+ * Revision 1.2  2003/09/25 06:01:09  Angrox
+ * XP fuers heilen
+ *
+ * Revision 1.1  2003/07/09 11:39:22  Angrox
+ * Initial revision
+ *
+ */
+
+
+int prep_massenheilung(object caster, mapping sinfo) {
+  if(caster->QueryProp(P_BLIND)) {
+    Message(caster,0,
+      BS("Bei Dusty, Du bist blind und kannst so niemanden heilen!\n"),0);
+    return 0;
+  }
+  if (ENV(caster) && ENV(caster)->_query_total_light() < 1) {
+    Message(caster,0,
+      BS("Bei Dusty, hier ist es VIEL zu dunkel dafuer!\n"),0);
+    return 0;
+  }
+  return 1;
+}
+
+
+int massenheilung(object caster, mapping sinfo) {
+  object *friends, ob;
+  int hands, suc, heal, i, new_heal, speed, j;
+  string heal_speed, *ignores, *c_ignore;
+  int old_hp, second, healed;
+  
+  if( !prep_massenheilung( caster,  sinfo) ) return 0;
+  friends=({});
+  if(!sinfo[SI_SKILLARG])
+    heal_speed="schnell";
+  else
+    heal_speed=sinfo[SI_SKILLARG];
+  switch(heal_speed) {
+    case "schnell": speed=1; break;
+    case "langsam": speed=10; break;
+    case "mittel": speed=5; break;
+    default: speed=1;
+  }
+  friends=filter_array(all_inventory(ENV(caster)), "FindPaladinFriends");
+  c_ignore=caster->QueryProp(P_IGNORE);
+  ignores=({});
+  for (j=sizeof(c_ignore)-1; j>=0; j--) {
+    if(c_ignore[j][0..12] == "massenheilung") {
+      ignores += ({ c_ignore[13..] });
+    }
+  }
+
+  if(!sizeof(friends)) {
+    Message(caster, 0, BS("Bei Dusty! Hier ist niemand, dem die Massenheilung "
+         "nuetzen wuerde!"), 0);
+    return 0;
+  }
+  
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+      printf(sinfo[SI_SP_LOW_MSG]);
+      return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  Message(caster, 0, BS("Du reckst Deine Arme gen Himmel und beginnst Dusty "
+       "anzurufen...\n"), 0);
+  Message(caster, 0, BS(sprintf("%s reckt %se Arme gen Himmel und beginnt "
+       "Dusty anzurufen...\n", caster->Name(WER),
+      caster->QueryPossPronoun(WER))), 3);
+  Message(caster, 0, BSA(sprintf("Herrin Dusty! Erhoere %s in Zeiten "
+       "hoechster Not und erfuelle mich und meine Gefaehrten mit Deinem Geist, "
+       "auf dass sich unsere Wunden schliessen!\n",
+      diener[1][caster->QueryProp(P_GENDER)]), "Du rufst: "), 0);
+  Message(caster, 0, BSA(sprintf("Herrin Dusty! Erhoere %s in Zeiten "
+       "hoechster Not und erfuelle mich und meine Gefaehrten mit Deinem Geist, "
+       "auf dass sich unsere Wunden schliessen!\n",
+      diener[1][caster->QueryProp(P_GENDER)]), caster->Name(WER)+
+      " ruft: "), 3);
+  if((suc=SpellSuccess(caster,sinfo))<=0) {
+    Message(caster, 0, "Dusty erhoert Dein Flehen nicht!\n", 0);
+    Message(caster, 0, sprintf("Dusty erhoert %s Flehen nicht!\n",
+        caster->Name(WESSEN)), 3);
+    return MISSERFOLG;
+  }
+  heal=caster->QueryProp(P_GUILD_LEVEL)+GetAlign(caster)/80+
+    random(40)*suc/MAX_ABILITY;
+  if(!random(500)) heal*=2;
+  Message(caster, 0, BS("Dustys Macht entfaltet sich unter euch, und ihr "
+       "werdet geheilt. Gepriesen sei Dusty! Heilig! Heilig! Heilig!\n"), 0);
+  Message(caster, 0, BS("Dustys Macht entfaltet sich unter euch, und ihr "
+       "werdet geheilt. Gepriesen sei Dusty! Heilig! Heilig! Heilig!\n"), 3);
+  // LOG
+  if(enable_spell_log)
+    write_file("/gilden/paladine/spells/massenheilung",
+        sprintf("CST: %O, VIC: %O, CA: %d, suc: %d, "
+         "heal: %d, MP: %d\n", caster, friends, caster->QueryProp(P_ALIGN),
+        suc, heal, sinfo[SI_RAW_SPELLCOST]));
+  // ------
+  healed = 0;
+  for(i=sizeof(friends)-1;i>=0;i--) {
+    
+    if( member(ignores, getuid(friends[i]))==-1 &&
+        (!friends[i]->QueryProp(P_IGNORE) ||
+         member(friends[i]->QueryProp(P_IGNORE), "massenheilung")==-1)) 
+    {
+      new_heal=DoModificationByAlign(heal, friends[i]);
+      if(new_heal>50) new_heal=50;
+        if( speed == 1 ) {
+          old_hp = friends[i]->QueryProp(P_HP);
+          friends[i]->AddHp(new_heal);
+          Message(caster, friends[i], "Die goettliche Macht Dustys "
+             "heilt Dich!\n", 1);
+          if(interactive(friends[i]) && !(caster == friends[i] || 
+            (caster->QueryProp(P_SECOND) && 
+              lower_case(caster->QueryProp(P_SECOND)) == getuid(friends[i])) ||
+             (friends[i]->QueryProp(P_SECOND) && 
+              lower_case(friends[i]->QueryProp(P_SECOND)) == getuid(caster)) ))
+          {
+            new_heal = (friends[i]->QueryProp(P_HP) - old_hp) * 
+              (5 - 5 * old_hp / friends[i]->QueryProp(P_MAX_HP));
+            if (friends[i]->InFight()) new_heal *= 2;
+            caster->AddExp(new_heal);
+            healed++;
+          }
+        }
+        else { 
+          if(!present(PALADIN_MASSENHEILUNG, friends[i])) {
+            ob=clone_object(OBJ("massenheilung"));
+            ob->move(friends[i], M_NOCHECK);
+            ob->start_heal(new_heal, speed, friends[i]);
+            Message(caster, friends[i], "Die goettliche Macht Dustys "
+              "beginnt Dich zu heilen!\n", 1);
+          }
+          else {
+            Message(caster, friends[i], "Die goettliche Macht Dustys "
+              "heilt Dich bereits!\n", 1);
+          }
+        }
+      }
+    new_heal=0;
+    }
+  if(caster->QueryProp(P_ALIGN) <1100 && healed)
+    caster->SetProp(P_ALIGN, caster->QueryProp(P_ALIGN)+random(10*healed));
+
+
+  if(HAS_BLESSING(caster, BLESSING_ANGELIC_AURA) && !objectp(present(ID_BLESSING_ANGEL, ENV(caster)))) {
+    call_out("conjure_angel", 2+random(4), ENV(caster));
+  }
+  
+  return ERFOLG;
+}
+
+public void conjure_angel(object room) {
+  object ob;
+
+  if(objectp(present(ID_BLESSING_ANGEL, room))) return; // schon einer da
+  ob = clone_object(OBJ("angelic_aura"));
+  if(ob->move(room, M_TPORT) != 1) {
+    destruct(ob);
+  }
+}

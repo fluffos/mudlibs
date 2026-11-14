@@ -1,0 +1,290 @@
+// weapon_master
+// alle sterbewaffen rufen in deren reset update_weapons() auf (schlachtfeld)
+// auch der Jadering (ARMOUR ring.c) ruft im reset() hier ein update_rings() auf
+
+#include "../def.h"
+
+// DIESE WERTE WERDEN IN ALLE STERBEWAFFEN GESETZT (in deren reset) wenn on==1
+int sfbonus = 80; // zuvor 70 (21.2.24)
+// Schleichende Anpassung 70 --> 80 (8.3.24)
+int odds_increase_multiply = 1500;
+float def_mult_factor = 1.3;
+float a_con = -2957.0, b_con = 500.0, c_con = 400.0;
+float d_con = 1.5; // d_con: Multiplikator auf Anzahl der Tode in hitfunc(), sinkt ab tode_breakpoint
+float e_con = 8.0, f_con = 48.0; // e_con zuvor 7.0, f_con zuvor 12.0 (30.1.24)
+// Schleichende Anpassung 7.0 --> 8.0 (8.3.24) & 12.0 --> 48.0 (8.3.24)
+float def_one_hand = 0.666;
+int tode_breakpoint = 160;
+float tode_factor = 0.05; // zuvor 0.1 (30.1.24)
+// Schleichende Anpassung 0.1 --> 0.05 (8.3.24)
+
+// ---> auf 1 setzen um updates im reset() der sterbewaffen zu aktivieren
+//  -> activate_updating(1)
+int on = 0;
+int force_each_reset = 0; // 1=Update jeden reset() erzwingen, sonst nur 1x pro Tag
+
+// zB set_debug("fewer") fuer weniger debug-scroll, set_debug() fuer mehr debug infos
+int debug = 2; // 0=disabled, 1=full, 2=less scroll
+
+void create()
+{
+  if(is_clone(TO))
+  {
+    destruct(TO);
+    return;
+  }
+  seteuid(getuid(this_object())); // fuer zugriff auf dateien benoetigt
+  seteuid(getuid(TO));
+
+  return;
+}
+
+void schleichende_anpassung()
+// Alle 3 Tage leichte Anpassung der Werte
+//  Funktion kann spaetestens 33 Tage nach dem 8.3.24 (-> 10.4.24) entfernt werden 
+//  --> dann sind alle Werte auf Maximum
+{
+  int i;
+  int *sf_array;
+  float *e_con_array;
+  float *f_con_array;
+  float *tode_factor_array;
+  sf_array=({70,71,72,73,74,75,76,77,78,79,80});
+  e_con_array=({7.0,7.1,7.2,7.3,7.4,7.5,7.6,7.7,7.8,7.9,8.0});
+  f_con_array=({12.0,16.0,20.0,24.0,28.0,32.0,36.0,40.0,44.0,48.0,48.0});
+  tode_factor_array=({0.1,0.095,0.09,0.085,0.08,0.075,0.07,0.065,0.06,0.055,0.05});
+
+  i = 1 + ((time()-1709881643)/(60*60*24*3)); // Start: 8. Mar 2024, 08:07:23
+
+  if(debug==1)
+   DB(sprintf("schleichende_anpassung %12s: Zyklus i=%d/%d, sfbonus=%d, e_con=%d, f_con=%d, tode_factor=%d\n",
+    "Werte VORHER",i, sizeof(sf_array), sfbonus, to_int(e_con*100), to_int(f_con*100), to_int(tode_factor*100)));
+
+  if(i < sizeof(sf_array)) sfbonus = sf_array[i];
+  else sfbonus = sf_array[<1];
+  if(i < sizeof(e_con_array)) e_con = e_con_array[i];
+  else e_con = e_con_array[<1];
+  if(i < sizeof(f_con_array)) f_con = f_con_array[i];
+  else f_con = f_con_array[<1];
+  if(i < sizeof(tode_factor_array)) tode_factor = tode_factor_array[i];
+  else tode_factor = tode_factor_array[<1];
+
+  if(debug)
+  {
+   DB(sprintf("schleichende_anpassung %12s: Zyklus i=%d/%d, sfbonus=%d, e_con=%d, f_con=%d, tode_factor=%d\n",
+    "Update", i, sizeof(sf_array), sfbonus, to_int(e_con*100+0.5), to_int(f_con+0.5), to_int(tode_factor*1000+0.5)));
+   if(i>=sizeof(sf_array)) DB("schleichende_anpassung: Werte sind auf Maximum\n");
+  }
+
+}
+
+// ------ update_weapons() ---------------------------------------------------
+void update_weapons(object weap)
+{
+  float new_d_con;
+  mixed old_d_con;
+  mixed new_d_con_updated;
+  //int tode;
+  //float one_hand_d_factor; // temporaer fuer alte Waffen
+  //float one_hand_e_f_factor; // temporaer fuer alte Waffen
+  object player;
+
+  //one_hand_d_factor = 1.0;
+  //one_hand_e_f_factor = 1.0;
+
+  schleichende_anpassung();
+
+  if(sizeof(weap->query_hitfunc_factors()) >= 4)
+    old_d_con = weap->query_hitfunc_factors()[3];
+  else old_d_con = "unknown";
+
+  if(on && (force_each_reset || ((time() - weap->QueryProp("last_update_weapons")) > 60*60*24)))
+  {
+    if(debug) DB(sprintf("doing %s update now...\n",(force_each_reset?"each reset":"daily")));
+    weap->SetProp("last_update_weapons", time());
+    new_d_con = d_con;
+    //tode = 0;
+    //if(weap->QueryProp(P_WIELDED)) tode = weap->query_tode(getuid(weap->QueryProp(P_WIELDED)));
+
+/* DEAKTIVIERT AM 28.11.2023
+
+    // Mai 2022
+    // (kann ca. im Mai 2023 entfernt werden, wenn sich alle alten Waffen aufgeloest haben sollten)
+    // Einhaendige Waffen machen ca. 2/3 Schaden (im Vgl. zu 2-Hand)
+    // das hier ist ein workaround (!) fuer alte Waffen; neue haben eine andere 
+    //   HitFunc mit 'def_one_hand' Faktor direkt drin
+    if(weap->QueryProp(P_NR_HANDS) == 1 && !weap->QueryProp("one_hand_update"))
+    {
+      one_hand_d_factor = 0.6; // Update 2.1.23 (zuvor: 0.7)
+      one_hand_e_f_factor = 1.8; // (zuvor 1.6) 
+                    // --> diese Faktoren [0.6,1.8] ergeben ca. 72% Schaden (im Vergleich zu 2-Hand Version)
+                    // TODO: kontinuierlich in Richtung 66% anpassen :)
+                    // --> [0.6,2.0] 69%
+                    // --> [0.6,2.2] 67%
+    }
+
+    // d_con Update: ab <tode_breakpoint> Toden reduziert sich d_con langsam
+    // kann spaetestens ab Dezember 2023 geloescht werden (steht seit Dez 22 in sterbewaffe.c)
+    if(tode) new_d_con = (d_con*one_hand_d_factor*(tode_breakpoint+(tode-tode_breakpoint)*tode_factor))/tode;
+    new_d_con = new_d_con < d_con*one_hand_d_factor ? new_d_con : d_con*one_hand_d_factor; // greift erst wenn es unter "default d_con" faellt
+    if(new_d_con <= 0.0) new_d_con = d_con*one_hand_d_factor;
+*/
+    weap->set_hitfunc_factors(
+      a_con, 
+      b_con, 
+      c_con, 
+      new_d_con, 
+      e_con,//*one_hand_e_f_factor, 
+      f_con,//*one_hand_e_f_factor, 
+      sfbonus,
+      odds_increase_multiply, 
+      def_mult_factor,
+      def_one_hand,
+      tode_breakpoint,
+      tode_factor);
+  }
+  // DEBUG
+  if(debug && find_player("wraz")) 
+  {
+    if(weap->QueryProp(P_WIELDED) && interactive(weap->QueryProp(P_WIELDED)))
+      player = weap->QueryProp(P_WIELDED);
+    else if(ENV(weap) && interactive(ENV(weap)))
+      player = ENV(weap);
+    else if(ENV(ENV(weap)) && interactive(ENV(ENV(weap))))
+      player = ENV(ENV(weap));
+
+    if(sizeof(weap->query_hitfunc_factors()) >= 4)
+      new_d_con_updated = weap->query_hitfunc_factors()[3];
+    else new_d_con_updated = "unknown";
+
+    find_player("wraz")->Message(
+      "** weapon_master.c, " + 
+      (on?(getcolor("bold")+"update_weapons() ACTIVE"+getcolor("none")):"inactive (debug only)") + 
+      sprintf(" (on=%d, debug=%d)", on, debug) +
+      ", weap: "+weap->name(RAW)+
+      (player
+        ?(", "+getuid(player)+": "+weap->query_all(getuid(player)))
+        :(", env: "+(ENV(weap)?file_name(ENV(weap)):"no env"))
+      )+
+      sprintf(", d_con: %O->%O",old_d_con,new_d_con_updated)+
+      //", one hand factors: "+one_hand_e_f_factor+", "+one_hand_d_factor+
+      ", cloned "+dtime(weap->QueryProp(P_CLONE_TIME))[5..16]+
+      ", remaining days: "+((-time()+weap->QueryProp("first_wield_time")+WLT)/(60.0*60*24))+
+      "\n");
+  }
+}
+
+// ------ update_rings() ---------------------------------------------------
+void update_rings(object ring)
+{
+  // hier kann man fuer die Jaderinge was einbauen -> set_defaults()
+}
+
+// ------ update_foci() ---------------------------------------------------
+void update_foci(object foc)
+  // hier kann man fuer die Sterbefoki was einbauen -> SetParameters()
+{
+  object player;
+  int remaining_days;
+
+  remaining_days = (-time()+foc->QueryProp("first_wield_time")+FLT)/(60*60*24);
+
+  // DEBUG
+  if(find_player("wraz") &&
+     (debug == 1 || (debug == 2 && remaining_days >= 0))) 
+  {
+    if(foc && ENV(foc) && interactive(ENV(foc)))
+      player = ENV(foc);
+    else if(ENV(ENV(foc)) && interactive(ENV(ENV(foc))))
+      player = ENV(ENV(foc));
+
+    find_player("wraz")->Message(
+      "** weapon_master.c, on: " + on + 
+      ", foc->name(): "+foc->name()+
+      (player
+        ?(", tode_10 ("+getuid(player)+"): "+foc->query_tode_10(getuid(player)))
+        :(", env: "+(ENV(foc)?file_name(ENV(foc)):"no environment"))
+      )+
+      ", cloned: "+dtime(foc->QueryProp(P_CLONE_TIME))[5..16]+
+      ", remaining days: "+(remaining_days>=0?remaining_days:"NA")+
+      "\n");
+  }
+}
+
+// ------ enable_updating() ---------------------------------------------------
+int enable_updating()
+{
+  on = 1;
+  return on;
+}
+
+// ------ disable_updating() ---------------------------------------------------
+int disable_updating()
+{
+  on = 0;
+  return on;
+}
+
+// ------ query_updating() ---------------------------------------------------
+int query_updating() { return on; }
+
+// ------ query_debug() ---------------------------------------------------
+int query_debug() { return debug; }
+
+// ------ set_debug() ---------------------------------------------------
+varargs string set_debug(string options_) 
+{
+  if(!options_)
+  {
+    debug = 1;
+    return sprintf("debug enabled (debug=%d); "+
+      "hint: use 'set_debug(\"fewer\")' for less debug from focus_sterbe.c\n",debug);
+  }
+  else if(options_ == "fewer")
+  {
+    debug = 2;
+    return sprintf("debug reduced (debug=%d); "+
+      "hint: use 'set_debug()' without parameter for full debug",debug);
+  }
+  else if(options_ == "off")
+  {
+    debug = 0;
+    return sprintf("debug disabled (debug=%d)",debug);
+  }
+  else return sprintf("unknown option '"+options_+"'; try \"fewer\" or \"off\"\n");
+}
+
+// ------ disable_debug() ---------------------------------------------------
+int disable_debug() 
+{ 
+  debug = 0;
+  return debug; 
+}
+
+
+// ------ force_updating_per_reset() ---------------------------------------------------
+varargs string force_updating_per_reset(int options_) 
+{
+  if(!options_ || options_ == 1)
+  {
+    force_each_reset = 1;
+    return sprintf("Ok, Waffenupdate jeden reset() (force_each_reset=%d)\n"+
+      "Tipp: 'force_each_reset(0)' fuer nur taegliches Update\n",force_each_reset);
+  }
+  else if(options_ == 0)
+  {
+    force_each_reset = 0;
+    return sprintf("Waffenupdate nur 1x pro Tag (force_each_reset=%d)\n",force_each_reset);
+  }
+  else return "Ungueltiger Parameter '"+options_+"'\n";
+}
+
+// ------ remove() -----------------------------------------------------------
+int remove()
+{
+  if(is_clone(TO)) {
+    destruct(TO);
+    return 1;
+  }
+  return 0;
+}

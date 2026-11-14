@@ -1,0 +1,133 @@
+// /d/dschungel/feyaria/tijara/armour/stiefel.c
+// Die Stiefel des Rausschmeissers aus dem Grand Hotel in Tijara
+// 25-11-96  Feyaria@SilberLand
+
+#include "../def.h"
+
+inherit "std/armour";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <new_skills.h>
+#include "/p/daemon/skillmaster/skillmaster.h"
+
+#define COST 7 
+int zeit;
+
+void create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+  
+  zeit=time();
+  SetProp(P_SHORT, "Die Stiefel eines Raus-Schmeissers");
+  SetProp(P_LONG, BS( 
+    "Das sind die Stiefel eines Raus-Schmeissers. Damit kann man besonders "
+    "gute Tritte austeilen.") );
+  SetProp(P_NAME, "Rausschmeisserstiefel");
+  SetProp(P_INFO, BS(
+    "Mit diesen Stiefeln kannst Du im Kampf nach Deinem Gegner treten. "
+    "Du musst sie dazu anziehen und das Kommando 'stiefeltritt <name>' "
+    "eingeben. Der ganze Spass kostet zwar "+COST+" Magiepunkte, dafuer ist es "
+    "ein Spass, wenn sich Deine Feinde mit Bauchweh am Boden winden. "
+    "Allerdings werden die meisten Leute dann aergerlich reagieren und "
+    "Dich angreifen.") );
+  SetProp(P_GENDER, MALE);
+  SetProp(P_PLURAL, 1);
+  SetProp(P_ARMOUR_TYPE, AT_BOOT );
+  SetProp(P_AC, 5+random(4));
+  SetProp(P_MATERIAL, MAT_LEATHER );
+  SetProp(P_WEIGHT, 1100);
+  SetProp(P_VALUE, 2750);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_WEAR_RESTRICTIONS, ([P_LEVEL:10, A_DEX:10, A_STR:10]) );
+
+  AddId( ({"stiefel", "rausschmeisserstiefel", "\nrausschmeisserstiefel"}) );
+/*
+  SetProp(P_COMBATCMDS, (["stiefeltritt %s":
+      ([C_MIN:10,C_AVG:25,C_MAX:40,C_DTYPES:({DT_BLUDGEON}),
+      C_SPCOST:COST, C_REFRESH:600, C_READY:"bereit"])]));
+*/
+  AddCmd("stiefeltritt", "treten");
+}
+
+int treten(string str, int fastload)
+{
+  object enemy;
+  
+  notify_fail("Wen moechtest Du mit Deinen Stiefeln treten?\n");
+  if( stringp(str) && (enemy=present(str, environment(TP))) )
+  {
+    if( enemy==TP)
+    {
+      write("Wie willst Du Dich denn selber treten?\n");
+      return 1;
+    }
+    if( query_once_interactive(enemy) && !TP->SelectEnemy(enemy) )
+    {
+      write("Du kannst doch keinen anderen Spieler angreifen!\n");
+      return 1;
+    }
+    if (!QueryProp(P_WORN))
+    {
+      write("Du musst dazu die Stiefel anziehen!\n");
+      return 1;
+    }
+    if( QueryProp(P_EQUIP_TIME)+10 > time() )
+    {
+      write("Du hast die Stiefel doch gerade erst angezogen!\n");
+      return 1;
+    }
+    if( zeit > time() )
+    {
+      write("Du musst Dich erst von Deinem letzten Tritt erholen!\n");
+      return 1;
+    }
+    if (TP->QueryProp(P_SP)<COST)
+    {
+      write("Du hast nicht genug Magiepunkte dafuer!\n");
+      return 1;
+    }
+    if (PL->QueryProp(P_ATTACK_BUSY))
+    {
+      write("He! Nicht so schnell!\n");
+      return 1;
+    }
+    PL->SetProp(P_ATTACK_BUSY, 1);
+    printf("Du trittst %s Deine Stiefel in den Bauch.\n", enemy->name(WEM));
+    say(sprintf(BS("%s tritt %s %s Stiefel in den Bauch."), CAP(TPN),
+       enemy->name(WEN), TPPP(FEMALE,WEM,PLURAL) ), enemy );
+    tell_object(enemy, CAP(TPN)+" gibt Dir einen Stiefeltritt in den "
+       "Bauch.\n");
+    enemy->SetProp(P_DISABLE_SPELLS, 1+random(2));
+    enemy->Defend(111+random(333), DT_BLUDGEON,
+      ([SP_NAME:"gewaltiger Tritt", SP_PHYSICAL_ATTACK:1,
+        SP_REDUCE_ARMOUR:([AT_HELMET:1, AT_BOOT:1]),SP_SHOW_DAMAGE:1]), TP);
+    TP->AddSp(-COST);
+    TakeFlaw( ({DT_BLUDGEON}) );
+    if (fastload) return 1;
+    if (random(75)==13)
+    {
+      if(SKILLMASTER->UseSkill(TP, SK_LUCK) > 0)
+        write( "Wow! Hast Du ein Glueck! Fast haetten sich die Stiefel aufgeloest!\n");
+      else
+      {
+        write("Dieser Tritt war wohl zuviel fuer Deine Stiefel.\n"
+            "Deine Stiefel brechen auseinander und nichts bleibt uebrig.\n");
+        remove(1); 
+        return 1;
+      }
+    }
+    zeit=time()+5*60;
+    return 1; 
+  }
+  else
+    return 0;
+}
+
+int bereit()
+{
+  return (QueryProp(P_WORN) && time()>zeit);
+}
+

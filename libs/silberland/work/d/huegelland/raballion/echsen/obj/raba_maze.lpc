@@ -1,0 +1,618 @@
+// /d/huegelland/raballion/echsen/obj/raba_maze.c
+// verwaltet und generiert Maze Raeume
+// 2004-08-05  Raballion@
+
+inherit "/std/room";
+
+#include "../def.h"
+
+#include <properties.h>
+#include <language.h>
+
+#define MASTERDIR "/d/huegelland/raballion/echsen/obj/"
+#define raba(x) if (find_player("raballion")) tell_object(find_player("raballion"),(x))
+
+// administration
+void save_modul();
+//string query_status();
+
+// DB Abfrage
+int mmaze (string str);
+int mdisplay ();
+int go_deep(string raum, string araum);
+int go();
+
+int mmaze2 (string str);
+int mdisplay2 ();
+int go_deep2(string raum, string araum);
+int go2();
+
+// Runentexte
+
+
+
+mapping maze_map;
+int sizex;
+int sizey;
+mapping visit;
+
+
+create()
+{
+
+  ::create();
+  SetProp(P_INT_SHORT, "Der Raba Maze Generator" );
+  SetProp(P_INT_LONG, "Du stehst im Kontrollraum fuer Maze.\nFolgende Kommandos stehen hier zur Verfuegung:\n"+
+             "   - mmaze           (1. vorberechnen maze data)\n"
+             "   - mgo           (2. berechne maze data rekursiv)\n"
+             "   - mdisplay        (3. display map)\n"
+             "   - mwrite          (schreib Daten in File)\n"
+             "   - mread        (lies Daten von file)\n"
+             );
+
+   AddCmd( "mmaze", "mmaze" );
+   AddCmd( "mdisplay","mdisplay" );
+   AddCmd( "mgo","go" );
+   AddCmd( "mmaze2", "mmaze2" );
+   AddCmd( "mdisplay2","mdisplay2" );
+   AddCmd( "mgo2","go2" );
+//   AddCmd( "mwrite","mwrite" );
+//   AddCmd( "mread","mread" );
+
+  AddId( ({"mazemaster", "rabamaze"}) );
+
+  seteuid(getuid(this_object()));
+  maze_map = ([]);
+  sizex = 0;
+  sizey = 0;
+  visit = ([]);
+//  save_modul();
+  raba("Rabamazegenerator gestartet\n");
+
+}
+
+int remove() { return 0; }
+
+
+
+// interne Fkt. --------------------------------------------------------------
+void save_modul()
+{    
+  save_object(MASTERDIR+"maze.save");
+}
+
+
+
+int mmaze(string str)
+{
+string * cmdl;
+int i, j;
+int x, y;
+string ausgangNord;
+string ausgangSued;
+string ausgangOst;
+string ausgangWest;
+
+
+  maze_map = ([]);
+  sizex = 0;
+  sizey = 0;
+  visit = ([]);
+
+  i=0;
+  j=0;
+  x=0;
+  y=0;
+
+  notify_fail("Was willst du fuer ein Maze bauen?\n");
+  if( !str ) return 0;
+
+  str = lower_case(str);
+  cmdl = explode(str, " ");
+//  raba("anzahl: "+sizeof(cmdl)+"\n");
+  if ( (sizeof(cmdl) != 2) || (strlen(cmdl[0]) <= 0) || (strlen(cmdl[1]) <= 0 )  )
+    {
+    return 0;
+    }
+
+  sizex = (int)cmdl[0];
+//  raba ("sizex: "+sizex+"\n");
+  sizey = (int)cmdl[1];
+//  raba ("sizey: "+sizey+"\n");
+
+  for (x=1; x<=sizex; x++)
+    {
+    for (y=1; y<=sizey; y++)
+      {
+      if (x == 1)
+        {
+        ausgangNord = "";
+        }
+      else
+        {
+        ausgangNord = (string)(x-1)+"_"+(string)(y);
+        }
+      if (x == sizex)
+        {
+        ausgangSued = "";
+        }
+      else
+        {
+        ausgangSued = (string)(x+1)+"_"+(string)(y);
+        }
+      if (y == 1)
+        {
+        ausgangWest = "";
+        }
+      else
+        {
+        ausgangWest = (string)(x)+"_"+(string)(y-1);
+        }
+      if (y == sizey)
+        {
+        ausgangOst = "";
+        }
+      else
+        {
+        ausgangOst = (string)(x)+"_"+(string)(y+1);
+        }
+//      raba ("hinzugefuegt: "+(string)x+"_"+(string)y+"mit: "+ausgangNord+" "+ausgangSued+" "+ausgangOst+" "+ausgangWest+"\n");
+      maze_map += ([(string)x+"_"+(string)y  : ausgangNord; ausgangSued; ausgangOst; ausgangWest ]);
+      visit += ([(string)x+"_"+(string)y: 0 ]);
+      }
+    }
+//raba("Groesse von maze_map: "+sizeof(maze_map)+"\n");
+//raba("Groesse von visit: "+sizeof(visit)+"\n");
+  write("Alle regulaeren Ausgaenge berechnet.\n");
+//    go_deep("2_1","");
+//    mdisplay();
+//    save_modul();
+return 1;
+}
+
+int go()
+{
+  go_deep("2_1","");
+  write ("Maze ist berechnet.\n");
+  return 1;
+}
+
+int go_deep(string raum, string araum)
+{
+int i;
+int j;
+int k;
+string go;
+mapping heaper;
+mixed *heaper_k;
+
+  heaper = ([]);
+
+//  raba("godeep:"+raum+"und"+araum+"\n");
+  visit[raum] = 1;
+  // heaper aufbauen; alle weiteren Raeume ohne Aufrufraum
+  for (i=0; i<4; i++)
+    {
+    if ( (maze_map[raum,i] != "") && (maze_map[raum,i] != araum) && (visit[maze_map[raum,i]] == 0) )
+      {
+      heaper += ([ maze_map[raum,i] : 0 ]);
+      }
+    }
+
+  while (sizeof(heaper) > 0)
+    {
+    // alle indices der noch zu besuchenden Raeume
+    heaper_k = m_indices(heaper);
+    // einen auswaehlen
+    i = random (sizeof(heaper_k));
+
+    if (visit[heaper_k[i]] == 1)
+      {
+      // ausgewaehlter raum war schon besucht von wo
+      // loesche bei ihm uns heraus
+      for (j=0; j<4; j++)
+        {
+        if ( (maze_map[heaper_k[i],j] == raum) )
+          {
+          // loesche bei ihm uns heraus
+          maze_map[heaper_k[i],j] = "";
+          }
+        if ( maze_map[raum,j] == heaper_k[i] )
+          {
+          // loesche bei uns ihn heraus
+          maze_map[raum,j] = "";
+          }
+        }
+      }
+    else
+      {
+      // unbesuchter Raum, dann gehen wir mal hin und besuchen ihn
+      go_deep(heaper_k[i],raum);
+      }
+    // loesche heaper_k[i] aus der heaper liste, weil schon mal dort
+    heaper -= ([ heaper_k[i] ]);
+    }
+}
+
+
+int mdisplay ()
+{
+int i, j;
+int x, y;
+mapping data;
+string ausgangNord;
+string ausgangSued;
+string ausgangOst;
+string ausgangWest;
+string zeile1;
+string zeile2;
+string zeile3;
+
+  i=0;
+  j=0;
+  x=0;
+  y=0;
+
+//  raba("Display start.\n");
+//  raba("Groesse von maze_map: "+sizeof(maze_map)+"\n");
+//  raba ("sizex: "+sizex+"\n");
+//  raba ("sizey: "+sizey+"\n");
+
+  notify_fail("Was willst du fuer ein Maze anzeigen?\n");
+
+  for(x=1; x<=sizex; x++)
+    {
+    zeile1 ="";
+    zeile2 ="";
+    zeile3 ="";
+    for (y=1; y<=sizey; y++)
+      {
+//      raba("x_y: "+(string)x+"_"+(string)y+"\n");
+      if (member(maze_map, (string)x+"_"+(string)y) == 1)
+        {
+//        write(maze_map[x+"_"+y,0]+"\n");  // Nord
+//        write(maze_map[x+"_"+y,1]+"\n");  // Sued
+//        write(maze_map[x+"_"+y,2]+"\n");  // Ost
+//        write(maze_map[x+"_"+y,3]+"\n");  // West
+        if (maze_map[x+"_"+y,0] != "")
+          {
+          zeile1 += " I ";
+          }
+        else
+          {
+          zeile1 += "   ";
+          }
+        if (maze_map[x+"_"+y,1] != "")
+          {
+          zeile3 += " I ";
+          }
+        else
+          {
+          zeile3 += "   ";
+          }
+        if (maze_map[x+"_"+y,3] != "")
+          {
+          zeile2 += "-X";
+          }
+        else
+          {
+          zeile2 += " X";
+          }
+        if (maze_map[x+"_"+y,2] != "")
+          {
+          zeile2 += "-";
+          }
+        else
+          {
+          zeile2 += " ";
+          }
+//        write(" | ");
+//        write("-X-");
+//        write(" | ");
+        }
+      }
+    write (zeile1+"\n");
+    write (zeile2+"\n");
+    write (zeile3+"\n");
+
+    }
+//  raba("Display ende.\n");
+return 1;
+}
+
+
+// Extend Version mit 8 Richtungen ----------------------------------
+// ------------------------------------------------------------------
+// ------------------------------------------------------------------
+// ------------------------------------------------------------------
+// ------------------------------------------------------------------
+int mmaze2(string str)
+{
+string * cmdl;
+int i, j;
+int x, y;
+string ausgangNord;
+string ausgangNordWest;
+string ausgangSued;
+string ausgangSuedWest;
+string ausgangOst;
+string ausgangNordOst;
+string ausgangWest;
+string ausgangSuedOst;
+
+
+  maze_map = ([]);
+  sizex = 0;
+  sizey = 0;
+  visit = ([]);
+
+  i=0;
+  j=0;
+  x=0;
+  y=0;
+
+  notify_fail("Was willst du fuer ein Maze bauen?\n");
+  if( !str ) return 0;
+
+  str = lower_case(str);
+  cmdl = explode(str, " ");
+//  raba("anzahl: "+sizeof(cmdl)+"\n");
+  if ( (sizeof(cmdl) != 2) || (strlen(cmdl[0]) <= 0) || (strlen(cmdl[1]) <= 0 )  )
+    {
+    return 0;
+    }
+
+  sizex = (int)cmdl[0];
+//  raba ("sizex: "+sizex+"\n");
+  sizey = (int)cmdl[1];
+//  raba ("sizey: "+sizey+"\n");
+
+  for (x=1; x<=sizex; x++)
+    {
+    for (y=1; y<=sizey; y++)
+      {
+      if (x == 1)
+        {
+        ausgangNord = "";
+        ausgangNordWest = "";
+        ausgangNordOst = "";
+        }
+      else
+        {
+        ausgangNord = (string)(x-1)+"_"+(string)(y);
+        ausgangNordWest = (string)(x-1)+"_"+(string)(y-1);
+        ausgangNordOst = (string)(x-1)+"_"+(string)(y+1);
+        }
+      if (x == sizex)
+        {
+        ausgangSued = "";
+        ausgangSuedWest = "";
+        ausgangSuedOst = "";
+        }
+      else
+        {
+        ausgangSued = (string)(x+1)+"_"+(string)(y);
+        ausgangSuedWest = (string)(x+1)+"_"+(string)(y-1);
+        ausgangSuedOst = (string)(x+1)+"_"+(string)(y+1);
+        }
+      if (y == 1)
+        {
+        ausgangWest = "";
+        ausgangNordWest = "";
+        ausgangSuedWest = "";
+        }
+      else
+        {
+        ausgangWest = (string)(x)+"_"+(string)(y-1);
+        }
+      if (y == sizey)
+        {
+        ausgangOst = "";
+        ausgangNordOst = "";
+        ausgangSuedOst = "";
+        }
+      else
+        {
+        ausgangOst = (string)(x)+"_"+(string)(y+1);
+        }
+//      raba ("hinzugefuegt: "+(string)x+"_"+(string)y+"mit: "+ausgangNord+" "+ausgangSued+" "+ausgangOst+" "+ausgangWest+"\n");
+      maze_map += ([(string)x+"_"+(string)y  : ausgangNord; ausgangSued; ausgangOst; ausgangWest; ausgangNordOst; ausgangNordWest; ausgangSuedWest; ausgangSuedOst ]);
+      visit += ([(string)x+"_"+(string)y: 0 ]);
+      }
+    }
+//raba("Groesse von maze_map: "+sizeof(maze_map)+"\n");
+//raba("Groesse von visit: "+sizeof(visit)+"\n");
+  write("Alle regulaeren Ausgaenge berechnet.\n");
+//    go_deep("2_1","");
+//    mdisplay();
+//    save_modul();
+return 1;
+}
+
+int go2()
+{
+  go_deep2("1_2","");
+  write ("Maze ist berechnet.\n");
+  return 1;
+}
+
+int go_deep2(string raum, string araum)
+{
+int i;
+int j;
+int k;
+string go;
+mapping heaper;
+mixed *heaper_k;
+
+  heaper = ([]);
+
+  //raba("godeep:"+raum+"und"+araum+"\n");
+  visit[raum] = 1;
+  // heaper aufbauen; alle weiteren Raeume ohne Aufrufraum
+  for (i=0; i<8; i++)
+    {
+    if ( (maze_map[raum,i] != "") && (maze_map[raum,i] != araum) && (visit[maze_map[raum,i]] == 0) )
+      {
+      heaper += ([ maze_map[raum,i] : 0 ]);
+      }
+    }
+
+  while (sizeof(heaper) > 0)
+    {
+    // alle indices der noch zu besuchenden Raeume
+    heaper_k = m_indices(heaper);
+    // einen auswaehlen
+    i = random (sizeof(heaper_k));
+
+    if ((visit[heaper_k[i]]) == 1)
+      {
+      // ausgewaehlter raum war schon besucht von wo
+      // loesche bei ihm uns heraus
+      //raba("  Ausgewaehlter war schon besucht"+(heaper_k[i])+".\n");
+      for (j=0; j<8; j++)
+        {
+        if ( (maze_map[heaper_k[i],j] == raum) )
+          {
+          // loesche bei ihm uns heraus
+          maze_map[heaper_k[i],j] = "";
+          }
+        if ( maze_map[raum,j] == heaper_k[i] )
+          {
+          // loesche bei uns ihn heraus
+          maze_map[raum,j] = "";
+          }
+        }
+      }
+    else
+      {
+      // unbesuchter Raum, dann gehen wir mal hin und besuchen ihn
+      go_deep2(heaper_k[i],raum);
+      }
+    // loesche heaper_k[i] aus der heaper liste, weil schon mal dort
+    heaper -= ([ heaper_k[i] ]);
+    }
+}
+
+int mdisplay2 ()
+{
+int i, j;
+int x, y;
+mapping data;
+string ausgangNord;
+string ausgangSued;
+string ausgangOst;
+string ausgangWest;
+string zeile1;
+string zeile2;
+string zeile3;
+
+  i=0;
+  j=0;
+  x=0;
+  y=0;
+
+//  raba("Display start.\n");
+//  raba("Groesse von maze_map: "+sizeof(maze_map)+"\n");
+//  raba ("sizex: "+sizex+"\n");
+//  raba ("sizey: "+sizey+"\n");
+
+  notify_fail("Was willst du fuer ein Maze anzeigen?\n");
+
+  for(x=1; x<=sizex; x++)
+    {
+    zeile1 ="";
+    zeile2 ="";
+    zeile3 ="";
+    for (y=1; y<=sizey; y++)
+      {
+//      raba("x_y: "+(string)x+"_"+(string)y+"\n");
+      if (member(maze_map, (string)x+"_"+(string)y) == 1)
+        {
+//        write(maze_map[x+"_"+y,0]+"\n");  // Nord
+//        write(maze_map[x+"_"+y,1]+"\n");  // Sued
+//        write(maze_map[x+"_"+y,2]+"\n");  // Ost
+//        write(maze_map[x+"_"+y,3]+"\n");  // West
+        if (maze_map[x+"_"+y,5] != "")
+          {
+          zeile1 += "\\";
+          }
+        else
+          {
+          zeile1 += " ";
+          }
+        if (maze_map[x+"_"+y,0] != "")
+          {
+          zeile1 += "I";
+          }
+        else
+          {
+          zeile1 += " ";
+          }
+        if (maze_map[x+"_"+y,4] != "")
+          {
+          zeile1 += "/";
+          }
+        else
+          {
+          zeile1 += " ";
+          }
+        if (maze_map[x+"_"+y,3] != "")
+          {
+          zeile2 += "-X";
+          }
+        else
+          {
+          zeile2 += " X";
+          }
+        if (maze_map[x+"_"+y,2] != "")
+          {
+          zeile2 += "-";
+          }
+        else
+          {
+          zeile2 += " ";
+          }
+        if (maze_map[x+"_"+y,6] != "")
+          {
+          zeile3 += "/";
+          }
+        else
+          {
+          zeile3 += " ";
+          }
+        if (maze_map[x+"_"+y,1] != "")
+          {
+          zeile3 += "I";
+          }
+        else
+          {
+          zeile3 += " ";
+          }
+        if (maze_map[x+"_"+y,7] != "")
+          {
+          zeile3 += "\\";
+          }
+        else
+          {
+          zeile3 += " ";
+          }
+//        write(" | ");
+//        write("-X-");
+//        write(" | ");
+        }
+      }
+    write (zeile1+"\n");
+    write (zeile2+"\n");
+    write (zeile3+"\n");
+
+    }
+
+
+
+
+//  raba("Display ende.\n");
+return 1;
+}
+
+

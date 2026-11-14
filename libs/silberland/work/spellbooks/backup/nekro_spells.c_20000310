@@ -1,0 +1,2215 @@
+// /spellbooks/nekro_spells.c  
+// Spellbook der Nekromanten
+// Genauere Erlaeuterungen bitte dem File /gilden/nekromanten/doc/nekro.txt
+// entnehmen.
+// Stahldorn@SilberLand
+
+// 10.03.2000 Feyaria
+//            Tell bei Attackspekls nur mehr mit random 10, zu viel scroll
+// 02.02.2000 Cirion 
+//            SI_PREPFUNCs implementiert
+//            identifiziere und schaetz angepasst
+// 11.10.1999 Angrox
+//            Kannibalismus auf alle Spielerrassen erweitert
+//            Kosten fuer Mumie um 50 gesenkt (auf 150)
+//            Verpestetete Waf/Rue koenne nur mehr Nekromanten brauchen
+//            Magic items koennen nicht verpestet werden
+//            Debug bei DoModificationByAlign()
+//            Anpassung DoSpellModification()
+// 12.10.1999 Angrox
+//            Beschraenkung der Untoten, die beherrscht werden koennen
+// 20.12.1999 Angrox
+//            Todesgesang: MP: 55, fatigue: 6
+//            Identifiziere gefixt: kostet nun 10 MPs statt 0 ;)
+//            Eiterhuelle: P_GUILD_CIRCLE in Dauer beruecksichtigt
+//            Verpesten: MP: 60, Fatigue: 10
+// 21.12.1999 Angrox
+//            Verpesten: msgs geaendert, gegenstaende sind gekennzeichnet
+//            DoSpellModification debuggt
+// 31.10.1999 Feyaria
+//            STufen der Spells neu geordnet
+//            Angrox
+//            DoSpellModification angepasst
+//            Schaetz kostet jetzt auch was
+//            GetAlign setzt jezt align auf int-wert wenn nicht intp   
+/*
+
+Beschwoere :    Leiche im Raum wird wieder lebendig und kaempft mit dem 
+                Caster zusammen mit. Je hoeher die Stufe, desto bessere 
+                Leichen kann man beschwoeren.
+                (Level des gestorbenen NPC muss < sein als Level des Casters)
+                Level:2 - MP:10
+
+Verfluche:      schwacher Spell gegen einen Gegner, DT_UNHOLY
+                Level:1 - MP:10
+
+Kannibalismus:  Leichen von Livings derselben Rasse wie der Caster heilen
+                besonders gut.
+                Level:2 - MP:0
+
+Beherrsche:     Man versucht, einen Untoten zu beherrschen, damit er einem
+                nachlaeuft. Man kann immer nur einen Untoten glztg beherrschen.
+                Level:2 - MP:20
+
+Verpeste:       auf Waffe:    diese schlaegt zusaetzlich mit DT_UNHOLY zu
+                auf Ruestung: diese schuetzt zusaetzlich vor DT_UNHOLY
+                              und bei besonders gutem Erfolg noch vor einem
+                              anderen zufaelligen Schadenstyp (MAGIC, FIRE...)  
+                Level:3 - MP:25
+
+Kreische:       mittlerer Spell gegen einen Gegner, DT_SOUND
+                Level:3 - MP:20
+
+Geisterruf:     Aus einer Leiche wird ein Geist, der den Killer verfolgt
+                Level: 3 - MP: 100
+
+Faeulnis:       guter Spell gegen einen Gegner, ({ DT_POISON, DT_UNHOLY })
+                verwandlet Leiche im Knochenhaufen um Skelett zu beschwoeren.
+                Level:4 - MP:25
+
+Eiterhuelle:    Man reibt sich mit unheiligem Eiter eigener Wunden ein.
+                Geht nur wenn P_HP < P_MAX_HP/2. Die Eiterhuelle bietet fuer
+                kurze Zeit zusaetzlichen Schutz vor physikalischen Angriffen
+                und erhoeht die Temperaturtoleranz stark.
+                Level:4 - MP:15
+
+Terror:         Spell gegen einen Gegner, DT_TERROR
+                wirkt bei Dunkelheit deutlich besser (groesserer Terroreffekt)
+                Level:5 - MP:30
+
+Spioniere:      Man erschafft eine Fledermaus oder Ratte, die man kurzzeitig
+                steuern kann, als ob man sie selber waere. Jeden heart_beat 
+                des Gefaehrten verliert man MP. Wenn die MP 0 werden, 
+                verschwindet der Spion wieder.
+                Level:5 - MP:40 (-10 MP jeden hb)
+
+Seelenfrass:    Magiepunkte des Gegners werden total abgezogen und man bekommt
+                die abgezogenen MP (gewichtet - Haelfte oder Drittel...) als 
+                LP gutgeschrieben. 
+                Level:6 - MP:50
+
+Todesgesang:    guter Spell gegen mehrere Gegner, ({ DT_SOUND, DT_UNHOLY })
+                Level:6 - MP:40
+
+Mumifizierung:  Eine Leiche in eine Mumie verwandeln.
+                Level:6 - MP:150
+*/
+
+// Changes: 
+//
+//
+//
+//
+
+
+
+
+#include <properties.h>
+#include <attributes.h>
+#include <combat.h>
+#include <wizlevels.h>
+#include <new_skills.h>
+#include <moving.h>
+#include <ansi.h>
+#include "/gilden/nekromanten/nekro.h"
+
+
+inherit "/std/spellbook";
+
+static int total_fail;
+
+varargs int DoModificationByAlign(int value, object caster, object victim);
+static mapping DoSpellModification(object caster,mapping sinfo);
+string CheckIfSpellAllowed(object caster, mapping sinfo);
+static int GetAlign(object spieler);  
+static int tell_saf(string msg);
+
+void create() 
+{
+  ::create();
+  SetProp(P_GLOBAL_SKILLPROPS,
+          ([SI_SPELLFATIGUE:2,       // 2 Sekunden kein neuer Spell
+            SI_PREPARE_TIME: 0,     
+            SI_SKILLLEARN:2,         // 0.05% pro 2 A_INT 
+            OFFSET(SI_SKILLLEARN):4, // plus 0.05% in jedem Fall
+            SI_SKILLLEARN_ATTRIBUTE: A_INT, 
+            SI_SKILLRESTR_USE: ([SR_FUN:"CheckIfSpellAllowed"]),
+            SI_SP_LOW_MSG:"Deine magische Energie reicht fuer diesen Zauber "
+                          "nicht aus.\n",
+            SI_TIME_MSG: "Du bist noch zu erschoepft von Deinem letzten "
+                         "Zauber.\n",
+            SI_NOMAGIC_MSG:"Eine seltsame Kraft verhindert, dass Du hier "
+                           "einen Zauber anwendest.\n",
+          ]));
+
+  AddSpell("identifiziere", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:1]),
+            SI_SPELLFATIGUE: 2,
+            SI_RAW_SPELLCOST: 10,
+            SI_DIFFICULTY: 10,
+            SI_SKILLLEARN: 3,
+            SI_SKILLRESTR_USE:([SR_FUN: "BlindTest"]),
+          ]));
+  AddSpell("schaetz", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:1]),
+            SI_SPELLFATIGUE: 2,
+            SI_RAW_SPELLCOST: 10,
+            SI_DIFFICULTY: 10,
+            SI_SKILLLEARN: 3,
+            SI_SKILLRESTR_USE:([SR_FUN: "BlindTest"]),
+          ]));
+  AddSpell("verfluchen", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:1]),
+            SI_SPELLFATIGUE: 2, 
+            SI_RAW_SPELLCOST: 10,
+            SI_DIFFICULTY: 20,
+            SI_SKILLDAMAGE:180,
+            SI_MAX_DAMAGE: 333,
+            SI_SKILLDAMAGE_TYPE:DT_UNHOLY
+          ]));
+
+  AddSpell("beschwoerung", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:2]),
+            SI_SPELLFATIGUE: 6,
+            SI_PREPARE_TIME: 2,
+            SI_PREPAREFUNC: "prep_beschwoerung",
+            SI_PREPARE_MSG: "Du reckst die Arme zum Himmel auf und "
+                            "beschwoerst die Maechte der Finsternis!\n", 
+            SI_RAW_SPELLCOST: 20,
+            SI_DIFFICULTY: 30,
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:2]),
+          ]));
+  AddSpell("beherrschung", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:2]),
+            SI_SPELLFATIGUE: 8,
+            SI_PREPARE_TIME: 4,
+            SI_PREPAREFUNC: "prep_beherrschung",
+            SI_PREPARE_MSG: "Du versuchst, die Untoten Deiner Herrschaft zu "
+                            "unterwerfen.\n",
+            SI_RAW_SPELLCOST: 30,
+            SI_DIFFICULTY: 50,
+            SI_SKILLRESTR_USE:([SR_FUN: "FroschTest"]),
+          ]));
+  AddSpell("kannibalismus", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:2]),
+            SI_SPELLFATIGUE: 1,
+            SI_PREPARE_TIME: 4,
+            SI_PREPAREFUNC: "prep_kannibalismus",
+            SI_PREPARE_MSG: "Du beginnst, die Leiche rituell zu zerlegen.\n",
+            SI_RAW_SPELLCOST: 20,
+            SI_DIFFICULTY: 50,
+            SI_SKILLLEARN: 3,
+          ]));
+
+  AddSpell("verpesten", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:3]),
+            SI_SPELLFATIGUE: 10,
+            SI_RAW_SPELLCOST: 60,
+            SI_DIFFICULTY: 40,
+            SI_SKILLLEARN: 3,
+          ]));
+  AddSpell("kreischen", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:3]),
+            SI_SPELLFATIGUE: 2,
+            SI_PREPARE_TIME: 1,
+            SI_PREPAREFUNC: "prep_kreischen",
+            SI_PREPARE_MSG: "Du holst tief Luft fuer einen lauten "
+                            "Kreischer.\n",
+            SI_RAW_SPELLCOST: 25,
+            SI_DIFFICULTY: 40,
+            SI_SKILLDAMAGE:300,
+            OFFSET(SI_SKILLDAMAGE):100,
+            SI_MAX_DAMAGE: 666,
+            SI_SKILLDAMAGE_TYPE:DT_SOUND,
+            SI_SKILLRESTR_USE:([SR_FUN: "FroschTest"]),
+          ]));
+  AddSpell("geisterruf", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:3]),
+            SI_SPELLFATIGUE: 8,
+            SI_PREPARE_TIME: 4,
+            SI_PREPAREFUNC: "prep_geisterruf",
+            SI_PREPARE_MSG: "Du sendest Deinen Geist in das Totenreich.\n",
+            SI_RAW_SPELLCOST: 100,
+            SI_DIFFICULTY: 100,
+            SI_SKILLLEARN: 5,
+          ]));
+
+  AddSpell("faeulnis", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:4]),
+            SI_SPELLFATIGUE: 4,
+            SI_PREPARE_TIME: 2,
+            SI_PREPAREFUNC: "prep_faeulnis",
+            SI_PREPARE_MSG: "Ein fauliger Geruch breitet sich langsam aus.\n",
+            SI_RAW_SPELLCOST: 35,
+            SI_DIFFICULTY: 50,
+            SI_SKILLDAMAGE:400,
+            OFFSET(SI_SKILLDAMAGE):200,
+            SI_MAX_DAMAGE: 888,
+            SI_SKILLDAMAGE_TYPE: ({ DT_POISON, DT_UNHOLY })
+          ]));
+  AddSpell("eiterhuelle", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:4]),
+            SI_SPELLFATIGUE: 6, 
+            SI_PREPARE_TIME: 4,
+            SI_PREPAREFUNC: "prep_eiterhuelle",
+            SI_PREPARE_MSG: "Aus Deinen Wunden kommt graesslicher Eiter.\n",
+            SI_RAW_SPELLCOST: 35,
+            SI_DIFFICULTY: 50,
+            SI_SKILLLEARN: 3,
+          ]));
+
+  AddSpell("terror", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:5]),
+            SI_SPELLFATIGUE: 2,
+            SI_PREPARE_TIME: 2,
+            SI_PREPAREFUNC: "prep_terror",
+            SI_PREPARE_MSG: "Du sammelst Deine ganze Boesartigkeit "
+                            "zusammen.\n",
+            SI_RAW_SPELLCOST: 45,
+            SI_DIFFICULTY: 100,
+            SI_SKILLDAMAGE:500,                 // bei Licht 20% 
+            OFFSET(SI_SKILLDAMAGE):250,         // bei Licht 20%        
+            SI_MAX_DAMAGE: 999,
+            SI_SKILLDAMAGE_TYPE: DT_TERROR
+          ]));
+  AddSpell("seelenfrass", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:5]),
+            SI_SPELLFATIGUE: 8,
+            SI_RAW_SPELLCOST: 40,
+            SI_DIFFICULTY: 200,
+            SI_SKILLLEARN: 3,
+          ]));
+
+  AddSpell("todesgesang",0, 
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:6]),
+            SI_SPELLFATIGUE: 6,
+            SI_PREPARE_TIME: 2,
+            SI_PREPAREFUNC: "prep_todesgesang",
+            SI_PREPARE_MSG: "Du rufst Dir die Melodie des Todesliedes ins "
+                            "Gedaechtnis.\n",
+            SI_RAW_SPELLCOST: 40,
+            SI_DIFFICULTY: 500,
+            SI_SKILLDAMAGE:400, 
+            OFFSET(SI_SKILLDAMAGE):250, 
+            SI_MAX_DAMAGE: 888,
+            SI_SKILLDAMAGE_TYPE: ({ DT_SOUND, DT_UNHOLY })
+          ]));
+  AddSpell("mumifizierung", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:6]),
+            SI_SPELLFATIGUE: 8,
+            SI_PREPARE_TIME: 6,
+            SI_PREPAREFUNC: "prep_mumifizierung",
+            SI_PREPARE_MSG: "Du beginnst, die Leiche mit Bandangen zu "
+                            "umwickeln.\n",
+            SI_RAW_SPELLCOST: 150,
+            SI_DIFFICULTY: 200,
+            SI_SKILLLEARN: 5,
+          ]));
+
+/*
+  AddSpell("spioniere",40,
+          ([SI_SPELLFATIGUE:12
+          ]));
+*/
+}
+
+
+void Misserfolg(object caster, string spell, mapping sinfo)
+{
+  int old_abil;
+  
+  if (!total_fail) 
+  {
+    switch( spell) 
+    {
+      case "beschwoerung":
+        write("Deine Beschwoerung bleibt ungehoert.\n"); break;
+      case "schaetz":
+        write("Du verschaetzt Dich total.\n"); break;
+      case "identifiziere":
+        write("Du schaffst die Identifizierung nicht.\n"); break;
+      case "verfluchen": 
+        write("Du fluchst voellig daneben.\n"); break;
+      case "beherrschung":
+        write("Du kannst niemanden unter Deinen Willen zwingen.\n"); break;
+      case "verpesten":
+        write("Du kannst nichts verpesten.\n"); break;
+      case "kreischen":
+      case "todesgesang":
+        write("Nur eine heiseres Kraechzen kommt aus Deiner Kehle.\n");break;
+      case "faeulnis":
+        write("Nichts verfault.\n"); break;
+      case "eiterhuelle":
+        write("Es entsteht keine Eiterhuelle.\n"); break;
+      case "terror":
+        write("Du schaffst es nicht, jemanden zu terrorisieren.\n"); break;
+      case "seelenfrass":
+        write("Du kannst die Magie der Seele nicht in Dich aufnehmen.\n");
+        break;
+      case "geisterruf":
+        write("Du kannst nicht tief genug in die Geisterwelt eindringen.\n");
+        break;
+      default:
+        write("Der Zauberspruch ist missglueckt.\n");
+    }
+  }
+  total_fail = 0;  // gleich zuruecksetzen
+  old_abil = sinfo[SI_SKILLABILITY];
+  Learn(caster, spell, sinfo);
+  sinfo=caster->QuerySkill(spell);
+
+  if (old_abil < (mappingp(sinfo) ? sinfo[SI_SKILLABILITY] : sinfo))
+    write("Du lernst aus Deinem Fehler.\n");
+  else
+    write( "Leider lernst Du nicht aus Deinem Fehler.\n" );
+}
+
+
+void Erfolg(object caster, string spell, mapping sinfo) 
+{
+  caster->ModifySkill(spell,([SI_USR:sinfo[SI_USR]+1]),0, "nekromanten");
+  return;
+}
+
+
+/* Hier wird geprueft, ob der Spell gesprochen werden darf */
+varargs string CheckIfSpellAllowed(object caster, mapping sinfo) {
+  object ob;
+
+  if(!ob=present(GUILDITEM_ID, caster)) 
+    return(BS("DU VERSAGER! OHNE DEINE MASKE KANNST DU NICHT ZAUBERN!!\n"));
+
+  if(ob->QueryVersion()!=LAST_GUILDITEM_UPDATE) 
+    return(BS("DEINE MASKE BRAUCHT FRISCHE ENERGIE! HOL SIE DIR VON "
+          "XARFAI!\n"));
+
+  if(GetAlign(caster) > 500)
+    return BS(
+      "Du musst erst boeser werden, sonst sind die Tore ins Reich der Untoten "
+      "fuer Dich verschlossen.");
+
+  return 0;
+}
+
+
+string FroschTest(object caster, mapping sinfo)
+{
+  if (caster->QueryProp(P_FROG))
+    return "Als Frosch kannst Du das nicht!\n";
+  return CheckIfSpellAllowed(caster, sinfo);
+}
+
+
+string BlindTest(object caster, mapping sinfo)
+{
+  if (caster->QueryProp(P_BLIND))
+    return "Da Du blind bist, kannst Du das nicht machen!\n";
+  return CheckIfSpellAllowed(caster, sinfo);
+}
+
+
+object CloneZombie(object corpse, object caster, int succ)
+{
+  object *ob, zombie;
+  int i;
+
+  zombie=clone_object(NPC "zombie");
+  zombie->SetZombie(corpse, caster, succ); 
+  
+  for( i=sizeof(ob=all_inventory(corpse))-1; i>=0; i--) 
+    ob[i]->move(zombie,M_GET);
+  zombie->command_me("ziehe alles an");
+  zombie->move(environment(corpse), M_NOCHECK | M_SILENT);
+  corpse->remove(1);
+
+  return zombie;
+}
+
+
+object CloneSkeleton(object corpse, object caster, int succ)
+{
+  object skeleton;
+
+  skeleton=clone_object(NPC "skelett");
+  skeleton->SetSkeleton(corpse, caster, succ); 
+  skeleton->move(environment(corpse), M_NOCHECK | M_SILENT);
+  corpse->remove(1);
+
+  return skeleton;
+}
+
+
+object CloneMummy(object corpse, object caster, int succ)
+{
+  object mummy;
+
+  mummy=clone_object(NPC "mumie");
+  mummy->SetMummy(corpse, caster, succ); 
+  mummy->move(environment(corpse), M_NOCHECK | M_SILENT);
+  mummy->command_me("wirf alles weg");
+  corpse->remove(1);
+
+  return mummy;
+}
+
+
+object CloneGhost(object corpse, object caster, int succ)
+{
+  object ghost;
+
+  ghost=clone_object(NPC "geist");
+  ghost->SetGhost(corpse, caster, succ); 
+  ghost->move(environment(corpse), M_NOCHECK | M_SILENT);
+  corpse->remove(1);
+
+  return ghost;
+}
+
+
+string eng2germ(string eng)
+{
+    switch(eng)
+    {
+      case DT_FIRE: return "Feuer";
+      case DT_MAGIC: return "Magie";
+      case DT_COLD: return "Eisschaden";
+      case DT_ACID: return "Saeuren";
+      case DT_TERROR: return "Terror";
+      case DT_POISON: return "Giftschaden";
+      case DT_HOLY: return "Heiligschaden";
+      case DT_UNHOLY: return "Unheiligschaden";
+      case DT_LIGHT: return "Licht";
+      case DT_SOUND: return "Laerm";
+      case DT_WATER: return "Wasserschaden";
+      case DT_LIGHTNING: return "Blitzschlag";
+      case DT_ELECTRIC: return "Strom";
+      case DT_EXPLOSION: return "Explosionen";
+      case DT_AIR: return "Luftschaden";
+      default: return eng;
+    }
+}
+
+
+int TryAttackSpell(object victim, int dam, mixed dtypes,
+                   mixed is_spell, object caster, mapping sinfo) 
+{
+  string msg;
+  object corpse;
+  msg = CAP(caster->query_real_name())+" ("+ caster->QueryProp(P_ALIGN)+ 
+        ") gegen "+ victim->name(WEN)+" ("+ victim->QueryProp(P_ALIGN)+
+        ") : "+dam ;
+  if( !random(10) ) {
+    tell_saf(is_spell[SP_NAME]+": "+ msg);
+    write_nekro_log( is_spell[SP_NAME]+".log", msg+"\n");
+  }
+  ::TryAttackSpell(victim, dam, dtypes, is_spell, caster, sinfo);
+  if( !victim && !random(25) ) {
+    if(corpse=present("Leiche", ENV(caster)) ) {
+      if(corpse->QueryProp(P_KILLER)==caster ) {
+        tell_object(caster, BS("Nach diesem brutalen Angriff konnte die "
+            "Seele Deines armen Opfers keine Ruhe finden und kehrt als "
+            "Geist zurueck.") );
+        tell_room(ENV(caster), BS("Nach diesem brutalen Angriff "+
+            caster->name(WESSEN,1)+" konnte die Seele dieses armen Opfers "
+            "keine Ruhe finden und kehrt als Geist zurueck."), ({caster}) );
+        CloneGhost(corpse, caster, 10000); 
+      }
+    }
+  }
+}
+
+
+int schaetz(object caster, mapping sinfo)
+{
+   object victim;
+   int hpdiff, wcdiff, acdiff;
+   int hp, vhp, wc, vwc, ac, vac, gen, val;
+   string result;
+   string vname, vnamegen;
+
+   victim=FindVictim(sinfo[SI_SKILLARG],caster,
+                           "Wen oder was willst Du denn einschaetzen?\n");
+   if (!victim)
+     return 0;
+   if( victim == caster ) {
+     write("Du bist genauso wie Du selbst!\n");
+     return 0;
+   }
+   if (query_once_interactive(victim) && IS_LEARNER(victim))
+   {
+     write(victim->Name()+" ist von Natur aus nicht einzuschaetzen.\n");
+     return 0;
+   }            
+   sinfo=DoSpellModification(caster, sinfo);
+   if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+     tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+     return 0;
+   }
+   caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+   if (SpellSuccess(caster,sinfo)<=0)
+      return MISSERFOLG;
+ 
+   if (!living(victim))
+   {
+     result = sprintf("Du schaetzt %s ab und kommst zu folgendem Schluss:\n",
+                      victim->name(WEN));
+     if (val = victim->QueryProp(P_VALUE))
+       result += sprintf("%s ha%s einen Wert von %d Muenze%s.\n",
+                      capitalize(victim->name(WER,1)),
+                      (victim->IsPlural()) ?
+                        "ben" : "t",
+                      val, (val==1 ? "" : "n"));
+     else
+       result += sprintf("%s %s voellig wertlos...\n",
+                      capitalize(victim->name(WER,1)),
+                      (victim->IsPlural()) ?
+                        "sind" : "ist");
+
+     if (victim->IsUnit())
+       val = victim->QueryProp(P_WEIGHT);
+     else
+       val = victim->QueryProp(P_TOTAL_WEIGHT);
+
+     // ab 6 kg nur mehr auf 1 kg genau
+     if ( (val >= 6000) || (val > (3000+100*caster->QueryProp(P_LEVEL))) )
+       vname = "in etwa "+((val+500)/1000)+" Kilogramm";
+     else
+     {
+       if (val < 100)
+         vname = "so gut wie nichts";
+       else if (val < 950)
+         vname = "schaetzungsweise "+((val+50)-(val+50)%100)+" Gramm";
+         // vname=sprintf("%.1f",to_float(val)/1000);
+       else
+       {
+         if (val >= 1500)
+           val = val+random(100)-random(100);   // ein wenig random :)
+         if (val >= 2000)
+           val=(val+250)-(val+250)%500;
+         else
+           val=(val+125)-(val+125)%250;
+         vname = "ungefaehr "+
+           ({"","ein","zwei","drei","vier","fuenf","sechs"})[val/1000]+
+           ({"","einviertel","einhalb","dreiviertel"})[(val%1000)/250]+
+           " Kilogramm";
+       }
+     }
+
+     result += sprintf("%s wieg%s %s.\n",
+         capitalize(victim->QueryPronoun()),
+         (victim->IsPlural()) ? "en" : "t", vname);
+
+     write (result);
+     return ERFOLG;
+   }
+   hp = caster->QueryProp(P_HP);    vhp = victim->QueryProp(P_HP);
+   wc = caster->QueryProp(P_TOTAL_WC);  vwc = victim->QueryProp(P_TOTAL_WC);
+   ac = caster->QueryProp(P_TOTAL_AC);  vac = victim->QueryProp(P_TOTAL_AC);
+   hpdiff = hp - vhp;
+   wcdiff = wc - vwc;
+   acdiff = ac - vac;
+   vname = victim->name(WER, 1);
+   vnamegen = victim->name(WESSEN, 1);
+   gen = victim->QueryProp(P_GENDER);
+
+   if (hpdiff > 2*vhp)
+      result = "Du bist " + victim->name(WEM, 1) + " haushoch ueberlegen.\n";
+   else if (hpdiff > vhp)
+      result = "Du bist viel staerker als " + vname + ".\n";
+   else if (hpdiff > vhp/5)
+      result = "Du bist staerker als " + vname + ".\n";
+   else if (-hpdiff > 2*hp)
+      result = capitalize(vname) + " ist Dir haushoch ueberlegen.\n";
+   else if (-hpdiff > hp)
+      result = capitalize(vname) + " ist viel staerker als Du.\n";
+   else if (-hpdiff > hp/5)
+      result = capitalize(vname) + " ist staerker als Du.\n";
+   else
+      result = capitalize(vname) + " ist etwa gleich stark wie Du.\n";
+   write(result);
+
+   if (acdiff > 2*vac)
+      result = "Deine Ruestung ist unglaublich viel besser als die " 
+     + vnamegen + ".\n";
+   else if (acdiff > vac)
+      result = "Deine Ruestung ist viel besser als die " + vnamegen + ".\n"; 
+   else if (acdiff >vac/5)
+      result = "Deine Ruestung ist besser als die " + vnamegen + ".\n";
+   else if (-acdiff > 2*ac)
+      result = "Die Ruestung " + vnamegen 
+     + " ist unglaublich viel besser als Deine.\n";
+   else if (-acdiff > ac)
+      result = "Die Ruestung " + vnamegen + " ist viel besser als Deine.\n";
+   else if (-acdiff > ac/5)
+      result = "Die Ruestung " + vnamegen + " ist besser als Deine.\n";
+   else
+      result = "Eure Ruestungen sind etwa gleich gut.\n";
+   write(result);
+
+   if (wcdiff > 2*vwc)
+      result = "Deine Waffe ist eigentlich zu gut fuer diesen Gegner.\n";
+   else if (wcdiff > vwc)
+      result = "Deine Waffe ist viel besser als die " +vnamegen + ".\n";
+   else if (wcdiff > vwc/5)
+      result = "Deine Waffe ist besser als die " +vnamegen + ".\n";
+   else if (-wcdiff > 2*wc)
+      result = "Die Waffe " + vnamegen 
+     + " laesst Deine ganz mickrig aussehen.\n";
+   else if (-wcdiff > wc)
+      result = "Die Waffe " + vnamegen + " ist viel besser als Deine.\n";
+   else if (-wcdiff > wc/5)
+      result = "Die Waffe " + vnamegen + " ist besser als Deine.\n";
+   else
+      result = "Eure Waffen sind etwa gleich gut.\n";
+
+  result += capitalize(victim->QueryPronoun(WER) || "es");
+  if ((val = victim->QueryProp(P_ALIGN)) <= -1000)
+    result += " ist von satanischer Gesinnung. Ein echtes Vorbild!\n";
+  else if (val < -800) result += " ist so richtig schoen boese. :)\n";
+  else if (val < -600) result += " ist extrem boese. :)\n";
+  else if (val < -400) result += " ist sehr boese. :)\n";
+  else if (val < -300) result += " ist etwas boesartig.\n";
+  else if (val < -200) result += " ist von etwas boeser Gesinnung.\n";
+  else if (val < -100) result += " ist sehr frech.\n";
+  else if (val < -50) result += " ist frech.\n";
+  else if (val < 50) result += " steht allem ziemlich neutral gegenueber.\n";
+  else if (val < 100) result += " ist nett. :(\n";
+  else if (val < 200) result += " ist sehr nett. :((\n";
+  else if (val < 300) result += " ist extrem nett. *wuerg*\n";
+  else if (val < 400) result += " ist gut. *igitt*\n";
+  else if (val < 600) result += " ist sehr gut. *pfui*\n";
+  else if (val < 800) result += " ist von extrem guter Gesinnung, wie "
+                                "ekelhaft!\n";
+  else if (val < 1000) result += " ist fast heilig. PFUI!\n";
+  else result += " strahlt eine unangenehme Heiligkeit aus. IGITT!!!\n";
+
+  result+=vname;
+  switch(100*victim->QueryProp(P_SIZE)/caster->QueryProp(P_SIZE)) {
+    case 0..20   : result+=" ist sehr viel kleiner als Du.\n"; break;
+    case 21..50  : result+=" ist viel kleiner als Du.\n"; break;
+    case 51..80  : result+=" ist kleiner als Du.\n"; break;
+    case 81..130 : result+=" ist etwa gleich gross wie Du.\n"; break;
+    case 141..180: result+=" ist groesser als Du.\n"; break;
+    case 181..350: result+=" ist viel groesser als Du.\n"; break;
+    case 351..500: result+=" ist sehr viel groesser als Du.\n"; break;
+    case 501..800: result+=" ueberragt Dich um Haeuser.\n"; break;
+    default      : result+=" ist gross wie ein Berg.\n";
+  }
+  result+=vname;
+  switch(victim->QueryProp(P_LEVEL)-caster->QueryProp(P_LEVEL)) {
+    case -500..-50: result+=" hat gar keine Macht.\n"; break;
+    case -49..-25 : result+=" hat kaum Macht verglichen mit Dir.\n"; break;
+    case -24..-11 : result+=" hat nur wenig Macht verglichen mit Dir.\n"; break;
+    case -10..-6  : result+=" ist weniger maechtig als Du.\n"; break;
+    case -5..-1   : result+=" ist nur wenig maechtig als Du.\n"; break;
+    case 0        : result+=" ist gleich maechtig wie Du.\n"; break;
+    case 1..5     : result+=" ist etwas maechtiger als Du.\n"; break;
+    case 6..10    : result+=" ist maechtiger als Du.\n"; break;
+    case 11..25   : result+=" ist um vieles maechtiger als Du.\n"; break;
+    case 26..50   : result+=" hat gewaltige Macht verglichen mit Dir.\n"; 
+                   break;
+    default       : result+=" hat nahezu gottgleiche Macht.\n"; break;
+  }
+
+   write(result);
+   return ERFOLG;
+}
+
+
+int identifiziere(object caster, mapping sinfo)
+{
+  object ob;
+  string *fi;
+  string result;
+  mapping mat;
+
+  ob=FindVictim(sinfo[SI_SKILLARG], caster,
+                "Was moechtest Du identifizieren?\n");
+  if (!ob)
+    return 0;
+  if( caster->InFight() ) {
+    write("Mitten im Kampf kannst Du nichts identifizieren.\n");
+    return 0;
+  }
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  if (SpellSuccess(caster,sinfo)<=0)
+    return MISSERFOLG;
+  if (result=ob->info(caster) || ob->QueryProp(P_INFO))
+    printf("Du identifizierst %s.\n%s", ob->name(WEN, 1), 
+           result);
+  else
+    printf("Du kannst nichts besonderes an %s erkennen.\n",
+           ob->name(WEM, 1));
+
+  if ( (mat=ob->QueryProp(P_MATERIAL)) && (pointerp(mat))) {
+    if (sizeof(mat))
+      write(break_string(sprintf("%s besteh%s aus %s.",
+          ob->Name(WER,1), ob->IsPlural() ? "en" : "t",
+          ob->MatList(WEM) || "unbekanntem Material"), 78));
+  }
+  else if (mappingp(mat) && sizeof(mat-([MAT_MISC_LIVING]) )) {
+    write(break_string(sprintf("%s besteh%s aus %s.",
+        ob->Name(WER,1), ob->IsPlural() ? "en" : "t",
+        ob->MaterialList(WEM, caster) || "unbekanntem Material"), 78));
+  }
+  if (result=ob->QueryProp(P_NEKRO_PESTERED))
+  {
+    if (!stringp(result))
+      result="einem Nekromanten";
+    else
+      result=capitalize(result);
+    write(ob->Name(WER,1)+" wurde von "+result+" verpestet.\n");
+  }
+  if (ob->QueryProp(P_CURSED))
+  {
+    write(ob->Name(WER,1)+" ist verflucht.\n");
+  }
+  if (mappingp(mat=ob->QueryProp(P_TEMPERATURE_PROTECTION))) {
+    int c,h;
+    string s;
+    s=ob->Name(WER,1);
+    c=mat[T_COLD_PROT];
+    h=mat[T_HEAT_PROT];
+    if (c) {
+      s+=" stellt bei Kaelte ";
+      if (c < -10) s+="eine enorme Belastung";
+      else if (c < -5) s+="eine ziemliche Belastung";
+      else if (c < -2) s+="eine spuerbare Belastung";
+      else if (c < -1) s+="eine leichte Belastung";
+      else if (c < 0)  s+="eine geringe Belastung";
+      else if (c > 10) s+="einen enormen Schutz";
+      else if (c > 5)  s+="einen sehr guten Schutz";
+      else if (c > 2)  s+="einen guten Schutz";
+      else if (c > 1)  s+="einen ganz brauchbaren Schutz";
+      else s+="einen eher geringen Schutz";
+      s+=" dar"+(h ? " und" : "");
+    }
+    if (h) {
+      if (h < -10) s+=" belastet Dich"+(c<-10 ? " auch" : "")+
+        " bei Hitze enorm stark";
+      else if (h < -5) s+=" bringt Dich bei Hitze schnell zum Schwitzen";
+      else if (h < -2) s+=" laesst Dich bei Hitze leicht schwitzen";
+      else if (h < -1) s+=" laesst Dich bei Hitze leichter schwitzen";
+      else if (h < 0)  s+=" ist bei Hitze eine leichte Belastung fuer Dich";
+      else if (h > 10) s+=" schuetzt Dich unglaublich gut vor Hitze";
+      else if (h > 5)  s+=" bietet Dir einen beachtlichen Hitzeschutz";
+      else if (h > 2)  s+=" schuetzt Dich recht gut vor Hitze";
+      else if (h > 1)  s+=" schuetzt Dich einigermassen vor Hitze";
+      else s+=" schuetzt Dich ein wenig vor Hitze";
+    }
+    if (c || h) {
+      write(break_string(s+".",78));
+    }
+  }
+
+  return ERFOLG;
+}
+
+
+int verfluchen(object caster, mapping sinfo) 
+{
+  int dam;
+  object victim;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wen willst Du verfluchen?\n");
+  if (!victim)
+    return 0;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  if (SpellSuccess(caster,sinfo)<=0)
+    return MISSERFOLG;
+
+  say(sprintf("%s belegt %s mit einem hoellischen Fluch.\n",
+                caster->Name(WER), victim->name(WEN, 2)), ({caster,victim}) );
+
+  write(sprintf("Du belegst %s mit einem hoellischen Fluch.\n", 
+                victim->name(WEN, 2)));
+  tell_object(victim,sprintf("%s belegt Dich mit einem hoellischen Fluch.\n",
+                             caster->Name(WER)));
+  dam=sinfo[SI_SKILLDAMAGE]+caster->QueryProp(P_GUILD_LEVEL)*5;
+  dam=random(DoModificationByAlign(dam, caster, victim));
+  if (dam > sinfo[SI_MAX_DAMAGE] ) dam=sinfo[SI_MAX_DAMAGE];
+  TryAttackSpell(victim, dam, sinfo[SI_SKILLDAMAGE_TYPE], 
+      ([SP_NAME:"Nekromantenfluch",SP_SHOW_DAMAGE:1]), caster,sinfo);
+  return ERFOLG;
+}
+
+int prep_beschwoerung(object caster, mapping sinfo)
+{
+  object corpse;
+
+  if(!sinfo[SI_SKILLARG])
+  {
+    write("Welche Leiche willst Du beschwoeren?\n");
+    return 0;
+  } 
+  if (!corpse=present(sinfo[SI_SKILLARG], environment(caster) ))
+  {
+    write("So etwas siehst Du da nicht!\n");
+    return 0;
+  }
+  if( !corpse->id("Leiche") &&
+      !corpse->id("\nnekromanten_knochen") &&
+      !corpse->id("\nnekromanten_mumie") )
+  {   // Eindeutige Leichen-ID !!!
+    write("Du kannst nur Tote beschwoeren!\n");
+    return 0;
+  }                           
+  return 1;
+}
+
+int beschwoerung(object caster, mapping sinfo) 
+{
+  object corpse, undead;
+  int succ;
+ 
+  if(!sinfo[SI_SKILLARG] ||
+     !corpse=present(sinfo[SI_SKILLARG], environment(caster)))
+  {
+    write("Wohin ist denn die Leiche verschwunden??\n");
+    return 0;
+  }
+  if( !corpse->id("Leiche") &&
+      !corpse->id("\nnekromanten_knochen") &&
+      !corpse->id("\nnekromanten_mumie") )
+  {   // Eindeutige Leichen-ID !!!
+    write("Du kannst nur Tote beschwoeren!\n");
+    return 0;
+  }                  
+  if(query_once_interactive(caster) &&
+      corpse->QueryProp(P_LEVEL) >= caster->QueryProp(P_LEVEL)) 
+  {
+    write(BS(
+      "Dieses Wesen war zu maechtig, als dass Du es wieder ins Reich der "
+      "Lebenden zurueckholen koenntest!"));
+    if( !random(3) && corpse->id("Leiche") ){
+      corpse->SetProp(P_KILLER, caster);
+      write("Deine Bemuehungen haben die Seele dieses Toten gestoert.\n"
+            "Ein veraergerter Geist kommt aus dem Totenreich.\n");
+      CloneGhost(corpse, caster, random(10000) );
+    }
+    return 0;
+  }
+  if( caster->InFight() ) {
+    write(BS("Im Kampf bist Du zu beschaeftigt, um eine Leiche zu "
+        "beschwoeren."));
+    return 0;
+  }
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+
+  write(BS(sprintf(
+    "Du tanzt um %s herum und murmelst die rituellen Formeln, "
+    "die fuer das Beschwoeren der Toten vonnoeten sind.", 
+    corpse->name(WEN, 1)))+"\n");
+  say(BS(sprintf(
+    "%s huepft laecherlich um %s herum und murmelt dabei mit todernstem "
+    "Gesicht und Schweiss auf der Stirn sinnlose Worte vor sich hin. "
+    "Hin und wieder kniet %s sich vor %s nieder und fummelt daran "
+    "herum... Was das wohl fuer einen Sinn haben soll?", caster->Name(),
+    corpse->name(WEN),caster->QueryPronoun(WER), corpse->name(WEM) )),
+      ({caster}) );
+
+  if ((succ=SpellSuccess(caster,sinfo)) <= -3000)
+  {
+     write(BS(
+       "Oh weh! Dein Beschwoerungsversuch ist Dir total misslungen! "
+       "Der Tote, den Du beschwoeren wolltest, wird lebendig und wendet "
+       "sich gegen Dich!"));
+     say(BS(sprintf(
+       "Ploetzlich wird die Leiche lebendig und greift %s an!",
+       caster->name(WEN) )), ({caster}) );
+     CloneZombie(corpse, caster, -succ+random(5000))->Kill(caster);
+     total_fail=1;
+  }
+  
+  //DB(succ);
+  if (succ <= 0)
+     return MISSERFOLG;
+  if( corpse->id("Leiche") ) {
+    tell_room(environment(caster), BS(
+     "Die Leiche beginnt ploetzlich zu zucken. Ueberall formen sich Blaeschen "
+     "und es waechst in Sekundenbruchteilen eine rissige, eiternde Haut. "
+     "Die Leiche bricht kurz total auseinander, nur um sich dann wieder "
+     "vollstaendig neu zusammenzusetzen. Schliesslich steht ein grauenhafter "
+     "Zombie vor Dir, der praktisch kaum noch Aehnlichkeiten mit dem "
+     "Wesen hat, von dessen untoter Seele er nun erfuellt ist."));
+    CloneZombie(corpse, caster, succ);
+  }
+  else if( corpse->id("\nnekromanten_knochen") ) {
+    tell_room(environment(caster), BS(
+      "Die Knochen werde ploetzlich lebendig und formen sich zu einem "
+      "Skelett zusammen. Die leeren Augenhoehlen des Totenschaedels "
+      "beginnen in einem unheimlichen Rot zu gluehen und blicken Dich "
+      "hasserfuellt an. Nur die unheilige Magie haelt diesen neuerstandenen "
+      "Untoten zusammen."));
+    CloneSkeleton(corpse, caster, succ);
+  }
+  else if( corpse->id("\nnekromanten_mumie") ){
+    tell_room(environment(caster), BS(
+      "Die mumifizierte Leiche beginnt sich ploetzlich zu bewegen und steht "
+      "vom Boden auf. Ihre Augen beginnen in einem daemonischen Rot zu "
+      "leuchten. Ein grauenhafter Anblick!"));  
+    CloneMummy(corpse, caster, succ);
+  }
+  return ERFOLG;
+}
+
+int prep_beherrschung(object caster, mapping sinfo)
+{
+  string str;
+  object ob, wer;
+
+  if(!str=sinfo[SI_SKILLARG]) {
+    write("Wen willst Du beherrschen?\n");
+    return 0;
+  }
+  if(!ob=present(str, environment(caster))) {
+    write("So jemanden siehst Du hier nicht.\n");
+    return 0;
+  }
+
+  if( !ob->id("Nekromantenzombie") &&
+      !ob->id("Nekromantenskelett") &&
+      !ob->id("Nekromantenmumie") ) {
+    write(ob->Name(WER,1)+" ist kein Untoter, den man beherrschen kann!\n");
+    return 0;
+  }
+  if( (wer=ob->QueryProp(P_NEKRO_CASTED_BY)) != caster) {
+    write(BS(
+       "Dieser Untote wurde von "+wer->name(WER)+" beschworen. "
+       "Du kannst leider nur Untote beherrschen, die Du auch selber "
+       "beschworen hast."));
+    return 0;
+  }
+  if( wer = ob->QueryProp(P_NEKRO_MASTERED_BY) ) {
+    write(BS(
+       "Dieser Untote wird bereits von "+
+       (wer==caster ? "Dir" : wer->name(WEM) )+
+       " beherrscht. Du kannst nur Untote beherrschen, die noch keinen "
+       "Besitzer haben.\n"));
+    return 0;
+  }
+  if( caster->InFight() ) {
+    write(BS("Im Kampf bist Du zu beschaeftigt, um einen Untoten zu "
+        "beherrschen."));
+    return 0;
+  }
+                                                  
+  return 1;
+}
+
+int beherrschung(object caster, mapping sinfo) 
+{
+  string str;
+  object ob, wer, *undeads;
+  int succ, nr_undeads, i;
+  
+  if(!str=sinfo[SI_SKILLARG]) {
+    write("Wen willst Du beherrschen?\n");
+    return 0;
+  }
+  if(!ob=present(str, environment(caster))) {
+    write("So jemanden siehst Du hier nicht.\n");
+    return 0;
+  }
+  
+  if( !ob->id("Nekromantenzombie") && 
+      !ob->id("Nekromantenskelett") &&
+      !ob->id("Nekromantenmumie") ) { 
+    write(ob->Name(WER,1)+" ist kein Untoter, den man beherrschen kann!\n");
+    return 0;
+  }
+  if( (wer=ob->QueryProp(P_NEKRO_CASTED_BY)) != caster) {
+    write(BS(
+       "Dieser Untote wurde von "+wer->name(WER)+" beschworen. "
+       "Du kannst leider nur Untote beherrschen, die Du auch selber "
+       "beschworen hast."));
+    return 0;
+  }
+  if( wer = ob->QueryProp(P_NEKRO_MASTERED_BY) ) {
+    write(BS(
+       "Dieser Untote wird bereits von "+ 
+       (wer==caster ? "Dir" : wer->name(WEM) )+
+       " beherrscht. Du kannst nur Untote beherrschen, die noch keinen "
+       "Besitzer haben.\n"));
+    return 0;
+  }
+  if( caster->InFight() ) {
+    write(BS("Im Kampf bist Du zu beschaeftigt, um einen Untoten zu "
+        "beherrschen."));
+    return 0;
+  }
+  
+  // Stufe 1-4 => 1 Untoter, Stufe 5-7 => 2 Untote, 7/7 -> 3 Untote
+  undeads=caster->QueryProp(P_NEKRO_MASTERED_UNDEADS);
+  if(sizeof(undeads)) {
+     TELL("angrox", "2ND UNDEAD\n");
+     undeads-=({0});
+     nr_undeads=sizeof(undeads);
+     if((nr_undeads==1 && TP->QueryProp(P_GUILD_LEVEL)<5) ||
+        (nr_undeads==2 && TP->QueryProp(P_GUILD_LEVEL)!=7 &&
+         TP->QueryProp(P_GUILD_CIRCLE)!=7) ||
+         nr_undeads>2)
+     {
+       if(random(10)>TP->QueryProp(P_GUILD_LEVEL)) {
+         write(BS("Du versuchst den Untoten zu beherrschen, doch Deine "
+            "Macht reicht nicht dazu aus, alle Untote unter Kontrolle "
+            "zu halten! Du verlierst die Kontrolle! BEI ALLEN "
+            "NIEDERHOELLEN, WAS PASSIERT ... NEIN!"));
+         for(i=sizeof(undeads)-1;i>=0;i--) {
+            undeads[i]->SetAggressive(1);
+         }
+         ob->SetAggressive(1);
+       }
+       else 
+         write("Deine Macht reicht nicht aus, um diesen Untoten zu "
+            "beherrschen!\n"); 
+       return 0;
+     }
+     TELL("angrox", "UNDEADS++\n");
+     undeads+=({ob});
+  }
+  else {
+    TELL("angrox", "1st UNDEAD!\n");
+    undeads=({ob});
+  }
+  caster->SetProp(P_NEKRO_MASTERED_UNDEADS, undeads); 
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+
+  write(BS(sprintf(
+    "Du konzentrierst Dich und versuchst, %s Deinen boesen Willen "
+    "aufzuzwingen. ", ob->name(WEM, 1))));
+  say(BS(sprintf(
+    "%s starrt %s an und murmelt dabei irgendeinen Hokuspokus. ", 
+    caster->Name(), ob->name(WEN) )), ({caster}));
+
+  if ((succ=SpellSuccess(caster,sinfo)) <= -3000)
+  {
+     write(BS(sprintf(
+       "%s hat ueberhaupt keine Lust, sich von Dir beherrschen zu lassen "
+       "und greift Dich brutal an.", ob->Name() )));
+     ob->Kill(caster);
+     ob->SetAggressive(1);
+     total_fail=1;
+  }
+    if (succ <= 0)
+     return MISSERFOLG;
+
+  write(BS("Dein unheiliger Zauber ist geglueckt. "+ob->Name(WER,1)+
+        " wird Dir nun folgen und gehorchen."));
+  ob->SetMaster(caster);
+  
+  return ERFOLG;
+}
+
+int prep_kannibalismus(object caster, mapping sinfo)
+{
+  object corpse, weapon ;
+
+  if(!sinfo[SI_SKILLARG] ||
+     !corpse=present(sinfo[SI_SKILLARG], environment(caster)))
+  {
+    write("Welche Leiche willst Du rituell verzehren?\n");
+    return 0;
+  }
+
+  if(!corpse->id("Leiche")) {   // Eindeutige Leichen-ID !!!
+    write("Aber das ist doch gar keine Leiche!\n");
+    return 0;
+  }
+  if( (!objectp(weapon=caster->QueryProp(P_WEAPON)) ||
+      (weapon->QueryProp(P_WEAPON_TYPE) != WT_KNIFE ) )) {
+    write("Du musst ein Messer gezueckt haben, um den rituellen "
+           "Kannibalismus abzuhalten!\n");
+    return 0;
+  }
+  if(caster->QueryProp(P_FOOD) > caster->QueryProp(P_MAX_FOOD) - CANNIBAL_COST)
+  {
+    write("Du bist zu satt, um den rituellen Kannibalismus durchzufuehren.\n");
+    return 0;
+  }
+  if( caster->InFight() ) {
+    write(BS("Im Kampf bist Du zu beschaeftigt, um das Kannibalenritual "
+        "zu vollziehen."));
+    return 0;
+  }                                               
+  return 1;
+}
+
+int kannibalismus(object caster, mapping sinfo) 
+{
+  object corpse, weapon, ob;
+  int succ, i;
+  string  was;
+
+  if(!sinfo[SI_SKILLARG] || 
+     !corpse=present(sinfo[SI_SKILLARG], environment(caster)))
+  {
+    write("Welche Leiche willst Du rituell verzehren?\n");
+    return 0;
+  }
+  
+  if(!corpse->id("Leiche")) {   // Eindeutige Leichen-ID !!!
+    write("Aber das ist doch gar keine Leiche!\n");
+    return 0;
+  }
+  if( (!objectp(weapon=caster->QueryProp(P_WEAPON)) ||
+      (weapon->QueryProp(P_WEAPON_TYPE) != WT_KNIFE ) )) {
+    write("Du musst ein Messer gezueckt haben, um den rituellen "
+           "Kannibalismus abzuhalten!\n");
+    return 0;
+  }
+  if(caster->QueryProp(P_FOOD) > caster->QueryProp(P_MAX_FOOD) - CANNIBAL_COST)
+  {
+    write("Du bist zu satt, um den rituellen Kannibalismus durchzufuehren.\n");
+    return 0;
+  }
+  if( caster->InFight() ) {
+    write(BS("Im Kampf bist Du zu beschaeftigt, um das Kannibalenritual "
+        "zu vollziehen."));
+    return 0;
+  }
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+
+  write(BS(sprintf(
+    "Du tanzt um %s herum und murmelst die rituellen Formeln des unheiligen "
+    "kannibalistischen Rituals. Du hoffst, dass die Seele des Toten Dich "
+    "erhoert. Schliesslich schneidest Du die besten Teile heraus und "
+    "verzehrst sie, waehrend Du ihre Eingeweide auf Deiner Brust verteilst.", 
+    corpse->name(WEN, 1))));
+  say(BS(sprintf(
+    "%s huepft laecherlich um %s herum und murmelt dabei mit todernstem "
+    "Gesicht und Schweiss auf der Stirn sinnlose Worte vor sich hin. "
+    "Immer wieder kniet %s sich vor %s nieder und fuegt ihr kleine Schnitte "
+    "mit einem Messer zu. Schliesslich schneidet %s einige grauenhafte Teile "
+    "ab und isst sie feierlich!", caster->Name(),
+    corpse->name(WEN),caster->QueryPronoun(WER), corpse->name(WEM),
+    caster->QueryPronoun(WER) )), ({caster}) );
+
+  if(member(CANIBAL_RACES, corpse->QueryProp(P_RACE))==-1)
+  {
+    write(BS(
+      "Zu spaet bemerkst Du, dass das Wesen, welches diese Leiche "
+      "hinterlassen hat, nicht einer humanoiden Rassen angehoerte! "
+      "Die fremde Seele "
+      "dringt nur kurz in Dein Bewusstsein ein, aber doch lang genug um Dir "
+      "die Inkompatibilitaet eurer Gehirne klarzumachen. Qualvoll "
+      "schreist Du auf."));
+    say(BS(
+      caster->Name()+" schreit schmerzerfuellt auf und haelt mit "
+      "qualvoll verzerrtem Gesicht die Haende an den Kopf."), ({caster}));
+    corpse->remove(1);
+    SetProp(P_KILL_NAME, "Ein schwerer Fehler im Ritual");
+    caster->do_damage(caster->QueryProp(P_HP)/5 + random(25) );
+    caster->AddPoison(1+random(5));
+    return 0;
+  }
+
+
+  if (((succ=SpellSuccess(caster,sinfo)) <= -2500) )
+  {
+     write(BS(
+       "Der rituelle Kannibalismus schlaegt total fehl! Die halbverzehrte "
+       "Leiche erwacht zu untotem Leben und greift Dich an."));
+     say(BS(sprintf(
+       "Ploetzlich wird die Leiche lebendig und greift %s an!",
+       caster->name(WEN) )), ({caster}));
+     CloneZombie(corpse, caster, -succ+random(10000))->Kill(caster);
+     total_fail=1;
+  }
+  //DB(succ);
+
+  if (succ <= 0)
+     return MISSERFOLG;
+/*
+  write(
+    "Die Kraft der verstorbenen Seele erfuellt Dich.\n" );
+  say( caster->Name()+" sieht nun viel erfrischter aus als vorher.\n", 
+      ({caster}) );
+  
+  // Nun die Wirkungen...  
+  caster->heal_self(10 + succ / 30);
+  caster->SetProp(P_FOOD, caster->QueryProp(P_FOOD) + CANNIBAL_COST);
+  
+  if((caster->QueryProp(P_POISON)) && (succ > 5000) && (random(100) > 50))
+  {
+    write("Deine Vergiftung wird etwas gelindert.\n");
+    caster->AddPoison(-2);
+  }
+  else if((caster->QueryProp(P_BLIND)) && (succ > 5000) && (random(100) > 50)) 
+  {
+    write("Deine Blindheit wurde geheilt!\n");
+    caster->SetProp(P_BLIND, 0);
+  }
+  if((caster->QueryProp(P_DEAF)) && (succ > 5000) && (random(100) > 50))
+  {
+    write("Deine Taubheit wurde geheilt!\n");
+    caster->SetProp(P_DEAF, 0);
+  }
+  else if((caster->QueryProp(P_FROG)) && (succ > 5000) && (random(100) > 50))
+  {
+    write(BS(
+      "Ploetzlich verschwinden Deine gruene Haut und Dein Appetit auf "
+      "Fliegen. Du verwandelst Dich wieder zurueck."));
+    say(caster->Name()+" entfroscht sich selbst.\n", ({caster}) );
+    caster->SetProp(P_FROG, 0);
+  }
+*/  
+// Besser waere, man schneidet sich ein Leichenteil heruas, das man dann
+// einen reset lang aufheben kann und bei bedarf essen kann. Beim reset
+// verfault es.
+// Herz (LP+), Hirn (MP+), Bein (MV+), Leber (Alk-), Niere (Drink-),
+// Magen (Food-), Milz (Poison-), Augen (blind-), Ohren(taub-),
+// Rippen (Frosch weg), Lunge (unter wasser atmen), Blut (Krankheit weg)
+// Essen kann das nur der caster selber (oder alle Nekromanten der selben
+// Rasse?), alle anderen werden von diesen Sachen nicht beeinflusst 
+// (zB sofortiges Ausspucken, weil es so eklig ist)
+  
+  write("Du zerstueckelst die Leiche und nimmst Dir ein paar besonders "
+      "schmackhafte Teile.\n");
+  say(BS(caster->Name()+" zerstueckelt die Leiche und nimmt sich einige "
+      "Teile mit."));
+  for(i=0;i<1+succ/3333;i++){
+    switch((succ+i*12)%55) {
+      case 0..9: was="herz"; break;
+      case 10..19: was="hirn"; break;
+      case 20..29: was="bein"; break;
+      case 30..34: was="leber"; break;
+      case 35..39: was="niere"; break;
+      case 40..44: was="magen"; break;
+      case 45..46: was="milz"; break;
+      case 47..48: was="auge"; break;
+      case 49..50: was="ohr"; break;
+      case 51..52: was="rippen"; break;
+      case 53..54: was="lunge"; break;
+    }
+    ob = clone_object(OBJ + was);
+    ob->move(caster, M_NOCHECK);
+    write("Du nimmst "+ob->name(WEN,0)+".\n");
+    ob->set_healing(caster, succ, corpse->QueryProp(P_LEVEL) );
+  }
+                   
+  
+  corpse->remove(1);
+  return ERFOLG;
+}
+
+
+int verpesten(object caster, mapping sinfo) 
+{
+  object ob;
+  string str, extra, *dts, obdp;
+  mixed obdt;
+  int succ;
+  
+  if(!str=sinfo[SI_SKILLARG]) {
+    write("Was willst Du verpesten?\n");
+    return 0;
+  }
+  if(!ob=present(str,caster)) {
+    write("So etwas hast Du nicht!\n");
+    return 0;
+  }
+  if(!ob->id("Ruestung") && !ob->id("Waffe")) {
+    write("Man kann nur Waffen oder Ruestungen verpesten!\n");
+    return 0;
+  }  
+  if(ob->QueryProp(P_NEKRO_PESTERED)) {
+    write("Das wurde bereits verpestet!\n");
+    return 0;
+  }
+  if(ob->QueryProp(P_CURSED)) {
+    write("Verfluchte Dinge kannst Du nicht verpesten!\n");
+    return 0;
+  }
+  if(sizeof(ob->QueryProp(P_ITEMD))) {
+    write("Magische Dinge kannst Du nicht verpesten!\n");
+    return 0;
+  }
+  if( caster->InFight() ) {
+    write("Im Kampf bist Du zu beschaeftigt, um Dinge zu verpesten.\n");
+    return 0;
+  }
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+
+  if((succ=SpellSuccess(caster,sinfo)) < -1000)
+  {
+    write("Huch! Da ist jetzt etwas Dummes passiert...\n"+
+          ob->Name(WER,1)+" ist nun verflucht!!!\n");
+    ob->SetProp(P_CURSED,1);
+    ob->SetProp(P_NEKRO_PESTERED, getuid(caster)); // verpestet, aber ohne Wirkung
+  }
+  //DB(succ);
+  if (succ <= 0) return MISSERFOLG;
+  
+  write(BS(sprintf(
+     "Du konzentrierst Dich und fokussierst die Macht des Boesen in %s. %s "
+     "erstrahlt kurz in einem eiskalten Schwarz.", ob->name(WEM,1),
+     ob->Name(WER))));
+  tell_room(ENV(caster), "Ein kuehler Hauch des Boesen geht durch den Raum.\n",
+      ({caster}));
+      
+  // --- Waffen --- 
+  if(ob->id("Waffe"))
+  {
+    if(!pointerp(obdt=ob->QueryProp(P_DAM_TYPE)))
+      obdt = ({ obdt });
+      
+    ob->SetProp(P_DAM_TYPE, obdt+=({ DT_UNHOLY }));
+
+    if (succ > 8000)
+    {
+      extra=EXTRA_DTS[random(1000) % sizeof(EXTRA_DTS)];
+      ob->SetProp(P_DAM_TYPE, obdt+=({ extra }) );
+      write(BS(sprintf(
+        "Weil Dir der Spruch so gut gelingt, trifft %s ab nun zusaetzlich "
+        "mit %s.", ob->name(WER,1), eng2germ(extra) )));
+    }
+    call_other(OBJ "pestered_weapon_func", "???");
+    ob->SetProp(P_WIELD_FUNC, find_object(OBJ "pestered_weapon_func"));
+  }
+  // --- Ruestungen ---
+  else
+  {
+    ob->SetProp(P_DAM_PROTECTION, ob->QueryProp(P_DAM_PROTECTION) +
+           ([ DT_UNHOLY: (2 + ob->QueryProp(P_DAM_PROTECTION)[DT_UNHOLY]) ]));
+
+    if (succ > 8000)
+    {
+      extra=EXTRA_DTS[random(1000) % sizeof(EXTRA_DTS)];
+      ob->SetProp(P_DAM_PROTECTION, ob->QueryProp(P_DAM_PROTECTION) +
+          ([ extra: (2 + ob->QueryProp(P_DAM_PROTECTION)[extra]) ]) );
+      write(BS(sprintf(
+        "Weil Dir der Spruch so gut gelingt, schuetzt %s ausserdem vor %s.",
+        ob->name(WER,1), eng2germ(extra) )));
+    }    
+    call_other(OBJ "pestered_armour_func", "???");
+    ob->SetProp(P_WEAR_FUNC, find_object(OBJ "pestered_armour_func"));
+  }
+  
+  ob->SetProp(P_NEKRO_PESTERED, getuid(caster));
+  ob->SetProp(P_SHORT, ob->QueryProp(P_SHORT)+" (verpestet)");
+  return ERFOLG;
+}
+
+int prep_kreischen(object caster, mapping sinfo)
+{
+  object victim;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wen willst Du ankreischen?\n");
+  if (!victim)
+    return 0;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }             
+
+  return 1;
+}
+
+int kreischen(object caster, mapping sinfo)
+{
+  object victim;
+  int dam, succ;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wen willst Du ankreischen?\n");
+  if (!victim)
+    return 0;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  if( (succ=SpellSuccess(caster,sinfo)) <=-3000) {
+    if( !caster->QueryProp(P_DEAF) ) {
+       write("Du kreischt so laut, dass Du selber taub wirst.\n");
+       total_fail=1;
+       caster->SetProp(P_DEAF, 3*caster->QueryProp(P_GUILD_LEVEL)-succ/50);
+    }
+  }
+  if( succ<=0)  
+    return MISSERFOLG;
+
+  say(sprintf("%s kreischt %s ohrenbetaeubend an.\n",
+       caster->Name(WER), victim->name(WEN, 2)), ({victim, caster}) );
+
+  write(sprintf("Du kreischst %s ohrenbetaeubend an.\n", 
+                victim->name(WEN, 2)));
+  tell_object(victim,sprintf("%s kreisch Dich ohrenbetaeubend an.\n",
+                             caster->Name(WER)));
+  dam=sinfo[SI_SKILLDAMAGE]+caster->QueryProp(P_GUILD_LEVEL)*10;
+  dam=sinfo[OFFSET(SI_SKILLDAMAGE)]+ 
+      random(DoModificationByAlign(dam, caster, victim));
+  if (dam > sinfo[SI_MAX_DAMAGE] ) dam=sinfo[SI_MAX_DAMAGE];
+  if (victim->QueryProp(P_DEAF) ) {
+    write( BS(sprintf("%s scheint taub zu sein und kann Dein Kreischen daher "
+                      "nicht hoehren.", victim->Name(WER,2))) );
+    tell_object(victim, "Zu Deinem Glueck kannst Du gar nichts hoeren.\n");
+    dam/=4;
+  }
+  if( dam>444 && succ>6666 ) {
+    tell_object(victim, "Das schrille Kreischen laesst Dich ertauben.\n");
+    victim->SetProp(P_DEAF, caster->QueryProp(P_GUILD_LEVEL)+succ/1000 );
+  }
+  TryAttackSpell(victim, dam, sinfo[SI_SKILLDAMAGE_TYPE],
+     ([SP_NAME:"Nekromantenkreischer",SP_SHOW_DAMAGE:1]), caster, sinfo);
+  return ERFOLG;
+}
+
+
+int is_humanoid(string str)
+{
+  if( member( ({"mensch", "elf", "zwerg", "hobbit", "fee", "troll",
+                "oger", "ork", "gaffo", "goblin", "gnom", "dunkelelf"}),
+      lower_case(str) )!=-1 ) return 1;
+  return 0;
+}
+
+int prep_faeulnis(object caster, mapping sinfo)
+{
+  object victim;
+
+  victim=FindVictim(sinfo[SI_SKILLARG],caster,
+        "Wen willst Du verfaulen lassen?\n");
+  if (!victim) return 0;
+  if( !victim->id("Leiche") )
+    victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wen willst Du verfaulen lassen?\n");
+  if (!victim) return 0;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }                             
+
+  return 1;
+}
+
+int faeulnis(object caster, mapping sinfo) 
+{
+  object victim, ob;
+  object *armours;
+  int dam, i;
+
+  victim=FindVictim(sinfo[SI_SKILLARG],caster,
+        "Wen willst Du verfaulen lassen?\n");
+  if (!victim) return 0;
+  if( victim->id("Leiche") ) 
+    dam=-1;
+  else
+    victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wen willst Du verfaulen lassen?\n");
+  if (!victim) return 0;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  if (SpellSuccess(caster,sinfo)<=0)
+    return MISSERFOLG;
+
+  if( dam==-1 ) {
+    say(BS(sprintf(
+      "%s spricht ein paar magische Worte, woraufhin %s furchtbar zu zucken "
+      "beginnt. Du bemerkst kleine Maden, die sich in %s Haut bohren und das "
+      "Fleisch von den Knochen nagen.",
+      caster->Name(WER), victim->name(WER, 2), 
+      victim->QueryPossPronoun(FEMALE,WEN,SINGULAR))), ({victim, caster}) );
+    write(BS(sprintf(
+      "Du sprichst die magischen Worte, woraufhin %s furchtbar zu zucken "
+      "beginnt. Hunderte kleine Maden bohren sich in %s Haut und nagen das "
+      "Fleisch von den Knochen.",
+      victim->name(WER, 2), 
+      victim->QueryPossPronoun(FEMALE,WEN,SINGULAR) )));
+   
+    if( is_humanoid(victim->QueryProp(P_RACE)) ) {
+      tell_room(ENV(caster), BS(victim->Name(WER,1)+ " zerfaellt und es "
+          "bleibt nur ein Knochenhaufen uebrig."));
+      ob=clone_object( OBJ "knochen");
+      ob->move( ENV(caster), M_NOCHECK);
+      ob->SetProp(P_SIZE, victim->QueryProp(P_SIZE) );
+      ob->SetProp(P_RACE, victim->QueryProp(P_RACE) );
+      ob->SetProp(P_LEVEL, victim->QueryProp(P_LEVEL) );
+      victim->remove();
+    }
+    else {
+      tell_room(ENV(caster), BS(victim->Name(WER,1)+ " zerfaellt zu Staub."));
+      if( !random(3) ) {
+        victim->SetProp(P_KILLER, caster);
+        write("Ungluecklicherweise hast Du eine Pforte ins Totenreich "
+            "aufgestossen.\n");
+        CloneGhost(victim, caster, 10000);
+      }
+      else
+        victim->remove();
+    }
+  }
+  else {
+    say(BS(sprintf(
+      "%s spricht ein paar magische Worte, woraufhin %s furchtbar aufschreit. "
+      "Du bemerkst kleine Maden, die sich in %s Haut bohren.",
+      caster->Name(WER), victim->name(WER, 2), 
+      victim->QueryPossPronoun(FEMALE,WEN,SINGULAR))), ({victim, caster}) );
+    write(BS(sprintf(
+      "Du sprichst die magischen Worte, woraufhin %s furchtbar aufschreit. "
+      "Hunderte kleine Maden bohren sich in %s Haut.",
+      victim->name(WER, 2), 
+      victim->QueryPossPronoun(FEMALE,WEN,SINGULAR) )));
+    tell_object(victim, BS(sprintf(
+      "%s spricht ein paar magische Worte, woraufhin Dich eine Welle von "
+      "Schmerz durchstroemt. Hunderte kleine Maden bohren sich in Deine Haut.",
+    caster->Name() )));
+    dam=sinfo[SI_SKILLDAMAGE]+caster->QueryProp(P_GUILD_LEVEL)*15;
+    dam=random(DoModificationByAlign(dam, caster, victim));
+    if (dam > sinfo[SI_MAX_DAMAGE] ) dam=sinfo[SI_MAX_DAMAGE];
+    if( armours=victim->QueryProp(P_ARMOURS) ){
+      for(i=sizeof(armours)-1;i>=0;i--){
+        if( armours[i]->QueryMaterialGroup(MATGROUP_BIO)>10 ||
+            armours[i]->QueryMaterialGroup(MATGROUP_CLOTH)>10 ||
+            armours[i]->QueryMaterialGroup(MATGROUP_PAPER)>10 ) 
+          armours[i]->Damage(random(3));
+      }
+    }
+    TryAttackSpell(victim, dam, sinfo[SI_SKILLDAMAGE_TYPE],
+      ([SP_NAME:"Nekromantenfaeulnis",SP_SHOW_DAMAGE:1]), caster, sinfo);
+  }
+  return ERFOLG;
+}
+
+int prep_eiterhuelle(object caster, mapping sinfo)
+{
+  if(present("NekromantenEiter", caster)){
+    write( "Aber Du hast doch schon eine Eiterhuelle!\n");
+    return 0;
+  }
+  if(caster->QueryProp(P_HP) > caster->QueryProp(P_MAX_HP)/2) {
+    write( BS( "Du hast leider keine eiternden Wunden, aus denen Du eine "
+      "Eiterhuelle zaubern koenntest! Du bist geradezu ekelerregend gesund."));
+    return 0;
+  }
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }                            
+
+  return 1;
+}
+
+int eiterhuelle(object caster, mapping sinfo)
+{
+  object ob;
+  int succ, temp, lvl, skill, grad;
+
+  if(present("NekromantenEiter", caster)){
+    write( "Aber Du hast doch schon eine Eiterhuelle!\n");
+    return 0;
+  }
+  if(caster->QueryProp(P_HP) > caster->QueryProp(P_MAX_HP)/2) {
+    write( BS( "Du hast leider keine eiternden Wunden, aus denen Du eine "
+      "Eiterhuelle zaubern koenntest! Du bist geradezu ekelerregend gesund."));
+    return 0;
+  }
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  if ( (succ=SpellSuccess(caster,sinfo)) <= -2333 ) {
+    total_fail=1;
+    write("Der Eiter wird ganz gruen und Du verwandelst Dich in einen "
+          "Frosch.\n");
+    caster->SetProp(P_FROG, 1);
+  }
+  if( succ <=0 )  
+    return MISSERFOLG;
+
+  //DB(succ);
+
+  write(BS(
+    "Du entnimmst etwas Eiter und Blut aus einer Deiner Wunden und rufst "
+    "Die Geister der Toten. Du fuehlst wie Dich eine magische Kraft durch"
+    "fliesst, als sich eine fast unsichtbare Schutzhuelle um Deinen Koerper "
+    "aufbaut."));
+
+  skill = sinfo[SI_SKILLABILITY];
+  lvl = caster->QueryProp(P_GUILD_LEVEL);
+  grad= caster->QueryProp(P_GUILD_CIRCLE);
+  temp = lvl+random(succ + skill )/1200; // max.6+16, min.4+0 
+
+  ob=clone_object(OBJ "eiter");
+  ob->SetProp(P_TEMPERATURE_PROTECTION, 
+    ([ T_COLD_PROT: temp + random(5) - 2,
+       T_HEAT_PROT: temp + random(5) - 2]));
+  ob->SetProp(P_NEKRO_FESTER_DEFENCE, lvl*2 + (succ+skill)/500); 
+                                     //max.12+40, min.8+0
+  ob->move(caster, M_NOCHECK);
+  ob->DoWear(1);
+  ob->call_out("remove", lvl*grad+random(succ+skill)/30); 
+                        //max.11 min, min. 1min 
+  return ERFOLG;
+}
+
+int prep_terror(object caster, mapping sinfo)
+{
+  object victim;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wen willst Du terrorisieren?\n");
+  if (!victim)
+    return 0;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }                
+
+  return 1;
+}
+
+int terror(object caster, mapping sinfo) 
+{
+  object victim;
+  int succ, dam;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wen willst Du terrorisieren?\n");
+  if (!victim)
+    return 0;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  if (SpellSuccess(caster,sinfo)<=0)
+    return MISSERFOLG;
+
+  say(sprintf("%s terrorisiert %s mit boeser Magie.\n",
+        caster->Name(WER), victim->name(WEN, 2)), ({victim, caster}) );
+
+  write(sprintf("Du terrorisierst %s mit boeser Magie.\n", 
+                victim->name(WEN, 2)));
+  tell_object(victim,sprintf("%s terrorisiert Dich mit boeser Magie.\n",
+                             caster->Name(WER)));
+
+  if(environment(caster)->QueryProp(P_TOTAL_LIGHT) > 0) 
+    sinfo += ([ SI_SKILLDAMAGE: sinfo[SI_SKILLDAMAGE]/5, 
+                OFFSET(SI_SKILLDAMAGE): sinfo[OFFSET(SI_SKILLDAMAGE)]/5]);
+
+  dam=sinfo[SI_SKILLDAMAGE]+caster->QueryProp(P_GUILD_LEVEL)*10;
+  dam=sinfo[OFFSET(SI_SKILLDAMAGE)]+ 
+      random(DoModificationByAlign(dam, caster, victim));
+  if (dam > sinfo[SI_MAX_DAMAGE] ) dam=sinfo[SI_MAX_DAMAGE];
+  TryAttackSpell(victim, dam, sinfo[SI_SKILLDAMAGE_TYPE],
+    ([SP_NAME:"Nekromantenterror",SP_SHOW_DAMAGE:1]), caster, sinfo);
+  if( victim && random(succ+sinfo[SI_SKILLABILITY]) > random(12000)
+      && dam>555 && random(100) > victim->QueryProp(P_NOMAGIC) ) {
+    victim->SetProp(P_DISABLE_ATTACK,2);
+    tell_object(victim, "Du faellst vor Schreck zu Boden.\n");
+    tell_room(environment(caster), victim->Name(WER,1)+" faellt vor "
+              "Schreck zu Boden.\n", ({victim}) );
+  }
+ 
+  return ERFOLG;
+}
+
+int prep_todesgesang(object caster, mapping sinfo)
+{
+  object *victims;
+
+  victims=FindGroup(caster,-1);
+  if( !victims || !sizeof(victims) ) {
+    tell_object(caster, BS(
+      "Hier ist ja gar niemand, den Du mit Deiem Todesgesang erschrecken "
+      "koenntest!") );
+    return 0;
+  }
+
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }                           
+
+  return 1;
+}
+
+int todesgesang(object caster, mapping sinfo) 
+{
+  object *victims;
+  int succ, i, dam;
+
+  victims=FindGroup(caster,-1);
+  if( !victims || !sizeof(victims) ) {
+    tell_object(caster, BS(
+      "Hier ist ja gar niemand, den Du mit Deiem Todesgesang erschrecken "
+      "koenntest!") );
+    return 0;
+  }
+    
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+
+  if ( (succ=SpellSuccess(caster,sinfo)) <=-1000) {
+    if( !caster->QueryProp(P_DEAF) ) {
+       write("Du sing so widerlich falsch, dass Du selber taub wirst.\n");
+       total_fail=1;
+       caster->SetProp(P_DEAF, 5*caster->QueryProp(P_GUILD_LEVEL)-succ/30);
+    }
+  }
+  if( succ<=0)  
+    return MISSERFOLG;
+
+  say(BS(sprintf(
+    "%s verfaellt in einen tranceartigen Zustand und beginnt, eine "
+    "schreckliche Melodie des Todes zu singen.",
+     caster->Name(WER))), ({caster}) );
+  write(BS("Du singst die Melodie des Todes.")); 
+
+  for(i=sizeof(victims)-1; i>=0; i--)
+  {
+    if(victims[i]->QueryProp(P_DEAF))
+    {
+      tell_object(victims[i], 
+        caster->Name(WESSEN)+" Todesgesang kann Dir aufgrund Deiner Taubheit "
+        "nichts anhaben.");
+      say(BS(sprintf(
+        "%s widersteht aufgrund %s Taubheit voellig %s Angriff.", 
+        victims[i]->Name(WER), 
+        victims[i]->QueryPossPronoun(FEMALE,WESSEN,SINGULAR), 
+        caster->name(WESSEN))), ({victims[i], caster}));
+      write(BS(sprintf(
+        "%s widersteht aufgrund %s Taubheit voellig Deinem Angriff.", 
+        victims[i]->Name(WER), 
+        victims[i]->QueryPossPronoun(FEMALE,WESSEN,SINGULAR) )));
+    }
+    else
+    {
+      tell_object(victims[i], BS(
+        caster->Name(WESSEN)+" Todesgesang dringt in Dein Gehirn ein und "
+        "laesst es fast zerspringen."));
+      write(sprintf("Dein Todesgesang dringt tief in %s Gehirn ein.\n",
+        victims[i]->name(WESSEN) ));
+      say(BS(sprintf(
+        "%s Todesgesang dringt tief in %s Gehirn ein.", 
+        caster->Name(WESSEN), victims[i]->name(WESSEN))), 
+           ({ victims[i], caster }));
+      if( (dam=sinfo[SI_SKILLDAMAGE]-25*sizeof(victims)) < 150 )
+        dam=150;
+      dam=sinfo[OFFSET(SI_SKILLDAMAGE)]+ 
+        random(DoModificationByAlign(dam, caster, victims[i]));
+      if (dam > sinfo[SI_MAX_DAMAGE] ) dam=sinfo[SI_MAX_DAMAGE];
+      TryAttackSpell(victims[i], dam, sinfo[SI_SKILLDAMAGE_TYPE],
+          ([SP_NAME:"Todesgesang",SP_SHOW_DAMAGE:1]), caster, sinfo);
+    }
+  }
+  return ERFOLG;
+}
+
+
+int seelenfrass(object caster, mapping sinfo)
+{
+  object victim;
+  int succ, vsp;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wessen Seele willst Du fressen?\n");
+  if (!victim)
+    return 0;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+
+  if ((succ=SpellSuccess(caster,sinfo)) <= -random(2222)) {
+    write("Du agierst so ungeschickt, dass sich Deine gesamt magische Kraft "
+          "verfluechtigt.\n");
+    total_fail=1;
+    caster->SetProp(P_SP, 0);
+  }
+  if( succ<=0 )
+    return MISSERFOLG;
+
+  if((vsp=victim->QueryProp(P_SP)) < 20 )
+  {
+    write(victim->Name(WESSEN)+" Seele ist leider frei von jeglicher "
+          "magischer Kraft.\n");
+    return ERFOLG;
+  }
+  if( random(100) < victim->QueryProp(P_NOMAGIC) ) {
+    write(victim->Name(WER,1)+ " wehrt Deinen Zauber ab.\n");
+    return ERFOLG;
+  }
+  if( victim->QueryProp(P_LEVEL) > caster->QueryProp(P_LEVEL) ) {
+    write("Die Macht "+victim->name(WESSEN,1)+" ist zu stark!\n"
+        "Deine Seele wird Dir aus dem Leib gerissen!\n\n");
+    call_out("sterben", 0, caster);
+    return ERFOLG;
+  }
+  write(BS(sprintf(
+    "Du frisst die Seele von %s und saugst ihr alle magische Kraft aus, "
+    "die ihr innewohnt.", victim->name(WEM) )));
+  tell_object(victim, sprintf(
+    "%s beraubt Dich all Deiner magische Energie.\n", caster->Name() ));
+  say(BS(sprintf(
+    "%s beraubt %s all %s magischen Energie.", caster->Name(), 
+      victim->name(WEN), 
+      victim->QueryPossPronoun(FEMALE,WESSEN,SINGULAR))), 
+    ({ victim, caster }) );
+  TELL("angrox", sprintf("SEELENFRASS-> SP Gegner:%d, SP geraubt: %O\n", 
+        vsp, vsp*succ/50000.0));
+  caster->AddSp(vsp*succ/50000);
+  victim->SetProp(P_SP, 0);
+
+  return ERFOLG;
+}
+
+sterben(object ob)
+{
+  SetProp(P_KILL_NAME, "Der Verlust der eigenen Seele");
+  tell_object(ob, BS("Dein Koerper faellt tot zu Boden, denn Deine Seele "
+      "wurde vom Koerper getrennt."));
+  ob->die();
+}
+
+int prep_mumifizierung(object caster, mapping sinfo)
+{
+  object corpse, bandage;
+
+  if(!sinfo[SI_SKILLARG] ||
+     !corpse=present(sinfo[SI_SKILLARG], environment(caster)))
+  {
+    write("Welche Leiche willst Du mumifizieren?\n");
+    return 0;
+  }
+  if( !corpse->id("Leiche") ) {
+    write("Du kannst nur Leichen mumifizieren.\n");
+    return 0;
+  }
+  if( caster->InFight() ) {
+    write(BS("Im Kampf bist Du zu beschaeftigt, um eine Leiche zu "
+        "mumifizieren."));
+    return 0;
+  }
+  if( !bandage=present("\nnekromanten_bandangen", caster) ) {
+    write(BS("Du benoetigst die richtigen Bandagen, um eine Leiche "
+        "mumifizieren zu koennen!"));
+    return 0;
+  }
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }                                         
+
+  return 1;
+}
+
+int mumifizierung(object caster, mapping sinfo)
+{
+  int succ;
+  object corpse, mumie, bandage;
+
+  if(!sinfo[SI_SKILLARG] || 
+     !corpse=present(sinfo[SI_SKILLARG], environment(caster))) 
+  {
+    write("Welche Leiche willst Du mumifizieren?\n");
+    return 0;
+  }
+  if( !corpse->id("Leiche") ) {
+    write("Du kannst nur Leichen mumifizieren.\n");
+    return 0;
+  }
+  if( caster->InFight() ) {
+    write(BS("Im Kampf bist Du zu beschaeftigt, um eine Leiche zu "
+        "mumifizieren."));
+    return 0;
+  }
+  if( !bandage=present("\nnekromanten_bandangen", caster) ) {
+    write(BS("Du benoetigst die richtigen Bandagen, um eine Leiche "
+        "mumifizieren zu koennen!"));
+    return 0;
+  }
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+
+  if( !is_humanoid(corpse->QueryProp(P_RACE)) ) 
+  {
+    write("Zu spaet bemerkst Du, dass Du diese Leiche nicht mumifizieren "
+        "kannst.\n");
+    if( random(2) ) {
+      write( "Die Leiche wird lebendig und greift Dich an!\n");
+      say("Die Leiche wird lebendig und greift "+caster->name(WEN)+" an.\n");
+      CloneZombie(corpse, caster, 10000)->Kill(caster);
+    }
+    return 0;
+  }
+  if ((succ=SpellSuccess(caster,sinfo)) <= -3000)
+  {
+     write(BS(
+       "Oh weh! Dein Mumifizierungsversuch ist Dir total misslungen! "
+       "Der Tote, den Du mumifizieren wolltest, wird lebendig und wendet "
+       "sich gegen Dich!"));
+     say(BS(sprintf(
+       "Ploetzlich wird die Leiche lebendig und greift %s an!",
+       caster->name(WEN) )), ({caster}) );
+     CloneZombie(corpse, caster, -succ+random(10000))->Kill(caster);
+     total_fail=1;
+  }
+  if (succ <= 0) return MISSERFOLG;
+
+  write(BS("Du salbst die Leiche mit einem speziellen Oel ein und bindest "
+    "dann ueberall Bandagen ueber den toten Koerper, bis kein Stueck der "
+    "Haut mehr zu sehen ist. Die Augen sind das einzige, was man noch "
+    "erkennen kann.") );
+  say(BS(CAP_TPN+" salbt die Leiche mit einem speziellen Oel ein und bindet "
+      "dann ueberall Bandagen ueber den toten Koerper, bis kein Stueck der "
+      "Haut mehr zu sehen ist. Die Augen sind das einzige, was man noch "
+      "erkennen kann.") );
+  bandage->remove();
+  mumie= clone_object( OBJ "mumie");
+  mumie->move(ENV(caster), M_NOCHECK );
+  mumie->SetProp(P_LEVEL, corpse->QueryProp(P_LEVEL) );
+  mumie->SetProp(P_SIZE, corpse->QueryProp(P_SIZE) );
+  mumie->SetProp(P_RACE, corpse->QueryProp(P_RACE) );
+  corpse->remove();
+  
+  return ERFOLG;
+
+}
+
+int prep_geisterruf(object caster, mapping sinfo)
+{
+  object corpse;
+
+  if(!sinfo[SI_SKILLARG] ||
+     !corpse=present(sinfo[SI_SKILLARG], environment(caster)))
+  {
+    write("Von welcher Leiche willst Du den Geist rufen?\n");
+    return 0;
+  }
+  if( !corpse->id("Leiche") ) {
+    write("Du kannst nur den Geist eines toten Lebewesen rufen.\n");
+    return 0;
+  }
+  if( caster->InFight() ) {
+    write(BS("Im Kampf bist Du zu beschaeftigt, um einen Geist aus der "
+        "Geisterwelt zurueckzuholen."));
+    return 0;
+  }
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }                                  
+
+  return 1;
+}
+  
+int geisterruf(object caster, mapping sinfo)
+{
+  int succ;
+  object corpse, mumie;
+
+  if(!sinfo[SI_SKILLARG] || 
+     !corpse=present(sinfo[SI_SKILLARG], environment(caster))) 
+  {
+    write("Von welcher Leiche willst Du den Geist rufen?\n");
+    return 0;
+  }
+  if( !corpse->id("Leiche") ) {
+    write("Du kannst nur den Geist eines toten Lebewesen rufen.\n");
+    return 0;
+  }
+  if( caster->InFight() ) {
+    write(BS("Im Kampf bist Du zu beschaeftigt, um einen Geist aus der "
+        "Geisterwelt zurueckzuholen."));
+    return 0;
+  }
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+
+  if ((succ=SpellSuccess(caster,sinfo)) <= -2500)
+  {
+     write(BS(
+       "Oh weh! Dein Geisterruf ist Dir total misslungen! Der Geist faehrt "
+       "in seinen alten Koerper und wendet sich gegen Dich!"));
+     say(BS(sprintf(
+       "Ploetzlich wird die Leiche lebendig und greift %s an!",
+       caster->name(WEN) )), ({caster}) );
+     CloneZombie(corpse, caster, -succ+random(5000))->Kill(caster);
+     total_fail=1;
+  }
+  if (succ <= 0) return MISSERFOLG;
+
+  write(BS("Aus den unendlichen tiefen des Geisterreiches holst Du die "
+      "Seele dieser Leiche zurueck in die Welt. Voller Hass auf alles Leben "
+      "wird sich der Geist jetzt an seinem Moerder raechen!"));
+  say(BS(CAP_TPN+" beschwoert einen Geist aus der Leiche, der sich jetzt an "
+      "seinem Moerder raechen wird."));
+  CloneGhost( corpse, caster, succ);
+  
+  return ERFOLG;
+
+}
+// -----------------------------------------------------------
+// -----------------------------------------------------------
+// -----------------------------------------------------------
+
+varargs int DoModificationByAlign(int value, object caster, object victim) 
+{
+  int flag, caster_align, victim_align, diff;
+  flag=1;
+  if(!intp(value)) return 0;
+  if(!objectp(caster)) caster=TP;
+  if(!objectp(victim)) flag=0;
+  caster_align=GetAlign(caster);
+  if(!intp(caster_align)) caster_align=0;
+  if(flag) {
+    victim_align=GetAlign(victim);
+    if(!intp(victim_align)) victim_align=0;
+  }
+  if(victim_align<-400) victim_align*=2;
+  if((diff=caster_align-victim_align)==0) return value;
+  //diff=diff<0?-diff:diff;
+  TELL("angrox", sprintf("NEKRO, DoModificationByAlign: align c/v: %d/%d, "
+        "value v/n: %d/%d\n", caster_align, victim_align, value, 
+        (int)(value*(1-(diff/3000.0)))));
+  return (int)(value*(1-(diff/3000.0)));
+}
+
+static mapping DoSpellModification(object caster,mapping sinfo) 
+{
+  int align, mod, kosten;
+  float cost_modifier, fatigue_modifier, dam_modifier;
+  cost_modifier=1.0;
+  fatigue_modifier=1.0;
+  dam_modifier=1.0;
+  align=GetAlign(caster);
+  if(align>100) {
+    // align 500 -> 0.79, align 1000 -> 1.11
+    cost_modifier+=sqrt((float)(align)/(float)800);
+    fatigue_modifier+=sqrt((float)(align)/(float)800);
+  }
+  
+  // align -1000 -> -0.06 .. -0.03,
+  if(align<-700) 
+    cost_modifier+=(float)((float)(align+700))/((float)(2000+random(2000)));
+ 
+  // Wenn man Gildenstufe 7 ist kosten alle spells um 3 weniger 
+  if(caster->QueryProp(P_GUILD_LEVEL)>6 && sinfo[SI_RAW_SPELLCOST]>=10) 
+    sinfo[SI_RAW_SPELLCOST]-=3;
+
+  // Kostenreduzierung durch innere Grade:
+  // 1. Grad -> +0.28, 7. Grad -> -0.14
+  cost_modifier+=(5-caster->QueryProp(P_GUILD_CIRCLE))/14.0;
+  
+  // Schadenserhoehung durch innere Grade:
+  // 1. Grad -> -0.1, 7. Grad -> +0.2
+  dam_modifier+=(caster->QueryProp(P_GUILD_CIRCLE)-3)/20.0;
+
+  // Licht: pro negativer Lichtstufe um 0.01 billiger
+  // Lichtlvl -1 -> -0.01, Lichtlvl 1 -> +0.01
+  if(ENV(caster)) {
+    cost_modifier+=ENV(caster)->QueryProp(P_LIGHT)*0.01; 
+                   // in std-maessig hellen raeumen kostets mehr.
+  }
+  
+  if(cost_modifier<0.3) cost_modifier=0.3;
+  if(fatigue_modifier<0.3) fatigue_modifier=0.3;
+  if(dam_modifier>1.3) dam_modifier=1.3;
+  
+  if(!sinfo[SI_SPELLFATIGUE]) sinfo[SI_SPELLFATIGUE]=2;
+  if((sinfo[SI_SPELLFATIGUE]=(int)(sinfo[SI_SPELLFATIGUE]*fatigue_modifier))<2)
+    sinfo[SI_SPELLFATIGUE]=2;
+  sinfo[SI_RAW_SPELLCOST]=(int)(sinfo[SI_RAW_SPELLCOST]*cost_modifier);
+  sinfo[SI_SKILLDAMAGE]=(int)(sinfo[SI_SKILLDAMAGE]*dam_modifier);
+  TELL("angrox", sprintf("NEKROspell: cm: %O, fm: %O, dm: %O, align: %d\n",
+        cost_modifier, fatigue_modifier, dam_modifier, align));
+  return sinfo;
+}
+
+static int tell_saf(string msg) 
+{
+  tell_stahldorn( BSA( msg+ANSI_NORMAL, ANSI_BLACK+ANSI_BG_RED+"*** "));
+  tell_angrox( BSA( msg+ANSI_NORMAL, ANSI_BLACK+ANSI_BG_RED+"*** "));
+  tell_feyaria( break_string( msg+ANSI_NORMAL, 96, ANSI_BLACK+ANSI_BG_RED+"*** "));
+  return 1;
+}
+
+static int GetAlign(object spieler) 
+{
+  int align;
+  string msg;
+  if(!intp(align=spieler->QueryProp(P_ALIGN))) {
+    tell_saf(sprintf("nekro_spells: GetAlign, %s hat falschen Datentyp fuer "
+      "Align!", spieler->Name(WER)));
+    spieler->SetProp(P_ALIGN, -1);
+    tell_object(spieler, "[BUG:"+CAP(getuid(spieler))+"] Falscher Dstentyp im "
+        "Align!!!\n");
+    return 0;
+  }
+  if(align<-3000 && !spieler->QueryProp(P_TESTPLAYER) &&
+      !IS_WIZARD(spieler) && interactive(spieler))
+  {
+    msg=sprintf("PL: %s, ALIGN: %d, PO: %O",getuid(spieler), align, 
+        previous_object());
+    write_nekro_log("align.log", msg+"\n");
+    tell_saf(msg);
+    spieler->SetProp(P_ALIGN, -align);
+  }
+  if(align<-1000) return -1000;
+  else if(align>1000) return 1000;
+  return align;
+}

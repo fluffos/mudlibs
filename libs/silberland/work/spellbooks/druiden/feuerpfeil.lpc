@@ -1,0 +1,98 @@
+/*
+ * Feuerpfeil
+ *
+ *
+ * Kosten: 
+ * Level : 5
+ * Objekte:
+ * Damage:
+ *
+ */
+
+int feuerpfeil(object caster, mapping sinfo) 
+{
+  object victim,ob,*victims;
+  string vn, vnw, cn, resist_txt;
+  int suc, dam;
+  mapping resists;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+               BS("Nach wem willst Du einen elementaren Feuerpfeil werfen?\n"));
+  if (!victim)
+    return 0;
+  
+  sinfo=DoSpellModification(FEUER, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  if ((suc=SpellSuccess(caster,sinfo))<=0)
+    return MISSERFOLG;
+  
+  dam=sinfo[SI_SKILLDAMAGE]+
+    5*suc*(caster->QueryProp(P_GUILD_LEVEL))/MAX_ABILITY; 
+  dam=(dam/2)+random(dam/2);
+  
+  cn = caster->name();
+  vnw = victim->name(WEN, 2);
+  say(BS(sprintf("%s feuert einen elementaren Feuerpfeil auf %s ab.\n",cn, vnw)),
+      victim);
+  write_color(BS("Du feuerst einen elementaren Feuerpfeil auf "+vnw+" ab."),
+     FEUER, caster, 1); 
+  tell_object(victim,sprintf("%s feuert einen elementaren "
+              +"Feuerpfeil auf Dich ab.\n",cn));
+  
+  TryAttackSpell(victim,dam, DT_FIRE, 
+      ([SP_NAME:"feuerpfeil",SP_SHOW_DAMAGE:1]),caster,sinfo );
+  if(victim && (suc > 10000 && !random(3) || HAS_MYSTERY(caster, MYSTERY_IGNITE) && random(15000) < suc ) && !present("\n"+FEUER+"pfeil_enhance", victim)) 
+  {
+    ob=clone_object(OBJ("arrow_special"));
+    ob->move(victim, M_NOCHECK);
+    ob->SetVariables(caster,FEUER, victim);
+  }
+  else if(victim && sinfo[SI_SKILLABILITY] == MAX_ABILITY && suc > 7000 &&
+      !present(DRUIDEN_RESIST_MOD, victim) )
+  {   
+    resists=victim->QueryProp(P_RESISTANCE_STRENGTHS);
+    if(mappingp(resists)) {
+      if(!member(resists, DT_WATER))
+        resists+=([DT_WATER:0.0]);
+      if(!member(resists,DT_COLD))
+        resists+=([DT_COLD:0.0]);
+    }
+    if( !mappingp(resists) ||
+        (1.0*(resists[DT_WATER])<=0.1 && 1.0*(resists[DT_COLD])<=0.1) )
+    {
+      ob=clone_object(OBJ("resist"));
+      ob->move(victim, M_NOCHECK);
+      ob->SetVariables(caster,FEUER, victim, suc);
+      resist_txt = BS(victim->Name(WER)+" wird von einer feurigen Aura umhuellt "
+            "und ist jetzt anfaelliger gegen Wasser und Eis.");
+      write_color(resist_txt, FEUER, caster, 1);
+      environment(caster)->Message(resist_txt, MSGFLAG_VISUAL, 
+          ([MSGFLAG_EXCLUDE: ({caster})]) );
+    }
+  }
+
+  if(sizeof(victims=caster->PresentEnemies()) > 1 && HAS_MYSTERY(caster, MYSTERY_SPARKS)) {
+    victims -= ({victim});
+    victim = victims[random(sizeof(victims))];
+    tell_room(ENV(caster), BS(sprintf("Funken von dem Zauber auf und regnen auf %s nieder.",victim->name(WEN, 2))));
+    TryAttackSpell(victim, dam/2, DT_FIRE, ([SP_NAME:"Funken", SP_SHOW_DAMAGE:1]), caster, sinfo);
+  }
+
+  if(suc > 7000 && HAS_MYSTERY(caster, MYSTERY_SHOCKWAVE) && objectp(victim)) {
+    write_color(BS(sprintf("Dein Feuerpfeil explodiert und eine Druckwelle fegt ueber %s hinweg.", victim->name(WEN, 2))), FEUER, caster, 1);
+    say(sprintf("%s Feuerpfeil explodiert und eine Druckwelle fegt ueber %s hinweg.", caster->Name(WESSEN, 1), victim->name(WEN, 2)));
+    if(victim->QueryProp(P_LAST_RAMMEN_TIME)+5 < time() && 
+       caster->QueryProp(P_GUILD_LEVEL)+random(caster->QueryAttribute(A_INT) > victim->QueryAttribute(A_STR))) {
+        tell_room(ENV(victim), BS(sprintf("%s faellt zu Boden.", victim->Name(WER, 2))));
+        victim->SetProp(P_DISABLE_ATTACK, 1);
+        victim->SetProp(P_LAST_RAMMEN_TIME, time());
+    }
+}
+
+  return ERFOLG;
+}

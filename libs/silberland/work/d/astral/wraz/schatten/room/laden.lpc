@@ -1,0 +1,181 @@
+// Laden im Lager der Schattenwelt
+// Vorlage: /d/open/beispiele/dorf/room/laden_100.c (Angrox)
+// Schattenwelt
+// Von Wraz / Mendralim
+
+#include "../def.h"
+#include <laden.h>
+
+inherit "std/laden";
+inherit ROOM "schatten.lpc";
+
+#define MAX_COUNT 15
+
+
+void create()
+{
+  ::create();
+
+  SetProp (P_LIGHT, 1);
+  SetProp (P_INDOORS, 1);
+  SetProp (P_ENVIRONMENT, ([ENV_TERRAIN:TT_HOUSE, ENV_TEMPERATURE:20]));
+  SetProp(P_NO_TPORT,NO_TPORT); // verhindert bersi "Heimkehr" und Druiden "Luftele-Teleport"
+
+  // SetProp(P_INT_LONG, "");
+
+  SetProp(P_INT_SHORT,"Liseth's Material, Waffen, Ruestungen");
+  SetProp(P_SHOPKEEPER_ID, "liseth");
+  SetProp(P_SHOPKEEPER_NAME, "Liseth");
+  SetProp(P_SHOPKEEPER_GENDER, FEMALE);
+  SetProp (P_SHOP_FLAGS, SHOP_HASKEEPER | SHOP_NEEDSKEEPER);
+  SetStorageRoom(ROOM "laden_lagerraum" );
+
+  SetProp (P_SPECIAL_SHOP, random(2) ?
+                           ([P_WC:"Das wird derzeit nicht angekauft.\n"]) :
+                           ([P_AC:"Das wird derzeit nicht angekauft.\n"]) );
+
+  AddDetail( ({"gras", "boden"}),
+    "Gras spriesst spaerlich aus dem Boden unter Deinen Fuessen.");
+
+  AddDetail( ({"fuesse","fuss"}),
+    "Darunter ist der Boden.");
+
+  AddDetail( ({"decke"}),
+    "Die Decke besteht aus Zeltstoff.");
+
+  AddDetail( ({"zeltstoff"}),
+    "Einfacher, grauer Zeltstoff.");
+
+  AddDetail( ({"stangen"}),
+    "Einige Stangen stehen schief. Das Zelt haelt trotzdem.");
+
+  AddDetail( ({"zelt"}),
+    "Es wurde offensichtlich in Eile aufgestellt.");
+
+  AddDetail( ({"tafel"}),
+    "Du kannst sie lesen.");
+
+  AddDetail( ({"tisch","holztisch","verkaufsflaeche"}),
+    "Ein klappbarer Holztisch. Nicht besonders massiv, aber er tut seinen "
+    "Zweck.");
+
+  AddDetail( ({"zweck"}),
+    "Der Tisch dient als Verkaufsflaeche.");
+
+  AddDetail( ({"wand","waende","zeltwand","zeltwaende"}),
+    "Die Waende bestehen aus Zeltstoff.");
+
+  AddDetail( ({"wind"}),
+    "Den Wind siehst Du nicht, aber die flatternden Zeltwaende.");
+
+  AddDetail( ({"zeug"}),
+    "Mit 'zeige' kannst Du es Dir genauer ansehen.");
+
+
+  AddReadDetail("tafel",
+    "Verfuegbare Befehle:\n"
+    "<zeige>             Gibt eine Uebersicht ueber das Angebot.\n"
+    "<zeige> rue|ver|waf Uebersicht ueber Ruestungen/Verschiedenes/Waffen\n"
+    "<zeige> panzer|helme|umhaenge|ringe|...  \n"
+    "<unt> nummer        Gibt eine Beschreibung eines Gegenstands der Liste aus\n"
+    "<kaufe> nummer oder\n"
+    "<kaufe> etwas       Du kaufst einen bestimmten Gegenstand.\n"
+    "<verkaufe> etwas    Du verkaufst einen Gegenstand, den Du bei Dir hast.\n"
+    "<versetze> etwas    Du verkaufst einen Gegenstand, egal wieviel der\n"
+    "                    Haendler dafuer bezahlt.\n"
+    "<schaetz> etwas     Liseth sagt Dir, wieviel ihr ein Gegenstand\n"
+    "                    wert waere, wenn Du ihn verkaufen wuerdest.\n");
+
+
+  AddExit("osten", ROOM "lagerplatz");
+
+  AddItem(NPC "liseth", REFRESH_DESTRUCT);
+}
+
+string _query_int_long()
+{
+  string txt;
+
+  txt = "Du befindest Dich hier in Liseth's Material-, Waffen- und Ruestungsladen.";
+
+  if(QueryProp(P_SHOPKEEPER_ID))
+  {
+    if(!present(QueryProp(P_SHOPKEEPER_ID)))
+    {
+      txt += " Leider ist momentan gerade niemand hier.";
+    }
+    else
+    {
+      txt += "";
+    }
+  }
+
+  return BS(txt);
+}
+
+//  kopiert & adaptiert von /d/kristallwald/sargola/dorf/room/laden.c
+int count_objs(object inv, string fn)
+{
+  if(explode(file_name(inv), "#")[0]==fn)
+    return 1;
+
+  return 0;
+}
+
+// Ueberschreiben von do_sell (Ankauf)
+//  kopiert & adaptiert von /d/kristallwald/sargola/dorf/room/laden.c
+varargs int do_sell(object ob, int force, string prefix, int limit)
+{
+  object *inv;
+  string fn;
+
+  // Haendler da? Meldungen etc.
+  if(!prefix=CheckKeeper(2)) return 0;
+
+  //if((TP) && (lower_case(TP->QueryProp(P_RACE))=="zwerg"))
+  //  return write(BS("Shegraz schimpft: Von Zwergen kaufe ich nichts!")), 1;
+
+  if(sizeof(inv=all_inventory(find_object(QueryStorageRoom()))))
+    {
+      fn=explode(file_name(ob), "#")[0];
+
+      inv=filter_array(inv, #'count_objs, fn); //'
+
+      if(sizeof(inv)>=MAX_COUNT)
+	return write(BS("Liseth meint: Davon habe ich bereits "
+			"genug.")), 1;
+    }
+
+  //if(ob->QueryMaterialGroup(MATGROUP_METAL))
+  //  return write(BS("Ranadrion meint: Nein, ich kaufe nichts aus Metall!")),1;
+
+  return ::do_sell(ob, force, prefix, limit);
+}
+
+void reset()
+{
+ ::reset();
+ SetProp (P_SPECIAL_SHOP, random(2) ?
+                          ([P_WC:"Das wird derzeit nicht angekauft.\n"]) :
+                          ([P_AC:"Das wird derzeit nicht angekauft.\n"]) );
+}
+
+// NotifyPlayerDeath
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  schatten::player_death(player, killer, lostexp);
+}
+
+// Init
+void init()
+{
+  ::init();
+  if(find_call_out("revive") <= 4) call_out("revive",1,TP);
+}
+
+// BecomesNetDead
+void BecomesNetDead(object player)
+{
+  if(sizeof(filter_objects(all_inventory(player),"id","\nshadow_netdeath")) >= 1) return;
+  clone_object(OBJ "schatten_netdeath")->move(player,M_NOCHECK|M_SILENT);
+}

@@ -1,0 +1,173 @@
+//=========================================================================
+//
+// File:    dung_05_02.c
+// Created by Speedy
+//
+// Project: Sarumans Quest (Finde die verlorene Schriftrolle)
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit ROOM "dung-inh";
+
+void create()
+{
+  ::create();
+
+  AddSpecialDetail( ({"fallgitter","gitter"}),            "detail_gitter" );
+  AddSpecialDetail( ({"wand","waende","mauer","mauern"}), "detail_mauer" );
+  AddSpecialDetail( ({"stein","steine","mauersteine","mauerstein"}),
+                                                          "detail_stein" );
+  AddSpecialDetail( ({"hebel"}),                          "detail_hebel" );
+
+  AddCmd( ({"bewege","beweg","schiebe","schieb"}),        "cmd_bewegen" );
+  AddCmd( ({"ziehe","zieh"}),                             "cmd_ziehen" );
+  AddCmd( CMD_OEFFNEN,                                    "cmd_oeffnen" );
+
+  AddExit( "westen", GETEXIT("04_02") );
+  AddExit( "sueden", GETEXIT("05_03") );
+  AddExit( "osten" , ([EX_DEST : GETEXIT("06_02"),EX_TESTFUNC : "exittest"]));
+}
+
+int exittest(string dir)
+{
+  if(SMASTER->QueryDoorStatus(TPUID,"B") == DOOROPENED) return 1;
+  TELLPLAYER("Der Durchgang nach Osten ist durch ein geschlossenes "
+             "Gitter blockiert.\n");
+  return 0;
+}
+
+string _query_int_long()
+{
+  string s;
+
+  if(SMASTER->QueryDoorStatus(TPUID,"B") == DOOROPENED)
+    s = "Im Osten befindet sich ein offenes Fallgitter. ";
+  else
+    s = "Im Osten befindet sich ein geschlossenes Fallgitter. ";
+
+  return BS(ltext1+s);
+}
+
+string detail_gitter(string str)
+{
+  if(SMASTER->QueryDoorStatus(TPUID,"B") == DOORCLOSED)
+    return BS("Das Gitter ist sehr robust, so einfach bekommst Du es sicher "
+              "nicht auf. ");
+
+  return "Das Fallgitter ist geoeffnet, Du kannst durchgehen.\n";
+}
+
+string detail_mauer(string str)
+{
+  if(SMASTER->QueryFlag(TPUID,F_STEIN_DRAUSSEN))
+  {
+    return "Die Wand ist schon sehr alt, ein Stein fehlt aus der Mauer.\n";
+  }
+  return BS("Die Wand ist schon sehr alt. Du entdeckst einen lockeren Stein, "
+            "den man wahrscheinlich bewegen kann.");
+}
+
+string detail_stein(string str)
+{
+  if(SMASTER->QueryFlag(TPUID,F_STEIN_DRAUSSEN))
+    return BS("In der Mauer befindet sich ein Loch. Dort wurde wohl mal ein "
+              "Stein herausgezogen. In dem Loch befindet sich ein Hebel.");
+
+  return BS("In der Wand ist ein Stein, der sich bewegen laesst. Vielleicht "
+            "kannst Du ihn herausziehen.");
+}
+
+string detail_hebel(string str)
+{
+  if(SMASTER->QueryFlag(TPUID,F_STEIN_DRAUSSEN))
+    return BS("In dem Loch in der Wand ist ein Hebel versteckt, vielleicht "
+              "solltest Du ihn mal ziehen. ");
+
+  return "Sowas siehst Du da nicht!\n";
+}
+
+int cmd_oeffnen(string str)
+{
+  notify_fail("Was willst Du oeffnen?\n");
+  if(!str || str == "") return 0;
+
+  if(!(str=="gitter" || str=="fallgitter")) return 0;
+
+  if(SMASTER->QueryDoorStatus(TPUID,"B") == DOOROPENED)
+  {
+    TELLPLAYER("Aber das Gitter ist doch schon offen.\n");
+    return 1;
+  }
+
+  TELLPLAYER("So einfach geht das nicht ...\n");
+  return 1;
+}
+
+int cmd_bewegen(string str)
+{
+  notify_fail("Was willst Du bewegen?\n");
+  if(!str || str == "") return 0;
+  if(!(str=="stein" || str=="mauerstein")) return 0;
+
+  if(SMASTER->QueryFlag(TPUID,F_STEIN_DRAUSSEN))
+  {
+    TELLPLAYER("Keiner der Steine laesst sich bewegen.\n");
+    return 1;
+  }
+
+  TELLPLAYER(BS("Tatsaechlich, der Stein laesst sich bewegen, vielleicht "
+                "solltest Du ihn herausziehen. "));
+  return 1;
+}
+
+int cmd_ziehen(string str)
+{
+  notify_fail("Was willst Du ziehen?\n");
+  if(!str || str == "") return 0;
+
+  if(str == "stein"                ||
+     str == "mauerstein"           ||
+     str == "stein heraus"         ||
+     str == "mauerstein heraus"    ||
+     str == "stein aus mauer"      ||
+     str == "mauerstein aus mauer" ||
+     str == "stein aus wand"       ||
+     str == "mauerstein aus wand"   )
+  {
+    if(SMASTER->QueryFlag(TPUID,F_STEIN_DRAUSSEN))
+    {
+      TELLPLAYER(BS("Keiner der Steine laesst sich herausziehen. Ein Stein "
+                    "wurde aber schon herausgezogen, so dass nun ein Loch in "
+                    "der Wand ist."));
+      return 1;
+    }
+
+    TELLPLAYER(BS("Muehsam ziehst Du einen Stein heraus und entdeckst "
+                  "dahinter einen Hebel. "));
+    SMASTER->SetFlag(TPUID,F_STEIN_DRAUSSEN);
+    return 1;
+  }
+
+  if(str == "hebel" )
+  {
+    if(!SMASTER->QueryFlag(TPUID,F_STEIN_DRAUSSEN)) return 0;
+
+    if(SMASTER->QueryDoorStatus(TPUID,"B") == DOORCLOSED)
+    {
+      TELLPLAYER(BS("Du ziehst an dem Hebel und das Fallgitter im Osten "
+                    "oeffnet sich."));
+      SMASTER->SetDoorStatus(TPUID,"B",DOOROPENED);
+      SMASTER->SetFlag(TPUID,F_TUER_B_OFFEN);
+    }
+    else
+    {
+      TELLPLAYER(BS("Du ziehst und zerrst an dem Hebel, doch er bewegt sich "
+                    "nicht. Irgendwie ist er blockiert."));
+    }
+    return 1;
+  }
+  return 0;
+}
+

@@ -1,0 +1,178 @@
+/*
+ * FluffOS catalog login for SilberLand (LDMud -> FluffOS).
+ * Displays /etc/WELCOME preserved from SilberLand and connects
+ * guests/players to /gilden/abenteurer (Die beruehmte Abenteurergilde).
+ */
+
+string name;
+string password;
+int tries;
+
+void create() {
+  seteuid(getuid());
+}
+
+void show_welcome() {
+  string raw;
+
+  raw = read_file("/etc/WELCOME");
+  if (raw) {
+    raw = replace_string(raw, "\r\n", "\n");
+    write("\n" + raw);
+    if (strlen(raw) && raw[<1] != '\n')
+      write("\n");
+  } else {
+    write("\nWillkommen im SilberLand!\n");
+  }
+  write("Preserved at https://mudlibs.fluffos.info\n");
+}
+
+void logon() {
+  show_welcome();
+  write("Wie willst Du heissen (2-16 Buchstaben, oder 'gast'): ");
+  input_to("get_name", 0);
+}
+
+int valid_name(string str) {
+  int i, n;
+
+  if (!stringp(str))
+    return 0;
+  n = strlen(str);
+  if (n < 2 || n > 16)
+    return 0;
+  for (i = 0; i < n; i++) {
+    if (str[i] < 'a' || str[i] > 'z')
+      return 0;
+  }
+  return 1;
+}
+
+string save_path(string n) {
+  return sprintf("/data/%c/%s", n[0], n);
+}
+
+void enter_guest() {
+  object p;
+  string err;
+
+  p = clone_object("/catalog/player");
+  p->setup_new("gast", "");
+  p->set_guest(1);
+  err = catch(exec(p, this_object()));
+  if (err) {
+    write("exec failed: " + err + "\n");
+    destruct(p);
+    destruct(this_object());
+    return;
+  }
+  p->enter_world();
+  destruct(this_object());
+}
+
+void get_name(string str) {
+  if (!str)
+    str = "";
+  str = lower_case(str);
+  while (strlen(str) && (str[0] == ' ' || str[<1] == ' ')) {
+    if (str[0] == ' ')
+      str = str[1..];
+    else
+      str = str[0..<2];
+  }
+  if (str == "?") {
+    write("Waehle 'gast' zum Umschauen oder gib einen eigenen Namen (2-16 Kleinbuchstaben) ein.\n");
+    write("Wie willst Du heissen: ");
+    input_to("get_name", 0);
+    return;
+  }
+  if (str == "gast" || str == "guest") {
+    enter_guest();
+    return;
+  }
+  if (!valid_name(str)) {
+    write("Bitte 2-16 Kleinbuchstaben (a-z) oder 'gast'.\nWie willst Du heissen: ");
+    input_to("get_name", 0);
+    return;
+  }
+  name = str;
+  if (file_size(save_path(name) + ".o") > 0) {
+    write("Passwort: ");
+    input_to("get_password", 1);
+    return;
+  }
+  write("Ein neuer Abenteurer! Herzlich Willkommen im SilberLand!\nPasswort (mind. 6 Zeichen): ");
+  input_to("new_password", 1);
+}
+
+void get_password(string str) {
+  object p;
+  string stored, err;
+
+  if (!str || strlen(str) < 1) {
+    write("Passwort: ");
+    input_to("get_password", 1);
+    return;
+  }
+  p = clone_object("/catalog/player");
+  if (!p || !p->restore_me(name)) {
+    write("Charakter konnte nicht geladen werden.\n");
+    destruct(this_object());
+    return;
+  }
+  stored = p->query_password();
+  if (crypt(str, stored) != stored && crypt(str, 0) != stored) {
+    tries++;
+    destruct(p);
+    if (tries >= 3) {
+      write("Zu viele Fehlversuche.\n");
+      destruct(this_object());
+      return;
+    }
+    write("Falsches Passwort.\nPasswort: ");
+    input_to("get_password", 1);
+    return;
+  }
+  err = catch(exec(p, this_object()));
+  if (err) {
+    write("exec failed: " + err + "\n");
+    destruct(p);
+    destruct(this_object());
+    return;
+  }
+  p->enter_world();
+  destruct(this_object());
+}
+
+void new_password(string str) {
+  if (!str || strlen(str) < 6) {
+    write("Das Passwort muss mindestens 6 Zeichen lang sein.\nPasswort: ");
+    input_to("new_password", 1);
+    return;
+  }
+  password = str;
+  write("Passwort bestaetigen: ");
+  input_to("confirm_password", 1);
+}
+
+void confirm_password(string str) {
+  object p;
+  string err;
+
+  if (str != password) {
+    write("Die Passwoerter stimmen nicht ueberein.\nPasswort: ");
+    input_to("new_password", 1);
+    return;
+  }
+  p = clone_object("/catalog/player");
+  p->setup_new(name, crypt(password, 0));
+  err = catch(exec(p, this_object()));
+  if (err) {
+    write("exec failed: " + err + "\n");
+    destruct(p);
+    destruct(this_object());
+    return;
+  }
+  p->enter_world();
+  destruct(this_object());
+}

@@ -1,0 +1,75 @@
+mapping prep_doppelschuss(object caster, mapping sinfo, int silent)
+{  
+  object ob1, ob2, *obs;
+  string s, fail, *str, e1, e2;
+  int i;
+  
+  //Aenderungen der Werte im sinfo Mapping vermeiden!
+  if(!TestNoTrance(caster, sinfo) || !GuildItemTest(caster, sinfo) ||
+     !FroschTest(caster, sinfo) || 
+     !BowTest(caster,sinfo)     ||
+     !BlindTest(caster,sinfo)     )
+    return 0;
+
+  if(!objectp(obs=sinfo[SI_ENEMY]))
+  { 
+    s=sinfo[SI_SKILLARG];
+    fail=BS("Syntax: beschowere 'doppelschuss' auf <Gegner1> und <Gegner2> ");
+
+    //Wenn keine Feinde angegeben wurden, werden 2 ausgesucht
+    if(!s || s=="" || s==" ")
+    { i=-1;
+      if(ENV(caster))
+      { str=explode(file_name(ENV(caster)), "/");
+        if( (str[0]=="d") && (str[1]=="pk") ) {i=0;} }
+      obs=FindGroupN(caster,i,2);
+      if(!obs ||   sizeof(obs)<2)
+      { tell_object(caster, BS("Es sind nicht genug Feinde hier."));
+        return 0;}
+    }
+    else if(s)
+    { 
+      if(sscanf(s, "%s und %s", e1, e2) != 2)
+      { tell_object(caster, fail); return 0;}
+      ob1=FindVictim(e1, caster, fail); if(!ob1) {return 0;}
+      ob2=FindVictim(e2, caster, fail); if(!ob2) {return 0;}
+      if (ob1 == ob2) { tell_object(caster, fail); return 0; }
+      obs=({ob1, ob2});  
+    }
+    //DBD(to_string(obs[0])+"\n"+to_string(obs[1])); 
+  }
+  sinfo[SI_ENEMY]=obs;
+  if(!silent){FirstPrepareFuncSuccessfull(caster, sinfo);}
+  aim(caster, sinfo);
+  return sinfo;
+}
+
+int doppelschuss(object caster, mapping sinfo) 
+{
+  object *obs, weapon;
+  int dam, success, ability, i;
+  mixed dts;
+
+  if(!mappingp(sinfo=prep_doppelschuss(caster, sinfo, 1))) return 0;
+  obs=sinfo[SI_ENEMY];
+  
+  success=SpellSuccess(caster,sinfo);
+  if(success<0)
+  {
+    tell_object(caster, BSC("Du bist zu ungeschickt und laesst die Pfeile "
+                        "fallen."));
+    return MISSERFOLG;
+  }
+
+  tell_object(caster, BS("Du schiesst zwei gut gezielte Pfeile auf "+obs[0]->name(WEN, 1)+" und "+obs[1]->name(WEN, 1)+".") );
+  tell_room(ENV(caster), BS(caster->Name(WER, 1)+" schiesst Pfeile auf "+obs[0]->name(WEN, 1)+" und "+obs[1]->name(WEN, 1)+"."), ({caster}));
+
+
+  sinfo[SI_SKILLDAMAGE] += sinfo[SI_SKILLABILITY]/100 + success/100; 
+
+  ExecuteAttackSpell(obs[0], caster, sinfo, ([SP_SHOW_DAMAGE:1]), ATTACK_SPELL_BOW);
+  ExecuteAttackSpell(obs[1], caster, sinfo, ([SP_SHOW_DAMAGE:1]), ATTACK_SPELL_BOW);   
+
+  reload(caster, sinfo);           
+  return ERFOLG;
+}

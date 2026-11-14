@@ -1,0 +1,671 @@
+/*
+**
+** Der Gildenmaster
+**
+** Angrox@Silberland  22.05.1998
+**
+** release: 31.06.1997
+**
+**     --.--.1997-1998: Angrox   
+**                Various updates
+**     22.05.1998 Angrox   
+**                Aenderung Druidenmaster -> Paladinmaster
+**     31.12.1998 Angrox 
+**                Paladinmaster -> Nekromantenmaster
+**     --.--.1998-1999: Angrox, Zordan
+**                Various updates 
+**     26.08.1999 Angrox
+**                Erste Anpassung an die Nekromanten
+**     31.08.1999 Cirion
+**                mnhist implementiert
+**     01.09.1999 Angrox
+**                QueryKilledPaladin() implementiert
+**     18.09.1999 Cirion
+**                mnhist und nhist erweitert (Datumsanzeige)
+**     19.09.1999 Angrox
+**                Anpassung CheckIfAllowed
+**                Anpassung der Topliste
+**     21.09.1999 Cirion
+**                Testweise auf service gesetzt.
+**     23.09.1999 Angrox
+**                AddBlood erweitert, QuerySacrified implementiert
+**     02.10.1999 Angrox
+**                Stelle 10 im Mapping fuer Kills pro Inneren Grad
+**                AdvanceInnerCircle inplementiert
+**                QueryKilled implementiert
+**                AdvanceLevel angepasst
+**                AddBlood auf Abfrage von P_ALIGN erweitert (muss in Leichen
+**                  noch gesetzt werden!)
+**                AddMember debuggt
+**     21.10.2000 Angrox
+**                History funktionen debuggt (invis hinzugefuegt)
+*/
+
+#include <wizlevels.h>
+#include <language.h>
+#include <config.h>
+#include <new_skills.h>
+#include <properties.h>
+#include "../nekro.h"
+#include "/gilden/nekromanten/service/service.h"
+
+inherit "/gilden/nekromanten/service/obj/service";
+
+//Globale Variablen
+mixed saveload;
+nosave int bloodpool;
+nosave mapping members=([ ]);
+nosave mapping top=([ ]);
+nosave string *number_one;
+nosave int *xp_per_level=XP_PER_LEVEL;
+nosave int *blood_per_level=BLOOD_PER_LEVEL;
+nosave int *lxp_per_level=LXP_PER_LEVEL;
+nosave int *kills_per_innercircle=KILLS_PER_INNERCIRCLE;
+nosave string *history=({});
+nosave int *hist_time=({});
+nosave string *mhistory=({});
+nosave int *mhist_time=({});
+
+//Prototypen
+int UpdateMemberLevels();
+mixed QueryKilledPaladin(object pl);
+
+create() {
+  ::create();
+  if (restore_object(MEMBERLIST))
+     members=saveload;
+  if (restore_object(TOPLIST))
+     top=saveload;
+  if (restore_object(BLOODPOOL))
+     bloodpool=saveload;
+  saveload=0;
+  SetNumberOne();    
+}
+
+nosave int CheckIfAllowed() {
+  object ob;
+  string fname;
+  ob=previous_object();
+  fname=file_name(ob);
+  if(!CheckSecurity(ob)) { 
+    MASTER->runtime_error(sprintf("Versuchte Aenderung im Gildenmaster "
+          "der Nekromanten von %s (direkt!)\n", CAP(getuid(ob))), 
+          "gilden/nekromanten/master/nekromaster.lpc", "", 69);
+    write_secure_log(ctime()+": Versuchte Aenderung im Gildenmaster "
+             +"von "+CAP(getuid(ob))+" (direkt!)\n");
+    return 0;      
+  }
+  return 1;
+}
+
+nosave mixed object2string(mixed name) {
+  if(objectp(name)) return getuid(name);
+  if(stringp(name)) return lower_case(name);
+  return 0;
+}
+
+nosave mixed string2object(mixed name) {
+  if(objectp(name)) return name;
+  if(stringp(name))
+    if(name=find_player(name) || name=find_netdead(name)) return name;
+  return 0;
+}
+
+//
+//  Backuphandling
+//
+int DoBackup() {
+  if (!CheckIfAllowed()) return -2;
+  saveload=members;
+  save_object(MEMBERBACKUP);
+  saveload=0;
+  rm(BACKUP+"backup.log");
+  write_file(BACKUP+"backup.log",
+             "Letztes Backup: "+dtime(time())+"\n");
+  return 1;
+}
+
+int DoRestore() {
+  if(!CheckIfAllowed()) return -2;
+  if(restore_object(MEMBERBACKUP))
+      save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+ 
+
+
+/*
+//
+// Taskhandling
+//
+*/
+
+int CheckTask(mixed pl, int nr) {
+ if(!pl=object2string(pl)) return -3;
+ if(!member(members, pl)) return 0;
+ if(!stringp(members[pl, 4])) return 0;
+ return test_bit(members[pl, 4], nr);       
+}
+
+int SetTask(mixed pl, int nr) {
+  string tasks;
+  if(!pl=object2string(pl)) return -3;
+  if(!member(members, pl))
+    return 0;
+  if (!CheckIfAllowed()) return -2;
+  if(!stringp(members[pl, 4])) tasks="";
+  else 
+    tasks=members[pl, 4];
+  tasks=set_bit(tasks, nr);
+  members[pl, 4]=tasks;
+  saveload=members;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+int DeleteTask(mixed pl, int nr) {
+  string tasks;
+  if(!pl=object2string(pl)) return -3;
+  if(!member(members, pl))
+    return 0;
+  if (!CheckIfAllowed()) return -2;
+  if(!stringp(members[pl, 4])) tasks="";
+  else 
+    tasks=members[pl, 4];
+  tasks=clear_bit(tasks, nr);
+  members[pl, 4]=tasks;
+  saveload=members;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+/* 
+//   Format: ([Name:int,int,int,int,({str,int}),int,int,int,int,int,0,0,0])
+//                   0   1   2   3       4       5   6   7   8   9  A
+//            
+//  0  ... Gildenstufe
+//  1  ... XP fuer naechste Stufe
+//  2  ... Spielerlevel
+//  3  ... Align
+//  4  ... ({geopfertert Paladine, Geschlecht})
+//  5  ... Lost XP fuer naechste Stufe
+//  6  ... Summe Lost XP 
+//  7  ... NPC Stufen fuer naechste Stufe
+//  8  ... NPC Stufen seit Beitritt
+//  9  ... Anzahl der geopferten NPCs
+//  A  ... Anzahl NPCs fuer naechsten GRAD!
+*/
+int AddMember(mixed pl, mixed paladin) {
+  string pl_str;
+  int xp, lxp, lvl, align;
+  if(!pl=string2object(pl)) return -3;
+  if(member(members, pl))
+    return 0;
+  if (!CheckIfAllowed()) return -2;
+  pl_str=getuid(pl);
+  xp=pl->QueryProp(P_XP);
+  lxp=pl->QueryProp(P_LOST_XP);
+  lvl=pl->QueryProp(P_LEVEL);
+  align=pl->QueryProp(P_ALIGN);
+  members+=([pl_str:1;
+                    xp+xp_per_level[0];
+                    lvl;
+                    align;
+                    paladin;
+                    lxp+lxp_per_level[0];
+                    lxp;
+                    blood_per_level[0];
+                    0;
+                    0;
+                    kills_per_innercircle[0];
+                    0
+           ]);
+  saveload=members;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+
+// Zum Hinzufuegen von eintragen im mapping
+int ChangeMemberFile() {
+  mapping help_map;
+  int i;
+  string *namen;
+  return 0; // Wenn nichts zu aendern ist, bitte immer diese Zeile
+            // drinnenlassen (Sicherheitsgruende)
+  help_map=([]);
+  namen=m_indices(members);
+  for(i=sizeof(namen)-1;i>=0;i--) {
+    help_map+=([namen[i]:members[namen[i],0];
+                           members[namen[i],1];
+                           members[namen[i],2];
+                           members[namen[i],3];
+                           members[namen[i],4];
+                           members[namen[i],6];
+                           members[namen[i],7];
+                           members[namen[i],8];
+                           members[namen[i],9];
+                           members[namen[i],10];
+                           members[namen[i],11];
+                           members[namen[i],12]
+                           ]);
+  } 
+  members=help_map;
+  saveload=members;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+/* Mitglied loeschen */
+int DeleteMember(mixed pl) {
+  if(!pl=object2string(pl)) return -1;
+  if(!CheckIfAllowed()) return -2;
+  if(!member(members, pl))
+    return -3;
+  members=m_delete(members, pl);
+  saveload=members;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+/* 
+//   Format: ([Name:int,int,int,int,({str,int}),int,int,int,int,int,0,0,0])
+//                   0   1   2   3       4       5   6   7   8   9  A
+//            
+//  0  ... Gildenstufe
+//  1  ... XP fuer naechste Stufe
+//  2  ... Spielerlevel
+//  3  ... Align
+//  4  ... ({geopfertert Paladine, Geschlecht})
+//  5  ... Lost XP fuer naechste Stufe
+//  6  ... Lost XP seit Beitritt
+//  7  ... NPC Stufen fuer naechste Stufe
+//  8  ... NPC Stufen seit Beitritt
+//  9  ... Anzahl der geopferten NPCs
+//  A  ... Anzahl NPCs fuer naechsten GRAD!
+*/
+int AdvanceLevel(mixed pl) {
+  int lev;
+  string pl_str;
+  if(!pl=string2object(pl)) return -1;
+  if(!CheckIfAllowed()) return -2;
+  pl_str=getuid(pl);
+  if(!member(members, pl_str)) return -3;
+  lev=pl->QueryProp(P_GUILD_LEVEL);
+  members[pl_str,0]=lev;
+  members[pl_str,1]=pl->QueryProp(P_XP)+xp_per_level[lev-1];
+  members[pl_str,2]=pl->QueryProp(P_LEVEL);
+  members[pl_str,3]=pl->QueryProp(P_ALIGN);
+  members[pl_str,5]=pl->QueryProp(P_LOST_XP)+lxp_per_level[lev-1];
+  members[pl_str,7]=blood_per_level[lev-1];
+  members[pl_str,10]=kills_per_innercircle[0];
+  saveload=members;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+int AdvanceInnerCircle(mixed pl) {
+  int ic;
+  string pl_str;
+  if(!pl=string2object(pl)) return -1;
+  if(!CheckIfAllowed()) return -2;
+  pl_str=getuid(pl);
+  if(!member(members, pl_str)) return -3;
+  ic=pl->QueryProp(P_GUILD_CIRCLE);
+  members[pl_str,10]=kills_per_innercircle[ic-1];
+  saveload=members;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}  
+// Alle Mitglieder ausgeben
+mixed QueryMembers() {
+  return m_indices(members);
+}
+
+// Eintrag im Savefile ausgeben
+mixed QueryMemberEntry(string pl) {
+  if(!member(members,pl)) return 0;
+  return ({members[pl,0], members[pl,1], members[pl,2], members[pl,3], 
+           members[pl,4], members[pl,5], members[pl,6], members[pl,7], 
+           members[pl,8], members[pl,9], members[pl,10] }); 
+}
+
+
+/* Levels updaten */
+int UpdateMemberLevels() {
+  int i;
+  object pl;
+  string *names;
+  names=m_indices(members);
+  for(i=sizeof(names)-1; i>=0;i--) {
+    if((pl=find_player(names[i]))||(pl=find_netdead(names[i]))) {
+      members[names[i], 0]=pl->QueryProp(P_GUILD_LEVEL);
+      members[names[i], 2]=pl->QueryProp(P_LEVEL);
+      members[names[i], 3]=pl->QueryProp(P_ALIGN);
+    } else {
+      members[names[i], 0]=call_other(SAVEMASTER, "QueryFileProp", names[i],
+         P_GUILD_LEVEL);
+      // Das richtige Gildenlevel muss ausgelesen werden : 
+      if (mappingp(members[names[i], 0]))
+        members[names[i], 0]=members[names[i], 0][GUILDNAME];
+      members[names[i], 2]=call_other(SAVEMASTER, "QueryFileProp", names[i],
+         P_LEVEL);
+      members[names[i], 3]=call_other(SAVEMASTER, "QueryFileProp", names[i],
+         P_ALIGN);
+    }
+  }
+  saveload=members;
+  save_object(MEMBERLIST);
+  return 1;
+}
+
+int CheckXp(mixed pl, int cur_xp) {
+  if(!pl=object2string(pl)) return -1;
+  if(!member(members, pl)) return -3;
+  if(members[pl, 0] > cur_xp)
+    return 0;
+  else return 1;
+}
+
+int QueryXpDifference(mixed pl) { 
+  int diff;
+  if(!pl=string2object(pl)) return -1;
+  if(!member(members, getuid(pl))) return -3;
+  diff=members[getuid(pl), 1]-(pl->QueryProp(P_XP));
+  if(diff<0) return 0;
+  else return diff;
+}
+
+int AddBloodPool(int value) {
+  bloodpool+=value;
+  if(bloodpool >= MAX_BLOODPOOL) {
+    call_out("ZombieEvent", 10);
+    bloodpool/=2;
+  }
+  saveload=bloodpool;
+  save_object(BLOODPOOL);
+  saveload=0;
+  return 1;
+}
+
+int UseBloodPool(int value) {
+  if(value > bloodpool) return 0;
+  bloodpool-=value;
+  saveload=bloodpool;
+  save_object(BLOODPOOL);
+  saveload=0;
+  return 1;
+}
+
+varargs int AddBlood(mixed pl, int blood, int align) {
+  if(!pl=object2string(pl)) return -1;
+  if(!CheckIfAllowed()) return -2;
+  if(!member(members, pl)) return -3;
+  if(!align) align=1;
+  if(align>0) {
+    members[pl, 7]-=blood;
+    if(members[pl,7]<0) members[pl,7]=0;
+    members[pl, 8]+=blood;
+  }
+  members[pl, 9]++; 
+  members[pl, 10]--; 
+  if(members[pl,10]<0) members[pl,10]=0;
+  AddBloodPool(blood);
+  saveload=members;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+int QueryNeededBlood(mixed pl) {
+  if(!pl=object2string(pl)) return -1;
+  if(!member(members, pl)) return -3;
+  return members[pl, 7];
+}
+
+int QueryBlood(mixed pl) {
+  if(!pl=object2string(pl)) return -1;
+  if(!member(members, pl)) return -3;
+  return members[pl, 8];
+}
+
+int QuerySacrified(mixed pl) {
+  if(!pl=object2string(pl)) return -1;
+  if(!member(members, pl)) return -3;
+  return members[pl, 9];
+}
+
+mixed QuerySacrifiedPaladin(mixed pl) {
+  if(!pl=object2string(pl)) return -1;
+  if(!member(members, pl)) return -3;
+  return members[pl, 4];
+}
+
+
+int QueryKilled(mixed pl) {
+  if(!pl=object2string(pl)) return -1;
+  if(!member(members, pl)) return -3;
+  return members[pl, 10];
+}
+
+// Farben setzen uns auslesen
+int SetColors(mixed pl, mixed colors) {
+  if(!pl=object2string(pl)) return -1;
+  if(!member(members, pl)) return -3;
+  members[pl,9]=colors;
+  saveload=members;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+mixed QueryColors(mixed pl) {
+  if(!pl=object2string(pl)) return -1;
+  if(!member(members, pl)) return -3;
+  return members[pl,9];
+}
+
+// Gekillten Paladin setzen
+int SetKilledPaladin(mixed pl, mixed paladin, int gender) {
+  if(!pl=object2string(pl)) return -1;
+  if(!CheckIfAllowed()) return -2;
+  if(!member(members, pl)) return -3;
+  members[pl,4]=({paladin, gender});
+  saveload=members;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+// ... und abfragen
+mixed QueryKilledPaladin(mixed pl) {
+  if(!pl=object2string(pl)) return -1;
+  if(!member(members, pl)) return -3;
+  return members[pl,4];
+}
+
+// History des mages_shout
+int AddMagesHistory(string presay, string msg) {
+  int i;
+  
+  if ( sizeof(mhistory) > 20 )
+  {
+    mhistory=mhistory[1..<1];
+    mhist_time=mhist_time[1..<1];
+  }
+  mhistory+=({implode(({presay, msg}), "&&*%%")});
+  mhist_time+=({time()});
+  return 1;
+}
+mixed QueryMagesHistory() {
+  return ({mhist_time,mhistory}); 
+}
+
+// History des guild_shout
+int AddHistory(string presay, string msg, int invis) {
+  int i;
+  
+  if ( sizeof(history) > 10 )
+  {
+    history=history[1..<1];
+    hist_time=hist_time[1..<1];
+  }
+  history+=({implode(({presay, msg, to_string(invis)}), "&&*%%")});
+  hist_time+=({time()});
+  write_file(NHIST_LOG, sprintf("%s - %s%s", dtime(time()), 
+        presay, msg));
+  return 1;
+}
+mixed QueryHistory() {
+  return ({hist_time,history}); 
+}
+
+/* Den Besten herausfiltern und in einer Variablen speichern. */
+int SetNumberOne() {
+  int i, *topratings, bestrating;
+  bestrating=0;
+  topratings=m_indices(top);
+  for(i=sizeof(topratings)-1;i>=0;i--)
+    if(topratings[i]>bestrating) bestrating=topratings[i];
+  number_one=top[bestrating];
+  return 1; 
+}
+
+/* Den Besten ausgeben */
+mixed QueryNumberOne() {
+  return number_one;
+}
+
+/* Berechnung der Wertung */
+int CalculateRating(string player, int rating, int stufe, mixed align) {
+  int last, lxp, gsu;
+  float mod;
+  object pl;
+  if(!intp(align)) align=0;
+  lxp=members[player, 6];
+  gsu=members[player, 9];
+  rating+=gsu+lxp/10000+2*stufe+align/35;
+  if(pl=find_player(player) || pl=find_netdead(player))
+    last=pl->QueryProp(P_LAST_LOGIN);
+  else
+    last=call_other(SAVEMASTER, "QueryFileProp", player, P_LAST_LOGIN);
+  if((time()-1728000)>last) {         // 3600*24*20 = 20 tage
+    mod=1-((time()-1728000-last)/86400)*0.05;
+    if((rating=(int)(rating*mod))<0) rating=1;
+  }
+  return rating;
+}
+
+/* Fuers Austreten -> Raus aus der Topliste */
+int DeleteTopEntry(string player) {
+  int *topratings, i; 
+  string *topnames;
+  if (!CheckIfAllowed()) return -2;
+  topnames=m_values(top);
+  topratings=m_indices(top);
+  for(i=sizeof(topnames)-1;i>=0;i--) 
+    if(member(topnames[i], player)!=-1) 
+      top[topratings[i]]-=({player});
+  saveload=top;
+  save_object(TOPLIST);
+  return 1;
+}
+
+/* Topliste updaten */
+int UpdateTopList() {
+  string *names, *topnames;
+  int rating, i, j, *topratings, test;
+  object pl;
+  names=m_indices(members);
+  top=([]);
+  //topnames=m_values(top);
+  //topratings=m_indices(top);
+  for(i=sizeof(names)-1;i>=0;i--) {
+    rating=0;
+    if(query_wiz_level(names[i])>0) {  // muss wieder auf <3 geaendert werden!!!
+      if(((pl=find_player(names[i]))||(pl=find_netdead(names[i]))) &&
+         !pl->QueryProp(P_TESTPLAYER))
+        rating=CalculateRating(names[i], pl->QueryProp(P_GUILD_RATING), 
+               pl->QueryProp(P_LEVEL), pl->QueryProp(P_ALIGN));
+      else {
+        if(!call_other(SAVEMASTER, "QueryFileProp", names[i], P_TESTPLAYER))
+          rating=CalculateRating(names[i],
+            call_other(SAVEMASTER, "QueryFileProp", names[i], P_GUILD_RATING), 
+            call_other(SAVEMASTER, "QueryFileProp", names[i], P_LEVEL),
+            call_other(SAVEMASTER, "QueryFileProp", names[i], P_ALIGN));
+      }      
+    }
+    if(rating) {
+      //for(j=sizeof(topnames)-1;j>=0;j--) 
+      //  if(member(topnames[j], names[i])!=-1) 
+      //    top[topratings[j]]-=({names[i]});
+      if(!member(top, rating)) 
+        top+=([rating:({names[i]})]);
+      else top[rating]+=({names[i]});
+    }   
+  }
+  for(i=sizeof(m_indices(top))-1;i>=0;i--) 
+    if(!sizeof(m_values(top)[i]))
+      top=m_delete(top, m_indices(top)[i]);
+  saveload=top;
+  save_object(TOPLIST);
+  return 1;   
+}
+
+/* Topliste in file 'toplist.read' schreiben, Ausgabe ueber 'more' */
+int MakeReadList() {
+  int *arm, i, j, tabs, tabs2, gstufe, stufe, nummer, seelen, lxp;
+  float best, fac;
+  string name, align;
+  UpdateMemberLevels();
+  rm(REALTOPLIST);
+  nummer=1;
+  write_file(REALTOPLIST, "    Name\tGST  SST  GSU  Todeserfahrung "
+    "  Gesinnung\tWertung\n");
+  write_file(REALTOPLIST, "-----------------------------------------"
+                     +"------------------------------\n");
+  arm=sort_array(m_indices(top), #'>); //');
+  if((i=sizeof(arm))>100) i=100;
+  for(i=i-1;i>=0;i--) {
+    if(arm[i]) {
+      if(i==sizeof(arm)-1)
+        best=(float)arm[i];
+      for(j=sizeof(top[arm[i]])-1;j>=0;j--) {
+        name=top[arm[i]][j];
+        fac=(float)(arm[i]/best)*100;
+        align=call_other("/std/player/base", "al_to_title", 
+            members[lower_case(name),3]);
+        tabs=1; //+(int)(strlen(name)/8);
+        if (strlen(name) < 4) tabs++;
+        tabs2=2-(int)(strlen(align)/8);
+        gstufe=members[name, 0];
+        stufe=members[name, 2];
+        lxp=members[name, 5];
+        seelen=members[name,9];
+        ta(sprintf("%s: gst: %O\n", name, gstufe));
+        if(!gstufe) continue;
+        if(arm[i]==1)
+	  write_file(REALTOPLIST, sprintf("%2d. %s%*'\t's%3d  %2d\t%d\r%d\t%s"
+              "%*'\t's%s\n", nummer, name, tabs, "", gstufe, stufe, 
+             seelen, lxp,align, tabs2, "", "  -.---"));
+        else 
+	 write_file(REALTOPLIST, sprintf("%2d. %s%*'\t's%3d  %3d  %4d\t%14d"
+               "\t%s%*'\t's%7.3f\n", nummer, CAP(name), tabs, "", gstufe, 
+               stufe, seelen, lxp, align, tabs2, "", fac));
+        nummer++;
+      }
+    }
+  }
+  return 1;
+}
+
+int ZombieEvent() {
+  // Hier kommt das Zombieevent hin
+}

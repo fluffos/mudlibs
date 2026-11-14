@@ -1,0 +1,169 @@
+inherit "/std/container";
+
+#include <properties.h>
+#include "../def.h"
+
+
+int gebunden;
+string draufsteht;
+string eigentuemer;
+
+
+nosave void BindOn()
+{
+   gebunden=1;
+   SetProp(P_SHORT, "Ein kleiner Sack (festgebunden)");
+   SetProp(P_WEIGHT_PERCENT, 35);
+}
+
+nosave void BindOff()
+{
+   gebunden=0;
+   SetProp(P_SHORT, "Ein kleiner Sack");
+   SetProp(P_WEIGHT_PERCENT, 60);
+}
+
+string washaltdadraufsteht(string str)
+{
+  if (!draufsteht || draufsteht=="")
+    return "Der Zettel ist leer.\n";
+  return break_string("Auf dem Zettel steht: '" + draufsteht + "'.", 78);
+}
+
+
+void create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+  SetProp(P_LONG, "Ein kleiner Filzsack, den man sich bequem um die Taille "
+    "binden kann und deshalb das Gewicht in ihm drin kaum spuerbar macht. "
+    "An seiner Oberseite ist - neben einer langen Schnur - ein Zettel, "
+    "auf dem man den Sack beschriften kann.");
+  AddId(({"sack", "filzsack", "stahl\nsack"}));
+  SetProp(P_NAME, "Sack");
+  SetProp(P_INFO, "Du kannst den Zettel am Sack beschriften.\n"
+     "(Syntax: beschrifte sack mit <text>\n");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_WEIGHT, 150);
+  SetProp(P_MAX_WEIGHT, 5000);
+  SetProp(P_VALUE, 250);
+  SetProp(P_MATERIAL, ([MAT_FELT:80, MAT_PAPER:5, MAT_COTTON:15]));
+  AddCmd(({ "binde", "bind" }), "cmdBinde");
+  AddCmd(({ "beschrifte" }), "cmdBeschrifte");
+  BindOff();
+  AddDetail("schnur", 
+    "Die Schnur ist lange genug, dass du den Sack um die Taille binden "
+    "kannst.");
+  AddDetail("zettel", "Lies ihn!\n");
+  AddReadDetail("zettel", #'washaltdadraufsteht);
+
+}
+
+int cmdBinde(string str)
+{
+   string *tmp;
+
+   tmp=explode(str, " ");
+   if( !sizeof(tmp) || ((tmp[0] != "sack") && (tmp[0] !="filzsack"))) 
+   {
+     notify_fail("Was willst Du wo anbinden?\n");
+     return 0;
+   }
+
+   if(!MENV || !living(MENV))
+   {
+     notify_fail("Du musst den Sack doch erst mal nehmen!\n");
+     return 0;
+   }
+
+   if((str != "sack an taille") && (str != "filzsack an taille")
+       && (str != "sack an taille fest") )
+   {
+     if((str != "sack los") && str != "filzsack los")
+     {
+       notify_fail("Woran willst Du den Sack festbinden?\n");
+       return 0;
+     }
+     if(!gebunden)
+     {
+       notify_fail("Du hast den Sack doch gar nicht festgebunden!\n");
+       return 0;
+     }
+
+     BindOff();
+     write("Du bindest den Sack von Deiner Taille los.\n");
+     say(TP->Name()+" bindet einen kleinen Sack von "+
+         TP->QueryPossPronoun(FEMALE, WEM)+ " Taille los.\n");
+     return 1;
+    }
+
+   if(gebunden)
+   {
+    notify_fail("Du hast den Sack doch schon an Deiner Taille festgebunden!\n");
+    return 0;
+   }
+
+   BindOn();
+   write("Du bindest den Sack an Deiner Taille fest.\n");
+   say(TP->Name()+" bindet einen kleinen Sack an " +
+       TP->QueryPossPronoun(FEMALE, WEM)+" Taille fest.\n");
+   return 1;
+}
+
+
+varargs int move(mixed dest, int method)
+{
+  BindOff();
+  return ::move(dest, method);
+}
+
+
+nosave int cmdBeschrifte(string wiebitte)
+{
+  string schrift, sack;
+
+  notify_fail("Was willst Du beschriften?\n");
+  if ( !wiebitte || !this_player() || !interactive(this_player()) )
+    return 0;
+
+  if (id(wiebitte)) {
+    write("Beschrifte ... mit ...?\n");
+    return 1;
+  }
+  if (!wiebitte = (string) this_player()->_unparsed_args())
+    return 0;   // kann eigtl. nie passieren :)
+  if (sscanf(wiebitte,"%s mit %s",sack, schrift)!=2) {
+    notify_fail("Beschrifte ... mit ...?\n");
+    return 0;
+  }
+  if (!id(sack)) {
+    notify_fail("Das kannst Du wohl nicht beschriften.\n");
+    return 0;
+  }
+  if (draufsteht) {
+    write(break_string("Auf dem Zettel des Sacks steht bereits klar und "
+        "deutlich: '" + draufsteht + "'. Das kriegst Du so leicht nicht "
+        "wieder ab. :(", 78));
+    return 1;
+  }
+  if ((!schrift) || (schrift=="")) {
+    write("Guter Ansatz, aber mit was moechtest Du den Sack beschriften?\n");
+    return 1;
+  }
+  if (strlen(schrift) < 3) {
+    write("Was laengeres faellt Dir nicht ein??\nNaja. ");
+    // Aber ist ok :)
+  }
+  if (strlen(schrift) > 150) {
+    write("Mmmh, so viel passt da nicht drauf, fasse Dich ein wenig "
+        "kuerzer.\n");
+    return 1;
+  }
+  eigentuemer = getuid(TP);
+  draufsteht = schrift;
+  write("Ok, Du schreibst es auf den Zettel.\n");
+  say(TP->Name() + " schreibt etwas auf einen Zettel an seinem Sack.\n");
+  SetProp(P_INFO, "Der Sack wurde von " + capitalize(eigentuemer) +
+      " beschriftet.\n");
+  return 1;
+}

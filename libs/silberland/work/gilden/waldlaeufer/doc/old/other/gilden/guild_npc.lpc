@@ -1,0 +1,164 @@
+/*
+**
+**  Standard-Gilden-NPC
+**
+**  (c) 01/09/1999 by Cirion@Silberland
+**
+**  v 0.01 0109199 Release version
+**                 Nur Nekromanten
+**
+**
+*/
+
+inherit "std/npc";
+inherit "std/npc/spells";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <wizlevels.h>
+#include "../paladin.h"
+
+#pragma strong_types
+
+// Prototypes
+int create_guild_npc(string guild,int guild_level,int level,int flags);
+// Globvars
+
+void create() {
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein Gildennpc");
+  SetProp(P_LONG,
+    "Das ist ein simpler Gildennpc.");
+  SetProp(P_NAME, "Gildennpc");
+  SetProp(P_GENDER, MALE);
+  AddId( ({GUILD_NPC}));
+
+  SetProp(P_GUILD, "INVALID_GUILD");
+  SetProp(P_GUILD_LEVEL, 1);
+
+  call_other("/gilden/paladine","learn_paladin_skills", 10000);
+  ModifySkill("behandle",      10000);
+  ModifySkill("behandle",      ([SI_PREPARE_TIME:0, SI_SPELLCOST:0,
+                                 SI_SKILLRESTR_USE:([SR_FREE_HANDS:0]) ]) );
+  ModifySkill("waffensegen",   10000);
+  ModifySkill("waffensegen",   ([SI_PREPARE_TIME:0, SI_SPELLCOST:0]) );
+  ModifySkill("zielattacke",   10000);
+  ModifySkill("zielattacke",   ([SI_PREPARE_TIME:0, SI_SPELLCOST:0]) );
+  ModifySkill("behandle",      10000);
+  ModifySkill("behandle",      ([SI_PREPARE_TIME:0, SI_SPELLCOST:0]) );
+  ModifySkill("heiligengebet", 10000);
+  ModifySkill("heiligengebet", ([SI_PREPARE_TIME:0, SI_SPELLCOST:0]) );
+  ModifySkill("spiegelschild", 10000);
+  ModifySkill("spiegelschild", ([SI_PREPARE_TIME:0, SI_SPELLCOST:0]) );
+  ModifySkill("goetterschutz", 10000);
+  ModifySkill("goetterschutz", ([SI_PREPARE_TIME:0, SI_SPELLCOST:0,
+                                 SI_SKILLRESTR_USE:([SR_FREE_HANDS:0]) ]) );
+
+  SetProp(P_HANDS, ({" mit ihren heiligen Haenden",300,DT_HOLY}));
+  SetProp(P_XP, QueryProp(P_XP)+150*100); // Bonus fuer Spells
+  SetProp(P_RACE, "Mensch");
+  SetProp(P_SIZE, 187);
+  SetProp(P_ALIGN, 1000);
+  SetProp(P_MAX_HANDS, 4);
+  SetProp(P_HEAL,20);
+  SetProp(P_AGGRESSIVE,0);
+  SetProp(P_WIMPY, 0);
+  SetProp(P_AGGRESSIVE, ([P_RACE:(["Dunkelelf":0.02]),
+                        P_GUILD:(["Nekromanten":0.05])]));    
+  SetProp(P_RESISTANCE_STRENGTHS , 
+    ([
+      DT_SLASH:     -0.7, DT_BLUDGEON:  -0.4, DT_PIERCE: -0.4, DT_SQUEEZE:-0.4, 
+      DT_WHIP:      -0.4, DT_RIP:       -0.4,
+      DT_FIRE:      -0.4, DT_COLD:      -0.3, DT_WATER:  -0.4, DT_AIR:    -0.3, 
+      DT_LIGHTNING: -0.3, DT_EXPLOSION: -0.3, DT_SOUND:  -0.3, DT_LIGHT:  -0.3,
+      DT_ELECTRIC:  -0.3, DT_ACID:       0.0, DT_POISON: -0.3, DT_TERROR: -1.0,
+      DT_HOLY:      -1.0, DT_UNHOLY:     0.0, DT_MAGIC:  -0.7 ]) );
+  SetProp(P_NOMAGIC,45);
+
+  SetProp(P_DIE_MSG,  " verschwindet in einer grellen Wolke.\n");
+  SetProp(P_NOCORPSE, 1 );
+  SetProp(P_MURDER_MSG, "Am Ende wird doch das Gute siegen!");
+  SetProp(P_KILL_NAME, "Ayla");
+  SetProp(P_KILL_MSG, "Gegen das Gute kann man nicht siegen!");
+  
+  SetProp(P_LOG_INFO, "paladine.log");
+
+  AddLibrary(LIBS("allgemein.lib"), 1);
+  AddLibrary(LIBS("ayla.lib"),      5);
+  AddLibrary(LIBS("schenke.lib"),   1);
+  AddLibrary(LIBS("schmied.lib"),   1);
+  AddLibrary(LIBS("laden.lib"),     1);
+  AddLibrary(LIBS("drache.lib"),    1);
+      
+  SetAttackChats(100, ({
+    "@@attackspell@@" }) );
+}
+
+/*
+** Erzeugen eines Standard-NPCs mit Skills und gildenspezifischen
+** Besonderheiten
+**
+*/
+varargs int create_guild_npc(string guild,int guild_level,int level,int flags)
+{
+  int i,skill_value;	
+	
+  /* Argumente pruefen, guild und guild_level sind Pflicht */
+  if (!VALID_GUILD(guild))
+    return 0;
+  if (!VALID_GUILD_LEVEL(guild,guild_level))
+    return 0;
+  if (level&&!intp(level))
+    return 0;
+  if (flags&&!intp(flag))
+    return 0;
+
+  /* Standardwerte */
+  
+  SetProp(P_GUILD,guild);
+  SetProp(P_GUILD_LEVEL,guild_level);
+  
+  /* Level verwenden */
+  if (level)
+    create_default_npc(level);
+    
+  /* Skillwert berechnen, zwischen 4500 und 9500 je nach Gildenstufe, */
+  /* Gildenmeister bekommen +500 */
+  skill_value=guild_level/MAX_GUILD_LEVEL(guild)
+             *(MAX_SKILL_VALUE-MIN_SKILL_VALUE)+MIN_SKILL_VALUE;
+  if (!(flags&F_GUILD_MASTER))
+    skill_value-=500;
+  
+  /* Gildenabhaengige Sachen */
+  
+  switch (guild)
+  {
+    case (NEKROMANTEN):
+      AddId({"Nekromant",NEKROMANT_ID});
+      break;
+//  case (): /* weitere Gilden */
+//    break;
+  }
+  
+  /* Schleife fuer die Skills */
+  
+  for (i=sizeof(GUILD_SKILLS(guild));i-->0;)
+  {
+    ModifySkill(GUILD_SKILLS(guild)[i],skill_value);
+  }
+
+  
+  return 1;
+}
+
+nomask query_prevent_shadow() { return 1; }
+
+varargs void ModifySkillAttribute(object caster, string atrname, int value, int duration, mixed fun) {
+  if (PO && PO!=TO && getuid(PO)!="GUILD.paladine") return;
+  ::ModifySkillAttribute(caster, atrname, value, duration, fun);
+}

@@ -1,0 +1,174 @@
+#include "../def.h"
+
+inherit "/p/std/npc/paladin_npc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <wizlevels.h>
+
+nosave int shield_cycle;
+
+void create()
+{
+    if (!is_clone(TO))
+        return;
+    ::create();
+
+    AddId(({
+        "komtur",
+        "komtur_der_rose",
+        "paladin",
+        "paladinwache",
+        "palatinwaechter",
+        "auren",
+    }));
+    SetProp(P_NAME, "Komtur Auren");
+    SetProp(P_GENDER, MALE);
+    SetProp(P_RACE, "Elf");
+    SetProp(P_SHORT, "Komtur Auren, Herr des Palatin");
+    SetProp(P_LONG,
+        "Auren, Komtur der Goldenen Rose, steht mit ruhiger Kraft im "
+        "Palatin. Sein Blick spiegelt jahrhundertelange Disziplin, und "
+        "Schwert wie Schild tragen gezeichnete Runen der Weihe.");
+    SetProp(P_ARTICLE, 0);
+
+    create_default_paladin(40, 15);
+    SetProp(P_ALIGN, 1600);
+    SetProp(P_SIZE, 192);
+    SetProp(P_BODY, 160);
+    SetProp(P_MAX_HANDS, 2);
+    SetProp(P_HANDS, ({
+        " mit geweihter Faust",
+        360,
+        DT_HOLY,
+    }));
+    SetProp(P_HEAL, 4);
+    SetProp(P_AGGRESSIVE, ([
+        P_RACE: ([
+            "Dunkelelf": 0.2,
+            "Ork": 0.08,
+        ]),
+        P_GUILD: ([
+            "nekromanten": 1,
+            "chaoskrieger": 0.5,
+        ]),
+    ]));
+    SetProp(P_RESISTANCE_STRENGTHS, ([
+        DT_SLASH:     -0.45,
+        DT_BLUDGEON:  -0.20,
+        DT_PIERCE:    -0.10,
+        DT_FIRE:      -0.45,
+        DT_COLD:      -0.30,
+        DT_WATER:     -0.25,
+        DT_AIR:       -0.35,
+        DT_LIGHTNING: -0.10,
+        DT_SOUND:     -0.20,
+        DT_ACID:       0.35,
+        DT_POISON:    -0.15,
+        DT_TERROR:    -0.35,
+        DT_HOLY:      -0.80,
+        DT_UNHOLY:     0.25,
+        DT_MAGIC:     -0.25,
+    ]));
+
+    SetProp(P_LOG_INFO, "npc_komtur");
+    SetProp(P_DIE_MSG,
+        " sinkt auf ein Knie, waehrend das Banner der Rose still bebebt.\n");
+    SetProp(P_KILL_MSG,
+        "Kein Frevler verdirbt die Goldene Rose.");
+    SetProp(P_MURDER_MSG,
+        "Komtur Auren ruft: \"%s hat das heilige Palatin geschmaeht!\".");
+    SetProp(P_DEFAULT_INFO, ({
+        "spricht ruhig: \"Im Palatin gelten Staerke und Barmherzigkeit gleichermassen.\".\n",
+        "nickt: \"Sag, was dich hierherfuehrt.\".\n",
+    }));
+    SetProp(P_REJECT, ({ REJECT_DROP,
+        "Der Komtur hebt abwehrend die Hand: \"Bewahr es fuer deinen Weg.\".\n" }));
+
+    SetChats(5, ({
+        "Komtur Auren zeichnet eine helle Rune ueber seinem Schild.\n",
+        "Der Komtur legt zwei Finger auf das Ordenssymbol und murmelt ein Gebet.\n",
+        "Ein Hauch von Weihrauch umweht Komtur Auren, waehrend er den Raum mustert.\n",
+    }));
+    SetAttackChats(40, ({ "@@attackspell@@" }));
+
+    SetProp(P_SPELLRATE, 30);
+    AddSpell(2, 450,
+        "Komtur Auren schneidet mit einem glaenzenden Klingenbogen nach dir.\n",
+        "Komtur Auren schneidet mit einem glaenzenden Klingenbogen nach @WEN.\n",
+        DT_SLASH,
+        ([SP_SHOW_DAMAGE: 1]));
+    AddSpell(1, 520,
+        "Ein Saeulenlicht stuermt von Aurens erhobener Hand auf dich herab.\n",
+        "Ein Saeulenlicht stuermt von Aurens erhobener Hand auf @WEN herab.\n",
+        DT_HOLY,
+        ([SP_SHOW_DAMAGE: 1]));
+    AddSpell(1, 600,
+        "Der Komtur rammt seinen Schild mit zerstampfender Wucht gegen deine Brust.\n",
+        "Der Komtur rammt seinen Schild mit zerstampfender Wucht gegen @WEN.\n",
+        DT_BLUDGEON,
+        ([SP_SHOW_DAMAGE: 1]));
+
+    SUID;
+    CLONEME("/gilden/paladine/weapon/paladinschwert");
+    command("zuecke schwert");
+    CLONEME("/p/armour/shield/mithrilschild");
+    command("trage schild");
+    CLONEME("/p/armour/armour/kettenpanzer");
+    CLONEME("/p/armour/helm/kettenhaube");
+    CLONEME("/p/armour/bracers/messingarmschienen");
+    CLONEME("/p/armour/boots/lederstiefel");
+    command("trage alles");
+}
+
+void init()
+{
+    ::init();
+    if (interactive(TP) &&
+        query_once_interactive(TP) &&
+        TP->QueryProp(P_ALIGN) < -800 &&
+        !IS_WIZARD(TP))
+    {
+        tell_object(TP, "Der Blick des Komturs friert Dich foermlich ein.\n");
+        Kill(TP);
+    }
+}
+
+string attackspell()
+{
+    if (!QueryProp(P_TMP_DEFEND_HOOK))
+    {
+        if (!random(2))
+        {
+            command_me("goetterschutz");
+            return "";
+        }
+        command_me("schildparade");
+        return "";
+    }
+
+    if (!random(4) && !shield_cycle)
+    {
+        shield_cycle = 1;
+        command_me("talisman");
+        return "";
+    }
+
+    if (!random(3))
+        command_me("heiligengebet");
+    else
+        command_me("zielattacke");
+    return "";
+}
+
+void heart_beat()
+{
+    ::heart_beat();
+    if (!InFight())
+        shield_cycle = 0;
+    if (!objectp(QueryProp(P_WEAPON)))
+        command_me("zuecke paladinschwert");
+}

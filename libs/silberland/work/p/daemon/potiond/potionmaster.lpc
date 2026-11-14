@@ -1,0 +1,486 @@
+
+/*
+
+   Der Master fuer die Traenke/potions - Zordan@SL
+
+*/
+
+#include "./potion.h"
+#include <properties.h>
+#include <language.h>
+#include <wizlevels.h>
+#include <moving.h>
+#include <new_skills.h>
+
+mapping potions;
+
+query_prevent_shadow() { return 1; }
+
+create() {
+  if (is_clone(TO)) { 
+    destruct(TO); 
+    return 1;
+  }
+  potions=([ ]);
+}
+
+//
+// der reset() :P
+//
+
+reset() {
+  object *ob;
+  int i;
+  ob=m_indices(potions);
+  for (i=sizeof(ob)-1;i>=0;i--) {
+    if(objectp(ob[i]) == 0) 
+      potions=m_delete(potions,ob[i]);
+  }
+  call_out("awake_reset",0);
+}
+void awake_reset() { int i;i=0; }
+
+//
+// Die Potionverwaltung
+//
+
+nosave GetPotions(int groesse) {
+  object *ob;
+  int i,nr;
+  nr=0;
+  ob=m_indices(potions);
+  for (i=sizeof(ob)-1;i>=0;i--) {
+    if(potions[ob[i],3] == groesse)
+      nr++;
+  }
+  return nr;
+}
+
+int NewPotion(object ob, int groesse) {
+  if(!PO) return 0;
+  if(!IS_LORD(TP) && explode(file_name(PO),"#")[0] != TRANK) return 0;
+  if(GetPotions(groesse) > MAXSINGLE[groesse]) return 0;
+  if(sizeof(m_indices(potions)) > MAXGLOBAL) return 0;
+  potions+=([ ob: 0;0;0;groesse;0;0 ]);
+  return 1;
+}
+
+void RemovePotion(object ob) {
+  if(!PO) return;
+  if(!IS_LORD(TP) && explode(file_name(PO),"#")[0] != TRANK) return;
+  if(member(potions,ob)) {
+    potions=m_delete(potions,ob);
+  }
+}
+
+void SetPotion(object ob,int nummer,int cursed,int costs,
+                         int groesse,int haltbar,int dauer) {
+  if(!PO) return;
+  if(!IS_LORD(TP) && explode(file_name(PO),"#")[0] != TRANK) return;
+  if(member(potions,ob)) {
+    potions[ob,0]=nummer;
+    potions[ob,1]=cursed;
+    potions[ob,2]=costs;
+    potions[ob,3]=groesse;
+    potions[ob,4]=haltbar;
+    potions[ob,5]=dauer;
+  }
+}
+
+int WantPotion() {
+  return (sizeof(potions) < MAXGLOBAL);
+}
+
+void ShowPotions() {
+  object *ob,p;
+  int i;
+  string wer;
+  
+  if(!PO) return;
+  if(!IS_LORD(TP) || !IS_LORD(TI) || TP!=TI) return;
+  ob=m_indices(potions);
+  write("+=====+=========+================+==============+===+===="
+        "+=========+====+====\n");
+  write("| Nr. | FileNr: | Env:           | Farbe:       | C:| Co:"
+        "| Groesse:| HB:| Ti:\n");
+  write("+=====+=========+================+==============+===+===="
+        "+=========+====+====\n");
+  for (i=0;i<sizeof(ob);i++) {
+    p=ob[i];
+    wer=explode(file_name(ENV(p)),"#")[0][<14..];
+//    if(!living(wer) && ENV(ENV(p)))
+//      wer=explode(file_name(ENV(ENV(p))),"#")[0][<14..];
+    if(strstr(wer,":") != -1) wer=explode(wer,":")[1];
+    write(sprintf("| %3d | %7s | %-14s | %-12s | %d | %2d | %-7s | %2d | %3d\n",
+      i, explode(file_name(p),"#")[1], wer,
+      FARBEN[potions[p,0]],
+      potions[p,1], potions[p,2], GROESSE[potions[p,3]],
+      potions[p,4], potions[p,5] ));
+  }
+  write( "+=====+=========+================+==============+===+===="
+         "+=========+====+====\n");
+  printf("| Globale Anzahl: %6d (%d/%d/%d/%d/%d) \n",
+        sizeof(potions), GetPotions(0), GetPotions(1), GetPotions(2), 
+        GetPotions(3), GetPotions(4) );
+  write( "+========================================================"
+         "====================\n");
+} 
+
+//
+// Die Trinken Fkt ansich. Wird von 'trank' aufgerufen
+//
+
+int trinken(object pl,int nummer,int cursed,int costs,
+                      int groesse,int haltbar,int dauer) {
+  int max,cmul,ncursed;
+  mixed wert;
+  object ob;
+  if(!pl) return 0;
+  if(!PO) return 0;
+  if(!IS_LORD(TP) && explode(file_name(PO),"#")[0] != TRANK) return 0;
+  wert=0;
+  cmul=1-cursed*2;
+  cmul*=(groesse+1);
+  ncursed=1-cursed;
+  while(nummer==21) {
+    nummer=random(sizeof(FARBEN));
+  }
+  switch(nummer) {
+//  0 rot          - Kraft
+    case  0:
+      if(!ob=clone_object(TRANKATTR)) return 0;
+      ob->move(pl,M_SILENT | M_NOCHECK);
+      wert=cmul;
+      if(!ob->SetVars(dauer,wert,0,0,0)) return 0;
+      break;
+//  1 gruen        - Intelligenz
+    case  1:
+      if(!ob=clone_object(TRANKATTR)) return 0;
+      ob->move(pl,M_SILENT | M_NOCHECK);
+      wert=cmul;
+      if(!ob->SetVars(dauer,0,0,wert,0)) return 0;
+      break;
+//  2 blau         - Geschicklichkeit
+    case  2:
+      if(!ob=clone_object(TRANKATTR)) return 0;
+      ob->move(pl,M_SILENT | M_NOCHECK);
+      wert=cmul;
+      if(!ob->SetVars(dauer,0,wert,0,0)) return 0;
+      break;
+//  3 tuerkis      - Ausdauer
+    case  3:
+      if(!ob=clone_object(TRANKATTR)) return 0;
+      ob->move(pl,M_SILENT | M_NOCHECK);
+      wert=cmul;
+      if(!ob->SetVars(dauer,0,0,0,wert)) return 0;
+      break;
+//  4 schwarz      - Movingpoints
+    case  4:
+      wert=TP->QueryProp(P_MV);
+      if(!intp(wert)) return 0;
+      max=TP->QueryProp(P_MAX_MV);
+      if(!cursed && wert >= max) return 0;
+      if(cursed  && wert <= 10)  return 0;
+      switch(groesse) {
+        case 0..3:
+          wert+=cmul*max/10;
+          break;
+        case 4:
+          wert=ncursed*max;
+          break;
+      }
+      if(wert>max) wert=max;
+      if(wert<10)  wert=10;
+      TP->SetProp(P_MV,wert);
+      break;
+//  5 braun        - Poison
+    case  5:
+      wert=TP->QueryProp(P_POISON);
+      if(!intp(wert)) return 0;
+      if(!cursed && wert<=0)  return 0;
+      if(cursed  && wert>=10) return 0;
+      switch(groesse) {
+        case 0..3:
+          wert-=cmul*2;
+          break;
+        case 4:
+          wert=cursed*10;
+          break;
+      }
+      if(wert<0)   wert=0;
+      if(wert>=10) wert=10;
+      TP->SetProp(P_POISON,wert);
+      break;
+//  6 orange       - Alcohol
+    case  6:
+      wert=TP->QueryProp(P_ALCOHOL);
+      if(!intp(wert)) return 0;
+      max=TP->QueryProp(P_MAX_ALCOHOL);
+      if(!cursed && wert<=0)   return 0;
+      if(cursed  && wert>=max) return 0;
+      switch(groesse) {
+        case 0..3:
+          wert-=cmul*max/10;
+          break;
+        case 4:
+          wert=cursed*max;
+          break;
+      }
+      if(wert<0)   wert=0;
+      if(wert>max) wert=max;
+      TP->SetProp(P_ALCOHOL,wert);
+      break;
+//  7 gelb         - Heilung LE
+    case  7:
+      wert=TP->QueryProp(P_HP);
+      if(!intp(wert)) return 0;
+      max=TP->QueryProp(P_MAX_HP);
+      if(!cursed && wert >= max) return 0;
+      if(cursed  && wert <= 0)   return 0;
+      switch(groesse) {
+        case 0..3:
+          wert+=cmul*max/10;
+          break;
+        case 4:
+          wert=ncursed*max;
+          break;
+      }
+      if(wert>max) wert=max;
+      if(wert<1)   wert=1;
+      TP->SetProp(P_HP,wert);
+      break;
+//  8 violett      - Frog
+    case  8:
+      wert=TP->QueryProp(P_FROG);
+      if(!intp(wert)) return 0;
+      if(!cursed && wert == 0) return 0;
+      if(cursed  && wert == 1)   return 0;
+      wert=cursed;
+      if(wert>1) wert=1;
+      if(wert<0) wert=0;
+      TP->SetProp(P_FROG,wert);
+      break;
+//  9 weiss        - Blind
+    case  9:
+      wert=TP->QueryProp(P_BLIND);
+      if(!intp(wert)) {
+        if(mappingp(wert)) wert=TP->QueryProp(P_BLIND)[BLIND_TIME];
+        else return 0;
+      }
+      if(!cursed && wert==0) return 0;
+      if(cursed && wert<0)   return 0;
+      switch(groesse) {
+        case 0..3:
+          wert-=cmul*20;
+          if(wert<=0) wert=0;
+          break;
+        case 4:
+          wert=ncursed-1;
+          break;
+      }
+      if(wert<=0) {
+        TP->SetProp(P_BLIND,wert);
+      } else {
+        if(mappingp(TP->QueryProp(P_BLIND))) {
+          TP->SetProp(P_BLIND, TP->QueryProp(P_BLIND) + ([BLIND_TIME:wert]));        
+        } else {
+          TP->SetProp(P_BLIND,wert);
+        }
+      }
+      break;
+// 10 durchsichtig - Heilung MP
+    case 10:
+      wert=TP->QueryProp(P_SP);
+      if(!intp(wert)) return 0;
+      max=TP->QueryProp(P_MAX_SP);
+      if(!cursed && wert >= max) return 0;
+      if(cursed  && wert <= 0)   return 0;
+      switch(groesse) {
+        case 0..3:
+          wert+=cmul*max/10;
+          break;
+        case 4:
+          wert=ncursed*max;
+          break;
+      }
+      if(wert>max) wert=max;
+      if(wert<0)   wert=0;
+      TP->SetProp(P_SP,wert);
+      break;
+// 11 grau         - Deaf
+    case 11:
+      wert=TP->QueryProp(P_DEAF);
+      if(!intp(wert)) {
+        if(mappingp(wert)) wert=TP->QueryProp(P_DEAF)[DEAF_TIME];
+        else return 0;
+      }
+      if(!cursed && wert==0) return 0;
+      if(cursed && wert<0)   return 0;
+      switch(groesse) {
+        case 0..3:
+          wert-=cmul*20;
+          if(wert<=0) wert=0;
+          break;
+        case 4:
+          wert=0-cursed;
+          break;
+      }
+      if(wert<=0) {
+        TP->SetProp(P_DEAF,wert);
+      } else {
+        if(mappingp(TP->QueryProp(P_DEAF))) {
+          TP->SetProp(P_DEAF, TP->QueryProp(P_DEAF) + ([DEAF_TIME:wert]));
+        } else {
+          TP->SetProp(P_DEAF,wert);
+        }
+      }
+      break;
+// 12 silbern      - SA_SPEED
+    case 12:
+      wert=100;
+      if(cursed) {
+        wert+=cmul*15;
+      } else {
+        wert+=cmul*50;
+      }
+      TP->ModifySkillAttribute(ME,SA_SPEED,wert,dauer/2);
+      break;
+// 13 golden       - Food
+    case 13:
+      wert=TP->QueryProp(P_FOOD);
+      if(!intp(wert)) return 0;
+      max=TP->QueryProp(P_MAX_FOOD);
+      if(!cursed && wert<=0)   return 0;
+      if(cursed  && wert>=max) return 0;
+      switch(groesse) {
+        case 0..3:
+          wert-=cmul*max/10;
+          break;
+        case 4:
+          wert=cursed*max;
+          break;
+      }
+      if(wert<0)   wert=0;
+      if(wert>max) wert=max;
+      TP->SetProp(P_FOOD,wert);
+      break;
+// 14 kupfern      - Heilung
+    default:
+    case 14:
+      wert=TP->QueryProp(P_HP);
+      max=TP->QueryProp(P_MAX_HP);
+      switch(groesse) {
+        case 0..3:
+          wert+=cmul*max/10;
+          break;
+        case 4:
+          wert=ncursed*max;
+          break;
+      }
+      if(wert>max) wert=max;
+      if(wert<1)   wert=1;
+      TP->SetProp(P_HP,wert);
+      wert=TP->QueryProp(P_SP);
+      max=TP->QueryProp(P_MAX_SP);
+      switch(groesse) {
+        case 0..3:
+          wert+=cmul*max/10;
+          break;
+        case 4:
+          wert=ncursed*max;
+          break;
+      }
+      if(wert>max) wert=max;
+      if(wert<0)   wert=0;
+      TP->SetProp(P_SP,wert);
+      break;
+// 15 cyan         - Drink
+    case 15:
+      wert=TP->QueryProp(P_DRINK);
+      if(!intp(wert)) return 0;
+      max=TP->QueryProp(P_MAX_DRINK);
+      if(!cursed && wert<=0)   return 0;
+      if(cursed  && wert>=max) return 0;
+      switch(groesse) {
+        case 0..3:
+          wert-=cmul*max/10;
+          break;
+        case 4:
+          wert=cursed*max;
+          break;
+      }
+      if(wert<0)   wert=0;
+      if(wert>max) wert=max;
+      TP->SetProp(P_DRINK,wert);
+      break;
+// 16 ockern        - Nightvision
+    case 16:
+      if(cursed) {
+        TP->SetProp(P_BLIND, ([
+          BLIND_TIME: dauer/2,
+          BLIND_MSG:  "Du bist geblendet!\n" ]) );
+      } else {
+        if(!ob=clone_object(TRANKATTR)) return 0;
+        ob->move(pl,M_SILENT | M_NOCHECK);
+        if(!ob->startvision(dauer*3/2)) return 0;
+      }
+      break;
+// 17 neonfarben    - No-Aggressive
+    case 17:
+      if(cursed) {
+        if(!ob=clone_object(TRANKATTR)) return 0;
+        ob->move(pl,M_SILENT | M_NOCHECK);
+        if(!ob->startaggressive(dauer/10,groesse+1)) return 0;
+      } else {
+        if(!ob=clone_object(TRANKATTR)) return 0;
+        ob->move(pl,M_SILENT | M_NOCHECK);
+        if(!ob->startnoattack(dauer/20)) return 0;
+      }
+      break;
+// 18 beigen       - TMP_DEFEND +-damage
+    case 18:
+      if(cursed) {
+        if(!ob=clone_object(TRANKATTR)) return 0;
+        ob->move(pl,M_SILENT | M_NOCHECK);
+        if(!ob->defendfkt(dauer,groesse,2)) return 0;
+      } else {
+        if(!ob=clone_object(TRANKATTR)) return 0;
+        ob->move(pl,M_SILENT | M_NOCHECK);
+        if(!ob->defendfkt(dauer,groesse,1)) return 0;
+      }
+      break;
+// 19 beigen       - TMP_DEFEND +-damage
+    case 19:
+      if(cursed) {
+        if(!ob=clone_object(TRANKATTR)) return 0;
+        ob->move(pl,M_SILENT | M_NOCHECK);
+        if(!ob->defendfkt(dauer,groesse,4)) return 0;
+      } else {
+        if(!ob=clone_object(TRANKATTR)) return 0;
+        ob->move(pl,M_SILENT | M_NOCHECK);
+        if(!ob->defendfkt(dauer,groesse,3)) return 0;
+      }
+      break;
+// 20 purpur      - TMP_DIE_HOOK
+    case 20:
+      if(cursed) {
+        TP->die();
+      } else {
+        if(!ob=clone_object(TRANKATTR)) return 0;
+        ob->move(pl,M_SILENT | M_NOCHECK);
+        if(!ob->diehook(dauer/20,groesse)) return 0;
+      }
+      break;
+// 21 bunt        - Irgendwas
+    case 21:
+      return 0;
+// 22 rosa        - Temperatur
+    case 22:
+      if(!ob=clone_object(TRANKATTR)) return 0;
+      ob->move(pl,M_SILENT | M_NOCHECK);
+      if(!ob->tempprot(dauer,groesse,cursed)) return 0;
+      break;
+  }
+  return 1;
+}
+

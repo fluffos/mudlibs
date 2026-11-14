@@ -1,0 +1,203 @@
+/* /gilden/druidenzirkel/armour/e_panzer.c
+//  
+// Angrox Zauberwerkstatt
+// 
+// Der Elementarpanzer
+//               
+// 05-06-1997 
+//
+
+// Updates:  
+//                    
+// 9.1.2004: Feyaria - Aufloesmeldung mit write_color vom spellbook
+*/
+
+
+inherit "std/armour";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <new_skills.h>
+#include <defines.h>
+#include <moredef.h>
+#include "../druiden.h"
+#include "../mysteries.h"
+
+object traeger;
+mapping shiftedDamageType = ([ ]);
+
+void create()
+{
+  if( !is_clone(TO) ) return;
+  ::create();
+
+  SetProp(P_SHORT, "Elementarpanzer");
+  SetProp(P_LONG,  
+    "Die Elemente selbst bilden diesen Panzer, um ihren Traeger zu schuetzen.");
+  SetProp(P_NAME, "Elementarpanzer");
+  SetProp(P_GENDER, MALE);
+  AddId( ({"panzer", "elementarpanzer", "\ne_panzer"}) );
+  SetProp(P_ARMOUR_TYPE, AT_ARMOUR);
+  SetProp(P_AC, 10);
+  SetProp(P_MATERIAL, ([MAT_FIRE:15, MAT_ICE:15, MAT_WATER:15, MAT_AIR:15, 
+    MAT_STONE:15, MAT_EARTH:15, MAT_MAGIC:10]) );
+  SetProp(P_WEIGHT, 100);  
+  SetProp(P_VALUE, 1);
+  SetProp(P_NOBUY, 1); 
+  SetProp(P_NOSELL, 1); 
+  SetProp(P_NODROP, "Den kannst Du nicht wegwerfen!\n");
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NOSELL, "Den kannst Du nicht verkaufen!\n");
+  SetProp(P_DAM_PROTECTION, QueryProp(P_DAM_PROTECTION)+
+      ([DT_FIRE:1, DT_COLD:1, DT_WATER:1, DT_AIR:1, DT_MAGIC:1, DT_POISON:1]));
+  SetProp(P_DEFEND_FUNC, ME);
+  SetProp(P_WEAR_FUNC, TO);
+}
+
+
+int DefendFunc (string *dam_type, mixed spell, object enemy)
+{
+  int dc, bonus, r, b;
+
+  r = 0;
+  traeger=this_object()->QueryProp(P_WORN);
+  if(!objectp(traeger)) return 0;
+
+  if(QueryProp("eiszapfen") && !random(3)) {
+    dc = traeger->QueryProp(P_GUILD_LEVEL) + traeger->QueryAttribute(A_DEX);
+    if(random(enemy->QueryAttribute(A_DEX)) < random(dc)) {
+      tell_object(enemy, BS("Du verletzt dich an den Eiszapfen auf "+traeger->name(WESSEN, 1)+" Elementarpanzer."));
+      tell_object(traeger, BS(enemy->Name(WER, 1) + " verletzt sich an den Eiszapfen deines Elementarpanzers."));
+      tell_room(environment(enemy), BS(enemy->Name(WER, 1) + " verletzt sich an den Eiszapfen auf "+traeger->name(WESSEN, 1)+" Elementarpanzer."),
+                ({enemy, traeger}));
+      enemy->Defend(100+random(dc), ({DT_COLD, DT_PIERCE}), ([SP_SHOW_DAMAGE: 1, SP_NAME: "Eiszapfen", SP_PHYSICAL_ATTACK: 1, SP_RECURSIVE: 1]), traeger);
+    }
+  }
+
+  if (!random(4) && spell && sizeof(dam_type & 
+        ({DT_FIRE, DT_COLD, DT_WATER, DT_AIR, DT_MAGIC, DT_POISON})) ) 
+  {
+    tell_object (traeger, BS("Um Deinen Elementarpanzer zucken "
+          "knisternd ein paar Blitze.\n"));
+    tell_room(environment(traeger), BS(sprintf(
+            "Um die Ruestung von %s zucken ein paar Blitze.\n",  
+            traeger->name(WEM))),({traeger}));
+    r += random(3*QueryProp(P_AC)); // Jaja, zusaetzlich zu P_DAM_PROTECTION
+  }
+
+  if(HAS_MYSTERY(traeger, MYSTERY_SNOW_LAYER) && mappingp(environment(traeger)->QueryProp(P_ENVIRONMENT)) && member(dam_type, DT_FIRE) < 0) {  
+    bonus = environment(traeger)->QueryProp(P_ENVIRONMENT)[ENV_TEMPERATURE];
+    if(!random(7)) tell_object(traeger, BS("Die Schneeschicht auf deinem Elementarpanzer daempft den Angriff."));
+    if((bonus-10) < 0) r += random((bonus-10)*-1);
+  }
+
+  if(QueryProp("shifting") && !random(3) && !sizeof(dam_type & m_indices(PHYSICAL_DAMAGE_TYPES))) {
+    for(dc=0; dc<sizeof(dam_type); ++dc) {
+      b = shiftedDamageType[dam_type[dc]];
+      if(!member(shiftedDamageType, dam_type[dc])) b = 0;
+      b += 1;
+      if(b > QueryProp(P_AC) / 2) b = QueryProp(P_AC)/2;
+      shiftedDamageType[dam_type[dc]] = b;
+    }
+    if(!random(2)) tell_object(traeger, BS("Die elementare Verteilung in deinem Elementarpanzer passt sich an."));
+  }
+
+  bonus = 0;
+  for(dc=0; dc<sizeof(dam_type); ++dc) {
+    if(member(shiftedDamageType, dam_type[dc])) {
+      b = shiftedDamageType[dam_type[dc]];
+      if(b > bonus) bonus = b;
+    }
+  }
+  r += random(bonus);
+
+  return r; 
+}
+
+public mapping QueryShiftingDamageTypes() { return shiftedDamageType; }
+
+
+void panzer_weg(int zeit)
+{
+  call_out("wegbinich", zeit);
+  return ;
+}
+
+void wegbinich()
+{
+  object ob;
+  ob=ENV(ME);
+  if(objectp(ob) && living(ob)) { 
+    DRUIDENSPELLS->write_color(
+        BS("Dein Elementarpanzer loest sich in die einzelnen Elemente auf.\n"),
+        "", ob, 1);
+    if(objectp(ENV(ob)))
+      tell_room(ENV(ob), BS(sprintf("Der Elementarpanzer von %s "
+              "loest sich in die einzelnen Elemente auf.\n", 
+              ob->name(WEN,1))), ({ob}));
+    SetProp(P_CURSED, 0);
+    DoUnwear(1);
+  }
+  remove(); 
+  return ;
+}
+
+void init()
+{
+  if(!ME || !ENV(ME) || !living(ENV(ME)) || 
+      ENV(ME)->QueryProp(P_GUILD) != GUILDNAME)
+    call_out("remove", 0);
+  SetProp(P_KEEP_ON_SELL, getuid(ENV(ME)));
+  return ::init();
+}
+
+void reset() {
+  ::reset();
+  if(ENV(ME) && (interactive(ENV(ME)) || !living(ENV(ME)))) 
+    wegbinich();
+}
+
+BecomesNetDead(object wer) {
+  wegbinich();
+}
+
+public int WearFunc(object ob, int silent) {
+  if(HAS_MYSTERY(TP, MYSTERY_ICICLES)) {
+    call_other(DRUIDENSPELLS, "write_color", "Stachelige Eiszapfen wachsen aus deinem Elementarpanzer.", EIS, TP, 1);
+    tell_room(environment(TP), BS("Stachelige Eiszapfen wachsen aus "+TP->name(WESSEN, 1)+" Elementarpanzer."), ({TP}));
+    SetProp("eiszapfen", 1);
+  }
+
+  if(HAS_MYSTERY(TP, MYSTERY_BE_LIKE_WATER)) {
+    call_other(DRUIDENSPELLS, "write_color", "Das Wasser in deinem Elementarpanzer beginnt zu fliessen und sich staetig zu aendern.", WASSER, TP, 1);
+    tell_room(environment(TP), BS("Das Wasser in "+TP->name(WESSEN, 1)+" Elementarpanzer beginnt sich staetig zu veraendern."), ({TP}));
+    SetProp("shifting", 1);
+    while(find_call_out("normalize_shifts") != -1) remove_call_out("normalize_shifts");
+    call_out("normalize_shifts", 10);
+  }
+
+  return 1;
+}
+
+public void normalize_shifts() {
+  int i, changed;
+  string *dt;
+
+  if(!QueryProp(P_WORN)->InFight()) {
+    dt = m_indices(shiftedDamageType);
+
+    for(i=0; i<sizeof(dt); ++i) {
+      if(shiftedDamageType[dt[i]]  <= 0) {
+        shiftedDamageType[dt[i]] -= random(5);
+        if( shiftedDamageType[dt[i]] < 0)  shiftedDamageType[dt[i]] = 0;
+        changed = 1;
+      }
+    }
+
+    if(changed) tell_object(QueryProp(P_WORN), BS("Die elementare Verteilung deines Elementarpanzers normalisiert sich etwas"));
+  }
+
+  call_out("normalize_shifts", 10);
+  return;
+}

@@ -1,0 +1,205 @@
+/*
+ * Behandle
+ *
+ *
+ * Kosten: 
+ * Level : 7
+ * Objekte:
+ * Damage:
+ *
+ */
+
+object get_behandle_victim(object caster, mapping sinfo) 
+{
+  object victim;
+  victim=FindVictim(sinfo[SI_SKILLARG],caster,
+              BS("Wen willst Du behandeln?"));
+  if (!victim)
+    return 0;
+  // 1999-12-13: NPCs koennen geheilt werden, vorausgesetzt
+  // P_FRIEND ist nicht gesetzt.
+  // 2008-10-07: Haustiere koennen geheilt werden (Angrox)
+  if(victim->QueryProp(P_FRIEND) && !interactive(victim) && !victim->id("\nhaustier")) 
+  {
+    printf(BS("Du kannst dieses Ding nicht heilen."));
+    return 0;
+  }
+  // 1999-12-13: Gegner, gegen die man kaempft kann man nicht heilen
+  if (victim->IsEnemy(TP))
+  {
+    printf(BS("Du kannst Deine Feinde nicht behandeln !"));
+    return 0;
+  }
+  if(IS_WIZARD(victim) && !IS_WIZARD(caster)) 
+  {
+    printf(BS("Es ist vielleicht keine gute Idee, einen Magier "
+         +"zu behandeln."));
+    return 0;
+  }
+  if(victim->QueryProp(P_TESTPLAYER) && !caster->QueryProp(P_TESTPLAYER) ) 
+  {
+    printf(BS("Du kannst keine Testspieler heilen."));
+    return 0;
+  } 
+  if(victim->QueryGuest()) 
+  {
+    printf(BS("Du kannst keine Gaeste heilen."));
+    return 0;
+  }
+  if(victim->QueryProp(P_HP)==victim->QueryProp(P_MAX_HP) && 
+     !(HAS_MYSTERY(caster, MYSTERY_NATURAL_HEALING) && (victim->QueryProop(P_POISON) || victim->QuerProp(P_ALCOHOL)))) 
+  {
+    printf(BS("Du kannst keine Gesunden heilen!"));
+    return 0;
+  }
+  return victim;
+}
+
+int prep_behandle(object caster, mapping sinfo) 
+{
+  object victim;
+  if( !victim=get_behandle_victim(caster, sinfo) ) return 0;
+  write_color(BS("Du legst Deine Haende auf "+
+        (victim==caster?"Dich selbst":victim->name(WEN,1))+
+        " und konzentrierst Dich auf die heilende Kraft des Humus."),
+      HUMUS, caster );
+  if( victim != caster )
+    tell_object(victim, BS(caster->Name(WER,1)+" legt "+
+        caster->QueryPossPronoun(FEMALE,WEN,PLURAL)+ 
+        " heilenden Haende auf Dich und konzentriert sich."));
+  return 1;
+}
+
+int behandle(object caster, mapping sinfo) 
+{
+  object victim;
+  int hands;
+  string vn, vnw, cn, wie;
+  int suc, heal, bonus;
+
+  if( !victim=get_behandle_victim(caster, sinfo)) 
+    return write("Da ist niemand den Du behandeln kannst!\n"),0;
+
+  sinfo=DoSpellModification(HUMUS, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  cn = caster->name();
+  vnw = victim->name(WEN, 2);
+  if ((suc=SpellSuccess(caster,sinfo))<=0) 
+  {
+    if(suc<(-2500)) 
+    {
+      if(victim==caster) 
+      {
+        say(sprintf("%s versucht sich zu heilen, jedoch entstehen nur "
+              +"mehr eitrige Wunden!\n",cn), victim);
+        printf("Du versuchst Dich zu heilen, jedoch entstehen nur noch "
+            +"mehr eitrige Wunden.\n");
+        if(!random(5)) 
+        {
+          printf(BS("Irgendwie fuehlst Du Dich krank."));
+          caster->AddPoison(random(3+5));
+        }
+      }
+      else 
+      {
+        say(sprintf("%s versucht %s zu heilen, jedoch entstehen nur "
+              +"mehr eitrige Wunden!\n",cn, vnw), victim);
+        printf("Du versuchst %s zu heilen, jedoch entstehen nur noch "
+            +"mehr eitrige Wunden.\n", vnw);
+        tell_object(victim,sprintf("%s versucht Dich zu heilen, "
+              +"jedoch entstehen eitrige Wunden.\n",cn));
+        if(!random(30)) 
+        {
+          tell_object(victim, sprintf("Irgendwie fuehlst Du Dich "
+                +"krank.\n"));
+          victim->AddPoison(random(3)+3);
+        } 
+      } 
+      victim->AddHp(suc/500);
+      // damit man keinen npc einfach so zu tode heilen kann
+      if(!query_once_interactive(victim))
+         victim->Kill(caster);
+      if(victim != caster) 
+      {
+        printf(BS("Durch den misslungenen Spruch verlierst auch Du "
+              +"Lebenspunkte."));
+        caster->AddHp(suc/200);
+        if(!random(30)) 
+        {
+          printf(BS("Irgendwie fuehlst Du Dich krank."));
+          caster->AddPoison(2);
+        }
+      }
+    }
+    caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+    printf("Dein Zauber misslingt.\n");
+    return MISSERFOLG;
+  }
+  //printf(suc+"/"+MAX_ABILITY+"\n");
+  heal=(int)(caster->QueryProp(P_GUILD_LEVEL)+caster->QueryAttribute(A_INT)*
+      suc/(2*MAX_ABILITY));
+  heal=SpellEnhanceModifier(caster, HUMUS, heal);
+  if( call_other(DRUIDENMASTER, "GetDruidElement", caster) == HUMUS )
+    bonus = 3;
+  else
+    bonus = 0;
+  if( sinfo[SI_SKILLABILITY] == MAX_ABILITY )
+    bonus += 2;
+  heal += bonus;
+  
+  heal = elementalBoost(heal, caster, sinfo);
+  
+  if(heal<MIN_BEHANDLE) heal=MIN_BEHANDLE;
+  if(heal>MAX_BEHANDLE+bonus) heal=MAX_BEHANDLE+bonus;
+  switch(100*(heal-MIN_BEHANDLE)/(MAX_BEHANDLE-MIN_BEHANDLE))
+  {
+    case 0..25: wie=" ein wenig";break;
+    case 26..50: wie=" leicht";break;
+    case 51..75: wie="";break;
+    case 76..100: wie=" stark"; break;
+    default: wie=" aussergewoehnlich stark";              
+  }
+  if(victim->id("anvar")) heal*=2;
+  victim->AddHp(heal);  
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  if(victim->QueryProp(P_HP)==victim->QueryProp(P_MAX_HP))
+    wie=" vollstaendig";
+  if(victim==caster) 
+  {
+    say(sprintf("%s heilt sich%s.\n",cn, wie), victim);
+    write_color("Du heilst Dich"+wie+".\n", HUMUS, caster, 1);
+    if(victim->QueryProp(P_POISON) || victim->QuerProp(P_ALCOHOL)) {
+      write_color(BS(sprintf("Du reinigst dein Blut.")), HUMUS, caster, 1);
+      victim->AddPoison(-(suc/1000));
+      victim->drink_drink(0, -(suc/500));
+    }
+  } 
+  else 
+  {
+    say(BS(sprintf("%s heilt einen Teil der Wunden von %s.",
+          capitalize(cn), victim->name(WEM))), victim);
+       
+    write_color(BS(sprintf("Du heilst %s%s.\n", vnw, wie)),HUMUS, caster, 1);
+    tell_object(victim,sprintf("%s heilt einen Teil Deiner Wunden.\n",
+          capitalize(cn))); 
+
+    if(HAS_MYSTERY(caster, MYSTERY_NATURAL_HEALING)) {
+      if(victim->QueryProp(P_POISON) || victim->QuerProp(P_ALCOHOL)) {
+        write_color(BS(sprintf("Du reinigst das Blut von %s.", victim->name(WEM, 1))), HUMUS, caster, 1);
+        victim->AddPoison(-(suc/1000));
+        victim->drink_drink(0, -(suc/500));
+      }
+    }
+  }
+  if (victim->id("\nhaustier")) {
+    write_file("/gilden/druidenzirkel/spells/behandle",
+        sprintf("CST: %O, VIC: %O, suc: %d, heal: %d, MP: %d\n", 
+          caster, victim, suc, heal, sinfo[SI_RAW_SPELLCOST]));
+
+  }
+  return ERFOLG;
+}

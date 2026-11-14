@@ -1,0 +1,292 @@
+//
+// Saeuresee
+//
+#include <properties.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <wizlevels.h>
+#include "../nekro.h"
+#include "/p/daemon/itemd/itemd.h"
+#include "../../directions.h"
+#include "../../coords.h"
+
+inherit "std/room";
+
+#define VC NEKRO_ISLAND_DIR+"room/acid_lake/virtual_compiler"
+
+nosave int destroy_equip(object pl);
+nosave int check_items(object ob);
+nosave void SetAllExits();
+nosave int get_out(string str);
+nosave int destroy_dead_things();
+
+nosave string *kueste=({});
+nosave string *walls=({});
+nosave int x, y;
+
+void create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+  SetProp (P_INT_SHORT, "In einem Saeuresee");
+  SetProp (P_LIGHT, 1);
+  SetProp (P_INDOORS, 1);
+  SetProp (P_KILL_NAME, "Saeure");
+  SetProp (P_KILL_MSG, "So aufgeloest habe ich Dich ja noch nie gesehen!");
+  SetProp (P_ENVIRONMENT, ([ENV_TEMPERATURE:15,ENV_TERRAIN:TT_WATER]));
+  SetProp (P_NOREST, BS("BIST DU DES WAHNSINNS LUSTIGE BEUTE? HIER ZU RASTEN "
+        "WAERE DEIN SICHERER TOD!"));
+
+  AddRoomMessage( ({ "" }), 3, "acid_damage");
+  AddCmd( ({"untersuche", "unt"}), "no_explore");
+  previous_object()->CustomizeObject();
+  AddCmd( ({"erklimme","erklimm"}), "crawl_out");
+  AddCmd( ({"schwimme","schwimm"}), "swim_out");
+  SetAllExits();
+}
+
+void SetCoords(int sx, int sy)
+{
+  if (VC != file_name(previous_object()))
+    return;
+  x = sx;
+  y = sy;
+}
+
+string _query_int_long() {
+  string txt;
+  int i;
+  txt="WAHHHH! Du schwimmst hier einem See voller dampfender "
+      "Saeure, die Dich zu zerfressen scheint! Egal an wen oder "
+      "was Du glaubst, nun ist es Zeit zu beten, bevor Du Dich in "
+      "nichts aufgeloest hast! Zeit etwas zu untersuchen hast Du nicht, "
+      "hier ist ohnehin nur Saeure und Du solltest lieber SO SCHNELL "
+      "WIE MOEGLICH das Ufer suchen!";
+  if(sizeof(kueste)) {
+    txt+=" Das rettende Ufer ist in folgende Richtungen zu erklimmen: ";
+    for(i=sizeof(kueste)-1;i>=0;i--) {
+      txt+=kueste[i]+", ";
+    }
+    txt+="\b\b.";
+  }
+  if(sizeof(walls)) {
+    txt+=" Von der Saeure angefressene Felswaende sind in Richtung: ";
+    for(i=sizeof(walls)-1;i>=0;i--) {
+      txt+=walls[i]+", ";
+    }
+    txt+="\b\b.";
+  }
+
+  return BS(txt);
+}
+
+void init() {
+  ::init();
+  if(PO==TP) {
+    TP->SetProp(P_PARALYZED,
+        ([PARALYZE_TIME: 1+random(6),
+          PARALYZE_MSG: "Du krampfst Dich vor Schmerzen zusammen!\n",
+          PARALYZE_END: "Du reisst Dich zusammen und unterdrueckst "
+                        "den Schmerz!\n",
+          PARALYZE_MSG_OTHER: "%s windet sich vor Schmerzen!\n",
+          PARALYZE_END_OTHER: BS("%s reisst sich zusammen und widersteht "
+                              "dem Schmerz!")
+         ]));
+  }
+  // Nein kein Jojogeist
+  if(living(PO) && PO->id("jojogeist")) 
+    PO->remove();
+  return;
+}
+
+void reset() {
+  ::reset();
+  return;
+}
+
+varargs string GetExits(object viewer) {
+  return "";
+}
+
+nosave int no_explore(string str) {
+  write(BS("Du hast keine Zeit hier etwas "
+        "zu untersuchen! RETTE DICH LIEBER!"));
+  return 1;
+}
+
+nosave int acid_damage(string msg) {
+  object *liv;
+  int i,dam;
+  float acid_res;
+  mapping res;
+
+  liv=filter_array(all_inventory(ME), "check_living");
+
+  call_out("destroy_dead_things", 0);
+
+  for(i=sizeof(liv)-1;i>=0;i--) {
+    res=liv[i]->QueryProp(P_RESISTANCE_STRENGTHS);
+    if(mappingp(res))
+      acid_res=1.0+liv[i]->QueryProp(P_RESISTANCE_STRENGTHS)[DT_ACID];
+    else
+      acid_res=1.0;
+    dam=(int)((random(50)+5)*acid_res);
+    tell_object(liv[i], "DIE SAEURE VERAETZT DICH !!!\n");
+    liv[i]->do_damage(dam);
+    if(objectp(liv[i]) && dam > 50 && !liv[i]->QueryProp(P_GHOST) 
+        && !liv[i]->QueryProp(P_PARALYZED))
+    {
+      liv[i]->SetProp(P_PARALYZED,
+        ([PARALYZE_TIME: 1+random(4),
+          PARALYZE_MSG: "Du krampfst Dich vor Schmerzen zusammen!\n",
+          PARALYZE_END: "Du reisst Dich zusammen und unterdrueckst "
+                        "den Schmerz!\n",
+          PARALYZE_MSG_OTHER: "%s windet sich vor Schmerzen!\n",
+          PARALYZE_END_OTHER: BS("%s reisst sich zusammen und widersteht "
+                              "dem Schmerz!")
+         ]));
+    }
+    if(!random(4))
+      destroy_equip(liv[i]);
+  }
+}
+
+nosave int check_living(object ob) {
+  if(living(ob) && !IS_WIZARD(ob)) return 1;
+  return 0;
+}
+
+nosave int check_dead(object ob) {
+  if(IS_WIZARD(ob)) return 0;
+  if(living(ob)) return 0;
+  return 1;
+}
+
+#define DBC(x) if (find_player("cirion")) tell_object(find_player("cirion"),"DB: "+x+"\n")
+nosave int destroy_dead_things() {
+  object *dead;
+  int i,nr;
+  dead=filter_array(all_inventory(ME), "check_items");
+  dead = dead - ({find_object(NEKRO_ISLAND_DIR+"transport/barke")});
+  if(!nr=sizeof(dead)) return 0;
+  if(nr>10) nr=10; // Aus Perfomancegruenden
+  for(i=nr-1;i>=0;i--) {
+    if(objectp(dead[i]) && !random(3)) {
+      tell_room(ME, BS(sprintf("%s loest sich durch die daemonische Saeure "
+              "auf.", dead[i]->Name(WER))));
+      dead[i]->remove();
+    }
+  }
+  return 1;
+}
+
+nosave int destroy_equip(object pl) {
+  object *equip;
+  int nr;
+  mapping res;
+  if(!pl) return 0;
+  equip=pl->QueryProp(P_ARMOURS)+({pl->QueryProp(P_WEAPON)});
+  equip-=({0});
+  equip = filter_array(equip, "check_items");
+  if(!sizeof(equip)) {
+    equip=filter_array(all_inventory(pl), "check_items");
+  }
+  if(!sizeof(equip)) return 0;
+  nr=random(sizeof(equip));
+  if(!objectp(equip[nr])) return 0;
+  if(mappingp(res=equip[nr]->QueryProp(P_DAM_PROTECTION))) {
+    if(member(res,DT_ACID) && res[DT_ACID]>=0.0) {
+      return 0;
+    }
+  }
+  tell_object(pl, BS(sprintf("%s loest sich in der Saeure auf!",
+          equip[nr]->Name(WER))));
+  equip[nr]->remove();
+  return 1;
+}
+
+nosave int check_items(object ob) {
+  if(IS_LEARNER(ob)) return 0;
+  if(living(ob)) return 0;
+  if(ob->id("QUESTOBJ") || ob->id("NODESTRUCT") || ob->id("UNZERSTOERBAR"))
+    return 0;
+  if(ob->QueryProp(P_CURSED)) return 0;
+  if(ob->QueryProp(P_AUTOLOADOBJ)) return 0;
+  if(ob->QueryProp(P_NEVERDROP)) return 0;
+  if(ob->QueryProp(P_NODROP)) return 0;
+  if(!ob->QueryProp(P_SHORT)) return 0;
+  if(!ob->QueryProp(P_LONG)) return 0;
+  if(ob->QueryProp(P_CURSED)) return 0;
+  if(ob->QueryProp(P_ITEMD)) {
+    // Godly, rare, unique, set, runes
+    if(member(({4,5,6,8,9,10}), ob->QueryProp(P_ITEMD)) != -1)
+      return 0;
+  }
+  return 1;
+}
+
+nosave void SetAllExits()
+{
+  string dummy;
+  int i;
+
+  for(i=sizeof(ALLDIRS)-1;i>=0;i--)
+  {
+    switch(call_other(VC, "LakeMap", x+DX[i], y+DY[i]))
+    {
+      case "~":
+        AddExit(ALLDIRS[i],
+                ([EX_DEST: sprintf(NEKRO_ISLAND_DIR+"room/acid_lake/std_acid:%d:%d",x+DX[i],y+DY[i]),
+                  EX_PLMSG: "Voller Schmerzen schwimmst Du nach "+CAP(ALLDIRS[i])+".\n",
+                ]));
+        break;
+      case "o":
+        kueste+=({ALLDIRS[i]});
+        break;
+      default:
+        walls+=({ALLDIRS[i]});
+        break;
+    }
+  }
+}
+
+nosave int swim_out(string str) {
+  if(!sizeof(kueste))
+    return 0;
+  if(member(({"an ufer", "ans ufer", "zurueck", "zur insel",
+          "zum festland"}), str)==-1)
+  {
+    write(BS("Wohin moechtest Du schwimmen?"));
+    return 1;
+  }
+  return get_out(str);
+}
+nosave int crawl_out(string str) {
+
+  if(!sizeof(kueste))
+    return 0;
+  if(member(({"ufer", "insel", "festland"}), str)==-1) {
+    write(BS("Was moechtest Du erklimmen?"));
+    return 1;
+  }
+  return get_out(str);
+}
+
+nosave int get_out(string str) {
+  string dir, room;
+  int i;
+
+  dir=kueste[random(sizeof(kueste))];
+  i = member(ALLDIRS, dir);
+  room=COORDS2ROOM[sprintf("%d:%d",x+DX[i],y+DY[i])];
+  write("Muehsam erklimmst Du das Ufer.\n");
+  TP->move(NEKRO_ISLAND_DIR+"room/"+room, M_GO, "ans Ufer",
+      "klettert", "klettert herein");
+  return 1;
+}
+
+void NotifyPlayerDeath(object victim, object killer, int lost_xp) {
+  write_file(NEKRO_ISLAND_DIR+"log/acid_lake", sprintf("%s: %s stirbt.\n",
+        dtime(time()), getuid(TP)));
+  return ;
+}

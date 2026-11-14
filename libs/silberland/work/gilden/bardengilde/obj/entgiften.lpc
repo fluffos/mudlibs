@@ -1,0 +1,135 @@
+//=========================================================================
+//
+// File: aura.c
+// Created by Gwenshara
+//
+// Project: Bardengilde
+//
+//=========================================================================
+
+inherit "/gilden/bardengilde/obj/std_song_effect";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <defines.h>
+#include <new_skills.h>
+#include <moredef.h>
+#include "/gilden/bardengilde/bardengilde.h"
+#include "bard_song.h"
+
+int poisonLevels, stopTime;
+
+mixed song_text_elements = ({
+  ({"Du spielst die Melodie wie einen rasanten Wildbach.", "%s spielt die Melodie wie einen rasanten Wildbach."}),
+  ({"Deine Musik laesst das Blut in Wallung geraten.", "Die Musik von %s laesst dein Blut in Wallung geraten."}),
+  ({"Deine Melodie erklingt wie das plaetschern einer frischen Quelle.", "Die Melodie von %s klingt wie das Plaetschern einer Quelle."}),
+  ({"Wie sanfter Regen ergiessen sich deine Toene ueber die Zuehoerer.", "Wie sanfter Regen ergiesst sich die Musik von %s ueber dich."}),
+  ({"Die sanften Toene erinnern an einen Wald nach dem Regen.", "Die sanften Toene von %s erinnern an einen Wald nach dem Regen."}),
+  ({"Die Musik durchdringt das Blut deiner Zuhoerer.", "Du spuehrst wie dich die Musik reinigend durchdringt."})
+});
+
+public void create() {
+  if (!is_clone(TO)) return;
+  ::create();
+
+  AddId(({SONG_DEPOISON}));
+  setUpkeepMode( ({SK_MUSIC}), CANCEL_INTERACT);
+  setEndSpellDelay(10);
+}
+
+public int canEndSong() {
+  if(time() < stopTime) {
+    write("Du bist noch zu konzentriert aufs Spielen, um jetzt schon aufzuhoeren!\n");
+    return 0;
+  }
+  return 1;
+}
+
+public void onEndSong() {
+  while(remove_call_out("reduce_poison_levels") >= 0);
+  return;
+}
+
+public varargs void prepareSong() {
+  poisonLevels = (ability / 2000) + (success / 2000);
+  poisonLevels = modifyBySkillAttribute(poisonLevels, SA_DURATION);
+  poisonLevels = (int) (poisonLevels * factor);
+
+  if(caster->QueryProp(P_TESTPLAYER)) {
+    tell_object(caster, sprintf("levels = %d\n", poisonLevels));
+  }
+
+  stopTime = time() + 10;
+
+  call_out("reduce_poison_levels", 0);
+}
+
+private void write_songtext() {
+  string *txt;
+  int index;
+
+  index = random(sizeof(song_text_elements));
+  txt = song_text_elements[index];
+
+  tell_object(caster, BS(txt[0]));
+  tell_room(environment(caster), BS(sprintf(txt[1], caster->Name(WER))), ({caster}));
+}
+
+int check_poisoned(object ob) {
+  return living(ob) && ob->QueryProp(P_POISON) > 0;
+}
+
+public void reduce_poison_levels() {
+  object env, *targets, target;
+  int i, poisonReduce;
+  string restrRes;
+
+  if(!objectp(caster)){
+    endSong();
+    return;
+  }
+
+  env = environment(caster);
+  if(!objectp(env)) {
+    endSong();
+    return;
+  }
+
+  if(stringp(restrRes=call_other("/spellbooks/barden_spells", "CheckCastWithMusic", caster, ([SI_CAP_NAME: songName])))) {
+    tell_object(caster, BS(restrRes));
+    call_out("endSong", 0);
+    return;
+  }
+
+  write_songtext();
+
+  poisonLevels--;
+
+  targets = findTargets("check_poisoned");
+  if(sizeof(targets) > 0) {
+    target = targets[random(sizeof(targets))];
+    tell_object(target, BS("Die Melodie umspielt dich mit einem gruenlichen Schimmern und reinigt dein Blut."));
+    tell_room(environment(target), BS(target->Name(WER) + " wird von einem gruenlichen Schimmern umspielt."), ({target}));
+
+    if(caster->QueyProp(P_TESTPLAYER)) tell_object(caster, sprintf("poisonReduce pre = %d\n", poisonReduce));
+    poisonReduce = 1;
+    if(TALENTMASTER->HasTalent(caster, TALENT_HEILER)) {
+      poisonReduce += caster->QueryProp(P_BARD_INSPIRATION_LEVEL);
+    }
+    poisonReduce = modifyBySkillAttribute(poisonReduce, SA_DAMAGE);
+    poisonReduce = (int) (poisonReduce * factor);
+    target->AddPoison(-poisonReduce);
+    if(caster->QueryProp(P_TESTPLAYER)) {
+      tell_object(caster, sprintf("poisonReduce post=%d target=%O\n", poisonReduce, target));
+    }
+  }
+
+  if(poisonLevels <= 0 || caster->QueryProp(P_SP) < 10) {
+    endSong();
+    return;
+  }
+  caster->AddSp(-10);
+
+  call_out("reduce_poison_levels", 2+random(5));
+}

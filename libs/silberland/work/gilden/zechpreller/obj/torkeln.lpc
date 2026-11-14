@@ -1,0 +1,126 @@
+//=========================================================================
+//
+// File: torkeln.c
+// Created by Gwenshara@SL
+//
+// Project: Zechpreller
+//
+//=========================================================================
+
+#include "../zech.h"
+#include "../talents.h"
+#include <properties.h>
+#include <moredef.h>
+#include <new_skills.h>
+#include <moving.h>
+#define PROTECTION ({DT_BLUDGEON, DT_SLASH, DT_PIERCE, DT_SQUEEZE, DT_WHIP,\
+		     DT_RIP})
+
+inherit "std/thing";
+
+object owner;
+int chance;
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+//--Beschreibungen---------------------------------------------------------
+
+  SetProp(P_SHORT, 0);
+  SetProp(P_LONG,
+    "<HICKS> Alles dreht sich!"
+  );
+
+//--Namen------------------------------------------------------------------
+
+  SetProp(P_NAME, "Torkeln");
+  SetProp(P_GENDER, NEUTER);
+  AddId( ({"\nzechpreller_torkeln", "NODESTRUCT", "torkeln"}) );
+
+//--Eigenschaften----------------------------------------------------------
+
+  SetProp(P_MATERIAL, ([MAT_ALCOHOL:100]) );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NEVERDROP, 1);
+}
+
+/* Zum setzen der Variablen, Hooks, etc. */
+void SetVars(object caster, int duration, int percent)
+{
+  owner    = caster; // Besitzer anzeigen
+  chance   = percent; // Prozentchance zum Ausweichen
+
+  owner->SetProp(P_TMP_DEFEND_HOOK, ({time()+duration, TO, "ByDefend"}));
+  owner->Set(P_MSGIN, symbol_function("min", this_object()), F_QUERY_METHOD);
+  owner->Set(P_MSGOUT, symbol_function("mout", this_object()),
+             F_QUERY_METHOD);
+  
+  call_out("removeme", duration);
+}
+
+void removeme()
+{
+  tell_object(owner, BS("Du hoerst auf herumzutorkeln."));
+  owner->SetProp(P_TMP_DEFEND_HOOK, 0);
+  owner->Set(P_MSGIN, 0, F_QUERY_METHOD);
+  owner->Set(P_MSGOUT, 0, F_QUERY_METHOD);
+  remove(1);
+}
+
+mixed *ByDefend(int dam, mixed dam_type, mixed spell, object enemy)
+{
+  mixed dt;
+  int i;
+  // Es wird nur vor physischen schaeden geschuezt
+  if(member(PROTECTION, dam_type) < -1)
+  {
+/*    tell_object(owner, "Fehler: nicht physisch ");
+    if(stringp(dam_type))
+      tell_object(owner, dam_type);
+    else
+      for(i=0; i<sizeof(dam_type); i++)
+      {
+        tell_object(owner, dam_type[i]);
+      }
+    tell_object(owner, "\n");*/
+    return ({dam, dam_type, spell});
+  }
+  if(!(random(100) < chance))
+  {
+//    tell_object(owner, "Fehler: kein glueck");
+    return ({dam, dam_type, spell});
+  }
+
+  tell_object(owner, BS("Du wankst aus der Reichweite der Attacke!"));
+  tell_object(enemy, BS(owner->Name(WER)+" wankt aus der Reichweite Deiner Attacke!"));
+  tell_room(ENV(owner), BS(owner->Name(WER)+" wankt aus der Reichweite der Attacke!"),
+            ({owner, enemy}));
+
+  return ({(int) dam/(1+random(chance/10)), dam_type, spell});
+}
+
+void BecomesNetDead(object spieler)
+{
+  if(spieler == owner) remove(1);
+}
+
+void NotifyPlayerDeath(object victim, object killer, int lost_xp)
+{
+  if(victim == owner) remove(1);
+}
+
+string min()
+{
+  return "torkelt herein";
+}
+
+string mout()
+{
+  return "torkelt";
+}

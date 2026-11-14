@@ -1,0 +1,273 @@
+// Schattenwelt
+// von Wraz / Mendralim
+//
+// Raum-Template
+
+#include "../def.h"
+
+inherit "std/room";
+inherit ROOM "schatten.lpc";
+
+// ca. 14 Tage:
+int playerdeathdelay = 1209600 * (90+random(21)) / 110;
+// ca. 7 Tage:
+int contentchangedelay = 604800 * (90+random(21)) / 110;
+// Boss Reset Delay ca. 6 Tage
+// bei Aenderung auch in reset() aendern!
+int bossresetdelay = 518400 * (90+random(21)) / 110;
+
+// Create
+void create()
+{
+  ::create();
+  schatten::create_default_shadowroom(1);
+  schatten::initialize_me();
+  AddCmd(({"stirb"}),"cmd_stirb");
+}
+
+// Fake-Raussterben mit XP-Kosten
+int cmd_stirb(string str)
+{
+  int xp_cost;
+  int divisor;
+  string *rooms;
+  string room_no;
+  rooms = ({"m01","m02","m03","m04","m05","m06","m07","m08","m09","m10",
+            "m11","m12","m13","m14","m23","m24","m25","m26","m27","m28",
+            "m29"});
+  room_no = rooms[random(sizeof(rooms))];
+  if(!QueryProp("planeshiftroom")) return 0;
+
+  if(!TP->InFight())
+    return notify_fail(BS("So einfach laesst sich Dein Leib von Deiner Seele nicht "
+      "trennen! Vielleicht muss die Situation, in der Du stirbst, ein wenig "
+      "realistischer sein?")),0;
+  else
+  {
+    divisor = 450+random(101); // Kosten reduziert am 23.6.24 (/300->/500)
+    xp_cost = TP->QueryProp(P_XP) / divisor;
+    TP->AddExp(-xp_cost);
+    if(objectp(present("\nwrazschatten_movehook",TP))) present("\nwrazschatten_movehook",TP)->remove();
+    write(BS("Du konzentrierst Dich kurz, schliesst die Augen und atmest tief aus. "
+    "Dann stellst Du Dir vor, wie sich Dein Leib und Deine Seele trennen, und loest "
+    "Dich von allen weltlichen Wuenschen und Belangen. Du gibst Dich komplett auf. "
+    "Nichts ist von Belangen.")+
+    BS("Und tatsaechlich: Es wird schwarz vor Deinen Augen. Du bist tot. ")+
+    BS("Doch dann ein Stechen, ueberall. Ein Lichtblitz! Koerper und Geist vereinen "
+    "sich wieder! Schatten fliessen davon, und ziehen einen Teil Deiner "
+    "Lebensessenz mit sich...")+
+    BS("Dann erwachst Du wieder."));
+    say(BS(TPN+" schliesst konzentriert die Augen und bricht dann wie tot zusammen! "
+    "Schatten wabern um "+TP->QueryPossPronoun(MALE,WEN)+" Koerper, bis dieser "
+    "nicht mehr zu erkennen ist. Als sich die Schatten zurueckziehen, ist der Koerper "
+    "verschwunden."), TP);
+    call_other(METZELORGIE + "/room/" + room_no, "???");
+    call_other(SCHATTEN "master/log_master", "DoEntryExitLog", TP, TO, TO, 
+      find_object(METZELORGIE + "/room/" + room_no),"cmd_stirb, xp_cost: "+xp_cost);
+    TP->move(METZELORGIE + "/room/" + room_no, M_NOCHECK|M_SILENT);
+    say(BS(TPN+" erscheint wie aus dem Nichts! Einige Schattenfetzen scheinen noch kurz "
+    "an "+TP->QueryPronoun(WEM)+" zu haengen, verschwinden aber rasch wieder."), TP);
+    
+    return 1;
+  }
+}
+
+// QueryDelay (fuer Debug)
+int *QueryDelay()
+{
+  int *val;
+  val = ({playerdeathdelay,contentchangedelay});
+  return val;
+}
+
+// plw player wraz (fuer Debug)
+int plw()
+{
+  if(find_player("wraz") && find_player("wraz")->QueryProp("debug")) return 1;
+  return 0;
+}
+
+// SetDelay (fuer Debug)
+int *SetDelay(int playerdeathdelaynew, int contentchangedelaynew)
+{
+  if(playerdeathdelaynew) 
+    playerdeathdelay = playerdeathdelaynew;
+
+  if(contentchangedelaynew) 
+    contentchangedelay = contentchangedelaynew;
+
+  return QueryDelay();
+}
+
+// Remove
+int remove()
+{
+  string file;
+  int t;
+  file = file_name(TO);
+
+  if(plw()) DB("remove() in "+explode(file,"/")[<1]+" called.\n");
+
+  // Raum bleibt wenn ein Spieler drin ist
+  //  sollte eigentlich nicht noetig sein, weil ein Spieler kaum lange genug im Raum ideln wird
+  //  (muesste laenger als contentchangedelay ideln); aber wer weiss ;)
+  if(present("Interactive",TO))
+  {
+    if(plw()) DB(" remove(): 'Interactive' present --> not removed\n");
+    return 0;
+  }
+
+  // Raum bleibt wenn letzter Spielertod weniger als 'playerdeathdelay' her ist
+  //  (zur Sicherheit im reset() und hier im remove() --> verhindert unabsichtliches rm() durch 
+  //   haendisches 'update')
+  if(QueryProp("last_player_death") > time() - playerdeathdelay) 
+  {
+    t=-time()+QueryProp("last_player_death")+playerdeathdelay;
+    if(plw()) DB(" last_player_death blocks --> not removed. remaining: "+
+    (((t/60/60/24) > 0) ? ((t/60/60/24)+"d "+(t/60/60%24)+"h ") : ((t/60/60)+"h "))+
+    (t/60%60)+"min "+
+    (t%60)+"s "
+    +"\n");
+    return 0;
+  }
+
+  // Template nicht loeschen
+  if(strstr(file,"sn_template") >= 0) 
+  {
+    if(plw()) DB(" file is sn_template --> not removed\n");
+    return 0;
+  }
+
+  else 
+  {
+    DB(getcolor("red") +" ->rm("+explode(file,"/")[<1]+")"+ getcolor("none")+"\n");
+    ::remove();
+    if(rm(file + ".lpc"))
+      return 1;
+    else DB(getcolor("red") +"--> failed!"+ getcolor("none")+"\n");
+  }
+}
+
+// Keep Alive (soll verhindern dass der Raum sich selbst removed)
+void keep_alive() {}
+
+// Reset
+void reset()
+{
+  int t;
+  object boss_npc;
+  string *weekly_reset_npc;
+
+  if(plw()) DB("reset() in "+explode(file_name(TO),"/")[<1]+" called.\n");
+  ::reset();
+  schatten::refresh_exits(def_exits);
+  schatten::set_rnd_planeshift_option();
+  // Raum verhindert "self destruct" fuer ca. 2 Wochen wenn Spieler dort gestorben ist, um
+  //  holen der Ausruestung zu ermoeglichen
+  // Raum verhindert "self destruct" grundsaetzlich fuer ca. 1 Woche, nachdem ein Spieler
+  //  dort war
+  if((QueryProp("last_player_death") > time() - playerdeathdelay)
+    ||
+    (QueryProp(P_LAST_CONTENT_CHANGE) > time() - contentchangedelay)) 
+  {
+    t=-time()+QueryProp("last_player_death")+playerdeathdelay;
+    if(t>0)
+      if(plw()) DB(" last_player_death blocks --> not removed. remaining: "+
+      (((t/60/60/24) > 0) ? ((t/60/60/24)+"d "+(t/60/60%24)+"h ") : ((t/60/60)+"h "))+
+      (t/60%60)+"min "+
+      (t%60)+"s "
+      +"\n");
+    t=-time()+QueryProp(P_LAST_CONTENT_CHANGE)+contentchangedelay;
+    if(t>0)
+      if(plw()) DB(" P_LAST_CONTENT_CHANGE blocks --> not removed. remaining: "+
+      (((t/60/60/24) > 0) ? ((t/60/60/24)+"d "+(t/60/60%24)+"h ") : ((t/60/60)+"h "))+
+      (t/60%60)+"min "+
+      (t%60)+"s "
+      +"\n");
+    call_out("keep_alive",1);
+    if(plw()) DB(" keep_alive() called");
+  }
+  
+  // Sicherstellen des remove() Aufrufs
+  else 
+  {
+    if(plw()) DB(" remove() called\n");
+    remove();
+  }
+  if(plw()) DB("\n");
+
+  // Bosse
+  if(pointerp(QueryProp("weekly_reset_npc"))) weekly_reset_npc=QueryProp("weekly_reset_npc");
+  else 
+  {
+    weekly_reset_npc=0;
+    if(plw()) DB(" weekly_reset_npc not set!\n");
+  }
+  if(sizeof(weekly_reset_npc)==2 && QueryProp("last_boss_death") < time() - bossresetdelay)
+  {
+    /*if(plw())*/ DB(" weekly_reset called in "+explode(file_name(TO),"/")[<1]+"\n");
+    
+    if(!find_living(weekly_reset_npc[1]))
+    {
+      /*if(plw())*/ DB(" living "+weekly_reset_npc[1]+" not found --> cloned in room "+
+      get_room_no()+"!\n");
+      boss_npc = clone_object(NPC + weekly_reset_npc[0]);
+      boss_npc->SetProp("shadow_room_no", get_room_no());
+      boss_npc->SetProp("shadow_difficulty", difficulty(get_room_no()));
+      boss_npc->SetProp("shadow_difficulty_int", difficulty_int(get_room_no()));
+      boss_npc->move(TO,2);
+    }
+
+    // neu berechnen (bei Aenderung auch in Variablendeklaration aendern!)
+    bossresetdelay = 518400 * (90+random(21)) / 110;
+  }
+}
+
+// NotifyPlayerDeath
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  schatten::player_death(player, killer, lostexp);
+}
+
+// Init
+void init()
+{
+  ::init();
+  if(find_call_out("revive") <= 4) call_out("revive",1,TP);
+}
+
+// BecomesNetDead
+void BecomesNetDead(object player)
+{
+  if(sizeof(filter_objects(all_inventory(player),"id","\nshadow_netdeath")) >= 1) return;
+  clone_object(OBJ "schatten_netdeath")->move(player,M_NOCHECK|M_SILENT); // + statt | ?
+}
+
+
+// **************************************************************************************
+// Anfang von "NPC verstecken sich in Raumdetails" - unfertig, wird dzt. nicht verwendet
+
+// RevertDetail
+void RevertDetail()
+{
+
+}
+
+// ModifyDetail
+void ModifyDetail()
+{
+  mapping all_details;
+  string *keys, detail_name, detail_desc;
+
+  if(!TO) return;
+
+  all_details = TO->QueryProp(P_DETAILS);
+  keys = m_indices(all_details);
+  detail_name = keys[random(sizeof(keys))];
+  detail_desc = all_details[detail_name];
+
+  if(plw()) DB(detail_name+" "+detail_desc);
+
+  RemoveDetail(detail_name);
+  AddDetail(detail_name, #'RevertDetail); //'
+}

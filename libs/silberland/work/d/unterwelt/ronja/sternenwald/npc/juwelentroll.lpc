@@ -1,0 +1,286 @@
+//=========================================================================
+//
+// File:    juwelentroll.c
+// Created by Tyron & Macalla
+// administered and modified by Ronja@SL
+//
+// Project: Sternenwald
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit "std/mnpc";
+
+#define ATTACKMSG " mit seinen Klauen"
+#define ATTACKTYP DT_RIP
+
+#define SING_NAME present("edelstein")->name
+#define PLUR_NAME present("edelsteine")->name
+
+int ngem, stufe, std_hands, std_xp, faktor;
+string mycolor,mytyp;
+
+object gem;
+
+void angriff_anpassen()
+{
+  int lichtlevel;
+  object env;
+
+  if(!objectp(env=ENV(TO))) return;
+
+  lichtlevel = env->QueryProp(P_TOTAL_LIGHT);
+
+  if(lichtlevel >  9) lichtlevel = 9;
+  if(lichtlevel < -9) lichtlevel = -9;
+
+  if(lichtlevel < 1)
+  {
+    SetProp(P_SPELLRATE,0);
+  }
+  else
+  {
+    SetProp(P_SPELLRATE,30+7*lichtlevel);
+  }
+
+  SetProp(P_HANDS, ({ATTACKMSG,std_hands+lichtlevel*faktor,ATTACKTYP}));
+  SetProp(P_XP, std_xp + (lichtlevel * 105 / 50));
+
+  return;
+}
+
+void create()
+{
+  int cost;
+
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+  SUID;
+
+  GEMMASTER->DistributeGem(2,0,0,TO,
+    ({"rubin","aquamarin","topas","smaragd","saphir","opal",
+      "onyx","bernstein","granat","bergkristall","diamant",
+      "amethyst","zirkon","tuerkis","turmalin","achat","lapislazuli"})
+  );
+  gem = present("edelstein",TO);
+
+  if(!objectp(gem))
+  {
+    SWMASTER->Msg("Juwelentroll ohne Edelstein wieder entfernt");
+    remove();
+  }
+
+  cost    = gem->QueryCoinsPerUnits()[0];
+  stufe   = cost/20;
+  mycolor = gem->QueryProp(P_COLOR);
+  mytyp   = gem->QueryProp(P_NAME);
+  faktor  = stufe * 6 / 10;
+
+  SetProp(P_SHORT, "Ein "+CAP(mytyp)+"troll");
+  SetProp(P_NAME, CAP(mytyp)+"troll");
+
+  SetProp( P_GENDER, MALE);
+  AddId( ({ "troll", "juwelentroll","edelsteintroll",lower_case(mytyp+"troll") }) );
+
+  SetProp(P_NAME_ADJ, mycolor);
+  AddAdjective( ({mycolor+"en",mycolor+"er",mycolor+"em",
+                  mycolor+"es",mycolor+"e"}) );
+
+  create_default_npc(stufe);
+  SetProp(P_HANDS, ({ATTACKMSG,QueryProp(P_HANDS)[1],ATTACKTYP}));
+  SetProp(P_RACE, "Juwelentroll");
+  SetProp(P_SIZE, 280+stufe);
+  SetProp(P_WEIGHT, 100+3*stufe);
+  SetProp(P_ALIGN, cost*110/100);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_AGGRESSIVE,0);
+  SetProp(P_WIMPY, 30);
+
+  SetProp(P_RESISTANCE_STRENGTHS ,
+    ([ DT_FIRE:      0.5, DT_COLD:      0.0, DT_WATER:       0.0
+     , DT_AIR:      -0.5, DT_LIGHTNING: 0.0, DT_EXPLOSION:   0.0
+     , DT_SOUND:     0.0, DT_LIGHT:    -1.0, DT_ELECTRIC:    0.0
+     , DT_ACID:      0.0, DT_POISON:    0.0, DT_TERROR:     -0.5
+     , DT_HOLY:      0.0, DT_UNHOLY:    0.0, DT_MAGIC:       0.0
+     , DT_MIND:      0.0, DT_SLASH:     0.0, DT_BLUDGEON:    0.0
+     , DT_PIERCE:    0.0, DT_SQUEEZE:   0.0, DT_WHIP:        0.0
+     , DT_RIP:       0.0
+     ])
+  );
+
+  SetProp(P_NOMAGIC,0);
+  SetProp(P_TRANSPARENT,0);
+
+  std_hands = QueryProp(P_HANDS)[1];
+  std_xp    = QueryProp(P_XP);
+
+  SetProp(P_NOCORPSE, 1);
+  SetProp(P_DIE_MSG, " zerfaellt zu Staub.\n");
+
+  SetProp(P_MSGIN, "kommt an");
+  SetProp(P_MSGOUT, "stapft");
+  SetProp(P_MMSGIN, "kommt an");
+  SetProp(P_MMSGOUT, "stapft");
+
+  SetProp(P_MNPC_AREA, ({ ROOM "th" }) );
+  SetProp(P_MNPC_FLAGS, MOV_MOVES | MOV_BACKWARDS | MOV_INDOORS |
+                         MOV_INFIGHT );
+  SetProp(P_MNPC_WAIT, ({ 90, 90, 30 }) );
+
+  SetProp(P_SPELLRATE,30);
+
+  AddSpell(3,1,
+    Name(WER,1)+" greift Dich mit gleissendem Licht an.\n",
+    Name(WER,1)+" greift @WEN mit gleissendem Licht an.\n",
+    DT_LIGHT, "spell_light"
+  );
+
+  AddDetail( ({"auge","augen" })        +
+             gem->QueryProp("u_ids")[0] +
+             gem->QueryProp("u_ids")[1]  ,
+    "Die Augen des Trolls sehen zwei "+PLUR_NAME(WEM)[2..]+" zum "
+    "verwechseln aehnlich. "
+  );
+
+  switch(random(100))
+  {
+    case  0 .. 15 : ngem = 0; break;
+    case 16 .. 67 : ngem = 1; break;
+    default       : ngem = 2; break;
+  }
+}
+
+void init()
+{
+  angriff_anpassen();
+
+  ::init();
+  return;
+}
+
+int Defend(int dam, mixed dam_type, mixed spell, object enemy)
+{
+  if(interactive(enemy) &&
+     ((enemy->QueryProp(P_LEVEL)+10) < TO->QueryProp(P_LEVEL)))
+  {
+    TELLPLAYER(BSI("Werd' erst einmal gross.",Name(WER,1)+" laechelt Dich "
+                   "freundlich an: "));
+    TELLOTHERS(Name(WER,1)+" laechelt "+TPN+" freundlich an.\n");
+    enemy->StopHuntFor(TO,1);
+    StopHuntFor(enemy,1);
+    return 0;
+  }
+
+  angriff_anpassen();
+  return ::Defend(dam, dam_type, spell, enemy);
+}
+
+string _query_long()
+{
+  string s,color,name;
+
+  if(!ENV(TO)) return "";
+
+  s = "Vor Dir steht ein grosses Wesen, das Dich sehr an einen Troll "
+      "erinnert. ";
+
+  if(ENV(TO)->QueryProp(P_TOTAL_LIGHT) > 0)
+  {
+    if(mycolor == "schwarz")
+    {
+      s += "Seine Haut, welche mit feinem Edelsteinstaub ueberzogen ist, "
+           "glueht allerdings unheimlich. ";
+    }
+    else
+    {
+      s += "Seine Haut, welche mit feinem "+CAP(mytyp)+"staub ueberzogen ist, "
+           "glueht allerdings "+mycolor+". ";
+    }
+  }
+  else
+  {
+    s += "Allerdings schimmert seine Haut selbst in der Dunkelheit "
+         "leicht. ";
+  }
+
+  if(IsEnemy(TP))
+  {
+    s += "Zwei riesige "+CAP(mytyp)+"augen funkeln Dich boese an. ";
+  }
+  else
+  {
+    s += "Zwei riesige "+CAP(mytyp)+"augen beobachten Dich wachsam aber "
+         "freundlich. ";
+  }
+
+  return BS(s);
+}
+
+varargs void die(int poisondeath)
+{
+  object enemy,ob;
+
+  switch(ngem)
+  {
+    case 0 :
+      ob = present("edelstein",TO);
+      if(ob) ob->remove();
+      ob = present("edelstein",TO);
+      if(ob) ob->remove();
+      break;
+
+    case 1 :
+      ob = present("edelstein",TO);
+      if(ob) ob->remove();
+      break;
+  }
+
+  ::die(poisondeath);
+}
+
+int remove()
+{
+  object ob;
+  string s;
+
+  switch(ngem)
+  {
+    case 0 :
+      s = "Als die beiden Edelsteinaugen "+name(WESSEN,1)+" zu Boden fallen, "
+          "zerbrechen sie in "+(random(800)+800)+" kleine Stuecke. ";
+      break;
+
+    case 1 :
+      s = "Als die beiden Edelsteinaugen "+name(WESSEN,1)+" zu Boden fallen, "
+          "zerbricht einer in "+(random(400)+400)+" kleine Stuecke. ";
+      break;
+
+    default :
+      s = "Die beiden Augen "+name(WESSEN,1)+" fallen zu Boden und kullern "
+          "vor deine Fuesse. ";
+      break;
+  }
+
+  if(ENV(TO)) tell_room(ENV(TO), BS(s));
+  ::remove();
+}
+
+void spell_light(object enemy, int damage, mixed dam_type)
+{
+  int lichtlevel;
+  object env;
+
+  if(!(env=ENV(TO))) return;
+
+  lichtlevel = env->QueryProp(P_TOTAL_LIGHT);
+  if (lichtlevel < 1) return;
+  if (lichtlevel > 9) lichtlevel = 9;
+
+  damage = std_hands * 2 + lichtlevel * stufe;
+  enemy->Defend(damage, ({ DT_LIGHT}), 0, TO);
+}
+
+

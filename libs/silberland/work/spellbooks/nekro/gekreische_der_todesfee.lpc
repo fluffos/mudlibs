@@ -1,0 +1,171 @@
+/*
+ * Gekreische der Toedesfee
+ *
+ * Man greift alle Feinde im Raum an (die hoeren koennen), Gegner koennen
+ * daran ertauben und bei gutem Erfolg eine Zeit lang keine Spells mehr
+ * sprechen (P_DISABLE_SPELLS)
+ *
+ * Kosten: 50 MP
+ * Level : 6 
+ * Schaden : ca 400 (Max 888),
+ *
+ * Skillpunktefaehig (dam)
+ *
+ * Status: anschlussreif
+ *
+ */
+// 06.08.2003 Archon: uebergabe sinfo
+// 22.12.2003 Feyaria: maximale Gegneranzahl
+
+mixed prep_gekreische_der_todesfee(object caster, mapping sinfo)
+{
+  object *victims;
+
+  victims=FindGroup(caster,-1);
+  if( !victims || !sizeof(victims) ) 
+  {
+    tell_object(caster, BSC(
+      "Hier ist ja niemand, den Du mit Deinem Todesgesang erschrecken "
+      "koenntest!") );
+    return 0;
+  }
+
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }                           
+
+  return sinfo;
+}
+
+public void siphon_magic(object caster, object *victim, int rounds) {
+  int presentVictims, i;
+  if(!pointerp(victim) || sizeof(victim) == 0) return;
+
+  for(i=0; i<sizeof(victim); ++i) {
+    if(!objectp(victim[i])) continue;
+    if(!is_living(victim[i])) continue;
+    if(environment(victim[i]) == environment(victim[i])) presentVictims++;
+
+    if(victim[i]->QueryProp(P_SPELLRATE) > 0) {
+      victim[i]->SetProp(P_SPELLRATE, victim[i]->QueryProp(P_SPELLRATE) - random(rounds*5));
+    }
+    victim[i]->AddSp(-(rounds*3));
+  }
+
+  if(presentVictims < 1) {
+    tell_object(caster, BS("Es ist keine Seele mehr hier von der du zehren kannst..."));
+    return;
+  }
+
+  tell_object(caster, BS("Gierig saugst du die Seelenkraft deiner Feinde auf und staerkst deine Magie."));
+  tell_room(environment(caster), BS(sprintf("%s saugt gierig die Seelenkraft %s Feinde ein.", caster->Name(WER), caster->QueryPossPronoun(WESSEN))), ({caster}));
+  caster->AddSp(presentVictims*rounds*(1+random(10)));
+  caster->ModifySkillAttribute(caster, SA_DAMAGE, 100 + rounds * random(10), 10 + random(10));
+  return;
+}
+
+int gekreische_der_todesfee(object caster, mapping sinfo)
+{
+  object *victims;
+  int succ, i, dam, skp, max, damage, totalDamage;
+
+  victims=FindGroup(caster,-1);
+  if( !victims || !sizeof(victims) ) 
+  {
+    tell_object(caster, BSC(
+      "Hier ist ja gar niemand, den Du mit dem Gekreische der Todesfee "
+      "angreifen koenntest!") );
+    return 0;
+  }
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+
+  succ=SpellSuccess(caster,sinfo);
+  if(succ <=-random(3000)) 
+  {
+    if( !caster->QueryProp(P_DEAF) ) 
+    {
+       write("Du kreischt so schlecht, dass Du selber taub wirst.\n"+
+           random_fluch()+"\n"); 
+       total_fail=1;
+       caster->SetProp(P_DEAF, 5*caster->QueryProp(P_GUILD_LEVEL)-succ/30);
+    }
+  }
+  if( succ<=0)  
+    return MISSERFOLG;
+
+  say(BS(sprintf(
+    "%s kreischt unirdische hohe Toene, eine Kakophonie die Dir ins Gebein "
+    "faehrt und Dir das Blut in den Adern gefrieren laesst!",
+     caster->Name(WER))), ({caster}) );
+  write(BS("Du kreischt unirdisch hohe Toene, eine Kakophonie des Grauens!"));
+
+  if( (dam=sinfo[SI_SKILLDAMAGE]-25*sizeof(victims)) < 150 )
+    dam=150;
+  dam += (13*caster->QueryProp(P_GUILD_CIRCLE) +
+         50*(caster->QueryProp(P_GUILD_LEVEL)-6) + 
+         3*caster->QueryAttribute(A_INT)) * succ/MAX_ABILITY;
+  skp=get_skillpoints(caster,"gekreische der todesfee");
+  dam=get_dam_with_skillpoints(dam,skp);
+
+  max = caster->QueryProp(P_GUILD_LEVEL) - 4 +        // 2 bis 3
+        (caster->QueryProp(P_GUILD_CIRCLE) -1) / 3 +  // 0 bis 2
+        sinfo[SI_SKILLABILITY] / MAX_ABILITY +        // 0 bis 1
+        skp / 3;                                      // 0 bis 3
+  if( sizeof(victims) - 1 < max )                     // 2 bis 9 
+    max = sizeof(victims) - 1;
+  for(i=max; i>=0; i--)
+  {
+    if(victims[i]->QueryProp(P_DEAF) && random(20)>skp)
+    {
+      tell_object(victims[i], 
+        caster->Name(WESSEN)+" Gekreische kann Dir aufgrund Deiner Taubheit "
+        "nichts anhaben.");
+      say(BS(sprintf(
+        "%s widersteht aufgrund %s Taubheit voellig %s Angriff.", 
+        victims[i]->Name(WER), 
+        victims[i]->QueryPossPronoun(FEMALE,WESSEN,SINGULAR), 
+        caster->name(WESSEN))), ({victims[i], caster}));
+      write(BSC(sprintf(
+        "%s widersteht aufgrund %s Taubheit voellig Deinem Angriff.", 
+        victims[i]->Name(WER), 
+        victims[i]->QueryPossPronoun(FEMALE,WESSEN,SINGULAR) )));
+    }
+    else
+    {
+      tell_object(victims[i], BS(
+        caster->Name(WESSEN)+" Gekreische dringt tief in Dein Gehirn ein "
+        "und laesst es fast zerspringen."));
+      damage=sinfo[OFFSET(SI_SKILLDAMAGE)]+ 
+        random(DoModificationByAlign(dam, caster, victims[i]));
+      damage=TryAttackSpell(victims[i], damage, sinfo[SI_SKILLDAMAGE_TYPE],
+          ([SP_NAME:"Todesgesang",SP_SHOW_DAMAGE:1]), caster, sinfo);
+      if( victims[i] && damage>40 && !victims[i]->QueryProp(P_DEAF) &&
+          succ>4000+random(8000) && random(100)>victims[i]->QueryProp(P_NOMAGIC) )
+      {
+        victims[i]->SetProp(P_DEAF, succ/500);
+        victims[i]->SetProp(P_DISABLE_SPELLS, succ/2500+skp/3);
+        tell_object(victims[i], "Das Gekreische laesst Dich ertauben.\n");
+        tell_object(caster, BSC(victims[i]->Name(WER) + 
+            " haelt sich vor Schmerz die Ohren zu."));
+      }
+      totalDamage += damage;
+    }
+  }
+
+  
+  if(skp > 7 && random(75-(skp*5/3)) < (totalDamage/sizeof(victims))) {
+    call_out("siphon_magic", 0, caster, victims, skp-7);
+  }
+
+  UseBlood();
+  return ERFOLG;
+}
+

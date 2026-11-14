@@ -1,0 +1,78 @@
+
+varargs int prep_lebenskraft(object caster, mapping sinfo, int flag) 
+{
+  if (caster->InFight())
+  {
+    tell_object(caster, "Das geht im Kampf nicht.\n");
+    return 0;
+  }
+  if (caster->Query(P_HP_DELAY, F_QUERY_METHOD) ||
+      present(AMAZON_LIFE, caster))
+  {
+    tell_object(caster, "Deine Lebenskraft ist ja schon gestaerkt!\n");
+    return 0;
+  }
+  if (!pay_for_spell(caster, sinfo, !flag))
+    return 0;
+  return 1;
+}
+
+int lebenskraft(object caster, mapping sinfo) 
+{
+  int suc;
+  int dur;
+  int hp;
+  string* delays;
+  object ob;
+  int glevel;
+
+  if (!prep_lebenskraft(caster, sinfo, 1))
+    return 0;
+
+  if ((suc = SpellSuccess(caster,sinfo)) <= 0)
+    return MISSERFOLG;
+
+  environment(caster)->Message(BS(sprintf("%s schliesst ihre Augen und "
+          "konzentriert sich.", caster->Name(WER,1))),
+      MSGFLAG_VISUAL, ([ MSGFLAG_EXCLUDE : ({ caster }) ]) );
+  tell_object(caster, "Du schliesst Deine Augen und konzentrierst Dich.\n");
+
+  hp = random(suc + sinfo[SI_SKILLABILITY]) / 1000;
+  
+  glevel = caster->QueryProp(P_GUILD_LEVEL);
+  dur = 30 * (1 + 2 * suc + sinfo[SI_SKILLABILITY]) / MAX_ABILITY +
+        glevel * 10;
+  if (sinfo[SI_SKILLABILITY] == MAX_ABILITY)
+    dur *= 1 + random(2);
+  if(sinfo[SI_SKILLPOINTS] > 0) {
+    dur *= 2;
+  }
+  if(sinfo[SI_SKILLPOINTS] > 1) {
+    hp *= 2;
+  }
+
+  delays = ({P_HP_DELAY});
+  if (glevel > 4 && suc > random(6000)) delays += ({P_SP_DELAY});
+  if (glevel > 6 && suc > random(12000)) delays += ({P_DRINK_DELAY});
+  if (glevel > 7 && suc > random(12000)) delays += ({P_FOOD_DELAY});
+  if (glevel > 8 && suc > random(12000)) delays += ({P_ALCOHOL_DELAY});
+  
+  ob = clone_object(OBJ "life");
+  ob->move(caster, M_NOCHECK);
+  ob->setup(caster, hp, delays, dur);
+
+  if(sinfo[SI_SKILLPOINTS] > 2) {
+    ob->set_heart_beat(1);
+  }
+
+  if (glevel >= 10 && suc >= 7000 && sinfo[SI_SKILLABILITY] == MAX_ABILITY)
+  {
+    ob = present(GUILD_ITEM, caster);
+    ob->PowerRegain((suc - 6500) / 500, 10 + suc / 200);
+  }
+  if (IS_WIZARD(caster))
+    printf("Suc=%d, HP=%d, DUR=%d min %d sec, Delays=%O\n", 
+        suc,hp,dur/60,dur%60,delays);
+
+  return ERFOLG;
+}

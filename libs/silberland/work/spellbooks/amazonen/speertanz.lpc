@@ -1,0 +1,75 @@
+// Speertanz: Temporarer Buff, der den Speerkampf-Schaden erhoeht.
+
+varargs int prep_speertanz(object caster, mapping sinfo, int flag)
+{
+  object spear;
+
+  if (!caster->InFight())
+  {
+    tell_object(caster, "Der Speertanz entfaltet nur im Kampf seine Wirkung.\n");
+    return 0;
+  }
+
+  if (!objectp(spear = caster->QueryProp(P_WEAPON)))
+  {
+    tell_object(caster, "Ohne Speer kannst Du keinen Speertanz tanzen.\n");
+    return 0;
+  }
+
+  if (spear->QueryProp(P_WEAPON_TYPE) != WT_SPEAR)
+  {
+    tell_object(caster, "Der Speertanz funktioniert nur mit einem Speer in der Hand.\n");
+    return 0;
+  }
+
+  if (caster->QueryProp(P_AMAZONEN_SPEAR_BONUS))
+  {
+    tell_object(caster, "Du befindest Dich bereits im Speertanz.\n");
+    return 0;
+  }
+
+  if (!pay_for_spell(caster, sinfo, !flag))
+    return 0;
+
+  return 1;
+}
+
+
+nosave void speertanz_expire(object caster)
+{
+  if (!objectp(caster)) return;
+  caster->SetProp(P_AMAZONEN_SPEAR_BONUS, 0);
+  tell_object(caster, BS("Erschoepft beendest du deinen Speertanz und laesst die Waffe sinken."));
+  if(objectp(present(GUILD_ITEM, caster))) present(GUILD_ITEM, caster)->UnregisterEffect("speertanz");
+}
+
+
+int speertanz(object caster, mapping sinfo)
+{
+  int suc, bonus, dur;
+
+  if (!prep_speertanz(caster, sinfo, 1))
+    return 0;
+
+  if ((suc = SpellSuccess(caster, sinfo)) <= 0)
+    return MISSERFOLG;
+
+  bonus = 20 + sinfo[SI_SKILLABILITY] / 120 + suc / 400;
+  if (bonus > 45) bonus = 45;
+
+  dur = caster->QueryProp(P_GUILD_LEVEL) + sinfo[SI_SKILLABILITY] / 1000 +
+        random(10);
+  if (sinfo[SI_SKILLABILITY] == MAX_ABILITY)
+    dur += random(10);
+
+  pDebug(caster, sprintf("speertanz :: duration=%d bonus=%d\n", dur, bonus));
+  environment(caster)->Message(BS(sprintf("%s tanzt mit dem Speer in flinken Kreisen.",
+        caster->Name(WER,1))),
+      MSGFLAG_VISUAL, ([ MSGFLAG_EXCLUDE : ({ caster }) ]) );
+  tell_object(caster, "Du gehst in den Speertanz ueber und fokussierst Dich auf blitzschnelle Angriffe.\n");
+
+  caster->SetProp(P_AMAZONEN_SPEAR_BONUS, bonus + sinfo[SI_SKILLPOINTS] * 10);
+  call_out("speertanz_expire", dur, caster);
+
+  return ERFOLG;
+}

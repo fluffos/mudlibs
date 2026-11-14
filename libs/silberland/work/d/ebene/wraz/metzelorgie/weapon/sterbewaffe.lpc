@@ -1,0 +1,1038 @@
+// Sterbewaffe - inheritance object
+// alle "xy des Sterbens" erben von hier
+// von Wraz / Mendralim
+// Update 2021/12: rare/unique
+// Update 2024/01: Aenderung e_con, f_con, tode_factor --> Abwertung
+
+#include "../def.h"
+
+inherit "std/weapon";
+
+#define mio 1000000
+#define PHP TP->QueryProp(P_HP)
+#define PMHP TP->QueryProp(P_MAX_HP)
+#define WOCHE 604800 // 60*60*24*7
+
+mapping lostxp = (["d.ebene.wraz":30000000]);
+// lostxp2: verlorene xp die ueber 2 milliarden hinausgehen...
+//          auf ganze millionen abgerundet!
+mapping lostxp2 = (["d.ebene.wraz":0]);
+mapping tode = (["d.ebene.wraz":10]);
+
+mixed *player_damage_type = ({"player", 1});
+
+mapping all_colors;
+
+string color, gem_name, wielded_by, klinge, long_text, *klingendetailkey;
+string newklingendetailtext;
+// ersetzt P_INFO, in _query_info() behandelt:
+string info_kraft_aus_toden = BS("Diese Waffe bezieht Kraft aus Deinen TODEN!");
+string info_rissschaden = ""; // Rissschaden Info
+string info_additional = "";  // wird zB von /master/unique_master gesetzt
+
+int gems;
+int specified_wc, specified_wc_fix, start_wc, start_wc_fix;
+int max_wc, max_wc_fix;
+int start_wc_def, start_wc_fix_def, max_wc_def, max_wc_fix_def;
+int hit_func_on = 0, heldenbonus;
+int sfbonus_on, todesnaehe;
+int rip_weapon = 0; // 1 wenn es eine der seltenen rip_dmg waffen ist
+
+int sfbonus = 80; // zuvor 70 (21.2.24)
+int odds_increase_multiply = 1500;
+float def_mult_factor = 1.3;
+float a_con = -2957.0, b_con = 500.0, c_con = 400.0;
+float d_con = 1.5; // d_con: Multiplikator auf Anzahl der Tode in hitfunc(), sinkt ab tode_breakpoint
+float e_con = 8.0, f_con = 48.0; // e_con zuvor 7.0, f_con zuvor 12.0 (30.1.24)
+float def_one_hand = 0.666;
+int tode_breakpoint = 160;
+float tode_factor = 0.05; // zuvor 0.1 (30.1.24)
+
+int cvalue;
+
+float get_ringbonus();
+float rand_multiplier();
+
+int new_wc(string who) // ------ WC BERECHNUNG ------------------------------
+{
+  if (!tode[who]) specified_wc = start_wc; // erst ab 1 Tod
+  // zuerst muss die Waffe mit Edelsteinen gefuellt werden:
+  else if (!hit_func_on) specified_wc = start_wc;
+  // bis 40 mio xp verlorene xp: linearer Anstieg
+  else if (lostxp[who] <= 40 * mio) 
+    specified_wc = start_wc + (max_wc-start_wc) * (lostxp[who] / mio) / 40;
+  // ab 40 mio verlorene xp: cap auf max_wc
+  else specified_wc = max_wc;
+
+  // Sicherheits-Cap
+  specified_wc = specified_wc <= max_wc ? specified_wc : max_wc;
+
+  return specified_wc;
+}
+
+int new_wc_fix(string who) // ------- WC_FIX BERECHNUNG ---------------------
+{
+  if (!tode[who]) specified_wc_fix = start_wc_fix; // wie oben
+  else if (!hit_func_on) specified_wc_fix = start_wc_fix; // wie oben
+  // bis 10 tode: linearer Anstieg
+  else if (tode[who] <= 10)
+    specified_wc_fix = start_wc_fix + (max_wc_fix-start_wc_fix) * tode[who] / 10;
+  // ab 10 Toden: cap auf max_wc_fix
+  else specified_wc_fix = max_wc_fix;
+
+  specified_wc_fix = specified_wc_fix <= max_wc_fix ? specified_wc_fix : max_wc_fix;
+
+  return specified_wc_fix;
+}
+
+// WC Basiswerte setzen ------------------------------------------------------
+//  flag 0: Erstsetzung inkl. Setzen der Defaults
+//  flag 1: Werte als Prozent der Defaults interpretieren
+//  flag 2: Reset auf defaults
+void set_wc(int swc, int swcf, int mwc, int mwcf, int flag, string player)
+{
+  SetProp("default_current_g", 1.8);
+
+  if (!player)
+    player = "";
+
+  if (!flag)
+  {
+    // Defaults setzen
+    start_wc_def = swc;
+    start_wc_fix_def = swcf;
+    max_wc_def = mwc;
+    max_wc_fix_def = mwcf;
+
+    // Aktuelle MinMax-Werte setzen
+    start_wc = swc;
+    start_wc_fix = swcf;
+    max_wc = mwc;
+    max_wc_fix = mwcf;
+
+    // Spezifische Werte setzen
+    specified_wc = start_wc;
+    specified_wc_fix = start_wc_fix;
+  }
+
+  else if (flag == 1)
+  {
+    // Interpretation als Prozentwert
+    start_wc = (start_wc_def * swc) / 100;
+    start_wc_fix = (start_wc_fix_def * swcf) / 100;
+    max_wc = (max_wc_def * mwc) / 100;
+    max_wc_fix = (max_wc_fix_def * mwcf) / 100;
+  }
+
+  else if (flag == 2)
+  {
+    // Reset auf Defaults
+    start_wc = start_wc_def;
+    start_wc_fix = start_wc_fix_def;
+    max_wc = max_wc_def;
+    max_wc_fix = max_wc_fix_def;
+  }
+
+  TO->SetProp(P_WC, new_wc(player) - QueryProp(P_DAMAGED));
+  TO->SetProp(P_WC_FIX, new_wc_fix(player));
+}
+
+// SET BLADE ----------------------------------------------------------------
+//  Mode 1: normal, Mode 2: nichtrissseite, Mode 3: rissseite
+int set_blade(int mode)
+{
+  string *schwert_dam;
+  string *hammer_dam;
+  string *peitsche_dam;
+  string *hellebarde_dam;
+  int *wc_pc;
+
+  if (mode < 1 || mode > 3)
+    return -1;
+
+  // Damage-Arrays; Eintrag 0 ist nur ein dummy
+  //  Eintrag 1: normal, 2: nichtrissseite, 3: rissseite
+  schwert_dam = ({"", ({DT_SLASH, DT_RIP}), DT_SLASH, DT_RIP}); // auch Axt
+  hammer_dam = ({"", ({DT_BLUDGEON, DT_RIP}), DT_BLUDGEON, DT_RIP});
+  hellebarde_dam = ({"", ({DT_RIP, DT_PIERCE}), DT_PIERCE, DT_RIP}); // auch Dolch, Kriegsbogen
+  peitsche_dam = ({"", ({DT_WHIP, DT_RIP}), DT_WHIP, DT_RIP});
+
+  // [0]: dummy, [1]: normal, [2]: nichtrissseite, [3]:Rissseite
+  //   [][0] bis [3]: Prozent, [][4]: flag fuer set_wc()
+  wc_pc = ({({0, 0, 0, 0, 0}),
+            ({0, 0, 0, 0, 2}), ({95, 95, 95, 95, 1}), ({90, 90, 90, 90, 1})})[mode];
+
+  switch (to_string(QueryProp(P_NR_HANDS)) + QueryProp(P_WEAPON_TYPE))
+  {
+  case "2axe":                              //"Axt des Sterbens":
+  case "1sword":                            //"Schwert des Sterbens":
+  case "2sword":                            //"Bidenhaender des Sterbens":
+    SetProp(P_DAM_TYPE, schwert_dam[mode]); // Schwerter, Axt
+    break;
+  case "2club":                            //"Kriegshammer des Sterben":
+    SetProp(P_DAM_TYPE, hammer_dam[mode]); // Hammer
+    break;
+  case "2spear":                           //"Hellebarde des Sterbens":
+  case "1knife":                           //"Dolch des Sterbens":
+  case "2bow":                             //"Kriegsbogen des Sterbens":
+    SetProp(P_DAM_TYPE, hellebarde_dam[mode]); // Hellebarde, Dolch, Kriegsbogen
+    break;
+  case "1whip":                              //"Peitsche des Sterbens":
+    SetProp(P_DAM_TYPE, peitsche_dam[mode]); // Peitsche
+    break;
+  }
+  set_wc(wc_pc[0], wc_pc[1], wc_pc[2], wc_pc[3], wc_pc[4], TPU);
+  player_damage_type = ({TPU, mode});
+
+  return 1;
+}
+
+void do_dcon_mod(int tode_count)
+{
+  // d_con Anpassung
+  // ab tode_breakpoint Toden reduziert sich d_con langsam
+  float new_d_con;
+  new_d_con = d_con;
+
+  if(tode_count) 
+    new_d_con = (d_con*(tode_breakpoint+(tode_count-tode_breakpoint)*tode_factor))/tode_count;
+  d_con = new_d_con < d_con ? new_d_con : d_con; // greift erst wenn es unter "default d_con" faellt
+  if(d_con <= 0.0) d_con = 0.01;
+}
+
+int WieldFunc(object waffe)
+{ // --- WIELD FUNC -----------------------------
+  wielded_by = TPU;
+  if (wielded_by == "d.ebene.wraz")
+    hit_func_on = 1; // Meisterschlaechter
+  if (hit_func_on)
+    write(BS("Du fuehlst den TOD in Dir!"));
+
+  if (!member(tode, wielded_by))
+    tode[wielded_by] = 0;
+  if (!member(lostxp, wielded_by))
+    lostxp[wielded_by] = 0;
+  if (!member(lostxp2, wielded_by))
+    lostxp2[wielded_by] = 0;
+
+  TO->SetProp(P_WC, new_wc(wielded_by) - QueryProp(P_DAMAGED));
+  // jeder nur seine eigenen tode!
+  TO->SetProp(P_WC_FIX, new_wc_fix(wielded_by));
+
+  if (WMASTER->is_hero(TPU))
+    heldenbonus = 60;
+  else
+    heldenbonus = 0; // heldenbonus
+
+  // Handling von seltenem RIP-Damage
+  if (member(player_damage_type, TPU) != -1) // Spielername steht im Array
+    set_blade(player_damage_type[1]);
+  else if (rip_weapon)
+    set_blade(1);
+
+  do_dcon_mod(tode[wielded_by]);
+
+  return 1;
+}
+
+int UnwieldFunc(object waffe)
+{ // --- UNWIELD FUNC -------------------------
+  if (wielded_by == "d.ebene.wraz")
+    hit_func_on = 0; // Meisterschlaechter
+  wielded_by = "nobody";
+  if (hit_func_on)
+    write(BS("Das Gefuehl des TODES weicht aus Dir."));
+  heldenbonus = 0;
+  specified_wc = start_wc;
+  specified_wc_fix = start_wc_fix;
+  return 1;
+}
+
+mixed query_hitfunc_factors()
+{ // --- QUERY HITFUNC FACTORS --------------------
+  return ({a_con, b_con, c_con, d_con, e_con, f_con, 
+    sfbonus, odds_increase_multiply, def_mult_factor, 
+    def_one_hand, tode_breakpoint, tode_factor});
+}
+
+varargs int set_hitfunc_factors(mixed _a_con, mixed _b_con, mixed _c_con, 
+  mixed _d_con, mixed _e_con, mixed _f_con, mixed _sfbonus,
+  mixed _odds_increase_multiply, mixed _def_mult_factor, mixed _def_one_hand,
+  mixed _tode_breakpoint, mixed _tode_factor)
+{ // --- SET HITFUNC FACTORS --------------------
+  if(_a_con) a_con = to_float(_a_con); // 1
+  if(_b_con) b_con = to_float(_b_con); // 2
+  if(_c_con) c_con = to_float(_c_con); // 3
+  if(_d_con) d_con = to_float(_d_con); // 4
+  if(_e_con) e_con = to_float(_e_con); // 5
+  if(_f_con) f_con = to_float(_f_con); // 6
+  if(_sfbonus) sfbonus = to_int(_sfbonus); // 7
+  if(_odds_increase_multiply) odds_increase_multiply = to_int(_odds_increase_multiply); // 8
+  if(_def_mult_factor) def_mult_factor = to_float(_def_mult_factor); // 9
+  if(_def_one_hand) def_one_hand = to_float(_def_one_hand); // 10
+  if(_tode_breakpoint) tode_breakpoint = to_int(_tode_breakpoint); // 11
+  if(_tode_factor) tode_factor = to_float(_tode_factor); // 12
+
+  return 1;
+}
+
+int HitFunc(object enemy)
+{ // --- HIT FUNC ! -----------------------------
+  // vgl. "Kronangs ... der Verwuestung" ->
+  // Kronangs: +150 WC (cap 300?) und +30 WC_FIX, +30% alle Bersispells
+  // der Verwuestung: alle 8 Treffer +random(WC*2), sonst +random(40)
+  // in Summe im Schnitt pro Treffer bei urspruenglich 260 WC & 20 FIX:
+  //   WC                       =      +19.5  random(40) weil 300-260 = 40
+  //   WC_FIX                   =      +30
+  //   hitfuncverwuestung2      =      +54.4  = (7x19.5+1x299.5)/8
+  //   SUMME (Durchschnitt)     =     +103.9
+  
+  // vgl hitfunc6 (nicht in Verwendung!) + Kronangs
+  //   WC                       =      +19.5
+  //   WC_FIX                   =      +30
+  //   hitfunc6                 =      +99.5  = random(200)
+  //   SUMME (Durchschnitt)     =     +149.0
+
+
+  int rnd_damage, fix_damage, max_damage, damage;
+  float current_g_con; // Multiplikator, Standard: 1
+  float one_hand; // Faktor fuer 1-Hand Waffen
+
+  if (!hit_func_on)
+    return 0;
+
+  sfbonus_on = 0;
+  if (enemy->id("\nschlachtfeld"))
+    sfbonus_on = 1; // alle schlachtfeld-npc
+
+  // bei < 10% HP schlaegt die Waffe haerter zu (Update 2020)
+  todesnaehe = 0;
+  if (PHP <= (PMHP / 10) && PHP >= 0)
+  {
+    // maximum bei 0 bzw 1 von 500 HP: 5000
+    // bei exakt 0 HP: Fixanteil von 1000
+    todesnaehe = PHP == 0 ? 1000 + (random((10 * PMHP / 5) * 4)) : random((10 * PMHP) / PHP);
+    if (todesnaehe > 200)
+      write(BS("Die Naehe zum TOD laesst Dich noch haerter zuschlagen!"));
+  }
+
+  // Multiplikator verbessern (random); aber nur wenn kein Multiplikator aktiv ist
+  // alles jedenfalls ueberschreiben
+  if(!random(to_int(odds_increase_multiply*(1-get_ringbonus()))-todesnaehe) &&
+    QueryProp("g_timestamp") < time())
+    call_other(TO,"multiply_hitfunc",time()+random(60)+!random(10)*random(3600),rand_multiplier(),0);
+
+  // Multiplikator auf HitFunc
+  if(QueryProp("g_timestamp") > time())
+    current_g_con = to_float(QueryProp("current_g"));
+  else current_g_con = 1.0;
+
+  // Hinweis dass der Tod zu lange her ist
+  if (current_g_con < 1.0 && !random(30))
+    write(BS(Name(WER,1) + " duerstet nach Deinem Blut!"));
+
+  // Faktor fuer 1-Hand Waffen
+  one_hand = 1.0;
+  if(TO->QueryProp(P_NR_HANDS) == 1) one_hand = def_one_hand;
+
+  // Zufalls-Anteil des Schadens
+  rnd_damage = to_int(
+    current_g_con *
+      (a_con + b_con * 
+        log(
+          c_con + 
+          to_float(tode[wielded_by])*d_con + 
+          to_float(lostxp[wielded_by])/(e_con*to_float(mio)) + 
+          to_float(lostxp2[wielded_by])/f_con
+          )
+      )
+  );
+
+  // Fix-Anteil: fix_damage = nur der Bonus auf dem Schlachtfeld
+  fix_damage = to_int((todesnaehe + sfbonus_on * sfbonus));
+
+  // Berechnung Gesamtschaden HitFunc
+  damage = to_int(one_hand*(fix_damage + random(rnd_damage)));
+
+  // Debug
+  max_damage = to_int(one_hand*(fix_damage + rnd_damage));
+  if(QueryProp("wdebug_dmg",1) && find_player("wraz")) 
+    find_player("wraz")->Message(
+      sprintf("%s: %s - damage=%d (max=%d, fix=%d)\n",dtime()[<8..],ENV(TO)->Name(),
+      damage,max_damage,fix_damage));
+
+  return damage;
+}
+
+// --- ADD DEATHS and LOSTXP ------------------------------------------------
+void add_deaths_lostxp(string playername, int deaths, int lostxp_to_add,
+                       int lostxp2_to_add)
+{
+  int temp;
+
+  if (!member(tode, playername))
+    tode[playername] = 0;
+  if (!member(lostxp, playername))
+    lostxp[playername] = 0;
+
+  if ((lostxp[playername] / mio) + (lostxp_to_add / mio) < 2000)
+    lostxp[playername] += lostxp_to_add;
+  else
+  {
+    temp = (lostxp[playername] / mio) + (lostxp_to_add / mio) - 2000;
+    lostxp[playername] = 2000000000;
+    lostxp2[playername] += temp;
+  }
+  if (lostxp2_to_add)
+    lostxp2[playername] += lostxp2_to_add;
+  tode[playername] += deaths;
+
+  if ((tode[playername] >= 11) &&
+      (lostxp[playername] >= 40000000) &&
+      !QueryProp("first_wield_time"))
+  {
+  // Todeszeitstempel fuer disappear(); wird auch von Schreckgespenst gesetzt
+    SetProp("first_wield_time", time());
+
+    if (TO->QueryProp(P_WIELDED))
+      (TO->QueryProp(P_WIELDED))->Message(BS("Ein wenig schwarzer Nebel entweicht aus " + name(WESSEN, 1) + 
+      ". Was das wohl bedeutet?"));
+  }
+
+  TO->SetProp(P_WC, new_wc(playername) - QueryProp(P_DAMAGED));
+  TO->SetProp(P_WC_FIX, new_wc_fix(playername));
+
+  do_dcon_mod(tode[playername]);
+}
+
+// --- LOGGING -------------------------------------------------------------
+void log_death(object victim, object wielder, int lostxp, string message)
+{
+  string victim_name;
+  string wielder_name;
+
+  if (!victim)
+    victim_name = "0";
+  else
+    victim_name = victim->name();
+
+  if (!wielder)
+    wielder_name = "0";
+  else
+    wielder_name = wielder->name();
+
+  log_file("d/ebene/metzelorgie/sterbewaffe_playerdeath",
+           dtime() + " " +
+               "victim: " + victim_name +
+               ", uid: " + getuid(victim) +
+               ", wielder: " + wielder_name +
+               ", lostxp: " + lostxp +
+               ", message: " + message +
+               "\n");
+}
+
+int match_item(string str, string *ids);
+
+// --- NOTIFY PLAYER DEATH --------------------------------------------------
+void NotifyPlayerDeath(object victim, object killer, int lost_xp)
+{
+  mixed ids;
+  ids = TO->QueryProp(P_IDS);
+
+  if (TO->QueryProp(P_WIELDED) != victim)
+  {
+    log_death(victim, TO->QueryProp(P_WIELDED), lost_xp, "TO->QueryProp(P_WIELDED) != victim");
+    return;
+  }
+
+  // ist vermutlich ueberfluessig, aber zur Sicherheit
+  if (!match_item("\nsterbewaffe", ids))
+  {
+    log_death(victim, TO->QueryProp(P_WIELDED), lost_xp, "!match_item(\"\\nsterbewaffe\",ids)");
+    return;
+  }
+
+  // "Echten" Todenzeitstempel setzen (wird nur hier gesetzt)
+  SetProp("real_deathtime", time()); // fuer HitFunc Multiplikator 
+   // Multiplikator erhoehen, timestamp ueberschreiben (1)
+  call_other(TO,"multiply_hitfunc",time()+random(60*60),rand_multiplier(),1); 
+
+  // SF-rares und uniques koennen keine Tode bzw. XP mehr dazu bekommen
+  //  (aber Multiplikator erhoehen)
+  if (match_item("\nsfrare", ids) || match_item("\nsfunique", ids))
+  {
+    victim->Message(BS(
+        TO->Name(WER,1) + " erfreut sich an Deinem TOD!"));
+    log_death(victim, TO->QueryProp(P_WIELDED), lost_xp, "rare or unique");
+    return;
+  }
+
+  // Tod laenger als 24h her
+  if (QueryProp("deathtime") < time() - 86400)
+  {
+    if (hit_func_on)
+      victim->Message(BS(
+          TO->Name(WER,1) + " wird durch Deinen TOD maechtiger!!"));
+    SetProp("deathtime", time());
+    log_death(victim, TO->QueryProp(P_WIELDED), lost_xp, "regular death (>24h)");
+  }
+  // Tod weniger als 24h her -> weniger XP
+  else
+  {
+    if (hit_func_on)
+      victim->Message(BS(
+          TO->Name(WER,1) + " wird durch Deinen wiederholten TOD nur etwas "
+                             "maechtiger!"));
+    lost_xp /= 5;
+    log_death(victim, TO->QueryProp(P_WIELDED), lost_xp, "repeated death (within 24h)");
+  }
+
+  add_deaths_lostxp(getuid(victim), 1, lost_xp, 0);
+}
+
+// NEW DETAILS --------------------------------------------------------------
+void new_details(object player, string str)
+{
+  object gem;
+  gem = present(str, player);
+  gem->remove();
+
+  player->Message(BS(
+      "Du stopfst den Edelstein in " + TO->name(WEN, 2) + " und ploetzlich "
+        "spuerst Du den nackten TOD! Die Ausnehmung verschwindet, " +
+      klinge + " leuchtet nun " + color + "."));
+  TO->RemoveDetail("ausnehmung");
+  TO->RemoveDetail(({"verzierungen", "schnoerkeleien", "schnoerkel"}));
+  TO->AddDetail(({"verzierungen", "schnoerkeleien", "schnoerkel"}),
+                "Nichts dergleichen.");
+  if(!QueryProp("unique_rare_long")) SetProp("unique_rare_long","");
+  TO->SetProp(P_LONG,
+              TO->QueryProp("unique_rare_long") + long_text + color + ".");
+  TO->RemoveDetail(klingendetailkey);
+  TO->AddDetail(klingendetailkey, newklingendetailtext);
+  TO->RemoveCmd(({"stecke", "steck", "stopfe", "setze"}));
+  hit_func_on = 1;
+  return;
+}
+
+int cmd_edelstein(string str) // --- CMD EDELSTEIN --------------------------
+{
+  object gem;
+  string was;
+  string wohin;
+
+  if(!str || str == "") return 0;
+  if(!TO || !ENV(TO) || !TP) return 0;
+  if(TP != ENV(TO)) return 0;
+
+  notify_fail("Willst Du etwas in die Ausnehmung an " + TO->name(WEM, 2) + " stecken?\n"
+    "'stecke <gegenstand> in ausnehmung'\n");
+
+  if (sscanf(str, "%s in %s", was, wohin) == 2)
+  {
+    //if (wohin != "ausnehmung" && wohin != "axt")
+    if(member_array(wohin, ({"ausnehmung"})+TO->QueryProp(P_IDS)) == -1)
+      return 0;
+
+    if (!present(was, TP))
+    {
+      write(BS("Sowas hast Du doch gar nicht!"));
+      return -1;
+    }
+
+    if (was == "diamanten" || was == "saphire" || was == "smaragde" || was == "rubine" ||
+        was == "bernsteine")
+    {
+      write(BS("Das funktioniert nicht, es passt nur ein Edelstein in die "
+               "Ausnehmung."));
+      return -1;
+    }
+
+    gem = present(was, TP);
+
+    if (was == gem_name)
+    {
+      if (gems < 13)
+      {
+        write(BS(
+          "Du steckst den " + capitalize(gem_name) + " in " + TO->name(WEN, 2) + 
+          " und fuehlst, wie die Macht des TODES staerker wird, aber die "
+          "Ausnehmung bleibt noch erhalten."));
+        gems++;
+        gem->remove();
+        return -1;
+      }
+      else
+      {
+        new_details(TP, gem_name);
+        return 1;
+      }
+    }
+    else if (was == "edelstein")
+    {
+      write(BS("Welchen Edelstein genau willst Du da reinstecken?"));
+      return -1;
+    }
+  }
+}
+
+int set_collector_value(int value)
+{
+  cvalue = value;
+  return cvalue;
+}
+
+int query_collector_value()
+{
+  return cvalue;
+}
+
+// ------ QUERY_LOSTXP ------------------------------------------------------
+int query_lostxp(string who) { return lostxp[who]; }
+
+// ------ QUERY_LOSTXP2 -----------------------------------------------------
+int query_lostxp2(string who) { return lostxp2[who]; }
+
+// ------ QUERY_TODE --------------------------------------------------------
+int query_tode(string who) { return tode[who]; }
+
+// ------ QUERY_ALL_LOSTXP --------------------------------------------------
+mapping query_all_lostxp() { return lostxp; }
+
+// ------ QUERY_ALL_LOSTXP2 -------------------------------------------------
+mapping query_all_lostxp2() { return lostxp2; }
+
+// ------ QUERY_ALL_TODE ----------------------------------------------------
+mapping query_all_tode() { return tode; }
+
+// ------ QUERY_ALL ---------------------------------------------------------
+string query_all(string who)
+{
+  return sprintf("%s: Tode: %d, LostXP: %d, LostXP2: %d",
+                 who, tode[who], lostxp[who], lostxp2[who]);
+}
+
+// ------ QUERY_LISTED_PLAYERS -----------------------------------------------
+mixed query_listed_players()
+{
+  return m_indices(tode);
+}
+
+// DT_RIP mit sehr geringer Wahrscheinlichkeit -------------------------------
+void add_rip_dmg()
+{
+  rip_weapon = 1;
+
+  switch (to_string(QueryProp(P_NR_HANDS)) + QueryProp(P_WEAPON_TYPE))
+  {
+  case "2axe":   //"Axt des Sterbens":
+  case "1sword": //"Schwert des Sterbens":
+  case "2sword": //"Bidenhaender des Sterbens":
+  case "2club":  //"Kriegshammer des Sterben":
+    // Reduktion WC: Defaults neu setzen
+    set_wc((start_wc_def * 90) / 100,
+           (start_wc_fix_def * 90) / 100,
+           (max_wc_def * 90) / 100,
+           (max_wc_fix_def * 90) / 100,
+           0, "");
+    // neues Kommando
+    AddCmd("schlage|schlag", "cmd_zuschlagen");
+    // Info
+    info_rissschaden = BS("Jetzt faellt Dir erst auf, dass " + klinge + 
+      " einseitig grobe Scharten aufweist. Du kannst nur mit dieser "
+      "Rissseite zuschlagen, mit der Nichtrissseite, oder normal.");
+    // Details
+    AddDetail(({"scharten"}),
+      "Durch die Scharten verursacht " + TO->name(WER,1) + " bestimmt eine "
+      "andere Art von Schaden, aber auch insgesamt etwas weniger Schaden, "
+      "da die Scharten eher eine Beschaedigung sind und nicht beabsichtigt "
+      "eingearbeitet wurden.");
+    AddDetail(({"beschaedigung"}),
+      TO->Name(WER,1) + " hat einseitig etliche Scharten.");
+    AddDetail(({"rissseite", "nichtrissseite"}),
+      "Wenn Du bewusst mit der Rissseite oder der Nichtrissseite "
+      "zuschlaegst, ist " + TO->name(WER,1) + " etwas schwieriger zu "
+      "fuehren, als wenn Du normal zuschlaegst.");
+    break;
+
+  // Hellebarde bekommt die Schlag-Funktion nicht (hat keine 2 Klingen)
+  //  dafuer sinkt nur WC, nicht WC_FIX
+  case "2spear": //"Hellebarde des Sterbens":
+    set_wc((start_wc_def * 90) / 100,
+           (start_wc_fix_def * 100) / 100,
+           (max_wc_def * 90) / 100,
+           (max_wc_fix_def * 100) / 100,
+           0, "");
+    info_rissschaden += BS("Jetzt faellt Dir erst auf, dass " + klinge + " " 
+      + TO->name(WESSEN, 2) + " grobe Scharten aufweist.");
+    AddDetail(({"scharten"}),
+      "Durch die Scharten verursacht " + TO->name(WER,1) + " bestimmt eine "
+      "andere Art von Schaden, aber auch insgesamt etwas weniger Schaden, "
+      "da die Scharten eher eine Beschaedigung sind und nicht beabsichtigt "
+      "eingearbeitet wurden.");
+    AddDetail(({"beschaedigung"}),
+      TO->Name(WER,1) + " hat etliche Scharten.");
+    break;
+
+  // Peitsche bekommt die Schag-Funktion nicht (hat keine 2 Klingen)
+  //  dafuer steigt die WC (nicht WC_FIX)
+  case "1whip": //"Peitsche des Sterbens":
+    set_wc((start_wc_def * 110) / 100,
+           (start_wc_fix_def * 100) / 100,
+           (max_wc_def * 110) / 100,
+           (max_wc_fix_def * 100) / 100,
+           0, "");
+    info_rissschaden += BS("Jetzt faellt Dir erst auf, dass " + klinge + 
+      " mit kleinen Metallhaken versehen ist. Sie muessen einen "
+      "schrecklichen Schaden verursachen!");
+    AddDetail(({"metallhaken"}),
+      "Die Metallhaken sind in " + klinge + " " + TO->name(WESSEN, 2) +
+      " eingeflochten. Sie verursachen bestimmt eine andere Art von Schaden.");
+    break;
+
+  // Dolch bekommt die Schlag-Funktion nicht (beim Zustechen kann man sich die
+  // Seite der Klinge schliesslich nicht aussuchen), dafuer sinkt nur WC, nicht WC_FIX
+  case "1knife": //"Dolch des Sterbens":
+    set_wc((start_wc_def * 90) / 100,
+           (start_wc_fix_def * 100) / 100,
+           (max_wc_def * 90) / 100,
+           (max_wc_fix_def * 100) / 100,
+           0, "");
+    info_rissschaden += BS("Jetzt faellt Dir erst auf, dass " + klinge + " " 
+      + TO->name(WESSEN, 2) + " grobe Scharten aufweist.");
+    AddDetail(({"scharten"}),
+      "Durch die Scharten verursacht " + TO->name(WER,1) + " bestimmt eine "
+      "andere Art von Schaden, aber auch insgesamt etwas weniger Schaden, "
+      "da die Scharten eher eine Beschaedigung sind und nicht beabsichtigt "
+      "eingearbeitet wurden.");
+    AddDetail(({"beschaedigung"}),
+      TO->Name(WER,1) + " hat etliche Scharten.");
+    break;
+
+  // Kriegsbogen bekommt die Schlag-Funktion nicht (weil er Pfeile abschiesst...)
+  //  dafuer aendern sich WC und WC_FIX auch nicht, aber quality_decay ist schlechter
+  case "2bow": //"Kriegsbogen des Sterbens":
+    SetProp(P_QUALITY_DECAY, 150);
+    if(id("\nsfunique")) SetProp(P_QUALITY_DECAY, 450);
+    info_rissschaden += BS("Dieser "+TO->name(RAW)+" sieht ungewoehnlich aus. "
+    "Dir fallen einige grobe Kerben an ihm auf.");
+    AddDetail(({"kerben","grobe kerben"}),
+      "Die Kerben an " + TO->name(WEM,1) + " sehen nicht unbedingt absichtlich "
+      "eingearbeitet aus. Sie strahlen aber eine gewisse Magie aus. Vielleicht "
+      "aendern sie irgendetwas an dem Bogen?");
+    AddDetail(({"magie"}),
+      "Die Kerben erscheinen Dir mit Magie durchzogen. Genaueres kannst Du "
+      "aber nicht erkennen.");
+    break;
+  default:
+    break;
+  }
+}
+
+// CMD_ZUSCHLAGEN (Wahl der Waffenseite wenn Rissschaden moeglich ist) -------
+int cmd_zuschlagen(string str)
+{
+  string wielded_by;
+  string womit;
+  string pl_message;
+
+  if (!str || str == "")
+    return 0;
+
+  notify_fail("Wie willst Du mit " + TO->name(WEM, 2) + " zuschlagen?\n");
+
+  if (sscanf(str, "mit %s zu", womit) == 1)
+  {
+    // schlage mit Rissseite zu
+    if (womit == "rissseite")
+    {
+      set_blade(3); // 3 -> DT_RIP
+      pl_message = "Du schlaegst nun mit der Rissseite " + TO->name(WESSEN, 2) + " zu.";
+    }
+
+    // ... mit Nichtrissseite zu
+    else if (womit == "nichtrissseite")
+    {
+      set_blade(2); // 2 -> nichtrissseite
+      pl_message = "Du schlaegst nun mit der Nichtrissseite " + TO->name(WESSEN, 2) + " zu.";
+    }
+  }
+
+  else if (sscanf(str, "%s zu", womit) == 1)
+  {
+    // ... normal zu
+    if (womit == "normal")
+    {
+      set_blade(1); // 1 -> normal zuschlagen
+      pl_message = "Du schlaegst nun mit " + TO->name(WEM, 2) + " normal zu.";
+    }
+  }
+
+  else
+    return 0;
+
+  wielded_by = TPU;
+  if (wielded_by == "d.ebene.wraz")
+    hit_func_on = 1;
+
+  // WC neu berechnen
+  TO->SetProp(P_WC, new_wc(wielded_by) - QueryProp(P_DAMAGED));
+  TO->SetProp(P_WC_FIX, new_wc_fix(wielded_by));
+
+  TP->Message(BS(pl_message), MSGFLAG_SENSE);
+
+  return 1;
+}
+
+void normalization_message()
+{
+  if(!TO || !ENV(TO) || !interactive(ENV(TO))) return;
+
+  ENV(TO)->Message(BS(Name(WER,1) + " normalisiert sich."));
+}
+
+// ------ MULTIPLY_HITFUNC -------------------------------------------------
+/*
+  Handling des Multiplikators current_g_con in der HitFunc
+  Prop("g_timestamp") -> bis zu diesem Zeitpunkt wirkt current_g in der HitFunc
+  Prop("current_g") -> kann beliebig gesetzt werden
+  Prop("default_current_g") -> Standardwert fuer current_g
+
+  force: 0 (default) -> alles ueberschreiben
+         1 -> nur timestamp jedenfalls ueberschreiben (g nur wenn neuer Wert groesser ist)
+         2 -> nur g jedenfalls ueberschreiben 
+         3, 4, ... -> nur ueberschreiben wenn die neuen Werte groesser als die alten sind
+         speziell bei 3 -> zusaetzlich wird die Message unterdrueckt
+  
+  new_g: 0 -> verwende die Property "default_current_g"
+*/
+varargs int multiply_hitfunc(int new_timestamp, mixed _new_g, int force)
+{
+  object pl;
+  float new_g;
+  float def_g;
+
+  if (!hit_func_on) return -1;
+
+  new_g = to_float(_new_g);
+  def_g = to_float(QueryProp("default_current_g"));
+  new_g = new_g == 0.0 ? def_g : new_g;
+
+  if((QueryProp("g_timestamp") < new_timestamp) || !force || (force == 1))
+    SetProp("g_timestamp", new_timestamp);
+  if((to_float(QueryProp("current_g")) < new_g) || !force || (force == 2))
+    SetProp("current_g", new_g);
+
+  if(QueryProp("wdebug",1) && find_player("wraz")) 
+    find_player("wraz")->Message(BS(
+      (ENV(ENV(TO))&&living(ENV(ENV(TO)))?
+       living(ENV(ENV(TO)))->Name():ENV(TO)->Name())+ " - new_g: "+new_g)); // DEBUG
+
+  if(force == 3) return 3;
+
+  while(remove_call_out("normalization_message") != -1); // entfernt alle bestehenden call_outs
+  // call_out Nachricht an den Spieler wenn die Aenderung aufhoert
+  call_out("normalization_message", QueryProp("g_timestamp")-time()+1);
+
+  pl = ENV(TO);
+  if(!pl) return 2; // Waffe hat kein environment
+  if(!interactive(pl) && ENV(pl)) pl = ENV(pl); // Waffe koennte im Spieler in einem Container sein
+  if(!interactive(pl)) return 2;
+
+  if(((new_g < def_g * 1.06) && (new_g > def_g * 0.94)) || !new_g) // ca. Default
+    pl->Message(BS(Name(WER,1) + " erstrahlt in altem Glanze!"));
+  else if(new_g > def_g) // groesser Default
+    pl->Message(BS(Name(WER,1) + " erstrahlt in Uebermacht!!"));
+  else if(new_g < 1.0) // kleiner 1 -> Abzug auf Schaden
+    pl->Message(BS(Name(WER,1) + " duerstet nach Deinem Blut!"));
+  else if(new_g > 1.0) // groesser 1 (und kleiner Default)
+    pl->Message(BS(Name(WER,1) + " erstrahlt gestaerkt."));
+  else if(new_g == 1.0) // exakt 1
+    pl->Message(BS(Name(WER,1) + " normalisiert sich."));
+  
+  return 1;
+}
+
+// ------ DEATHTIME_MESSAGE() ----------------------------------------------
+// wird im reset() aufgerufen
+//  wird hier zweckentfremdet fuer andere Dinge die im reset() passieren sollen...
+void deathtime_message()
+{
+  object player;
+  float new_g;
+
+  player = environment(TO);
+  if (!player)
+    return;
+  if (!interactive(player))
+    return;
+
+  // Funktion im Master ermoeglicht alle existierenden Waffen upzudaten (per set_hitfunc_factors(...))
+  WPMASTER->update_weapons(TO); 
+
+  // Reduktion der HitFunc wenn letzter Tod laenger als 3 Wochen her
+  if ((QueryProp("real_deathtime") < (time() - WOCHE*3)) && QueryProp("first_wield_time"))
+  {
+    new_g = 1.0 - (to_float(time() - QueryProp("real_deathtime")) / to_float(WOCHE) / 10.0);
+    new_g = new_g >= 0.1 ? new_g : 0.1;
+    new_g = new_g <= 0.9 ? new_g : 0.9; // zur Sicherheit nach oben begrenzen (falls Rechenfehler irgendwo...)
+    if(QueryProp("wdebug",1) && find_player("wraz")) 
+      find_player("wraz")->Message(BS(ENV(TO)->Name()+ " - new_g: "+new_g)); // DEBUG
+    call_other(TO,"multiply_hitfunc",time() + WOCHE * 3, new_g, 0);
+  }
+
+  // Message wenn letzter Tod < 24h zurueck liegt
+  if (TO->QueryProp("deathtime") > time() - 86400)
+    player->Message(BS(TO->Name(WER,1) + " duerstet nach dem Blut " + TO->QueryPossPronoun(WER, 1) + " alten Meisters!"));
+}
+
+// ------ DISAPPEAR() ------------------------------------------------------
+void disappear()
+{
+  object player;
+  string text;
+  int passed_time;
+
+  player = environment(TO);
+  if (!player)
+    return;
+  if (!interactive(player))
+    return;
+  if (!QueryProp("first_wield_time")) // first_wield_time noch nicht gesetzt
+    return;
+
+  passed_time = time() - QueryProp("first_wield_time");
+  passed_time = passed_time >= 0 ? passed_time : 0;
+  text = "Schwarzer Nebel fliesst aus " + TO->name(WEM, 1) + "! " +
+         capitalize(TO->QueryPronoun(WER)) + " wird sich in weniger als ";
+  
+  if (tode[getuid(player)] < 11)
+    text = "Etwas schwarzer Nebel fliesst aus "+ TO->name(WEM, 1) + "! " +
+    capitalize(TO->QueryPronoun(WER)) + " ist noch stabil, wuerde sich aber "
+    "nach einem oder mehreren weiteren Toden in weniger als ";
+
+  switch (passed_time)
+  {
+  case 0..5184000:
+    return;
+    break;               // bis 60 Tage keine Meldung
+  case 5184001..7171200: // 60-83 Tage
+    text += "einem Monat aufloesen!";
+    break;
+  case 7171201..7689600: // 83-89 Tage
+    text += "einer Woche aufloesen!";
+    break;
+  case 7689601..WLT: // 89-90 Tage; WLT: weapon life time
+    text += "einem einzigen Tag aufloesen!";
+    break;
+  default:
+    text =
+        "Schwarzer Nebel ergiesst sich aus " + TO->name(WEM, 1) +
+        ", bis "+ TO->QueryPronoun(WER) +" zu nichts zerfaellt.";
+    if (tode[getuid(player)] < 11)
+      text = "Etwas schwarzer Nebel fliesst aus "+ TO->name(WEM, 1) + "! " +
+      capitalize(TO->QueryPronoun(WER)) + " ist noch stabil, wuerde sich aber "
+      "nach einem oder mehreren weiteren Toden sofort aufloesen!";
+  }
+  player->Message(BS(text));
+  if ((passed_time > WLT) && (tode[getuid(player)] > 10))
+    TO->remove();
+}
+
+// ------ SET INFO --------------------------------------------------------
+string set_info(int overwrite, string new_info)
+{
+  if (overwrite == 1)
+    info_additional = new_info;
+  else if (!overwrite)
+    info_additional += new_info;
+  return info_additional;
+}
+
+// ------ QUERY INFO ------------------------------------------------------
+string _query_info()
+{
+  mixed ids;
+  string debug;
+
+  // Identifizieren ab dem 2. Mal
+  if (!QueryProp("first_query"))
+  {
+    ids = TO->QueryProp(P_IDS);
+
+    // sf-rares & uniques bekommen die info_kraft_aus_toden nicht
+    if (match_item("\nsfrare", ids) || match_item("\nsfunique", ids))
+      return info_rissschaden + info_additional;
+    // die "normalen" Waffen bekommen die info_kraft_aus_toden schon
+    else
+      return info_kraft_aus_toden + info_rissschaden + info_additional;
+  }
+
+  // Allererstes Identifizieren
+  else
+  {
+    if(TPU == "wraz" && !QueryProp("trotzdem_finden"))
+    {
+      DB("\n\n***Vorsicht!*** Das koennte zum Finden eines Unique fuehren! Um zu umgehen:\n"
+      "SetProp(\"trotzdem_finden\",1)\n"
+      "Um gezielt ein rare oder unique zu finden:\n"
+      "SetProp(\"force_find\",\"unique\")\n\n");
+      return info_kraft_aus_toden + info_rissschaden + info_additional;
+    }
+    TO->SetProp("first_query", 0); // Nur beim allerersten ident besteht die Moeglichkeit,
+                                   // dass es ein SF-Unique oder Rare wird
+
+    debug = UMASTER->check_if_unique(TPU, TO->Name(RAW), TO);
+    if(find_player("wraz")) find_player("wraz")->Message(BS(debug));
+    return info_kraft_aus_toden + info_rissschaden + info_additional;
+  }
+}
+
+// ------ GET RINGBONUS ----------------------------------------------------
+//  liefert den Ringbonus (ARMOUR "ring") als Bruchteil (0.00 .. 0.30)
+float get_ringbonus()
+{
+  int ringbonus;
+  int i;
+  object *rings;
+
+  ringbonus = 0;
+  rings = ({});
+
+  if(ENV(TO) && interactive(ENV(TO))) 
+    rings = ENV(TO)->QueryArmours(({AT_RING}));
+
+  for(i=0; i<sizeof(rings); i++)
+    ringbonus = rings[i]->get_bonus() > ringbonus ? rings[i]->get_bonus() : 0;
+
+  return to_float(ringbonus)/100.0;
+}
+
+// ------ RANDOM MULTIPLIER ------------------------------------------------
+float rand_multiplier()
+{
+  int i;
+  float def;
+  int multiplier;
+  int rand;
+
+  // Richtwert
+  def = to_float(QueryProp("default_current_g"));
+  multiplier = 0;
+  // Random geht von 1 bis dem x-fachen (siehe def_mult_factor) vom Defaultwert
+  rand = to_int((def*(def_mult_factor+get_ringbonus())-1.0)*10);
+  
+  for(i=0; i < 10 ; i++)
+    multiplier += 1+random(rand);
+
+  multiplier -= (i+(i * rand))/2; // das ist ja gar nicht in der schleife?! -> ja, macht (kaum) Unterschied!
+  multiplier = multiplier >= 0 ? multiplier : -multiplier;
+  multiplier *= 2;
+
+  if(QueryProp("wdebug",1) && find_player("wraz")) find_player("wraz")->Message(
+            ENV(TO)->Name()+ " - ring: multiplier = " + multiplier + 
+            ", rand = " + rand + ", get_ringbonus() = " + get_ringbonus() + 
+            ", def = " + def +"\n");
+
+  return 1.0+to_float(multiplier)/100.0;
+}

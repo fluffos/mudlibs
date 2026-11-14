@@ -1,0 +1,289 @@
+// SilberLand MUDlib
+//
+// spellbooks/paladine/behandle.c
+//
+// $Date: 2009/01/25 09:17:01 $
+/* $Revision: 1.5 $
+ * $Log: behandle.c,v $
+ * Revision 1.5  2009/01/25 09:17:01  Angrox
+ * Haustiere koennen nun geheilt werden
+ *
+ * Revision 1.4  2005/05/31 11:39:30  Feyaria
+ * behandle mich
+ *
+ * Revision 1.3  2004/12/15 00:50:11  Feyaria
+ * XP von geheilten hp und gefaehrlichkeit der lage abhaengig.
+ *
+ * Revision 1.2  2003/09/25 06:00:07  Angrox
+ * XP fuers heilen
+ *
+ * Revision 1.1  2003/07/09 11:39:22  Angrox
+ * Initial revision
+ *
+ */
+
+
+
+// Prototypem
+string perc2str(int percent);
+int behandle(object caster, mapping sinfo);
+  
+
+string perc2str(int percent) {
+  string str;
+
+  str="";
+  switch (percent) {
+    case  0:        str+=" wird den naechsten Treffer nicht ueberleben.";
+                    break;
+    case  1..5 :    str+=" ist so gut wie am Ende.";
+                    break;
+    case  6..10:    str+=" spuert bald das Ende nahen.";
+                    break;
+    case 11..15:    str+=" spuert die Lebensenergie schwinden.";
+                    break;
+    case 16..20:    str+=" ist in einem aeusserst bedenklichen Zustand.";
+                    break;
+    case 21..25:    str+=" ist in einem sehr ueblen Zustand.";
+                    break;
+    case 26..30:    str+=" ist in einem ueblen Zustand.";
+                    break;
+    case 31..35:    str+=" ist in einem sehr schlechten Zustand.";
+                    break;
+    case 36..40:    str+=" ist in einem ziemlich schlechten Zustand.";
+                    break;
+    case 41..45:    str+=" macht einen sehr angeschlagenen Eindruck.";
+                    break;
+    case 46..50:    str+=" macht einen ziemlich angeschlagenen Eindruck.";
+                    break;
+    case 51..55:    str+=" machte schon einen wesentlich besseren Eindruck.";
+                    break;
+    case 56..60:    str+=" machte schon einen deutlich besseren Eindruck.";
+                    break;
+    case 61..65:    str+=" machte schon einen besseren Eindruck.";
+                    break;
+    case 66..70:    str+=" fuehlt sich nicht mehr so gut.";
+                    break;
+    case 71..75:    str+=" ist noch recht gut drauf.";
+                    break;
+    case 76..79:    str+=" ist bei ordentlicher Gesundheit.";
+                    break;
+    case 81..85:    str+=" ist bei guter Gesundheit.";
+                    break;
+    case 86..90:    str+=" ist bei sehr guter Gesundheit.";
+                    break;
+    case 91..95:    str+=" ist bei hervorragender Gesundheit.";
+                    break;
+    case 96..99:    str+=" ist bei ausgezeichneter Gesundheit.";
+                    break;
+    case 100..10000:str+=" ist bei bester Gesundheit.";
+                    break;
+    default:  str+=" ist nicht von dieser Seite.";
+  }
+  return str;
+}
+
+
+
+int behandle(object caster, mapping sinfo) {
+  object victim;
+  int hands, suc, heal, hp, max_hp, percent;
+  int f_hands, old_hp, second;
+  // FUER DIE HAUSTIERE LOGGEN: 
+  enable_spell_log=1;
+
+  if (sinfo[SI_SKILLARG] == "mich")
+    victim = caster;
+  else
+    victim=FindVictim(sinfo[SI_SKILLARG],caster,
+        BS("Wen willst Du mit der Macht Dustys behandeln?\n"));
+  if (!victim || (victim && victim->QueryProp(P_INVIS)))
+    return 0;
+  f_hands=caster->QueryProp(P_MAX_HANDS)-caster->QueryProp(P_USED_HANDS);
+  if(present("\nspiegelschild", caster)) {
+    f_hands+=1;
+  }
+  if(interactive(caster) && f_hands < 2)
+  {
+    Message(caster,0,
+      BS("Du hast nicht genug Haende frei.\n"),0);
+    return 0;
+  }
+  if(caster->QueryProp(P_BLIND)) {
+    Message(caster,0,
+      BS("Bei Dusty, Du bist blind und kannst so nicht behandeln!\n"),0);
+    return 0;
+  }
+  if (ENV(caster) && ENV(caster)->_query_total_light() < 1) {
+    Message(caster,0,
+      BS("Bei Dusty, hier ist es VIEL zu dunkel dafuer!\n"),0);
+    return 0;
+  }
+
+  if(victim->is_class_member(CL_UNDEAD) ||
+     victim->is_class_member(CL_DEMON))
+  {
+    Message(caster, 0, "PALADIN! Du kannst keine Untoten oder "
+        "Daemonen heilen!\n", 0);
+    return 0;
+  }
+
+  if((old_hp = victim->QueryProp(P_HP)) == victim->QueryProp(P_MAX_HP)) {
+    if(victim==caster)
+      Message(caster, 0, "Aber Du hast doch keine Wunden! Danke Dusty "
+          +"dafuer!\n", 0);
+    else
+      Message(caster, 0, sprintf("Aber %s hat keine Wunden! %s sollte Dusty "
+          +"dafuer danken.\n", victim->name(WER),
+          CAP(victim->QueryPronoun(WER))), 0);
+    return 0;
+  }
+  if(call_other(NPCMASTER, "IsFeind", victim) && victim!=caster) {
+    Message(caster,0,
+          BS("BEI DUSTY! Du wuerdeset einen FEIND der Paladine und somit "
+          "auch einen FEIND Deiner Goettin heilen? Dafuer gibt es nur "
+          "EINE Strafe!!!"),0);
+    call_out("DoFakeDeath",0,caster);
+    return 0;
+  }
+  //if(interactive(caster) && !interactive(victim)) {
+  //  Message(caster, 0, BS(sprintf("Bei Dusty! Du kannst %s nicht behandeln!",
+  //      victim->name(WEN))), 0);
+  //  return 0;
+  //}
+/*  if(victim->QueryProp(P_GHOST)) {
+    Message(caster, 0, BS(                                                                                        
+     sprintf("Bei Dusty! Du kannst %s nicht behandeln, weil %s gerade ein "
+         +"Geist ist!\n",                                                         
+     victim->name(WER),victim->QueryPronoun(WER))), 0);
+     return 0; 
+  }*/
+  if(victim->QueryProp(P_FRIEND) && !victim->id("\nhaustier")) {
+    Message(caster, 0, BS(                                                                                        
+     sprintf("Bei Dusty! Du kannst %s nicht behandeln!\n",                                                         
+     victim->name(WER))), 0);
+     return 0; 
+  }
+  if (IS_WIZARD(victim)) {
+    Message(caster, 0, BS(
+      sprintf("%s ist von Natur aus nicht verwundbar!\n",
+      victim->Name(WER))), 0);
+    return 0;
+  }
+  if (victim->QueryGuest()) {
+    Message(caster, 0, BS(
+      sprintf("%s ist ein Gast und bedarf keiner Heilung!\n",
+      victim->Name(WER))), 0);
+    return 0;
+  }
+
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+      printf(sinfo[SI_SP_LOW_MSG]);
+      return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  Message(caster, 0, "Du beginnst leise zu Dusty zu beten!\n", 0);
+  Message(caster, 0, sprintf("%s scheint leise zu beten.\n",caster->Name(WER)),
+      3);
+  if((suc=SpellSuccess(caster,sinfo))<=0)
+    return MISSERFOLG;
+  heal=caster->QueryProp(P_GUILD_LEVEL)+((caster->QueryAttribute(A_INT)
+      *12*suc/(10*MAX_ABILITY)));
+  //tell_angrox(heal+"/");
+  if(f_hands<2)
+    heal/=2;
+  heal=DoModificationByAlign(heal, caster)/2+
+       DoModificationByAlign(heal, victim)/2;
+  if(heal < (15-(caster->QueryProp(P_GUILD_LEVEL)+2))*2)
+    heal=(15-(caster->QueryProp(P_GUILD_LEVEL)+2))*2;
+  if(enable_spell_log)
+    write_file("/gilden/paladine/spells/behandle",
+        sprintf("CST: %O, VIC: %O, CA: %d, VA: %d, suc: %d, "
+         "heal: %d, MP: %d\n", caster, victim, caster->QueryProp(P_ALIGN),
+        victim->QueryProp(P_ALIGN), suc, heal, sinfo[SI_RAW_SPELLCOST]));
+  //tell_angrox(heal+"\n");
+  if(heal>50) heal=50;
+  if(victim->id(ISPALADIN)) heal*=2; // NPCs heilen is cool :) angrox
+  victim->AddHp(heal);
+  if(victim==caster) {
+    Message(caster, 0, sprintf("%s legt sich %s Hand auf %s Wunden.\n",
+        caster->Name(WER), caster->QueryPossPronoun(FEMALE),
+        caster->QueryPossPronoun(FEMALE)), 3);
+    Message(caster, 0, BSA(sprintf("Goettliche Herrin Dusty, leihe %s Deine "
+         "Macht und heile meine Wunden!",
+         diener[0][caster->QueryProp(P_GENDER)]), caster->Name(WER)+
+          " ruft: "), 3);
+    Message(caster, 0, BS(sprintf("Die Wunden von %s schliessen sich!\n",
+        caster->Name(WER))), 3);
+    Message(caster, 0, BS("Du legst Deine Hand auf Deine Wunden.\n"), 0);
+    Message(caster, 0, BSA(sprintf("Goettliche Herrin Dusty, leihe %s "
+         "Deine Kraft und heile meine Wunden!",
+        diener[0][caster->QueryProp(P_GENDER)]), "Du rufst: "), 0);
+    Message(caster, 0, BS("Ein Teil Deiner Wunden schliesst sich! Dusty sei "
+         "Dank!"), 0);
+  }
+  else {
+    Message(caster, victim, sprintf("%s legt %s Hand auf Deine Wunden.\n",
+        caster->Name(WER), caster->QueryPossPronoun(FEMALE)), 1);
+    Message(caster, victim, BS(sprintf("Du legst Deine Hand auf die Wunden "
+         "von %s.", victim->name(WEM))), 0);
+    Message(caster, victim, BS(sprintf("%s legt %s Hand auf die Wunden "
+           "von %s.", caster->Name(WER), caster->QueryPossPronoun(FEMALE),
+          victim->name(WEM))), 2);
+    Message(caster, victim, BSA(sprintf("Goettliche Herrin Dusty, leihe %s "
+         "Deine Macht und heile die Wunden von %s!",
+        diener[0][caster->QueryProp(P_GENDER)], victim->name(WEM)),
+        "Du rufst: "), 0);
+    Message(caster, victim, BSA(sprintf("Goettliche Herrin Dusty, leihe "
+           "%s Deine Macht und heile die Wunden von %s!",
+          diener[0][caster->QueryProp(P_GENDER)], victim->name(WEM)),
+          caster->Name(WER)+" ruft: "), 3);
+    hp=victim->QueryProp(P_HP);
+    if (hp < 0) hp=0;
+    max_hp=victim->QueryProp(P_MAX_HP);
+    if (max_hp < 1) max_hp=1;
+    percent=100*hp/max_hp;
+    Message(caster, victim, BS(sprintf("Die Wunden von %s schliessen sich "
+          "und "+victim->QueryPronoun()+perc2str(percent)+"\n",
+        victim->name(WEM))), 4);
+    Message(caster, victim, "Deine Wunden schliessen sich!\n", 1);
+
+    second = (caster->QueryProp(P_SECOND) && 
+        lower_case(caster->QueryProp(P_SECOND)) == getuid(victim)) ||
+       (victim->QueryProp(P_SECOND) && 
+        lower_case(victim->QueryProp(P_SECOND)) == getuid(caster));
+    if(caster->QueryProp(P_ALIGN) <1100)
+      caster->SetProp(P_ALIGN, caster->QueryProp(P_ALIGN)+random(10)/(1+second));
+    if (!second)
+    {
+      heal = (hp - old_hp) * (5 - percent/21);
+      if (victim->InFight()) heal *= 2;
+      if (caster->InFight()) heal *= 2;
+      caster->AddExp(heal);
+    }
+  }
+
+  if(HAS_BLESSING(caster, BLESSING_HEALING_HANDS) && 
+     !victim->Query(P_HP_DELAY,F_QUERY_METHOD)) {
+    victim->Set(P_HP_DELAY, symbol_function("healing_hands_delay", TO), F_QUERY_METHOD);
+    call_out("remove_healing_hands_delay", caster->QueryAttribute(A_INT)/2 + random(caster->QueryProp(P_GUILD_LEVEL)/2 + caster->QueryProp(P_ALIGN)/75), victim);
+    tell_object(victim, BS("Dustys Gnade laesst deine Wunden schneller heilen!"));
+  }
+
+  return ERFOLG;
+}
+
+public int healing_hands_delay() {
+  return 0;
+}
+
+public void remove_healing_hands_delay(object caster) {
+  if( objectp(caster) ) {
+    caster->Set(P_HP_DELAY, 0, F_QUERY_METHOD);
+    tell_object(caster, BS("Dustys Segen auf deinen Wunden erlischt. LOB SEI DUSTY!"));
+  }
+}
+
+
+

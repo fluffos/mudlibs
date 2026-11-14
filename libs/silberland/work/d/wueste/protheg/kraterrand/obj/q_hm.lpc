@@ -1,0 +1,163 @@
+/*
+** Questobjekt fuer Barlogors Quest
+**
+**
+*/
+
+#include <properties.h>
+#include <language.h>
+#include "../def.h"
+
+inherit "std/thing";
+
+#define QUESTNAMEN \
+({"Oturo", "Banw", "Treyr", "Kinrr", "Ingnd", "Youph", "Iase", "Yumu",    \
+  "Oachi", "Laef", "Aero", "Smaith", "Samph", "Noes", "Eryni", "Burlt",   \
+  "Utasa", "Isg", "Ehine", "Ger", "Tanlit", "Oiro", "Rhaiv", "Oceri",     \
+  "Phayl", "Slaen", "Therth", "Ret", "Luick", "Cheugh", "Kinck", "Drurd", \
+  "Uightu", "Idanu", "Issc", "Ytura", "Heak", "Naey", "Apola", "Ustm",    \
+  "Yurny", "Yture", "Biph", "Ias", "Bees", "Itasu", "Rothll", "Enysy",    \
+  "Otai", "Irilu", "Loiq", "Skelck", "Ukaly", "Cloeth", "Iperi", "Olore", \
+  "Tasld", "Quas", "Gour", "Chraud", "Uskq", "Nird"})
+
+nosave int dauer, gefunden, gemeisselt, gefragt, failed;
+nosave string toternftah;
+
+void create() 
+{
+  if(!is_clone(ME)) return;
+  ::create();
+  
+  SetProp(P_SHORT, "Hammer und Meissel");
+  SetProp(P_LONG,
+	  BS("Ein ganz normaler Hammer und ein kleiner, staehlerner Meissel. "
+	     "Nftah Barlogor Ukmant hat Dir die zwei gegeben, dass du das "
+	     "Grab renovieren kannst!"));
+
+  SetProp(P_NAME, "Hammer und Meissel");
+  SetProp(P_GENDER, MALE);
+
+  AddId(({"hammer","meissel","hammer und meissel", "\ngrabquesthm",
+          "\ngrab_quest_item","QUESTOBJ", "NODESTRUCT"}));
+
+  SetProp(P_MATERIAL, ([MAT_WOOD:10,MAT_STEEL:70,MAT_IRON:20]));
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL,1);
+  SetProp(P_NODROP,1);
+  SetProp(P_NEVERDROP,1);
+  dauer=4;
+
+  SUID;
+
+  toternftah=lower_case(QUESTNAMEN[random(sizeof(QUESTNAMEN))]);
+  failed=0;
+}
+
+void reset()
+{
+  object pl;
+  
+  ::reset();
+  
+  if(!is_clone(ME)) return;
+  
+  if(!pl=ENV(ME)) remove();
+
+  if(!query_once_interactive(pl)) remove();
+  
+  dauer--;
+
+  if(!dauer)
+    {
+      if(interactive(pl))
+	pl->Message(break_string("Achtung! Ich gebe Dir noch 15 Minuten, "
+				 "um das Grab fertig zu bekommen! Danach "
+				 "breche ich Deinen Auftrag ab!!", 78,
+				 "Barlogor Ukmant teilt Dir mit: "), 
+		    MSGFLAG_TELL);
+      call_out("versagen", 900, pl);
+    }
+}
+
+void versagen(object pl)
+{
+  if(!objectp(pl)) remove();
+
+  if(interactive(pl))
+    {
+      pl->Message(
+	 break_string("Du hast versagt! Du hast es nicht in der Zeit "
+		      "geschafft! Ich breche somit den Auftrag ab und "
+		      "vergebe ihn an Jemand anderes. Falls Du mir "
+		      "wieder helfen willst, musst Du zu mir kommen.",
+		      78, "Barlogor Ukmant teilt Dir mit: "), 
+	 MSGFLAG_TELL);
+      call_out("remove",0);
+    }
+  else
+    failed=1;
+  
+  DB("*** Nftahgrab: "+CAP(getuid(pl))+" schafft die Quest nicht!\n");
+
+  write_file("/log/quests/nftahgrab",
+	     ctime(time())+": "+CAP(getuid(pl))+" schafft die Quest nicht.\n");
+}
+
+string QueryNftahName()
+{
+  return toternftah;
+}
+
+int QueryStat(string what)
+{
+  switch(what)
+  {
+  case "gefunden":   return gefunden;   break;
+  case "gemeisselt": return gemeisselt; break;
+  case "gefragt":    return gefragt;    break;
+  default: return -1;
+  }
+}
+
+int SetStat(string what)
+{
+  switch(what)
+  {
+    case "gefunden":   gefunden=1;   break;
+    case "gemeisselt": gemeisselt=1; break;
+    case "gefragt":    gefragt=1;    break;
+    default: return -1;
+  }
+}
+
+string Fortschritt()
+{
+  return "gefunden: "+gefunden+", gefragt: "+gefragt+", gemeisselt: "+
+    gemeisselt;
+}
+
+int AllDone()
+{
+  if(QueryStat("gefragt"))
+    if(QueryStat("gefunden"))
+      if(QueryStat("gemeisselt"))
+	return 1;
+  return 0;
+}
+
+void BecomesNetAlive(object spieler)
+{
+  if(failed)
+    {
+      spieler->Message(
+	 break_string("Du hast versagt! Du hast es nicht in der Zeit "
+		      "geschafft! Ich breche somit den Auftrag ab und "
+		      "vergebe ihn an Jemand anderes. Falls Du mir "
+		      "wieder helfen willst, musst Du zu mir kommen.",
+		      78, "Barlogor Ukmant teilt Dir mit: "), 
+	 MSGFLAG_TELL);
+      call_out("remove",0);
+    }
+}

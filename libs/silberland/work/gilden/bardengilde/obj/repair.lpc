@@ -1,0 +1,297 @@
+//=========================================================================
+//
+// File: aura.c
+// Created by Gwenshara
+//
+// Project: Bardengilde
+//
+//=========================================================================
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <defines.h>
+#include <new_skills.h>
+#include <moredef.h>
+#include "/gilden/bardengilde/bardengilde.h"
+
+object caster;
+int steps, step, repairPoints;
+
+string *strophen = ({
+  "Hoho! hahei! hoho!\n"
+  "Schmiede, mein Hammer, ein hartes Schwert!",
+
+  "Einst faerbte Blut, dein falbes Blau;\n"
+  "sein rotes Rieseln roetete dich:\n"
+  "kalt lachtest du da, das warme lecktest du kuehl!",
+
+  "Hahahei! hahahei!\n"
+  "hahahei! hei! hei!\n"
+  "Hoho! hoho! hoho!",
+
+  "#Die Musik imitiert das Haemmern auf einem Amboss.",
+
+  "Nun hat die Glut dich rot geglueht;\n"
+  "deine weiche Haerte dem Hammer weicht:\n"
+  "zornig spruehst du mir Funken, dass ich dich sproeden gezaehmt!",
+
+  "Heiaho! heiaho!\n"
+  "heiaho! ho! ho!\n"
+  "Hoho! hoho! hahei!",
+
+  "Hoho! hahei! hoho!\n"
+  "Schmiede, mein Hammer, ein hartes Schwert!",
+
+  "#Ein gleichmaessiges Stakkato klingt wieder wie der Hammer auf dem Amboss.",
+
+  "Der frohen Funken, wie freu' ich mich!\n"
+  "Es ziert den Kuehnen des Zornes Kraft:\n"
+  "lustig lachst du mich an,\n"
+  "stellst du auch grimm dich und gram!\n",
+
+  "#Die Musik wird langsam epischer.",
+
+  "Hahahei! hahahei!\n"
+  "hahahei! hei! hei!\n"
+  "Hoho! hoho! hoho!",
+
+  "Durch Glut und Hammer glueckt' es mir\n"
+  "mit starken Schlaegen streckt' ich dich:\n"
+  "nun schwinde die rote Scham\n"
+  "werde kalt und hart wie du kannst!",
+
+  "#Immer staerker schwillt die Musik an und begleitet den Gesang.",
+  
+  "Heiaho! heiaho!\n"
+  "heiaho! ho! ho!\n"
+  "Hahei! hoho! hahei!",
+
+  "Neidliches Schwert! Jetzt haftest du wieder im Heft.\n"
+  "Warst du entzwei, ich zwang dich ganz,\n"
+  "kein Schlag soll nun dich zerschlagen.\n"
+  "Dem sterbenden Vater zersprang der Stahl,\n"
+  "der lebende Sohn schuf ihn neu:\n"
+  "nun lacht ihm sein heller Schein,\n"
+  "seine Schaerfe schneidet ihm hart",
+
+  "#Das Spiel klingt nun triumphierend und erneuert sich in einem hellen Klang.",
+
+  "Neu und verjuengt! Zum Leben weckt' ich dich wieder.\n"
+  "Tot lagst du in Truemmern dort,\n"
+  "jetzt leuchtest du trotzig und hehr.\n"
+  "Zeige den Schaechern nun deinen Schein!\n"
+  "Schlage den Falschen, faelle den Schelm!",
+
+  "#Das Musizieren kuendigt jetzt ein regelrecht fulminant-episches Finale an!"
+});
+
+public void create() {
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+//--Beschreibungen---------------------------------------------------------
+
+  SetProp(P_SHORT, 0);
+  SetProp(P_LONG,
+    "Ein Bardenlied");
+
+//--Namen------------------------------------------------------------------
+
+  SetProp(P_NAME, "Das geborstene Schwert");
+  SetProp(P_GENDER, NEUTER);
+  SetProp(P_INVIS, 1);
+  AddId(({"\nbarden_song_repair", BARD_UPKEEP_EFFECT}));
+  SetProp(P_BARD_UPKEEP_MODES, ({SK_SINGING, SK_MUSIC}));
+
+//--Eigenschaften----------------------------------------------------------
+
+  SetProp(P_MATERIAL, MAT_MAGIC );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_SIZE, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NEVERDROP, 1);
+}
+
+public void init() {
+  ::init();
+
+  add_action("cancel_effect", "", 1);
+}
+
+public varargs int remove(int silent) {
+  tell_object(caster, BS(sprintf("Du schmetterst: Schau, du Schmied - so schneidet %s Schwert!", caster->Name(WESSEN, 1))));
+  tell_room(environment(caster), BS(sprintf("%s schmettert: Schau, du Schmied - so schneidet %s Schwert!", caster->Name(WER, 1), caster->Name(WESSEN, 1))), ({caster}));
+  return ::remove(silent);
+}
+
+int cancel_effect(string args) {
+  write("Du hoerst auf die Melodie zu spielen und die Wirkung laesst nach.\n");
+  tell_room(ENV(caster), BS(sprintf("%s hoert auf zu spielen und zu singen.", caster->Name(WER))), ({caster}));
+  caster->SetProp(P_NEXT_SPELL_TIME, time() + 20);
+  while(remove_call_out("repair_items") >= 0);
+  remove(1);
+  return 1;
+}
+
+public void Setup(object pl, int ability, int success, float factor) {
+  caster = pl;
+  steps = (ability / 500);
+  if(steps > sizeof(strophen)) {
+    steps = sizeof(strophen);
+  }
+
+  repairPoints = (int) ((1 + success/3000) * factor);
+
+  step = 0;
+  call_out("repair_items", 0);
+}
+
+private void write_songtext(int step) {
+  string strophe;
+
+  strophe = strophen[step];
+
+  if(strophe[0..0] == "#") {
+    tell_room(environment(caster), BS(strophe[1..]));
+  } else {
+    tell_object(caster, break_string(strophe, 75, "Du singst: ", BS_LEAVE_MY_LFS));
+    tell_room(environment(caster), break_string(strophe, 75, caster->Name(WER, 1)+" singt: ", BS_LEAVE_MY_LFS), ({caster}));
+  }
+}
+
+public int valid_target(object ob) {
+  return living(ob);
+}
+
+private int isEligibleForRepair(object ob) {
+  if(ob->QueryProp(P_NO_DAMAGE_DESTRUCT) || ob->QueryProp(P_INVIS) || ob->QueryProp(P_SHORT) == 0) return 0;
+  if(ob->QueryProp(P_ARMOUR_TYPE) == AT_MISC) return 0;
+  return 1;
+}
+
+private object *get_items_of(object *targets) {
+  object *armours, item, *allArmours;
+  int i, j;
+
+  allArmours = ({ });
+  for(i=0; i<sizeof(targets); ++i) {
+    armours = targets[i]->QueryArmours();
+    for(j=0; j<sizeof(armours); j++) {
+      if(isEligibleForRepair(armours[j])) {
+        allArmours += ({ armours[j] });
+      }
+    }
+
+    if(objectp(targets[i]->QueryProp(P_WEAPON)) && isEligibleForRepair(targets[i]->QueryProp(P_WEAPON))) {
+      allArmours += ({ targets[i]->QueryProp(P_WEAPON) });
+    }
+  }
+
+  return allArmours;
+}
+
+private int modifyBySkillAttribute(int baseVal, string skillAttribute) {
+  return (int) (baseVal * (caster->QuerySkillAttribute(skillAttribute) / 100.0));
+}
+
+public void repair_items() {
+  object env, *targets, *items, item;
+  int i, n;
+
+  if(!objectp(caster)){
+    call_out("cancel_effect", 0);
+    return;
+  }
+
+  env = environment(caster);
+  if(!objectp(env)) {
+    call_out("cancel_effect", 0);
+    return;
+  }
+
+  if(caster->QueryProp(P_SP) < repairPoints) {
+    tell_object(caster, BS("Du bist zu sehr ausgelaugt um weiter zu singen."));
+    call_out("cancel_effect", 0);
+    return;
+  }  
+
+  caster->AddSp(-(repairPoints*2));
+
+  write_songtext(step);
+
+  targets = filter_array(all_inventory(env), "valid_target");
+  items = get_items_of(targets);
+
+  if(sizeof(items) > 0) {
+    n = 1;
+    
+    if(TALENTMASTER->HasTalent(caster, TALENT_FORTE_FORTISSIMO)) {
+      n += caster->QueryProp(P_BARD_INSPIRATION_LEVEL);
+    }
+
+    n = modifyBySkillAttribute(n, SA_EXTENSION);
+    if(n>sizeof(items)) n = sizeof(items);
+
+    if(caster->QueryProp(P_TESTPLAYER)) {
+      tell_object(caster, sprintf("repair n = %d\n", n));
+    }
+    for(; n>0; n--) {
+      call_out("repair_item", 0, items[random(sizeof(items))]);
+    }
+  }
+
+  item = call_other("/spellbooks/barden_spells", "getInstrument", caster);
+  if(objectp(item)) {
+    item->Damage(-1); // instrument wird immer repariert
+  }
+
+  step++;
+  if(step >= sizeof(strophen) || step >= steps) {
+    call_out("cancel_effect", 0);
+    return;
+  }
+  
+  call_out("repair_items", 4);
+}
+
+public void repair_item(object item) {
+  object owner;
+  string oname, iname;
+
+  item->Damage(-(repairPoints));
+  if(item->QueryProp(P_WEAPON_TYPE)) {
+    owner = item->QueryProp(P_WIELDED);
+  } else {
+    owner = item->QueryProp(P_WORN);
+  }
+
+  if(!objectp(item) || !objectp(owner)) return;
+  
+  iname = item->QueryProp(P_NAME);
+  oname = owner->Name(WESSEN, 1);
+  if(!stringp(iname) || !stringp(oname)) return;
+
+  if(caster->QueryProp(P_TESTPLAYER)) {
+    tell_object(caster, sprintf("iname: %s\n", iname));
+    tell_object(caster, sprintf("oname: %s\n", oname));
+    tell_object(caster, sprintf("plural: %d\n", item->QueryProp(P_PLURAL)));
+  }
+
+  tell_room(environment(owner), BS(sprintf("%s %s erneuer%s sich ein wenig.", 
+            oname, iname, (item->QueryProp(P_PLURAL)>0?"n":"t"))), ({owner}));
+  tell_object(owner, BS(sprintf("Dein%s %s erneuer%s sich ein wenig.", 
+              ((item->QueryProp(P_GENDER)==FEMALE)||(item->QueryProp(P_PLURAL)>0)?"e":""), iname, (item->QueryProp(P_PLURAL)?"n":"t"))));
+}
+
+public void BecomesNetDead(object spieler) {
+  if(spieler == caster) {
+    caster->SetProp(P_NEXT_SPELL_TIME, time()+10);
+    remove(1);
+  }
+}

@@ -1,0 +1,85 @@
+// Fluegelschlag: Luftangriff aus dem Himmelsritt heraus, trifft mehrere Gegner.
+
+varargs int prep_fluegelschlag(object caster, mapping sinfo, int flag)
+{
+  if (!present("\namz_himmelsritt", caster))
+  {
+    tell_object(caster, "Ohne Himmelsritt kannst Du keinen Fluegelschlag ausfuehren.\n");
+    return 0;
+  }
+
+  if (!caster->InFight())
+  {
+    tell_object(caster, "Du musst im Kampf sein, um mit Deinen Fluegeln zuzuschlagen.\n");
+    return 0;
+  }
+
+  if (!pay_for_spell(caster, sinfo, !flag))
+    return 0;
+
+  return 1;
+}
+
+
+int fluegelschlag(object caster, mapping sinfo)
+{
+  object *victims, hr;
+  int suc, bonus, i;
+  int *factors;
+  mapping sinfo2;
+  
+  factors = ({100, 70, 50}); // Schaden fuer 1., 2., 3. Ziel
+
+  if (!prep_fluegelschlag(caster, sinfo, 1))
+    return 0;
+
+  victims = caster->PresentEnemies();
+  if (!pointerp(victims) || !sizeof(victims))
+  {
+    tell_object(caster, "Du hast gerade niemanden zum Treffen.\n");
+    return 0;
+  }
+
+  if ((suc = SpellSuccess(caster, sinfo)) <= 0)
+    return MISSERFOLG;
+
+  bonus = CheckEquip(caster, sinfo[SI_SPELLFUNC]);
+  sinfo[SI_SKILLDAMAGE] += bonus;
+  sinfo[OFFSET(SI_SKILLDAMAGE)] += bonus / 2;
+  sinfo[SI_MAX_DAMAGE] += (caster->QueryProp(P_GUILD_LEVEL) - 10) * 25 + bonus;
+  sinfo[SI_SKILLDAMAGE_TYPE] = ({DT_AIR});
+
+  environment(caster)->Message(BS(sprintf("%s schlaegt mit maechtigen Fluegeln auf %s herab.",
+        caster->Name(WER,1), victims[0]->name(WEN,1))),
+      MSGFLAG_VISUAL, ([ MSGFLAG_EXCLUDE : ({ caster, victims[0] }) ]) );
+
+  tell_object(caster, "Du schlaegst mit Deinen Fluegeln nach unten!\n");
+  tell_object(victims[0], "Ein starker Windstoss der Fluegel trifft Dich mit voller Wucht!\n");
+
+  // Ersten Gegner voll treffen, weitere abgeschwaecht.
+  for (i = 0; i < sizeof(victims) && i < sizeof(factors); i++)
+  {
+    sinfo2 = copy_mapping(sinfo);
+    sinfo2[SI_SKILLDAMAGE] = sinfo[SI_SKILLDAMAGE] * factors[i] / 100;
+    sinfo2[OFFSET(SI_SKILLDAMAGE)] = sinfo[OFFSET(SI_SKILLDAMAGE)] * factors[i] / 100;
+    TryDefaultAttackSpell(victims[i], caster, sinfo2, sinfo2[SI_SPELL]);
+
+    if(objectp(victims[i]) && sinfo[SI_SKILLPOINTS] > 2 && !random(2)) {
+      // gegner zu boden werfen und kampfaussetzer
+      victims[i]->SetProp(P_DISABLE_ATTACK, 1);
+      victims[i]->SetProp(P_LAST_RAMMEN_TIME, time());
+      tell_object(victims[i], "Du wirst durch den heftigen Fluegelschlag zu Boden geworfen!\n");
+      tell_room(environment(caster), victims[i]->name(WER,1) + " wird durch den heftigen Fluegelschlag zu Boden geworfen!\n",
+          ({victims[i]}));
+    }
+  }
+
+  // Himmelsritt stabilisieren: etwas Hoehe/Hover dazugeben.
+  hr = present("\namz_himmelsritt", caster);
+  if (objectp(hr)) {
+    hr->ascend(suc / 2500 + (sinfo[SI_SKILLPOINTS] > 2 ? 2 : 0));
+    hr->addHover(2 + random(suc / 2500) + (sinfo[SI_SKILLPOINTS] > 2 ? 2 : 0));
+  }
+
+  return ERFOLG;
+}

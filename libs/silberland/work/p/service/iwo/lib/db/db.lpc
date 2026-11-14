@@ -1,0 +1,775 @@
+
+inherit "std/npc";
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <mnpc.h>
+#include <new_skills.h>
+#include <defines.h>
+#include <moredef.h>
+#include <wizlevels.h>
+
+#define LIBPATH "/p/service/iwo/lib/"
+#define LIBS ({ "gilden", "regionen", "quests", "kristallwald", "ebene", "wasser", "gebirge", "huegelland", "unterwelt", "polar", "allgemein", "wueste", "rassen", "dschungel" })
+
+#define MAINTAINERS ({ "iwo" })
+
+
+string helpfun ();
+string mhelpfun ();
+string crashfun ();
+void LoadLibs ();
+
+string *locked = ({});
+mixed *a_input = ({});
+int input_line = 0;
+int input_level = 0;
+string input_key = "";
+string input_lib = "";
+
+
+create()
+{
+  object ob;
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  seteuid(getuid(TO));
+
+  AddId (({"datenbank", "bank", "db"}));
+  SetProp (P_GENDER, FEMALE);
+  SetProp (P_NAME, "Datenbank");
+  SetProp (P_SHORT, "Eine Datenbank");
+  SetProp (P_LONG,
+	   "Hmm. Ein seltsames Ding.");
+  SetProp (P_ALIGN, 0);
+  create_default_npc(1);
+  SetProp (P_SIZE, 40);
+  SetProp (P_WEIGHT, 2000);
+  SetProp (P_RACE, "Datenbank");
+  SetProp (P_MAX_HANDS, 0);
+
+  SetProp (P_KILL_NAME, "Eine Datenbank");
+
+  SetProp (P_XP, 0);
+
+  SetProp(P_MSGIN, "rollt Iwo herein");
+  SetProp(P_MSGOUT, "rollt");
+  SetProp(P_MMSGIN, "rollt herein");
+  SetProp(P_MMSGOUT, "rollt");
+  SetProp(P_DEFAULT_INFO, "rattert...");
+
+  SetProp(P_NOATTACK, "will nicht getoetet werden.");
+
+  SetProp(P_DIE_MSG, " crashed.\n");
+
+  enable_commands();
+
+  AddDetail( ({ "info", "information" }),
+    "Vielleicht kann man die Datenbank danach fragen.");
+
+  ob = clone_object(sprintf("%sdb/info", LIBPATH));
+  ob->move(ME);
+
+  SetChats(2, ({
+    "Die Datenbank surrt...\n",
+    "Ein gruenes Laempchen an der Datenbank leuchtet kurz auf.\n",
+    "Die Datenbank piepst leise.\n",
+    "Die Datenbank beisst Dich herzhaft ins Bein.\n" }));
+
+  AddInfo( ({ "info", "information" }),
+           "Hmm, Momentan trage ich Information zu den "+implode(LIBS, ", ")+ " bei mir.",
+	   "sagt: ");
+
+  AddInfo( ({ "schluesselwort" }),
+    "Das Schluesselwort wird verwendet um einen Datensatz zu identifizieren. "
+    "Es muss eindeutig sein in der Datenbank. Es koennen auch mehrere "
+    "angegeben werden. Beispiel: dbneu 10 blume,blumen,pflanzen", "sagt: ");
+
+  AddInfo( ({ "level" }),
+    "Der Level gibt an welches Wissensniveau ueber die Information verfuegen "
+    "soll. Als Richtlinie gilt: Level 10 - Ordinaeres Strassenwissen, "
+    "Level 20 - Intelligentes Lebewesen, Level 30 - Weiser, Level 40 - Orakel.",
+    "sagt: ");
+
+
+  AddInfo( ({ "angrox", "iwo" }), #'crashfun);
+
+
+  AddInfo ( ({ "hilfe", "help" }), #'helpfun, "sagt: ");
+  AddInfo ( ({ "maghilfe", "magierhilfe", "mhilfe",
+               "maghelp", "magehelp", "mhelp" }), #'mhelpfun, "sagt: ");
+
+  if (find_player("iwo")) find_player("iwo")->AddPursuer(ME);
+  else remove();
+  ME->move(ENV(find_player("iwo")), M_SILENT);
+
+  LoadLibs();
+
+  AddCmd( ({ "setz", "setze", "sitz", "sitze" }), "sit");
+  AddCmd( ({ "dbliste", "dblist" }), "dblist");
+  AddCmd( ({ "dbindex" }), "dbindex");
+  AddCmd( ({ "dbakt" }), "dbakt");
+  AddCmd( ({ "dbloesche", "dbdel", "dbloesch", "db-" }), "DeleteFromLib");
+  AddCmd( ({ "undo", "zurueck" }), "Undo");
+  AddCmd( ({ "dbneu", "dbadd", "dbnew", "db+" }), "dbnew");
+  AddCmd( ({ "dbkey" }), "KeyPresent");
+  AddCmd( ({ "dbstat" }), "DbStat");
+}
+
+
+int DbStat()
+{
+  int i;
+  int keys;
+  int pos;
+  string line;
+  command_me("sag Status der Bibliotheken:");
+  for (i=0;i<sizeof(LIBS);i++)
+    {
+       keys = 0;
+       pos = 0;
+       while(line = read_file(sprintf("%s%s.lib",LIBPATH,LIBS[i]), pos,1))
+         {
+           if (strstr(line, "info:", 0) != -1) keys++;
+           pos++;
+         }
+       command_me(sprintf("sag %15.15-s%5.2fk  (%3.3d Keys) ", 
+         CAP(LIBS[i]),
+         file_size(sprintf("%s%s.lib",LIBPATH,LIBS[i]))/1024.0,
+         keys
+         ));
+    }
+  return 1;
+}
+
+
+string crashfun()
+{
+//  call_out("die", 2);
+  return "rattert grauenvoll.";
+}
+
+void MyLog(string str)
+{
+  string lf;
+  
+  lf = sprintf("%sdb/db.log", LIBPATH);
+  
+  write_file(lf, BS(str));
+  
+  return;
+}
+
+
+void LoadLibs()
+{
+  int i;
+  string hl;
+  
+  for (i = 0; i < sizeof(LIBS); i++)
+    {
+      hl = sprintf("%s%s.lib",LIBPATH,LIBS[i]);
+      AddLibrary(hl, 100);
+      command_me(sprintf("sag Lade Bibliothek: %s", hl));
+    }
+  
+  return;
+}
+
+
+void Tell(object player, string str)
+{
+  tell_object(player, break_string(str, 78, "DB: "));
+  return;
+}
+
+
+int Allowed(object player, string lib)
+{
+  if (member(MAINTAINERS, getuid(TP)) != -1) return 1;
+  // return 0;
+  if (IS_GOD(TP) || IS_ARCH(TP)) return 1;
+  
+  switch (lib)
+    {
+    case "gilden":
+      if (IS_ARCH(TP)) return 1;
+      break;
+    case "regionen":
+      if (IS_LORD(TP)) return 1;
+      break;
+    case "quests":
+      if (IS_WIZARD(TP)) return 1;
+      break;
+    case "kristallwald":
+      if (IS_WIZARD(TP)) return 1;
+      break;
+    case "ebene":
+      if (IS_WIZARD(TP)) return 1;
+      break;
+    case "dschungel":
+      if (IS_WIZARD(TP)) return 1;
+      break;
+    case "wasser":
+      if (IS_WIZARD(TP)) return 1;
+      break;
+    case "huegelland":
+      if (IS_WIZARD(TP)) return 1;
+      break;
+    case "unterwelt":
+      if (IS_WIZARD(TP)) return 1;
+      break;
+    case "polar":
+      if (IS_WIZARD(TP)) return 1;
+      break;
+    case "wueste":
+      if (IS_WIZARD(TP)) return 1;
+      break;
+    case "allgemein":
+      if (IS_WIZARD(TP)) return 1;
+      break;
+    case "rassen":
+      if (IS_WIZARD(TP)) return 1;
+      break;
+    default:
+      return 0;
+    }
+  
+  return 0;
+}
+
+
+int sit(string what)
+{
+  notify_fail("Wo willst Du Dich hinsetzen?\n");
+  if (what != "auf db" &&
+      what != "bank" &&
+      what != "datenbank") return 0;
+      
+  tell_room(ENV(ME), BS(TP->Name(WER) + " setzt sich gemuetlich auf " +
+    TO->name(WEN) + "."), ({ TP }));
+
+  tell_object(TP, BS("Du setzt Dich gemuetlich auf " + TO->name(WEN) + "."));
+  
+  return 1;
+}
+
+string helpfun()
+{
+  string returnstr;
+  returnstr = sprintf("Ich kann Dir Informationen geben in dem Du mich "
+                      "ganz einfach nach <schluesselwort> fragst. "
+		      "Eine Uebersicht zu den Themen ueber die ich zur Zeit "
+		      "etwas weiss, bekommst Du auf die Frage nach 'Information'.");
+
+  if (!IS_WIZARD(TP)) return returnstr;
+  
+  return sprintf("%s\nWie ich sehe, bist Du Magier. Mehr Hilfe bekommst "
+                 "Du unter dem Thema 'Magierhilfe'.", returnstr);
+  
+}
+
+
+string mhelpfun()
+{
+  string returnstr;
+
+  if (!IS_WIZARD(TP)) return "Datenbankzugriff verweigert.";
+  
+  returnstr =
+  
+  sprintf("Folgende Kommandos stehen zur Pflege der Datenbank zur Verfuegung: \n"
+          "  * dbliste\n"
+	  "      Zeigt alle verfuegbaren Bibliotheken an.\n"
+	  "  * dbindex <Bibliothek>\n"
+	  "      Zeigt alle Eintraege in einer Bibliothek\n"
+	  "  * dbkey <Bibliothek> <schluesselwort>\n"
+	  "      Prueft, ob ein Schluessel existiert\n\n"
+	  "  * dbneu <Bibliothek> <level> <Schluesselwort>\n"
+	  "      Erzeugt einen neuen Eintrag <Schluesselwort>\n"
+	  "       in <Bibliothek>\n"
+	  "  * dbloesche <Bibliothek> [<Level>] <Schluesselwort>\n"
+	  "      Loescht Eintrag <Schluesselwort> aus <Bibliothek>\n"
+	  "  * dbakt <Bibliothek>\n"
+	  "      Aktualisiert <Bibliothek> nach Aenderungen.\n"
+	  "  * undo <Bibliothek>\n"
+	  "      Macht die letzte Aenderung rueckgaengig\n"
+	  "      (Nur 1 Schritt!)\n"
+          "  * dbstat\n"
+          "      Zeigt Groesse und Anzahl der Eintraege der\n"
+          "      Bibliotheken.\n"
+	  "\n"
+	  "Es gibt auch Kurzformen wie dbdel, db+, db-,....\n"
+	  );     
+
+  return returnstr;
+  
+}
+
+
+int dblist()
+{
+  string str;
+  int i;
+  
+  notify_fail("Datenbankzugriff verweigert.");
+  if (!IS_WIZARD(TP)) return 0;
+  
+  Tell(TP, "Folgende Bibliotheken fuehre ich zur Zeit:");
+
+  str = "  ";
+  
+  for (i = 0; i < sizeof(LIBS); i++)
+    {
+      str = sprintf("%s %s",str,LIBS[i]);
+    }
+  Tell(TP, str);
+  
+  return 1;
+  
+}
+
+
+int dbindex(string lib)
+{
+  int pos;
+  string hl, *hi, *hi2, str, *index; 
+  
+  index = ({});
+  
+  pos = 1;
+  
+  notify_fail("DB: Keine solche Bibliothek vorhanden!\n"); 
+  if (member(LIBS, lib)==-1) return 0;
+  
+  notify_fail("DB: Datenbankzugriff verweigert.\n");
+  if (!IS_WIZARD(TP)) return 0;
+  
+  hl = sprintf("%s%s.lib", LIBPATH, lib);
+
+  
+  while(str = read_file(hl, pos, 1))
+    {
+      pos++;
+
+      if (strstr(str, "info:")!=-1)
+        {
+	  hi2 = explode(str, "\n");
+	  hi = explode(hi2[0], ":");
+	  index += ({ sprintf("  %s : %s\n",hi[1],hi[2]) });
+	}
+    }
+    
+    str = implode(index, "");
+    
+    Tell(TP, sprintf("Index von %s (Level: Key):",lib));
+    TP->More(str);
+    
+    return 1;
+    
+    
+}
+
+
+int dbakt(string lib)
+{
+  notify_fail("DB: Datenbankzugriff verweigert.\n");
+  if (!IS_WIZARD(TP)) return 0;
+  
+  notify_fail("DB: Bibliothek nicht gefunden.\n");
+  if (member(LIBS, lib) == -1) return 0;
+  
+  "/p/daemon/infolibd"->DiscardLib(sprintf("%s%s.lib", LIBPATH, lib));
+  
+  Tell(TP, "Bibliothek aktualisiert.");
+  
+  return 1;
+}
+
+
+int Real2Temp(string lib)
+{
+  string str, hl, thl, uhl;
+  int pos;
+  
+  pos = 1;
+
+  notify_fail("DB: Keine solche Bibliothek.\n");
+  if (member(LIBS, lib) == -1) return 0;
+
+  hl = sprintf("%s%s.lib", LIBPATH, lib);
+  thl = sprintf("%s%s.tmp", LIBPATH, lib);
+  uhl = sprintf("%s%s.undo", LIBPATH, lib);
+  
+  notify_fail("DB: Temporaere Datenbank existiert bereits.\n");
+  if (file_size(thl) > 0) return 0;
+
+  rm(uhl);
+  
+  while (str = read_file(hl, pos, 1))
+  {
+    pos++;
+    notify_fail("DB: Schreiben der temporaeren Datei gescheitert.\n");
+    if (!write_file(thl, str)) return 0;
+    notify_fail("DB: Fehler beim Schreiben der Wiederherstellungsdatei\n");
+    if (!write_file(uhl, str)) return 0;
+  }
+
+  Tell(TP, "Temporaere Datenbank erstellt.");
+  return 1;  
+}
+
+
+int Temp2Real(string lib)
+{
+  string str, hl, thl;
+  int pos;
+  
+  pos = 1;
+  
+  notify_fail("DB: Keine solche Bibliothek.\n");
+  if (member(LIBS, lib) == -1) return 0;
+  
+  
+  hl = sprintf("%s%s.lib", LIBPATH, lib);
+  thl = sprintf("%s%s.tmp", LIBPATH, lib);
+
+  notify_fail("DB: Temporaere Datenbank nicht vorhanden oder beschaedigt.\n");
+  if (file_size(thl) <= 0) return 0;
+
+  rm(hl);
+  
+  while (str = read_file(thl, pos, 1))
+  {
+    pos++;
+    notify_fail("DB: Schreiben der temporaeren Datenbank gescheitert.\n");
+    if (!write_file(hl, str)) return 0;
+  }
+  
+  rm(thl);
+  
+  Tell(TP, "Echtdatenbank aus temporaerer Datei wiederhergestellt.");
+  
+  return 1;
+}
+
+
+int Undo2Real(string lib)
+{
+  string str, hl, uhl;
+  int pos;
+  
+  notify_fail("DB: Keine solche Bibliothek.\n");
+  if (member(LIBS, lib) == -1) return 0;
+  
+  pos = 1;
+  
+  hl = sprintf("%s%s.lib", LIBPATH, lib);
+  uhl = sprintf("%s%s.undo", LIBPATH, lib);
+  
+  notify_fail("DB: Undo Datei existiert nicht oder ist leer.\n");
+  if (file_size(uhl) <= 0) return 0;
+  
+  rm(hl);
+  
+  while(str = read_file(uhl, pos, 1))
+  {
+    pos++;
+    notify_fail("DB: Schreiben der Echtdatenbank gescheitert.\n");
+    if (!write_file(hl, str)) return 0;
+  }
+  
+  MyLog(sprintf("%s %s %s Undo durchgefuehrt.", ctime(), lib, getuid(TP)));
+  Tell(TP, "Echtdatenbank aus Undo Datei wiederhergestellt.");
+  return 1;  
+}
+
+
+int Undo(string lib)
+{
+  notify_fail("DB: Keine soche Bibliothek.\n");
+  if (member(LIBS, lib) == -1) return 0;
+  
+  notify_fail("DB: Datenbankzugriff verweigert.\n");
+  if (!Allowed(TP, lib)) return 0;
+  
+  return Undo2Real(lib);
+  
+}
+
+int KeyPresent(string lib, string key)
+{
+  int pos;
+  string hl, *hi, *hi2, str, *index; 
+
+  pos = 1;
+
+  index = ({});  
+  
+  notify_fail("DB: Keine solche Bibliothek vorhanden!\n"); 
+  if (member(LIBS, lib)==-1) return 0;
+  
+  hl = sprintf("%s%s.lib", LIBPATH, lib);
+  
+  while(str = read_file(hl, pos, 1))
+    {
+      pos++;
+
+      if (strstr(str, "info:")!=-1)
+        {
+	  hi2 = explode(str, "\n");
+	  hi = explode(hi2[0], ":");
+	  index += ({ hi[2] });
+	}
+    }
+    
+
+  notify_fail("DB: Schluessel nicht gefunden.\n");
+  if (member(index, key)== -1) return 0;
+    
+  return 1;
+    
+}
+
+
+int Append2Lib(string lib, string *str)
+{
+  string thl;
+  int i;
+
+  notify_fail("DB: Keine solche Bibliothek.\n");
+  if (member(LIBS, lib) == -1) return 0;
+
+  notify_fail("DB: Konnte temporaere Datei nicht erstellen. Abbruch.\n");
+  if (!Real2Temp(lib)) return 0;
+  
+  thl = sprintf("%s%s.tmp", LIBPATH, lib);
+
+  notify_fail("DB: Konnte Daten nicht zu temporaerer Datei hinzufuegen.\n");
+  write_file(thl, sprintf("# %s, %s\n", capitalize(getuid(TP)), ctime()));
+  for (i = 0; i < sizeof(str); i++)
+    {
+      if (str[i] != "") if (!write_file(thl, BS(str[i]))) return 0;
+    }
+  write_file(thl, "\n");
+    
+  notify_fail("DB: Konnte Echtdatenbank nicht aus Temporaerer Datei erstellen.\n");
+  if (!Temp2Real(lib)) return 0;
+
+  Tell(TP, "Daten hinzugefuegt.");
+  MyLog(sprintf("%s %s %s Neuer Eitnrag: %s", ctime(), input_lib, getuid(TP), input_key));
+  dbakt(lib);
+
+  return 0;
+}
+
+
+int DeleteFromLib(string istr)
+{
+
+  string lib, slvl, key, str, hl, thl, hs1, *hs2, *argv;
+  int hi1, pos, nowrite, done, lvl;
+
+  istr = TP->_unparsed_args();
+  argv = explode(istr, " ");
+  
+  notify_fail("DB: Falsche Anzahl an Parametern.\n");  
+  if (sizeof(argv) < 2 || sizeof(argv) > 3) return 0; 
+
+  if (sizeof(argv) == 2)
+    {
+      lib = argv[0];
+      key = argv[1];
+    }
+  else
+    {
+      lib = argv[0];
+      lvl = to_int(argv[1]);
+      key = argv[2];
+    }
+
+  pos = 1;
+
+  if (!key || key == "" || !lib || lib == "")
+    {
+      notify_fail("DB: Falsche Anzahl an Parametern.\n");
+      return 0;
+    }
+
+  Tell(TP, sprintf("Lib: %s, Level: %d, Key: %s", lib, lvl, key));
+
+
+  notify_fail("DB: Keine solche Bibliothek.\n");
+  if (member(LIBS, lib) == -1) return 0;
+
+  notify_fail("DB: Datenbankzugriff verweigert.\n");
+  if (!Allowed(TP, lib)) return 0;
+
+  notify_fail("DB: Datenbank gesperrt.\n");
+  if (member(locked, lib) != -1) return 0;
+  
+
+  notify_fail("DB: Schluesselwort nicht vorhanden.");
+  if (!KeyPresent(lib, key)) return 0;
+
+  locked += ({ lib });
+
+  notify_fail("DB: Konnte temporaere Datei nicht erstellen. Abbruch.\n");
+  if (!Real2Temp(lib)) return 0;
+  
+
+  hl = sprintf("%s%s.lib", LIBPATH, lib);
+  thl = sprintf("%s%s.tmp", LIBPATH, lib);
+  
+  rm(hl);
+  
+  while (str = read_file(thl, pos, 1))
+  {
+    pos++;
+    if (!done)
+      {
+        if (sscanf(str, "info:%d:%s", hi1, hs1) ==2)
+	  {
+	      if (explode(hs1, "\n")[0] == key) 
+	        {
+                if (lvl && hi1 != lvl) {}
+	        else nowrite = 1;
+		}
+	      else 
+	        if (nowrite)
+	          {
+		    done = 1;
+		    nowrite = 0;
+		  }
+	  }
+      }
+
+    notify_fail("DB: Konnte geaenderte Datenbank nicht zurueckschreiben.\n");
+    if (!nowrite)
+      if (!write_file(hl, str)) return 0;
+
+  }
+
+  rm(thl);
+  
+  if (done)
+    {
+    Tell(TP, "Datensatz geloescht.");
+    MyLog(sprintf("%s %s %s Geloescht: %s", ctime(), lib, getuid(TP), key));
+    }
+  else Tell(TP, "Datensatz NICHT geloescht.");
+
+  locked -= ({ lib });
+
+  dbakt(lib);
+  
+  return 1;
+          
+}
+
+
+int dbnew(string str)
+{
+  string *hs1, lib, key;
+  int level;
+  int schluesselwort;
+
+  str = TP->_unparsed_args();
+
+  notify_fail("DB: Usage: dbneu <Bibliothek> <level> <Schluesselwort>\n");
+  if(!str || str == "") return 0;
+  
+  hs1 = explode(str, " ");
+  if (sizeof(hs1) != 3) return 0;
+  
+  input_lib = hs1[0];
+  input_level = to_int(hs1[1]);
+  input_key = hs1[2];
+  
+  notify_fail("DB: Keine solche Bibliothek.\n");
+  if (member(LIBS, input_lib) == -1) return 0;
+  
+  notify_fail("DB: Datenbankzugriff verweigert.\n");
+  if (!Allowed(TP, input_lib)) return 0;
+
+  notify_fail("DB: Kein Schluesselwort angegeben.\n");
+  if (!input_key || input_key == "") return 0;
+  
+  notify_fail("DB: Datenbank unter Verwendung. Eingabe nicht moeglich.\n");
+  if (sizeof(locked)>0) return 0;
+  
+  locked += ({ input_lib });
+  
+  Tell(TP, "Erzeuge neuen Datensatz.");
+  Tell(TP, sprintf("Bibliothek: %s", input_lib));
+  Tell(TP, sprintf("Level: %d", input_level));
+  Tell(TP, sprintf("Key: %s", input_key));
+  tell_object(TP, "*** . zum Beenden, ~q Abbruch, ~r vorige Zeile loeeschen.\n");
+ 
+  // pervers, ich weiss.. aber naja, es funzt
+  a_input = ({sprintf("info:%d:%s",input_level,input_key),
+              "","","","","","","","","","","","","","","","","","","",""});
+  input_line = 1; // 0 ist der header
+  tell_object(TP, sprintf("Zeile %d:",input_line));
+  input_to("LineInput");
+
+  return 1;
+  
+}
+
+
+void SaveInput()
+{
+  int i;
+
+  Append2Lib(input_lib, a_input);
+  locked -= ({ input_lib });
+
+  return;
+}
+
+
+void LineInput(string str)
+{
+  switch(str)
+    {
+      case "~q":
+        a_input = ({});
+        locked -= ({ input_lib });
+	break;
+      case "~r":
+        input_line>1?input_line--:input_line=1; // 0 ist der header
+        a_input[input_line]="";
+        tell_object(TP, sprintf("Zeile %d:",input_line));
+	input_to("LineInput");
+	break;
+      case ".":
+        SaveInput();
+	break;
+      default:
+        if (input_line>20)
+	  tell_object(TP, "Maximale Anzahl an Zeilen erreicht.\n");
+        else
+	  { 
+	    a_input[input_line] = str;
+	    input_line++;
+	  }
+        tell_object(TP, sprintf("Zeile %d:",input_line));
+	input_to("LineInput");
+    }
+
+  return;
+}
+
+int DistributeLib(string library, int lvl)
+{
+  string hl;
+  if(member(LIBS, library)==-1)
+    return 0;
+  hl = sprintf("%s%s.lib",LIBPATH,library);
+  PO->AddLibrary(hl, lvl);
+  return 1; 
+}
+

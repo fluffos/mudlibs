@@ -1,0 +1,197 @@
+/*
+ * Anrufung des Kharr-zzteth
+ * 
+ * Spruch erweckt 'Leichen', 'Knochen' oder 'Saerge' in dem
+ * Zombies, Skelette oder Mumien beschworen werden
+ * Diese Untoten sterben sicher beim naechsten Reset
+ * Spruchsuccess ist durch Equipment beeinflussbar
+ *
+ * Kosten: 20 MP
+ * Level : 2
+ * Objekt: /gilden/nekromanten/npc/zombie
+ * Objekt: /gilden/nekromanten/npc/mumie
+ * Objekt: /gilden/nekromanten/npc/skelett
+ *
+ * Spruch kann nicht durch Skillpunkte verbessert werden!
+ *
+ * Status: anschlussreif
+ *
+ */
+// 31.07.2003 Archon: typofix
+// 24.06.2003 Archon: umstellung sinfo uebergabe
+
+object beschwoerung_find_victim(object caster,mapping sinfo, int silent)
+{
+  object corpse;
+  string str;
+  
+  str=sinfo[SI_SKILLARG];
+  if (!corpse=present(str,environment(caster)))
+  {
+    if (!silent)
+     write("So etwas siehst Du da nicht!\n");
+    return 0;
+  }
+  if( !corpse->id("Leiche") &&
+      !corpse->id(NEKRO_BONES) &&
+      !corpse->id(NEKRO_MUMMY))
+  {
+    if (!silent)
+     write(sprintf("%s! Du kannst nur Tote beschwoeren!\n",
+          caster->QueryProp(P_GENDER)==FEMALE?"NAERRIN":"NARR"));
+    return 0;
+  }
+  return corpse;
+}              
+
+mixed prep_beschwoerung(object caster, mapping sinfo)
+{
+  object corpse;
+  string str;
+
+  str=sinfo[SI_SKILLARG];
+  if(!stringp(str) || !strlen(str))
+  {
+    write("Welche Leiche willst Du beschwoeren?\n");
+    return 0;
+  } 
+  corpse=beschwoerung_find_victim(caster,sinfo,0);
+  if (!objectp(corpse)) return 0;
+  sinfo[SI_ENEMY]=corpse;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  tell_room(ENV(caster), sprintf("%s hebt %s Arme in einer unheilvollen "
+        "Geste gen Himmel!\n", caster->Name(WER), caster->QueryPossPronoun(WEM)
+        ), ({caster}));
+  return sinfo;
+}
+
+int beschwoerung(object caster, mapping sinfo) 
+{
+  object corpse, undead;
+  int succ;
+ 
+  corpse=sinfo[SI_ENEMY];
+  if (!present_victim(corpse,caster) || !objectp(corpse=beschwoerung_find_victim(caster,sinfo,1)))
+  {
+    write(BS("BEI ALLEN NIEDERHOELLEN! Wohin ist denn die Leiche "
+          "verschwunden??"));
+    return 0;
+  }
+
+  if(query_once_interactive(caster) &&
+      corpse->QueryProp(P_LEVEL) >= caster->QueryProp(P_LEVEL)) 
+  {
+    write(BSC(
+      "Dieses Wesen war zu maechtig, als dass Du es wieder ins Reich der "
+      "Lebenden zurueckholen koenntest!"));
+    if( !random(3) && corpse->id("Leiche") )
+    {
+      corpse->SetProp(P_KILLER, caster);
+      write(BS("Deine Bemuehungen haben die Seele dieses Toten gestoert."));
+      tell_room(ENV(caster),BS("Ein wuetender Geist kommt aus dem "
+                "Totenreich!"));
+      CloneGhost(corpse, caster, random(10000) );
+    }
+    return 0;
+  }
+  if( caster->InFight() ) 
+  {
+    write(BS("VERNICHTE ERST DEINE GEGNER! DANN HAST DU MEHR ZUM "
+          "BESCHWOEREN!"));
+    return 0;
+  }
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    write(sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+
+  write(BSC(sprintf(
+    "Worte, fremdartig und bedrohlich, "
+    "kommen ueber Deine Lippen und rufen die Maechte des jenseitigen "
+    "Grauens!")));
+  write(BSA("Nekratos ay'hala! Shiyaya'zzad 'na Astiphel! Nya al "
+          "H'rrad!", "Du rufst: "));
+  tell_room(ENV(caster), BS(sprintf("%s ruft "
+          "Worte, fremdartig und bedrohlich. Du hast das unbestimmte "
+          "Gefuehl, dass diese Worte etwas rufen, was nicht gerufen werden "
+          "sollte!", caster->Name(WER), caster->QueryPossPronoun(WEM),
+          caster->Name(WER))), ({caster}));
+  tell_room(ENV(caster), BSA("Nekratos ay'hala! Shiyaya'zzad 'na Astiphel! "
+        "Nya al H'rrad!", sprintf("%s ruft: ", caster->Name(WER))),({caster}));
+
+  if ((succ=SpellSuccess(caster,sinfo)+random(50*CheckEquip(caster, "anrufung des kharr-zzteth"))) 
+      <= -random(5000) )
+  {
+     write(BSC(
+       random_fluch()+" Durch Deine Schwaeche wendet sich der Untote gegen "
+       "Dich!"));
+     tell_room(ENV(caster), BS(sprintf(
+       "Ploetzlich wird die Leiche lebendig und greift %s an!",
+       caster->name(WEN) )), ({caster}) );
+     if(corpse->id(NEKRO_MUMMY))
+       CloneMummy(corpse, caster, -succ+random(5000))->Kill(caster);
+     else if(corpse->id(NEKRO_BONES))
+       CloneSkeleton(corpse, caster, -succ+random(5000))->Kill(caster);
+     else
+       CloneZombie(corpse, caster, -succ+random(5000))->Kill(caster);
+     total_fail=1;
+     return MISSERFOLG;
+  }
+  
+  //DB(succ);
+  if (succ <= 0) 
+  {
+     tell_room(ENV(caster),"Nichts passiert.\n");
+     return MISSERFOLG;
+  }
+  if( corpse->id("Leiche") ) 
+  {
+    tell_room(ENV(caster),
+        BSC("Ein Ruck geht durch die Leiche! Langsam erhebt sie sich, erfuellt "
+          "von untotem Leben!"));
+    CloneZombie(corpse, caster, succ);
+    UseBlood();
+  }
+  else if( corpse->id(NEKRO_BONES) ) 
+  {
+    tell_room(ENV(caster),
+        BS("Die Knochen werden von einem kraenklichen Leuchten umhuellt! "
+          "Wie durch eine unsichtbare Hand bewegen sich die Knochen, finden "
+          "zueinander um letztendlich ein Skelett zu bilden. In seinen "
+          "Augenhoehlen glimmt ein roetlicher Funke. Mit ungelenken "
+          "Bewegungen erhebt sich das Skelett!"));
+    CloneSkeleton(corpse, caster, succ);
+    UseBlood(2);
+  }
+  else if( corpse->id(NEKRO_MUMMY)) 
+  {
+    switch( random(2))
+    {
+      case 0: 
+       tell_room(ENV(caster),BS(
+        "Der Sarg springt auf und die "
+        "mumifizierte Leiche beginnt sich ploetzlich zu bewegen und steht "
+        "vom Boden auf. Ihre Augen beginnen in einem daemonischen Rot zu "
+        "leuchten. Ein grauenhafter Anblick!"));
+      break;
+      case 1:  
+       tell_room(ENV(caster),BS(
+         "Der Sarg springt auf und die "
+         "Gliedmassen der mumifizierten Leiche beginnen ploetzlich zu "
+         "zucken. Kurz darauf bewegt sich der ganze Koerper und erhebt sich "
+         "vom Boden. Die Augen beginnen in einem daemonischen Rot zu "
+         "gluehen. Ein fuerchterlicher Anblick!")); 
+       break;
+    }
+    CloneMummy(corpse, caster, succ);
+    UseBlood(3);
+  }
+  return ERFOLG;
+}

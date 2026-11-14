@@ -1,0 +1,189 @@
+//Hier endet der Gang. Wenn man sich von _16n hergehangelt hat, kann man die Wand hochkurbeln
+//ansonsten faengt man sich nen Splitter ein, kann versuchen ne Raeuberleiter zu machen, Lehmabbauen
+
+#include "../def.h"
+inherit "std/room";
+#include <properties.h>
+
+//Wird von Aristocal aufgerufen wenn die Quest beendet oder abgebrochen wird.
+int lehmda;
+void anfangszustand()
+{
+	lehmda=1+random(2);
+}
+
+void reset()
+{
+	lehmda=1+random(2);
+  ::reset();	
+}
+
+
+void create() 
+{
+  ::create();
+  SetProp( P_INT_SHORT, "In einem Gang unter der Erde" );
+	lehmda=1+random(2);
+  
+  SetProp( P_LIGHT, 0 );
+  SetProp( P_INDOORS, 1 );
+  SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE: 20, ENV_TERRAIN: TT_CAVE]) );
+
+
+  AddSmell( DEFAULT_SMELL,
+    "Es riecht hier erdig.");
+  AddSmell( ({ "erde" }),
+    "Die Erde riecht feucht, aber nicht faulig.");
+
+  AddRoomMessage( 
+    ({"Die Wurzeln an den Waenden zucken.\n",
+    	"Es raschelt ueber Dir.\n"}),100,"schnapp");
+
+  AddSound( DEFAULT_SOUND,
+    "Hin und wieder hoerst Du ein leises Rascheln.");
+
+  AddSound( ({ "rascheln" }),
+    "Woher das wohl kommen mag?");
+
+
+
+  AddCmd(({"buddel","buddle","buddele"}),"buddeln"); //Man kann sich ein bisschen Lehm ausbuddeln
+  AddCmd(({"lasse","lass"}),"fallenlassen"); //um das hangeln zu beenden
+
+//wird dann in jedem Raum selbst geschrieben:
+  AddCmd(({"hangel","hangle","hangele"}),"hangeln");
+}
+
+
+
+
+
+int hangeln(string str)
+{
+	string wohin;
+	string dummy;
+	mapping ausgaenge;
+	string richtung;
+	
+	notify_fail("Wohin moechtest Du Dich hangeln?\n");
+	if(!str) return 0;
+  if (sscanf(str, "nach %s%s", dummy, wohin) != 2) return 0;
+	if(TP->QueryProp(P_NOMOVE)!="Du haengst in den Wurzeln und musst Dich fallen lassen um normal laufen zu koennen.\n")
+  			{
+  				write("Dazu musst Du an den Wurzeln in der Decke haengen. Aber wie kommst Du da bloss hin?\n");
+  				return 1;
+  			}
+	notify_fail("Dahin kannst Du nicht hangeln.\n");
+	ausgaenge=([])+TO->QueryProp(P_EXITS);
+	
+  if (!member(ausgaenge, wohin))return 0;
+  	
+ 	richtung = ausgaenge[wohin,0];
+  this_player()->move(richtung, M_NOCHECK, 
+  	"hangelt sich nach "+capitalize(wohin), "", "kommt angehangelt");
+
+  	return 1;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+int buddeln(string str)
+{
+	notify_fail("Was moechtest Du ausbuddeln?\n");
+	if (str!= "lehm"&&str!="lehm aus") return 0;
+	if(present("schaufel",TP))
+		{
+			if(lehmda)			
+				{
+					write("Du buddelst ein bisschen Lehm aus und steckst es ein.\n");
+					lehmda--;
+			    CLONE(LABY_OBJ + "lehm.lpc", TP);		
+				}
+			else
+				write("Leider schaffst Du es nicht Lehm auszubuddeln.\n");
+			}
+	else 	write("Du hast keine passende Schaufel dabei.\n");
+			return 1;
+		}	
+
+void fallenlassen_2()
+{
+	write("Du schlaegst hart auf dem Boden auf.\n");
+	say(TPN+" schlaegt hart auf dem Boden auf.\n",TP);
+	TP->SetProp(P_NOMOVE,0);
+	TP->AddHp(-25);
+}
+	
+int fallenlassen(string str)
+{
+	notify_fail("Moechtest Du Dich fallen lassen?\n");
+	if(str=="fallen"||str=="lasse mich fallen"||str=="wurzeln los")
+		{
+			if(TP->QueryProp(P_NOMOVE)=="Du haengst in den Wurzeln und musst Dich fallen lassen um normal laufen zu koennen.\n")
+				{
+					write("Mutig laesst Du Dich fallen.\n");
+					say(TPN+" laesst die Wurzeln los und faellt.\n");
+					call_out("fallenlassen_2",2);
+					return 1;
+				}
+			write("Du haengst doch gar nicht in den Wurzeln.\n");
+			return 1;
+		}
+	return 0;
+}
+ 
+ 
+
+
+
+
+//Ein Spieler wird kurz gefesselt.
+void schnapp(int msg)
+{
+	if (msg==1&&random(5)==1)
+		{
+			call_out("schnapp2",random(10));
+		}
+	}
+			
+
+
+schnapp2()
+{
+		
+	object gefangener; 
+	mixed *spieler; 
+  spieler=filter_array( all_inventory(), #'interactive );
+        //map_array(spieler, #'alleraus);
+      
+  if(!sizeof(spieler)) return;
+  gefangener=spieler[random(sizeof(spieler))];
+//Wenn er aus irgendeinem Grund eh schon nicht laufen kann abbrechen
+  if(gefangener->QueryProp(P_NOMOVE)) return;
+  tell_room(TO,"Ploetzlich schiessen die weichen Wurzeln aus den Waenden und umschliessen "+
+            gefangener->name()+".\n", ({gefangener}));
+  tell_object(gefangener, "Ploetzlich schiessen die weichen Wurzeln aus den Waenden und umschliessen Dich.\n");
+  gefangener->SetProp(P_NOMOVE,"Die Wurzeln halten Dich fest.\n");
+  call_out("schnapp3",random(10)+5, gefangener);
+}
+
+schnapp3(object gefangener)
+{
+	gefangener->SetProp(P_NOMOVE,0);
+  tell_room(TO,"Die Wurzeln geben "+gefangener->name()+" wieder frei.\n", ({gefangener}));
+  tell_object(gefangener, "Die Wurzeln geben Dich wieder frei.\n");
+}
+	

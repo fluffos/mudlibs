@@ -1,0 +1,273 @@
+/*
+ * nacht/anatol/std/info.c
+ * 
+ *  (c) 1999 Adrian Holzwarth / Anatol@Silberland
+ */
+
+#pragma strict_types
+
+#define NEED_PROTOTYPES
+
+#include <thing/properties.h>
+#include <properties.h>
+#include <language.h>
+#include <exploration.h>
+#include <config.h>
+#include <npc/info.h>
+#include "../../defines.h"
+#include SYS "npc.h"
+
+#define DEFAULT_INFO "\ndefault info"
+
+mapping libraries;
+private nosave string *explore;
+mapping infos;
+
+void create() {
+  infos = ([DEFAULT_INFO:"schaut Dich fragend an.\n";0;0;0]);
+  explore = (string *)(EPMASTER->QueryExplore(EP_INFO));
+  libraries = ([]);
+}
+
+void init() {
+  add_action( "frage", "frag", 1 );
+}
+
+nosave void smart_npc_log(string str) {
+  string creat;
+  string *strs;
+  
+  if (stringp(creat=QueryProp(P_LOG_INFO)))
+    creat="loginfo/"+creat;
+  else {
+    creat = (string)MASTER->creator_file(this_object());
+    if (creat == ROOTID)
+      creat = "ROOT";
+    else if( !creat || creat[0]==' ' )
+      creat="STD";
+    strs= (string*)MASTER->full_path_array(file_name(this_object()),0);
+    if( strs[0]=="d" )
+      creat = "report/"+strs[1]+"/"+creat+".info";
+    else
+      creat="report/"+creat+".rep";
+  }
+  
+  log_file(creat,
+           sprintf("FRAGE von %s an %s (%s):\n%s\n",
+                   getuid(this_interactive()),
+                   explode(file_name(this_object()),"#")[0],
+                   dtime(time())[5..<11],
+                   str));
+}
+
+int do_frage(string text);
+
+/* Koennte man bestimmt auch ohne diese Hilfsfunktion erledigen. Aber - hab
+ * ich da Lust zu? So geht es auch und daran wird niemand sterben. :o) */
+
+int IsNotDeaf(object o) { 
+  return (int)(!(o->QueryProp(P_DEAF))); 
+}
+
+/* Saemtliche Textausgaben der gegluecken oder versuchten Frage sind aus
+ * frage() herausgenommen worden, das haengt jetzt alles in do_frage(). */
+
+int frage(string str) {
+  string myname, text, question;
+
+  str=(extern_call()?(string)this_player()->_unparsed_args():str);
+  if( !str || sscanf( str, "%s nach %s", myname, text ) != 2 ) {
+    _notify_fail( "WEN willst Du nach WAS fragen?\n" );
+    return 0;
+  }
+
+  if( !this_object()->id( lower_case(myname) ) ) {
+    _notify_fail( "So jemanden findest Du hier nicht.\n" );
+    return 0;
+  } 
+  text = lower_case(text);
+
+  return do_frage(text);
+}
+
+/* In do_frage() hat sich einiges getan: Zunaechst wird P_NPC_QUIET behandelt:
+ *
+ * Propertyinhalt | Reaktion
+ * ---------------+-----------
+ *       0        | Keine besondere, alles wie gehabt.
+ *    int > 0     | Frage wird ausgegeben, die Antwort mit der Standardmeldung
+ *                | "... gibt im Moment keine Antworten." verweigert - was 
+ *                | automatisch im Kampf auch gemacht wird.
+ *    int < 0     | Es wird nichtmal eine Frage ausgegeben, sondern direkt mit
+ *                | der Standardmeldung (die dann auch nur an den Frager geht)
+ *                | abgeblockt. So stoeren Fragen nicht, wenn der NPC gerade
+ *                | in einer Sequenz steckt.
+ *    String      | String der statt der Standardmeldung ausgegeben wird, 
+ *                | das Verhalten ist wie bei positiven Integerwerten, also
+ *                | Ausgabe mit Frage und an alle.
+ *    Mapping     | Key 0 (bzw. QUIET_MSG) gibt die Meldung, Key 1 (QUIET_FLAG)
+ *                | entscheidet, ob es mit Frage an alle (bei gesetztem Flag)
+ *                | oder ohne Frage und nur an den Frager geht (sonst).
+ *
+ * Des weiteren ist AddInfo() (siehe unten) um einen weiteren Stringparameter
+ * erweitert worden, der dann in do_frage evaluiert und als Fragestellung an
+ * den NPC uebernommen wird. Die Idee stammt von Silvana, btw.
+ * 
+ * Und zu guter Letzt hoert nicht nur der Taube Frager nichts, auch taube
+ * Zuhoerer bekommen weder von Frage noch von Antwort etwas mit. */
+
+int do_frage(string text) {
+  mixed answer, silent, noans;
+  string indent,question;
+  int noansflag;
+  object * livings;
+
+  answer=indent=question=noansflag=0;
+  if (!environment(this_object())) return 0; 
+  if (!member(infos, text)) {
+    string *libs, *result;
+    int i;
+    libs = m_indices (libraries);
+    for (i=sizeof(libs)-1; i>=0; i--)
+      if (result=(string*)INFOLIB_MASTER->GetInfo( libs[i], text, 
+            libraries[libs[i]], this_player() )) {
+        answer=result[0];
+        indent=result[1];
+        if (sizeof(result) > 2) silent=result[2];
+        if (sizeof(result) > 3) question=(string)result[3];
+        break;
+      }
+    if (!answer) {
+      if(this_interactive() && QueryProp(P_LOG_INFO)) 
+        smart_npc_log(text);
+      if (pointerp(answer=infos[DEFAULT_INFO,0]))  
+        answer=answer[random(sizeof(answer))];
+      indent=infos[DEFAULT_INFO,1];
+      silent=infos[DEFAULT_INFO,2];
+    }
+  }
+  else {
+    if (pointerp(answer=infos[text,0]))  
+      answer=answer[random(sizeof(answer))];
+    indent=infos[text,1];
+    silent=infos[text,2];
+    question=(string)infos[text,3];
+  }
+                   
+  if (noans=QueryProp(P_NPC_QUIET)) { // Soll der NPC ueberhaupt antworten? 
+    if (intp(noans)) {
+      if ((int)noans<0) noansflag=1;
+      noans=Name(WER,2)+" gibt im Moment keine Antworten.";
+    }
+    else if (mappingp(noans)) {
+      noansflag=noans[QUIET_FLAG];
+      noans=noans[QUIET_MSG];
+    }
+    if (!stringp(noans)) noans=0;
+    else if (noansflag) {
+      tell_object(this_player(),break_string(noans));
+      return 1; // KEINE Frage ausgeben!
+    }
+  }
+
+  if (InFight()) // NPC im Kampf antworten nicht...
+    noans=Name(WER,2)+" ist gerade zu beschaeftigt, um auf Fragen einzugehen.";
+
+  if (!stringp(question))
+    tell_object(this_player(),"Du fragst "+name(WEN,1)+" nach "+
+      capitalize(text)+".\n");
+  else {
+    question=process_string(question);
+    tell_object(this_player(),break_string(question,77,
+          "Du fragst "+name(WEN,1)+": ",1));
+  }
+
+  if (!silent || !intp(silent)) {
+    livings=filter_array(filter_array(all_inventory(environment(
+      this_object())), #'living)- ({this_object(),this_player()}),"IsNotDeaf");
+    filter_array(livings,#'tell_object,(question?break_string(question,77,
+         (string)this_player()->Name(WER)+" fragt "+
+         (string)name(WEN,2)+": ", 1):break_string(
+          this_player()->Name(WER)+" fragt "+name(WEN,2)+" nach "+
+          capitalize(text)+".\n",77)));
+  
+    if (noans) {
+      filter_array(livings+({this_player()}),#'tell_object,
+          break_string((string)noans,77)); 
+      return 1;
+    }
+  }
+
+  if (explore && member(explore, text) >= 0)       // EPMASTER erst aufrufen, 
+    EPMASTER->GiveExplorationPoint(text, EP_INFO); // wenn Frage durchkam.
+
+  if ( closurep(answer) ) {
+    answer = funcall(answer, text);
+    if (!stringp(answer))
+      return 1;
+  }
+  answer = process_string(answer);
+
+  if (indent)
+    answer = break_string(answer, 78,Name(WER,2)+" "+indent, 1);
+  else
+    answer = break_string(Name(WER,2)+" "+answer, 78, 0, 1);
+
+  if( this_player()->QueryProp(P_DEAF) )
+    tell_object(this_player(), break_string("Selbst wenn "+
+        name(WER,2)+ " etwas gesagt hat - gehoert hast Du nichts.\n"));
+  else
+    tell_object(this_player(), answer);
+
+  if (intp(silent) && silent)
+    return 1;
+
+  if (stringp(silent))
+    filter_array(livings,#'tell_object,process_string(silent)); 
+  else
+    filter_array(livings,#'tell_object,answer); 
+
+  return 1;
+}
+
+// Nach Silvana-Modell ein Argument mehr fuer AddInfo: Der String in 
+// "question" wird Fragetext sowohl fuer den Frager als auch Umstehende.
+
+varargs void AddInfo(mixed key, mixed info, string indent, mixed silent,
+    string question) {
+  if( pointerp( key ) ) {
+    int i;
+    for ( i=sizeof( key )-1; i>=0; i-- )
+      infos += ([ key[i]: info; indent; silent; question ]);
+  }
+  else
+    infos += ([ key: info; indent; silent; question ]);
+}
+
+void RemoveInfo(string key) {
+  efun::m_delete(infos, key);
+}
+
+varargs void _set_default_info( string info, string indent ) {
+  AddInfo( DEFAULT_INFO, info, indent );
+}
+
+varargs mixed GetInfo(string key) {
+  if (!key) return infos;
+  return infos[key];
+}
+
+varargs void AddLibrary(string library, int level, int localflag) {
+  if (localflag)
+    INFOLIB_MASTER->NewLib(library, 1, this_object(), level);
+  else {
+    library = (string)MASTER->make_path_absolute(library);
+    libraries += ([ library: level ]);
+  }
+}
+
+void RemoveLibrary(string library) {
+  library = (string)MASTER->make_path_absolute(library);
+  libraries = m_delete(libraries, library);
+}
+

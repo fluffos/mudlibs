@@ -1,0 +1,561 @@
+/*
+** Ein Damespiel  Yara@SL
+** ---
+** Diese Datei bietet NUR die Funktionalitaet fuer ein Damespiel.
+** Die noetigen Befehle sind im Raum integriert, dort wird nur die
+** Blueprint geladen.
+** ---
+** 2005-12-13  1.0  Yara  initial version
+*/
+
+
+#include "../def.h"
+
+inherit "std/thing";
+
+#define WHITE 0
+#define BLACK 1
+
+#define N  "   "
+#define S  " X "
+#define W  " O "
+#define SD "(X)"
+#define WD "(O)"
+
+mixed stones;   //anzahl verbleibender steine
+mixed  brett;   //spielbrett
+int current;    //wer ist dran (0=weiss, 1=schwarz) (boolean)
+string won;        //wurde das Spiel schon gewonnen? (boolean)
+mixed player;   //die beiden spieler
+int whitePl;    //wer ist der weisse spieler
+status hit;     //wurde ein Stein geschlagen?
+mixed nextmove; //ausgangsfeld für nächsten sprung (wenn spieler gesprungen hat)
+status weiter;  //darf der spieler noch mal?
+
+
+//////////////////////////////////////////////////////////////////////////////
+object get_player(int id){
+  return player[id];
+}
+
+//////////////////////////////////////////////////////////////////////////////
+int remove_player(object pl) {
+  if(player[0] == pl)      player[0] = 0;
+  else if(player[1] == pl) player[1] = 0;
+  else                     return 0;      
+
+  return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Rueckgabewerte: -1 Spieler schon gesetzt
+//                  0 Zwei andere Spieler spielen
+//                  1 ok 
+int set_player(object pl) {
+  if( player[0] == pl || player[1] == pl ) return -1;
+  if(!player[0])                           player[0] = pl;
+  else if(!player[1])                      player[1] = pl;
+  else                                     return 0;
+
+  return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+void create() {
+//  if (!is_clone(TO)) return;
+  ::create();
+
+   brett = ({
+            ({ 0,S,0,S,0,S,0,S }),
+            ({ S,0,S,0,S,0,S,0 }),
+            ({ 0,S,0,S,0,S,0,S }),
+    
+            ({ N,0,N,0,N,0,N,0 }),
+            ({ 0,N,0,N,0,N,0,N }),
+    
+            ({ W,0,W,0,W,0,W,0 }),
+            ({ 0,W,0,W,0,W,0,W }),
+            ({ W,0,W,0,W,0,W,0 })
+      });
+
+  current = WHITE; //weiss beginnt
+  won = "Noch niemand";
+  hit = 0;
+  player = ({0,0});
+  stones = ({12,12});
+
+  SetProp(P_SHORT, "Ein Damespielbrett");
+  SetProp(P_LONG,
+    "" );
+  SetProp(P_NAME, "Damespielbrett");
+  SetProp(P_NOGET, 1);
+  SetProp(P_MAX_WEIGHT, 1000000);
+
+  AddId("\ny_dame");
+
+//  AddCmd("regeln", "cmdRegeln");
+}
+
+//////////////////////////////////////////////////////////////////////////////
+//zeichnet das Spielbrett
+int brett() {   
+  int i;
+  string row;
+  string abc;
+  
+  abc = "ABCDEFGH";  
+
+  write("      1   2   3   4   5   6   7   8         \n");
+  write("         ___     ___     ___     ___        \n");
+  write("        /   \\   /   \\   /   \\   /   \\   \n");
+
+  for(i=1;i<=8;i++) {
+    row = abc[i-1..i-1];
+    
+    if(i & 1) {     // i ist ungerade
+      write(row+"    __( "+brett[i-1][1]+" )_( "+brett[i-1][3]+" )_");
+      write("( "+brett[i-1][5]+" )_( "+brett[i-1][7]+" )  "+row+"   \n");
+      write("    /   \\___/   \\___/   \\___/   \\___/   \n");
+    }
+    else {        // i ist gerade
+      if(i != 8) {
+        write(row+"  ( "+brett[i-1][0]+" )_( "+brett[i-1][2]+" )_");
+        write("( "+brett[i-1][4]+" )_( "+brett[i-1][6]+" )__    "+row+"   \n");
+        write("    \\___/   \\___/   \\___/   \\___/   \\  \n");
+      }
+      else {
+        write(row+"  ( "+brett[i-1][0]+" ) ( "+brett[i-1][2]+" ) ");
+        write("( "+brett[i-1][4]+" ) ( "+brett[i-1][6]+" )      "+row+"   \n");
+        write("    \\___/   \\___/   \\___/   \\___/       \n");
+      }
+    }
+  }
+
+  write("                                            \n");
+  write("      1   2   3   4   5   6   7   8         \n");
+
+  write("\n");
+
+  write( ((TP==player[whitePl]) && !won?"Du hast ":"Weiss hat ") 
+          +(12 - stones[WHITE]) + " Steine verloren.\n");
+  write( ((TP==player[whitePl^1]) && !won?"Du hast ":"Schwarz hat ")
+          +(12 - stones[BLACK]) + " Steine verloren.\n");
+
+  write("\n");
+  
+  if( !won ) {
+    if( ( current == WHITE && TP == player[whitePl] ) ||
+        ( current == BLACK && TP == player[whitePl^1] ) )
+      write("Du bist am Zug.\n");
+    else
+      if( current == WHITE ) write("Weiss ist am Zug.\n");
+      else write("Schwarz ist am Zug.\n");
+  }
+  else
+    write(won+" hat gewonnen! Das Spiel wurde beendet.\n");
+
+}
+
+//////////////////////////////////////////////////////////////////////////////
+int neu(string str) {
+  if( TP != player[0] && TP != player[1] ) {
+    write(BS("Du kannst kein neues Spiel starten, da Du "
+      "nicht am Spieltisch sitzt."));
+    return 1;
+  }
+
+  if(!player[0] || !player[1]) {
+    write("Du brauchst noch einen Mitspieler.\n");
+    return 1;
+  }
+
+  if(TP == player[0]) whitePl = 0;
+  else whitePl = 1;
+
+  if(str == "test") {
+    brett = ({
+              ({ 0,N,0,N,0,N,0,N }),
+              ({ N,0,N,0,S,0,N,0 }),
+              ({ 0,N,0,N,0,W,0,N }),
+
+              ({ N,0,N,0,N,0,N,0 }),
+              ({ 0,N,0,N,0,N,0,N }),
+
+              ({ N,0,N,0,N,0,N,0 }),
+              ({ 0,N,0,N,0,N,0,N }),
+              ({ N,0,N,0,N,0,N,0 })
+    });
+
+    stones = ({ 1,1 });
+  }
+  else {
+    brett = ({
+              ({ 0,S,0,S,0,S,0,S }),
+              ({ S,0,S,0,S,0,S,0 }),
+              ({ 0,S,0,S,0,S,0,S }),
+
+              ({ N,0,N,0,N,0,N,0 }),
+              ({ 0,N,0,N,0,N,0,N }),
+
+              ({ W,0,W,0,W,0,W,0 }),
+              ({ 0,W,0,W,0,W,0,W }),
+              ({ W,0,W,0,W,0,W,0 })
+    });
+
+    stones = ({ 12,12 });
+  }
+
+  current = WHITE;
+  won = 0;
+  hit = 0;
+
+  write(BS("Du startest ein neues Spiel und beginnst mit Weiss."));
+  say(BS(TP->Name() + " startet ein neues Spiel und ist mit Weiss am Zug."), TP);
+  log_file(LOG+"dame.log", ctime()+": "+TP->Name(RAW)+" neu\n");
+  brett();
+  return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+int weiter() {
+  if( current == WHITE && TP != player[whitePl] ||
+      current == BLACK && TP == player[whitePl])
+    write("Du bist doch gar nicht dran!\n");
+  else if( !weiter )
+    write("Du musst erst einen Stein versetzen.\n");    
+  else
+  {
+    write("Du gibst an Deinen Mitspieler ab.\n");
+    say(TP->Name() + " kann nicht weiter ziehen und gibt ab.\n", TP);
+  
+    weiter = 0;
+    current ^= 1;
+    hit = 0;
+  }
+  return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+mixed convert_string_to_pos(string str) {
+  int p1,p2;
+
+  if(strlen(str) != 2) return 0;
+
+  p2 = str[1] - '1';
+  p1 = lowerchar(str[0]) - 'a';
+
+  if( !(p1 >= 0 && p1 <= 7) || !(p2 >=0 && p2 <= 7) )
+    return 0;
+
+  return ({p1,p2});
+}
+
+//////////////////////////////////////////////////////////////////////////////
+int check_valid_pos(mixed from, mixed to) {
+  if( ((from[0]&1) && (from[1]&1)) || (!(from[0]&1) && !(from[1]&1)) ) {
+    write(BS("Das Feld, von wo aus Du ziehen willst, gibt es gar nicht."));
+    return 0;
+  }
+  if( ((to[0]&1) && (to[1]&1)) || (!(to[0]&1) && !(to[1]&1)) ) {
+    write(BS("Das Feld, wo Du hinziehen moechtest, gibt es gar nicht."));
+    return 0;
+  }
+
+  if( brett[from[0]][from[1]] == N ) {
+    write(BS("Auf dem Ausgangsfeld liegt doch gar kein Stein."));
+    return 0;
+  }
+  if( brett[to[0]][to[1]] != N ) {
+    write(BS("Auf dem Zielfeld liegt schon ein Stein."));
+    return 0;
+  }
+
+  return 1;
+
+}
+
+//////////////////////////////////////////////////////////////////////////////
+int check_valid_color(string color) {
+  int can_move;
+
+  can_move = 0;
+
+  if(current == BLACK) {
+    if( color == S || color == SD ) can_move = 1;
+  }
+  else {
+    if( color == W || color == WD ) can_move = 1;
+  }
+
+  if(!can_move) {
+    if(query_wiz_level(TP) == 111)
+      write(BS("Nein, auch als Gott darfst Du keinen Stein Deines "
+      "Mitspielers ziehen, Du willst ihnen doch ihren Spass lassen."));
+    else {
+      if(IS_LEARNER(TP))
+        write(BS("Nein, auch als Magier darfst Du keinen Stein "
+          "Deines Mitspielers ziehen, das waere glatter Betrug."));
+      else
+        write(BS("Du kannst doch keinen Stein Deines Mitspielers "
+          "versetzen, das waere glatter Betrug."));
+    }
+    
+    say(BS(TP->Name() + " wollte gerade einen gegnerischen Stein versetzen."), TP);
+    return 0;
+  }
+
+  return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+int do_move(mixed from, mixed to) {
+  int dist;
+  int s;
+  int step;
+  int jump;
+  string col1, col2; // gegnerische Farben
+
+  if(current == BLACK) {
+    step = 1;
+    jump = 2;
+    col1 = W;
+    col2 = WD;
+  }
+  else {
+    step = -1;
+    jump = -2;
+    col1 = S;
+    col2 = SD;
+  }
+
+// will springen
+  if( to[0] == from[0]+jump )   {
+    dist = to[1] - from[1];
+    if(dist != 2 && dist != -2)  return 0;
+
+    s = dist/2;
+    if( (brett[from[0]+step][from[1]+s] != col1) &&
+        (brett[from[0]+step][from[1]+s] != col2) )
+      return 0;
+
+    brett[from[0]+step][from[1]+s] = N;
+    hit = 1;
+  }
+  else {
+    if( (to[0] != from[0]+step) ||
+        (to[1] != from[1]+1 && to[1] != from[1]-1)  )
+      return 0;
+  }
+
+  return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+int do_queen_move(mixed from, mixed to) {
+  int tmp1, tmp2;
+  int atmp1, atmp2;
+  int s1, s2, p1, p2;
+  int i;
+  string col1, col2; // gegnerische Farben
+
+  if(current == BLACK) {
+    col1 = W;
+    col2 = WD;
+  }
+  else {
+    col1 = S;
+    col2 = SD;
+  }
+
+  tmp1 = to[0]-from[0];
+  tmp2 = to[1]-from[1];
+
+  if( tmp1 == 0 || tmp2 == 0 ) return 0;
+
+  if( tmp1 < 0 ) atmp1 = -tmp1;  else atmp1 = tmp1;
+  if( tmp2 < 0 ) atmp2 = -tmp2;  else atmp2 = tmp2;
+
+  if( atmp1 != atmp2 ) return 0;
+
+  s1 = (int) (tmp1/atmp1);
+  s2 = (int) (tmp2/atmp2);
+  p1 = from[0] + s1;
+  p2 = from[1] + s2;
+
+  for(i=1; i<atmp1; i++, p1+=s1, p2+=s2) {
+    if(brett[p1][p2] == N) continue;
+    if( (brett[p1][p2] == col1) || (brett[p1][p2] == col2) ) {
+      if( (to[0] == p1+s1) && (to[1] == p2+s2) ) {
+        brett[p1][p2] = N;
+        hit = 1;
+        return 1;
+      }
+      else return 0;
+    }
+    return 0;
+  }
+
+  return 1;
+
+}
+
+//////////////////////////////////////////////////////////////////////////////
+int ziehe(string str) {
+  string pos1, pos2;  //koordinateneingabe v. spieler
+  mixed from, to;     //umgewandelte koordinaten
+  string color;       //farbe d. steines auf from-feld
+  status thit;
+  
+  if(won) {
+    write(BS(won+" hat gewonnen! Das Spiel wurde beendet. Mit \"neu\" kannst Du ein neues "
+             "Spiel starten.\n"));
+    return 1;
+  }
+
+  if(!str) return 0;
+  if( ( sscanf(str, "von %s nach %s", pos1, pos2) != 2 ) &&
+      ( sscanf(str, "%s nach %s", pos1, pos2) != 2 ) &&
+      ( sscanf(str, "%s %s", pos1, pos2) != 2 ) ) return 0;
+
+//wer ist am zug
+  if( ( current == WHITE && TP != player[whitePl] ) ||
+      ( current == BLACK && TP != player[whitePl^1] ) ) {
+    write(BS("Du bist doch gar nicht dran."));
+    return 1;
+  }
+
+//position berechnen
+  from = convert_string_to_pos(pos1);
+  to = convert_string_to_pos(pos2);
+
+//ungueltige eingabe
+  if(!from || !to) return 0;   
+
+//ungueltige felder
+  if(!check_valid_pos(from,to)) return 1; 
+
+//(nextmove speichert position des zuletzt bewegten steins)
+  if( hit && ( nextmove[0] != from[0] || nextmove[1] != from[1] ) )  {
+    write(BS("Du kannst nur mit dem Stein, mit dem Du den letzten "
+             "Sprung gemacht hast, weiterspringen."));
+    return 1;
+  }
+
+
+  color = brett[from[0]][from[1]];     //farbe des ausgangsfeldes
+  if( !check_valid_color(color) ) return 1; //ist eigene farbe?
+
+  thit = hit;
+  hit = 0;
+
+//setzen der dame
+  if( color == SD || color == WD ) {
+    if(!do_queen_move(from, to))  {
+//TODO spezifische meldung
+      write("Das ist ein ungueltiger Spielzug.\n");
+      return 1;
+    }
+  }
+//normaler zug
+  else {
+    if(!do_move(from, to)) {
+      write("Das ist ein ungueltiger Spielzug.\n");
+      return 1;
+    }
+  }
+
+  if( thit && !hit ) {
+    write(BS("Du kannst nur einen Zug machen, mit dem Du einen "
+        "gegnerischen Stein springst."));
+    hit = 1;
+    return 1;
+  }
+
+  if( hit ) {
+    stones[current^1]--;
+    nextmove = to;
+  }
+  
+  if(current == BLACK) {
+    if(to[0] == 7) color = SD;    //erhaelt spieler dame?
+  }
+  else {
+    if(to[0] == 0) color = WD;
+  }
+
+  brett[from[0]][from[1]] = N;    //ausgangsfeld leer
+  brett[to[0]][to[1]] = color;    //zielfeld belegen
+
+  say(TP->Name() + " zieht von " + pos1 + " nach " + pos2 + ".\n", TP);
+  write("\n");
+
+  if(stones[current^1] == 0) {
+    write("Du hast gewonnen!\n");
+    say(TP->Name() + " hat gewonnen!\n", TP);
+    won = TP->Name();
+    log_file(LOG+"dame.log", ctime()+": "+won+" hat gewonnen, "
+      +stones[current]+" Steine uebrig\n");
+    return 1;
+  }
+
+  if(hit) {
+    brett();
+    write("\n");
+    write(BS("Du hast einen gegnerischen Stein gesprungen. Du koenntest "
+        "jetzt noch weitere Spruenge machen. Mit \"weiter\" kannst Du "
+        "an Deinen Mitspieler abgeben."));
+    say(TP->Name() + " ist nochmal dran.\n", TP);
+
+    weiter = 1;
+  }
+  else {
+    current ^= 1;               //spieler wechseln
+    brett();
+  }
+
+  return 1;
+}
+
+void regeln() {
+  write(BS("* * * Dame ~ Regeln * * * * * * * * * * * * * * * * * * * * * * * * * * * * *"));
+  write(break_string(
+           "\b\b\b*\n"
+           "Das Damespiel wird von zwei Gegnern gespielt, einer spielt mit schwarzen, "
+           "der andere mit weissen Spielsteinen. Ziel des Spiels ist es, alle "
+           "gegnerischen Spielsteine durch Ueberspringen vom Brett zu entfernen."
+           "\n\b\b\b*\n"
+           "Ein Spielstein darf nur diagonal vorwaerts bewegt werden. Ein Spielstein "
+           "kann auf ein anliegendes leeres Feld gesetzt werden. Liegt auf einem "
+           "angrenzenden Feld ein gegnerischer Spielstein und ist hinter diesem ein "
+           "leeres Feld, kann der gegnerische Stein uebersprungen und der Spielstein auf "
+           "das freie Feld dahinter gesetzt werden."
+           "\n\b\b\b*\n"
+           "Pro Spielzug darf ein Stein einen Schritt bewegt werden, es sei denn, der "
+           "Spielstein hat einen gegnerischen Stein uebersprungen. Dann kann dieser "
+           "Stein noch weitere gegnerische Steine ueberspringen. Mit \"weiter\" kann an "
+           "den Mitspieler abgegeben werden."
+           "\n\b\b\b*\n"
+           "Erreicht ein Spielstein den gegnerischen Spielfeldrand, wird gegen eine Dame "
+           "getauscht. Die Dame darf sich mehrere Felder auf einmal bewegen und ist "
+           "nicht nur auf die Vorwaertsrichtung beschraenkt."
+           "\n\b\b\b*\n", 78, "*  ", BS_LEAVE_MY_LFS));
+}
+
+//////////////////////////////////////////////////////////////////////////////
+string hilfe() {
+  return
+    "  ********** DAME *** HILFE **********************************\n"
+    +"  *                                                          *\n"
+    +"  *  brett          - zeigt das Spielbrett                   *\n"
+    +"  *  neu            - startet ein neues Spiel                *\n"
+    +"  *  weiter         - gibt an den Mitspieler ab              *\n"
+    +"  *  regeln         - die Spielregeln                        *\n"
+    +"  *                                                          *\n"
+    +"  *  ziehe|zieh|z [von] <feld1> [nach] <feld2>               *\n"
+    +"  *                - zieht einen Stein von feld1 nach feld2  *\n"
+    +"  *                  Beispiele: zieh von b3 nach a4          *\n"
+    +"  *                             ziehe b3 nach a4             *\n"
+    +"  *                             z b3 a4                      *\n"
+    +"  *                                                          *\n"
+    +"  ************************************************************\n";
+}

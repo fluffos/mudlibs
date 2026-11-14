@@ -1,0 +1,250 @@
+/*
+  Schuldschein von Mani Raffzahn
+
+  P_AUTOLOADOBJ kriegt 
+  schulden["gesamt"]==gesamtbetrag
+  schulden["rest"]==restbetrag
+  schulden["angefangen"]==zeitpunkt des angefangenen kredites
+  schulden["alter"]==alter des spielers bei kreditantritt
+  schulden["zahlungen"]==liste der erfolgten einzahlungen
+
+*/
+
+#include "../def.h"
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+
+#define MANI "/d/wueste/protheg/quaul/room/quaul_1_4_2"
+
+inherit "std/thing";
+inherit MOST "std_things";
+
+private nosave mapping schulden;
+
+rueckseite();
+
+create()
+{
+  if (!is_clone(TO)) return;
+  ::create();
+ 
+  AddId(({"schein", "schuldschein","\nmaniraffzahnschuldschein"}) );
+  SetProp(P_SHORT, "Ein Schuldschein");
+  SetProp(P_LONG, 
+	  "Ein Schuldschein!\n");
+  SetProp(P_NAME, "Schuldschein");
+  SetProp(P_INFO,
+	  "Dir fallen ein paar kleingedruckte Zeilen am unteren Rand auf:\n"+
+	  " 'Solltet Ihr ueber einen laengeren Zeitraum versaeumen Eure Schulden\n"+
+	  "  abzubezahlen, sieht sich der Verleiher, Mani Raffzahn, gezwungen\n"+
+	  "  entsprechende Massnahmen einzuleiten!'\n");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_VALUE, 10);
+  SetProp(P_NOSELL, "So einfach wirst Du den nicht los!\n");
+  SetProp(P_NODROP, "Der Schuldschein ist ein Dokument und wird nicht weggeworfen!\n");
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NOBUY, 1);
+
+  SetProp(P_MATERIAL, ([MAT_PERGAMENT:99,MAT_INK:1]));
+
+  AddDetail("rueckseite", 
+	    "Auf der Rueckseite des Schuldscheines werden die einzelnen Rueckzahlungen "+
+	    "festgehalten. Du kannst sie lesen.\n");
+  AddReadDetail("rueckseite",CLOSURE(rueckseite));
+  AddReadDetail(({"schein","schuldschein","vorderseite"}), CLOSURE(long));
+
+  schulden=(["gesamt":0, "angefangen":0, "alter":0, "zahlungen":({})]);
+}
+
+gf(string a, string b)
+{
+  int d1,d2;
+
+  d1=to_int(explode(a,"-")[0]);
+  d2=to_int(explode(b,"-")[0]);
+
+  if(d1>d2) return 1;
+  else return 0;  
+}
+
+rueckseite()
+{
+  int i,s,r;
+  string ret;
+  string *e;
+
+  
+  ret="\n          Rueckzahlungen:                   Stand: "+dtime(time())[5..16]+"\n"+
+        "         -===============-\n \n";
+
+  if(!sizeof(schulden["zahlungen"]))
+    ret+="Noch keine Rueckzahlungen erfolgt!\n";
+  else
+    {
+      s=sizeof(schulden["zahlungen"]);
+
+      for(i=0;i<s;i++)
+	{
+	  e=explode(schulden["zahlungen"][i], "-");
+	  ret+=to_int(i+1)+". Einzahlung: "+dtime(to_int(e[0]))[0..16]+", Betrag: "+
+	    sprintf("%6s",e[1])+" Muenzen\n \n";
+	}
+    }
+  
+  ret+="Hinweis: Zinsen und Zinseszinsen werden nicht mitgerechnet!!\n";
+
+  TP->More(make_dokument(ret));
+  return "";
+}
+
+Zahlung(int i)
+{
+  if((file_name(PO)==MANI) || getuid(PO)=="protheg")
+    {
+      schulden["zahlungen"]+=({time()+"-"+i});
+      schulden["zahlungen"]=sort_array(schulden["zahlungen"], "gf");
+      return sizeof(schulden["zahlungen"]);
+    }
+}
+
+long()
+{
+  string ret,datum,alter,nam;
+  object who;
+
+  if(!interactive(who=ENV(ME)))
+    return "";
+
+  datum=dtime(schulden["angefangen"])[5..16];
+  alter=t2s(schulden["alter"]);
+  nam=CAP(getuid(who));
+
+  ret="\n                   Schuldschein                "+datum+"\n \n \n"+
+    "Verleiher - im folgenden P1: 'Mani Raffzahn'\n"+
+    "Schuldner - im folgenden P2: '"+nam+"'\n \n \n"+
+    "Am '"+datum+"' hat sich P2 (Alter zu dem Zeitpunkt '"+alter+"') "+
+    "infolge akuter Geldnot von P1 einen Geldbetrag in der Hoehe "+
+    "von '"+schulden["gesamt"]+"' Muenzen geliehen.\n \n"+
+    "P2 verpflichtet sich hiermit den oben genannten Betrag so "+
+    "schnell wie moeglich an P1 zurueckzuzahlen und sich dabei "+
+    "nicht durch andere Ereignisse, wie zB: ein Tod oder eine "+
+    "Sauferei in der Kneipe aufhalten zu lassen.\n \n"+
+    "Weiters nimmt P2 zur Kenntnis, dass sich mit der Dauer "+
+    "des laufenden Kredites auch der Zinssatz erhoeht.\n \n"+
+    "P1 wird hiermit ermaechtigt im Falle von versaeumten "+
+    "Zurueckzahlungen des P2 bestimmte Massnahmen inform von "+
+    "Pfaendungen u. ae. durchfuehren zu duerfen.\n \n"+
+    "P2 muss aber im Vorhinein vor den Konsequenzen gewarnt werden!\n \n"+
+    "Auf der Rueckseite dieses Dokumentes werden die jeweiligen "+
+    "Abbezahlungen festgehalten.\n \n \n"+
+    "        Mani Raffzahn (P1)            "+nam+" (P2)\n";
+  
+  ret=break_string(ret, 63,"",BS_LEAVE_MY_LFS+BS_BLOCK+BS_NO_PARINDENT);
+
+  if(TP) TP->More(make_dokument(ret));
+  return "";
+}
+
+string extra_look()
+{
+  object en;
+  
+  if(!en=environment(this_object())) return "";
+  return CAP(en->QueryPronoun(WER))+" ist total verschuldet!!\n";
+}
+
+int Renew()
+{
+  string bluename;
+  bluename = explode(file_name(ME),"#")[0];
+  if (catch(call_other(bluename,"???")))
+  {
+    // Error beim versuchten reload - behalten wir also wenigstens
+    // den urspruenglichen Clone des Rings... hmm, und benachrichtigen
+    // wir nen zustaendigen Magier, wenn der grad eingeloggt ist. :)
+    DB(sprintf ("[ER-Debug:] %O failed reloading blueprint!\n", ME));
+    return 0;
+  }
+  // Besser noch waer ein Vergleich mit file_time() des Files... naja :)
+  if (program_time(ME) < program_time(find_object(bluename)))
+  {
+    object neu;
+    neu=clone_object(bluename);
+    neu->move (environment(this_object()), M_NOCHECK);
+    neu->SetProp (P_AUTOLOADOBJ, schulden);
+    neu->BecomesNetAlive(environment(this_object()));
+    remove(1);  // silent remove
+    return 1;
+  }
+  return 0;
+}
+
+void BecomesNetAlive(object wer)
+{
+  if(Renew()) return;
+  catch(MANI->CheckSchuldner(wer));
+}
+
+mapping _set_autoloadobj(mapping data)
+{
+  object wer;
+
+  if (mappingp(data)) schulden+=data;  // info um Daten in data _ergaenzen_
+
+  if ((wer=previous_object(1))==environment(this_object()))
+    BecomesNetAlive(wer);
+  return schulden;
+}
+
+mapping _query_autoloadobj()
+{
+  return schulden;
+}
+
+varargs remove(int silent)
+{
+  object hehe;
+
+  if(query_once_interactive(ENV(ME)))
+    {
+      hehe=clone_object(OBJ "schuldschein");
+      hehe->SetProp(P_AUTOLOADOBJ, schulden);
+      hehe->move(ENV(ME), M_NOCHECK);
+    }
+
+  return ::remove();
+}
+
+t2s(int time)
+{
+  int d, h, m;
+  string ret;
+  ret="";
+  d = time/86400;
+  time%=86400;
+  h = time/3600;
+  time%=3600;
+  m = time/60;                                                                 
+  if(d) ret+=time2string("%d %D ", d*86400);
+  if(h) ret+=time2string("%h %H ", h*3600);
+  if(m) ret+=time2string("%m %M", m*60);
+  return ret;
+}
+
+destruct()
+{
+  return remove();
+}
+
+fertigmacht()
+{
+  return ::remove();
+}
+
+za()
+{
+  return schulden["zahlungen"];
+}

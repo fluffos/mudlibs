@@ -1,0 +1,111 @@
+// Heiligenschein der Paladine
+inherit "std/thing";
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <new_skills.h>
+#include "../paladin.h"
+#include "../blessing.h"
+
+private mapping lastSeen;
+
+create() {
+  if (!is_clone(this_object())) return;
+  ::create();
+  AddId (({PALADINITEM, "\nheiligenschein"}));
+  SetProp (P_SHORT, 0); 
+  SetProp (P_GENDER, MALE);
+  SetProp (P_WEIGHT, 0);
+  SetProp (P_LIGHT, 1);
+  SetProp (P_NODROP, 1);
+  SetProp (P_NEVERDROP, 1);
+  SetProp (P_MAGIC, 1);
+  AddDetail(({"heiligenschein", "schein"}), 
+      "Der Heiligenschein schwebt ueber Deinem Haupt und spendet "
+      +"ein warmes, goldenes Licht.");
+  if(getuid(previous_object())!="GUILD.pal_spells" &&
+      getuid(TI)!="dusty")
+  {
+   call_out("remove", 1);
+   return 0;
+  }
+
+  lastSeen = ([ ]);
+}
+
+string extra_look() {
+  object player;
+  if(!player=ENV(ME)) return "";
+  if(player->QueryProp(P_GENDER)==FEMALE)
+    return "Ueber ihrem Haupt schwebt ein goldener Heiligenschein.\n";
+  else 
+    return "Ueber seinem Haupt schwebt ein goldener Heiligenschein.\n";
+}
+
+public void activate_glimmer_of_hope() {
+  object pl;
+
+  if(!objectp(pl = ENV(ME))) return;
+
+  SetProp(P_X_HEALTH_MOD, ([P_HP: pl->QueryProp(P_GUILD_LEVEL)/5]));
+  pl->UpdateAttributes();
+  lastSeen = ([ ]);
+  pl->AddPursuer(ME);
+  tell_object(pl, BS("Dein Heiligenschein spendet Hoffnung und Trost."));
+  tell_room(ENV(pl), BS(pl->Name(WESSEN) + " Heiligenschein spendet Hoffnung und Trost."), ({pl}));
+}
+
+public int isHopeTarget(object ob) {
+  return query_once_interactive(ob) && ob->QueryProp(P_ALIGN) > 0;
+}
+
+public int PreventFollow(object room) {
+  object *players;
+  int i;
+
+  players=filter_array(all_inventory(room), "isHopeTarget");
+  players-=({ENV(ME)});
+
+  if(ENV(ME)->QueryProp(P_TESTPLAYER)) {
+    tell_object(ENV(ME), sprintf("## Hoffnungsschimmer targets=%O\n", players));
+  }
+
+  for(i=0; i<sizeof(players); ++i) {
+    if(!objectp(players[i])) continue;
+    if( (member(lastSeen, players[i]) && lastSeen[players[i]]+300 < time()) || !member(lastSeen, players[i])) {
+      tell_object(players[i], BS(sprintf("Der Anblick von %s Heiligenschein spendet dir neue Hoffnung!",
+                  ENV(ME)->name(WESSEN))));
+      players[i]->AddHp(ENV(ME)->QueryProp(P_GUILD_LEVEL));
+      lastSeen[players[i]] = time();
+    }
+  }
+
+  return 1;
+}
+
+int start_remove(int time) {
+  call_out("remove_me", time);
+  if(objectp(ENV(ME)) && HAS_BLESSING(ENV(ME), BLESSING_GLIMMER_OF_HOPE)) {
+    call_out("activate_glimmer_of_hope", 0);
+  }
+  return 1;
+}
+
+remove_me() {
+  object player, room;
+  if(player=ENV(ME)) 
+    tell_object(player, "Dein Heiligenschein verblasst.\n");
+  if(room=ENV(player))
+    tell_room(room, sprintf("Der Heiligenschein von %s verblasst.\n",
+        player->name(WER)), ({player}));
+  player->RemoveDetail(({"heiligenschein", "schein"}));
+  call_other("/spellbooks/pal_spells", "UpdateAttributesOf", player);
+  ME->remove();
+}
+
+/*
+void BecomesNetDead(object player) {
+ remove_me();
+}
+*/
+

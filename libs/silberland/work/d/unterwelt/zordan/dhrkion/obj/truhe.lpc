@@ -1,0 +1,246 @@
+//=========================================================================
+//
+// File:    truhe.c
+// Created by Ronja@SL
+//
+// Project: Dhrkion
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit "/std/thing";
+
+int is_open;
+
+string *dolch;
+string *hose;
+string *stiefel;
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+  is_open = 0;
+
+  AddDetail( ({"schimmer"}) ,
+    "Auch Magie schimmert um die Truhe herum. Du kannst Deinen Blick "
+    "gar nicht mehr von der Truhe loesen und ein unfassbarer Wunsch "
+    "ueberkommt Dich, in die Truhe zu greifen. "
+  );
+
+  SetProp(P_NAME, "Truhe");
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({"truhe","obsidiantruhe","\nANFAENGERTRUHE_DHRKION"}) );
+
+  SetProp(P_NAME_ADJ, ({"schwarz"}) );
+  AddAdjective( ({"schwarzen","schwarzer","schwarzem","schwarzes","schwarze"}) );
+
+  SetProp(P_MATERIAL, ([MAT_OBSIDIAN:95, MAT_MISC_MAGIC:5]) );
+  SetProp(P_MAX_WEIGHT, 15000);
+  SetProp(P_WEIGHT, 200000000);
+
+  SetProp(P_TRANSPARENT, 0);
+
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NOGET, Name(WER, 1)+" ist viel zu unhandlich und zu schwer zum "
+                             "mitnehmen.\n");
+
+  AddCmd( CMD_OEFFNEN                                , "cmd_oeffnen");
+  AddCmd(({"schliess", "schliesse", "verschliesse"}) , "cmd_schliessen");
+  AddCmd(({"greif", "greife"})                       , "cmd_greifen");
+
+  dolch   = ({ });
+  hose    = ({ });
+  stiefel = ({ });
+}
+
+int reset()
+{
+  ::reset();
+
+  if(is_open)
+  {
+    tell_room(ENV(TO),BS("Ploetzlich schliesst sich "+name(WER, 1)+
+                         " lautlos."), ({ TP }) );
+    is_open = 0;
+  }
+
+  dolch   = ({ });
+  hose    = ({ });
+  stiefel = ({ });
+}
+
+string _query_long()
+{
+  string s;
+
+  s = "Die Truhe ist schwaerzer als schwarz. Anscheinend schluckt der "
+      "Obsidian, aus welchem die Truhe besteht, jeden noch so kleinen "
+      "Schimmer von Licht. Fast kannst Du die Umrisse der Truhe nicht "
+      "erkennen, so schwarz ist sie. ";
+
+  if(is_open)
+  {
+    s += "Sie ist geoeffnet. ";
+  }
+  else
+  {
+    s += "Sie ist geschlossen. ";
+  }
+
+  return BS(s);
+}
+
+string _query_short()
+{
+  string s;
+
+  s = "Eine schwarze Truhe ";
+
+  if(is_open)
+  {
+    s += "(geoeffnet)";
+  }
+  else
+  {
+    s += "(geschlossen)";
+  }
+
+  return s;
+}
+
+int cmd_oeffnen(string str)
+{
+
+  notify_fail("Was moechtest Du oeffnen?\n");
+  if (!str || str=="") return 0;
+
+  notify_fail("Das kannst Du nicht oeffnen.\n");
+
+  if(!id(str)) return 0;
+
+  if(is_open)
+  {
+    tell_object(TP, Name(WER,1)+" ist doch schon geoeffnet!\n");
+    return 1;
+  }
+
+  tell_object(TP, BS("Lautlos oeffnest Du "+name(WEN, 1)+"."));
+
+  tell_room(ENV(TO), BS(TPN+" oeffnet lautlos "+name(WEN, 1)+"."), ({ TP }) );
+
+  is_open = 1;
+  return 1;
+}
+
+int cmd_schliessen(string str)
+{
+  object key;
+
+  notify_fail("Was moechtest Du schliessen?\n");
+  if (!str || str=="" || !id(str)) return 0;
+
+  if(!is_open)
+  {
+    tell_object(TP, Name(WER,1)+" ist doch schon geschlossen!\n");
+    return 1;
+  }
+
+  tell_object(TP, BS("Lautlos schliesst Du "+name(WEN, 1)+" wieder."));
+
+  tell_room(ENV(TO), BS(TPN+" schliesst lautlos "+name(WEN, 1)+"."), ({ TP }) );
+
+  is_open = 0;
+  return 1;
+}
+
+int FindObject(string fname)
+{
+  object ob;
+
+  ob = clone_object(fname);
+
+  if(ob->move(TP, M_GET) == 1)
+  {
+    ob->SetProp(P_VALUE, 0);
+
+    tell_object(TP, BS(
+      "Du greifst in die Kiste und findest "+ob->name(WEN, 0)+", "+
+      ob->QueryArticle(WEN, 1)+"Du sofort einsteckst."));
+
+    return 1;
+  }
+
+  tell_object(TP, BS(
+    "Du greifst in die Kiste und kannst einen Gegenstand ertasten. Dieser "
+    "ist jedoch viel zu schwer fuer Dich und Du laesst ihn deswegen in "
+    "der Kiste. Werd' erstmal staerker, Du Flasche!"));
+  ob->remove();
+  return 0;
+}
+
+int cmd_greifen(string str)
+{
+  notify_fail("Wohinein moechtest Du greifen?\n");
+
+  if(!str || str == "") return 0;
+  if(!(str == "in truhe"                  ||
+       str == "in truhe hinein"           ||
+       str == "in truhe rein"             ||
+       str == "in schwarze truhe"         ||
+       str == "in schwarze truhe hinein"  ||
+       str == "in schwarze truhe rein"    )) return 0;
+
+  if(!is_open)
+  {
+    tell_object(TP, "Aber die Truhe ist doch gar nicht offen!\n");
+    return -1;
+  }
+
+  if(TP->QueryProp(P_LEVEL) > 7)
+  {
+    tell_object(TP, "Du greifst in die Truhe, aber sie scheint leer zu "
+                    "sein.\n");
+    return 1;
+  }
+
+  if(TP->QueryProp(P_GUILD) != "dunkelelfen")
+  {
+    tell_object(TP, "Du greifst in die Truhe, aber sie scheint leer zu "
+                    "sein.\n");
+    return 1;
+  }
+
+  if(member(dolch, getuuid(TP)) == -1)
+  {
+    if(FindObject(WEAPON "dolch")) dolch += ({ getuuid(TP) });
+  }
+  else if(member(hose, getuuid(TP)) == -1)
+  {
+    if(TP->QueryProp(P_GENDER) == FEMALE)
+    {
+      if(FindObject(ARMOUR "rock")) hose += ({ getuuid(TP) });
+    }
+    else
+    {
+      if(FindObject(ARMOUR "hose")) hose += ({ getuuid(TP) });
+    }
+  }
+  else if(member(stiefel, getuuid(TP)) == -1)
+  {
+    if(FindObject(ARMOUR "stiefel")) stiefel += ({ getuuid(TP) });
+  }
+  else
+  {
+    tell_object(TP, BS("Du greifst in die Kiste, kannst aber keinen "
+                       "Gegenstand mehr darin finden."));
+  }
+
+  return 1;
+}
+

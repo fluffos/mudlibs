@@ -1,0 +1,3261 @@
+// druiden_spells.c - Das Spellbook der Druiden
+// $Date: 2000/11/29 17:40:25 $
+/* $Revision: 1.6 $
+ * $Log: druiden_spells.c,v $
+ * Revision 1.6  2000/11/29 17:40:25  Angrox
+ * typo cleanup
+ *
+ * Revision 1.5  2000/11/05 15:06:08  Angrox
+ * DT_STONE entfernt, Schadensverlauf bei den "Strahlen" angepasst.
+ *
+ * Revision 1.4  2000/10/13 11:47:52  Feyaria
+ * PREPARE_FUNCs und PREPARE_MSG
+ *
+ * Revision 1.3  2000/09/18 14:29:27  Angrox
+ * CheckElementalItems debuggt.
+ *
+ * Revision 1.2  2000/09/18 12:58:28  Angrox
+ * CheckElementalItem(), SetDebugName(), DelDebugName() eingebaut
+ *
+ * Revision 1.1  2000/08/15 18:50:36  Zordan
+ * Initial revision
+ *
+ */
+ 
+/* 
+   // Spellbook des Druidenzirkels.
+   // Neue Ueberarbeitete Version
+   // (c) Angrox@Silberland
+   // 17.08.1998
+   //
+   // Orginalversion: 18-03-1997
+*/
+//    01.Dez.1998 ()         SI_USR wird mitgezaehlt.
+//    30-Dez.1999 ()         Typofix fuer Erdbeben
+//    20-jan-2000 (iwo)      rammen vor tryattackspell
+//
+//
+//    31.01.2000 Angrox
+//               Ab jetzt bitte jede Veraenderung anfuegen!
+//               SI_PREPAREFUNC bei elementarhand und beherrschung dazu
+//    09.04.2000 Angrox
+//               Behandeln heilt Anvar mehr -> muss auf ISDRUID upgedatet werden//    21.05.2000 Angrox
+//               Bug bei Elementarhand behoben, 2ter Damtype DT_BLUDGEON
+//    08.08.2000 Angrox
+//               P_ELEMENTAL_ROOM eingebaut
+
+inherit "/std/spellbook";
+
+
+#include <moving.h>
+#include <properties.h>
+#include <language.h>
+#include <attributes.h>
+#include <combat.h>
+#include <wizlevels.h>
+#include <new_skills.h>
+#include <material.h>
+#include <ansi.h>
+#include "/gilden/druidenzirkel/druiden.h"
+
+/* Die Regionen und Domains werden in druiden.h definiert */
+/* Prototypen definieren */
+static int CheckArmour(object caster);
+static mapping DoSpellModification(string element, object caster, 
+    mapping sinfo);
+string GetMaterialString(object ob, object caster);
+static int general_info(object victim, object caster);
+int QueryOwnCreature(object caster, int flag, int what);
+object CreateElemental(object caster, int suc, string element);
+string Set_P_LONG(string element);
+static mixed myhands();
+int QueryMetal(object ob);
+float CheckElementalItem(object pl);
+
+static string DebugName="";
+
+nomask query_prevent_shadow() { return 1; }
+
+create() {
+  ::create();
+  SetProp(P_GLOBAL_SKILLPROPS,
+            ([SI_SPELLFATIGUE:2,
+              SI_SKILLRESTR_USE: ([SR_FUN:"CheckIfSpellAllowed"]),      
+              SI_SKILLLEARN:2,  
+              OFFSET(SI_SKILLLEARN): 3, 
+              SI_SP_LOW_MSG:BS("Du hast nicht genuegend Magiepunkte, um "
+                         +"die Elemente zu beherrschen."),
+              SI_TIME_MSG: "Du musst Dich erst wieder konzentrieren.\n",
+              SI_SKILLLEARN_ATTRIBUTE: A_INT
+            ]));
+
+
+
+/*
+//
+// Veraenderung der Hand
+//
+*/ 
+
+ AddSpell("elementarhand", 0,
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 6]), 
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:2,
+                                P_GUILD_LEVEL: 6,
+                                A_INT: 15]),
+            SI_PREPARE_TIME:3,
+            SI_PREPARE_MSG: "Du laesst die elementaren Kraefte in Deine "
+              "Haende fliessen.\n",
+            SI_SPELLFATIGUE:4,
+            SI_RAW_SPELLCOST: 45,
+            SI_SPELLNAME: "elementarhand",
+            SI_PREPAREFUNC: "elementarhand_check",
+          ]));
+
+ 
+/*
+//
+// ELMENTARE PFEILE
+//
+*/ 
+  AddSpell("luftpfeil", 0,
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 1]), 
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:1,
+                                P_GUILD_LEVEL: 1,
+                                A_INT: 10]),
+            SI_SKILLDAMAGE: 140,
+            SI_SPELLFATIGUE:2,
+            SI_SKILLDAMAGE_TYPE: DT_AIR, 
+            SI_RAW_SPELLCOST: 10,
+            SI_SPELLNAME: "luftpfeil"
+          ]));
+  AddSpell("wasserpfeil", 0,
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 3]), 
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:1,
+                                P_GUILD_LEVEL: 3,
+                                A_INT: 12]),
+            SI_SKILLDAMAGE: 140,
+            SI_SPELLFATIGUE: 2,
+            SI_SKILLDAMAGE_TYPE: DT_WATER,
+            SI_RAW_SPELLCOST: 10,
+            SI_SPELLNAME: "wasserpfeil"
+          ]));
+ 
+  AddSpell("erzpfeil", 0,
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 2]), 
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:1,
+                                P_GUILD_LEVEL: 2,
+                                A_INT: 11]),
+            SI_SKILLDAMAGE: 160,
+            SI_SPELLFATIGUE: 2, 
+            SI_RAW_SPELLCOST: 10,
+            SI_SPELLNAME: "erzpfeil",
+	    SI_SKILLDAMAGE_TYPE: ({DT_BLUDGEON, DT_MAGIC})
+          ]));
+  AddSpell("eispfeil", 0,
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 4]), 
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:1,
+                                P_GUILD_LEVEL: 4,
+                                A_INT: 13]),
+            SI_SKILLDAMAGE: 140,
+            SI_SPELLFATIGUE: 2,
+            SI_SKILLDAMAGE_TYPE: DT_COLD,
+            SI_RAW_SPELLCOST: 10,
+            SI_SPELLNAME: "eispfeil"
+          ]));
+  AddSpell("feuerpfeil", 0,
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 5]), 
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:1,
+                                P_GUILD_LEVEL: 5,  //5 statt 4
+                                A_INT: 14]),
+            SI_SKILLDAMAGE: 140,
+            SI_SPELLFATIGUE: 2,
+            SI_RAW_SPELLCOST: 10,
+            SI_SKILLDAMAGE_TYPE: DT_FIRE,
+            SI_SPELLNAME: "feuerpfeil"
+          ]));
+
+
+/*
+//
+// ELEMENTARE BAELLE (oder halt je nach Element anders benannt)
+//
+*/
+
+AddSpell("windstoss",0, 
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 6]), 
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:2,
+                                P_GUILD_LEVEL: 6,
+                                A_INT: 15]),
+            SI_SKILLDAMAGE: 350,
+            SI_DIFFICULTY: 150,
+            SI_PREPARE_TIME:1,  
+            SI_PREPAREFUNC: "prep_windstoss",  
+            SI_PREPARE_MSG: "Ein kleiner Luftwirbel bildet sich um Deine "
+               "Hand.\n",  
+            SI_SKILLDAMAGE_TYPE: DT_AIR,
+            SI_RAW_SPELLCOST: 20,
+            SI_SPELLNAME: "windstoss"
+          ]));
+
+AddSpell("wasserstrahl",0, 
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 8]), 
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:2,
+                                P_GUILD_LEVEL: 8,
+                                A_INT: 17]),
+            SI_SKILLDAMAGE: 350,
+            SI_DIFFICULTY: 150,
+            SI_PREPARE_TIME:1,  
+            SI_PREPAREFUNC: "prep_wasserstrahl",  
+            SI_PREPARE_MSG: "Wassertropfen sammeln sich in Deiner "
+               "Hand.\n",  
+            SI_SKILLDAMAGE_TYPE: DT_WATER,
+            SI_RAW_SPELLCOST: 20,
+            SI_SPELLNAME: "wasserstrahl"
+          ]));
+
+AddSpell("erzstrahl",0,
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 7]), 
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:2,
+                                P_GUILD_LEVEL: 7,
+                                A_INT: 16]),
+            SI_SKILLDAMAGE: 380,
+            SI_DIFFICULTY: 150,
+            SI_PREPARE_TIME:1,  
+            SI_PREPAREFUNC: "prep_erzstrahl",  
+            SI_PREPARE_MSG: "Kleine Steinchen bilden sich in Deiner "
+               "Hand.\n",  
+            SI_SKILLDAMAGE_TYPE: ({DT_BLUDGEON, DT_MAGIC}),
+            SI_RAW_SPELLCOST: 23,
+            SI_SPELLNAME: "erzstrahl"
+          ]));
+
+AddSpell("froststrahl",0, 
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 9]), 
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:2,
+                                P_GUILD_LEVEL: 9,
+                                A_INT: 20]),
+            SI_SKILLDAMAGE: 400,
+            SI_DIFFICULTY: 150,
+            SI_PREPARE_TIME:1,  
+            SI_PREPAREFUNC: "prep_froststrahl",  
+            SI_PREPARE_MSG: "Deine Hand ueberzieht sich mit Raureif.\n",
+            SI_SKILLDAMAGE_TYPE: DT_COLD,
+            SI_RAW_SPELLCOST: 25,
+            SI_SPELLNAME: "froststrahl"
+          ]));
+
+AddSpell("feuerball",0, 
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 10]), 
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:2,
+                                P_GUILD_LEVEL: 10,
+                                A_INT: 21]),
+            SI_SKILLDAMAGE: 400,
+            SI_DIFFICULTY: 150,
+            SI_PREPARE_TIME:1,   
+            SI_PREPAREFUNC: "prep_feuerball",  
+            SI_PREPARE_MSG: "Deine Hand beginnt zu gluehen.\n",
+            SI_SKILLDAMAGE_TYPE: DT_FIRE,
+            SI_RAW_SPELLCOST: 25,
+            SI_SPELLNAME: "feuerball"
+          ]));
+
+/*
+//
+// ELEMENTARE SCHAEDEN FUER MEHR FEINDE
+//
+*/  
+
+
+  AddSpell("windhose",0,  
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 11]), 
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:2,
+                                P_GUILD_LEVEL: 11,
+                                A_INT: 21]),
+            SI_SKILLDAMAGE: 350,
+            SI_DIFFICULTY: 200,
+            SI_SPELLFATIGUE:5,
+            SI_PREPARE_TIME:2,   
+            SI_PREPARE_MSG: "Grosse Luftwirbel bilden sich um Deine "
+                "Haende.\n",
+            SI_SKILLDAMAGE_TYPE: DT_AIR,
+            SI_RAW_SPELLCOST: 40,
+            SI_SPELLNAME: "windhose"
+          ]));
+
+   AddSpell("erdbeben",0, //kosten 50 
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 8]), 
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:2,
+                                P_GUILD_LEVEL: 8,
+                                A_INT: 17]),
+            SI_SKILLDAMAGE: 350,
+            SI_DIFFICULTY: 200,
+            SI_SPELLFATIGUE:5,
+            SI_PREPARE_MSG: "Du legst beide Handflaechen auf den Boden.\n",
+            SI_PREPARE_TIME:2, 
+            SI_SKILLDAMAGE_TYPE: ({DT_MAGIC, DT_BLUDGEON}),
+            SI_RAW_SPELLCOST: 50,
+            SI_SPELLNAME: "erdbeben"
+          ]));
+ 
+   AddSpell("sturmflut",0, //kosten 50 
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 12]), 
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:2,
+                                P_GUILD_LEVEL: 12,
+                                A_INT: 23, 
+                                SM_RACE:(["Zwerg":([A_DEX:23]),
+                                          "Hobbit":([A_DEX:24]),
+                                          "Elf":([A_INT:25])])]),
+            SI_SKILLDAMAGE: 350,
+            SI_DIFFICULTY: 200,
+            SI_SPELLFATIGUE:5,
+            SI_PREPARE_TIME:2,  
+            SI_PREPARE_MSG: "Du machst eine Wellenbewegung mit beiden "
+                "Haenden.\n",  //Space zuviel
+            SI_SKILLDAMAGE_TYPE: DT_WATER,
+            SI_RAW_SPELLCOST: 50,
+            SI_SPELLNAME: "sturmflut"
+          ]));
+
+  AddSpell("hagelschlag",0, //kosten 55 
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 14]), 
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:2,
+                                P_GUILD_LEVEL: 14,
+                                A_INT: 25,
+                                A_DEX: 22,
+                                SM_RACE:(["Zwerg":([A_DEX:25, A_INT:24]),
+                                          "Hobbit":([A_DEX:26]),
+                                          "Elf":([A_INT:28])])]),
+            SI_SKILLDAMAGE: 400,
+            SI_DIFFICULTY: 200,
+            SI_SPELLFATIGUE:5,
+            SI_PREPARE_TIME:2,  
+            SI_PREPARE_MSG: "Eine eisige Wolke entsteht zwischen Deinen "
+                "Haenden .\n",
+            SI_SKILLDAMAGE_TYPE: DT_COLD,
+            SI_RAW_SPELLCOST: 55,
+            SI_SPELLNAME: "hagelschlag"
+          ]));
+
+  AddSpell("feuersturm",0, //kosten 55 
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 15]), 
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:2,
+                                P_GUILD_LEVEL: 15,
+                                A_INT: 27,
+                                A_DEX: 25,
+                                SM_RACE:(["Zwerg":([A_DEX:27, A_INT:24]),
+                                          "Hobbit":([A_DEX:27]),
+                                          "Elf":([A_INT:30])])]),
+             SI_SKILLDAMAGE: 400,
+             SI_DIFFICULTY: 300,
+             SI_SPELLFATIGUE:5, 
+             SI_PREPARE_TIME:2,  
+             SI_PREPARE_MSG: "Grosse Flammen schlagen aus Deinen "
+                "Haenden.\n",
+             SI_SKILLDAMAGE_TYPE: DT_FIRE, 
+            SI_RAW_SPELLCOST: 55,
+            SI_SPELLNAME: "feuersturm"
+           ]));
+
+
+/*
+//
+//  Elementare
+//
+*/
+
+  AddSpell("beherrschung", 0, //kosten 40
+         ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 9]), 
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:2,
+                                P_GUILD_LEVEL: 9,
+                                A_INT: 20]),
+            SI_SKILLLEARN:4,
+            SI_DIFFICULTY: 500,
+            SI_SPELLFATIGUE:8,
+            SI_PREPARE_TIME:8,  
+            SI_PREPARE_MSG: "",  
+            SI_RAW_SPELLCOST: 42,
+            SI_SPELLNAME: "beherrschung",
+            SI_PREPAREFUNC: "beherrschung_func",
+	  ]));
+ 
+  AddSpell("luftelementar",0,
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 10]), 
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:2,
+                                P_GUILD_LEVEL: 10,
+                                A_INT: 21]),
+            SI_DIFFICULTY: 500,
+            SI_SPELLFATIGUE:14,
+            SI_SKILLLEARN:3,
+            SI_PREPARE_TIME:5, 
+            SI_PREPARE_MSG: "", 
+            SI_PREPAREFUNC: "prep_luftelementar", 
+            SI_RAW_SPELLCOST: 50,
+            SI_SPELLNAME: "luftelementar"
+          ]));
+
+  AddSpell("erzelementar",0,
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 11]), 
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:2,
+                                P_GUILD_LEVEL: 11,
+                                A_INT: 22]),
+            SI_DIFFICULTY: 500,
+            SI_SPELLFATIGUE:16,
+            SI_SKILLLEARN:3,
+            SI_PREPARE_TIME:5,  
+            SI_PREPARE_MSG: "", 
+            SI_PREPAREFUNC: "prep_erzelementar", 
+            SI_RAW_SPELLCOST: 60,
+            SI_SPELLNAME: "erzelementar"
+          ]));  
+
+  AddSpell("wasserelementar", 0,
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 12]), 
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:2,
+                                P_GUILD_LEVEL: 12,
+                                A_INT: 23, 
+                                SM_RACE:(["Zwerg":([A_DEX:23]),
+                                          "Hobbit":([A_DEX:24]),
+                                          "Elf":([A_INT:25])])]),
+            SI_DIFFICULTY: 500,
+            SI_SPELLFATIGUE:18,
+            SI_SKILLLEARN:3,
+            SI_PREPARE_TIME:5,
+            SI_PREPARE_MSG: "", 
+            SI_PREPAREFUNC: "prep_wasserelementar", 
+            SI_RAW_SPELLCOST: 60,
+            SI_SPELLNAME: "wasserelementar"
+          ]));  
+
+ AddSpell("eiselementar",0, 
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 13]), 
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:2,
+                                P_GUILD_LEVEL: 13,
+                                A_INT: 24,
+                                A_INT:22,
+                                SM_RACE:(["Zwerg":([A_DEX:24]),
+                                          "Hobbit":([A_DEX:25]),
+                                          "Elf":([A_INT:27])])]),
+            SI_DIFFICULTY: 500,
+            SI_SPELLFATIGUE:28,
+            SI_SKILLLEARN:3,
+            SI_PREPARE_TIME:7,
+            SI_PREPARE_MSG: "", 
+            SI_PREPAREFUNC: "prep_eiselementar", 
+            SI_RAW_SPELLCOST: 80,
+            SI_SPELLNAME: "eiselementar"
+          ]));  
+
+  AddSpell("humuselementar",0, 
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 14]), 
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:2,
+                                P_GUILD_LEVEL: 14,
+                                A_INT: 25,
+                                A_DEX: 22,
+                                SM_RACE:(["Zwerg":([A_DEX:25, A_INT:24]),
+                                          "Hobbit":([A_DEX:26]),
+                                          "Elf":([A_INT:28])])]),
+            SI_DIFFICULTY: 500,
+            SI_SPELLFATIGUE:30,
+            SI_SKILLLEARN:3,
+            SI_PREPARE_TIME:7, 
+            SI_PREPARE_MSG: "", 
+            SI_PREPAREFUNC: "prep_humuselementar", 
+            SI_RAW_SPELLCOST: 80,
+            SI_SPELLNAME: "feuerelementar"
+          ]));
+
+ AddSpell("feuerelementar",0,
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 15]), 
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:2,
+                                P_GUILD_LEVEL: 15,
+                                A_INT: 27,
+                                A_DEX: 25,
+                                SM_RACE:(["Zwerg":([A_DEX:27, A_INT:24]),
+                                          "Hobbit":([A_DEX:27]),
+                                          "Elf":([A_INT:30])])]),
+            SI_DIFFICULTY: 500,
+            SI_SPELLFATIGUE:30,
+            SI_SKILLLEARN:3,
+            SI_PREPARE_TIME:7, 
+            SI_PREPARE_MSG: "", 
+            SI_PREPAREFUNC: "prep_feuerelementar", 
+            SI_RAW_SPELLCOST: 90,
+            SI_SPELLNAME: "feuerelementar"
+          ]));  
+
+
+
+/*
+//
+//  Heierspells
+//
+*/
+
+ AddSpell("behandle", 0, // Kosten 15
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 7]), 
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:2,
+                                P_GUILD_LEVEL: 7,
+                                A_INT: 16]),
+             SI_PREPARE_TIME:4,
+             SI_DIFFICULTY: 200,  
+             SI_SPELLFATIGUE:16,
+             SI_SKILLLEARN:5,
+             SI_RAW_SPELLCOST: 15,
+             SI_SPELLNAME: "behandle"
+           ]));
+
+ 
+/*
+//
+//  DIV. SPELLS
+//
+*/
+ 
+ AddSpell("schaetz", 0, 
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 3]),
+            SI_SKILLRESTR_USE:([P_GUILD_LEVEL: 3,
+                                A_INT: 12]),
+             SI_SKILLLEARN:4,  
+	           OFFSET(SI_SKILLLEARN): 3, 
+             SI_RAW_SPELLCOST: 10,
+             SI_SPELLNAME: "schaetz"]));
+
+ AddSpell("feuerwusel",0,
+            ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 2]), 
+            SI_SKILLRESTR_USE:([P_GUILD_LEVEL: 2,
+                                A_INT: 11]),
+            SI_SPELLNAME: "feuerwusel",
+            SI_SKILLLEARN:4,  
+	          OFFSET(SI_SKILLLEARN): 3, 
+            SI_RAW_SPELLCOST: 20,
+            SI_PREPARE_TIME: 2]));
+
+ AddSpell("erkenne", 0,
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 1]),
+            SI_SKILLRESTR_USE:([P_GUILD_LEVEL: 1,
+                                A_INT: 10]),
+            SI_SKILLLEARN:4,  
+	          OFFSET(SI_SKILLLEARN): 3, 
+            SI_RAW_SPELLCOST: 10,
+            SI_SPELLNAME: "erkenne"
+         ]));
+            
+
+ AddSpell("laehme", 0,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 9]),
+            SI_SKILLRESTR_USE:([P_GUILD_LEVEL: 9,
+                                A_INT: 20]),
+             SI_DIFFICULTY: 400, 
+             SI_SPELLFATIGUE: 6,
+             SI_SKILLLEARN:4,  
+	           OFFSET(SI_SKILLLEARN): 3, 
+             SI_RAW_SPELLCOST: 30,
+             SI_SPELLNAME: "laehme",
+             SI_PREPARE_TIME:4]));
+             
+ AddSpell("elementarpanzer", 0, 
+            ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 5]),
+            SI_SKILLRESTR_USE:([P_GUILD_LEVEL: 5,
+                                A_INT: 14]),
+             SI_DIFFICULTY: 100, 
+             SI_SPELLFATIGUE: 8,
+             SI_SKILLLEARN:4,  
+	           OFFSET(SI_SKILLLEARN): 3, 
+             SI_RAW_SPELLCOST: 45,
+             SI_SPELLNAME: "elementarpanzer",
+             SI_PREPARE_TIME:1,
+             SI_PREPAREFUNC: "elementarpanzer_check"  ]));
+
+ AddSpell("dzuecke", 0, 
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 4]),
+             SI_DIFFICULTY: -200,  
+             SI_SPELLFATIGUE: 30,
+             SI_SKILLLEARN:10,  
+	           OFFSET(SI_SKILLLEARN): 5, 
+             SI_RAW_SPELLCOST: 20,
+             SI_SPELLNAME: "dzuecke",
+             SI_PREPARE_TIME:4,  
+            ]));
+ 
+ 
+}
+ 
+/* 
+//p****************************************************************
+//p**************** Ab hier beginnen die Spells ******************
+//p***************************************************************   
+*/ 
+
+
+/*
+//
+// ALLGEMEINE SPELLS
+//
+*/
+
+int 
+schaetz(object caster, mapping sinfo) {
+  object victim;
+  int *res_res, *res_vul, *values, suc, i;
+  string result, name_vic;
+  mixed *indices;
+
+  values=({});
+  indices=({});
+  if(caster->InFight()) {
+    printf(BS("Du kannst Dich nicht auf die Muster des Zaubers "
+              +"konzentrieren."));
+    return 0;  
+  }
+  victim=FindVictim(sinfo[SI_SKILLARG],caster, "Wen oder was "
+              +"willst Du denn einschaetzen?\n");
+  if (!victim)
+    return 0;
+  if(!living(victim)) {
+    printf(BS("Du kannst nur Lebewesen einschaetzen.\n"));
+    return 0;
+  }
+  sinfo=DoSpellModification(HUMUS, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->restore_spell_points(-sinfo[SI_RAW_SPELLCOST]);
+/*if(victim==caster) {
+    printf(BS(sprintf("Du musterst Dich und laesst elementare Kraefte "
+                   +"durch Dich fliessen...\n")));
+    tell_room(ENV(caster), sprintf("%s mustert Dich.\n", caster->name(), 
+	     ({victim, caster}));
+  }
+  else ...
+*/
+  printf(BS(sprintf("Du musterst %s und laesst elementare Kraefte "
+                   +"durch Dich fliessen...\n", victim->name())));
+  tell_room(ENV(caster), sprintf("%s mustert %s.\n", caster->name(), 
+	    victim->name(WEN)), ({victim, caster}));
+  tell_object(victim, sprintf("%s mustert Dich.\n", caster->name(WER)));
+  if ((suc=SpellSuccess(caster,sinfo))<=0) {
+      printf(BS("...aber Du kannst nichts erkennen.\n"));
+      return MISSERFOLG;
+  }
+  if(victim==caster) {
+    printf(BS("Du schaetzt Dich und kommst zu folgendem Schluss:\n"));
+    printf(BS("Du bist so gut wie Du. Waer ja schlimm, wenns " //Komma fehlte
+           +"anders waere.\n"));
+    return ERFOLG;
+  }
+  printf(BS("Schliesslich kommst Du zu folgendem Schluss:\n"));
+  printf("------------------------------------------------"
+         +"------------------------------\n");
+  /* General Information */
+  general_info(victim, caster);
+  /* End */
+
+  name_vic=victim->name();
+  if(victim->QueryProp(P_RESISTANCE_STRENGTHS)) {
+    values=m_values(victim->QueryProp(P_RESISTANCE_STRENGTHS));
+    indices=m_indices(victim->QueryProp(P_RESISTANCE_STRENGTHS));
+  }
+  res_vul=({});
+  res_res=({});
+  for(i=sizeof(values)-1;i>=0;i--) {
+    if((float)values[i]<0.0) res_res+=({i});
+    if((float)values[i]>0.0) res_vul+=({i});
+  }
+  /*
+  tell_object(find_player("angrox"), 
+              sprintf("\n#Vul:%d\n#Res:%d\n", sizeof(res_vul), 
+              sizeof(res_res)));
+	      */
+  if(suc>6000){
+    if(sizeof(res_vul)>0)
+      printf(BS(CAP(name_vic)+" hat Verwundbarkeiten.\n"));
+    else 
+      printf(BS(CAP(name_vic)+" hat keine Verwundbarkeiten.\n"));
+    if(sizeof(res_res)>0)
+      printf(BS(CAP(name_vic)+" ist gegen ein paar Schaeden "
+            +"resistent oder immun.\n"));
+    else 
+      printf(BS(CAP(name_vic)+" ist gegen nichts resistent "
+            +"oder immun.\n"));
+  }
+  printf("------------------------------------------------"
+        +"------------------------------\n");
+  return ERFOLG;
+}
+
+/* Fuer 'schaetz' spell */
+int general_info(object victim, object caster)
+{
+  int hp, sp, ac, size, i, nomagic_vic;
+  int hp_vic, sp_vic, ac_vic, size_vic, spellrate_vic, align;
+  string result, name_vic;
+
+  sp_vic=victim->QueryProp(P_MAX_SP);
+  ac_vic=victim->QueryProp(P_TOTAL_AC);
+  size_vic=victim->QueryProp(P_SIZE);
+  name_vic=victim->name(WER);
+  hp_vic=victim->QueryProp(P_MAX_HP);
+  nomagic_vic=victim->QueryProp(P_NOMAGIC);
+  spellrate_vic=victim->QueryProp(P_SPELLRATE);
+  align=victim->QueryProp(P_ALIGN);
+  gender=victim->QueryPronoun(WER);   //gender neu hinzugefuegt
+  if(!size_vic) size_vic=1;
+
+  sp=caster->QueryProp(P_MAX_SP);
+  ac=caster->QueryProp(P_TOTAL_AC);
+  hp=caster->QueryProp(P_MAX_HP);
+  size=caster->QueryProp(P_SIZE);
+  if(!size) size=1;
+
+  result=CAP(name_vic);
+  switch(100*size_vic/size) {
+    case 0..20   : result+=" ist sehr viel kleiner als Du.\n";
+                   break;
+    case 21..50  : result+=" ist viel kleiner als Du.\n";
+                   break;
+    case 51..80  : result+=" ist kleiner als Du.\n";
+                   break;
+    case 81..130 : result+=" ist etwa gleich gross wie Du.\n";
+                   break;
+    case 141..180: result+=" ist groesser als Du.\n";
+                   break;
+    case 181..350: result+=" ist viel groesser als Du.\n";
+                   break;
+    case 351..500: result+=" ist SEHR viel groesser als Du.\n";
+                   break;
+    case 501..800: result+=" ueberragt Dich um Haeuser.\n";
+                   break;
+    default      : result+=" ist gross wie ein Berg.\n";
+  }
+  printf(BS(result));
+  result="Absolut gesehen haelt "+name_vic;
+  if(!hp) hp=1;
+  switch(100*hp_vic/hp) {
+    case 0..20   : result+=" im Gegensatz zu Dir gar "
+                          +"nichts aus.\n";
+                   break;
+    case 21..50  : result+=" im Gegensatz zu Dir "
+                          +"sehr wenig aus.\n";
+                   break;
+    case 51..80  : result+=" etwas weniger als Du aus.\n";
+                   break;
+    case 81..140 : result+=" etwa gleich viel wie Du aus.\n";
+                   break;
+    case 151..200: result+=" im Gegensatz zu Dir viel aus.\n";
+                   break;
+    case 201..400: result+=" im Gegensatz zu Dir sehr viel "
+                          +"aus.\n";
+                   break;
+    case 401..600: result+=" im Gegensatz zu Dir enorm viel "
+                          +"aus .\n";
+                   break;
+    case 601..800: result+=" extrem viel aus. Du fuehlst Dich wie "
+                         +"ein kleines Wuerstchen.\n";
+                   break;     
+    case 801..1000:result+=" im Gegensatz zu Dir unglaublich viel " 
+                          +"aus. Sieh Dich bloss vor, sonst "
+                          +"stehst Du bald vor Lars!\n";
+                   break;
+    default      : result+=" soviel Schaden aus, dass "+gender+" fuer " //gender statt er
+                   +"Dich so gut wie unbesiegbar ist! Du zitterst "
+                   +"vor Ehrfurcht.\n";
+  }
+  printf(BS(result));
+  result=CAP(name_vic);
+  if(!sp) sp=1;
+  switch(100*sp_vic/sp) {
+    case 0..20   : result+=" hat so gut wie keine "
+                          +"magischen Kraefte.\n";
+                   break;
+    case 21..50  : result+=" hat weit weniger magische "
+                          +"Energie als Du.\n";
+                   break;
+    case 51..80  : result+=" hat etwas weniger magische "
+                         +"Energie als Du.\n";
+                   break;
+    case 81..120 : result+=" ist etwa gleich magisch aktiv "
+                         +"wie Du.\n";
+                   break;
+    case 121..180: result+=" hat mehr magische Energie "
+                         +"als Du.\n";
+                   break;
+    case 181..250: result+=" hat viel mehr magische "
+                         +"Energie als Du.\n";
+                   break; 
+    case 251..400: result+=" ist mit sehr viel mehr "
+                         +"magischer Energie gesegnet als Du.\n";
+                   break;
+    case 401..600: result+=" ist in Sachen Magie extrem "
+                         +"maechtiger als Du.\n";
+                   break;
+    case 601..800: result+=" hat im Gegensatz zu "
+                          +"Dir unglaublich hohe und extrem "
+                          +"maechtige magische Kraefte.";
+                   break;     
+    case 801..1000:result+=" hat im Gegensatz zu "
+                         +"Dir so unglaublich "
+                         +"grosse magische Kraefte, dass Du vor "
+                         +"Ehrfurcht erzitterst.\n";
+                   break;
+    default      : result+=" hat im Gegensatz zu Dir gottgleiche "
+                         +"magische Kraefte! Du erzitterst vor "
+                         +"Ehrfurcht!\n";
+  }
+  printf(BS(result));
+  result=CAP(name_vic);
+  switch(nomagic_vic) {
+    case 0      : result+=" kann keine Zauber abwehren.\n";
+                   break;
+    case 1..15  : result+=" kann nur wenige Zauber abwehren.\n";
+                   break;
+    case 16..30 : result+=" kann ein paar Zauber abwehren.\n";
+                   break;
+    case 31..45 : result+=" kann relativ viele Zauber abwehren.\n";
+                   break;
+    case 46..60 : result+=" wehrt etwa die Haelfte aller Zauber ab.\n";
+                   break;
+    case 61..75 : result+=" wehrt sehr viele Zauber ab.\n";
+                   break;
+    case 76..99 : result+=" wehrt beinahe alle Zauber ab.\n";
+                   break;
+    case 100    : result+=" wehrt alle Zauber ab.\n";
+                   break;
+    default      : result+=" wehrt alle Zauber ab.\n";
+  }
+  printf(BS(result));
+  result=CAP(name_vic);
+  if(interactive(victim)) result+=" kann zaubern.\n";
+  else
+  switch(spellrate_vic) {
+    case 0      : result+=" kann keine Zauber sprechen.\n";
+                   break;
+    case 1..15  : result+=" kann nur wenige Zauber sprechen.\n";
+                   break;
+    case 16..30 : result+=" kann ein paar Zauber sprechen.\n";
+                   break;
+    case 31..45 : result+=" kann relativ viele Zauber sprechen.\n";
+                   break;
+    case 46..60 : result+=" spricht viele Zauber.\n";
+                   break;
+    case 61..75 : result+=" spricht sehr viele Zauber.\n";
+                   break;
+    case 76..99 : result+=" spricht beinahe immer einen Zauber.\n";
+                   break;
+    case 100    : result+=" spricht immer einen Zauber.\n";
+                   break;
+    default      : result+=" spricht immer einen Zauber.\n";
+  }
+  printf(BS(result));
+  result=CAP(name_vic);
+  switch(ac_vic) {
+    case 0..40   : result+=" hat so gut wie keinen Schutz.\n";
+                   break; 
+    case 41..80  : result+=" kann Dir nicht viel entgegensetzen.\n";
+                   break;
+    case 81..120 : result+=" hat eine gute Ruestung oder natuerlichen "
+                         +"Schutz.\n";
+                   break; 
+    case 121..160: result+=" hat eine maechtige Ruestung oder "
+                         +"natuerlichen Schutz.\n";
+                   break;
+    case 161..200: result+=" hat eine extrem maechtige Ruestung oder "
+                         +"einen uebernatuerlichen Schutz.\n"; 
+                   break;
+    case 201..250: result+=" scheint vom Element Erz selbst vollkommen "
+                         +"geschuetzt zu sein.\n";
+                   break;
+    case 251..350: result+=" ist beinahe wie unverwundbar.\n";  
+                   break;
+    default      : result+=" ist durch normale Waffen nicht mehr zu "
+                         +"verletzen und scheint einen extrem "
+                         +"machtvollen uebernatuerlichen Schutz zu "
+                         +"haben.\n"; 
+  }
+  printf(BS(result));
+  result=CAP(name_vic);
+  if(align<-1000) result+=" scheint das Boese selbst zu sein!\n";
+  else if (align<-600) result+=" ist von diabolischer Gesinnung.\n";
+  else if (align<-400) result+=" ist extrem boese.\n";
+  else if (align<-200) result+=" ist von boeser Gesinnung.\n";
+  else if (align<-50) result+=" ist zu frech um neutral zu sein.\n";
+  else if (align<50) result+=" steht allem neutral gegenueber.\n";
+  else if (align<200) result+=" scheint ziemlich nett zu sein.\n";
+  else if (align<400) result+=" ist von guter Gesinnung.\n";
+  else if (align<600) result+=" ist von aussergewoehnlich guter "
+                            +"Gesinnung.\n";
+  else if (align<1000) result+=" scheint schon fast heilig zu sein.\n";
+  else result+=" ist ein Heiliger!\n";
+  printf(BS(result));
+  return 1;
+}
+
+
+int erkenne(object caster, mapping sinfo)  {  
+  object ob; 
+  string* fi, cn, result; 
+  int suc;
+
+  if(caster->InFight()) {
+    printf(BS("Du kannst Dich nicht auf die Muster des Zaubers "
+              +"konzentrieren."));
+    return 0;  
+  }
+  ob=FindVictim(sinfo[SI_SKILLARG], caster, 
+                BS("Welchem Gegenstand moechtest Du seine "
+                  +"Geheimnisse entreissen?\n")); 
+  if (!ob) 
+    return 0; 
+  sinfo=DoSpellModification(HUMUS, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->restore_spell_points(-sinfo[SI_RAW_SPELLCOST]);
+  cn = caster->name();
+   if ((suc=SpellSuccess(caster,sinfo))<=0)
+    return MISSERFOLG;
+  printf(BS("Die Elemente gewaehren Dir einen Blick "
+             +"in die Struktur des Objektes:\n"));
+  printf("------------------------------------------------"
+        +"------------------------------\n");       
+  if (result=ob->info(caster) || ob->QueryProp(P_INFO))
+    printf(BS(result));
+  else
+    printf("%s birgt keine Geheimnisse.\n",
+           ob->Name(WER));     
+  if(ob->QueryProp(P_MAGIC))
+     printf(BS(CAP(ob->QueryPronoun(WER))+" ist eindeutig magisch.\n"));
+  /*
+  if(ob->QueryProp(P_NEVERDROP))
+     printf(BS(CAP(ob->QueryPronoun(WER))+" bleibt Dir auch nach Deinem Tod "
+         +"erhalten.\n"));
+         */
+  if(ob->QueryProp(P_CURSED) && suc>4000) {
+    if(!ob->id("\druidenamulett") && !ob->id("elementarpanzer"))
+       printf(BS("Auf "+ob->QueryPronoun(WEM)+" scheint ein Fluch "
+           +"zu liegen!\n"));
+  }
+  else 
+     printf("Auf "+ob->QueryPronoun(WEM)+" scheint kein Fluch zu liegen.\n");
+  /* if(ob->QueryProp(P_AUTOLOADOBJ))
+     printf(BS(CAP(ob->QueryPronoun(WER))+" scheint Dir auch nach einem "
+             +"Weltuntergang erhalten zu bleiben.\n"));
+             */
+  result=GetMaterialString(ob, caster);
+  printf(BS(result+"\n"));
+  if(ob->QueryProp(P_ARMOUR_TYPE) || ob->QueryProp(P_WEAPON_TYPE)) {
+    if(QueryMetal(ob)>0)
+      write(BS(sprintf("Du kannst %s aufgrund des hohen Metallgehaltes "
+           +"nur erschwert oder gar nicht benutzen.\n", ob->name(WEN))));
+  }
+  printf("------------------------------------------------"
+        +"------------------------------\n");
+  return ERFOLG;
+}
+
+   
+
+int feuerwusel(object caster, mapping sinfo) {
+  object l;
+
+  if(caster->InFight()) {
+    printf(BS("Du kannst Dich nicht auf die Muster des Zaubers "
+              +"konzentrieren."));
+    return 0;  
+  }
+  sinfo=DoSpellModification(FEUER, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->restore_spell_points(-sinfo[SI_RAW_SPELLCOST]);
+  
+  printf("Du konzentrierst Dich...\n");
+  if(QueryOwnCreature(caster, 1, 0)) {
+    write("Du hast schon einen Feuerwusel.\n");
+    return 0; 
+  }
+  say(sprintf("%s scheint sich zu konzentrieren.\n", 
+      capitalize(caster->name())));
+  if(SpellSuccess(caster,sinfo)<=0)
+    return MISSERFOLG;
+
+  printf(BS("Wie aus dem Nichts erscheint ein kleiner Feuerwusel, "
+         +"der Dir von nun an folgt und Licht spendet.\n"));
+  say(sprintf(BS("Ploetzlich erscheint ein kleiner Feuerwusel, der "
+         +"%s folgt und Licht spendet.\n"),  capitalize(caster->name())));
+  l=clone_object(NPC("feuerwusel"));
+  l->move(environment(caster), M_NOCHECK|M_SILENT); 
+  l->SetProp(P_MSGOUT, "wuselt hinter "+caster->QueryProp(P_NAME)+" her");
+  l->SetProp(ELEMENTAL_CASTER, caster);
+  caster->AddPursuer(l);
+  l->start_remove(caster->QueryProp(P_GUILD_LEVEL)*50);
+  return ERFOLG;
+}
+
+
+int elementarpanzer_check(object caster, mapping sinfo) {
+  if(caster->InFight()) {
+    printf(BS("Du kannst Dich nicht auf die Muster des Zaubers "
+       +"konzentrieren."));
+    return 0;
+  }
+  if(CheckArmour(caster)) {
+    write("Du hast Doch schon eine Ruestung an!\n");
+    return 0;
+  }
+  if(present("elementarpanzer", caster)) {
+    write("Du hast schon einen Elementarpanzer.\n");
+    return 0;
+  }
+  return 1;
+}
+
+int elementarpanzer(object caster, mapping sinfo) {
+  object l;
+  int aclass, suc;
+
+  if(CheckArmour(caster)) {
+    write("Du hast Doch schon eine Ruestung an!\n");
+    return 0;
+  }
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->restore_spell_points(-sinfo[SI_RAW_SPELLCOST]);
+  printf("Du rufst die Elemente an und konzentrierst Dich auf "
+         +"die Form einer Ruestung...\n");
+  say(sprintf("%s scheint sich zu konzentrieren und fuehrt seltsame "
+          +"Bewegungen aus.\n", capitalize(caster->name())));
+  if(suc=SpellSuccess(caster,sinfo)<=0) {
+    if(suc<-2000) {
+      write(BS("Um Dich herum formt sich ein Panzer, doch vermag er "
+              "Dich nicht zu schuetzen.\n"));
+      say(sprintf(BS("Um %s materialisiert sich ein Panzer aus "
+          +"den Elementen selbst!\n"),  capitalize(caster->name())));
+      l=clone_object("/gilden/druidenzirkel/armour/e_panzer");
+      l->SetProp(P_WC, 1);
+      l->move(TP, M_NOCHECK); 
+      l->DoWear(1);   
+      l->NegativeProtection(suc, 1);
+      l->panzer_weg(500);
+    }	
+    return MISSERFOLG;
+  } 
+  printf(BS("Durch Deine Konzentration formen Deine Gedanken einen Panzer "
+       +"aus Eis, Luft, Feuer, Erz und Wasser und Humus."));
+  say(sprintf(BS("Um %s materialisiert sich ein Panzer aus "
+          +"den Elementen selbst.\n"),  capitalize(caster->name())));
+  l=clone_object("/gilden/druidenzirkel/armour/e_panzer");
+  if((aclass=(TP->QueryAttribute(A_INT))/2+ (TP->QueryProp(P_GUILD_LEVEL)))>40)
+     aclass=40;
+  l->SetProp(P_AC, aclass);
+  l->SetProp(P_TEMPERATURE_PROTECTION, ([T_COLD_PROT:(int)aclass/10,
+       T_HEAT_PROT:(int)aclass/10]));
+  l->move(TP, M_NOCHECK); 
+  l->DoWear(1);   
+  l->SetProp(P_CURSED, 1);
+  l->NegativeProtection(0,0);
+  l->panzer_weg(caster->QueryProp(P_GUILD_LEVEL)*aclass);
+  return ERFOLG;
+}
+
+
+int laehme(object caster, mapping sinfo) {
+  object victim;
+  int dauer, suc, speed, size;
+  string cn, vn;
+
+  if(!caster->InFight()) {
+    printf(BS("Ausserhalb eines Kampfes kannst Du "
+                 +"niemanden laehmen!"));
+    return 0;  
+  }
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wen willst Du laehmen?\n");
+  if(!victim) return 0;
+  if((size=victim->QueryProp(P_SIZE))<1) 
+    size=1;
+  sinfo[SI_RAW_SPELLCOST]+=((size-200)/10)+random(10);
+  if(sinfo[SI_RAW_SPELLCOST]>130) sinfo[SI_RAW_SPELLCOST]=130;
+  if(sinfo[SI_RAW_SPELLCOST]<10) sinfo[SI_RAW_SPELLCOST]=10;
+
+  sinfo=DoSpellModification(HUMUS, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->restore_spell_points(-sinfo[SI_RAW_SPELLCOST]);
+  cn=caster->name();
+  vn=victim->name(WEN, 2);
+  dauer = (int)(1.5 * (caster->QueryAttribute(A_INT) + 
+	       random(sinfo[SI_SKILLABILITY]/1000)));
+  if((suc=SpellSuccess(caster,sinfo))<=0) {
+    if(suc<-500) {
+      write("Irgendwie wird alles soooooo zaeh...\n");
+      say(sprintf("%s bewegt sich so schnell wie in Honig.\n",cn), caster);
+      caster->ModifySkillAttribute(caster,SA_SPEED,60,dauer);
+    }	
+    return MISSERFOLG;
+  } 
+  switch (suc) {
+    case 0..5000:      speed=75; break;
+    case 5001..14000:   speed=50; break;
+    case 14001..18000:  speed=30; break;
+    case 19001..20000: speed=20; break;
+    default: speed=100;
+  } 
+  //tell_object(find_player("angrox"), sprintf("\nLaehme von %s: %d\n",
+  //         CAP(getuid(caster)),suc));
+  printf("Magische Ranken springen empor und behindern %s.\n", vn);
+  tell_object(victim,sprintf("%s laehmt Dich.\n", cn));
+  say(BS(sprintf("%s beschwoert magische Ranken aus dem Bodem, die %s "
+      +"behindern.\n",cn, vn)), victim);
+  victim->ModifySkillAttribute(caster,SA_SPEED,speed,dauer);
+  return ERFOLG;
+}
+
+int dzuecke(object caster, mapping sinfo) {
+  object weapon, damulett;
+  string cn;
+
+  if(!sinfo[SI_SKILLARG]) {
+    printf("Welche Metallwaffe moechtest Du zuecken?\n"); 
+    return 0;
+  }
+  if(!(weapon=present(sinfo[SI_SKILLARG], caster))) {
+    printf("Welche Metallwaffe moechtest Du zuecken?\n"); 
+    return 0;
+  }
+  sinfo=DoSpellModification(HUMUS, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->restore_spell_points(-sinfo[SI_RAW_SPELLCOST]);
+  cn=caster->name();
+  damulett=present("\ndruidenamulett", caster);
+  printf("Du konzentrierst Dich ...\n");
+  say(sprintf("%s scheint sich zu konzentrieren...\n",cn), caster);
+  if(SpellSuccess(caster,sinfo)<=0) {
+    printf("...aber nichts passiert.\n");
+    say(sprintf("...aber nichts passiert.\n",cn), caster);
+    return MISSERFOLG;
+  }  
+  printf(BS("...und eine schimmernde Aura bildet sich um Deine Hand. "
+      "Nun kannst Du die Metallwaffe zuecken.\n"));
+  say(sprintf("...und eine schimmernde Aura bildet sich um %se Hand.\n",
+        caster->QueryPossPronoun(WESSEN)), caster);
+  call_other(damulett, "AllowMetalWeapon",weapon, 10);
+  return ERFOLG;
+}
+
+
+
+//
+// ELEMENTARHAND
+//
+int elementarhand_check(object caster, mapping sinfo) {
+  if(!caster->InFight() && caster->QueryProp(P_GUILD_LEVEL)<10) {
+    printf("Nur im Kampf kannst Du Deine Haende verwandeln.\n");
+    return 0;
+  }
+  if(caster->Query(P_HANDS, F_QUERY_METHOD)) {
+    printf("Deine Haende sind bereits verwandelt.\n");
+    return 0;
+  }
+  return 1;
+}
+
+int elementarhand(object caster, mapping sinfo) {
+  object ob, amulett;
+  string cn, element;
+  mapping msgs;
+  int suc, dam, dur;
+  mixed old_dam;
+ 
+  msgs=([
+      FEUER  : " mit flammenden Haenden",
+      EIS    : " mit scharfen Eiskrallen",
+      HUMUS  : " mit giftigen Dornenhaenden",
+      WASSER : " mit gigantischen Wasserfaeusten",
+      LUFT   : " mit der Kraft eines Wirbelsturms",
+      ERZ    : " mit toetlichen Stahldornen",
+      GEIST  : " mit Haenden aus reinster Magie"
+      ]);
+ 
+  ob=present("\ndruidenamulett", caster);
+  
+  element=call_other(DRUIDENMASTER, "GetDruidElement", getuid(caster));
+  sinfo=DoSpellModification(element, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->restore_spell_points(-sinfo[SI_RAW_SPELLCOST]);
+  cn = caster->name();
+  say(sprintf("%s reibt die Haende aneinander...\n", cn));
+  printf("Du reibst Deine Haende aneinander...\n");
+  if((suc=SpellSuccess(caster,sinfo))<=0) {
+    say(sprintf("...doch nur kleine schwarze Kruemel fallen zu Boden.\n"));
+    printf("...doch nur kleine schwarze Kruemel fallen zu Boden.\n");
+    return MISSERFOLG;
+  }	
+  ob->DoSetHands();
+  old_dam=caster->QueryProp(P_HANDS)[2];
+  if(pointerp(old_dam)) old_dam=old_dam[0];
+  dam=25+caster->QueryProp(P_HANDS)[1]+suc*(2*caster->QueryAttribute(A_INT)+
+        caster->QueryAttribute(A_DEX)+
+        caster->QueryAttribute(A_STR))/MAX_ABILITY;
+  if(dam<30) dam=30;
+  if(dam>150) dam=150;
+  dur=caster->QueryProp(P_GUILD_LEVEL)*5+25*suc/MAX_ABILITY;
+  //TELL("angrox", sprintf("%s+++%sFH: %s, dam: %d, dur: %d, cst: %d, suc: %d, "
+  //    "hnds: %d\n",
+  //    ANSI_RED, ANSI_NORMAL, getuid(caster),dam, dur,sinfo[SI_RAW_SPELLCOST],
+  //    suc, caster->QueryProp(P_HANDS)[1]));
+  caster->SetProp(E_HANDS, ({msgs[element], dam, ({ELEMENT_DAMAGE[element], 
+          old_dam, })}));
+  call_out("stop_hands", 
+        (caster->QueryProp(P_GUILD_LEVEL)*5+25*suc/MAX_ABILITY), caster);
+  say(sprintf("...und %s Haende sind vollkommen von dem Element %s umgeben!\n", 
+                caster->name(WESSEN), CAP(element)));
+  caster->Set(P_HANDS, symbol_function("myhands", TO), F_QUERY_METHOD); 
+  printf(sprintf("...und Deine Haende sind komplett von dem Element %s "
+        "umgeben!\n", CAP(element)));
+  //if(amulett=present(DRUIDENAMULETT, caster))
+  //  amulett->SetProp(P_LIGHT, 1);
+  return ERFOLG;
+  
+}
+
+static mixed myhands() {
+  int hand_dam;
+  object ob;
+  ob=previous_object();
+  return ob->QueryProp(E_HANDS);
+}
+
+void stop_hands(object pl) {
+ object ob;
+ if(pl) {
+   if(ob=present("\ndruidenamulett", pl)) {
+     ob->RemoveSetHands();
+   //  ob->SetProp(P_LIGHT, 0);
+   }
+   write("Deine Haende werden wieder normal.\n");
+   say(sprintf("%s Haende werden wieder normal.\n", pl->name(WESSEN)));
+   pl->Set(P_HANDS, 0, F_QUERY_METHOD);
+   pl->SetProp(E_HANDS, 0);
+ }
+ return ;
+}
+/*
+//||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+//||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+// HEILER SPELLS
+//||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+//||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+*/
+int behandle(object caster, mapping sinfo) {
+  object victim;
+  int hands;
+  string vn, vnw, cn;
+  int suc, heal;
+  victim=FindVictim(sinfo[SI_SKILLARG],caster,
+              BS("Wen willst Du behandeln?"));
+  if (!victim)
+    return 0;
+  // 1999-12-13: NPCs koennen geheilt werden, vorausgesetzt
+  // P_FRIEND ist nicht gesetzt.
+  if(victim->QueryProp(P_FRIEND) && !interactive(victim)) {
+    printf(BS("Du kannst dieses Ding nicht heilen."));
+    return 0;
+  }
+  // 1999-12-13: Gegner, gegen die man kaempft kann man nicht heilen
+//Soll man sich selbst oder wen anders heilen koennen, wenn man selbst im Kampf 
+//ist oder derjenige, den man heilen will?
+/*if (caster->InFight()) {
+    printf(BS("Du kannst Dich nicht heilen, weil Du gerade mitten in "
+         +"einem Kampf bist."));
+    return 0;
+  }
+  if (victim->InFight()) {
+    printf(BS("Du kannst %s nicht heilen, weil %s sich gerade im "
+         +"Kampf befindet.",victim->name(WEN, 2),
+         victim->QueryPronoun(WER)));
+    return 0;
+  } 
+*/
+  if (victim->IsEnemy(TP))
+    {
+    printf(BS("Du kannst Deine Feinde nicht behandeln !"));
+    return 0;
+    }
+  if(IS_WIZARD(victim)) {
+    printf(BS("Es ist vielleicht keine gute Idee, einen Magier "
+         +"zu behandeln."));
+    return 0;
+  }
+  if(victim->QueryProp(P_TESTPLAYER)) {
+    printf(BS("Du kannst keine Testspieler heilen."));
+    return 0;
+  } 
+  if(victim->QueryGuest()) {
+    printf(BS("Der Zauber ist misslungen. Seltsam."));
+    return 1;
+  }
+  if(victim->QueryProp(P_HP)==victim->QueryProp(P_MAX_HP)) {
+    printf(BS("Du kannst keine Gesunden heilen!"));
+    return 1;
+  }
+  sinfo=DoSpellModification(HUMUS, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->restore_spell_points(-sinfo[SI_RAW_SPELLCOST]);
+  cn = caster->name();
+  vnw = victim->name(WEN, 2);
+  if ((suc=SpellSuccess(caster,sinfo))<=0) {
+    if(suc<(-2500)) {
+      if(victim==caster) {
+        say(sprintf("%s versucht sich zu heilen, jedoch entstehen nur "
+                   +"mehr eitrige Wunden!\n",cn), victim);
+        printf("Du versuchst Dich zu heilen, jedoch entstehen nur noch "
+              +"mehr eitrige Wunden.\n");
+        if(!random(20)) {
+          printf(BS("Irgendwie fuehlst Du Dich krank."));
+          caster->AddPoison(4);
+	      }
+	    }
+      else {
+        say(sprintf("%s versucht %s zu heilen, jedoch entstehen nur "
+                       +"mehr eitrige Wunden!\n",cn, vnw), victim);
+        printf("Du versuchst %s zu heilen, jedoch entstehen nur noch "
+               +"mehr eitrige Wunden.\n", vnw);
+        tell_object(victim,sprintf("%s versucht Dich zu heilen, "
+                +"jedoch entstehen eitrige Wunden.\n",cn)); //jedoch statt jedoche
+        if(!random(30)) {
+          tell_object(victim, sprintf("Irgendwie fuehlst Du Dich "
+                                 +"krank."));
+          victim->AddPoison(4);
+        } 
+      } 
+      victim->reduce_hit_point(-suc/500);
+      if(victim != caster) {
+        printf(BS("Durch den misslungenen Spruch verlierst auch Du "
+               +"Lebenspunkte."));
+        caster->reduce_hit_point(-suc/200);
+        if(!random(30)) {
+          printf(BS("Irgendwie fuehlst Du Dich krank."));
+          caster->AddPoison(2);
+        }
+      }
+    }
+    return MISSERFOLG;
+  }
+  //printf(suc+"/"+MAX_ABILITY+"\n");
+  heal=(int)(caster->QueryProp(P_GUILD_LEVEL)+caster->QueryAttribute(A_INT)*
+      suc/(2*MAX_ABILITY));
+  if(heal<15) heal=15;
+  if(heal>40) heal=40;
+  if(victim->id("anvar")) heal*=2;
+  victim->AddHp(heal);  
+  if(victim==caster) {
+    say(sprintf("%s heilt sich.\n",cn), victim);
+    printf("Du heilst Dich.\n");
+  } 
+  else {
+    say(sprintf("%s heilt einen Teil der Wunden von %s.\n",
+          capitalize(cn), victim->name(WEM)), victim);
+       
+    printf("Du heilst %s.\n", vnw);
+    tell_object(victim,sprintf("%s heilt einen Teil Deiner Wunden.\n",
+          capitalize(cn))); 
+  }
+  return ERFOLG;
+}
+
+
+
+/*
+//||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+//||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+// KAEMPFER SPELLS
+//||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+//||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+*/
+
+
+/*
+////////////////////////////////////////////////////////////////////////
+// ELEMENTARE PFEILE
+////////////////////////////////////////////////////////////////////////
+*/
+
+int luftpfeil(object caster, mapping sinfo) {
+  object victim; 
+  string vn, vnw, cn; 
+  int dam, suc;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Nach wem willst Du einen Luftpfeil werfen?\n");
+  if (!victim)
+    return 0;
+  
+  sinfo=DoSpellModification(LUFT, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->restore_spell_points(-sinfo[SI_RAW_SPELLCOST]);
+  if((suc=SpellSuccess(caster,sinfo))<=0)
+    return MISSERFOLG;
+  
+  dam=sinfo[SI_SKILLDAMAGE]+
+    5*suc*(caster->QueryProp(P_GUILD_LEVEL))/MAX_ABILITY; 
+  if(dam > 250) dam=250;
+  dam=(dam/2)+random(dam/2); 
+  cn = capitalize(caster->name());
+  vnw = victim->name(WEN, 2);
+  say(sprintf("%s feuert einen elementaren Luftpfeil auf %s ab.\n",cn, vnw),
+      victim);
+  printf("Du feuerst einen elementaren Luftpfeil auf %s ab.\n", vnw);
+  tell_object(victim,sprintf("%s feuert einen elementaren Luftpfeil "
+      +"auf Dich ab.\n",cn));
+  //tell_angrox(sprintf("dam: %d, suc: %d, caster: %O\n", dam, suc, caster)); 
+  TryAttackSpell(victim,dam, DT_AIR, 
+      ([SP_NAME:"luftpfeil",SP_SHOW_DAMAGE:1]),caster,sinfo );
+  return ERFOLG;
+}
+
+int wasserpfeil(object caster, mapping sinfo) {
+  object victim;
+  int hands, dam, suc;
+  string vn, vnw, cn;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Nach wem willst Du einen Wasserpfeil werfen?\n");
+  if (!victim)
+    return 0;
+  sinfo=DoSpellModification(WASSER, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->restore_spell_points(-sinfo[SI_RAW_SPELLCOST]);
+  if ((suc=SpellSuccess(caster,sinfo))<=0)
+    return MISSERFOLG;
+  
+  dam=sinfo[SI_SKILLDAMAGE]+
+    8*suc*(caster->QueryProp(P_GUILD_LEVEL))/MAX_ABILITY; 
+/* Ist da nicht eine Wiederholung oder bilde ich mir das ein?
+   Wieso eigentlich 8 und nicht 5 wie bei anderen? */
+  dam=sinfo[SI_SKILLDAMAGE]+
+    8*suc*(caster->QueryProp(P_GUILD_LEVEL))/MAX_ABILITY; 
+  if(dam > 250) dam=250;
+  dam=(dam/2)+random(dam/2);  
+  
+  cn = caster->name();
+  vnw = victim->name(WEN, 2);
+  say(sprintf("%s feuert einen elementaren Wasserpfeil auf %s ab.\n",cn, vnw),
+      victim);
+  printf("Du feuerst einen elementaren Wasserpfeil auf %s ab.\n", vnw);
+  tell_object(victim,sprintf("%s feuert einen elementaren "
+              +"Wasserpfeil auf Dich ab.\n",cn));
+  TryAttackSpell(victim,dam, DT_WATER, 
+      ([SP_NAME:"wasserpfeil",SP_SHOW_DAMAGE:1]),caster,sinfo );
+  return ERFOLG;
+}
+
+
+int erzpfeil(object caster, mapping sinfo) {
+  object victim;
+  string vn, vnw, cn;
+  int suc, dam;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Nach wem willst Du einen Erzpfeil werfen?\n");
+  if (!victim)
+    return 0;
+  
+  sinfo=DoSpellModification(ERZ, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->restore_spell_points(-sinfo[SI_RAW_SPELLCOST]);
+  if ((suc=SpellSuccess(caster,sinfo))<=0)
+    return MISSERFOLG;
+  
+  dam=sinfo[SI_SKILLDAMAGE]+
+    5*suc*(caster->QueryProp(P_GUILD_LEVEL))/MAX_ABILITY; 
+  if(dam >250) dam=250;
+  dam=(dam/2)+random(dam/2);
+  
+  cn = caster->name();
+  vnw = victim->name(WEN, 2);
+  say(sprintf("%s feuert einen elementaren Erzpfeil auf %s ab.\n",cn, vnw),
+      victim);
+  printf("Du feuerst einen elementaren Erzpfeil auf %s ab.\n", vnw);
+  tell_object(victim,sprintf("%s feuert einen elementaren "
+              +"Erzpfeil auf Dich ab.\n",cn));
+  TryAttackSpell(victim,dam, sinfo[SI_SKILLDAMAGE_TYPE], 
+      ([SP_NAME:"erzpfeil",SP_SHOW_DAMAGE:1]),caster,sinfo );
+  return ERFOLG;
+}
+
+int eispfeil(object caster, mapping sinfo) {
+  object victim;
+  string vn, vnw, cn;
+  int suc, dam;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+              BS("Nach wem willst Du einen elementaren Eispfeil werfen?\n"));
+  if (!victim)
+    return 0;
+  
+  sinfo=DoSpellModification(EIS, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->restore_spell_points(-sinfo[SI_RAW_SPELLCOST]);
+  if ((suc=SpellSuccess(caster,sinfo))<=0)
+    return MISSERFOLG;
+  
+  dam=sinfo[SI_SKILLDAMAGE]+
+    5*suc*(caster->QueryProp(P_GUILD_LEVEL))/MAX_ABILITY; 
+  if(dam > 250) dam=250;
+  dam=(dam/2)+random(dam/2);
+  
+  cn = caster->name();
+  vnw = victim->name(WEN, 2);
+  say(sprintf("%s feuert einen elementaren Eispfeil auf %s ab.\n",cn, vnw),
+      victim);
+  printf("Du feuerst einen elementaren Eispfeil auf %s ab.\n", vnw);
+  tell_object(victim,sprintf("%s feuert einen elementaren "
+              +"Eispfeil auf Dich ab.\n",cn));
+  TryAttackSpell(victim,dam, DT_COLD, 
+      ([SP_NAME:"eispfeil",SP_SHOW_DAMAGE:1]),caster,sinfo );
+  return ERFOLG;
+}
+
+
+int feuerpfeil(object caster, mapping sinfo) {
+  object victim;
+  string vn, vnw, cn;
+  int suc, dam;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+               BS("Nach wem willst Du einen elementaren Feuerpfeil werfen?\n"));
+  if (!victim)
+    return 0;
+  
+  sinfo=DoSpellModification(FEUER, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->restore_spell_points(-sinfo[SI_RAW_SPELLCOST]);
+  if ((suc=SpellSuccess(caster,sinfo))<=0)
+    return MISSERFOLG;
+  
+  dam=sinfo[SI_SKILLDAMAGE]+
+    5*suc*(caster->QueryProp(P_GUILD_LEVEL))/MAX_ABILITY; 
+  if(dam > 250) dam=250;
+  dam=(dam/2)+random(dam/2);
+  
+  cn = caster->name();
+  vnw = victim->name(WEN, 2);
+  say(sprintf("%s feuert einen elementaren Feuerpfeil auf %s ab.\n",cn, vnw),
+      victim);
+  printf("Du feuerst einen elementaren Feuerpfeil auf %s ab.\n", vnw);
+  tell_object(victim,sprintf("%s feuert einen elementaren "
+              +"Feuerpfeil auf Dich ab.\n",cn));
+  
+  TryAttackSpell(victim,dam, DT_FIRE, 
+      ([SP_NAME:"feuerpfeil",SP_SHOW_DAMAGE:1]),caster,sinfo );
+  return ERFOLG;
+}
+
+
+
+
+/*
+//////////////////////////////////////////////////////////////////////////
+// ELEMENTAERE BAELLE
+//////////////////////////////////////////////////////////////////////////
+*/
+
+
+int prep_windstoss(object caster, mapping sinfo) {
+  if( !FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+        "Auf wen willst Du einen elementaren Windstoss schleudern?\n") )
+    return 0;
+  return 1;
+}
+
+int windstoss(object caster, mapping sinfo) {
+  object victim;
+  int hands, suc, dam;
+  string vnw;  
+ 
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+        "Auf wen willst Du einen elementaren Windstoss schleudern?\n");
+  if (!victim)
+    return 0;
+  
+  sinfo=DoSpellModification(LUFT, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->restore_spell_points(-sinfo[SI_RAW_SPELLCOST]);
+  if ((suc=SpellSuccess(caster,sinfo))<=0)
+    return MISSERFOLG;
+  
+  //dam=sinfo[SI_SKILLDAMAGE]+10*
+  //  suc*(caster->QueryProp(P_GUILD_LEVEL))/MAX_ABILITY;
+  //if(dam>500) dam=500;
+  dam=sinfo[SI_SKILLDAMAGE]+(exp(caster->QueryProp(P_GUILD_LEVEL)/3.35)*
+    suc/MAX_ABILITY);
+  //TELL("angrox", sprintf("WINDSTOSS: TP: %O, lvl: %d, suc: %d, dam: %O\n",
+  //      caster,caster->QueryProp(P_GUILD_LEVEL),suc,dam));
+  dam=(int)dam;
+  dam=(3*dam/5)+random(2*dam/5);
+  
+  vnw = victim->name(WEN, 2);  //WEN statt WEM
+  say(BS(sprintf("%s konzentriert sich und feuert einen elementaren Windstoss "
+       "auf %s.\n", capitalize(caster->name()), vnw)), victim);
+  write(BS(sprintf("Du konzentrierst Deine Gedanken auf Deine Haende, in denen "
+     "sich augenblicklich die Kraefte des Elementes manifestieren "
+     "und auf %s zuschiessen!\n", vnw))); 
+  tell_object(victim, BS(sprintf("%s konzentriert sich und feuert einen "
+     "elementaren Windstoss auf Dich.\n", capitalize(caster->name()))));
+  //tell_angrox(sprintf("dam: %d, suc: %d, caster: %O\n", dam, suc, caster)); 
+  TryAttackSpell(victim,dam, DT_AIR, 
+      ([SP_NAME:"windstoss",SP_SHOW_DAMAGE:1]),caster,sinfo );
+  return ERFOLG;
+}
+
+int prep_erzstrahl(object caster, mapping sinfo) {
+  if( !FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+        "Auf wen willst Du einen elementaren Erzstrahl abfeuern?\n") )
+    return 0;
+  return 1;
+}
+
+int erzstrahl(object caster, mapping sinfo) {
+  object victim;
+  int hands, suc, dam;
+  string vnw;  
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+        "Auf wen willst Du einen elementaren Erzstrahl abfeuern?\n");
+  if (!victim)
+    return 0;
+  sinfo=DoSpellModification(ERZ, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->restore_spell_points(-sinfo[SI_RAW_SPELLCOST]);
+  if ((suc=SpellSuccess(caster,sinfo))<=0)
+    return MISSERFOLG;
+  //dam=sinfo[SI_SKILLDAMAGE]+10*
+  //  suc*(caster->QueryProp(P_GUILD_LEVEL))/MAX_ABILITY;
+  //if(dam>500) dam=500;
+  dam=sinfo[SI_SKILLDAMAGE]+(exp(caster->QueryProp(P_GUILD_LEVEL)/3.35)*
+    ((float)suc/MAX_ABILITY));
+  //TELL("angrox", sprintf("ERZSTRAHL: TP: %O, lvl: %d, suc: %d, g_dam: %d, "
+  //      "dam: %O, exp: %O\n", caster,caster->QueryProp(P_GUILD_LEVEL),suc,
+  //      sinfo[SI_SKILLDAMAGE],dam, (exp(caster->QueryProp(P_GUILD_LEVEL)/3.2)*((float)suc/MAX_ABILITY))));
+  dam=(int)dam;
+  dam=(3*dam/5)+random(2*dam/5);
+  
+  vnw = victim->name(WEN, 2);
+  say(BS(sprintf("%s feuert einen elementaren Strahl fluessigen Erzes auf "
+        "%s ab .\n", capitalize(caster->name()), vnw)), victim);
+  write(BS(sprintf("Du staerkst Deine Gedanken, laesst sie hart wie "
+          "Fels werden. Aus Deinen geoeffneten Haenden rast ein Strahl "
+          "fluessigen Erzes auf %s zu!\n", vnw)));
+  tell_object(victim, BS(sprintf(
+        "%s konzentriert sich und wirft einen elementaren Strahl fluessigen "
+        "Erzes auf Dich.\n", capitalize(caster->name()))));
+  TryAttackSpell(victim,dam, sinfo[SI_SKILLDAMAGE_TYPE],
+      ([SP_NAME:"erzstrahl",SP_SHOW_DAMAGE:1]),caster,sinfo );
+  return ERFOLG;
+}
+
+int prep_wasserstrahl(object caster, mapping sinfo) {
+  if (!FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+        "Auf wen willst Du einen elementaren Wasserstrahl abfeuern?\n") )
+    return 0;
+  return 1;
+}
+    
+int wasserstrahl(object caster, mapping sinfo) {
+  object victim;
+  int hands, kosten, suc, dam;
+  string vnw; 
+ 
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+        "Auf wen willst Du einen elementaren Wasserstrahl abfeuern?\n");
+  if (!victim)
+    return 0;
+  sinfo=DoSpellModification(WASSER, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->restore_spell_points(-sinfo[SI_RAW_SPELLCOST]);
+  if ((suc=SpellSuccess(caster,sinfo))<=0)
+    return MISSERFOLG;
+  //dam=sinfo[SI_SKILLDAMAGE]+10*suc*
+  //  (caster->QueryProp(P_GUILD_LEVEL))/MAX_ABILITY;
+  //if(dam>500) dam=500;
+  dam=sinfo[SI_SKILLDAMAGE]+(exp(caster->QueryProp(P_GUILD_LEVEL)/3.35)*
+    ((float)suc/MAX_ABILITY));
+  //TELL("angrox", sprintf("WASSERSTRAHL: TP: %O, lvl: %d, suc: %d, g_dam: %d, "
+  //      "dam: %O, exp: %O\n", caster,caster->QueryProp(P_GUILD_LEVEL),suc,
+  //      sinfo[SI_SKILLDAMAGE],dam, (exp(caster->QueryProp(P_GUILD_LEVEL)/3.2)*((float)suc/MAX_ABILITY))));
+  dam=(int)dam;
+  dam=(3*dam/5)+random(2*dam/5);
+  
+  vnw = victim->name(WEN, 2);
+  say(BS(sprintf("%s konzentriert sich und ein Strahl elementar reinen "
+       "Wassers schiesst auf %s zu.\n", capitalize(caster->name()), vnw)), 
+      victim);
+  write(BS(sprintf("In Deinen zur Halbschale geoeffneten Haenden manifestiert " //Deinen statt deinen
+     "sich elementar reines Wasser, um mit gewaltiger Kraft auf %s "
+     "zuzuschiessen!\n", vnw)));
+  tell_object(victim, BS(sprintf("%s wirft einen elementar reinen Wasser"
+        "strahl nach Dir!\n", capitalize(caster->name()))));
+  TryAttackSpell(victim,dam, DT_WATER, 
+      ([SP_NAME:"wasserstrahl",SP_SHOW_DAMAGE:1]),caster,sinfo );
+  return ERFOLG;
+}
+
+
+int prep_froststrahl(object caster, mapping sinfo) {
+  if( !FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+        "Auf wen willst Du einen elementaren Froststrahl abfeuern?\n") )
+    return 0;
+  return 1;
+}
+
+int froststrahl(object caster, mapping sinfo) {
+  object victim;
+  int hands,suc, dam;
+  string vnw;
+  
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+        "Auf wen willst Du einen elementaren Froststrahl abfeuern?\n");
+  if (!victim)
+    return 0;
+  sinfo=DoSpellModification(EIS, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->restore_spell_points(-sinfo[SI_RAW_SPELLCOST]);
+  if ((suc=SpellSuccess(caster,sinfo))<=0)
+    return MISSERFOLG;
+  //dam=sinfo[SI_SKILLDAMAGE]+10*suc*
+  //  (caster->QueryProp(P_GUILD_LEVEL))/MAX_ABILITY;
+  //if(dam>525) dam=525;
+  dam=sinfo[SI_SKILLDAMAGE]+(exp(caster->QueryProp(P_GUILD_LEVEL)/3.35)*
+    ((float)suc/MAX_ABILITY));
+  //TELL("angrox", sprintf("FROSTSTRAHL: TP: %O, lvl: %d, suc: %d, g_dam: %d, "
+  //      "dam: %O, exp: %O\n", caster,caster->QueryProp(P_GUILD_LEVEL),suc,
+  //      sinfo[SI_SKILLDAMAGE],dam, (exp(caster->QueryProp(P_GUILD_LEVEL)/3.2)*((float)suc/MAX_ABILITY))));
+  dam=(int)dam;
+  dam=(3*dam/5)+random(2*dam/5);
+  
+  vnw = victim->name(WEN, 2);
+  say(BS(sprintf("%s feuert eine Lanze aus elementaren Eis auf %s.\n", 
+              capitalize(caster->name()), vnw)), victim);
+  write(BS(sprintf("Deine Haende werden ploetzlich von einer Frostschicht "
+     "umgeben, als Du das elementare Eis in Form einer "
+     "toedlichen Lanze auf %s wirfst!\n", vnw)));
+  tell_object(victim, BS(sprintf("%s wirft einen elementaren Froststrahl "
+      "nach Dir.\n", capitalize(caster->name()))));
+  //tell_angrox(sprintf("dam: %d, suc: %d, caster: %O\n", dam, suc, caster)); 
+  TryAttackSpell(victim,dam, DT_COLD, 
+      ([SP_NAME:"froststrahl",SP_SHOW_DAMAGE:1]),caster,sinfo );
+  return ERFOLG;
+}
+
+int prep_feuerball(object caster, mapping sinfo) {
+  if( !FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+        "Auf wen willst Du einen elementaren Feuerball schleudern?\n") )
+    return 0;
+  return 1;
+}
+
+int feuerball(object caster, mapping sinfo) {
+  object victim;
+  int hands, suc, dam;
+  string vnw;  
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+        "Auf wen willst Du einen elementaren Feuerball schleudern?\n");
+  if (!victim)
+    return 0;
+  sinfo=DoSpellModification(FEUER, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->restore_spell_points(-sinfo[SI_RAW_SPELLCOST]);
+  if ((suc=SpellSuccess(caster,sinfo))<=0)
+    return MISSERFOLG;
+  //dam=sinfo[SI_SKILLDAMAGE]+10*suc*
+  //  (caster->QueryProp(P_GUILD_LEVEL))/MAX_ABILITY;
+  //if(dam>525) dam=525;
+  dam=sinfo[SI_SKILLDAMAGE]+(exp(caster->QueryProp(P_GUILD_LEVEL)/3.35)*
+    ((float)suc/MAX_ABILITY));
+  //TELL("angrox", sprintf("FEUERBALL: TP: %O, lvl: %d, suc: %d, g_dam: %d, "
+  //      "dam: %O, exp: %O\n", caster,caster->QueryProp(P_GUILD_LEVEL),suc,
+  //      sinfo[SI_SKILLDAMAGE],dam, (exp(caster->QueryProp(P_GUILD_LEVEL)/3.2)*((float)suc/MAX_ABILITY))));
+  dam=(int)dam;
+  dam=(3*dam/5)+random(2*dam/5);
+  vnw = victim->name(WEM, 2);
+  say(sprintf("%s wirft einen elementaren Feuerball nach %s.\n", 
+              capitalize(caster->name()), vnw), victim);
+  printf("Du wirfst einen elementaren Feuerball nach %s.\n", vnw);
+  tell_object(victim, sprintf("%s wirft einen elmentaren Feuerball nach Dir.\n",
+                              capitalize(caster->name())));
+  TryAttackSpell(victim,dam, DT_FIRE, 
+      ([SP_NAME:"feuerball",SP_SHOW_DAMAGE:1]),caster,sinfo );
+  return ERFOLG;
+}
+
+
+
+
+/*
+//////////////////////////////////////////////////////////////////////////////
+// ELEMENTARER SCHADEN FUER MEHRERE GEGNER
+//////////////////////////////////////////////////////////////////////////////
+*/
+
+int erdbeben(object caster, mapping sinfo) {
+  object *friends, *enemies;
+  int i, suc, chance, dam;
+
+  sinfo=DoSpellModification(ERZ, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->restore_spell_points(-sinfo[SI_RAW_SPELLCOST]);
+  write(BS("Du konzentrierst Dich auf das Element Erz und beruehrst "
+           +"die Erde.\n"));
+  say(sprintf("%s konzentriert sich und beruehrt die Erde.\n", 
+              capitalize(caster->name())), caster);
+  suc=SpellSuccess(caster,sinfo);
+  if (suc<=0) return MISSERFOLG;
+  dam=sinfo[SI_SKILLDAMAGE]+10*suc*
+    (caster->QueryProp(P_GUILD_LEVEL))/MAX_ABILITY;
+  if(dam>600) dam=600;
+  say("Die Erde beginnt zu beben!\n");
+  write("Die Erde beginnt zu beben!\n");
+  
+  friends=FindGroup(caster,1);
+  if((chance=100*suc/MAX_ABILITY)<50)
+      chance=50;
+  else if(chance>90) chance=90;
+  enemies=FindGroupP(caster, -1, chance);
+  if(friends && sizeof(friends)) {
+    for(i=sizeof(friends)-1;i>=0;i--) {
+      tell_object(friends[i], BS("Das Erdbeben verschont Dich nicht "
+        +"und verletzt Dich leicht."));
+      friends[i]->reduce_hit_point(random(sinfo[SI_SKILLDAMAGE]/125));
+    }
+  }
+  if(sizeof(enemies)>6) {
+    dam=dam-(int)((sizeof(enemies)-6)*dam*10/100);
+    if(dam<100) dam=100;
+  }
+  if(enemies && sizeof(enemies)) {
+    for(i=sizeof(enemies)-1;i>=0;i--) {
+      if((enemies[i]->id("elementar"))==0 && (enemies[i]->id("feuerwusel"))==0)
+      {
+        tell_object(enemies[i], sprintf("Das Erdbeben von %s verletzt Dich und "
+           +"wirft Dich zu Boden.", caster->name(WEM)  ) );
+        say(sprintf("Das Erdbeben von %s wirft %s zu Boden.\n", 
+           caster->name(WEM), enemies[i]->name(WEN, 2)), enemies[i]);
+        printf("Dein Erdbeben wirft %s zu Boden.\n", enemies[i]->name(WEN, 2));
+        enemies[i]->SetProp("last_rammen_time", time() );
+        TryAttackSpell(enemies[i], random(2*dam/3)+(dam/3), 
+            sinfo[SI_SKILLDAMAGE_TYPE], ([SP_NAME:"erdbeben",SP_SHOW_DAMAGE:1]),
+            caster,sinfo );
+      }
+    }
+  }
+  return ERFOLG;
+}
+
+
+int windhose(object caster, mapping sinfo) {
+  object *friends, *enemies;
+  int i, suc, chance, dam;
+  
+  sinfo=DoSpellModification(LUFT, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->restore_spell_points(-sinfo[SI_RAW_SPELLCOST]);
+  write(BS("Du konzentrierst Dich auf das Element Luft und machst "
+           +"eine weitreichende Bewegung.\n"));
+  say(sprintf(BS("%s konzentriert sich und macht eine weitreichende "
+      +"Bewegung.\n"), 
+      capitalize(caster->name())), caster);
+  suc=SpellSuccess(caster,sinfo);
+  if (suc<=0) return MISSERFOLG;
+  dam=sinfo[SI_SKILLDAMAGE]+10*suc*
+    (caster->QueryProp(P_GUILD_LEVEL))/MAX_ABILITY;
+  if(dam>600) dam=600;
+  say("Eine Windhose entsteht!\n");
+  write("Eine Windhose entsteht!\n");
+  friends=FindGroup(caster,1);
+  if((chance=100*suc/MAX_ABILITY)<50)
+      chance=50;
+  else if(chance>90) chance=90;
+  enemies=FindGroupP(caster, -1, chance); 
+  if(friends && sizeof(friends)) {
+     for(i=sizeof(friends)-1;i>=0;i--) {
+        tell_object(friends[i], BS("Die Windhose verletzt Dich durch "
+           +"herumfliegende Kleinteile leicht."));
+        friends[i]->reduce_hit_point(random(sinfo[SI_SKILLDAMAGE]/150));
+     }
+  }
+  if(sizeof(enemies)>6) {
+    dam=dam-(int)((sizeof(enemies)-6)*dam*10/100);
+    if(dam<100) dam=100;
+  }
+  if(enemies && sizeof(enemies)) {
+    for(i=sizeof(enemies)-1;i>=0;i--) {
+      if((enemies[i]->id("elementar"))==0 && (enemies[i]->id("feuerwusel"))==0)
+	    {
+        tell_object(enemies[i], sprintf("Die Windhose von %s wirbelt "
+               +"Dich umher.", capitalize(caster->name() ) ) );
+        say(sprintf("Die Windhose von %s wirbelt %s umher.\n", 
+            capitalize(caster->name()), enemies[i]->name(WEN, 2)), enemies[i]); //WEN statt WEM
+       printf("Deine Windhose wirbelt %s umher.\n", enemies[i]->name(WEN, 2));
+       TryAttackSpell(enemies[i], random(2*dam/3)+(dam/3), DT_AIR,
+               ([SP_NAME:"windhose",SP_SHOW_DAMAGE:1]),caster,sinfo );
+      }
+    }
+  }
+  return ERFOLG;
+}
+
+
+int sturmflut(object caster, mapping sinfo) {
+  object *friends, *enemies;
+  int i, suc, max_enemies, chance, dam;
+  
+  sinfo=DoSpellModification(WASSER, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->restore_spell_points(-sinfo[SI_RAW_SPELLCOST]);
+  write(BS("Du konzentrierst Dich auf das Element Wasser und blaest "
+           +"in die zur Halbkugel geformten Haende.\n"));
+  say(sprintf(BS("%s konzentriert sich und blaest in die zur "
+           +"Halbkugel geformten Haende.\n"), 
+              capitalize(caster->name())), caster);
+  suc=SpellSuccess(caster,sinfo);
+  if (suc<=0) return MISSERFOLG;
+  dam=sinfo[SI_SKILLDAMAGE]+10*suc*
+    (caster->QueryProp(P_GUILD_LEVEL))/MAX_ABILITY;
+  if(dam>600) dam=600;
+  say("Eine Sturmflut entsteht ganz in der Naehe.\n");
+  write("Eine Sturmflut entsteht gleich in der Naehe!\n");
+  friends=FindGroup(caster,1);
+  if((chance=100*suc/MAX_ABILITY)<50)
+      chance=50;
+  else if(chance>90) chance=90;
+  max_enemies=sizeof(FindGroup(caster,-1));
+  enemies=FindGroupP(caster, -1, chance);
+  if(friends && sizeof(friends)) {
+    for(i=sizeof(friends)-1;i>=0;i--) {
+      tell_object(friends[i], BS("Die Sturmflut bricht ueber Dich herein, "
+        +"verletzt Dich aber nur gering."));
+      friends[i]->reduce_hit_point(random(sinfo[SI_SKILLDAMAGE]/150));
+    }
+  }
+  if(sizeof(enemies)>6) {
+    dam=dam-(int)((sizeof(enemies)-6)*dam*10/100);
+    if(dam<100) dam=100;
+  }
+  if(enemies && sizeof(enemies)) {
+    for(i=sizeof(enemies)-1;i>=0;i--) {
+      if((enemies[i]->id("elementar"))==0 && (enemies[i]->id("feuerwusel"))==0)
+	    {
+        tell_object(enemies[i], sprintf("Die Sturmflut von %s bricht "
+            +"ueber Dich herein.", capitalize(caster->name() ) ) );
+        say(sprintf("Die Sturmflut von %s begraebt %s unter sich.\n", 
+            capitalize(caster->name()), enemies[i]->name(WEN, 2)), enemies[i]); //WEN statt WEM
+        printf("Die Sturmflut begraebt %s unter sich.\n", 
+                enemies[i]->name(WEN, 2));
+       TryAttackSpell(enemies[i], random(2*dam/3)+(dam/3), DT_WATER,
+               ([SP_NAME:"sturmflut",SP_SHOW_DAMAGE:1]),caster,sinfo );
+      }
+    }
+  }
+  return ERFOLG;
+}
+
+int hagelschlag(object caster, mapping sinfo) {
+  object *friends, *enemies;
+  int i, suc, chance, dam;
+  
+  sinfo=DoSpellModification(EIS, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->restore_spell_points(-sinfo[SI_RAW_SPELLCOST]);
+  write(BS("Du konzentrierst Dich auf das Element Eis und "
+           +"erstarrst wie eine Eisstatue.\n"));
+  say(sprintf(BS("%s konzentriert sich und erstarrt."), 
+              capitalize(caster->name())), caster);
+  suc=SpellSuccess(caster,sinfo);
+  if (suc<=0) return MISSERFOLG;
+  dam=sinfo[SI_SKILLDAMAGE]+10*suc*
+    (caster->QueryProp(P_GUILD_LEVEL))/MAX_ABILITY;
+  if(dam>600) dam=600;
+  say("Ein Hagelsturm prasselt hernieder!\n");
+  write("Ein Hagelsturm prasselt hernieder!\n");
+  friends=FindGroup(caster,1);
+  if((chance=100*suc/MAX_ABILITY)<50)
+      chance=50;
+  else if(chance>90) chance=90;
+  enemies=FindGroupP(caster, -1, chance);
+  if(friends && sizeof(friends)) {
+    for(i=sizeof(friends)-1;i>=0;i--) {
+      tell_object(friends[i], BS("Der Hagelschlag verletzt Dich " 
+         +"nur geringfuegig."));
+      friends[i]->reduce_hit_point(random(sinfo[SI_SKILLDAMAGE]/150));
+    }
+  }
+  if(sizeof(enemies)>6) {
+    dam=dam-(int)((sizeof(enemies)-6)*dam*10/100);
+    if(dam<100) dam=100;
+  }
+  if(enemies && sizeof(enemies)) {
+    for(i=sizeof(enemies)-1;i>=0;i--) {
+      if((enemies[i]->id("elementar"))==0 && (enemies[i]->id("feuerwusel"))==0)
+	    {
+        dam=random(2*dam/3)+(dam/3);
+        tell_object(enemies[i], sprintf("Der Hagelschlag von %s bricht "
+           +"ueber Dich herein.", capitalize(caster->name() ) ) );
+        say(sprintf("Der Hagelschlag von %s bricht ueber %s herein.\n", 
+            capitalize(caster->name()), enemies[i]->name(WEM, 2)), enemies[i]);
+        printf("Dein Hagelsturm prasselt auf %s nieder.\n", 
+                enemies[i]->name(WEM, 2));
+      //tell_angrox(sprintf("dam: %d, suc: %d, caster: %O\n", dam, suc, caster)); 
+       TryAttackSpell(enemies[i], dam, DT_COLD,
+               ([SP_NAME:"hagelschlag",SP_SHOW_DAMAGE:1]),caster,sinfo );
+      } 
+    }
+  }
+  return ERFOLG;
+}
+
+
+int feuersturm(object caster, mapping sinfo) {
+  object *friends, *enemies;
+  int i, suc, chance, dam;
+   
+  sinfo=DoSpellModification(FEUER, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->restore_spell_points(-sinfo[SI_RAW_SPELLCOST]);
+  write(BS("Du konzentrierst Dich auf das Element Feuer und "
+          +"formst Zeichen der Macht."));
+  say(sprintf(BS("%s konzentriert sich und formt seltsame Zeichen mit "
+       +"der rechten Hand."), 
+              capitalize(caster->name())), caster);
+  suc=SpellSuccess(caster,sinfo);
+  if (suc<=0) return MISSERFOLG;
+  dam=sinfo[SI_SKILLDAMAGE]+10*suc*
+    (caster->QueryProp(P_GUILD_LEVEL))/MAX_ABILITY;
+  if(dam>600) dam=600;
+  say("Ein Feuersturm rast auf Dich zu!\n");
+  write("Ein Feuersturm rast auf Dich zu!\n");
+
+  friends=FindGroup(caster,1);
+  if((chance=100*suc/MAX_ABILITY)<50)
+      chance=50;
+  else if(chance>90) chance=90;
+  enemies=FindGroupP(caster, -1, chance);
+  if(friends && sizeof(friends)) {
+    for(i=sizeof(friends)-1;i>=0;i--) {
+      tell_object(friends[i], BS("Der Feuersturm verletzt Dich " 
+        +"nur leicht."));
+      friends[i]->reduce_hit_point(random(sinfo[SI_SKILLDAMAGE]/150));
+    }
+  }
+  if(sizeof(enemies)>6) {
+    dam=dam-(int)((sizeof(enemies)-6)*dam*10/100);
+    if(dam<100) dam=100;
+  }
+  if(enemies && sizeof(enemies)) {
+    for(i=sizeof(enemies)-1;i>=0;i--) {
+      if((enemies[i]->id("elementar"))==0 && (enemies[i]->id("feuerwusel"))==0)
+	    {
+        tell_object(enemies[i], sprintf("Der Feuersturm von %s huellt "
+             +"Dich ein.", capitalize(caster->name() ) ) );
+        say(sprintf("Der Feuersturm von %s huellt %s ein.\n", 
+             capitalize(caster->name()), enemies[i]->name(WEN, 2)), enemies[i]); //WEN statt WEM
+        printf("Dein Feuersturm huellt %s ein.\n", 
+                enemies[i]->name(WEN, 2));
+       TryAttackSpell(enemies[i], random(2*dam/3)+(dam/3), DT_FIRE,
+               ([SP_NAME:"feuersturm",SP_SHOW_DAMAGE:1]),caster,sinfo );
+      }
+    }
+  }
+  return ERFOLG;
+}
+
+
+/*
+//
+// Elementare beschwoeren
+//
+*/
+
+int beherrschung_func(object caster, mapping sinfo) {
+  object victim;
+  if(caster->InFight()) {
+    write(BS("Im Kampf kannst Du Dich auf so etwas nicht "
+              +"konzentrieren."));
+    return 0;  
+  }
+  if(!present(DRUIDENELEMENTAR, ENV(caster))) {
+    write(BS("Aber hier ist kein Elementar!\n"));
+    return 0;
+  }
+  victim=FindVictim(sinfo[SI_SKILLARG],caster,
+		    "Welches Elementar willst Du beherrschen?\n");
+  if( !victim) return 0;
+  write(BS("Du konzentrierst Dich darauf, "+victim->name(WEN,1)+
+        " zu beherrschen."));
+  return 1;
+}
+
+int beherrschung(object caster, mapping sinfo) {
+  object victim;
+  int suc;
+  string cn, vn, element;
+
+  if(caster->InFight()) {
+    write(BS("Im Kampf kannst Du Dich auf so etwas nicht "
+              +"konzentrieren."));
+    return 0;  
+  }
+  if(!present(DRUIDENELEMENTAR, ENV(caster))) {
+    write(BS("Aber hier ist kein Elementar!\n"));
+    return 0;
+  }
+  victim=FindVictim(sinfo[SI_SKILLARG],caster,
+		    "Welches Elementar willst Du beherrschen?\n");
+  if(!victim) return 0;
+  if(!victim->id(DRUIDENELEMENTAR)) {
+    write(BS("Das ist kein Elementar, oder Du kannst es nicht beherrschen."));
+    return 0; 
+  }
+  if(victim->QueryProp(ELEMENTAL_CASTER) != caster)
+    sinfo[SI_RAW_SPELLCOST]*=2;
+  if((victim->QueryProp(ELEMENTAL_OWNER)) == caster) {
+    write("Du beherrscht das Elementar bereits.\n");
+    return 0;
+    }
+  if(QueryOwnCreature(caster, 0, 1)) {
+    write("Du beherrscht schon ein Elementar.\n");
+    return 0; 
+  }
+  if((victim->QueryProp(ELEMENTAL_OWNER)) &&
+      (victim->QueryProp(ELEMENTAL_OWNER)) != caster)
+    sinfo[SI_RAW_SPELLCOST]*=4;
+  
+  sinfo=DoSpellModification(victim->QueryElement(), caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  
+  cn=caster->name();
+  vn=victim->name(WEN, 2);
+  tell_room(ENV(caster), BS(sprintf("%s fuehrt magische Bewegungen "
+     +"aus und deutet auf %s.", cn, vn)), ({caster}));
+  tell_object(caster, BS(sprintf("Du fuehrst uralte Beherrschungszeichen "
+        +"aus und deutest auf %s.", vn)));
+  
+  suc=SpellSuccess(caster, sinfo);
+  if (suc<=0){
+    if(suc<-500) {  
+      tell_room(ENV(caster), BS(sprintf("%s scheint das %s erzuernt "
+           +"zu haben ...", cn, victim->QueryProp(P_NAME))), ({caster}));
+      tell_object(caster, sprintf("Das Elementar greift Dich an!\n"));
+      // 1999-12-14: Das iss einfach zu heavy <iwo>
+      //             Statt folgen wird das Ele mit
+      //             5%iger Wahrscheinlichkeit aggressive
+      //if(!victim->QueryProp(ELEMENTAL_OWNER))
+      //      caster->AddPursuer(victim);
+      victim->SetProp(P_AGGRESSIVE, 0.05);
+      victim->Kill(caster);
+    }
+    return MISSERFOLG;
+  }
+  
+  tell_room(ENV(caster), BS(sprintf("Das %s folgt und gehorcht nun %s.",
+            victim->QueryProp(P_NAME), cn)), ({caster}));
+  tell_object(caster, sprintf("Das Elementar gehorcht Dir nun!\n")); 
+  caster->AddDefender(victim);
+  caster->AddPursuer(victim);
+  victim->SetProp(ELEMENTAL_OWNER, caster);
+  if(victim->CheckPursuers())
+  SetProp(P_MSGOUT, "folgt "+caster->name(WEM));
+  SetProp(P_MMSGOUT, "folgt "+caster->name(WEM));
+  victim->SetProp(P_LONG, Set_P_LONG(victim->QueryElement()));
+  victim->SetProp(P_LONG, victim->QueryProp(P_LONG)+"Es bleibt staendig in "
+       +"der Naehe von "+CAP(getuid(caster))+".");
+  victim->SetProp(E_REMOVE_MSG, BS(sprintf("Das %selementar von %s loest sich "
+      "nach erfuelltem Dienst auf.", CAP(victim->QueryElement()), 
+      caster->Name(WER))));
+  return ERFOLG;
+}
+
+int prep_luftelementar(object caster, mapping sinfo) {
+  if(QueryOwnCreature(caster, 0, 2))
+  {
+    write("Da ist schon ein Elementar.\n");
+    return 0;
+  }
+  printf(BS("Du konzentrierst Dich auf das Element Luft und "
+       +"laesst das Bild eines Luftelementars in Deinem "
+       +"Geist entstehen.\n"));
+  say(sprintf("%s scheint sich zu konzentrieren. "
+               +"Die Luft beginnt zu flimmern...\n",
+	       capitalize(caster->name())));
+  return 1;
+}
+
+int luftelementar(object caster, mapping sinfo) {
+  object l;
+  int suc;
+  int level, hands, e_defends;
+
+  if(QueryOwnCreature(caster, 0, 2)) {
+    write("Da ist schon ein Elementar.\n");
+    return 0; 
+  }
+  sinfo=DoSpellModification(LUFT, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->restore_spell_points(-sinfo[SI_RAW_SPELLCOST]);
+  
+  if(suc=SpellSuccess(caster,sinfo)<=0) {
+    if(suc<-2000) {
+      printf(BS("Urploetzlich beginnt sich die Luft zu verwirbeln, "
+             +"und ein Luftelementar erscheint, das ziemlich aergerlich "  //das statt dass
+             +"und wuetend zu sein scheint!!! Es attackiert Dich!\n"));
+      say(sprintf(BS("Urploetzlich beginnt sich die Luft zu verwirbeln, "
+            +"und ein Luftelementar erscheint, das auf %s ziemlich wuetend "  //das statt dass
+            +"zu sein scheint...\n"),  capitalize(caster->name())));
+      l=CreateElemental(caster, suc, "luft");
+      l->set_fehler();
+      caster->AddPursuer(l);
+      l->move(environment(this_player()), M_NOCHECK|M_SILENT); 
+      l->Kill(caster);
+    }
+    return MISSERFOLG;
+  } 
+  printf(BS("Urploetzlich beginnt sich die Luft zu verwirbeln, "
+            +"und ein Luftelementar erscheint."));
+  say(BS("Urploetzlich beginnt sich die Luft zu verwirbeln, "
+            +"und ein Luftelementar erscheint.\n"));
+  l=CreateElemental(caster, suc, "luft");
+  l->move(environment(this_player()), M_NOCHECK|M_SILENT); 
+  return ERFOLG;
+}
+
+int prep_erzelementar(object caster, mapping sinfo) {
+  if(QueryOwnCreature(caster, 0, 2)) {
+    write("Da ist schon ein Elementar.\n");
+    return 0; 
+  }
+  printf(BS("Du konzentrierst Dich auf das Element Erz, kniest Dich "
+       +"nieder und beschwoerst die Macht der Elemente...\n"));
+  say(sprintf("%s scheint sich zu konzentrieren und beruehrt die Erde. "
+            +"Sie beginnt ganz leicht zu vibrieren...\n",
+	       capitalize(caster->name())));
+  return 1;
+}
+
+int erzelementar(object caster, mapping sinfo) {
+   object l;
+   int suc;
+   int level, hands, e_defends;
+ 
+  if(QueryOwnCreature(caster, 0, 2)) {
+    write("Da ist schon ein Elementar.\n");
+    return 0; 
+  }
+  sinfo=DoSpellModification(ERZ, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->restore_spell_points(-sinfo[SI_RAW_SPELLCOST]);
+
+  if(suc=SpellSuccess(caster,sinfo)<=0) {
+    if(suc<-2000) {
+      printf(BS("Ploetzlich bricht die Erde bricht auf, und ein Elementar "
+            +"aus purem Erz entsteht aus dem Krater. Es wirkt SEHR "
+            +"wuetend..."));
+      say(sprintf(BS("Ploetzlich bricht die Erde auf und ein "
+              +"Elementar aus purem Erz waechst aus der Erde.")));
+      l=CreateElemental(caster, suc, "erz");
+      caster->AddPursuer(l);
+      l->move(environment(this_player()), M_NOCHECK|M_SILENT); 
+      l->Kill(caster);
+    }	
+    return MISSERFOLG;
+  } 
+  printf(BS("Ploetzlich bricht die Erde auf, und ein Elementar "  //bricht zuviel
+            +"aus purem Erz entsteht aus dem Krater.\n"));
+  say(BS("Ploetzlich bricht die Erde auf, und ein "  //Wenn schon Komma vor und dann auch hier
+              +"Elementar aus purem Erz waechst aus der Erde.\n"));
+  l=CreateElemental(caster, suc, "erz");
+  l->move(environment(this_player()), M_NOCHECK|M_SILENT); 
+  return ERFOLG;
+}
+
+int prep_wasserelementar(object caster, mapping sinfo) {
+  if(QueryOwnCreature(caster, 0, 2)) {
+    write("Da ist schon ein Elementar.\n");
+    return 0; 
+  }
+  printf(BS("Du konzentrierst Dich auf das Element Wasser, "
+        +"formst mit Deinen Haenden eine Welle "
+       +"und beschwoerst die Macht der Elemente...\n"));
+  say(sprintf("%s scheint sich zu konzentrieren und bewegt seltsam "
+            +"die Haende.\n",capitalize(caster->name())));
+  return 1;
+}
+
+int wasserelementar(object caster, mapping sinfo) {
+  object l;
+  int suc;
+  int level, hands, e_defends;
+  
+  if(QueryOwnCreature(caster, 0, 2)) {
+    write("Da ist schon ein Elementar.\n");
+    return 0; 
+  }
+  sinfo=DoSpellModification(WASSER, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->restore_spell_points(-sinfo[SI_RAW_SPELLCOST]);
+  
+  if(suc=SpellSuccess(caster,sinfo)<=0) {
+    if(suc<-2000) {
+      printf(BS("Wie aus dem Nichts entsteht eine Gestalt aus "
+            +"Wasser, die Dich mit "
+            +"zornerfuelltem Blick anstarrt und dann ...\n"));  //erfuelltem statt erfuellten
+      say(sprintf(BS("Wie aus dem Nichts entsteht eine Gestalt aus Wasser, "
+             +"die %s zornerfuellt anblickt und %s dann attackiert.\n"),
+              capitalize(caster->name()),caster->QueryPronoun(WEN)));  //Geschlechtsunterscheidung
+      l=CreateElemental(caster, suc, "wasser");
+      l->set_fehler();
+      l->move(environment(this_player()), M_NOCHECK|M_SILENT);
+      l->Kill(caster);
+    }
+    return MISSERFOLG;
+  }
+  printf(BS("Wie aus dem Nichts entsteht eine Gestalt aus Wasser.\n"));
+  say(BS("Wie aus dem Nichts entsteht eine Gestalt aus Wasser."));
+  l=CreateElemental(caster, suc, "wasser");
+  l->move(environment(this_player()), M_NOCHECK|M_SILENT); 
+  return ERFOLG;
+}
+
+int prep_eiselementar(object caster, mapping sinfo) {
+  if(QueryOwnCreature(caster, 0, 2)) {
+    write("Da ist schon ein Elementar.\n");
+    return 0; 
+  }
+  printf(BS("Du presst Deine Haende zusammen, konzentrierst "
+        +"Dich auf die Macht des Eises und murmelst leise "
+       +"die Beschwoerungsformeln.\n"));
+  say(sprintf(BS("%s murmelt etwas und presst die Haende "
+       +"zusammen.\n"),capitalize(caster->name())));
+  return 1;
+}
+
+int eiselementar(object caster, mapping sinfo) {
+  object l;
+  int suc;
+  int level, hands, e_defends;
+   
+  if(QueryOwnCreature(caster, 0, 2)) {
+    write("Da ist schon ein Elementar.\n");
+    return 0; 
+  }
+  sinfo=DoSpellModification(EIS, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->restore_spell_points(-sinfo[SI_RAW_SPELLCOST]);
+  
+  if(suc=SpellSuccess(caster,sinfo)<=0) {
+    if(suc<-2000) {
+      printf(BS("Ploetzlich faellt die Temperatur rapide ab "
+            +"und ein Eiselementar formt sich aus der Kaelte. Es "
+            +"blickt Dich hasserfuellt an... und attackiert Dich!\n")); 
+      say(sprintf(BS("Urploetzlich faellt die Temperatur ab, und aus "
+                +"der Kaelte formt sich ein Eiselementar, welches %s"
+                +"sofort attackiert!\n"),capitalize(caster->name())));
+      l=CreateElemental(caster, suc, "eis");
+      caster->AddPursuer(l);
+      l->move(environment(this_player()), M_NOCHECK|M_SILENT);  
+      l->Kill(caster);
+    }	
+    return MISSERFOLG;  
+  } 
+  printf(BS("Ploetzlich faellt die Temperatur rapide ab "  
+             +"und ein Eiselementar formt sich aus der Kaelte.\n"));   
+  say(BS("Urploetzlich faellt die Temperatur ab, und aus "
+                +"der Kaelte formt sich ein Eiselementar."));
+  l=CreateElemental(caster, suc, "eis");
+  l->move(environment(this_player()), M_NOCHECK|M_SILENT); 
+  return ERFOLG;
+}
+
+int prep_humuselementar(object caster, mapping sinfo) {
+  if(QueryOwnCreature(caster, 0, 2)) {
+    write("Da ist schon ein Elementar.\n");
+    return 0; 
+  }
+  printf(BS("Du kniest Dich nieder, nimmst eine Handvoll Erde in die "
+        "Hand und beschwoerst die Essenz des Elements..."));
+    
+  say(BS(sprintf("%s kniet sich nieder, nimmt etwas Erde in die Hand "
+          "und scheint sich zu konzentrieren...", caster->Name(WER,1))));
+  return 1;
+}
+
+int humuselementar(object caster, mapping sinfo) {
+  object l;
+  int suc;
+  int level, hands, e_defends;
+   
+  if(QueryOwnCreature(caster, 0, 2)) {
+    write("Da ist schon ein Elementar.\n");
+    return 0; 
+  }
+  sinfo=DoSpellModification(HUMUS, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->restore_spell_points(-sinfo[SI_RAW_SPELLCOST]);
+  
+  if(suc=SpellSuccess(caster,sinfo)<=0) {
+    if(suc<-2000) {	
+      printf(BS("Aus der Erde entsteht eine Gestalt aus reinstem Humus, "
+            "die Dich sofort attackiert!"));
+      say(BS(sprintf("Aus der Erde entsteht eine Gestalt aus reinstem "
+              "Humus, die %s sofort attackiert!", caster->name(WEN, 1))));
+      l=CreateElemental(caster, suc, HUMUS);
+      l->set_fehler();
+      caster->AddPursuer(l);   
+      l->move(environment(this_player()), M_NOCHECK|M_SILENT); 
+      l->Kill(caster);
+    }	
+    return MISSERFOLG;
+  } 
+  tell_room(ENV(caster),BS("Aus der Erde entsteht eine baumhohe Gestalt aus "
+      "Erde, Laub und Holz, umgeben von Dornenranken!"));
+  l=CreateElemental(caster, suc, HUMUS);
+  l->move(environment(this_player()), M_NOCHECK|M_SILENT); 
+  return ERFOLG;
+}
+
+
+
+int prep_feuerelementar(object caster, mapping sinfo) {
+  if(QueryOwnCreature(caster, 0, 2)) {
+    write("Da ist schon ein Elementar.\n");
+    return 0; 
+  }
+  printf(BS("Du murmelst Worte der Beschwoerung und beschwoerst "
+          +"die Macht des Feuers in eine Gestalt...\n"));
+    
+  say(sprintf("%s murmelt einige Worte.\n",capitalize(caster->name())));
+  return 1;
+}
+
+int feuerelementar(object caster, mapping sinfo) {
+  object l;
+  int suc;
+  int level, hands, e_defends;
+   
+  if(QueryOwnCreature(caster, 0, 2)) {
+    write("Da ist schon ein Elementar.\n");
+    return 0; 
+  }
+  sinfo=DoSpellModification(FEUER, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->restore_spell_points(-sinfo[SI_RAW_SPELLCOST]);
+  
+  if(suc=SpellSuccess(caster,sinfo)<=0) {
+    if(suc<-2000) {	
+      printf(BS("Ploetzlich manifestiert sich eine Gestalt aus reinstem "
+           +"Feuer, die DICH sofort attackiert!\n"));  //die statt dass
+      say(BS(sprintf("Ploetzlich manifestiert sich eine Gestalt aus "
+              +"reinstem Feuer, die %s attackiert\n", caster->Name())));
+      l=CreateElemental(caster, suc, "feuer");
+      l->set_fehler();
+      caster->AddPursuer(l);   
+      l->move(environment(this_player()), M_NOCHECK|M_SILENT); 
+      l->Kill(caster);
+    }	
+    return MISSERFOLG;
+  } 
+  printf(BS("Ploetzlich manifestiert sich eine Gestalt aus reinstem "
+          +"Feuer.\n"));
+  say(BS("Ploetzlich manifestiert sich eine Gestalt aus "
+              +"reinstem Feuer."));
+  l=CreateElemental(caster, suc, "feuer");
+  l->move(environment(this_player()), M_NOCHECK|M_SILENT); 
+  return ERFOLG;
+}
+
+/*
+//
+// DIV. FUNCTIONS
+//
+*/
+
+/* Fuer den Elementarruestung-Spell */
+static int CheckArmour(object caster) {
+ object *worn_armours;
+ int i;
+ worn_armours=caster->QueryProp(P_ARMOURS);
+ if(sizeof(worn_armours)==0) return 0;
+ for(i=sizeof(worn_armours)-1;i>=0;i--)
+   if(worn_armours[i] && (worn_armours[i]->QueryProp(P_ARMOUR_TYPE))==AT_ARMOUR)
+     return 1;
+return 0;
+}
+
+
+static mapping
+DoSpellModification(string element,object caster,mapping sinfo) {
+  mapping t_env;
+  string *filename, caster_element, comp_element;
+  string *d_domain, *d_komp_domain, *race_elements;
+  int *t_type, *t_comp_type, difficult_modifier, align, kosten, var;
+  float cost_modifier, damage_modifier, fatigue_modifier;
+  object amulett;
+  
+  cost_modifier=1.0;
+  difficult_modifier=0;
+  damage_modifier=1.0;
+  fatigue_modifier=1.0;
+  kosten=sinfo[SI_RAW_SPELLCOST];
+  amulett=present(DRUIDENAMULETT, caster);
+  race_elements=({});
+  t_env=environment(caster)->QueryProp(P_ENVIRONMENT);
+  filename=explode(file_name(environment(caster)), "/");
+  caster_element=call_other(DRUIDENMASTER, "GetDruidElement", caster);
+  align=caster->QueryProp(P_ALIGN);
+
+  switch(caster->QueryProp(P_RACE)) {
+    case "Zwerg": race_elements=E_DWARF; break;
+    case "Elf"  : race_elements=E_ELF; break;
+    case "Mensch": race_elements=E_HUMAN; break;
+    case "Hobbit": race_elements=E_HOBBIT; break;
+    case "Dunkelelf": race_elements=E_DARKELF; break;
+    case "Oger": race_elements=E_OGRE; break;
+    case "Fee": race_elements=E_FAIRY; break;
+    default: race_elements=E_DEFAULT;            
+  }
+  switch (element) {
+    case FEUER:  d_domain=D_FEUER;
+                 d_komp_domain=D_WASSER;
+                 t_type=TT_FEUER;
+                 t_comp_type=TT_WASSER;
+                 comp_element=WASSER;
+                 break;
+    case WASSER: d_domain=D_WASSER;
+                 d_komp_domain=D_FEUER;
+                 t_type=TT_WASSER;
+                 t_comp_type=TT_FEUER;
+                 comp_element=FEUER;
+                 break;
+    case ERZ:    d_domain=D_ERZ;
+                 d_komp_domain=D_LUFT;
+                 t_type=TT_ERZ;
+                 t_comp_type=TT_LUFT;
+                 comp_element=LUFT;
+                 break;
+    case LUFT:   d_domain=D_LUFT;
+                 d_komp_domain=D_ERZ;
+                 t_type=TT_LUFT;
+                 t_comp_type=TT_ERZ;
+                 comp_element=ERZ;
+                 break;
+    case EIS:    d_domain=D_EIS;
+                 d_komp_domain=D_HUMUS;
+                 t_type=TT_EIS;
+                 t_comp_type=TT_HUMUS;
+                 comp_element=HUMUS;
+                 break;
+    case HUMUS:  d_domain=D_HUMUS;
+                 d_komp_domain=D_EIS;
+                 t_type=TT_HUMUS;
+                 t_comp_type=TT_HUMUS;
+                 comp_element=EIS;
+                 break;
+    default:     d_domain=({});
+                 d_komp_domain=({});
+                 t_type=({});
+                 t_comp_type=({});
+                 comp_element="";
+  } 
+  //TERRAIN
+  if(member_array(t_env[ENV_TERRAIN], t_type)!=-1 || 
+      ENV(caster)->QueryProp(P_ELEMENTAL_ROOM)==t_type || 
+      (caster_element=="geist" && !random(2) && amulett->QueryGhost())) 
+  {
+    cost_modifier+=-0.1;
+    difficult_modifier+=-50;
+    damage_modifier+=0.1;
+    fatigue_modifier+=-0.1;
+  } 
+  else if((member_array(t_env[ENV_TERRAIN], t_comp_type)!=-1 || 
+      ENV(caster)->QueryProp(P_ELEMENTAL_ROOM)==t_comp_type) &&
+      caster_element!="geist") 
+  {
+    cost_modifier+=0.15;
+    difficult_modifier+=50;
+    damage_modifier+=-0.15;
+    fatigue_modifier+=0.1;
+  }
+  //REGION
+  if(getuid(caster)==DebugName)
+    TELL("angrox", sprintf("TP:%s, SP: %s, Ter:%.4f, ", DebugName, 
+          sinfo[SI_SPELLNAME],cost_modifier));
+  if(filename[1]) {
+    if(member_array(filename[1], d_domain)!=-1 || 
+        (caster_element=="geist" && !random(2) && amulett->QueryGhost())) 
+    {
+      cost_modifier+=-0.15;
+      difficult_modifier+=-50;
+      damage_modifier+=0.1;
+      fatigue_modifier+=-0.2;
+    }
+    else if(member_array(filename[1], d_komp_domain)!=-1 &&
+        caster_element!="geist") 
+    {
+      cost_modifier+=0.15;
+      difficult_modifier+=50;
+      damage_modifier+=-0.1;
+      fatigue_modifier+=0.2;
+    } 
+  }
+  //RASSEN
+  if(getuid(caster)==DebugName)
+    TELL("angrox", sprintf("Reg:%.4f, ", cost_modifier));
+  if(race_elements && caster_element!="geist") {
+    if(member_array(element, race_elements[0])!=-1) {
+      cost_modifier+=-0.15;
+      fatigue_modifier+=-0.1;
+    }
+    else if(member_array(element, race_elements[1])!=-1){
+      cost_modifier+=0.25;
+      fatigue_modifier+=0.1;
+    }
+  }
+  //ELEMENT
+  if(getuid(caster)==DebugName)
+    TELL("angrox", sprintf("Ras: %.4f, ", cost_modifier));
+  if(element==caster_element || (caster_element=="geist" && 
+      amulett->QueryGhost() && !random(2))) 
+  {
+    cost_modifier+=-0.25;
+    difficult_modifier+=-50;
+    damage_modifier+=0.2;
+    fatigue_modifier+=-0.2;
+  }
+  else if(comp_element==caster_element && caster_element!="geist") {
+    cost_modifier+=0.25;
+    difficult_modifier+=50;
+    damage_modifier+=-0.3;
+    fatigue_modifier+=0.2;
+  }
+  // MAGIC ITEM
+  cost_modifier-=CheckElementalItem(caster);
+  if(getuid(caster)==DebugName)
+    TELL("angrox", sprintf("Ele. Item: %.4f, ", cost_modifier));
+  //ALIGN
+  if(getuid(caster)==DebugName)
+    TELL("angrox", sprintf("Ele: %.4f, ", cost_modifier));
+  if((align<-500) || (align>500)) {
+    align=(align<0?-align:align);
+    cost_modifier+=((float)align-500)/1000; 
+  }
+  if(getuid(caster)==DebugName)
+    TELL("angrox", sprintf("Ali: %.4f, ", cost_modifier));
+  if(cost_modifier<0.3) cost_modifier=0.3;
+  if(cost_modifier>1.5) cost_modifier=1.5;
+  
+  if(caster->QueryProp(P_BLIND)) 
+    cost_modifier+=0.5;
+  
+  if(getuid(caster)==DebugName)
+    TELL("angrox", sprintf("Bli: %.4f, ", cost_modifier));
+  
+  if(var=amulett->QueryWornMetal()) {
+    cost_modifier+=(float)var/1000;
+    fatigue_modifier+=(float)var/1500;  
+  }
+  kosten=(int)(kosten*cost_modifier);
+  if(getuid(caster)==DebugName)
+  TELL("angrox", sprintf("Met: %.4f, SP/SP_old: %d/%d\n", cost_modifier, kosten, 
+        sinfo[SI_RAW_SPELLCOST]));
+  if(caster->QueryProp(P_GUILD_LEVEL)>14)
+    if(sinfo[SI_SKILLRESTR_LEARN][P_GUILD_LEVEL] > 9)
+      kosten-=caster->QueryProp(P_GUILD_LEVEL)-14;
+  
+  sinfo[SI_RAW_SPELLCOST]=kosten; 
+  if(caster->QueryProp(P_GUILD_LEVEL)==15) 
+    sinfo+=([SI_NOMAGIC: 5]);
+  if(caster->QueryProp(P_GUILD_LEVEL)==16)
+    sinfo+=([SI_NOMAGIC: 10]);
+
+  
+  //sinfo[SI_DIFFICULTY]=(int)(sinfo[SI_DIFFICULTY]+difficult_modifier);
+   
+  if(sinfo[SI_SKILLDAMAGE]) {
+    if(damage_modifier<0.5) damage_modifier=0.5;
+    if(damage_modifier>1.4) damage_modifier=1.4;
+    sinfo[SI_SKILLDAMAGE]=(int)(sinfo[SI_SKILLDAMAGE]*damage_modifier);
+  } 
+  if(!sinfo[SI_SPELLFATIGUE]) sinfo[SI_SPELLFATIGUE]=2;
+  if((sinfo[SI_SPELLFATIGUE]=(int)(sinfo[SI_SPELLFATIGUE]*fatigue_modifier))<2)
+        sinfo[SI_SPELLFATIGUE]=2;
+  return sinfo;
+}
+
+float CheckElementalItem(object pl) {
+  object *obj;
+  int i, value, h;
+  value=0;
+  if(!objectp(pl)) return 0.0;
+  obj=pl->QueryProp(P_ARMOURS);
+  if(!sizeof(obj)) return 0.0;
+  for(i=sizeof(obj)-1;i>=0;i--) {
+    if(h=obj[i]->QueryProp(P_ITEMD_ELEMENTAL_VALUE)) {
+      value+=h;
+    }
+  }
+  return value/100.0;
+}
+
+/* Hier wird geprueft, ob der Spell gesprochen werden darf */
+static CheckIfSpellAllowed(object caster) {
+  object ob, weapon, *armours;
+  int var;
+  if(caster->QueryProp(P_FROG)) {
+    printf(BS("Wahhhhhh. Ein Frosch! Als Frosch kannst Du "
+        +"nicht zaubern!\n"));
+    return "";
+  }
+  if(caster->QueryProp(P_GHOST)) {
+    printf(BS("Buaaahhhhh. Ein Geist! Als Geist kannst Du "
+        +"nicht zaubern!\n"));
+    return "";
+  }
+  /*
+  if(caster->QueryProp(P_BLIND) && caster->QueryProp(P_GUILD_LEVEL)<16) { 
+    printf(BS("Blind kannst Du nicht zaubern!\n"));
+    return "";
+  }
+  */
+  if(!ob=present("\ndruidenamulett", TP)) {
+    printf(BS("Ohne das Druidenamulett kannst Du nicht zaubern!\n"));
+    write_secure_log(sprintf("%s versucht ohne Amulett zu zaubern!\n", 
+          CAP(getuid(caster))));
+    return "";
+  }
+  if(ob->QueryVersion()!=LATEST_AMULET_VERSION) {
+    printf(BS("Dein Amulett scheint abgenutzt zu sein! Du solltest "
+         "Dir ein Neues von Anvar holen! (frag anvar nach neuem amulett)"));
+    return ""; 
+  }
+  if((var=QueryMetal(caster)) > (caster->QueryProp(P_GUILD_LEVEL)*20)) {
+    printf("Mit soviel Metall am Koerper kannst Du nicht zaubern!\nDer "
+        "Versuch zu Zaubern erschoepft Dich!\n");
+    caster->AddHp(-random(20));
+    caster->SetProp(P_NEXT_SPELL_TIME, time()+(int)var/10);
+    ob->SetWornMetal(var); // uebergeben des Metalls an das Amulett
+    return "";
+  }
+  ob->SetWornMetal(var); // uebergeben des Metalls an das Amulett
+  if(ob->QueryProp(P_WORN)!=caster) {
+    printf(BS("Du musst das Amulett schon tragen, wenn Du zaubern "
+        "willst"));
+    return "";
+  }
+  if(!call_other(DRUIDENMASTER, "CheckPreviousTasks", caster,
+     caster->QueryProp(P_GUILD_LEVEL)-1) && !IS_WIZARD(caster) &&
+     !caster->QueryProp(P_TESTPLAYER))
+  {
+   //printf(BS("Du kannst nicht zaubern! Komisch, oder?\n"));
+    if(find_player("angrox"))
+      tell_angrox(sprintf("%s hat nicht alle Aufgaben fuer Level %d!\n", 
+          CAP(getuid(caster)), caster->QueryProp(P_GUILD_LEVEL)));
+     write_secure_log(sprintf("%s hat nicht alle Aufgaben fuer Level %d!\n", 
+          CAP(getuid(caster)), caster->QueryProp(P_GUILD_LEVEL)));
+  } 
+  return 0;
+}
+
+// 
+// Ueberpruefen auf verbotenes metall
+// Es kann sowohl ein Living wie auch ein Objekt angegeben werden.
+// Rueckgabewert: Metall in Gramm;
+//
+int QueryMetal(object ob) {
+  object *items;
+  int total_metal, i,j,x,rtn;
+  mapping mat_map;
+  string *mat, *fm;
+  fm=FORBIDDEN_METAL;
+  items=({});
+  if(living(ob)) {
+    items=({ ob->QueryProp(P_WEAPON) });
+    if(sizeof(ob->QueryProp(P_ARMOURS)))
+      items+=ob->QueryProp(P_ARMOURS);
+    items-=({0});
+  }
+  else items+=({ob});
+  if(!sizeof(items)) return 0;
+  for(i=sizeof(items)-1;i>=0;i--) {
+    if(items[i]->QueryMaterialGroup(MATGROUP_METAL) &&
+        !items[i]->id(ALLOWED_METAL_ITEM)) 
+    {
+      mat_map=items[i]->QueryProp(P_MATERIAL);
+      mat=m_indices(mat_map);
+      for(j=sizeof(mat)-1;j>=0;j--) {
+        if((x=member(fm, mat[j]))!=-1)
+          total_metal+=(int)((float)(items[i]->QueryProp(P_WEIGHT)/100)*
+            mat_map[fm[x]]);
+      }
+    }          
+  }
+  return total_metal; // getragenes Metall in Gramm
+}
+
+/*Was besteht woraus?*/
+string GetMaterialString(object ob, object caster) {
+  string *mat_indices, *mat_values, result;
+  mapping material;
+  int i;
+
+  result=CAP(ob->QueryPronoun(WER))+" besteht ";
+  material=ob->QueryProp(P_MATERIAL);
+  mat_values=m_values(material);
+  mat_indices=m_indices(material);
+  for(i=sizeof(mat_values)-1; i>=0; i--) {
+    switch(mat_values[i]) {
+      case -100..-1: result+="aus Anti-";
+                         break;
+      case 0: continue;
+	    case 1..20:  result+="zu einem geringen Anteil aus ";
+                        break;
+      case 21..40: result+="zu einem maessigen Anteil aus ";
+                        break; 
+      case 41..60: result+="etwa zur Haelfte aus "; 
+                        break;
+      case 61..80: result+="zum Grossteil aus ";
+                        break;
+      case 81..99: result+="fast ausschliesslich aus ";
+                        break;
+      case 100:    result+="vollstaendig aus ";
+                        break;
+      default:     result+="zu einem undefinierbaren Anteil aus ";
+    }	
+    result+=MATERIALDB->MaterialName(mat_indices[i],WEM,caster);
+    if(i>1) result+=", ";
+    else if(i==1) result+=" und ";
+    else if(i==0) result+=".";
+  } 
+  return result;
+}
+
+
+
+/*
+//
+// Hier wird das Elementar geclont und die Werte berechnet
+//
+*/
+object CreateElemental(object caster, int suc, string element) {
+  object e;
+  int level, time, e_defends, hands;
+  string long;
+  e=clone_object(NPC("elementar"));
+  if(element=="feuer") {
+    e->create_default_npc((level=caster->QueryProp(P_GUILD_LEVEL)+random(10)));
+    e->SetProp(P_HANDS, ({" mit Feuerhaenden", level*17, DT_FIRE}));
+    e->SetProp(ELEMENTAL_CASTER, caster);
+    e->SetProp(P_MSGIN, "schwebt herein");
+    e->SetProp(P_DIE_MSG, " erlischt.\n");
+    e->SetProp(P_SHORT, "Ein Feuerelementar");
+    e->SetProp(P_NAME, "Feuerelementar");
+    e->SetProp(P_XP, 0);
+    e->SetProp(P_LIGHT, 1);
+    e->SetProp(P_BODY, level*7);
+    e->SetProp(P_FRIEND, 1);
+    e->SetProp(P_NO_GLOBAL_ATTACK, 1);
+    e->AddId("feuerelementar");
+    e->SetProp(E_REMOVE_MSG, "Das Feuerelementar loest sich auf.\n");
+    e->SetProp(P_KILL_NAME, "Ein Feuerelementar");
+    e->set_time((int)(2*caster->QueryAttribute(A_INT)*(1+3*suc/MAX_ABILITY)+
+               2*caster->QueryProp(P_GUILD_LEVEL)));
+    e->set_element(CAP(element));
+    //caster->AddDefender(e);
+  }
+  else if(element=="wasser") {
+    e->create_default_npc((level=caster->QueryProp(P_GUILD_LEVEL)+
+        random(11)+1));
+    e->SetProp(P_HANDS, ({" mit einer Flutwelle", level*10, DT_WATER}));
+    e->SetProp(ELEMENTAL_CASTER, caster);
+    e->SetProp(P_MSGIN, "fliesst herein");
+    e->SetProp(P_DIE_MSG, " zerrinnt.\n");
+    e->SetProp(P_SHORT, "Ein Wasserelementar");
+    e->SetProp(P_NAME, "Wasserelementar");
+    e->SetProp(P_XP, 0);
+    e->SetProp(P_BODY, level*10);
+    e->SetProp(P_FRIEND, 1);
+    e->SetProp(P_NO_GLOBAL_ATTACK, 1);
+    e->AddId("wasserelementar");
+    e->SetProp(E_REMOVE_MSG, "Das Wasserelementar zerfliesst.\n");
+    e->SetProp(P_KILL_NAME, "Ein Wasserelementar");
+    e->set_time(1);
+    e->SetProp(ELEMENTAL_DEFENDS,
+              (int)(caster->QueryProp(P_GUILD_LEVEL)*(1+4*suc/MAX_ABILITY)));
+    e->set_element(CAP(element));
+  }
+  else if(element=="luft") {
+    e->create_default_npc((level=caster->QueryProp(P_GUILD_LEVEL)+
+        random(12)+1));
+    e->SetProp(P_HANDS, ({" mit einem Windstoss", level*10, DT_AIR}));
+    e->SetProp(ELEMENTAL_CASTER, caster);
+    e->SetProp(P_MSGIN, "weht herein");
+    e->SetProp(P_DIE_MSG, " loest sich auf.\n");
+    e->SetProp(P_XP, 0);
+    e->SetProp(P_SHORT, "Ein Luftelementar");
+    e->SetProp(P_NAME, "Luftelementar");
+    e->SetProp(P_FRIEND, 1);
+    e->SetProp(P_NO_GLOBAL_ATTACK, 1);
+    e->AddId("luftelementar");
+    e->SetProp(E_REMOVE_MSG, "Das Luftelementar loest sich auf.\n");
+    e->SetProp(P_KILL_NAME, "Ein Luftelementar");
+    e->SetProp(ELEMENTAL_DEFENDS,
+	  (int)(caster->QueryProp(P_GUILD_LEVEL)*(1+(5*(suc/MAX_ABILITY)/2))));
+    e->set_element(CAP(element));
+  }
+  else if(element=="eis") {
+    e->create_default_npc((level=caster->QueryProp(P_GUILD_LEVEL)+random(5)));
+    e->SetProp(P_HANDS, ({" mit eisiger Kaelte", level*15, DT_COLD}));
+    e->SetProp(ELEMENTAL_CASTER, caster);
+    e->SetProp(P_MSGIN, "stapft herein");
+    e->SetProp(P_DIE_MSG, " schmilzt.\n");
+    e->SetProp(P_SHORT, "Ein Eiselementar");
+    e->SetProp(P_NAME, "Eiselementar");
+    e->SetProp(P_XP, 0);
+    e->SetProp(P_BODY, level*8);
+    e->SetProp(P_FRIEND, 1);
+    e->SetProp(P_NO_GLOBAL_ATTACK, 1);
+    e->AddId("eiselementar");
+    e->SetProp(E_REMOVE_MSG, "Das Eiselementar schmilzt.\n");
+    e->SetProp(P_KILL_NAME, "Ein Eiselementar");
+    e->SetProp(ELEMENTAL_DEFENDS, 1);
+    e->set_time((int)(2*caster->QueryAttribute(A_INT)*(1+3*(suc/MAX_ABILITY)/2)+
+                2*caster->QueryProp(P_GUILD_LEVEL)));
+    e->set_element(CAP(element));
+  }
+  else if(element=="erz") {
+    e->create_default_npc((level=caster->QueryProp(P_GUILD_LEVEL)+random(6)+1));
+    e->SetProp(P_HANDS, ({" mit staehlener Faust", level*14, 
+               ({DT_MAGIC,DT_BLUDGEON})}));;
+    e->SetProp(ELEMENTAL_CASTER, caster);
+    e->SetProp(P_MSGIN, "stapft herein");
+    e->SetProp(P_DIE_MSG, " verschwindet in der Erde.\n");
+    e->SetProp(P_XP, 0);
+    e->SetProp(P_SHORT, "Ein Erzelementar");
+    e->SetProp(P_NAME, "Erzelementar");
+    e->SetProp(P_BODY, level*15);
+    e->SetProp(P_FRIEND, 1);
+    e->SetProp(P_NO_GLOBAL_ATTACK, 1);
+    e->AddId("erzelementar");
+    e->SetProp(E_REMOVE_MSG, "Das Erzelementar verschwindet im Boden.\n");
+    e->SetProp(P_KILL_NAME, "Ein Erzelementar");
+    e->SetProp(ELEMENTAL_DEFENDS, 
+           (int)(caster->QueryProp(P_GUILD_LEVEL)*(1+4*suc/MAX_ABILITY)));
+    e->set_element(CAP(element));
+  }
+  else if(element==HUMUS) {
+    e->create_default_npc((level=caster->QueryProp(P_GUILD_LEVEL)+random(6)+1));
+    e->SetProp(P_HANDS, ({" mit Giftstacheln", level*14, 
+               ({DT_POISON})}));;
+    e->SetProp(ELEMENTAL_CASTER, caster);
+    e->SetProp(P_MSGIN, "stapft herein");
+    e->SetProp(P_DIE_MSG, " verschwindet in der Erde.\n");
+    e->SetProp(P_XP, 0);
+    e->SetProp(P_SHORT, "Ein Humuselementar");
+    e->SetProp(P_NAME, "Humuselementar");
+    e->SetProp(P_BODY, level*15);
+    e->SetProp(P_FRIEND, 1);
+    e->SetProp(P_NO_GLOBAL_ATTACK, 1);
+    e->AddId("humuselementar");
+    e->SetProp(E_REMOVE_MSG, "Das Humuselementar verschwindet im Boden.\n");
+    e->SetProp(P_KILL_NAME, "Ein Humuselementar");
+    e->SetProp(ELEMENTAL_DEFENDS, 
+           (int)(caster->QueryProp(P_GUILD_LEVEL)*(1+4*suc/MAX_ABILITY)));
+    e->set_element(CAP(element));
+  }
+  e->SetProp(P_LONG, Set_P_LONG(element));
+  return e;
+}
+
+string Set_P_LONG(string element) {
+  string long;
+  if(!element) return "";
+  long="Das ist halt so ein Elementar.";
+  switch(lower_case(element)) {
+    case "luft": long="Das Luftelementar sieht wie eine kleine "
+               +"Windhose aus. Durch ihre rapiden Drehungen verursacht "
+               +"es einen starken Wind.";  //es statt sie
+                 break;
+    case "wasser": long="Das Wasserelementar sieht wie eine riesige, "
+                    +"aus durchscheinendem Wasser gebildete Gestalt aus. "  //scheinendem statt scheinenden
+                    +"In seiner Naehe ist das Rauschen des Meeres zu "
+                    +"hoeren. Es ist etwa zwei Schritt hoch.";
+                 break;
+    case "erz": long="Das Erzelementar ist eine Gestalt aus reinstem "
+                 +"Erz, mit rubinernen Augen und Gold als Haaren. Durch seine "
+                 +"Adern fliesst reinstes Quecksilber.";
+                 break;
+    case "feuer": long="Das Feuerelementar sieht wie eine riesige, "
+                     +"flammenumwaberte Gestalt aus. Es ist etwa " 
+                     +"zwei Schritt hoch und es strahlt eine enorme " 
+                     +"Hitze ab.";
+                 break;
+    case "eis":  long="Das Eiselementar ist eine riesige, zwei "
+                 +"Schritt hohe Gestalt aus purem Eis, von der eine "
+                 +"toedliche Kaelte ausgeht.";
+                 break;
+    case "humus":long="Das Humuselementar besteht vollkommen aus Erde, "
+                  "Laub und Dornenranken. Es ueberragt Dich um Laengen. "
+                  "Eine eigentuemliche Kraft des Lebens geht von ihm aus, "
+                  "ja Du spuerst diese Kraft sogar.";
+                 break;
+  } 
+  return long;
+}
+
+
+
+/*
+//
+// Ueberpruefung ob schon eine eigene Kreatur da ist 
+//
+*/
+int QueryOwnCreature(object caster, int flag, int what) {
+  object *inv;
+  int i, value;
+  string ident;
+  value=0;
+  if(!flag)
+    ident="elementar";
+  else ident="feuerwusel";
+  inv=filter_array(all_inventory(ENV(caster)), "filter_func", TO, ident);
+  inv+=filter_array(caster->QueryPursuers(), "filter_func",TO,ident);
+  //TELL("angrox", sprintf("%O\n", inv));
+  for(i=sizeof(inv)-1;i>=0;i--) {
+    if(objectp(inv[i]) && living(inv[i]) && inv[i]->QueryProp(P_IDS) &&
+       member(inv[i]->QueryProp(P_IDS), ident)!=-1)
+      switch(what) {
+        // Es steht schon ein Teil von dem caster rum
+        case 0:if(inv[i]->QueryProp(ELEMENTAL_CASTER)==caster)
+		       value++;
+               break;
+	// Das ist sein eigenes Teil
+        case 1:if(inv[i]->QueryProp(ELEMENTAL_OWNER)==caster)
+	               value++;
+               break;
+	// Er hat hat schon ein Teil
+	// 1999-12-13: Ein verschenktes elementar hindert nichtmehr
+	//             am beschwoeren eines neuen <iwo>
+        case 2:if((!inv[i]->QueryProp(ELEMENTAL_OWNER) 
+	            && inv[i]->QueryProp(ELEMENTAL_CASTER)==caster) ||
+                  inv[i]->QueryProp(ELEMENTAL_OWNER)==caster)
+	               value++;
+               break;
+      } 
+  } 
+  if(value>1) 
+     write_secure_log(sprintf("%d %s , CST: %O, ENV:%O\n", value, 
+         CAP(ident), caster, environment(caster)));
+  return value;
+}
+
+
+int filter_func(object ob, string ident) {
+  if(ob->id(ident)) return 1;
+  return 0;
+}
+
+/*
+// Man soll auch lernen, wenn der Zauber gelungen ist.
+// Der Wert ist vom Skill im Zaubern abhaengig. Eine Ausgabe
+// "Du lernst..." erfolgt nicht, die Spieler sollen gefaelligst
+// selbst draufkommen
+// Weiters besteht die Chance etwas zu verlernen, wenn man mehr
+// als 33% MAX_ALC hat
+*/
+
+void Erfolg(object caster, string spell, mapping sinfo) {
+  int new_abil, abil, alc, maxalc, modifier, cast;
+  modifier=0;
+  
+  caster->ModifySkill(spell,([SI_USR:sinfo[SI_USR]+1]),0, "druidenzirkel");
+  abil=sinfo[SI_SKILLABILITY];
+  
+  if(!IS_WIZARD(caster) && !caster->QueryProp(P_TESTPLAYER))
+    call_other(ABILMASTER, "CheckAbility", caster, spell, 
+              sinfo[SI_SKILLABILITY]);
+  
+  if(alc=caster->QueryProp(P_ALCOHOL)) 
+    modifier-=alc/8;
+  
+  if(!random(20) && abil<10000) {
+    if((cast=caster->QuerySkillAbility("Cast"))>6000)
+      modifier+=(cast-6000)/200; 
+    new_abil=abil+modifier+random(5)+1;
+    if(new_abil>10000) {
+      new_abil=10000;
+      tell_object(caster, sprintf("Du kannst %s nun perfekt!\n", CAP(spell)));
+    }
+    caster->ModifySkill(spell, ([SI_SKILLABILITY: new_abil ]), 0, 
+        "druidenzirkel");
+  }
+  else if(modifier) {
+    new_abil=abil+modifier;
+    if(new_abil<1) 
+      new_abil=1;
+    caster->ModifySkill(spell, ([SI_SKILLABILITY: new_abil ]), 0, 
+        "druidenzirkel");
+  }
+  if(!IS_WIZARD(caster) && !caster->QueryProp(P_TESTPLAYER))
+    call_other(ABILMASTER, "UpdateAbility", caster, spell, 
+        (caster->QuerySkillAbility(spell)));
+  if(getuid(caster)=="pardona") {
+    TELL("angrox", sprintf("Gelernt: %d -> %d\n", abil, new_abil));
+  }
+} 
+
+/*
+// Beim Misserfolg verlernt man, wenn man mehr als 25% ALC
+// hat.
+//
+*/
+void
+Misserfolg(object caster, string spell, mapping sinfo) {
+  int old_abil,alc, maxalc, modifier, abil, new_abil;
+  caster->ModifySkill(spell,([SI_USR:sinfo[SI_USR]+1]),0, "druidenzirkel");
+  alc=caster->QueryProp(P_ALCOHOL);
+  maxalc=caster->QueryProp(P_MAX_ALCOHOL);
+  modifier=(maxalc/2)-alc;
+  old_abil = sinfo[SI_SKILLABILITY];
+  if(!IS_WIZARD(caster) && !caster->QueryProp(P_TESTPLAYER))
+    call_other(ABILMASTER, "CheckAbility", caster, spell, old_abil);
+  if(modifier<0) {
+    write("Du lernscht nix aus <Hicks!> Deinem Fehler.\n");
+    abil=old_abil+(modifier/3);
+    if(abil<1) abil=1;
+    caster->ModifySkill(spell, ([SI_SKILLABILITY: abil ]), 0, "druidenzirkel");
+    new_abil=caster->QuerySkillAbility(spell);
+    if(!IS_WIZARD(caster) && !caster->QueryProp(P_TESTPLAYER))
+      call_other(ABILMASTER, "UpdateAbility", caster, spell, new_abil);
+    return;
+  }
+  Learn(caster, spell, sinfo);
+  new_abil=caster->QuerySkillAbility(spell);
+  if(!IS_WIZARD(caster) && !caster->QueryProp(P_TESTPLAYER))
+    call_other(ABILMASTER, "UpdateAbility", caster, spell, new_abil);
+  if (old_abil < new_abil) {
+    write("Du lernst aus Deinem Fehler.\n" ); 
+    if(new_abil==10000)
+      tell_object(caster, "Du kannst "+capitalize(spell)+" nun perfekt!\n");
+  }
+  else 
+    write( "Leider lernst Du nicht aus Deinem Fehler.\n" );
+  return;
+}
+
+int SetDebugName(string str) {
+  if(getuid(TP)!="angrox") return 1;
+  DebugName=str;
+  return 1;
+}
+int DelDebugName() {
+  DebugName="";
+}
+
+/* Aenderung bzw Aenderungsvorschlaege 2001/01/19 Rage
+ * Bei behandle kommt keine Spellabbruchmeldung, wenn man mitten im
+   Spell gemovt wird (zB bei reise mit xxx nach yyy)
+ * P_GUILD_LEVEL geaendert     Zeile 168
+ * Schaetz: Abfrage auf victim==caster schon vorher:    Zeile 624
+ * Geschlechtsunterscheidung fehlte                     Zeile 760
+ * Behandle: Gab ja doch mal Ueberlegung, ob man
+   wen im Kampf heilen soll koennen                     Zeilen 1278-89
+ * Wasserpfeil: Wiederholung                            Zeile 1456
+ * Windstoss: falscher Fall                             Zeile 1631
+ * Windhose: falscher Fall                              Zeile 1950
+ * Sturmflut: falscher Fall                             Zeile 2007
+   Anmerkung: Dieser Spell scheint im Gegensatz zu 
+   anderen Raumspells keinen Kampf auszuloesen
+ * Feuerball: falscher Fall                             Zeile 2122
+ * Wasserelementar: Geschlechtsunterscheidung           Zeile 2387
+*/

@@ -1,0 +1,956 @@
+//drider getestet
+//feuerelementar getestet
+//eiselementar getestet
+//erzelementar getestet
+//wasserelementar getestet
+//windelementar getestet
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include "/d/dschungel/trintrasil/myowndefine.h"
+
+#define STRAND "/d/dschungel/trintrasil/fluss/room/strand2"//raum von dem aus man den fluss betreten kann
+#define DSTRAND "/d/dschungel/trintrasil/sdschungel/room/strand1"//fuehrt vom fluss nach sdschungel
+
+#define FELS "/d/dschungel/trintrasil/fluss/room/fels"//fels auf den man klettern kann und von dem aus man zur schutthalde kommt
+#define HALDE "/d/dschungel/trintrasil/fluss/room/halde"//erster raum der schutthalde
+
+#define DFLUSS4 "/d/dschungel/trintrasil/fluss/room/dfluss4"//fels im fluss auf den leichen und gegenstaende die in den fluss fallen angespuelt werden
+
+#define WFALL "/d/dschungel/trintrasil/hoehle/room/wasserfall-h"//pseudoraum wird verwendet wenn der spieler durch den wasserfall will
+
+#define STRUDEL "/d/dschungel/trintrasil/fluss/room/strudel-h"//virtueller hilfsraum wenn spieler in fluss5 in den strudel schwimmt
+
+#define TURM "/d/dschungel/trintrasil/fluss/room/turm"//felstum der aus dem fluss ragt (fluss13)
+#define TURMH "/d/dschungel/trintrasil/fluss/room/turm1-h"//pseudoraum der beim erklettern verwendet wird
+
+#define KONTROLL "/d/dschungel/trintrasil/hoehle/room/kontrollraum-h"//pseudoraum der eigentlich die flut in der hoehle steuert. wird auch zur npcentsorgung verwendet
+
+#define ROOM9 "/d/dschungel/trintrasil/dorfneu/room/room9"//erster raum zu den kannibalen
+#define ROOM12 "/d/dschungel/charon/dorfneu/room/room12"//nachbarraum dieses
+#define ROOM10 "/d/dschungel/trintrasil/dorfneu/room/room10"//nachbarraum
+
+#define AMOEBE "/d/dschungel/trintrasil/hoehle/room/amoebe"//raum in der noch nicht angeschlossenen hoehle
+#define SPALT "/d/dschungel/trintrasil/hoehle/room/spalt"//s.o.
+#define FELSH "/d/dschungel/trintrasil/hoehle/room/fels"//raum von dem aus man von der hoehle wieder auf den fluss kommt
+#define HOEHLE3 "/d/dschungel/trintrasil/hoehle/room/hoehle3"//s.o.
+
+#define FISHKILL "/d/dschungel/trintrasil/fluss/room/spellfiskill-h"//virtueller hilsraum eines kaimanspells
+#define OVERKILL "/d/dschungel/trintrasil/fluss/room/spelloverkill-h"//s.o.
+#define SPRUNG "/d/dschungel/trintrasil/fluss/room/sprung-h"//virtueller hilfsraum wenn spieler vom felsturm springt
+
+string besitzername;
+object besitzer;
+
+
+nenne_besitzer() {//testfunktion
+	
+	object gott;
+	
+	gott=find_player("gott");
+	
+	if(gott) {
+		
+		tell_object(gott, BSL(" Ein Schatten raunt: Mein Besitzer ist "
+		""+besitzername+".\n"));
+	}
+}
+
+
+setze_besitzer() {//testfunktion
+	
+	besitzer=this_player();
+	besitzername=""+this_player()->name()+"";
+	
+	shadow(besitzer, 1);
+}
+
+
+msg() {//testfunktion
+	
+	tell_object(TP, BSL("\n Ein Schatten raunt: Ich erlaube meinem Besitzer nicht zu "
+	"antworten.\n\n"));
+	return 1;
+}
+
+//extra definiert pursuer: feuer/eis/humus/wasser/wind-elementar, feuerwusel, drider 
+//rest einheitlich..
+
+/* erklaerung der einzelnen variablen:
+
+string zielraum: filename des raumes den der npc betritt
+string herkunftsraum: filename des raumes in dem sich der npc vor der bewegung befindet
+string zielsubstr: dient dazu zu ueberpruefen ob der zielraum noch im flussgebiet liegt
+string herkunftsubstr: dient zur ueberpruefung ob der npc aus einem raum im flussgebiet
+                       kommt. ist nur bei den anschlussraeumen notwendig
+string besitzerpropname: der returnwert des prop P_NAME des npcs der den schatten besitzt
+string min/out: msgin und msgout des npcs. ist notwendig wenn der npc das kontrollierte gebiet
+                verlaesst und der shadow zerstoert wird.
+*/
+
+varargs move(mixed dest, string dir) {
+	
+	string zielraum, herkunftsraum, zielsubstr, herkunftsubstr, besitzerpropname;
+	string min, mout;
+
+	object gott;//nur zu testzwecken notwendig
+
+	int elhp, elschaden, driderschaden;//int die fuer die schadensermittlung schlecht
+	                                   //wasservertraeglicher npc verwendet werden
+	
+	gott=find_player("gott");//nur zu testzwecken notwendig
+
+	zielraum=file_name(dest);
+	herkunftsraum=file_name(ENV(besitzer));
+	zielsubstr=extract(file_name(dest),13,28);
+	herkunftsubstr=extract(file_name(ENV(besitzer)),13,28);
+	besitzerpropname=besitzer->QueryProp(P_NAME);
+	min=besitzer->QueryProp(P_MSGIN);
+	mout=besitzer->QueryProp(P_MSGOUT);
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~ FLUSSBEWEGUNGEN AUS ODER IN DEN FLUSS ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+//pursuer bewegt sich komplett aus dem flussgebiet heraus ohne die vorgesehenen ausgaenge zu benutzen
+
+	if( zielsubstr!="trintrasil/fluss" && zielraum!=DSTRAND && 
+	zielraum!=WFALL && zielraum!=ROOM10 && zielraum!=ROOM12 && zielraum!=ROOM9 &&
+	zielraum!=AMOEBE && zielraum!=SPALT && zielraum!=FELSH && zielraum!=HOEHLE3 ) {
+
+//gilt fuer alle pursuer gleich..
+
+		if(gott) {
+			tell_object(gott, BSL("\n Ein Schatten raunt: Ich werde nicht mehr "
+			"gebraucht!\n\n"));
+		}
+		
+		besitzer->move(dest, M_GO,0, "verschwindet mit einem leisen Zischen",
+		"materialisiert sich mit einem leisen Zischen");
+		unshadow();
+		besitzer->SetProp("shadow(trint)", 0);//dieses prop soll sicherstellen, dass ein npc
+		                                      //nur einen shadow bekommt. wird beim
+		                                      //clonen des shadows verwendet
+		TO->remove();
+		return 1;
+	}
+
+//pursuer betritt flussgebiet vom room strand1 aus oder verlaesst es zum strand1 (dir sdschungel) usw...
+	
+	if( herkunftsraum==STRAND && zielraum==DSTRAND ) {
+		
+		if(gott) {
+			tell_object(gott, BSL("\n Ein Schatten raunt: Mein Besitzer verlaesst "
+			"meinen Zustaendigkeitsbereich.\n\n"+mout+"\n"+min+""));
+		}
+		
+		besitzer->move(dest, M_GO,0,""+mout+" nach Westen",""+min+"");
+		unshadow();
+		besitzer->SetProp("shadow(trint)", 0);
+		TO->remove();
+		return 1;
+	}
+	
+	if( herkunftsraum==STRAND && zielsubstr=="trintrasil/fluss" ) {
+		
+		if(gott) {
+			tell_object(gott, BSL("\n Ein Schatten raunt: Mein Besitzer geht "
+			"vom Strand in den Fluss.\n\n"));
+		}
+		
+		if( besitzerpropname=="Feuerelementar" ) {
+			
+			tell_room(dest, BSL("\nEin Feuerelementar geht selbstmoerderisch in "
+			"den Fluss und erlischt zischend.\n\n"));
+			besitzer->move(KONTROLL, M_GO,0,"geht selbstmoerderisch in den Fluss "
+			"und erlischt zischend","kommt sterbend herein");
+			besitzer->remove();
+			return 1;
+		}
+		
+		if( besitzerpropname=="Drider" ) {
+			
+			besitzer->move(dest, M_GO,0,"krabbelt platschend in den Fluss",
+			"schwimmt fiepend vom Strand herein");
+			return 1;
+		}
+		
+		if( besitzerpropname=="Windelementar" ) {
+			
+			besitzer->move(dest, M_GO,0,"weht auf den Fluss hinaus",
+			"weht vom Strand herein");
+			return 1;
+		}
+		
+		if( besitzerpropname=="Wasserelementar" ) {
+			
+			besitzer->move(dest, M_GO,0,"fliesst freudig plaetschernd auf den "
+			"Fluss hinaus",
+			"weht vom Strand herein");
+			return 1;
+		}
+		
+		else {
+			
+			if(gott) {
+				tell_object(gott, BSL("\n ELSE\n\n"));
+			}
+			
+			if( besitzer->is_class_member("CL_FLYING")==1 ){
+			
+				if(gott) {
+					tell_object(gott, BSL("\n FLYING\n\n"));
+				}
+				
+				besitzer->move(dest, M_GO,0,"fliegt auf den Fluss hinaus",
+				"fliegt vom Strand aus herein");
+				return 1;
+			}
+			
+			if( besitzer->is_class_member("CL_FLYING"!=1) &&
+			besitzer->is_class_member("CL_UNDEAD")==1 ){//alle Untoten ausser Vampire versinken
+				
+				if(gott) {
+					tell_object(gott, BSL("\n UNDEAD\n\n"));
+				}
+				
+				tell_room(dest, BSL("\n"+besitzer->name(WER,0)+" geht ins "
+				"Wasser und versinkt kreischend.\n\n"));
+				besitzer->move(KONTROLL, M_GO,0,"geht ins Wasser und versinkt "
+				"kreischend","kommt untot herein");
+				besitzer->remove();
+				return 1;
+			}
+			
+			if( besitzer->is_class_member("CL_FLYING")!=1 &&
+			besitzer->is_class_member("CL_UNDEAD")!=1 ) {
+				tell_object(gott, BSL("\n NICHTS "+besitzer->is_class_member("CL_UNDEAD")+"\n\n"));
+				besitzer->move(dest, M_GO,0,"geht platschend in den Fluss",
+				"schwimmt vom Strand herein");
+				return 1;
+			}
+		}
+	}
+	
+	if( (zielraum==STRAND || zielraum==ROOM9) && herkunftsubstr=="trintrasil/fluss" ) {
+		
+		if( besitzerpropname=="Windelementar" ) {
+			
+			besitzer->move(dest, M_GO,0,"schwebt ans Ufer","schwebt vom Fluss ans "
+			"Ufer");
+			return 1;
+		}
+		
+		if( besitzerpropname=="Wasserelementar" ) {
+			
+			besitzer->move(dest, M_GO,0,"fliesst plaetschernd ans Ufer","fliesst "
+			"plaetschernd vom Fluss ans Ufer");
+			return 1;
+		}
+		
+		else {
+			besitzer->move(dest, M_GO,0,"schwimmt ans Ufer","kommt aus dem Fluss "
+			"ans Ufer");
+			return 1;
+		}
+	}
+	
+//111111111111111111111111111111111 STRAND ABGESCHLOSSEN 1111111111111111111111111111111111111111111111111111	
+
+
+//22222222222222222222222222222222 FELS UND HÖHLE 222222222222222222222222222222222222222222222222222
+
+//pusuer betritt oder verlaesst fluss zum/vom fels richtung schutthalde usw..
+
+	if( (zielraum==FELS||zielraum==DFLUSS4||zielraum==FELSH) && 
+	herkunftsubstr=="trintrasil/fluss") {
+
+//erklettern dieses felsen hat gleiche meldungen wie erklettern des felsen dfluss4 oder felsh
+		
+		if( besitzerpropname=="Wasserelementar" ) {
+			
+			besitzer->move(dest, M_GO,0,"fliesst auf einen Felsen","fliesst vom "
+			"Fluss auf den Felsen");
+			return 1;
+		}
+		
+		if( besitzerpropname=="Windelementar" ) {
+			
+			besitzer->move(dest, M_GO,0,"schwebt auf einen Felsen","schwebt vom "
+			"Fluss auf den Felsen");
+			return 1;
+		}
+		
+		else {
+			besitzer->move(dest, M_GO,0,"klettert auf einen Felsen","klettert aus "
+			"dem Fluss auf den Felsen");
+			return 1;
+		}
+	}
+//verlaesst schattenkontrollbereich nach der schutthalde
+	
+	if( herkunftsraum==FELS && zielraum==HALDE ) {
+		
+		besitzer->move(dest, M_GO,0,""+mout+" die Schutthalde hinauf",""+min+"");
+		unshadow();
+		besitzer->SetProp("shadow(trint)", 0);
+		TO->remove();
+		return 1;
+	}
+	
+	if( (herkunftsraum==FELS||herkunftsraum==DFLUSS4||herkunftsraum==FELSH) && 
+	zielsubstr=="trintrasil/fluss" && zielraum!=HALDE) {
+		
+		if( besitzerpropname=="Feuerelementar" ) {
+		
+			tell_room(dest, BSL("\nEin Feuerelementar geht selbstmoerderisch in "
+			"den Fluss und erlischt zischend.\n\n"));
+			besitzer->move(KONTROLL, M_GO,0,"geht selbstmoerderisch in den Fluss "
+			"und erlischt zischend","kommt sterbend herein");
+			besitzer->remove();
+			return 1;
+		}
+			
+		if( besitzerpropname=="Wasserelementar" ) {
+			
+			besitzer->move(dest,M_GO,0,"fliesst freudig plaetschernd vom Felsen in "
+			"den Fluss","fliesst freudig plaetschernd von einem Felsen herein");
+			return 1;
+		}
+		
+		if( besitzerpropname=="Windelementar" ) {
+			
+			besitzer->move(dest,M_GO,0,"schwebt vom Felsen auf den Fluss hinaus",
+			"schwebt von einem Felsen auf den Fluss hinaus");
+			return 1;
+		}
+		
+		else {
+			if( besitzer->is_class_member("CL_FLYING")==1 ) {
+				
+				besitzer->move(dest, M_GO,0,"fliegt auf den Fluss hinaus",
+				"fliegt von einem Felsen aus herein");
+				return 1;
+			}
+			
+			if( besitzer->is_class_member("CL_FLYING")!=1 &&
+			besitzer->is_class_member("CL_UNDEAD")==1 ) {
+				
+				tell_room(dest, BSL("\n"+besitzer->name(WER,0)+" springt von "
+				"einem Fels in den Fluss und versinkt kreischend.\n\n"));
+				besitzer->move(KONTROLL, M_GO,0,"springt vom Felsen in den "
+				"Fluss und versinkt kreischend","kommt untot herein");
+				besitzer->remove();
+				return 1;
+			}
+			
+			if( besitzer->is_class_member("CL_FLYING")!=1 && 
+			besitzer->is_class_member("CL_UNDEAD")!=1 ) {
+				
+				besitzer->move(dest, M_GO,0,"springt vom Fels in den Fluss",
+				"springt von einem Felsen in den Fluss");
+				return 1;
+			}
+		}
+	}
+
+//2222222222222222222222222222222222 FELS UND HALDE ABGESCHLOSSEN 222222222222222222222222222222222222222222222222222222
+
+//pursuer betritt/verlaesst fluss zum/vom fels im fluss (wo gegenstaende angespuelt werden)
+
+//dfluss4 kann nur vom fluss aus betreten oder in richtung fluss normal verlassen werden
+//die meldungen zum betreten/verlassen dieses felsens sind gleich den meldungen des felsen 
+//bei der schutthalde
+	
+	
+//333333333333333333333333333333333 DFLUSS4 ABGESCHLOSSEN 3333333333333333333333333333333333333333333333333333	
+
+//pursuer versucht dem besitzer durch den wasserfall zu folgen..
+
+	if(zielraum==WFALL ) {
+		
+		call_out("wasserfallfunc", 18, besitzerpropname, besitzername, dest);
+		return 1;
+	}
+	
+//444444444444444444444444444444444 WASSERFALL ABGESCHLOSSEN 4444444444444444444444444444444444444444444444444	
+
+
+//55555555555555555555555555555555555 KANNIBALENDORF 5555555555555555555555555555555555555555555555555
+
+//pursuer versucht dem besitzer von/zu den kannibalen auf/vom fluss zu folgen usw..
+
+        if( herkunftsraum==ROOM9 && zielsubstr=="trintrasil/fluss" ) {
+        	
+        	if( besitzerpropname=="Drider" ) {
+        		
+        		besitzer->move(dest, M_GO,0,"krabbelt fiepend in den Fluss",
+        		"schwimmt fiepend vom Ufer herein");
+        		return 1;
+        	}
+        	
+        	if( besitzerpropname=="Wasserelementar" ) {
+        		
+        		besitzer->move(dest, M_GO,0,"fliesst freudig plaetschernd auf den "
+        		"Fluss hinaus","fliesst freudig plaetschernd auf den Fluss "
+        		"hinaus");
+        		return 1;
+        	}
+        	
+        	if( besitzerpropname=="Windelementar" ) {
+        		
+        		besitzer->move(dest,M_GO,0,"schwebt auf den Fluss hinaus",
+        		"schwebt vom Ufer herein");
+        		return 1;
+        	}
+        	
+        	if( besitzerpropname=="Feuerelementar" ) {
+		
+			tell_room(dest, BSL("\nEin Feuerelementar geht selbstmoerderisch in "
+			"den Fluss und erlischt zischend.\n\n"));
+			besitzer->move(KONTROLL, M_GO,0,"geht selbstmoerderisch in den Fluss "
+			"und erlischt zischend","kommt sterbend herein");
+			besitzer->remove();
+			return 1;
+		}
+        		
+        	else {
+        		if( besitzer->is_class_member("CL_FLYING")==1 ) {
+				
+				besitzer->move(dest, M_GO,0,"fliegt auf den Fluss hinaus",
+				"fliegt vom Ufer aus herein");
+				return 1;
+			}
+			
+			if( besitzer->is_class_member("CL_FLYING")!=1 &&
+			besitzer->is_class_member("CL_UNDEAD")==1 ) {
+				
+				tell_room(dest, BSL("\n"+besitzer->name(WER,0)+" watet vom Ufer "
+				"in den Fluss und versinkt kreischend.\n\n"));
+				besitzer->move(KONTROLL, M_GO,0,"watet in den Fluss und "
+				"versinkt kreischend","kommt untot herein");
+				besitzer->remove();
+				return 1;
+			}
+			
+			if( besitzer->is_class_member("CL_FLYING")!=1 && 
+			besitzer->is_class_member("CL_UNDEAD")!=1 ) {
+				
+				besitzer->move(dest, M_GO,0,"watet in den Fluss hinaus",
+				"schwimmt vom Ufer herein");
+				return 1;
+			}
+        	}
+        }
+        
+        if( herkunftsraum==ROOM9 && zielraum==ROOM10 ) {
+        	
+        	besitzer->move(dest, M_GO,0,""+mout+" nach Sueden",""+min+"");
+		unshadow();
+		besitzer->SetProp("shadow(trint)", 0);
+		TO->remove();
+		return 1;
+
+        }
+        
+        if( herkunftsraum==ROOM9 && zielraum==ROOM12 ) {
+        	
+        	besitzer->move(dest, M_GO,0,""+mout+" nach Westen",""+min+"");
+		unshadow();
+		besitzer->SetProp("shadow(trint)", 0);
+		TO->remove();
+		return 1;
+        }
+              
+//     if( zielraum==ROOM9 ) {//kann nur von fluss aus sein. von kannibalen aus haben 
+//pursuer keinen shadow. meldungen sind gleich wie das an land gehen bei strand2 (s.o.)
+
+
+//55555555555555555555555555555555555555 KANNIBALENDORF ABGESCHLOSSEN 5555555555555555555555555555555555555555555555555        
+
+
+//66666666666666666666666666666666666666 HOEHLE 666666666666666666666666666666666666666666666666666
+        
+//pursuer versucht dem spieler in/aus die/der felsspalte in der Hoehle zu folgen usw...
+        
+        if( zielraum==SPALT ) {//egal ob von room amoebe (dir hoehle) oder vom fels (anschlussraum zur hoehle) aus
+        	
+        	if( besitzerpropname=="Windelementar" ) {
+        		
+        		besitzer->move(dest, M_GO,0,"weht heulend in eine enge Felsspalte",
+        		"weht heulend herein");
+        		return 1;
+        	}
+        	
+        	if( besitzerpropname=="Wasserelementar" ) {
+        		
+        		besitzer->move(dest,M_GO,0,"fliesst blubbernd in eine enge Felsspalte",
+        		"fliesst blubbernd herein");
+        		return 1;
+        	}
+        	
+        	else {//fuer alle anderen gleich auf fuer cl_flying
+        		besitzer->move(dest, M_GO,0,"zwaengt sich in eine Felsspalte",
+        		"zwaengt sich herein");
+        		return 1;
+        	}
+        }
+        
+        if( zielraum==AMOEBE && herkunftsraum==SPALT ) {
+        	
+        	if( besitzerpropname=="Windelementar" ) {
+        		
+        		besitzer->move(dest, M_GO,0,"pfeift nach Suedosten aus dem Spalt",
+        		"pfeift seufzend aus einer Felsspalte herein");
+        		return 1;
+        	}
+        	
+        	if( besitzerpropname=="Wasserelementar" ) {
+        		
+        		besitzer->move(dest,M_GO,0,"fliesst nach Suedosten aus dem Spalt",
+        		"fliesst aus einer Felsspalte herein");
+        		return 1;
+        	}
+        	
+        	else {
+        		besitzer->move(dest, M_GO,0,"zwaengt sich nach Suedosten aus dem "
+        		"Spalt","kriecht aus einem Felsspalt");
+        		return 1;
+        	}
+        }
+        
+        if( zielraum==FELSH && herkunftsraum==SPALT ) {
+        	
+        	if(besitzerpropname=="Windelementar" ) {
+        		
+        		besitzer->move(dest, M_GO,0,"pfeift nach Westen aus dem Spalt",
+        		"pfeift seufzend aus einer Felsspalte herein");
+        		return 1;
+        	}
+        	
+        	if( besitzerpropname=="Wasserelementar" ) {
+        		
+        		besitzer->move(dest,M_GO,0,"fliesst nach Westen aus dem Spalt",
+        		"fliesst aus einer Felsspalte herein");
+        		return 1;
+        	}
+        	
+        	else {
+        		besitzer->move(dest, M_GO,0,"zwaengt sich nach Westen aus dem Spalt",
+        		"kriecht aus einem Felsspalt");
+        		return 1;
+        	}
+        }
+
+//meldungen zum verlassen/betreten des felsen vom/zum fluss sind gleich wie bei dfluss4 oder
+//fels (bei schutthalde) s.o.
+        
+        if( zielraum==HOEHLE3 && herkunftsraum==AMOEBE ) {
+        	
+        	besitzer->move(dest, M_GO,0,""+mout+" nach Suedosten",""+min+"");
+		unshadow();
+		besitzer->SetProp("shadow(trint)", 0);
+		TO->remove();
+		return 1;
+        }
+       
+//66666666666666666666666666666666 HOEHLE ABGESCHLOSSEN 6666666666666666666666666666666666666666666666666
+
+
+//7777777777777777777777777777777 AUSGANG BEI SPEZIELLEN ORTEN 777777777777777777777777777777777777777777
+        
+//pursuer folgt dem spieler in den strudel in raum fluss5
+        
+        if( zielraum==STRUDEL ) {
+        	
+        	call_out("strudelfunc", 3, besitzerpropname, besitzername, dest);
+        	return 1;
+        }
+        
+//der spieler klettert auf den felsturm der aus dem fluss ragt (steht in fluss13)
+        
+        if( zielraum==TURMH ) {//pursuer koennen dem Spieler nicht am Seil hinterher klettern
+        	
+        	tell_room(dest, BSL("\n"+CAP(besitzername)+" wartet unten im Fluss beim "
+        	"Felsturm.\n\n"));
+        	return 1;
+        }
+        
+        if( zielraum==TURM ) {//pursuer warten auf den Spieler im Fluss beim Felsturm.
+        	
+        	return 1;
+        }
+        
+        if( zielraum==FISHKILL||zielraum==OVERKILL ) {//diese pseudoraeume werden im kampf gegen den riesenkaiman verwendet
+        	
+        	return 1;//spieler wird nach diesen raumen in dfluss4 angespuelt. dorthin folgt dann der pusuer automatisch
+        }
+        
+        if( zielraum==SPRUNG ) {//der pseudoraum wird verwendet wenn der spieler vom felsturm spring. der pursuer befindet sich unter dem felsturm, macht den sprung also nicht mit und verschwindet
+        
+        	if(besitzerpropname=="Wasserelementar") {
+        		
+        		tell_room(ENV(besitzer), BSL("\nEin Wasserelementar vereinigt sich "
+        		"rauschend mit dem Fluss."));
+        	}
+        	
+        	if(besitzerpropname=="Windelementar") {
+        		
+        		tell_room(ENV(besitzer), BSL("\nEin Windelementar weht heulend davon."));
+        	}
+        	
+        	else {
+        		if( besitzer->is_class_member("CL_FLYING")==1 ) {
+				
+				tell_room(ENV(besitzer), BSL("\n"+CAP(besitzername)+" fliegt "
+				"davon."));
+				return 1;
+			}
+			
+			else {
+				tell_room(ENV(besitzer), BSL("\n"+CAP(besitzername)+" schwimmt "
+				"davon."));
+				return 1;
+			}
+        	}
+        	
+        	besitzer->move(KONTROLL, M_GO+ M_SILENT);
+        	besitzer->remove();
+        	return 1;
+        }
+        
+//da turm fuer pursuer nicht betretbar ist kann sprung auch nicht betreten werden
+        		
+//777777777777777777 AUSGANG BEI SPEZIELLEN ORTEN ABGESCHLOSSEN 77777777777777777777777777777777777777
+
+        
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+//~~~~~~~~~~~~~~~~~~~ FLUSSBEWEGUNGEN NORMAL AUF DEM FLUSS ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	if( zielsubstr=="trintrasil/fluss" && herkunftsubstr=="trintrasil/fluss" && 
+	zielraum!=STRUDEL && zielraum!=TURM && zielraum!=TURMH && herkunftsraum!=STRAND &&
+	herkunftsraum!=DFLUSS4 && herkunftsraum!=FELS) {
+		
+		if(!besitzerpropname) {
+			
+			tell_room(ENV(besitzer), BS("Da hat etwas unmoeglicherweise "
+			"keinen Namen! Verstaendige bitte Trintrasil!"));
+			return 1;
+		}
+		
+		else {
+			
+//eiselementar: sie schmelzen im warmen Wasser langsam...
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~			
+			if(besitzerpropname=="Eiselementar") {
+				
+				elhp=besitzer->QueryProp(P_HP);
+				elschaden=elhp/8;
+				
+				if(gott) {
+					tell_object(gott, BSL("\n Ein Schatten raunt: "
+					""+CAP(besitzername)+" mit "+elhp+" Lebenspunkten will "
+					"sich nach "+zielraum+" bewegen! Extract: "
+					""+zielsubstr+"!\n\n"));
+				}
+				
+				if(elhp<=5) {
+					
+					tell_room(dest, BS("Ein Eiselementar schmilzt wimmernd "
+					"und loest sich auf."));
+					tell_room(ENV(besitzer), BS("Ein Eiselementar schmilzt "
+					"wimmernd und loest sich auf."));
+					besitzer->move(KONTROLL, M_GO+ M_SILENT);
+					besitzer->remove();
+					return 1;
+				}
+				
+				if(elhp>5 && elschaden<5) {
+					
+					besitzer->do_damage(5);
+					besitzer->move(dest, M_GO,0, "schwimmt schmelzend davon",
+					"schwimmt schmelzend herein");
+					if(gott) {
+						tell_object(gott, BSL("\n Ein Schatten raunt: "
+						"Mein Besitzer verliert 5 Lebenspunkte."));
+					}
+					return 1;
+				}
+				
+				if(elhp>5 && elschaden>=5) {
+					
+					besitzer->do_damage(elschaden);
+					besitzer->move(dest, M_GO, 0, "schwimmt schmelzend davon",
+					"schwimmt schmelzend herein");
+					if(gott) {
+						tell_object(gott, BSL("\n Ein Schatten raunt: "
+						"Mein Besitzer verliert "+elschaden+" "
+						"Lebenspunkte."));
+					}
+					return 1;
+				}
+			}
+			
+//erzelementar: sie versinken mit einer gewissen wahrscheinlichkeit
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~			
+			if(besitzerpropname=="Erzelementar") {
+				
+				switch(random(10)) {
+					
+					case 0..8:
+					besitzer->move(dest, M_GO,0,"schwimmt muehsam davon",
+					"schwimmt muehsam herein");
+					break;
+					
+					case 9:
+					tell_room(dest, BS("Ein schweres Erzelementar versinkt "
+					"blubbernd im Fluss."));
+					tell_room(ENV(besitzer), BS("Ein schweres Erzelementar "
+					"versinkt blubbernd im Fluss."));
+					besitzer->move(KONTROLL, M_GO+ M_SILENT);
+					besitzer->remove();
+					break;
+					
+					default:
+					besitzer->move(dest, M_GO,0,"schwimmt muehsam davon",
+					"schwimmt muehsam herein");
+					return 1;
+				}
+				return 1;
+			}
+			
+//humuselementar: wird vom Fluss langsam aufgeloest			
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~			
+			if(besitzerpropname=="Humuselementar") {	
+				
+				elhp=besitzer->QueryProp(P_HP);
+				elschaden=elhp/12;
+				
+				if(elhp<=4) {
+					
+					tell_room(dest, BS("Ein Humuselementar loest sich "
+					"entgueltig im Wasser auf."));
+					tell_room(ENV(besitzer), BS("Ein Humuselementar loest "
+					"sich entgueltig im Wasser auf."));
+					besitzer->move(KONTROLL, M_GO+ M_SILENT);
+					besitzer->remove();
+					return 1;
+				}
+				
+				if(elhp>4 && elschaden<4) {
+					
+					besitzer->do_damage(4);
+					besitzer->move(dest, M_GO,0, "schwimmt sich langsam "
+					"aufloesend davon",
+					"schwimmt sich langsam aufloesend herein");
+					return 1;
+				}
+				
+				if(elhp>4 && elschaden>=4) {
+					
+					besitzer->do_damage(elschaden);
+					besitzer->move(dest, M_GO, 0, "schwimmt sich langsam "
+					"aufloesend davon",
+					"schwimmt sich langsam aufloesend herein");
+					return 1;
+				}
+			}
+
+//windelementar: windelementare fliegen ungestoert..			
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~			
+			if(besitzerpropname=="Windelementar") {
+				
+				besitzer->move(dest, M_GO,0,"weht davon","weht herein");
+				return 1;
+			}
+
+//feuerelementar: feuerelementare sollten am fluss unmoeglich sein. TT_WATER verhindert ein
+//                beschwoeren und zerstoert sich auch wenn sie einen raum mit TT_WATER
+//                betreten. ausserdem ist deren erloeschen zusaetzlich im shadow beruecksichtigt
+//                diese abfrage ist dennoch zur sicherheit hier
+                        
+                        if(besitzerpropname=="Feuerelementar") {
+                        	
+                        	tell_room(dest, BSL("\nEin Feuerelementar erlischt zischend im "
+                        	"Wasser."));
+                        	besitzer->move(KONTROLL, M_GO,0,"erlischt zischend im "
+                        	"Wasser","brennt herein");
+                        	besitzer->remove();
+                        	return 1;
+                        }
+                        
+//wasserelementar: wasserelementare koennen sich manchmal heilen..
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~			
+			if(besitzerpropname=="Wasserelementar") {
+				
+				besitzer->move(dest,M_GO,0,"fliesst freudig plaetschernd "
+				"davon","fliesst freudig plaetschernd herein");
+				
+				if( besitzer->QueryProp(P_HP)<besitzer->QueryProp(P_MAX_HP) ) {
+					
+					switch(random(5)) {
+						
+						case 0..3://nichts passiert
+						return 1;
+						break;
+						
+						case 4://elementar staerkt sich
+						tell_room(ENV(besitzer), BSL("\nEin "
+						"Wasserelementar staerkt sich mit "
+						"Flusswasser."));
+						besitzer->AddHp(10+random(10));
+						break;
+						
+						default:
+						
+						return 1;
+					}
+				}
+				return 1;
+			}
+			
+//drider: sind schlechte schwimmer und bekommen manchmal schaden..			
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~			
+			if(besitzerpropname=="Drider") {
+				
+				switch(random(5)) {
+					
+					case 0..3:
+					besitzer->move(dest, M_GO,0,"schwimmt davon",
+					"schwimmt herein");
+					break;
+					
+					case 4:
+					driderschaden=20+random(5);
+					
+					if( driderschaden>=besitzer->QueryProp(P_HP) ) {
+						
+						tell_room(dest, BS("Ein Drider ertrinkt "
+						"fiepend im Fluss."));
+						tell_room(ENV(besitzer), BS("Ein Drider ertrinkt "
+						"fiepend im Fluss."));
+						besitzer->move(KONTROLL, M_GO+ M_SILENT);
+						besitzer->remove();
+						return 1;
+					}
+					
+					else {
+						besitzer->move(dest, M_GO, 0,"schwimmt roechelnd "
+						"davon","schwimmt roechelnd herein");
+						besitzer->do_damage(driderschaden);
+						return 1;
+					}
+					break;
+					
+					default:
+					besitzer->move(dest, M_GO,0,"schwimmt davon",
+					"schimmt herein");
+					return 1;
+				}
+				return 1;
+			}
+
+//alle restlichen nicht definierten pursuernpcs (jojogeist, persoenliche npcs) schwimmen oder fliegen. untote sollten nicht moeglich sein..
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~			
+			else {
+				if( besitzer->is_class_member("CL_FLYING")==1 ) {
+					
+					besitzer->move(dest, M_GO,0,"fliegt davon",
+					"fliegt herein");
+					return 1;
+				}
+				
+				if( besitzer->is_class_member("CL_FLYING")!=1 ) {
+					
+					besitzer->move(dest, M_GO,0,"schwimmt davon","schwimmt "
+					"herein");
+					return 1;
+				}
+			}
+		}
+	}
+}
+
+
+strudelfunc(string besitzerpropname, besitzername, object dest) {//function wird aufgerufen wenn der
+                                                                 //der npc in den pseudoraum strudel will
+	if( besitzerpropname=="Windelementar" ) {
+		
+		tell_room(dest, BSL("\nEin Windelementar kann in den Strudel nicht folgen!\n"));
+		tell_room(ENV(besitzer), BSL("\nEin Windelementar schwebt heulend davon."));
+		besitzer->move(KONTROLL, M_GO+ M_SILENT );
+		besitzer->remove();
+        	return 1;
+        }
+        
+        if( besitzerpropname=="Wasserelementar" ) {
+        	
+        	tell_room(dest, BSL("\nEin Wasserelementar kann in den Strudel nicht "
+        	"folgen!\n"));
+        	tell_room(ENV(besitzer), BSL("\nEin Wasserelementar vereinigt sich plaetschernd "
+        	"mit dem Fluss."));
+        	besitzer->move(KONTROLL,M_GO+ M_SILENT );
+        	besitzer->remove();
+        	return 1;
+        }
+        
+        else {
+        	tell_room(dest, BSL("\n"+CAP(besitzername)+" versucht in den Strudel zu "
+        	"folgen und ersaeuft jaemmerlich!\n"));
+        	tell_room(ENV(besitzer), BSL("\n"+besitzername+" schwimmt in einen "
+        	"Strudel und geht sofort gurgelnd unter."));
+        	besitzer->move(KONTROLL, M_GO+M_SILENT );
+        	besitzer->remove();
+        	return 1;
+        }
+}
+
+
+wasserfallfunc(string besitzerpropname, besitzername, object dest) {
+	
+	if(besitzerpropname=="Eiselementar") {
+		
+		tell_room("/d/dschungel/trintrasil/hoehle/room/wasserfall-h", BSL("\nDu "
+		"hoerst den klirrenden Schrei eines zerbrechenden Eiselementars!\n"));
+		besitzer->move(KONTROLL, M_GO,0,"schwimmt zum Wasserfall und wird von ihm "
+		"unter Wasser gedrueckt","klirrt sterbend herein");
+		besitzer->remove();
+		return 1;
+	}
+	
+	if(besitzerpropname=="Erzelementar") {
+		
+		tell_room("/d/dschungel/trintrasil/hoehle/room/wasserfall-h",
+		BSL("\nDu hoerst das dumpfe Zerbrechen eines Erzelementars!\n"));
+		besitzer->move(KONTROLL, M_GO,0,"schwimmt zum Wasserfall und wird von ihm "
+		"unter Wasser gedrueckt","klirrt sterbend herein");
+		besitzer->remove();
+		return 1;
+	}
+	
+	if(besitzerpropname=="Windelementar") {
+		
+		besitzer->move(KONTROLL,M_GO,0,"zischt heulend davon","zischt herein");
+		besitzer->remove();
+		return 1;
+	}
+	
+	if(besitzerpropname=="Wasserelementar") {
+		
+		besitzer->move(KONTROLL,M_GO,0,"vereinigt sich plaetschernd mit dem Fluss",
+		"fliesst herein");
+		besitzer->remove();
+		return 1;
+	}
+	
+	else {
+		tell_room("/d/dschungel/trintrasil/hoehle/room/wasserfall-h",
+		BSL("\n"+CAP(besitzername)+" treibt ertrinkend an Dir vorbei!\n"));
+		besitzer->move(KONTROLL, M_GO,0,"schwimmt zum Wasserfall und wird von ihm "
+		"unter Wasser gedrueckt","schwimmt herein");
+		besitzer->remove();
+		return 1;
+	}
+}

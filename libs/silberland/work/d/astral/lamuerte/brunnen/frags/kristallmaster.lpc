@@ -1,0 +1,175 @@
+#include "../def.h"
+
+#define HIST_LOG LOGS "brufe%s.log"
+
+mapping frags = ([]);
+nosave mapping gained = ([]);
+nosave mapping used = ([]);
+mapping open = (["luftfragm":0, "wasserfra":0, "eisfragme":0, "feuerfrag":0]);
+nosave int saving = 0;
+nosave string _name_;
+nosave string *history=({});
+nosave int *hist_time=({});
+
+void create()
+{
+  if (is_clone(this_object())) 
+  {
+    destruct(this_object());
+    return;
+  }
+  seteuid(getuid(this_object()));
+  restore_object(FRAGS "kristallsave");
+}
+
+void save()
+{
+  save_object(FRAGS "kristallsave");
+}
+
+varargs int set_frags(string player, int w, int l, int e, int f, int nr)
+{
+  if( member(ALLOWED_UIDS, getuid(previous_object())) == -1)
+    return -1;
+  if (!nr) nr = 1;
+  frags += ([player: w;l;e;f;nr]);
+  save();
+  return 1;
+}
+
+mixed query_frags(string player)
+{
+  if( member(ALLOWED_UIDS, getuid(previous_object())) == -1)
+    return -1;
+  if( member(m_indices(frags), player) == -1)
+    return -2;
+  return ({frags[player,0], frags[player,1], frags[player,2], frags[player,3], frags[player,4]});
+}
+
+int query_all_frags()
+{
+  int i;
+  string *names;
+
+  if( member(ALLOWED_UIDS, getuid(previous_object())) == -1)
+    return -1;
+
+  names = sort_array(m_indices(frags), #'<);
+  printf("NAME              WASSER       LUFT         EIS       FEUER    FILLED\n"
+         "---------------------------------------------------------------------\n");
+  for( i = sizeof(names) - 1; i >= 0; i--)
+  {
+    printf("%-13s:    %6d     %6d      %6d      %6d       %1d\n",
+        capitalize(names[i]), frags[names[i],0], frags[names[i],1], 
+        frags[names[i],2], frags[names[i],3], frags[names[i],4] );
+  }
+  printf("NAME              WASSER       LUFT         EIS       FEUER    FILLED\n"
+         "---------------------------------------------------------------------\n");
+  return 1;
+}
+
+void fragused(string type, int amount)
+{
+  if (member(ALLOWED_UIDS, getuid(previous_object())) == -1)
+    return;
+  if (member(used, type))
+    used[type] = amount;
+  else
+    used[type] += amount;
+  save();
+  saving = 1;
+}
+
+void fraggained(string type, int amount)
+{
+  if (member(ALLOWED_UIDS, getuid(previous_object())) == -1)
+    return;
+  if (member(gained, type))
+    gained[type] = amount;
+  else
+    gained[type] += amount;
+  save();
+  saving = 1;
+}
+
+void write_frag_log()
+{
+  open["wasserfra"] += gained["wasserfra"] - used["wasserfra"];
+  open["luftfragm"] += gained["luftfragm"] - used["luftfragm"];
+  open["eisfragme"] += gained["eisfragme"] - used["eisfragme"];
+  open["feuerfrag"] += gained["feuerfrag"] - used["feuerfrag"];
+  write_file(LOGS "frag_consistency", sprintf(
+      "[%s] Wasser: %d/%d->%d Luft: %d/%d->%d Eis: %d/%d->%d Feuer: %d/%d->%d\n",
+      dtime(),
+      gained["wasserfra"], used["wasserfra"], open["wasserfra"],
+      gained["luftfragm"], used["luftfragm"], open["luftfragm"],
+      gained["eisfragme"], used["eisfragme"], open["eisfragme"],
+      gained["feuerfrag"], used["feuerfrag"], open["feuerfrag"]));
+  gained = ([]);
+  used = ([]);
+  save();
+}
+
+void remove()
+{
+  if (saving)
+    write_frag_log();
+  destruct(this_object());
+}
+
+void reset()
+{
+  if (saving)
+    write_frag_log();
+  saving = 0;
+}
+
+void Channel(string msg) 
+{
+  CHMASTER->join("Brunnen", TO);
+  CHMASTER->send("Brunnen", "", msg, MSG_SAY);
+} 
+
+string _query_name()
+{
+  return "";
+}
+
+varargs int AddHistory(string presay, string msg, int invis, int emote, 
+    string emote_string) 
+{
+  int i;
+  
+  if(!emote) emote=0;
+  if(!emote_string) emote_string=" ";
+  if ( sizeof(history) > 50 )
+  {
+    history=history[1..<1];
+    hist_time=hist_time[1..<1];
+  }
+  history+=({implode(({presay, msg, to_string(invis),to_string(emote), 
+          emote_string}), "&&*%%")});
+  hist_time+=({time()});
+  //    " &&*%% emotestet &&*%% -1&&*%% 1 &&*%% <NK:Todesengel Angrox %s> "
+  //    
+    if(!emote)
+      write_file(sprintf(HIST_LOG,  dtime()[13..16]), BS(sprintf("%s - %s%s", dtime(time()), 
+         presay, msg)));
+    else 
+      write_file(sprintf(HIST_LOG,  dtime()[13..16]), BS(sprintf("%s - %s", dtime(time()), 
+              sprintf(emote_string, msg))));
+  return 1;
+}
+
+varargs mixed QueryHistory(int lines) 
+{
+  int max, max_size, from;
+  if(!lines) lines=10;
+  max_size=sizeof(hist_time);
+  if(max_size < lines)
+    lines=max_size;
+  from=max_size-lines;
+  return ({hist_time[from..],history[from..]}); 
+}
+
+string name() { return _name_ ? _name_ : "<Brunnen>"; }

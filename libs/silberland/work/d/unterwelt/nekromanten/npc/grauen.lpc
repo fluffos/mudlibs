@@ -1,0 +1,173 @@
+// 24.09.2003 Archon@WL: - erstellt 
+/*
+ Rev 1.1 15.10.2003 Archon: fuer sl ueberarbeitet
+*/
+
+
+inherit "std/npc";
+#include <combat.h>
+#include <moving.h>
+#include "../def.h" 
+
+void create()
+{
+  if (!is_clone(ME)) return;
+  ::create();    
+
+  create_default_npc(23);
+
+  SetProp(P_LONG,"Vor Dir ragt ein halb durchscheinendes humanoides Wesen auf. "
+                 "Besonders auffallend "
+                 "ist sein grosses weit aufstehendes Maul, welches alles in "
+                 "sich hinein zu saugen scheint. Zwei kraeftige Arme mit riesigen "
+                 "Pranken zeugen davon, dass man es nicht auf einen Kampf mit "
+                 "diesem Wesen ankommen lassen sollte. Das Wesen besitzt keine "
+                 "Augen.");
+  AddDetail(({"maul"}),
+    "Der Maul ist weit aufgerissen.");
+  AddDetail(({"arm","arme","muskel","muskeln","muskelmassen"}),
+    "Die Arme sind mit gewaltigen Muskelmassen umspannt.");
+  AddDetail(({"pranke","pranken","kralle","krallen"}),
+    "An den Pranken befinden sich scharfe Krallen.");
+
+  SetProp(P_NAME,"Grauen");
+  SetProp(P_SHORT,"Ein unersaettliches Grauen");
+  SetProp(P_GENDER,NEUTER);
+  SetProp(P_RACE,"Daemon");
+  
+  SetProp(P_ALIGN, -1000);
+  AddClass(CL_UNDEAD); 
+  SetProp(P_BODY, 100);
+  SetProp(P_MAX_HP, 900);
+  SetProp(P_MAX_SP, 1);
+  SetProp(P_HANDS, ({ " mit scharfen Krallen", 240, ({ DT_UNHOLY }) }) );
+  SetProp(P_AGGRESSIVE, ([ 0:1, P_GUILD: (["nekromanten":0.0]) ]));
+  SetProp(P_NOCORPSE, 1);
+  SetProp(P_XP,QueryProp(P_XP)*2);
+  SetProp(P_DIE_MSG, " zerfaellt zu Staub.\n");
+  SetProp(P_RESISTANCE_STRENGTHS,([ DT_MAGIC     :  -0.6,
+                                    DT_HOLY      :   0.6,
+                                    DT_UNHOLY    :  -0.9,
+                                    DT_POISON    :  -1.0,
+                                    DT_SOUND     :  -1.0,
+                                    DT_TERROR    :  -0.8,
+                                    DT_LIGHT     :  -1.0 ]));
+  AddId(({"grauen","monster"}));
+}
+
+void iss_enemy(object enemy)
+{
+  object ob;
+  int i,s,l,org;
+  string was;
+  mixed ret;
+  
+  i=enemy->QueryAttribute(A_INT);
+  s=enemy->QueryAttribute(A_STR);
+  l=enemy->QueryProp(P_LEVEL);
+  if (l<20) return;
+  if (i+s<20) return;
+  ob=S_STANDARD->present_clone(OBJ "grauen_invis",enemy);
+  if (!objectp(ob))
+  {
+    ob=clone_object(OBJ "grauen_invis");
+    ob->move(enemy,M_SILENT|M_NOCHECK);
+  }
+  if (random(100)>49 && i>5) 
+    was=A_INT; 
+  else if (s>5)
+    was=A_STR;  
+  else
+    was=A_INT;
+  ret=ob->QueryProp(P_X_ATTR_MOD);
+  if (!mappingp(ret)) 
+    ret=([was:-1]);
+  else
+  {
+    org=ret[was];
+    org--;
+    ret[was]=org;
+  }
+  ob->SetProp(P_X_ATTR_MOD,ret);
+  ob->set_owner(enemy);
+  tell_room(environment(ME),break_string(
+    "Das Grauen springt "+enemy->name(WEN,1)+" an und lutscht an "
+    +enemy->QueryPronoun(WEM)+"."),({enemy}));
+  tell_object(enemy,
+    "Das Grauen springt Dich an und lutscht an Dir. Dir wird ganz komisch.\n");
+}
+
+int IsFood(object ob)
+{
+  return (member(inherit_list(ob), "std/food.lpc") != -1);
+}
+
+int IsBehaelter(object ob)
+{
+  if (ob->QueryProp(P_NODROP)) return 0;
+  if (ob->QueryProp(P_NEVERDROP)) return 0;
+  return (member(inherit_list(ob), "std/container.lpc") != -1);
+}
+
+void zerstoere(object ob,object enemy)
+{
+  tell_room(environment(ME),break_string(
+    "Das Grauen entreisst "+enemy->name(WEN,1)+" "+ob->name(WEN,0)+
+    " und verschlingt "+ob->QueryPronoun(WEN)+"."),({enemy}));
+  tell_object(enemy,break_string(
+    "Das Grauen entreisst Dir "+ob->name(WEN,0)+
+    " und verschlingt "+ob->QueryPronoun(WEN)+"."));
+  ob->remove(1);
+}
+
+void move_env(object ob,object env)
+{
+  ob->move(env,M_NOCHECK);
+}
+
+void zerfetze(object ob,object enemy)
+{
+  mixed inv;
+  tell_room(environment(ME),break_string(
+    "Das Grauen entreisst "+enemy->name(WEN,1)+" "+ob->name(WEN,0)+
+    "und zerfetzt "+ob->QueryPronoun(WEN)+" auf der Suche nach essbarem."),({enemy}));
+  tell_object(enemy,break_string(
+    "Das Grauen entreisst Dir "+ob->name(WEN,0)+
+    "und zerfetzt "+ob->QueryPronoun(WEN)+" auf der Suche nach essbarem."));
+  inv=all_inventory(ob);
+  map_array(inv,#'move_env,environment(ME));
+  ob->remove(1);
+}
+
+void suche_essen(object enemy)
+{
+  mixed inv,zw;
+  inv=all_inventory(enemy);
+  if (!IsEnemy(enemy))
+    enemy->Kill(ME);
+  if (!sizeof(inv) || !random(3)) 
+    return iss_enemy(enemy);
+  zw=filter_array(inv,#'IsFood);
+  if (sizeof(zw)) return zerstoere(zw[random(sizeof(zw))],enemy);
+  zw=filter_array(inv,#'IsBehaelter);
+  if (sizeof(zw) && random(2)) return zerfetze(zw[random(sizeof(zw))],enemy);
+  iss_enemy(enemy);
+}
+
+void Attack(object enemy)
+{
+  if (QueryProp(P_BLIND)) //hat keine Augen mehr
+    SetProp(P_BLIND,0);
+  if (!random(3))
+    return suche_essen(enemy);
+  ::Attack(enemy);
+}
+
+int Defend(int dam, string *dam_type_liste, int spell, object enemy)
+{
+  if (enemy == ME)
+    return ::Defend(0, dam_type_liste, spell, enemy);
+  if (QueryProp(P_BLIND)) //hat keine Augen mehr
+    SetProp(P_BLIND,0);
+  return ::Defend(dam, dam_type_liste, spell, enemy);
+}

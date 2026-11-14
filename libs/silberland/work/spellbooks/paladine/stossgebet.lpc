@@ -1,0 +1,104 @@
+// SilberLand MUDlibstossgebet.c
+//
+// spellbooks/paladine/stossgebet.c
+//
+// $Date: 2003/07/09 11:39:22 $
+/* $Revision: 1.1 $
+ * $Log: stossgebet.c,v $
+ * Revision 1.1  2003/07/09 11:39:22  Angrox
+ * Initial revision
+ *
+ */
+// Prototypen
+int stossgebet(object caster, mapping sinfo);
+int stossgebet_endmsg(object caster);
+int stossgebet_func(int poisondeath);
+
+
+int stossgebet(object caster, mapping sinfo) {
+  int suc, offset;
+  object obj;
+
+  if (caster->QueryProp(P_HP) > caster->QueryProp(P_MAX_HP)/3) {
+    Message(caster, 0, BS(
+      "Du bist in keiner Situation groesster Not, wo Dusty Dir ihre grosse "
+      "Macht und Hilfe geben kann! Erflehe Dustys Macht nicht "
+      "so leichtfertig, Paladin!"),0);
+// angrox, da muessen wir mal schauen. die ausgaben sind verwirrend,
+// weil es eigentlich gar kein misserfolg war ...
+    DoFailure(caster, 1);
+    return 0;
+  }
+  if(interactive(caster) && GetAlign(caster)<0) {
+    write("Frevler! Mit Deiner Gesinnung wird Dusty Dich NIE erhoeren!\n");
+    DoFailure(caster, 1);
+    return 0;
+  }
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  Message(caster, 0, "Du breitest Deine Arme aus und betest zu Dusty!\n", 0);
+  Message(caster, 0, BSA(sprintf("Herrin Dusty, erhoehre %s und wappne "
+      +"mich gegen den Tod, auf dass ich Deine Macht und Herrlichkeit "
+      +"verkuenden kann! Ehre sei Dir, oh Dusty! Ehre! Ehre! Ehre!\n",
+      diener[1][caster->QueryProp(P_GENDER)]),"Du rufst: "), 0);
+  Message(caster, 0, BSA(sprintf("Herrin Dusty, erhoehre %s und wappne "
+      +"mich gegen den Tod, auf dass ich Deine Macht und Herrlichkeit "
+      +"verkuenden kann! Ehre sei Dir, oh Dusty! Ehre! Ehre! Ehre!\n",
+      diener[1][caster->QueryProp(P_GENDER)]),caster->Name(WER)+
+      " ruft: "), 3);
+  //caster->reduce_hit_point(random(30)+1);
+  if((suc=SpellSuccess(caster, sinfo))<=0) {
+    if(suc<-3000) {
+//      DoFailure(caster, 1);
+      call_out("DoFakeDeath",0,caster);
+    } else {
+      Message(caster, 0, BS("Dusty erhoert Dich nicht!\n"), 0);
+      Message(caster, 0, BS("Nichts passiert!\n"), 3);
+    }
+    return MISSERFOLG;
+  }
+  offset=6+DoModificationByAlign((int)25*suc/MAX_ABILITY, caster);
+  if(offset<10) offset=10;
+  if(offset>40) offset=40;
+  caster->SetProp(P_TMP_DIE_HOOK, ({time()+offset, TO, "stossgebet_func"}));
+  call_out("stossgebet_endmsg", offset-2, caster);
+
+  // ZUM LOGGEN DER SPELLSTAERKE
+  if(enable_spell_log)
+    write_file("/gilden/paladine/spells/stossgebet",
+        sprintf("CST: %O, CA: %d, suc: %d, offset: %d\n",
+        caster, caster->QueryProp(P_ALIGN), suc, offset ));
+  // ----------------------------
+  Message(caster, 0, BS("Ploetzlich bist Du von einer hellsilbernen Aura "
+      +"umgeben! Dank Dustys Macht bist Du nun fuer kurze Zeit im Kampf "
+      "unsterblich!"
+      +" Lob sei Dusty! Lob! Lob! Lob!\n"), 0);
+  Message(caster, 0, BS(sprintf("%s ist ploetzlich von einer hellsilbernen "
+      +"Aura umgeben.", caster->Name(WER))), 3);
+  return ERFOLG;
+}
+
+int stossgebet_endmsg(object caster) {
+  if (!objectp(caster)) return 0;         // Woody (981122)
+  if(interactive(caster) && find_player(getuid(caster)))
+    tell_object(caster, "Du bist wieder sterblich, Paladin!\n");
+  return 1;
+}
+
+int stossgebet_func(int poisondeath) {
+  if(living(PO)) {
+    Message(PO, 0, BS(
+      "Du spuerst einen stechenden Schmerz in Deinem Herzen. Doch sofort "
+      "erscheint Dusty in Deinem Geist und Dir wird ganz warm ums Herz. "
+      "Dusty beschuetzt Dich und stellt den Kampf sofort ein!\n"), 0);
+    PO->AddHP(random((int)(PO->QueryProp(P_ALIGN)/25)));
+  }
+  return 1;
+}
+
+
+

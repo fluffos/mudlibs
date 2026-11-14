@@ -1,0 +1,271 @@
+/* a finger
+ * Original (c) 14.03.1993 by Taube @Nightfall
+ * Umsetzung fuer Morgengrauen 09.08.1993 by Loco
+ * Version MG 1.10 deutsch.
+
+   Verwendung ausserhalb von Morgengrauen ist gestattet unter folgenden
+   Bedingungen:
+   - Benutzung erfolgt auf eigene Gefahr. Jegliche Verantwortung wird
+     abgelehnt.
+   - Auch in veraenderten oder abgeleiteten Objekten muss ein Hinweis auf
+     die Herkunft erhalten bleiben.
+   Ein Update-Service besteht nicht.
+
+ * 29.Okt 1993 Seherversion.
+ * spaeter auch fuer externen Aufruf verwendbar gemacht
+ * 13.Okt .plan und .project koennen auch in ~loco/plans sein.
+ * 15.Jan 1994 angepasst an neues Speicherformat
+ * 02-05.Dez94 -n, -p
+ *
+ * Gelegentlich minor changes, zuletzt 04.Okt.95
+ */
+
+inherit "/std/thing";
+
+#include <config.h>
+#include <properties.h>
+#include <wizlevels.h>
+
+#define HBINT    2   /* interval between two heart_beats in seconds */
+#define MINIDLE 60   /* minimum idle time in seconds to be stated idle */
+#define TP this_player()
+#define wiz (local && IS_LEARNER(TP))
+#define seer (local && IS_SEER(TP))
+
+mapping properties;
+int age;
+
+
+create()
+{
+  (::create());
+  SetProp(P_IDS,({"finger","tfinger"}));
+  SetProp(P_SHORT,"Ein Finger");
+  SetProp(P_NAME,"Finger");
+  SetProp(P_GENDER,1);
+  /* SetProp(P_LONG,) removed, see QueryLong() below. */
+  SetProp(P_VALUE,0);
+  SetProp(P_AUTOLOADOBJ, 1);
+  SetProp(P_NOBUY,1);
+  SetProp(P_NODROP,1);
+  seteuid(getuid());
+}
+
+init()
+{
+  (::init());
+  if(this_player() == environment() && IS_SEER(this_player())) {
+    add_action("Finger", "tfinger");
+    add_action("Finger","finger");
+  }
+}
+
+long()
+{
+  return
+"Mit dem Finger kannst Du ein paar Informationen auch ueber ausgeloggte Spieler\n\
+abfragen. Befehl ist:\n\
+tfinger <name> oder finger <name>\n";
+}
+
+Finger(string str)
+{
+  if(!str || str=="") { notify_fail("Wen denn?\n"); return 0; }
+  else
+    return finger_single(str,1);
+}
+
+varargs finger_single(string str,int local)
+{
+  mixed  *userinfo;
+  string ip,text,ipnum,filename;
+  int wizlevel,playerlevel,idle,pos,tmp,noplan,last;
+  mixed h,data;
+  object player;
+  
+  /*DEBUG###  tell_object((find_player("loco")||this_object()),"Finger request: '"+str+"'("+local+")\n");/**/
+  str=lower_case(str);
+  text="";
+  
+  h=new_explode(str," ");
+  if (member(h,"-n")>=0) noplan=1;
+  if (member(h,"-p")>=0) noplan=0;
+  h=(h-({"-n","-p"}));
+  if (!sizeof(h)) {
+    text="Du solltest schon sagen, wer Dich interessiert!\n";
+    if (local) return write(text),0;
+    else return text;
+  }
+  str=h[0];
+  if (str[0]<'a' || str[0]>'z') {
+    text="Also, so ("+str+") heisst bestimmt kein Spieler hier!\n";
+    if (local) return write(text),0;
+    else return text;
+  }
+  
+  /* does this player exist? */
+  userinfo=MASTER->get_userinfo(str);
+  player=find_player(str);
+  
+  if(!userinfo && !player) {
+    text="Hmm... diesen Namen gibt es in Morgengrauen nicht.\n";
+    if ("/secure/master"->QueryBanished(str))
+      text="Hoppla - dieser Name ist reserviert oder gesperrt (\"gebanisht\") !\n";
+    if (local) return write(text),0;
+    else return text;
+  }
+  
+  if (player)
+    properties=player->QueryProperties();
+  else
+    restore_object("/save/"+str[0..0]+"/"+str);
+  if (!properties)
+  {
+    text+="Mist!!! Das Einlesen der Daten klappt nicht wie es soll :-(\n";
+    properties=0;
+    if (!local)
+      return text;
+    write(text);
+    return 1;
+  }
+  ip=properties[P_CALLED_FROM_IP];
+  if(player)
+  {
+    if (ipnum=query_ip_number(player))
+    {
+      ip=query_ip_name(player);
+      if ((idle=query_idle(player))<MINIDLE)
+	idle=0;
+    }
+    age=player->QueryProp(P_AGE);
+  }
+  else
+    // idle=file_date("/save/"+str[0..0]+"/"+str+".o");
+    idle=properties[P_LAST_LOGOUT];
+
+  wizlevel=query_wiz_level(str);
+  last=properties[P_LAST_LOGOUT]||file_time("/save/"+str[0..0]+"/"+str+".o");
+  
+  /* output routine for all */
+  if(player)
+  {
+    if(ipnum && (wiz || !(player->QueryProp(P_INVIS))))
+    {
+      text+=capitalize(str)+" ist eingeloggt,\n"+
+	"und zwar von: "+
+	(wiz ? (ip+" ("+ipnum+") ["+country(ip)+"]") : country(ip))+".\n";
+      if(idle)
+	text+="Idle-Zeit: "+timediff(idle)+"\n";
+    }
+    else
+      text+=capitalize(str)+" ist nicht eingeloggt.\nZuletzt eingeloggt von: "+
+	(wiz ? ip+" ["+country(ip)+"].\n" : country(ip)+"\n")+
+	"Zuletzt ausgeloggt: "+dtime(last)+" ("+timediff(time()-last)+")\n";
+  }
+  else
+  {
+    text+=capitalize(str)+" ist nicht eingeloggt.\nZuletzt eingeloggt von: "+
+      (wiz ? ip+" ["+country(ip)+"].\n" : country(ip)+"\n")+
+      "Zuletzt ausgeloggt: "+dtime(last)+" ("+timediff(time()-last)+")\n";
+  }
+  text+="Voller Name: "+(((h=properties[P_PRESAY]) && h!="") ? h+" " : "")+
+    capitalize((h=properties[P_NAME]) ? h : str)+" "+
+     ((h=properties[P_TITLE]) ? h :
+    ((mappingp(h=properties["guild_title"]) && (h=(h[properties[P_GUILD]?properties[P_GUILD]:"abenteurer"])) ) ? h : "") )
+       +"\n";
+  if (properties[P_GHOST]) text+="Hoppla, ein Geist!\n";
+  text+="Rasse: "+((h=properties[P_RACE]) ? h :
+		   ( (userinfo && pointerp(userinfo) && sizeof(userinfo)>4 &&
+		      stringp(userinfo[4]) &&
+		      sizeof(h=explode(userinfo[4],"/"))>2 ) ?
+		     (((h=capitalize(h[2]))=="Human") ?
+		      "Mensch" : (h=="Dwarf" ? "Zwerg" : h)) : "<keine>"))+
+		      ",  Gilde: "+
+		     ((h=properties[P_GUILD])?capitalize(h):"Abenteurer")+
+		      ",  Geschlecht: "+({"neutral ?!","maennlich","weiblich","<verdammt seltsam>"})[properties[P_GENDER]]+
+		      (seer ? "\nAlter: "+timediff(age*HBINT) : "")+
+		      (wizlevel>=10?"   Magierlevel: "+wizlevel:
+		       ("   Spielerlevel: "+properties[P_LEVEL]+( wizlevel ? ", Seher" : "" )))+
+			 (wiz ? ("\nE-Mail-Adresse: "+((h=properties[P_MAILADDR]) ? h : "keine")+"\n") : "\n");
+  if (properties[P_MARRIED])
+    text+="Verheiratet mit: "+capitalize(properties[P_MARRIED])+"\n";
+  if (properties[P_AWAY])
+    text+="z.Z. abwesend, Grund  : "+properties[P_AWAY]+"\n";
+  if (h=properties[P_TESTPLAYER])
+  {
+    text+=capitalize(str)+" ist Testspieler";
+    if (stringp(h)) text+=" ("+h+")";
+    text+=".\n";
+  }
+  if ( h=properties[P_SECOND])
+  {
+    text+=capitalize(str)+" ist Zweitspieler";
+    if (stringp(h)) text+=" ("+h+")";
+    text+=".\n";
+  }
+  if (properties[P_DEADS])
+  {
+    text+="Seit dem 30.11.'94 bereits "+properties[P_DEADS]+" mal gestorben\n";
+  }
+  if (/*wiz && */userinfo)
+  {
+    data=userinfo[3];
+    if (sizeof(data)) 
+      text+="Regionsmagier von     : "+implode(map_array(data,#'capitalize),", ")+".\n";
+    data="/secure/master"->get_domain_homes(str);
+    if (sizeof(data))
+      text+="Regionsmitarbeiter von: "+implode(map_array(data,#'capitalize),", ")+".\n";
+    }
+  filename="/players/"+str+"/.project";
+  if(file_size(filename)>=0)
+    text+="Projekt: "+explode(read_file(filename), "\n")[0]+"\n";
+  else
+  {
+    filename="/p/service/loco/plans/"+str+".project";
+    if(file_size(filename)>=0)
+      text+="Projekt: "+explode(read_file(filename), "\n")[0]+"\n";
+  }
+  if (seer && !noplan)
+  {
+    filename="/players/"+str+"/.plan";
+    if(file_size(filename)>=0)
+      text+="Plan:\n"+read_file(filename);
+    else
+    {
+      filename="/p/service/loco/plans/"+str+".plan";
+      if(file_size(filename)>=0)
+	text+="Plan:\n"+read_file(filename);
+      else 
+	text+="Keine .plan-Datei.\n";
+    }
+  }
+  properties=0;
+  if (!local)
+    return text;
+  write(text);
+  return 1;
+}
+
+
+string timediff(int time)
+{
+  string ret;
+  
+  ret="";
+  if(time>=86400) {
+    ret+=time/86400+"d ";
+    time%=86400;
+  }
+  if(time<36000) ret+="0";
+  ret+=time/3600+":";
+  time%=3600;
+  if(time<600) ret+="0";
+  ret+=time/60+":";
+  time%=60;
+  if(time<10) ret+="0";
+  ret+=time+"";
+  return ret;
+}
+
+
+

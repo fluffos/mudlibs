@@ -1,0 +1,204 @@
+/*
+ * Schleier des Val Tkro Tthar
+ *
+ * Ein dunkler Schleier umgibt ein Spieler
+ * Dieser Schuetzt vor Angriffen -> 95% Schaden
+ * Wird ein Angriff mittels der Typen DT_HOLY, DT_LIGHT, DT_MAGIC, DT_FIRE 
+ * gefuehrt, wird der Schaden  wie folgt vermindert:
+ *   DT_HOLY:  62.5%
+ *   DT_LIGHT: 50.0%
+ *   DT_UNHOLY:37.5%
+ *   DT_FIRE:  20.0%
+ *   DT_MAGIC: 10.0%
+ *
+ *
+ * Kosten: 50 MP
+ * Level : 3 
+ * Schutz: variabel
+ * Objekt: /gilden/nekromanten/obj/temp
+ *
+ * Skillpunktefaehig (Schutz,Schutzdauer)
+ *
+ * Status: anschlussreif
+ *
+ */
+//13.08.2003 Archon: sinfo uebergabe, skillpunkte
+
+mixed prep_schutz(object caster, mapping sinfo) 
+{
+  mixed h;
+  if(h=caster->QueryProp(P_TMP_DEFEND_HOOK)) 
+  {
+    if(h[1]==TO && h[2]=="nekro_schutz") 
+    {
+      if(h[0]>=time()) 
+      {
+        write(BSC(sprintf("%s Du hast schon einen Schutz! Geh und opfere "
+                "unschuldige Leben!", random_fluch())));
+        return 0;
+      }
+    }
+    else 
+    {
+      return write("Etwas schuetzt Dich schon! Aeusserst seltsam!\n"), 0;
+    }
+  }
+  sinfo[SI_RAW_SPELLCOST] -= get_skillpoints(caster,"schleier des val-tkro-tthar");
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+      printf(sinfo[SI_SP_LOW_MSG]);
+      return 0;
+  }
+  tell_room(ENV(caster), BS(sprintf("%s verfaellt in einen leisen Gesang, "
+          "der Dich froesteln laesst!", caster->Name(WER))), ({caster}));
+  return sinfo;
+}
+
+int schutz(object caster, mapping sinfo) 
+{
+  int suc, s_time, skp;
+  mixed h;
+  mapping env, env2;
+  object ob,maske;
+
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+      printf(sinfo[SI_SP_LOW_MSG]);
+      return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+
+  if((suc=SpellSuccess(caster,sinfo))<=0) 
+  {
+    tell_room(ENV(caster), BS(sprintf("Der Gesang von %s verebbt. Nichts "
+            "passiert!", caster->name(WEM))), ({caster}));
+    write(BSC(sprintf("%s Nichts passiert!", random_fluch())));
+    return MISSERFOLG;
+  }
+  if(!present(NEKRO_TEMP_OBJ, ENV(caster)) && !present("\ntemp", ENV(caster)))
+  {
+    if(mappingp(env=ENV(caster)->QueryProp(P_ENVIRONMENT))) 
+    {
+      if(env[ENV_TEMPERATURE]) 
+      {
+        env2=copy_mapping(env);
+        env2[ENV_TEMPERATURE]-=(random(4)+1);
+        ob=clone_object(OBJ "temp");
+        ob->move(ENV(caster), M_NOCHECK);
+        ob->SetVariables(env2,env);
+      }
+    }
+  } 
+  if(mappingp(env2)) 
+  {
+    write(BSC("Mit einem Schlag kuehlt die Umgebung ab, und ein dunkler "
+        "Schleier umgibt Dich."));
+    tell_room(ENV(caster), BS(sprintf("Mit einem Schlag kuehlt die Umgebung "
+          "ab, und ein dunkler Schleier senkt sich auf %s herab!", 
+          caster->Name(WEN))), ({caster}));
+  }
+  else 
+  {
+    write(BS("Wie aus dem Nichts umgibt Dich ein dunkler Schleier."));
+    tell_room(ENV(caster), BS(sprintf("Ploetzlich senkt sich ein dunkler "
+            "Schleier auf %s herab!", caster->Name(WEN))), ({caster}));
+  }
+
+  s_time=25+random(25)
+         +2*caster->QueryProp(P_GUILD_LEVEL)
+         +caster->QueryProp(P_GUILD_CIRCLE)
+         -GetAlign(caster)/30
+         +100*suc/MAX_ABILITY;  // 32 ... 130 .... 200
+  s_time=DoModificationByAlign(s_time, caster);
+  skp=get_skillpoints(caster,"schleicher des val tkro tthar");
+  s_time=get_dam_with_skillpoints(s_time,skp); //selbe formel wie bei dam ...
+  if (s_time<30) s_time=30;
+  if (s_time>300) s_time=300;
+  caster->SetProp(P_TMP_DEFEND_HOOK, ({s_time+time(), TO, "nekro_schutz"}));
+  call_out("schutz_msg", s_time+1, caster);
+  maske=present(NEKRO_GUILDITEM_ID, caster);
+  if(maske)
+    maske->RegisterSpellEffect(1);
+  UseBlood();
+
+  if(get_skillpoints(caster,"schleier des val-tkro-tthar") > 9) {
+    write(BS("Aus deinem Schleier loesen sich immer wieder abschaeulich verzerrte Albtraumfratzen, die um "
+             "dich herum rasen."));
+    say(BS("In dem dunklen Schleier um " + caster->name(WEN, 1) + " zeichnen sich abschaeulich verzerrten "
+           "Albtraumfratzen. Komm " + caster->QueryPronoun(WEM) + " besser nicht zu nahe!"));
+  }
+
+  return ERFOLG;
+}
+
+void schutz_msg(object caster) 
+{
+  mixed h;
+  object maske;
+  if (!objectp(caster)) return;  
+  if (h=caster->QueryProp(P_TMP_DEFEND_HOOK)) 
+  {
+    if(h[1]==TO && h[2]=="nekro_schutz") 
+    {
+      caster->SetProp(P_TMP_DEFEND_HOOK, 0);
+    }
+  }
+  tell_object(caster, BSC(sprintf("%s Dein dunkler Schleier verfliegt!", 
+          random_fluch())));
+  tell_room(ENV(caster), BS(sprintf("Der dunkle Schleier, der ueber %s "
+          "liegt, lueftet sich!", caster->name(WEM))), ({caster}));
+  maske=present(NEKRO_GUILDITEM_ID, caster);
+  if(maske)
+    maske->DeRegisterSpellEffect(1);
+  return;
+}
+
+mixed nekro_schutz(int dam, mixed dam_type, mixed spell, object enemy)
+{
+  int nr_damtypes, dam_nr, original_dam, reflect_dam, skp;
+  object pl;
+  mapping sinfo;
+
+  pl=previous_object(); //der spieler - PL,ME sind nicht korrekt gesetzt
+
+  original_dam = dam;
+
+  dam_nr=0;
+  if (!pointerp(dam_type))
+    dam_type=({dam_type});
+  nr_damtypes=4*sizeof(dam_type);
+  if (objectp(pl))
+  {
+    skp=get_skillpoints(pl,"schleier des val-tkro-tthar");
+    dam=(int)(dam*(0.95 - (skp/100.0)));
+    dam-=get_schutz_with_skillpoints(dam,skp);
+  }  else {
+    dam = (int)(dam*0.95);
+  }
+  
+                                                //0skp, Human/Undead, 10skp Human/Undead
+  if(member(dam_type, DT_HOLY)!=-1) dam_nr+=5;   //       44%   58%           40%   52%
+  if(member(dam_type, DT_LIGHT)!=-1) dam_nr+=4;  //       47%   61%           42%   55%
+  if(member(dam_type, DT_UNHOLY)!=-1) dam_nr+=3; //       44%   20%           40%   18%
+  if(member(dam_type, DT_FIRE)!=-1) dam_nr+=2;   //       71%   85%           64%   76%
+  if(member(dam_type, DT_MAGIC)!=-1) dam_nr+=1;  //       83%   66%           74%   59%
+  if(dam_nr)
+    dam-=(dam/2)*dam_nr/nr_damtypes;
+
+  if(skp>9 && !random(5)) {
+    tell_room(ENV(pl), BS(sprintf("Eine albtraumhafte Fratze loest sich aus dem dunklen Schleier um %s und rast auf %s zu.", 
+                                  pl->name(WEM, 1), enemy->name(WEN, 1))), ({pl}));
+    tell_object(pl, BS(sprintf("Eine geisterhafte Albtraumfratze loest sich aus deinem Schleier und rast auf %s zu.",
+                                enemy->name(WEN, 1))));
+
+    
+    sinfo = ([SI_MAX_DAMAGE: 400]);
+    // reflektier den absorbierten schaden
+    reflect_dam = original_dam - dam;
+    TryAttackSpell(enemy, reflect_dam + random(reflect_dam*((pl->QueryProp(P_GUILD_LEVEL)-1)*7 + pl->QueryProp(P_GUILD_CIRCLE))/100), 
+                    DT_TERROR, ([SP_NAME:"Albtraum", SP_SHOW_DAMAGE:1, SP_RECURSIVE: 1]), pl, sinfo);
+  }
+  
+  return ({ dam, dam_type, spell, enemy });
+}

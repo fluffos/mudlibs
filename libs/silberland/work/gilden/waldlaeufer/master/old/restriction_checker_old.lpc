@@ -1,0 +1,239 @@
+/***************** Restriction_Checker der Waldlaeufergilde ******************
+22.08.2005 - Begin (Lilyth, Torian, Delgo)@Silberland <sl.mud.at>
+*****************************************************************************/
+//** INHERIT + INCLUDE + DEFINE ********************************************//
+#include "../def.h"
+#include "../functions.h"
+
+//-- Vars --------------------------------------------------------------------
+mixed savefile;
+nosave mapping skill_changes=([]);
+nosave mapping path_changes=([]);
+nosave mapping archenemy_changes=([]);
+nosave mapping cost=([ 1: 10000;"money";"Geld",
+                       2: 50000;"money";"Geld",
+                       3:100000;"money";"Geld",
+                       4:    50;SCHUPPEN_ID;"Drachenschuppen",
+                       5:   100;SCHUPPEN_ID;"Drachenschuppen",
+                       6:   200;SCHUPPEN_ID;"Drachenschuppen",
+                       7:    10;DIAMANT_ID;"Diamanten",
+                       8:    25;DIAMANT_ID;"Diamanten",
+                       9:    50;DIAMANT_ID;"Diamanten",
+                      ]);
+//-- Prototypes --------------------------------------------------------------
+void LoadList();
+void SaveList();
+//**************************************************************************//
+
+
+
+//** StandardFunktionen ****************************************************//
+//-- Create ------------------------------------------------------------------
+void create()
+{ 
+  if(is_clone(this_object()))
+  { destruct(this_object());
+    return; }
+  SUID;
+  LoadList();
+}
+//-- Listen Laden und speichern ----------------------------------------------
+void LoadList()
+{
+  restore_object(SKILL_CHANGE);
+  skill_changes=savefile;
+  savefile=0;
+  restore_object(PATH_CHANGE);
+  path_changes=savefile;
+  savefile=0;
+  restore_object(ARCHENEMY_CHANGE);
+  archenemy_changes=savefile;
+  savefile=0;
+}
+void SaveList()
+{
+  savefile= skill_changes;
+  save_object(SKILL_CHANGE);
+  savefile=0;
+  savefile=path_changes;
+  save_object(PATH_CHANGE);
+  savefile=0;
+  savefile=archenemy_changes;
+  save_object(ARCHENEMY_CHANGE);
+  savefile=0; 
+}
+//**************************************************************************//
+
+
+
+//** Aenderung von Pfad/Skillpunkte ****************************************//
+//-- Welches Mapping soll genutzt werden? ------------------------------------
+mapping SwitchMapping(int skill)
+{
+  if(skill) {return skill_changes;}
+  else {return path_changes;}  
+}
+
+//-- Mapping umsetzen --------------------------------------------------------
+void SetMapping(mapping m, int skill)
+{
+  if(skill) {skill_changes=m;}
+  else {path_changes=m;}
+}
+
+//-- Hat der Spieler schonmal getauscht? -------------------------------------
+int IsChanger(string caster, int skill)
+{
+  mixed m;
+  
+  m=SwitchMapping(skill);;
+  return (member(m_indices(m), caster)!=-1);
+}
+
+//-- Einen neuen Tauscher hinzufuegen ----------------------------------------
+int AddChanger(string caster, int skill)
+{
+  mixed m;
+  
+  if(member(RANGERMASTER->MemberList(), caster) == -1) {return 0;}
+
+  m=SwitchMapping(skill);
+  if(member(m_indices(m), caster) != -1) {return 0;}
+  
+  m+=([lower_case(caster):0]);
+  SetMapping(m, skill);
+  SaveList();
+  return 1;
+}
+
+//-- Einen Wert aendern ------------------------------------------------------
+int SetCount(string caster, int skill, int count)
+{
+  mixed m;
+  
+  m=SwitchMapping(skill);
+  if(member(m_indices(m), caster) == -1) {return 0;}
+  
+  m[caster]=count;
+  SetMapping(m, skill);
+  SaveList();
+  return 1;
+}
+
+//-- Einen Tauscher entfernen (sollte nur zum debugging genutzt werden) ------
+int RemoveChanger(string caster, int skill)
+{
+  if(!IsChanger(caster, skill)) {return 0;}
+  if(skill) {skill_changes=m_delete(skill_changes, caster);}
+  else {path_changes=m_delete(path_changes, caster);}
+  SaveList();
+  return 1;
+}
+
+//-- Wieoft hat der caster schon getauscht? ----------------------------------
+int GetCount(string caster, int skill)
+{
+  mixed m;
+  
+  if(!IsChanger(caster, skill)) {return 0;}
+  m=SwitchMapping(skill);
+  return m[caster];
+}
+
+//-- Ermittelt die Kosten ----------------------------------------------------
+mixed GetCost(int count)
+{
+  if(count<1) { return 1; }
+  if(count>=10) { return ({(count-8), MSTONE_ID, "Magiesteine"}); }  
+  return ({ cost[count, 0] , cost[count, 1], cost[count, 2] });
+}
+
+//-- Der Tausch --------------------------------------------------------------
+mixed Change(object ob, int flag, mixed path)
+{
+  string caster, objekte;
+  int count, need, i;
+  mixed costs, sp;
+  object price;
+  
+  if(member(RANGERMASTER->MemberList(), caster=getuid(ob)) == -1) {return 0;}
+  if(flag==CHANGE_FLAG_PATH)
+  {
+    if(!stringp(path)) {return 0;}
+    if(!RANGERMASTER->IsOnPath(caster, path))
+    { tell_object(ob, BS("Du befindest Dich nicht auf einem solchen Pfad."));
+      return 0;}
+  }
+  if(flag==CHANGE_FLAG_SKILL) //Skillpunkte
+  {
+    if(!pointerp(sp=R_SKILLMASTER->GetSkillPoints(caster)) || sizeof(sp)<1)
+    { tell_object(ob, BS("Du hast noch keine Fertigkeitspunkte vergeben."));
+      return 0;}
+  }
+  
+  if(!IsChanger(caster, flag)) {AddChanger(caster, flag);}
+  count=GetCount(caster, flag);
+  if(!costs=GetCost(count)) {return 0;}
+  if(pointerp(costs) && sizeof(costs)!=3) {return 0;}
+  if(!pointerp(costs) && costs!=1) {return 0;}
+  
+  if(costs!=1)
+  {
+    need=costs[0];
+    objekte=costs[2];
+    switch(costs[1])
+    {
+      case "money":
+        if(need>ob->QueryMoney())
+        { tell_object(ob, BS("Du hast nicht genug "+objekte+ " bei Dir!"));
+          return 0;}
+      break;
+      
+      default:
+        if(!price=present(costs[1], ob))
+        { tell_object(ob, BS("Du hast keine "+objekte+ " bei Dir!"));
+          return 0; }
+        if(price->QueryProp(P_AMOUNT)<need)
+        { tell_object(ob, BS("Du hast nicht genug "+objekte+ " bei Dir!"));
+          return 0;}
+      break;
+    }
+    ob->AddMoney(-need);
+    tell_object(ob, BS("Du zahlst die "+to_string(need)+ " Muenzen."));
+    price->AddAmount(-need);
+    tell_object(ob, BS("Du gibst die "+to_string(need)+ " "+objekte+" "
+                    "ab.")); 
+  }
+  if(flag==CHANGE_FLAG_PATH)
+  {
+    if(!RANGERMASTER->RemovePath(caster, path))
+    { tell_object(ob, BS("Fehler. Wende Dich an einen Gildenmagier."));
+      return 0;}
+    count++;
+    write_file(PATH_LOG, sprintf("%s %s %s %s \n",
+                                     to_string(time()),
+                                     caster,
+                                     path,
+                                     to_string(count)) );
+    tell_object(ob, BS("Du verlaesst den "+path+"pfad."));
+  }
+  else
+  {
+    i=sizeof(sp);
+    i+=R_SKILLMASTER->GetFreeSkillPoints(caster);
+    R_SKILLMASTER->SetFreeSkillPoints(caster, i);
+    R_SKILLMASTER->SetSkillPoints(caster, 0);
+    count++;
+    write_file(SKILLPOINT_LOG, sprintf("%s %s %s %s \n",
+                                     to_string(time()),
+                                     caster,
+                                     to_string(sizeof(sp))+"/"+i,
+                                     to_string(count)) );
+    tell_object(ob, BS("Du erhaelst "+to_string(sizeof(sp))+" "
+                    "Fertigkeitspunkt"+(sizeof(sp)>1?"e":"")+" zurueck."));
+    log_member(caster, "Reset der Skillpunkte");
+  }
+  SetCount(caster, flag, count);
+  return 1;
+}
+//**************************************************************************//

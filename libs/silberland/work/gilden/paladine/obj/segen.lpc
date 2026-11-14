@@ -1,0 +1,128 @@
+// Changes:
+// 14.02.2000 Angrox
+//            Becomesnetdead auskommentiert
+
+
+inherit "std/thing";
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <new_skills.h>
+#include <defines.h>
+#include <moredef.h>
+#include "../paladin.h"
+
+object caster, victim;
+int suc, body_value;
+mapping mod=([]);
+
+create() {
+  if(!is_clone(TO)) return;
+  ::create();
+  SetProp(P_SHORT, 0);
+  SetProp(P_WEIGHT, 0);  
+  SetProp(P_VALUE, 1);
+  SetProp(P_NOBUY, 1); 
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NOSELL, 1);
+  AddId(({PALADINITEM, "\nsegen"}));
+  if(getuid(previous_object())!="GUILD.pal_spells"  &&
+      getuid(TI)!="dusty") 
+  {
+   TELL("angrox", sprintf("PO: %O, TI: %O, TP:%O\n", PO,TI,TP)); 
+   call_out("remove", 1);
+   return 0;
+  }
+}
+
+int SetVariables(object caster1, object victim1, int time, int suc1)
+{
+  int value;
+  int ob;
+  int align;
+
+  if(getuid(previous_object())!="GUILD.pal_spells" && getuid(TI)!="dusty") {
+   call_out("remove", 1);
+   return 0;
+  }
+  caster=caster1;
+  victim=victim1;
+  suc=suc1;
+  ob=victim->QueryProp(P_BODY);
+  if(suc>6000) {
+      if ((align = victim->QueryProp(P_ALIGN)) > 1000)
+        align = 1000;
+      body_value=victim->QueryProp(P_BODY)+ (align*suc)/(20*10000);
+      victim->Set(P_BODY, symbol_function("body_change", TO), F_QUERY_METHOD);
+  }
+  value=1+suc/3000;
+  mod+=([A_STR:value]);
+  AddId("STR_BUFF");
+  if(suc>6000 && !present("DEX_BUFF", victim)) {
+    AddId("DEX_BUFF");
+    mod+=([A_DEX:value]);
+  }
+  if(suc>8000 && !present("CON_BUFF", victim)) {
+    AddId("CON_BUFF");
+    mod+=([A_CON:value]);
+  }
+  SetProp(P_X_ATTR_MOD, mod);
+  victim->UpdateAttributes();
+  call_out("remove", time);
+  // LOG, eingebaut am 05.03, Angrox
+  write_file("/gilden/paladine/log/segen.log", sprintf("-- %s -- Gottsegen von %s auf %s: --\n"
+        "suc: %d, body: %d -> %d\n\n", ctime(), caster->Name(WER), 
+        victim->Name(WER), suc, ob, body_value));
+  return 1;
+}
+
+mixed QueryVariables() {
+  return ({caster, victim, body_value, mod, suc});
+}
+
+int body_change() {
+  return body_value; 
+}
+
+remove() {
+ if(objectp(caster) && find_player(getuid(caster))) {
+   if(caster==victim)
+     tell_object(caster, "Dein Segen erlischt!\nDu dankst "
+         +"Dusty fuer ihren Segen!\n");
+   else if(objectp(victim) && interactive(victim) &&
+            find_player(getuid(victim))) 
+     tell_object(caster, BS(sprintf("Dein Segen auf %s erlischt!\n", 
+       victim->name(WEN))));
+ }
+ if(objectp(victim) && caster!=victim && interactive(victim)) {
+   if(objectp(caster) && find_player(getuid(caster)))
+     tell_object(victim, BS(sprintf("Der Segen von %s erlischt!\n", 
+         caster->name(WEM))));
+   else
+     tell_object(victim, BS(sprintf("Dein Segen erlischt!\n")));
+ }
+ if(objectp(victim) && 
+   (find_player(getuid(victim)) || find_netdead(getuid(victim))))
+   victim->Set(P_BODY, 0, F_QUERY_METHOD);
+ while(remove_call_out("remove")!=-1);
+ ::remove();
+}
+
+init() {
+ ::init();
+ if(!living(ENV(ME)))
+   call_out("remove", 0);
+}
+
+reset() {
+  ::reset();
+  call_out("remove", 0);
+}
+
+/* Auskommentiert, da Spieler immer reconnecten  <angrox, 14.02.2000>
+BecomesNetDead(object wer) {
+  if(wer==caster || wer==victim)
+    remove();
+}
+*/

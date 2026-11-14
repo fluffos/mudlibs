@@ -1,0 +1,123 @@
+/*
+ * Laehme
+ *
+ *
+ * Kosten: 
+ * Level : 9
+ * Objekte:
+ * Damage:
+ *
+ */
+
+int prep_laehme(object caster, mapping sinfo) 
+{
+  object victim;
+  if(!caster->InFight()) 
+  {
+    printf(BS("Ausserhalb eines Kampfes kannst Du "
+                 +"niemanden laehmen!"));
+    return 0;  
+  }
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wen willst Du laehmen?\n");
+  if(!victim) return 0;
+  write_color(BS("Du deutest mit ausgestreckten Fingern auf den Boden und dann "
+      "auf "+victim->name(WEN)+"."), HUMUS, caster); 
+  return 1;
+}
+
+int laehme(object caster, mapping sinfo) 
+{
+  object victim;
+  int dauer, suc, speed, size;
+  string cn, vn;
+
+  if(!caster->InFight()) 
+  {
+    printf(BS("Ausserhalb eines Kampfes kannst Du "
+                 +"niemanden laehmen!"));
+    return 0;  
+  }
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wen willst Du laehmen?\n");
+  if(!victim) return 0;
+  if((size=victim->QueryProp(P_SIZE))<1) 
+    size=1;
+  sinfo[SI_RAW_SPELLCOST]+=((size-200)/10)+random(10);
+  if(sinfo[SI_RAW_SPELLCOST]>130) sinfo[SI_RAW_SPELLCOST]=130;
+  if(sinfo[SI_RAW_SPELLCOST]<10) sinfo[SI_RAW_SPELLCOST]=10;
+
+  sinfo=DoSpellModification(HUMUS, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  cn=caster->name();
+  vn=victim->name(WEN, 2);
+  dauer = caster->QueryAttribute(A_INT) + random(sinfo[SI_SKILLABILITY]/500);
+  dauer = SpellEnhanceModifier(caster, HUMUS, dauer);
+  if((suc=SpellSuccess(caster,sinfo))<=0) 
+  {
+    if(suc<-500) 
+    {
+      printf("Irgendwie wird alles soooooo zaeh...\n");
+      say(sprintf("%s bewegt sich so schnell wie in Honig.\n",cn), caster);
+      caster->ModifySkillAttribute(caster,SA_SPEED,60,dauer);
+    }        
+    return MISSERFOLG;
+  } 
+  switch (suc) 
+  {
+    case 0..3000:      speed=75; break;
+    case 3001..7000:   speed=66; break;
+    case 7001..12000:  speed=50; break;
+    case 12001..15000: speed=45; break;
+    case 15001..19000: speed=40; break;
+    case 19001..20000: speed=35; break;
+    default: speed=100;
+  } 
+  if (random(3 * caster->QueryProp(P_GUILD_LEVEL) + 3 * caster->QueryAttribute(A_INT)) < 
+      victim->QueryProp(P_NOMAGIC)) 
+  {
+    write(victim->Name(WER)+" wehrt Deinen Zauber ab.\n");
+  }
+  else 
+  {
+    victim->ModifySkillAttribute(caster,SA_SPEED,speed,dauer + suc/1000);
+     
+    if(HAS_MYSTERY(caster, MYSTERY_THORNS)) {
+      call_out("thorns_damage", 0, caster, victim, time() + dauer + suc/1000, sinfo);
+      write_color(BS("Magische Ranken mit langen Dornen springen empor und behindern "+vn+"."), HUMUS, caster, 1);
+      tell_object(victim,BS(sprintf("%s laehmt Dich durch magische Ranken mit langen Dornen, die aus dem Boden wachsen!\n", cn)));
+      say(BS(sprintf("%s beschwoert magische Ranken mit langen Dornen aus dem Boden, die %s behindern.",cn, vn)), victim);
+    } else {
+      write_color(BS("Magische Ranken springen empor und behindern "+vn+"."), HUMUS, caster, 1);
+      tell_object(victim,BS(sprintf("%s laehmt Dich durch magische Ranken, die aus dem Boden wachsen!\n", cn)));
+      say(BS(sprintf("%s beschwoert magische Ranken aus dem Boden, die %s behindern.",cn, vn)), victim);
+    }
+  }
+  return ERFOLG;
+}
+
+public void thorns_damage(object caster, object victim, int endTime, mapping sinfo) {
+  int dam;
+
+  if(!objectp(caster) || !objectp(victim) || time() > endTime) return;
+
+  sinfo[SI_SKILLDAMAGE] = 100;
+  sinfo[SI_SKILLDAMAGE_TYPE] = ({DT_PIERCE, DT_POISON});
+
+  dam=sinfo[SI_SKILLDAMAGE]+ 5*random(sinfo[SI_SKILLABILITY])*(caster->QueryProp(P_GUILD_LEVEL))/MAX_ABILITY; 
+  dam= (dam/2)+random(dam/2);
+
+  write_color(BS("Die Dornen der laehmenden Ranken bohren sich in " + victim->Name(WEN, 1)), HUMUS, caster, 1);
+  tell_room(environment(victim), BS("Die Dornen der laehmenden Ranken bohren sich in " + victim->name(WEN, 1)), ({caster}));
+  
+  TryAttackSpell(victim,dam, ({DT_PIERCE, DT_POISON}), ([SP_NAME:"laehme",SP_SHOW_DAMAGE:1]), caster,sinfo );
+
+  call_out("thorns_damage", random(3+3), caster, victim, endTime, sinfo);
+  return;
+}
+

@@ -1,0 +1,263 @@
+/*****************************************************************************
+Die Pets der Gilde
+(c) Lilyth, Torian, Delgo @ Silberland <sl.mud.at>
+16.09.05 - Begin
+
+*****************************************************************************/
+
+//** INCLUDE + INHERIT + DEFINE ********************************************//
+#include "/gilden/waldlaeufer/def.h"
+
+inherit "std/npc";
+inherit "/std/npc/spells";
+
+#define MOD_PEACE 0
+#define MOD_ATTACK 1
+#define MOD_DEFEND 2
+
+private nosave string r_owner, category;
+private nosave int mode;
+//mapping p;
+private nosave object owner;
+
+// From the savefile:
+string category;
+mapping properties;
+mapping attributes;
+mapping attributes_modifier;
+mapping infos;
+mapping libraries;
+
+//**************************************************************************//
+
+
+
+//** CREATE ****************************************************************//
+void create()
+{
+  if(!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_FRIEND, 1);
+  SetProp(P_NO_GLOBAL_ATTACK, 1);  
+  enable_commands();
+  mode=MOD_PEACE;
+  
+  SUID;
+}
+//**************************************************************************//
+
+
+
+//** SECOND-CREATE *********************************************************//
+int second_create(object caster)
+{
+  int i,x;
+  string *keys;
+  write(sprintf("pet.c: CASTER Object: %O\n",caster));
+  write(sprintf("pet.c: restoring:  %s\n",MEMBERS_PETS+(getuid(caster))));
+  x=restore_object(MEMBERS_PETS+(getuid(caster)));
+  write(sprintf("pet.c: Status of restore: %d\n",x));
+  write(sprintf("pet.c: CATEGORY: %O\n", category));
+  SetProperties(properties);
+  keys=m_indices(attributes);
+  for(i=sizeof(keys)-1;i>=0;i--)
+    SetAttribute(keys[i], properties[keys[i]]);
+  
+    
+  //ZUSATZFUNKTIONEN
+  TO->move(ENV(caster), M_GO|M_SILENT);
+  caster->AddPursuer(TO);
+  caster->AddDefender(TO);
+  caster->SetProp(P_RANGER_HAS_ANIMAL, 1);
+
+  return 1;
+}
+//**************************************************************************//
+
+
+
+
+//** Komunikation **********************************************************//
+void catch_tell(string str)
+{
+  string who,target,action;
+  
+  if(!((query_verb() == "sag") /*|| (query_verb()[0..0] == "'")*/))return;
+                              //buggt. 
+  if(sscanf(str,"%s sagt: %s %s",who,target,action) != 3)      return;
+  if(!id(target))                                              return;
+  if(find_player(lower_case(who)) != owner)                    return;
+  if(action[<1..] == "\n") action = action[0..<2];
+  action = lower_case(action);
+  call_out("order",0,action);
+  return;
+}
+
+int order(string action)
+{
+  object *enemies;
+  int i;
+
+  if(action == "verschwinde"  ||
+     action == "hau ab"       ||
+     action == "verzieh dich" ||
+     action == "geh")
+  { tell_room(ENV(owner), BS( TO->Name()+" verschwindet."));
+    call_out("remove", 0);
+    return 1;}
+  
+  if(action == "kaempfe"         ||
+     action == "kaempf"          ||
+     action == "kaempfe mit"     ||
+     action == "hilf mir"        ||
+     action == "kaempfe mit mir")
+  { tell_object(owner, BS( TO->Name()+" kaempft jetzt mit Dir zusammen."));
+    owner->AddDefender(TO);
+    mode=MOD_ATTACK;
+    return 1; } 
+    
+  if(action == "pause"       ||
+     action == "kampfpause"  ||
+     action == "stopp")
+  { tell_object(owner, BS( "Du kaempfst jetzt alleine.")); 
+    owner->RemoveDefender(TO);
+    mode=MOD_PEACE;
+    enemies=TO->QueryEnemies()[0];
+    for(i=0; i<=sizeof(enemies)-1; i++)
+    { enemies[i]->StopHuntFor(TO,1);
+      TO->StopHuntFor(enemies[i],1); }
+    return 1; } 
+  
+}
+
+//**************************************************************************//
+
+
+
+//** StandartFunktionen ****************************************************//
+mixed DefendOther(int dam, mixed dam_type, mixed spell, object enemy)
+{ 
+  if(!mode=MOD_DEFEND)
+  {
+    return ({dam, dam_type, spell}); 
+  }
+  
+}
+
+void die(int poisondeath)
+{
+  ::die(poisondeath);
+}
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  if(player == owner)
+  {  
+    if(objectp(owner)) owner->RemovePursuer(TO);
+    if(objectp(owner)) owner->RemoveDefender(TO);
+    if(owner) owner->SetProp(P_RANGER_HAS_ANIMAL, 0);
+    TO->move(ROOM"pet_asyl", M_TPORT);
+  }
+}
+int remove()
+{
+  if(objectp(owner)) owner->RemovePursuer(TO);
+  if(objectp(owner)) owner->RemoveDefender(TO);
+  while(remove_call_out("remove")!=-1);
+  if(owner) owner->SetProp(P_RANGER_HAS_ANIMAL, 0);
+  return ::remove();
+}
+void reset()
+{
+  ::reset();
+}
+//**************************************************************************//
+
+
+
+//** REACTIONS *************************************************************//
+/*void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+  if(find_call_out("reaction") != -1) return;
+
+  switch (gruppe)
+  {
+    case "aengstlich":
+      call_out("reaction", 0, TP,
+        race_verb+" leise.",
+        race_verb+" leise.");
+      break;
+
+    case "aergerlich":
+      call_out("reaction", 0, TP,
+        race_verb+" vorsichtig.",
+        race_verb+" vorsichtig.");
+      break;
+
+    case "albern":
+      call_out("reaction", 0, TP,
+        race_verb+".",
+        race_verb+" "+TPN+" an.");
+      break;
+
+    case "fies":
+      call_out("reaction", 0, TP,
+        race_verb+" bedrohlich.",
+        race_verb+" "+TPN+" bedrohlich an.");
+      break;
+
+    case "frech":
+      call_out("reaction", 0, TP,
+        race_verb+" bedrohlich.",
+        race_verb+" "+TPN+" bedrohlich an.");
+      break;
+
+    case "froh":
+      call_out("reaction", 0, TP,
+        race_verb+" ruhig.",
+        race_verb+" "+TPN+" ruhig an.");
+      break;
+
+    case "intim":
+      call_out("reaction", 0, TP,
+        race_verb+" erschrocken.",
+        race_verb+" "+TPN+" erschrocken an.");
+      break;
+
+    case "nett":
+      call_out("reaction", 0, TP,
+        race_verb+" ruhig.",
+        race_verb+" "+TPN+" ruhig an.");
+      break;
+
+    case "neutral":
+      call_out("reaction", 0, TP,
+        race_verb+".",
+        race_verb+".");
+      break;
+
+    case "traurig":
+      call_out("reaction", 0, TP,
+        race_verb+" troestend.",
+        race_verb+" troestend fuer "+TPN+".");
+      break;
+  }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void reaction(object pl, string macher, string andere)
+{
+  if(!ENV(TO))           return;
+  if(!objectp(pl))       return;
+  if(!ENV(pl))           return;
+  if(ENV(TO) != ENV(pl)) return;
+
+  tell_object(pl, BS(Name(WER, 1)+" "+macher));
+  tell_room(ENV(TO), BS(Name(WER, 1)+" "+andere), ({pl}) );
+}*/
+//**************************************************************************//

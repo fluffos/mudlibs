@@ -1,0 +1,243 @@
+/*****************************************************************************
+ boomerang.c, Copyright (C) 2002 by Carador
+*****************************************************************************/
+
+#pragma strong_types
+#include "../def.h"
+#include <verben.h>
+
+inherit RD_THING;
+
+int flying;
+string *dest,*back;
+string *shortdest;
+object start;
+object victim;
+object thrower;
+int way_back;
+int fly_dir;
+
+void create()
+{
+  ::create();
+
+  shortdest=({"o","w","n","s","so","sw","no","nw"});
+  dest=({"osten","westen","norden","sueden","suedosten","suedwesten","nordosten","nordwesten"});
+  back=({"westen","osten","south","norden","nordwesten","nordosten","suedwesten","suedosten"});
+
+  SetProp(P_NAME, "Bumerang");
+  AddId(({ "bumerang" }));
+  SetProp(P_SHORT, "Ein Bumerang");
+  SetProp(P_LONG, "\
+Dies ist ein hoelzerner Bumerang. Er ist flach und leicht abgewinkelt, so\n\
+wie es ein Bumerang eben ist. Du gewinnst den Eindruck, als ob der Bumerang\n\
+jetzt und hier auf der Stelle fliegen moechte.\n\
+Benutzungshinweise:\n\
+Zum Werfen: wirf bumerang nach <richtung> [auf <name>]\n\
+  Richtung ist klar, kann n,no,o,so,s,sw,w oder nw sein.\n\
+  Wenn Du einen Namen angibst, so wird versucht den Spieler mit diesem Namen\n\
+  zu treffen.\n\
+Zum Fangen: fange bumerang.\n");
+  SetProp(P_MATERIAL, MAT_MISC_WOOD);
+  SetProp(P_SIZE, 50);
+  SetProp(P_GENDER, MALE);
+  SetProp(P_WEIGHT, 300);
+  SetProp(P_VALUE, 500);
+  AddCmd(CMD_WERFEN, "do_throw");
+  AddCmd(({ "fang", "fange" }), "do_catch");
+}
+
+string _query_short()
+{
+   if (flying) return "Ein Bumerang (fliegend)";
+   return "Ein Bumerang";
+}
+
+string _query_noget()
+{
+  if (!flying) return 0;
+  return "\
+Du kannst den Bumerang nicht einfach nehmen. Du musst ihn schon fangen.\n";
+}
+
+status do_throw(string str) 
+{
+   string *ex_cmds;
+   object ob;
+   string what,where,whom;
+   int nr;
+
+   if (!str) return 0;
+   if ( sscanf(str,"%s nach %s auf %s",what,where,whom)!=3 && 
+        sscanf(str,"%s nach %s",what,where) !=2 ) {
+      notify_fail("Wirf was nach wo [auf wen]?\n");
+      return 0;
+   }
+   ob = present(what, this_player())||present(what, environment(this_player()));
+   if (!ob || ob != this_object()) {
+      notify_fail("Wirf was nach wo [auf wen]?\n");
+      return 0;
+   }
+   if (environment(ob) != this_player()) {
+      message("Dazu solltest Du den Bumerang erst nehmen.");
+      return 2;
+   }
+
+   if (environment(this_player())->QueryProp(P_INDOORS)) {
+      message("Bumerang-Werfen geht nur im Freien.");
+      return 2;
+   }
+   victim=0;
+   if (whom) {
+     victim=find_living(whom);
+     if (!victim) {
+       message("Hmm, ein Opfer namens '" + whom + "' ist nirgends zu finden.");
+       return 2;
+     }
+   }
+   nr=member_array(where,shortdest);
+   if (nr>-1)
+      where=dest[nr];
+   nr=member_array(where,dest);
+   if (nr<0) {
+      message("In diese Richtung kann der Bumerang nicht fliegen.");
+      return 2;
+   }
+
+   ex_cmds = m_indices(environment(this_player())->QueryProp(P_EXITS)||([]));
+   where = lower_case(where);
+
+   if (member_array(where,ex_cmds)<0) {
+      message("Aber in die Richtung ist kein Ausgang.");
+      return 2;
+   }
+   start=environment(this_player());
+   thrower=this_player();
+   message(({
+     ({ M_PL, M_PL_VERB, "wirf", M_PL_AKK_POSS, this_object(),
+        " nach "+capitalize(where)+"." }) }));
+   if (victim) message(({
+     ({ M_WRITE, "Dabei versuchst Du, ", M_AKK, victim, " zu treffen." }) }));
+   flying=1;
+   way_back=0;
+   fly_dir = nr;
+   move(environment(this_player()), M_PUT);
+   call_out("flying",0);
+   return 1;
+}
+
+
+void hit_him(object vic) 
+{
+   tell_room(environment(),"BONNNNNNNNNCCCCCCCCCCCCCCC.\n");
+   tell_room(environment(),
+     "Der Bumerang knallt "+vic->name(WEM)+" voll gegen die Ruebe.\n",({vic}));
+   tell_object(vic,"Der Bumerang knallt Dir voll gegen die Ruebe. AUUUUAHH.\n");
+   if (thrower) tell_room(environment(thrower),
+     "In einiger Entfernung hoerst Du ein lautes BONNNNNNNNCCCCC.\n");
+   flying=0;
+   fly_dir = 0;
+   way_back=0;
+   start=0;
+   thrower=0;
+}
+
+
+void flying() 
+{
+   string ex_cmd;
+   string *ex_cmds;
+   mixed *ex_dests;
+   object *livs;
+   object vic;
+   int i;
+
+   if (!flying) return;
+
+   livs = filter_array(all_inventory(environment()), #'living) - ({ thrower });
+  
+   if (sizeof(livs) && environment() != start) {
+     if (victim && !random(2)) {
+       hit_him(victim);
+       return;
+     }
+     if (!victim && !random(7)) {
+       vic = livs[random(sizeof(livs))];
+       hit_him(vic);
+       return;
+     }
+   }
+    
+   if (way_back) ex_cmd=back[fly_dir];
+   else ex_cmd=dest[fly_dir];
+   ex_cmds = m_indices(environment()->QueryProp(P_EXITS)||([]));
+   ex_dests = m_values(environment()->QueryProp(P_EXITS)||([]));
+   i=member_array(ex_cmd,ex_cmds);
+   if (environment() == start && way_back) {
+      flying=0;
+      if ( thrower && 
+           environment(thrower)==environment() &&
+           move(thrower, M_GET) > 0
+         ) {
+         tell_room(environment(thrower),"\
+Der Bumerang fliegt direkt in "+thrower->name(WESSEN)+" Haende.\n",({thrower}));
+         tell_object(thrower,"\
+Der Bumerang fliegt direkt in Deine Haende.\n");
+      }
+      else tell_room(environment(),"Der Bumerang faellt auf den Boden.\n");
+      way_back=0;
+      start=0;
+      fly_dir=0;
+      thrower=0;
+      return;
+   }
+
+   if (i<0) {
+     if (way_back) { // sollte nicht passieren
+        tell_room(environment(),"Der Bumerang faellt auf den Boden.\n");
+        way_back=0;
+        start=0;
+        fly_dir=0;
+        thrower=0;
+        return;
+     }
+     way_back=1;
+     tell_room(environment(),"\
+Ploetzlich kehrt der Bumerang um in Richtung "+capitalize(back[fly_dir])+".\n");
+   } else {
+      tell_room(environment(),"Der Bumerang fliegt nach "+ 
+         capitalize(ex_cmd) + ".\n");
+      move(ex_dests[i], M_NOCHECK|M_SILENT);
+      tell_room(environment(),"Ein Bumerang fliegt herein.\n");
+   }
+   call_out("flying",2);
+}
+
+status do_catch(string str) 
+{
+   if (!str || present(str, environment(this_player())) != this_object()) {
+      notify_fail("Was magst fangen? Vielleicht den Bumerang?\n");
+      return 0;
+   }
+   if (!flying) {
+      message(({ ({ M_WRITE, "Du versuchst, den Bumerang, der auf dem Boden "
+        "liegt, zu fangen, scheiterst aber klaeglich." }),
+       ({ M_SAY, M_PL, "versucht den auf dem Boden liegenden Bumerang zu "
+          "fangen, scheitert aber klaeglich." }) }));
+      return 1;
+   }
+   if (move(this_player()), M_GET < 1) {
+      message(({ ({ M_PL, M_PL_VERB, "versuch", "den Bumerang zu fangen, "
+          M_PL_VERB, "schaff", "es aber nicht." }) }));
+      return 1;
+   }
+   flying=0;
+   message(({ ({ "Juhuhuhuuuu! Du faengst den Bumerang." }),
+              ({ M_PL, "faengt den Bumerang." }) }));
+   start=0;
+   fly_dir = 0;
+   way_back=0;
+   thrower=0;
+   return 1;
+}
+

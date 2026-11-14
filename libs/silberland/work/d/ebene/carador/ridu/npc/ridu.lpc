@@ -1,0 +1,483 @@
+/****************************************************************************
+ ridu.c, (C) 2002 by Carador for Silberland
+****************************************************************************/
+
+#pragma strong_types
+#include "../def.h"
+
+inherit RD_NPC;
+
+mapping walk_commands;
+
+string *dirs;
+string s_lastroom;
+int s_lastdir = -1;
+int frust = 0; 
+/*
+bei jeder aktion (laufen, drehen, fahren) steigt ridus frust.
+er wird dann auf 0 gesetzt, wenn ridu es schafft, einen schritt zu 
+fahren
+im unguenstigsten fall ist ridu 3 schritte vom wendestein entfernt
+und muss dann 4 wendungen machen
+und dann 2 schritte zum fahrstein laufen
+d.h. der unguenstigste fall ohne einmischen des spielers sind 9 aktionen
+bis zum fahrerfolg
+der spieler kann sich jetzt aber einmischen, indem er das schiff immer
+wieder verdreht, wenn ridu es gerade richtig drehen will
+damit kann der frust von ridu ueber 10 steigen
+ab frust 14 erhoeht ridu seine geschwindigkeit so sehr, dass er auf
+einer bananenschale ausrutschen wuerde
+eine banane gibt es in der kabine, essen, schale in r4 platzieren
+und ridu so lang aergern, bis er drauf ausrutscht. voila.
+*/
+
+string *wahn_msg = ({
+         "Ridu ruft: Hopp, hopp, hopp, Ridu lauf Galopp!",
+         "Ridu ist dem Wahnsinn schon ziemlich nahe.",
+         "In Ridus Augen zeigt sich ein irres Flackern!",
+         "Ridu ruft: Arglarglargl, weiter, weiter, weiter!",
+         "Nicht mehr lang und Ridu ist fertig "
+            "(koerperlich, geistig und ueberhaupt).",
+         "Wieder ertoent Ridus Kampfschrei ueber das ganze Schiff.",
+         "Die Geschwindigkeit, mit der Ridu ueber die Reling fegt, "
+            "ist schwindelerregend.",
+       "Schweissperlen sind ueberall auf Ridus Stirn zu sehen.",
+       "Ridu schimpft wie ein Rohrspatz.",
+       "Ridu legt noch einen Zahn zu bei seinem wilden Lauf von "
+          "Stein zu Stein.",
+       "Ridu ist inzwischen schon ziemlich ausser Puste." });
+
+void wirf_apfel()
+{
+  command("sag Nehmt das, Ihr Schurken!");
+  command("wirf pferdeapfel ueber bord");
+}
+
+int query_frust()
+{
+  return frust;
+}
+
+
+varargs status walk_to(int nr, int force)
+{
+  int old_nr, next_step;
+  string rname;
+  object env;
+
+  if (!(env = environment())) {   // sollte nicht passieren
+    move(RD_TOOLS->load_object(RD_ROOMDIR"r1"), M_NOCHECK);
+    return 0;
+  }
+  rname = RD_TOOLS->program_name(env);
+  old_nr = to_int(rname[<1..<1]);
+  if (nr == old_nr) return 1;
+  if (nr < old_nr) {
+    if (old_nr - nr >  3)  next_step = old_nr + 1;
+    else next_step = old_nr - 1;
+  } else {
+    if (nr - old_nr>  3)  next_step = old_nr - 1;
+    else next_step = old_nr + 1;
+  }
+  if (next_step < 1) next_step = 6;
+  if (next_step > 6) next_step = 1;
+  command(walk_commands[ "" + old_nr + next_step ]);
+  if (next_step != nr) {
+    if(force) return walk_to(nr,force);
+  }
+  if ( !force && 
+       !random(3) &&
+       present("pferdeapfel", this_object()) &&
+       find_call_out("wirf_apfel") < 0) call_out("wirf_apfel", 8);
+  return 1;
+}
+
+void attack_walk()
+{
+  int nr;
+
+  if (this_player() && environment(this_player()) == environment()) {
+    message("Er ist Dir zwar entwischt, aber auf jeden Fall konntest Du "
+      "durch Deinen Angriff seine Fahr-Aktivitaeten durchkreuzen, was ihm "
+      "sichtlich missfaellt.");
+    nr = to_int(RD_TOOLS->program_name(environment())[<1..<1]);
+    if (nr > 3) 
+      nr -=3;
+    else
+      nr +=3;
+    walk_to(nr,1);
+  }
+}
+
+mixed _query_noattack()
+{
+  if (find_call_out("attack_walk") < 0) {
+    call_out("attack_walk", 0);
+  }
+  return "nimmt die Beine in die Hand und sucht sein Heil in der Flucht.";
+}
+
+
+varargs status turn_schiff(int dir)
+{
+  object env;
+  int old_dir;
+  int stein_raum;
+
+  if (!(env = environment())) {   // sollte nicht passieren
+    move(RD_TOOLS->load_object(RD_ROOMDIR"r1"), M_NOCHECK);
+    return 0;
+  }
+
+  old_dir =  RD_LIBDIR"mover"->query_dir();
+  if (dir == old_dir) return 1;
+  if (dir < old_dir) {
+    if (old_dir - dir >  4)  stein_raum = 6;
+    else stein_raum = 2;
+  } else {
+    if (dir - old_dir >  4)  stein_raum = 2;
+    else stein_raum = 6;
+  }
+  if (RD_TOOLS->program_name(environment())[<1..<1] != ""+stein_raum) {
+    walk_to(stein_raum);
+    return 0;
+  } else {
+    command("reibe stein");
+    if (RD_LIBDIR"mover"->query_dir() == dir) return 1; 
+    return 0;
+  }
+}
+
+
+status fahre_nach(int dir)
+{
+  object wolke, env_wolke, env;
+
+  if (!(env = environment())) {   // sollte nicht passieren
+    move(RD_TOOLS->load_object(RD_ROOMDIR"r1"), M_NOCHECK);
+    return 0;
+  }
+
+  if (RD_LIBDIR"mover"->query_dir() != dir) {
+    turn_schiff(dir);
+    return 0;
+  }
+
+  if (RD_TOOLS->program_name(environment())[<1..<1] != "4") {
+    walk_to(4);
+    return 0;
+  }
+
+  command("reibe stein");
+
+  wolke = RD_TOOLS->load_object(RD_OBJDIR"wolke");
+  env_wolke = environment(wolke);
+  if (!env_wolke) {
+    wolke->move(RD_WOLKENSTART, M_NOCHECK|M_SILENT);
+    env_wolke = environment(wolke);
+    s_lastroom = 0;
+  }
+  if (RD_TOOLS->program_name(env_wolke) == s_lastroom) {  // move hat nicht
+                                                          // geklappt
+    s_lastroom = 0;
+    s_lastdir = -1;
+    RD_LOGGER->do_log("error", "ridu::ridu_fahre_nach(): move hat nich geklappt");
+    return 0;
+  }
+  return 1;
+}
+
+int calc_speed()
+{
+  int res;
+  if (frust < 10) return 15;
+  if (frust < 15) return 8;
+  return 4;
+}
+
+
+void random_fahren()
+{
+  int i, cur, start, again;
+  object wolke, env_wolke, r;
+  mapping ex;
+  mixed ex_cmd, ex_dest;
+  int s_newdir;
+
+  if (find_call_out("random_fahren") >-1) return;
+
+  wolke = RD_TOOLS->load_object(RD_OBJDIR"wolke");
+  env_wolke = environment(wolke);
+  if (!env_wolke) {
+    wolke->move(RD_WOLKENSTART, M_NOCHECK|M_SILENT);
+    env_wolke = environment(wolke);
+  }
+  if ( RD_TOOLS->program_name(env_wolke) != s_lastroom ||
+       s_lastdir == -1 ) {
+     // aha, schiff hat sich bewegt seit dem letzten mal, wir brauchen
+     // eine neue richtung
+  
+    if (frust > 9) 
+      RD_LIBDIR"mover"->tell_schiff("Ridu ruft: Aahhhh, jetz geht's mir "
+       "wieder besser.");
+    frust = 0;
+    ex = env_wolke->QueryProp(P_EXITS);
+    ex_cmd = m_indices(ex);
+    ex_dest = m_values(ex);
+    start = random(sizeof(ex_cmd));
+    for (again = 0; again <2; again++) {
+      for (i=sizeof(ex_cmd);i--;) {
+      cur = (start+i)%sizeof(ex_cmd);
+      if ( !(r = RD_TOOLS->load_object(ex_dest[cur])) ||
+           r->QueryProp(P_INDOORS) ||
+           ( strstr("/" + RD_TOOLS->program_name(env_wolke), RD_MIDASDIR)>-1&& 
+             strstr("/" + RD_TOOLS->program_name(r), RD_MIDASDIR) < 0 ) ||
+           (s_newdir = RD_LIBDIR"mover"->dircmd2dir(ex_cmd[cur])) < 0 
+         ) {
+        continue;
+      }
+      if ( !again && 
+           s_lastdir > -1 && 
+           ((s_lastdir + 4)%8) == s_newdir   // waere genau zurueck
+         ) {
+        continue;
+      }
+
+      s_lastdir = s_newdir;  // setze neue richtung fest
+      s_lastroom = RD_TOOLS->program_name(env_wolke);
+      call_out("random_fahren", calc_speed());
+      return;
+     }
+    }
+    RD_LOGGER->do_log("error", "ridu::random_fahren(): stecke fest");
+    return;
+  }
+  frust++;
+  if (!fahre_nach(s_lastdir)) {
+     switch(frust) {
+       case 0..5:
+         break;
+       case 6..8:
+         RD_LIBDIR"mover"->tell_schiff("Ridu ruft: "
+               "Mensch, wann kann ich denn nun endlich "
+               "wieder ein Stueck vorwaerts fliegen.");
+         break;
+       case 9:
+         RD_LIBDIR"mover"->tell_schiff("Ridu ruft: Wieso dauert das "
+            "denn alles so lange! "
+            "Ich hab doch inzwischen schon x-mal an dem "
+            "bloeden Stein gerieben!");
+         break;
+       case 10:
+         RD_LIBDIR"mover"->tell_schiff("Ridu ruft: Was is' denn nun wieder "
+            "los! Wann zeigt das bloede Schiff endlich in die Richtung, "
+            "in die ich will!");
+         break;
+       case 11:
+         RD_LIBDIR"mover"->tell_schiff("Ridu ruft: Ja wirds jetzt endlich? "
+             "Ich muss mich mehr beeilen!");
+         break;
+       case 12:
+         RD_LIBDIR"mover"->tell_schiff("Ridu ruft: Schneller, schneller, "
+             "dann schaff ich's noch, nach " +
+             capitalize(dirs[s_lastdir]) + " zu kommen!");
+         break;
+       case 13:
+         RD_LIBDIR"mover"->tell_schiff("Voellig genervt rast Ridu "
+             "inzwischen wie ein Bloeder ueber das Schiff.");
+         break;
+       default:
+         if (present("bananenschale", environment())) {
+           RD_LIBDIR"mover"->tell_schiff("Und ploetzlich passiert das "
+            "Unvermeidbare: Ridu rutscht auf der Bananenschale aus und "
+            "stuerzt mit einem lauten AAAAAAAAAAAARRRGL ueber die Reling "
+            "in die Tiefe.");
+           RD_LOGGER->do_log("info", "Ridu stuerzt in die Tiefe");
+           remove();
+           return;
+         }
+         if (!random(3))
+           RD_LIBDIR"mover"->tell_schiff("Ridu ist inzwischen so schnell, "
+           "dass, wenn er jetzt auf etwas ausrutschen wuerde, "
+           "ueber Bord fallen koennte.");
+         else
+           RD_LIBDIR"mover"->tell_schiff(wahn_msg[random(sizeof(wahn_msg))]);
+         break;
+     }
+     call_out("random_fahren", calc_speed());
+  }
+}
+
+
+varargs int remove()
+{
+  object ob;
+
+  while(ob = first_inventory(this_object())) ob->remove();
+  RD_LOGGER->do_log("info", "Ridu destruct");
+  return ::remove();
+}
+
+
+string _query_short()
+{
+  switch(frust) {
+    case 0..9 :
+      return "Ridu Cerrall (grimmig wie immer)";
+    case 10..12 :
+      return "Ridu Cerrall (SEHR grantig)";
+    case 13..15 :
+      return "Ridu Cerrall (dem Wahnsinn nahe)";
+    default :
+      return "Ridu Cerrall (wahnsinnig)";
+  }
+}
+
+void create()
+{
+  if(is_clone(this_object())) {
+    call_out("remove", 0);
+    return;
+  }
+
+  npc::create();
+  
+  dirs = RD_LIBDIR"mover"->query_dirs();
+
+  AddId(({ "NOCONTROL", "NOWIMPY", "\nridu#ridu", "ridu", "cerrall", "ridu cerrall" }));
+  SetProp(P_NAME, "Ridu");
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_ALIGN, -700);
+  SetProp(P_GENDER, MALE);
+  SetProp(P_SHORT, "Ridu Cerrall");
+  SetProp(P_LONG, "\
+Ridu ist ein ziemlich alter, hagerer, grossgeratener Mann mit aeusserst \
+haesslicher Nase, weissen Haaren und einer unangenehmen Ausstrahlung. Er \
+gehoert offensichtlich zu der Sorte Leute, die sich ungern ins Handwerk \
+pfuschen lassen und auch schnell wuetend werden koennen, wenn man sie \
+aergert.");
+  create_default_npc(7);
+  AddInfos(({
+    ({ ({ "aepfeln", "warum", "aepfel", "apfel", "pferdeapfel", "pferdeaepfel",
+          "pferdeaepfeln" }),
+       ({({ M_SAYS, "Wozu ich die Pferdeaepfel brauche? Na um sie ueber Bord "
+            "nach diesen verflixten Spielern zu werfen." }),
+         2,
+         ({ M_ME, "schluchzt." }),
+         2,
+         ({ M_SAYS, "Weisst Du, das hier ist meine Rache. Einer von ihnen "
+            "ist mit meiner Frau durchgebrannt und jetzt quaele ich sie "
+            "hiermit." }) }) }),
+    ({ "schiff",
+        ({ ({ M_SAYS, "Aeh, das Schiff, ja, das habe ich irgendwo, aeh, "
+              "gefunden, mit dem Flugbausatz ausgestattet, den ich zufaellig "
+              "hatte, und jetzt bin ich hier." }) }) }),
+
+    ({ ({ "bausatz", "flugbausatz", "fliegen" }),
+       ({ ({ M_SAYS, "Das geht Dich nun wirklich nix an." }) }) })
+  }));
+
+  walk_commands = ([
+    "12":"backbord",
+    "21":"vorne",
+    "23":"hinten",
+    "32":"vorne",
+    "34":"hinten",
+    "43":"backbord",
+    "45":"steuerbord",
+    "54":"hinten",
+    "56":"vorne",
+    "65":"hinten",
+    "61":"vorne",
+    "16":"steuerbord"
+ ]);
+
+  AddAcceptItem("pferdeapfel", 
+                ({ ({ M_SAYS, "Jaa, wunderbar, vielen Dank. Hast Du noch "
+                      "mehr davon?" }) }));
+
+  while (!present("pferdeapfel 10", this_object()))
+    clone_object(RD_OBJDIR"papfel")->move(this_object(), M_NOCHECK);
+
+
+  RD_LOGGER->do_log("info", "Ridu wurde geladen");
+}
+
+status is_xaver(object pl)
+{
+  return (!!(present("milchkanne", pl) &&
+         present("mistgabel", pl) &&
+         present("lederstiefel", pl) &&
+         present("arbeitshemd", pl)));
+}
+
+void my_attacke()
+{
+  if (!this_player() ||
+      environment(this_player()) != environment()) return;
+  message(({ ({ M_ROOM, environment(), "Ridu bruellt: Hey, wer bist Du "
+    "denn? Schau bloss, dass Du verschwindest!" }) }));
+//  Kill(this_player());
+}
+
+void init()
+{
+  npc::init();
+  if (!interactive(this_player()) ||  
+//      IS_LEARNER(this_player()) ||
+      this_player()->QueryProp(P_INVIS)) return; 
+
+  if (!is_xaver(this_player())) 
+    call_out("my_attacke", 0);
+  else
+    message(({ 2, ({ M_SAYS, "Los, her mit den Pferdeaepfeln!" }) }));
+}
+
+private void my_stop_hunt(object ob)
+{
+  if (ob && environment(ob) != environment()) StopHuntFor(ob, 1);
+}
+
+void do_my_heart_beat()
+{
+  filter_array(m_indices(GetEnemies()), #'my_stop_hunt);
+  ::do_my_heart_beat();
+}
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+  if (query_message_busy()) return;
+  switch(verb) {
+   case "aerger":
+   case "nerv":
+     message(({ 2, ({ M_WRITE, "Von der Idee her schon gut, aber ueberleg "
+       "mal, was koennte Ridu so richtig aergern? Was macht ihn rasend?" }),
+      2,
+      ({ M_WRITE, "Na, wenn er mit dem Schiff nicht so fahren kann, wie er "
+         "moechte. Ich als Ridu wuerde mich aergern, wenn ich das Schiff "
+         "grade nach Steuerbord gedreht habe und Jemand dreht es wieder "
+         "nach Backbord..." }) }));
+     return;
+
+   case "schubs":
+   case "stoss":
+   case "knuff":
+   case "stubs":
+   case "tritt":
+     if (!present("bananenschale", environment(this_player()))) {
+       message(({ 2, ({ "Aber Ridu faellt keineswegs, wie vielleicht erhofft, "
+         "ueber Bord. Dazu ist es hier nicht rutschig genug." }) }));
+       return;
+     }
+     message(({ 2,
+       ({ "Ridu torkelt ein bisschen zurueck... knapp an der Bananenschale "
+          "vorbei... Doch danach faengt er sich wieder und faellt insbesondere "
+          "nicht ueber Bord." }),
+       2,
+       ({ M_WRITE, "Ridu ist einfach noch zu ruhig und gefasst, als dass "
+          "er sich so einfach mit der Bananenschale austricksen liesse. Aber "
+          "wenn Du ihn aergerst, dann wuerde er sich bestimmt aufregen und "
+          "vielleicht auch unaufmerksam werden." }) }));    
+     return;
+  }
+}

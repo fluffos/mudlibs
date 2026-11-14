@@ -1,0 +1,366 @@
+/*
+**  Service Object 
+** 
+**  Objekt fuer das Handling von Security, Fehlern und aehnlichen
+**  Systemdingen
+**
+**  (c) 1999 by Cirion@Silberland
+**
+**  v0.01 20/09/199 Release Version
+**                  by Cirion
+**
+**
+**
+**
+**
+*/
+
+#include <wizlevels.h>
+#include <language.h>
+#include <properties.h>
+#include "/p/daemon/channel.h"
+#include "../service.h"
+
+/* Sauber deklarieren */
+#pragma strong_types
+
+/* Properties brauchen wir*/
+inherit "/std/thing/properties.lpc";
+
+/* Funktionsdeklarationen */
+nosave int Error(string msg,int flags);
+int AddUid(object pl,string uid);
+int DelUid(object pl,string uid);
+int AddMaster(object pl,string uid);
+int DelMaster(object pl,string uid);
+int AddFile(object pl,string file);
+int DelFile(object pl,string file);
+int ShowStats(object pl,string str);
+varargs int CheckSecurity(mixed uid,int flag);
+
+/* Bitte keine Shadows */
+nomask int query_prevent_shadow() { return 1; }
+
+void create()
+{
+  int j;
+  string savefile;
+
+  /* Service-Objekt nur zum ableiten...das frisst beim clonen */
+  /* bloss Speicher und schreibt ein Savefile, das brauchma ned */
+  if (explode(file_name(this_object()),"#")[0]==SERVOBJ)
+    return;
+  /* Saemtliche abgeleiteten Objekte duerfen nur einmal existieren */
+  /* Sie werden nicht oefter gebraucht und wuerden nur Konflikte */
+  /* bei den Savefiles produzieren */
+  if (is_clone(this_object()))
+    destruct(this_object());
+  seteuid(getuid());
+  savefile=file_name(this_object());
+  for (j=strlen(savefile)-1;savefile[j..j]!="/";j--);
+  savefile=savefile[0..j]+"."+savefile[j+1..<1]+".sec";
+  write("Savefile: "+savefile+"\n");
+  restore_object(savefile);
+  /* Nur einmal initialisieren */  
+  write (sprintf("P_SEC_ACCESS %O\n",QueryProp(P_SEC_ACCESS)));
+  if (2==sizeof(QueryProp(P_SEC_ACCESS)))
+    return;
+  write("P_SEC_ACCESS set to ({({}),({})})\n");
+  properties::create();
+  SetProp(P_SEC_ACCESS,({({}),({})}));
+  Set(P_SEC_ACCESS,SAVE|SECURED|PROTECTED,F_MODE_AS); 
+  SetProp(P_SEC_LOGFILES,({}));
+  Set(P_SEC_LOGFILES,SAVE|SECURED|PROTECTED,F_MODE_AS); 
+}
+
+nosave int Error(string msg,int flags)
+{
+  int i;
+  string *ar;
+  
+  if (!previous_object())
+    return 0;
+  if (flags&FL_LOG)
+  {
+    ar=QueryProp(P_SEC_LOGFILES);
+    for (i=sizeof(ar);i-->0;)
+    {
+      write_file(ar[i],ctime()+": "+msg+"\n");
+    } 
+  }
+  if (flags&FL_MAG)
+  {
+    ar=QueryProp(P_SEC_ACCESS)[0];
+    for (i=sizeof(ar);i-->0;)
+    {
+      if (find_player(ar[i]))
+        tell_object(find_player(ar[i]),msg+"\n");
+    }
+  }
+  if (flags&FL_MAS)
+  {
+    ar=QueryProp(P_SEC_ACCESS)[1];
+    for (i=sizeof(ar);i-->0;)
+    {
+      if (find_player(ar[i]))
+        tell_object(find_player(ar[i]),msg+"\n");
+    }
+  }
+  if (flags&FL_DEB)
+  {
+    catch(VOICEMASTER->SendToChannel("Debug", this_object(), SAY, msg));
+  }
+  return 0;
+}
+
+nosave varargs int CheckSecurity(mixed uid,int flag)
+{
+  string *access_rights;
+  
+  if (!flag&&intp(uid)&&uid==1)
+  {
+    flag=1;
+    uid=previous_object();
+  }
+  if (!uid)
+    uid=previous_object();
+  if (!stringp(uid))
+    uid=getuid(uid);
+  if (IS_ARCH(uid))
+    return 1;
+  if (uid==getuid(this_object()))
+    return 1;
+  access_rights=QueryProp(P_SEC_ACCESS)[flag];
+  if (-1 != member(access_rights,uid)) 
+    return 1;
+  return 0;
+}
+
+/* Logfiles hinzufuegen */
+int AddFile(object pl,string file)
+{
+  int j;
+  string *logfiles;
+  string savefile;
+  
+  if (!previous_object()||(explode(file_name(previous_object()),"#")[0]!=SERVTOOL))
+    return 0;
+  if (!CheckSecurity(pl,0))
+    return 0;
+  logfiles=QueryProp(P_SEC_LOGFILES);
+  if (-1==member(logfiles,file))
+  {
+    logfiles+=({file});
+    SetProp(P_SEC_LOGFILES,logfiles);
+    savefile=file_name(this_object());
+    for (j=strlen(savefile)-1;savefile[j..j]!="/";j--);
+    save_object(savefile[0..j]+"."+savefile[j+1..<1]+".sec");
+    tell_object(pl,"Logfile "+file+" erfolgreich hinzugefuegt.\n");
+  }
+  else
+    tell_object(pl,"Logfile "+file+" ist bereits eingetragen.\n");
+  return 1;
+}
+
+int DelFile(object pl,string file)
+{
+  int j;
+  string *logfiles;
+  string savefile;
+  
+  if (!previous_object()||(explode(file_name(previous_object()),"#")[0]!=SERVTOOL))
+    return 0;
+  if (!CheckSecurity(pl,0))
+    return 0;
+  logfiles=QueryProp(P_SEC_LOGFILES);
+  if (-1!=member(logfiles,file))
+  {
+    logfiles-=({file});
+    SetProp(P_SEC_LOGFILES,logfiles);
+    savefile=file_name(this_object());
+    for (j=strlen(savefile)-1;savefile[j..j]!="/";j--);
+    save_object(savefile[0..j]+"."+savefile[j+1..<1]+".sec");
+    tell_object(pl,"Logfile "+file+" erfolgreich entfernt.\n");
+  }
+  else
+    tell_object(pl,"Logfile "+file+" ist nicht eingetragen.\n");
+  return 1;
+}
+
+/* Allowed Uid hinzufuegen */
+int AddUid(object pl,string uid)
+{
+  int j;
+  mixed *access_rights;
+  string savefile;
+  
+  if (!previous_object()||(explode(file_name(previous_object()),"#")[0]!=SERVTOOL))
+    return 0;
+  if (!CheckSecurity(pl,1))
+    return 0;
+  access_rights=QueryProp(P_SEC_ACCESS);
+  if (-1==member(access_rights[0],uid))
+  {
+    access_rights[0]+=({uid});
+    SetProp(P_SEC_ACCESS,access_rights);
+    savefile=file_name(this_object());
+    for (j=strlen(savefile)-1;savefile[j..j]!="/";j--);
+    save_object(savefile[0..j]+"."+savefile[j+1..<1]+".sec");
+    tell_object(pl,"Uid <<"+uid+">> erfolgreich hinzugefuegt.\n");
+  }
+  else
+    tell_object(pl,"Uid <<"+uid+">> ist bereits eingetragen.\n");
+  return 1;
+}
+
+/* Allowed Uid loeschen */
+int DelUid(object pl,string uid)
+{
+  int j;
+  mixed *access_rights;
+  string savefile;
+  
+  if (!previous_object()||(explode(file_name(previous_object()),"#")[0]!=SERVTOOL))
+    return 0;
+  if (!CheckSecurity(pl,1))
+    return 0;
+  access_rights=QueryProp(P_SEC_ACCESS);
+  if (-1!=member(access_rights[0],uid))
+  {
+    access_rights[0]-=({uid});
+    SetProp(P_SEC_ACCESS,access_rights);
+    savefile=file_name(this_object());
+    for (j=strlen(savefile)-1;savefile[j..j]!="/";j--);
+    save_object(savefile[0..j]+"."+savefile[j+1..<1]+".sec");
+    tell_object(pl,"Uid <<"+uid+">> erfolgreich entfernt.\n");
+  }
+  else
+    tell_object(pl,"Uid <<"+uid+">> ist nicht eingetragen.\n");
+  return 1;
+  
+}
+
+/* Master Uid hinzufuegen */
+int AddMaster(object pl,string uid)
+{
+  int j;
+  mixed *access_rights;
+  string savefile;
+
+  if (!previous_object()||(explode(file_name(previous_object()),"#")[0]!=SERVTOOL))
+    return 0;
+  if (!CheckSecurity(pl,1))
+    return 0;
+  access_rights=QueryProp(P_SEC_ACCESS);
+  if (-1==member(access_rights[1],uid))
+  {
+    access_rights[1]+=({uid});
+    if (-1==member(access_rights[0],uid))
+      access_rights[0]+=({uid});
+    SetProp(P_SEC_ACCESS,access_rights);
+    savefile=file_name(this_object());
+    for (j=strlen(savefile)-1;savefile[j..j]!="/";j--);
+    save_object(savefile[0..j]+"."+savefile[j+1..<1]+".sec");
+    tell_object(pl,"Master-Uid <<"+uid+">> erfolgreich hinzugefuegt.\n");
+  }
+  else
+    tell_object(pl,"Master-Uid <<"+uid+">> ist bereits eingetragen.\n");
+  return 1;
+}
+
+/* Master Uid loeschen */
+int DelMaster(object pl,string uid)
+{
+  int j;
+  mixed *access_rights;
+  string savefile;
+
+  if (!previous_object()||(explode(file_name(previous_object()),"#")[0]!=SERVTOOL))
+    return 0;
+  if (!CheckSecurity(pl,1))
+    return 0;
+  access_rights=QueryProp(P_SEC_ACCESS);
+  if (-1!=member(access_rights[1],uid))
+  {
+    access_rights[1]-=({uid});
+    if (-1!=member(access_rights[0],uid))
+      access_rights[0]-=({uid});
+    SetProp(P_SEC_ACCESS,access_rights);
+    savefile=file_name(this_object());
+    for (j=strlen(savefile)-1;savefile[j..j]!="/";j--);
+    save_object(savefile[0..j]+"."+savefile[j+1..<1]+".sec");
+    tell_object(pl,"Master-Uid <<"+uid+">> erfolgreich entfernt.\n");
+  }
+  else
+    tell_object(pl,"Master-Uid <<"+uid+">> ist nicht eingetragen.\n");
+  return 1;
+
+}
+
+int ShowStats(object pl,string str)
+{
+  int i;
+  string *logfiles;
+  mixed *access_rights;
+  
+  if (!previous_object()||(explode(file_name(previous_object()),"#")[0]!=SERVTOOL))
+    return 0;
+  if (!CheckSecurity(pl,0))
+    return 0;
+  logfiles=QueryProp(P_SEC_LOGFILES);
+  for (i=sizeof(logfiles);i-->0;)
+    logfiles[i]=sprintf("%s-50",logfiles[i]);
+  access_rights=QueryProp(P_SEC_ACCESS);
+  tell_object(pl,
+        "     +-----------------------------------------------------+\n"
+        "     | Status von:                                         |\n"
+        "     | "+
+        sprintf("%-50s",file_name(this_object()))
+                                                                +"  |\n"
+        "     +-----------------------------------------------------+\n"
+        "     | Master Uids:                                        |\n"
+        "     | "+
+        sprintf("%-50s",implode(access_rights[1],", "))
+                                                                +"  |\n"
+        "     | Uids:                                               |\n"
+        "     | "+
+        sprintf("%-50s",implode(access_rights[0]-access_rights[1],", "))
+                                                                +"  |\n"
+        "     | Logfiles:                                           |\n"
+        "     | "+
+        sprintf("%-50s",implode(logfiles,"  |\n     | "))
+                                                                +"  |\n"
+        "     +-----------------------------------------------------+\n"
+              );
+  return 1;
+}
+
+private mixed *_set_sec_access(mixed access)
+{
+  if (!pointerp(access))
+    return 0;
+  return Set(P_SEC_ACCESS,access,F_VALUE);
+}
+
+private mixed *_set_sec_logfiles(mixed logfiles)
+{
+  int i;
+  
+  if (!pointerp(logfiles))
+    return 0;
+  for (i=sizeof(logfiles);i-->0;)
+    if (!stringp(logfiles[i]))
+      return 0;
+  return Set(P_SEC_LOGFILES,logfiles,F_VALUE);
+}
+
+private mixed *_query_sec_access()
+{
+  return Query(P_SEC_ACCESS,F_VALUE);
+}
+
+private mixed *_query_sec_logfiles()
+{
+  return Query(P_SEC_LOGFILES,F_VALUE);
+
+}

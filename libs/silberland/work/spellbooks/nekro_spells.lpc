@@ -1,0 +1,1208 @@
+// /spellbooks/nekro_spells.c  
+// Spellbook der Nekromanten
+// Genauere Erlaeuterungen bitte dem File 
+// entnehmen.
+// Stahldorn@SilberLand
+// Angrox@Silberland
+// Feyaria@Silberland
+
+// $Date: 2007/04/13 11:26:21 $
+/* $Revision: 1.9 $
+ * $Header: /mud/mudlib/spellbooks/RCS/nekro_spells.c,v 1.9 2007/04/13 11:26:21 Angrox Exp mud $
+ * $Log: nekro_spells.c,v $
+ * Revision 1.9  2007/04/13 11:26:21  Angrox
+ * Mehr Schaden wenn die Standarte da is
+ *
+ * Revision 1.8  2007/03/06 19:48:31  Angrox
+ * Abnorme Schadensanpassungen
+ *
+ * Revision 1.7  2005/11/25 19:14:44  Angrox
+ * Typos ausgebessert. Verfluchte Items bringen kleinen Bonus ueber CheckItems()
+ *
+ * Revision 1.6  2004/12/20 13:43:51  Angrox
+ * Bonus wenn Paladinstandarte in der Gruft
+ *
+ * Revision 1.5  2004/09/03 18:00:43  Feyaria
+ * froglok ist humanoid, equiptime abfrageb beim nekro-bonus
+ *
+ * Revision 1.4  2004/02/24 10:22:44  Angrox
+ * BLOODUSE_FACTOR integriert
+ *
+ * Revision 1.3  2004/02/23 13:26:19  Feyaria
+ * Komplette Neuueberarbeitung von Angrox, Archon und Feyaria
+ *
+ * Revision 1.1  2002/05/22 15:41:45  Angrox
+ * Initial revision
+ *
+ */
+// 31.07.2003 Archon: halbelf ist auch humanoid
+// 29.07.2003 Archon: hier und da etwas
+// 23.06.2003 Archon: skillpunkte
+// 14.06.2003 Archon: victim finden
+
+//Erzmagierin Feyaria teilt Dir mit: 'schrei der todesfee' 'hauch des
+//Erzmagierin Feyaria teilt Dir mit: verderbens' 'atem der verwesung' 'kochendes
+//Erzmagierin Feyaria teilt Dir mit: blut' 'mysterium von Ny-ka-thul' 'wolke der
+//Erzmagierin Feyaria teilt Dir mit: verdammnis' 'pforte ins totenreich' usw usw
+//Erzmagierin Feyaria teilt Dir mit: :)
+//
+
+#include <properties.h>
+#include <attributes.h>
+#include <combat.h>
+#include <wizlevels.h>
+#include <new_skills.h>
+#include <moving.h>
+#include <ansi.h>
+#include <class.h>
+#include "/gilden/nekromanten/nekro.h"
+#include "/gilden/berserker/berserker_extern.h"
+#include "/p/daemon/itemd/itemd.h"
+
+#define MAX_EQUIP_BONUS 30
+#define TOTAL_EQUIP_BONUS 100
+#define TW(x) if (find_player("wraz")) tell_object(find_player("wraz"),x)
+
+inherit "/std/spellbook";
+
+nosave int total_fail;
+nosave int blood_check_counter=0; 
+nosave int blood_value_add=0;
+
+varargs int DoModificationByAlign(int value, object caster, object victim);
+nosave mapping DoSpellModification(object caster,mapping sinfo);
+string CheckIfSpellAllowed(object caster, mapping sinfo);
+nosave int GetAlign(object spieler);  
+nosave int tell_saf(string msg);
+int is_humanoid(string str);
+int is_living(object victim);
+string random_fluch();
+object CloneGhost(object corpse, object caster, int succ);
+object CloneZombie(object corpse, object caster, int succ);
+object CloneSkeleton(object corpse, object caster, int succ);
+object CloneMummy(object corpse, object caster, int succ);
+object CloneVampir(object corpse, object caster, int succ);
+object CloneGhoul(object caster, int succ);
+int CheckEquip(object caster, string prop);
+int Darkness(object victim, object caster, int suc);
+int clone_properties(object new, object old);
+mixed parse_target(string str);
+string checkgender(object pl, string female, string male);
+string eng2germ(string eng);
+void do_spellbook_damage(int dam, object pl, string killer, mixed kill_msg);
+int present_victim(object victim,object caster); //Archon - test ob victim noch da
+int get_skillpoints(object pl,string skill); //skillpunkte fuer einen spell/skill holen
+int get_dam_with_skillpoints(int dam,int skillpunkte); //berechnung des dam unter beruecksichtigung der skillpunkte
+varargs int UseBlood(int value);
+int get_schutz_with_skillpoints(int dam,int skillpunkte);
+
+// von saeureexplosion:
+object saeureexplosion_find_vicitim(object caster, mapping sinfo, int silent);
+
+void create() 
+{
+  ::create();
+  SetProp(P_SB_CASTVERB, "zaubere");
+  SetProp(P_SB_PARSE_FUNC, "nekro_parse_func");
+  SetProp(P_SB_NEW_PREPAREFUNC,1);
+  SetProp(P_GLOBAL_SKILLPROPS,
+          ([SI_SKILLRESTR_USE: ([SR_FUN:"CheckIfSpellAllowed"]),
+            SI_SKILLLEARN:1,         // 0.05% pro 2 A_INT 
+            OFFSET(SI_SKILLLEARN):2, // plus 0.05% in jedem Fall
+            SI_SKILLLEARN_ATTRIBUTE: A_INT, 
+            SI_SPELLFATIGUE:2,       // 2 Sekunden kein neuer Spell
+            SI_PREPARE_TIME: 0,     
+            SI_TIME_MSG: BS("NARR! Du bist noch zu erschoepft von Deiner "
+                           "letzten unheiligen Anrufung!"),
+            SI_SP_LOW_MSG: BS("NARR! Deine unheilige Macht reicht fuer diese "
+                             "Anrufung nicht aus."),
+            SI_NOMAGIC_MSG: BS("BEI ALLEN DAEMONISCHEN GESCHOEPFEN! Eine "
+                             "heilige Macht verhindert Deine Anrufung!"),
+            SI_LEARN_MSG: BS("Endlich! Deine Anrufung ist nun besser "
+                            "geworden!"),
+            SI_NOLEARN_MSG: BS("NARR! DU HAST NICHTS GELERNT!"),
+            SI_ENABLE_CASTVERB: 1,
+          ]));
+
+
+  //
+  //  ALLE DAMAGESPELLS WURDEN UM ca. 10 % gesenkt !!
+  //  (siehe kommentar "orginal <zahl>"
+  // 
+
+  // --- LVL 1 ---
+  AddSpell("auge des khaza-dhunaar", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:1]),
+            SI_SKILLLEARN: 2,
+            SI_RAW_SPELLCOST: 20,
+            SI_DIFFICULTY: 10,
+            SI_SPELLFATIGUE: 4,
+            SI_PREPARE_TIME: 2,
+            SI_PREPARE_MSG: BS("Du konzentrierst Dich auf die unheilige "
+                              "Anrufung ..."),
+            SI_PREPAREFUNC: "prep_schaetzident",
+            SI_SPELLFUNC: "schaetzident",
+          ]));
+  
+  AddSpell("strahlen der dunkelheit", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:1]),
+            SI_RAW_SPELLCOST: 15,
+            SI_DIFFICULTY: 10,
+            SI_SPELLFATIGUE: 4,
+            SI_SKILLDAMAGE_TYPE: DT_UNHOLY,
+            SI_SKILLDAMAGE: 130, // orginal 140
+            SI_MAX_DAMAGE: 200,
+            SI_DIE_MSG: " wird in Dunkelheit gehuellt und stirbt.\n",
+            SI_SPELLFUNC: "strahlderdunkelheit",
+          ]));
+
+  AddSpell("pforte ins totenreich", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:1]),
+            SI_SKILLLEARN: 5,
+            SI_RAW_SPELLCOST: 40,
+            SI_DIFFICULTY: 40,
+            SI_SPELLFATIGUE: 6,
+            SI_PREPARE_TIME: 5,
+            SI_PREPARE_MSG: "Du loest die Verbindung zwischen Geist und Koerper "
+                            "und sendest den Geist in das Totenreich.\n",
+            SI_PREPAREFUNC: "prep_pforte_ins_totenreich",
+            SI_SPELLFUNC: "pforte_ins_totenreich",
+          ]));
+
+  AddSpell("beruehrung von zum-uul", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:1]),
+            SI_RAW_SPELLCOST: 30,
+            SI_DIFFICULTY: 30,
+            SI_SPELLFATIGUE: 12,
+            SI_PREPARE_TIME: 2,
+            SI_SPELLFUNC: "zumuul",
+          ]));
+
+
+// --- LVL 2 ---
+  AddSpell("anrufung des kharr-zzteth", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:2]),
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:2, SR_FUN:"CheckIfSpellAllowed"]),
+            SI_RAW_SPELLCOST: 30,
+            SI_DIFFICULTY: 30,
+            SI_SPELLFATIGUE: 6,
+            SI_PREPARE_TIME: 5,
+            SI_PREPARE_MSG: BS("Du reckst die Arme zum Himmel auf und "
+                            "beschwoerst die Macht der totalen Finsternis!"),
+            SI_PREPAREFUNC: "prep_beschwoerung",
+            SI_SPELLFUNC: "beschwoerung",
+          ]));
+
+  AddSpell("unterwerfung der toten", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:2]),
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:2, SR_FUN:"CheckIfSpellAllowed"]),
+            SI_RAW_SPELLCOST: 30,
+            SI_DIFFICULTY: 30,
+            SI_SPELLFATIGUE: 6,
+            SI_PREPARE_TIME: 5,
+            SI_PREPARE_MSG: "",
+            SI_PREPAREFUNC: "prep_beherrschung",
+            SI_SPELLFUNC: "beherrschung",
+          ]));
+
+  AddSpell("empathie der schatten", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:2]),
+            SI_SKILLLEARN: 2,
+            SI_RAW_SPELLCOST: 15,
+            SI_DIFFICULTY: 50,
+            SI_SPELLFATIGUE: 12,
+            SI_PREPARE_TIME: 4,
+            SI_PREPARE_MSG: BS("Du ziehst Deine unheilige Lebensessenz "
+                              "auf einen Punkt zusammen ..."),
+            SI_PREPAREFUNC: "prep_schattenempathie",
+            SI_SPELLFUNC: "schattenempathie",
+          ]));
+
+ // --- Lvl 3 ---
+ 
+  AddSpell("kochendes blut", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:3]),
+            SI_SKILLLEARN: 2,
+            SI_RAW_SPELLCOST: 45,
+            SI_DIFFICULTY: 50,
+            SI_SPELLFATIGUE: 8,
+            SI_PREPARE_TIME: 2,
+            SI_PREPARE_MSG: "Kochendes Blut, ueberall Blut ...\n",
+            SI_PREPAREFUNC: "prep_kochendes_blut",
+            SI_SPELLFUNC: "kochendes_blut",
+          ]));
+  
+  AddSpell("dunkler pakt", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:3]),
+            SI_SKILLLEARN: 3,
+            SI_RAW_SPELLCOST: 150,
+            SI_DIFFICULTY: 50,
+            SI_SPELLFATIGUE: 14,
+            SI_PREPARE_TIME: 6,
+            SI_PREPARE_MSG: "Du bereitest Dich auf den dunklen Pakt vor.\n",
+            SI_PREPAREFUNC: "prep_dunkler_pakt",
+            SI_SPELLFUNC: "dunkler_pakt",
+          ]));
+
+  AddSpell("schleier des val-tkro-tthar", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:3]),
+            SI_SKILLLEARN: 2,
+            SI_RAW_SPELLCOST: 50,
+            SI_DIFFICULTY: 50,
+            SI_SPELLFATIGUE: 8,
+            SI_PREPARE_TIME: 4,
+            SI_PREPARE_MSG: BS("Du beginnst leise die geheimen Riten des "
+                              "Val-Tkro-Tthar zu singen!"),
+            SI_PREPAREFUNC: "prep_schutz",
+            SI_SPELLFUNC: "schutz",
+          ]));
+
+
+// Lvl 4
+  AddSpell("hauch der verwesung", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:4]),
+            SI_RAW_SPELLCOST: 40,
+            SI_DIFFICULTY: 50,
+            SI_SPELLFATIGUE: 4,
+            SI_PREPARE_TIME: 2,
+            SI_PREPARE_MSG: "Ein fauliger Geruch breitet sich langsam aus.\n",
+            SI_PREPAREFUNC: "prep_hauch_der_verwesung",
+            SI_SKILLDAMAGE_TYPE: ({ DT_ACID, DT_POISON }),
+            SI_SKILLDAMAGE:360, // orginal 400
+            OFFSET(SI_SKILLDAMAGE):180, // orginal 200
+            SI_MAX_DAMAGE: 777,
+            SI_SPELLFUNC: "hauch_der_verwesung",
+            ]));
+  
+  AddSpell("fluch der klinge", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:4]),
+            SI_SKILLLEARN: 3,
+            SI_RAW_SPELLCOST: 100,
+            SI_DIFFICULTY: 50,
+            SI_SPELLFATIGUE: 40, 
+            SI_PREPARE_TIME: 10,
+            SI_PREPARE_MSG: BS("Deine leisen Worte bringen die Kaelte "
+                              "auf den schwarzen Stahl..."),
+            SI_PREPAREFUNC: "prep_fluch_der_klinge",
+            SI_SPELLFUNC: "fluch_der_klinge",
+          ]));
+
+  AddSpell("biss des vampirs",0, 
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:4]),
+            SI_RAW_SPELLCOST: 30,
+            SI_DIFFICULTY: 100,
+            SI_SPELLFATIGUE: 6,
+            SI_PREPARE_TIME: 2,
+            SI_PREPARE_MSG: "Du fletschst Deine Zaehne.\n",
+            SI_PREPAREFUNC: "prep_biss_des_vampirs",
+            SI_SKILLDAMAGE_TYPE: ({ DT_PIERCE, DT_UNHOLY }),
+            SI_SKILLDAMAGE:405,  // orginal 450
+            OFFSET(SI_SKILLDAMAGE):150, 
+            SI_MAX_DAMAGE: 666,
+            SI_NOMAGIC: 100,
+            SI_DIE_MSG: " stirbt an Blutverlust.\n",
+            SI_SPELLFUNC: "biss_des_vampirs",
+          ]));
+
+  AddSpell("ruf der ghoule",0, 
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:4]),
+            SI_SKILLLEARN: 2,
+            SI_RAW_SPELLCOST: 40,
+            SI_DIFFICULTY: 50,
+            SI_SPELLFATIGUE: 4,
+            SI_PREPARE_TIME: 4,
+            SI_PREPARE_MSG: "Du denkst an Ghoule und Leichenfresser.\n",
+            SI_PREPAREFUNC: "prep_ruf_der_ghoule",
+            SI_SPELLFUNC: "ruf_der_ghoule",
+          ]));
+
+// Lvl 5
+  AddSpell("schrecken der finsternis", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:5]),
+            SI_RAW_SPELLCOST: 45,
+            SI_DIFFICULTY: 100,
+            SI_SPELLFATIGUE: 6,
+            SI_PREPARE_TIME: 2,
+            SI_PREPARE_MSG: "Du sammelst Deine ganze Boesartigkeit "
+                            "zusammen.\n",
+            SI_PREPAREFUNC: "prep_terror",
+            SI_SKILLDAMAGE_TYPE: ({DT_TERROR, DT_UNHOLY}),
+            SI_SKILLDAMAGE:450,  // orginal 500
+            OFFSET(SI_SKILLDAMAGE):200,
+            SI_MAX_DAMAGE: 999,
+            SI_DIE_MSG: " faellt vor Schreck tot um.\n",
+            SI_SPELLFUNC: "terror",
+          ]));
+  AddSpell("geifer der verdammten",0, 
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:5]),
+            SI_RAW_SPELLCOST: 50,
+            SI_DIFFICULTY: 100,
+            SI_SPELLFATIGUE: 4,
+            SI_PREPARE_TIME: 2,
+            SI_PREPARE_MSG: "Du formst Deine Haende zu einer Kugel.\n",
+            SI_PREPAREFUNC: "prep_saeureexplosion",
+            SI_SKILLDAMAGE_TYPE: ({ DT_ACID, DT_EXPLOSION }),
+            SI_SKILLDAMAGE:270,  // orginal 300
+            OFFSET(SI_SKILLDAMAGE):150, 
+            SI_MAX_DAMAGE: 555,
+            SI_DIE_MSG: " zerplatzt in kleine Stuecke.\n",
+            SI_SPELLFUNC: "saeureexplosion",
+          ]));
+  
+
+// Lvl 6
+  AddSpell("blutpakt der verdammten", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:6]),
+            SI_SKILLLEARN: 3,
+            SI_RAW_SPELLCOST: 100,
+            SI_DIFFICULTY: 200,
+            SI_SPELLFATIGUE: 14,
+            SI_PREPARE_TIME: 6,
+            SI_PREPARE_MSG: "Du spuerst das Blut der Lebenden pulsieren...\n",
+            SI_PREPAREFUNC: "prep_blutpakt",
+            SI_SPELLFUNC: "blutpakt",
+          ]));
+
+  AddSpell("gekreische der todesfee",0, 
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:6]),
+            SI_RAW_SPELLCOST: 50,
+            SI_DIFFICULTY: 200,
+            SI_SPELLFATIGUE: 6,
+            SI_PREPARE_TIME: 2,
+            SI_PREPARE_MSG: "Du reisst Deinen Mund ganz weit auf.\n",
+            SI_PREPAREFUNC: "prep_gekreische_der_todesfee",
+            SI_SKILLDAMAGE_TYPE: ({ DT_SOUND, DT_UNHOLY }),
+            SI_SKILLDAMAGE:360, // orginal 400
+            OFFSET(SI_SKILLDAMAGE):250, 
+            SI_MAX_DAMAGE: 888,
+            SI_DIE_MSG: " wird vom Gekreische wahnsinnig und stirbt.\n",
+            SI_SPELLFUNC: "gekreische_der_todesfee",
+          ]));
+
+ 
+// Lvl 7
+  AddSpell("mysterium von yok-njarg-zirm", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:7]),
+            SI_SKILLLEARN: 3,
+            SI_RAW_SPELLCOST: 50,
+            SI_DIFFICULTY: 300,
+            SI_SPELLFATIGUE: 20,
+            SI_PREPARE_TIME: 2,
+            SI_PREPARE_MSG: BS("Du versenkst Deinen Geist in die Nebel "
+                              "der Ungewissheit ..."),
+            SI_PREPAREFUNC: "prep_mysterium",
+            SI_SPELLFUNC: "mysterium",
+          ]));
+  AddSpell("fluch der mumie", 0,
+          ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:7]),
+            SI_SKILLLEARN: 2,
+            SI_RAW_SPELLCOST: 80,
+            SI_DIFFICULTY: 300,
+            SI_SPELLFATIGUE: 6,
+            SI_PREPARE_TIME: 2,
+            SI_PREPARE_MSG: "Ein schwarzer Schleier scheint sich zu bilden.\n",
+            SI_PREPAREFUNC: "prep_fluch_der_mumie",
+            SI_SPELLFUNC: "fluch_der_mumie",
+            ]));
+  
+}
+
+// LVL 1
+// Auge des Khaza-doom
+//
+#include "nekro/auge_des_khaza_dhunaar.lpc"
+
+// LVL 1
+// STRAHL DER DUNKELHEIT
+//
+#include "nekro/strahlen_der_dunkelheit.lpc"
+
+// LVL 1
+// Pforte ins Totenreich
+//
+#include "nekro/pforte_ins_totenreich.lpc"
+
+// LVL 1
+// Beruehrung von Zum-Uul
+//
+#include "nekro/beruehrung_von_zum_uul.lpc"
+
+// LVL 2
+// BESCHWOERUNG
+//
+#include "nekro/beschwoerung.lpc"
+
+// LVL 2
+// BEHERRSCHUNG
+//
+#include "nekro/beherrschung.lpc"
+
+// LVL 3
+// Kochendes Blut
+// 
+#include "nekro/kochendes_blut.lpc"
+
+// LVL 3
+// Dunkler Pakt
+// 
+#include "nekro/dunkler_pakt.lpc"
+
+// LVL 3
+// schleier des val-tkro-tthar
+#include "nekro/schleier_des_val_tkro_tthar.lpc"
+
+// LVL 4
+// Biss des Vampirs
+//
+#include "nekro/biss_des_vampirs.lpc"
+
+
+// LVL 4
+// Hauch der Verwesung
+//
+#include "nekro/hauch_der_verwesung.lpc"
+
+// LVL 4
+// Fluch der Klinge 
+#include "nekro/fluch_der_klinge.lpc"
+
+// LVL 4
+// Ruf der Ghoule
+#include "nekro/ruf_der_ghoule.lpc"
+
+// LVL 5
+// Schrecken der Finsternis
+// 
+#include "nekro/schrecken_der_finsternis.lpc"
+
+// LVL 5
+// Saeureexplosion
+//
+#include "nekro/saeureexplosion.lpc"
+
+// LVL 6
+// Gekreische der Todesfee
+//
+#include "nekro/gekreische_der_todesfee.lpc"
+
+//  LVL 6
+//  SCHATTENEMPATHIE
+//
+#include "nekro/empathie_der_schatten.lpc"
+
+// LVL 6
+// Blutpakt der Verdammten
+#include "nekro/blutpakt_der_verdammten.lpc"
+
+// LVL 7
+// Mysterium von Yok-njarg-Zirm
+#include "nekro/mysterium.lpc"
+
+
+// LVL 7
+// fluch_der_mumie
+#include "nekro/fluch_der_mumie.lpc"
+
+
+// -----------------------------------------------------------
+// -----------------------------------------------------------
+// -----------------------------------------------------------
+
+varargs int DoModificationByAlign(int value, object caster, object victim) 
+{
+  int flag, caster_align, victim_align, diff;
+  flag=1;
+  if(!intp(value)) return 0;
+  if(!objectp(caster)) caster=TP;
+  if(!objectp(victim)) flag=0;
+  caster_align=GetAlign(caster);
+  if(!intp(caster_align)) caster_align=0;
+  if(flag) {
+    victim_align=GetAlign(victim);
+    if(!intp(victim_align)) victim_align=0;
+  }
+  // Das is zu hart: 
+  //if(victim_align<-400) victim_align*=2;
+  if((diff=caster_align-victim_align)==0) return value;
+  //diff=diff<0?-diff:diff;
+  //TELL("angrox", sprintf("NEKRO, DoModificationByAlign: align c/v: %d/%d, "
+    //    "value v/n: %d/%d\n", caster_align, victim_align, value, 
+    //    (int)(value*(1-(diff/3000.0)))));
+    
+  return (int)(value*(1-(diff/4000.0)));
+  //  diff/3000
+  // caster        Victim=1000    400      0       -400     -500   -1000
+  // --------------------------------------------------------------------
+  // -1100              +70%     +50%     +36%     +23%      +3%    -30%
+  // -1000              +66%     +46%     +33%     +20%       0     -33%
+  //  -500              +50%     +30%     +16%      +3%     -16%    -50%
+  //     0              +33%     +13%       0      -13%     -33%    -66%    
+  //
+  // diff/4000
+  // caster        Victim=1000    400      0       -400     -500   -1000
+  // --------------------------------------------------------------------
+  // -1100              +52%     +37%     +27%     +17%      +2%    -22%
+  // -1000              +50%     +34%     +23%     +15%       0     -25%
+  //  -500              +37%     +28%     +12%      +2%     -12%    -37%
+  //     0              +25%     +10%       0      -10%     -25%    -50%    
+}
+
+//liefert die summe aller bonusobjekte zurueck
+int CheckEquip(object caster, string prop)
+{
+  int r,i,x;
+  object *a;
+  object w;
+  mapping map;
+  r=0;
+  if (!pointerp(a=caster->QueryProp(P_ARMOURS)) ) a=({});
+  if( w=caster->QueryProp(P_WEAPON)) a+=({w});
+  a-=({0});
+  for(i=sizeof(a);i--;)
+  {
+    if( objectp(a[i]) && mappingp(map=a[i]->QueryProp(P_NEKRO_BONUS)) &&
+        a[i]->QueryProp(P_EQUIP_TIME) + 3 < time())
+      if( (x=map[prop]) || (x=map["all"]) ) 
+        if(intp(x) && x>0)
+        {
+          r+=x>MAX_EQUIP_BONUS?MAX_EQUIP_BONUS:x;
+          //write_nekro_log("CheckEquip.log", 
+          //  sprintf("prop='%s' bonus=%d, item=%s\n",prop,x,to_string(a[i])));
+        }
+  }
+  return (r>TOTAL_EQUIP_BONUS?TOTAL_EQUIP_BONUS:r);
+}
+
+float CheckItems(object pl) {
+  object *obj, wea;
+  int i, value, h;
+  value=0;
+  if(!objectp(pl)) return 0.0;
+  obj=({});
+  obj=pl->QueryProp(P_ARMOURS);
+  if( wea=pl->QueryProp(P_WEAPON) )
+    obj+=({wea});
+  if(!sizeof(obj)) return 0.0;
+  for(i=sizeof(obj)-1;i>=0;i--) {
+    //TW(sprintf("NEKROspell: CheckItems: %O\n", obj[i]));
+    if(h=obj[i]->QueryProp(P_NEKRO_SPELLCOST))
+      value+=h;
+    if(h=obj[i]->QueryProp(P_CURSED)) 
+      value+=random(3);
+  }
+  return value/100.0;
+}
+
+#define DEBUG_TELL(caster, msg) if(IS_LEARNER(caster) || caster->QueryProp(P_TESTPLAYER)) { \
+                                    tell_object(caster, msg); \
+                                }
+
+nosave mapping DoSpellModification(object caster,mapping sinfo) 
+{
+  int align, mod, kosten, req_glvl;
+  float cost_modifier, fatigue_modifier, dam_modifier, max_dam_modifier;
+  cost_modifier=1.0;
+  fatigue_modifier=1.0;
+  dam_modifier=1.0;
+  max_dam_modifier=1.6;
+  align=GetAlign(caster);
+  if(align>100) {
+    // align 500 -> 0.79, align 1000 -> 1.11
+    cost_modifier+=sqrt((float)(align)/(float)800);
+    fatigue_modifier+=sqrt((float)(align)/(float)800);
+    DEBUG_TELL(caster, sprintf("NEKROspell: positive align - cm: %O, fm: %O, dm: %O, align: %d\n", cost_modifier, fatigue_modifier, dam_modifier, align));
+  }
+  
+  if(dtime(time())[19..20]==" 0" &&  // zwischen 0 udn 1 Uhr (geisterstunde)
+     sinfo[SI_SKILLFUNC]=="pforte_ins_totenreich" )
+    sinfo[SI_RAW_SPELLCOST]=10;  // ist geisterrufen sehr billig
+  
+  if(dtime(time())[0..6]=="Fre, 13")  // am Freitag dem 13
+    cost_modifier-=0.4;               // sind die spells billiger 
+  
+  if(dtime(time())[5..11]=="31. Oct")  // an Halloween
+    cost_modifier-=0.4;               // sind die spells billiger 
+
+  DEBUG_TELL(caster, sprintf("NEKROspell: date - cm: %O, fm: %O, dm: %O, align: %d\n", cost_modifier, fatigue_modifier, dam_modifier, align));
+
+  // Wenn die Standarte da ist: +40% Damage
+  if (find_object(NEKRO_ROOMS+"gruft") &&
+      present("\npaladinstandarte\n", find_object(NEKRO_ROOMS+"gruft"))) 
+  {
+     dam_modifier+=0.4;
+     cost_modifier-=0.4;               // sind die spells billiger 
+     max_dam_modifier+=0.6;
+  }
+
+  DEBUG_TELL(caster, sprintf("NEKROspell: standarte - cm: %O, fm: %O, dm: %O, align: %d\n", cost_modifier, fatigue_modifier, dam_modifier, align));
+
+  // align -1000 -> -0.06 .. -0.03,
+  if(align<-700) 
+    cost_modifier+=(float)((float)(align+700))/((float)(2000+random(2000)));
+
+  DEBUG_TELL(caster, sprintf("NEKROspell: negative align - cm: %O, fm: %O, dm: %O, align: %d\n", cost_modifier, fatigue_modifier, dam_modifier, align));
+ 
+  // Wenn man Gildenstufe 7 ist kosten alle spells um bis zu 3 weniger 
+  if(caster->QueryProp(P_GUILD_LEVEL)>6 && sinfo[SI_RAW_SPELLCOST]>=10) 
+    sinfo[SI_RAW_SPELLCOST]-=random(4);
+
+  // by Gwenshara: Nur auf die Grade zu gehen ist zu instabil, darum auch
+  // Gildenstufe miteinbeziehen  
+  // Kostenreduzierung durch innere Grade + Gildenstufe:
+  // 1/1 -> +0.235, 7/7 -> -0.245
+  cost_modifier+=0.245-(( (caster->QueryProp(P_GUILD_LEVEL)-1) * 7 + caster->QueryProp(P_GUILD_CIRCLE) ) / 100.0);
+  
+  // Schadenserhoehung durch innere Grade:
+  // 1. Grad -> -0.1, 7. Grad -> +0.2
+  dam_modifier+=(caster->QueryProp(P_GUILD_CIRCLE)-3)/20.0;
+
+  DEBUG_TELL(caster, sprintf("NEKROspell: glvl - cm: %O, fm: %O, dm: %O, align: %d\n", cost_modifier, fatigue_modifier, dam_modifier, align));
+
+  // Licht: pro negativer Lichtstufe um 0.01 billiger
+  // Lichtlvl -1 -> -0.01, Lichtlvl 1 -> +0.01
+  if(ENV(caster)) {
+    cost_modifier+=ENV(caster)->QueryProp(P_LIGHT)*0.01; 
+                   // in std-maessig hellen raeumen kostets mehr.
+  }
+
+  DEBUG_TELL(caster, sprintf("NEKROspell: light - cm: %O, fm: %O, dm: %O, align: %d\n", cost_modifier, fatigue_modifier, dam_modifier, align));
+
+  // Items Check
+  cost_modifier-=CheckItems(caster);
+  DEBUG_TELL(caster, sprintf("NEKROspell: items - cm: %O, fm: %O, dm: %O, align: %d\n", cost_modifier, fatigue_modifier, dam_modifier, align));
+
+  // Caster hat Dantes Zombievirus
+  if(present("DANTE_ZOMBIE_VIRUS", caster))
+    cost_modifier-=0.05;
+    DEBUG_TELL(caster, sprintf("NEKROspell: virus - cm: %O, fm: %O, dm: %O, align: %d\n", cost_modifier, fatigue_modifier, dam_modifier, align));
+
+  // Nach einem Tod eine Stunde lang billigere Spells
+  if((time()-3600) < caster->QueryProp(P_LAST_DIE_TIME)) 
+    cost_modifier-=0.1;
+  
+    DEBUG_TELL(caster, sprintf("NEKROspell: death - cm: %O, fm: %O, dm: %O, align: %d\n", cost_modifier, fatigue_modifier, dam_modifier, align));
+
+  if(cost_modifier<0.4) cost_modifier=0.4;
+  if(fatigue_modifier<0.3) fatigue_modifier=0.3;
+  if(dam_modifier>max_dam_modifier) dam_modifier=max_dam_modifier;
+  
+  if(!sinfo[SI_SPELLFATIGUE]) sinfo[SI_SPELLFATIGUE]=2;
+  if((sinfo[SI_SPELLFATIGUE]=(int)(sinfo[SI_SPELLFATIGUE]*fatigue_modifier))<2)
+    sinfo[SI_SPELLFATIGUE]=2;
+  sinfo[SI_RAW_SPELLCOST]=(int)(sinfo[SI_RAW_SPELLCOST]*cost_modifier);
+  sinfo[SI_SKILLDAMAGE]=(int)(sinfo[SI_SKILLDAMAGE]*dam_modifier);
+
+  DEBUG_TELL(caster, sprintf("NEKROspell: cm: %O, fm: %O, dm: %O, align: %d\n", cost_modifier, fatigue_modifier, dam_modifier, align));
+
+  return sinfo;
+}
+
+nosave int tell_saf(string msg) 
+{
+  return 1;
+  tell_stahldorn( BSA( msg+ANSI_NORMAL, ANSI_BLACK+ANSI_BG_RED+"*** "));
+  tell_angrox( BSA( msg+ANSI_NORMAL, ANSI_BLACK+ANSI_BG_RED+"*** "));
+  tell_feyaria( break_string( msg+ANSI_NORMAL, 96, ANSI_BLACK+ANSI_BG_RED+"*** "));
+  return 1;
+}
+
+nosave int GetAlign(object spieler) 
+{
+  int align;
+  string msg;
+  if(!intp(align=spieler->QueryProp(P_ALIGN))) {
+    tell_saf(sprintf("nekro_spells: GetAlign, %s hat falschen Datentyp fuer "
+      "Align!", spieler->Name(WER)));
+    spieler->SetProp(P_ALIGN, -1);
+    tell_object(spieler, "[BUG:"+CAP(getuid(spieler))+"] Falscher Datentyp im "
+        "Align!!! Bitte Magier verstaendigen!\n");
+    return 0;
+  }
+  if(align<-1100) return -1100;
+  else if(align>1000) return 1000;
+  return align;
+}
+
+string random_fluch()
+{
+  string *flueche;
+  flueche=({
+    "Verdammt noch einmal!",
+    "In drei Teufels Namen!",
+    "Bei allen Daemonen!",
+    "Verflucht noch einmal!",
+    "Zur Hoelle damit!",
+    "Faeulnis und Verdammnis!",
+    "Spinnenfrass und Eiterbeule!",
+    "Bei den Niederhoellen!",
+    "Verdammt seien alle Paladine!", 
+    "In der ewigen Verdammnis sollt ihr schmoren!",
+    "Bei allen Niederhoellen!",
+    "Bei der schleichenden Verdammnis!",
+    "Verflucht in alle Ewigkeiten!",
+    "Bei den vier Bestien!",
+    "Verflucht sei alles Gute!",
+    "Zombiefaeule und Mumienmoder!",
+    "Bei allen Pestbeulen!",
+    "Deamonendung!",
+    "Bei Xarfai!",
+    "Beim Freitag dem Dreizehnten!",
+    "Blutgierige Blutsaeufer!",
+    "Bei allen Untoten!",
+    "Bei der Macht der Untoten!",
+    "Bei den Maechten der Finsternis!",
+    "Verflucht seien die Paladine!",
+    "ARRRGH! Verflucht sei alles!",
+    });
+  return flueche[random(sizeof(flueche))];
+}
+
+string eng2germ(string eng)
+{
+    switch(eng)
+    {
+      case DT_FIRE: return "Feuerschaden";
+      case DT_MAGIC: return "Magieschaden";
+      case DT_COLD: return "Eisschaden";
+      case DT_ACID: return "Saeureschaden";
+      case DT_TERROR: return "Terrorschaden";
+      case DT_POISON: return "Giftschaden";
+      case DT_HOLY: return "heiligen Schaden";
+      case DT_UNHOLY: return "unheiligen Schaden";
+      case DT_LIGHT: return "Lichtschaden";
+      case DT_SOUND: return "Laermschaden";
+      case DT_WATER: return "Wasserschaden";
+      case DT_LIGHTNING: return "Blitzschlag";
+      case DT_ELECTRIC: return "Stromschaden";
+      case DT_EXPLOSION: return "Explosionsschaden";
+      case DT_AIR: return "Luftschaden";
+      case DT_MIND: return "geistigen Schaden";
+      default: return eng;
+    }
+}
+
+void Misserfolg(object caster, string spell, mapping sinfo) 
+{
+  int old_abil, modifier, abil, new_abil;
+  object victim;
+
+  if( stringp(sinfo[SI_SKILLARG]) && 
+      (victim=present(sinfo[SI_SKILLARG], ENV(caster)) ||
+       (victim=present(sinfo[SI_SKILLARG], caster))))
+  {
+    if(victim->id(SID_NOLEARN)) 
+    {
+      printf("Leider lernst Du nicht aus Deinem Fehler.\n");
+      return;
+    }
+  }
+  caster->ModifySkill(spell,([SI_USR:sinfo[SI_USR]+1]),0, "nekromanten");
+  if(caster->QueryProp(P_ALIGN )> 0) {
+    printf("Werde erstmal boeser! So lernst Du nie was!\n");
+    return;
+  }
+  old_abil=caster->QuerySkillAbility(spell);
+  Learn(caster, spell, sinfo);
+  new_abil=caster->QuerySkillAbility(spell);
+  if (old_abil < new_abil) 
+  {
+    printf("Du lernst aus Deinem Fehler.\n" ); 
+    if(new_abil==MAX_ABILITY)
+      tell_object(caster, BS(sprintf("%s teilt Dir mit: Du kannst %s "
+          "nun daemonisch gut! WEITER SO!", GUILDNPC_NAME, CAP(spell))));
+  }
+  else 
+    printf( "Leider lernst Du nicht aus Deinem Fehler.\n" );
+  return;
+}
+
+void Erfolg(object caster, string spell, mapping sinfo) 
+{
+  int abil;
+  object victim;
+  if(!interactive(caster)) 
+    return;
+  abil=sinfo[SI_SKILLABILITY];
+  if (abil!=MAX_ABILITY && random(MAX_ABILITY)<abil-MAX_ABILITY+100 )
+  {
+    if( stringp(sinfo[SI_SKILLARG]) && 
+        (victim=present(sinfo[SI_SKILLARG], ENV(caster)) ||
+         (victim=present(sinfo[SI_SKILLARG], caster))))
+    {
+      if(victim->id(SID_NOLEARN)) 
+      {
+        printf("Leider lernst Du nicht aus Deinem Fehler.\n");
+        return;
+      }
+    }
+    if(caster->QueryProp(P_ALIGN) > 0) {
+      printf("Werde erstmal boeser! So lernst Du nie was!\n");
+      return;
+    }
+    caster->ModifySkill( spell, ([ SI_SKILLABILITY: ++abil ]), 0, "nekromanten");
+    tell_object(caster,"Du lernst aus Deinem Erfolg.\n");
+    if (abil==MAX_ABILITY)
+    {
+      tell_object(caster, BS(sprintf("%s teilt Dir mit: Du kannst %s "
+          "nun absolut perfekt! WEITER SO!", GUILDNPC_NAME, CAP(spell))));
+    }
+  }
+  caster->ModifySkill(spell,([SI_USR:sinfo[SI_USR]+1]),0, "nekromanten");
+  if( !random(3) && caster->QueryProp(P_ALIGN)>-1500) 
+    caster->SetProp(P_ALIGN, caster->QueryProp(P_ALIGN)-1);
+  return;
+}
+
+// Ab und zu gehen Spells einfach so schief, nur auf 7/7 nicht
+int SpellSuccess(object caster, mapping sinfo) 
+{
+  int suc;
+  suc=::SpellSuccess(caster, sinfo);
+
+  if(caster->QueryProp(P_TESTPLAYER)) {
+    tell_object(caster, sprintf("nekro_spells :: success = %d\n", suc));
+  }
+
+  if(random(4000) || (caster->QueryProp(P_GUILD_LEVEL) != 7 &&
+      caster->QueryProp(P_GUILD_CIRCLE) != 7)  )
+    return suc;
+  return -10000+suc;
+}
+
+/* Hier wird geprueft, ob der Spell gesprochen werden darf */
+varargs string CheckIfSpellAllowed(object caster, mapping sinfo) 
+{
+  object ob;
+//  if( sinfo[SI_SKILLRESTR_LEARN][P_GUILD_LEVEL] > caster->QueryProp(P_GUILD_LEVEL) )
+//    return BS("Dazu reicht Deine Gildenstufe nicht aus!");
+  if (caster->QueryProp(P_FROG))
+    return "Als Frosch? IDIOT!\n";
+  if (caster->QueryProp(P_BLIND) && caster->QueryProp(P_GUILD_LEVEL)<7)
+    return BS("Bei allen Niederhoellen! DU BIST BLIND!");
+  if(!ob=present(NEKRO_GUILDITEM_ID, caster))
+    return("DU VERSAGER! OHNE DEINE MASKE KANNST DU NICHT ZAUBERN!!\n");
+  if(ob->QueryProp(P_WORN) != caster) 
+    return("DU VERSAGER! OHNE DEINE MASKE KANNST DU NICHT ZAUBERN!!\n");
+
+  if(ob->QueryVersion()!=LAST_GUILDITEM_UPDATE) 
+    return(BS("DEINE MASKE BRAUCHT FRISCHE ENERGIE! HOL SIE DIR VON "
+          "XARFAI!\n"));
+
+  if(GetAlign(caster) > 500)
+    return BS(
+      "HARHAR! Mit Deiner Gesinnung sollte man Dich wie die Paladine "
+      "aufschlitzen!");   
+  if(caster->QueryProp(P_SP)<=0 )
+    return "IDIOT! Ohne MAGIEPUNKTE geht gar nichts!\n";
+  return 0;
+}
+
+object CloneZombie(object corpse, object caster, int succ)
+{
+  object *ob, zombie;
+  int i;
+  mapping env;
+  string npc;
+
+  env=environment(caster)->QueryProp(P_ENVIRONMENT);
+  if( mappingp(env) && (
+        (stringp(env[ENV_TERRAIN]) && env[ENV_TERRAIN]== TT_ARCTIC) ||
+        (intp(env[ENV_TEMPERATURE]) && env[ENV_TEMPERATURE]<-10)) )
+    npc = "eisleiche";
+  else if (mappingp(env) && (
+        stringp(env[ENV_TERRAIN]) && (env[ENV_TERRAIN]== TT_WATER ||
+          env[ENV_TERRAIN]== TT_UNDERWATER)))
+    npc = "wasserleiche";
+  else
+    npc = "zombie";
+  zombie=clone_object(NPC + npc);
+  zombie->SetZombie(corpse, caster, succ); 
+  
+  for( i=sizeof(ob=all_inventory(corpse))-1; i>=0; i--) 
+    ob[i]->move(zombie,M_GET);
+  zombie->command_me("ziehe alles an");
+  zombie->move(environment(corpse), M_NOCHECK | M_SILENT);
+  corpse->remove(1);
+
+  return zombie;
+}
+
+object CloneSkeleton(object corpse, object caster, int succ)
+{
+  object skeleton;
+  skeleton=clone_object(NPC "skelett");
+  skeleton->SetSkeleton(corpse, caster, succ); 
+  skeleton->move(environment(corpse), M_NOCHECK | M_SILENT);
+  skeleton->command_me("ziehe alles an");
+  corpse->remove(1);
+
+  return skeleton;
+}
+
+object CloneGhost(object corpse, object caster, int succ)
+{
+  object ghost;
+
+  ghost=clone_object(NPC "geist");
+  ghost->SetGhost(corpse, caster, succ); 
+  ghost->move(environment(corpse), M_NOCHECK | M_SILENT);
+  //corpse->remove(1); -> geister entstehen nicht "aus leichen" und verbrauchen sie daher nicht
+  corpse->SetProp("nekro_ghost", 1);
+
+  return ghost;
+}
+
+object CloneMummy(object corpse, object caster, int succ)
+{
+  object mummy;
+
+  mummy=clone_object(NPC "mumie");
+  mummy->SetMummy(corpse, caster, succ); 
+  mummy->move(environment(corpse), M_NOCHECK | M_SILENT);
+  mummy->command_me("wirf alles weg");
+  corpse->remove(1);
+
+  return mummy;
+}
+
+object CloneVampir(object corpse, object caster, int succ)
+{
+  object *ob, vampir;
+  int i;
+
+  vampir=clone_object(NPC "vampir");
+  vampir->SetVampir(corpse, caster, succ); 
+  
+  for( i=sizeof(ob=all_inventory(corpse))-1; i>=0; i--) 
+    ob[i]->move(vampir,M_GET);
+  vampir->command_me("ziehe alles an");
+  vampir->move(environment(corpse), M_NOCHECK | M_SILENT);
+  corpse->remove(1);
+
+  return vampir;
+}
+
+object CloneGhoul(object caster, int succ)
+{
+  object ghoul;
+
+  ghoul=clone_object(NPC "ghoul");
+  ghoul->move(environment(caster), M_NOCHECK );
+  ghoul->SetGhoul(caster, succ); 
+  
+  return ghoul;
+}
+
+int TryAttackSpell(object victim, int dam, mixed dtypes,
+                   mixed is_spell, object caster, mapping sinfo) 
+{
+  string msg;
+  object corpse;
+  msg = CAP(caster->query_real_name())+" ("+ caster->QueryProp(P_ALIGN)+ 
+    ") gegen "+ victim->name(WEN)+" ("+ victim->QueryProp(P_ALIGN)+
+    ") : "+dam ;
+  tell_saf(is_spell[SP_NAME]+": "+ msg);
+//  write_nekro_log( is_spell[SP_NAME]+".log", msg+"\n");
+  dam=::TryAttackSpell(victim, dam, dtypes, is_spell, caster, sinfo);
+  if( !victim && !random(20+caster->QueryProp(P_GUILD_LEVEL)*5) ) 
+  {
+    if(corpse=present("Leiche", ENV(caster)) ) 
+    {
+      if(corpse->QueryProp(P_KILLER)==caster ) 
+      {
+        tell_object(caster, BS("HARHAR! Nach Deiner kleinen Demonstration "
+              "konnte die verdammte Seele Deines Opfers keine Ruhe finden!"));
+        tell_room(ENV(caster), BS("Nach diesem brutalen Angriff "+
+            caster->name(WESSEN,1)+" konnte die Seele dieses armen Opfers "
+            "keine Ruhe finden und kehrt als Geist zurueck."), ({caster}) );
+        CloneGhost(corpse, caster, 10000); 
+      }
+    }
+  }
+  return dam;
+}
+
+int Darkness(object victim, object caster, int suc) 
+{
+  object ob;
+  tell_room(ENV(caster), BS(sprintf("Eine daemonische Dunkelheit geht "
+            "ploetzlich von %s aus!", victim->name(WEM))), ({victim}));
+  tell_object(victim, "Du strahlst ploetzlich eine daemonische "
+        "Dunkelheit aus!");
+  if(ob=present(NEKRO_DARKNESS_OBJ, victim))
+    ob->ChangeLightLevel();
+  else 
+  {
+    ob=clone_object(OBJ "darkness");
+    ob->Setup(caster, suc);
+  }
+  return 1;
+}
+
+int is_humanoid(string str)
+{
+  if( member( ({"mensch", "elf", "zwerg", "hobbit", "fee", "troll", "xandim",
+                "oger", "ork", "gaffo", "goblin", "gnom", "dunkelelf", 
+                "halbelf", "froglok" , "zentaur"}),
+      lower_case(str) )!=-1 ) return 1;
+  return 0;
+}
+
+int is_living(object victim)
+{
+  if( victim->is_class_member(CL_UNDEAD) || 
+      victim->is_class_member(CL_DEMON) ||
+      member( ({"geist", "elementar", "golem"}), 
+        lower_case(victim->QueryProp(P_RACE)) ) != -1 ||
+      victim->QueryProp(P_MAGIC)) 
+    return 0;
+  return 1;
+}
+
+int clone_properties(object new, object old) 
+{
+  mapping properties;
+  int i;
+  mixed ind, val;
+  string *not_set;
+  not_set=({"clone_time","commands","cloner","last_use", "ids"});
+  properties=old->__query_properties(old,0)[0];
+  ind=m_indices(properties);
+  val=m_values(properties);
+  for(i=sizeof(ind)-1;i>=0;i--) 
+  {
+    if(member(not_set,ind[i])==-1) 
+      new->SetProp(ind[i],val[i]);
+  } 
+  return 1;
+}
+
+mixed parse_target(string str) 
+{
+  string wer;
+  if(!str) return str;
+  if(sscanf(str, "auf %s", wer)!=1) 
+    return 0;
+  return wer;
+}
+
+string checkgender(object pl, string female, string male) 
+{
+  if(pl->QueryProp(P_GENDER) == FEMALE)
+    return female;
+  return male;
+}
+
+mixed nekro_parse_func(string str) 
+{
+  string *parts;
+  string arg;
+  if(!sizeof(regexp( ({ str }), "'.*'"))) 
+  {
+    write(BS("Magie kann nur wirken wenn sie zwischen den mystischen "
+        "Symbolen ' ' steht!"));
+    return 0;
+  }
+  parts=explode(str, "'");
+  if(sizeof(parts) < 1) //bei zaubere '' ohne arg
+  {
+      write(BS("Magie kann nur wirken wenn sie zwischen den mystischen "
+        "Symbolen ' ' steht!"));
+      return 0;
+  }
+  arg=implode(parts[1..], " ");
+  if(arg[0..0] == " ") 
+  {
+    arg=arg[1..];
+  }
+  arg=parse_target(arg);
+  return ({ arg, parts[0] });
+}
+
+void do_spellbook_damage(int dam, object pl, string killer, mixed kill_msg) 
+{
+  string killer_orig;
+  mixed killmsg_orig;
+  killer_orig=QueryProp(P_KILL_NAME);
+  killmsg_orig=QueryProp(P_KILL_MSG);
+  SetProp(P_KILL_NAME, killer);
+  SetProp(P_KILL_MSG, kill_msg);
+  pl->do_damage(dam);
+  SetProp(P_KILL_NAME, killer_orig);
+  SetProp(P_KILL_MSG, kill_msg);
+  return;
+}
+
+//Archon 14.06.2003
+int present_victim(object victim,object caster)
+{
+  if (!objectp(victim) || !objectp(caster)) return 0;
+  // Selber Raum -> OK
+  if (environment(caster) && (environment(victim)==environment(caster)))
+    return 1;
+  // Opfer im Caster -> OK
+  if (environment(victim)==caster) return 1;
+  return 0;
+}
+
+//Archon 23.06.2003 - holt die skillpunkte fuer einen spell
+int get_skillpoints(object pl,string skill)
+{
+  mixed sp;
+  sp=call_other(NEKROMASTER, "QuerySkillPoints",pl);
+  if (!mappingp(sp))
+    return 0;
+  else if (sp[skill]) return sp[skill];
+  return 0;
+}
+
+//Archon 23.06.2003
+//Berechnet fuer alle Dam-Spells den modifizierten damage
+//selbe gilt fuer Zeiten
+int get_dam_with_skillpoints(int dam,int skillpunkte)
+{
+  if (skillpunkte<0) skillpunkte=0;
+  if (skillpunkte>10) skillpunkte=10;
+  if (dam<1) return 0;
+  dam=dam*(98+2*skillpunkte)/100;
+  if (dam<1) dam=1;
+  return dam;
+}
+
+//Angrox 08.08.2003
+varargs int UseBlood(int value) 
+{
+  int *blood;
+  int percent;
+  if(!value) value=1;
+  if(blood_check_counter>50) {
+    blood_check_counter=0;
+    blood=call_other(NEKROMASTER, "QueryBloodPool");
+    percent=100*blood[0]/blood[1]; 
+    if(percent > 85) blood_value_add=1;
+    else  blood_value_add=0;
+  }
+  blood_check_counter++;
+  if(!call_other(NEKROMASTER, "UseBloodPool",(int) ((value+blood_value_add)*BLOODUSE_FACTOR))) 
+  {
+    tell_object(TP, BS("Du fuehlst einen Schmerz in Dir, als die unheilige "
+          "Anrufung einen Teil Deiner Lebensessenz entzieht! Opfert mehr "
+          "Seelen, ihr Narren!!"));
+    do_spellbook_damage(random(7)+3*value, TP, "Machtgier",0);
+    return 0;
+  } 
+  return 1;
+}
+
+//Archon 13.08.2003
+//Berechnet Schutzmodifikation fuer einen Dam-Wert
+int get_schutz_with_skillpoints(int dam,int skillpunkte)
+{
+  int schutz;
+  if (skillpunkte<1) return 0;
+  if (skillpunkte>10) skillpunkte=10;
+  if (dam<1) return 0;
+  schutz=dam*skillpunkte/100;
+  if (schutz<1) schutz=1;
+  return schutz;
+}

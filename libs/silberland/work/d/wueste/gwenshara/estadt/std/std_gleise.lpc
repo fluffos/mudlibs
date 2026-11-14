@@ -1,0 +1,159 @@
+//=========================================================================
+//
+// File: std_gleise.c
+// Created by Gwenshara
+//
+// Project: Zugang zu den Wuestenzwergen
+//
+//=========================================================================
+
+#include "../def.h"
+#include "/p/daemon/skillmaster/skillmaster.h"
+
+inherit "std/room";
+
+int gems;
+
+void create()
+{
+  ::create();
+
+  gems=1+random(5);
+//  tell_object(find_player("gwenshara"), STD);
+
+//--Beschreibungen---------------------------------------------------------
+
+  SetProp(P_INT_SHORT, "In Gaengen unter der Wueste");
+  SetProp(P_INT_LONG,
+    "Du wanderst hier durch Gaenge, die unter der Wueste in den Stein "
+    "gehauen wurden.");
+
+//--Umgebung---------------------------------------------------------------
+
+  SetProp(P_LIGHT, 0);
+  SetProp(P_INDOORS, 1);
+  SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE: 25, ENV_TERRAIN: TT_CAVE]) );
+
+//--Details----------------------------------------------------------------
+
+  AddDetail( ({ "boden" }),
+    "Der Boden hier besteht aus hartem Fels.");
+
+  AddDetail( ({ "fels", "faerbung", "stein" }),
+    "Dieser Fels hat eine gelb-graue Faerbung." );
+
+  AddDetail( ({ "decke" }),
+    "Wie der Boden besteht auch die Decke aus hartem Fels." );
+
+  AddDetail( ({ "gaenge", "gang" }),
+    "Du befindest Dich hier in einem Gang unter der Wueste." );
+
+  AddDetail( ({ "wueste" }),
+    "Irgendwo ober Dir befindet sich die Wueste." );
+
+  AddDetail( ({ "zwerge", "wuestenzwerge", "volk" }),
+    "Dieses beinahe unbekannte Volk lebt angeblich hier unter der Wueste.");
+
+  AddDetail( ({ "wand", "waende" }),
+    "Die Waende scheinen aus solidem Fels zu bestehen. Ab und zu funkelt es "
+    "an ihnen. Ob man hier schuerfen kann?" );
+
+  AddSound( DEFAULT_SOUND,
+    "Du hoerst ein leises Heulen und ab und zu ein dumpfes Tropfen.");
+
+  AddSound( "heulen",
+    "Vermutlich stammt es vom Wind, der durch die Gaenge pfeift.");
+
+  AddSound( "wind",
+    "Der Wind heult hier unten leise.");
+
+  AddSound( "tropfen",
+    "Ab und zu hoerst Du ein dumpfes tropfen. *PLITSCH*");
+
+  AddCmd( ({"schuerfe", "schuerf"}), "cmd_schuerfen");
+}
+
+
+int cmd_schuerfen(string str)
+{
+  int suc;
+  notify_fail("Wo willst Du schuerfen?\n");
+  if(!str || str=="") return 0;
+  if(!( str == "hier" ||
+	str == "an wand" ||
+	str == "in gang" ||
+	str == "nach edelsteinen" )) return 0;
+
+  notify_fail("Ohne Spitzhacke wird das wohl nichts...\n");
+  if(!present("spitzhacke", TP)) return 0;
+
+  suc=SKILLMASTER->UseSkill(TP, SK_PROSPECT);
+
+  tell_object(TP, BS("Du beginnst zu schuerfen..."));
+  tell_room(TO, BS(TPN+" beginnt hier zu schuerfen..."), ({TP}));
+  call_out("schuerfen", 2+random(4), suc, TP);
+  TP->SetProp(P_PARALYZED,
+		  ([
+		   PARALYZE_TIME:30,
+		   PARALYZE_MSG:"Du schuerfst gerade!\n",
+		   PARALYZE_MSG_OTHER:TPN+" schuerft!\n",
+		   PARALYZE_END:"",
+		   PARALYZE_END_OTHER:"%s beendet die Edelsteinsuche.\n"
+		   ]));
+  return 1;
+}
+
+void schuerfen(int suc, object who)
+{
+  object gem;
+  who->SetProp(P_PARALYZED, 0);
+  who->do_exhaust(100+random(100));
+  if(suc < 0)
+  {
+    tell_object(who, BS("Du findest keinen einzigen Edelstein..."));
+    if(suc < -1000) gems--;
+    return;
+  }
+
+  if(gems < 1)
+  {
+    tell_object(who, BS("Du findest nichts. Scheinbar haben hier bereits "
+		        "andere geschuerft!"));
+    return;
+  }
+
+  gem = call_other("/obj/gemmaster", "DistributeGem", 1, 0, 1, 0);
+
+  tell_object(who,
+	BS("Deine Bemuehungen werden belohnt! Du findest "+gem->name("WEN")+"!"));
+
+  if(gem->move(who, M_GET) != 1)
+  {
+    tell_object(who, BS("Du laesst den Edelstein fallen!"));
+    tell_room(TO, BS(TPN+" laesst etwas fallen!"), ({who}));
+    gem->move(TO, M_PUT);
+  }
+ 
+  gems--;
+  return;
+}
+
+int is_not_living(object ob)
+{
+  if(!living(ob) && !ob->id("\nwz_wagen"))
+  {
+    ob->remove();
+    return 1;
+  }
+  return 0;
+}
+
+void reset()
+{
+  ::reset();
+  gems=1+random(5);
+
+  // Aufraeumen ist notwendig, wegen kaempfenden NPC
+  map_array(all_inventory(TO), "is_not_living");
+  return;
+}

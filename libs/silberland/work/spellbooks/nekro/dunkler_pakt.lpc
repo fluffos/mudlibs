@@ -1,0 +1,226 @@
+/*
+ * Dunkler Pakt
+ *
+ * Der Blutpakt der Verdammten verbessert einen beliebigen Untoten. Der Untote
+ * muss nicht vom Nekromanten beherrscht werden.Erhoeht werden P_BODY und 
+ * A_STR. Der Zauber heilt den Untoten auch vollstaendig. Der Pakt kann nur 
+ * EINMAL auf * einen Untoten angewandt werden.
+ * Ist der Nekromant im siebten Kreis der Verdammnis (Untoten-Shell), so 
+ * kann er sich selbst (oder einen anderen lvl 7 Nekromanten) einmal pro
+ * 3 resets (bei > 7 skillpoints: jeden reset) eine Vollheilung geben
+ *
+ * Kosten: 150 MP
+ * Level : 3 
+ * Objekte: /gilden/nekromanten/obj/dark_pact
+ *
+ * Skillpunktefaehig bei str, hp (npc)
+ *
+ * Status: anschlussreif
+ *
+ */
+//15.08.2003 Archon: umstellung uebergabe sinfo, skillpunkte auswerten
+
+object dunkler_pakt_find_victim(object caster,mapping sinfo, int silent)
+{
+  object victim;
+  if(!victim=FindLivingVictim(sinfo[SI_SKILLARG],caster,0)) 
+  {
+    if (!silent)
+      write(BSC("Mit welchem Untoten willst Du einen dunklen "
+               "Pakt schliessen?"));
+    return 0;
+  }
+  if(is_living(victim) && !victim->id("boese")) 
+  {
+    if (!silent)
+      write(BSC(sprintf("%s Nur auf einen Untoten kannst Du einen dunklen "
+            "Pakt zaubern!", random_fluch())));
+    return 0;
+  }
+  if(victim->QueryProp(P_NEKRO_DARK_PACT) || present(NEKRO_DARK_PACT, victim))
+  {
+    if(victim == caster) 
+    {
+     if (!silent)
+      write("Auf Dir liegt schon ein dunkler Pakt!\n");
+    }
+    else 
+    {
+     if (!silent)
+      write(BS(sprintf("Auf diese%s Untoten liegt bereits ein dunkler Pakt!",
+              victim->QueryProp(P_GENDER)==FEMALE?"r":"m")));
+    }
+    return 0;
+  }
+  return victim;
+}
+
+mixed prep_dunkler_pakt(object caster, mapping sinfo) 
+{
+  object victim;
+
+  if (!victim=dunkler_pakt_find_victim(caster,sinfo,0))
+    return 0;
+
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  write(BSC("Du hebst Deine Haende und fuehrst die rituellen Gesten "
+        "des Zzta'Trekar durch!"));
+  tell_room(ENV(caster), sprintf("%s fuehrt mit %s Haenden seltsame Gesten "
+      "durch.\n", caster->Name(WER), caster->QueryPossPronoun(WESSEN,3)), 
+      ({caster}));
+  sinfo[SI_ENEMY]=victim;
+  return sinfo;
+}
+
+int dunkler_pakt(object caster, mapping sinfo) 
+{
+  int suc, pct, str, skp, m;
+  string name;
+  object victim,ob;
+  mixed *hands;
+
+  victim=sinfo[SI_ENEMY];
+  name=sinfo[SI_SKILLARG];
+  if (!present_victim(victim,caster))
+  {
+    write(BSC(sprintf("%s! '%s' ist nicht mehr hier! Wie kann man nur "
+            "so versagen?!", caster->QueryProp(P_GENDER)==FEMALE?
+            "NAERRIN":"NARR",CAP(name))));
+    return 0;
+  }
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+
+  suc=SpellSuccess(caster,sinfo);
+  if (suc<random(-5000)) 
+  {
+    tell_room(ENV(caster), "Irgendetwas ging katastrophal schief!\n", 
+        ({caster}));
+    tell_object(caster, BS(sprintf("%s Irgendetwas ging schief!", 
+            random_fluch())));
+    if(!query_once_interactive(victim)) 
+    {
+      caster->RemoveDefender(victim);
+      victim->Kill(caster);
+    }
+  }
+  if (suc<0) 
+  {
+    tell_room(ENV(caster), "Nichts passiert.\n");
+    return MISSERFOLG;
+  }
+  skp=get_skillpoints(caster,"dunkler pakt");
+  if(!query_once_interactive(victim)) 
+  {
+    str=victim->QueryAttribute(A_STR)+(caster->QueryProp(P_GUILD_LEVEL)+caster->QueryProp(P_GUILD_CIRCLE))*suc/MAX_ABILITY;
+    pct=100+2*caster->QueryProp(P_GUILD_LEVEL)+random(caster->QueryProp(P_GUILD_CIRCLE)*2+caster->QueryAttribute(A_INT)/2);
+    
+    hands = victim->QueryProp(P_HANDS);
+    hands[1] = hands[1] + (caster->QueryProp(P_GUILD_LEVEL)+caster->QueryProp(P_GUILD_CIRCLE))*suc/MAX_ABILITY + skp;
+
+    victim->SetProp(P_NEKRO_DARK_PACT, ({victim->QueryAttribute(A_STR), victim->QueryProp(P_MAX_HP)}));
+    victim->SetAttribute(A_STR, str + skp);
+    victim->SetProp(P_MAX_HP, (pct+skp)*victim->QueryProp(P_MAX_HP)/100);
+    victim->SetProp(P_HANDS, hands);
+
+    m=0;
+    if(skp > 3 ) {
+    if(victim->id("Nekromantengeist")) {
+      victim->SetProp(P_MAX_HP, (int) (victim->QueryProp(P_MAX_HP)*(1.1 + (skp/50.0))));
+      victim->SetProp(P_HP, victim->QueryProp(P_MAX_HP));
+      tell_room(ENV(victim), BS(sprintf("%s wird deutlicher erkennbar und wirkt irgendwie... koerperlicher.", victim->Name(WER, 2))));
+      m=1;
+    } else if (victim->id("Nekromantenskelett")) {
+      victim->SetProp(P_SPELLRATE, victim->QueryProp(P_SPELLRATE) + skp + caster->QueryProp(P_GUILD_LEVEL));
+      tell_room(ENV(victim), BS("In den leeren Augenhoehlen des Skeletts flammt ein roetliches Glimmen auf."));
+      m=1;
+    } else if (victim->id("Nekromantenzombie")) {
+      victim->SetProp(P_HP_DELAY, 0);
+      victim->SetProp(P_BODY, victim->QueryProp(P_BODY) + skp*4);
+      tell_room(ENV(victim), BS("Das Fleisch des Zombies scheint sich langsam wieder zusammen zu fuegen."));
+      m=1;
+    } else if(victim->id("Nekromantenvampir")) {
+      victim->SetProp("life_drain_divisor", 20-skp);
+      tell_room(ENV(victim), BS("Die Zaehne des Vampirs werden spitzer und gierig blickt er sich um."));
+      m=1;
+    } else if(victim->id("Nekromantenmumie"))  {
+      victim->SetProp(P_SPELLRATE, victim->QueryProp(P_SPELLRATE) + skp + caster->QueryProp(P_GUILD_LEVEL));
+      tell_room(ENV(victim), BS("Ein leises Raunen und unheimliches Fluestern geht von der Mumie aus."));
+      m=1;
+    }
+   }
+
+   if(!m) {
+      tell_room(ENV(caster), BS(sprintf("%s sieht viel maechtiger und staerker aus!", victim->Name(WER))));
+   }
+
+   if(skp > 7) {
+      if(victim->id("Nekromantenskelett")) {
+        victim->AddDefaultSpell(1, victim->QueryProp(P_LEVEL)*(1+skp-6)+suc/33, DS_MASS_DAMAGE,
+          "Das Skelett wirbelt bei seinem Angriff entlang der Huefte im Kreis.",
+          "Das Skelett wirbelt bei seinem Angriff entlang der Huefte im Kreis.", DT_SLASH);
+        tell_room(ENV(victim), BS("Das Skelett knurrt angriffslustig."));
+      } else if(victim->id("Nekromantengeist")) {
+        victim->SetProp("nekro_defend_scare", skp-6);
+        tell_room(ENV(victim), BS("Der Geist glueht in einem unheimlichen gruenen Elmsfeuer auf."));
+      } else if(victim->id("Nekromantenzombie")) {
+        victim->EnableRageMode(skp-6);
+        tell_room(ENV(victim), BS("Der Zombie schmatzt gierig und sieht hungrig aus. ER WILL HIRN!"));
+      } else if(victim->id("Nekromantenvampir")) {
+        victim->SetProp("life_link", skp-6);
+        tell_room(ENV(victim), BS("Eine unheilige rot-schwarze Aura umgibt den Vampir."));
+      } else if(victim->id("Nekromantenmumie")) {
+        victim->AddSpell(1, victim->QueryProp(P_LEVEL)*6+suc/66,
+                         "Die Mumie spricht den Fluch der alten Koenige ueber dich!\n",
+                         "Die Mumie spricht den Fluch der alten Koenige auf @WEN!\n",
+                         DT_UNHOLY, "curse_enemy", ([SP_SHOW_DAMAGE:1]));
+        switch(random(3)) {
+          case 0: victim->AddSpell(1, victim->QueryProp(P_LEVEL)*15+suc/25,
+                                   "Die Mumie haucht dich mit eisigem Grabesatem an!\n",
+                                   "Die Mumie haucht @WEN mit eisigem Grabesatem an!\n",
+                                   DT_COLD, ([SP_SHOW_DAMAGE:1]));
+                  break;
+          case 1: victim->AddSpell(1, victim->QueryProp(P_LEVEL)*15+suc/25,
+                                   "Die Mumie wirft einen gruenen Feuerball nach dir!\n",
+                                   "Die Mumie wirft einen gruenen Feuerzauber nach @WEM!\n",
+                                   DT_FIRE, ([SP_SHOW_DAMAGE:1]));
+                  break;
+          default: victim->AddSpell(1, victim->QueryProp(P_LEVEL)*15+suc/25,
+                                    "Die Mumie schleudert einen unheimlichen schwarz-roten Blitz nach dir!\n",
+                                    "Die Mumie schleudert einen unheimlichen schwarz-roten Blitz nach @WEM\n",
+                                     DT_LIGHTNING, ([SP_SHOW_DAMAGE:1]));
+                   break;
+        }
+        tell_room(ENV(victim), BS("Auf den Bandagen der Mumie bilden sich blutrote Runen und Zaubersprueche."));
+      }
+    }
+  }
+  else 
+  {
+    tell_room(ENV(caster), BS(sprintf("%s sieht viel maechtiger und staerker aus!", victim->Name(WER))), ({caster, victim}));
+    tell_object(victim, "AAAAAH DU FUEHLST DICH VIEL BESSER!\n");
+    if(caster != victim) 
+    {
+      tell_object(caster, BSC(sprintf("%s sieht gleich viel besser aus! "
+              "Vergiss bloss nicht etwas dafuer zu verlangen!", 
+              victim->Name(WER))));
+    }
+    victim->SetProp(P_HP, victim->QueryProp(P_MAX_HP));
+    victim->SetProp(P_SP, victim->QueryProp(P_MAX_SP));
+    ob=clone_object(OBJ "dark_pact");
+    ob->Setup(victim, (skp>7?1:3));
+    ob->move(victim, M_NOCHECK);
+  }
+  UseBlood();
+  return ERFOLG;
+}
+

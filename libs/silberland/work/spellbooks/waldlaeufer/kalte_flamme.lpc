@@ -1,0 +1,88 @@
+mapping prep_kalte_flamme(object caster, mapping sinfo, int silent)
+{  
+  object ob;
+  mixed kf;
+  
+  //Aenderungen der Werte im sinfo Mapping vermeiden!
+  if(!GuildItemTest(caster, sinfo) || 
+     !FroschTest(caster, sinfo) || 
+     !BowTest(caster,sinfo)     ||
+     !IsNotInFight(caster,sinfo)||
+     !BlindTest(caster,sinfo)     )
+    return 0;
+
+  if(!objectp(ob=sinfo[SI_ENEMY])) {ob=caster->QueryProp(P_WEAPON);}
+  sinfo[SI_ENEMY]=ob;
+    
+  kf=caster->QueryProp(P_RANGER_COLD_FLAME);
+  if(pointerp(kf) && to_int(kf[1]) >= time() ) { 
+    tell_object(caster, BS("Du hast doch schon ein Band zu "+ob->Name(WEM, 1)+" geknuepft!")); return 0; 
+  }
+
+  if(!silent){FirstPrepareFuncSuccessfull(caster, sinfo);}
+  return sinfo;
+}
+
+int kalte_flamme(object caster, mapping sinfo)
+{
+  object ob;
+  int ability, success, t, bonusDam;
+  mixed dts;
+   
+  if(!mappingp(sinfo=prep_kalte_flamme(caster, sinfo, 1))) return 0;
+  ob=sinfo[SI_ENEMY];
+  
+  success=SpellSuccess(caster,sinfo);
+  if(success < (-6500))
+  {
+    tell_object(caster, BSC("Das mentale Band bricht sofort zusammen und entzieht dir auch noch geistige Kraft!"));
+    caster->AddSp(-10-random(100));
+    return MISSERFOLG;
+  }
+  if(success<0)
+  {
+    tell_object(caster,BSC("Es gelingt dir nicht dich auf den Bogen einzustimmen."));
+    return MISSERFOLG;
+  }
+  
+  ability=sinfo[SI_SKILLABILITY];
+
+  tell_object(caster, BS(" Du oeffnest die Augen und beisst Dir in den Unterarm um etwas Blut "
+                      "auf "+ob->name(WEN, 1)+" zu tropfen. Ein mystisches Band "
+                      " durchfaehrt "+ob->name(WEN, 1)+". Du bist jetzt"
+                      " Eins mit "+ob->name(WEM, 1)+"."));
+  caster->AddHp(-(30-(ability/1000)-(success/1000)));
+  if(ENV(caster)) {
+    tell_room(ENV(caster), BS(caster->Name()+" beisst in "
+                           +caster->QueryPossPronoun(MALE,WEN,0)+" Unterarm "
+                           "und laesst etwas Blut auf "+ob->name(WEN, 1)+" "
+                           "tropfen. Ploetzlich beginnt "+ob->name(WER, 1)+" "
+                           "blaeulich zu schimmern."), ({caster}));
+  }
+  
+  dts=({DT_MAGIC}); 
+  if(success>9000) {
+    dts+=({DT_MIND});
+    tell_object(caster, BS("Deine Pfeile werden durchscheinend und treffen jetzt die Seele deines Gegners."));
+  }
+
+  t = 3 * ((ability/200) + (success/333));
+  bonusDam = (ability/70 + success/70);
+
+  t += t * get_equip_bonus(caster, "band des schuetzen") / 100;
+  bonusDam += bonusDam * get_equip_bonus(caster, "band des schuetzen") / 100;
+
+  //({caster,zeit,({zusatz_schadensarten}),zusatz_schaden})
+  caster->SetProp(P_RANGER_COLD_FLAME, ({caster,t+time(), dts, bonusDam}));
+   
+  
+  call_out("unflame",t+1,caster);
+  return ERFOLG;
+}
+
+int unflame(object caster)
+{
+  if(!caster) return 0;
+  tell_object(caster, BS("Dein Band zu deiner Waffe erlischt wieder."));
+  return 1;
+}

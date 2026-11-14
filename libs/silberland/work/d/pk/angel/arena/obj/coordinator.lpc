@@ -1,0 +1,461 @@
+/******************************************************************************
+ * Server fuer die Fernglaeser, verwendbar auf der Tribuene der Arena
+ * Datei: coordinator.c
+ * Autor: Angel (avs@sbox.tu-graz.ac.at)
+ */
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include <ansi.h>
+#include "./def.h"
+
+nosave int    arena_registration;  // Unsere Frist, in der wir ein Duell in der Arena
+                                   // beginnen koennen.
+nosave object challenger, partner; // Wer hat sich registriert?
+nosave mixed  client_list;         // Alle registrierten Clients.
+nosave mixed  visitor_list;        // Alle registriereten Zuseher.
+
+create()
+{
+  ::create();   
+
+  SetProp(P_SHORT, 0);
+  SetProp(P_NAME, "Duell Koordinator" );
+  SetProp(P_INVIS, 1);
+  AddId("duell_broadcast_server");
+
+  if (is_clone(this_object())) 
+     destruct(this_object());
+}
+
+// Checkt ob el element von arr ist.
+int is_element (mixed arr, object el)
+{
+  int i;
+  for (i = 0;i < sizeof(arr) ;i++)
+  {
+     if (arr[i] == el) return 1;
+  }
+  return 0;
+}
+
+// Uebermittelt das "Gebruellte"
+void transmit_shout(string msg)
+{
+   object room;
+   
+   if ( room = find_object(ROOM "battle_field_o"))
+        tell_room(room, msg, ({ present("arena_camera", room) }) );
+   if ( room = find_object(ROOM "battle_field_sw"))
+        tell_room(room, msg, ({ present("arena_camera", room) }) );
+   if ( room = find_object(ROOM "battle_field_so"))
+        tell_room(room, msg, ({ present("arena_camera", room) }) );
+   if ( room = find_object(ROOM "battle_field_no"))
+        tell_room(room, msg, ({ present("arena_camera", room) }) ); 
+   if ( room = find_object(ROOM "battle_field_nw"))
+        tell_room(room, msg, ({ present("arena_camera", room) }) );
+   if ( room = find_object(ROOM "battle_field_w"))
+        tell_room(room, msg, ({ present("arena_camera", room) }) );
+   if ( room = find_object(ROOM "battle_field_zw"))
+        tell_room(room, msg, ({ present("arena_camera", room) }) );
+   if ( room = find_object(ROOM "battle_field_zo"))
+        tell_room(room, msg, ({ present("arena_camera", room) }) );  
+}
+
+// Wirft alles vom Kampfplatz raus
+void clear_battle_field()
+{
+   object room;
+   
+   if ( room = find_object(ROOM "battle_field_o"))
+        room->remove_objects();
+   if ( room = find_object(ROOM "battle_field_sw"))
+        room->remove_objects();
+   if ( room = find_object(ROOM "battle_field_so"))
+        room->remove_objects();   
+   if ( room = find_object(ROOM "battle_field_no"))
+        room->remove_objects();   
+   if ( room = find_object(ROOM "battle_field_nw"))
+        room->remove_objects();
+   if ( room = find_object(ROOM "battle_field_w"))
+        room->remove_objects();
+   if ( room = find_object(ROOM "battle_field_zw"))
+        room->remove_objects();   
+   if ( room = find_object(ROOM "battle_field_zo"))
+        room->remove_objects();   
+}
+
+// Wir verbinden mal die Clients mit dem Server.
+int link_into_system (object client)
+{
+  // Pruefung ob auf der Tribuene liegt beim Fernglas
+  // aber wir gehen trotzdem sicher dass es ein Fernglas ist.
+  if (!client->id("fernglas"))
+  {
+     tell_object (environment(client), "Dies ist kein Fernglas!\n");
+     return 0;
+  }
+
+  // Sehen wir mal ob schon jemand auf der Liste steht:
+  if (!pointerp(client_list))
+  { 
+    // Dranhaengen des neuen Client!
+    tell_object (environment(client), "Du verfolgst nun die Kaempfe!\n");
+    client_list = ({client});
+    return 1; 
+  }
+  else
+  { 
+    // Ist client noch nicht auf unserer Liste ...
+    if (!is_element (client_list, client))
+    {
+       tell_object (environment(client), "Du verfolgst nun die Kaempfe!\n");
+       client_list += ({client});
+       return 1;
+    }
+    else
+    {
+       tell_object (environment(client), "Du verfolgst doch schon die Kaempfe!\n");
+       return 0;
+    }
+  } 
+}
+
+// Sofern sich ein Client verabschieden moechte ...
+int unlink_client (object client)
+{
+  // Pruefung ob auf der Tribuene liegt beim Fernglas
+  // aber wir gehen trotzdem sicher dass es ein Fernglas ist.
+  if (!client->id("fernglas"))
+     return 0;
+
+  // Sehen wir mal ob schon jemand auf der Liste steht:
+  if (!sizeof(client_list))
+  {
+    // Keiner da!
+    tell_object (environment(client), "Du verfolgst die Kaempfe doch gar nicht!\n");
+    return 0;
+  }
+  else
+  {
+    // Ist client schon auf unserer Liste ...
+    if (is_element (client_list, client))
+    {
+      // Runter mit dem Client!
+      tell_object (environment(client), "Du verfolgst die Kaempfe nun nicht mehr!\n");
+      client_list = client_list-({client});
+      return 1;
+    }
+    else
+    { 
+       tell_object (environment(client), "Du verfolgst die Kaempfe doch gar nicht!\n");
+       return 0;
+    }
+  }
+}
+
+// Bei einem Duell in der Arena werden die Schaulustigen "geweckt":
+int notify_visitors ()
+{
+   int i;
+   if (!pointerp(visitor_list))
+      return 0;
+   for (i=0; i < sizeof(visitor_list); i++)
+       if (objectp(visitor_list[i]))
+       {
+          visitor_list[i]->do_shout();
+       }
+}
+
+// Ein neuer Zuseher ...
+int register_visitor (object visitor)
+{
+  // Sehen wir mal ob schon jemand auf der Liste steht:
+  if (!pointerp(visitor_list))
+  { 
+    // Dranhaengen des neuen Besuchers!
+    visitor_list = ({visitor});
+    return 1; 
+  }
+  else
+  { 
+    // Ist visitor noch nicht auf unserer Liste ...
+    if (!is_element (visitor_list, visitor))
+    {
+       visitor_list += ({visitor});
+       return 1;
+    }
+    else
+       return 0;
+
+  } 
+}
+
+// Stirbt der Zuseher ...
+int unregister_visitor (object visitor)
+{
+
+  // Sehen wir mal ob schon jemand auf der Liste steht:
+  if (!sizeof(visitor_list))
+  {
+    // Keiner da!
+    return 0;
+  }
+  else
+  {
+    // Ist client schon auf unserer Liste ...
+    if (is_element (visitor_list, visitor))
+    {
+      // Runter mit dem Client!
+      visitor_list = visitor_list-({visitor});
+      return 1;
+    }
+    else
+    { 
+       return 0;
+    }
+  }
+}
+
+//Prueft die Reichweite der Clients
+int check_range (object client)
+{
+   mixed test;
+   // geprueft wird:
+   // * Ob das environment des Client ein living ist
+   // * Ob sich das Living auf der Tribuene befindet
+   
+   if (!objectp(client))
+      return 0;
+      
+   if (!living (environment(client)))
+      return 0; // Wir machen keine Massen-Vorstellungen!
+  
+
+  // Sind wir auf der Tribuene?
+  if (test = regexp( ({file_name(environment(environment(client)))}) ,
+      DROOM "tribuene_"))
+     if (!sizeof(test))
+     { 
+       // Auf der Tribuene sollte man schon sein!
+       return 0;
+     }
+
+  // Passt!
+  return 1;
+}
+
+// Hier werden die Clients geprueft und die Nachricht an die
+// angelschlossennen Clients in Reichweite (auf der Tribuene) verschickt:
+void broadcast_duell_news (string msg)
+{
+  mixed farben;
+  int i;
+
+  for (i=0; i<sizeof(client_list); i++)
+  {
+    if (check_range(client_list[i]))
+    {  
+       switch (environment(client_list[i])->QueryProp(P_TTY))
+       {
+         case "ansi": farben=({ANSI_WHITE+ANSI_BOLD, ANSI_NORMAL}); break;
+         case "vt100": farben=({ANSI_BOLD, ANSI_NORMAL}); break;
+         default: farben=({"",""}); break;
+       }    
+       // Los geht's! Auf Sendung!
+       tell_object (environment(client_list[i]), sprintf ("%s"+msg+"%s", farben[0], farben[1]) );
+    }
+  }
+}
+
+// Liefert wie schlimm ein Duellant zugerichtet ist:
+string get_health_level (object ob)
+{
+  string str;
+  int hpnt, max_hpnt;
+
+  hpnt = ob->QueryProp( P_HP );
+  max_hpnt = ob->QueryProp( P_MAX_HP );
+  if (hpnt < max_hpnt/10) 
+    str = "steht auf der Schwelle des Todes";
+  else if (hpnt < max_hpnt/5) 
+    str = "braucht dringend einen Arzt";
+  else if (hpnt < max_hpnt*3/10) 
+    str = "ist in keiner guten Verfassung";
+  else if (hpnt < max_hpnt*4/10) 
+    str = "wankt bereits bedenklich";
+  else if (hpnt < max_hpnt/2) 
+    str = "macht einen mitgenommenen Eindruck";
+  else if (hpnt < max_hpnt*6/10) 
+    str = "sieht nicht mehr taufrisch aus";
+  else if (hpnt < max_hpnt*7/10) 
+    str = "ist leicht angeschlagen";
+  else if (hpnt < max_hpnt*8/10) 
+    str = "fuehlte sich heute schon besser";
+  else if (hpnt < max_hpnt*9/10) 
+    str = "ist schon etwas geschwaecht";
+  else
+    str = "ist absolut fit";
+
+  return str;
+}
+
+// Liefert white_spaces
+string fill_space (int number)
+{
+  string str;
+  int i;
+  
+  str = " ";
+  for (i=0; i< (number-1); i++)
+  {
+    str = str+" ";
+  }
+  return str;
+}
+
+// Formatiert die Ausgabe
+string format_string (string str1, string str2, int line)
+{
+//      Name             gegen               Name
+// xy verfassung                        xy verfassung
+
+// Zeile 1:
+// 78 gesamt, gegen auf position 36, Name auf 18 - strlen(name)/2 
+// Name(2) auf 58 - strlen (name)/2
+
+  string msg;
+  msg = "";
+
+  if (line == 1)
+  {
+    msg += "\n";
+    msg += fill_space(18 - (strlen(str1)/2));
+    msg += str1;
+    msg += fill_space(36 - strlen(msg));
+    msg += "gegen";
+    msg += fill_space(18 - (strlen(str2)/2));
+    msg += str2;
+    msg += "\n";
+  }
+  else
+  {
+    msg += fill_space (19 - (strlen(str1)/2));
+    msg += str1;
+    msg += fill_space (39 - strlen(msg));
+    msg += fill_space (19 - (strlen(str2)/2));
+    msg += str2;
+    msg += "\n\n";
+  }
+  return msg;
+}
+
+// Hier der Empfang und das Aufbereiten der Nachrichten.
+void receive_duell_news (mixed raw)
+{
+   // Aufbau von raw: ({opponent, challenger_flag, opponent})
+   string msg;
+   msg = "\n";
+
+   if (raw[1] == 1)
+   {
+     msg = format_string(raw[0]->name(WER, 0), raw[2]->name(WEN, 0), 1);
+   }
+   else
+   {
+     msg = format_string(raw[2]->name(WER, 0), raw[0]->name(WEN, 0), 1);
+   }
+
+   if (raw[1] == 1)
+   {
+     msg += format_string(get_health_level (raw[0]), get_health_level (raw[2]), 2);
+   }
+   else
+   {
+     msg += format_string(get_health_level (raw[2]), get_health_level (raw[0]), 2);
+   }
+
+   // Endlich auf Sendung!!!
+   broadcast_duell_news (msg);   
+}
+
+
+// Funktionen zum Variablenzugriff:
+
+object get_challenger ()
+{
+  return challenger;
+}
+
+
+void set_challenger (object ob)
+{
+  challenger = ob;
+}
+
+object get_partner ()
+{
+  return partner;
+}
+
+void set_partner (object ob)
+{
+  partner = ob;
+}
+
+int get_arena_registration ()
+{
+  return arena_registration;
+}
+
+void set_arena_registration (int time)
+{
+  arena_registration = time;
+}
+
+// Prueft, ob die registriereren Duellanten ein Duell austragen:
+int get_duell_status ()
+{
+  object orden;
+  
+  // Nicht registriert == kein Duell!
+  if ( !objectp(challenger) || !objectp(partner) )
+     return 0;
+  // Hat der Herausforderer einen Orden?
+  orden = present ("DuellItem", challenger);
+  if (!objectp(orden))
+     return 0;
+  // Ist der Duellpartner gleich dem registrierten Partner?
+  if ( !(orden->get_duell_opponent() == partner) )
+     return 0;
+  // Hat der Partner einen Orden?
+  orden = present ("DuellItem", partner);
+  if (!objectp(orden))
+     return 0;
+  // Ist der Duellpartner gleich dem registrierten Partner?
+  if ( !(orden->get_duell_opponent() == challenger) )
+     return 0;
+  // Laeuft auch wirklich ein Duell?
+  // Hier reicht ein check, weil die anderen Werte passen.
+  if ( orden->check_duell() == 1 )
+     return 1;
+  else 
+     return 0;
+}
+
+// Alle zerstoerten Glaeser streichen wir aus der Liste:
+void reset()
+{
+  int i;
+  
+  ::reset();
+  
+  if (pointerp(client_list))
+     while ( member(client_list, 0) != -1)
+           client_list -= ({ 0 });
+  if (pointerp(visitor_list))
+     while ( member(visitor_list, 0) != -1)
+           visitor_list -= ({ 0 });
+}

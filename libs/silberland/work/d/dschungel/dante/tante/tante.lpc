@@ -1,0 +1,615 @@
+/*
+    /npc/tratschtante.c fuer die RoleMUDLib
+    Copyright (C) 2000  invisible.mud@bl.mud.at & amnenion.mud@bl.mud.at
+   In Wirklichkeit war die Idee von mir:-) dante
+   aber Amne klaut eh immer alles:-) ich bei ihm auch!
+   
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+*/
+
+#include <properties.h> 
+#include <ansi.h> 
+#include "/players/dante/myowndefine.h"
+
+inherit "/std/npc";
+
+mixed geruechte;
+mapping userdaten;
+mixed spamm_mi_zu;
+mixed reg_user;
+mapping geruechte_farben;
+int gesamtcounter;
+
+
+#define VV(x) view_var(x)
+#define CLSR(x) #'x
+// '
+#define CAP(x) capitalize(x)
+#define ADMINS ({ "amnenion", "dante", "invisible" }) 
+// hehehe! wer da drin steht is r00t und 31337! 
+
+#define DEBUG(msg) if (find_player("dante")) tell_object(find_player("dante"),"\n\n"+msg+"\n\n"+ANSI_NORMAL)
+
+
+#define TANTENLOGFILE "/d/dschungel/dante/tante/tantenaccess"
+
+#define MAXGERUECHTE 200
+#define MAXSTRLEN 1000
+#define SAVEFILE "/d/dschungel/dante/tante/tantensave"
+
+#define SORRY ""+ANSI_RED+"Die Tante ist Dantes persoenliches Spielzeug und " \
+"kein offizieller Bestandteil des Silberlandes. Solltest Du Interesse " \
+"haben, bei der Tante mitzulesen/schreiben, so schreib eine Mail an "\
+"die Admins: "+adminlist()+ \
+". Inhalt: Lebenslauf, Leumundszeugnis und eine "\
+"Erklaerung, dass Du ALLES, was Du bei der Tante lesen wirst NICHT "\
+"ernst nehmen wirst. Sollte das doch einmal der Fall sein, wird dein "\
+"Leserecht gekuendigt."+ANSI_NORMAL+""
+
+string 
+text_list(string *ar, string bindewort) {
+  string ret;
+  
+  ret="";
+  while (sizeof(ar)>2) {
+    ret += ar[0]+", ";
+    ar = ar - ({ ar[0] });
+  }
+  if (sizeof(ar)) {
+    ret += ar[0]+" ";
+    ar = ar - ({ ar[0] });
+  }
+  if (sizeof(ar))
+    ret += bindewort +" "+ ar[0];
+  return ret;
+}
+
+
+
+die() { 
+  return 0;
+}
+
+is_member(mixed array, mixed element) {
+  if (member_array(element, array) != -1)
+    return 1;
+
+}
+
+_capitalize(string s) {
+  return capitalize(s);
+}
+
+random_element(mixed x) {
+  return x[random(sizeof(x))];
+}
+
+adminlist() {
+  return text_list(map_array(ADMINS, CLSR(capitalize)), "und");
+}
+
+xxx () {
+  // nur so a funktion zum debuggen
+  return "diese zeile auskommentieren damits geht";
+  geruechte = ({ });
+  userdaten = ([ ]);
+  //  names = ({ });
+  //  spamverdacht = ({ });
+
+  save_object(SAVEFILE);
+}
+
+cleanup() {
+  int x,i;
+  mixed user;
+
+  x=sizeof(geruechte);
+
+  if(x>MAXGERUECHTE) {
+    geruechte = geruechte[10..];
+    user = m_indices(userdaten);
+    for(i=sizeof(user); i-->0; ) {
+      userdaten[user[i]] -= 10;
+      if(userdaten[user[i]] <= 0) {
+	userdaten -= ([ user[i] ]);
+      }
+    }
+  }
+}
+
+tantenruf() {
+  mixed userlein;
+  
+  userlein=users();
+  while(sizeof(userlein)) {
+    if (is_member(spamm_mi_zu, getuid(userlein[0]))) {
+      tell_object(userlein[0], 
+	     "Die "+ANSI_RED+"Tratschtante"+ANSI_NORMAL+
+	     " ruft: Schon gehoert? Ich weiss was "+
+	     "ganz Neues!!!\n");
+    }
+    userlein = userlein [1..];
+  }
+}
+
+neues_geruecht(string text,string wer) {
+  if(strlen(text)>MAXSTRLEN)
+    return "So viel kann ich mir nicht merken.";
+
+  if (strstr(lower_case(wer),"gast")==0)
+    return "Aber Du bist doch noch so eine kleine Wurst! Was willst "+
+      "Du schon von der Welt wissen?";
+
+  if (strstr(lower_case(wer),"guest")==0)
+    return "But you are yet still such a little Wurst! What want "+
+      "you already from the world know? (sorry for my english).";
+
+  if (text=="")
+    return "Ja was jetzt?";
+  if (text==" ")
+    return "Ja was jetzt?";
+
+  if(sizeof(geruechte) && text==geruechte[<1][1]) {
+    return "Aber das weiss ich doch schon!";
+  }
+
+  cleanup();
+
+  geruechte += ({ ({ time(), text }) });
+
+  gesamtcounter++;
+  save_object(SAVEFILE);
+
+  tantenruf();
+  return "Danke fuer den neuesten Tratsch!!!";
+}
+
+#define SPRUECHE ({ "Wusstest Du schon:", \
+                    "Achja, folgendes wollte ich Dir noch erzaehlen:", \
+                    "So ganz unter uns:", \
+                    "Erzaehls nicht weiter, aber das musst Du wissen:", \
+                    "Folgendes ist mir zu Ohren gekommen:", \
+                    "Weisst Du schon das Neueste:", \
+                    "Achtung, eine wichtige Sondermeldung: ", \
+                    "Ich sag ja sonst nix, aber das muss ich Dir erzaehlen:", \
+                    "Es geht mich zwar nichts an, aber das muss ich Dir noch erzaehlen:" }) 
+
+#define IRGENDWELCHE_NAMEN ({ "uschi", "detlev", "rotkaeppchen", "ruediger", \
+"desiree", "gunhild", "niklas", "brunhilde", "jaqueline" })
+
+
+string
+check_geruechte(string user) {
+  int index;
+  string ret;
+  mixed teil;
+  int i;
+  int anzahl_grossgeschriebener_worte;
+  mixed irgendwers;
+  string tempstring;
+  int tempint;
+  mapping used_irgendwers;
+
+  irgendwers= ({ });
+  used_irgendwers= ([ ]);
+  index = userdaten[user];
+
+  if((index)>=sizeof(geruechte))
+    return "Ich weiss leider kein neues Geruecht. Hast Du eines fuer mich?";
+  
+  ret= (string)geruechte[index][1];
+    
+  teil=explode(ret, " ");
+
+  while(i<sizeof(teil)) {
+    if (teil[i][0]>64)
+      if (teil[i][0]<91) {
+	anzahl_grossgeschriebener_worte++;
+      }
+    i++;
+  }
+  // hier wird die anzahl der grossgeschriebenen worte ermittelt und ab
+  // 2 grossen worten wird %NAME mit CAP geparsed
+  //  AMDM(VV(anzahl_grossgeschriebener_worte));
+  
+  teil=regexplode(ret, "%NAME|%name");
+  i=0;
+
+  while (i<sizeof(teil)) {
+    if ( (teil[i]=="%NAME") || (teil[i]=="%name") ) {
+      if (anzahl_grossgeschriebener_worte)
+	teil[i]= CAP(explode(user,"@")[0]);
+      else
+	teil[i]= explode(user,"@")[0];
+    }
+    i++;
+  }
+  ret= implode(teil, ""); 
+
+  teil=regexplode(ret, 
+		  "%IRGENDWER[1-9]|%irgendwer[1-9]|%IRGENDWER|%irgendwer");
+  i=0;
+
+
+  while (i<sizeof(teil)) {
+    if ( (teil[i][0..9]=="%IRGENDWER") || (teil[i][0..9]=="%irgendwer") ) {
+      if (sizeof(irgendwers)==0) {
+	irgendwers=m_indices(userdaten) - ({ user });
+	irgendwers += IRGENDWELCHE_NAMEN;
+      }
+
+      if (tempint = to_int((teil[i][10..]))) { // wenns ne nummer hat
+	if (!used_irgendwers[tempint]) // nummer noch nicht zugeordnet
+	  used_irgendwers[tempint] = (string)random_element(irgendwers);
+	tempstring = used_irgendwers[tempint];
+      }
+      else // keine nummer, einfach irgendwen
+	tempstring = (string)random_element(irgendwers);
+
+      irgendwers -= ({ tempstring }); // der is nimmer im pool ,)
+
+      if (anzahl_grossgeschriebener_worte)
+	teil[i]= CAP(explode(tempstring, "@")[0]);
+      else
+	teil[i]= explode(tempstring, "@")[0];
+    }
+    i++;
+  }
+  ret= implode(teil, ""); 
+
+  if (geruechte_farben[user])
+    ret = random_element(SPRUECHE)+geruechte_farben[user]+" "+
+      ret+""+ANSI_NORMAL+"";
+  else
+    ret = random_element(SPRUECHE)+" "+
+      ret;
+  userdaten[user] = index+1;
+
+  save_object(SAVEFILE);
+
+  return ret;
+}
+
+string
+wiederhole_geruecht(string anzahl, string user) {
+  int index, i;
+
+  i = to_int(anzahl);
+
+  if (i) {
+    index = userdaten[user];
+    index = index - i;
+    if (index < 0)
+      index = 0;
+    userdaten[user] = index;
+    save_object(SAVEFILE);
+    return "Bitteschoen! Du kannst die letzten Geruechte nochmal lesen!";
+  }
+  else return "Hmm was wie bitte?!?!?!";
+}
+
+string
+uebergehe_geruecht(string anzahl, string user) {
+  int index, i;
+  string ret;
+
+  i = to_int(anzahl);
+
+  if (i) {
+    index = userdaten[user];
+    index = index + i;
+    if (index >= sizeof(geruechte)) {
+      index = sizeof(geruechte);
+      ret = "Du bist beim letzten Geruecht angekommen!";
+    }
+    else
+      ret = "Du hast "+anzahl+" Geruechte uebergangen!";
+    userdaten[user] = index;
+    save_object(SAVEFILE);
+    return ret;
+  }
+  else return "Hmm was wie bitte?!?!?!";
+}
+
+erwarte(string habara) {
+  if (strlen(habara)==0)
+    return "Des geht nur im Silberland.";
+
+  if (!is_member(spamm_mi_zu,habara)) {
+    spamm_mi_zu = spamm_mi_zu + ({ habara });
+    save_object(SAVEFILE);
+    return "Ich werde Dich wieder spammen! SPAM SPAM SPAM! Lovely Spam! "+
+      "Wonderful Spam!";
+  }
+  else {
+    spamm_mi_zu = spamm_mi_zu - ({ habara });
+    save_object(SAVEFILE);
+    return "Ok, ich werde Dich in Zukunft nimmer nerven!";
+  }
+}
+
+
+blutbad(string habara) {
+  string wo;
+
+  if (find_player("hellspawn")) 
+    if (wo=environment(find_player("hellspawn"))->QueryProp(P_INT_SHORT)) {
+      return "Hellspawn faehrt mit seinem Auto gerade hier herum: "+wo+".";
+    }
+  return "Anscheinend macht Hellspawn gerade RL die Gegend unsicher! *ZITTER*";
+}
+
+tallow(string habara, string caller) {
+  //  habara=explode(habara,"\n")[0];
+
+  if(!is_member(ADMINS, lower_case(caller)))
+    return "Hehehe, du bist ka admin";
+  if (!is_member(reg_user,lower_case(habara))) {
+    reg_user = reg_user + ({ habara });
+    save_object(SAVEFILE);
+    write_file(TANTENLOGFILE, ctime()+":\n"+caller+" erlaubt "+habara+".\n");
+    return habara+" darf ab sofort mitlesen/schreiben!";
+  }
+  else {
+    reg_user = reg_user - ({ habara });
+    save_object(SAVEFILE);
+    write_file(TANTENLOGFILE, ctime()+":\n"+caller+" entzieht "+habara+
+	       " die Erlaubnis.\n");
+    return habara+" darf ab sofort nicht mehr mitlesen/schreiben!";
+  }
+}
+
+
+#define FARBEN ([ "rot": ANSI_RED, "gruen": ANSI_GREEN, \
+"blau": ANSI_BLUE, "gelb": ANSI_YELLOW+ANSI_BOLD, "cyan": ANSI_CYAN ])
+farbe(string farbe, string habara) {
+  geruechte_farben[habara]=FARBEN[farbe];
+  save_object(SAVEFILE);
+  return "Ok.";
+}
+
+tantenwer(string user) {
+  string result;
+  mixed leser;
+  int i,j;
+  mixed per_mud;
+  mixed all;
+
+  per_mud= ({ });
+  all= ({ });
+
+  leser=m_indices(userdaten);
+  result="Das sind meine Fans: ";
+  while (sizeof(leser)) {
+    while(i<sizeof(leser)) {
+      per_mud += ({ CAP(leser[i]) });
+      leser -= ({ leser[i] });
+    }
+  }
+
+  //  DEBUG(VV(per_mud));
+  /*
+  if (geruechte_farben[user])
+    result+=geruechte_farben[user]+(all[i][0])+": "+ANSI_NORMAL+"";
+  else
+  result+=CAP(all[i][0])+": "; */
+  result += text_list(per_mud,"und")+". ";
+    
+    /*    i++;
+	  i++;
+	  } */
+  result += "Insgesamt wurden mir seit 22. Juni 2001 schon "+
+    (geruechte_farben[user]||"")+gesamtcounter+""+ANSI_NORMAL+
+    " Geruechte mitgeteilt.";
+  result += (geruechte_farben[user]||"")+
+    " Tantenadmins: "+ANSI_NORMAL+""+adminlist()+".";
+  return result;
+}
+
+user(string user) {
+  string result;
+  string *mudname;
+  mixed leser;
+  mixed grossleser;
+  int i,j;
+  mixed per_mud;
+  mixed all;
+
+  if(!is_member(ADMINS, lower_case(user)))
+    return "Hehehe, du bist ka admin";
+  
+  
+  per_mud= ({ });
+  all= ({ });
+
+  leser=reg_user;
+  grossleser= ({ });
+  i=0;
+  while (i<sizeof(leser)) {
+    grossleser += ({ CAP(leser[i]) });
+    i++;    
+  }
+  leser=grossleser;
+
+  result=""+ANSI_RED+"Erlaubte Tantenarschkriecher: "+ANSI_NORMAL+"";
+  result += text_list(leser, "und") +".\n";
+  if (geruechte_farben[user])
+    result += geruechte_farben[user];
+  result += "Tantenadmins: "+ANSI_NORMAL+""+adminlist()+".";
+  return result;
+}
+
+
+
+evaluate_tell(mixed wer, string was) {
+  string answer;
+  string cmd;
+
+  if(!is_member(ADMINS,wer))
+    if (!is_member(reg_user, wer)) {
+      answer = SORRY;
+      return answer;
+    } 
+  
+  if (was)
+    cmd = explode(was," ")[0];
+  else cmd = "";
+
+  switch (cmd) {
+    case "nn": 
+      answer = check_geruechte(wer);
+      break;
+    case "neu":
+      answer = neues_geruecht(was[4..],wer);
+      break;
+    case "farbe":
+      answer = farbe(was[6..],wer);
+      break;
+    case "wiederhole":
+      answer = wiederhole_geruecht(was[11..],wer);
+      break;
+    case "uebergehe":
+      answer = uebergehe_geruecht(was[10..],wer);
+      break;
+    case "user":
+      answer = user(wer);
+      break;
+    case "tallow":
+      answer = tallow(was[7..],wer);
+      break;
+    case "erwarte":
+      answer = erwarte(wer);
+      break; 
+    case "wer":
+      answer = tantenwer(wer);
+      break;
+    case "blutbad":
+      answer = blutbad(wer);
+      break;
+    default:
+      answer = "Mit "+ANSI_YELLOW+ANSI_BOLD+"'neu TEXT'"+ANSI_NORMAL+
+	" kannst Du mir ein neues Geruecht "+
+	"mitteilen, wobei "+ANSI_YELLOW+ANSI_BOLD+"'%NAME'"+ANSI_NORMAL+
+	" durch den jeweiligen Namen des Lesers "+
+	"ersetzt wird, ebenso wird "+ANSI_YELLOW+ANSI_BOLD+"%IRGENDWER"+
+	ANSI_NORMAL+" durch irgendeinen Namen "+
+	"ersetzt, Du kannst sogar "+ANSI_YELLOW+ANSI_BOLD+"%IRGENDWER1"+
+	ANSI_NORMAL+" bis "+ANSI_YELLOW+ANSI_BOLD+"%IRGENDWER9"+ANSI_NORMAL+
+	" "+
+	"schreiben, falls Du den selben zufaelligen Namen mehrmals in einem "+
+	"Geruecht verwenden willst, "+
+	"mit "+ANSI_YELLOW+ANSI_BOLD+"'nn'"+ANSI_NORMAL+
+	" erfaehrst Du die neuesten Geruechte. "+
+	/*	"Du kannst mir auch eine "+
+		"email mit Subject "+ANSI_YELLOW+ANSI_BOLD+"'neu'"+ANSI_NORMAL+ */
+	" und einem Geruecht schicken. "+
+	"Ausserdem kannst Du mit "+ANSI_YELLOW+ANSI_BOLD+"'wiederhole X'"+
+	ANSI_NORMAL+" Geruechte nocheinmal "+
+	"lesen, und mit "+ANSI_YELLOW+ANSI_BOLD+"'uebergehe X'"+
+	ANSI_NORMAL+" uebergehen. Wenn Du "+
+	"mir "+ANSI_YELLOW+ANSI_BOLD+"'erwarte'"+ANSI_NORMAL+
+	" mitteilst werde ich Dich zuspammen, wenn ich ein "+
+	"neues Geruecht erfahre! "+
+	"Achja mit "+ANSI_YELLOW+ANSI_BOLD+"'farbe FARBCODE'"+ANSI_NORMAL+
+	" faerbe ich dir "+
+	"zukuenftig alle Geruechte ein (Farbcodes: rot, gruen, blau, gelb, "+
+	"cyan). Seit neuestem kann ich dir auch sagen "+
+	"wer meine Fans sind -> "+ANSI_YELLOW+ANSI_BOLD+"'wer'"+ANSI_NORMAL+
+	". Wenn Du mir "+ANSI_YELLOW+ANSI_BOLD+"'Blutbad'"+ANSI_NORMAL+" "+
+	"mitteilst, verrate ich Dir uebrigens, wo Hellspawn sich gerade "+
+	"mit seinem Auto herumtreibt.";
+      if(is_member(ADMINS, lower_case(objectp(wer)?wer->login_name():wer)))
+	answer += "    "+ANSI_RED+"ADMINCOMMANDS: tallow <name> und user"+
+	  ANSI_NORMAL+"";
+  }
+  return answer;
+}
+
+usertell(object futknecht, string bla) {
+  if(futknecht)
+    tell_object(futknecht, bla);
+}
+
+catch_tell(string was) {
+  string answer;
+  string wer;
+  mixed cut;
+  int i;
+
+  /*  DEBUG("hidhiuhsui");  
+      DEBUG(VV(was));*/
+  
+  cut= explode(was, "teilt Dir mit: ");
+  // DEBUG(VV(cut));
+  i=1;
+  was="";
+  if (sizeof(cut)>1) 
+    while(i<sizeof(cut)) {
+      //      DEBUG(i+" "+cut[i]);
+      was+=explode(cut[i],"\n")[0]+" ";
+      i++;
+    }
+  else
+    return;
+  //  DEBUG(VV(was));
+
+  was=was[0..<2];
+  wer = getuid(this_player());
+
+  answer = evaluate_tell(wer, was);
+
+  call_out("usertell",0, this_player(), "Die Tratschtante teilt Dir mit: \n"+
+	   BSA(answer, "   "));
+  
+  return 1;
+}
+
+create() {
+  ::create();
+seteuid(getuid(this_object()));
+
+  if(!restore_object(SAVEFILE)) {
+    geruechte= ({ });
+    userdaten = ([ ]);
+    geruechte_farben = ([ ]);
+    //    lass_mi_inruh = ({ });
+    spamm_mi_zu = ({ });
+    reg_user = ({ "merlin" });
+  } 
+
+  SetProp(P_NAME,"Tratschtante");
+  SetProp(P_SHORT,"Die Tratschtante");
+  AddId("tante");
+  AddId("tratschtante");
+  set_living_name("tratschtante");
+SP(P_GENDER, FEMALE);
+SP(P_NOATTACK, "NIX DA!\n");
+
+
+
+  SetProp(P_LONG,"Das ist eine typische Tratschtante, die zu allem ihren "+
+	   "Senf dazugeben muss, ohne wirklich zu wissen, worum es "+
+	   "eigentlich geht.");
+
+  create_default_npc(10);
+seteuid(getuid(this_object()));
+}
+
+destruct()  {
+	return 0;  }
+	
+remove()  {
+	return 0;  }
+	

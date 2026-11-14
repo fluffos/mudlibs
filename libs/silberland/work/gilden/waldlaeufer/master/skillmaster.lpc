@@ -1,0 +1,401 @@
+/************** SkillMaster der Waldlaeufergilde *****************************
+22.07.2005 - Begin (Lilyth, Torian, Delgo)@Silberland <sl.mud.at>
+**** INHERIT + INCLUDE + DEFINE *********************************************/
+#include "../def.h"
+#include "./master-skillmaster.h"
+
+//--Vars----------------------------------------------------------------------
+nosave string *skill_list=({SPEED_ONE, SINNE_DES_JAEGERS, ERSTE_STICHE, 
+                            VERBESSERTE_ZAEHMUNG, VERBESSERTER_PAKT, 
+                            MESSERKAMPF, BOGENKAMPF, TIER_ATTACKEN, 
+                            TIER_VERTEIDIGUNG, AKROBATIK, KRAEUTERKUNDE, 
+                            SPEED_TWO, KLINGENMEISTER, BOGENMEISTER, 
+                            MEISTER_DER_GIFTE, GROSSWILDJAEGER, 
+                            GEWALT_DER_URAHNEN, GUNST_DER_FLAMME, 
+                            KOERPERBEHERRSCHUNG, SCHUTZ_DES_WALDES, 
+                            RUHEHORT, AVATARA_NAMEN, TIER_RESPEKT});
+nosave string *tmp_list=({});
+//--Prototypes----------------------------------------------------------------
+mixed GetSkillPoints(string caster);
+//**************************************************************************//
+
+
+
+//** CREATE ****************************************************************//
+//--Have to be----------------------------------------------------------------
+void create()
+{ 
+  string backupfile, *lines, *pos, next;
+  int i, j, time_left;  
+  object room;
+  
+  if(is_clone(this_object()))
+  { 
+    destruct(this_object());
+    return; 
+  } 
+  
+  for(i=0;i<sizeof(skill_list);i++) {tmp_list+=({lower_case(skill_list[i])});}
+  
+  SUID;
+  
+  if(backupfile=read_file(R_HYMNE_BACKUP_LOG))
+  {
+    next="";
+    lines=explode(backupfile, "\n");
+    for(i=0; i<=sizeof(lines)-1; i++)
+    {
+      if( (pos=explode(lines[i], "**")) && (sizeof(pos) == 3) )
+      {
+        if( (room=find_object(pos[1])) && 
+            (j=to_int(pos[2])) )
+        {
+          if( (j+900) >= time() )
+          {
+            time_left=j+900-time();
+            if( (time_left < 0) && 
+                (room->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN] != TT_FOREST) ) 
+            {
+              lines[i]="DELET!";
+            }
+            else
+            { 
+              if(time_left < 1) time_left=0;
+              call_out("undo_hymne_des_waldes_exe"
+                      , time_left, room);
+            }            
+          }
+        }
+      }
+      if(lines[i] != "DELET!") next+=lines[i]+"\n";
+    }
+    write_bytes(R_HYMNE_BACKUP_LOG, 0, next);
+  }
+}
+//**************************************************************************//
+
+
+
+//** SkillPointFunktionen **************************************************//
+//-- Welcher Skill, benoetigt welchen ? --------------------------------------
+/*
+  Habe heute Nacht keinen Lust einen Baum zu schreiben, also etwas simpler.
+  Einfach feste Reihenfolge im Array und somit die Positionen im Baum 
+  festlegen und mit folgender Funktion auf den benoetigten vorgaenger 
+  schliessen:
+  xlpc int i; for(i=23;i>0;i--) {this_player()->Message(to_string(i/2)+"\n");}
+  4/1/2 seperat abfangen
+  
+  [12]  [13] [14] [15]     [16]  [17]  [18]  [19]     [20] [21] [22]  [23]
+     \   |     \   |         \    /      \    /         |   /     |   /
+       \ |       \ |          \  /        \  /          | /       | /
+        [06]     [07]         [08]        [09]         [10]     [11]
+            \___  |             \___    ___/             |  ___/
+                \ |                 \  /                 | /
+                [03]                [04]                [05]
+                   \____    ________/  \________    ____/
+                        \  /       (oder)       \  /
+                        [01]                    [02]
+
+*/
+//-- Ermittelt die Baumposition zu einem Skill -------------------------------
+int QuerySkillPosition(string skill)
+{ return (1+member(tmp_list, lower_case(skill)));}
+
+//-- Ermittelt den Skill zu einer Position -----------------------------------
+string QuerySkill(int position)
+{
+  if(position>sizeof(skill_list) || position<1)
+  {return "Out of Range (1-"+sizeof(skill_list)+")!\n";}
+  return skill_list[position-1];
+}
+
+//-- Welcher Skill wird benoetigt um einen neuen zu lernen? ------------------
+mixed get_ancestor(int i) //am besten nur interner Zugriff!
+{
+  if(i>sizeof(skill_list) || i<1) {return 0;}
+  switch(i)
+  {
+    case 1 .. 2: return -1; break; //Keine benoetigt
+    case 4: return ({1,2}); break; //1 oder 2
+    default: return (i/2); break;
+  }
+  return 0;
+}
+mixed QueryNeededSkill(string skill)
+{
+  int position;
+  mixed res;
+  
+  if(!position=QuerySkillPosition(skill)) {return 0;}
+  if(!res=get_ancestor(position)) {return 0;}
+  if(res==-1) {return -1;}
+  if(pointerp(res)) {return ({QuerySkill(res[0]),QuerySkill(res[1])});}
+  return QuerySkill(res);
+}
+int HasNeededSkill(mixed caster, string skill)
+{
+  mixed res, actual, tmp_actual;
+  int i;
+  
+  if(objectp(caster)) {caster=getuid(caster);}
+  if(!stringp(caster) || (member(RANGERMASTER->MemberList(),caster)==-1) )
+  {return 0;}
+  if(member(tmp_list, lower_case(skill)) == -1) {return 0;}
+  if(!res=QueryNeededSkill(skill)) {return 0;}
+  if(intp(res) && res<0) {return 1;}
+  if(!pointerp(tmp_actual=GetSkillPoints(caster))) {return 0;}
+  actual=({});
+  for(i=0;i<sizeof(tmp_actual);i++) {actual+=({tmp_actual[i]});}
+  if(pointerp(res))
+  {
+    if( (member(actual, res[0]) != -1) || ((member(actual, res[1]) != -1)) )
+    {return 1;}
+    else {return 0;} 
+  }
+  if(stringp(res))
+  { //DBD(res);
+    //for(i=0;i<sizeof(actual);i++){DBD(actual[i]);}
+    return (member(actual, res) != -1);}
+  return 0;
+}
+
+//-- Hat der Caster den Skill? -----------------------------------------------
+int HasSkill(string caster, string skill)
+{
+  mixed res;
+  
+  /*if(member(RANGERMASTER->MemberList(),caster)==-1) ) {return 0;}*/
+  if(!pointerp(res=GetSkillPoints(caster))) {return 0;}
+  return (member(res, skill)!=-1);
+}
+
+//-- graphische Ausgabe fuer den Spieler -------------------------------------
+mixed QuerySkillTree(string caster)
+{
+  string s, s1, s2;
+  int i;
+  
+  if(member(RANGERMASTER->MemberList(),caster)== -1 ) { return 0; }
+  s=sprintf("%|78s\n\n", "~~~~~ Fertigkeitspunkte von "+CAP(caster)+" ~~~~~");
+  s+=
+" [12]  [13] [14] [15]     [16]  [17]  [18]  [19]     [20] [21] [22]  [23]\n"
+"    \\   |     \\   |         \\    /      \\    /         |   /     |   /\n"
+"      \\ |       \\ |          \\  /        \\  /          | /       | /\n" 
+"       [06]     [07]         [08]        [09]         [10]     [11]\n" 
+"           \\___  |             \\___    ___/             |  ___/\n" 
+"               \\ |                 \\  /                 | /\n" 
+"               [03]                [04]                [05]\n"
+"                  \\____    ________/  \\________    ____/\n"
+"                       \\  /       (oder)       \\  /\n"
+"                       [01]                    [02]\n\n";
+  for(i=0;i<sizeof(skill_list);i+=2)
+  {
+    s1=skill_list[i];
+    s+=sprintf("[%+1s] %+2s: %-29s",
+               (HasSkill(caster, s1)?"X":""), to_string(i+1), s1);
+    if((i+1)==sizeof(skill_list)) {break;}
+    s2=skill_list[(i+1)];
+    s+=sprintf("%+29s :%+2s [%+1s]\n",
+               s2,to_string(i+2),(HasSkill(caster, s2)?"X":""));
+  }
+  s+="\n\n";
+  return s;
+}
+
+//-- Alle erwerbaren Skills --------------------------------------------------
+mixed get_skill_list() {return skill_list;}
+
+//-- Wieviel Skillpunkte stehen noch zur Verfuegung? -------------------------
+int GetFreeSkillPoints(string caster)
+{ return RANGERMASTER->GetEntry(caster, M_FREE_SKILLPOINTS); }
+
+//-- Skillpunkte umsetzen ----------------------------------------------------
+void SetFreeSkillPoints(string caster, int points)
+{ RANGERMASTER->SetEntry(caster, M_FREE_SKILLPOINTS, points); }
+
+//-- Einen freien Skillpunkt hinzufuegen -------------------------------------
+void IncFreeSkillPoints(string caster)
+{
+  int i;
+  
+  i=GetFreeSkillPoints(caster);
+  i++;
+  SetFreeSkillPoints(caster, i);
+}
+//-- Einen freien Skillpunkt abziehen ----------------------------------------
+void DecFreeSkillPoints(string caster)
+{
+  int i;
+  
+  i=GetFreeSkillPoints(caster);
+  i--;
+  if(i<0) i=0;
+  SetFreeSkillPoints(caster, i);
+}
+
+//-- Welche Skills wurden schon gesetzte? ------------------------------------
+mixed GetSkillPoints(string caster)
+{ return RANGERMASTER->GetEntry(caster, M_SKILLPOINTS); }
+
+//-- Setzt die Skills komplett um (nur fuer Gildenmagier!) -------------------
+void SetSkillPoints(string caster, mixed value)
+{
+  if(intp(value) && value==0) 
+  { RANGERMASTER->SetEntry(caster, M_SKILLPOINTS, ({}) ); 
+    return;}
+  if(!pointerp(value)) {return;}
+  RANGERMASTER->SetEntry(caster, M_SKILLPOINTS, value ); 
+}
+
+//-- Einen neuen Skill erwerben ----------------------------------------------
+int AddSkillPoint(string caster, mixed skill)
+{
+  string *actual;
+  int i;
+  
+  if( member(RANGERMASTER->MemberList(),caster)== -1 ) {return 0;}
+    
+  if(GetFreeSkillPoints(caster) < 1) {return -1;} //Keine Skillpunkte
+  if(!pointerp(actual=GetSkillPoints(caster))) {return 0;}
+  if(member(actual, skill) != -1 ) {return -2;} //schon geskillt
+//  tmp_list=({});
+//for(i=0;i<sizeof(skill_list);i++) {tmp_list+=({lower_case(skill_list[i])});}
+  if(member(skill_list, skill) == -1) {return -3;} //den skill gibt es nicht
+  if(sizeof(actual)>=MAX_SKILL_POINTS) {return -4;} //Maximum an Skills
+  if(!HasNeededSkill(caster, skill)){return -5;} //Vorgaenger nicht geskillt
+  actual+=({skill});
+  RANGERMASTER->SetEntry(caster, M_SKILLPOINTS, actual );
+  DecFreeSkillPoints(caster);
+  return 1;
+}
+//**************************************************************************//
+
+
+
+//** SPELL-FUNKTIONEN ******************************************************//
+//-- Hymne des Waldes --------------------------------------------------------
+varargs int hymne_des_waldes_exe(object caster, int bySpawner)
+{
+  object room;
+  int i, k;
+
+  i = 300 + caster->QuerySkillAbility(HYMNE_DES_WALDES)/33;
+
+  if(!caster) return 0;
+
+  room=ENV(caster);
+  if(!room) return 0;
+
+  k=room->QueryProp(P_ENVIRONMENT)[ENV_TEMPERATURE];
+  room->Set(P_ENVIRONMENT, ([ENV_TEMPERATURE: k, ENV_TERRAIN: TT_FOREST])
+                         , F_QUERY_METHOD);
+
+  caster->SetProp(P_RANGER_LAST_HYMNE_DES_WALDES, time()+(600-(caster->QuerySkillAbility(HYMNE_DES_WALDES)/20))); // hymne nur alle 10 minuten
+
+  tell_room(room, BS("Du spuerst weiter die schoene Melodie "+
+                  caster->name(WESSEN, 1)+", obwohl "+caster->QueryPronoun(0)+
+                  " nichtmehr spielt."), ({caster}));
+
+  write_file(R_HYMNE_LOG, "Change to Forest: "+caster->Name()+" -> "
+                          +file_name(room)+" : "+dtime()+"\n");
+  write_file(R_HYMNE_BACKUP_LOG, 
+    "RC**"+file_name(room)+"**"+time()+"**\n");
+    //0 = "RC" 1 = "<file_name>" 2 = zeitpunkt 
+
+  room->SetProp(P_RANGER_HYMN_OF_WOODS_ACTIVE, caster);
+  
+/*xlpc environment(this_player())->Set(P_ENVIRONMENT,([ENV_TERRAIN: 14]), F_QUERY_METHOD); this_player()->Message("Terrain: "+to_string(environment(this_player())->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN]+".\n")); environment(this_player())->Set(P_ENVIRONMENT,([ENV_TERRAIN: 12]), F_QUERY_METHOD); return environment(this_player())->QueryProp(P_ENVIRONMENT);*/
+//Testfunktion
+  
+  call_out("change_to_forest_1", 4, room, caster);
+  if(!bySpawner) call_out("undo_hymne_des_waldes_exe", i, room);
+  
+  return 1;
+    
+}
+
+int change_to_forest_1(object room, object caster)
+{
+  if(!room) return 0; 
+  if(environment(caster) != room) {
+    call_out("undo_hymne_des_waldes_exe", 30, room);
+    return 0;
+  }
+
+  tell_room(room, BS("Die Melodie bleibt in der Luft haengen und Du spuerst "
+                  "wie eine Veraenderung durch diese Umgebung geht. Der Boden"
+                  " bebt leicht. Ploetzlich breitet sich ein kleiner "
+                  "Moosteppich aus."));
+
+  call_out("change_to_forest_2", 4, room, caster);
+  return 1;
+}
+
+int change_to_forest_2(object room, object caster)
+{
+  if(!room) return 0; 
+  if(environment(caster) != room) {
+    call_out("undo_hymne_des_waldes_exe", 30, room);
+    return 0;
+  }
+  
+  tell_room(room, BS("Ploetzlich wachsen kleine Buesche und Straeucher aus "
+                  "dem Boden.  Als sie deine Huefthoehe erreicht haben, "
+                  "bemerkst Du auch die ersten kleinen Baeume. Welche Macht "
+                  "ist hier am Werk?"));  
+  call_out("change_to_forest_3", 4, room, caster);
+  return 1;
+}
+
+int change_to_forest_3(object room, object caster)
+{
+  if(!room) return 0; 
+  if(environment(caster) != room) {
+    call_out("undo_hymne_des_waldes_exe", 30, room);
+    return 0;
+  }
+  
+  tell_room(room, BS("Durch die kraftvollen Melodien "+caster->name(WESSEN,1)+
+                  ", wird die Veraenderung immer gewaltiger. Ploetzlich "
+                  "wachsen neben Dir wahre Baumriesen in die Hoehe. Ein "
+                  "Moosteppich legt sich ueber den Untergrund und schon bald "
+                  "stehst Du in einem bluehenden Wald. Doch als Du Dich genau"
+                  " umschaust, bemerkst Du es ist nur eine Illusion. Dennoch "
+                  "fasziniert Dich der Anblick."), ({caster}) ); 
+  room->Set(P_INT_LONG, room->QueryProp(P_INT_LONG)+BS("Fasziniert aber,"
+                " bist Du von den wunderschoenen Wald der hier entstanden "
+                "ist. Doch als Du die Baeume unglaeubig beruehren "
+                "magst, stellst Du erstaunt fest, dass es sich hierbei um "
+                "eine Illusion handelt."), F_QUERY_METHOD);
+  if(ENV(caster) == room)
+  {
+    tell_object(caster, BS("Durch Deine kraftvollen Melodien "
+                  ", wird die Veraenderung immer gewaltiger. Ploetzlich "
+                  "wachsen neben Dir wahre Baumriesen in die Hoehe. Ein "
+                  "Moosteppich legt sich ueber den Untergrund und schon bald "
+                  "stehst Du in einem bluehenden Wald. Doch als Du Dich genau"
+                  " umschaust, bemerkst Du es ist nur eine Illusion. Dennoch "
+                  "fasziniert Dich der Anblick."));   
+  }
+  return 1;
+}
+
+int undo_hymne_des_waldes_exe(object room)
+{
+  if(!room) return 0; 
+  if(!room->QueryProp(P_RANGER_HYMN_OF_WOODS_ACTIVE)) return 0; // der raum ist nicht verwandelt
+
+  room->SetProp(P_RANGER_HYMN_OF_WOODS_ACTIVE, 0);
+  room->Set(P_ENVIRONMENT, 0, F_QUERY_METHOD);
+  room->Set(P_INT_LONG, 0, F_QUERY_METHOD);
+
+  tell_room(room, BS("Auf einmal fangen die Baeume an zu verschwimmen und "
+                  "nach und nach verblassen alle Reste die hier einst an den"
+                  " schoenen Wald erinnert haben."));
+
+  write_file(R_HYMNE_LOG, " Rechange: "+file_name(room)+" : "+dtime()+"\n");
+  
+  return 1;
+}
+//**************************************************************************//

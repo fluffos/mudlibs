@@ -1,0 +1,94 @@
+/*
+** Eine Feuerwand
+** ---
+** 1997-10-15  Woody
+** 1998-01-20  Woody: Defend() statt do_damage, 12 statt 6 Sekunden
+** 1998-08-23  Woody: NPCs macht die Feuerwand nix mehr
+** 2002-12-02  Woody: mehr Schaden: 50+rnd(40) statt 40+rnd(30), 15 Sek
+*/
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <combat.h>
+#include <new_skills.h>
+#include "../../ebene.h"
+
+#define FIRE_LOG "/d/ebene/log/feuerwand.log"
+
+string wo,wohin;
+
+create()
+{
+  if (!is_clone(ME)) return;
+  ::create();
+  AddId ( ({ "wand","feuerwand","feuer" }) );
+  SetProp (P_SHORT, "Eine Feuerwand");
+  SetProp (P_GENDER, FEMALE);
+  SetProp (P_KILL_NAME, "Ein falscher Schritt");
+  SetProp (P_KILL_MSG, "ist eine heisse Sache.");
+  SetProp (P_MSG_FLAGS, ([ P_KILL_MSG:1 ]) );
+  SetProp (P_NAME, "Feuerwand");
+  SetProp (P_LONG, "Die Feuerwand versperrt Dir den Weg.\n");
+  SetProp (P_VALUE, 0);
+  SetProp (P_WEIGHT, 0);
+  SetProp (P_NOGET, "Du verbrennst Dir ganz fuerchterlich die Finger.\n");
+  SetProp (P_MATERIAL, MAT_FIRE);
+  call_out("dissolve", 15);
+  wo="";
+  seteuid(getuid(this_object()));
+}
+
+string SetDirection(string dir)
+{
+  wohin=dir;
+  switch (dir)
+  {
+    case "oben":  wo=" ueber Dir"; break;
+    case "unten": wo=" unter Dir"; break;
+    default:      wo=" im "+(wohin=capitalize(dir));
+  }
+  SetProp (P_SHORT, "Eine Feuerwand"+wo);
+  SetProp (P_LONG, "Die Feuerwand versperrt Dir den Weg nach "+wohin+".\n");
+  wohin=dir;
+  AddId ("feuerwand im "+dir);
+  AddCmd(dir, "aua");
+  return wo;
+}
+
+string QueryDirection()
+{
+  return wohin;
+}
+
+void dissolve()
+{
+  if (environment())
+    tell_room(environment(), "Die Feuerwand"+wo+" loest sich auf.\n");
+  remove();
+}
+
+int aua()
+{
+  string l;
+  int d,t;
+
+  if (!TP) return 0;
+  if (!query_once_interactive(TP)) return 0;
+  if (TP->QueryProp(P_GHOST)) return 0;
+  d=50+random(40);
+  l=dtime(time())+": "+capitalize(getuid(TP))+" durchschreitet Feuerwand";
+
+  write("Du durchschreitest die Feuerwand"+wo+".\n");
+  say(TP->Name()+" durchschreitet eine Feuerwand"+wo+".\n");
+  tell_room(environment(), "Die Feuerwand loest sich auf.\n");
+
+  // TP->do_damage(d);
+  TP->Defend(10*d, DT_FIRE, ([ SP_NAME:"Feuerwand" ]), this_object() );
+  if (!TP || (t=TP->QueryProp(P_GHOST)))
+    l+=" (gestorben!)";
+  write_file(FIRE_LOG, l+"\n");
+  remove();
+  return t;     // Verhindert "Wie bitte?" bei Tod
+}
+

@@ -1,0 +1,402 @@
+// SilberLand MUDlib
+//
+// spellbooks/paladine/schaetz.c
+//
+// $Date: 2006/04/15 08:44:12 $
+/* $Revision: 1.3 $
+ * $Log: schaetz.c,v $
+ * Revision 1.3  2006/04/15 08:44:12  Angrox
+ * Abfrage auf Palafeind: seine -> ueber QueryPossPronoun()
+ *
+ * Revision 1.2  2004/09/11 15:51:38  Feyaria
+ * fix bei satanischem align
+ *
+ * Revision 1.1  2003/07/09 11:39:22  Angrox
+ * Initial revision
+ *
+ */
+// Prototypen
+int schaetz(object caster, mapping sinfo);
+
+
+int schaetz(object caster, mapping sinfo) {
+  int suc,al;
+  object victim;
+  int hp, sp, ac, size, level;
+  int hp_vic, sp_vic, size_vic, spellrate_vic, nomagic_vic, align;
+  string result,who;
+  mixed *indices;
+  float *values,wert;
+
+  if(caster->QueryProp(P_BLIND)) {
+    Message(caster,0,
+      BS("Bei Dusty, Du bist blind und kannst so niemanden einschaetzen!\n"),0);
+    return 0;
+  }
+  if (ENV(caster) && ENV(caster)->_query_total_light() < 1) {
+    Message(caster,0,
+      BS("Bei Dusty, hier ist es VIEL zu dunkel dafuer!\n"),0);
+    return 0;
+  }
+  victim=FindVictim(sinfo[SI_SKILLARG], caster,
+                BS("Wen moechtest Du einschaetzen?\n"));
+  if (!victim || (victim && victim->QueryProp(P_INVIS))) return 0;
+  if(!living(victim)) {
+    printf(BS("Bei Dusty, Du kannst nur Lebewesen einschaetzen!\n"));
+    return 0;
+  }
+  if (IS_WIZARD(victim)) {
+    Message(caster, 0, BS(
+      sprintf("%s ist von Natur aus nicht einzuschaetzen!\n",
+      victim->Name(WER))), 0);
+    return 0;
+  }
+
+  if (!HAS_BLESSING(caster, BLESSING_BLAZING_GAZE) && victim->InFight() && (victim->QueryProp(P_AGGRESSIVE) == 0)) {
+    Message(caster,0,
+      BS(sprintf("%s ist gerade in einen Kampf verwickelt!",
+      victim->Name(WER))),0);
+    return 0;
+  }
+  
+  if(victim==caster) {
+    Message(caster, 0, BS(
+      "Du bist zum Glueck so wie Dusty Dich geschaffen hat!\n"), 0);
+    return 0;
+  }
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+
+  Message(caster, 0, BS(
+    sprintf("Du versuchst %s mit Deinen Augen zu durchdringen.\n",
+            victim->name(WEN))), 0);
+  if ((suc=SpellSuccess(caster,sinfo))<=0) {
+    Message(caster, 0, "Deine Augen schweifen auf einmal ab!\n", 0);
+    return MISSERFOLG;
+  }
+  Message(caster, victim, BS(sprintf("%s durchdringt %s mit %sn Augen.\n",
+          caster->Name(WER),victim->name(WEN),caster->QueryPossPronoun(2))),2);
+  Message(caster, victim, BS(sprintf("%s durchdringt Dich mit %sn Augen.\n",
+          caster->Name(WER),caster->QueryPossPronoun(2))),1);
+  Message(caster,0,
+    BS("Du kannst mit goettlicher Hilfe folgendes erkennen:"),0);
+  Message(caster,0, BS("------------------------------------------------"
+                       "------------------------------"), 0);
+
+  sp_vic=victim->QueryProp(P_MAX_SP);
+  size_vic=victim->QueryProp(P_SIZE);
+  hp_vic=victim->QueryProp(P_MAX_HP);
+  nomagic_vic=victim->QueryProp(P_NOMAGIC);
+  spellrate_vic=victim->QueryProp(P_SPELLRATE);
+  align=victim->QueryProp(P_ALIGN);
+  if(!intp(align)) align=0;
+  who=CAP(victim->QueryPronoun(WER));
+  if(!size_vic) size_vic=1;
+
+  sp=caster->QueryProp(P_MAX_SP);
+  ac=caster->QueryProp(P_TOTAL_AC);
+  hp=caster->QueryProp(P_MAX_HP);
+  size=caster->QueryProp(P_SIZE);
+  level=caster->QueryProp(P_GUILD_LEVEL);
+  if(!size) size=1;
+
+  result=victim->Name(WER)+" ";
+  if      (align<=-1000) result+="scheint das Boese in sich zu haben! "
+                               +"TOETE IN DUSTYS NAMEN!!!\n";
+  else if (align<-800)  result+="ist von extrem diabolischer Gesinnung! "
+                               +"SOFORT TOETEN!\n";
+  else if (align<-600)  result+="ist von diabolischer Gesinnung! "
+                               +"TOETEN!\n";
+  else if (align<-400)  result+="ist extrem boese.\n";
+  else if (align<-300)  result+="ist sehr boese.\n";
+  else if (align<-200)  result+="ist boese.\n";
+  else if (align<-100)  result+="ist sehr frech.\n";
+  else if (align<-50)   result+="ist zu frech um neutral zu sein.\n";
+  else if (align<50)    result+="steht allem ziemlich neutral gegenueber.\n";
+  else if (align<100)   result+="ist nett.\n";
+  else if (align<200)   result+="ist sehr nett.\n";
+  else if (align<300)   result+="ist extrem nett.\n";
+  else if (align<400)   result+="hat eine gute Gesinnung.\n";
+  else if (align<600)   result+="hat eine sehr gute Gesinnung.\n";
+  else if (align<800)   result+="hat eine aussergewoehnlich gute "
+                               +"Gesinnung.\n";
+  else if (align<1000)  result+="ist schon fast heilig.\n";
+  else                  result+="ist heilig! EHRE SEI DUSTY!!!\n";
+  Message(caster, 0, BS(result), 0);
+  
+  if(call_other(NPCMASTER, "IsEnemy", victim)) {
+    Message(caster, 0, BS(sprintf("%s ist durch %se Taten ein FEIND "
+            "der Paladine! Dusty wird %s jegliche Gnade verweigern!", 
+            victim->Name(WER), victim->QueryPossPronoun(WESSEN), 
+            victim->QueryPronoun(WEM))));
+  }
+
+
+  al = caster->QueryProp(P_ALIGN)/32 + align / 12;
+  result="Nach einem siegreichen Kampf wuerde Deine Gesinnung ";
+  if(al < 0) 
+    result += "steigen.";
+  else if (al > 0) 
+    result += "sinken.";
+  else 
+    result += "gleich bleiben.";
+  Message(caster, 0, BS(result), 0);
+    
+
+  result=who;
+  switch(100*size_vic/size) {
+    case 0..20   : result+=" ist sehr viel kleiner als Du.\n";
+                   break;
+    case 21..50  : result+=" ist viel kleiner als Du.\n";
+                   break;
+    case 51..80  : result+=" ist kleiner als Du.\n";
+                   break;
+    case 81..130 : result+=" ist etwa gleich gross wie Du.\n";
+                   break;
+    case 141..180: result+=" ist groesser als Du.\n";
+                   break;
+    case 181..350: result+=" ist viel groesser als Du.\n";
+                   break;
+    case 351..500: result+=" ist sehr viel groesser als Du.\n";
+                   break;
+    case 501..800: result+=" ueberragt Dich um Haeuser.\n";
+                   break;
+    default      : result+=" ist gross wie ein Berg.\n";
+  }
+  Message(caster, 0, BS(result), 0);
+
+  result=who+" haelt";
+  if(!hp) hp=1;
+  switch(100*hp_vic/hp) {
+    case 0..20   : result+=" im Gegensatz zu Dir gar nichts aus.\n";
+                   break;
+    case 21..50  : result+=" im Gegensatz zu Dir sehr wenig aus.\n";
+                   break;
+    case 51..80  : result+=" etwas weniger als Du aus.\n";
+                   break;
+    case 81..140 : result+=" etwa gleich viel wie Du aus.\n";
+                   break;
+    case 151..200: result+=" im Gegensatz zu Dir viel aus.\n";
+                   break;
+    case 201..400: result+=" im Gegensatz zu Dir sehr viel aus.\n";
+                   break;
+    case 401..600: result+=" im Gegensatz zu Dir enorm viel aus .\n";
+                   break;
+    case 601..800: result+=" extrem viel aus. Du fuehlst Dich wie "
+                         +"ein kleines Wuerstchen.\n";
+                   break;
+    case 801..1000:result+=" im Gegensatz zu Dir unglaublich viel aus.\n";
+                   break;
+    default      : result+=" zuviel Schaden aus. Du zitterst "
+                          +"vor Ehrfurcht.\n";
+  }
+  if (suc > 4000) Message(caster, 0, BS(result), 0);
+
+  result=who;
+  if(!sp) sp=1;
+  switch(100*sp_vic/sp) {
+    case 0..20   : result+=" hat so gut wie gar keine magischen Kraefte.\n";
+                   break;
+    case 21..50  : result+=" hat weit weniger magische Energie als Du.\n";
+                   break;
+    case 51..80  : result+=" hat etwas weniger magische Energie als Du.\n";
+                   break;
+    case 81..120 : result+=" ist etwa gleich magisch aktiv wie Du.\n";
+                   break;
+    case 121..180: result+=" hat mehr magische Energie als Du.\n";
+                   break;
+    case 181..250: result+=" hat viel mehr magische Energie als Du.\n";
+                   break;
+    case 251..400: result+=" ist mit sehr viel mehr "
+                         +"magischer Energie gesegnet als Du.\n";
+                   break;
+    case 401..600: result+=" ist in Sachen Magie extrem "
+                         +"maechtiger als Du.\n";
+                   break;
+    case 601..800: result+=" hat im Gegensatz zu "
+                          +"Dir unglaublich hohe und extrem "
+                          +"maechtige magische Kraefte.";
+                   break;
+    case 801..1000:result+=" hat im Gegensatz zu "
+                         +"Dir so unglaublich "
+                         +"grosse magische Kraefte, dass Du vor "
+                         +"Ehrfurcht erzitterst.\n";
+                   break;
+    default      : result+=" hat im Gegensatz zu Dir gottgleiche "
+                         +"magische Kraefte! Du erzitterst vor "
+                         +"Ehrfurcht!\n";
+  }
+  if (suc > 4000) Message(caster, 0, BS(result), 0);
+
+  result=who;
+  if(interactive(victim)) result+=" kann zaubern.\n";
+  else
+  switch(spellrate_vic) {
+    case 0      : result+=" kann keine Zauber sprechen.\n";
+                   break;
+    case 1..15  : result+=" kann nur wenige Zauber sprechen.\n";
+                   break;
+    case 16..30 : result+=" kann ein paar Zauber sprechen.\n";
+                   break;
+    case 31..45 : result+=" kann relativ viele Zauber sprechen.\n";
+                   break;
+    case 46..60 : result+=" spricht viele Zauber.\n";
+                   break;
+    case 61..75 : result+=" spricht sehr viele Zauber.\n";
+                   break;
+    case 76..99 : result+=" spricht beinahe immer einen Zauber.\n";
+                   break;
+    case 100    : result+=" spricht immer einen Zauber.\n";
+                   break;
+    default      : result+=" spricht immer einen Zauber.\n";
+  }
+  if (level>8) Message(caster, 0, BS(result), 0);
+  /*
+  result=who;
+  switch(nomagic_vic) {
+    case 0      : result+=" kann keine Zauber abwehren.\n";
+                   break;
+    case 1..15  : result+=" kann nur wenige Zauber abwehren.\n";
+                   break;
+    case 16..30 : result+=" kann ein paar Zauber abwehren.\n";
+                   break;
+    case 31..45 : result+=" kann relativ viele Zauber abwehren.\n";
+                   break;
+    case 46..60 : result+=" wehrt etwa die Haelfte aller Zauber ab.\n";
+                   break;
+    case 61..75 : result+=" wehrt sehr viele Zauber ab.\n";
+                   break;
+    case 76..99 : result+=" wehrt beinahe alle Zauber ab.\n";
+                   break;
+    case 100    : result+=" wehrt alle Zauber ab.\n";
+                   break;
+    default      : result+=" wehrt alle Zauber ab.\n";
+  }
+  if (level>8) Message(caster, 0, BS(result), 0);
+  */
+  hp=victim->QueryProp(P_TOTAL_AC);
+  result=who;
+  switch(hp) {
+    case 0..40   : result+=" hat so gut wie keinen Schutz.\n";
+                   break;
+    case 41..80  : result+=" kann Dir nicht viel entgegensetzen.\n";
+                   break;
+    case 81..120 : result+=" hat eine gute Ruestung oder natuerlichen "
+                         +"Schutz.\n";
+                   break;
+    case 121..160: result+=" hat eine maechtige Ruestung oder "
+                         +"natuerlichen Schutz.\n";
+                   break;
+    case 161..200: result+=" hat eine extrem maechtige Ruestung oder "
+                         +"einen uebernatuerlichen Schutz.\n";
+                   break;
+    case 201..250: result+=" scheint vom Element Erz selbst vollkommen "
+                         +"geschuetzt zu sein.\n";
+                   break;
+    case 251..350: result+=" ist beinahe wie unverwundbar.\n";
+                   break;
+    default      : result+=" ist durch normale Waffen nicht mehr zu "
+                         +"verletzen und scheint einen extrem "
+                         +"machtvollen uebernatuerlichen Schutz zu "
+                         +"haben.\n";
+  }
+  Message(caster, 0, BS(result), 0);
+
+  // Achtung, wegen too many local vars werden alte wiederbenutzt !!!
+
+  if (level>10) {
+    if (suc>random(6000) && victim->QueryProp(P_RESISTANCE_STRENGTHS)) {
+      values=m_values(victim->QueryProp(P_RESISTANCE_STRENGTHS));
+      indices=m_indices(victim->QueryProp(P_RESISTANCE_STRENGTHS));
+      hp=member(indices,DT_HOLY);
+      if(hp>-1) {
+        wert=(float)values[hp];
+        if (wert > 0.0)
+          Message(caster, 0, BS(
+            who+" ist mit heiligen Attacken verwundbar!"), 0);
+        if (wert < 0.0)
+          Message(caster, 0, BS(
+            who+" ist gegen heilige Attacken geschuetzt."), 0);
+      }
+      hp=member(indices,DT_UNHOLY);
+      if(hp>-1) {
+        wert=(float)values[hp];
+        if (wert > 0.0)
+          Message(caster, 0, BS(
+            who+" ist mit daemonischen Attacken verwundbar!"), 0);
+         if (wert < 0.0)
+          Message(caster, 0, BS(
+            who+" ist gegen daemonische Attacken geschuetzt."), 0);
+      }
+    }
+    if(suc>random(6000)) {
+      indices=victim->QueryProp(P_HANDS);
+      if(indices) {
+        if (!pointerp(indices))
+          indices[0]=({indices});
+        if(member(indices, DT_HOLY)!=-1) {
+          Message(caster, 0, BS(
+            who+" attackiert mit heiligen Angriffen!"), 0);
+        }
+        if(member(indices, DT_UNHOLY)!=-1) {
+          Message(caster, 0, BS(
+            who+" attackiert mit daemonischen Angriffen!"), 0);
+        }
+      }
+    }
+    if (suc>random(6000)) {
+      indices=victim->QueryProp(P_SPELLS);
+      if (sizeof(indices)>0) {
+        ac=sp=0; // ac=holy , sp=unholy
+        for (hp=0;hp<sizeof(indices);hp++) {
+          if (!pointerp(indices[hp][3]))
+            indices[hp][3]=({ indices[hp][3] });
+          if(member(indices[hp][3], DT_HOLY)!=-1)
+            ac++;
+          if(member(indices[hp][3], DT_UNHOLY)!=-1)
+            sp++;
+        }
+        if (ac)
+          Message(caster, 0, BS(
+            who+" hat heilige Zauber auf Lager!"), 0);
+        if (sp)
+          Message(caster, 0, BS(
+            who+" hat daemonische Zauber auf Lager!"), 0);
+      }
+    }
+  }
+  if(!query_once_interactive(victim) && victim->QueryProp(P_LEVEL) >
+      caster->QuerySkillAbility("Fight_sword")/400) {
+    Message(caster, 0, BS(sprintf("Bei Dusty! %s ist ein wuerdiger Gegner! "
+            "Bei %s wirst Du sicher Deinen Schwertkampf lernen.",
+            CAP(victim->QueryPronoun(WER)), victim->QueryPronoun(WEM))),0);
+  }
+
+  Message(caster,0,BS("------------------------------------------------"
+        +"------------------------------"),0);
+
+  if(HAS_BLESSING(caster, BLESSING_BLAZING_GAZE)) {
+    Message(caster, 0, BS(sprintf("Dein lodernder Blick offenbart dir alle Schwaechen von %s!", victim->name(WEM, 1))), 0);
+    caster->SetProp(P_TMP_PALADINE_BLAZING_GAZE, victim);
+  }
+  
+  // machen wir doch die boesen ein wenig attack
+  if ((!query_once_interactive(victim)) &&
+      (align < -200) &&
+      (caster->QueryProp(P_ALIGN) >200) &&
+      (caster->QueryProp(P_LEVEL) > victim->QueryProp(P_LEVEL)) &&
+      !victim->QueryProp(P_FRIEND) &&
+      !victim->QueryProp(P_NOATTACK) &&
+      (random(100) <5)) {
+    Message(caster, 0, BS(
+      victim->Name(WEN)+" verflucht Dich und greift Dich an!"));
+    victim->Kill(caster);
+  }
+  return ERFOLG;
+}
+
+

@@ -1,0 +1,187 @@
+//  Projekt   : Barry's Pfeifenladen
+//  Raumname  : Ein Zufallstier
+//  Erstellt  : 03.06.2001 (Orw)
+//  Geaendert : -
+
+inherit "std/mnpc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <new_skills.h>
+#include <moving.h>
+#include <mnpc.h>
+#include "../def.h"
+
+// Der Name der verschiedenen Tierchen besteht aus drei Gruppen zu
+// je 20 Woertern - daraus entstehen 8000 Moeglichkeiten an 
+// unterschiedlichen Viechern
+
+// Hier werden die Wortgruppen definiert...
+#define ADJECT    ({"klein","erbaermlich","komisch","stachelig", \
+                    "kurzsichtig","haesslich","hungrig","schoen", \
+                    "wendig","giftig","fett","gefaehrlich", \
+                    "schnell","duerr","winzig","huebsch", \
+                    "glaenzend","schimmernd","schmutzig","grantig"})
+
+#define ART       ({"moos","kies","schlamm","gras", \
+                    "baum","borken","rinden","holz", \
+                    "erz","grinse","rund","knall", \
+                    "stein","erd","streifen","flecken", \
+                    "busch","strauch","schalen","toten"})
+
+#define RASSE     ({"kaefer","wurm","huepfer","springer", \
+                    "laeufer","zirper","beisser","krabbler", \
+                    "kauer","fresser","kriecher","waelzer", \
+                    "fluegler","floh","dreher","zwicker", \
+                    "nager","roller","brummer","quaker"})
+
+// Hier werden die Woerter aus den einzelnen Gruppen ausgewaehlt
+int adjective = random(sizeof(ADJECT));
+int art       = random(sizeof(ART));
+int rasse     = random(sizeof(RASSE));
+
+
+void create() 
+{
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein "+ADJECT[adjective]+"er "+CAP(ART[art])+RASSE[rasse]);
+  SetProp(P_LONG,
+    "Vor Dir befindet sich ein "+CAP(ART[art])+RASSE[rasse]+". Ein nicht "
+    "sehr grosses Tierchen der Gattung "+CAP(RASSE[rasse])+", denen "
+    "man nachsagt sehr "+ADJECT[adjective]+" zu sein. Er wohnt "
+    "in huegeligem Gebiet und laesst sich nicht oft blicken. Er ist zwar "
+    "kein besonders starker Gegner, aber da er so selten vorkommt muss "
+    "man den Sieg ueber diesen "+CAP(ART[art])+RASSE[rasse]+" unbedingt feiern.");
+    
+  SetProp(P_NAME, CAP(ART[art])+RASSE[rasse]);
+  SetProp(P_NAME_ADJ, ADJECT[adjective]);
+  AddAdjective( ({ADJECT[adjective], ADJECT[adjective]+"e"}) ); 
+  SetProp(P_GENDER, MALE);
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:0,T_RANGE_MAX:30]));
+  AddId(({ART[art]+RASSE[rasse],RASSE[rasse], "ZUFALLSTIERCHEN"}));
+  set_living_name("zufallstierchen");
+
+  create_default_npc(5+random(5));
+  SetProp(P_HANDS, ({
+    " mit seinen "+ADJECT[adjective]+"en Krallen",
+    QueryProp(P_HANDS)[1],DT_BLUDGEON}));
+  SetProp(P_RACE, CAP(RASSE[rasse]));
+  SetProp(P_SIZE, 15+random(15));
+  SetProp(P_ALIGN, -300+random(600));
+  SetProp(P_MAX_HANDS, 4);
+
+  SetProp(P_MSGIN, "krabbelt rein");
+  SetProp(P_MSGOUT, "krabbelt");
+  SetProp(P_MMSGIN, "krabbelt rein");
+  SetProp(P_MMSGOUT, "krabbelt raus");
+  SetProp(P_MNPC_AREA, (ROOM) );
+  SetProp(P_MNPC_WAIT, ({ 10, 30, 30 }));
+  SetProp(P_MNPC_DEFAULTROOM, ROOM "kiesweg3");
+  SetProp(P_MNPC_FLAGS, MOV_OUTDOORS + MOV_MOVES + MOV_BACKWARDS);
+
+  SetProp(P_DIE_MSG,  " faellt tot zu Boden.\n");
+  SetProp(P_MURDER_MSG, "Mich seht ihr lang nicht mehr!");
+  SetProp(P_KILL_NAME, CAP(ART[art])+RASSE[rasse]);
+  SetProp(P_KILL_MSG, "Alle Macht den "+CAP(RASSE[rasse])+"n!");
+
+  AddInfo(DEFAULT_INFO, "versteht Dich doch gar nicht.\n");
+  AddInfo("orw", 
+    "Orw ist mein Schoepfer. Er kommt mich oft besuchen.","sagt: ");
+
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    "Der "+CAP(ART[art])+RASSE[rasse]+" will Deine Sachen nicht tragen.\n" }) );
+
+
+}
+
+// Mitloggen wenn ein Spieler den NPC killt:
+void die(int poisondeath) {
+  write_file(LOG "zufallstierchen.kills",
+    ctime()+": "+CAP(getuid(PL))+" killt den "+ADJECT[adjective]+"en "
+    +CAP(ART[art])+RASSE[rasse]+".\n");
+  ::die(poisondeath);
+}
+// Mitloggen wenn ein Spieler vom NPC gekillt wird:
+void NotifyPlayerDeath(object player, object killer, int lostexp) 
+{
+  if(killer == ME)
+    write_file(LOG "zufallstierchen.deads",
+      ctime()+": Der "+ADJECT[adjective]+"e "+CAP(ART[art])+RASSE[rasse]+
+      " hat gerade "+CAP(getuid(player))+" umgebracht.\n");
+}
+
+
+
+// Reactions
+void StartReaction(string verb, string gruppe, string adverb, int touch) {
+  if (find_call_out("reaction") != -1) return;
+  switch (gruppe) {
+    case "aengstlich":
+      call_out("reaction", 0, TP, 
+        "guckt Dich verwundert an.",
+        "guckt "+TPN+" verwundert an.");
+      break;
+    case "aergerlich":
+      call_out("reaction", 0, TP,
+        "zieht sich schuetzend zurueck.",
+        "zieht sich schuetzend zurueck.");
+      break;
+    case "albern":
+      call_out("reaction", 0, TP,
+        "quitscht vergnuegt.",
+        "quitscht vergnuegt.");
+      break;
+    case "fies":
+      call_out("reaction", 0, TP,
+        "brummt Dich an.",
+        "brummt "+TPN+" an.");
+      break;
+    case "frech":
+      call_out("reaction", 0, TP,
+        "kratzt Dich am Bein.",
+        "kratzt "+TPN+" am Bein.");
+      break;
+    case "froh":
+      call_out("reaction", 0, TP,
+        "rollt am Boden herum.", 
+        "rollt am Boden herum.");
+      break;
+    case "intim":
+      call_out("reaction", 0, TP,
+        "rollt sich erroetend zusammen.",
+        "rollt sich erroetend zusammen.");
+      break;
+    case "nett":
+      call_out("reaction", 0, TP,
+        "krabbelt lustig herum.",
+        "krabbelt lustig herum.");
+      break;
+    case "neutral":
+      call_out("reaction", 0, TP,
+        "guckt Dich an.",
+        "guckt "+TPN+" an.");
+      break;
+    case "traurig":
+      call_out("reaction", 0, TP,
+        "beachtet Dich gar nicht.",
+        "beachtet "+TPN+" gar nicht.");
+      break;
+  }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch) 
+{
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void reaction(object ob, string macher, string andere) 
+{
+  if (present(ob, ENV(TO))) 
+  {
+    tell_object(ob, BS(Name(WER, 1)+" "+macher));
+    tell_room(ENV(TO), BS(Name(WER, 1)+" "+andere), ({ob}));
+  }
+}

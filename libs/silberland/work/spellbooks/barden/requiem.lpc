@@ -1,0 +1,160 @@
+public mapping prep_requiem(object caster, mapping sinfo) {
+    object target;
+
+    if(caster->InFight()) {
+      write(BS("DIm Kampf kannst du dieses Lied nicht anstimmen!"));
+      return 0;
+    }
+  
+    sinfo = prepare_song(caster, sinfo);
+    if(sinfo == 0) {
+        return 0;
+    }
+
+    target = FindVictim(sinfo[SI_SKILLARG], caster, 0);
+    if(!objectp(target)) target = caster;
+  
+    if(pointerp(target->QueryProp(P_TMP_DIE_HOOK))) {
+        if(target->QueryProp(P_TMP_DIE_HOOK)[0] >= time()) {
+            write(BS(sprintf("Etwas beschuetzt %s bereits vor dem Tod.",
+                    (target==caster?"dich":target->name(WEN, 1)))));
+            return 0;
+        } else {
+            target->SetProp(P_TMP_DIE_HOOK, 0);
+        }
+    }
+  
+    if(!paySpellCost(caster, sinfo, 1)) return 0;
+   
+    else play_song_text(SPELLSEQ(sprintf("requiem.seq")), caster);
+    return sinfo;
+  }
+
+int requiem(object caster, mapping sinfo) {
+  object target;
+  int abil, suc, duration;
+  float factor;
+  string bg, song;
+  
+  if(!paySpellCost(caster, sinfo)) return 0;
+
+  target = FindVictim(sinfo[SI_SKILLARG], caster, 0);
+  if(!objectp(target)) target = caster;
+
+  if(target->QueryProp(P_TMP_DIE_HOOK)) {
+    write(BS(sprintf("Etwas beschuetzt %s bereits vor dem Tod.",
+             (target==caster?"dich":target->name(WEN, 1)))));
+    return 0;
+  }
+  
+  if(environment(target) != environment(caster)) {
+    tell_object(caster, BS(sprintf("Nanu?! wo ist denn %s hin?", target->name(WER, 1))));
+    return 0;
+  }
+
+  // GELUNGEN?
+  if((suc=SpellSuccess(caster,sinfo))<=0) {
+    tell_room(ENV(caster), BS("Nichts geschieht..."));
+    return MISSERFOLG;
+  }
+
+  tell_room(ENV(target), BS(sprintf("Mehrere Abbilder von %s schimmern in regenbogenfarben.",
+                            target->name(WEM, 1))), ({target}));
+  tell_object(target, BS("Das Requiem durchstroemt dich. Mehrere Versionen von dir schimmern kurz "
+                         "in den Farben des Regenbogens. Die Musik manifestiert eine Erinnerung "
+                         "an dich."));
+
+  duration = sinfo[SI_SKILLABILITY]/10+random(suc/10);
+  target->SetProp(P_TMP_DIE_HOOK, ({time()+duration,
+                                    TO,
+                                    "catchRequiemDeath"}));
+  target->SetProp("bard_requiem_data", ({sinfo[SI_SKILLABILITY], suc, caster, environment(target)}));
+  call_out("requiemEndMessage", duration, target);
+  return ERFOLG;
+}  
+
+public void requiemEndMessage(object pl) {
+    if(!objectp(pl)) return;
+    if(!pl->QueryProp(P_TMP_DIE_HOOK)) return;
+
+    tell_object(pl, "Die Wirkung des Requiems der Traeume erlischt mitsamt der Erinnerung an dich.");
+    return;
+}
+
+public int catchRequiemDeath(int pd) {
+    int abil, suc;
+    object caster, castRoom;
+
+    abil = PO->QueryProp("bard_requiem_data")[0];
+    suc = PO->QueryProp("bard_requiem_data")[1];
+    castRoom = PO->QueryProp("bard_requiem_data")[3];
+
+    TEST_PRINT(PO, sprintf("catchReqiuemDeath :: abil=%d suc=%d castRoom=%O\n", abil, suc, castRoom));
+
+    tell_object(PO, BS("Regenbogenschillernde Abbilder von dir erscheinen um dich herum."));
+    tell_room(ENV(PO), BS(PO->Name(WER, 1) + " wird von regenbogenfarbenem Licht und Musik umspielt."));
+
+    call_out("requiemDeghost", 2, PO, time()+60*10, abil, suc);
+    call_out("requiremMoveInventory", 0, PO, all_inventory(PO));
+    if(abil > 7000) call_out("requiemRecall", 35-(abil/1000)-(suc/1000), PO, castRoom);
+    PO->SetProp(P_TMP_DIE_HOOK, 0);
+    PO->SetProp("bard_requiem_data", 0);
+    return 0;
+}
+
+public void requiemDeghost(object pl, int endtime, int abil, int suc) {
+    if(!objectp(pl)) return;
+    if(!pl->QueryProp(P_GHOST)) return;
+    if(time() > endtime) return;
+
+    TEST_PRINT(pl, sprintf("requiemDeghost :: endtime=%d abil=%d suc=%d\n", endtime, abil, suc));
+
+    if(file_name(environment(pl)) != "/room/death/death_room") {
+        pl->SetProp(P_GHOST, 0);
+        tell_object(pl, BS("Du nimmst wieder koerperliche Gestalt an."));
+        TEST_PRINT(pl, sprintf("requiemDeghost :: suc=%d heal=%.2f xpSave=%d\n", suc,  (suc/25000.0), (abil + suc)/1000));
+        pl->AddHp((int) (pl->QueryProp(P_MAX_HP) * (suc/25000.0)));
+        pl->AddSp((int) (pl->QueryProp(P_MAX_SP) * (suc/25000.0)));
+        pl->resurrect((abil + suc)/1000);
+        return;
+    }
+
+    call_out("requiemDeghost", 2, pl, endtime, abil, suc);
+    return;
+}
+
+public void requiemRecall(object pl, object oldEnv) {
+    int r;
+    object ob;
+    if(!objectp(pl)) return;
+    if(file_name(environment(pl)) != "/room/death/death_room") return;
+
+    TEST_PRINT(pl, sprintf("requiemRecall :: env=%O\n", oldEnv));
+    r = pl->move(oldEnv, M_NOCHECK|M_SILENT);
+    TEST_PRINT(pl, sprintf("requiemRecall :: r=%d\n", r)); 
+    if(r == 1) {
+        tell_object(pl, BS("Regenbogenfarbenes Licht umspielt dich und zerrt dich zurueck ins Leben."));
+        tell_room(oldEnv, BS(sprintf("%s erscheint in einem hellen Lichtblitz neben dir.", pl->Name(WER, 1))));
+        if(ob = present("\ndeath_mark", pl)) ob->remove();
+    }
+    return;
+}
+
+public void requiremMoveInventory(object pl, object *inv) {
+    int i;
+    object item;
+
+    TEST_PRINT(pl, sprintf("requiem :: requiemMoveInventory :: n(inv)=%d\n", sizeof(inv)));
+
+    for(i=0;i<sizeof(inv);++i) {
+        item = inv[i];
+        if(!objectp(item)) continue;
+        if(environment(item) == pl) continue;
+
+        TEST_PRINT(pl, sprintf("requirem :: requiemMoveInventory :: item=%O\n", item));
+        if(item->move(pl, M_NOCHECK) == 1) {
+            tell_room(environment(item), BS(sprintf("%s verschwindet in regenbogenfarbenem Flackern.", item->Name(WER))));
+            tell_object(environment(item), BS(sprintf("%s verschwindet in regenbogenfarbenem Flackern.", item->Name(WER))));
+        }
+    }
+}

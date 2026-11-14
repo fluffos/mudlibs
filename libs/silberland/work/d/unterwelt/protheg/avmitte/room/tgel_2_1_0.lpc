@@ -1,0 +1,374 @@
+/*
+  Der Brunnen Lloths
+  Einer der Schreine im Tempelbezirk von Ardulvhier
+
+  Macalla + Tyron, Juni 2001
+
+  Finalisiert by PROtheG, Oktober 2001
+*/
+
+#include "../def.h"
+
+inherit MOST "std_room";
+inherit ROOM "s";
+
+#define MAX_BAD_PL  1
+
+nosave mapping Bad_pl;
+nosave object seq;
+nosave int pause;
+
+/*
+  Testet, ob der Spieler, der baden moechte, ein Geist ist, etwas traegt
+  oder eine Waffe gezueckt hat.
+  Rueckgabewerte:
+   0  Keine Kleidung, keine Waffe
+  -1  Spieler ist ein Geist
+  -2  Spieler traegt Ruestung
+  -3  Waffe gezueckt.
+*/
+nosave int check_schwimmen(object pl)
+{
+  int i;
+  object *armours;
+
+  if(pl->QueryProp(P_GHOST)) return -1;
+  if(pl->QueryProp(P_WEAPON)) return -3;
+
+  if(sizeof(pl->QueryArmours()-pl->QueryArmours(({AT_AMULET,AT_RING,AT_MISC}))))
+    return -2;
+  
+  return 0;
+}
+
+/*
+  In dieser Funktionen erhaelt ein badender Spieler fuer gewisse Zeit eine
+  verbesserte Ruestungsklasse. Die Funktion wird von cmd_meditieren()
+  aufgerufen.
+*/
+nosave int erhoehe_schutz(object pl)
+{
+  int count;
+  object ob;
+
+  if(!pl||!objectp(pl)|| ENV(pl)!=ME) return -1;
+  //if(pl->QueryProp(P_GUILD)!="dunkelelfen") return 0;
+
+  // Falls Charakter schon einen Schutz besitzt, keinen weiteren geben
+  if(present("\nlloth_schutz",pl)) return 0;
+
+  count=Bad_pl[pl];
+
+  if(count < MAX_BAD_PL) // Maximal zulaessige Badezahl fuer Spieler erreicht?
+    {
+      tell_object(pl,
+		  BS("Ploetzlich beginnt Euer ganzer Koerper zu kribbeln...")+
+		  BS(" Seltsam beschuetzt fuehlt Ihr Euch mit einem Mal..."));
+
+      Bad_pl[pl]=count+1;
+      ob=clone_object(OBJ "lloth_schutz");
+      
+      if(objectp(ob))
+	{
+	  ob->move(pl, M_NOCHECK);
+	  ob->DoWear(1);
+	}
+    }
+}
+
+/*
+  In dieser Funktionen erhaelt ein badender Spieler fuer gewisse Zeit eine
+  verbesserte Ruestungsklasse. Die Funktion wird von cmd_baden()
+  aufgerufen.
+*/
+nosave int gebe_schale(object pl)
+{
+  object ob;
+
+  if(!pl||!objectp(pl)||ENV(pl)!=ME) return -1;
+  //if(pl->QueryProp(P_GUILD)!="dunkelelfen") return 0;
+
+  // Falls Charakter schon eine Schale besitzt, keine weitere geben
+  if(present("\nlloth_schale", pl)) return 0;
+
+  tell_object(pl,
+	  BS("Kurz vor dem Beckenrand gleitet Ihr auf dem nassen "
+	     "Fels aus und als Ihr Euch abstuetzt, ertastet Ihr etwas "
+	     "Rundes, Glattes. Ihr stellt fest, dass es sich um eine "
+	     "kleine Schale aus rauchigem braunen Stein handelt."));
+
+  ob=clone_object(OBJ "lloth_schale");
+
+  if(objectp(ob))
+    if(ob->move(pl)==ME_TOO_HEAVY)
+      {
+	tell_object(pl,
+		    BS("Leider scheint sie Euch zu schwer zu sein und Ihr "
+		       "laesst sie liegen."));
+
+	ob->remove(1);
+      }
+    else
+      tell_object(pl,
+		  BS("Einem Impuls folgend nehmt Ihr sie an Euch."));
+  
+  return 1;
+}
+
+void create()
+{
+  ::create();
+
+  Bad_pl=([]);
+  
+  SetProp(P_INT_SHORT, "Der Brunnen Lloths");
+  SetProp(P_INT_LONG,
+	  BS("Ihr steht vor einem schlichten, kreisrunden Felsbecken, das "
+	     "auf den ersten Blick mit Blut gefuellt zu sein scheint. Erst "
+	     "als Ihr etwas naeher tretet, und vorsichtig eine Hand in die "
+	     "Fluessigkeit taucht, merkt Ihr, dass es sich wohl doch um "
+	     "etwas anderes handelt. Aber was immer es ist - Ihr starrt "
+	     "fasziniert auf die Tropfen, die wie Rubine auf Eurer Hand "
+	     "glitzern und Eure Gedanken fast unwillkuerlich auf die "
+	     "Jagd nach den Wesen der Oberwelt lenken, deren Blut der "
+	     "maechtigen Lloth geopfert werden muss."));
+
+  AddDetail(({"felsbecken","becken"}),
+    "Das Becken scheint ein natuerlicher Brunnen zu sein. Es ist nicht sehr"
+    " gross, scheint aber genuegend Platz zum Baden zu bieten - falls Ihr"
+    " das wagen wollt ...");
+
+  AddDetail(({"platz"}),
+    "Das Becken bietet genuegend Platz, um darin zu baden.");
+
+  AddDetail(({"blick","anblick"}),
+     "Ihr seid voellig in den Anblick des Brunnens versunken.");
+
+  AddDetail(({"fluessigkeit","blut"}),
+    "Die Fluessigkeit ist blutrot, hat aber nicht die richtige Konsistenz,"
+    " um tatsaechlich Blut zu sein.");
+
+  AddDetail(({"konstistenz"}),
+    "Die Fluessigkeit hat eher die Konsistenz von Wasser.");
+
+  AddDetail(({"wasser"}),
+    "Auch in Wasser kann man baden ...");
+
+  AddDetail(({"hand"}),
+    "Nun, ich hoffe doch, dass Ihr zumindest eine habt, um zu Ehren der"
+    " ewigen Lloth kaempfen zu koennen.");
+
+  AddDetail(({"ehren"}),
+    "Alles geschieht zu Ehren der dunklen Herrin!");
+
+  AddDetail(({"lloth","herrin"}),
+    "Leben und Tod fuer die dunkle Herrin!");
+
+  AddDetail(({"leben","tod"}),
+    "Lebt und sterbt zu Ehren Lloths, Drow! Falls Du kein Drow bist,"
+    " vergiss das mit dem Leben ...");
+
+  AddDetail(({"tropfen","rubine","rubin"}),
+    "Wie Rubine haengen die Tropfen an Eurer Hand und glitzern sanft. Eure"
+    " Hand kribbelt leicht ...");
+
+  AddDetail(({"gedanken","gedanke"}),
+    "Ihr koennt beim Anblick von Lloths blutrotem Brunnen an nichts anderes"
+    " als an jene Wesen der Oberwelt denken, deren Blut ihr zu Ehren Lloths"
+    " schon vergossen habt und hoffentlich noch vergiessen werdet.");
+
+  AddDetail(({"brunnen"}),
+    "Man erzaehlt sich, aus diesem Brunnen habe einst die dunkle Lloth"
+    " selber getrunken. Und in dem Moment, als ihre goettlichen Lippen das"
+    " Wasser beruehrten, verfaerbte es sich blutrot, auf dass sich ihre"
+    " Kinder ewig an ihre Pflicht der Herrin gegenueber erinnern moegen.");
+
+  AddDetail(({"oberwelt","ort","sonne"}),
+    "Die Oberwelt - jener verfluchte Ort, der von der grausamen Sonne"
+    " verbrannt wird.");
+
+  AddDetail(({"wesen"}),
+    "Wenn Ihr eines davon seid, dann lauft kleines Wesen, bevor die Jaeger"
+    " der Dunkelheit Euch zu Tode hetzen!");
+
+  AddDetail(({"lippen","kuesse","kuss"}),
+    "Lloths Kuesse sind toedlich!");
+
+  AddDetail(({"kinder"}),
+    "Nur die edlen Dunkelelfen duerfen sich Kinder Lloths nennen!");
+
+  AddDetail(({"pflicht"}),
+    "Es ist die Pflicht aller Dunkelelfen, der grossen Lloth das Blut ihrer"
+    " Feinde zu opfern - oder auch das eigene, wenn sie es verlangt.");
+
+  AddDetail(({"jaeger","jagd"}),
+    "Dunkelelfen sind fuer die Jagd geboren - stark, schnell, klug und sehr,"
+    " sehr gefaehrlich...");
+
+  AddDetail(({"dunkelheit"}),
+    "Gepriesen sei Lloths Dunkelheit!");
+
+  AddDetail(({"dunkelelfen","drow","reich","volk","voelker"}),
+    "Dies ist das Reich des edelsten aller Voelker: der Dunkelelfen!");
+
+  AddDetail(({"feinde"}),
+    "Wesen, die dazu da sind, gejagt und geopfert zu werden.");
+
+  AddDetail(({"boden"}),
+    "Der Boden besteht, wie ueberall hier, aus Kalkstein.");
+
+  AddDetail(({"himmel"}),
+    "Zwischen dem und Euch ist erfreulich viel festes Gestein.");
+
+  AddDetail(({"gestein","kalkstein"}),
+    "Kalkstein.");
+
+  AddSound (DEFAULT_SOUND,
+    "Heilige Stille. Ihr hoert nur das leise Plaetschern des Wassers.");
+
+  AddSound ("stille",
+    "Bis auf ein leises Plaetschern ist es hier absolut still!\n");
+
+  AddSound (({"wasser","plaetschern"}),
+    "Das leise Plaetschern des Wassers im Becken wirkt einladend und"
+    " beruhigend.\n");
+
+  AddCmd("", "seq_check", 1);
+  AddCmd(({"bete","huldige"}), "cmd_beten");
+  AddCmd(({"bade"}), "cmd_baden");
+
+  Licht("dunkel");
+  Umgebung("warm", TT_CAVE, 1);
+
+  set_exits("tgel");
+
+  pause=0;
+}
+
+nosave int seq_check(string str)
+{
+  if((objectp(seq)) && (seq==TP) && !IS_WIZARD(TP)) return 1;
+  return 0;
+}
+
+void reset()
+{
+  ::reset();
+
+  Bad_pl=([]);
+}
+
+nosave int cmd_beten(string str)
+{
+  notify_fail(BS("Wollt Ihr zu Lloth beten?"));
+  if(!str) return 0;
+
+  if(member(({"lloth", "zu lloth", "loth", "zu loth"}), str)>-1)
+    {
+      write(BS("Ihr kniet Euch neben dem Becken hin und betet "
+	       "zu Lloth, der Dunklen Herrin. Ihr spuert, dass ihr Blick "
+	       "gefaellig auf Euch ruht ob dieses Zeichens Eurer "
+	       "Ehrerbietung, und erhebt Euch wieder."));
+
+      say(BS(TP->Name()+" kniet sich hin und betet."), ({TP}));
+      return 1;
+    }
+  else
+    if(member(({"woody", "zu woody", "dusty", "zu dusty"}), str)>-1)
+      {
+	write(break_string(
+	     "Du unwuerdiger Wurm wagst es tatsaechlich, HIER zu "
+	     "einem anderen Gott zu beten??\n"
+	     "Ploetzlich spuert Ihr einen stechenden Schmerz in Euren "
+	     "Lungen, als ob Ihr gluehende Luft einatmen wuerdet. Ihr "
+	     "schnappt verzweifelt nach Luft, koennt aber nicht mehr "
+	     "atmen. Ihr meint, ersticken zu muessen und windet Euch "
+	     "keuchend auf dem Boden.",0,0,1));
+	
+	say(break_string(
+	     TP->Name()+" wagt es tatsaechlich, HIER zu einem anderen Gott "
+	      "zu beten!\n"
+	      "Ploetzlich liegt "+TP->QueryPronoun(WER)+" keuchend "
+	      "auf dem Boden und beginnt, nach Luft zu schnappen. Es sieht so "
+	      "aus, als wuerde "+TP->QueryPronoun(WER)+" jeden Augenblick "
+	      "ersticken.", 0, 0, 1));
+	
+	TP->AddHp(-22-random(10)-random(10));
+
+	return 1;
+      }
+  return 0;
+}
+
+void darkelf_fin(object who)
+{
+  erhoehe_schutz(TP);
+  gebe_schale(TP);
+
+  seq=0;
+}
+
+void other_fin(object who)
+{
+  TP->AddHp(-12-random(10)-random(10));
+
+  who->move(ROOM "tgel_1_4_0", M_GO,"","rennt davon",
+            "stuermt kreidebleich herein");
+  seq=0;
+}
+
+nosave int cmd_baden(string str)
+{
+  int check;
+  object pl;
+
+  notify_fail(BS("Worin moechtet Ihr baden?"));
+
+  if(!str) return 0;
+
+  if(str=="in becken"||str=="im becken"||str=="in wasser"||str=="im wasser")
+    {
+      if(objectp(seq) && ENV(seq)==ME)
+        return write(BS("Aber "+seq->name()+" badet doch gerade in dem "
+			"Becken!")), 1;
+
+      if(pause > time())
+	return write(BS("Ihr fuehlt, dass sich die Magie des Brunnens noch "
+			"nicht vollstaendig regeneriert hat...")), 1;
+      
+      check=check_schwimmen(TP);
+      
+      switch(check)
+	{
+	case 0:
+	  seq=TP;
+	  
+	  if(TP->QueryProp(P_RACE)=="Dunkelelf") // Sequenz fuer Dunkelelfen
+	    StartSequence(ROOM "seq/schrein3_darkelf", seq, "darkelf_fin");
+	  else //  Sequenz fuer Nichtdunkelelfen
+	    StartSequence(ROOM "seq/schrein3_other", seq, "other_fin");
+
+	  GESINNUNG->Aendere_Gesinnung(TP, SCHREIN_BECKEN);
+	  
+	  pause=time()+60*2;
+	  
+	  break;
+	  // Nun abarbeiten, wenn der Spieler nicht ins Becken darf
+	case -1:
+	  return write(BS("Als Geist hasst Ihr Wasser, wusstet Ihr das nicht?")),1;
+	case -2:
+	  return write(BS("Ihr werdet doch nicht mit Eurer schmutzigen "
+		          "Kleidung in dieses heilige Becken steigen wollen???")),1;
+	case -3:
+	  return write(BS("Ihr werdet doch nicht mit einer Waffe in der Hand "
+		          "in dieses Becken steigen wollen???")),1;
+	default:
+	  return write(BS("Ihr wisst nicht warum, aber Ihr wollt nicht in "
+		          "dieses Becken steigen.")),1;
+      	}
+      
+      return 1;
+    }
+  
+  return 0;
+}

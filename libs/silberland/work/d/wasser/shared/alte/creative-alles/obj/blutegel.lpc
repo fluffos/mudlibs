@@ -1,0 +1,166 @@
+// Blutegel
+// (c) -Crea- 20030505
+
+inherit "std/thing";
+
+#include <thing.h>
+#include <material.h>
+#include <language.h>
+#include <moving.h>
+#include <properties.h>
+#include "../files.h"
+
+#define SUCK_PROBABILITY 20 
+#define SUCK_TIME 8
+#define SUCK_DAMAGE 10
+#define SUCK_THRESHOLD 30
+
+#define DEB(x) if (find_player("creative")) tell_object(find_player("creative"),sprintf("[EGEL]: %s\n",x))
+
+int sucking, invis;
+
+void suck();
+void my_death(string str);
+
+void create() {
+  if ( !is_clone( this_object() ) )
+    return;
+
+  ::create();
+  SetProp( P_NAME, "Blutegel" );
+  SetProp( P_SHORT, 0 );
+  SetProp( P_LONG, BS(
+           "Der Blutegel haftet an Deinem Bein und saugt Dich aus. "
+         + "Sein Bauch ist schon ganz dick und kugelrund von Deinem Blut."
+         + "Vielleicht kannst Du ihn ja herunterreissen." ));
+  SetProp( P_NODROP, "Der Blutegel haftet an Dir wie ein Magnet." );
+  SetProp( P_NEVERDROP );
+  SetProp( P_MATERIAL, ([ MAT_BLOOD:100 ]) );
+  AddId( "blutegel" );
+  AddId( "egel" );
+  AddId( "\blutegel" );
+  sucking = 0;
+  invis = 1;
+  AddCmd( ({ "reiss", "reisse" }), "rip" );
+}
+
+init() {
+  ::init();
+  DEB(CAP(TP->query_real_name()) + " found.");
+  if ( ENV(TO) && ENV(TO)->id( "Raum" ) && TP->id( "Spieler" ) &&
+       random( 100 ) < SUCK_PROBABILITY ) {
+    TO->move( TP, M_NOCHECK );
+    start_sucking();
+    DEB("started sucking " + CAP(TP->query_real_name()) + ".");
+  }
+}
+
+void start_sucking() {
+  if ( sucking )
+    return;
+  call_out( "suck", SUCK_TIME );
+  sucking = 1;
+}
+
+rip(str) {
+  string what;
+  object env;
+  int dex;
+  string ter;
+
+  if ( !str )
+    return 0;
+  if ( str == "" )
+    return 0;
+  if ( invis )
+    return 0;
+  notify_fail( "Was moechtest Du herunterreissen?\n" );
+  sscanf( str, "%s herunter", what );
+  if ( ! id(what) )
+    return 0;
+  dex = TP->QueryAttribute( A_DEX );
+  if ( dex + random( 100 ) > 60 ) {
+    env = ENV(ENV(TO));
+    write( "Du reisst mit aller Gewalt den Blutegel herunter und schmeisst ihn zu Boden.\n" );
+    TP->AddHp( -8 );
+    if ( env ) {
+      TO->move(env, M_NOCHECK);
+      ter = env->QueryProp( P_ENVIRONMENT )[ENV_TERRAIN];
+      switch ( ter ) {
+        case TT_FOREST:
+        case TT_SWAMP:
+        case TT_JUNGLE:
+          write( "Der Blutegel fuehlt sich hier sehr wohl und graebt sich sofort ein.\n" );
+          SetProp( P_SHORT, 0 );
+          invis = 0;
+          break;
+        case TT_HOUSE:
+        case TT_CAVE:
+          call_out( "my_death", 4, "verkriecht sich in einer Ritze im Boden" );
+          break;
+        case TT_WATER:
+        case TT_UNDERWATER:
+          write( "Der Blutegel versinkt im Wasser.\n" );
+          call_out( "my_death", 3, "ertrinkt klaeglich" );
+          break;
+        case TT_MOUNTAIN:
+          call_out( "remove", 0, "versteckt sich hinter einem Stein" );
+          break;
+        case TT_DESERT:
+        case TT_PLAIN:
+        case TT_TOWN:
+        case TT_ROAD:
+          call_out( "my_death", 20, "verdorrt einfach" );
+          break;
+        case TT_ARCTIC:
+          call_out( "my_death", 10, "erfriert jaemmerlich" );
+        default:
+      }
+    } else
+      call_out( "remove", 0 );
+  } else {
+    write( "Du versuchst mit Mueh und Not den Blutegel herunterzureissen, doch Du hast keinen Erfolg.\n" );
+    write( "Der Blutegel verbeisst sich noch tiefer in Dein Bein.\n" );
+    TP->do_damage( 3 );
+  }
+  return 1;
+}
+
+void suck() {
+  object env;
+  int hp, max_hp;
+
+  while ( remove_call_out( "suck" ) != -1 ) ;
+  env = ENV(TO);
+  if ( !env || ! query_once_interactive( env ) ) {
+    sucking = 0;
+    call_out( "remove", 0 );
+    return;
+  }
+  hp = env->QueryProp( P_HP );
+  max_hp = env->QueryProp( P_MAX_HP );
+  if ( hp <= 50 || hp <= max_hp * SUCK_THRESHOLD / 100 ) {
+    if ( invis ) {
+      invis = 0;
+      tell_object( env, "Du entdeckst einen fetten Blutegel an Deinem Bein.\n" );
+      SetProp( P_SHORT, "Ein Blutegel" );
+    }
+    tell_object( env, "  Der Blutegel saugt kraeftig an Deinem Bein.\n" );
+  } else
+    tell_object( env, "  Aua! Irgendwo muss wohl ein Blutegel sitzen der Dich gerade aussaugt!\n" );
+  env->do_damage( random( 5 ) + SUCK_DAMAGE, TO );
+  call_out( "suck", SUCK_TIME );
+}
+
+remove() {
+  while ( remove_call_out( "suck" ) != -1 ) ;
+  return ::remove();
+}
+
+void my_death(string str) {
+  if ( str == "" )
+    str = "verendet qualvoll";
+  write( "Der Blutegel " + str + ".\n" );
+  call_out( "remove", 0 );
+}
+

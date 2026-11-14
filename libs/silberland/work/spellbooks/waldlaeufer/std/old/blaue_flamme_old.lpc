@@ -1,0 +1,155 @@
+//-- Die eigentliche Blaue Flamme --------------------------------------------
+int prep_blaue_flamme(object caster, mapping sinfo) 
+{  
+  if(!FroschTest(caster, sinfo)  || 
+     !IsInFight(caster, sinfo)   ||
+     !KnifeTest(caster, sinfo)   ||
+     !BlindTest(caster,sinfo)     )
+    return 0;
+
+  if( caster->QueryProp(P_RANGER_BLAUE_FLAMME_ACTIVE) == 1)
+  { tell_object(caster, BS("Die Kraft der blauen Flamme ist noch in Dir."));
+    return 0; }
+
+  return 1;
+}
+
+int blaue_flamme(object caster, mapping sinfo)
+{
+  if( !prep_blaue_flamme( caster, sinfo) ) return 0;
+
+  
+  tell_object(caster, BS("Die Flamme von Tethyr beginnt in Dir zu wachsen "
+                         "und blaue Flammen zuengeln um Deine Waffe."));
+  tell_room(ENV(caster), BS(caster->Name()+" wird in eine blaeuliche Aura "
+                         "gehuellt und faengt an sich schneller zu bewegen.")
+                       , ({caster}) );
+    
+  caster->ModifySkillAttribute(caster, SA_SPEED, 200, 4
+                             , #'blaue_flamme_control);
+  caster->SetProp(P_RANGER_FLAME_COUNTER, 1);
+  caster->SetProp(P_RANGER_BLAUE_FLAMME_ACTIVE, 1);
+
+  return ERFOLG;
+}
+
+mixed blaue_flamme_control()
+{
+  int speed, i, es, counter;
+  object caster, weapon, fighter;
+  mixed enemies, fighters;
+  string gruppe, *names;
+  
+  caster=TP;
+  if(caster) 
+  {
+    counter=20+random(5);
+    if( (caster->QueryProp(P_RANGER_FLAME_COUNTER) > counter) ||
+        (!caster->InFight())                                  ||
+        (sizeof(caster->PresentEnemies()) < 2 )               ||
+        (!(weapon=caster->QueryProp(P_WEAPON)) )              ||
+        ((weapon->QueryProp(P_WEAPON_TYPE) != WT_KNIFE) )        ) 
+    {
+      //Der Erschoepfungsteil
+      caster->SetProp(P_RANGER_FLAME_COUNTER, 0);
+      caster->SetProp(P_RANGER_BLAUE_FLAMME_ACTIVE, 0);
+      call_out("blue_kolab", 2, caster);
+      /*if(weapon=caster->QueryProp(P_WEAPON))
+      {weapon->Set(P_WC, 0, F_QUERY_METHOD);
+        weapon->Set(P_DAM_TYPE, 0, F_QUERY_METHOD);}*/
+      //Vorerst rausgenommen, zu maechtig
+      return 0;
+    }
+    weapon=caster->QueryProp(P_WEAPON);
+    speed=0;
+    enemies=caster->PresentEnemies();
+    es=0;
+    for(i=0; i<=sizeof(enemies)-1; i++)
+    {
+      if(IsUndead(enemies[i]))
+      {
+        speed+=100;
+      }
+      else
+      {
+        tell_object(caster, BS(enemies[i]->Name(WER, 1)+" ist kein gueltiges "
+                            "Ziel. Die Macht der Flamme prallt ab und "
+                            "verkehrt sich ins Gegenteil!"));
+        SetProp(P_KILL_NAME, caster->Name(WER, 0));
+        caster->Defend( (enemies[i]->QueryProp(P_LEVEL))*20
+                        , ({DT_FIRE, DT_LIGHT}), 0, caster);
+      }
+    }
+    speed+=100;
+    if(speed > 500) speed=500;
+    /*if(es > 5) es=5; //Feindanzahl
+    weapon->Set(P_WC, es*30, F_QUERY_METHOD);
+    weapon->Set(P_DAM_TYPE, ({DT_FIRE, DT_LIGHT}), F_QUERY_METHOD);*/
+    //Vorerst rausgenommen, zu maechtig
+    if(gruppe=GROUPMASTER->GroupAffiliation(caster))
+    {
+      fighters=({});
+      names=GROUPMASTER->GroupMembers(gruppe);
+      if(sizeof(names) > 1)
+      {
+        for(i=0; i<=sizeof(names)-1; i++)
+        { 
+          if( fighter=find_player(lower_case(names[i])) )
+          fighters+=({ fighter });  }        
+        for(i=0; i<=sizeof(fighters)-1; i++)
+        {
+          if(fighters[i] == caster) { fighters-=({fighters[i]}); continue; }
+          if(lower_case(fighters[i]->QueryProp(P_GUILD)) != "waldlaeufer") 
+          { fighters-=({fighters[i]}); continue; }
+          if(ENV(fighters[i]) != ENV(caster)) 
+          { fighters-=({fighters[i]}); continue; }
+          if( !(fighters[i]->InFight()) ) 
+          { fighters-=({fighters[i]}); continue; }
+          if(!fighters[i]->QueryProp(P_RANGER_BLAUE_FLAMME_ACTIVE)) 
+          { fighters-=({fighters[i]}); continue; }
+        }
+        if(sizeof(fighters) > 0)
+        {
+          //Welche Art von Boni wollen wir hier noch geben/umsetzen? Mehr 
+          //Speed? Rueckendeckung? (am logischsten) Oder aber Aufteilen der
+          //Gegner via PRFERED_ENEMY? Problem dabei: diese funktion wird in 
+          //jedem fighter aufgerufen, einigung ueber feindaufteilung ueber
+          //einen Master?
+        }    
+      }
+    }
+    caster->ModifySkillAttribute(caster, SA_SPEED, speed, 2
+                               , #'blaue_flamme_control);
+    caster->SetProp(P_RANGER_FLAME_COUNTER, 
+                    1+(caster->QueryProp(P_RANGER_FLAME_COUNTER)) );
+    return 1;
+  }
+  else
+  { return 0; }
+}
+
+int blue_kolab(object caster)
+{
+  int time;
+  
+  while (remove_call_out("kolab") != -1);
+  time=30-(caster->QueryProp(P_GUILD_LEVEL));
+  if(time < 5) time=5;
+  tell_room(ENV(caster), BS(caster->Name(WEN)+" scheinen ploetzlich die "
+                         "magischen Kraefte zu verlassen. Der blaue Schimmer "
+                         "verschwindet und "+caster->Name()+" sackt kraftlos "
+                         "zusammen."), ({caster}));
+  tell_object(caster, BS("Die Kraefte der Flamme verlassen Dich, Du sinkst "
+                         "kraftlos nieder. Dein Herz rast noch."));
+  caster->SetProp(P_PARALYZED, ([PARALYZE_TIME: time,
+                                 PARALYZE_MSG: BS("Du musst erst Dein Herz "
+                                               "wieder zur Ruhe kommen lassen"
+                                               ". Sonst wuerdest Du einfach "
+                                               "kolabieren!"),
+                                 PARALYZE_MSG_OTHER: "%s liegt zitternd am "
+                                                     "Boden.\n",
+                                 PARALYZE_END: "Dein Herz hat sich wieder "
+                                               "beruhigt.\n",
+                                 PARALYZE_END_OTHER: "%s steht auf.\n"]));
+  return 1;
+}

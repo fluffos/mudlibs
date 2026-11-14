@@ -1,0 +1,291 @@
+/* ****************************************************************************
+ * Die Kraeuter der WaldlaeuferGilde
+ * (c) Lilyth, Torian, Delgo @ Silberland <sl.mud.at>
+ * 26.02.06 - Begin
+ * *************************************************************************** */
+
+inherit "std/food";
+
+#include <properties.h>
+#include <food.h>
+#include "../../def.h"
+
+int counter;
+
+/**StandartFunktionen****************************************************** */
+// -- create() ----------------------------------------------------------------
+create() {
+  if (!is_clone(ME)) return;
+  ::create(({"iss", "esse"}));
+
+  AddId(({KRAUT_ID, FOOD_ID, "heilkraut"}));
+  SetProp(P_VALUE, 10);
+  SetProp(P_WEIGHT, 10 + random(10));
+  SetProp(P_MATERIAL, ({MAT_MISC_PLANT}));
+  SetProp(P_HEAL_TYPE, "NONE");
+  SetProp(P_HEAL_STRENGTH, 0);
+  SetProp(
+    P_FOOD_INFO,
+    ([
+      F_VERB: "essen",
+      F_HEAL: random(10),
+      F_SOAK: random(5),
+      F_DRINK: 0,
+      F_ALCOHOL: 0,
+    ])
+  );
+  SetProp(P_NOBUY, 1);
+  counter = 0;
+}
+
+// -- Nur einmal geniessbar ---------------------------------------------------
+second_life(object pl) { return 0; }
+
+// -- Beim Reset wird ueberprueft obs im Beutel lag ---------------------------
+void reset() {
+  if (!is_clone(this_object())) return;
+  
+  if (!ENV(TO)) return;
+
+
+  if (!ENV(TO)->id(FOOD_CONTAINER_ID)) {
+    start_decay(150, 60);
+  }
+
+  ::reset();
+  return;
+}
+
+// -- Im Kraeuterbeutelchen verdirbt es nicht ---------------------------------
+int decay(int silent) {
+  if (ENV(TO)->id(FOOD_CONTAINER_ID)) {
+    return 1;
+  }
+
+  if (counter > 4) {
+    return ::decay(silent);
+  }
+
+  return ::decay(silent);
+}
+/************************************************************************** */
+
+/**Die spezifischen Funktionen fuer sammeln und Anwenden******************* */
+// -- Die Anpassung -----------------------------------------------------------
+int customize(string n,
+string l,
+int gender,
+mixed heileffekt,
+int heilstaerke,
+mapping details) {
+  string *s;
+  int i;
+
+  s = ({"blatt", "kraut", "wurzel", "gras", "beere", "lotus", "moos", "knolle"});
+  if (QueryProp(P_HEAL_TYPE) != "NONE") return 0;
+  SetProp(P_NAME, CAP(n));
+  SetProp(P_SHORT, CAP(n));
+  SetProp(P_ARTICLE, 1);
+  SetProp(
+    P_LONG,
+    BS(l + " Die Wirkung kann nur von Waldlaeufern entfaltet " "werden.")
+  );
+  SetProp(P_GENDER, gender);
+  if (details) SetProp(P_DETAILS, details);
+  n = lower_case(n);
+  for (i = 0; i <= sizeof(s) - 1; i++) {
+    if (strstr(n, s[i]) != -1) {
+      AddId(s[i]);
+      break;
+    }
+  }
+  AddId(({lower_case(n), "\n_" + lower_case(n)}));
+  SetProp(P_HEAL_TYPE, heileffekt);
+  SetProp(P_HEAL_STRENGTH, heilstaerke);
+  return 1;
+
+}
+
+// -- Die Wirkung 'Kraeutermixtur' --------------------------------------------
+int Kraeutermixtur(object pl, object skillHolder, int faktor) {
+  int i, j, k, skill;
+  object ob;
+  mixed str, *effekte;
+  mapping debuffStatus;
+
+  if (faktor < 1) faktor = 1;
+  if (faktor > 10) faktor = 10;
+
+  faktor = SPELL_DAMAGE_BONUS(skillHolder, "kraeutermixtur", faktor);
+
+  i = QueryProp(P_HEAL_STRENGTH);
+  i = SPELL_DAMAGE_BONUS(skillHolder, "kraeutermixtur", i);
+  str = QueryProp(P_HEAL_TYPE);
+
+  if (stringp(str)) effekte = ({str});
+  if (pointerp(str)) effekte = str;
+
+  if (!effekte) return 0;
+  tell_object(
+    pl,
+    BS(
+      "Du trinkst die Kraeutermixtur und spuerst "
+      "foermlich, wie sich der Kraeutersud in Deinem "
+      "Koerper ausbreitet."
+    )
+  );
+
+  skill = R_SKILLMASTER->HasSkill(getuid(skillHolder), KRAEUTERKUNDE);
+
+  pDebug(TP, sprintf("kraut :: effekte=%O, skill=%d, faktor=%d pl=%O\n", effekte, skill, faktor, pl));
+  
+  for (j = 0; j < sizeof(effekte); j++) {
+    switch (effekte[j]) {
+      case HERBS_HEAL:
+        if ((pl->QueryProp(P_HP)) >= (pl->QueryProp(P_MAX_HP))) {
+          break;
+        }
+        pl->AddHp((faktor + 2 * skill) * i + random(10));
+        tell_object(pl, BS("Deine Verletzungen beginnen zu verheilen."));
+        break;
+      case HERBS_REFRESH:
+        if ((pl->QueryProp(P_SP)) >= (pl->QueryProp(P_MAX_SP))) {
+          break;
+        }
+        pl->AddSp((faktor * i * 3 + 2 * skill) / 2 + random(10));
+        tell_object(
+          pl,
+          BS("Du spuerst wie Deine Konzentrationsfaehigkeit " "steigt.")
+        );
+        break;
+      case HERBS_FROG:
+        if (pl->QueryProp(P_FROG)) {
+          pl->SetProp(P_FROG, 0);
+          tell_object(pl, BS("Du erhaelst Deine alte Gestalt zurueck."));
+          break;
+        }
+      case HERBS_ALCOHOL:
+        if ((pl->QueryProp(P_ALCOHOL) - 10) <= 0) {
+          break;
+        }
+        if (i == 5) {
+          pl->SetProp(P_ALCOHOL, 0);
+          tell_object(pl, BS("Du bist jetzt vollkommen nuechtern."));
+          break;
+        }
+        pl->drink_alcohol(-((faktor + 1 + 2 * skill) * (i + 2)), 1);
+        tell_object(pl, BS("Deine Sinne werden klarer."));
+        break;
+      case HERBS_DRINK:
+        if ((pl->QueryProp(P_DRINK) - 10) <= 0) {
+          break;
+        }
+        if (i == 5) {
+          pl->SetProp(P_DRINK, 0);
+          tell_object(pl, BS("Du brauchst etwas zu trinken."));
+          break;
+        }
+        pl->drink_soft(-((faktor + 1 + 2 * skill) * (i + 2)), 1);
+        tell_object(pl, BS("Dein Durst wird groesser."));
+        break;
+      case HERBS_FOOD:
+        if ((pl->QueryProp(P_FOOD) - 10) <= 0) {
+          break;
+        }
+        if (i == 5) {
+          pl->SetProp(P_FOOD, 0);
+          tell_object(pl, BS("Du bekommst einen riesen Hunger."));
+          break;
+        }
+        pl->eat_food(-((faktor + 1 + 2 * skill) * (i + 2)), 1);
+        tell_object(pl, BS("Das Saettigungsgefuehl verschwindet langsam."));
+        break;
+      case HERBS_POISON:
+        k = pl->QueryProp(P_POISON);
+        if (!k) break;
+
+        pl->AddPoison((-i - faktor - 2 * skill));
+        if (pl->QueryProp(P_POISON))
+          tell_object(pl, BS("Deine Vergiftung wurde leicht gehemmt."));
+        else
+          tell_object(pl, BS("Das Gift in deinem Blut wurde neutralisiert."));
+        break;
+      case HERBS_BLIND:
+        if (!mappingp(debuffStatus = pl->QueryProp(P_BLIND))) {
+          break;
+        }
+
+        k =  debuffStatus[BLIND_TIME] - (faktor + 2 * skill) * i;
+
+        if(k <= 0) {
+          tell_object(pl, BS("Du kannst wieder sehen."));
+          pl->SetProp(P_BLIND, 0);
+        } else {
+          tell_object(pl, BS("Du wirst bald wieder sehen koennen."));
+          debuffStatus[BLIND_TIME] = k;
+          pl->SetProp(P_BLIND, debuffStatus);
+        }
+
+        break;
+      case HERBS_DEAF:
+        if (!mappingp(debuffStatus = pl->QueryProp(P_DEAF))) {
+          break;
+        }
+
+        k =  debuffStatus[DEAF_TIME] - (faktor + 2 * skill) * i;
+
+        if(k <= 0) {
+          tell_object(pl, BS("Du kannst wieder hoeren."));
+          pl->SetProp(P_DEAF, 0);
+        } else {
+          tell_object(pl, BS("Du wirst bald wieder hoeren koennen."));
+          debuffStatus[DEAF_TIME] = k;
+          pl->SetProp(P_DEAF, debuffStatus);
+        }
+
+        break;
+      case HERBS_MV:
+        if ((100 + pl->QueryProp(P_MV)) >= (pl->QueryProp(P_MAX_MV))) {
+          break;
+        }
+        pl->do_exhaust(-(20 * (faktor + 2 * skill) * i));
+        tell_object(pl, BS("Die Muedigkeit weicht aus Deinen Beinen."));
+        break;
+      case HERBS_WATER:
+        ob = clone_object(OBJ "bonus");
+        ob->AddId(({WATERBREATH_ID}));
+        ob->move(pl, M_NOCHECK);
+        ob->new_remove(30 * faktor + 5 * skill);
+        tell_object(pl, BS("Dir wachsen kleine Kiemen."));
+        break;
+      case HERBS_MALARIA:
+        if (!objectp(ob = present("MALA", pl))) break;
+        ob->remove(1);
+        tell_object(pl, BS("Deine Malaria wurde geheilt."));
+        break;
+    }
+
+  }
+  return 1;
+}
+
+// -- Beim normalen Essen passiert nichts -------------------------------------
+BeimEssen() {
+  if (pointerp(QueryProp(P_RANGER_HERBMIX_ACTIVATED))) {
+    Kraeutermixtur(
+      TP,
+      QueryProp(P_RANGER_HERBMIX_ACTIVATED)[0],
+      QueryProp(P_RANGER_HERBMIX_ACTIVATED)[1]
+    );
+  } else {
+    tell_object(
+      TP,
+      BS(
+        "Du spuerst nur eine schwache Wirkung. In einer Kraeutermixtur wirkt es sicher besser."
+      )
+    );
+  }
+  return;
+}
+
+/************************************************************************** */

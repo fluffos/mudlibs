@@ -1,0 +1,352 @@
+/* orden - generischer Orden fuer XP-Verdienste
+ * __________________________________________(i) Anatol@Silberland (2012) */
+
+
+#pragma strict_types
+
+#include "../xp-honors.h"
+#include <properties.h>
+#include <armour.h>
+#include <combat.h>
+#include <ansi.h>
+
+#define HONORS_MEDAL_LOGFILE HONORS_DIR "log/medal.log"
+#define P_LAST_COLOR_SAY "last_color_say"
+#define X_COLORSAY_CD 10   // Minuten
+
+inherit "/std/armour";
+
+mapping customizing;
+
+public mixed
+_query_cursed()
+{
+    return 0;
+}
+
+public string
+extra_look()
+{
+    int mono;
+    
+    if ((!environment())  || (!QueryProp(P_WORN)))
+        return "";
+
+    if ((!this_player())
+        || ((string)(this_player()->QueryProp(P_TTY)) != "ansi"))
+        mono=1;
+
+    return break_string(sprintf(
+        "Oh, ein%s Traeger%s %s%s%s%s! Respekt!",
+        ((int)(environment()->QueryProp(P_GENDER))==FEMALE?"e":""),
+        ((int)(environment()->QueryProp(P_GENDER))==FEMALE?"in":""),
+        QueryArticle(WESSEN,1), 
+        (mono?"":(string)QueryProp("medal_color")),
+        (string)QueryProp("declinated_name"),
+        ANSI_NORMAL),79+(mono?0:16));
+}
+
+public int TryRenewMedal()
+{ 
+    return MEDAL_RENEW;
+}
+
+
+
+public void
+create()
+{
+    if (!is_clone(this_object()))
+        return;
+    ::create();
+
+    seteuid(getuid(this_object()));
+
+    SetProp(P_AC,0);
+    SetProp(P_ARMOUR_TYPE,AT_MISC);
+    SetProp(P_NO_DAMAGE_DESTRUCT,1);
+    SetProp(P_WEAR_TEXT,({"Du haengst Dir %s um.\n"
+        "Das Tragen einer solchen Auszeichnung erfuellt Dich mit Stolz.\n",
+                            " haengt sich %s um.\n"}));
+    SetProp(P_UNWEAR_TEXT,({"Du legst %s ab.\n"
+        "Welch' ein Akt der Bescheidenheit! Dir wird ganz warm ums Herz.\n",
+                            " legt %s ab.\n"}));
+    SetProp(P_WORN_TEXT,"stolz getragen");
+
+    SetProp(P_WEIGHT, 0); 
+    SetProp(P_VALUE, 0); 
+    SetProp(P_MATERIAL,([MAT_MAGIC:100]));
+    SetProp(P_NODROP,"Oh nein. Diese Auszeichnung gibst Du niemals her.\n");
+    SetProp(P_NOSELL,"Diese Auszeichnung ist *unbezahlbar*. "
+        "Niemand will sie kaufen.\n");
+    SetProp(P_NEVERDROP,1); 
+    AddId(({"\a\n\a\tol_medal_of_xp_honor","auszeichnung", "orden"})); 
+
+    SetProp(P_INFO,"Versuch' mal 'xp hilfe' ...\n");
+}
+
+public void
+init()
+{
+    object pl;
+    ::init();
+    if ((!pl=environment()) || (!living(pl)) ||
+        QueryProp("medal_color"))
+        return; 
+    if (!MEDAL_CUSTOMIZE)
+    {
+        tell_object(environment(), 
+            "Du bist dieser Auszeichnung noch nicht wuerdig.\n");
+        remove();
+    }
+    else
+    {
+        AddCmd("xp","cmdXP",0);
+        reset();
+    }
+    return;
+}
+
+
+public void
+reset()
+{
+    int i;
+    string s;
+
+    ::reset();
+    
+    if (!is_clone(this_object()))
+        return;
+    
+    if ((!environment()) || (!query_once_interactive(environment())))
+        remove();
+
+    if ((i=QUERY_XPHONOR(environment())) 
+            != ((int)(environment()->QueryProp(P_XP_HONORS))))
+    {
+        // keine MSG_FLAGs, ein Spieler MUSS dies lesen koennen, 
+        // auch wenn er grade taub ist.
+        s=sprintf("%s | M/P-Abweichung bei %s (%d/%d)",
+            dtime(time())[6..], capitalize(getuid(environment())),
+            i, (int)(environment()->QueryProp(P_XP_HONORS)));
+        environment()->Message(break_string(
+            "Hallo, ich bin Zweiter Rein-Schreiber Gresklim vom "
+            "Ehrenkataster. "
+            "Das ist jetzt etwas peinlich. Irgendwie sind da ein paar "
+            "Eintraege im Ehrenkataster durcheinander gekommen. "
+            "Warte mal, vielleicht laesst sich das korrigieren ...",77,
+            "Ein Wartungskobold teilt Dir mit: ",1 ));
+        environment()->SetProp(P_XP_HONORS,i);
+        if (i != ((int)(environment()->QueryProp(P_XP_HONORS))))
+        {
+            environment()->Message(break_string(
+                "... schade, konnte nicht korrigiert werden. Sprich einen "
+                "Magier darauf an (und erklaere, was passiert ist). Deine "
+                "Auszeichnung muss ich vorsorglich einziehen",77,
+            "Ein Wartungskobold teilt Dir mit: ",1 ));
+            write_file(HONORS_MEDAL_LOGFILE,s+", FEHLER.\n");
+            remove();
+         }
+         else
+         {
+            environment()->Message(break_string(
+                "... jau, korrigiert. Nochmal Glueck gehabt, "
+                "mein Chef mag sowas gar nicht!",77,
+            "Ein Wartungskobold teilt Dir mit: ",1));
+            write_file(HONORS_MEDAL_LOGFILE,s+", angepasst.\n");
+         }
+     }
+     if (!i)
+     {
+        if ((int)(environment()->QueryProp(P_XP)) <1000000000)
+        {
+            environment()->Message(break_string(sprintf(
+                "Hallo, ich bin Unterpruefer Kriglin vom Ehrenkataster. "
+                "%s "
+                "bist Du nur wuerdig, solange Du mehr als 1 Milliarde "
+                "Erfahrungspunkte hast. Da Deine Erfahrung unter diese "
+                "hoechstmagische Grenze gefallen ist, ist die "
+                "Auszeichnung erstmal futsch, ich muss sie einziehen. Hol' "
+                "sie Dir wieder, wenn Du genuegend Erfahrung hast.",
+                    Name(WESSEN,1)),77,"Ein Wartungskobold teilt Dir mit: ",
+                    1));
+                write_file(HONORS_MEDAL_LOGFILE,
+                    sprintf("%s | Orden von %s wegen wegen "
+                    "XP-Mangel eingezogen.\n",dtime(time())[6..],
+                    capitalize(getuid(environment())),
+                    (int)environment()->QueryProp(P_XP)));
+
+            remove();
+        }
+    }
+}
+
+nosave void
+checkIfUpdateIsPossible()
+{
+    if (!this_player()) 
+        return;
+
+    reset();
+    this_player()->Message(break_string(sprintf(
+            "Die Bedingungen fuer ein Tausch des Ordens gegen ein "
+            "edleres (und imposanteres) Modell sind exorbitant: Du "
+            "kannst den Tausch nur dann vornehmen, wenn Du mindestens "
+            "%d Erfahrungspunkte hast. Und der Tausch wird Dich %d "
+            "Erfahrungspunkte kosten.",HONOR_XP_NEEDED,HONOR_XP_COST),77));
+
+    if (!MAY_INC_XPHONOR(this_player()))
+    {
+        this_player()->Message(break_string(
+            "Zur Zeit kannst Du Deinen Orden nicht gegen ein "
+            "edleres Modell tauschen."));
+    }
+    else
+    {
+        this_player()->Message(break_string(sprintf(
+            "\n"
+            "Moechtest Du Deinen Orden austauschen?\n"
+            "Dies kostet Dich %d Erfahrungspunkte!\n\n",HONOR_XP_COST),
+                77,"| ",1));
+        write("(ja oder nein?) > ");
+        input_to("inputTo_Update");
+    }
+}
+
+nosave void
+inputTo_Update(string res)
+{
+    if ((res=="ja") && (this_player()) && (this_player()==this_interactive()))
+    {
+        if (INC_XPHONOR(this_player()))
+        {
+            write("So soll es sein!\n");
+            call_out("TryRenewMedal",0);
+        }
+    }
+    else 
+    {
+        write("Na gut - dann nicht.\n");
+    }
+    return;
+}
+
+
+nosave int
+colorSay()
+{
+    string s;
+    string colored;
+    string prefix;
+    object * o;
+
+    if (!this_player()) 
+        return 0;
+
+    notify_fail("Was moechtest Du sagen?\n");
+    if (!(s=(string)(this_player()->_unparsed_args())) 
+        || (!stringp(s)) || (!strlen(s))) 
+        return 0;
+
+    s=s[4..]; // "sag " weg...
+
+    if (!strlen(s))
+        return 0;
+
+    notify_fail("Die Magie der Auszeichnung muss sich noch erholen.\n");
+    if ((time()-(int)this_player()->QueryProp(P_LAST_COLOR_SAY)) 
+        < (X_COLORSAY_CD *60))
+        return 0;
+
+    notify_fail("Du musst Dich, leider, kuerzer fassen.\n");
+    if (strlen(s)>250)
+        return 0;
+
+    notify_fail(break_string(
+            "Bloed wie das ist, aber zumindest DU brauchst ein "
+            "ansi-faehiges Terminal ('hilfe stty').",77));
+    if ((string)this_player()->QueryProp(P_TTY) !="ansi")
+        return 0;
+
+    prefix=(string)(this_player()->Name(WER))+" sagt: ";
+    s=break_string(s,(78-strlen(prefix)))[0..<2];
+
+    colored=prefix+(string)QueryProp("medal_color")+
+        regreplace(s,"\n",ANSI_NORMAL+"\n"+prefix+QueryProp("medal_color"),1)+
+            ANSI_NORMAL+"\n";
+    s=prefix+regreplace(s,"\n","\n"+prefix,1)+"\n";
+
+
+    write("Okay, alle anderen sehen:\n");
+    o=filter_array(all_inventory(environment(this_player())),#'living);
+    while (sizeof(o))
+    {
+        o[0]->Message(((string)(o[0]->QueryProp(P_TTY))=="ansi"?colored:s));
+        o=o[1..];
+    }
+    this_player()->SetProp(P_LAST_COLOR_SAY,time());
+
+    return 1;
+
+}
+
+
+nosave int
+cmdXP(string cmd)
+{
+    notify_fail("xp ... bitte was? Versuch' mal 'xp hilfe'.\n");
+    switch((cmd&&stringp(cmd)?explode(cmd," ")[0]:""))
+    {
+        case 0:
+        case "":
+            printf("Du hast zur Zeit %s Erfahrungspunkte.\n",
+                regreplace(
+                    implode(
+                        regexp(
+                            regexplode(
+                                sprintf("%021d",
+                                    (int)this_player()->QueryProp(P_XP)),
+                                "..."),
+                            "..."),
+                        "."),
+                    "^[0.]*","",1)
+            );
+            return 1;
+            break;
+        case "hilfe":
+            write("Hilfe:\n"
+                  "    xp                   - Zeigt Deine Erfahrungspunkte.\n"
+                  "    xp auszeichnung      - Prueft, ob Du einen andere "
+                                            "Auszeichnung verdient haettest.\n"
+                 /* "    xp orden-erneuern    - Erneuert den Orden, "
+                                            "falls moeglich.\n" */
+                  +(this_player()->QueryProp(P_XP_HONORS)
+                    ?"    xp sag               - Sagt etwas in Farbe (alle "
+                            +to_string(X_COLORSAY_CD)+" min)\n"
+                    :"")+
+                  "    xp hilfe             - Zeigt diese Hilfe.\n");
+            return 1;
+            break;
+        /* case "orden-erneuern":
+            if (TryRenewMedal())
+                write("Okay - hat geklappt.\n");
+            else
+                write("Njet - klappte nicht.\n");
+            return 1;
+            break; */
+        case "auszeichnung":
+            checkIfUpdateIsPossible();
+            return 1;
+            break;
+        case "sag":
+            if (!(this_player()->QueryProp(P_XP_HONORS)))
+                return 0;
+            return colorSay();
+            break;
+        default:
+            return 0;
+            break;
+    }
+}
+

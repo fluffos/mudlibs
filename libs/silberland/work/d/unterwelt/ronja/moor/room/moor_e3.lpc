@@ -1,0 +1,406 @@
+//=========================================================================
+//
+// File:    moor_e3.c
+// Created by Ronja@SL
+//
+// Project: Moor
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit ROOM "moor_inh.lpc" ;
+
+int last_try;
+
+int graben(string str);
+int blubber(object pl);
+int luck();
+
+void create()
+{
+  ::create();
+
+  SetProp(P_INT_SHORT,"In einem Moor");
+  SetProp(P_INT_LONG,
+    "Du haettest vorsichtiger sein sollen oder jemanden nach dem Weg "
+    "fragen sollen. So bist Du nun danebengetreten und versinkst langsam "
+    "aber sicher im Moor. Mit jeder Deiner Bewegungen versinkst Du nur "
+    "noch tiefer im Moor."
+  );
+
+  SetProp(P_LIGHT, 1 );
+  SetProp(P_INDOORS, 0 );
+  SetProp(P_NO_TPORT, NO_TPORT);
+  SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE: 18, ENV_TERRAIN: TT_SWAMP]) );
+  SetProp(P_HIDE_EXITS, 1);
+
+  AddDetail( ({"boden"}) ,
+    "Festen Boden hast Du keinen mehr unter Dir. Selbst schwimmen duerfte in "
+    "dieser zaehen Bruehe nichts bringen. "
+  );
+
+  AddDetail( ({"bruehe"}) ,
+    "Das ist wirklich eine zaehe und stinkige Bruehe, in der Du da steckst."
+  );
+
+  AddDetail( ({"bewegung","bewegungen"}) ,
+    "Jede Bewegung laesst Dich nur noch tiefer einsinken. Jetzt brauchst Du "
+    "dringend eine Idee, wie Du hier wieder rauskommst. "
+  );
+
+  AddDetail( ({"weg"}) ,
+    "Jetzt ist es zu spaet, nach einem Weg zu suchen. Naja nicht ganz, denn "
+    "Du solltest schleunigst einen Weg hieraus finden."
+  );
+
+  AddSpecialDetail( ({"idee"}) , "detail_idee" );
+
+  AddDetail( ({"zeit"}) ,
+    "Deine Zeit laeuft ab!"
+  );
+
+  AddDetail( ({"halt"}) ,
+    "Nichts zum festhalten da."
+  );
+
+  AddDetail( ({"hilfe"}) ,
+    "Hilft Dir selbst!"
+  );
+
+  AddCmd( ({"ziehe","zieh"})                    , "cmd_ziehen");
+  AddCmd( ({"finde","find"})                    , "cmd_finden");
+  AddCmd( ({"suche","such"})                    , "cmd_suchen");
+  AddCmd( CMD_SCHWIMMEN                         , "cmd_schwimmen");
+  AddCmd( ({"strampel","strample","strampele"}) , "cmd_strampeln");
+  AddCmd( CMD_KLETTERN                          , "cmd_klettern");
+
+  AddSpecialExit( "norden"      , "keinausgang"  );
+  AddSpecialExit( "nordosten"   , "keinausgang"  );
+  AddSpecialExit( "osten"       , "keinausgang"  );
+  AddSpecialExit( "suedosten"   , "keinausgang"  );
+  AddSpecialExit( "sueden"      , "keinausgang"  );
+  AddSpecialExit( "suedwesten"  , "keinausgang"  );
+  AddSpecialExit( "westen"      , "keinausgang"  );
+  AddSpecialExit( "nordwesten"  , "keinausgang"  );
+
+  last_try = 0;
+}
+
+int keinausgang(string richtung)
+{
+  if(TP && interactive(TP) && !IS_WIZARD(TP))
+  {
+    TELLPLAYER("Sieh erstmal zu, dass Du aus dieser stinkigen Bruehe "
+               "herauskommst.\n");
+    return 1;
+  }
+
+  switch(richtung)
+  {
+    case "norden"     : TP->move(ROOM "moor_e2",M_GO|M_NOCHECK); break;
+    case "nordosten"  : TP->move(ROOM "moor_f2",M_GO|M_NOCHECK); break;
+    case "osten"      : TP->move(ROOM "moor_f3",M_GO|M_NOCHECK); break;
+    case "westen"     : TP->move(ROOM "moor_d3",M_GO|M_NOCHECK); break;
+    case "nordwesten" : TP->move(ROOM "moor_d2",M_GO|M_NOCHECK); break;
+
+    default :
+      ::keinausgang();
+      return 0;
+  }
+
+  return 1;
+}
+
+void init()
+{
+  ::init();
+
+  if(TP && interactive(TP) && (!IS_WIZARD(TP)) ) call_out("blubber",6,TP);
+}
+
+int luck()
+{
+  if(time() < (last_try+10)) return 0;
+
+  last_try = time();
+
+  if(random(99) > 90)
+  {
+    MOORMASTER->Msg(TPUID+" hat Glueck und versinkt nicht im Moor");
+    return 1;
+  }
+  return 0;
+}
+
+int objekt_darf_weg(object ob)
+{
+  if( ob->QueryProp(P_CURSED))    return 0;
+  if( ob->QueryProp(P_NEVERDROP)) return 0;
+  if( ob->id("QUESTOBJ"))         return 0;
+  if( ob->QueryProp(P_NODROP))    return 0;
+  if(!ob->QueryProp(P_SHORT))     return 0;
+  if( ob->QueryProp(P_INVIS))     return 0;
+  if(!ob->QueryProp(P_NAME))      return 0;
+  return 1;
+}
+
+int hau_wech(string str)
+{
+  object *inv;
+  int i;
+  string s;
+
+  inv = filter_array(all_inventory(TP),"objekt_darf_weg");
+
+  if(sizeof(inv) > 0)
+  {
+    i = random(sizeof(inv));
+    s = "Dein";
+
+    if(inv[i]->IsPlural() || inv[i]->QueryProp(P_GENDER) == FEMALE)
+    {
+      s = "Deine";
+    }
+    else if(inv[i]->QueryProp(P_GENDER) == MALE)
+    {
+      s = "Deinen";
+    }
+
+    str += "Leider verlierst Du dabei "+s+" "+inv[i]->Name(RAW)+".";
+    ROOM "moor_inh"->versinken2(inv[i]);
+  }
+
+  TELLPLAYER(BS(str));
+  TP->move(ROOM "moor_d3",M_GO|M_NOCHECK,
+           "aus dem Moor","steigt","kommt hereingekrochen"
+  );
+  return 1;
+}
+
+string detail_idee(string str)
+{
+  string s;
+
+  switch(random(7))
+  {
+    case 0 :
+      s = "Du denkst angestrengt nach und kommst auf die Idee es mal mit "
+          "schwimmen zu probieren";
+      break;
+
+    case 1 :
+      s = "Gruebeln war zwar noch nie Deine Staerke, aber wie waere es mit "
+          "strampeln?";
+      break;
+
+    case 2 :
+      s = "Du denkst Dir: Ich muss schnellstens einen Ausgang finden";
+      break;
+
+    case 3 :
+      s = "Rausklettern waere bestimmt nicht schlecht in dieser Situation.";
+      break;
+
+    case 4 :
+      s = "Jetzt wird es aber dringend Zeit einen Ausgang zu suchen.";
+      break;
+
+    case 5 :
+      s = "Vielleicht kann man einfach heraussteigen?";
+      break;
+
+    default :
+      s = "Hattest Du ein aehnliches Problem nicht schon mal im Sumpf?";
+  }
+
+  return BS(s);
+}
+
+int cmd_ziehen(string str)
+{
+  notify_fail("Woran willst Du ziehen?\n");
+
+  if(!str || str == "") return 0;
+  if(!(str == "an haar"                           ||
+       str == "an haarschopf"                     ||
+       str == "an schopf"                         ||
+       str == "an haaren"                         ||
+       str == "an haar aus moor"                  ||
+       str == "an haarschopf aus moor"            ||
+       str == "an schopf aus moor"                ||
+       str == "an haaren aus moor"                ||
+       str == "an haar aus moor heraus"           ||
+       str == "an haarschopf aus moor heraus "    ||
+       str == "an schopf aus moor heraus"         ||
+       str == "an haaren aus moor heraus"         )) return 0;
+
+  TELLPLAYER("Netter Versuch :-)\n");
+  MOORMASTER->Msg(TPUID+" versucht sich an den Haaren aus dem Moor zu ziehen");
+  return -1;
+}
+
+int cmd_schwimmen(string str)
+{
+  notify_fail("Das hat jetzt auch nicht viel gebracht.\n");
+
+  if(luck())
+  {
+    hau_wech("Du versuchst zu schwimmen und tatsaechlich gelingt es Dir, "
+             "aus dem Moor herauszukommen."
+    );
+    return 1;
+  }
+
+  return 0;
+}
+
+int cmd_strampeln(string str)
+{
+  notify_fail("Du versinkst bloss noch tiefer.\n");
+
+  if(luck())
+  {
+    hau_wech("Du strampelst wie verrueckt um aus dem Mooor zu entkommen, "
+             "und Du schaffst es tatsaechlich."
+    );
+    return 1;
+  }
+
+  return 0;
+}
+
+int cmd_finden(string str)
+{
+  notify_fail("Was willst Du finden?\n");
+
+  if(!str || str == "") return 0;
+  if(!(str == "ausweg"         ||
+       str == "ausgang"        )) return 0;
+
+  notify_fail("Finde schnell eine andere Loesung!\n");
+
+  if(luck())
+  {
+    hau_wech("Du suchst und suchst und suchst und findest tatsaechlich eine "
+             "Wurzel, mit der Du Dich aus dem Moor ziehen kannst."
+    );
+    MOORMASTER->Msg(TPUID+" zieht sich an der Wurzel heraus I");
+    return 1;
+  }
+
+  return 0;
+}
+
+int cmd_suchen(string str)
+{
+  notify_fail("Was willst Du suchen?\n");
+
+  if(-1 == member(({"ausweg","ausgang"}),str))
+  {
+    return 0;
+  }
+
+  notify_fail("Suche schnell eine andere Loesung!\n");
+
+  if(luck())
+  {
+    hau_wech("Du suchst und suchst und suchst und findest tatsaechlich eine "
+             "Wurzel, mit der Du Dich aus dem Moor ziehen kannst."
+    );
+    MOORMASTER->Msg(TPUID+" zieht sich an der Wurzel heraus II");
+    return 1;
+  }
+
+  return 0;
+}
+
+int cmd_klettern(string str)
+{
+  notify_fail("Du findest keinen Halt zum klettern.\n");
+
+  if(luck())
+  {
+    hau_wech("Muehsam kletterst Du aus dem Sumpf.");
+    MOORMASTER->Msg(TPUID+" klettert aus dem Sumpf");
+    return 1;
+  }
+
+  return 0;
+}
+
+void blubber(object pl)
+{
+
+  if (!pl || ENV(pl) != TO) return;
+
+  switch(random(10))
+  {
+    case 0 :
+      tell_object(pl,"Jetzt wird es aber langsam Zeit, hier herauszukommen.\n");
+      break;
+
+    case 1 :
+      tell_object(pl,"Du versinkst langsam im Moor, tu doch endlich was.\n");
+      break;
+
+    case 2 :
+      tell_object(pl,BS("Langsam wird es Zeit, etwas zu unternehmen, wenn Du "
+                    "nicht im Moor versinken moechtest."));
+      break;
+
+    case 3 :
+      tell_object(pl,BS("Du spuerst wie Dich etwas um Dein Bein "
+                    "wickelt und Dich ins Moor zu ziehen versucht."));
+      break;
+
+    case 4 :
+      tell_object(pl,BS("Die Angst schnuert Dir die Kehle zu."));
+      break;
+
+    case 5 :
+      tell_object(pl,BS("Noch kannst Du handeln - Also handle endlich!"));
+      break;
+
+    default :
+      tell_object(pl,BS("Willst Du wirklich sterben?"));
+      break;
+  }
+
+  pl->AddHp(-(random(25)+15));
+
+  if(pl->QueryProp(P_HP) < 50)
+  {
+    call_out("player_die",0,pl);
+  }
+  else
+  {
+    call_out("blubber",6,pl);
+  }
+  return;
+}
+
+void player_die(object pl)
+{
+  if(!pl)              return;
+  if(!interactive(pl)) return;
+  if(!ENV(pl))         return;
+  if(ENV(pl) != TO)    return;
+
+  MOORMASTER->Msg(UID(pl)+" versinkt im Sumpf");
+
+  tell_object(pl,BS("Du spuerst wie der zaehe Sumpf in Deine Lungen "
+        "eindringt. Wuergend und hustend versuchst Du, diesen Morast "
+        "wieder aus Deinen Lungen herauszubekommen. Aber damit erreichst "
+        "Du nur mehr das Gegenteil. Langsam schwindet Dein Bewusstsein und "
+        "Du bekommst Deinen Todeskampf kaum mehr mit."
+  ));
+  pl->SetProp(P_KILLER, TO);
+  SetProp(P_KILL_NAME, "Ein heimtueckisches Moor");
+  SetProp(P_KILL_MSG, "BLUBB BLUBB");
+  SetProp(P_ENEMY_DEATH_SEQUENCE, ROOM "tod");
+  pl->SetProp(P_GHOST, 1);
+  pl->move("/room/death/death_room", M_NOCHECK|M_NO_SHOW);
+  pl->SetProp(P_KILLER, 0);
+  return;
+}

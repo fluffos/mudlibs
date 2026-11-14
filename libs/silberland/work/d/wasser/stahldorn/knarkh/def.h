@@ -1,0 +1,10 @@
+#include "../def.h"
+
+#define PATH "/d/wasser/stahldorn/knarkh/"
+#define NPC PATH "npc/"
+#define ROOM PATH "room/"
+#define OBJ PATH "obj/"
+#define ARMOUR PATH "obj/"
+#define WEAPON PATH "obj/"
+#define LOG PATH "log/"
+#define WEG "/d/wasser/stahldorn/weg/"

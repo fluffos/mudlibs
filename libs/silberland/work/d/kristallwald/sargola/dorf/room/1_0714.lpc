@@ -1,0 +1,271 @@
+/*
+***********************************************
+** 1_0714.c                                   *
+**                                            *
+** date: 31-01-97 by Sargola@Silberland       *
+** Email: a9504778@unet.univie.ac.at          *
+***********************************************
+**
+**  2002-05-31  PROtheG  Neuueberarbeitung
+*/
+
+#include "../def.h"
+#include "dorf.h"
+
+inherit "std/room";
+
+#define MAX_FILL 3
+#define P_SEERDOOR_DISCOVER "rw_sehertor_disc"
+
+nosave int gems, filled;
+
+string blumen(string str);
+
+void create()
+{
+  ::create();
+  
+  SetProp(P_ENVIRONMENT, ([ENV_TERRAIN:TT_TOWN, ENV_TEMPERATURE:20]));
+  
+  SetProp(P_INT_SHORT, "Elessar");
+  SetProp(P_INT_LONG, 
+	  BS("Du stehst auf einem maechtigen Baum und fuehlst Dich sicher. " 
+	     "Unter Dir siehst Du den Waldweg. Die Bruecke im Sueden fuehrt "
+	     "zu einem weiteren Holzplateau. Dort duerften sich weitere "
+	     "bewohnte Baeume befinden. Ein kleines Astgeflecht erhebt sich "
+	     "neben Dir."));
+  
+  SetProp(P_LIGHT, 1);
+  SetProp(P_INDOORS, 0);
+  
+  STANDARD1
+  STANDARD2
+  BODEN_WEG
+  
+  AddDetail(({"sockel","geflecht","astgeflecht"}),
+	    "Ein Astgeflecht bildet seitlich von Dir einen kleinen Sockel, "
+	    "auf dem eine Schale festgehalten wird.");
+  
+  AddDetail(({"schale","blumenschale"}),
+	    "Eine kleine, silberne Schale steht auf dem Sockel neben Dir. "
+	    "Du kannst einige Bluetenblaetter darin erkennen.");
+  
+  AddDetail(({"blaetter","bluetenblaetter"}),
+	    "Es scheint, als waeren in der Schale einmal Blumen gewesen...");
+
+  AddDetail(({"blumen","blume"}), CLOSURE(blumen));
+
+  AddRoomMessage(({
+    "Unter Dir siehst Du einen Haendler vorbeiziehen.\n",
+      "Im Westen hoerst Du Kinder spielen.\n",
+      "Du siehst eine Gruppe Elfen nach Norden verschwinden.\n",
+      "Du spaehst vorsichtig ueber den Rand des Talans.\n",
+      "Du haeltst Dich am Stamm fest.\n" }), 60);
+  
+  AddExit("norden", ROOM "1_0713");
+  AddExit("osten", ROOM "1_0814");
+  AddExit("sueden", ROOM "1_0715");
+  AddExit("westen", ROOM "1_0614");
+
+  AddCmd(({"lege","leg","steck","stecke","gib","gebe"}), "cmd_legen");
+  
+  AddItem(NPC "mschnabl", REFRESH_DESTRUCT);
+  AddItem("obj/sehertor", REFRESH_NONE, ([P_SEERDOOR_DISCOVER:0]));
+  
+  filled=0;
+  gems=0;
+}
+
+varargs int PreventLeave(object ob, mixed dest)
+{
+  if(interactive(ob))
+    if(stringp(dest))
+      if(strstr(dest, ROOM)==-1)
+	if("/obj/sehertormaster"->DoorIsKnown(ob))
+	  if(WMASTER->is_elessar_enemy(ob))
+	    if(present(ELESSARELF))
+	      return write(BS("Die Macht der Elfen haelt Dich zurueck!")), 1;
+
+  return 0;
+}
+string blumen(string str)
+{
+  if(filled)
+    if(filled==1)
+      return "In der Schale befindet sich eine einzige Blume.\n";
+    else
+      return "In der Schale befinden sich zwei wunderschoene Blumen.\n";
+  
+  return "Jetzt sind jedenfalls keine mehr in der Schale...\n";
+}
+
+nosave int cmd_legen(string str)
+{
+  string what, dummy;
+  object ob;
+
+  notify_fail(BS("Was willst Du wo hineinlegen?"));
+  if(!str) return 0;
+  
+  if(sscanf(str, "%s in %s", what, dummy)!=2) return 0;
+  
+  if(member(({
+    "schale","blumenschale","bluetenschale","schale rein","blumenschale rein",
+      "bluetenschale rein","schale hinein", "blumenschale hinein",
+      "bluetenschale hinein"}), dummy)==-1) 
+    return 0;
+
+  if(!ob=present(what, TP)) 
+    return notify_fail(BS("Soetwas hast Du doch gar nicht dabei!")), 0;
+  
+  if((!ob->id("blume")) && (!ob->id("bluemchen")) && (!ob->id("rose")) && 
+     (!ob->id("lilie")) && (!ob->id("veilchen")) && (!ob->id("kamille")) &&
+     (!ob->id("stiefmuetterchen")) && (!ob->id("blumenstrauss")) &&
+     (!ob->id("mohn")) && (!ob->id("flieder")) && (!ob->id("margarite")))
+    return notify_fail(BS("Bist Du sicher, dass das die richtige Blume ist?")),
+      0;
+  
+  write(BS("Du legst "+
+	   (ob->QueryProp(P_ARTICLE)? "D"+ob->name(WEN):ob->name(WEN))+
+	   " vorsichtig in die Schale und..."));
+  
+  tell_room(ME, BS(TPN+" legt eine Blume in die Schale."), ({TP}));
+  
+  ob->remove(1);
+  
+  filled++;
+  
+  if(filled < MAX_FILL)
+    return write(BS("Es scheint nichts zu passieren!")+
+		 BS("Vielleicht musst Du noch eine Blume in die Schale "
+		    "legen!")), 1;
+  
+  tell_room(ME,
+	    BS("Ploetzlich beginnt ein Nebel aus der Schale herauszuquillen "
+	       "und sich rasend schnell zu verbreiten...")+
+	    BS("Innerhalb von Sekunden ist Deine Umgebung in Nebel "
+	       "gehuellt."));
+  
+  SetProp(P_INT_LONG,
+	  BS("Du siehst irgendwie nur Nebel..."));
+
+  if((IS_SEER(TP)) && (!"/obj/sehertormaster"->DoorIsKnown()))
+    call_out("sehertor", 4, TP);
+  else
+    call_out("normal", 4, TP);
+  
+  filled=0;
+
+  return 1;
+}
+
+void normal(object who)
+{
+  SetProp(P_INT_LONG, 
+	  BS("Du stehst auf einem maechtigen Baum und fuehlst Dich sicher. " 
+	     "Unter Dir siehst Du den Waldweg. Die Bruecke im Sueden fuehrt "
+	     "zu einem weiteren Holzplateau. Dort duerften sich weitere "
+	     "bewohnte Baeume befinden. Ein kleines Astgeflecht erhebt sich "
+	     "neben Dir."));
+  
+  tell_room(ME,
+	    BS("So schnell wie der Nebel gekommen ist, hat er sich auch "
+	       "gleich wieder aufgeloest..."));
+  
+  if(gems > 3) return;
+
+  "/obj/gemmaster"->DistributeGem(1,0,2,who,({"saphir","smaragd","rubin"}));
+  
+  tell_object(who, BS("Seltsam, was ist denn das fuer ein Edelstein?"));
+}
+
+void sehertor(object who)
+{
+  SetProp(P_INT_LONG, 
+	  BS("Du stehst auf einem maechtigen Baum und fuehlst Dich sicher. " 
+	     "Unter Dir siehst Du den Waldweg. Die Bruecke im Sueden fuehrt "
+	     "zu einem weiteren Holzplateau. Dort duerften sich weitere "
+	     "bewohnte Baeume befinden. Ein kleines Astgeflecht erhebt sich "
+	     "neben Dir."));
+
+  tell_room(ME,
+	    BS("So schnell wie der Nebel gekommen ist, hat er sich auch "
+	       "gleich wieder aufgeloest..."));
+
+  tell_object(who,
+	      BS("Aus dem Nebel heraus erkennst Du ploetzlich einen seltsamen "
+		 "Umriss..."));
+
+  "obj/sehertormaster"->DiscoverDoor();
+}
+
+void reset()
+{
+  ::reset();
+
+  if(filled)
+    tell_room(ME, 
+	      BS("Du hoerst ploetzlich ein leises Zischen aus der Schale "
+		 "an Deiner Seite und danach ist sie wieder leer."));
+
+  filled=0;
+  gems=0;
+}
+
+void init()
+{
+  ::init();
+  
+  if((TP) && (interactive(TP)))
+    if((TP->QueryProp(P_RACE)!="Elf") && (TP->QueryProp(P_RACE)!="Fee") && 
+       (!TP->id("elfenwaechter")))
+      if((random(TP->QueryAttribute(A_DEX)) < 10) && (!random(15)))
+	call_out("runter", 1, TP);
+}
+                                                                        
+void runter(object who)
+{
+  if(!objectp(who)) return;
+  if(!present(who)) return;
+  
+  tell_room(TO, 
+	    BS(who->Name()+" versucht, sich auf den Talan zu retten, schafft "
+	       "aber nicht ganz und plumpst nach unten."), ({who}));
+  
+  tell_object(who, 
+	      BS("Gerade, als Du glaubst, sicher angekommen zu sein, "
+		 "verlierst Du das Gleichgewicht...")+
+	      BS("und faellst durch die Zweige nach unten!"));
+
+  TP->move(ROOM "0714", M_GO,
+	   "nach unten", "faellt", "faellt von oben herein");
+
+  TP->AddHp(-5-random(6));
+}
+
+int _query_tport_cost_in()
+{
+  if(!TP) return 0;
+  if(!interactive(TP)) return 0;
+  
+  if(TP->QueryProp(P_RACE)=="Elf") return -2;
+  if(TP->QueryProp(P_RACE)=="Dunkelelf") return 2;
+  if(TP->QueryProp(P_GUILD)=="nekromanten") return 2;
+  if(NPC "wmaster"->is_elessar_enemy(TP)) return (TP->QueryProp(P_LEVEL)*2/3);
+  
+  return 0;
+}
+
+int _query_tport_cost_out()
+{
+  if(!TP) return 0;
+  if(!interactive(TP)) return 0;
+
+  if(TP->QueryProp(P_RACE)=="Elf") return -2;
+  if(TP->QueryProp(P_RACE)=="Dunkelelf") return 2;
+  if(TP->QueryProp(P_GUILD)=="nekromanten") return 2;
+  if(NPC "wmaster"->is_elessar_enemy(TP)) return (TP->QueryProp(P_LEVEL)*2/3);
+  
+  return 0;
+}
+

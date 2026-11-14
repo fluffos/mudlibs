@@ -1,0 +1,346 @@
+/*
+ * Mysterium von Yok-njarg-zirm
+ *
+ * Je nachdem wie man gut man den Spruch zaubert, erhaelt man 
+ * Vorteile (HP,MP, Schnelligkeit, entsaettigung, align ins negative) oder
+ * Nachteile (HP, MP, Verlangsamung, ...)
+ *
+ * Kosten: 50 MP
+ * Level : 7 
+ *
+ * Spruch kann nicht durch Skillpunkte verbessert werden!
+ *
+ * Status: anschlussreif
+ * 23.2.2004: x-berechnung geaendert in mysterium2 [Feyaria]
+ * 15.3.2004: check ob caster noch da ist [Feyaria]
+ * 15.10.2004 auf max_hp umgestellt (siehe maske)
+ * 27.1.2005 mehr wirkung auf nekroinsel und in astral-region
+ * 13.5.2008 Verhinderung von 2x demselben Effekt hintereinander [Angrox]
+ */
+
+
+int check_mysterium(object caster, mapping sinfo) 
+{
+  if( caster->InFight() ) 
+  {
+    write(BSC(sprintf("%s! Im Kampf bist Du zu beschaeftigt, um das "
+            "Mysterium von Yok-njarg-Zirm anzurufen.", checkgender(caster, 
+              "NAERRIN", "NARR"))));
+    return 0;
+  }
+  return 1;
+}
+
+mixed prep_mysterium(object caster, mapping sinfo)
+{
+  object maske;
+  if(!check_mysterium(caster, sinfo)) return 0;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  maske=present(GUILDITEM_ID,caster);
+  if(maske->CastMysterium() < 1) {
+    tell_object(caster, BSC(sprintf("%s Die unheiligen Maechte von "
+            "Yok-njarg-Zirm muessen sich erst regenerieren! Opfere in "
+            "der Zwischenzeit lieber ein paar jungfraeuliche Seelen!",
+            random_fluch())));
+    return 0;
+  }
+  tell_room(ENV(caster), BS(sprintf("%s laesst den Kopf nach vorne "
+          "fallen und hebt beschwoerend %se Arme.", caster->Name(WER),
+          caster->QueryPossPronoun(WESSEN))), ({caster}));
+  return sinfo;
+}
+  
+int mysterium(object caster, mapping sinfo)
+{
+  int suc,i;
+  object *player_in_room;
+
+  if (!check_mysterium(caster, sinfo))
+    return 0;
+
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  suc=SpellSuccess(caster,sinfo)+random(50*CheckEquip(caster, sinfo[SI_SPELLFUNC]));
+  if (suc <= 0 && suc > -2999) 
+  {
+    tell_room(ENV(caster), "Totenstille herrscht! Es passiert ... nichts.\n");
+    return MISSERFOLG;
+  }
+
+  write("Du beschwoerst das Mysterium von Yok-njarg-Zirm...\n"
+      "Was jetzt wohl passieren wird.....\n"); 
+  say (BS(caster->Name(WER,1)+ " beschwoert das Mysterium von Yok-njarg-Zirm. "
+      "Voller Furcht vor dem, was nun passieren wird, stellen sich Deine "
+      "Nackenhaare auf und Du verfaellst in Panik!"));
+  player_in_room=filter_array(all_inventory(ENV(caster)), #'interactive);
+  for (i=sizeof(player_in_room)-1;i>=0;i--) 
+  {
+    if(player_in_room[i] != caster && 
+        player_in_room[i]->QueryProp(P_LEVEL) < 8*caster->QueryProp(P_LEVEL)/10 &&
+        player_in_room[i]->QueryProp(P_RACE) != "Untoter" 
+        ) 
+    {
+      player_in_room[i]->SetProp(P_WIMPY, 
+          player_in_room[i]->QueryProp(P_MAX_HP));
+    }
+  }
+  if (suc <= 0) 
+  {
+    call_out("mysterium2", 2+random(6), caster, suc, 0);
+    return MISSERFOLG;
+  }
+  suc = DoModificationByAlign(suc, caster);
+  call_out("mysterium2", 2+random(6), caster, suc, sinfo[SI_SKILLABILITY]);
+  UseBlood();
+  if (dtime(time())[0..6] == "Fre, 13")
+  {
+    if (!random(2))
+      call_out("mysterium2", 4+random(8), caster, suc + 1000, sinfo[SI_SKILLABILITY]);
+    if (!random(5))
+      call_out("mysterium2", 6+random(10), caster, suc + 3000, sinfo[SI_SKILLABILITY]);
+  }
+  return ERFOLG;
+}
+
+int signed_random(int r)
+{
+  return (r < 0 ? -1 : 1) * random( r < 0 ? -r : r);
+}
+
+void add_max(object caster, string prop, int value)
+{
+//  value += caster->QueryProp(prop);
+//  if (value > 444) value = 444;
+//  caster->SetProp(prop, value);
+  present(GUILDITEM_ID,caster)->AddMax(prop, value);
+}
+
+int nekroinsel_check(object caster)
+{
+  if(file_name(environment(caster))[0..9] == "/d/astral/")
+  {
+    write("Astrale Energie durchflutet Dich.\n");
+    caster->AddSp(10+random(200));
+    return 0;
+  }
+  if(file_name(environment(caster)) != "/gilden/nekromanten" &&
+      strstr(file_name(environment(caster)), "/d/unterwelt/nekromanten") == -1)
+    return 1;
+  else
+  {
+    write("Die boese Macht der Nekromanteninsel staerkt Deine Macht.\n");
+    caster->heal_self(200); 
+    return 0;
+  }
+}
+
+void mysterium2(object caster, int suc, int abil)
+{
+  int x, dauer, flag, last_effect, now_effect,nr_effect_tests;
+  object ob;
+
+  if(!objectp(caster))
+    return;
+  last_effect=caster->QueryProp(P_NEKRO_MYSTERIUM_EFFECT); 
+  nr_effect_tests=0;
+  // Abfrage ob der Effekt schon beim letzten Mal aufgetreten ist
+  // Angrox, 2008/05/13
+  do { 
+    x = signed_random(suc) / 100 +                       // 0-99
+        random(7) * caster->QueryProp(P_GUILD_CIRCLE) +  // 0-42
+        random(3 * caster->QueryAttribute(A_INT) / 2) +  // 0-59
+        random(caster->QueryProp(P_LEVEL)) / 5;          // 0-20
+                                                       // 0-220
+    dauer = (suc + abil) / 1000;
+    if (abil == MAX_ABILITY)
+    {
+      x += random(3 * caster->QueryProp(P_GUILD_CIRCLE));
+      dauer += random(caster->QueryProp(P_GUILD_CIRCLE));
+    }
+    if( caster->QueryProp(P_ALIGN) < -1333 )
+    {
+      x += random(4 * caster->QueryProp(P_GUILD_CIRCLE));
+      dauer += random(caster->QueryProp(P_GUILD_CIRCLE));
+    }
+
+    if (x<0) 
+      x=random(40);
+    TELL("angrox", sprintf("nekrospells(mysterium): x=%d\n",x));
+    now_effect=x/10;
+    nr_effect_tests++;
+  } while (now_effect == last_effect && nr_effect_tests <= 5);
+
+  caster->SetProp(P_NEKRO_MYSTERIUM_EFFECT, now_effect);
+
+  // gwenshara: auf 7/7 passieren somit keine negativen effekte
+  // mehr... alles andere ist für einen top-level spell 
+  // irgendwie witzlos... vor allem bei den kosten
+  x += 7*caster->QueryProp(P_GUILD_CIRCLE);
+  TELL("gwenshara", sprintf("nekrospells(mysterium): caster=%O x=%d\n", caster, x));
+ 
+  switch (x) 
+  {
+    case 0..9:
+      write("Das Mysterium verschlingt Deine gesamte Energie!\n");
+      caster->AddHp(-400); 
+      caster->AddSp(-400);
+    break;
+    case 10..19:
+      write("Ein Vampirnebel saugt Dir all Dein Blut aus.\n");
+      caster->AddHp(-400); 
+    break;
+    case 20..29:
+      write("Deine gesamte magische Energie verfluechtigt sich in einem "
+          "astralen Wirbel.\n");
+      caster->AddSp(-400); 
+    break;
+    case 30..34:
+      write("Deine gesamte Boesartigkeit verfluechtigt sich.\n");
+      caster->Set(P_ALIGN, 0); 
+    break;
+    case 35..39:
+      ob=clone_object(ROOM "sarg");
+      ob->move(environment(caster),M_SILENT|M_NOCHECK);
+      ob->StartSequence(caster);
+    break;
+    case 40..49:
+      if(caster->QueryProp(P_FOOD) > 0) {
+        write("Du wirst ploetzlich total hungrig!\n");
+        caster->SetProp(P_FOOD, 0); 
+        break;
+      }
+    case 50..59:
+      if(caster->QueryProp(P_DRINK) > 0) {
+        write("Du wirst ploetzlich total durstig!\n");
+        caster->SetProp(P_DRINK, 0); 
+        break;
+      }
+    case 60..69:
+      if(caster->QueryProp(P_ALCOHOL) > 0) {
+        write("Du wirst ploetzlich total nuechtern!\n");
+        caster->SetProp(P_ALCOHOL, 0); 
+        break;
+      }
+    case 70..79:
+      if(caster->QueryProp(P_FOOD)+caster->QueryProp(P_DRINK)+caster->QueryProp(P_ALCOHOL) > 0) {
+        write("Du wirst ploetzlich total hungrig, durstig und nuechtern.\n");
+        caster->SetProp(P_DRINK, 0); 
+        caster->SetProp(P_FOOD, 0); 
+        caster->SetProp(P_ALCOHOL, 0); 
+        break;
+      }
+    case 80..89:
+      if (nekroinsel_check(caster))
+      {
+        if(abil < 9500) {
+          write("Deine Umgebung verschwimmt...\n");
+          caster->move("/gilden/nekromanten", M_TPORT);
+          nekroinsel_check(caster);
+        } else {
+          write("Nichts passiert.\n");
+        }
+      }
+    break;
+    case 90..99:
+      write("Du fuehlst Dich .... boese!\n");
+       if(caster->QueryProp(P_ALIGN) > -1500) {
+         caster->Set(P_ALIGN, -1500); 
+         break;
+       }
+    case 100..109:
+      if(!caster->Query(P_SP_DELAY,F_QUERY_METHOD)) {
+        write("Magische Energie durchstroemt Dich!\n");
+        caster->Set(P_SP_DELAY, symbol_function("delay", TO), F_QUERY_METHOD);
+        call_out("remove_delay", dauer*60, caster, P_SP_DELAY);
+        break;
+      }
+    case 110..119:  
+      if(!caster->Query(P_HP_DELAY,F_QUERY_METHOD)){
+        write("Die Kraft des unheiligen Blutes durchstroemt Dich!\n");
+        caster->Set(P_HP_DELAY, symbol_function("delay", TO), F_QUERY_METHOD);
+        call_out("remove_delay", dauer*60, caster, P_HP_DELAY);
+        break;
+      }
+    case 120..129:  
+      flag = 0;
+      if (!caster->Query(P_HP_DELAY,F_QUERY_METHOD) ) {
+        write("Die Kraft des unheiligen Blutes durchstroemt Dich!\n");
+        caster->Set(P_HP_DELAY, symbol_function("delay", TO), F_QUERY_METHOD);
+        call_out("remove_delay", dauer*60, caster, P_HP_DELAY);
+        flag = 1;
+      }
+      if (!caster->Query(P_SP_DELAY,F_QUERY_METHOD) )
+      {
+        write("Magische Energie durchstroemt Dich!\n");
+        caster->Set(P_SP_DELAY, symbol_function("delay", TO), F_QUERY_METHOD);
+        call_out("remove_delay", dauer*60, caster, P_SP_DELAY);
+        flag = 1;
+      }
+      if(flag) break;
+    case 130..139:
+      write("Du fuehlst Dich schneller!\n");
+      caster->ModifySkillAttribute(caster, SA_SPEED, 125, dauer*60);
+      break;
+    case 140..149:
+      write("Deine Magie ist nun maechtiger!\n");
+      caster->ModifySkillAttribute(caster, SA_DAMAGE, 125, dauer*60);
+      break;
+    case 150..159:  
+      write("Du fuehlst wie Du Dich schneller bewegst und Deine "
+          "Magie gestaerkt wird!\n");
+      caster->ModifySkillAttribute(caster, SA_QUALITY, 125, dauer*60);
+      break;
+    case 160..169: 
+      nekroinsel_check(caster);
+      ob = caster->QueryProp(P_NEKRO_MASTERED_UNDEADS);
+      if(objectp(ob)) {
+        tell_room(ENV(ob), BS("Mit unheiligem Kreischen fahren geopferte Seelen in " + ob->name(WEN, 1) + " ein."));
+        ob->SetProp(P_MAX_HP, ob->QueryProp(P_MAX_HP) + random(49));
+        ob->SetProp(P_HP, ob->QueryProp(P_MAX_HP));
+        ob->SetProp(P_HANDS, ({ob->QueryProp(P_HANDS)[0],
+                              ob->QueryProp(P_HANDS)[1] + random(30),
+                              ob->QueryProp(P_HANDS)[2]}));
+        ob->SetProp(P_BODY, ob->QueryProp(P_BODY) + random(20));
+        if(ob->QueryProp(P_SPELLRATE) < 75) {
+          ob->SetProp(P_SPELLRATE, ob->QueryProp(P_SPELLRATE) + 5);
+        }
+        break;
+      }
+    case 170..179: 
+       write("All Deine Wunden verschwinden!\n");
+       add_max(caster, P_HP, 1 + random(10));
+       caster->AddHp(500); // Vielleicht auch ein paar punkte mehr max_hp ?
+      break;
+    case 180..189: 
+       write("Magische Energie erfuellt Dich!\n");
+       add_max(caster, P_SP, 1 + random(10));
+       caster->AddSp(500); // Vielleicht auch ein paar punkte mehr max_sp ?
+      break;
+    default:
+       write("Deine Kraft erneuert sich komplett!\n");
+       add_max(caster, P_HP, 3 + random(10));
+       add_max(caster, P_SP, 3 + random(10));
+       caster->heal_self(500); 
+      break;
+  }
+}
+
+int delay()
+{
+  return 0;
+}
+
+void remove_delay(object caster, string prop)
+{
+  if( objectp(caster) )
+    caster->Set(prop, 0, F_QUERY_METHOD);
+}

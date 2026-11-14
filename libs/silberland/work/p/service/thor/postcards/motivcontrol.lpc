@@ -1,0 +1,202 @@
+/*
+ * motivcontrol.c  -  Ein Raum um den TownD zu steuern
+ * --------------
+ *
+ */
+ 
+#pragma strong_types
+ 
+#include <properties.h>
+#include <wizlevels.h>
+
+#define MOTIVMASTER "/p/service/thor/postcards/motivmaster"
+#define MC_DOC "/p/service/thor/postcards/motivcontrol.doc"
+
+
+inherit "/std/room";
+inherit "/mail/nedit";
+
+
+void create()
+{
+  ::create();
+  SetProp(P_LIGHT, 1);
+  SetProp(P_INDOORS, 1);
+  SetProp(P_INT_SHORT, "Motivemaster Kontrollraum");
+  SetProp(P_INT_LONG,
+      "Du befindest Dich im Motivemaster Kontrollraum. "
+      "Hier lassen sich die Motive des Motivmasters verwalten. "
+      "Dazu stehen folgende Befehle zur Verfuegung:\n\n"
+      "   getgroups (gg)        addgroup (ag)\n"
+      "   getmotives (gms)      delgroup (dg)\n"
+      "   getmotive (gm)        addmotive (am)\n"
+      "                         delmotive (dm)\n\n");
+
+  AddCmd( ({"getgroups", "gg"}), "getgroups" );
+  AddCmd( ({"getmotives", "gms"}), "getmotives" );
+  AddCmd( ({"getmotive", "gm"}), "getmotive" );
+  AddCmd( ({"addgroup", "ag"}), "addgroup" );
+  AddCmd( ({"delgroup", "dg"}), "delgroup" );
+  AddCmd( ({"addmotive", "am"}), "addmotive" );
+  AddCmd( ({"dellmotive", "dm"}), "delmotive" );
+
+  AddExit("woody", "/players/woody/workroom");
+}
+
+int darf_das(object ob)
+{
+  if (query_once_interactive(ob) && IS_WIZARD(ob)) return 1;
+  return 0; 
+}
+
+int getgroups(string str)
+{
+  mixed res;
+  res=MOTIVMASTER->GetGroups();
+  if (!sizeof(res))
+    write("Es gibt noch keine Motivgruppen.\n");
+  else
+    write("Derzeit gibt es folgende Motivgruppen:\n"+
+        break_string( implode(res, ", "), 78 ));
+  return 1;
+}
+
+int getmotives(string str)
+{
+  mixed res;
+  if (!str) {
+    write("Syntax: getmotives group\n");
+    return 1;
+  }
+  str = this_player()->_unparsed_args();
+  res = MOTIVMASTER->GetMotives(str);
+  if (!res)
+    write("Diese Motivgruppe gibt es nicht.\n");
+  else if (!sizeof(res))
+    write("Es gibt noch keine Motive in dieser Gruppe.\n");
+  else
+    write("In der Gruppe '"+str+"' gibt es folgende Motive:\n"+
+        break_string( implode(res, ", "), 78 ));
+  return 1;
+}
+
+int getmotive(string str)
+{
+  string gr,mo,txt;
+  str = this_player()->_unparsed_args();
+  if (!str || (sscanf(str,"%s %s",gr,mo)!=2)) {
+    write("Syntax: getmotive group title\n");
+    return 1;
+  }
+  if (!txt=MOTIVMASTER->GetMotive(gr,mo))
+    write(break_string("Konnte Motiv '"+mo+"' in Gruppe '"+gr+
+        "' nicht finden.",78));
+  else
+    write("Gruppe '"+gr+"', Motiv '"+mo+"':\n"
+        "-----------------------------------------------------"
+        "----------------------\n"+
+        txt+
+        "-----------------------------------------------------"
+        "----------------------\n");
+  return 1;
+}
+
+int addgroup(string str)
+{
+  if (!darf_das(this_player())) {
+    write("Sorry, aber auf diese Funktion darfst Du nicht zugreifen.\n");
+    return 1;
+  }
+  if (!str) {
+    write("Syntax: addgroup group\n");
+    return 1;
+  }
+  str = this_player()->_unparsed_args();
+  str = explode(str, " ")[0];
+  if (!MOTIVMASTER->AddGroup(str))
+    write("Konnte Gruppe nicht anlegen - vermutlich gibt es sie schon.\n");
+  else
+    write("Ok, Gruppe '"+str+"' angelegt.\n");
+  return 1;
+}
+
+int delgroup(string str)
+{
+  if (!darf_das(this_player())) {
+    write("Sorry, aber auf diese Funktion darfst Du nicht zugreifen.\n");
+    return 1;
+  }
+  if (!str) {
+    write("Syntax: delgroup group\n");
+    return 1;
+  }
+  str = this_player()->_unparsed_args();
+  if (!MOTIVMASTER->RemoveGroup(str))
+    write("Konnte Gruppe nicht entfernen - vermutlich gibt es sie nicht.\n");
+  else
+    write("Ok, Gruppe '"+str+"' entfernt.\n");
+  return 1;
+}
+
+int addmotive(string str)
+{
+  string gr,mo;
+  if (!darf_das(this_player())) {
+    write("Sorry, aber auf diese Funktion darfst Du nicht zugreifen.\n");
+    return 1;
+  }
+  str = this_player()->_unparsed_args();
+  if (!str || (sscanf(str,"%s %s",gr,mo)!=2)) {
+    write("Syntax: addmotive group title\n");
+    return 1;
+  }
+  if (!MOTIVMASTER->GetMotives(gr)) {
+    write("Es gibt noch keine Gruppe '"+gr+"'.\n");
+    return 1;
+  }
+  if (MOTIVMASTER->GetMotive(gr,mo)) {
+    write("Dieses Motiv existiert bereits in der Gruppe '"+gr+"'.\n");
+    return 1;
+  }
+  write("Ok, bitte Text fuer Motiv '"+mo+"' in Gruppe '"+gr+"' eingeben:\n");
+  nedit("do_add",0,gr,mo);
+  return 1;
+}
+
+void do_add(string txt, string gr, string mo)
+{
+  if (!txt || !stringp(txt) || !stringp(gr) || !stringp(mo)) {
+    write("Ok, Bearbeitung abgebrochen.\n");
+    return;
+  }
+  if (!MOTIVMASTER->AddMotive(gr, mo, txt))
+    write("Konnte Motiv nicht einfuegen - bitte nochmals pruefen!\n");
+  else
+    write("Ok, Motiv '"+mo+"' in Gruppe '"+gr+"' angelegt:\n"+
+        "-----------------------------------------------------"
+        "----------------------\n"+
+        txt+
+        "-----------------------------------------------------"
+        "----------------------\n");
+}
+
+int delmotive(string str)
+{
+  string gr,mo;
+  if (!darf_das(this_player())) {
+    write("Sorry, aber auf diese Funktion darfst Du nicht zugreifen.\n");
+    return 1;
+  }
+  str = this_player()->_unparsed_args();
+  if (!str || (sscanf(str,"%s %s",gr,mo)!=2)) {
+    write("Syntax: delmotive group title\n");
+    return 1;
+  }
+  if (!MOTIVMASTER->RemoveMotive(gr,mo))
+    write(break_string("Konnte Motiv '"+mo+"' in Gruppe '"+gr+
+        "' nicht entfernen - vermutlich nichtexistent.",78));
+  else
+    write("Ok, Motiv '"+mo+"' aus Gruppe '"+gr+"' entfernt.\n");
+  return 1;
+}
+

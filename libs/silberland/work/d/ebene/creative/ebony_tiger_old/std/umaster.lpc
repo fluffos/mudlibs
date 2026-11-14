@@ -1,0 +1,408 @@
+nosave string map;
+nosave int width, height, actmap;
+nosave mapping rooms, connect, players, mobs;
+
+#include "../files.h"
+#include <moving.h>
+#include <properties.h>
+#include <room.h>
+#include <mnpc.h>
+
+#define MAPS 2
+#define RES_OFF 200
+#define RES_RND 300
+#define RES_CHK 30
+
+#define MAPLOC "/d/ebene/creative/ebony_tiger/underdark"
+#define UD_ROOM STD("ud")
+
+#define MAPNAME(x) MAPLOC+"/ud"+x+".map"
+#define CONNAME(x) MAPLOC+"/ud"+x+".con"
+#define MOBNAME(x) MAPLOC+"/ud"+x+".mob"
+
+#define ALL_SYM ({'.','#','>'})
+
+#define MAP(xx,yy) (int)map[y*width+yy*width+x+xx]
+
+create()
+{
+  if (is_clone(this_object())) {
+    destruct(this_object());
+    return;
+  }
+  map=""; width=height=0;
+  rooms=([]);
+  connect=([]);
+  players=([]);
+  mobs=([]);
+  actmap=random(MAPS)+1;
+  loadmap(actmap);
+  call_out("reset_map", RES_OFF+random(RES_RND));
+}
+
+int xy2num(int x, int y)
+{
+  return y*width+x;
+}
+
+int num2xy(int x, int y)
+{
+  y=x/width;
+  x=x%width;
+}
+
+reset_map()
+{
+  while (!remove_call_out("reset_map")) ;
+
+  if (sizeof(players)) {
+    call_out("reset_map", RES_CHK);
+    return;
+  }
+  actmap=random(MAPS)+1;
+  loadmap(actmap);
+  call_out("reset_map", RES_OFF+random(RES_RND));
+}
+
+int loadmap(int mapnum)
+{
+  string m, *mm, file, *con;
+  int i;
+
+  file=MAPNAME(mapnum);
+  if (file_size(file)==-1) {
+    write_file(LOG("underdark"), sprintf("%s: error loading %s\n", dtime(time()), file));
+    return 0;
+  }
+  m=read_file(file);
+  mm=explode(m, "\n");
+  width=strlen(mm[0]);
+  height=sizeof(mm);
+  m=implode(mm, "");
+  map=m;
+  file=CONNAME(mapnum);
+  if (file_size(file)==-1) {
+    write_file(LOG("underdark"), sprintf("%s: loading %s\n", dtime(time()), file));
+    return 0;
+  }
+  m=read_file(file);
+  mm=explode(m, "\n");
+  for (i=sizeof(mm)-1; i>=0; i--) {
+    con=explode((string)(mm[i]), "#");
+    connect+=([con[0]:(int)xy2num((int)con[1], (int)con[2])]);
+  }
+  file=MOBNAME(mapnum);
+  if (file_size(file)==-1) {
+    write_file(LOG("underdark"), sprintf("%s: loading %s\n", dtime(time()), file));
+    return 0;
+  }
+  m=read_file(file);
+  mm=explode(m, "\n");
+  for (i=sizeof(mm)-1; i>=0; i--) {
+    con=explode((string)(mm[i]), "#");
+    mobs+=([con[0]:(int)xy2num((int)con[1], (int)con[2])]);
+  }
+  return 1;
+}
+
+int _check(int x)
+{
+  switch (x) {
+    case ' ': return 0;
+    case '-':
+    case '|':
+    case '+': return -1;
+  }
+  return 1;
+}
+
+void _vq(int x, int y, int dir, mixed o)
+{
+  int A, B, C, D, a, b, c, d, f, g;
+
+  o[4][4]='X';
+  A=_check(MAP(0,1*dir));
+  if (A>0) B=_check(MAP(0,2*dir));
+  if (B>0) C=_check(MAP(0,3*dir));
+  if (C>0) D=_check(MAP(0,4*dir));
+  if (A) o[4+1*dir][4]=MAP(0,1*dir);
+  if (B) o[4+2*dir][4]=MAP(0,2*dir);
+  if (C) o[4+3*dir][4]=MAP(0,3*dir);
+  if (D) o[4+4*dir][4]=MAP(0,4*dir);
+  if (A) a=_check(MAP(-1,1*dir));
+  if (B || a>0) b=_check(MAP(-1,2*dir));
+  if (C || B>0 && b>0) c=_check(MAP(-1,3*dir));
+  if (D || c>0) d=_check(MAP(-1,4*dir));
+  if (a>0 && b>0) {
+    f=_check(MAP(-2,2*dir));
+    if (c>0 || f>0)
+      g=_check(MAP(-2,3*dir));
+  }
+  if (a) o[4+1*dir][3]=MAP(-1,1*dir);
+  if (b) o[4+2*dir][3]=MAP(-1,2*dir);
+  if (c) o[4+3*dir][3]=MAP(-1,3*dir);
+  if (d) o[4+4*dir][3]=MAP(-1,4*dir);
+  if (f) o[4+2*dir][2]=MAP(-2,2*dir);
+  if (g) o[4+3*dir][2]=MAP(-2,3*dir);
+  a=b=c=d=f=g=0;
+  if (A) a=_check(MAP(1,1*dir));
+  if (B || a>0) b=_check(MAP(1,2*dir));
+  if (C || B>0 && b>0) c=_check(MAP(1,3*dir));
+  if (D || c>0) d=_check(MAP(1,4*dir));
+  if (a>0 && b>0) f=_check(MAP(2,2*dir));
+  if (a>0 && b>0 && (c>0 || f>0)) g=_check(MAP(2,3*dir));
+  if (a) o[4+1*dir][5]=MAP(1,1*dir);
+  if (b) o[4+2*dir][5]=MAP(1,2*dir);
+  if (c) o[4+3*dir][5]=MAP(1,3*dir);
+  if (d) o[4+4*dir][5]=MAP(1,4*dir);
+  if (f) o[4+2*dir][6]=MAP(2,2*dir);
+  if (g) o[4+3*dir][6]=MAP(2,3*dir);
+}
+
+
+void _hq(int x, int y, int dir, mixed o)
+{
+  int A, B, C, D, a, b, c, d, f, g;
+
+  o[4][4]='X';
+  A=_check(MAP(1*dir,0));
+  if (A>0) B=_check(MAP(2*dir,0));
+  if (B>0) C=_check(MAP(3*dir,0));
+  if (C>0) D=_check(MAP(4*dir,0));
+  if (A) o[4][4+1*dir]=MAP(1*dir,0);
+  if (B) o[4][4+2*dir]=MAP(2*dir,0);
+  if (C) o[4][4+3*dir]=MAP(3*dir,0);
+  if (D) o[4][4+4*dir]=MAP(4*dir,0);
+  if (A) a=_check(MAP(1*dir,-1));
+  if (B || a>0) b=_check(MAP(2*dir,-1));
+  if (C || B>0 && b>0) c=_check(MAP(3*dir,-1));
+  if (D || c>0) d=_check(MAP(4*dir,-1));
+  if (a>0 && b>0) {
+    f=_check(MAP(2*dir,-2));
+    if (c>0 || f>0)
+      g=_check(MAP(3*dir,-2));
+  }
+  if (a) o[3][4+1*dir]=MAP(1*dir,-1);
+  if (b) o[3][4+2*dir]=MAP(2*dir,-1);
+  if (c) o[3][4+3*dir]=MAP(3*dir,-1);
+  if (d) o[3][4+4*dir]=MAP(4*dir,-1);
+  if (f) o[2][4+2*dir]=MAP(2*dir,-2);
+  if (g) o[2][4+3*dir]=MAP(3*dir,-2);
+  a=b=c=d=f=g=0;
+  if (A) a=_check(MAP(1*dir,1));
+  if (B || a>0) b=_check(MAP(2*dir,1));
+  if (C || B>0 && b>0) c=_check(MAP(3*dir,1));
+  if (D || c>0) d=_check(MAP(4*dir,1));
+  if (a>0 && b>0) f=_check(MAP(2*dir,2));
+  if (a>0 && b>0 && (c>0 || f>0)) g=_check(MAP(3*dir,2));
+  if (a) o[5][4+1*dir]=MAP(1*dir,1);
+  if (b) o[5][4+2*dir]=MAP(2*dir,1);
+  if (c) o[5][4+3*dir]=MAP(3*dir,1);
+  if (d) o[5][4+4*dir]=MAP(4*dir,1);
+  if (f) o[6][4+2*dir]=MAP(2*dir,2);
+  if (g) o[6][4+3*dir]=MAP(3*dir,2);
+}
+
+mixed surround(int x, int y)
+{
+  string *out;
+  int i;
+
+  out=allocate(9);
+  for (i=0; i<9; i++)
+    out[i]="         ";
+  _vq(x, y, 1, out);
+  _vq(x, y, -1, out);
+  _hq(x, y, 1, out);
+  _hq(x, y, -1, out);
+  return out;
+}
+
+string query_surround(object p)
+{
+  int x, y;
+  string *s;
+
+  x=players[p];
+  num2xy(&x, &y);
+  s=surround(x, y);
+  for (x=0; x<9; x++)
+    s[x]="          "+s[x];
+  return implode(s, "\n");
+}
+
+m_north(int x, int y)
+{
+  int yy;
+
+  yy=y-1;
+  if (yy>=0 && yy<height && (member(ALL_SYM, MAP(0,-1))!=-1))
+    y=yy;
+}
+
+m_south(int x, int y)
+{
+  int yy;
+
+  yy=y+1;
+  if (yy>=0 && yy<height && (member(ALL_SYM, MAP(0,1))!=-1))
+    y=yy;
+}
+
+m_west(int x, int y)
+{
+  int xx;
+
+  xx=x-1;
+  if (xx>=0 && xx<width && (member(ALL_SYM, MAP(-1,0))!=-1))
+    x=xx;
+}
+
+m_east(int x, int y)
+{
+  int xx;
+
+  xx=x+1;
+  if (xx>=0 && xx<width && (member(ALL_SYM, MAP(1,0))!=-1))
+    x=xx;
+}
+
+object init_room(int x, int y)
+{
+  object o;
+  string *ro;
+  int *va, i;
+
+  if (!(o=rooms[xy2num(x, y)])) {
+    o=clone_object(UD_ROOM);
+    o->set_xy(x, y);
+    if (member(mobs, xy2num(x, y)))
+      o->AddItem(mobs[xy2num(x, y)], REFRESH_NONE, ([P_MNPC_FLAGS:0, P_AGGRESSIVE:1]));
+    if ((int)map[y*width+x]=='>') {
+      ro=m_indices(connect);
+      va=m_values(connect);
+      for (i=sizeof(ro)-1; i>=0; i--) {
+        if (va[i]==xy2num(x, y))
+          o->AddExit("oben", ro[i]);
+      }
+    }
+    rooms+=([xy2num(x,y):o]);
+  }
+  return o;
+}
+
+int remove_room(int x, int y)
+{
+  object o;
+
+  if ((o=rooms[xy2num(x, y)]) && sizeof(all_inventory(o)))
+    return 0;
+  if (o) {
+    o->remove();
+    m_delete(rooms, xy2num(x, y));
+  }
+  return 1;
+}
+
+object init_new_player(object pl, object source)
+{
+  string f;
+  int x, y;
+
+  f=file_name(source);
+  x=connect[f];
+  num2xy(&x, &y);
+  players+=([pl:xy2num(x, y)]);
+  return init_room(x, y);
+}
+
+set_player(object pl, int x, int y)
+{
+  players+=([pl:xy2num(x, y)]);
+}
+
+int remove_player(object pl)
+{
+  int x, y;
+
+  if (!member(players, pl))
+    return 0;
+  x=players[pl];
+  num2xy(&x, &y);
+  remove_room(x, y);
+  players=m_delete(players, pl);
+  return 1;
+}
+
+int move_north(object pl)
+{
+  int x, y, old;
+
+  if (!member(players, pl))
+    return 0;
+  x=old=players[pl];
+  num2xy(&x, &y);
+  m_north(&x, &y);
+  if (old != xy2num(x, y)) {
+    players[pl]=xy2num(x, y);
+    pl->move(init_room(x, y), M_GO, "nach Norden");
+    remove_room(x, y+1);
+    return 1;
+  }
+  return 0;
+}
+
+int move_south(object pl)
+{
+  int x, y, old;
+
+  if (!member(players, pl))
+    return 0;
+  x=old=players[pl];
+  num2xy(&x, &y);
+  m_south(&x, &y);
+  if (old != xy2num(x, y)) {
+    players[pl]=xy2num(x, y);
+    pl->move(init_room(x, y), M_GO, "nach Sueden");
+    remove_room(x, y-1);
+    return 1;
+  }
+  return 0;
+}
+
+int move_west(object pl)
+{
+  int x, y, old;
+
+  if (!member(players, pl))
+    return 0;
+  x=old=players[pl];
+  num2xy(&x, &y);
+  m_west(&x, &y);
+  if (old != xy2num(x, y)) {
+    players[pl]=xy2num(x, y);
+    pl->move(init_room(x, y), M_GO, "nach Westen");
+    remove_room(x+1, y);
+    return 1;
+  }
+  return 0;
+}
+
+int move_east(object pl)
+{
+  int x, y, old;
+
+  if (!member(players, pl))
+    return 0;
+  x=old=players[pl];
+  num2xy(&x, &y);
+  m_east(&x, &y);
+  if (old != xy2num(x, y)) {
+    players[pl]=xy2num(x, y);
+    pl->move(init_room(x, y), M_GO, "nach Osten");
+    remove_room(x-1, y);
+    return 1;
+  }
+  return 0;
+}
+

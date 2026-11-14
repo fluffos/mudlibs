@@ -1,0 +1,362 @@
+//=========================================================================
+//
+// File:    fee.c
+// Created by Ronja@SL
+//
+// Project: Feen
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit NPC "castlenpc";
+inherit "std/npc/spells";
+
+#define NORMAL 1
+#define ANGRIFFSLUSTIG 0
+
+int count;
+int callouts;
+int react_on_fart;
+
+void SetStatus(int i);
+
+void create()
+{
+  if(!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Eine Fee");
+
+  SetProp(P_RACE, "Fee");
+  SetProp(P_NAME, "Fee");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:0,T_RANGE_MAX:30]));
+
+  AddId(({"fee"}));
+  AddClass(CL_FAIRY);
+
+  create_default_npc(25);
+  SetProp(P_HANDS, ({" mit zarten Feenhaenden",200, DT_BLUDGEON}) );
+  SetProp(P_MAX_HP, 425);
+  SetProp(P_SIZE, 60+random(20));
+  SetProp(P_ALIGN, 600);
+  SetProp(P_MAX_HANDS, 4);
+
+  SetStatus(NORMAL);
+
+  if(random(10) < 5)
+  {
+    SetProp(P_MNPC_AREA, ({ROOM "sgang",ROOM "bhof",ROOM "schlaf",ROOM "dusch"}) );
+  }
+  else
+  {
+    SetProp(P_MNPC_AREA, ({ROOM "sgang",ROOM "schlaf",ROOM "dusch"}) );
+  }
+
+  SetProp(P_MNPC_DEFAULTROOM, ROOM "sgang11.lpc");
+  SetProp(P_MNPC_WAIT, ({ 20, 30, 30 }));
+  SetProp(P_MNPC_FLAGS, MOV_INDOORS + MOV_OUTDOORS + MOV_MOVES + MOV_BACKWARDS);
+
+  SetProp(P_DIE_MSG,  " seufzt: Wer fuehrt jetzt den Solotanz auf?\n");
+
+  AddInfo(DEFAULT_INFO,
+    "ist zu sehr mit sich selbst beschaeftigt um Dir zuzuhoeren.\n"
+  );
+
+  AddLibrary(FEENLIB, 3);
+
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    "Die Fee interessiert sich nicht dafuer.\n" }) );
+
+  SetChats(4,
+    ({"Die Fee taenzelt etwas umher.\n"
+     ,"Die Fee uebt einen besonderen Tanzschritt.\n"
+     ,"Die Fee versucht sich an die Choreographie zu erinnern.\n"
+     ,"Die Fee ist ganz aufgeregt.\n"
+     ,"Die Fee laechelt Dich an.\n"
+     })
+  );
+
+  SetProp(P_SPELLRATE,40);
+
+  AddDefaultSpell(1, 150, DS_FROG);
+
+  AddSpell(9,300,
+    "Die Fee wirft einen Feenzauber auf Dich.\n",
+    "Die Fee wirft einen Feenzauber auf @WEN.\n",
+     DT_MAGIC, ([SP_SHOW_DAMAGE:1]) );
+
+  SUID;
+
+  clone_object(ARMOUR "schleier")->move(ME);
+  command("trage schleier");
+
+  clone_object(ARMOUR "brustp")->move(ME);
+  command("trage panzer");
+
+  clone_object(ARMOUR "kleid")->move(ME);
+  command("trage kleid");
+
+  clone_object(ARMOUR "spitz")->move(ME);
+  command("trage handschuh");
+
+  FMASTER->AddFairy(file_name(TO));
+  count         = 0;
+  callouts      = 0;
+  react_on_fart = 0;
+}
+
+void SetStatus(int i)
+{
+  if(i == ANGRIFFSLUSTIG)
+  {
+    SetProp(P_LONG,
+      "Die Fee ist erzuernt darueber, dass jemand sich erdreistet, "
+      "das Feenschloss anzugreifen. Voller Grimm ist sie auf dem "
+      "Weg zur Koenigin, um diese zu beschuetzen."
+    );
+
+    SetProp(P_MMSGIN, "flattert auf dem Weg zur Koenigin herein");
+    SetProp(P_MMSGOUT, "flattert ihrer Koenigin zu Hilfe");
+    SetProp(P_MSGIN, "flattert auf dem Weg zur Koenigin herein");
+    SetProp(P_MSGOUT, "flattert aufgeregt#");
+  }
+  else
+  {
+    SetProp(P_LONG,
+      "Die Fee scheint schwer beschaeftigt und murmelt etwas "
+      "vor sich her. Durch den bevorstehenden Tanz scheint sie "
+      "ganz in Gedanken verloren zu sein. Sie traegt bereits "
+      "festliche Gewaender."
+    );
+
+    SetProp(P_MMSGIN, "taenzelt herein");
+    SetProp(P_MMSGOUT, "flattert davon");
+    SetProp(P_MSGIN, "taenzelt herein");
+    SetProp(P_MSGOUT, "flattert#");
+  }
+}
+
+void init()
+{
+  object room;
+
+  ::init();
+
+  if((room=ENV(TO)) && present("_furz_",room))
+  {
+    call_out("meckern",0,room);
+  }
+}
+
+void reset()
+{
+  ::reset();
+
+  callouts = 0;
+
+  if(!is_clone(TO)) return;
+
+  SetProp(P_MNPC_FLAGS, QueryProp(P_MNPC_FLAGS) | MOV_MOVES);
+  SetStatus(NORMAL);
+}
+
+int remove(int arg)
+{
+  FMASTER->DeleteFairy(file_name(TO));
+  ::remove(arg);
+}
+
+void GotoQueen()
+{
+  string s;
+
+  s = FMASTER->GetDirection();
+  if(s == "ende" || count++ > 30)
+  {
+    if(count > 30)
+    {
+      FMASTER->Msg("Zielgang fuer Fee gestoppt in "+file_name(ENV(TO)) );
+    }
+
+    count = 0;
+    SetStatus(NORMAL);
+    SetProp(P_MNPC_FLAGS, QueryProp(P_MNPC_FLAGS) | MOV_MOVES);
+    return;
+  }
+  command(s);
+  call_out("GotoQueen", 2);
+}
+
+void DefendQueen()
+{
+  if(count > 0) return;
+  SetProp(P_MNPC_FLAGS, QueryProp(P_MNPC_FLAGS) & ~MOV_MOVES);
+  SetStatus(ANGRIFFSLUSTIG);
+  call_out("GotoQueen", 0);
+}
+
+
+void meckern(object room)
+{
+  tell_room(room, BSI("He, was soll denn das? Wirbel nicht so viel Staub "
+                      "auf, wenn ich da bin, ich werde ja ganz schmutzig."
+                     ,"Die Fee aergert sich: "));
+
+  wandern();
+  return;
+}
+
+void meckern2(object room)
+{
+  object ob;
+
+  if(!(ob = present("_furz_",room))) return;
+
+  react_on_fart = time()+5;
+
+  if(room->QueryProp(P_INDOORS))
+  {
+    ob->remove();
+    tell_room(room, BSI("Was fuer ein Gestank!","Die Fee entruestet sich: ")+
+                    BS("Die Fee murmelt einen Zauberspruch und der Gestank "
+                       "ist wie durch Magie verschwunden.")
+    );
+  }
+  else
+  {
+    tell_room(room, BSI("Was fuer ein Gestank!","Die Fee ruempft ihr "
+                        "Naeschen: "));
+    wandern();
+  }
+
+  return;
+}
+
+void catch_tell(string str)
+{
+  string who;
+  object room;
+
+  if(!(room=ENV(TO))) return;
+  if(InFight())       return;
+
+  if(sscanf(str,"%s schwingt einen Besen und wirbelt eine Menge Staub auf.",who)==1)
+  {
+    call_out("meckern",0,room);
+  }
+
+  if((time() > react_on_fart) && present("_furz_",room)) // nur wenn nicht
+  {                                                      // vor kurzem darauf
+    react_on_fart = time()+5;                            // reagiert
+    call_out("meckern2",0,room);
+  }
+
+  return;
+}
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+  if(TP && interactive(TP) && FMASTER->IsEnemy(TP)) return;
+
+  if(callouts > 5) return;
+
+  switch (gruppe) {
+    case "aengstlich":
+      call_out("reaction", 0, TP,
+        "Die Fee sagt: Du Memme!\n",
+        BSI("Was fuer eine Memme "+TP->name(WER)+" doch ist.","Die Fee sagt: ")
+      );
+      break;
+
+    case "aergerlich":
+      call_out("reaction", 0, TP,
+        "Die Fee taetschelt Dir den Kopf.\n",
+        "Die Fee taetschelt "+TP->name(WEM)+" den Kopf.\n"
+      );
+      break;
+
+    case "albern":
+      call_out("reaction", 0, TP,
+        "Die Fee laechelt Dich mitleidig an.\n",
+        "Die Fee laechelt "+TP->name(WEN)+" mitleidig an.\n"
+      );
+      break;
+
+    case "fies":
+      call_out("reaction", 0, TP,
+        "Die Fee laesst sich von Dir nicht aergern.\n",
+        "Die Fee laesst sich von "+TP->name(WER)+" nicht aergern.\n"
+      );
+      break;
+
+    case "frech":
+      call_out("reaction", 0, TP,
+        "Die Fee sagt: Lass das!\n",
+        "Die Fee sagt: Lass das, "+TP->name()+"!\n"
+      );
+      break;
+
+    case "froh":
+      call_out("reaction", 0, TP,
+        "Die Fee sagt: Du bist aber gut drauf heute!\n",
+        "Die Fee sagt: Du bist aber gut drauf heute, "+TP->name()+"!\n"
+      );
+      break;
+
+    case "intim":
+      if(TP->QueryProp(P_GENDER) == MALE)
+      {
+        call_out("reaction", 0, TP,
+          "Die Fee schmiegt sich an Dich an!\n",
+          "Die Fee schmiegt sich an "+TP->name(WEN)+" an.\n"
+        );
+      }
+      else
+      {
+        call_out("reaction", 0, TP,
+          "Die Fee gibt Dir eine Ohrfeige, das es nur so schallt.\n",
+          "Die Fee gibt "+TP->name(WEM)+" eine Ohrfeige, das es nur so "
+          "schallt.\n"
+        );
+      }
+      break;
+
+    case "nett":
+      call_out("reaction", 0, TP,
+        "Die Fee scheint noch eitler zu werden.\n",
+        "Die Fee scheint noch eitler zu werden.\n"
+      );
+      break;
+
+    case "neutral":
+      call_out("reaction", 0, TP,
+        "Die Fee beachtet Dich gar nicht.\n",
+        "Die Fee beachtet "+TP->name(WEN)+" gar nicht.\n");
+      break;
+
+    case "traurig":
+      call_out("reaction", 0, TP,
+        "Die Fee troestet Dich.\n",
+        "Die Fee troestet "+TP->name(WEN)+".\n");
+      break;
+  }
+  callouts++;
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void reaction(object ob, string macher, string andere)
+{
+  if (present(ob, ENV(TO)))
+  {
+    tell_object(ob, macher );
+    tell_room(ENV(TO), andere, ({ob}));
+  }
+  callouts--;
+}

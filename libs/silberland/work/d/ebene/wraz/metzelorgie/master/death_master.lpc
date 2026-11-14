@@ -1,0 +1,216 @@
+// death_master
+// regelt die Pfad-NPC staerke, abhaengig vom spieler (schlachtfeld)
+// Wraz / Mendralim
+// Update 21.01.2022: Speichern der 'standardnpc.deaths'
+
+#include "../def.h"
+
+#define DEATH_SAVE ZONE "save/save_deaths"
+
+// MAPPING DEATHS:
+// KEY (string): Spielername (lower_case)
+// 0. value (int): player_deaths,
+// 1. value (int): pfadnpc_kills,
+// 2. value (int): (deaths * 700) / kills ; 7 -> anzahl der "allein-pfadnpc"
+//                                         *100 -> floats sind orsch
+//    2. value = player_deaths to NPC_kills ratio
+//       1 wenn man im Schnitt 1 Mal pro Pfaddurchlauf stirbt (excl. Meisterschlaechter)
+//       0 .. 0.99 wenn man zu selten stirbt
+//       1.01 .. unendlich wenn man haeufiger stirbt
+mapping deaths;
+// MAPPING DEATHS_FOR_MODIFY_HP:
+//  sehr aehnlich zu deaths; wird verwendet in pfadnpc.c
+// KEY (string): Spielername (lower_case)
+// 0. value (*int): player_deaths,
+// 1. value (*int): (deaths * 700) / kills ; 7 -> anzahl der "allein-pfadnpc"
+// 2. value (int): Zeiger, auf welchen Index in den Arrays zuletzt geschrieben wurde
+mapping deaths_for_modify_hp;
+mapping standardnpc; // 1. value: player_deaths, 2.: npc_kills, 3.: lostxp (in [MXP])
+int last_backup=0;
+
+void create()
+{
+  if(is_clone(TO))
+  {
+    destruct(TO);
+    return;
+  }
+  seteuid(getuid(this_object())); // fuer zugriff auf dateien benoetigt
+
+  restore_object(DEATH_SAVE);
+  if(!deaths) deaths=allocate_mapping(10,3); // gehen Daten beim haendischen Laden verloren?
+  if(!standardnpc) standardnpc=allocate_mapping(10,3);
+  if(!deaths_for_modify_hp) deaths_for_modify_hp=allocate_mapping(10,3);
+  seteuid(getuid(TO));
+
+  return;
+}
+
+// Pfad-NPC: player-deaths, NPC-deaths
+int save_death(string player,int death,int kill)
+{
+  int current_index;
+  int death_sum;
+  int i;
+  int *death_array;
+  int array_size;
+
+  player=lower_case(player);
+  if(!player||player=="") return 0;
+  if(!deaths) restore_object(DEATH_SAVE); // if(!deaths||deaths==([]))
+
+  // Player noch nicht in Liste:
+  if(member(m_indices(deaths),player)==-1) deaths+=([player: 0; 0; 0]);
+
+  // add new death/kill
+  deaths[player,0] += death;
+  deaths[player,1] += kill;
+  // recalculate death*700-to-kill ratio (7 NPC, *100 weil floats orsch sind)
+  deaths[player,2] = (deaths[player,0]*7*100) /
+      ((deaths[player,1] > 0) ? deaths[player,1] : 1);
+
+  // *** DEATHS_FOR_MODIFY_HP ***
+  // Player noch nicht in Liste:
+  array_size = 140; // 140 array size --> entspricht 20 Pfaddurchlaeufen (7 Gegner pro Durchlauf)
+  death_array = allocate(array_size);
+  if(member(m_indices(deaths_for_modify_hp),player)==-1) 
+  {
+    for(i=0;i<array_size;i++) // Vorbefuellung der Arrays
+    {
+      if(!((i-1)%23)) death_array[i] = 1; // 7 Spielertode eintragen (der erste wird gleich ueberschrieben unten,
+        // uebrig bleiben dann 6)
+      else death_array[i] = 0;
+    }
+    deaths_for_modify_hp+=([player: death_array; 0; 0]); // ratio wird weiter unten berechnet
+  }
+
+  // add new death (if any)
+  current_index = deaths_for_modify_hp[player,2];
+  deaths_for_modify_hp[player,0][current_index] = death;
+  // recalculate death*700-to-kill ratio (7 NPC, *100 weil floats orsch sind)
+  for(i=0;i<sizeof(deaths_for_modify_hp[player,0]);i++)
+  {
+    death_sum += deaths_for_modify_hp[player,0][i];
+  }
+  deaths_for_modify_hp[player,1] = (death_sum*7*100) / array_size; // eigene "kill_sum" waere hier unnoetig,
+    // weil eh lauter 1 drinnen stehen wuerden, ausser bei den wenigen Toden (ob 140 oder 133 drin steht, 
+    // ist schon Wurst, dafuer ein Array gespart)
+  // increase current_index; restart with 0 if out of bounds
+  deaths_for_modify_hp[player,2] += 1;
+  deaths_for_modify_hp[player,2] = 
+    (deaths_for_modify_hp[player,2] >= sizeof(deaths_for_modify_hp[player,0]) ?
+     0 : deaths_for_modify_hp[player,2]);
+
+  DB(BS(player+": deaths_for_modify_hp ratio newly calculated = "
+    +(deaths_for_modify_hp[player,1]/100.0)));
+
+  // Return: nur deaths (nicht deaths_for_modify_hp)
+  return to_int(deaths[player,2]);
+}
+
+// for debugging
+mapping remove_caric()
+{
+  deaths_for_modify_hp -= (["caric"]);
+  return deaths_for_modify_hp;
+}
+
+// Pfad-NPC: Playerdeath
+int save_playerdeath(string player)
+{
+  return save_death(player,1,0);
+}
+
+// Pfad-NPC: NPCdeath
+int save_npcdeath(string player)
+{
+  return save_death(player,0,1);
+}
+
+// Pfad-NPC: Abfrage des Verhaeltnisses Playerdeaths / NPC-Kills
+float query_death_ratio(string player)
+{
+  player=lower_case(player);
+  if(!player||player=="") return -1.0;
+  if(!deaths_for_modify_hp) restore_object(DEATH_SAVE);
+  if(member(m_indices(deaths_for_modify_hp),player)==-1) return -1.0;
+
+  DB(BS(player+": deaths_for_modify_hp ratio = "
+    +(deaths_for_modify_hp[player,1]/100.0)));
+
+  // Trick spart floats im mapping (keine floats noetig)
+  return (to_float(deaths_for_modify_hp[player,1])/100.0);
+}
+
+// Pfad-NPC: Abfrage des gesamten Mappings
+mapping query_deaths_saves()
+{
+  return deaths;
+}
+
+// Pfad-NPC: Abfrage des Mappings fuer die HP-Modifikation
+mapping query_deaths_for_modify_hp()
+{
+  return deaths_for_modify_hp;
+}
+
+// Standardnpc-NPC: player-deaths, NPC-deaths
+int save_standardnpc(string player,int death,int kill, int lostxp)
+{
+  player=lower_case(player);
+  if(!player||player=="") return 0;
+  if(!standardnpc) restore_object(DEATH_SAVE);
+
+  // Player noch nicht in Liste:
+  if(member(m_indices(standardnpc),player)==-1) standardnpc+=([player: 0; 0; 0]);
+
+  // add new death/kill
+  standardnpc[player,0] += death;
+  standardnpc[player,1] += kill;
+  standardnpc[player,2] += (lostxp/1000000);
+
+  return standardnpc[player,0] + 10*standardnpc[player,1];
+}
+
+// Standardnpc: Playerdeath
+int save_standardnpc_playerdeath(string player, int lostxp)
+{
+  return save_standardnpc(player,1,0,lostxp);
+}
+
+// Standardnpc: NPCdeath
+int save_standardnpc_npcdeath(string player)
+{
+  return save_standardnpc(player,0,1,0);
+}
+
+
+// Masterobjekt speichern
+void do_save()
+{
+  if(last_backup < time()-604800) // backup jede Woche
+  {
+    save_object(ZONE "save/bkp/save_deaths_bkp_"+to_string(time()));
+    last_backup = time();
+  }
+  save_object(DEATH_SAVE);
+}
+
+void reset()
+{
+  if(!read_file(ZONE "master/death_master.lpc")) return;
+  do_save();
+}
+
+int remove()
+{
+  if(is_clone(TO)) {
+    destruct(TO);
+    return 1;
+  }
+
+  // nochmal speichern vor dem destruct
+  save_object(DEATH_SAVE);
+  destruct(TO);
+  return 1;
+}

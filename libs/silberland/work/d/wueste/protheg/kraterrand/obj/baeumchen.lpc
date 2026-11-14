@@ -1,0 +1,136 @@
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include "../def.h"
+#include "baeumchen.h"
+
+string owner;
+int stat, muenzen, finished;
+
+create() 
+{
+  if(!is_clone(ME)) return;
+  ::create();
+  
+  SetProp(P_SHORT, "Ein Samenkorn");
+  SetProp(P_LONG, 
+	  "Du haelst ein unscheinbares kleines Samenkorn in Deinen Haenden. "+
+	  "Es schimmert golden, wessen Samen das wohl ist?!\n");
+  SetProp(P_INFO, "Ob aus dem Samen etwas wird? Pflanz ihn doch mal!\n");
+  SetProp(P_NAME, "Samenkorn");
+  SetProp(P_VALUE, 200);
+  SetProp(P_WEIGHT, 10);
+  SetProp(P_MATERIAL, ([MAT_GOLD:70,MAT_MISC_PLANT:30]));
+  AddId(({"samen","samenkorn"}));
+  
+  AddCmd(({"pflanze","pflanz"}), "pflanzen");
+  AddCmd("baba", "remove");
+  muenzen=1;
+  stat=0;
+  finished=0;
+}
+
+pflanzen(string str) 
+{
+  mapping i;
+  object o;
+  
+  notify_fail("Was willst Du denn pflanzen?\n");
+  if(!str) return 0;
+  if(strstr(str, "samen")==-1) return 0;
+  if(present("\nsetzling",environment(TP)))
+    return write("Aber da reift schon ein kleines Baeumchen heran!\n"),1;
+  write("Du kniest Dich hin und pflanzt das Samenkorn vorsichtig ein.\n");
+  say(TPN+" kniet sich hin und vergraebt etwas.\n",TP);
+  TO->move(environment(TP), M_NOCHECK);
+  SetProp(P_INVIS,1);
+  AddId("\nsetzling");
+  RemoveId(({"samen","samenkorn"}));
+  SetProp(P_NOGET, "Dazu muesstest Du das Baeumchen schon rausreissen.\n");
+  AddCmd(({"reiss","reisse"}), "reissen");
+  call_out("wachsen", 30);
+  owner=getuid(TP);
+  return 1;
+}
+
+wachsen()
+{
+  int next;
+  
+  if(finished)
+    {
+      tell_room(MENV, "Der Baum verwelkt zusehends.\n");
+      muenzen-=20-random(100);
+      if(muenzen<=0) muenzen=0;
+      if(stat>=30)
+	{
+	  tell_room(MENV, 
+		    "Der Baum verrottet und verschwindet in der Erde.\n");
+	  call_out("remove",1);
+	}
+    }
+  else
+    {    
+      DB("Baum waechst !! Aktueller Status: "+stat+"!!\n");
+      if(QueryProp(P_INVIS)) SetProp(P_INVIS,0);
+      SetProp(P_SHORT, SHORT[stat]);
+      SetProp(P_LONG, LONG[stat] );
+      AddDetail("fruechte", "An dem "+NAME[stat]+" haengen "+muenzen+
+		" Muenzen.\n");
+      SetProp(P_NAME, NAME[stat]);
+      if(NAME[stat]=="Baum") AddCmd("ernte", "abernten");
+      if(stat) 
+	{
+	  RemoveAdjective(ADJEKTIV[stat-1]);
+	  RemoveId(lower_case(NAME[stat-1]));
+	}
+      AddAdjective(ADJEKTIV[stat]);
+      AddId(lower_case(NAME[stat]));
+      muenzen+=100*stat+random(1000*stat);
+    }
+  if(random(3)) stat++;
+  if(stat==5) finished=1;
+  next=30+random(stat*10);
+  call_out("wachsen", next);
+  DB("Nexter call_out in "+next+" Sekunden.\n");
+}
+
+reissen(string str)
+{
+  string what;
+  
+  notify_fail("Was willst Du denn ausreissen?\n");
+  if(!str) return 0;
+  if(sscanf(str,"%s aus",what)!=1) return 0;
+  if(what=="pflaenzchen"||what=="baeumchen")
+    {
+      if(getuid(TP)!=owner) 
+	return write("Das darf nur derjenige, der auch gepflanzt hat!\n"),1;
+      write("Mit einem Ruck reisst Du das unschuldige Ding heraus. "+
+	    (muenzen>=2 ? "Dabei verliert es "+muenzen+" Muenzen, die Du "+
+	     "Dir sofort einsteckst. " : "")+"Die Ueberreste verrotten "+
+	    "recht schnell, daher wirfst Du sie weg.\n");
+      say(TPN+" reisst einen jungen Baum aus dem Boden aus.\n",TP);
+      if(muenzen)
+	TP->AddMoney(muenzen);
+      call_out("remove",1);
+      return 1;
+    }
+  if(str=="baum")
+    {
+      if(getuid(TP)!=owner) 
+	return write("Das darf nur derjenige, der es gepflanzt hat!\n"),1;
+      else
+	return write("Du bist viel zu schwach, um einen ganzen Baum "+
+		     "ausreissen zu koennen! Aber man koennte ihn aber "+
+		     "vielleicht abernten?!\n"),1;
+      return 1;
+    }
+  return 0;
+}
+
+abernten(string str)
+{
+  return 1;
+}

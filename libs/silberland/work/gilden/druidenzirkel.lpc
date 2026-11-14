@@ -1,0 +1,1450 @@
+// Steinkreis des Druidenzirkels*// 17-03-97   Angrox@SL
+//
+// Als Vorlage diente die Berserkergilde von Feyaria
+//
+//   24-10-97: Verschiede Rassenbedingungen beim Aufsteigen
+//   22-10-97: Backupsicherung aktiviert
+//   29-09-97: Elementauswahl beim Beitritt  
+//   17-08-97: Details, Typos, Gildenaufgaben aufgearbeitet
+//   16-08-97: Bug der restrictions behoben
+//   23-07-97: Details, Gildenaufgaben erweitert
+//   11-06-97: Dokumentation, Tasks
+//   02-06-97: Erweiterung auf 15 Gildenlevels
+//   23-02-98: Beim Austreten im MAster Eintraege loeschen
+//             Magierbefehle der Gilde
+//             Debugs
+//   16-07-98  Anpassung der Tasks auf neuen res_checker
+//   18-08-98  Erweiterung auf Gildenlevel 16
+//   02-02-99  Funktionen im Reset ausgegliedert
+//   10-02-99  UnwearArmour() rausgenommen
+//   13-12-99: IS_LORD abfragen erweitert um member(DRUIDENMAGIER, TP)
+//             Funktion 'ta' (teile angrox mit) auf
+//             'tdm' geaendert (teile druidenmagier mit) 
+//   27-04-21: (2021): Angrox: Lvl16 rnd wird einfacher
+//
+
+
+/* 
+Alle wichtigen Funktionen sind in /std/gilden_ob.c 
+definiert! 
+gilden_ob.c -> gilde.c -> gilden_room.c
+*/
+inherit "std/gilden_room";
+inherit "std/living/std_skills";
+inherit "/gilden/obj/restriction_checker";
+inherit "/gilden/druidenzirkel/room/mystery_room";
+
+
+#include <properties.h>
+#include <rooms.h>
+#include <wizlevels.h>
+#include <language.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <ansi.h>
+
+#include "./druidenzirkel/druiden.h"
+#include "./druidenzirkel/mysteries.h"
+
+#define MAX_HANDKAMPF 130
+
+
+int zaehler=0;
+string int2string(int wert);
+string druid_element="";
+nosave void Channel(string msg);
+nosave string *feuer, *wasser, *eis, *humus, *erz, *luft;
+query_prevent_shadow() { return 1; }
+
+create()
+{
+  ::create();
+  SetProp( P_INT_SHORT, "Der Steinkreis des Druidenzirkels" ); 
+  SetProp( P_INT_LONG, BS(
+    "Du betrittst die kleine Lichtung und merkst sofort, dass Du Dich "
+    "an einer Staette alter Macht befindest. Die Lichtung wird von "
+    "sieben gigantischen Monolithen umringt, jeder viermal so gross wie "
+    "Du selbst. Einer der Monolithen ist in der Mitte zersplittert, die "
+    "Reste liegen auf dem Gras der Lichtung. Inmitten der Lichtung befindet "
+    "sich ein Altar in Form eines Steinblockes, in den sieben Symbole in "
+    "den Stein eingelassen sind. Zahlreiche Gestalten, bei denen es sich "
+    "wohl um Druiden handelt, befinden sich auf der Lichtung, in "
+    "verschiedene Handlungen vertieft. @@maghelp@@"));
+  SetProp(P_NAME, "Anvar");
+  SetProp(P_ARTICLE, 0);
+  AddDetail(({"raum", "lichtung"}),
+    "Die Lichtung strahlt eine gewisse Aura der Macht ab. In der Mitte "
+    "der Lichtung steht ein Steinblock, der offenbar eine Art Altar "
+    "darstellt. Um die Lichtung herum stehen 7 Monolithen, von denen der "
+    "suedliche zerbrochen ist.");
+
+  AddDetail( "handlungen", 
+      "Leider kannst Du nicht genau erkennen, was die Druiden da machen.");
+  
+  AddDetail("art", 
+    "Du wuerdest das schon als Altar bezeichnen.");
+ 
+  AddDetail("boden",
+    "Der Boden der Lichtung ist mit frischem, saftigem Gras bedeckt.");
+
+  AddDetail("gras",
+    "Das Gras sieht ungewoehnlich saftig aus.");
+
+  AddDetail("himmel",
+    "Der Himmel ist strahlend blau.");
+
+  AddDetail("reste",
+      "Die Reste des zerstoerten Monolithen liegen im Nordwesten.");
+  
+  AddDetail(({"monolithen", "monolith"}),
+    "Die Monolithen stehen, von der Lichtung aus gesehen, im Nordosten, "
+    "im Osten, im Suedosten, im Sueden, im Suedwesten, im Westen und im "
+    "Nordwesten. Um die genauer zu sehen, muesstest Du schon hingehen.");
+
+  AddDetail(({"nordosten", "osten", "suedosten", "suedwesten", "westen",
+	      "nordwesten"}),
+    "Da steht ein Monolith. Wenn Du naeher hingehst, koenntest Du ihn "
+    "genauer sehen.");
+
+  AddDetail("sueden",
+    "Der Monolith, der im Sueden steht, ist in der Mitte zerbrochen. "
+    "Wenn Du naeher hingehst, koenntest Du ihn genauer sehen.");
+
+  AddDetail(({"altar", "steinblock"}),
+    "Der Altar, oder besser gesagt der Steinblock, steht in der Mitte "
+    "der Lichtung. Er ist kreisrund und etwa einen Schritt hoch. Auf "
+    "der Oberseite sind sieben Symbole eingelassen. Eine seltsame Aura "
+    "der Macht geht von dem Altar aus. Auf einer Seite ist eine "
+    "Liste eingraviert, welche magisch leuchtet.");
+
+  AddDetail(({"seite", "altarseite"}),
+    "Auf einer Altarseite ist eine Liste eingraviert. "
+    "Sie leuchtet magisch.");
+  AddDetail("liste", "Du koenntest sie lesen.");
+  AddReadDetail(({"liste", "topliste"}), "@@liste@@");
+  AddDetail("form", 
+    "Der Altar ist kreisrund.");
+
+  AddDetail("mitte", 
+    "In der Mitte der Lichtung befindet sich ein Altar.");
+
+  AddDetail("aura",
+    "Du kannst es nicht beschreiben ... aber Du fuehlst Dich wohl hier.");
+
+  AddDetail("macht",
+    "Die Macht dieser Staette ist beinahe koerperlich zu spueren.");
+
+  AddDetail("symbole",
+    "Die Symbole zeigen folgendes: Ein Dreieck, zwei "
+    "uebereinanderliegende Wellenlinien, ein auf einer Kante stehendes "
+    "Quadrat oder Rechteck, eine Spirale, zwei Kreise, wobei einer im "
+    "anderen liegt, und 4 Linien, von denen je 2 parallel liegen und "
+    "die anderen zwei kreuzen.");
+
+  AddDetail("dreieck",
+    "Das Dreieck stellt das Symbol fuer das Element \"Feuer\" dar.");
+
+  AddDetail("wellenlinien",
+    "Die Wellenlinien stehen fuer das Element \"Wasser\".");
+
+  AddDetail("rechteck",
+    "Das Rechteck ist das Symbol des Elementes \"Erz\".");
+
+  AddDetail("spirale",
+    "Die Spirale ist das Symbol des Elementes \"Luft\".");
+
+  AddDetail(({"kreise", "kreis"}),
+    "Die Kreise stellen das Symbol des Elementes \"Humus\" dar.");
+
+  AddDetail("linien",
+    "Die Linien (#) stellen das Symbol des Elementes \"Eis\" "
+    "dar.");
+
+  AddDetail("quadrat",
+      "Das Quadrat steht fuer das Element \"Erz\".");
+  
+  AddDetail(({"oberseite", "oberflaeche"}),
+    "Auf der steinernen Oberflaeche des Altars sind sieben Symbole "
+    "eingelassen.");
+
+  AddDetail("gestalten",
+    "Die Druiden sind hier wohl zum Meditieren hergekommen.");
+
+  AddDetail("druiden",
+    "Es befinden sich etliche hier. Am Besten stoerst Du sie nicht!");
+
+  AddDetail("meditieren",
+    "Stoer sie besser nicht.\n");
+
+  SetProp( P_LIGHT, 1 );
+  SetProp( P_INDOORS, 0 );
+  SetProp(P_ENVIRONMENT,([ENV_TERRAIN:TT_FOREST, ENV_TEMPERATURE: 13]) );
+  SetProp(P_GUILD_DEFAULT_SPELLBOOK,"druiden_spells"); 
+         //Es muss ein gueltiges Spellbook festgelegt werden!
+  SetProp(P_GUILD_RESTRICTIONS, 
+      ([P_LEVEL: 6,A_INT  : 10, P_QP   : 20, SR_BAD: -100, SR_GOOD: 100,
+        SR_FUN : "Test1", SR_EXCLUDE_RACE: ({"Troll"})]) );
+         // Die Aufnahmebedingungen fuer die Gilde
+
+
+/* -----------------------------------------------------
+Fuer jede Gildenstufe (!= Spielerstufe) werden bestimmte
+Bedingungen festgelegt. Diese Bedingungen werden in Form
+eines Mappings fuer jede (!) Stufe einzelnen angegeben.
+Die Defines sind in der Gildendoku nachzulesen.
+----------------------------------------------------- */
+  SetProp(P_GUILD_LEVELS,([
+       1: ([ SR_FUN: "Test1", A_INT: 10, P_LEVEL: 6,
+             P_QP: 20, SR_BAD: -100, SR_GOOD: 100]),
+       2: ([ SR_FUN: "Test", A_INT: 11, P_LEVEL: 8,
+             SR_BAD: -500, SR_GOOD: 500]),
+       3: ([ SR_FUN: "Test", A_INT: 12, P_LEVEL: 10, 
+             SR_BAD: -500, SR_GOOD: 500]),
+       4: ([ SR_FUN: "Test", A_INT: 13, P_LEVEL: 12,
+             SR_BAD: -500, SR_GOOD: 500]),
+       5: ([ SR_FUN: "Test", A_INT: 14, P_LEVEL: 16,
+             SR_BAD: -500, SR_GOOD: 500]),
+       6: ([ SR_FUN: "Test", A_INT: 15, P_LEVEL: 18,
+             SR_BAD: -500, SR_GOOD: 500]),
+       7: ([ SR_FUN: "Test", A_INT: 16, P_LEVEL: 22,
+             SR_BAD: -500, SR_GOOD: 500]),
+       8: ([ SR_FUN: "Test", A_INT: 17, P_LEVEL: 24, 
+             SR_BAD: -500, SR_GOOD: 500]),
+       9: ([ SR_FUN: "Test", A_INT: 20, P_LEVEL: 28, 
+             SR_BAD: -500, SR_GOOD: 500]),
+      10: ([ SR_FUN: "Test", A_INT: 21, P_LEVEL:32, 
+             SR_BAD: -300, SR_GOOD: 300]),
+      11: ([ SR_FUN: "Test", A_INT: 22,  P_LEVEL: 34, 
+             SR_SEER: 1, SR_BAD: -300, SR_GOOD: 300]),
+      12: ([ SR_FUN: "Test", A_INT: 23, A_DEX: 21,
+             P_LEVEL: 36, SR_BAD: -250, SR_GOOD: 250]),
+      13: ([ SR_FUN: "Test",A_INT: 25, A_DEX: 22,
+             P_LEVEL: 40, SR_BAD: -200, SR_GOOD: 200]),
+      14: ([ SR_FUN: "Test", A_INT: 27, A_DEX: 23,
+             P_LEVEL: 45, SR_BAD: -150, SR_GOOD: 150,
+             SM_RACE:(["Zwerg":([ A_INT:25]),
+                       "Oger": ([A_INT:26]),
+                       "Gaffo": ([A_INT:26])])]),
+      15: ([ SR_FUN: "Test",A_INT: 30, A_DEX: 25,
+             P_LEVEL: 50, SR_BAD: -100, SR_GOOD: 100,
+             SM_RACE:(["Zwerg":([ A_INT:25]),
+                       "Oger": ([A_INT:26]),
+                       "Mensch": ([A_INT:29]),
+                      "Gaffo": ([A_INT:26])])]),
+    ])); 
+
+/* ---------------------------------------------------------
+Wenn der Druide noch kein Seher ist, dann werden diese 
+Titel verwendet, die in Form eines Mappings angegeben 
+werden: 
+--------------------------------------------------------- */
+ SetProp(P_GUILD_MALE_TITLES,
+     ([1 : "der unwissende Schueler",
+       2 : "der Druidenlehrling",
+       3 : "der Jungdruide",
+       4 : "der Hilfselementarist",
+       5 : "der Elementaristadept",
+       6 : "der angehende Elementarist",
+       7 : "der Elementarist", 
+       8 : "der fortgeschrittene Elementarist", 
+       9 : "der baldige Elementarbeschwoerer",
+       10: "der Elementarbeschwoerer",
+       11: "der erfahrene Elementarbeschwoerer",
+       12: "der Elementarbeherrscher", 
+       13: "der Meister der Elemente",
+       14: "der Grossmeister der Elemente", 
+       15: "der Herr der Elemente", 
+       16: "der Herr der sieben Elemente" ]));
+  SetProp(P_GUILD_FEMALE_TITLES,
+     ([1 : "die unwissende Schuelerin",
+       2 : "das Druidenlehrmaedchen",
+       3 : "die Jungdruidin",
+       4 : "die Hilfselementaristin",
+       5 : "die Elementaristadeptin",
+       6 : "die angehende Elementaristin",
+       7 : "die Elementaristin", 
+       8 : "die fortgeschrittene Elementaristin", 
+       9 : "die baldige Elementarbeschwoererin",
+       10: "die Elementarbeschwoererin",
+       11: "die erfahrene Elementarbeschwoererin",
+       12: "die Elementarbeherrscherin", 
+       13: "die Meisterin der Elemente",
+       14: "die Grossmeisterin der Elemente", 
+       15: "die Herrin der Elemente", 
+       16: "die Herrin der sieben Elemente" ]));
+ 
+  
+/* ---------------------------------------------------------
+Die gueltigen Spells des Spellbooks muessen auch im Gilden-
+object definiert werden:
+--------------------------------------------------------- */
+  AddSpell("feuerwusel");
+  AddSpell("erkenne");
+  AddSpell("schaetz");
+  AddSpell("elementarpanzer");
+  AddSpell("behandle"); 
+  AddSpell("laehme");
+
+  //AddSpell("entgifte");
+  //AddSpell("entfrosche");
+  //AddSpell("staerke");
+
+  AddSpell("elementarhand");
+
+  AddSpell("feuerpfeil");
+  AddSpell("eispfeil");
+  AddSpell("luftpfeil");
+  AddSpell("erzpfeil");
+  AddSpell("wasserpfeil");
+
+  AddSpell("feuerball");
+  AddSpell("froststrahl");
+  AddSpell("wasserstrahl");
+  AddSpell("erzstrahl");
+  AddSpell("windstoss");
+
+  AddSpell("feuersturm");
+  AddSpell("sturmflut");
+  AddSpell("windhose");
+  AddSpell("hagelschlag");
+  AddSpell("erdbeben");
+
+  AddSpell("beherrschung"); 
+  AddSpell("luftelementar");
+  AddSpell("erzelementar");
+  AddSpell("wasserelementar");
+  AddSpell("eiselementar");
+  AddSpell("humuselementar");
+  AddSpell("feuerelementar");
+
+  feuer=({"feuerwusel", "feuerpfeil", "feuerball", "feuersturm",
+      "feuerelementar"});
+  wasser=({"wasserpfeil", "wasserstrahl", "sturmflut", "wasserelementar"});
+  eis=({"eispfeil", "froststrahl", "hagelschlag", "eiselementar"});
+  erz=({"erzpfeil", "erzstrahl", "erdbeben", "erzelementar"});
+  luft=({"luftpfeil", "windstoss", "windhose", "luftelementar"});
+  humus=({"erkenne", "schaetz", "laehme", "behandle", "humuselementar"});
+
+/* Eventuelle Skills werden ebenfalls mal definiert: */
+  AddSkill(SK_CASTING, ([ SI_SKILLFUNC : "Zaubern", SI_DIFFICULTY:200]));
+  AddSkill(FIGHT(WT_HANDS), ([ SI_SKILLFUNC:"HandKampf", SI_DIFFICULTY:150 ]));
+
+
+  AddItem(NPC("anvar"), REFRESH_DESTRUCT);
+
+
+  //AddExit( "gilde", "in die Abenteurergilde#/gilden/abenteurer" );
+  AddExit("norden", DROOM("l_monolith"));
+  AddExit("nordosten", DROOM("w_monolith")); 
+  AddExit("osten", DROOM("h_monolith")); 
+  AddExit("suedosten", DROOM("wald"));
+  AddExit("sueden", DROOM("ee_monolith"));
+  AddExit("suedwesten", DROOM("f_monolith"));
+  AddExit("westen", DROOM("e_monolith"));
+  AddExit("nordwesten", DROOM("no_monolith")); 
+
+
+  AddCmd(({"tritt","trete"}),"tritt");
+  AddCmd(({ "lerne", "lern" }), "OwnLearnSpell" );
+  AddCmd("austritt","austreten");
+  AddCmd("beitritt", "falscher_syntax");
+  AddCmd( ({"fertigkeiten"}), "faehigkeiten");
+  AddCmd(({"gilde", "dgilde"}), "magfunc");
+  AddCmd(({"meditiere", "meditier"}), "cmd_meditieren");
+}
+
+//
+// INIT 
+//
+void init() {
+  string txt;
+  object amulett, ob;
+  int x, y, rnd, l_stat;
+  mapping help_map;
+  mixed help_mixed;
+  ::init();
+  // STUFE 16 Check :)
+  if (interactive(TP) && IsGuildMember(TP) && 
+      TP->QueryProp(P_GUILD_LEVEL)==15 && TP->QueryProp(P_LEVEL)>=60 &&
+      TP->QueryProp(P_GUILD_RATING) > 9000) 
+  {
+    amulett=present("\ndruidenamulett", TP);
+    l_stat=call_other(DRUIDENMASTER, "QueryLvl16Quest", TP);
+    txt=sprintf("Druide:[%O]", TP);
+    if (objectp(amulett) && (amulett->Query16() || IS_ARCH(TP)) && 
+        (l_stat==1 || l_stat==99))
+    {
+      if(l_stat==1) rnd=50;
+      else rnd=150;
+      if( member(call_other(DRUIDENMASTER, "QueryLegendary"), getuid(TP)) != -1)
+        rnd /= 2; // Legendaere haben hoehre chance... da wirds ja zeit dass die 16 werden
+      txt+=", 1st check ok";
+      if(!(x=random(rnd))) {
+        call_out("GetLvl16Quest", (y=random(300)+190), TP);
+        tdm(sprintf("\n%s***%s %s koennte Aufgabe 1 fuer GST 16 bekommen!\n", 
+            ANSI_BLINK+ANSI_RED, ANSI_NORMAL, CAP(getuid(TP))));
+        write_file(LOG("lvl16quest"), sprintf("%s: %s koennte die erste "
+            "Aufgabe bekommen (%ds)!\n", dtime(time()), CAP(getuid(TP)), x));
+      }
+      txt+=sprintf(", rnd: %d(%d)", x, rnd);
+      amulett->Del16();
+      txt+="\n";
+      if(!IS_LEARNER(TP))
+        write_file(LOG("lvl16rnd"), sprintf("%s: %s", dtime(time())[5..], txt));
+    }
+    if(objectp(ob=present(TASKITEM, TP)) && (time()-ob->QueryProp(E_TIME)) > 
+        43200 && call_other(DRUIDENMASTER, "QueryLvl16Quest", TP)==2)
+    {
+      call_out("Lvl16Failed", 0, TP);
+    }
+    if(objectp(ob=present(TASKITEM, TP)) && (time()-ob->QueryProp(E_TIME)) > 
+        345600 && call_other(DRUIDENMASTER, "QueryLvl16Quest", TP)==3)
+    {
+      call_out("Lvl16Failed", 0, TP);
+    }
+  }
+
+}
+
+
+// TEST
+mixed test123() {
+ write(sprintf("%O\n", QueryProp(P_GUILD_LEVELS)[TP->QueryProp(P_GUILD_LEVEL)+1]));
+ return call_other(RES_CHECKER, "check_restrictions", TP,
+    QueryProp(P_GUILD_LEVELS)[TP->QueryProp(P_GUILD_LEVEL)+1]);
+}
+
+
+
+string maghelp()
+{
+ if(!IS_LORD(TP) && member(DRUIDENMAGIER, TP->query_real_name())==-1) return "";
+ return "\nMagInfo: Hilfe fuer Magierbefehle mit 'gilde hilfe'.";
+}
+/* Funktionen fuer Magier */
+int magfunc(mixed str)
+{
+  mixed *txt;
+  object ob;
+  int err, task;
+  string name;
+  if(!IS_LORD(TP) && member(DRUIDENMAGIER, TP->query_real_name())==-1) return 0;
+  if(!str) str="hilfe";
+  if(str=="hilfe") {
+   write("Folgende Befehle sind moeglich:\n"
+         "gilde hilfe  : Dieses hier\n"
+         "gilde backup : Backup des Memberfiles\n"
+         "gilde restore: Zurueckspielen des Backups\n"
+         "gilde toplist: Updaten der Topliste\n"
+         "gilde set_task <name> <task> : Setzen eines Tasks\n"
+         "gilde del_task <name> <task> : Loeschen eines Tasks\n"
+         "gilde memberdel <name> : Spieler aus Gilde loeschen\n");
+   return 1;
+  }
+  txt=explode(str, " ");
+  if(member(({"backup", "restore", "set_task", "del_task"}), txt[0])!=-1) {
+    if(!IS_ARCH(TP) && member(DRUIDENMAGIER, TP->query_real_name())==-1) {
+      write_secure_log(sprintf("Versuchte Aenderung im Gildenmaster (%s) "
+		       "von %s\n", str, CAP(getuid(TP))));
+      write("Befehl nicht ausfuehrbar. Grund: Magierlevel < 60\n");
+      return 1;
+    }
+    else write_file(LOG("changes"), sprintf("Aenderung im Gildenmaster"
+           "(%s): gilde %s\n", CAP(getuid(TP)), str));
+  }
+  
+  if(txt[0]=="memberdel") {
+    if(sizeof(txt)<2) {
+     tell_object(TP, "Syntax: gilde memberdel <name> \n");
+     return 1;
+    }
+    name=lower_case(to_string(txt[1]));
+    err=call_other(DRUIDENMASTER, "DeleteMember", name);
+    if(err!=1) {
+      tell_object(TP, sprintf("DeleteMember: Fehler. Code %d\n", err));
+      return 1;
+    }
+    err=call_other(DRUIDENMASTER, "DeleteTopEntry", name);
+    if(err!=1) {
+      tell_object(TP, "Task geloescht.\n");
+      return 1;
+    }
+  }
+ 
+  if(txt[0]=="backup") {
+    call_other(DRUIDENMASTER, "DoBackup"); 
+    tell_object(TP, "Kopiere members/members.o nach "
+              "backup/members_backup.o\n");
+    return 1;
+  }
+  if(txt[0]=="restore") {
+    if(call_other(DRUIDENMASTER, "DoRestore")==-2){
+      tell_object(TP, "Fehler! Members.o konnte nicht restored "
+                  "werden!\n");
+      return 1;
+    } 
+    tell_object(TP, "Kopiere backup/members_backup.o nach "
+                  "members/members.o\n");
+    return 1;
+  }
+  if(txt[0]=="toplist") {
+    call_other(DRUIDENMASTER, "UpdateMemberLevels");
+    call_other(DRUIDENMASTER, "UpdateTopList");
+    // call_other(DRUIDENMASTER, "MakeReadList");
+    // call_other(DRUIDENMASTER, "SetNumberOne");
+    tell_object(TP,"Memberliste ist in Kuerze (ca. 15 Sekunden) up-to-date.\n");
+    return 1;
+  }
+  if(txt[0]=="set_task") {
+    if(sizeof(txt)<3) {
+      tell_object(TP, "Syntax: gilde set_task <name> <Task>\n");
+      return 1;
+    }
+    task=to_int(txt[2]);
+    name=lower_case(to_string(txt[1]));
+    if(!(ob=find_player(name)) && !(ob=find_netdead(name))) {
+      tell_object(TP, "Spieler nicht im Speicher. Abbruch.\n");
+      return 1;
+    }
+    err=call_other(DRUIDENMASTER, "SetTask", ob, task);
+    if(err!=1) {
+       tell_object(TP, sprintf("Fehler. Code %d\n", err));
+       return 1;
+    }
+    tell_object(TP, "Task gesetzt.\n");
+    return 1;
+ } 
+ if(txt[0]=="del_task") {
+   if(sizeof(txt)<3) {
+     tell_object(TP, "Syntax: gilde del_task <name> <Task>\n");
+     return 1;
+   }
+   task=to_int(txt[2]);
+   name=lower_case(to_string(txt[1]));
+   if(!(ob=find_player(name)) && !(ob=find_netdead(name))) {
+     tell_object(TP, "Spieler nicht im Speicher. Abbruch.\n");
+     return 1;
+    }
+   err=call_other(DRUIDENMASTER, "DeleteTask", ob, task);
+   if(err!=1) {
+      tell_object(TP, sprintf("Fehler. Code %d\n", err));
+      return 1;
+   }
+    tell_object(TP, "Task geloescht.\n");
+    return 1;
+ }
+
+  tell_object(TP, "Befehl nicht moeglich!\n");
+  return 1;
+}
+
+
+/* Bestenliste */
+string liste()
+{
+ TP->More("\nDIE BESTEN DER DRUIDEN:\n"+read_file(REALTOPLIST));
+ tell_room(TO, BS(sprintf("%s schaut sich den Altar genauer an.", 
+           TP->Name(WER))), ({TP}));
+ return "";
+}
+
+
+
+/* Backup der Memberliste */
+reset()
+{
+  ::reset();
+  zaehler++;
+  if(zaehler==5) {
+    call_other(DRUIDENMASTER, "DoBackup"); 
+    zaehler=0;
+  }
+}
+
+// Funktionen zwecks resetlag ueber crontab 
+void toplist_update() {
+  call_other(DRUIDENMASTER, "UpdateMemberLevels");
+  call_other(DRUIDENMASTER, "UpdateTopList"); 
+  // call_other(DRUIDENMASTER, "MakeReadList"); 
+  // call_other(DRUIDENMASTER, "SetNumberOne");
+  return;
+}
+
+/* Skillablilty am Anfang in einen Bereich 3000..5000 setzen */
+nosave int InitialSkillAbility(mapping ski, object pl) 
+{
+  int value;
+  if (!ski || !pl) return 0;
+  value=::InitialSkillAbility(ski, pl);
+  if(value<3000) value=3000;
+  else if(value>5000) value=5000;
+  return value;
+}
+
+
+int GuildRating(object pl) {
+  string c_element, *z;
+  mapping ski;
+  string *sk;
+  int i, cnt, sum;
+  closure qsa;
+  
+  if (!IsGuildMember(pl)||!query_once_interactive(pl))
+       return 0;
+  if (!(ski = QueryProp(P_GUILD_SKILLS)) ||
+      !(qsa = symbol_function("QuerySkillAbility",pl)))
+     return 0;
+  
+  sk=m_indices(ski);
+  switch(call_other(DRUIDENMASTER, "GetDruidElement", pl)) {
+    case FEUER  : z=wasser; break;
+    case WASSER : z=feuer;  break;
+    case EIS    : z=humus;  break;
+    case HUMUS  : z=eis;    break;
+    case ERZ    : z=luft;   break;
+    case LUFT   : z=erz;    break;
+    default     : z=({});             
+  }
+  if (pl->QueryProp(P_GUILD_LEVEL) == 16) // Auf Stufe 16 zaehlen allen Zauber
+    z = ({});
+  sk-=z;
+  //tell_angrox(sprintf("%O\n", sk));
+  cnt=sizeof(sk);
+
+  for (i=cnt-1, sum=0; i>=0; i--)
+  sum += funcall(qsa, sk[i]);
+
+  sum = sum/cnt;
+  if (sum < 0)
+  sum = 0;
+  else if (sum > MAX_ABILITY)
+  sum = MAX_ABILITY;
+  
+  return pl->SetProp(P_GUILD_RATING, sum);
+}
+  
+
+/* So gehts nicht :> */
+int falscher_syntax()
+{
+  if(!present("anvar", TO)) {
+    write(BS("Ohne Anvar laeuft hier gar nichts!\n"));
+    return 1;
+  }
+  write(BSA("Du musst Dich nun entscheiden, welchem Element Du "
+            "beitreten willst. (Syntax: \"trete <element> bei\")"
+            "Du kannst zwischen Humus, Eis, Wasser, Feuer, Erz "
+            "und Luft auswaehlen.",
+             "Anvar teilt Dir mit: "));
+  return 1;
+}
+
+/* Austritt aus der Gilde */
+int austreten()
+{
+  object ob;
+  if(!present("anvar", TO)) {
+    write(BS("Ohne Anvar laeuft hier gar nichts!\n"));
+    return 1;
+  }          
+  if(!IsGuildMember(TP))
+    return 1;
+  this_player()->SetProp( P_GUILD_LEVEL, 0);
+  WLOG("/log/gilden/druiden", "tritt aus der Gilde aus");
+  write(BSA("Wir halten Dich nicht auf ... ziehe Deines Weges...\n", 
+      "Anvar sagt traurig: "));
+  say(BSA("Wir halten Dich nicht auf, "+CAP(getuid(TP))+" ... ziehe "
+      "Deines Weges...\n", "Anvar sagt traurig: "));
+  if(ob=present("\ndruidenamulett",TP)) 
+    {
+      ob->SetProp(P_CURSED, 0);
+      ob->remove();
+    }
+  call_other(DRUIDENMASTER, "DeleteMember", TP);
+  call_other(DRUIDENMASTER, "DeleteTopEntry", getuid(TP));
+  call_other(DRUIDENMASTER, "DeleteLegendary", getuid(TP));
+  call_other(ABILMASTER, "DeleteEntry", getuid(TP));
+  //rm(LOG(getuid(TP)+".log"));
+  Channel(CAP(getuid(TP))+" ist gerade aus dem Druidenzirkel ausgetreten.");
+  return ::austreten();
+}
+
+/* Gildenbeitritt */
+int tritt(string str)
+{
+  string wo, restr;
+  string not_fail;
+  if(!present("anvar", TO)) {
+    write(BS("Ohne Anvar laeuft hier gar nichts!\n"));
+    return 1;
+  } 
+  not_fail="Du musst Dich nun zwischen den Elementen entscheiden. "
+    "Waehle weise, denn das Element, welches Du waehlst, "
+    "gewaehrt Dir viele Vorteile. Die Syntax lautet: "
+    "\"trete <element> bei\".";
+  if (!str)
+  {
+    //write(BSA(not_fail, "Anvar teilt Dir mit: "));
+    return 0;
+  }
+  if(sscanf(str, "%s bei", wo)!=1)
+  {
+    //write(BSA(not_fail, "Anvar teilt Dir mit: "));
+    return 0; 
+  }
+  if(wo!="eis" && wo!="feuer" && wo!="wasser" && wo!="humus" &&
+      wo!="erz" && wo!="luft")
+  {
+    TP->Message(BSA(not_fail, "Anvar teilt Dir mit: "), MSGFLAG_TELL);
+    return 1;
+  }
+  druid_element=wo;
+  if(IsGuildMember(TP))
+  {
+    TP->Message(BSA("Aber Du bist doch schon Mitglied!", "Anvar staunt: "),
+        MSGFLAG_SAY);
+    return 1;
+  }
+
+  restr=call_other(RES_CHECKER, "check_restrictions", TP,
+      QueryProp(P_GUILD_RESTRICTIONS));
+  if(stringp(restr))
+  {
+    Message(BSA(sprintf("Du erfuellst nicht alle Anforderungen, "
+            "um Druide zu werden, %s! %s\n", TP->Name(WER), restr), 
+        "Anvar sagt: "), MSGFLAG_SAY);
+    return 1;
+  }
+  return beitreten();  
+}
+ 
+
+/* Eigentliche Beitrittsfunktion, wird von tritt() aufgerufen */
+int beitreten()
+{
+  int b;
+  object ob;
+  if( (b = ::beitreten()) < 0) return 1;
+  TP->Message(BSA("Als Zeichen der Mitgliedschaft im Druidenzirkel bekommst "
+            "Du ein Amulett, dass auch als Fokus fuer Deine Zauberkraefte "
+            "dient. Ohne dieses Amulett kannst Du nicht zaubern.\n", 
+            "Anvar sagt: "), MSGFLAG_SAY);
+  Message(BSA("Als Zeichen der Mitgliedschaft im Druidenzirkel bekommst "
+            "Du ein Amulett, dass auch als Fokus fuer Deine Zauberkraefte "
+            "dient. Ohne dieses Amulett kannst Du nicht zaubern.\n", 
+            "Anvar sagt zu "+CAP(getuid(TP))+": "),
+      MSGFLAG_SAY | MSGFLAG_NO_TP);
+  write(BS("Anvar ueberreicht Dir ein Amulett.\n"));
+  say(BS("Anvar ueberreicht "+CAP(getuid(TP))+" ein Amulett.\n"));
+  ob=clone_object(ARMOUR("d_amulett"));
+  ob->move(TP, M_NOCHECK);
+  call_other(DRUIDENMASTER, "AddMember", this_player());
+  call_other(DRUIDENMASTER, "SetDruidElement", TP, druid_element);
+  druid_element="";
+  write(BSA("Willkommen im Zirkel der Druiden!\n", "Anvar freut sich: "));
+  say(BSA("Willkommen im Zirkel der Druiden, "+CAP(getuid(TP))+"!\n"
+         , "Anvar freut sich: "));
+  TP->Message(BSA("So, nun einige wichtige Dinge: Du kannst nur zaubern, "
+        "wenn Du kein Frosch, kein Geist und nicht blind bist. Weiters "
+        "benoetigst Du zum Zaubern das Druidenamulett. Solltest Du es "
+        "wider erwarten verlieren, frag mich danach und ich gebe Dir ein "
+        "Neues. Wenn Du denkst, Du koennest eine Stufe aufsteigen, so "
+        "kannst Du das mit \"erhoehe Gildenstufe\" probieren. Ich kann "
+        "Dir auch Deine Fertigkeiten in den Zaubern sagen, der Syntax "
+        "dazu lautet \"fertigkeiten\".", "Anvar teilt Dir mit: "),
+      MSGFLAG_TELL); 
+  say(BS("Anvar gibt "+CAP(getuid(TP))+" ein Pergament.\n"));
+  write(BS("Anvar gibt Dir ein Pergament."));
+  ob=clone_object(OBJ("pergament"));
+  ob->move(TP, M_NOCHECK);   
+  WLOG("/log/gilden/druiden", "tritt in die Gilde ein.");
+  call_other(DRUIDENMASTER, "AddMember", this_player());
+  this_player()->ModifySkill(FIGHT(WT_HANDS),
+    QuerySkill(FIGHT(WT_HANDS)),0,"druidenzirkel");
+  this_player()->ModifySkill(SK_CASTING,
+     QuerySkill(SK_CASTING),0, "druidenzirkel" );
+  write_file(MEMBER_LOG(getuid(TP)+".log"),
+             dtime(time())+": "+CAP(getuid(TP))+" ist "
+             +"in die Gilde eingetreten.\n");
+  Channel(CAP(getuid(TP))+" ist gerade in den Druidenzirkel eingetreten.");
+  return b;
+}
+
+/* Aufstieg */
+advance(string str)
+{
+  mixed b, restr;
+  object anvar;
+  if(!anvar=present("anvar", TO)) {
+    write(BS("Ohne Anvar laeuft hier gar nichts!\n"));
+    return 1;
+  } 
+    
+  notify_fail(BSA("Du kannst hier nur die Gildenstufe erhoehen.", 
+    "Anvar sagt: "));
+  if(!str) return 0;
+  if(!IsGuildMember(TP)) {
+    tell_room(TO, BSA(sprintf("Du bist kein Druide, %s", TP->Name(WER)),
+        "Anvar sagt: "));  
+    return 1;
+  }
+  if(str=="stufe" || str2attr(str))
+     return 0;
+  if(str=="gildenstufe" || str=="gilde") {
+    if(TP->QueryProp(P_GUILD_LEVEL)>=15) {
+       write(BSA("Du kannst nicht mehr weiter aufsteigen.\n", 
+                 "Anvar sagt: "));
+       say(BSA("Du kannst nicht mehr weiter aufsteigen, "
+             +CAP(getuid(TP))+".\n", "Anvar sagt: "));
+       return 1;
+    }
+
+    if((restr=call_other(RES_CHECKER, "check_restrictions", TP,
+          QueryProp(P_GUILD_LEVELS)[TP->QueryProp(P_GUILD_LEVEL)+1]))!=0 )
+    {
+      Message(BSA(sprintf("Du erfuellst nicht alle Anforderungen, "
+         "um aufsteigen zu koennen, %s! %s\n", TP->Name(WER), restr), 
+        "Anvar sagt: "), MSGFLAG_SAY);
+      return 1;
+    }
+    //write(restr+"\n");
+    anvar->_set_druid_info();
+    do_advance();
+    if(TP->QueryProp(P_GUILD_LEVEL)>14) {
+      TP->Message(BSA("Sei willkommen auf der Ebene der "
+               "absoluten Vollkommenheit.\n", "Anvar spricht "
+               "feierlich: "), MSGFLAG_SAY); 
+      Message(BSA("Sei willkommen auf der Ebene der "
+               "absoluten Vollkommenheit, "+CAP(getuid(TP))+
+              ".\n", "Anvar spricht feierlich: "), MSGFLAG_SAY|MSGFLAG_NO_TP); 
+      write_file(MEMBER_LOG(getuid(TP)+".log"),
+             dtime(time())+": "+CAP(getuid(TP))+" hat "
+              "die hoechste Stufe erreicht.\n");    
+      Channel(CAP(getuid(TP))+" hat im Druidenzirkel gerade Gildenstufe 15 "
+               "und somit die Vollendung erreicht.");
+      return 1;
+    } 
+    TP->Message(BSA("Sei willkommen auf einer hoeheren "
+               "Ebene der Vollkommenheit.\n", "Anvar spricht "
+               "feierlich: "), MSGFLAG_SAY);
+    Message(BSA("Sei willkommen auf einer hoeheren "
+               "Ebene der Vollkommenheit, "+CAP(getuid(TP))+
+              ".\n", "Anvar spricht feierlich: "), MSGFLAG_SAY);     
+    write_file(MEMBER_LOG(getuid(TP)+".log"),
+             dtime(time())+": "+CAP(getuid(TP))+" ist "
+              "eine Stufe aufgestiegen.\n"); 
+    Channel(CAP(getuid(TP))+" hat im Druidenzirkel Gildenstufe "
+              +TP->QueryProp(P_GUILD_LEVEL)+" erreicht.");
+    call_other(DRUIDENMASTER, "SetXp", TP, TP->QueryProp(P_XP)+
+              XP_PER_LEVEL[TP->QueryProp(P_GUILD_LEVEL)]);
+    return 1; 
+  }
+    /*
+    else {
+      tell_room(ENV(TP), BSA(sprintf("Du erfuellst nicht alle Anforderungen, "
+        +"um aufsteigen zu koennen, %s! %s\n", TP->Name(WER), restr), 
+        "Anvar sagt: "));
+      return 1;
+    }
+    */
+  return 1;
+}
+
+/* Spells lernen */
+OwnLearnSpell(string str)
+{
+ 
+  if(!present("anvar", TO)) {
+     write(BS("Ohne Anvar laeuft hier gar nichts!\n"));
+     return 1;
+  }   
+  if(!IsGuildMember(TP))
+  {
+    write(BSA("Du bist kein Mitglied dieser Gilde!\n", "Anvar sagt: "));
+    return 1;
+  }
+  notify_fail("Was moechtest Du hier lernen?\n");
+  if(!str)
+  {
+    TP->Message(BSA("Welchen Zauber moechtest Du lernen? Du kannst mich "
+         "nach auch nach den Zaubern fragen!", "Anvar sagt: "), MSGFLAG_SAY);
+    Message(BSA("Welchen Zauber moechtest Du lernen? Du kannst mich "
+         "nach auch nach den Zaubern fragen!",
+         "Anvar sagt zu "+CAP(getuid(TP))+": "), MSGFLAG_SAY);
+    return 1;
+  }
+    
+  return LearnSpell(str);
+}
+
+
+
+/*
+//
+// Senden auf dem Channel info
+//
+*/
+/*
+nosave void Channel(string msg)
+{
+    //if(!interactive(previous_object()))
+	// return;
+    catch(VOICEMASTER->SendToChannel("Info",TO,SAY,msg));
+}
+*/
+
+// Hier erfolgt die Ausgabe auf den Channel
+nosave void Channel(string msg) {
+  CHMASTER->join("Info",TO);
+  CHMASTER->send("Info",TO,msg,MSG_SAY);
+}
+
+
+/*
+//
+// Ausgabe der Fertigkeiten
+//
+*/
+
+mixed skill(string skill1, string skill2)
+{
+  return TP->QuerySkillAbility(skill1)>TP->QuerySkillAbility(skill2); 
+}
+
+varargs int faehigkeiten(string sortmod)
+{
+  int i, wert, sum;
+  string *arm, *arm2, s;
+  mapping res;
+  string output;
+  
+  if(0 && IS_LEARNING(this_player()))
+  {
+    write(BSA("Deine Skills: ", "Anvar sagt: "));
+    s="";
+    res = this_player()->QueryProp(P_NEWSKILLS);
+    arm=sort_array(m_indices(res), #'<); //')
+    for (i = sizeof(arm)-1;i>=0;i--)
+    {
+      s += arm[i]+": ";
+      if (mappingp(res[arm[i]])) s += res[arm[i]][SI_SKILLABILITY];
+      else s += res[arm[i]];
+      s += "\n";
+      write(BSA(s, "Anvar sagt: "));
+      s="";
+    }
+    return 1;   
+  }
+  if(!IsGuildMember(TP))
+  {
+    TP->Message(BSA("Du gehoerst nicht dieser Gilde an!", "Anvar sagt: "),
+        MSGFLAG_SAY);
+    return 1;
+  }
+  s="";
+  sum = 0;
+  res=this_player()->QueryProp(P_NEWSKILLS);
+  arm2 = m_indices(res);
+  if( member(m_indices(ELEMENT_DAMAGE), sortmod)!=-1 )
+  {
+    switch (sortmod)
+    {
+      case FEUER  : arm2=feuer; break;
+      case WASSER : arm2=wasser;  break;
+      case EIS    : arm2=eis;  break;
+      case HUMUS  : arm2=humus;    break;
+      case ERZ    : arm2=erz;   break;
+      case LUFT   : arm2=luft;    break;
+    }
+    output = BSA("Du beherrschst Deine "+CAP(sortmod)+"zauber wie folgt: ", 
+          "Anvar sagt: ");
+  }
+  else
+    output = BSA("Du beherrschst Deine Zauber wie folgt: ", "Anvar sagt: ");
+  if(sortmod=="skill")
+    arm=sort_array(arm2, "skill") ; 
+  else
+    arm=sort_array(arm2, #'<); //')
+  for (i = sizeof(arm)-1;i>=0;i--) {
+    if(member(({"Cast", "Fight_hands"}), arm[i])==-1) {
+      s += CAP(arm[i])+" beherrschst Du";
+      wert=TP->QuerySkillAbility(arm[i]);   
+      sum += wert;
+      s+=int2string(wert);
+      if(wert)
+        output += BSA(s, "Anvar sagt: ");
+      s="";         
+    }
+  }
+  if( member(m_indices(ELEMENT_DAMAGE), sortmod)==-1 )
+  {
+    s=int2string(TP->QuerySkillAbility("Cast"));
+    output += BSA("Die Fertigkeit Zaubern beherrschst Du"+s,"Anvar sagt: ");
+    s=int2string(TP->QuerySkillAbility("Fight_hands"));
+    output += BSA("Den waffenlosen Kampf beherrschst Du"+s, "Anvar sagt: ");
+    if((wert=TP->QueryProp(P_GUILD_RATING))<1501) wert=1501;
+    s=int2string(wert);
+    output += BSA("Insgesamt betrachtet bist Du"+s, "Anvar sagt: "); 
+  }
+  else
+  {
+    s = int2string(sum/sizeof(arm2));
+    output += BSA("Insgesamt betrachtet kannst Du die "+CAP(sortmod)+"zauber"+s, 
+          "Anvar sagt: "); 
+  }
+  TP->Message(output, MSGFLAG_SAY);
+  say(sprintf("Anvar klaert %s ueber %se Fertigkeiten auf.\n", 
+         CAP(getuid(TP)), 
+  TP->QueryPossPronoun(WESSEN)));
+  return 1;
+}
+
+/* Fertigkeitswert in entsprechende Ausgabe umwandeln */
+string int2string(int wert) {
+ string str;
+ switch(wert) {
+   case 0..500 : str=" so gut wie gar nicht.\n"; break;
+   case 501..1000: str=" fast gar nicht.\n"; break;
+   case 1001..1500: str=" kaum.\n"; break;
+   case 1501..2000: str=" sehr miserabel.\n"; break;
+   case 2001..2500: str=" miserabel.\n"; break;
+   case 2501..3000: str=" ziemlich schlecht.\n"; break;
+   case 3001..3500: str=" schlecht.\n"; break;
+   case 3501..4000: str=" maessig.\n"; break;
+   case 4001..4500: str=" unterdurchschnittlich.\n"; break;
+   case 4501..5000: str=" durchschnittlich.\n"; break;
+   case 5001..5500: str=" ueberdurchschnittlich.\n"; break;
+   case 5501..6000: str=" gut.\n"; break;
+   case 6001..6500: str=" wirklich gut.\n"; break;
+   case 6501..7000: str=" sehr gut.\n"; break;
+   case 7001..7500: str=" unglaublich gut.\n"; break;
+   case 7501..8000: str=" phantastisch gut.\n"; break;
+   case 8001..8500: str=" ausgezeichnet.\n"; break;
+   case 8501..9000: str=" hervorragend.\n"; break;
+   case 9001..9300: str=" exzellent.\n"; break;
+   case 9301..9500: str=" beinahe meisterhaft.\n"; break;
+   case 9501..9700: str=" meisterhaft.\n"; break;
+   case 9701..9850: str=" nahezu perfekt.\n"; break;
+   case 9851..9999: str=" perfekt.\n"; break;
+   case 10000: str=" absolut perfekt.\n"; break;
+   default: str=" ueberhaupt nicht.\n"; 
+ } 
+ return str;
+}
+
+
+
+
+/*
+//
+// Funktion fuer den Waffenlosen Kampf
+//
+*/
+mapping HandKampf( object user, string sname, mapping sinfo )
+{
+  int abil, diff, val, learn, vorher, i, bonus;
+  object *arms;
+  learn=0;
+  if( !mappingp(sinfo)) return 0; 
+  if(!objectp(sinfo[SI_ENEMY])) return sinfo;
+  abil = sinfo[SI_SKILLABILITY];
+  
+  vorher=sinfo[SI_SKILLDAMAGE];
+  val=user->QueryProp(P_GUILD_LEVEL)*2+
+    random(abil*(10+user->QueryAttribute(A_STR)*2+
+    user->QueryAttribute(A_DEX)*2+user->QueryAttribute(A_INT))/MAX_ABILITY);  
+  if(val > MAX_HANDKAMPF) val=MAX_HANDKAMPF;
+  sinfo[SI_SKILLDAMAGE]+=val;
+  if(sizeof(arms=filter_array(user->QueryProp(P_ARMOURS), "check_id"))) {
+    for(i=sizeof(arms)-1;i>=0;i--) {
+      bonus+=arms[i]->QueryProp(P_DRUID_ADD_HAND_DAMAGE);
+    }
+    bonus=bonus/2+random(bonus/2);
+    if(bonus > 50) bonus=50;
+    sinfo[SI_SKILLDAMAGE]+=sinfo[SI_SKILLDAMAGE]*bonus/100;
+  }
+  if(!random(500)) {
+    tell_object(user, "Die Kraft der Elemente verstaerkt Deine Attacke!\n");
+    learn=1;
+    sinfo[SI_SKILLDAMAGE]+=100+abil/30;
+  }
+  else if (!random(1000)) {
+    sinfo[SI_SKILLDAMAGE]/=4;
+  }
+  //TELL("angrox", sprintf("DRUIDENZIRKEL: Handkampf bei %s: %d (boni: %d)\n", 
+  //      CAP(getuid(user)), sinfo[SI_SKILLDAMAGE], bonus));
+  if((!random(2) && ((10000-abil) > random(MAX_ABILITY))) || learn) {
+    learn=0;
+    user->LearnSkill(sname, (2*user->QueryAttribute(A_STR)+
+      2*user->QueryAttribute(A_DEX)+user->QueryAttribute(A_INT))/40); 
+  }
+  if (abil < MAX_ABILITY && 
+      user->QuerySkill(FIGHT(WT_HANDS))[SI_SKILLABILITY] == MAX_ABILITY)
+    user->Message("Anvar teilt Dir mit: Du kannst Handkampf nun absolut perfekt!\n",
+        MSGFLAG_TELL);
+
+  if(HAS_MYSTERY(user, MYSTERY_FIND_WEAKNESS) && sinfo[SI_ENEMY]->QueryProp(P_RESISTANCE_STRENGTHS) && !random(abil/(user->QueryProp(E_HANDS)?300:100))) {
+    tell_object(user, BS("Du erkennst eine Schwaeche deines Gegners. Rasch formt das elementare Wasser in dir "
+                         "eine Struktur, um diese auszunutzen."));
+    sinfo[SI_SKILLDAMAGE] = (int) (sinfo[SI_SKILLDAMAGE] * (1.0 + 
+                                    sort_array(map_array(m_values(sinfo[SI_ENEMY]->QueryProp(P_RESISTANCE_STRENGTHS)), #'to_float ), #'<)[0]));
+  }
+
+  if(HAS_MYSTERY(user, MYSTERY_STORM_STRIKES) && !random(abil/(user->QueryProp(E_HANDS)?300:100))) {
+    tell_object(user, BS("Die Kraft des Sturms faehrt in deine Gleider. Wie Blitz, Donner und Sturm faehrst du auf deine Feinde nieder!"));
+    tell_room(ENV(user), BS(sprintf("Die Schlaege von %s rasen in unglaublicher Geschwindigkeit auf %s Feinde zu.", 
+                            user->name(WEM, 1), user->QueryPossPronoun(MALE, WEN, 1))), ({user}));
+    user->ModifySkillAttribute(user, SA_SPEED, 200 + random(100), 2 + random(abil/2500));
+    sinfo[SI_SKILLDAMAGE_TYPE] = ({DT_AIR, DT_LIGHTNING});
+  }
+
+  return sinfo;                                                     
+}                                                       
+
+int check_id(object ob) {
+  if(objectp(ob) && ob->QueryProp(P_DRUID_ADD_HAND_DAMAGE)) return 1;
+  return 0;
+}
+/*
+//
+// Funktion fuer den Zaubernskill
+//
+*/
+int Zaubern(object user, string sname, mapping sinfo)
+{
+  int abil, cur_alk, max_alk, value, modifier;
+  int learn_abil;
+  if(!mappingp(sinfo)) return 0; 
+  cur_alk=user->QueryProp(P_ALCOHOL);
+  max_alk=user->QueryProp(P_MAX_ALCOHOL);
+// value=user->QueryAttribute(A_INT)/10;
+// modifier=(((max_alk/3)-cur_alk)/4)+value;
+// TELL("feyaria", "MAX_ALK="+max_alk+" ALK="+cur_alk+" INT="+value+" mod="+modifier+"\n");
+  value=user->QueryAttribute(A_INT);
+  modifier=value/3-cur_alk/(6-value/10);
+// Neue lernberechnung, spieler mit hoeherem max_alk lernen zaubern jetzt nicht mehr schneller
+  abil=sinfo[SI_SKILLABILITY]+modifier;
+  if(abil>MAX_ABILITY) abil=MAX_ABILITY;
+  if(abil<0) abil=0;
+  if(modifier<0) {
+    user->ModifySkill(SK_CASTING, abil, 150, "druidenzirkel");
+    return -abil * cur_alk / max_alk;
+  }
+  learn_abil=((MAX_ABILITY - sinfo[SI_SKILLABILITY]) + (value / 5))/2;
+  if(learn_abil < 100)
+    learn_abil*=2;
+  if((!random(15) && random(MAX_ABILITY) <= learn_abil) || 
+      (sinfo[SI_SKILLABILITY]>9950 && !random(30))) {
+    user->ModifySkill(SK_CASTING, abil, 150, "druidenzirkel");
+  }
+  else if( !random(MAX_ABILITY * (MAX_ABILITY - abil + 1) / value) ) {
+    user->ModifySkill(SK_CASTING, ++sinfo[SI_SKILLABILITY], 150, "druidenzirkel");
+  }
+
+  if (abil < MAX_ABILITY && 
+      user->QuerySkill(SK_CASTING)[SI_SKILLABILITY] == MAX_ABILITY)
+    user->Message("Anvar teilt Dir mit: Du kannst Zaubern nun absolut perfekt!\n",
+        MSGFLAG_TELL);
+  abil -= abil * cur_alk / max_alk;
+  if(!random(2000)) {
+    tell_object(user, "Irgendetwas scheint schiefzugehen ...\n");
+    return random(abil)-MAX_ABILITY;
+  }
+  else 
+    return random(abil);
+}
+
+
+
+/*
+//
+// Ausgabe beim Levelaufstieg
+//
+*/
+void LevelText(object pl)
+{
+ write(BS("Du versinkst in Meditation und versuchst, eine "
+      "Gildenstufe aufzusteigen...\n"));
+ say(BS(CAP(getuid(pl))+ " versinkt in Medidation...\n"));
+ return ;
+}
+
+
+/*
+//
+// Ausgabe beim Levelaufstieg
+//
+*/
+nosave string NeedMoreXP(object pl, int xp) {
+ string str;
+ int percent, x;
+ str="";
+ str="Obwohl Du wuerdig bist, musst Du noch mehr Erfahrung sammeln. "
+     +"Von den Erfahrungspunkten, die Du benoetigst, fehlen Dir ";
+ x=call_other(DRUIDENMASTER, "GetXpDifference", pl, 
+              pl->QueryProp(P_XP));
+ percent=100*x/xp;
+ switch (percent)
+  {
+    case  0..10:  str+="nur mehr ganz wenige. ";     break;
+    case 11..20:  str+="weniger als ein Viertel. ";  break;
+    case 21..30:  str+="etwa ein Viertel. ";         break;
+    case 31..40:  str+="weniger als die Haelfte. ";  break;
+    case 41..50:  str+="etwa die Haelfte. ";         break;
+    case 51..60:  str+="mehr als die Haelfte. ";     break;
+    case 61..70:  str+="weniger als drei Viertel. "; break;
+    case 71..80:  str+="etwa drei Viertel. ";        break;
+    case 81..90:  str+="mehr als drei Viertel. ";    break;
+    case 91..99 : str+="beinahe alle. ";             break;
+    case 100    : str+="alle. ";                     break;
+    default:      str+="viel mehr als gefordert. ";  break; 
+  }
+ //call_other(DRUIDENMASTER, "SetXp", pl, pl->QueryProp(P_XP)+xp);
+ return str;
+}
+
+
+/*
+//
+// Loggen des Taskloesen
+//
+*/
+void LogTask(object pl, int stufe)
+{
+  if(call_other(DRUIDENMASTER, "CheckTask", pl, stufe) &&
+      stufe==15 && stufe==6) return;
+  write_file(MEMBER_LOG(getuid(pl)+".log"),
+             dtime(time())+": "+CAP(getuid(pl))+" hat Aufgabe "
+             +stufe+" geloest.\n");
+  return; 
+}
+
+mixed Test(object pl) {
+  string txt;
+  object ob;
+  int lvl,n_lvl, *xp_per_level;
+  txt="";
+  xp_per_level=XP_PER_LEVEL;
+  if(pl->QueryProp(P_FROG)) 
+      return BS("Igitt! Ein Frosch! Hau bloss ab!");
+  if(pl->QueryProp(P_GHOST)) 
+       return BS("Ein Geist! Hau bloss ab, bevor wir "
+	            +"Dich verbannen!");
+  lvl=pl->QueryProp(P_GUILD_LEVEL);
+  n_lvl=lvl+1;
+  if(!call_other(DRUIDENMASTER, "CheckPreviousTasks", pl, lvl)) {
+    write_file(DRUID_SUSPICIOUS_LOG, sprintf("%s: %s fehlt eine vorhergehende "
+         "Aufgabe zu Gildenlevel %d\n", dtime(time()), CAP(getuid(pl)), 
+        n_lvl)); 
+    return sprintf("Du kannst nicht aufsteigen, %s! Du hast nicht "
+         "alle vorhergehenden Aufgaben geloest! Das ist SEHR dubios. "
+         "Bereite Dich darauf vor, Dich dafuer zu verantworten!\n", 
+        pl->name(WER));
+  }
+  if(!call_other(DRUIDENMASTER, "CheckXp", pl, pl->QueryProp(P_XP))
+      && !IS_WIZARD(pl) && !pl->QueryProp(P_TESTPLAYER))
+  {
+    txt+=NeedMoreXP(pl, xp_per_level[lvl]);
+  }
+  /*
+  else 
+    call_other(DRUIDENMASTER, "SetXp", pl, pl->QueryProp(P_XP)+
+        XP_PER_LEVEL[n_lvl]);
+        */
+  if(lvl==7 && pl->QueryQuest("Cailleac'h's Harfe")) {
+    call_other(DRUIDENMASTER, "SetTask", TP, 8);
+  }
+  if(lvl==3 && objectp(ob=present(TASKITEM, pl)) && 
+      (ob->QueryProp(ELEMENT_SECURE))==4)
+  { 
+    call_other(DRUIDENMASTER, "SetTask", TP, 4);
+    ob->remove();
+  }
+  if(!call_other(DRUIDENMASTER, "CheckTask", pl,n_lvl)) {
+    switch(n_lvl) {
+      case 2 : 
+           txt+=BS("Gut, Schueler. Um hoehere Weihen zu erlangen, musst "
+                  "Du eine Kreatur des Elementes Wasser holen. Es ist eine "
+                  "Kreatur, die in den Weiten des SilberMeeres lebt, ein "
+                  "Raubfisch, der nach seiner Farbe benannt ist, so wie vieles "
+                  "hier.");
+           break;
+      case 3 :  
+           txt+=BS("Nun gut, Schueler, um Aufzusteigen musst Du "
+                  "erneut auf die Suche gehen. Es gibt ein magisches "
+                  "Gewaechs, welches den Anwender befaehigt, unter Wasser "
+                  "zu atmen. Diese Frucht existiert im Dschungel. Finde "
+                  "sie und bringe ein Exemplar."); 
+           break;
+      case 4 :
+           txt+=BS("Nun wird es an der Zeit, dass Du Deine Faehigkeiten "
+                  "an einem verderbten Wesen ausprobierst: Toete einen "
+                  "Seelendieb!");
+           break;
+      case 5 :
+           txt+=BS("Gut, Schueler. Um hoehere Weihen zu erlangen, musst "
+                  "Du ein Symbol des Elementes Luft holen, welches wir "
+                  "dringend zur permaneten Bindung eines Luftelementars "
+                  "in einen Teppich benoetigen: Eine Adlerfeder.");
+           break;
+      case 6 :
+           txt+=BS("Um aufzusteigen, musst Du zeigen, was Du "
+                  "bisher gelernt hast: Toete den Balrog, der das "
+                  "Symbol des verderbten Feuers repraesentiert! Diese "
+                  "Ausgeburt der Hoelle muss sich irgendwo im "
+                  "Gebirge befinden!");
+           break;
+      case 7 :
+           txt+=BS("In den Tiefen des Berges, so sagt man, ist eine "
+                  "Waffe des Lichts verborgen. Suche und Finde sie!");
+           break;
+      case 8 :
+           txt+=BS("Gut, Schueler. Nun gibt es eine weitere "
+                  "Aufgabe: Finde die Harfe der Winde!");
+           break;
+      case 9 :
+           txt+=BS("Hoere, Schueler! Wir benoetigen dringend "
+                  "die Schuppe eines Drachen. Zeit ist fuer diese "
+                  "Aufgabe ein wichtiges Kriterium, also eile Dich!"); 
+           break;
+      case 10 :  
+           txt+=BS("Hoere nun, Schueler. Die Trolle haben einst ein maechtiges "
+                  "Artefakt gestohlen. Es handelt sich dabei um das Szepter "
+                  "der Macht. Suche es und bring es uns.");
+           break;
+      case 11 :  
+           txt+=BS("Schueler! Wir benoetigen dringend einen Heiltrank. "
+                  "Allerdings nicht irgendeinen, sondern einen speziellen. "
+                  "Im Lager oestlich von Midas soll es angeblich exzellente "
+                  "Traenke geben."); 
+           break;
+      case 12 :  
+           txt+=BS("Es erwartet Dich eine der schwersten Pruefungen, "
+                  "Schueler! In dem Dorf Knarkh leben etliche Bestien. "
+                  "Eine davon ist die gefuerchtete gehoernte Bestie. Zum "
+                  "Beweis der Beherrschung Deiner Zauber: Toete diese "
+                  "Bestie!!"); 
+           break;
+      case 13 :  
+           txt+=BS("In der Stadt Kyranda existiert eine Waffe, der "
+                  "Schmiedehammer des Haegar, der in der Lage ist, "
+                  "jegliches Metall problemlos zu schmieden. Wir "
+                  "vermuten, dass dieser Hammer mit einem verschollenen "
+                  "Zauber belegt ist. Bringe uns diesen Hammer. Es ist "
+                  "auch noch von groesster Wichtigkeit, dass der Drache "
+                  "von Dir persoenlich getoetet wird. Und nun geh!"); 
+           break;
+      case 14 :  
+           txt+=BS("Eines unserer Mitglieder, Elsurion, hat uns verraten. "
+                  "Dafuer gibt es nur eine Strafe, und Dir wurde die Ehre, "
+                  "zuteil, diese Strafe auszufuehren."); 
+           break;
+      case 15 :
+           txt+=BS("Du stehst nun kurz vor der Vollendung, "+CAP(getuid(TP))
+                  +". Nur noch eine Aufgabe liegt vor Dir. Die Legende "
+                  "erzaehlt von einem riesigen Golem aus Stein, Soordhin, "
+                  "den Steinritter. Finde ihn und toete ihn, doch sei "
+                  "auf der Hut. Viele haben ihn schon aufgesucht, "
+                  "nur wenige sind zurueckgekehrt. Er traegt eine "
+                  "maechtige Waffe mit sich, also sei auf der Hut. Du "
+                  "findest ihn im Gebirge, in einer Stadt aus Stein.");
+           break;
+      default : break;
+    }
+  }
+  //if(txt=="")  {
+  //  return 0;
+ // }
+  return txt;
+}
+
+string Test1(object pl) {  
+  object ob;
+  int *xp_per_level;
+  xp_per_level=XP_PER_LEVEL;
+  if(pl->QueryProp(P_FROG)) 
+      return BS("Igitt! Ein Frosch! Hau bloss ab!"); 
+  if(pl->QueryProp(P_GHOST)) 
+       return BS("Ein Geist! Hau bloss ab, bevor wir "
+	           +"Dich verbannen!");
+  ob=present(TASKITEM, pl);
+  if(ob && (ob->QueryProp(ELEMENT_SECURE))==1) {
+     call_other(DRUIDENMASTER, "SetTask", TP, 1);
+     call_other(DRUIDENMASTER, "SetXp",TP, 
+        TP->QueryProp(P_XP)+xp_per_level[0]);
+     return 0;
+  }
+  return BS("Du willst also die Mysterien der "
+             "Druiden erlernen. Nun, ich sehe, dass Du "
+             "durchaus dazu geeignet bist. Bevor wir Dich "
+             "jedoch in den Druidenzirkel aufnehmen, muesstest "
+             "Du uns eine kleine Gefaelligkeit erweisen. "
+             "Wir benoetigen dringend fuer ein Elixier eine "
+             "Portion Wirselkraut. Bringe mir solch ein Kraut, "
+             "und wir werden Dich in unsere Reihen "
+             "aufnehmen.");
+}
+
+int GetLvl16Quest(object player) {
+  object amulett, ob;
+  string gem_name;
+
+  if (!player || !interactive(player))  return 0;
+  amulett=present("\ndruidenamulett", player);
+  ob=clone_object(OBJ("task"));
+  ob->SetProp(E_TIME, time());
+  ob->move(player, M_NOCHECK);
+  gem_name=({"rubin","smaragd","saphir","granat","amethyst","topas","aquamarin"})[random(7)];
+  ob->SetProp(P_LEVEL_SIXTEEN_GEM, gem_name);
+  player->Message(BSA(sprintf("Hoere, %s, ich benoetige "
+      "%s faehig%s Druid%s, denn ich habe eine sehr wichtige "
+      "Aufgabe, eine sehr wichtige, schwere und gefaehrliche "
+      "Aufgabe. Solltest Du versagen, es also nicht innerhalb der "
+      "vorgegebenen Zeit schaffen, werde ich es mir gut ueberlegen, "
+      "Dir jemals erneut diese Aufgabe zu stellen. "
+      "Zuerst musst Du Dich allerdings als wuerdig erweisen, und "
+      "um mir das zu beweisen, musst Du mir "+player->QueryProp(P_LEVEL)+ " "+
+      CAP(gem_name)+"e bringen. "
+      "Du hast 12 Stunden dafuer Zeit. Sollte waehrenddessen ein "
+      "Weltuntergang stattfinden oder Du mit 'Ende' aussteigen, hast "
+      "Du ebenfalls versagt. Und nun geh!", player->Name(WER), 
+      TP->QueryProp(P_GENDER)==FEMALE?"eine":"einen",
+      TP->QueryProp(P_GENDER)==FEMALE?"e":"en",
+      TP->QueryProp(P_GENDER)==FEMALE?"in":"en"),
+       "Anvar teilt Dir mit: "), MSGFLAG_TELL);
+  call_other(DRUIDENMASTER, "SetLvl16Quest", player, 2);
+  tdm(sprintf("%s***%s %s hat Aufgabe 1 fuer GST 16 bekommen!\n", 
+      ANSI_BLINK+ANSI_RED, ANSI_NORMAL, player->Name(WER)));
+  write_file(LOG("lvl16quest"), sprintf("%s: %s erhaelt die erste Aufgabe! (50 "+
+        CAP(gem_name)+"e\n", 
+      dtime(time()), CAP(getuid(player))));
+  return 1;
+}
+
+nosave int Lvl16Failed(object pl) {
+  object ob;
+  pl->Message(BSA("Du hast versagt! Die Zeit ist um! Vielleicht werde "
+      "ich Dir irgendwann die Aufgabe nocheinmal stellen...", 
+      "Anvar teilt Dir mit: "), MSGFLAG_TELL);
+  tdm(sprintf("%s***%s %s hat bei Lvl16Quest versagt!\n", 
+      ANSI_BLINK+ANSI_RED, ANSI_NORMAL, pl->Name(WER)));
+  write_file(LOG("lvl16quest"), sprintf("%s: %s hat versagt! So ein Lulu :)\n", 
+      dtime(time()), CAP(getuid(pl))));
+  if(ob=present(TASKITEM, pl)) {
+   ob->remove();
+  }
+  call_other(DRUIDENMASTER, "SetLvl16Quest", pl, 99);
+  return 1;
+}
+
+int GiveSkills(string pl_name) {
+  object pl;
+  if(getuid(TP)!="angrox") return 0;
+  pl=find_player(pl_name);
+  if(!pl) return 0;
+  pl->ModifySkill(FIGHT(WT_HANDS), 
+      QuerySkill(FIGHT(WT_HANDS)),0,"druidenzirkel");
+  pl->ModifySkill(SK_CASTING, QuerySkill(SK_CASTING),0, "druidenzirkel" );
+  write("Done!\n");
+  return 1;
+}

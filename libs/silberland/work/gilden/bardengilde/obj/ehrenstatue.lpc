@@ -1,0 +1,371 @@
+inherit "/std/thing";
+
+#include "/gilden/bardengilde/bardengilde.h"
+#include <thing.h>
+#include <properties.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <defines.h>
+
+private mapping heroMetadata = ([
+    HERO_ANGARA:   "tuerkis"; A_INT,
+    HERO_ARCON:    "bergkristall"; A_DEX,
+    HERO_FLAMMARA: "rubin"; A_INT,
+    HERO_GRIMM:    "aventurin"; A_STR,
+    HERO_KHARTAK:  "tigerauge"; A_STR,
+    HERO_NOGI:     "diamant"; A_CON,
+    HERO_RYNOXA:   "bernstein"; A_DEX,
+    HERO_XULGSCH:  "onyx"; A_INT,
+    HERO_FRAGGIN:  "lapislazuli"; A_CON,
+    HERO_ZAFIRA:  "saphir"; A_INT,
+]);
+
+private mapping requiredSets = ([
+    HERO_ANGARA: ({"Angaras Diadem", "Angaras Siegelring", "Angaras leuchtende Sonne"}),
+    HERO_ARCON: ({"Arcons Klinge", "Arcons Visier", "Arcons Schutz", "Arcons Parade"}),
+    HERO_FLAMMARA: ({"Flammaras Flammenspur", "Flammaras Inferno", "Flammaras Lava", "Flammaras Stichflamme"}),
+    HERO_GRIMM: ({"Grimms Brustkorb", "Grimms Faust", "Grimms Fussstapfen", "Grimms Schaedel", "Grimms Schultern"}),
+    HERO_KHARTAK: ({"Khartaks Krallen", "Khartaks Schlaechter", "Khartaks Stirn", "Khartaks Treter"}),
+    HERO_NOGI: ({"Nogis Denker", "Nogis Druecker", "Nogis Flitzer", "Nogis Greifer", "Nogis Hacker", "Nogis Schluepfer", "Nogis Schuetzer", "Nogis Ueberzieher"}),
+    HERO_RYNOXA: ({"Rynoxas Fackel", "Rynoxas Funkeln", "Rynoxas Glimmer", "Rynoxas Schimmern", "Rynoxas Strahlen"}),
+    HERO_XULGSCH: ({"Xulgsch Geissel", "Xlugsch Hoerner", "Xulgsch Huelle", "Xulgsch Huelle", "Xulgsch Knochen"}),
+    HERO_FRAGGIN: ({"Fraggins Becher", "Fraggins Dunst", "Fraggins Wanker", "Fraggins Zuender"}),
+    HERO_ZAFIRA: ({"Zafiras Erde", "Zafiras Flutwelle", "Zafiras Frost", "Zafiras Steinhaut", "Zafiras Sturm", "Zafiras Vulkan"}),
+]);
+
+public void create() {
+    if(!is_clone(TO)) return;
+    ::create();
+
+    SetProp(P_NOGET, "Die Statue ist hier fest verankert.\n");
+    SetProp(P_MATERIAL, ([MAT_MARBLE: 100]));
+    SetProp(P_NAME, "Ehrenstatue");
+    SetProp(P_GENDER, FEMALE);
+    SetProp(P_WEIGHT, 1000000);
+    SetProp(P_SIZE, 200);
+    SetProp("hero", 0);
+    
+    AddId(({"\nbarden_ehrenstatue", "statue", "ehrenstatue", "heldenstatue"}));
+
+    AddCmd(({"opfer", "opfere"}), "cmd_opfern");
+    AddCmd(({"knie"}), "cmd_knien");
+}
+
+public int cmd_knien(string str) {
+    object *arms;
+    string *required, *missing;
+    int i, j, f;
+
+    notify_fail("Wovor moechtest du niederknien?\n");
+    if(str != "vor state" && str != "vor statue nieder" &&
+       str != "vor ehrenstatue nieder" && str != "vor ehrenstatue") return 0;
+
+    write(BS("Du kniest kurz vor der Statue."));
+    say(BS(TPN + " kniet kurz vor der Statue nieder."));
+
+    if(TP->QueryProp(P_GUILD) != "bardengilde")  return 1;
+    if(BARDENMASTER->HasHeroPathLevel(TP, QueryProp("hero"), 3)) return 1;
+
+    if(!BARDENMASTER->HasHeroPathLevel(TP, QueryProp("hero"), 2)) {
+        write(BS("Du musst erst den zweiten Schritte auf diesem Heldenpfad gehen."));
+        return 1;
+    } 
+
+    required = requiredSets[QueryProp("hero")];
+    arms = TP->QueryArmours() + ({ TP->QueryProp(P_WEAPON) });
+    missing = ({ });
+    for(i=0; i<sizeof(required); ++i) {
+        f=0;
+        for(j=0; j<sizeof(arms); ++j) {
+            if(arms[j]->QueryProp("set_item") == required[i]) {
+                f=1; break;
+            }
+        }
+        if(!f) missing += ({ required[i] });
+    }
+
+    if(sizeof(missing)) {
+        write(BS("Folgende Gegenstaende musst du noch finden:"));
+        for(i=0; i<sizeof(missing); ++i) {
+            write(sprintf("* %s\n", missing[i]));
+        }
+    } else {
+        BARDENMASTER->SetHeroPathLevel(TP, 3);
+        write(BS("Die Macht des Helden "+capitalize(QueryProp("hero")+" durchstroemt dich. "
+                 "Nun verkoeperst du wahre Heldenmacht! (Neu einloggen kann noetig sein, um die Heldenmacht zu aktivieren.")));
+    }
+    return 1;
+}
+
+public void init() {
+    object ob;
+    int condition;
+
+    ::init();
+
+    condition = BARDENMASTER->HasHeroPathLevel(TP, QueryProp("hero"), 1) &&  // spieler ist auf meinem heldenpfad
+               !BARDENMASTER->HasHeroPathLevel(TP, QueryProp("hero"), 2) && // aber noch nicht auf stufe 2
+               TP->QueryProp(P_GUILD) == "bardengilde" && TP->QueryProp(P_GUILD_LEVEL) > 13 &&  // und er ist zumindest gs 14
+               !objectp(present("\nbarden_hero_killquest", TP)); { // und nicht gerade auf der quest 
+
+    //write(sprintf("BARDEN DEBUG: condition = %d\n", condition));
+    
+    if(condition)    
+      call_out("hero_mission_start", 0);
+    }
+
+    if(objectp(ob=present("\nbarden_hero_killquest", TP)) && ob->QueryProp("hero") == QueryProp("hero")) {
+        if(!ob->IsDone()) {
+            call_out("remind_quest", 0);
+        } else {
+            call_out("prompt_swap_spells", 0);
+        }
+    }
+}
+
+public void remind_quest() {
+    write(BS("Als du die Statue erblickst faellt dir ein, dass du immer noch etwas zu erledigen hast..."));
+    return;
+}
+
+public void prompt_swap_spells() {
+    int r;
+    object ob;
+    write(BS("Erfolgreich kehrst du zur Ehrenstatue zurueck und kniest davor nieder."));
+    
+    BARDENMASTER->SetHeroPathLevel(TP, 2);
+    BARDENMASTER->SwapHeroPathVariants(TP);
+
+    if(objectp(ob=present("\nbarden_hero_killquest", TP))) {
+        ob->remove(1);
+    }
+    return;
+}
+
+public void hero_mission_start() {
+    if(!objectp(TP)) return;
+
+    write(BS("Du betrachtest die Ehrenstatute und stellst fest: Du bist nun erfahren Genug die "
+             "Heldenreise zum zweiten Schritt auf dem Heldenpfad zu beschreiten."));
+    write("Willst du diese Aufgabe annehmen? [ja/NEIN] ");
+    input_to("confirm_hero_mission");
+}
+
+public void confirm_hero_mission(string input) {
+    object ob;
+
+    if(!objectp(TP)) return;
+
+    if(lowerstring(input) != "ja" && lowerstring(input) != "j") {
+        write(BS("Du entschliesst dich die Heldenreise jetzt nicht anzutreten."));
+        return;
+    }
+
+    ob = clone_object(OBJ("quest/heldenreise"));
+    ob->SetProp("hero", QueryProp("hero"));
+    if(ob->move(TP, M_NOCHECK) != 1) {
+        destruct(ob);
+        write(BS("Hm... irgendetwas ist schief gegangen."));
+        return;
+    }
+
+    write(BS("Du beschliesst die Heldenreise anzutreten. Um den zweiten Schritt am "
+             "Heldenpfad zu gehen, musst du einen bestimmten Gegner besiegen. Zum "
+             "Lohn deiner Muehen erlernst du eine Liedvariante."));
+    write(BS("Die Statue bietet dir vielleicht einen Hinweis, um welchen Gegner es sich handelt."));
+    return;
+}
+
+private attri2string(string attr) {
+    switch(attr) {
+        case A_CON: return "ausdauernder"; break;
+        case A_STR: return "kraeftiger"; break;
+        case A_DEX: return "wendiger"; break;
+        case A_INT: return "klueger"; break;
+        default: return "???"; break;
+    }
+    return "???";
+}
+
+private void giveBonus(string attribute, int amnt, int timeBonus) {
+    object bonus;
+    bonus = clone_object(OBJ("bonus"));
+    bonus->SetProp(P_X_ATTR_MOD, ([attribute: amnt]));
+    bonus->SetEndMessage(sprintf("Die Ehrerbietung an den Helden %s schwindet von dir.", capitalize(QueryProp("hero"))));
+    bonus->SetTimeout(120 + timeBonus*60);
+    if(bonus->move(TP, M_NOCHECK) != 1) {
+        destruct(bonus);
+    }
+}
+
+public void increase_path_progression(object pl, int amnt) {
+    BARDENMASTER->ProgressHeroPathEntry(pl, QueryProp("hero"), amnt);
+}
+
+public int cmd_opfern(string str) {
+    object gems;
+    string attribute, itemId;
+    int opferSize;
+
+    if(!QueryProp("hero")) return 0;
+
+    notify_fail("Was willst du an dieser Statue opfern?\n");
+    if(!str || str == "") return 0;
+
+    notify_fail("Wieviele Edelsteine dieser Art willst du opfern?\n");
+    if(sscanf(str, "%d %s", opferSize, itemId) != 2) return 0;
+
+    if(!objectp(gems=present(itemId, TP))) {
+        write(BS("Sowas hast du gar nicht bei dir!"));
+        return -1;
+    }
+
+    notify_fail(BS("Traditionell opfert man den alten Helden nur Edelsteine."));
+    if(!gems->id("EDELSTEIN")) return 0;
+
+    notify_fail("So viel besitzt du davon nicht!\n");
+    if(gems->QueryProp(P_AMOUNT) < opferSize) return 0;
+    
+    gems->AddAmount(-1 * opferSize);
+
+    write(BS(sprintf("Du opferst dem Helden %s %d %s.", capitalize(QueryProp("hero")), opferSize, gems->QueryProp(P_NAME))));
+    say(BS(sprintf("%s opfert dem Helden %s %d %s.", TP->Name(WER, 1), capitalize(QueryProp("hero")), opferSize, gems->QueryProp(P_NAME))));
+
+    attribute = heroMetadata[QueryProp("hero"), 1];
+
+    if(!gems->id(heroMetadata[QueryProp("hero"), 0])) {
+        if(!objectp(present("\nbarden_bonus", TP)))  {
+            write(BS(sprintf("Du fuehlst dich ein bisschen %s.",  attri2string(attribute))));
+            giveBonus(attribute, 1, opferSize/10);
+        }
+    } else {
+        if(!objectp(present("\nbarden_bonus", TP))) {
+            write(BS(sprintf("Du fuehlst dich %s.",  attri2string(attribute))));
+            giveBonus(attribute, 2, opferSize/10);
+        }
+
+        if(TP->QueryProp(P_GUILD) == "bardengilde" && TP->QueryProp(P_GUILD_LEVEL) > 12 &&
+           BARDENMASTER->GetHeroPath(TP) == 0) {
+            call_out("increase_path_progression", 0, TP, opferSize);
+        }
+    }
+
+    return 1;
+}
+
+public string _query_short() {
+    string hero;
+
+    switch(QueryProp("hero")) {
+        case HERO_ANGARA:   hero = "Angara der Juwelieren"; break;
+        case HERO_ARCON:    hero = "Arcon dem Mutigen"; break;
+        case HERO_FLAMMARA: hero = "Flammara der Feurigen"; break;
+        case HERO_GRIMM:    hero = "Grimm dem Riesen"; break;
+        case HERO_KHARTAK:  hero = "Khartak dem Schlaechter"; break;
+        case HERO_NOGI:     hero = "Nogi dem Heldenschmied"; break;
+        case HERO_RYNOXA:   hero = "Rynoxa der Strahlenden"; break;
+        case HERO_FRAGGIN:  hero = "Fraggin dem Trunkenbold"; break;
+        case HERO_ZAFIRA:   hero = "Zafira die Elementaristin"; break;
+        default: hero = "einem unbekannten Helden"; break;
+    }
+
+    return sprintf("Eine Statue zu Ehren von %s", hero);
+}
+
+public string _query_long() {
+    string description;
+
+    switch(QueryProp("hero")) {
+        case HERO_ANGARA:   
+            description = "Diese erhabene Marmostatue zeigt die Zwergenheldin "
+                          "Angara. In der dargestellten Szene ihres Heldenlebens "
+                          "traegt sie ihre gesamtes Geschmeide, das ueber und ueber "
+                          "mit Tuerkisen besetzt ist. Sie haelt gerade ihren Siegelring "
+                          "einem finsteren Gaffomagier entgegen, deseen finstere "
+                          "Beschwoerungen wohl an ihrer magischen Aura abprallen. Wenn "
+                          "du diese Statue erblickst, wird dir klar, warum Angara die "
+                          "Juwlieren fuer ihren Kampf gegen finstere Zauberei beruehmt ist."; 
+            break;
+        case HERO_ARCON:    
+            description = "Der Hobbit Arcon wird mit dieser Marmorstatue als mutiger "
+                          "Held dargestellt. In der Darstellung traegt er seine Ruestung. "
+                          "Mit dem geschlossenen Visier und dem Schild in der Hand kannst "
+                          "du sein Gesicht nicht erkennen. Um seinen Kopf hat der Bildhauer "
+                          "einen Heiligenschein aus Bergkristall eingesetzt, der das Licht "
+                          "der Umgebung einfaengt und dadurch zu leuchten scheint. Sein "
+                          "Schwert bohrt sich nach unten in den Leib eines sich windenden "
+                          "Skelettdrachens. Schon alleine diese Statue verkoerpert Arcons "
+                          "Mut und Streben nach Gerechtigkeit."; 
+            break;
+        case HERO_FLAMMARA: 
+            description = "Die Heldenstatue von Flammara der Feurigen ist aus rotem Marmor mit "
+            "gelben Adern geschlagen. Du weisst nicht, ob er von Natur aus so aussah, oder erst "
+            "nachtraeglich eingefaerbt wurden. Auf jeden Fall verkoerpert die feurige Natur der "
+            "Hobbitheldin hervorragend. In der Pose, in der sie dargestellt wird, ist sie "
+            "kuenstlerisch etwas ueberhoeht. Triumphierend erhebt sie sich im Zauberduell ueber "
+            "eine ander Zauberin, die offenbar eine Metallwand heraufbeschworen hat, um sich "
+            "vor Flammaras Flammen zu schuetzen. Dass der Versuch vergeblich ist, muss wohl "
+            "nicht erwaehnt werden. Das schmelzende Metall zeigt es. Auf Flammaras Schultern "
+            "thront ein kleiner Feuerwusel, waehrend sich hinter ihr der gefuerchtete "
+            "Feuersalamander und der Phoenix erheben. Besonders gut gemacht wirken die Flammen "
+            "dieser Statue, die aus Rubinsplittern bestehen und dadurch bei jeder Bewegung zu "
+            "lodern scheinen." ;
+            break;
+        case HERO_GRIMM:    
+            description = "Diese grosse Statue stellt den Riesen Grimm dar, der einst ein "
+            "Held war und gegen das Boese kaempfte. In diesem Kunstwerk wird seine schiere "
+            "Groesse dadurch deutlich, dass man sieht, wie er einen Orkfuersten, der erstaunlich "
+            "klein scheint, in seiner Faust haelt und zu Boden drueckt. Die Muskeln des Riesen "
+            "sind fein und detailreich gearbeitet. Er in dieser Statue nichts, ausser einem "
+            "Stirnreif, in dessen Mitte, wie ein drittes Auge, ein Aventurin schimmert."; 
+            break;
+        case HERO_KHARTAK:
+            description = "Diese Statue stellt den Menschenhelden Khartak dar. "
+            "Er wurde vom Bildhauer als huenenhafter, muskelbepackter Krieger mit "
+            "wilder Maehne und kaum mehr als einem Lendenschurz dargestellt. In seiner "
+            "Hand traegt er seine maechtige Axt, den Schlaechter, mit dem er gerade "
+            "einem Trollberzerker den Schaedel entzwei hiebt. Seine Fuesse stehen dabei "
+            "auf einem Haufen aus orkischen Schaedelknochen. In der detaillierten "
+            "ausarbeitung seiner einzelnen Muskeln und dem bruellenden Gesicht kannst "
+            "du Khartaks Kampfeswut in den mit Tigerauge besetzten Augenhoehlen funkeln sehen."; 
+            break;
+        case HERO_NOGI:     
+            description = "Mit dieser Statue wird Nogi der Heldenschmied geehrt. Er wird "
+            "hier als kraeftiger Zwerg in diamantenbesetzer Vollruestung dargestellt. "
+            "Im Grunde ist deshalb von ihm nicht mehr, als sein wallender Bart zu erkennen, "
+            "der bis zum Boden reicht. Mit beiden Haenden schwingt er einen schweren "
+            "Kriegshammer gegen den einen Drachen, dessen Schuppen aus vielen Bronzeplaettchen "
+            "gehaemmert wurden. Die Klauen des Drachen umschlingen dabei zwar Nogis Ruestung, "
+            "doch hinterlassen sie nicht den kleinsten Kratzer."; 
+            break;
+        case HERO_RYNOXA:
+            description = "Diese Statue wurde zu Ehren von Rynoxa der Strahlenden errichtet. "
+            "Sie stellt eine grazile Fee dar, die sich mit ihren Schmetterlingsfluegel hoch "
+            "in die Luefte erhebt. In gebieterischer Pose schleudert sie einem uralten Betrachter "
+            "mit seinen neun Tentakelaugen eine helle Sternschnuppe entgegen und verbannt ihn damit "
+            "unter den Wuestensand. Die Sternschnuppe, als auch Ryonxas Fluegel sind aus duenn "
+            "geschnittenem Bernstein gefertigt, durch den sich das Licht goldglaenzend bricht.";
+            break;
+        case HERO_FRAGGIN:
+            description = "Die Statue ist gar nicht so gross. Sie stellt einen offensichtlich "
+            "betrunkenen Hobbit in zerlumpter Kleidung dar, der einen ueberschaeumenden Humpen "
+            "Bier in die Hoehe reckt. Der Bierschaum ist aus feinen Plaettchen aus Lapislazuli "
+            "gemacht und wirkt fast schon Lebensecht. Mit seinen ausgelatschten Lederstiefel "
+            "wird der Hobbit, offenbar Fraggin Wirtsschreck, Held des Zufalls und des Trinkgelages, "
+            "triumphierend auf einem grauslichen Nekromanten mit schwarzer Peitsche dargestellt, "
+            "dessen skelettartiges Gesicht verwirrt und ueberrascht dreinblickt."; break;
+        case HERO_ZAFIRA:
+            description = "Diese Statue zeigt die Elfenheldin Zafira. Ihr Antlitz ist wunderschoen "
+            "und feingliedrig aus dem Marmor geschlagen. Ihre Augen, aus strahlenden Saphiren, "
+            "schlagen dich sofort in ihren Bann. Sie war sicherlich eine der schoensten Elfen, die "
+            "je gelebt haben. Doch das soll nicht ueber ihre Macht ueber die Elemente hinwegtaeuschen. "
+            "Diese wird eindruecklich dargestellt, da die Statue zeigt, wie Zafira einen grausigen "
+            "Erdbebendaemon mit einem Wasserstrahl aus glaenzen Saphiren zerschmettert."; break;
+        default: 
+            description = "einem unbekannten Helden"; break;
+    }
+
+    description += "\nIn den Sockel der Statue wurde eine Opferschale eingehauen, in der "
+                   "man im Gedenken an die grossen Heldentaten gerne Edelsteine hinterlaesst.";
+    return break_string(description, TP->QueryProp(P_SCREENWIDTH), 0, BS_LEAVE_MY_LFS);
+}

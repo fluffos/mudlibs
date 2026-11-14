@@ -1,0 +1,408 @@
+/*
+** Laden in Midas  (w) Woody@SL
+** ---
+** 1996-03-24  Woody  Release
+** 1997-03-22  Woody  <laden.h>, P_SHOP_*
+** 2001-10-28  Woody  missing details ergaenzt
+** 2005-11-09  Woody  klingel eingebaut
+** $Log: laden.c,v $
+** Revision 1.4  2005/12/16 11:14:47  Woody
+** Abfrage auf Gewicht, Logging on demand (#define DO_LOG)
+**
+** Revision 1.3  2005/12/16 09:39:11  Woody
+** Pfade angepasst, Sicherheitsabfragen
+**
+** Revision 1.2  2005/12/06 21:31:57  Woody
+** Kaugummiautomat von Yara
+**
+*/
+
+inherit "std/laden";
+
+#include <properties.h>
+#include <moving.h>
+#include <laden.h>
+#include "files.h"
+
+#define LAGER ROOM "lagerraum"
+#define KLINGEL_INTERVALL 4
+
+// Kaugummiautomat:
+//   Wie oft darf kein special item kommen
+#define MAX_NO_ITEM 100
+//   Mindestabstand fuer special items
+#define MIN_NO_ITEM 10
+#define TOY_PROBABILITY 30
+#define KA_ITEM_PATH "/d/ebene/yara/kaugummi/"
+#define DO_LOG
+
+int klingel = 0;
+
+string *candy = ({ KA_ITEM_PATH "obj/kaugummi" });
+string *toys = ({ KA_ITEM_PATH "obj/sonnenring",
+                  KA_ITEM_PATH "obj/herzring",
+                  KA_ITEM_PATH "obj/kleeblattring",
+                  KA_ITEM_PATH "obj/mondring",
+                  KA_ITEM_PATH "obj/sternenring"
+                  });
+string *specials = ({ KA_ITEM_PATH "obj/plueschaxt"});
+int coins = 0;
+int hebel = 0;
+int cnt = 0;
+int gum = 0;
+
+void create()
+{
+  ::create();
+  SetProp(P_LIGHT, 1);
+  SetProp(P_INDOORS, 1);
+  SetProp(P_ENVIRONMENT, ([ENV_TERRAIN:TT_HOUSE, ENV_TEMPERATURE:20]));
+  SetProp(P_INT_LONG,
+    "Du stehst etwas verloren in einem riesigen Laden. In den Regalen "
+    "liegen Waren aller Art, jedes Eck ist vollgestopft mit diesem und jenem "
+    "nuetzlichen Ausruestungsgegenstand, etwa Schwerter, Ruestungen, "
+    "aber auch ganz andere Dinge. "
+    "Hinter der Kasse haengt eine Tafel an der Wand, ausserdem siehst Du einen "
+    "seltsamen Kasten aus Holz.");
+  SetProp(P_INT_SHORT,"In einem grossen Laden");
+
+  SetProp(P_SHOP_FLAGS, SHOP_HASKEEPER | SHOP_NEEDSKEEPER);
+  SetProp(P_SHOPKEEPER_ID, "\nlandar");
+  SetProp(P_SHOPKEEPER_NAME, "Landar");
+
+  AddDetail ("laden", "Du stehst mittendrin.\n");
+  AddDetail ( ({"regal", "regale"}),
+    "Die Regale sind voll mit Schwertern, Ruestungen und anderem "
+    "Krimskrams.");
+  AddSpecialDetail ( ({ "ausruestungsgegenstand", "schwerter", "ruestungen",
+                 "krimskrams", "dinge", "art", "waren" }),
+    "det_zeugs");
+  AddDetail ( ({ "hinweis", "hinweise" }),
+    "Lies einfach die Tafel an der Wand!");
+  AddDetail ( ({ "eck", "ecke" }),
+      "In der Ecke siehst Du auch einige Gegenstaende rumliegen.");
+  AddDetail ("gegenstaende",
+      "Da waere etwa eine alte Dose, die niemand braucht.");
+  AddDetail ( ({ "dose", "blechdose" }),
+      "Eine kleine braune Dose aus Blech. Vielleicht ist Kaffee drin?");
+  AddDetail ( ({ "kaffee" }),
+      "Du traust Dich nicht nachzusehen.");
+  AddDetail ( ({ "blech" }),
+      "Gewoehnliches Blech, wohl von Zwergen geschmiedet.");
+  AddDetail ( ({ "zwerge" }),
+      "Ja, die koennen sowas meisterhaft!");
+  AddDetail ("kasse",
+    "Eine grosse, alte Kasse. Sie zeigt gerade 407,00 an.\n");
+  AddDetail ("eingang", "Eine schlichte Tuer bildet den Eingang.\n");
+  AddDetail ("tuer", "An der Tuer haengt ein Schild.\n");
+  AddDetail ("schild", "Du kannst es lesen.\n");
+  AddDetail ("tafel", "Du kannst sie lesen.\n");
+  AddDetail ( ({"boden", "decke"}),
+    "Du kannst daran nichts Besonderes erkennen.\n");
+  AddDetail ( ({"wand", "waende"}),
+    "Ganz normale Waende. In einer davon ist eine Tuer, durch die Du wohl "
+    "hereingekommen sein musst.\n");
+
+  /* KAUGUMMIAUTOMAT - YARA */
+  AddDetail ( ({"kaugummiautomat","automat","kasten","holzkasten"}),
+    "An einer Wand ist ein seltsamer Kasten aus Holz befestigt. Die "
+    "Oberseite des Kastens haelt eine grosse Glaskugel. Unter einem Muenzschlitz "
+    "und einem Hebel siehst Du ein kleines Fach.");  
+  AddDetail ( ({"holz"}),
+    "Das Holz aus dem der Kasten gemacht ist, ist mit spiralfoermig nach oben "
+    "laufenden roten und weissen Streifen bemalt. Offenbar verbirgt sich "
+    "darin eine Mechanik.");
+  AddDetail ( ({"mechanik"}),
+    "Das scheint ein Kaugummiautomat zu sein.");
+  AddDetail ( ({"rote","weisse","streifen","spiralen"}),
+    "Irgendwie erinnert Dich das an Erdbeeren und Sahne.");
+  AddDetail ( ({"oberseite"}),
+    "Eine grosse Glaskugel ist fest mit der Oberseite verbunden.");
+  AddDetail ( ({"glaskugel"}),
+    "Die grosse Glaskugel ist gefuellt mit vielen bunten Kaugummikugeln. "
+    "Zwischen den Kaugummikugeln scheinen auch andere Sachen zu sein.");
+  AddDetail ( ({"glas"}),
+    "Wie schoen, dass Glas durchsichtig ist, so kann man die Kaugummis sehen");
+  AddDetail ( ({"erdbeeren","sahne"}),
+    "Lecker!");
+  AddDetail ( ({"sachen"}),
+    "Leider kannst Du die nicht genau erkennen.");
+  AddDetail ( ({"kaugummikugeln","kaugummi","kaugummis","kugeln"}),
+    "Mjam!");
+
+  AddDetail ( ({"muenzschlitz"}),
+    "Da kann man Muenzen rein stecken. Neben dem Muenzschlitz klebt ein kleines "
+    "Schildchen.");
+  AddDetail ( ({"hebel"}),
+    "Sieht so aus, als koennte man den Hebel drehen.");
+  AddDetail ( ({"fach"}),
+    "Das Fach ist leer.");
+  AddDetail ( ({"schildchen"}),
+    "Das Schildchen kann man lesen.");
+  AddReadDetail ("schildchen", "Auf dem kleinen Schildchen steht: 20 Muenzen\n");
+
+  AddCmd ( ({"stecke","steck","wirf","werfe"}), "cmdPay");
+  AddCmd ( ({"drehe","dreh"}), "cmdTurn");
+  AddCmd ( ({"ziehe","zieh"}), "cmdPull");
+  AddCmd ( ({"druecke","drueck","schiebe","schieb"}), "cmdPush");
+  AddCmd ( ({"nimm","nehme","nehm"}), "cmdTake");
+  /* KAUGUMMIAUTOMAT - ENDE */
+
+  AddReadDetail ("schild", "Auf dem Schild steht: Wir bauen gerade um!\n");
+  AddReadDetail ("tafel",
+    "Verfuegbare Befehle:\n"+
+    "<zeige>           Gibt eine Uebersicht ueber das Angebot im Laden.\n"+
+    "<unt> nummer      Gibt eine Beschreibung eines Gegenstands der Liste aus\n"+
+    "<kaufe> nummer oder\n"+
+    "<kaufe> etwas     Du kaufst einen bestimmten Gegenstand.\n"+
+    "<verkaufe> etwas  Du verkaufst einen Gegenstand, den Du bei Dir hast.\n"+
+    "<versetze> etwas  Du verkaufst einen Gegenstand, egal wieviel der\n"+
+    "                  Haendler dafuer bezahlt.\n"+
+    "<schaetz> etwas   Der Haendler sagt Dir, wieviel ihm ein Gegenstand\n"+
+    "                  wert waere, wenn Du ihn verkaufen wuerdest.\n");
+
+  SetStorageRoom (LAGER);
+
+  // AddItem (OBJ("div/teddyautomat"), REFRESH_REMOVE);
+  AddExit ("sueden", "./room_e5");
+
+  AddItem (NPC "landar", REFRESH_DESTRUCT);
+}
+/*
+string det_zeugs()
+{
+  int anz;
+  anz = sizeof(all_inventory(find_object(QueryStorageRoom())));
+  anz += sizeof(QueryFixedObjects());
+  return break_string(
+      "Du zaehlst insgesamt " + anz + " verschiedene Sachen. Wenn Du "
+      "genauer wissen willst, was hier alles feilgeboten wird, gib "
+      "einfach \"zeige\" ein! Auf der Tafel an der Wand kannst Du "
+      "weitere Hinweise nachlesen.", 78);
+}
+*/
+void laeuten(object who)
+{
+  if (who->QueryProp(P_INVIS)) return;
+  while (remove_call_out("klingeling") != -1) /* continue */ ;
+  call_out("klingeling", 4, who);
+}
+
+void exit()
+{
+  laeuten(previous_object());
+}
+
+void init()
+{
+  ::init();
+  laeuten(TP);
+}
+
+void klingeling(object who)
+{
+  if (!who) return;
+  Message(
+      "Die Tuer schliesst sich mit einem Klingeln hinter " +
+      who->name(WEM) + ".\n", MSGFLAG_SOUND,
+      ([ MSGFLAG_EXCLUDE : ({ who }) ]) );
+  if (environment(who) == ME)
+    who->Message(
+        "Die Tuer schliesst sich mit einem Klingeln hinter Dir.\n",
+        MSGFLAG_SOUND);
+}
+
+
+/* KAUGUMMIAUTOMAT - YARA */
+
+int cmdPay(string str)
+{
+  int i;
+  string where;
+
+  notify_fail("Wieviele Muenzen willst Du wo rein stecken?\n");
+  if(!str) return 0;
+
+  str = regreplace(str, "^muenze ", "1 muenzen ", 1);
+  if (2 != sscanf(str, "%d muenzen in %s", i, where) &&
+      2 != sscanf(str, "%d in %s", i, where)) return 0;
+  if((where!="muenzschlitz" && where!="schlitz") || i<1) return 0;
+
+  if (TP->QueryMoney() < i) {
+    write("Soviel Muenzen hast Du nicht bei Dir!\n");
+    return -1;
+  }
+  if (coins > 100) {
+    write("Soviel Muenzen passen da nicht mehr rein!\n");
+    return -1;
+  }
+  if (i > 100) {
+    write("Soviel Muenzen passen da nicht rein!\n");
+    return -1;
+  }
+
+  printf("Du steckst "+(i>1?"%d Muenzen":"eine Muenze")+" in den Muenzschlitz.\n", i);
+  Message(BS(TP->Name()+" steckt etwas in den Muenzschlitz des hoelzernen Kastens."),
+          MSGFLAG_VISUAL, ([MSGFLAG_EXCLUDE :({TP})]));
+  coins += i;
+  TP->AddMoney(0-i);
+  return 1;
+}
+
+
+void turn()
+{
+  Message("Der Kasten klickt leise.\n", MSGFLAG_SOUND);
+  write(BS("Da sonst nichts passiert, muss man wohl noch etwas tun. "
+           "Drehen laesst sich der Hebel nicht mehr, aber vielleicht "
+           "kann man ihn ziehen?"));
+  hebel=1;
+}
+
+int cmdTurn(string str)
+{
+  notify_fail("Was willst Du drehen?\n");
+  if(str!="hebel") return 0;
+
+  if(coins<20 || hebel!=0 || find_call_out("turn")!=-1) {
+    write("Du versuchst den Hebel zu drehen aber der bewegt sich nicht.\n");
+    return -1;
+  }
+  write("Du drehst den Hebel bis er einrastet.\n");
+  AddDetail("hebel","Vielleicht kann man den Hebel ziehen.");
+  Message(TP->Name()+" dreht einen Hebel.\n",
+          MSGFLAG_VISUAL, ([MSGFLAG_EXCLUDE :({TP})]));
+  Message("Der Kasten beginnt zu rattern.\n", MSGFLAG_SOUND);
+  call_out("turn",random(4)+3);
+  return 1;
+}
+
+void pull1()
+{
+  write(BS("Gespannt wartest Du auf Deinen Kaugummi, doch es tut sich nichts. "
+           "Vielleicht muss man noch etwas mit dem Hebel machen?"));
+  hebel=2;
+}
+
+void pull()
+{
+  Message("Die Kaugummis in der Glaskugel wirbeln ploetzlich durcheinander.\n",
+          MSGFLAG_VISUAL);
+
+  call_out("pull1",random(4)+1);
+}
+
+int cmdPull(string str)
+{
+  notify_fail("Was willst Du ziehen?\n");
+  if(str!="hebel") return 0;
+
+  if(hebel!=1 || find_call_out("pull")!=-1 || find_call_out("pull1")!=-1) {
+    write("Du versuchst den Hebel zu ziehen, doch der bewegt sich nicht.\n");
+    return -1;
+  }
+
+  write("Du ziehst den Hebel bis zum Anschlag heraus und wartest.\n");
+  AddDetail("hebel","Der Hebel ist herausgezogen. Was koennte man wohl mit dem tun?");
+  Message(TP->Name()+" zieht einen Hebel.\n",
+          MSGFLAG_VISUAL, ([MSGFLAG_EXCLUDE :({TP})]));
+  call_out("pull",random(4)+3);
+  return 1;
+}
+
+void push1()
+{
+  Message("Der Kasten gibt etwas aus.\n", MSGFLAG_VISUAL);
+  Message("Du hoerst das Klimpern von Muenzen.\n", MSGFLAG_SOUND);
+  AddDetail("fach","Im Fach liegt etwas.");  
+  AddDetail("etwas","Es liegt in dem Fach des Kastens.");
+  hebel=0;
+  gum++;
+  coins=0;
+}
+
+void push()
+{
+  Message("Du hoerst ein leises Rollen aus dem Kasten.\n",
+          MSGFLAG_SOUND);
+  call_out("push1",random(4)+3);
+}
+
+int cmdPush(string str)
+{
+  notify_fail("Was willst Du druecken?\n");
+  if(str!="hebel") return 0;
+
+  if(hebel!=2 || find_call_out("push")!=-1 || find_call_out("push1")!=-1) {
+    write("Du versuchst den Hebel zu druecken, doch der bewegt sich nicht.\n");
+    return -1;
+  }
+
+  write(BS("Du drueckst den Hebel zurueck in seine Ausgangsposition bis "
+           "er einrastet und wartest gespannt.\n"));
+  AddDetail ( ({"hebel"}), "Sieht so aus, als koennte man den Hebel drehen.");
+  Message(TP->Name()+" drueckt einen Hebel.\n",
+          MSGFLAG_VISUAL | MSGFLAG_NO_TP );
+  Message("Der Kasten rattert.\n",MSGFLAG_SOUND);
+  call_out("push",random(4)+3);
+  return 1;
+}
+
+object chooseItem()
+{
+  int i;
+  i = random(100);
+
+  if(cnt==MAX_NO_ITEM || i<5 && cnt>MIN_NO_ITEM) {
+    cnt = 0;
+#ifdef DO_LOG 
+log_file("wiz/yara/kaugummi.log", dtime()+": "
+         +TP->Name(RAW)+" Special Item.\n");
+#endif
+    return clone_object(specials[random(sizeof(specials))]);
+  }    
+  cnt++;
+  if(i<TOY_PROBABILITY) {
+#ifdef DO_LOG 
+  log_file("wiz/yara/kaugummi.log", dtime()+": "
+           +TP->Name(RAW)+" Spielzeug.\n");
+#endif
+    return clone_object(toys[random(sizeof(toys))]);
+  }
+#ifdef DO_LOG 
+log_file("wiz/yara/kaugummi.log", dtime()+": "
+               +TP->Name(RAW)+" Kaugummi.\n");
+#endif
+  return clone_object(candy[random(sizeof(candy))]);
+}
+
+int cmdTake(string str) {
+  object ob;
+  int ret;
+
+  notify_fail("Was willst Du aus dem Fach nehmen?\n");
+  if(str!="etwas aus fach" && str!="alles aus fach") return 0;
+  if(gum<1) {
+    write("Das Fach ist leer.\n");
+    return -1;
+  }
+  if(ob=chooseItem()) {
+    ret=ob->move(TP,M_GET);
+    if(ret == ME_TOO_HEAVY || ret == ME_TOO_MUCH) {
+      write("Das kannst Du nicht mehr aufnehmen.\n");
+      ob->remove();
+      return -1;
+    }
+    write("Du nimmst " + ob->name(WEN) + " aus dem Fach.\n");
+    Message(TP->Name()+" nimmt etwas aus einem Fach.\n",
+          MSGFLAG_VISUAL, ([MSGFLAG_EXCLUDE :({TP})]));
+    AddDetail ( ({"fach"}), "Das Fach ist leer.");
+    RemoveDetail ( "etwas" );
+    gum--;
+  }
+  else write("Du hast Dich geirrt, da ist doch nichts.\n");
+
+  return 1;
+}
+
+/* KAUGUMMIAUTOMAT - ENDE */

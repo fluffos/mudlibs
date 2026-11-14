@@ -1,0 +1,678 @@
+//**************************************************************************//
+/*
+  Die Waldlaeufer-Npcs
+  29.08.06 - Beginn
+  
+  Spells:
+  Rindenhaut: immer (hoehere def gl abhaengig)
+  deutschuss/messerstich: gl 3 (attack)
+  geschwindigkeit: gl 5 (buff)
+  pakt der schatten: gl 6 (wenn lps zu niedrig fuer einige sek invis)
+  zaehmung: gl 7 (hat immer pet dabei, ausser auf beschwoererpfad gl>11)
+  fusstritt: gl 9 (Attack)
+  
+  beschwoerer:
+    wolf/baer/adler/spinne: gl 12/13/14/15
+  
+  iama:
+    ode des sturmes: gl 12 (buff)
+    melodie der avatara: gl 13 (hoehere def)
+    melodie des ostens: gl 15 (buff)
+    
+  tiermeister:
+    tierangriff: gl 11 (attack)
+    kampfgeist: gl 12 (pet-buff)
+    kraft des tieres: gl 13 (buff)
+    kraft der ahnen: gl 14 (pet-buff)
+    gemeinsame attacke: gl 15 (attack)
+    
+  bogen:
+    kalte flamme: gl 11 (buff)
+    zielschuss: gl 12 (attack)
+    giftpfeil: gl 13 (attack)
+    doppelschuss: gl 14 (attack)
+    salve: gl 15 (attack)
+    
+  messer:
+    klingenwirbel: gl 11 (attack)
+    messerwurf: gl 12 (attack)
+    blaue flamme: gl 14 (buff)
+    ausweiden: gl 15 (attack)  
+    
+  beachte: - nach der long!
+           - level > 10
+           - level > (gl*3)-5
+           - sinnvolle pfad-kombination
+           - entsprechende Waffen mitgeben!
+           - wimpy gesetzt und ueber gs6, dann wird pakt der schatten genutzt
+*/
+//**************************************************************************//
+//** INCLUDE + INHERIT + DEFINE ********************************************//
+inherit "std/mnpc";
+#include "/gilden/waldlaeufer/def.h"
+#include "/gilden/waldlaeufer/functions.h"
+#define DR_STURZFLUG "sturzflug "
+#define DR_FANGE "fange "
+#define DR_LAEHME "laehme "
+//-- Vars --------------------------------------------------------------------
+mixed knife_attack_spells=({});
+mixed bow_attack_spells=({});
+mixed pre_buffs=({});
+mixed infight_buffs=({});
+mixed pet=0;
+int has_pakt=0;
+int dex_bonus, rindenhaut, gl, is_pet, dam_bonus, wimpy;
+int avatara_aktiv=0;
+mapping active_spells=([]);
+//-- Prototypes --------------------------------------------------------------
+varargs void create_default_ranger(int level, int glevel, mixed paths, 
+                                   int maxhp);
+//**************************************************************************//
+
+
+
+//** Standardfunktionen ****************************************************//
+//-- Create ------------------------------------------------------------------
+void create()
+{
+  if (!is_clone(TO)) { return; }
+  
+  ::create();
+/*  
+  SetProp(P_NAME, "Typ");
+  SetProp(P_SHORT, "Ein Typ");
+  SetProp(P_LONG, "Blubb");
+  AddId("typ");
+  SetProp(P_SPELLRATE, 100);
+*/
+}
+
+//-- Remove, das Pet muss auch weg -------------------------------------------
+int remove(int silent)
+{ if(objectp(pet)) { pet->remove(); }
+  return ::remove(); }
+
+//-- Der Tod -----------------------------------------------------------------
+void die(int poisondeath)
+{ if(objectp(pet)) { pet->remove(); }
+  ::die(poisondeath); }
+  
+//-- Der Reset ---------------------------------------------------------------
+void reset()
+{ if (!is_clone(TO)) { return; }
+  if(!InFight()) { active_spells=([]); }
+  ::reset(); }
+//**************************************************************************//
+
+
+
+//** Anpassung *************************************************************//
+//-- Traegt er einen Bogen? --------------------------------------------------
+int has_bow()
+{ mixed weapon;
+  if(objectp(TO) && objectp(weapon=QueryProp(P_WEAPON)) ) 
+  { return (weapon->QueryProp(P_WEAPON_TYPE)==WT_BOW); }
+  return 0;
+}
+
+//-- Traegt er eine Messer? --------------------------------------------------
+int has_knife()
+{ mixed weapon;
+  if(objectp(TO) && objectp(weapon=QueryProp(P_WEAPON)) ) 
+  { return (weapon->QueryProp(P_WEAPON_TYPE)==WT_KNIFE); }
+  return 0;
+}
+
+//-- Aufrufen der Funktion, weil eine env benoetigt wird es verzoegert -------
+varargs void create_default_ranger(int level, int glevel, mixed paths, 
+                                    mixed w_pet, int maxhp)
+{
+  call_out(  "create_default_ranger_two" ,0 
+            ,level
+            ,glevel
+            ,paths
+            ,w_pet
+            ,maxhp  ); 
+}
+
+//-- Die Hauptfunktion -------------------------------------------------------
+varargs void create_default_ranger_two(int level, int glevel, mixed paths, 
+                                       mixed w_pet, int maxhp)
+{
+  mixed ob, env, m, pets;
+  string s;
+  int i, k;
+  
+  if (!is_clone(TO) || !objectp(TO) || !objectp(env=ENV(TO)) ) { return; }
+  
+  if(intp(maxhp)&&(maxhp>0)) { create_default_npc(level, maxhp); }
+  else { create_default_npc(level); }
+  SetProp(P_XP, (QueryProp(P_XP)*4)/3);
+  gl=limit(glevel, 1, 20);
+  if(level<10) return;
+  i=(gl*3)-5;
+  if(level<i) return;
+
+  // Waldlaeuferwerte
+  SetProp(P_GUILD, GUILD);
+  SetProp(P_GUILD_LEVEL, gl);
+  AddId( ({DEFAULT_RANGER_ID}) );
+  if(!paths) { paths=({}); }
+  if(gl>15)      { paths=paths[0..1]; }
+  else if(gl>10) { paths=paths[0..0]; }
+  else           { paths=({}); }
+
+  // Ausruestung
+  SUID;
+  ob=clone_object(OBJ"koecher");
+  ob->move(TO, M_NOCHECK);
+  command("trage alles");
+  
+  // Begleiter
+  pets=({"fuchs", "wildschwein", "waldwolf", "steinadler", 
+         "astralpanther", "tiger"});
+  
+  if(!stringp(w_pet) || (member(pets, w_pet) == -1) )
+  {
+    k=sizeof(pets);
+    w_pet=pets[random(k)];
+  }
+  
+  if( gl>=(GUILD_SPELLBOOK->get_spell_use_guild_level(ZAEHMUNG)) )
+  { 
+    if( ((i=member(paths, BESCHWOERER_PFAD)) != -1) &&
+        gl>=(GUILD_SPELLBOOK->get_spell_use_guild_level(WALDWOLF)) )
+    { 
+      if(objectp(ob=clone_object(NPC"summons")) )
+      {
+        if(i){i=gl-17;}
+        else {i=gl-12;}
+        i=limit(i,0,3);
+        s=({"wolf","adler","baer","spinne"})[i];
+        ob=clone_object(NPC"summons");
+        ob->customize(TO, s, MAX_ABILITY);
+        if(gl==MAX_GUILD_LEVEL) { ob->pimp(); }
+        ob->move(env, M_GO);
+        pet=ob;
+      }
+    }
+    else
+    { if(objectp(ob=clone_object(NPC"pet")) )
+      {
+        if(ob->second_create(TO, w_pet)) { pet=ob; }
+        i=gl/2; i=limit(i,0,MAX_LEVEL);
+        i=limit(i,0,ob->QueryProp(P_RANGER_MAX_PET_LEVEL));
+        if(i) 
+        { i--; 
+          ob->SetProp(P_LEVEL, (ob->QueryProp(P_LEVEL))+i); 
+          ob->new_level(); }
+        ob->order("hilf mir");
+        is_pet=1;
+      }
+    }
+  }
+  
+  // Anpassung der Staerke
+  rindenhaut=(gl*5)/2;
+  i=gl/2; i=limit(i,0,10);
+  if(stringp(m=QueryProp(P_LONG)))
+  {
+    SetProp(P_LONG, m+"Scheinbar ist die Haut von einer "+
+      (({"Fichte","Kastanie","Tanne","Linde","Laerche","Kiefer","Birke",
+         "Tethyrahornie","Ulme","Buche","Eiche"})[i])+"nrinde "
+         "ueberzogen.\n" );
+  }
+  SetProp(P_BODY, QueryProp(P_BODY)+rindenhaut);
+  dex_bonus=gl; dam_bonus=10+gl*2;
+  ModifySkill(SK_FIGHT, ([SI_SKILLABILITY:200 ,
+                          SI_DIFFICULTY:100]) , 100 , GUILD);
+  
+  // Spellauswahl
+  if(gl>= 3) { knife_attack_spells+=({MESSERSTICH});
+               bow_attack_spells+=({DEUTSCHUSS});  }
+  if(gl>= 5) { infight_buffs+=({GESCHWINDIGKEIT}); }
+  if(gl>= 6) { has_pakt=1; }
+  if(gl>= 9) { bow_attack_spells+=({FUSSTRITT});
+               knife_attack_spells+=({FUSSTRITT}); }
+  if((i=member(paths, TIERMEISTER_PFAD)) != -1)
+  {
+    if(i>0)   { i=gl-5; }
+    else { i=gl; }
+    if(i>=11) { knife_attack_spells+=({TIERANGRIFF});
+                bow_attack_spells+=({TIERANGRIFF}); }
+    if(i>=12) { infight_buffs+=({KAMPFGEIST});  }
+    if(i>=13) { pre_buffs+=({KRAFT_DES_TIERES}); }
+    if(i>=14) { pre_buffs+=({KRAFT_DER_AHNEN}); }
+    if(i>=15) { knife_attack_spells+=({GEMEINSAME_ATTACKE});
+                bow_attack_spells+=({GEMEINSAME_ATTACKE}); }
+  }
+  if((i=member(paths, IAMA_PFAD)) != -1)
+  {
+    if(i>0)   { i=gl-5; }
+    else { i=gl; }
+    if(i>=12) { pre_buffs+=({ODE_DES_STURMES});
+                dex_bonus+=10; }
+    if(i>=13) { pre_buffs+=({MELODIE_DER_AVATARA}); }
+    if(i>=15) { dex_bonus+=50; }
+  }
+  if((i=member(paths, BOGEN_PFAD)) != -1)
+  {
+    if(i>0)   { i=gl-5; }
+    else { i=gl; }
+    if(i>=11) { pre_buffs+=({KALTE_FLAMME}); }
+    if(i>=12) { bow_attack_spells+=({ZIELSCHUSS});  }
+    if(i>=13) { bow_attack_spells+=({GIFTPFEIL}); }
+    if(i>=14) { bow_attack_spells+=({DOPPELSCHUSS}); }
+    if(i>=15) { bow_attack_spells+=({SALVE}); }
+  }
+  if((i=member(paths, MESSER_PFAD)) != -1)
+  {
+    if(i>0)   { i=gl-5; }
+    else { i=gl; }
+    if(i>=11) { knife_attack_spells+=({KLINGENWIRBEL}); }
+    if(i>=12) { knife_attack_spells+=({MESSERWURF});  }
+    if(i>=14) { infight_buffs+=({BLAUE_FLAMME}); }
+    if(i>=15) { knife_attack_spells+=({AUSWEIDEN}); }
+  }
+}
+//-- Welche Spells hat er nun? -----------------------------------------------
+mixed get_spells()
+{ return knife_attack_spells+bow_attack_spells+infight_buffs+pre_buffs; }
+//**************************************************************************//
+
+
+
+//** KampfFunktionen *******************************************************//
+//-- Schadensbeeinflussung ---------------------------------------------------
+mixed StdSkill_Fight(object me, string sname, mapping sinfo)
+{
+  int dam;
+  
+  // Urspruenglichen Schaden ermittelt
+  dam=sinfo[SI_SKILLDAMAGE];
+  
+  // Std-Bonus
+  dam+=dam_bonus;
+  
+  // Kalte Flamme
+  if(has_bow() && active_spells[KALTE_FLAMME]>time())
+  { sinfo[SI_SKILLDAMAGE_TYPE]+=({DT_MAGIC, DT_MAGIC}); 
+    dam+=gl*5; }
+    
+  // Blaue Flamme
+  if(has_knife() && active_spells[BLAUE_FLAMME]>time())
+  { sinfo[SI_SKILLDAMAGE_TYPE]+=({DT_MAGIC, DT_MAGIC}); 
+    dam+=10+gl*2; }
+    
+  // Ode des Sturmes
+  if(active_spells[ODE_DES_STURMES]>time()) { dam+=10+gl*2; }
+
+  // Schaden wird ausgegeben
+  sinfo[SI_SKILLDAMAGE]=dam;
+  return sinfo;
+}
+
+//-- Verteidgung und Ausweichen ----------------------------------------------
+int Defend(int dam, mixed dam_type, mixed fstspell, object enemy)
+{
+  mixed spell, env, weapon, ob;
+  int i, k, knife, bow;
+  
+  if(!objectp(TO) || !objectp(env=ENV(TO)) )
+  { return ::Defend(dam, dam_type, fstspell, enemy); }
+
+  // Falls das Pet nicht mitkaempft.
+  if(objectp(pet) && present(pet, env))
+  { pet->order("hilf mir"); }
+
+  if(!(bow=has_bow()) && !(knife=has_knife()))
+  { return ::Defend(dam, dam_type, fstspell, enemy); }
+  weapon=QueryProp(P_WEAPON);
+  
+  // Die PreBuffs
+  if(!InFight())
+  {
+    k=0;
+    for(i=0;i<sizeof(pre_buffs);i++)
+    {
+      spell=pre_buffs[i];
+      switch(spell)
+      {
+        case KALTE_FLAMME:
+          if(!bow) { break; }
+          if(active_spells[KALTE_FLAMME]>(time()-20)) { break; }
+          if(env)
+          { tell_room(env, BS(Name(WER, 1)+" beisst in "
+              +QueryPossPronoun(MALE,WEN,0)+" Unterarm und laesst etwas "
+              "Blut auf "+weapon->name(WEN, 1)+" tropfen. Ploetzlich beginnt "
+              +weapon->name(WER, 1)+" blaeulich zu schimmern.")); }
+          active_spells+=([KALTE_FLAMME:time()+250]);
+          call_out("env_message",250, 
+            "Die Kalte Flamme verlaesst "+name(WEN, 1)+"." );
+          k++;
+        break;
+        
+        case KRAFT_DER_AHNEN:
+          if(!is_pet || !objectp(pet)) { break; }
+          if(pet->QueryBiest()) { break; }
+          if(env)
+          { tell_room(env, BS("Ein Waldgeist faehrt in "+pet->name(WEN, 1)+" "
+              "ein. "+pet->Name(WER, 1)+" sieht nun staerker aus.")); }
+          pet->SetBiest(gl/2);
+          k++;
+        break;
+        
+        case KRAFT_DES_TIERES:
+          if(!is_pet || !objectp(pet)) { break; }
+          if(present(KRAFT_DES_TIERES_ID, TO)) { break; }
+          if(env)
+          { tell_room(env, BS(Name(WER)+" scheint jetzt die Kraefte von "
+              +pet->name(WEM, 1)+" zu erben.")); }
+          pet->SwitchBonus(gl/4);
+          k++;
+        break;
+
+        case ODE_DES_STURMES:
+          if(active_spells[ODE_DES_STURMES]>(time()-10)) { break; }
+          if(env)
+          { tell_room(env, BS(Name(WER, 1)+" laesst die mystischen Klaenge "
+              "einer Ode erklingen. "+Name(WER, 1)+" wird merklich "
+              "schneller.")); }
+          active_spells+=([ODE_DES_STURMES:time()+150]);
+          call_out("env_message",150, 
+            "Die mystischen Klaenge der Ode verhallen langsam und "
+            +name(WER, 1)+" wird merklich langsamer." );
+          k++;
+        break;
+        
+        case MELODIE_DER_AVATARA:
+          if(present(AVATARA_ARMOUR_ID, TO)) { break; }
+          if(!objectp(ob=clone_object(ARMOUR"invis_armour"))) { break; }
+          if(env)
+          { tell_room(env, BS(Name(WER, 1)+" wird von einem silbernen "
+              "Schimmer umgeben, schinbar hat "+Name(WER, 1)+" einen "
+              "Schutzgeist angerufen.")); }
+          ob->move(TO, M_SILENT);
+          ob->AddId(AVATARA_ARMOUR_ID);
+          ob->AddResistance(DT_SLASH, -0.7, 150);
+          k=2;
+        break;
+      }
+      if(k>1) { break; }
+    }
+  }
+  
+  // Bonus durch Geschick
+  dam-=dex_bonus;
+  
+  // AusweichenSkill
+  if(random(100)<=(gl/2))
+  {
+    if(objectp(ENV(TO))) 
+    { tell_room(ENV(TO), BS(Name(WER)+" weicht geschickt aus.")); }
+    dam=0;
+  }
+  
+  return ::Defend(dam, dam_type, fstspell, enemy);
+}
+
+//-- Filterfunktion fuer Messer im Inv ---------------------------------------
+int is_knife(object ob)
+{
+  if(ob->QueryProp(P_WEAPON_TYPE) == WT_KNIFE) { return 1; }
+  return 0;
+}
+
+//-- Der Angriff, hier wird die Kampftaktik bestimmt -------------------------
+void Attack(object enemy)
+{
+  mixed env, penv, ob, enemies, weapon, spell, spells;
+  int i, k, knife, bow;
+  
+  if(!objectp(TO) || !objectp(env=ENV(TO)) ) { return; }
+  if(objectp(pet)) { penv=ENV(pet); }
+  bow=has_bow(); knife=has_knife();
+  weapon=QueryProp(P_WEAPON);
+  
+  // Spellt nicht waerend der blauen Flamme
+  if(active_spells[BLAUE_FLAMME]>(time()-10)) { ::Attack(enemy); return; }
+  // Die Buffs, die auch im Kampf wirken
+  if((i=sizeof(infight_buffs))>0)
+  {
+    spell=infight_buffs[random(i)];
+    switch(spell)
+    {
+      case BLAUE_FLAMME:
+        if(!knife) { break; }
+        if(env)
+        { tell_room(env, BS(Name(WER, 1)+" wird in eine blaeuliche "
+                           "Aura gehuellt und faengt an sich schneller zu "
+                           "bewegen.")); }
+        active_spells+=([BLAUE_FLAMME:time()+120]);
+        ModifySkillAttribute(TO, SA_SPEED, 450, 60);
+        call_out("env_message",120, 
+          "Die Blaue Flamme verlaesst "+name(WEN, 1)+"." );
+      break;
+      
+      case KAMPFGEIST:
+        if(!pet || !is_pet) { break; }
+        if(pet->QueryTeam()) { break; }
+        if(env)
+        { tell_room(env, BS(Name(WER, 1)+" gibt "+pet->name(WEM, 1)+" ein "
+            "Zeichen.")); }
+        pet->SetTeam(10);
+      break;
+      
+      case GESCHWINDIGKEIT:
+        if(active_spells[GESCHWINDIGKEIT]>(time()-10)) { break; }
+        if(active_spells[ODE_DES_STURMES]>(time()-10)) { break; }
+        if(env)
+        { tell_room(env, BS(Name(WER, 1)+" spannt die Muskeln an und beginnt "
+            "sich wesentlich schneller zu bewegen.")); }
+        active_spells+=([GESCHWINDIGKEIT:time()+120]);
+        i=gl*20; i=limit(i,150,400);
+        ModifySkillAttribute(TO, SA_SPEED, i, 100);
+        call_out("env_message",100, 
+          Name(WER, 1)+" bewegt sich wieder langsamer." );
+      break;
+    }
+  }
+  // Der Angriff
+  ::Attack(enemy);
+  if(!objectp(enemy)) { return; }
+  
+  // AngriffSpells
+  if(random(100)>=QueryProp(P_SPELLRATE)) {return; }
+  spells=({});
+  if(knife)    { spells+=knife_attack_spells; }  
+  else if(bow) { spells+=bow_attack_spells;   }
+  if(objectp(pet) && env==penv && !is_pet)
+  { if(pet->id("adler"))        { spells+=({DR_STURZFLUG}); }
+    if(pet->id("schwertspinne")){ spells+=({DR_FANGE});     }
+    if(pet->id("spinne"))       { spells+=({DR_LAEHME});    } }
+  if(sizeof(filter_array(all_inventory(TO), "is_knife")) < 2)
+  { spells-=({MESSERWURF}); }
+  if(!sizeof(spells)) return;
+  if(!spell=spells[random(sizeof(spells))]) return;
+  switch(spell)
+  {
+    case MESSERSTICH:
+      if(env)
+      { tell_room(env, BS(Name(WER, 1)+" zielt kurz auf "+enemy->name(WEN, 1)+
+          "."), ({enemy}) ); }
+      tell_object(enemy, BS(Name(WER, 1)+" zielt kurz auf Dich."));
+      enemy->Defend(20*gl, weapon->QueryProp(P_DAM_TYPE), 0, TO);   
+    break;
+    
+    case DEUTSCHUSS:
+      if(env)
+      { tell_room(env, BS(Name(WER, 1)+" laeuft auf "+enemy->name(WEN, 1)+
+          " zu, springt ab und stoesst zu."), ({enemy}) ); }
+      tell_object(enemy, BS(Name(WER, 1)+" laeuft auf Dich zu, springt ab und"
+        " stoesst zu."));
+      enemy->Defend(20*gl, weapon->QueryProp(P_DAM_TYPE), 0, TO);
+    break;
+
+    case FUSSTRITT:
+      if(env)
+      { tell_room(env, BS(enemy->Name(WER, 1)+" wird von "+name(WEM, 1)+" "
+          "mit einer geschickten Bewegung getreten."), ({enemy}) ); }
+      tell_object(enemy, BS("Du wirst von "+name(WEM, 1)+" "
+          "mit einer geschickten Bewegung getreten."));
+      enemy->Defend(10*gl, ({ DT_BLUDGEON, DT_SQUEEZE }), 0, TO);
+      if(!objectp(enemy)) { return; }
+      if( !(enemy->id(NOFALLDOWN))                   ||
+          !(enemy->is_class_member(CL_FLYING))       || 
+           (enemy->QueryProp(P_WEIGHT)<=5*100*1000)  || 
+          !(enemy->id("geist")) )
+      {
+        if(active_spells[ODE_DES_STURMES]>time() || random(2))
+        { enemy->SetProp(P_DISABLE_ATTACK, 2);
+          tell_object(enemy, BS("Du faellst zu Boden."));
+          tell_room(env,BS(enemy->Name(WER,1)+" faellt zu Boden."),({enemy}));
+          enemy->SetProp(P_LAST_RAMMEN_TIME, time());
+        }
+      }      
+    break;
+    
+    case TIERANGRIFF:
+      if(penv!=env || !is_pet) { break; }
+      if(env)
+      { tell_room(env, BS(Name(WER, 1)+" gibt "+pet->name(WEM, 1)+" "
+          "ein Zeichen.")); }
+      pet->SpezialAttack(enemy, 5);
+    break;
+    
+    case GEMEINSAME_ATTACKE:
+      if(penv!=env || !is_pet) { break; }
+      i=pet->QueryStrength(5);
+      if(!i) { break; }
+      if(env)
+      { tell_room(env, BS(Name(WER, 1)+" greift "+enemy->name(WEN, 1)+
+          " zusammen mit "+pet->name(WEM, 1)+" an."), ({enemy}) ); }
+      tell_object(enemy, BS(Name(WER, 1)+" greift Dich zusammen mit "+
+        pet->name(WEM, 1)+" an."));
+      i+=weapon->QueryDamage();
+      enemy->Defend(i, weapon->QueryProp(P_DAM_TYPE), 0, TO);
+    break;
+    
+    case ZIELSCHUSS:
+      if(env)
+      { tell_room(env, BS(Name(WER, 1)+" laesst einen gut "
+          "gezielten Schuss auf "+enemy->name(WEN, 1)+" los."), ({enemy}) ); }
+      tell_object(enemy, BS(Name(WER, 1)+" laesst einen gut "
+          "gezielten Schuss auf Dich los."));
+      enemy->Defend(50*gl, weapon->QueryProp(P_DAM_TYPE), 0, TO);
+    break;
+    
+    case GIFTPFEIL:
+      if(env)
+      { tell_room(env, BS(Name(WER, 1)+" schiesst einen Giftpfeil "
+          "auf "+enemy->name(WEN, 1)+"."), ({enemy}) ); }
+      tell_object(enemy, BS(Name(WER, 1)+" schiesst einen Giftpfeil "
+          "auf Dich."));
+      if(interactive(enemy)) { enemy->AddPoison(2); }
+      enemy->Defend(25*gl, ({DT_POISON}), 0, TO);
+    break;
+    
+    case DOPPELSCHUSS:
+      enemies=PresentEnemies();
+      if(sizeof(enemies)<2) { enemies=({enemy, enemy}); }
+      enemies=enemies[0..1];
+      if(env)
+      { tell_room(env, BS(Name(WER, 1)+" legt zwei Pfeile in den Bogen und "
+          "zielt ...")); }
+      enemies[0]->Defend(20*gl, weapon->QueryProp(P_DAM_TYPE), 0, TO);
+      enemies[1]->Defend(20*gl, weapon->QueryProp(P_DAM_TYPE), 0, TO);
+    break;
+    
+    case SALVE:
+      enemies=PresentEnemies();
+      if(sizeof(enemies)<2) { enemies=({enemy, enemy}); }
+      if(env)
+      { tell_room(env, BS(Name(WER, 1)+" laesst einen Pfeilhagel auf Euch "
+          "los!")); }
+      for(i=0;i<sizeof(enemies);i++)
+      { if(!objectp(enemy)) { return; }
+        enemies[i]->Defend(15*gl, weapon->QueryProp(P_DAM_TYPE), 0, TO); }
+    break;
+    
+    case KLINGENWIRBEL:
+      enemies=PresentEnemies();
+      if(sizeof(enemies)<1) { break; }
+      if(env)
+      { tell_room(env, BS(Name(WER, 1)+" wirbelt einmal im Kreis und holt "
+          "zu einem Rundumschlag aus.")); }
+      for(i=0;i<sizeof(enemies);i++)
+      { enemies[i]->Defend(9*gl, weapon->QueryProp(P_DAM_TYPE), 0, TO); }
+    break;
+    
+    case MESSERWURF:
+      if(env)
+      { tell_room(env, BS(Name(WER, 1)+" wirft "+weapon->name(WEN, 0)+" "
+          "auf "+enemy->name(WEN, 1)+"."), ({enemy}) ); }
+      tell_object(enemy, BS(Name(WER, 1)+" wirft "+weapon->name(WEN, 0)+" "
+        "auf Dich."));
+      enemy->Defend(3*weapon->QueryProp(P_WC), 
+                    weapon->QueryProp(P_DAM_TYPE), 0, TO);
+      if(!objectp(enemy)) { return; }
+      if( (lower_case(enemy->QueryProp(P_RACE)) == "geist") ||
+          (enemy->id("geist")) )
+      { weapon->move(env, M_NOCHECK | M_SILENT); 
+        tell_room(env, BS(weapon->Name(WER, 1)+" faellt auf den Boden."));}
+      else { weapon->move(enemy, M_NOCHECK | M_SILENT); } 
+      command("zuecke dolch");
+      command("zuecke messer");
+    break;
+    
+    case DR_STURZFLUG: pet->order(DR_STURZFLUG+
+                                  lower_case(to_string(enemy->name(RAW))));
+    break;
+    case DR_FANGE:     pet->order(DR_FANGE+
+                                  lower_case(to_string(enemy->name(RAW))));
+    break;
+    case DR_LAEHME:    pet->order(DR_LAEHME+
+                                  lower_case(to_string(enemy->name(RAW))));
+    break;
+        
+    case AUSWEIDEN:
+      if(env)
+      { tell_room(env, BS(Name(WER, 1)+" schlitzt "+enemy->name(WEN, 1)+" "
+          "auf."), ({enemy}) ); }
+      tell_object(enemy, BS(Name(WER, 1)+" schlitzt Dich auf!"));
+      enemy->Defend(50*gl, weapon->QueryProp(P_DAM_TYPE), 0, TO);  
+    break;
+  }  
+}
+
+//-- Wenn ein Spell abgelaufen ist, kommt hier die Meldung -------------------
+void env_message(string msg)
+{ object env;
+  if(objectp(TO) && objectp(env=ENV(TO))) { tell_room(env, BS(msg)); } }
+  
+//-- Pakt der Schatten wenn der Ranger fliehen will --------------------------
+int _set_wimpy(int i) { wimpy=i; return wimpy;}
+int _query_wimpy()
+{
+  if( (QueryProp(P_HP) < wimpy) && !QueryProp(P_INVIS) && 
+      has_pakt && InFight() && active_spells[PAKT_DER_SCHATTEN]<time() )
+  { 
+    SetProp(P_NOATTACK, 1); 
+    call_out("undo_invis_flee", 6); 
+    active_spells+=([PAKT_DER_SCHATTEN:time()+36]);
+    if(ENV(TO))
+    { tell_room(ENV(TO), BS(Name(WER, 1)+" wird zu einem Schatten.")); } 
+    SetProp(P_INVIS, 1); 
+  }
+  return wimpy;
+}
+void undo_invis_flee()
+{
+  mixed env;
+  
+  SetProp(P_INVIS, 0); 
+  if(objectp(TO) && objectp(env=ENV(TO)) )
+  { tell_room(env,BS(Name(WER,1)+" verlaesst die Welt der Schatten.")); }
+  SetProp(P_NOATTACK, 0); 
+}
+//**************************************************************************//

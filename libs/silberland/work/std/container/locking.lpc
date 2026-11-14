@@ -1,0 +1,390 @@
+// SilberLand MUDlib
+//
+// std/container/locking.c -- oeffnen/(ver-) schliessen von Containern
+//
+// $Date: 2006/02/18 21:20:01 $
+/* $Revision: 1.3 $
+ * $Log: locking.c,v $
+ * Revision 1.3  2006/02/18 21:20:01  Woody
+ * Abfrage in reset() gegen Buggen eingebaut
+ *
+ * Revision 1.2  2003/03/24 09:33:54  Woody
+ * P_TRANSPARENT setzen in _set_cnt_status()
+ *
+ * Revision 1.1  2003/03/19 15:47:42  Woody
+ * Initial revision
+ *
+ */
+
+
+// Eine Erweiterung fuer Standardcontainers in /std/container:
+// damit leichter Behaelter wie Beutel, Kiste, Flasche, etc.
+// geoeffnet, geschlossen, ggf. abgeschlossen, geknackt werden koennen
+//
+// Beruht auf /obj/container.c von Mupfel@Anderland (1995)
+//
+// Soll ein Schluessel verwendet werden, so setzt man
+// P_CNT_KEY auf die Id des zu verwendenden Schluessels:
+// 1. Wenn EIN Schluessel zum Oeffnen und Schliessen verwendet
+//    werden soll:
+//    SetProp(P_CNT_KEY, schluessel_id)
+// 2. Wenn fuers Oeffnen und Schliessen unterschiedliche
+//    Schluessel verwendet werden sollen (oder nur fuers
+//    Oeffnen oder nur fuers Schliessen):
+//    SetProp(P_CNT_KEY, ([CNT_STATUS_OPEN:open_id,
+//                         CNT_STATUS_LOCKED:lock_id]))
+//
+// contributed by Archon@Silberland
+
+#pragma strong_types
+#define NEED_PROTOTYPES
+
+#include <thing.h>
+#include <language.h>
+#include <properties.h>
+#include <container.h>
+#include <defines.h>
+#include "/sys/thing/properties.h"
+
+
+void add_openclose_commands();
+
+// Default Verhalten
+int IsOpen()
+{
+  return !(QueryProp(P_CNT_STATUS) & ~CNT_STATUS_BROKEN);
+}
+
+int IsClosed()
+{
+  return QueryProp(P_CNT_STATUS) & CNT_STATUS_CLOSED;
+}
+
+int IsLocked()
+{
+  return QueryProp(P_CNT_STATUS) == CNT_STATUS_LOCKED;
+  // if broken, P_CNT_STATUS is CNT_STATUS_LOCKED | CNT_STATUS_BROKEN
+}
+
+// 'Prototypen' fuer ueberladbare Funktionen, um eigenes verhalten anzupassen
+int  BeforeOpen()   { return 1; }
+int  BeforeClose()  { return 1; }
+void AfterOpen()    { }
+void AfterClose()   { }
+int  KeyOpenFunc()  { return 1; }
+int  KeyCloseFunc() { return 1; }
+
+void create()
+{
+  SetProp(P_CNT_OPENCLOSE , 0); //ersteinmal alle funktionalitaeten ausschalten
+}
+
+void add_openclose_commands()
+{
+  Set(P_CNT_KEY   , 0, F_SET_METHOD);
+  Set(P_CNT_STATUS, 0, F_SET_METHOD);
+  Set(P_CNT_FLAGS , 0, F_SET_METHOD);
+
+  SetProp(P_CNT_OPENCLOSE , 1);
+  SetProp(P_CNT_KEY       , 0);
+  SetProp(P_CNT_STATUS    , CNT_STATUS_CLOSED);
+  SetProp(P_CNT_FLAGS     , CNT_RESET_CLOSE);
+  SetProp(P_CNT_CRACK_CHANCE, 10);
+
+  AddCmd(({"oeffne"}),"cmd_open");
+  AddCmd(({"schliess","schliesse","verschliesse"}), "cmd_close");
+}
+
+void reset()
+{
+  int f;
+
+  if (file_name(ME)=="/std/container/locking")  // prevents reset bugs
+    return;
+
+  if (!QueryProp(P_CNT_OPENCLOSE))
+    return;
+
+  f = QueryProp(P_CNT_FLAGS);
+  if (f & CNT_RESET_OPEN)
+    SetProp(P_CNT_STATUS, CNT_STATUS_OPEN);
+  else if (f & CNT_RESET_CLOSE)
+    SetProp(P_CNT_STATUS, CNT_STATUS_CLOSED);
+  else if (f & CNT_RESET_LOCK)
+    SetProp(P_CNT_STATUS, CNT_STATUS_LOCKED);
+
+  SetProp(P_TRANSPARENT, IsOpen());
+}
+
+// Methode zum Setzen des Container-Status
+int _set_cnt_status(int st)
+{
+  //testen ob Kombination der Stati erlaubt
+  mixed ret;
+
+  switch (st)
+  {
+    case CNT_STATUS_OPEN:
+    case CNT_STATUS_CLOSED:
+    case CNT_STATUS_LOCKED:
+    case (CNT_STATUS_BROKEN|CNT_STATUS_OPEN):   // == CNT_STATUS_BROKEN
+    case (CNT_STATUS_BROKEN|CNT_STATUS_CLOSED):
+      ret = Set(P_CNT_STATUS, st);
+      SetProp(P_TRANSPARENT, IsOpen());
+      return ret;
+
+    default:
+      return -1;        //error
+  }
+}
+
+// Methode zum Setzen eines Schluessels (wenn P_CNT_KEY gesetzt
+// wird, wird angenommen, dass ein Schluessel erforderlich ist)
+mixed _set_cnt_key(mixed key)
+{
+  string lock_key, open_key;
+
+  if (stringp(key))
+    return Set( P_CNT_KEY,
+        ([ CNT_STATUS_OPEN:key, CNT_STATUS_LOCKED:key ]) );
+
+  if (mappingp(key))
+  {
+    open_key = key[CNT_STATUS_OPEN];
+    lock_key = key[CNT_STATUS_LOCKED];
+    return Set( P_CNT_KEY,
+        ([ CNT_STATUS_OPEN:open_key, CNT_STATUS_LOCKED:lock_key ]) );
+  }
+  return -1;  // Fehlerstatus
+}
+
+//aufruf von aussen (skill mit flags=1) oder von hier
+varargs int do_crack(int chance,int flags)
+{
+  int old_s;
+
+  if (QueryProp(P_CNT_FLAGS) & CNT_NO_CRACK) return 0;
+  old_s = QueryProp(P_CNT_STATUS);
+  if (old_s & CNT_STATUS_OPEN) return 0;
+  if (old_s & CNT_STATUS_BROKEN) return 0;
+  if (flags)
+  { // Aufruf vom Skill - der uebernimmt alles andere
+    // (Test ob Skill funktioniert etc.)
+    if (old_s & CNT_STATUS_BROKEN)
+      SetProp(P_CNT_STATUS,CNT_STATUS_OPEN|CNT_STATUS_BROKEN);
+    else
+      SetProp(P_CNT_STATUS,CNT_STATUS_OPEN);
+    return 1;
+  }
+  if (chance>random(1001)) return 1; //geknackt
+  if (random(2)) return 0; //nicht geknackt aber dietrich heil
+  return -1; //dietrich geht kaputt
+}
+
+
+// Funktionen zum Oeffnen/Schliessen des Containers, ggf. mit Schluessel
+// (in Anlehnung an entsprechende Funktionen aus /obj/doormaster.c)
+
+int cmd_open(string args)
+{
+  object key;
+  string was, womit;
+  int dietrich, ret;
+
+  if (!args || !PL)
+    return notify_fail("WAS moechtest Du oeffnen?\n"), 0;
+
+  notify_fail("Das kannst Du nicht oeffnen.\n");
+  if (sscanf(args, "%s mit %s", was, womit) < 2) {
+    was = args;
+    womit = 0;
+  }
+  if (!id(was)) return 0;
+  if (IsOpen()) {
+    write(break_string(Name(WER,1) + " ist schon geoeffnet."));
+    return 1;
+  }
+
+  dietrich = 0;
+  if (womit)
+  {
+    if (!IsLocked() || !QueryProp(P_CNT_KEY) ||!(QueryProp(P_CNT_KEY)[CNT_STATUS_OPEN]))
+    {
+      write(break_string(
+        "Zum Oeffnen " + name(WESSEN,1) + " brauchst Du keinen Schluessel."));
+      return 1;
+    }
+    if (!(key = present(womit,PL)))
+    {
+      write(break_string(
+         capitalize(womit) + "? Sowas hast Du nicht bei Dir."));
+      return 1;
+    }
+    dietrich = key->id("\ndietrich");
+    if (!key->id(QueryProp(P_CNT_KEY)[CNT_STATUS_OPEN]) && !dietrich)
+    {
+      say(break_string(sprintf(
+          "%s versucht, %s mit %s aufzuschliessen - aber vergeblich.",
+          PL->Name(WER), name(WEN,0), key->name(WEM,0))), ({ PL }) );
+      write(break_string(sprintf(
+          "Du versuchst, %s mit %s aufzuschliessen, doch %s passt nicht!",
+          name(WEN,1), key->name(WER,1), key->name(WER,1) )));
+      return 1;
+    }
+    if (dietrich && (1 != (ret = do_crack(QueryProp(P_CNT_CRACK_CHANCE)))))
+    {
+      say(break_string(sprintf(
+          "%s versucht %s mit %s zu oeffnen - aber vergeblich.",
+          PL->Name(WER), name(WEN,0), key->name(WEM,0))), ({ PL }) );
+      write(break_string(sprintf(
+        "Du versuchst, %s mit %s zu oeffnen. Doch Du schaffst es nicht.",
+        name(WEN,1), key->name(WER,1) )));
+
+      if (ret == -1)
+      {
+        write("Leider ist Dir dabei auch noch Dein Dietrich kaputt gegangen.\n");
+        womit->remove(1);
+      }
+      return 1;
+    }
+    if (!KeyOpenFunc()) return 1;       //eigene Funktion hat etwas gegen das Oeffnen
+  }
+  else
+  {
+    if (QueryProp(P_CNT_KEY) && IsLocked())
+    {
+      write(break_string(
+        "Du benoetigst einen Schluessel, um " + name(WEN,1) + " zu oeffnen."));
+      return 1;
+    }
+  }
+  if (!BeforeOpen())
+    return 1;           //eigene Funktion hat etwas gegen das Oeffnen
+
+  if (womit)
+    write(break_string(sprintf(
+        "Du %sst %s mit %s.", (dietrich ? "knack" : "oeffne"),
+        name(WEN,1), key->name(WEM,1))));
+  else
+    write(break_string(sprintf(
+      "Du oeffnest %s.", name(WEN,1) )));
+
+  say(break_string(sprintf(
+      "%s oeffnet %s.", PL->Name(WER), name(WEN) )), ({ PL }) );
+
+  SetProp(P_CNT_STATUS,
+      CNT_STATUS_OPEN | (QueryProp(P_CNT_STATUS) & CNT_STATUS_BROKEN) );
+
+  AfterOpen();
+  return 1;
+}
+
+
+int cmd_close(string args)
+{
+  object key;
+  string was, womit;
+
+  if (!args || !PL)
+    return notify_fail("WAS moechtest Du schliessen?\n"), 0;
+
+  notify_fail("Das kannst Du nicht schliessen.\n");
+
+  if ((sscanf(args, "%s mit %s ab", was, womit) == 2) ||
+      (sscanf(args, "%s mit %s zu", was, womit) == 2) ||
+      (sscanf(args, "%s mit %s", was, womit) == 2))
+    ;
+  else if ((sscanf(args, "%s zu", was) == 1) ||
+           (sscanf(args, "%s ab", was) == 1))
+  {
+    if (!id(was)) return 0;
+
+    if (IsLocked())
+    {
+      write(Name(WER,1)+" ist doch schon abgeschlossen!\n");
+      return 1;
+    }
+    if (QueryProp(P_CNT_KEY) && (QueryProp(P_CNT_KEY)[CNT_STATUS_LOCKED]))
+    {
+      write(break_string(
+        "Du benoetigst einen Schluessel um "+name(WEN,1)+" abzuschliessen."));
+      return 1;
+    }
+    write(break_string("Du kannst "+name(WEN,1)+" nicht abschliessen."));
+    return 1;
+  }
+  else if (sscanf(args, "%s mit %s auf", was, womit) == 2)
+    return cmd_open(sprintf("%s mit %s",was,womit));
+  else if (sscanf(args, "%s auf", was) == 1)
+    return cmd_open(was);
+  else
+  { womit=0; was=args; }
+
+  if (!id(was)) return 0;
+  if (IsLocked())
+  {
+    write(Name(WER,1) + " ist doch schon abgeschlossen!\n");
+    return 1;
+  }
+  if (womit)
+  {
+    if (QueryProp(P_CNT_STATUS) & CNT_STATUS_BROKEN)
+    {
+      write(break_string(
+         "Das Schloss " + name(WESSEN,1) + " ist zerstoert, Du kannst "
+         + QueryPronoun(WEN) + " nicht mehr abschliessen."));
+      return 1;
+    }
+    if (!QueryProp(P_CNT_KEY) || !(QueryProp(P_CNT_KEY)[CNT_STATUS_LOCKED]))
+    {
+      write(break_string(
+        "Du kannst " + name(WEN,1) + " nicht abschliessen!"));
+      return 1;
+    }
+    if (!(key = present(womit, PL)))
+    {
+      write(break_string(
+         capitalize(womit) + "? Sowas hast Du nicht bei Dir."));
+      return 1;
+    }
+    if (!key->id(QueryProp(P_CNT_KEY)[CNT_STATUS_LOCKED]))
+    {
+      say(break_string(sprintf(
+          "%s versucht, %s mit %s abzuschliessen - aber vergeblich.\n",
+          PL->Name(WER), name(WEN), key->name(WEM) )), ({ PL }) );
+      write(break_string(sprintf(
+          "Du versuchst, %s mit %s abzuschliessen, doch %s passt nicht.",
+          name(WEN), key->name(WEM), key->name(WER,1) )));
+      return 1;
+    }
+    if (!KeyCloseFunc()) return 1;
+  }
+  else if (IsClosed())
+  {
+    write(Name(WER,1)+" ist doch schon geschlossen!\n");
+    return 1;
+  }
+  if (!BeforeClose()) return 1;
+  if (womit)
+  {
+    //Status kann hier nicht BROKEN sein ...
+    SetProp(P_CNT_STATUS, CNT_STATUS_LOCKED);
+    write(break_string(sprintf(
+        "Du schliesst %s mit %s ab.", name(WEN,1), key->name(WEM,1) )));
+    say(break_string(sprintf(
+        "%s schliesst %s ab.", PL->Name(WER), name(WEN) )));
+  }
+  else
+  {
+    write(break_string(sprintf(
+      "Du schliesst %s.", name(WEN,1) )));
+
+    say(break_string(sprintf(
+        "%s schliesst %s.", PL->Name(WER), name(WEN) )), ({ PL }) );
+
+    SetProp(P_CNT_STATUS,
+        CNT_STATUS_CLOSED | (QueryProp(P_CNT_STATUS) & CNT_STATUS_BROKEN) );
+  }
+  AfterClose();
+  return 1;
+}

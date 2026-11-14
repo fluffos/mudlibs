@@ -1,0 +1,346 @@
+//** Npcmaster von Delgo ***************************************************//
+/*
+  Master zur Steuerung/Kontrolle von wichtigen NPCs in Tethyrgebieten
+  - aufgrund der Fuelle der Infos Zeilenlaenge 150
+*/
+//**************************************************************************//
+//** INHERIT + INCLUDE + DEFINE ********************************************//
+#include "../def.h"
+#include <ansi.h>
+
+//--Vars----------------------------------------------------------------------
+string *enemies;
+mixed area_color, npcs;
+int messagelevel;  // 0 = Nichts; 1 = Wichtiges; 2 = Quests; 3 = Alles
+
+//--Prototypes----------------------------------------------------------------
+void update_list();
+//**************************************************************************//
+
+
+
+//** StandardFunktionen ****************************************************//
+//-- Create ------------------------------------------------------------------
+void create()
+{
+  if(is_clone(TO))
+  { destruct(TO); return; }
+
+  SUID;
+  enemies=({});
+  npcs=({});
+  area_color=ANSI_BOLD+ANSI_RED;
+  return;
+}
+
+//-- Feindschaft beenden -----------------------------------------------------
+void reset()
+{
+  enemies=({});
+  update_list();
+}
+//**************************************************************************//
+
+
+
+//** GebietsFeind-Verwaltung ***********************************************//
+//-- Einen Feind hinzufuegen -------------------------------------------------
+void AddEnemy(object pl)
+{
+  string uuid;
+  if(!pl)              return;
+  if(!interactive(pl)) return;
+  uuid = getuuid(pl);
+  if(member(enemies, uuid) == -1) enemies += ({ uuid });
+}
+
+//-- Ist das objekt ein Feind? -----------------------------------------------
+int IsEnemy(object pl)
+{
+  string uuid;
+
+  if(!pl)              return 0;
+  if(!interactive(pl)) return 0;
+  uuid = getuuid(pl);
+  if(member(enemies, uuid) != -1) {return 1;}
+  return 0;
+
+}
+
+/***************************************************************************
+** Die folgenden drei Funktionen sind in den entsprechenden NPC zu kopieren
+** oder noch besser, man kreiiert sich seinen eigenen std_npc, der diese
+** Funktionen Beinhaltet
+****************************************************************************
+
+void angriff(object pl)
+{
+  string shouter;
+  if(!ENV(TO))           return;
+  if(!ENV(pl))           return;
+  if(!interactive(pl))   return;
+  if(ENV(TO) != ENV(pl)) return;
+  shouter = pl->CannotSee(1) ? "Jemand ruft: "
+                             : Name(WER,1)+" ruft: ";
+  tell_room(ENV(TO),
+     "\n"+break_string(pl->Name(WER)+" ist uns feindlich "
+             "gesinnt, auf "+pl->QueryPronoun(WEN)+" mit Gebruell!!!", 78,
+             shouter)+"\n", 1);
+  Kill(pl);
+  return;
+}
+
+void init()
+{
+  ::init();
+  if(!TP)                        return;
+  if(!interactive(TP))           return;
+  if(TP->QueryProp(P_GHOST))     return;
+  if(!WALDMASTER->IsEnemy(TP))   return;
+  call_out("angriff", 0, TP);
+}
+
+int Defend(int dam, mixed dam_type, mixed spell, object enemy)
+{
+  WALDMASTER->AddEnemy(enemy);
+  return ::Defend(dam, dam_type, spell, enemy);
+}
+*/
+//**************************************************************************//
+
+
+
+//** Npc registrieren/loeschen *********************************************//
+//-- Liste updaten -----------------------------------------------------------
+void check_list() { return update_list(); }
+void update_list()
+{
+  int i;
+  object ob;
+
+  if(!pointerp(npcs) || sizeof(npcs)<1) return;
+  for(i=0;i<sizeof(npcs);i++)
+  {
+    if(!objectp(ob=npcs[i]))
+    {
+      npcs-=({ob});
+      i--;
+    }
+  }
+  return;
+}
+
+//-- Neuen Npc hinzufuegen ---------------------------------------------------
+int RegisterNpc(object ob)
+{
+  if(!pointerp(npcs)) return 0;
+  if(!objectp(ob) || (member(npcs, ob) != -1) || interactive(ob)) return 0;
+  npcs+=({ob});
+  return 1;
+}
+
+//-- Npc beseitigen ----------------------------------------------------------
+void DeleteNpc(object ob)
+{
+  if(!pointerp(npcs) || sizeof(npcs)<1) return;
+  if(!objectp(ob) || (member(npcs, ob) == -1)) return;
+  npcs-=({ob});
+  return;
+}
+
+//-- Liste ausgeben ----------------------------------------------------------
+mixed get_list()
+{
+  update_list();
+  if(!pointerp(npcs) || sizeof(npcs)<1) return ({});
+  return npcs;
+}
+mixed get_npcs() { return get_list(); }
+
+//-- Einen NPC anfordern -----------------------------------------------------
+mixed get_npc(int index)
+{
+  int size;
+  mixed ob;
+  
+  update_list();
+  size=sizeof(npcs);
+  if( (index < 0) || (index > (size-1)) ) return 0;
+  if(!pointerp(npcs) || size<1) return 0;
+  if(!objectp(ob=npcs[index])) return 0;
+  return ob;
+}
+
+//-- Fuer Rechner auswertbare Liste ------------------------------------------
+/*
+  Gibt die registrierten ids und den zugehoerigen namen aus, damit andere 
+  Funktionen Npcs erkennen koennen, ihre Id holen und somit den Npc
+  den sie brauchen
+*/
+mapping get_all_npcs()
+{
+  mapping m;
+  int i;
+  object ob;
+  
+  m=([]);
+  update_list();
+  if(!pointerp(npcs) || sizeof(npcs)<1) return m;
+  for(i=0; i<sizeof(npcs); i++)
+  {
+    if(!objectp(ob=npcs[i])) continue;
+    m+=([i:to_string(ob->QueryProp(P_NAME))]);
+  }
+  return m;  
+}
+
+//-- eine Liste bestimmter Npcs werden ausgegeben (id) -----------------------
+mixed get_all(string s)
+{
+  int i;
+  object ob;
+  mixed m;
+  
+  m=({});
+  update_list();
+  if(!pointerp(npcs) || sizeof(npcs)<1 || strlen(s)<1) return ({});
+  for(i=0;i<sizeof(npcs);i++)
+  {
+    if(!objectp(ob=npcs[i])) continue;
+    if(ob->id(s)) m+=({ob});
+  }
+  return m;
+}
+
+int get_index(object ob)
+{
+  update_list();
+  if(!objectp(ob) || !pointerp(npcs) || sizeof(npcs)<1) return -1;
+  return member(npcs, ob);
+}
+//**************************************************************************//
+
+
+
+//** Message-Verwaltung ****************************************************//
+//-- Das NachrichtenLevel setzen ---------------------------------------------
+void SetLevel(int level) { messagelevel = level; }
+
+//-- Welches NachrichtenLevel ist gesetzt? -----------------------------------
+int QueryLevel() { return messagelevel; }
+
+//-- Nachricht an Gebietsmagier ----------------------------------------------
+void Msg(string s, int level)
+{
+  object pl;
+  int i;
+  string str;
+
+  // Log
+  write_file(DOC "master.log", dtime()+": "+s+".\n");
+  
+  // Message
+  pl=find_player(MAGIERNAME);
+  str="";
+  if( objectp(pl) && interactive(pl) && IS_WIZARD(pl) && 
+      (level <= messagelevel))
+  { str=break_string(area_color+"Tethyr - Npcs"+ANSI_NORMAL+": "+s+".", 
+                     pl->QueryProp(P_SCREENWIDTH));
+    tell_object(pl,str); }
+  return;
+}
+//**************************************************************************//
+
+
+
+//** Wer ist zur Zeit aktiv? ***********************************************//
+//-- Vorfunktion zum Sortieren -----------------------------------------------
+int fn_sort(object ob1, object ob2) 
+{
+  if(file_name(ob1)<file_name(ob2)) { return 1; }
+  return 0;
+}
+
+//-- Hauptfunktion -----------------------------------------------------------
+int area_info(int fn_sort) 
+{
+  string s, fn, env_fn, n, lps, fight;
+  object *list, ob, env, enemy;
+  mixed m;
+  int i, index, k, npc_counter;
+
+  if(!objectp(TP) || !IS_WIZARD(TP)) return 0;
+  update_list();
+  if(!pointerp(npcs)) return 0;
+  list=npcs;
+  if(fn_sort) list=sort_array(list,"fn_sort", ME);
+  
+  s=sprintf("\n"+area_color+"%|150s"+ANSI_NORMAL+"\n\n"+ANSI_BOLD+ANSI_UNDERL+
+            "%-3s %-19s %-42s %-42s %-9s %-30s\n\n"+ANSI_NORMAL
+      , "Tethyr - Npcs"
+      , "ID#"
+      , "Name"
+      , "file_name"
+      , "room"
+      , "LPs"
+      , "Im Kampf mit:"
+      );
+
+  for(i=0;i<=sizeof(list)-1;i++) 
+  {
+    ob=list[i];
+    if(!objectp(ob)) continue;
+    
+    if(fn_sort) index=get_index(ob);
+    else { index=i; }
+    
+    n=to_string(ob->QueryProp(P_NAME));
+    
+    m=explode(file_name(ob), "#");
+    fn=m[0];
+    
+    if(objectp(env=environment(ob)))
+    {
+      env_fn=file_name(env);
+      env_fn=(strlen(env_fn)>40?(env_fn[0..39])+"..":env_fn);
+    }
+    else { env_fn="<Keine Env!>"; }
+    
+    lps=to_string(ob->QueryProp(P_HP))+"/"+to_string(ob->QueryProp(P_MAX_HP));
+    
+    fight="";
+    m=ob->PresentEnemies();
+    if(sizeof(m)<1) fight+="<keine Feinde>";
+    else
+    {
+      npc_counter=0;
+      for(k=0;k<sizeof(m);k++)
+      {
+        enemy=m[k];
+        if(interactive(enemy))
+        {
+          fight+=CAP(getuid(enemy));
+          if(k<sizeof(m)-1) fight+=", ";
+        }
+        else { npc_counter++; }
+      }
+      if(npc_counter)
+      {
+        fight+=" -- "+to_string(npc_counter)+" NPC"+((npc_counter>1)?"s":"");
+      }
+    }
+    
+    s+=sprintf("%3s %-19s %-42s %-42s %-9s %-30s\n"
+        , to_string(index)
+        , n[0..18]
+        , (strlen(fn)>40?(fn[0..39])+"..":fn)
+        , env_fn
+        , lps
+        , fight
+        );
+  }
+
+  write(s+"\n");
+  return 1;
+}
+//**************************************************************************//

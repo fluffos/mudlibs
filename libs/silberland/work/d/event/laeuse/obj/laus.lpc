@@ -1,0 +1,172 @@
+
+/*
+
+   Eine kleine Laeusefamilie fuer das Laeuse-Event Zordan@SL
+
+*/
+
+
+#include "../laeuse.h"
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+
+int zeit;
+int no_entlaus;
+
+create() {
+  if (!is_clone(TO)) return;
+  ::create();
+
+  if(file_name(previous_object()) != LAEUSEMASTER) {
+    write("Die Laeuse haben auch ihren Stolz und lassen sich nicht einfach clonen.\n");
+    destruct(TO);
+  }
+  zeit=call_other(LAEUSEMASTER,"dauer")/2;
+  no_entlaus=time();
+
+  SetProp(P_SHORT, "Eine Laeusefamilie");
+  SetProp(P_LONG,
+    "Ihhh. Ein paar Laeuse haben sich in Deinen Haaren festgesetzt. Sie "
+    "jucken und nerven Dich tierisch. Ab und zu beissen sie Dir in den Kopf "
+    "und fangen langsam aber sicher an Dich zu nerven. Du solltest Dir "
+    "schnell jemanden suchen, der Dir gegen diese Plage hilft. Ausserdem "
+    "fressen sie die ganze Zeit Teile Deiner Erfahrung und Gesundheit weg." );
+  SetProp(P_INFO,"Nur mit Entlausen kann man diesen Biestern entgegenwirken.\n");
+  SetProp(P_NAME, "Laeusefamilie");
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({ "laeuse","familie","laeusefamilie",LAUSID,"NODESTRUCT",
+            "NOUNCURSE", "NOCONTROL", "SKILL_NOLEARN", "FELL_WUSCHEL"}) );
+          //Alles grossgeschriebene August 2004 by Malar
+  SetProp(P_MATERIAL, MAT_FLESH );
+  SetProp(P_WEIGHT, 1);
+  SetProp(P_VALUE, 0);
+  SetProp(P_CURSED,1); // damit Berserker sie NICHT zerstoeren koennen !!!
+  SetProp(P_NOBUY, 1);
+//  SetProp(P_NEVERDROP,1); nene, die laeuse bleiben in der leiche !!
+  SetProp(P_NODROP, 
+    "Du schuettelst Dich. Doch leider wirst Du nicht alle Laeuse los.\n");
+  SetProp(P_NOSELL, 
+    "Die Laeuse nimmt Dir doch niemand freiwillig ab.\n");
+
+  AddCmd( ({ "entlaus","entlause" }),"entlausfkt" );
+
+  call_out("lausfkt",1+random(3));
+}
+
+void lausfkt() {
+  string ausgabe;
+  object *env;
+  object ob;
+  int i,xp,timetogo;
+  if (!MENV) {
+    // hm. wo ist mein ENV hin ? -> besser entfernen
+    TO->remove();
+    return;
+  }
+  if (!living(MENV)) { 
+    // Achtung, irgendwie aus nem Living entkommen -> besser entfernen 
+    TO->remove();
+    return;
+  }
+  timetogo=no_entlaus+30;
+  if (timetogo < time()) {  // in den ersten 30 Sek. verliert man keine XP
+    xp=MENV->QueryProp(P_XP);
+    xp-=(3+random(3))*MENV->QueryProp(P_LEVEL);
+    MENV->SetProp(P_XP,xp);
+  }
+  MENV->reduce_hit_point(random(4)); // hp verliert man immer
+  if (!random(4)) {
+    switch(random(10)) {
+      default: ausgabe="Eine Laus zwickt Dir in Dein Ohr.\n";
+               break;
+      case 1 : ausgabe="Die Laeuse spielen Ping-Pong auf Deinem Kopf.\n";
+               break;
+      case 2 : ausgabe="Eine Laus krabbelt Dir ueber die Nase.\n";
+               break;
+      case 3 : ausgabe="Ein paar Laeuse fallen an Dir herunter.\n";
+               break;
+      case 4 : ausgabe="Die Laeuse jucken wie verrueckt.\n";
+               break;
+      case 5 : ausgabe="Die Laeuse rauben Dir den Verstand.\n";
+               break;
+      case 6 : ausgabe="Du kratzt Dich.\n";
+               break;
+      case 7 : ausgabe="Eine Laus krabbelt Dir den Ruecken runter.\n";
+               break;
+      case 8 : ausgabe="Du denkst . o O (Ich hasse Laeuse)\n";
+               break;
+      case 9 : ausgabe="Das Jucken auf Deinem Kopf laesst nicht nach.\n";
+               break;
+    }
+//    ausgabe=ausgabe+" Abzug XP: "+to_string(xp)+".\n";  
+    tell_object(MENV,ausgabe);
+  }
+
+
+  env=all_inventory(ENV(MENV));
+  for( i=0 ; i<sizeof(env) ; i++ ) {
+    if (living(env[i]) && interactive(env[i])) {
+      if(!present(LAUSID,env[i])) {
+        if(env[i]->QueryProp(P_LEVEL)>=10) {
+          call_other(LAEUSEMASTER,"NewLaus",MENV,env[i]);
+          no_entlaus=time();
+        }
+      }
+    }
+  }
+  if (zeit--<0) {
+    tell_object(MENV,
+      "Die Laeuse finden an Dir nichts mehr zu fressen und fallen tot zu Boden.\n");
+    tell_room(ENV(MENV),
+      "Lauter tote Laeuse fallen von "+MENV->Name()+" herunter.\n", ({ MENV }) );
+    TO->remove();
+    return;
+  }
+  call_out("lausfkt",1+random(3));
+}
+
+void remove() {
+  call_other(LAEUSEMASTER, "RemoveLaus", ME);
+  ::remove();
+  return;
+}
+
+string extra_look() {
+  if (environment()->QueryProp(P_GENDER)==MALE)
+    return "Ihhh. An seinem Koerper krabbeln ueberall Laeuse herum.\n";
+  else
+    return "Ihhh. An ihrem Koerper krabbeln ueberall Laeuse herum.\n";
+}
+
+int entlausfkt(string str) {
+  object player,playerlaus;
+  int timetogo;
+  timetogo=no_entlaus+30+random(30);
+  notify_fail("Wen moechtest Du entlausen ?\n");
+  if (!str) return 0;
+  notify_fail("Diesen Spieler gibt es nicht !\n");
+  if (!player=find_living(str)) return 0;
+  if (!interactive(player)) return 0;
+  notify_fail("Du kannst Dich nicht selber entlausen !\n");
+  if (player==TP) return 0;
+  notify_fail(CAP(str)+" muss schon neben Dir stehen !\n");
+  if (!present(player,ENV(TP))) return 0;
+  notify_fail(CAP(str)+" hat ja gar keine Laeuse !\n");
+  if (!playerlaus=present(LAUSID,player)) return 0;
+  notify_fail("Die Laeuse sind noch zu klein. Du musst noch ein wenig warten.\n");
+  if (timetogo > time()) return 0;
+  notify_fail("Du fummelst und fummelst, aber leider kannst Du nicht alle Laeuse erwischen.\n");
+  if (random(3)) return 0;
+  tell_object(TP,
+    "Du entlaust "+CAP(str)+" und aus Dank wirst Du auch entlaust.\n");
+  tell_object(player,
+    "Du wirst von "+TPN+" entlaust und revangierst Dich.\n");
+  tell_room(ENV(TP),
+    TPN+" und "+CAP(str)+" entlausen sich gegenseitig.\n", ({ TP,player}) );
+  playerlaus->remove();
+  TO->remove();
+  return 1;
+}

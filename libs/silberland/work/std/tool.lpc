@@ -1,0 +1,148 @@
+// SilberLand MUDlib
+//
+// std/tool.c -- Basisobjekt fuer sicherheitsrelevante Objekte (Tools)
+//
+// $Date: 2005/01/15 13:46:24 $
+/* $Revision: 1.2 $
+ * $Log: tool.c,v $
+ * Revision 1.2  2005/01/15 13:46:24  Woody
+ * Zusaetzlicher Parameter fuer secure(), reset() Tests, SetShort(), ...
+ *
+ * Revision 1.1  1999/03/15 16:30:59  Woody
+ * Initial revision
+ *
+ */
+
+/*
+ * Von dieser Unterklasse von std/thing.c sollten alle Magiertools, 
+ * zumindest aber jene in /obj/tools/ und jene, welche eine effektive
+ * User-ID != 0 verwenden, abgeleitet werden.
+ *
+ * 1999 - 2005 Adrian Holzwarth / Anatol@Silberland
+ */
+
+#pragma strict_types
+
+inherit "std/thing";
+
+#include <properties.h>
+
+/* secure() sollte in einem Befehl als erstes aufgerufen werden. Der 
+ * Mindestmagierlevel ist ggf. zu uebergeben.  */
+
+varargs nosave int secure (int security) {
+  return ((this_interactive()) && 
+          (this_player()==this_interactive()) &&
+          (this_player()==environment(this_object())) &&
+          (!process_call()) &&
+	  (secure_level() >= security));
+}
+
+public void create () {
+  if (!is_clone(this_object())) return;
+  ::create();
+  AddId("TOOL");
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_MAGIC, 1);
+  SetProp(P_MATERIAL, ([ MAT_MAGIC:100 ]) );
+  return;
+}
+
+/* SetShort() ist nicht fuer die Sicherheit, sondern fuer die
+ * Customer Compliance. Setzt den Namen des Eigners in die Short: */
+
+nosave int SetShort (string rawstring) {
+  string s, owner;
+  if (((environment())||(this_player())) && 
+      (owner=getuid(environment(this_object())||this_player())))
+    s=capitalize(((s=owner)[<1]=='s'||s[<1]=='x'||s[<1] =='z')?
+      s+="' ":s+="s ");
+  else
+    s=QueryArticle(); 
+  SetProp(P_SHORT, s+rawstring);
+  return 1;
+}
+
+/* Im Reset wird das Objekt entsorgt, wenn es a) die Blueprint ist und 
+ * eine Umgebung hat (waere nicht mehr clonebar) oder b) die Umgebung 
+ * kein Spielerobjekt ist.  */
+
+public void reset () {
+  if ((!is_clone(this_object())) && environment())
+    destruct(this_object()); 
+  if (environment() && query_once_interactive(environment()))
+    ::reset();
+  else 
+    destruct(this_object());
+}
+
+public varargs string long () {
+  return funcall(QueryProp(P_LONG));
+}
+
+public string short () {
+  if (QueryProp(P_INVIS)) return 0;
+  if (QueryProp(P_SHORT))
+    return funcall(QueryProp(P_SHORT))+".\n";
+}
+
+public varargs string GetSmell (mixed race) {
+  mixed smell;
+
+  if (stringp(race)) race=lower_case(race);
+  smell = funcall(QueryProp(P_SMELL));
+  if (mappingp(smell)) smell = smell[race] || smell[0];
+  if (stringp(smell)) return smell;
+  else return 0;
+}
+
+public varargs string GetSound (mixed race) {
+  mixed sound;
+
+  if (stringp(race)) race=lower_case(race);
+  sound = funcall(QueryProp(P_SOUND));
+  if (mappingp(sound)) sound = sound[race] || sound[0];
+  if (stringp(sound)) return sound;
+  else return 0;
+}
+
+public varargs string GetDetail (mixed key, mixed race) {
+  mixed detail;
+ 
+  if (stringp(race)) race=lower_case(race);
+  detail = Query(P_DETAILS)[key];
+  if (mappingp(detail)) detail = detail[race] || detail[0];
+  if (stringp(detail)) return detail;
+  else return 0;
+}
+
+public varargs string GetReadDetail (mixed key, mixed race) {
+  mixed detail;
+
+  if ((id(key) && (detail=funcall(QueryProp(P_READ_MSG)))) ||
+      (detail=Query(P_READ_DETAILS)[key]))
+    if (mappingp(detail))
+      detail = (stringp(race)?detail[lower_case(race)]:0) || detail[0];
+  if (stringp(detail)) return detail;
+}
+
+public int lies (string str) {
+  string detail;
+
+  _notify_fail("Was moechtest Du lesen?\n");
+  if (!str || !id(str)) return 0;
+  if (this_player()->CannotSee()) return 1;
+  if (QueryProp(P_READ_MSG))
+    return (int)write(funcall(QueryProp(P_READ_MSG))), 1;
+  else if (detail = funcall(QueryProp(P_READ_DETAILS)[str]))
+    return (int)write(detail);
+  else return 0;
+}
+
+public int read (string str) { return lies(str); }
+

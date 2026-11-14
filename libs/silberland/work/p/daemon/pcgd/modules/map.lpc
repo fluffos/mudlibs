@@ -1,0 +1,156 @@
+#include "../pcgd_intern.h"
+
+private string* createSubBranch(int length) {
+    string *branch;
+
+    DB(sprintf("createSubBranch :: length = %d\n", length));
+
+    branch = ({ });
+    for(;length>0;length--) {
+        branch += ({ MAP_NODE_UNDEF });
+    }
+
+    DB(sprintf("createSubBranch :: return = %O\n", branch));
+    return branch;
+}
+
+private mixed* explodeCyclicBranch(mixed* map,float branchChance, int minBranchLength, int maxBranchLength, int depth) {
+    int i, len;
+    mixed* newMap;
+    mixed *newBranch;
+
+    newMap = ({ });
+
+    DB(sprintf("GenerateCyclicMap :: map=%O branchChance=%.2f minBranchLength=%d maxBranchtLength=%d\n", 
+    map, branchChance, minBranchLength, maxBranchLength));
+
+    // iterate over map, each field on the map has a chance to generate a branch. The end of each branch is 
+    // connected to the next element in the map
+    for(i=0; i<sizeof(map); ++i) {
+        newMap += ({ map[i] });
+        if(i == sizeof(map)-1) continue; // last node never has a branch to ensure clean exit
+        if(random(100) > (int) (100*branchChance) && depth != 0) continue; // first level always branches
+        if(++depth > MAX_CYCLIC_MAP_DEPTH) continue;
+
+        len = random(maxBranchLength - minBranchLength);
+        newMap += ({ explodeCyclicBranch(createSubBranch(len), branchChance, minBranchLength, maxBranchLength, depth ) });
+    }
+
+    DB(sprintf("GenerateCyclicMap :: return = %O\n", newMap));
+
+    return newMap;
+}
+
+// Generates a map path based on a cyclic generation algorithm. This algorithm guarantees that the map is always
+// traversible. It visits each node in the path and, given on a chance, generates a subbranch.
+// The resulting path can be passed to a map layouter function that will generate a room with exits for each
+// node.
+//
+// map - initial map to start with, you can use your own strings as keywords to highlight nodes of importance (default: ({start, undef, end}))
+// branchChance - chance that a new branch is created (default: 0.5)
+// minBranchLength - minimum length of a subbranch (default: 1)
+// maxBranchLength - maximum length of a subbranch (defaukt: 20)
+public varargs mixed* GenerateCyclicMapPath(mixed *map, float branchChance, int minBranchLength, int maxBranchLength) {
+    if(!map) map = ({MAP_NODE_START, MAP_NODE_UNDEF, MAP_NODE_END});
+    if(!branchChance) branchChance = 0.5;
+    if(!minBranchLength) minBranchLength = 1;
+    if(!maxBranchLength) maxBranchLength = 20;
+
+    DB(sprintf("GenerateCyclicMap :: startMap=%O branchChance=%.2f minBranchLength=%d maxBranchtLength=%d\n", 
+                  map, branchChance, minBranchLength, maxBranchLength));
+
+   
+    return explodeCyclicBranch(map, branchChance, minBranchLength, maxBranchLength, 0);
+}
+
+
+
+private void expandLinearLayoutForBranch(mixed* branch, int startPosition, object layout, int bivariant) {
+    int position, bivariantStartX, bivariantStartY;
+
+    DB(sprintf("expandLinearLayoutForBranch :: branch=%O startPosition=%d layout=%O bivariant=%d\n", branch, startPosition, layout, bivariant))
+
+    for(position=startPosition; position < sizeof(branch); ++position) {
+        if(pointerp(branch[position])) {
+            if(bivariant) {
+                bivariantStartX = layout->getCurrentCursorX();
+                bivariantStartY = layout->getCurrentCursorY();
+            }
+            
+            layout->AddExit(PCG_EXIT_SOUTH);
+            layout->AppendRow();
+            layout->incrementCursorY();
+            layout->AddExit(PCG_EXIT_NORTH);
+            layout->SetType(branch[position]);
+
+            expandLinearLayoutForBranch(branch[position], 0, layout, bivariant);
+           
+            if(bivariant) {
+                layout->AddLinearPathX(bivariantStartX, layout->getCurrentCursorX(), layout->getCurrentCursorY()-1);
+                layout->AddLinearPathY(bivariantStartY, layout->getCurrentCursorY(), layout->getCurrentCursorX());
+            }
+        }
+        else {
+            layout->AddExit(PCG_EXIT_EAST);
+
+            layout->AppendColumn();
+            layout->incrementCursorX();
+            layout->SetType(branch[position]);
+            layout->AddExit(PCG_EXIT_WEST);
+        }
+    }
+
+    DB(sprintf("expandLinearLayoutForBranch :: return\n"))
+}
+
+// simple linear layouter model:
+//  - start in the northwestern point of the map
+//  - advance to the next node previous
+//  - if node is a simple node: connect previous node to the west of the current node
+//  - if node is a branch: make first node of branch the current node and connect the previous node to the north of the current node
+//  - repeat until last node is processed
+private object linearLayoutMap(mixed* map, int bivariant) {
+    object layout;
+    int position;
+    int cursorX, cursorY;
+    mixed *ret;
+
+    DB(sprintf("linearLayoutMap :: bivariant=%d\n", bivariant))
+
+    layout = clone_object(PCGD_HOME "modules/map/MapLayout");
+    layout->Initialize(({ 
+        ({ ([PCG_L_TYPE: MAP_NODE_START, PCG_L_EXITS: 0]) }) // start with only one coordinate at 0|0 with no exits
+    }), 1, 1);
+    layout->SetCursorX(1, 0);
+
+    expandLinearLayoutForBranch(map, 1, layout, bivariant);
+
+    DB(sprintf("linearLayoutMap :: return = %O\n", layout))
+
+    return layout;
+}
+
+public varargs mixed* LayoutPathToMap(int layoutModel, mixed *map, string persistenceKey) {
+    object layout;
+    mixed *ret;
+
+    // check if the cache already contains a map with the given persistence key
+    if(objectp(layout=this->CacheGet(CACHE_MAPS, persistenceKey))) return layout->Map();
+
+    switch(layoutModel) {
+        case PCG_LAYOUT_LINEAR: layout = linearLayoutMap(map, 0); break;
+        case PCG_LAYOUT_BIVARIANT_LINEAR: layout = linearLayoutMap(map, 1); break;
+        default: raise_error("unknown layout model");
+    }
+
+    layout->CleanLayout();
+    ret = layout->Map();
+
+    if(stringp(persistenceKey)) {
+        this->CachePut(CACHE_MAPS, persistenceKey, layout);
+    } else {    
+        destruct(layout);
+    }
+
+    return ret;
+}

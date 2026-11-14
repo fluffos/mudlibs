@@ -1,0 +1,93 @@
+#include "../def.h"
+
+#define SP_ANIMALS "animal"
+#define SP_RANGER "ranger"
+#define SP_POACHER "poacher"
+#define SP_TRAP "trap"
+
+#define RANDOM_ROOM all_rooms[random(sizeof(all_rooms))]
+
+private nosave string *all_rooms = ({"a0_b", "a0_h", "a0_k", "a1_m", "a2_l", "a3_l", "a4_e", "a4_k", "a5_e", "a5_k", "a6_d", "a6_f", "a6_g", "a6_j", "a7_b", "a7_f", "a7_h", "a7_i", "a8_c", "a8_e", "a8_i", "a9_a", "a9_c", "a9_d", "a9_i", "b1_b", "b1_c", "b1_g", "b1_i", "b1_j", "b1_l", "b2_c", "b2_g", "b2_l", "b3_b", "b3_g", "b3_k", "b4_a", "b4_g", "b4_h", "b4_i", "b4_j", "b5_b", "b5_d", "b5_f", "b5_k", "b6_c", "b6_e", "b6_l", "b7_d", "b8_d", "b9_c"});
+private nosave mapping npcSpawnPoints = ([SP_ANIMALS: ({}), SP_RANGER: ({}), SP_POACHER: ({}), SP_TRAP: ({})]);
+private nosave mapping targetNumbers = ([SP_ANIMALS: 10, SP_RANGER: 3, SP_POACHER: 5, SP_TRAP: 10]);
+private nosave mapping spawnItems = ([
+    SP_ANIMALS: ({NPC "hirsch", NPC "dachs", NPC "wolf", NPC "luchs", NPC "amsel", "d/huegelland/feyaria/weg/npc/specht", NPC "habicht", NPC "uhu", NPC "libelle", 
+                  "/d/ebene/Silberwald/npc/otter", "/d/ebene/Silberwald/npc/biber", NPC "fuchs", NPC "bache", NPC "eber", NPC "schwarzbaer",
+                  NPC "schroeter", NPC "waldspinne"}),
+    SP_RANGER: ({NPC "ranger_schueler", NPC "ranger_hueter"}),
+    SP_POACHER: ({NPC "poacher_easy"}),
+    SP_TRAP: ({OBJ "fangfalle", OBJ "giftfalle", OBJ "netzfalle", OBJ "stolperdraht"})
+]);
+
+public void selectSpawnPoints();
+
+public void create() {
+    selectSpawnPoints();
+}
+
+public void selectSpawnPoints () {
+    int j;
+    string *indices, cat;
+
+    indices = m_indices(targetNumbers);
+    for(j = 0; j<sizeof(indices); ++j) {
+        cat = indices[j];
+        call_out("selectSpawnPointsFor", 0, cat);
+    }  
+
+    return;
+}
+
+public varargs void selectSpawnPointsFor(string cat) {
+    string room;
+    int safeCounter, i;
+    DB("spawnPoints :: " + cat + "\n");
+    for(i=0; i<targetNumbers[cat]; ++i) {
+        safeCounter = 0;
+        room = "";
+        do {
+            room = RANDOM_ROOM;
+            if(++safeCounter > 100) break;
+            DB(sprintf("safeCounter: %d\n", safeCounter));
+        } while(room == "" || member(npcSpawnPoints[cat], room) >= 0);
+
+        npcSpawnPoints[cat] += ({room});
+    }
+}
+
+public mapping GetSpawnPoints() {
+    return npcSpawnPoints;
+}
+
+public string* GetItemsForSpawnPoint(string room) {
+    room = explode(room, "/")[sizeof(explode(room, "/"))-1];
+    if(member(npcSpawnPoints[SP_ANIMALS], room) >= 0) return spawnItems[SP_ANIMALS];
+    if(member(npcSpawnPoints[SP_RANGER], room) >= 0) return spawnItems[SP_RANGER];
+    if(member(npcSpawnPoints[SP_POACHER], room) >= 0) return spawnItems[SP_POACHER];
+    if(member(npcSpawnPoints[SP_TRAP], room) >= 0) return spawnItems[SP_TRAP];
+    return 0;
+}
+
+// Gildenquest fuer die Waldis
+public void PoacherKilledBy(object pl) {
+    if(pl->QueryProp(P_TESTPLAYER)) {
+        tell_object(pl, sprintf("waldmaster :: PoacherKilledBy :: pl=%O killed=%d\n", pl, pl->QueryProp("suedwald_poacher_killed")));
+    }
+
+    if(pl->QueryProp(P_GUILD) != "waldlaeufer") return;
+    if(pl->QueryProp(P_GUILD_LEVEL) > 1) return;
+
+    if(pl->QueryProp(P_TESTPLAYER)) {
+        tell_object(pl, "waldmaster :: PoacherKilledBy :: kill accepted\n");
+    }
+
+    pl->SetProp("suedwald_poacher_killed", pl->QueryProp("suedwald_poacher_killed") + 1);
+    if(pl->QueryProp("suedwald_poacher_killed") >= 5) {
+        call_other("/gilden/waldlaeufer/master/master", "SetTask",  getuid(pl), 2);
+        tell_object(pl, BS("Du muesstest nun genug Wilderer getoetet haben, sodass sie die Botschaft verstanden "
+                           "haben. Raziel sollte zufrieden sein!"));
+        pl->SetProp("suedwald_poacher_killed", 0);
+    }
+
+    return;
+}

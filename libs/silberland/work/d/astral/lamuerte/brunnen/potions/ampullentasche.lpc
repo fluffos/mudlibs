@@ -1,0 +1,219 @@
+// Ampullentasche von Angrox, 22.08.2006
+inherit "/std/container";
+
+#include "../def.h" 
+#include "../well_level.h"
+
+nosave string *ampullen;
+
+create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+  ampullen=({});
+  SetProp(P_SHORT, "Eine Ampullentasche");
+  AddId(({"tasche", "ampullentasche", "\nampullentasche"}));
+  SetProp(P_NAME, "Ampullentasche");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_WEIGHT, 800);
+  SetProp(P_VALUE, 10000);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_INFO, BS("Die Ampullentasche ist gut ausgepolstert, um sicherlich "
+        "um die 50 Ampullen aufzunehmen. Du kannst Ampullen hineinstecken "
+        "(stecke ampulle|farbe in ampullentasche) und die Ampullen auf "
+        "verschiedene Art und Weise suchen und herausnehmen "
+        "(nimm ampulle|ampulle <nr>|farbe aus ampullentasche). Vorsicht "
+        "jedoch! Wenn man mehrere Ampullentaschen gleichzeitig besitzt, "
+        "kann es passieren, dass diese aus voellig unerfindlichen "
+        "Gruenden explodieren!"));
+  SetProp(P_MATERIAL, ({MAT_LEATHER}));
+  SetProp(P_KILL_NAME, "Eine kleine Explosion");
+  AddCmd( ({ "steck", "stecke", "leg", "lege" }), "insert_into" );
+  AddCmd( ({ "nimm", "nehme" }), "take_from" );
+}
+
+string _query_long() {
+  string txt;
+  string *amp_txt;
+  int i;
+  txt=BS("Eine ausgepolsterte Ampullentasche, in der sich folgende Ampullen "
+      "befinden: ");
+  if(!sizeof(ampullen))
+    txt+="Keine\n";
+  else {
+    for(i=0;i<=sizeof(ampullen)-1;i++) {
+      amp_txt=explode(ampullen[i],"__"); 
+      txt+=sprintf("%2d.  Eine %s Ampulle\n", i,amp_txt[2]);
+    }
+  }
+  return txt;   
+}
+
+int insert_into(string str) {
+  string was,wohin, unique_name,c_string;
+  object ampulle;
+  int colornumber,might;
+  if(!str) return 0;
+  str=TP->_unparsed_args();
+  if(sscanf(str,"%s in %s", was, wohin)!=2) {
+    return 0;
+  }
+  if(member(({"ampullentasche","tasche"}), wohin)==-1) {
+    return 0;
+  } 
+  if(!(ampulle=present(was,TP))) {
+    write(BS("So etwas hast Du nicht bei Dir!"));
+    return 1;
+  }
+  if(!ampulle->id("\nbrunnenampulle")) {
+    write(BS("Du kannst nur Ampullen aus dem Brunnen in die "
+          "Ampullentasche stecken."));
+    return 1;
+  }
+  if(sizeof(ampullen)>=50) {
+    write(BS("Leider passen nicht mehr Ampullen in die Tasche."));
+    return 1;
+  }
+  colornumber=ampulle->query_colornumber();
+  might=ampulle->query_might();
+  c_string=ampulle->colorstring();
+  unique_name=implode( ({to_string(colornumber),to_string(might),c_string}), "__");
+  ampullen+=({unique_name});
+  ampulle->remove();
+  write(BS("Du steckst eine "+c_string+" Ampulle in die Ampullentasche."));
+  if(ENV(TP)) 
+    tell_room(ENV(TP), BS(sprintf("%s steckt eine Ampulle in die "
+            "Ampullentasche.", TP->Name(WER))),({TP}));
+  return 1;
+}
+
+int take_from(string str) {
+  string was,wohin,unique_name;
+  object ampulle;
+  string c_string;
+  mixed help;
+  int i,nummer,mv_ret;
+  nummer=-1;
+  if(!query_once_interactive(TP)) return 0;
+  str=TP->_unparsed_args();
+  if(!str) return 0;
+  if(sscanf(str,"%s aus %s", was, wohin)!=2) {
+    return 0;
+  }
+  sscanf(str, "%s %d aus %s", was, nummer, wohin);
+  if(member(({"ampullentasche","tasche"}), wohin)==-1) {
+    return 0;
+  } 
+  if(!sizeof(ampullen)) {
+    write(BS("Du greifst in die Ampullentasche, findest jedoch nichts."));
+    return 1;
+  }
+  if(intp(nummer) && nummer !=-1 && was == "ampulle") {
+    if(nummer >= 0 && nummer<=(sizeof(ampullen)-1))
+      unique_name=ampullen[nummer];
+  }
+  else if(was == "ampulle") {
+    nummer=sizeof(ampullen)-1;
+    unique_name=ampullen[nummer];
+  }
+  else {
+    for (i=sizeof(ampullen)-1;i>=0;i--) {
+      if (was==lower_case(explode(ampullen[i],"__")[2])) {
+        unique_name=ampullen[i];
+        nummer=i;
+        break;
+      }
+    }
+  }
+  if(!unique_name) {
+    write(BS("Du greifst in die Ampullentasche, findest jedoch nichts."));
+    return 1;
+  }
+  help=explode(unique_name,"__");
+  ampulle=clone_object(POTIONS "ampulle");
+  ampulle->set_color(to_int(help[0]));
+  ampulle->set_might(to_int(help[1]));
+  mv_ret=ampulle->move(TP, M_GET);
+  if(mv_ret == ME_TOO_HEAVY) {
+    write(BS("Die Ampulle ist Dir zu schwer!"));
+    ampulle->remove();
+    return 1;
+  }
+  if(mv_ret == ME_TOO_MUCH) {
+    write(BS("Du kannst keine weiteren Gegenstaende mehr tragen!"));
+    ampulle->remove();
+    return 1;
+  }
+  ampullen[nummer]="delete_me";
+  ampullen-=({"delete_me"});
+  write(BS(sprintf("Du greifst in die Ampullentasche und holst eine %s "
+          "Ampulle heraus.", help[2])));
+  if(ENV(TP)) 
+    tell_room(ENV(TP),BS(sprintf("%s nimmt eine Ampulle aus der "
+            "Ampullentasche.",TP->Name(WER))),({TP}));
+  return 1;
+}
+
+
+mixed QueryPotion() {
+  return ampullen;
+}
+
+int number_of_potions() {
+  return sizeof(ampullen);
+}
+
+int bumm() {
+  object pl;
+  if(!sizeof(ampullen)) return 0;
+  if(living(ENV(ME))) 
+    pl=ENV(ME);
+  else if(ENV(ENV(ME)) && living(ENV(ENV(ME))))
+    pl=ENV(ENV(ME));
+  if(pl) {
+    tell_object(pl, BS("Huch! Ein leises Knirschen laesst vermuten, dass "
+        "ein paar Deiner Ampullen in der Tasche zerbrochen sind und das nun "
+        "die Tasche wohl gleich explodiert!"));
+    tell_object(pl,BS("Mit einer kleinen Explosion verteilt sich die "
+            "Ampullentasche samt Inhalt in der Umgebung!"));
+    if(ENV(pl)) 
+      tell_room(ENV(pl), BS(sprintf("Die Ampullentasche von %s explodiert!",
+              pl->name(WEM))),({pl}));
+    pl->do_damage(random(100)+10);
+  } else if(ENV(ME)) {
+    tell_room(ENV(ME), BS("Die Ampullentasche explodiert!"));
+  }
+  call_out("remove", 0);
+
+  return 1;
+}
+
+void reset() {
+  object *objects;
+  ::reset();
+  // Auf anraten von Yara: Wahrscheinlichkeit verringert
+  if(random(1000) == 23) 
+    bumm();
+
+  if(ENV(ME)) {
+    objects=filter_objects(all_inventory(ENV(ME)), "id", "\nampullentasche");
+    objects-=({ME});
+    write(sprintf("%O\n", objects));
+    if(sizeof(objects)) 
+      objects[random(sizeof(objects))]->bumm();
+    }
+  return;
+}
+
+varargs int move(mixed dest, int method, string dir, string textout, 
+    string textin)
+{
+  object ob;
+  if(!objectp(dest)) ob=find_object(dest);
+  else ob=dest;
+  if(objectp(ob) && ob->QueryProp(P_CONTAINER)) {
+    return ME_CANT_BE_INSERTED;
+  }
+  return ::move(dest,method,dir,textout,textin);
+}
+

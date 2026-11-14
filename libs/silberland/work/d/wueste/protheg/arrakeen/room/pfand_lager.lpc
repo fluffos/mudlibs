@@ -1,0 +1,242 @@
+#include "../def.h"
+#include "pfand.h"
+
+inherit "std/store";
+
+#define SCHULD 0
+#define WERT 1
+#define ZULETZT 2
+#define ANFANG 3
+
+#define ZEIT 43200 // 0.5 Tag
+
+nosave mapping inhalt,players;
+
+void create()
+{
+  ::create();
+  
+  inhalt=([]);
+  players=([]);
+}
+
+void reset() 
+{ 
+  call_out("clean_inh", 10);
+}
+
+aufraeumen() { /*gibs nicht*/ }
+
+void clean_pls(string who)
+{
+  int i,s;
+  object *new;
+  
+  new=({});
+
+  for(s=sizeof(players[who]),i=0;i<s;i++)
+    if(objectp(players[who][i]))
+      new+=({players[who][i]});
+  
+  players[who]=new;
+}
+
+void clean_inh()
+{
+  int i;
+  mapping new;
+  object *index;
+  
+  index=m_indices(inhalt);
+  new=([]);
+  
+  for(i=sizeof(index)-1;i>=0;i--)
+    if(objectp(index[i]))
+      new+=([index[i]:inhalt[index[i], 0];inhalt[index[i], 1];
+	     inhalt[index[i], 2];inhalt[index[i], 3]]);
+  
+  inhalt=new;
+}
+
+void Set_Pfand(object what, int m)
+{
+  if(!member(inhalt, what)) return;
+  
+  inhalt[what, SCHULD]=m;
+}
+
+int Insert_Object(object what, object who)
+{
+  int va;
+  
+  DB(BS("*** Pfandlager Insert_Object : "+file_name(what)+" - "+
+	sprintf("%O", who)));
+  
+  what->move(ME, M_PUT);
+
+  if(ENV(what)!=ME) return 0;
+  
+  if(member(m_indices(inhalt), what))
+    inhalt=m_delete(inhalt, what);
+
+  va=what->QueryProp(P_VALUE) > MAX_VALUE ?
+    MAX_VALUE : what->QueryProp(P_VALUE);;
+  
+  inhalt+=([what:0;va;time();time()]);
+  
+  if(!member(players, getuid(who)))
+    players+=([getuid(who):({what})]);
+  else
+    players[getuid(who)]+=({what});
+  
+  clean_pls(getuid(who));
+  
+  return va;
+}
+
+int Remove_Object(object who, object what)
+{
+  if(!member(players, getuid(who))) return 0;
+  if(!member(inhalt, what)) return 0;
+  if(ENV(what)==ME) return 0;
+  
+  players[getuid(who)]-=({what});
+  inhalt=m_delete(inhalt, what);
+  return 1;
+}
+
+varargs object *Get_Objects(object who, string obid, int pos)
+{
+  string pid;
+  int i,s;
+  object *ret;
+
+  pid=getuid(who);
+  
+  if(!member(players, pid)) return ({});
+
+  clean_pls(pid);
+  
+  if(!strlen(obid))
+    return players[pid];
+  
+  ret=({});
+  
+  if(pos)
+    {
+      if(pos > 0 && pos <= sizeof(players[pid]))
+	ret+=({players[pid][pos-1]});
+    }
+  else
+    for(s=sizeof(players[pid]),i=0;i<s;i++)
+      if(players[pid][i]->id(obid))
+	ret+=({players[pid][i]});
+  
+  return ret;
+}
+
+void Miete_begleichen(object who)
+{
+  int i, s;
+  object *index;
+  
+  if(interactive(who))
+    {
+      if(!member(players, getuid(who))) return;
+      
+      index=players[getuid(who)];
+      
+      for(s=sizeof(index),i=0;i<s;i++)
+	{
+	  inhalt[index[i], ZULETZT]=time();
+	  inhalt[index[i], SCHULD]=0;
+	}
+
+      return;
+    }
+  
+  if(!member(inhalt, who))
+    return;
+  
+  inhalt[who, SCHULD]=0;
+}
+
+int zinsen(object what)
+{
+  
+  inhalt[what, SCHULD]+=((time()-inhalt[what, ZULETZT])/ZEIT)*inhalt[what, WERT]*ZINSSATZ/100;
+
+  catch(tell_object(find_player("protheg"), 
+		    "*** Pfand_lager Zins: "+inhalt[what, ZULETZT]+" vs "+
+		    time()+" == "+
+		    ((time()-inhalt[what, ZULETZT])/ZEIT)+
+		    " Halbtag(e).\n"
+		    "*** Pfand_lager Zins: Schulden neu "+
+		    inhalt[what, SCHULD]+" Muenzen.\n"));
+  
+  inhalt[what, ZULETZT]=time();
+  
+  return inhalt[what, SCHULD];
+}
+
+varargs mapping Get_Miete(object who, string obid, int pos)
+{
+  int i,s,tmp;
+  object *index;
+  mapping ret;
+  
+  if(!member(players, getuid(who))) 
+    players+=([getuid(who):({})]);
+  
+  index=Get_Objects(who, obid, pos);
+  ret=([]);
+  
+  for(s=sizeof(index),i=0;i<s;i++)
+    if(tmp=zinsen(index[i]))
+      ret+=([index[i]:tmp]);
+  
+  return ret;
+}
+
+mapping dump_players()
+{
+  return players;
+}
+
+mapping dump_inhalt()
+{
+  return inhalt;
+}
+
+void restore(mapping inh, mapping pls, object *inv)
+{
+  int i;
+  
+  if(!sizeof(inh)) return;
+  if(!sizeof(pls)) return;
+  if(!sizeof(inv)) return;
+  
+  DB(BS("*** Pfand_lager restore activated"));
+  
+  inhalt=inh;
+  players=pls;
+
+  for(i=sizeof(inv)-1;i>=0;i--)
+    inv[i]->move(ME, M_NOCHECK);
+}
+
+/*
+void remove()
+{
+  DB(BS("*** Pfand_lager: got remove"));
+  
+  call_other(ROOM "pfand_backup", "???");
+  find_object(ROOM "pfand_backup")->backup(inhalt, players, all_inventory());
+}
+
+void destruct()
+{
+  DB(BS("*** Pfand_lager: got destruct"));
+  return remove();
+}
+*/

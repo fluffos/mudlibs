@@ -1,0 +1,176 @@
+
+inherit "std/food";
+
+#include <properties.h>
+#include <language.h>
+#include <wizlevels.h>
+#include <moving.h>
+#include <new_skills.h>
+
+#include "./potion.h"
+
+int nummer,cursed,costs,groesse,haltbar,dauer;
+int trinken();
+
+nosave void SetProps() {
+  SetProp(P_SHORT, "Ein "+FARBEN[nummer]+"es "+
+                          GROESSE[groesse]+"es Flaeschchen");
+  SetProp(P_LONG,  PLONG[nummer] );
+  SetProp(P_INFO, PINFO[nummer] );
+  SetProp(P_CURSED, cursed);
+  SetProp(P_NAME_ADJ, ({ FARBEN[nummer],GROESSE[groesse] }) );
+  AddAdjective( ({ FARBEN[nummer]+"es",GROESSE[groesse]+"es" }) );
+  SetProp(P_VALUE, 250+groesse*250);
+  SetProp(P_WEIGHT, 50+groesse*50);
+  TRANKMASTER->SetPotion(TO,nummer,cursed,costs,groesse,haltbar,dauer);
+}
+
+create() {
+  int n;
+  
+  if (!is_clone(TO)) return;
+  switch(random(100)) {
+    default:
+    case  0..34: groesse=0; break;
+    case 35..64: groesse=1; break;
+    case 65..84: groesse=2; break;
+    case 85..94: groesse=3; break;
+    case 95..99: groesse=4; break;
+  }
+  if (!TRANKMASTER->NewPotion(TO,groesse)) {
+    destruct(TO);
+    return;
+  }
+  ::create( "\npotionTank\n" );
+
+  n=sizeof(FARBEN);
+  nummer=random(n+12);
+  
+  // es soll +LE/MP haeufiger als andere Traenke geben :))
+  if((nummer >= n+0) && (nummer <= n+ 3)) nummer =  7; // LE 
+  if((nummer >= n+4) && (nummer <= n+ 7)) nummer = 10; // MP
+  if((nummer >= n+8) && (nummer <= n+11)) nummer = 14; // MP + LE
+
+  // nunja, einige sollen halt auch verflucht sein :))
+  if(random(100)>CURSEDCHANCE) cursed=1;
+  else                         cursed=0;
+  costs=    1+groesse;
+  haltbar=  5+groesse*2 +random(5);
+  dauer=  300+groesse*50+random(100);
+
+  SetProp(P_GENDER, NEUTER);
+  AddId( ({ "flaeschchen","trank","\n_trank","NOUNCURSE" }) );
+  SetProp(P_NAME, "Flaeschchen");
+  SetProp(P_MATERIAL, ([ MAT_MISC_FLUID:90, MAT_GLASS:10 ]) );
+  SetProp(P_NOBUY, 1);
+  SetProp(P_KILL_NAME, "Eine sofort toedliche Fluessigkeit");
+
+  SetProps();
+
+  AddCmd( ({ "trink","trinke" }), "trinkfkt" );
+}
+
+reset() {
+  object env;
+  ::reset();
+  if (!is_clone(TO)) return;
+  env=MENV;
+  if(MENV && ENV(MENV) && interactive(ENV(MENV))) env=ENV(MENV); // falls in Beutel :P
+  if(objectp(env)) {
+    haltbar--;
+    if(!cursed && !random(100)) {
+      if(interactive(env))
+        tell_object(env,BS(
+          "Das "+FARBEN[nummer]+"e "+GROESSE[groesse]+"e Flaeschchen faengt auf "
+          "einmal an boese zu vibrieren. Du bist Dir nicht sicher, aber es "
+          "scheint so als ob die Fluessigkeit in ihm sich veraendert haette und "
+          "Du jetzt vorsichter sein solltest."));
+      SetProp(P_CURSED,1);
+      cursed=1;
+      TRANKMASTER->SetPotion(TO,nummer,cursed,costs,groesse,haltbar,dauer);
+    }
+    else if(cursed && !random(1000)) {
+      if(interactive(env))
+        tell_object(env,BS(
+          "Das "+FARBEN[nummer]+"e "+GROESSE[groesse]+"e Flaeschchen wird auf "
+          "einmal von einem heiligen Schimmern umgeben. Zufrieden glaubst Du, "
+          "dass die Fluessigkeit in dem Flaeschchen geniessbarer geworden ist."));
+      SetProp(P_CURSED,0);
+      cursed=0;
+      TRANKMASTER->SetPotion(TO,nummer,cursed,costs,groesse,haltbar,dauer);
+    }
+    else if((!random(100)) || (haltbar<0)) {
+      if(interactive(env))
+        tell_object(env,BS(
+          "Du stolperst und laesst aus Versehen das "+FARBEN[nummer]+"e "
+          +GROESSE[groesse]+"e Flaeschchen fallen. Es zerbricht und Du fluchst "
+          "laut."));
+      RemoveCmd( ({"trinke","trink"}) );
+      call_out("remove", 0);
+    }
+  }
+}
+
+varargs int remove(int silent) {
+  if (TO) TRANKMASTER->RemovePotion(TO);
+  return ::remove(silent);
+}
+
+nosave int trinkfkt(string str) {
+  notify_fail("Was moechtest Du trinken?\n");
+  if (!id(str)) return 0;
+  if(TP->QueryProp(P_DRINK) > (TP->QueryProp(P_MAX_DRINK) - costs)) {
+    write("So viel kannst Du im Moment nicht mehr trinken!\n");
+    return 1;
+  }
+  TP->SetProp(P_DRINK, TP->QueryProp(P_DRINK) + costs);
+  write(BS(
+    "Du trinkst das "+FARBEN[nummer]+"e "+GROESSE[groesse]+"e Flaeschchen "
+    "aus und ..."));
+  say(BS(
+    CAP_TPN+" trinkt ein "+FARBEN[nummer]+"es "+GROESSE[groesse]+"es "
+            "Flaeschchen aus."));
+  if(TRANKMASTER->trinken(TP,nummer,cursed,costs,groesse,haltbar,dauer)) {
+    if(cursed)
+      write(BS(NEG[nummer]));
+    else 
+      write(BS(POS[nummer]));
+  } else {
+    write(BS("... es passiert irgendwie ueberhaupt gar nichts!?!"));
+  }
+  RemoveCmd( ({"trinke","trink"}) );
+  call_out("remove", 0);
+  return 1;
+}
+
+int SetVars(int xnummer, int xgroesse, int xdauer, int xcursed, 
+            int xcosts,  int xhaltbar) {
+  if(xnummer<0)                 xnummer= random(sizeof(FARBEN));
+  if(xnummer>=sizeof(FARBEN))   xnummer= random(sizeof(FARBEN));
+  nummer=xnummer;
+  if(xgroesse<0 || xgroesse>=sizeof(GROESSE)) {
+    switch(random(100)) {
+      default:
+      case  0..34: xgroesse=0; break;
+      case 35..64: xgroesse=1; break;
+      case 65..84: xgroesse=2; break;
+      case 85..94: xgroesse=3; break;
+      case 95..99: xgroesse=4; break;
+    }
+  }
+  groesse=xgroesse;
+  if(xcursed<0 || xcursed>1) {
+    if(xcursed<0) xcursed=-xcursed;
+    if(random(100)>xcursed) xcursed=1;
+    else                    xcursed=0;
+  }
+  cursed=xcursed;
+  if(xcosts<1 || xcosts>20)     xcosts=1+xgroesse;
+  costs=xcosts;
+  if(xhaltbar<1 || xhaltbar>15) xhaltbar=5+xgroesse*2+random(5);
+  haltbar=xhaltbar;
+  if(xdauer<1 || xdauer>1000)   xdauer=300+xgroesse*50+random(100);
+  dauer=xdauer;
+  SetProps();
+  return 1;
+}

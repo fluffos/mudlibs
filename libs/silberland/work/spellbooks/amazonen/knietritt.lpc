@@ -1,0 +1,82 @@
+
+int knietritt(object caster, mapping sinfo) 
+{
+  object victim;
+  object *hose;
+  int suc;
+  int dam;
+
+  if (!caster->InFight())
+  {
+    tell_object(caster,
+        "Du kaempfst ja gar nicht!\n");
+    return 0;
+  }
+  victim = FindEnemyVictim(sinfo[SI_SKILLARG], caster,
+      "Wem willst Du einen Knietritt verpassen?\n");
+  if (!victim)
+    return 0;
+  if (caster->QueryProp(P_DISABLE_ATTACK))
+  {
+    tell_object(caster, "Du bist kampfunfaehig und kannst jetzt keinen "
+        "Knietritt machen!\n");
+    return 0;
+  }
+  if (!is_humanoid(victim->QueryProp(P_RACE)))
+  {
+    tell_object(caster, BSC(sprintf("%s gehoert der Rasse %s an und ist "
+            "somit kein geeignetes Opfer fuer einen Knietritt!",
+            victim->Name(WER,1), capitalize(victim->QueryProp(P_RACE)) )));
+    return 0;
+  }
+  if (victim->QueryProp(P_GENDER) != MALE)
+  {
+    tell_object(caster, "Nur Maennern tut ein Knietritt so richtig weh!\n");
+    return 0;
+  }
+  if (victim->QueryProp(P_DISABLE_ATTACK))
+  {
+    tell_object(caster, sprintf("%s ist schon kampfunfaehig.\n", 
+          victim->Name(WER,1)));
+    return 0;
+  }
+
+  if (!(sinfo = pay_for_spell(caster, sinfo)))
+    return 0;
+
+  if ((suc = SpellSuccess(caster,sinfo)) <= 0)
+    return MISSERFOLG;
+
+  environment(caster)->Message(BS(sprintf("%s tritt %s mit dem Knie zwischen "
+          "die Beine.",
+        caster->Name(WER,1), victim->name(WEM,1))),
+      MSGFLAG_VISUAL, ([ MSGFLAG_EXCLUDE : ({ caster, victim }) ]) );
+
+  tell_object(caster, BSC(sprintf("Du trittst %s mit dem Knie zwischen die "
+        "Beine.", victim->name(WESSEN,1))));
+
+  tell_object(victim, BS(sprintf("%s tritt Dir mit dem Knie zwischen die "
+        "Beine. AUA! Das tut weh!", caster->Name(WER,1) )));
+
+  if (sizeof(hose = caster->QueryArmours(AT_TROUSERS)))
+    sinfo[SI_SKILLDAMAGE] += hose[0]->QueryProp(P_EFFECTIVE_WC);
+  sinfo[OFFSET(SI_SKILLDAMAGE)] += caster->QueryProp(P_GUILD_LEVEL) * 2;
+  sinfo[SI_MAX_DAMAGE] += caster->QueryProp(P_GUILD_LEVEL) * 4;
+
+  if (IS_LEARNER(caster))
+    printf("dam = %d, off = %d, max = %d\n",
+        sinfo[SI_SKILLDAMAGE], 
+        sinfo[OFFSET(SI_SKILLDAMAGE)], 
+        sinfo[SI_MAX_DAMAGE]);
+
+  dam = TryDefaultAttackSpell(victim, caster, sinfo, sinfo[SI_SPELL] + 
+      ([SP_REDUCE_ARMOUR: ([P_BODY: 101 - sinfo[SI_SKILLABILITY] / 100])]) );
+
+  if (IS_LEARNER(caster))
+    printf("Schaden = %d\n", dam);
+  if (victim && !victim->QueryProp(P_GHOST) &&
+      random(100) > victim->QueryProp(P_NOMAGIC))
+    victim->SetProp(P_DISABLE_ATTACK, 
+        1 + random((2 * suc + 3 * sinfo[SI_SKILLABILITY])) / MAX_ABILITY );
+  return ERFOLG;
+}

@@ -1,0 +1,93 @@
+#include "../../arkanisten.h"
+
+inherit GUILD_FOLDER "abilities/ability.lpc";
+
+public void create() {
+    if(is_clone(TO)) return;
+
+    ::create();
+    SetProp(P_ABILITY_NAME, CAP(MUTAGENIC_ELIXIR));
+    SetProp(P_ABILITY_DESCRIPTIPON, 
+        "Mit dieser Fähigkeit kannst du ein mutagenes Elixier herstellen, "
+        "das du dann trinkst, um für kurze Zeit deine koerperlichen Werte zu steigern. "
+        "Das Elixier wirkt sofort nach dem Trinken und hält einige Runden an. "
+        "Waehnred das Elixir wirkt, sind deine geistigen Faehigkeiten etwas beeinträchtigt.");    
+    SetProp(P_ABILITY_TYPE, ABILITY_TYPE_ACTIVE);
+    SetProp(P_ABILITY_BASE_ATTRIBUTE, A_INT);
+    SetProp(P_ABILITY_CASTVERB, CAST_VERB_DRINK);
+    SetProp(P_ABILITY_GROUP, ({ABILITY_GROUP_ALCHEMY}));
+    SetProp(P_ABILITY_COST, ([
+        P_SP: 30,
+        P_HP: 10
+    ]));
+    SetProp(P_ABILITY_REQUIRES, ({ HEALING_TONIC }));
+}
+
+public mapping prepare_use(object user, mapping sinfo) {
+    object victim;
+
+    if(get_free_hands(user) < 2) {
+        tell_object(user, BS("Du benoetigst zwei freie Haende um das Mutagen zu mischen!"));
+        return 0;
+    }
+
+    victim = user;
+    tell_object(user, BS("Geschwind mischt du mehrere Grundmittel zusammen, um ein mutagenes Elixier zu erhalten."));
+    tell_room(ENV(user), BS(user->Name(WER)+" mischt mehrere bunte Ampullen zusammen."), ({user}));
+
+    sinfo[SI_PREPARE_TIME] = 8;
+    sinfo[SI_SKILLARG] = victim;
+
+    return ::prepare_use(user, sinfo);
+}
+
+public void failed(object user, mapping sinfo, int skillcheck) {
+    object victim, obj;
+    victim = sinfo[SI_SKILLARG];
+    if(skillcheck < -3000) {
+        tell_object(user, BS("Beim Mischen der Zutaten unterläuft dir ein folgenschwerer Fehler! Du wirst klein und schwach!"));
+        obj = clone_object(OBJ "bonus");
+        obj->move(user);
+        obj->set_timeout(5 + (-1 * skillcheck / 1000));
+        obj->set_end_message("Deine Kraft kehrt wieder zurueck.");
+        obj->SetProp(P_X_ATTR_MOD, ([A_STR: -5 + skillcheck / 2000, 
+                                     A_CON: -5 + skillcheck / 2000]));
+        user->UpdateAttributes();
+        obj->AddId(MUTAGENIC_ELIXIR_ID);
+        pDebug(user, sprintf("mutagenic_elixir :: failed :: str/con malus %d for %d seconds\n", -5 - skillcheck / 200, 5 + (-1 * skillcheck/1000)));
+        return ::failed(user, sinfo, skillcheck);
+    }
+
+    tell_object(user, BS("Beim Mischen der Zutaten unterläuft dir ein Fehler! Das Elixier wirkt nicht richtig."));
+    tell_room(ENV(user), BS(user->Name(WER)+" verzieht das Gesicht, als ein Trank misslingt."), ({user}));
+    
+    return ::failed(user, sinfo, skillcheck);
+}
+
+public void success(object user, mapping sinfo, int skillcheck) {
+    object victim, obj;
+    int duration, bonus, malus;
+    victim = sinfo[SI_SKILLARG];
+    duration = 30 + skillcheck / 100 + sinfo[SI_SKILLABILITY] / 50;
+    if(duration < 5) duration = 5;
+    
+    tell_object(user, BS("Du trinkst das frisch gemischte mutagene Elixier. Deine Muskeln wachsen uebernatuerlich an."));
+    tell_room(ENV(user), BS(user->Name(WER)+" trinkt ein frisch gemischtes Elixier und wird staerker und kraeftiger."), ({user}));
+
+    obj = clone_object(OBJ "bonus");
+    obj->move(user);
+    obj->set_timeout(duration);
+    obj->set_end_message("Die Wirkung des Elixiers lässt nach und du fühlst dich wieder normal.");
+
+    bonus = 1 + skillcheck / 2000;
+    malus = -1 - (skillcheck / 2500);
+    obj->SetProp(P_X_ATTR_MOD, ([A_STR: bonus, 
+                                 A_CON: bonus,
+                                 A_INT: malus,
+                                 A_DEX: malus]));
+    user->UpdateAttributes();
+    obj->AddId(MUTAGENIC_ELIXIR_ID);
+    obj->set_extra_look(CAP(user->QueryPronoun(WER)) + " wirkt uebernatuerlich gross und muskuloes.");
+    pDebug(user, sprintf("mutagenic_elixir :: success :: str/con bonus %d, int/dex malus %d for %d seconds\n", bonus, malus, duration));
+    return;
+}

@@ -1,0 +1,280 @@
+/*
+ communications stuff for Group master
+ Iwo@SL
+*/
+ 
+
+private nosave int TellMasterHelp(object pl)
+{
+  TellP(pl, "Kommandos:");
+  TellP(pl, " gm h                 Diesen Hilfetext anzeigen");
+  TellP(pl, " gm g                 Aktive Gruppen auflisten");
+  TellP(pl, " gm s <gruppe>        Stati einer Gruppe anzeigen"); 
+  TellP(pl, " gm a <gruppe>        Eine Gruppe aufloesen");
+  TellP(pl, " gm des               Gruppenobjekt zerstoeren (toggle)");
+  TellP(pl, " gm t                 Tasks auflisten");
+  TellP(pl, " gm enable <spieler>  Gruppenmodus fuer <Spieler> erlauben");
+  TellP(pl, " gm disable <spieler> Gruppenmodus verbieten");
+  TellP(pl, " gm cg                Pruefe Gruppenobjektliste");
+  TellP(pl, " gm fg                Alle Gruppenobjekte finden");
+  TellP(pl, " rm rg                Alle Gruppenobjekte resetten");
+  return 1;
+}
+
+
+
+private nosave int MasterInfo(string txt)
+{
+  if (!txt || txt == "") return 0;
+
+  if(ENV(ME)) tell_room(ENV(ME), break_string(txt, 78, "Groupmaster: "));
+  
+  return 1;
+}
+
+
+
+
+// Tell help text
+int TellHelp (object pl)
+{
+  if (!pl) return 0;
+  TellP(pl, "Folgende Befehle sind verfuegbar:"); 
+  TellP(pl, " g[ruppe] h[ilfe]             Zeigt diesen Hilfetext"); 
+  TellP(pl, " g[ruppe] g[ruenden] gruppe   Gruendet die Gruppe 'gruppe'");
+  TellP(pl, " g[ruppe] aufl[oesen] gruppe  Loest die Gruppe auf");
+  TellP(pl, " g[ruppe] s[tatus]            Status der Gruppe");
+  TellP(pl, " g[ruppe] v[erlassen]         Gruppe verlassen");
+  TellP(pl, " g[ruppe] aufn[ehmen] name    Bietet Spieler 'name' Mitgliedschaft");
+  TellP(pl, "                              in der Gruppe an");
+  TellP(pl, " g[ruppe] b[eitreten] name    Gruppe 'name' beitreten");
+  TellP(pl, " g[ruppe] r[ufe]              Der Gruppe etwas mitteilen");
+  TellP(pl, " g[ruppe] e[mote]             Emote an die Gruppe");
+  TellP(pl, " g[ruppe] o[ffen]             Legt fest, ob der Gruppe die genauen Werte");
+  TellP(pl, "                              offengelegt werden, oder nur eine sehr ungenaue");
+  TellP(pl, "                              Balken darstellung (toggle)");
+  TellP(pl, " g[ruppe] l[eiter] name       Macht 'name' zum neuen Gruppenleiter");
+  TellP(pl, " g[ruppe] aus[schluss] name   Wirft 'name' aus einer Gruppe");
+  TellP(pl, " g[ruppe] hist[ory] <anzahl>  Zeigt die History des Gruppenrufs");
+  TellP(pl, " g[ruppe] ort                 Zeigt die Aufenthaltsorte der Mitglieder");
+  TellP(pl, " g[ruppe] liste               Aktive Gruppen auflisten");
+  TellP(pl, " g[ruppe] p[ublic]            Macht eine Gruppe frei zugaenglich (Toggle)");
+  TellP(pl, " g[ruppe] k[ommando] (befehl) Legt das Angriffskommando fest. Falls (befehl) ");
+  TellP(pl, "                              nicht angegeben wird, uebernimmt man das ");
+  TellP(pl, "                              vorgeschlagene Kommando. Der Leiter legt ");
+  TellP(pl, "                              das gruppenweite fest oder loescht es. Im ");
+  TellP(pl, "                              Status wird die Einstellung unter 'K' angezeigt.");
+  TellP(pl, "                              Das spezielle Kommando '-' stellt ein, dass man");
+  TellP(pl, "                              bis auf Weiteres alle Angriffskommandos ");
+  TellP(pl, "                              ignoriert. Kann via 'g k - <spieler>' vom ");
+  TellP(pl, "                              Gruppenleiter gesetzt werden.");
+
+  TellP(pl, " g[ruppe] a[ngriff]           Fuehrt das Angriffsskommando aus falls alle ");
+  TellP(pl, "                              bereit sind.");
+  TellP(pl, " greport                      Gruppenreport konfigurieren");
+  return 1;
+ 
+}
+
+
+
+
+
+// Tell Player Text
+varargs int TellP (object pl, string txt, string istr)
+{
+  if (!pl || !txt) return 0;
+  
+  if (istr)
+    tell_object(pl, break_string(txt, pl->QueryProp(P_SCREENWIDTH), istr));
+  else
+    tell_object(pl, break_string(txt, pl->QueryProp(P_SCREENWIDTH)));
+  return 1;
+}
+
+// Tell Player Text
+varargs int TellPnb (object pl, string txt)
+{
+  if (!pl || !txt) return 0;
+  
+  tell_object(pl, sprintf("%s\n",txt));
+  return 1;
+}
+
+
+
+// This is for external messages to all members
+varargs int GroupMsg(string grp, string txt, string indent, int emote)
+{
+  string *members;
+  string prefix, suffix;
+  string str,s_pl;
+  object ob_pl, ob_gobj;
+  int i;
+
+  if (!IsGroup(grp)) return 0;
+
+  if (!txt || txt == "")
+    return 0;
+
+  if (!indent || indent == "")
+    indent = "<Unbekannt>";
+
+  members = m_indices(groups[grp, 1]);
+  
+  prefix = "[Gruppe "+CAP(grp)+":"+CAP(indent);
+  
+  if (!emote)
+    {
+      prefix += "] ";
+      suffix = "";
+    }
+  else
+    {
+      prefix += " ";
+      suffix = "]";
+    }
+
+  // Add to history
+  if (sizeof(groups[grp,5]) > GROUPHISTLEN)
+    groups[grp,5] -= ({ groups[grp,5][0] });
+  if (!emote)
+    groups[grp,5] += ({ break_string(sprintf("%s <%s>",txt, dtime(time())[19..26]), 78, prefix) });
+  else
+    groups[grp,5] += ({ break_string(sprintf("%s%s%s <%s>", prefix, txt, suffix, dtime(time())[19..26]), 78) });
+
+
+
+  for (i = 0; i < sizeof(members); i++)
+    {
+      ob_pl = find_player(members[i]);
+      if (ob_pl)
+        {
+	if (!emote) TellP(ob_pl, txt, prefix);
+	else TellP(ob_pl, sprintf("%s%s%s", prefix, txt, suffix));
+        }
+    }
+
+  return 1;
+  
+}
+
+
+
+
+
+// Tell something to all members of a group
+varargs int ShoutMembers(object pl, string txt, int emote)
+{
+  string *members;
+  string prefix, suffix;
+  string str,s_pl, grp;
+  object ob_pl, ob_gobj;
+  int i;
+
+  s_pl = getuid(pl);  
+
+  if (!member(affiliations, s_pl))
+    {
+      TellP(pl, "Du bist doch gar keine Mitglied einer Gruppe.");
+      return 1;
+    }
+
+  if (!txt || txt == "")
+    {
+      TellP(pl, "Was willst Du denn Deinen Gruppenmitgliedern sagen?");
+      return 1;
+    }
+
+  if (objectp(TP->QueryProp(P_PERM_STRING)))
+    txt = call_other(TP->QueryProp(P_PERM_STRING),"permutate_string",txt)||"";
+
+  grp = affiliations[s_pl, 0];  
+
+  members = m_indices(groups[grp, 1]);
+  
+  if (member(members, s_pl) == -1)
+    {
+      TellP(pl, "Du bist doch gar kein Mitglied einer Gruppe.");
+      affiliations -= ([ s_pl ]);
+      return 1;
+    }
+  
+  prefix = "[Gruppe "+CAP(grp)+":"+CAP(s_pl);
+  
+  if (!emote)
+    {
+      prefix += "] ";
+      suffix = "";
+    }
+  else
+    {
+      prefix += " ";
+      suffix = "]";
+    }
+
+  // Add to history
+  if (sizeof(groups[grp,5]) > GROUPHISTLEN)
+    groups[grp,5] -= ({ groups[grp,5][0] });
+  if (!emote)
+    groups[grp,5] += ({ break_string(sprintf("%s <%s>",txt, dtime(time())[19..26]), 78, prefix) });
+  else
+    groups[grp,5] += ({ break_string(sprintf("%s%s%s <%s>", prefix, txt, suffix, dtime(time())[19..26]), 78) });
+
+
+
+  for (i = 0; i < sizeof(members); i++)
+    {
+      ob_pl = find_player(members[i]);
+      if (ob_pl)
+        {
+	if (!emote) TellP(ob_pl, txt, prefix);
+	else TellP(ob_pl, sprintf("%s%s%s", prefix, txt, suffix));
+        }
+    }
+
+  return 1;
+  
+}
+
+
+// Recall group shout history
+varargs int ShoutHist(object pl, mixed len)
+{
+  int i;
+  int hlen;
+  int histsize;
+  string s_pl, grp;
+  s_pl = getuid(pl);
+
+  if (!member(affiliations, s_pl))
+    {
+      TellP(pl, "Du bist kein Mitglied einer Gruppe.");
+      return 1;
+    }
+
+  grp = affiliations[s_pl,0];
+
+  histsize = sizeof(groups[grp, 5]);
+
+  if (histsize <= 0)
+    {
+      TellP(pl, "Noch niemand hat der Gruppe etwas mitgeteilt.");
+      return 1;
+    }
+
+  // User may pass crap thru command
+  if (!len || len == "" || to_int(len) > 25 || to_int(len) <= 0)
+    hlen = GROUPHISTDEFAULT;
+  else
+    hlen = to_int(len);
+
+  // Requested length is greater then history length
+  if (hlen > histsize) hlen = histsize;
+
+  for (i=histsize-hlen;i<histsize;i++)
+    TellP(pl, groups[grp, 5][i]);
+  
+  return 1;
+}
+

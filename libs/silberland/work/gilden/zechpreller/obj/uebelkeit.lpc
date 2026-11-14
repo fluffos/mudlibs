@@ -1,0 +1,116 @@
+inherit "std/thing";
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <new_skills.h>
+#include <defines.h>
+#include <moredef.h>
+#include "../zech.h"
+
+object npc;
+int duration, brennt;
+
+create() {
+  if( !is_clone(TO) ) return;
+  ::create();
+  SetProp(P_SHORT, 0);
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_VALUE, 1);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NOSELL, 1);
+  AddId(({"\nzechpreller_folgeschaden"}));
+}
+
+
+int IsBrennen() {
+  return brennt;
+}
+
+void Start(int was) {
+  if(!objectp(ENV(ME)) || !living(ENV(ME))) {
+    call_out("remove", 0);
+    return 0;
+  }
+  
+  npc=ENV(ME);
+  if(was==0)
+  {
+    tell_object(npc, BS("Dir wird schrecklich uebel zumute!"));
+    tell_room(ENV(npc), BS(npc->Name(WER)+" haelt sich den Bauch."), ({npc}));
+  }
+  else
+  {
+    tell_object(npc, BS("Du hast Feuer gefangen!"));
+    tell_room(ENV(npc), BS(npc->Name(WER)+" hat Feuer gefangen!"), ({npc}));
+  }
+  duration = 4+random(5);
+
+  ENV(TO)->SetProp(P_TMP_DIE_HOOK, ({time()+(duration*2), TO, "AtDeath"}));
+
+  call_out("hurt", 2, was);
+
+  brennt = was;
+
+  return;
+}
+
+void hurt(int was)
+{
+  if(duration < 1) return;
+  if(!objectp(npc)) 
+  {
+    call_out("remove", 0);
+    return;
+  }
+
+  if(!IsBrennen()) {
+    tell_object(npc, BS("Du uebergibst Dich!"));
+    tell_room(ENV(npc), BS(npc->Name(WER)+" uebergibt sich!"));
+  } else {
+    tell_object(npc, BS("Du brennst!"));
+    tell_room(ENV(npc), BS(npc->Name(WER)+" brennt!"));
+  }
+
+  npc->AddHp(-5-(random(6))); // 5 bis 10 lp
+  if(--duration < 1)
+  {
+    if(was==0)
+    {
+      tell_object(npc, BS("Die Uebelkeit verschwindet!"));
+      tell_room(ENV(npc), BS(npc->Name(WER)+" sieht wieder etwas besser aus."));
+    }
+    else
+    {
+      tell_object(npc, BS("Die Flammen verloeschen!"));
+      tell_room(ENV(npc), BS(npc->Name(WER)+" brennt nicht mehr!"));
+    }	  
+
+    remove(1);
+  }
+
+  call_out("hurt", 2);
+}
+
+init() {
+ ::init();
+ if(!living(ENV(ME)))
+   call_out("remove", 0, 1);
+}
+
+int AtDeath(int poisondeath)
+{
+  remove(1);
+  return 0;
+}
+
+void RenewDuration() {
+  duration += 2;
+
+  if(IsBrennen()) {
+    tell_room(ENV(npc), BS(sprintf("Das Feuer um %s wird durch den Ruelpser wieder angefacht!", npc->name(WEN, 1))));
+  } else {
+    tell_room(ENV(npc), BS(sprintf("%s Uebelkeit wird weiter angeregt.", npc->name(WESSEN, 1))));
+  }
+}

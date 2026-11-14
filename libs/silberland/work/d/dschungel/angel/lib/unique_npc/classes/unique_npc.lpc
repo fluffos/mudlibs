@@ -1,0 +1,1345 @@
+/*******************************************************************************
+ * Unique NPC System Implementarion
+ * Zur Verwirklichung wurden zum Teil Funktionen der SL-Spielerrassen adaptiert. 
+ * Datei: unique_npc.c
+ * Autor: Angel (avs@sbox.tu-graz.ac.at)
+ */
+
+#define NEED_PROTOTYPES_NPC
+#define NEED_PROTOTYPES_UNIQUE_NPC
+#define NEED_PROTOTYPES_RACE_SPECS
+
+#include <lightsource.h>
+#include <properties.h>
+#include <language.h>
+#include "../headers/unique_npc.h"
+#include "../headers/race_specs.h"
+#include "../headers/parser.h"
+#include "./def.h"
+
+inherit "std/mnpc";
+inherit "std/npc/sequencer";
+inherit LIB_UNIQUE "classes/parser";
+
+// Static Variables
+nosave mixed family_tree;  // Array construct which saves ancestors of an UNPC.
+nosave object family_server; // Saves Family Server-Object;
+nosave mixed greeted_players;
+
+// Diese Funktion ist von description.c adaptiert.
+private void select(object o, mixed weapon, mixed armour, mixed rest)
+{
+  if (!o->short()) return;  // unsichtbare Objekte nicht anzeigen (Rochus@@MG)
+  if (member(QueryProp(P_ARMOURS), o) != -1) armour += ({ o });
+  else if (QueryProp(P_WEAPON) == o) weapon += ({ o });
+  else if (sizeof(all_inventory(o)) || o->QueryProp(P_LIGHT) ||
+           o->QueryProp(P_LIGHTED) || o->QueryProp(P_SHOW_INV))
+    rest += ({ o });
+}
+
+// Diese Funktion ist von description.c uebernommen.
+private string andlist(object *arr)
+{
+  string *tmp;
+  if(!sizeof(arr)) return "";
+  if(sizeof(tmp = map_objects(arr, "name", WEN))>1)
+    return implode(tmp[0..<2], ", ")+(sizeof(tmp)>1?" und "+tmp[<1]:"");
+  else return tmp[0];
+}
+
+// Setzt infos ueber getragene Ruestungen und gezueckte Waffen
+// Diese Funktion ist von description.c adaptiert.
+ string long ()
+{
+  string descr;
+  object ob, *w, *a, *r;
+
+  descr = ::long();
+  w = ({}); a = ({}); r = ({});
+  map_array(all_inventory(ME), #'select, &w, &a, &r);
+  return  descr +=
+          break_string(capitalize(name(WER, 1))+" hat "
+                      +(sizeof(a)?andlist(a):"keine Ruestung")+" an"
+                      +(sizeof(r)?", ":" und ")
+                      +(sizeof(w)?andlist(w):"keine Waffe")+" gezueckt"
+                      +(sizeof(r)?" und traegt "+andlist(r):"")+".", 78);
+}
+
+// Hier wird alles noch offen gelassen und nur mit Standardwerten gefuellt:
+void create ()
+{
+  mnpc::create();
+  
+  seteuid(getuid());
+
+  SetProp(P_TRANSPARENT, 0);
+
+  SetProp(P_RACE, "Wesen");                       
+  
+  SetProp(P_GENDER, get_gender(50)); // 50% Chance Frau/Mann
+  
+  SetProp (P_SHORT, 
+     distinguish_gender( "ein maennliches Wesen", 
+                        "ein weibliches Wesen" ) );
+  
+  SetProp (P_LONG, "Du siehst ein noch nicht fertig geformtes Wesen.\n"); 
+
+  SetProp(P_NAME, "Wesen");				
+
+  AddId("wesen");             
+}
+
+// Filtert die zu Gruessenden:
+int filter_people(object ob)
+{
+   if ( (!ob->QueryProp(P_INVIS)) && interactive (ob))
+      return 1;
+   else
+      return 0;
+}
+
+// Begruessungsroutine wird nur einmal pro Reset aufgerufen!
+init ()
+{
+   //int i;
+   
+   ::init();
+   if(find_call_out("greet_check")==-1)
+     call_out("greet_check",1); 
+}
+
+void greet_check()
+{
+   mixed people, result;
+   
+   if (!objectp(environment(this_object())))
+      return;
+   
+   people = filter_array(all_inventory(environment(this_object())), #'filter_people);
+   
+   if (pointerp(greeted_players))
+      people -= greeted_players;
+   
+   result = people;
+   if (!pointerp(greeted_players))
+      greeted_players = people;
+   else
+      greeted_players += people;
+
+   if (pointerp(result))
+      greet_player(result);
+}
+
+reset ()
+{
+   ::reset();
+   greeted_players = 0;
+}
+
+varargs string query_certain_article(int gender, int casus, int plural)
+{
+  if (plural)
+    return ({ "die", "der", "den", "die"})[casus];
+  return ({ ({ "das", "des", "dem", "das" }),
+            ({ "der", "des", "dem", "den" }),
+            ({ "die", "der", "der", "die" }) })
+         [(int)gender % 3][casus];
+}
+
+// Loescht alle vom Spieler zugaenglichen Ids
+void reset_ids()
+{
+  mixed ids;
+  int i, max;
+  
+  ids = QueryProp (P_IDS);
+  
+  max = sizeof(ids);
+  if (pointerp(ids))
+  for (i = 0; i < max; i++)
+  {
+    if (ids[i] == lower_case(ids[i]))
+       RemoveId (ids[i]);
+  } 
+}
+
+// Setzt alle Werte fuer einen standard unique NPC: 
+varargs void create_default_unique_npc( int level, int prob_male, int special_name, string first_names, string sur_names )
+{
+  int set_level;
+  mixed name_list;
+   
+  set_level = level;
+
+  if (level < 1)
+     set_level = 1;
+     
+  create_default_npc (set_level); // Wir lassen mal einen NPC generieren als Basis.
+  
+  SetProp(P_GENDER, get_gender(prob_male)); // Wir setzen das Geschlecht.
+  
+  if (pointerp(family_tree))
+     if (pointerp(family_tree[1]))
+        SetProp(P_RACE, family_tree[0]);
+     else 
+        SetProp(P_RACE, get_race(QueryProp(P_GENDER))); // Auswahl nach dem Rassen-Schluessel.
+  else
+     SetProp(P_RACE, get_race(QueryProp(P_GENDER))); // Auswahl nach dem Rassen-Schluessel.
+     
+  set_race_specs (QueryProp(P_RACE)); // Wir laden unsere NPC-Rassen-Spezifikationen.
+  
+  if (!special_name)
+  {
+     SetProp(P_UNIQUE_SURNAME, get_surname(QueryProp(P_UNIQUE_SURNAME_POLICY), 
+                         sur_names, first_names));
+     SetProp(P_UNIQUE_FIRSTNAME, get_name(first_names));
+     SetProp(P_NAME, QueryProp(P_UNIQUE_FIRSTNAME) + QueryProp(P_UNIQUE_SURNAME)); // Ein zur Rasse passender Name wird gewaehlt.
+  }
+  else
+  {
+     if (special_name == -1)
+     {
+     	SetProp(P_UNIQUE_FIRSTNAME, get_race_declination(WER)); // Wir wollen bewusst keinen Namen angeben.
+        SetProp(P_NAME, QueryProp(P_UNIQUE_FIRSTNAME)); 
+     }
+     else 
+     {
+     	SetProp(P_UNIQUE_FIRSTNAME, get_special_name());
+        SetProp(P_NAME, QueryProp(P_UNIQUE_FIRSTNAME)); // Oder ein manuell angegebener.
+     }
+  }
+
+  if (QueryProp(P_NAME) == get_race_declination(0)) // Wenn das Wesen keinen eigenen Namen hat
+     SetProp (P_SHORT,                              // nehmen wir die Rasse her.
+        distinguish_gender( "ein " + get_race_declination(0),
+                           "eine " + get_race_declination(0)));
+  else
+     SetProp (P_SHORT, // Andernfalls wird der Name und die Rasse eingebaut.
+        distinguish_gender( "ein " + get_race_declination(0) + " namens " + QueryProp(P_NAME),
+                           "eine " + get_race_declination(0) + " namens " + QueryProp(P_NAME) ) );
+
+  SetProp (P_LONG, get_long()); // Eine automatisch generierte Beschribung.
+  
+  reset_ids(); // Alle vorher gesetzten und vom Spieler ansprechbaren Ids loeschen!
+  
+  if (QueryProp(P_NAME) == get_race_declination(0))
+     AddId(lower_case(QueryProp(P_NAME))); // Der NPC soll mit Namen und Rasse ansprechbar sein.
+  else
+  {  // Sollten wir einen Doppelnamen haben wird auch der erste Teil des Namens als ID gesetzt.
+     name_list = explode (lower_case(QueryProp(P_NAME)), " ");
+     if (!pointerp(name_list))
+     {
+        AddId( ({lower_case(QueryProp(P_NAME)), 
+                 lower_case(get_race_declination(0))}) );
+        set_living_name ( lower_case(QueryProp(P_NAME)) );
+     }
+     else
+     {
+        AddId( ({lower_case(QueryProp(P_UNIQUE_FIRSTNAME)),
+                 lower_case(get_race_declination(0))}) );
+        set_living_name ( lower_case(QueryProp(P_UNIQUE_FIRSTNAME)) );
+     }
+  } 
+}
+
+// Liefert eine Rasse nach den Wahrscheinlichkeiten.
+varargs string get_race(int gender)
+{
+  int dice, stake;
+  int i, j, max_i, max_j;
+  mixed races;
+  mixed restricted_races;
+  mixed deletion_list;
+
+  races = QueryProp(P_UNIQUE_RACE_PROBABILITY);
+  restricted_races = QueryProp(P_UNIQUE_GENDER_RESTRICTIONS);
+
+  if (gender) 
+  {  
+     // Hier werden die fuer das Geschlecht verbotenen Rassen gesucht.
+     max_i = sizeof(restricted_races);
+     if (pointerp(restricted_races))
+     for (i = 0; i < max_i; i++)
+     {
+       if (restricted_races[i][1] == gender)
+       { 
+       	 max_j = sizeof(races);
+         for (j = 0; j < max_j; j++)
+         {
+           if (restricted_races[i][0] == races[j][0])
+           {
+              if (pointerp(deletion_list))
+                 deletion_list += races[j];
+              else 
+                 deletion_list = ({ races[j] });
+           }
+         }
+       }
+     }
+  }
+  
+  // Hier werden die vorher gefundenen verbotenen Rassen
+  // aus der Liste entfernt.
+  max_i = sizeof(deletion_list);
+  if (pointerp(deletion_list))
+  for (i = 0; i < max_i; i ++)
+      races -=  ({ deletion_list[i] });
+
+  // Wir zaehlen mal alle Werte zusammen und ermitteln dann
+  // daraus das Ergebnis:
+  max_i = sizeof(races);
+  if (pointerp(races))
+  for (i = 0; i < max_i; i ++)
+      stake += races[i][1];
+
+  dice = random (stake)+1;
+  
+  stake = 0;
+  
+  // Hier erfolgt die Auswahl der Rasse nach dem angegebenen
+  // Schluessel P_UNIQUE_RACE_PROBABILITY.
+  max_i = sizeof(races);
+  if (pointerp(races))
+  for (i = 0; i < max_i; i ++)
+  {
+    stake += races[i][1];
+    if (stake >= dice)
+       return races[i][0];
+  } 
+  // Wenn das alles nix wird wird es ein Mensch - da kann nix passieren, 
+  // einen Fehler setzen wir trotzdem noch ab:
+  // (Dieser Fehler sollte NICHT auftreten!)
+  notify_error ( ({ 0, "Warning: Could not find propper race for NPC! Race set to 'Wesen'.",
+                       "Class: unique_npc.lpc", "Function: get_race", 0, this_object() }) );
+  return "Wesen"; 
+}
+
+// "Wuerfelt" uns ein Geschlecht aus.
+int get_gender(int prob_male) 
+{
+  int dice, i, max;
+  string race;
+  mixed restricted_races;
+  
+  restricted_races = QueryProp(P_UNIQUE_GENDER_RESTRICTIONS);
+  race = QueryProp(P_RACE);
+   
+  // Wenn wir eine Rasse mit Restriktionen haben dann geben 
+  // wir automatisch das richtige Geschlecht zurueck:
+  // Feen sind z.B. immer weiblich :o)
+  max = sizeof(restricted_races);
+  if (pointerp(restricted_races))
+  for (i = 0; i < max; i++)
+  {
+    if (restricted_races[i][0] == race)
+    {
+       // Wenns kein Maennchen sein darf wird es ein Weibchen.
+       // Neutrales Geschlecht wird nicht unterstuetzt!
+       if (restricted_races[i][0] == 1)
+       return 2;
+    }
+  }
+
+  // Hier wird einfach gewuerfelt ob Maennlein oder Weiblein.
+  dice = random (100) + 1;
+  if (dice <= prob_male)
+     return MALE;
+  else
+     return FEMALE; 
+}
+
+// Liefert einen bestimmten Fall der Rassenbezeichnung
+string get_race_declination(int casus)
+{
+  mixed declinations;
+  
+  // Es werden die (normalerweise) in den race_specs.c angegebenen
+  // Rassen-Deklinationen ausgelesen.
+  declinations = QueryProp(P_UNIQUE_RACE_DECLINATIONS);
+
+  if (!pointerp(declinations))
+  {
+      notify_error ( ({ 0, "Runtime Error: P_UNIQUE_RACE_DECLINATIONS where set incorrectly!", 
+                           "Class: unique_npc.lpc", "Function: get_race_declination", 0, this_object() }) ); 
+      return "";
+  }
+  
+  // Hier erfolgt die Unterscheidung zwischen Maennlein und Weiblein:
+  if (QueryProp(P_GENDER) == FEMALE)
+  {
+    if (casus <= (sizeof(declinations[1]) - 1))
+    {
+       if (stringp(declinations[1][casus]))
+          return declinations[1][casus];
+       else 
+         notify_error ( ({ 0, "Runtime Error: P_UNIQUE_RACE_DECLINATIONS where set incorrectly for race: "+QueryProp(P_RACE)+"!",
+                           "Class: unique_npc.lpc", "Function: get_race_declination", 0, this_object() }) );
+         return "";
+     }
+     else
+     {
+         notify_error ( ({ 0, "Runtime Error: P_UNIQUE_RACE_DECLINATIONS where set incorrectly for race: "+QueryProp(P_RACE)+"!",
+                           "Class: unique_npc.lpc", "Function: get_race_declination", 0, this_object() }) );
+         return "";
+     }    
+
+  }
+  else
+  {
+    if (casus <= (sizeof(declinations[0]) - 1))
+    {
+       if (stringp(declinations[0][casus]))
+          return declinations[0][casus];
+       else
+         notify_error ( ({ 0, "Runtime Error: P_UNIQUE_RACE_DECLINATIONS where set incorrectly for race: "+QueryProp(P_RACE)+"!",
+                           "Class: unique_npc.lpc", "Function: get_race_declination", 0, this_object() }) );
+         return "";
+     }
+     else
+     {
+         notify_error ( ({ 0, "Runtime Error: P_UNIQUE_RACE_DECLINATIONS where set incorrectly for race: "+QueryProp(P_RACE)+"!",
+                           "Class: unique_npc.lpc", "Function: get_race_declination", 0, this_object() }) );
+         return "";
+     }
+  }
+}
+
+// Liefert einen rassenspezifischen Namen.
+varargs string get_name(string lib, int no_first_name)
+{
+  int dice;
+  mixed names;
+  object ubs;
+    
+  call_other( LIB_UNIQUE "classes/unpc_banishing_system", "???", 0);
+  ubs = find_object( LIB_UNIQUE "classes/unpc_banishing_system" );
+  if (!objectp(ubs))
+  {
+     notify_error ( ({ 0, "Fatal Error: Unable to load unique banishing system! Name set to: +'"+get_race_declination(WER)+"'.",
+                          "Class: unique_npc.lpc", "Function: get_name", lib, this_object() }) );
+     return (get_race_declination(WER)); 
+  }
+  // Es wird versucht aus der angegebenen Bibliothek einen Namen auszulesen.
+  // Schlaegt dies fehl, wird die Rasse dekliniert.
+  if (!pointerp(names = load_names(QueryProp(P_RACE), QueryProp(P_GENDER), lib)))
+  {
+     return (get_race_declination(WER));
+  }
+  
+  // Wir benennen keinen NPC mit diesen Namen, koennte u.U. ein Teil des Familienamens sein.
+  if (no_first_name)
+  {
+    if (pointerp(names));
+    {
+      dice = random (sizeof(names));
+      if (stringp(names[dice]))
+         return names[dice];
+    }
+    notify_error ( ({ 0, "Warning: Could not find propper name for NPC! Name clipped!",
+                         "Class: unique_npc.lpc", "Function: get_name", lib, this_object() }) );
+    return 0;
+  }
+
+  // Haben wir nun etwas passendes wird noch ausgewuerfelt welchen Namen wir nehmen.
+  if (pointerp(names));
+  {
+    do 
+    {
+       names = ubs->verify_names(names);
+       if (!sizeof(names))
+       {
+          notify_error ( ({ 0, "Warning: Could not find propper name due to UBS restrictions! Name set to '"+get_race_declination(WER)+"'.",
+                               "Class: unique_npc.lpc", "Function: get_name", lib, this_object() }) );     
+          return (get_race_declination(WER));
+       }
+       dice = random (sizeof(names));
+    } while ( !ubs->notify_new_name(names[dice]) );
+    
+    if (stringp(names[dice]))
+       return names[dice];
+  }
+  
+  // Geht alles schief, muss die Rasse herhalten.
+  notify_error ( ({ 0, "Warning: Could not find propper name for NPC! Name set to '"+get_race_declination(WER)+"'.",
+                       "Class: unique_npc.lpc", "Function: get_name", lib, this_object() }) );  
+  return (get_race_declination(WER));
+}
+
+// Liefert einen rassenspezifischen Namen.
+varargs string get_surname(int policy, string sur_names, string first_names, string parental_name, int parental_gender )
+{
+  int dice;
+  string queried_name;
+  mixed names;
+
+  // Policies:
+  // 0 .. keinen Familiennamen
+  // 1 .. Sohn/Tochter der/des Vater/Mutter
+  // 2 .. Familienname
+  // 3 .. Clan Familienname
+
+  // In diesem Fall gibt es keine Familiennamen!
+  if (!policy)
+     return "";
+    
+  if (!stringp(sur_names))
+     sur_names = P_UNIQUE_SURNAMES_LIBRARY;
+  
+  if (!stringp(sur_names) && (policy == 2))
+  {
+     notify_error ( ({ 0, "Warning: No propper Surname Library! Surname clipped.",
+                       "Class: unique_npc.lpc", "Function: get_surname", sur_names, this_object() }) );  
+     return "";
+  }
+
+  switch (policy)
+  {
+    case 1 : {
+    	       if (stringp(parental_name) && (parental_gender))
+    	       {
+    	         if (QueryProp(P_GENDER) == 1)
+                    if (parental_gender == 1)
+                        return ", Sohn des "+parental_name;
+                    else
+                        return ", Sohn der "+parental_name;
+                 else
+                    if (parental_gender == 1)
+                       return ", Tochter des "+parental_name;
+                    else
+                       return ", Tochter der "+parental_name;
+                }
+                else
+                {
+                 // Wuerfeln wir uns mal das Geschlecht des Elternteiles aus:
+                 parental_gender = QueryProp(P_GENDER);
+                 queried_name = get_name(first_names, 1);
+                 
+                 if (!stringp(queried_name))
+                    return "";
+                    
+    	         if (QueryProp(P_GENDER) == 1)
+                    if (parental_gender == 1)
+                        return ", Sohn des "+queried_name;
+                    else
+                        return ", Sohn der "+queried_name;
+                 else
+                    if (parental_gender == 1)
+                       return ", Tochter des "+queried_name;
+                    else
+                       return ", Tochter der "+queried_name;                	
+                }
+                break;
+              }
+              
+    case 2 : {
+    	       if (stringp(parental_name) && (parental_gender))
+    	       {
+                  return parental_name; // Den letzen Namen wollen wir!
+               }
+               else
+               {
+                // Wuerfeln wir uns mal das Geschlecht des Elternteiles aus:
+                parental_gender = QueryProp(P_GENDER);
+                queried_name = get_name(sur_names, 1);
+                
+                if (!stringp(queried_name))
+                   return "";                
+                    
+                return " "+queried_name;                	
+               }
+               break;
+             }
+              
+    case 3 : {
+    	       if (stringp(parental_name) && (parental_gender))
+    	       {
+                  return parental_name; // Den letzen Namen wollen wir!
+               }
+               else
+               {
+                // Wuerfeln wir uns mal das Geschlecht des Elternteiles aus:
+                parental_gender = QueryProp(P_GENDER);
+                queried_name = get_name(sur_names, 1);
+                
+                if (!stringp(queried_name))
+                   return "";                
+                    
+                return " Clan "+queried_name;                	
+               }
+               break;
+             }
+    default: {
+               notify_error ( ({ 0, "Warning: Unsupported Policy! Surname clipped.",
+                                    "Class: unique_npc.lpc", "Function: get_surname", 0, this_object() }) );      	
+               return 0;
+             }
+   }
+
+}
+
+// In manchen Faellen ist es sinnvoll spezielle Namen anzugeben:
+string get_special_name()
+{
+  int dice;
+  mixed names;  
+
+
+  // Hier wird geprueft welches Array verwendet werden soll (m|f):
+  if (QueryProp(P_GENDER) == FEMALE)
+     names = QueryProp(P_UNIQUE_FEMALE_NAMES);
+  else
+     names = QueryProp(P_UNIQUE_MALE_NAMES);
+     
+  // Und ein Name wird ausgewuerfelt.
+  if (pointerp(names));
+  {
+    if(sizeof(names))
+    {
+      dice = random (sizeof(names));
+      if (stringp(names[dice]))
+         return names[dice];
+    }
+  }
+  // Geht alles schief, muss die Rasse herhalten.
+  notify_error ( ({ 0, "Warning: Could not find propper name for NPC! Race set to '"+get_race_declination(WER)+"'.",
+                       "Class: unique_npc.lpc", "Function: get_race", 0, this_object() }) );  
+  return (get_race_declination(WER));
+}
+
+// Prueft ob NPC "Extras" wie Narben/Tattoos etc. hat und beschreibt diese. 
+varargs void set_extras(mixed type, int probability, string lib)
+{
+
+  int dice, pos, i, max;
+  mixed extras, details;
+  string long, info;
+
+  // Haben wir keine Wahrscheinlichkeit oder keinen Typ des Extras angegeben,
+  // so steigen wir aus.
+  if (!type || !probability)
+  {
+     notify_error ( ({ 0, "Warning: Too few arguments to funtion set_extras(mixed type, int probability, string lib).",
+                          "Class: unique_npc.lpc", "Function: set_extras", lib, this_object() }) );    
+     return;
+  }
+  
+  // Sollte keine Bibliothek angegeben worde sein nehmen wir die Standard Bib.
+  if (!stringp(lib))
+     lib = P_UNIQUE_EXTRAS_LIBRARY;
+
+  // Wenn wir ueber die Wahrscheinlichkeit wuerfeln, gibt es kein Extra.
+  dice = random(100) + 1;
+  if (dice > probability)
+     return; 
+
+  long = QueryProp (P_LONG);
+  
+  // Sollte nur ein Typ von Extra angegeben worden sein nehmen wir diesen.
+  if (stringp(type))
+  {
+    if (!pointerp(extras = load_extras(type, lib)))
+    {
+     notify_error ( ({ 0, "Warning: Unable to load extra: '"+type+"' from library!",
+                          "Class: unique_npc.lpc", "Function: set_extras", lib, this_object() }) );        	
+      return;
+    }
+      
+    dice = random (sizeof(extras));
+    if (pointerp(extras[dice]))
+    {
+      // Wenn unser erwuerfeltes Extra auch wirklich ein String ist dann
+      // fuegen wir es an die Long.
+      if (stringp(extras[dice][0]))
+      {
+      	// An der ersten Stelle befindet sich die Beschreibung.
+        long += pass_three (extras[dice][0], 0);
+        SetProp(P_LONG, break_string(long,78));
+      }
+      if (stringp(extras[dice][1]) && stringp(extras[dice][1]))
+      {
+         // An der 2. Stelle des Arrays haben wir (optional) ein Detail,
+         // bzw. mehrere mit | getrennte Details welche hier installiert werden.
+         details = explode (extras[dice][1], "|");
+         if (!sizeof(details))
+            details = extras[dice][1];
+         AddDetail( details, pass_three (extras[dice][2], 0));
+      } 
+    }
+  }
+  else
+  // War es ein ganzes Array wird alles ausgewertet.
+  if (pointerp(type))
+  {
+    info = "";
+    max = sizeof(type);
+    for (i = 0; i < max; i++)
+    {
+      if (stringp(type[i]))
+      {
+        if (!pointerp(extras = load_extras(type[i], lib)))
+        {
+          notify_error ( ({ 0, "Warning: Unable to load extra: '"+type[i]+"' from library!",
+                          "Class: unique_npc.lpc", "Function: set_extras", lib, this_object() }) );                	
+          return;
+        }
+        // Wuerfeln wir das Extra aus:
+        dice = random (sizeof(extras));
+        if (pointerp(extras[dice]))
+        {
+          // Wenn unser erwuerfeltes Extra auch wirklich ein String ist dann
+          // fuegen wir es an die Long.        	
+          if (stringp(extras[dice][0]))
+          {
+            // Wir pruefen hier, ob man das Extra an den letzten Satz haengen kann:
+            info = pass_three (extras[dice][0], i);
+            if (info[0 .. 1] != capitalize(info[0 .. 1]))
+              long = long[0 .. strlen(long)-2] + ", " + info;
+            else
+              long += info;
+          }
+          if (stringp(extras[dice][1]) && stringp(extras[dice][1]))
+          {
+      	     // An der 2. Stelle des Arrays haben wir (optional) ein Detail,
+      	     // bzw. mehrere mit | getrennte Details welche hier installiert werden.
+             details = explode (extras[dice][1], "|");
+             if (!sizeof(details))
+                details = extras[dice][1];
+             AddDetail( details, pass_three (extras[dice][2], 0));
+          }
+        }
+      }
+    }
+    SetProp(P_LONG, break_string(long,78));
+  } 
+  return;
+
+}
+
+// Hier laden wir uns den Header aus einer Library:
+mixed load_details_header(string lib)
+{
+  int start;
+  string line;
+  string test, query_key, query_info;
+  mixed result, store;
+  object library_server;
+
+  // Ist nichts spezifiziert, wird die Standard Bibliothek angenommen
+  if (!stringp(lib))
+     lib = P_UNIQUE_DETAILS_LIBRARY;
+     
+  call_other( LIB_UNIQUE "classes/unpc_library_server", "???", 0);
+  library_server = find_object( LIB_UNIQUE "classes/unpc_library_server" );
+  
+  if (!objectp(library_server))
+  {
+     notify_error ( ({ 0, "Fatal Error: Unable to load library server!",
+                          "Class: unique_npc.lpc", "Function: load_details_header", lib, this_object() }) );     
+  }
+  
+  store = library_server->load_lib(lib, 1);
+  
+  if (!pointerp(store))
+  {
+     while ( line = read_file (lib, start, 1) )
+     {
+       // Mal sehen ob wir eine Kommentarzeile haben!
+       if (sscanf (line, "#%s", test) != 1)
+       {
+         // Die benoetigten Werte werden mit sscanf ausgelesen:
+         if (sscanf (line, ";key: %s : %s;", query_key, query_info) == 2)
+         {
+         	// Pruefung auf erstes Element:
+           if (!pointerp(result))
+              result = ({ ({ query_key, query_info }) });
+           else
+              result += ({ ({ query_key, query_info }) });
+         }
+       }
+       start += 1;
+     }
+     library_server->store_lib(lib, 1);
+     return result;
+  }
+  else
+  {
+    return store;
+  }
+}
+
+// Hier werden dem NPC Details aus einer Bibliothek gesetzt.
+varargs void set_details(string lib, int distributed)
+{
+  int dice, i, max, index, index2;
+  string type, pre, post, long;
+  mixed header, details, keys, result;
+ 
+   // Wenn distributed gesetzt ist, greifen wir auf verteilte Bibliotheken zu, sonst auf eine einzige.
+  if (distributed)
+     lib = lib + "/" + lower_case(QueryProp(P_RACE));
+ 
+  // Kann der Header nicht gefunden werden geben wir eine Warnung aus:
+  if (!pointerp(header = load_details_header (lib)))
+  {
+     notify_error ( ({ 0, "Warning: Unable to load header from library!",
+                          "Class: unique_npc.lpc", "Function: set_details", lib, this_object() }) );
+     return;
+  }
+  
+  // Wir arbeiten den Header key fuer key ab:
+  max = sizeof (header);
+  for (i = 0; i < max; i++)
+  {
+    // Dem Parser uebergeben wir eine Liste von verwendeten Keys,
+    // welche wir veraendert wieder bekommen. (Loesung mit Reference
+    // wuerde das sparen!)
+    if (i > 0)
+       keys = result[1]; // Key-list
+       
+    // Das Auswerten der Daten aus der Bibliothek erledigt der Parser.
+    result = parse(header[i][1], lib, keys);
+    
+    // Der key <look> kommt in die P_LONG:
+    if (header[i][0] == "<look>")
+    {  
+       do 
+       {
+       	  // Sollte nach einem Detail noch zusaetzlich ein ".." angegeben sein wird das
+       	  // zusatzlich als key verwendet. z.B. haare->pagenkopf oder bart->schnurrbart
+          index = find_char(result[0], "\"", 0);
+          if (index >= 0)
+          {
+             index2 = find_char(result[0], "\"", index+1);
+             if (index2 > 0)
+             {  
+                if (!index)
+                   pre = "";
+                else
+                   pre = result[0][0 .. index - 1];
+                post = result[0] [index2 + 1 .. strlen (result[0]) - 1];
+                result[0] = pre+post;
+             }
+          }
+       }
+       while (index != -1 && index2 != -1);
+       // Wir generieren unsere neue Long mit der Info.
+       long = QueryProp(P_LONG);
+       long += result[0];
+       SetProp(P_LONG, long);
+    }
+    else
+    {
+      index = find_char(result[0], "\"", 0);
+      if (index >= 0)
+      {
+        do
+        {
+       	  // Sollte nach einem Detail noch zusaetzlich ein ".." angegeben sein wird das
+       	  // zusatzlich als key verwendet. z.B. haare->pagenkopf oder bart->schnurrbart
+           index2 = find_char(result[0], "\"", index+1);
+           if (index2 > 0)
+           {
+              if (!index)
+                 pre = "";
+              else
+                 pre = result[0][0 .. index - 1];
+              post = result[0] [index2 + 1 .. strlen (result[0]) - 1];
+  
+              header[i][0] += "|" + result[0][index +1 .. index2 -1];
+              result[0] = pre+post;
+           }
+         }
+         while (index != -1 && index2 != -1);
+      }
+      keys = explode (header[i][0], "|");
+      if (!sizeof(keys))
+         keys = header[i][0];
+ 
+      // Also Nullstrings geben wir nicht als Details an!
+      if (strlen(result[0]))
+         AddDetail(keys, result[0]);
+    }
+  }
+}
+
+// Unterscheidung Maennlein/Weiblen in der Int_Long
+// und baut nette Infos zur Rasse ein ;-)
+// Diese Funktion ist von description.c adaptiert.
+varargs string get_long(string male, string female)
+{
+   string long;
+   string size_descr, fill;
+   int per;
+
+   if (stringp(female))
+      long = distinguish_gender (male, female);
+   else
+      long = male;
+
+   if (!stringp(long))
+      long = "";
+
+   per=1000*QueryProp(P_SIZE)/QueryProp(P_UNIQUE_AVERAGE_SIZE);
+   switch(per)
+   {
+     case 0..800: size_descr="ziemlich winzig"; break;
+     case 801..850: size_descr="eher winzig"; break;
+     case 851..900: size_descr="recht klein"; break;
+     case 901..950: size_descr="eher klein"; break;
+     case 951..1050: size_descr="mittelgross"; break;
+     case 1051..1100: size_descr="relativ gross"; break;
+     case 1101..1150: size_descr="ziemlich gross"; break;
+     case 1151..1200: size_descr="sehr gross"; break;
+     default: size_descr="riesig"; break;
+   }
+
+   fill = " ";
+
+   if (QueryProp(P_UNIQUE_AVERAGE_SIZE)<170)
+   {
+     if (per<950)
+       fill=" selbst fuer eine"+(QueryProp(P_GENDER)==2?" ":"n ")
+                              +get_race_declination(WEN)+" ";
+     else
+       if (per>1050)
+   fill=", wenn auch nur fuer eine"+(QueryProp(P_GENDER)==2?" ":"n ")
+                              +get_race_declination(WEN)+", ";
+   }
+   else
+   {
+     if (QueryProp(P_UNIQUE_AVERAGE_SIZE)>170)
+       if (per>1050)
+     fill=" sogar fuer eine"+(QueryProp(P_GENDER)==2?" ":"n ")
+                                +get_race_declination(WEN)+" ";
+         else
+     if (per<950)
+        fill=", wenn auch nur fuer eine"+(QueryProp(P_GENDER)==2?" ":"n ")
+                                +get_race_declination(WEN)+", ";
+   }
+   
+   long += capitalize(QueryPronoun(0))+" ist"+fill+size_descr+".";
+   return long;
+}
+
+// Unterscheidung Maennlein/Weiblen
+string distinguish_gender(string male, string female)
+{
+   if (QueryProp(P_GENDER) == 1)
+      return male;
+   else
+      return female;
+}
+
+// Wert zwischen min/max.
+int get_between(int min, int max)
+{
+   int dice;
+ 
+   if ((max >= 0) && (min >= 0))
+   {
+     dice = random (max - min)+1;
+     dice += min;
+   }
+   else 
+   if ((max >= 0) && (min < 0))
+   {
+     dice = random (max) - random (negate (min));  
+   }
+   else
+   if ((max <= 0) && (min <= 0))
+   {
+     dice = random (min + negate (max))+1;
+     dice -= max ;
+   }
+        
+   return dice;
+}
+
+// Hier laden wir uns unsere Namen aus einer Library:
+mixed load_names(string race, int gender, string lib)
+{
+  int start, query_gender, i, max;
+  string line;
+  string test, query_race, query_names;
+  mixed result, store;
+  object library_server;
+  
+  if (!stringp(lib))
+     lib = P_UNIQUE_NAMES_LIBRARY;
+
+  call_other( LIB_UNIQUE "classes/unpc_library_server", "???", 0);
+  library_server = find_object( LIB_UNIQUE "classes/unpc_library_server" );
+  
+  if (!objectp(library_server))
+  {
+     notify_error ( ({ 0, "Fatal Error: Unable to load library server!",
+                          "Class: unique_npc.lpc", "Function: load_names", lib, this_object() }) );     
+  }
+  store = library_server->load_lib(lib, 0);
+  if (!pointerp(store))
+  {
+    while ( line = read_file (lib, start, 1) )
+    {
+      // Mal sehen ob wir eine Kommentarzeile haben!
+      if (sscanf (line, "#%s", test) != 1)
+      {
+        if (sscanf (line, "%s - %d : %s;", query_race, query_gender, query_names) == 3)
+        { 
+          if (!pointerp(store))
+             store = ({ ({ query_race, query_gender , explode (query_names, ", ") }) });
+          else
+             store += ({ ({ query_race, query_gender , explode (query_names, ", ") }) });
+             
+          if ((race == query_race) && ((gender == query_gender)||(query_gender == 0)))
+          {
+            if (!pointerp(result))
+               result = explode (query_names, ", ");
+            else
+               result += explode (query_names, ", ");
+          }
+        }
+      }
+      start += 1;
+    }
+    library_server->store_lib(lib, 0, store);
+    return result;
+  }
+  else
+  {
+    max = sizeof (store);
+    for (i = 0; i < max; i++)
+    {
+      if ((race == store[i][0]) && ((gender == store[i][1])||(query_gender == 0)))
+         return store[i][2];
+    }
+  }
+  return 0;
+}
+
+// Hier laden wir uns unsere Extras aus einer Library:
+mixed load_extras(string type, string lib)
+{
+  int start, i, max;
+  string line;
+  string test, query_extra, query_type, query_detail, query_detail_info;
+  mixed result, store;
+  object library_server;
+
+  if (!stringp(lib))
+     lib = P_UNIQUE_EXTRAS_LIBRARY;
+
+  call_other( LIB_UNIQUE "classes/unpc_library_server", "???", 0);
+  library_server = find_object( LIB_UNIQUE "classes/unpc_library_server" );
+  
+  if (!objectp(library_server))
+  {
+     notify_error ( ({ 0, "Fatal Error: Unable to load library server!",
+                          "Class: unique_npc.lpc", "Function: load_names", lib, this_object() }) );     
+  }
+  
+  store = library_server->load_lib(lib, 3);
+  
+  if (!pointerp(store))
+  {
+    start = 1;
+    while ( line = read_file (lib, start, 1) )
+    {
+      // Mal sehen ob wir eine Kommentarzeile haben!
+      if (sscanf (line, "#%s", test) != 1)
+      {
+        if (sscanf (line, "%s : %s; %s : %s;", query_type, query_extra, query_detail, query_detail_info) == 4)
+        {
+          if (!pointerp(store))
+             store = ({ ({ query_type, query_extra, query_detail, query_detail_info }) });
+          else
+             store += ({ ({ query_type, query_extra, query_detail, query_detail_info }) });
+          if (type == query_type)
+          {
+            if (!pointerp(result))
+               result = ({ ({ query_extra, query_detail, query_detail_info }) });
+            else
+               result += ({ ({ query_extra, query_detail, query_detail_info }) });
+          }
+        }
+      }
+      start += 1;
+    }
+    library_server->store_lib(lib, 3, store);
+    return result;
+  }
+  else
+  {
+    max = sizeof (store);
+    for (i = 0; i < max; i++)
+    {
+      if (type == store[i][0])
+         return ({ ({ store[i][1], store[i][2], store[i][3]}) });
+    }
+  }
+  return 0;
+}
+
+// Hier laden wir uns unsere Details aus einer Library:
+mixed load_details(string type, string race, int gender, string lib)
+{
+  int start, query_gender, i, max;
+  string line;
+  string test, query_race, query_details, query_type;
+  mixed result, store;
+  object library_server;
+  
+  if (!stringp(lib))
+     lib = P_UNIQUE_DETAILS_LIBRARY;
+
+  call_other( LIB_UNIQUE "classes/unpc_library_server", "???", 0);
+  library_server = find_object( LIB_UNIQUE "classes/unpc_library_server" );
+  
+  if (!objectp(library_server))
+  {
+     notify_error ( ({ 0, "Fatal Error: Unable to load library server!",
+                          "Class: unique_npc.lpc", "Function: load_names", lib, this_object() }) );     
+  }
+  
+  store = library_server->load_lib(lib, 2);
+  
+  if (!pointerp(store))
+  {
+    while ( line = read_file (lib, start, 1) )
+    {
+      // Mal sehen ob wir eine Kommentarzeile haben!
+      if (sscanf (line, "#%s", test) != 1)
+      {
+        if (sscanf (line, "%s - %d - %s : %s;", query_race, query_gender, query_type, query_details) == 4)
+        {
+          if (!pointerp(store))
+             store = ({ ({ query_race, query_gender , query_type, explode (query_details, ", ") }) });
+          else
+             store += ({ ({ query_race, query_gender , query_type, explode (query_details, ", ") }) });
+          if ( (race == query_race) && ( (gender == query_gender) || (query_gender == 0) ) && (type == query_type) )
+          {
+            if (!pointerp(result))
+               result = explode (query_details, ", ");
+            else
+               result += explode (query_details, ", ");
+          }
+        }
+      }
+      start += 1;
+    }
+    library_server->store_lib(lib, 2, store);
+    return result;
+  }
+  else
+  {
+     max = sizeof (store);
+     for (i = 0; i < max; i++)
+     {
+       if ( (race == store[i][0]) && ( (gender == store[i][1]) || (store[i][1] == 0) ) && (type == store[i][2]) )
+           return store[i][3];
+     }
+  }
+  return 0;
+}
+
+// Startet (wenn nicht vorhanden) eine neue Familie!
+// probability -> wie wahrscheinlich ist Vererbung
+// settlingtime (in min) -> veraenderung der probability: Der NPC braucht settlingtime um
+// die chance auf probability Vererbung zu haben - darunter ist sie kleiner, darueber
+// groesser. (Wird ein NPC sofort nach dem Create gezapt ist sie gleich Null). 
+varargs void create_unique_family ( int probability, int settlingtime, int level, int prob_male, int special_name, string first_names, string sur_names ) 
+{
+   int i, max, dice, procreation, parental_gender;
+   string full_name, parental_name;
+   
+   // Keine Wahrscheinlichkeit, keine Familie ...
+   if (!intp(probability))
+   {
+      notify_error ( ({ 0, "Syntax Error: no parameters provided for create_unique_family!",
+                           "Class: unique_npc.lpc", "Function: create_unique_family", 0, this_object() }) );
+      return;                   
+   } 
+   
+   // Wir laden mal den Unique NPC Daten Server
+   call_other( LIB_UNIQUE "classes/unpc_family_server", "???", 0);
+   
+   family_server = find_object( LIB_UNIQUE "classes/unpc_family_server" );
+   
+   // Wir laden die Daten aus der Ahnen-Datenbank:
+   family_tree = family_server->load_data (explode(file_name(), "#")[0]);
+      
+   // Noch keine Familie vorhanden?
+   if (!pointerp(family_tree))
+   {
+      create_default_unique_npc(level, prob_male, special_name, first_names, sur_names);      
+      
+      // Der Killer wird mal mit this_object initialisiert - wird im die() umgesetzt.
+      // Es wird geprueft welcher Name fuer die Nachkommen relevant ist und dieser gespeichert.
+      if (QueryProp(P_UNIQUE_SURNAME_POLICY) == 1)
+         family_tree = ({ QueryProp(P_RACE), ({ ({ file_name(), QueryProp(P_UNIQUE_FIRSTNAME), QueryProp(P_GENDER), probability, settlingtime*60, getuid(this_object()) }) }) });
+      else
+         family_tree = ({ QueryProp(P_RACE), ({ ({ file_name(), QueryProp(P_UNIQUE_SURNAME), QueryProp(P_GENDER), probability, settlingtime*60, getuid(this_object()) }) }) });
+      // Und das Leben einer neuen Dynastie kann beginnen!
+      return; 
+   }
+   else
+   {
+     if (pointerp(family_tree[1]))
+     {
+     	max = sizeof(family_tree[1]);
+     	for (i = 0; i < max; i++)
+     	{  
+     	   procreation = 0;
+           // Nur zeugungsfaehige NPCs sind interessant.
+     	   if (family_tree[1][i][3] > 0)
+     	   {
+     	      while ((family_tree[1][i][3] > 0)&&(!procreation))
+     	      {
+     	         dice = random (100) + 1;
+     	         // Wenn die Zeugung fehlschlaegt sinkt die Chance auch weiter.
+     	         if ( dice > family_tree[1][i][3])
+     	         {
+     	            family_tree[1][i][3] -= P_CHILD_COST;
+     	         }
+     	         else
+     	         {                       
+     	      	    // Es gibt noch ein Kind, aber die Wahrscheinlichkeit 
+     	      	    // sinkt trotzdem mit jedem Kind. Mit anderen Worten: Der NPC altert.
+     	            family_tree[1][i][3] -= P_CHILD_COST;
+     	            procreation = 1; // Erfolgreiche Zeugung!
+     	            parental_name = family_tree[1][i][1];
+     	            parental_gender = family_tree[1][i][2];
+     	         }
+     	      }
+     	      // Wenn die Zeugung erfolgreich war:
+     	      if (procreation)
+     	      {      	 
+                 create_default_unique_npc(level, prob_male, special_name, first_names, sur_names);
+                 
+                 // Der Killer wird mal mit this_object initialisiert - wird im die() umgesetzt.
+                 if (QueryProp(P_UNIQUE_SURNAME_POLICY) == 1)
+                    family_tree[1] += ({ ({ file_name(), QueryProp(P_UNIQUE_FIRSTNAME), QueryProp(P_GENDER), probability, settlingtime*60, getuid(this_object()) }) });
+                 else
+                    family_tree[1] += ({ ({ file_name(), parental_name, QueryProp(P_GENDER), probability, settlingtime*60, getuid(this_object()) }) });
+                 full_name = QueryProp(P_UNIQUE_FIRSTNAME);
+                 // Dieses Kind hat einen bekannten Vater bzw. eine bekannte Mutter:
+                 full_name += get_surname(QueryProp(P_UNIQUE_SURNAME_POLICY), sur_names, first_names, parental_name, parental_gender );
+                 // Nun erhalten wir unserenentgueltigen Namen!
+                 SetProp (P_NAME, full_name);
+                 SetProp (P_SHORT,      // Wir passen auch die Short an.
+                            distinguish_gender( "ein " + get_race_declination(0) + " namens " + QueryProp(P_NAME),
+                                                "eine " + get_race_declination(0) + " namens " + QueryProp(P_NAME) ) );
+                 // Und ein neues Leben beginnt!
+                 return;      	      	 
+     	      }
+     	   }
+        }
+     }
+   }
+   // Die Familie wurde ausgerottet, schade um sie ...
+   family_tree = 0;
+   // Scheinbar wurde die Familie ausgeloescht ... wir starten ganz einfach eine neue!
+   create_default_unique_npc(level, prob_male, special_name, first_names, sur_names);       
+   // Der Killer wird mal mit this_object initialisiert - wird im die() umgesetzt.
+   if (QueryProp(P_UNIQUE_SURNAME_POLICY) == 1)
+      family_tree = ({ QueryProp(P_RACE), ({ ({ file_name(), QueryProp(P_UNIQUE_FIRSTNAME), QueryProp(P_GENDER), probability, settlingtime*60, getuid(this_object()) }) }) });
+   else
+      family_tree = ({ QueryProp(P_RACE), ({ ({ file_name(), QueryProp(P_UNIQUE_SURNAME), QueryProp(P_GENDER), probability, settlingtime*60, getuid(this_object()) }) }) });
+   // Wir setzen den alten Familytree zurueck
+   family_server->store_data( explode(file_name(), "#")[0], 0);   
+   // Und das Leben einer neuen Dynastie kann beginnen!
+   return;       
+}
+
+// Hier bauen wir den Killer des armen NPC in unseren Family Tree:
+void die(int poisondeath) 
+{
+   object killer, ubs;
+   int lifetime, i, max;
+   
+   call_other( LIB_UNIQUE "classes/unpc_banishing_system", "???", 0);
+   ubs = find_object( LIB_UNIQUE "classes/unpc_banishing_system" );   
+   ubs->notify_unused_name(this_object()->name());
+   
+   // Ist keine Dynastie erwuenscht steigen wir einfach aus.
+   if ( !pointerp( family_tree ) )
+   {
+      ::die(poisondeath);
+      return; 
+   }
+   // Wer wars? Wer hat und ermordet?!
+   killer = QueryProp(P_KILLER);
+  
+   // Nun wird geprueft ob 
+   if (pointerp(family_tree))
+   if (pointerp(family_tree[1]))
+   {
+     max = sizeof(family_tree[1]);
+     for (i = 0; i < max; i++)
+     {
+     	if (family_tree[1][i][0] == file_name())
+     	{
+     	   family_tree[1][i][5] = getuid(killer||TP);
+     	   
+     	   // Je laenger das Lebewesen gelebt hat, desto groesser ist die Chance auf Kinder.
+     	   // Jedes Kind setzt diese Chance jedoch wieder herunter.
+     	   lifetime = time() - QueryProp(P_CLONE_TIME);
+      	   family_tree[1][i][3] = (family_tree[1][i][3] * lifetime) / family_tree[1][i][4];
+     	   if (family_tree[1][i][3] > P_MAX_HERITAGE_PROBABILITY)
+     	      family_tree[1][i][3] = P_MAX_HERITAGE_PROBABILITY;  
+     	}
+     }
+   }
+   // Wir laden mal den Unique NPC Daten Server
+   call_other( LIB_UNIQUE "classes/unpc_family_server", "???", 0);
+   family_server = find_object( LIB_UNIQUE "classes/unpc_family_server" );
+   
+   if (objectp(family_server))
+   {
+     family_server->store_data( explode(file_name(), "#")[0], family_tree);
+     ::die(poisondeath);
+   }
+   else
+     ::die(poisondeath);
+}
+
+// Begruesungsroutine
+void greet_player(mixed people)
+{
+   int i, max;
+   string msg;
+
+   // Niemand zum gruessen? Dann raus!
+   if (!sizeof(people))
+      return;
+
+   msg = this_object()->name()+" sagt: Hallo "; 
+   max = sizeof(people);
+   for (i = 0; i < max; i++)
+   {
+      if ( i == (sizeof(people) - 2) )
+         msg += people[i]->name()+" und ";
+      else if ( i == (sizeof(people) - 1) )
+         msg += people[i]->name()+"!\n";
+      else
+         msg += people[i]->name()+", ";
+   }
+   say (msg);
+}
+
+// Liefert unseren family_tree zur weiteren Auswertung:
+mixed get_family_tree()
+{
+  return family_tree;
+}
+
+catch_tell(str)
+{
+  sequencer::catch_tell(str);
+  mnpc::catch_tell(str);
+}
+
+give_notify(ob)
+{
+  sequencer::give_notify(ob);
+  mnpc::give_notify(ob);
+}

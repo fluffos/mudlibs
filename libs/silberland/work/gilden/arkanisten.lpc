@@ -1,0 +1,205 @@
+inherit "/std/gilde";
+inherit "/std/gilden_ob";
+inherit "/std/gilden_room";
+inherit "/gilden/obj/sequencer_new";
+#include "/gilden/arkanisten/arkanisten.h"
+
+void create() 
+{
+  ::create();
+  SetProp(P_NAME, "Ein verhuellter Meister"); // Fuer die Channelausgabe
+  //SetNames(GUILDNPC_LONGNAME, GUILDNPC_NAME); // Fuer den Sequencer
+  SetProp(P_ARTICLE, 0);
+
+  SetProp(P_INT_SHORT, "Das geheime Hauptquartier der Arkanisten");
+  SetProp(P_INT_LONG,
+	  "tbd");
+
+  AddCmd( ({"lerne", "lern"}), "cmd_lernen");
+  AddCmd( ({"fertigkeiten"}), "cmd_abilities_overview");
+}
+
+string repeat_string(string str, int count) {
+  string result;
+  int i;
+  result = "";
+  for (i = 0; i < count; i++) {
+      result += str;
+  }
+  return result;
+}
+
+public int cmd_abilities_overview() {
+  object *abilities, ab;
+  int score, max_score, i;
+  string progress_bar;
+
+  if (TP->QueryProp(P_GUILD) != "arkanisten") return 0;
+
+  write("+-----------------------------------------------------------------------------+\n");
+  write("|                              Fähigkeiten Übersicht                          |\n");
+  write("+-----------------------------------------------------------------------------+\n");
+
+  abilities = ABILITY_SERVICE->get_all_learned_by(TP);
+
+  for(i=0; i<sizeof(abilities); ++i) {
+    ab = abilities[i];
+      score = TP->QuerySkillAbility(ab->skill_name());
+      max_score = MAX_ABILITY; // Assuming `max_skill_level` exists
+      progress_bar = repeat_string("#", (score * 20) / max_score) + repeat_string(" ", 20 - (score * 20) / max_score);
+
+     write(sprintf("| %-50s [%s]   |\n", 
+             ab->QueryProp(P_ABILITY_NAME), 
+             progress_bar));
+  }
+  write("+-----------------------------------------------------------------------------+\n");
+  return 1;
+}
+
+private int calculate_free_ability_slots(object pl) {
+  int guild_level, used_slots, free_slots;
+
+  guild_level = pl->QueryProp(P_GUILD_LEVEL);
+  used_slots = sizeof(ABILITY_SERVICE->get_all_learned_by(pl));
+  free_slots = guild_level - used_slots;
+
+  return free_slots;
+}
+
+public void show_learnable_abilities() {
+  string s;
+  object *abilities, ab;
+  int learnable, idx;
+
+  s = "Folgende Faehigkeiten kannst du aktuell lernen:\n";
+
+
+  abilities = ABILITY_SERVICE->get_all_abilities(ABILITY_GROUP_GADGETS);
+  s +="\n  1. Werkzeuge:\n";
+  learnable = 0;
+  foreach(idx, abilities, ab, {
+    if(ab->can_learn(TP, 1)) {
+      s += "    * "+ab->QueryProp(P_ABILITY_NAME)+"\n";
+      learnable++;
+    }
+  });
+  if(learnable < 1) s += "    < keine >\n";
+
+  abilities = ABILITY_SERVICE->get_all_abilities(ABILITY_GROUP_ALCHEMY);
+  s +="\n  2. Alchemie:\n";
+  learnable = 0;
+  foreach(idx, abilities, ab, {
+    if(ab->can_learn(TP, 1)) {
+      s += "    * "+ab->QueryProp(P_ABILITY_NAME)+"\n";
+      learnable++;
+    }
+  });
+  if(learnable < 1) s += "    < keine >\n";
+
+  abilities = ABILITY_SERVICE->get_all_abilities(ABILITY_GROUP_STRATEGY);
+  s +="\n  3. Strategien:\n";
+  learnable = 0;
+  foreach(idx, abilities, ab, {
+    if(ab->can_learn(TP, 1)) {
+      s += "    * "+ab->QueryProp(P_ABILITY_NAME)+"\n";
+      learnable++;
+    }
+  });
+  if(learnable < 1) s += "    < keine >\n";
+
+  abilities = ABILITY_SERVICE->get_all_abilities(ABILITY_GROUP_BIOLOGY);
+  s +="\n  4. Transmutationen:\n";
+  learnable = 0;
+  foreach(idx, abilities, ab, {
+    if(ab->can_learn(TP, 1)) {
+      s += "    * "+ab->QueryProp(P_ABILITY_NAME)+"\n";
+      learnable++;
+    }
+  });
+  if(learnable < 1) s += "    < keine >\n";
+
+  s+="\n";
+  s+=sprintf("Du kannst noch %d Faehigkeiten lernen.\n", calculate_free_ability_slots(TP));
+  s+="Zum Lernen einer Faehigkeit gib 'lerne <Name der Faehigkeit>' ein.\n";
+  s+="\n";
+  write(s);
+}
+
+public int cmd_lernen(string str) {
+  object ab;
+
+  if(TP->QueryProp(P_GUILD) != GUILD) {
+    write(BS("Du musst dem Arkanistenorden angehoeren um hier lernen zu koennen."));
+    return -1;
+  }
+
+  if(!str || str == "") {
+    show_learnable_abilities();
+    return 1;
+  }
+
+  ab = ABILITY_SERVICE->get_ability_by_name(str);
+  if(!objectp(ab)) {
+    write(BS("So eine Faehigkeit gibt es nicht."));
+    return -1;
+  }
+
+  if(!ab->can_learn(TP)) return -1;
+
+  ab->learn_ability(TP);
+  if(objectp(present(GUILD_OBJ_ID, TP))) present(GUILD_OBJ_ID, TP)->reactivate_abilities();
+  return 1;
+}
+
+public mapping Kampfskill(object player, string skill, mapping sinfo) {
+  string *abilities, ab_name;
+  object gobj, ab;
+  int idx;
+
+  gobj = present(GUILD_OBJ_ID, player);
+  if(!objectp(gobj)) return sinfo;
+
+ // pDebug(player, sprintf("kampfskill :: sinfo_before=%O\n", sinfo));
+ 
+  abilities = gobj->QueryProp(P_WATCHER_COMBAT_ABILITIES);
+  foreach(idx, abilities, ab_name, {
+    ab = ABILITY_SERVICE->get_ability_by_name(ab_name);
+    if(!objectp(ab)) continue;
+    
+    sinfo[SI_SKILLABILITY] = player->QuerySkillAbility(ab->skill_name());
+    sinfo[SI_ABILITY_SILENT] = 1;
+    sinfo[SI_ABILITY_NOLEARN] = random(5);
+    ab->use(player, sinfo);
+  });
+
+ // pDebug(player, sprintf("kampfskill :: sinfo_after=%O\n", sinfo));
+  return sinfo;
+}
+
+public mapping Verteidigungsskill(object player, string skill, mapping sinfo) {
+  string *abilities, ab_name;
+  object gobj, ab;
+  int idx;
+
+  gobj = present(GUILD_OBJ_ID, player);
+  if(!objectp(gobj)) return sinfo;
+
+ // pDebug(player, sprintf("verteidigungsskill :: sinfo_before=%O\n", sinfo));
+
+  abilities = gobj->QueryProp(P_WATCHER_DEFENSIVE_ABILITIES);
+  foreach(idx, abilities, ab_name, {
+    ab = ABILITY_SERVICE->get_ability_by_name(ab_name);
+    if(!objectp(ab)) continue;
+
+    pDebug(player, sprintf("verteidigungsskill :: calling=%s\n", ab_name));
+
+    sinfo[SI_SKILLABILITY] = player->QuerySkillAbility(ab->skill_name());
+    sinfo[SI_ABILITY_SILENT] = 1;
+    sinfo[SI_ABILITY_NOLEARN] = random(5);
+    ab->use(player, sinfo);
+    
+  });
+  //pDebug(player, sprintf("verteidigungsskill :: sinfo_after=%O\n", sinfo));
+
+  return sinfo;
+}

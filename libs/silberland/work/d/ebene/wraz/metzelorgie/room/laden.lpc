@@ -1,0 +1,271 @@
+// Laden am Schlachtfeld
+// Wraz / Mendralim
+// Vorlage: /d/open/beispiele/dorf/room/laden_100.c (Angrox)
+
+
+//-------------------------------------------------------------------------
+// Fuer einen Laden, wo Gegenstaende verkauft und gekauft werden koennen,
+// erben wir nicht den std/room, sondern den bereits auf die Funktion vor-
+// bereiteten std/laden.
+//-------------------------------------------------------------------------
+
+inherit "std/laden";
+
+#include "../def.h"
+#include <laden.h>
+
+#define MAX_COUNT 15
+
+mapping players_bling;
+mapping players_message;
+
+void create()
+{
+  ::create();
+
+  players_bling = SMASTER->query_save();
+  players_message = ([]);
+
+  SetProp (P_LIGHT, 1);
+  SetProp (P_INDOORS, 1);
+  SetProp (P_ENVIRONMENT, ([ENV_TERRAIN:TT_HOUSE, ENV_TEMPERATURE:20]));
+
+//-------------------------------------------------------------------------
+// P_INT_LONG lassen wir auskommentiert, da wir die Long anpassen wollen.
+// Je nachdem ob der Haendler da ist oder nicht kommt eine andere Lang-
+// beschreibung (siehe funktion _query_int_long())
+//-------------------------------------------------------------------------
+  // SetProp(P_INT_LONG, "");
+
+  SetProp(P_INT_SHORT,"In einem hastig errichteten Zelt");
+
+//-------------------------------------------------------------------------
+// Die P_SHOPKEEPER_ID entspricht einer eindeutigen ID des Npcs der in dem
+// Laden den Haendler spielen wird. Man kann auch Ids wie "\ngerion" be-
+// nutzen, diese koennen von einem Spieler allerdings nicht angesprochen
+// werden (\n ist fuer einen spieler nicht zu tippen)
+//-------------------------------------------------------------------------
+
+  SetProp(P_SHOPKEEPER_ID, "shegraz");
+
+//-------------------------------------------------------------------------
+// Welcher Name soll fuer die Chats des Ladens hergenommen werden?
+//-------------------------------------------------------------------------
+
+  SetProp(P_SHOPKEEPER_NAME, "Shegraz");
+
+//-------------------------------------------------------------------------
+// Geschlecht des Shopkeepers. Default ist MALE
+//-------------------------------------------------------------------------
+
+  SetProp(P_SHOPKEEPER_GENDER, FEMALE);
+
+//-------------------------------------------------------------------------
+// P_SHOP_FLAGS geben an, ob der Shop ueberhaupt einen Keeper hat, und wenn
+// ja, ob er einen braucht (dann kann nichts gekauft/verkauft werden, wenn
+// der Shopkeeper nicht im Raum ist.
+//-------------------------------------------------------------------------
+
+  SetProp (P_SHOP_FLAGS, SHOP_HASKEEPER | SHOP_NEEDSKEEPER);
+
+//-------------------------------------------------------------------------
+// Der Storageroom ist der Raum, wo alle verkauften Items lagern. Wird
+// dieser Raum upgedatet, wird auch der Laden aufgeraeumt. Die Items, die
+// sich im Lagerraum befinden, werden NICHT ausgeswappt.
+//-------------------------------------------------------------------------
+
+  SetStorageRoom(ROOM "laden_lagerraum" );
+
+//-------------------------------------------------------------------------
+// Mittels P_SPECIAL_SHOP kann man einstellen, was der Laden ankauft,
+// naeheres dazu in der man-page
+//-------------------------------------------------------------------------
+
+  SetProp (P_SPECIAL_SHOP, random(2) ?
+                           ([P_WC:"Das wird derzeit nicht angekauft.\n"]) :
+                           ([P_AC:"Das wird derzeit nicht angekauft.\n"]) );
+
+  AddDetail( ({"gras", "boden"}),
+    "Gras spriesst spaerlich aus dem Boden unter Deinen Fuessen.");
+
+  AddDetail( ({"fuesse","fuss"}),
+    "Darunter ist der Boden.");
+
+  AddDetail( ({"decke"}),
+    "Die Decke besteht aus Zeltstoff.");
+
+  AddDetail( ({"zeltstoff"}),
+    "Einfacher, orkischer Zeltstoff.");
+
+  AddDetail( ({"eile"}),
+    "Das Zelt wurde offensichtlich in Eile aufgestellt, einige Stangen stehen "
+    "schief.");
+
+  AddDetail( ({"stangen"}),
+    "Einige Stangen stehen schief. Das Zelt haelt trotzdem.");
+
+  AddDetail( ({"zelt"}),
+    "Es wurde offensichtlich in Eile aufgestellt.");
+
+  AddDetail( ({"tafel"}),
+    "Du kannst sie lesen.");
+
+  AddDetail( ({"tisch","holztisch","verkaufsflaeche"}),
+    "Ein klappbarer Holztisch. Nicht besonders massiv, aber er tut seinen "
+    "Zweck.");
+
+  AddDetail( ({"zweck"}),
+    "Der Tisch dient als Verkaufsflaeche.");
+
+  AddDetail( ({"wand","waende","zeltwand","zeltwaende"}),
+    "Die Waende bestehen aus Zeltstoff.");
+
+  AddDetail( ({"wind"}),
+    "Den Wind siehst Du nicht, aber die flatternden Zeltwaende.");
+
+  AddDetail( ({"zeug"}),
+    "Mit 'zeige' kannst Du es Dir genauer ansehen.");
+
+
+  AddReadDetail("tafel",
+    "Verfuegbare Befehle:\n"
+    "<zeige>             Gibt eine Uebersicht ueber das Angebot.\n"
+    "<zeige> rue|ver|waf Uebersicht ueber Ruestungen/Verschiedenes/Waffen\n"
+    "<zeige> panzer|helme|umhaenge|ringe|...  \n"
+    "<unt> nummer        Gibt eine Beschreibung eines Gegenstands der Liste aus\n"
+    "<kaufe> nummer oder\n"
+    "<kaufe> etwas       Du kaufst einen bestimmten Gegenstand.\n"
+    "<verkaufe> etwas    Du verkaufst einen Gegenstand, den Du bei Dir hast.\n"
+    "<versetze> etwas    Du verkaufst einen Gegenstand, egal wieviel der\n"
+    "                    Haendler dafuer bezahlt.\n"
+    "<schaetz> etwas     Shegraz sagt Dir, wieviel ihr ein Gegenstand\n"
+    "                    wert waere, wenn Du ihn verkaufen wuerdest.\n");
+
+
+  AddExit("raus", ROOM "w02");
+
+  AddItem(NPC "shegraz", REFRESH_DESTRUCT);
+}
+
+//-------------------------------------------------------------------------
+// Anstatt die P_INT_LONG statisch zu setzen, nehmen wir eine dynamische
+// Ausgabe der Long. Die Funktion hierfuer setzt sich aus dem Propertie-
+// Namen mit vorgestelltem "_query_" zusammen.
+// Bsp: P_INT_LONG "int_long" -> _query_int_long
+//      P_LIGHT    "light"    -> _query_light
+// Der Rueckgabewert muss immer der Propertie entsprechen, in unserem Fall
+// string (im Fall von P_LIGHT waere ein Rueckgabewert von "integer"
+// richtig). Es ist daher auf jeden Fall immer ratsam die man page der
+// ensprechenden Propertie einzusehen.
+// Wenn eine Propertie dermassen "ueberschrieben" wird, kann sie NICHT
+// ueber SetProp veraendert werden. Es wird immer der return-wert der
+// "_query_" Funktion hergenommen.
+//-------------------------------------------------------------------------
+
+string _query_int_long()
+{
+  string txt;
+
+  txt = "Du befindest Dich hier in einem offensichtlich in Eile errichtetem "
+        "Zelt. Einige Stangen stehen schief, bei Wind flattern die Zeltwaende. "
+        "Viel Zeug liegt auch nicht herum. Ein wackeliger, klappbarer Tisch "
+        "dient als Verkaufsflaeche. Eine kleine Tafel liegt darauf. ";
+
+//-------------------------------------------------------------------------
+// Wenn die Ladenbesitzerin nicht hier ist geben wir das in der Long an
+//-------------------------------------------------------------------------
+
+  if(QueryProp(P_SHOPKEEPER_ID))
+  {
+    if(!present(QueryProp(P_SHOPKEEPER_ID)))
+    {
+      txt += "Leider ist momentan gerade niemand hier.";
+    }
+    else
+    {
+      txt += "";
+    }
+  }
+
+  return BS(txt);
+}
+
+//  kopiert & adaptiert von /d/kristallwald/sargola/dorf/room/laden.c
+int count_objs(object inv, string fn)
+{
+  if(explode(file_name(inv), "#")[0]==fn)
+    return 1;
+
+  return 0;
+}
+
+// Ueberschreiben von do_sell (Ankauf)
+//  kopiert & adaptiert von /d/kristallwald/sargola/dorf/room/laden.c
+varargs int do_sell(object ob, int force, string prefix, int limit)
+{
+  object *inv;
+  string fn;
+
+  // Haendler da? Meldungen etc.
+  if(!prefix=CheckKeeper(2)) return 0;
+
+  // mindestens 90000 bling-value noetig, oder lvl < 50
+  if((TP) && (players_bling[getuid(TP)]<90000) && (TP->QueryProp(P_LEVEL) > 50))
+    return write(BS("Shegraz sagt: Ich kaufe nur von Kriegern, die auf "
+    "dem Schlachtfeld gefuerchtet sind. Oder von jungen Kriegern, fuer "
+    "ihren Mut, trotzdem hierher zu kommen.")), 1;
+
+  // level < 50 und zu wenig bling, bekommt eine Meldung
+  if((TP) && (players_bling[getuid(TP)]<90000) && (TP->QueryProp(P_LEVEL) < 50))
+  {
+    if(!players_message[getuid(TP)]) // Meldung nur 1x pro Reset
+    write(BS("Shegraz sagt: Du bist mutig, hier her zu kommen! Normalerweise "
+             "handle ich nur mit erfahrenen Schlachtfeldkriegern, aber Deinen "
+             "Einsatz will ich belohnen."));
+    players_message += ([getuid(TP) : 1]);
+  }
+
+  //if((TP) && (lower_case(TP->QueryProp(P_RACE))=="zwerg"))
+  //  return write(BS("Shegraz schimpft: Von Zwergen kaufe ich nichts!")), 1;
+
+  if(sizeof(inv=all_inventory(find_object(QueryStorageRoom()))))
+    {
+      fn=explode(file_name(ob), "#")[0];
+
+      inv=filter_array(inv, #'count_objs, fn); //'
+
+      if(sizeof(inv)>=MAX_COUNT)
+	return write(BS("Shegraz meint: Davon habe ich bereits "
+			"genug.")), 1;
+    }
+
+  //if(ob->QueryMaterialGroup(MATGROUP_METAL))
+  //  return write(BS("Ranadrion meint: Nein, ich kaufe nichts aus Metall!")),1;
+
+  return ::do_sell(ob, force, prefix, limit);
+}
+
+void BecomesNetAlive(object player)
+{
+  // Spieler wird leise nach w02 bewegt wenn das Zelt nicht da ist
+  if( !(ROOM "w02"->query_zelt_da()) )
+  {
+    call_other(ROOM "w02", "???");
+    player->move(ROOM "w02", M_NOCHECK + M_NO_SHOW + M_SILENT );
+    player->Message(BS("Auf den zweiten Blick merkst Du erst, dass Du Dich "
+    "gar nicht mehr in dem Zelt befindest. Verwirrend, dieses Netztotenreich!"));
+  }
+return;
+}
+
+void reset()
+{
+ ::reset();
+ players_bling = SMASTER->query_save();
+ players_message = ([]);
+ SetProp (P_SPECIAL_SHOP, random(2) ?
+                          ([P_WC:"Das wird derzeit nicht angekauft.\n"]) :
+                          ([P_AC:"Das wird derzeit nicht angekauft.\n"]) );
+
+ // Aufruf von zelt_abbauen() in w02
+}

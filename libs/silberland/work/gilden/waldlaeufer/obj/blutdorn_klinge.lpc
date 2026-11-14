@@ -1,0 +1,127 @@
+inherit "std/thing";
+#include "../def.h"
+#include "/spellbooks/waldlaeufer/std/restrictions.lpc"
+
+object weapon;
+int wcBonus, healChance, healAmount;
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, 0 );
+  SetProp(P_LONG,  0 );
+  SetProp(P_NAME, 0);
+  SetProp(P_INVIS, 1);
+  SetProp(P_GENDER, FEMALE); 
+  AddId(BLUTDORN_ID);
+  SetProp(P_MATERIAL, MAT_MAGIC );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_SIZE, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_KILL_NAME, "Der Durst des Blutdorns");
+}
+
+public void Setup(object _weapon, object caster, int ability, int success) {
+  int duration;
+  string s;
+
+  duration = caster->QueryProp(P_GUILD_LEVEL) * 10 + success/200 + ability/100;
+  weapon = _weapon;
+
+  SetProp("end_time", time()+duration);
+
+  wcBonus = SPELL_DAMAGE_BONUS(caster, "klinge des blutdorns", ability/1000 + random(success/1000));
+  
+  healAmount = caster->QueryProp(P_GUILD_LEVEL) + success/500;
+  healChance = caster->QueryProp(P_GUILD_LEVEL) + random(ability/1000 + success/2000);
+
+  weapon->SetProp(P_UNWIELD_FUNC, TO);
+
+  pDebug(caster, sprintf("blutdorn_klinge :: wcBonus=%d healChance=%d healAmount=%d duration=%d\n",
+                        wcBonus, healChance, healAmount, duration));
+
+  if(!objectp(weapon->QueryProp(P_WIELDED))) {
+    weapon->DoWield();
+  }
+
+  tell_object(weapon->QueryProp(P_WIELDED), BS("Blutdornranken mit spitzen Dornen wachsen entlang der Klinge und bohren sich am Handgelenk in deine Haut."));
+  SetProp("last_attack", time()+60);
+  call_out("check_usage", 60);
+
+  s = caster->QueryProp(P_RANGER_ACTIVE_SPELLS);
+  if(!stringp(s)) s = "";
+  caster->SetProp(P_RANGER_ACTIVE_SPELLS, set_bit(s, TB_BLUTDORN));
+  return;
+}
+
+public void check_usage() {
+  object owner;
+
+  if(!objectp(weapon)) {
+    remove();
+    return;
+  }
+
+  if(!objectp(owner = weapon->QueryProp(P_WIELDED) )|| time() >= QueryProp("end_time")) {
+    remove();
+    return;
+  }
+
+  if(time()-QueryProp("last_attack") > 60 && !random(3)) { // kein Angriff seit mehr als 60 Sekunden? Das kostet!
+    tell_object(owner, BS("Der Blutdorn auf deiner Waffe ist am austrocknen. Er entzieht dir Blut!"));
+    owner->do_damage(random(healAmount), TO);
+  }
+
+  call_out("check_usage", 10);
+}
+
+varargs int remove(int silent) {
+  object owner;
+
+  if(objectp(weapon)) {
+    weapon->SetProp(P_UNWIELD_FUNC, 0);
+    if(objectp(owner = weapon->QueryProp(P_WIELDED))) { 
+      if(!silent) tell_object(owner, BS("Die Blutdornranken auf deiner Waffe verwelken."));
+      owner->SetProp(P_RANGER_ACTIVE_SPELLS, clear_bit(owner->QueryProp(P_RANGER_ACTIVE_SPELLS), TB_BLUTDORN));
+    }
+  }
+
+  return ::remove(silent);
+}
+
+// Diese Hitfunc wird nicht in der Waffe gesetzt, sondern aus Dolchkampf(...) in
+// /gilden/waldlaeufer bei Verwendung des Messerskills aufgerufen. Dadurch behalten
+// wir bestehende HitFuncs von e.g. magsichen Waffen.
+public int HitFunc(object enemy) {
+  object owner;
+
+  if(!objectp(weapon)) {
+    remove(1);
+  }
+
+  if(!objectp(owner = weapon->QueryProp(P_WIELDED))) {
+    return 0;
+  }
+
+  if(!enemy->is_class_member(CL_UNDEAD) && !enemy->is_class_member(CL_DEMON) && random(100) < healChance) {
+    tell_object(owner, BS("Der Blutdorn auf deiner Waffe laesst das Blut deines Feindes in dich fliessen."));
+    owner->AddHp(random(healAmount));
+  }
+
+  SetProp("last_attack", time());
+
+  return random(wcBonus);
+}
+
+public int UnwieldFunc(object waffe, int silent) {
+  tell_object(TP, BS("Die Blutdornranken reissen dir schmerzhaft die Haut auf."));
+  if(TP->QueryProp(P_HP) > 0 && !(TP->QueryProp(P_GHOST))) TP->do_damage(random(20), TO);
+  remove(silent);
+  return 1;
+}

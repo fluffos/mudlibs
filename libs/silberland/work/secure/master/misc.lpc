@@ -1,0 +1,638 @@
+/* SilberLand MUDlib
+ *
+ * /secure/master/misc.c -- miscellaneous functions of the master object
+ *
+ * $Date: 2004/07/24 20:06:05 $
+ * $Revision: 1.16 $
+ * $Log: misc.c,v $
+ * Revision 1.16  2004/07/24 20:06:05  Woody
+ * tp in renew_player_object() schon frueher ermitteln
+ *
+ * Revision 1.15  2003/12/18 23:41:13  Woody
+ * Komplettes BANISH Management auf mappings umgestellt
+ *
+ * Revision 1.14  2002/08/29 16:52:13  Woody
+ * Auch ROOTID darf nun TBanishName() verwenden
+ *
+ * Revision 1.13  2000/11/07 00:17:17  Woody
+ * OudateProjectCache() in OutdateProjectCache() umbenannt :)
+ *
+ * Revision 1.12  2000/06/07 13:13:10  Woody
+ * Bugfix in BanishName() damit Banish bei Selbstloeschung klappt
+ *
+ * Revision 1.11  1999/05/13 12:43:26  Woody
+ * Bugfix in TBanishName(), autom. Cleanup von TBANISH in UpdateTBanish()
+ *
+ * Revision 1.10  1999/03/26 16:23:38  Woody
+ * Bugfix fuer Prompt in renew_player_object()
+ *
+ * Revision 1.9  1999/01/27 22:02:05  Woody
+ * TBanishName() gebugfixed
+ *
+ * Revision 1.8  1998/09/20 13:45:12  Woody
+ * show_dir() -> std/shells/filesys/filesys::_ls_output()
+ *
+ * Revision 1.7  1998/08/07 10:25:52  Woody
+ * ___query_variable() nur noch fuer IS_ARCH, History -> Kanal Snoop
+ *
+ * Revision 1.6  1998/05/05 12:08:42  Woody
+ * Security Abfrage in show_dir() rein
+ * (verhindert direktes Aufrufen mit falscher user-id)
+ *
+ * Revision 1.5  1998/05/02 21:36:18  Woody
+ * Security Bugfix bei 'ls -l directory'
+ *
+ * Revision 1.4  1997/07/06 15:53:10  Woody
+ * show_dir() ueberarbeitet, nimmt jetzt flags und arrays usw.
+ *
+ * Revision 1.3  1997/06/21 00:34:24  Woody
+ * Bugfixed... jetzt sollte es klappen :)
+ *
+ * Revision 1.2  1997/06/21 00:08:26  Woody
+ * Neues Format fuer ls -l, damit ftp auch mit mc, xftp usw. geht
+ *
+ * Revision 1.1  1997/03/16 00:02:51  Woody
+ * prepared for revision control
+ *
+ * 1996/10/29  Woody  bei renew deep destruct von Autoloadern, weiters
+ *                    Unterdruecken von 'XY verlaesst diese Welt.'
+ *
+ * 1996/09/23  Woody  bei renew silent move und umgek. Reihenfolge
+ *
+ * 1996/01/23  Woody  added UnbanishName()
+ *
+ */
+
+#pragma strong_types
+
+#include "/secure/master.h"
+
+nosave mapping projects=([]);
+nosave mapping banished;
+nosave mapping tbanished;
+
+nosave string *explode_files(string file) {
+  string data;
+  mixed *exploded;
+  int i;
+  
+  data=read_file(file);
+  if (!data || !stringp(data) || data == "") return ({});
+  exploded = efun::explode(data,"\n");
+  for (i=sizeof(exploded);i--;)
+    if (!stringp(exploded[i]) || exploded[i]=="" || exploded[i][0]=='#')
+      exploded[i]=0;
+  exploded-=({0});
+  printf("%-30s: %3d Objekt%s\n",file,i=sizeof(exploded),(i==1?"":"e"));
+  return exploded;
+}
+
+#define PATH_ARRAY(x) (efun::explode(x, "/")-({"","."}))
+
+string *full_path_array(string path, string user) {
+  string *strs;
+  int p;
+  
+  if(!path)
+    path="/";
+  switch(path[0]) {
+    case '/':
+    if(!path[1]) return ({""});
+    strs=PATH_ARRAY(path);
+    break;
+    case '+':
+    if(!path[1]) return ({"d"});
+    strs=({"d"})+PATH_ARRAY(path[1..<1]);
+    break;
+    case '~':
+    if(user && !path[1])
+      return ({"players",user});
+    if(user && path[1]=='/')
+      strs=({"players",user})+PATH_ARRAY(path[2..<1]);
+    else
+      strs=({"players"})+PATH_ARRAY(path[1..<1]);
+    break;
+    default:
+    if(user && TP && getuid(TP) == user && TP->QueryProp(P_CURRENTDIR))
+      strs=PATH_ARRAY(TP->QueryProp(P_CURRENTDIR)+"/"+path);
+    else
+      strs=PATH_ARRAY(path);
+  }
+  while((p=member_array("..", strs)) != -1)
+    strs = strs[0..p-2]+strs[p+1..];
+  return strs;
+}
+
+string _get_path(string path, string user) {
+  return "/"+implode(full_path_array(path, user),"/");
+}
+
+nosave void _cleanup_projects()
+{
+  int i;
+  mixed *users;
+  
+  for (users=m_indices(projects),i=sizeof(users)-1;i>=0;i--)
+    if((time()-projects[users[i]][1])>1800)
+      projects=m_delete(projects,users[i]);
+}
+
+nosave int project_access(string user, string project)
+{
+  mixed *lines;
+  string s;
+  mapping tmp;
+
+  if (!member(projects,project))
+  {
+    s=read_file(PROJECTDIR+"/"+project+"/ACCESS_RIGHTS");
+    if(!s||s=="")
+      return 0;
+    tmp=([]);
+    for (lines=explode(s,"\n")-({""});sizeof(lines);lines=lines[1..])
+    {
+      if (lines[0][0]=='*')
+	tmp[lines[0][1..]]=2;
+      else
+	tmp[lines[0]]=1;
+    }
+    projects[project]=({tmp,time()});
+    return tmp[user];
+  }
+  projects[project][1]=time();
+  return projects[project][0][user];
+}
+
+void OutdateProjectCache(string project)
+{
+  projects=m_delete(projects,project);
+}
+
+void UpdateTBanish();
+
+mixed QueryBanished(string str)
+{
+  string *bans;
+  int i;
+
+  if (!str) return 0;
+  if (!mappingp(banished)) return 0;
+
+  // RAW match? (needed for BanishName() and UnbanishName())
+  if (banished[str])
+    return stringp(banished[str]) && strlen(banished[str]) ?
+      banished[str] : "Dieser Name ist gesperrt.";
+
+  // regexp match?
+  bans = m_indices(banished);
+  for (i = sizeof(bans); i-->0; )
+    if (sizeof(regexp( ({ str }), "^" + bans[i] + "$" )))
+    {
+      if (stringp(banished[bans[i]]) && strlen(banished[bans[i]]))
+	return banished[bans[i]];
+      else
+	return "Dieser Name ist gesperrt.";
+    }
+  return 0;
+}
+
+mixed QueryTBanished(string str)
+{
+  int i;
+
+  if (!str || !mappingp(tbanished) || !(i=tbanished[str]))
+    return 0;
+
+  if (i == -1 || i > time())
+    return i;
+    /*
+    return sprintf("Es gibt schon einen Spieler diesen Namens.\n"
+        +"Allerdings kann er/sie erst am %s wieder ins Mud kommen.\n",
+          (i == -1 ? "St. Nimmerleinstag" :
+           funcall(symbol_function('dtime),i)[0..16]));
+    */
+
+  // Ansonsten: die Zeit ist abgelaufen, Spieler darf wieder...
+  efun::m_delete(tbanished, str);
+  UpdateTBanish();
+  return 0;
+}
+
+void ReloadBanishFile()
+{
+  int i,t;
+  string *bans, *s;
+  string s1, s2;
+
+  // Banishes
+  banished = ([ ]);
+  bans = efun::explode(read_file("/secure/BANISH"), "\n");
+  bans -= ({ "" });
+  for (i = sizeof(bans); i-->0; )
+  {
+    s = explode(bans[i]," ");
+    s1 = s[0];
+    s2 = implode(s[1..], " ");
+    banished[s1] = s2;
+  }
+
+  // Spielpausen
+  if (!mappingp(tbanished))
+  {
+    tbanished = ([ ]);
+
+    if (file_size("/secure/TBANISH") > 0) {
+      s = efun::explode(read_file("/secure/TBANISH"),"\n");
+      s -= ({ "" });
+    }
+    else
+      s = ({ });
+
+    for (i=sizeof(s)-1; i>=0; i--) {
+      sscanf(s[i],"%s:%d",s1,t);
+      tbanished[s1] = t;
+    }
+  }
+}
+
+void BanishName(string name, string reason)
+{
+  string *names;
+  string *bans;
+  int i;
+
+  if (!IS_LORD(TI) && previous_object() != this_object()) return 0;
+  if (QueryBanished(name)) {
+    write("Der Name ist schon gebannt.\n");
+    return;
+  }
+  if (file_size(sprintf("%s%c/%s.o", SAVEPATH, name[0], name)) > 0) {
+    write("Es existiert bereits ein Spieler dieses Namens.\n");
+    return;
+  }
+  // if (!("/secure/login"->valid_name(name))) return;
+  if (!reason)
+    reason = "";
+
+  banished[name] = reason;
+  names = ({ });
+  bans = m_indices(banished);
+  for (i = sizeof(bans); i-->0; )
+    names += ({ bans[i] + " " + banished[bans[i]] });
+  names = sort_array( names, #'> );     // viel huebscher sortiert :)
+
+  rm("/secure/BANISH");
+  write_file("/secure/BANISH", implode(names, "\n"));
+  write("Ok.\n");
+}
+
+void UpdateTBanish()
+{
+  int i;
+  string *names;
+
+  names=sort_array(m_indices(tbanished), #'<);
+  for (i=sizeof(names)-1; i>=0; i--)
+    if (file_size(SAVEPATH+names[i][0..0]+"/"+names[i]+".o")<=0)
+      names[i]=0;
+    else
+      names[i] = sprintf("%s:%d", names[i], tbanished[names[i]]);
+
+  names-=({0});
+  rm("/secure/TBANISH");
+  write_file("/secure/TBANISH", implode(names,"\n")+"\n");
+}
+
+void TBanishName(string name, int days)
+{
+  int t;
+
+  if (TI) {
+    if (!IS_ARCH(TI) && (getuid(TI) != name))
+      return;   // else OK
+  }
+  else if (!previous_object() || (getuid(previous_object()) != ROOTID))
+    return;
+
+  if (!mappingp(tbanished))
+    tbanished = ([ ]);
+
+  if (file_size(SAVEPATH+name[0..0]+"/"+name+".o")<=0)
+  {
+    write("Es existiert kein Spieler dieses Namens!\n");
+    if (!member(tbanished,name)) return;
+  }
+
+  if (!days && member(tbanished, name))
+    efun::m_delete(tbanished, name);
+  else if (days)
+  {
+    if (days < 0) t=-1;
+    else t=(time()/86400)*86400 + days*86400;
+    tbanished += ([ name : t ]);
+  }
+  UpdateTBanish();
+}
+
+void UnbanishName(string name)
+{
+  string *names;
+  string *bans;
+  int i;
+
+  if (!IS_LORD(TI)) return 0;
+  if (!QueryBanished(name)) {
+    write("Der Name ist doch gar nicht gebannt.\n");
+    return;
+  }
+/*  if (!("/secure/login"->valid_name(name))) return;*/
+
+  // Aus aktuellem Mapping entfernen
+  efun::m_delete(banished, name);
+
+  // Datei neu schreiben
+  names = ({ });
+  bans = m_indices(banished);
+  for (i = sizeof(bans); i-->0; )
+  {
+    if (bans[i] != name)
+      names += ({ bans[i] + " " + banished[bans[i]] });
+  }
+  names = sort_array( names, #'> );     // viel huebscher sortiert :)
+
+  rm("/secure/BANISH");
+  write_file("/secure/BANISH", implode(names, "\n"));
+  write("Ok.\n");
+}
+
+nosave int create_home(string owner, int level)
+{
+  string def_castle;
+  string dest, castle, wizard;
+  object player;
+  string *domains;
+  int i;
+  
+  player = funcall(symbol_function('find_player),owner);
+  if (!player)
+    return -5;
+  domains=get_domain_homes(owner);
+  if (!sizeof(domains) && level >= DOMAINMEMBER_LVL) 
+  {
+    tell_object(player,"Du gehoerst noch keiner Region an !\n");
+    return -6;
+  }
+  tell_object(player,"Du bist Mitarbeiter der folgenden Regionen:\n");
+  for (i=0;i<sizeof(domains);i++)
+  {
+    if (i) tell_object(player,", ");
+    tell_object(player,domains[i]);
+  }
+  tell_object(player,".\n");
+  update_wiz_level(owner, level);
+  wizard = "/players/" + owner;
+  castle = "/players/" + owner + "/workroom.lpc";
+  if (file_size(wizard) == -1) {
+    tell_object(player, "Verzeichnis " + wizard + " angelegt.\n");
+    mkdir(wizard);
+  }
+  dest = file_name(environment(player));
+  def_castle = read_file("/std/def_workroom.lpc");
+  if (file_size(castle) > 0) {
+    tell_object(player, "Du HATTEST ja schon ein Arbeitszimmer !\n");
+  } else {
+    if (write_file(castle, def_castle)) 
+      tell_object(player, "Arbeitszimmer " + castle + " erzeugt.\n");
+    else
+      tell_object(player, "Arbeitszimmer konnte nicht erzeugt werden !\n");
+  }
+  return 1;
+}
+
+int allowed_advance_wizlevel(mixed ob)
+{
+  string what;
+  
+  if (objectp(ob) && geteuid(ob)==ROOTID) return 1;
+  
+  if (!stringp(ob))
+    what=explode(file_name(ob),"#")[0];
+  else
+    what=ob;
+  
+  if (what=="/secure/merlin") return 1;
+  
+  return 0;
+}
+
+int advance_wizlevel(string name, int level)
+{
+  int answer;
+  mixed *user;
+  
+  if (!allowed_advance_wizlevel(PO))
+    return -1;
+  
+  if (level>80) return -2;
+  
+  if (!find_userinfo(name)) return -3;
+
+  user=get_full_userinfo(name);
+  
+  if (user[USER_LEVEL+1]>level) return -4;
+  
+  if (user[USER_LEVEL+1]==level) return 1;
+  
+  if (level>=10 && level<20)
+  {
+    update_wiz_level(name, level);
+    return 1;
+  }
+  if (level>=20 && user[USER_LEVEL+1]<21)
+  {
+    answer = create_home(name, level);
+    if ( answer > 0 )
+      return update_wiz_level(name, level);
+    return answer;
+  }
+
+  update_wiz_level(name, level);
+
+  return 1;
+}
+
+void redo_preload()
+{
+  mixed *to_preload;
+  int i;
+  
+  to_preload=epilog(0);
+  for (i=0;i<sizeof(to_preload);i++)
+    catch(preload(to_preload[i]));
+  to_preload=0;
+}
+
+void restart_heart_beat(object heart_beat)
+{
+  if (heart_beat) heart_beat->_restart_beat();
+}
+
+int renew_player_object(mixed who)
+{
+  object newob;
+  object *obs;
+  mixed err;
+  string ob_name;
+  object *armours, weapon;
+  object tp;
+  int i,active;
+
+  if (stringp(who))
+  {
+    who=funcall(symbol_function('find_player),who);//'))
+    if (!who)
+    {
+      who=funcall(symbol_function('find_netdead),who);//'))
+      if (!who)
+	return -1;
+    }
+  }
+  if (!objectp(who))
+    return -2;
+  if (!query_once_interactive(who))
+    return -3;
+
+  tp = this_player();
+  active = interactive(who);
+  printf("OK, renewing %O\n",who);
+  seteuid(geteuid(who));
+  err=catch(newob=clone_object(query_player_object(getuid(who))));
+  seteuid(getuid(TO));
+  if (err)
+  {
+    printf("%O\n",err);
+    return -4;
+  }
+  if (!newob)
+    return -5;
+  /* Ok, the object is here now ... lets go for it ... */
+  who->save_me(0);
+  disable_commands();
+  armours=who->QueryProp(P_ARMOURS);
+  weapon=who->QueryProp(P_WEAPON);
+  DEBUG_MSG(sprintf("RENEWING: %O %O\n",newob,who));
+  ob_name=explode(file_name(newob),"#")[0];
+  if (strlen(ob_name)>11 && ob_name[0..11]=="/std/shells/")
+    ob_name=ob_name[11..];
+  ob_name=ob_name+":"+getuid((object)who);
+  if (active)
+    exec(newob,who);
+  if (active && (interactive(who)||!interactive(newob)))
+  {
+    DEBUG_MSG("ERROR: still active !\n");
+    newob->remove();
+    return 0;
+  }
+
+  // newob->start_player(capitalize(getuid(who)),who->_query_my_ip());
+  funcall(
+          bind_lambda(
+                      unbound_lambda( ({'x, 'y}),
+                                      ({#'call_other/*'*/,
+                                             newob,
+                                             "start_player",
+                                             'x, 'y
+                                             })
+                                      ), who
+                      ),
+          capitalize(getuid(who)), who->_query_my_ip() );
+
+  newob->move(environment(who),
+              M_TPORT|M_NOCHECK|M_NO_SHOW|M_SILENT|M_NO_ATTACK);
+
+  obs=deep_inventory(who);
+  for (err=sizeof(obs)-1;err>=0;err--)
+    if (obs[err]->QueryProp(P_AUTOLOADOBJ)) {
+      if (objectp(environment(obs[err])))
+        environment(obs[err])->SetProp(P_LAST_CONTENT_CHANGE, time());
+      catch(destruct(obs[err]));
+    }
+    else
+      if (environment(obs[err])==who)
+        catch(obs[err]->move(newob,M_NOCHECK | M_SILENT));
+
+  who->SetProp(P_INVIS, 1);	// verhindert Meldung 'XY verlaesst diese Welt'
+  who->remove(1);
+  rename_object(newob,ob_name);
+
+  if (!tp) tp = this_player();
+  efun::set_this_player(newob);
+  if (objectp(weapon))
+    weapon->wield_me(1);
+  if (pointerp(armours))
+    for (i=sizeof(armours)-1;i>=0;i--)
+      if (objectp(armours[i]))
+	armours[i]->do_wear("alles", 1);
+  efun::set_this_player(tp);
+}
+
+mixed __query_variable(object ob, string var)
+{ 
+  if (!PO || !IS_ARCH(geteuid(PO)))
+  {
+    write("ILLEGAL\n");
+    return;
+  }
+  if (query_once_interactive(ob) && (PO!=ob) &&
+      (var=="history" || var=="hist2"))
+    CHMASTER->send("Snoop", previous_object(), sprintf("%s -> %s (history).",
+        capitalize(getuid(PO)),capitalize(getuid(ob))));
+  return
+    funcall(bind_lambda(
+			unbound_lambda(
+				       ({}),
+				       ({#'funcall,({#'symbol_variable,var})})),
+			ob));
+}
+
+void RestartBeats()
+{
+  int i,size,counter;
+  object ob;
+  mixed *list;
+  string file,obname,fun;
+  
+  "/secure/simul_efun"->StopCallOut(0);
+  write("CALL_OUT-Restart in progress !\n");
+  filter_array(users(),#'tell_object,"CALL_OUT-Restart in progress !\n");
+  size=file_size("log/call_out_stop");
+  if (size<=0)
+    return;
+  file="";
+  counter=0;
+  while (counter<size)
+  {
+    file+=read_bytes("log/call_out_stop",counter,
+		     (size-(counter+=40000)>0?counter:size));
+  }
+  list=explode(file,"__(CUT HERE)__\n");
+  list=list[<1..];
+  list=explode(list[0],"\n")-({""});
+  for (i=sizeof(list)-1;i>=0;i--)
+    if (sscanf(list[i],"%s \"%s\"",obname,fun)==2 && ob=find_object(obname))
+    {
+      write(sprintf("%O -> %s\n",ob,fun));
+      catch(ob->__restart(fun));
+    }
+  write("CALL_OUT-Restart completed !\n");
+  filter_array(users(),#'tell_object,"CALL_OUT-Restart completed !\n");
+  rename("log/call_out_stop","log/call_out_stop.old");
+}
+
+string show_dir(string wo,string user)
+{
+    mixed ret; ret = "";
+    "/std/shells/filesys/filesys"->_ls_output(wo, &ret, user, 0x83);
+    return ret;
+}
+

@@ -1,0 +1,110 @@
+
+int prep_blitzschlag(object caster, mapping sinfo) 
+{
+  object victim;
+
+  victim = FindEnemyVictim(sinfo[SI_SKILLARG], caster,
+      "Wem willst Du einen Blitzschlag verpassen?\n");
+  if (!victim)
+    return 0;
+  if (!pay_for_spell(caster, sinfo, 1))
+    return 0;
+  environment(caster)->Message(BS(sprintf("Kleine Blitze beginnen um %s "
+          "Finger zu zucken.", caster->name(WESSEN, 1))), 
+      MSGFLAG_VISUAL, ([MSGFLAG_EXCLUDE: ({caster})]) );
+  return 1;
+}
+
+int blitzschlag(object caster, mapping sinfo) 
+{
+  object victim;
+  int suc;
+  int dam;
+  int bonus;
+  object *victims;
+  int i;
+
+  victim = FindEnemyVictim(sinfo[SI_SKILLARG], caster,
+      "Wem willst Du einen Blitzschlag verpassen?\n");
+  if (!victim)
+    return 0;
+
+  if (!pay_for_spell(caster, sinfo))
+    return 0;
+
+  if ((suc = SpellSuccess(caster,sinfo)) <= 0)
+    return MISSERFOLG;
+
+  environment(caster)->Message(BS(sprintf("Ein gewaltiger Blitz schiesst aus "
+          "%s Haenden auf %s zu.",
+        caster->Name(WESSEN,1), victim->name(WEN,1))), 
+      MSGFLAG_VISUAL, ([ MSGFLAG_EXCLUDE : ({ caster, victim }) ]) );
+
+  tell_object(caster, BSC(sprintf("Ein gewaltiger Blitz schiesst aus Deinen "
+          "Haenden auf %s zu.\n", victim->name(WEN,1) )));
+
+  tell_object(victim, BS(sprintf("Ein gewaltiger Blitz schiesst aus %s "
+          "Haenden auf Dich zu.\n", caster->Name(WESSEN,1) )));
+
+  bonus = CheckEquip(caster, sinfo[SI_SPELLFUNC]);
+  sinfo[SI_SKILLDAMAGE] += bonus;
+  sinfo[OFFSET(SI_SKILLDAMAGE)] += bonus / 2 + (sinfo[SI_SKILLPOINTS] > 1 ? caster->QueryProp(P_GUILD_LEVEL) * 10 : 0);
+  sinfo[SI_MAX_DAMAGE] += (caster->QueryProp(P_GUILD_LEVEL) - 5) * 20 + bonus;
+
+  if (IS_LEARNER(caster))
+    printf("dam = %d, off = %d, max = %d\n",
+        sinfo[SI_SKILLDAMAGE], 
+        sinfo[OFFSET(SI_SKILLDAMAGE)], 
+        sinfo[SI_MAX_DAMAGE]);
+
+  dam = TryDefaultAttackSpell(victim, caster, sinfo, sinfo[SI_SPELL]);
+
+  if (IS_LEARNER(caster))
+    printf("Schaden = %d\n", dam);
+
+  if (suc > MAX_ABILITY / 2 && 
+      sizeof(victims = caster->PresentEnemies())>1 ) 
+  {
+    for (i = sizeof(victims) - 1; i >= 0; i--)
+    {
+      if(!objectp(victims[i])) continue;
+      if (victims[i] != victim)
+      {
+        sinfo[SI_SKILLDAMAGE] /= 2;
+        sinfo[OFFSET(SI_SKILLDAMAGE)] /= 2;
+        tell_object(victims[i], BS(
+              "Der Blitz springt auch auf Dich ueber!\n"));
+        TryDefaultAttackSpell(victim, caster, sinfo, sinfo[SI_SPELL]);
+      }
+    }
+  }
+
+  if(sinfo[SI_SKILLPOINTS] > 2) {
+    // nach dem blitz, der donner!
+    call_out("Thunderstrike", 2, environment(caster), caster, sinfo);
+  }
+
+  return ERFOLG;
+}
+
+public void Thunderstrike(object env, object caster, mapping sinfo) 
+{
+  object *victims;
+  int i;
+
+  env->Message(BS("Ein gewaltiger Donnerschlag grollt durch die Gegend!"), 
+      MSGFLAG_SOUND );
+
+  victims = caster->PresentEnemies();
+  if  (!sizeof(victims)) return;
+
+  sinfo[SI_SKILLDAMAGE_TYPE] = DT_SOUND;
+
+  for(i=0; i<sizeof(victims); i++) {
+    tell_object(victims[i], BS("Der Donner trifft Dich mit voller Wucht!\n"));
+    sinfo[SI_SKILLDAMAGE] /= 2;
+    sinfo[OFFSET(SI_SKILLDAMAGE)] /= 2;
+    TryDefaultAttackSpell(victims[i], caster, sinfo, sinfo[SI_SPELL]);
+  }
+  return;
+}

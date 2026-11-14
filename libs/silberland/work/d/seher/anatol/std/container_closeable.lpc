@@ -1,0 +1,147 @@
+/* 
+ *
+ * (c) 2000 Adrian Holzwarth / Anatol@Silberland
+ *
+ * Ein Std-Container, den man oeffnen und schliessen kann.
+ *
+ * Wer diesen Container verwendet, muss die gaengigen Properties auf 
+ * jeden Fall selbst (nochmals) setzen, insbesondere auch: P_MAX_WEIGHT,
+ * P_TOTAL_OBJECTS, P_WEIGHT_PERCENT, P_SIZE, P_WEIGHT, P_MATERIAL...
+ *
+ * Setzen KANN er P_CONTAINER_STATES ("container_states"), Inhalt dieser
+ * Property *MUSS* ein Array aus zwei Elementen, jeweils Strings, sein.
+ * Das erste Element gibt den Zustand des geoeffneten Containers an, das
+ * zweite den geschlossenen. Default: ({"geoeffnet","geschlossen"}).
+ *
+ * Ueberschreiben bzw. Ergaenzen kann man folgende Methoden:
+ *
+ * o openContainer()/closeContainer(). Hier empfiehlt es sich, zuerst
+ *   die Superklasse wursteln zu lassen und dann selbst gewuenschte 
+ *   Aenderungen vorzunehmen - z.B. wenn der Container auch im geschlossenen
+ *   Zustand durchsichtig sein soll:
+ *   void closeContainer() {
+ *     ::closeContainer();
+ *     SetProp(P_TRANSPARENT,1);
+ *   }
+ *
+ * o tryOpenContainer()/tryCloseContainer(). Wenn moeglich, Ueberschreiben
+ *   vermeiden, moeglich ist es trotzdem, z.B. fuer den Fall, dass man die
+ *   Meldungen beim Oeffnen oder Schliessen des Containers unterdruecken
+ *   oder aendern moechte. Rueckgabewert 1 bedeutet, dass der Vorgang
+ *   klappt.
+ *
+ */ 
+
+#pragma strict_types 
+
+#include <properties.h>
+
+#define P_CONTAINER_STATES "container_states"
+
+inherit "/std/container";
+
+public varargs string GetContainerStatusString(int full_declared) {
+  if (QueryProp(P_CONTAINER_STATES))
+    return QueryProp(P_CONTAINER_STATES)[(QueryProp(P_CNT_STATUS)?1:0)];
+  else return "???????";
+}
+
+varargs string long() {
+  string desc, inv_desc;
+
+  desc=process_string((string)QueryProp(P_LONG))+
+    capitalize(QueryPronoun(WER))+ " ist "+GetContainerStatusString(1);
+  if (QueryProp(P_TRANSPARENT)) {
+    inv_desc = make_invlist(this_player(),all_inventory(this_object()), 0);
+    if (inv_desc !="")
+      desc+=" und enthaelt:\n" + inv_desc;
+    else 
+      desc+=" und leer.\n";
+  }
+  else desc+=".\n";
+  return desc;
+}
+
+varargs string short() {
+  return process_string((string)QueryProp(P_SHORT))+" ("+
+    GetContainerStatusString(1) +").\n";
+}
+
+nosave void openContainer() {
+  SetProp(P_CNT_STATUS, CNT_STATUS_OPEN);
+  SetProp(P_TRANSPARENT,1);
+}
+
+nosave void closeContainer() {
+  SetProp(P_CNT_STATUS, CNT_STATUS_CLOSED);
+  SetProp(P_TRANSPARENT,0);
+}
+
+nosave varargs int tryOpenContainer(string with) {
+  if (with) {
+    write(break_string("Damit kannst Du "+name(WEN)+" nicht oeffnen.\n",77));
+    return 0;
+  }
+  write(break_string("Du oeffnest "+(string)name(WEN)+".\n",77));
+  say(break_string(this_player()->Name(WER)+" oeffnet "+
+        (string)name(WEN)+".\n",77));
+  return 1;
+}
+
+nosave varargs int tryCloseContainer(string with) {
+  if (with) {
+    write(break_string("Damit kannst Du "+name(WEN)+
+          " nicht schliessen.\n",77));
+    return 0;
+  }
+  write(break_string("Du schliesst "+(string)name(WEN)+".\n",77));
+  say(break_string(this_player()->Name(WER)+" schliesst "+
+        (string)name(WEN)+".\n",77));
+  return 1;
+}
+
+nomask nosave int cmdOeffne(string s) {
+  string what, with;
+
+  if ((!s)|| ((!id(s))&&((sscanf(s,"%s mit %s",what, with)!=2)||(!id(what)))))
+    return 0;
+  notify_fail(break_string((string)Name(WER)+" ist bereits "+
+        GetContainerStatusString()+".\n",77));
+  if (!QueryProp(P_CNT_STATUS)) return 0;
+  if (tryOpenContainer(with)) 
+    openContainer();
+  return 1;
+}
+
+nomask nosave int cmdSchliesse(string s) {
+  string what, with;
+
+  if ((!s)||((!id(s))&&((sscanf(s,"%s mit %s",what, with)!=2)||(!id(what)))))
+       return 0;
+  notify_fail(break_string((string)Name(WER)+" ist bereits "+
+        GetContainerStatusString()+".\n",77));
+  if (QueryProp(P_CNT_STATUS)) return 0;
+  if (tryCloseContainer(with))
+    closeContainer();
+  return 1;
+}
+
+public void create() {
+  ::create();
+  AddId(({"Schliessbarer_Behaelter"}));
+  SetProp(P_CONTAINER_STATES,({"geoeffnet","geschlossen"}));
+  SetProp(P_SHORT,"Ein Standard-Behaelter (schliessbar)");
+  SetProp(P_LONG, "Ein Standard-Behaelter, schliessbar und unbeschrieben.\n");
+  SetProp(P_NAME,"Standard-Behaelter (schliessbar)");
+  SetProp(P_GENDER,MALE);
+  SetProp(P_WEIGHT,0);
+  SetProp(P_SIZE,50);
+  SetProp(P_MAX_WEIGHT,25000);
+  SetProp(P_WEIGHT_PERCENT,100);
+  SetProp(P_VALUE,3000);  // GUENSTIG! :o)
+  SetProp(P_MATERIAL,([MAT_MISC_WOOD:100]));
+  closeContainer();
+  AddCmd(({"oeffne"}),"cmdOeffne");
+  AddCmd(({"schliess","schliesse"}),"cmdSchliesse");
+}
+

@@ -1,0 +1,226 @@
+//=========================================================================
+//
+// File:    stikker.c
+// Created by Ronja@SL
+//
+// Project: Moor
+//
+//=========================================================================
+
+inherit "std/weapon";
+
+#include "../def.h"
+
+string owner;
+int unbrauchbar;
+int count;
+
+void create()
+{
+  if (!is_clone(this_object())) return;
+
+  ::create();
+
+  SetProp (P_SHORT, "Ein Stikker");
+  SetProp (P_LONG,
+    "Ein Stikker wird dazu benutzt, Torf zu stechen."
+  );
+
+  AddId ( ({"stikker","\nSTIKKER"}) );
+  SetProp(P_NAME, "Stikker");
+  SetProp(P_GENDER, MALE);
+
+  SetProp(P_VALUE, 0);
+  SetProp(P_WEIGHT, 800);
+  SetProp(P_WEAPON_TYPE, WT_KNIFE);
+  SetProp(P_DAM_TYPE, DT_PIERCE);
+  SetProp(P_WC, 45);
+  SetProp(P_NR_HANDS, 1);
+  SetProp(P_MATERIAL, MAT_STEEL);
+
+  AddCmd( ({"stech","steche","stich"}),  "cmd_stechen" );
+
+  owner       = "";
+  unbrauchbar = 0;
+  count       = 5;
+}
+
+void init()
+{
+  object pl;
+
+  ::init();
+
+  if(!(pl = ENV(TO)))  return;
+  if(!interactive(pl)) return;
+
+  if(owner == "")
+  {
+    owner = getuuid(pl);
+  }
+}
+
+void reset()
+{
+  ::reset();
+
+  count = 5;
+}
+
+mixed dam_desc()
+{
+  if(unbrauchbar)
+  {
+    return "unbrauchbaren und irreparabl";
+  }
+  else
+  {
+    ::dam_desc();
+  }
+}
+varargs int move(mixed dest, int method,
+                 string dir, string textout, string textin)
+{
+  object env;
+
+  SetProp(P_NODROP,0);
+  SetProp(P_NOGET,0);
+
+  env = ENV(TO);
+
+  if(owner == "" && objectp(dest) && interactive(dest))
+  {
+    owner == getuuid(dest);
+  }
+
+  if(interactive(dest) && objectp(env) && interactive(env))
+  {
+    if(owner != getuuid(dest) && unbrauchbar == 0)
+    {
+      tell_room(ENV(dest),
+        BS("Als "+env->Name()+" den Stikker an "+dest->Name()+" gibt, "
+           "laesst "+env->QueryPronoun()+" den Stikker fallen. Dabei faellt "
+           "der Stikker auf die Schneide, welche schartig wird. So ein Mist,"
+           "diesen Stikker kann man bestimmt nicht mehr benutzen."),
+           ({ env, dest})
+      );
+
+      tell_object(env,
+        BS("Bevor Du den Stikker an "+dest->Name()+" gibst, laesst Du "
+           "den Stikker fallen. Dabei faellt der Stikker auf die Schneide, "
+           "welche schartig wird. So ein Mist, diesen Stikker kann man "
+           "bestimmt nicht mehr gebrauchen.")
+      );
+
+      tell_object(dest,
+        BS("Bevor "+env->Name()+" Dir den Stikker gibt, laesst "+
+           env->QueryPronoun()+" den Stikker fallen, welcher genau auf die "
+           "Schneide fällt. So ein Mist, den Stikker kann man bestimmt nicht "
+           "mehr gebrauchen.")
+      );
+      unbrauchbar = 1;
+      ::move(ENV(dest),M_PUT|M_NOCHECK|M_SILENT);
+      SetProp(P_NODROP,"");
+      return ME_CANT_BE_DROPPED;
+    }
+  }
+
+  if(interactive(dest) && objectp(env) && !interactive(env))
+  {
+    if(owner != getuuid(dest) && unbrauchbar == 0)
+    {
+      tell_object(dest,BS("Als Du den Stikker nimmst, laesst Du ihn un"
+                          "geschickterweise fallen. Dabei faellt der "
+                          "Stikker genau auf die Schneide, wodurch er "
+                          "wohl unbrauchbar ist. So ein Mist aber auch."));
+
+      tell_room(ENV(dest),BS("Als "+dest->name()+" den Stikker nimmt, laesst "+
+                             dest->QueryPronoun()+" ihn ungeschickterweise "
+                             "fallen. Dabei faellt der Stikker genau auf "
+                             "die Schneide, wodurch er wohl unbrauchbar "
+                             "ist." ), ({dest}) );
+
+
+
+      unbrauchbar = 1;
+      ::move(ENV(dest),M_PUT|M_NOCHECK|M_SILENT);
+      SetProp(P_NOGET,"");
+      return ME_CANT_BE_TAKEN;
+    }
+  }
+
+  return ::move(dest,method,dir,textout,textin);
+}
+
+
+int cmd_stechen(string str)
+{
+  object torf;
+
+  notify_fail(BS("Hier ist nichts, aber auch gar nichts, was Du mit einem "
+                 "Stikker stechen koenntest."));
+
+  if(!str || str == "") return 0;
+
+  if(!ENV(TP)->moor_ist_da())
+  {
+    return 0;
+  }
+
+  notify_fail("Das kannst Du mit einem Stikker nicht stechen.\n");
+
+  if(!(str == "torf")) return 0;
+
+  if(unbrauchbar)
+  {
+    TELLPLAYER("Dieser Stikker ist nicht mehr zu gebrauchen.\n");
+    return -1;
+  }
+
+  if(count <= 0)
+  {
+    TELLPLAYER(BS("Fuer den Augenblick reicht es erstmal was Du an Torf "
+                  "gestochen hast. Schliesslich bist Du Abenteuerer und "
+                  "kein Torfstecher. "));
+    return -1;
+  }
+
+  if(!objectp(QueryProp(P_WIELDED)))
+  {
+    TELLPLAYER("Du solltest den Stikker erstmal zuecken.\n");
+    TELLOTHERS(TPN+" spielt mit einem Stikker herum.\n");
+    return -1;
+  }
+
+  switch (ENV(TP)->moor_ist_da())
+  {
+    case 0 :
+      TELLPLAYER(BS("Hier ist nichts, aber auch gar nichts, was Du mit einem "
+                    "Stikker stechen koenntest."));
+      TELLOTHERS(BS(TPN+" fuchtelt wie wild mit einem Stikker herum."));
+      return -1;
+      break;
+
+    case 1 :
+      TELLPLAYER(BS("Du stocherst etwas im Moor herum, aber Torf kannst Du "
+                    "hier bestimmt nicht stechen."));
+      TELLOTHERS(TPN+" stochert im Moor herum.\n");
+      return -1;
+      break;
+
+    case 2 :
+      TELLPLAYER("Mit dem Stikker stichst Du Dir ein grosses Stueck "
+                 "Torf ab.\n");
+      TELLOTHERS(TPN+" sticht mit einem Messer etwas Torf.\n");
+
+      torf=clone_object(OBJ "torfn.lpc");
+      torf->SetOwner(getuuid(TP));
+      torf->move(ENV(TP),M_GET|M_SILENT);
+      count--;
+
+      break;
+  }
+
+  return 1;
+}
+

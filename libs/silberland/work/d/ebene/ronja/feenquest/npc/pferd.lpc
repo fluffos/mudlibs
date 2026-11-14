@@ -1,0 +1,1310 @@
+//=========================================================================
+//
+// File:    pferd.c
+// Created by Ronja@SL
+//
+// Project: Feen
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit NPC "stdnpc";
+
+#define BRIDLE_WAIT 60
+#define BRIDLE_WAIT_RANDOM 20
+#define NICHTS "Sowas siehst Du da nicht!\n"
+
+void AdjustDetails();
+void BuildNames();
+string fressen();
+
+int fell,hufe,callouts;
+
+string *friends;
+
+void create()
+{
+  if(!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Ein Pferd" );
+  SetProp(P_LONG, "Ein Pferd." );
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:-10,T_RANGE_MAX:40]));
+  AddId(({"pferd","\nFEENPFERD","MAEHNE_WUSCHEL"}));
+  AddClass(CL_ANIMAL);
+
+  SetProp(P_TEMPERAMENT, random(2)); // zufaellig nur feurig und daemlich, brav
+                                     // wird anderweitig gesetzt, so dass nur 1
+                                     // braves pferd vorhanden ist
+
+
+  SetProp(P_FARBE, random(5));
+  SetProp(P_GESCHLECHT, random(3));  // geschlecht fohlen wird anderweitig gesetzt
+
+  SetProp(P_ZAUMZEUG,Z_NICHTS);
+  SetProp(P_SATTEL,S_NICHTS);
+  AdjustDetails();
+
+  FMASTER->CheckHorses(TO);
+  BuildNames();
+
+  SetProp(P_MNPC_AREA, ({ROOM "koppel",ROOM "box0"}) );
+  SetProp(P_MNPC_DEFAULTROOM, ROOM "box0");
+  SetProp(P_MNPC_WAIT, ({ 60, 60, 60 }));
+  SetProp(P_MNPC_FLAGS, MOV_INDOORS + MOV_OUTDOORS + MOV_MOVES + MOV_BACKWARDS);
+
+  SetChats(4, ({
+    #'fressen,
+  }) );
+
+  AddInfo(DEFAULT_INFO, "wiehert Dich freudig an.\n");
+
+  AddSpecialDetail( ({"fell"})       , "detail_fell" );
+  AddSpecialDetail( ({"huf","hufe"}) , "detail_huf" );
+
+  AddCmd( ({"zieh","ziehe","streif","streife"}) , "cmd_ziehen" );
+  AddCmd( ({"leg","lege","legen"})              , "cmd_legen" );
+  AddCmd( ({"zurr","zurre"})                    , "cmd_zurren");
+  AddCmd( ({"lass","lasse"})                    , "cmd_lassen");
+  AddCmd( ({"fuetter","fuettere"})              , "cmd_fuettern");
+  AddCmd( ({"reit","reite"})                    , "cmd_reiten");
+  AddCmd( ({"sattle","sattel","sattele"})       , "cmd_satteln");
+  AddCmd( CMD_NEHMEN                            , "cmd_nehmen");
+
+  fell     = 1;
+  hufe     = 1;
+  callouts = 0;
+
+  friends  = ({});
+}
+
+void BuildNames()
+{
+  int level,size,weight,gender;
+  string str;
+
+  SetProp(P_NAME, ({
+    ({"Rappe","Wallach","Stute","Fohlen"}),
+    ({"Schimmel","Wallach","Stute","Fohlen"}),
+    ({"Hengst","Wallach","Stute","Fohlen"}),
+    ({"Hengst","Wallach","Stute","Fohlen"}),
+    ({"Hengst","Wallach","Stute","Fohlen"})
+  })[QueryProp(P_FARBE)][QueryProp(P_GESCHLECHT)]);
+
+  SetProp(P_NAME_ADJ, ({
+    ({0,"schwarz","schwarz","schwarz"}),
+    ({0,"weiss","weiss","weiss"}),
+    ({"braun","braun","braun","braun"}),
+    ({"fuchsfarben","fuchsfarben","fuchsfarben","fuchsfarben"}),
+    ({"gescheckt","gescheckt","gescheckt","gescheckt"}),
+  })[QueryProp(P_FARBE)][QueryProp(P_GESCHLECHT)]);
+
+  AddAdjective( ({
+    ({({0})
+     ,({"schwarzer","schwarzen","schwarzem"})
+     ,({"schwarze" ,"schwarzen","schwarzer"})
+     ,({"schwarzes","schwarzen","schwarzem"})
+     }),
+    ({({0})
+     ,({"weisser" ,"weissen","weissem"})
+     ,({"weisse"  ,"weissen","weisser"})
+     ,({"weisses" ,"weissen","weissem"})
+     }),
+    ({({"brauner" ,"braunen","braunem"})
+     ,({"braunen" ,"braunen","braunem"})
+     ,({"braune"  ,"braunen","brauner"})
+     ,({"braunes" ,"braunen","braunem"})
+     ,}),
+    ({({"fuchsfarbener" ,"fuchsfarbenen","fuchsfarbenem"})
+     ,({"fuchsfarbener" ,"fuchsfarbenen","fuchsfarbenem"})
+     ,({"fuchsfarbene"  ,"fuchsfarbenen","fuchsfarbener"})
+     ,({"fuchsfarbenes" ,"fuchsfarbenen","fuchsfarbenem"})
+     }),
+    ({({"gescheckter" ,"gescheckten","geschecktem"})
+     ,({"gescheckter" ,"gescheckten","geschecktem"})
+     ,({"gescheckte"  ,"gescheckten","gescheckter"})
+     ,({"geschecktes" ,"gescheckten","geschecktem"})
+     }),
+  })[QueryProp(P_FARBE)][QueryProp(P_GESCHLECHT)]);
+
+  level = 18;
+
+  switch(QueryProp(P_TEMPERAMENT))
+  {
+    case T_FEURIG:   level += 4; break;
+    case T_DAEMLICH: level -= 2; break;
+  }
+
+  switch(QueryProp(P_GESCHLECHT))
+  {
+    case T_HENGST:
+      level +=  3; size = 180; weight = 400000; gender = MALE;
+      str = " mit seinen Hufen";
+      break;
+
+    case T_WALLACH:
+      level +=  2; size = 180; weight = 400000; gender = MALE;
+      str = " mit seinen Hufen";
+      break;
+
+    case T_STUTE:
+      level +=  1; size = 160; weight = 300000; gender = FEMALE;
+      str = " mit ihren Hufen";
+      break;
+
+    case T_FOHLEN:
+      level -= 10; size = 100; weight = 100000; gender = NEUTER;
+      str = " mit seinen Hufen";
+      break;
+  }
+
+  create_default_npc(level);
+  SetProp(P_RACE, "Pferd");
+  SetProp(P_SIZE, size+random(30));
+  SetProp(P_ALIGN, 600);
+  SetProp(P_MAX_HANDS, 4);
+  SetProp(P_WEIGHT,weight);
+  SetProp(P_HEAL,0);
+  SetProp(P_HANDS, ({str,QueryProp(P_HANDS)[1],DT_BLUDGEON}));
+  SetProp(P_GENDER,gender);
+
+  SetProp(P_SHORT,name(WER));
+  AddId(lower_case(QueryProp(P_NAME)));
+
+  SetProp(P_MMSGIN, ({"galoppiert herein","trottet herein","trabt herein"})[QueryProp(P_TEMPERAMENT)] );
+  SetProp(P_MMSGOUT,({"galoppiert davon" ,"trottet davon" ,"trabt davon"})[QueryProp(P_TEMPERAMENT)] );
+
+  SetProp(P_MSGIN, ({"galoppiert herein","trottet herein","trabt herein"})[QueryProp(P_TEMPERAMENT)] );
+  SetProp(P_MSGOUT,({"galoppiert# davon" ,"trottet# davon" ,"trabt# davon"})[QueryProp(P_TEMPERAMENT)] );
+
+  return;
+}
+
+string _query_long()
+{
+  string ret;
+
+  ret = "Du hast ein wahres Prachtexemplar von Vollblut vor Dir. "+
+        "Es ist "+name(WER);
+
+  switch(QueryProp(P_ZAUMZEUG))
+  {
+    case Z_AUFGELEGT:
+      ret+=". Auf "+QueryPossPronoun(MALE,WEM,SINGULAR)+
+           " Hals liegt ein Zaumzeug mit offenen Schnallen";
+      break;
+
+    case Z_FESTGESCHNALLT:
+      ret+=". Ein Zaumzeug mit festgezogenen Schnallen liegt auf "+
+           QueryPossPronoun(MALE,WEM,SINGULAR)+" Hals. Die Zuegel sind "+
+           "noch nicht uebergestreift";
+      break;
+
+    case Z_UEBERGESTREIFT:
+      ret+=". "+CAP(QueryPronoun(WER))+" traegt ein einfaches Zaumzeug mit "
+           "festgezogenen Schnallen, die Zuegel sind uebergelegt";
+      break;
+
+    default:
+      break;
+  }
+
+  switch(QueryProp(P_SATTEL))
+  {
+    case S_AUFGELEGT:
+      ret+=" und auf "+QueryPossPronoun(MALE,WEM,SINGULAR)+
+           " Ruecken liegt ein Sattel. ";
+      break;
+
+    case S_FESTGESCHNALLT:
+      ret+=" und auf "+QueryPossPronoun(MALE,WEM,SINGULAR)+
+           " Ruecken ist ein Sattel festgeschnallt. Die "+
+           "Steigbuegel sind noch hochgezogen.";
+      break;
+
+    case S_STEIGBUEGEL:
+      ret+=" und "+QueryPronoun(WER)+" traegt einen "
+           "festgeschnallten Sattel. Die " +
+           "Steigbuegel haengen neben dem Pferdebauch.";
+      break;
+
+    default:
+      ret+=".";
+      break;
+
+  }
+
+  return BS(ret);
+}
+
+void reset()
+{
+  ::reset();
+
+  fell    = 1;
+  hufe    = 1;
+  friends = ({});
+}
+
+void init_msg(object pl)
+{
+  tell_object(pl,BS(Name(WER,1)+" kommt freudig auf Dich zugelaufen und "
+              "wedelt mit den Ohren. "));
+
+  tell_room(ENV(TO),
+    BS(Name(WER,1)+" laeuft freudig auf "+pl->Name(WEN)+" zu."),
+    ({pl})
+  );
+}
+
+init()
+{
+  ::init();
+  if (TP && TP->id("\nFEENPFERD")) AddDefender(TP);
+
+  if(TP && interactive(TP) && member(friends,getuuid(TP)) > -1)
+    call_out("init_msg",0,TP);
+}
+
+void InformDefend(object enemy)
+{
+  Kill(enemy);
+}
+
+int Defend(int dam, mixed dam_type, mixed spell, object enemy)
+{
+  if(member(friends,getuuid(TP)) > -1) friends -= ({ getuuid(enemy) });
+  return ::Defend(dam, dam_type, spell, enemy);
+}
+
+int isFriend(object pl)
+{
+  if(member(friends,getuuid(pl)) > -1) return 1;
+  return 0;
+}
+
+void cmd_wait()
+{
+  int t;
+
+  if(t=find_call_out("wandern") < 0) return;
+  if(t > BRIDLE_WAIT) return;
+  remove_call_out("wandern");
+  call_out("wandern", BRIDLE_WAIT+random(BRIDLE_WAIT_RANDOM));
+  return;
+}
+
+int zaumzeug_ueberziehen(object zaumzeug)
+{
+  string sp, so;
+
+  sp = "";
+  so = "";
+
+  switch(QueryProp(P_ZAUMZEUG))
+  {
+    case Z_NICHTS:
+      if(isFriend(TP))
+      {
+        sp = "Du streifst "+name(WEM,1)+" das Zaumzeug ueber den Hals. "
+             "Die Schnallen sind noch nicht festgezogen und die "
+             "Zuegel haengen noch herunter, die muessen auch noch "
+             "uebergelegt werden.";
+        zaumzeug->remove();
+        SetProp(P_ZAUMZEUG, Z_AUFGELEGT);
+        AdjustDetails();
+      }
+      else
+      {
+        sp = Name(WER,1)+" traut Dir nicht so ganz und geht ein paar "
+             "Schritte zurueck. ";
+      }
+
+      break;
+
+    case Z_AUFGELEGT:
+    case Z_FESTGESCHNALLT:
+    case Z_UEBERGESTREIFT:
+      sp = Name(WER,1)+" traegt bereits ein Zaumzeug. Schau "
+           "demnaechst besser hin.";
+      notify_fail(BS(sp));
+      return 0;
+      break;
+  }
+
+  TELLPLAYER(BS(sp));
+  TELLOTHERS(BS(so));
+  return 1;
+}
+
+int zaumzeug_festschnallen()
+{
+  string sp, so;
+
+  sp = "";
+  so = "";
+
+  switch(QueryProp(P_ZAUMZEUG))
+  {
+    case Z_NICHTS:
+      sp = Name(WER,1)+" traegt doch ueberhaupt kein Zaumzeug, dessen "
+           "Schnallen Du festziehen koenntest. ";
+      notify_fail(BS(sp));
+      return 0;
+      break;
+
+    case Z_AUFGELEGT:
+      if(isFriend(TP))
+      {
+        sp = "Du gehst zu "+name(WEM,1)+", taetschelst "+
+             QueryPossPronoun(MALE,WEN,SINGULAR)+" Hals und ziehst die "
+             "Schnallen an "+QueryPossPronoun(NEUTER,WEM,SINGULAR)+
+             " Zaumzeug fest. Jetzt muessen nur noch die Zuegel ueber "
+             "den Hals gelegt werden. ";
+        SetProp(P_ZAUMZEUG, Z_FESTGESCHNALLT);
+        AdjustDetails();
+      }
+      else
+      {
+        sp = "Das Pferd scheut und laesst Dich nicht an sich heran. ";
+      }
+      break;
+
+    case Z_FESTGESCHNALLT:
+    case Z_UEBERGESTREIFT:
+      sp = "Die Schnallen sind schon laengst angezogen!";
+      break;
+  }
+
+  TELLPLAYER(BS(sp));
+  TELLOTHERS(BS(so));
+  return 1;
+}
+
+int zuegel_ueberlegen()
+{
+  string sp, so;
+  object zaumzeug;
+
+  sp = "";
+  so = "";
+
+  switch(QueryProp(P_ZAUMZEUG))
+  {
+    case Z_NICHTS:
+      sp = Name(WER,1)+" traegt doch ueberhaupt kein Zaumzeug, und damit "
+           "auch keine Zuegel, die Du ueberlegen koenntest. ";
+      notify_fail(BS(sp));
+      return 0;
+      break;
+
+    case Z_AUFGELEGT:
+      if(isFriend(TP))
+      {
+        sp = "Du legst "+name(WEM,1)+" die Zuegel ueber, aber weil Du die "
+             "Schnallen nicht festgezogen hast, faellt das gesamte "
+             "Zaumzeug wieder herunter. ";
+        clone_object(OBJ "zaumzeug")->move(ENV(TO), M_NOCHECK|M_SILENT);
+        SetProp(P_ZAUMZEUG, Z_NICHTS);
+        AdjustDetails();
+      }
+      else
+      {
+        sp = Name(WER,1)+" traut Dir nicht so recht und weicht ein paar "
+             "Schritte zurueck. ";
+      }
+      break;
+
+    case Z_FESTGESCHNALLT:
+      if(QueryProp(P_TEMPERAMENT)==T_DAEMLICH)
+      {
+        sp = "Gerade als Du die Schnallen festziehen moechtest, schuettelt "
+             +name(WER,1)+" widerwillig den Kopf, die Schnallen "
+             "loesen sich und das Zaumzeug faellt herunter. ";
+        clone_object(OBJ "zaumzeug")->move(ENV(TO), M_NOCHECK|M_SILENT);
+        SetProp(P_ZAUMZEUG, Z_NICHTS);
+        AdjustDetails();
+      }
+      else
+      {
+        sp = "Du legst dem Pferd die Zuegel ueber und ziehst noch ein "
+             "paar Haare der Maehne darunter hervor. ";
+        SetProp(P_ZAUMZEUG, Z_UEBERGESTREIFT);
+        AdjustDetails();
+      }
+      break;
+
+    case Z_UEBERGESTREIFT:
+      sp = "Die Zuegel sind doch schon laengst uebergelegt! "
+           "Schau demnaechst besser hin. ";
+      break;
+  }
+
+  TELLPLAYER(BS(sp));
+  TELLOTHERS(BS(so));
+  return 1;
+}
+
+int sattel_auflegen(object sattel)
+{
+  string sp, so;
+
+  sp = "";
+  so = "";
+
+  switch(QueryProp(P_SATTEL))
+  {
+    case S_NICHTS:
+      if(isFriend(TP))
+      {
+        sp = "Du legst "+name(WEM,1)+" den Sattel auf den Ruecken, nicht "
+             "ohne vorher noch die Haare am Widerist glattzustreichen. "
+             "Der Gurt des Sattels baumelt neben dem Pferd und muss "
+             "noch festgezurrt werden, die Steigbuegel haengen noch "
+             "hochgezogen am Sattel fest. ";
+        sattel->remove();
+        SetProp(P_SATTEL, S_AUFGELEGT);
+        AdjustDetails();
+      }
+      else
+      {
+        sp = Name(WER,1)+" traut Dir nicht und weicht ein paar Schritte "
+             "zurueck. ";
+      }
+      break;
+
+    case S_AUFGELEGT:
+    case S_FESTGESCHNALLT:
+    case S_STEIGBUEGEL:
+      sp = Name(WER,1)+" traegt bereits einen Sattel. Schau "
+           "demnaechst besser hin.";
+      notify_fail(BS(sp));
+      return 0;
+      break;
+  }
+
+  TELLPLAYER(BS(sp));
+  TELLOTHERS(BS(so));
+  return 1;
+}
+
+int sattel_festzurren(int named)
+{
+  string sp, so;
+
+  sp = "";
+  so = "";
+
+  switch(QueryProp(P_SATTEL))
+  {
+    case S_NICHTS:
+      sp = Name(WER,1)+" traegt doch ueberhaupt keinen Sattel, dessen "
+           "Gurt Du festzurren koenntest. ";
+      if(!named){notify_fail(BS(sp)); return 0;}
+      break;
+
+    case S_AUFGELEGT:
+      sp = "Du gehst an die Seite "+name(WESSEN,1)+", bueckst Dich, fischst "
+           "unter dem Bauch "+name(WESSEN,1)+" den Gurt von der anderen Seite "
+           "und zurrst ihn fest. ";
+      SetProp(P_SATTEL, S_FESTGESCHNALLT);
+      AdjustDetails();
+      break;
+
+    case S_FESTGESCHNALLT:
+    case S_STEIGBUEGEL:
+      sp = "Der Gurt ist doch schon laengst festgezurrt!";
+      if(!named){notify_fail(BS(sp)); return 0;}
+      break;
+  }
+
+  TELLPLAYER(BS(sp));
+  TELLOTHERS(BS(so));
+  return 1;
+}
+
+int sattel_steigbuegel()
+{
+  string sp, so;
+  object zaumzeug;
+
+  sp = "";
+  so = "";
+
+  switch(QueryProp(P_SATTEL))
+  {
+    case S_NICHTS:
+      sp = "Das Pferd traegt doch ueberhaupt keinen Sattel, "
+           "also kannst Du auch keine Steigbuegel herunterlassen.";
+      break;
+
+    case S_AUFGELEGT:
+      sp = "Du loest die Steigbuegel, um sie herabzulassen. Da Du den "
+           "Sattel jedoch nicht festgezurrt hast, faellt der Sattel "
+           "herunter. ";
+      clone_object(OBJ "sattel")->move(ENV(TO), M_NOCHECK|M_SILENT);
+      SetProp(P_SATTEL, S_NICHTS);
+      AdjustDetails();
+      break;
+
+    case S_FESTGESCHNALLT:
+      if(QueryProp(P_TEMPERAMENT)==T_DAEMLICH)
+      {
+        sp = "Gerade als Du Dich bueckst, macht das Pferd einen Schritt "
+             "zur Seite und der Sattel faellt herunter. ";
+        clone_object(OBJ "sattel")->move(ENV(TO), M_NOCHECK|M_SILENT);
+        SetProp(P_SATTEL, S_NICHTS);
+        AdjustDetails();
+      }
+      else
+      {
+        sp = "Du machst die Steigbuegel los und laesst sie herunter. ";
+        SetProp(P_SATTEL, S_STEIGBUEGEL);
+        AdjustDetails();
+      }
+      break;
+
+    case S_STEIGBUEGEL:
+      sp = "Das Pferd traegt laengst einen Sattel, dessen Steigbuegel"
+           "heruntergelassen sind. Schau demnaechst besser hin. ";
+      break;
+  }
+
+  TELLPLAYER(BS(sp));
+  TELLOTHERS(BS(so));
+  return 1;
+}
+
+int cmd_ziehen(string str)
+{
+  object ob;
+  string wen;
+  int syntax;
+
+  notify_fail("Was moechtest Du wem ueberziehen?\n");
+
+  if(!str || str == "") return 0;
+
+  syntax = 0;
+  wen = 0;
+
+  if(!syntax && sscanf(str,"%s zaumzeug auf",wen)        == 1) syntax = 1;
+  if(!syntax && sscanf(str,"%s zaumzeug auf hals",wen)   == 1) syntax = 1;
+  if(!syntax && sscanf(str,"%s zaumzeug ueber",wen)      == 1) syntax = 1;
+  if(!syntax && sscanf(str,"%s zaumzeug ueber hals",wen) == 1) syntax = 1;
+  if(!syntax && sscanf(str,"zaumzeug %s ueber",wen)      == 1) syntax = 1;
+  if(!syntax && sscanf(str,"zaumzeug %s ueber hals",wen) == 1) syntax = 1;
+  if(!syntax && str == "zaumzeug auf"                        ) syntax = 1;
+  if(!syntax && str == "zaumzeug auf hals"                   ) syntax = 1;
+  if(!syntax && str == "zaumzeug ueber"                      ) syntax = 1;
+  if(!syntax && str == "zaumzeug ueber hals"                 ) syntax = 1;
+
+  if(!syntax && sscanf(str,"schnallen an %s an",wen)         ) syntax = 2;
+  if(!syntax && sscanf(str,"schnallen an %s fest",wen)       ) syntax = 2;
+  if(!syntax && sscanf(str,"schnallen am %s an",wen)         ) syntax = 2;
+  if(!syntax && sscanf(str,"schnallen am %s fest",wen)       ) syntax = 2;
+  if(!syntax && sscanf(str,"schnallen an dem %s an",wen)     ) syntax = 2;
+  if(!syntax && sscanf(str,"schnallen an dem %s fest",wen)   ) syntax = 2;
+  if(!syntax && str == "schnallen fest"                      ) syntax = 2;
+  if(!syntax && str == "schnallen an"                        ) syntax = 2;
+
+  switch(syntax)
+  {
+    case 1:
+      if(!ob = present("zaumzeug",TP))
+      {
+        TELLPLAYER("Du hast doch gar kein Zaumzeug bei Dir.\n");
+        return 1;
+      }
+      if(wen && !id(wen)) return 0;
+      cmd_wait();
+      return zaumzeug_ueberziehen(ob);
+      break;
+
+    case 2:
+      if(wen && !id(wen)) return 0;
+      cmd_wait();
+      return zaumzeug_festschnallen();
+      break;
+
+  }
+
+  return 0;
+}
+
+int cmd_legen(string str)
+{
+  object ob;
+  int n,syntax;
+  string wen;
+
+  notify_fail("Was moechtest Du wem auflegen?\n");
+
+  if(!str || str == "") return 0;
+
+  syntax = 0;
+  wen = 0;
+
+  if(!syntax && sscanf(str,"%s zuegel auf",wen)         == 1) syntax = 1;
+  if(!syntax && sscanf(str,"%s zuegel auf hals",wen)    == 1) syntax = 1;
+  if(!syntax && sscanf(str,"%s zuegel ueber",wen)       == 1) syntax = 1;
+  if(!syntax && sscanf(str,"%s zuegel ueber hals",wen)  == 1) syntax = 1;
+  if(!syntax && str == "zuegel auf"                         ) syntax = 1;
+  if(!syntax && str == "zuegel auf hals"                    ) syntax = 1;
+  if(!syntax && str == "zuegel ueber hals"                  ) syntax = 1;
+  if(!syntax && str == "zuegel ueber"                       ) syntax = 1;
+
+  if(!syntax && sscanf(str,"sattel auf %s",wen)         == 1) syntax = 2;
+  if(!syntax && sscanf(str,"%s sattel auf",wen)         == 1) syntax = 2;
+  if(!syntax && sscanf(str,"%s sattel auf ruecken",wen) == 1) syntax = 2;
+  if(!syntax && sscanf(str,"%s sattel ueber",wen)       == 1) syntax = 2;
+  if(!syntax && sscanf(str,"sattel ueber %s",wen)       == 1) syntax = 2;
+  if(!syntax && str == "sattel auf"                         ) syntax = 2;
+  if(!syntax && str == "sattel auf pferderuecken"           ) syntax = 2;
+
+  switch(syntax)
+  {
+    case 1:
+      if(wen && !id(wen)) return 0;
+      cmd_wait();
+      return zuegel_ueberlegen();
+      break;
+
+    case 2:
+      if(!ob = present("sattel",TP))
+      {
+        TELLPLAYER("Du hast doch gar keinen Sattel bei dir.\n");
+        return 1;
+      }
+
+      if(wen && !id(wen)) return 0;
+      cmd_wait();
+      return sattel_auflegen(ob);
+      break;
+  }
+
+  return 0;
+}
+
+int cmd_satteln(string str)
+{
+  notify_fail("Wen moechtest Du satteln?\n");
+
+  if(!str || str == "") return 0;
+
+  if(!id(str)) return 0;
+
+  return cmd_legen("sattel auf "+str);
+}
+
+int cmd_nehmen(string str)
+{
+  int n;
+  string wem,was;
+  object ob;
+
+  notify_fail("Was moechtest Du von wem herunter nehmen?\n");
+
+  if(!str || str == "") return 0;
+
+  n   = 0;
+  wem = 0;
+  was = 0;
+
+  if(n!=2) n = sscanf(str,"%s von %s herunter",was,wem);
+  if(n!=2) n = sscanf(str,"%s vom %s herunter",was,wem);
+  if(n!=2) n = sscanf(str,"%s von dem %s herunter",was,wem);
+
+  if(n!=2) n = sscanf(str,"%s von %s",was,wem);
+  if(n!=2) n = sscanf(str,"%s vom %s",was,wem);
+  if(n!=2) n = sscanf(str,"%s von dem %s",was,wem);
+
+  if(n!=2) n = sscanf(str,"%s %s",was,wem);
+
+  if(n!=2)            return 0;
+  if(wem && !id(wem)) return 0;
+
+  switch(was)
+  {
+    case "sattel":
+      TELLPLAYER(BS("Du nimmst den Sattel von "+name(WEM)+" wieder "
+                    "herunter.\n"));
+      TELLOTHERS(BS(TPN+" nimmt den Sattel von "+name(WEM)+ "wieder "
+                    "herunter"));
+
+      SetProp(P_SATTEL, S_NICHTS);
+      AdjustDetails();
+      ob = clone_object(OBJ "sattel");
+      if(ob->move(TP,M_GET) != 1)
+      {
+        TELLPLAYER(BS("Der Sattel ist Dir allerdings zu schwer und so legst "
+                      "Du ihn erstmal wieder ab."));
+
+        ob->move(ENV(TO),M_NOCHECK|M_SILENT);
+      }
+      return 1;
+      break;
+
+    case "zaumzeug":
+    case "zuegel":
+      TELLPLAYER(BS("Du nimmst das Zaumzeug von "+name(WEM)+" wieder "
+                    "herunter.\n"));
+      TELLOTHERS(BS(TPN+" nimmt das Zaumzeug von "+name(WEM)+ "wieder "
+                    "herunter"));
+
+      SetProp(P_ZAUMZEUG, Z_NICHTS);
+      AdjustDetails();
+      ob = clone_object(OBJ "zaumzeug");
+      if(ob->move(TP,M_GET) != 1)
+      {
+        TELLPLAYER(BS("Das Zaumzeug ist Dir allerdings zu schwer und so "
+                      "legst Du es erstmal wieder ab."));
+
+        ob->move(ENV(TO),M_NOCHECK|M_SILENT);
+      }
+      return 1;
+      break;
+
+  }
+
+  return 0;
+}
+
+int cmd_zurren(string str)
+{
+  object ob;
+  int n,syntax,named;
+  string wen;
+
+  notify_fail("Was moechtest Du an wem festzurren?\n");
+
+  if(!str || str == "") return 0;
+
+  syntax = 0;
+  wen = 0;
+
+  if(!syntax && sscanf(str,"gurt an %s",wen)            == 1) syntax = 1;
+  if(!syntax && sscanf(str,"gurt an dem %s",wen)        == 1) syntax = 1;
+  if(!syntax && sscanf(str,"gurt am %s",wen)            == 1) syntax = 1;
+  if(!syntax && sscanf(str,"gurt an %s fest",wen)       == 1) syntax = 1;
+  if(!syntax && sscanf(str,"gurt an dem %s fest",wen)   == 1) syntax = 1;
+  if(!syntax && sscanf(str,"gurt am %s fest",wen)       == 1) syntax = 1;
+  if(!syntax && str == "gurt"                               ) syntax = 1;
+  if(!syntax && str == "gurt fest"                          ) syntax = 1;
+
+  switch(syntax)
+  {
+    case 1:
+      if(wen && !id(wen)) return 0;
+      cmd_wait();
+      return sattel_festzurren((wen) ? 1 : 0);
+      break;
+  }
+
+  return 0;
+}
+
+int cmd_lassen(string str)
+{
+  notify_fail("Was moechtest Du herablassen?\n");
+
+  if(!str || str == "") return 0;
+
+  if(!(str == "steigbuegel herab"         ||
+       str == "steigbuegel herunter"      ||
+       str == "buegel herab"              ||
+       str == "buegel herunter"           ||
+       str == "buegel runter"             ||
+       str == "steigbuegel runter"        )) return 0;
+
+  notify_fail(Name(WER,1)+" traut Dir nicht so ganz und weicht ein paar "
+              "Schritte zurueck. \n");
+  if(!isFriend(TP)) return 0;
+  sattel_steigbuegel();
+  cmd_wait();
+
+  return 1;
+}
+
+int cmd_reiten(string str)
+{
+  int syntax;
+  string wen;
+  object ob;
+
+  notify_fail("Was moechtest Du reiten?\n");
+
+  syntax = 0;
+  wen = 0;
+
+  if(!str || str == "") return 0;
+
+  if(!syntax && sscanf(str,"auf %s",wen)       == 1) syntax = 1;
+  if(!syntax && sscanf(str,"mit %s",wen)       == 1) syntax = 1;
+
+  if(!syntax) wen = str;
+
+  if(!(wen && id(wen))) return 0;
+
+  RINGMASTER->Msg(sprintf("%s will auf %s reiten",CAP(getuid(TP)),TO->name(WEM)));
+
+  if(member(friends,getuuid(TP)) == -1 )
+  {
+    TELLPLAYER(BS("Als Du auf "+name(WEN,1)+" zugehst, scheut das Pferd "
+                  "vor Dir.\n"));
+    TELLOTHERS(Name(WER,1)+" scheut vor "+TPN+".\n");
+    return -1;
+  }
+
+  switch(QueryProp(P_ZAUMZEUG))
+  {
+    case Z_NICHTS:
+      TELLPLAYER(Name(WER,1)+" hat doch gar kein Zaumzeug uebergelegt.\n");
+      return -1;
+      break;
+
+    case Z_AUFGELEGT:
+      TELLPLAYER("Die Schnallen am Zaumzeug von "+name(WEM,1)+" sind noch "
+                 "gar nicht fest gezogen.\n");
+      return -1;
+      break;
+
+    case Z_FESTGESCHNALLT:
+      TELLPLAYER("Die Zuegel des Zaumzeuges sind noch gar nicht uebergelegt.");
+      return -1;
+      break;
+  }
+
+  switch(QueryProp(P_SATTEL))
+  {
+    case S_NICHTS:
+      TELLPLAYER(Name(WER,1)+" traegt doch gar keinen Sattel.\n");
+      return -1;
+      break;
+
+    case S_AUFGELEGT:
+      TELLPLAYER("Der Gurt des Sattels ist doch gar nicht festgezurrt.\n");
+      return -1;
+      break;
+
+    case S_FESTGESCHNALLT:
+      TELLPLAYER("Die Steigbuegel sind noch gar nicht heruntergelassen.\n");
+      return -1;
+      break;
+  }
+
+  if(QueryProp(P_TEMPERAMENT)==T_BRAV)
+  {
+    TELLPLAYER(BS("Du gehst an die Seite des Pferdes, steckst einen Fuss in "
+                  "den Steigbuegel und schwingst Dich gekonnt in den Sattel. "
+                  "Stolz schaust Du in die Runde. Endlich nicht mehr laufen, "
+                  "jetzt wird geritten! Freudig gibst Du dem Pferd die Sporen, "
+                  "doch Du haust dem Pferd nur die Fuesse in die Flanken. "
+                  "Erschrocken baeumt das Pferd sich auf, wirft Dich ab und "
+                  "geht durch. Ein Huf des davoneilenden Pferdes trifft Dich "
+                  "am Kopf und Du wirst ohnmaechtig."));
+    SetProp(P_SATTEL,S_NICHTS);
+    SetProp(P_ZAUMZEUG,Z_NICHTS);
+    AdjustDetails();
+    TP->AddHP(-30);
+    TP->move(ROOM +  "bett:" + getuid(TP) ,M_NOCHECK|M_SILENT|M_NO_SHOW);
+
+    RINGMASTER->SetWasinBed(getuuid(TP));
+    RINGMASTER->Msg(TPUID+" reitet das richtige Pferd");
+
+    TP->SetProp(P_PARALYZED,
+      ([PARALYZE_TIME: random(8)+5,
+        PARALYZE_MSG: "Aber Du bist doch ohnmaechig!\n",
+        PARALYZE_MSG_OTHER: "stoehnt auf.\n",
+        PARALYZE_END: "\n"+BS("Langsam kommst Du wieder zu Dir. Jetzt "
+                      "erinnerst Du Dich wieder. Du wolltest das Pferd "
+                      "reiten, bist abgeworfen worden und bewusstlos "
+                      "geworden. Jemand muss Dich dann wohl in dieses Bett "
+                      "gebracht haben, bis Du wieder zur Besinnung kommst."),
+        PARALYZE_END_OTHER: TPN+" wird munter.\n"]));
+
+    return 1;
+  }
+  else
+  {
+    TELLPLAYER(BS("Du gehst an die Seite des Pferdes, steckst einen Fuss "
+                  "in den Steigbuegel und schwingst Dich gekonnt in den "
+                  "Sattel. Das Pferd wendet den Kopf zu Dir hin, schnaubt "
+                  "einmal kurz und aergerlich auf und faengt nach allen "
+                  "Regeln der Kunst an zu bocken. In Nullkommanichts loesen "
+                  "sich die Schnallen und der Gurt und Du fliegst in hohem "
+                  "Bogen vom Pferd."));
+
+    TELLOTHERS(BS(CAP(TPN)+" geht an die Seits des Pferdes, steckt einen Fuss "
+                  "in den Steigbuegel und schwingt sich gekonnt in den "
+                  "Sattel. Das PFerd wendet einmal kurz den Kopf, schnaubt "
+                  "kurz und faengt nach allen Regeln der Kunst an zu bocken. "
+                  "In Nullkommanichts loesen sich die Schnallen und der Gurt "
+                  "und "+TPN+" fliegen in hohem Bogen vom Pferd."));
+
+    RINGMASTER->Msg(TPUID+" reitet das falsche Pferd");
+
+    ob = clone_object(OBJ "sattel");
+    ob->move(ENV(TO),M_NOCHECK|M_SILENT);
+    ob = clone_object(OBJ "zaumzeug");
+    ob->move(ENV(TO),M_NOCHECK|M_SILENT);
+
+    SetProp(P_SATTEL,S_NICHTS);
+    SetProp(P_ZAUMZEUG,Z_NICHTS);
+    AdjustDetails();
+    SetProp(P_KILL_NAME,"Ein Sturz von einem Pferd");
+
+    TP->do_damage(30);
+    wandern();
+  }
+
+  return -1;
+}
+
+int cmd_fuettern(string str)
+{
+  int n;
+  string wen,was;
+  object futter;
+
+  notify_fail("Was moechtest Du wem fuettern?\n");
+
+  if(!str || str == "") return 0;
+
+  n = sscanf(str,"%s mit %s",wen,was);
+  if(n != 2) return 0;
+
+  if(!id(wen)) return 0;
+
+  if(InFight())
+  {
+    TELLPLAYER(Name(WER,1)+" interessiert sich jetzt wirklich nicht dafuer.\n");
+    return 1;
+  }
+
+  if(!futter=present(was,TP))
+  {
+    TELLPLAYER("Sowas hast Du doch gar nicht!\n");
+    return 1;
+  }
+
+  if(!(was == "mais"         ||
+       was == "maiskolben"   ||
+       was == "kolben"       ))
+  {
+    TELLPLAYER("Das Pferd wendet sich gelangweilt ab.\n");
+    return 1;
+  }
+
+  TELLPLAYER(BS("Du haeltst dem Pferd den Maiskolben mit der flachen Hand "
+                "hin. "+Name(WER,1)+" kommt freudig auf Dich zu und frisst "
+                "den Maiskolben mit sichtlichem Behagen."));
+  TELLOTHERS(CTPN+" fuettert ein Pferd.\n");
+  futter->remove();
+  if(member(friends,getuuid(TP)) == -1) friends += ({ getuuid(TP) });
+  RINGMASTER->Msg(TPUID+" fuettert ein Pferd mit einem Maiskolben");
+
+  return 1;
+}
+
+void give_notify(object obj)
+{
+  if(InFight())
+  {
+    TELLPLAYER(Name(WER,1)+" interessiert sich jetzt wirklich nicht dafuer.\n");
+    obj->move(ENV(TO),M_NOCHECK|M_SILENT);
+    return;
+  }
+
+  if(obj->id("maiskolben"))
+  {
+    TELLPLAYER(BS("Du haelst "+name(WEM,1)+" den Maiskolben mit der flachen Hand "
+                  "hin. "+Name(WER,1)+" kommt freudig auf Dich zu und frisst "
+                  "den Maiskolben mit sichtlichem Behagen."));
+    TELLOTHERS(CTPN+" fuettert ein Pferd.\n");
+    obj->remove();
+    if(member(friends,getuuid(TP)) == -1) friends += ({ getuuid(TP) });
+    RINGMASTER->Msg(TPUID+" gibt einem Pferd einen Maiskolben");
+
+    return;
+  }
+
+  TELLPLAYER(Name(WER,1)+" interessiert sich nicht fuer "+obj->name(WEN,0)+".\n");
+  obj->move(ENV(TO),M_NOCHECK|M_SILENT);
+  return;
+}
+
+string detail_huf(string str)
+{
+  string s;
+
+  if(hufe)
+  {
+    s = "Die Hufe sind etwas schmutzig, die koennten mal saubergekratzt "
+        "werden. ";
+  }
+  else
+  {
+    s = "Die Hufe sind wohl gerade eben saubergekratzt worden. ";
+  }
+
+  return BS(s);
+}
+
+string detail_fell(string str)
+{
+  string s;
+
+  if(fell)
+  {
+    switch(QueryProp(P_FARBE))
+    {
+      case T_RAPPE :
+        s = "Das schwarze Fell koennte ruhig mal gesaeubert werden, damit "
+            "es wieder schoen glaenzt. ";
+        break;
+
+      case T_SCHIMMEL :
+        s = "Der Schimmel ist etwas schmutzig, saeubere ihn doch mal, "
+            "damit man wieder sein schoenes weisses Fell sehen kann. ";
+        break;
+
+      case T_BRAUNER :
+        s = "Die braune Farbe sieht mehr nach Schmutz als nach Fellfarbe "
+            "aus. ";
+        break;
+
+      case T_FUCHS :
+        s = "Die roetliche Farbe des Fells kommt durch den ganzen Schmutz "
+            "gar nicht mehr zur Geltung.";
+        break;
+
+      default :
+        s = "Das Fell ist ganz schmutzig. Saeubere es doch mal!";
+
+    }
+  }
+  else
+  {
+    s = "Das Fell wurde erst vor kurzem gereinigt. ";
+  }
+
+  return BS(s);
+}
+
+varargs void die(int poisondeath)
+{
+  object enemy;
+
+  if(enemy=QueryProp(P_KILLER))
+    RINGMASTER->Msg(CAP(Name(WER,1))+" wurde von "+CAP(getuid(enemy))+" umgebracht");
+
+  ::die(poisondeath);
+}
+
+int second_life(object corpse)
+{
+  object ob;
+
+  if(QueryProp(P_SATTEL))
+  {
+    ob = clone_object(OBJ "sattel");
+    ob->move(corpse,M_NOCHECK|M_SILENT);
+  }
+
+  if(QueryProp(P_ZAUMZEUG))
+  {
+    ob = clone_object(OBJ "zaumzeug");
+    ob->move(corpse,M_NOCHECK|M_SILENT);
+  }
+
+  return 0;
+//  return ::second_life(corpse);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  if(killer==TO)
+  {
+    RINGMASTER->Msg(Name(WER,1)+" hat gerade "+UID(player)+" umgebracht");
+  }
+  return;
+}
+
+string fressen()
+{
+  object room;
+
+  if(!(room=ENV(TO))) return "";
+
+  if(room->IsCornThere())
+    return "\n"+BS(Name(WER,1)+" sucht an dem Maisfeld nach uebrig"
+           "gebliebenen Maiskolben, kann aber keinen finden.");
+
+  if(room->IsGrassThere())
+    return "\n"+BS(Name(WER,1)+" knabbert lustlos am Gras herum. Vielleicht "
+           "haette "+QueryPronoun(WER)+" lieber etwas anderes?");
+
+  return "\n"+Name(WER,1)+" sieht hungrig aus.\n";
+}
+
+void lpweg(object pl)
+{
+  pl->AddHP(-15);
+}
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+  string s;
+  if(++callouts > 5) return;
+
+  switch (gruppe) {
+    case "fies":
+      Kill(TP);
+      break;
+
+    case "frech":
+      call_out("react", 0, TP,
+        "wirft Dir einen veraechtlichen Blick zu",
+        "wirft "+TPN+" einen veraechtlichen Blick zu"
+      );
+      break;
+
+    case "traurig":
+      s = QueryPossPronoun(MALE,WEN,SINGULAR);
+      call_out("react", 0, TP,
+        "reibt "+s+" Kopf an Deiner Schulter",
+        "reibt "+s+" Kopf an "+TP->Name(WESSEN)+" Schulter"
+      );
+      break;
+
+    case "neutral":
+      call_out("react", 0, TP,
+        "schnaubt kurz",
+        "schaut "+TPN+" unschluessig an"
+      );
+      break;
+
+    case "nett":
+      call_out("react", 0, TP,
+        "wackelt mit den Ohren",
+        "wackelt mit den Ohren"
+      );
+      break;
+
+    case "albern":
+      s = QueryPronoun(WER);
+      call_out("react", 0, TP,
+        "wiehert Dich an. Oder lacht "+s+" Dich aus?",
+        "wiehert "+TPN+" an");
+      break;
+
+    case "aengstlich":
+      call_out("react", 0, TP,
+        "geht ein paar Schritte zurueck",
+        "geht ein paar Schritte zurueck"
+      );
+      break;
+
+    case "intim":
+      s = QueryPossPronoun(FEMALE,WEM,SINGULAR);
+      call_out("react", 0, TP,
+        "schlabbert Dich mit "+s+" Zunge ab",
+        "schlabbert "+TPN+" mit "+s+" Zunge ab"
+      );
+      break;
+
+    case "froh":
+      call_out("react", 0, TP,
+        "wiehert froehlich",
+        "wiehert froehlich"
+      );
+      break;
+
+    case "aergerlich":
+      call_out("react", 0, TP,
+        "schnaubt boese auf, dreht sich um und schlaegt mit den Hinterhufen "
+        "nach Dir",
+        "schnaubt boese auf, dreht sich um und schlaegt mit den Hinterhufen "
+        "nach "+TPN
+      );
+      call_out("lpweg",0,TP);
+      break;
+
+  }
+}
+
+void react(object to, string vic, string oth)
+{
+  if (present(to, ENV(TO))) {
+    tell_object(to, BS(Name(WER, 1)+" "+vic+"."));
+    tell_room(ENV(TO), BS(Name(WER, 1)+" "+oth+"."), ({to}));
+  }
+  callouts--;
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void AdjustDetails()
+{
+  RemoveDetail( ({"sattel","steigbuegel","buegel","gurt"}) );
+  RemoveDetail( ({"zaumzeug","zuegel","schnallen"})        );
+
+  switch(QueryProp(P_SATTEL))
+  {
+    case S_AUFGELEGT:
+      AddDetail( ({"sattel","steigbuegel","buegel","gurt"}) ,
+        Name(WER) + " hat einen Sattel aufliegen, allerdings muss der "
+        "Gurt noch festgezurrt werden und die Steigbuegel herunter"
+        "gelassen werden. "
+      );
+      break;
+
+    case S_FESTGESCHNALLT:
+      AddDetail( ({"sattel","steigbuegel","buegel","gurt"}) ,
+        Name(WER) + " hat einen Sattel aufliegen, der Gurt ist bereits "
+        "festgezurrt. Die Steigbuegel sind allerdings noch nicht "
+        "heruntergelassen. "
+      );
+      break;
+
+    case S_STEIGBUEGEL:
+      AddDetail( ({"sattel","steigbuegel","buegel","gurt"}) ,
+        Name(WER) + " hat einen Sattel aufliegen. Der Gurt ist festgezurrt "
+        "und die Steigbuegel wurden heruntergelassen. "
+      );
+      break;
+  }
+
+  switch(QueryProp(P_ZAUMZEUG))
+  {
+    case Z_AUFGELEGT:
+      AddDetail( ({"zaumzeug","zuegel","schnallen"}),
+        Name(WER) + " traegt ein Zaumzeug, an dem jedoch die Schnallen "
+        "noch nicht angezogen sind und die Zuegel sind auch noch "
+        "nicht uebergestreift. "
+      );
+      break;
+
+    case Z_FESTGESCHNALLT:
+      AddDetail( ({"zaumzeug","zuegel","schnallen"}),
+        Name(WER) + " traegt ein Zaumzeug, an dem die Schnallen zwar "
+        "angezogen sind, die Zuegel aber noch nicht uebergestreift "
+        "wurden. "
+      );
+      break;
+
+    case Z_UEBERGESTREIFT:
+      AddDetail( ({"zaumzeug","zuegel","schnallen"}),
+        Name(WER) + " traegt ein Zaumzeug. Die Schnallen an dem Zaumzeug "
+        "sind festgezogen und die Zuegel ordentlich uebergestreift. "
+      );
+      break;
+  }
+}
+

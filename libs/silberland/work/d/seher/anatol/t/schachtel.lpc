@@ -1,0 +1,201 @@
+/* Die Schachtel enthaelt einige Knuddel, deren Verzehr dem Verzehrer eine
+ * Meldung ueberbringt, die durch das Beschriften der Schachtel magisch
+ * angebracht worden ist. 
+ * Die Idee hierzu kam von Zephyr@Morgengrauen und mir, als wir ende '94
+ * Einladungen zu einer Hochzeit verteilen wollten. Die erste Implementierung
+ * stammt von Vrai, der Code hier ist jedoch voellig neu, da ich das, was
+ * Vrai da proggte, einerseits nicht toleriere (weil es durch die neuen
+ * Inventory-Befehle ziemlich uebel aussehen wuerde) und andererseits ein
+ * echter Hack ist. *schauder* ;->
+ * (c) Anatol@SilberLand 9/97
+ * 
+ * Initial  Revision 1.0      angeschlossen 07-09-97
+ * 24-09-97 Revision 1.0.1    Bugfix P_CLONER --> "schenker" 
+ *
+ */
+
+#pragma strong_types
+#include <moving.h>
+#include <properties.h>
+#define MAX_KNUDDEL  18
+#define KNUDDEL "/d/seher/anatol/t/knuddel"
+inherit "/std/thing";     /* Vererbung sichern */
+inherit "/mail/nedit";    /* Fuer den Editor   */
+
+
+int knuddel_zahl;
+string knuddel_text;
+
+nosave int cmdBeschrifte(string was);
+nosave int fertigBeschriftet(string beschriftung);
+nosave string detailSchriftfeld();
+nosave string liesSchriftfeld();
+
+void create() {
+  if (!is_clone(this_object())) return;
+  ::create();  /* Hallo Superklasse */
+  knuddel_zahl=MAX_KNUDDEL;
+  knuddel_text="";
+  SetProp(P_SHORT,"Eine Knuddelschachtel");  /* long() und short() ! */
+  SetProp(P_LONG,"Das ist eine kleine rosane Schachtel.\n"); 
+  SetProp(P_NAME, "Knuddelschachtel");
+  SetProp(P_GENDER,FEMALE);
+  SetProp(P_WEIGHT,500);       /* gewichtig aber gewichtsarm          */
+  SetProp(P_VALUE,100);        /* Der materielle Wert ist sehr gering */
+  SetProp(P_NOBUY,1);          /* Normale Laeden haben sowas nicht... */
+  SetProp(P_NOSELL,"Du behaeltst die Schachtel lieber.\n"); /* s.ob. */
+  SetProp(P_NODROP,
+    "Ups, vorsicht, nicht doch die Schachtel fallenlassen!\n");
+  SetProp(P_NEVERDROP,1);      /* Nicht in Leichen liegenlassen, ne?  */
+  SetProp(P_INFO,break_string(
+    "Diese huebschen Knuddel koennen als Medium persoenlich ueberbrachter "
+    "Botschaften dienen. Einfach das Schriftfeld der Schachtel mit der "
+    "Mitteilung beschriften, die Knuddel aus der Schachtel nehmen und "
+    "verschenken. Toll, was?",77));
+  SetProp(P_MATERIAL,MAT_PAPER);
+  AddCmd("beschrifte","cmdBeschrifte");
+  AddCmd("ziehe","cmdZiehe");
+  AddAdjective(({"klein","rosa"}));
+  AddId(({"schachtel","knuddelschachtel","anatol_knuddel_schachtel",
+          "\nknuddel_schachtel"}));
+
+  AddSpecialDetail(({"feld","schriftfeld"}),"detailSchriftfeld");
+  AddReadDetail(({"beschriftung","feld","schriftfeld"}),#'liesSchriftfeld);
+}
+
+varargs string long() {  /* varargs ohne parameter ist komisch... */
+ string message;
+ message="Das ist eine kleine rosane Schachtel, die als Behaelter fuer "
+          "Knuddel dient.\n";
+ if (knuddel_text=="")
+   message+=break_string("Das Schriftfeld der Schachtel ist noch "
+     "unbeschriftet. Bevor Du einen Knuddel aus der Schachtel ziehen "
+     "kannst, musst Du das Schriftfeld beschriften.\n",77);
+ else
+   message+=break_string("Das Schriftfeld ist beschriftet, die Schachtel "
+      "enthaelt noch "+to_string(knuddel_zahl)+" Knuddel, die Du aus ihr "
+      "ziehen und dann verschenken kannst.",77);
+ return message;
+}
+
+varargs string short() {
+  if (knuddel_text!="")
+    return "Eine kleine Schachtel mit "+to_string(knuddel_zahl)+" Knuddel.\,";
+  else 
+    return "Eine kleine Schachtel mit Knuddel (unbeschriftet).\n";
+}
+
+int remove() {
+  if (is_clone(this_object())) {
+  write("Die leere Schachtel klappt auf, faltet sich geschickt zu einem "
+        "putzigen\nkleinen Origami-Papiervoegelchen und flattert leise "
+        "raschelnd davon.\n");
+  say(break_string(this_player()->Name(WESSEN)+" leere Knuddelschachtel "
+    "klappt auf, faltet sich geschickt zu einem putzigen kleinen Origami-"
+    "papiervoegelchen und flattert leise raschelnd davon.",77));
+  }
+  return ::remove();
+}
+
+nosave int cmdZiehe(string was) {
+  string ich;
+  object knuddel;
+  notify_fail("Was willst Du ziehen?\n");
+  if (!was) return 0;
+  notify_fail("Das klappt so irgendwie nicht.\n"
+       "Vorschlag: ziehe <was> aus <was>.\n");
+  if (sscanf(was,"knuddel aus %s",ich)!=1) return 0;
+  notify_fail("Daraus kannst Du leider nichts ziehen.\nAusser dem Schluss, "
+    "dass Du irgendetwas falsch machst.\n");
+  if ((!ich) || (!id(ich)))
+    return 0;
+  if (knuddel_text=="") { /* nicht mehr ueber notify_fails! */
+    write(break_string(
+      "Eine magische Kraft haelt Dich davon ab, einen Knuddel aus der "
+      "unbeschrifteten Schachtel zu ziehen. Hat sie ja auch Recht, die Kraft,"
+      " schliesslich willst Du mit den Knuddel ja auch eine Nachricht "
+      "uebermitteln, oder?",77));
+    return 1;
+  }
+  if (knuddel_zahl<=0) { /* sollte eigentlich NICHT! auftreten! */
+    write("Wie ging _DAS_ denn?!\nEgal, die Schachtel war leer oder sogar "
+      "mehr als das.\n");
+    remove();
+    return 1;
+  }
+  if (ich=catch(knuddel=clone_object(KNUDDEL))) {
+    write("*SEUFZ* Nicht doch schoooon wieder ein Bug. :-(\n" 
+      "Der Fehler ist anscheinend: "+ich+ /* :) */
+      "Erzaehle das bitte Anatol, damit er den Fehler korrigieren kann.\n");
+    return 1;
+  }
+  knuddel->setKnuddelText(knuddel_text);
+  knuddel->SetProp("schenker",getuid(this_player()));
+  knuddel->move(this_player(),M_NOCHECK); /* kein Gewicht, da darf man das. */
+  write(
+    "Du ziehst einen verpackten Knuddel aus der kleinen rosanen Schachtel,\n"
+    "uebrig bleiben "
+     +(--knuddel_zahl?"noch "+to_string(knuddel_zahl)+" Knuddel":
+     "keine Knuddel mehr")+", die auf ihren grossen Moment warten.\n");
+  say(this_player()->Name()+
+    " zieht einen verpackten Knuddel aus einer Schachtel.\n");
+  if (!knuddel_zahl) remove();
+  return 1;
+}
+
+nosave int cmdBeschrifte(string was) {
+  notify_fail("Was willst Du beschriften?\n");
+  if (!was) return 0;
+  notify_fail("Das kannst Du hier irgendwie nicht beschriften...\n");
+  if ((was!="schriftfeld")&&(was!="feld")) return 0;
+  notify_fail("Aber Du hast doch das Schriftfeld schon beschriftet!\n");
+  if (knuddel_text!="") return 0;
+  write(
+    "Du zauberst einen Stift hervor und beginnst, das Schriftfeld mit einer\n"
+    "Nachricht zu versehen. "
+    "Mit ** beenden, ~q bricht das Beschriften ab.\n");
+  nedit("fertigBeschriftet");
+  return 1;
+}
+
+nosave int fertigBeschriftet(string beschriftung) {
+  if ((!beschriftung) ||(beschriftung=="")) {
+    write("Du beschriftest das Schriftfeld doch noch nicht.\n");
+    return 1;
+  }
+  else {
+    write("Du pustest die Schrift noch schnell trocken - voila!\n");
+    say(break_string(this_player()->Name()+
+      " beschriftet das Schriftfeld einer Knuddelschachtel und pustet "
+      "das Geschriebene trocken.\n",77));
+    knuddel_text=beschriftung;
+    return 1;
+  } 
+}
+
+
+nosave string detailSchriftfeld() {
+  if (knuddel_text=="") 
+    return break_string(
+      "Das Schriftfeld ist leer. Bevor Du die Knuddel aus der Schachtel "
+      "ziehen kannst, musst Du erst noch das Schriftfeld beschriften. "
+      "Diese Nachricht wird dann irgendwie magisch auf die Knuddel in "
+      "der Schachtel uebergehen.\nUeberlege Dir gut, was Du schreiben willst, "
+      "denn Du kannst die Nachricht, einmal geschrieben, nicht wieder "
+      "aendern.",77,0,1);
+    else {
+     this_player()->More("Du hast das Schriftfeld schon beschriftet. "
+          "Darauf steht:\n" +knuddel_text);
+     return "";
+  }
+}
+
+nosave string liesSchriftfeld() {
+  if (knuddel_text=="")
+    return "Das Schriftfeld ist doch noch unbeschriftet!\n";
+  else {
+    this_player()->More(knuddel_text);
+    return "";
+  }
+}
+

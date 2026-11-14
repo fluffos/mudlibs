@@ -1,0 +1,536 @@
+/*
+//
+// Der Gildenmaster fuer die Bardengilde
+//
+// AnDyL@Silberland
+//
+// 1998-05-14
+//
+// Last updated: 2002-09-20
+*/ 
+
+#include <wizlevels.h>
+#include <language.h>
+#include <config.h>
+#include <new_skills.h>
+#include <properties.h>
+
+#include "/gilden/bardengilde/bardengilde.h"
+
+mixed saveload;
+nosave mapping bards=([ ]);
+nosave mapping top=([ ]);
+nosave string *number_one;
+nosave int *xp_per_level=XP_PER_LEVEL;
+create()
+{
+  if (is_clone(this_object())) 
+    {
+      destruct(this_object());
+      return 1;
+    }
+  seteuid(getuid(this_object()));
+  if (restore_object(MEMBERLIST))
+    bards=saveload;
+  if (restore_object(TOPLIST))
+    top=saveload;
+  saveload=0;
+  SetNumberOne();    
+}
+
+// HIER KANN MAN DIE FUNKTIONEN NICHT MEHR UEBERSCHREIBEN ;P
+
+nomask query_prevent_shadow() { return 1; }
+
+
+// ABFRAGEN OB JEMAND MIT DEM MASTER PFUSCHEN DARF ODER NICHT
+
+nosave int CheckIfAllowed()
+{
+ object ob;
+ string fname;
+ ob=previous_object();
+ fname=explode(file_name(ob), "#")[0];
+ if(getuid(ob)!="GUILD.bardengilde"  &&
+    getuid(ob)!="GUILD.barden_spells")
+   { 
+     if(find_player("andyl")) {
+       tell_object(find_player("andyl"), sprintf("Versuchte "
+       +"Aenderung im Gildenmaster von %s (direkt!)\n", CAP(getuid(ob))));
+     }
+     write_secure_log("Versuchte Aenderung im Gildenmaster "
+		      +"von "+CAP(getuid(ob))+" (direkt!)\n");
+     return 0;      
+   }
+ return 1;
+}
+
+// UMWANDELN EINES OBJECTS IN EINEN STRING
+
+nosave mixed object2string(mixed name) 
+{
+  if(objectp(name)) return getuid(name);
+  if(stringp(name)) return lower_case(name);
+  return 0;
+}
+
+// UMWANDELN EINES STRINGS IN EIN OBJECT
+
+nosave mixed string2object(mixed name) 
+{
+  if(objectp(name)) return name;
+  if(stringp(name))
+    {
+      if(name=find_player(name) || name=find_netdead(name)) return name;
+    }
+  return 0;
+}
+
+// BACKUP ERSTELLEN
+
+int DoBackup()
+{
+  if (!CheckIfAllowed()) return -2;
+  saveload=bards;
+  save_object(MEMBERBACKUP);
+  saveload=0;
+  rm (BACKUP("backup.log"));
+  write_file(BACKUP("backup.log"),
+             "Letztes Backup: "+dtime(time())+"\n");
+  return 1;
+}
+
+// BACKUP ZURUECKSPIELEN
+
+int DoRestore()
+{
+  if(!CheckIfAllowed()) return -2;
+  if(restore_object(MEMBERBACKUP))
+    save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+//   LEVEL AUFSTEIGEN 
+//   Format: ([Name:Stufe;xp;SpielerLevel;Tasks;Bardengruppe;Diverses1;Diverses2;]) 
+//                    0   1       2         3        4          5         6
+
+int AdvanceLevel(mixed pl) 
+{
+  int lev;
+  string pl_str;
+  if(!pl=string2object(pl)) return -1;
+  if(!CheckIfAllowed()) return -2;
+  pl_str=getuid(pl);
+  if(!member(bards, pl_str)) return -3;
+  lev=pl->QueryProp(P_GUILD_LEVEL);
+  bards[pl_str,0]=lev;
+  bards[pl_str,1]=(pl->QueryProp(P_XP))+pl->QueryProp(P_LOST_XP)+
+    xp_per_level[lev-1];
+  bards[pl_str,2]=pl->QueryProp(P_LEVEL);
+  saveload=bards;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+//   NEUES MITGLIED HINZUFUEGEN 
+//   Format: ([Name:Stufe;xp;SpielerLevel;Tasks;Bardengruppe;Diverses1;Diverses2;]) 
+//                    0   1       2         3        4          5         6
+
+int AddMember(mixed pl, int xp, int lvl) {
+  if(!pl=object2string(pl)) return -3;
+  if(member(bards, pl))
+    return 0;
+  if (!CheckIfAllowed()) return -2;
+  bards+=([pl:1;xp+xp_per_level[0];lvl;"";"";"";""]);
+  saveload=bards;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+//   MITGLIED LOESCHEN
+
+int DeleteMember(mixed pl) 
+{
+  if(!pl=object2string(pl)) return -1;
+  if(!CheckIfAllowed()) return -2;
+  if(!member(bards, pl))
+    return -3;
+  bards=m_delete(bards, pl);
+  saveload=bards;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+// SETZEN EINER AUFGABE
+
+int SetTask(object pl, int task)
+{
+ if(!pl || !objectp(pl) || task<1 || task>12) return -1;
+ if (!CheckIfAllowed()) return -2;
+ 
+ bards[getuid(pl), 3]=task;
+ bards[getuid(pl), 1]=pl->QueryProp(P_GUILD_LEVEL);
+ saveload=bards;
+ save_object(MEMBERLIST);
+ saveload=0;
+ return 1;
+}
+
+// LOESCHEN ALLER TASKS EINES SPIELERS
+
+int DeleteTask(object pl)
+{ 
+  if (!CheckIfAllowed()) return -2;
+  bards[getuid(pl), 3]="";
+  saveload=bards;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+// ALLE TASKS ANZEIGEN DIE EIN SPIELER ABSOLVIERT HAT
+
+mixed ViewTasks(object pl)
+{    
+  if (!CheckIfAllowed()) return -2;
+  return bards[getuid(pl), 3];
+}
+
+// ALLE MITGLIEDR DER BARDENGILDE ANZEIGEN
+
+mixed QueryMembers()
+{
+  return m_indices(bards);
+}
+
+// ABFRAGEN OB EIN SPIELER UEBERHAUPT MITGLIED IST
+
+int IsMember(mixed pl)
+{
+  if(!member(bards, pl)) return -1;
+  else return 1;
+}
+
+// WELCHER GRUPPE GEHOERT DER/DIE BARDE/IN AN?
+
+string GetBardGroup(mixed pl)
+{
+  string bardgroup;
+  if(!pl=object2string(pl)) return ""; 
+  if(!member(bards, pl)) return "";
+  return bardgroup=bards[pl, 4];
+}
+
+// BARDENGRUPPE FUER EINEN SPIELER SETZEN
+
+int SetBardGroup(mixed pl, string group)
+{
+  if(!pl=object2string(pl)) return -1;
+  if(!member(bards, pl)) return -1;
+  if (!CheckIfAllowed()) return -2;
+  if(!(group=="alestra" || group=="tirena" || group=="korriax" || group=="sarrian")) return -3;
+  bards[pl, 4]=group;
+  saveload=bards;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1; 
+}
+
+// LEVELS UPDATEN
+
+int UpdateMemberLevels() 
+{
+  int i;
+  object pl;
+  string *names;
+  names=m_indices(bards);
+  for(i=sizeof(names)-1; i>=0;i--) 
+    {
+      if((pl=find_player(names[i]))||(pl=find_netdead(names[i])))
+	bards[names[i], 1]=pl->QueryProp(P_GUILD_LEVEL);
+    }
+  saveload=bards;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+// ABFRAGEN EINER AUFGABE
+
+int CheckTask(object pl, int task)
+{
+  if(!pl || task<1 || task>12) return -1;
+  if ((bards[getuid(pl), 3]) >= task) return 1;
+  else return 0; 
+}
+
+// UEBERPRUEFEN DER VORHERGEHENDEN TASKS
+
+int CheckPreviousTasks(object pl, int task_number)
+{
+  int i;
+  if(!pl || task_number<1 || task_number>12) return -1;
+  for(i=task_number-1;i>=1;i--) 
+    {
+      if(!bards[getuid(pl), i]) return 0;
+    }
+  return 1;
+}
+
+int CheckXp(object pl, int cur_xp)
+{
+  if(!pl || !cur_xp) return -1;
+  if(bards[getuid(pl), 1] > cur_xp)
+    return 0;
+  else return 1;
+}
+
+int GetXpDifference(object pl, int cur_xp)
+{
+  if(!pl) return -1;
+  return bards[getuid(pl), 1]-cur_xp;
+}
+
+int SetXp(object pl, int needed_xp)
+{
+  if(!pl || !needed_xp) return -1;
+  if (!CheckIfAllowed()) return -2;
+  bards[getuid(pl), 1]=needed_xp;
+  saveload=bards;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+// DEN BESTEN HERAUSFILTERN UND IN EINER VARIABLE SPEICHERN
+
+int SetNumberOne()
+{
+  int i, *topratings, bestrating;
+  bestrating=0;
+  topratings=m_indices(top);
+  for(i=sizeof(topratings)-1;i>=0;i--)
+    if(topratings[i]>bestrating) bestrating=topratings[i];
+  number_one=top[bestrating];
+  return 1; 
+}
+
+
+// DEN BESTEN AUSGEBEN
+mixed QueryNumberOne()
+{
+  return number_one;
+}
+
+
+// BERECHNUNG DER WERTUNG
+int CalculateRating(string player, int rating, int stufe)
+{
+  int last;
+  float mod;
+  object pl;
+  rating+=2*stufe;
+  //tell_andyl(sprintf("Name: %s, Rating: %d", player, rating));
+  if(pl=find_player(player) || pl=find_netdead(player))
+    last=pl->QueryProp(P_LAST_LOGIN);
+  else
+    last=call_other(SAVEMASTER, "QueryFileProp", player, P_LAST_LOGIN);
+  if((time()-1728000)>last) {         // 3600*24*20 = 20 tage
+   mod=1-((time()-1728000-last)/86400)*0.05;
+   if((rating=(int)(rating*mod))<0) rating=1;
+  }
+  //tell_andyl(sprintf(", Rating.mod: %d\n", rating));
+  return rating;
+}
+
+
+// FUERS AUSTRETEN -> RAUS AUS DER TOPLISTE
+
+int DeleteTopEntry(string player)
+{
+  int *topratings, i; 
+  string *topnames;
+  if (!CheckIfAllowed()) return -2;
+  topnames=m_values(top);
+  topratings=m_indices(top);
+  for(i=sizeof(topnames)-1;i>=0;i--) 
+    if(member(topnames[i], player)!=-1) 
+      top[topratings[i]]-=({player});
+  saveload=top;
+  save_object(TOPLIST);
+  return 1;
+}
+
+// TOPLISTE UPDATEN
+
+int UpdateTopList()
+{
+  string *names, *topnames;
+  int rating, i, j, *topratings, test;
+  object pl;
+  names=m_indices(bards);
+  topnames=m_values(top);
+  topratings=m_indices(top);
+  if((i=sizeof(names))>100) i=100;
+  for(i=i-1;i>=0;i--) {
+    rating=0;
+    if(query_wiz_level(names[i])<3) {
+      if(((pl=find_player(names[i]))||(pl=find_netdead(names[i]))) &&
+	 !pl->QueryProp(P_TESTPLAYER))
+	rating=CalculateRating(names[i], pl->QueryProp(P_GUILD_RATING), 
+			       pl->QueryProp(P_LEVEL));
+      else 
+	{
+	  if(call_other(SAVEMASTER, "QueryFileProp", names[i], 
+			P_TESTPLAYER)==0)
+	    rating=CalculateRating(names[i],
+				   call_other(SAVEMASTER, "QueryFileProp", names[i], 
+					      P_GUILD_RATING), 
+				   call_other(SAVEMASTER, "QueryFileProp", names[i], 
+					      P_LEVEL));
+	}
+    }
+    if(rating) 
+      {
+	for(j=sizeof(topnames)-1;j>=0;j--) 
+	  if(member(topnames[j], names[i])!=-1) 
+	    {
+	      top[topratings[j]]-=({names[i]});
+	    }     
+	if(!member(top, rating)) 
+	  {
+	    top+=([rating:({names[i]})]);
+	  }
+	else top[rating]+=({names[i]});
+      }
+  }
+  for(i=sizeof(m_indices(top))-1;i>=0;i--) {
+    if(!sizeof(m_values(top)[i]))
+      top=m_delete(top, m_indices(top)[i]);
+  }
+  saveload=top;
+  save_object(TOPLIST);
+  return 1;   
+}
+
+
+// TOPLISTE IN FILE 'toplist.read' SCHREIBEN, AUSGABE UEBER 'more'
+
+int MakeReadList()
+{
+  int *arm, i, j, tabs, stufe, nummer;
+  float best, fac;
+  string name, group;
+  rm(REALTOPLIST);
+  rm(ALESTRATOPLIST);
+  rm(TIRENATOPLIST);
+  rm(SARRIANTOPLIST);
+  rm(KORRIAXTOPLIST);
+  nummer=1;
+  
+  write_file(REALTOPLIST, "        Name\t\tGzweig\tGstufe\tWertung "
+	     +"(Nr.1=100)\n");
+  write_file(REALTOPLIST, "-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-="
+	     +"-=-=-=-=-=-=-=-=-=-=\n");
+
+  write_file(ALESTRATOPLIST, "        Name\t\tGzweig\tGstufe\tWertung "
+	     +"(Nr.1=100)\n");
+  write_file(ALESTRATOPLIST, "-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-="
+	     +"-=-=-=-=-=-=-=-=-=-=\n");
+  
+  write_file(TIRENATOPLIST, "        Name\t\tGzweig\tGstufe\tWertung "
+	     +"(Nr.1=100)\n");
+  write_file(TIRENATOPLIST, "-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-="
+	     +"-=-=-=-=-=-=-=-=-=-=\n");
+  
+  write_file(SARRIANTOPLIST, "        Name\t\tGzweig\tGstufe\tWertung "
+	     +"(Nr.1=100)\n");
+  write_file(SARRIANTOPLIST, "-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-="
+	     +"-=-=-=-=-=-=-=-=-=-=\n");
+  write_file(KORRIAXTOPLIST, "        Name\t\tGzweig\tGstufe\tWertung "
+	     +"(Nr.1=100)\n");
+  write_file(KORRIAXTOPLIST, "-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-="
+	     +"-=-=-=-=-=-=-=-=-=-=\n");
+  
+  arm=sort_array(m_indices(top), #'>); //');
+  for(i=sizeof(arm)-1;i>=0;i--) {
+    if(arm[i]) {
+      if(i==sizeof(arm)-1)
+	best=(float)arm[i];
+      for(j=sizeof(top[arm[i]])-1;j>=0;j--) {
+	name=CAP(top[arm[i]][j]);
+	fac=(float)(arm[i]/best)*100;
+	group=capitalize(bards[lower_case(name), 4]);
+	tabs=2-(int)(strlen(name)/8);
+	stufe=bards[lower_case(name), 0];
+	if(arm[i]==1)
+	  {
+	    
+	    if (group=="Alestra")
+	      {
+		write_file(ALESTRATOPLIST, sprintf("%2d.\t%s%*'\t's%s\t%2d\t  -.---\n",
+						   nummer, name, tabs, "", group, stufe)); 
+	      }
+	    
+	    if (group=="Tirena")
+	      {
+		write_file(TIRENATOPLIST, sprintf("%2d.\t%s%*'\t's%s\t%2d\t  -.---\n",
+						  nummer, name, tabs, "", group, stufe)); 
+	      }
+	    
+	    if (group=="Sarrian")
+	      {		
+		write_file(SARRIANTOPLIST, sprintf("%2d.\t%s%*'\t's%s\t%2d\t  -.---\n",
+						   nummer, name, tabs, "", group, stufe)); 
+	      }
+	    
+	    if (group=="Korriax")
+	      {
+		write_file(KORRIAXTOPLIST, sprintf("%2d.\t%s%*'\t's%s\t%2d\t  -.---\n",
+						   nummer, name, tabs, "", group, stufe)); 
+	      }
+	    
+	    write_file(REALTOPLIST, sprintf("%2d.\t%s%*'\t's%s\t%2d\t  -.---\n",
+					    nummer, name, tabs, "", group, stufe)); 
+	  }
+	else 
+	  {
+	    if (group=="Alestra")
+	      {
+		write_file(ALESTRATOPLIST, sprintf("%2d.\t%s%*'\t's%s\t%2d\t%7.3f\n", 
+						   nummer, name, tabs, "", group, stufe, fac));
+	      }
+	    if (group=="Tirena")
+	      {
+		write_file(TIRENATOPLIST, sprintf("%2d.\t%s%*'\t's%s\t%2d\t%7.3f\n", 
+						  nummer, name, tabs, "", group, stufe, fac));
+	      }
+	    if (group=="Sarrian")
+	      {
+		write_file(SARRIANTOPLIST, sprintf("%2d.\t%s%*'\t's%s\t%2d\t%7.3f\n", 
+						   nummer, name, tabs, "", group, stufe, fac));
+	      }
+	    if (group=="Korriax")
+	      {
+		write_file(KORRIAXTOPLIST, sprintf("%2d.\t%s%*'\t's%s\t%2d\t%7.3f\n", 
+						   nummer, name, tabs, "", group, stufe, fac));
+	      }
+	    
+	    write_file(REALTOPLIST, sprintf("%2d.\t%s%*'\t's%s\t%2d\t%7.3f\n", 
+					    nummer, name, tabs, "", group, stufe, fac));
+	    nummer++;
+	    
+	  }
+      }
+    }
+  }
+  return 1;
+}
+
+
+
+

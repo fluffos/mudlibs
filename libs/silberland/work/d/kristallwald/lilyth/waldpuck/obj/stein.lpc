@@ -1,0 +1,205 @@
+//=========================================================================
+// File: stein.c
+// Project: Waldpuck (Tethyrwald)
+//
+// Created by Lilyth (2004)
+//=========================================================================
+
+#include "../def.h"
+
+inherit "std/thing";
+
+//--Variablen&Defines------------------------------------------------------
+
+int paralyze (int zeit, object player);
+
+//--Create-----------------------------------------------------------------
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+//--Initialisierungen------------------------------------------------------
+
+  call_out("remove", 120+random(300));
+
+//--Beschreibungen---------------------------------------------------------
+
+//SetProp(P_SHORT, ""); -> wird im Waldpuck gesetzt
+  SetProp(P_LONG, "Ein kleiner, scharfkantiger Stein, der Dich beim Laufen "
+  "staendig in die blanke Fusssohle piekst.");
+
+  AddDetail( ({ "laufen", "fuss" }),
+    "Ganz vorsichtig setzt Du einen Fuss vor den anderen.");
+
+  AddDetail( ({ "fusssohle", "fussohle", "sohle" }),
+    "Sie fuehlt sich schon ganz wund an.");
+
+//--Namen------------------------------------------------------------------
+
+  SetProp(P_NAME, "Stein");
+  SetProp(P_GENDER, MALE);
+  AddId( ({"\nstein", "stein"}) );
+
+//--Eigenschaften----------------------------------------------------------
+
+  SetProp(P_MATERIAL, MAT_MISC_STONE);
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+
+//--Tod--------------------------------------------------------------------
+
+  SetProp(P_KILL_NAME, "Ein scharfkantiger Stein");
+
+//--Kommandos--------------------------------------------------------------
+
+  AddCmd( ({ "schuettel", "schuettl", "schuettele", "schuettle" }), "schuetteln" );
+
+//--Create Ende------------------------------------------------------------
+
+}
+
+//--Funktionen-------------------------------------------------------------
+
+//Stein aus Stiefel schuetteln
+int schuetteln(string str)
+{
+  string was, wer;
+  object *schuhe;
+  schuhe = TP->QueryArmours(AT_BOOT);
+  
+  if(!sizeof(schuhe))
+  {
+      remove(); 
+      return -1;
+  }
+
+  notify_fail("WAS willst Du WO herausschuetteln?\n");
+
+  if(!str || str == "")
+  {
+      return (notify_fail ("WAS willst Du WO herausschuetteln?\n"),0);
+  }
+
+  //Syntaxcheck
+  if( (sscanf(str, "%s aus %s heraus", was, wer) == 2 && schuhe[0]->id(wer)) ||
+      (sscanf(str, "%s aus %s raus", was, wer) == 2 && schuhe[0]->id(wer)) ||
+      (sscanf(str, "%s aus %s aus", was, wer) == 2 && schuhe[0]->id(wer)) ||
+      (sscanf(str, "%s aus %s hinaus", was, wer) == 2 && schuhe[0]->id(wer)) ||
+      (sscanf(str, "%s aus %s", was, wer) == 2 && schuhe[0]->id(wer)) )
+  {
+      write(BS("Du schuettelst "+schuhe[0]->Name(WEN)+" kraeftig aus und "
+      +"ein kleiner Stein faellt heraus.\n"));
+
+      ENV(TP)->Message(BS(TP->Name(WER, 1)+" schuettelt "
+      +schuhe[0]->Name(WEN)+" aus."), MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+      
+      remove();
+      return 1;
+  }
+  
+  return 0;
+}
+
+
+int remove()
+{
+  object player;
+  object *schuhe;
+  mixed res;
+  
+  if(!is_clone(TO)) return ::remove();
+  
+  player = ENV(TO);
+  
+  if(player)
+  {
+    schuhe = player->QueryArmours(AT_BOOT);
+  }
+  
+  if(!sizeof(schuhe)) return ::remove();
+     
+  if(res=player->QueryProp(P_TMP_MOVE_HOOK))
+  {
+      if ( pointerp(res) && sizeof(res) >= 3
+           && intp(res[0]) && time() < res[0]
+           && objectp(res[1]) && stringp(res[2]) )
+      {
+           if (res[1] == TO)
+           {
+                player->SetProp(P_TMP_MOVE_HOOK, 0);
+           }
+      }
+  }
+
+  tell_object(player, BS("Endlich bekommst Du den Stein aus "
+  +schuhe[0]->Name(WEM)+" heraus.\n"));
+
+  return ::remove();
+}
+
+void init()
+{
+  mixed res;
+  ::init();
+
+  if(!TP) remove();
+
+  if(res=TP->QueryProp(P_TMP_MOVE_HOOK))
+  {
+    if ( pointerp(res) && sizeof(res) >= 3
+         && intp(res[0]) && time() < res[0]
+         && objectp(res[1]) && stringp(res[2]) )
+    {
+      remove();
+      return 0;
+    }
+  }
+  
+  TP->SetProp(P_TMP_MOVE_HOOK, ({time()+999, TO, "freeze_in_place"}) );
+  return;
+}
+
+//Hilfsfunktion fuer Move_Hook
+string freeze_in_place()
+{
+  string text;
+
+  if(!TP) return 0;
+
+  switch(random(3))
+  {
+    case 1:
+      text = "\nDer kleine Stein piekst Dich schmerzhaft in den Fuss!\n\n";
+      break;
+    case 2:
+      text = "\nAutsch! Vielleicht solltest Du versuchen, den Stein "
+      +"da herauszuschuetteln.\n\n";
+      break;
+    default:
+      text = "\nDer kleine Stein sticht Dich beim Laufen in die Fusssohle.\n\n";
+      break;
+  }
+
+  tell_object(TP, break_string(text, 78,0,1));
+  TP->do_damage(5+random(10));
+  return 0;
+}
+
+void BecomesNetDead(object player)
+{
+  remove(); 
+  return;
+}
+
+void NotifyPlayerDeath(object player, object killer, int lost_xp)
+{
+  remove(); 
+  return;
+}

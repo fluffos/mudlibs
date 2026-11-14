@@ -1,0 +1,82 @@
+/*
+ * Erzpfeil
+ *
+ *
+ * Kosten: 
+ * Level : 2
+ * Objekte:
+ * Damage:
+ *
+ */
+
+int erzpfeil(object caster, mapping sinfo) 
+{
+  object victim, ob;
+  string vn, vnw, cn, resist_txt;
+  int suc, dam;
+  mapping resists;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Nach wem willst Du einen Erzpfeil werfen?\n");
+  if (!victim)
+    return 0;
+  
+  sinfo=DoSpellModification(ERZ, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  if ((suc=SpellSuccess(caster,sinfo))<=0)
+    return MISSERFOLG;
+  
+  dam=sinfo[SI_SKILLDAMAGE]+
+    5*suc*(caster->QueryProp(P_GUILD_LEVEL))/MAX_ABILITY; 
+  dam=(dam/2)+random(dam/2);
+  
+  cn = caster->name();
+  vnw = victim->name(WEN, 2);
+  say(BS(sprintf("%s feuert einen elementaren Erzpfeil auf %s ab.\n",cn, vnw)),
+    victim);
+  write_color(BS("Du feuerst einen elementaren Erzpfeil auf "+vnw+" ab."), 
+    ERZ, caster, 1);
+  tell_object(victim,sprintf("%s feuert einen elementaren "
+              +"Erzpfeil auf Dich ab.\n",cn));
+  TryAttackSpell(victim,dam, sinfo[SI_SKILLDAMAGE_TYPE], 
+      ([SP_NAME:"erzpfeil", SP_SHOW_DAMAGE:1, SP_REDUCE_ARMOUR: 
+       ([P_BODY: 101-sinfo[SI_SKILLABILITY]/100])]), caster, sinfo );
+
+  if(victim && suc > 10000 && !random(3) &&
+      !present("\n"+ERZ+"pfeil_enhance", victim)) 
+  {
+    ob=clone_object(OBJ("arrow_special"));
+    ob->move(victim, M_NOCHECK);
+    ob->SetVariables(caster,ERZ, victim);
+  }
+  else if(objectp(victim) && victim->QueryProp(P_TMP_DRUID_RESISTANCE_PROCC) || victim && sinfo[SI_SKILLABILITY] == MAX_ABILITY && suc > 7000 &&
+      !present(DRUIDEN_RESIST_MOD, victim) )
+  {
+    if( !mappingp(resists=victim->QueryProp(P_RESISTANCE_STRENGTHS)) ||
+        (1.0*(resists[DT_AIR]))<=0.1 )
+    {
+      ob=clone_object(OBJ("resist"));
+      ob->move(victim, M_NOCHECK);
+      ob->SetVariables(caster,ERZ, victim, suc);
+      resist_txt = BS(victim->Name(WER)+" wird von einer steinernen Aura umhuellt "
+            "und ist jetzt anfaelliger gegen Luft.");
+      write_color(resist_txt, ERZ, caster, 1);
+      environment(caster)->Message(resist_txt, MSGFLAG_VISUAL, 
+                    ([MSGFLAG_EXCLUDE: ({caster})]) );
+
+      victim->SetProp(P_TMP_DRUID_RESISTANCE_PROCC, 0);
+    }
+  }
+
+  if(objectp(victim)) {
+    smashSpellResistance(caster, victim, suc);
+    petrify(caster, victim, suc);
+  }
+
+  return ERFOLG;
+}

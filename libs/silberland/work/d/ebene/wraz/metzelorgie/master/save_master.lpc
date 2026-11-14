@@ -1,0 +1,89 @@
+// save_master
+// regelt das speichern der bling objekte der spieler (schlachtfeld)
+
+#include "../def.h"
+
+#define BLING_SAVE ZONE "save/save_bling"
+
+mapping save;
+int last_backup=0;
+
+void create()
+{
+  if(is_clone(TO))
+  {
+    destruct(TO);
+    return;
+  }
+  seteuid(getuid(this_object())); // fuer zugriff auf dateien benoetigt
+
+  save=allocate_mapping(10,1); // bug? beim haendischen laden mit "Update"
+                               //  gehen die daten aus BLING_SAVE verloren!
+  restore_object(BLING_SAVE);
+  seteuid(getuid(TO));
+
+  return;
+}
+
+int save_bling(string player,int value)
+{
+  object pl;
+
+  player=lower_case(player);
+  if(!player||player=="") return 0;
+  if(!save||save==([])) restore_object(BLING_SAVE);
+  if(member(m_indices(save),player)==-1) save+=([player: 0]);
+
+  write_file(LOG "bling.collectors", // Bling Sammelwert loggen
+       dtime()+" "+player+": "+value+"\n");
+
+  save[player]+=value;
+
+  // Prop im Player, die den Pfad etwas erleichtert (wird in pfadnpc.c abgefragt)
+  if(pl=find_player(player))
+    pl->SetProp("temp_bling",pl->QueryProp("temp_bling")+value);
+
+  return save[player];
+}
+
+int query_bling(string player)
+{
+  player=lower_case(player);
+  if(!player||player=="") return 0;
+  if(!save||save==([])) restore_object(BLING_SAVE);
+  return save[player];
+}
+
+void do_save()
+{
+  if(last_backup < time()-604800) // backup jede Woche
+  {
+    save_object(ZONE "save/bkp/save_bling_bkp_"+to_string(time()));
+    last_backup = time();
+  }
+  save_object(BLING_SAVE);
+}
+
+mapping query_save()
+{
+  return save;
+}
+
+void reset()
+{
+  if(!read_file(ZONE "master/save_master.lpc")) return;
+  do_save();
+}
+
+int remove()
+{
+  if(is_clone(TO)) {
+    destruct(TO);
+    return 1;
+  }
+
+  // nochmal speichern vor dem destruct
+  save_object(BLING_SAVE);
+  destruct(TO);
+  return 1;
+}

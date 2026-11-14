@@ -1,0 +1,202 @@
+/*
+  Die heilige Muuuerspinne im Schrein "Die Kinder Lloths
+  
+  tyron, Juni 2001 
+*/
+
+#pragma strong_types;
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>  // fuer die damage types
+#include <guard.h>
+#include <new_skills.h>
+#include <class.h>
+
+#include "../def.h"
+
+inherit "std/npc";
+
+/*
+  Liste der hochgradigen Spieler, die den Geist bereits einmal 
+  angegriffen haben
+*/
+nosave string *angreifer;  
+
+nosave private void loesche_angreifer(string enemy)
+{
+  if(member(angreifer, enemy)>=0)
+    angreifer-=({enemy});
+}
+
+void create()
+{
+  if(!is_clone(ME)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Die \"heilige\" Spinne");
+  SetProp(P_LONG,
+	  BS("Die Spinne ist wunderschoen. Ihre seidigschwarze Behaarung "
+	     "ist mit Gold gesprenkelt, ihre vier Augen schimmern wie "
+	     "kostbare Juwelen. Ein wahrhaft edles Exemplar von Lloths "
+	     "Kindern, dessen anmutige Groesse Euch Bewunderung und "
+	     "Respekt abnoetigt.")+
+	  BS("Sie mustert Euch herablassend, und Ihr spuert die Macht "
+	     "der Goettin, die in diesem Wesen ruht. Es waere gewiss "
+	     "ein guter Gedanke, Eure Ergebenheit der Goettin gegenueber "
+	     "durch ein Futteropfer zu beweisen."));
+
+  SetProp(P_NAME, "Spinne");
+  SetProp(P_NAME_ADJ, "heilig");
+  SetProp(P_GENDER, FEMALE);
+  AddId(({"spinne","heilige spinne","mutterspinne","NOWIMPY","NOCONTROL"}));
+  AddAdjective("grosse");
+
+  create_default_npc(45);
+  SetProp(P_XP, 0);
+  SetProp(P_ALIGN, -1000); /* Diese Spinne ist ein Avatar Lloths... */
+  SetProp(P_HANDS, 
+	  ({" mit ihren maechtigen Beissern", 900, ({DT_POISON, DT_RIP})}));
+  
+  SetProp(P_RACE, "Spinne");
+  SetProp(P_SIZE, 100);
+  SetProp(P_WEIGHT, 45000); // 45 kg
+
+  SetGuardProtection(100, GUARD_LOCATION);
+
+  AddDetail(({"haare","Behaarung"}),
+     "Die Haare der Spinne sind seidigschwarz, golden gesprenkelt und"
+     " wunderbar weich und geschmeidig.");
+
+  AddDetail(({"augen","juwelen"}),
+     "Ihre vier Augen schimmern wie kostbare Juwelen. Sie beobachten euch"
+     " herablassend.");
+
+  AddDetail(({"exemplar","groesse"}),
+     "Diese Spinne reicht Euch bis ueber die Knie.");
+
+  angreifer=({});
+}
+
+// ----- Bei einem Angriff auf die Spinne wird der Angreifer getoetet.
+int Defend(int dam, mixed dam_type, mixed spell, object enemy)
+{
+  string uid_enemy;
+  
+  if(!IsEnemy(enemy))
+  {
+    uid_enemy=getuid(enemy);
+    
+    if(member(angreifer, uid_enemy)==-1)
+    {
+      tell_object(enemy,
+		  BS("Ihr wollt doch nicht wirklich diese Verkoerperung "
+		     "Lloths angreifen? Die Konsequenzen waeren fuer Euch "
+		     "hier, an diesem Ort, absolut toedlich..."));
+
+      angreifer+=({uid_enemy});
+      
+      call_out("loesche_angreifer", 120, uid_enemy);
+    }
+    else
+      {
+	loesche_angreifer(uid_enemy);
+
+	tell_object(enemy,
+		    BS("Du stellst mit Entsetzen fest, dass dies der "
+		       "letzte Fehler deines armseligen Lebens war.")+
+		    BS("Von allen Seiten stuerzen sich tausende kleiner "
+		       "Spinnen auf dich, krabbeln in deine Kleidung und "
+		       "deine Ruestung, in deinen Mund, deine Nase und "
+		       "deine Ohren, beissen Dich. Ihr Gift laehmt Dich, "
+		       "Du kannst dich nicht mehr bewegen, stuerzt zu "
+		       "Boden..."));
+
+	say(BS("Von allen Seiten stuerzen sich tausende kleiner Spinnen auf "+
+	       enemy->Name(WEN)+" ein."), ({enemy}));
+
+	enemy->SetProp(P_PARALYZED,
+		       ([ 
+			 PARALYZE_TIME:       15, // 10 Heartbeats = 20 s
+			 PARALYZE_MSG:       "Das Spinnengift laehmt dich\n",
+			 PARALYZE_MSG_OTHER: "Das Spinnengift laehmt %s\n" ]) );
+	call_out("kill_1", 4, enemy);
+	enemy->StopHuntFor(ME, 1);
+	enemy->AddPoison(2);
+	enemy->AddHp(-10-random(5));
+	enemy->AddHp(-10-random(5));
+	enemy->AddHp(-10-random(5));
+	enemy->AddHp(-10-random(5));
+	enemy->AddHp(-10-random(5));
+      }
+    
+    enemy->StopHuntFor(ME,1);
+    return 0;
+  }
+  else  // duerfte eigentlich gar nicht vorkommen...
+    return ::Defend(dam/2, dam_type, spell, enemy);
+}
+
+void kill_1(object enemy)
+{
+  if((!objectp(enemy)) || !interactive(enemy)) return;
+
+  if(enemy->QueryProp(P_GHOST)) return;
+
+  if(!present(enemy, MENV)) enemy->move(MENV, M_NOCHECK);
+
+  tell_object(enemy,
+	      BS("Heftiger Schmwerz durchjagt nun Deinen Koerper. Das Gift "
+		 "zeigt seine Wirkung, beendet Dein armseliges, nutzloses "
+		 "Leben."));
+  say(BS(enemy->Name(WER)+" stuerzt zu Boden. Ihr seht, wie "+
+	 enemy->QueryPronoun(WER)+" immer schwaecher wird, das Gift der "
+	 "Spinnen "+enemy->QueryPronoun(WEN) + " langam toetet."), ({enemy}));
+  
+  enemy->AddPoison(2);
+  enemy->Defend(300, ({DT_POISON}), ([SP_SHOW_DAMAGE:1,SP_NO_ENEMY:1]), ME);
+  enemy->AddHp(-10-random(5));
+  enemy->AddHp(-10-random(5));
+  enemy->AddHp(-10-random(5));
+  enemy->AddHp(-10-random(5));
+  enemy->AddHp(-10-random(5));
+  
+  call_out("kill_2", 4, enemy);
+}
+
+void kill_2(object enemy)
+{
+  if((!objectp(enemy)) || !interactive(enemy)) return;
+  
+  if(enemy->QueryProp(P_GHOST)) return;
+  
+  if(!present(enemy, MENV)) enemy->move(MENV, M_NOCHECK);
+  
+  write(BS("Agonie! Du kannst Dich nicht ruehren, die Spinnen "
+	   "klettern ueber Deinen Koerper, wimmeln durch Deinen Mund und "
+	   "das Leben entweicht unaufhaltsam aus Dir."));
+  
+  say(BS(enemy->Name(WER)+" ist voellig unter Spinnen begraben. Ihr seht "
+	 "hilflos zu, wie "+enemy->QueryPronoun(WER)+" stirbt."),
+      ({enemy}));
+  
+  enemy->Defend(800, ({DT_POISON}), ([SP_SHOW_DAMAGE:1,SP_NO_ENEMY:1]), ME);
+  
+  call_out("kill_3", 4, enemy);
+}
+
+void kill_3(object enemy)
+{
+  if((!objectp(enemy)) || !interactive(enemy)) return;
+  
+  if(enemy->QueryProp(P_GHOST)) return;
+  
+  if(!present(enemy, MENV)) enemy->move(MENV, M_NOCHECK);
+
+  say(BS("Es ist vorbei fuer "+enemy->Name(WEN)+"."), ({enemy}));
+  
+  enemy->AddPoison(10);
+  enemy->SetProp(P_HP, 1);
+
+}
+

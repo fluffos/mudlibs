@@ -1,0 +1,555 @@
+
+/*
+ * Vrai's Freundschaftsband
+ * ---
+ * 21 Mai 98: Eros: Invismagier nicht mehr erkennbar
+ * 16 Dec 97: Stahldorn: Extralook erneut geaendert.
+ *                       Befehl "freport" eingefuehrt, ID "fband" hinzugefuegt.
+ * 15 Dec 97: Stahldorn: extralook geaendert, Befehl "freundliste" eingefuehrt.
+ * 14 Oct 97: Unsichtbare Mag's nimmer anzeigen, Umbruch bei '...sind im Spiel'
+ *  6 Oct 97: Feyaria: fwer ort uebersichtlicher
+ * 30 Jun 98: Woody: Invis Mags fuer Magier in Klammern bei '...sind im Spiel'
+ *  3 Aug 98: Woody: 'fwer weg'
+ * 26 Aug 98: Woody: 'fwer weg' verbessert
+ * 21 Oct 98: Woody: Freundschaft schliessen sieht man ab nun im Raum
+ * 19 Mai 99: Zordan: Diverse Typofixes (_D_u, _D_ich, _D_ein uswusf.)
+ *  8 Mar 00: Feyaria: keine Ortstbestimmung von Magiern durch Spieler
+ */
+
+inherit "/std/thing";
+
+#include <properties.h>
+#include <combat.h>
+#include <moving.h>
+#include <wizlevels.h>
+#include <thing/properties.h> 
+
+#define BANDID "\n\bfband"
+#define BANDFILENAME "/obj/fband.lpc"
+#define FMASTER "/players/woody/fband/fmaster.lpc"
+#define FILENAME(x) explode(file_name(x),"#")[0]
+#define P_FRIENDS "friends"
+
+private nosave object angebot;
+private nosave string *Freunde;
+private nosave int getragen;
+private nosave int logon;
+
+void create()
+{
+  if (! is_clone(this_object())) return;
+  ::create();
+  SetProp(P_NAME,"Freundschaftsband");
+  SetProp(P_SHORT,"Ein Freundschaftsband");
+  SetProp(P_WEIGHT,0);
+  SetProp(P_NEVERDROP,1);
+  SetProp(P_NODROP,1);
+  SetProp(P_VALUE,0);
+  SetProp(P_LONG,"Ein kleines geflochtenes Freundschaftsband.\n"+
+                 "Es wird am Handgelenk getragen.\n"+
+		  "Mit 'hilfe freundschaftsband' bekommst Du Hilfe ueber das Band.\n");
+  SetProp(P_SHOW_INV, 0);
+  AddId(({"fband", "band","freundschaftsband",BANDID}));
+  AddCmd(({"biete","biet"}),"bieten");
+  AddCmd( ({"verachte","veracht"}),"verachten");
+  AddCmd( ({"fwer"}),"fwer");
+  AddCmd( ({"frufe","fruf"}),"frufen");
+  AddCmd( ({"fknuddle","fknuddl","fknuddlen","fknuddel","fknuddeln"}),"fknuddlen");
+  AddCmd( ({"fwink","fwinke"}), "fwinken");
+  AddCmd( ({"femote"}), "femote");
+  AddCmd( ({"freundliste"}), "freundliste");
+  AddCmd( ({"freport"}), "freport");
+  AddCmd( ({"hilfe"}), "helfen");
+  Freunde=({});
+  logon=time();
+}
+
+int remove()
+{
+  if (logon)
+    FMASTER->OverAndOut(getuid(environment()),logon,time());
+  return ::remove();
+}
+
+int IsFriend(string str)
+{
+  if (! pointerp(Freunde)) return 0;
+  return member(Freunde,str)!=-1;
+}
+
+mixed _query_autoloadobj()
+{
+  if (! environment()) return 0;
+  environment()->SetProp(P_FRIENDS,Freunde);
+  environment()->Set(P_FRIENDS,SAVE,F_MODE_AS);
+  if (sizeof(Freunde))
+	return 1;
+  return 0;
+}
+
+string *_set_autoloadobj(mixed f)
+{int i;
+ object pl,b;
+ string *s,si;
+ if (intp(f)) 
+   {
+	 f=environment()->QueryProp(P_FRIENDS);
+	 if (! pointerp(f)) f=({});
+   }
+ s=({});
+ for (i=sizeof(f)-1;i>-1;i--)
+   {
+	 if ((pl=find_player(f[i])) &&
+             (!pl->QueryProp(P_INVIS) || IS_LEARNER(environment())) )
+	   {
+		 if (! (b=present(BANDID,pl)) || ! b->IsFriend(getuid(environment())))
+		   {
+			 tell_object(environment(),"Irgendetwas ist mit der Freundschaft zu "+capitalize(f[i])+" vorgefallen.\n");
+			 f[i]=0;
+		   }
+		 else
+		   {
+			 s += ({ pl->QueryProp(P_INVIS) ?
+                 "("+capitalize(f[i])+")" : capitalize(f[i]) });
+		   }
+	   }
+   }
+ si=environment()->CountUp(map_array(s,#'capitalize)); //'));
+ if (stringp(si)) 
+   tell_object(environment(),
+       break_string(si+" "+(sizeof(s)>1?"sind":"ist")+" im Spiel.",78));
+ getragen=1;
+ Freunde=filter_array(f,#'stringp); //');
+  FMASTER->Friend(getuid(environment()),Freunde);
+ return Freunde;
+}
+ 
+int ReUpdate()
+{
+  call_other(FILENAME(this_object()),"???");
+  if (program_time(this_object())<program_time(find_object(FILENAME(this_object()))))
+    {
+      object nring;
+      nring=clone_object(FILENAME(this_object()));
+      nring->move(environment(),1023);
+      nring->SetProp(P_AUTOLOADOBJ,QueryProp(P_AUTOLOADOBJ));
+      remove();
+      return 1;
+    }
+  return 0;
+}
+
+void BecomesNetDead()
+{
+  FMASTER->OverAndOut(getuid(environment()),logon,time());
+  logon=0;
+}
+
+void BecomesNetAlive()
+{
+  logon=time();
+  if (ReUpdate()) return;
+  SetProp(P_AUTOLOADOBJ,Freunde);
+}
+
+void SetzAngebot()
+{
+  if (this_player()==this_interactive())
+	{
+	  angebot=this_interactive();
+	}
+}
+
+void BinVerachtet()
+{object ti;
+  if (ti=this_interactive() && IsFriend(getuid(this_interactive())))
+	{
+	  Freunde-=({getuid(this_interactive())});
+	}
+}
+
+void Schnuckel(object a)
+{
+  string w;
+
+  if (a!=angebot) return;
+  w="";
+  SetProp(P_INVIS,0);
+  if (environment()->QueryProp(P_GENDER)==2)
+    {
+      w="in";
+    }
+  if (member(Freunde,getuid(a))==-1)
+    {
+      Freunde+=({getuid(a)});
+      tell_object(environment(),"Du bist nun Freund"+w+" von "+
+          capitalize(getuid(a))+".\n");
+      if (environment()==this_player())
+        tell_room(environment(environment()),
+            capitalize(getuid(environment()))+" und "+
+            capitalize(getuid(a))+" haben Freundschaft geschlossen.\n",
+            ({ environment(),a }) );
+    }
+  else
+    {
+      tell_object(environment(),"Die Freundschaft ist nun frisch gestaerkt.\n");
+      if (environment()==this_player())
+        tell_room(environment(environment()),
+            capitalize(getuid(environment()))+" und "+
+            capitalize(getuid(a))+" haben ihre Freundschaft gestaerkt.\n",
+            ({ environment(),a }) );
+    }
+  FMASTER->Friend(getuid(environment()),Freunde);
+  getragen=1;
+}
+
+int bieten(string str)
+{string wem,*ig;
+ object Wem,band;
+ notify_fail("Wem willst Du was anbieten?\n");
+ if (! stringp(str)) return 0;
+ str=lower_case(str);
+ if (sscanf(str,"%s freundschaft",wem)!=1) return 0;
+ notify_fail("Spieler '"+capitalize(wem)+"' finde ich leider gerade nicht.\n");
+ if (! (Wem=find_player(wem))) return 0;
+ if (!IS_WIZARD(this_player()) && Wem->QueryProp(P_INVIS)) return 0;
+ notify_fail(capitalize(wem)+ " ist leider nicht in der Naehe.\n");
+ if (! present(Wem,environment(this_player()))) return 0;
+ ig=Wem->QueryProp(P_IGNORE);
+ if (pointerp(ig))
+   {
+	 if (member(ig,"freundschaft")!=-1 || member(ig,"freundschaft."+getuid(this_player()))!=-1 || member(ig,getuid(this_player()))!=-1)
+	   {
+		 write(capitalize(getuid(Wem))+" mag Deine Freundschaft nicht!\n");
+		 return 1;
+	   }
+   }
+
+ if (Wem!=angebot)
+   {
+	 tell_object(Wem,capitalize(getuid(this_player()))+" bietet Dir Freundschaft an.\n");
+	 write("Du bietest "+capitalize(getuid(Wem))+" Deine Freundschaft an.\n");
+	 if (! (band=present(BANDID,Wem)))
+	   {
+		 tell_object(Wem,capitalize(getuid(this_player()))+" gibt Dir ein Freundschaftsband.\n");
+		 tell_object(Wem,break_string("Du kannst die Freundschaft mit 'biete "+capitalize(getuid(this_player()))+" Freundschaft an' beantworten.\n",78));
+		 band=clone_object(BANDFILENAME);
+		 band->move(Wem,M_NOCHECK);
+		 band->SetProp(P_INVIS,1);
+	   }
+	 band->SetzAngebot();
+   }
+ else
+   {
+	 band=present(BANDID,Wem);
+	 if (! objectp(band))
+	   {
+		 band=clone_object(BANDFILENAME);
+		 band->move(Wem,M_NOCHECK);
+		 band->SetProp(P_INVIS,1); 
+	   }
+	 band->SetzAngebot();
+	 band->Schnuckel(this_interactive()); 
+	 Schnuckel(Wem);
+   }
+ return 1;
+}
+
+int verachten(string str)
+{object pl;
+  notify_fail("Wen willst Du verachten?\n");
+  if (! stringp(str)) return 0;
+  str=lower_case(str);
+  if (member(Freunde,str)==-1)
+	{
+	  notify_fail("Zwischen "+capitalize(str)+" und Dir bestand doch keine Freundschaft.\n");
+	  return 0;
+	}
+  Freunde-=({str});
+  if (pl=find_player(str))
+	{object b;
+	  tell_object(find_player(str),capitalize(getuid(this_player()))+" hat die Freundschaft mit Dir geloest.\n");
+	  if (b=present(BANDID,pl))
+		b->BinVerachtet();
+	}
+  write("Okay, keine Freundschaft mehr zwischen Dir und "+capitalize(str)+".\n");
+  FMASTER->Friend(getuid(environment()),Freunde);
+  return 1;
+}
+
+private nosave _get_wer_title(object ob,int what,int ist_magier)
+{
+  string s,r;
+
+  if (! objectp(ob)) return "";
+  if (ob->QueryProp(P_INVIS) && ! ist_magier)
+    return "";
+  s="";
+  switch (what)
+    {
+    default:
+    case 0:
+      if (r=getuid(ob)) {
+        if (ob->QueryProp(P_INVIS))
+          r=sprintf("(%s) ", capitalize(r));
+        else
+          if (stringp(r=ob->short())) r=r[0..<2]+" ";
+        if (stringp(r)) {
+          s+=r;
+          if (r=country(ob)) s+="- "+r+" - ";
+        }
+      }
+      break;
+    case 1:
+      if (r=getuid(ob)) {
+        s+=sprintf("%11s - ",capitalize(r));
+        if( ! ist_magier && IS_LEARNER(ob) ) 
+          s+="An einem unbekannten Ort";
+        else if (environment(ob) && r=environment(ob)->QueryProp(P_INT_SHORT))
+          s+=r+" ";
+        else 
+          s+="Im Nirgendwo";
+      }
+      break;
+    case 2:
+      if (r=getuid(ob))
+        s=time2string(sprintf("%15s, ", capitalize(r))+
+                              "%2d:%2h:%2m:%2s", query_idle(ob));
+      break;
+    case 3:
+      if (r=getuid(ob)) {
+        s+=sprintf("%11s - ",capitalize(r));
+        s += (r=ob->QueryProp(P_AWAY)) ? r : "anwesend"+
+             (query_idle(ob) >= 60 ? " (aber idle)" : "");
+      }
+      break;
+    case 4:
+      if (r=getuid(ob)) {
+        s+=sprintf("%11s - %s",
+                   capitalize(r), r=query_ip_name(ob));
+        if (r != (r=query_ip_number(ob)))
+          s+=sprintf(" (%s)", r);
+      }
+      break;
+    }
+ return s;
+}
+
+int fwer(string str)
+{mixed fr;
+ fr=map_array(Freunde,#'find_player); //');
+ fr=filter_array(fr,#'objectp); //')
+ switch (str)
+   {
+   case "ort":
+	 fr=map_array(fr,#'_get_wer_title,1,IS_LEARNER(this_player())); //');
+	 break;
+   case "idle":
+     fr=map_array(fr,#'_get_wer_title,2,IS_LEARNER(this_player())); //');
+     break;
+   case "weg":
+     fr=map_array(fr,#'_get_wer_title,3,IS_LEARNER(this_player())); //');
+     break;
+   case "ip":
+     if (IS_LEARNER(this_player())) {
+       fr=map_array(fr,#'_get_wer_title,4,IS_LEARNER(this_player())); //');
+       break;
+     }
+   default:
+     fr=map_array(fr,#'_get_wer_title,0,IS_LEARNER(this_player())); //');
+     break;
+   }
+ fr=filter_array(fr,#'stringp); //');
+ fr=fr-({""});
+ if (! sizeof(fr))
+   {
+	 write("Wir sind alle Deine Freunde.\n");
+   }
+ else
+   {
+	 fr=sort_array(fr,#'>); //')
+	 this_player()->More(implode(fr,"\n"));
+   }
+ return 1;
+}
+
+string extra_look()
+{
+ string w, b;
+ mixed x;
+ w=capitalize(environment()->QueryPronoun());
+ if (! getragen) return "";
+ switch(x=sizeof(Freunde=Freunde & Freunde))
+ {
+   case 0: x="kein"; b="band"; break;
+   case 1: x="ein"; b="band"; break;
+   default: b="baender";
+ }
+ return break_string(w+" traegt "+x+" Freundschafts"+b+" am Handgelenk.",78);
+}
+
+int SetWorn(int i)
+{
+  return getragen=i;
+}
+
+string short()
+{
+  if (! QueryProp(P_INVIS))
+	return "Ein Freundschaftsband"+(getragen?" (getragen)":"")+".\n";
+  return "";
+}
+
+private nosave _add_string(string s,string a)
+{ return a+s; }
+
+int f_filter(object ob, int invis)
+{
+  if (!objectp(ob)) return 0;
+  return !invis || IS_LEARNER(ob);
+}
+
+int frufen(string st)
+{string *s,s1,a;
+ object *p;
+ if (! this_player()) return 0;
+ notify_fail("Was moechtest Du denn Deinen Freunden zurufen?\n");
+ if (! stringp(st)) return 0;
+ a="Dein"+(this_player()->QueryProp(P_GENDER)==2?"e Freundin":" Freund")+" "+
+   capitalize(getuid(this_player()))+" teilt Dir mit: ";
+ s1=break_string(this_player()->_unparsed_args(),78-strlen(a));
+ p=map_array(Freunde,#'find_player); //')
+ // p=filter_array(p,#'objectp); //')
+ p=filter_array(p,#'f_filter, this_player()->QueryProp(P_INVIS)); //')
+ map_array(p,#'tell_object,implode(map_array(explode(s1,"\n"),#'_add_string,a),"\n")+"\n"); //')
+ tell_object(this_player(),implode(map_array(explode(s1,"\n"),#'_add_string,"Du teilst Deinen Freunden mit: "),"\n")+"\n"); //')
+ return 1;
+}
+
+void reset()
+{
+  if (! sizeof(Freunde) || QueryProp(P_INVIS) || ! environment() || ! query_once_interactive(environment()))
+	remove();
+}
+
+int helfen(string str)
+{
+  if (! stringp(str)) return 0;
+  if (lower_case(str)=="freundschaftsband")
+	{
+	  this_player()->More(read_file("/obj/fband.txt"));
+	  return 1;
+	}
+  return 0;
+}
+
+string _in(string a,mapping m)
+{
+  if (member(m,lower_case(a)))
+    return m[a];
+  else
+    return "";
+}
+
+string ParseAdverben(string str,object ob)
+{
+  string *advpart,quotedpart;
+  mapping adverben;
+  if (! str) return 0;
+  str=" "+str;
+  adverben=ob->QueryStdAdverbs()+ob->QueryAdverbs();
+  advpart=explode(str,"/");
+  if (sizeof(advpart)>1)
+      quotedpart=implode(advpart[1..],"/");
+  else
+    quotedpart="";
+  advpart=regexplode(advpart[0],"\\<[^, ]*\\>");
+//  write(sprintf("%O\n",advpart));
+  advpart=(map_array(advpart,#'_in,adverben)+({quotedpart}))-({""}); //'));
+  return ob->CountUp(advpart);
+}
+
+void tell_near_far(object pl,object tp,string near,string far)
+{
+  if (present(pl, environment(tp)))
+    tell_object(pl,near);
+  else tell_object(pl,far);
+}
+
+
+int fverb(string bef,string sec)
+{
+  string a,a1,d,s;
+  object *p;
+  s=this_player()->_unparsed_args();
+  a="Dein"+(this_player()->QueryProp(P_GENDER)==2?"e Freundin":" Freund")+" "+
+    capitalize(getuid(this_player()))+bef;
+  d=ParseAdverben(s,this_player());
+  if (stringp(d))
+    a=implode(explode(a,"&A")," "+d);
+  else
+    a=implode(explode(a,"&A"),"");
+  a1=implode(explode(a,"&F")," aus der Ferne");
+  a=implode(explode(a,"&F"),"");
+  p=map_array(Freunde,#'find_player); //');
+  // p=filter_array(p,#'objectp); //');
+  p=filter_array(p,#'f_filter, this_player()->QueryProp(P_INVIS)); //')
+  map_array(p,#'tell_near_far,this_player(),break_string(a,78),break_string(a1,78)); //');
+  write(implode(explode(sec,"&A"),(stringp(d)?" "+d:"")));;
+  return 1;   
+}
+
+int fknuddlen(string s)
+{
+  return fverb(" knuddelt Dich&A&F.","Du knuddelst Deine Freunde&A.\n");
+}
+
+int fwinken(string s)
+{
+  return fverb(" winkt Dir&A&F zu.","Du winkst Deinen Freunden&A zu.\n");
+}
+
+int femote(string s)
+{
+  if (! IS_SEER(this_player())) return 0;
+  s=this_player()->_unparsed_args();
+  if (! stringp(s))
+      return (int) notify_fail("Was willst Du Deinen Freunden emoten?\n");
+  if (strstr(s,"#")==-1)
+    s+=" aus der Ferne.";
+  s=implode(explode(s,"#"),"aus der Ferne");
+  s=implode(explode(s,"&"),"");
+  return fverb(" "+s,this_player()->name()+" "+s+"\n");
+}
+
+int freundliste (string s)
+{
+  string f;
+  if(!interactive(environment())) return 0;
+  Freunde=Freunde & Freunde;
+  f=environment()->CountUp(map_array(Freunde,#'capitalize)); //'))
+  if (!f) f = "niemandem";
+  else if (sizeof(Freunde)>1) 
+    write("Insgesamt hast Du "+sizeof(Freunde)+" Freunde.\n");
+  write( break_string("Du bist Freund"+
+     ((environment()->QueryProp(P_GENDER)==FEMALE)?"in":"")+" von "+f+".", 78));
+  return 1;
+}
+
+int freport (string s)
+{
+  string f;
+  if(!interactive(environment())) return 0;
+  Freunde=Freunde & Freunde;
+  f=environment()->CountUp(map_array(Freunde,#'capitalize)); //'))
+  if (!f) f = "niemandem";
+  else if (sizeof(Freunde)>1) 
+    write("Insgesamt hast Du "+sizeof(Freunde)+" Freunde.\n");
+  tell_room(environment(environment()), break_string(
+     capitalize(environment()->name(WER, 1))+" ist Freund"+
+     ((environment()->QueryProp(P_GENDER)==FEMALE)?"in":"")+" von "+f+".", 78),
+     ({ environment() }) );
+  write("Du erzaehlst allen ganz stolz von Deinen Freunden.\n");
+  return 1;
+}
+

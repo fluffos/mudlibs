@@ -1,0 +1,115 @@
+//
+// Lag-o-daemon: stellt das Mudlag fest
+// ---
+// Credits to Kirk@Morgengrauen
+// MG independet version by Woody@Silberland
+//
+// $Date: 2001/02/16 20:53:12 $
+/* $Revision: 1.4 $
+ * $Log: lag-o-daemon.c,v $
+ * Revision 1.4  2001/02/16 20:53:12  Woody
+ * LAG log nach /log/daemon/ verlegt
+ *
+ * Revision 1.3  1999/05/31 10:52:30  Zordan
+ * Logausgabe veraendert (weniger oft, Wiederholungen raus)
+ *
+ * Revision 1.2  1999/05/31 08:07:37  Zordan
+ * RCS'ed, Sicherheitstest, Logfunktion
+ *
+ * Revision 1.1  1999/05/31 07:24:45  Zordan
+ * Initial revision
+ *
+ */
+
+
+int *time;                      // time array
+int *hb;                        // heartbeat array
+int pointer;                    // pointer to current index
+float lag_60, lag_15, lag_1;    // lag data
+int my_hb;                      // lag-o-daemon's own heartbeat counter
+string lastlog;                 // log-temp-var
+
+void create()
+{
+  int i;
+
+  if(is_clone(this_object()))
+    destruct(this_object());
+
+  hb = allocate(360);
+  time = allocate(360);
+  for(i=1;i<360;i++) time[i]=hb[i]=-1;
+
+  pointer=0;
+  my_hb=0;
+  hb[0]=my_hb;
+  time[0]=time();
+
+  lag_60=lag_15=lag_1=-1.0;
+  
+  lastlog="";
+
+  call_out("step",10);
+  set_heart_beat(1);
+}
+
+
+void heart_beat()
+{
+  my_hb++;
+}
+
+
+nosave void step()
+{
+  int changed, pointer_60, pointer_15, pointer_1;
+  string str;
+  
+  call_out("step",10);
+  time[pointer]=time();
+  hb[pointer]=my_hb;
+  pointer_60=(pointer==359?0:pointer+1);
+  pointer_15=(pointer<90?pointer-90+359:pointer-90);
+  pointer_1=(pointer<6?pointer-6+359:pointer-6);
+  changed=0;
+  
+  if(time[pointer_1]>=0)
+  {
+    lag_1 = ((float)hb[pointer]-(float)hb[pointer_1])*2.0;
+    lag_1 /= (float)(time[pointer]-time[pointer_1]);
+    lag_1 = 100.0*(1.0-lag_1);
+    changed = 1;
+  }
+  if(time[pointer_15]>=0)
+  {
+    lag_15 = ((float)hb[pointer]-(float)hb[pointer_15])*2.0;
+    lag_15 /= (float)(time[pointer]-time[pointer_15]);
+    lag_15 = 100.0*(1.0-lag_15);
+    changed = 1;
+  }
+  if(time[pointer_60]>=0)
+  {
+    lag_60 = ((float)hb[pointer]-(float)hb[pointer_60])*2.0;
+    lag_60 /= (float)(time[pointer]-time[pointer_60]);
+    lag_60 = 100.0*(1.0-lag_60);
+    changed = 1;
+  }
+  if(pointer >= 359)
+    pointer=0;
+  else
+    pointer++;
+  if(changed && (lag_1 >= 20.0 || lag_15 >= 15.0 || lag_60 >= 10.0)) {
+    str=sprintf("   1: %8.3f,  15: %8.3f,  60: %8.3f", 
+      lag_1, lag_15, lag_60);
+    if(str != lastlog) {
+      log_file("daemon/LAG",sprintf("[%s]: ",ctime())+str+"\n");
+      lastlog=str;
+    }
+  }
+}
+
+
+float *read_lag_data()
+{
+  return ({lag_60,lag_15,lag_1});
+}

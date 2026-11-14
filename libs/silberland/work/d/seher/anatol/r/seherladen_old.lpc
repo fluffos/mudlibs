@@ -1,0 +1,1719 @@
+/* 
+ * Ein sehr magischer Ort - solche Laeden sind _IMMER_ magisch,
+ * meist gegen ihren Willen. Aber welcher Laden wird da schon um
+ * seine Meinung gefragt? Also hier ist er, der Seherladen
+ * (c) Anatol@SL 9/97
+ *
+ * *****************************************************************
+ * In allen Objekten, die vom Laden verkauft werden, wird die 
+ * Funktion >> soldBySeerShop() << aufgerufen. Hiermit kann man z.B. 
+ * sonst sehr wertvolle Questbelohnungen etwas untauglicher machen,
+ * um sie auf diesem Wege ohne Balancebrechung dem Seher zugaenglich
+ * machen zu koennen.
+ * *****************************************************************
+ * 
+ * *****************************************************************
+ * Ebenso wird in allen Objekten vor Verkauf die Funktion 
+ * >> deniedToSell(object player) << aufgerufen. Gibt diese
+ * Funktion "wahr" zurueck, wird der Verkauf verweigert und das 
+ * Objekt wieder eingestampft.
+ * *****************************************************************
+ *
+ *
+ * Initial  Revision 1.0     Anschluss 06-09-97
+ * 06-09-97 Revision 1.0.1   woBistDu() fuer Fernabfrage eingefuegt,      
+ *                           Betreten durch Seher wird geloggt, die
+ *                           Lupe der Seher - hehe - abgefangen,
+ *                           'here make' loggt nur noch einmal ;->
+ * 07-09-97 Revision 1.0.2   Jaja, jetzt loggt er auch auch mit, von 
+ *                           WO betreten wird...
+ * 12-09-97 Revision 1.0.3   Ich muss mir was fuer das Gruessen einfallen
+ *                           lassen...
+ * 12-09-97 Revision 1.0.4   Hinweis von Stahldorn auf command_me("raus")
+ *                           und moegliches Abfangen durch ein Alias. Ich
+ *                           Depp, in anderen Muds praktiziere ich das ja
+ *                           auch als Spieler ;-> --> move()
+ * 14-09-97 Revision 1.0.4   Bla bla bla, Notfallhebel eingebaut. Macht aber
+ *                           nur Sinn, wenn ich da bin ;->
+ * 12-02-98 Revision 1.0.5   Runenzugriff fuer Magier jetzt auch mit 
+ *                           Farbangabe, Staubwolke eingefuegt (Idee Larissa)
+ * 13-01-99 Revision 1.0.6   Runenzugriff fuer Magier jetzt wieder OHNE
+ *                           Farbangabe, #pragma strict_types, Standard-
+ *                           Raum der Region wird inheritet, Logging nach
+ *                           /d/seher/anatol/log statt /players... und ein
+ *                           paar Details/Stupids/Fails hinzugefuegt.
+ * 14-10-00 Revision 1.0.7   Call_out Fix.
+ * 14-01-01 Revision 1.0.8   Logging ebenfalls umgestellt, loggt jetzt mit
+ *                           log_file() nach /log/wiz/anatol/seher
+ * 
+ * 2012-01-25                Betreten wird nicht mehr geloggt, dafuer
+ *                           jetzt Kaeufe.
+ */
+
+#pragma strict_types
+
+#include <properties.h>
+#include <wizlevels.h>    /* Fuer IS_ARCH usw.   */
+#include <moving.h>       /* Fuer M_NOCHECK usw. */
+#include <bank.h>         /* Fuer ZENTRALBANK    */
+#include <ansi.h>         /* Fuer die Farben...  */
+#include "../defines.h"   /* Alles meins!        */
+
+#define SEHERRUNE "/d/seher/anatol/a/ladnda"
+#define SAVEFILE "/d/seher/anatol/save/seherladen"
+#define SLOG(f,x) log_file(LOG+f,sprintf("%s: %s",LOGTIME,x),50000,1)
+
+#define L_FILENAME 0      /* Der Filename des Objektes...           */
+#define L_ANZAHL 1        /* Anzahl je Periode kaeuflich...         */
+#define L_BESTAND 2       /* Der momentane Bestand                  */
+#define L_KOSTEN 3        /* Die Grundkosten des Objektes...        */ 
+#define L_PREIS 4         /* Der derzeitige Preis                   */
+#define L_TEXT 5          /* Der Text des Objektes auf der Tafel    */
+#define L_MAXMULT 2.0     /* Maximaler Multiplikator des Zuschlags  */
+#define L_EXIT 1          /* Ausgang IN den Seherladen...           */
+
+/* Die Aufenthalte des Ladens regelt man am besten auch ueber Defines,
+ * sonst muss man bei Aenderungen durch den ganzen Code pfriemeln... */
+
+#define L_MINIMUM_RESTING_TIME               900
+#define L_RESTING_TIME_RANDOM                900
+#define L_MINIMUM_AWAY_TIME                  300
+#define L_AWAY_TIME_RANDOM                   600
+#define L_RESETS_NEEDED_TO_REFILL            3
+
+inherit SEHER "std/room";      /* Oberklasse festlegen */
+
+/*   
+ *  angebot  ({({ string blueprint_filename ,
+ *                int anzahl_je_periode,
+ *                int aktueller_bestand,
+ *                int grundpreis,
+ *                int aktueller_preis
+ *                string text_auf_tafel, }),})
+ *  zielorte ({({ string objektpfad, 
+ *                string ausgang_richtung, }),})
+ */
+
+mixed * angebot;
+mixed * zielorte;     /* Das Zielarray selbst    */
+
+nosave string tafel;   /* Der Text der Tafel, 'nosave' (ohne save ins File) */
+nosave string wolke;   /* Der letzte Staubwischer */
+nosave int gewischt;   /* Wann wurde zuletzt Staub gewischt? */
+nosave int cash;       /* Fuer die Einzahlungen an die Zentralbank im Reset */
+nosave int currentenv; /* Raumnummer in Zielarray */
+nosave string * dest;  /* Kleine 'Hilfsvariable'  */
+nosave int reset_counter; /* numeriert Resets durch */
+nosave mixed bauchdecke; /* Bauchdeckenheilung nur einmal je Reset! */
+nosave mixed stoehnen;   /* Wer hat denn dem Stoehnen gelauscht?    */
+nosave int muenzenda;  /* Falls Muenzen schon geclont wurden... */
+nosave int gehebelt;   /* Wurde der Hebel schon gezogen? */
+     /* Vorwaertsdeklarationen der eigenen Funktionen */
+
+nosave int cmdStecke(string str);      /* ... verbesserungsbeduerftig     */
+nosave int cmdDeute(string arg);       /* Einkaufen durch "deuten"        */
+nosave int cmdTrommle(string arg);     /* Aga, fuer die Trommler          */
+nosave int cmdMunkel(string was);      /* Im Dunkeln .....                */
+nosave int cmdZiehe(string was);       /* Der Beschwerdehebel...          */
+nosave int cmdBreche(string was);      /* Brech' den Hebel ab...          */
+nosave int cmdDruecke(string was);     /* Der Beschwerdehebel...          */
+nosave int cmdBewege(string was);      /* Der Beschwerdehebel...          */
+nosave int cmdWische(string was);      /* Der Versuch, Staub zu wischen   */
+nosave int cmdOeffne(string was);      /* Kisten oder Tuere oeffnen..,    */
+nosave int cmdTrinke(string was);      /* Kisten oder Tuere oeffnen..,    */
+nosave int cmdMache(string arg);       /* Aerger oder was?                */
+nosave int cmdGreife(string arg);      /* Man soll nicht in Kisten greifen*/
+nosave int cmdGruesse(string was);     /* Gruesse die Stimme des Herrn ;> */
+nosave int cmdSchliesse(string was);   /* Tuere schliessen                */
+nosave string detailBauchdecke();      /* Specialdetail Bauchdecke        */
+nosave string detailStaub();           /* Specialdetail Staub             */
+nosave string detailStaubwolke();      /* Specialdetail Staubwolke        */
+nosave void fliegeZielAn();            /* (zumeist ueber call_out)        */
+nosave void fliegeAb();                /* (auch meist ueber call_out)     */
+varargs nosave void fliegeEndlichAb(int parken);  /* (call_out / parken   */
+nosave void begruesseSeher();          /* Ein "Guten Tag" an den Seher    */
+nosave void kaufMich(int artikel);     /* call_out-Aufruf von cmdDeute    */
+nosave void bewegeArtikel(object ware,int artikel); /* von kaufMich...    */
+nosave void geldZurueck(int geld);     /* Geld-zurueck bei 'zu schwer'    */
+private nosave int keinZugriff();      /* Zugriff verweigert == TRUE      */
+nosave int errechnePreis(mixed * item); /* Preiskalkulation schwergemacht */
+nosave void updateSortiment();         /* Nach Kauf muss geupdatet werden */
+nosave void ergaenzeSortiment();       /* Fuellt den Warenbestand auf     */
+nosave int zeigeLaden();               /* WizAnzeige der Bestandskonfig.  */
+nosave int ladenHandling(string arguments); /* Funktion "laden"           */
+nosave int postenLoeschen(string arguments);  /* Aufruf vom ladenHandling */
+nosave int postenHinzufuegen(string arguments); /* - dito -               */
+nosave string zeigeTafel();            /* SpecialReadDetail 'tafel'       */
+nosave int zeigeZiele();               /* WizAnzeige der Zieleorte        */
+nosave int zielHandling(string arguments); /* Handling der Zielorte       */
+varargs nosave int parkLaden(int nolog); /* Laden parken                  */
+nosave int restartLaden();             /* Laden "wiederbeleben"           */
+nosave int zeigeHilfe();               /* WizAnzeige der Befehle...       */
+string woBistDu(object player);        /* Fernabfrage fuer Seher usw.     */
+/* create(), init(), remove(), reset() ergaenzt, clean_up ueberschrieben  */
+string _query_int_long();              /* Fuer die Hilfezeile...          */
+void BecomesNetDead(object player);    /* Netztote RAUS!!                 */
+nomask nosave string completePath(string filename);  /* Pfadnamen erg.    */
+
+
+void create() {      /* *** CREATE *** */
+
+  ::create();  /* Pflichtaufruf in der Superklasse */
+
+  if (!restore_object(SAVEFILE)) {
+    angebot=({});                  /* Dies hier, falls das Savefile fehlt */
+    zielorte=({({"/players/anatol/workroom","norden"})});
+  }
+  tafel=""; 
+  cash=0;
+  currentenv=-1;
+  bauchdecke=({});
+  wolke=0;
+  gewischt=0;  
+  gehebelt=0;
+  muenzenda=0; 
+  SetProp(P_INT_SHORT,"Ein magischer Laden");
+  SetProp(P_INT_LONG,
+  "Es ist ziemlich schummrig hier, die Oellampe an der Decke vermag nicht,\n"
+  "den Raum auszuleuchten. Du scheinst Dich in einem dieser komischen Laeden\n"
+  "zu befinden, die immer dann, wenn es um Reklamationen oder Umtausch geht,\n"
+  "verschwunden zu sein scheinen. Ueberall liegt alter 'Krempel' herum, die\n"
+  "Regale quellen ueber von 'Ramsch', den bestimmt niemand kaufen moechte.\n"
+  "Kisten, teilweise offen, teilweise geschlossen, verschlossen, versiegelt,\n"
+  "stehen und stapeln sich ueberall, ob dieser Laden ueberhaupt Brauchbares\n"
+  "verkauft? Ein Schild haengt an einer Wand, die wie durch ein Wunder nicht\n"
+  "mit Kisten und Regalen zugestellt ist. Die Tuer, durch die Du den Laden\n"
+  "betreten hast, steht unveraenderbar offen.\n");
+  SetProp(P_LIGHT,1);    /* Licht an! */
+  SetProp(P_INDOORS,1);  /* Wir sind drinnen... */
+  SetProp(P_NO_TPORT,NO_TPORT); /* Nein, bitte keine Teleporte... */
+  SetProp(P_ENVIRONMENT,([ENV_TEMPERATURE:26,ENV_TERRAIN:TT_HOUSE]));
+
+  AddCmd("schliesse","cmdSchliesse");       /* Spielerkommandos */
+  AddCmd("oeffne","cmdOeffne"); 
+  AddCmd("stecke","cmdStecke");  
+  AddCmd("wische","cmdWische");  
+  AddCmd(({"deut","deute"}),"cmdDeute");
+  AddCmd(({"trommel","trommle"}),"cmdTrommle");
+  AddCmd(({"trink","trinke"}),"cmdTrinke");
+  AddCmd(({"mach","mache"}),"cmdMache");
+  AddCmd(({"greif","greife"}),"cmdGreife");
+  AddCmd(({"brech","breche"}),"cmdBreche");
+  AddCmd(({"gruess","gruesse"}),"cmdGruesse");
+  AddCmd(({"drueck","druecke"}),"cmdDruecke");
+  AddCmd(({"munkle","munkel"}),"cmdMunkel");
+  AddCmd(({"zieh","ziehe"}),"cmdZiehe");
+  AddCmd(({"beweg","bewege"}),"cmdBewege");
+
+  AddCmd("laden","ladenHandling");          /* Wartungskommandos */ 
+  AddCmd("ziele","zielHandling");           /* fuer die Magier   */
+
+  AddReadDetail(({"schild","tafel","schiefertafel"}),#'zeigeTafel);
+
+     /* Details sind NERVIG, machen aber leider ein Grossteil dessen aus,
+      * was man einen "schoenen Raum" nennt. *seufz* */
+
+  AddSmell("skelett",
+    "Das Skelett muffelt gar nicht. Faszinierend, muss wohl daran liegen, "
+    "dass es voellig fleischlos ist...");
+  AddSmell("magier",
+    "Der Magier stinkt. Da er auch noch doof ist, ist das nicht weiter "
+    "verwunderlich. Nun, er ist aber auch ein guter Magier, da sind wir "
+    "ja dann tolerant. :->");
+  AddSmell(({"maus","maeuse"}),
+    "Sie riechen wie tote Maeuse.");
+  AddSmell(({"steak","steaks"}),
+    "Hmmmmmjammm! Die Steaks riechen richtig blutig und lecker... aeh... "
+    "naja, ein Hund zumindest wuerde so denken.");
+  AddSmell("hund",
+    "Als ob Du einen nicht anwesenden Hund riechen koenntest. :->");
+  AddSmell("tentakel",
+    "Das riecht nicht mehr, das ist schon zu alt.");
+  AddSound("knacken",
+    "Das hoerte sich knochig an. Oh-oh...");
+  AddSound("rappeln",
+    "Es rappelt in der Kiste.");
+  AddSound("gluckern",
+    "Das Gluckern koennte von Wasser stammen... koennte.");
+  AddSound("stoehnen",
+    "Das Stoehnen klingt (ausnahmsweise) ueberhaupt nicht anzueglich oder "
+    "sonstwie erregend. Es klingt vielmehr nach Jemandem mit einer "
+    "zermalmten Bauchdecke oder aehnlichen Sorgen.");
+  AddSound(({"pfeifen","pfeifgeraeusche"}),
+    "Was das wohl gewesen sein koennte...?");
+  AddSmell("bier",
+    "Das Bier riecht sehr abgestanden, trink es besser nicht.");
+  AddSmell("reis",
+    "Der Reis riecht ziemlich vergammelt. Geradezu ungeniessbar. *wuerg*");
+  AddSmell(DEFAULT_SMELL,
+    "Es riecht hier so, wie es in uralten Raeumen so riecht... irgendwie "
+    "eine Komposition aus 'abgestanden', 'trocken' und 'hoelzernmuffig'.");
+  AddSound(DEFAULT_SOUND,
+    "Ausser dem leisen Quietschen der Lampe und gelegentlichem Aechzen und "
+    "Scharren aus dunklen Ecken hoerst Du nicht gerade viel Geraeusche. "
+    "Aber ganz ehrlich: Die reichen Dir auch.");
+  AddSound(({"geraeusch","geraeusche"}),
+    "Du hoerst bewusst weg.\n");
+  AddSound("quietschen",
+    "Das Quietschen der Lampe geht Dir auf die Nerven.");
+  AddSound("aechzen",
+    "Man sagt, dass Holz arbeitet... nichtsdestotrotz hoert sich das Aechzen "
+    "nicht gerade sehr beruhigend an.");
+  AddSound("scharren",
+    "Oh-oh...?! Was mag das wohl sein? Es hoert sich nicht gerade nach einem "
+    "kleinen suessen Kaetzchen an...");
+  AddSpecialDetail("bauchdecke","detailBauchdecke");
+  AddDetail(({"sorgen","sorge"}),
+    "Sie sind alle da und sorgen sich.");
+  AddDetail("nerven",
+    "Deine Nerven liegen bald blank, wenn Du das Quietschen nicht "
+    "ueberhoerst.");
+  AddDetail("kaetzchen",
+    "Nein, bestimmt nicht!");
+  AddDetail(({"tuer","tuere"}),
+    "Die Tuer macht momentan einen friedlichen Eindruck. Dein Glueck.");
+  AddDetail("eindruck",
+    "Hoffentlich taeuscht der Eindruck nicht!\n");
+  AddDetail("glueck",
+    "Sowas siehst Du da (*schluck*) nicht!\n");
+  AddDetail("eifer",
+    "Ereifere Dich mal nicht.");
+  AddDetail("holz",
+    "Woody waere stolz drauf!");
+  AddDetail("anzahl",
+    "Aeh... Ecken? Na, acht natuerlich.");
+  AddDetail("woody",
+    "Der ist ganz offensichtlich nicht hier.");
+  AddDetail("aerger",
+    "Mach' hier bloss keinen...");
+  AddDetail("wasser",
+    "Wenn es doch nur Wasser waere...");
+  AddDetail(({"besitzer","inhaber"}),
+    "Ohje, koennen solche Laeden ueberhaupt von irgendetwas besessen "
+    "werden? Es sieht vielmehr danach aus, als ob der Laden seinen "
+    "eigenen Willen hat, seinen eigenen Weg geht.\n*SCHLUCK*\nWo bist "
+    "Du hier nur hineingeraten...?");
+  AddDetail("ramsch",
+    "Hier gibt es natuerlich KEINEN Ramsch, das wuerde nur den Besitzer "
+    "beleidigen. Und das willst Du sicher nicht.");
+  AddDetail("krempel",
+    "Hier gibt es natuerlich KEINEN Krempel, schliesslich willst Du den "
+    "Besitzer nicht beleidigen, oder?");
+  AddDetail("boden",
+    "Der Boden sieht vergleichsweise normal aus. Er befindet sich unter "
+    "Dir und ausser viel Staub siehst Du nichts besonderes. Wenn Staub "
+    "ueberhaupt etwas besonderes ist.");
+  AddDetail(({"inhalt","regale","regal"}),
+    "*aechz* Von den Regalen quillt es nur so herunter. Du ueberfliegst "
+    "schnell den Inhalt und siehst unter anderem eine alte Gitarre, ein "
+    "halbes Mass Bier, eine kaputte Ghulkrone, eine Photonenplasmakanone, "
+    "fuenf tote Maeuse, zwei halbgegessene Zigarren, ein unbenutztes "
+    "Praeservativ, ein benutztes, ein Little-Feuerzeug, ein Skelett, "
+    "ein guter Magier, einen Reissnagel, ein halbes Pfund Reis, ein Buch "
+    "ueber Persoenlichkeitstheorien, ein zerbeulter Kochtopf, zwei "
+    "blutige Steaks und ein Tentakel. Das wird wohl nicht mehr kaeuflich "
+    "sein."); 
+  AddDetail(({"persoenlichkeitstheorie","persoenlichkeitstheorien"}),
+    "Du willst es gar nicht wissen...");
+  AddDetail("jahrhunderte",
+    "Naja, schon sehr lang jedenfalls.");
+  AddDetail("laeden","Reicht Dir der eine nicht?");
+  AddDetail(({"topf","kochtopf"}),
+    "Hm, der Kopftopf sieht auch schon ein kleinwenig aelter aus. Zumal "
+    "er ein altes Vogelnest beinhaltet.");
+  AddDetail("kopftopf",
+     "Wow, klasse, Du hast einen Typo gefunden!");
+  AddDetail("typo","... hat Dir aber nicht viel gebracht.");
+  AddDetail(({"nest","vogelnest"}),
+    "Oh, das Vogelnest sieht auch schon etwas aelter aus. Die suessen "
+    "Piepmaetze, die dort drin ausgebruetet wurden, duerften inzwischen "
+    "auch schon das Zeitliche gesegnet haben.");
+  AddDetail(({"piepmatz","piepmaetze"}),
+    "Keiner da.\nAlle weg.\nAusgeflogen.\n*schnief*");
+  AddDetail("weg",
+    "Der Weg ist das Ziel.");
+  AddDetail("ziel",
+    "Das Ziel ist noch weit weg.");
+  AddDetail(({"steak","steaks"}),
+    "Wow, die Steaks scheinen noch ganz frisch zu sein! Ob sich der "
+    "Besitzer einen Hund haelt?");
+  AddDetail("hund",
+    "Derzeit ist wohl gerade kein Hund hier...");
+  AddDetail(({"zeitliche","moment"}),
+    "Wie krank muss man eigentlich sein, um das alles zu untersuchen?");
+  AddDetail("tentakel",
+    "Dieses Tentakel ist schon ziemlich vertrocknet, es koennte jeden "
+    "Moment zu Staub zerfallen...");
+  AddSpecialDetail("staub","detailStaub");
+  AddSpecialDetail("staubwolke","detailStaubwolke");
+  AddDetail("idee",
+    "Du kommst nicht drauf ;-)");
+  AddDetail("muehe",
+    "Du machst Dir hier wirklich viel Muehe...");
+  AddDetail("reissnagel",
+    "Das ist ein ganz normaler Reissnagel. Was hast Du anderes erwartet?");
+  AddDetail(({"reis","pfund"}),
+    "Oh-oh... dieser Reis hat schon bessere Jahrhunderte gesehen. Und genau "
+    "da duerfte sein Problem liegen. Er muffelt auch schon nicht schlecht.");
+  AddDetail("buch",
+     "WAH, nein, das schaut schon gefaehrlich aus, das schaust Du Dir nicht "
+     "aus der Naehe an, das koennte beissen!!");
+  AddDetail("naehe",
+     "Too close, a little bit too close.");
+  AddDetail("magier",
+    "Man sagt: Nur ein toter Magier ist ein guter Magier. Das duerfte auch "
+    "erklaeren, warum dieser hier schon seit 1093 Jahren hier herumhaengt.");
+  AddDetail("skelett",
+    "Es muss sich um einen ehemaligen Kunden handeln, der nicht zahlen "
+    "konnte.");
+  AddDetail(({"kunde","kunden"}),
+    "Vermutlich wird er auch nicht mehr zahlen. Aber man weiss ja nie.");
+  AddDetail(({"feuerzeug","little-feuerzeug"}),
+    "Oh, es ist leer. Abgesehen davon ist es auch noch gar nicht erfunden.");
+  AddDetail("maeuse",
+    "Diese Maeuse sind eindeutig tot.");
+  AddDetail("zigarren",
+    "Irgendjemand muss das Prinzip des Rauchens nicht verstanden haben. "
+    "Diese Zigarren sind zur Haelfte weggefressen. Baeh.");
+  AddDetail(({"rauchen","raucher","rauchens"}),
+    "Jemand, der Zigarren *isst*, hat das Prinzip des Rauchens definitiv "
+    "nicht verstanden.");
+  AddDetail("jemand",
+    "Das ist Jemand.\nEr sieht schon reichlich mitgenommen aus.");
+  AddDetail("prinzip", 
+    "Hier geht es nicht ums Prinzip.");
+  AddDetail("unbenutztes praeservativ",
+    "Es ist unbenutzt, aber verstaubt und loechrig. Es ist besser, wenn "
+    "es unbenutzt bleibt.");
+  AddDetail("benutztes praeservativ",
+    "Iiiiiiiiiiiiiih. Ausserdem sieht es ziemlich loechrig aus. Vermutlich "
+    "krabbelt irgendwo das Ergebnis der fehlgeschlagenen Anwendung herum.");
+  AddDetail("anwendung",
+    "Fehler in der Anwendung. Ganz grob gesprochen.");
+  AddDetail("fehler",
+    "Error: detail overflow");
+  AddDetail("problem",
+    "Hast Du ein Problem? Das ist Dein Problem.");
+  AddDetail("praeservativ",
+    "Welches Praeservativ? Das benutzte oder das unbenutzte?");
+  AddDetail(({"kanone","plasmakanone","photonenplasmakanone"}),
+    "Du musst Dich getaeuscht haben, nichteinmal HIER koennte man so etwas "
+    "kaufen!");
+  AddDetail(({"gitarre","wandergitarre"}),
+    "Oh, eine schoene Wandergitarre. Leider fehlen alle Saiten, man koennte "
+    "noch auf ihr herumtrommeln. Aber dafuer ist sie wohl zu schade...");
+  AddDetail("saiten",
+    "Keine Saiten da. :(");
+  AddDetail(({"mass","bier"}),
+    "Nur eine halbe Mass Bier. Oder ein halbes Mass? Egal, jedenfalls sieht "
+    "das Bier schon reichlich abgestanden aus. Fragt sich eigentlich, wer "
+    "die fehlende Haelfte gekauft hat...");
+  AddDetail("haelfte",
+    "Sie fehlt.");
+  AddDetail(({"krone","ghulkrone"}),
+    "Oh, wer hat diese knoecherige Krone hier vergessen? Igitt, das koennten "
+    "die Knochen eines Zwergs sein. Kein Wunder, dass die Krone noch hier "
+    "herumliegt, sowas kauft doch keiner... und offensichtlich ist sie "
+    "inzwischen auch nicht mehr kaeuflich.");
+  AddDetail("zwerg",
+    "Zwerg? Wo?");
+  AddDetail("knochen",
+    "Igitt! Na, wenigstens sind sie sauber und gebleicht.");
+  AddDetail(({"ecke","ecken"}),
+    "Auch dieser Laden verfuegt ueber eine gewisse Anzahl Ecken.");
+  AddDetail(({"wand","waende"}),
+    "Die Waende hier sehen, sofern man sie sehen kann, ziemlich normal aus. "
+    "Ja, ein wenig verstaubt zwar, aber ansonsten recht normal. Auffallend "
+    "ist hoechstens der Hebel an einer Wand. Unter ihm ist auch ein kleines "
+    "Taefelchen zu sehen.");
+  AddSpecialDetail("hebel","detailHebel");
+  AddDetail("taefelchen",
+    "Das messingfarbene (und ziemlich ungepflegte) Taefelchen ist mit einer "
+    "ehemals knallroten Aufschrift bedruckt. Obwohl da ein \"mattrotgrau\" "
+    "daraus geworden ist, kannst Du die Aufschrift vermutlich lesen.");
+  AddDetail(({"schwarze","mattrotgraue","buchstaben","aufschrift"}),
+    "Das ist die Aufschrift, die Du lesen koenntest. Und vermutlich auch "
+    "lesen solltest. Doch, ja, Du _solltest_ sie lesen.");
+  AddReadDetail("taefelchen",
+    "Waaah, bist Du aber doooooof! Das Schwarze (ok: Mattrotgraue) sind die "
+    "Buchstaben! Wie kann man nur ein Taefelchen lesen wollen...");
+  AddReadDetail(({"aufschrift","buchstaben"}),
+    " .---------------------------------------. \n"
+    " | o   Beschwerde- und Notfallhebel!   o | \n"
+    " | o        Missbrauch strafbar.       o | \n"
+    " `---------------------------------------' \n");
+  AddDetail("schlitz",
+    "Der Schlitz, aus dem der Hebel heraussteht, ist feinsaeuberlich in "
+    "Holz abgefasst und sieht aus, als ob er schon ewig hier waere. Wie "
+    "alles andere - insbesondere diverse Ladenhueter - auch. Oben ist er"
+    " deutlich verschrammter, was wohl darauf hindeutet, dass man besser"
+    " drueckt anstatt zu ziehen.");
+  AddDetail("ladenhueter",
+    "Naja, der gute Magier ist nichteinmal mehr verkaeuflich... ;->");
+    
+  AddDetail(({"kiste","kisten"}),
+    "Oh Dusty, was mag nur in all diesen Kisten sein? Hier und da schaut etwas "
+    "aus einer offenen Kiste heraus (nimm das nur woertlich, stecke besser "
+    "keine Finger in eine Kiste, vielleicht beisst es ja), die meisten Kisten "
+    "sind aber zu und wollen bestimmt nicht geoeffnet werden.");
+  AddDetail("finger",
+    "Noch dran.");
+  AddDetail(({"es","etwas"}),
+    "Du willst es einfach nicht genauer wissen! Nein, wirklich nicht! "
+    "Glaub es einfach. Wenn Du es doch genauer wissen willst, untersuche "
+    "folgendes: asfvoithmcuiwemxlptrwnl");
+  AddDetail("asfvoithmcuiwemxlptrwnl",
+    "Ok, Du willst es doch genauer wissen. Leider bleibt es beim Wollen, "
+    "denn was auch immer in den offenen Kisten ist, es versteckt sich gut.");
+  AddDetail("wollen",
+    "Dein Wille ist sehr stark.");
+  AddDetail("willen",
+    "Das heisst doch \"Wille\", oder?");
+  AddDetail("wille",
+    "Dein Wille ist etwa gleich stark wie Du.");
+  AddDetail("wunder",
+    "Dieser verdammte Laden ist ein einziges Wunder. Niemand behauptet, "
+    "dass alle Wunder etwas schoenes seien... pass' besser auf!");
+  AddDetail("brauchbares",
+    "Na, ob es hier irgendwo etwas Brauchbares gibt? Vor allem: Brauchbar "
+    "und _ungefaehrlich_...? Du hast berechtigte Zweifel. Allerdings muss "
+    "der Inhaber auch von etwas leben. Und wer kauft schon Dinge, die man "
+    "nicht brauchen kann oder gefaehrlich sind? ... ... Ok, vergiss die "
+    "Frage, ich habe auch schon Frauen kennengelernt.");
+  AddDetail("frage", "Hm?");
+  AddDetail("dinge",
+      "Wah, etwas genauer bitte!");
+  AddDetail(({"frau","frauen"}),
+    "ERROR: (s)printf(): incorrect argument type to %woman.");
+  AddDetail(({"schild","tafel","schiefertafel"}),
+    "Das Schild ist eine grosse Schiefertafel, auf der feinsaeuberlich "
+    "die derzeitigen Angebote und die jeweils dazugehoerigen Preise "
+    "notiert sind. Du kannst versuchen, die Tafel zu lesen. Krieg' aber "
+    "keinen Anfall, solche Laeden sind noch nie billig gewesen...");
+  AddDetail(({"angebot","angebote"}),
+    "Lies' am besten das Schild, da stehen sie alle drauf.");
+  AddDetail(({"preis","preise"}),
+    "Sieh' sie Dir besser nicht zu genau an...");
+  AddDetail("zweifel",
+    "Das sind Deine Zweifel.");
+  AddDetail("anfall",
+    "Sowas siehst Du da nicht!\nNoch nicht.\n");
+  AddDetail(({"umtausch","reklamation","reklamationen"}),
+    "Besser, Du versuchst das erst gar nicht. Sowas bringt nur noch viel "
+    "mehr Aerger.");
+  AddDetail(({"raum","laden"}),
+    "Du stehst in einem Laden. Eigentlich sollte daran nichts "
+    "besorgniserregendes sein. Eigentlich. Aber... naja.");
+  AddDetail("besorgniserregendes",
+    "Es ist nur so ein Gefuehl...");
+  AddDetail("gefuehl",
+    "...als ob Du im Bauch von irgendetwas steckst, das "
+    "Dich gerne verdauen wuerde.");
+  AddDetail("irgendetwas",
+    "Du stehst in einem Laden. Aber das solltest sogar "
+    "DU inzwischen mitbekommen haben. Wirklich.");
+  AddDetail(({"oellampe","lampe"}),
+    "Die Oellampe haengt an einer rostigen "
+    "Metallkette an der Decke und schwingt leise quietschend langsam hin und "
+    "her. Ihr Licht reicht nicht ganz dazu aus, den Raum zu erleuchten, es "
+    "liegen verdaechtig viele Ecken im Dunkeln.");
+  AddDetail("licht",
+    "Das Licht reicht gerade dazu aus, dass Du die Preise auf der Tafel "
+    "erkennen kannst. Das ist eigentlich schon zuviel *schauder*.");
+  AddDetail(({"decke"}),"Uuuups. Irgendwo dort oben muss die Decke sein, aber"
+    " sie liegt vollkommen im Dunkeln, aber da eine Oellampe von der Decke "
+    "haengt, ist ihre Existenz ausreichend bewiesen.");
+  AddDetail("existenz","Pass auf, dass Dir nichts auf den Kopf faellt.");
+  AddDetail("kopf","Das koennte weh tun, weisst Du.");
+  AddDetail(({"kette","metallkette"}),"Die Metallkette, an der die Oellampe "
+    "an der Decke haengt, sieht schon ziemlich rostig aus. Aber sie wird "
+    "vermutlich noch eine ganze Weile halten.");
+  AddDetail("weile","Du hast wohl Langeweile...");
+  AddDetail("langeweile","Du hast ganz offensichtlich Langeweile.");
+  AddDetail("dunkel","Im Dunkeln laesst sich's munkeln... aber so richtig "
+    "munkel-schunkelig hoeren sich die Geraeusche, die hier aus dem Dunkel "
+    "kommen, wirklich nicht an.");
+  AddDetail("geraeusche","Irgendwie unheimlich... als ob der Laden selbst "
+    "lebt.");
+
+  AddRoomMessage(({       /* Jaaa! Stimmung auf Kosten von Rechenzeit ;-> */
+    "Ploetzlich rappelt es in einer Kiste.\n",
+    "Ein leises Stoehnen kommt von der Decke.\n",
+    "Aus einer Ecke erklingen Pfeifgeraeusche, dann blitzt es kurz.\n",
+    "Du fuehlst Dich beobachtet.\n",
+    "War da nicht eben ein schmatzendes Geraeusch?\n",
+    "Knackte da nicht ein sproeder Knochen?\n",
+    "Unter dem Boden gluckert Wasser. Hoffentlich ist es nur Wasser.\n"
+     }),700,0);
+
+  ergaenzeSortiment();   /* Nach einem Crash darf der Laden ruhig gleich  */
+                         /* gefuellt sein, muss ja keine Schikane sein    */
+    
+  call_out("fliegeZielAn",30);   /* Man kann notfalls noch schnell parken */
+  if (previous_object()!=find_object("/secure/master"))
+    SLOG("seherladen.err",sprintf("'create()' aufgerufen. (PO:%s, TP:%s) \n",
+      (previous_object()?file_name(previous_object()):"--"),
+      (this_player()?getuid(this_player()):"--")));
+
+  SetFailMessages( ({
+        "Du bist zu nervoes.\n",
+        "Du traust Dich nicht, Du fuehlst Dich zu sehr beobachtet.\n",
+        "Mist, weg ist es!\n",
+        "Oh, das Detail fehlt.\n",
+        "DA! WAS WAR DAS?!\n"}));
+
+  SetStupids(({"hier","jemandem","keinen","wo","raeumen",
+        "wartungsfunktionen"}));
+
+}    /* Ende von create() */
+
+
+
+void init() {        /* *** INIT *** */
+ if (  (this_player()) && 
+       ( (query_once_interactive(this_player())) &&
+       ((!IS_SEER(this_player())) || (!interactive(this_player())))))
+   { 
+   write("Du versuchst, den Laden zu betreten, doch dieser faucht Dich boese "
+        "an\n(huch!? Ein Laden, der faucht?!?), schreist vor Schreck laut auf"
+        " und Du\nstolperst dann zurueck ins Freie.\n");
+   if (currentenv!=-1) {
+     tell_room(zielorte[currentenv][L_FILENAME],
+       "Du hoerst einen fuerchterlichen Aufschrei aus dem Laden schallen.\n"); 
+     this_player()->move(zielorte[currentenv][L_FILENAME] ,
+     M_GO|M_SILENT|M_NO_SHOW);
+   }
+   else  /* Sollte aber nicht auftreten... */
+     this_player()->move("/gilden/abenteurer",M_GO|M_NO_SHOW); 
+   return;
+  }
+  if ((this_player()) && (!this_player()->QueryProp(P_INVIS))) {
+    while (remove_call_out("begruesseSeher")!=-1);
+    call_out("begruesseSeher",3);
+    /*
+    if ((!IS_WIZARD(this_player()))&&(!this_player()->QueryProp(P_TESTPLAYER)))
+        SLOG("seherladen.enter",sprintf("%s betritt den Seherladen. [%s]\n",
+        capitalize(getuid(this_player())),
+        ((currentenv>=0)?zielorte[currentenv][L_FILENAME]:"- OHNE EINGANG -"))); 
+    */
+  }
+  ::init();   /* Super! Klasse! Superklasse! ;-> */
+}
+
+/* Wenn remove() von einem interaktiven Objekt aufgerufen wird (direkt oder
+ * indirekt), dann loggen und ausfuehren. Ansonsten *nicht* zerstoeren, da
+ * der Raum ja nicht durch Ausgaenge zum Wiedereinswappen gezwungen werden
+ * kann... */
+
+int remove() {       /* *** REMOVE *** */
+  parkLaden(1);
+  save_object(SAVEFILE);
+  reset();   /* PayIn */
+  if (this_player()) {
+    SLOG("seherladen.err",sprintf("'remove()' aufgerufen. (%s) \n",
+      (this_player()?getuid(this_player()):"--")));
+    return ::remove();
+  } 
+  else return 0;  
+}
+
+
+
+void reset() {       /* *** RESET *** */
+  reset_counter++;
+  bauchdecke=({});
+  muenzenda=0;
+  if (!(reset_counter%L_RESETS_NEEDED_TO_REFILL))
+    ergaenzeSortiment();
+  if (cash) {
+    ZENTRALBANK->PayIn(cash);
+    SLOG("seherladen.cash",sprintf("ZENTRALBANK PayIn: %d Muenzen\n",cash));
+    cash=0;
+  }
+  ::reset();
+}
+
+
+
+int clean_up(int refcount) {
+  return 1;
+}
+
+
+string _query_int_long() {          /* evtl. besondere Befehle anzeigen */
+  if (keinZugriff()) return Query(P_INT_LONG);
+  return (Query(P_INT_LONG)+
+   "Wizinfo: Hilfe zu den Laden-Wartungsfunktionen mit \"laden hilfe\".\n");
+}
+
+
+
+void BecomesNetDead(object player) {      /* Netztote RAUS! */
+  if (!objectp(player)) return;
+  if ((currentenv==-1) || 
+     (catch(this_player()->move(zielorte[currentenv][L_FILENAME],M_GO,"",
+      "kullert netztot raus","kullert netztot aus dem Laden herein"))))
+    say(sprintf("Mit einem leisen Seufzen wird %s entfernt.\n",
+      player->name()));
+  if ((environment(player)) && (environment(player)==this_object())) 
+    player->move("/room/void",M_NOCHECK);     /* *GRUMMEL* Magier... */
+}  
+
+
+mixed QueryProp(string name) {   /* Selbst suchen macht frei...       */
+  if ((previous_object()) &&     /* Sorry, Woody, aber das muss sein. */
+      (file_name(previous_object())[0..22]=="/d/seher/woody/obj/lupe"))
+    switch (name) {
+      case P_SMELLS:case P_SOUNDS: return (["Bla":"Fasel"]);break;
+      default: return ([]);
+    }
+  return ::QueryProp(name);
+}
+
+
+nosave void begruesseSeher() {          
+  if ((!this_player()) || (!environment(this_player())) ||
+      (environment(this_player())!=this_object()))
+    return;
+  tell_room(this_object(),break_string("Eine Stimme raunt: Sei Gegruesst, "
+    +(((int)this_player()->QueryProp(P_GENDER)==FEMALE)?"Frau":"Herr")+" "+
+    capitalize((string)this_player()->QueryProp(P_RACE))+" ...",77));
+  return;
+}
+
+      /* Befehle, die der Raum dem Spieler anbietet....: */
+
+
+nosave string zeigeTafel() {          /* Fuer das lesbare Detail 'tafel' */
+  this_player()->More(tafel);
+  return "";
+}
+
+nosave string detailHebel() {
+  return break_string(
+   "Hm, ein handlicher Hebel, der aus einem senkrechten, mit Holz "
+   "eingefassten, Schlitz in der Wand nach schraegoben herausschaut. Er "
+    "sieht wichtig aus, so mancher Kunde wird ihn im blinden Eifer schon fast "
+    "abgebrochen haben. "+
+  (gehebelt?"Die Spuren im Staub deuten darauf hin, dass er kuerzlich "
+     "genutzt wurde.\n":""),77);
+}
+
+nosave string detailBauchdecke() { 
+  if ((!this_player())||(!interactive(this_player()))) return "";
+  if (member(bauchdecke, getuid(this_player()))!=-1)
+    return  
+      "Deine Bauchdecke ist noch voellig in Ordnung, das weisst Du doch.\n";
+  else {
+    bauchdecke+=({getuid(this_player())});
+    write(break_string(
+      "Du ueberpruefst schnell Deine Bauchdecke und stellst fest, dass "
+      "zumindest _Du_ noch keinen Grund fuer solches Stoehnen hast. Da "
+      "BIST Du aber enorm erleichtert!",77));
+    this_player()->heal_self(50);
+    SLOG("seherladen.info",sprintf("%s ist enorm erleichtert. \n",
+      (this_player()?capitalize(getuid(this_player())):"--")));
+    return "";
+  }
+}   
+
+nosave string detailStaubwolke() {
+  if ((!this_player())||(!interactive(this_player()))) return "";
+  if ((!gewischt)||((time()-gewischt)>60)) return "Staubwolke? Wo?\n";
+  return "Hier hat eben jemand versucht, ein wenig sauber zu machen.\n"
+         "Vergeblich uebrigens.\n"
+         "Dir war das ja klar.\n"
+         "Oder?\n";
+}
+
+nosave string detailStaub() {
+  if ((!this_player())||(!interactive(this_player()))) return "";
+  return break_string(sprintf("%s %s",
+    "Oh ja, viel Staub hier. Anscheinend macht hier niemand richtig sauber. "
+    "Nein, komm' bloss nicht auf die Idee, hier Staub wischen zu wollen, "
+    "das ist vergebliche Muehe...",(gewischt?"Wenn Du es genau wissen willst: "
+    "zuletzt versuchte es "+wolke+" und das ist schon "+
+     time2string("%x %X",time()-gewischt)+" her.":"")),77);
+}
+
+nosave int cmdBreche(string was) {
+  int dam;
+  notify_fail("Moment, Du willst hier was abbrechen?\n");
+  if (!was) return 0;
+  if (was=="hebel ab") {
+    write(break_string(
+     "In boesester Absicht ziehst Du wie wild an dem Hebel. "
+     "Der Hebel ist erstaunlich widerstandskraeftig, obwohl er so alt "
+     "aussieht. Du nicht, Du spuerst das heftige Prickeln in den Haenden "
+     "sehr deutlich, und es zehrt an Deinen Kraeften - auch wenn noch "
+     "nie jemand an einem Prickeln gestorben ist...",77));
+   say(break_string(this_player()->Name()+
+     " zieht wie bloede an dem Hebel, laesst dann aber ploetzlich mit einem "
+     "Aufschrei los. Frag' "+this_player()->QueryPronoun(WEN)+" doch mal, ob "
+     "es weh getan hat... ;->",77));
+    this_player()->reduce_hit_point(dam=(50+random(100))); /* Randale! ;-> */
+    SLOG("seherladen.info",sprintf("%s zerrt am Hebel (%d).\n",
+      (this_player()?capitalize(getuid(this_player())):"--"),dam));
+    return 1;
+  }
+  notify_fail("Das kannst Du aber nicht abbrechen.\n");
+  return 0;
+}
+nosave int cmdMunkel(string was) { /* Na danke, Zordan ;-> */
+  notify_fail("Und wo moechtest Du munkeln? ;->\n");
+  if (!was) return 0;
+  notify_fail("Nein, das stimmte nicht. Hehe.\n");
+  if ((was!="in dunkeln") && (was!="in dunklen") && (was!="in dunkel")) 
+    return 0;
+  write("Du gehst in eine dunkle Ecke und munkelst ein wenig. "
+        "Sehr einfallsreich.\n"); 
+  say(break_string(this_player()->Name()+
+    " geht in eine dunkle Ecke und munkelt ein wenig. Ist das nicht toll? "
+    "Sollte man "+this_player()->QueryPronoun(WEN)+" dafuer nicht "
+    "grenzenlos bewundern? Fantastisch!" ,77));
+  return 1;
+}
+
+nosave int cmdGreife(string arg) {
+  notify_fail("Greife wo hinein? Nein, mach' es besser nicht.\n");
+  if (!arg) return 0;
+  notify_fail("Du kannst da nicht reingreifen.\n");
+  if (arg!="in kiste") return 0;
+  return cmdStecke("finger in kiste");
+}
+
+nosave int cmdZiehe(string was) {
+  if (!this_player()) return 0;
+  notify_fail("An was moechtest Du denn ziehen?\n");
+  if (!was) return 0;
+  notify_fail("Das geht so irgendwie nicht.\n");
+  if ((was=="hebel") || (was=="an hebel")) {
+    write("Du ziehst am Hebel, es geschieht aber ueberhaupt nichts.\n");
+    say(break_string(this_player()->Name()+ " zieht an einem Hebel.",77));
+    return 1;
+  }
+  notify_fail("Das geht so irgendwie nicht.\n");
+  return 0;
+}
+
+nosave int cmdBewege(string was) {
+  if (!this_player()) return 0;
+  notify_fail("Was moechtest Du bewegen?\n");
+  if (!was) return 0;
+  if (was=="hebel") {
+    write("Fein. Gut. Aber - druecken oder ziehen? :->\n");
+    return 1;
+  }
+  notify_fail("Hm, das geht irgendwie nicht.\n");
+  return 0;
+}
+
+ 
+
+nosave int cmdDruecke(string was) {
+  if (!this_player()) return 0;
+  notify_fail("Ok, und was bitteschoen moechtest Du druecken?\n");
+  if (!was) return 0;
+  if (was=="hebel") {
+    if ((IS_WIZARD(this_player())) || 
+      (this_player()->QueryProp(P_TESTPLAYER))) {
+      write("Magier und Testies haben keine Verwendung fuer diesen Hebel.\n");
+      return 1;
+    }
+
+    SLOG("seherladen.info",sprintf("%s loest den Hebel aus.\n",
+         (this_player()?capitalize(getuid(this_player())):"--")));
+    if (gehebelt) {
+      write(break_string(
+         "Du drueckst den Hebel nach oben, aber abgesehen davon, dass der "
+         "Hebel in seine urspruengliche Position zurueckfaellt, passiert "
+         "nichts.",77));
+      say(break_string(this_player()->Name()+
+         " drueckt den Hebel nach oben, dieser faellt aber einfach wieder "
+         "in seine urspruengliche Position zurueck, ohne dass irgendetwas "
+         "anderes passiert.",77));
+    } 
+    else {
+      write(break_string(
+        "Du drueckst den Hebel nach oben, stoesst aber unvermutet auf "
+        "Widerstand. Na, das muss doch... Jawoll, hoch mit dem Hebel!",77));
+      say(break_string(this_player()->Name()+
+        " drueckt den Hebel nach oben, grummelt leise, als es nicht so recht "
+        "gelingen will, schafft es dann aber doch.",77));
+      gehebelt=2;        
+      call_out("weckeMagier",4);
+    }
+    return 1;
+  }
+  notify_fail("Den oder das kannst Du nicht druecken.\n");
+  return 0;
+}
+
+nosave void weckeMagier() {
+  tell_room(this_object(),
+    "Ein leises Knirschen, das Geraeusch von aufeinanderreibenden grossen\n"
+    "Steinplatten, ein leichtes Zittern des Raumes - und der Hebel faellt\n"
+    "wieder in seine urspruengliche Position zurueck.\n");
+  write("Eine Stimme teilt Dir mit: Sofern Anatol Anwesend Ist, Wird Er "
+    "Ueber Deinen\nEine Stimme teilt Dir mit: Wunsch, Ihn Zu Sprechen, "
+    "Informiert Sein Und Dich\nEine Stimme teilt Dir mit: Bestimmt Sofort "
+    "Darauf Ansprechen.\n");
+  if (find_player("anatol"))
+    tell_object(find_player("anatol"),
+    ANSI_YELLOW+
+    break_string("\aHe Anatol, Ich Glaube, "
+    +capitalize(getuid(this_player()))+" Hat Eine Beschwerde Vorzubringen "
+    "Oder Steckt Gar In Ernsten Schwierigkeiten. Bemuehe Doch Deine Edle "
+    "Gestalt Mal In Den Seherladen, Bitte."
+    ,77,"Eine Stimme teilt Dir mit: ")+ANSI_NORMAL);
+  return;
+}
+
+
+   
+nosave int cmdMache(string arg) {
+  notify_fail("Mach WAS?\n");
+  if (!arg) return 0;
+  notify_fail("Nein, das macht vielleicht wirklich Sinn, aber es "
+    "geht hier nicht.\n");
+  if (arg!="aerger") return 0;
+  write("Du moserst ein wenig herum und trittst eine Wand.\n"
+    "Postwendend knurrt Dich irgendetwas ziemlich gefaehrlich an.\n"
+    "Die Angst ist staerker als Du... Du willst nur noch weg hier.\n");
+  say(break_string(this_player()->Name()+" mosert herum, tritt ploetzlich "
+    "gegen eine Wand. Es war allerdings vorherzusehen, dass "+
+    this_player()->QueryPronoun()+" sich damit Aerger einhandelt, dass sich "
+    "... aeh ... wer-auch-immer das nicht gefallen lassen wuerde. "
+    "Irgendetwas knurrt "
+    +this_player()->name(WEN)+" beaengstigend boese an.",77));
+  if ((currentenv==-1) || 
+     (catch(this_player()->move(zielorte[currentenv][L_FILENAME],M_GO,"",
+      "fluechtet schreiend raus","kommt gehetzt um sich schauend herein"))))
+    write("Dein Fluchtversuch ist gescheitert.\n");
+  return 1;
+}
+
+nosave int cmdTrommle(string arg) {
+  notify_fail("Schoen, und worauf willst Du trommeln?\n");
+  if (!arg) return 0;
+  notify_fail("Nein, nicht darauf, lass es lieber.\n");
+  if ((arg!="gitarre")&&(arg!="auf gitarre")&&(arg!="auf wandergitarre")&&
+       (arg!="auf gitarre"))
+    return 0;
+  write("Du trommelst auf der Gitarre herum. Schaem Dich!\n");
+  say(break_string(this_player()->Name()+" trommelt auf der alten Gitarre "
+    "herum. Dabei hat diese "+this_player()->QueryPronoun(WEM)+" doch "
+    "gar nichts getan... :-\  ",77));
+  return 1;
+}
+  
+nosave int cmdStecke(string str) {
+  notify_fail("Was auch immer Du vorhast, lass es.\n");
+  if (!str) return 0; 
+  if (str!="finger in kiste") return 0;
+  write("Mutig (und dumm) wie Du bist, steckst Du einen Finger in eine der\n"
+  "Kisten. AUAAAA! *Natuerlich* hat Dich irgendetwas gebissen, was dachtest\n"
+  "Du denn, was passieren wuerde?!?\n");
+  say(break_string(this_player()->Name()+
+    " muss seine Finger ueberall drin haben und "
+    "natuerlich auch in eine Kiste stecken. Ts, das war doch zu erwarten... "
+    "irgendetwas rappelt in der Kiste und beisst in "+ 
+     this_player()->name(WESSEN)+" Finger. Deine Ohren muessen "
+    "jetzt das Geschrei aushalten.",77));
+  SetProp(P_KILL_NAME,"Etwas Bissiges");
+  SetProp(P_KILL_MSG,"Tat's weh, "+this_player()->name()+"?");
+  this_player()->do_damage(random(5),this_object());
+  SetProp(P_KILL_NAME,0); 
+  SetProp(P_KILL_MSG,0); 
+  return 1;
+}
+
+nosave int cmdWische(string was) {
+  if (!this_player()) return 0;
+  notify_fail("Was willst Du (weg)wischen?\n");
+  if (!was) return 0;
+  notify_fail("Nein, das klappt irgendwie nicht.\n");
+  if ((was!="staub")&&(was!="staub weg")) return 0;
+  write("Du fuchtelst ein wenig herum und wischst und tust und machst.\n"+
+  "Aber ausser einer temporaeren Staubwolke hast Du nicht viel erreicht.\n"); 
+  say(break_string(this_player()->Name()+" findet offensichtlich regen "+
+      "Gefallen an Staubwolken. *HUST*\n",77));
+  wolke=(string)this_player()->Name(WER);
+  gewischt=time();
+  return 1;
+}
+
+nosave int cmdOeffne(string was) {
+  object dummy;
+  notify_fail("Was willst Du oeffnen?\n");
+  if (!was) return 0;
+  notify_fail("Das kannst Du nicht oeffnen.\n");
+  if ((was=="tuer") || (was=="tuere")) {
+    write("Die Tuere steht schon offen. Und es sieht auch nicht danach\n"+
+        "aus, dass sie es zulassen wird, von Dir geschlossen zu werden.\n");
+    say(break_string(this_player()->Name()+
+      " versucht vergeblich, die Tuer zu schliessen.",77));
+    return 1;
+  }
+  if ((was=="kiste") || (was=="kisten")) {
+    write("Du versuchst, eine der Kisten zu oeffnen.\n");
+    say(break_string(this_player()->Name()+
+      " fummelt an einer Kiste herum.\n",77));
+    if (random(7)>5) {
+      write("Du hast Erfolg!\n");
+      if (!muenzenda) {
+        muenzenda=1;
+        tell_room(this_object(),
+          "Tausende von Muenzen fallen aus einer Kiste.\n");
+        dummy=clone_object("/obj/money");
+        dummy->SetProp(P_AMOUNT,random(42)+42);
+        dummy->move(this_object(),M_NOCHECK);
+        write("Du bist reich!\n");
+      }
+      else
+        write("Die Kiste ist leer! Na sowas...\n");
+    }  
+    else {
+      say(break_string(this_player()->Name()+
+        " wird von der Kiste nachdruecklich zurueckgewiesen.\n",77));
+      write("Die Kiste wehrt Deinen Versuch ab.\n");
+    }
+    return 1;
+  }
+  return 0;
+}
+
+nosave int cmdSchliesse(string was) {
+  notify_fail("Was willst Du schliessen?\n");
+  if ((was=="tuer") || (was=="tuere")) {
+    write("Du stemmst Dich gegen die Tuer, in der Hoffnung, sie zuzukriegen.\n"
+        "Eigentlich unnoetig zu erwaehnen, dass Du keinen Erfolg hast.\n");
+    say(break_string(this_player()->Name()+
+      " stemmt sich mit aller Gewalt gegen die Tuere. Die Tuere stemmt "
+      "(actio gleich reactio) genauso zurueck. Und bleibt offen.",77));
+    return 1;
+  }
+}
+
+
+nosave int cmdTrinke(string was) {
+  notify_fail("Und was bitteschoen willst Du trinken?\n");
+  if (!was) return 0;
+  notify_fail("Das kannst Du (hier) irgendwie nicht trinken.\n");
+  if ((was!="bier") && (was!="bier aus")) return 0;
+  write(break_string(
+    "Du trinkst einen Schluck aus dem Bierglas, aber das Bier schmeckt so "
+    "abartig widerlich, dass Du es wuergend und keuchend wieder ins Glas "
+    "spuckst. Dir ist ein wenig schwindelig geworden, kannst aber den "
+    "Brechreiz grade noch unterdruecken, als Du Dich zu fragen beginnst, "
+    "wieviele Leute vor Dir das Bier schon im Mund hatten...",77));
+  say(break_string(
+    this_player()->Name()+" trinkt ein Schluck des abgestandenen Bieres "
+    "und beginnt augenblicklich, heftig zu wuergen und zu keuchen. Das Bier "
+    "ist wohl wirklich schon *sehr* alt. Jedenfalls spuckt "+
+    this_player()->QueryPronoun()+" das Bier schnell ins Glas zurueck.",77));
+  SLOG("seherladen.info",sprintf("%s trinkt abgestandenes Bier *wuerg*. \n",
+      (this_player()?capitalize(getuid(this_player())):"--")));
+  if (!this_player()->QueryProp(P_POISON)) 
+    this_player()->AddPoison(1);  /* Das soll kein echter Giftangriff sein, */
+  return 1;                       /* daher nur _wenig_ Gift und nur auf     */
+}                                 /* unvergiftete Seher...                  */
+ 
+
+      /* Hier wird eingekauft. Der Code sieht ziemlich chaotisch aus,
+       * funktioniert aber praechtig. Ok, "praechtig" ist was anderes.
+       * Aber bitte. Keine Klagen, ja? ;->
+       */
+
+nosave int cmdGruesse(string was) {
+  if ((!was) ||(was!="stimme"))
+    return 0;
+  SLOG("seherladen.info",sprintf("%s versucht, die Stimme zu gruessen.\n",
+    (this_player()?capitalize(getuid(this_player())):"--")));
+  if (find_player("anatol"))
+    tell_object(find_player("anatol"),break_string(sprintf(
+    "He Anatol, Du Oberschnarchzapfen! %s Versuchte Gerade Vergebens, Mich, "
+    "Die Stimme Im Magischen Laden Fuer Seher, Zu Gruessen. Mach Mal Was!", 
+       capitalize(getuid(this_player()))),77,"Eine Stimme teilt Dir mit: "));
+  return 0;
+}
+
+
+nosave int cmdDeute(string arg) {   /* *** EINKAUFEN *** */
+  string dummy;
+  int artikel;
+  if (!arg) return 0;
+  if (sscanf(arg,"auf %s",dummy)==1) arg=dummy;
+        /* Wenn das Argument keine Ziffer ist, ueberlassen wir das */
+        /* Handling einfach der Soul, die ja "deute" auch bedient. */
+  if (!(to_string(to_int(arg))==arg)) return 0; 
+  artikel=to_int(arg);
+  if ((find_call_out("bewegeArtikel")!=-1) || (find_call_out("kaufMich")!=-1)){
+    write("Das wuerde vermutlich keinen Effekt haben, der Laden scheint schon"
+          "\nirgendetwas zu tun... warte lieber noch einen Moment.\n");
+    return 1;
+  }  
+  if (artikel<1) {
+    write("Du schreckst furchtbar zusammen, als Dich irgendetwas in Deinen "
+      "Hintern\ntritt. Am besten deutest Du nur noch auf positive Zahlen.\n");
+    say(break_string(this_player()->Name()+" schrickt ploetzlich furchtbar "
+      "zusammen und erroetet.",77));
+    return 1;
+  }
+  if (artikel>sizeof(angebot)) {
+    write("AUTSCH! Irgendwas hat Dir eben eine Kopfnuss gegeben. Wie willst "
+      "willst\nDu auch auf Zahlen deuten, die es (noch) gar nicht auf der "
+      "Tafel gibt?\n");
+    say(this_player()->Name()+" bekommt eine Kopfnuss.\n"
+      "Es klingt erschreckend hohl, erschreckender ist allerdings, dass Du "
+      "niemanden\ngesehen hast, der die Kopfnuss gegeben haben koennte...\n");
+    return 1; 
+  }
+  write("Du deutest auf die Nummer "+arg+" auf der Schiefertafel.\n");
+  say(this_player()->Name()+" deutet auf eine Zahl der Schiefertafel.\n");
+  call_out("kaufMich",2,--artikel);  
+  return 1;
+}
+
+nosave void kaufMich(int artikel) {
+  string dummy;
+  object ware;
+
+  if(!this_player()) return;
+  if(!environment(this_player())) return;
+  if((environment(this_player()))!=this_object()) {
+    tell_room(this_object(),break_string(
+      "Von irgendwoher vernimmt man veraergertes Grummeln. Es hoerte sich an "
+      "wie: `Erst Fragen, Dann Weglaufen. !&\$#'!! Seher!`",77));
+    return;
+  }
+       /* Sooo, Artikelnummer ist gueltig, der Besteller ist noch im Raum,
+        * also koennen wir weitermachen... */
+  if (!IS_WIZARD(this_player())) {
+    if (!angebot[artikel][L_BESTAND]) {
+      tell_room(this_object(),break_string(
+        "Kannst Du Nicht Lesen, "+this_player()->Name()+"? Dieser Posten Ist "
+        "Zu Unserem Groessten Bedauern Derzeit Ausverkauft.",77,
+        "Eine Stimme raunt: ",1));
+      return;
+    }
+    if (this_player()->QueryMoney()<angebot[artikel][L_PREIS]) {
+      tell_room(this_object(),break_string(
+        "Du Glaubst Wohl, Uns Uebers Ohr Hauen Zu Koennen, "
+        +this_player()->Name()+"? Nein, "
+        +((((int)this_player()->QueryProp(P_GENDER))==FEMALE)?"Maedel":"Buerschchen")
+        +", Das Kannst Du Mit Uns Bestimmt Nicht Machen. Du Hast Nicht "
+        "Genuegend Gold Bei Dir, Winzling.",77,
+        "Eine Stimme knurrt: ",1));
+      write("AUAA! Ein elektrisierendes Prickeln im Nacken laesst Dich "
+        "aufschreien. \n");
+      say(this_player()->Name()+" schreit schmerzerfuellt auf.\n");
+      SetProp(P_KILL_NAME,"Finanzielle Selbstueberschaetzung");
+      this_player()->do_damage(random(15),this_object());
+      SetProp(P_KILL_NAME,0);
+      return;
+    }  
+  }
+  if (dummy=catch(ware=clone_object(angebot[artikel][L_FILENAME]))) {
+     write("Oh, hier ging etwas schief, bitte verstaendige Anatol:\nFehler: "
+        +dummy+"\n");
+     return;
+  }
+  if (ware->deniedToSell(this_player())) {
+    tell_room(this_object(),break_string(
+      "Leider Duerfen Wir Dir Das Nicht Verkaufen, "
+      +this_player()->Name()+". Zu Schade, Wir Haetten Auch Diesen "
+      "Handel Gerne Mit Dir Abgeschlossen.",77,"Eine Stimme bedauert: ",1));
+    ware->remove();
+    if (objectp(ware)) destruct(ware);
+    return;
+  }
+
+  if (!IS_WIZARD(this_player())) {
+     cash+=angebot[artikel][L_PREIS];
+     angebot[artikel][L_BESTAND]-=1;
+     write("Dein Geldbeutel ist leichter geworden.\n");
+     this_player()->AddMoney(((angebot[artikel][L_PREIS])*(-1)));
+     ware->SetProp("sold_by_seershop_for_cash",angebot[artikel][L_PREIS]);
+  }
+  else 
+    write("Da Du Magier bist, bleibt Dein Geldbeutel unberuehrt.\n");
+    
+  tell_room(this_object(),break_string(
+    "Dein Wunsch Soll Dir Erfuellt Werden, "+this_player()->Name()+". "
+    "Gedulde Dich Bitte Einen Kleinen Augenblick.",77,
+    "Eine Stimme verkuendet: ",1));
+  tell_room(this_object(),
+    "Du nimmst ein kurzes magisches Flimmern auf der Schiefertafel wahr.\n");
+
+  call_out("bewegeArtikel",4,ware,artikel);
+  updateSortiment();
+  return;
+} 
+
+nosave void bewegeArtikel(object ware,int artikel) {
+  int mvres;
+  if (!objectp(ware)) {   /* Wah, Objekt weg?? */
+    tell_room(this_object(), 
+      "Eine Stimme faengt woodylaesterlich an zu fluchen.\n"
+      "(Sag' bitte Anatol Bescheid, hier gibt es wohl ein Problem.)\n");
+    return;
+  }
+  catch(ware->soldBySeerShop());
+  mvres=(int)ware->move(this_player(),M_GET|M_SILENT);
+  if (mvres==ME_TOO_HEAVY) {
+    tell_room(this_object(),break_string(
+      "Oh "+this_player()->Name()+", Deine Augen Waren Einmal Mehr Groesser "
+      "Als Dein Tragevermoegen. Du Bist "+
+      (((int)this_player()->QueryProp(P_GENDER)==FEMALE)?"Eine Wurstseherin":
+      "Ein Wurstseher")+", "+this_player()->Name()+"!",77,
+    "Eine Stimme laestert: ",1));
+    ware->remove();
+    angebot[artikel][L_BESTAND]+=1;
+    updateSortiment();
+    if (!IS_WIZARD(this_player())) {
+      cash-=angebot[artikel][L_PREIS];
+      call_out("geldZurueck",2,angebot[artikel][L_PREIS]);
+    }
+    return;     
+  }
+  if (mvres!=1) {
+    tell_room(this_object(), 
+      "Die Stimme stoehnt genervt.\n"
+      "(Sag' bitte Anatol Bescheid, hier gibt es wohl ein Problem.)\n");
+    ware->remove();
+    return;
+  }
+  say(break_string(
+     "Mit einem magischen Knistern materialisiert sich ueberraschend "+
+     ware->name()+" zwischen "+this_player()->name(WESSEN)+" Besitztuemern.",
+     77,0,1));
+  write(break_string(
+    "Ein magisches Knistern umgibt Dich, und ploetzlich materialisiert "+
+     "sich erfreulicherweise "+ware->name()+
+     " zwischen Deinen Besitztuemern.",77,0,1));
+  if (!IS_WIZARD(this_player()))
+    SLOG("seherladen.kauf",sprintf("%s kauft %s fuer %d\n",capitalize(getuid(this_player())),file_name(ware),
+      ((int)(ware->QueryProp("sold_by_seershop_for_cash",angebot[artikel][L_PREIS])))) );
+  return;
+}     /* VOILA, Handel abgeschlossen! :> */
+ 
+nosave void geldZurueck(int geld) {
+  object gobj;
+  tell_room(this_object(), "Ein froehliches Klimpern verkuendet die "
+    "Ankunft unermesslichen Reichtums.\n");
+  gobj=clone_object("/obj/money");
+  gobj->SetProp(P_AMOUNT,geld);
+  gobj->move(this_object(),M_MOVE_ALL);
+  return;
+}
+
+/*****************************************************************/
+/* So, jetzt sorgen wir fuer Bewegung. Der Laden huepft ja nicht
+ * wie ein mnpc von Raum zu Raum, sondern fliegt nur eingetragene
+ * Ziele an. Hier kommt die Fliegerei...:                        */
+
+nosave void fliegeZielAn() {
+  string err;
+  if (!sizeof(zielorte)) {
+    tell_room(this_object(),
+      "Sowas, es sind ja gar keine Ziele eingetragen...\n"
+      "Laden ist in Parkposition.\n");
+    return;
+  }
+  dest=zielorte[currentenv=random(sizeof(zielorte))];
+  if (err=catch(call_other(dest[L_FILENAME],"???",0))) {
+    SLOG("seherladen.err",sprintf("%s: Raum nicht ladbar...!\n",
+      dest[L_FILENAME]));
+    tell_room(this_object(),
+       "Laden konnte Zielraum nicht laden, ist in Parkposition.\n");
+    currentenv=-1;
+    raise_error("Aaaaargh! Konnte Zielraum ''"+dest[L_FILENAME]+
+       "'' nicht laden: "+ err);
+    return;
+  } 
+  if (member((mapping)dest[L_FILENAME]->QueryProp(P_DETAILS),"laden"))
+    SLOG("seherladen.err",sprintf("%s: Detail Laden existiert!\n",
+      dest[L_FILENAME]));
+  if (member((mapping)dest[L_FILENAME]->QueryProp(P_EXITS),dest[L_EXIT]))
+    SLOG("seherladen.err",sprintf("%s: Ausgang existiert!\n",dest[L_FILENAME]));
+  dest[L_FILENAME]->AddExit(dest[L_EXIT],
+         "in den seltsamen Laden#"+file_name(this_object()));
+  dest[L_FILENAME]->SetProp(P_INT_LONG,dest[L_FILENAME]->QueryProp(P_INT_LONG)+
+    "Nach "+capitalize(dest[L_EXIT])+" kannst Du in den alten Laden gehen.\n");
+  dest[L_FILENAME]->AddDetail("laden","Ach ja, Du erinnerst Dich, der Laden "
+  "war schon immer hier. Komisch, dass Dir das erst jetzt auffaellt... Du "
+  "koenntest ja mal nach "+capitalize(dest[L_EXIT])+" gehen und reinschauen.");
+    /* Extern call fuer den Reset, der dann weiter ausgeloest wird... */
+  this_object()->AddExit("raus",dest[L_FILENAME]);
+  tell_room(this_object(),"Eine Erschuetterung verkuendet, dass der Laden wohl"
+    " wieder\nfuer die Oeffentlichkeit zugaenglich ist.\n");
+  tell_room(dest[L_FILENAME], 
+    "Eine Tuer oeffnet sich mit einem leisen Quietschen.\n");
+  gehebelt=0;      /* Hebel benutzbar machen... */
+  call_out("fliegeAb",L_MINIMUM_RESTING_TIME+random(L_RESTING_TIME_RANDOM));
+  return;
+}
+
+nosave void fliegeAb() {
+  tell_room(this_object(),
+    "Ploetzlich wirkt der Laden irgendwie unruhig... schau besser, dass Du\n"
+    "von hier verschwindest, ehe es zu spaet ist und Du... was auch immer.\n");
+  call_out("fliegeEndlichAb",10);
+  return;
+}
+
+varargs nosave void fliegeEndlichAb(int parken) {
+  object * inv;
+  string * lines;
+  tell_room(this_object(),
+    "Ploetzlich flattert die Tuere und die Waende wackeln. Ein Grunzen "
+    "verkuendet\nveraergert, dass Du besser vorher rausgegangen waerst.\n");
+  inv=all_inventory(this_object());
+  while(sizeof(inv)) {
+    if (living(inv[0])) {
+      if ((query_once_interactive(inv[0])) && (IS_WIZARD(inv[0])))
+        tell_object(inv[0],"Sei froh, dass Du unsterblich bist, sonst "
+           "waere es eben Dein Ende gewesen.\n");
+      else {
+        inv[0]->move(dest[L_FILENAME], M_GO|M_NO_SHOW,0,"wird ausgespuckt",
+          "wird von irgendwo hereingespuckt und japst nach Luft");
+        tell_object(inv[0],
+          "Mit einem ekligen SPLUUUAAAARRK spuckt Dich der Laden aus.\n");
+      }
+    }
+    else {
+      inv[0]->move(dest[L_FILENAME],M_NOCHECK|M_SILENT);
+      tell_room(this_object(), break_string((inv[0]->Name(WER))+
+        " "+((inv[0]->QueryProp(P_AMOUNT)>1)?"werden":"wird")+
+        " ausgespuckt.\n",78));
+      tell_room(dest[L_FILENAME], break_string((inv[0]->Name(WER))+
+        " "+((inv[0]->QueryProp(P_AMOUNT)>1)?"werden":"wird")+
+        " von irgendwo hereingespuckt.\n",78));
+      }
+    inv=inv[1..];
+  }
+
+  RemoveExit("raus");
+  if (member((mapping)dest[L_FILENAME]->QueryProp(P_EXITS),dest[L_EXIT]))
+    dest[L_FILENAME]->RemoveExit(dest[L_EXIT]); 
+  else
+    SLOG("seherladen.err",sprintf("%s: Fail: RemoveExit.\n",
+      dest[L_FILENAME]));
+  if (member((mapping)dest[L_FILENAME]->QueryProp(P_DETAILS),"laden"))
+    dest[L_FILENAME]->RemoveDetail("laden");
+  else
+    SLOG("seherladen.err",sprintf("%s: Fail: RemoveDetail.\n",
+      dest[L_FILENAME]));
+  lines=explode(dest[L_FILENAME]->QueryProp(P_INT_LONG),"\n");
+  if (sizeof(regexp(({lines[<1]}),
+       "^Nach .* kannst Du in den alten Laden gehen")))
+    dest[L_FILENAME]->SetProp(P_INT_LONG,implode(lines[0..<2],"\n"));
+  else
+    SLOG("seherladen.err",sprintf("%s: Fail: INT_LONG-Zeile entf.\n",
+      dest[L_FILENAME]));
+  tell_room(dest[L_FILENAME], 
+    "Eine Tuer faellt mit einem 'Klack' ins Schloss.\n");
+  currentenv=-1;
+  if (!parken)
+    call_out("fliegeZielAn",L_MINIMUM_AWAY_TIME+random(L_AWAY_TIME_RANDOM));
+  return;
+}
+
+/*****************************************************************/
+/* Ein paar Funktionen, die der Laden zum Leben brauchst, z.B. die
+ * Berechnung des Preises, Sortiment wiederauffuellen etc...      */
+
+nosave void ergaenzeSortiment() {
+  int i;
+  for(i=0;i<sizeof(angebot);i++)
+    angebot[i][L_BESTAND]=angebot[i][L_ANZAHL];
+  tell_room(this_object(),break_string(
+    "Ein Aechzen und Stoehnen geht durch den Laden, ueberall knistert und "
+    "raschelt es. Der Laden scheint fuer einen Moment lebendig, in den Kisten "
+    "eine kleine Koboldhorde eingesperrt zu sein (die jetzt ploetzlich raus "
+    "will *argl*).\nDie Zahlen auf der Schiefertafel werden von einer "
+    "unsichtbaren Hand verwischt und neu geschrieben. Doch dann ist der Spuk "
+    "vorbei.",
+     77,0,1));
+  updateSortiment();
+  return;
+}
+
+nosave int errechnePreis(mixed * item) {
+  int heisserpreis;
+  if (!item[L_BESTAND]) 
+    return 0;                               /* Nix koschd nix */
+  if (item[L_BESTAND]==item[L_ANZAHL]) 
+    return item[L_KOSTEN];                  /* Voller Bestand==Basispreis */
+  heisserpreis= (int)(((((item[L_ANZAHL]-item[L_BESTAND])*L_MAXMULT)
+     /item[L_ANZAHL])+((item[L_BESTAND]==1)?0.5:0.0))*item[L_KOSTEN])+
+     item[L_KOSTEN];
+
+       /* Und was sagt uns das jetzt?
+        * a. je mehr (prozentual gesehen) Artikel einer Sorte verkauft
+        *    sind, desto teurer wird das naechste, bis etwa zum
+        *    L_MAXMULT+1-fachen des Grundpreises. 
+        * b. das allerletzte Objekt einer Sorte kostet nocheinmal einiges
+        *    mehr. Ausnahme: Es gibt von vorneherein nur ein Objekt dieser
+        *    Art.
+        * c. Der Programmierer gehoert wegen Wucherns ins Jail!
+        */
+
+  return ((heisserpreis>0)?heisserpreis:1000000);   /* Narrensicher? */
+}
+
+nosave void updateSortiment() {   /* Savefile schreiben,   */ 
+  int i;                          /* Preis aktualisieren,  */
+  save_object(SAVEFILE);          /* Tafel beschriften.    */
+    tafel="                -=<<< Wir Lassen Keine Wuensche Offen! >>>=-\n"
+    "-      -     -    -   -  - - - - - - -"
+    " - - - - - - -  -   -    -     -      -\n";
+  for (i=0;i<sizeof(angebot);i++) {
+    angebot[i][L_PREIS]=errechnePreis(angebot[i]);
+    tafel+=sprintf("Pos. %2d  %-35s nur %5d Muenzen!  Bestand: %d\n",i+1,
+        angebot[i][L_TEXT],
+        angebot[i][L_PREIS],angebot[i][L_BESTAND]);
+  }
+  tafel+= "-      -     -    -   -  - - - - - - -"
+    " - - - - - - -  -   -    -     -      -\n"
+    "(Bitte Deuten Sie Nur Auf Die Nummer Des Artikels, Den Sie "
+    "Erwerben Moechten!)\n";
+  return; 
+}
+
+/*****************************************************************/
+/* Igitt, jetzt kommt noch der Verwaltungskram. Leider geht es auch
+ * hier nicht ohne einen Wulst an Verwaltungsfunktionen. Leider.  */
+  
+nosave int zeigeHilfe() {
+  write(
+  "laden                        : Zeigt Filenamen/Eigensch. des Sortiments\n"
+  "laden <nr> anz|ko|text <arg> : Aendert Eigenschaft von Art. an Pos. <nr>\n"
+  "laden + <filename>           : Fuegt einen Artikel dem Sortiment zu      \n"
+  "laden - <nr>                 : Loescht Artikel an Pos. <nr> aus Sortiment\n"
+  "laden parken                 : Parkt den Laden (ohne Ein- und Ausgaenge)\n"
+  "laden restart                : Aktiviert den Laden, falls geparkt, wieder\n"
+  "laden hilfe                  : Dieses hier.\n"
+  "ziele                        : Zielraeume und deren Ausgaenge anzeigen\n"
+  "ziele + <filename> <richtung>: Zielraum mit Ausgang hinzufuegen\n"
+  "ziele - <nr>                 : Zielraum an Pos. <nr> loeschen\n"
+  );
+  return 1;
+}
+
+private nosave int keinZugriff() {
+  if ((!this_player()) || 
+ (((!IS_ARCH(this_player()))&&(!(getuid(this_player())=="anatol")))))
+    return 1;
+  return 0;
+}
+
+nomask nosave string completePath(string filename) { /* Aus 'v' entnommen */
+  string use_uid;
+  if (this_player()) use_uid=getuid(this_player());
+  else use_uid=getuid(this_object());            
+  if  (!stringp(filename)) return 0;
+  if (filename[0]=='+') return filename="/d/"+filename[1..];
+  else if ((strlen(filename)>1) && (filename[0..1]=="~/"))
+    return "/players/"+use_uid+filename[1..];
+  else if (filename[0]=='~') return "/players/"+filename[1..];
+  else if ((filename[0]!='/')&&(this_player())) 
+    return (this_player()->QueryProp(P_CURRENTDIR))+"/"+filename;
+  else return filename;
+}
+
+nosave int zeigeLaden() {  /* Eingetragene Artikel und deren Eigenschaften */
+  string message;          /* auflisten. Nur fuer Wartungs-Magier...       */
+  int i;
+  if (keinZugriff()) return 0;
+  message=" Nr                               Filename Anz Kosten Eintrag\n";
+  message+="----------------------------------";
+  message+="----------------------------------\n";
+  for (i=0;i<sizeof(angebot);i++)
+    message+=sprintf("%2d %40s %3d %-5d %-20s\n",
+     i+1,
+     (string)angebot[i][L_FILENAME],
+     (int)angebot[i][L_ANZAHL],
+     (int)angebot[i][L_KOSTEN],
+     (string)(angebot[i][L_TEXT]?angebot[i][L_TEXT]:"-"));
+  this_player()->More(message);
+  return 1;
+}
+
+nosave int ladenHandling(string arguments) { /* Handling Befehl 'laden' */
+  string prop, number, arg;                  /* *natuerlich* auch nur   */
+  int num;
+  if (keinZugriff()) return 0;               /* fuer Wartungs-Magier!   */
+  if (!arguments) 
+    return zeigeLaden();
+  if (arguments=="hilfe")
+    return zeigeHilfe();
+  if (arguments=="parken")
+    return parkLaden();
+  if (arguments=="restart")
+    return restartLaden();
+  arguments=(string)this_player()->_unparsed_args();
+  if (arguments[0]=='-') 
+    return postenLoeschen(arguments);
+  if (arguments[0]=='+') 
+    return postenHinzufuegen(arguments);
+  notify_fail("Irgendwas passte da jetzt nicht.\n");
+  if (sscanf(arguments,"%s %s %s",number, prop, arg)!=3) return 0;
+  if (!number) return 0;
+  notify_fail("Eigenschaft aendern: Witzknochen, Argument 1 ist keine Zahl\n");
+  if (number!=to_string(num=to_int(number))) return 0;
+  notify_fail("Eigenschaft aendern: Scherzkeks, soviele Artikel gibts net.\n");
+  if (sizeof(angebot)<num--) return 0;
+  notify_fail("Eigenschaft aendern: Intelligenzbestie, kein Kommentar!\n");
+  if (num<0) return 0;
+  notify_fail("Eigenschaft aendern: Zulaessige Eigenschaften: anz, text.\n");
+  if (member(({"ko","anz","text"}),prop)==-1) return 0; 
+  if ((prop=="anz")||(prop=="ko")) {
+    notify_fail("Eigenschaft aendern: Anzahl muss ein Integerwert sein...\n");
+    if (arg!=to_string(to_int(arg))) return 0;
+    notify_fail("Eigenschaft aendern: Negative Werte !?!?\n");
+    if ((to_int(arg))<0) return 0;
+    angebot[num][((prop=="anz")?L_ANZAHL:L_KOSTEN)]=to_int(arg);
+    if (prop=="anz") angebot[num][L_BESTAND]=to_int(arg);
+    write(((prop=="anz")?"Anzahl pro Periode":"Preis")+" von Objekt "+
+      number+" geaendert.\n");
+    SLOG("seherladen.service",sprintf("AEND (%s): %s (%s:%s)\n",
+      getuid(this_player()), angebot[num][L_FILENAME],
+      prop, arg));
+  }
+  else {
+    angebot[num][L_TEXT]=arg;
+    write("Text, der fuer das Objekt "+number+" erscheint, geaendert.\n");
+    SLOG("seherladen.service",sprintf("AEND (%s): %s (Text)\n",
+      getuid(this_player()), angebot[num][L_FILENAME]));
+  }
+  updateSortiment();
+  return 1; 
+}
+
+nosave int postenLoeschen(string arguments) {
+  string number;
+  int num;
+  if (keinZugriff()) return 0;
+  notify_fail("Artikel entfernen: Zuwenig Argumente.\n");
+  if (sscanf(arguments,"- %s",number)!=1) return 0;
+  notify_fail("Witzknochen, das Argument keine Zahl...\n");
+  if (number!=to_string(num=to_int(number))) return 0;
+  notify_fail("Scherzkeks, soviele Artikel werden hier gar nicht verkauft.\n");
+  if (sizeof(angebot)<=--num) return 0;
+  notify_fail("Intelligenzbestie, kein Kommentar!\n");
+  if (num<0) return 0;
+  SLOG("seherladen.service",sprintf("ENTF (%s): %s\n",
+      getuid(this_player()), angebot[num][L_FILENAME]));
+  write("Artikel "+angebot[num][L_FILENAME]+"...");
+  angebot-=({angebot[num]});
+  write("entfernt.\n");
+  updateSortiment();
+  return 1;
+}
+
+nosave int postenHinzufuegen(string arguments) {
+  object obj;           /* Default fuer Text ist P_SHORT,          */
+  int newkey;           /* fuer den Grundpreis P_VALUE*3           */
+  string err;           /* Bestand *muss* von Hand gesetzt werden. */
+  string filename;
+  notify_fail("Artikel hinzufuegen: Zuwenig Argumente.\n");
+  if (sscanf(arguments,"+ %s",filename)!=1) return 0;
+  filename=completePath(filename);
+  if (err = catch(obj = clone_object(filename)))
+    write("Warnung: Objekt ist nicht clonbar!\nGrund:"+err+"\n");
+  write("Fuege neues Objekt in Ladensortiment an Position "+
+        ((newkey=(sizeof(angebot)))+1)+" ein...");
+  angebot+=({({filename,0,0,0,0," "})});
+  if ((objectp(obj))&&(obj->QueryProp(P_SHORT)))
+    angebot[newkey][L_TEXT]=(string)obj->QueryProp(P_SHORT);
+  if ((objectp(obj))&&(obj->QueryProp(P_VALUE)))
+    angebot[newkey][L_KOSTEN]=(int)((int)(obj->QueryProp(P_VALUE))*3);
+  write("fertig.\n");
+  SLOG("seherladen.service",sprintf("HINZ (%s): %s ($%d)\n",
+      getuid(this_player()), filename, angebot[newkey][L_KOSTEN] ));
+  updateSortiment();
+  return 1;
+}
+
+
+nosave int zeigeZiele() {
+  int i;
+  string ziele;
+  if (!this_player()) return 0;
+  ziele="Nr.  Filename                                      Ausgang\n"+
+  "------------------------------------------------------------------------\n";
+  for (i=0;i<sizeof(zielorte);i++)
+    ziele+=sprintf(" %2d  %-50s %-14s\n",i,zielorte[i][L_FILENAME],
+    zielorte[i][L_EXIT]);
+  ziele+=
+  "------------------------------------------------------------------------\n";
+  ziele+=woBistDu(this_player());
+  this_player()->More(ziele);
+  return 1;
+}
+
+nosave int zielHandling(string arguments) {
+  string mode, path, exit;
+  string err;
+  mode=path=exit="";
+  if (!arguments)
+    return zeigeZiele();
+  if (keinZugriff()) return 0;
+  arguments=(string)this_player()->_unparsed_args();
+  if (arguments[0]=='+') {
+    notify_fail("Zielort hinzufuegen: Ungueltige Parameterzahl...\n");
+    if (sscanf(arguments,"%s %s %s",mode,path,exit)!=3) return 0;
+    notify_fail("Zielort hinzufuegen: Unzulaessiger Ausgang (zul. nur norden,"
+      " nordosten...)\n");
+    if (member(({"norden","nordosten","nordwesten","sueden","suedwesten",
+      "suedosten","osten","westen"}),exit)==-1) return 0;
+    if (err=catch(call_other(path=completePath(path),"???",0))) {
+      write("Zielort hinzufuegen: Konnte Zielraum "+path+" nicht laden.\n"
+            "Fehler: "+err+" (Abbruch)\n");
+      return 1;
+    }
+    if (member((mapping)path->QueryProp(P_EXITS),exit)) { 
+      write("Zielort hinzufuegen: Ausgang ist schon im Raum vorhanden!"
+        " (Abbruch)\n");
+      return 1;
+    }
+    if (member((mapping)path->QueryProp(P_DETAILS),"laden")) {
+      write("Zielort hinzufuegen: Raum enthaelt bereits ein Detail 'laden'!"
+        " (Abbruch)\n");
+      return 1;
+    }
+    write("Fuege "+path+" als Zielraum ein...");
+    zielorte+=({({path,exit})});
+    SLOG("seherladen.service",sprintf("ZIEL+(%s): %s (%s)\n",
+      getuid(this_player()),path,exit));
+    write("fertig.\n");
+    save_object(SAVEFILE);
+    return 1;
+  }
+  else if (arguments[0]=='-') {
+    notify_fail("Zielort entfernen: Falsche Parameterzahl.\n");
+    if (sscanf(arguments,"%s %s",mode,path)!=2) return 0;
+    notify_fail("Zielort entfernen: Argument keine Nummer.\n");
+    if (to_string(to_int(path))!=path) return 0;
+    notify_fail("Zielort entfernen: Soviele Orte sind"
+      " gar nicht eingetragen!\n");
+    if (sizeof(zielorte)<=to_int(path)) return 0;
+    notify_fail("Zielort entfernen: Guter Witz.\n");
+    if (to_int(path)<0) return 0;
+    write("Entferne "+zielorte[to_int(path)][L_FILENAME]+" ("+
+      zielorte[to_int(path)][L_EXIT]+") ...");
+    SLOG("seherladen.service",sprintf("ZIEL-(%s): %s (%s)\n",
+      getuid(this_player()),zielorte[to_int(path)][L_FILENAME],
+      zielorte[to_int(path)][L_EXIT]));
+    zielorte-=({zielorte[to_int(path)]});
+    write("fertig.\n"); 
+    save_object(SAVEFILE);
+    return 1;
+  }
+  notify_fail("Zielort: hinzufuegen (+) oder entfernen (-) ?\n");
+  return 0;
+}
+
+varargs nosave int parkLaden(int nolog) {
+  if (keinZugriff()) return 0;
+    if (!nolog)
+      SLOG("seherladen.err",sprintf("Laden geparkt. (%s) \n",
+        (this_player()?getuid(this_player()):"--")));
+  if (find_call_out("fliegeZielAn")!=-1) {
+    remove_call_out("fliegeZielAn");
+    write("Ok, der Laden bleibt in den unendlichen Weiten geparkt.\n");
+    return 1;
+  }
+  else if (find_call_out("fliegeAb")!=-1) {
+    printf("Ok, Abflug um %d Sekunden vorgezogen, Laden bleibt "
+        "in Parkposition.\n",(10+ remove_call_out("fliegeAb")));
+    fliegeEndlichAb(1);
+    return 1;
+  }
+  else if (find_call_out("fliegeEndlichAb")!=-1) {
+    printf("Ok, Abflug um %d Sekunden vorgezogen, Laden bleibt "
+        "in Parkposition.\n", remove_call_out("fliegeEndlichAb"));
+    fliegeEndlichAb(1);
+    return 1;
+  }
+  write("Der Laden parkt doch schon...?\n");
+  return 1;
+}  
+    
+nosave int restartLaden() {
+  if (keinZugriff()) return 0;
+  notify_fail("Aber der Laden parkt doch gar nicht...?\n");
+  if ((find_call_out("fliegeZielAn")!=-1) ||
+      (find_call_out("fliegeAb")!=-1) ||
+      (find_call_out("fliegeEndlichAb")!=-1) ||
+      (currentenv!=-1)) return 0;
+  SLOG("seherladen.err",sprintf("Laden wieder gestartet. (%s) \n",
+    (this_player()?getuid(this_player()):"--")));
+  write("Ok, der Laden wird sofort wieder aktiv...\n");
+  call_out("fliegeZielAn",0);
+  return 1;
+}
+
+string woBistDu(object player) {       /* Fernabfrage fuer Seher usw.     */
+  string meldung, farbe;
+  string * pfad;
+  int i;
+  meldung="";
+  if (!objectp(player)) return "Nix da.\n";
+  if (!interactive(player)) return "Werd' Du erstmal intelligent.\n";
+  if (IS_WIZARD(player)) {
+    if (currentenv!=-1) {
+      meldung+="Aufenthalt: ["+to_string(currentenv)+"] "
+          +zielorte[currentenv][L_FILENAME];
+      if ((i=find_call_out("fliegeEndlichAb"))!=-1) 
+        meldung+=" - beim Abflug.\n";
+      else if ((i=find_call_out("fliegeAb"))!=-1)
+        meldung+=" - Abflug in "+time2string("%02h:%02m:%02s",i)+ ".\n";
+      else 
+        meldung+=" - festgewachsen?!\n";
+    }
+    else {
+      meldung+="Aufenthalt: "
+          "Jenseits des Silberlands, ";
+      if ((i=find_call_out("fliegeZielAn"))!=-1)
+        meldung+="Rueckflug in "+time2string("%02h:%02m:%02s",i)+".\n";
+      else meldung+="geparkt.\n";
+    }
+    if (previous_object()==this_object()) 
+      return meldung;
+    return meldung;
+  }
+  if (IS_SEER(player)) {
+    if (currentenv==-1) 
+      meldung+="Du hoerst leises Knistern, bemerkst aber ansonsten nichts.\n";
+    else {
+      pfad=explode(zielorte[currentenv][L_FILENAME],"/");
+      if (pfad[0]!="d")
+        farbe="bunt und unwirklich";
+      else 
+        switch (pfad[1]) {
+          case "ebene":         farbe="grasgruen und ziegelrot";break;
+          case "huegelland":    farbe="laubgruen";break;
+          case "gebirge":       farbe="steingrau";break;
+          case "kristallwald":  farbe="kristallklar";break;
+          case "wasser":        farbe="tiefblau";break;
+          case "dschungel":     farbe="dunkelgruen verschlungen";break;
+          case "unterwelt":     farbe="unheimlich duester";break;
+          case "polar":         farbe="eisig blau";break;
+          case "seher":         farbe="klar und durchscheinend";break;
+          case "wahnsinn":      farbe="verwirrend und wahnsinnig";break;
+          default:              farbe="oktarin (huch?)";
+        } 
+      meldung+=break_string("Du hoerst ein leises Knistern, "
+        "und ploetzlich funkelt die Rune Lad'nda geheimnisvoll und "
+        "glueht fuer einen Moment "+farbe+" auf.",77);
+    }
+  }
+  else
+    meldung=break_string(
+      "Dein magisches Potential ist nicht gross genug, um zu den "
+      "Kraeften der geheimnisvollen Rune Lad'nda Zugang zu finden.\n",77);
+  return meldung;
+}      

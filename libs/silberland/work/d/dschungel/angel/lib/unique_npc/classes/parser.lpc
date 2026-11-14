@@ -1,0 +1,752 @@
+/*******************************************************************************
+ * Unique NPC Kommando-Parser 
+ * Datei: parser.c
+ * Autor: Angel (avs@sbox.tu-graz.ac.at)
+ */
+ 
+#include "../headers/parser.h"
+#include "../headers/unique_npc.h"
+#include <language.h>
+#include <properties.h>
+
+inherit LIB "generic/classes/algorithms";
+inherit "/std/thing/language.lpc";
+
+// Routine zur Fehlerbehandlung
+int notify_error (mixed error)
+{
+   string path;
+   string error_msg;
+   object debug_server;
+
+   error_msg = ( "Time: ["+ctime()+"]\n" + break_string(error[1]+"\n", 78) + 
+                 break_string(error[2]+"\n", 78) + break_string(error[3]+"\n", 78) + 
+                 "file: " + error[4] + "\n" + "object: " + file_name(error [5]) + "\n\n" );
+   
+   path = QueryProp(P_UNIQUE_DEBUG_LOG);
+   if (stringp(path))
+      write_file ( path , error_msg );
+
+   // Wir laden den Debug Server sollte er nicht geladen sein ...
+   call_other( LIB_UNIQUE "classes/debug_server", "???", 0);
+   
+   // ... und holen uns  einen Objekt-Pointer auf ihn.
+   debug_server = find_object (LIB_UNIQUE "classes/debug_server");
+
+   // Nur wenn der Debug Server wirklich "online ist" senden wir:
+   if (objectp(debug_server))
+   {
+      debug_server->broadcast_debug_message("\n"+error_msg);
+   }
+
+   return 1;   
+}
+
+// Adaptierte Funktion aus language.c
+varargs string query_certain_article(int gender, int casus, int plural)
+{
+  if (plural)
+    return ({ "die", "der", "den", "die"})[casus];
+  return ({ ({ "das", "des", "dem", "das" }),
+            ({ "der", "des", "dem", "den" }),
+            ({ "die", "der", "der", "die" }) })
+         [(int)gender % 3][casus];
+}
+
+
+// Hier laden wir uns unsere Details aus einer Library:
+mixed load_details(string type, string race, int gender, string lib)
+{
+  int start, query_gender;
+  string line;
+  string test, query_race, query_details, query_type;
+  mixed result;
+
+  if (!stringp(lib))
+     lib = P_UNIQUE_DETAILS_LIBRARY;
+
+  while ( line = read_file (lib, start, 1) )
+  {
+    // Mal sehen ob wir eine Kommentarzeile haben!
+    if (sscanf (line, "#%s", test) != 1)
+    {
+      if (sscanf (line, "%s - %d - %s : %s;", query_race, query_gender, query_type, query_details) == 4)
+      {
+        if ( (race == query_race) && ( (gender == query_gender) || (query_gender == 0) ) && (type == query_type) )
+        {
+          if (!pointerp(result))
+             result = explode (query_details, ", ");
+          else
+             result += explode (query_details, ", ");
+        }
+      }
+    }
+    start += 1;
+  }
+  return result;
+}
+
+// Der dritte Parserdurchlauf setzt uns Namen sowie Pronomen ein.
+mixed pass_three (string str, int not_first)
+{
+  string pre, post, mode;
+  int gender, casus, plural, save_gender;
+  int index, index2;
+
+  while (find_char(str, "<", 0) != -1)
+  {
+     index = find_char(str, "<", 0);
+     if (index == 0)
+        pre = "";
+     else
+        pre = str[0 .. index-1];
+     index = find_char(str, ">", 0);
+     post = str[index+1 .. strlen(str)-1];
+     if ((find_char(str, ",", find_char(str, "<", 0)) != -1) &&
+         (find_char(str, ",", find_char(str, "<", 0)) < find_char(str, ">", 0)))
+     {
+       index = find_char(str, "<", 0);
+       index2 = find_char(str, ",", index)-1;
+       gender = to_int (str[index+1 .. index2]);
+       index = index2 + 2;
+       index2 = find_char (str, ",", index)-1;
+       casus = to_int (str[index .. index2]);
+       index = index2 + 2;
+       index2 = find_char (str, ">", index);
+       plural = to_int (str[index .. index2]);
+
+       if (pre == "" && !not_first)
+          str = capitalize(QueryPossPronoun(gender, casus, plural))+post;
+       else
+       {
+          if (!not_first || !gender )
+          {
+            str = pre+QueryPossPronoun(gender, casus, plural)+post;
+          }
+          else
+          {
+            str = pre+query_certain_article(gender, casus, plural)+post;
+          }
+       }
+     }
+     else
+     {
+       index = find_char(str, "<", 0);
+       index2 = find_char(str, ">", index)-1;
+       casus = to_int (str[index+1 .. index2]);
+       if ( (casus > 4) || (!casus) )
+       {
+         mode = str[index+1 .. index2];
+         if (mode == "WER")
+            str = pre+name(WER)+post;
+         if (mode == "WESSEN")
+            str = pre+name(WESSEN)+post;
+         if (mode == "WEM")
+            str = pre+name(WEM)+post;
+         if (mode == "WEN")
+            str = pre+name(WEN)+post;
+       }
+       else
+       {
+         if (pre == "" && !not_first)
+            str = capitalize(QueryPronoun(casus))+post;
+         else
+            str = pre+QueryPronoun(casus)+post;
+       }
+     } 
+  }
+ 
+  return str;
+}
+
+// Liefert einen evtl. schon vorhandenen Key aus der uebergebenen Liste:
+private mixed re_use_keys(string type, mixed keys)
+{
+  int i, max;
+  
+  // Ist die Key Liste ein Array?
+  if (!pointerp(keys))
+     return -1;
+
+  // Wir sehen nach, ob sich das gesuchte Element in der Liste befindet.
+  max = sizeof (keys);
+  for (i = 0; i < max; i++)
+  {
+     if (keys[i][0] == type)
+        return ({ keys[i][1] });
+  }
+  return -1;
+}
+
+// Der zweite Parserdurchlauf laedt die Keys aus der Bibliothek.
+varargs mixed pass_two(string input, string lib, mixed keys)
+{
+  int dice, i, index, index2, re_use;
+  string type, pre, post, output;
+  mixed details;
+
+  if (!stringp(input))
+     return ({ 0, "Runtime Error: invalid input.", "Class: parser.lpc", "Function: pass_two", 0, this_object() });
+
+  output = input;  
+
+  while (find_char(output, "[", 0) != -1)
+  {
+    index = find_char(output, "[", 0)-1;
+    if (index != 0)
+       if (output[index .. index] == "~")
+       {
+          re_use = 1;
+          index --;
+       }
+       else 
+       {
+          re_use = 0;
+       }
+    
+    pre = output[0 .. index];
+    index2 = find_char(output, "]", 0)+1;
+    post = output[index2 .. strlen(output)];
+    type = output[index + 2 + re_use .. index2 - 2];
+    if (re_use)
+    {  
+       details = re_use_keys (type, keys);
+       if (!pointerp(details))
+          details = load_details(type, QueryProp(P_RACE), QueryProp(P_GENDER), lib);
+    }
+    else   
+       details = load_details(type, QueryProp(P_RACE), QueryProp(P_GENDER), lib);
+
+    if (pointerp(details))
+    {
+      dice = random (sizeof(details));
+      if (stringp(details[dice]))
+      {
+         if (pointerp(keys))
+            keys += ({ ({ type, details[dice] }) });
+         else
+            keys =  ({ ({ type, details[dice] }) });
+
+         output = pre+details[dice]+post;
+      }
+    }
+    else
+    {
+      notify_error ( ({ 0, "Runtime Error: invalid key type: '"+type+"' for the current object detected, output truncated!",
+                           "Class: parser.lpc", "Function: pass_two", lib, this_object() }) );
+      output = "";
+    }
+  }
+  output = pass_three(output, 0);
+  return ({ output, keys });
+}
+
+
+// Funktion zum entfernen von whitespaces aus non-output-strings
+// -> d.h Strings die zur Verarbeitung dienen.
+// Diese Funktion darf NUR auf einen Abfrage-Teil verwendet werden, da der
+// Rest keine '"' besitzt die das Kompremieren verhindern!
+private mixed compress (string str)
+{
+   int index, index2;
+   string output;
+  
+   index2 = -1;
+ 
+   do
+   {
+      index = find_char( str, "\"",  index2+1);
+      if (index != -1)
+      {
+         // Zwischen dem letzten und dem neuen Index loeschen wir
+         // die whitespaces ...
+         if (!stringp(output))
+            output = delete_whites(str[index2+1 .. index-1]);
+         else
+            output += delete_whites(str[index2+1 .. index-1]);
+
+
+         index2 = find_char ( str, "\"",  index+1);
+         if (index2 == -1)
+            return ({ 0, "Syntax Error: unterminated string in expression '"+str+"'.",
+                         "Class: parser.lpc", "Funktion: compress", 0, this_object() });
+
+         // ... und fuegen den in " ... " gekapselten String an:
+         if (!stringp(output))
+            output = str[index .. index2];
+         else
+            output += str[index .. index2]; 
+      }
+   }
+   while (index != -1);
+
+   if (stringp(output))
+   {
+      output += str[index2+1 .. strlen(str)];  
+      return output;
+   }
+   else
+   {
+      return delete_whites(str);
+   }
+}
+
+// Liefert uns die Ballance von '{' und '}'
+// Wobei: '{' als +1 und '}' als -1 angesehen wird.
+private int bracket_ballance (string str)
+{
+   int balance, index;
+   
+   balance = 0;
+
+   index = find_char (str, "{", 0);
+   
+   while (index != -1)
+   {
+      balance ++;
+      index = find_char (str, "{", index+1);
+   }
+   
+   index = find_char (str, "}", 0);
+
+   while (index != -1)
+   {
+      balance --;
+      index = find_char (str, "}", index+1);
+   }
+
+   return balance;
+
+}
+
+// Diese Funktion liefert die indizes der obersten Ebene des angegebenen string:
+mixed get_bracket_level( string str )
+{
+   int ballance, last, count, index;
+   mixed result;
+
+   // Beim ersten Durchlauf wird last zumindest auf 0 gesetzt.
+   last = -1;
+
+   count = 0;
+   index = 0;
+
+   index = find_char ( str, "{", index );
+
+   while ( index != -1 )
+   {
+      do
+      {
+         ballance = bracket_ballance (str [index .. last = find_char (str, "}", last+1)]);
+         if ( (ballance < 0) || (last == -1) )
+            return -1;
+      }
+      // Solange ballance != 0 ist haben wir das Ende noch nicht gefunden:
+      while (ballance);
+      if (!pointerp(result))
+      {
+         result = ({ ({ count, index, last }) });
+      }
+      else
+      {
+         result += ({ ({ count, index, last }) });
+      }
+      count ++;
+
+      index = find_char ( str, "{", last + 1 );
+      last = index;
+   }
+   return result;
+}
+
+
+// Der erste Parserdurchlauf kann auch verschachtelte Abfragen auswerten:
+mixed pass_one (string str, string lib)
+{
+  string exp, operator, pre, post, arg1, arg2;
+  mixed levels, exec, ops;
+  int i, j, max_i, max_j, index, index2, index3, result, stat, mode, offset, is_evaluated;
+
+  levels = get_bracket_level (str);
+  if (!pointerp(levels))
+     return str;
+  max_i = sizeof (levels);
+  for (i = 0; i < max_i; i++)
+  {
+     is_evaluated = 0; // Wir haben die Daten noch nicht ausgewertet!
+     exp = str[levels[i][1]+1 .. levels[i][2]-1]; // Der zu behandelnde Ausdruck wird ausgeschnitten.
+     exp = compress(exp); // Hier werden stoehrende Leerzeichen beseitigt.
+     
+     // Wir sehen nach ob es schon etwas vor der ersten Klammer gibt:
+     if (levels[i][1] == 0)
+     {
+     	// Wenn nicht dann wird pre auf "" gesetzt = nix davor.
+        pre  = "";
+        // Wenn wir beim letzen Element angekommen sind, merken wir uns auch den Rest.
+        if (i == sizeof (levels)-1)
+           post = str[levels[i][2]+1 .. strlen(str)-1]; 
+        else
+           post = "";
+     }
+     else
+     {  // Sonst merken wir uns den Teil des Strings in pre.
+        if (i == 0)
+           pre =  str[0 .. levels[i][1]-1];
+        else 
+           pre =  pre + str[levels[i-1][2]+1 .. levels[i][1]-1];
+        // Wenn wir beim letzen Element angekommen sind, merken wir uns auch den Rest.
+        if (i == sizeof (levels)-1)
+           post = str[levels[i][2]+1 .. strlen(str)-1];
+        else 
+           post = "";
+     }
+     // Var-Initialisierung:
+     stat = 0;
+     // Wir checken ob sich ein "?" im Ausdruck befindet
+     offset = find_char(exp, "?", 0);
+     // Wenn nicht gibt's einen Fehler.
+     if (offset == -1)
+        return ({ 0, "Syntax Error: missing character '?' in expression.", "Class: parser.lpc", 
+                     "Funktion: pass_one", 0, this_object() });
+                     
+     // Wir besorgen und den Operator-String 
+     // (der die Argumente wie auch den eigentlichen Operator enthaelt)
+     operator = exp[0 .. offset - 1];
+
+     exp = exp[offset + 1 .. strlen(exp) - 1]; 
+     
+     // Weiters werden nun alle in @..@ "geklammerten" Ausdruecke ausgewertet:
+     while (find_char(operator, "@", 0) != -1)
+     {
+       index = find_char(operator, "@", 0);
+       index2 = find_char(operator, "@", index+1);
+
+       // Die @ muessen immer paarweise, als "Klammerung" auftreten:
+       if (index2 == -1)
+          return ({ 0, "Syntax Error: missing second indicator character '@' in expression '"+str+"'.",
+                       "Class: parser.lpc", "Funktion: pass_one", lib, this_object() });
+                       
+       // Stat zaehlt durch bei welchem Paar wir sind:
+       if (stat == 0)
+       {
+          arg1 = (operator[index+1 .. index2-1]);
+       }
+       else
+          if (stat == 1)
+             arg2 = (operator[index+1 .. index2-1]);
+          else
+          // Mehr als 2 Argumente koennen wir nicht brauchen!
+          return ({ 0, "Syntax Error: more than two arguments in expression.",
+                       "Class: parser.lpc", "Funktion: pass_one", lib, this_object() });
+       stat ++;
+       
+       if (index == 0)
+          operator = operator[index2+1 .. strlen(operator)-1];
+       else
+          operator = operator[0 .. index-1] + operator[index2+1 .. strlen(operator)-1];
+     }
+     if (!stringp(arg1))
+          return ({ 0, "Syntax Error: missing first argument in expression.",
+                       "Class: parser.lpc", "Funktion: pass_one", lib, this_object() });
+
+     if (!stringp(arg2))
+     {
+        index = find_char(operator, "[", 0);
+        if (index == -1)
+           return ({ 0, "Syntax Error: missing second argument in expression.",
+                        "Class: parser.lpc", "Funktion: pass_one", lib, this_object() });
+
+        index2 = find_char(operator, "]", index);
+        if (index2 == -1)
+           return ({ 0, "Syntax Error: missing second indicator character ']' in expression.",
+                        "Class: parser.lpc", "Funktion: pass_one", lib, this_object() });
+
+        arg2 = operator [index + 1 .. index2 - 1];
+
+        if (index == 0)
+           operator = operator[index2+1 .. strlen(operator)-1];
+        else
+           operator = operator[0 .. index-1] + operator[index2+1 .. strlen(operator)-1];
+
+        stat = 3;
+     }
+
+     arg1 = lower_case(arg1);
+     arg2 = lower_case(arg2);
+     
+     // Nun werten wir die Argumente aus:
+     // Status == 0 .. Fehler, wir brauchen 2 Argumente!
+     // Status == 1 .. Hier haben wir ein Argument, aber kein 2. ...
+     // Status == 2 .. Das ist ein Vergleich arg1 ==/!= arg2
+     // Status == 3 .. Hier ist es entweder ein TEST_KEY oder
+     // eine Pruefung auf die Rasse, wobei bei letzeterem noch ein Operator
+     // angegeben sein muss.
+
+     // exp ist nun bis auf den Operator geschrumpft, also sehen wir mal nach
+     // was angegeben wurde:
+     switch (operator)
+     {
+       case "!=": mode = 0; break;
+       case "==": mode = 1; break;
+       case "":   if (arg1 == "test_key") mode = 2; break;
+       default:   return ({ 0, "Syntax Error: invalid operator '"+ operator +"'.",
+                    "Class: parser.lpc", "Funktion: pass_one", lib, this_object() });
+ 
+     }
+
+     // Nun an dieser Stelle ist eine sinnvolle Auswertung auf jeden Fall denkbar!
+     // Sehen wir nun ob das erste Argument ein sinnvolles Kommando ist!
+     if (!is_element(P_PARSER_COMMAND_LIST, arg1))
+        return ({ 0, "Syntax Error: invalid parser command '"+arg1+"'.",
+                     "Class: parser.lpc", "Funktion: pass_one", lib, this_object() }); 
+
+     // Auswertung:
+     switch (mode)
+     {
+        case 0 .. 1: { // Auswertung des Geschlechts
+                  if (arg1 == "gender")
+                  {
+                     ops = explode (arg2 , "|");
+                     if (!pointerp(ops))
+                     {
+                        switch (arg2)
+                        {       
+                           case "m": result = (QueryProp(P_GENDER) == 1); break;
+                    
+                           case "f": result = (QueryProp(P_GENDER) == 2); break;
+                  
+                           default:  return ({ 0, "Syntax Error: invalid argument '"+arg2+"' to parser command '@gender@'.",
+                                     "Class: parser.lpc", "Funktion: pass_one", lib, this_object() });
+                        }
+                     
+                        break;
+                     }
+                     else
+                     {
+                        result = 0; // Als Startwert muessen wir "false" angeben bei | Verknuepfungen
+                        
+                        max_j = sizeof( ops );
+                        for ( j = 0 ; j < max_j; j++ )
+                        switch (ops[j])
+                        {
+                           case "m": result = (result || (QueryProp(P_GENDER) == 1)); break;
+
+                           case "f": result = (result || (QueryProp(P_GENDER) == 2)); break;
+
+                           default: return ({ 0, "Syntax Error: invalid argument '"+ops[j]+"' to parser command '@gender@'.",
+                                    "Class: parser.lpc", "Funktion: pass_one", lib, this_object() });
+                        }
+
+                        break;
+  
+                     }
+                  }
+                  else if (arg1 == "race") // Auswertung der Rasse:
+                  {
+                     ops = explode (arg2 , "|");
+                     if (!pointerp(ops))
+                     {
+                        result = (lower_case(QueryProp(P_RACE)) == arg2);
+                        break;
+                     }
+                     else
+                     {
+                        result = 0; // Als Startwert muessen wir "false" angeben bei | Verknuepfungen
+
+                        max_j = sizeof( ops );
+                        for ( j = 0 ; j < max_j; j++ )
+                            result = (result || (lower_case(QueryProp(P_RACE)) == ops[j]));
+                        break;
+                     }
+                  }
+                  return ({ 0, "Syntax Error: invalid expression arguments '"+arg1+"' and '"+arg2+"'.",
+                               "Class: parser.lpc", "Funktion: pass_one", lib, this_object() }); // Fehler!
+               }
+
+        case 2: {
+                   ops = explode (arg2 , "|");  // Auswertung eines test_key:
+                   if (!pointerp(ops))
+                   {
+                      result = (pointerp(load_details(arg2, QueryProp(P_RACE), QueryProp(P_GENDER), lib)));
+                      break;
+                   }
+                   else
+                   {
+                      result = 1; // Als Startwert muessen wir "true" angeben bei & Verknuepfungen
+                     
+                      max_j = sizeof( ops );
+                      for ( j = 0 ; j < max_j; j++ )
+                          result = (result && (pointerp(load_details(ops[j], QueryProp(P_RACE), QueryProp(P_GENDER), lib))));
+                      break;
+                   }
+                }
+        default : break;
+     }
+
+     // Da wir uns die Abfrage auf ==/!= vorher gespart haben muessen wir im Falle von mode == 0 
+     // das resultat umdrehen.
+     if (!mode)
+        result = !result;
+     // Wir pruefen ob sich im Ausdruck noch ein weiterer befindet den man auswerten kann:   
+     exec = get_bracket_level (exp);
+     // Wenn ja tun wir das:
+     if (pointerp(exec))
+     {    
+         if (result) // Positives Ergebnus:
+         {
+            // Wenn wir nur eine weitere Abfrage haben muessen wir pruefen ob sie im 
+            // true- oder false- Teil des Ausdrucks liegt:
+            if ( sizeof(exec) == 1 )
+            {
+               // Ohne das Trennzeichen '%' tun wir uns schwer festzustellen in welchem Teil
+               // die Abfrage liegt - also geben wir einen Fehler aus:
+               index3 = find_char (exp, "%", 0, 1);
+               if (index3 == -1)
+                  return ({ 0, "Syntax Error: missing seperation character '%' in expression '"+exp+"'.",
+                               "Class: parser.lpc", "Funktion: pass_one", lib, this_object() });
+               // Wenn das '%' hinter dem '{' liegt, dann ist die Abfrage im true-Teil.
+               if (index3 > exec[0][1])
+               {
+               	  // Das Ergebnis wird (hinten) an den Vorderteil gehaengt.
+                  pre = pre+pass_one(exp[exec[0][1] .. exec[0][2]], lib)+post;
+                  is_evaluated = 1; // Auswertung wird auf true gesetzt.
+               }
+            }
+            else // Haben wir mehrere naehmen wir die erste als true, die zweite als false an.
+            {
+               // Ohne das Trennzeichen '%' tun wir uns schwer festzustellen in welchem Teil
+               // die Abfrage liegt - also geben wir einen Fehler aus:            	
+               index3 = find_char (exp, "%", exec[0][2], 1);
+               if (index3 == -1)
+                  return ({ 0, "Syntax Error: missing seperation character '%' in expression '"+exp+"'.",
+                               "Class: parser.lpc", "Funktion: pass_one", lib, this_object() });
+                               
+               // Wenn sich das '%' vor dem 2. '{' befindet, dann ist die 1. Abfrage im true-Teil.
+               if (exec[1][1] > index3)
+               {
+               	  // Das Ergebnis wird (hinten) an den Vorderteil gehaengt.
+                  pre = pre+pass_one(exp[exec[0][1] .. exec[0][2]], lib)+post;
+                  is_evaluated = 1; // Auswertung wird auf true gesetzt.
+               }        
+            }
+         }
+         else // Negatives Ergebnis:
+         {
+            // Wenn wir nur eine weitere Abfrage haben muessen wir pruefen ob sie im 
+            // true- oder false- Teil des Ausdrucks liegt:     	
+            if ( sizeof(exec) == 1 )
+            {
+               // Ohne das Trennzeichen '%' tun wir uns schwer festzustellen in welchem Teil
+               // die Abfrage liegt - also geben wir einen Fehler aus:            	
+               index3 = find_char (exp, "%", 0, 1);
+               if (index3 == -1)
+                  return ({ 0, "Syntax Error: missing seperation character '%' in expression '"+exp+"'.",
+                               "Class: parser.lpc", "Funktion: pass_one", lib, this_object() });
+                               
+               // Wenn das '%' vor dem '}' liegt, dann ist die Abfrage im false-Teil.
+               if (index3 < exec[0][2])
+               {
+               	  // Das Ergebnis wird (hinten) an den Vorderteil gehaengt.
+                  pre = pre+pass_one(exp[exec[0][1] .. exec[0][2]], lib)+post;
+                  is_evaluated = 1; // Auswertung wird auf true gesetzt.
+               }
+            }
+            else // Haben wir mehrere naehmen wir die erste als true, die zweite als false an.
+            {
+               // Ohne das Trennzeichen '%' tun wir uns schwer festzustellen in welchem Teil
+               // die Abfrage liegt - also geben wir einen Fehler aus:  
+               index3 = find_char (exp, "%", exec[0][2], 1);
+               if (index3 == -1)
+                  return ({ 0, "Syntax Error: missing seperation character '%' in expression '"+exp+"'.",
+                               "Class: parser.lpc", "Funktion: pass_one", lib, this_object() });
+                               
+               // Wenn sich das '%' vor dem 2. '{' befindet, dann ist die 2. Abfrage im false-Teil.
+               if (exec[1][1] > index3)
+               {  
+               	  // Das Ergebnis wird (hinten) an den Vorderteil gehaengt.
+                  pre = pre+pass_one(exp[exec[1][1] .. exec[1][2]], lib)+post;
+                  is_evaluated = 1; // Auswertung wird auf true gesetzt.
+               }
+            }
+         }
+     }
+     if (!is_evaluated)
+        if (!result) // Ist  das resultat negativ?
+        {
+          // Nun haben wir ein Resultat und koennen weitersehen:
+          
+          // Pruefung auf das Trennzeichen '%':
+          index3 = find_char (exp, "%", 0, 1);
+          if (index3 == -1)
+             return ({ 0, "Syntax Error: missing seperation character '%' in expression '"+exp+"'.",
+                          "Class: parser.lpc", "Funktion: pass_one", lib, this_object() });
+                          
+          // Pruefung ob der Ausgabestring auch zwei '"' hat:
+          index = find_char (exp, "\"", index3);
+          if (index == -1)
+             return ({ 0, "Syntax Error: missing output string in expression '"+exp+"'.",
+                          "Class: parser.lpc", "Funktion: pass_one", lib, this_object() });
+
+          // 2. '"' vorhanden?
+          index2 = find_char (exp, "\"", index+1);
+          if (index2 == -1)
+             return ({ 0, "Syntax Error: unterminated string in expression '"+exp+"'.",
+                          "Class: parser.lpc", "Funktion: pass_one", lib, this_object() });
+
+          exp = exp[index + 1 .. index2 - 1];
+          
+          // Sind wir noch nicht am Ende angelangt erweitern wir einfach den Vorderteil (pre).
+          if (i < sizeof(levels)-1)
+             pre = pre+exp;
+        }
+        else // In diesem Fall war das Resultat positiv:
+        {
+           // Nun haben wir ein Resultat und koennen weitersehen:
+           
+          // Pruefung auf das Trennzeichen '%':
+          index3 = find_char (exp, "%", 0, 1);
+          if (index3 == -1)
+             return ({ 0, "Syntax Error: missing seperation character '%' in expression '"+exp+"'.",
+                          "Class: parser.lpc", "Funktion: pass_one", lib, this_object() });
+                          
+          // Pruefung ob der Ausgabestring auch zwei '"' hat:
+          index = find_char (exp, "\"", 0);
+          if (index == -1)
+             return ({ 0, "Syntax Error: missing output string in in expression '"+exp+"'.",
+                          "Class: parser.lpc", "Funktion: pass_one", lib, this_object() });
+          // 2. '"' vorhanden?
+          index2 = find_char (exp, "\"", index+1);
+          if (index2 == -1)
+             return ({ 0, "Syntax Error: unterminated string in expression '"+exp+"'.",
+                          "Class: parser.lpc", "Funktion: pass_one", lib, this_object() });
+
+          exp = exp[index + 1 .. index2 - 1];
+          
+          // Sind wir noch nicht am Ende angelangt erweitern wir einfach den Vorderteil (pre).
+          if (i < sizeof(levels)-1)
+             pre = pre+exp;
+       }
+     // Fuer den naechsten Durchlauf reinitialisieren wir die Argumente:
+     arg1 = 0;
+     arg2 = 0;
+  }
+  // Rueckgabe des Ergebnis:
+  return pre+exp+post;
+}
+
+// Diese Funktion ruft nur die einzelnen Parerdurchlaeufe auf:
+varargs string parse (string str, string lib, mixed keys)
+{
+   mixed output;
+   // Auswertung von u.U. vorhandenen Abfragen:
+   output = pass_one(str, lib);
+   if (!stringp(output))
+      notify_error(output);
+      
+   // Aufbereitung der Ausgabe (laden der Keys):
+   output = pass_two(output, lib, keys);
+   if (!stringp(output[0]))
+      notify_error(output);
+
+   return output;
+}

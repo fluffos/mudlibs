@@ -1,0 +1,243 @@
+inherit "/std/armour";
+#define DB(x) if(find_player("feyaria")) tell_object(find_player("feyaria"), x);
+#include "def.h"
+
+int might=0;
+int complete=0;
+object *setitems=({});
+
+void create()
+{
+  if( !is_clone(this_object()) ) return;
+  ::create();
+  if(this_interactive() && !IS_ARCH(this_interactive()) && 
+      file_name(previous_object()) != "/p/daemon/itemd/itemd") 
+  {
+    if (IS_LEARNER(this_interactive()))
+    {
+      raise_error("Illegales Clonen eines Set Items!!!!\n");
+      destruct();
+      return;
+    }
+  }
+  // Automagisches Registrieren, wenn Cloner = Erzi
+  if(IS_ARCH(this_interactive())) {
+    call_other(ITEMD, "RegisterNewItem", ME, SET_ID);
+    SetProp("itemd_arch_cloner", sprintf("%s: %s", dtime(), 
+          getuid(this_interactive())));
+  }
+  SetProp(P_WEAR_FUNC, TO);
+  SetProp(P_REMOVE_FUNC, TO);
+  SetProp(P_MAGIC, 10);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  AddId(({"ITEMD_SET_ITEM"}) );
+  SetProp("ruestungsbalsam", 10);
+}
+
+void set_complete()
+{
+  string magic;
+  string *texte;
+  int rnd;
+
+  if (complete)
+    return;
+  complete=1;
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_ITEMD_TMPMAGIC, ({2500,2500}) );
+
+  if(!QueryProp(P_ITEMD_CAIN_TIME) && pointerp(texte = QueryProp(P_ITEMD)))
+   {
+     magic = sprintf("%s ist auf jeden Fall magisch. %s ",
+         Name(WER,1), CAP(QueryPronoun(WER)));
+     while(sizeof(texte)) 
+     {
+       rnd = random(sizeof(texte));
+       if(sizeof(texte) > 2)
+         magic += texte[rnd] + ", ";
+       else if(sizeof(texte) == 2)
+         magic += texte[rnd] + " und ";
+       else 
+         magic += texte[rnd] + ".";
+       texte -= ({texte[rnd]});
+     }
+     if(stringp(QueryProp(P_INFO)))
+       SetProp(P_INFO, QueryProp(P_INFO) + BS(magic));
+     else
+       SetProp(P_INFO, BS(magic));
+
+     SetProp(P_ITEMD_CAIN_TIME, time());
+   }
+}
+
+int query_complete()
+{
+  return complete;
+}
+
+nosave void bonus()
+{
+  mapping sb;
+  string *ind;
+  int i;
+  if(mappingp(sb=QueryProp(P_SET_BONUS)) && mappingp(sb[might]))
+  {
+    ind=m_indices(sb[might]);
+
+    for(i=sizeof(ind)-1;i>=0;i--)
+      SetProp(ind[i], sb[might][ind[i]]);
+
+    environment()->UpdateAttributes();
+  }
+}
+
+int register_set(object item)
+{
+  if(item->QueryProp(P_SET)==QueryProp(P_SET) &&
+     item->QueryProp(P_SET_ITEM)!=QueryProp(P_SET_ITEM) &&
+     member(setitems,item)==-1 )
+  {
+    might++;
+    setitems+=({item});
+    bonus();
+  }
+}
+
+int unregister_set(object item)
+{
+  if(item->QueryProp(P_SET)==QueryProp(P_SET) &&
+     member(setitems,item)!=-1 )
+  {
+    might--;
+    setitems-=({item});
+    bonus();
+  }
+}
+
+int WearFunc(object ruest,int silent)
+{
+  int i,c;
+  object *a;
+  object w;
+  c=0;
+  if((w=environment()->QueryProp(P_WEAPON)) && w->QueryProp(P_SET)==QueryProp(P_SET) )
+  {
+    w->register_set(ME);
+    c+=w->query_complete();
+    register_set(w);
+  }
+  if( sizeof(a=environment()->QueryProp(P_ARMOURS)) )
+  {
+    for(i=sizeof(a)-1;i>=0;i--)
+    {
+      if( objectp(a[i]) && a[i]->QueryProp(P_SET)==QueryProp(P_SET) )
+      {
+        a[i]->register_set(ME);
+        c+=a[i]->query_complete();
+        register_set(a[i]);
+      }
+    }
+    c+=query_complete();
+    if(QueryProp(P_NR_SET_ITEMS)==might+1)
+    {
+      for(i=sizeof(a)-1;i>=0;i--)
+        if( objectp(a[i]) && a[i]->QueryProp(P_SET)==QueryProp(P_SET) )
+          a[i]->set_complete();
+      set_complete();
+      if (!c)
+        call_out("set_is_complete",2);
+    }
+  }  
+  return 1;
+}
+
+void set_is_complete()
+{
+  if( !IS_LEARNER(environment()))
+    "/p/daemon/itemd/itemd"->CompleteSetChannel(environment(),QueryProp(P_SET));
+}
+
+int RemoveFunc(object ruest,int silent)
+{
+  int i;
+  for(i=sizeof(setitems)-1;i>=0;i--)
+  {
+    if(setitems[i])
+      setitems[i]->unregister_set(ME);
+  }
+  might=0;
+  setitems=({});
+  bonus();
+  return 1;
+}
+
+int setmight()
+{
+  return might;
+}
+
+string long()
+{
+  string s,s2;
+  int i,sum;
+  s=QueryProp(P_LONG);
+  s+=Name(WER)+" gehoer"+(QueryProp(P_PLURAL)?"en":"t")+
+    " zu Ausruestungsset "+QueryProp(P_SET)+".\n";
+  if(sum=sizeof(setitems))
+  {
+    s2="Dazu gehoer"+(sum==1?"t":"en")+" auch ";
+    for(i=sum-1;i>=0;i--)
+    {
+      s2+=setitems[i]->QueryProp(P_NAME);
+      switch(i)
+      {
+        case 1: s2+=" und ";break;
+        case 0: s2+="."; break;
+        default: s2+=", ";
+      }
+    }
+  }
+  return s+BS(s2);
+}
+
+string short()
+{
+  string s;
+  if(QueryProp(P_WORN)) 
+    s=" ("+(QueryProp(P_WORN_TEXT)||"getragen")+")"; 
+  else 
+    s="";
+  if(this_player() && this_player()->QueryProp(P_TTY)=="ansi")
+     return VT_GREEN+QueryProp(P_SET_ITEM)+VT_NORMAL+s+".\n"; 
+  return QueryProp(P_SET_ITEM)+s+".\n";
+}
+
+string name(int casus, int daemon)
+{
+  string n;
+  n=::name(casus, daemon);
+  if( this_player() && this_player()->QueryProp(P_TTY)=="ansi")
+    return VT_GREEN+n+VT_NORMAL;
+  return n;
+}
+
+string Name(int casus, int daemon)
+{
+  return capitalize(name(casus,daemon));
+}
+
+void _set_autoloadobj(mixed data)
+{
+  set_complete();
+  if (strstr(file_name(this_object()), "/p/daemon/itemd/set/") == -1)
+    return;
+  SetProp(P_ITEMD_TMPMAGIC, data);
+  find_object(ITEMD)->RegisterNewItem(this_object(), SET_ID);
+}
+
+mixed _query_autoloadobj()
+{
+  return QueryProp(P_ITEMD_TMPMAGIC);
+}

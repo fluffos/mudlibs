@@ -1,0 +1,251 @@
+/*
+** Vernichtung
+** 22. November 1998
+** Angrox@SilberLand
+**
+** Std-Raum
+** 
+** CHANGES: 
+** 25.10.2000 Angrox Aenderung fuer die Nekromanten!
+*/
+
+
+
+inherit "std/room";
+#include <properties.h>
+#include <language.h>
+#include <player.h>
+#include <class.h>
+#include "../dungeon.h"
+#include "../directions.h"
+
+// Prototyping
+nosave string GetNewRoom(string dir);
+nosave varargs void do_room_damage(object pl, int dam, string kill_name, string kill_msg);
+// Globvars
+nosave mapping dirmap=([NORDEN:SUEDEN,SUEDEN:NORDEN,OSTEN:WESTEN,WESTEN:OSTEN,
+    NORDOSTEN:SUEDWESTEN,SUEDWESTEN:NORDOSTEN,NORDWESTEN:SUEDOSTEN,
+    SUEDOSTEN:NORDWESTEN]);
+
+
+void create() {
+  ::create();
+  AddCmd( ({"zerstoere", "zerstoer", "vernichte"}), "DestroyBarrier");
+}
+
+
+//
+// Setzen der Exits. Funktioniert nur, wenn Raeume Namen wie 
+// a1.c, b4.c haben
+// xy
+//
+varargs int SetExit(mixed dirs, string path) {
+  int i;
+  mixed helpvar;
+  string roomname;
+  if(!path) path="./";
+  if(!pointerp(dirs)) dirs=({dirs});
+  for(i=sizeof(dirs)-1;i>=0;i--) {
+    roomname=GetNewRoom(dirs[i]);
+    if(!random(3)) 
+      // EXG_ID in _check_barrier ausgelagert.
+      AddExit(dirs[i], ([EX_DEST: path+roomname,
+                 EX_TESTFUNC: "_check_barrier", 
+                 ]));
+    else 
+      AddExit(dirs[i], ([EX_DEST: path+roomname])); 
+  }                      
+  return 1;
+}
+
+
+nosave string GetNewRoom(string dir) {
+  mixed helpvar;
+  int x, y;
+  string roomname;
+  mapping x_koord;
+  x_koord=([49:"a",50:"b",51:"c",52:"d",53:"e",54:"f",55:"g",56:"h",57:"i"]);
+  helpvar=explode(file_name(this_object()), "/");
+  x=helpvar[sizeof(helpvar)-1][0]-48;
+  y=helpvar[sizeof(helpvar)-1][1]-48;
+  switch(dir) {
+    case OSTEN:  roomname=x_koord[x+1]+y; break;
+    case NORDEN: roomname=x_koord[x]+(y-1); break;
+    case SUEDEN: roomname=x_koord[x]+(y+1); break;
+    case WESTEN: roomname=x_koord[x-1]+y; break;
+    case NORDOSTEN : roomname=x_koord[x+1]+(y-1); break;
+    case SUEDOSTEN : roomname=x_koord[x+1]+(y+1); break;
+    case SUEDWESTEN: roomname=x_koord[x-1]+(y+1); break;
+    case NORDWESTEN: roomname=x_koord[x-1]+(y-1); break;
+  }
+  return roomname;
+}
+
+nosave string GetBarrierRoom(string dir) {
+  mapping _ex;
+  _ex=QueryProp(P_NEW_EXITS);
+  return _ex[dir][EX_DEST];
+}
+
+
+
+object QueryBarrier(string dir) {
+  object ob, *inv;
+  string barr_dir;
+  int i;
+  inv=all_inventory(ME);
+  for(i=sizeof(inv)-1;i>=0;i--) {
+    barr_dir=inv[i]->QueryProp(P_BARRIER_DIRECTION);
+    if(barr_dir == dir)
+      return inv[i]; 
+  }
+  return 0;
+}
+
+
+nosave int _check_barrier() {
+  object ob, *inv, barr;
+  int i;
+  string dir, old_kill_name;
+  mixed old_msg;
+  dir=query_verb();
+  if(present(NEKRO_GUARD_ID)) {
+    if(random(4) && TP->QueryProp(P_GUILD) != "nekromanten" && 
+        !TP->is_class_member( CL_UNDEAD)) 
+    {
+      tell_object(TP, BS("Du wirst nicht vorbeigelassen! Du musst einfach "
+            "schneller sein!"));
+      tell_room(ME, BS(sprintf("%s wird nicht vorbeigelassen!", TP->Name(WER))
+            ), ({TP}));
+      return 0;
+    }
+  }
+  inv=filter_array(all_inventory(ME), "_barrier_filter", TO,dir);
+  if(sizeof(inv)) {
+    tell_object(TP, BS("Du versucht durch die Knochenbarriere zu "
+        "durchschreiten, doch die Knochensplitter verletzen Dich so schwer, "
+        "dass Du zurueckweichst!"));
+    tell_room(ME, BS(sprintf("%s versucht die Knochenbarriere "
+        "zu durchschreiten, wird jedoch schwer verletzt und weicht zurueck!",
+        TP->Name(WER))), ({TP}));
+    old_msg=QueryProp(P_KILL_MSG);
+    old_kill_name=QueryProp(P_KILL_NAME);
+    SetProp(P_KILL_MSG, ({"ist so nicht zu durchschreiten", MSG_EMOTE}));
+    SetProp(P_KILL_NAME, "Eine blutige Knochenbarriere");
+    TP->do_damage(20+random(10)); 
+    SetProp(P_KILL_MSG, old_msg);
+    SetProp(P_KILL_NAME, old_kill_name);
+    return 0;
+  }
+  return 1;  
+}
+
+  
+int _barrier_filter(object ob, string dir) {
+  if(ob->id(VBARRIER)  && (ob->QueryProp(P_BARRIER_DIRECTION))==dir)
+    return 1;
+  return 0;
+}
+
+varargs int AddBarrier(string dir, int flag) {
+  string roomname;
+  object ob;
+  if(QueryBarrier(dir)) return 0;
+  if(!member(QueryProp(P_NEW_EXITS), dir)) return 0;
+  if(QueryProp(P_NOBARRIER)) return 0;
+  roomname=GetBarrierRoom(dir);
+  call_other(roomname, "????"); 
+  if(!find_object(roomname)) return 0;
+  if(find_object(roomname)->QueryProp(P_NOBARRIER)) return 0;
+  RemoveExit(dir);
+  AddExit(dir, ([EX_DEST: roomname,
+                 EX_TESTFUNC: "_check_barrier", 
+                 ]));
+  ob=clone_object(VOBJ "barrier");
+  ob->SetProp(P_BARRIER_DIRECTION, dir);
+  ob->move(ME, M_NOCHECK);
+  if(!flag) {
+    call_other(roomname, "AddBarrier", dirmap[dir], 1);
+  }
+  return 1;
+}
+
+varargs int RemoveBarrier(string dir, int flag) {
+  string roomname;
+  object ob;
+  if(!ob=QueryBarrier(dir)) return 0;
+  ob->remove();
+  roomname=GetBarrierRoom(dir);
+  if(!flag)
+    call_other(roomname, "RemoveBarrier", dirmap[dir], 1);
+  return 1;
+}
+
+int DestroyBarrier(string str) {
+  string dir;
+  object ob, weapon, *liv;
+  int i;
+  if(!present(VBARRIER, ME)) return 0;
+  if(!str) {
+    write(BS("Was moechtest Du zerstoeren?"));
+    return 1;
+  }
+  if(sscanf(str, "barriere nach %s", dir)!=1) {
+    write(BS("Welche Barriere moechtest Du zerstoeren? (zerstoere barriere "
+          "nach <richtung>)"));
+    return 1;
+  }
+  ob=QueryBarrier(lower_case(dir));
+  if(!objectp(ob)) {
+    write(BS(sprintf("Richtung %s gibt es keine Knochenbarriere, Du Narr!", 
+            CAP(dir))));
+    return 1;
+  }
+  weapon=TP->QueryProp(P_WEAPON);
+  if(!weapon) {
+    write(BS("Voll Wut schlaegst Du mit blosser Faust auf die Barriere ein!"));
+    tell_room(ME, BS(sprintf("Voller Wut schlaegt %s mit blosser Faust auf "
+            "die Barriere ein!", TP->name())), ({TP}));
+    ob->AddHp(-random(5));
+    do_room_damage(TP, random(30)+20, "Eine Knochenbarriere", "Mit blosser "
+        "Faust kannst Du mich nicht vernichten, Du Narr!");
+    return 1;
+  }
+  write(BS("Du schlaegst voller Wucht auf die Barriere ein!"));
+  tell_room(ME, BS(sprintf("%s schlaegt voller Wucht auf die Barriere ein!", 
+          TP->Name())),({TP}));
+  ob->AddHp(-random(weapon->QueryProp(P_WC)));
+  liv=filter_array(all_inventory(), #'living);
+  for(i=sizeof(liv)-1; i>=0; i--) {
+    tell_object(liv[i], BS("Einige Splitter von der Knochenbarriere treffen "
+          "Dich!"));
+    do_room_damage(liv[i], random(10)+2, "Knochensplitter", "Tief bohren wir "
+        "uns in Deinen Koerper!");
+  }
+  return 1;
+}
+
+nosave varargs void do_room_damage(object pl, int dam, string kill_name, 
+    string kill_msg) 
+{
+  string old_kill_msg;
+  string old_kill_name;
+  if(!objectp(pl)) return; // Zur Sicherheit
+  if(pl->QueryProp(P_GHOST)) return ;
+  old_kill_msg=QueryProp(P_KILL_MSG);
+  old_kill_name=QueryProp(P_KILL_NAME);
+  if(kill_msg) SetProp(P_KILL_MSG, kill_msg);
+  if(kill_name) SetProp(P_KILL_NAME, kill_name);
+  pl->do_damage(dam);
+  if(pl && pl->QueryProp(P_GHOST)) {
+    write_file(NEKRO_ISLAND_DIR+"log/kills/rooms", sprintf(
+          "%s: %s -> %O[%d/%d-%s] (%s/%d)\n", 
+          ctime(),file_name(ME),pl,pl->QueryProp(P_LEVEL),
+          pl->QueryProp(P_GUILD_LEVEL),pl->QueryProp(P_GUILD),
+          kill_name, dam));
+  }
+  SetProp(P_KILL_MSG, old_kill_msg);
+  SetProp(P_KILL_NAME, old_kill_name);
+  return;
+}
+

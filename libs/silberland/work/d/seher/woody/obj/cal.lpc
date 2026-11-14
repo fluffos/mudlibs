@@ -1,0 +1,192 @@
+/*
+** cal (calendar)
+*/
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include <ansi.h>
+#include <moredef.h>
+#include <wizlevels.h>
+
+
+void create()
+{
+  string str;
+
+  if (!is_clone(this_object())) return;  // (return on BP)
+
+  ::create();
+
+  AddId ( ({"cal","kalender"}) );
+  SetProp (P_SHORT, "Ein Kalender");
+  SetProp (P_LONG,
+      "Ein kleiner, handlicher Taschenkalender.\n"
+      "Du kannst mit \"cal [monat [jahr]]\" ein bestimmtes Kalenderblatt "
+      "ansehen. Willst Du den Rahmen drumherum nicht, dann gib "
+      "\"cal -n [monat [jahr]]\" ein.\n");
+  SetProp (P_NAME, "Kalender");
+  SetProp (P_ARTICLE, 1);
+  SetProp (P_GENDER, MALE);
+  SetProp (P_WEIGHT, 400);
+  SetProp (P_VALUE, 900);
+  SetProp (P_NOSELL, 1);
+  SetProp (P_MATERIAL, MAT_PAPER);
+  AddCmd("cal", "cal");
+}
+
+mapping mon2num = ([
+    "Jan" :  1, "Feb" :  2, "Mar" :  3, "Apr" :  4,
+    "May" :  5, "Jun" :  6, "Jul" :  7, "Aug" :  8,
+    "Sep" :  9, "Oct" : 10, "Nov" : 11, "Dec" : 12 ]);
+
+mapping mon2num = ([
+    "Jan" :  1, "Feb" :  2, "Mar" :  3, "Apr" :  4,
+    "May" :  5, "Jun" :  6, "Jul" :  7, "Aug" :  8,
+    "Sep" :  9, "Oct" : 10, "Nov" : 11, "Dec" : 12 ]);
+
+mapping wd2num = ([
+    "Mon" :  1, "Tue" :  2, "Wed" :  3, "Thu" :  4,
+    "Fri" :  5, "Sat" :  6, "Sun" :  7 ]);
+
+mapping mon2str = ([
+    1:"Januar", 2:"Februar", 3:"Maerz", 4:"April",
+    5:"Mai", 6:"Juni", 7:"Juli", 8:"August",
+    9:"September", 10:"Oktober", 11:"November", 12:"Dezember" ]);
+
+mapping monofs = ([
+    1:0, 2:31, 3:31+28, 4:31+28+31, 5:31+28+31+30,
+    6:151, 7:151+30, 8:151+30+31, 9:151+30+31+31, 10:151+30+31+31+30, 
+    11:304, 12:304+30 ]);
+
+int cal(string str)
+{
+  int jahr;
+  int monat;
+  int t,i,noframe;
+  string ret,ct,today;
+  string bold,color,invers,reset;
+
+  // Farbvariablen belegen:
+  switch (TP->QueryProp(P_TTY))
+  {
+    case "ansi":
+      bold = ANSI_BOLD;
+      color = ANSI_BOLD + ANSI_YELLOW;
+      invers = ANSI_BOLD + ANSI_GREEN;
+      reset = ANSI_NORMAL;
+      break;
+    case "vt100":
+      bold = color = ANSI_BOLD;
+      invers = ANSI_INVERS;
+      reset = ANSI_NORMAL;
+      break;
+    default:
+      bold = color = invers = reset = "";
+  }
+
+  // -n Switch auswerten:
+  if (stringp(str))
+    if (str[0..1] == "-n") {
+      noframe = 1;
+      str = str[3..];
+    }
+
+  // Monat/Jahr Parameter auswerten:
+  if (!stringp(str) || !strlen(str)) {
+    jahr = to_int(ctime()[<4..]);
+    monat = to_int(mon2num[ctime()[4..6]]);
+  }
+  else if (sscanf(str, "%d %d", monat, jahr) < 2) {
+    jahr = to_int(ctime()[<4..]);
+    if (sscanf(str, "%d", monat) < 1)
+      monat = to_int(mon2num[ctime()[4..6]]);
+  }
+
+  // Validity check:
+  if ((jahr < 1970) || (jahr > 2032)) {
+    write("Ungueltiges Jahr angegeben! (erlaubt: 1970 - 2032)\n");
+    return 1;
+  }
+  if ((monat < 1) || (monat > 12)) {
+    write("Ungueltiges Monat angegeben! (erlaubt: 1 - 12)\n");
+    return 1;
+  }
+
+  // Zeitpunkt t vom 1. Jaenner schaetzen
+  t = (jahr - 1970) * (int)(365.25 * 86400);
+  t -= t % 86400;
+  // Monat dazuzaehlen
+  t += monofs[monat] * 86400;
+
+  // Etwaige Korrekturen vornehmen
+  if (((int)(ctime(t)[<4..]) < jahr) || (mon2num[ctime(t)[4..6]] < monat))
+    while ( ((int)(ctime(t)[<4..]) < jahr) ||
+            ( ((int)(ctime(t)[<4..]) == jahr) &&
+              (mon2num[ctime(t)[4..6]] < monat) ) )
+      t += 86400;
+  else if ( ((int)(ctime(t)[<4..]) > jahr) ||
+            ( (mon2num[ctime(t)[4..6]] >= monat)&&
+              ((int)(ctime(t)[<4..]) > jahr) ) )
+  {
+    while ( ((int)(ctime(t)[<4..]) > jahr) ||
+            ( (mon2num[ctime(t)[4..6]] >= monat)&&
+              ((int)(ctime(t)[<4..]) > jahr) ) )
+      t -= 86400;
+    t += 86400;         // Korrektur, da einmal zu oft abgezogen
+  }
+
+  // Header (Monat+Jahr, Mo-So Kopfzeile):
+  ret = sprintf( "%s%|20s%s\n", bold, mon2str[monat]+" "+jahr, reset );
+  ret += color + "Mo Di Mi Do Fr Sa So" + reset + "\n";
+
+  ct = ctime(t);
+  if (wd2num[ct] != 1)  // padding required
+    ret += sprintf("%*s", (wd2num[ct[0..2]] - 1) * 3, "");
+
+  // Aktuelles Monat und Jahr?
+  if ( (ctime()[-4..] == ct[-4..]) &&
+       (ctime()[4..6] == ct[4..6]) )
+    today = ctime()[8..10];
+  else
+    today = 0;
+
+  while (mon2num[ct[4..6]] == monat)
+  {
+    if (today == ct[8..10])
+      ret += invers + ct[8..9] + reset + " ";
+    else
+      ret += ct[8..10];
+    if (wd2num[ct[0..2]] == 7)
+      ret = ret[0..<2] + "\n";
+    ct = ctime(t += 86400);
+  }
+  if (wd2num[ct[0..2]] != 1)
+  {
+    ret += sprintf("%*s", (8 - wd2num[ct[0..2]]) * 3, "");
+    ret = ret[0..<2] + "\n";
+  }
+
+  if (!noframe)
+    ret = ",----------------------.\n" +
+          implode( map_array( explode( ret, "\n" ),
+                              lambda(
+                                ({ 'x }),
+                                ({ #'sprintf, "| %-20s |", 'x }) )
+                            ), "\n" ) +
+          "\n`----------------------'\n";
+
+  write(ret);
+  return 1;
+}
+
+mixed _query_autoloadobj()
+{
+  object ob;
+
+  ob = this_player();
+  if (ob && query_once_interactive(ob) && IS_LEARNER(ob))
+    return 1;
+  return 0;
+}

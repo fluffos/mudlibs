@@ -1,0 +1,186 @@
+//=========================================================================
+//
+// File:    kaesemaster.c
+// Created by Ronja@SL
+//
+// Project: Kaeseladen
+//
+//=========================================================================
+
+#include "kaeseladen.h"
+
+mapping production;
+// 0: Flag ob Albin Milch bekommen hat
+// 1: Flag ob Albin Lab bekommen hat
+// 2: Flag ob Albin Geld bekommen
+// 3: Flag ob Kaese in Produktion ist
+// 4: timestamp, wann der kaese fertig ist
+// 5: filename des geclonten kaesestuecks
+// 6: typ des kaeses, 1 = kuh, 2 = schaf, 3 = ziege
+
+void create()
+{
+  if(is_clone(this_object()))
+  {
+    destruct(this_object());
+    return;
+  }
+
+  seteuid(getuid(this_object()));
+
+  production = ([]);
+  restore_object(SAVEFILE);
+  return;
+}
+
+int DeleteOrder(string uid)
+{
+  production = m_delete(production, uid);
+  save_object(SAVEFILE);
+  return 1;
+}
+
+int TestProduction(string uid)
+{
+  if(member(production,uid)   &&
+     production[uid,0] == 1   &&
+     production[uid,1] == 1   &&
+     production[uid,2] == 1    )
+  {
+    production[uid,3] = 1;
+    production[uid,4] = time()+KAESEZEIT;
+  }
+
+  save_object(SAVEFILE);
+  return 1;
+}
+
+int SetMilk(string uid,int mtyp)
+{
+  if(member(production,uid))
+  {
+    production[uid,0] = 1;
+    production[uid,6] = mtyp;
+  }
+  else
+  {
+    production += ([uid: 1;0;0;0;0;"";mtyp]);
+  }
+
+  TestProduction(uid);
+  return 1;
+}
+
+int QueryMilk(string uid)
+{
+  if(member(production,uid) && production[uid,0]) return 1;else return 0;
+}
+
+int QueryMilkType(string uid)
+{
+  if(member(production,uid) && production[uid,0])
+  {
+    return production[uid,6];
+  }
+
+  return 0;
+}
+
+int SetLab(string uid)
+{
+  if(member(production,uid))
+  {
+    production[uid,1] = 1;
+  }
+  else
+  {
+    production += ([uid: 0;1;0;0;0;"";0]);
+  }
+
+  TestProduction(uid);
+  return 1;
+}
+
+int QueryLab(string uid)
+{
+  if(member(production,uid) && production[uid,1]) return 1;else return 0;
+}
+
+int SetMoney(string uid)
+{
+  if(member(production,uid))
+  {
+    production[uid,2] = 1;
+  }
+  else
+  {
+    production += ([uid: 0;0;1;0;0;"";0]);
+  }
+
+  TestProduction(uid);
+  return 1;
+}
+
+int QueryMoney(string uid)
+{
+  if(member(production,uid) && production[uid,2]) return 1;else return 0;
+}
+
+int SetCheese(string uid, string fn)
+{
+  if(member(production,uid)) production[uid,5] = fn;
+  save_object(SAVEFILE);
+  return 1;
+}
+
+int QueryCheese(string uid)
+{
+  object ob;
+
+  if(member(production,uid))
+  {
+    if(production[uid,3] == 1)
+    {
+      if(ob=find_object(production[uid,5]))
+      {
+        return 3;
+      }
+      else
+      {
+        if(production[uid,5] != "")
+        {
+          DeleteOrder(uid);
+          return 0;
+        }
+      }
+
+      if(time() > production[uid,4]) return 2; else return 1;
+    }
+  }
+  return 0;
+}
+
+int QueryMissing(string uid)
+{
+  int temp;
+
+  temp = MISSING_NOTHING;
+
+  if(!QueryMilk(uid))  temp += MISSING_MILK;
+  if(!QueryLab(uid))   temp += MISSING_LAB;
+  if(!QueryMoney(uid)) temp += MISSING_MONEY;
+
+  return temp;
+}
+
+int CheckFunc(string uid)
+{
+  if(QueryCheese(uid) == 2) return 1;
+  return 0;
+}
+
+string *QueryDoneCheese()
+{
+  return
+    m_indices(filter_mapping(production,"CheckFunc",this_object()));
+}

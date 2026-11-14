@@ -1,0 +1,107 @@
+/*
+ * Kochendes Blut
+ *
+ * Erzeugt beim Ziel kochendes Blut, hierdurch nimmt das Ziel
+ * fuer einige Zeit Schaden. Der Schaden entsteht nur, wenn sich der Nekromant
+ * im selben Raum wie das Opfer befindet.
+ *
+ * Kosten: 45 MP
+ * Level : 3 
+ * Schaden: 30+2*glvl+(suc/300)+random(suc/300) (pro KR)
+ * Runden: bis zu 30 Kampfrunden (maximal!!!!)
+ * Objekt: /gilden/nekromanten/obj/bloodboil
+ * 
+ * Skillpunktefaehig (dam,ggf rundenanzahl)
+ *
+ * Status: anschlussreif
+ *
+ */
+// 13.08.2003 Archon: sinfo uebergabe, skillpunkte
+// 23.12.2003 Feyaria: LivingVictim->EnemyVictim
+
+object kochendes_blut_find_victim(object caster,mapping sinfo,int silent)
+{
+  object victim;
+  if (!victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,0))
+  {
+    if (!silent)
+      write("Wessen Blut willst Du zum Kochen bringen?\n");
+    return 0;
+  }
+  if(!is_living(victim)) 
+  {
+    write(BSC(sprintf("%s Nur einem Wesen aus Fleisch und Blut kannst Du "
+            "mit dieser unheiligen Anrufung schaden!", random_fluch())));
+    return 0;
+  }
+  if (query_once_interactive(victim))
+  {
+    write("Auf einen Mitspieler kannst Du kein kochendes Blut zaubern!\n");
+    return 0;
+  }
+  if(present(NEKRO_BLOODBOIL, victim)) 
+  {
+    write(BSC(sprintf("Das Blut von %s kocht schon! Bring %s endlich um!",
+            victim->name(WEM), victim->QueryPronoun(WEN))));
+    return 0;
+  }
+  return victim;
+}
+
+mixed prep_kochendes_blut(object caster, mapping sinfo) 
+{
+  object victim;
+  if (!victim=kochendes_blut_find_victim(caster,sinfo,0))
+    return 0;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  sinfo[SI_ENEMY]=victim;
+  return sinfo;
+}
+
+int kochendes_blut(object caster, mapping sinfo) 
+{
+  int suc,skp;
+  object victim,ob;
+  string str;
+  
+  victim=sinfo[SI_ENEMY];
+  str=sinfo[SI_SKILLARG]; //ggf auf anderes ziel umschwenken
+  if (!present_victim(victim,caster) || !objectp(victim=kochendes_blut_find_victim(caster,sinfo,1)))
+  {
+    write(BSC(sprintf("%s! '%s' ist nicht mehr hier! Wie kann man nur "
+            "so versagen?!", caster->QueryProp(P_GENDER)==FEMALE?
+            "NAERRIN":"NARR",CAP(str?str:"Dein Opfer"))));
+    return 0;
+  }
+
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  if ((suc=SpellSuccess(caster,sinfo))<=0)
+    return MISSERFOLG;
+
+  tell_room(ENV(caster), BS(sprintf("Mit einem Ruck deutet %s auf %s! "
+          "%s schreit ploetzlich in Agonie!", caster->name(WER),
+          victim->name(WEN), victim->Name(WER))), ({caster,victim}));
+  write(BSC(sprintf("Mit einem Ruck deutest Du auf %s! %s Bald wird %s "
+          "gar sein! Harhar!", victim->name(WEN), random_fluch(), 
+          victim->QueryPronoun(WER))));
+  tell_object(victim,BS(sprintf("%s deutet mit einem Ruck auf Dich! "
+        "Ploetzlich spuerst Du wie Dein Blut zu kochen beginnt! "
+        "Du schreist vor Schmerz!!!", caster->Name(WER))));
+  skp=get_skillpoints(caster,"kochendes blut");
+  ob=clone_object(OBJ "bloodboil");
+  ob->move(victim, M_NOCHECK);
+  ob->Setup(victim,caster,suc,skp);
+  UseBlood();
+  return ERFOLG;
+}
+

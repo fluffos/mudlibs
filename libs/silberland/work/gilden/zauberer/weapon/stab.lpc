@@ -1,0 +1,239 @@
+//inherit "../zfun";
+inherit "std/weapon";
+
+#pragma strong_types
+
+#include <properties.h>
+#include <combat.h>
+#include <defines.h>
+#include <moredef.h>
+#include <ansi.h>
+
+#include "../zauberer.h"
+
+#define P_SHORT_SAVE "short_save"
+
+// Prototypes
+int lichtstab(int light, int time);
+void NotifyHpChange();
+void DoReport(int hook);
+int zstatus();
+
+// Globale Variablen
+int debug = 0;
+int HP_last = 0;
+int SP_last = 0;
+
+
+
+void create()
+{
+  if (!is_clone(this_object())) return;
+
+  weapon::create();  
+
+  SetProp(P_NAME, "Stab");
+  AddId( ({ "zauberstab", "stab", "\nguildobject", "\nzauberer_stab" }));
+  SetProp(P_GENDER, MALE);
+  SetProp(P_SHORT_SAVE, "Der knorrige Stab eines Zauberers");
+  SetProp(P_SHORT, QueryProp(P_SHORT_SAVE));
+
+  SetProp(P_LONG, "Dieser Stab scheint aus einer Wurzel "
+    "gefertigt zu sein. Das obere Ende bildet eine "
+    "knorrige Vedickung in der Wurzel, wogegen der Stab "
+    "zum unteren Ende hin relativ duenn wird. Sicher "
+    "lassen sich mit ihm schmerzhafte Schlaege austeilen "
+    "und durch die handliche Form ist wohl auch der eine "
+    "oder andere Angriff abzuwehren.");
+    
+  SetProp(P_INFO, "Magische Energie durchfliesst den Stab.");
+
+  SetProp(P_MATERIAL, MAT_WOOD);
+  
+  SetProp(P_WC, 150); // _query_wc !!
+  SetProp(P_WC_FIXFACTOR, 0.6);
+  //SetProp(P_WC_FIX, 40);
+  SetProp(P_WEAPON_TYPE, WT_CLUB);
+  SetProp(P_NR_HANDS, 1);
+  SetProp(P_DAM_TYPE, ({ DT_BLUDGEON })); // _query_dam_type !!
+  
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NEVERDROP, 1);
+  //SetProp(P_AUTOLOADOBJ, 1);
+  
+  AddCmd("deb_st", "toggle_debug");
+
+  AddCmd("zreport", "report");
+  AddCmd("zstatus", "zstatus");
+}
+
+int toggle_debug()
+{
+  if (!IS_MAINTAINER(getuid(this_player()))) return 0;
+  debug==0?debug=1:debug=0;
+  tell_object(this_player(), sprintf("ST_DEBUG: %d\n", debug));
+  return 1;
+}
+
+
+int lichtstab(int light, int time)
+{
+  string lstr;
+  object pl;
+
+  switch(light)
+    {
+      case 1: lstr = "schwach"; break;
+      case 2: lstr = "hell"; break;
+      case 3: lstr = "sehr hell"; break;
+      case 4: lstr = "extrem hell"; break;
+      default:
+        SetProp(P_SHORT, QueryProp(P_SHORT_SAVE));
+	SetProp(P_LIGHT, 0);
+	if (pl = ENV(ME)) tell_object(pl, "Das leuchten um Deinen Stab erlischt!\n");
+        if (ENV(pl)) tell_room(ENV(pl), sprintf("Das leuchten um den Stab von %s erlischt.\n",
+	                                 pl->name(WEM)), ({ pl }));
+        
+        return 1;
+    }
+
+  SetProp(P_LIGHT, light);
+  
+  SetProp(P_SHORT, sprintf("%s (%s leuchtend)", QueryProp(P_SHORT_SAVE), lstr));
+  
+  call_out("lichtstab", time, 0, 0);
+  
+  return 1;
+}
+
+
+int _query_wc()
+{
+  mapping p_st;
+  object pl;
+  int wc;
+
+  if (!objectp(pl = environment(this_object())) 
+      || ! mappingp(p_st = pl->QueryProp(P_Z_COMBAT_STICK)))
+    {
+        return QueryProp(P_WC);
+
+    }
+
+  // Zeit abgelaufen? safety check
+  if (time() > p_st[Z_COMBAT_STICK_TS, 0]+4)
+    environment(this_object())->SetProp(P_Z_COMBAT_STICK, 0);
+    
+  wc = 100 * p_st[Z_COMBAT_STICK_FACTOR, 0] / 100;
+
+  if (pl && debug) tell_object(pl, sprintf("ST_WC: %d", wc));
+
+  return wc;
+}
+
+
+mixed _query_dam_type()
+{
+  mapping p_st;
+  object pl;
+
+  if (!objectp(pl = environment(this_object())) 
+      || ! mappingp(p_st = pl->QueryProp(P_Z_COMBAT_STICK)))
+    {
+      if (pl && debug) tell_object(pl, "ST_DT: DT_BLUDGEON");
+      return ({ DT_BLUDGEON });
+    }
+    
+  if (pl && debug) tell_object(pl, sprintf("ST_DT: %O", p_st[Z_COMBAT_STICK_DT]));
+
+  return p_st[Z_COMBAT_STICK_DT];
+}
+
+
+int report(string str)
+{
+
+  switch (str)
+    {
+      case "ein":
+        TP->AddHpHook(this_object());
+	NotifyHpChange();
+	tell_object(TP, "Ok, Report EINgeschaltet.\n");
+	return 1;
+        break;
+      case "aus":
+        TP->RemoveHpHook(this_object());
+	tell_object(TP, "Ok, Report AUSgeschaltet.\n");
+	return 1;
+        break;
+      default:
+        notify_fail("Ein oder Aus?\n");
+        return 0;
+    }
+}
+
+
+void NotifyHpChange()
+{
+  DoReport(1);
+}
+
+int zstatus()
+{
+  DoReport(0);
+  return 1;
+}
+
+void DoReport(int hook)
+{
+  int hp,sp, max_hp;
+
+  string spellrep, hprep;
+  
+  object pl;
+
+  string col_pre;
+
+  if (!(pl=ENV(ME)) || !interactive(ENV(ME))) return;
+  
+  hp = pl->QueryProp(P_HP);
+
+  if (hook && HP_last == hp) return;
+
+  // Troll scroll :)
+  //if (pl->QueryProp(P_RACE) == "troll" && 
+
+  switch (hp * 100 / (max_hp = pl->QueryProp(P_MAX_HP)))
+    {
+      // Rot blau, cyan, gelb, gruen
+      case 0..20:
+        col_pre = ANSI_RED;
+	break;
+      case 21..40:
+        col_pre = ANSI_BLUE;
+	break;
+      case 41..60:
+        col_pre = ANSI_CYAN;
+	break;
+      case 61..80:
+        col_pre = ANSI_YELLOW;
+	break;
+      case 81..100:
+        col_pre = ANSI_GREEN;
+	break;
+      default:
+        col_pre = ANSI_NORMAL;
+    }
+  
+  hprep = sprintf("--LPs:%4d (%+4d) MPs:%4d (%+4d) --%s\n",
+                    hp, hp-HP_last, (sp=pl->QueryProp(P_SP)),
+		    sp-SP_last, ANSI_NORMAL);
+  HP_last = hp;
+  SP_last = sp;
+
+  spellrep = sprintf("--%c-%c-x-x-x-x-", QueryProp(P_LIGHT) > 0 ? 'L' : 'x', mappingp(pl->QueryProp(P_Z_COMBAT_STICK)) ? 'K' : 'x');
+
+  tell_object(pl, sprintf("%s-%s-%s", col_pre, spellrep, hprep));
+  
+
+}

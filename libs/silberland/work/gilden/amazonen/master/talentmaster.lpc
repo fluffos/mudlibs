@@ -1,0 +1,328 @@
+// Talentmaster der Amazonengilde (Spell-Verbesserungen)
+// Speichert pro Spieler, wie viele Talentpunkte in welchen Spell investiert wurden.
+
+#pragma no_clone, no_inherit, no_shadow
+
+#include "../def.h"
+
+mixed saveload;
+nosave mapping spent = ([ ]); // ([ playeruid : ([ spellid : int points ]) ])
+
+public int QuerySpentTotal(mixed pl);
+
+nosave varargs int CheckSecurity(mixed uid, int flag)
+{
+  if (!flag && intp(uid) && uid == 1)
+  {
+    flag = 1;
+    uid = previous_object();
+  }
+  if (!uid)
+    uid = previous_object();
+  if (!stringp(uid))
+    uid = getuid(uid);
+
+  if (IS_ARCH(uid))
+    return 1;
+  if (uid == getuid(this_object()))
+    return 1;
+  if (uid == GUILD_UID || uid == SPELL_UID)
+    return 1;
+  if (member(GUILD_WIZARDS, uid) != -1)
+    return 1;
+  return 0;
+}
+
+nosave int CheckIfAllowed()
+{
+  object ob;
+  ob = previous_object();
+  if (!objectp(ob))
+    return 0;
+  if (!CheckSecurity(ob))
+  {
+    log_file("/gilden/amazonen/master/talent.secure.log", sprintf("Amazonen: Talentmaster Aenderung von %s (%O)\n",
+                             CAP(getuid(ob) || "unbekannt"), ob));
+    return 0;
+  }
+  return 1;
+}
+
+nosave string object2uid(mixed pl)
+{
+  if (objectp(pl))
+    return getuid(pl);
+  if (stringp(pl) && sizeof(pl))
+    return lower_case(pl);
+  return 0;
+}
+
+nosave object player_object(mixed pl)
+{
+  if (objectp(pl))
+    return pl;
+  if (stringp(pl) && sizeof(pl))
+  {
+    object ob;
+    ob = find_player(pl);
+    if (!objectp(ob))
+      ob = find_netdead(pl);
+    return ob;
+  }
+  return 0;
+}
+
+nosave string normalize_spell(string spell)
+{
+  if (!stringp(spell))
+    return 0;
+  spell = lower_case(spell);
+  spell = implode(explode(spell, " "), "");
+  if (!strlen(spell))
+    return 0;
+  return spell;
+}
+
+nosave void load_data()
+{
+  mapping data;
+
+  if (restore_object(AMAZONEN_TALENT_SAVE))
+    data = saveload;
+  else
+    data = 0;
+
+  saveload = 0;
+
+  if (mappingp(data))
+    spent = data;
+  else
+    spent = ([ ]);
+}
+
+nosave void save_data()
+{
+  saveload = spent;
+  save_object(AMAZONEN_TALENT_SAVE);
+  saveload = 0;
+}
+
+public void create()
+{
+  if (is_clone(this_object()))
+  {
+    destruct(this_object());
+    return;
+  }
+  seteuid(getuid(this_object()));
+  load_data();
+}
+
+public int DoBackup()
+{
+  if (!CheckIfAllowed())
+    return -2;
+  saveload = spent;
+  save_object(AMAZONEN_TALENT_BACKUP);
+  saveload = 0;
+  return 1;
+}
+
+public int DoRestore()
+{
+  if (!CheckIfAllowed())
+    return -2;
+  if (restore_object(AMAZONEN_TALENT_BACKUP))
+  {
+    spent = mappingp(saveload) ? saveload : ([ ]);
+    save_data();
+  }
+  saveload = 0;
+  return 1;
+}
+
+public int QuerySpentPoints(mixed pl, string spell)
+{
+  string uid, sid;
+  mapping m;
+
+  uid = object2uid(pl);
+  sid = normalize_spell(spell);
+  if (!uid || !sid)
+    return 0;
+
+  m = spent[uid];
+  if (!mappingp(m))
+    return 0;
+  return m[sid];
+}
+
+public int QuerySpentPointsUid(string uid, string sid)
+{
+  mapping m;
+
+  if (!stringp(uid) || !stringp(sid) || !strlen(uid) || !strlen(sid))
+    return 0;
+  uid = lower_case(uid);
+  sid = normalize_spell(sid);
+  if (!sid)
+    return 0;
+
+  m = spent[uid];
+  if (!mappingp(m))
+    return 0;
+  return m[sid];
+}
+
+public mapping QuerySpentSpells(mixed pl)
+{
+  string uid;
+  mapping m;
+
+  uid = object2uid(pl);
+  if (!uid)
+    return ([ ]);
+
+  m = spent[uid];
+  return mappingp(m) ? (m + ([ ])) : ([ ]);
+}
+
+// Setzt den Wert absolut (z.B. fuer Admin-Korrekturen).
+public int SetSpentPoints(mixed pl, string spell, int points)
+{
+  string uid, sid;
+  mapping m;
+  int max_total, current_for_spell, other_total;
+  object plob;
+
+  if (!CheckIfAllowed())
+    return -2;
+
+  uid = object2uid(pl);
+  sid = normalize_spell(spell);
+  if (!uid || !sid)
+    return -3;
+
+  if (points < 0)
+    points = 0;
+  if (points > 3)
+    points = 3;
+
+  // Gesamtlimit: maximal so viele Punkte wie Gildenstufe (nur wenn Spielerobjekt bekannt).
+  plob = player_object(pl);
+  if (objectp(plob))
+  {
+    max_total = plob->QueryProp(P_GUILD_LEVEL);
+    if (max_total < 0) max_total = 0;
+    current_for_spell = QuerySpentPoints(uid, sid);
+    other_total = QuerySpentTotal(uid) - current_for_spell;
+    if (other_total < 0) other_total = 0;
+    if (points > (max_total - other_total))
+      points = max_total - other_total;
+    if (points < 0)
+      points = 0;
+  }
+
+  m = spent[uid];
+  if (!mappingp(m))
+    m = ([ ]);
+
+  if (points == 0)
+    m -= ([ sid ]);
+  else
+    m[sid] = points;
+
+  if (!sizeof(m))
+    spent -= ([ uid ]);
+  else
+    spent[uid] = m;
+
+  save_data();
+  return points;
+}
+
+// Addiert Punkte (typischer Use-Case beim "Ausgeben" von Talentpunkten).
+public int AddSpentPoints(mixed pl, string spell, int delta)
+{
+  int current;
+
+  if (!CheckIfAllowed())
+    return -2;
+  if (!intp(delta) || delta == 0)
+    return -3;
+
+  current = QuerySpentPoints(pl, spell);
+  return SetSpentPoints(pl, spell, current + delta);
+}
+
+// Gesamtsumme pro Spieler (fuer Checks/Anzeige).
+public int QuerySpentTotal(mixed pl)
+{
+  string uid;
+  mapping m;
+  mixed *vals;
+  int i, sum;
+
+  uid = object2uid(pl);
+  if (!uid)
+    return 0;
+
+  m = spent[uid];
+  if (!mappingp(m) || !sizeof(m))
+    return 0;
+
+  vals = m_values(m);
+  for (i = sizeof(vals) - 1; i >= 0; --i)
+    if (intp(vals[i]) && vals[i] > 0)
+      sum += vals[i];
+  return sum;
+}
+
+public int QuerySpentTotalUid(string uid)
+{
+  mapping m;
+  mixed *vals;
+  int i, sum;
+
+  if (!stringp(uid) || !strlen(uid))
+    return 0;
+  uid = lower_case(uid);
+
+  m = spent[uid];
+  if (!mappingp(m) || !sizeof(m))
+    return 0;
+
+  vals = m_values(m);
+  for (i = sizeof(vals) - 1; i >= 0; --i)
+    if (intp(vals[i]) && vals[i] > 0)
+      sum += vals[i];
+  return sum;
+}
+
+// Setzt alle investierten Spellpunkte des Spielers zurueck.
+// Rueckgabe: Anzahl der freigegebenen Punkte.
+public int ResetSpentSpells(mixed pl)
+{
+  string uid;
+  int freed;
+
+  if (!CheckIfAllowed())
+    return -2;
+
+  uid = object2uid(pl);
+  if (!uid)
+    return -3;
+
+  freed = QuerySpentTotalUid(uid);
+  spent = m_delete(spent, uid);
+  save_data();
+  return freed;
+}
+
+// Nur fuer Admin/Debugging: komplette Tabelle.
+public mapping QueryAll()
+{
+  if (!CheckIfAllowed())
+    return ([ ]);
+  return spent + ([ ]);
+}

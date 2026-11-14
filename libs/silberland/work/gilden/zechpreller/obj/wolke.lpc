@@ -1,0 +1,252 @@
+//=========================================================================
+//
+// File: wolke.c
+// Created by Gwenshara@SL
+//
+// Project: Zechpreller
+//
+//=========================================================================
+
+#include "../zech.h"
+#include "../talents.h"
+#include <properties.h>
+#include <moredef.h>
+#include <new_skills.h>
+#include <moving.h>
+#define MAX_SAVED_ALC 500
+#define ROOM_MSGS ({"Die Alkoholwolke verstroemt Alkohol.",\
+		    "Der Geruch von Alkohol steigt Dir in die Nase",\
+		    "Irgend etwas riecht hier nach Schnaps...",\
+		    "Du bekommst Lust auf ein Glaeschen Bier.",\
+		    "Hier scheint jede Menge Alkohol zu sein.",\
+		    "Der Alkoholgehalt Deiner Umgebung scheint etwas zu sinken.",\
+		    "Du torkelst ein wenig.",\
+		    "Puh... der Geruch hier erledigt selbst Zechus.",\
+		    "Was ist das fuer ein seltsamer Geruch?",\
+		    "<HICKS>!",\
+		    "Du stolperst.",\
+                  })
+
+inherit "std/npc";
+
+object owner;
+int alc, last_inhalate;
+
+
+// Die Fun zum veraendern des Alkohols
+// return: ({rest alc in der wolke, abgezogener wert})
+int *ChangeAlcohol(object who, int amount)
+{
+  int mom_alc, x;
+  if(!objectp(who)) return ({alc, 0});
+  if(!query_once_interactive(who)) return ({alc, 0});
+
+  mom_alc = who->QueryProp(P_ALCOHOL);
+
+  who->SetProp(P_ALCOHOL, mom_alc+amount); // Alc raufsetzen
+
+  // Damit man nicht ueber das Alcohol-Maximum geht:
+  if(who->QueryProp(P_ALCOHOL) > who->QueryProp(P_MAX_ALCOHOL))
+     who->SetProp(P_ALCOHOL, who->QueryProp(P_MAX_ALCOHOL));
+  
+  alc    -= amount;
+  
+  if(alc <= 0)
+  {
+    if(ENV(TO))
+      tell_room(ENV(TO), BS("Die Alkoholwolke ist aufgebraucht und loest sich auf."));
+    remove(1);
+    return ({alc, amount});
+  }
+
+  if(lower_case(who->QueryProp(P_GUILD)) == "zechpreller")
+    call_other(ZECHMASTER, "DrinksAlcohol", who, amount);
+
+  if((x=ZTMASTER->GetTalent(who, ZT_HEALING_CLOUD))) {
+    who->AddHp(x);
+    who->AddSp(x);
+  }
+
+  return ({alc, amount});
+}
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+//--Beschreibungen---------------------------------------------------------
+
+  SetProp(P_SHORT, "Eine Alkoholwolke verstroemt Alkohol");
+
+//--Namen------------------------------------------------------------------
+
+  SetProp(P_NAME, "Alkoholwolke");
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({"\nzechpreller_wolke", "NODESTRUCT", "wolke", "alkoholwolke"}) );
+
+//--Eigenschaften----------------------------------------------------------
+
+  SetProp(P_MATERIAL, ([MAT_ALCOHOL:90, MAT_MISC_GAS:10]) );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NEVERDROP, 0);
+  SetProp(P_NOGET, 1);
+  SetProp(P_FRIEND, 1);
+  SetProp(P_NOATTACK, " ist nicht materiell!\n");
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:-70,T_RANGE_MAX:70]));
+
+  SetProp(P_MSGIN, "schwebt herein");
+  SetProp(P_MSGOUT, "schwebt");
+  SetProp(P_MMSGIN, "schwebt herein");
+  SetProp(P_MMSGOUT, "schwebt davon");
+
+  SetProp(P_NOCORPSE, 1);
+  SetProp(P_DIE_MSG, " verfluechtigt sich.\n");
+
+  AddCmd( ({"atme", "atem"}), "cmd_einatmen");
+  call_out("idle_up", 1+random(10));
+}
+string long()
+{
+  return BS("Eine dichte Alkoholwolke! Besser Du atmest sie nicht ein...");
+}
+
+int cmd_einatmen(string str)
+{
+  if(!str || str == "") return 0;
+  if(!(str == "wolke ein" ||
+       str == "alkoholwolke ein" ||
+       str == "alkohol ein")) return 0;
+  if(!objectp(TO)) return 0;
+
+  notify_fail("Die Wolke muss sich erst wieder sammeln.\n");
+  if(time()-last_inhalate<5) return 0;
+
+  tell_object(TP, "Du inhalierst einen Teil der Wolke...\n"
+		  "<HICKS> Dasch hat gut getan!\n");
+  tell_room(ENV(TP), BS(TPN+" atmet einen guten Teil der Alkoholwolke ein."), ({TP}));
+  last_inhalate=time();
+  ChangeAlcohol(TP, 5);
+  return 1;
+}
+
+int IsZechpreller(object ob)
+{
+  if(!(ob->QueryProp(P_GUILD) == "zechpreller")) return 0;
+  return 1;
+}
+
+void idle_up()
+{
+  object *inv;
+  if(!ENV(TO) || !TO || !owner) return;
+
+  else // wenn sie nicht hilft, dann idlet ein Zechi im raum Alkohol rauf
+  {
+    if(!random(3) && objectp(TO) && objectp(ENV(TO)))
+     tell_room(ENV(TO), BS(ROOM_MSGS[random(sizeof(ROOM_MSGS))]));
+
+    inv = filter_array(all_inventory(ENV(TO)), "IsZechpreller");
+    if(sizeof(inv))
+      ChangeAlcohol(inv[random(sizeof(inv))], 1+random(5));
+  }
+
+  call_out("idle_up", 1+random(10));
+}
+
+void fight()
+{
+  object enemy;
+  if(!ENV(TO) || !TO || !owner) return;
+
+  if(present(owner, ENV(TO)) && objectp(enemy=owner->InFight()))
+  {
+    tell_room(ENV(TO), BS("Die Alkoholwolke huellt "+enemy->Name(WEN, 1)+" ein."),
+	      ({enemy}));
+
+    tell_object(enemy, BS("Die Alkoholwolke huellt Dich ein!"));
+    enemy->Defend(50+random(60), ({DT_POISON,DT_ACID}),
+	          ([SP_SHOW_DAMAGE:1, SP_NAME:"alkoholwolke"]), owner);
+  }
+
+  call_out("fight", 2);
+}
+
+public void cause_weakness(int x) {
+  object *enemies;
+  int i;
+  
+  if(!objectp(owner)) return;
+  if(sizeof(enemies=owner->PresentEnemies()) < 1) return;
+
+  for(i=0; i<sizeof(enemies); ++i) {
+    if(!enemies[i]->QueryProp("zechpreller_weakened")) break;
+  }
+
+  if(i < sizeof(enemies)) {
+    tell_room(ENV(enemies[i]), BS("Die Alkoholwolke macht "+enemies[i]->name(WEN)+" anfaellig gegen Alkohol!"));
+    enemies[i]->AddResistanceModifier(([DT_POISON: 0.1 * x, DT_ACID: 0.1 * x]));
+    enemies[i]->SetProp("zechpreller_weakened", 1);
+  }
+
+  call_out("cause_weakness", 10 - x, x);
+}
+
+void SetVars(object caster, int duration, int save)
+{
+  int x;
+  if(caster->QueryProp(P_GUILD_LEVEL) >= 9)
+   // caster->SetProp(P_TMP_MOVE_HOOK, ({time()+duration, TO, "CasterMoves"}));
+   caster->AddPursuer(TO);
+  owner = caster; // Besitzer der Wolke kennzeichnen
+
+  // Wieviel Alk ist in der Wolke?
+  if(alc > MAX_SAVED_ALC) alc = MAX_SAVED_ALC;
+  else                    alc   = save;
+
+  // Artanoks Erben haben ja eine maechtigere Wolke!
+  if(ERBMASTER->QueryErbe(caster) == ERBE_ARTANOK)
+    call_out("fight", 2);
+
+  if((x=ZTMASTER->GetTalent(caster, ZT_POISON_CLOUD))) {
+    call_out("cause_weakness", 10 - x, x);
+  }
+
+  call_out("removeme", duration);
+}
+
+void removeme()
+{
+  die();
+}
+
+mixed CasterMoves(mixed dir, mapping target)
+{
+  int i;
+  mixed values, indices;
+  
+  if(find_call_out("walk")) remove_call_out("walk");
+  call_out("walk", 0, dir);
+  return;
+}
+
+void walk(mixed dir)
+{
+  tell_room(ENV(TO), BS("Die Alkoholwolke schwebt "+owner->Name(WEM)+" nach."));
+  move(dir, M_NOCHECK);
+  tell_room(ENV(TO), BS("Eine Alkoholwolke schwebt herein."));
+}
+
+void BecomesNetDead(object spieler)
+{
+  if(spieler == owner)
+  {
+    if(objectp(ENV(TO)))
+      tell_room(ENV(TO), BS("Die Alkoholwolke verdunstet."));
+    remove(1);
+  }
+}

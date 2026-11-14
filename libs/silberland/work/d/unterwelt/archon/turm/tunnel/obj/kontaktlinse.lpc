@@ -1,0 +1,188 @@
+// Hinweis, zZ ist es nicht moeglich die Farbe wirklich beim spieler zu aendern
+// vielleicht kommt ja doch mal ein ModifyProp ... oder temp-prop
+// 21.03.2003 Archon: - erstellt
+/*
+ zuletzt bearbeitet: 27.12.2004 Clementine@SL
+ Rev 1.0 21.03.2003 Archon: erstellt
+*/
+inherit "std/thing"; 
+#include "../def.h"
+inherit STD "set_disguise";
+
+string farbe;
+string ret;
+int getragen;
+object owner;
+
+void create();
+string _query_long();
+string _query_short();
+int cmd_setze(string str);
+int cmd_nehmen(string str);
+
+void create()
+{
+  if (!is_clone(ME)) return;
+  ::create();
+  farbe="blau";
+  getragen=0;
+  SetProp(P_VALUE,300);
+  SetProp(P_WEIGHT,20);
+  SetProp(P_MATERIAL,([MAT_GLASS:100]));
+  SetProp(P_NAME,"Kontaktlinsen");
+  SetProp(P_PLURAL,1);
+  SetProp(P_GENDER,FEMALE);
+  
+  AddId(({"glasscheibe","glasscheiben","glas","scheibe","scheiben",
+          "linse","linsen","kontaktlinse","kontaktlinsen"}));
+ 
+  AddCmd(({"setz","setze","setzen","einsetzen"}),"cmd_setze"); 
+  AddCmd(({"nimm","nehme","nehmen"}),"cmd_nehmen"); 
+
+  SetProp(P_DISGUISE_SET_OBJECTS,({ OBJ "peruecke",
+                                    OBJ "kontaktlinse",
+                                    ARMOUR "umhang" }));
+  SetProp(P_DISGUISE_SET_NAME, "Dunkelelfen");
+  
+  SetProp(P_INFO,"Du kannst die Kontaktlinsen in Deine Augen einsetzen,\n"
+                 "[setze linsen ein] bzw.\n"
+                 "sie spaeter wieder heraus nehmen\n"
+                 "[nimm linsen heraus]\n");
+}
+
+//ACHTUNG: es muessen zusaetzlich auch noch die adjektive gesetzt werden!
+void SetFarbe(string in)
+{
+  farbe=in;
+}
+
+void SetDisguise(string in)
+{
+  SetProp(P_DISGUISE_SET_NAME,in);
+}
+
+string _query_long()
+{
+  if (getragen)
+    return "Aber Du traegst die Kontaktlinsen doch gerade!\n";
+  return break_string(
+    "Dies sind zwei "+farbe+"e Kontaktlinsen, welche eigentlich nur zwei ganz "
+    "duenne, runde, farbige Glascheiben sind. In der Mitte ist ein "
+    "Loch gelassen, so dass Du weiterhin sehen kannst, auch wenn Du die "
+    "Linsen traegst. Du kannst die Linsen in die Augen einsetzen.");
+ 
+}
+
+string _query_short()
+{
+  if (getragen)
+  {
+    return "Ein Paar "+farbe+"e Kontaktlinsen (getragen)";
+  }
+  return "Ein Paar "+farbe+"e Kontaktlinsen";
+}
+
+int QueryGetragen()
+{
+  return getragen;
+}
+
+int other_kontaktlinse(object pl)
+{
+  object *ob;
+  int i;
+  ob=filter_objects(all_inventory(pl),"id","kontaktlinsen")-({ME});
+  for (i=sizeof(ob);i--;)
+    if (ob[i]->QueryGetragen()) return 1;
+  return 0;
+}
+
+int cmd_setze(string str)
+{
+  string ids,egal;
+  object ob;
+
+  if (!S_STANDARD->check_cmd(str,
+       "linse|linsen|kontaktlinse|kontaktlinsen&ein|auge",
+       "Was willst Du auf-,ab- oder einsetzen?|"
+       "Willst Du die Kontaktlinsen wohl EINsetzen?"))
+    return 0;
+  
+  
+  if (getragen)
+    return notify_fail("Aber Du traegst die Kontaktlinsen doch schon!\n"),0;
+ 
+  if (environment()!=PL)
+    return 
+      notify_fail("Dazu musst Du die Kontaktlinsen erst einmal nehmen!\n"),0;
+
+  if (other_kontaktlinse(PL))
+    return notify_fail("Aber Du traegst schon andere Kontaktlinsen!\n"),0;
+
+  if (sscanf(str,"%s ein",ids)==1 ||
+      sscanf(str,"%s in %s",ids,egal)==2 ||
+      sscanf(str,"%s ins %s",ids,egal)==2)
+  { //wir haben eine id ... nun testen ob wir gemeint sind
+    if (!id(ids) && 
+        objectp(ob=present(ids,PL)) && 
+        ob->QueryProp(P_DISGUISE_SET_NAME))
+      return 0;  //id trifft auf ein objekt zu - aber das sind nicht wir
+  }
+  getragen=1;
+  owner=PL;
+  ret=PL->QueryProp(P_EYE_COLOR);
+  tell_object(PL,"Du setzt Dir die "+farbe+"en Kontaktlinsen in Deine Augen ein.\n");
+  tell_room(environment(PL),break_string(
+    PL->Name(WER,1)+" setzt sich Kontaktlinsen in die Augen ein."),({PL}));
+  PL->SetProp(P_EYE_COLOR,farbe);
+  SetProp(P_EXTRA_LOOK,capitalize(PL->QueryPronoun(WER))+" traegt "+farbe+
+                         "farbige Kontaktlinsen.\n");
+  SetProp(P_WORN,PL);
+  activate_set_special(PL,ME);
+  return 1;
+}
+
+int cmd_nehmen(string str)
+{
+  if (!S_STANDARD->check_cmd(str,
+       "linse|linsen|kontaktlinse|kontaktlinsen&aus|raus|heraus",
+       "Was willst Du herausnehmen?|"
+       "Willst Du die Kontaktlinsen HERAUSnehmen?"))
+    return 0;
+  
+  if (!getragen)
+    return notify_fail("Aber Du traegst die Kontaktlinsen doch gar nicht!\n"),0;
+
+  if (getragen && objectp(owner) && stringp(ret))
+    owner->SetProp(P_EYE_COLOR,ret); //sicher ist sicher
+  tell_object(PL,"Du nimmst die Kontaktlinsen aus Deinen Augen.\n");
+  tell_room(environment(PL),break_string(
+    PL->Name(WER,1)+" nimmt Kontaktlinsen aus "+
+    PL->QueryPossPronoun(MALE,WEN,SINGULAR)+" Augen."),({PL}));
+  getragen=0;
+  SetProp(P_EXTRA_LOOK,0);
+  SetProp(P_WORN,0);
+  activate_set_special(PL,ME);
+  return 1;
+}
+
+int move(mixed dest,int method)
+{
+  if (getragen)
+  {
+    tell_object(environment(),"Die Kontaktlinsen musst Du erst herausnehmen.\n");
+    return ME_CANT_LEAVE_ENV;
+  }
+  return ::move(dest,method);
+}
+
+int remove(int s)
+{
+  if (getragen && objectp(owner) && stringp(ret))
+    owner->SetProp(P_EYE_COLOR,ret);
+  SetProp(P_WORN,0);
+  activate_set_special(owner,ME);
+  return ::remove(s);
+}
+
+

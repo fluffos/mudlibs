@@ -1,0 +1,136 @@
+
+int betoeren(object caster, mapping sinfo) 
+{
+  object victim, ob;
+  int suc, duration;
+  int skp;
+
+  victim = FindEnemyVictim(sinfo[SI_SKILLARG], caster,
+      "Wen willst Du betoeren?\n");
+  if (!victim)
+    return 0;
+
+  // Mit 3 Verbesserungen wirkt Betoeren auch auf nicht-humanoide Gegner.
+  skp = AMAZONEN_TALENTMASTER->QuerySpentPoints(getuid(caster), "betoeren");
+  if (!is_humanoid(victim->QueryProp(P_RACE)))
+  {
+    if (skp > 2)
+      ; // erlaubt
+    else
+    {
+    tell_object(caster, BSC(sprintf("%s gehoert der Rasse %s an und kann "
+            "somit nicht betoert werden!",
+            victim->Name(WER,1), capitalize(victim->QueryProp(P_RACE)) )));
+    return 0;
+    }
+  }
+  if (interactive(victim))
+  {
+     tell_object(caster, "Mitspieler kannst Du nur mit Worten betoeren, nicht "
+         "mit Magie.\n");
+    return 0;
+  }
+
+  if (victim->QueryProp(P_TMP_ATTACK_HOOK) && victim->QueryProp(P_TMP_ATTACK_HOOK)[0] > time())
+  {
+    tell_object(caster, BSC(sprintf("%s ist bereits von einer anderen "
+            "Kraft beeinflusst und kann nicht erneut betoert werden.",
+          victim->Name(WER,1))));
+    return 0;
+  }
+  
+  if (!(sinfo = pay_for_spell(caster, sinfo)))
+    return 0;
+
+  if ((suc = SpellSuccess(caster,sinfo)) <= 0)
+    return MISSERFOLG;
+
+
+  tell_object(caster, BSC(sprintf("Du laesst Deine weiblichen Reize spielen "
+          "und zwinkerst %s verfuehrerisch zu. %s ist von Dir so bezaubert, "
+          "dass %s zurueckhaltender kaempft.",
+        victim->name(WEM,1), CAP(victim->QueryPronoun(WER)), victim->QueryPronoun(WER))));
+
+  environment(caster)->Message(BS(sprintf("%s zwinkert %s verfuehrerisch zu. "
+          "%s kaempft jetzt zurueckhaltender.",
+        caster->Name(WER,1), victim->name(WEM,1), victim->QueryPronoun(WER))),
+      MSGFLAG_VISUAL, ([ MSGFLAG_EXCLUDE : ({ caster, victim }) ]) );
+
+  
+  duration = sinfo[SI_SKILLABILITY] / 1000 + suc / 1000 + caster->QueryProp(P_GUILD_LEVEL) / 2;
+  pDebug(caster, "Betoeren: Dauer = " + duration + " Sekunden.");
+  victim->SetProp(P_TMP_ATTACK_HOOK, ({ time() + duration, ME, "BetoerenAttackHook" }) );
+  victim->SetProp(P_BETOERED_BY, caster);
+  victim->SetProp("amz_betoeren_skp", sinfo[SI_SKILLPOINTS]);
+  call_out("RemoveBetoeren", duration, victim);
+
+  if(sinfo[SI_SKILLPOINTS] > 0) {
+    sinfo[SI_SPELLFATIGUE] = 0;
+  }
+
+  return ERFOLG;
+}
+
+void RemoveBetoeren(object victim)
+{
+  if (!objectp(victim)) return;
+  victim->SetProp(P_TMP_ATTACK_HOOK, 0);
+  victim->SetProp(P_BETOERED_BY, 0);
+  victim->SetProp("amz_betoeren_skp", 0);
+  tell_object(victim, BS("Der Zauber der Betoerung hat nachgelassen, und Du kaempfst wieder mit voller Kraft."));
+  tell_room(environment(victim),
+      BS(sprintf("%s ist weniger betoert und kaempft nun mit voller Kraft.",
+        victim->Name(WER,1))),
+      ({ victim }) );
+}
+
+int BetoerenAttackHook(object enemy)
+{
+  object betoerer, attacker;
+  int chance, roll, skp;
+
+  betoerer = previous_object()->QueryProp(P_BETOERED_BY);
+  attacker = previous_object();
+  if(!objectp(betoerer) || !objectp(attacker)) return 1;
+
+  skp = previous_object()->QueryProp("amz_betoeren_skp");
+
+  if(enemy == betoerer && !random(20 - betoerer->QueryProp(P_GUILD_LEVEL) - (skp > 2 ? 2 : 0)))
+  {
+    tell_object(attacker, BS(sprintf("Du bist so sehr von %s bezaubert, dass Du Dich weigerst, gegen %s zu kaempfen.", betoerer->Name(WEM,1), betoerer->QueryPronoun(WEM))));
+    tell_room(environment(attacker),
+        BS(sprintf("%s weigert sich, gegen %s zu kaempfen, da %s so bezaubert ist.",
+          attacker->Name(WER,1), betoerer->Name(WEM,1),
+          attacker->QueryPronoun(WER))),
+        ({ attacker }) );
+    return 0;
+  }
+
+  chance = 5 - betoerer->QueryProp(P_GUILD_LEVEL)/5 - (skp > 1 ? 1 : 0);;
+  roll = !random(chance);
+  pDebug(betoerer, "BetoerenAttackHook: Chance fuer Abwehr = 1:" + chance+" roll="+roll+"\n");
+  if(!random(5 - betoerer->QueryProp(P_GUILD_LEVEL)/5))
+  {
+    tell_object(attacker, BS(sprintf("Deine Betoerung durch %s lenkt Dich ab, so dass Du weniger Schaden verursachst.", betoerer->Name(WEM,1))));
+    tell_room(environment(attacker),
+        BS(sprintf("%s scheint durch die Betoerung von %s abgelenkt zu sein und verursacht weniger Schaden.",
+          attacker->Name(WER,1), betoerer->Name(WEM,1))),
+        ({ attacker }) );
+    attacker->SetProp("amz_old_str", attacker->QueryAttribute(A_STR));
+    attacker->SetAttribute(A_STR, 0);
+    call_out("RestoreStr", 4, attacker);
+    return 1;
+  }
+
+  return 1;
+}
+
+void RestoreStr(object attacker)
+{
+  if(!objectp(attacker)) return;
+  if(attacker->QueryProp("amz_old_str"))
+  {
+    attacker->SetAttribute(A_STR, attacker->QueryProp("amz_old_str"));
+    attacker->SetProp("amz_old_str", 0);
+  }
+}

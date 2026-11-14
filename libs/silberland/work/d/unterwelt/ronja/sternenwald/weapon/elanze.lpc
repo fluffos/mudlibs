@@ -1,0 +1,389 @@
+//=========================================================================
+//
+// File:    elanze.c
+// Created by Ronja@SL
+//
+// Project: sternenwald
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit "std/weapon";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <new_skills.h>
+#include <moving.h>
+#include <ansi.h>
+
+#include "/p/daemon/skillmaster/skillmaster.h"
+
+#define MAXSPITZEN 40
+#define RESETSPITZEN 10
+#define TOTALSPITZEN 400
+#define PROPABILITY 15
+
+int spitzen;
+int stellen;
+int aufladungen;
+
+void SetMat();
+
+void create()
+{
+  spitzen = (MAXSPITZEN/2) + random(MAXSPITZEN/2);
+  if(spitzen > MAXSPITZEN) spitzen = MAXSPITZEN; //sicher ist sicher
+  stellen = MAXSPITZEN - spitzen;
+
+  if( !is_clone(TO) )  return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Eine Eisschattenlanze");
+//SetProp(P_LONG,); siehe _query_long()
+
+  SetProp(P_NAME, "Eisschattenlanze");
+
+//  SetProp(P_INFO,  siehe _query_info()
+
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_WEAPON_TYPE, WT_SPEAR );
+  SetProp(P_WC, 210);
+  SetProp(P_WC_FIX, 40);
+  SetProp(P_NR_HANDS, 2);
+  SetProp(P_SIZE, 185);
+  SetProp(P_VALUE, 3500);
+  SetProp(P_HIT_FUNC, TO);
+  SetProp(P_WIELD_RESTRICTIONS,
+    ([P_XP:9000000, SR_SEER: 1, A_STR: 20, A_DEX: 26])
+  );
+  SetProp(P_NOBUY, 1);
+  SetProp(P_ITEMD_NO_MAGIC,1);
+
+  SetMat();
+
+  AddId( ({"eisschattenlanze", "schattenlanze","eislanze","lanze"}) );
+
+  AddSpecialDetail( ({"dorn","dornen","eisdornen"}) ,"detail_dornen");
+
+  AddDetail( ({"holz","eichenholz"}) ,
+    "Altes, abgelagertes Eichenholz bildet den Stiel dieser Lanze. Doch "
+    "Magie und Mithril sind noetig, um den Stiel auch extreme Belastungen "
+    "aushalten zu lassen. "
+  );
+
+  AddDetail( ({"belastung","belstungen"}) ,
+    "Die Belastungen im Kampf sind extrem."
+  );
+
+  AddDetail( ({"mithril","magie"}) ,
+    "Damit der Stiel extrem belastbar wird, wurde er mit Mithril "
+    "und Magie verstaerkt. "
+  );
+
+  AddSpecialDetail( ({"stellen","spitze","lanzenspitze","eisschattenlanzenspizte"}) ,
+    "detail_spitze"
+  );
+
+  AddCmd( ({"befestige","befestig"}) , "cmd_befestigen");
+
+  aufladungen = 0;
+}
+
+void reset()
+{
+  int diff;
+
+  ::reset();
+
+  stellen += RESETSPITZEN;
+  if(stellen > MAXSPITZEN) stellen = MAXSPITZEN;
+  diff = MAXSPITZEN - spitzen;
+  if(stellen > diff)       stellen = diff;
+
+}
+
+void SetMat()
+{
+  int oak,mithril,magic;
+
+  mithril = 1000 / (100+spitzen);
+  magic   = mithril;
+  oak     = 100 - mithril - magic - spitzen;
+
+  if(spitzen == 0)
+  {
+    SetProp(P_DAM_TYPE, ({DT_RIP,DT_PIERCE}) );
+  }
+  else
+  {
+    SetProp(P_DAM_TYPE, ({DT_COLD, DT_PIERCE}) ); 
+  }
+
+  SetProp(P_WEIGHT, 10000+spitzen*100);
+
+  SetProp(P_MATERIAL, ([MAT_MITHRIL:mithril,
+                        MAT_ICE:spitzen,
+                        MAT_OAK:oak,
+                        MAT_MAGIC:magic
+                       ]) );
+}
+
+void StopAttack(object player, object enemy)
+{
+  if(objectp(player) && objectp(enemy))
+  {
+    enemy->StopHuntFor(player,1);
+    player->StopHuntFor(enemy,1);
+    tell_object(player,BS("Mit der Eisschattenlanze bist Du viel zu "
+                          "schwerfaellig und brichst den Kampf ab. "));
+  }
+}
+
+void removeme(object player)
+{
+  string s;
+
+
+  s = "Die Belastung war zuviel fuer die Eisschattenlanze. Mit einem lauten "
+      "Knall zerbirst sie";
+
+  switch(spitzen)
+  {
+    case 0:
+      s += ".";
+      break;
+
+    case 1:
+      s += " und es bleibt Dir nur ein Eisdorne uebrig.";
+      break;
+
+    default :
+      s += " und Du haelst nur mehr "+spitzen+" Eisdornen in der Hand.";
+      break;
+  }
+  if(TP->QueryProp(P_TTY)) s = ANSI_BOLD+ANSI_RED+s+ANSI_NORMAL;
+
+  tell_object(player,BS(s));
+  tell_room(ENV(player),"Mit einem lauten Knall zerbirst "+TP->name(WESSEN)+
+                        " Eisschattenlanze.\n");
+
+  while(spitzen--) clone_object(WEAPON "edorn")->move(player,M_NOCHECK);
+  remove();
+}
+
+int HitFunc(object enemy)
+{
+  string s;
+  object pl;
+
+  pl = QueryProp(P_WORN);
+
+  if((aufladungen > TOTALSPITZEN) && (random(100) < 33))
+  {
+    if(SKILLMASTER->UseSkill(pl, SK_LUCK) < 0)
+    {
+      call_out("removeme",0,TP);
+      return 0;
+    }
+    else
+    {
+      tell_object(pl, BS("Wow! Hast Du ein Glueck! Fast waere die "
+                         "Eisschattenlanze zerborsten"));
+    }
+  }
+
+  if( enemy->QueryProp(P_SIZE)<80 )
+  {
+    tell_object(TP,BS("Mit der Eisschattenlanze wirst Du "+enemy->name(WEN)+
+      " niemals treffen."));
+    call_out("StopAttack",0,TP,enemy);
+    return -1000;
+  }
+
+  if(enemy->QueryProp(P_SIZE)<180 && random(2) )
+  {
+    write(enemy->Name(WER)+" weicht Deiner Attacke aus.\n");
+    return -250;
+  }
+
+  if((spitzen > 0) && (random(100) < PROPABILITY))
+  {
+
+    s = "Einer der Eisdornen bricht ab und bleibt im Koerper von "
+        +enemy->name(RAW)+" stecken!";
+
+    if(TP->QueryProp(P_TTY)) s = ANSI_BOLD+ANSI_RED+s+ANSI_NORMAL;
+
+    tell_object(TP,BS(s));
+    spitzen--;
+    SetMat();
+    return 500+random(300);
+  }
+
+  return 0;
+}
+
+string _query_long()
+{
+
+  string s;
+
+  switch(spitzen)
+  {
+    case 0:
+      s = "Die Eisschattenlanze. Aus bestem Eichenholz, beschlagen mit "
+          "Mithril, besass an ihrem Ende Eisdornen, mit denen man einem "
+          "Gegner fuerchterlichen Schaden zufuegen konnte. Leider sind "
+          "alle Eisdornen abgebrochen. ";
+      break;
+
+
+    case 1:
+      s = "Die Eisschattenlanze. Aus bestem Eichenholz, beschlagen mit "
+          "Mithril, besitzt sie an ihrer Spitze nur noch einen Eisdorn, "
+          "der gefaehrlich im Licht glitzert. Wenn diese Spitze abbricht "
+          "und im Koerper des Feindes steckenbleibt, fuegt sie dem "
+          "Gegner sicherlich extremen Schaden zu. ";
+      break;
+
+
+    default:
+      s = "Die Eisschattenlanze. Aus bestem Eichenholz, beschlagen mit "
+          "Mithril, besitzt sie an ihrer Spitze "+spitzen+" Eisdornen, "
+          "die gefaehrlich im Licht glitzern. Wenn diese Dornen abbrechen "
+          "und im Koerper des Feindes steckenbleiben, fuegen sie dem "
+          "Gegner sicherlich extremen Schaden zu. ";
+      break;
+
+  }
+
+  if(stellen > 0)
+  {
+    s += "Es sieht so aus, als ob man noch "+stellen+" weitere Eisdornen "
+         "an der Lanze befestigen koennte. ";
+  }
+  return BS(s);
+}
+
+string _query_info()
+{
+  string s;
+
+  s = "Eine lange Lanze, an deren Spitze es eigentuemlich glitzert, so als "
+      "ob dort Magie verankert waere. ";
+
+  if(spitzen > 0)
+  {
+    s += "Die Eisdornen an der Spitze der Eisschattenlanze sehen bedrohlich "
+         "aus. Wenn diese abbrechen, fuegen sie einem Gegner bestimmt "
+         "schweren Schaden zu. ";
+  }
+
+  if(stellen == 1)
+  {
+    s += "An der Spitze der Lanze hat sich bereits eine weitere Stelle "
+         "gebildet, an der man einen weiteren Eisdornen befestigen koennte. ";
+  }
+
+  if(stellen > 1)
+  {
+    s += "An der Spitze der Lanze haben sich bereits "+stellen+" Stellen "
+         "gebildet, an denen man weitere Eisdornen befestigen koennte. ";
+  }
+
+  return BS(s);
+}
+
+string detail_dornen(string str)
+{
+  string s;
+
+  switch(spitzen)
+  {
+    case 0:
+      s = "An der Spitze der Lanze befinden sich derzeit keine Eisdornen.";
+      break;
+
+    case 1:
+      s = "An der Spitze der Lanze befindet sich nur noch eine einzige "
+          "Eisdorne. Es wird Zeit, weitere Eisdornen zu suchen. ";
+      break;
+
+    default :
+      s = "An der Spitze befinden sich derzeit "+spitzen+" Eisdornen, "
+          "die nur darauf warten, sich in den Koerper eines Gegners zu "
+          "bohren.";
+  }
+
+  return BS(s);
+}
+
+string detail_spitze(string str)
+{
+  string s;
+
+  s = detail_dornen("");
+
+  if(stellen > 0)
+  {
+    if(stellen ==1)
+    {
+      s += "Es befindet sich momentan eine weitere Stelle an der Spitze, "
+           "an der Du einen weiteren Eisdorn befestigen koenntest. ";
+    }
+    else
+    {
+      s += "Es befinden sich momenten "+stellen+" weitere Stellen an der "
+           "Spitze, an denen Du noch Eisdornen befestigen koenntest. ";
+    }
+  }
+
+  return BS(s);
+}
+
+int cmd_befestigen(string str)
+{
+  object dorn;
+  string was,woran;
+
+  notify_fail("Was maechtest Du woran befestigen?\n");
+
+  if(!str || str == "") return 0;
+
+  if(sscanf(str,"%s an %s",was,woran) != 2) return 0;
+
+  if(!(was == "eisdorn"   ||
+       was == "dorn"      )) return 0;
+
+  if(!id(woran)) return 0;
+
+  if(stellen == 0)
+  {
+    TELLPLAYER("Du findest keine Stelle, an der Du einen Eisdorn befestigen "
+               "koenntest.\n");
+    return 1;
+  }
+
+  if(!dorn=present("\neisdorn",TP))
+  {
+    TELLPLAYER("Du hast keinen passenden Eisdorn dabei, den Du an der Lanze "
+               "befestigen koenntest.\n");
+    return 1;
+  }
+
+  stellen--;
+  aufladungen++;
+  spitzen++;
+
+  SetMat();
+
+  TELLPLAYER("Du befestigst einen Eisdorn an der Lanze.\n");
+  dorn->remove();
+
+  return 1;
+}
+
+

@@ -1,0 +1,323 @@
+// obj/tools/sheriffstern
+//
+// tool for warning system handling
+
+inherit "std/armour";
+inherit "std/tool";
+
+#include <properties.h>
+#include <wizlevels.h>
+#include <defines.h>
+#include <moving.h>
+#include <armour.h>
+#include <combat.h>
+#include <vt100.h>
+#include "/secure/warnings.h"
+
+#define HIGH "high"
+#define WARN "warn"
+#define AOUT "aout"
+#define CMDS "cmds"
+#define OPTN "optn"
+
+#define W_CMDS ({"anhaengen", "entfernen", "zeigen", \
+                 "add", "remove", "show", \
+                 "a", "e", "z", "r", "s"})
+
+mapping cols;
+
+void create()
+{
+  if (!is_clone(this_object()))
+    return;
+  tool::create();
+  armour::create();
+
+  SetProp(P_SHORT, geteuid()+"s Sheriffstern");
+  SetProp(P_NAME, "Sheriffstern");
+  SetProp(P_NODROP, 0);
+  SetProp(P_NEVERDROP, 0);
+  SetProp(P_AUTOLOADOBJ, 1);
+  SetProp(P_ARTICLE, 1);
+  SetProp(P_AC, 0);
+  SetProp(P_GENDER, MALE);
+  SetProp(P_ARMOUR_TYPE, AT_MISC);
+  SetProp(P_MATERIAL, ([MAT_GOLD:80, MAT_SILVER:20]));
+  SetProp(P_WEAR_TEXT, ({ "Du steckst Dir den Sheriffstern an.\n",
+        " steckt sich einen Sheriffstern an.\nDu zitterst vor Angst.\n" }));
+  SetProp(P_UNWEAR_TEXT, ({ "Du steckst Dir den Sheriffstern ab.\n",
+        " steckt sich einen Sheriffstern ab.\nDu atmest erleichtert auf.\n" }));
+  SetProp(P_WORN_TEXT, "angesteckt");
+  AddId("stern");
+  AddId("sheriffstern");
+  AddCmd(({"verwarnung", "warning", "warn"}), "warn");
+  AddCmd("sternhilfe", "help");
+  AddCmd("lastinfo", "lastcmd");
+  cols=([]);
+}
+
+void colors() {
+  switch (this_interactive()->QueryProp(P_TTY)) {
+    case "ansi":
+      cols[HIGH]=VT_TA_B+VT_YELLOW;
+      cols[WARN]=VT_TA_B+VT_RED;
+      cols[CMDS]=VT_TA_B+VT_GREEN;
+      cols[OPTN]=VT_CYAN;
+      cols[AOUT]=VT_TA_AO;
+      break;
+    case "vt100":
+      cols[HIGH]=VT_TA_B;
+      cols[CMDS]=VT_TA_B;
+      cols[OPTN]=VT_TA_U;
+      cols[WARN]=VT_TA_U;
+      cols[AOUT]=VT_TA_AO;
+      break;
+    case "dumb":
+      cols[HIGH]="";
+      cols[CMDS]="";
+      cols[WARN]="";
+      cols[OPTN]="";
+      cols[AOUT]="";
+    default:
+  }
+  return;
+}
+
+string syntax() {
+  string str;
+
+  str="";
+  str+=sprintf("      %sverwarnung%s [ %sanhaengen%s | %sentfernen%s | %szeigen%s ] [ %soptionen%s ]\n", 
+               cols[WARN], cols[AOUT], cols[CMDS], cols[AOUT], cols[CMDS], cols[AOUT], cols[CMDS], cols[AOUT],
+               cols[OPTN], cols[AOUT]);
+  str+=sprintf(" oder %swarning%s    [ %sadd%s       | %sremove%s    | %sshow%s   ] [ %soptions%s  ]\n", 
+               cols[WARN], cols[AOUT], cols[CMDS], cols[AOUT], cols[CMDS], cols[AOUT], cols[CMDS], cols[AOUT],
+               cols[OPTN], cols[AOUT]);
+  return str;
+}
+
+string add_syntax() {
+  string str;
+
+  str="";
+  str+=sprintf(" %sverwarnung%s %sanhaengen%s <spieler> <lvl> <grund>\n", cols[WARN], cols[AOUT], cols[CMDS], cols[AOUT]);
+  str+=sprintf("            Verwarnt Spieler <spieler> mit Warnlevel <lvl> und <grund>\n\n");
+  return str;
+}
+
+string remove_syntax() {
+  string str;
+
+  str="";
+  str+=sprintf(" %sverwarnung%s %sentfernen%s <spieler> <id>\n", cols[WARN], cols[AOUT], cols[CMDS], cols[AOUT]);
+  str+=sprintf("            Entfernt Verwarnung <id> von Spieler <spieler>\n\n");
+  return str;
+}
+
+string show_syntax() {
+  string str;
+
+  str="";
+  str+=sprintf(" %sverwarnung%s %szeigen%s [<spieler>]\n", cols[WARN], cols[AOUT], cols[CMDS], cols[AOUT]);
+  str+=sprintf("            Zeigt Verwarnungen der eingeloggten Spieler oder von <spieler>\n\n");
+  return str;
+}
+
+help(string str) {
+  string s;
+
+  colors();
+  s="";
+  s+=syntax();
+  s+=add_syntax();
+  s+=remove_syntax();
+  s+=show_syntax();
+  this_player()->More(s);
+  return 1;
+}
+
+string long() {
+  string str;
+
+  colors();
+  str=sprintf("Das ist Dein %sSheriffstern%s.", cols[HIGH], cols[AOUT]);
+  if (!QueryWorn()) {
+    str+="\nWenn Du ihn anziehst, so kannst Du mit ihm ein paar Sherifftaetigkeiten erledigen.\n";
+    return str;
+  }
+  str+=" Du kannst damit folgende Befehle absetzen:\n\n";
+  str+=syntax();
+  str+=sprintf("\nMit <%ssternhilfe%s> bekommst Du weitere Informationen.\n\n", cols[CMDS], cols[AOUT]);
+  return str;
+}
+
+string status_line(string plr, string id, string lvl, string cause) {
+  return sprintf(" %s%-15s%s | %s%5s%s | %s%3s%s | %s%-20s%s\n",
+      cols[WARN], plr, cols[AOUT], cols[OPTN], id, cols[AOUT],
+      cols[CMDS], lvl, cols[AOUT], cols[AOUT], cause, cols[AOUT]);
+}
+
+int check_warnings(object u) {
+  mapping w;
+  if ((w=u->QueryProp(P_WARNINGS)) && sizeof(w)>0)
+    return 1;
+  return 0;
+}
+
+int warn(string str) {
+  string cmd, options, player, cause, args, out;
+  int lvl, ret, i, j;
+  object p, *u;
+  mapping w;
+  mixed *ww;
+
+  args=this_player()->_unparsed_args();
+  colors();
+  notify_fail("Du musst den Sheriffstern schon tragen, um Spieler zu verwarnen!\n");
+  if (!QueryWorn())
+    return 0;
+  notify_fail("Syntax:\n"+syntax());
+  if (!str)
+    return 0;
+  if (sizeof(explode(args, " "))==1)
+    sscanf(args, "%s", cmd);
+  else
+    sscanf(args, "%s %s", cmd, options);
+  if (member(W_CMDS, cmd)==-1)
+    return 0;
+  switch (cmd) {
+    case "anhaengen":
+    case "add":
+    case "a":
+              notify_fail("Syntax:\n"+add_syntax());
+              if (sscanf(options, "%s %d %s", player, lvl, cause)!=3)
+                return 0;
+              ret=call_other(WARNING_MASTER, "add_warning", player, lvl, cause);
+              if (ret==W_NOSUCHPLAYER) {
+                write("Kein solcher Spieler.\n");
+                return 1;
+              }
+              break;
+    case "entfernen":
+    case "remove":
+    case "e":
+    case "r":
+              notify_fail("Syntax:\n"+remove_syntax());
+              if (sscanf(options, "%s %d", player, lvl)!=2)
+                return 0;
+              ret=call_other(WARNING_MASTER, "remove_warning", player, lvl, cause);
+              switch (ret) {
+                case W_NOSUCHPLAYER:
+                  write("Kein solcher Spieler.\n");
+                  return 1;
+                case W_NOSUCHID:
+                  write(sprintf("Keine Verwarnung mit ID %d gefunden.\n", lvl));
+                  return 1;
+                case W_IDNOTONPLAYER:
+                  write(sprintf("Spieler %s hat keine Verwarnung mit ID %d.\n", player, lvl));
+                  return 1;
+                default:
+              }
+              break;
+    case "zeigen":
+    case "show":
+    case "z":
+    case "s":
+              notify_fail("Syntax:\n"+show_syntax());
+              u=({ });
+              if (options && options!="") {
+                if (strlen(options)>0 && sizeof(explode(options, " "))!=1)
+                  return 0;
+                if ((p=find_player(lower_case(options))))
+                  u += ({ p });
+              }
+              else
+                u=users();
+              u=filter_array(u, #'check_warnings);
+              if (sizeof(u)==0) {
+                write("Niemand mit Verwarnungen gefunden.\n");
+                return 1;
+              }
+              out=status_line("Spieler", " ID ", "lvl", "Grund");
+              out+="-----------------+-------+-----+--------------------------------------------\n";
+              for (i=sizeof(u)-1; i>=0; i--) {
+                w=u[i]->QueryProp(P_WARNINGS);
+                ww=m_indices(w);
+                for (j=sizeof(ww)-1; j>=0; j--)
+                  out+=status_line(capitalize(getuid(u[i])), to_string(ww[j]), to_string(w[ww[j]][W_LEVEL]), w[ww[j]][W_CAUSE]);
+              }
+              out+="\n";
+              this_player()->More(out);
+              return 1;
+              break;
+    default:
+  }
+  return 1;
+}
+
+init() {
+  ::init();
+  if (!IS_ARCH(environment(this_object())))
+    call_out("remove", 0);
+  if (this_player() != environment(this_object()))
+    return;
+  if (!QueryProp(P_WORN))
+    DoWear();
+}
+
+int lastcmd(string str) {
+  mixed *w;
+  object pl;
+  int last_in, last_out;
+  string out, in, ret, day_in, date_in, time_in, day_out, date_out, time_out;
+
+  notify_fail("Syntax: last <spieler>\n");
+  if (!str)
+    return 0;
+  if (sizeof(explode(str, " "))>1)
+    return 0;
+  ret=sprintf("%s: ", capitalize(str));
+  w=call_other(MASTER, "get_userinfo", str);
+  if (!w) {
+    ret+="ist kein Spieler.\n";
+    write(ret);
+    return 1;
+  }
+  colors();
+  pl=find_player(str);
+  if (!pl) {
+    pl=find_netdead(str);
+  }
+  if (!pl) {
+    ret+="war noch nicht eingeloggt.\n";
+    write(ret);
+    return 1;
+  }
+  last_in=pl->QueryProp(P_LAST_LOGIN);
+  in=dtime(last_in);
+  last_out=pl->QueryProp(P_LAST_LOGOUT);
+  out=dtime(last_out);
+  day_in=implode(explode(explode(in, ",")[0], " "), " ");
+  date_in=implode(explode(explode(in, ",")[1], " "), " ");
+  time_in=implode(explode(explode(in, ",")[2], " "), " ");
+  day_out=implode(explode(explode(out, ",")[0], " "), " ");
+  date_out=implode(explode(explode(out, ",")[1], " "), " ");
+  time_out=implode(explode(explode(out, ",")[2], " "), " ");
+
+  if (last_in < last_out) {
+    if (date_in == date_out) {
+      ret+=sprintf("%s%s, %s%s %s%s%s - %s%s%s\n", cols[CMDS], day_in, date_in, cols[AOUT], cols[HIGH], time_in, cols[AOUT], cols[HIGH], time_out, cols[AOUT]);
+    } else {
+      ret+=sprintf("%s%s, %s%s %s%s%s - %s%s, %s%s %s%s%s\n", cols[CMDS], day_in, date_in, cols[AOUT], cols[HIGH], time_in, cols[AOUT], cols[CMDS], day_out, date_out, cols[AOUT], cols[HIGH], time_out, cols[AOUT]);
+    }
+  } else {
+    if (date_in == date_out) {
+      ret+=sprintf("%s%s, %s%s %s[..]%s - %s%s%s; %s%s%s - %s[..]%s\n", cols[CMDS], day_out, date_out, cols[AOUT], cols[OPTN], cols[AOUT], cols[HIGH], time_out, cols[AOUT], cols[HIGH], time_in, cols[AOUT], cols[OPTN], cols[AOUT]);
+    } else {
+      ret+=sprintf("%s%s, %s%s %s[..]%s - %s%s%s; %s%s, %s%s %s%s%s - %s[..]%s\n", cols[CMDS], day_out, date_out, cols[AOUT], cols[OPTN], cols[AOUT], cols[HIGH], time_out, cols[AOUT], cols[CMDS], day_in, date_in, cols[AOUT], cols[HIGH], time_in, cols[AOUT], cols[OPTN], cols[AOUT]);
+    }
+  }
+  write(ret);
+  return 1;
+}
+

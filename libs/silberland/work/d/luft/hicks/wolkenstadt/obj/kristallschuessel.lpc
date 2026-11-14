@@ -1,0 +1,146 @@
+// von Hicks
+// 23.1.2006
+// 
+// Objekt der "Wolkenstadt"
+
+#define P_POTOURRI 
+
+#include "../def.h"
+
+inherit "std/container";
+
+int duft;     // wie lange riechts noch?
+
+object *tmp = ({});
+
+void create() 
+{
+  if (!is_clone(TO)) return;
+  ::create();
+  
+  SetProp(P_SHORT, "Eine Kristallschuessel");
+  SetProp(P_LONG,
+	  "Diese Schuessel besteht aus glaenzendem Kristall. Ihre Form ist besonders "
+	  "auffaellig durch ihre Aehnlichkeit mit einem Bluetenkelch." );
+  SetProp(P_NAME, "Kristallschuessel");
+  SetProp(P_GENDER, FEMALE);
+  AddId(({"kristallschuessel","schuessel"}));
+  
+  SetProp(P_MATERIAL, ([MAT_CRYSTAL: 100]) );
+  SetProp(P_WEIGHT, 500);
+  SetProp(P_VALUE, 500);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_MAX_WEIGHT, 10000);
+
+  SetProp(P_POTPOURRI, 0);
+
+  AddDetail( ({"kristall"}),
+	     "Matter und durchsichtiger Kristall. Du erkennst auch ein leichtes Funkeln.");
+  
+  AddDetail( ({"funkeln"}),
+	     "Hin und wieder glitzert eine Stelle auf.");
+  
+  AddDetail( ({"stelle"}),
+	     "Hier glitzert wieder eine Stelle. Die Kristallschuessel schimmert "
+	     "und funkelt hin und wieder.");
+  
+  AddDetail( ({"form"}),
+	     "Die Form stellt einen Bluetenkelch dar.");
+  
+  AddDetail( ({"bluetenkelch","kelch"}),
+	     "Einzelne Bluetenblaetter wurden aus dem Kristall herausgearbeitet.");
+
+  AddDetail( ({"bluetenblaetter","blaetter"}),
+	     "Matte und helle Erhebungen konturieren die Bluetenblaetter genau.");
+
+  AddDetail( ({"erhebungen"}),
+	     "Du erkennst wirklich eine gute plastische Arbeit.");
+
+  AddDetail( ({"arbeit"}),
+	     "Du pfeifst anerkennend!");
+}
+
+varargs int PreventInsert(object ob)
+{
+  // Wenn es kein Potpourri ist, erheben wir sofort Einspruch
+  if(!ob->id("potpourri"))
+    return 1;
+
+  if(QueryProp(P_POTPOURRI)) // da war noch was drin
+    write(BS("Du leerst die Ueberreste des noch vorhandenen Potpourries "
+         "aus..."));
+
+  write(BS("Du reisst die knisternde Verpackung auf.")); //Sackerlaufreissen zusaetzlich zu lege-auswurf
+
+  SetProp(P_POTPOURRI, ob->QueryProp(P_POTPOURRI));
+
+// ob brauchen wir nun nicht mehr, wird aber erst spaeter geloescht
+// damit PreventInsert dann immer noch ein Objekt hat, bis dahin invis
+  ob->SetProp(P_SHORT, 0);
+  tmp += ({ob});
+
+  // In der Langbeschreibung steht nun der Name des Potpourris drinnen.
+  SetProp(P_LONG,
+      "Diese Schuessel besteht aus glaenzendem Kristall. Ihre Form ist "
+      "besonders auffaellig durch ihre Aehnlichkeit mit einem "
+      "Bluetenkelch. Sie ist mit "+ob->name(WEM)+" gefuellt.");
+
+  duft=70+random(5); // so viele resets lang riecht das potpourri = Zeitdauer
+
+  if(find_call_out("duften") == -1)
+    call_out("duften", 5); // duft-meldungen aktivieren nach 5sec beginnt die 1. Meldung
+
+  // Potpourri darf rein
+  return 0;
+}
+
+void duften()
+{
+  string *msg;
+  msg = QueryProp(P_POTPOURRI);
+
+  if(sizeof(tmp -= ({0})))
+    map_objects(tmp, "remove", 1);
+    
+  if(!msg || !sizeof(msg))
+  {
+    // Langbeschreibung wieder auf leer setzen.
+    SetProp(P_LONG,
+          "Diese Schuessel besteht aus glaenzendem Kristall. Ihre Form ist "
+          "besonders auffaellig durch ihre Aehnlichkeit mit einem "
+          "Bluetenkelch.");
+
+    // Meldung an den Spieler(interactive), dass die Schuessel nun leer ist.
+    if(MENV && interactive(MENV))
+      tell_object(MENV, "Das Potpourri wird vom Wind aus der Kristallschuessel "
+                        "verweht. Der Geruch verblasst.");
+
+    return; // mischung ist leer, callout anhalten
+  }
+
+  // Jetzt schauen wir wo wir uns befinden und geben an den Raum in der
+  // Umgebung eine Meldung ab
+
+  if(MENV)
+  {
+    // Schuessel steht im Raum
+    if(MENV->id("Raum")) //1. MENV fragt ab ob es ein Enviroment gibt (zb Raeume) und
+	  //dann && MENV ist die eigentliche Abfrage ob id Raum vorhanden ist
+      MENV->Message(BS(msg[random(sizeof(msg))]), MSGFLAG_SMELL);
+
+    // Schuessel steckt in einem Spieler, oder Truhe
+    if(ENV(MENV) && ENV(MENV)->id("Raum"))
+      ENV(MENV)->Message(BS(msg[random(sizeof(msg))]), MSGFLAG_SMELL);
+  }
+
+  call_out("duften", 30+random(60)); // bald wieder duften = callout-abstaende
+}
+
+void reset()
+{
+  ::reset();
+  
+  if(duft) duft--; // duftdauer verkuerzen
+  
+  if(!duft) SetProp(P_POTPOURRI, 0); // ausgeduftet, der naechste duftcallout geht ins leere
+}

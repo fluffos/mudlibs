@@ -1,0 +1,177 @@
+// SilberLand MUDlib
+//
+// LIVING/DESCRIPTION.C -- description for living objects
+//
+// $Date: 2007/02/11 11:22:37 $
+/* $Revision: 2.5 $
+ * $Log: description.c,v $
+ * Revision 2.5  2007/02/11 11:22:37  Woody
+ * long() optimiert, gegen nicht-existierenden TP abgesichert
+ *
+ * Revision 2.4  1998/10/20 00:30:35  Woody
+ * name() mit Plural uebergeben
+ *
+ * Revision 2.3  1998/08/11 08:33:25  Woody
+ * query_real_name(), Bugfix in name() (P_ARTICLE 'verloren')
+ *
+ * Revision 2.2  1997/09/25 15:07:51  Woody
+ * _query_material()
+ *
+ * Revision 2.1  1997/06/25 11:53:32  Woody
+ * unnoetiges short() entfernt, neu: is_class_member()
+ *
+ * Revision 2.0  1997/03/13 00:54:07  Woody
+ * prepared for revision control
+ *
+ * Revision 1.1  96/05/25  18:00:00  Woody
+ * short() Aenderungen wieder retour
+ *
+ * Revision 1.0  96/02/22  23:00:00  Hadra
+ * short() geaendert
+ */                            
+
+#include "/std/sys_debug.h"
+
+inherit "/std/container/description";
+
+#pragma strong_types
+
+#define NEED_PROTOTYPES
+
+#include <thing/properties.h>
+#include <properties.h>
+#include <language.h>
+#include <defines.h>
+#include <class.h>
+
+void create()
+{
+  ::create();
+  Set(P_GENDER, SAVE, F_MODE);
+}
+
+varargs string long()
+{
+  string str, cap_pronoun;
+  string descr, invl;
+  int hpperc;
+  mixed filter;
+
+  // Langbeschreibung
+  descr = cap_pronoun = capitalize(QueryPronoun());
+  str = funcall(QueryProp(P_LONG));
+  if (!stringp(str)) str = "";
+
+  // Lebenszustand
+  hpperc = 100 * QueryProp(P_HP) / QueryProp(P_MAX_HP);
+
+  if (hpperc < 10)
+    descr += " steht auf der Schwelle des Todes.\n";
+  else if (hpperc < 20)
+    descr += " braucht dringend einen Arzt.\n";
+  else if (hpperc < 30)
+    descr += " ist in keiner guten Verfassung.\n";
+  else if (hpperc < 40)
+    descr += " wankt bereits bedenklich.\n";
+  else if (hpperc < 50)
+    descr += " macht einen mitgenommenen Eindruck.\n";
+  else if (hpperc < 60)
+    descr += " sieht nicht mehr taufrisch aus.\n";
+  else if (hpperc < 70)
+    descr += " ist leicht angeschlagen.\n";
+  else if (hpperc < 80)
+    descr += " fuehlte sich heute schon besser.\n";
+  else if (hpperc < 90)
+    descr += " ist schon etwas geschwaecht.\n";
+  else
+    descr += " ist absolut fit.\n";
+
+  str += descr;
+
+  if (filter = QueryProp(P_TRANSPARENT))
+  {
+    invl = make_invlist(PL,
+        all_inventory(ME),
+        this_player() ? (this_player()->QueryProp(P_SHORTINV) ? 0 : 2) : 0);
+
+    if (invl != "")
+      str += cap_pronoun + " traegt bei sich:\n" + invl;
+  }
+  return str;
+}
+
+#define DD(x) tell_object(find_player("debugger"), (x))
+
+varargs string name(int casus, int demonst, int plural)
+{
+  string s;
+  int art;
+  
+// DD(sprintf("name: me = %O, prev = %O\n", this_object(), previous_object()));
+  
+  if( QueryProp( P_INVIS ) )
+  {
+    if( casus == RAW ) return "Jemand";
+    return ({"Jemand","Jemands","Jemandem","Jemanden"})[casus];
+  }
+  if (QueryProp(P_FROG) && casus != RAW )
+  {
+    s=QueryArticle(casus,0,1)+"Frosch";
+    if (casus==WESSEN) s += "es";
+    return s;
+  }
+  return ::name( casus, demonst, plural );
+}
+
+mixed query_real_name()
+{
+  return name(RAW);
+}
+
+nosave int _query_gender()
+{
+  if (QueryProp(P_FROG)) return MALE;
+  return Query(P_GENDER);
+}
+
+nosave mixed _set_name(mixed nm )
+{
+  string lvnam;
+  lvnam = nm;
+  if(pointerp(nm)) lvnam = nm[0];
+  set_living_name(lower_case(lvnam));
+  return Set(P_NAME, nm);
+}
+
+int _query_container()
+{
+  return 0;
+}
+
+int is_class_member(mixed str) {
+  if (::is_class_member(str))
+    return 1;
+
+  if (stringp(str))
+    str = ({str});
+
+  if (!pointerp(str))
+    return 0;
+
+  if ((member(str, CL_UNDEAD) >= 0) &&
+      ::is_class_member( ({CL_ZOMBIE, CL_SKELETON}) ))
+    return 1;
+  else if ((member(str, CL_GOBLIN) >= 0) &&
+           ::is_class_member( ({ CL_HOBGOBLIN }) ))
+    return 1;
+  else
+    return 0;
+}
+
+mapping _query_material() {
+  mixed res;
+
+  if (mappingp(res=Query(P_MATERIAL)))
+    return res;
+  return ([MAT_MISC_LIVING:100]);
+}

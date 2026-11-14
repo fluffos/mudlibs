@@ -1,0 +1,79 @@
+#define TIERANGRIFF_PET_COST 30
+
+mapping prep_tierangriff(object caster, mapping sinfo, int silent)
+{  
+  object ob,pet;
+  
+  //Aenderungen der Werte im sinfo Mapping vermeiden!
+  if(!GuildItemTest(caster, sinfo) || !IsInFight(caster, sinfo) )
+    return 0;
+  if(!(pet=FindPet(caster))) { 
+    tell_object(caster, BS("Dein Tier ist nicht bei Dir."));
+    return 0;
+  }
+
+  if(pet->QueryProp(P_RANGER_NEXT_ANIMAL_ATACK) > time() || pet->QueryProp("panzertier_defense") > 0) {
+    tell_object(caster, BS("Dein Kampfgefaehrte ist noch nicht bereit!"));
+    return 0;
+  }
+
+  if(pet->QueryProp(P_SP) < TIERANGRIFF_PET_COST) {
+    tell_object(caster, BS("Dein Kampfgefaehrte ist zu erschoepft!"));
+    return 0;
+  }
+  
+  if(!(pet->QueryFight()))
+  { tell_object(caster, BS(pet->Name(WER, 1)+" kaempft aber nicht mit Dir "
+                        "zusammen.")); return 0;}
+    
+  if(!objectp(ob=sinfo[SI_ENEMY])) { 
+    ob=FindEnemyVictim(sinfo[SI_SKILLARG],caster, "Wen soll "+pet->name(WER, 1)+" angreifen?\n");
+    sinfo[SI_ENEMY]=ob;
+    if(!ob) {
+      return 0;
+    } 
+  }
+  if(!silent){FirstPrepareFuncSuccessfull(caster, sinfo);}
+  return sinfo;
+}
+
+int tierangriff(object caster, mapping sinfo)
+{
+  int success, ability;
+  object ob, pet;
+  
+  if(!mappingp(sinfo=prep_tierangriff(caster, sinfo, 1))) return 0;
+
+  if(!(pet=FindPet(caster)))
+  { 
+    tell_object(caster, BS("Dein Tier ist nicht bei Dir."));
+    return 0;
+  }
+
+  success=SpellSuccess(caster,sinfo);
+  if(success < (-5000))
+  {
+    tell_object(caster, BSC("Du gibst "+pet->name(WEM, 1)+" das falsche "
+                        "Zeichen."));
+    tell_room(ENV(caster), BS( pet->Name(WER, 1)+" verschwindet."));
+    pet->remove(0);
+    return MISSERFOLG;
+  }
+  if(success<0)
+  {
+    tell_object(caster, BSC(pet->Name(WER, 1)+" versteht nicht."));
+    return MISSERFOLG;
+  }
+  
+  pet=FindPet(caster); ability=sinfo[SI_SKILLABILITY];
+
+  ob=sinfo[SI_ENEMY];
+  pet->SetProp(P_RANGER_NEXT_ANIMAL_ATACK, time() + 4);
+  pet->AddSp(-TIERANGRIFF_PET_COST);
+
+  if(pet->SpezialAttack(ob, ability, success)) {
+    return ERFOLG;
+  }
+  tell_object(caster, BS("Etwas ist schief gelaufen."));
+  return 0;
+}

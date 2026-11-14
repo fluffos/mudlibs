@@ -1,0 +1,199 @@
+// 17.03.2019 Yondala@SilberLand Erstbesichtigung
+// Pfade angepasst, Area etc muss noch angepasst werden
+
+#include <properties.h>
+#include <combat.h>
+#include <new_skills.h>
+#include <moving.h>
+#include <mnpc.h>
+#include "../def.h"
+
+inherit THUM_NPC + "zwerg_raw.lpc";
+
+string *geloest;
+
+string q_waermestein()
+{
+	object ob;
+	if( !ob=present("\nzwergequest", TP) )
+	  return "Ein Waermestein ist sehr selten und gibt bestaendig Waerme ab.";
+  if(ob->QueryStatus()!=1)
+  {
+	  ob->SetStatus(1);
+	  return "Genau, ein Waermestein ist genau das Richtige. "+
+	    "Nur wo bekomme ich so schnell einen her? Diese Steine sind sehr selten und in "+
+	    "meiner Schatzkammer befindet sich leider keiner. Koennt ihr mir einen besorgen?";
+	}
+	return "Ihr muesst mir unbedingt einen Waermestein besorgen, habt ihr einen?";
+}
+
+string q_hilfe2()
+{
+	if( member(geloest, TP->name())==-1 )
+	  return "Ich koennte wirklich eure Hilfe gebrauchen. Falls Du also bereit bist "+
+	    "mir einen kleinen Gefallen zu tun so sage mir einfach 'ich helfe euch'. " ;
+	return "Ihr habt mir doch schon geholfen.";    
+}
+
+void create() {
+	int i;
+	string text;
+	
+  if (!is_clone(TO)) return; //Abbruch fuer Blueprint
+  ::create(); //Ausfuehren von Create in Inherit "std/mnpc"
+  
+  create_default_npc(45); //erstellt Standartwerte fuer THUM_NPC des Level x
+
+  //Properties
+  AddId(({"orrnuf", "zwergenkoenig", "koenig", "\norrnuf" })); //Bezeichner zur Interaktion
+  SetProp( P_SHORT, "Orrnuf, der Zwergenkoenig");
+  SetProp( P_LONG, BS("Dies ist Orrnuf, der Zwergenkoenig. Er hat einen langen wallenden Bart und "+
+    "schaut recht grimmig. Sein wettergegebtes Gesicht wird von einer grauen Haarpracht umrahmt. "));
+  SetProp( P_GENDER, MALE);
+  SetProp( P_ARTICLE, 0);
+  SetProp( P_NAME, "Orrnuf");
+  SetProp( P_WIMPY, 0); //Fluchtschwelle an HP
+  SetProp( P_MNPC_AREA, "/gilden/zwergentempel.lpc" ); // Bereichsangabe fuer Bewegung
+  SetProp( P_MNPC_DEFAULTROOM, "/gilden/zwergentempel.lpc"); // Startpunkt
+  SetProp( P_MNPC_FLAGS, MOV_INDOORS); // Bewegungsmoeglichkeiten
+  SetProp( P_KILL_NAME, "Zwergenkoenig"); //string fuer Todessequenz
+ 
+  //Chats
+  SetChats( 1, ({
+  	"Der Zwergenkoenig gruebelt.\n",
+  	"Orrnuf murmelt: Was soll ich nur mitbringen?\n",
+  	"Orrnuf setzt sich auf den Thron und zwirbelt in Gedanken an seinem Bart.\n",
+  	"Orrnuf sagt: Wenn mir doch jemand helfen wuerde.\n",
+  	"Der Zwergenkoenig schaut zur Decke.\n",
+  	"Der Zwergenkoenig geht langsam auf und ab.\n"}) );
+  //SetAttackChats( 5, ({"" }) ); 
+
+  AddInfo( QueryProp(P_IDS), "Das bin ich! ", "sagt: ");
+  AddInfo( ({"waermestein"}), #'q_waermestein, "sagt: ");
+  AddInfo( ({"hilfe", "quest"}), #'q_hilfe2,"sagt: ");
+
+  AddInfo( ({"geschenk", "gastgeschenk", "gefallen"}), 
+    "Was soll ich denn nur mitbringen? Koennt ihr mir helfen?", "sagt: ");
+  AddInfo( ({"untertan", "untertanen", "volk"}), 
+    "Alle Zwerge die hier in Thumfels leben, zaehlen zu meinen Untertanen.", "sagt: ");
+  AddInfo( ({"zeitung"}), 
+    "Ich lese kaum Zeitung. Hier muessten irgendwo noch welche sein.", "sagt: ");
+ 
+  //Ausruestung
+  SUID; //Anmelden als Erzeuger von geclonten Objekten und ausfuehrenden Commands
+  CLONEME( THUM_WEAPON+"kriegsaxt_1.lpc" );
+  command("zuecke waffe");
+  "/obj/magicmaster"->Create_Magic_Armour( 3, TO, ([P_ARMOUR_TYPE:AT_ARMOUR]), 80);
+  "/obj/magicmaster"->Create_Magic_Armour( 3, TO, ([P_ARMOUR_TYPE:AT_TROUSERS]), 80);
+  CLONEME( THUM_ARMOUR+"eisenstiefel_1.lpc" );
+  command("trage alles");
+
+	geloest=({});
+	if(file_size(THUM_NPC+"zwergequest")>0)
+	{
+	  text=read_file(THUM_NPC+"zwergequest");
+  	geloest=explode(text,"\n");
+	}
+}
+
+void necke_elf( object opfer )
+{
+	// der Koenig neckt keine Elfen
+	return;
+}
+
+void catch_tell(string str)
+{
+	string sager, sagtext;
+	object spieler, ob;
+	
+	if( sscanf(lower_case(str), "%s sagt: ich helfe euch%s", sager, sagtext )==2 ) 
+	{
+	  if( !spieler = find_player(lower_case(sager)) ) return;
+    if( !interactive(spieler) ) return;	
+  	if( member(geloest, spieler->name())!=-1  )
+  	{
+	    tell_object(spieler, break_string( "Ihr habt mir doch schon einen Waermestein besorgt. "+
+	      "Zur Zeit benoetige ich Eure Hilfe nicht mehr." , 78, TO->name()+" sagt zu Dir: ") );
+  		return;
+  	}
+  	if( !ob=present("\nzwergequest", spieler) ) 
+    {
+  	  ob=clone_object( THUM_OBJ+"zwergequest.lpc" );
+	    tell_object(spieler, break_string( "Prima, ich muss demnaechst zu den Troglodyten und "+
+	      "habe leider noch kein Gastgeschenk, ich weiss einfach nicht was ich mitbringen soll. "+
+  	    "Ich kann leider nicht selbst bei meinen Untertanen nachfragen was die Troglodyten so "+
+	      "als Gastgeaschenk akzeptieren wuerden. Fuer Euch hingegen duerfte es ein Leichtes sein, "+
+	      "bei meinen Untertanen ein wenig nachzufragen was man den Troglodyten mitbringen kann. "+
+	      "Alles was ich bisher herausgefunden habe ist, dass dieses Volk mit Metall nicht viel "+
+	      "anzufangen weiss. Wenn ihr etwas wisst so kommt wieder zu mir und sagt es mir. " , 78, TO->name()+" sagt zu Dir: ") );
+	    tell_room(environment(TO), break_string("Prima, ich muss demnaechst zu den Troglodyten und "+
+  	    "habe leider noch kein Gastgeschenk, und weiss einfach nicht was ich mitbringen soll. "+
+	      "Ich kann leider nicht selbst bei meinen Untertanen nachfragen was die Troglodyten so "+
+	      "als Gastgeaschenk akzeptieren wuerden. Fuer Euch hingegen duerfte es ein Leichtes sein, "+
+	      "bei meinen Untertanen ein wenig nachzufragen was man den Troglodyten mitbringen kann. "+
+  	    "Alles was ich bisher herausgefunden habe ist, dass dieses Volk mit Metall nicht viel "+
+	      "anzufangen weiss. Wenn ihr etwas wisst so kommt wieder zu mir und sagt es mir. ", 78, TO->name()+" sagt zu "+spieler->name()+": "),({spieler}));
+	    ob->move(spieler, M_NOCHECK);
+	    return;
+    }
+    if(ob->QueryStatus()!=1)
+    {
+	    tell_object(spieler, 
+	      break_string( "Habt ihr herausgefunden was die Troglodyten schaetzen wuerden?", 78, TO->name()+" sagt zu Dir: ") );
+	    tell_room(environment(TO), 
+	      break_string( "Habt ihr herausgefunden was die Troglodyten schaetzen wuerden?", 78, TO->name()+" sagt zu "+spieler->name()+": "),({spieler}));
+	  }
+	  else
+	  {
+	    tell_object(spieler, 
+	      break_string( "Ihr muesst mir unbedingt einen Waermestein besorgen, habt ihr einen?", 78, TO->name()+" sagt zu Dir: ") );
+	    tell_room(environment(TO), 
+	      break_string( "Ihr muesst mir unbedingt einen Waermestein besorgen, habt ihr einen?", 78, TO->name()+" sagt zu "+spieler->name()+": "),({spieler}));
+	  }
+	  return;
+	}
+	if( sscanf(lower_case(str), "%s sagt: waermestein%s", sager, sagtext )==2 ) 
+	{
+	  if( !spieler = find_player(lower_case(sager)) ) return;
+    if( !interactive(spieler) ) return;
+  	if( member(geloest, spieler->name())!=-1  )
+  	{
+	    tell_object(spieler, break_string( "Ihr habt mir doch schon einen Waermestein besorgt. "+
+	      "Zur Zeit benoetige ich Eure Hilfe nicht mehr." , 78, TO->name()+" sagt zu Dir: ") );
+  		return;
+  	}
+	  if( !ob=present("\nzwergequest", spieler) ) return;
+	  ob->SetStatus(1);
+	  tell_object(spieler, break_string( "Genau, ein Waermestein ist genau das Richtige. "+
+	    "nur wo bekomme ich so schnell einen her? Diese Steine sind sehr selten und in "+
+	    "meiner Schatzkammer befindet sich leider keiner. Koennt ihr mir einen besorgen?" , 78, TO->name()+" sagt zu Dir: ") );
+	  return;
+	}
+	return;
+}
+
+void give_notify(object stein)
+{
+	object ob;
+
+ 	if( member(geloest, TP->name())!=-1 ) { ::give_notify(ob); return; }
+  if( !ob=present("\nzwergequest", TP) ) { ::give_notify(ob); return; }
+	if( !stein->id("\nwaermestein") ) { ::give_notify(ob); return; }
+  if( ob->QueryStatus()!=1 ) 
+  {
+    tell_object(TP, break_string( "Ein Waermestein? Genau, ein Waermestein ist genau das Richtige Gastgeschenk. ",
+	    78, TO->name()+" sagt zu Dir: "));
+  }
+  geloest+=({TP->name()});
+  write_file(THUM_NPC+"zwergequest", TP->name()+"\n" );
+	ob->remove();
+	if( TP->QueryProp(P_RACE) == "Zwerg" ) ob=clone_object(THUM_OBJ+"mithrilarmband.lpc");
+	else ob=clone_object("/gilden/zaubererzunft/obj/magiestein.lpc");
+  tell_object(TP, break_string( "Vielen Dank, hier habt Ihr "+ob->name(WEN)+" als Belohnung.",
+	  78, TO->name()+" sagt zu Dir: "));
+	ob->move(TP, M_NOCHECK);
+	TP->SetProp(P_XP, QueryProp(P_XP)+2500);
+	tell_object(TP, TO->name()+" gibt Dir "+ob->name(WEN,1)+"\n");
+  return;
+}

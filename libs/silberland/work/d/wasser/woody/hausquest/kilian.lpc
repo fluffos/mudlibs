@@ -1,0 +1,300 @@
+/*
+** Kilian, der Seebaer - Woody
+** ---
+** 19 Feb, 1997  Release
+** 22 Feb, 1997  Spieler kriegt wirklich ne (unsichtbare) Tarnkappe :)
+**               (allerdings nur Seher)
+*/
+
+inherit "std/npc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <mnpc.h>
+#include <wizlevels.h>
+
+#include "files.h"
+#include "/gilden/waldlaeufer/ranger_tasks.h"
+
+#define KAPPENPREIS 5000
+#define GEGENWERT 2500
+#define SAVEFILE QDIR("kilian.save")
+#define TK_LOGFILE QDIR("kilian.log")
+
+nosave string *farbegegeben;
+string *kappegegeben;
+object *rumGegegben;
+
+create()
+{
+  object ob;
+  string s;
+
+  if (!is_clone(this_object())) return;  // (return on BP)
+
+  ::create();
+  AddId (({"mann","seebaer","kilian"}));
+  SetProp (P_GENDER, MALE);
+  SetProp (P_NAME, "Kilian");
+  SetProp (P_ARTICLE, 0);
+  SetProp (P_SHORT, "Kilian, der Seebaer");
+  SetProp (P_LONG, "Vor Dir steht Kilian, der alte Seebaer. Er ist in "
+      "seinem Leben viel und weit herumgekommen, und hat auch viel ueber "
+      "seine Reisen zu erzaehlen. Er hat ein altes, freundliches Gesicht "
+      "und einen weissen Vollbart und laechelt Dich freundlich an. Du "
+      "bist Dir nicht sicher, aber irgendwie scheint Dir dieses Gesicht "
+      "sehr vertraut zu sein.");
+  SetProp (P_ALIGN, 150);
+  create_default_npc (15);
+  SetProp (P_HANDS, ({" mit blossen Haenden", 150, DT_BLUDGEON}) );
+
+  AddDetail ( ({"gesicht", "alter"}),
+      "Kilians Gesicht ist zwar bereits von seinem Alter gezeichnet, "
+      "aber es hat immer noch einen froehlichen Ausdruck.");
+  AddDetail ( ({"vollbart", "bart" }),
+      "Kilian hat einen weissen Vollbart, durch den er sich von Zeit "
+      "zu Zeit etwas nachdenklich und wohl auch wehmuetig streicht.");
+
+  SetProp (P_DEFAULT_INFO, ({
+      "brummt irgendetwas unverstaendliches in seinen Bart.\n",
+      "sagt unwirsch: So ein Unsinn!\n",
+      "laechelt weise, sagt aber nichts.\n",
+      "zuckt ratlos mit den Schultern.\n",
+      "taetschelt Dir wohlwollend den Kopf.\n" }) );
+  AddLibrary(QDIR("kilian.lib"), 1, 1);
+  AddInfo ( ({"farbe","anstrich","weiss","haus"}), "@@i_farbe@@");
+  AddInfo ( ({"helfer","kappe","tarnkappe"}), "@@id_kappe@@");
+
+  AddCmd ( ({"schlag", "schlage"}), "schlag" );
+  AddCmd ("bitte", "bitte");
+  AddCmd("zeige|zeig&kilian|seebaer&schuppe|unbekannte schuppe", "cmd_wl_schuppe");
+
+  farbegegeben = kappegegeben = rumGegegben = ({});
+  SUID;
+  if (stringp(s=read_file(SAVEFILE)))
+    kappegegeben=explode(explode(s,"\n")[0],",");
+  else
+    kappegegeben=({});
+}
+
+// Gwenshara, 17.01.2024: Waldlaeufer gildentask
+public int cmd_wl_schuppe() {
+  object schuppe;
+  if(TP->QueryProp(P_GUILD) != "waldlaeufer") return 0;
+  if(!objectp(schuppe=present(RANGER_TASK_SCHUPPE, TP))) return 0;
+
+  tell_object(TP, BS("Du zeigst Kilian die unbekannte Schuppe."));
+  tell_room(ENV(TP), BS(TPN+" zeigt Kilian eine Schuppe."), ({TP}));
+
+  if(member(rumGegegben, TP) < 0) {
+    command_me("sag Hm. Ich koennte dir schon helfen. Aber dafuer will ich eine Gegenleistung! "
+               "Als ich noch zur See gefahren bin, hatten wir immer den besten Rum an Board. Heute "
+               "bekommt man den kaum noch. Bring mir eine Falsche Rum, um meine alten Gleider "
+               "zu waermen. Dann verrate ich dir mehr!");
+    return 1;
+  }
+
+  tell_room(ENV(TO), "Kilian studiert die Schuppe gruendlich.\n");
+  command_me("sag Hmmm... Ich bin viel herumgekommen und habe die ganzen Weltmeere besegelt. "
+             "Dabei habe ich viele Monster gesehen. Diese Schuppe kommt mir bekannt vor. "
+             "Ich glaube, sie gehoert zu einer Hydra. Davon gibt es nur noch wenige auf der Insel "
+             "Hypros.");
+  tell_room(ENV(TO), "Kilian nimmt "+TP->name(WEM)+" die Schuppe ab.\n");
+  tell_object(TP, "Kilian nimmt dir die Schuppe ab.\n");
+  command_me("sag Ich werde mich darum kuemmern, dass diese Schuppe wieder zu Raziel gelangt.");
+
+  // Gildenaufgabe setzen
+  call_other("/gilden/waldlaeufer/master/master", "SetTask",  getuid(TP), 3);
+  schuppe->remove(1);
+  return 1;
+}
+
+reset()
+{
+  ::reset();
+  farbegegeben = ({});
+}
+
+saveinfo()
+{
+  catch(rm(SAVEFILE));
+  write_file(SAVEFILE, implode(kappegegeben,",")+"\n");
+}
+
+int remove()
+{
+  if (is_clone(this_object()))
+    saveinfo();
+  return ::remove();
+}
+
+string id_kappe()
+{
+  if (member(kappegegeben, getuid(TP))==-1)
+    return
+      "kramt in der Truhe und streckt Dir eine leere Hand entgegen.\n"+
+      break_string("Diese Tarnkappe hat mir aus aller Not geholfen. Nie hat "
+        "sie mich im Stich gelassen. Mit ihrer Hilfe war ich unbesiegbar. "
+        "Wenn Du willst, verkaufe ich sie Dir fuer "+KAPPENPREIS+" Muenzen. "
+        "Schlag ein und sie gehoert Dir!", 78, "Kilian sagt: ");
+  else if (present("\ntarnkappe", TP))
+    return
+      "erroetet und sagt: Naja, unbesiegbar macht sie nicht...\n"+
+      "Kilian sagt: Ich hoffe aber, sie leistet Dir dennoch gute Dienste!\n";
+  else {
+    return "gruebelt.\n"+
+      break_string("Hmmm, Du willst also wieder eine Tarnkappe? Du hast "
+        "wahrlich Glueck! Ich habe noch eine... aber Du musst mir dafuer "
+        "irgendeine Waffe oder Ruestung im Wert von mindestens "+GEGENWERT+
+        " Muenzen bringen! Ich sammle sowas naemlich!", 78, "Kilian sagt: ");
+  }
+}
+
+int schlag(string str)
+{
+  string *wer, liste;
+  int i;
+
+  notify_fail ("Was willst Du tun?\n");
+  if (!str) return 0;
+  if (str!="ein") return 0;
+  if (member(kappegegeben, getuid(TP))!=-1)
+    write ("Kilian lacht: Nein, nochmal hau ich Dich nicht uebers Ohr!\n");
+  else if (TP->QueryGuest())
+    write ("Kilian lacht: Einem Gast verkaufe ich lieber nichts!\n");
+  else if (!IS_SEER(TP))
+    write ("Kilian schuettelt den Kopf und sagt: "
+        "Werd erstmal Seher, "+CAP(getuid(TP))+"!\n");
+  else if (present("\ntarnkappe", TP))
+    write ("Kilian wundert sich: Aber Du hast doch schon eine Tarnkappe?!\n");
+  else if (TP->QueryMoney() < KAPPENPREIS)
+    write ("Kilian sagt: Aber Du hast doch gar nicht genug Geld dabei!\n");
+  else {
+    wer=map_array(kappegegeben, #'capitalize);
+    if (sizeof(wer)==0)
+      liste="hat noch keiner";
+    else if (sizeof(wer)==1)
+      liste="hat erst ein Abenteurer, naemlich "+wer[0];
+    else
+      liste="haben schon "+implode(wer[0..<2], ", ") + " und " + wer[<1];
+    write ("Kilian nimmt Dir "+KAPPENPREIS+" Muenzen ab.\n");
+    TP->AddMoney(-KAPPENPREIS);
+    write (break_string(
+        "Hier hast Du die Kappe! Wundere Dich nicht, dass Du sie nicht "
+        "sehen kannst, es ist eine echte Tarnkappe! Vor Dir "+liste+
+        " ein Exemplar bekommen!", 78, "Kilian sagt: "));
+    kappegegeben += ({getuid(TP)});
+    CLONETPNOCHK(OBJ("tarnkappe"));
+    say (CAP_TPN+" schlaegt mit Kilian auf einen Handel ein.\n", TP);
+    write_file(TK_LOGFILE, dtime(time())+": Kilian verkauft "+
+        CAP(getuid(TP))+" eine Tarnkappe.\n");
+  }
+  saveinfo();
+  return 1;
+}
+
+string i_farbe()
+{
+  object qo;
+  say (break_string(
+      "Ist der weisse Anstrich meines Hauses nicht wundervoll? Ich habe die "
+      "Farbe sehr guenstig fuer eine, im Vertrauen gesagt etwas aeltere "
+      "meiner Pfeifen bekommen.", 78, "Kilian schwaermt: "));
+
+  if (!qo=present(QO_ID,TP))
+    return "laechelt ein wenig vertraeumt.\n";
+
+  write (break_string("Ich habe gehoert, dass Du das Haus des alten Verian "
+      "renovierst. Ein wenig von der Farbe habe ich noch... Du kannst sie "
+      "sicherlich gut gebrauchen, wenn Du welche willst, bitte mich einfach "
+      "darum, ich werde Dir dann gerne was geben!",
+      78, "Kilian fluestert Dir zu: "));
+  return "laechelt Dich an.\n";
+}
+
+int bitte(string str)
+{
+  string s, um;
+  object ob,qo;
+
+  notify_fail ("WEN willst Du um WAS bitten?\n");
+  if (!str) return 0;
+  if (sscanf(str,"%s um %s",s,um)!=2) return 0;
+  if (!id(s)) return 0;
+  if (um!="farbe" && um!="weisse farbe")
+    write (break_string(
+        CAP(um)+"?? Das kann ich Dir nicht geben, tut mir leid!",
+        78, "Kilian sagt: "));
+  else {
+    if (member(farbegegeben, getuid(TP))!=-1)
+      write ("Kilian sagt: Dir habe ich doch schon etwas Farbe gegeben!\n");
+    else if (!qo=present(QO_ID,TP))
+      write ("Kilian sagt: Die hebe ich lieber fuer Notfaelle auf!\n");
+    else if (!ob=present(EIMER_ID,TP))
+      write ("Kilian sagt: Besorg Dir erst mal einen Eimer!\n");
+    else if (ob->QueryProp(P_CONTAINS)==CONTAINS_COLOR)
+      write ("Kilian sagt: Aber da ist doch schon Farbe drin!\n");
+    else if (member(({CONTAINS_NOTHING, CONTAINS_COLOR_R}),
+             ob->QueryProp(P_CONTAINS))==-1)
+      write ("Kilian sagt: Aber Dein Eimer ist doch gar nicht leer!\n");
+    else {
+      ob->SetProp (P_CONTAINS, CONTAINS_COLOR);
+      write ("Kilian fuellt etwas Farbe in Deinen Eimer.\n");
+      say ("Kilian fuellt etwas Farbe in "+TP->name(WESSEN)+" Eimer.\n", TP);
+      write ("Kilian sagt: Hier bitte, und gruess mir den alten Verian!\n");
+      farbegegeben += ({getuid(TP)});
+    }
+  }
+  return 1;
+}
+
+give_notify(obj)
+{
+  if (obj->id("\ntarnkappe"))
+    say("Kilian bricht vor Lachen zusammen.\n"+break_string(
+      "Erst willst Du unbedingt so eine Kappe, und dann gibst Du sie "
+      "mir wieder? Du bist wahrlich "+
+      (TP->QueryProp(P_GENDER) == FEMALE ? "eine seltsame Zeitgenoessin!" :
+      "ein seltsamer Zeitgenosse!")+" Behalt die Kappe lieber mal...", 78,
+      "Kilian sagt: "));
+  else if ((member(kappegegeben, getuid(TP))!=-1) &&
+      !present("\ntarnkappe",TP))
+  {
+    if ((!obj->QueryProp(P_WEAPON_TYPE)) && (!obj->QueryProp(P_ARMOUR_TYPE)))
+      say(break_string("Aber Du sollst mir doch eine Waffe oder eine "
+        "Ruestung bringen, das ist es, was ich sammle! Mit "+
+        obj->name(WEM)+" kann ich nix anfangen...", 78, "Kilian sagt: "));
+    else if (obj->QueryProp(P_VALUE) < GEGENWERT)
+      say("Kilian lacht.\n"+break_string(
+        "Grade mal laecherliche "+obj->QueryProp(P_VALUE)+" Muenzen ist "+
+        obj->name(WER,1)+" wert! Bring mir lieber was besseres, mit diesem "
+        "Schrott fang ich ja doch nix an...", 78, "Kilian sagt: "));
+    else
+    {
+      say("Kilian freut sich.\n"+break_string(
+        "Oh, sowas schoenes! "+obj->Name(WER)+"! Das leg ich am Besten "
+        "gleich zu meiner Sammlung...", 78, "Kilian sagt: "));
+      say ("Kilian sagt: Danke, "+TP->name()+"!\n", TP);
+      write ("Kilian steckt Dir zum Dank eine neue Tarnkappe zu.\n");
+      CLONETPNOCHK(OBJ("tarnkappe"));
+      write_file(TK_LOGFILE, dtime(time())+": Kilian tauscht "+
+          obj->name(WEN)+" ["+explode(file_name(obj),"#")[0]+"]"+
+          " von "+CAP(getuid(TP))+" gegen eine Tarnkappe.\n");
+      obj->remove();
+      return;
+    }
+  } else if(obj->id("\nnachtfahrer_rum")) {
+    command_me("sag Aaaah! Danke, "+TPN+". Das weckt Erinnerungen.");
+    say("Kilian leert die Flasche in einem Zug.\n");
+    if(member(rumGegegben, TP) < 0) rumGegegben += ({TP});
+    obj->remove();
+    return;
+  }
+  else
+    say("Kilian sagt: Nein nein, behalt das mal lieber!\n");
+  give_obj (obj, TP);
+  return;
+}
+

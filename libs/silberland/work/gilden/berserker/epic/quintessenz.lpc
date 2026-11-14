@@ -1,0 +1,172 @@
+#include <defines.h>
+#include <moredef.h>
+#include <properties.h>
+#include <combat.h>
+#include "berserkerstufe11.h"
+#include "../def.h"
+#include "vt100.h"
+
+inherit "std/thing";
+
+mapping gems;
+string *gemnames;
+
+string einbuchtungen_info();
+
+void create()
+{
+  if( !is_clone(TO) ) return;
+  ::create();
+
+  SetProp(P_SHORT, "Die Quintessenz des Berserkertums");
+  SetProp(P_LONG, "Das ist die Quintessenz des Berserkertums. Sie hat 5 "
+      "Ecken und 5 Kanten und schimmert in allen Regenbogenfarben. An jeder "
+      "Ecke befindet sich eine kleine Einbuchtung.\n@@einbuchtungen@@" );
+      
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_NAME, "Quintessenz");
+  AddId( ({"quintessenz", "\nb11_q"}) );
+
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_AUTOLOADOBJ, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NEVERDROP, 1);
+
+  AddDetail( ({"kante", "kanten"}),
+      "Du kannst 5 Kanten erkennen.\n");
+  AddDetail( ({"ecke", "eck"}),
+      "Du kannst 5 Ecken erkennen.\n");
+  AddDetail( ({"farbe", "regenbogenfarbe", "regenbogenfarben"}),
+      "Die Quintessenz schimmert in allen Regenbogenfarben.");
+
+  AddSpecialDetail( ({"einbuchtung", "einbuchtungen"}), "det_einbuchtungen");
+
+  AddCmd( ({"befestige", "befestig"}), "befestigen");
+  gems = ([0:0, 1:0, 2:0, 3:0, 4:0]);
+  seteuid(getuid(this_object()));
+}
+
+int befestigen(string str)
+{
+  string was, worin;
+  object gem;
+  int nr;
+  notify_fail( "Was willst Du in der Einbuchtung befestigen?\n");
+  if (!str) return 0;
+  if( sscanf(str, "%s in %s", was, worin) != 2 ) return 0;
+  if( worin != "einbuchtung" && worin !="einbuchtungen") return 0;
+  if( !(gem=present(was, TP)) )
+      return write("Aber Du hast ja gar kein '"+was+"'!\n"),1;
+  if( (nr = member( gemnames, gem->QueryProp(P_NAME))) == -1 ) 
+    return write(gem->Name(WER) + " passt nicht in die Einbuchtung hinein.\n"),1;
+  if( gems[nr] )
+    return write("Diese Einbuchtung ist bereits besetzt!\n"),1;
+  if( TP->QueryProp(P_LEVEL) < 65 || TP->QueryProp(P_XP) < 211111111 )
+    return write("Du bist nicht erfahren genug um mit der Quintessenz "
+        "umzugehen!\n"),1;
+  write("Du befestigst "+gem->name(WEN)+" in einer Einbuchtung der Quintessenz.\n");
+  tell_room(environment(TP),
+      sprintf("%s befestigt %s in der Quintessenz des Berserkertums.\n",
+        TP->Name(WER), gem->name(WEN)), ({TP}));
+  log_file(B11_LOG,sprintf("[%s] %O befestigt %s\n",
+               dtime(time()), TP, gem->name(WEN)));
+  gem->remove(); 
+  gems[nr]=1;
+  if( gems[0] && gems[1] && gems[2] && gems[3] && gems[4] )
+    call_out("fertig", 2);
+  return 1;
+}
+
+void fertig()
+{
+  write(BS("Die 5 Edelsteine beginnen zu summen und ploetzlich haeltst Du "
+      "den Edelstein der Edelsteine in Deinen Haenden!")+"\n");
+  shout(CAP(getuid(TP)) + " hat soeben den Edelstein der Edelsteine entdeckt!\n");
+  log_file(B11_LOG,sprintf("[%s] %O erhaelt den Edelstein der Edelsteine!\n",
+        dtime(time()), TP));
+  CLONE( B11_GEM, TP);
+}
+
+string einbuchtungen()
+{
+  string s;
+  int a;
+
+  a = 5 - (gems[0] + gems[1] + gems[2] + gems[3] + gems[4]);
+  s = "";
+  if (gems[0])
+    s += "In der ersten Einbuchtung befindet sich ein "+ gemnames[0] + ". ";
+  if (gems[1])
+    s += "In der zweiten Einbuchtung befindet sich ein "+ gemnames[1] + ". ";
+  if (gems[2])
+    s += "In der dritten Einbuchtung befindet sich ein "+ gemnames[2] + ". ";
+  if (gems[3])
+    s += "In der vierten Einbuchtung befindet sich ein "+ gemnames[3] + ". ";
+  if (gems[4])
+    s += "In der fuenften Einbuchtung befindet sich ein "+ gemnames[4] + ". ";
+  if (a > 0 )
+    s += ({"", "Eine", "Zwei", "Drei", "Vier", "Fuenf"})[a] + " Einbuchtung" +
+      (a==1?" ist":"en sind") + " leer.";
+  return BS(s);
+}
+
+string det_einbuchtungen()
+{
+  return BS(
+      "Diese Einbuchtungen scheinen geeignet zu sein, um grosse Edelsteine "
+      "darin zu befestigen.\n" +einbuchtungen() );;
+}
+string _query_info()
+{
+  string s;
+    s = "In die erste Einbuchtung koennte ein "+gemnames[0] + " passen, ";
+    s += "in die zweite Einbuchtung koennte ein "+gemnames[1] + " passen, ";
+    s += "in die dritte Einbuchtung koennte ein "+gemnames[2] + " passen, ";
+    s += "in die vierte Einbuchtung koennte ein "+gemnames[3] + " passen ";
+    s += "und in die fuenfte Einbuchtung koennte ein "+gemnames[4] + " passen. ";
+  return BS(s);
+}
+
+string short()
+{
+  if(this_player() && this_player()->QueryProp(P_TTY)=="ansi")
+    return VT_RED+QueryProp(P_SHORT)+VT_NORMAL+".\n";
+  return QueryProp(P_SHORT)+".\n";
+}
+
+string name(int casus, int daemon)
+{
+  string n;
+  n=::name(casus, daemon);
+  if( this_player() && this_player()->QueryProp(P_TTY)=="ansi")
+    return VT_RED+n+VT_NORMAL;
+  return n;
+}
+
+string Name(int casus, int daemon)
+{
+  return capitalize(name(casus,daemon));
+}
+
+mixed _query_autoloadobj()
+{
+  return ( gems );
+}
+
+void _set_autoloadobj( mixed args )
+{
+  gems=args;
+}
+
+void init()
+{
+  ::init();
+  if( interactive(MENV) && !(gemnames) )
+  {
+    gemnames = ({BMASTER->b11_gem(getuid(MENV),0),
+    BMASTER->b11_gem(getuid(MENV),1), BMASTER->b11_gem(getuid(MENV),2),
+    BMASTER->b11_gem(getuid(MENV),3), BMASTER->b11_gem(getuid(MENV),4)});
+  }
+}

@@ -1,0 +1,312 @@
+/*
+
+   Der Master fuer den Riesen in der Unterwelt Zordan@SL
+
+*/
+
+#include "../def.h"
+#include <attributes.h>
+#include <moving.h>
+
+nosave int arm,bein,brust,huefte,kopf,zaehler;
+object *feinde,leicheobj;
+
+#define BODEN ({            "boden-a2","boden-a3","boden-a4", \
+                 "boden-b1","boden-b2","boden-b3","boden-b4","boden-b5", \
+                 "boden-c1","boden-c2","boden-c3","boden-c4","boden-c5", \
+                 "boden-d1","boden-d2","boden-d3","boden-d4","boden-d5", \
+                            "boden-e2","boden-e3","boden-e4" })
+
+#define KOERPER ({ "riese-kopf", "riese-brust","riese-huefte", \
+                   "riese-beinl","riese-beinr", \
+                   "riese-arml", "riese-armr" })
+
+#define LEICHEN ({ "\n_kopf_ab","\n_brust_ab","\n_huefte_ab", \
+                   "\n_bein_ab","\n_bein_ab", \
+                   "\n_hand_ab","\n_hand_ab" })
+
+#define TEILEID ({   "\n_kopf","\n_brust","\n_huefte", \
+                     "\n_bein_links", "\n_bein_rechts", \
+                     "\n_hand_links", "\n_hand_rechts" })
+
+#define TEILEFILE ({   "kopf","brust","huefte", \
+                       "bein-links", "bein-rechts", \
+                       "hand-links", "hand-rechts" })
+
+query_prevent_shadow() { return 1; }
+
+create() {
+  if (is_clone(TO)) { destruct(TO); return 1; }
+  feinde=({});
+  zaehler=0;
+  call_out("laderiese",0);
+}
+
+reset() {
+  feinde=({});
+  zaehler++;
+  if (zaehler>3) {
+    zaehler=0;
+    call_out("laderiese",0);
+  }
+  call_out("dummyfkt",0);
+}
+
+dummyfkt() {
+  int i;
+  i=10;
+}
+
+// Die Fuesse und die Auswirkungen
+
+string berechne(int welcher) {
+  int x1,x2,y1,y2,dx,dy;
+  string *wohin;
+
+  x1=ENV(find_living("riese_fuss_links"))->posx();
+  y1=ENV(find_living("riese_fuss_links"))->posy();
+  x2=ENV(find_living("riese_fuss_rechts"))->posx();
+  y2=ENV(find_living("riese_fuss_rechts"))->posy();
+  dx=x2-x1;
+  dy=y2-y1;
+  
+  if (dy == 0) {
+    if (y1 == 1) { return "sueden"; }
+    if (y1 == 5) { return "norden"; }
+    if (random(2)) { return "norden"; } else { return "sueden"; }
+  }
+  if (dx == 0) {
+    if (x1 == 1) { return "osten"; }
+    if (x1 == 5) { return "westen"; }
+    if (random(2)) { return "westen"; } else { return "osten"; }
+  }
+  if (dy>0) {
+    if (welcher == 1) {
+      if (random(2)) {
+        return "sueden";
+      } else {
+        if (dx<0) { return "westen"; }
+        return "osten";
+      }
+    }
+    if (random(2)) {
+      return "norden";
+    } else {
+      if (dx<0) { return "osten"; }
+      return "westen";
+    }
+  } 
+  if (welcher == 1) {
+    if (random(2)) {
+      return "norden";
+    } else {
+      if (dx<0) { return "westen"; }
+      return "osten";
+    }
+  }
+  if (random(2)) {
+    return "sueden";
+  } else {
+    if (dx<0) { return "osten"; }
+    return "westen";
+  }
+}
+
+int bewege_fuss() {
+  object ob;
+  if (!find_living("riese_fuss_links") || !find_living("riese_fuss_rechts")) {
+    return -1;
+  }
+  switch(random(3)) {
+    case 1: // linker  Fuss
+      call_other(find_living("riese_fuss_links"),"befehl",
+                 berechne(1));
+      return 1;
+      break;
+    case 2: // rechter Fuss
+      call_other(find_living("riese_fuss_rechts"),"befehl",
+                 berechne(2));
+      return 2;
+      break;
+    default: 
+      return 0;
+      break;
+  }
+}
+
+string wo_fuesse() {
+  int x1,x2,y1,y2,dx,dy;
+  x1=ENV(find_living("riese_fuss_links"))->posx();
+  y1=ENV(find_living("riese_fuss_links"))->posy();
+  x2=ENV(find_living("riese_fuss_rechts"))->posx();
+  y2=ENV(find_living("riese_fuss_rechts"))->posy();
+  return "x1: "+x1+", y1: "+y1+", x2: "+x2+", y2: "+y2;
+}
+
+string richtung() {
+  int x,y;
+  string ausgabe;
+  if (!find_living("riese_fuss_links") || !find_living("riese_fuss_rechts")) {
+    return "Oh, sie ist doch nicht geneigt.\n";
+  }
+  x=ENV(find_living("riese_fuss_links"))->posx();
+  y=ENV(find_living("riese_fuss_links"))->posy();
+  if ( x==3 && y==3 ) {
+    return "Oh, sie ist doch nicht geneigt.\n";
+  }
+  else if ( x==1 ) { ausgabe = "sehr stark nach Westen"; }
+  else if ( x==5 ) { ausgabe = "sehr stark nach Osten"; }
+  else if ( y==1 ) { ausgabe = "sehr stark nach Norden"; }
+  else if ( y==5 ) { ausgabe = "sehr stark nach Sueden"; }
+  else if ( x==2 && y==2 ) { ausgabe = "leicht nach Nordwesten"; }
+  else if ( x==2 && y==3 ) { ausgabe = "leicht nach Westen"; }
+  else if ( x==2 && y==4 ) { ausgabe = "leicht nach Suedwesten"; }
+  else if ( x==4 && y==2 ) { ausgabe = "leicht nach Nordosten"; }
+  else if ( x==4 && y==3 ) { ausgabe = "leicht nach Osten"; }
+  else if ( x==4 && y==4 ) { ausgabe = "leicht nach Suedosten"; }
+  else if ( x==3 && y==2 ) { ausgabe = "leicht nach Norden"; }
+  else if ( x==3 && y==4 ) { ausgabe = "leicht nach Sueden"; }
+  return "Die Felsplatte ist "+ausgabe+" geneigt.\n";
+}
+
+int rutschen() {
+  int x,y,i,j;
+  string command;
+  object raum;
+  object *env;
+  object *liste;
+  liste=({ });
+  if (!find_living("riese_fuss_links")) return -1;
+  x=ENV(find_living("riese_fuss_links"))->posx();
+  y=ENV(find_living("riese_fuss_links"))->posy();
+  if ((x!=1)&&(x!=5)&&(y!=1)&&(y!=5)) return -1;
+  if (x == 1) { command="westen"; }
+  else if (x == 5) { command="osten"; }
+  else if (y == 1) { command="norden"; }
+  else if (y == 5) { command="sueden"; }
+  for (i=sizeof(BODEN)-1; i>=0; i--) {
+   if (raum=find_object(ROOM + BODEN[i])) {
+    env=all_inventory(raum);
+    for( j=0 ; j<sizeof(env) ; j++ ) {
+     if ( living(env[j]) && interactive(env[j])) {
+      if (member_array(env[j],liste) == -1) {
+       liste+=({ env[j] });
+       if ((random(30) > env[j]->QueryAttribute(A_DEX)) && (!random(5))) {
+        tell_object(env[j],
+          "Durch die starke Neigung der Platte rutschst Du nach "
+          +capitalize(command)+".\n");
+        env[j]->command_me(command);
+       } else {
+        tell_object(env[j],
+          "Durch die starke Neigung der Platte waerst Du fast nach "
+          +capitalize(command)+" gerutscht.\n");
+       }
+      }
+     }
+    }
+   }
+  }
+}
+
+int _query_wimpy() { return 0; }
+
+// Kampfverwaltung
+
+addfeind(object player) {
+  if(member(feinde,player) == -1) {
+    domainshout("Der Riese bruellt: Ich werde "+player->Name()+" zerstoeren!\n");
+    feinde+=({player});
+  }
+}
+
+int checkfeind(object enemy) {
+  if(member(feinde,enemy) != -1 ) {
+    return 1;
+  } else {
+    return 0;
+  }
+}
+
+void feindtot(object player) {
+  domainshout("Der Riese bruellt: Der Wurm "+player->Name()+" musste buessen!\n");
+  feinde-=({player});
+}
+
+int teiltot(string welcher) {
+  object ob,raum,*env;
+  int i,j;
+  if (welcher == "arm")    arm=1;
+  if (welcher == "bein")   bein=1;
+  if (welcher == "brust")  brust=1;
+  if (welcher == "huefte") huefte=1;
+  if (welcher == "kopf") {
+    // tja, der geht erst, wenn die anderen 4 kaputt sind ;)
+    if ((arm!=1)||(bein!=1)||(brust!=1)||(huefte!=1)) { return -1; }
+    kopf=1;
+  }
+  if ((arm==1)&&(bein==1)&&(kopf==1)&&(brust==1)&&(huefte==1)) {
+    // der Riese ist tot :))
+    if (ob=find_living("riese_fuss_links"))  { ob->remove(); }
+    if (ob=find_living("riese_fuss_rechts")) { ob->remove(); }
+    leicheobj=clone_object(OBJ "riesenleiche");
+    leicheobj->move(ROOM "boden-c3", M_SILENT + M_TPORT);
+    for (i=sizeof(KOERPER)-1; i>=0; i--) {
+      if (raum=find_object(ROOM + KOERPER[i])) {
+        tell_room(raum,BS(
+           "Der Riese bricht mit einem lauten Schrei toedlich verwundet zusammen. "
+          +"Du faellst mit der Leiche des Riesen zusammen auf die Felsplatte runter.\n" ));
+//        shout(BS("Die Erde bebt unter Dir. Du bist Dir sicher: Ein riesiges Ungeheuer"
+//                +"wurde gerade in der Unterwelt besiegt.\n"));
+        env=all_inventory(raum);
+        for( j=0 ; j<sizeof(env) ; j++ ) {
+          if ( living(env[j]) && interactive(env[j])) {
+            env[j]->move( ROOM "boden-c3", M_TPORT|M_SILENT);
+          }
+        }
+      } 
+    }  
+    return 2;
+  }
+  return 1;
+}
+
+// riesen neu laden und alle raeume ueberpruefen
+
+void laderiese() {
+  int i;
+  object raum,ob;
+  string dummy;
+  for (i=sizeof(KOERPER)-1; i>=0; i--) {
+    if (!raum=find_object(ROOM + KOERPER[i])) {
+      call_other(ROOM + KOERPER[i],"???");    // bei Bedarf Raeume laden
+      raum=find_object(ROOM + KOERPER[i]);
+      if (!raum) { return; }                  // uiuiui, hier stimmt was nicht :(
+    }
+    if (ob=present(LEICHEN[i],raum)) {
+      ob->remove();                           // Leichenteile entfernen
+    }
+    if (!ob=present(TEILEID[i],raum)) {
+      CLONE( NPC + TEILEFILE[i],raum);            // Riesenteile laden
+    }
+  }
+/*
+  if (leicheobj) {                            // riesenleiche entfernen 
+    leicheobj->remove();
+  }
+*/
+  if (!ob=find_living("riese_fuss_links")) {  // bei bedarf fuss neu laden
+    if(!raum=find_object(ROOM "boden-c3" )) {
+      call_other(ROOM "boden-c3","???");
+      raum=find_object(ROOM "boden-c3" );
+    }
+    if (raum) { CLONE( NPC "fuss-links",raum); }
+  }
+  if (!ob=find_living("riese_fuss_rechts")) { // bei bedarf fuss neu laden
+    if(!raum=find_object(ROOM "boden-c4" )) {
+      call_other(ROOM "boden-c4","???");
+      raum=find_object(ROOM "boden-c4" );
+    }
+    if (raum) { CLONE( NPC "fuss-rechts",raum); }
+  }
+  arm=bein=brust=huefte=kopf=0;
+}

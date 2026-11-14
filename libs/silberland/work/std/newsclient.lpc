@@ -1,0 +1,261 @@
+// SilberLand MUDlib
+//
+// std/newsclient.c -- alter Newsclient
+//
+// $Date: 1997/03/13 03:06:42 $
+/* $Revision: 3.0 $
+ * $Log: newsclient.c,v $
+ * Revision 3.0  1997/03/13 03:06:42  Woody
+ * prepared for revision control
+ *
+ * Revision 2.5  1995/06/06  08:42:44  Jof
+ * _notify_fail
+ *
+ * Revision 2.5  1995/06/05  14:56:00  Jof
+ * _notify_fail used
+ *
+ * Revision 2.4  1995/05/02  17:29:42  Jof
+ * *** empty log message ***
+ *
+ * Revision 2.3  1995/02/06  19:44:14  Jof
+ * RCS-Logs aufgeraeumt (leere Logs raus usw)
+ *
+*/
+
+/* 1992 JOF */
+
+inherit "/std/thing";
+inherit "/std/more";
+
+#include <config.h>
+#include <properties.h>
+#include <news.h>
+#include <wizlevels.h>
+#include <language.h>
+#include <defines.h>
+
+string GROUP;
+string writer;
+string usemsg;
+
+ENVCHECKPROC
+
+SetInUseMessage(str)
+{
+  usemsg=str;
+}
+
+SetGroup(str)
+{
+  return GROUP=str;
+}
+
+create()
+{
+  thing::create();
+  writer=="";
+
+  ENVCHECK
+  }
+
+thinginit() /* If someone doesnt want our add_action he may call this */
+{
+  thing::init();
+}
+
+remove()
+{
+  return thing::remove();
+}
+
+init()
+{
+  thing::init();
+  add_action("schreib","schreib",1);
+  add_action("lies","lies");
+  add_action("loesche","loesch",1);
+}
+
+ladj(str, weite)
+{
+  return((str+"                                            ")[0..weite-1]);
+}
+
+QueryLong()
+{
+  mixed *messages;
+  string desc;
+  int i;
+
+  desc=QueryProp(P_LONG);
+  desc+="\n";
+  messages=NEWSSERVER->GetNotes(GROUP);
+  if (!pointerp(messages) || !sizeof(messages)) 
+    return desc+"Zur Zeit befinden sich keine Nachrichten am Brett.\n";
+  if (sizeof(messages)==1)
+    desc+="Zur Zeit befindet sich eine Nachricht am Brett:\n\n";
+  else
+    desc+="Zur Zeit befinden sich "+sizeof(messages)+" Nachrichten am Brett:\n\n";
+  for (i=0;i<sizeof(messages);i++)
+  {
+    if (i<9) desc+=" ";
+    desc+=""+(i+1)+". ";
+    desc+=(ladj(messages[i][M_TITLE],45)+" ("+
+	   ladj(messages[i][M_WRITER]+",",13)+
+	   extract(dtime(messages[i][M_TIME]),4,24)+")\n");
+  }
+  return desc;
+}
+
+long()
+{
+  return QueryLong();
+}
+
+mixed *message;
+
+schreib(str)
+{
+  int err;
+
+  if (!this_interactive() || !this_interactive()->query_real_name()) return 0;
+  if (writer)
+  {
+    write("Das geht im Moment nicht, da "+capitalize(writer)+" gerade an diesem Brett schreibt.\n");
+    if (usemsg) write(usemsg+"\n");
+    return 1;
+  }
+  _notify_fail("Du musst einen Titel fuer die Notiz angeben !\n");
+  if (!str) return 0;
+  switch (err=NEWSSERVER->AskAllowedWrite(GROUP))
+  {
+    case  1: break;
+	     case -1: write("Du darfst keine Notes an dieses Brett heften !\n"); return 1;
+	     case -3: write("Das Brett ist leider voll !\n"); return 1;
+	     default: write("Interner Fehler "+err+", Erzmagier verstaendigen !\n"); return 1;
+	   }
+  writer=this_interactive()->query_real_name();
+  message=allocate(6);
+  message[M_BOARD]=GROUP;
+  message[M_TITLE]=str;
+  message[M_MESSAGE]="";
+  write("Ok, beende Deine Notiz mit '**' oder brich sie mit '~q' ab !\n");
+  if (IS_WIZARD(this_player()))
+    write("Als Magier"+(this_player()->QueryProp(P_GENDER)==FEMALE ? "in" : "")+
+	  " kannst Du per '~r<filename>' ein File in die Notiz einlesen.\n");
+  input_to("get_note_line");
+  write(":");
+  return 1;
+}
+
+get_note_line(str)
+{
+  int err;
+  if (str=="**" || str=="~.")
+  {
+    writer=0;
+    switch (err=(NEWSSERVER->WriteNote(message)))
+    {
+      case 1:  write("Ok, Nachricht aufgehaengt.\n");
+	       say(message[M_WRITER]+" hat eine Nachricht ans Brett gehaengt.\n");
+	       return 1;
+	       case -1: write("Du darfst leider keine Nachrichten hier aufhaengen.\n");
+	       return 1;
+	       case -3: write("Das Brett ist leider voll !\n");
+	       return 1;
+	       default: write("Interner Fehler "+err+" aufgetreten ! Bitte Erzmagier verstaendigen.\n");
+	       return 1;
+	     }
+  }
+  if (str=="~q")
+  {
+    writer=0;
+    write("Notiz nicht angeheftet.\n");
+    return 1;
+  }
+  if (str[0..1]=="~r" && IS_WIZARD(this_player())) {
+    str=str[2..<1];
+    if (str[0]==" ") str=str[1..<1];
+    if (!str || catch(err=file_size(str)) || err<0) {
+      write("File nicht gefunden.\n");
+      write(":");
+      input_to("get_note_line");
+      return 1;
+    }
+    str=read_file(str);
+    if (!str){
+      write("Zu gross!\n:");
+      input_to("get_note_line");
+      return 1;
+    }
+    write("Ok.\n");
+  }
+  if (message[M_MESSAGE] && message[M_MESSAGE]!="") message[M_MESSAGE]+="\n";
+  message[M_MESSAGE]+=str;
+  write(":");
+  input_to("get_note_line");
+  return 1;
+}
+
+lies(str)
+{
+  int num;
+  mixed *messages;
+
+  if (!str || str=="" || sscanf(str,"%d",num)!=1 || num<=0)
+  {
+    _notify_fail("WELCHE Nachricht willst Du lesen ?\n");
+    return 0;
+  }
+  num--;
+  messages=(NEWSSERVER->GetNotes(GROUP));
+  if (sizeof(messages)<=num)
+  {
+    _notify_fail("So viele Nachrichten sind da nicht !\n");
+    return 0;
+  }
+  this_player()->More(messages[num][M_TITLE]+" ("+messages[num][M_WRITER]+", "+
+       extract(dtime(messages[num][M_TIME]),5,26)+"):\n"+
+       messages[num][M_MESSAGE]);
+  return 1;
+}
+
+loesche(str)
+{
+  int num;
+
+  if (!str || str=="" || sscanf(str,"%d",num)!=1 || num<=0)
+  {
+    _notify_fail("WELCHE Nachricht willst Du loeschen ?\n");
+    return 0;
+  }
+  num--;
+  switch (NEWSSERVER->RemoveNote(GROUP, num)){
+    case 1: write("Ok.\n");
+	    say(this_player()->name()+" entfernt eine Nachricht vom Brett.\n");
+	    return 1;
+	    case -1: write("Das darfst Du nicht.\n");
+	    say(this_player()->name()+" versucht, eine Nachricht vom Brett zu reissen.\n");
+	    return 1;
+	    case -3: write("So viele Nachrichten sind da nicht !\n");
+	    return 1;
+	    default: write("Interner Fehler. Bitte Erzmagier verstaendigen !\n");
+	    return 1;
+	  }
+}
+
+Crumble()
+{
+  if (environment() && living(environment()))
+    return;
+  say(capitalize(name(WER))+" zerfaellt zu Staub, der sich sofort verteilt.\n");
+  write(capitalize(name(WER))+" zerfaellt zu Staub, der sich sofort verteilt.\n");
+  remove();
+}
+
+move(where,method)
+{
+  if (objectp(where)&&!living(where)&&environment()&&living(environment()))
+    call_out("Crumble",30+random(30));
+  return ::move(where, method);
+}

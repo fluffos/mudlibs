@@ -1,0 +1,334 @@
+/*
+** Kneipe 'Zur roten Nase', Speisesaal, Midas  (w) Woody@SL
+**
+**    date      Version  comments
+** --------------------------------------------------------------------
+** 1996-01-05     1.0    Release
+** 1996-06-08     2.0    Speisen, Getraenke erweitert, INT_LONG etc.
+** 1996-09-09     2.1    Verhackerts Brot
+** 1996-10-12     2.2    Exploration Point vergeben
+** 1997-03-07     2.3    Kinderschnitzel, Broetchen und Brot abgewertet,
+**                       Rotwein aufgewertet
+** 1997-10-05     2.4    Verhackertes limitiert
+** 2002-11-30     2.5    Kuerbissuppe
+** 2003-12-16     2.6    statt Kuerbissuppe: Eowyns Suppe, Druidenomelette
+*/
+
+#define TOMBOLAMASTER "/d/ebene/Midas/std/tombolamaster"
+inherit "std/pub";
+
+#include <moving.h>
+#include <player.h>
+#include <properties.h>
+#include <exploration.h>
+#include <pub.h>
+#include "files.h"
+#include "/gilden/bardengilde/barden_extern.h"
+
+#define VERHACK_KOST 300
+#define VERHACK_WIEOFT (5+random(2))
+mapping verhack;
+
+create()
+{
+  ::create();
+
+  AddId("\nsaal");
+  SetProp (P_LIGHT, 1);
+  SetProp (P_INDOORS, 1);
+  SetProp (P_ENVIRONMENT, ([ENV_TERRAIN:TT_HOUSE, ENV_TEMPERATURE:20]));
+  SetProp (P_INT_LONG, bs(
+  "Du befindest Dich im Speisesaal der grossen Stadtkneipe 'Zur "+
+  "roten Nase'. Die Einrichtung ist hier deutlich vornehmer als "+
+  "nebenan, dementsprechend sind hier allerdings auch die Preise. "+
+  "Baenke und Stuehle sind gepolstert, der Boden besteht aus teurem "+
+  "Parkett, die Waende sind von feinen Tapeten ueberzogen. An "+
+  "einem der Tische siehst Du eine Speisekarte.\n"));
+
+  SetProp (P_INT_SHORT, "Speisesaal der Kneipe 'Zur roten Nase'");
+
+  SetProp(P_PUB_FLAGS, PUB_HASKEEPER+PUB_NEEDSKEEPER);
+  SetProp(P_PUBKEEPER_ID, "max");
+  SetProp(P_PUBKEEPER_NAME, "der Wirt");
+  SetProp(P_PUBMSG_NOKEEPER,
+      "Max, der Wirt ist nicht da...\n"
+      "Aber vielleicht ist er nebenan, und Du kannst nach ihm rufen?\n");
+  SetProp(P_PUBMSG_NOENEMY, bs("Aber Du kaempfst doch gerade mit Max, glaubst "
+      "Du im Ernst, dass er Dir dann auch noch etwas servieren wuerde???"));
+  SetProp(P_PUBMSG_NOINVITE, bs("Max denkt gar nicht daran, seinen Gegnern "
+      "auch noch etwas zu servieren."));
+  SetProp(P_PUBMSG_FIGHTING, "Max ist im Moment zu beschaeftigt.\n");
+
+  AddDetail ( ({"speisesaal","saal", "einrichtung"}), bs(
+    "Waehrend nebenan typische Kneipenatmosphaere herrscht, ist es "+
+    "hier wesentlich ruhiger, die Tische sind sorgfaeltiger gearbeitet, "+
+    "die Baenke und Stuehle gepolstert, und der Boden besteht aus feinstem "+
+    "Parkett. Doch die Speisekarte laesst Deinen Atem stocken.\n"));
+  AddDetail ( ({"wand","waende"}),
+    "Die Waende sind hier mit feinen Tapeten ueberzogen.\n");
+  AddDetail ( ({"tapete","tapeten"}),
+    "Die Tapeten sind reinweiss und mit feinen vertikalen Fasern durchsetzt.\n");
+  AddDetail ("fasern", "Sie verlaufen von oben nach unten.\n");
+  AddDetail ("gemuetlichkeit", "Versuch's auch mal nebenan!\n");
+  AddDetail ("boden",
+    "Der Boden besteht aus allerfeinstem Parkett.\n");
+  AddDetail ("decke",
+    "Die Decke besteht aus vertaefelten Holzplatten.\n");
+  AddDetail ( ({"platten","holzplatten"}),
+    "Holzplatten aus sehr nobel wirkendem Holz.\n");
+  AddDetail ("holz",
+    "Zu gerne wuesstest Du, um was fuer ein Holz es sich handelt, aber "
+    "es gelingt Dir nicht, dies festzustellen...");
+  AddDetail ("parkett",
+    "Es ist sehr glatt, Du solltest aufpassen, dass Du nicht ausrutscht!\n");
+  AddDetail ("staub", bs("Kaum zu glauben, hier befindet sich sogar noch "+
+    "weniger Staub als nebenan!\n"));
+  AddDetail ( ({"karte","speisekarte","speisen","speise"}),
+    "Du kannst die Speisekarte mit dem Befehl <menue> lesen.\n");
+  AddReadDetail ( ({"karte","speisekarte"}),
+    "Du kannst die Speisekarte mit dem Befehl <menue> lesen.\n");
+  AddDetail ("ausgang", "Er befindet sich im Westen.\n");
+  AddDetail ("westen", "Im Westen gelangst Du zur eigentlichen Kneipe.\n");
+  AddDetail ( ({"tisch","tische"}), "Die Tische sind aus gebeizter Eiche "+
+    "gearbeitet und sehr massiv.\n");
+  AddDetail ("eiche", "Gebeizt und wie nicht anders zu erwarten, sehr "+
+    "sauber verarbeitet.\n");
+  AddDetail ( ({"stuhl","stuehle","sessel","bank","baenke"}), bs(
+    "Saemtliche Baenke und Stuehle sind mit einer sehr gemuetlichen "+
+    "Polsterung und mit Rueckenlehnen versehen und laden geradezu "+
+    "dazu ein, es sich auf ihnen bequem zu machen und eine der "+
+    "angebotenen Speisen zu geniessen.\n"));
+  AddDetail ("polsterung", bs("Die Polsterung besteht aus feinem roten "+
+    "Stoff und verleiht den Stuehlen eine enorme Bequemlichkeit."));
+  AddDetail ("stoff", "Fein und rot, sehr vornehm.\n");
+
+  AddDrink("Eistee (Jugendgetraenk!)", ({"tee", "eistee"}),
+    75, 20, 0, 8,
+    ({"Ein Kellner bringt Dir ein Glas mit erfrischendem Eistee.",
+      "&& geniesst ein Glas erfrischenden Eistees."}));
+  AddDrink("Weisswein", ({"weiss", "weisswein", "wein"}),
+    100, 20, 2, 6,
+    ({"Ein Kellner bringt Dir ein Glas feinsten Weissweins "
+      "aus dem Huegelland.",
+      "&& geniesst ein Glas feinsten huegellaendischen Weissweins."}));
+  AddDrink("Rotwein", ({"rot", "rotwein"}),
+    120, ({15,20}), 2, 4,
+    ({"Ein Kellner bringt Dir ein Glas feinsten huegellaendischen "+
+      "Rotweins.",
+      "&& geniesst ein Glas feinsten huegellaendischen Rotweins."}));
+
+  /*
+  AddFood (
+    "Kuerbissuppe",                     // Name
+    ({"kuerbissuppe", "suppe"}),        // IDs
+    80,                                 // Preis
+    25,                                 // LPs
+    6,                                  // Saett
+    ({ "Eine brennend heisse Kuerbissuppe wird vom Ober hereingetragen, Du "
+       "siehst sie noch regelrecht dampft, als sie Dir vor die Nase "
+       "gestellt wird. Doch das macht Dir nix, hungrig wie Du bist, "
+       "schluerfst Du sie sofort aus.\n"
+       "Als Dich einige Gaeste grinsend anblicken, bemerkst Du ploetzlich, "
+       "dass Dir noch ein Stueck Paprika im Mundwinkel haengt. "
+       "Du erroetest.",
+       "Der Ober serviert && eine heisse Kuerbissuppe, die &1 sofort "
+       "ausschluerft. Dabei bleibt &3 vor lauter Gier ein Stueck "
+       "Paprika im Mundwinkel haengen - Du kicherst." }) );
+    */
+
+  AddFood (
+    "Eowyns Suppe",                     // Name
+    ({"eowyns suppe", "suppe"}),        // IDs
+    15,                                 // Preis
+    5,                                  // LPs
+    5,                                  // Saett
+    ({ "Eine brennend heisse Suppe wird vom Ober hereingetragen, Du "
+       "siehst sie noch regelrecht dampft, als sie Dir vor die Nase "
+       "gestellt wird. Doch das macht Dir nix, hungrig wie Du bist, "
+       "schluerfst Du sie sofort aus.\n"
+       "Doch irgendwie schmeckt diese Suppe seltsam, der leicht "
+       "cremige Geschmack wird durchsetzt von ekligem Kleingetier, "
+       "dass beim Zerbeissen einen sehr bitteren Geschmack entwickelt.\n"
+       "Angeekelt verziehst Du das Gesicht und willst schon den Rest "
+       "unbemerkt wegkippen, als Max Dich streng ansieht. Mit "
+       "Todesverachtung loeffelst Du auch die letzten Reste weg. "
+       "Naja, wenigstens gewaermt hat sie dich...",
+       "Der Ober serviert && eine heisse Suppe, die &1 sofort "
+       "ausschluerft. Seltsamerweise verzieht &1 dabei das "
+       "Gesicht... ob es &3 nicht geschmeckt hat?" }) );
+
+  AddFood (
+    "Druidenomelette",                  // Name
+    ({"druidenomelette", "omelette"}),  // IDs
+    60,                                 // Preis
+    18,                                 // LPs
+    5,                                  // Saett
+    ({ "Ein leckeres kleines Druidenomelette wird Dir serviert. "
+       "Skeptisch siehst Du es an - und da soll ein ganzer Druide "
+       "drin sein?!? \"Mogelpackung\" denkst Du noch, faengst aber "
+       "an, es zu essen, und spuerst ploetzlich die elementare "
+       "Kraft durch Dich fliessen und Dich beleben - Aaaaaaaaaahhh, "
+       "tut das gut!",
+       "&& bekommt ein kleines Omelette serviert und sieht es "
+       "skeptisch an. Aber dann isst &1 es genuesslich auf und "
+       "scheint sichtlich gestaerkt zu sein." }) );
+
+  AddFood (
+    /* Name  */  "Kinderschnitzel",
+    /* IDs   */  "kinderschnitzel",
+    /* Preis */  99,
+    /* LPs   */  28,
+    /* Saett */  10,
+    ({bs("Der Ober bringt Dir ein Kinderschnitzel auf einem bunten Teller, "+
+    "das Du sofort gierig verschlingst. Du wunderst Dich noch ueber die "+
+    "bunten Figuren am Tellerrand, verdrueckst aber schnell noch die "+
+    "Pommes Frites und lehnst Dich zufrieden zurueck."),
+    "Der Ober bringt && ein kleines Kinderschnitzel auf einem bunten "+
+    "\nTeller, das &! sofort genuesslich mitsamt Pommes Frites "+
+    "verschlingt.\n"}));
+
+  AddFood (
+    /* Name  */  "Putenschnitzel",
+    /* IDs   */  ({"schnitzel", "putenschnitzel"}),
+    /* Preis */  150,
+    /* LPs   */  45,
+    /* Saett */  15,
+    ({bs("Der Ober bringt Dir ein riesiges Putenschnitzel mit Ketchup und "+
+    "Mayonnaise sowie einem Erdaepfelsalat, das Du mit Genuss verzehrst. "),
+    "Der Ober bringt && ein riesiges Putenschnitzel mit Ketchup und "+
+    "\nMayonnaise, das &! auf der Stelle verzehrt.\n"}));
+
+  AddFood (
+    /* Name  */  "Wildschweinbraten",
+    /* IDs   */  ({"wildschweinbraten", "wildschwein", "braten"}),
+    /* Preis */  500,
+    /* LPs   */  50,
+    /* Saett */  20,
+    "wildschwein_essen");
+
+  AddFood (
+    /* Name  */  "Steak",
+    /* IDs   */  "steak",
+    /* Preis */  600,
+    /* LPs   */  80,
+    /* Saett */  30,
+    ({"Der Ober bringt Dir ein saftiges Steak, das Du natuerlich sofort "+
+    "hinunter-\nschlingst. Du fuehlst Dich nach langer Zeit wieder einmal "+
+    "so richtig satt und\ndeutlich gestaerkt.\n",
+    "&& bestellt ein saftiges Steak, verzehrt es genuesslich und scheint\n"+
+    "sich auf einmal wesentlich staerker zu fuehlen.\n"}));
+
+  AddFood ("Verhackerts Brot", ({"brot", "verhackerts brot", "verhackerts"}),
+    VERHACK_KOST, 0, 8, "iss_brot");
+
+  AddFood ("Belegtes Broetchen", ({"broetchen", "belegtes broetchen"}),
+    250, ({25,0,8}), 5,
+    ({ "Ein Ober bringt Dir ein kleines belegtes Broetchen. Du schlingst es "
+       "gierig hinunter und fuehlst Dich gleich ein wenig besser.",
+       "&& bekommt ein kleines belegtes Broetchen serviert, schlingt "
+       "es gierig hinunter und macht einen etwas gestaerkten Eindruck." }) );
+
+  AddCmd (({"ruf","rufe"}),"rufe");
+  AddExit("westen", "./kneipe");
+
+  verhack=([]);
+
+}
+
+public void wildschwein_essen() {
+  object task;
+
+  write(BS("Der Ober bringt Dir einen duftenden Wildschweinbraten, den Du im "+
+          "ganzen runterschluckst. Hoppla, beinahe waerest Du erstickt... Doch "+
+          "Du hast nochmal Glueck gehabt, und auch Dein Magen scheint nicht zu "+
+          "protestieren, er arbeitet...\n"));
+  say(BS("Der Ober bringt "+TPN+" einen duftenden Wildschweinbraten, den "+TPN+" im ganzen"+
+         "runterwuergt... "+TPN+" wird kurz blau im Gesicht, scheint sich aber dann "+
+         "doch wieder zu fangen."));
+
+  if(objectp(task=present(BARD_ID_GS10_TASK, TP))) {
+    task->MarkFood(0);
+  }
+}
+
+
+int iss_brot (object z, object e)  // z=Zahler, e=Empfaenger
+{
+  if (!member(verhack, getuid(e)))
+    verhack[getuid(e)] = VERHACK_WIEOFT;
+  if ( verhack[getuid(e)] )
+  {
+    verhack[getuid(e)]--;
+    tell_object (e, bs(
+      "Ein Ober bringt Dir ein Verhackerts Brot. So richtig appetitlich "+
+      "sieht es allerdings nicht aus, ganz im Gegenteil...")+
+      "\nDu musst Dich uebergeben...\n\n");
+    tell_room (ME, bs(e->Name()+" bekommt ein Verhackerts Brot "
+      "serviert, schlingt es hinunter und... muss sich uebergeben. "
+      "Dich ekelt bei dem Anblick..."), ({e}) );
+    e->SetProp(P_FOOD, e->QueryProp(P_FOOD)*5/8);
+    EPMASTER->GiveExplorationPoint("verhackerts", EP_MISC);
+  }
+  else
+  {
+    if (e == z)
+      tell_room (ME, e->Name()+" will offenbar ein Verhackerts Brot.\n",
+          ({ e }) );
+    tell_room (ME,
+        break_string("So wie Du Dich in letzter Zeit hier benommen hast, "+
+        CAP(getuid(e))+", muss ich vorerst davon absehen, Dir noch ein "
+        "Brot zu bringen, es scheint so als ob Du es nicht ganz vertragen "
+        "wuerdest!", 78, "Der Ober sagt: "));
+    if (e != z)
+      tell_object(z, "Du schaemst Dich ein wenig fuer "+e->name(WEN)+".\n");
+    tell_object(z, "Der Ober gibt Dir Dein Geld zurueck.\n");
+    z->AddMoney(VERHACK_KOST);
+  }
+  return 1;
+}
+
+query_verhack() { return verhack; }
+
+void reset()
+{
+  ::reset();
+  verhack=([]);
+}
+
+int rufe(string str)
+{
+  object ob,max;
+
+  if (!str)
+    return 0;
+  if (!member((["max","nach max","wirt","nach wirt",
+      "bedienung","nach bedienung"]),str))
+    return 0;
+
+  write("Du rufst ungeduldig nach einer Bedienung.\n"+
+      (random(10)>6 ? "Du denkst . o O ( "+
+       "Bei den Preisen auch noch warten muessen... :-( )\n" : ""));
+  say(TP->Name(WER)+" ruft ungeduldig nach einer Bedienung.\n");
+  if (max=present("\nmax")) {
+    write("Max schaut Dich verwundert an.\n");
+    tell_room(this_object(), "Max schaut "+TP->name(WEN)+
+        " verwundert an.\n", ({ TP,max }) );
+  }
+  if (!ob = find_object(ROOM "kneipe")) return 1;
+  tell_room(ob, "Du hoerst jemanden nebenan nach einer Bedienung rufen.\n");
+  if (max=present("\nmax",ob))
+    max->CallFor(TO,TP);
+  return 1;
+}
+
+
+nosave int calc_price(mixed what) {
+  int preis;
+  preis=::calc_price(what);
+  if(member( ({"bestelle", "bestell", "kaufe","kauf"}), query_verb()) !=-1
+        && call_other(TOMBOLAMASTER, "CheckWinner", TP) == 1)
+  {
+    preis=0;
+  }
+  return preis;
+}

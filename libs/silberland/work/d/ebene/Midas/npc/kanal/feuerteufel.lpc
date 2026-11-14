@@ -1,0 +1,136 @@
+/*
+** Ein kleiner Feuerteufel
+** ---
+** 1997-10-15  Woody
+** 2002-12-02  Woody  in kanal-Dir verschoben, leicht aufgewertet
+*/
+
+inherit "std/mnpc";
+inherit "/gilden/bardengilde/obj/quest/bard_small_combatspell_teacher";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <mnpc.h>
+#include <new_skills.h>
+
+#include "files.h"
+#include "/gilden/bardengilde/barden_extern.h"
+
+#define FEUERWAND OBJ("div/feuerwand")
+#define KILL_LOG "/d/ebene/log/feuerteufel.kills"
+
+void create()
+{
+  if (!is_clone(this_object())) return;  // (return on BP)
+
+  ::create();
+  AddId ( ({"teufel","feuerteufel"}) );
+  SetProp (P_GENDER, MALE);
+  SetProp (P_NAME, "Feuerteufel");
+  SetProp (P_SHORT, "Ein kleiner Feuerteufel");
+  SetProp (P_LONG, "Der kleine Feuerteufel ist zwar nicht gerade der "
+      "groesste, aber seine roten Augen starren Dich feindselig und "
+      "furchteinfloessend an, sodass Dir ganz mulmig zumute wird. "
+      "Ein irres Grinsen liegt auf seinem Gesicht, Du bist Dir nicht "
+      "sicher, ob es Wahnsinn oder Vorfreude auf seine Opfer ist...");
+  SetProp (P_ALIGN, -100-random(100));
+  SetProp (P_AGGRESSIVE, ([P_BARD_GROUP: 
+                            ([0:0.2, 
+                              BARD_GROUP_ALESTRA: 0.0]) 
+                          ]));
+  SetProp (P_INFO,
+      "Der Feuerteufel kann Fluchtwege mit Feuerwaenden versperren.\n");
+  create_default_npc(15+random(4));
+  SetProp (P_XP, QueryProp(P_XP)+100000);  // Spell-Bonus
+  SetProp (P_HEAL, -30);
+  SetProp (P_SIZE, 130+random(15));
+  SetProp (P_RACE, "Gnom");
+  SetProp (P_MAX_HANDS, 2);
+  SetProp (P_HANDS, ({" mit seinen kleinen Krallen", 200, DT_RIP}) );
+
+  SetProp(P_RESISTANCE_STRENGTHS,
+    ([ DT_FIRE:     -0.5, DT_COLD:      1.0, DT_WATER:  1.0,
+       DT_LIGHT:    -0.3, DT_TERROR:   -0.5,
+       DT_HOLY:      1.5, DT_UNHOLY:   -0.5 ]) );
+
+  SetProp(P_MSGIN, "huepft herein");
+  SetProp(P_MSGOUT, "huepft");
+
+  // set_living_name("feuerteufel");
+
+  SetProp (P_SPELLRATE, 25);
+
+  AddSpell(65, 350,
+    "Der Feuerteufel wirft einen Feuerball nach Dir.\n",
+    "Der Feuerteufel wirft einen Feuerball nach @WEM.\n",
+    DT_FIRE, ([SP_SHOW_DAMAGE:1]) );
+
+  // Feuerwand aufbauen
+  AddSpell(35, 100, "", "", DT_FIRE, "feuerwand");
+
+  SetProp (P_DIE_MSG, " bricht zusammen.\n");
+  SetProp (P_MURDER_MSG, "Endlich daheim!");
+  SetProp (P_KILL_MSG, "Ewig sollst Du schmoren!");
+  SetProp (P_DEFAULT_INFO, "sagt: Kuemmert mich nicht!\n");
+
+  SetProp (P_MNPC_AREA, KANAL "piazza");
+  SetProp (P_MNPC_WAIT, ({ random(5)+5, 10, 5 }));
+  SetProp (P_MNPC_DEFAULTROOM, KANAL "piazza_c6");
+  SetProp (P_MNPC_FLAGS, MOV_INDOORS + MOV_MOVES);
+
+  SetProp (P_REJECT, ({ REJECT_KEEP,
+    "Der Feuerteufel bedankt sich fuer @WEN.\n" }) );
+
+  initialize_bard_spell_teacher(BARD_GROUP_ALESTRA);
+
+  SUID;
+}
+
+void feuerwand(object enemy, int damage, mixed dam_type)
+{
+  object wall;
+  string *dirs, *opendirs, wo;
+  int i;
+
+  dirs=m_indices(environment()->QueryProp(P_NEW_EXITS));
+  opendirs=({});
+  for (i=sizeof(dirs)-1; i>=0; i--)
+    if (!present("feuerwand im "+dirs[i],environment()))
+      opendirs += ({ dirs[i] });
+  if (!sizeof(opendirs)) return;
+
+  wall=clone_object(FEUERWAND);
+  wo=wall->SetDirection(opendirs[random(sizeof(opendirs))]) || "";
+  wall->move(environment(), M_NOCHECK);
+  tell_room(environment(),
+      "Der Feuerteufel errichtet eine Feuerwand"+wo+"!\n");
+}
+
+void NotifyPlayerDeath(object pl, object killer, int lost_exp)
+{
+  string who;
+  object *inv,ob;
+  int x;
+
+  if (killer!=ME) return;
+  who=getuid(pl);
+  write_file (KILL_LOG, dtime(time())+": Feuerteufel killt "+CAP(who)+
+              " (-"+lost_exp+" EP)\n");
+
+}
+
+public void teleport_bard(object who) {
+  tell_object(who, "Der Feuerteufel zwinkert dir zu.\nPloetzlich wirst du von einer Flammensaeule erfasst!");
+  tell_room(environment(who), sprintf("%s verbrennt ploetzlich in einer Flammensaeule!", who->Name(WER, 1)));
+
+  who->move("/d/ebene/Midas/room/room_f5", M_TPORT, "", "", "erscheint in einer Flammesaeule.");
+  return;
+}
+
+protected void learnSong(object who) {
+  ::learnSong(who);
+  call_out("teleport_bard", 0, who);
+}
+

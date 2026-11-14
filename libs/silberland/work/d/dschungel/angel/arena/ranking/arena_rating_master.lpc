@@ -1,0 +1,309 @@
+/******************************************************************************
+ * Duell System: Ranking Master
+ * Datei: arena_ranking_master.c
+ * Autor: Angel (avs@sbox.tu-graz.ac.at)
+ */
+
+#include "./def.h"
+#define RANK "/d/dschungel/angel/arena/ranking/"
+
+inherit "/d/dschungel/angel/lib/generic/classes/algorithms.lpc";
+
+void create()
+{
+  if (is_clone(this_object()))
+     destruct (this_object());
+  seteuid(getuid());
+}
+
+string reduce_whites(string str)
+{
+  int i, max;
+  
+  if (!stringp(str))
+     return 0;
+  max = strlen(str);
+  for (i = 0; i < max; i++)
+  {
+    if ((str[i .. i] == " " && str[i+1 .. i+1] == " ")||(str[i] == '\t' && str[i+1] == '\t'))
+    {
+      if (i == 0)
+         str = str[1 .. strlen(str)];
+      else
+         str = str[0 .. i-1] + str[i+1 .. strlen(str)];
+      i--;
+    } 
+  }
+  return str;
+}
+
+
+string get_title ( int rate )
+{
+
+   if (rate >= 5560)
+      return "10M"; // 11M ist noch nicht implementiert!
+   
+   switch (rate)
+   {
+     case 5230 .. 5559 : return "9M";
+     case 4910 .. 5229 : return "8M";
+     case 4600 .. 4909 : return "7M";
+     case 4300 .. 4599 : return "6M";
+     case 4010 .. 4299 : return "5M";
+     case 3730 .. 4009 : return "4M";
+     case 3460 .. 3729 : return "3M";
+     case 3200 .. 3459 : return "2M";
+     case 2950 .. 3199 : return "1M";
+     case 2710 .. 2949 : return "1S";
+     case 2480 .. 2709 : return "2S";
+     case 2260 .. 2479 : return "3S";
+     case 2050 .. 2259 : return "4S";
+     case 1850 .. 2049 : return "5S";
+     case 1660 .. 1849 : return "6S";
+     case 1480 .. 1659 : return "7S";
+     case 1310 .. 1479 : return "8S";
+     case 1150 .. 1309 : return "9S";
+     case 1000 .. 1149 : return "10S";
+     case  860 ..  999 : return "11S";
+     case  730 ..  859 : return "12S";
+     case  610 ..  729 : return "13S";
+     case  500 ..  609 : return "14S";
+     case  400 ..  499 : return "15S";
+     default: return "15S";
+  }
+}
+
+
+int get_rating (int level)
+{
+   int i, rate;
+   float gain;
+   if (level != 0)
+   {
+      rate = 400;
+      for (i = 1; i <= level/5; i++)
+      {
+      	gain = 100 + (i - 1) * 10;
+      	rate = rate + gain;
+      }
+      if (rate > 2950)
+         rate = 2950;      
+   }
+
+   return rate;
+}
+
+float get_k (int rating)
+{
+   switch (rating)
+   {
+     case  400 ..  859 : return 40.0;
+     case  860 .. 1479 : return 36.0;
+     case 1480 .. 2259 : return 32.0;
+     case 2260 .. 3199 : return 28.0;
+     case 3200 .. 4009 : return 24.0;
+     case 4010 .. 4599 : return 20.0;
+     case 4600 .. 5229 : return 16.0;
+     case 5230 .. 5899 : return 12.0;
+     default : return 8.0;
+   }
+}
+
+// Abgehaengt am 29.03.2004 (Angel)
+void Calculate (object winner, object looser, int honour, int fatality)
+{
+	return;
+}
+
+/*
+void Calculate (object winner, object looser, int honour, int fatality)
+{
+  mixed raw_data;
+  mixed data;
+  mixed winner_i, looser_i;
+  string file_name, result, title, str;
+  int i, j, level, tabs;
+  float delta;
+  int a, b; // a .. winner, b .. looser
+  
+
+  // Datenstruktur: Nummer (int), Name (str), gewonnen (int), verloren (int), Duellpunkte (int), Rang (string)  
+  data = 0;
+    
+  if (fatality)
+  {
+     if (honour)
+     	file_name = (RANK "status_death_honour.txt");
+     else
+        file_name = (RANK "status_death.txt");
+  }
+  else
+  {
+     if (honour)
+     	file_name = (RANK "status_honour.txt");
+     else
+        file_name = (RANK "status_duel.txt");
+  }
+  
+  // Daten laden:  
+  raw_data = explode (reduce_whites(read_file(file_name)), "\r\n");
+  
+  for (i = 0; i < sizeof(raw_data); i++)
+      raw_data[i] = explode (raw_data[i], "\t");
+  
+  a = -1;
+  b = -1;
+  
+  data = raw_data;
+  for (i = 0; i < sizeof(raw_data); i++)
+  {
+      data[i][1] = raw_data[i][1];
+      if ( capitalize(winner->query_real_name()) == data[i][1])
+         a = i;
+      if ( capitalize(looser->query_real_name()) == data[i][1])
+         b = i;
+      data[i][2] = to_int(raw_data[i][2]);
+      data[i][3] = to_int(raw_data[i][3]);
+      data[i][4] = to_int(raw_data[i][4]);
+      data[i][5] = raw_data[i][5];
+  }
+
+  // Existieren die Spieler schon in der Datenbank?
+  if (a == -1)
+  {
+     winner_i = ({ 0, capitalize(winner->query_real_name()), 0, 0, get_rating(winner->QueryProp(P_LEVEL)), "?" });
+  }
+  else
+     winner_i = data[a];
+
+  if (b == -1)
+  {
+     looser_i = ({ 0, capitalize(looser->query_real_name()), 0, 0, get_rating(looser->QueryProp(P_LEVEL)), "?" });
+  }
+  else
+     looser_i = data[b];
+     
+  // Daten aendern:
+  
+  // Winner:
+  delta = get_k(winner_i[4]) * ( 1.0 - 1.0/(1.0+pwr(10.0,( to_float(looser_i[4] - winner_i[4]) )/400.0)));
+  winner_i[4] += to_int(delta+0.5);
+  winner_i[2] ++;
+  if ((winner_i[2]+winner_i[3]) < 10)
+  {
+     winner_i[5] = "?"+get_title(winner_i[4]);
+  }
+  else
+  {  
+     if ((winner_i[2]+winner_i[3]) == 10)
+        title = get_title(winner_i[4]);
+     else
+     {
+     	title = get_title(winner_i[4]);
+     	if ( title[strlen(title)-1 .. strlen(title)-1] == "M")
+     	{
+     	   str = title[0 .. strlen(title)-2];
+     	   level = to_int(str);
+     	   if (winner_i[5][strlen(winner_i[5])-1 .. strlen(winner_i[5])-1] == "M")
+     	   {
+     	      str = winner_i[5][0 .. strlen(winner_i[5])-2];
+     	      if (level < to_int(str))
+     	         title = winner_i[5]; // Der alte Titel ist hoeher als der neue!
+     	   }
+        }
+        else
+        {
+     	   str = title[0 .. strlen(title)-2];
+     	   level = to_int(str);
+     	   if (winner_i[5][strlen(winner_i[5])-1 .. strlen(winner_i[5])-1] == "S")
+     	   {
+     	      str = winner_i[5][0 .. strlen(winner_i[5])-2];
+     	      if (level > to_int(str))
+     	         title = winner_i[5]; // Der alte Titel ist hoeher als der neue!
+     	   }        	
+        }
+     }
+     winner_i[5] = title;
+  }
+  if (a == -1)
+     if (!pointerp(data))
+        data = ({ winner_i });
+     else 
+        data += ({ winner_i });
+  else
+     data[a] = winner_i;
+     
+  // Looser:
+  delta = get_k(looser_i[4]) * ( 0.0 - 1.0/(1.0+pwr(10.0,( to_float(winner_i[4] - looser_i[4]) )/400.0)));
+  looser_i[4] += to_int(delta-0.5); 
+  looser_i[3] ++;
+  if ((looser_i[2]+looser_i[3]) < 10)
+  {
+     looser_i[5] = "?"+get_title(looser_i[4]);
+  }
+  else
+  {
+     if ((looser_i[2]+looser_i[3]) == 10)
+        title = get_title(looser_i[4]);
+     else
+     {
+     	title = get_title(looser_i[4]);
+     	if ( title[strlen(title)-1 .. strlen(title)-1] == "M")
+     	{
+     	   str = title[0 .. strlen(title)-2];
+     	   level = to_int(str);
+     	   if (looser_i[5][strlen(looser_i[5])-1 .. strlen(looser_i[5])-1] == "M")
+     	   {
+     	      str = looser_i[5][0 .. strlen(looser_i[5])-2];
+     	      if (level < to_int(str))
+     	         title = looser_i[5]; // Der alte Titel ist hoeher als der neue!
+     	   }
+        }
+        else
+        {
+     	   str = title[0 .. strlen(title)-2];
+     	   level = to_int(str);
+     	   if (looser_i[5][strlen(looser_i[5])-1 .. strlen(looser_i[5])-1] == "S")
+     	   {
+     	      str = looser_i[5][0 .. strlen(looser_i[5])-2];
+     	      if (level > to_int(str))
+     	         title = looser_i[5]; // Der alte Titel ist hoeher als der neue!
+     	   }        	
+        }
+     }
+     looser_i[5] = title;
+  }
+  if (b == -1)
+     if (!pointerp(data))
+        data = ({ looser_i });
+     else 
+        data += ({ looser_i });
+  else
+     data[b] = looser_i;
+     
+  // Daten zurueckschreiben:
+  data = SortField(data, 4);
+  
+  result = "";
+  
+  // Neues Ranking:
+  j = sizeof(data);
+  for (i = j-1; i >= 0 ; i--)
+  {
+      if (strlen(data[i][1]) > 7)
+         tabs = 1;
+      else
+         tabs = 2;
+      // result += to_string(j-i) + " " + data[i][1] + " " + to_string(data[i][2]) + " " + to_string(data[i][3]) + " " + to_string(data[i][4]) + " " + data[i][5] + "\r\n";
+      result += sprintf ("%4d.\t%s%*'\t's%4d\t%4d\t%5d\t%s\r\n", j-i, data[i][1], tabs, "",  data[i][2], data[i][3], data[i][4], data[i][5]); 
+  }
+
+  // Alte Datei loeschen:
+  rm (file_name);
+  
+  // Neue Daten zurueckschreiben
+  write_file (file_name, result);
+
+}
+*/

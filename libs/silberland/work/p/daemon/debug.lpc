@@ -1,0 +1,235 @@
+// SilberLand MUDlib
+//
+// /p/daemon/debug.c -- handle debug messages
+//
+// $Date: 2009/09/04 08:19:16 $
+/* $Revision: 1.6 $
+ * $Log: debug.c,v $
+ * Revision 1.6  2009/09/04 08:19:16  Woody
+ * Etwas mehr Infos bei stats Anzeige, max. 20 statt bisher 10 auf einmal
+ *
+ * Revision 1.5  2004/11/04 04:59:24  Feyaria
+ * from-to bei stats anzeige
+ *
+ * Revision 1.4  2000/11/26 01:30:37  Woody
+ * "" und Renews werden jetzt von der Statistik ausgeklammert
+ *
+ * Revision 1.3  2000/11/07 01:02:13  Woody
+ * Savefile fuer Statistik mitfuehren, Debug/Entwicklung getrennt
+ *
+ * Revision 1.2  2000/11/06 00:48:40  Woody
+ * join-by-send Problem geloest, Backtrace filtern, Statistiken fuehren
+ *
+ * Revision 1.1  1998/09/20 13:13:34  Woody
+ * Initial revision
+ *
+ */
+
+#include <daemon.h>
+
+#define DEBUG_FILE ("/"+__HOST_NAME__+".debug.log")
+#define DSTAT_SAVEFILE "/p/daemon/save/debugstats"
+#define TOP_N 5
+
+
+// debug file markers
+nosave int d_start, d_end;
+nosave int e_start, e_end;
+
+// statistical data
+int stDate;
+int stErrs;
+mapping stWiz;
+
+
+void create()
+{
+  seteuid(getuid());
+  if (is_clone(this_object())) return;
+  d_start = d_end = e_start = e_end = file_size(DEBUG_FILE);
+
+  if (!restore_object(DSTAT_SAVEFILE))
+  {
+    stDate = time();
+    stErrs = 0;
+    stWiz = ([]);
+    save_object(DSTAT_SAVEFILE);
+  }
+}
+
+
+int remove() {
+  save_object(DSTAT_SAVEFILE);
+  destruct(this_object());
+  return 1;
+}
+
+
+string name() { return "<Debugger>"; }
+
+
+int check(string ch, object pl, string cmd, string txt)
+{
+  mixed tmp;
+
+  if (ch != "Debug" && ch != "Entwicklung")
+    return 0;
+
+  if(!objectp(pl) || !query_once_interactive(pl) || query_wiz_level(pl) < 15)
+    return 0;
+
+  switch(cmd)
+  {
+    case C_FIND:
+    case C_LIST:
+    case C_JOIN:
+    case C_LEAVE:
+      return 1;
+
+    case C_SEND:
+      // Wer (noch) nicht auf dem Kanal ist, bekommt auch keine
+      // Ausgabe - sonst gibt es selbige doppelt, da der CHMASTER
+      // einen automatisch den Kanal betreten laesst ...
+      if ( !objectp(pl) || !pointerp(tmp = pl->QueryProp(P_CHANNELS)) ||
+           member( tmp, lower_case(ch) ) == -1 )
+        return 0;
+
+      switch(lower_case(explode(txt," ")[0]))
+      {
+        case "backtrace":
+        {
+          string bt;
+          int start, end;
+
+          if ( ch == "Debug" ){
+            start = d_start;
+            end = d_end;
+          }
+          else {
+            start = e_start;
+            end = e_end;
+          }
+
+          if (start >= end)
+            bt = "["+ch+":] Kein Backtrace verfuegbar!\n";
+          else
+          {
+            // Unwichtiges rausfiltern.
+            bt = regreplace( read_bytes( DEBUG_FILE, start, end - start ),
+                             "(Misplaced|current_object|"
+                             "Connection|Host)[^\n]*\n",
+                             "", 1 );
+            bt = "["+ch+":] -- BACKTRACE BEGIN --\n"
+               + bt
+               + "["+ch+":] -- BACKTRACE END --\n";
+          }
+          call_out(symbol_function("Message", pl), 0, bt);
+          break;
+        }
+        case "stats":
+        {
+          string *buggers;
+          string top;
+          int i,n;
+          int from, to;
+
+          if (sscanf(txt, "stats %d %d", from, to) != 2 || 
+              from > to || from < 0 || to < 0 || to > sizeof(stWiz) ||
+              to - from > 20)
+          {
+            from = 1;
+            to = TOP_N;
+          }
+
+          buggers = sort_array( m_indices(stWiz),
+              lambda(({'x, 'y}),
+                ({#'<,
+                  ({#'[, stWiz, 'x}),
+                  ({#'[, stWiz, 'y}) }) ) )[(from-1)..(to-1)];
+
+          if (sizeof(buggers))
+          {
+            for (i=n=0; i<sizeof(buggers); i++)
+              if (strlen(buggers[i]) > n)
+                n = strlen(buggers[i]);
+
+            n = (n > 48) ? 50 : n + 2;
+            top = sprintf("Top-Buggerliste von %d bis %d (%d insgesamt):\n",
+                i = from, to, sizeof(m_indices(stWiz)));
+            while (sizeof(buggers))
+            {
+              top += sprintf("%3d. %*s : %4d Meldung%s\n",
+                             i++, n, buggers[0], stWiz[buggers[0]],
+                             stWiz[buggers[0]]!=1 ? "en" : "");
+              buggers=buggers[1..];
+            }
+          }
+          else
+            top = "";
+
+          pl->Message(
+              break_string( sprintf(
+              "Statistiken fuer die Ebene Debug/Entwicklung:\n"
+              "Seit %s liegen folgende Daten vor:\n"+
+              "%d Debug-Meldungen insgesamt (im Schnitt %.2f/Stunde).\n%s",
+              dtime(stDate), stErrs,
+              (stDate+3600 < time() ?   // mind. 1 Stunde vergangen?
+                3600.0 * stErrs / (time()-stDate) :     // ja, calc!
+                to_float(stErrs)), top),        // nein, stErrs nehmen.
+              78, "["+ch+":] ", 1));
+
+          break;
+        }
+        default:
+          pl->Message(
+              break_string(
+              "Hilfe...\n"
+              "Folgende Kommandos stehen zur Verfuegung:\n"
+              "'backtrace'          -- sendet den Backtrace zum Fehler\n"
+              "'stats <from> <to>'  -- zeigt ein paar Statistiken an\n"
+              "'hilfe'              -- sendet diese Hilfeseite\n",
+              78, "["+ch+":] ", 1));
+          break;
+      }
+  }
+  return 0;
+}
+
+
+void ChannelMessage(mixed a)
+{
+  int fs;
+
+  // Statistik sammeln
+  stErrs++;
+  if (pointerp(a) && sizeof(a)>=3 && stringp(a[1]))
+    if (strlen(a[1]) && a[1][0..3]!="Gast" && a[2][0..8]!="RENEWING:")
+      stWiz[a[1]]++;
+    else ;
+  else
+    stWiz["Unbekannt"]++;
+
+  // Neue Daten abspeichern
+  save_object(DSTAT_SAVEFILE);
+
+  fs = file_size(DEBUG_FILE);
+  switch( a[0] )
+  {
+    case "Debug":
+      if ( fs > d_end && fs > e_end )
+      {
+        d_start = d_end > e_end ? d_end : e_end;
+        d_end = fs;
+      }
+      break;
+
+    case "Entwicklung":
+      if ( fs > d_end && fs > e_end )
+      {
+        e_start = e_end > d_end ? e_end : d_end;
+        e_end = fs;
+      }
+      break;
+  }
+}
+

@@ -1,0 +1,348 @@
+//=========================================================================
+//
+// File:    master.c
+// Created by Gwenshara@SL
+//
+// Project: Lagerraum
+//
+//=========================================================================
+
+#include <ansi.h>
+#include "store.h"
+
+#define BSI(x,y) break_string(x,78,y,1)
+
+#define LOGLEVEL 15
+
+string *listener;
+mapping store;
+string month;
+
+int EmptyStore(object pl);
+
+void create()
+{
+  if(is_clone(this_object()))
+  {
+    destruct(this_object());
+    return;
+  }
+
+  seteuid(getuid(this_object()));
+
+  listener    = ({"gwenshara"});
+  store       = ([ ]); 
+  month       = explode(ctime(), " ")[1];
+
+  return;
+}
+
+
+void Msg(string s)
+{
+  object pl;
+  int i;
+  string str;
+
+  write_file(LOGFILE,ctime()+": "+s+".\n");
+
+  i = sizeof(listener);
+  while(i--)
+  {
+    pl = find_player(listener[i]);
+
+    if(objectp(pl) && interactive(pl) && IS_WIZARD(pl))
+    {
+      str = BSI(s+".","LAGERRAEUME: ");
+      if(pl->QueryProp(P_TTY)) str = ANSI_BOLD+ANSI_RED+str+ANSI_NORMAL;
+      tell_object(pl,str);
+    }
+  }
+}
+
+int ActivateStore(object pl, int weeks)
+{
+  if(!PO) return -2;
+  if(PO != find_object(VERWALTUNG)) return -1; //Nur die verwaltung darf
+  if(member(store, getuid(pl))) return -1;
+  if(!call_other("/obj/erzsehermaster", "check", "Erzseher", pl, "ObjAdding", "try"))
+    return 0;
+  
+  call_other(LAGERRAUM+getuid(pl), "???"); //Lagerplatz erzeugen
+  store[getuid(pl)] = (time()+weeks*TIME_WEEK); // Mietdauer merken
+  pl->AddExp(-(weeks*PRICE)); // Bezahlen
+  Msg(ctime()+file_name(PO)+" erzeugt neues Lager fuer "+file_name(pl));
+
+  return 1;  
+}
+
+int DisactivateStore(object pl)
+{
+  if(!PO) return -2;
+  if(PO != find_object(VERWALTUNG)) return -1; //Nur die verwaltung darf
+  if(!find_object(LAGERRAUM+getuid(pl))) return -2;
+
+  EmptyStore(pl); //Lagerplatz leeren
+  call_other(LAGERRAUM+getuid(pl), "remove", 1);
+  store=m_delete(store, getuid(pl));
+  Msg(ctime()+file_name(PO)+" loescht das Lager von "+file_name(pl));
+  return 1;
+}
+
+int AddObject(object ob, object pl)
+{
+  int n;
+  
+  if(!PO) return -2;
+  if(PO != find_object(VERWALTUNG)) return -1; //Nur die verwaltung darf
+  if(!find_object(LAGERRAUM+getuid(pl))) return -2;
+
+  if(!call_other("/obj/erzsehermaster", "check", "Erzseher", pl, "ObjAdding", "try"))
+  {
+    tell_object(pl, "Das kannst Du nur als Erzseher tun!\n");
+    return 1;
+  }
+  
+  n = sizeof(all_inventory(find_object(LAGERRAUM+getuid(pl))));
+  if(n>=(int) pl->QueryProp(P_LEVEL)/STEPS)
+  {
+    tell_object(pl, "Dein Spind ist leider schon zu voll!\n");
+    return 1;
+  }
+  
+  ob->move(LAGERRAUM+getuid(pl), M_PUT|M_SILENT); //Objekt zur Aufbewahrung bewegen
+  return 1;
+}
+
+int RemoveObject(object ob, object pl)
+{
+  if(!PO) return -2;
+  if(PO != find_object(VERWALTUNG)) return -1; //Nur die verwaltung darf
+  if(!find_object(LAGERRAUM+getuid(pl))) return -2;
+
+
+  if(ME_TOO_HEAVY == ob->move(TP, M_GET) )
+  {
+    tell_object(pl, BS("Da Dir "+ob->name()+" zu schwer ist, laesst Du "+
+		ob->QueryPronoun(3)+" fallen."));
+    tell_object(ENV(pl), BS(pl->Name(WER)+" laesst "+ob->name()+" fallen."));
+    ob->move(ENV(pl), M_NOCHECK);
+    return 1;
+  }
+  
+  tell_object(pl, BS("Du nimmst "+ob->name()+" aus Deinem Spind."));
+  return 1;
+}
+
+int EmptyStore(object pl)
+{
+  object *inv;
+  int i, n;
+  
+  if(!PO) return -2;
+  if(PO != find_object(VERWALTUNG)) return -2; //Nur die verwaltung darf
+  if(!find_object(LAGERRAUM+getuid(pl))) return -1;
+
+  inv = all_inventory(find_object(LAGERRAUM+getuid(pl)));
+  n   = sizeof(inv);
+
+  for(i=0; i<n; i++)
+  {
+    RemoveObject(inv[i], pl);
+  }
+
+  return 1;
+}
+
+string QueryStoreInv(object pl)
+{
+  object *inv;
+  string s;
+  int n, i;
+
+  inv = all_inventory(find_object(LAGERRAUM+getuid(pl)));
+  s   ="Folgendes erkennst Du in Deinem Spind:\n";
+  n   = sizeof(inv);
+
+  if(n<1)  s+="Du hast derzeit nichts in Deinem Spind gelagert!\n";
+  else
+  {
+    for(i=0; i<n; i++)
+    {
+       s += inv[i]->short();
+    }
+  }
+  return s;
+}
+
+int KillStore(string uid)
+{
+  object *inv;
+  int i, n;
+  
+//  if(!PO) return -1;
+//  if(PO != find_object(VERWALTUNG) || PO != TO) return -2; //Nur die verwaltung darf
+  if(!find_object(LAGERRAUM+uid)) return -3;
+  if(!present("\nfreientnahme", find_object(VERWALTUNG))) return -4;
+
+  inv = all_inventory(find_object(LAGERRAUM+uid));
+  n   = sizeof(inv);
+
+  for(i=0; i<n; i++)
+  {
+    inv[i]->move(present("\nfreientnahme", find_object(VERWALTUNG)));
+  }
+
+  call_other(LAGERRAUM+uid, "remove", 1);
+  tell_object(find_object(VERWALTUNG), "Der Spind von "+CAP(uid)+" wird entleert.\n");
+  Msg("Zwangsraemung von "+uid);
+  return 1;
+}
+
+int SendMail(string uid)
+{
+  string *reok;
+  int ret;
+  
+  if(!find_player(uid))
+    if(!find_netdead(uid)) return -1;
+	
+  reok = ({});
+  reok = call_other("/secure/mailer", "DeliverMail",({
+	     "Die Lagerverwaltung",
+	     "Der Lagerbeamte",
+	     uid,
+	     LAGERMAGIER,
+	     ({""}),
+	     "Dein Schliessfach wurde aufgeloest!",
+	     ctime(),
+	     "aufloesungsschreiben",
+		 "Hoch geschaetzter Mieter,\n\n"
+	     "Die vereinbarte Mietdauer Deines Schliessfachs ist ausgelaufen!\n"
+		 "Die gelagerten Sachen kannst aus der Entnahmekiste bei der\n"
+		 "Schatzkammer der Wuestenzwerge entnehmen!\n\n"
+	     "Mit freundlichen Gruessen,\n"
+	     "Haschram, Schatzmeister der Wuestenzwerge"}));
+
+  ret = sizeof(reok);		 
+  return ret;
+}
+
+int SendWarnMail(string uid)
+{
+  string *reok;
+  int ret;
+  
+  if(!find_player(uid))
+    if(!find_netdead(uid)) return -1;
+	
+  reok = ({});
+  reok = call_other("/secure/mailer", "DeliverMail",({
+	     "Die Lagerverwaltung",
+	     "Der Lagerbeamte",
+	     uid,
+	     LAGERMAGIER,
+	     ({""}),
+	     "Dein Mietvertrag laeuft aus!",
+	     ctime(),
+	     "aufloesungsschreiben",
+		 "Hoch geschaetzter Mieter,\n\n"
+	     "Der Mietvertrag Deines Schliessfachs bei den Wuestenzwergen wird\n"
+		 "in den naechsten Tagen auslaufen!\n\n"
+		 "Solltest Du nicht innerhalb der naechsten Tage vorbei kommen, und\n"
+		 "ihn erneuern, wird dein Schliessfach geraeumt!\n\n"
+	     "Haschram, Schatzmeister der Wuestenzwerge"}));
+
+  ret = sizeof(reok);		 
+  return ret;
+}
+
+
+void Filter()
+{
+  int i, n;
+  string *people;
+  string str;
+
+  n           = m_sizeof(store);
+  people      = m_indices(store);
+  str         = "";
+  
+  for(i=0; i<n; i++)
+  {
+    if(!find_player(people[i]) && !find_netdead(people[i]))
+    {
+      KillStore(people[i]);
+      SendMail(people[i]);
+    }
+    else if(time() >= store[people[i]])
+    {
+      KillStore(people[i]);
+      SendMail(people[i]);
+    }
+  }
+}
+
+void Warn()
+{
+  int i, n;
+  string *people;
+  
+  n      = m_sizeof(store);
+  people = m_indices(store);
+  
+  for(i=0; i<n; i++)
+  {
+    if(store[people[i]]-time() < 3*TIME_DAY)
+	  SendWarnMail(people[i]);
+  }
+  return;
+}
+
+void CallStorageRooms()
+{
+  int i, n;
+  string *people;
+  
+  n      = m_sizeof(store);
+  people = m_indices(store);
+  
+  for(i=0; i<n; i++)
+  {
+    call_other(LAGERRAUM+people[i], "???");
+  }
+  return;
+}
+
+void reset()
+{
+  Filter(); // Nicht benutzte Lagerplaetze loeschen
+  Warn(); // Warnen, wenn Lagerplaetze in den naechsten drei Tagen auslaufen
+  CallStorageRooms(); // Dummy calls auf die Lagerraeume, damit sie nicht
+                      // verschwinden
+}
+
+mixed people()
+{
+  return find_object(m_indices(store)[0]);
+}
+
+int RenewDuration(object pl, int weeks)
+{
+  if(!PO) return -2;
+  //if(PO != find_object(VERWALTUNG) &&
+  //   !IS_ARCH(PO)) return -1; //Nur die verwaltung darf
+  if(!member(store, getuid(pl))) return -3;
+  
+  store[getuid(pl)] = (store[getuid(pl)]+weeks*TIME_WEEK); // Mietdauer verlaengern
+  pl->AddExp(-(weeks*PRICE)); // Bezahlen
+  
+  Msg("Mietdauer von "+file_name(pl)+"  durch "+file_name(PO)+" um "+
+      weeks+" Wochen verlaengert.");
+  return 1;
+}
+
+mapping GetAllStorager()
+{
+  return store;
+}

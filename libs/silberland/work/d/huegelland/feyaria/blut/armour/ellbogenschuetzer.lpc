@@ -1,0 +1,120 @@
+// /d/gebirge/feyarai/blut/armour/ellbogenschuetzer.c 
+// Stachelbewehrte Ellbogenschuetzer fuer den Schlachtenwueter
+// 97-04-20  Feyaria@SilberLand
+
+#include "../def.h"
+
+inherit "std/armour";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <new_skills.h>
+
+#define COST 8 
+int geladen;
+
+#ifndef AT_BRACERS
+#define AT_BRACERS AT_MISC
+#define BRACERS_AC 0
+#else
+#define BRACERS_AC 4
+#endif
+
+create()
+{
+  if( !is_clone(TO) ) return;
+  ::create();
+
+  SetProp(P_SHORT, "Stachelbewehrte Ellbogenschuetzer");
+  SetProp(P_LONG, BS( 
+    "Stachelbewehrte Ellbogenschuetzer wie sie nur ein Schlachtenwueter "
+    "verwendet.") );
+  SetProp(P_NAME, ({"die Ellbogenschuetzer", "der Ellbogenschuetzer",
+                    "den Ellbogenschuetzern", "die Ellbogenschuetzer"}) );
+  SetProp(P_INFO, BS(
+    "Mit dem Kommando 'ellbogenspiesse <gegner>' kannst Du im Kampf Deinem "
+    "Gegner mittels Ellbogenstoss Schaden zufuegen. Das ist aber so schwer, "
+    "dass man dazu "+COST+" Magiepunkte fuer die Konzentration braucht.") );
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_ARTICLE, 0);
+  AddId( ({"ellbogenschuetzer"}) );
+
+  SetProp(P_ARMOUR_TYPE, AT_BRACERS );
+  SetProp(P_AC, BRACERS_AC);
+  SetProp(P_MATERIAL, ({MAT_METAL, MAT_LEATHER}) );
+  SetProp(P_WEIGHT, 600);
+  SetProp(P_VALUE, 300);
+  SetProp(P_NOBUY, 0);
+
+  SetProp(P_WEAR_RESTRICTIONS, ([A_STR:17, A_DEX:18, P_XP:200000]) );
+
+/*  SetProp(P_COMBATCMDS, (["ellbogenspiesse %s":
+      ([C_MIN:11,C_AVG:23,C_MAX:35,C_DTYPES:({DT_PIERCE}),
+      C_SPCOST:COST, C_REFRESH:300, C_READY:"bereit"])]));
+*/
+
+  AddCmd("ellbogenspiesse", "spiessen");
+  aufladen();
+}
+
+int spiessen(string str, int fastload)
+{
+  object enemy;
+
+  notify_fail("Wen moechtest Du mit Deinen Ellbogenspitzen aufspiessen?\n");
+  if( stringp(str) && (enemy=present(str, environment(TP))) )
+  {
+    if (!QueryProp(P_WORN))
+    {
+      write("Du musst dazu die Ellbogenschuetzer anziehen!\n");
+      return 1;
+    }
+    if (!geladen)
+    {
+      write("Du musst Dich erst von Deinem letzten Spiessen erholen!\n");
+      return 1;
+    }
+    if (TP->QueryProp(P_SP)<COST)
+    {
+      write("Du hast nicht genug Magiepunkte dafuer!\n");
+      return 1;
+    }
+    if (PL->QueryProp(P_ATTACK_BUSY))
+    {
+      write("He! Nicht so schnell!\n");
+      return 1;
+    }
+    PL->SetProp(P_ATTACK_BUSY, 1);
+    printf("Du gibst %s einen spiessigen Ellbogenstoss.\n", enemy->name(WEM));
+    say(sprintf(BS("%s gibt %s einen spiessigen Ellbogenstoss."), 
+       CAP(TPN), enemy->name(WEM) ), enemy );
+    tell_object(enemy, CAP(TPN)+" gibt Dir einen spiessigen Ellbogenstoss.\n");
+    enemy->Defend(111+random(500), DT_PIERCE,
+                  ([SP_NAME:"Ellbogenspiesser", SP_SHOW_DAMAGE:1]), TP);
+    TP->restore_spell_points(-COST);
+    if (fastload) return 1;
+    if (random(200)==13)
+    {
+      write("Leider brechen die Stacheln von Deinen Ellbogenschuetzern ab.\n"
+            "Wuetend wirfst Du sie weg.\n");
+      remove(1); return 1;
+    }
+    call_out("aufladen", 300);  // 5 Minuten Ladezeit
+    geladen = 0;
+    return 1;
+  }
+  else
+    return 0;
+}
+
+void aufladen()
+{
+  geladen = 1;
+}
+
+int bereit()
+{
+  return (QueryProp(P_WORN) && geladen);
+}
+

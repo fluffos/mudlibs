@@ -1,0 +1,132 @@
+#include "/secure/wizlevels.h"
+#include <properties.h>
+#include <language.h>
+#include <config.h>
+#include <mnpc.h>
+#include <moving.h>
+#include <defines.h>
+#include <moredef.h>
+#include "../rabbit.h"
+ 
+nosave mapping rabbit_map=([ ]);
+nosave mapping kills_by_players=([ ]);
+nosave int max_rabbits;
+nosave int event_in_progress, last_amount_check, solved;
+nosave int last_gender=MALE;
+nosave string region;
+nosave int max_gen=1;
+
+int create() {
+  if (is_clone(this_object())) {
+    destruct(this_object());
+    return 1;
+  } 
+  seteuid(getuid(this_object())); 
+}
+
+int CloneRabbitForStart(object room)
+{
+  object ob;
+  if (!room) return 0;
+  ob=clone_object(RABBITS_NEW);
+  if(last_gender==0) last_gender=MALE;
+  if(last_gender==MALE) 
+  {
+    ob->set_sex(FEMALE);
+    last_gender=FEMALE;
+  }
+  else 
+  {
+    ob->set_sex(MALE);
+    last_gender=MALE;
+  }
+  if(!region) region="/";
+  rabbit_map+=([file_name(ob):time()+random(5)]);
+  ob->set_exhausted(time()+6);
+  ob->move(room, M_GO);
+  return 1;
+}
+
+void move_loop() {
+  string *rab;
+  int x,y;
+  rab=m_indices(rabbit_map);
+  while(sizeof(rab)) {
+    x=sizeof(rab);
+    if(x <= 150) {
+      call_out("move_rabbits", 0, rab[0..x-1]);
+      rab=({});
+    }
+    else {
+      call_out("move_rabbits", 0, rab[0..149]);
+      rab=rab[150..x-1];
+    }
+    y++;
+    if(y > 300) break;
+  }
+  call_out("move_loop", 2);
+  return ;
+}
+
+nosave int move_rabbits(string *rab) {
+  int i;
+  object rabbit;
+  rab=m_indices(rabbit_map);
+  TELL("angrox", sprintf("ANZAHL KARNICKEL: %d\n", sizeof(rab)));
+  for(i=sizeof(rab)-1; i>=0;i--) {
+    if(catch(rabbit=find_object(rab[i]))) {
+      TELL("angrox", sprintf("FEHLER RABBIT! rab[i]= %s, i= %d, sizeof(rab) = %d\n", rab[i], i, sizeof(rab)));
+      TELL("angrox", sprintf("rab[i-1]= %s\n", rab[i-1]));
+      break;
+    }
+    if(!objectp(rabbit)) {
+      rabbit_map=m_delete(rabbit_map, rab[i]);
+      continue;
+    }
+    if(rabbit_map[rab[i]] <= time()) {
+      rabbit->move_random();
+      rabbit_map[rab[i]]=time()+(random(4)*2);
+    }
+  }
+}
+
+/*
+//  1 ... Rabbit wird geclont
+//  0 ... Max Anzahl erreicht
+// -1 ... Eltern sind nicht eingetragen oder 
+          vater==mutter
+*/
+mixed CloneRabbit(int parent_gen)
+{
+  object ob;
+  int lvl;
+  if(!max_rabbits) max_rabbits=250;
+  if(sizeof(rabbit_map)>=max_rabbits) return 0;
+  ob=CLONEOB(RABBITS_NEW);
+  if(last_gender==0) last_gender=MALE;
+  if(last_gender==MALE) 
+  {
+    ob->set_sex(FEMALE);
+    last_gender=FEMALE;
+  }
+  else 
+  {
+    ob->set_sex(MALE);
+    last_gender=MALE;
+  }
+  ob->set_exhausted(time()+6);
+  if((parent_gen+1) > max_gen)
+    max_gen=parent_gen+1;
+  ob->AddGen(parent_gen);
+  if(!random(4)) {
+    lvl=ob->QueryProp(P_LEVEL)+1;
+    ob->SetLevel(lvl<=10?lvl:10);
+  }
+  rabbit_map+=([file_name(ob):time()+random(10)]);
+
+  return ob;
+}
+
+mixed test123() {
+  return rabbit_map;
+}

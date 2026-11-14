@@ -1,0 +1,169 @@
+//=========================================================================
+//
+// File:    dung_01_07.c
+// Created by Speedy
+//
+// Project: Sarumans Quest (Finde die verlorene Schriftrolle)
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit ROOM "dung-inh";
+
+int nummer;
+
+void create()
+{
+  ::create();
+
+  ltext2 = "In der Mitte des Raumes steht ein kleines Podest.";
+
+  AddDetail( ({"podest"}),
+    "Das Podest ist relativ klein, an der Seite ist eine Tafel und oben "
+    "eine Glaskuppel. "
+  );
+
+  AddDetail( ({"tafel"}),
+    "Auf der Tafel steht: CODE EINSTELLEN. Daneben siehst Du ein "
+    "Zahlenschloss. "
+  );
+
+  AddSpecialDetail( ({"zahlenschloss","schloss"}), "detail_schloss" );
+  AddSpecialDetail( ({"kuppel","glaskuppel"}),     "detail_kuppel" );
+  AddSpecialDetail( ({"muenze"}),                  "detail_muenze" );
+
+  AddCmd( ({"stell","stelle"}),  "cmd_stellen" );
+  AddCmd( CMD_NEHMEN,            "cmd_nehmen" );
+
+  AddExit( "osten", GETEXIT("02_07") );
+
+  nummer=random(10000);
+}
+
+void init()
+{
+  ::init();
+  if(TP && interactive(TP))
+  {
+    nummer = random(10000);
+    while(nummer == SMASTER->QueryCode2(TPUID)) nummer == random(10000);
+    if(SMASTER->QueryStatus(TPUID, S_KUPPEL_AUF))
+      nummer = SMASTER->QueryCode2(TPUID);
+  }
+}
+
+string detail_schloss(string str)
+{
+  return "Im Moment is die Nummer "+nummer+" eingestellt.\n";
+}
+
+string detail_muenze(string str)
+{
+  if(SMASTER->QueryStatus(TPUID,S_KUPPEL_AUF))
+  {
+    if(!SMASTER->QueryFlag(TPUID,F_GET_MUENZE_G))
+      return "Unter der offen Kuppel liegt eine Muenze.\n";
+    return "Sowas siehst Du da nicht!\n";
+  }
+
+  if(!SMASTER->QueryFlag(TPUID,F_GET_MUENZE_G))
+    return "Unter der geschlossenen Kuppel liegt eine Muenze.\n";
+
+  return "Sowas sieht Du da nicht!\n";
+}
+
+string detail_kuppel(string str)
+{
+  if(SMASTER->QueryStatus(TPUID,S_KUPPEL_AUF))
+  {
+    if(!SMASTER->QueryFlag(TPUID,F_GET_MUENZE_G))
+      return "Unter der offen Kuppel liegt eine Muenze.\n";
+    return "Die Kuppel ist offen.\n";
+  }
+
+  if(!SMASTER->QueryFlag(TPUID,F_GET_MUENZE_G))
+    return "Unter der geschlossenen Kuppel liegt eine Muenze.\n";
+
+  return "Die Kuppel ist geschlossen.\n";
+}
+
+int cmd_stellen(string str)
+{
+  int code;
+  string s;
+
+  notify_fail( "Syntax: stelle code <nummer> ein.\n" );
+  if(!str || str == "") return 0;
+
+  if(sscanf(str,"code %d ein",code) != 1) return 0;
+
+  if(nummer == code)
+  {
+    TELLPLAYER("Das Zahlenschloss ist schon auf "+nummer+" eingestellt.\n");
+    return 1;
+  }
+
+  nummer = code;
+  s = "Du stellst die Nummer "+code+" am Zahlenschloss ein. ";
+
+  if(nummer == SMASTER->QueryCode2(TPUID))
+  {
+    if(SMASTER->QueryStatus(TPUID,S_KUPPEL_AUF))
+    {
+      s += "Nichts passiert. ";
+    }
+    else
+    {
+      s += "Die Kuppel oeffnet sich. ";
+      SMASTER->SetStatus(TPUID,S_KUPPEL_AUF);
+    }
+
+  }
+  else
+  {
+    if(SMASTER->QueryStatus(TPUID,S_KUPPEL_AUF))
+    {
+      s += "Die Kuppel schliesst sich. ";
+      SMASTER->ClearStatus(TPUID,S_KUPPEL_AUF);
+    }
+    else
+    {
+      s += "Nichts passiert. ";
+    }
+  }
+
+  TELLPLAYER(BS(s));
+  return 1;
+}
+
+int cmd_nehmen(string str)
+{
+  object ob;
+
+  if(SMASTER->QueryFlag(TPUID,F_GET_MUENZE_G)) return 0;
+
+  notify_fail("Was willst Du nehmen?\n");
+  if(!str || str == "") return 0;
+  if(!(str == "muenze")) return 0;
+
+  if(!SMASTER->QueryStatus(TPUID,S_KUPPEL_AUF))
+  {
+    TELLPLAYER("Die Kuppel ist geschlossen.\n");
+    return 1;
+  }
+
+  ob = clone_object(OBJ "muenze");
+  if(ob->move(TP,M_GET|M_SILENT) != 1)
+  {
+    TELLPLAYER("Du kannst aber nichts mehr tragen.\n");
+    ob->remove();
+    return 1;
+  }
+
+  TELLPLAYER("Du nimmst die Muenze an Dich.\n");
+  SMASTER->SetFlag(TPUID,F_GET_MUENZE_G);
+  ob->Customize("gruen");
+  return 1;
+}
+

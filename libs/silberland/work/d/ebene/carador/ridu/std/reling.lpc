@@ -1,0 +1,380 @@
+/****************************************************************************
+ reling.c, (C) 2002 by Carador for Silberland
+****************************************************************************/
+
+#pragma strong_types
+#include "../def.h"
+#include "../sys/ctype.h"
+#include <exploration.h>
+
+inherit RD_ROOM;
+
+object stolperer;
+
+string _query_int_long()
+{
+  string desc;
+
+  desc = QueryProp(P_RD_RELING_LONG);
+  if (RD_ROOMDIR"r4"->query_kaputt())
+    desc += " Hey, was ist das! Das Schiff hat ja totale Schlagseite nach "
+     "hinten. Du hast Muehe, nicht wegzurutschen.";
+  return break_string(desc);
+}
+
+void my_walk(string dir)
+{
+  object pl;
+
+  if (!stolperer || environment(stolperer) != this_object() ||
+      this_player() != stolperer) {
+    stolperer = 0;
+    return;
+  }
+  stolperer = 0;
+  if (IS_LEARNER(this_player()) || !random(2)) {
+    message(({ ({ "Gluecklicherweise", M_PL_VERB, 
+      ({ "kannst", "kann" }), M_PL, M_PL_AKK_SICH, "noch an der Reling "
+      "festhalten." }) }));
+    return;
+  }
+  message(({ ({ M_PL, M_PL_VERB, ({ "kannst", "kann" }),
+    "es nicht verhindern, dass ", M_PL_PRONOUN, " in eine andere "
+    "als die gewuenschte Richtung", M_PL_VERB, "taumel", "." }) }));
+  this_player()->command_me(dir);
+}
+
+nosave status my_stolper(mixed arg)
+{
+  string meld;
+  string theex;
+  mapping ex;
+  string *excmd;
+
+  if (stolperer && this_player() == stolperer) {
+    message("Du taumelst noch immer.");
+    return 0;
+  }
+
+  if ( stolperer ||
+       !this_player() ||
+       present("\nridu#moewe", environment(this_player())) ||
+       RD_ROOMDIR"r4"->query_kaputt() ||
+       !interactive(this_player()) ||
+       find_call_out("no_wind") > -1 ||
+       random(100) >= (QueryProp(P_RD_STOLPER_CHANCE)||5) ) return 1;
+
+  if (arg == "steuerbord" || arg = "backbord")
+    meld = capitalize(arg);
+  else meld = arg;
+  meld = "nach " + meld;
+
+  ex = QueryProp(P_EXITS)||([]);
+  excmd = (m_indices(ex)||({})) - ({ arg });
+  if (!sizeof(excmd)) return 1;
+  theex = excmd[random(sizeof(excmd))];
+  message(({ ({ "Gerade als ", M_PL, meld + " gehen", M_PL_VERB, 
+    ({ "willst", "will" }), ", erfasst ein heftiger Windstoss das Schiff, ",
+    "so dass es schwankt." }) }));
+  stolperer = this_player();
+  call_out("my_walk", 0, theex);
+  call_out("no_wind", 4);
+}
+
+
+status is_ridu_reling()
+{
+  return 1;
+}
+
+void init()
+{
+  ::init();
+}
+
+private mixed ueberschau_reling()
+{
+  return "\
+Zwar kannst Du nicht in die Kabine sehen, aber Du erkennst gut, wer sich\n\
+momentan an Deck aufhaelt:" +RD_LIBDIR"karte"->query_karte();
+}
+
+varargs string unt_unten(status fernrohr)
+{
+  object ob;
+  int i, nebel;
+  string text;
+  string htext;
+
+  htext = RD_LIBDIR"mover"->query_htext();
+  nebel = RD_LIBDIR"mover"->query_nebel(this_object());
+  ob = RD_TOOLS->load_object(RD_OBJDIR"wolke");
+  text = environment(ob)->int_long(this_player(), this_player());
+  if (!fernrohr) {
+    for (i=0; i<strlen(text); i++) 
+      if (random(100) < nebel && isalnum(text[i])) text[i..i] = ".";
+  } else {
+    return "\
+Wie durch ein Wunder ist da, wo Du nach unten schaust, absolut kein Nebel \
+und Du kannst ungetruebt gucken:\n" +
+      text + htext + "\n\
+Ausserdem erkennst Du, dass der Schiffsbug momentan Richtung " +
+    capitalize(RD_LIBDIR"mover"->query_dir_string()) + " zeigt.";
+  }
+  text = text + htext;
+  switch(nebel) {
+     case 0 :
+   return "\
+Hey, da hast Du ja beim Nach-Unten-Schauen ein totales Nebelloch erwischt. \
+Voellig ungetruebt schaust Du nach unten:\n" + text + "\n\
+Ausserdem erkennst Du, dass der Schiffsbug momentan Richtung " +
+    capitalize(RD_LIBDIR"mover"->query_dir_string()) + " zeigt.";
+     case 20 :
+   return "\
+Du schaust nach unten, es sind zwar ein paar Nebelschleier da, aber Du \
+erkennst doch ziemlich gut, was sich unten abspielt:\n" + text;
+     case 40 :
+   return "\
+Die Sicht koennte echt besser sein, denkst Du Dir. Aber troeste Dich, sie \
+koennte auch noch viel schlechter sein:\n" + text;
+     case 60 :
+  return "\
+Du schaust nach unten durch den Nebel. Allerdings hindern doch gewaltige \
+Nebelschleier eine ungetruebe Aussicht:\n" + text;
+     case 80 :
+  return "\
+Das ist ja eine ziemliche Suppe, denkst Du Dir, als Du durch die Wolke \
+nach unten schaust. Viel ist es ja nicht, was Du erkennen kannst:\n" + text;
+     case 100 :
+  return "\
+Herrje, ist das neblig hier. Du schaust zwar nach unten, aber eigentlich \
+kannst Du gar nichts erkennen:\n" + text;
+ }
+}
+
+string schlagseite_long()
+{
+  if (!RD_ROOMDIR"r4"->query_kaputt()) return 0;
+  return "\
+Das Schiff hat wirklich beachtliche Schlagseite nach hinten. Es geht \
+ziemlich stark bergab heckwaerts. Dort muss irgend etwas nicht in \
+Ordnung sein.";
+}
+
+string schiff_long()
+{
+  if (!RD_ROOMDIR"r4"->query_kaputt()) return "\
+Nunja, ein ganz normales hoelzernes Schiff, nicht zu klein, nicht zu gross, \
+es hat aussen rum eine Reling und in der Mitte eine Kabine. Und es kann \
+fliegen.";
+
+  return "\
+Das Schiff haengt total schief in der Luft. Es hat volle Schlagseite nach \
+hinten.";
+}
+
+
+void create()
+{
+  RD_ROOM::create();
+  SetProp(P_RD_RIDU_AREA,1);
+  SetProp(P_LIGHT, 1);
+  AddDetails(({
+    ({ "backbordseite", "steuerbordseite", "backbord", "steuerbord" }), "\
+Ja, so sprechen die Seeleute. Wobei Backbord die linke Seite des Schiffs \
+bedeutet und Steuerbord die rechte. Ich konnte mir das aber auch nicht merken. \
+Deshalb bekommt man es bei 'ueberblicke reling' auch mit angezeigt. Aber \
+Dank Woody gibt es eine Eselsbruecke: In Steue(r)bord kommt ein 'r' wie in \
+rechts vor.",
+    ({ "dank", "woody" }), "Gepriesen sei Woody!",
+    "eselsbruecke", "Gut, gell?",
+    "seite", "Welche nun?",
+    "linke seite", "Die heisst aber Backbord.",
+    "rechte seite", "Die heisst aber Steuerbord.",
+    ({ "seeleute", "seebaeren" }), "\
+Seeleute, man haette sicher auch Seebaeren schreiben koennen. Nicht jedoch \
+Seeloewen.",
+    "seeloewen", "Nein, ich sagte doch, NICHT Seeloewen.",
+    "schlagseite", #'schlagseite_long,
+    "himmel", "Ach ist das schoen hier, Du fuehlst Dich dem Himmel so nah. "
+      "Vielleicht liegt's dran, dass Du dem Himmel wirklich nah bist?",
+    "unten", #'unt_unten,
+    "boden", "Der Boden unter Deinen Fuessen besteht aus soliden Planken.",
+    ({ "fuesse", "fuessen" }), "Hattest Du nicht schon am Pier auf "
+     "Deine Fuesse gestarrt? Hast Du Fusspilz oder so?",
+    "fusspilz", "Ihhh!",
+    ({ "bohlen", "holzbohlen", "planke", "planken" }), 
+      "Massive, dicke Holzbohlen, eine neben der anderen.",
+    "gasse", "Sie fuehrt aussen um die Kabine herum um das gesamte Schiff.",
+    "holz", "\
+Das Holz sieht solide aus, ob es jetzt Eiche, Buche oder sonstwas ist, \
+das uebersteigt Dein Wissen.",
+    ({ "eiche", "buche" }), "Eiche, Buche, is eigentlich wurscht!",
+    ({ "wand", "kabinenwand" }), "\
+Eine gute, solide, hoelzerne Wand ohne jedwede Besonderheiten.",
+    "besonderheiten", "... OHNE JEDWEDE Besonderheiten.",
+    "reling", "\
+Die Reling fuehrt aussen um das ganze Schiff herum. Ein kleines Gelaender \
+hindert einen am Runterfallen aber keineswegs am Sachen-Ueber-Bord-Werfen \
+oder Nach-Unten-Schauen. Auch kannst Du versuchen, die Reling von hier aus \
+zu ueberblicken ('ueberblicke reling'). Und weil wir grad schon beim \
+Technischen sind: Mit 'rufe nach unten <text>' kannst Du etwas nach unten \
+rufen.",
+    "gelaender", "\
+Gluecklicherweise ist es da, denn sonst koennte man leicht ueber Bord \
+fallen.",
+    "schiff", #'schiff_long,
+    ({ "wolke", "nebel" }), "\
+Eine neblige Wolke umgibt das Schiff. Und diese Wolke scheint nicht \
+natuerlichen Ursprungs zu sein. Du vermutest, die Wolke soll das Schiff \
+vor neugierigen Augen tarnen.",
+    "kabine", "\
+Sie nimmt die gesamte Schiffsmitte ein. Irgendwo muss doch auch ein Eingang \
+sein? Hier auf jeden Fall nicht.",
+    "schiffsmitte", "\
+Eine Kabine, deren Eingang im hinteren Teil des Schiffs liegen muss, nimmt \
+die gesamte Schiffsmitte ein.",
+    ({ "teil", "hinteren teil" }), "Da ist wohl der Eingang zur Kabine.",
+    "eingang", "\
+Nein, hier ist kein Eingang, leider nicht, vielleicht woanders.",
+    "glueck", "\
+Wieso soll das eigentlich Glueck sein? Wenn's einer gern sonnig hat?",
+    ({ "kabinendach", "dach" }), "\
+Zum Glueck ist die Kabine ueberdacht, jawoll, aber Du kannst das Dach von \
+hier aus nicht erreichen."
+  }));
+  AddDetailAction(({ "reling" }), ({ "ueberblick <me>", "ueberblicke <me>", "ueberschau <me>",
+     "ueberschaue <me>" }), "ueberschau_reling", #'ueberschau_reling);
+  AddErrorMessage("ueberblicke", "Vielleicht die Reling ueberblicken?");
+  AddErrorMessage("ueberblick", "Vielleicht die Reling ueberblicken?");
+  AddErrorMessage("ueberschau", "Vielleicht die Reling ueberschauen?");
+  AddErrorMessage("ueberschaue", "Vielleicht die Reling ueberschauen?");
+  AddRule("glaube <text>", "glaube_fliegen", RD_LIBDIR"mover");
+  AddRule("glaub <text>", "glaube_fliegen", RD_LIBDIR"mover");
+  AddRule("meditier", "meditiere", RD_LIBDIR"mover");
+  AddRule("meditiere", "meditiere", RD_LIBDIR"mover");
+  AddRule("meditier <text>", "meditiere", RD_LIBDIR"mover");
+  AddRule("meditiere <text>", "meditiere", RD_LIBDIR"mover");
+  AddErrorMessage("glaub","Moechtest Du vielleicht ans Fliegen glauben?");
+  AddErrorMessage("glaube","Moechtest Du vielleicht ans Fliegen glauben?");
+  AddRule("schau <text>", "schau_unten");
+  AddRule("schaue <text>", "schau_unten");
+  AddRule("rufe nach unten <text>", "ruf_unten", RD_LIBDIR"mover");
+  AddRule("ruf nach unten <text>", "ruf_unten", RD_LIBDIR"mover");
+  AddRule("schleuder <object> ueber <text>","werf_sachen");
+  AddRule("schleudere <object> ueber <text>", "werf_sachen");
+  AddRule("werfe <object> ueber <text>", "werf_sachen");
+  AddRule("wirf <object> ueber <text>", "werf_sachen");
+  AddRule("wirf <object> runter", "werf_sachen");
+  AddRule("wirf <object> hinunter", "werf_sachen");
+  AddRule("wirf <object> nach unten", "werf_sachen");
+  AddRule("werfe <object> runter", "werf_sachen");
+  AddRule("werfe <object> hinunter", "werf_sachen");
+  AddRule("werfe <object> nach unten", "werf_sachen");
+  AddErrorMessage("werfe", "\
+Du koenntest etwas ueber Bord werfen.");
+  AddErrorMessage("wirf", "\
+Du koenntest etwas ueber Bord werfen.");
+  AddErrorMessage("schleuder", "\
+Du koenntest etwas ueber Bord schleudern.");
+  AddErrorMessage("schleudere", "\
+Du koenntest etwas ueber Bord schleudern.");
+  
+  AddSound(DEFAULT_SOUND,
+    "Ein fliegendes Schiff hoch oben in den Wolken hat schon was: "
+    "Es gleitet voellig geraeuschlos durch die Luefte.");
+
+  AddSound(({ "wolken", "luefte" }), "Wolken ziehen geraeuschlos \
+an Dir vorueber.");
+
+  AddSmell("luft", "Reine Luft. Die Luft ist rein.");
+
+  AddSmell(DEFAULT_SMELL,
+    "Was den Geruch angeht, so hat man beim Fliegen den Vorteil, dass man "
+    "frische, reine Luft atmen kann. Und nicht immer Gischt voll Salzgeschmack "
+    "ins Gesicht bekommt.");
+}
+
+status do_action(string verb, mapping args)
+{
+  object ob, victim, *liv;
+  switch(verb) {
+    case "werf_sachen":
+      if (args[G_TEXT] && member_array(args[G_TEXT], ({ "bord", "reling", "die reling" }))<0)
+        return 0;
+      if (environment(args[G_OBJECT]) != this_player() &&
+          args[G_OBJECT]->move(this_player(), M_GET) < 1) {
+          message("Das kannst Du nicht nehmen.");
+          return 1;
+      }
+      if (args[G_OBJECT]->move(this_object(), M_PUT) < 0) {
+        message("Das geht leider nicht.");
+        return 1;
+      }
+      if (args[G_OBJECT]->id("seil")) {
+        if (!(environment(this_player()))->wirf_seil_runter(args[G_OBJECT]))
+        message(({({ M_PL_BEST, M_PL_VERB, "schaff", " es nicht, ",
+          M_PL_POSS, "Seil ueber Bord zu werfen." }),
+          ({ M_WRITE, "Entweder die Reling ist hier zu hoch fuer Seile oder "
+            "Du leidest an voruebergehender Entkraeftung. Du beschliesst, "
+            "es an einer anderen Stelle nochmal zu probieren." }) }));
+        return 1;
+      }
+      ob = RD_TOOLS->load_object(RD_OBJDIR"wolke");
+      if (!environment(ob)) ob->move(RD_WOLKENSTART, M_NOCHECK|M_SILENT);
+      if (!args[G_OBJECT]->id("pferdeapfel")) {
+        args[G_OBJECT]->move(environment(ob), M_NOCHECK|M_SILENT);
+        message(({ ({ M_PL_BEST,
+             M_PL_VERB, "wirf", M_AKK, args[G_OBJECT],
+            "ueber die Reling. Kaum hoerbar " + 
+            (args[G_OBJECT]->IsPlural() ? "segeln" : "segelt"), " ",
+            M_PRONOUN, args[G_OBJECT], "nach unten." }),
+          ({ M_ROOM, environment(ob), "Zunaechst hoerst Du Sirren von "
+            "oben, anschliessend siehst Du ", args[G_OBJECT],
+            "durch die Luft fliegen und direkt vor Dir auf dem Boden "
+            "aufschlagen." }) }));
+        return 1;
+      }
+      call_other(RD_STDDIR"reling","gep_papfel");
+      message(({
+        ({ M_PL_BEST, M_PL_VERB, "wirf", "einen Pferdeapfel ueber die "
+           "Reling. Kaum hoerbar segelt er nach unten." }) }));
+      if (!random(3)) {   // einer von drei kommt nur unten an
+        liv = filter_array(all_inventory(environment(ob)), #'living);
+        if (sizeof(liv)) victim = liv[random(sizeof(liv))];
+        if (victim && !random(3)) {   // victim wird getroffen
+          message(({ ({ M_ROOM, environment(ob), "Ploetzlich und ohne "
+           "Vorwarnung faellt", M_DAT, victim, "ein Pferdeapfel auf "
+           "den Kopf." }),
+            ({ M_TARGETS, ({ victim }), "Buah ist das unangenehm. Dabei "
+               "zerbroeckelt der Pferdeapfel in viele kleine Stueckchen, "
+               "die ueberall an Dir herunterrutschen, nicht ohne einen "
+               "unangenehmen Geruch zu hinterlassen." }) }));
+          clone_object(RD_OBJDIR"mief")->move(victim, M_NOCHECK|M_SILENT);
+        } else {   // apfel zerschellt auf boden
+          message(({ ({ M_ROOM, environment(ob), "Ploetzlich faellt aus "
+           "heiterem Himmel ein Pferdeapfel auf den Boden und zerbroeselt "
+           "dort in lauter Stueckchen." }) }));
+        }
+      }
+      args[G_OBJECT]->remove();
+      return 1;
+    case "schau_unten" :
+      if (member_array(args[G_TEXT], ({ "runter", "nach unten",
+       "unten", "u", "ueber reling", "ueber bord", "ueber die reling" })) <0) {
+        notify_fail("Vielleicht wolltest Du nach unten schauen?\n");
+        return 0;
+      }
+      message(unt_unten());
+      return 1;
+  }
+  return RD_ROOM::do_action(verb, args);
+}
+
+
+void gep_papfel()
+{
+  if (getuid() != getuid(previous_object()))
+    return;
+  EPMASTER->GiveExplorationPoint("papfel", EP_MISC);
+}

@@ -1,0 +1,454 @@
+// SilberLand MUDlib
+//
+// LIVING/ATTRIBUTES.C -- attributes for living objects
+//
+// $Date: 2006/06/08 20:27:27 $                      
+/* $Revision: 3.5 $       
+ * $Log: attributes.c,v $
+ * Revision 3.5  2006/06/08 20:27:27  Woody
+ * Globale Mappings direkt initialisieren (statt im create())
+ *
+ * Revision 3.4  2004/10/22 13:36:26  Feyaria
+ * P_M_MAX_HEALTH_MOD
+ *
+ * Revision 3.3  2001/08/03 10:46:15  Feyaria
+ * HP und SP auf MAX_HEALTH beschraenken
+ *
+ * Revision 3.2  1999/09/16 10:12:56  Woody
+ * Attributmodifier-Obergrenzen implementiert, P_*_HEALTH_MOD Handling
+ *
+ * Revision 3.1  1997/06/25 11:52:24  Woody
+ * P_MAX_MV korrekt setzen
+ *
+ * Revision 3.0  1997/03/13 00:49:22  Woody
+ * prepared for revision control
+ *
+ * Revision 2.14  1997/01/23  Woody
+ * Objekte koennen mit P_X_ATTR_MOD die Spieler-Attribute aendern,
+ * previous_object() -> previous_object(1) in _set_/_query_ func's,
+ * QueueUpdateAttributes()
+ *
+ * Revision 2.13  1996/10/01  Woody
+ * Zahlen durch Konstanten ersetzt, SetRealAttribute(), etc.
+ *
+ * Revision 2.12  1995/02/23  20:52:40  Rochus
+ * Vereinfachung.
+ *
+ * Revision 2.11  1995/02/23  20:48:00  Rochus
+ * Attribut-Modifier eingebaut. Diese koennen nur von
+ * dem Objekt geaendert werden, das sie gesetzt hat.
+ *
+ * Revision 2.10  1994/12/09  17:05:53  Jof
+ * made offsets nosave
+ * /
+ *
+ * Revision 2.9  1994/10/04  09:45:53  Jof
+ * *** empty log message ***
+ *
+ * Revision 2.9  1994/10/04  13:54:50  mud
+ * Indentation fixed
+ *
+ * Revision 2.8  1994/09/15  14:57:57  Rochus
+ * Zwei Zeilen waren vertauscht, daher wurden SP/HP geupdated
+ * BEVOR die neuen Attribute gesetzt wurden...
+ *
+ * Revision 2.7  1994/09/13  16:33:06  Rochus
+ * Automatisches Update NUR bei Spielern.
+ *
+ * Revision 2.6  1994/09/13  16:24:27  Rochus
+ * Automatisches Update von MAX_SP und MAX_HP
+ *
+ * Revision 2.5  1994/09/13  10:47:43  Rochus
+ * Rassenspezifische Offsets fuer Attribute eingebaut.
+ *
+ * Revision 2.4  1994/06/13  07:36:24  Jof
+ * Removed SET_METHODs
+ *
+ * Revision 2.3  1994/03/21  16:48:13  Jof
+ * Reindented files using emacs - once again
+ *
+ * Revision 2.2  1994/03/18  12:35:53  Jof
+ * Fixed indentation
+ *
+ * Revision 2.1  1994/02/24  13:02:34  Jof
+ * Private removed
+ *
+ * Revision 2.0  1994/01/13  16:52:12  mud
+ * *** empty log message ***
+ *
+ * Revision 1.3  1994/01/08  13:11:20  mud
+ * *** empty log message ***
+ *
+ * Revision 1.3  1994/01/08  13:11:20  mud
+ * *** empty log message ***
+ *
+ * Revision 1.2  1994/01/05  17:07:50  mud
+ * changed attributes to mapping
+ *             
+ */                            
+
+
+// attribute handling
+//
+//   filter: str, dex, con, int
+//
+// In den Attributen und Abilites werden Rassenspzifische und erworbene
+// Faehigkeiten (mit autoload-Eigenschaft) abgepseichert.
+//
+// Funktionen:
+//   SetAttribute( attr, val ) (Erzeuge und) setze das Attribut auf val.
+//   SetAbility( abil, val )   dito.
+//   QueryAttribute( attr )    Gebe den Wert des Attributes zurueck.
+//   QueryAbility( abil )      dito.
+//
+//   Wenn ein Objekt eine Funktion _filterattr_<name> beitzt, wird beim Setzen
+//   des Attributes <name>, der vorgesclagene Wert uebergeben und der von
+//   dieser Funktion zurueckgegebene gesetzt. (fuer ueberpruefungszwecke)
+//   Gleiches gilt fuer _filterabil_<name>.
+
+
+#pragma strong_types
+
+#define NEED_PROTOTYPES
+
+#include "/std/sys_debug.h"
+#include <thing/properties.h>
+#include <attributes.h>
+#include <moving.h>
+
+#include <config.h>
+#include <properties.h>
+
+// Save variable
+mapping attributes = ([ ]);
+mapping attributes_modifier = ([ ]);
+// Offsets koennen geaendert werden, NICHT speichern!
+nosave mapping attributes_offsets = ([ ]);
+nosave mapping used_attributes_offsets = ([ ]);         // unbegrenzter Anteil
+nosave mapping limited_attributes_offsets = ([ ]);      // begrenzter Anteil
+nosave mapping attributes_lock = ([ ]);
+nosave int max_modifier_value, modifier_sum, hp_off, sp_off;
+nosave int max_hp_off, max_sp_off;
+
+nosave mapping _set_attributes(mapping map);
+nosave mapping _query_attributes();
+nosave mapping _set_attributes_offsets(mapping map);
+nosave mapping _query_attributes_offsets();
+mixed _set_attributes_modifier(mixed arr);
+mapping _query_attributes_modifier();
+
+varargs nosave void add_offsets(mapping map, int lock) {
+  mixed *ind;
+  int i,val,msum;
+ 
+  if (!mappingp(map)) return;
+
+  // Indizes sortieren -> kleinste Modifier zuerst testen
+  ind=m_indices(map);
+  ind=sort_array(ind,
+      lambda( ({'a,'b}),
+              ({#'<, ({ #'[,map,'a }),
+                     ({ #'[,map,'b }) }) ) );
+
+  for (i=sizeof(ind)-1;i>=0;i--)
+  {
+    if (lock>0)
+    {
+      if ((attributes_lock[ind[i]]+lock) <= A_MAX_MODIFIERS)    // locked?
+      {
+        if ((val=map[ind[i]]) <= 0)     // keine weiteren Limits ;)
+        {
+          used_attributes_offsets[ind[i]]+=val;   // unlimitiert...
+          attributes_lock[ind[i]] += lock;        // ...aber locked!
+        }
+        else
+        {
+          // pro Attribut nach oben hin begrenzen
+          if (limited_attributes_offsets[ind[i]]+val > max_modifier_value)
+            val=max_modifier_value-limited_attributes_offsets[ind[i]];
+          // Summe der positiven Attribut-Modifier begrenzen
+          if (modifier_sum+val > A_MAX_TOTAL_MOD)
+            val=A_MAX_TOTAL_MOD-modifier_sum;
+          if (val>0) {  // lock only if positive modifier remains
+            limited_attributes_offsets[ind[i]] += val;
+            attributes_lock[ind[i]] += lock;
+            modifier_sum += val;
+          } // if (val>0)...
+        } // if ((val=map[ind[i]]) <= 0)...
+      } // if ((attributes_lock[ind[i]]+lock) <= A_MAX_MODIFIERS)...
+    } // if (lock>0)...
+    else
+      used_attributes_offsets[ind[i]]+=map[ind[i]];
+  } // for()...
+}
+
+nosave void update_used_attributes() {
+  mixed *ind;
+  int i;
+  object ob;
+  mapping res;
+
+  used_attributes_offsets=([]);
+  limited_attributes_offsets=([]);
+  attributes_lock=([]);
+  modifier_sum=0;
+
+  if ((max_modifier_value=1+QueryProp(P_LEVEL)/10) > 5)
+    max_modifier_value=5;
+
+  if (mappingp(attributes_offsets))
+    used_attributes_offsets+=attributes_offsets;
+  if (mappingp(attributes_modifier)) {
+    ind=m_indices(attributes_modifier);
+    for (i=sizeof(ind)-1;i>=0;i--)
+      add_offsets(attributes_modifier[ind[i]]); // Modifier addieren...
+  }
+  hp_off=sp_off=0;
+  max_hp_off=max_sp_off=0;
+  for (ob=first_inventory(this_object());ob;ob=next_inventory(ob))
+  {
+    if (mappingp(res=ob->QueryProp(P_X_ATTR_MOD)))
+      add_offsets(res,ob->QueryProp(P_X_ATTR_LOCK));
+    if (mappingp(res=ob->QueryProp(P_M_ATTR_MOD)) &&
+        ( ob->QueryProp(P_WORN) || ob->QueryProp(P_WIELDED) ))
+      add_offsets(res,1);
+    if (mappingp(res=ob->QueryProp(P_M_HEALTH_MOD)) &&
+        ( ob->QueryProp(P_WORN) || ob->QueryProp(P_WIELDED) ))
+    {
+      hp_off+=res[P_HP];
+      sp_off+=res[P_SP];
+    }
+    if (mappingp(res=ob->QueryProp(P_X_HEALTH_MOD)))
+    {
+      hp_off+=res[P_HP];
+      sp_off+=res[P_SP];
+    }
+    if (mappingp(res=ob->QueryProp(P_M_MAX_HEALTH_MOD)) &&
+        ( ob->QueryProp(P_WORN) || ob->QueryProp(P_WIELDED) ))
+    {
+      max_hp_off+=res[P_HP];
+      max_sp_off+=res[P_SP];
+    }
+    if (mappingp(res=ob->QueryProp(P_X_MAX_HEALTH_MOD)))
+    {
+      max_hp_off+=res[P_HP];
+      max_sp_off+=res[P_SP];
+    }
+  }
+  if (max_hp_off > MAX_HEALTH / 4)
+    max_hp_off = MAX_HEALTH / 4;
+  if (max_sp_off > MAX_HEALTH / 4)
+    max_sp_off = MAX_HEALTH / 4;
+}
+
+nosave void update_max_sp_and_hp() {
+  update_used_attributes();
+  if (!query_once_interactive(this_object())) return;
+  // Bei Monstern werden die HP/SP ueblicherweise selbst gesetzt
+  SetProp(P_MAX_HP, ((int)QueryAttribute(A_CON))*8+42+hp_off);
+  if( QueryProp(P_MAX_HP)> MAX_HEALTH + max_hp_off ) 
+    SetProp(P_MAX_HP, MAX_HEALTH + max_hp_off);
+  SetProp(P_MAX_SP, ((int)QueryAttribute(A_INT))*8+42+sp_off);
+  if( QueryProp(P_MAX_SP)> MAX_HEALTH + max_sp_off) 
+    SetProp(P_MAX_SP, MAX_HEALTH + max_sp_off);
+  SetProp(P_MAX_MV, ((int)QueryAttribute(A_CON))*MVP_CON_FACTOR+MVP_BASE);
+}
+
+void UpdateAttributes() {
+  update_max_sp_and_hp();
+}
+
+nosave void create()
+{
+  max_hp_off = max_sp_off = hp_off = sp_off = modifier_sum = 0;
+  Set(P_ATTRIBUTES_MODIFIER, attributes_modifier); // nicht geschuetzt
+  Set(P_ATTRIBUTES_OFFSETS, attributes_offsets);
+  Set(P_ATTRIBUTES_OFFSETS, PROTECTED, F_MODE);
+  Set(P_ATTRIBUTES, attributes);
+  Set(P_ATTRIBUTES, PROTECTED, F_MODE);
+}
+
+nosave mapping _set_attributes(mapping map) {
+  Set(P_ATTRIBUTES, attributes=map);
+  update_max_sp_and_hp();
+  return map;
+}
+nosave mapping _query_attributes() { 
+  return copy_mapping(Set(P_ATTRIBUTES, attributes));
+}
+
+nosave mapping _set_attributes_offsets(mapping map) {
+  Set(P_ATTRIBUTES_OFFSETS, attributes_offsets=map);
+  update_max_sp_and_hp();
+  return attributes_offsets;
+}
+
+nosave mapping _query_attributes_offsets() {
+  return copy_mapping(Set(P_ATTRIBUTES_OFFSETS, attributes_offsets));
+}
+
+mixed _set_attributes_modifier(mixed arr) {
+  string fn;
+  mixed pre;
+  mapping map;
+
+  if (pointerp(arr) && sizeof(arr)>=2) {
+    pre=arr[0];
+    map=arr[1];
+  } else {
+    pre=previous_object(1);
+    map=arr;
+  }
+  if (objectp(pre))
+    fn=explode(file_name(pre),"#")[0];
+  else
+    fn=pre;
+  if (!stringp(fn))
+    return 0;
+
+  if (!mappingp(map))
+    efun::m_delete(attributes_modifier,fn);
+  else
+    attributes_modifier[fn]=map;
+  Set(P_ATTRIBUTES_OFFSETS, attributes_modifier);
+  update_max_sp_and_hp();
+  return attributes_modifier[fn];
+}
+
+mapping _query_attributes_modifier() {
+  return copy_mapping(attributes_modifier);
+}
+
+/*
+mapping _query_attributes_modifier() {
+  string fn;
+
+  if (!previous_object(1)) return 0;
+  fn=explode(file_name(previous_object(1)),"#")[0];
+  Set(P_ATTRIBUTES_OFFSETS, attributes_modifier);
+  return attributes_modifier[fn];  
+}
+*/
+
+int SetAttr(string attr, int val) {
+  closure filter;
+
+  if(filter = symbol_function("_filterattr_"+attr, this_object())) 
+    val = funcall(filter, val);
+  attributes[attr] = val;
+  update_max_sp_and_hp();
+}
+
+int SetAttribute(string attr, int val) {
+  return SetAttr(attr,
+      val-used_attributes_offsets[attr]-limited_attributes_offsets[attr]);
+}
+
+// Diese Funktion sollte zum Abfragen verwendet werden:
+int QueryAttribute(string attr) {
+  int re;
+  re=attributes[attr]
+     +used_attributes_offsets[attr]
+     +limited_attributes_offsets[attr];
+  if(query_once_interactive(this_object()) && re>A_MAX_MODIFIED)
+    re=A_MAX_MODIFIED;
+  return re;
+}
+
+int QueryRealAttribute(string attr) {
+  return attributes[attr];
+}
+
+int SetRealAttribute(string attr, int val) {
+  return SetAttr(attr, val);
+}
+
+int QueryAttributeOffset(string attr) {
+  int re;
+  re=used_attributes_offsets[attr]+limited_attributes_offsets[attr];
+  if(!query_once_interactive(this_object())) return re;
+  if(attributes[attr]+re<=A_MAX_MODIFIED) return re;
+  return A_MAX_MODIFIED-attributes[attr];
+}
+
+// Abfrage, ob eines oder mehrere Attribute bereits blockiert sind
+string TestAttributeLock(mapping check)
+{
+  mixed *ind;
+  int i, val, msum;
+
+  if (!mappingp(check)) return "fail";
+  if (!mappingp(attributes_lock)) attributes_lock=([]);
+
+  msum=modifier_sum;
+  if ((max_modifier_value=1+QueryProp(P_LEVEL)/10) > 5)
+    max_modifier_value=5;
+
+  // Indizes sortieren -> kleinste Modifier zuerst testen
+  ind=m_indices(check);
+  ind=sort_array(ind,
+      lambda( ({'a,'b}),
+              ({#'<, ({ #'[,check,'a }),
+                     ({ #'[,check,'b }) }) ) );
+
+  for (i=sizeof(ind)-1;i>=0;i--)
+  {
+    if (attributes_lock[ind[i]] >= A_MAX_MODIFIERS)
+      return (string)ind[i];
+    if ((val=check[ind[i]]) <= 0)       // negative Offsets nur sperren
+      continue;
+    // pro Attribut nach oben hin begrenzen
+    if (limited_attributes_offsets[ind[i]]+val > max_modifier_value)
+      val=max_modifier_value-limited_attributes_offsets[ind[i]];
+    // Summe der positiven Attribut-Modifier begrenzen
+    if (msum+val > A_MAX_TOTAL_MOD)
+      val=A_MAX_TOTAL_MOD-msum;
+    // Jedes Attribut, das erhoeht wird, muss auch um mind. 1 erhoeht
+    // werden duerfen -> Spieler werden zu Entscheidungen gezwungen.
+    if (val<=0) return (string)ind[i];
+    msum += val;
+  }
+  return 0;
+}
+
+/*
+ *------------------------------------------------------------
+ * attributes compatibility functions
+ */
+
+string query_stats() {
+  string retstr;
+  mixed i;
+  retstr = "";
+  for (i = m_indices(attributes); sizeof(i); i = i[1..])
+    retstr += sprintf("%s: %2d  ", i[0], attributes[i[0]]);
+  return retstr;
+}
+
+nosave int _filterattr_str(int val)
+{
+  if( val<0 ) return 0;
+  if( val>A_MAX ) return A_MAX;
+  return val;
+}
+
+nosave int _filterattr_dex(int val)
+{
+  if( val<0 ) return 0;
+  if( val>A_MAX ) return A_MAX;
+  return val;
+}
+
+nosave int _filterattr_int(int val)
+{
+  if( val<0 ) return 0;
+  if( val>A_MAX ) return A_MAX;
+  return val;
+}
+
+nosave int _filterattr_con(int val)
+{
+  if( val<0 ) return 0;
+  if( val>A_MAX ) return A_MAX;
+  return val;
+}

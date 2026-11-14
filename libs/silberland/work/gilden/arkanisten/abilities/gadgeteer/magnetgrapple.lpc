@@ -1,0 +1,141 @@
+#include "../../arkanisten.h"
+
+inherit GUILD_FOLDER "abilities/ability.lpc";
+
+public void create() {
+    if(is_clone(TO)) return;
+
+    ::create();
+    SetProp(P_ABILITY_NAME, CAP(MAGNET_GRAPPLE));
+    SetProp(P_ABILITY_DESCRIPTIPON, 
+        "Dank kleiner elektromagnetisch aktivierbarer Plaettchen auf der Innenseite deiner "
+        "Handschuhe kannst du deinen Gegner packen und so behindern. Wenn deine Gegner metallene "
+        "Teile tragen, oder sogar selbst aus Metall sind, dann helfen die kleinen Magnete dabei "
+        "deinen Griff sogar noch zu verstaerken. Wenn du einen Magnetgriff durchfuehrst, kaempfen "
+        "deine Gegner zwar schlechter, bedenke jedoch, dass auch du dann eine deiner Haende dafuer "
+        "benoetigst und daher nicht so gut treffen wirst. Du kannst nur Gegner magnetgreifen, die "
+        "nicht viel groesser sind als du.");    
+    SetProp(P_ABILITY_TYPE, ABILITY_TYPE_ACTIVE);
+    SetProp(P_ABILITY_BASE_ATTRIBUTE, A_DEX);
+    SetProp(P_ABILITY_GROUP, ({ABILITY_GROUP_GADGET_POWERUP, ABILITY_GROUP_GADGETS}));
+    SetProp(P_ABILITY_REQUIRES, ({DEPLOYABLE_SHIELD}));
+    SetProp(P_ABILITY_COST, ([
+        P_SP: 15,
+    ]));
+
+    modify(SPRINGLOADED_GLOVES, MODIFY_DAMAGE);
+}
+
+public mapping prepare_use(object user, mapping sinfo) {
+    object gloves, victim;
+    float size_modifier;
+
+    sinfo = ::prepare_use(user, sinfo);
+    if(!sinfo) return 0;
+
+    if(!objectp(gloves=present(SPRINGLOADED_GLOVES_ID, user))) {
+        tell_object(user, BS("Du musst deine federmechanischen Handschuhe tragen!"));
+        return 0;
+    }
+
+    if(!gloves->QueryProp(P_WORN)) {
+        tell_object(user, BS("Du musst deine federmechanischen Handschuhe tragen!"));
+        return 0;
+    }
+
+    if(get_free_hands(user) < 1) {
+        tell_object(user, BS("Du musst zumindest eine Hand frei haben!"));
+        return 0;
+    }
+
+    victim = FindEnemyVictim(sinfo[SI_SKILLARG], user);
+    if(!objectp(victim)) {
+        tell_object(user, BS("Dazu benoetigst du einen Gegner!"));
+        return 0;
+    }
+
+    size_modifier = apply_modifications(MODIFY_CUSTOM_VALUE, ([
+        SI_ABILIT_USER: user,
+        SI_ENEMY: victim,
+        SI_ABILITY_USAGE: "size_modifier",
+        SI_ABILITY_VALUE: 1.2
+    ]))[SI_ABILITY_VALUE];
+
+    if(victim->QueryProp(P_SIZE) * 1.0 > user->QueryProp(P_SIZE) * size_modifier) {
+        tell_object(user, BS(victim->Name(WER)+" ist zu gross um von dir festgehalten zu werden!"));
+        return 0;
+    }
+
+    if(present(MAGNET_GRAPPLE_ID, user)) {
+        tell_object(user, BS("Du haeltst schon einen Gegner fest!"));
+        return 0;
+    }
+
+    
+    tell_object(user, BS("Mit einem leisen Surren aktivierst du die Magnetplaettchen deiner Handschuhe."));
+    tell_room(ENV(user), BS(user->Name(WER)+" schuettelt eine Hand und ein leises Summen ertoent."), ({user}));
+
+    sinfo[SI_SKILLARG] = victim;
+    sinfo[SI_PREPARE_TIME] = 2;
+    sinfo[SI_SPELLFATIGUE] = 2;
+
+    return sinfo;
+}
+
+public void failed(object caster, mapping sinfo, int skillcheck) {
+    if(skillcheck < -3000) {
+        tell_object(caster, BS("Deine Handschuhe bleiben an einander kleben!"));
+        caster->SetProp(P_DISABLE_ATTACK, 1+random(3));
+    } else {
+        tell_object(caster, BS("Du bekommst deinen Gegner nicht zu packen!"));
+    }
+
+    return ::failed(caster, sinfo, skillcheck);
+}
+
+public void success(object user, mapping sinfo, int skillcheck) {
+    object victim, ob;
+
+    victim = sinfo[SI_SKILLARG];
+    if(!objectp(victim)) {
+        tell_object(user, BS("Nanu? Dein Ziel ist nicht mehr da!"));
+        return;
+    }
+
+    tell_object(user, BS("Beherzt packst du "+victim->name(WEN)+"."));
+    tell_room(ENV(user), BS(user->Name(WER)+" packt "+victim->name(WEN)+" mit festem Griff."));
+
+    ob = clone_object(OBJ "magnetgrapple_user");
+    if(!ob->move(user)) {
+        destruct(ob);
+        return;
+    }
+    ob->setup(victim, sinfo[SI_SKILLABILITY], skillcheck);
+
+    ob = clone_object(OBJ "magnetgrapple_victim");
+    if(!ob->move(victim)) {
+        destruct(ob);
+        return;
+    }
+    ob->setup(sinfo[SI_SKILLABILITY], skillcheck);
+
+    return;
+}
+
+
+public mapping modify_ability(string sender, int mtype, mapping payload) {
+    int sc, damage;
+    object user;
+
+    if(sender != SPRINGLOADED_GLOVES) return payload;
+    if(mtype != MODIFY_DAMAGE) return payload;
+    if(!objectp(user=payload[SI_ABILIT_USER])) return payload;
+    if(!member(payload, SI_SKILLDAMAGE)) return payload;
+    if(!intp(payload[SI_SKILLDAMAGE])) return payload;
+
+    if(present(MAGNET_GRAPPLE_ID, user)) {
+        payload[SI_SKILLDAMAGE] = payload[SI_SKILLDAMAGE] / 2;
+    }
+
+    return payload;
+}

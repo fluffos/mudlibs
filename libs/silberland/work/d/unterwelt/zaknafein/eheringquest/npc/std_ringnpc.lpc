@@ -1,0 +1,128 @@
+//=========================================================================
+//
+// File:    std_ringnpc.c
+// Created by Ronja@SL
+//
+// Project: Eheringquest
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit "std/mnpc";
+inherit "std/npc/spells";
+inherit "/std/player/moneyhandler";
+
+#define THISID "\nEHERINGNPC"
+#define MAXCALLOUTS 8
+
+mapping reactions;
+int callouts;
+
+void create()
+{
+  if(!is_clone(TO)) return;
+
+  ::create();
+
+  AddId( ({THISID}) );
+
+  reactions = ([ ]);
+  callouts  = 0;
+}
+
+void reset()
+{
+  ::reset();
+
+  callouts = 0;
+}
+
+varargs void die(int poisondeath)
+{
+  object enemy;
+
+  if(enemy = QueryProp(P_KILLER))
+  {
+    EMASTER->Msg(Name(WER,1)+" wurde von "+UID(enemy)+" umgebracht");
+  }
+
+  ::die(poisondeath);
+}
+
+void NotifyPlayerDeath(object pl, object killer, int lostexp)
+{
+  string s;
+
+  if(killer == TO)
+  {
+    EMASTER->Msg(Name(WER,0)+" hat gerade "+UID(pl)+" umgebracht");
+  }
+
+  return;
+}
+
+string DefaultReplace(string str, object pl)
+{
+  str = regreplace(str, "@TPWER",     pl->name(WER, 1),    1);
+  str = regreplace(str, "@TPWESSEN",  pl->name(WESSEN, 1), 1);
+  str = regreplace(str, "@TPWEM",     pl->name(WEM, 1),    1);
+  str = regreplace(str, "@TPWEN",     pl->name(WEN, 1),    1);
+
+  str = regreplace(str, "@NPCWER",    TO->name(WER, 1),    1);
+  str = regreplace(str, "@NPCWESSEN", TO->name(WESSEN, 1), 1);
+  str = regreplace(str, "@NPCWEM",    TO->name(WEM, 1),    1);
+  str = regreplace(str, "@NPCWEN",    TO->name(WEN, 1),    1);
+
+  return str;
+}
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+  if(callouts > MAXCALLOUTS) return;
+  if(!adverb)      adverb = "";
+
+//DB(sprintf("verb:%s gruppe:%s adverb:%s touch:%d\n", verb, gruppe, adverb, touch));
+
+  if(touch && member(reactions, "touch"))
+  {
+    callouts++;
+    call_out("reaction", 0, TP, DefaultReplace(reactions["touch", 0], TP)
+                              , DefaultReplace(reactions["touch", 1], TP)
+                              ,                reactions["touch", 2]);
+  }
+
+  if(member(reactions, verb))
+  {
+    callouts++;
+    call_out("reaction", 0, TP, DefaultReplace(reactions[verb, 0], TP)
+                              , DefaultReplace(reactions[verb, 1], TP)
+                              ,                reactions[verb, 2]);
+  }
+
+  if(member(reactions, gruppe))
+  {
+    callouts++;
+    call_out("reaction", 0, TP, DefaultReplace(reactions[gruppe, 0], TP)
+                              , DefaultReplace(reactions[gruppe, 1], TP)
+                              ,                reactions[gruppe, 2]);
+  }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void reaction(object pl, string splayer, string sother, string func)
+{
+  callouts--;
+
+  if(!ENV(TO))           return;
+  if(ENV(pl) != ENV(TO)) return;
+
+  if(strlen(splayer)) tell_object(pl,    CAP(BS(splayer)));
+  if(strlen(sother))  tell_room(ENV(TO), CAP(BS(sother)), ({ pl }) );
+  if(strlen(func))    call_other(TO, func, pl, TO);
+}
+

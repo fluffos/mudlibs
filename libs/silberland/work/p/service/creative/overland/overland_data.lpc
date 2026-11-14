@@ -1,0 +1,297 @@
+/***************************************************************/ 
+/*                    OVERLAND DATA                            */
+/***************************************************************/ 
+#include "overland_test_data.lpc"
+
+/***************************************************************/ 
+/*                   DATA STRUCTURE                            */
+/*[world]                                                      */ 
+/*   [plain]                                                   */ 
+/*      [zone]                                                 */ 
+/*      [zone]                                                 */ 
+/*      [...]                                                  */ 
+/*   [plain]                                                   */ 
+/*      [zone]                                                 */ 
+/*      [...]                                                  */ 
+/*   [...]                                                     */ 
+/*[world]                                                      */ 
+/*   [...]                                                     */ 
+/*                                                             */ 
+/***************************************************************/ 
+private mapping overland_data = ([ ]);
+
+#define OL_DATA_LANDSCAPE "@DATA_LANDSCAPE"
+#define OL_DATA_TRANSPARENT "@DATA_TRANSPARENT"
+#define OL_DATA_PLAINDATA "@DATA_PLAINDATA"
+#define OL_DATA_DEF_LANDSCAPE "@DATA_DEF_LANDSCAPE"
+
+#define OL_DATA_UPPER_PLAIN "@DATA_UPPER_PLAIN"
+#define OL_DATA_LOWER_PLAIN "@DATA_LOWER_PLAIN"
+
+#define OL_DATA_MAPPOSITION "@OL_DATA_MAPPOSITION"
+#define OL_DATA_MAP "@OL_DATA_MAP"
+#define OL_DATA_MAPSIZE "@OL_DATA_MAPSIZE"
+
+#define OL_DATA_ZONES "@OL_DATA_ZONES"
+
+#define PDATA_VCOLOR   0
+#define PDATA_VCHAR    1
+#define PDATA_BLOCKING 2
+#define PDATA_HCOLOR   3
+#define PDATA_HCHAR    4
+
+public nomask int load_overland_data()
+{
+  string tmp;
+  string *worlds;
+
+  int i, j, k;
+
+  overland_data = ([ ]);
+
+  worlds = query_worlds();
+  DEBUG("worlds");
+  for ( i = sizeof( worlds ) - 1; i >= 0 ; i -- ) {
+//  foreach ( string world : worlds ){
+    string world;
+    mapping _world;
+    string *plains;
+
+    world = worlds[i];
+    _world = ([ ]);
+    overland_data[ world ] = _world;
+
+    plains = query_plains_of_world( world );
+    DEBUG("plains["+world+"]");
+    for ( j = sizeof( plains ) - 1; j >= 0; j-- ) {
+//    foreach ( string plain : plains ){
+      mapping _plain;
+      string plain;
+      mixed *plain_data;
+      string *maps;
+      string *zones;
+      mapping _zone_data;
+
+      plain = plains[j];
+      _plain = ([ ]);
+      //check
+      _world[ plain ] = _plain;
+
+      plain_data = query_plain( plain );
+      if ( plain_data ){
+        _plain[ OL_DATA_LANDSCAPE ] = strlen( plain_data[ 2 ] ) ? plain_data[ 2 ][ 0..0 ] : " ";              
+        _plain[ OL_DATA_DEF_LANDSCAPE ] = ([ ]);              
+        _plain[ OL_DATA_TRANSPARENT ] = to_int( plain_data[ 3 ] );
+      }
+
+      plain_data = query_plaindata( plain );          
+      if ( plain_data ){            
+        mapping _plain_data;
+
+        _plain_data = ([ ]);              
+        DEBUG("plain_data["+plain+"]");
+        for ( k = sizeof( plain_data ) - 1 ; k >= 0; k-- ) {
+//        foreach( string * data : plain_data ){                        
+          string *data;
+
+          data = plain_data[k];
+          _plain_data += ([ data[0] : data[1];            //VColor
+              (strlen(data[ 2 ])? data[ 2 ][ 0..0 ] : " "); //VChar
+              to_int(data[ 3 ]);     //blocking the sight
+              data[ 4 ];             // HColor
+              (strlen(data[ 5 ])? data[ 5 ][ 0..0 ] : " "); //HChar
+              to_int(data[ 6 ]);     //RoomType
+              to_int(data[ 7 ]);     //RoomLandscape
+              to_int(data[ 8 ]);     //FPNeeded
+              data[ 9 ];             //Description
+              to_int(data[ 10 ]);    //CanEnter
+              data[ 11 ];            //BlockMessage
+              to_int(data[ 12 ]) ]); //Flags
+        }           
+        _plain[ OL_DATA_PLAINDATA ] = _plain_data;
+      }             
+
+      //superior and lower plain
+      if ( tmp = query_upper_plain( plain ) )
+        _plain[ OL_DATA_UPPER_PLAIN ] = tmp;
+      if ( tmp = query_lower_plain( plain ) )
+        _plain[ OL_DATA_LOWER_PLAIN ] = tmp;
+
+      // maps
+      maps = query_maps_on_plain( plain );
+      DEBUG("maps["+plain+"]");
+      for ( k = sizeof( maps ) - 1; k >= 0; k-- ) {
+//      foreach( string map : maps ){
+        mapping _map;
+        string map;
+        string *map_data;
+
+        map = maps[k];
+        _map = ([ ]);
+
+        map_data = query_map( map );
+        if ( map_data ){
+          _map[ OL_DATA_MAPPOSITION ] = ({ to_int(map_data[ 2 ]), to_int(map_data[ 3 ]) });
+          _map[ OL_DATA_MAP ] = explode( regreplace( map_data[ 4 ], "\n+$", "", 1), "\n");
+          _map[ OL_DATA_MAPSIZE ] = ({ sizeof( _map[ OL_DATA_MAP ] ), strlen( _map[ OL_DATA_MAP ][0] ) - 1 });     
+        }                               
+
+        _plain[ map ] = _map;
+      }
+
+      // zones
+      zones = query_zones_of_plain( plain );          
+      _zone_data = ([ ]);              
+ 
+      DEBUG("zones["+plain+"]");
+      for ( k = sizeof( zones ) - 1; k >= 0; k-- ) {
+//      foreach( string zone : zones ){                        
+        string zone;
+        string *zone_data;
+
+        zone = zones[k];
+        zone_data = query_zone( zone );
+        if (  zone_data ){
+          string loc;
+          mixed *pos;
+
+          loc = sprintf( "@%s|%s|%s%d|%d", zone_data[ 2 ], zone_data[ 3 ], (strlen(zone_data[ 4 ])?zone_data[ 4 ]+"|":""),
+              to_int( zone_data[ 5 ]), to_int( zone_data[ 6 ]) );
+          pos = WORLD->unify_position( loc );
+          if ( !pos )
+            continue;
+
+          _zone_data += ([ this_object()->build_unified_position( pos ):
+              loc; //real position
+              LOC_VIEW_X( pos ); //X
+              LOC_VIEW_Y( pos ); //Y
+              to_int( zone_data[ 7 ] ); //type
+              zone_data[ 8 ]; //colour
+              zone_data[ 9 ]; //char
+              to_int( zone_data[ 10 ] ); //flags
+              mkmapping( ({ "south", "west", "north", "east" }), zone_data[ 11.. ] )
+              ]);               
+        }           
+      }             
+      _plain[ OL_DATA_ZONES ] = _zone_data;
+
+      //         _world[ plain ] = _plain;
+    }
+
+    //      overland_data[ world ] = _world;
+  }
+  //   write( sprintf("%O\n", overland_data ) );
+}
+
+
+/***************************************************************/ 
+/*                    DEFAULT LANDSCAPE                        */
+/***************************************************************/  
+public nomask string get_default_landscape( string world, string plain, int size )
+{
+  string chr, tmp;
+
+  //write(world+ " "+plain+"\n");
+  if ( !overland_data[ world ] || !(overland_data[ world ][ plain ]) || !size )
+    return 0;
+
+  chr = overland_data[ world ][ plain ][ OL_DATA_LANDSCAPE ];
+
+  if ( size == 1 )
+    return chr;
+
+  tmp = overland_data[ world ][ plain ][ OL_DATA_DEF_LANDSCAPE ][ size ];   
+
+  if ( tmp )
+    return tmp;
+
+  tmp = strmul(strmul(chr, size) + "\n", size)[0..<2];
+  overland_data[ world ][ plain ][ OL_DATA_DEF_LANDSCAPE ][ size ] = tmp;
+
+  return tmp;
+}
+
+/***************************************************************/ 
+/*                         MERGE MAPS                          */
+/***************************************************************/  
+private nomask string merge_maps( string view, string world, string plain, int xpos, int ypos, int size )
+{
+  mapping tmp;
+  string *maps;
+  string *vtmp;
+  int x2pos, y2pos;
+  int mx1, my1, mx2, my2;
+  int ix1, ix2, iy1, iy2;
+  int dx, dy;
+  int i;
+
+  tmp  = overland_data[ world ][ plain ];
+  maps = regexp( m_indices( tmp ), "^[^@].*");   
+
+  vtmp = explode( view, "\n" );
+  x2pos = xpos + size - 1;
+  y2pos = ypos + size - 1;
+
+  for ( i = sizeof( maps ) - 1; i >= 0; i-- ) {
+//  foreach( string map : maps ){
+    string map;
+    string *mtmp;
+
+    map = maps[i];
+    mx1 = tmp[ map ][ OL_DATA_MAPPOSITION ][ 0 ];
+    my1 = tmp[ map ][ OL_DATA_MAPPOSITION ][ 1 ];
+
+    mx2 = mx1 + tmp[ map ][ OL_DATA_MAPSIZE ][ 0 ] - 1; 
+    my2 = my1 + tmp[ map ][ OL_DATA_MAPSIZE ][ 1 ] - 1;
+
+    if ( xpos > mx2 || mx1 > x2pos ||
+        ypos > my2 || my1 > y2pos ) continue;
+
+    ix1 = max( xpos, mx1 ) - xpos;
+    ix2 = min( x2pos, mx2 ) - xpos;
+
+    iy1 = max( ypos, my1 ) - ypos;
+    iy2 = min( y2pos, my2 ) - ypos;
+
+    dx = xpos - mx1;
+    dy = ypos - my1;
+
+    //      write( map+"\n");
+    mtmp = tmp[ map ][ OL_DATA_MAP ];
+    for ( ; ix1 <= ix2; ix1++ ) {
+      //write("iy1="+iy1+" iy2="+iy2+" ["+vtmp[ ix1 ][ iy1..iy2 ]+"]["+mtmp[ ix1 + dx ][ (iy1+dy)..(iy2+dy) ]+"]\n");
+      vtmp[ ix1 ][ iy1..iy2 ] = mtmp[ ix1 + dx ][ (iy1+dy)..(iy2+dy) ]; 
+    }
+  }
+
+  //view = implode( vtmp, "\n" );
+  return implode( vtmp, "\n" );
+}
+
+/***************************************************************/ 
+/*                      ROOM DESCRIPTION                       */
+/***************************************************************/  
+public nomask mixed * get_room_description_data( string location/*, string landscape*/ )
+{
+  mixed *pos;
+  mixed *tmp;
+  string landscape;
+  int i, len;
+
+  pos = this_object()->unify_position( location );
+
+  if ( !pos )
+    return 0;
+
+  landscape = WORLD->get_landscape( location );
+
+//  return overland_data[LOC_WORLD( pos )][LOC_PLAIN( pos )][OL_DATA_PLAINDATA][ landscape, 6 ];
+  len = get_type_info( overland_data[LOC_WORLD( pos )][LOC_PLAIN( pos )][OL_DATA_PLAINDATA] )[ 1 ];
+  tmp = ({ });
+  for ( i = 0; i < len; i++ ) {
+    tmp += ({ overland_data[LOC_WORLD( pos )][LOC_PLAIN( pos )][OL_DATA_PLAINDATA][landscape,i] });
+  }
+  return tmp;
+    //  return map_mapping( filter_mapping( overland_data[LOC_WORLD( pos )][LOC_PLAIN( pos )][OL_DATA_PLAINDATA], lambda( ({'a,'b,'c}), ({#'==,'a,'c}) ), landscape ), lambda( ({'a, 'b}), ({'b}) ) )[landscape];
+}
+

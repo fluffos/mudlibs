@@ -1,0 +1,159 @@
+inherit "std/thing";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <moving.h>
+#include <defines.h>
+#include <moredef.h>
+#include <environment.h>
+
+nosave int _status=0;
+nosave mixed old_exits, new_exits; 
+nosave string r_exit;
+nosave mapping r_exit_map;
+nosave int gewachsen();
+nosave int gepflanzt();
+
+create()
+{
+  if( !is_clone(TO) ) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein kleiner Pflanzensamen");
+  SetProp(P_LONG, 
+     "Du siehst einen kleinen, unscheinbaren Pflanzensamen. Wer weiss, "
+    "wenn Du ihn einpflanzt wird eines Tages vielleicht ein Baum aus ihm."); 
+  SetProp(P_NAME, "Pflanzensame");
+  SetProp(P_GENDER, MALE);
+  AddId( ({"same", "pflanzensame", "\nmagischeranken", "pflanzensamen", 
+        "samen"}));
+  SetProp(P_MATERIAL, MAT_MISC_HERBAL );
+  SetProp(P_WEIGHT, 10); 
+  SetProp(P_VALUE, 100);
+  AddCmd( ({"pflanze", "pflanz"}), "einpflanzen");
+}
+
+int einpflanzen(string str) {
+  mixed helpvar;
+   
+  notify_fail("Was moechtest du einpflanzen?\n");
+  if(!str) return 0; 
+  if(member(({"samen", "pflanzensamen", "same"}), str)==-1) return 0;
+  if(ENV(TP) && member(({TT_WATER,TT_UNDERWATER,TT_HOUSE,TT_CAVE,TT_DESERT}),
+        ENV(TP)->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN])!=-1) 
+  {
+    tell_object(TP, BS("Hier kannst Du keine Pflanze anbauen. Die Umgebung "
+       "passt einfach nicht!\n"));
+    return 1;
+  }
+  helpvar=ENV(TP)->QueryProp(P_ENVIRONMENT)[ENV_TEMPERATURE];
+  if(helpvar<10 || helpvar>35) {
+    tell_object(TP, BS("Hier passt die Temperatur nicht. Du kannst hier "
+          "den Samen nicht pflanzen.\n"));
+    return 1;
+  }
+  tell_object(TP, BS("Du bueckst Dich und scharrst ein kleines Loch, in das "
+       "Du behutsam den Pflanzensamen bettest. Danach fuellst Du das Loch "
+       "wieder und trittst es fest."));
+  tell_room(ENV(TP), BS(sprintf("%s bueckt sich und scharrt ein kleines Loch. "
+          "Danach legt %s einen kleinen Pflanzensamen in das entstandene "
+          "Loch und fuellt es wieder mit Erde.", TP->Name(WER), 
+          TP->QueryPronoun(WER))), ({TP}));
+  gepflanzt();
+  return 1;
+}
+
+
+
+nosave int gepflanzt() {
+  SetProp(P_LONG, 0);
+  SetProp(P_SHORT, 0);
+  SetProp(P_NOGET, 1);
+  RemoveId(({"samen","pflanzensamen"})); 
+  RemoveCmd(0);
+  _status=1;
+  set_next_reset(900); // 15mins :))
+  ME->move(ENV(TP), M_NOCHECK);
+  return 1;
+}
+
+reset() {
+  ::reset();
+  if(_status==1) 
+    gewachsen();
+}
+
+nosave int gewachsen() {
+  string *dirs;
+  old_exits=MENV->QueryProp(P_NEW_EXITS);
+  if(!mappingp(old_exits)) {
+    call_out("remove", 0);
+    return 1;
+  }
+  if(_status!=1) return 0;  
+  _status=2;
+  
+  dirs=m_indices(old_exits);
+  r_exit=dirs[random(sizeof(dirs))];
+  //TELL("angrox", "EXIT: "+r_exit+"\n");
+  r_exit_map=old_exits[r_exit];
+  MENV->RemoveExit(r_exit);
+  new_exits=m_delete(old_exits, r_exit);
+  tell_room(MENV, BS("Ploetzlich bricht die Erde auf und mit unheimlicher "
+      "Geschwindigkeit waechst eine Rosenhecke."));  
+  SetProp(P_LONG, sprintf(
+      "Diese Rosenhecke mit wunderschoenen roten Rosenblueten hat den Ausgang "
+      "nach %s vollkommen blockiert. Sieht nicht so aus, als wuerde es nicht "
+      "leicht sein, hier durchzukommen.", CAP(r_exit)));
+  SetProp(P_INFO, "Vielleicht koenntest Du diesen "
+      "Rosenstrauch zerhacken?\n");
+  SetProp(P_NAME, "Rosenhecke");
+  SetProp(P_SHORT, "Eine Rosenhecke");
+  AddDetail( ({"blueten", "rosenblueten"}),
+      "Die Rosenblueten sind tiefrot und bieten Dir einen wunderbaren "
+      "Anblick.");
+  AddId(({"hecke", "rosenhecke"}));
+  AddCmd(({"zerhacke", "zerhack"}), "durchhacken");
+  return 1;
+}
+ 
+nosave int durchhacken(string str) {
+  object weapon;
+  notify_fail("Was willst Du zerhacken?\n");
+  if(!str) return 0;
+  if(member(({"hecke", "rosenhecke"}), str)==-1)
+    return 0;
+  weapon=TP->QueryProp(P_WEAPON);
+  TELL("angrox", sprintf("%O\n", weapon));
+  if(!weapon) {
+    write(BS("Du versuchst mit Deiner Hand die Hecke auszureissen ... AUA! "
+        "Bloede Rosen, immer diese Dornen.\n"));
+    tell_room(ENV(ME), BS(sprintf("%s versucht die Hecke mit %sen Haenden "
+            "auszureissen. AUA, das muss weh tun ...", TP->Name(WER),
+            TP->QueryPossPronoun(WER))),({TP}));
+    SetProp(P_KILL_NAME, "Eine Rosenhecke");
+    SetProp(P_KILL_MSG, "Was willst Du mich auch ausreissen?");
+    TP->do_damage(5+random(5));
+    return 1;
+  } 
+  if(!weapon->id("machete")) {
+    write(BS("Du brauchst wohl eine Machete, um Dich hier durchschlagen zu "
+        "koennen.\n"));
+    return 1;
+  }
+  write(BS("Du nimmst Deine Machete fester in die Hand und hackst die "
+      "Rosenhecke weg, allerdings nicht, ohne Dir ein paar "
+      "Kratzer zu holen."));
+  tell_room(ENV(ME), BS(sprintf("%s zerhackt mit einer Machete die "
+          "Rosenhecke.", TP->Name())),({TP}));
+  clone_object(explode(file_name(ME), "#")[0])->move(ENV(ME), M_NOCHECK);
+  remove();
+  return 1;
+}
+
+void remove() {
+  if(stringp(r_exit) && mappingp(r_exit_map))
+    MENV->AddExit(r_exit,r_exit_map); 
+  ::remove(); 
+}

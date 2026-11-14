@@ -1,0 +1,163 @@
+/*
+** Ein alter Landstreicher  (w) Woody@SL
+** ---
+** 1996-05-04  1.0  Release
+** 1996-10-23  1.1  Er antwortet auf Frage nach Faehigkeiten
+** 28 Jul 1997 1.2  Sauberer programmiert
+** - Fey: Nur noch fuer Abenteurer
+** 22 Jan 1998 1.3  Sagt einem auch, wieviel ZTs man noch findet
+*/
+
+inherit "/d/ebene/Park/npc/starter";
+
+#include <properties.h>
+#include <language.h>
+#include <wizlevels.h>
+#include <new_skills.h>
+#include "../park.h"
+
+string gilden_info();
+
+
+create()
+{
+  object geld;
+  if (!is_clone(ME)) return;
+  ::create();
+  SetProp (P_SHORT, "Ein alter Landstreicher");
+  SetProp (P_LONG, bs("Der alte Landstreicher scheint schon ziemlich muede "+
+    "zu sein. Das bisschen Geld, das er bei sich hat, hat er sich auf "+
+    "seinen Reisen durch das Land ergaunert."));
+  SetProp (P_NAME, "Landstreicher");
+  SetProp (P_GENDER, MALE);
+  SetProp(P_RACE, "Mensch");
+  AddId ("landstreicher");
+  create_default_npc (3);
+  SetProp (P_SIZE, 165);
+  SetProp (P_HEAL, 8);
+  SetProp (P_MSGIN, "schlurft herein");
+  SetProp (P_ALIGN, -100);
+  SetProp (P_MAX_KILL_LEV, 6);
+  SetProp (P_NOKILL_MSG, ({"Der Landstreicher winkt nur ab.\n",
+    "@@WER@@ hat Mitleid mit dem Landstreicher und stellt den Kampf ein.\n"}));
+  SUID;
+  CLONEME (OBJ("waffe/messer"));
+  command ("zuecke messer");
+  geld = clone_object ("/obj/money");
+  geld->move(ME);
+  geld->AddAmount(400+random(400));
+  AddInfo(({"faehigkeiten", "zaubern"}), "@@gilden_info@@");
+  AddInfo(({"zaubertrank","zaubertraenke","zaubertraenken",
+      "zt","zts"}), "@@zt_info@@", "sagt: ");
+}
+
+string a2s(int abil)
+{
+  switch (abil)
+  {
+    case 0..999 : return "hundsmiserabel schlecht";
+    case 1000..1499 : return "miserabel";
+    case 1500..1999 : return "uebel";
+    case 2000..2499 : return "unheimlich schlecht";
+    case 2500..2999 : return "sehr schlecht";
+    case 3000..3499 : return "schlecht";
+    case 3500..3999 : return "maessig";
+    case 4000..4499 : return "unterdurchschnittlich";
+    case 4500..4999 : return "durchschnittlich";
+    case 5000..5499 : return "ueberdurchschnittlich";
+    case 5500..5999 : return "befriedigend";
+    case 6000..6499 : return "sehr befriedigend";
+    case 6500..6999 : return "recht gut";
+    case 7000..7499 : return "ganz gut";
+    case 7500..7749 : return "gut";
+    case 7750..7999 : return "wirklich gut";
+    case 8000..8249 : return "sehr gut";
+    case 8250..8499 : return "unglaublich gut";
+    case 8500..8749 : return "ausserordentlich gut";
+    case 8750..8999 : return "phantastisch gut";
+    case 9000..9249 : return "ausgezeichnet";
+    case 9250..9499 : return "hervorragend";
+    case 9500..9749 : return "beinahe meisterhaft";
+    case 9750..9899 : return "meisterhaft";
+    case 9900..9999 : return "beinahe perfekt";
+    default : return "perfekt";
+  }
+}
+
+string gilden_info()
+{
+  string gilde, info, *spells;
+  int abil, i, n;
+  closure qsa;
+
+  gilde = "/gilden/" + (PL->QueryProp(P_GUILD) || "abenteurer");
+  if( gilde!="/gilden/abenteurer" ) 
+    return "sagt: Ich kenn mich nur in der Abenteurergilde aus!\n";
+  if (find_object(gilde))
+  {
+    qsa = symbol_function("QuerySkillAbility", PL);
+    spells = sort_array(
+        m_indices(gilde->QueryProp(P_GUILD_SKILLS)), #'< );
+
+    n = 0;
+    info = "sagt: Hm... wollen mal sehen...\n";
+    for (i=sizeof(spells)-1, abil=0; i>=0; i--) {
+      if (abil=funcall(qsa, spells[i]))
+      {
+        info += sprintf("Der Landstreicher sagt: Du beherrschst '%s' %s.\n",
+                        spells[i], a2s(abil));
+        n++;
+      }
+    }
+    if (!n)
+      return "sagt: Ohje "+PL->name()+", Du kannst ja kein bisschen zaubern!\n";
+    info += sprintf("Der Landstreicher sagt: Insgesamt gesehen bist Du %s.\n",
+                a2s(gilde->GuildRating(PL) * 10000 / gilde->MaxGuildRating()));
+    return info;
+  }
+  else
+    return "fragt: In was fuer einer Gilde bist DU denn??\n";
+}
+
+string zt_info()
+{
+  mixed n;
+  string s;
+
+  s = PL->name();
+  n = PL->QueryProp(P_POTIONROOMS);
+  n = pointerp(n) ? sizeof(n) : 0;
+  if (n<1)
+    return "Hmm "+s+", ich habe so das dumpfe Gefuehl, "
+      "Du wirst keine Zaubertraenke mehr finden...";
+  if (n>=6)
+    return "Ohje "+s+", Du musst noch ganze "+n+" Zaubertraenke suchen!";
+  if (n>=2)
+    return "Naja "+s+", "+n+" Zaubertraenke fehlen Dir schon noch!";
+
+  return "He, "+s+", ich bin beeindruckt! Dir fehlt nur noch ein "
+    "einziger Zaubertrank! Wo der ist, kann ich Dir allerdings "
+    "leider auch nicht beantworten...";
+}
+
+
+give_notify(object obj) {
+  mixed vars;
+  object item;
+  if(obj->id("muenzen")) {
+    if((item=present("\npaladintaskitem", TP)) && item->GetTask(2, TP)) 
+    {
+      vars=item->GetVar();
+      if(!mappingp(vars)) vars=([]);
+      if(!member(vars, "landstreicher")) vars+=(["landstreicher":0]);
+      vars["landstreicher"]+=obj->QueryProp(P_AMOUNT);
+      if(vars["landstreicher"]>=3000) 
+        item->SetFlag(0);
+      item->SetVar(vars);
+    } 
+   say(BS("Der Landstreicher bedankt sich herzlich und versteckt "
+       +"die Muenzen sofort!"));
+   obj->remove();
+  }
+  ::give_notify(obj);
+}

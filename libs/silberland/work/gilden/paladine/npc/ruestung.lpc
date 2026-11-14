@@ -1,0 +1,131 @@
+
+inherit "std/mnpc";
+inherit "std/npc/spells";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <new_skills.h>
+#include <moving.h>
+#include <mnpc.h>
+#include "../paladin.h"
+
+
+void create() {
+  if (!is_clone(TO)) return;
+  ::create();
+
+  create_default_npc(27+random(3));
+  SetProp(P_SHORT, "Eine belebte Ruestung");
+  SetProp(P_NAME_ADJ, "belebt");
+  SetProp(P_LONG,
+      "Diese Ruestung scheint von der goettlichen Macht Dusty durchdrungen "
+      "zu sein. Sie schwebt etwa einem Schritt ueber dem Erdboden und "
+      "haelt einen maechtigen Zweihaender in ihren Haenden!");
+  SetProp(P_NAME, "Ruestung");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_HANDS, ({" mit Dustys Macht", 200, DT_HOLY}));
+  AddId( ({ISPALADIN,  "ruestung", "belebte ruestung", "\nschatzkammer_waechter"}) );
+
+  //create_default_npc(25+random(5));
+  SetProp(P_RACE, "Ruestung");
+  SetProp(P_SIZE, 170+random(20));
+  SetProp(P_ALIGN, 700+random(200));
+  SetProp(P_MAX_HANDS, 2);
+
+  SetProp(P_KILL_MSG, ({"ist weiterhin wachsam.", MSG_EMOTE}));
+
+
+  SetProp(P_RESISTANCE_STRENGTHS , 
+    ([
+      DT_SLASH:     -0.4, DT_BLUDGEON:  -0.4, DT_PIERCE: -0.4, DT_SQUEEZE:-0.4, 
+      DT_WHIP:      -0.4, DT_RIP:       -0.4,
+      DT_ELECTRIC:  -0.3, DT_ACID:       0.5, DT_POISON: -0.3, DT_TERROR: -1.0,
+      DT_HOLY:      -1.0, DT_UNHOLY:     0.5, DT_MAGIC:  -0.5 ]) );
+
+
+  SetProp(P_MSGIN, "schwebt hereinn");
+  SetProp(P_MSGOUT, "schwebt weiter");
+
+  SetProp(P_DIE_MSG,  " faellt scheppernd auseinander.\n");
+  SetProp(P_NOCORPSE, 1 );
+
+
+  SetProp(P_SPELLRATE,70);
+
+  AddDefaultSpell(3,400, DS_DISARM,
+    " Die belebte Ruestung entwaffnet Dich!\n" 
+    " Die belebte Ruestung entwaffnet @WEN\n",
+     ([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(1,800,
+    " Die belebte Ruestung fuehrt einen Wuchtschlag gegen Dich!\n",
+    " Die belebte Ruestung fuehrt einen Wuchtschlag gegen @WEN!\n",
+    DT_SLASH,
+    "wuchtschlag");
+  
+  AddDefaultSpell(1,500,DS_FEAR,
+    "Du bekommst Angst!\n",
+    "@WER fluechtet!\n",
+    ([SP_SHOW_DAMAGE:0]));
+
+
+  call_other(NPCMASTER,"add_npc");
+  catch(CLONEME("/p/armour/armour/bronzepanzer"));
+  catch(CLONEME("/p/armour/helm/bronzehelm"));
+  catch(CLONEME("/p/armour/bracers/plattenzeug"));
+  catch(CLONEME("/p/weapon/sword/bihaender"));
+  command_me("trage alles");
+  command_me("zuecke schwert");
+  
+}
+
+void init() {
+  ::init();
+  if(call_other(NPCMASTER,"IsFeind",TP)) Kill(TP);
+}
+
+
+
+remove(int arg) {
+  call_other(NPCMASTER,"del_npc");
+  ::remove(arg);
+}
+
+int Defend(int dam, mixed dam_type, mixed spell, object enemy)
+{
+  return ::Defend(dam, dam_type, spell, enemy);
+  call_other(NPCMASTER,"help_me",enemy);
+}
+
+
+void NotifyPlayerDeath(object player, object killer, int lostexp) {
+  write_file(LOG("npc.kills"), sprintf(
+      "%s: %s killt %s (LVL:%d, GLVL:%d-%s, lXP:%d)\n", QueryProp(P_SHORT),
+      ctime(),CAP(getuid(player)), player->QueryProp(P_LEVEL), 
+      player->QueryProp(P_GUILD_LEVEL), 
+      stringp(player->QueryProp(P_GUILD))?player->QueryProp(P_GUILD):"???",
+      lostexp));
+}
+
+void die(int pd) {
+  call_other(NPCMASTER, "del_npc", TP);
+  write_file(LOG("npc.kills"), sprintf(
+      "%s: %s killt bel. Ruestung (LVL:%d, GLVL:%d-%s)\n",
+      ctime(),CAP(getuid(TP)), TP->QueryProp(P_LEVEL), 
+      TP->QueryProp(P_GUILD_LEVEL), TP->QueryProp(P_GUILD)));
+  return ::die(pd);
+}
+
+int wuchtschlag(object enemy, int damage, mixed dam_type) {
+  tell_object(enemy,"Du taumelst benommen!\n");
+  tell_room(ENV(ME), sprintf("%s taumelt benommen!\n", enemy->Name(WER)),
+      ({enemy}));
+  enemy->SetProp(P_DISABLE_ATTACK, 2);
+  enemy->SetProp(P_DISABLE_SPELLS, 2);
+  return 1;
+}
+
+int _query_wimpy() {
+  return 0;
+}

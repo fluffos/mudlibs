@@ -1,0 +1,239 @@
+/*
+** Eine Gummiente - Woody@SilberLand
+** ---
+** 1996-07-09   1.0   initial version
+** 2001-03-07   2.0   "schicken" :-)
+*/
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include <wizlevels.h>
+#include <defines.h>
+#include <moredef.h>
+
+
+string *taenze, *gna;
+
+
+create()
+{
+  if (!is_clone(this_object())) return;  // (return on BP)
+  ::create();
+
+  AddId( ({"ente", "gummiente"}) );
+  SetProp(P_NAME, "Gummiente");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_SHORT, "Eine kleine gelbe Gummiente");
+  SetProp(P_LONG,
+    "Diese kleine gelbe Gummiente ist ein Sondermodell, das extra "
+    "fuer Dich in den silberlaendischen Gummientenfabriken "
+    "hergestellt wurde. Naja, viel kann sie ja nicht, die kleine "
+    "suesse Ente, aber plantschen kann man allemal damit. "
+    "Ausserdem kann man sie jemandem schicken.");
+  SetProp(P_WEIGHT, 50);
+  SetProp(P_NOSELL,
+      "Dein Gewissen haelt Dich davon ab, dieses Geschenk zu verkaufen.\n");
+  SetProp(P_MATERIAL, MAT_PLASTIC);
+  SetProp(P_INFO, break_string(
+      "Du kannst die Ente einem bestimmten Spieler, \"allen\", "
+      "\"sehern\" und \"magiern\" schicken. Wenn diese sie nicht "
+      "ignorieren...", 78));
+
+  AddDetail ("plastik", "Gewoehnliches, tiefgelbes Plastik. Kitsch!\n");
+
+  AddCmd( ({"plantsch", "plantsche"}), "plantsch");
+  AddCmd( ({"schick", "schicke"}), "schick");
+
+  gna = ({ "GNA!", "ZDONG!", "ROCKLM!", "TSCHUPAX!", "MAKS!",
+           "KNARCK!", "ARTOKS!", "SARUMM!", "UMPFF!", "KSARFFEI!" });
+  taenze = ({ "einen Walzer", "eine Polka", "einen Rumba",
+              "einen Tango", "einen Cha cha cha", "einen Foxtrott",
+              "einen Mambo", "einen Salsa", "einen Slowfox",
+              "einen Breakdance", "einen Pogo","einen Merengue",
+              "einen Rock'n'Roll", "einen Regentanz", "einen Hexentanz" });
+}
+
+
+int plantsch(string str)
+{
+  write (BS("Du plantscht eine Runde mit Deiner gelben Gummiente und "+
+    "quietscht vergnuegt. Du kannst richtiggehend den Neid in "+
+    "den Gesichtern der anderen anwesenden erkennen..."));
+  say (BS(TP->Name()+" plantscht eine Runde mit "+
+    TP->QueryPossPronoun(FEMALE,WEM)+" Gummiente und quietscht "+
+    "dabei vergnuegt. Am liebsten haettest Du auch so eine schoene "+
+    "gelbe Gummiente!"));
+  // call_out("x",4,this_player());
+  return 1;
+}
+
+
+int ignores_ant(object who)
+{
+  mixed ign;
+
+  if (!pointerp(ign = who->QueryProp(P_IGNORE)))
+    return 0;
+
+  return
+    sizeof( ({ "gummiente", getuid(TP), getuid(TP)+".gummiente", }) & ign );
+}
+
+
+int schick(string str)
+{
+  string wem, was, was2, tanz;
+  string von, vonuid;
+  mixed obs, ob, an;
+  int multi;
+
+  notify_fail("Schicke wem was?\n");
+  if (!str) return 0;
+  if (sscanf(str, "%s %s", wem, was) != 2) return 0;
+  if (!id(was)) return 0;
+
+  if (wem == "allen") {
+    obs = users() - ({ TP });
+    if (!IS_LEARNER(TP))
+      obs -= filter_objects( users(), "QueryProp", P_INVIS );
+    obs -= filter_array( obs, #'ignores_ant );
+  }
+  else if (wem == "sehern") {
+    obs = filter_array(users(),
+        lambda( ({ 'x }),
+                ({ #'&&,
+                ({ #'query_wiz_level, 'x }),
+                ({ #'<, ({ #'query_wiz_level, 'x }), 10 }),
+                }) ) ) - ({ TP });
+    obs -= filter_array( obs, #'ignores_ant );
+  }
+  else if (wem == "magiern")
+  {
+    obs = filter_array(users(),
+        lambda( ({ 'x }),
+                ({ #'>=, ({ #'query_wiz_level, 'x }), 10 }) ) ) - ({ TP });
+    if (!IS_LEARNER(TP))
+      obs -= filter_objects( users(), "QueryProp", P_INVIS );
+    obs -= filter_array( obs, #'ignores_ant );
+  }
+  else
+  {
+    if (!ob=find_player(wem))
+      return write("Deine Ente quakt: Dieser Spieler ist nicht anwesend.\n"),1;
+
+    if (!IS_LEARNER(TP) && ob->QueryProp(P_INVIS))
+      return write("Deine Ente quakt: Dieser Spieler ist nicht anwesend.\n"),1;
+
+    if (ignores_ant(ob))
+      return write("Deine Ente quakt traurig: " + ob->Name() +
+          " ignoriert mich! :-(\n"), 1;
+
+    obs = 0;
+  }
+  if (obs && !sizeof(obs))
+  {
+    write("Deine Ente findet leider niemanden... *sniiiiief*\n");
+    return 1;
+  }
+
+  // Wir waehlen einen Tanz aus :)
+  tanz = taenze[random(sizeof(taenze))];
+  was2 = gna[random(sizeof(gna))];
+
+  von = TP->Name(WESSEN);
+  vonuid = capitalize(getuid(TP));
+  if (vonuid[<1] != 's' && vonuid[<1] != 'x')
+    vonuid += "s";
+  else
+    vonuid += "'";
+
+  if (obs) {
+    an = map_array( map_array( obs, #'getuid ), #'capitalize );
+    an = sort_array( an, #'> );
+    if (sizeof(an) == 1 )
+      an = an[0];
+    else
+      an = implode( an[0..<2], ", " ) + " und " + an[<1];
+  }
+  else
+    an = capitalize(getuid(ob));
+
+  was = was2 + " %s kleine quietschgelbe Gummiente watschelt an, ";
+  was2 += " Deine kleine quietschgelbe Gummiente watschelt zu " + an + ", ";
+
+  switch (random(3))
+  {
+    case 0:
+      was += "huepft Dir auf die Fuesse, tanzt " + tanz + " auf Deinen Zehen";
+      if (obs)
+        was2 += "huepft ihnen auf die Fuesse, tanzt " + tanz +
+          " auf ihren Zehen";
+      else
+        was2 += "huepft " + ob->QueryPronoun(WEM) + " auf die Fuesse, tanzt " +
+          tanz + " auf " + ob->QueryPossPronoun(FEMALE,WEM,PLURAL) + " Zehen";
+      break;
+    case 1:
+      was += "springt Dir auf die Schulter, schnattert Dir ganz aufgeregt " +
+        tanz + " ins Ohr";
+      if (obs)
+        was2 += "springt ihnen auf die Schulter, schnattert ihnen ganz "
+          "aufgeregt " + tanz + " ins Ohr";
+      else
+        was2 += "springt " + ob->QueryPronoun(WEM) + " auf die Schulter, "
+          "schnattert " + ob->QueryPronoun(WEM) + " ganz aufgeregt " +
+          tanz + " ins Ohr";
+      break;
+    case 2:
+      was += "wirft Dich zu Boden, klettert auf Deinen Bauch und legt " +
+             tanz + " hin. Anschliessend verbeugt sie sich";
+      if (obs)
+        was2 += "wirft sie zu Boden, klettert auf ihre Bäuche und legt " +
+          tanz + " hin. Anschliessend verbeugt sie sich";
+      else
+        was2 += "wirft " + ob->QueryPronoun(WEN) + " zu Boden, klettert auf " +
+          ob->QueryPossPronoun(MALE,WEN) + " Bauch und legt " +
+               tanz + " hin. Anschliessend verbeugt sie sich";
+      break;
+  }
+  was += " und duest wieder auf und davon.";
+  was2 += " und duest wieder zu Dir zurueck.";
+
+  // So, und jetzt zur Ausgabe...
+  if (obs)      // Gehts an mehrere Spieler?
+  {
+    int i;
+    for (i=sizeof(obs); i-->0; )
+    {
+      obs[i]->Message(
+          break_string(
+            sprintf(was,
+              TP->QueryProp(P_INVIS) && IS_LEARNER(obs[i]) ? vonuid : von),
+            78), MSGFLAG_SOUL);
+    }
+  }
+  else          // Gehts gezielt an einen?
+  {
+    ob->Message(
+      break_string(
+        sprintf(was, TP->QueryProp(P_INVIS) && IS_LEARNER(ob) ? vonuid : von),
+        78), MSGFLAG_SOUL);
+  }
+  // An mich selbst gehts immer :)
+  TP->Message( break_string(was2, 78), MSGFLAG_SOUL);
+
+  return 1;
+}
+
+
+// Test fuer TP nach call_out() und logout...
+/*
+void x(object tp)
+{
+  if (find_player("woody"))
+    tell_object(find_player("woody"),
+        sprintf("------TP: %O - but was: %O\n", this_player(), tp));
+}
+*/
+

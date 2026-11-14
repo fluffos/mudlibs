@@ -1,0 +1,179 @@
+//=========================================================================
+//
+// File:    schwert_040.c
+// Created by Feyaria@SL
+//
+// Project: testgebiet
+//
+// Ein Schwert mit einer Hitfunc, Wieldfunc und Unwieldfunc. Der Spieler
+// bekommt beim Zuecken / Zurueckstecken eine Meldung und beim Kaempfen
+// richtet die Waffe manchmal Schaden beim Spieler an
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit "std/weapon";
+
+void create()
+{
+  if(!is_clone(this_object())) return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Flammenzunge, das feurige Schwert");
+  SetProp(P_LONG,
+    "Flammenzunge ist ein Schwert, das nur aus Flammen zu bestehen scheint. "
+    "Sicher muss man sehr maechtig sein, um diese Waffe fuehren zu koennen."
+  );
+
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_NAME, "Flammenzunge");
+  AddId( ({"flammenzunge", "schwert"}) );
+
+//-------------------------------------------------------------------------
+// Da dieses Schwert einen Eigennamen traegt, muessen wir verhindern, dass
+// solche Meldungen wie "Du nimmst eine Flammenzunge." kommen. Dafuer muss
+// man nur den Artikel auf 0 setzen.
+//-------------------------------------------------------------------------
+
+  SetProp(P_ARTICLE, 0);
+
+  AddDetail( ({"flammen"}),
+    "Die Flammen dieses Schwertes sind echt! Pass auf, dass Du Dich nicht "
+    "verbrennst.");
+
+  SetProp(P_VALUE, 4000);
+  SetProp(P_WEIGHT, 2000);
+  SetProp(P_MATERIAL, ([ MAT_FIRE:100 ]) );
+
+  SetProp(P_WEAPON_TYPE, WT_SWORD);
+
+//-------------------------------------------------------------------------
+// Ein Flammenschwert macht natuerlich Feuerschaden. Da aber Waffen mit
+// reinem magischen Schaden viel zu stark sind (magischer Schaden wird ja
+// nicht von normalen Ruestungen aufgefangen) muss man sie mit einem
+// physischem Schaden kombinieren. Dies geht, indem man P_DAM_TYPE auf
+// ein Array von Schadenstypen setzt.
+//-------------------------------------------------------------------------
+
+  SetProp(P_DAM_TYPE, ({DT_SLASH, DT_FIRE}) );
+  SetProp(P_WC, 220);
+  SetProp(P_WC_FIX, 30);
+
+//-------------------------------------------------------------------------
+// Dieses Schwert bekommt man nur, wenn man das fiese Feuermonster besiegt,
+// das Stufe 45 hat. NPCs sollten aber Hands oder eine Waffe haben, die ca
+// 10*Stufe betraegt. Daher bekommt unser Feuermonster einen WC_BONUS von
+// 200, dafuer muessen wir nur noch dort die id "\nfieses_feuermonster"
+// setzen. Die Beschraenkung von 300 gilt nicht fuer NPCs, diese koennen
+// auch Waffen mit hoeherer WC haben.
+//-------------------------------------------------------------------------
+
+  SetProp(P_WC_BONUS, (["\nfieses_feuermonster": 200]) );
+
+  SetProp(P_NR_HANDS, 2);
+
+//-------------------------------------------------------------------------
+// Dieses Schwert ist so maechtig, dass nur Seher es verwenden duerfen.
+// Alle NPCs duerfen es auch verwenden, NPCs gelten im restriction_checker
+// als Seher.
+//-------------------------------------------------------------------------
+
+  SetProp(P_WIELD_RESTRICTIONS, ([SR_SEER:1]) );
+
+//-------------------------------------------------------------------------
+// Da man dieses Schwert wohl nur durch Besiegen eines harten Monsters
+// bekommen kann, soll man es nicht im Laden kaufen koennen.
+//-------------------------------------------------------------------------
+
+  SetProp(P_NOBUY, 1);
+
+//-------------------------------------------------------------------------
+// Bei diesem Schwert handelt es sich auf jeden Fall um eine magische Waffe,
+// darum setzen wir es auf magisch.
+//-------------------------------------------------------------------------
+
+  SetProp(P_MAGIC, 1);
+
+//-------------------------------------------------------------------------
+// Beim Zuecken soll man sich die Finger leicht verbrennen, das kann man in
+// der WieldFunc machen, die waehrend dem Zuecken aufgerufen wird.
+// Angeben muss man hier, in welchem Objekt sich diese Funktion befindet,
+// in diesem Fall ist es this_object().
+//-------------------------------------------------------------------------
+
+  SetProp(P_WIELD_FUNC, this_object());
+
+//-------------------------------------------------------------------------
+// Beim Wegstecken soll man die Blasen auf den Fingern sehen, das geht mit
+// der UnwieldFunc, die waehrende dem Wegstecken aufgerufen wird.
+//-------------------------------------------------------------------------
+
+  SetProp(P_UNWIELD_FUNC, this_object());
+
+//-------------------------------------------------------------------------
+// Die Hitfunc wird jedes mal aufgerufen, wenn man mit der Waffe zuschlaegt
+//-------------------------------------------------------------------------
+
+  SetProp(P_HIT_FUNC, this_object());
+}
+
+//-------------------------------------------------------------------------
+// waffe ist hier this_object(), wir benoetigen es also nicht, das ist nur
+// sinnvoll, wenn man mehrere Waffen auf eine WieldFunc in einem anderen
+// File zugreifen.
+// silent bedeutet, dass wir keine Meldungen ausgeben duerfen, wenn dieser
+// Wert gesetzt ist.
+// Der return-Wert hat Auswirkungen auf das Zuecken: bei 1 gelingt es,
+// bei 0 kann die Waffe nicht gezueckt werden.
+// Meistens verwendet man sie, um Dinge zu pruefen, die mittels
+// P_WIELD_RESTRICTIONS nicht moeglich sind. Falls die Waffe nicht gezueckt
+// werden kann, gibt man eine entsprchende Meldung aus und macht return 0;
+//-------------------------------------------------------------------------
+
+int WieldFunc(object waffe, int silent)
+{
+  if( !silent )
+    write("Deine Finger beginnen zu gluehen. Dieses Schwert ist wirklich "
+        "heiss!\n");
+  TP->AddHp(-1); // Man verliert einen Lebenspunkt beim Zuecken.
+  return 1;
+}
+
+//-------------------------------------------------------------------------
+// Die UnwieldFunc ist aequivalent zur WieldFunc, nur dass sie beim
+// Wegstecken aufgerufen wird.
+//-------------------------------------------------------------------------
+
+int UnwieldFunc(object waffe, int silent)
+{
+  if( !silent )
+    tell_object(QueryProp(P_WIELDED),
+        "Die Brandblasen auf Deinen Fingern schauen schrecklich aus.\n");
+  return 1;
+}
+
+//-------------------------------------------------------------------------
+// Der Hitfunc wird der Feind uebergeben, den man gerade mit dieser Waffe
+// angreift. Der return-Wert wird zum Schaden addiert, der mittels P_WC
+// ausgerechnet wird. Eine Waffe mit P_WC 100 und einem return random(10);
+// in der HitFunc entspricht ca. einer Waffe mit P_WC 110.
+// Man kann hier aber nicht nur den Schaden gegen einen bestimmten
+// Gegner erhoehen oder erniedrigen sondern auch alle moeglichen
+// Sachen mit demjenigen machen, der die Waffe gezueckt hat, der
+// Phantasie sind hier kaum Grenzen gesetzt.
+//-------------------------------------------------------------------------
+
+int HitFunc(object enemy)
+{
+  // Ab und zu wird man von den Flammen selber getroffen!
+  if( !random(50) )  // Bei ca jedem 50sten Schlag
+  {
+    tell_object(QueryProp(P_WIELDED),
+        "Flammenzunge versengt Deine Finger.\n");
+    QueryProp(P_WIELDED)->AddHp(-1);
+  }
+  return 0;
+}
+

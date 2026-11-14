@@ -1,0 +1,217 @@
+inherit "/gilden/bardengilde/obj/std_song_effect";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <defines.h>
+#include <new_skills.h>
+#include <moredef.h>
+#include <pub.h>
+#include <moving.h>
+#include "/gilden/bardengilde/bardengilde.h"
+#include "bard_song.h"
+#include "/gilden/berserker/berserker_extern.h"
+#include "/gilden/nekromanten/nekro_properties.h"
+#include "/gilden/paladine/paladin_extern.h"
+#include "/gilden/zechpreller/zechpreller_extern.h"
+
+private int healBonus, soakBonus, duration, imprDrinks, specialChance;
+private string qualityString, targetString, whatString, originalLong;
+
+public void create() {
+    if (!is_clone(TO)) return;
+  
+    ::create();
+    AddId(({SONG_PUB}));
+    setSilentEnd(1);
+
+    AddCmd( ({"kaufe", "kauf", "bestelle", "bestell"}), "intercept_buy");
+
+    imprDrinks = 0;
+}
+
+private int isInPub() {
+    object env;
+    env = environment(this_object());
+    if(!objectp(env)) return 0;
+
+    return sizeof(env->QueryFood() + env->QueryDrink()) > 0;
+}
+
+private void checkAndApplyHeroBonus(object pl) {
+    object ob;
+    string attr;
+    int insp;
+
+    if(objectp(ob=present("\nbarden_bonus"))) return;
+    if(random(10) > specialChance) return;
+
+    if(objectp(caster)) {
+        insp = caster->QueryProp(P_BARD_INSPIRATION_LEVEL);
+    } else {
+        insp = 0;
+    }
+
+    ob = clone_object(OBJ("bonus"));
+    attr = ({A_STR, A_DEX, A_INT, A_CON})[random(4)];
+    ob->SetProp(P_X_ATTR_MOD, ([attr: 1+(insp/2)]));
+    ob->SetProp(P_BERSERKER_BONUS, (["all": insp]));
+    ob->SetProp(P_NEKRO_SPELLCOST, insp);
+    ob->SetProp(P_NEKRO_BONUS, insp);
+    ob->SetProp(P_PALADIN_SPELLCOST, insp);
+    ob->SetProp(P_ZECHPRELLER_SPELLCOST, insp);
+    ob->SetProp(P_ZECHPRELLER_BONUS, insp);
+    ob->SetTimeout(30 + random(insp*6));
+    ob->SetEndMessage("Du fuehlst Fraggins Macht von dir schwinden.");
+    if(ob->move(pl, M_NOCHECK|M_GET) != 1) {
+        ob->remove();
+        return;
+    }
+
+    tell_object(pl, BS("Du siehst, wie dir der Geist von Fraggin Wirtsschreck hinter der Bar zuprostet."));
+    return;
+}
+
+public int intercept_buy(string what) {
+    string details;
+    int result, isDrink;
+
+    if(what == 0 || what == "") return 0;
+    if(!isInPub()) {
+        remove(1);
+        return 0;
+    }
+
+    details = ENV(TO)->QueryFoodById(what);
+    if(details == 0) {
+        details = ENV(TO)->QueryDrinkById(what);
+        if(details) isDrink = 1;
+    }
+    if(!details) return 0;
+
+    if(TP->QueryProp(P_TESTPLAYER)) {
+        write(sprintf("Bestellung von %s abgefangen\n", details[0]));
+    }
+
+    result = ENV(TO)->bestelle(what);
+    if(TP->QueryProp(P_TESTPLAYER)) {
+        write(sprintf("result=%d\n", result));
+    }
+
+    if(result) {
+        if(TP->QueryProp(P_TESTPLAYER)) {
+            write(sprintf("baseHeal=%O isDrink=%d\n", details[3], isDrink));
+        }   
+
+        if((isDrink && imprDrinks) || !isDrink) {
+            TP->AddHp(healBonus);
+            TP->AddSp(healBonus);
+            if(!isDrink) {
+                TP->SetProp(P_FOOD, TP->QueryProp(P_FOOD) + soakBonus);
+            } else {
+                TP->SetProp(P_DRINK, TP->QueryProp(P_DRINK) + soakBonus);
+            }
+
+            checkAndApplyHeroBonus(TP);
+        }
+    }
+
+    return result;
+}
+
+public varargs void prepareSong() {
+    int inspiration;
+    if(!isInPub()) {
+        remove(1);
+        return;
+    }
+
+    if(TALENTMASTER->HasTalent(caster, TALENT_HEILER)) {
+        inspiration = caster->QueryProp(P_BARD_INSPIRATION_LEVEL);
+    }
+    
+    if(success < 0) { 
+        if(caster->QueryProp(P_TESTPLAYER)) {
+            tell_object(caster, BS("negative effect"));
+        }
+
+        healBonus = (success/2000);
+        soakBonus = (success/1000);
+        duration = 60 + random(success/50);
+        qualityString = "verschlechtert";
+        targetString = "Speisen und Getraenke";
+        whatString = "Qualitaet und Bekoemmlichkeit";
+        imprDrinks = 1;
+    } else {
+        soakBonus = (ability/3333) + (success/3333) + inspiration;
+        qualityString = "verbessert";
+        whatString    = "Bekoemmlichkeit";
+        targetString  = "Speisen";
+
+        if(ability > (8000 - (inspiration*1000))) {
+            imprDrinks = 1;
+            targetString = "Speisen und Getraenke";
+        }
+
+        if(success > (9500-inspiration*500)) {
+            healBonus = (ability/3500) + (success/3333) + inspiration;
+            whatString = "Qualitaet und Bekoemmlichkeit";
+        } else {
+            healBonus = 0;
+        }
+    }
+
+    if(caster->QueryProp(P_TESTPLAYER)) {
+        tell_object(caster, sprintf("%s :: before modification healBonus=%d soakBonus=%d impDrink=%d duration=%d\n", 
+                      songName, healBonus, soakBonus, imprDrinks, duration));
+    }
+
+    healBonus = modifyBySkillAttribute(healBonus, SA_DAMAGE);
+    soakBonus = modifyBySkillAttribute(soakBonus, SA_DAMAGE);
+    if(success > 0) soakBonus *= -1;
+
+    if(success > 0 && songName == "Fraggins Totenwache") {
+        specialChance = caster->UseSkill(SK_HEROISM(HERO_FRAGGIN)) / 1000;
+        if(specialChance > 0) {
+            tell_room(environment(this_object()), BS("Fuer einen Moment siehst du den Geist von Fraggin Wirtsschreck hinter der Bar."));
+        }
+        healBonus += specialChance/2;
+        soakBonus += specialChance;
+    } else {
+        specialChance = 0;
+    }
+
+    originalLong = ENV(TO)->QueryProp(P_INT_LONG);
+    ENV(TO)->Set(P_INT_LONG, symbol_function("longOverwrite", this_object()), F_QUERY_METHOD);
+
+    duration = ability/50 + random(success/50) + caster->QueryProp(P_GUILD_LEVEL) * 5 + caster->QueryAttribute(A_INT) * 2;
+    duration = modifyBySkillAttribute(duration, SA_DURATION);
+
+    if(caster->QueryProp(P_TESTPLAYER)) {
+        tell_object(caster, sprintf("%s :: healBonus=%d soakBonus=%d impDrink=%d duration=%d\n", 
+                      songName, healBonus, soakBonus, imprDrinks, duration));
+    }
+
+    call_out("endSong", duration);
+
+    tell_room(ENV(TO), BS(sprintf("%s Lied breitet sich aus und %s die %s der %s.",
+              caster->Name(WESSEN, 1), qualityString, whatString, targetString)), ({caster}));
+    tell_object(caster, BS(sprintf("Dein Lied breitet sich aus und %s die %s der %s.",
+                qualityString, whatString, targetString)));
+
+    return;
+} 
+
+public string longOverwrite() {
+    return originalLong +
+           BS(sprintf("Ein Zauberlied von %s %s die %s der %s des Lokals.",
+                   caster->name(WEM, 1), qualityString, whatString, targetString));
+}
+
+public void onEndSong() {
+    ENV(TO)->Set(P_INT_LONG, 0, F_QUERY_METHOD);
+    tell_room(ENV(TO), BS(sprintf("Die Wirkung des Liedes '%s' von %s im Raum laesst nach. "
+                                  "Die Qualitaet der Speisen und Getraenke wird wieder normal.",
+                                  songName, caster->name(WEM, 1))));
+    return;
+}

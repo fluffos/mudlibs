@@ -1,0 +1,158 @@
+inherit "std/room";
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include "files.h"
+
+#define CHK_TIME 15
+#define MAX_CHK_TIME 180
+#define MAX_IDLE_TIME 25
+#define KREUZUNG "/d/ebene/creative/feldlager/room/a3_a2"
+
+mapping entered=([]);
+int lastmet=0;
+
+create()
+{
+  ::create();
+
+  SetProp(P_INT_SHORT, "Auf einer schwankenden Bruecke" );
+  SetProp(P_INT_LONG,
+    "Du befindest Dich auf einer kleinen, wackligen Bruecke, die ueber das "
+    "kleine Baechlein fuehrt, das die Ostallee begleitet. Waehrend der Bach "
+    "unter Dir gemaechlich vor sich hin plaetschert, knarren die Planken "
+    "der kleinen Bruecke schon recht bedrohlich, und Du fragst Dich, "
+    "wielange sie Dich wohl noch tragen werden... Nach kurzem Ueberlegen "
+    "beschliesst Du, rasch weiterzugehen.");
+
+  SetProp(P_LIGHT, 1);
+  SetProp(P_INDOORS, 0);
+  SetProp(P_NO_MNPC, 1);	// MNPCs sollen hier erst gar nicht rein
+
+  AddDetail ( ({"bruecke"}),
+    "Die kleine Bruecke mit ihren schmalen Holzplanken fuehrt ueber das "
+    "kleine Baechlein unter Dir. Offenbar wurden hier noch nie groessere "
+    "Lasten befoerdert, sonst waere die Bruecke wohl schon laengst "
+    "eingebrochen...");
+  AddDetail ( ({"lasten"}),
+    "Groessere Lasten ueber diese wacklige Bruecke zu befoerdern, ist wohl "
+    "illusorisch. Man kann schon froh sein, ueberhaupt das andere Ufer "
+    "zu erreichen...");
+  AddDetail ( ({"planken", "holzplanken"}),
+    "Die Holzplanken wurden notduerftig mit Tauen verbunden und schwanken "
+    "im Wind hin und her. Du fuehlst Dich alles andere als sicher auf "
+    "diesem wackligen Untergrund...");
+  AddDetail ( ({"boden", "untergrund"}),
+    "Der Boden, auf dem Du stehst, ist alles andere als fest.\n");
+  AddDetail ( ({"taue"}),
+    "Die Taue verbinden die Holzplanken der Bruecke notduerftig, wirken "
+    "allerdings nicht sonderlich vertrauenserregend. Dir wird mulmig.");
+  AddDetail ( ({"wind"}),
+    "Eine Windboe erfasst die kleine Bruecke und schwenkt sie bedrohlich "
+    "hin und her.");
+  AddDetail ( ({"windboe", "boe"}),
+    "Solltest Du nicht allmaehlich weitergehen? Du koenntest sonst noch "
+    "eine unangenehme Ueberraschung erleben...");
+  AddDetail ( ({"bach", "baechlein"}),
+    "Das Baechlein unter Dir plaetschert zwischen seinen Ufern leise vor "
+    "sich hin. Das Wasser ist sehr rein und klar, aber bestimmt hundekalt...");
+  AddDetail ( ({"wasser"}),
+    "Wer weiss... "
+    "vielleicht machst Du ja noch eines Tages Bekanntschaft damit?");
+  AddDetail ( ({"ueberraschung", "bekanntschaft"}), "Wart's nur ab!\n");
+  AddDetail ( ({"ufer"}),
+    "Noerdlich und suedlich des Baches ist sowas wie ein Ufer auszumachen, "
+    "an dem Du einige Gegenstaende liegen sehen kannst...");
+  AddDetail ( ({"gegenstaende", "dinge"}),
+    "An den Ufern kannst Du diverse Gegenstaende liegen sehen, die "
+    "Abenteurer offenbar verloren haben, als sie in den Bach geplumpst "
+    "sind... leider siehst Du keine Moeglichkeit, da ran zu kommen...");
+  AddDetail ( ({"moeglichkeit"}),
+    "Nein, wirklich nicht. Zumindest vorlaeufig...\n");
+
+  AddSound (DEFAULT_SOUND,
+    "Das Baechlein unter Dir plaetschert leise vor sich hin, und die "
+    "Bruecke, sie knarrt bedrohlich im Wind...");
+  AddSound( ({"wind"}),
+    "Der eigentlich eher sanfte Wind reicht bereits, um die wacklige "
+    "Bruecke zum Knarren zu bringen... Dir wird unwohl.");
+  AddSound( ({"bruecke", "knarren"}),
+    "Das Knarren hoert sich aeusserst bedrohlich an...");
+  AddSound( ({"bach", "baechlein", "plaetschern"}),
+    "Das Baechlein plaetschert, gluckst, rauscht leise vor sich hin...\n");
+
+  AddCmd (({"spring", "springe", "huepf", "huepfe"}), "jump");
+
+  AddExit( "norden", ROOM("10y_23x") );
+  AddExit( "sueden", KREUZUNG );
+}
+
+int jump(string str)
+{
+  string s1,s2;
+  notify_fail ("Wohin willst Du springen?\n");
+  if (!str) return 0;
+  if (str=="wasser" || str=="bach") return
+    notify_fail ("Hmm... an der Formulierung solltest Du noch feilen!\n"), 0;
+  if (sscanf(str, "%s %s", s1, s2)!=2) return 0;
+  if (!(s1=="in" && (s2=="bach" || s2=="baechlein" || s2=="wasser"))) return 0;
+  write (
+    "Du nimmst all Deinen Mut zusammen und springst ins eiskalte Wasser.\n"
+    "Lange haeltst Du das jedoch nicht aus, Du schwimmst daher schnell wieder\n"
+    "ans Ufer... brrrrr, war das kalt!!!\n"
+    "Du denkst noch . o O ( Und zu MIR sagen sie Warmduscher... )\n");
+  this_player()->move(KREUZUNG, M_GO, "ins Wasser", "springt",
+    "kommt pudelnass aus dem Bach angeschwommen");
+  return 1;
+}
+
+init()
+{
+  ::init();
+  if (!this_player() || !query_once_interactive(this_player())) return;
+  if (find_call_out("chk_idle")==-1)
+  call_out("chk_idle", CHK_TIME);
+  entered[getuid(this_player())]=lastmet=time();
+}
+
+chk_idle()
+{
+  string *ind;
+  int i;
+  object who;
+
+  while (remove_call_out("chk_idle")!=-1);
+  if (time()-lastmet > MAX_CHK_TIME) {
+    entered=([]);
+    return;
+  }
+  call_out("chk_idle", CHK_TIME);
+  ind=m_indices(entered);
+  for (i=sizeof(ind)-1; i>=0; i--) {
+    if (!(who=find_player(ind[i])) || !present(who))
+      entered=m_delete(entered,ind[i]);
+    else
+      if (time()-entered[ind[i]] > MAX_IDLE_TIME) {
+        plumps(who);
+        entered=m_delete(entered,ind[i]);
+      }
+  }
+}
+
+plumps(object ob)
+{
+  tell_object (ob,
+    "Ohje - jetzt bist Du wohl zulange unachtsam rumgestanden!\n"
+    "Eine der Planken gibt nach, kippt um und Du plumpst in den kalten Bach!\n"
+    "Brrrr... ist das kalt! Schnell schwimmst Du ans Ufer "
+    "vor der Bruecke zurueck.\n"
+  );
+  tell_room (this_object(),
+    "Oh... eine der Planken gibt nach, und "+
+    capitalize(ob->name())+" plumpst ins kalte Wasser!\n", ({ob}) );
+  ob->move(({KREUZUNG,ROOM("10y_23x")})[random(2)],
+    M_GO, "schnell wieder zurueck ans Ufer", "schwimmt",
+    "kommt pudelnass aus dem Bach angeschwommen");
+}
+

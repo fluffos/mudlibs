@@ -1,0 +1,186 @@
+/*
+ * Ein Schluesselbund
+ * ---
+ * von Woody.-
+ *
+ */
+
+#include <properties.h>
+#include <moving.h>
+#include <defines.h>
+#include "/players/woody/files.h"
+
+inherit "/std/container";
+
+private nosave mixed doorkeys;
+private nosave int last_recalc;
+
+create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+  SetProp(P_SHORT, "Ein silberner Schluesselbund");
+  SetProp(P_LONG, "Der Schluesselbund besteht aus einem runden Reif "
+      "aus feinstem Silber, der verschiedenste Schluessel aufnehmen kann. "
+      "Er ist bestimmt praktisch, wenn Du deren bereits viele gesammelt "
+      "hast.");
+  AddId(({"\nschluesselbund", "schluesselbund", "bund"}));
+  SetProp(P_NAME, "Schluesselbund");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_WEIGHT, 200);
+  SetProp(P_WEIGHT_PERCENT, 25);
+  SetProp(P_MAX_WEIGHT, 3000);
+  SetProp(P_VALUE, 3000);
+  SetProp(P_NODROP, "Du willst Dich von diesem Geschenk nicht trennen.\n");
+  SetProp(P_NEVERDROP, 1);
+
+  SetProp(P_INFO, bs("Du kannst Schluessel an den Schluesselbund "
+      "stecken oder wieder abloesen."));
+  SetProp(P_MATERIAL, MAT_SILVER);
+
+  AddDetail("reif",
+      "Der Reif haelt die Schluessel beisammen.");
+  AddDetail("silber",
+      "Feinstes, haertestes Silber, das dafuer sorgt, dass Du keinen "
+      "Deiner Schluessel verlierst.");
+  AddDetail("schluessel",
+      "Die kannst Du auf den Bund stecken oder davon loesen.");
+
+  AddCmd(({"steck","stecke"}), "stecke");
+  AddCmd(({"nimm","loes","loese"}), "nimm");
+
+  doorkeys=({});
+  last_recalc=time();
+}
+
+void RecalcDoorkeys()
+{
+  int i;
+  mixed obs,dk;
+
+  doorkeys=({});
+  obs=all_inventory(this_object());
+  for (i=sizeof(obs)-1; i>=0; i--)
+  {
+    dk=obs[i]->QueryDoorKey();
+    if (stringp(dk)) {
+      if (member(doorkeys,dk)==-1) doorkeys+=({ dk });
+    }
+    else if (pointerp(dk)) doorkeys=doorkeys-dk+dk;
+  }
+  last_recalc=time();
+}
+
+int stecke(mixed str)
+{
+  string s1,s2;
+  object ob;
+  mixed dk;
+  int ret;
+
+  if (!str) return 0;
+  if (objectp(str))
+    ob = str;
+  else
+  {
+    if (sscanf(str,"%s auf %s",s1,s2)!=2 && sscanf(str,"%s an %s",s1,s2)!=2)
+      return 0;
+    notify_fail("Was willst Du worauf stecken?\n");
+    if (!id(s2)) return 0;
+
+    if (s1 == "jeden schluessel" || s1 == "alle schluessel")
+    {
+      object *keys;
+      int i;
+
+      keys = filter_objects( all_inventory(PL), "QueryDoorKey" ) - ({ ME });
+      if (sizeof(keys))
+        for (i=0; i<sizeof(keys); i++)
+          stecke(keys[i]);
+      else
+        write("Du hast im Moment keinen losen Schluessel bei Dir!\n");
+      return 1;
+    }
+
+    if (!(ob=present(s1,this_player())||present(s1,environment(PL))))
+      return write("Aber sowas hast Du doch gar nicht bei Dir!\n"), 1;
+    if (ob==this_object())
+      return write("Das wuerde ja wohl kaum Sinn machen, oder...?\n"), 1;
+  }
+
+  dk=ob->QueryDoorKey();
+  if (!dk && !ob->id("schluessel"))
+    return write("Du kannst nur Schluessel auf den Schluesselbund "
+        "stecken.\n"), 1;
+  ret = ob->move(this_object(), M_PUT);
+  if (ret > 0) {
+    write("Du steckst "+ob->name(WEN,1)+" auf den Schluesselbund.\n");
+    if (stringp(dk)) {
+      if (member(doorkeys,dk)==-1) doorkeys+=({ dk });
+    }
+    else if (pointerp(dk)) doorkeys=doorkeys-dk+dk;
+  }
+  else {
+    switch (ret)
+    {
+      case ME_PLAYER:
+        write(bs("Also Lebewesen kannst Du so nicht anketten. "+
+            "Nicht mal "+ob->name(WEN)+"!"));
+        break;
+      case ME_TOO_HEAVY:
+        write(bs(ob->Name(WER,1)+" passt nicht mehr auf den Schluesselbund."));
+        break;
+      case ME_CANT_BE_DROPPED:
+        if (stringp(ob->QueryProp(P_NODROP))) {
+          write(ob->QueryProp(P_NODROP));
+          break;
+        }
+        // else ... (fall-thru)
+      default:
+        write("Du kannst "+ob->name(WEN,1)+
+            " nicht auf den Schluesselbund stecken.\n");
+    }
+  }
+  return 1;
+}
+
+int nimm(string str)
+{
+  string s1,s2;
+  object ob;
+
+  if (!str) return 0;
+  if ((sscanf(str,"%s von %s ab",s1,s2)!=2) &&
+      (sscanf(str,"%s von %s herunter",s1,s2)!=2) &&
+      (sscanf(str,"%s von %s runter",s1,s2)!=2) &&
+      (sscanf(str,"%s von %s",s1,s2)!=2))
+    return 0;
+  notify_fail("Was willst Du wovon (ab)loesen?\n");
+  if (!id(s2)) return 0;
+  if (!(ob=present(s1,this_object())))
+    return write("Aber sowas steckt ja gar nicht an "
+        "Deinem Schluesselbund!\n"), 1;
+  if (ob->move(this_player(), M_GET) < 0)
+    write("Du kannst "+ob->name(WEN,1)+
+        " nicht von Deinem Schluesselbund loesen.\n");
+  else {
+    write("Du loest "+ob->name(WEN,1)+" von Deinem Schluesselbund ab.\n");
+    RecalcDoorkeys();
+  }
+  return 1;
+}
+
+mixed QueryDoorKey()
+{
+  if (QueryProp(P_LAST_CONTENT_CHANGE) >= last_recalc)
+    RecalcDoorkeys();
+  return doorkeys;
+}
+
+varargs int PreventInsert(object ob)
+{
+  if (!ob->QueryDoorKey() && !ob->id("schluessel"))
+    return 1;
+  return 0;
+}
+

@@ -1,0 +1,307 @@
+// Ueberarbeitet fuer das Silberland
+// Yondala@Silberland 01.05.2010
+// Funktioniert natuerlich nicht. Bleibt hinter verschlossenen Tueren.
+
+//Der Verkauefer im bewachten Laden der Piraten
+//zusaetzlich Messerkampfausbilder
+//kann waehrend er uebt oder ausbildet Sachen verkaufen (hihi)
+
+#include <properties.h>
+#include <combat.h>
+#include <new_skills.h>
+#include <moving.h>
+#include <mnpc.h>
+#include "../def.h"
+
+inherit PIR_NPC + "pirat_std.lpc";
+
+// Variablen
+string pfad_uebungen = PIR_NPC+"/uebungen/";
+string start_sequenz = pfad_uebungen+"start.std";
+mapping liste = ([]);
+string uebung;
+object uebender;
+
+string aus_name() { // fuer Ausgabezwecke
+	return uebender->name();
+}
+
+void ende() {
+	int abil;
+	
+	abil=TP->QuerySkillAbility(SK_KNIFEFIGHTING);
+  if( abil>=random(3000) ) {
+   	tell_room(environment(TO), 
+   	  BS(TO->name()+" sagt zu "+uebender->name()+"Ihr seid wohl ein bischen abgelenkt gewesen, oder? "+
+   	  "Ich glaube nicht dass Euch diese Uebung geholfen hat."));
+  } else {
+  	TP->LearnSkill(SK_KNIFEFIGHTING, 25+random(76), 100);	
+    tell_room(environment(TO), 
+   	  BS(TO->name()+" sagt zu "+uebender->name()+": Ihr habt gelernt mit dem Messer etwas geschickter "+
+   	  "umzugehen. Ihr muesst noch viel ueben, damit Ihr ein guter Messerkaempfer werdet."));
+  }
+	uebender->SetProp( P_NOMOVE, 0);
+}
+
+void ausbildung_ende() {
+  TP->LearnSkill(SK_KNIFEFIGHTING, 400, 100);	
+  tell_room(environment(TO), 
+   	BS(TO->name()+" sagt zu "+uebender->name()+ ": Ihr habt gelernt mit einem Messer euch nicht "+
+   	"selbst zu verletzen. Ihr muesst noch viel ueben, damit Ihr ein guter Messerkaempfer werdet."));
+	uebender->SetProp( P_NOMOVE, 0);
+}
+
+string start() {
+	string *ind_liste;
+	
+	if( find_call_out("ueben")!=-1 || find_call_out("ausbilden")!=-1) 
+		return "Tut mir leid, aber ich bin gerade beschaeftigt .\n";
+	if( sizeof(liste) == 0 )
+		return "Ich weiss leider gerade keine Uebung.\n";	
+	// uebung aussuchen
+	ind_liste = m_indices(liste);
+	uebung = ind_liste[random(sizeof(ind_liste))];
+	call_out("ueben", 3, 1);
+	uebender = TP;
+	uebender->SetProp( P_NOMOVE, BS("Du bist gerade am ueben und kannst daher nicht weg."));
+	return "Ich werde nun mit Euch ueben. Falls ihr die Uebung abbrechen wollt, "+
+	  "so fragt mich einfach nach einem Abbruch.";
+}
+
+string neu_sequenz() {
+	
+	if( find_call_out("ueben")!=-1 || find_call_out("ausbilden")!=-1) 
+		return "Tut mir leid, aber ich bin gerade beschaeftigt .\n";
+	if( file_size(start_sequenz) == -1 )
+		return "Ich weiss leider gerade nicht wie man ausbildet.\n";	
+	call_out("ausbilden", 3, 1);
+	uebender = TP;
+	uebender->SetProp( P_NOMOVE, BS("Du bist gerade mit deiner Ausbildung beschaeftigt und kannst daher nicht weg."));
+	return "Ich werde Euch nun die Grundlagen des Messerkampfs beibringen.\n";
+}
+
+string abbruch() {
+ 	if(  find_call_out("ausbilden") != -1) 
+		return "Tut mir leid, aber ich bin gerade mitten beim Ausbilden.\n";
+	if( find_call_out("ueben") == -1 ) 
+    return "Ich bin gerade nicht mit ueben beschaeftigt.\n";
+	if( TP != uebender ) 
+    return "Ich uebe gerade mit "+uebender->name()+". "+
+      "Sprecht mich wieder an, wenn ich damit fertig bin.\n";
+	remove_call_out("ueben"); 
+	uebender->SetProp( P_NOMOVE, 0);
+	return "Dann hoere ich eben auf mit Euch zu ueben.\n";  
+}
+
+void ueben(int absatz) {
+	string zeile;
+	zeile = read_file(liste[uebung], absatz, 1);
+	if( zeile != "" && zeile != 0) {
+		tell_object(uebender, BS(process_string(zeile)) );
+		if( absatz%4 == 0) {
+		  tell_room(environment(TO), BS( TO->name(RAW)+" ist mit "+uebender->name()+" am ueben."), ({uebender}) );
+		}
+	  absatz = absatz + 1;
+	  call_out("ueben", 3, absatz);
+	}	else {
+		ende();
+	}  
+}
+
+void ausbilden(int absatz) {
+	string zeile;
+	zeile = read_file(start_sequenz, absatz, 1);
+	if( zeile != ""  && zeile != 0) {
+		tell_object(uebender, BS(process_string(zeile)) );
+		if( absatz%4 == 0 ) {
+  		tell_room(environment(TO), BS( TO->name(RAW)+" ist dabei "+uebender->name()+" auszubilden."), ({uebender}) );
+  	}
+	  absatz = absatz + 1;
+	  call_out("ausbilden", 3, absatz);
+	}	else {
+		ausbildung_ende();
+	}  
+}
+
+void erzeuge_liste() {  
+  string *filenames, name, dummy;
+  int i;
+
+	filenames = get_dir( pfad_uebungen+"*" );
+  for(i=0; i<sizeof(filenames); i++)
+  {
+    if( sscanf(filenames[i],"%s.txt%s", name, dummy) == 2 )
+    	if( !member(liste, name) )
+        liste += ([name: pfad_uebungen+filenames[i] ]);
+  }
+}
+
+string ausbildungsstand()
+{
+	int abil;
+  string *skill_knowledge;
+  skill_knowledge = ({
+  	"schrecklich schlecht",
+  	"miserabel",
+  	"extrem schlecht",
+    "sehr schlecht",
+    "schlecht",
+    "fast gar nicht",
+    "maessig",
+    "mittelmaessig",
+    "durchschnitt",
+    "passabel"
+    "beinahe gut",
+    "gut",
+    "sehr gut",
+    "perfekt",
+    "meisterhaft",
+    "goettlich" });
+	abil=TP->QuerySkillAbility(SK_KNIFEFIGHTING);
+	if( !abil )
+	  return "Du hast die Grundlagen des Messerkampfs noch nicht gelernt.\n";
+	if( abil<0 ) abil=0;  
+	return "Du kannst den Messerkampf "+skill_knowledge[abil/625]+".\n";  
+}
+
+string ausbildungsstart()
+{
+	object waffe;
+	if( find_call_out("ueben")!=-1 || find_call_out("ausbilden")!=-1) 
+		return "Tut mir leid, aber ich bin gerade beschaeftigt .\n";
+	waffe=TP->QueryProp(P_WEAPON);
+	if( TP->QuerySkillAbility(SK_KNIFEFIGHTING)>0 )
+		return "Ihr habt die Grundlagen des Messerkampfs doch schon gelernt. "+
+		"Ihr musst nun ueben, ueben, ueben und nochmals ueben.";
+  if( !waffe ) 
+		return "Ohne eigene Waffe kann ich Euch nichts beibringen. "+
+		"Los geht und besorgt Euch ein Messer.";
+  if( waffe->QueryProp(P_WEAPON_TYPE) != WT_KNIFE ) 
+  	return "Ich kann Euch nur den Messerkampf beibringen wenn Ihr auch ein "+
+  	"Messer gezueckt habt.";
+  return neu_sequenz();
+}
+
+string uebung()
+{
+	int abil;
+	object waffe;
+	abil = TP->QuerySkillAbility(SK_KNIFEFIGHTING);
+	waffe=TP->QueryProp(P_WEAPON);
+	if( find_call_out("ueben")!=-1 || find_call_out("ausbilden")!=-1) 
+		return "Tut mir leid, aber ich bin gerade beschaeftigt .\n";
+	if( !abil )
+		return "Ihr habt die Grundlagen des Messerkampfs noch nicht gelernt. "+
+		"Ich kann mit Euch erst dann ueben wenn Ihr die Grundlagen kennt.";
+	if( abil>1200 )
+		return "Ihr hast den Messerkampf schon gut genug gelernt. "+
+		"Nur durch die Erfahrungen aus echten Kaempfen werdet Ihr eure Fertigkeit noch verbessern.";
+	if( !waffe ) 
+		return "Ohne eigene Waffe kann ich Euch nichts beibringen. "+
+		"Los geht und besorgt Euch ein Messer.";
+  if( waffe->QueryProp(P_WEAPON_TYPE) != WT_KNIFE ) 
+  	return "Ich kann mit Euch den Messerkampf nur ueben wenn Ihr auch einen "+
+  	"Messer gezueckt habt.";
+  return start();  
+}
+
+void reset()  {
+  ::reset();
+  erzeuge_liste(); // bei jedem RESET wird die Liste mit Geschichten aktualisiert
+}
+
+void create() {
+
+  ::create();
+
+  SetProp(P_SHORT, "Messer-Jockeli");
+  SetProp(P_LONG,
+    "Du siehst einen alten, schmutzigen Piraten. Seine fettigen Haare sind halb von einem "
+    "dreckigen blassrotem Tuch verdeckt. Seine Zaehne sind braun und verfault. Ausserdem "
+    "stinkt er, dass Dir bald uebel wird.");
+  SetProp(P_NAME, "Messer-Jockel");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_ARTICLE, 0);
+
+  AddId(({"pirat", "jockel", "messer-jockel"}));
+
+  create_default_npc(20); //erstellt Standartwerte fuer PIR_NPC des Level x
+  erzeuge_liste();
+  
+  SetProp(P_RACE, "Mensch");
+  SetProp(P_SIZE, 175);
+  SetProp(P_WEIGHT, 80000);
+  SetProp(P_ALIGN, -400);
+  SetProp(P_MAX_HANDS, 2);
+
+  SetProp(P_MMSGIN, "kommt unter dem Ladentisch hervor");
+  SetProp(P_MMSGOUT, "kriecht unter den Ladentisch");
+
+  SetProp(P_DIE_MSG,  " faellt tot zu Boden.\n");
+  SetProp(P_KILL_NAME, "Messer-Jockel");
+
+  AddInfo( ({"ausbildungsstart"}), #'ausbildungsstart, "sagt: ");
+  AddInfo( ({"ausbildungsstand"}), #'ausbildungsstand, "sagt: ");
+  AddInfo( ({"uebung"}), #'uebung, "sagt: ");
+  AddInfo( ({"abbruch"}), #'abbruch, "sagt: ");
+
+  AddInfo(DEFAULT_INFO, "erwidert: Wenn Ihr nichts kaufen wollt, dann schert Euch fort!\n");
+    
+  AddInfo( ({ "waffe", "waffen" }),
+    "Waffen koennt Ihr bei mir kaufen.",
+    "sagt: ");        
+  AddInfo( ({ "yason","yondala","aginor" }),
+    "Adelspack!",
+    "ruft: ");        
+  AddInfo( ({ "waffe", "waffen" }),
+    "Waffen koennt Ihr bei mir kaufen.",
+    "sagt: ");        
+  AddInfo( ({ "yason","yondala","aginor","nyx" }),
+    "Adelspack!",
+    "ruft: ");        
+  AddInfo( ({ "messerkampf" }),
+ //   "Den koennt Ihr gegen eine kleine Gebuehr bei mir lernen.",
+    "Den bringe ich derzeit nur Piraten bei.",
+    "sagt: ");        
+  AddInfo( ({ "gebuehr" }),
+    "Wenn Ihr den Messerkampf bei mir lernen wollt, so verlange ich dafuer 5000 Muenzen von "
+    "einem Piraten und 10000 Muenzen von einer Landratte.",
+    "sagt: ");        
+  AddInfo( ({ "landratte" }),
+    "Jeder, der kein Pirat ist, ist eine Landratte.",
+    "sagt: ");        
+  AddInfo( ({ "pirat" }),
+    "Ich bin ein Pirat.",
+    "sagt: ");        
+  AddInfo( ({ "" }),
+    "",
+    "sagt: ");        
+    
+    
+    
+     
+  SUID;
+  CLONEME("/p/armour/armour/hemd");
+  CLONEME("/p/armour/trousers/hose");
+  CLONEME("/p/armour/boots/lederschuhe");
+  command("trage alles");
+  CLONEME("/p/weapon/knife/messer" );
+  command("zuecke saebel");        
+
+}
+
+void die(int poisondeath) {
+	if( find_call_out("ueben")!=-1 ) {
+		remove_call_out("ueben"); 
+	  uebender->SetProp( P_NOMOVE, 0);
+    tell_room(environment(TO), 
+   	  BS(TO->name()+" kann die Uebung mit "+uebender->name()+ " nicht mehr abschliessen."));
+  }
+	if( find_call_out("ausbilden")!=-1 ) {
+		remove_call_out("ausbilden"); 
+	  uebender->SetProp( P_NOMOVE, 0);
+    tell_room(environment(TO), 
+   	  BS(TO->name()+" kann die Ausbildung mit "+uebender->name()+ " nicht mehr abschliessen."));
+  }
+  ::die(poisondeath);
+}

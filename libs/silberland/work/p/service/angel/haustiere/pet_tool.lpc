@@ -1,0 +1,264 @@
+/********************************************************************
+ * Tool: Updatetool fuer die Haustiere                              *
+ * Datei: /p/service/angel/haustiere/pet_tool.c                     *
+ * Letzte Ueberarbeitung: 29.12.2002                                *
+ * Version: 1.0 Release                                             *
+ ********************************************************************/
+
+inherit "/std/thing.lpc";
+private inherit "/std/shells/filesys/asynchron";
+
+
+#include "/d/def.h"
+
+// Extrahiert den Namen des Haustieres aus den Dateinamen der savefiles
+string FindPet( string uid )
+{
+   int i, max;
+   string name, player;
+   mixed files;
+
+   files = get_dir("/p/service/angel/haustiere/save/*");
+
+   max = sizeof(files);
+   for (i=0; i < max; i++)
+   {
+      sscanf(files[i], "pet_%s_%s.o", name, player);
+      if (player == uid)
+         return name;
+   }
+}
+
+// Extrahiert den Namen des Besitzers aus den Dateinamen der savefiles
+string FindOwner( string uid )
+{
+   int i, max;
+   string name, player;
+   mixed files;
+
+   files = get_dir("/p/service/angel/haustiere/save/*");
+
+   max = sizeof(files);
+   for (i=0; i < max; i++)
+   {
+      sscanf(files[i], "pet_%s_%s.o", name, player);
+      if (name == uid)
+         return player;
+   }
+}
+
+mixed QueryPets()
+{
+   int i, max;
+   string name, player;
+   mixed files, results;
+
+   results = ({});
+
+   files = get_dir("/p/service/angel/haustiere/save/*");
+
+   max = sizeof(files);
+   for (i=0; i < max; i++)
+   {
+      if ( sscanf(files[i], "pet_%s_%s.o", name, player) == 2 )
+         results += ({name});
+   }
+   return filter_array(results, #'find_living);
+}
+
+varargs int RestorePet ( string uid, string mode )
+{
+   object pet, location;
+   string owner, filename, vstring, namestr;
+
+   pet = find_living ( uid );
+
+   notify_fail ( "Dieses Tier ist nicht auffindbar!\n" );
+   if ( !objectp(pet) )
+      return 0;
+
+   vstring = "/p/service/angel/haustiere/std_pet"->QueryVersion();
+
+   if ( !stringp (uid) )
+   {
+	  notify_fail ("Welches Tier moechtest Du erneuern?\n");
+	  return 0;
+   }
+
+   notify_fail ( "Dies ist kein Haustier!\n" );
+   owner = FindOwner ( uid );
+   if ( !stringp ( owner ) )
+      return 0;
+
+   notify_fail ( "Diese Haustier ist schon am letzten Stand!\n");
+   if ( pet->QueryVersion() == vstring  && mode != "force" )
+      return 0;
+
+   location = environment (pet);
+
+   notify_fail ("Fehler! Pet ist klein Clone!\n");
+   if ( sizeof(explode(file_name(pet), "#")) != 2 )
+      return 0;
+
+   filename = explode(file_name(pet), "#")[0];
+
+   pet->SavePet();
+   pet->remove();
+
+   pet = clone_object (filename);
+
+   pet->RestorePet( lower_case (owner) );
+   pet->move (location, M_GO);
+
+   if (strlen(uid) < 10)
+      namestr = pet->Name() +"':\t\t";
+   else
+      namestr = pet->Name() +"':\t";
+
+   write ("Pet '"+namestr+"restored to "+vstring+"!\n");
+   return 1;
+}
+
+int DisplayPet ( string uid )
+{
+   object pet, location;
+   string owner, filename, namestr;
+
+   if ( !stringp (uid) )
+   {
+	  notify_fail ("Welches Tier moechtest Du erneuern?\n");
+	  return 0;
+   }
+
+   notify_fail ( "Dies ist kein Haustier!\n" );
+   owner = FindOwner ( uid );
+   if ( !stringp ( owner ) )
+      return 0;
+
+   pet = find_living ( uid );
+
+   notify_fail ( "Dieses Tier ist nicht auffindbar!\n" );
+   if ( !objectp(pet) )
+      return 0;
+
+   location = environment (pet);
+
+   if (strlen(uid) < 6)
+      namestr = capitalize(uid) +": \t\t";
+   else
+      namestr = capitalize(uid) +": \t";
+
+   write ( namestr+pet->QueryVersion()+", "+file_name(location)+".\n");
+   return 1;
+}
+
+int RestorePets ( string args )
+{
+   mixed pets;
+   int i;
+
+   pets = QueryPets();
+
+   asynchron( pets, #'RestorePet, ({ args }) );
+   return 1;
+}
+
+int PetCheck ( string args )
+{
+   mixed pets;
+   int i;
+
+   if ( stringp (args) )
+   {
+      DisplayPet( args );
+      return 1;
+   }
+
+   pets = QueryPets();
+
+   asynchron( pets, #'DisplayPet );
+   return 1;
+}
+
+int GetPet ( string owner )
+{
+   string pet_name;
+
+   pet_name = FindPet ( lower_case(owner) );
+
+   notify_fail ( "Dieser Spieler hat noch kein Haustier!\n" );
+   if ( !stringp(pet_name) )
+      return 0;
+
+   write ( "Das Haustier von "+capitalize (owner)+" heisst "+capitalize(pet_name)+".\n" );
+   return 1;
+}
+
+int GetDupes( string args )
+{
+   int i, max;
+   string name, player;
+   mixed files, owners;
+
+   files = get_dir("/p/service/angel/haustiere/save/*");
+
+   owners = ([]);
+
+   max = sizeof(files);
+   for (i=0; i < max; i++)
+   {
+      sscanf(files[i], "pet_%s_%s.o", name, player);
+
+      if ( stringp( name ) && stringp( player ) && member ( owners, player ) )
+      {
+	     printf (">> %s: %s (dupe!)\n", player, name);
+      }
+      else
+      {
+	     if ( args == "all" )
+	        printf ("%s: %s (ok!)\n", player, name);
+	     owners += ([ player:name ]);
+      }
+   }
+   return 1;
+}
+
+short ()
+{
+  if ( objectp( environment ( TO ) ) && living (environment ( TO )) )
+     return environment ( TO )->Name(WESSEN) +" "+ ::short();
+  else
+     return ::short();
+}
+
+void create()
+{
+   ::create();
+
+   SetProp(P_AUTOLOADOBJ, 1);
+   SetProp(P_NEVERDROP, 1);
+   SetProp(P_NODROP, 1);
+   SetProp(P_NAME, "Pet-Tool");
+   SetProp(P_GENDER, NEUTER);
+   SetProp(P_SHORT, "Pet-Tool");
+   SetProp(P_LONG, "Dieses Tool dient der Verwaltung "
+                   "der Haustiere im Silberland.\nSyntax: <restore 'petname'>\n        <petcheck>\n"
+                   "        <restorepets 'force' (optional)>\n        <petinfo 'spieler'>\n");
+
+   seteuid(getuid());
+
+   AddCmd ( "restore", "RestorePet" );
+   AddCmd ( "restorepets", "RestorePets" );
+   AddCmd ( "petcheck", "PetCheck" );
+   AddCmd ( "petinfo", "GetPet" );
+   AddCmd ( "getdupes", "GetDupes" );
+   AddId ("pettool");
+}
+
+int move(mixed dest, int method)
+{
+   if (!objectp (dest) || !IS_LEARNER(dest))
+      return ME_CANT_BE_TAKEN;
+   ::move(dest, method);
+   return 1;
+}

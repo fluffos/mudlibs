@@ -1,0 +1,436 @@
+
+/*
+
+  Erhoeht Attribute durch Traenke - Zordan@SL
+
+*/
+
+
+inherit "std/armour";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <class.h>
+#include <new_skills.h>
+
+#include "./potion.h"
+
+void vorbei();
+void dunkel(object ob);
+void attackende(object ob);
+void aggrende(object ob);
+void tempvorbei();
+void dieende(object ob);
+void defendhook_end(object ob);
+
+int defart,groesse;
+
+create() {
+  if(!is_clone(TO)) return;
+  ::create();
+
+  defart=0;
+  groesse=0;
+
+  SetProp(P_SHORT, 0);
+  SetProp(P_LONG,  "Erhoehung eines Attributes durch Trank." );
+  SetProp(P_NAME, 0);
+  SetProp(P_GENDER, NEUTER);
+  AddId( ({"\n_trank_attr"}) );
+
+  SetProp(P_ARMOUR_TYPE, AT_MISC );
+  SetProp(P_AC, 0);
+  SetProp(P_MATERIAL, MAT_MISC );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_INVIS, 1);
+}
+
+init() {
+  ::init();
+  if(MENV && !interactive(MENV)) call_out("remove",0);
+}
+
+reset() {
+  ::reset();
+  if(!is_clone(TO)) return;
+  if(!MENV) call_out("remove",0);
+  if(query_once_interactive(MENV)) call_out("BecomesNetDead",0,MENV);
+  else call_out("remove",0);
+}
+
+BecomesNetDead(object wer) {
+  if(wer != MENV) return;
+  if(find_call_out("vorbei") != -1) {
+    while (remove_call_out("vorbei") != -1) ;
+    vorbei();
+    return;
+  }
+  if(find_call_out("dunkel") != -1) {
+    while (remove_call_out("dunkel") != -1) ;
+    dunkel(wer);
+    return;
+  }
+  if(find_call_out("attackende") != -1) {
+    while (remove_call_out("attackende") != -1) ;
+    attackende(wer);
+    return;
+  }
+  if(find_call_out("aggrende") != -1) {
+    while (remove_call_out("aggrende") != -1) ;
+    aggrende(wer);
+    return;
+  }
+  if(find_call_out("defendhook_end") != -1) {
+    while (remove_call_out("defendhook_end") != -1) ;
+    defendhook_end(wer);
+    return;
+  }
+  if(find_call_out("dieende") != -1) {
+    while (remove_call_out("dieende") != -1) ;
+    dieende(wer);
+    return;
+  }
+  if(find_call_out("tempvorbei") != -1) {
+    while (remove_call_out("tempvorbei") != -1) ;
+    tempvorbei();
+    return;
+  }
+  call_out("remove",0);
+}
+
+//
+// + Atrtribute
+//
+
+int SetVars(int dauer, int str, int dex, int mag, int con) {
+  object ob;
+  SetProp (P_X_ATTR_MOD, ([ A_STR: str, A_DEX: dex, A_INT: mag, A_CON: con ]));
+  DoWear(1);
+  if(!ob=QueryProp(P_WORN)) {
+    if(find_living("zordan"))
+      tell_object(find_living("zordan"),"*** SetVars in PotionObj ging nicht!\n");
+    call_out("remove",0);
+    return 0;
+  }
+  ob->UpdateAttributes();
+  call_out("vorbei", dauer);
+  return 1;
+}
+
+void vorbei() {
+  object ob;
+  SetProp (P_X_ATTR_MOD, 0 );
+  ob=QueryProp(P_WORN);
+  DoUnwear(1);
+  if(ob) {
+    ob->UpdateAttributes();
+    tell_object(ob,BS(
+      "Die Wirkung des Flaeschchens laesst nach und Du wirst wieder "
+      "normal."));
+  }
+  call_out("remove",0);
+}
+
+varargs int DoUnwear(int silent) {
+  int ret;
+  object ob;
+  ob=QueryProp(P_WORN);
+  ret = ::DoUnwear (silent);
+  if (!QueryProp(P_WORN)) {
+    SetProp (P_X_ATTR_MOD, 0 );
+    if(ob) ob->UpdateAttributes();
+  }
+  return ret;
+}
+
+//
+// Nightvision
+//
+
+int startvision(int dauer) {
+  object ob;
+  if(!ob=MENV) {
+    call_out("remove",0);
+    return 0;
+  }
+  if(!interactive(ob)) {
+    call_out("remove",0);
+    return 0;
+  }
+  if(ob->is_class_member(CL_NIGHTVISION)) {
+    call_out("remove",0);
+    return 0;
+  }
+  ob->AddClass(CL_NIGHTVISION);
+  call_out("dunkel",dauer,ob);
+  return 1;
+}
+
+void dunkel(object ob) {
+  if(!ob) { // falls der spieler 'ende' gemacht hat
+    call_out("remove",0);
+    return 0;
+  }
+  ob->RemoveClass(CL_NIGHTVISION);
+  tell_object(ob,BS(
+    "Die Wirkung des Flaeschchens laesst nach und Deine Augen werden wieder "
+    "normal."));
+  call_out("remove",0);
+}
+
+// 
+// Aggressive
+//
+
+int startnoattack(int dauer) {
+  object ob;
+  if(!ob=MENV) {
+    call_out("remove",0);
+    return 0;
+  }
+  if(!interactive(ob)) {
+    call_out("remove",0);
+    return 0;
+  }
+  if(ob->QueryProp(P_NOAGGRESSIVE)) {
+    call_out("remove",0);
+    return 0;
+  }
+  ob->SetProp(P_NOAGGRESSIVE,1);
+  call_out("attackende",dauer,ob);
+  return 1;
+}
+
+void attackende(object ob) {
+  if(!ob) { // falls der spieler 'ende' gemacht hat
+    call_out("remove",0);
+    return 0;
+  }
+  ob->SetProp(P_NOAGGRESSIVE,0);
+  tell_object(ob,BS(
+    "Die Wirkung des Flaeschchens laesst nach und Deine Umwelt hat wieder "
+    "die alte Einstellung zu Dir."));
+  call_out("remove",0);
+}
+
+int startaggressive(int dauer,int groesse) {
+  object ob;
+  if(!ob=MENV) {
+    call_out("remove",0);
+    return 0;
+  }
+  if(!interactive(ob)) {
+    call_out("remove",0);
+    return 0;
+  }
+  if(ob->QueryProp(P_AGGRESSIVE)) {
+    call_out("remove",0);
+    return 0;
+  }
+  ob->SetProp(P_AGGRESSIVE, 0.05*groesse);
+  call_out("aggrende",dauer,ob);
+  return 1;
+}
+
+void aggrende(object ob) {
+  if(!ob) { // falls der spieler 'ende' gemacht hat
+    call_out("remove",0);
+    return 0;
+  }
+  ob->SetProp(P_AGGRESSIVE,0);
+  tell_object(ob,BS(
+    "Die Wirkung des Flaeschchens laesst nach und Deine Umwelt hat wieder "
+    "die alte Einstellung zu Dir."));
+  call_out("remove",0);
+}
+
+//
+// Defend hook
+//
+
+int defendfkt(int dauer,int xgroesse,int art) {
+  object ob;
+  if(!ob=MENV) {
+    call_out("remove",0);
+    return 0;
+  }
+  if(!interactive(ob)) {
+    call_out("remove",0);
+    return 0;
+  }
+  if(ob->QueryProp(P_TMP_DEFEND_HOOK)) {
+    call_out("remove",0);
+    return 0;
+  }
+  if(art<1 || art>4) defart=1;
+  defart=art;
+  if(xgroesse<0)                xgroesse=random(sizeof(GROESSE));
+  if(xgroesse>=sizeof(GROESSE)) xgroesse=random(sizeof(GROESSE));
+  groesse=xgroesse;
+  call_out("defendhook_end", dauer+1, ob);
+  ob->SetProp(P_TMP_DEFEND_HOOK, ({time()+dauer, TO, "defendhook" }));
+  return 1;
+}
+
+void defendhook_end(object ob) {
+  if(!ob) { // falls der spieler 'ende' gemacht hat
+    call_out("remove",0);
+    return 0;
+  }
+  tell_object(ob,BS(
+    "Die Wirkung des Flaeschchens laesst nach und Deine Haut ist wieder "
+    "so wie frueher."));
+  call_out("remove",0);
+}
+
+mixed defendhook(int dam, mixed dam_type, mixed spell, object enemy) {
+  if(sizeof(filter_array(dam_type,PHYSICAL_DAMAGE_TYPES))) {
+    switch(defart) {
+      default:
+      case  1:
+        dam=dam*(10-groesse)/10;
+        break;
+      case  2:
+        dam=dam*10/(10-groesse);
+        break;
+      case  3:
+	      if(PO) PO->AddHp(1+random(groesse));
+        break;
+      case  4:
+	      if(enemy) enemy->AddHp(1+random(groesse));
+        break;
+    }
+  } else {
+    switch(defart) {
+      default:
+      case  1:
+        dam=dam*(20-groesse)/20;
+        break;
+      case  2:
+        dam=dam*20/(20-groesse);
+        break;
+      case  3:
+	      if(PO) PO->AddSp(1+random(groesse));
+        break;
+      case  4:
+	      if(enemy) enemy->AddHp(1+random(groesse));
+        break;
+    }
+  }
+  if(dam<0) dam=0;
+  return ({ dam, dam_type, spell, enemy });
+}
+
+// 
+// Unsterblichkeit
+//
+
+int diehook(int dauer, int xgroesse) {
+  object ob;
+  if(!ob=MENV) {
+    call_out("remove",0);
+    return 0;
+  }
+  if(!interactive(ob)) {
+    call_out("remove",0);
+    return 0;
+  }
+  if(ob->QueryProp(P_TMP_DIE_HOOK)) {
+    call_out("remove",0);
+    return 0;
+  }
+  if(xgroesse<0)                xgroesse=random(sizeof(GROESSE));
+  if(xgroesse>=sizeof(GROESSE)) xgroesse=random(sizeof(GROESSE));
+  groesse=xgroesse;
+  ob->SetProp(P_TMP_DIE_HOOK, ({time()+dauer, TO, "diehookfkt" }));
+  call_out("dieende",dauer+1,ob);
+  return 1;
+}
+
+void dieende(object ob) {
+  if(!ob) { // falls der spieler 'ende' gemacht hat
+    call_out("remove",0);
+    return 0;
+  }
+  tell_object(ob,BS(
+    "Die Wirkung des Flaeschchens laesst nach und Du bist wieder sterblich."));
+  ob->SetProp(P_TMP_DIE_HOOK, 0);
+  call_out("remove",0);
+}
+
+int diehookfkt(int poisondeath) {
+  if(random(100) < (60+groesse*10)) {
+    if(living(PO)) {
+      tell_object(PO, BS(
+        "Die Wirkung des Flaeschchens laesst nicht auf sich warten und "
+        "beschuetzt Dich vor dem sicheren Tod."));
+    }
+    PO->SetProp(P_TMP_DIE_HOOK, 0);
+    while (remove_call_out("dieende") != -1) ;
+    call_out("remove",0);
+    return 1;
+  }
+  if(living(PO)) {
+    tell_object(PO, BS(
+      "Die Wirkung des Flaeschchens reichte leider bei diesem Tod nicht "
+      "aus."));
+  }
+  return 0;
+}
+
+//
+// Kaelte / Hitze
+//
+
+int tempprot(int dauer, int xgroesse, int cursed) {
+  object ob;
+  if(!ob=MENV) {
+    call_out("remove",0);
+    return 0;
+  }
+  if(!interactive(ob)) {
+    call_out("remove",0);
+    return 0;
+  }
+  if(ob->QueryProp(P_TMP_DIE_HOOK)) {
+    call_out("remove",0);
+    return 0;
+  }
+  if(xgroesse<0)                xgroesse=random(sizeof(GROESSE));
+  if(xgroesse>=sizeof(GROESSE)) xgroesse=random(sizeof(GROESSE));
+  groesse=xgroesse;
+  if (cursed) {
+    SetProp (P_TEMPERATURE_PROTECTION,
+      ([T_COLD_PROT: -(groesse+2), T_HEAT_PROT: -(groesse+2)]) );
+  } else {
+    SetProp (P_TEMPERATURE_PROTECTION,
+      ([T_COLD_PROT: groesse+2, T_HEAT_PROT: groesse+2]) );
+  }
+  DoWear(1);
+  if(!ob=QueryProp(P_WORN)) {
+    call_out("remove",0);
+    return 0;
+  }
+  call_out("tempvorbei", dauer);
+  return 1;
+}
+
+void tempvorbei() {
+  object ob;
+  SetProp (P_TEMPERATURE_PROTECTION, ([T_COLD_PROT: 0, T_HEAT_PROT: 0]) );
+  ob=QueryProp(P_WORN);
+  DoUnwear(1);
+  if(ob) {
+    tell_object(ob,BS(
+      "Die Wirkung des Flaeschchens laesst nach und Deine Haut wird "
+      "wieder normal."));
+  }
+  call_out("remove",0);
+}
+

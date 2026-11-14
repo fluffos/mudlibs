@@ -1,0 +1,264 @@
+/*
+**  Tempelwache
+**
+**  generell 200% Speed
+**  faengt Schlaege mit dem Schild ab
+**
+**  2002-30-09  PROtheG  Logging vergessen ;) Schwerter aufgewertet
+*/
+
+#pragma strong_types;
+
+#include "../def.h"
+
+inherit DUNKELELF;
+
+nosave int shield_hp;
+
+void create()
+{
+  object we;
+
+  if(!is_clone(ME)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein Tempelwaechter bewacht das Tempelgelaende");
+  SetProp(P_LONG,
+    BS("Gross und stark steht der Tempelwaechter vor Euch und bewegt sich "
+       "kein Stueck. Seine Augen jedoch lassen nicht ab von Euch... Ein "
+       "unheimlicher Schauer ueberzieht Euch, so als wuerdet Ihr durch seine "
+       "Augen direkt in die Hoelle blicken..."));
+
+  SetProp(P_NAME, "Tempelwaechter");
+  SetProp(P_GENDER, MALE);
+  AddId(({"\ntempelwaechter","tempelwaechter","dunkelelf","waechter",
+	    "Schwertmeister"}));
+
+  create_default_darkelf(25, 30);
+
+  SetProp(P_HANDS, ({" mit seinen schnellen Haenden",
+		       QueryProp(P_HANDS)[1], DT_RIP}));
+  SetProp(P_SIZE, 200+random(10));
+  SetProp(P_ALIGN, -550-random(100));
+  SetProp(P_AGGRESSIVE, 0);
+  SetProp(P_XP, QueryProp(P_XP)+100100);
+  SetProp(P_KILL_NAME, "Die Tempelwache von Ardulvhier");
+  
+  AddInfo(DEFAULT_INFO,
+	  ({"schweigt vor sich hin.\n",
+	      "wuerdigt Euch keines Blickes.\n",
+	      "steht still da.\n"}));
+
+  SetProp(P_REJECT, 
+	  ({REJECT_DROP, "Der Tempelwaechter haelt Wache!\n"}));
+
+  SetChats(1, ({
+    "Der Tempelwaechter blickt sich um.\n",
+      "Der Tempelwaechter schaut Euch misstrauisch an.\n"}));
+  
+  SetProp(P_SPELLRATE, 80);
+  
+  AddSpell(1,900,
+	   "Der Tempelwaechter landet einen kritischen Schlag!\n",
+	   "Der Tempelwaechter landet einen kritischen Schlag!\n",
+	   ({DT_PIERCE, DT_SLASH}), ([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(1,0,
+	   "Der Tempelwaechter spricht einen dunklen Zauber...\n",
+	   "Der Tempelwaechter spricht einen dunklen Zauber...\n",
+	   ({DT_MAGIC}), "spell_blind");
+
+  AddSpell(2,312,
+	   "Der Tempelwaechter trifft Dich am Bein.\n",
+	   "Der Tempelwaechter trifft @WEN am Bein.\n",
+	   ({DT_SLASH}), ([SP_SHOW_DAMAGE:0]));
+  
+  AddSpell(2,290,
+	   "Der Tempelwaechter sticht Dir in den Bauch.\n",
+	   "Der Tempelwaechter sticht @WEM in den Bauch.\n",
+	   ({DT_PIERCE}), ([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(2,366,
+	   "Der Tempelwaechter taenzelt gekonnt um Euch herum...\n",
+	   "Der Tempelwaechter taenzelt gekonnt um @WEN herum...\n",
+	   ({DT_PIERCE, DT_SLASH}), ([SP_SHOW_DAMAGE:1]));
+  
+  SUID;
+  
+  we=clone_object("/p/weapon/sword/obsidianschwert");
+  
+  switch(random(10))
+    {
+    case 1 .. 2 :
+      we->SetProp(P_SHORT, "Ein scharfes Obsidianschwert");
+      we->SetProp(P_WC, 160);
+      we->SetProp(P_WC_FIX, 35);
+      break;
+    case 5 .. 6 :
+      we->SetProp(P_SHORT, "Ein langes Obsidianschwert");
+      we->SetProp(P_WC, 170);
+      we->SetProp(P_WC_FIX, 20);
+      we->SetProp(P_WEIGHT, 1500);
+      break;
+    case 8 .. 9 :
+      we->SetProp(P_SHORT, "Ein altes Obsidianschwert");
+      we->SetProp(P_WC, 120);
+      we->SetProp(P_QUALITY_DECAY, 30);
+      break;
+    default:
+      we->SetProp(P_WC_FIX, 30);      
+    }
+  
+  CLONEME(ARMOUR "wrobe");
+  CLONEME(ARMOUR "buckler");
+  CLONEME("/p/armour/boots/lederstiefel");
+  command("trage alles");
+
+  shield_hp=2000+random(1000);
+}
+
+void spell_schnell(object enemy, int damage, mixed dam_type){}
+void spell_ausweichen(object enemy, int damage, mixed dam_type){}
+
+void spell_blind(object enemy, int damage, mixed dam_type)
+{
+  if(enemy->QueryProp(P_BLIND)) return;
+  
+  tell_object(enemy, BS("Etwas dunkles legt sich ueber Deine Augen!"));
+  
+  TP->SetProp(P_BLIND, 
+      ([BLIND_TIME:5+random(6),
+      BLIND_MSG:"Deine Augen sind verdunkelt!\n",
+      BLIND_END_MSG:"Der dunkle Zauber loest sich von Deinen Augen...\n"]));
+}
+
+void shield_check(object shield)
+{
+  if(!MENV) return;
+
+  if(shield_hp > 1) return;
+
+  if(!objectp(shield))
+    if(!objectp(shield=present("\ntempelwaechterschild")))
+      return;
+  
+  tell_room(MENV, "Der Mithrilbuckler des Tempelwaechters zerbricht...\n");
+  
+  shield->SetProp(P_CURSED, 0);
+  shield->DoUnwear(1);
+  shield->remove(1);
+}
+
+int Defend(int dam, mixed dam_type_list, mixed spell, object enemy)
+{
+  object shield;
+  int r;
+
+  if(!QueryProp(P_WEAPON))
+    command("zuecke schwert");
+
+  if((shield=present("\ntempelwaechterschild")) && 
+     (shield->QueryProp(P_WORN)==ME) && (random(100) < 33))
+    if(enemy->QueryProp(P_WEAPON))
+      {
+	tell_room(MENV, 
+		  BS("Der Schild des Tempelwaechters faengt einen Schlag ab."),
+		  ({ME}));
+	shield_hp=shield_hp - (dam*2/3);
+
+	call_out("shield_check", 0, shield);
+
+	dam=dam/3;
+
+      }
+    else
+      {
+	tell_room(MENV, 
+		  BS("Der Tempelwaechters haelt seinen Schild hoch."), ({ME}));
+	
+	if(r=random(2))
+	  {
+	    tell_object(enemy, 
+			BS("Ihr stecht Euch schmerzhaft an dem Schild!!"));
+	    tell_room(MENV, 
+		      BS(enemy->Name(WER)+" sticht sich an dem Schild!"), 
+		      ({enemy}));
+	    enemy->AddPoison(r);
+	  }
+	dam=0;
+      }
+  
+  if(QuerySkillAttribute(SA_SPEED)<200)
+    TO->ModifySkillAttribute(TO, SA_SPEED, 200, 500);
+
+  return ::Defend(dam, dam_type_list, spell, enemy);
+}
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+  if(find_call_out("reaction") != -1) return;
+  if(touch)
+    {
+      switch(random(3))
+        {
+          case 0: call_out("reaction", 0, TP,
+            "blickt Euch streng an!",
+            "blickt "+TP->name(WEN)+" streng an.");
+          break;
+          case 1: call_out("reaction", 0, TP,
+            "stoesst Euch mit seinem Schild weg.",
+            "stoesst "+TP->name(WEN)+" mit seinem Schild weg.", 1);
+          break;
+          case 2: call_out("reaction", 0, TP,
+            "schlaegt Euch mit seinem Schwert gegen die Rippen.",
+            "schlaegt "+TP->name(WEM)+" mit seinem Schwert gegen die Rippen.",1);
+          break;
+        }
+    }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch) 
+{
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+varargs void reaction(object ob, string macher, string andere, int flag)
+{
+  if(present(ob, ENV(TO)))
+  {
+    tell_object(ob, BS(Name(WER, 1)+" "+macher));
+    tell_room(ENV(TO), BS(Name(WER, 1)+" "+andere), ({ob}));
+    if(flag) ob->AddHp(-20+random(10));
+  }
+}
+
+varargs int StopHuntFor(object arg, int silent)
+{
+  int tmp;
+
+  if(tmp=::StopHuntFor(arg, silent))
+    call_out("weapon_check", 5);
+
+  return tmp;
+}
+
+varargs mixed StopHuntingMode(int silent)
+{
+  call_out("weapon_check", 5);
+
+  return ::StopHuntingMode(silent);
+}
+
+void weapon_check()
+{
+  if(!m_sizeof(GetEnemies()))
+    command("stecke schwert weg");
+}
+
+void NotifyPlayerDeath(object player, object killer, int l) 
+{
+  if(killer == ME)
+    write_file(LOG "deads",
+      ctime()+": Ein Tempelwaechter hat "+CAP(getuid(player))+" umgebracht ("+
+	       l+").\n");
+}

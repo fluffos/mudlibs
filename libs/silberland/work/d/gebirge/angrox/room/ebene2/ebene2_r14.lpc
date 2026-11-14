@@ -1,0 +1,156 @@
+/*
+**
+** Angrox Zauberwerkstatt
+** 26.06.1996 by Angrox@Silberland
+** EMail:mzehetma@tks.fh-sbg.ac.at
+**
+** Zwergenbergwerk
+** Ebene 2
+*/
+
+
+inherit "/d/gebirge/angrox/room/std_bergwerk_new";
+#include <properties.h>
+#include <language.h>
+#include <player.h>
+#include <moving.h>
+#include <rooms.h>
+#include "../../files.h"
+
+int tafel = 0;
+
+
+void create()
+{
+  ::create();
+
+  SetProp( P_LIGHT, 0 );
+  SetProp(P_INDOORS, 1);
+  SetProp (P_ENVIRONMENT, ([ ENV_TERRAIN:TT_CAVE, ENV_TEMPERATURE:5 ]) );
+
+  SetProp( P_INT_SHORT, "Eine Hoehle");
+  SetProp( P_INT_LONG, BS(
+		 "Diese fast kreisrunde Hoehle ist ueber und ueber mit blutroten Steinen "
+                 "ausgelegt. Am hinteren Ende der Hoehle steht ein Altar, der "
+                 "vollkommen mit Blut besudelt ist. Der Gestank des Blutes schwaengert die "
+                 "gesamte Hoehle und macht das Atmen beinahe unmoeglich. Ein leises "
+                 "Pochen ist zu hoeren.\n"));
+
+  AddDetail ( ({"raum", "hoehle"}), QueryProp(P_INT_LONG) );
+
+  AddDetail ( ({"boden", "steine", "decke", "wand", "waende"}), 
+		 "Alles mit diesen blutroten Steinen bedeckt.\n");
+
+  AddDetail( ({ "ende", "altar" }), BS(
+                "Der Altar besteht vollkommen aus einem tiefschwarzen Gestein, welches "
+                "das Licht voellig verschluckt. Er ist vollkommen mit Blut besudelt. An "
+                "der Vorderseite des Altars befindet sich eine Nische."));
+
+  AddDetail( "gestank", "Na riech doch mal!\n" );
+  AddDetail( "herz", "Dir bleibt Dein Herz stehen.\n" );
+
+  AddSpecialDetail( "nische", "d_nische" );
+  AddSpecialDetail( ({ "tafel", "steintafel", "symbol","symbole" }), "d_tafel" );
+
+  AddDetail( "gestein", BS(
+                "Es ist tiefschwarz und scheint das Licht zu verschlucken. Irgendwie "
+                "glaubst Du nicht, dass das Gestein natuerlichen Ursprungs ist.\n"));
+
+  AddDetail( "Blut", BS(
+                "Es ist ueberall auf dem Altar. Vermutlich wurden hier intelligente "
+                "Lebewesen geopfert - wem auch immer...\n"));
+
+  AddSound(DEFAULT_SOUND, BS("Es ist ein dumpfes Pochen zu hoeren.\n"));
+  AddSound("pochen", BS("Wie das Haemmern eines Herzens...\n"));
+  AddSound("haemmern", "*POCH* *POCH* *POCH*\n");
+
+  AddSmell(DEFAULT_SMELL, BS("Die Luft stinkt nach Blut.\n"));
+  AddSmell ("blut", BS("Echt eklig, wie es danach stinkt.\n"));
+
+  AddExit("sueden", EBENE2("ebene2_r13"));
+  AddCmd( ({ "nimm","nehme","nehm" }), "nimm" );
+}
+
+
+string d_nische()
+{
+  if (!tafel)
+    return "Oops. Warum ist diese Nische leer?\n";
+  else
+    return "In der Nische liegt ein Steintafel, die mit Symbolen uebersaet ist.\n";
+}
+
+
+string d_tafel()
+{
+  if (!tafel)
+    return 0;
+  else
+    return "Die Steintafel ist mit fremdartigen Symbolen uebersaet.\n";
+}
+
+
+void NeueTafel()
+{
+  tafel=1;
+}
+
+
+int nimm(string str)
+{
+  object ob;
+  int ret;
+
+  if (!stringp(str))
+    return 0;
+  if (str[<11..] == " aus nische")      // tolerant sein ;)
+    str = str[0..<12];
+  if (present(str,this_object()))       // let put_and_get do the work
+    return 0;
+  if (str != "tafel" && str != "steintafel") // anything else -> put_and_get
+    return 0;
+
+  if (tafel <= 0)
+  {
+    write("Aber da ist doch gar keine "+capitalize(str)+"?!\n");
+    return 1;
+  }
+
+  ob = clone_object(OBJ("steintafel"));
+  ob->SetProp("balrog_level", QueryProp("balrog_level"));
+  SetProp("balrog_level", 0);
+  ret = ob->move(this_player(), M_GET);
+
+  // Alles OK -> Tafeln runterzaehlen
+  if (ret > 0)
+  {
+    write("Du nimmst die Steintafel.\n");
+    say(this_player()->Name() + " nimmt etwas vom Altar.\n");
+    // Lieber nur eine Tafel pro totem Balrog
+    tafel=0;
+    return 1;
+  }
+
+  // Fehlgeschlagen -> weg mit dem Objekt
+  ob->remove();
+
+  if (ret == ME_TOO_HEAVY)
+    write("Du versuchst die Steintafel zu nehmen, doch sie ist zu schwer.\n");
+  else
+    write("Auweia, die Steintafel sitzt fest!\n");
+
+  return 1;
+}
+
+
+// Ungewolltes Entladen des Raumes verhindern
+int clean_up(int refcount)
+{
+  if (tafel)
+    return 1;
+  else
+    return ::clean_up(refcount);
+}
+
+
+

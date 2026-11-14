@@ -1,0 +1,195 @@
+inherit "/std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include <ansi.h>
+#define TP this_player()
+
+// Funktionen statt Variablen, um Speicher zu sparen.
+mapping getpos() {
+  return ([
+    "entr":1;1,
+    "t1":2;1,
+    "t2":2;2,
+    "t4":2;3,
+    "t3":3;2,
+    "t5":3;3,
+    "t6":3;4,
+    "spiess":4;2,
+    "jail":5;2,
+    "boss":4;4,
+    "cave":2;5,
+    "tres":1;5
+    // Ausnahmen:
+  ]);
+}
+
+mapping getcolors() {
+  return ([
+    0x1:ANSI_RED,           // Gebirge
+    0x18:ANSI_BLUE,
+    0x53:ANSI_BLUE,
+    0x83:ANSI_BLUE,
+    0x64:ANSI_BLUE,
+    0x65:ANSI_BLUE,
+    0x66:ANSI_BLUE,
+    0x67:ANSI_BLUE,
+    0x68:ANSI_BLUE,
+    0x69:ANSI_BLUE,
+    0x70:ANSI_BLUE
+   
+  ]);
+	   /*
+    0x31:ANSI_RED+ANSI_INVERS,    // Gilde
+    0x32:ANSI_PURPLE+ANSI_BOLD,   // Kirche
+    0x33:ANSI_RED,                // Post
+    0x34:ANSI_RED,                // Kapelle
+    0x35:ANSI_BLUE,               // Kneipe
+    0x36:ANSI_BLUE,               // Kneipesaal
+    0x37:ANSI_GREEN,              // Laden
+    0x38:ANSI_GREEN,              // Kramladen
+    0x39:ANSI_GREEN+ANSI_BOLD,    // Waffenexperte
+    0x40:ANSI_BLUE,               // Kneipe
+    ]);
+  */
+}
+
+mapping gethilite() {
+  return ([
+  ]);
+  /*
+    0x66:ANSI_INVERS,             //  Gilde
+    0x74:ANSI_UNDERL,             //  Post
+    0x54:ANSI_UNDERL              //  Kapelle
+  ]);
+  */
+}
+
+string *getmap() {
+  return ({
+"              *** TROLLAGER ***                         ",
+"                                                        ",
+"     Gebirge -----o--Gjordil                              ",
+"                        |\\_                             ",
+"                        |  \\_                           ",
+"                        |    \\                          ",
+"                        o     o--Spiess--Jail           ",
+"                        |   _/|           |             ",
+"                        | _/  |           |             ",
+"                        |/    |         _/              ",
+"                Baum^^^^o     o       _/                ",
+"                         \\_   |      /                  ",
+"                           \\_ |     |                   ",
+"                             \\|     |                   ",
+"                              o----Chef                 ",
+"                            _/                          ",
+"                          _/                            ",
+"                         /                              ",
+"               Schatz--Cave                               ",
+""});
+}
+
+string long() {
+  string *map,fn,term;
+  mapping pos,cols;
+  int x,x1,x2,y,i,j;
+  
+  map=getmap()[0..];
+  if (!TP) return implode(map,"\n");
+
+  term=TP->QueryProp(P_TTY);
+  switch(term) {
+    case "ansi":  cols=getcolors(); break;
+    case "vt100": cols=gethilite(); break;
+    default:;
+  }
+
+  // Position des Spielers eintragen
+  if (environment(TP)) {
+    pos=getpos();
+    fn=file_name(environment(TP));
+    if (fn[0..19]=="/d/gebirge/speedy/trollager/room/") fn=fn[20..];
+    x=pos[fn,0];y=pos[fn,1];
+    if (x||y) {
+      if (mappingp(cols)) {
+        switch(term) {
+          case "ansi":  cols[16*x+y]=ANSI_RED+ANSI_BOLD; break;
+          case "vt100": cols[16*x+y]=ANSI_BOLD; break;
+          default:;
+        }
+      }
+      if (((x==6) || (x==7)) && (y==4)) x=x*6+6;
+      else if ((x=x*6+5) > 60) x=60;
+      if ((y*=2) > 20) y=20;
+
+#define IS_LETTER(c) ( (((c&223)>='A') && ((c&223)<='Z')) || \
+    ((c>='0') && (c<='9')) )
+
+      x1=x; while (IS_LETTER(map[y][x1])) map[y][x1--]=' ';
+      x2=x+1; while (IS_LETTER(map[y][x2])) map[y][x2++]=' ';
+      map[y][x-2..x+2]="HIER!";
+    }
+  }
+
+  // Karte einfaerben:
+  if (mappingp(cols)) {
+    for (i=5;i>=0;i--) {
+      y=2*i;
+      for (j=5;j>=0;j--) {
+        // x=6*j;
+        x=6*j+5;
+        x2=x;
+        while(IS_LETTER(map[y][x])) x--;
+        while (IS_LETTER(map[y][x2])) x2++;
+        if (map[y][x2]=='!') x2++;
+        if (fn=cols[16*j+i]) {
+          map[y]=
+            map[y][0..x]+
+            fn+map[y][(x+1)..(x2-1)]+ANSI_NORMAL+
+            map[y][x2..];
+        }
+      }
+    }
+  }
+  
+  return implode(map,"\n");
+}
+
+create()
+{
+  if (!is_clone(this_object()))
+     return;
+  ::create();
+  SetProp(P_SHORT,"Eine Karte vom Trollager");
+  SetProp(P_NAME,"Karte");
+  SetProp(P_GENDER,FEMALE);
+  AddId(({"karte", "trollkarte", "trollplan", "plan" }));
+  AddCmd ("lies", "lies");
+  SetProp(P_WEIGHT,20);
+  SetProp(P_VALUE,30);
+}
+
+int lies(string str)
+{
+  if (!str || str=="" || !id(str)) return 0;
+  write(long());
+  return 1;
+}
+
+try_remove() {
+  if (!environment() || !living(environment())) {
+    if (environment())
+      tell_room(environment(),"Eine Karte loest sich auf.\n");
+    remove();
+  }
+}
+
+move(dest,meth) {
+  mixed res;
+  
+  while (remove_call_out("try_remove")!=-1) ;
+  res=::move(dest,meth);
+  if (!environment() || !living(environment()))
+    call_out("try_remove",30);
+  return res;
+}

@@ -1,0 +1,153 @@
+/* Angrox' Zauberwerkstatt
+//  
+// Silberland
+// 17-07-1998 
+//  
+//  
+*/
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include <defines.h>
+#include <moredef.h>
+#include <new_skills.h>
+#include <wizlevels.h>
+
+
+nosave mixed *unt_count=({0,0,0});
+nosave mixed *unt_tdiff=({0,0,0});
+//min, max, durchsc
+nosave mapping spell_count=([]);
+nosave string *unt_syntax=({"unt", "untersuche", "schaue", "schau"});
+nosave string *spells=({});
+nosave int starttime;
+nosave mapping cmd_count;
+nosave string *unts;
+nosave string name="undefined";
+#define wsl(x) write_file("/log/ARCH/scriptest/"+name+".log", x);
+#define LINE "------------------------------------------------------------------------------\n" 
+nosave void InitValues();
+create()
+{
+  if (!is_clone(TO)) return;
+  ::create();
+  InitValues();
+  SetProp(P_SHORT, 0);
+  SetProp(P_LONG, "");
+  AddId(({"\nscripttest"}));
+  SetProp(P_MATERIAL, MAT_MISC );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 0);
+  SetProp(P_NODROP, 1);
+  //SetProp(P_AUTOLOADOBJ, 1);
+  AddCmd("","testfunc",1);
+  set_next_reset(1800);
+}
+
+
+init() {
+  object pl,gilde;
+  if(!pl=ENV(ME)) {
+    ME->remove();
+    return;
+  }
+  name=getuid(pl);
+  if(gilde=find_object("/gilden/"+pl->QueryProp(P_GUILD)))
+    spells=m_indices(gilde->QueryProp(P_GUILD_SKILLS));
+  ::init();
+}
+
+
+reset() {
+ string w_spells, x, time_str; 
+ int y, sum_cmd;
+ int i;
+ if(!objectp(ENV(ME)) || !interactive(ENV(ME))) 
+   return ::reset();
+ w_spells="";
+ time_str=time2string("%mm %ss", (time()-starttime));
+ sum_cmd=cmd_count["spell"]+cmd_count["unt"]+cmd_count["other"];
+ y=m_values(spell_count);
+ if(cmd_count["unt"]<1) cmd_count["unt"]=1;
+ unt_tdiff[2]=(float)unt_tdiff[2]/cmd_count["unt"];
+ for(i=sizeof(x=m_indices(spell_count))-1;i>=0;i--) 
+   w_spells=w_spells+x[i]+": "+y[i]+", ";
+ wsl(LINE);
+ wsl(sprintf("REPORT am %s, Spieler %s, Zeitbereich: %s\n", 
+     dtime(time())[6..], CAP(name), time_str));
+ wsl(sprintf("SPELLS\nSumme gesprochene Spells: %d\nSpells: %s\n\n", 
+     cmd_count["spell"], w_spells));
+ wsl(sprintf("UNTERSUCHE\nSumme Unt-Kommandos: %d\nMin. Zeitdiff: %d, Max. "
+     +"Zeitdiff: %d\nDurchschnittliche Zeitdiff: %f\n\n", cmd_count["unt"], 
+     unt_tdiff[0], unt_tdiff[1], unt_tdiff[2]));
+ wsl(sprintf("OTHER\nSumme anderer Kommandos: %d\n\n", cmd_count["other"]));
+ wsl(sprintf("Summe ALLER Kommandos: %d\n", sum_cmd));
+ wsl(LINE);
+ InitValues();
+ ::reset();
+ set_next_reset(1800);
+}
+
+nosave void InitValues() {
+  starttime=time();
+  cmd_count=0;
+  unt_count=({time(),0,0});
+  spell_count=([]);
+  unts=({""});
+  unt_tdiff=({0,0,0});
+  cmd_count=(["unt":0, "spell":0, "other":0]);
+}
+
+mixed test123() {
+ return ({unts, unt_count, cmd_count});
+}
+
+
+nosave int testfunc(string str) {
+  string *txt, cmd;
+  string what;
+  txt=({query_verb()});
+  txt+=explode(str, " ");
+  // UNT
+  if(member(unt_syntax, txt[0])!=-1 && sizeof(txt)>1) {
+    cmd_count["unt"]++;
+    if(sizeof(unts)>20) 
+      unts-=({unts[0]});
+    if(unts[sizeof(unts)-1]!=txt[1])
+      unts+=({txt[1]});
+    if((time()-unt_count[0])==unt_count[2])
+      unt_count[1]++;
+    if(unt_count[1]>10) {
+     what=implode(unts, ",");
+     wsl("---\n");
+     wsl(sprintf("PL: %O: ENV: %O, unts: %s, Nr: %d, Tdiff:%d\n", TP, ENV(TP),
+         what, unt_count[1], unt_count[2]));
+     wsl("---\n");
+     unt_count=({time(),0,0});
+     unts=({""});
+    }
+     // Timediffs
+    unt_count[2]=time()-unt_count[0];
+    if(unt_tdiff[0]>unt_count[2]) unt_tdiff[0]=unt_count[2];
+    if(unt_tdiff[1]<unt_count[2]) unt_tdiff[1]=unt_count[2];
+    unt_tdiff[2]+=unt_count[2];
+    unt_count[0]=time();
+  }
+  // SPELL 
+  else 
+  if(member(spells, txt[0])!=-1) {
+    cmd_count["spell"]++;
+    if(!member(spell_count, txt[0])) {
+      spell_count+=([txt[0]:0]);
+    }
+    spell_count[txt[0]]++; 
+  }
+  // OTHER
+  else {
+    cmd_count["other"]++;
+  }
+  return 0;
+}

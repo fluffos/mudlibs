@@ -1,0 +1,112 @@
+inherit "/gilden/bardengilde/obj/std_song_effect";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <defines.h>
+#include <new_skills.h>
+#include <moredef.h>
+#include "/gilden/bardengilde/bardengilde.h"
+#include "bard_song.h"
+
+int stopTime, endTime;
+
+mixed song_text_elements = ({
+  ({"Mit geschlossenen Augen taucsht du in die Welt der Klaenge ein, jeder Ton ein Pinselstrich auf der Leinwand deiner Musikalitaet.", "Die Finger von %s gleiten muehelos ueber das Instrument, eine Symbiose aus Klaengen und Leidenschaft, die dich in Staunen versetzt."}),
+  ({"In deinen Haenden verschmelzen Melodie und Harmonie zu einem kunstvollen Gemaelde aus Toenen.", "Du wirst Zeuge einer magischen Darbietung, in der %s nicht nur spielt, sondern mit jeder Note eine Geschichte erzaehlt."}),
+  ({"Deine Finger tanzen ueber die Saiten, als ob sie ein unsichtbares Band zwischen dir und deiner Musik knuepfen.", "Dein Blick ist gebannt, waehrend %s virtuos die Grenzen zwischen Realitaet und Klang verschwimmen laesst."}),
+  ({"Mit jeder gespielten Note entfaltet sich eine Welt voller Emotionen, in der du der Geschichtenerzaehler bist.", "Du wirst von der einzigartigen Melodie gefangen genommen, wenn %s das Instrument zum Klingen bringen"}),
+  ({"In deinen Haenden wird das Instrument zu einer Verlaengerung deiner Gefuehle, jede Note ein Ausdruck deiner innersten Emotionen.", "Du verlierst dich in den Klaengen, die %s kunstvoll und virtuos aus seinem Instrument zaubert."}),
+  ({"Mit geschlossenen Augen entfuehrst du die Zuhoerer in eine Welt voller Magie und Traeume, in der Musik die Sprache der Seele ist.", "Die Finger von %s gleiten muehelos ueber das Instrument, eine Symbiose aus Klaengen und Leidenschaft."}),
+  ({"Deine Finger gleiten ueber das Instrument, als ob sie die Geheimnisse des Universums entschluesseln.", "Du lauschst gebannt, wenn %s mit jeder Note eine Geschichte erzaehlt, die direkt ins Herz geht."}),
+  ({"In deinen Haenden wird dein Instrument zum Medium, durch das du deine innersten Gedanken und Gefuehle mit der Welt teilst.", "Du wirst von einer Woge der Begeisterung erfasst, wenn die Finger von %s die Magie der Musik entfesseln."}),
+  ({"Mit jeder Note erschaffst du eine Klanglandschaft, die die Herzen der Zuhoerer beruehrt.", "Die Melodie, gespielt von %s, durchdringt die Luft und laesst dein Herz im Takt schlagen."}),
+  ({"Deine Finger tanzen ueber dein Isntrument, als ob sie ein unsichtbares Gedicht komponieren.", "Du wirst in eine Welt der Inspiration entfuehrt, in der die Musik von %s die Gedanken schweben laesst."})
+});
+
+public void create() {
+  if (!is_clone(TO)) return;
+  ::create();
+
+  AddId(({SONG_DEPOISON}));
+  setUpkeepMode( ({SK_MUSIC}), CANCEL_INTERACT);
+  setEndSpellDelay(4);
+}
+
+public int canEndSong() {
+  if(time() < stopTime) {
+    write("Du bist noch zu konzentriert aufs Spielen, um jetzt schon aufzuhoeren!\n");
+    return 0;
+  }
+  return 1;
+}
+
+public void onEndSong() {
+  while(remove_call_out("increase_inspiration") >= 0);
+  return;
+}
+
+public varargs void prepareSong() {
+  endTime = (ability/100) + (success/100);
+  endTime = modifyBySkillAttribute(endTime, SA_DURATION);
+  endTime += time();
+
+  if(caster->QueryProp(P_TESTPLAYER)) {
+    tell_object(caster, sprintf("%s :: endTime=%d duration = %d\n", songName, endTime, endTime-time()));
+  }
+
+  stopTime = time() + 10;
+
+  call_out("increase_inspiration", 0);
+}
+
+private void write_songtext() {
+  string *txt;
+  int index;
+
+  index = random(sizeof(song_text_elements));
+  txt = song_text_elements[index];
+
+  tell_object(caster, BS(txt[0]));
+  tell_room(environment(caster), BS(sprintf(txt[1], caster->Name(WER))), ({caster}));
+}
+
+public void increase_inspiration() {
+  int skill;
+  string restrRes;
+
+  if(stringp(restrRes=call_other("/spellbooks/barden_spells", "CheckCastWithMusic", caster, ([SI_CAP_NAME: songName]))) ) {
+    tell_object(caster, BS(restrRes));
+    call_out("endSong", 0);
+    return;
+  }
+
+  if(caster->InFight() || time() > endTime) {
+    call_out("endSong", 0);
+    return;
+  }
+
+  write_songtext();
+
+  skill = (int) (caster->UseSkill(SK_MUSIC) / 500);
+  skill = (int) (skill * factor);
+  skill = modifyBySkillAttribute(skill, SA_DAMAGE);
+  if(skill < 0) skill = 0;
+
+  call_other("/spellbooks/barden_spells", "accumulateInspiration", caster, skill, 1);
+
+  // zahlen dafiuer...
+  skill = call_other("/spellbooks/barden_spells", "modifyCostWithSpellsong", caster, skill);
+  if(caster->QueryProp(P_SP) >= skill)  {
+    caster->AddSp(-skill);
+  } else {
+    skill -= caster->QueryProp(P_SP);
+    caster->SetProp(P_SP, 0);
+    SetProp(P_KILL_NAME, "Intensives Musizieren");
+    caster->do_damage(skill);
+  }
+
+  caster->SetProp(P_BARD_INSPIRATION_OVERFLOW_UNTIL, time() + ((ability/1000) + (success/2000))*60);
+
+  call_out("increase_inspiration", 2+random(5));
+}

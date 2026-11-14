@@ -1,0 +1,211 @@
+//losti heldent
+//mod by arth -> heldentoeter2 (extremely modified)
+//
+//bin dafuer den noch nicht reinzustellen...
+//weil so ned wirklich ergiebig...
+//aber:  ich haette da ne idee +:>
+//ok. npc is voellig umgeschrieben...denke so bringt er echt spannung spasz und spiel fuer 'helden' +;>
+
+inherit "std/mnpc";                    //moving-comands/properties will be supplied as soon as all bugs are wiped out
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <mnpc.h>
+#include <combat.h>
+//#include "../def.h"
+
+
+object * targets;                       //whom will 'heldentoeter' attack
+int num_targets;                       //how many players will be attacked -> logfile
+int search;                            //to search for players presence in a room
+
+
+void handle_users();
+object * get_users();
+object * filter_users(object * users);
+object * filter_heroes(object * heroes, int num_heroes);
+void log_targets(/*object * targets, int num_targets*/);
+
+
+#define LOGHEROES "/d/ebene/lostboy/steppe/log/"
+
+#define IDLE 20                         //if p is longer than 20 sec idle i will not attack him +;>
+
+
+create() 
+{
+	if (!is_clone(this_object())) return;
+
+	::create();
+
+	SetProp(P_SHORT, "Ein Heldentoeter");
+	SetProp(P_LONG, 
+		"Der Heldentoeter irrt durch das halbe Silberland und spuert Helden auf. "    
+		"Sein Gehirn ist eine Masse die nur aus einer Gehirnzelle besteht. In dieser "
+		"Zelle sitzt nur eine Information: ICH MUSS HELDEN TOETEN. ");
+
+	SetProp(P_NAME, "Heldentoeter");
+	SetProp(P_GENDER, MALE);
+
+	set_living_name ("heldentoeter");
+
+	AddId( ({"toeter", "heldentoeter", "\nheldentoeter", "~ht"}) );
+
+	SetProp(P_SIZE, 400+random(30));
+	
+	SetProp(P_WEIGHT, 120000);
+ 
+	create_default_npc(40);
+	
+	SetProp(P_RESISTANCE_STRENGTHS,
+	([	DT_FIRE:	    -0.3, DT_COLD:			 0.0, DT_WATER:		-0.5, DT_AIR:		 0.0,
+		DT_LIGHTNING:	-0.3, DT_EXPLOSION:	    -0.3, DT_SOUND:		 0.1, DT_LIGHT:		 0.1,
+		DT_ELECTRIC:	-0.2, DT_ACID:			 0.1, DT_POISON:	 0.4, DT_TERROR:	-0.8,
+		DT_HOLY:		 0.0, DT_UNHOLY:		 0.0, DT_MAGIC:		-0.2 ]) );
+
+	SetProp(P_ALIGN, 0);
+	SetProp(P_RACE, "Heldentoeter");
+	
+	SetProp(P_KILL_MSG, "Es tut mir ja fast leid, aber ich kann nicht anders, "+
+		"ich muss HELDEN TOETEN!!!");
+
+	SetProp(P_REJECT, ({REJECT_DROP, "Der Toeter sagt: Das interessiert mich nicht. "+
+		"Meine Bestimmung ist es Helden aufzuspueren, um sie zu Lars zu befoerdern.\n"}) );
+
+	SetProp(P_MAX_HANDS, 2);
+	SetProp(P_HANDS, ({" mit seinem gesammten Gewicht", 500, DT_BLUDGEON}) );
+	
+	SetProp(P_DEFAULT_INFO, 
+		"lacht und sagt: Ich MUSS Helden toeten.\n");
+
+	SetProp(P_SPELLRATE, 10);
+
+	AddSpell(10, 1000,
+		"Der Toeter versucht Dich zu teoten.\n",
+		"Der Toeter versucht @WEN zu toeten.\n",
+		DT_BLUDGEON, ([SP_SHOW_DAMAGE:1]) );
+		
+	handle_users();
+}
+
+
+void init()
+{
+	::init();
+	
+	for (search=0; search < num_targets; search++)
+	{
+		if ( (present(targets[search], environment(this_object()))) && (query_idle(targets[search]) < IDLE) )
+		{
+			tell_object(targets[search], break_string(capitalize(targets[search]->name()+" ich "+
+				"werde Dich toeten, denn das ist mein Schicksal!"), 78));
+			
+			Attack(targets[search]);
+		}
+	}
+}
+
+
+void reset()
+{
+	::reset();
+	handle_users();
+}
+
+
+void handle_users()
+{
+	object * users;
+	object * heroes;
+	//object * targets;                                                              -> global definition
+	int num_users, num_heroes;
+	// num_targets;
+	
+	users = get_users();                          //get current users
+	num_users = sizeof(users);                   //eval number of users out there
+	
+	heroes = filter_users(users);                 //filter seers out of all online users 
+	num_heroes = sizeof(heroes);                 //eval number of seers out there
+
+	targets = filter_heroes(heroes, num_heroes);              //filter testies and zeitis
+	num_targets = sizeof(targets);
+
+	log_targets(/*targets, num_targets*/);             //log targets...there's no need for, but why not +:>
+}
+
+
+object * get_users()
+{
+	return users();
+}
+
+
+object * filter_users(object * users)
+{
+	object * is_seer;
+	object * seer_mage;
+	int i, p_is_mage, num_seer_mage;
+		
+	seer_mage = filter_array(users, #'query_wiz_level); //get rid of players
+	num_seer_mage = sizeof(seer_mage);                 //count remaining (seers & mages)
+	
+	is_seer = seer_mage;
+	
+	for (i=0; i < num_seer_mage; i++)
+	{
+		p_is_mage = query_wiz_level(seer_mage[i]);     //filter mages out from array seer&mage
+		
+		if (p_is_mage > 1)
+		{
+			is_seer -= ({seer_mage[i]});               //subtract mages from array
+		}
+	}
+	return is_seer;
+}
+
+
+object * filter_heroes(object * heroes, int num_heroes)
+{
+	object * targets;
+	
+	int i;
+	
+	targets = heroes;
+	
+	for (i=0; i < num_heroes; i++)
+	{
+		if ( (heroes[i]->QueryProp(P_SECOND) != 0) || (heroes[i]->QueryProp(P_TESTPLAYER) != 0) 
+		                                           || (heroes[i]->QueryProp(P_LEVEL) < 50) )
+		{
+			targets -= ({heroes[i]});
+		}
+	}
+	return targets;
+}
+
+
+void log_targets(/*object * targets, int num_targets*/)
+{
+	int i;
+		
+	for (i=0; i < num_targets; i++)
+	{
+		write_file(LOGHEROES+"heroes", sprintf("%s: Held: %O \n",
+				dtime(time()), targets[i]) );
+	}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+

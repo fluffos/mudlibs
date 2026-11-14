@@ -1,0 +1,607 @@
+//
+// Der Standard Nekromanten NPC, by Angrox@SL
+// 
+// 02.10.1999 Angrox
+//            release
+//
+
+inherit "std/mnpc";
+inherit "std/npc/spells";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <npc.h>
+#include <defines.h>
+#include <moredef.h>
+#include <wizlevels.h>
+#include <class.h>
+#include "/gilden/obj/guildnpc.h"
+#include "/gilden/nekromanten/nekro.h"
+
+#pragma strong_types
+
+// Prototyping
+nosave string CastGuildSpell();
+nosave mixed GetEnemy(int flag);
+nosave varargs void strategy_level_one(object enemy);
+nosave varargs void strategy_level_two(object enemy);
+nosave varargs void strategy_level_three(object enemy);
+nosave varargs void strategy_level_four(object enemy);
+nosave varargs void strategy_level_five(object enemy);
+nosave varargs void strategy_level_six(object enemy);
+nosave varargs void strategy_level_seven(object enemy);
+void make_zombie();
+void make_skeleton();
+void make_mummy();
+nosave int geisterruf();
+void hauch_der_verwesung(object enemy);
+void beruehrung_von_zumuul(object enemy);
+void strahlen_der_dunkelheit(object enemy);
+void kochendes_blut(object enemy);
+void biss_des_vampirs(object enemy);
+void schrecken_der_finsternis(object enemy);
+void geifer_der_verdammten(object *enemies);
+void gekreische_der_todesfee(object *enemies);
+void schleier_des_val_tkro_tthar();
+mixed nekro_schutz(int dam, mixed dam_type, mixed spell, object enemy);
+
+
+// Glob. Variablen
+nosave int undead_per_reset=5;
+nosave mapping damage=([]);
+nosave int g_level=1;
+nosave int g_circle=1;
+nosave int skill_per_level=1430; // 10000 / 7 =~ 1430
+nosave string *make_zombie=({
+            "beschwoerung leiche", "beherrschung zombie"});
+nosave string *make_skeleton=({
+            "faeulnis leiche", "beschwoerung knochen", "beherrschung "
+            "skelett"});
+nosave string *make_mummy=({
+            "mumifizierung leiche", "beschwoerung mumie", "beherrschung "
+            "mumie"});
+nosave string *make_ghost=({
+            "geisterruf leiche"});
+nosave int nodefense;
+
+
+void create() {
+  if (!is_clone(TO)) return;
+  ::create();
+  SetProp(P_GUILD, GUILDNAME);
+  CLONEME(ARMOUR "maske");
+  command_me("trage alles");
+}
+
+int is_necromancer_npc() {
+  return 1;
+}
+
+void reset() {
+  ::reset();
+  undead_per_reset=g_level*2;
+}
+
+void set_guild_spellrate(int value) {
+  SetAttackChats(value,({"@@CastGuildSpell@@"}));
+} 
+
+
+varargs 
+void create_necromancer_npc(int lvl, int glvl, int grad, int no_def) {
+  if(!no_def) 
+    call_other(NNPCMASTER, "add_npc");
+  create_default_npc(lvl); 
+  SetProp(P_TEMPERATURE_RANGE, ([0:-276,1:50]) );
+  SetProp(P_GUILD_LEVEL, glvl);
+  g_level=glvl;
+  g_circle=grad;
+  nodefense=no_def;
+  set_guild_spellrate(glvl*4 + grad*3);
+  SetProp(P_GUILD_CIRCLE, grad);
+  SetProp(P_RESISTANCE_STRENGTHS , 
+    ([ DT_COLD   : -0.05*glvl,
+       DT_LIGHT  :  0.7/glvl,
+       DT_TERROR : -0.1*glvl,
+       DT_HOLY   :  1.5/glvl,
+       DT_UNHOLY : -0.1*glvl ]) );
+  switch(lvl+3*glvl)
+  {
+    case 0..19: break;
+    case 20..35: AddId("Messerkaempfer"); break;
+    case 40..60: AddId("Messerexperte"); break;
+    default: AddId("Messermeister");
+  }
+  return;
+}
+
+varargs void create_default_necromancer(int lvl, int glvl, int grad, int no_def) 
+{
+  create_necromancer_npc(lvl, glvl, grad, no_def);
+}
+
+nosave string CastGuildSpell() {
+  if (g_level > 2 && !QueryProp(P_TMP_DEFEND_HOOK)) {
+    schleier_des_val_tkro_tthar();
+    return "";
+  }
+  switch(g_level) {
+    case 0: break;
+    case 1: strategy_level_one(); break; 
+    case 2: strategy_level_two(); break; 
+    case 3: strategy_level_three(); break; 
+    case 4: strategy_level_four(); break; 
+    case 5: strategy_level_five(); break; 
+    case 6: strategy_level_six(); break; 
+    default: strategy_level_seven();
+  }
+  return "";
+}
+
+nosave varargs void strategy_level_one(object enemy) {
+  object *enemies;
+  if(!enemy) {
+    enemies=PresentEnemies();
+    if(!sizeof(enemies)) return;
+    enemy=enemies[random(sizeof(enemies))];
+  }
+  if(!random(2) && !enemy->QueryProp(P_BLIND))
+    strahlen_der_dunkelheit(enemy);
+  else
+    beruehrung_von_zumuul(enemy);
+  return; 
+}
+
+nosave varargs void strategy_level_two(object enemy) {
+  if(!random(25) && undead_per_reset>0 && !sizeof(QueryProp(P_DEFENDERS))) { 
+    make_zombie();
+    undead_per_reset--;
+    return ;
+  }
+  return strategy_level_one(enemy);
+}
+
+
+nosave varargs void strategy_level_three(object enemy) {
+  object *enemies;
+  if(!enemy) {
+    enemies=PresentEnemies();
+    if(!sizeof(enemies)) return;
+    enemy=enemies[random(sizeof(enemies))];
+  }
+  if(!present(NEKRO_BLOODBOIL,enemy) && !random(2)) {
+    kochendes_blut(enemy);
+    return;
+  }
+  return strategy_level_two(enemy);
+}
+
+nosave varargs void strategy_level_four(object enemy) {
+  int percent_hp;
+  object *enemies;
+  if(!random(20) && undead_per_reset>0 && !sizeof(QueryProp(P_DEFENDERS))) { 
+    undead_per_reset--;
+    if(!random(2))
+      make_skeleton();
+    else 
+      make_zombie();
+  }
+  if (!enemy) {
+    enemies=PresentEnemies();
+    if(!sizeof(enemies)) return;
+    enemy=enemies[random(sizeof(enemies))];
+  }
+  percent_hp= 100 * QueryProp(P_HP) / QueryProp(P_MAX_HP);
+  if(!random(percent_hp/10)) {
+    biss_des_vampirs(enemy);
+    return;
+  }
+  if(!random(3)) {
+    hauch_der_verwesung(enemy);
+    return;
+  }
+  return strategy_level_three(enemy);
+}
+  
+
+nosave varargs void strategy_level_five(object enemy) {
+  object *enemies;
+  enemies=PresentEnemies();
+  if(!sizeof(enemies)) return;
+  enemy=enemies[random(sizeof(enemies))];
+
+  if(!random(3) && (sizeof(enemies) > 1 || !random(5))) {
+    geifer_der_verdammten(enemies);
+    return;
+  }
+  if(!random(3)) {
+    schrecken_der_finsternis(enemy);
+    return;
+  }
+  return strategy_level_four(enemy);
+}
+
+nosave varargs void strategy_level_six(object enemy) {
+  object *enemies;
+  if(!random(20) && undead_per_reset>0 && !sizeof(QueryProp(P_DEFENDERS))) { 
+    undead_per_reset--;
+    make_skeleton();
+  }
+  if(!random(3)) {
+    enemies=PresentEnemies();
+    if(!sizeof(enemies)) return;
+    if (!enemy)
+      enemy=enemies[random(sizeof(enemies))];
+
+    if (sizeof(enemies) > 1 || !random(5)) {
+      gekreische_der_todesfee(enemies);
+      return;
+    }
+  }
+  return strategy_level_five(enemy);
+}
+
+nosave varargs void strategy_level_seven(object enemy) {
+  object *enemies;
+  if(!random(15) && undead_per_reset>0 && !sizeof(QueryProp(P_DEFENDERS))) { 
+    undead_per_reset--;
+    if(random(3))
+      make_mummy();
+    else 
+      make_skeleton();
+  }
+  if (!objectp(enemy))
+  {
+    enemies=PresentEnemies();
+    if(!sizeof(enemies)) return;
+    enemy=enemies[random(sizeof(enemies))];
+  }
+  return strategy_level_six(enemy);
+}
+
+
+//
+// Spellerzeugen von Zombie, Skelett, Mumie:
+//
+void make_zombie() {
+  object zombie;
+  zombie=clone_object(NPC "zombie");
+  zombie->SetZombie(QueryProp(P_GUILD_LEVEL)*4, ME, 
+      random(g_level*skill_per_level));  
+  zombie->SetMaster(ME);
+  tell_room(ENV(ME), BS(sprintf("%s vollfuehrt seltsam anmutende Gesten "
+      "mit %s Haenden, und "
+      "ploetzlich entsteigt dem Boden der furchtbare Zombie eines "
+      "gefallenen und laengst vergessenen Kriegers!", Name(), 
+      QPP(FEMALE, WEM, PLURAL))));
+  zombie->move(ENV(ME), M_GO|M_SILENT);
+  return ;
+}
+
+void make_skeleton() {
+  object skeleton;
+  skeleton=clone_object(NPC "skelett");
+  skeleton->SetSkeleton(QueryProp(P_GUILD_LEVEL)*4, ME, 
+      random(g_level*skill_per_level));  
+  skeleton->SetMaster(ME);
+  tell_room(ENV(ME), BS(sprintf("%s fuchtelt mit %s Haenden herum, und "
+      "ploetzlich entsteigt dem Boden ein furchtbares Skelett eines "
+      "gefallenen und laengst vergessenen Kriegers!", Name(), 
+      QPP(FEMALE, WEM, PLURAL))));
+  skeleton->move(ENV(ME), M_GO|M_SILENT);
+  return ;
+}
+
+void make_mummy() {
+  object mummy;
+  mummy=clone_object(NPC "mumie");
+  mummy->SetMummy(QueryProp(P_GUILD_LEVEL)*4, ME, 
+      random(g_level*skill_per_level));  
+  mummy->SetMaster(ME);
+  tell_room(ENV(ME), BS(sprintf("%s fuchtelt mit %s Haenden herum, und "
+      "ploetzlich stapft eine furchtbare Mumie herein!", Name(), 
+      QPP(FEMALE, WEM, PLURAL))));
+  mummy->move(ENV(ME), M_GO|M_SILENT);
+  return ;
+}
+
+//
+nosave int geisterruf() {
+  object corpse;
+  string killer;
+  if(!corpse=present("Leiche", ENV(ME))) return 0;
+  killer=corpse->QueryProp(P_KILLER);
+  if(!find_player("killer")) return 0;
+  command_me("geisterruf leiche");
+  return 1;
+}
+
+
+// Unsere eigene kleine Defend:
+int Defend(int dam, string dam_type, mixed spell, object enemy) {
+  string en_name;
+  if(interactive(enemy)) { // Speichern der Schaeden.
+    en_name=getuid(enemy);
+    if(member(damage, en_name)==-1)
+      damage+=([en_name:dam]);
+    else 
+      damage[en_name]=(damage[en_name]+dam)/2; 
+  }
+  if(!nodefense)
+    call_other(NNPCMASTER, "AddFeind", enemy);
+  return ::Defend(dam,dam_type,spell,enemy);
+}
+
+// Hier holen wir uns unseren naechsten Gegner
+// flag: 0 ... meisten LP 
+//       1 ... wenigsten LP
+//       2 ... meisten Schaden verursachend
+//       3 ... wenigsten Schaden verursachend
+nosave mixed GetEnemy(int flag) {
+  int i, x, eval, old_eval;
+  object *en;
+  string en_name;
+  old_eval=0;
+  if(sizeof(en=filter_array(PresentEnemies(), #'interactive))<1) return 0;
+  for(i=sizeof(en)-1;i>=0;i--) {
+    en_name=getuid(en[i]);
+    if(!flag || flag==1) 
+      eval=en[i]->QueryProp(P_MAX_HP)-en[i]->QueryProp(P_HP);
+    if(flag==2 || flag==3)
+      eval=damage[en];
+    if(!flag && eval<old_eval) x=i;
+    if(flag==1 && eval>old_eval) x=i;
+    if(flag==2 && eval>old_eval) x=i;
+    if(flag==3 && eval<old_eval) x=i;
+    old_eval=eval;
+  }
+  return en[x];
+}
+
+// NotifyPlayerDeath 
+void NotifyPlayerDeath(object player, object killer, int lostexp) {
+  string pl_name, *cmds;
+  int i;
+  
+  if(killer == ME && stringp(QueryProp(P_NEKRO_LOG_PLAYERDEATH))) {
+    write_file(QueryProp(P_NEKRO_LOG_PLAYERDEATH), sprintf(
+        "%s: %s[%d/%d/%d] killt %O[%d/%d-%s,lxp:%d]\n",
+        ctime(),
+        explode(file_name(ME), "#")[0], 
+        QueryProp(P_LEVEL), 
+        QueryProp(P_GUILD_LEVEL),
+        QueryProp(P_GUILD_CIRCLE),
+        player,
+        player->QueryProp(P_LEVEL), 
+        player->QueryProp(P_GUILD_LEVEL), player->QueryProp(P_GUILD),
+        lostexp));
+  }
+  pl_name=getuid(player);
+  if(member(damage, pl_name)) 
+    damage=m_delete(damage, pl_name);
+  switch(g_level) {
+    case 2:
+    case 3: cmds=make_zombie; 
+    case 4:
+    case 5: cmds=make_skeleton;
+    default: cmds=(random(2)?make_mummy:make_skeleton);
+  }
+  if(sizeof(cmds))
+    for(i=0;i<=sizeof(cmds)-1;i++)
+      command_me(cmds[i]);
+  return;
+}
+
+varargs void die(int poisondeath) {
+  string logfile;
+  if(!nodefense) {
+    if(poisondeath || !objectp(TP))
+      call_other(NNPCMASTER, "del_npc");
+    else 
+      call_other(NNPCMASTER, "del_npc",TP);
+  }
+  if(QueryProp(P_NEKRO_LOG_DEATH)) {
+    if(stringp(QueryProp(P_NEKRO_LOG_DEATH)))
+      logfile=QueryProp(P_NEKRO_LOG_DEATH);
+    else
+      logfile=KILL_LOG;
+    write_file(logfile, sprintf(
+        "%s: %O[%d/%d-%s] killt %s[%d/%d/%d]\n",
+        ctime(),TP, TP->QueryProp(P_LEVEL), 
+        TP->QueryProp(P_GUILD_LEVEL), TP->QueryProp(P_GUILD),
+        explode(file_name(ME), "#")[0], QueryProp(P_LEVEL), 
+        QueryProp(P_GUILD_LEVEL),
+        QueryProp(P_GUILD_CIRCLE)));
+  }
+  return ::die(poisondeath);
+}
+
+varargs int remove(int silent) {
+  if(!nodefense) {
+    call_other(NNPCMASTER, "del_npc");
+  }
+  return ::remove(silent);
+}
+
+
+
+void init() {
+  ::init();
+  if (!TP) return;
+  if (TP->QueryProp(P_GHOST))
+    TP->SetProp(P_GHOST, 0);
+  if(!nodefense && !QueryProp(P_NEKRO_NOENEMYCHECK) && 
+      call_other(NNPCMASTER,"IsFeind",TP)) 
+    Kill(TP);
+}
+
+void strahlen_der_dunkelheit(object enemy) {
+  int dam,nr,i;
+  string str;
+  dam=g_level*25+g_circle*10+100;
+  switch (1 + random(g_level)) {
+    case 1..3: nr=1; str="schiesst ein dunkler Strahl"; break;
+    case 4..5: nr=2; str="schiessen zwei dunkle Strahlen"; break;
+    default:   nr=3; str="schiessen drei dunkle Strahlen"; break;
+  }
+  tell_room(ENV(ME), BS(sprintf("Aus den Augen von %s %s genau auf "
+          "die Augen von %s zu!", name(WEM), str, enemy->name(WEM))),
+      ({ME, enemy}));
+  tell_object(enemy, BS(sprintf("Aus den Augen von %s %s auf Dich zu!",
+          name(WEM), str)));
+  for(i=1; i<=nr; i++)
+    if(objectp(enemy) && !enemy->QueryProp(P_GHOST))
+      enemy->Defend(dam/2 + random(dam/2), ({DT_UNHOLY}), 
+          ([SP_NAME:"strahlen der dunkelheit", SP_SHOW_DAMAGE:1]), ME);
+  return ;
+}
+
+void beruehrung_von_zumuul(object enemy) {
+  int dam;
+  dam=20+2*g_level+g_circle;
+  dam = dam/2 + random(dam/2);
+  if(random(QueryAttribute(A_DEX)) > random(enemy->QueryAttribute(A_DEX))) {
+    tell_room(ENV(ME), BS(sprintf("%s beruehrt %s schnell.", Name(WER),
+          enemy->name(WEN))), ({enemy}));
+    tell_object(enemy, BS(sprintf("%s beruehrt Dich schnell! Du schreist voller"
+          " Schmerzen auf und fuehlst Dich gelaehmt!", Name(WER))));
+    enemy->AddHp(-dam);
+    AddHp(dam);
+    enemy->SetProp(P_DISABLE_ATTACK, 1 + random(g_level));
+  }
+  return ;
+}
+
+void hauch_der_verwesung(object enemy) {
+  int dam;
+  dam=300+g_level*10+g_circle*10+random(200);
+  tell_room(ENV(ME), BS(sprintf("%s ruft: Ika-haar Turz'waa tortem Gr'traf!", 
+          Name(WER))));
+  tell_room(ENV(ME), BS(sprintf("Ploetzlich schreit %s auf, als sich hunderte "
+          "kleine Maden in %s Haut bohren!", enemy->name(WER), 
+          enemy->QPP(FEMALE, WEN))), ({enemy}));
+  tell_object(enemy, BS("Du schreist in Schmerzen auf als sich hunderte kleine "
+        "Maden in Deine Haut bohren!"));
+  enemy->Defend(dam/2 + random(dam/2), ({DT_UNHOLY, DT_ACID, DT_POISON}), 
+      ([SP_NAME:"hauch der verwesung", SP_SHOW_DAMAGE:1]), ME);
+  return ;
+}
+
+void biss_des_vampirs(object enemy) {
+  int dam;
+  dam=300+g_level*20+g_circle*10+random(200);
+  tell_room(ENV(ME), BS(sprintf("%s springt nach vorne und beisst %s in den "
+          "Hals!", Name(WER), enemy->name(WER))), ({enemy}));
+  tell_object(enemy, BS(sprintf("%s springt ploetzlich nach vorne, entbloesst "
+          "%s spitzen Zaehne und beisst Dir in den Hals! Du fuehlst Dich ganz "
+        "schwach.", Name(WER), QPP(MALE, WEN, PLURAL))));
+  dam = enemy->Defend(dam/2 + random(dam/2), ({DT_UNHOLY, DT_PIERCE}), 
+      ([SP_NAME:"biss des vampirs", SP_SHOW_DAMAGE:1]), ME);
+  AddHp(dam * (g_level + g_circle) / 10);
+  return ;
+}
+
+void kochendes_blut(object enemy) {
+  object ob;
+  if(enemy->is_class_member(CL_UNDEAD) || enemy->is_class_member(CL_DEMON))
+    return;
+  tell_room(ENV(ME), BS(sprintf("%s deutet auf %s und %s schreit ploetzlich "
+          "in Agonie!",
+          Name(WER), enemy->name(WER), enemy->QueryPronoun(WER))), ({enemy}));
+  tell_object(enemy, BS(sprintf("%s deutet mit einem Ruck auf Dich! "
+          "Ploetzlich spuerst Du wie Dein Blut zu kochen beginn! Du "
+          "schreist vor Schmerz!", Name(WER))));
+  ob=clone_object(OBJ "bloodboil");
+  ob->move(enemy, M_NOCHECK);
+  ob->Setup(enemy, ME, g_level*skill_per_level);
+  ob->NPC_caster();
+  return;
+}
+
+void schrecken_der_finsternis(object enemy) {
+  int dam;
+  dam=400+g_level*20+g_circle*10+random(200);
+  tell_room(ENV(ME),BS(sprintf("%s belegt %s mit dem furchtbaren Schrecken der "
+          "Finsternis. %s wimmert wie ein kleines Kind.",
+          Name(WER), enemy->name(WEN), enemy->Name(WER))), ({enemy}));
+  tell_object(enemy, BS(sprintf("%s belegt Dich mit dem furchtbaren "
+          "Schrecken den Finsternis. Deine fuechterlichsten Alptraeume "
+          "werden Realitaet!", Name(WER))));
+  enemy->Defend(dam/2 + random(dam/2), ({DT_UNHOLY, DT_TERROR}), 
+      ([SP_NAME:"schrecken der finsternis", SP_SHOW_DAMAGE:1]), ME);
+  if(random(g_circle+g_level) > 10 && interactive(enemy)) {
+    tell_room(ENV(ME), BS(sprintf("%s fluechtet voller Entsetzen!", 
+            enemy->Name(WER))), ({enemy}));
+    tell_object(enemy, BS("Du fluechstet voller Entsetzen"));
+    enemy->SetProp(P_WIMPY, enemy->QueryProp(P_HP)+1);
+    enemy->CheckWimpyAndFlee();
+  }
+  return;
+}
+
+void geifer_der_verdammten(object *enemies) {
+  int dam,i;
+  dam=300+g_level*10+g_circle*10+random(200);
+  tell_room(ENV(ME), BS(sprintf("%s formt %s Haende zu einer Kugel und "
+          "wirft eine geifernde Saeurekugel in den Raum!", Name(WER), 
+          QPP(FEMALE, WEN, PLURAL))));
+  for(i=sizeof(enemies)-1;i>=0;i--) {
+    tell_object(enemies[i], "Der Geifer veraetzt Dich!\n");
+    enemies[i]->Defend(dam/2 + random(dam/2), ({DT_ACID}), 
+        ([SP_NAME:"geifer der verdammten", SP_SHOW_DAMAGE:1]), ME);
+  }
+  return;
+}
+
+void gekreische_der_todesfee(object *enemies) {
+  int dam,i;
+  dam=500+g_level*10+g_circle*10+random(200);
+  tell_room(ENV(ME), BS(sprintf("%s reisst %s Mund weit auf und laesst "
+          "einen schrillen Schrei los, der Dein Blut in den Adern gefrieren "
+          "laesst!", Name(WER), QPP(MALE, WEN))));
+  for(i=sizeof(enemies)-1;i>=0;i--) {
+    if(!enemies[i]->QueryProp(P_DEAF)) {
+      tell_object(enemies[i], BS(sprintf("%s kreischt in unirdisch hohen "
+              "Toenen, eine Kakophonie des Grauens, die Dir das Blut in den "
+              "Adern gefrieren laesst!", Name(WER))));
+      enemies[i]->Defend(dam/2 + random(dam/2), ({DT_SOUND, DT_UNHOLY}), 
+          ([SP_NAME:"gekreische der todesfee",SP_SHOW_DAMAGE:1]), ME);
+      if(!random(10)) {
+        tell_object(enemies[i], "Du wirst durch das Gekreische taub!\n");
+        enemies[i]->SetProp(P_DEAF, g_level*10);
+      }
+    }
+  }
+  return;
+
+}
+
+void schleier_des_val_tkro_tthar() {
+  int s_time;
+  s_time=20*g_level+4*g_circle;
+  tell_room(ENV(ME), BS(sprintf("Mit einem Mal wird %s von einem dunklen "
+          "Schleier umgeben!", name(WER))));
+  SetProp(P_TMP_DEFEND_HOOK, ({s_time+time(), TO, "nekro_schutz"}));
+  return ;
+}
+
+mixed nekro_schutz(int dam, mixed dam_type, mixed spell, object enemy)
+{
+  int nr_damtypes, dam_nr, dam2;
+  dam_nr=0;
+  if (!pointerp(dam_type))
+    dam_type=({dam_type});
+  nr_damtypes=2*sizeof(dam_type);
+  dam=(int)(dam*0.95);
+  if(member(dam_type, DT_HOLY)!=-1) dam_nr+=3;
+  if(member(dam_type, DT_LIGHT)!=-1) dam_nr+=2;
+  if(member(dam_type, DT_FIRE)!=-1) dam_nr+=1;
+  if(member(dam_type, DT_MAGIC)!=-1) dam_nr++;
+  if(dam_nr)
+    dam-=(dam/3)*dam_nr/nr_damtypes;
+  return ({ dam, dam_type, spell, enemy });
+}
+

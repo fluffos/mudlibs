@@ -1,0 +1,331 @@
+//
+// Masterobjekt fuer Sehertore (c) by Rochus
+//
+// Dieses Objekt verwaltet die Sehertore.
+// Nicht clonen! Nicht updaten! Nicht destructen!
+// (Ausser bei Erneuerung der Torliste)
+// Die einzelnen Funktionen sind in /doc/lfun dokumentiert.
+//
+#include <properties.h>
+#include <moving.h>
+#include <wizlevels.h>
+#include <language.h>
+#include <defines.h>
+#include <moredef.h>
+
+#pragma strong_types
+
+#define DOORFILE        "/etc/sehertore"
+#define DEFAULT_TELEPORT_KOSTEN 5
+#define TELEPORT_KOSTEN 10
+#define P_SEERDOORS     "rw_sehertore"
+
+mapping doors;
+// Doormapping:
+// ([raumname: nummer; beschreibung; ]);
+
+mapping nutzung;
+nosave int *disabled_doors=({});
+
+
+void create ()
+{
+  if (is_clone(this_object())) {
+    destruct(this_object());
+    return;
+  }
+  doors = ([ ]);
+  nutzung = ([ ]);
+  restore_object(DOORFILE);
+  set_next_reset(20*60);
+}
+
+varargs int DoorIsKnown(object player) 
+{
+  // Tuer in Umgebung von TP ist TP bekannt.
+  object pl,env;
+  int num;
+  mapping st;
+
+  pl = player || this_player();
+  if (pl &&
+      IS_SEER(pl) && // Spieler muss Seher sein
+      (env=environment(pl)) &&
+      (num=doors[file_name(env)]) && // Tor existiert
+      (st=pl->QueryProp(P_SEERDOORS)) && // mindestens ein Tor schon entdeckt
+      st[num]) // wurde dieses Tor schon entdeckt ?
+    return num;
+  return 0;
+}
+
+varargs int DiscoverDoor(string dname, object player)
+{
+  // TP entdeckt Tor in seiner Umgebung oder dname, falls angegeben.
+  object pl,env;
+  int num;
+  mapping st;
+
+  pl = player || this_player();
+  if (!pl ||
+      !IS_SEER(pl)) return 0;
+  if (!dname) { // Kein Tor an einer bestimmten Stelle angegeben?
+    if (!(env=environment(pl))) return 0;
+    dname=file_name(env); // Dann das Tor hier nehmen.
+  }
+  if (!(num=doors[dname])) return 0;
+  if (!(st=pl->QueryProp(P_SEERDOORS))) { // Noch kein Tor entdeckt?
+    pl->SetProp(P_SEERDOORS,([num:1])); // Dieses ist das erste.
+    pl->Set(P_SEERDOORS,SAVE,F_MODE);
+    return 1;
+  }
+  if (st[num]) // Tor war schon vorher bekannt.
+    return 0;
+  st[num]=1; // Tor ist jetzt bekannt.
+  log_file( "obj/SEHERTORDISCOVER", 
+      sprintf("%s: %s findet Sehertor Nr. %d.\n",
+          dtime(time()), capitalize(getuid(pl)), num));
+  pl->SetProp(P_SEERDOORS,st);
+  return 1;
+}
+
+#ifndef P_TELEPORT_COST
+#define P_TELEPORT_COST "teleport_cost"
+#endif
+
+int CheckEquip(object player)
+{
+  int r,i;
+  object *a;
+  object w;
+  r=0;
+  if (!pointerp(a=player->QueryProp(P_ARMOURS)) ) a=({});
+  if( w=player->QueryProp(P_WEAPON)) a+=({w});
+  for(i=sizeof(a)-1;i>=0;i--)
+  {
+    if( objectp(a[i]) )
+      r += a[i]->QueryProp(P_TELEPORT_COST);
+  }
+  return r;
+}
+
+varargs void ShowDoors(object player) 
+{
+  // Zeigt alle Sehertore, die TP kennt.
+  object pl;
+  mixed *ind,*inf,ix;
+  mapping st;
+  int i,n,me,c1,c2;
+
+  pl = player || this_player();
+  if (!pl ||
+      !IS_SEER(pl) ||
+      !(st=pl->QueryProp(P_SEERDOORS)))
+        return;
+  me=DoorIsKnown(pl);
+  c1=DEFAULT_TELEPORT_KOSTEN+environment(pl)->QueryProp(P_TPORT_COST_OUT);
+  c1-=CheckEquip(pl);
+  ind=m_indices(doors);inf=({});
+  for (i=sizeof(ind)-1;i>=0;i--) {
+    ix=ind[i];
+    n=doors[ix];
+    if (!n ||
+        !st[n]) continue;
+    if( !member(nutzung, getuid(pl)) )
+      nutzung += ([getuid(pl): 0]);
+    c2 = (pl->QueryProp(P_FROG)?2:1) * (c1+nutzung[getuid(pl)]+
+              call_other(ix,"QueryProp",P_TPORT_COST_IN));
+    inf+=({({n,doors[ix,1], (c2<1 ? 1 : c2) })});
+  }
+  inf=sort_array(inf,lambda(({'x,'y}),
+                            ({#'<,({#'[, 'x, 0}),({#'[, 'y, 0})})));
+  for (i=sizeof(inf)-1;i>=0;i--) {
+    if (inf[i][0]!=me) {
+      if (inf[i][2] && !pl->QueryProp(P_GHOST) )
+        printf(" %2d. %s (%d MP)\n",inf[i][0],inf[i][1],inf[i][2]);
+      else
+        printf(" %2d. %s\n",inf[i][0],inf[i][1]);
+    }
+    else
+      printf("[%2d. %s]\n",inf[i][0],inf[i][1]);
+  }
+}
+
+nosave void TeleportTo(int num) 
+{
+  // Teleportiert TP zu Tor Nummer <num>.
+  object pl;
+  mapping st;
+  string *ind,ix;
+  int i,kosten;
+
+  if (!(pl=this_player()) || !DoorIsKnown()) 
+    return;
+  if (num==0) {
+    write("OK, nicht teleportieren.\n");
+    return;
+  }
+  if(((!random(321) && nutzung[pl] > random(10)) || (!random(23) &&
+      (dtime(time())[0..6]=="Fre, 13" || dtime(time())[5..11]==" 1. Apr"))) &&
+      !present("\nstoerungsfreies_teleport_item", pl) )
+      // Fehler im Astralgefuege! zu falschen Tor teleportieren
+  {
+    write("\nDu fuehlst eine Stoerung im Astralgefuege!\n\n");
+    log_file( "obj/SEHERTOR", sprintf("%s: %O teleportiert statt %d nach %d.\n",
+          dtime(time()), pl, num, num=random(sizeof(doors)) ));
+  }
+  if (!(st=pl->QueryProp(P_SEERDOORS)) ||
+      !st[num]) { // Seher kennt dieses Tor noch nicht.
+    write("Du kennst noch kein Tor mit dieser Nummer.\n");
+    return;
+  }
+  if (pl->QueryProp(P_RESTING)) {
+    write("Du solltest zuerst aufstehen.\n");
+    return;
+  }
+  if(member(disabled_doors, num)!=-1) {
+    write(BS("Du kannst Dich im Moment dorthin nicht teleportieren! "
+          "Das Tor scheint durch eine magische Macht gesperrt zu sein!"));
+    return ;
+  }
+  ind=m_indices(doors);
+  for (i=sizeof(ind)-1;i>=0;i--) {
+    ix=ind[i];
+    if (doors[ix]!=num) continue; // Dieses Tor ist nicht das angegebene.
+    kosten=DEFAULT_TELEPORT_KOSTEN;
+    if( ix == file_name(environment(pl)) ) {
+      write("Du bleibst im gleichen Raum.\n");
+      return;
+    }
+    if( !member(nutzung, getuid(pl)) )
+      nutzung += ([getuid(pl): 0]);
+    kosten+=nutzung[getuid(pl)];
+    kosten+=environment(pl)->QueryProp(P_TPORT_COST_OUT);
+    kosten+=call_other(ix,"QueryProp",P_TPORT_COST_IN);
+    kosten-=CheckEquip(pl);
+    kosten *= (pl->QueryProp(P_FROG)?2:1);
+    if (kosten<1) kosten=1;
+    if (pl->QueryProp(P_GHOST)) {
+      kosten = 0;
+      nutzung[getuid(pl)] += 2;
+    }
+
+    if (pl->QueryProp(P_SP) < kosten) {
+      write("Du hast nicht genug Magiepunkte dafuer.\n");
+      return;
+    }
+    write("Du verlierst fuer einen Moment die Orientierung.\n");
+    if (pl->move(ix,M_TPORT)>0) {
+      pl->AddSp(-1*kosten);
+      nutzung[getuid(pl)] ++;
+//      log_file( "ARCH/sehertor", sprintf("%O teleportiert nach Tor %d fuer %d MP\n",
+//            pl, num, kosten) );
+    }
+    else
+      write("Das Teleportieren hat nicht funktioniert.\n");
+    /* 
+    // Keine Parallelwelt im SL!
+    if (random(100)<5 && !(pl->QueryProp(P_PARA))) {
+      pl->SetProp(P_PARA,((random(100)<5)?0:1));
+      write("Du hast das komische Gefuehl, dass beim Teleportieren\n"+
+            "etwas falsch gelaufen sein koennte...\n");
+      if (pl->QueryProp(P_PARA))
+	log_file("para",sprintf("%s %s (%s): Sehertor\n",ctime(time()),
+				pl->name(WER),geteuid(pl)));
+    }
+    */
+    return;
+  }
+  write("Es existiert kein Ziel mit dieser Nummer.\n");
+}
+
+nosave void GetTeleporterNum(string str) 
+{
+  // Wartet auf Eingabe einer Tornummer.
+  int n;
+
+  if (!str)
+    n=0;
+  else
+    sscanf(str,"%d",n);
+  TeleportTo(n);
+}
+
+varargs int Teleport(string str) 
+{
+  // Teleportiert Seher zum Tor, falls angegeben.
+  object pl;
+
+  if (!DoorIsKnown()) return 0;
+  if (member(disabled_doors, DoorIsKnown()) != -1 ) {
+    write(BS("Irgendetwas stimmt nicht! Offenbar ist dieses "
+          "Sehertor deaktiviert!"));
+    return 1;
+  }
+  if (!str) {
+    if (!query_once_interactive(this_player()))
+      return 0;  // Monster muessen Nummer angeben
+    write("  0. nicht teleportieren\n");
+    ShowDoors();
+    input_to("GetTeleporterNum");
+  } else
+    GetTeleporterNum(str);
+  return 1;
+}
+
+void ReloadDoorFile()
+{
+  doors=([]);
+  restore_object(DOORFILE);
+}
+
+int DisableDoor(int number) 
+{
+  if(member(disabled_doors, number)!=-1) return 0;
+  disabled_doors+=({number});
+  return 1;
+}
+
+int EnableDoor(int number) 
+{
+  if(member(disabled_doors, number)==-1) return 0;
+  disabled_doors-=({number});
+  return 1;
+}
+
+int IsDisabled(int number) 
+{
+  if(member(disabled_doors, number)!=-1) return 1;
+  return 0;
+}
+
+void reset()
+{
+  walk_mapping(nutzung, "reduzierung");
+//  log_file( "ARCH/sehertor", "-------------------RESET---------------------\n");
+  set_next_reset(25*60);
+}
+
+varargs void reduzierung(string player)
+{
+  int i;
+  if( (nutzung[player] = 3 * nutzung[player] / 4) <= 0 )
+    nutzung=m_delete(nutzung, player);
+}
+
+int query_kosten(string player)
+{
+  if( !member(nutzung, player) ) return 0;
+  return DEFAULT_TELEPORT_KOSTEN + nutzung[player];
+}
+
+int query_all_kosten()
+{
+  walk_mapping(nutzung, "all_kosten");
+}
+
+varargs void all_kosten(string player)
+{
+  if( stringp(player) )
+    printf("%-13s zahlt %2d Magiepunkte.\n", 
+      player, DEFAULT_TELEPORT_KOSTEN + nutzung[player]);
+}

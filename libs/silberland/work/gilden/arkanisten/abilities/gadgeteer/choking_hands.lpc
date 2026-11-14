@@ -1,0 +1,74 @@
+#include "../../arkanisten.h"
+
+inherit GUILD_FOLDER "abilities/ability.lpc";
+
+public void create() {
+    if(is_clone(TO)) return;
+
+    ::create();
+    SetProp(P_ABILITY_NAME, CAP(CHOKING_HANDS));
+    SetProp(P_ABILITY_DESCRIPTIPON, 
+        "Du hast die Finger deiner Handschuhe mit schraubzwingenartigen Gelenken ausgestattet. "
+        "Mit ihnen werden deine Griffe so stark, dass sich kaum jemand befreien kann. Wenn du "
+        "deinen Gegner an der richtigen Stelle packst, wuergst du ihn wahrend deinem Magnetgriff "
+        "automatisch und schadest ihm somit, so lange wie dein Griff anhaelt.");    
+    SetProp(P_ABILITY_TYPE, ABILITY_TYPE_PASSIVE);
+    SetProp(P_ABILITY_BASE_ATTRIBUTE, A_STR);
+    SetProp(P_ABILITY_GROUP, ({ABILITY_GROUP_GADGET_POWERUP, ABILITY_GROUP_GADGETS}));
+    SetProp(P_ABILITY_REQUIRES, ({TITAN_WRESTLER}));
+    SetProp(P_ABILITY_MIN_GUILD_LEVEL, 31);
+    SetProp(P_ABILITY_SPELLBREAK, 0);
+    
+    subscribe_to(MAGNET_GRAPPLE, EVENT_AFTER_USE);
+}
+
+public void handle_ability_event(string sender_name, int event, mixed payload) {
+    object gloves;
+    object user, enemy;
+    mapping sinfo;
+    int success;
+
+    if(!objectp(user = payload["user"])) return;
+
+    pDebug(user, sprintf("choking_hands :: sinfo=%O\n", payload));
+
+    if(sender_name != MAGNET_GRAPPLE) return;
+    if(event != EVENT_AFTER_USE) return;
+    if(!mappingp(sinfo=payload["sinfo"])) return;
+    if(!objectp(gloves = present(SPRINGLOADED_GLOVES_ID, user))) return;
+    if(!objectp(enemy = sinfo[SI_ENEMY] || sinfo[SI_SKILLARG])) return;
+    if(!objectp(present(MAGNET_GRAPPLE_ID, user))) return;
+
+    success = use(user, ([SI_ABILITY_SILENT: 1]), 1);
+    pDebug(user, sprintf("choking_hands :: success=%d\n", success));
+    if(success < 0) {
+        tell_object(user, BS("Du erwischst "+enemy->name(WEN)+" nicht richtig, um zu wuergen."));
+        return;
+    } 
+    
+    tell_object(user, BS("Deine schraubstockartigen Fingergelenke schliessen sich um "+enemy->name(WEN)+"!"));
+    tell_room(ENV(enemy), BS(user->Name(WER)+" haelt "+enemy->name(WEN)+" mit schraubstockartigem Griff fest und wuergt."), ({user}));
+    call_out("choke", 0, user, enemy, success);
+    return;
+}
+
+public void choke(object user, object enemy, int success) {
+    mapping sinfo;
+    int ability;
+
+    if(!objectp(enemy)) return;
+    if(!objectp(user)) return;
+    if(!objectp(present(MAGNET_GRAPPLE_ID, user))) return;
+
+    ability = user->QuerySkillAbility(CHOKING_HANDS);
+    sinfo = ([
+        SI_SKILLDAMAGE: 200 + success/100,
+        OFFSET(SI_SKILLDAMAGE): 100 + ability/100,
+        SI_MAX_DAMAGE: 500,
+        SI_SKILLDAMAGE_TYPE: ({ DT_SQUEEZE }),
+    ]);
+
+    default_attack_spell(enemy, user, sinfo, ([SP_SHOW_DAMAGE: 1, SP_NAME: CHOKING_HANDS]));
+    call_out("choke", 2, user, enemy, success);
+    return;
+}

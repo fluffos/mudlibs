@@ -1,0 +1,939 @@
+/*
+//
+// Der Gildenmaster fuer die Bardengilde
+//
+// AnDyL@Silberland
+//
+// 1998-05-14
+//
+// Last updated: 2002-09-20
+*/ 
+
+#include <wizlevels.h>
+#include <language.h>
+#include <config.h>
+#include <new_skills.h>
+#include <properties.h>
+
+#include "/gilden/bardengilde/bardengilde.h"
+
+mixed saveload;
+nosave mapping bards=([ ]);
+nosave mapping top=([ ]);
+nosave string *number_one;
+nosave int *xp_per_level=XP_PER_LEVEL;
+
+nosave mapping heroPathEntryProgess = ([ ]);
+
+int SetNumberOne();
+
+public void create() {
+  if (is_clone(this_object())) {
+      destruct(this_object());
+      return;
+  }
+
+  seteuid(getuid(this_object()));
+  if (restore_object(MEMBERLIST)) {
+    bards=saveload;
+  }
+
+  if (restore_object(TOPLIST)) {
+    top=saveload;
+  }
+
+  saveload=0;
+
+  SetNumberOne();    
+}
+
+// HIER KANN MAN DIE FUNKTIONEN NICHT MEHR UEBERSCHREIBEN ;P
+
+nomask query_prevent_shadow() { return 1; }
+
+
+// ABFRAGEN OB JEMAND MIT DEM MASTER PFUSCHEN DARF ODER NICHT
+
+#include "../access.h"
+
+// UMWANDELN EINES OBJECTS IN EINEN STRING
+
+nosave mixed object2string(mixed name) 
+{
+  if(objectp(name)) return getuid(name);
+  if(stringp(name)) return lower_case(name);
+  return 0;
+}
+
+// UMWANDELN EINES STRINGS IN EIN OBJECT
+
+nosave mixed string2object(mixed name) 
+{
+  if(objectp(name)) return name;
+  if(stringp(name))
+    {
+      if(name=find_player(name) || name=find_netdead(name)) return name;
+    }
+  return 0;
+}
+
+// BACKUP ERSTELLEN
+
+int DoBackup()
+{
+  if (!CheckIfAllowed()) return -2;
+  saveload=bards;
+  save_object(MEMBERBACKUP);
+  saveload=0;
+  rm (BACKUP("backup.log"));
+  write_file(BACKUP("backup.log"),
+             "Letztes Backup: "+dtime(time())+"\n");
+  return 1;
+}
+
+// BACKUP ZURUECKSPIELEN
+
+int DoRestore()
+{
+  if(!CheckIfAllowed()) return -2;
+  if(restore_object(MEMBERBACKUP))
+    save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+//   NEUES MITGLIED HINZUFUEGEN 
+//   Format: ([Name:Stufe;xp;SpielerLevel;Tasks;Bardengruppe;Heldenpfad;Diverses2;]) 
+//                    0   1       2         3        4          5         6
+
+int AddMember(mixed pl, int xp, int lvl) {
+  string plId;
+  if(!plId=object2string(pl)) return -3;
+  if(member(bards, plId))
+    return 0;
+  if (!CheckIfAllowed()) return -2;
+  xp+=XP_PER_LEVEL[0];
+  bards+=([plId:1;xp;lvl;"";"";"";""]);
+  saveload=bards;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+//   MITGLIED LOESCHEN
+
+int DeleteMember(mixed pl) 
+{
+  if(!pl=object2string(pl)) return -1;
+  if(!CheckIfAllowed()) return -2;
+  if(!member(bards, pl))
+    return -3;
+  bards=m_delete(bards, pl);
+  saveload=bards;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+// SETZEN EINER AUFGABE
+
+int SetTask(object pl, int task)
+{
+ if(!pl || !objectp(pl) || task<1 || task>12) return -1;
+ if (!CheckIfAllowed()) return -2;
+ 
+ bards[getuid(pl), 3]=task;
+ bards[getuid(pl), 1]=pl->QueryProp(P_GUILD_LEVEL);
+ saveload=bards;
+ save_object(MEMBERLIST);
+ saveload=0;
+ return 1;
+}
+
+// LOESCHEN ALLER TASKS EINES SPIELERS
+
+int DeleteTask(object pl)
+{ 
+  if (!CheckIfAllowed()) return -2;
+  bards[getuid(pl), 3]="";
+  saveload=bards;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+// ALLE TASKS ANZEIGEN DIE EIN SPIELER ABSOLVIERT HAT
+
+mixed ViewTasks(object pl)
+{    
+  if (!CheckIfAllowed()) return -2;
+  return bards[getuid(pl), 3];
+}
+
+// ALLE MITGLIEDR DER BARDENGILDE ANZEIGEN
+
+mixed QueryMembers()
+{
+  return m_indices(bards);
+}
+
+// ABFRAGEN OB EIN SPIELER UEBERHAUPT MITGLIED IST
+
+int IsMember(mixed pl)
+{
+  string uid;
+  if(stringp(pl)) uid = pl;
+  else if(objectp(pl)) uid = getuid(pl);
+  else raise_error("invalid parameter for IsMember");
+
+  if(!member(bards, uid)) return 0;
+  else return 1;
+}
+
+// WELCHER GRUPPE GEHOERT DER/DIE BARDE/IN AN?
+
+string GetBardGroup(mixed pl)
+{
+  string bardgroup;
+  if(!pl=object2string(pl)) return ""; 
+  if(!member(bards, pl)) return "";
+  return bardgroup=bards[pl, 4];
+}
+
+// BARDENGRUPPE FUER EINEN SPIELER SETZEN
+
+int SetBardGroup(mixed pl, string group)
+{
+  if(!pl=object2string(pl)) return -1;
+  if(!member(bards, pl)) return -1;
+  if (!CheckIfAllowed()) return -2;
+  if(!(group=="alestra" || group=="tirena" || group=="korriax" || group=="sarrian")) return -3;
+  bards[pl, 4]=group;
+  saveload=bards;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1; 
+}
+
+// LEVELS UPDATEN
+
+int UpdateMemberLevels() 
+{
+  int i;
+  object pl;
+  string *names;
+  names=m_indices(bards);
+  for(i=sizeof(names)-1; i>=0;i--) 
+    {
+      if((pl=find_player(names[i]))||(pl=find_netdead(names[i])))
+	bards[names[i], 1]=pl->QueryProp(P_GUILD_LEVEL);
+    }
+  saveload=bards;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+// ABFRAGEN EINER AUFGABE
+
+int CheckTask(object pl, int task)
+{
+  if(!pl || task<1 || task>12) return -1;
+  if ((bards[getuid(pl), 3]) >= task) return 1;
+  else return 0; 
+}
+
+// UEBERPRUEFEN DER VORHERGEHENDEN TASKS
+
+int CheckPreviousTasks(object pl, int task_number)
+{
+  int i;
+  if(!pl || task_number<1 || task_number>12) return -1;
+  for(i=task_number-1;i>=1;i--) 
+    {
+      if(!bards[getuid(pl), i]) return 0;
+    }
+  return 1;
+}
+
+int CheckXp(object pl, int cur_xp)
+{
+  if(!pl || !cur_xp) return -1;
+  if(bards[getuid(pl), 1] > cur_xp)
+    return 0;
+  else return 1;
+}
+
+int GetXpDifference(object pl, int cur_xp)
+{
+  if(!pl) return -1;
+  return bards[getuid(pl), 1]-cur_xp;
+}
+
+public int GetXpAchievedPercentage(object pl) {
+  int remainingXp, neededXp;
+  if(!pl) return 0;
+  neededXp = bards[getuid(pl), 1] ;
+  return (100 * pl->QueryProp(P_XP) / neededXp);
+}
+
+int SetXp(object pl, int needed_xp)
+{
+  if(!pl || !needed_xp) return -1;
+  if (!CheckIfAllowed()) return -2;
+  bards[getuid(pl), 1]=pl->QueryProp(P_XP)+needed_xp;
+  saveload=bards;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+// DEN BESTEN HERAUSFILTERN UND IN EINER VARIABLE SPEICHERN
+
+int SetNumberOne()
+{
+  int i, *topratings, bestrating;
+  bestrating=0;
+  topratings=m_indices(top);
+  for(i=sizeof(topratings)-1;i>=0;i--)
+    if(topratings[i]>bestrating) bestrating=topratings[i];
+  number_one=top[bestrating];
+  return 1; 
+}
+
+
+// DEN BESTEN AUSGEBEN
+mixed QueryNumberOne()
+{
+  return number_one;
+}
+
+
+// BERECHNUNG DER WERTUNG
+int CalculateRating(string player, int rating, int stufe)
+{
+  int last;
+  float mod;
+  object pl;
+  rating+=2*stufe;
+  //tell_andyl(sprintf("Name: %s, Rating: %d", player, rating));
+  if(pl=find_player(player) || pl=find_netdead(player))
+    last=pl->QueryProp(P_LAST_LOGIN);
+  else
+    last=call_other(SAVEMASTER, "QueryFileProp", player, P_LAST_LOGIN);
+  if((time()-1728000)>last) {         // 3600*24*20 = 20 tage
+   mod=1-((time()-1728000-last)/86400)*0.05;
+   if((rating=(int)(rating*mod))<0) rating=1;
+  }
+  //tell_andyl(sprintf(", Rating.mod: %d\n", rating));
+  return rating;
+}
+
+
+// FUERS AUSTRETEN -> RAUS AUS DER TOPLISTE
+
+int DeleteTopEntry(string player)
+{
+  int *topratings, i; 
+  string *topnames;
+  if (!CheckIfAllowed()) return -2;
+  topnames=m_values(top);
+  topratings=m_indices(top);
+  for(i=sizeof(topnames)-1;i>=0;i--) 
+    if(member(topnames[i], player)!=-1) 
+      top[topratings[i]]-=({player});
+  saveload=top;
+  save_object(TOPLIST);
+  return 1;
+}
+
+// TOPLISTE UPDATEN
+
+int UpdateTopList()
+{
+  string *names, *topnames;
+  int rating, i, j, *topratings, test;
+  object pl;
+  names=m_indices(bards);
+  topnames=m_values(top);
+  topratings=m_indices(top);
+  if((i=sizeof(names))>100) i=100;
+  for(i=i-1;i>=0;i--) {
+    rating=0;
+    if(query_wiz_level(names[i])<3) {
+      if(((pl=find_player(names[i]))||(pl=find_netdead(names[i]))) &&
+	 !pl->QueryProp(P_TESTPLAYER))
+	rating=CalculateRating(names[i], pl->QueryProp(P_GUILD_RATING), 
+			       pl->QueryProp(P_LEVEL));
+      else 
+	{
+	  if(call_other(SAVEMASTER, "QueryFileProp", names[i], 
+			P_TESTPLAYER)==0)
+	    rating=CalculateRating(names[i],
+				   call_other(SAVEMASTER, "QueryFileProp", names[i], 
+					      P_GUILD_RATING), 
+				   call_other(SAVEMASTER, "QueryFileProp", names[i], 
+					      P_LEVEL));
+	}
+    }
+    if(rating) 
+      {
+	for(j=sizeof(topnames)-1;j>=0;j--) 
+	  if(member(topnames[j], names[i])!=-1) 
+	    {
+	      top[topratings[j]]-=({names[i]});
+	    }     
+	if(!member(top, rating)) 
+	  {
+	    top+=([rating:({names[i]})]);
+	  }
+	else top[rating]+=({names[i]});
+      }
+  }
+  for(i=sizeof(m_indices(top))-1;i>=0;i--) {
+    if(!sizeof(m_values(top)[i]))
+      top=m_delete(top, m_indices(top)[i]);
+  }
+  saveload=top;
+  save_object(TOPLIST);
+  return 1;   
+}
+
+
+// TOPLISTE IN FILE 'toplist.read' SCHREIBEN, AUSGABE UEBER 'more'
+
+int MakeReadList()
+{
+  int *arm, i, j, tabs, stufe, nummer;
+  float best, fac;
+  string name, group;
+  rm(REALTOPLIST);
+  rm(ALESTRATOPLIST);
+  rm(TIRENATOPLIST);
+  rm(SARRIANTOPLIST);
+  rm(KORRIAXTOPLIST);
+  nummer=1;
+  
+  write_file(REALTOPLIST, "        Name\t\tGzweig\tGstufe\tWertung "
+	     +"(Nr.1=100)\n");
+  write_file(REALTOPLIST, "-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-="
+	     +"-=-=-=-=-=-=-=-=-=-=\n");
+
+  write_file(ALESTRATOPLIST, "        Name\t\tGzweig\tGstufe\tWertung "
+	     +"(Nr.1=100)\n");
+  write_file(ALESTRATOPLIST, "-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-="
+	     +"-=-=-=-=-=-=-=-=-=-=\n");
+  
+  write_file(TIRENATOPLIST, "        Name\t\tGzweig\tGstufe\tWertung "
+	     +"(Nr.1=100)\n");
+  write_file(TIRENATOPLIST, "-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-="
+	     +"-=-=-=-=-=-=-=-=-=-=\n");
+  
+  write_file(SARRIANTOPLIST, "        Name\t\tGzweig\tGstufe\tWertung "
+	     +"(Nr.1=100)\n");
+  write_file(SARRIANTOPLIST, "-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-="
+	     +"-=-=-=-=-=-=-=-=-=-=\n");
+  write_file(KORRIAXTOPLIST, "        Name\t\tGzweig\tGstufe\tWertung "
+	     +"(Nr.1=100)\n");
+  write_file(KORRIAXTOPLIST, "-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-="
+	     +"-=-=-=-=-=-=-=-=-=-=\n");
+  
+  arm=sort_array(m_indices(top), #'>); //');
+  for(i=sizeof(arm)-1;i>=0;i--) {
+    if(arm[i]) {
+      if(i==sizeof(arm)-1)
+	best=(float)arm[i];
+      for(j=sizeof(top[arm[i]])-1;j>=0;j--) {
+	name=CAP(top[arm[i]][j]);
+	fac=(float)(arm[i]/best)*100;
+	group=capitalize(bards[lower_case(name), 4]);
+	tabs=2-(int)(strlen(name)/8);
+	stufe=bards[lower_case(name), 0];
+	if(arm[i]==1)
+	  {
+	    
+	    if (group=="Alestra")
+	      {
+		write_file(ALESTRATOPLIST, sprintf("%2d.\t%s%*'\t's%s\t%2d\t  -.---\n",
+						   nummer, name, tabs, "", group, stufe)); 
+	      }
+	    
+	    if (group=="Tirena")
+	      {
+		write_file(TIRENATOPLIST, sprintf("%2d.\t%s%*'\t's%s\t%2d\t  -.---\n",
+						  nummer, name, tabs, "", group, stufe)); 
+	      }
+	    
+	    if (group=="Sarrian")
+	      {		
+		write_file(SARRIANTOPLIST, sprintf("%2d.\t%s%*'\t's%s\t%2d\t  -.---\n",
+						   nummer, name, tabs, "", group, stufe)); 
+	      }
+	    
+	    if (group=="Korriax")
+	      {
+		write_file(KORRIAXTOPLIST, sprintf("%2d.\t%s%*'\t's%s\t%2d\t  -.---\n",
+						   nummer, name, tabs, "", group, stufe)); 
+	      }
+	    
+	    write_file(REALTOPLIST, sprintf("%2d.\t%s%*'\t's%s\t%2d\t  -.---\n",
+					    nummer, name, tabs, "", group, stufe)); 
+	  }
+	else 
+	  {
+	    if (group=="Alestra")
+	      {
+		write_file(ALESTRATOPLIST, sprintf("%2d.\t%s%*'\t's%s\t%2d\t%7.3f\n", 
+						   nummer, name, tabs, "", group, stufe, fac));
+	      }
+	    if (group=="Tirena")
+	      {
+		write_file(TIRENATOPLIST, sprintf("%2d.\t%s%*'\t's%s\t%2d\t%7.3f\n", 
+						  nummer, name, tabs, "", group, stufe, fac));
+	      }
+	    if (group=="Sarrian")
+	      {
+		write_file(SARRIANTOPLIST, sprintf("%2d.\t%s%*'\t's%s\t%2d\t%7.3f\n", 
+						   nummer, name, tabs, "", group, stufe, fac));
+	      }
+	    if (group=="Korriax")
+	      {
+		write_file(KORRIAXTOPLIST, sprintf("%2d.\t%s%*'\t's%s\t%2d\t%7.3f\n", 
+						   nummer, name, tabs, "", group, stufe, fac));
+	      }
+	    
+	    write_file(REALTOPLIST, sprintf("%2d.\t%s%*'\t's%s\t%2d\t%7.3f\n", 
+					    nummer, name, tabs, "", group, stufe, fac));
+	    nummer++;
+	    
+	  }
+      }
+    }
+  }
+  return 1;
+}
+
+public void SetBardGroupForActiveBards() {
+  object *bards;
+  int i;
+
+  bards = filter_array(users(), "IsMember");
+  for(i=0; i<sizeof(bards); ++i) {
+    bards[i]->SetProp(P_BARD_GROUP, GetBardGroup(bards[i]));
+  }
+}
+
+public void reset() {
+  SetBardGroupForActiveBards();
+}
+
+//   LEVEL AUFSTEIGEN 
+//   Format: ([Name:Stufe;xp;SpielerLevel;Tasks;Bardengruppe;Diverses1;Diverses2;]) 
+//                    0   1       2         3        4          5         6
+
+int AdvanceLevel(mixed pl) 
+{
+  int lev;
+  string pl_str;
+  if(!pl=string2object(pl)) return -1;
+  if(!CheckIfAllowed()) return -2;
+  pl_str=getuid(pl);
+  if(!member(bards, pl_str)) return -3;
+  lev=pl->QueryProp(P_GUILD_LEVEL);
+  bards[pl_str,0]=lev;
+  SetXp(pl, xp_per_level[lev-1]);
+  bards[pl_str,2]=pl->QueryProp(P_LEVEL);
+  saveload=bards;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+// Guild Rating berechnen
+public int GuildRating(object pl) {
+  mapping ski;
+  string *sk;
+  int i, cnt, sum;
+  closure qsa;
+
+  if (!IsMember(pl)||!query_once_interactive(pl))
+    return 0;
+
+  if (!(ski = pl->QueryProp(P_NEWSKILLS)) ||
+      !(qsa = symbol_function("QuerySkillAbility",pl)))
+    return 0;  
+
+  sk = m_indices(ski);
+    
+  cnt = sizeof(ski);
+
+  for (i=cnt-1, sum=0; i>=0; i--)
+    sum += funcall(qsa, sk[i]);
+
+  sum = sum/NO_OF_SKILLS;
+  if (sum < 0)
+    sum = 0;
+  else if (sum > MAX_ABILITY)
+    sum = MAX_ABILITY;
+
+  return pl->SetProp(P_GUILD_RATING, sum);
+}
+
+// via crontab gesteuert wird 1 mal taeglich das GuildRating errechnet
+// es wird nur fuer aktive (= online oder netztote) Spieler berechnet
+public void RecalculateGuildRating() {
+  object bard;
+  string *bardIds;
+  int i;
+
+  bardIds = m_indices(bards);
+  for(i=0; i<sizeof(bardIds); ++i) {
+    bard = find_player(bardIds[i]) || find_netdead(bardIds[i]);
+    if(!objectp(bard)) continue;
+    
+    GuildRating(bard);
+  }
+}
+
+// Heldenpfadfunktionen (ab GS 13)
+
+//   Format: ([Name:Stufe;xp;SpielerLevel;Tasks;Bardengruppe;Heldenpfad;Diverses2;]) 
+//                    0   1       2         3        4          5         6
+
+public int SetHeroPath(mixed pl, string path) {
+  string uid, currentPath;
+  object who;
+
+  if(objectp(pl)) uid = object2string(pl);
+  else uid = pl;
+
+  if(!IsMember(pl)) return 0; // Spieler ist kein Barde
+
+  if(!objectp(pl)) {
+    who = find_player(pl);
+    if(!objectp(who)) return -4; // unknown player
+  } else {
+    who = pl;
+  }
+
+  currentPath = bards[uid, 5];
+  if(strlen(currentPath) > 0) return -1; // Spieler folgt bereits einem Heldenpfad
+  if(member(ALLOWED_HERO_PATHS, path) < 0) return -3; // Pfad nicht freigeschalten oder erlaubt
+
+  bards[uid, 5] = sprintf("%s:%d", path, 1);
+
+  saveload=bards;
+  save_object(MEMBERLIST);
+  saveload=0;
+
+  who->ModifySkill(SK_HEROISM(path), ([SI_SKILLABILITY: 0, SI_SKILLFUNC: "Heroism"]), 100, "bardengilde");
+
+  return 1;
+}
+
+public int SetHeroPathLevel(mixed pl, int lvl) {
+  string uid, currentPath, path;
+  object who;
+  int currentLevel;
+
+  if(objectp(pl)) uid = object2string(pl);
+  else uid = pl;
+
+  if(!IsMember(pl)) return 0; // Spieler ist kein Barde
+
+  if(!objectp(pl)) {
+    who = find_player(pl);
+    if(!objectp(who)) return -4; // unknown player
+  } else {
+    who = pl;
+  }
+
+  currentPath = bards[uid, 5];
+  if(!strlen(currentPath) > 0) return -1; // Spieler folgt keinem Pfad
+  
+  path = explode(currentPath, ":")[0];
+  currentLevel = to_int(explode(currentPath, ":")[1]);
+
+  if(lvl > 3) lvl = 3;
+  if(lvl < 1) lvl = 1;
+
+  bards[uid, 5] = sprintf("%s:%d", path, lvl);
+
+  saveload=bards;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+public string GetHeroPath(mixed pl) {
+  string uid, currentPath;
+
+  if(objectp(pl)) uid = object2string(pl);
+  else uid = pl;
+
+  if(!IsMember(uid)) return 0; // Spieler ist kein Barde
+
+  currentPath = bards[uid, 5];
+  if(strlen(currentPath) < 1) return 0;
+
+  return explode(currentPath, ":")[0];
+}
+
+public int HasHeroPathLevel(mixed pl, string path, int minLvl) {
+  string uid, currentPath;
+  object who;
+
+  if(objectp(pl)) uid = object2string(pl);
+  else uid = pl;
+
+  if(!IsMember(pl)) return 0; // Spieler ist kein Barde
+
+  if(!objectp(pl)) {
+    who = find_player(pl);
+    if(!objectp(who)) return 0; // unknown player
+  } else {
+    who = pl;
+  }
+
+  currentPath = bards[uid, 5];
+  if(strlen(currentPath) < 1) return 0;
+
+  if(explode(currentPath, ":")[0] != path) return 0;
+
+  //return to_int(explode(currentPath, ":")[1]) >= minLvl;
+  return to_int(explode(currentPath, ":")[1]) >= minLvl;
+}
+
+public varargs void SwapHeroPathVariants(object pl, int unlearn) {
+  string old, new, path;
+  int ability, r;
+
+  if(!stringp(path=GetHeroPath(pl))) return; // kein aktiver heldenpfad
+  if(!HasHeroPathLevel(pl, path, 2)) return; // pfadstufe zu niedrig
+
+  if(!unlearn) {
+    switch(path) {
+      case HERO_ANGARA: old = "lorica der musen"; new = "schuetzendes herz des berges"; break;
+      case HERO_ARCON:
+        switch(GetBardGroup(pl)) {
+          case BARD_GROUP_ALESTRA: old = "haette ich ein herz"; break;
+          case BARD_GROUP_KORRIAX: old = "toetet das biest"; break;
+          case BARD_GROUP_SARRIAN: old = "wiegenlied des leids"; break;
+          case BARD_GROUP_TIRENA:  old = "vana-o isil ar elena"; break;
+        }
+        new = "der goettin erster krieger";
+        break;
+      case HERO_FLAMMARA: old = "schrei des verderbens"; new = "wort des feuers"; break;
+      case HERO_GRIMM: old = "ruf der helden"; new = "der letzte der riesen"; break;
+      case HERO_KHARTAK: old = "tanz der saebel"; new = "sturm der klingen"; break;
+      case HERO_NOGI:
+        switch(GetBardGroup(pl)) {
+          case BARD_GROUP_ALESTRA: old = "ballade vom drachentoeter"; break;
+          case BARD_GROUP_KORRIAX: old = "zwergisches ahnenlied"; break;
+          case BARD_GROUP_SARRIAN: old = "stolze mauer am fluss"; break;
+          case BARD_GROUP_TIRENA:  old = "schildsang der walkueren"; break;
+        }
+        new = "kriegslied der zwerge";
+      break;
+      case HERO_RYNOXA: old = "band der freundschaft"; new = "hymne der hoffnung"; break;
+      case HERO_XULGSCH: 
+        switch(GetBardGroup(pl)) {
+          case BARD_GROUP_ALESTRA: old = "hinter dem sternenwall"; break;
+          case BARD_GROUP_KORRIAX: old = "also sprach qexyypbmizox"; break;
+          case BARD_GROUP_SARRIAN: old = "das geheimnis der insel"; break;
+          case BARD_GROUP_TIRENA:  old = "beschwoerung der sonne"; break;
+        }
+        new = "fest der schatten";
+        break;
+      case HERO_FRAGGIN: old = "sei hier gast"; new = "fraggins totenwache"; break;
+      case HERO_ZAFIRA: 
+        switch(GetBardGroup(pl)) {
+          case BARD_GROUP_ALESTRA: old = "flamme bin ich"; break;
+          case BARD_GROUP_KORRIAX: old = "des todes drei trommelschlaege"; break;
+          case BARD_GROUP_SARRIAN: old = "das lied vom sturmvogel"; break;
+          case BARD_GROUP_TIRENA:  old = "windlied der sylphen"; break;
+        }
+        new = "zafiras elementare elegie";
+        break;
+      default: raise_error(sprintf("illegaler pfad: %s", path));
+    }
+  } else {
+    switch(path) {
+      case HERO_ANGARA: new = "lorica der musen"; old = "schuetzendes herz des berges"; break;
+      case HERO_ARCON:
+        switch(GetBardGroup(pl)) {
+          case BARD_GROUP_ALESTRA: new = "haette ich ein herz"; break;
+          case BARD_GROUP_KORRIAX: new = "toetet das biest"; break;
+          case BARD_GROUP_SARRIAN: new = "wiegenlied des leids"; break;
+          case BARD_GROUP_TIRENA:  new = "vana-o isil ar elena"; break;
+        }
+        old = "der goettin erster krieger";
+        break;
+      case HERO_FLAMMARA: new = "schrei des verderbens"; old = "wort des feuers"; break;
+      case HERO_GRIMM: new = "ruf der helden"; old = "der letzte der riesen"; break;
+      case HERO_KHARTAK: new = "tanz der saebel"; old = "sturm der klingen"; break;
+      case HERO_NOGI:
+        switch(GetBardGroup(pl)) {
+          case BARD_GROUP_ALESTRA: new = "ballade vom drachentoeter"; break;
+          case BARD_GROUP_KORRIAX: new = "zwergisches ahnenlied"; break;
+          case BARD_GROUP_SARRIAN: new = "stolze mauer am fluss"; break;
+          case BARD_GROUP_TIRENA:  new = "schildsang der walkueren"; break;
+        }
+        old = "kriegslied der zwerge";
+      break;
+      case HERO_RYNOXA: new = "band der freundschaft"; old = "hymne der hoffnung"; break;
+      case HERO_XULGSCH: 
+        switch(GetBardGroup(pl)) {
+          case BARD_GROUP_ALESTRA: new = "hinter dem sternenwall"; break;
+          case BARD_GROUP_KORRIAX: new = "also sprach qexyypbmizox"; break;
+          case BARD_GROUP_SARRIAN: new = "das geheimnis der insel"; break;
+          case BARD_GROUP_TIRENA:  new = "beschwoerung der sonne"; break;
+        }
+        old = "fest der schatten";
+        break;
+      case HERO_FRAGGIN: new = "sei hier gast"; old = "fraggins totenwache"; break;
+      case HERO_ZAFIRA: 
+        switch(GetBardGroup(pl)) {
+          case BARD_GROUP_ALESTRA: new = "flamme bin ich"; break;
+          case BARD_GROUP_KORRIAX: new = "des todes drei trommelschlaege"; break;
+          case BARD_GROUP_SARRIAN: new = "das lied vom sturmvogel"; break;
+          case BARD_GROUP_TIRENA:  new = "windlied der sylphen"; break;
+        }
+        old = "zafiras elementare elegie";
+      break;
+      default: raise_error(sprintf("illegaler pfad: %s", path));
+    }
+  }
+
+  if(!mappingp(pl->QuerySkill(old))) {
+    tell_object(pl, BS("Fehler beim Lernen einer Liedvariante: Ursprungslied ungelernt!\n"));
+    return;
+  }
+
+  ability = pl->QuerySkillAbility(old);
+
+  pl->SetProp(P_NEWSKILLS, m_delete(pl->QueryProp(P_NEWSKILLS), old));
+  call_other("/gilden/bardengilde", "InitSpells");
+  if( (r=call_other("/gilden/bardengilde", "LearnSpell", new, pl)) != 1) {
+    raise_error(sprintf("swap spell variant failed - learn: %d", r));
+    return;
+  }
+
+  pl->ModifySkill(new, ([SI_SKILLABILITY: ability]));
+  tell_object(pl, BS(sprintf("Du lernst das Lied '%s' anstelle von '%s'.", 
+              call_other("/spellbooks/barden_spells", "QuerySpell", new)[SI_CAP_NAME],
+              call_other("/spellbooks/barden_spells", "QuerySpell", old)[SI_CAP_NAME])));
+  return;
+}
+
+public void ResetHeroPath(mixed pl) {
+  string uid, currentPath;
+  object who;
+
+  if(objectp(pl)) uid = object2string(pl);
+  else uid = pl;
+
+  if(!IsMember(pl)) return; // Spieler ist kein Barde
+
+  if(!objectp(pl)) {
+    who = find_player(pl);
+    if(!objectp(who)) return; // unknown player
+  } else {
+    who = pl;
+  }
+
+  TALENTMASTER->DisableHeroPassive(who);
+
+  currentPath = explode(bards[uid, 5], ":")[0];
+  if(member(who->QueryProp(P_NEWSKILLS), SK_HEROISM(currentPath))) {
+   who->SetProp(P_NEWSKILLS, m_delete(who->QueryProp(P_NEWSKILLS), SK_HEROISM(currentPath)));
+  }
+
+  if(HasHeroPathLevel(uid, currentPath, 2)) {
+    SwapHeroPathVariants(who, 1);
+  }
+
+  bards[uid, 5] = "";
+
+  saveload=bards;
+  save_object(MEMBERLIST);
+  saveload=0;
+
+  return;
+}
+
+public void InitiateHeroPath(string input, string hero) {
+  int r;
+  if(lower_case(input) != "ja" && lower_case(input) != "j") {
+    write(BS(sprintf("Du entscheidest dich dem Heldenpfad von %s nicht zu folgen. "
+             "Deine Ehrerbietung an %s verschwindet.", capitalize(hero), capitalize(hero))));
+    return;
+  }
+
+  write(BS(sprintf("Entschlossen laesst du den Heldenmut von %s in dich stroemen. "
+           "Du folgst nun dem Heldenpfad von %s!", capitalize(hero), capitalize(hero))));
+  if((r=SetHeroPath(TP, hero)) != 1) {
+    write(BS(sprintf("Entwas ging schief. Melde einen Magier den Fehlercode '%d'\n", r)));
+  }
+  heroPathEntryProgess = m_delete(heroPathEntryProgess, TP);
+  return;
+}
+
+public mapping QueryHeroPathEntryProgress() {
+  return heroPathEntryProgess;
+}
+
+public void ProgressHeroPathEntry(object pl, string hero, int amount) {
+  string msg; 
+
+  if(!objectp(pl)) return;
+  if(!member(heroPathEntryProgess, pl)) {
+    heroPathEntryProgess += ([pl: ([])]);
+  }
+
+  if(!member(heroPathEntryProgess[pl], hero)) {
+    heroPathEntryProgess[pl][hero] = 0;
+  }
+
+  heroPathEntryProgess[pl][hero] += amount;
+
+  if(heroPathEntryProgess[pl][hero] >= 100) {
+    tell_object(pl, BS(sprintf("Mit einem Mal erfuellt dich die Heldenmacht von %s. "
+                "deine Erherbietung war ausreichend, um dem Heldenpfad von %s zu "
+                "folgen. Moechtest du das tun? [ja/NEIN] ", capitalize(hero), capitalize(hero))));
+    heroPathEntryProgess[pl][hero] = 0;
+    input_to("InitiateHeroPath", 0, hero);
+    return;
+  } else {
+    switch(heroPathEntryProgess[pl][hero]) {
+      case 0 .. 30:
+        msg = "Du hast deinem Helden nun geringe Ehrerbietung erbracht. Bis du "
+              "dem Heldenpfad folgen kannst, wird es noch lange dauern.";
+        break;
+      case 31 .. 40:
+        msg = "Die Ehrerbietung zu deinem Helden ist bereits gewachsen. Du bist auf "
+              "dem Weg zur Haelfte des Heldenpfads.";
+        break;
+      case 41 .. 50:
+        msg = "Deine Ehrerbietung waechst. Die Haelfte am Weg zum Heldenpfad hast du"
+              " fast geschafft.";
+        break;
+      case 51 .. 60:
+        msg = "Deine Ehrerbietung waechst. Du hast etwa die Haelfte geschafft.";
+        break;
+      case 61 .. 75:
+        msg = "Deine Ehrerbietung waechst weiter an. Du hast bereits mehr als die "
+              "Haelfte auf dem Weg zum Heldenpfad geschafft.";
+        break;
+      case 76 .. 90:
+        msg = "Deine Ehrerbietung ist bereits sehr gross. Dir fehlt noch weniger als "
+              "ein Viertel zum Heldenpfad.";
+        break;
+      default:
+        msg = "Deine Ehrerbietung ist bereits so gross, dass nur noch ein kleines "
+              "Stueck fehlt um den Heldenpfad zu beschreiten.";
+        break;
+    }
+    tell_object(pl, BS(msg));
+  }
+}

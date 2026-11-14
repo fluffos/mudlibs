@@ -1,0 +1,174 @@
+/*
+ * Schrecken der Finsternis
+ *
+ * Der Gegner wird mit dem Schrecken der Finsternis
+ * angegriffen. Dabei koennen Gegner bis zu 3 
+ * Kampfrunden paralysiert (P_DISABLE_ATTACK) werden. Alternativ wird
+ * ggf. Wimpy gesetzt oder kleine Gegner fluechten fuer eine gewisse Zeit
+ * in den npcasylroom. Ggf kann fuer die Berserker rammen_time gesetzt werden
+ * (Boni fuer Berserker beim zertreten)
+ *
+ *
+ * Kosten: 15 MP
+ * Level : 5 
+ * Schaden : (Spellmodifizierte 500) + 250 + 
+ * modifikation aus kreis*grad (max 49) + skillpointmod (0.85 .. 1.05) +
+ * equipmodifikation (+-)
+ *
+ * Skillpunktefaehig (dam)
+ *
+ * Status: anschlussreif
+ *
+ */
+// 08.08.2003 Archon: skillpunkte
+
+object terror_find_victim(object caster,mapping sinfo, int silent)
+{
+  object victim;
+  if( !victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,0))
+  {
+    if (!silent)
+     write(
+      "Wen willst Du mit dem Schrecken der Finsternis ueberziehen?\n");
+    return 0;
+  }
+  if(environment(caster)->QueryProp(P_TOTAL_LIGHT) >0)
+  {
+    if (!silent)
+     write("Aber hier ist es doch viel zu hell fuer den Schrecken der "
+      "Finsternis!\n");
+    return 0;
+  }
+  return victim;
+}
+
+mixed prep_terror(object caster, mapping sinfo)
+{
+  object victim;
+  victim=terror_find_victim(caster,sinfo,0);
+  sinfo[SI_ENEMY]=victim;
+  if (!victim) return 0;
+
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  return sinfo;
+}
+
+int terror(object caster, mapping sinfo) 
+{
+  object victim;
+  int succ, dam, skp, t;
+  string str;
+
+  victim=sinfo[SI_ENEMY];
+  str=sinfo[SI_SKILLARG];
+  
+  if (!present_victim(victim,caster) || !objectp(victim=terror_find_victim(caster,sinfo,1)))
+  {
+    write(BSC(sprintf("%s! Dein Opfer ist nicht mehr hier! Wie kann man nur "
+            "so versagen?!", caster->QueryProp(P_GENDER)==FEMALE?
+            "NAERRIN":"NARR")));
+    return 0;
+  }
+
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  if (SpellSuccess(caster,sinfo)<=0)
+    return MISSERFOLG;
+
+  if (!is_living(victim)) 
+  {
+    write(BSC(victim->Name(WER,1) + " ist gar kein lebendes Wesen und kann "
+          "daher nicht erschreckt werden - Deine Magie verpufft "
+          "wirkungslos."));
+    return ERFOLG;
+  }
+  
+  write(BSC(sprintf("Du belegst %s mit dem furchbaren Schrecken der "
+          "Finsternis, der %s Herz umklammern wird.", victim->name(WEN, 2),
+          victim->QPP(WESSEN))));
+  tell_object(victim,BS(sprintf("%s belegt Dich mit dem furchtbaren Schrecken "
+          "der Finsternis. Deine fuerchterlichsten Alptraeume werden "
+          "Realitaet!", caster->Name(WER))));
+  say(BS(sprintf("%s belegt %s mit Schrecken der Finsternis. %s wimmert wie "
+      "ein kleines Kind.", caster->Name(WER), victim->name(WEN, 2),
+      CAP(victim->QueryPronoun(WER)))), ({victim, caster}) );
+
+  dam=sinfo[SI_SKILLDAMAGE]+caster->QueryProp(P_GUILD_LEVEL)*
+    caster->QueryProp(P_GUILD_CIRCLE);
+  dam+=CheckEquip(caster, sinfo[SI_SPELLFUNC]);
+  dam=sinfo[OFFSET(SI_SKILLDAMAGE)]+ 
+      random(DoModificationByAlign(dam, caster, victim));
+
+  skp=get_skillpoints(caster,"schrecken der finsternis");
+  dam=get_dam_with_skillpoints(dam,skp);
+  dam=TryAttackSpell(victim, dam, sinfo[SI_SKILLDAMAGE_TYPE],
+    ([SP_NAME:"Nekromantenterror",SP_SHOW_DAMAGE:1]), caster, sinfo);
+  if( victim && random(100) > victim->QueryProp(P_NOMAGIC))
+  {
+    if (random(succ+sinfo[SI_SKILLABILITY]) > random(12000) && dam>50 &&
+        !victim->QueryProp(P_DISABLE_ATTACK))
+    {
+      victim->SetProp(P_DISABLE_ATTACK,1+random(skp/2));
+      victim->SetProp(P_LAST_RAMMEN_TIME,time());
+      tell_object(victim, "Du faellst vor Schreck zu Boden.\n");
+      tell_room(environment(caster), victim->Name(WER,1)+" faellt vor "
+          "Schreck zu Boden.\n", ({victim}) );
+    } 
+    else if (victim->QueryProp(P_HP) < victim->QueryProp(P_MAX_HP)/10 &&
+             !victim->id("NOWIMPY") && dam > 25) 
+    {
+      tell_room(environment(caster), victim->Name(WER,1)+" fluechtet "
+          "voller Entsetzen.\n", ({victim}) );
+      victim->SetProp(P_WIMPY, victim->QueryProp(P_HP)+1);
+      victim->CheckWimpyAndFlee();
+    }
+    else if (victim->QueryProp(P_LEVEL) < caster->QueryProp(P_LEVEL)/4+
+        caster->QueryProp(P_GUILD_LEVEL) + caster->QueryProp(P_GUILD_CIRCLE) &&
+        random(2) && dam > 25) 
+    {
+      victim->move("/room/npcasylraum", M_GO, "sich", "versteckt", "");
+      call_out("move_back",2+2*random(7), victim, environment(caster));
+    }
+
+    if(skp > 9) {
+     if(caster->QueryProp("next_schrecken_regeneration") < time() && ((victim->QueryProp(P_WIMPY) || victim->QueryProp(P_DISABLE_ATTACK)))) {
+      tell_object(caster, BS("Du ergoezt dich an der Furcht deines Opfers! HAHAHA! FEIGLINGE!"));
+      t =  time() + 4 + random(victim->QueryProp(P_LEVEL) / 2) + victim->QueryProp(P_WIMPY)/2 + random(victim->QueryProp(P_WIMPY));
+      call_out("schrecken_regenerate", 0, caster, t);
+      caster->SetProp("next_schrecken_regeneration", t);
+     } else if(!random(3)) {
+       victim->SetProp(P_WIMPY, victim->QueryProp(P_WIMPY) + skp);
+       tell_room(ENV(victim), BS(sprintf("%s zittert vor Furcht.", victim->Name(WER, 1)))); 
+     }
+    }
+  } 
+  UseBlood();
+  return ERFOLG;
+}
+
+public void schrecken_regenerate(object caster, int endTime) {
+  if(time() > endTime) {
+    tell_object(caster, BS("Deine haemische Freude ueber die Angst deiner Opfer vergeht."));
+    return;
+  }
+
+  caster->AddHp(2);
+  caster->AddSp(2);
+
+  call_out("schrecken_regenerate", 2, caster, endTime);
+}
+
+void move_back(object wen, object wohin)
+{
+  if(objectp(wen) && objectp(wohin))
+    wen->move(wohin, M_GO, "", "", "traut sich wieder heraus");
+}

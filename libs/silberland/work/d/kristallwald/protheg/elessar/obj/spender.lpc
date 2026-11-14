@@ -1,0 +1,180 @@
+/*
+**  Ein Itemspender fuer Elfenanfaenger
+**
+**  2002-06-03  PROtheG  eine kleine "Truhe" mit Gegenstaenden fuer Anfaenger
+**
+**  2002-06-04  PROtheG  init() um die kleinen Spieler auf den Korb aufmerksam
+**                       zu machen.
+**
+**  2002-09-22  PROtheG  logging abgedreht... funktioniert eh.
+*/
+
+#include "../def.h"
+
+inherit "std/thing";
+
+nosave mapping genommen;
+
+#define MAXLEVEL 5
+
+#define ITEMS ([1:"Ein elfisches Hemd";({"elfenhemd", "hemd"}); "/d/kristallwald/sargola/dorf/armour/hemd", \
+                2:"Eine kleine Bauschhose";({"hose","bauschhose"}); "/d/kristallwald/sargola/dorf/armour/hose", \
+		3:"Ein elfisches Messer";({"elfenmesser","messer"}); "/d/kristallwald/sargola/dorf/weapon/emesser", \
+                4:"Ein Bauschbeutel";({"beutel","bauschbeutel"});"/d/kristallwald/protheg/elessar/obj/beutel", \
+		5:"Ein Seil";({"seil"});"/obj/seil", \
+                6:"Ein Holzstock";({"holzstock","stock"});"/p/weapon/club/holzstock"])
+
+void create() 
+{
+  if(!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Eine grosse Korbpflanze (offen)");
+  SetProp(P_LONG,
+	  BS("Eine grosse, offene Korbpflanze wurde hier aufgestellt, um fuer "
+	     "junge Spieler wie Dich einige wichtige Gegenstaende, die fuer "
+	     "den Anfang hier im Silberland, wichtig sind aufzubewahren."));
+  
+  SetProp(P_NAME, "Korbpflanze");
+  SetProp(P_GENDER, FEMALE);
+  AddId(({"pflanze","korb","korbpflanze"}));
+  
+  SetProp(P_MATERIAL, MAT_MISC_PLANT);
+  SetProp(P_WEIGHT, 923850);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOGET, 1);
+
+  SUID;
+
+  genommen=([]);
+
+  AddCmd(CMD_NEHMEN, "nehmen");
+}
+
+void reset()
+{
+  ::reset();
+  
+  genommen=([]);
+}
+
+string short()
+{
+  if((TP) && (TP->QueryProp(P_LEVEL) > MAXLEVEL)) 
+    return BS("Eine grosse Korbpflanze.");
+  
+  return ::short();
+}
+
+string long() 
+{
+  int i;
+  string ret;
+
+  ret=::long();
+
+  if((TP) && (TP->QueryProp(P_LEVEL) < MAXLEVEL)) 
+    ret+=BS("Mit 'nimm <name> aus korbpflanze' kannst Du folgendes "
+	    "erhalten:");
+  else
+    ret+=BS("Fuer Anfaenger ist folgendes enthalten:");
+
+  for(i=m_sizeof(ITEMS);i>0;i--)
+    ret+=BS(" "+ITEMS[i]+".");
+  
+  return ret;
+}
+
+nosave int nehmen(string str)
+{
+  int i,t;
+  object ob;
+
+  string what, where, who;
+  
+  if(!str) return 0;
+  if(!TP) return 0;
+  if(!interactive(TP)) return 0;
+  
+  if(sscanf(str, "%s aus %s", what, where)!=2) return 0;
+  
+  if(!id(where)) return 0;
+
+  if(TP->QueryProp(P_LEVEL) > MAXLEVEL) 
+    return write(BS("Du bist schon recht erfahren und benoetigst die "
+		    "Sachen aus der Korbpflanze nicht mehr.")), 1;
+  
+  what=explode(what, " ")[<1];
+  
+  if(what=="alles")
+    return write(BS("Nicht gleich alles nehmen! Nimm die Sachen einzeln "
+		    "heraus!")), 1;
+  
+  for(i=m_sizeof(ITEMS);i>0;i--)
+    if(member(ITEMS[i, 1], what)!=-1) t=i;
+  
+  if(!t) return 0;
+  
+  if(ob=present(ITEMS[t,1][0], TP))
+    if(explode(file_name(ob), "#")[0]==ITEMS[t, 2])
+      return write(BS("Aber Du hast doch bereits so etwas bei Dir!")), 1;
+  
+
+  if(member(genommen, who=getuid(TP)))
+    if(member(genommen[who], t)!=-1)
+      return write(BS("Aber das hast Du doch vor kurzem erst genommen!")), 1;
+    else
+      genommen[who]+=({t});
+  else
+    genommen+=([who:({t})]);
+  
+  ob=clone_object(ITEMS[t, 2]);
+  
+  if(ob->move(TP, M_GET)==ME_TOO_HEAVY)
+    {
+      ob->remove(1);
+      
+      genommen[who]-=({t});
+      
+      return write(BS("Das ist fuer Dich leider zu schwer. Vielleicht "
+		      "solltest Du vorher etwas aus deinem Inventar "
+		      "ablegen...")), 1;
+    }
+  
+  write(BS("Du nimmst "+ob->name(WEN)+" aus der Korbpflanze.")+
+	BS("Vielleicht kannst Du "+ob->QueryPronoun(WEN)+" ja gebrauchen."));
+  
+  tell_room(MENV, BS(TPN+" nimmt etwas aus der Korbpflanze."), ({TP}));
+
+  //WLOG(LOG "spender_log", "nimmt "+ob->name(WEN)+". ("+str+")");
+
+  return 1;
+}
+
+void init()
+{
+  ::init();
+  
+  if((TP) && (interactive(TP)) && (TP->QueryProp(P_LEVEL) < MAXLEVEL))
+    if((!TP->QueryWeapon()) && (!sizeof(TP->QueryArmours(AT_ARMOUR))) &&
+       (!present("stock", TP)) && (!present("seil", TP)))
+      call_out("anfaenger_begruessung", 1, TP);
+}
+
+void anfaenger_begruessung(object who)
+{
+  if(!objectp(who)) return;
+  if(!MENV) return;
+  if(!present(who, MENV)) return;
+  
+  tell_object(who,
+	      "\n"+
+	      BS("Hier steht eine grosse, offene Korbpflanze. Du solltest sie "
+		 "Dir einmal ansehen (unt korbpflanze), vielleicht ist da ja "
+		 "etwas interessantes fuer Dich darin...")+"\n");
+}
+
+mapping dumpvars()
+{
+  return genommen;
+}

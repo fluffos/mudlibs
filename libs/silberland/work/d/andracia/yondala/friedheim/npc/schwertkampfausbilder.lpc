@@ -1,0 +1,282 @@
+// Stabkampfausbilder und Zaubererausbilder
+// vorerst als Schwertkampfausbilder
+
+#include <properties.h>
+#include <combat.h>
+#include <new_skills.h>
+#include <moving.h>
+#include <mnpc.h>
+#include "../def.h"
+
+inherit "/std/mnpc.lpc";
+
+mapping fieser_moep;
+
+string ausbildungsstand()
+{
+	int abil;
+  string *skill_knowledge;
+  skill_knowledge = ({
+  	"schrecklich schlecht",
+  	"miserabel",
+  	"extrem schlecht",
+    "sehr schlecht",
+    "schlecht",
+    "fast gar nicht",
+    "maessig",
+    "mittelmaessig",
+    "durchschnitt",
+    "passabel"
+    "beinahe gut",
+    "gut",
+    "sehr gut",
+    "perfekt",
+    "meisterhaft",
+    "goettlich" });
+	abil=TP->QuerySkillAbility(SK_SWORDFIGHTING);
+	if( !abil )
+	  return "Du hast die Grundlagen des Schwertkampfs noch nicht gelernt.\n";
+	if( abil<0 ) abil=0;  
+	return "Du kannst den Schwertkampf "+skill_knowledge[abil/625]+".\n";  
+}
+string ausbildungsstart()
+{
+	object waffe;
+	waffe=TP->QueryProp(P_WEAPON);
+	if( TP->QuerySkillAbility(SK_SWORDFIGHTING)>0 )
+		return "Du hast die Grundlagen des Schwertkampfs doch schon gelernt. "+
+		"Du musst nun ueben, ueben, ueben und nochmals ueben.";
+  // Abfrage ob dieser Spieler diesen Skill auch bekommen darf.
+	if( !waffe ) 
+		return "Ohne eigene Waffe kann ich Dir nichts beibringen. "+
+		"Los geh und besorg Dir ein gutes Schwert.";
+  if( waffe->QueryProp(P_WEAPON_TYPE) != WT_SWORD ) 
+  	return "Ich kann Dir nur den Schwertkampf beibringen wenn Du auch ein "+
+  	"Schwert gezueckt hast.";
+  // nun eine laengere Sequenzmit P_NOMOVE
+  TP->LearnSkill(SK_SWORDFIGHTING, 200, 100);	
+  return "Du hast gelernt mit einem Schwert Dich nicht selbst zu verletzen. "+
+  "Nun uebe viel, damit Du ein guter Schwertkaempfer wirst.";
+}
+string uebung()
+{
+	int abil;
+	object waffe;
+	abil = TP->QuerySkillAbility(SK_SWORDFIGHTING);
+	waffe=TP->QueryProp(P_WEAPON);
+	if( !abil )
+		return "Du hast die Grundlagen des Schwertkampfs noch nicht gelernt. "+
+		"Ich kann mit Dir erst dann ueben wenn Du die Grundlagen kannst.";
+	if( abil>2500 )
+		return "Du hast den Schwertkampf schon gut genug gelernt. "+
+		"Nur durch die Erfahrungen aus echten Kaempfen wirst Du deine Fertigkeit noch verbessern.";
+	if( !waffe ) 
+		return "Ohne eigene Waffe kann ich Dir nichts beibringen. "+
+		"Los geh und besorg Dir ein gutes Schwert.";
+  if( waffe->QueryProp(P_WEAPON_TYPE) != WT_SWORD ) 
+  	return "Ich kann mit Dir den Schwertkampf nur ueben wenn Du auch ein "+
+  	"Schwert gezueckt hast.";
+  // nun eine laengere Sequenz mit P_NOMOVE	
+  
+  if( abil>=random(5000) ) 
+  	return "Du bist wohl ein bischen abgelenkt gewesen, oder? Ich glaube nicht dass "+
+  	"Dir diese Uebung geholfen hat.";
+ 	TP->LearnSkill(SK_SWORDFIGHTING, 25+random(76), 100);	
+  return "Du hast gelernt mit dem Schwert etwas geschickter umzugehen. "+
+  "Nun uebe viel, damit Du ein guter Schwertkaempfer wirst.";
+}
+
+string schwert()
+{
+	int i, abil, wc, q_decay, *dam_typ;
+	object waffe;
+	string res;
+	abil = TP->QuerySkillAbility(SK_SWORDFIGHTING);
+	if( !abil )
+		return "Du hast die Grundlagen des Schwertkampfs noch nicht gelernt. "+
+		"Du kannst mit meiner Untersuchung ueber dein Schwert doch gar nichts anfangen.";
+	waffe=TP->QueryProp(P_WEAPON);	
+  if( waffe->QueryProp(P_WEAPON_TYPE) != WT_SWORD ) 
+  	return "Du solltest auch ein Schwert gezueckt haben, damit ich Dir sagen kann, "+
+  	"wie gut es ist.";
+	// damage_type
+	dam_typ = waffe->QueryProp(P_DAM_TYPE);
+	res = "";
+	for( i=sizeof(dam_typ)-1; i>=0; i--) {
+		switch(dam_typ[i]) {
+			case DT_BLUDGEON: res+="Diese Waffe ist aussergewoehnlich stumpf. "; break;
+	    case DT_FIRE: res+="Diese Klinge brennt sich in deine Gegner. "; break;
+	    case DT_POISON: res+="Diese Waffe wird deine Gegner vergiften. "; break;
+	    case DT_COLD: res+="Ein Treffer mit dieser Waffe wird deinen Gegner schmerzhafte "+
+	    	"Kaelte spueren lassen. "; break;
+	    case DT_TERROR: res+="Diese Waffe wird deinen Gegnern Angst einfloessen. "; break;
+	    case DT_HOLY: 
+	    case DT_UNHOLY: res+="Mystische Kraefte wirken durch diese Waffe. "; break;
+      case DT_LIGHTNING: 
+	    case DT_ELECTRIC: res+="Wie ein Blitz wird diese Waffe sich auf deine "+
+	    	"Gegner auswirken. "; break;
+	    case DT_AIR:
+	    case DT_WATER:
+	    case DT_LIGHT: res+"Elementare Kraefte wirken in dieser Waffe. "; break;
+	    case DT_SLASH: break;
+	    default: res+="Ungewoehnliche Auswirkungen hat diese Klinge. "; break;
+	  }
+  }
+  // WC
+  wc=waffe->QueryProp(P_WC)+waffe->QueryProp(P_WC_FIX);
+  if( wc > 160 ) res += "Diese Waffe ist besonders gefaehrlich. "; else
+  if( wc > 120 ) res += "Diese Waffe wird Dir gute Dienste tun. "; else
+  if( wc > 90 ) res += "Diese Waffe ist ganz passabel. "; else
+  if( wc < 30	) res += "Diese Waffe solltest Du schnellstmoeglich gegen ein "+
+  	"besseres austauschen. ";
+  q_decay=waffe->QueryProp(P_QUALITY_DECAY);
+  if( q_decay > 160 ) res += "Diese Waffe wird sich fast gar nicht abnuetzen. "; else
+  if( q_decay > 120 ) res += "Diese Waffe nuetzt sich nur sehr langsam ab. "; else
+  if( q_decay > 90 ) res += "Diese Waffe verschleisst nicht allzu schnell. "; else
+  if( q_decay < 30 ) res += "Nach viel zu wenigen Hieben wird diese Waffe stumpf werden. ";
+  // dem raum was mitteilen...
+  if( res=="" ) return "Das ist eine ganz normale Waffe ohne herausragende Eigenschaft. ";
+  return res;
+}
+
+void reset()  {
+  ::reset();
+  fieser_moep = ([]); // Man ist Dir nur bis zum reset boese.
+}
+
+void create() {
+  if (!is_clone(TO)) return; //Abbruch fuer Blueprint
+  ::create(); //Ausfuehren von Create in Inherit "std/mnpc"
+  
+  create_default_npc(40); //erstellt Standartwerte fuer NPC des Level x
+
+  //Properties
+  AddId(({"laurenzio", "furlani", "Laurenzio Furlani" })); //Bezeichner zur Interaktion
+  SetProp( P_SHORT, "Laurenzio Furlani");
+  SetProp( P_LONG, "Dies ist Laurenzio Furlani, der Meister des Stabkampfs");
+  SetProp( P_GENDER, MALE);
+  SetProp( P_ARTICLE, 0);
+  SetProp( P_NAME, "Laurenzio Furlani");
+  SetProp( P_WIMPY, 0); //Fluchtschwelle an HP
+  SetProp( P_MNPC_AREA, ROOM + "marmorturm_helix1_c3.lpc" ); // Bereichsangabe fuer Bewegung
+  SetProp( P_MNPC_DEFAULTROOM, ROOM + "marmorturm_helix1_c3.lpc" ); // Startpunkt
+  SetProp( P_MNPC_FLAGS, MOV_INDOORS ); // Bewegungsmoeglichkeiten
+  SetProp( P_KILL_NAME, "Laurenzio"); //string fuer Todessequenz
+ 
+  //Chats
+  SetAttackChats( 5, ({"Laurenzio Furlani bruellt: Euch werd ich's zeigen! \n" }) ); // rate in%
+
+  AddInfo( QueryProp(P_IDS), "Das bin ich! ", "sagt: ");
+
+  AddInfo( ({"ausbildungsstart"}), #'ausbildungsstart, "sagt: ");
+  AddInfo( ({"ausbildungsstand"}), #'ausbildungsstand, "sagt: ");
+  AddInfo( ({"uebung"}), #'uebung, "sagt: ");
+  AddInfo( ({"schwert"}), #'schwert, "sagt: ");
+
+  AddInfo( ({"schwertkampf"}), "Da bist Du bei mir an der richtigen Stelle. "+
+    "Wenn ich Dir die Grundlagen des Schwertkampfs beibringen soll so frage mich "+
+    "einfach nach dem Ausbildungsstart. Wenn ich beurteilen soll wie gut Du Dich "+
+    "im Schwertkampf machst so frage mich nach dem Ausbildungsstand. Auch kann ich "+
+    "mit Dir ein bischen ueben wenn Du moechtest.", "sagt: ");
+  
+  /*Ausruestung
+  SUID;
+  CLONEME( ARMOUR + ".lpc" );
+  CLONEME( ARMOUR + ".lpc" );
+  command("trage alles");
+  CLONEME( WEAPON + ".lpc" );
+  command("zuecke haken");
+  */
+}
+
+// Reactions (werden von außen gestartet)
+
+void StartReaction(string verb, string gruppe, string adverb, int touch) { 
+  if (find_call_out("reaction") != -1) return; 
+  switch (gruppe) { 
+    case "aengstlich": 
+      call_out("reaction", 0, TP,  
+        "sagt: Ihr braucht keine Angst haben. \n", 
+        "sagt zu " + capitalize(this_player()->name()) + ": Ihr braucht keine Angst haben. \n"); 
+      break; 
+    case "aergerlich": 
+      call_out("reaction", 0, TP, 
+        "sagt: Ihr braucht gar nicht zu schimpfen, Ihr seid selbst schuld an allem. \n", 
+        "sagt zu " + capitalize(this_player()->name()) + ": Ihr braucht gar nicht zu schimpfen, Ihr seid selbst schuld an allem. \n"); 
+      break; 
+    case "albern": 
+      call_out("reaction", 0, TP, 
+        "sagt: Lasst doch bitte den Bloedsinn. \n", 
+        "sagt zu " + capitalize(this_player()->name()) + ": Lasst doch bitte den Bloedsinn. \n"); 
+      break; 
+    case "fies":
+      if( !member(fieser_moep, getuid(this_player()) ) )
+        {
+        fieser_moep+=([getuid(this_player()):1]);
+        call_out("reaction", 0, TP, 
+          "sagt: Wenn Du das nochmal machst, werd ich boese. \n", 
+          "sagt zu " + capitalize(this_player()->name()) + ": Wenn Du das nochmal machst, werd ich boese. \n"); 
+        break; 
+        }
+      else
+        {
+        fieser_moep[getuid(this_player()),0]++;
+        if(fieser_moep[getuid(this_player()),0] >= 3)
+          {
+          call_out("reaction", 0, TP, 
+            "sagt: Das war zuviel! \n", 
+            "sagt zu " + capitalize(this_player()->name()) + ": Das war zuviel. \n"); 
+            call_out ("Attack", 3, TP);
+            break;
+          }
+        else
+          {
+          call_out("reaction", 0, TP, 
+            "sagt: Letzte Warnung! \n", 
+            "sagt zu " + capitalize(this_player()->name()) + ": Letzte Warnung! \n"); 
+          break;
+          }
+        }  
+    case "frech": 
+      call_out("reaction", 0, TP, 
+        "sagt: He - Was soll das? \n", 
+        "sagt zu " + capitalize(this_player()->name()) + ": He - Was soll das? \n"); 
+      break; 
+    case "froh": 
+      call_out("reaction", 0, TP, 
+        "grinst.",  
+        "grinst."); 
+      break; 
+    case "intim": 
+      call_out("reaction", 0, TP, 
+        "sagt: Bitte sucht Euch jemand anderen fuer sowas. \n", 
+        "sagt zu " + capitalize(this_player()->name()) + ": Bitte sucht Euch jemand anderen fuer sowas. \n"); 
+      break; 
+    case "nett": 
+      call_out("reaction", 0, TP, 
+        "laechelt Dir zu. \n", 
+        "laechelt " + capitalize(this_player()->name()) + " freundlich an \n"); 
+      break; 
+    case "neutral": 
+      call_out("reaction", 0, TP, 
+        "zieht die Stirn kraus.", 
+        "zieht die Stirn kraus."); 
+      break; 
+    case "traurig": 
+      call_out("reaction", 0, TP, 
+        "troestet Dich. \n", 
+        "troestet " + capitalize(this_player()->name()) + ". \n"); 
+      break; 
+  } 
+} 
+void StartReactionAll(string verb, string gruppe, string adverb, int touch) {
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void reaction(object ob, string akteur, string andere) {
+  if (present(ob, ENV(TO))) {
+    tell_object(ob, BS(Name(WER, 1)+" "+akteur));
+    tell_room(ENV(TO), BS(Name(WER, 1)+" "+andere), ({ob}));
+  }
+}
+

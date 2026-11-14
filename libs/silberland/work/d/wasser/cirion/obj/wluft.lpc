@@ -1,0 +1,159 @@
+#include "/d/wasser/cirion/water.h"
+
+
+#include <properties.h>
+#include <moving.h>
+#include <language.h>
+inherit "std/thing";
+
+int    luft,luftmax;
+
+create()
+{
+  if (!is_clone(this_object())) return;
+  
+  ::create();
+  
+  SetProp(P_SHORT, 0);
+  SetProp(P_LONG, 0);
+  SetProp(P_NAME, "Ertrinken");
+  SetProp(P_GENDER, 1);
+  SetProp(P_ARTICLE,0);
+  SetProp(P_NODROP,1);
+  SetProp(P_NEVERDROP,1);
+  SetProp(P_NOGET,1);
+  SetProp(P_WEIGHT,0);
+  AddId("\nluft");
+  luft = 60+this_player()->QueryAttribute(A_CON);
+  luftmax=luft;
+}
+
+heart_beat_on()
+{
+  set_heart_beat(1);
+}
+
+try_heart_beat_on()
+{
+  if ( environment() 
+    && environment(environment()) 
+    && environment(environment())->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN]==TT_UNDERWATER )
+    heart_beat_on();
+}
+
+heart_beat()
+{
+  if (!query_once_interactive(MENV))
+  {
+    TO->remove();
+    if (TO)
+      destruct(TO);
+  }
+  if ( environment(environment())->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN] == TT_UNDERWATER 
+    && !present("\nwaterbreath",environment())) 
+  {
+    luft--;
+    if (luft<0)
+    {
+      tell_object(environment(this_object()),
+        "Du schluckst Wasser.\n");
+      environment()->do_damage(2+random(5)); 
+    }
+    switch (luft)
+    { 
+      case	45:
+        tell_object(environment(this_object()),
+          "Langsam aber sicher wird Deine Luft knapp.\n");
+        break;
+      case  30:
+        tell_object(environment(this_object()),
+          "Deine Lunge beginnt zu brennen.\n");
+        break;
+      case  15:
+        tell_object(environment(this_object()),
+          "Die Schmerzen in der Lunge werden langsam unertraeglich.\n");
+        break;
+      case   5:
+        tell_object(environment(this_object()),break_string(
+          "Du kannst Dich kaum noch davon abhalten, den Mund zu oeffnen und "
+  	  "einen tiefen Atemzug des Meerwassers zu Dir zu nehmen."));
+        break;
+      case   0:
+        tell_object(environment(this_object()),break_string(
+          "Deine Luft ist endgueltig erschoepft. Du solltest schnell auftauchen, "
+          "bevor es zu spaet ist.\n"));
+        break;
+    }
+  }
+  else if (luft<luftmax) 
+  {
+    luft+=8;
+    if (luft>luftmax)
+    {
+      if (environment(environment())->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN] == TT_UNDERWATER)
+        tell_object(environment(this_object()),
+          "Du atmest das Meerwasser jetzt ganz ruhig ein.\n");
+      else
+        tell_object(environment(this_object()),
+          "Deine Atmung hat sich wieder beruhigt.\n");
+      luft=luftmax;
+      set_heart_beat(0);
+    }
+    if (luft<8)
+    {
+      luft=1;
+      if (environment(environment())->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN] == TT_UNDERWATER)
+        tell_object(environment(this_object()),break_string(
+          "Du atmest tief ein, und Deine Lunge fuellt sich mit Meerwasser. "
+          "Ein seltsames Gefuehl, aber nicht unangenehm."));
+      else
+        tell_object(environment(this_object()),
+          "Du atmest tief ein, und Deine Lunge fuellt sich mit der koestlichen Luft.\n");
+    }
+    if ((luft>luftmax/2-5)&&(luft<luftmax/2+4))
+    {
+      if (environment(environment())->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN] == TT_UNDERWATER)
+        tell_object(environment(this_object()),
+          "Du atmest das Meerwasser tief ein.\n");
+      else
+        tell_object(environment(this_object()),
+          "Du atmest schwer.\n");
+    }			
+    if ((luft>luftmax-10)&&(luft<luftmax-1))
+    {
+      tell_object(environment(this_object()),
+        "Langsam beruhigt sich deine Atmung wieder.\n");
+    }
+  }
+  else
+  {
+    this_object()->remove();
+  } 
+}
+
+int luft()
+{
+//Funktion zum debuggen, gibt den momentanen Luftvorrat zurueck.
+
+write("Du hast momentan noch "+luft+" Luft von maximal "+luftmax+".\n");
+
+	
+}
+
+void BecomesNetDead(object pl)
+{
+  set_heart_beat(0);
+}
+
+void BecomesNetAlive(object pl)
+{
+  if (luft<3) 
+  {
+    luft=3;
+    tell_object(pl,break_string(
+      "Du hast fast gar keine Luft mehr. Tauch lieber schnell auf, "
+      "bevor es zu spaet ist."));
+  } 
+  if (environment()==pl)
+    try_heart_beat_on();
+}

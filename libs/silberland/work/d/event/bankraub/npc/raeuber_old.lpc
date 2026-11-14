@@ -1,0 +1,262 @@
+
+/*
+
+  Der Bankraeuber fuer das Bankueberfallevent in Midas Zordan@SL
+
+*/
+
+inherit "std/npc";
+
+#include <properties.h>
+#include <room/exits.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include "../bank.h"
+
+void setzeweg(int dest);
+
+#define weg1 ({  "osten",  "osten",  "osten",  "osten",  "osten", \
+                 "osten",  "sueden",  "sueden",  "osten",  "osten",\
+                 "nordosten",  "norden",  "norden",  "norden",  "osten",\
+                 "osten",  "osten",  "osten",  "osten",  "osten",  "nordosten",\
+                 "norden",  "norden",  "norden",  "norden" })
+
+#define weg2 ({  "osten",  "norden",  "norden",  "westen",  "suedwesten",\
+                 "sueden",  "sueden",  "sueden",  "westen",  "westen",\
+                 "nordwesten",  "norden",  "nordwesten",  "westen",\
+                 "nordwesten",  "westen",  "nordwesten",  "nordwesten",\
+                 "nordwesten",  "nordwesten",  "norden",  "norden",\
+                 "norden",  "nordwesten",  "westen",  "westen",  "nordwesten" })
+
+#define weg3 ({  "osten",  "norden",  "norden",  "westen",  "suedwesten",\
+                 "sueden",  "sueden",  "sueden",  "westen",  "westen",\
+                 "nordwesten",  "norden",  "nordwesten",  "westen",\
+                 "nordwesten",  "westen",  "nordwesten",  "nordwesten",\
+                 "nordwesten",  "nordwesten",  "westen",  "westen",\
+                 "nordwesten",  "westen",  "nordwesten",  "westen",  "norden",\
+                 "norden",  "westen",  "suedwesten",  "nordwesten",\
+                 "suedwesten",  "norden",  "nordosten",  "nordosten",\
+                 "norden",  "westen",  "westen",  "westen",  "westen",\
+                 "nordosten",  "nordosten",  "norden",  "westen",  "westen",\
+                 "westen",  "suedwesten",  "westen",  "sueden",  "suedwesten",\
+                 "westen",  "suedwesten",  "westen",  "nordosten",\
+                 "nordosten",  "norden",  "norden",  "suedwesten",  "sueden" })
+
+#define weg4 ({   "osten",  "norden",  "norden",  "westen",  "suedwesten",\
+                  "sueden",  "sueden",  "sueden",  "westen",  "westen",\
+                  "nordwesten",  "suedwesten",  "suedwesten",  "westen",\
+                  "suedwesten",  "suedwesten",  "sueden",  "sueden",  "sueden",\
+                  "suedwesten",  "westen",  "westen",  "suedwesten",  \
+                  "suedwesten",  "sueden",  "suedwesten" })
+
+string *weg=({ });
+int wo;
+object geld;
+
+void create() {
+  if (!is_clone(TO)) return;
+  ::create();
+
+  weg=({ });
+  wo=-3;
+
+  SetProp(P_SHORT, "Ein Bankraeuber");
+  SetProp(P_LONG,
+    "Eine kleine, hagere Gestalt, aber sehr flink, schleppt einen grossen "
+    "Beutel auf seinem Ruecken. Er scheint ziemlich in Eile zu sein und "
+    "schaut sich immer und immer wieder um. Ob er etwas boeses angestellt "
+    "hat?");
+  SetProp(P_NAME, "Bankraeuber");
+  SetProp(P_GENDER, MALE);
+  AddId( ({"bankraeuber", "raeuber", RAEUBERID}) );
+
+  enable_commands();
+  set_heart_beat(1);
+
+  create_default_npc(20);  // erstmal nur, damit er einen mind. level hat
+  SetProp(P_HANDS, ({" mit seinen Haenden",QueryProp(P_HANDS)[1],DT_BLUDGEON}));
+  SetProp(P_MAX_HP, 820);  // doppelt soviele wie normalerweise
+  SetProp(P_BODY, 120);    // doppelt soviele wie normalerweise
+  SetProp(P_RACE, "Mensch");
+  SetProp(P_SIZE, 180+random(20));
+  SetProp(P_ALIGN, -1000);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_RESISTANCE_STRENGTHS , 
+    ([DT_FIRE:      -0.3, DT_COLD:      -0.3, DT_WATER:  -0.3, DT_AIR:    -0.3, 
+      DT_LIGHTNING: -0.4, DT_EXPLOSION: -0.3, DT_SOUND:  -0.4, DT_LIGHT:  -0.3,
+      DT_ELECTRIC:  -0.4, DT_ACID:      -0.4, DT_POISON: -0.2, DT_TERROR: -0.3,
+      DT_HOLY:       0.2, DT_UNHOLY:    -0.8, DT_MAGIC:  -0.8 ]) );
+  SetProp(P_NOMAGIC,20);
+  SetProp(P_HB,1);
+
+  SetProp(P_MSGIN, "kommt in Eile an");
+  SetProp(P_MSGOUT, "rennt schnell weiter");
+  SetProp(P_MMSGIN, "kommt aus einem Versteck hervor");
+  SetProp(P_MMSGOUT, "macht sich in einem Versteck unsichtbar");
+
+  SetProp(P_DIE_MSG,  " wird so schnell nichts mehr ueberfallen.\n");
+  SetProp(P_NOCORPSE, 0 );
+  SetProp(P_MURDER_MSG, "Das naechste Mal raube ich Euch alle aus!");
+  SetProp(P_KILL_NAME, "Ein Bankraeuber");
+  SetProp(P_KILL_MSG, "Du Schwaechling!");
+
+  AddInfo(DEFAULT_INFO, "hat bestimmt keine Zeit auf Fragen zu antworten.\n");
+
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    "Der Bankraeuber hat genug an seinem Beutel zu schleppen.\n" }) );
+
+  SetProp(P_SPELLRATE,30);
+
+  AddSpell(1,200,
+    "Der Bankraeuber beisst Dir ins Ohr.\n",
+    "Der Bankraeuber beisst @WEM ins Ohr.\n",
+     DT_PIERCE,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(1,300,
+    "Der Bankraeuber tritt Dich sehr feste.\n",
+    "Der Bankraeuber tritt @WEN sehr feste.\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(1,400,
+    "Der Bankraeuber haut Dir ins Gesicht.\n",
+    "Der Bankraeuber hat @WEM ins Gesicht.\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(1, 1,
+    "Der Bankraeuber versucht Dich zu bestehlen.\n",
+    "Der Bankraeuber versucht @WEN zu bestehlen.\n",
+    DT_MAGIC, "geldklau");
+
+
+
+  SetChats(5, ({
+    "Der Bankraeuber gruebelt kurz nach.\n",
+    "Der Bankraeuber verliert ein paar Muenzen die sofort jemand einsteckt.\n",
+    "Der Bankraeuber schaut Dir kurz ins Gesicht.\n",
+    "Der Bankraeuber schaut in welche Richtung er weiterrennen soll.\n",
+    "Der Bankraeuber sieht sich aenglicht um.\n"}) );
+  SetAttackChats(10, ({
+    "Der Bankraeuber schleudert wild mit seinem Beutel.\n",
+    "Der Bankraeuber schaut dich unglaeubig an.\n",
+    "Der Bankraeuber sagt: Von Dir hab ich am meisten Geld gestohlen.\n",
+    "Der Bankraeuber sagt: Du bist doch eh so reich, lass mir doch das Geld.\n",
+    "Der Bankraeuber verliert ein paar Muenzen.\n"}) );
+
+  CLONEME( "/p/armour/armour/weste" );
+  CLONEME( "/p/armour/boots/lederschuhe" );
+  CLONEME( "/p/armour/trousers/hose" );
+
+  command("trage alles");
+
+  geld=CLONEOB("/obj/money");
+  geld->SetProp(P_AMOUNT, 1);
+  geld->move(ME,M_NOCHECK);
+}
+
+void setzeweg(int dest) {
+  switch (dest) {
+    case 1:  weg=weg2;
+             break;
+    case 2:  weg=weg3;
+             break;
+    case 3:  weg=weg4;
+             break;
+    default: weg=weg1;
+             break;
+  }
+  wo=-3;
+}
+
+void die(int poisondeath) {
+  write_file(BANKRAUBLOG "raeuber.kills",
+    ctime()+": "+CAP(getuid(PL))+" killt den Bankraeuber.\n");
+  call_other(BANKRAUBMASTER,"Killed",ME,PL);
+  ::die(poisondeath);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp) {
+  write_file(BANKRAUBLOG "raeuber.deads",
+    ctime()+": Der Bankraeuber hat gerade "+CAP(getuid(PL))+" umgebracht.\n");
+}
+
+heart_beat() {
+  mapping doors;
+  string *way,wohin;
+  int anzahl,i;
+  object *env;
+  anzahl=0;
+
+  switch(random(10)) {
+    case 0:  SetProp(P_MSGOUT, "rennt schnell weiter");
+             break;
+    case 1:  SetProp(P_MSGOUT, "verkringelt sich");
+             break;
+    case 2:  SetProp(P_MSGOUT, "flitzt schnell weiter");
+             break;
+    case 3:  SetProp(P_MSGOUT, "tritt Dich und geht");
+             break;
+    case 4:  SetProp(P_MSGOUT, "schlaegt einen Haken nach Westen und wandert");
+             break;
+    case 5:  SetProp(P_MSGOUT, "fluechtet");
+             break;
+    case 6:  SetProp(P_MSGOUT, "verschwindet");
+             break;
+    case 7:  SetProp(P_MSGOUT, "rennt # und schaut dabei nach Sueden");
+             break;
+    case 8:  SetProp(P_MSGOUT, "geht # und schubst Dich nach Osten");
+             break;
+    case 9:  SetProp(P_MSGOUT, "verkruemmelt sich nicht");
+             break;
+    default: SetProp(P_MSGOUT, "torkelt # wobei er nach Norden schaut");
+             break;
+  }
+
+  ME->ModifySkillAttribute(ME,SA_SPEED,100,2);
+  env=all_inventory(MENV);
+  for(i=sizeof(env)-1;i>=0;i--) {
+    if(interactive(env[i])) anzahl++;
+  }
+  if ((anzahl < 2) || (!random(2))) {
+    if ((wo>=0) && (wo<sizeof(weg))) {
+      ME->command_me(weg[wo]);
+      wo++;
+    } else if(wo>=sizeof(weg)) {
+      doors=MENV->QueryProp(P_EXITS);
+      way=m_indices(doors);
+      if(sizeof(way) > 0 ) {
+        wohin=way[random(sizeof(way))];
+        if(random(2)) {
+          call_other(doors[wohin],"???");
+          ME->command_me(wohin);
+        }
+      }
+    }
+    if (wo<=0) wo++;
+  }
+
+  ::heart_beat();
+}
+
+int _query_wimpy() { return 0; }
+
+int ismoney(object ob) {
+  return explode(file_name(ob), "#")[0] == "/obj/money";
+}
+
+void geldklau(object enemy, int damage, mixed dam_type) {
+  object *inv;
+  int i,anz,ges;
+  inv = deep_inventory(enemy);
+  inv = filter_array(inv, "ismoney");
+  if (!sizeof(inv)) return;
+  anz=ges=0;
+  for (i=sizeof(inv)-1; i>=0; i--) {
+    anz=inv[i]->QueryProp(P_AMOUNT)/2;
+    inv[i]->AddAmount(-anz);
+    geld->AddAmount(anz);
+    ges+=anz;
+  }
+  tell_object(enemy,"Der Bankraeuber hat Dir "+ges+" Muenzen gestohlen!\n");
+}

@@ -1,0 +1,484 @@
+//=========================================================================
+//
+// File:    std_darkelf.c
+// Created by Ronja@SL
+//
+// Project: Standard Unterwelt
+//
+//=========================================================================
+//
+// ab glevel 10 : beherrscht Terrorblitz (10)
+//           12              Ausweichen (25)
+//           15              Dunkellanze (20)
+//           17              Schnell (20)
+//           20              Dunkelheit (60) (entreisst Gegner Lichtitems)
+//           25              Drider (100)
+//
+// in klammern MP Kosten
+//-------------------------------------------------------------------------
+
+inherit "std/mnpc";
+inherit "std/player/moneyhandler";
+
+#include "../def.h"
+#include <lightsource.h>
+
+#define D_CASTER "d_caster"
+#define D_DRIDER "\n_dunkel_drider"
+#define P_AUTO_ATTACK "auto_attack"
+
+int ndrider;
+
+int ausweichen;
+int ausweich_ende;
+
+int schnell;
+int schnell_ende;
+
+int maxdrider;
+
+string *nodefender;
+
+void debug(string msg)
+{
+  object pl;
+
+  if(pl=find_player("torian")) tell_object(pl,"XXX "+msg+" XXX\n");
+}
+
+void create()
+{
+  if(!is_clone(TO)) return;
+
+  ::create();
+
+  SUID;
+
+  maxdrider     = 3;
+  ndrider       = maxdrider;
+
+  ausweichen    = 0;
+  ausweich_ende = 0;
+
+  schnell       = 0;
+  schnell_ende  = 0;
+
+  nodefender    = ({ "\ndunkelelfenkoenigin", "mystixfis" });
+
+  return;
+}
+
+string GetAttackSpell()
+{
+  return BSI("Nieder mit dem Paladinpack!",Name(WER)+" ruft: ");
+}
+
+void PaladinAttack(object player)
+{
+  object room;
+
+  if(!(room=ENV(TO)))       return;
+  if(!present(player,room)) return;
+
+  tell_room(room,GetAttackSpell());
+  Kill(player);
+}
+
+void PaladinGrin(object player)
+{
+  object room;
+
+  if(!(room=ENV(TO)))       return;
+  if(!present(player,room)) return;
+
+  tell_room(room,BS(Name(WER)+" grinst "+player->name(WEN)+" an."), ({player}) );
+  tell_object(player,Name(WER)+" grinst Dich wegen Deines Todes an.\n");
+}
+
+void reset()
+{
+  ::reset();
+
+  ndrider    = maxdrider;
+}
+
+void init()
+{
+  int probability;
+
+  ::init();
+
+  if(!TO->QueryProp(P_NOATTACK) && TP && TP->id("DUNKELELFNPC"))
+  {
+    AddDefender(TP);
+  }
+
+  if(QueryProp(P_NOATTACK)) return; // Wenn der NPC noattack ist dann
+                                    // nicht angreifen
+
+  if(!(probability=QueryProp(P_AUTO_ATTACK))) return;
+
+  if(TP                                   &&
+     interactive(TP)                      &&
+     TP->QueryProp(P_GUILD) == "paladine" &&
+     TP->QueryProp(P_GUILD_LEVEL) >= 14   &&
+     TP->QueryProp(P_ALIGN) >= 900        &&
+     random(100) < probability             )
+  {
+    if(TP->QueryProp(P_GHOST) == 0)
+    {
+      call_out("PaladinAttack",0,TP);
+    }
+    else
+    {
+      call_out("PaladinGrin",0,TP);
+    }
+  }
+
+}
+
+void InformDefend(object enemy)
+{
+  if(interactive(enemy) && enemy->id("Dunkelelfenspieler")) return;
+  Kill(enemy);
+}
+
+int Defend(int dam, mixed dam_type, mixed spell, object enemy)
+{
+  if(ausweichen && (time() > ausweich_ende)) ausweichen = 0;
+  if(schnell    && (time() > schnell_ende )) schnell    = 0;
+
+  if(!ausweichen) return ::Defend(dam, dam_type, spell, enemy);
+
+  if(!pointerp(dam_type)) dam_type = ({dam_type});
+  if(sizeof(filter_array(dam_type,PHYSICAL_DAMAGE_TYPES)))
+  {
+    if (enemy->QueryProp(P_ALIGN) < -500)
+    {
+      dam = dam / 2;
+    }
+    else if (enemy->QueryProp(P_ALIGN) > 500)
+    {
+      dam =  dam / 3;
+    }
+    else
+    {
+      dam = 2 * dam / 5;
+    }
+
+    if (dam < 10)
+    {
+      tell_object(enemy, Name(WER)+" weicht Dir sehr gekonnt aus.\n");
+    }
+    else if (dam < 20)
+    {
+      tell_object(enemy, Name(WER)+" weicht Dir gekonnt aus.\n");
+    }
+    else
+    {
+      tell_object(enemy, Name(WER)+" weicht Dir ein wenig aus.\n");
+    }
+
+  }
+
+  return ::Defend(dam, dam_type, spell, enemy);
+}
+
+varargs void create_default_darkelf(int level, int glevel, int aggressive)
+{
+  if(!intp(level))      level      = 1;
+  if(level < 1)         level      = 1;
+  if(!intp(glevel))     glevel     = level;
+  if(!glevel)           glevel     = level;
+  if(glevel < 1)        glevel     = 0;
+  if(!intp(aggressive)) aggressive = 0;
+  if(aggressive < 0)    aggressive = 0;
+  if(aggressive > 100)  aggressive = 100;
+
+  AddClass( ({CL_NIGHTVISION, CL_DARKELF}) );
+  AddId( ({"dunkelelf","elf","DUNKELELFNPC"}) );
+
+  if(QueryProp(P_GENDER) == FEMALE)
+  {
+    AddId( ({"dunkelelfin", "dunkelelfe", "elfin"}) );
+  }
+
+  SetProp(P_RACE,"Dunkelelf");
+
+  SetProp(P_GUILD, "dunkelelfen");
+  SetProp(P_GUILD_LEVEL, glevel);
+  SetProp(P_TEMPERATURE_RANGE,([T_RANGE_MIN:-15,T_RANGE_MAX:55]));
+
+  SetProp(P_ALIGN, -350);
+  SetProp(P_SIZE,185);
+  SetProp(P_WEIGHT, 72000);
+  SetProp(P_MAX_HANDS, 2);
+
+  SetProp(P_MSGIN,"schleicht herein");
+  SetProp(P_MSGOUT,"schleicht");
+  SetProp(P_MMSGIN,"tritt aus einem Schatten hervor");
+  SetProp(P_MMSGOUT,"verschwindet in einem Schatten");
+  SetProp(P_MNPC_FLAGS, 0);
+
+  SetProp(P_RESISTANCE_STRENGTHS ,
+    ([ DT_FIRE:      0.0, DT_COLD:      0.0, DT_WATER:       0.0
+     , DT_AIR:       0.0, DT_LIGHTNING: 0.0, DT_EXPLOSION:   0.0
+     , DT_SOUND:     0.0, DT_LIGHT:     0.6, DT_ELECTRIC:    0.0
+     , DT_ACID:      0.0, DT_POISON:    0.0, DT_TERROR:      0.0
+     , DT_HOLY:      0.7, DT_UNHOLY:   -0.4, DT_MAGIC:       0.0
+     , DT_MIND:      0.0, DT_SLASH:     0.0, DT_BLUDGEON:    0.0
+     , DT_PIERCE:    0.0, DT_SQUEEZE:   0.0, DT_WHIP:        0.0
+     , DT_RIP:       0.0
+     ])
+  );
+
+  SetProp(P_AUTO_ATTACK, aggressive);
+
+  if(QueryProp(P_NOATTACK)) return; //nicht angreifbare NPCs brauchen
+                                    //keine Spells
+
+  if(glevel    > 25) maxdrider = 3 + glevel - 25;
+  if(glevel    <  0) glevel    = 0;
+  if(maxdrider >  8) maxdrider = 8;
+
+  if(glevel >= 10) //terrorblitz
+  {
+    AddSpell(2,150+glevel*7,
+      Name(WER)+" wirft einen Terrorblitz auf Dich.\n",
+      Name(WER)+" wirft einen Terrorblitz auf @WEN.\n",
+      ({DT_TERROR}) , ([SP_SHOW_DAMAGE:1])
+    );
+  }
+
+  if(glevel >= 12) //ausweichen
+  {
+    AddSpell(2,1,"","",DT_MAGIC, "spell_ausweichen");
+  }
+
+  if(glevel >= 15) //dunkellanze
+  {
+    AddSpell(2,150+glevel*7,
+      Name(WER)+" wirft eine Dunkellanze auf Dich.\n",
+      Name(WER)+" wirft eine Dunkellanze auf @WEN.\n",
+      ({DT_UNHOLY}), ([SP_SHOW_DAMAGE:1])
+    );
+  }
+
+  if(glevel >= 17) // schnell
+  {
+    AddSpell(2,1,"","",DT_MAGIC, "spell_schnell");
+  }
+
+  if(glevel >=20)
+  {
+    AddSpell(1,1,"","",DT_MAGIC, "spell_dunkelheit");
+  }
+
+  if(glevel >=25) //drider
+  {
+    AddSpell(1,1,"","",DT_MAGIC, "spell_drider");
+  }
+
+  create_default_npc(level);
+}
+
+void spell_ausweichen(object enemy, int damage, mixed dam_type)
+{
+  if(ausweichen) return;
+  ausweichen = 1;
+  ausweich_ende = time()+QueryProp(P_GUILD_LEVEL);
+}
+
+void spell_schnell(object enemy, int damage, mixed dam_type)
+{
+  if(schnell) return;
+  TO->ModifySkillAttribute(TO,SA_SPEED, 100+2*QueryProp(P_GUILD_LEVEL), 10);
+
+  tell_room(ENV(TO),BS(Name(WER)+" konzentriert sich kurz und bewegt sich "
+                    "auf einmal viel schneller."));
+
+  schnell      = 1;
+  schnell_ende = time() + 20; //10 sek dauer und 10 sek pause
+}
+
+int check_for_light(object ob)
+{
+  if(ob->QueryProp(P_CURSED))      return 0;
+  if(ob->id("\neifer"))            return 0;
+  if(ob->id("QUESTOBJ"))           return 0;
+  if(ob->id("ITEMD_SET_ITEM"))     return 0;
+  // Feuerwuselleuchtitem aussortieren
+  if(ob->id("LEUCHTITEM"))         return 0;
+
+  if(ob->_query_light()       > 0) return 1;
+  if(ob->_query_lighted()     > 0) return 1;
+  if(ob->QueryProp(P_LIGHTED) > 0) return 1;
+  if(ob->QueryProp(P_LIGHT)   > 0) return 1;
+
+  return 0;
+}
+
+int check_for_wusel(object ob, object enemy)
+{
+  if(!ob->id("feuerwusel"))              return 0;
+  if(ob->QueryProp("e_caster") == enemy) return 1;
+
+  return 0;
+}
+
+int ThrowAway(object ob)
+{
+  object room;
+  string *temp, target;
+
+  if(!(room=ENV(TO))) return 0;
+
+  temp = m_values(room->QueryProp(P_EXITS));
+  if(!sizeof(temp))
+  {
+    target = file_name(room);
+  }
+  else
+  {
+    target = temp[random(sizeof(temp))];
+  }
+
+// Log fuer Testphase, was landet wo
+  write_file(LOG "throw.log",ctime()+sprintf(": %O landet in %O.\n", ob, target));
+
+//  debug(sprintf("%O",target));
+
+  call_other(target,"???");
+  ob->move(target,M_PUT);
+
+  return 1;
+}
+
+void spell_dunkelheit(object enemy, int damage, mixed dam_type)
+{
+  object *ob, room, curse, item;
+  string target;
+  if(!(room=ENV(TO))) return;
+
+  ob = filter_array(all_inventory(enemy),"check_for_light");
+
+//
+//kein licht objekt? wie schade....
+//
+
+  if(!sizeof(ob))
+  {
+//  aber vielleicht doch einen feuerwusel?
+    ob = filter_array(all_inventory(room),"check_for_wusel",TO,enemy);
+
+    if(sizeof(ob))
+    {
+      tell_object(enemy,
+        BS(Name(WER)+" huellt Deinen Feuerwusel in tiefste Dunkelheit "
+           "und laesst ihn erloeschen.")
+      );
+
+      tell_room(room,
+        BS(Name(WER)+" huellt "+enemy->name(WESSEN)+" Feuerwusel "
+           "in tiefste Dunkelheit und laesst ihn erloeschen."),({enemy})
+      );
+
+      ob[0]->wegbinich();
+    }
+    return;
+  }
+
+//
+//nachschauen obs evtl ein heiligenschein ist
+//
+
+  item = ob[random(sizeof(ob))];
+  if(item->id("\nheiligenschein"))
+  {
+    tell_object(enemy,
+      BS(Name(WER)+" huellt Deinen Heiligenschein in tiefste Dunkelheit "
+         "und laesst ihn erloeschen.")
+    );
+
+    tell_room(room,
+      BS(Name(WER)+" huellt "+enemy->name(WESSEN)+" Heiligenschein "
+         "in tiefste Dunkelheit und laesst ihn erloeschen."),({enemy})
+    );
+
+    item->remove_me();
+    return;
+  }
+
+//
+// alle andere objekte werden zu 100% entrissen und in einen anderen 
+// raum geworfen
+//
+
+  tell_object(enemy,
+    BS(Name(WER)+" entreisst Dir "+item->name(WEN)+" und wirft "+
+       item->QueryPronoun(WEN)+" weit weg.")
+  );
+
+  tell_room(ENV(TO),
+    BS(Name(WER)+" entreisst "+enemy->name(WEM)+" "+item->name(WEN)+" und "
+       "wirft "+item->QueryPronoun(WEN)+" weit weg."),({enemy})
+  );
+
+  ThrowAway(item);
+  return;
+}
+
+void spell_drider(object enemy, int damage, mixed dam_type)
+{
+  int light,level;
+  object ob,room;
+
+  if(ndrider <= 0)    return;
+  if(!(room=ENV(TO))) return;
+
+  light = room->QueryProp(P_TOTAL_LIGHT);
+//if(light > 2) return 0;
+  level = QueryProp(P_GUILD_LEVEL)/3+random(5)+1 - 2 * light;
+  if(level <  1) return;
+  if(level > 20) level = 20;
+
+  ob=clone_object("/gilden/dunkelelfen/npc/drider");
+  ob->create_default_npc(level);
+  ob->SetProp(P_HANDS, ({" mit einem seiner Beine", level*(6+random(6)), DT_PIERCE}));
+  ob->SetProp(P_BODY, level*4);
+  ob->SetProp(D_CASTER, TO->QueryProp(P_NAME));
+  ob->SetProp(P_XP, 0);
+  ob->AddId(D_DRIDER);
+  TO->AddPursuer(ob);
+
+  ob->SetProp(P_LONG, "Vor Dir steht ein Drider wie man sie von den "
+    "Dunkelelfen gewohnt ist. Sein Spinnenrumpf wird gekroent durch einen "
+    "stattlichen Oberbau. "
+    "Er unterstuetzt "+name(WEN)+" im Kampf.");
+  ob->SetProp(P_MSGOUT, "begleitet "+name(WEN));
+  ob->SetProp(P_FRIEND, 1);
+  ob->SetProp(P_NO_GLOBAL_ATTACK, 1);
+  TO->AddDefender(ob);
+  TO->AddPursuer(ob);
+  ob->move(ENV(TO), M_NOCHECK|M_SILENT);
+
+  tell_room(ENV(TO),BS(
+    "Auf einmal entsteht neben Dir ein Drider aus einer dunklen Wolke "
+    "und wird "+name(WEN)+" im Kampf unterstuetzen." ));
+
+  ndrider--;
+}
+
+varargs void die(int poisondeath)
+{
+  object enemy;
+
+  if((enemy=QueryProp(P_KILLER)) && interactive(enemy) )
+  {
+    DHRKIONMASTER->addkiller(enemy);
+  }
+
+  ::die(poisondeath);
+}
+
+

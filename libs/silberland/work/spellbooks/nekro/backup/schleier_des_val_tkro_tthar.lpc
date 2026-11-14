@@ -1,0 +1,104 @@
+
+int prep_schutz(object caster, mapping sinfo) {
+  mixed h;
+  if(h=caster->QueryProp(P_TMP_DEFEND_HOOK)) {
+    if(h[1]==TO && h[2]=="nekro_schutz") {
+      if(h[0]>=time()) {
+        write(BS(sprintf("%s Du hast schon einen Schutz! Geh und opfere "
+                "unschuldige Leben!", random_fluch())));
+        return 0;
+      }
+    }
+    else {
+      return write("Etwas schuetzt Dich schon! Aeusserst seltsam!"), 0;
+    }
+  }
+  tell_room(ENV(caster), BS(sprintf("%s verfaellt in einen leisen Gesang, "
+          "der Dich froesteln laesst!", caster->Name(WER))), ({caster}));
+  return 1;
+}
+
+int schutz(object caster, mapping sinfo) {
+  int suc, s_time;
+  mixed h;
+  mapping env, env2;
+  object ob;
+
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+      printf(sinfo[SI_SP_LOW_MSG]);
+      return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+
+  if((suc=SpellSuccess(caster,sinfo))<=0) {
+    tell_room(ENV(caster), BS(sprintf("Der Gesang von %s verebbt. Nichts "
+            "passiert!", caster->name(WEM))), ({caster}));
+    write(BS(sprintf("%s Nichts passiert!", random_fluch())));
+    return MISSERFOLG;
+  }
+  if(!present(NEKRO_TEMP_OBJ, ENV(caster))) {
+    if(mappingp(env=ENV(caster)->QueryProp(P_ENVIRONMENT))) {
+      if(env[ENV_TEMPERATURE]) {
+        env2=copy_mapping(env);
+        env2[ENV_TEMPERATURE]-=random(4)+1;
+        ob=clone_object(OBJ "temp");
+        ob->move(ENV(caster), M_NOCHECK);
+        ob->SetVariables(env2,env);
+      }
+    }
+  } 
+  if(mappingp(env2)) {
+    write(BS("Mit einem Schlag kuehlt die Umgebung ab, und ein dunkler "
+        "Schleier umgibt Dich."));
+    tell_room(ENV(caster), BS(sprintf("Mit einem Schlag kuehlt die Umgebung "
+          "ab, und ein dunkler Schleier senkt sich auf %s herab!", 
+          caster->Name(WEN))), ({caster}));
+  }
+  else {
+    write(BS("Wie aus dem Nichts umgibt Dich ein dunkler Schleier."));
+    tell_room(ENV(caster), BS(sprintf("Ploetzlich senkt sich ein dunkler "
+            "Schleier auf %s herab!", caster->Name(WEN))), ({caster}));
+  }
+  s_time=25+random(25)
+         +2*caster->QueryProp(P_GUILD_LEVEL)
+         +caster->QueryProp(P_GUILD_CIRCLE)
+         -GetAlign(caster)/30
+         +100*suc/MAX_ABILITY;
+  s_time=DoModificationByAlign(s_time, caster);
+  caster->SetProp(P_TMP_DEFEND_HOOK, ({s_time+time(), TO, "nekro_schutz"}));
+  call_out("schutz_msg", s_time+1, caster);
+  return ERFOLG;
+}
+
+void schutz_msg(object caster) {
+  mixed h;
+  if (!objectp(caster)) return;  
+  if (h=caster->QueryProp(P_TMP_DEFEND_HOOK)) {
+    if(h[1]==TO && h[2]=="nekro_schutz") {
+      caster->SetProp(P_TMP_DEFEND_HOOK, 0);
+    }
+  }
+  tell_object(caster, BS(sprintf("%s Dein dunkler Schleier verfliegt!", 
+          random_fluch())));
+  tell_room(ENV(caster), BS(sprintf("Der dunkle Schleier, der ueber %s "
+          "liegt, lueftet sich!", caster->name(WEM))), ({caster}));
+  return;
+}
+
+mixed nekro_schutz(int dam, mixed dam_type, mixed spell, object enemy)
+{
+  int nr_damtypes, dam_nr, dam2;
+  dam_nr=0;
+  if (!pointerp(dam_type))
+    dam_type=({dam_type});
+  nr_damtypes=2*sizeof(dam_type);
+  dam=(int)(dam*0.95);
+  if(member(dam_type, DT_HOLY)!=-1) dam_nr+=3;
+  if(member(dam_type, DT_LIGHT)!=-1) dam_nr+=2;
+  if(member(dam_type, DT_FIRE)!=-1) dam_nr+=1;
+  if(member(dam_type, DT_MAGIC)!=-1) dam_nr++;
+  if(dam_nr)
+    dam-=(dam/2)*dam_nr/nr_damtypes;
+  return ({ dam, dam_type, spell, enemy });
+}

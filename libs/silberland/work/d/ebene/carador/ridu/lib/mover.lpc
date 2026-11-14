@@ -1,0 +1,1088 @@
+/****************************************************************************
+ mover.c, (C) 2002 by Carador for Silberland
+****************************************************************************/
+
+#pragma strong_types
+#include "../def.h"
+#include "../sys/ctype.h"
+#include <exploration.h>
+
+inherit RD_STDDIR"array";
+inherit RD_STDDIR"message";
+
+int kaputt;
+object *unglaeubige, *abgestuerzte;
+string *last_movers;
+mapping stein_actions;
+mapping gekratzt;
+
+string *schiff_rooms = 
+  ({ RD_ROOMDIR"r1",
+     RD_ROOMDIR"r2",
+     RD_ROOMDIR"r3",
+     RD_ROOMDIR"r4",
+     RD_ROOMDIR"r5",
+     RD_ROOMDIR"r6",
+     RD_ROOMDIR"innen",
+     RD_ROOMDIR"treppe",
+     RD_ROOMDIR"seil_raum" });
+
+string old_rname;
+object moewen_env;
+object *moewen;
+int *entladungen;
+int entladung_drache;
+int *nebel = ({ 0, 20, 40, 60, 80, 100 });  // fuer r1-r6
+int dir = 0;
+string *dirs = ({ "norden", "nordosten", "osten", "suedosten", "sueden", 
+  "suedwesten", "westen", "nordwesten" });
+int hoehe = 3;
+string *htext2 = ({ 
+  "Das Schiff muesste gleich auf das Wasser aufsetzen.",
+  "Das Schiff fliegt schon ziemlich niedrig.",
+  "Das Schiff hat schon mit dem Landeanflug begonnen.",
+  "Das Schiff fliegt noch auf seiner Reiseflughoehe."
+});
+string *htext = ({
+  "\
+AU WEIA, DAS SCHIFF IST SCHON SO TIEF GESUNKEN, DASS ES JEDEN MOMENT \
+ABSTUERZEN KANN. 'GLAUBE ANS FLIEGEN', ABER SCHNELL, SONST IST ES ZU \
+SPAET!",
+  "\
+Dir faellt auf, dass das Schiff viel zu niedrig fliegt. Hoffentlich sinkt \
+es nicht noch weiter, denn sonst besteht ernsthafte Absturzgefahr. Naaa? \
+Hat da wieder einer nicht rechtzeitig ans Fliegen geglaubt?",
+  "\
+Holla, was ist jetzt los? Das Schiff fliegt ja niedriger als normal? Was \
+hat das denn nur zu bedeuten?",
+  "\
+Das Schiff befindet sich auf seiner vorgeschriebenen Reiseflughoehe." });
+
+
+// 0 = n
+// 1 = no
+// 2 = o
+// 3 = so
+// 4 = s
+// 5 = sw
+// 6 = w
+// 7 = nw
+
+object query_unten()
+{
+  object wolke;
+  wolke = RD_TOOLS->load_object(RD_OBJDIR"wolke");
+  if (!environment(wolke)) wolke->move(RD_WOLKENSTART, M_NOCHECK|M_SILENT);
+  return environment(wolke);
+}
+
+void tell_unten(string str)
+{
+  object r;
+
+  if (!(r = RD_ROOMDIR"seil_raum"->query_unten())) return;
+  message(({ ({ M_ROOM, r, str }) }));
+}
+
+
+
+private void my_tell(object ob, string str)
+{
+  if (environment(ob) && environment(ob)->is_ridu_reling())
+    message(({ ({ M_TARGETS, ({ ob }), str }) }));
+}
+
+
+varargs void tell_schiff(string str, status noseilraum)
+{
+  object *excl;
+
+  filter_array(users(), #'my_tell, str);
+  if (!noseilraum)
+    message(({ ({ M_ROOM,
+      RD_TOOLS->load_object(RD_ROOMDIR"seil_raum"), "\
+Das Seil, an dem Du haengst, faengt ploetzlich an, stark zu schwanken. Du \
+hast Schwierigkeiten, Dich festzuhalten, aber zum Glueck ist das Schwanken \
+gleich wieder vorueber." }) }));
+}
+
+
+int dircmd2dir(string adir)
+{
+  return member_array(lower_case(adir), dirs);
+}
+
+int query_hoehe()
+{
+  return hoehe;
+}
+
+void add_hoehe()
+{
+  if (hoehe < 0 || hoehe >= 3) return;
+  hoehe ++;
+  if (hoehe < 2) 
+    RD_LOGGER->do_log("info", "Hoehe erhoeht auf " + hoehe, this_player());
+  tell_schiff("\
+Das Schiff gewinnt ploetzlich wieder an Hoehe. " +
+     (random(2) ? "Woody" : "Dusty") + " sei Dank.");
+  message(({ ({ M_ROOM, RD_TOOLS->load_object(RD_ROOMDIR"innen"),
+    "Du glaubst zu fuehlen, dass das Schiff wieder an Hoehe gewinnt." }) }));
+  tell_unten("Die Wolke steigt ein Stueck hoeher.");
+}
+
+string query_htext()
+{
+  object wolke;
+
+  if (hoehe <0) {
+    RD_LOGGER->do_log("error", "hoehe kleiner null in query_htext");
+    return "Du kannst die Hoehe nicht erkennen.";
+  }
+ 
+  wolke = RD_TOOLS->load_object(RD_OBJDIR"wolke");
+  if (!environment(wolke) || !(environment(wolke)->is_ridu_theo_home()))
+    return htext[hoehe];
+  return "\
+Hier am Meer koennte man das Schiff gut landen. Es muesste dann einfach ins \
+Wasser plumpsen. " + htext2[hoehe];
+}
+
+void setup_vars()
+{
+  entladungen = ({ 1,2,3,4,5,6,7 }); 
+  entladung_drache = 8;
+  stein_actions = ([]);
+  last_movers = ({ "nobody" });
+  gekratzt = ([]);
+}
+
+void reset()
+{
+  int i;
+  object r;
+
+  for (i=sizeof(schiff_rooms); i--;) {
+    if (!(r = find_object(schiff_rooms[i]))) continue;
+    if (!sizeof(filter_array(all_inventory(r), #'query_once_interactive)))
+      continue;
+    return;
+  }
+  // schiff ist leer
+  setup_vars();
+  for (i=sizeof(schiff_rooms); i--;) {
+    if (!(r = find_object(schiff_rooms[i]))) continue;
+    r->reset_vars();
+  }
+}
+
+status is_abgestuerzt()
+{
+  return (this_player() && member_array(this_player(), abgestuerzte) > -1);
+}
+
+private void truemmer_move(object ob, string msg)
+{
+  object tr;
+
+  if (!query_once_interactive(ob)) {
+    if ( !(tr = find_object(RD_OBJDIR"truemmer")) ||
+         getuid(ob) == "d.ebene.carador" ||
+         ob->QueryProp(P_NOGET) ) return;
+    ob->move(tr, M_SILENT|M_GET);
+    return;
+  }
+  message(({
+    ({ M_ROOM, query_unten(), ob, " wird aus dem Schiff geschleudert."}),
+    ({ M_TARGETS, ({ ob }), msg }) }));
+
+  if (!query_unten()->is_ridu_theo_home()) {
+    ob->AddHp(-(ob->QueryProp(P_HP))+10);
+    abgestuerzte -= ({ 0, ob });
+    abgestuerzte += ({ ob });
+  }
+  ob->move(query_unten(), M_SILENT|M_NOCHECK);
+}
+
+private void empty_one_room(string room, string msg)
+{
+  object r, ob, ob2;
+  
+  r = find_object(room);
+  if (!r) return;
+
+  if (ob = present("\nridu#reserve", r))
+    map_array(all_inventory(ob), #'truemmer_move);
+
+  map_array(all_inventory(r), #'truemmer_move, msg);
+ 
+  catch(r->remove());
+  if (r) destruct(r);
+}
+
+void empty_schiff(string msg, status sturz)
+{
+  object ob;
+
+  if (sturz)
+// erst die truemmer in den zielraum
+  (RD_TOOLS->load_object(RD_OBJDIR"truemmer"))->move(query_unten(), 
+        M_NOCHECK|M_SILENT);
+
+  if ((ob = find_object(RD_ROOMDIR"innen")) &&   //tonschale leeren
+      (ob = present("\nridu#schale", ob)))
+    map_array(all_inventory(ob), #'truemmer_move);
+
+  map_array(schiff_rooms, #'empty_one_room, msg);
+  if (ob = find_object(RD_NPCDIR"ridu")) ob->remove();
+  RD_LOGGER->do_log("info", "Schiff " + 
+    (sturz ? "abgestuerzt" : "gelandet") + " in " +
+    RD_TOOLS->program_name(query_unten()));
+  if (ob = find_object(RD_OBJDIR"wolke")) ob->remove();
+  if (ob = find_object(RD_OBJDIR"seil_unten")) ob->remove();
+  if (ob = find_object(RD_OBJDIR"seil_oben")) ob->remove();
+  if (ob = find_object(RD_NPCDIR"d_kopf")) ob->remove();
+  if (ob = find_object(RD_NPCDIR"d_schwanz")) ob->remove();
+  destruct(this_object());
+}
+
+string check_for_quest()
+{
+  // wenn der, der den letzten schritt gefahren ist, von den letzten
+  // 7 schritten insgesamt 4 gefahren ist, soll er die quest bekommen
+  // damit verhindern wir, dass jemand nur den letzten schritt faehrt
+  // und jemand anderes vorher alles fuer ihn gemacht hat
+
+  RD_LOGGER->do_log("checkquest", implode(last_movers, " "));
+  if (sizeof(filter_array(last_movers, #'==, last_movers[<1])) >=4)
+    return last_movers[<1];
+}
+
+private status is_money(object ob)
+{
+  return ob->id("\ngeld") && (RD_TOOLS->program_name(ob) == "obj/money");
+}
+
+
+void do_one_goldregen()
+{
+  int i;
+  object r, mo, *moarr;
+  
+  for (i=1; i<=6; i++) {
+    r = RD_TOOLS->load_object(RD_ROOMDIR"r" + i);
+    moarr = filter_array(all_inventory(r), #'is_money);
+    if (sizeof(moarr))
+      moarr[0]->AddAmount(1);
+    else {
+      mo = clone_object("/obj/money");
+      mo->SetProp(P_AMOUNT, 1);
+      mo->move(r, M_NOCHECK);
+    }
+  }
+}
+
+
+varargs void do_goldregen(int count)
+{
+  if (find_call_out("do_goldregen") > -1) return;
+  switch(count) {
+    case 0:   // anfang, still sein
+      break;
+    case 1:   // anfangsmeldung
+      tell_schiff("Was ist das? Du glaubst, Du bist im Maerchen! Ploetzlich "
+        "beginnt es, Goldmuenzen zu regnen!", 1);
+      do_one_goldregen();
+      break;
+    case 2..30: // 
+      tell_schiff((random(2) ? (random(2) ? "Pling" : "Plang") : "Plung") +
+        "! Eine weitere Muenze purzelt aus heiterem Himmel auf die Reling.",1);
+      do_one_goldregen();
+      break;
+    default:  // ende
+      tell_schiff("So ploetzlich wie der Goldregen eingesetzt hat, ist er "
+                  "auch wieder vorueber.", 1);
+     return;
+  }
+  call_out("do_goldregen", 0, count+1);
+}
+
+
+
+void do_landung()
+{
+  string solver;
+  object wolke, env_wolke, theo;
+
+  wolke = RD_TOOLS->load_object(RD_OBJDIR"wolke");
+  if (!environment(wolke))
+    wolke->move(RD_WOLKENSTART, M_NOCHECK|M_SILENT);
+
+  env_wolke = environment(wolke);
+  if (env_wolke->is_ridu_theo_home()) {   // Lande sauber bei Theo
+    if (theo = find_object(RD_NPCDIR"theo")) theo->remove();
+    solver = check_for_quest();
+    env_wolke->schiff_ist_zurueck(solver);
+    tell_unten("\
+Ploetzlich taucht aus der Wolke heraus ein Schiff auf. Mit ziemlicher Wucht \
+braust es abwaerts an Dir vorbei und platscht mit einem lauten 'KLATSCHHH' \
+und einer gewaltigen Wasserfontaene auf das Meer.");
+    empty_schiff("\
+Mit einem lauten 'KLATSCHHH' und meterhohen Wasserfontaenen platscht das \
+Schiff ploetzlich auf dem Meer auf. Der Aufprall war dann doch haerter \
+als Du dachtest. Von der Gewalt der Landung wirst Du von Bord geschleudert \
+und landest gluecklicherweise unverletzt am Strand.", 0);
+  } else {   // Mache eine Superbruchlandung!
+    tell_unten("\
+Ploetzlich taucht aus der Wolke heraus ein Schiff auf, im freien Fall nach \
+unten, auf Dich zu. Mit einem gewagten Sprung schaffst Du es gerade noch \
+zur Seite zu springen, bevor das Schiff auf den Boden knallt und in tausende \
+von Einzelteilen zerspringt.");
+    empty_schiff("\
+Mit voller Wucht schrammt das Schiff urploetzlich auf etwas Hartes. Um Dich \
+herum hoerst Du zerberstendes Holz splittern. Durch die Gewalt des Aufpralls \
+wirst Du von Bord geschleudert und landest schwer verletzt auf dem harten \
+Untergrund.", 1);
+  }
+}
+
+void fliegen()
+{
+  int delay;
+  object ridu, wolke;
+  if (hoehe<0) return;
+  if (find_call_out("fliegen") > -1) return;
+
+  wolke = RD_TOOLS->load_object(RD_OBJDIR"wolke");
+  if (!environment(wolke) || !environment(wolke)->is_ridu_theo_home())
+    delay = RD_FLIEGEABSTAND;
+  else {
+    environment(wolke)->make_theo();
+    delay = RD_LANDEABSTAND;
+  }
+
+  if (hoehe >-1) call_out("fliegen", delay); 
+
+  if (ridu = find_object(RD_NPCDIR"ridu")) {  // ridu lebt
+    ridu->random_fahren();
+  } else {   // ridu lebt nicht
+    hoehe--;
+    if (hoehe < 2) RD_LOGGER->do_log("info", "Hoehe gesunken auf " + hoehe);
+    if (hoehe > -1) { 
+      message(({ ({ M_ROOM, RD_TOOLS->load_object(RD_ROOMDIR"innen"),
+         "Was ist das? Das Schiff scheint an Hoehe zu verlieren." }) }));
+      tell_schiff("Ploetzlich verliert das Schiff ein Stueck an Hoehe. " +
+         (delay == RD_FLIEGEABSTAND ? htext[hoehe]: "\
+Aber der Ort hier scheint ganz gut zum Landen zu sein. Das Schiff muesste \
+genau ins Meer plumpsen."));
+      tell_unten("Die Wolke sinkt ein Stueck tiefer.");
+    } else { 
+      do_landung();
+      return;
+    }
+  }
+}
+
+void create()
+{
+  setup_vars();
+  RD_LOGGER->do_log("info", "Mover wurde geladen");
+  RD_LOGGER->do_log("entladung", "--- Entladungen zurueckgesetzt ---");
+  unglaeubige = ({});
+  abgestuerzte = ({});
+  call_out("fliegen", 20);
+}
+
+int random_entladung()   // 1-7 kommen zufaellig, die 8 kommt erst, wenn
+                         // 1-7 passiert sind, das ist die story mit dem 
+                         // drachen
+{
+  int si, nr;
+
+  if (!(si = sizeof(entladungen))) {
+    if (entladung_drache) {
+      nr = entladung_drache;
+      entladung_drache = 0;
+      return nr;
+    }
+    return -1;
+  }
+  nr = random(si);
+  nr = entladungen[nr];
+  entladungen -= ({ nr });
+  return nr;
+}
+
+
+
+private status is_an_reling(object ob)
+{
+  if (environment(ob) && environment(ob)->is_ridu_reling())
+    return 1;
+}
+
+private status is_moewen_opfer(object ob)
+{
+  return is_an_reling(ob) && ob->QueryProp(P_HP) > 50;
+}
+
+void do_one_gemuese(object pl, object gemuese, object schale)
+{
+  int i;
+  object *inv;
+
+  inv = shuffle_array(all_inventory(pl));
+  for (i=sizeof(inv);i--;) {
+    if ( inv[i]->QueryProp(P_CONTAINER) ||
+         inv[i]->QueryProp(P_NODROP) ||
+         inv[i]->QueryProp(P_NEVERDROP) ||
+         inv[i]->QueryProp(P_AMOUNT) ||
+         inv[i]->id("\nridu#gemuese") ||
+         inv[i]->move(schale, M_PUT|M_SILENT) < 1 ||
+         IS_LEARNER(pl)
+       ) continue;
+    gemuese->move(pl, M_SILENT|M_NOCHECK);
+    if (find_call_out("innen_told") < 0) {
+      call_out("innen_told", 2);
+      message(({ ({ M_ROOM, environment(schale),
+                    "Die Tonschale gibt ploetzlich einen hellen "
+                    "Lichtblitz von sich." }) }));
+    }
+    message(({ ({ M_TARGETS, ({ pl }),
+      "Du kannst nicht verhindern, dass Dich einer der herabfallenden "
+      "Lichtpunkte trifft. Ploetzlich merkst Du, wie ",
+      M_NOM_POSS, pl, inv[i], "sich " + (inv[i]->IsPlural() ?
+       "aufloesen" : "aufloest") + " und Du ploetzlich etwas ganz anderes "
+       "in Haenden haeltst. Herzlichen Glueckwunsch! Du bist gerade Zeuge "
+       "einer bidirektionalen Materie-Teleportation geworden." }) }));
+    return;
+  }
+}
+
+void do_gemuese()
+{
+  int i;
+  object schale;
+  object ob;
+  object *pls;
+
+  schale = present("\nridu#schale", RD_TOOLS->load_object(RD_ROOMDIR"innen"));
+  if (!schale) {
+    schale = clone_object(RD_OBJDIR"schale");
+    schale->move(RD_TOOLS->load_object(RD_ROOMDIR"innen"), M_NOCHECK);
+  }
+  schale->make_food();
+
+  pls = shuffle_array(filter_array(users(), #'is_an_reling));
+  tell_schiff("\
+Wie eine Sylvesterrakete schiesst ploetzlich ein knisternder Lichtblitz \
+aus einem der Steine in den Himmel. \
+Mit einem lauten Knall teilt sich der Blitz in viele kleine Blitze auf, \
+die langsam auf das Schiff niedersinken.");
+  for (i=sizeof(pls);i--;)
+    if (ob = present("\nridu#gemuese", schale))
+      do_one_gemuese(pls[i], ob, schale);
+}
+
+
+
+void moewen_entladung(int count)
+{
+  int i, oldm;
+  object m, *vics;
+
+ if (find_call_out("moewen_entladung") > -1) return;
+
+  if (count > RD_MOEWENANZAHL) {
+    if (moewen) {
+      for (i=sizeof(moewen);i--;) {
+        if (moewen[i]) {
+          if (environment(moewen[i])) message(({ ({
+             M_ROOM, environment(moewen[i]),
+            "\
+Die Moewe fliegt davon und verschwindet hoffentlich auf Nimmerwiedersehen." 
+                }) }));;
+          moewen[i]->remove();
+        }
+      }
+    }
+    tell_schiff("Die Moewen scheinen sich jetzt wieder beruhigt zu haben.");
+    message(({ ({ M_ROOM, RD_TOOLS->load_object(RD_ROOMDIR"innen"),
+     "Draussen ist es ruhig geworden. Die Moewen scheinen weg zu sein." }) }));
+    moewen = 0;
+    return;
+  }
+  if (!moewen) moewen = ({});
+  moewen -= ({ 0 });
+  while(sizeof(moewen) < count+1) {
+    m = clone_object(RD_STDDIR"npc");
+    m->SetProp(P_NAME, "Moewe");
+    m->SetProp(P_ARTICLE,1);
+    m->SetProp(P_NAME_ADJ, "wildgeworden");
+    m->SetProp(P_GENDER, FEMALE);
+    m->SetProp(P_SHORT, "Eine wildgewordene Moewe");
+    m->SetProp(P_LONG, "\
+Die Moewe sieht mit ihren scharfen Krallen und ihrem Schnabel aeusserst \
+gefaehrlich aus.");
+    m->create_default_npc(1+(1*count));
+    m->AddId(({ "\nridu#moewe", "moewe", "wildgewordene moewe", "vogel" }));
+    m->SetProp(P_HANDS, ({ " mit ihren scharfen Krallen", (1+count)*10 }));  // TODO_ASK
+    m->SetProp(P_AGGRESSIVE,1);
+    moewen += ({ m });
+  }
+
+  vics = shuffle_array(filter_array(users(), #'is_moewen_opfer)); // opfer?
+  if (sizeof(vics)) {
+    oldm = sizeof(filter_array(moewen, #'environment));
+    if (oldm &&
+        moewen_env &&
+        moewen_env != environment(vics[0])) {    // ziehe bestehende moewen ab
+      message(({ ({ M_ROOM, moewen_env, "Die Moewe" + 
+        (oldm > 1 ? "n fliegen" : " fliegt") +
+        " zu einer anderen Stelle des Schiffs." }) }));
+    }
+    moewen_env = environment(vics[0]);
+    map_objects(moewen, "move", moewen_env, M_SILENT|M_NOCHECK);
+    message(({ ({ M_ROOM, moewen_env, 
+      (sizeof(moewen) > 1 ? RD_LIBDIR"grammar"->get_numeral(sizeof(moewen)) +
+                              " wildgewordene Moewen stuerzen " :
+                            "Eine wildgewordene Moewe stuerzt ") +
+      "herein und natuerlich direkt auf Dich." }),
+    ({ "Vielleicht solltest Du besser in der Kabine Unterschlupf suchen, bis "
+       "sich die Moewen wieder beruhigt haben. Denn wenn noch mehr Moewen "
+       "dazukommen, so kann dies SEHR GEFAEHRLICH werden." }) }));
+  }
+  call_out("moewen_entladung", RD_MOEWENABSTAND, count+1);
+}
+
+int query_moewen()
+{
+  if (moewen && sizeof(moewen)) return sizeof(moewen);
+  return (find_call_out("moewen_entladung") >-1);
+}
+
+
+void do_entladung()
+{
+  object ab, ridu, ob;
+  int nr;
+
+// nochmal schaun, obs wirklich ne entladung wird
+// wenn ridu noch lebt sollen keine kommen, weil man sie
+// sonst nicht geniessen kann
+  ridu = find_object(RD_NPCDIR"ridu");
+  if (ridu) return;
+
+  call_out("last_entladung", RD_MIN_ENTLADUNGSABSTAND);
+
+  nr = random_entladung();
+
+  ab = present("\nridu#ableiter_dach",
+               RD_TOOLS->load_object(RD_ROOMDIR"r4"));
+
+  if (ab) {
+    if (nr > - 1) entladungen += ({ nr });   // sollt gar nicht passieren 
+    tell_schiff("\
+Ein greller, MAGISCH-FUNKELNDER BLITZ zischt ploetzlich aus einem der Steine \
+gen Himmel und schlaegt am SCHIFFSHECK ein.");
+    RD_ROOMDIR"r4"->do_entladung(ab);
+    RD_LOGGER->do_log("entladung", "Entladung Ableiter mit Klemme " +
+      ab->query_klemme(), this_player());
+    return;
+  }
+
+  if (nr < 0) {
+    tell_schiff("\
+Ein greller, vor magischer Energie knisternder Lichtblitz schiesst auf einmal \
+aus einem der Steine gen Himmel.");
+    RD_LOGGER->do_log("entladung", "alle Entladungen verbraucht", 
+       this_player());
+    return; 
+  }
+
+  RD_LOGGER->do_log("entladung",
+    ({ "Minifische", "Planke", "Gemuese", "Tauende", "Vogelschwarm",
+       "Goldregen", "Gegenstand", "Drachenkopf" })[nr-1], this_player());
+
+  switch(nr) {
+    case 1:   // Minifische in R5 (rechts hinten)
+      tell_schiff("\
+Ein greller, vor magischer Energie knisternder LICHTBLITZ schiesst auf einmal \
+aus einem der Steine in die Luft und schlaegt auf der STEUERBORDSEITE IN NAEHE \
+DES HECKS ein.");
+      RD_ROOMDIR"r5"->do_entladung();
+      return;
+      break;
+    case 2:   // Planke, wo man mit dem Fuss steckenbleibt
+      tell_schiff("\
+Aus einem der magischen Steine schiesst ploetzlich ein knisternder LICHTBLITZ \
+in die Luft und schlaegt auf der BACKBORDSEITE in HECKNAEHE ein.");
+      RD_ROOMDIR"r3"->do_entladung();
+      return;
+      break;
+    case 3:   // Vertauschung der Ausruestung mit Gemuese
+      do_gemuese();
+      return;
+      break;
+    case 4:   // Das wildgewordene Tauende
+      tell_schiff("\
+Einem der Steine entfaehrt ploetzlich ein magischer, knisternder LICHTBLITZ, \
+der mit voller Wucht auf der BACKBORDSEITE IN BUGNAEHE einschlaegt.");
+      RD_ROOMDIR"r2"->do_entladung();
+      return;
+      break;
+    case 5:  // Wildgewordener Vogelschwarm
+      tell_schiff("\
+Ploetzlich schiesst ein heller LICHTBLITZ aus einem der Steine in den Himmel \
+empor und kracht mit voller Wucht in das KABINENDACH. Man sieht dort einige \
+Moewen kreischend in die Luft stossen.");
+      moewen_entladung(0);
+      return;
+      break;
+    case 6:  // Goldregen
+      tell_schiff("\
+Ploetzlich schiesst ein heller LICHTBLITZ aus einem der Steine in den Himmel \
+empor. Mit einem KLIMPERNDEN GERAEUSCH schlaegt der Blitz irgendwo hoch oben \
+in den Wolken ein.");
+      do_goldregen();
+      return; 
+      break;
+    case 7:  // Belebter Ausruestungsgegenstand
+      tell_schiff("Ein heller LICHTBLITZ schiesst ploetzlich aus einem der \
+Steine. Ohoh, der hat sich ein lebendes Ziel an Bord ausgesucht...");
+      if (!IS_LEARNER(this_player())) {    // nur bei echten spielern
+        ob = clone_object(RD_NPCDIR"ding");
+        ob->make_ding(this_player());
+      }
+      if (ob) {
+        ob->move(environment(this_player()), M_NOCHECK|M_SILENT);
+        message(({
+         ({ M_SAY, "Der Blitz trifft", M_AKK_BEST, ob, "von", M_PL_DAT, "." }),
+         ({ M_WRITE, "Der Blitz kommt direkt auf Dich zu, Du willst ausweichen, "
+            "doch bevor WUSCHHHHHHHHHH! Getroffen, mitten in ", M_AKK_BEST, ob,
+            "." }),
+         ({ M_BEST, ob,
+            (ob->IsPlural() ? "sind" : "ist") +
+            " ploetzlich von Leben erfuellt, " +
+            (ob->IsPlural() ? "fangen" : "faengt") +
+            " an, sich zu bewegen, " +
+            (ob->IsPlural() ? "schweben" : "schwebt") +
+            " weg von", M_PL_DAT,"und - und das ist das Schlimmste - " +
+            (ob->IsPlural() ? "greifen" : "greift"),
+            M_PL_AKK_IHN, "an." }) }));
+         ob->Kill(this_player());
+      } else {
+        message(({ ({ "Der Blitz geht nur wenige Zentimeter an ",
+                      M_PL_DAT, "vorbei." }) }));
+      }
+      return; 
+      break;
+    case 8:  // Belebter Drachenkopf
+      tell_schiff("\
+Aus einem der magischen Steine schiesst ploetzlich ein knisternder LICHTBLITZ \
+in die Luft und schlaegt in den BUG ein.");
+      RD_ROOMDIR"r1"->do_entladung();
+      return;
+      break;
+    
+  }
+}
+
+string *query_dirs()
+{
+  return dirs;
+}
+
+int query_dir()
+{
+  return dir;
+}
+
+string query_dir_string()
+{
+  return dirs[dir];
+}
+
+varargs int query_nebel(object wo)
+{
+  string r;
+  int nr;
+ 
+  nr = 0;
+  r = RD_TOOLS->program_name(wo);
+  if (isdigit(r[<1])) nr = (int)r[<1..<1];
+  nr--;
+
+  if (nr<0||nr>5) return 0;
+  return nebel[nr];
+}
+
+varargs void pre_msg(status splitter, int room_nr)
+{
+  if (!splitter)
+    message(({ 
+      ({ M_PL_BEST, M_PL_VERB, "reib", "an dem Stein." }),
+      ({ M_WRITE, "Je laenger Du reibst, desto waermer wird der Stein und "
+         "auch das Leuchten wird immer heller." }),
+      ({ M_SAY, "Das Leuchten des Steins wird immer heller." })
+    }));
+  else
+    message(({ 
+      ({ M_WRITE, "Der Splitter wird auf einmal ganz warm und leuchtet " +
+         "strahlend hell." }),
+      ({ M_SAY, "Der Splitter faengt an, hell zu leuchten." }),
+      ({ M_ROOM, RD_TOOLS->load_object(RD_ROOMDIR"r" + room_nr),
+         "Ploetzlich faengt der Stein an, hell zu leuchten." }) }));
+}
+
+varargs void post_msg(status splitter, int room_nr)
+{
+  if ( find_call_out("last_entladung") < 0 &&
+       !this_player()->id("\nridu#ridu") &&
+       !random(RD_ENTLADUNGSCHANGE) ) do_entladung();
+
+
+  if (splitter) {
+    message(({
+      ({ M_ROOM, RD_TOOLS->load_object(RD_ROOMDIR"r" + room_nr),
+         "Kurz darauf laesst das Leuchten im Stein wieder nach." }),
+      ({ M_WRITE, "Auch der Splitter erlischt wieder." }) }));
+    
+  } else {
+    message(({ ({ M_ROOM, environment(this_player()), 
+             "Kurz darauf laesst das Leuchten im Stein wieder nach." }) }));
+  }
+
+  if (this_player()->id("\nridu#ridu"))
+    message(({ 2,
+      ({ M_ROOM, environment(this_player()), 
+         "Es wuerde Ridu bestimmt aergern, wenn ihm hier jemand ins "
+         "Handwerk pfuschen wuerde, indem er an einem der anderen "
+         "Steine reibt." }) }));
+  else if (find_object(RD_NPCDIR"ridu"))
+    message("Das war gut. Das bringt Ridu bestimmt vollkommen durcheinander.");
+
+}
+
+varargs void turn(int wohin, status splitter) 
+{
+  pre_msg(splitter, (wohin == -1 ? 2 : 6));
+  if (wohin > 0) {    // rechtsrum
+    tell_schiff("Ploetzlich dreht sich das Schiff ruckartig ein "
+                "Stueck nach Steuerbord.");
+    dir++;
+  } else {            // linksrum
+    tell_schiff("Ploetzlich dreht sich das Schiff ruckartig ein "
+                "Stueck nach Backbord.");
+    dir--;
+  }
+  if (dir<0) dir = 7;
+  if (dir>7) dir = 0;
+  post_msg(splitter, (wohin == -1 ? 2 : 6));
+}
+
+varargs void go(status splitter)
+{
+  int i;
+  object ob, seil, ziel, kiste, innen;
+  mixed ex, cmds, rooms, result;
+
+  if (this_player()->QueryProp(P_CLONE_TIME) < 1018994400) {
+    message("\
+Technischer Hinweis:\n\
+Leider ist Dein Spielerobjekt nicht aktuell genug. Du kannst diese Quest\n\
+aus technischen Gruenden erst spielen, wenn Du ein aktuelles Spielerobjekt\n\
+hast. Dies bekommst Du, indem Du 'ende' tippst und Dich danach neu im\n\
+Silberland einloggst.");
+    return;
+  }
+
+  pre_msg(splitter, 4);
+
+  ob = RD_TOOLS->load_object(RD_OBJDIR"wolke.lpc");
+  if (!ob || !environment(ob)) return;
+  seil = present("\nridu#seil_unten", environment(ob));
+  ex = environment(ob)->QueryProp(P_EXITS); // Nur normale String-Exits.
+  if (!ex || !m_sizeof(ex)) {   // das sollte eigentlich nicht passieren
+    message(({ ({ M_ROOM, environment(ob), 
+       "Eine starker Wind weht die Wolke fort." }) }));
+    if (seil) seil->move(RD_WOLKENSTART);
+    ob->move(RD_WOLKENSTART);
+    message(({ ({ M_ROOM, 
+          environment(ob), "Eine seltsame Wolke weht herein." }) }));
+    post_msg(splitter, 4);
+    return;
+  }
+  cmds = m_indices(ex);
+  rooms = m_values(ex);
+  for (i=sizeof(rooms);i--;)
+    if (!stringp(rooms[i])) cmds[i] = 0;
+
+  cmds -= ({ 0 });
+  
+#if 0
+  result = ({ dirs[dir], 
+              dirs[dir][0..<3] + "oben", 
+              dirs[dir][0..<3] + "unten" }) & cmds;
+#else
+  result = ({ dirs[dir] }) & cmds;
+#endif
+
+#if 0
+  // Ausgaenge mit 'oben' und 'unten' mussten ausgeschlossen werden,
+  // weil der Fall aufgetreten ist, dass man zwar mit
+  // westoben auf die Stadtmauer raufkam aber nicht mehr runter
+  // Sortiere das Ergebnis, dass norden vor nordoben kommt, fuer den Fall
+  // dass es Raeume gibt, in denen man sowohl nach Norden als auch nach
+  // Nordoben gehen kann.
+  result = sort_array(result, #'<);
+#endif
+  if (!sizeof(result)) {
+    tell_schiff("Das Schiff macht einen kurzen Rucker in Richtung " +
+       capitalize(dirs[dir]) + ", kommt aber sofort " +
+       "mit einem gewaltigen RUMMMMMS wieder zum Stillstand.");
+    tell_unten("Die Wolke schwebt ein Stueck in Richtung " +
+       capitalize(dirs[dir]) + ", stoesst aber mit einem fuer" +
+      " Wolken eher untypischem RUMMMMMS irgendwo an.");
+    post_msg(splitter);
+    return;
+  }
+  for (i=sizeof(result); i--;) {
+    ziel = RD_TOOLS->load_object(ex[result[i]]);
+    if (!ziel) continue;
+    if (ziel->QueryProp(P_INDOORS)) {
+      tell_schiff("Das Schiff macht einen kurzen Rucker in Richtung " +
+         capitalize(result[i]) + ", kommt aber sofort" +
+         "mit einem gewaltigen RUMMMMMS wieder zum Stillstand.");
+      tell_unten("Die Wolke schwebt ein Stueck in Richtung " +
+         capitalize(result[i]) + ", stoesst aber mit einem fuer" +
+        " Wolken eher untypischem RUMMMMMS irgendwo an.");
+      continue;
+    }
+
+    if (interactive(this_player()) &&
+        !kaputt && 
+        dir == 5 &&
+        strstr("/" + RD_TOOLS->program_name(query_unten()), RD_MIDASDIR)<0){
+      RD_LOGGER->do_log("info", "gruener Stein kaputt (Platten!)", this_player());
+      message(({
+          ({ M_ROOM, RD_TOOLS->load_object(RD_ROOMDIR"r4"),
+           "Ohne Vorwarnung erlischt der gruene Stein." }) }));
+      tell_schiff("Ploetzlich sackt das Schiff hinten ab. Es hat nun "
+         "gewaltige Schlagseite und haengt total schief in der Luft.");
+      kaputt = 1;
+      kiste = present("\nridu#kiste", innen = RD_TOOLS->load_object(RD_ROOMDIR"innen"));
+      if (!kiste) innen->reset_vars();
+      kiste = present("\nridu#kiste", innen);
+      if (kiste) kiste->reset_vars();
+      RD_ROOMDIR"r4"->make_kaputt();
+      return;
+    }
+
+    message(({ ({ M_ROOM, environment(ob), "Die Wolke weht weiter nach " + 
+      capitalize(result[i]) + "." }) }));
+    old_rname = RD_TOOLS->program_name(environment(ob));
+    if (seil) seil->move(ziel, M_NOCHECK);
+    ob->move(ziel, M_NOCHECK);
+    RD_LOGGER->do_log("move", 
+      result[i] + " nach " + RD_TOOLS->program_name(ziel), this_player());
+
+    if (interactive(this_player())) {
+      while(sizeof(last_movers) <= 7)
+        last_movers += ({ this_player()->query_real_name() });
+      last_movers = last_movers[1..];
+    }
+
+    message(({ ({ M_ROOM, environment(ob), 
+                  "Eine seltsame Wolke weht herein." }) }));
+    nebel = shuffle_array(nebel);
+    tell_schiff("Sanft schwebt das Schiff in Richtung " +
+         capitalize(result[i]) + ".");
+    if (!splitter && interactive(this_player())) {
+      stein_actions[this_player()]++;
+      if ( !sizeof(entladungen) &&
+           !entladung_drache &&
+          stein_actions[this_player()]>10 ) {   
+     // das ganze bitte erst vereinfachen, wenn der spieler alle entladungen
+     // erlebt hat und es ohnehin langweilig werden wuerde auf dem schiff
+        message("\
+Ploetzlich denkst Du Dir, dass die Hin-und-Her-Lauferei auf dem Schiff \
+kompliziert ist und kommst ins Gruebeln, ob es nicht einen einfacheren \
+Weg gibt, dieses Schiff zu steuern, als an den Steinen zu >_REIBEN_<. \
+Dir faellt aber nichts Gescheites ein, egal, wie nachdenklich Du Dich \
+auch am Kopf >_KRATZT_<, denn das tust Du naemlich gerade.");
+        message(({ ({ M_SAY, M_PL_BEST, "kratzt sich nachdenklich am Kopf." }) }));
+      }
+    }
+    post_msg(splitter);
+    return;
+  }
+  post_msg(splitter);
+}
+
+// 1 lila
+// 2 rot
+// 4 gruen
+// wird bitweise benutzt
+
+void kratze_stein(int farbe)
+{
+ object ob;
+  if (!present("schwert", this_player()) && !present("messer", this_player())) {
+     message("\
+Mit den Fingernaegeln am Stein zu kratzen ist wohl nicht sehr erfolgversprechend. Ein Schwert oder wenigstens ein Messer braeuchtest Du schon.");
+    return;
+  }
+
+  message(({ ({ M_PL_BEST, "kratzt mit", M_PL_POSS, "~er Klinge an dem " +
+     (farbe == 1 ? "lilanen" : (farbe == 2 ? "roten" : "gruenen")) +
+     " Stein herum." }) }));
+
+  if (!IS_LEARNER(this_player()) && (sizeof(entladungen) || entladung_drache ||
+      find_object(RD_NPCDIR"ridu"))) {
+    message("\
+Doch es passiert ueberhaupt nichts. Der Stein ist von Deinem Kratzen total \
+unbeeindruckt.");
+    return;
+  }
+
+  if (gekratzt[this_player()] & farbe) {
+    message("\
+Aber egal, wie sehr Du dran rumschabst, Du bekommst keinen weiteren Splitter \
+ab.");
+    return;
+  }
+  gekratzt[this_player()] |= farbe;
+  message(({ ({ "Und nach einer kleinen Weile passsiert das Unerwartete: " +
+    "ein kleiner, " +
+    (farbe == 1 ? "lilaner" : (farbe == 2 ? "roter" : "gruener")) +
+    " Splitter platzt ab und faellt ", M_PL_DAT_IHM, "in die Haende." }) }));
+  
+  RD_LOGGER->do_log("splitter",
+    (farbe == 1 ? "lila" : (farbe == 2 ? "rot" : "gruen")),
+    this_player());
+
+  ob = clone_object(RD_STDDIR"splitter");
+  ob->SetProp(P_NAME_ADJ, 
+        (farbe == 1 ? "lilafarben" : (farbe == 2 ? "rot" : "gruen")));
+  ob->SetProp(P_SHORT, "Ein " + 
+    (farbe == 1 ? "lilafarbener" : (farbe == 2 ? "roter" : "gruener")) +
+    " Splitter");
+  ob->SetProp(P_LONG, "\
+Der Splitter ist halbdurchsichtig. In seinem Inneren siehst Du ein leichtes,"+
+    (farbe == 1 ? "lilanes" : (farbe == 2 ? "rotes" : "gruenes")) +
+       " Glimmen. Eigentlich sieht er genauso aus wie der zugehoerige grosse \
+Stein, nur kleiner und nicht so rund.");
+  switch(farbe) {
+    case 1: 
+      ob->AddId(({ "lila splitter", "lilaner splitter", "lilanen splitter",
+                   "lilafarbener splitter", "lilafarbenen splitter" }));
+      break;
+    case 2: 
+      ob->AddId(({ "roter splitter", "roten splitter", "rotem splitter" }));
+      break;
+    case 4:
+      ob->AddId(({ "gruener splitter", "gruenen splitter", 
+                   "gruenem splitter" }));
+      break;
+  }
+  if (ob->move(this_player(), M_GET) < 0) 
+    ob->move(environment(this_player()), M_NOCHECK);
+}
+
+
+status do_action(string verb, mapping args)
+{
+  string txt;
+
+  switch(verb) {
+    case "ruf_unten" :
+      filter_array(
+       users() -  ({ this_player() }),
+       #'my_tell, 
+       break_string(args[G_TEXT], 78, this_player()->Name() + " ruft nach unten: "));
+      message(({
+        ({ M_ROOM, RD_TOOLS->load_object(RD_ROOMDIR"seil_raum"),
+          break_string(args[G_TEXT], 78, "Jemand ruft von oben: ") }),
+        ({ M_ROOM, query_unten(),
+          break_string(args[G_TEXT], 78, "Jemand ruft von oben: ") }),
+        ({ M_WRITE, break_string(args[G_TEXT],78, "Du rufst nach unten: ") }) }));
+      return 1;
+    case "ruf_oben" :
+      filter_array(users(), #'my_tell, 
+        break_string(args[G_TEXT], 78, "Jemand ruft von unten: "));
+      message(({
+        ({ M_ROOM, RD_TOOLS->load_object(RD_ROOMDIR"seil_raum"),
+          break_string(args[G_TEXT], 78, "Jemand ruft von unten: ") }),
+        ({ M_WRITE, break_string(args[G_TEXT],78, "Du rufst nach oben: ") }),
+        ({ M_SAY, break_string(args[G_TEXT],78, 
+        this_player()->Name() + " ruft nach oben: ") }) }));
+      return 1;
+    case "meditiere" :
+      if (member_array(this_player(), unglaeubige) < 0) {
+        message("Das hast Du doch gar nicht noetig. Du bist doch glaeubig "
+                "genug.");
+        return 1;
+      }
+      txt = lower_case(args[G_TEXT] || "");
+      if (strstr(txt, "lautem omm") < 0) {
+        message("Naja, ein bisschen mehr Muehe musst Du Dir schon geben, "
+                "zum Beispiel 'mit lautem Omm' meditieren.");
+        return 1;
+      }
+      if (strstr(txt, "schneidersitz") < 0) {
+        message("Gut, aber um richtig glaubwuerdig zu sein, musst Du schon "
+                "'mit lautem Omm im Schneidersitz' meditieren.");
+        return 1;
+      }
+      if (strstr(txt, "nicken") < 0) {
+        message("Nicht schlecht, aber heftiges Kopfnicken gehoert auch zu "
+         "einer echten Meditation.");
+        return 1;
+      }
+      message(({
+        ({ M_SAY, M_PL, "setzt sich auf den Boden und meditiert mit lautem "
+           "'Omm' und heftigem Kopfnicken." }),
+        ({ M_WRITE, "Prima, geht doch. Deine gelungene Meditation wird "
+           "erhoert. Du fuehlst Dich geistig wieder in der Lage, ans "
+           "Fliegen glauben zu koennen." }) }));
+      EPMASTER->GiveExplorationPoint("meditiert", EP_MISC);
+      unglaeubige -= ({ this_player() });
+      return 1;
+    case "glaube_fliegen" :
+      txt = lower_case(args[G_TEXT] || "");     // 2004-07-21 -bugfix-woody-
+      if (strstr(txt, "fliegen") < 0) {
+        notify_fail(break_string(
+         "Du koenntest, oder besser gesagt, solltest, ans Fliegen "
+                    "glauben. Zumindest hier. Anderswo kannst Du glauben, "
+                    "was Du magst.\n"));
+        return 0;
+      }
+      if (strstr(txt, "nicht") > -1) {
+        message(({
+        ({ M_WRITE, "Gut, dann glaubst Du halt nicht dran. Deshalb stuerzt "
+           "das Schiff auch nicht gleich ab. Aetsch! Aber bald "
+           "vielleicht..." }),
+        ({ M_SAY, M_PL_BEST, "sieht fuer einen kurzen Moment furchtbar "
+           "unkonzentriert aus." }) }));
+        unglaeubige += ({ this_player() });
+        return 1;
+      }
+      unglaeubige -= ({0});
+      if(member_array(this_player(), unglaeubige) > -1) {
+        message("Nanana, das waer's noch. Erst nicht glauben und dann "
+                "ploetzlich wieder glaeubig werden? So einfach isses "
+                "nicht. Bevor Du wieder glauben kannst, musst Du wenigstens "
+                "ordentlich meditieren.");
+        return 1;
+      }
+      message(({
+        ({ M_WRITE, "Du konzentrierst Dich ganz feste und glaubst ganz fest "
+           "daran, dass dieses Schiff einfach fliegt und dass Fliegen fuer "
+           "Schiffe die natuerlichste Sache auf der Welt ist." }),
+        ({ M_SAY, M_PL_BEST, "sieht fuer einen kurzen Moment furchtbar "
+           "konzentriert aus." }) }));
+      add_hoehe();
+      return 1;
+  }
+}

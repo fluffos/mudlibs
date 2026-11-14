@@ -1,0 +1,222 @@
+// SilberLand MUDlib
+//
+// spellbooks/paladine/entfluche.c
+//
+// $Date: 2006/04/25 19:22:20 $
+/* $Revision: 1.8 $
+ * $Log: entfluche.c,v $
+ * Revision 1.8  2006/04/25 19:22:20  Feyaria
+ * bugfix beim im spieler entfluchen
+ *
+ * Revision 1.7  2006/03/08 20:14:11  Feyaria
+ * bugfix
+ *
+ * Revision 1.6  2005/05/25 17:21:15  Feyaria
+ * zufaellig ein verfluchtes item auswaehlen
+ *
+ * Revision 1.5  2005/04/18 12:18:46  Feyaria
+ * autoloader entfluchbar, meldung wenn entfluchen fehl schlaegt
+ *
+ * Revision 1.4  2004/12/19 15:14:50  Feyaria
+ * zusaetzliche sicherheitsabfrage
+ *
+ * Revision 1.3  2004/12/15 00:49:23  Feyaria
+ * Entfluchen in anderen spielern.
+ *
+ * Revision 1.2  2004/09/20 10:23:59  Woody
+ * Plural beruecksichtigen
+ *
+ * Revision 1.1  2003/07/09 11:39:22  Angrox
+ * Initial revision
+ *
+ */
+// Prototypem
+int prep_entfluche(object caster, mapping sinfo);
+int entfluche(object caster, mapping sinfo);
+
+object find_cursed_object(string str, object caster)
+{
+  object pl, ob, *obj;
+
+  if ((pl = present(str, environment(caster))) && interactive(pl))
+  {
+    if (pl->QueryProp(P_GUILD) == "nekromanten")
+    {
+      write(BS("PALADIN! Nekromanten sind so vollkommen verflucht, dass "
+            "sie nicht zu entfluchen sind."));
+      return 0;
+    }
+    obj = pl->QueryProp(P_ARMOURS) - ({0});
+    if( objectp(pl->QueryProp(P_WEAPON)) )
+      obj += ({pl->QueryProp(P_WEAPON)});
+    if (sizeof(obj))
+      obj = filter_array(obj, lambda( ({ 'x }), ({ #'!= , 
+              ({ #'call_other, 'x, "QueryProp", P_CURSED }), 0 }) ) );
+    if (!sizeof(obj))
+    {
+      write(BS(pl->Name(WER,1) + " traegt dustyseidank gar keinen "
+            "verfluchten Gegenstand."));
+      return 0;
+    }
+    if (!present("magiestein", caster))
+    {
+      write(BS("Paladin! Du benoetigst einen Magiestein, um Gegenstaende in "
+          "einem anderen Spieler zu entfluchen!\n"));
+      return 0;
+    }
+    return obj[random(sizeof(obj))];
+  }
+  if(!ob=deep_present(str, caster)) {
+    write("Diesen Gegenstand besitzt Du gar nicht, Paladin!\n");
+    return 0;
+  }
+  if(!ob->QueryProp(P_CURSED)) {
+    write( sprintf("Dusty sei Dank! %s %s gar nicht verflucht!\n",
+          ob->Name(WER), (ob->IsPlural() ? "sind" : "ist") ) );
+    return 0;
+  }
+  return ob;
+}
+
+int prep_entfluche(object caster, mapping sinfo) {
+  object ob;
+  if(caster->InFight()) {
+    Message(caster,0,
+      BS("Du solltest erst Deinen Gegner fuer Dusty besiegen!"),0);
+    return 0;
+  }
+  if(caster->QueryProp(P_BLIND)) {
+    Message(caster,0,
+      BS("Bei Dusty, Du bist blind und kannst so nichts entfluchen!\n"),0);
+    return 0;
+  }
+  if(!sinfo[SI_SKILLARG]) {
+    write(BS("Was in Dustys Namen moechtest Du entfluchen?"));
+    return 0;
+  }
+  if(!find_cursed_object(sinfo[SI_SKILLARG], caster))
+    return 0;
+  return 1;
+}
+
+
+int entfluche(object caster, mapping sinfo) {
+  object ob, pl, stein, flag;
+  string result,str;
+  int suc;
+
+  if( !prep_entfluche( caster, sinfo) ) return 0;
+  ob=find_cursed_object(sinfo[SI_SKILLARG], caster);
+  if (!flag = present(ob, caster))
+  {
+    pl = environment(ob);
+    sinfo[SI_RAW_SPELLCOST] *= 2;  //entfluchen in anderen Spielern kostet das doppelte
+  }
+  if(ob->QueryProp(P_NEKRO_PESTERED))
+  {
+    write(BS(sprintf("Ploetzlich %s sich %s mit einem haesslichen Zischen "
+         "auf!", (ob->IsPlural() ? "loesen" : "loest"), ob->name(WER))));
+    Message(caster, 0, BS(sprintf(
+            "Ploetzlich %s sich %s von %s mit einem haesslichen "
+            "Zischen auf.", (ob->IsPlural() ? "loesen" : "loest"),
+            ob->name(WER), caster->name(WER))));
+    ob->SetProp(P_CURSED, 0);
+    ob->remove();
+    caster->AddHp(-random(100));
+    caster->AddSp(-random(100));
+    return 0;
+  }
+  if(ob->id("NOUNCURSE") || ob->id("QUESTITEM") || living(ob)) {
+    write("Dusty verbietet es Dir, "+ob->name(WEN)+" zu entfluchen!\n");
+    return 0;
+  }
+  if (!flag && !(stein = present("magiestein", caster)))
+  {
+    write(BS("Paladin! Du benoetigst einen Magiestein, um Gegenstaende in "
+          "einem anderen Spieler zu entfluchen!\n"));
+    return 0;
+  }
+
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    Message(caster,0,sinfo[SI_SP_LOW_MSG],0);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+
+  if (flag)
+  {
+    Message(caster, 0, BS(
+          sprintf("Du legst %s vor Dich auf den Boden und kniest Dich davor.\n",
+            ob->name(WEN))),0);
+    Message(caster, 0, BS(
+          sprintf("%s legt %s vor sich auf den Boden und kniet sich davor.\n",
+            caster->Name(WER),ob->name(WEN))),3);
+  }
+  else
+  {
+    tell_object(caster, sprintf(
+          BS("Du deutest auf %s von %s und kniest Dich nieder."),
+          ob->name(WEN,1), pl->name(WEM,1)));
+    tell_object(pl, sprintf(
+          BS("%s deutet auf %s von Dir und kniet sich nieder."),
+          caster->Name(WER,1), ob->name(WEN,1)));
+    tell_room(environment(caster), sprintf(
+          BS("%s deutet auf %s von %s und kniet sich nieder."),
+          caster->Name(WER,1), ob->name(WEN,1), pl->name(WEM,1)), ({caster, pl}));
+  }
+  Message(caster, 0, BSA(
+        "Oh Dusty, bei allen guten Geistern und Goettern. Erhoere mich und "
+        "entfluche diesen frevelhaften Gegenstand!","Du rufst: "),0);
+  Message(caster, 0, BSA(
+        "Oh Dusty, bei allen guten Geistern und Goettern. Erhoere mich und "
+        "entfluche diesen frevelhaften Gegenstand!",
+        caster->Name(WER)+" ruft: "),3);
+  if ((suc=SpellSuccess(caster,sinfo))<=0) {
+    Message(caster, 0, BS(
+          sprintf("Bei Dusty! Deine Konzentration war nicht hoch genug!\n")), 0);
+    Message(caster, 0, BS(
+          "Nichts passiert."),3);
+    if(!flag)
+    {
+      Message(caster, 0, BS(
+            sprintf("Du nimmst %s wieder an Dich.\n",
+              ob->name(WEN))),0);
+      Message(caster, 0, BS(
+            sprintf("%s nimmt %s wieder an sich.\n",
+              caster->Name(WER),ob->name(WEN))),3);
+    }
+    return MISSERFOLG;
+  }
+  Message(caster,0, BS(
+        sprintf("Auf einmal bildet sich um %s ein silberner Schleier. Der "
+          "Schleier verweilt eine Weile und loest sich dann im Nichts "
+          "wieder auf. Du dankst Dusty fuer ihre Hilfe.",ob->name(WEM))), 0);
+  Message(caster,0, BS(
+        sprintf("Auf einmal bildet sich um %s ein silberner Schleier. Der "
+          "Schleier verweilt eine Weile und loest sich dann im Nichts "
+          "wieder auf.",ob->name(WEM))), 3);
+  if(flag)
+  {
+    Message(caster, 0, BS(
+          sprintf("Du nimmst %s wieder an Dich.\n",
+            ob->name(WEN))),0);
+    Message(caster, 0, BS(
+          sprintf("%s nimmt %s wieder an sich.\n",
+            caster->Name(WER),ob->name(WEN))),3);
+  }
+  else
+  {
+    stein->AddAmount(-1);
+    tell_object(pl, "Du freust Dich und dankst Dusty.\n");
+    tell_room(environment(caster), 
+        pl->Name(WER,1) + " freut sich und dankt Dusty.\n", ({pl}));
+  }
+  ob->SetProp(P_CURSED,0);
+  if (ob->QueryProp(P_CURSED))
+    tell_room(environment(caster),
+        "Seltsamerweise war die Entfluchung nicht erfolgreich.\n");
+  return ERFOLG;
+}
+
+

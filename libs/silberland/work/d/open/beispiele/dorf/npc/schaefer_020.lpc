@@ -1,0 +1,249 @@
+//=========================================================================
+//
+// File:    schaefer_020.c
+// Created by Rage@SL
+//
+// Project: testgebiet
+//
+// Schon etwas komplizierter: der NPC kann selbststaendig herumlaufen
+// und traegt Ausruestung.
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit "std/mnpc"; // Es soll ein sich selbst bewegender npc werden,
+                    // = moving npc = mnpc
+
+void create()
+{
+  if(!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Ein Schaefer");
+  SetProp(P_LONG,
+    "Der Schaefer ist ein junger Mann, dessen Koerperbau unter dem "
+    "weiten Lodenmantel nicht erkennbar ist. Er haelt einen Wanderstab "
+    "in seiner Hand, traegt einfache Sandalen und schlendert gemuetlich "
+    "durch die Landschaft, immer eine Auge auf seine Schafe werfend."
+  );
+
+  AddDetail( ({ "koerperbau" }),
+    "Der Koerperbau bleibt Dir unter dem Lodenmantel des Schaefers "
+    "verborgen, womit Du weder sagen kannst, ob er kraeftig oder "
+    "schlacksig ist."
+  );
+
+  AddDetail( ({ "mantel","lodenmantel" }),
+    "Der Lodenmantel wurde wohl schon oft getragen, denn am unteren "
+    "Teil ist er schon ziemlich zerrissen, doch dem Schaefer scheint "
+    "diese Kleidung zu reichen."
+  );
+
+  AddDetail( ({ "wanderstab","stab" }),
+    "Der Wanderstab ist gleich gross wie der Schaefer und er hilft ihm "
+    "beim Antreiben der Schafe und beim Wandern."
+  );
+
+  AddDetail( ({ "sandalen" }),
+    "Ganz einfache Sandalen aus Leder, die schon ziemlich durchgetragen "
+    "aussehen."
+  );
+
+  AddDetail( ({ "auge" }),
+    "Der Schaefer hat immer ein Auge auf seine Schafe, ganz egal, was er "
+    "sonst noch macht, da seine Schafe sein Leben sind."
+  );
+
+  SetProp(P_NAME, "Schaefer");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:-5, T_RANGE_MAX:30]) );
+
+  AddId( ({ "schaefer","mann" }) );
+//-------------------------------------------------------------------------
+// Wir wollen einen anderen living name, weil es eventuell auch einen 
+// anderen schaefer gibt. set_living_name braucht man nur, wenn es sich
+// von P_NAME unterscheidet, denn es wird automatisch auf den namen gesetzt
+//-------------------------------------------------------------------------
+  set_living_name("schafhirte");
+
+  create_default_npc(16);
+  SetProp(P_HANDS, ({ " mit seinen Haenden", 150, DT_BLUDGEON }) );
+  SetProp(P_RACE, "Mensch" );
+  AddClass(CL_HUMAN);
+  SetProp(P_SIZE, 180);
+  SetProp(P_ALIGN, 300);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_WIMPY, 0);
+
+  SetProp( P_REJECT, ({ REJECT_KEEP,
+    "Der Schaefer nimmt @WEN dankbar an.\n" }) );
+
+//-------------------------------------------------------------------------
+//Meldung, die die Spieler sehen, wenn der NPC in den Raum kommt.
+//-------------------------------------------------------------------------
+
+  SetProp(P_MSGIN, "wandert herein");
+
+//-------------------------------------------------------------------------
+// Meldung, die an alle im Raum gegeben wird, wenn der NPC den Raum
+// verlaesst. Es wird dabei die Richtung, in die der NPC den Raum verlaesst,
+// automatisch mit angegeben.
+//-------------------------------------------------------------------------
+
+  SetProp(P_MSGOUT, "wandert");
+
+//-------------------------------------------------------------------------
+// Das gleiche machen wir fuer die Bewegungen, wenn der NPC sich transt
+// oder getranst wird, denn ein Schaefer sollte nicht mit Knall und
+// Schwefelduft erscheinen.
+//-------------------------------------------------------------------------
+
+  SetProp(P_MMSGIN, "spaziert von seinen Schafen herein");
+  SetProp(P_MMSGOUT, "sieht sich nach seinen Schafen um");
+
+//-------------------------------------------------------------------------
+// Properties fuer MNPC:
+// P_MNPC_AREA legt fest, wo sich der MNPC bewegen darf. Kann entweder als
+// String oder als Array von Strings gesetzt sein. Der String wird mit dem
+// entsprechenden Raum verglichen und wenn sie uebereinstimmen, gilt der
+// Raum als betretbar.
+// Praktisch ist es nur den Pfad zu den Raeumen anzugeben,bsp.:
+// "/d/open/Beispiele/dorf/room", womit sich der
+// MNPC durch alle Raeume in diesem Verzeichnes bewegen darf.
+//-------------------------------------------------------------------------
+
+  SetProp(P_MNPC_AREA, ({ ROOM "wiese_030", ROOM "platz_001",
+                          ROOM "eingang_010" }) );
+
+//-------------------------------------------------------------------------
+// Hier werden zeitlichen Intervalle bestimmt, in denen sich der MNPC
+// bewegt. Normalerweise ein Array mit 3 Elementen:
+//
+// 1.Element: Sekunden, bis sich der MNPC das erste Mal bewegt
+// 2.Element: Sekunden, bis sich der MNPC ein weiteres Mal bewegt
+// 3.Element: Zufallselement: wird randommaessig zum 2.Element dazugezaehlt
+//-------------------------------------------------------------------------
+
+  SetProp(P_MNPC_WAIT, ({ 15, 20, 20 }) );
+
+//-------------------------------------------------------------------------
+// Falls sich ein MNPC "verlaufen" haben sollte, (das kann zB durch diverse
+// Zaubersprueche de Gilden passieren), dann wird er mittels Teleport in
+// diesem angegebenen Raum gebracht. Dies passiert mit TRANS, weswegen man
+// immer auch die Bewegungsmeldungen MMSGIN und MMSGOUT setzen soll.
+//-------------------------------------------------------------------------
+
+  SetProp(P_MNPC_DEFAULTROOM, ROOM "wiese_030");
+
+//-------------------------------------------------------------------------
+// Verschiedene Bedingungen, wie sich der MNPC bewegen darf
+//
+// MOV_BACKWARDS: MNPC darf in den Raum zurueck, aus dem er gerade gekommen
+//                ist.
+// MOV_OUTDOORS:  MNPC darf sich ins Freie bewegen.
+// MOV_MOVES:     MNPC bewegt sich fort.
+// MOV_INDOORS:   MNPC darf in geschlossene Raeume
+// MOV_SPECIAL:   MNPC darf Special Exits verwenden, also Ausgaenge, die
+//                eben mit AddSpecialExit gesetzt worden sind
+// MOV_MAYLOAD:   MNPC darf auch nicht geladene Raeume betreten. Sollte nur
+//                verwendet werden, wenn es wirklich notwendig ist!!!
+// MOV_INFIGHT:   MNPC bewegt sich auch waehrend eines Kampfes fort.
+// MOV_CMDS:      Falls gesetzt, dann wird statt des Fortbewegens
+//                P_MNPC_CMDS ausgewertet.
+//-------------------------------------------------------------------------
+
+  SetProp(P_MNPC_FLAGS, MOV_BACKWARDS|MOV_OUTDOORS|MOV_MOVES);
+
+  SetProp(P_DIE_MSG, " seufzt: Und wer passt jetzt auf die Schafe auf?\n");
+
+  AddInfo(DEFAULT_INFO, " beachtet Dich gar nicht.\n" );
+
+//-------------------------------------------------------------------------
+// Soll ein Spieler mit dem NPC reden koennen, braucht man AddInfos, damit
+// man auf "frag schaefer nach schaf" auch eine passende Antwort bekommt.
+// Aufgebaut ist es aehnlich die AddDetails, nur kann es aus 4 Elementen
+// bestehen.
+//
+// 1.Element: Schluesselwoerter, also Woerter auf die der NPC eine Antwort
+//            hat
+// 2.Element: Die Antwort des NPCs
+// 3.Element: Falls nicht angegeben kommt immer "NPC sagt: ..." hier:
+//
+// "Der Schaefer sagt: ...". Falls man das Varieren moechte kann man eigene
+// Phrasen schreiben. Auf alle Faelle steht bei der Ausgabe dann in der jeder
+// Antwortzeile: P_NAME+3.Element, hier beim Beispiel schaf
+// Spieler: frag schaefer nach schaf ->
+// Schaefer: Der Schaefer antwortet Dir: Da ich ein Schaefer bin, passe ich
+//           Der Schaefer antwortet Dir: immer auf die Schafe auf.
+// 4.Element: Wenn man nicht will, dass die Antwort von allen im Raum
+// gesehen wird, dann kann man das mit 1 unterdruecken. Default ist 0.
+// siehe Bespiel mit AddInfo( ({ "sandalen" }),.. );
+// Wird eher bei Quests angewendet, damit der NPC nicht zuviel fuer andere
+// sichtbar verraet.
+//-------------------------------------------------------------------------
+
+  AddInfo( ({ "schaf","schafe" }),
+    "Da ich ein Schaefer bin, passe ich immer auf die Schafe auf.",
+    "antwortet Dir: " );
+
+  AddInfo( ({ "wanderstab","stab" }),
+    "Der Wanderstab hilft mir beim Antreiben der Schafe. Ich kann ihn aber "
+    "auch zum Wandern gebrauchen.",
+    "nickt Dir zu: " );
+
+  AddInfo( ({ "mantel","lodenmantel" }),
+    "Ich finde den Mantel einfach praktisch, weil ich ihn zu jeder "
+    "Jahreszeit tragen kann.",
+    "kichert: ");
+
+  AddInfo( ({ "sandalen" }),
+    "Ich brauche eigentlich schon laengst neue, weil die Sohlen schon "
+    "durchgetreten sind, aber das muss nicht jeder wissen.",
+    "fluestert: ", 1);
+
+  SetChats( 2, ({
+    "Der Schaefer huetet seine Schafe.\n",
+    "Der Schaefer stuetzt sich kurz auf seinen Wanderstab.\n",
+    "Der Schaefer pfeift ein Liedchen.\n"
+                }) );
+
+  SetAttackChats( 4, ({
+    "Der Schaefer versucht Dich umzurempeln.\n",
+    "Der Schaefer ruft: Lass ja die Schafe in Ruhe!\n",
+                      }) );
+
+//-------------------------------------------------------------------------
+// So, jetzt noch etwas Ausruestung. Asuruestung clonen wir in der Regel
+// nicht mit AddItem, da der Schaefer ja nur etwas verliert, wenn er stirbt
+// Zum bereitstelleten existiert das Makro CLONEME, welches ein Objekt
+// clont und in den NPC bewegt.
+//
+// Es ist nicht notwednig, NPCs mit zig Items wie Hose, Jacke, Socken,
+// Schuhe usw auszuruesten. Dies kann man auch auch ueber AddDetail
+// loesen. Ansonsten haette wir eine ziemliche Objektschwemme im SL.
+//-------------------------------------------------------------------------
+
+    CLONEME(WEAPON "stab_010");
+    CLONEME(ARMOUR "umhang_010");
+
+//-------------------------------------------------------------------------
+// Der Schaefer hat nun den Stab und den Umhang im Inventory, aber
+// noch nicht getragen bzw gezueckt. Man koennte die entsprechenden
+// Funktionen der Mudlib aufrufen, aber man kann es sich auch einfach machen
+// und ihm ein paar Kommandos unterschieben:
+//-------------------------------------------------------------------------
+
+  command("trage alles");
+  command("zueck stab"); // zueck alles wuerde nicht funktionieren
+}
+
+
+
+
+
+
+
+
+

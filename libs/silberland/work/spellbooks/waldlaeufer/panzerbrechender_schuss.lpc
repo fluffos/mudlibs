@@ -1,0 +1,108 @@
+mapping prep_panzerbrechender_schuss(object caster, mapping sinfo, int silent)
+{  
+  object ob;
+  
+  //Aenderungen der Werte im sinfo Mapping vermeiden!
+  if(!GuildItemTest(caster, sinfo) ||
+     !FroschTest(caster, sinfo) || 
+     !BowTest(caster,sinfo)     ||
+     !BlindTest(caster,sinfo)     )
+    return 0;
+    
+  if(!objectp(ob=sinfo[SI_ENEMY])) {
+     ob = FindEnemyVictim(sinfo[SI_SKILLARG], caster, "Wen moechtest Du mit einem panzerbrechenden Schuss treffen?\n");
+     if(!ob) return 0;
+  }
+
+  sinfo[SI_ENEMY]=ob;
+
+  if(objectp(present(PENETRATING_SHOT_ID, ob))) {
+    tell_object(caster, BS("Dein Ziel ist bereits von einem panzerbrechenden Schuss getroffen worden."));
+    return 0;
+  }
+
+  if(!silent) {
+    FirstPrepareFuncSuccessfull(caster, sinfo);
+    tell_room(ENV(caster), BS(caster->Name()+" zielt auf eine Schwachstelle in "+ob->name(WESSEN)+" Panzerung."), ({caster}));
+  }
+
+  aim(caster, sinfo);
+  return sinfo;
+}
+
+int panzerbrechender_schuss(object caster, mapping sinfo) 
+{
+  object ob;
+  int dam, abil, i, success;
+  string *dtypes;
+  mapping current_resistances, temp_resistances, reduced_armour;
+  float penetration;
+  int intPen;
+
+  if(!mappingp(sinfo=prep_deutschuss(caster, sinfo, 1))) return 0;
+  ob=sinfo[SI_ENEMY];
+  
+  abil = sinfo[SI_SKILLABILITY];
+  success=SpellSuccess(caster,sinfo);
+  if(success<0)
+  {
+    tell_object(caster,BSC("Dein Pfeil verfehlt die Schwachstelle und prallt ab."));
+    tell_room(ENV(caster), BS(caster->Name()+" schiesst auf eine Schwachstelle in "+ob->name(WESSEN)+" Panzerung, aber der Pfeil prallt ab."), ({caster}));
+    return MISSERFOLG;
+  }
+  
+  
+  dam=sinfo[SI_SKILLDAMAGE];
+  sinfo[OFFSET(SI_SKILLDAMAGE)] = sinfo[OFFSET(SI_SKILLDAMAGE)] + sinfo[SI_SKILLABILITY]/100; 
+  sinfo[SI_SKILLDAMAGE]=dam;
+
+
+  tell_object(caster, BS("Du laesst den Pfeil von der Sehne und triffst eine Schwachstelle in der Panzerung von "+ob->name(WEM)+"."));  
+  tell_room(ENV(caster), BS(caster->Name()+" laesst einen Pfeil von der Sehne und trifft eine Schwachstelle ind er Panzerung von "+ob->name(WEM, 1)+"."), ({caster}));
+
+  // dieser angriff umgeht alle phyischen resistenzen
+  current_resistances = ob->QueryProp(P_RESISTANCE_STRENGTHS);
+  temp_resistances = ([]);
+  dtypes = m_indices(PHYSICAL_DAMAGE_TYPES);
+  penetration = ( (((float) abil) + success) / (2 * MAX_ABILITY) );
+  if(mappingp(current_resistances)) {
+    for(i = 0; i < sizeof(dtypes); i++) {
+      if(member(current_resistances, dtypes[i]) && current_resistances[dtypes[i]]*1.0 < 0.0) { // mal 1.0 ist ein trick um einen float aus 0 zu machen...
+        temp_resistances[dtypes[i]] = current_resistances[dtypes[i]] * penetration * -1.0;
+      }
+    }
+  }
+
+  intPen = (int) (penetration * 100);
+  reduced_armour = ([
+    P_BODY: intPen,
+    AT_ARMOUR: intPen,
+    AT_HELMET: intPen,
+    AT_AMULET: intPen,
+    AT_RING: intPen,
+    AT_GLOVE: intPen,
+    AT_CLOAK: intPen,
+    AT_BOOT: intPen,
+    AT_SHIELD: intPen,
+    AT_TROUSERS: intPen,
+    AT_BELT: intPen,
+    AT_BRACERS: intPen,
+    AT_MISC: intPen
+  ]);
+  
+  pDebug(caster, sprintf("penetrating shot :: initialPenetration=%d\n", intPen));
+  sinfo[SI_ENEMY]->AddResistanceModifier(temp_resistances, "panzerbrecher");
+  dam = ExecuteAttackSpell(ob, caster, sinfo, ([SP_SHOW_DAMAGE:1, SP_REDUCE_ARMOUR: reduced_armour]), ATTACK_SPELL_BOW);
+  if(objectp(sinfo[SI_ENEMY])) {
+    sinfo[SI_ENEMY]->RemoveResistanceModifier("panzerbrecher");
+
+    if(dam > 0) {
+      pDebug(caster, sprintf("penetrating shot :: resistanceBreak=%.2f\n", (0.000015 * (abil + success)) ));
+      ob=clone_object(OBJ "penetration");
+      ob->BreakResistance(sinfo[SI_ENEMY], 0.000015 * (abil + success) + (get_equip_bonus(caster, "panzerbrechender schuss") / 100.0) );
+    }
+  }
+
+  reload(caster, sinfo);
+  return ERFOLG;
+}

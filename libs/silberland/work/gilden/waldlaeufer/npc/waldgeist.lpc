@@ -1,0 +1,277 @@
+#include "../def.h"
+
+#define BUFF "\nwaldgeist_buff"
+
+inherit "gilden/waldlaeufer/npc/summons.lpc";
+
+int defrog, depoison, deblind, hpBuff, attrBuff, heal_strength, spellTimer;
+
+//-- Prototypes --------------------------------------------------------------
+int order(string action);
+
+
+//** Standardfunktionen ****************************************************//
+//-- Create ------------------------------------------------------------------
+void create()
+{
+  if(!is_clone(TO)) return;
+  ::create();
+  
+  SetProp(P_RACE, "Elementar");
+  SetProp(P_FRIEND, 1);
+  SetProp(P_NO_GLOBAL_ATTACK, 1); 
+  SetProp(P_ARTICLE, 1);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_HEAL, 0);
+  SetProp(P_AGGRESSIVE, 0);
+  SetProp(P_WIMPY, 0);
+  SetProp(P_NO_SCORE, 1);
+  AddInfo(DEFAULT_INFO, "knarzt und quietscht wie ein Baum im Wind.\n");
+  AddId(({NOCONTROL, NOWIMPY, SUMMON_ID, SKILL_NOLEARN })); 
+  SUID;
+}
+
+//-- Die Anpassung -----------------------------------------------------------
+int customize(object caster, string r, int success, int ability)
+{ 
+  int level;
+  string descriptor;
+
+  ::customize(caster, "waldgeist", success, ability);
+
+  spellTimer = 60 - ability / 500 - success / 1000;
+
+  call_out("cast_next_spell", spellTimer + random(spellTimer / 2));
+
+  defrog, depoison, deblind, hpBuff, attrBuff, heal_strength = 0;
+
+  heal_strength = ability / 500 + success / 500;
+  heal_strength = SPELL_DAMAGE_BONUS(caster, "waldgeist", heal_strength);
+
+  if(ability > 6000) {
+    deblind = 1;
+  }
+
+  if(ability > 7000) {
+    depoison = 1;
+  }
+
+  if(ability > 8000) {
+    defrog = 1;
+  }
+
+  if(ability > 9000) {
+    hpBuff = random(2);
+  }
+
+  if(ability > 9999) {
+    attrBuff = success / 3333;
+  }
+
+  pDebug(owner, sprintf("waldgeist :: spellTimer=%d strength=%d blind=%d poision=%d frog=%d hpbuff=%d attrBuff=%d\n", spellTimer, heal_strength, deblind, depoison, defrog, hpBuff, attrBuff));
+
+  return 1;
+}
+
+public int validTarget(object ob) {
+  return (ob != TO && ob == owner || living(ob) && ob->QueryProp(P_FRIEND) || query_once_interactive(ob)) && ob->QueryProp(P_HP) < ob->QueryProp(P_MAX_HP);
+}
+
+public object find_target() {
+  object *all, target, i;
+
+  all = all_inventory(ENV(TO));
+  all = filter_array(all, "validTarget");
+
+  if(sizeof(all) < 1) return 0;
+
+  return all[random(sizeof(all))];
+}
+
+public string selectSpell(object pl) {
+  if(defrog && pl->QueryProp(P_FROG)) {
+   return "unfrog";
+  } else if(deblind && pl->QueryProp(P_BLIND)) {
+    return "unblind";
+  } else if(depoison && pl->QueryProp(P_POISON)) {
+    return "unpoison";
+  } else if(pl->QueryProp(P_HP) < pl->QueryProp(P_MAX_HP)) {
+    return "heal";
+  } else if(attrBuff > 0 && !objectp(present(BUFF, pl))) {
+    return "buff";
+  }
+
+  return 0;
+}
+
+public void cast_next_spell() {
+  object target;
+  string spell;
+
+  pDebug(owner, sprintf("waldgeist :: cast_next_spell\n"));
+
+  spell = selectSpell(owner);
+  pDebug(owner, sprintf("waldgeist :: cast_next_spell(owner) == %s\n", spell));
+  if(stringp(spell)) {
+    call_out(spell, 0, owner);
+  } else {
+    target = find_target();
+    if(objectp(target)) {
+      spell = selectSpell(target);
+      pDebug(owner, sprintf("waldgeist :: cast_next_spell(%O) == %s\n", target, spell));
+      if(stringp(spell)) call_out(spell, 0, target);
+    }
+  }
+
+  call_out("cast_next_spell", spellTimer + random(spellTimer / 2));
+  return;
+}
+
+public void heal(object pl) {
+  object bonus;
+
+  tell_room(ENV(TO), BS(Name(WER)+ " hebt die Arme und huellt "+pl->name(WEN)+" in ein sanftes gruenes Licht."), ({pl}));
+  tell_object(pl, BS(Name(WER)+ " hebt die Arme und huellt dich in ein sanftes gruenes Licht."));
+  pl->AddHp(heal_strength + random(heal_strength));
+  do_damage(heal_strength + random(heal_strength));
+
+  if(hpBuff && !random(3)) {
+    tell_object(pl, BS("Ein kleiner Teil der Heilkraft bleibt zurueck und staerkt dich."));
+
+    bonus = present("\nwaldgeist_hp_buff", pl);
+    if(objectp(bonus)) {
+      bonus->remove(1);
+    }
+
+    bonus = clone_object(OBJ "bonus");
+    if(!bonus->move(pl)) {
+      destruct(bonus);
+      return;
+    }
+    bonus->SetBonus("life", 5, 300);
+    pl->UpdateAttributes();
+  }
+
+  return;
+}
+
+public void unfrog(object pl) {
+  if(!pl->QueryProp(P_FROG)) return;
+  tell_room(ENV(TO), BS(Name(WER)+ " murmelt leise Worte, die wie das Plaetschern eines Wildbachs klingen und beruehrt "+pl->name(WEN)+" am Kopf."), ({pl}));
+  tell_object(pl, BS(Name(WER)+ " murmelt leise Worte, die wie das Plaetschern eines Wildbachs klingen und beruehrt dich am Kopf."));
+  call_out("unfrog_2", random(8), pl);
+  return;
+}
+
+public void unfrog_2(object pl) {
+  if(!objectp(pl)) return;
+  if(!pl->QueryProp(P_FROG)) return;
+
+  do_damage(100);
+
+  pl->SetProp(P_FROG, 0);
+  tell_room(ENV(pl->Name(WER)+" ist nun kein Frosch mehr."), ({pl}));
+  tell_object(pl, BS("Du verwandelst dich zurueck und bist kein Frosch mehr."));
+  return;
+}
+
+public void unblind(object pl) {
+  if(!pl->QueryProp(P_BLIND)) return;
+  tell_room(ENV(TO), BS(Name(WER)+ " beschwoert einen kleinen gilmmenden Funken Sonnenlicht herauf und blickt "+pl->name(WEM)+" in die Augen."), ({pl}));
+  tell_object(pl, BS(Name(WER)+ " laesst deine Augen warm werden, wie im Sonnenlicht."));
+  call_out("unblind_2", random(8), pl);
+  return;
+}
+
+public void unblind_2(object pl) {
+  if(!objectp(pl)) return;
+  if(!pl->QueryProp(P_BLIND)) return;
+  
+  do_damage(50);
+
+  pl->SetProp(P_BLIND, 0);
+  tell_room(ENV(TO), BS(pl->Name(WER)+" kann wieder sehen."), ({pl}));
+  tell_object(pl, BS("Du kannst wieder sehen."));
+  return;
+}
+
+public void unpoison(object pl) {
+  if(!pl->QueryProp(P_POISON)) return;
+  tell_room(ENV(TO), BS(Name(WER)+ " wickelt seine Rankenarme um "+pl->name(WESSEN)+" Unterarm."), ({pl}));
+  tell_object(pl, BS(Name(WER)+ " wickelt seine Rankenarme um deinen Unterarm."));
+  call_out("unpoison_2", random(8), pl);
+  return;
+}
+
+public void unpoison_2(object pl) {
+  if(!objectp(pl)) return;
+  if(!pl->QueryProp(P_POISON)) return;
+
+  do_damage(pl->QueryProp(P_POISON) * 10);
+
+  pl->AddPoison(- 1 - random(pl->QueryProp(P_POISON)));
+
+  tell_room(ENV(TO), BS(pl->Name(WER)+" sieht etwas besser aus."), ({pl}));
+  tell_object(pl, BS("Das Gift in deinen Adern wird schwaecher."));
+  return;
+}
+
+public void buff(object pl) {
+  object bonus;
+  if(objectp(present(BUFF, pl))) return;
+
+  tell_room(ENV(TO), BS(Name(WER)+ " gibt "+pl->name(WEM)+" etwas von seinem Harz zu trinken."), ({pl}));
+  tell_object(pl, BS(Name(WER)+ " gibt dir einen Schluck Harz zu trinken. Du spuerst die rohe Kraft der Natur durch deinen Koerper brausen."));
+
+  bonus = clone_object(OBJ "bonus");
+  if(!bonus->move(pl, M_NOCHECK)) {
+    destruct(bonus);
+    return;
+  }
+  bonus->SetBonus(A_STR, attrBuff, 300);
+  bonus->AddId(BUFF);
+  pl->UpdateAttributes();
+
+  return;
+}
+
+
+
+
+//-- Befehle auswerten -------------------------------------------------------
+int order(string action) {
+  if(::order(action)) return 1;
+  return 0;
+}
+
+mixed DefendOther(int dam, mixed dam_type, mixed spell, object enemy) { 
+  return ({dam, dam_type, spell});  
+} 
+
+public void InformDefend(object enemy) {
+  return;
+}
+
+
+//-- EigenVerteidigung -------------------------------------------------------
+int Defend(int dam, mixed dam_type, mixed spell, object enemy) {
+  if(objectp(owner) && (enemy==owner)) {
+    tell_object(owner, BS(Name(WER, 1)+" verlaesst Dich."));
+    remove(); 
+    return 0;
+  }
+
+  return ::Defend(dam, dam_type, spell, enemy); 
+}
+
+//-- Der Angriff -------------------------------------------------------------
+void Attack(object enemy) {
+  if(random(5)) {
+    // Der Waldgeist greift nur seeeehr ungern an
+    return;
+  }
+
+  ::Attack(enemy); 
+
+  return;
+}

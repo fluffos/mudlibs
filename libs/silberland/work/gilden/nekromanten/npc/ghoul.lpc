@@ -1,0 +1,256 @@
+// Ein Ghoul
+// 30.10.2003 Feyaria NPC fuer "Ruf der Ghoule" Zauberspruch
+//
+// 30.12.2003 Sicherheitsabfragen 
+
+inherit "/p/std/npc/nekro_npc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <new_skills.h>
+#include "../def.h"
+
+#define MAX_NOFOOD 150
+
+int creation_time;
+int dur=-1;
+object corpse;
+int eating, nofood;
+int suc;
+
+void create()
+{
+ 
+  if (!is_clone(TO)) return;
+  ::create();
+
+  creation_time=time();
+
+  SetProp(P_SHORT, "Ein Ghoul");
+  SetProp(P_LONG, BS(
+    "Ein schleimiges Wesen mit langen Armen, buckligem Ruecken und riesigen "
+    "Zaehnen. Ein eckliger Geruch nach Leichen geht von ihm aus." ));
+  SetProp(P_NAME, ({ "Ghoul", "Ghouls", "Ghoul", "Ghoul"}) );
+  SetProp(P_GENDER, MALE);
+  AddId( ({ "ghoul", "Nekromantenghoul" }));
+
+  SetProp(P_RACE, "Untoter");
+  SetProp(P_ALIGN, -900);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_NOCORPSE, 1);
+  SetProp(P_NO_GLOBAL_ATTACK, 1);
+  SetProp(P_FRIEND, 1);
+  SetProp(P_MAX_POISON, 0);
+  SetProp(P_TEMPERATURE_RANGE, ([0:-276, 1:500]));
+  SetProp(P_DIE_MSG, " loest sich in seine stinkenden Einzelteile auf.\n");
+
+  SetProp(P_MSGIN, "schlurft herein");
+  SetProp(P_MSGOUT, "schlurft");
+  SetProp(P_MMSGIN, "graebt sich aus dem Boden heraus");
+  SetProp(P_MMSGOUT, "vergraebt sich selbst im Boden");
+  
+  // Das hier ist ein Utility Undead
+  SetProp(P_NEKRO_UTILITY_UNDEAD, 1);
+
+  
+  AddDetail( ({ "zaehne" }), 
+    "Die Zaehne des Ghouls sind gross und breit, damit er Knochen zerbeissen "
+    "kann." );
+  AddDetail( ({ "arme" }), 
+    "Die Arme des Ghouls sind lang, damit er besser Leichen tragen kann." );
+  AddDetail( ({ "ruecken" }), 
+    "Der Ruecken des Ghouls ist bucklig, da er beim Leichenfressen staendig "
+    "den Ruecken beugt." );
+
+  eating = nofood = 0;
+}
+
+void SetGhoul(mixed caster, int succ)
+{
+  int level, maxlevel;
+ 
+  if(objectp(caster)) 
+  {
+    SetProp(P_NEKRO_CASTED_BY, caster);
+    SetProp(P_LONG, QueryProp(P_LONG)[0..<2] + 
+      caster->Name()+" hat diesen Untoten beschworen.");
+  }
+  SetProp(P_SIZE, 150 + random(20));
+  if(!objectp(caster)) 
+    level=15;
+  else 
+    level=12 + caster->QueryProp(P_GUILD_LEVEL);
+
+  create_default_npc(level);
+  SetProp(P_HANDS, ({" mit langen Ghoularmen", 50 + level * 3 + succ / 250,
+                     DT_BLUDGEON }));  // maximal 50+95+50 = 195
+  SetProp(P_XP, 0);
+  SetProp(P_MAX_HP, level * 20 + succ / 100); // maximal 380+100 = 480
+  SetProp(P_MAX_SP, QueryProp(P_MAX_HP));
+  SetProp(P_BODY, level * 3);
+  SetProp(P_RESISTANCE_STRENGTHS, ([ 
+        DT_UNHOLY: -0.5, DT_HOLY:0.5, DT_LIGHT:0.5 ]));
+  if(!objectp(caster)) 
+    dur = (random(20) + 10) * 30 + succ / 20 + random(100);
+  else 
+    dur = caster->QueryProp(P_GUILD_LEVEL) * 30 + succ / 20 + random(100) + 
+          caster->QueryProp(P_GUILD_CIRCLE) * 20; 
+  // maximal 210+500+100+140 = 950 s = 15 min
+
+  suc = succ + caster->QueryProp(P_GUILD_LEVEL) * 200 + 
+    caster->QueryProp(P_GUILD_CIRCLE) * 100;
+
+  if( !present("leiche", environment(caster)) )
+  {
+    tell_object(caster,
+        BS("Da der Ghoul hier keine Leiche findet, wird er aergerlich und "
+          "greift Dich an."));
+    Kill(caster);
+  }
+  return;
+}
+
+void make_food()
+{
+  object caster, ob;
+  int succ, i;
+  string was;
+
+  if( !objectp(corpse) || !objectp(caster=QueryProp(P_NEKRO_CASTED_BY)) ||
+       !interactive(caster) ) 
+    return;
+  if(!call_other(GUILD_SPELLBOOK, "is_humanoid", corpse->QueryProp(P_RACE)))
+    return;
+  succ = suc;
+  tell_object(caster, BS(
+        "Der Ghoul ueberlaesst Dir als Dank ein paar schmackhafte Stuecke aus "
+        "der Leiche."));
+  if( corpse->QueryProp(P_RACE)==caster->QueryProp(P_RACE))
+    succ *= 2;
+  for(i=0;i<1+succ/3333;i++){
+    switch((succ+i*12)%58) {
+      case 0..10: was="herz"; break;
+      case 11..21: was="hirn"; break;
+      case 22..26: was="bein"; break;
+      case 27..32: was="leber"; break;
+      case 33..38: was="niere"; break;
+      case 39..44: was="magen"; break;
+      case 45..46: was="milz"; break;
+      case 47..48: was="auge"; break;
+      case 49..50: was="ohr"; break;
+      case 51..52: was="rippen"; break;
+      case 53..54: was="lunge"; break;
+      case 55..57: was="zunge"; break;
+    }
+    ob = clone_object(OBJ + "misc/" + was);
+    ob->move(caster, M_NOCHECK);
+    tell_object(caster, "Der Ghoul gibt Dir "+ob->name(WEN,0)+".\n");
+    ob->set_healing(caster, succ, corpse->QueryProp(P_LEVEL) );
+    ob->SetProp(P_KEEP_ON_SELL, getuid(caster));
+  }
+  if( !random(3) )
+  {
+    tell_object(caster, "Du leckst etwas Blut von den Leichenteilen und "
+        "fuehlst Dich gestaerkt.\n");
+    caster->AddHp(succ/1000);
+  }
+}
+
+void heart_beat()
+{ 
+  ::heart_beat();
+  SetProp(P_HB, 1); // sonst stoppt das leichen-essen
+  SetProp(P_FOOD, 0);
+  if( eating )
+  {
+    if( !objectp(corpse) || !present(corpse, MENV) ) 
+    {
+      say("Der Ghoul wird wuetend, weil seine Leiche verschwunden ist!\n");
+      SetProp(P_AGGRESSIVE, 1);
+      eating = 0;
+      return;
+    }
+    if( (--eating) == 0 ) 
+    {
+      make_food();
+      command_me("iss leiche");
+      if( objectp(corpse) ) 
+        corpse->remove();
+      if( objectp(corpse) ) 
+        destruct(corpse);
+      suc -= random(300);
+      // Bei gutem Success bleibt der Ghoul !
+      if( suc < 8000)
+      {
+        say("Der Ghoul verzieht sich gesaettigt.\n");
+        remove();
+      }
+      else
+      {
+        say(BS("Dem Ghoul hat es so gut geschmeckt, dass er noch bleibt und "
+            "auf weitere Leichen hofft."));
+      }
+    }
+    else
+    {
+        say(({"Der Ghoul frisst genuesslich an der Leiche.\n",
+              "Der Ghoul reisst die Leiche in zwei Teile.\n",
+              "Der Ghoul steckt sich grosse Brocken Fleisch in sein Maul.\n",
+              "Der Ghoul zerbeisst einen Knochen.\n",
+              "Der Ghoul gibt schmatzende Geraeusche von sich.\n",
+              "Der Ghoul verschlingt genuesslich einen Teil der Leiche.\n",
+              "Der Ghoul beisst wild in die Leiche.\n",
+              "Dem Ghoul scheint es sehr gut zu schmecken.\n",
+              })[random(7)]);
+    }
+  }
+  else if (environment() && (corpse=present("leiche", environment())) )
+  {
+    say("Der Ghoul macht sich ueber die Leiche her!\n");
+    eating = 5;
+  }
+  else if( ++nofood > MAX_NOFOOD )
+  {
+    say("Der Ghoul ist zu hungrig und sucht sich anderswo frische Leichen.\n");
+    remove();
+  }
+}
+
+
+void reset()
+{
+  if (!is_clone(ME)) 
+    return ::reset();
+  die(0);
+  return;
+}
+
+void init()
+{
+  ::init();
+  if(dur>0 && creation_time+dur<time())
+    call_out("die",0);
+}
+
+int QueryDuration()
+{
+  return creation_time+dur-time();
+}
+
+void InformDefend(object enemy)
+{
+  if( enemy->QueryProp(P_HP)<enemy->QueryProp(P_MAX_HP)/10 && !random(5) )
+    say("Der Ghoul schaut "+enemy->name(WEN)+" hungrig an.\n");
+}
+
+int Eating() {
+  return eating;
+}
+
+// 2012-08-07 Gwenshara: Ghoule sind "Utility" Untote und zaehlen nicht als
+//                       Diener
+int requiresUndeadSlot()
+{
+  return 0;
+}

@@ -1,0 +1,199 @@
+//=========================================================================
+//
+// File: elemental_sliver.c
+// Created by Gwenshara@SL
+//
+// Project: Tal der Flammen
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit "std/thing";
+
+int planted, bonus;
+string extralook, *msgs;
+
+void ActiveImplantat();
+void UnactiveImplantat();
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+  planted = 0;
+  bonus   = 5+random(5);
+  msgs    = ({"Ein brennender Schmerz geht von Deinem Herzen aus.",
+	      "Blut rinnt aus Deinen Augen und Deiner Nase.",
+	      "Was geht nur mit deinem Koerper vor?",
+	      "Deine Muskeln verkrampfen sich...",
+	      "Du schreist vor Schmerzen.",
+	      "Dein Koerper glueht im Fieber.",
+	      "Kraempfe schuetteln Deinen Koerper.",
+	      "Etwas veraendert Deinen Koerper.",
+	      "Irgendwas wuehlt in Deinem Innersten.",
+	      "Wasser rinnt aus Deinen Poren.",
+	      "Du fuehlst Dich so unendlich schwer...",
+	      "Eine ungekannte Leichtigkeit erfuellt Dich.",
+	      "Du uebergibst Dich auf den Boden."});
+
+//--Beschreibungen---------------------------------------------------------
+
+  SetProp(P_LONG,
+    "Dies ist einer Splitter der Elemente. Er ist ein Teil des Urelements, "
+    "aus dem alle anderen Elemente geboren wurden. Manche behaupten, diese "
+    "Splitter bestuenden aus purer Magie. Der Splitter glimmt in rot, gruen, "
+    "gelb, blau, cyan und violett. Alles gleichzeitig. Sein Anblick allein "
+    "verwirrt Dich.");
+
+//--Namen------------------------------------------------------------------
+
+  SetProp(P_INFO, BS("Du kannst den Splitter in Dein Herz rammen."));
+  SetProp(P_NAME, "Splitter");
+  SetProp(P_GENDER, MALE);
+  AddId( ({"splitter", "elementarsplitter", "\ngwenshara_elemental_sliver"}) );
+
+//--Eigenschaften----------------------------------------------------------
+
+  SetProp(P_MATERIAL, MAT_MISC );
+  SetProp(P_WEIGHT, 100);
+  SetProp(P_VALUE, 10000);
+  SetProp(P_NOBUY, 1);
+
+  AddCmd( ({"ramme", "ramm"}), "cmd_stechen");
+}
+
+int cmd_stechen(string str)
+{
+  int i;
+  notify_fail("Was willst Du wohin rammen?\n");
+  if(!str || str == "") return 0;
+  if(!(str == "splitter der elemente in herz" ||
+       str == "splitter in herz" ||
+       str == "elementarsplitter in herz" )) return 0;
+
+  notify_fail("Dazu musst Du den Splitter nehmen.\n");
+  if(!present(TO, TP)) return 0;
+
+  notify_fail("Dazu muss Dein Oberkoerper nackt sein.\n");
+  for(i=0; i<sizeof(TP->QueryProp(P_ARMOURS)); ++i)
+    if(TP->QueryProp(P_ARMOURS)[i]->QueryProp(P_ARMOUR_TYPE)==AT_ARMOUR)
+      return 0;
+
+  write(BS("Du rammst Dir den Splitter in die Brust."));
+  say(BS(TPN+" rammt sich den Splitter in "+TP->QueryPossPronoun()+"e Brust."));
+
+  planted = 1;
+  call_out("mutation", 5+random(5), TP);
+  return 1;
+}
+
+void mutation(object pl)
+{
+  if(planted<1) return;
+  if(!objectp(pl)) return;
+  
+  tell_object(pl, BS(msgs[random(sizeof(msgs))]));
+  planted++;
+  if(planted>=5)
+    ActiveImplantat();
+   else 
+    call_out("mutation", 60, pl);
+
+  return;
+}
+
+void ActiveImplantat()
+{
+  if(planted<5) return;
+  if(!living(ENV(ME))) return;
+  switch(random(4))
+  {
+    case 0: tell_object(ENV(ME), BS("Deine Augen gluehen in rotem Feuer."));
+	    SetProp(P_X_ATTR_MOD, ([A_STR:bonus]));
+	    extralook="feuer";
+	    break;
+    case 1: tell_object(ENV(ME), BS("Durch Deine Adern fliesst pures Wasser."));
+	    SetProp(P_X_ATTR_MOD, ([A_DEX:bonus]));
+	    extralook="wasser";
+	    break;
+    case 2: tell_object(ENV(ME), BS("In Deinem Kopf tobt ein Wirbelsturm."));
+	    SetProp(P_X_ATTR_MOD, ([A_INT:bonus]));
+	    extralook="luft";
+	    break;
+    case 3: tell_object(ENV(ME), BS("Dein Koerper verwandelt sich in Stein."));
+	    SetProp(P_X_ATTR_MOD, ([A_CON:bonus]));
+	    extralook="erde";
+	    break;
+    default: raise_error("Implantat falsch implementiert.");
+             break;
+  }  
+
+  return;
+}
+
+void UnactiveImplantat()
+{
+  write(BS("Die elementare Mutation verlaesst Deinen Koerper."));
+  TP->AddHp(-50);
+  SetProp(P_X_ATTR_MOD, 0);
+  extralook="";
+  planted=0;
+  return;
+}
+
+void reset()
+{
+  if(!is_clone(TO)) return;
+  ::reset();
+  UnactiveImplantat();
+  if(!bonus--)
+  {
+    if(living(ENV(ME)))
+      tell_object(ENV(TO), BS("Der Splitter verglueht."));
+    remove();
+  }
+}
+
+string _query_short()
+{
+  return "Ein Splitter der Elemente"+(planted!=0?" (im Herzen)":"");    
+}
+
+mixed _query_nodrop()
+{
+  return planted;
+}
+
+varargs int move(mixed dest, int method, string dir, string textout, string textin)
+{
+  int r;
+  r = ::move(dest, method, dir, textout, textin);
+  if(present("\ngwenshara_elemental_sliver 2", TP))
+  {
+   if(living(ENV(ME)))
+      tell_object(ENV(TO), BS("Der Splitter verglueht."));
+    remove();
+  }
+  return r;
+}
+
+
+string extra_look()
+{
+  string ret;
+  switch(extralook)
+  {
+    case "feuer": ret = "Die Augen von "+ENV(TO)->Name(WEM)+" gluehen in rotem Feuer.";
+    		  break;
+    case "wasser": ret = ENV(TO)->Name(WER)+" wirkt fluessig.";
+    		   break;
+    case "luft": ret = "Um "+ENV(TO)->Name(WESSEN)+" Kopf flimmert Luft.";
+    		 break;
+    case "erde": ret = ENV(TO)->Name(WESSEN)+" Koerper ist aus Stein.";
+    		 break;
+  }
+
+  return BS(ret);
+}

@@ -1,0 +1,1235 @@
+//=========================================================================
+// File: mg_teestube.c
+// Project: Palast
+//
+// Created by Lilyth (2004)
+//=========================================================================
+
+#include "../def.h"
+#include <laden.h>
+#include <pub.h>
+#include <routingd.h>
+
+inherit "std/laden";
+inherit "std/pub";
+
+#define MAX_ANZ 3       /* Max 3 Objekte einer Sorte im Laden */
+#define BUY_FACT 300    /* Objekte kosten BUY_FACT mal P_VALUE / 100 */
+#define MAX_SELL_OBS 40 /* Max 40 Objekte auf einmal verkaufen */
+#define EVAL_LIMIT 100000  /* eval darf dabei nicht unter 100000 sinken */
+
+//--Variablen&Defines------------------------------------------------------
+
+#define MyCountUp(arg) (sizeof(arg) > 1 ? \
+    implode(arg[0..<2], ", ") + " und " + arg[<1] : \
+    (sizeof(arg) == 0 ? "niemand" : arg[0]) )
+
+#define SESSEL(wer) (member(sessel, capitalize(getuid(wer)))!=-1)
+string *sessel=({});
+
+#define SOFA(wer) (member(sofa, capitalize(getuid(wer)))!=-1)
+string *sofa=({});
+
+//--Create-----------------------------------------------------------------
+
+void create()
+{
+  object router;
+
+  pub::create();
+
+  _set_shop_percent_left();
+  last=wantto=mymoney=50000;
+  buyfact=BUY_FACT;
+
+  AddCmd(({"zeig","zeige"}),"list");
+  AddCmd(({"verkauf","verkaufe"}),"sell");
+  AddCmd(({"versetz","versetze"}),"force_sell");
+  AddCmd(({"schaetz","schaetze"}),"evaluate");
+  AddCmd(({"untersuche","unt"}), "show_obj");
+  AddItem("/obj/entsorg",REFRESH_REMOVE);
+
+  ob_anz = ([]);
+  fixed_obj = ({ });
+  fixed_value = ([ ]);
+  fixed_ids = ([ ]);
+
+  if (!is_clone(this_object()) && objectp(router=find_object(ROUTER)))
+    router->RegisterTarget(TARGET_SHOP,file_name(this_object()));
+
+//--Initialisierungen------------------------------------------------------
+
+  RemoveItem("/obj/entsorg");
+  RemoveItem("/obj/topliste");
+
+//--Beschreibungen---------------------------------------------------------
+
+  SetProp(P_INT_SHORT, "In einer gemuetlichen Teestube");
+  SetProp(P_INT_LONG,
+    "Nachdem sich Deine Augen an das leicht gedaempfte Licht gewoehnt "
+    "haben, schaust Du Dich neugierig in der Teestube um. Ueberall im Raum "
+    "stehen mehrere Sessel und kleine Sofas um runde Tische "
+    "herum. Einige von ihnen sind bereits von Besuchern des Palastes "
+    "besetzt, die sich leise miteinander unterhalten. An einer Wand siehst "
+    "Du einen grossen Kamin, in dem ein kleines Feuer lustig vor sich "
+    "hinprasselt.");
+
+//--Umgebung---------------------------------------------------------------
+
+  SetProp(P_LIGHT, 1);
+  SetProp(P_INDOORS, 1);
+  SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE: 15, ENV_TERRAIN: TT_HOUSE]) );
+
+//--Ladeneigenschaften-----------------------------------------------------
+
+  SetProp(P_SHOPKEEPER_ID, "kellnerin");
+  SetProp(P_SHOPKEEPER_NAME, "Die junge Kellnerin");
+  SetProp(P_SHOPKEEPER_GENDER, FEMALE);
+  SetProp(P_SHOP_FLAGS, SHOP_HASKEEPER | SHOP_NEEDSKEEPER);
+  SetStorageRoom(ROOM "mg_lagerraum_teestube" );
+
+//--Pubeigenschaften-------------------------------------------------------
+
+  SetProp(P_PUB_FLAGS, PUB_HASKEEPER+PUB_NEEDSKEEPER);
+  SetProp(P_PUBKEEPER_ID, "kellnerin");
+  SetProp(P_PUBKEEPER_NAME, "Kellnerin");
+  SetProp(P_PUBMSG_NOKEEPER, "Es ist leider niemand da, der Dich bedienen "
+  +"koennte.\n");
+  SetProp(P_PUBMSG_NOENEMY, BS("Du glaubst doch nicht, dass Dich die "
+  +"Kellnerin jetzt noch bedient?!"));
+  SetProp(P_PUBMSG_NOINVITE, BS("Die junge Kellnerin ist gerade in einen "
+  +"Kampf verwickelt!"));
+  SetProp(P_PUBMSG_FIGHTING, "Die junge Kellnerin ist gerade in einen Kampf "
+  +"verwickelt!\n");
+
+//--Details----------------------------------------------------------------
+
+  AddDetail( ({ "augen", "auge" }),
+    "Deine Augen brauchen einen kleinen Moment, um sich das das flackernde "
+    "Licht zu gewoehnen.");
+
+  AddDetail( ({ "moment" }),
+    "Langsam gewoehnen sich Deine Augen an das Licht.");
+
+  AddDetail( ({ "licht" }),
+    "Die einzige Lichtquelle hier im Raum ist das kleine Feuer, das "
+    "im Kamin brennt. Ausserdem sind auf den Tischen ein paar Kerzen "
+    "verteilt worden.");
+
+  AddDetail( ({ "lichtschein" }),
+    "Das Feuer fuellt den Raum mit seinem flackernden Licht.");
+
+  AddDetail( ({ "lichtquelle", "lichtquellen", "quelle", "quellen" }),
+  ([ 0: "Das Feuer spendet gerade genuegend Licht, um alles halbwegs "
+  "deutlich erkennen zu koennen.",
+  "dunkelelf": "Am liebsten waere es Dir ja, wenn auch diese Lichtquelle "
+  "nicht vorhanden waere, aber da Du heute in gnaediger Stimmung bist, "
+  "versuchst Du, das Feuer so gut wie moeglich zu ignorieren." ]) );
+
+  AddDetail( ({ "stimmung" }),
+  ([ 0: "Sowas siehst Du da nicht!",
+  "dunkelelf": "Du willst die anderen Palastbesucher (ausnahmsweise "
+  "einmal) nicht veraergern." ]) );
+
+  AddDetail( ({ "kerzen", "kerze" }),
+    "Auf den Tischen stehen kleine blaue Kerzen in silbernen Haltern. "
+    "Sie scheinen irgendwie magisch zu sein, denn ihre Flammen "
+    "leuchten in einem merkwuerdig glimmenden Blau.");
+
+  AddDetail( ({ "flammen", "flamme", "kerzenflammen", "kerzenflamme" }),
+    "Blaeulich glimmende Flammen sind an den Kerzen zu sehen. Sie sehen "
+    "so aus, als wuerden sie immerzu leuchten.");
+
+  AddDetail( ({ "blau" }),
+    "Die Kerzenflammen glimmen in einem seltsamen Blau. Da scheint Magie "
+    "im Spiel zu sein.");
+
+  AddDetail( ({ "magie" }),
+    "Na, Du weisst schon, dieses Hokuspukus-Zeugs.");
+
+  AddDetail( ({ "spiel" }),
+    "Hier ist eindeutig Magie im Spiel.");
+
+  AddDetail( ({ "halter", "kerzenhalter" }),
+    "Flache, versilberte Kerzenhalter stehen auf den Tischen. In jedem "
+    "von ihnen steckt eine kleine blaue Kerze.");
+
+  AddDetail( ({ "raum" }),
+    "Du befindest Dich in einer gemuetlichen Teestube.");
+
+  AddDetail( ({ "teestube", "stube" }),
+    "Wie Du bereits auf dem Schild draussen vor dem Eingang lesen konntest, "
+    "handelt es sich bei diesem Raum um eine Teestube. Daher verwundert "
+    "es Dich nicht sonderlich, dass viele der Besucher hier Teetassen und "
+    "Teekaennchen vor sich auf dem Tisch stehen haben.");
+
+  AddDetail( ({ "schild" }),
+    "Hast Du es nicht gesehen?");
+
+  AddDetail( ({ "eingang" }),
+    "Der Eingang zur Teestube befindet sich nun oestlich von Dir. Auch "
+    "wenn er jetzt eher einen Ausgang darstellt.");
+
+  AddDetail( ({ "ausgang" }),
+    "Da Du Dich bereits in der Teestube befindest, ist es kein Eingang "
+    "mehr, sondern ein Ausgang.");
+
+  AddDetail( ({ "teetassen", "teetasse", "tassen", "tasse" }),
+    "Der Grossteil der Besucher, die Du hier siehst, trinken Tee aus "
+    "kleinen, zierlichen Teetassen.");
+
+  AddDetail( ({ "grossteil" }),
+    "Die Mehrzahl der Besucher.");
+
+  AddDetail( ({ "mehrzahl" }),
+    "Die meisten von ihnen.");
+
+  AddDetail( ({ "einzahl" }),
+    "Du kannst wohl nie genug kriegen, oder?");
+
+  AddDetail( ({ "tee" }),
+    "Auch Du bekommst so richtig Lust auf eine schoene, heisse Tasse "
+    "Tee.");
+
+  AddDetail( ({ "lust" }),
+    "Mach es Dir doch einfach irgendwo gemuetlich und bestell Dir "
+    "einen Tee.");
+
+  AddDetail( ({ "teekaennchen", "kaennchen", "teekannen", "teekanne",
+  "grosse teekaennchen", "kleine teekaennchen" }),
+    "Grosse und kleine Teekaennchen stehen ueberall auf den Tischen.");
+
+  AddDetail( ({ "tische", "tisch" }),
+    "Mehrere runde Tische stehen im ganzen Raum verteilt. Auf jedem von "
+    "ihnen siehst Du eine kleine, blaue Kerze, eine Karte sowie ein "
+    "kleines, weisses Taefelchen stehen.");
+
+  AddDetail( ({ "karte" }),
+    "Dies scheint die Teekarte zu sein. Du kannst sie lesen.");
+
+  AddDetail( ({ "teekarte", "teekarten", "karten" }),
+    "Auf jedem der Tische liegt eine Teekarte.");
+
+  AddDetail( ({ "taefelchen", "tafel" }),
+    "Auf den Taefelchen steht etwas geschrieben.");
+
+  AddDetail( ({ "besucher", "palastbesucher" }),
+    "Wenn Du geglaubt hast, Du haettest diesen Raum fuer Dich alleine, hast "
+    "Du Dich getaeuscht. Viele der gemuetlichen Sessel und Sofas sind "
+    "bereits besetzt. Du kannst froh sein, wenn Du irgendwo noch ein "
+    "Plaetzchen zum Sitzen findest.");
+
+  AddDetail( ({ "plaetzchen" }),
+    "Hoffentlich ist noch eines fuer Dich frei.");
+
+  AddDetail( ({ "sitzen" }),
+    "Du stellst Dich auf Deine Zehenspitzen und spaehst aufmerksam durch "
+    "den Raum. Hah! Da ganz hinten scheint noch ein wenig Platz zu sein!");
+
+  AddDetail( ({ "zehenspitzen" }),
+    "Langsam fangen sie an, zu schmerzen.");
+
+  AddDetail( ({ "platz" }),
+    "Beeil Dich lieber, bevor ihn Dir jemand vor der Nase wegschnappt.");
+
+  AddDetail( ({ "nase" }),
+    "Das war nicht woertlich gemeint.");
+
+  AddDetail( ({ "palast" }),
+    "Du befindest Dich immer noch im Palast.");
+
+  AddDetail( ({ "wand" }),
+    "In eine der Waende wurde ein grosser Kamin eingelassen.");
+
+  AddDetail( ({ "waende" }),
+    "Wie Du schon fast erwartet hast, bestehen auch hier die Waende aus "
+    "blauem Marmor, der von goldenen Faeden durchzogen wird.");
+
+  AddDetail( ({ "marmor" }),
+    "Der Marmor ist blau.");
+
+  AddDetail( ({ "faeden", "faden", "goldfaeden", "goldfaden" }),
+    "Goldene Faeden ziehen sich durch den Marmor. Sie glaenzen hell im "
+    "flackernden Lichtschein des Feuers.");
+
+  AddDetail( ({ "kamin" }),
+    "In eine Wand wurde ein steinerner Kamin eingelassen. Ein kleines "
+    "Feuer brennt darin.");
+
+  AddDetail( ({ "stein", "steine" }),
+    "Der Kamin besteht aus einem dunklen, leicht blaeulichen Stein.");
+
+  AddDetail( ({ "feuer" }),
+    "Das Feuer prasselt lustig vor sich hin und fuellt den Raum mit seinem "
+    "flackernden, gedaempften Licht.");
+
+  AddDetail( ({ "boden" }),
+    "Du kannst nicht erkennen, woraus der Boden besteht, denn er ist "
+    "vollstaendig mit dicken, weichen Teppichen bedeckt.");
+
+  AddDetail( ({ "teppiche", "teppich" }),
+    "Dicke, mit bunten Mustern verzierte Teppiche liegen auf dem Boden. "
+    "Sie daempfen jegliches Geraeusch Deiner Schritte.");
+
+  AddDetail( ({ "geraeusch", "geraeusche" }),
+    "Jeder Schritt wird von den dicken Teppichen stark gedaempft.");
+
+  AddDetail( ({ "schritt", "schritte" }),
+    "Du kannst Deine eigenen Schritte nicht hoeren.");
+
+  AddDetail( ({ "muster" }),
+    "Lauter bunte Muster sind auf den Teppichen zu sehen. Abgesehen davon, "
+    "dass sie recht huebsch aussehen, scheinen sie keinen weiteren Zweck "
+    "zu haben.");
+
+  AddDetail( ({ "zweck", "zwecke" }),
+    "Sie dienen nur zur Verzierung.");
+
+  AddDetail( ({ "verzierung", "verzierungen" }),
+    "Die Teppiche sind mit huebschen, bunten Mustern verziert.");
+
+  AddDetail( ({ "decke" }),
+    "Die Decke ist hier sehr niedrig, und verleiht dem Raum dadurch eine "
+    "gemuetliche Atmosphaere.");
+
+  AddDetail( ({ "atmosphaere" }),
+    "Du beginnst langsam, Dich hier wohlzufuehlen.");
+
+  AddDetail( ({ "geschmack" }),
+    "Ist fuer Dich etwa nichts passendes dabei?");
+
+  AddReadDetail( ({ "teekarte", "karte" }),
+    "                  TEEKARTE\n\n"
+    "*** Fruechtetee\n"
+    "    Eine bunte Mischung verschiedenster Fruechte\n"
+    "*** Zitronentee\n"
+    "    Fuer den etwas anderen Geschmack\n"
+    "*** Pfefferminztee\n"
+    "    Schaerft die Sinne\n"
+    "*** Kamillentee\n"
+    "    Die pure Gesundheit (auch fuer Gruenhaeute)\n"
+    "*** Kraeutertee\n"
+    "    Eine Vielfalt frischer Kraeuter (sehr gesund)\n"
+    "*** Weihnachtstee\n"
+    "    Fuer die schoenste aller Jahreszeiten\n");
+
+  AddReadDetail( ({ "taefelchen", "tafel" }),
+    "                *** SONDERAKTION ***\n"
+    "Geniessen Sie Ihren Tee auch zu Hause aus einem edlen Teeservice\n"
+    "aus feinstem Porzellan! Heute besonders guenstig:\n"
+    "Ein Service fuer drei Personen mit allem Drum und Dran!\n"
+    "Kaufen und geniessen Sie!");
+
+  AddSound( DEFAULT_SOUND,
+    "Nur das leise Prasseln und Knacken des Feuers sowie die leisen "
+    "Stimmen der Besucher um Dich herum sind zu hoeren.");
+
+  AddSound( ({ "prasseln" }),
+    "Das Feuer prasselt leise vor sich hin.");
+
+  AddSound( ({ "feuer" }),
+    "Es prasselt leise vor sich hin.");
+
+  AddSound( ({ "knacken" }),
+    "*knack*");
+
+  AddSound( ({ "stimmen", "stimme" }),
+    "Die leisen Stimmen der Besucher dringen zu Dir.");
+
+  AddSound( ({ "besucher", "palastbesucher" }),
+    "Die Besucher um Dich herum unterhalten sich leise.");
+
+  AddSound( ({ "unterhaltung", "unterhaltungen" }),
+    "Unauffaellig lehnst Du Dich ein wenig vor und lauschst den "
+    "Unterhaltungen um Dich herum. Ploetzlich kannst Du ein paar "
+    "undeutliche Worte aufschnappen.");
+
+  AddSound( ({ "worte", "wort" }),
+    "'... psst, sei mal leise! Ich glaube, da versucht jemand, uns zu "
+    "belauschen ...'");
+
+  AddSound( ({ "schritt", "schritte" }),
+    "Du machst einen grossen Schritt und lauscht. Nichts.");
+
+  AddSmell( DEFAULT_SMELL,
+    "Ein herrlicher Duft nach allen nur denkbaren Teesorten schwebt im "
+    "Raum. Ausserdem riecht es ein wenig nach Feuer.");
+
+  AddSmell( ({ "teesorten", "tee", "sorten" }),
+    "Haaach, Du kannst gar nicht soviel riechen, wie Du am liebsten "
+    "wuerdest! Es duftet nach allerlei Kraeutern und Fruechten, nach "
+    "Pfefferminz, Orange und Zitrone und sogar ein klein wenig nach Zimt. "
+    "Herrlich!");
+
+  AddSmell( ({ "kraeuter", "kraut" }),
+    "Es riecht herrlich nach allerlei frischen Kraeutern.");
+
+  AddSmell( ({ "fruechte", "frucht" }),
+    "Du riechst den frischen, saftigen Duft von Orangen, Aepfeln und "
+    "Zitronen.");
+
+  AddSmell( ({ "pfefferminz", "pfefferminze", "pfefferminzgeruch" }),
+    "Der leichte Pfefferminzgeruch ist nicht zu ueberriechen.");
+
+  AddSmell( ({ "apfel", "aepfel", "orange", "orangen", "zitrone",
+    "zitronen" }),
+    "Ein frischer Duft nach Aepfeln, Orangen, Zitronen und zahlreichen "
+    "anderen Fruechten liegt in der Luft.");
+
+  AddSmell( ({ "luft", "gerueche", "geruch" }),
+    "Zahlreiche Gerueche liegen in der Luft, einer herrlicher als der "
+    "andere.");
+
+  AddSmell( ({ "zimt" }),
+    "Es riecht ein wenig nach Zimt. Du fuehlst Dich an Weihnachten "
+    "erinnert.");
+
+  AddSmell( ({ "weihnachten" }),
+    "Weihnachten mit all seinen herrlichen Dueften nach Zimt, Aepfeln und "
+    "Nuessen...");
+
+  AddSmell( ({ "duefte", "weihnachtsduefte", "nuesse", "nuss" }),
+    "Du kannst es gar nicht abwarten, bis es endlich wieder soweit ist.");
+
+  AddSmell( ({ "duft", "raum" }),
+    "Der ganze Raum wird von allerlei suesslichen Dueften durchdrungen.");
+
+  AddSmell( ({ "feuer", "russ" }),
+    "Das Feuer im Kamin riecht etwas nach Feuer und Russ, jedoch nicht "
+    "so stark, dass es unangenehm waere.");
+
+  AddSpecialDetail( ({ "sessel" }),
+    "strsessel");
+
+  AddSpecialDetail( ({ "sofa", "sofas" }),
+    "strsofa");
+
+  AddSpecialDetail( ({ "hokuspokus", "zeugs", "hokuspokus-zeugs" }),
+    "strhokuspokus");
+
+  AddSpecialDetail( ({ "meister" }),
+    "strmeister");
+
+  AddSpecialDetail( ({ "kronang" }),
+    "strkronang");
+
+  AddSpecialDetail( ({ "dusty", "erleuchtung", "ehre" }),
+    "strdusty");
+
+  AddSpecialDetail( ({ "anvar", "gelegenheit" }),
+    "stranvar");
+
+  AddSpecialDetail( ({ "xarfai" }),
+    "strxarfai");
+
+  AddSpecialDetail( ({ "diener", "dienerin" }),
+    "strdiener");
+
+  AddSpecialDetail( ({ "lloth" }),
+    "strlloth");
+
+  AddSpecialDetail( ({ "sessel" }),
+    "strsessel");
+
+  AddSpecialDetail( ({ "sofa", "sofas" }),
+    "strsofa");
+
+  AddRoomMessage(
+    ({ "Das Feuer knistert leise vor sich hin.\n",
+       " *knack*\n",
+       " *knister*\n" }), 100);
+
+//--Menue------------------------------------------------------------------
+
+  AddDrink("Fruechtetee", ({"fruechtetee"}),
+    50, 10, 0, 3,
+    ({"Du trinkst einen Fruechtetee und fuehlst Dich etwas gestaerkt.\n",
+     "&& trinkt einen Fruechtetee und sieht etwas gestaerkt aus.\n"}));
+
+  AddDrink("Pfefferminztee", ({"pfefferminztee"}),
+    450, 5, 0, 4, "taub");
+
+  AddDrink("Zitronentee", ({"zitronentee"}),
+    500, 5, 0, 4, "blind");
+
+  AddDrink("Kamillentee", ({"kamillentee"}),
+    750, 5, 0, 4, "frosch");
+
+  AddDrink("Kraeutertee", ({"kraeutertee"}),
+    1500, 5, 0, 5, "gift");
+
+  AddDrink("Weihnachtstee", ({"weihnachtstee"}),
+    110, 18, 0, 6,
+    ({"Die junge Kellnerin bringt Dir einen Weihnachtstee an den Tisch. "
+      "Vorsichtig schluerfst Du das heisse, herrlich duftende Getraenk "
+      "und schliesst dabei geniesserisch die Augen. Langsam breitet sich "
+      "eine wohlige Waerme in Deinem ganzen Koerper aus.\n",
+      "Die junge Kellnerin bringt && ein heisses, herrlich duftendes "
+      "Getraenk an den Tisch.\n"
+      "Ein weihnachtlicher Duft breitet sich langsam im Raum aus.\n"}));
+
+//--Ausgaenge--------------------------------------------------------------
+
+  AddExit ("osten", ([ EX_DEST: "./mg_gang4",
+                       EX_TESTFUNC: "exit_test",
+                       EX_MSG: "auf den Gang hinaus" ]) );
+
+//--Kommandos--------------------------------------------------------------
+
+  AddCmd( ({ "sitz", "sitze", "setz", "setze" }), "sitzen" );
+  AddCmd( ({ "steh", "stehe", "erheb", "erhebe" }), "aufstehen" );
+  AddCmd( ({ "loesch", "loesche", "pust", "puste" }), "loeschen" );
+
+//--Items & NPCs-----------------------------------------------------------
+
+  AddItem(NPC "kellnerin", REFRESH_DESTRUCT);
+
+//--Create Ende------------------------------------------------------------
+
+}
+
+//--Funktionen fuer SpecialDetails-----------------------------------------
+
+string strhokuspokus(string str)
+{
+  string s;
+  s = "";
+
+  switch(TP->QueryProp(P_GUILD))
+  {
+      case "abenteurer": s = "Du bist zwar kein Meister der Magie, "
+        +"aber ein wenig verstehst Du schon davon.";
+        break;
+      case "berserker": s = "Hmm... falls Kronang jemals von so etwas "
+        +"gesprochen hat, hast Du wohl gerade nicht zugehoert.";
+        break;
+      case "paladine": s = "Bete zu Dusty, und sie wird Dir "
+        +"Erleuchtung bringen!";
+        break;
+      case "zechpreller": s = "Du hascht sicher schon mal davon "
+        +"gehoert! *hicks*";
+        break;
+      case "druidenzirkel": s = "Ob Anvar Dir mehr darueber sagen kann?";
+        break;
+      case "nekromanten": s = "Xarfai weiss sicher mehr darueber.";
+        break;
+      case "dunkelelfen":
+        if(TP->QueryProp(P_GENDER) == MALE)
+        {
+            s = "Du als ein Diener Lloths solltest wissen, was das ist.";
+        }
+        if(TP->QueryProp(P_GENDER) == FEMALE)
+        {
+            s = "Du als eine Dienerin Lloths solltest wissen, was das ist.";
+        }
+        break;
+      default: s = "Kennst Du Dich damit aus?";
+        break;
+  }
+
+  return BS(s);
+}
+
+string strmeister(string str)
+{
+  string s;
+  s = "";
+
+  if(TP->QueryProp(P_GUILD) == "abenteurer")
+  {
+        s = "Nein, ein Meister bist Du nicht gerade.";
+  }
+  else
+  {
+        s = "Sowas siehst Du da nicht!";
+  }
+  return BS(s);
+}
+
+string strkronang(string str)
+{
+  string s;
+  s = "";
+
+  if(TP->QueryProp(P_GUILD) == "berserker")
+  {
+        s = "Du hast ihn nie ueber Magie sprechen hoeren.";
+  }
+  else
+  {
+        s = "Sowas siehst Du da nicht!";
+  }
+  return BS(s);
+}
+
+string strdusty(string str)
+{
+  string s;
+  s = "";
+
+  if(TP->QueryProp(P_GUILD) == "paladine")
+  {
+        s = "Ehre sei Dusty!";
+  }
+  else
+  {
+        s = "Sowas siehst Du da nicht!";
+  }
+  return BS(s);
+}
+
+string stranvar(string str)
+{
+  string s;
+  s = "";
+
+  if(TP->QueryProp(P_GUILD) == "druidenzirkel")
+  {
+        s = "Du kannst ihn bei Gelegenheit ja mal danach fragen.";
+  }
+  else
+  {
+        s = "Sowas siehst Du da nicht!";
+  }
+  return BS(s);
+}
+
+string strxarfai(string str)
+{
+  string s;
+  s = "";
+
+  if(TP->QueryProp(P_GUILD) == "nekromanten")
+  {
+        s = "Du kannst ihn bei Gelegenheit ja mal danach fragen.";
+  }
+  else
+  {
+        s = "Sowas siehst Du da nicht!";
+  }
+  return BS(s);
+}
+
+string strdiener(string str)
+{
+  string s;
+  s = "";
+
+  if(TP->QueryProp(P_GUILD) == "dunkelelfen")
+  {
+     if(this_player()->QueryProp(P_GENDER) == MALE && str == "diener")
+     {
+      	 s = "Du bist ein Diener Lloths.";
+     }
+     if(this_player()->QueryProp(P_GENDER) == FEMALE && str == "dienerin")
+     {
+  	 s = "Du bist eine Dienerin Lloths.";
+     }
+  }
+  else
+  {
+     s = "Sowas siehst Du da nicht";
+  }
+
+  return BS(s);
+}
+
+string strlloth(string str)
+{
+  string s;
+  s = "";
+
+  if(TP->QueryProp(P_GUILD) == "dunkelelfen")
+  {
+        s = "Lloth ist allmaechtig!";
+  }
+  else
+  {
+        s = "Sowas siehst Du da nicht!";
+  }
+  return BS(s);
+}
+
+string strsessel(string str)
+{
+  string s;
+  s = "";
+
+  if(SESSEL(TP))
+  {
+  	sessel -= ({ capitalize(getuid(TP)) });
+
+  	if(sizeof(sessel) == 0)
+  	{
+  	        s = "Du hast es Dir in einem der Sessel gemuetlich gemacht.";
+  	}
+  	if(sizeof(sessel) == 1)
+  	{
+  	        s = sessel[0]+" und Du sitzt gemuetlich in den Sesseln "
+  	        +"herum.";
+  	}
+  	if(sizeof(sessel) > 1)
+  	{
+  	        s = ""+MyCountUp(sessel)+" haben es sich, ebenso wie Du, in "
+  	        +"den Sesseln gemuetlich gemacht.";
+  	}
+
+  	sessel += ({ capitalize(getuid(TP)) });
+   }
+   else
+   {
+  	if(sizeof(sessel) == 1)
+  	{
+  	        s = sessel[0]+" hat es sich in einem der Sessel gemuetlich "
+  	        +"gemacht.";
+  	}
+  	if(sizeof(sessel) > 1)
+  	{
+  	        s = ""+MyCountUp(sessel)+" haben es sich in den Sesseln "
+  	        +"gemuetlich gemacht.";
+  	}
+   }
+   return BS("Es stehen mehrere Sessel um die runden Tische herum. Ein paar "
+   +"von ihnen sehen sehr gross und schwer aus, andere dagegen sind klein "
+   +"und zierlich, einige sind dick gepolstert und andere wiederum sehr "
+   +"schlicht und einfach ausgestattet. Es scheint fuer jeden Geschmack "
+   +"etwas dabei zu sein. "+s);
+}
+
+string strsofa(string str)
+{
+  string s;
+  s = "";
+
+  if(SOFA(TP))
+  {
+  	sofa -= ({ capitalize(getuid(TP)) });
+
+  	if(sizeof(sofa) == 0)
+  	{
+  	        s = "Du sitzt gemuetlich auf einem der Sofas.";
+  	}
+  	if(sizeof(sofa) == 1)
+  	{
+  	        s = sessel[0]+" und Du sitzt gemuetlich auf einem der Sofas.";
+  	}
+  	if(sizeof(sofa) > 1)
+  	{
+  	        s = ""+MyCountUp(sofa)+" sitzen gemuetlich neben Dir auf "
+  	        +"einem der Sofas.";
+  	}
+
+  	sofa += ({ capitalize(getuid(TP)) });
+   }
+   else
+   {
+  	if(sizeof(sofa) == 1)
+  	{
+  	        s = sofa[0]+" hat es sich auf einem der Sofas gemuetlich "
+  	        +"gemacht.";
+  	}
+  	if(sizeof(sofa) > 1)
+  	{
+  	        s = ""+MyCountUp(sofa)+" haben es sich auf einem der Sofas "
+  	        +"gemuetlich gemacht.";
+  	}
+   }
+   return BS("Einige mit weichen Kissen ausgepolsterte und sehr bequem "
+   +"aussehende Sofas stehen an den Waenden. Viele von ihnen sind bereits "
+   +"von den anderen Besuchern besetzt. "+s);
+}
+
+//--Funktionen fuer Menue--------------------------------------------------
+
+//Pfefferminztee enttaubt:
+taub(object zahler, object trinker)
+{
+   if(trinker->QueryProp(P_DEAF) != 0)
+   {
+      tell_object(trinker, BS(
+      "Du bekommst einen heissen Pfefferminztee vorgesetzt und "
+      "trinkst vorsichtig ein paar Schlucke. Ploetzlich kannst Du die "
+      "Geraeusche in Deiner Umgebung wieder viel deutlicher wahrnehmen.\n" ));
+      Message(BS(trinker->Name(WER)+" bestellt sich einen heissen "
+      +"Pfefferminztee.\n"),
+      MSGFLAG_VISUAL, ([MSGFLAG_EXCLUDE: ({ trinker })]));
+      trinker->SetProp(P_DEAF, 0);
+   }
+   else
+   {
+      tell_object(trinker, BS(
+      "Du bekommst einen heissen Pfefferminztee vorgesetzt.\nVorsichtig "
+      "schluerfst Du an dem heissen Getraenk, um Dir nicht den Mund zu "
+      "verbrennen.\n" ));
+      Message(BS(trinker->Name(WER)+" bestellt sich einen heissen "
+      +"Pfefferminztee.\n"),
+      MSGFLAG_VISUAL, ([MSGFLAG_EXCLUDE: ({ trinker })]));
+   }
+}
+
+//Zitronentee entblindet:
+blind(object zahler, object trinker)
+{
+   if(trinker->QueryProp(P_BLIND) != 0)
+   {
+      tell_object(trinker, BS(
+      "Du bestellst Dir einen heissen Zitronentee. Hmm, schmeckt "
+      "eigentlich gar nicht mal so schlecht, wenn auch ein wenig "
+      "saeuerlich.\nPloetzlich kannst Du wieder etwas sehen!\n" ));
+      Message(BS(trinker->Name(WER)+" bestellt sich eine kleine Tasse "
+      +"Zitronentee und verzieht beim Trinken ein wenig das Gesicht.\n"),
+      MSGFLAG_VISUAL, ([MSGFLAG_EXCLUDE: ({ trinker })]));
+      trinker->SetProp(P_BLIND, 0);
+   }
+   else
+   {
+      tell_object(trinker, BS(
+      "Du bestellst Dir einen heissen Zitronentee. Hmm, schmeckt "
+      "eigentlich gar nicht mal so schlecht, wenn auch ein wenig "
+      "saeuerlich.\n" ));
+      Message(BS(trinker->Name(WER)+" bestellt sich eine kleine Tasse "
+      +"Zitronentee und verzieht beim Trinken ein wenig das Gesicht.\n"),
+      MSGFLAG_VISUAL, ([MSGFLAG_EXCLUDE: ({ trinker })]));
+   }
+}
+
+//Kamillentee entfroscht:
+frosch(object zahler, object trinker)
+{
+   if(trinker->QueryProp(P_FROG) == 1)
+   {
+      tell_object(trinker, BS(
+      "Genuesslich trinkst Du einen heissen, mit viel Zucker gesuessten "
+      "Kamillentee.\nPloetzlich merkst Du, dass sich irgendetwas veraendert "
+      "hat.\n" ));
+      Message(BS(trinker->Name(WER)+" trinkt einen heissen Kamillentee und "
+      +"scheint sich ploetzlich irgendwie zu veraendern.\n"),
+      MSGFLAG_VISUAL, ([MSGFLAG_EXCLUDE: ({ trinker })]));
+      trinker->SetProp(P_FROG, 0);
+   }
+   else
+   {
+      tell_object(trinker, BS(
+      "Genuesslich trinkst Du einen heissen, mit viel Zucker gesuessten "
+      "Kamillentee.\n" ));
+      Message(BS(trinker->Name(WER)+" trinkt einen heissen Kamillentee.\n"),
+      MSGFLAG_VISUAL, ([MSGFLAG_EXCLUDE: ({ trinker })]));
+   }
+}
+
+//Kraeutertee entgiftet:
+gift(object zahler, object trinker)
+{
+   if(trinker->QueryProp(P_POISON) > 0)
+   {
+      tell_object(trinker, BS(
+      "Du bestellst Dir einen heissen Kraeutertee.\nSchon nach wenigen "
+      "Schlucken fuehlst Du Dich auf einmal wieder putzmunter.\n" ));
+      Message(BS(trinker->Name(WER)+" bekommt eine grosse Tasse mit einem "
+      +"dampfenden Getraenk darin vorgesetzt.\nDer Duft von frischen "
+      +"Kraeutern dringt an Deine Nase.\n"),
+      MSGFLAG_VISUAL, ([MSGFLAG_EXCLUDE: ({ trinker })]));
+      trinker->AddPoison(-1 - random(3));
+   }
+   else
+   {
+      tell_object(trinker, BS(
+      "Du bestellst Dir einen heissen Kraeutertee.\nHmm, der schmeckt "
+      "aber gesund!\n" ));
+      Message(BS(trinker->Name(WER)+" bekommt eine grosse Tasse mit einem "
+      +"dampfenden Getraenk darin vorgesetzt.\nDer Duft von frischen "
+      +"Kraeutern dringt an Deine Nase.\n"),
+      MSGFLAG_VISUAL, ([MSGFLAG_EXCLUDE: ({ trinker })]));
+   }
+}
+
+//--Funktionen-------------------------------------------------------------
+
+//auf Sessel oder Sofa sitzen:
+int sitzen(string str)
+{
+  notify_fail("Wo moechtest Du Dich hinsetzen?\n");
+
+  if(!str || str == "") return 0;
+
+  if(str == "auf sessel" ||
+     str == "in sessel")
+  {
+        if(SESSEL(TP))
+        {
+            write(BS("Du sitzt doch bereits in einem der Sessel!"));
+            return -1;
+        }
+
+        if(sizeof(sessel) > 4)
+        {
+            write(BS("Die Sessel sind leider schon alle besetzt."));
+
+            TO->Message(BS(TP->Name(WER, 1)+" schaut sich nach einem freien "
+            +"Platz um."), MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+            return -1;
+        }
+
+        if(TP->QueryProp(P_RACE) == "Elf" ||
+           TP->QueryProp(P_RACE) == "Dunkelelf")
+        {
+            write(BS("Anmutig laesst Du Dich in einen grossen, weichen "
+            +"Sessel sinken."));
+
+            TO->Message(BS(TP->Name(WER, 1)+" laesst sich anmutig in einen "
+            +"grossen, weichen Sessel sinken."),
+            MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+        }
+
+        if(TP->QueryProp(P_RACE) == "Troll" ||
+           TP->QueryProp(P_RACE) == "Oger")
+        {
+            write(BS("Etwas schwerfaellig laesst Du Dich auf einem der "
+            +"grossen Sessel nieder."));
+
+            TO->Message(BS(TP->Name(WER, 1)+" laesst sich etwas "
+            +"schwerfaellig auf einem der grossen Sessel nieder."),
+            MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+        }
+
+        if(TP->QueryProp(P_RACE) == "Hobbit")
+        {
+            write(BS("Du suchst Dir einen kleinen, weich gepolsterten "
+            +"Sessel aus und macht es Dir darauf gemuetlich."));
+
+            TO->Message(BS(TP->Name(WER, 1)+" macht es sich in einem "
+            +"kleinen, weich gepolsterten Sessel gemuetlich."),
+            MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+        }
+
+        if(TP->QueryProp(P_RACE) == "Fee")
+        {
+            write(BS("Waehlerisch flatterst Du eine Weile herum, bis Du "
+            +"einen winzigen freien Sessel erspaehst, und laesst Dich dann "
+            +"entspannt darauf nieder."));
+
+            TO->Message(BS(TP->Name(WER, 1)+" flattert eine Weile suchend "
+            +"herum und laesst sich dann auf einem winzigen kleinen Sessel "
+            +"nieder."), MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+        }
+
+        if(TP->QueryProp(P_RACE) == "Zwerg")
+        {
+            write(BS("Du suchst Du Dir einen einfachen, kleinen Sessel "
+            +"aus und laesst Dich darauf nieder."));
+
+            TO->Message(BS(TP->Name(WER, 1)+" laesst sich auf einem der "
+            +"kleineren Sessel nieder."),
+            MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+        }
+
+        if(TP->QueryProp(P_RACE) == "Mensch")
+        {
+            write(BS("Du suchst Du Dir einen noch freien Sessel "
+            +"und laesst Dich darauf nieder."));
+
+            TO->Message(BS(TP->Name(WER, 1)+" laesst sich auf einem der "
+            +"noch freien Sessel nieder."),
+            MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+        }
+
+        if(TP->QueryProp(P_RACE) == "Untoter")
+        {
+            write(BS("Du manovrierst Deine klapprigen Knochen in einen "
+            +"sehr bequem aussehenden Sessel."));
+
+            TO->Message(BS(TP->Name(WER, 1)+" laesst sich mit klappernden "
+            +"Knochen in einen weichen Sessel sinken."),
+            MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+        }
+
+        if(TP->QueryProp(P_RACE) == "Magier")
+        {
+            write(BS("Mit absolutem Kennerblick suchst Du Dir den "
+            +"schoensten und bequemsten Sessel heraus, schubst den Zwerg, "
+            +"der dort gerade sass, unsanft herunter und machst es Dir dann "
+            +"selbst darauf gemuetlich."));
+
+            TO->Message(break_string(TP->Name(WER, 1)+" schubst einen "
+            +"Zwerg von seinem Sessel herunter und macht es sich dann "
+            +"dort gemuetlich.\nDu denkst   . o O (Immer diese "
+            +"unverschaemten Magier.)", 78,0,1),
+            MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+       }
+
+        sessel += ({ capitalize(getuid(TP)) });
+        return 1;
+  }
+
+  if(str == "auf sofa")
+  {
+        if(SOFA(TP))
+        {
+                write(BS("Du sitzt doch bereits auf einem der Sofas!"));
+                return -1;
+        }
+        if(sizeof(sofa) > 4)
+        {
+                write(BS("Die Sofas sind leider schon alle besetzt."));
+                return -1;
+        }
+
+        write(BS("Du machst es Dir auf einem der Sofas gemuetlich."));
+
+        TO->Message(BS(TP->Name(WER, 1)+" macht es sich auf einem der "
+        +"Sofas gemuetlich."), MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+
+        sofa += ({ capitalize(getuid(TP)) });
+        return 1;
+  }
+
+  return 0;
+}
+
+//aufstehen:
+int aufstehen(string str)
+{
+  notify_fail("Von wo moechtest Du aufstehen?\n");
+
+  if(!str || str == "")
+  {
+     write(BS("Von wo moechtest Du aufstehen?"));
+     return -1;
+  }
+
+  if(str == "von sessel auf")
+  {
+     if(SESSEL(TP))
+     {
+        write(BS("Mit einigem Bedauern erhebst Du Dich muehsam "
+        +"aus dem Sessel. Dabei war es gerade so gemuetlich."));
+
+        TO->Message(BS(TP->Name(WER, 1)+" erhebt sich von einem der "
+        +"Sessel."), MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+
+        sessel -= ({ capitalize(getuid(TP)) });
+        return 1;
+     }
+     else
+     {
+        write(BS("Aber Du sitzt doch gar nicht in einem der Sessel!"));
+        return -1;
+     }
+  }
+
+  if(str == "von sofa auf")
+  {
+     if(SOFA(TP))
+     {
+        write(BS("Mit einigem Bedauern erhebst Du Dich muehsam "
+        +"von dem Sofa. Dabei war es gerade so gemuetlich."));
+
+        TO->Message(BS(TP->Name(WER, 1)+" erhebt sich von einem der "
+        +"Sofas."), MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+
+        sofa -= ({ capitalize(getuid(TP)) });
+        return 1;
+     }
+     else
+     {
+        write(BS("Aber Du sitzt doch gar nicht auf einem der Sofas!"));
+        return -1;
+     }
+  }
+
+  if(str == "auf")
+  {
+     if(SESSEL(TP))
+     {
+        write(BS("Mit einigem Bedauern erhebst Du Dich muehsam "
+        +"aus dem Sessel. Dabei war es gerade so gemuetlich."));
+
+        TO->Message(BS(TP->Name(WER, 1)+" erhebt sich von einem der "
+        +"Sessel."), MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+
+        sessel -= ({ capitalize(getuid(TP)) });
+        return 1;
+     }
+
+     if(SOFA(TP))
+     {
+        write(BS("Mit einigem Bedauern erhebst Du Dich muehsam "
+        +"von dem Sofa. Dabei war es gerade so gemuetlich."));
+
+        TO->Message(BS(TP->Name(WER, 1)+" erhebt sich von einem der "
+        +"Sofas."), MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+
+        sofa -= ({ capitalize(getuid(TP)) });
+        return 1;
+     }
+
+     write(BS("Aber Du sitzt doch gar nicht!"));
+     return -1;
+  }
+  return -1;
+}
+
+//Test beim Verlassen des Raumes, ob man auf Sessel oder Sofa sitzt
+int exit_test(string dir)
+{
+        if(SOFA(TP) || SESSEL(TP))
+        {
+                write(BS("Dazu solltest Du erstmal aufstehen."));
+                return 0;
+        }
+
+        return 1;
+}
+
+//Spieler logt aus waehrend des Sitzens
+void BecomesNetDead(object spieler)
+{
+  if(SESSEL(spieler))
+  {
+        sessel -= ({ capitalize(getuid(spieler)) });
+  }
+  if(SOFA(spieler))
+  {
+        sofa -= ({ capitalize(getuid(spieler)) });
+  }
+  return;
+}
+
+//Spieler stirbt waehrend des Sitzens
+void NotifyPlayerDeath(object spieler, object killer, int lost_xp)
+{
+  if(SESSEL(spieler))
+  {
+        sessel -= ({ capitalize(getuid(spieler)) });
+  }
+  if(SOFA(spieler))
+  {
+        sofa -= ({ capitalize(getuid(spieler)) });
+  }
+  return;
+}
+
+//Kerzen loeschen:
+int loeschen(string str)
+{
+  notify_fail("Was moechtest Du loeschen?\n");
+
+  if(!str || str == "") return 0;
+
+  if(!(str == "kerze" ||
+       str == "kerze aus" ||
+       str == "kerzen" ||
+       str == "kerzen aus")) return 0;
+
+        write(BS("Du versuchst, eine der Kerzen auszupusten, doch "
+        +"sie flackert nur leicht und leuchtet dann voellig unbeirrt "
+        +"weiter."));
+
+        TO->Message(BS(TP->Name(WER, 1)+" versucht, eine der Kerzen "
+        +"auszupusten, schafft es aber nicht."),
+        MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+
+        return 1;
+}
+
+void reset()
+{
+        laden::reset();
+        pub::reset();
+}
+
+//Kein verkaufen hier:
+int sell(string str, int f)
+{
+  string prefix;
+
+  if (!prefix=CheckKeeper(2)) return 0;
+
+  write(capitalize(QueryProp(P_SHOPKEEPER_NAME))+
+       " sagt bedauernd: Es tut mir leid, aber wir kaufen nichts.\n");
+  return -1;
+}
+
+int bestelle(string str)
+{
+  int i, val, j;
+  object k, ob, store;
+  string prefix, dummy;
+
+
+  // Im Kampf kann man nichts kaufen, essen oder trinken
+  if (this_player()->InFight()) {
+    write(BS("Dazu bist Du im Moment viel zu beschaeftigt."));
+    return 1;
+  }
+
+  _notify_fail("Was willst Du kaufen oder bestellen?\n");
+  if (!str || str=="") return 0;
+
+  // Wenn Kellnerin nicht da, kein kaufen oder bestellen
+  if (!CheckKeeper(this_player())) return -1;
+
+  if (k=present(QueryProp(P_PUBKEEPER_ID)))
+    prefix=k->Name()+" sagt: ";
+  else
+    prefix=capitalize(QueryProp(P_PUBKEEPER_NAME))+" sagt: ";
+    _notify_fail(break_string("Tut mir leid, "
+    +(str ? capitalize(str) : "das")+" haben wir nicht im Angebot.",
+      78, prefix));
+
+   j = search_what(str,this_player(),this_player());
+
+  if(j) return j; // Getraenk oder Essen gefunden
+
+/*----------------------------------------------------------------------------*/
+/* Nur noch verkaufen des Ladens                                              */
+
+  // Objekt suchen im Lagerraum
+  if (sscanf(str,"%d%s",i,dummy)>0 && i>0)
+  {
+    if ((dummy==" ab") || (dummy==""))
+      ob=FindInStore(i);
+    else
+      ob=FindInStore(str);
+  }
+  else
+    ob=FindInStore(str);
+
+  if (!ob)
+    return 0;
+
+  // Geld pruefen
+  val=QueryBuyValue(ob);
+  if ((i=this_player()->QueryMoney()) < val) {
+    write(break_string(ob->Name(WER,1)+" wuerde"+
+        (ob->IsPlural() ? "n " : " ")+val+" Muenze"+
+        (val==1 ? "" : "n")+" kosten, Du "+
+        (i ? "hast aber nur "+i+"."
+           : "bist aber voellig pleite!"),
+        78, prefix));
+    return 1;
+  }
+
+  // Geldtransfer
+  this_player()->AddMoney(-val);
+  mymoney += val;
+
+  // fixed object? (staendig verfuegbar)
+  if (stringp(ob))
+    ob=clone_object((string) ob);
+
+  // Kaufen und als behalten markieren
+  write("Du kaufst " + ob->name(WEN,1) + ".\n");
+  say(this_player()->Name() + " kauft " + ob->name(WEN) + ".\n");
+  ob->SetProp(P_KEEP_ON_SELL, getuid(this_player()));
+
+  // Kanns der Spieler tragen?
+  if (ob->move(this_player(),M_GET) <= 0)
+  {
+    write(prefix + "Du kannst " + ob->QueryPronoun(WEN) +
+        " nicht mehr tragen!\n");
+    ob->move(environment(this_player()));       // Objekt in den Raum moven
+  }
+  UpdateCounter(ob,-1);
+  return 1;
+}

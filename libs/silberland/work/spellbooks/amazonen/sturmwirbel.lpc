@@ -1,0 +1,74 @@
+// Sturmwirbel: Valkyre-Unterstuetzung. Stabilisiert Himmelsritt (Hover)
+// und beschwoert einen Wirbelsturm im Raum, der Feinde debufft.
+
+varargs int prep_sturmwirbel(object caster, mapping sinfo, int flag)
+{
+  if (!present("\namz_himmelsritt", caster))
+  {
+    tell_object(caster, "Nur aus dem Himmelsritt heraus kannst Du einen Sturmwirbel beschwoeren.\n");
+    return 0;
+  }
+
+  if (!caster->InFight())
+  {
+    tell_object(caster, "Du musst im Kampf sein, um einen Sturmwirbel zu beschwoeren.\n");
+    return 0;
+  }
+
+  if (present("\namz_wirbelsturm", environment(caster)))
+  {
+    tell_object(caster, "Hier tobt bereits ein Wirbelsturm.\n");
+    return 0;
+  }
+
+  if (!pay_for_spell(caster, sinfo, !flag))
+    return 0;
+
+  return 1;
+}
+
+
+int sturmwirbel(object caster, mapping sinfo)
+{
+  object hr, storm;
+  int suc, ability, hover_add, power, dur;
+
+  if (!prep_sturmwirbel(caster, sinfo, 1))
+    return 0;
+
+  if ((suc = SpellSuccess(caster, sinfo)) <= 0)
+    return MISSERFOLG;
+
+  ability = sinfo[SI_SKILLABILITY];
+  if (ability < 0) ability = 0;
+
+  // Hover fuer den Himmelsritt: je besser, desto stabiler.
+  hover_add = 2 + ability / 2500 + suc / 2500;
+  if (hover_add < 2) hover_add = 2;
+
+  hr = present("\namz_himmelsritt", caster);
+  if (objectp(hr))
+    hr->addHover(hover_add);
+
+  // Power/Dauer des Wirbelsturms.
+  power = 3 + ability / 2000 + suc / 2000 + caster->QueryProp(P_GUILD_LEVEL) / 4;
+  if (power < 3) power = 3;
+  if (power > 12) power = 12;
+  dur = caster->QueryProp(P_GUILD_LEVEL) + ability / 1500 + suc / 1500;
+  if (dur < 6) dur = 6;
+
+  environment(caster)->Message(BS(sprintf("%s zieht in der Hoehe einen Sturm zusammen, der im Raum zu einem Wirbelsturm anwächst!",
+        caster->Name(WER,1))),
+      MSGFLAG_VISUAL, ([ MSGFLAG_EXCLUDE : ({ caster }) ]) );
+
+  tell_object(caster, "Du laesst einen Sturmwirbel entstehen. Dein Flug wird stabiler, und ein Wirbelsturm geht auf Deine Feinde los.\n");
+
+  storm = clone_object("/gilden/amazonen/obj/wirbelsturm");
+  if (objectp(storm) && storm->move(environment(caster), M_NOCHECK) == 1)
+    storm->setup_wirbelsturm(caster, power, dur);
+  else if (objectp(storm))
+    destruct(storm);
+
+  return ERFOLG;
+}
+

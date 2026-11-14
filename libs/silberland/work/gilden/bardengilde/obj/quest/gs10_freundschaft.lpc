@@ -1,0 +1,201 @@
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include <moredef.h>
+#include <moving.h>
+#include "/gilden/bardengilde/bardengilde.h"
+
+inherit "std/thing";
+inherit "/gilden/bardengilde/obj/std_spellprovider";
+
+string *gems;
+string partnerId;
+int moves, nextSide;
+
+public void create() {
+  if (!is_clone(this_object())) return; 
+  
+  ::create();
+
+  AddId(({"idokaeder", "zwanzigseiter", "wuerfel", "idokaeder der freunschaft",
+          "wuerfel der freundschaft", BARD_ID_GS10_TASK_FRIEND}));
+  SetProp(P_SHORT, "Ein Idokaeder der Freundschaft");
+  SetProp(P_LONG, "Dieser zwanzigseitige Koerper besteht aus zwanzig verschiedenfarbigen Dreiecken, "
+                  "die zu einer Art Wuerfel oder dreidimensionalen Koerper zusammengesetzt wurden. "
+                  "Jede Seite scheint aus einem anderen Edelstein geschliffen zu sein. In seinem "
+                  "Inneren pulsiert ein sanftes Licht. Dieser Idokaeder ist durch ein magisches "
+                  "Band mit @@partnerName@@ verbunden. @@side@@");
+  SetProp(P_NAME, "Idokaeder");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NODROP, 1);
+  SetProp(P_MATERIAL, ([MAT_GLASS: 50, MAT_MAGIC: 50]) );
+
+  SetProp(P_INFO, "Du kannst jede der zwanzig Seiten druecken. Wenn den Idokader nicht mehr "
+                  "haben moechtest, kannst du ihn zerbrechen.");
+
+  nextSide = 0;
+  moves = 7;
+
+  AddCmd( ({"zerbreche", "zerbrich", "zerbrech"}), "cmd_zerbrechen");
+  AddCmd( ({"drueck", "druecke"}), "cmd_druecken");
+}
+
+private varargs object partnerCube(int noRemove) {
+  object partner, ob;
+
+  if(!objectp(partner = find_player(partnerId))) {
+    if(!noRemove) remove();
+    return 0;
+  }
+
+  if(!objectp(ob = present(BARD_ID_GS10_TASK_FRIEND, partner))) {
+    if(!noRemove) remove();
+    return 0;
+  }
+
+  return ob;
+}
+
+public string side() {
+  if(nextSide > 0)
+    return "Die Seite " + nextSide + " steht etwas heraus.";
+  return "Keine der Seiten scheint besonders.";
+}
+
+public int GetNextSide() {
+  return nextSide;
+}
+
+public int cmd_zerbrechen(string str) {
+  object partner, ob;
+
+  notify_fail("Was willst du zerbrechen?\n");
+  if(!id(str)) return 0;
+
+  write(BS("Du zerbrichst den Idokaeder"));
+  say(BS(TPN + " zerbricht einen Idokaeder"));
+
+  if(!objectp(partner = find_player(partnerId))) return 1;
+  if(!objectp(ob = present(BARD_ID_GS10_TASK_FRIEND, partner))) return 1;
+
+  ob->remove();
+  call_out("remove", 0);
+  return 1;
+}
+
+public void ResetSides() {
+  tell_object(ENV(TO), "Mit einem lauten *KLICK* setzen sich die Seiten des Idokaeders zurueck.\n");
+  nextSide = -1;
+
+  if(objectp(partnerCube()))
+    partnerCube()->SetNextSide(1 + random(20));
+  
+  return;
+}
+
+public void SetNextSide(int s) {
+  nextSide = s;
+  tell_object(ENV(TO), BS(sprintf("Mit einem leisen *KLICK* springt die Seite %d deines Idokaeders hervor.", nextSide)));
+}
+
+public void inspireSong(int callOther) {
+  object partner;
+  tell_object(ENV(TO), BS("Mit einem leisen Summen loest sich der Idokaeder in Luft auf."));
+
+  if(ENV(TO)->QueryProp(P_GUILD) == "bardengilde" && ENV(TO)->QuerySkill("band der freundschaft") == 0) {
+    call_out("LearnBardSpell", 0, environment(this_object()), "band der freundschaft", 
+            "Mit diesem Musikstueck verbindest du deine Lebensenergie und Seele mit der eines Freundes.",
+            "spiele 'band der freundschaft' auf <freund>");
+  } else {
+    ENV(TO)->SetProp(P_SP, ENV(TO)->QueryProp(P_MAX_SP));
+  }
+
+  if(objectp(partner= partnerCube())) {
+    if(callOther) partnerCube()->inspireSong(0);
+  }
+
+  call_out("remove", 2);
+  return;
+}
+
+public int cmd_druecken(string str) {
+  int seite, otherSide;
+  object ob;
+
+  if(!str) return 0;
+
+  notify_fail("Welche Seite willst du druecken?\n");
+  if(sscanf(str, "seite %d", seite) != 1) return 0;
+
+  if(seite < 1 || seite > 20) {
+    write(BS("So eine Seite hat der Idokaeder nicht."));
+    return -1;
+  }
+
+  if(!objectp(ob = partnerCube())) {
+    remove();
+    return 1;
+  }
+
+  if(ob->GetNextSide() < 0) {
+    write("Nichts passiert.\n");
+    return -1;
+  } 
+
+  if(ob->GetNextSide() != seite) {
+    ResetSides();
+    return -1;
+  }
+
+  nextSide = -1;
+  write(BS(sprintf("Du drueckst die Seite %d des Idokaeders.", seite)));
+
+  otherSide = 1+random(20);
+  SetNextSide(otherSide);
+
+  if(--moves <= 0) {
+    inspireSong(1);
+  }
+
+  return 1;
+}
+
+public string partnerName() {
+  object ob;
+  if(!objectp(ob=find_player(partnerId))) {
+    remove();
+    return "Niemandem";
+  }
+
+  return ob->Name(WER);
+}
+
+public void setPartner(object partner) {
+  partnerId = getuid(partner);
+  return;
+}
+
+public void init() {
+  object pl;
+  ::init();
+  if(!is_clone(this_object())) return;
+  if(!interactive(pl=environment(this_object()))) {
+    remove(1);
+    return;
+  }
+}
+
+
+public int remove(int silent) {
+  if(objectp(ENV(TO))) {
+    tell_object(ENV(TO), BS("Der Idokaeder zerbricht."));
+  }
+  return ::remove(silent);
+}

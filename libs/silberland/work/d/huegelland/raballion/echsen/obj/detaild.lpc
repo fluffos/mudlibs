@@ -1,0 +1,261 @@
+// /d/huegelland/raballion/echsen/obj/detaild.c
+// Ein Master fuer die ganzen AddDetail der Raeume
+// dient zum zentralen Verwalten der Details zum Untersuchen in Raeumen
+// 2004-07-15  Raballion@
+
+#include "../def.h"
+
+#include <properties.h>
+
+#define MASTERDIR "/d/huegelland/raballion/echsen/obj/"
+#define DBBASE "details.lib"
+#define SAVEFILE "detaild.save"
+#define raba(x) if (find_player("raballion")) tell_object(find_player("raballion"),(x))
+
+// administration
+void save_modul();
+string query_status();
+varargs void Stat(string library);
+
+// DB Abfrage
+varargs int NewLib(string file, int localflag, object room);
+void DiscardLib (string library);
+mixed GetInfo(string library, string key);
+
+
+
+// 
+mapping details;
+
+create()
+{
+  if (is_clone(TO) )
+     {
+     return destruct(TO);
+     }
+//  AddId( ({"detailmaster", "detaild"}) );
+
+  seteuid(getuid(this_object()));
+
+  details=([]);
+//  NewLib(MASTERDIR+DBBASE,0);
+  raba("Detaild gestartet\n");
+
+}
+
+int remove() { return 0; }
+
+
+// Administration
+// sichern aller Variablen. Damit man Fehler debugen kann.
+void save_modul()
+{
+  raba("Objekt sichern\n");
+  save_object(MASTERDIR+SAVEFILE);
+}
+
+
+varargs int NewLib(string file, int localflag, object room)
+{
+int i, j, stat; // laeufer und der status laut Automatentheorie
+string str;     // das ganze File zum lesen
+string *s;      // die Zeilen des Files
+string keys;    // die Keys als string
+string *keyssp; // die Keys gesplittet
+string grp;     // die Gruppen als String
+string *grpsp;   // die Gruppen gesplittet
+mapping data;   // die Daten je Detail
+string texte;   // sammel der texte
+
+
+  // file mit den Details lesen
+  if (!str=read_file(file)) return 0;
+
+  // auftrennen nach den Zeiletrennern des Files
+  s = explode (str, "\n");
+
+  // sonderbehandlung beim Schreiben der Einzeleintraege, da wir NACH einem wechsel gerne
+  // rausschreiben. Daher fuehren nen Status laut Automatentheorie.
+  stat = 0; // noch nie was gelesen
+  texte = "";
+  data = ([]);
+
+  // dann gehen wir mal ueber alle zeilens des Files
+  for (i=0; i<sizeof(s); i++)
+    {
+    // Komentare ueberlesen
+    if ((s[i]=="") || (s[i][0]=='#')) continue;
+    // Header
+    if (s[i][0..6]=="detail:")
+      {
+      if ((stat != 3) && (stat != 0))
+        {
+        // da war was verkehrt
+        return -1;
+        }
+      else if (stat == 0)
+        {
+        // nicht sichern, da wir nun das erste Detail in Haenden halten.
+        stat = 1; // header Status
+        }
+      else
+        {
+        // korrekter wechsel des status laut Automatentheorie
+        stat = 1; // header Status
+        // daten schreiben
+        if (localflag == 0)
+          {
+          // daten in den Master
+          for (j=0; j<sizeof(keyssp); j++)
+            {
+            data += ([ keyssp[j]:texte ]);
+            }
+          }
+        else if (localflag == 1)
+          {
+          // daten in den Raum lokal
+          room->AddDetail(keyssp, texte);
+          }
+        // var zuruecksetzen fuers sammeln
+        texte = "";
+        }
+      // Daten vom Header einlesen
+      sscanf(s[i], "detail:%s", keys);
+      keyssp = explode(keys, ",");
+      for (j=0; j<sizeof(keyssp); j++)
+        {
+        // vorne ein space?
+        if (keyssp[j][0..0] == " ")
+          {
+          keyssp[j] = keyssp[j][1..];
+          }
+        if ((string)keyssp[j][<1] == " ")
+          {
+          keyssp[j] = keyssp[j][0..<1];
+          }
+        }
+      }
+    // Gruppen einlesen wird derzeit nicht mit gespeichert oder verwendet
+    else if (s[i][0..6]=="gruppe:")
+      {
+      if (stat != 1)
+        {
+        // da war was mit dem Status verkehrt
+        return -1;
+        }
+      else
+        {
+        stat = 2;  // gruppen Status
+        }
+      sscanf(s[i], "gruppe:%s", grp);
+      grpsp = explode(grp, ",");
+      for (j=0; j<sizeof(grpsp); j++)
+        {
+        // vorne ein space?
+        if (grpsp[j][0..0] == " ")
+          {
+          grpsp[j] = grpsp[j][1..];
+          }
+        if ((string)grpsp[j][<1] == " ")
+          {
+          grpsp[j] = grpsp[j][0..<1];
+          }
+        }
+      }
+    else
+      {
+      if ( (stat == 0) )
+        {
+        // da war was mit dem Status verkehrt
+        // status ist 0 oder 2 also keinen header oder nur gruppe 
+        return -1;
+        }
+      else if ((stat == 1) || (stat == 3) || (stat == 2))
+        {
+        // wir sind jetzt im text bzw. immer noch. Das macht keinen Unterschied.
+        stat = 3; // text Status
+        texte += s[i];
+        }
+      }
+
+    }
+  // Schreiben des letzten Details.
+  // daten in den Master
+  for (j=0; j<sizeof(keyssp); j++)
+    {
+    data += ([ keyssp[j]:texte ]);
+    }
+
+  if (localflag == 0)
+    {
+    details += ([ file : data ]);
+    }
+
+
+  save_modul();
+  return 0;
+}
+
+void DiscardLib (string library)
+{
+  details = m_delete (details, library);
+}
+
+mixed GetInfo(string library, string key)
+{
+int i;
+
+  if (!member(details, library)) 
+    {
+    NewLib(library);
+    }
+  if (!member(details, library)) 
+    {
+    return 0;
+    }
+  if (member(details[library], key))
+    {
+    return ({ details[library][key]  });
+    }
+  save_modul();
+  return 0;
+}
+
+varargs void Stat(string library)
+{
+  int i,j,k;
+  string *libs;
+  string s;
+
+  s = sprintf(
+    "\nROOM Details Libmaster (%s)\n"
+    "Up since: %s\n"
+    "Loaded Libraries:\n\n",
+    ctime()[11..18], dtime(program_time()));
+
+  if (stringp(library))
+  {
+    if (!member(details, library))
+      s += library + ": no such library.\n\n";
+    else
+    {
+      s += library + " found with following keys:\n" +
+           break_string( implode( m_indices(details[library]) , ", "), 78 ) +
+           "\n";
+    }
+  }
+  else
+  {
+    libs = m_indices(details);
+    k=0;
+    for (i=sizeof(libs)-1; i>=0; i--) {
+      s += sprintf ("  %'.'-:60s %3d keys\n", libs[i]+" ",
+             j=sizeof(details[libs[i]]));
+      k += j;
+    }
+    s += sprintf("  %'-'69s\n", "");
+    s += sprintf("  %-19s"+
+    " %'.'40s %3d keys\n\n", sizeof(libs)+" libraries total", "", k);
+  }
+  this_player()->More(s);
+}

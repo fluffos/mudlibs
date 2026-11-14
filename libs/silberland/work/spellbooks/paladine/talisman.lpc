@@ -1,0 +1,130 @@
+// SilberLand MUDlib
+//
+// spellbooks/paladine/talisman.c
+//
+// $Date: 2004/12/14 22:00:35 $
+/* $Revision: 1.4 $
+ * $Log: talisman.c,v $
+ * Revision 1.4  2004/12/14 22:00:35  Angrox
+ * MessageToPaladins
+ *
+ * Revision 1.3  2004/01/12 20:52:44  Angrox
+ * Wenn Amaryllion verflucht ist kann es nicht herbeigerufen werden
+ *
+ * Revision 1.2  2003/12/07 18:21:18  Angrox
+ * Abfrage auf sinfo[SI_SKILLARG] !=""
+ *
+ * Revision 1.1  2003/07/09 11:39:22  Angrox
+ * Initial revision
+ *
+ */
+// Prototypem
+int prep_talisman(object caster, mapping sinfo);
+int talisman(object caster, mapping sinfo);
+
+
+
+int prep_talisman(object caster, mapping sinfo) {
+  if (sinfo[SI_SKILLARG] != 0 && sinfo[SI_SKILLARG] != "") {
+    write(BS("Der Talisman ist nur fuer Dich, Paladin!!"));
+    return 0;
+  }
+  if(present("\namaryllion", caster)) {
+    write(BS("Paladin! Du hast bereits das Talismanschwert Amaryllion! Wie "
+        +"kannst Du es wagen, es ein zweites Mal zu erflehen?"));
+    DoFailure(caster, 1);
+    return 0;
+  }
+  if(caster->QueryProp(P_WEAPON)) {
+    write("Paladin! Du hast schon eine Waffe gezueckt!\n");
+    return 0;
+  }
+  if(GetAlign(caster)<0) {
+    write("Frevler! Mit Deiner Gesinnung wird Dusty Dich NIE erhoeren!\n");
+    DoFailure(caster, 1);
+    return 0;
+  }
+  return 1;
+}
+
+int talisman(object caster, mapping sinfo) {
+  object ob, owner, necro;
+  int suc,time;
+  string text;
+
+  if( !prep_talisman( caster, sinfo) ) return 0;
+  if(!(present(WAPPENROCK, caster)->QueryAmaryllion(caster))) {
+    write(BS("Paladin! So oft kannst Du Dusty um ihr Schwert nicht "
+        "belaestigen!\n"));
+    return 0;
+  }
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+      printf(sinfo[SI_SP_LOW_MSG]);
+      return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  text=sprintf("Herrin Dusty, erhoere %s und gewaehre %s %s Bitte, "
+      +"das Talismanschwert Amaryllion im Kampf gegen das Boese "
+      +"einsetzen zu duerfen!\n", diener[1][caster->QueryProp(P_GENDER)],
+      caster->QueryPronoun(WEM), caster->QueryPossPronoun(WEM));
+
+  Message(caster, 0, BSA(text,"Du rufst: "), 0);
+  Message(caster, 0, BSA(text, caster->Name(WER)+" ruft: "), 3);
+
+  call_other(WEAPON("amaryllion"), "???");
+  ob=find_object(WEAPON("amaryllion"));
+  owner=ENV(ob);
+  if(owner && !interactive(owner) && living(owner)
+      && lower_case(owner->QueryProp(P_GUILD))=="paladine")
+  {
+    Message(caster, 0, BS("Jemand anderes benutzt gerade Amaryllion "
+        "im Kampf gegen das Boese!"), 0);
+    Message(caster, 0, sprintf("Dusty scheint %s Bitte nicht erhoert "
+            "zu haben!\n",caster->Name(WESSEN)), 3);
+    return 0;
+  }
+  if(objectp(necro=ob->query_pestered())) {
+    Message(caster, 0, BS(sprintf("Bei Dusty! %s hat Amaryllion mit einem "
+            "Fluch der Niederhoellen belegt! Du kannst es nicht herbei"
+            "rufen!", necro->Name(WER))),0);
+    Message(caster, 0, sprintf("Dusty scheint %s Bitte nicht erhoert "
+            "zu haben!\n",caster->Name(WESSEN)), 3);
+    return 0;
+  }
+  if((suc=SpellSuccess(caster, sinfo))<=0) {
+    Message(caster, 0, BS("Dusty scheint Dich nicht zu erhoeren!"), 0);
+    Message(caster, 0, sprintf("Dusty scheint %s Bitte nicht erhoert "
+            "zu haben!\n",caster->Name(WESSEN)), 3);
+    return MISSERFOLG;
+  }
+  Message(caster, 0, BS(sprintf("Ploetzlich materialisiert sich aus einem "
+      +"hellen Leuchten heraus ein silbern schimmerndes Schwert! Das Talisman"
+      +"schwert Amaryllion! Gepriesen sei Dusty! Nun moegen sich Deine "
+      +"Feinde vor Dir vorsehen!\n")), 0);
+  Message(caster, 0, BS(sprintf("Auf einmal materialisiert sich in %s Hand "
+      +"ein silbern schimmerndes Schwert!\n", caster->Name(WESSEN))), 3);
+  time=10*caster->QueryProp(P_GUILD_LEVEL)+
+         GetAlign(caster)/7+150*suc/MAX_ABILITY+random(150);
+  if(owner && interactive(owner)) {
+    tell_object(owner, BS(sprintf("Paladin! %s benoetigt Amaryllion! "
+        "Das Talismanschwert loest sich vor Deinen Augen auf.",
+        caster->Name(WER))));
+  }
+  // ZUM LOGGEN DER SPELLSTAERKE!
+  write_file("/gilden/paladine/spells/talisman",
+      sprintf("CST: %O, CA: %d, suc: %d, time: %d\n",
+          caster, caster->QueryProp(P_ALIGN), suc, time ));
+  // ----------------------------
+  ob->SetProp(P_CURSED,0);
+  ob->DoUnwield(0);
+  ob->unset_pestered();
+  ob->move(caster, M_NOCHECK|M_SILENT);
+  ob->start_remove(time, suc);
+  ob->wield_me(0);
+  ob->MessageToPaladins(caster);
+  present(WAPPENROCK, caster)->SetAmaryllion();
+  return ERFOLG;
+}
+
+

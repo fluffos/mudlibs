@@ -1,0 +1,68 @@
+mapping prep_giftpfeil(object caster, mapping sinfo, int silent)
+{  
+  object ob;
+  
+  //Aenderungen der Werte im sinfo Mapping vermeiden!
+  if(!TestNoTrance(caster, sinfo) || !GuildItemTest(caster, sinfo) ||
+     !FroschTest(caster, sinfo) || 
+     !BowTest(caster,sinfo)     ||
+     !BlindTest(caster,sinfo)     )
+    return 0;
+
+  if(!objectp(ob=sinfo[SI_ENEMY]))
+  { ob=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                       "Wen moechtest Du anvisieren?\n");
+    if(!ob) return 0; }
+  sinfo[SI_ENEMY]=ob;
+  if(!silent){FirstPrepareFuncSuccessfull(caster, sinfo);}
+  aim(caster, sinfo);
+  return sinfo;
+}
+
+int giftpfeil(object caster, mapping sinfo) 
+{
+  object ob, p;
+  int dam, success, ability, i, giftskill;
+  mixed dts;
+
+  if(!mappingp(sinfo=prep_zielschuss(caster, sinfo, 1))) return 0;
+  ob=sinfo[SI_ENEMY];
+
+  success=SpellSuccess(caster,sinfo);
+  if(success < (-5000+random(1000)))
+  {
+    tell_object(caster, BSC("Du schneidest Dich an dem vergifteten Pfeil. "
+                        "MIST!"));
+    caster->AddPoison(1);
+    return MISSERFOLG;
+  }
+  if(success<0)
+  {
+    tell_object(caster, BSC("Du verschiesst den Pfeil."));
+    return MISSERFOLG;
+  }
+  
+  ability=sinfo[SI_SKILLABILITY]; success=SpellSuccess(caster, sinfo);
+  dam=sinfo[SI_SKILLDAMAGE]; 
+  
+  giftskill=R_SKILLMASTER->HasSkill(getuid(caster), MEISTER_DER_GIFTE);
+  dts=({DT_POISON,DT_PIERCE});
+  dam+=ability/50; dam+=success/100;
+  sinfo[SI_SKILLDAMAGE_TYPE]=dts;
+    
+  tell_object(caster, BS("Du schiesst einen vergifteten Pfeil auf "+ob->name(WEN, 1)+".") );
+  tell_room(ENV(caster), BS(caster->Name(WER, 1)+" schiesst einen Giftpfeil auf "+ob->name(WEN, 1)+"."), ({caster}));
+  sinfo[SI_SKILLDAMAGE]=dam;
+  ExecuteAttackSpell(ob, caster, sinfo, ([SP_SHOW_DAMAGE:1]), ATTACK_SPELL_BOW);
+
+  // opfer lebt noch -> wird ggf vergiftet (mit talent fix, sonst nur bei besonders gutem erfolg)
+  if(objectp(ob) && objectp(caster) && !ob->is_class_member(({CL_UNDEAD})) && (giftskill || success > 8000) & !objectp(present(NPC_POISON_ID, ob))) {
+    tell_room(ENV(caster), BS(caster->Name(WESSEN, 1)+" Pfeil hat "+ob->name(WEN, 1)+" genau getroffen und somit vergiftet."), ({caster}));
+    tell_object(caster, BS(sprintf("Der Pfeil bleibt in %s stecken und vergiftet %s.", ob->name(WEM, 1), ob->QueryPronoun(WEM))));
+    p=clone_object(OBJ "npc_poison"); p->move(ob, M_TPORT|M_SILENT);
+    p->poison(ob, caster, giftskill, get_equip_damage(caster, "giftpfeil", success));
+  }
+
+  reload(caster, sinfo);
+  return ERFOLG;
+}

@@ -1,0 +1,687 @@
+// von Wraz / Mendralim
+// basiert auf /gilden/druidenzirkel/obj/focus.c
+
+// TODO mehr Zufall einbauen?
+
+#include "../def_metzelorgie.h"
+
+inherit "std/thing";
+
+// #define FOCUS_LOGGING
+#include <properties.h>
+#include <combat.h>
+#include <defines.h>
+#include <moredef.h>
+#include <ansi.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <wizlevels.h>
+#include "/gilden/druidenzirkel/druiden.h"
+
+#define DAM_MOD ([1:110, 2:120, 3:130, 4:140, 5:150])
+#define COST_MOD ([1:110, 2:125, 3:150, 4:170, 5:200])
+#define ADJ ([1:"klein"; ({"kleiner", "klein", "kleinen"}), \
+              2:"mittler"; ({"mittel", "mittlerer", "mittleren"}),\
+              3:"gross"; ({"gross", "grosser", "grossen"}),\
+              4:"maechtig"; ({"maechtig", "maechtiger", "maechtigen"}),\
+              5:"ultimativ"; ({"ultimativ", "ultimativer", "ultimativen"}) ])
+#define SPECIAL ([FEUER: "rubin", WASSER: "aquamarin", LUFT: "topas", ERZ: "opal", EIS: "saphir", HUMUS: "smaragd"])
+#define LOAD_TEXT ({"fast leer", "nicht ganz halbvoll", "halbvoll", "mittelvoll", "fast voll", "randvoll"})
+#define HOLO_IDS ({DRUIDEN_FOCUS+FEUER,DRUIDEN_FOCUS+WASSER,DRUIDEN_FOCUS+EIS,DRUIDEN_FOCUS+LUFT,DRUIDEN_FOCUS+ERZ,DRUIDEN_FOCUS+HUMUS})
+#define mio 1000000
+#define WOCHE 604800 // 60*60*24*7
+#ifndef DB
+#define DB(x) if (find_player("wraz")) tell_object(find_player("wraz"),(x))
+#endif
+
+int size, max_amount, amount, cost_mod, dam_mod, dam_mod_deaths;
+string element, long_str;
+
+int todesnaehe;
+int PHP, PMHP;
+
+float max_dam_mod_deaths = 200.0;
+int randomness = random(11);
+float k_steigung = 0.7;
+float deaths_wendepunkt = 5.0;
+float cost_mod_factor = 0.55; // nicht genutzt
+float last_deathtime_penalty_factor = 1.0;
+int week_no_penalty_thresh = 2;
+
+mapping tode_10 = (["d.ebene.wraz":100]);
+
+// --- CREATE ---------------------------------------------------------------
+void create()
+{
+  if(!is_clone(TO))
+    return;
+
+  ::create();
+  max_dam_mod_deaths *= (90.0+to_float(randomness))/100.0;
+
+  SetProp(P_SHORT, "Ein elementarer Fokus des Sterbens");
+  SetProp(P_NAME, "Fokus des Sterbens");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_WEIGHT, 0);  
+  SetProp(P_VALUE, 1000);
+  SetProp(P_NOBUY, 1); 
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NOSELL, 1);
+  AddId(({ DRUIDEN_FOCUS, "fokus", "sterbefokus", "\nsterbefokus" }));
+
+  AddCmd( ({"aktiviere", "aktivier"}), "cmd_aktivieren");
+  AddCmd( ({"deaktiviere", "deaktivier"}), "cmd_deaktivieren");
+  AddCmd( ({"lade", "lad"}), "cmd_aufladen");
+  size = max_amount = 1;
+  element = "keines";
+  SUID;
+}
+
+// --- QUERY MODS -----------------------------------------------------
+mixed QueryMods()
+{
+  return ({dam_mod,cost_mod});
+}
+
+// --- QUERY PARAMETERS -----------------------------------------------------
+mixed QueryParameters()
+{
+  return ({max_dam_mod_deaths, k_steigung, deaths_wendepunkt, cost_mod_factor,
+    last_deathtime_penalty_factor, week_no_penalty_thresh});
+}
+
+// --- QUERY DAMMODDEATHS ---------------------------------------------------
+int QueryDamModDeaths() { return dam_mod_deaths; }
+
+// ------ QUERY_TODE --------------------------------------------------------
+int query_tode_10(string who) { return tode_10[who]; }
+
+// ------ QUERY_LISTED_PLAYERS -----------------------------------------------
+mixed query_listed_players()
+{
+  return m_indices(tode_10);
+}
+
+// ------ QUERY_INFO --------------------------------------------------------
+string _query_info()
+{
+  string str;
+  int tode;
+  int passed_time;
+  object player;
+  str = "Dieser Fokus wird durch Deine TODE maechtiger! Dazu muss er aktiv sein.\n"
+      "Zum Aktivieren benoetigt man ";
+  if (element==WASSER) str += "eine Perle oder einen Aquamarin.\n"
+      "Syntax: aktiviere fokus mit <perle|aquamarin>\n";
+  else str += "einen Edelstein.\n"
+      "Syntax: aktiviere fokus mit <edelstein>\n";
+  str +=
+      "Da man nur einen aktiven Fokus haben kann, kann man ihn auch deaktivieren.\n"
+      "Syntax: deaktiviere fokus\n"
+      "Da der Fokus nach einiger Zeit Energie verliert, kann man ihn wieder aufladen.\n";
+  if (element==WASSER) str += "Syntax: lade fokus mit <perle|aquamarin> auf\n";
+  else str += "Syntax: lade fokus mit <edelstein> auf\n";
+  if (randomness>=5) str += "Dieser Fokus ist besonders stark.\n";
+
+  player = TP;
+  if (!player) return str;
+
+  tode = tode_10[getuid(player)]/10;
+
+  passed_time = time() - QueryProp("first_wield_time");
+  passed_time = passed_time >= 0 ? passed_time : 0;
+
+  if(!QueryProp("first_wield_time")) // first_wield_time noch nicht gesetzt
+    return str;
+  
+  if (passed_time > 2678400)
+  {
+    if (!tode) str += "Dieser Fokus wird sich nach Deinem ersten Tod mit ihm ";
+    else str += "Dieser Fokus wird sich ";
+  }
+  
+  switch (passed_time)
+  {
+  case 0..2678400:
+    return str;
+    break;               // bis 31 Tage keine Meldung
+  case 2678401..3283200: // 31-38 Tage
+    str += "in weniger als zwei Wochen aufloesen!";
+    break;
+  case 3283201..3801600: // 38-44 Tage
+    str += "in weniger als einer Woche aufloesen!";
+    break;
+  case 3801601..FLT: // 44-45 Tage
+    str += "in weniger als einem einzigen Tag aufloesen!";
+    break;
+  default:
+    str += "in wenigen Minuten aufloesen!";
+  }
+  return str;
+}
+
+// --- SETPARAMETERS --------------------------------------------------------
+varargs mixed SetParameters(float max_dam_mod_deaths_, 
+  float k_steigung_, float deaths_wendepunkt_,float cost_mod_factor_, 
+  float last_deathtime_penalty_factor_, int week_no_penalty_thresh_)
+{
+  max_dam_mod_deaths = max_dam_mod_deaths_;
+  max_dam_mod_deaths *= (90.0+randomness)/100.0;
+  k_steigung = k_steigung_;
+  deaths_wendepunkt = deaths_wendepunkt_;
+  cost_mod_factor = cost_mod_factor_;
+  last_deathtime_penalty_factor = last_deathtime_penalty_factor_;
+  week_no_penalty_thresh = week_no_penalty_thresh_;
+  return QueryParameters();
+}
+
+// --- UPDATE DAM_MOD and COST_MOD ------------------------------------------
+void UpdateDamCost(string who)
+// Zusaetzlicher Bonus von dam_mod_deaths je Todeszahl:
+// 0 Tode:    +5
+// 1 Tod:    +11
+// 5 Tode:  +100
+// 10 Tode: +194
+// 20 Tode: +200 (Limit)
+{
+  float temp;
+  float tode;
+
+  if (!tode_10[who] || !who || who == "") // noch kein tod -> nix erhoehen
+  {
+    cost_mod = COST_MOD[size];
+    dam_mod = DAM_MOD[size];
+    return;
+  }
+  else
+  {
+    tode = to_float(tode_10[who] / 10);
+
+    // Bonus "dam_mod_deaths" Berechnung (Logistische Funktion)
+    temp = max_dam_mod_deaths / (1.0+exp(-k_steigung*(tode-deaths_wendepunkt)));
+    temp *= last_deathtime_penalty_factor;
+    dam_mod_deaths = to_int(temp);
+
+    // Bei dam_mod = 200: cost_mod von 240 (0 Tode) bis 175 (ab 10 Tode)
+    // Ohne Obergrenze (siehe unten) waere bei 0 Tode cost_mod = 1002!
+    cost_mod = 
+      100 
+      + to_int(
+        (COST_MOD[size] - 100.0 + temp) 
+        / (temp/50.0)
+      );
+    // Obergrenze bei wenigen Toden ist 1.2 * 'normale' cost_mod
+    cost_mod = (cost_mod > (COST_MOD[size] * 12 / 10)) ?
+      (COST_MOD[size] * 12 / 10) :
+      cost_mod;
+    dam_mod = DAM_MOD[size] + dam_mod_deaths;
+    return;
+  }
+
+}
+
+// --- SETVARIABLES ---------------------------------------------------------
+int SetVariables(string _element, int _size) 
+{
+  switch (_element)
+  {
+    case FEUER: SetProp(P_MATERIAL, MAT_FIRE); break;
+    case WASSER: SetProp(P_MATERIAL, MAT_WATER); break;
+    case EIS: SetProp(P_MATERIAL, MAT_ICE); break;
+    case LUFT: SetProp(P_MATERIAL, MAT_AIR); break;
+    case ERZ: SetProp(P_MATERIAL, MAT_METAL); break;
+    case HUMUS: SetProp(P_MATERIAL, MAT_MISC_PLANT); break;
+    case "holo": SetProp(P_MATERIAL, ({MAT_FIRE, MAT_WATER, MAT_ICE,
+      MAT_AIR, MAT_METAL, MAT_MISC_PLANT})); break;
+    default:
+      remove();
+      return 0;
+  }
+  if (_size < 1 || _size > 5)
+    return remove(),0;
+  element = _element;
+  size = _size;
+  max_amount = amount = 10000 * size;
+  UpdateDamCost(MENV?getuid(MENV):"");
+  AddId(lower_case(element+"fokus"));
+  SetProp(P_NAME, CAP(element+"fokus")+" des Sterbens");
+  if(element=="holo")
+  {
+    AddId(HOLO_IDS);
+    AddId("holoelementarfokus");
+    SetProp(P_NAME, CAP(element+"elementarfokus")+" des Sterbens");
+  }
+  SetProp(P_NAME_ADJ, ADJ[size,0]);
+  SetProp(P_SHORT, Name(WER,0) );
+  AddAdjective( ADJ[size,1]);
+  return 1;
+}
+
+// --- QUERY VARIABLES -----------------------------------------------------
+mixed QueryVariables()
+{
+  return ({element, size, amount, max_amount});
+}
+
+// --- FOCUS ---------------------------------------------------------------
+varargs mapping Focus(object player, mapping sinfo, int flag)
+{
+  if (amount > 0 || flag)
+  {
+#ifdef FOCUS_LOGGING
+    write_file(LOG("focus.log"), sprintf("%s: %O (%s %d %d %d) old: %d/%d/%d,",
+          dtime(time()), player, element, size, amount, max_amount, 
+          sinfo[SI_SKILLDAMAGE], sinfo[SI_RAW_SPELLCOST],sinfo[SI_MAX_DAMAGE]));
+#endif
+  // bei < 10% HP ist der Bonus noch hoeher (wie bei den Sterbewaffen)
+  PHP = player->QueryProp(P_HP);
+  PMHP = player->QueryProp(P_MAX_HP);
+  if (PHP <= (PMHP / 10) && PHP >= 0)
+  {
+    todesnaehe = 0;
+    // maximum bei 0 bzw 1 von 500 HP: 5000
+    // bei exakt 0 HP: Fixanteil von 1000
+    todesnaehe = PHP == 0 ? 1000 + (random((10 * PMHP / 5) * 4)) : random((10 * PMHP) / PHP);
+    if (todesnaehe > 200)
+      player->Message(BS("Die Naehe zum TOD staerkt Deinen Fokus!"));
+  }
+    sinfo[SI_SKILLDAMAGE] = (dam_mod+todesnaehe) * sinfo[SI_SKILLDAMAGE] / 100;
+    sinfo[SI_RAW_SPELLCOST] = cost_mod * sinfo[SI_RAW_SPELLCOST] / 100;
+    sinfo[SI_MAX_DAMAGE] = (100 + (dam_mod - 100) / 2) * sinfo[SI_MAX_DAMAGE] / 100;
+    amount -= sinfo[SI_SKILLDAMAGE] / 10;
+#ifdef FOCUS_LOGGING
+    write_file(LOG("focus.log"), sprintf(" new: %d/%d/%d, amount: %d\n",
+          sinfo[SI_SKILLDAMAGE], sinfo[SI_RAW_SPELLCOST],sinfo[SI_MAX_DAMAGE],
+          amount));
+#endif
+    if (amount < 0) amount = 0;
+  }
+  return sinfo;
+}
+
+// --- DOTDAMAGE -----------------------------------------------------------
+int DotDamage(int damage)
+{
+  return damage * dam_mod / 100;
+}
+
+void remove_me()
+{
+  if (amount > 0)
+    return;
+  if (MENV && interactive(MENV))
+    call_other(DRUIDENSPELLS, "write_color", 
+        Name(WER,1)+" loest sich auf!\n", element, MENV);
+  remove();
+}
+
+// --- CMD AKTIVIEREN ------------------------------------------------------
+int cmd_aktivieren(string str)
+{
+  string focus, gemname, macht_string;
+  object gem;
+
+  notify_fail("Was willst Du mit was aktivieren?\n");
+  if (!str) 
+    return 0;
+  if (sscanf(str, "%s mit %s", focus, gemname) != 2) 
+    return 0;
+  if (TO && ENV(TO) && ENV(ENV(TO)) && ENV(ENV(TO)) == TP)
+    return notify_fail("Du musst "+TO->name(WEN,1)+" zuerst aus "+
+    ENV(TO)->name(WEM,1)+" nehmen!\n"),0;
+  if (TO && ENV(TO) && ENV(TO) != TP)
+    return notify_fail("Du musst "+TO->name(WEN,1)+" bei Dir tragen!\n"),0;
+  if (!id(focus)) 
+    return notify_fail("Du hast ja gar kein "+CAP(focus)+"!\n"),0;
+  if (!objectp(gem=present(gemname, TP)))
+    return notify_fail("Du hast ja gar kein "+CAP(gemname)+"!\n"),0;
+  if ((element == WASSER && file_name(gem)[0..11] != "/obj/pearls/")) 
+    return notify_fail("Du brauchst eine Perle, um "+name(WEN,1)+" zu aktivieren!\n"),0;
+  if (element != WASSER && file_name(gem)[0..9] != "/obj/gems/") 
+    return notify_fail("Du brauchst einen Edelstein, um "+name(WEN,1)+" zu aktivieren!\n"),0;
+  if (present(DRUIDEN_FOCUS "aktiv", TP) )
+    return notify_fail("Du hast doch schon einen Fokus aktiv!\n"),0;
+  if (amount <= 0)
+  {
+    call_other(DRUIDENSPELLS, "write_color", BS(Name(WER,1)+
+          " ist leer und wird sich bald aufloesen, wenn Du "
+          "ihn nicht schnell auflaedst!\n"), element, TP);
+    call_out("remove_me", 60);
+    return 1;
+  }
+  // getuid() damit der NPC-Druide den Fokus levelunabhaengag nutzen kann
+  if (getuid(TP) != "d.ebene.wraz" && TP->QueryProp(P_GUILD_LEVEL) - size < 11 &&
+      query_wiz_level(TP) < 20)
+    return write("Deine Gildenstufe reicht dazu nicht aus!\n"),1;
+  gem->AddAmount(-1);
+  if(element=="holo") AddId(({DRUIDEN_FOCUS "aktiv"}) + HOLO_IDS);
+  else AddId(({DRUIDEN_FOCUS "aktiv",DRUIDEN_FOCUS + element}));
+  macht_string = (element == "holo") ? "aller Elemente" : ("des Elements "+CAP(element));
+  call_other(DRUIDENSPELLS, "write_color", Name(WER,1)+" ist jetzt aktiv!\n"
+      "Du fuehlst die Macht "+macht_string+" in Dir!\n",
+      element, TP);
+  return 1;
+}
+
+// --- CMD DEAKTIVIEREN ----------------------------------------------------
+int cmd_deaktivieren(string str)
+{
+  if (!id(str) ) 
+    return notify_fail("Was willst Du deaktivieren?\n"),0;
+  if (!id(DRUIDEN_FOCUS "aktiv") )
+    return notify_fail(Name(WER,1)+ " ist doch gar nicht aktiv!\n"),0;
+  if (amount == 0)
+  {
+    call_other(DRUIDENSPELLS, "write_color", BS(Name(WER,1)+
+          " ist leer und wird sich bald aufloesen, wenn Du "
+          "ihn nicht schnell auflaedst!\n"), element, TP);
+    call_out("remove_me", 60);
+    return 1;
+  }
+  RemoveId(({DRUIDEN_FOCUS "aktiv",DRUIDEN_FOCUS + element}));
+  call_other(DRUIDENSPELLS, "write_color", 
+      Name(WER,1)+" ist jetzt nicht mehr aktiv!\n", element, TP);
+  return 1;
+}
+
+// --- CMD AUFLADEN --------------------------------------------------------
+int cmd_aufladen(string str)
+{
+  string was, womit;
+  object ob;
+  int value;
+  int req;
+  int tode;
+
+  notify_fail("Was willst Du womit aufladen?\n");
+  if (!str ) return 0;
+  if (sscanf(str, "%s mit %s auf", was, womit) != 2 &&
+      sscanf(str, "%s mit %s", was, womit) != 2)
+    return 0;
+  if (!id(was) ) return 0;
+  if (!objectp(ob=present(womit,TP)) ) return 0;
+  if (element != WASSER && file_name(ob)[0..9] != "/obj/gems/" )
+    return write("Du kannst "+name(WEN,1)+" nur mit Edelsteinen aufladen!\n"),-1;
+  else if (element == WASSER && file_name(ob)[0..11] != "/obj/pearls/" && 
+       file_name(ob)[0..18] != "/obj/gems/aquamarin")
+    return write("Du kannst "+name(WEN,1)+" nur mit Perlen und Aquamarinen aufladen!\n"),-1;
+
+  write("Du laedst "+name(WEN,1)+" mit "+ob->name(WEM)+" auf.\n");
+  req = ob->QueryProp(P_REQUESTED_AMOUNT);
+  value = req * ob->QueryCoinsPerUnits()[0];
+  if (ob->id( SPECIAL[element] ) ) 
+    value *= 3;
+  if(TP && getuid(TP)) 
+  {
+    tode = tode_10[getuid(TP)]/10;
+    value = to_int(value * (1.0 + sqrt(to_float(tode)))) ; // mehr Tode --> besseres Aufladen
+    value = value > 50 ? value : 50; // min 50 (Wert der billigsten Edelsteine)
+  }
+  amount += value * TP->QueryAttribute(A_INT) / 30;
+  if (amount >= max_amount)
+  {
+    amount = max_amount;
+    write(Name(WER,1) + " ist nun vollstaendig aufgeladen!\n");
+  }
+  ob->AddAmount(-req);
+  // DEBUG
+  DB(sprintf("  Sterbefokus aufladen: %s laedt %s auf, %d Edelsteine verbraucht, %d Wert, amount: %d, max_amount: %d\n",
+    TP->Name(WER,1), explode(file_name(TO),"/")[<1], req, value, amount, max_amount));
+  return 1;
+}
+
+// ------ DEATHTIME_MESSAGE() ----------------------------------------------
+// wird im reset() aufgerufen
+void deathtime_message()
+{
+  object player;
+  float new_penalty;
+
+  player = environment(TO);
+  if (!player || !interactive(player)) return;
+
+  // Penalty wenn letzter Tod laenger als week_no_penalty_thresh Wochen her
+  if ((QueryProp("real_deathtime") < (time() - WOCHE*week_no_penalty_thresh)) 
+    && QueryProp("first_wield_time"))
+  {
+    new_penalty = 1.0 - (to_float(time() - QueryProp("real_deathtime")) / to_float(WOCHE) / 10.0);
+    new_penalty = new_penalty >= 0.1 ? new_penalty : 0.1;
+    new_penalty = new_penalty <= 0.9 ? new_penalty : 0.9; // zur Sicherheit nach oben begrenzen (falls Rechenfehler irgendwo...)
+    if(QueryProp("wdebug",1) && find_player("wraz")) 
+      find_player("wraz")->Message(BS(ENV(TO)->Name()+ " - new last_deathtime_penalty_factor: "+new_penalty+
+        "\npreviously: "+last_deathtime_penalty_factor+", weeks since death: "+
+        (to_float(time() - QueryProp("real_deathtime")) / to_float(WOCHE)))); // DEBUG
+    last_deathtime_penalty_factor = new_penalty;
+    if(last_deathtime_penalty_factor < 1.0) // kleiner 1 -> Penalty
+      player->Message(BS(Name(WER,1) + " duerstet nach Deinem Blut!"));
+  }
+
+  // Message wenn letzter Tod < 24h zurueck liegt
+  if (TO->QueryProp("deathtime") > time() - 86400)
+    player->Message(BS(TO->Name(WER,1) + " duerstet nach dem Blut " + TO->QueryPossPronoun(WER, 1) + " alten Meisters!"));
+}
+
+// ------ DISAPPEAR() ------------------------------------------------------
+void disappear()
+{
+  object player;
+  string text;
+  int passed_time;
+  int tode;
+
+  player = environment(TO);
+  if (!player)
+    return;
+  if (!interactive(player))
+    return;
+  if (!QueryProp("first_wield_time")) // first_wield_time noch nicht gesetzt
+    return;
+
+  tode = tode_10[getuid(player)]/10;
+
+  passed_time = time() - QueryProp("first_wield_time");
+  passed_time = passed_time >= 0 ? passed_time : 0;
+  text = "Schwarzer Nebel fliesst aus " + TO->name(WEM, 1) + "! " +
+         capitalize(TO->QueryPronoun(WER)) + " wird sich in weniger als ";
+  
+  if (!tode)
+    text = "Etwas schwarzer Nebel fliesst aus "+ TO->name(WEM, 1) + "! " +
+    capitalize(TO->QueryPronoun(WER)) + " ist noch stabil, wuerde sich aber "
+    "nach einem weiteren Tod in weniger als ";
+
+  switch (passed_time)
+  {
+  case 0..2678400:
+    return;
+    break;               // bis 31 Tage keine Meldung
+  case 2678401..3283200: // 31-38 Tage
+    text += "zwei Wochen aufloesen!";
+    break;
+  case 3283201..3801600: // 38-44 Tage
+    text += "einer Woche aufloesen!";
+    break;
+  case 3801601..FLT: // 44-45 Tage
+    text += "einem einzigen Tag aufloesen!";
+    break;
+  default:
+    text =
+        "Schwarzer Nebel ergiesst sich aus " + TO->name(WEM, 1) +
+        ", bis "+ TO->QueryPronoun(WER) +" zu nichts zerfaellt.";
+    if (!tode)
+      text = "Etwas schwarzer Nebel fliesst aus "+ TO->name(WEM, 1) + "! " +
+      capitalize(TO->QueryPronoun(WER)) + " ist noch stabil, wuerde sich aber "
+      "nach einem weiteren Tod sofort aufloesen!";
+  }
+  player->Message(BS(text));
+  if ((passed_time > FLT) && (tode))
+    TO->remove();
+}
+
+// --- RESET ---------------------------------------------------------------
+void reset()
+{
+  object wer;
+  if (!is_clone(TO))
+    return;
+  ::reset();
+  deathtime_message();
+  disappear();
+  if(!TO) return;
+
+  // Funktion im Master ermoeglicht alle existierenden Sterbe-Foki upzudaten
+  call_other(WPMASTER,"update_foci",TO); 
+
+  if ((wer=MENV) && (interactive(wer) || ((wer=ENV(MENV)) && interactive(wer))) &&
+      id(DRUIDEN_FOCUS "aktiv"))
+  {
+    max_amount -= size * size * random(40 - wer->QueryAttribute(A_INT));
+    if(wer->QueryAttribute(A_INT) < 40)
+      tell_object(wer, "Dein Fokus verliert langsam an Kraft!\n");
+    else if(!random(7))
+      tell_object(wer, BS("Dein geschulter Intellekt erlaubt Dir, die Kraft Deines "
+        "Fokus zu erhalten!"));
+    if (amount > max_amount) 
+      amount = max_amount;
+    // DEBUG
+    DB(sprintf("  Sterbefokus reset: %s %s, von amount abgezogen: %d, amount: %d, max_amount: %d\n",
+      MENV->name(WER,1),
+      explode(file_name(TO),"/")[<1], (size * size * random(40 - wer->QueryAttribute(A_INT))), 
+      amount, max_amount));
+  }
+  if (element == "keines" || max_amount <= 0) 
+  {
+    if(wer)
+      tell_object(wer, "Dein beschaedigter Fokus loest sich auf.\n");
+    call_out("remove", 0);
+  }
+}
+
+// --- LONG ----------------------------------------------------------------
+string long()
+{
+  string magisch_string, schaden_string;
+  magisch_string = (element == "holo") ? ("aus einer jeder Logik widersprechenden "+
+    "Mischung aller Elemente") : ("ganz aus magischem "+CAP(element));
+  schaden_string = (element == "holo") ? ("allen elementaren Zaubern") : 
+    (CAP(element)+"zaubern");
+  return BS(
+    Name(WER,1)+" ist eine kleine Kugel, die "+magisch_string+" besteht. "
+    "Wenn der Fokus aktiviert ist, verstaerkt er den Schaden von "+
+    schaden_string+", was aber einen hoeheren Einsatz an Magie "
+    "erfordert. Der Fokus ist momentan "+ 
+    (id(DRUIDEN_FOCUS+"aktiv")?"aktiv":"inaktiv")+
+    " und "+(amount > 0 ? LOAD_TEXT[5 * amount / max_amount] : "voellig leer")+".");
+}
+
+// --- QUERY NODROP --------------------------------------------------------
+mixed _query_nodrop()
+{
+  return id(DRUIDEN_FOCUS "aktiv") ? "Du kannst keinen aktiven Fokus ablegen!\n" : 0;
+}
+
+// --- SET AMOUNT ----------------------------------------------------------
+int SetAmount(int a) { amount = a; }
+
+// --- QUERY AMOUNT --------------------------------------------------------
+int QueryAmount() { return amount; }
+
+// --- ADD DEATHS ----------------------------------------------------------
+int add_deaths(string playername, int deaths_10)
+// deaths_10 = 10 * Todeszahl (um auch "Teiltode" rechnen zu koennen mit int)
+{
+  if (!member(tode_10, playername))
+    tode_10[playername] = 0;
+
+  tode_10[playername] += deaths_10;
+
+  if (((tode_10[playername]/10) >= 1) &&
+      !QueryProp("first_wield_time"))
+  {
+  // Todeszeitstempel fuer disappear(); wird auch von Schreckgespenst gesetzt
+    SetProp("first_wield_time", time());
+
+    if (MENV)
+      (MENV)->Message(BS("Ein wenig schwarzer Nebel entweicht aus " + name(WESSEN, 1) + 
+      ". Was das wohl bedeutet?"));
+  }
+
+  UpdateDamCost(playername);
+
+  //do_dcon_mod(tode_10[playername]);
+  return tode_10[playername];
+}
+
+// --- LOGGING -------------------------------------------------------------
+void log_death(object victim, object menv, int lostxp, int deaths_10, string message)
+{
+  string victim_name;
+  string menv_name;
+
+  if (!victim)
+    victim_name = "0";
+  else
+    victim_name = victim->name();
+
+  if (!menv)
+    menv_name = "0";
+  else
+    menv_name = menv->name();
+
+  log_file("d/ebene/metzelorgie/sterbefokus_playerdeath",
+           dtime() + " " +
+               "victim: " + victim_name +
+               ", uid: " + getuid(victim) +
+               ", menv: " + menv_name +
+               ", lostxp: " + lostxp +
+               ", deaths_10: " + deaths_10 +
+               ", message: " + message +
+               "\n");
+}
+
+int match_item(string str, string *ids);
+
+// --- NOTIFY PLAYER DEATH --------------------------------------------------
+void NotifyPlayerDeath(object victim, object killer, int lost_xp)
+{
+  int deaths_10;
+
+  deaths_10 = 10; // zaehlt wie 1 Tod
+
+  if (MENV != victim)
+  {
+    log_death(victim, MENV, lost_xp, deaths_10, "MENV != victim");
+    return;
+  }
+
+  if (!id(DRUIDEN_FOCUS "aktiv"))
+  {
+    log_death(victim, MENV, lost_xp, deaths_10, "Fokus nicht aktiv");
+    return;
+  }
+
+  // "Echten" Todenzeitstempel setzen (wird nur hier gesetzt)
+  SetProp("real_deathtime", time());
+   // Penalty zuruecksetzen
+  last_deathtime_penalty_factor = 1.0;
+
+  // Tod laenger als 24h her
+  if (QueryProp("deathtime") < time() - 86400)
+  {
+    victim->Message(BS(
+        TO->Name(WER,1) + " wird durch Deinen TOD maechtiger!!"));
+    // Todeszeitstempel fuer disappear(); wird auch von Schreckgespenst gesetzt
+    SetProp("deathtime", time());
+    log_death(victim, MENV, lost_xp, deaths_10, "regular death (>24h)");
+  }
+  // Tod weniger als 24h her -> weniger XP
+  else
+  {
+    victim->Message(BS(
+      TO->Name(WER,1) + 
+      " wird durch Deinen wiederholten TOD nur etwas maechtiger!"));
+    deaths_10 = 2; // zaehlt wie 0.2 Tode
+    log_death(victim, MENV, lost_xp, deaths_10, "repeated death (within 24h)");
+  }
+
+  add_deaths(getuid(victim), deaths_10);
+}

@@ -1,0 +1,156 @@
+
+
+
+int kampfstab(object caster, mapping sinfo)
+{
+  int succ,
+      duration,
+      factor,
+      skill_mod,
+      align,
+      align_dam;
+
+  mixed align_dam_type;
+
+  string *combat_stick_dt;
+      
+  mapping skill;
+      
+  object stab;
+
+  //write("here");
+
+  if (!stab = present("\nzauberer_stab", caster)) return 0;
+
+  if (caster->QueryProp(P_Z_COMBAT_STICK))
+    {
+      tell_object(caster, "Du kaempfst schon mit dem Stab!\n");
+       return 0;
+    }
+  
+  succ = SpellSuccess(caster, sinfo);
+
+  if (!PaySp(caster, succ, sinfo)) return 0;
+  
+  if (succ<=0) return MISSERFOLG;
+  
+  tell_object(caster, "Dein Stab blitzt kurz auf.\n");
+  tell_room(ENV(caster), BS("Der Stab von " + TP->name(WEM) 
+                         + " blitzt kurz auf."), ({ caster }));
+
+
+  if (IS_MAINTAINER(getuid(caster)))
+    tell_object(caster, sprintf("Sinfo: %O\n", sinfo[SI_RAW_SPELLCOST, 0]));
+    
+  if (succ <=0)
+    {
+      tell_room(ENV(caster), BS("Der Stab kistert etwas, aber nicht passiert."));
+      return MISSERFOLG;
+    }
+
+  tell_room(ENV(caster), "Du fuehlst die Macht welche von Deinem Stab ausgeht.\n");
+
+  if ((factor = succ/100)<10) factor = 10;
+
+  // Modifikation nach Skill (%)
+  if (!mappingp(caster->QuerySkill("kampfstab")))
+    return 0;
+
+  notify_fail("Boeser Fehler!\n");
+  if (!mappingp(skill = copy_mapping(caster->QuerySkill("kampfstab"))))
+     return 0;
+
+  skill_mod = skill["si_abil"]/100;
+  
+  // Volle Kraft erst bei voller uebung :)
+  factor = ( factor * skill_mod / 100 + 100 );
+
+
+  // Boni fuer WC:
+  factor += caster->QueryAttribute(A_STR)/3;  // Das sollte den WC
+  factor += caster->QueryAttribute(A_DEX)/3; // bei 28 um 9 erhoehen
+
+  factor += caster->QueryProp(P_GUILD_LEVEL); // Je 1 auf WC per gildenlevel
+  
+  factor += caster->QueryProp(P_LEVEL)/6; // Lvl/6 auf WC - bei lvl 100 = 16
+
+  // Obergrenze!
+  if (factor>250) factor = 250;
+
+  // Dauer ermitteln anhand Success (<=10000)
+  duration = succ/30;
+
+  // Zeit wird auch via Skill modifiziert
+  duration = ( duration * skill_mod / 100 );
+
+  // Untergrenze... sonst wird lernen zu leicht
+  if (duration<30) duration = 30;
+
+  // Jetzt wirds cool - Schadenstyp nach Align anpassen
+  // >= 1/3 DT_BLUDGEON ### SOCKEL? ###
+  // <= 1/3 DT_[UN]HOLY
+  // == 1/3 DT_MAGIC
+  // Fuck, kann man nicht prozentuell angeben... scheibe..
+  // Aber zuerst mal trimmen...
+  align = (int) caster->QueryProp(P_ALIGN);  // Zur Sicherheit casten...
+  
+  if (align > 1000) align = 1000;
+  else if (align < -1000) align = -1000;
+
+  align > 0 ? align_dam_type = DT_HOLY:align_dam_type = DT_UNHOLY;
+
+  if (align<0) align *= -1;
+
+  align_dam = 0; // Sicher ist sicher
+
+  combat_stick_dt = ({ DT_BLUDGEON, DT_MAGIC });
+
+  switch (align)
+    {
+      case 0..799:
+        break;
+	
+    /*
+      case 200..399:
+        align_dam = 33/4;
+      case 400..599:
+        align_dam = 33/3;
+      case 600..799:
+        align_dam = 33/2;
+    */
+    //  case 800..1000:
+    //    align_dam = 33;
+      default:
+	combat_stick_dt += ({ align_dam_type });
+    }
+
+
+  if (IS_MAINTAINER(getuid(caster)))
+    {
+      tell_object(caster, sprintf("Succ: %d\nfactor: %d\nTime:%d\nSkill_mod:%d\n", succ, factor, duration, skill_mod));
+    }
+
+  caster->SetProp(P_Z_COMBAT_STICK,
+      ([ Z_COMBAT_STICK_FACTOR: factor,
+         Z_COMBAT_STICK_TS: time()+duration,
+	 Z_COMBAT_STICK_DT: combat_stick_dt
+	  /* align_dam_type: align_dam,
+	                       DT_MAGIC: 33,
+			       DT_BLUDGEON: 100-33-align_dam
+			    ])*/
+      ]));
+
+  call_out("kampfstab_aus", duration, caster);
+  
+  return ERFOLG;
+}
+
+
+void kampfstab_aus(object pl)
+{
+  if (objectp(pl) && pl->QueryProp(P_Z_COMBAT_STICK))
+    {
+      tell_object(pl, BS("Die Macht Deines Stabes schwindet!"));
+      pl->SetProp(P_Z_COMBAT_STICK, 0);
+    }
+}

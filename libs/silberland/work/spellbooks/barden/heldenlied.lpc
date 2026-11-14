@@ -1,0 +1,94 @@
+mapping prep_heldenlied(object caster, mapping sinfo)
+{
+  object target, oldSong;
+  string bardGroup;
+
+  sinfo = prepare_song(caster, sinfo);
+  if(sinfo == 0) {
+    return 0;
+  }
+
+  target = FindVictim(sinfo[SI_SKILLARG], caster, 0);
+  if(!objectp(target)) target = caster;
+
+  if(objectp(oldSong = present(SONG_BUFF, target))) {
+    if(TALENTMASTER->HasTalent(caster, TALENT_KANON)) {
+      if(!oldSong->CanRecharge()) {
+        tell_object(caster, BS("Dieses Lied kann noch nicht erneuert werden!"));
+        return 0;
+      }
+    } else {
+      if(target == caster) {
+        tell_object(caster, BS("Dieser Zauber wirkt bereits auf dich!"));
+      } else {
+        tell_object(caster, BS(sprintf("Dieses Lied wirkt bereits auf %s.", target->Name(WER, 1))));
+      }
+      return 0;
+    }
+  }
+
+  if(!living(target)) {
+    tell_object(caster, BS("Das kannst du nur fuer andere Lebewesen singen!"));
+    return 0;
+  }
+
+  if(objectp(present("STR_BUFF", target)) || objectp(present("CON_BUFF", target)) ||
+     objectp(present("INT_BUFF", target)) || objectp(present("DEX_BUFF", target))) {
+      if(target == caster) {
+        tell_object(caster, BS("Du wirst bereits von aehnlicher Magie gestaerkt."));
+      } else {
+        tell_object(caster, BS(sprintf("%s wird bereits von aehnlicher Magie gestaerkt.", target->Name(WER, 1))));
+      }
+      return 0;
+  }
+
+  if(!paySpellCost(caster, sinfo, 1)) return 0;
+
+  tell_room(environment(caster), BS(sprintf("%s  %s Instrument fest in die Haende.", 
+    caster->Name(WER, 1), caster->QueryPossPronoun(WER))), ({caster}));
+
+  if(sinfo[SI_CAP_NAME] == "Der letzte der Riesen") play_song_text(SPELLSEQ("letzter_der_riesen.seq"), caster);
+  else play_song_text(SPELLSEQ("ruf_der_helden.seq"), caster);
+
+  return sinfo;
+}
+
+int heldenlied(object caster, mapping sinfo)
+{
+  object target, song;
+  int success;
+  float factor;
+  string songName;
+
+  if(!paySpellCost(caster, sinfo)) return 0;
+
+  target = FindVictim(sinfo[SI_SKILLARG], caster, 0);
+  if(!objectp(target)) target = caster;
+  
+  if(environment(target) != environment(caster)) {
+    tell_object(caster, BS(sprintf("Nanu?! wo ist denn %s hin?", target->name(WER, 1))));
+    return 0;
+  }
+
+  // GELUNGEN?
+  if((success=SpellSuccess(caster,sinfo))<=0)
+  {
+    tell_room(ENV(caster), BS("Nichts geschieht..."));
+    return MISSERFOLG;
+  }
+
+  song = clone_object(OBJ("buff"));
+  if(song->move(target) != 1) {
+    tell_object(caster, BS("Das Lied kann sich bei deinem Ziel nicht manifestieren!"));
+    song->remove();
+    return 0;
+  }
+
+  factor = 1.0 + ((float) CheckEquip(caster, lower_case(sinfo[SI_CAP_NAME]))/100.0);
+
+
+  songName = lower_case(sinfo[SI_CAP_NAME]);
+  song->Setup("ruf der helden", caster, sinfo[SI_SKILLABILITY], success, factor, target);
+  
+  return ERFOLG;
+}

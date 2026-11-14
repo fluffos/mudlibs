@@ -1,0 +1,150 @@
+// SilberLand MUDlib
+//
+// /p/service/obj/party/formular.c -- Partybrett Abfragesequenz
+//
+// $Date: 2005/01/11 23:30:25 $
+/* $Revision: 1.3 $
+ * $Log: formular.c,v $
+ * Revision 1.3  2005/01/11 23:30:25  Woody
+ * username wird nun von starte() Parameter uebernommen, wenn uebergeben
+ *
+ * Revision 1.2  2001/05/20 23:07:22  Woody
+ * Timeout, verbesserter Q+A Dialog
+ *
+ * Revision 1.1  1997/03/16 17:39:30  Woody
+ * prepared for revision control
+ *
+ */
+
+#include "board.h"
+
+#include <properties.h>
+#include <defines.h>
+#include <moredef.h>
+#include <ansi.h>
+
+#define TIMEOUT 10*60           // 10 Minuten sollten reichen ;o)
+
+mapping info,data,tmp;
+mixed *k;
+int i, ansi;
+object rob;
+string username;
+
+
+void create()
+{
+  seteuid(getuid());
+  info = (mapping) PM->QueryInfo();
+}
+
+int greater(mixed a, mixed b)
+{
+  return tmp[a,1] > tmp[b,1];
+}
+
+string Display(int i)
+{
+  string str;
+
+  str = FIELDS[k[i]][0..<2];
+  if (data[k[i]] && data[k[i]] != "")
+    str += " ["+data[k[i]]+"]";
+  str += FIELDS[k[i]][<1..<1] + " ";
+
+  write(str);
+  return str;
+}
+
+int starte(string u)
+{
+  string str;
+
+  if (geteuid(previous_object())!=geteuid()) return 0;
+  if (!username)
+    if (stringp(u) && strlen(u))
+      username = u;
+    else
+      username = getuid(RPL);
+
+  rob = previous_object();
+  k = sort_array(m_indices(tmp = FIELDS), #'greater);
+
+  info = (mapping) PM->QueryInfo();
+  str = "\n%sDu meldest Dich nun %%sfuer folgendes Event an:%s\n" +
+        info["grund"] +
+        "\nOrt: " + info["ort"] +
+        "\nDatum: " + info["datum"] + "\n\n";
+
+  // ANSI stuff
+  if (ansi = (TP->QueryProp(P_TTY)=="ansi" || TP->QueryProp(P_TTY)=="vt100"))
+    str = sprintf(str, ANSI_BOLD, ANSI_NORMAL);
+  else
+    str = sprintf(str, "", "");
+
+  if (!(data = PM->QueryUser(username))) {
+    data = ([]);
+    str = sprintf(str, "");
+  }
+  else
+    str = sprintf(str, "erneut ");
+
+  str = break_string( str, 78, 0, BS_LEAVE_MY_LFS ) +
+        break_string("Du wirst nun befragt nach: " +
+                     implode(map_array(k, #'capitalize), ", ") + ".", 78) +
+        "\n"
+        "Du kannst diese Anmeldung jederzeit mit 'q' oder '~q' abbrechen.\n\n";
+
+  write(str);
+
+  i=0;
+  // Display(i);
+  input_to("getit", 0, Display(i));
+  call_out("timeout", TIMEOUT, TP);
+  return 1;
+}
+
+void getit(string str)
+{
+  // strip spaces
+  str = regreplace(str, "^  *|  *$", "", 1);
+
+  if (str=="q" || str=="~q") {
+    write("Ok, abgebrochen.\n");
+    destruct(this_object());
+    return;
+  }
+  else if (str && str != "") {
+    Display(i);
+    write(str + "\n");
+    data[k[i]] = str;
+  }
+  else
+    if (!data[k[i]] || data[k[i]]=="") {
+      input_to("getit", 0, Display(i)); // ask again
+      return;
+      // data[k[i]] = "";       // acceppt "empty" answer
+    }
+
+  if (++i==sizeof(k))
+  {
+    PM->SetUser(username,data);
+    if (rob) rob->zurueck(username);
+    write(
+        "Ok, Du bist jetzt angemeldet. Moechtest Du eine oder mehrere\n"
+        "Angaben aendern, so melde Dich einfach erneut an.\n");
+    destruct(this_object());
+    return;
+  }
+  Display(i);
+  input_to("getit", 0);
+  return;
+}
+
+void timeout(object pl)
+{
+  if (objectp(pl))
+    tell_object( pl, "Zeitueberschreitung bei Party-Anmeldung.\n" );
+  destruct(this_object());
+}
+

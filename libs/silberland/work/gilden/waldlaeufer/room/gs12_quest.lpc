@@ -1,0 +1,456 @@
+#include "../def.h"
+inherit "std/room";
+#include "/gilden/waldlaeufer/functions.h"
+#include "/gilden/waldlaeufer/ranger_tasks.h"
+
+private int position, bombs, targetPosition, attrappePosition, discovered, watchedThisArea, encounterStage, readyForCapture, nextWatch, dodged, lastBomb, netzUsed;
+private object player;
+
+#define PN(x) player->Name(x)
+#define POS_N  0
+#define POS_NO 1
+#define POS_O  2
+#define POS_SO 3
+#define POS_S  4
+#define POS_SW 5
+#define POS_W  6
+#define POS_NW 7
+#define POS_ADJ ({"noerdlich", "nordoestlich", "oestlich", "suedoestlich", "suedlich", "suedwestlich", "westlich", "nordwestlich"})
+#define POS_NAME ({"Norden", "Nordosten", "Osten", "Suedoesten", "Sueden", "Suedwesten", "Westen", "Nordwesten"})
+
+public void horkSay(string str) {
+  tell_room(TO, break_string(str, 78, "Hork sagt: "));
+  return;
+}
+
+public void echo(string str) {
+  tell_room(TO, BS(str));
+  return;
+}
+
+public void create()
+{
+  ::create();
+
+  SetProp(P_INT_SHORT, "Auf dem Ruecken eines riesigen Adlers");
+  SetProp(P_INT_LONG,
+   "Du sitzt auf dem Ruecken eines riesigen Adlers. Hork, der Zwergenwaldlaeufer, "
+   "haelt die Zuegel fest, waehrend ihr Kreise ueber der Todesinsel dreht. In zwei Satteltaschen "
+   "links und rechts des Adlers liegen einige Rauchbomben und ein Netz ist am Sattel angebunden.");
+  SetProp(P_LIGHT, 1);
+  SetProp(P_INDOORS, 0);
+  SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE: 20, ENV_TERRAIN: TT_HOUSE]) );
+  SetProp(P_HIDE_EXITS, 1);
+  SetProp(P_NAME, "Lysandra");
+
+  AddDetail( ({"netz"}), "Mit dem Gleiter kannst du jemanden einfangen (<wirf netz>).");
+  AddSpecialDetail( ({"bomben", "rauchbomben"}), "inform_bombs");
+
+  AddCmd( "beobachte|beobacht&insel|boden", "cmd_beobachten", "Was willst du beobachten?");
+  AddCmd( "wirf|werfe&bombe|rauchbombe", "cmd_bombe", "Was willst du werfen?");
+  AddCmd( "rueckkehr|rueckkehren|heimkehr|heimkehren", "cmd_gohome");
+  AddCmd( "wirf|werf&netz|fangnetz", "cmd_netz");
+  AddCmd( "weiter", "cmd_moveon");
+  AddCmd( "ausweichen|weich aus", "cmd_dodge");
+}
+
+public int cmd_dodge() {
+  if(find_call_out("arrow_hit") == -1) {
+    return 0;
+  }
+
+  write(BS("Geschwind duckst du dich."));
+  dodged = 1;
+  return 1;
+}
+
+public void setPosition(int pos) {
+  position = pos;
+  echo("Der Riesenadler zieht seine Kreise ueber dem "+POS_ADJ[position]+" Teil der Insel.");
+  watchedThisArea = 0;
+  return;
+}
+
+
+public void nextPosition() {
+  echo("Hork beendet die Schleifen ueber diesem Teil der Insel und befiehlt dem Adler weiter zu fliegen.");
+  setPosition(++position%8);
+
+  call_out("nextPosition", 120);
+}
+
+public int cmd_moveon() {
+  if(objectp(present("CHALLENGENPC"))) {
+    write(BS("Das geht gerade nicht! Besiege deinen Gegner!"));
+    return 1;
+  }
+
+  while(find_call_out("nextPosition") != -1) remove_call_out("nextPosition");
+  nextPosition();
+  return 1;
+}
+
+public int cmd_netz() {
+  if(netzUsed < 0) {
+    write(BS("Du hast das Netz leider verloren."));
+    return 1;
+  }
+
+  if(netzUsed < 0) {
+    write(BS("Du hast das Netz leider verloren."));
+    return 1;
+  }
+  
+  netzUsed++;
+
+  if(netzUsed > 8 && !random(3)) {
+    write(BS("Du wirfst das Nezt und das Sicherungsseil gleitet dir aus der Hand. Jetzt ist es fort :("));
+    horkSay("Ohje! Wir sollten umkehren und uns ein neues Netz holen. Neuer Tag, neues Glueck!");
+    echo("Wenn du umkehren willst, kannst du das mit <rueckkehr> tun.");
+    netzUsed = -1;
+    return 1;
+  }
+
+  if(position == attrappePosition) {
+    echo(BS("Du wirfst dein Netz und faengst jemanden ein! Als du es hochziehst stellst du fest, dass es nur eine Strohatrappe war..."));
+    attrappePosition = -1;
+    return 1;
+  }
+
+  if(!discovered) {
+    echo(BS("Du wirfst dein Netz, doch da ist niemand, den du fangen koenntest."));
+    return 1;
+  }
+
+  if(encounterStage != 2 && watchedThisArea < 2) {
+    echo(BS("Du wirfst das Netz doch den Ziel weicht im letzten Moment behaende aus."));
+    return 1;
+  }
+
+  write(BS("Mit einem geschickten Wurf faengst du die Verraeterin ein!"));
+  call_out("endsequence", 0, 0);
+}
+
+public void stopQuest() {
+  object *inv;
+  int i;
+
+  while(find_call_out("nextPosition") != -1) remove_call_out("nextPosition");
+  player = 0;
+  set_next_reset(-1); // wenn grad keiner was tut, dann kein reset
+  
+  // etwaige npc entfernen
+  inv = all_inventory(TO);
+  for(i=0; i<sizeof(inv); ++i) {
+    if(inv[i]->id("CHALLENGENPC")) inv[i]->remove();
+  }
+}
+
+public void NotifyPlayerDeath(object victim, object killer, int lost_xp) {
+  if(victim == player) {
+    stopQuest();
+  }
+
+  call_out("moveCorpse", 0);
+}
+
+public void moveCorpse() {
+  object *inv;
+  int i;
+  inv = all_inventory(TO);
+  for(i=0; i<sizeof(inv); ++i) {
+    if(inv[i]->id("Leiche")) inv[i]->move("/gilden/waldlaeufer/room/e4", M_NOCHECK);
+  }
+  return;
+}
+
+public int cmd_gohome() {
+  horkSay("Also gut, "+PN(WER)+". Dann lass uns umkehren und es ein anderes Mal versuchen.");
+  echo("Hork lenkt den Adler zurueck zum Tethyrwald.");
+  call_out("returnToGuild", 4);
+  return 1;
+}
+
+public int cmd_bombe() {
+  if(netzUsed < 0) {
+    write(BS("Du hast das Netz leider verloren."));
+    return 1;
+  }
+  
+  if(bombs < 1) {
+    write(BS("Ohje! Du hast keine Rauchbomben mehr! Wenn du heimkehren willst dann tippe <rueckkehr>"));
+    return 1;
+  }
+
+  call_out("informBombs", 0);
+
+  if(time() < lastBomb+10) {
+    write(BS("Warte doch mal bis sich der Rauch verzogen hat!"));
+    return -1;
+  }
+
+  write(BS("Du wirfst eine Rauchbombe nach unten und farbiger Qualm steigt auf."));
+  lastBomb = time();
+  call_out("smoke_away", 10);
+  bombs--;
+
+  if(position == targetPosition) {
+    discovered = 1;
+  }
+
+  return 1;
+}
+
+public void smoke_away() {
+  echo(BS("Der farbige Rauch unter dir hat sich verzogen."));
+  return;
+}
+
+public void advanceEncounterStage() {
+  encounterStage++;
+  discovered = 0;
+  return;
+}
+
+public void watchDiscoveredPositon() {
+  if(encounterStage == 0) {
+    switch(watchedThisArea) {
+      case 0: echo(BS("Unter dir erkennst du jemanden laufen. Sieht aus wie eine Elfe in einem grauen Waldlaeufermantel!")); break;
+      case 1: echo(BS("Die Elfe scheint dich entdeckt zu haben und schiesst ein paar Pfeile nach euch.")); call_out("arrows_incoming", 4+random(4), 1+random(3)); break;
+      default: targetPosition = random(8); echo(BS("Du erkennst, wie die Waldlaeuferin in den "+POS_ADJ[targetPosition]+"en Teil der Insel fluechtet.")); advanceEncounterStage(); break;
+    }
+  } else if(encounterStage == 1) {
+    switch(watchedThisArea) {
+      case 0: echo(BS("Es ist dir gelungen die Waldlaeuferin aufzuscheuchen! Sie ist aus ihrem Versteck aufgetaucht und sucht einen Fluchtweg.")); break;
+      case 1: echo(BS("Sie scheint einen Weg gefunden zu haben und laeuft los.")); break;
+      default: targetPosition = random(8); echo(BS("Gerade als die Elfe in den "+POS_NAME[targetPosition]+" der Insel laeuft stoesst sie den Ruf eine Kraehe aus!")) ;call_out("crows_incoming", 4+random(4), 3+random(3)); advanceEncounterStage(); break;
+    }
+  } else if(encounterStage == 2) {
+    switch(watchedThisArea) {
+      case 0: echo(BS("Wieder hast du die Verraeterin aufgescheucht. Sie blickt in eure Richtung und deutet mit der Hand auf euch.")); call_out("giantbird_incoming", 4+random(4)); break;
+      case 1: echo(BS("Du erkennst wie die Elfe in ein steiniges Geibet laeuft und versucht euch zwischen den Felsen abzuhaengen.")); break;
+      default: echo(BS("Die Elfe ist zwischen den Steinen in eine Sackgasse gelaufen. Jetzt sitzt sie in der Falle!")); readyForCapture = 1; return;
+    }
+  }
+  return;
+}
+
+public void giantbird_incoming() {
+  echo("Aus dem Sueden naehert sich ein riesiger Vogel! Er scheint es auf euch abgesehen zu haben!!");
+  call_out("clone_giantbird", 8);
+  return;
+}
+
+public void clone_giantbird() {
+  object birb;
+
+  birb = clone_object("d/huegelland/feyaria/weg/npc/adler");
+  birb->AddId("CHALLENGENPC");
+  birb->SetProp(P_AGGRESSIVE, 1);
+  birb->SetProp(P_MNPC_FLAGS, 0);
+  birb->SetProp(P_SPELLRATE, 5);
+  birb->SetProp(P_HP, birb->QueryProp(P_HP)/4*3);
+  birb->move(TO, M_GO);
+  return;
+}
+
+public void crows_incoming(int nr) {
+  echo("Ein Schwarm Kraehen naehert sich dem Riesenadler! Lysandra hat sie wohl auf euch gehetzt.");
+  call_out("clone_crows", 8, nr);
+  return;
+}
+
+public void clone_crows(int nr) {
+  object crow;
+  for(;nr>0;--nr) {
+    crow = clone_object("/d/andracia/yondala/nebelwaelder/nebel/npc/nebelkraehe");
+    crow->SetProp(P_AGGRESSIVE, 1);
+    crow->SetProp(P_MNPC_FLAGS, 0);
+    crow->AddId("CHALLENGENPC");
+    crow->move(TO, M_GO);
+  }
+  return;
+}
+
+public void arrows_incoming(int nr) {
+  echo(BS("Ein Pfeil fliegt direkt auf dich zu! Du solltest sofort ausweichen! (<ausweichen>)"));
+  dodged = 0;
+  call_out("arrow_hit", 4, --nr);
+  return;
+}
+
+public void arrow_hit(int nr) {
+  if(dodged) {
+    echo(BS("Gerade noch rechtzeitig duckst du dich und der Pfeil segelt an dir vorbei."));
+  } else {
+    echo(BS("Der Pfeil trifft dich!"));
+    SetProp(P_KILL_NAME, "Ein Pfeil aus grosser Distanz");
+    player->do_damage(5+random(15));
+    SetProp(P_KILL_NAME, 0);
+  }
+
+  if(nr>0) {
+    call_out("arrows_incoming", 2, nr);
+  }
+
+  return;
+}
+
+public int cmd_beobachten() {
+  if(objectp(present("CHALLENGENPC"))) {
+    write(BS("Das geht gerade nicht! Besiege deinen Gegner!"));
+    return 1;
+  }
+
+
+  if(position < 0) {
+    write(BS("Warte doch mal, bis du bei der Insel bist!"));
+    return 1;
+  }
+
+  if(find_call_out("smoke_away") != -1) {
+    write(BS("Der Rauch steigt noch von der Insel auf. Du kannst nichts erkennen."));
+    return 1;
+  }
+
+  if(time() < nextWatch) {
+    echo(BS("Du benoetigst noch einen Moment um dich wieder zu konzentrieren!"));
+    return 1;
+  }
+
+  if(position == targetPosition && discovered) {
+    watchDiscoveredPositon();
+    watchedThisArea++;
+  } else if(position == attrappePosition) {
+    if(watchedThisArea < 1) {
+      echo(BS("Da unten zwischen den Steinen steht jemand!"));
+    } else if(watchedThisArea < 2) {
+      echo(BS("Es sieht so aus, als wuerde da eine gestalt in einem grauen Umhang zwischen den Steinen stehen. Der Umhang weht im Wind"));
+    } else if(watchedThisArea < 3) {
+      echo(BS("Die Gestalt steht immer noch reglos da. Nur der Umhang flattert im Wind"));
+    } else if(watchedThisArea >= 3) {
+      echo(BS("Du beobachtest noch laenger und die Gestalt regt sich nicht. Es handelt sich offenbar um eine Attrappe."));
+      attrappePosition = -1; // erkannt und entfernt
+    }
+    watchedThisArea++;
+  } else {
+    echo(BS(({"Unter dir gleitet die karge Landschaft dahin, ohne, dass sich etwas regt.",
+               "Nichts regt sich zwischen den Felsen und kahlen Bueschen.",
+               "Du musterst die Landschaft genau, kannst jedoch niemanden erkennen.",
+               "Bis auf einen Druiden, der seine Rituale abhaelt, kannst du niemanden erkennen.",
+               "Nur karge Felsen und verkuemmerte Buesche.",
+               "Zwischen den Steinen bewegt sich nichteinmal ein wildes Tier.",
+               "Du kannst niemanden auf der Insel erkennen."})[random(7)]));
+  }
+
+  nextWatch = time() + 8;
+  return 1;
+}
+
+public void Start(object pl) {
+  player = pl;
+  tell_object(player, BS("Du kletterst auf den Ruecken des Riesenadlers. Hork nimmt vorne Platz."));
+  player->move(TO, M_NOCHECK);
+  horkSay("Los geht's!");
+  echo("Hork laesst den Adler aufsteigen und der Flug beginnt.");
+  set_next_reset(60*30); // reset in 30 minuten
+  call_out("explainer", 4, 0);
+
+  targetPosition = 1+random(7); // steht in einem zufaelligen Teil der Insel
+  attrappePosition = targetPosition-1; // die attrappe steht ein feld for der ersten position#
+  discovered = 0;
+  encounterStage = 0;
+  readyForCapture = 0;
+  bombs = 10;
+  nextWatch = 0;
+  position = -1; // noch nicht da
+  netzUsed = 0;
+  return;
+}
+
+public void informBombs() {
+  echo(sprintf("Du hast noch %d Rauchbomben uebrig.\n", bombs));
+  return;
+}
+
+public void explainer(int step) {
+  int pause;
+  pause = 4;
+  switch(step) {
+    case 0: horkSay("Also gut, "+PN(WER)+"! Es geht los. Wir sind auf dem Weg zur Todesinsel und muessen schnell handeln."); break;
+    case 1: horkSay("Raziel konnte durch die Augen der Tiere den Weg der Verraeterin bis dort hin verfolgen."); break;
+    case 2: horkSay("Ich kenne Lysandra sehr gut. Sie war eine Kampfgefaehrtin aus meinen ersten Tagen. Sehr bedauerlich das Ganze."); break;
+    case 3: echo("Der Riesenadler rast ueber Khorinis hinweg und ueberfliegt nun das offene Meer."); break;
+    case 4: horkSay("Sie ist eine Meisterin der Tarnung, also wird es schwer sie einfach so zu finden. Wir werden sie erst aufscheuchen muessen!"); break;
+    case 5: horkSay("Wir machen das so: Ich kreise den Adler ueber verschiedene Teile der Insel. Du kannst Rauchbomben abwerfen, die Lysandra "
+                    "aufscheuchen sollen abwerfen (<wirf rauchbombe>). Gib aber Acht, dass du vor lauter buntem Rauch nicht vergisst die "
+                    "Insel im Auge zu behalten (<beobachte insel>). Wenn du erkennen kannst, dass die Waldlaeuferin in die Enge gedraengt "
+                    "ist, dann koennen wir versuchen sie mit dem netz zu fangen (<wirf netz>)."); pause = 12; break;
+    case 6: horkSay("Wenn ich in den naechsten Inselabschnitt fliegen soll kannst du das mit <weiter> bekannt geben. Willst du zurueck zur Gilde, "
+                    "dann geht das jederzeit mit <rueckkehr>!"); break;
+    case 7: echo("Die Insel kommt in Sichtweite."); break;
+    case 8: horkSay("Pass aber gut auf. Die Kleine mag fiese Tricks. Und sie wird sich sicher nicht so einfach geschlagen geben."); break;
+    case 9: echo("Der Riesenadler beginnt ueber der Insel zu kreisen."); break;
+    case 10: horkSay("Also auf! Los geht's!"); break;
+    default:
+      setPosition(POS_O);
+      informBombs();
+      call_out("nextPosition", 120);
+      return;
+      break;
+  }
+
+  call_out("explainer", pause, ++step);
+}
+
+public void reset() {
+  ::reset();
+  if(!objectp(player)) return;
+
+  horkSay("Mein Adler ist erschoepft. Wir muessen zurueckfliegen und es ein anderes Mal erneut versuchen!");
+  echo("Hork lenkt den Adler zurueck zum Tethyrwald.");
+  call_out("returnToGuild", 4);
+  return;
+}
+
+public void returnToGuild() {
+  if(!objectp(player)) return;
+
+  echo("Sanft setzt dich Horks Adler bei Raziel ab.");
+  player->move("/gilden/waldlaeufer/room/e4", M_GO);
+  stopQuest();
+  return;
+}
+
+public object CurrentPlayer() {
+  return player;
+}
+
+public void endsequence(int step) {
+  if(!objectp(player)) {
+    stopQuest();
+    return;
+  }
+
+  switch(step) {
+    case 0: echo("Du bindest das Sicherungsseil des Netzes an den Sattel des Adlers. Die Elfe baumelt fluchend unter dir."); break;
+    case 1: horkSay("Haha! Wunderbare Arbeit, "+PN(WER)+"! Jetzt haben wir die Verraeterin. Ab nach Hause."); break;
+    case 2: echo("Hork gibt dem Riesenadler den Befehl in den Tethyrwald zurueck zu kehren.");break;
+    case 3: echo("Ihr lasst die Insel hinter euch und fliegt ueber das offene Meer."); break;
+    case 4: echo("Die Kueste und Khorinis kommen in Sichtweite."); break;
+    case 5: echo("Unter dir rast Khorinis vorbei und schon fliegst du ueber den Berg auf dem Avir errichtet wurde."); break;
+    case 6: echo("Der Adler wendet sich nach Sueden und die blauen Blaetter des Tethyrwalds rauschen unter dir."); break;
+    case 7: horkSay("Gleich sind wir da!");
+    case 8: echo("Ihr steuert einen grossen Baum in Mitten des Waldes an. Der Adler setzt zum Landeanflug an."); break;
+    default:
+      RANGER_SET_TASK(player, 12);
+      returnToGuild();
+      stopQuest();
+      return;
+      break;
+  }
+
+  call_out("endsequence", 4, ++step);
+  return;
+}
+

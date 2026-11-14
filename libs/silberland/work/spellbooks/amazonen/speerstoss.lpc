@@ -1,0 +1,80 @@
+
+int speerstoss(object caster, mapping sinfo) 
+{
+  object victim;
+  int suc;
+  object spear;
+  int dam;
+  mapping sinfo2;
+
+  victim = FindEnemyVictim(sinfo[SI_SKILLARG], caster,
+      "Wen willst Du mit Deinem Speer stossen?\n");
+  if (!victim)
+    return 0;
+  if (caster->QueryProp(P_DISABLE_ATTACK))
+  {
+    tell_object(caster, "Du bist kampfunfaehig und kannst jetzt keinen "
+        "Speerstoss machen!\n");
+    return 0;
+  }
+  if (!objectp(spear = caster->QueryProp(P_WEAPON)) || 
+      spear->QueryProp(P_WEAPON_TYPE) != WT_SPEAR)
+  {
+    tell_object(caster, "Du musst einen Speer gezueckt haben, um einen " 
+        "Speerstoss machen zu koennen!\n");
+    return 0;
+  }
+
+  if (!(sinfo = pay_for_spell(caster, sinfo)))
+    return 0;
+
+  if ((suc = SpellSuccess(caster,sinfo)) <= 0)
+    return MISSERFOLG;
+
+  environment(caster)->Message(BS(sprintf("%s stoesst %s Speer mit aller "
+          "Kraft in %s Koerper.",
+        caster->Name(WER,1), caster->QueryPossPronoun(MALE, WEN), 
+        victim->name(WESSEN,1))),
+      MSGFLAG_VISUAL, ([ MSGFLAG_EXCLUDE : ({ caster, victim }) ]) );
+
+  tell_object(caster, BSC(sprintf("Du stoesst Deinen Speer mit aller Kraft in %s "
+        "Koerper.\n", victim->name(WESSEN,1))));
+
+  tell_object(victim, BS(sprintf("%s stoesst %s Speer mit aller Kraft in Deinen "
+        "Koerper.\n", caster->Name(WER,1), caster->QueryPossPronoun(MALE, WEM))));
+
+  sinfo[SI_SKILLDAMAGE] += spear->QueryProp(P_WC) / 2 + suc / 200;
+  sinfo[OFFSET(SI_SKILLDAMAGE)] += caster->QueryProp(P_WC_FIX);
+  sinfo[SI_MAX_DAMAGE] += caster->QueryProp(P_GUILD_LEVEL) * 10;
+  sinfo[SI_SKILLDAMAGE_TYPE] = spear->QueryProp(P_DAM_TYPE);
+  if(sinfo[SI_SKILLPOINTS] > 2) {
+    sinfo2 = caster->UseSkill(FIGHT(WT_SPEAR), ([SI_ENEMY: victim, SI_SKILLDAMAGE: sinfo[SI_SKILLDAMAGE]]));
+    sinfo[SI_SKILLDAMAGE] += sinfo2[SI_SKILLDAMAGE] / 2;
+  }
+
+  if(victim->QueryProp(P_LAST_RAMMEN_TIME) + 5 > time()) {
+    tell_object(caster, BS("Du nutzt aus, dass dein Ziel am Boden liegt!"));
+    sinfo[OFFSET(SI_SKILLDAMAGE)] = (int) (sinfo[OFFSET(SI_SKILLDAMAGE)] * 1.5);
+  }
+
+  if (IS_LEARNER(caster))
+    printf("dam = %d, off = %d, max = %d\n",
+        sinfo[SI_SKILLDAMAGE], 
+        sinfo[OFFSET(SI_SKILLDAMAGE)], 
+        sinfo[SI_MAX_DAMAGE]);
+
+  dam = TryDefaultAttackSpell(victim, caster, sinfo, sinfo[SI_SPELL] + 
+      ([SP_REDUCE_ARMOUR: ([P_BODY: 101 - sinfo[SI_SKILLABILITY] / 100])]) );
+
+  if (suc > (8000 - sinfo[SI_SKILLPOINTS] * 1000) && caster->QuerySkillAttribute(SA_DAMAGE) <= 100)
+  {
+    caster->ModifySkillAttribute(caster, SA_DAMAGE, 
+        100 + caster->QueryAttribute(A_DEX), 4 + caster->QueryProp(P_GUILD_LEVEL));
+    tell_object(caster,BSC(
+          "Dein Speerstoss hat Dich in eine so gute Angriffsposition gebracht, "
+          "dass Du nun kurze Zeit einen grossen Vorteil im Kampf hast."));
+  }
+  if (IS_LEARNER(caster))
+    printf("Schaden = %d\n", dam);
+  return ERFOLG;
+}

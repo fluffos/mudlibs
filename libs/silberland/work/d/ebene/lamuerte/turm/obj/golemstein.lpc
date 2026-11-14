@@ -1,0 +1,108 @@
+   /*
+    * 20.03.2013 [W] Anatol - im reset() nur dann zerstoeren, 
+    *     wenn kein call_out() laeuft. Sonst ist der Ausgang kaputt.
+     * 05.08.2019 -> P_NOSELL eingefuegt (es gibt eine
+     * Moeglichkeit den Stein zu transportieren und zu
+     * verkaufen -> Bug, da sich der Stein im Lager des
+     * Ladens nicht zerstoeren kann -> Eros
+    */         
+
+inherit "std/thing"; 
+#include <language.h>
+#include <properties.h>
+#include <combat.h>
+#include <moving.h>
+
+int todeszeit=3600; 
+int zeit=time()+todeszeit;
+object player=this_player();
+string backuproom,backupdir;
+
+testfunc();
+
+create()
+{
+  if(!is_clone(this_object())) return;
+  thing::create();
+  SetProp(P_SHORT,"Ein riesiger Steinbrocken");
+  SetProp(P_LONG, 
+      "Ein riesiger Steinbrocken. Er sieht toootallll schwer aus.");
+  SetProp(P_VALUE,500);
+  SetProp(P_WEIGHT,20000000);
+  SetProp(P_GENDER, MALE);
+  SetProp(P_NAME,"Steinbrocken");
+  AddId( ({"stein","brocken","steinbrocken","\ngolemstein"}));
+  SetProp(P_NOSELL, 1);
+
+  backuproom="";
+  backupdir=""; 
+  seteuid(getuid());
+}
+
+aufstell()
+{
+  string *BLAH;
+  string *SCHNARR;
+  string backup;
+
+  string str;
+  int x;
+  int y;
+  y=0;
+  BLAH=m_values(environment(previous_object())->QueryProp(P_EXITS));
+  SCHNARR=m_indices(environment(previous_object())->QueryProp(P_EXITS));
+
+  if(sizeof(BLAH)<1)
+  {
+    return 1;
+  }
+
+  str=SCHNARR[random(sizeof(BLAH))];
+
+  if (member_array(str,SCHNARR)==-1)
+  { write("Dort funktioniert das nicht!\n"); 
+    return 1; 
+  }
+
+
+  backuproom=environment(previous_object())->QueryProp(P_EXITS)[str];
+  backupdir=str;
+
+  environment(previous_object())->RemoveExit(backupdir);
+  environment(previous_object())->AddExit(backupdir,([ EX_TESTFUNC: #'testfunc ]) );
+
+  this_object()->move(environment(previous_object()), M_NOCHECK); 
+  this_object()->SetProp(P_NOGET,"Der ist viel zu schwer!\n");
+
+  call_out("orig",(random(30)+10));
+  tell_room(environment(this_object()),"  Der Golem wirft einen Steinbrocken weg und BLOCKIERT einen Ausgang.\n");
+
+  return 1;
+}
+
+
+testfunc()
+{ 
+  write ("Du rennst gegen einen Steinbrocken. PATSCH!\n");
+  tell_room(environment(this_object()),"Ein Steinbrocken bewegt sich ein wenig.\n");
+  return 0;
+}
+
+orig()
+{ 
+  environment(this_object())->RemoveExit(backupdir);
+  environment(this_object())->AddExit(backupdir,backuproom);
+  tell_room(environment(this_object()),"Ein Steinbrocken loest sich auf. Ein Ausgang wird freigegeben.\n");
+  this_object()->remove();
+  return 1;
+}
+
+reset()
+{
+  ::reset();
+  if(!is_clone(this_object())) return;
+  if ( (!environment(this_object()) || member_array("\n_STD_Golem",environment(this_object())->QueryProp(P_IDS))==-1) 
+    /* new (Anatol) */ && (find_call_out("orig")<0))
+    this_object()->remove();
+}
+

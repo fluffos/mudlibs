@@ -1,0 +1,205 @@
+/*
+ * /obj/pkmaster.c
+ * ---
+ * Zustaendig fuer Playerkill-Handling
+ * ---
+ * Jan 08, 1997  Woody  Release
+ * Jun 22, 1997  Woody  move jetzt M_GO|M_NOCHECK (wg. Erschoepfung)
+ * Jan  6, 1999  Woody  mitloggen, victims Handling, Release()
+ * Dez 30, 1999  Zordan write_file durch log_file ersetzt wegen
+ *                      Schreibrechten, dadurch Abbruch und kein Release
+ * Nov 15, 2000  Woody  AddVictim(), CheckData()
+ * Jun 13, 2001  Feyaria PK_allowed eingefuehrt
+ *
+ */
+
+inherit "/std/thing";
+
+#include <properties.h>
+#include <daemon.h>
+#include <moving.h>
+
+#define ATTACK_LOG  "irregular/PK_TRIED"
+#define RELEASE_LOG "irregular/PK_RELEASED"
+
+// Mapping der Opfer (Keys: Taeter [string], Values: Opfer [*string])
+mapping victims;
+mapping orig_rooms;
+
+
+void create()
+{
+  if (is_clone(this_object())) remove();
+  victims = ([]);
+  orig_rooms = ([]);
+}
+
+int remove() {return 0;}
+
+int query_prevent_shadow() { return 1; }
+
+
+// AddVictim() - neue Taeter/Opfer eintragen
+void AddVictim(string taeter, string opfer)
+{
+  if (member(victims,taeter))
+    victims[taeter] += ({ opfer });
+  else
+    victims[taeter] = ({ opfer });
+}
+
+
+/*
+ * TriedPK(): Wird vom Spielerobjekt bei versuchtem PK aufgerufen
+ */
+
+void TriedPK(object wer, object wen)
+{
+  object w;
+  if (w=find_player("woody"))
+    tell_object(w, sprintf("Tried PK: %O against %O\n", wer, wen));
+
+  log_file(ATTACK_LOG, sprintf("%s: %O -> %O [%O]\n",
+        dtime(time()), wer, wen, environment(wer)));
+
+  if (wer->QueryProp(P_GHOST)) {        // inzwischen verstorben...
+    return;
+  }
+  tell_object (wer,
+    "\nEin dumpfes Gefuehl ueberkommt Dich...\n"
+    "Das Bild vor Deinen Augen verdunkelt sich und verschwimmt immer mehr...\n\n"
+    "Du faellst...\n\n");
+  wer->StopHuntFor(wen, 1);
+  wen->StopHuntFor(wer, 1);
+
+  // Originalraum zwischenspeichern
+  orig_rooms[getuid(wer)] = file_name(environment(wer));
+  wer->move ("/room/entscheidung", M_GO|M_NOCHECK, "geschleudert",
+    "wird ganz woanders hin", "wird hereingeschleudert");
+
+  AddVictim(getuid(wer),getuid(wen));
+}
+
+
+/*
+ * Release(): Hiermit kann man jmd. aus dem Raum der Entscheidung befreien
+ *            Allerdings koennen das nur Opfer. Und alle Opfer muessens tun.
+ *
+ *   returns:  1: darf befreit werden
+ *           < 0: einer der folgenden Fehler:
+ *            -1: war gar nicht vermerkt
+ *            -2: 'wer' ist kein Opfer des Taeters
+ *            -3: hat noch weitere Opfer, die ihn/sie begnadigen muessen
+ *
+ *   ANMERKUNG: befreit nicht, sondern traegt nur aus der Opferliste aus
+ *              und gibt das OK fuer's Befreien.
+ *
+ */
+
+int Release(object wer, string wen)
+{
+  if (!member(victims, wen)) return -1;
+  if (member(victims[wen], getuid(wer))==-1) return -2;
+  victims[wen] -= ({ getuid(wer) });
+
+  log_file(RELEASE_LOG, sprintf("%s: %O begnadigt %s [%O]\n",
+        dtime(time()), wer, capitalize(wen), previous_object()));
+
+  if (sizeof(victims[wen])) return -3;
+
+  victims = m_delete(victims, wen);
+  return 1;
+}
+
+
+/*
+ * MoveBack(): Wenn ein Taeter begnadigt wurde, wird er durch diese
+ *             Funktion wieder an den Ort zurueckgebracht, wo er herkam.
+ *             Geht natuerlich nur, wenn er keine Feinde mehr hat.
+ *
+ *   returns:  1: Move Back war erfolgreich
+ *             2: Move Back zu Ursprungsraum fehlgeschlagen, -> Gilde
+ *           < 0: einer der folgenden Fehler:
+ *            -1: hat noch Opfer, die ihn/sie begnadigen muessen
+ *            -2: hat keinen Ursprungsraum eingetragen
+ *            -3: Move Back zur Gilde ist ebenfalls fehlgeschlagen
+ *            -4: 'wen' ist kein Spieler
+ *
+ */
+
+int MoveBack(object wen)
+{
+  int ret;
+
+  if (!query_once_interactive(wen))
+    return -4;
+
+  if (member(victims, getuid(wen)))
+    if (sizeof(victims[getuid(wen)]))
+      return -1;
+    else
+      victims = m_delete(victims, getuid(wen));
+
+  if (!member(orig_rooms, getuid(wen)))
+    return -2;
+
+  ret = wen->move( orig_rooms[getuid(wen)], M_TPORT | M_NOCHECK );
+  orig_rooms = m_delete(orig_rooms, getuid(wen));
+
+  if (ret == 1)
+    return 1;
+
+  ret = wen->move( "/gilden/abenteurer", M_TPORT | M_NOCHECK );
+  return (ret == 1) ? 2 : -3;
+}
+
+
+/*
+ * QueryVictims(): gibt das victims mapping zurueck
+ */
+
+mapping QueryVictims()
+{
+  return copy_mapping(victims);
+}
+
+
+nosave PlayerExists(string str)
+{
+  return file_size("/save/"+str[0..0]+"/"+str+".o") > 0;
+}
+
+/*
+ * CheckData()
+ */
+
+void CheckData()
+{
+  mixed ind;
+  mixed new,enemies;
+  int i,j;
+
+  new=([]);
+  ind=m_indices(victims);
+  for (i=sizeof(ind);i--;)
+  {
+    if (PlayerExists(ind[i]))
+    {
+      enemies = ({});
+      for (j=sizeof(victims[ind[i]]);j--;)
+        if (PlayerExists(victims[ind[i]][j]))
+          enemies = ({ victims[ind[i]][j] }) + enemies;
+      if (sizeof(enemies))
+        new += ([ ind[i] : enemies ]);
+    }
+  }
+  victims = new;
+}
+
+varargs int PK_allowed(object room, object attacker, object enemy)
+{
+  if( (file_name(room)[0..5]=="/d/pk/") )
+    return 1;
+  return 0;
+}
+

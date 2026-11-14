@@ -1,0 +1,91 @@
+inherit "std/room";
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <defines.h>
+#include <moredef.h>
+#include "/gilden/druidenzirkel/druiden.h"
+
+nosave int kugel;
+nosave string stein, elem;
+
+void create() {
+  ::create();
+  switch(file_name(ME)[40..]) {
+    case "e_monolith":  stein="saphir"; elem="eis"; break; 
+    case "ee_monolith": stein="granat"; elem="erz"; break;
+    case "l_monolith":  stein="topas"; elem="luft"; break;
+    case "h_monolith":  stein="smaragd"; elem="humus"; break;
+    case "f_monolith":  stein="rubin"; elem="feuer"; break;
+    case "w_monolith":  stein="aquamarin"; elem="wasser"; break;
+    case "no_monolith": stein="diamant"; elem="geist"; break;
+  }
+
+  AddDetail( ({"zirkel", "druidenzirkel", "druiden"}),
+      "Du befindest Dich im Zirkel der Druiden.");
+  AddCmd(({ "meditiere", "meditier"}), "meditieren");
+}
+
+
+int meditieren (string str) {
+   object ob;
+   int nr;
+   if(TP->QueryProp(P_GUILD)!="druidenzirkel" || 
+       TP->QueryProp(P_GUILD_LEVEL)<16)
+     return 0;
+   if(file_name(ME)[40..]=="no_monolith" && (ob=present(DRUIDENAMULETT, TP))
+       && call_other(DRUIDENMASTER, "GetDruidElement", TP)=="geist")
+   {
+     tell_object(TP, "Du beginnst zu meditieren.\n");
+     tell_room(ME, sprintf("%s beginnt zu meditieren...\n", TP->Name(WER)), 
+        ({TP}));
+     TP->SetProp(P_PARALYZED, ([PARALYZE_TIME:30, 
+                          PARALYZE_MSG:"Aber Du meditierst ja gerade...\n", 
+                          PARALYZE_MSG_OTHER:"%s meditiert gerade...\n", 
+                          PARALYZE_END:"Du beendest Deine Meditation.\n", 
+                          PARALYZE_END_OTHER:"%s beendet die Meditation.\n"]));
+     ob->SetGhost(time()+60*60*5); // 5h
+     call_out("med_end", 60, "geist");
+     return 1;
+   }
+   switch(elem) {
+     case "geist":  nr=45; break;
+     default:       nr=10;
+   }
+  ob=deep_present(stein, TP);
+  if(!ob || ob->QueryProp(P_AMOUNT)<nr) {
+    tell_object(TP, sprintf("Du benoetigst %d %se%s, um hier zu meditieren zu "
+        "koennen.\n", nr, capitalize(stein),stein=="diamant"?"n":""));
+    return 1;
+  }
+  if(ob->QueryProp(P_AMOUNT)>=nr)
+     ob->SetProp(P_AMOUNT, ob->QueryProp(P_AMOUNT)-nr);
+  else ob->remove();
+  tell_object(TP, "Du beginnst zu meditieren.\n");
+  tell_room(ME, sprintf("%s beginnt zu meditieren...\n", TP->Name(WER)), 
+      ({TP}));
+  TP->SetProp(P_PARALYZED, ([PARALYZE_TIME:30, 
+                          PARALYZE_MSG:"Aber Du meditierst ja gerade...\n", 
+                          PARALYZE_MSG_OTHER:"%s meditiert gerade...\n", 
+                          PARALYZE_END:"Du beendest Deine Meditation.\n", 
+                          PARALYZE_END_OTHER:"%s beendet die Meditation.\n"]));
+  call_out("med_end", 60, elem);
+  return 1;
+}
+
+nosave int med_end(string element) { 
+  object ob;
+  if(!ob=present("\ndruidenamulett", TP)) {
+    tell_object(TP,"Nichts passiert. Komisch.\n");
+    return 0;
+  }
+  TP->SetProp(P_MV, 10);
+  TP->SetProp(P_SP, 0);
+  tell_object(TP, sprintf("Dein Element ist nun %s.\n"
+      "Du bist total erschoepft.\n", 
+      capitalize(element)));
+  ob->SetDruidElement(element, TP);
+  return 1;
+}

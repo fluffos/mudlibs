@@ -1,0 +1,314 @@
+/*****************************************************************************
+Die Kleintiere der Gilde
+(c) Lilyth, Torian, Delgo @ Silberland <sl.mud.at>
+06.08.05 - Begin
+
+*****************************************************************************/
+
+//** INCLUDE + INHERIT + DEFINE ********************************************//
+#include "../def.h"
+
+inherit "std/npc";
+inherit "/std/npc/spells";
+inherit "std/player/soul";
+//zum steuern
+
+object owner;
+int mode;
+string npc;
+
+//**************************************************************************//
+
+  
+  
+//** CREATE ****************************************************************//
+void create()
+{
+  if(!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Ein Eichhoernchen");
+  SetProp(P_LONG,
+    "Das kleine flinke Eichhoernchen aus dem fernen Tethyr hat rotbraunes "
+    "Fell und einen langen buschigen Schwanz. Es bewegt sich die ganze Zeit, "
+    "sodass Du es nicht richtig untersuchen kannst.");
+  SetProp(P_NAME, "Eichhoernchen");
+  SetProp(P_GENDER, NEUTER);
+  AddId(({NOCONTROL, NOWIMPY, FELL_WUSCHEL, "eichhoernchen"
+    , "hoernchen" }));
+  SetProp(P_RACE, "Tiere");
+  AddClass( ({CL_ANIMAL }) );
+  SetProp(P_ARTICLE, 1);
+  create_default_npc(10);
+  SetProp(P_FRIEND, 1);
+  SetProp(P_NOATTACK, "schaut Dich fragend an.");
+  SetProp(P_HANDS, ({" mit seinen Krallen", QueryProp(P_HANDS)[1],
+                    ({DT_BLUDGEON})   }) );
+  SetProp(P_SIZE, 75);
+  SetProp(P_WEIGHT, 18000);
+  SetProp(P_ALIGN, 1000);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_HEAL, 0);
+  SetProp(P_AGGRESSIVE, 0);
+  SetProp(P_WIMPY, 0);
+  SetProp(P_NOMAGIC, 0);
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    Name(WER,1)+" kann sowas nicht.\n" }) );
+
+  SetProp(P_MSGIN, "springt herein");
+  SetProp(P_MSGOUT, "springt");
+  SetProp(P_MMSGIN, "springt herein");
+  SetProp(P_MMSGOUT, "springt geschickt aus Deiner Reichweite");
+  SetProp(P_DIE_MSG,  " springt davon.\n");
+  SetProp(P_NOCORPSE,  1);
+  SetProp(P_KILL_NAME, "Ein Betrueger");
+  AddInfo(DEFAULT_INFO, "kann Deine Sprache nicht verstehen.\n");
+  AddInfo(({"lilyth", "torian", "delgo"}), "faucht.","");
+
+  SetProp(P_SPELLRATE, 0);
+  
+  SetChats(1,
+  ({Name(WER, 1)+" schaut sich nervoes um.\n",
+    Name(WER, 1)+" stellt sich kurz auf.\n",
+   }) );
+
+  mode=0;
+
+  add_soul_commands();
+
+}
+//**************************************************************************//
+
+
+//** Customize *************************************************************//
+int customize(object caster)
+{
+  
+  owner=caster;
+  
+  owner->AddPursuer(TO);
+  
+  return 1;
+}
+//**************************************************************************//
+
+
+
+//** Komunikation **********************************************************//
+void catch_tell(string str)
+{
+  string who,target,action;
+  
+  if(!((query_verb() == "sag") /*|| (query_verb()[0..0] == "'")*/))return;
+                              //buggt. 
+  if(sscanf(str,"%s sagt: %s %s",who,target,action) != 3)      return;
+  if(!id(target))                                              return;
+  if(find_player(lower_case(who)) != owner)                    return;
+  if(action[<1..] == "\n") action = action[0..<2];
+  action = lower_case(action);
+  call_out("order",0,action);
+  return;
+}
+
+int order(string action)
+{
+  object ob;
+  string *s, *po, *pp;
+  int i, hunt, ht;
+  
+  if(action == "verschwinde"  ||
+     action == "hau ab"       ||
+     action == "verzieh dich" ||
+     action == "geh")
+  { ENV(owner)->Message(BS("Das Eichhoernchen springt geschickt aus Deiner "
+      "Reichweite."));
+    call_out("remove", 0);
+    return 1;}
+    
+  //Jagen/Sammeln
+  if(action == "sammel nuesse"     ||
+     action == "bring mir nahrung" ||
+     action == "sammel"            ||
+     action == "sammele")
+  { 
+    hunt=owner->QueryProp(P_RANGER_LAST_HUNT);
+    if( ( hunt > 3 ) && ( 1800+hunt >= time() ) )
+    { //Schon 3 mal gejagt, aber Zeit noch nicht um
+      owner->Message(BS("Deine Tiere werden noch nichts Essbares finden."));
+      ht=(1800+hunt)-time();
+      if( ht > 300 && ht <=  600 )
+      { owner->Message(BS("Du musst noch kurz warten.")); }
+      else if( ht > 600 && ht <= 1200)
+      { owner->Message(BS("Du musst noch lang warten.")); }
+      else if( ht > 1200 )
+      { owner->Message(BS("Du musst noch sehr lang warten.")); }
+      else
+      { owner->Message(BS("Du musst noch sehr kurz warten.")); }
+    }
+    else if( ( hunt > 3 ) && ( 1800+hunt < time() ) )
+    { //Schon 3 mal gejagt und Wartezeit ist um
+      hunt=1;
+      call_out("hunting", 6, hunt);
+      owner->Message(BS("Das Eichhoernchen wird jetzt fuer Dich Nuesse "
+                     "suchen."));
+      TO->move(ROOM "air", M_TPORT);      
+    }
+    else if( hunt <= 3 )
+    { //Noch nicht 3 mal gejagt
+      hunt++;
+      call_out("hunting", 6+hunt, hunt); 
+      owner->Message(BS("Das Eichhoernchen wird jetzt fuer Dich Nuesse "
+                     "suchen."));
+      TO->move(ROOM "air", M_TPORT);
+    }
+    else
+    {owner->Message(BS("Ein Fehler ist aufgetreten. Wende Dich an einen "
+                    "Gildenmagier.(Eichhoernchen/Sammeln)")); return 1;}
+    return 1;
+  }  
+
+  s=explode(action, " ");
+  
+  //NPC-erwarten
+  if(s[0] == "erwarte")
+  {  
+    if(sizeof(s)<=1) {owner->Message(BS("Wen soll das Eichhoernchen "
+                                     " erwarten?")); 
+                      return 1;}
+    s[1]=lower_case(s[1]);
+    tell_room(ENV(TO), BS(owner->Name(WER,1)+" gibt dem Eichhoernchen ein "
+                          "Zeichen und dieses huepft in den Hintergrund.")
+                          , ({owner}) );
+    owner->Message(BS("Du gibst Deinem Eichhoernchen ein Zeichen, er solle "
+                      "hier auf '"+CAP(s[1])+"' warten."));
+    owner->RemovePursuer(TO);
+    npc=s[1];
+    mode=1;
+    return 1;    
+  }
+
+}
+//**************************************************************************//
+
+
+
+//** NPC-Erwarten **********************************************************//
+void init()
+{
+  ::init();
+  
+  if(mode)
+  { 
+    if( TP->id(npc) || 
+        lower_case(TP->QueryProp(P_NAME)) == npc)
+    {
+      if(owner)
+      {
+        tell_room(ENV(owner), BS("Ein Eichhoernchen tapst herein und stupst "+
+                              owner->Name(WER,1)+" kurz an. Danach "
+                              "verschwindet das Eichhoernchen wieder.") 
+                              , ({owner}) );
+        owner->Message(BS("Ein Eichhoernchen tapst herein und stupst Dich "
+                       "kurz an. Scheinbar ist '"+CAP(npc)+"' jetzt da."));
+        call_out("remove", 1);
+      }
+    }    
+  }
+}
+//**************************************************************************//
+
+
+
+//** Jagen/Sammeln *********************************************************//
+int hunting(int hunt)
+{
+  int i, k;
+  object *food;
+  
+  if(hunt > 3)
+  { owner->SetProp(P_RANGER_LAST_HUNT, time() ); }
+  else
+  { owner->SetProp(P_RANGER_LAST_HUNT, hunt); }
+  
+  food=({});  
+  for(i=0; i<5; i++)
+  {
+    k=1+random(8);
+    switch(k)
+    {
+      case 7..8: break;
+      
+      default: 
+        if(k<1) {k=1;}
+        if(k>6) {k=6;}
+        food+=({ clone_object(FOOD "nuss"+to_string(k)) });
+      break;
+    }    
+  }
+  TO->move(file_name(ENV(owner)), M_TPORT);
+  for(i=0; i<=sizeof(food)-1; i++)
+  {
+    food[i]->move(owner, M_GET);
+  }
+  owner->Message(BS("Das Eichhoernchen gibt Dir einen Teil seiner Beute. Du "
+                 "erhaelst "+to_string(sizeof(food))+" Nuesse."));
+  //DBD("HUNT: "+to_string(hunt));
+  call_out("remove", 1);
+  
+  return 1;  
+  
+}
+//**************************************************************************//
+
+
+
+//** StandartFunktionen ****************************************************//
+void die(int poisondeath)
+{
+  if(owner) owner->SetProp(P_RANGER_LAST_ANIMAL, time());
+  ::die(poisondeath);
+}
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  if(player == owner)
+  {call_out("remove", 0);}
+}
+int remove()
+{
+  if(owner) owner->SetProp(P_RANGER_LAST_ANIMAL, time());
+  if(owner) owner->RemovePursuer(TO);
+  return ::remove();
+}
+void reset()
+{
+  ::reset();
+  call_out("remove",0);
+}
+//**************************************************************************//
+
+
+
+//** REACTIONS *************************************************************//
+//--Reactions-----------------------------------------------------------------
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{ if(find_call_out("reaction") != -1) return;
+  call_out("reaction", 0, TP, "quiekt.", "quiekt."); }
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void reaction(object pl, string macher, string andere)
+{
+  if(!ENV(TO))           return;
+  if(!objectp(pl))       return;
+  if(!ENV(pl))           return;
+  if(ENV(TO) != ENV(pl)) return;
+
+  tell_object(pl, BS(Name(WER, 1)+" "+macher));
+  tell_room(ENV(TO), BS(Name(WER, 1)+" "+andere), ({pl}) );
+}
+//**************************************************************************//

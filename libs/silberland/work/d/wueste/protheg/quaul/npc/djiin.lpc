@@ -1,0 +1,271 @@
+/*
+  Der Djiin, Bewacher der Leichen
+*/
+
+inherit "std/npc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <guard.h>
+#include "../def.h"
+
+#define STANDARDCORPSE "/std/corpse"
+#define DJIIN NPC "djiin"
+#define OBERGRENZE 50000
+
+nosave string player;
+
+void create() 
+{
+  if(!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein durchsichtiger Djiin");
+  SetProp(P_LONG,
+          BS("Ein durchsichtiger Djiin schwebt hier herum. Er wirkt als wuerde "+
+	     "er schlafen, doch seine wachsamen Augen verraten anderes. Scheinbar "+
+	     "wartet er auf etwas oder jemanden."));
+  SetProp(P_NAME, "Djiin");
+  SetProp(P_NAME_ADJ, "durchsichtig");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:-50,T_RANGE_MAX:70]));
+  AddId(({"geist", "djiin", "\ndjiin", "NODESTRUCT","NOWIMPY","NOCONTROL"}));
+  
+  create_default_npc(50);
+  SetProp(P_HANDS, ({" mit seinen magischen Haenden",QueryProp(P_HANDS)[1],
+		       DT_MAGIC}));
+  
+  SetProp(P_XP, 0);
+  
+  SetProp(P_RACE, "Djiin");
+  SetProp(P_SIZE, 190);
+  SetProp(P_ALIGN, 100);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_AGGRESSIVE,0);
+
+  SetProp(P_RESISTANCE_STRENGTHS , 
+    ([DT_FIRE:      -1.0, DT_COLD:      -1.0, DT_WATER:  -1.0, DT_AIR:    -1.0, 
+      DT_LIGHTNING: -1.0, DT_EXPLOSION: -1.0, DT_SOUND:  -1.0, DT_LIGHT:  -1.0,
+      DT_ELECTRIC:  -1.0, DT_ACID:      -1.0, DT_POISON: -1.0, DT_TERROR: -1.0,
+      DT_HOLY:      -1.0, DT_UNHOLY:    -1.0, DT_MAGIC:  -1.0 ]) );
+  
+  SetProp(P_NOATTACK, "sagt: Ich kann nicht, ich muss hier wachen!\n");
+  
+  SetProp(P_NOMAGIC,100);
+  
+  SetProp(P_MSGIN, "schwebt herein");
+  SetProp(P_MSGOUT, "schwebt");
+  SetProp(P_MMSGIN, "erscheint in einer Rauchwolke");
+  SetProp(P_MMSGOUT, "verschwindet mit Knall und Schwefelduft");
+  
+  SetProp(P_NOCORPSE, 1);
+  
+  AddInfo(DEFAULT_INFO, "sagt: Ich kann nicht, ich muss hier wachen!\n");
+  
+  SetProp(P_REJECT, ({REJECT_DROP, "Der Djiin will Deine Sachen nicht tragen.\n"}));
+  
+  SetChats(3, 
+    ({"Der Djiin schwebt ein wenig nach oben.\n",
+      "Der Djiin schwebt ein wenig nach unten.\n",
+      "Der Djiin schwebt ein wenig nach vorne.\n",
+      "Der Djiin schwebt ein wenig nach hinten.\n",
+      "Der Djiin schwebt ein wenig nach links.\n",
+      "Der Djiin schwebt ein wenig nach rechts.\n",
+      "Der Djiin schwebt durch Dich hindurch und ist nun hinter Dir.\n",
+      "Der Djiin schwebt einmal im Kreis herum.\n",
+      "Der Djiin scheint auf jemanden zu warten.\n",
+      "Was der Djiin hier wohl macht?\n"}));
+
+  SUID;
+  SetGuardProtection(100, GUARD_THING);
+  
+  AddCmd("freikauf", "freikaufen");
+  AddCmd(({"verschwinde","verschwind"}), "schleichdi");
+}
+
+PreventInsert(object ob)
+{
+  if(ob->id("geld"))
+    return ob->remove();
+
+  return ::PreventInsert(ob);
+}
+
+
+nosave undweg()
+{
+  ME->move(ROOM "dummy", M_NOCHECK|M_SILENT);
+  //map_objects(deep_inventory(ME), "remove"); 
+  ME->remove();
+}
+
+nosave schleichdi(string str)
+{
+  if(!player)
+    return notify_fail("BUG! Bitte PROtheG verstaendigen!\n"),0;
+  if(!TP) return;
+  if(getuid(TP)!=player)
+    return notify_fail("Der Djiin sagt: Auf Dich habe ich nicht gewartet!\n"),0;
+  if(str=="djiin")
+    {
+      write("Der Djiin nickt Dir zu und verschwindet...\n");
+      undweg();
+      return 1;
+    }
+  return 0;
+}
+
+nosave freikaufen(string str)
+{
+  object *inv,tp,ob;
+  int i,kosten;
+
+  if(!player)
+    return notify_fail("BUG! Bitte PROtheG verstaendigen!\n"),0;
+  if(!tp=TP) return;
+  if(getuid(tp)!=player)
+    return notify_fail("Der Djiin sagt: Auf Dich habe ich nicht gewartet!\n"),0;
+
+  if(!str)
+    {
+      inv=deep_inventory(ME);
+      if(!sizeof(inv))
+	{
+	  write("Der Djiin hat nichts bei sich und winkt.\n");
+	  undweg();
+	  return 1;
+	}
+      for(i=sizeof(inv)-1;i>=0;i--)
+	{
+	  kosten+=inv[i]->QueryProp(P_VALUE);
+      	  DB("*** +"+inv[i]->QueryProp(P_VALUE)+" = "+kosten+"\n");
+	}
+
+      if(kosten<0) undweg();
+      if(kosten<100) kosten=100;
+      if(kosten>OBERGRENZE) kosten=OBERGRENZE;
+      write("Der Djiin beaeugt die Sachen und faengt an zu rechnen...\n"+
+	    "Der Djiin meint darauf: Ich moechte dafuer "+kosten+" Muenzen.\n");
+      if(tp->QueryMoney()<kosten)
+	return write("Der Djiin sieht Dich an und meint:\n"+
+		     " 'Du bist zu arm, entweder Du holst mehr Geld oder Du'\n"+
+		     " 'bekommst nur einen Teil zurueck.'\n"),1;
+      write_file(LOG "djiin",
+		 ctime()+" : "+CAP(player)+" kauft "+sizeof(inv)+" Sachen fuer "+
+		 kosten+" frei.\n");
+      tp->AddMoney(-kosten);
+      write("Du gibst dem Djiin die "+kosten+" Muenzen.\n"+
+	    "Der Djiin nickt Dir zu und macht sich auf den Weg...\n");
+      call_out("remove",0);
+    }
+  else
+    {
+      if(!ob=present(str, ME))
+	return write("Der Djiin sieht Dich seltsam an!\n"),1;
+
+      kosten=ob->QueryProp(P_VALUE);
+
+      if(kosten<100) kosten=100;
+
+      write("Der Djiin beaeugt "+ob->name(WEN)+" und faengt an zu rechnen...\n"+
+	    "Der Djiin meint darauf: Ich moechte dafuer "+kosten+" Muenzen.\n");
+
+      if(tp->QueryMoney()<kosten)
+	return write("Der Djiin sieht Dich an und meint:\n"+
+		     " 'Du bist zu arm, hole mehr Geld!'\n"),1;
+      write_file(LOG "djiin",
+		 ctime()+" : "+CAP(player)+" kauft "+ob->name(WEN)+" fuer "+
+		 kosten+" frei.\n");
+      tp->AddMoney(-kosten);
+      write("Du gibst dem Djiin die "+kosten+" Muenzen.\n"+
+	    "Der Djiin nickt Dir zu und gibt Dir "+ob->name(WEN)+" ...\n");
+      if(ob->move(tp, M_GIVE)==ME_TOO_HEAVY)
+	{
+	  write(ob->Name()+" ist Dir zu schwer und plumpst auf den Boden.\n");
+	  ob->move(ENV(tp), M_NOCHECK);
+	}
+      if(ENV(ob)==ME)
+	{
+	  tp->AddMoney(kosten);
+	  return write("Der Djiin kratzt sich am Kopf.\n"+
+		       "Der Djiin meint: "+ob->Name()+" benimmt sich seltsam!\n"+
+		       "Der Djiin meint: Ich behalte das lieber.\n"),1;
+	}
+      if(!sizeof(all_inventory(ME)))
+	undweg();
+    }
+  return 0;
+}
+
+reset()
+{
+  ::reset();
+
+  if(random(5))
+    undweg();
+}
+
+info()
+{
+  if(strlen(player))
+    return "Der Djiin scheint auf "+CAP(player)+" zu warten.\n";
+  else
+    return "Irgendwas buggt hier, verstaendige bitte PROtheG!\n";
+}
+
+long()
+{
+  if(TP)
+    if(getuid(TP)==player)
+      return BS("Ein durchsichtiger Djiin schwebt hier herum. Er wirkt als wuerde "+
+		"er schlafen, doch seine wachsamen Augen verraten anderes. "+
+		"Er wartet hier auf Dich! Mit 'freikauf' kannst Du alles, oder "+
+		"auch nur ein bestimmtes Stueck wiedererlangen. Doch billig wird "+
+		"es sicher nicht! Mit 'verschwinde djiin' wird er sich aufloesen "+
+		"und alles, dass er noch bei sich hat mitnehmen...");
+
+  return ::long();
+}
+
+Identify(object pl)
+{
+  if(!pl) return;
+
+  player=getuid(pl);
+  if(pl->QueryProp(P_CORPSE)==DJIIN)
+    pl->SetProp(P_CORPSE, STANDARDCORPSE);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lxp) 
+{
+  if(killer == ME)
+    write_file(LOG "playerdeath",
+      ctime()+": Der DJIIN killt "+CAP(getuid(player))+" \("+lxp+"\) !!!\n");
+}
+
+void StartReaction(string verb, string gruppe, string adverb, int touch) 
+{
+  if(find_call_out("reaction") != -1) return;
+    if(touch)  
+      call_out("reaction", 0, TP,
+        "Der Djiin zeigt sich unbeeindruckt, als Deine Bewegung durch ihn durchgeht.",
+        TP->Name(WESSEN)+" Bewegung geht einfach durch den Djiin durch.");
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch) 
+{
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void reaction(object ob, string macher, string andere) 
+{
+  if(present(ob, ENV(TO))) 
+  {
+    tell_object(ob, BS(macher));
+    tell_room(ENV(TO), BS(andere), ({ob}));
+  }
+}
+

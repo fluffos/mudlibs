@@ -1,0 +1,303 @@
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <bank.h>
+#include "../files.h"
+
+inherit "std/npc";
+inherit "std/npc/sequencer";
+
+#define AUC_TIME 15
+#define CAN_TIME 20 
+#define AUC_LOG "AUCTION" 
+#define AUCMASTER "d/ebene/creative/feldlager/std/auctions" 
+#define AUCSTORE "d/ebene/creative/feldlager/room/aucstore"
+#define CHANNELD "p/daemon/channeld"
+#define DEFAULT_ENV "d/ebene/creative/feldlager/room/zelte/a6_a0_g"
+#define AUC_FEE_PERCENT 3
+
+nosave object auc_ob;
+nosave string customer, auctionner;
+nosave int lastbid, minbid;
+
+create()
+{
+  if (is_clone(this_object())) {destruct(TO); return 1;}
+  ::create();
+
+  SetProp(P_SHORT, "Sensal Bodenstab");
+  SetProp(P_LONG, BS(
+          "Sensal Bodenstab kuemmert sich um die Versteigerungen."));
+  AddDetail(({ "versteigerung", "auktion", "versteigerung"}), BS(
+            "Bei einer Versteigerung kannst Du ein Objekt von Dir versteigern lassen."));
+  
+  SetProp(P_WEIGHT, 90000);
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_NAME, "Sensal Bodenstab");
+  SetProp(P_GENDER, MALE);
+  AddId(({"bodenstab", "sensal", "\nauktionatorbodenstab"}));
+  AddInfo(({"versteigerung", "versteigern", "auktion", "mitbieten", "bieten", "gebot"}), 
+          "Willst Du etwas zur Versteigerung freigeben, so gib mir den Gegenstand."
+         +" Wenn Du mitbieten willst, genuegt es, mir mitzuteilen, wieviel Du bieten"
+         +" willst, also \"teile bodenstab mit biete <xxx>\". Wenn Du den "
+         "Gegenstand zu einem bestimmten Preis anbieten willst, so kannst Du "
+         "den Preis mit \"verlange <x> muenze(n) fuer <gegenstand>\" "
+         "festlegen.",
+          "sagt: ");
+  set_living_name("bodenstab");
+  create_default_npc(20);
+  SetProp(P_RACE, "Mensch");
+  SetProp(P_SIZE, 190);
+  SetProp(P_NOATTACK, "dreht Dir den Ruecken zu und beachtet Dich nicht mehr.");
+  enable_commands();
+  add_action("auction", "versteiger");
+  seteuid(getuid(this_object()));
+  RegisterGive("gotsome", ({
+               ({ "sage Aha, Du willst also was versteigern lassen...", 1}), 
+               ({ "versteiger", 1})
+	       }) );
+  auc_ob=0; auctionner=""; customer=""; lastbid=0; minbid=0;
+  call_other(AUCMASTER, "???");
+  call_other(DEFAULT_ENV, "???");
+}
+
+init()
+{
+  string pl, ob;
+
+  ::init();
+  pl=getuid(TP);
+  if (AUCMASTER->query_pending(pl))
+    call_out("command_me", 1, "sage Ich hab da was fuer Dich, "+CAP(pl));
+  while ((AUCMASTER->query_pending(pl))) {
+    ob=AUCMASTER->get_ob(pl);
+    call_out("hand_out", 2, ob, pl);
+  }
+}
+
+hand_out(string ob, string whom)
+{
+  object o, w;
+  int ret;
+
+  o=find_object(ob);
+  if (o) {
+    o->SetProp("auc_value", 0);
+    w=find_player(whom);
+    if (!w)
+      return;
+    ret=o->move(w, M_PUT);
+    if (ret<1){
+      tell_room(ENV(TO), "Sensal Bodenstab laesst "+o->name(WEN)+" fallen.\n");
+      o->move(environment(w));
+    }
+    else {
+      tell_object(w, "Sensal Bodenstab gibt Dir "+o->name(WEN)+".\n");
+      tell_room(ENV(TO), "Sensal Bodenstab gibt "+w->Name(WEM)+" "
+               +o->name(WEN)+".\n", ({w}));
+    }
+  }
+  else {
+    command_me("sag Huch! Offenbar scheine ich Deinen Gegenstand verloren zu "
+        "haben. Tut mir leid :( Hoehre Gewalt!");
+  }
+  return;
+}
+
+gotsome(obj)
+{
+  string who;
+  who=getuid(this_interactive());
+
+  if (auc_ob) {
+    command_me("sage Es ist schon eine Versteigerung im Gange.");
+    command_me("gib "+obj->QueryProp(P_IDS)[0]+" an "+who);
+    return 0;
+  }
+  if (file_name(obj)[0..9]=="/obj/money") {
+    command_me("sage Nein, Geld versteigere ich nicht.");
+    command_me("gib "+obj->QueryProp(P_IDS)[0]+" an "+who);
+    return 0;
+  }
+/*  if (obj->QueryProp("itemd")) {
+    command_me("sage Mit magischen Dingen hab ich noch nix am Hut, da muss"
+              +" zuerst den Fernkurs abschliessen.");
+    command_me("gib "+obj->QueryProp(P_IDS)[0]+" an "+who);
+    return 0;
+  } */
+  if (obj->QueryProp(P_NEVERDROP)) {
+    command_me("sage Das kann ich Dir nicht versteigern.");
+    command_me("gib "+obj->QueryProp(P_IDS)[0]+" an "+who);
+    return 0;
+  }
+  if(!obj->QueryProp("auc_value"))
+    obj->SetProp("auc_value", obj->QueryProp(P_VALUE));
+  if ((lastbid=obj->QueryProp("auc_value"))>100) {
+    auctionner=who;
+    customer="";
+    auc_ob=obj;
+    minbid=lastbid;
+    return 1;
+  }
+  command_me("sage Dieses Ding ist zu wenig wert.");
+  command_me("gib "+obj->QueryProp(P_IDS)[0]+" an "+who);
+  return 0;
+}
+
+give_notify(ob)
+{
+  sequencer::give_notify(ob);
+  npc::give_notify(ob);
+}
+
+auction()
+{
+  AUCMASTER->Channel("Versteigerung!");
+  AUCMASTER->Channel(auc_ob->Name(WER)+" von "+CAP(auctionner)+", Minimum: "+lastbid);
+  if (lastbid==auc_ob->QueryProp("auc_value"))
+    call_out("cancel", CAN_TIME, 2);
+}
+
+cancel(int c)
+{
+  while (!remove_call_out("cancel")) ;
+  if (c) {
+    AUCMASTER->Channel(auc_ob->Name(WER)+", kein Interesse?");
+    call_out("cancel", CAN_TIME, --c);
+  }
+  else {
+    AUCMASTER->Channel(auc_ob->Name(WER)+": Auktion abgebrochen.");
+    customer=auctionner;
+    lastbid=0;
+    handle_transfer();
+  }
+}
+
+void catch_tell(string str)
+{
+  object who;
+  string dum, dum2;
+  int gebot, ret;
+
+  str=lower_case(str);
+
+  if ((ret=sscanf(str, "%s teilt dir mit: biete %d%s", dum, gebot, dum2))<2)
+    return;
+  who=TP;
+  if (!auc_ob) {
+    call_out("tell", 1, who, "Es gibt derzeit keine Auktion.");
+    return;
+  }
+  if (gebot<=minbid) {
+    call_out("tell", 1, who, "Das letzte Gebot stand"+
+             (gebot==lastbid?" schon":"")+" bei "+lastbid+" Muenzen. Minimum derzeit: "
+             +minbid);
+    return;
+  }
+  if ((who->QueryMoney())<gebot) {
+    call_out("tell", 1, who, "Soviel Geld hast Du nicht!");
+    return;
+  }
+  while (!remove_call_out("cancel")) ;
+  AUCMASTER->Channel("Gebot von "+CAP(getuid(who))+": "+gebot);
+  customer=getuid(who);
+  lastbid=gebot;
+  minbid=(int)(lastbid*1.05);
+  while (!remove_call_out("step")) ;
+  call_out("step", AUC_TIME, 1);
+}
+
+step(int s)
+{
+  AUCMASTER->Channel(lastbid+" von "+CAP(customer)+" zum "+s+".");
+  while (!remove_call_out("step")) ;
+  if (s==3) {
+    if (!(find_player(customer) && find_player(auctionner)))
+      AUCMASTER->Channel("Auktion abgebrochen...");
+    else
+      AUCMASTER->Channel("Ok, "+(auc_ob->name(WER))+" geht an "+CAP(customer)+
+                " zum Preis von "+lastbid+" Muenzen.");
+    transfer_money();
+    handle_transfer();
+  }
+  else
+    call_out("step", AUC_TIME, ++s);
+}
+
+
+tell(object who, string str)
+{
+  tell_object(who, break_string(str, 78, "Sensal Bodenstab teilt Dir mit: "));
+  return;
+}
+
+transfer_money()
+{
+  object s, d, m;
+  int ret, fee;
+
+  if ((d=find_player(auctionner)) && (s=find_player(customer)) && s->QueryMoney()>=lastbid) {
+    s->AddMoney(-lastbid);
+    tell(s, "Du zahlst jetzt "+lastbid+" Muenzen fuer "+auc_ob->name(WER)+", abzuholen bei mir im Auktionshaus.");
+    fee=(int)(lastbid/100)*AUC_FEE_PERCENT;
+    ZENTRALBANK->PayIn(fee);
+    ret=(d->AddMoney(lastbid-fee));
+    if (ret>0)
+      tell(d, "Du erhaeltst "+(lastbid-fee)+" Muenzen fuer "+auc_ob->name(WEN)
+          +", "+fee+" Muenzen wurden als Gebuehr verrechnet.");
+    else {
+      m=clone_object("/obj/money");
+      m->AddAmount(lastbid-fee-1);
+      AUCMASTER->insert_ob(file_name(m), auctionner);
+      m->move(AUCSTORE);
+      tell(d, "Ich habe "+(lastbid-fee)+" Muenzen fuer "+auc_ob->name(WEN)
+          +" fuer Dich beiseitegelegt. "+fee+" Muenzen wurden als Gebuehr"
+          +" verrechnet.");
+    }
+  }
+  else {
+    // Abholbereit machen fuer auctionner, da schiefgelaufen...
+    if (d)
+      tell(d, "Irgendetwas ist mit dem Empfaenger schiefgelaufen, nochmal das Ganze...");
+    if (s)
+      tell(s, "Irgendetwas ist mit dem Anbieter schiefgelaufen, warte auf nochmalige Auktion.");
+    customer=auctionner;
+    lastbid=0;
+  }
+  return;
+}
+
+handle_transfer()
+{
+  string *c_ob;
+
+  if (lastbid)
+    write_file(LOG(AUC_LOG), sprintf("%s: %O; bid %d; %s->%s\n",
+             dtime(time()), auc_ob, lastbid, auctionner, customer));
+
+  if (present(customer, environment())) {
+    command_me("gib "+auc_ob->QueryProp(P_IDS)[0]+" an "+customer);
+  }
+  else {
+    AUCMASTER->insert_ob(file_name(auc_ob), customer);
+    //AUCMASTER->insert_ob(explode(file_name(auc_ob), "#")[0], customer);
+    //auc_ob->remove();
+    auc_ob->move(AUCSTORE);
+  }
+  auc_ob=0; lastbid=0; auctionner=""; customer=""; minbid=0;
+  return;
+}
+
+/* 
+   void Defend(int dam, string dam_type, int spell, object enemy)
+{
+  object en;
+  if (!en=previous_object() || !living(en))
+    en=this_player();
+  tell_room(environment(), break_string("Mich braucht man hier noch!", 78, "Sensal Bodenstab meint: "), ({ TO }) );
+  say("Sensal Bodenstab dreht Dir den Ruecken zu und beachtet Dich nicht mehr.\n");
+  en->StopHuntFor(this_object(), 1);
+}
+*/

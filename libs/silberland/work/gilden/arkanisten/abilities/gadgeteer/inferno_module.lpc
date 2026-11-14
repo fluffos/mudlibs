@@ -1,0 +1,63 @@
+#include "../../arkanisten.h"
+
+inherit GUILD_FOLDER "abilities/ability.lpc";
+
+public void create() {
+    if(is_clone(TO)) return;
+
+    ::create();
+    SetProp(P_ABILITY_NAME, CAP(INFERNO_MODULE));
+    SetProp(P_ABILITY_DESCRIPTIPON, 
+        "Ein spezieller Aufsatz verbessert das Flammenwerfermodul deines federmechanischen "
+        "Handschuhs. Statt einfachem Brandoel kannst du ein Brandgel verspruehen, dass "
+        "auf deinem Gegner kleben bleibt und garantiert, dass er noch weiter brennt. Die "
+        "Brennkraft dieses Gels ist ebenso weit staerker als die des Brennoels.");    
+    SetProp(P_ABILITY_TYPE, ABILITY_TYPE_PASSIVE);
+    SetProp(P_ABILITY_BASE_ATTRIBUTE, A_DEX);
+    SetProp(P_ABILITY_GROUP, ({ABILITY_GROUP_GADGET_POWERUP, ABILITY_GROUP_GADGETS}));
+    SetProp(P_ABILITY_REQUIRES, ({FLAMETHROWER_MODULE}));
+    SetProp(P_ABILITY_MIN_GUILD_LEVEL, 21);
+    
+    subscribe_to(FLAMETHROWER_MODULE, EVENT_AFTER_ATTACK);
+}
+
+public void activate_for(object user) {
+    tell_object(user, BS("Du fuellst Infernogel in dein Flammenwerfermodul."));
+}
+
+
+public void handle_ability_event(string sender_name, int event, mixed payload) {
+    object gloves;
+    object user, enemy;
+    mapping sinfo;
+    int success;
+
+    if(sender_name != FLAMETHROWER_MODULE) return;
+    if(event != EVENT_AFTER_ATTACK) return;
+    if(!mappingp(sinfo=payload)) return;
+    if(!objectp(user = payload["user"])) return;
+    if(!objectp(gloves = present(SPRINGLOADED_GLOVES_ID, user))) return;
+    if(!objectp(enemy = sinfo[SI_ENEMY])) return;
+    if(enemy->QueryProp(P_WATCHER_INFERNO_UNTIL) > time()) return;
+
+    success = use(user, ([SI_ABILITY_SILENT: 1]), 1);
+    pDebug(payload["user"], sprintf("inferno_module :: success=%d\n", success));
+    if(success < 0) return;
+    
+    tell_room(ENV(enemy), BS("Brennendes Gel bleibt an "+enemy->name(WEM)+" kleben und brennt mit orangener Flamme!"));
+    enemy->SetProp(P_WATCHER_INFERNO_UNTIL, time() + success/333);
+    call_out("inferno_baby", 0, user, enemy);
+    return;
+}
+
+public void inferno_baby(object user, object enemy) {
+    if(!objectp(enemy)) return;
+    if(!objectp(user)) return;
+    if(enemy->QueryProp(P_WATCHER_INFERNO_UNTIL) > time()) {
+        tell_room(ENV(enemy), BS(enemy->Name(WER)+" brennt nicht mehr!"));
+    }
+
+    enemy->Defend(100 + random(200), DT_FIRE, ([SP_SHOW_DAMAGE: 1, SP_NAME: "Infernomodul"]), user);
+    call_out("inferno_baby", 2, user, enemy);
+    return;
+}

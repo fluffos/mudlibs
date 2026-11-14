@@ -1,0 +1,155 @@
+/*
+ * Kampfzauber.... Klein
+ * Gildenstufe 3
+ *
+ *  Um den Barden sammelt sich eine Aura aus Flammen, Sturm, Furcht oder
+    Blitzen. Wird auf Vorrat gezaubert. Ein Zauber erzeugt eine Aura mit
+    (Abil/2000)+(suc/1000) Ladungen.
+    Alestra: "Der Feuertanz", DT_FIRE, "brenne"
+    Tirena:  "Der Hurrican", DT_AIR, "wehe"
+    Korriax: "Die Angst", DT_TERROR, "aengstige"
+    Sarrian: "Der Gewittersturm", DT_LIGHTNING, "blitze"
+ *
+ * Gwenshara
+ * 23.04.2008
+*/
+
+mixed prep_kampfzauber_klein(object caster, mapping sinfo)
+{
+  object target, instrument;
+  string bardGroup;
+  
+  bardGroup = "/gilden/bardengilde/master/bardenmaster"->GetBardGroup(caster);
+
+  instrument = getInstrument(caster);
+  if(!objectp(instrument) || instrument->QueryProp(P_INSTRUMENT_TYPE) != BARD_GROUP_INSTRUMENT[bardGroup]) {
+    tell_object(caster, BS("Dazu benoetigst du ein passendes Instrument."));
+    return 0;
+  }
+
+  sinfo = prepare_song(caster, sinfo);
+  if(sinfo == 0) {
+      return 0;
+  }
+
+  if(stringp(sinfo[SI_SKILLARG])) {
+    target = FindVictim(sinfo[SI_SKILLARG], caster, 0);
+    if(objectp(target)) {
+      if(!living(target) || !interactive(target)) {
+        write(BS("Fuer dieses Ziel kannst Du dieses Lied nicht singen!"));
+        return 0;
+      }
+    } else {
+      write(BS("Das findest du hier nicht!\n"));
+      return 0;
+    }
+  }
+  else target = caster;
+
+  if(caster->QueryProp(P_TESTPLAYER)) {
+    write(sprintf("kampfzauber_klein :: target = %O\n", target));
+  }
+
+  if(present(SONG_SMALL_AURA, target))
+  {
+    if(TALENTMASTER->HasTalent(caster, TALENT_KANON)) {
+     if(!present(SONG_SMALL_AURA, target)->CanRecharge()) {
+      write(BS("Dieser Zauber kann noch nicht erneuert werden."));
+      return 0;
+     } 
+    }else {
+      write(BS("Dieses Lied umspielt Dich bereits!"));
+      return 0;
+    }
+  }
+  
+  if(!paySpellCost(caster, sinfo, 1)) return 0;
+ 
+  if(sinfo[SI_CAP_NAME] == "Zafiras elementare Elegie") play_song_text(SPELLSEQ("zafiras_elementare_elegie.seq"), caster);
+  else play_song_text(SPELLSEQ(sprintf("kampfspell_klein_%s.seq", bardGroup)), caster);
+  return sinfo;
+}
+
+
+int kampfzauber_klein(object caster, mapping sinfo)
+{
+  object aura, target;
+  int suc, abil;
+  float factor;
+  string song, bg;
+
+  if(!paySpellCost(caster, sinfo)) return 0;
+
+  // GELUNGEN?
+  if((suc=SpellSuccess(caster,sinfo))<=0)
+  {
+     write(BS("Du versingst Dich!"));
+     if(suc < -1500)
+     {
+       write(BS("Du versuchst die magischen Schwingungen des Liedes einzudaemmen!"));
+       if(caster->QueryProp(P_HP)<10)
+       {
+         write(BS("Die Schwingungen breiten sich auf die Umgebung aus!"));
+         aura = clone_object(OBJ("aura_fehlschlag"));
+         aura->move(ENV(caster), M_NOCHECK);
+         if(objectp(aura)) aura->start();
+       }
+       else
+       {
+         write(BS("Es gelingt Dir gerade noch die Magie der Toene aufzuhalten!"));
+         caster->AddHp(-10);
+       }
+     }
+     return MISSERFOLG;
+  }
+
+  abil = sinfo[SI_SKILLABILITY];
+
+  if(stringp(sinfo[SI_SKILLARG])) {
+    target = FindVictim(sinfo[SI_SKILLARG], caster, 0);
+    if(!objectp(target)) {
+      write("Das findest du hier nicht!\n");
+      return 0;
+    }
+  } else target = caster;
+
+  if(caster->QueryProp(P_TESTPLAYER)) {
+    write(sprintf("kampfzauber_klein :: target = %O\n", target));
+  }
+
+  if(objectp(aura = present(SONG_SMALL_AURA, target))) {
+    aura->remove(1);
+  }
+
+  write(BS("Die Toene des Lieds umspielen Dich sanft."));
+  aura = clone_object(OBJ("aura"));
+  if(aura->move(target, M_NOCHECK) != 1)
+  {
+    write(BS("Etwas behindert die Zauberwirkung!"));
+    aura->remove(1);
+    return 0;
+  }
+
+  bg = call_other("/gilden/bardengilde/master/bardenmaster", "GetBardGroup", caster);
+
+  switch(bg)
+  {
+    case "alestra": song = "flamme bin ich";
+                    break;
+    case "tirena":  song = "windlied der sylphen";
+                    break;
+    case "korriax": song = "des todes drei trommelschlaege";
+                    break;
+    case "sarrian": song = "das lied vom sturmvogel";
+                    break;
+    default: raise_error("Undefinierte Bardengruppe!");
+             break;
+  }
+
+  factor = ((float) CheckEquip(caster, song))/100.0;
+  if(TALENTMASTER->HasTalent(caster, TALENT_TAMBOURMAJOR)) {
+    factor += 0.05 + ((float) caster->QueryProp(P_BARD_INSPIRATION_LEVEL)) / 100.0;
+  }
+  aura->load(target, (sinfo[SI_CAP_NAME]=="Zafiras elementare Elegie"?"zafira":bg), caster->QueryProp(P_GUILD_LEVEL) + (abil/1000)+(suc/800), factor);
+  return ERFOLG;
+}

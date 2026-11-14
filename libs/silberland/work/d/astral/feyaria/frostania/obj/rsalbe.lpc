@@ -1,0 +1,193 @@
+// Ruestungssalbe
+// 15.6.2004 - Feyaria@SilberLand
+
+inherit "std/thing";
+
+#include "../def.h"
+
+#define MAX_COLD 5
+#define MAX_HEAT 2
+#define MAX_QD 500
+
+int salbe;
+
+mapping adj = ([
+ 0 : "heiss"; 0; "waermende", // cold protection
+ 1 : "kalt"; 0; "kuehlende", // heat protection
+ 2 : "hart"; 0; "staerkende", // AC
+ 3 : "rot"; DT_FIRE; "feurige",
+ 4 : "blau"; DT_WATER; "waessrige",
+ 5 : "gruen"; DT_POISON; "giftige",
+ 6 : "weiss"; DT_COLD; "eisige",
+ 7 : "grau"; DT_TERROR; "schreckliche",
+ 8 : "braun"; DT_AIR; "luftige", 
+ 9 : "orangen"; DT_LIGHTNING; "blitzende", 
+10 : "gelb"; DT_LIGHT; "leuchtende", 
+11 : "hell"; DT_HOLY; "heilige", 
+12 : "dunkl"; DT_UNHOLY; "daemonische", 
+13 : "regenbogenfarben"; DT_MAGIC; "magische", 
+14 : "schwarz"; DT_ACID; "aetzende", 
+15 : "violett"; DT_SOUND; "laermende", 
+16 : "beig"; DT_MIND; "geistige", 
+17 : "purpurn"; DT_ELECTRIC; "geladene", 
+18 : "zyan"; DT_EXPLOSION; "explodierende", 
+19 : "golden"; 0; "astrale", // m_attr_mod
+20 : "farblos"; 0; "", // uncurse
+]);
+
+void create()
+{
+  
+  if (!is_clone(this_object())) return;
+  ::create();
+  
+  if (random(2))
+    salbe = random(3);
+  else  
+    salbe = 3 + random(sizeof(adj) - 3);
+  SetProp(P_NAME, "Ruestungssalbe");
+  SetProp(P_NAME_ADJ, adj[salbe]);
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_SHORT, Name(WER,0));
+  SetProp(P_LONG,
+    "Ein kleines Doeschen mit etwas Salbe. Sie stinkt fuerchterlich und "
+    "ist ziemlich oelig, wahrscheinlich ist sie eher fuer Leder und "
+    "Metall geeignet als fuer Deine Haut.");
+  AddId( ({"salbe", "ruestungssalbe", "\nruestungssalbe"}) );
+  AddAdjective( ({adj[salbe], adj[salbe] + "e"}) );
+  SetProp(P_INFO, BS(
+    "Diese Salbe kann eine Ruestung verbessern. Wie sie genau wirkt, "
+    "wird wohl von ihrer Farbe bestimmt."));
+  
+  SetProp(P_VALUE, 100);
+  SetProp(P_WEIGHT, 50);
+  SetProp(P_MAGIC, 1);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_MATERIAL, ([MAT_CERAMIC: 10, MAT_MISC_MAGIC: 90]) );
+  SetProp(P_NOBUY, 1);
+
+  AddCmd( ({"schmiere", "schmier"}), "cmd_schmieren");  
+}
+
+int cmd_schmieren(string str)
+{
+  string was, womit;
+  object ob;
+  mixed qd;
+  int ac;
+
+  notify_fail("Was willst Du mit " + name(WEM,1) + " einschmieren?\n");
+  if (!str) 
+    return 0;
+  str = lower_case(TP->_unparsed_args());
+  if (sscanf(str, "%s mit %s ein", was, womit) != 2)
+    return 0;
+  if (!id(womit))
+  {
+    notify_fail("Aber Du hast ja gar kein " + CAP(womit) + "!\n");
+    return 0;
+  }
+  if (!objectp(ob = present(was, TP)))
+  {
+    notify_fail("Aber Du hast ja gar kein " + CAP(was) + "!\n");
+    return 0;
+  }
+  if (!ob->QueryProp(P_ARMOUR_TYPE))
+  {
+    write("Du kannst nur Ruestungen mit dieser Salbe einschmieren!\n");
+    return 1;
+  }
+  ac = VALID_ARMOUR_CLASS[ob->QueryProp(P_ARMOUR_TYPE)] < 10 ? 2 : 1;
+  if ((salbe == 19 && mappingp(ob->QueryProp(P_M_HEALTH_MOD))) ||
+      (salbe == 20 && !ob->QueryProp(P_CURSED)) ||
+      (salbe < 20 && (ob->QueryProp(P_ARMOUR_TYPE) == AT_MISC ||
+        ob->QueryProp("ruestungsbalsam") >= 10 ||
+        (salbe == 0 && ob->QueryProp(P_TEMPERATURE_PROTECTION)[0] >= MAX_COLD / ac) ||
+        (salbe == 1 && ob->QueryProp(P_TEMPERATURE_PROTECTION)[1] >= MAX_HEAT / ac) ||
+        (salbe == 2 && (ob->QueryProp(P_AC) + ob->QueryProp(P_DAMAGED)) == 
+        VALID_ARMOUR_CLASS[ob->QueryProp(P_ARMOUR_TYPE)]) ||
+        (salbe > 2 && member(ob->QueryProp(P_DAM_PROTECTION), adj[salbe,1])))))
+  {
+    write(BS(Name(WER,1) + " wuerde auf "+ ob->name(WEM) +" keine Wirkung "
+          "haben!"));
+    return 1;
+  }
+
+  write(BS("Du schmierst " + ob->name(WEN) + " mit " + name(WEM) + " ein."));
+  say(BS(TP->Name(WER, 1) + " schmiert " + ob->name(WEN) + " mit " +
+        name(WEM) + " ein."));
+
+  if (salbe == 0)
+    ob->SetProp(P_TEMPERATURE_PROTECTION, ([
+          0: ob->QueryProp(P_TEMPERATURE_PROTECTION)[0] + 2,
+          1: ob->QueryProp(P_TEMPERATURE_PROTECTION)[1] 
+          ]) );
+  else if (salbe == 1)
+    ob->SetProp(P_TEMPERATURE_PROTECTION, ([
+          0: ob->QueryProp(P_TEMPERATURE_PROTECTION)[0],
+          1: ob->QueryProp(P_TEMPERATURE_PROTECTION)[1] + 1
+          ]) );
+  else if (salbe == 2)
+  {
+    ob->SetProp(P_AC, ob->QueryProp(P_AC) + 1);
+    if ((ob->QueryProp(P_AC) + ob->QueryProp(P_DAMAGED)) < 
+        VALID_ARMOUR_CLASS[ob->QueryProp(P_ARMOUR_TYPE)])
+      ob->SetProp(P_AC, ob->QueryProp(P_AC) + !random(2));
+  }
+  else if (salbe > 2 && salbe < 19)
+    ob->SetProp(P_DAM_PROTECTION, 
+        ob->QueryProp(P_DAM_PROTECTION) + 
+        ([adj[salbe,1]: ac ]) );
+  else if (salbe == 19)
+  {
+    ob->SetProp(P_M_HEALTH_MOD, ([P_HP: 1 + random(4), P_SP: 2 + random(6)]) );
+    write(BS( "Astrale Energie fliesst in " + ob->name(WEN,1) + "."));
+    if(objectp(ob->QueryProp(P_WORN)))
+      ob->QueryProp(P_WORN)->UpdateAttributes();
+  }
+
+  if (salbe == 20)
+  {
+    ob->SetProp(P_CURSED, 0);
+    write(ob->Name(WER,1) + (ob->IsPlural() ? " werden" : " wird") + 
+        " entflucht");
+    if (ob->QueryProp(P_DAMAGED))
+    {
+      write(" und repariert.\n");
+      ob->Damage(-ob->QueryProp(P_DAMAGED));
+    }
+    else
+      write(".\n");
+  }
+  else
+  {
+    qd = ob->QueryProp(P_QUALITY_DECAY); 
+    if (intp(qd) && qd > 0 && qd < MAX_QD)
+      ob->SetProp(P_QUALITY_DECAY, qd + 10 + random(11) );
+    else if (mappingp(qd) && qd[0] > 0 && qd[0] < MAX_QD)
+      ob->SetProp(P_QUALITY_DECAY, qd + ([0: qd[0] + 10 + random(11)]) ); 
+
+    if ((ob->QueryProp(P_AC) + ob->QueryProp(P_DAMAGED)) < 
+        VALID_ARMOUR_CLASS[ob->QueryProp(P_ARMOUR_TYPE)])
+      ob->SetProp(P_AC, ob->QueryProp(P_AC) + !random(3));
+
+    ob->SetProp(P_VALUE, ob->QueryProp(P_VALUE) + 50 + random(100));
+
+    write("Eine " +  adj[salbe, 2] + " Aura umgibt " + ob->name(WEN,1) + ".\n");
+    ob->SetProp("ruestungsbalsam", ob->QueryProp("ruestungsbalsam") + 1);
+  }
+  tell_room(ENV(TP),BS(
+        sprintf("%s schmiert %s mit %s ein.", capitalize(TPN), ob->name(WEN,1),
+          name(WEM,0))), ({TP}));
+  /*
+   DB(sprintf("salbe = %d\nruestung = %O\nplayer = %O\nAC = %d\ntemp = %O\ndam_prot = %O\n", 
+        salbe, ob, TP, ob->QueryProp(P_AC), ob->QueryProp(P_TEMPERATURE_PROTECTION),
+        ob->QueryProp(P_DAM_PROTECTION) ));
+*/
+  DB(sprintf("salbe = %d\nruestung = %O\nplayer = %O\n",
+        salbe, ob, TP));
+
+  remove();
+  return 1;    
+}
+

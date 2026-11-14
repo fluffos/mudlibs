@@ -1,0 +1,8 @@
+#include "/gilden/berserker/berserker_extern.h"
+#include "/gilden/druidenzirkel/druiden_extern.h"
+#include "/gilden/nekromanten/nekro_properties.h"
+#include "/gilden/paladine/paladin_extern.h"
+#include "/gilden/zechpreller/zechpreller_extern.h"
+#include "/gilden/amazonen/amazonen_extern.h"
+#include "/gilden/bardengilde/barden_extern.h"
+#include "/p/daemon/itemd/itemd.h"

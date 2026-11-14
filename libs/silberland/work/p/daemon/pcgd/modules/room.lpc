@@ -1,0 +1,188 @@
+#include "../pcgd_intern.h"
+#include <room.h>
+#include <properties.h>
+
+private mapping getLongsFromBiome(mapping biome) {
+    mapping longs, ret;
+    string *keys;
+    int i;
+
+    ret = ([ ]);
+    longs = biome[BIOME_IND_DESCRIPTION][BIOME_IND_DESCR_LONG];
+    keys = m_indices(longs);
+
+    for(i=0; i<sizeof(keys); ++i) {
+        ret[keys[i]] = longs[keys[i]][1];
+    }
+    
+    return ret;
+}
+
+public varargs string GenerateRoomLong(string biomePath, int length, int randomMode, float synonymChance) {
+    mapping biome;
+    string description, *buckets, *textsInBucket, bucket, *usedPieces, current;
+    mapping longBuckets;
+
+    if(!randomMode) randomMode |= PCG_SELECT_RANDOM; // if nothing given, we'll do randomness
+    if(!length) length = 1;
+
+    biome = this->GetBiome(biomePath);
+    if(!biome) return 0;
+
+    description = "";
+
+    longBuckets = getLongsFromBiome(biome);
+    buckets = m_indices(longBuckets);
+
+    usedPieces = ({ });
+
+    for(;length>0;--length) {
+        do {
+            do {  
+                if(randomMode & PCG_SELECT_RANDOM) {
+                    bucket = buckets[random(sizeof(buckets))];
+                } 
+                else if(randomMode & PCG_EACH_BUCKET_ONE) {
+                    bucket = buckets[length % sizeof(buckets)];
+                }
+
+                textsInBucket = longBuckets[bucket];
+
+                current = textsInBucket[random(sizeof(textsInBucket))];
+            } while ( (randomMode & PCG_CONTENT_NO_SUCCESSION) && sizeof(usedPieces) > 0 && current == usedPieces[sizeof(usedPieces)-1]); // prevent the same string from occring twice in a row
+        } while( (randomMode & PCG_CONTENT_ONLY_ONCE) && member(usedPieces, current) >= 0);
+
+        description += current+" ";
+        usedPieces += ({ current });
+    }
+
+    if(synonymChance) {
+        description = this->SynonymizeString(biomePath, description, synonymChance);
+    }
+
+    return description;
+}
+
+public int isCapitalised(string str) {
+    if(strlen(str) < 1) return 0;
+    return 'A' <= str[0] && str[0] <= 'Z';
+}
+
+private string* extractCapitalizedWordsFromString(string str) {
+    string *words;
+
+    str = regreplace(str, "\\.", "", 1);
+    str = regreplace(str, "\\?", "", 1);
+    str = regreplace(str, "\\!", "", 1);
+    str = regreplace(str, "\\,", "", 1);
+    str = regreplace(str, "\n", "", 1);
+    str = regreplace(str, "\r", "", 1);
+
+    words = explode(str, " ");
+    words = filter_array(words, "isCapitalised", this);
+    
+    return words;
+}
+
+private varargs mapping generateDetails(mapping biome, string str, float synonymChance, mapping details, int maxDepth, int currentDepth) {
+    string *words, newStr, lc;
+    int i;
+    mapping biomeDetails;
+
+    if(maxDepth <= 0) maxDepth = 10;
+    if(currentDepth >= maxDepth) return details;
+    
+    newStr = "";
+    words = extractCapitalizedWordsFromString(str);
+    for(i=0; i<sizeof(words); ++i) {
+        lc = lower_case(words[i]);
+        if(!member(details, lc) && member(biome[BIOME_IND_DESCRIPTION][BIOME_IND_DESCR_DETAILS], lc)) {
+            biomeDetails = biome[BIOME_IND_DESCRIPTION][BIOME_IND_DESCR_DETAILS];
+            details[lc] = biomeDetails[lc][random(sizeof(biomeDetails[lc]))] + "\n";
+            // TODO synonymize string
+            newStr += details[lc] + " ";
+        } 
+    }
+
+    return (strlen(newStr) > 0 ? generateDetails(biome, newStr, synonymChance, details, maxDepth, ++currentDepth) : details);
+}
+
+// Generates a mapping with details to be added to the room.
+// biomePath - Path for the biome to be used
+// synonymChance - 0.0 to 1.0; gives a chance for using a synonym instead of the word in the original text
+public mapping GenerateRoomDetails(string biomePath, string roomDescription, float synonymChance) {
+    mapping biome;
+    
+    biome = this->GetBiome(biomePath);
+    if(!biome) return 0;
+
+    return generateDetails(biome, roomDescription, synonymChance, ([ ]));
+}
+
+// Describes a room with a descrpition and details from the given biome.
+// all parameters given are passed on
+public varargs int DescribeRoom(string biomePath, object room, int length, int randomMode, float synonymChance) {
+    if(!this->GetBiome(biomePath)) {
+        raise_error(sprintf("invalid biome path '%s", biomePath));
+        return PCG_R_BIOME_INVALID_DIR;
+    }
+
+    if(!objectp(room)) return PCG_R_MISSING_ARGS;
+
+    room->SetProp(P_INT_LONG, this->GenerateRoomLong(biomePath, length, randomMode, synonymChance));
+    room->SetProp(P_DETAILS, this->GenerateRoomDetails(biomePath, room->QueryProp(P_INT_LONG), synonymChance));
+
+    return PCG_R_OK;
+}
+
+public int GenerateRoomEnvironment(string biomePath, object room) {
+    mapping biome, env; 
+    int lower, upper;
+
+    if(!(biome = this->GetBiome(biomePath))) {
+        raise_error("invalid biome path");
+        return PCG_R_BIOME_INVALID_DIR;
+    }
+
+    env = biome[BIOME_IND_ENVIRONMENT];
+
+    if(member(env, "INDOORS")) {
+        room->SetProp(P_INDOORS, to_int(env["INDOORS"]));
+    }
+
+    if(member(env, "TERRAIN")) {
+        room->SetProp(P_ENVIRONMENT, room->QueryProp(P_ENVIRONMENT) + ([ENV_TERRAIN: to_int(env["TERRAIN"])]));
+    }
+
+    if(member(env, "TEMPERATURE_UPPER") || member(env, "TEMPERATURE_LOWER")) {
+        lower = to_int(env["TEMPERATURE_LOWER"] || env["TEMPERATURE_UPPER"]);
+        upper = to_int(env["TEMPERATURE_UPPER"] || env["TEMPERATURE_LOWER"]);
+
+        room->SetProp(P_ENVIRONMENT, room->QueryProp(P_ENVIRONMENT) + ([ENV_TEMPERATURE: lower + random(upper - lower)]));
+    }
+
+    return PCG_R_OK;
+}
+
+// Fills an 'empty' room with settings based on the given biome. It autofills:
+//  * Long description
+//  * Details
+//  * Environment settings (temperature, terrain, ...)
+public varargs int GenerateRoom(string biomePath, object room, int longLength, int randomMode, float synonymChance) {
+    int r;
+
+    if(!this->GetBiome(biomePath)) {
+        raise_error("invalid biome path");
+        return PCG_R_BIOME_INVALID_DIR;
+    }
+
+    if(!objectp(room)) return PCG_R_MISSING_ARGS;
+
+    if((r=DescribeRoom(biomePath, room, longLength, randomMode, synonymChance)) != PCG_R_OK)
+        return r;
+
+    if((r=GenerateRoomEnvironment(biomePath, room)) != PCG_R_OK)
+        return r;
+
+    return PCG_R_OK;
+}

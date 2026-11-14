@@ -1,0 +1,256 @@
+
+/* 
+   STD CLIFF ROOM for Yaq'Monoq
+*/
+
+#include <properties.h>
+#include <moving.h>
+#include "../nekro.h"
+#include "../coords.h"
+#include "../dungeon.h"
+
+#ifndef ROOM
+#define ROOM(x) ("/d/unterwelt/nekromanten/room/"+x)
+#endif
+
+inherit NEKRO_ISLAND_DIR+"room/std_yaq_monoq";
+
+nosave string *push_array=({});
+nosave mapping jumppoints;
+
+
+
+void create()
+{
+  ::create();
+  jumppoints=JUMPPOINTS;
+
+  // ROOM DESCRIPTION
+  SetProp (P_INT_SHORT, "Auf Yaq'Monoq");
+  SetProp (P_INT_LONG, "Du stehst auf einer Klippe aus schwarzem Gestein. Der "
+      "Boden unter Dir ist hart und karg, nur einige verdreht verkrueppelte "
+      "Baeume wachsen hier. Unter den Klippen befindet sich der Saeuresee, "
+      "nagt zischend an dem Gestein, als wolle er die Insel verschlingen. "
+      "Am Boden liegen etliche Brocken des schwarzen Gesteins. Aus Deinen "
+      "Augenwinkeln heraus kannst Du ganz leichte Bewegungen ausmachen, die "
+      "von diesen Brocken zu kommen scheint. Als Du etwas genauer hinsiehst, "
+      "kannst Du allerdings keine Bewegungen erkennen.");
+  // ROOM DESCRIPTION END
+
+  // DETAILS START 
+  // Fuer den Zweig "Klippe"
+  AddDetail ( ({"klippe"}),
+    "Aus schwarzem Gestein besteht sie, die Klippe, auf der Du stehst. Als "+
+    "Du vorsichtig hinunterspaehst siehst Du etwas weiter unterhalb den "+
+    "Saeuresee, wie er mit zischendem Geraeusch am Gestein nagt. Du koenntest "
+    "von hier aus ohne Probleme in den See springen.");
+  AddDetail ( ({"gestein"}),
+    "Dunkelschwarz. Du hast noch nie ein aehnliches Gestein gesehen. Es sieht "
+    "extrem hart und wiederstandsfaehig aus, und doch scheint die Saeure ihm "
+    "etwas anzuhaben.");
+  AddDetail ( ({"probleme"}),
+    "Die hast Du nachher sicherlich nicht mehr.");
+  AddDetail ( ({"saeure"}),
+    "Die Saeure des Sees zischt und dampft. Dir faellt das Atmen durch die "
+    "Daempfe schwer. Du bist Dir sicher, dass dieser See alles aufloest, was "
+    "man in ihn hineinwirft");
+  AddDetail ( ({"dampf", "daempfe"}),
+    "Die Saeure erzeugt aetzende Daempfe, die Dir das Atmen zur Qual machen.");
+  AddDetail ( ({"qual", "schmerz", "atmen"}),
+    "Du fuehlst wie Deine Lunge brennt vor Schmerz.");
+  AddDetail ( ({"lunge"}),
+    "Du solltest schnell hier verschwinden, bevor sich Deine Lunge aufloest!");
+  AddDetail ( ({"see", "saeuresee"}),
+    "Der Saeuresee liegt wie ein traeges giftiges Ungeheuer unter Dir, stets "
+    "bereit alles zu verschlingen, was so verwegen ist sich ihm zu naehern. "
+    "Aetzende Daempfe steigen von ihm auf, und Du hoerst das leise Zischen, "
+    "das den langsam Tod verkuendet.");
+  AddDetail ( ({"ungeheuer"}),
+    "Wer weiss was hier alles durch daemonische Praesenzen beseelt ist. Huete "
+    "Dich.");
+  AddDetail ( ({"praesenz", "praesenzen"}),
+    "Ein kalter Schauer laeuft Dir ueber den Ruecken.");
+  AddDetail ( ({"schauer", "ruecken"}),
+    "Was geht hier nur vor? Irgendetwas stimmt hier nicht.");
+  AddDetail ( ({"tod"}),
+    "Den findest Du hier leicht. Und er verheisst keineswegs Erloesung.");
+  AddDetail ( ({"erloesung"}),
+    "Selbst im Tod - so etwas gibt es hier nicht.");  
+  AddDetail ( ({"gehirn"}),
+    "Immer deutlicher ...");
+ 
+  AddSound ( ({"zischen", "geraeusch"}),
+    "Das leise Zischen der Saeure frisst sich in Dein Gehirn. Du hoerst "+
+    "es! Immer deutlicher!");
+  AddSound ( ({DEFAULT_SOUND}),
+    "Ein stetiges Zischen ist zu hoeren. Es macht Dich nervoes.");
+
+  AddSmell ( ({DEFAULT_SMELL}),
+    "Der beissende Geruch von Saeure steigt in Deine Nase.");
+  AddSmell ( ({"geruch", "saeure", "saeuregeruch"}),
+    "Wah! Das brennt in der Nase.");
+  AddSmell ( ({"nase"}),
+    "Du versuchst an deiner Nase zu riechen, aber es gelingt Dir nicht.");  
+  
+  AddCmd ( ({"springe", "spring", "huepf", "huepfe"}), "jump_in_acid");
+  AddCmd ( ({"wirf", "werfe","werf",}), "throw_item_in_acid");
+  AddCmd ( ({"schubse", "schubs"}), "push_player_in_acid");
+}
+
+void reset() {
+  ::reset();
+  push_array=({});
+}
+
+int jump_in_acid(string str) {
+  string my_name, dest_name, *help_var;
+  // Absichtlich KEIN notify fail!
+  if(!str) return 0;
+  if(member(({"in see", "in saeuresee", "in saeure"}), str)==-1) return 0;
+  tell_room(ME, BS(sprintf("%s bekommt einen seltsamen Ausdruck in den Augen "
+          "und springt in den Saeuresee. Schade eigentlich.", TPN)), ({TP}));
+  tell_object(TP, "Du bist unsterblich! Nichts kann Dich vernichten!\nDu "
+      "springst in den Saeuresee.\n");
+  help_var=explode(file_name(ME), "/");
+  my_name=help_var[sizeof(help_var)-1];
+  dest_name=NEKRO_ISLAND_DIR+"room/acid_lake/std_acid:"+
+    jumppoints[my_name][random(sizeof(jumppoints[my_name]))];
+  TP->move(dest_name, M_GO|M_NOCHECK|M_SILENT);
+  return 1;
+}
+
+int throw_item_in_acid(string str) {
+  string wo, was, unit_word;
+  object ob;
+  if(!str) return 0; // kein notify fail -> wird an spieler-"werfe" uebergeben
+  if(sscanf(str, "%s in %s", was, wo)!=2) return 0;
+  if(member(({"see", "saeure", "saeuresee"}), wo)==-1) return 0;
+  if(!ob=present(was, TP)) return 0;
+  if(ob->QueryProp(P_CURSED) || ob->QueryProp(P_NODROP)) return 0;
+  if(ob->QueryProp(P_WORN)) {
+    write(BS(sprintf("Du solltest %s erst einmal ausziehen.", ob->name(WEN))));
+    return 1;
+  }
+  if(ob->QueryProp(P_WIELDED)) {
+    write(BS(sprintf("Du solltest %s erst einmal wegstecken.", 
+            ob->name(WEN))));
+    return 1;
+  }
+  if(ob->QueryProp(P_REQUESTED_AMOUNT)>1)
+    unit_word="haben";
+  else
+    unit_word="hat";
+  write(sprintf("Du nimmst %s und wirfst %s in den Saeuresee.\nEin haessliches "
+        "Zischen ertoent und %s %s sich aufgeloest.\n", ob->name(WEN,1), 
+         ob->QueryPronoun(WEN), ob->name(WER,1), unit_word));
+  tell_room(ME, sprintf("%s nimmt %s und wirft %s in den Saeuresee.\nEin "
+         "haessliches Zischen laesst vermuten, dass %s sich aufgeloest %s.\n",
+         TP->Name(WER,1),ob->name(WEN,1),ob->QueryPronoun(WEN), 
+         ob->name(WER,1), unit_word), ({TP}));
+  if( ob->IsUnit() ) {
+    ob->id(was);
+    ob->AddAmount(- ob->QueryProp(P_REQUESTED_AMOUNT) );
+  }
+  else 
+    ob->remove();
+  return 1;
+}
+
+int push_player_in_acid(string str) {
+  object pl, looser;
+  string wo, wer, *help_var, my_name,dest_name;
+  int str1, str2, dex1, dex2;
+  if(!str) return 0;
+  if(sscanf(str, "%s in %s", wer, wo)!=2) return 0;
+  if(!pl=find_player(wer)) return 0;
+  if(ENV(pl)!=ENV(TP)) return 0;
+  if(member(({"see", "saeure", "saeuresee"}), wo)==-1) return 0;
+  if(!IS_SEER(pl)) {
+    write(BS(sprintf("Nein, das willst Du nicht. Nicht %s!",
+            pl->QueryProp(P_GENDER)==FEMALE?"die Kleine":"den Kleinen")));
+    return 0;
+  }
+  if(member(push_array, getuid(pl))!=-1) {
+    write(BS(sprintf("Du moechtest %s nicht mehr in den See schubsen. Warte "
+        "wieder etwas bis Du genuegend Wut auf %s hast.", pl->Name(WER,1),
+        pl->QueryPronoun(WEN,1))));
+    return 1;
+  }
+  str1=random(TP->QueryAttribute(A_STR)/2);
+  str2=random(pl->QueryAttribute(A_STR));
+  dex1=random(TP->QueryAttribute(A_DEX)/2);
+  dex2=random(pl->QueryAttribute(A_DEX));
+  if( str1 > str2 ) {
+    if( dex1 > dex2 ) {
+      write(BS(sprintf("Du gibst %s mit einem haemischen Grinsen "
+              "einen Schubser. %s kann %s Gleichgewicht nicht halten "
+              "und faellt mit einem gellenden Schrei in den Saeuresee.",
+              pl->name(WER,1),pl->Name(WER,1),pl->QueryPossPronoun(WESSEN))));
+      tell_object(pl, BS(sprintf("Ploetzlich gibt %s Dir mit einem "
+              "haemischen Grinsen einen Schubser. Du verlierst das Gleich"
+              "gewicht, torkelst Richtung Klippe und faellst in den "
+              "Saeuresee! WAHHHHHH!",TP->Name(WER,1))));  
+      tell_room(ME, BS(sprintf("Mit einem haemischen Grinsen gibt %s %s einen "
+              "Schubser Richtung Klippe. %s verliert %s Gleichgewicht und "
+              "faellt ueber die Klippe in den Saeuresee!",TP->name(WER,1),
+              pl->name(WER,1), pl->name(WER,1), pl->QueryPronoun(WESSEN))), 
+            ({TP,pl}));
+      looser=pl;
+      push_array+=({getuid(pl)});
+    }
+    else if(random(pl->QueryAttribute(A_DEX)/2) > dex1)
+    {
+      write(BS(sprintf("Du versuchst %s einen Schubser zu geben. Offenbar "
+              "hast Du nicht mit %ser Wendigkeit gerechnet, denn %s weicht "
+              "aus, fasst Dich am Arm, vollfuehrt eine halbe Drehung und nutzt "
+              "dabei Deinen Schwung aus und wirft Dich ueber die Klippe in "
+              "den Saeuresee!",pl->Name(),pl->QueryPossPronoun(WESSEN), 
+              pl->QueryPronoun(WER))));
+      tell_object(pl, BS(sprintf("%s versucht Dir einen Schubser zu geben. "
+            "So tollpatschig wie %s das anstellt, ist es ein leichtes fuer "
+            "Dich %s an %sem Arm zu packen. Du vollfuehrst eine halbe Drehung, "
+            "nutzt %s Schwung aus und wirfst %s ueber die Klippe! HAHA!",
+            TP->Name(WER,1), TP->QueryPronoun(WER), TP->QueryPronoun(WEN),
+            TP->QueryPossPronoun(WESSEN), TP->name(WESSEN), 
+            TP->QueryPronoun(WEN))));  
+//wenn du bei QueryPossPronoun(FEMALE,WESSEN,SINGULAR) nimmst brauchst du nur
+// %s statt %ser
+      tell_room(ME, BS(sprintf("%s versucht %s einen Schubser zu geben. "
+            "Doch %s weicht aus, packt %s am Arm, vollfuehrt eine halbe "
+            "Drehung und wirfst %s ueber die Klippe in den Saeuresee!",
+            TP->Name(WER,1), pl->name(WER,1), pl->name(WER,1), 
+            TP->name(WER,1), TP->QueryPronoun(WEN))),
+            ({TP,pl}));
+//                      ^^^^ siehe oben (MALE,WESSEN,SINGULAR) bei QPP
+      looser=TP;
+       
+    }
+    else {
+      write(BS(sprintf("Du versuchst %s ueber die Klippe zu schubsen, doch "
+              "%s weicht aus.",pl->Name(WEN,1), pl->QueryPronoun(WER))));
+      tell_object(pl, BS(sprintf("%s versuchst Dich zu schubsen, aber Du "
+              "weichst gekonnt aus.",TP->Name(WER,1))));  
+      tell_room(ME, BS(sprintf("%s versucht %s ueber die Klippe zu schubsen, "
+              "doch %s weicht geschickt aus.",TP->Name(WER,1), pl->name(WER,1),
+              pl->QueryPronoun(WER))), ({TP,pl}));
+      push_array+=({getuid(pl)});
+    }
+  }
+  else {
+    write(BS(sprintf("Du versuchst %s ueber die Klippe zu schubsen, doch "
+            "%s weicht aus.",pl->Name(WEN,1), pl->QueryPronoun(WER))));
+    tell_object(pl, BS(sprintf("%s versuchst Dich zu schubsen, aber Du weichst "
+            "gekonnt aus.",TP->Name(WER,1))));  
+    tell_room(ME, BS(sprintf("%s versucht %s ueber die Klippe zu schubsen, "
+            "doch %s weicht geschickt aus.",TP->Name(WER,1), pl->name(WER,1),
+            pl->QueryPronoun(WER))), ({TP,pl}));
+    push_array+=({getuid(pl)});
+  }
+  help_var=explode(file_name(ME), "/");
+  my_name=help_var[sizeof(help_var)-1];
+  dest_name=NEKRO_ISLAND_DIR+"room/acid_lake/std_acid:"+
+    jumppoints[my_name][random(sizeof(jumppoints[my_name]))];
+  if(looser) 
+    looser->move(dest_name, M_TPORT|M_NOCHECK|M_SILENT);
+  return 1;
+}

@@ -1,0 +1,102 @@
+#include "../../arkanisten.h"
+
+inherit GUILD_FOLDER "abilities/ability.lpc";
+
+public void create() {
+    if(is_clone(TO)) return;
+
+    ::create();
+    SetProp(P_ABILITY_NAME, "Steinschlosspistole");
+    SetProp(P_ABILITY_DESCRIPTIPON, 
+        "Die Steinschusspistole ist eine mechanische Weiterentwicklung der Armbrust. Statt Bolzen "
+        "ueber das Spannen einer Sehne zu verschiessen, wird eine kleine Explosion von "
+        "Schwarzpulver genutzt, um eine kleine Bleikugel zu verschiessen. Sie ist langsamer "
+        "als die Handarmbrust, kann dafuer Ruestungen besser durchschlagen.");    
+    SetProp(P_ABILITY_TYPE, ABILITY_TYPE_ACTIVE);
+    SetProp(P_ABILITY_CASTVERB, CAST_VERB_WIELD);
+    SetProp(P_ABILITY_BASE_ATTRIBUTE, A_DEX);
+    SetProp(P_ABILITY_GROUP, ({ABILITY_GROUP_GADGET_POWERUP, ABILITY_GROUP_GADGETS}));
+    SetProp(P_ABILITY_REQUIRES, ({EXPLODING_AMMUNITION}));
+    SetProp(P_ABILITY_COST, 0);
+    SetProp(P_ABILITY_SPELLBREAK, 0);
+}
+
+
+public mapping prepare_use(object user, mapping sinfo) {
+    if(present(PISTOL_ID, user)) {
+        tell_object(user, BS("Du hast diese Waffe bereits gezogen."));
+        return 0;
+    }
+
+    if(get_free_hands(user) < 1 || objectp(user->QueryProp(P_WEAPON))) {
+        tell_object(user, BS("Du musst eine freie Hand haben, um deine Steinschlosspistole zu zuecken!"));
+        return 0;
+    }
+
+    sinfo[SI_ABILITY_NOLEARN] = 1;
+
+    return ::prepare_use(user, sinfo);
+}
+
+public void success(object user, mapping sinfo, int skillcheck) {
+    object cb;
+    int val;
+    mapping mod;
+
+    if(objectp(cb=present(PISTOL_ID, user))) {
+        if(!objectp(user->QueryProp(P_WEAPON))) return; // nur mit waffe
+        if(!(user->QueryProp(P_WEAPON)->id(PISTOL_ID))) return; // nur mit pistole
+
+        val = user->QueryProp(P_GUILD_LEVEL)+skillcheck/200;
+        pDebug(user, sprintf("flintlockpistol :: bonusDamagePreMod=%d\n", val));
+        mod = apply_modifications(MODIFY_DAMAGE, ([
+            SI_ABILIT_USER: user,
+            SI_SKILLDAMAGE: val,
+            SI_ABILITY_NOLEARN: sinfo[SI_ABILITY_NOLEARN],
+        ]));
+        val = mod[SI_SKILLDAMAGE];
+        pDebug(user, sprintf("flintlockpistol :: bonusDamage=%d\n", val));
+        sinfo[SI_SKILLDAMAGE] += val;  
+
+        val = 1;
+        if(!random(20-sinfo[SI_SKILLABILITY]/1000)) {
+            tell_object(user, BS("Dein Schuss durchlaegt die Panzerung!"));
+            val = 100;
+            sinfo[SI_SKILLDAMAGE] = (int) (sinfo[SI_SKILLDAMAGE] * 1.1);
+        }
+        val = 101 - val;
+        pDebug(user, sprintf("flintlockpistol :: armorReduction=%d\n", val));
+        sinfo[SI_SPELL] = ([
+            SP_SHOW_DAMAGE: 1,
+            SP_REDUCE_ARMOUR: ([
+                AT_ARMOUR: val,
+                AT_HELMET: val,
+                AT_AMULET: val,
+                AT_RING: val,
+                AT_GLOVE: val,
+                AT_CLOAK: val,
+                AT_BOOT: val,
+                AT_SHIELD: val,
+                AT_TROUSERS: val,
+                AT_MISC: val,
+                P_BODY: val
+            ])
+        ]);
+    } else {
+        cb = clone_object(OBJ "flintlockpistol");
+        if(!cb->move(user)) {
+            tell_object(user, BS("Du kannst das gerade nicht tun."));
+            destruct(cb);
+            return;
+        }
+
+        cb->setup(user);
+        cb->wield_me();
+    }
+
+    return;
+}
+public int on_use_after_eval(object user, mapping sinfo, int skillcheck) {
+    if(!objectp(present(PISTOL_ID, user))) return ERFOLG; // always succeed in wielding it
+    return ::on_use_after_eval(user, sinfo, skillcheck);
+}

@@ -1,0 +1,210 @@
+inherit "std/thing";
+inherit "/std/more";
+
+#include <properties.h>
+#include <defines.h>
+#include <moredef.h>
+#include <moving.h>
+#include <ansi.h>
+#include <wizlevels.h>
+
+int check_iwo();
+
+string *allowed = ({ "teiresias", "zaphod", "miratai", "wumanzu", "yoghurt" });
+
+create()
+{
+   ::create();
+   SetProp(P_SHORT, "Iwos magisches Auge");
+   SetProp(P_LONG, "Iwos magisches Auge. Nur fuer Magierzweitis.\n");
+   SetProp(P_NAME, "Auge");
+   SetProp(P_GENDER, NEUTER);
+   SetProp(P_NAME_ADJ, "magisch");
+   SetProp(P_INFO, BS("Mit 'visor' siehst Du invismags im Raum. "
+                      "Mit 'vison' eingeloggte Invismags."
+                      "Mit 'visec' Zweitimarkierungen."));
+   AddId(({"visor", "auge"}));
+   SetProp(P_WEIGHT, 100);
+   SetProp(P_VALUE, 0);
+   SetProp(P_NOBUY, 1);
+   SetProp(P_NODROP, 1);
+   SetProp(P_NEVERDROP, 1);
+   SetProp(P_AUTOLOADOBJ, 1);
+
+   AddCmd( ({ "visor" }), "visor");
+   AddCmd( ({ "vison" }), "vison");
+   AddCmd( ({ "visec" }), "visec");
+
+   check_iwo();
+}
+
+int Allowed()
+{
+  if (!(IS_WIZARD(TP) && TP->QueryProp(P_WANTS_TO_LEARN))
+      && member(allowed, getuid(TP)) == -1) return 0;
+
+  return 1;
+}
+
+string strmul(string a, int b)
+{
+  int i;
+  string str;
+
+  str = "";
+
+  for (i=0; i < b; i++)
+    str += a;
+
+  return str;
+}
+
+int check_second(object pl)
+{
+  return pl->QueryProp(P_SECOND) != 0;
+}
+
+
+string ShowFirst(object pl)
+{
+  int mark;
+  string second;
+
+  mark = pl->QueryProp(P_SECOND_MARK);
+
+  second = pl->QueryProp(P_SECOND);
+
+  if (!second) second = "<Unbekannt>";
+
+  if (mark == -1) mark = 2;
+
+  switch((int) mark)
+    {
+      case 2:
+        return sprintf("([ %s ])", pl->QueryProp(P_SECOND));
+      case 0:
+        return sprintf("(  %s )", pl->QueryProp(P_SECOND));
+      case 1:
+         return sprintf("   %s", pl->QueryProp(P_SECOND));
+    }
+}
+
+
+int visec()
+{
+  int i;
+
+  object *seconds;
+
+  notify_fail("Das ist nichts fuer Dich. Du solltest es zurueckgeben.\n");
+
+  if (!Allowed())
+    return 0;
+
+  tell_room(ENV(TP), BS(TP->Name(WER) + " blickt durch ein magisches Auge."), ({ TP }));
+  tell_object(TP, BS("Du blicks durch das magische Auge."));
+  
+  seconds = filter_array(users(), "check_second");
+
+  for (i=0; i < sizeof(seconds); i++)
+    {
+      tell_object(TP,
+        sprintf("%s%s%s\n", 
+          CAP(getuid(seconds[i])), 
+          strmul(".", 14-strlen(getuid(seconds[i]))),
+          ShowFirst(seconds[i])));
+
+    }
+  //tell_object(TP, BS(sprintf("%O\n", seconds)));
+  
+  return 1;
+  
+}
+
+
+
+int visor()
+{
+  object *inv;
+  string *invis;  
+  string str;
+  int i;
+
+  inv = ({});
+  invis = ({});
+
+  notify_fail("Das ist nichts fuer Dich. Du solltest es zurueckgeben.\n");
+
+  if (!Allowed())
+    return 0;
+
+  tell_room(ENV(TP), BS(TP->Name(WER) + " blickt durch ein magisches Auge."), ({ TP }));
+  tell_object(TP, BS("Du blicks durch das magische Auge."));
+
+  inv = all_inventory(ENV(TP));
+
+  for (i=0;i<sizeof(inv);i++)
+    {
+      if(inv[i]->QueryProp(P_INVIS))
+        invis += ({ CAP(getuid(inv[i])) });
+    } 
+  
+  if (sizeof(invis)>0)
+    {
+      str = implode(invis, " ");
+    }
+  else str = "Keine";
+
+  tell_object(TP, BS(ANSI_RED + "Unsichtbare Objekte: " + ANSI_NORMAL + str + "."));
+
+  return 1;
+
+}
+
+
+int vison()
+{
+  int shrt;
+  mixed res;
+  
+  notify_fail("Das ist nichts fuer Dich. Du solltest es zurueckgeben.\n");
+
+  if (!Allowed())
+    return 0;
+
+  tell_room(ENV(TP), BS(TP->Name(WER) + " blickt durch ein magisches Auge."), ({ TP }));
+  tell_object(TP, BS("Du blicks durch das magische Auge."));
+
+  More(implode("/obj/werliste"->QueryWhoListe(1 && 1, 1, 0, 0), "\n")+"\n\n",0);
+
+  return 1;  
+}
+
+
+int check_iwo()
+{
+  object iwo, tei;
+  string str;
+
+  while (remove_call_out("check_iwo") != -1);
+
+  if ((iwo = find_player("iwo")) && (tei = find_player("teiresias")))
+    {
+      str = ANSI_BOLD + ANSI_RED + "*** ACHTUNG ***  BEIDE CHAR ONLINE!"+ANSI_NORMAL+"\n";
+      tell_object(iwo, str);
+      tell_object(tei, str);
+    }
+
+  if (ENV(ME) && interactive(ENV(ME))) call_out("check_iwo", 15);
+}
+
+
+void BecomesNetDead(object pl)
+{
+  if (pl == ENV(ME)) while(remove_call_out("check_iwo")!= -1);
+}
+
+void BecomesNetAlive(object pl)
+{
+  if (pl == ENV(ME)) call_out("check_iwo", 0);
+}

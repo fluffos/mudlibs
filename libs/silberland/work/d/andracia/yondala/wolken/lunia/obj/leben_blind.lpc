@@ -1,0 +1,204 @@
+//
+/*
+Lirandra teilt Dir mit: hi, ka ob du das liest. aber mir is augefallen, dass
+Lirandra teilt Dir mit: der report sich immer von selber deaktiviert vor allem
+Lirandra teilt Dir mit: nach einem kampf... find ich jetz nich so praktisch
+Lirandra teilt Dir mit: grad im brunnen und so. lg
+Tick
+[Allgemein:Lisp knickst.]
+[Allgemein:Lirandra] knicks
+Du teilst Lirandra mit: oh, ok, danke
+> Du teilst Lirandra mit: ich schaus mir an
+> Lirandra teilt Dir mit: fein danke ...
+Lirandra teilt Dir mit: also ich schalt ihn ein kaempfe dann kampf zu ende,
+Lirandra teilt Dir mit: und wenn ein neuer kampf kommt muss ich den ohrring
+Lirandra teilt Dir mit: ausch neu aktivieren. so isses glaub aktuell
+Du teilst Lirandra mit: komisch
+> Lirandra teilt Dir mit: ka*/
+
+
+
+#include "../def.h"
+inherit "std/thing";
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <wizlevels.h>
+#include <defines.h>
+#include <moredef.h>
+#include <class.h>//fuer die Vision
+#include <ansi.h>//fuer die Farben
+
+object besitzer;
+nosave int lastHP;
+nosave int lastSP;
+nosave int aktiv=0;
+nosave int schritte;
+
+void create() 
+{
+  if( !is_clone(TO) ) return;
+  ::create();
+  schritte=0; 
+  SetProp(P_SHORT, "Der Ohrring des Lebens");
+  SetProp(P_LONG,
+  "Du siehst einen kleinen, goldenen Ohring, der Dir ueber ueber Deinen "
+  "Gesundheitszustand berichtet.");
+
+  AddId( ({"ohrring","ohrring des lebens"}) );
+  SetProp(P_INFO, "Du erkennst, dass Du den Report mit dem Befehl <ohrring> "+
+                  "ein oder aus schalten kannst.\n"+
+				  "Mit <ohrringschritte> kannst Du einstellen, ob Dir hochidlen "+
+				  "angezeigt werden soll.\n"+
+				  "Mit <ohrringstatus> bekommst Du Deinen aktuellen Status angezeigt.");
+
+  
+  
+  
+    SetProp(P_NAME, "Ohrring des Lebens");
+  SetProp(P_GENDER, MALE);
+ 
+  SetProp(P_MATERIAL, ({MAT_SILVER, MAT_MISC_MAGIC }));
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_VALUE, 500);
+  SetProp(P_NOBUY, 0);
+  SetProp(P_NOSELL, 0);
+//  SetProp(P_NODROP, "Den Ohrring moechtest Du nicht missen.\n");
+//  SetProp(P_NEVERDROP, 1);
+SetProp( P_AUTOLOADOBJ, 1 );
+	SetProp(P_WORN_TEXT, "ins Ohr gesteckt");
+  SetProp(P_ARMOUR_TYPE, AT_MISC );
+  SetProp(P_AC, 0);
+
+  SetProp(P_WEAR_FUNC, TO );
+  SetProp(P_REMOVE_FUNC, TO );
+  SetProp(P_DEFEND_FUNC, TO );
+  AddCmd( ({ "ohrring"}), "ohrringreport");
+  AddCmd( ({ "ohrringstatus"}), "ohrringstatus");
+
+  AddCmd( ({ "ohrringschritte"}), "ohrringschritte");
+  lastHP = lastSP = -1;
+}
+
+int ohrringschritte(string str)
+{
+  int i;
+  notify_fail("Bitte eine Zahl eingeben.\n");
+  if(!str) return 0;
+  i=to_int(str);
+  //if (to_int(i))
+  //{
+  
+    write("Dir werden Deine gewonnen Lebens- und Magiepunkte nun in "+i+
+	"er Schritten angezeigt.\n");
+	schritte=i;
+	schritte--;
+	aktiv=1;
+	return 1;
+	//}
+//return 0;
+}
+int ohrringreport(string str)
+{
+	notify_fail("Ohrring status, ein oder aus?\n");
+	if(TP!=environment(TO))
+	{
+	  write("Dazu musst Du den Ohrring in Besitz haben.\n");
+	  return 1;
+	  }
+	besitzer=environment(TO);
+	
+	if(str=="status")
+	{
+	  tell_object(TP,"LP: "+TP->QueryProp(P_HP)+"  SP: "+TP->QueryProp(P_SP)+"\n");
+	  return 1;
+	  }
+	if(str=="ein")
+		{
+			aktiv=1;
+			write("Der Report ist nun eingeschaltet.\n");
+            lastHP = besitzer->QueryProp(P_HP);
+            lastSP = besitzer->QueryProp(P_SP);
+            besitzer->AddHpHook(ME);
+			SetProp(P_NODROP, "Einen aktiven Ohrring kannst Du nicht ablegen.\n");
+            SetProp(P_NEVERDROP, 1);
+			return 1;
+		}
+	if(str=="aus")
+		{
+			aktiv=0;
+			write("Der Report ist nun ausgeschaltet.\n");
+			SetProp(P_NODROP, 0);
+            SetProp(P_NEVERDROP, 0);
+			besitzer->RemoveHpHook(ME);
+			return 1;
+		}	
+return 0;
+}
+
+NotifyHpChange()
+{
+	  int    hp, mhp, sp, msp;
+	  int unter1;
+	  int unter2;
+	  if(!aktiv) return;
+/*
+  // Sicherheits-Check
+  if (!previous_object() || !besitzer || (besitzer != previous_object()))
+    return;
+  if(besitzer!=environment()) return;
+*/
+  if (besitzer->QueryProp(P_GHOST)) return;// Test auf Geist
+  
+
+  // aktuelle Werte ermitteln
+  hp = besitzer->QueryProp(P_HP);
+  //mhp = besitzer->QueryProp(P_MAX_HP);
+  sp = besitzer->QueryProp(P_SP);
+  //msp = besitzer->QueryProp(P_MAX_SP);
+
+
+  // Test auf Tod
+  if ((hp<=0) || (!living(besitzer)))
+  {
+ 			aktiv=0;
+			besitzer->RemoveHpHook(ME);
+  }
+
+
+	
+	unter1=hp+10;
+    unter2=sp+10;
+//tell_object(besitzer,"LP: "+hp+" LastLP: "+lastHP+"  Unter1: "+unter1+"  \n");
+//wenn lp > lastlp+10
+
+  //if(lastHP<=unter1||lastSP<=unter2) //Wenn weniger oder mehr als 10 groesser
+   if(schritte)
+   {
+   if(hp>lastHP+schritte||sp>lastSP+schritte)
+	{
+      tell_object(besitzer,"LP: "+hp+"  SP: "+sp+"\n");
+	  lastHP=hp;
+	  lastSP=sp;
+	  return;
+	  }
+	}
+ if(lastHP>hp||lastSP>sp)//Wenn der Spieler weniger hat als vorher
+  {
+    tell_object(besitzer,"LP: "+hp+"  SP: "+sp+"\n");
+	lastHP=hp;
+	lastSP=sp;
+	}
+  else if(besitzer->QueryProp(P_MAX_HP)==hp&&besitzer->QueryProp(P_MAX_SP)==sp)
+  {
+    tell_object(besitzer,"LP: "+hp+"  SP: "+sp+"\n");
+	lastHP=hp;
+	lastSP=sp;
+	}
+}
+
+int ohrringstatus()
+{
+	write("LP: "+TP->QueryProp(P_HP)+" SP: "+TP->QueryProp(P_SP)+"\n");
+	return 1;
+}

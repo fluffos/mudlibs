@@ -1,0 +1,172 @@
+// /d/dschungel/feyaria/tijara/room/wache_e7.c
+// Die Stadtwache von Tijara, E7
+// 30-10-96  Feyaria@SilberLand
+// 7 Details
+
+#include "../def.h"
+
+inherit "std/room";
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include <wizlevels.h>
+
+create()
+{
+  ::create();
+
+  SetProp( P_INT_SHORT, "Die Stadtwache von Tijara" );
+  SetProp( P_INT_LONG, BS(
+    "Die Stadtwache von Tijara hat dieses Haus als Hauptquartier "
+    "ausgewaehlt. Die Wachstube ist relativ spartanisch eingerichtet. Um "
+    "einen grossen Tisch, der in der Mitte des Raumes steht, sind ein paar "
+    "Stuehle aufgestellt und neben dem Schrank an der Suedwand sind "
+    "Halterungen fuer Waffen angebracht worden. Der Ausgang geht nach "
+    "Westen auf die Strasse zurueck.") );
+  SetProp( P_LIGHT, 1 );
+  SetProp( P_INDOORS, 1 );
+  SetProp(P_ENVIRONMENT,([ENV_TEMPERATURE: 25, ENV_TERRAIN:TT_HOUSE]) );
+
+  AddDetail( ({"tijara", "stadt"}),
+    "Du befindest Dich in der Stadt Tijara.");
+  AddDetail( ({"ausgang", "westen", "strasse"}),
+    "Der Ausgang geht nach Westen auf die Strasse zurueck.");
+  AddDetail(({"schrank", "suedwand"}), 
+    "In dem Schrank an der Suedwand bewahren die Gardisten ihre spaerliche "
+    "Habe auf.");
+  AddDetail("tisch",
+    "Ein schmuckloser, leerer Tisch.");
+  AddDetail( ({"stuehle", "stuhl"}),
+    "Die Stuehle sind so hart und unbequem, dass nur ein abgehaerteter "
+    "Gardist sich laenger darauf setzen kann.");
+  AddDetail( ({"raum", "wachstube", "hauptquartier", "stadtwache"}),
+    "Das ist die Wachstube der Stadtgardisten von Tijara. Hier ruhen sie "
+    "sich von ihrem anstrengenden Dienst aus. In einer Halterung haben sie "
+    "ihre Waffenreserven stationiert."); 
+  AddDetail( ({"wand", "waende"}),
+    "Alle Waende sind uninteressant bis auf die Suedwand, an der eine "
+    "Waffenhalterung angebracht ist.");
+  AddDetail( ({"decke", "boden", "bretter"}),
+    "Decke und Boden sind aus ganz normalen Brettern gefertigt.");
+  AddSpecialDetail(({"waffen", "waffenhalterung", "waffenhalterungen",
+                     "halterung", "halterungen", "waffenreserven"}), 
+    "halterung");
+
+  AddCmd("nimm", "nimm");
+  AddCmd(({"steck", "stecke"}), "steck");
+  AddCmd("oeffne", "oeffne");
+
+  AddItem(NPC "gardist3", REFRESH_DESTRUCT);
+    
+  AddExit( "westen", "./tor_d7" );
+}
+
+string halterung()
+{
+  int    i;
+  string text;
+  object *liste;
+  
+  text= "In diesen Halterungen bewahren die Gardisten ihre Waffen auf, wenn "
+        "sie sich nach ihrem Dienst eine Pause in der Wachstube goennen. ";
+  call_other( ROOM "halterung", "???", 0);
+  liste = all_inventory(find_object( ROOM "halterung"));
+  if(!sizeof(liste))
+    text +="Im Augenblick befindet sich aber keine Waffe in den Halterungen";
+  else
+  {
+    text += "Im Augenblick sind folgende Waffen in den Halterungen: ";
+    if (sizeof(liste)==1)
+      text += liste[0]->name(WER);
+    else
+      text += implode(map_objects(liste[0..<2], "name", WER), ", ")+
+              " und "+liste[<1]->name(WER);
+  }
+  return BS(text+".");
+}
+
+int nimm(string str)
+{
+  string arg;
+  object *liste, obj;
+  int    i;
+  
+  if (!str) return 0;
+  if (sscanf(str, "%s aus halterung", arg)!=1) return 0;
+  if (present("tijara\gardist"))
+  {
+    if (IS_LEARNING(TP))
+      write("Der Gardist sagt: Weil Du Magier bist, drueck ich ein "
+        "Auge zu.\n");
+    else
+    {
+      write("Der Gardist sagt: Hier wird nicht geklaut!\n");
+      return 1;
+    }
+  } 
+  call_other( ROOM "halterung", "???", 0);
+  liste = all_inventory(find_object( ROOM "halterung"));
+  for(i=(sizeof(liste))-1; i>=0;i--)
+  {
+    obj = liste[i];
+    if (member(obj->QueryProp(P_IDS), arg)!=-1)
+    {
+      if (obj->move(TP)==ME_TOO_HEAVY)
+      {
+        write("Du kannst "+obj->name(WEN)+" nicht mehr tragen.\n");
+        obj->move( ENV(TP) );
+      }
+      else
+        write("Du nimmst "+obj->name(WEN)+" aus der Halterung.\n");
+      say(TPN+" nimmt "+obj->name(WEN)+" aus der Halterung.\n");
+      return 1;  // nur einmal nehmen
+    }
+  }
+  return 0;
+}
+
+int steck(string str)
+{
+  string arg;
+  object store, obj;
+  int    i;
+  
+  if (!str) return 0;
+  if (sscanf(str, "%s in halterung", arg)!=1) return 0; 
+  call_other( ROOM "halterung", "???", 0);
+  store = find_object( ROOM "halterung");
+  if (obj = present(arg, TP))
+  {
+    if (obj->QueryProp(P_WEAPON_TYPE))
+    {
+      write("Du steckst "+obj->name(WEN)+" in die Halterung.\n");
+      say(TPN+" steckt "+obj->name(WEN)+" in die Halterung.\n");
+      obj->move(store, M_PUT);
+    }
+    else
+      write("In die Halterung kannst Du nur Waffen stecken.\n");
+  }
+  else
+    write(CAP(arg)+"? Sowas hast Du gar nicht dabei.\n");
+  return 1;
+}
+
+int oeffne(string str)
+{
+  notify_fail("Was willst Du oeffnen?\n");
+  if(!str) return 0;
+  if( str=="schrank")
+  {
+    if (present("tijara\gardist"))
+    {
+      write("Der Gardist sagt: Hier wird nicht geklaut!\n");
+      return 1;
+    }
+    write("Du oeffnest den Schrank, findest aber nichts brauchbares.\n"
+          "Frustriert machst Du den Schrank wieder zu.\n");
+    say(TPN+" oeffnet den Schrank, aber schliesst ihn sofort wieder.\n");
+    return 1;
+  }
+  return 0;
+}

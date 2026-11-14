@@ -1,0 +1,75 @@
+
+int prep_saeureexplosion(object caster, mapping sinfo)
+{
+  object victim;
+  sinfo[SI_SKILLARG]=parse_target(sinfo[SI_SKILLARG]);
+  if (!victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+      "Wen willst Du mit dem Geifer der Verdammten vernichten?\n"))
+    return 0;
+
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }                           
+  return 1;
+}
+
+int saeureexplosion(object caster, mapping sinfo)
+{
+  object *victims;
+  object victim;
+  int succ, i, dam, damage;
+
+  if (!victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+      "Wen willst Du mit dem Geifer der Verdammten vernichten?\n"))
+    return 0;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+
+  if ((succ=SpellSuccess(caster,sinfo))<=0)
+    return MISSERFOLG;
+
+  write(BS("Dein purer Hass formt in Deinen Haenden eine Kugel aus "
+        "nachtschwarz schaeumenden Geifer, die Du auf "
+        +victim->name(WEN,2)+" wirfst."));
+  tell_object(victim, BS(sprintf("%s wirft ein schwarzes, schaeumendes "
+          "Etwas auf Dich.", caster->Name(WER,1))));
+  say(BS(sprintf(
+          "%s formt in %s Haenden eine nachtschwarze Kugel aus "
+          "schaeumenden Geifer und wirft "
+          "sie voller Hass auf %s.", caster->Name(WER), 
+          victim->QueryPossPronoun(WESSEN,3),victim->name(WEN,2))), 
+      ({caster, victim}) );
+
+  dam = sinfo[SI_SKILLDAMAGE] + caster->QueryAttribute(A_INT) * 
+    caster->QueryProp(P_GUILD_LEVEL)*caster->QueryProp(P_GUILD_CIRCLE) *
+    succ/ (10 *MAX_ABILITY);
+  damage=sinfo[OFFSET(SI_SKILLDAMAGE)]+ 
+    random(DoModificationByAlign(dam, caster, victim));
+  TryAttackSpell(victim, damage, sinfo[SI_SKILLDAMAGE_TYPE],
+      ([SP_NAME:"Saeureexplosion",SP_SHOW_DAMAGE:1]), caster, sinfo);
+  
+  if (sizeof(victims=FindGroup(caster,-1))>1) {
+    tell_room(environment(caster), "Der daemonische Geifer "
+        "explodiert.\n");
+    for(i=sizeof(victims)-1; i>=0; i--)
+    {
+      if (victims[i] != victim)
+      {
+        tell_object(victims[i], BS(
+              "Der Geifer trifft Dich!\n"));
+        damage=sinfo[OFFSET(SI_SKILLDAMAGE)]/2+ 
+          random(DoModificationByAlign(dam/2, caster, victims[i]));
+        TryAttackSpell(victims[i], damage, sinfo[SI_SKILLDAMAGE_TYPE],
+            ([SP_NAME:"Saeureexplosion",SP_SHOW_DAMAGE:1]), caster, sinfo);
+      }
+    }
+  }
+  return ERFOLG;
+}
+

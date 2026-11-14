@@ -1,0 +1,199 @@
+
+/*
+
+  Ein Armreif, mit dem man 2 Attributpunkte von x nach y bewegen kann
+  Auswahl nur bei NICHT getragen moeglich !!! Zordan@SL
+
+*/
+
+inherit "std/armour";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <attributes.h>
+#include <new_skills.h>
+
+#include "../def.h"
+
+int kraft,gesch,ausd,intel;
+int anzahl,warned;
+int lasttime;
+
+reset() {
+  object env;
+  ::reset();
+  warned=0;
+  if(!random(7) && anzahl<(3+random(4))) {
+    if(env=MENV) {
+      if(interactive(env)) {
+        tell_object(env,break_string(
+          "Schoooeeeen diese Ruhe! Da fuehle ich mich ja gleich "
+          "wieder fitter Dir zu helfen.",78,
+          "Der Armreif teilt Dir mit: "));
+        anzahl++;
+      }
+    }
+  }
+}
+ 
+create() {
+  if (!is_clone(this_object())) return;
+  ::create();
+  
+  warned=0;
+  kraft=0;
+  gesch=0;
+  ausd=0;
+  intel=0;
+  anzahl=3;
+  lasttime=0;
+
+  SetProp(P_SHORT, "Ein Armreif aus Fleisch");
+  SetProp(P_LONG, 
+    "Dieser Armreif wurde aus dem Fleisch eines Herzens von einem Riesen "
+    "hergestellt. Eine dicke Blutader haelt ein kleines Stueck des Herzens fest, "
+    "so dass man dieses Gebilde auch Armreif nennen kann. Er scheint ein "
+    "eigenes Leben zu haben." );
+  AddId( ({"armreif", "reif", "\n_sica_armreif"}) );
+  SetProp(P_NAME, "Armreif");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_ARMOUR_TYPE, AT_BRACERS);
+  SetProp(P_AC, 6+random(3));
+  SetProp(P_WEIGHT, 250);
+  SetProp(P_VALUE, 5000+random(1000));
+  SetProp(P_NOBUY,1);
+//  SetProp(P_AUTOLOADOBJ,1);
+  SetProp(P_NODROP, "Du wuerdest diesen kostbaren Armreif niemals hergeben.\n");
+  SetProp(P_NEVERDROP,1);
+  SetProp(P_INFO, BS(
+    "Die magische Ausstrahlung des Fleisches macht Dich neugierig. "
+    "Du bist der Meinung, als koennte dieser Armreif irgendetwas veraendern." ));
+  SetProp(P_WEAR_RESTRICTIONS, ([SR_SEER:1]) );
+  SetProp(P_MATERIAL, ([MAT_FLESH:80, MAT_MISC_MAGIC:20]) );
+
+  AddCmd( ({ "veraender","veraendere" }), "verfkt" );
+
+  SetProp(P_REMOVE_FUNC, TO );
+}
+
+varargs int DoWear(int silent, int all) {
+  int ret;
+  object ob;
+  ret = ::DoWear (silent, all);
+  if ((ob=QueryProp(P_WORN)) && (ausd!=0 || kraft!=0 || gesch!=0 || intel!=0)) {
+    SetProp (P_X_ATTR_MOD, 
+             ([ A_CON:ausd,A_STR:kraft,A_DEX:gesch,A_INT:intel ]) );
+    ob->UpdateAttributes();
+  }
+  return ret;
+}
+
+varargs int DoUnwear(int silent) {
+  int ret;
+  object ob;
+  ob=QueryProp(P_WORN);
+  ret = ::DoUnwear (silent);
+  if (ob && !QueryProp(P_WORN)) {
+    SetProp (P_X_ATTR_MOD, 0 );
+    ob->UpdateAttributes();
+  }
+  return ret;
+}
+
+int RemoveFunc(object me) {
+  if(time() - lasttime < 15*60) {
+    write(break_string("So schnell kannst Du mich nach dem Veraendern nicht "
+                       "ausziehen!\n",78,"Der Armreif teilt Dir mit: "));
+    return 0;
+  }
+  return 1;
+}
+
+nosave int verfkt(string str) {
+  string str1,str2;
+  int good, bad;
+  notify_fail("Der Armreif teilt Dir mit: Du musst mich erst anziehen!\n");
+  if (!QueryProp(P_WORN)) { return 0; }
+  notify_fail("Der Armreif teilt Dir mit: Mit dieser Information kann ich "
+              "nichts anfangen!\n");
+  if (!str) { return 0; }
+  if (sscanf(str,"%s in %s", str1, str2) == 2) {
+    notify_fail("Der Armreif teilt Dir mit: Mit dieser Information kann ich "
+                "nichts anfangen!\n");
+    kraft=0;
+    gesch=0;
+    ausd=0;
+    intel=0;
+    good=0;
+    bad=0;
+    if (str1[0..4] == "gesch" ) { gesch=-2-random(2); bad=1; }
+    if (str1[0..3] == "ausd" )  { ausd=-2-random(2);  bad=2; }
+    if (str1 == "kraft" )       { kraft=-2-random(2); bad=3; }
+    if (str1[0..2] == "int" )   { intel=-2-random(2); bad=4; }
+    if (str2[0..4] == "gesch" ) { gesch=2+random(2); good=1; }
+    if (str2[0..3] == "ausd" )  { ausd=2+random(2);  good=2; }
+    if (str2 == "kraft" )       { kraft=2+random(2); good=3; }
+    if (str2[0..2] == "int" )   { intel=2+random(2); good=4; }
+    if (bad == good) { return 0; }
+    if ((bad == 0) || (good == 0)) { return 0; }
+    if(time() - lasttime < 30*60) {
+      write(break_string("So schnell hintereinander kann ich meine "
+            "Faehigkeiten nicht benutzen. Warte noch ein wenig!\n",78,
+            "Der Armreif teilt Dir mit: "));
+      return 1;
+    }
+    anzahl--;
+    if (anzahl<0 || !random(50)) {
+      write(break_string("Argl. Sooft kann ich Dir leider nicht helfen.",78,
+           "Der Armreif teilt Dir mit: "));
+      write("Der Armreif ist ueberfordert. Er faellt tot zu Boden.\n");
+      lasttime=0;
+      SetProp (P_X_ATTR_MOD, 0 );
+      TP->UpdateAttributes();
+      TO->DoUnwear(1);
+      TO->remove();
+      return 1;
+    }
+    write("Der Armreif blitzt kurz auf.\n");
+    write(break_string("Ab sofort hast Du mit meiner Hilfe weniger "
+          +capitalize(str1)+" und mehr "+capitalize(str2)+".\n",78,
+           "Der Armreif teilt Dir mit: "));
+    say("Ein Armreif von "+TPN+" blitzt kurz auf.\n",({TP}) );
+    if((anzahl<=random(2)) && warned==0) {
+      write(break_string("Uffz, Du solltest mich vorerst wohl nicht mehr "
+                         "so arg belasten!\n",78,
+                         "Der Armreif teilt Dir mit: "));
+      warned=1;
+    }
+    SetProp (P_X_ATTR_MOD, 
+             ([ A_CON:ausd,A_STR:kraft,A_DEX:gesch,A_INT:intel ]) );
+    TP->UpdateAttributes();
+    lasttime=time();
+    return 1;
+  }
+  notify_fail("Der Armreif teilt Dir mit: Was moechtest Du in was "
+              "veraendern?\n");
+  return 0;
+}
+
+mixed _query_autoloadobj() {
+  return ({lasttime,ausd,kraft,gesch,intel,anzahl,(QueryProp(P_WORN)!=0)});
+}
+
+void _set_autoloadobj(mixed arg) {
+  if (sizeof(arg)>6) {
+    lasttime=arg[0];
+    ausd=arg[1];
+    kraft=arg[2];
+    gesch=arg[3];
+    intel=arg[4];
+    anzahl=arg[5];
+    if(arg[6]) {
+      SetProp (P_X_ATTR_MOD, 
+               ([ A_CON:ausd,A_STR:kraft,A_DEX:gesch,A_INT:intel ]) );
+      TO->DoWear(1);
+      if(MENV) MENV->UpdateAttributes();
+    }
+  }
+}

@@ -1,0 +1,148 @@
+#include "../def.h"
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+
+
+create()
+{
+  if (!is_clone(TO) )  return;
+  ::create();
+
+  SetProp(P_SHORT, "Eine Bombe");
+  SetProp(P_LONG, BS( 
+    "Eine metallische Kugel mit einer Zuendschnur dran.") );
+  SetProp(P_INFO, BS(
+    "Wenn man die Zuendschnur anzuendet, sollte man sich schnell "
+    "aus dem Staub machen, sonst wird man durch die Sprengkraft der "
+    "Bombe zerfetzt.(WARNUNG! Das Verletzen oder gar Toeten anderer "
+    "Spieler faellt unter die allgemeinen PK-Bestimmungen des Silberlandes. "
+    "Im Toetungsfall bekommt derjenige, der die Bombe angezuendet hat, den "
+    "Playerkill gesetzt. Vorlaeufig funktioniert die Bombe nur in Knarkh.)"));
+  SetProp(P_NAME, "Bombe");
+  SetProp(P_GENDER, FEMALE);
+  AddId("bombe");
+
+  SetProp(P_MATERIAL, ([MAT_GUNPOWDER:60, MAT_IRON:39, MAT_WOOL:1]) );
+  SetProp(P_WEIGHT, 1500);
+  SetProp(P_VALUE, 1900);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_KILL_NAME, "Eine fuerchterliche Bombenexplosion");
+
+  AddDetail( ({"schnur", "zuendschnur"}), 
+   "Die Zuendschnur braucht etwa 10 Sekunden um abzubrennen, schaetzt Du.\n");
+
+  AddCmd( ({"zuende", "zuend"}), "anzuenden");
+
+}
+
+
+int notliving(object ding)
+{
+    if(ding == TO) return 0;
+
+    if(!living(ding))
+      return 1;
+    else return 0;
+}
+
+
+object GetRoom (object thing)
+{
+  if (objectp(ENV(thing))) 
+    return GetRoom(ENV(thing));
+  return thing;
+}
+
+
+void bummbumm(object zuendler)
+{
+  object *leute, *sachen;
+  object raum;
+  int i;
+  string *pfadname, pfad3;
+
+//  if(living(raum = ENV(TO))) 
+//    raum = ENV(raum);
+  raum=GetRoom(TO);
+  pfadname=explode(file_name(raum), "/");
+  leute = filter_array(all_inventory(raum), #'living);
+  sachen = filter_array(all_inventory(raum), #'notliving);
+  if(sizeof(pfadname) > 4) 
+     pfad3 = pfadname[3];
+  else
+     pfad3="";
+
+ if(!(pfad3=="knarkh"))
+    tell_room(raum, 
+      "Die Bombe verpufft nutzlos. Irgendwas war anscheinend kaputt.\n");
+ else
+ {
+  tell_room(raum, BS(
+    "Die von "+ zuendler->name(WEM) +" angezuendete Bombe explodiert "
+    "in einem ohrenbetaeubenden Knall. Splitter, Erdbrocken, Blut, "
+    "Kleidungsfetzen und Steine fliegen Dir um die Ohren. "));
+  for (i=0; sizeof(leute)-1 >= i; i++)
+  {
+    tell_room(raum, CAP(leute[i]->name())+
+      " wird von der Bombe in Fetzen gerissen.\n", ({leute[i]}));
+    tell_object(leute[i], "Die Bombe zerfetzt Dich.\n");
+    leute[i]->Defend( 1100 + random(900), DT_EXPLOSION, "Bombenexplosion",
+                      zuendler);
+  }
+
+  for (i=0; sizeof(sachen)-1 >= i; i++)
+  {
+    if (!sachen[i]->QueryProp(P_NOGET) )
+    {
+       tell_room(raum, CAP(sachen[i]->name())+
+         " wird von der Bombe zerstoert.\n");
+       sachen[i]->remove();
+    }
+    else
+       tell_room(raum, CAP(sachen[i]->name())+
+         " widersteht der Bombenexplosion.\n");
+  }
+  tell_room(raum, BS(
+    "Die Luft ist erfuellt von dichtem Qualm und Rauch, der sich aber "
+    "bald wieder verzieht, und den Blick auf den Schaden freigibt, den "
+    "die Bombe angerichtet hat.") );
+ }
+  remove();
+}
+
+anzuenden(string *str)
+{
+  notify_fail("Was willst Du anzuenden?\n");
+  str=explode(str, " ");
+  if (sizeof(str) != 2) return 0;
+  if (str[1] != "an") return 0;
+  if (member( ({"bombe", "zuendschnur", "schnur"}), str[0]) < 0) return 0;
+  if (TP->QueryProp(P_SP) < 5)
+  {
+    notify_fail( BS(
+      "Du hast nicht genug Magiepunkte, um die Zuendschnur "
+      "der Bombe anzuzuenden!") );
+    return 0;
+  }
+
+  RemoveCmd( ({"zuende", "zuend" }) );
+  SetProp(P_SHORT, "Eine Bombe mit brennender Zuendschnur");
+  SetProp(P_LONG, 
+    QueryProp(P_LONG) + "Die Zuendschnur brennt rasch ab.\n");
+  AddDetail( ({"schnur", "zuendschnur"}), BS(
+   "Die Zuendschnur brennt bereits. Die Bombe wird wohl in Kuerze "
+   "explodieren. Lauf schnell weg!") );
+
+  call_out("bummbumm", 5 + random(10), TP);
+  TP->restore_spell_points(-5);
+  write("Du zuendest die Zuendschnur der Bombe mit einem kleinen " +
+        "Feuerball an.\n");
+  say(TPN + " zuendet eine Zuendschnur an.\n");
+  return 1;
+}
+
+

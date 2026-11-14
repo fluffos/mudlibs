@@ -1,0 +1,133 @@
+// SilberLand MUDlib
+//
+// spellbooks/paladine/verbannung.c
+//
+// $Date: 2009/01/25 09:16:30 $
+/* $Revision: 1.2 $
+ * $Log: verbannung.c,v $
+ * Revision 1.2  2009/01/25 09:16:30  Angrox
+ * Fuer Todesritter angepasst
+ *
+ * Revision 1.1  2003/07/09 11:39:22  Angrox
+ * Initial revision
+ *
+ */
+// Prototypen
+int verbannung(object caster, mapping sinfo);
+
+public void rebuke_undead(object caster, object victim) {
+  if(!objectp(caster) || !objectp(victim)) return;
+
+  if( random(caster->QueryAttribute(A_INT) + caster->QueryProp(P_ALIGN) / 20) >
+      victim->QueryProp(P_NOMAGIC) - random(victim->QueryProp(P_ALIGN)/44)  && !victim->QueryProp(P_DISABLE_ATTACK)) {
+        tell_room(ENV(victim), BS("Diese Demonstration von Dustys Macht laesst " + victim->name(WEN, 1) + " zurueckschrecken!"));
+        victim->SetProp(P_DISABLE_ATTACK, 1);
+        victim->SetProp(P_TMP_PALADINE_LAST_REBUKE, time());
+  }
+  return;
+}
+
+int verbannung(object caster, mapping sinfo) {
+  object victim;
+  int suc, dam, ghost;
+  string spellname;
+  string *txtarray;
+  string guild;
+  mixed help;
+  guild=caster->QueryProp(P_GUILD);
+  if(guild=="paladine") {
+    spellname="verbannung";
+    txtarray=({"Welchen Daemon oder Untoten moechtest Du verbannen?\n",
+        "Paladin! Dieser Spruch funktioniert nur auf Untote und Daemonen!",
+        "DUSTY! Erhoere mich und verbanne %s in Deinem Namen!",
+        "DUSTY! Erhoere mich und verbanne %s in Deinem Namen!",
+        "Dusty erhoert Dein Flehen nicht!\n",
+        "Nichts passiert.\n",
+        "Die Macht Dustys senkt sich auf %s herab und loest %s auf!",
+        "Die Macht Dustys senkt sich auf Dich herab und loest Dich auf!",
+        "Die Macht Dustys senkt sich auf %s herab und loest %s auf!",
+        });
+  }
+  else {
+    spellname="todesfluch";
+    help=caster->QueryProp(P_GENDER)==FEMALE?"NAERRIN":"NARR";
+    txtarray=({"Welchen Gotteskriecher willst Du vernichten?\n",
+        help+"! Der Todesfluch wirkt nur auf die, die rein im Herzen sind!",
+        "Stirb! Bei Yol Ghurmak! Verschlinge %s mit der Macht des Verderbens! "
+        "Der Tod wartet!",
+        "Stirb! Bei Yol Ghurmak! Verschlinge %s mit der Macht des Verderbens! "
+        "Der Tod wartet!",
+        "DU "+help+" HAST VERSAGT!\n",
+        "Nichts passiert.\n",
+        "Der Todesfluch huellt %s in violett-schwarze Nebel und loest %s auf!",
+        "Der Todesfluch huellt dich in violett-schwarze Nebel und beginnt "
+           "Dich aufzuloesen!",
+        "Der Todesfluch huellt %s in violett-schwarze Nebel und loest %s auf!",
+        });
+  }
+  ghost = 0;
+  if (sinfo[SI_SKILLARG] == "geist" && 
+      (victim=present("Nekromantengeist", ENV(caster)))) 
+    ghost = 1;
+  else
+    victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,txtarray[0]);
+  if(!victim) return 0;
+  if( (guild=="paladine" && 
+       !victim->is_class_member(CL_UNDEAD) &&
+       !victim->is_class_member(CL_DEMON)) 
+      ||
+      (guild=="todesritter" && 
+       victim->QueryProp(P_ALIGN)<0))
+  {
+   Message(caster, 0, BS(txtarray[1]), 0);
+   return 0;
+  }
+  sinfo=DoSpellModification(caster, sinfo);
+  if (ghost)
+    sinfo[SI_RAW_SPELLCOST] *= (10+random(5));
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+      printf(sinfo[SI_SP_LOW_MSG]);
+      return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  Message(caster, 0, BSA(sprintf(txtarray[2], victim->name(WEN)), 
+        "Du rufst: "), 0);
+  Message(caster, 0, BSA(sprintf(txtarray[3],
+      victim->name(WEN)), caster->Name(WER)+" ruft: "), 3);
+  if((suc=SpellSuccess(caster, sinfo))<=0) {
+    Message(caster, 0, txtarray[4], 0);
+    Message(caster, 0, txtarray[5], 3);
+    return MISSERFOLG;
+  }
+  if(suc>7000) {
+    if(!random(5))
+      victim->ModifySkillAttribute(caster, SA_SPEED, 200, 2);
+  }
+  dam=sinfo[SI_SKILLDAMAGE]+caster->QueryProp(P_GUILD_LEVEL)*5;
+  sinfo[SI_SKILLDAMAGE]=DoModificationByAlign(dam, caster, victim);
+  if (sinfo[SI_SKILLDAMAGE] > 375) sinfo[SI_SKILLDAMAGE]=375;
+  // ZUM LOGGEN DER SPELLSTAERKE! (Fuer die Palas)
+  if(enable_spell_log)
+    write_file("/gilden/paladine/spells/verbannung",
+        sprintf("CST: %O, CA: %d, VA: %d, suc: %d, dam: %d\n",
+            caster, caster->QueryProp(P_ALIGN), victim->QueryProp(P_ALIGN),
+            suc, sinfo[SI_SKILLDAMAGE]));
+  // ----------------------------
+  Message(caster, 0, BS(sprintf(txtarray[6], victim->name(WEN),
+    victim->QueryPronoun(WEN))), 0);
+  Message(caster, victim, BS(sprintf(txtarray[7])), 1);
+  Message(caster, victim, BS(sprintf(txtarray[8], victim->name(WEN),
+    victim->QueryPronoun(WEN))), 2);
+  if (ghost)
+    victim->remove();
+  else {
+    if(TryDefaultAttackSpell(victim,caster,sinfo, ([SP_NAME:spellname, SP_SHOW_DAMAGE:1])) && 
+       HAS_BLESSING(caster, BLESSING_REBUKE) && 
+       objectp(victim) && victim->QueryProp(P_TMP_PALADINE_LAST_REBUKE)+5 <= time()) {
+      rebuke_undead(caster, victim);
+    }
+  }
+  return ERFOLG;
+}
+
+

@@ -1,0 +1,120 @@
+inherit "std/thing";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <moving.h>
+#include "/gilden/druidenzirkel/druiden.h"
+#include <new_skills.h>
+#include  "/gilden/druidenzirkel/mysteries.h"
+#include <wizlevels.h>
+
+private int power;
+private object caster;
+private mapping originalEnv;
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+//--Beschreibungen---------------------------------------------------------
+
+  SetProp(P_LONG,
+    "Es regnet hier.");
+
+//--Namen------------------------------------------------------------------
+
+  SetProp(P_INFO, "Der Regen ist die elementare Manifestation des Wassers und wurde "
+                  "von einem Druiden hervorgerufen.");
+  SetProp(P_NAME, "Regen");
+  SetProp(P_GENDER, MALE);
+  AddId(({"regen", ID_RAIN, DRUID_ID_ELEMENTAL_BOOST(WASSER)}));
+
+//--Eigenschaften----------------------------------------------------------
+
+  SetProp(P_MATERIAL, MAT_WATER);
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_SIZE, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NOGET, 1);
+}
+
+public string _query_short() {
+  switch(power) {
+    case 0..5: return "Leichter Nieselregen geht hier nieder"; break;
+    case 6..15: return "Leichter Regen faellt hier"; break;
+    case 16..20: return "Es regnet hier"; break;
+    case 21..25: return "Regen faellt in dicken Tropfen auf dich herab"; break;
+    case 26..30: return "Starker Regen geht in diesem Raum nieder"; break;
+    default: return "Regen schuettet wie aus Eimern auf dich herab"; break;
+  }
+}
+
+public string elemental_room() {
+  return WASSER;
+}
+
+public int _query_druid_elemental_boost_bonus() {
+  return power;
+}
+
+public void Start(int _power, object _caster) {
+  power = _power;
+  caster = _caster;
+  ENV(TO)->Set(P_ELEMENTAL_ROOM, symbol_function("elemental_room", TO), F_QUERY_METHOD);
+  
+  call_out("do_blind", 2+random(6));
+  call_out("end", 30);
+}
+
+public int isValidTarget(object o) {
+  return caster->IsEnemy(o) && living(o);
+}
+
+public void do_blind() {
+  object *targets, t, debuff;
+  int dc, i;
+
+  dc = caster->QueryProp(P_GUILD_LEVEL) + power/2 + caster->QueryAttribute(A_INT);
+
+  targets = filter_array(all_inventory(ENV(TO)), "isValidTarget");
+  if(sizeof(targets) > 0) {
+    for(i=0; i<sizeof(targets); ++i) {
+      t = targets[i];
+      if(!objectp(t)) continue;
+      if(t->QueryProp(P_BLIND)) continue;
+
+      if(IS_LEARNER(caster)) {
+        tell_object(caster, sprintf("regen :: dc=%d dex=%d\n", dc, t->QueryAttribute(A_DEX)));
+      }
+
+      if(random(t->QueryAttribute(A_DEX)) < random(dc) ) {
+        t->SetProp(P_BLIND, 4);
+        tell_object(t, BS("Regen klatscht dir ins Gesicht. Du kannst nichts sehen!"));
+        tell_room(ENV(t), BS("Regen klatscht "+t->Name(WEM, 1)+" ins Gesicht."), ({t}));
+      }
+    }
+  }
+
+  call_out("do_blind", 2+random(6));
+  return;
+}
+
+public void AddStrength(int _power) {
+  int op;
+  op = power;
+  power += _power;
+  if(power > 33) power = 33;
+  while(find_call_out("end") != -1) remove_call_out("end");
+  call_out("end", 30);
+  if(op != power) tell_room(ENV(TO), BS("Der Regen wird staerker."));
+}
+
+public void end() {
+  tell_room(environment(TO), BS("Der Regen versiegt."));
+  remove(1);
+}

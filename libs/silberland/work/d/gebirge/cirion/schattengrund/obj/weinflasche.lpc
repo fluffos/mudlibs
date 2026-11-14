@@ -1,0 +1,348 @@
+#include "../schattengrund.h"
+
+#define WINE ({"weiss","rot","rot"})
+
+inherit "std/thing";
+
+private string wine;
+
+create() {
+  if (!is_clone(TO)) return;
+  ::create();
+  
+  wine=WINE[random(3)];
+  SetProp(P_SHORT, "Eine Weinflasche");
+  SetProp(P_NAME, "Weinflasche");
+  SetProp(P_GENDER, FEMALE);
+  AddId(({"flasche","weinflasche"}));
+
+  SetProp(P_MATERIAL, MAT_GLASS );
+
+  AddDetail(({"etikett","papier","papieretikett"}),
+    "Ein hellbrauens Papierettikett ist um die Flasche gewickelt. Auf dem "
+    "Etikett ist das Wappen derer vom Schattengrund abgebildet. Um das Wappen "
+    "ranken sich zwei Weinreben, und es steht auch einiges auf dem Etikett, "
+    "so dass Du es lesen koenntest.");
+  AddReadDetail(({"etikett","papier","papieretikett"}),
+    "Auf dem Etikett steht:\nSchattengrund Weinlese\nDies ist ein "
+    "besonderer "+CAP(wine)+"wein. Seine Trauben wachsen im Schattengrunder "
+    "Suedhang und verleihen im seinen ganz besonderen, edlen Geschmack.");
+  AddDetail(({"form"}),
+    "Die Weinflasche hat eine edle, leicht geschwungene Form."); 
+  AddSpecialDetail(({"inhalt","wein",wine+"wein"}),
+    "inhalt_fun"); 
+  clone_object(OBJ"/korken")->move(TO,M_NOCHECK);
+  clone_object(OBJ"/wein")->move(TO,M_NOCHECK);
+  present("wein",TO)->SetWine(wine);
+  AddCmd(("oeffne"),"oeffne_fun");
+  AddCmd(({"trink","trinke","sauf","saufe"}),"trink_fun");
+  AddCmd(({"schenk","schenke"}),"schenk_fun");
+}
+
+remove()
+{
+  object inv,next;
+  for(inv=first_inventory(TO);inv;)
+  {
+    next=next_inventory(inv);
+    inv->remove();
+    inv=next;
+  }
+  return::remove();
+}
+
+int _query_weight()
+{
+  int weight;
+  object inv;
+  
+  weight=150;
+  for (inv=first_inventory(TO);inv;inv=next_inventory(inv))
+    weight+=inv->QueryProp(P_WEIGHT);
+ 
+  return weight;
+}
+
+int _query_value()
+{
+  int value;
+  
+  value=10;
+  if (present("wein",TO))
+  {
+    value+=present("wein",TO)->QueryProp(P_VALUE);
+    if (present("korken",TO))
+      value+=300;
+  }
+  return value;
+}
+
+string _query_nosell()
+{
+  if (!present("wein",TO))
+    return "Was soll ich denn mit einer leeren Weinflasche?\n";
+}
+
+int schenk_fun(string str)
+{
+  string wem;
+  object ziel,glas,wein;
+  int menge;
+  
+  notify_fail("Was moechtest Du wem/wie/wohin (ein-)schenken?\n");
+  if (!str)
+    return 0;
+  if (-1!=member(({"wein ein","wein in glass","ein",wine+"wein ein",
+                   wine+"wein in glass"}),str))
+  {
+    notify_fail("Du hast doch gar kein Glas.\n");
+    if (!(glas=present("glas",TP)))
+      return 0;
+    notify_fail("Dazu musst Du schon beide Haende frei haben.\n");
+    if (QueryProp(P_USED_HANDS))
+      return 0;
+    notify_fail("Die Flasche muesstest Du vorher schon aufmachen.\n");
+    if (present("korken",TO))
+      return 0;
+    notify_fail("In der Flasche ist doch gar kein Wein mehr.\n");
+    if (!(wein=present("wein",TO)))
+      return 0;
+    tell_object(TP,BS(
+      "Du schenkst Dir selbst etwas "+CAP(wine)+"wein aus der Flasche in"
+      " Dein "+glas->name(RAW)+".\n"));
+    tell_room(ENV(TO),BS(
+      TP->Name()+" schenkt sich selbst etwas Wein aus "+
+      TPPP(1,WESSEN,0)+" Weinflasche in "+TPPP(1,WESSEN,0)+
+      " "+glas->name(RAW)+".\n"),({TP}));
+    menge=-wein->AddAmount(-50);
+    if (!glas->Fill(file_name(wein),menge))
+    {
+      tell_object(TP,BS(
+        "Dummerweise passt der Wein da nicht mehr hinein, und Du fabrizierst "
+        "eine Riesensauerei."));
+      tell_room(ENV(TP),BS(
+        "Dummerweise ist "+glas->name(WER)+" bereits voll, und "+TP->Name()+
+        " fabriziert eine Riesensauerei."),({TP}));
+      //weinflecken
+    }
+    return 1;
+  }
+  if ((1==sscanf(str,"%s wein ein",wem))
+    ||(1==sscanf(str,"%s wein in glass",wem))
+    ||(1==sscanf(str,"%s "+wine+"wein in glass",wem))
+    ||(1==sscanf(str,"%s "+wine+"wein ein",wem))
+    ||(1==sscanf(str,"%s ein",wem)))
+  {
+    notify_fail("WEM moechtest Du einschenken?\n");
+    if (!(ziel=present(wem,ENV(TP))))
+      return 0;
+    notify_fail(ziel->Name(WEM)+" kannst Du ja wohl kaum etwas einschenken.\n");
+    if (!living(ziel))  
+      return 0;
+    notify_fail(ziel->Name()+" hat doch gar kein Glas.\n");
+    if (!(glas=present("glas",ziel)))
+      return 0;
+    notify_fail("Dazu musst Du schon beide Haende frei haben.\n");
+    if (QueryProp(P_USED_HANDS))
+      return 0;
+    notify_fail("Die Flasche muesstest Du vorher schon aufmachen.\n");
+    if (present("korken",TO))
+      return 0;
+    notify_fail("In der Flasche ist doch gar kein Wein mehr.\n");
+    if (!(wein=present("wein",TO)))
+      return 0;
+    tell_object(TP,BS(
+      "Du schenkst "+ziel->Name(WEM)+" etwas "+CAP(wine)+"wein aus Deiner "
+      "Flasche in "+ziel->QueryPossPronoun(1,WESSEN,0)+" "+glas->name(RAW)+".\n"));
+    tell_object(ziel,BS(
+      TP->Name()+" schenkt Dir etwas "+CAP(wine)+"wein aus "+
+      TPPP(1,WESSEN,0)+" Weinflasche in Dein "+glas->name(RAW)+".\n"));
+    tell_room(ENV(TP),BS(
+      TP->Name()+" schenkt "+ziel->Name(WEM)+" etwas "+CAP(wine)+"wein "
+      "aus "+TPPP(1,WESSEN,0)+" Weinflasche in "+ziel->QueryPossPronoun(1,WESSEN,0)+" "+
+      glas->name(RAW)+".\n"),({TP,ziel}));
+    if (!glas->Fill(file_name(wein),menge))
+    {
+      //sauerei
+    }
+    else
+    {
+      //aufmerksam
+    }
+    return 1;
+  }
+  return 0;
+}
+
+int trink_fun(string str)
+{
+  string what;
+  notify_fail("Woran moechtest Du trinken?\n");
+  if (!str)
+    return 0;
+  if (1!=sscanf(str,"aus %s",what))
+    if (1!=sscanf(str,"an %s",what))
+      return 0;
+  if (!id(what))
+    return 0;
+  notify_fail("Dazu brauchst Du aber mindestens eine freie Hand.\n");
+  if (2==QueryProp(P_USED_HANDS))  
+    return 0;
+  if (present("korken",TO))
+  {
+    tell_object(TP,BS(
+      "Du moechtest an der Weinflasche trinken, musst dann aber enttaeuscht "
+      "feststellen, dass sie noch verkorkt ist."));
+    return 1;
+  }
+  if (!present("wein",TO))
+  {
+    tell_object(TP,BS(
+      "Du moechtest an der Weinflasche trinken, musst dann aber enttaeuscht "
+      "feststellen, dass sie bereits leer ist."));
+    return 1;
+  }
+  tell_object(TP,BS(
+    "Du hebst die Weinflasche und setzt sie zum Trinken an den Mund."));
+  tell_room(ENV(TP),BS(
+    TP->Name()+" hebt seine Weinflasche und setzt sie zum Trinken an den "
+    "Mund."),({TP}));
+  if (present("wein",TO)->TrinkWein(TP,35))
+  {
+    tell_object(TP,BS(
+      "Du nimmst einen tiefen Zug aus der Flasche. Ah, tut das gut. Der "
+      "Wein schmeckt wirklich hervorragend. "
+      "Genuesslich wischtst Du Dir mit dem Handruecken ueber den Mund."));
+    tell_room(ENV(TP),BS(
+      TP->Name()+" nimmt einen tiefen Zug aus der Flasche und wischt sich "
+      "dannach genuesslich mit dem Handruecken ueber den Mund."),({TP}));
+  }
+  return 1;
+}
+
+int oeffne_fun(string str)
+{
+  notify_fail("Was moechtest Du denn oeffnen?\n");
+  if (!str) 
+    return 0;
+  if (-1!=member(({"flasche mit korkenzieher","weinflasche mit korkenzieher",
+                   wine+"weinflasche mit korkenzieher"}),str))
+  {
+    notify_fail("Die Weinflasche ist doch schon offen.\n");
+    if (!present("korken",TO))
+      return 0;
+    notify_fail("Du solltest vielleicht ersteinmal einen Korkenzieher haben.\n");
+    if (!present("korkenzieher",TP))
+      return 0;
+    notify_fail(BS("Du solltest den Korkenzieher vielleicht auch in die Hand "
+                "nehmen."));
+    if (!TP->QueryProp(P_WEAPON))
+      return 0;
+    if (!(TP->QueryProp(P_WEAPON)->id("korkenzieher")))
+      return 0;
+    notify_fail("Die zweite Hand musst Du dazu wohl auch frei haben.\n");
+    if (2==TP->QueryProp(P_USED_HANDS))
+      return 0;
+    tell_object(TP,BS(
+      "Du drehst den Korkenzieher vorsichtig in den Korken der Weinflasche, "
+      "ziehst dann einmal kraeftig daran, und 'Plopp', ist er draussen."));
+    tell_room(ENV(TP),BS(
+      TP->Name()+" oeffnet eine Weinflasche mit dem Korkenzieher."),({TP}));
+    present("korken",TO)->move(TP,M_NOCHECK);
+    return 1;
+  }
+  if (-1!=member(({"flasche","weinflasche",wine+"weinflasche"}),str))
+  {
+    notify_fail("Die Weinflasche ist doch schon offen.\n");
+    if (!present("korken",TO))
+      return 0;
+    notify_fail("Dazu musst Du schon beide Haende frei haben.\n");
+    if (TP->QueryProp(P_USED_HANDS))
+      return 0;
+    if (TP->QueryAttribute(A_STR)>22)
+    {
+      tell_object(TP,BS(
+        "Du packst den Korken fest und ziehst mit aller Gewalt daran, und "
+        "'Plopp', ploetzlich hast Du ihn in der Hand und die Weinflasche "
+        "ist offen."));
+      tell_room(ENV(TP),BS(
+        TP->Name()+" reisst mit aller Gewalt den Korken aus seiner "
+        "Weinflasche."),({TP}));
+      present("korken",TO)->move(TP,M_NOCHECK);
+    }
+    else
+    {
+      tell_object(TP,BS(
+        "Du packst den Korken fest und ziehst mit aller Gewalt daran, aber "
+        "scheinbar bist Du nicht stark genug, denn er bewegt sich nicht. "
+        "Vielleicht versuchts Du es mal mit einem Korkenzieher."));
+      tell_room(ENV(TP),BS(
+        TP->Name()+" reisst mit aller Gewalt am Korken seiner Weinflasche, "
+        "leider ohne Ergebnis."),({TP}));
+    }
+    return 1;
+  }
+}
+
+string inhalt_fun()
+{
+  string str;
+  if (!present("wein",TO))
+    return BS("Die Weinflasche ist voellig leer. Schade.");
+  switch (present("wein",TO)->QueryProp(P_WEIGHT))
+  {
+    case -1000..0:
+      str="In der Weinflasche ist VIEL ZU WENIG "+CAP(wine)+"wein. Das kann "
+          "ja gar nicht sein.";
+      break;   
+    case 1..100:
+      str="In der Weinflasche ist noch ein kleines bisschen "+CAP(wine)+"wein.";
+      break;   
+    case 101..200:
+      str="In der Weinflasche sind noch ein paar Schlucke "+CAP(wine)+"wein.";
+      break;   
+    case 201..300:
+      str="In der Weinflasche ist noch einiger "+CAP(wine)+"wein.";
+      break;   
+    case 301..400:
+      str="Die Weinflasche ist ungefaehr halb voll mit "+CAP(wine)+"wein.";
+      break;   
+    case 401..500:
+      str="Die Weinflasche ist noch zu mehr als der Haelfte gefuellt mit "
+          +CAP(wine)+"wein.";
+      break;   
+    case 501..600:
+      str="Die Weinflasche ist gut gefuellt mit "+CAP(wine)+"wein.";
+      break;   
+    case 601..699:
+      str="Die Weinflasche ist fast ganz voll mit "+CAP(wine)+"wein.";
+      break;
+    case 700:
+      str="Die Weinflasche ist bis ganz oben hin gefuellt mit "+CAP(wine)+
+          "wein.";
+      break;   
+    case 701..10000:
+      str="In der Weinflasche ist VIEL ZU VIEL "+CAP(wine)+"wein. Das kann ja "
+          "gar nicht sein.";
+      break;
+    default:
+      str="In der Weinflasche ist...hm, da scheint was nicht zu stimmen mit "
+          "dem Inhalt.";
+      break;   
+  }
+  return BS(str);
+}
+
+string _query_long()
+{
+  string str;
+  str="Das ist eine tiefgruene, glaeserne Weinflasche. Sie hat eine edle " 
+      "Form, die auch auf einen edlen Inhalt schliessen laesst. Ein "
+      "hellbraunes Etikett ist um die Flasche gewickelt.\n";
+  if (present("korken",TO))
+    str+="Die Flasche ist fest verkorkt.";
+  else
+    str+="Die Flasche ist offen.";
+  return break_string(str,78,0,1);
+}
+

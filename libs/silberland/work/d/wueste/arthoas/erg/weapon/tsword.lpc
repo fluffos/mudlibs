@@ -1,0 +1,174 @@
+/*
+  Ar-Thoas
+  tuareg-sword - anfuehrer /Das heilige Schwert
+*/
+
+inherit "std/weapon";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <new_skills.h>
+#include <defines.h>
+#include <moredef.h>
+
+nosave int delay;
+
+#define COST 20 
+
+create() 
+{
+  if(!is_clone(this_object())) return;
+  ::create();
+  
+  delay=time();
+
+  SetProp(P_SHORT, "Das heilige Schwert");
+  SetProp(P_LONG,
+	  BS("Du haeltst das heilige Schwert des Glaubens in Deinen "
+	     "Haenden. In den falschen Haenden kann es Angst und Schrecken "
+	     "verbreiten. Seinem Traeger verleiht es unglaubliche Macht."));
+
+  SetProp(P_NAME, "Schwert");
+  SetProp(P_NAME_ADJ, "heilig");
+  AddAdjective("heilige");
+  
+  SetProp(P_GENDER, NEUTER);
+
+  AddId(({"schwert", "\nholysword"}));
+
+  SetProp(P_VALUE, 4200);
+  SetProp(P_WEIGHT, 1800);
+  SetProp(P_SIZE, 120);
+  SetProp(P_NOBUY, 1);
+  
+  SetProp(P_WEAPON_TYPE, WT_SWORD);
+  SetProp(P_DAM_TYPE, ({DT_UNHOLY, DT_SLASH, DT_BLUDGEON}));
+
+  SetProp(P_WC, 250);
+  SetProp(P_WC_BONUS, (["\ntanfuehrer":100]) );
+
+  SetProp(P_NR_HANDS, 2);
+  SetProp(P_MATERIAL, MAT_MITHRIL);
+
+  SetProp(P_WIELD_FUNC, TO);
+  SetProp(P_WIELD_RESTRICTIONS, ([P_LEVEL: 33, A_STR: 20, A_INT: 25]));
+  
+  SetProp(P_INFO,
+	  BS("Mit dem Befehl 'himmelsfeuer' kannst Du ein unheiliges "
+	     "Feuer vom Himmel herabbeschwoeren."));
+  
+  AddDetail(({"angst", "schrecken", "verderben"}),
+	    "Ist das Herz des Traegers dieses Schwertes von Hass erfuellt, "
+	    "oder hat er seine Seele dem Boese verschrieben, so wird er, "
+	    "dank der Macht des Schwertes Verderben ueber das Land bringen.\n");
+  AddDetail("macht",
+	    "Sie ist nicht von dieser Welt.\n");
+
+  AddCmd("himmelsfeuer", "holy_fire");
+
+  SetProp(P_COMBATCMDS,
+          ([ "himmelsfeuer":
+	     ([ C_MIN: 50,
+	     C_AVG: 75,
+	     C_MAX:100,
+	     C_DTYPES: ({DT_UNHOLY, DT_FIRE})
+	      ])]));
+}
+
+holy_fire(string str) 
+{
+  object enemy;
+  int current_time;
+  
+  current_time = time();
+
+  if (QueryProp(P_WIELDED)!=TP)
+    return notify_fail("Willst Du das Schwert nicht zuerst zuecken?\n"),0;
+  
+  if((time()-QueryProp(P_EQUIP_TIME))<11)
+    return notify_fail("Du musst Dich erst noch mit den Eigenheiten dieser "
+		       "Waffe vertraut machen.\n"),0;
+  
+  if(TP->QueryProp(P_SP)<20)
+    return notify_fail("Deine magische Kraft reicht dazu momentan leider "
+		       "nicht aus.\n"),0;
+
+  if(TP->QueryProp(P_ALIGN) > 800)
+    {
+      notify_fail(BS(
+		     "Auf einmal oeffnet sich ueber Dir ein Riss und ein sehr starker "
+		     "Blitz durchzuckt Deinen Koerper. Deine Einstellung zu den Dingen "
+		     "im SilberLand ist wohl zu gut fuer diese Waffe!"));
+      TP->AddHp(-(30+random(30)));
+      return 0;
+    }
+
+  if(str) 
+    {
+      if((enemy=present(str, environment(TP))) && !enemy->QueryProp(P_INVIS))
+      {
+	if (!query_once_interactive(enemy) || TP->SelectEnemy(enemy))
+          return cast(enemy);
+        return notify_fail("Du kannst doch keinen Spieler angreifen!\n"),0;
+      }
+      else
+	return notify_fail(capitalize(str)+" ist ja gar nicht hier!\n"), 0;
+    }
+  
+  if(enemy=TP->SelectEnemy()) return cast(enemy);
+
+  return write("Himmelsfeuer!?!?! Einfach nur so?\n"),1;
+}
+
+cast(object enemy) 
+{
+  mapping sinfo;
+  int damage;
+  
+  damage=1;
+  
+  if(delay>time())
+    return notify_fail("Das unheilige Feuer steht Dir nicht unbegrenzt zur "+
+		       "Verfuegung, uebe Geduld.\n"),0;
+
+  if(TP->QueryProp(P_ATTACK_BUSY))
+    return notify_fail("Was willst Du denn nicht noch alles auf einmal machen?\n"),0;
+  
+  TP->SetProp(P_ATTACK_BUSY, 4);
+
+  if((TP->QueryProp(P_SP)) < COST)
+    return notify_fail("Deine magische Kraft reicht dazu momentan leider nicht aus.\n"),0;
+
+  TP->AddSp(-COST);
+
+  if(!enemy) 
+    {
+      delay = 600 + time();
+      return write("Ploezlich faellt unheiliges Feuer vom Himmel vor Dir nieder.\n"),1;
+    }
+
+  printf("Unheiliges Feuer faellt vom Himmel auf %s nieder.\n",
+	 enemy->name(WEN));
+  tell_object(enemy, "Unheiliges Feuer faellt auf Dich herab.\n");
+
+  damage=300+random(500);
+  sinfo=([SP_NAME:"himmelsfeuer",SP_PHYSICAL_ATTACK:0,SP_SHOW_DAMAGE:1]);
+  enemy->Defend(damage, ({DT_UNHOLY, DT_FIRE}), sinfo, TP);
+  delay=1200+time();
+  return 1;
+}
+
+
+int WieldFunc(object ob) 
+{
+  if(TP->QueryProp(P_ALIGN) > 800) 
+    {
+      write(BS("Auf einmal oeffnet sich ueber Dir ein Riss und ein sehr starker "
+	       "Blitz durchzuckt Deinen Koerper. Deine Einstellung zu den Dingen "
+	       "im SilberLand ist wohl zu gut fuer diese Waffe!"));
+      TP->AddHp(-(30+random(30)));
+      return 0;
+    }
+  return 1;	
+}

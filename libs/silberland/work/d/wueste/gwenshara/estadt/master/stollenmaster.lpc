@@ -1,0 +1,715 @@
+//=========================================================================
+//
+// File: stollenmaster.c
+// Created by Gwenshara
+//
+// Project: Wuestenzwerge
+//
+// Dieser Master verwaltet das dynamische Schuerfgebiet. Er erzeugt eine 
+// aktuelle Karte, verwaltet das einfuegen von NPC und Gebietsbegrenzungen.
+//
+// TODO:
+//
+// Logging funktioniert nicht?
+// VC Funktionen
+//
+//=========================================================================
+
+#include "../def.h"
+#include <ansi.h>
+
+//--Defines---------------------------------------------------------------
+#define CREATION_LOG           LOG "maze.creation"
+#define ERROR_LOG              LOG "maze.error"
+#define LINE "------\n"
+
+#define MIN_PASSAGE_LENGTH     2
+#define PASSAGE_EXTENSION      0
+
+#define E_NORTH                1
+#define E_NORTHEAST            2
+#define E_EAST                 4
+#define E_SOUTHEAST            8
+#define E_SOUTH                16
+#define E_SOUTHWEST            32
+#define E_WEST                 64
+#define E_NORTHWEST            128
+
+#define ROOM_PICTURE           ({"...","...","..."})
+
+#define STOLLEN                STOLLENROOM "stollen"
+
+//--Variablen-------------------------------------------------------------
+mapping links;      // Speichert die Ausgaenge der Raeume
+int width, height;  // Hoehe und Breite
+string *passages;   // Alle automatisch generierten Gaenge
+string *digged;     // Selbstgegrabene Gaenge
+string *open_rooms; // Wird von create_links verwendet um noch nicht
+                    // bearbeitete Raeume zu merken
+string *open_paths; // Alle noch zu erzeugenden Pfade
+int finished;       // Labyrinth fertig?
+int stime;          // Zeit zum Messen
+mixed errflg;       // Wenn Fehler auftreten != 0
+int tries;          // Der wievielte Notfallsneustart ist es?
+
+//--Prototypes------------------------------------------------------------
+varargs void InitializeMaze(int _height, int _width);
+int CreateNextPath();
+int *choose_exits(int x, int y);
+void create_links(int x, int y, int maxlength, int length);
+void finish_open_rooms();
+int is_passage(string room);
+int is_digged(string room);
+int AddOpenRoom(string r);
+int RemoveOpenRoom(string r);
+int AddPassageRoom(string r);
+varargs int AddExit(string room, int exit, int no_cross);
+int _query_finished();
+void SetFinished(int i);
+
+void create()
+{
+  if (is_clone(TO)) return;
+
+  links      = ([ ]);
+  width      = 0;
+  height     = 0;
+  passages   = ({ });
+  digged     = ({ });
+  open_rooms = ({ });
+  open_paths = ({ });
+  finished   = 2;
+
+
+}
+
+//--Query Functions-------------------------------------------------------
+mapping _query_links()
+{
+  return links;
+}
+
+int _query_width()
+{
+  return width;
+}
+
+int _query_height()
+{
+  return height;
+}
+
+string *_query_passages()
+{
+  return passages;
+}
+
+string *_query_digged()
+{
+  return digged;
+}
+
+string *_query_open_rooms()
+{
+  return open_rooms;
+}
+
+string *_query_open_paths()
+{
+  return open_paths;
+}
+
+int _query_exits(string room)
+{
+  if(!member(links, room)) return 0;
+  else return links[room];
+}
+
+// Weiter unten definiert
+// int _query_finished();
+
+//--Loggen----------------------------------------------------------------
+int log(string file, string what)
+{
+  string *exp;
+
+  if(find_player("gwenshara"))
+  {
+    tell_object(find_player("gwenshara"),
+		BS(ANSI_BOLD+ANSI_YELLOW+"--MAZE: "+what+ANSI_NORMAL));
+  }
+  // "Tue Apr 27 05:32:25 2010"
+  exp = explode(ctime(time()), " ");
+  return write_file(file+exp[4], BS(what));
+}
+
+//--Notfall-Fehler-Routine------------------------------------------------
+void EmergencyShutdown()
+{
+  int i;
+  log(ERROR_LOG, "!!! Emergency Shutdown !!!");
+
+  while(find_call_out("CreateNextPath") != -1)
+    remove_call_out("CreateNextPath");
+
+  while(find_call_out("create_links") != -1)
+    remove_call_out("create_links");
+
+  errflg = 0;
+  i      = random(30);
+  SetFinished(0);
+  tries++;
+
+  if(tries < 4)
+  {
+    log(ERROR_LOG, "!!! Restarting in "+i+" Seconds !!!");
+    call_out("InitializeMaze", i, height, width);
+  }
+  else
+    log(ERROR_LOG, "!!! Deadlock Sealed !!!");
+
+  SetFinished(-1);
+  return;
+}
+
+//--Pfad zur Erzeugung geben----------------------------------------------
+int AddPath(int x, int y)
+{
+  string str;
+  str = sprintf("%d;%d", x, y);
+  if(member(open_paths, str)>-1)
+    return 0;
+  open_paths += ({ str });
+  return 1;
+}
+
+
+//--Labyrinth generieren--------------------------------------------------
+varargs void InitializeMaze(int _height, int _width)
+{
+  string roomline;
+  int i;
+
+  if(!_query_finished())
+  {
+    log(ERROR_LOG, "InitializeMaze was called while not finished!");
+    return;
+  }
+
+  if(_query_finished() < 0)
+    log(ERROR_LOG, "InitializeMaze called because of Emergency Shutdown!");
+  if(!intp(_height) || _height < 1) _height = 10;
+  if(!intp(_width)  || _width < 1 ) _width  = 10;
+
+  links      = ([ ]);
+  passages   = ({ });  
+  digged     = ({ });
+  open_rooms = ({ });
+  open_paths = ({ });
+
+  
+  log(CREATION_LOG, LINE+ctime()+LINE);
+  log(CREATION_LOG, "Creating new maze.");
+  stime = time();
+
+  SetFinished(0);
+  width  = _width;
+  height = _height;  
+
+  errflg = 0;
+  // Ein paar Gaenge am Anfang
+  AddPath(0, (int) (height/2));
+  AddPath(width-1, height-1);
+  AddPath(width-1, (int) (height/2));
+  AddPath((int) (width/2), (int) (height/2));
+  AddPath(width-1, 0);
+  AddPath(0, 0);
+  AddPath(0, height-1);
+
+  // Gaenge berechnen
+  CreateNextPath();
+  return;
+}
+
+//--Erzeugt zufaellige Gaenge im Labyrinth--------------------------------
+int CreateNextPath()
+{
+  int length; // Die Laenge des Gangs
+  int x, y;
+  string *exp, path;
+
+  if(sizeof(open_paths) < 1)
+  {
+    log(ERROR_LOG, "Creating paths, but there are no paths to create!");
+    return -1;
+  }
+
+  length = MIN_PASSAGE_LENGTH+random(PASSAGE_EXTENSION);
+  path   = open_paths[random(sizeof(open_paths))];
+  exp    = explode(path, ";");
+  x      = to_int(exp[0]);
+  y      = to_int(exp[1]);
+
+  // Aus den offenen Pfaden entfernen
+  open_paths -= ({ path });
+
+  log(CREATION_LOG, sprintf("Creating passage with %d rooms from %d|%d.",
+      length, x, y));
+
+  create_links(x, y, length, 0);
+  return 1;
+}
+
+int *choose_exits(int x, int y)
+{
+  int *exits, max_exits, i, j, chance;
+  int *possible_exits;
+
+  possible_exits = ({ E_NORTH,
+		      E_NORTHEAST,
+		      E_EAST,
+		      E_SOUTHEAST,
+		      E_SOUTH,
+		      E_SOUTHWEST,
+		      E_WEST,
+		      E_NORTHWEST });
+  exits = ({});
+
+  if(x>=width || x<0 || y>=height || y<0)
+  {
+    log(ERROR_LOG, sprintf("choose_exits out of bounds %d %d", x, y));
+    return ({});
+  }
+
+  if(x==0)
+    possible_exits -= ({ E_EAST, E_SOUTHEAST, E_NORTHEAST });
+  if(x>=width-1)
+    possible_exits -= ({ E_WEST, E_NORTHWEST, E_SOUTHWEST });
+  if(y==0)
+    possible_exits -= ({ E_NORTH, E_NORTHEAST, E_NORTHWEST });
+  if(y>=height-1)
+    possible_exits -= ({ E_SOUTH, E_SOUTHWEST, E_SOUTHEAST });
+
+  // Anzahl der maximalen Ausgaenge bestimmen
+  if(sizeof(open_rooms) < 8)
+    max_exits = sizeof(open_rooms);
+  else
+    max_exits = 8;
+
+  // Ausgaenge zufaellig waehlen
+  for(i=0; i<=max_exits;++i)
+  {
+    if(!random(4))
+    {
+      j = possible_exits[random(sizeof(possible_exits))];
+      // Ausgang hinzufuegen, wenn er noch nicht dabei ist
+      if(member(exits, j)>-1)
+        exits += ({j});
+    }
+  }
+
+  if(!sizeof(exits))
+    exits += ({possible_exits[random(sizeof(possible_exits))]});
+
+  log(CREATION_LOG, sprintf("Choosing exits for %d|%d with %d exits",
+      x, y, sizeof(exits)));
+  return exits;
+}
+
+void create_links(int x, int y, int maxlength, int length)
+{
+  int *chosen_exits, exits;
+  int i;
+  string roomstring, *exp;
+
+  roomstring = sprintf("%d;%d", x, y);
+
+  // Ausgaenge bestimmen
+  chosen_exits = choose_exits(x,y);
+
+  // Ausgangscode berechnen
+  exits = 0;
+  for(i=0;i<sizeof(chosen_exits);++i)
+  {
+    exits|=chosen_exits[i];
+    AddExit(roomstring, chosen_exits[i]);
+  }
+
+  // Ist der Raum Teil der zu bearbeitenden Raeume wird er aus der Liste
+  // entfernt
+  if(member(open_rooms, roomstring)<0)
+    RemoveOpenRoom(roomstring);
+
+  // Ist der bearbeitete Raum nicht Teil der gegrabenen Gaenge und nicht
+  // automatisch generiert, wird er als passage gespeichert.
+  if(member(digged, roomstring) < 0 &&
+     member(passages, roomstring) < 0)
+    AddPassageRoom(roomstring);
+
+  // Neue Raeume als zu bearbeiten setzen
+  if(exits & E_NORTH &&
+     (x<width && x > 0 && y-1<height && y-1>0))
+    AddOpenRoom(sprintf("%d;%d", x, y-1));
+  else
+    exits -= E_NORTH;
+  if(exits & E_NORTHEAST &&
+     (x-1<width && x-1 > 0 && y-1<height && y-1>0))
+    AddOpenRoom( sprintf("%d;%d", x-1, y-1));
+  else
+    exits -= E_NORTHEAST;
+  if(exits & E_EAST &&
+     (x-1<width && x-1 > 0 && y<height && y>0))
+    AddOpenRoom( sprintf("%d;%d", x-1, y));
+  else
+    exits -= E_EAST;
+  if(exits & E_SOUTHEAST &&
+     (x+1<width && x+1 > 0 && y-1<height && y-1>0))
+    AddOpenRoom( sprintf("%d;%d", x+1, y-1));
+  else
+    exits -= E_SOUTHEAST;
+  if(exits & E_SOUTH &&
+     (x<width && x > 0 && y+1<height && y+1>0))
+    AddOpenRoom( sprintf("%d;%d", x, y+1));
+  else
+    exits -= E_SOUTH;
+  if(exits & E_SOUTHWEST &&
+     (x+1<width && x+1 > 0 && y+1<height && y+1>0))
+    AddOpenRoom( sprintf("%d;%d", x+1, y+1));
+  if(exits & E_WEST &&
+     (x+1<width && x+1 > 0 && y<height && y>0))
+   AddOpenRoom(sprintf("%d;%d", x+1, y));
+  else
+    exits -= E_WEST;
+  if(exits & E_NORTHWEST &&
+     (x-1<width && x-1 > 0 && y+1<height && y+1>0))
+    AddOpenRoom( sprintf("%d;%d", x-1, y+1));
+  else
+    exits -= E_NORTHWEST;
+
+  // Aufhoeren, wenn der Gang lang genug ist
+  if(length>=maxlength)
+  {
+    if(sizeof(open_rooms))
+      finish_open_rooms();
+    if(sizeof(open_paths))
+      call_out("CreateNextPath", 0);
+    else
+    {
+      SetFinished(1);
+      log(CREATION_LOG,
+	  sprintf("Maze has finished creation! (%i)", time()-stime));
+      tries = 0; // Wenn wir das Maze erfolgreich geladen haben, dann
+                 // sind alle Fehler vergessen :)
+    }
+    return;
+  }
+
+  // Naechsten, zufaelligen Raum bearbeiten
+  i = random(sizeof(open_rooms));
+  if(i>(sizeof(open_rooms)+1)) return;
+  errflg = catch(exp = explode(open_rooms[i], ";"));
+  if(errflg!=0)
+  {
+    EmergencyShutdown();
+    return;
+  }
+  if(sizeof(exp)<2) return;
+  catch(call_out("create_links", 0, to_int(exp[0]), to_int(exp[1]),
+	   maxlength, ++length));
+  if(errflg!=0)
+  {
+    EmergencyShutdown();
+    return;
+  }
+  return;
+}
+
+// Schliesst offene Raeume ab, wenn die maximale Ganglaenge erreicht ist.
+void finish_open_rooms()
+{
+  int i, *exits;
+  string *exp, room;
+
+  log(CREATION_LOG, sprintf("Finishing %d open rooms.", sizeof(open_rooms)));
+  while(sizeof(open_rooms))
+  {
+    room = open_rooms[0];
+    exp = explode(room, ";");
+    exits = choose_exits(to_int(exp[0]), to_int(exp[1]));
+    log(CREATION_LOG, sprintf("Finishing room %s with %d exits", room, 
+	sizeof(exits)));
+    for(i=0;i<sizeof(exits);++i)
+      AddExit(room, exits[i]);
+    AddPassageRoom(room);
+    RemoveOpenRoom(room);
+  }
+  return;
+}
+
+//--Prüfen ob eine Verbindung zwischen zwei Raeumen besteht---------------
+int has_exit(string room, int exit)
+{
+  int e;
+  if(!member(links, room)) return 0;
+  e = links[room];
+  return ((e&exit)>0);
+}
+
+//--Karte zeichnen--------------------------------------------------------
+varargs void DrawMap(object receiver)
+{
+  int x, y;
+  string map, room;
+  if(!objectp(receiver) && objectp(TP))
+    receiver = TP;
+  else
+    return;
+
+  map = "";
+  for(y=0; y<height; y++)
+  {
+//    map += " ";
+    for(x=width-1; x>=0; x--)
+    {
+      room = sprintf("%d;%d", x, y);
+      // Nordausgaenge prüfen
+      if(has_exit(sprintf("%d;%d", x+1, y), E_NORTHEAST) &&
+	has_exit(room, E_NORTHWEST))
+        map += "X ";
+      else if(has_exit(room, E_NORTHWEST))
+        map += "\\";
+      else
+        map += " ";
+
+      if(has_exit(room, E_NORTH))
+        map += "|";
+      else
+        map += " ";
+
+      if(has_exit(room, E_NORTHEAST) &&
+	 !has_exit(sprintf("%d;%d", x-1, y), E_NORTHWEST))
+        map += "/";
+      else if(has_exit(sprintf("%d;%d", x-1, y), E_NORTHWEST) &&
+	has_exit(room, E_NORTHEAST))
+        map += "";
+      else
+        map += " ";
+
+      /* if(!has_exit(room, E_NORTHEAST) &&
+	      !has_exit(sprintf("%d;%d", x-1, y), E_NORTHEAST))*/
+    }
+
+    map += "\n ";
+
+    for(x=width-1; x>=0; --x)
+    {
+      room = sprintf("%d;%d", x, y);
+      if(is_passage(room))
+        map += "P";
+      else if(is_digged(room))
+        map += "D";
+      else
+        map += "o";
+      if(has_exit(room, E_EAST))
+        map += "--";
+      else
+        map += "  ";
+    }
+    map += "\n";
+  }
+
+  tell_object(receiver, map);
+  return;
+}
+
+//--Setter----------------------------------------------------------------
+void _set_exits(string room, int exit)
+{
+  if(member(links, room))
+  {
+    links[room] = exit;
+  }
+  else
+  {
+    links += ([room:exit]);
+  }
+  return;
+}
+
+void _set_width(int w)
+{
+  width = w;
+  return;
+}
+
+void _set_height(int h)
+{
+  height = h;
+  return;
+}
+
+//--Prüft ob ein Raum passage ist-----------------------------------------
+int is_passage(string room)
+{
+  if(member(passages, room)>-1) return 1;
+  return 0;
+}
+
+int is_digged(string room)
+{
+  if(member(digged, room)>-1) return 1;
+  return 0;
+}
+
+//--Verwaltungsmethoden fuer die Arrays-----------------------------------
+int AddOpenRoom(string r)
+{
+  if(member(open_rooms, r)>-1) return 0;
+  open_rooms += ({r});
+  return 1;
+}
+
+int RemoveOpenRoom(string r)
+{
+  if(member(open_rooms, r)<0) return 0;
+  open_rooms -= ({r});
+  return 1;
+}
+
+int AddPassageRoom(string r)
+{
+  if(member(passages, r)>-1) return 0;
+  passages += ({r});
+  return 1;
+}
+
+//--Exitverwaltung--------------------------------------------------------
+varargs int AddExit(string room, int exit, int no_cross)
+{
+  string *exp;
+  int x, y;
+  if(has_exit(room, exit)) return 0;
+
+  // Ausgang im eigentlichen Raum aufdrehen
+  if(member(links, room))
+    links[room] |= exit;
+  else
+    links += ([room:exit]);
+
+  exp = explode(room, ";");
+  x   = to_int(exp[0]);
+  y   = to_int(exp[1]);
+
+  log(CREATION_LOG, sprintf("Adding exit %d (%d) in %d|%d.", exit, 
+      no_cross, x, y));
+
+  // Wenn wir nicht die Ausgaenge im Endraum einsetzen, dann hier Ende
+  if(no_cross) return 1;
+
+  if(exit == E_NORTH)
+    AddExit(sprintf("%d;%d", x, y-1), E_SOUTH, 1);
+  if(exit == E_NORTHEAST)
+    AddExit(sprintf("%d;%d", x-1, y-1), E_SOUTHWEST, 1);
+  if(exit == E_EAST)
+    AddExit(sprintf("%d;%d", x-1, y), E_WEST, 1);
+  if(exit == E_SOUTHEAST)
+    AddExit(sprintf("%d;%d", x-1, y+1), E_NORTHWEST, 1);
+  if(exit == E_SOUTH)
+    AddExit(sprintf("%d;%d", x, y+1), E_NORTH, 1);
+  if(exit == E_SOUTHWEST)
+    AddExit(sprintf("%d;%d", x+1, y+1), E_NORTHEAST, 1);
+  if(exit == E_WEST)
+    AddExit(sprintf("%d;%d", x+1, y), E_EAST, 1);
+  if(exit == E_NORTHWEST)
+    AddExit(sprintf("%d;%d", x+1, y-1), E_SOUTHWEST, 1);
+  return 1;
+}
+
+//--Gibt an ob das Labyrinth fertig generiert ist-------------------------
+void SetFinished(int i)
+{
+  finished = i;
+}
+
+int _query_finished()
+{
+  return finished;
+}
+
+//
+//-----------------Hier beginnen VirtualCompiler Funs---------------------
+//
+
+//--Liefert die Ausgaenge eines Raums als Mapping-------------------------
+mapping VC_get_exits_mapping(int x, int y)
+{
+  mapping exits;
+  int exitcode;
+  string roomstring;
+
+  exits = ([ ]);
+
+  // Wenn ein Raum irgendwo ausserhalb der Karte liegt, dann einen
+  // Notfallsausgang 'raus'
+  if(x>width-1 || x<0 ||
+     y>height-1 || y<0) return (["raus":STADTROOM "2a3_stollen"]);
+
+  // Im Eingangsraum braucht man natuerlich einen Ausgang in die
+  // Zwergenstadt
+  if(x == 0 && y == (height/2))
+    exits+=(["osten":STADTROOM "2a3_stollen"]);
+
+  // Ausgaenge nach Exitcode
+  roomstring = sprintf("%d;%d", x, y);
+  if(has_exit(roomstring, E_NORTH) && y != 0)
+    exits += (["norden":sprintf(STOLLEN ":%d:%d", x, y-1)]);
+
+  if(has_exit(roomstring, E_NORTHEAST) && (y != 0 && x != 0))
+    exits += (["nordosten":sprintf(STOLLEN ":%d:%d", x-1, y-1)]);
+
+  if(has_exit(roomstring, E_EAST) && x != 0)
+    exits += (["osten":sprintf(STOLLEN ":%d:%d", x-1, y)]);
+
+  if(has_exit(roomstring, E_SOUTHEAST) && (x != 0 && y != height-1))
+    exits += (["suedosten":sprintf(STOLLEN ":%d:%d", x-1, y+1)]);
+  
+  if(has_exit(roomstring, E_SOUTH) && y != height-1)
+    exits += (["suedosten":sprintf(STOLLEN ":%d:%d", x+1, y)]);
+
+  if(has_exit(roomstring, E_SOUTHWEST) && (x != width-1 && y != height-1))
+    exits += (["suedwesten":sprintf(STOLLEN ":%d:%d", x+1, y+1)]);
+
+  if(has_exit(roomstring, E_WEST) && x != width-1)
+    exits += (["westen":sprintf(STOLLEN ":%d:%d", x+1, y)]);
+  
+  if(has_exit(roomstring, E_NORTHWEST) && (x != width-1 && y != 0))
+    exits += (["nordwesten":sprintf(STOLLEN ":%d:%d", x+1, y-1)]);
+  return exits;
+}
+
+//--Validiert ob der Raum existieren kann---------------------------------
+int VC_validate_exists(string fname)
+{
+  int x, y;
+  string foo;
+ 
+  if(sscanf(fname, "%s:%d:%d", foo, x, y) != 3) return 0;
+
+  if(x<0) return 0;
+  if(y<0) return 0;
+  if(x>width-1) return 0;
+  if(y>height-1) return 0;
+
+  return 1;
+}
+
+//--Gibt VC den Typ des raums---------------------------------------------
+string VC_get_roomtype(int x, int y)
+{
+  string roomstring;
+
+  roomstring = sprintf("%d;%d", x, y);
+  if(is_digged(roomstring)) return "D";
+  if(is_passage(roomstring)) return "P";
+  return "?";
+}

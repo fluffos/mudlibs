@@ -1,0 +1,113 @@
+mapping prep_ausweiden(object caster, mapping sinfo, int silent) 
+{ 
+  object ob;
+  int r;
+  
+  if(!GuildItemTest(caster, sinfo) ||
+     !FroschTest(caster, sinfo)|| 
+     !BlindTest(caster, sinfo) ||
+     !KnifeTest(caster, sinfo) ||
+     !IsInFight(caster, sinfo) )
+    return 0;
+  
+  if(!objectp(ob=sinfo[SI_ENEMY]))
+  { ob=FindEnemyVictim(sinfo[SI_SKILLARG], caster, 
+                       "Wen willst Du ausweiden?\n");
+    if(!ob) return 0;
+  }
+  sinfo[SI_ENEMY]=ob;
+  if(!silent){FirstPrepareFuncSuccessfull(caster, sinfo);}
+  return sinfo;
+}
+
+int ausweiden(object caster, mapping sinfo)
+{
+  int dam, abil, success;
+  object ob, weapon;
+  
+  if(!mappingp(sinfo=prep_ausweiden(caster, sinfo, 1))) return 0;
+  ob=sinfo[SI_ENEMY]; weapon=caster->QueryProp(P_WEAPON);
+
+  success=SpellSuccess(caster,sinfo);
+  if(success < (-5000+random(2000)))
+  {
+    tell_object(caster, BSC("Du stichst ins Leere und musst kurz um dein "
+                        "Gleichgewicht kaempfen."));
+    caster->SetProp(P_DISABLE_ATTACK, 1);
+    if(random(2))
+    {
+      tell_object(caster, BSC("Du faellst zu Boden."));
+      tell_room( ENV(caster), 
+                 BS(caster->Name(WER, 1)+" geht zu Boden.") ,
+                 ({caster}) );
+      caster->SetProp(P_LAST_RAMMEN_TIME, time());
+      caster->SetProp(P_DISABLE_ATTACK, 2);
+      caster->AddHp(-random(5));
+    }
+    return MISSERFOLG;
+  }
+  if(success<0)
+  {
+    tell_object(caster, BSC("Du setzt viel zu spaet zum Angriff an."));
+    return MISSERFOLG;
+  }
+    
+  dam=sinfo[SI_SKILLDAMAGE];
+  dam+=sinfo[SI_SKILLABILITY]/100;
+  if( (2+ob->QueryProp(P_LAST_RAMMEN_TIME))>=(time()) ) {
+    dam += random(dam/10);
+  }  
+
+  sinfo[SI_SKILLDAMAGE]=dam;
+
+  tell_object(caster, BS("Du springst auf "+ob->name(WEN,1)+" zu, rammst "
+                         +ob->QueryPronoun(WEM)+" "+weapon->name(WEN, 1)+" "
+                         "in den Leib und schlitzt "+ob->QueryPronoun(WEN)+" "
+                         "auf."));
+  if(ENV(caster)) {
+    tell_room(ENV(caster), BS(caster->Name(WER, 1)+" schlitzt "+ob->name(WEN, 1)+" auf."), ({caster}));
+  }
+
+  dam = ExecuteAttackSpell(ob, caster, sinfo, ([SP_SHOW_DAMAGE:1]), ATTACK_SPELL_KNIFE);
+
+  if(objectp(ob) && dam > 35 && ob->QueryProp(P_RANGER_EVISCERATED_UNTIL) < time()) {
+    ob->SetProp(P_RANGER_EVISCERATED_UNTIL, time()+(success/500));
+    call_out("eviscerate_bleed", 0, ob, dam, caster);
+    tell_room(ENV(caster), BS(sprintf("%s hat eine blutende Wunde erlitten!", ob->Name(WER, 1))));
+  }
+
+  return ERFOLG;
+}
+
+public void eviscerate_bleed(object enemy, int damage, object caster) {
+  int hp;
+  string msg;
+
+  if(!objectp(enemy) || !objectp(caster)) return;
+
+  if(time() > enemy->QueryProp(P_RANGER_EVISCERATED_UNTIL)) {
+    tell_room(ENV(enemy), BS(sprintf("%s blutet nicht mehr.", enemy->Name(WER, 1))));
+    return;
+  }
+
+  hp = random(damage/2);
+
+  if(caster->QueryProp(P_TESTPLAYER)) {
+    tell_object(caster, sprintf("eviscerate_bleed :: enemy=%O damage=%d hpLoss=%d\n", enemy, damage, hp));
+  }
+
+  enemy->AddHp(-hp);
+  switch(hp) {
+    case 0..2:  msg = "%s blutet ganz leicht."; break;
+    case 3..6:  msg = "%s blutet leicht."; break;
+    case 7..10: msg = "%s verliert etwas Blut."; break;
+    case 11..15: msg = "%s blutet."; break;
+    case 16..20: msg = "%s blutet stark."; break;
+    case 21..25: msg = "%s verliert viel Blut."; break;
+    case 26..30: msg = "%s blutet in Stroemen."; break;
+    case 31..35: msg = "%s rinnt das Blut in einem Bach aus dem Koerper."; break;
+    default: msg = "%s geht an der blutenden Wunde fast zu Grunde."; break;
+  }
+  tell_room(ENV(enemy), BS(sprintf(msg, enemy->Name(WER, 1))));
+  call_out("eviscerate_bleed", 0, enemy, damage, caster);
+}

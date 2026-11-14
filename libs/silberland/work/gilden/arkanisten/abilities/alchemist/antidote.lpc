@@ -1,0 +1,90 @@
+#include "../../arkanisten.h"
+
+inherit GUILD_FOLDER "abilities/ability.lpc";
+
+public void create() {
+    if(is_clone(TO)) return;
+
+    ::create();
+    SetProp(P_ABILITY_NAME, CAP(ANTIDOTE));
+    SetProp(P_ABILITY_DESCRIPTIPON, 
+       "Du mischst und trinkst ein Gegengift, das die Wirkung von Vergiftunten "
+       "lindert oder sogar aufheben kann.");    
+    SetProp(P_ABILITY_TYPE, ABILITY_TYPE_ACTIVE);
+    SetProp(P_ABILITY_BASE_ATTRIBUTE, A_DEX);
+    SetProp(P_ABILITY_CASTVERB, CAST_VERB_DRINK);
+    SetProp(P_ABILITY_GROUP, ({ABILITY_GROUP_ALCHEMY}));
+    SetProp(P_ABILITY_COST, ([
+        P_SP: 30,
+    ]));
+    SetProp(P_ABILITY_REQUIRES, ({ HEALING_TONIC }));
+}
+
+public mapping prepare_use(object user, mapping sinfo) {
+    object victim;
+
+    if(get_free_hands(user) < 2) {
+        tell_object(user, BS("Du musst eine zwei freie Haende haben, um das Gegengift zu nutzen!"));
+        return 0;
+    }
+
+    victim = user;
+
+    if(victim->QueryProp(P_POISON) <= 0) {
+        tell_object(victim, BS("Aber du bist doch gar nicht vergiftet."));
+        return 0;
+    }
+
+    tell_object(user, BS("Du mischst eine gruene und eine blaue Phiole, um ein Gegengift zu erhalten."));
+    tell_room(ENV(user), BS(user->Name(WER)+" mischt eine gruene und eine blaue Ampulle."), ({user}));
+
+    sinfo[SI_PREPARE_TIME] = 6;
+    sinfo[SI_SKILLARG] = victim;
+
+    return ::prepare_use(user, sinfo);
+}
+
+public void failed(object user, mapping sinfo, int skillcheck) {
+    object victim;
+    victim = sinfo[SI_SKILLARG];
+    if(skillcheck < -5000) {
+        tell_object(user, BS("Ohje! Du hast einen fundamentalen Fehler gemacht! Statt eines Gegengifts hast du ein Gift getrunken."));
+        tell_room(ENV(user), BS(user->Name(WER)+" trinkt eine braune Fluessigkeit und wird blasser."), ({user}));
+        victim->AddPoison(1);
+        return ::failed(user, sinfo, skillcheck);
+    }
+
+    tell_object(user, BS("Das Gegengift zeigt kaum Wirkung. Vielleicht war die Mischung nicht ganz korrekt."));
+    tell_room(ENV(user), BS(user->Name(WER)+" sieht enttaeuscht auf das misslungene Gegengift."), ({user}));
+    
+    return ::failed(user, sinfo, skillcheck);
+}
+
+public void success(object user, mapping sinfo, int skillcheck) {
+    object victim;
+    int poison, reduction;
+
+    victim = sinfo[SI_SKILLARG];
+    if(!objectp(victim)) {
+        tell_object(user, BS("Nanu? Dein Ziel ist nicht mehr da!"));
+        return;
+    }
+    reduction = (sinfo[SI_SKILLABILITY] + skillcheck) / 2000; // max 10
+    if (reduction < 1) reduction = 1;
+
+    victim->AddPoison(-reduction);
+
+    poison = victim->QueryProp(P_POISON);
+
+    pDebug(victim, sprintf("antidote :: abil=%d success=%d reduction=%d new_poison=%d\n", sinfo[SI_SKILLABILITY], skillcheck, reduction, poison));
+    if (poison > 0) {
+        victim->AddPoison(-reduction);
+        tell_object(user, BS("Du trinkst das Gegengift und spuerst, wie das Gift in deinem Koerper nachlaesst."));
+        tell_room(ENV(user), BS(user->Name(WER)+" trinkt ein Gegengift und sieht erleichtert aus."), ({user}));
+    } else {
+        tell_object(user, BS("Das Gegengift neutralisiert das Gift in deinem Blut."));
+        tell_room(ENV(user), BS(user->Name(WER)+" trinkt ein Gegengift und sieht komplett geheilt aus."), ({user}));
+    }
+
+    return;
+}

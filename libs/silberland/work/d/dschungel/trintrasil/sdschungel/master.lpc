@@ -1,0 +1,1199 @@
+#include <moving.h>
+#include <properties.h>
+
+#include "/d/dschungel/trintrasil/myowndefine.h"
+#define TIME 600  //zeit nach der der ausgangszustand wieder hergestellt 
+//wird (aufrufen der funkt. ausgangszustand
+
+  int durchlauf=0;//gebraucht zB. in hermann3 (zeile 235). Wird von einer 
+                  //Funktion im master wieder zurueckgesetzt.
+  int anzahl=1;/*definiert ob die npc schon angegriffen wurden, wenn nein dann 
+               wird die support welche von der defend des angegriffenen npc 
+               aufgerufen wird ausgefuehrt, wenn ja dann wird sie abgebrochen.
+               ist notwendig weil defend sonst jede kampfrunde die support 
+               ausloest. wird in der Funktion ausgangszustand im master wieder
+               zurueckgesetzt*/
+
+string *namen;   
+string nam;
+object *mann;
+  
+//zentraler reset notwendig damit sicher ist das alle posten gleichzeitig
+//wiederkommen
+reset() {
+
+call_other("/d/dschungel/trintrasil/sdschungel/room/turm", "reset");
+call_other("/d/dschungel/trintrasil/sdschungel/room/sdschungel2", "reset");
+call_other("/d/dschungel/trintrasil/sdschungel/room/bruecke2", "reset");
+call_other("/d/dschungel/trintrasil/sdschungel/room/busch-h", "reset");
+anzahl=1;
+}  
+
+void mann_check()
+{
+  int i;
+
+  for(i = sizeof(mann) - 1; i >= 0; i--)
+    if(!mann[i] || !objectp(mann[i]))
+      mann -= ({mann[i]});
+}
+ 
+ 
+  create() {
+    
+    if (is_clone(this_object())) {
+    	 
+    	 this_object()->remove();
+    	 
+    	 return 0;}
+    
+    mann = ({});
+    
+  }
+
+
+     check()  {
+	int i;
+	object dante;
+	dante=find_player("trintrasil");
+	
+	if(dante)  {
+		
+      /* if(mann==({}) )  {
+     
+       	tell_object(dante,
+       	"mann = ({})\n");
+      } */ 			
+		
+if(!sizeof(mann))  {
+       	tell_object(dante,
+       	"mann = NULL\n");
+      }  				
+      	
+if(sizeof(mann))  {
+	
+		for(i=0; i<sizeof(mann); i++)  {
+			tell_object(dante,
+			" "+(i+1)+".) Name: "+mann[i]->QueryProp(P_NAME)+"\n");
+		}	}	
+	
+}
+}
+
+//ooooooooooooooooooooo EIN UND AUSTRAGEN DER POSTEN oooooooooooooooooooooooooooo
+remove_mann() {
+
+  mann_check();
+  mann -= ({ previous_object() });
+}
+
+
+add_mann() {
+
+  mann_check();
+  mann += ({ previous_object() });
+}
+
+
+
+//ooooooooooooooooo FUNKTION DIE DAS EINTRAGEN DER ENEMIES STEUERT oooooooooooooo
+
+ruf_um_hilfe(object spieler) {
+    
+  int u;
+  object *w;
+  mann_check();
+  w=mann;
+
+  for (u=sizeof(w)-1;u>=0;u--) {
+
+    if( objectp(w[u]) )  // sicherheitsabfrage [feyaria]
+    {
+      w[u]->fightstatus();      
+      if (catch(w[u]->InsertEnemy(spieler))) {
+
+        mann -= ({ w[u] }); 
+      }
+    }
+  }
+}
+
+
+
+ //ooooooooooooo AUSTRAGEN DES SPIELERS ALS ENEMY AUS ALLEN POSTEN oooooooooooooo 
+
+//diese funktion ist notwendig wenn der spieler stirbt wenn nicht alle posten 
+//die ihn als enemy gesetzt haben mit ihm im selben raum sind
+ 
+remove_enemy(object spieler)  {
+
+ int i;
+
+  mann_check();
+  if(!sizeof(mann))  { //kann nie vorkommen 
+  	return;}
+ 
+  for(i=0; i<sizeof(mann); i++)  {
+ 	
+ 	if( spieler && mann[i] && mann[i]->IsEnemy(spieler)==1 )  { 
+ 		
+ 		mann[i]->StopHuntFor(spieler);
+                spieler->StopHuntFor(mann[i]);
+        } 
+  }
+}                        
+//ooooooooooooooooooooooooooooo AUSTRAGEN ENDE oooooooooooooooooooooooooooooooooo
+
+
+
+
+//oooooooooooooo SUPPORTFUNKT DIE DIE AKTIONEN DER NPC AUSLOEST ooooooooooooooooo
+
+support() {
+
+  int p;
+  mann_check();
+  p=sizeof(mann);
+
+  if(p==1) {//wenn nur eine einzige wache vorhanden ist, waere der hilfruf  
+    //unnuetz
+    call_out("ausgangszustand", TIME);
+    return 0;}
+
+    if(p>=2) {//hier stehen wachen als hilfe zur verfuegung
+
+      if(anzahl==0) {   //wurden die posten schon einmal in diesem reset angegriffen	
+   	return 0;}   //stehen sie bereits alle in einem raum und muessen nicht 
+                     //zusammenlaufen
+   if(anzahl==1) {
+     	
+      if(previous_object()->id("wernfried")) {
+      	
+      	tell_room(environment(previous_object()),
+      	          "\nWernfried bruellt: HEEE, WASN LOS! ICH WERDE "
+      	          "ANGEGRIFFEN!\n\n");
+      	
+      	TELLSD(sdschungel2,"HEEE, WASN LOS! ICH WERDE ANGEGRIFFEN!",
+      	              "Im Norden bruellt Jemand: ");
+      	TELLSD(turm,"HEEE, WASN LOS! ICH WERDE ANGEGRIFFEN!",
+      	            "Im Norden auf der Bruecke bruellt Jemand: ");
+        TELLSD(bruecke1,"HEEE, WASN LOS! ICH WERDE ANGEGRIFFEN!",
+                      "Der Brueckenposten im Norden bruellt: ");
+        TELLSD(sdschungel1,"HEEE, WASN LOS! ICH WERDE ANGEGRIFFEN!",
+                      "Im Norden bruellt Jemand: ");      	
+      	anzahl=0;
+        call_out("wernfried1", 3);
+        call_out("ausgangszustand", TIME);//funktion bewegt alle posten auf ihre
+        }                                //urspruenglichen plaetze wenn alle
+                                         //enemies ausgetragen sind
+ 
+      if(previous_object()->id("hermann")) {
+        
+        TELLSD(bruecke2,"ALARM! EIN ANGRIFF!!!",
+                      "Im Sueden bruellt Jemand: ");                           	
+        tell_room(environment(previous_object()),
+                  "\nDer Torposten bruellt: ALARM! EIN ANGRIFF!!!\n\n");
+        TELLSD(turm,"ALARM! EIN ANGRIFF!!!",
+                     "Unten am Tor bruellt Jemand: ");
+        TELLSD(bruecke1,"ALARM! EIN ANGRIFF!!!",
+                      "Im Sueden bruellt Jemand: ");
+        TELLSD(sdschungel1,"ALARM! EIN ANGRIFF!!!",
+                      "Der Torposten im Sueden bruellt: ");       
+        anzahl=0;        
+        call_out("hermann1", 3);
+        call_out("ausgangszustand", TIME);
+                }
+                
+                
+      if(previous_object()->id("ruediger")) {
+             	
+      	TELLSD(turm,"ALARM! EIN ANGRIFF AUF DEN TURM!!!",
+      	              "Der Wachtmeister bruellt: "); 
+      	TELLSD(sdschungel2,"ALARM! EIN ANGRIFF AUF DEN TURM!!!",
+      	              "Im Turm bruellt Jemand: ");
+      	TELLSD(bruecke2,"ALARM! EIN ANGRIFF AUF DEN TURM!!!",
+      	              "Im Sueden bruellt Jemand: ");
+      	TELLSD(bruecke1,"ALARM! EIN AUGRIFF AUF DEN TURM!!!",
+                      "Im Sueden bruellt Jemand: ");
+        TELLSD(sdschungel1,"ALARM! EIN ANGRIFF AUF DEN TURM!!!",
+                      "Im Turm im Sueden bruellt Jemand: ");
+      	anzahl=0;
+      	call_out("ruediger1", 3);
+      	call_out("ausgangszustand", TIME);
+      	}
+        	
+     } 
+  }
+}
+//ooooooooooooooooooooooo SUPPORTFUNKT ENDE oooooooooooooooooooooooooooooooooooo
+
+
+
+//oooooooooooooooooooooooooo HERMANN ANFANG oooooooooooooooooooooooooooooooooooo
+
+hermann1() {
+
+    int i;
+    object *w, obj;
+  mann_check();
+    w=mann;
+    obj = find_object("/d/dschungel/trintrasil/sdschungel/room/turm");
+    	
+  if(present("ruediger", obj)) {	
+    TELLSD(turm,"Kreuzdonner was ist denn da unten los?!","Der Wachtmeister "
+                  "bruellt: ");
+           }
+
+  if(!present("ruediger", obj)) {
+    tell_room("/d/dschungel/trintrasil/sdschungel/room/turm",
+              "\nDu hoerst lauten Kampflaerm von unten!\n");
+        }
+        
+    for (i=0; i<sizeof(w); i++) {
+
+      w[i]->postenmove_herm();      
+   }                
+}
+
+
+hermann2() {//wird aus wachtmeister.c aufgerufen, oder aus posten.c wenn 
+         //vorheriger nicht vorhanden. ist notwendig um zeitdifferenz zu schaffen                      
+  call_out("hermann3", 2);
+    }
+
+
+hermann3() {
+	
+	object dante;
+	int i;  
+	object *w;
+	namen=({});
+	dante=find_player("dante");
+  mann_check();
+	w=mann;
+	
+	for(i=0; i<sizeof(w); i++ ) {
+		
+		nam=w[i]->QueryProp(P_NAME);
+		namen+=({ nam  });
+		
+		if(dante)  {
+			
+			tell_object(dante, " namen: "+nam+" \n");
+		}
+	}
+	//wenn -1 dann nicht gefunden , wenn ungleich -1 gefunden!!!
+	
+	if( member_array("Brueckenposten", namen)!=-1 && 
+	member_array("Wachposten", namen)!=-1 )  {
+		
+		call_out("hermann3b", 1);
+	}
+	
+	if( member_array("Brueckenposten", namen)==-1 &&
+        member_array("Wachposten", namen)!=-1 )  {
+        	
+        	call_out("hermann3a", 1);
+        }
+        
+        if( member_array("Brueckenposten", namen)!=-1 &&
+        member_array("Wachposten", namen)==-1 )  {
+        	
+        	call_out("hermann3c", 1);
+        }
+        
+        if( member_array("Brueckenposten", namen)==-1 &&
+        member_array("Wachposten", namen)==-1 )  {
+        	
+        	//tell_room("/d/dschungel/trintrasil/sdschungel/room/sdschungel2", 
+        	//"\n!!!KEINE POSTEN!!!\n\n");
+        	return 0;
+        }
+}
+
+
+
+hermann3a() {
+	
+object obj;
+obj = find_object("/d/dschungel/trintrasil/sdschungel/room/sdschungel2");
+	
+ if(present("ruediger", obj)) {
+
+  TELLSD(turm,"VERDAMMT GARDIST MEINHART WO BLEIBST DU?!?",
+                "Unten am Tor bruellt Jemand: ");      
+  TELLSD(sdschungel2,"VERDAMMT GARDIST MEINHART WO BLEIBST DU?!?",
+                     "Der Wachtmeister bruellt: ");
+  TELLSD(sdschungel1,"VERDAMMT GARDIST MEINHART WO BLEIBST DU?!?",
+                     "Im Sueden bruellt Jemand: ");
+  TELLSD(bruecke1,"VERDAMMT GARDIST MEINHART WO BLEIBST DU?!?",
+                  "Im Sueden bruellt Jemand: ");   	  
+  TELLSD(bruecke2,"VERDAMMT GARDIST MEINHART WO BLEIBST DU?!?",
+                  "Im Sueden bruellt Jemand: ");
+    }
+
+if(!present("ruediger", obj) && present("hermann", obj)) {
+	
+  TELLSD(turm,"VERDAMMT MEINHART WO BLEIBST DU?!?",
+              "Unten am Tor bruellt Jemand: ");      
+  TELLSD(sdschungel2,"VERDAMMT MEINHART WO BLEIBST DU?!?",
+                     "Der Torposten bruellt: ");
+  TELLSD(sdschungel1,"VERDAMMT MEINHART WO BLEIBT DU?!?",
+                     "Im Sueden bruellt Jemand: ");
+  TELLSD(bruecke1,"VERDAMMT MEINHART WO BLEIBST DU?!?",
+                  "Im Sueden bruellt Jemand: ");   	  
+  TELLSD(bruecke2,"VERDAMMT MEINHART WO BLEIBST DU?!?",
+                  "Im Sueden bruellt Jemand: ");
+    }	
+
+if(!present("ruediger", obj) && !present("hermann", obj)) {
+	
+  return ;} 
+}
+
+
+
+hermann3b() { 	
+
+object obj;
+obj = find_object("/d/dschungel/trintrasil/sdschungel/room/sdschungel2");
+
+ if(present("ruediger", obj)) {
+
+  TELLSD(turm,"VERDAMMT GARDISTEN MEINHART UND WERNFRIED WO BLEIBT "
+              "IHR?!?","Unten am Tor bruellt "
+                "Jemand: ");      
+  TELLSD(sdschungel2,"VERDAMMT GARDISTEN MEINHART UND WERNFRIED WO BLEIBT "
+                     "IHR?!?",
+                     "Der Wachtmeister bruellt: ");
+  TELLSD(sdschungel1,"VERDAMMT GARDISTEN MEINHART UND WERNFRIED WO BLEIBT "
+                     "IHR?!?",
+                     "Im Sueden bruellt Jemand: ");
+  TELLSD(bruecke1,"VERDAMMT GARDISTEN MEINHART UND WERNFRIED WO BLEIBT "
+                  "IHR?!?",
+                  "Im Sueden bruellt Jemand: ");   	  
+  TELLSD(bruecke2,"VERDAMMT GARDISTEN MEINHART UND WERNFRIED WO BLEIBT "
+                  "IHR?!?",
+                  "Im Sueden bruellt Jemand: ");
+    }
+
+if(!present("ruediger", obj) && present("hermann", obj)) {
+	
+  TELLSD(turm,"VERDAMMT MEINHART UND WERNFRIED WO BLEIBT IHR?!?",
+              "Unten am Tor bruellt Jemand: ");      
+  TELLSD(sdschungel2,"VERDAMMT MEINHART UND WERNFRIED WO BLEIBT "
+                     "IHR?!?",
+                     "Der Torposten bruellt: ");
+  TELLSD(sdschungel1,"VERDAMMT MEINHART UND WERNFRIED WO BLEIBT "
+                     "IHR?!?",
+                     "Im Sueden bruellt Jemand: ");
+  TELLSD(bruecke1,"VERDAMMT MEINHART UND WERNFRIED WO BLEIBT "
+                  "IHR?!?",
+                  "Im Sueden bruellt Jemand: ");   	  
+  TELLSD(bruecke2,"VERDAMMT MEINHART UND WERNFRIED WO BLEIBT "
+                  "IHR?!?",
+                  "Im Sueden bruellt Jemand: ");
+    }
+
+if(!present("ruediger", obj) && !present("hermann", obj)) {
+	
+  return ;}   //dann sollte diese funkt gar nie aufgerufen werden.. aber 
+  }            //zur sicherheit sollten alle posten in der kurzen zeit sterben
+
+
+hermann3c() {
+	
+object obj;
+obj = find_object("/d/dschungel/trintrasil/sdschungel/room/sdschungel2");
+ 	
+ if(present("ruediger", obj)) {
+
+  TELLSD(turm,"VERDAMMT GARDIST WERNFRIED WO BLEIBST DU?!?",
+                "Unten am Tor bruellt Jemand: ");      
+  TELLSD(sdschungel2,"VERDAMMT GARDIST WERNFRIED WO BLEIBST DU?!?",
+                     "Der Wachtmeister bruellt: ");
+  TELLSD(sdschungel1,"VERDAMMT GARDIST WERNFRIED WO BLEIBST DU?!?",
+                     "Im Sueden bruellt Jemand: ");
+  TELLSD(bruecke1,"VERDAMMT GARDIST WERNFRIED WO BLEIBST DU?!?",
+                  "Im Sueden bruellt Jemand: ");   	  
+  TELLSD(bruecke2,"VERDAMMT GARDIST WERNFRIED WO BLEIBST DU?!?",
+                  "Im Sueden bruellt Jemand: ");
+    }
+
+if(!present("ruediger", obj) && present("hermann", obj)) {
+	
+  TELLSD(turm,"VERDAMMT WERNFRIED WO BLEIBST DU?!?",
+              "Unten am Tor bruellt Jemand: ");      
+  TELLSD(sdschungel2,"VERDAMMT WERNFRIED WO BLEIBST DU?!?",
+                     "Der Torposten bruellt: ");
+  TELLSD(sdschungel1,"VERDAMMT WERNFRIED WO BLEIBT DU?!?",
+                     "Im Sueden bruellt Jemand: ");
+  TELLSD(bruecke1,"VERDAMMT WERNFRIED WO BLEIBST DU?!?",
+                  "Im Sueden bruellt Jemand: ");   	  
+  TELLSD(bruecke2,"VERDAMMT WERNFRIED WO BLEIBST DU?!?",
+                  "Im Sueden bruellt Jemand: ");
+    }	
+
+if(!present("ruediger", obj) && !present("hermann", obj)) {
+	
+  return ;} 
+}
+
+    
+//ooooooooooooooooooooo HERMANN ENDE ooooooooooooooooooooooooooooooooooooooooo
+
+
+
+
+//ooooooooooooooooooooo RUEDIGER ANFANG oooooooooooooooooooooooooooooooooooooo
+ruediger1() {
+ 
+    int u;
+    object *w, obj;
+  mann_check();
+    w=mann;
+    obj = find_object("/d/dschungel/trintrasil/sdschungel/room/sdschungel2");
+    
+ if(present("hermann", obj)) {   	
+    tell_room("/d/dschungel/trintrasil/sdschungel/room/sdschungel2",
+              "\nDer Torposten sagt: Potztausend was ist denn da im Wachturm "
+              "los?!\n");
+             }
+             
+ if(!present("hermann", obj)) {
+    tell_room("/d/dschungel/trintrasil/sdschungel/room/sdschungel2",
+              "\nDu hoerst lauten Kampflaerm aus dem Turm!\n");
+              }
+
+    for (u=sizeof(w)-1;u>=0;u--) {
+
+      w[u]->postenmove_rued();      
+   }                
+}
+
+
+ruediger2() {
+
+  call_out("ruediger3", 2);
+}
+
+ruediger3() {
+
+object dante;
+int i;  
+object *w;
+namen=({});
+  mann_check();
+w=mann;
+dante=find_player("dante");
+
+   for(i=0; i<sizeof(w); i++ ) {
+   
+   nam=w[i]->QueryProp(P_NAME);
+   
+   namen+=({ nam  });
+
+if(dante)  {
+	tell_object(dante,
+	" namen: "+nam+" \n");
+	}
+}
+
+
+ if( member_array("Brueckenposten", namen)!=-1 &&
+       member_array("Wachposten", namen)!=-1 )  {
+    call_out("ruediger3b", 1);
+    }
+
+ if( member_array("Brueckenposten", namen)==-1 &&
+       member_array("Wachposten", namen)!=-1 )  {
+    call_out("ruediger3a", 1);
+    }
+
+ if( member_array("Brueckenposten", namen)!=-1 &&
+       member_array("Wachposten", namen)==-1 )  {
+    call_out("ruediger3c", 1);
+    }
+
+ if( member_array("Brueckenposten", namen)==-1 &&
+       member_array("Wachposten", namen)==-1 )  {
+//tell_room("/d/dschungel/trintrasil/sdschungel/room/turm",
+  //   	          "\n!!test!!!\n\n");
+     	return 0;} 	
+}
+   
+   
+ruediger3a() {
+	
+object obj;  
+obj = find_object("/d/dschungel/trintrasil/sdschungel/room/turm");
+
+ if(present("ruediger", obj)) {
+ 	
+  TELLSD(turm,"VERDAMMT GARDIST MEINHART WO BLEIBST DU?!?",
+              "Der Wachtmeister bruellt: ");      
+  TELLSD(sdschungel2,"VERDAMMT GARDIST MEINHART WO BLEIBST DU?!?",
+                     "Im Turm bruellt Jemand: ");
+  TELLSD(sdschungel1,"VERDAMMT GARDIST MEINHART WO BLEIBST DU?!?",
+                     "Im Turm im Sueden bruellt Jemand: ");
+  TELLSD(bruecke1,"VERDAMMT GARDIST MEINHART WO BLEIBST DU?!?",
+                  "Im Sueden bruellt Jemand: ");   	  
+  TELLSD(bruecke2,"VERDAMMT GARDIST MEINHART WO BLEIBST DU?!?",
+                  "Im Sueden bruellt Jemand: ");
+    }
+  
+ if(!present("ruediger", obj) && present("hermann", obj)) {
+ 	
+  TELLSD(turm,"VERDAMMT MEINHART WO BLEIBST DU?!?",
+              "Der Torposten bruellt: ");      
+  TELLSD(sdschungel2,"VERDAMMT MEINHART WO BLEIBST DU?!?",
+                     "Im Turm bruellt Jemand: ");
+  TELLSD(sdschungel1,"VERDAMMT MEINHART WO BLEIBST DU?!?",
+                     "Im Turm im Sueden bruellt Jemand: ");
+  TELLSD(bruecke1,"VERDAMMT MEINHART WO BLEIBST DU?!?",
+                  "Im Sueden bruellt Jemand: ");   	  
+  TELLSD(bruecke2,"VERDAMMT MEINHART WO BLEIBST DU?!?",
+                  "Im Sueden bruellt Jemand: ");
+    }    
+  }
+
+   
+ruediger3b() {
+	
+object obj;  
+obj = find_object("/d/dschungel/trintrasil/sdschungel/room/turm");
+
+ if(present("ruediger", obj)) {
+ 
+  TELLSD(turm,"VERDAMMT GARDISTEN MEINHART UND WERNFRIED WO BLEIBT "
+              "IHR?!?","Der Wachtmeister "
+              "bruellt: ");      
+  TELLSD(sdschungel2,"VERDAMMT GARDISTEN MEINHART UND WERNFRIED WO BLEIBT "
+                     "IHR?!?",
+                     "Im Turm bruellt Jemand: ");
+  TELLSD(sdschungel1,"VERDAMMT GARDISTEN MEINHART UND WERNFRIED WO BLEIBT "
+                     "IHR?!?",
+                     "Im Turm im Sueden bruellt Jemand: ");
+  TELLSD(bruecke1,"VERDAMMT GARDISTEN MEINHART UND WERNFRIED WO BLEIBT "
+                  "IHR?!?",
+                  "Im Sueden bruellt Jemand: ");   	  
+  TELLSD(bruecke2,"VERDAMMT GARDISTEN MEINHART UND WERNFRIED WO BLEIBT "
+                  "IHR?!?",
+                  "Im Sueden bruellt Jemand: ");
+    }
+  
+ if(!present("ruediger", obj) && present("hermann", obj)) {
+ 	
+  TELLSD(turm,"VERDAMMT MEINHART UND WERNFRIED WO BLEIBT IHR?!?",
+              "Der Torposten bruellt: ");      
+  TELLSD(sdschungel2,"VERDAMMT MEINHART UND WERNFRIED WO BLEIBT "
+                     "IHR?!?",
+                     "Im Turm bruellt Jemand: ");
+  TELLSD(sdschungel1,"VERDAMMT MEINHART UND WERNFRIED WO BLEIBT "
+                     "IHR?!?",
+                     "Im Turm im Sueden bruellt Jemand: ");
+  TELLSD(bruecke1,"VERDAMMT MEINHART UND WERNFRIED WO BLEIBT "
+                  "IHR?!?",
+                  "Im Sueden bruellt Jemand: ");   	  
+  TELLSD(bruecke2,"VERDAMMT MEINHART UND WERNFRIED WO BLEIBT "
+                  "IHR?!?",
+                  "Im Sueden bruellt Jemand: ");
+    }    
+
+
+ if(!present("ruediger", obj) && !present("hermann", obj)) { 	
+  return;}//Ich halte es eigentlich fuer unmoeglich das dieser fall eintritt
+}//sollte kaum moeglich sein das ein stufe 31 und ein stufe 26 npc zusammen in  
+//ein paar sekunden tot sein sollten..
+
+ruediger3c() {
+	
+object obj;  
+obj = find_object("/d/dschungel/trintrasil/sdschungel/room/turm");
+
+ if(present("ruediger", obj)) {
+ 	
+  TELLSD(turm,"VERDAMMT GARDIST WERNFRIED WO BLEIBST DU?!?",
+              "Der Wachtmeister bruellt: ");      
+  TELLSD(sdschungel2,"VERDAMMT GARDIST WERNFRIED WO BLEIBST DU?!?",
+                     "Im Turm bruellt Jemand: ");
+  TELLSD(sdschungel1,"VERDAMMT GARDIST WERNFRIED WO BLEIBST DU?!?",
+                     "Im Turm im Sueden bruellt Jemand: ");
+  TELLSD(bruecke1,"VERDAMMT GARDIST WERNFRIED WO BLEIBST DU?!?",
+                  "Im Sueden bruellt Jemand: ");   	  
+  TELLSD(bruecke2,"VERDAMMT GARDIST WERNFRIED WO BLEIBST DU?!?",
+                  "Im Sueden bruellt Jemand: ");
+    }
+  
+ if(!present("ruediger", obj) && present("hermann", obj)) {
+ 	
+  TELLSD(turm,"VERDAMMT WERNFRIED WO BLEIBST DU?!?",
+              "Der Torposten bruellt: ");      
+  TELLSD(sdschungel2,"VERDAMMT WERNFRIED WO BLEIBST DU?!?",
+                     "Im Turm bruellt Jemand: ");
+  TELLSD(sdschungel1,"VERDAMMT WERNFRIED WO BLEIBST DU?!?",
+                     "Im Turm im Sueden bruellt Jemand: ");
+  TELLSD(bruecke1,"VERDAMMT WERNFRIED WO BLEIBST DU?!?",
+                  "Im Sueden bruellt Jemand: ");   	  
+  TELLSD(bruecke2,"VERDAMMT WERNFRIED WO BLEIBST DU?!?",
+                  "Im Sueden bruellt Jemand: ");
+    }    
+  } 
+//oooooooooooooooooooooooooo RUEDIGER ENDE oooooooooooooooooooooooooooooooooooooo
+
+
+
+//oooooooooooooooooooooooooo WERNFRIED ANFANG ooooooooooooooooooooooooooooooooooo
+
+wernfried1() {
+
+    int u;
+    object *w, turm, tor, busch;
+  mann_check();
+    w=mann;
+    turm = find_object("/d/dschungel/trintrasil/sdschungel/room/turm");
+    tor = find_object("/d/dschungel/trintrasil/sdschungel/room/sdschungel2");
+    busch = find_object("/d/dschungel/trintrasil/sdschungel/room/busch-h");
+    
+  if(present("ruediger", turm) && present("hermann", tor)) {
+  	
+    TELLSD(turm,"Himmel und Hoelle! Was ist denn da auf der Bruecke los!",
+                "Der Wachtmeister flucht: ");	
+    TELLSD(sdschungel2,"Donnerluetchen was ist denn da im Norden los?!",
+                       "Der Torposten flucht: ");
+              }
+
+  if(present("ruediger", turm) && !present("hermann", tor)) {
+
+    TELLSD(turm,"Himmel und Hoelle! Was ist denn da auf der Bruecke los!",
+                "Der Wachtmeister flucht: ");
+        }
+  
+  if(!present("ruediger", turm) && present("hermann", tor)) {
+  	
+    TELLSD(sdschungel2,"Donnerluetchen was ist denn da im Norden los?!",
+                       "Der Torposten flucht: ");
+        }
+        
+  if( !present("ruediger", turm) && !present("hermann", tor) && 
+       present("meinhart", busch) ) {  	
+    tell_room("/d/dschungel/trintrasil/sdschungel/room/sdschungel2",
+              "\nDu hoerst ein Fluchen im Gebuesch!\n");
+    }
+	
+  if( !present("ruediger", turm) && !present("hermann", tor) &&
+      !present("meinhart", busch) ){
+      	
+      	return 0;}//wenn wegen einer unerklaerlich seuche alle posten von der 
+      	          //support unerklaerlich tot sein sollten (rein theoretisch
+      	          //moeglicher fall.. abgeklaert zur sicherheit..)
+      	
+    for (u=sizeof(w)-1;u>=0;u--) {
+
+      if( objectp(w[u]) )
+        w[u]->postenmove_wern();      
+   }                
+}
+
+
+wernfried2() {
+
+  call_out("wernfried3", 2);
+}
+
+
+wernfried3() {
+
+  object dante;
+  int i;  
+  object *w, obj;
+  namen=({});
+  obj = find_object("/d/dschungel/trintrasil/sdschungel/room/bruecke2");
+  namen=({});
+  mann_check();
+  w=mann;
+  dante=find_player("dante");
+
+  for(i=0; i<sizeof(w); i++ ) {
+
+    if( objectp(w[i]))
+    {
+      nam=w[i]->QueryProp(P_NAME);
+
+      namen+=({ nam  });
+
+      if(dante)  {
+        tell_object(dante,
+            " namen: "+nam+" \n");
+      }
+    }
+  }
+
+ if( member_array("Wachposten", namen)==-1) {
+ 	return 0;}//ist der wachposten meinhart tot kann er nicht gerufen werden 
+
+ if( member_array("Wachposten", namen)!=-1) {  
+
+  if(present("ruediger", obj)) {
+ 	
+  TELLSD(turm,"VERDAMMT GARDIST MEINHART WO BLEIBST DU?!?",
+              "Im Norden bruellt Jemand: ");      
+  TELLSD(sdschungel2,"VERDAMMT GARDIST MEINHART WO BLEIBST DU?!?",
+              "Im Norden bruellt Jemand: ");
+  TELLSD(sdschungel1,"VERDAMMT GARDIST MEINHART WO BLEIBST DU?!?",
+                     "Im Nordem bruellt Jemand: ");
+  TELLSD(bruecke1,"VERDAMMT GARDIST MEINHART WO BLEIBST DU?!?",
+                  "Im Norden bruellt Jemand: ");   	  
+  TELLSD(bruecke2,"VERDAMMT GARDIST MEINHART WO BLEIBST DU?!?",
+                  "Der Wachtmeister bruellt: ");
+}
+    
+
+  if(!present("ruediger", obj) && present("hermann", obj)) {
+
+  TELLSD(turm,"VERDAMMT MEINHART WO BLEIBST DU?!?",               
+              "Im Norden bruellt Jemand: ");
+  TELLSD(sdschungel2,"VERDAMMT MEINHART WO BLEIBST DU?!?",
+                     "Im Norden bruellt Jemand: "); 
+  TELLSD(sdschungel1,"VERDAMMT MEINHART WO BLEIBST DU?!?",
+                     "Im Nordem bruellt Jemand: "); 
+  TELLSD(bruecke1,"VERDAMMT MEINHART WO BLEIBST DU?!?",
+                  "Im Norden bruellt Jemand: ");   	  
+  TELLSD(bruecke2,"VERDAMMT MEINHART WO BLEIBST DU?!?",
+                  "Der Torposten bruellt: ");   
+}
+
+  if(!present("ruediger", obj) && !present("hermann", obj)) {
+ 	
+   return 0;}
+  }
+}
+//oooooooooooooooooooooooooooo WERNFRIED ENDE ooooooooooooooooooooooooooooooooooo    
+    
+
+ 
+
+
+
+//ooooooooooooooooooooooo AUSGANGSZUSTAND ANFANG oooooooooooooooooooooooooooooooo
+
+/*Diese Funktion soll den urspruenglichen Zustand vor dem Angriff wieder 
+herstellen (die getoeteten posten bleiben natuerlich tot :)). Sie wird von der 
+supportfunkt. das erste mal aufgerufen, und ruft sich dann so lange regelmaessig 
+selber auf bis die npc nicht mehr InFight sind (alle 15 min) und sie voll 
+ausgefuehrt wird. Sind die posten im Kampf wird sie abgebrochen.*/
+
+int ausgangszustand() {
+	
+int p, u, i;//p=anzahl der ueberlebenden posten,i und u fuer forschleifen 
+object turm, tor, bruecke, *w;//sind alle raeume geladen wenn mann
+  mann_check();
+w=mann;
+p=sizeof(mann);
+
+turm = find_object("/d/dschungel/trintrasil/sdschungel/room/turm");
+tor = find_object("/d/dschungel/trintrasil/sdschungel/room/sdschungel2");
+bruecke = find_object("/d/dschungel/trintrasil/sdschungel/room/bruecke2");	
+
+//tell_room("/d/dschungel/trintrasil/sdschungel/room/turm", "!!AUSGANG!!\n\n");
+
+
+if(!mann) {
+//tell_room("/d/dschungel/trintrasil/sdschungel/room/turm", "!!NOMANN!!");	
+	return 0;}//alle maenner wurden getoetet, funktion sinnlos
+	
+	
+	
+if(mann) {
+
+//tell_room("/d/dschungel/trintrasil/sdschungel/room/turm", "!!MANN!!\n\n");
+
+   for( i=0;i<sizeof(w);i=sizeof(w) ) {/*pervertierte forschleife...
+
+es soll nur ermittlet werden ob irgendein posten i, array mann InFight ist.
+Ist einer im kampf sind automatisch alle anderen auch im kampf, somit ist nur
+ein einmaliges abfragen noetig. weiters soll die forschleife nur einmal durch-
+laufen werden da sonst die funkt. ausgangszustand mehrmals gleichzeitig 
+ausgefuehrt werden wuerde... zwar unedel aber es funktioniert.. */
+//tell_room("/d/dschungel/trintrasil/sdschungel/room/turm", "!!FOR!!\n\n");
+     
+     if(objectp(mann[i]) && mann[i]->InFight()) {//maenner die gerade kaempfen sollen nicht 
+     	                      //zurueckgesetzt werden
+//tell_room("/d/dschungel/trintrasil/sdschungel/room/turm", "!!MANN KAEMPFT!!\n\n");     	
+call_out("ausgangszustand", TIME);      	
+     	return 0; }	      
+   	
+   	
+   	
+else {
+//tell_room("/d/dschungel/trintrasil/sdschungel/room/turm", 
+//          "!!MANN KAEMPFT NICHT!!\n\n");     	
+	
+  if(present("posten", turm) && !present("posten", tor) &&
+     !present("posten", bruecke)) { //normalerweise koennen die posten nach einem
+                                    //kampf nur mehr alle in einem der raeume 
+                                    //stehen, reine sicherheitsabfrage 
+		
+//++++++++++++++++++++++++++++++ TURM +++++++++++++++++++++++++++++++++++++++++++
+			
+    if(present("ruediger", turm)) {//checkt indirekt ab wo der kampf 
+                       //stattgefunden hat da die posten den kampfplatz nicht 
+                       //verlassen koennen (nomove, nowimpy..)
+    	if(p>=3) {
+		TELLSD(turm,"Scheint wieder alles ruhig zu sein. Alle zurueck "
+		            "auf ihre Posten bis die Abloese kommt!",
+		            "Der Wachtmeister sagt: ");     
+                call_out("anzahl_reset", 6);
+                for (u=sizeof(w)-1;u>=0;u--) {
+                  if(objectp(w[u]))
+                	  w[u]->turm_reset();//siehe turm_reset in den einzelnen
+	                }                    //posten
+		       }
+		        
+        if(p==2) {
+    	
+    	        TELLSD(turm,"Scheint wieder alles ruhig zu sein. Nimm Deinen "
+    	                    "Posten wieder ein bis die Abloese kommt! Verdammt "
+    	                    "viele Verluste!","Der Wachtmeister sagt: ");     
+                call_out("anzahl_reset", 6);
+                for (u=sizeof(w)-1;u>=0;u--) {
+                   if(objectp(w[u]))
+                	  w[u]->turm_reset();
+	                }    	                
+    	               }
+    	                
+        if(p==1) {
+               
+                anzahl=1;                             
+            
+                for (u=sizeof(w)-1;u>=0;u--) {
+                   if(objectp(w[u]))
+                	  w[u]->turm_reset();
+                	  }
+// tell_room("/d/dschungel/trintrasil/sdschungel/room/turm", "!!P=1!!");
+                }//es gibt keine maenner die auf ihre posten gehen sollten
+           
+              }
+        
+        
+    if(!present("ruediger", turm) && present("hermann", turm)) {
+    	
+    	if(p>=2) { 
+    		
+    		TELLSD(turm,"Scheint alles wieder ruhig zu sein. Wir sollten "
+    		            "auf unseren Posten zurueck bis die Abloese "
+    		            "kommt.","Der Torposten sagt: ");
+                call_out("anzahl_reset", 6);
+                for (u=sizeof(w)-1;u>=0;u--) {
+                   if(objectp(w[u]))
+                	  w[u]->turm_reset();
+	                }             
+    		       }
+    		        
+        if(p==1) {
+                
+                anzahl=1;
+                for (u=sizeof(w)-1;u>=0;u--) {
+                   if(objectp(w[u]))
+                	  w[u]->turm_reset();
+	                }        	
+        	      }
+        
+                   }
+        
+        
+    if(!present("ruediger", turm) && !present("hermann", turm) && 
+        present("meinhart", turm)) {
+        	
+        if(p==2) {
+        	
+                TELLSD(turm,"Scheint jetzt alles ruhig zu sein. Wir sollten "
+                            "wieder unsere Posten einnehmen. Die Abloese wird "
+                            "ohnehin bald kommen.",
+                            "Der Wachposten Meinhart sagt: ");
+                call_out("anzahl_reset", 6);
+                for (u=sizeof(w)-1;u>=0;u--) {
+                  if(objectp(w[u]))	
+                	  w[u]->turm_reset();
+	                }  
+                       }
+                        
+         if(p==1) {
+         	
+                TELLSD(turm,"Hoffentlich war das der letzte Angriff bis die "
+                            "Abloese kommt. Der Tod meiner Kameraden wird "
+                            "nicht ungeraecht bleiben.",
+                            "Der Wachposten Meinhart brummelt: ");                
+                anzahl=1;
+                for (u=sizeof(w)-1;u>=0;u--) {
+                  if(objectp(w[u]))	
+                	  w[u]->turm_reset();
+	                }         	
+         	       }
+        
+                  }
+        
+        
+     if(!present("ruediger", turm) && !present("hermann", turm) &&
+        !present("meinhart", turm) && present("wernfried", turm)) {
+
+                TELLSD(turm,"Verdammt, hoffentlich ist bald Verstaerkung da.",
+                            "Der Brueckenposten brummelt: ");
+                anzahl=1;
+                for (u=sizeof(w)-1;u>=0;u--) {
+                if(objectp(w[u]))	
+                	  w[u]->turm_reset();
+	                }        	
+        	       }
+        	       
+                   }
+
+//++++++++++++++++++++++++++++ TOR ++++++++++++++++++++++++++++++++++++++++++++++
+
+  if(!present("posten", turm) && present("posten", tor) &&
+     !present("posten", bruecke)) {
+     	 
+     	 
+    if(present("ruediger", tor)) {
+
+    	if(p>=3) {
+    		
+		TELLSD(sdschungel2,"Scheint wieder alles ruhig zu sein. Alle "
+		                  "zurueck auf ihre Posten bis die Abloese "
+		                  "kommt!",
+		                  "Der Wachtmeister sagt: ");     
+                call_out("anzahl_reset", 6);
+                for (u=sizeof(w)-1;u>=0;u--) {
+                if(objectp(w[u]))   
+                	  w[u]->tor_reset();
+	                }
+	       	       }
+		        
+        if(p==2) {
+    	
+    	        TELLSD(sdschungel2,"Scheint wieder alles ruhig zu sein. Nimm "
+    	                           "Deinen Posten wieder ein bis die Abloese "
+    	                           "kommt! Verdammt viele Verluste!",
+    	                           "Der Wachtmeister sagt: ");     
+                call_out("anzahl_reset", 6);
+                for (u=sizeof(w)-1;u>=0;u--) {
+                if(objectp(w[u]))	
+                	  w[u]->tor_reset();
+	                }    	                
+    	               }
+    	                
+        if(p==1) {
+              if(objectp(w[u])) 
+               w[u]->tor_reset();
+               anzahl=1;                             
+                }
+               }
+        
+        
+    if(!present("ruediger", tor) && present("hermann", tor)) {
+    	
+    	if(p>=2) { 
+    		
+    		TELLSD(sdschungel2,"Scheint alles ruhig zu sein. Wir sollten " 
+    		                   "auf unseren Posten zurueck bis die Abloese "
+    		                   "kommt.","Der Torposten sagt: ");
+                call_out("anzahl_reset", 6);
+                for (u=sizeof(w)-1;u>=0;u--) {
+                if(objectp(w[u]))	
+                	  w[u]->tor_reset();
+	                }             
+    		       }
+    		        
+        if(p==1) {
+                
+                anzahl=1;
+                for (u=sizeof(w)-1;u>=0;u--) {
+                if(objectp(w[u]))	
+                	  w[u]->tor_reset();
+	                }        	
+        	      }
+     
+                   }
+        
+        
+    if(!present("ruediger", tor) && !present("hermann", tor) && 
+        present("meinhart", tor)) {
+        	
+        if(p==2) {
+        	
+                TELLSD(sdschungel2,"Scheint alles ruhig zu sein. Wir sollten "
+                                   "wieder unsere Posten einnehmen. Die Abloese "
+                                   "wird ohnehin bald kommen.",
+                                   "Der Wachposten Meinhart sagt: ");
+                call_out("anzahl_reset", 6);
+                for (u=sizeof(w)-1;u>=0;u--) {
+                if(objectp(w[u]))	
+                	  w[u]->tor_reset();
+	                }  
+                       }
+                        
+         if(p==1) {
+         	
+                TELLSD(sdschungel2,"Hoffentlich war das der letzte Angriff bis "
+                                   "die Abloese kommt. Der Tod meiner Kameraden "
+                                   "wird nicht ungeraecht bleiben.",
+                                   "Der Wachposten Meinhart brummelt: ");                
+                anzahl=1;
+                for (u=sizeof(w)-1;u>=0;u--) {
+                if(objectp(w[u]))	
+                	  w[u]->tor_reset();
+	                }         	
+               	       }
+              
+                    }
+        
+        
+     if(!present("ruediger", tor) && !present("hermann", tor) &&
+        !present("meinhart", tor) && present("wernfried", tor)) {
+
+                TELLSD(sdschungel2,"Verdammt hoffentlich ist bald Verstaerkung "
+                                   "da.",
+                                   "Der Brueckenposten brummelt: ");
+                anzahl=1;
+                for (u=sizeof(w)-1;u>=0;u--) {
+                if(objectp(w[u]))	
+                	  w[u]->tor_reset();
+	                }        	
+                       }
+
+                  }
+
+//+++++++++++++++++++++++++++++++ BRUECKE +++++++++++++++++++++++++++++++++++++++
+
+  if(!present("posten", turm) && !present("posten", tor) &&
+     present("posten", bruecke)) {
+     	 
+     	 
+    if(present("ruediger", bruecke)) {
+
+    	if(p>=3) {
+    		
+		TELLSD(bruecke2,"Scheint wieder alles ruhig zu sein. Alle "
+		                "zurueck auf ihre Posten bis die Abloese kommt!",
+		                "Der Wachtmeister sagt: ");     
+                call_out("anzahl_reset", 6);
+                for (u=sizeof(w)-1;u>=0;u--) {
+                  if(objectp(w[u])) 
+                	  w[u]->bruecke_reset();
+	                }
+	       	       }
+		        
+        if(p==2) {
+    	
+    	        TELLSD(bruecke2,"Scheint wieder alles ruhig zu sein. Nimm "
+    	                        "Deinen Posten wieder ein bis die Abloese "
+    	                        "kommt! Verdammt viele Verluste!",
+    	                        "Der Wachtmeister sagt: ");     
+                call_out("anzahl_reset", 6);
+                for (u=sizeof(w)-1;u>=0;u--) {
+                if(objectp(w[u]))	
+                	  w[u]->bruecke_reset();
+	                }    	                
+    	               }
+    	                
+        if(p==1) {
+      
+               anzahl=1;                             
+                for (u=sizeof(w)-1;u>=0;u--) {
+                  if(objectp(w[u])) 
+                	  w[u]->bruecke_reset();
+                	}
+                	
+                }
+               }
+        
+        
+    if(!present("ruediger", bruecke) && present("hermann", bruecke)) {
+    	
+    	if(p>=2) { 
+    		
+    		TELLSD(bruecke2,"Scheint alles ruhig zu sein. Wir sollten auf "
+    		              "unseren Posten zurueck bis die Abloese kommt.",
+    		              "Der Torposten sagt: ");
+                call_out("anzahl_reset", 6);
+                for (u=sizeof(w)-1;u>=0;u--) {
+                if(objectp(w[u]))	
+                	  w[u]->bruecke_reset();
+	                }             
+    		       }
+    		        
+        if(p==1) {
+                
+                anzahl=1;
+                for (u=sizeof(w)-1;u>=0;u--) {
+                if(objectp(w[u]))	
+                	  w[u]->bruecke_reset();
+	                }        	
+        	      }
+     
+                   }
+        
+        
+    if(!present("ruediger", bruecke) && !present("hermann", bruecke) && 
+        present("meinhart", bruecke)) {
+        	
+        if(p==2) {
+        	
+                TELLSD(bruecke2,"Scheint alles ruhig zu sein. Wir sollten "
+                                "wieder unsere Posten einnehmen. Die Abloese "
+                                "wird ohnehin bald kommen.",
+                                "Der Wachposten Meinhart sagt: ");
+                call_out("anzahl_reset", 6);
+                for (u=sizeof(w)-1;u>=0;u--) {
+                if(objectp(w[u]))	
+                	  w[u]->bruecke_reset();
+	                }  
+                       }
+                        
+         if(p==1) {
+         	
+                TELLSD(bruecke2,"Hoffentlich war das der letzte Angriff bis die "
+                              "Abloese kommt. Der Tod meiner Kameraden wird "
+                              "nicht ungeraecht bleiben.",
+                              "Der Wachposten Meinhart brummelt: ");                
+                anzahl=1;
+                for (u=sizeof(w)-1;u>=0;u--) {
+                if(objectp(w[u]))	
+                	  w[u]->bruecke_reset();
+	                }         	
+               	       }
+              
+                    }
+        
+        
+     if(!present("ruediger", bruecke) && !present("hermann", bruecke) &&
+        !present("meinhart", bruecke) && present("wernfried", bruecke)) {
+
+                TELLSD(bruecke2,"Verdammt, hoffentlich ist bald Verstaerkung da.",
+                                "Der Brueckenposten brummelt: ");
+                anzahl=1;
+                for (u=sizeof(w)-1;u>=0;u--) {
+                if(objectp(w[u]))	
+                	  w[u]->bruecke_reset();
+	                }        	
+                       }//wernfried
+
+                  }//bruecke
+          }//mann->InFight
+        }//forschleife
+       }//mann
+
+}//ausgang     
+/*wenn mehr als ein posten vorhanden ist wird anzahl nicht schon sofort in der
+ausgangszustand() zurueckgesetzt weil die reset funkt. aus den posten laenger
+andauert und ansonsten waehrend der ausfuehrung der reset funkt. in den npcs
+schon die support ausgeloest werden koennte was zu einem eigenartigen verhalten
+der posten fuehrt (evtl. im kampf auf den alten platz laufen, rufe von posten wo
+kein posten mehr steht... ect.). Es ist aber eigentlich ohnehin sehr 
+unwahrscheinlich das ein spieler genau in den paar sekunden angreift die die 
+ausfuehrung der ausgangszustand() beansprucht. Bei nur mehr einem Posten ist
+dieser zeitraum unwichtig da die support ohnehin nicht ausgefuehrt wird.*/
+   	
+anzahl_reset() {//damit anzahl erst resetet wird wenn alle auf ihrem platz sind
+
+anzahl=1; }

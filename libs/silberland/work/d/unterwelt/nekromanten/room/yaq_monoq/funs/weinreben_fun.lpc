@@ -1,0 +1,203 @@
+long: Etwas abseits steht ein merkwuerdig anmutender Busch
+
+
+  AddSpecialDetail( ({"busch"}),
+      "catch_em_all");
+  AddSpecialDetail( ({"weinranken", "ranken"}),
+      "catch_em_all");
+
+  AddCmd( ({"zerschneide", "zerschneid"}), "cut_em_all");
+  AddCmd( ({"pfluecke", "pflueck"}), "pick_berries");
+
+
+void BecomesNetDead(object wer) {
+  if(getuid(wer)==captured_player) {
+    wer->SetProp("ranks_cap", 1);
+    catch(remove_call_out("next_damage"));
+    catch(remove_call_out("end_paralyze"));
+  }
+  return;
+}
+
+void BecomdesNetAlive(object wer) {
+  if(wer->QueryProp("ranks_cap")) {
+    wer->QueryProp("ranks_cap");
+    if(!captured_player) 
+      start_paralyze(wer);
+  }
+  return;
+}
+
+nosave string catch_em_all(string key) {
+  string txt;
+  if(key=="ranken" || key=="weinranken") {
+    txt="Die Weinranken der Rebe scheinen sehr grazil und beweglich "
+      "zu sein.";
+    if(berries) 
+      txt+=" An einigen Ranken haben sich bereits praechtige "
+        "Weintrauben gebildet.";
+    if(!random(4) && find_call_out("next_damage")==-1 && !captured_player) 
+    {
+      txt+=" Ploetzlich schnellen die Weinranken nach vorne und halten Dich "
+        "fest. Ein paar Ranken bohren sich durch Deine Haut und du fuehlst "
+        "Dich so muede ...";
+      tell_room(ME, BS(sprintf("Ploetzlich wird %s von den Weinranken des "
+              "Weinrebe gepackt. %s sackt schlaff zusammen.", TP->name(WER),
+              CAP(TP->QueryPronoun(WER, 1)))), ({TP}));
+      call_out("start_paralyze", 0, TP);
+    }
+    return BS(txt);
+
+  }
+  if(key=="schwarz" || key=="bann") {
+    txt="Das Schwarz der Weintrauben scheint Dich irgendwie in ihren "
+      "Bann zu ziehen.";
+    if(!random(10) && find_call_out("next_damage")==-1 && !captured_player) 
+    {
+      txt+=" Ploetzlich schnellen die Weinranken nach vorne und halten Dich "
+        "fest. Ein paar Ranken bohren sich durch Deine Haut und du fuehlst "
+        "Dich so muede ...";
+      tell_room(ME, BS(sprintf("Ploetzlich wird %s von den Weinranken des "
+              "Weinrebe gepackt. %s sackt schlaff zusammen.", TP->name(WER),
+              CAP(TP->QueryPronoun(WER, 1)))),({TP}));
+      call_out("start_paralyze", 0, TP);
+    }
+    return BS(txt);
+  } 
+  if(key=="busch") {
+    txt=
+      "Als Du etwas genauer hinsiehst, faellt Dir auf, dass es sich nicht "
+      "um einen Busch, sondern um eine Weinrebe handelt. ";
+    if(berries) 
+      txt+="Die Pflanze traegt dicke, tiefschwarze Weintrauben an den "
+        "Ranken. ";
+    txt+="In der Pflanze haengt eine ausgetrocknete Leiche.";
+    if(captured_player)
+      txt+=sprintf(" %s ist ebenfalls von Ranken umsponnen und haengt "
+          "bewusstlos in der Weinrebe. Du solltest die Ranken zerschneiden!", 
+          CAP(captured_player));
+    return BS(txt);
+  }
+}
+
+nosave void start_paralyze(object pl) {
+  if(find_call_out("next_damage")!=-1 || find_call_out("start_paralyse")!=-1)
+    return;
+  pl->SetProp(P_PARALYZED, ([
+          PARALYZE_TIME: -1,
+          PARALYZE_MSG: "",
+          PARALYZE_MSG_OTHER: ""]));
+  old_title=pl->QueryProp(P_TITLE);
+  captured_player=getuid(pl);
+  pl->SetProp(P_TITLE, "(von Weinranken umschlungen und bewegungslos!)");
+  tell_object(pl, BS("Die Ranken saugen Dich aus!"));
+  next_damage(pl, random(20)+15);
+  return;
+ 
+}
+
+nosave void next_damage(object pl, int nr) {
+  int l_hps;
+  if(!present(pl)) return 0;
+  if(!nr) {
+    call_out("end_paralyze", 0, pl);
+    return 0;  
+  }
+  l_hps=random(10);
+  lost_hp+=l_hps;
+  if(lost_hp>100) {
+    tell_room(ME, BS("Urploetzlich wachsen ein paar Weintrauben auf der "
+        "Weinrebe"));
+    lost_hp=0;
+    berries++;
+    if(berries>5) berries=5;
+  }
+  do_room_damage(pl,l_hps, "Daemonische Weinranken");
+  call_out("next_damage", 2, pl, nr-1);
+  return;
+}
+
+nosave varargs void end_paralyze(object pl) {
+  if(find_call_out("next_damage")!=-1) remove_call_out("next_damage");
+  if(find_call_out("end_paralyze")!=-1) remove_call_out("end_paralyze");
+  if(!pl) pl=find_player(captured_player);
+  if(objectp(pl)) {
+    tell_object(pl, BS("Die Weinranken lassen Dich los!\n"));
+    pl->SetProp(P_PARALYZED, 0);
+    tell_room(ME, BS(sprintf("Die Weinranken lassen ab von %s!", 
+            pl->name(WER))), ({pl}));
+    pl->SetProp(P_TITLE, old_title);
+  }
+  captured_player=0;
+  lost_hp=0;
+  live=100;
+  return 0;
+}
+
+nosave int cut_em_all(string str) {
+  string was, was2;
+  object ob;
+  notify_fail("Was moechtest Du mit was zerschneiden?\n");
+  if(!str) return 0;
+  if(sscanf(str, "%s mit %s", was, was2)!=2) return 0;
+  if(!objectp(ob=present(was2, TP))) {
+    write(BS(sprintf("Du hast kein '%s' bei Dir!", CAP(was2))));
+    return 1;
+  } 
+  if(!ob->QueryProp(P_WEAPON_TYPE)) {
+    write(BS(sprintf("Ein '%s' ist keine Waffe.", CAP(was2))));
+    return 1;
+  }
+  write(BS("Du schlaegst voller Wucht auf die Ranke ein."));
+  if(find_call_out("next_damage") && captured_player) {
+    live-=random(10);
+    if(live<0) 
+     end_paralyze();
+  }
+  return 1; 
+}
+
+nosave int pick_berries(string str) {
+  object ob;
+  notify_fail("Was moechtest Du pfluecken?\n");
+  if(!str) return 0;
+  if(member(({"weinranke", "ranke", "beere", "rebe", "weinrebe", 
+          "weintraube", "weintrauben", "traube", "trauben"}), str)==-1)
+  {
+    return 0;
+  }
+  if(!berries) {
+    write(BS("Leider siehst Du keine Weintrauben auf den Ranken haengen."));
+    return 1;
+  }
+  write(BS("Du streckst Deine Hand nach den schwarzen Weintrauben aus. "
+        "So verfuehrerisch glaenzen sie ... ohne zu ueberlegen greifst "
+        "Du zu."));
+  if(!random(3)) {
+    write(BS("Du schnappst Dir ein paar Weintrauben."));
+    tell_room(ME, BS(sprintf("%s greift schnell zu den Weinranken und "
+            "schnappt sich ein paar Weintrauben.", TP->Name(WER))),({TP}));
+    ob=CLONEOB(NEKRO_ISLAND_DIR+"obj/weintrauben");
+    if(ob->move(TP, M_GET)==ME_TOO_HEAVY) 
+      ob->move(ME, M_NOCHECK);
+    berries--;
+    if(berries<0) berries=0;
+    return 1;
+  }
+  if(captured_player) {
+    write(BS("Du versuchst ein paar Weintrauben zu schnappen, doch "
+          "die Weinranken schlagen nach Dir und treffen Dich hart!"));
+    tell_room(ME, BS(sprintf("%s versucht sich ein paar Weintrauben zu "
+            "schnappen, wird aber von den Weinranken hart getroffen!", 
+            TP->Name(WER,1))));
+    do_room_damage(TP, random(20), "Daemonische Weinranken");
+  }
+  write(BS("Du versuchst Die ein paar Weintrauben zu schnappen, doch "
+        "irgendwie sind die Weinranken schneller und schnappen Dich!"));
+  tell_room(ME,BS(sprintf("%s versucht sich ein paar Weintrauben zu schnappen, "
+          "doch die Weinranken sind schneller und schnappen %s!", 
+          TP->Name(WER,1), TP->QueryPronoun(WEN,1))),({TP}));
+  start_paralyze(TP);
+  return 1;
+  
+}

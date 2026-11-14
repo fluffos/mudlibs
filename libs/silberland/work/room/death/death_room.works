@@ -1,0 +1,578 @@
+//
+//  Aenderungen:
+//
+//	06-02-1996	Mupfel
+//	Blindheit/Taubheit sind nach dem Tod verschwunden
+//
+//  27.12.1997  Woody
+//  "Vergiftung", "Hitze" und "Kaelte" als Todesursachen auf -T senden
+//
+//  03.02.1998  Woody
+//  Wieder volle Lebenspunkte nach Tod (warum eigentlich? naja... egal)
+//
+//  19.06.1998  Angrox
+//  Wenn P_TMP_PRAY_ROOM gesetzt wurde, wird der Spieler dorthin gemovt
+//
+
+
+#include <properties.h>
+#include <moving.h>
+#include <language.h>
+#include <wizlevels.h>
+#include <combat.h>
+
+inherit "/std/room";
+
+mixed *players;
+mapping msgCache;
+
+int check(string ch, object pl, string cmd, string txt)
+{
+  string fn;
+  if(ch != "Tod") return 0;
+  switch(cmd)
+  {
+    case C_SEND:
+      fn=explode(file_name(pl),"#")[0];
+      if (fn!="/players/woody/obj/auge" &&
+          fn!="/d/dschungel/feyaria/kueste/room/bucht" &&
+          fn!="/spellbooks/pal_spells") return 0;
+      // else fall-thru
+    default:
+      return 1;
+  }
+}
+
+init() {
+  object pl;
+  string prayroom;
+  int res;
+
+  ::init();
+  pl=this_player();
+  if (!IS_WIZARD(this_player())) add_action("filter", "", 1);
+  if (!(prayroom=this_player()->QueryProp(P_TMP_PRAY_ROOM)) &&
+      !(prayroom=this_player()->QueryPrayRoom())) 
+  {
+    prayroom="/room/pray_room";
+  }
+  if (!pl->QueryProp(P_GHOST))
+  {
+    if (IS_WIZARD(pl) && pl->QueryProp(P_WANTS_TO_LEARN))
+    {
+      if (!pl->QueryProp(P_INVIS))
+        call_out("room_msg",1,"Der Tod sagt: WAS WILLST DU HIER, "+
+            upperstring(this_player()->name())+"?\n"+
+            "DU BIST UNSTERBLICH, DU HAST HIER NICHTS ZU SUCHEN!\n\n");
+    }
+    else
+    {
+      write("Der Tod sagt: WAS TUST DU HIER? "+
+          "DEINE ZEIT IST NOCH NICHT REIF!\n\n");
+      if (catch(res=pl->move(prayroom,M_GO|M_NOCHECK|M_SILENT)) ||
+          (res != 1) && (environment(pl)==this_object()))
+        pl->move("/room/pray_room",M_GO|M_NOCHECK|M_SILENT);
+    }
+    return;
+  }
+  add_player(pl);
+  set_heart_beat(1);
+}
+
+reset()
+{
+  ::reset();
+
+  flush(1);
+}
+
+create()  {
+  ::create();
+  players= ({});
+  flush();
+
+  SetProp(P_NAME, "Lars");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_LIGHT,1);
+  SetProp(P_INT_SHORT,"Arbeitszimmer des Todes");
+  SetProp(P_INT_LONG,
+	  "Ein dunkler Raum, erleuchtet von dunklem Licht, das sich der Dunkelheit "
+    "nicht so sehr zu widersetzen scheint, indem es leuchtet, als dass es "
+    "der dunkelste Punkt in einer weniger dunklen Umgebung ist. Im seltsamen "
+    "Licht erkennst Du einen zentral aufgestellten Schreibtisch, der mit "
+    "Diagrammen und Buechern bedeckt ist. Die Waende verschwinden hinter "
+    "Regalen, die gefuellt sind mit in Leder gebundenen, dunklen Waelzern, "
+    "von denen geheimnisvolle Runen leuchten.");
+}
+
+flush(int unusedOnly)
+{
+  string *mi;
+  int i;
+
+  if (!unusedOnly)
+    msgCache = ([]);
+  else if (i=sizeof(mi=m_indices(msgCache))) {
+    for (i-=1; i>=0; i--) {
+      if (msgCache[mi[i],1])
+        msgCache[mi[i],1] = 0;
+      else
+        msgCache = m_delete(msgCache, mi[i]);
+    }
+  }
+}
+
+private static
+string expand(string table, int value)
+{
+  int sz, wert, i;
+  string *texte;
+
+  sz = sizeof(texte = explode(table, "##"));
+  wert=0;
+  for (i = 0; i < sz; i++)
+    if (i%2) {
+      sscanf(texte[i],"%d",wert);
+      if (value < wert) break;
+    } else
+      table=texte[i];
+
+  return table;
+}
+
+#define TOS(s) s[<1]
+#define STOS(s) s[<2]
+#define PUSH(x,s) (s+= ({ x }))
+#define POP(s)	(s=s[0..<2])
+
+private static
+string parseText(string msg, object pl)  /* ziemlich vom htmld abgekupfert ;) */
+{
+  string *words, *texte, *todo, *done, tmp, cmd;
+  int i,k, sz;
+  int endFlag;
+
+  sz = sizeof(words = regexplode(msg, "[<][^<]*[>]"));
+  todo = ({ });
+  done = ({""});
+
+  for (i=1; i<sz; i+=2) {
+    cmd = words[i][1..<2];
+    TOS(done) += words[i-1];
+
+    if (cmd[0]=='/') {
+      endFlag = 1;
+      cmd = cmd[1..];
+    }
+    else
+      endFlag = 0;
+
+    switch(cmd[0]) {
+      case 'A': /*** Alignment ersetzen ***/
+      if (!endFlag) {
+        PUSH(cmd, todo); PUSH("",done);
+      }
+      else
+        if (todo[<1] == "A") {
+          STOS(done) += expand(TOS(done), pl->QueryProp(P_ALIGN));
+          done = done[0..<2];
+          todo = todo[0..<2];
+        }
+      break;
+
+      case 'D': /*** Tode ersetzen ***/
+      if (!endFlag) {
+        PUSH(cmd, todo); PUSH("",done);
+      }
+      else
+        if (todo[<1] == "D") {
+          STOS(done) += expand(TOS(done), pl->QueryProp(P_DEADS));
+          POP(done); POP(todo);
+        }
+      break;
+
+      case 'L': /*** Level ersetzen ***/
+      if (!endFlag) {
+        PUSH(cmd, todo); PUSH("",done);
+      }
+      else
+        if (todo[<1] == "L") {
+          STOS(done) += expand(TOS(done), pl->QueryProp(P_LEVEL));
+          POP(done); POP(todo);
+        }
+      break;
+
+      case 'Z': /*** Zufall ersetzen ***/
+      if (!endFlag) {
+        PUSH(cmd, todo); PUSH("",done);
+      }
+      else {
+        if (todo[<1][0] == 'Z') {
+          int cnt, rnd, wert, sz2;
+
+          if (!sscanf(todo[<1], "Z=%d", rnd))
+            STOS(done) += "\n###\n### Syntax Error in <Z>!\n###\n\n";
+          else {
+            rnd=random(rnd);
+            sz2=sizeof(texte=efun::explode(TOS(done),"##"));wert=0;cnt=0;
+            for (k=1;k<sz2;k+=2) {
+              sscanf(texte[k],"%d",wert);
+              cnt+=wert;
+              if (rnd<cnt) {
+                STOS(done)+=texte[k+1];
+                break;
+              }
+            }
+          }
+          POP(done); POP(todo);
+        }
+      }
+      break;
+
+      case 'G': /*** Gender ersetzen ***/
+      if (!endFlag) {
+        PUSH(cmd, todo); PUSH("",done);
+      }
+      else {
+        if(sizeof(texte=regexplode(TOS(done),":"))==3)
+          STOS(done) += texte[2*(pl->QueryProp(P_GENDER)==FEMALE)];
+        POP(done); POP(todo);
+      }
+      break;
+
+      case 'R': /*** Rasse ersetzen ***/
+      if (!endFlag) {
+        PUSH(cmd, todo); PUSH("",done);
+      }
+      else {
+        int race;
+
+        texte=regexplode(TOS(done),"\\|");
+        race = 2*(member( ({ "Mensch","Elf","Zwerg","Hobbit" }),
+            pl->QueryProp(P_RACE)) + 1);
+        if (race < sizeof(texte))
+          STOS(done) += texte[race];
+
+        POP(done); POP(todo);
+      }
+      break;
+
+      case 'n': /*** Name, normal geschrieben ***/
+      TOS(done) += (string)(pl->name(RAW));
+      break;
+
+      case 'N': /*** Name, in Grossbuchstaben ***/
+      TOS(done) += (string)upperstring(pl->name(RAW));
+      break;
+    }
+  }
+  PUSH(words[<1], done);
+  return implode(done, "");
+}
+
+heart_beat() {
+  int j,nr;
+  string msg;
+
+  j=0;
+  while (j<sizeof(players))
+    if (!objectp(players[j][0]) || environment(players[j][0])!=this_object())
+      players=players[0..j-1]+players[j+1..];
+    else
+      j++;
+
+  if (!sizeof(players)) {
+    set_heart_beat(0);
+    return;
+  }
+
+  for (j=sizeof(players)-1;j>=0;j--) {
+    nr=++players[j][1];
+
+    if (mappingp(players[j][2]))
+      msg=players[j][2][nr];
+    else
+      msg=0;
+    if (!msg)
+      msg=players[j][3][1][nr];
+    if (msg)
+      tell_object(players[j][0],parseText(msg,players[j][0]));
+  }
+  do_remove();
+}
+
+do_remove() {
+  int j, nr, res;
+  string prayroom;
+  object plobj, pl;
+
+  nr=sizeof(players);
+  for (j=0;j<nr;j++) {
+    if (players[j][1]>=players[j][3][0]) {
+      pl = players[j][0];
+      while (plobj = present("\ndeath_mark", pl))
+        plobj->remove();
+      if (!(prayroom=pl->QueryProp(P_TMP_PRAY_ROOM)) && 
+          !(prayroom=pl->QueryPrayRoom()))
+      {
+        prayroom="/room/pray_room";
+      }
+      // Bevor der Spieler wieder im seine Kapelle gebracht
+      // wird, werden Froschdasein, Blindheit und Taubheit entfernt
+      if (pl->QueryProp(P_FROG)) pl->SetProp(P_FROG, 0);
+      if (pl->QueryProp(P_BLIND))
+      {
+        pl->SetProp(P_BLIND, 0);
+        tell_object(pl, "Der Tod hat die Blindheit von Dir genommen!\n");
+      }
+      if (pl->QueryProp(P_DEAF))
+      {
+        pl->SetProp(P_DEAF, 0);
+        tell_object(pl, "Du kannst wieder hoeren!\n");
+      }
+      pl->SetProp(P_HP, pl->QueryProp(P_MAX_HP));
+      // Jetzt wird der Spieler in die Kapelle gebracht
+      if (catch(res=pl->move(prayroom,M_GO|M_NOCHECK|M_SILENT)) || !res)
+        pl->move("/room/pray_room",M_GO|M_NOCHECK);
+      remove_player(j);
+      do_remove();
+      pl->SetProp(P_TMP_PRAY_ROOM, 0); // temporaeren prayroom ruecksetzen
+      return;
+    }
+  }
+}
+
+varargs mixed get_sequence(string str)
+{
+  string *sequences,seq,txt;
+  int i,len,cacheable,tmark,ofs;
+  mapping m;
+
+  if (!stringp(str)||file_size(str)<=0)
+  {
+    sequences=get_dir("/room/death/sequences/*")-({".",".."});
+    str="/room/death/sequences/"+sequences[random(sizeof(sequences))];
+  }
+
+  if (cacheable=((strlen(str)>21) && (str[0..21]=="/room/death/sequences/"))) {
+    if (member(msgCache, str)) {
+      msgCache[str,1] = 1;  // Touch it!
+      return msgCache[str];
+    }
+  }
+  sequences=efun::explode(read_file(str),"\n");
+  tmark=0;
+  for (i=1;i<sizeof(sequences);i++) {
+    if (sscanf(sequences[i],"+%d:%s",ofs,txt)==2) {     // relativer Zeitmarker
+      tmark+=ofs;
+      sequences[i]=tmark+":"+txt;
+    }
+    else if (sscanf(sequences[i],"%d:%s",ofs,txt)==2)   // absoluter Zeitmarker
+      tmark=ofs;
+  }
+  sscanf(sequences[0],"%d",len);
+  seq=implode(sequences[1..],"\n");
+  sequences=regexplode(seq,"[0-9][0-9]*:");
+  m=([]);
+  for (i=1;i<sizeof(sequences)-1;i+=2)
+    m[(int)sequences[i]]=sequences[i+1];
+
+  if (cacheable)
+    msgCache += ([ str: ({ len, m }); 1 ]);
+
+  return ({len,m});
+}
+
+add_player(pl) {
+  // Description:   Adds a player to the list
+  int i, kart, kgen;
+  int escaped;
+  object pre,kill_liv,kill_ob;
+  mixed dseq,act_seq,msg_flags;
+  string fn;
+  mixed killer_name, killer_msg;
+
+  kill_liv=0; kill_ob=0; dseq=0; kart=0; kgen=MALE;
+  if (objectp(pre=pl->QueryProp(P_LAST_COMMAND_ENV)))
+  {
+
+  }
+  for (i=0;pre=previous_object(i);i++) {
+    if (!objectp(pre)) continue;
+    if (pre==pl) continue;
+    fn=file_name(pre);
+    if (fn[0..12]=="/secure/login" && !kill_liv)
+      escaped=1;
+    if (fn[0..7]=="/secure/"&&fn[0..13]!="/secure/merlin") continue;
+    if (fn[0..21]=="/room/death/death_mark") continue;
+    if (living(pre)) {
+      kill_liv=pre; // Killer
+      break;
+    }
+    kill_ob=pre; // killendes Objekt
+  }
+  if (objectp(pre = pl->QueryProp(P_KILLER))) {
+    dseq = pre->QueryProp(P_ENEMY_DEATH_SEQUENCE);
+    if(!(killer_name=pre->QueryProp(P_KILL_NAME))) {
+      killer_name = pre->QueryProp(P_NAME);
+      kart = pre->QueryProp(P_ARTICLE);
+      kgen = pre->QueryProp(P_GENDER);
+    }
+    killer_msg = pre->QueryProp(P_KILL_MSG);
+  }
+  if (!dseq && kill_liv && function_exists("QueryProp",kill_liv))
+  {
+    dseq=kill_liv->QueryProp(P_ENEMY_DEATH_SEQUENCE);
+    if(!(killer_name=kill_liv->QueryProp(P_KILL_NAME))) {
+      killer_name = kill_liv->QueryProp(P_NAME);
+      kart = kill_liv->QueryProp(P_ARTICLE);
+      kgen = kill_liv->QueryProp(P_GENDER);
+    }
+    killer_msg = kill_liv->QueryProp(P_KILL_MSG);
+    msg_flags = kill_liv->QueryProp(P_MSG_FLAGS);
+  }
+  if (!dseq && kill_ob && function_exists("QueryProp",kill_ob))
+  {
+    dseq=kill_ob->QueryProp(P_ENEMY_DEATH_SEQUENCE);
+    if(!(killer_name=kill_ob->QueryProp(P_KILL_NAME))) {
+      killer_name = kill_ob->QueryProp(P_NAME);
+      kart = kill_ob->QueryProp(P_ARTICLE);
+      kgen = kill_ob->QueryProp(P_GENDER);
+    }
+    killer_msg = kill_ob->QueryProp(P_KILL_MSG);
+    msg_flags = kill_ob->QueryProp(P_MSG_FLAGS);
+  }
+  act_seq=0;
+  if (mappingp(dseq))
+    act_seq=get_sequence("/room/death/sequences/lars");
+  else if (pointerp(dseq))  // ganze Todessequenz...
+    act_seq=dseq;
+  else
+    if (stringp(dseq))
+      act_seq=get_sequence(dseq);
+  if (!act_seq) act_seq=get_sequence();
+  if (!mappingp(dseq)) dseq=0;
+
+  for (i=sizeof(players)-1;i>=0;i--)
+    if (players[i][0] == pl)
+      break;
+
+  if (i==-1)
+    players+=({({pl,0,dseq,act_seq})});
+
+  if ((!pl->QueryProp(P_WANTS_TO_LEARN) ||
+      (!pl->QueryProp(P_TESTPLAYER) && !IS_LEARNER(pl))) &&
+      (!kill_ob || !environment(kill_ob)))
+  {
+    if (!killer_name)
+    {
+      if (!escaped || killer_msg)
+      {
+        mixed damtypes;
+        killer_name = "Etwas Geheimnisvolles und Unbekanntes";  // (default)
+        kgen = NEUTER;
+        kart = 0;
+        damtypes = pl->QueryProp(P_LAST_DAMTYPES);
+        if (sizeof(damtypes)==1)
+          if (damtypes[0]==DT_COLD)
+            killer_name = "Kaelte";
+          else if (damtypes[0]==DT_FIRE)
+            killer_name = "Hitze";
+          else if (damtypes[0]==DT_POISON)
+            killer_name = "Eine Vergiftung";
+      }
+      else
+      {
+        killer_name="";
+        killer_msg=upperstring(getuid(pl))+
+          " VERSUCHTE, MIR ZU ENTKOMMEN - JETZT HABE ICH WIEDER EXTRA-ARBEIT"+
+          " MIT "+ (pl->QueryProp(P_GENDER) != 2 ? "IHM" : "IHR") + " ...";
+      }
+    }
+  }
+
+  if (!pointerp(killer_msg))
+    killer_msg = ({ killer_msg, 0, 0 });
+  else if (sizeof(killer_msg) < 3)
+    killer_msg += ({ 0, 0, 0 });
+  if (mappingp(msg_flags) && member(msg_flags,P_KILL_MSG))
+    killer_msg[1] = msg_flags[P_KILL_MSG];
+
+  SetProp(P_NAME, killer_name);
+  SetProp(P_ARTICLE, kart);
+  SetProp(P_GENDER, kgen);
+  fn = capitalize(name(WER) || "Etwas Geheimnisvolles und Unbekanntes");
+  SetProp(P_NAME, "Lars");
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_GENDER,MALE);
+
+  CHMASTER->join("Tod", this_object());
+
+  if ((!stringp(killer_name) || killer_name!="") &&
+      (sizeof(killer_msg)<4 || !killer_msg[3])) {
+    if (killer_msg[2] == PLURAL)
+      CHMASTER->send("Tod", this_object(),
+                               fn+" haben gerade "+
+                               capitalize(getuid(pl)) +" umgebracht.");
+    else
+      CHMASTER->send("Tod", this_object(),
+                               fn+" hat gerade "+
+                               capitalize(getuid(pl)) +" umgebracht.");
+  }
+  i=pl->QueryProp(P_DEADS);
+  if ( i && (i%100==0 || i%250==0) ) {
+    SetProp(P_NAME,"Tod");
+    CHMASTER->send("Tod",this_object(),
+                   sprintf("DAS WAR SCHON DAS %dTE MAL!",i));
+    SetProp(P_NAME,"Lars");
+  }
+  if(killer_msg[0]) {
+    if (stringp(killer_name) && killer_name == "")
+      CHMASTER->send("Tod",
+                     this_object(),
+                     break_string(funcall(killer_msg[0]), 78,
+                                  "[Tod:] ")[0..<2],
+                     MSG_EMPTY);
+    else {
+      if ((killer_msg[1] < MSG_SAY) || (killer_msg[1] > MSG_GEMOTE))
+        killer_msg[1] = MSG_SAY;
+      SetProp(P_NAME, killer_name);
+      SetProp(P_ARTICLE, kart);
+      SetProp(P_GENDER, kgen);
+      CHMASTER->send("Tod",
+                     this_object(),
+                     funcall(killer_msg[0]),
+                     killer_msg[1]);
+      SetProp(P_NAME, "Lars");
+      SetProp(P_ARTICLE, 0);
+      SetProp(P_GENDER, MALE);
+    }
+  }
+}
+
+remove_player(num) {
+  // Description:   Removes a player from the list
+  int i, j, x, oldlist;
+
+  players=players[0..num-1]+players[num+1..];
+  if (!sizeof(players)) set_heart_beat(0);
+}
+
+filter(str) {
+  // Description:   Filter out relevant commands.
+  string verb;
+  object pl;
+
+  pl=this_player();
+  verb=query_verb();
+  if (verb=="quit" || verb=="ende") {
+    write("DU KANNST DEM TOD NICHT ENTRINNEN!\n");
+    return 0;
+  }
+  if (verb=="typo" || verb=="fehler" || verb=="bug" || verb=="idee")
+    return 0;
+  write("Dein Koerper gehorcht Dir nicht !\n");
+  return 1;
+}
+

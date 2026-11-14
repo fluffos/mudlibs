@@ -1,0 +1,302 @@
+/*****************************************************************************
+Die Kleintiere der Gilde
+(c) Lilyth, Torian, Delgo @ Silberland <sl.mud.at>
+06.08.05 - Begin
+
+*****************************************************************************/
+
+//** INCLUDE + INHERIT + DEFINE ********************************************//
+#include "../def.h"
+
+inherit "std/npc";
+inherit "/std/npc/spells";
+inherit "std/player/soul";
+//zum steuern
+
+object owner;
+int mode;
+string npc;
+
+//**************************************************************************//
+
+  
+  
+//** CREATE ****************************************************************//
+void create()
+{
+  if(!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Eine Fledermaus");
+  SetProp(P_LONG,
+    "Der schwarze Schatten der wild umherflattert, ist eine Kreatur aus dem "
+    "fernen Wald von Tethyr. Die Fledermaus ist klein und unauffaellig, sie "
+    "ist sicher ein ausgezeichneter Spion.");
+  SetProp(P_NAME, "Fledermaus");
+  SetProp(P_GENDER, FEMALE);
+  AddId(({NOCONTROL, NOWIMPY, FELL_WUSCHEL, "fledermaus", "maus" }));
+  SetProp(P_RACE, "Tiere");
+  AddClass( ({CL_ANIMAL, CL_FLYING }) );
+  SetProp(P_ARTICLE, 1);
+  create_default_npc(10);
+  SetProp(P_FRIEND, 1);
+  SetProp(P_NOATTACK, "schaut Dich fragend an.");
+  SetProp(P_HANDS, ({" mit ihren Krallen", QueryProp(P_HANDS)[1],
+                    ({DT_BLUDGEON})   }) );
+  SetProp(P_SIZE, 70);
+  SetProp(P_WEIGHT, 16000);
+  SetProp(P_ALIGN, -1000);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_HEAL, 0);
+  SetProp(P_AGGRESSIVE, 0);
+  SetProp(P_WIMPY, 0);
+  SetProp(P_NOMAGIC, 0);
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    Name(WER,1)+" kann sowas nicht.\n" }) );
+
+  SetProp(P_MSGIN, "flattert herein");
+  SetProp(P_MSGOUT, "flattert");
+  SetProp(P_MMSGIN, "flattert heran");
+  SetProp(P_MMSGOUT, "erhebt sich in die Luefte");
+  SetProp(P_DIE_MSG,  " flattert davon.\n");
+  SetProp(P_NOCORPSE,  1);
+  SetProp(P_KILL_NAME, "Ein Betrueger");
+  AddInfo(DEFAULT_INFO, "kann Deine Sprache nicht verstehen.\n");
+  AddInfo(({"lilyth", "torian", "delgo"}), "kreischt.","");
+
+  SetProp(P_SPELLRATE, 0);
+  
+  SetChats(1,
+  ({Name(WER, 1)+" kreischt.\n",
+    Name(WER, 1)+" flattert wild im Kreis herum.\n",
+   }) );
+
+  mode=0;
+
+  add_soul_commands();
+
+}
+//**************************************************************************//
+
+
+//** Customize *************************************************************//
+int customize(object caster)
+{
+  
+  owner=caster;
+  
+  owner->AddPursuer(TO);
+  
+  return 1;
+}
+//**************************************************************************//
+
+
+
+//** Komunikation **********************************************************//
+void catch_tell(string str)
+{
+  string who,target,action;
+  
+  if(!((query_verb() == "sag") /*|| (query_verb()[0..0] == "'")*/))return;
+                              //buggt. 
+  if(sscanf(str,"%s sagt: %s %s",who,target,action) != 3)      return;
+  if(!id(target))                                              return;
+  if(find_player(lower_case(who)) != owner)                    return;
+  if(action[<1..] == "\n") action = action[0..<2];
+  action = lower_case(action);
+  call_out("order",0,action);
+  return;
+}
+
+int order(string action)
+{
+  object ob;
+  string *s, *po, *pp;
+  int i;
+  
+  if(action == "verschwinde"  ||
+     action == "hau ab"       ||
+     action == "verzieh dich" ||
+     action == "geh")
+  { ENV(owner)->Message(BS("Die Fledermaus flattert weg."));
+    call_out("remove", 0);
+    return 1;}
+  
+  //Lokalisieren
+  s=explode(action, " ");
+  if(sizeof(s)<=1) {owner->Message(BS("Wen soll die Fledermaus suchen?")); 
+                    return 1;}
+  s[1]=lower_case(s[1]);
+  
+  if(s[0] == "finde"       ||
+     s[0] == "lokalisiere" ||
+     s[0] == "suche")
+  {
+    tell_room(ENV(TO), BS(owner->Name(WER,1)+" gibt der Fledermaus ein "
+                          "Zeichen und diese flattert davon.")
+                          , ({owner}) );
+    owner->Message(BS("Du gibst der Fledermaus ein Zeichen und sie flattert "
+                      "davon."));
+    TO->move(ROOM "air", M_GO | M_SILENT);
+    ob=find_living(s[1]);
+    if(!ob) {call_out("location", 4, ob, s[1], 0); return 1;}
+    else if(ob->QueryProp(P_INVIS)) 
+    {call_out("location", 4, ob, s[1], 0); return 1;}
+    else if(ob->QueryProp(P_PALADIN_NO_LOCATION))
+    { call_out("location", 4, ob, s[1], 1); return 1; }
+    else
+    {
+      i=10;
+      po=explode(file_name(ENV(ob)), "/");
+      pp=explode(file_name(ENV(owner)), "/");
+      if( po[1] == pp[1] ) //selbe Region
+      { i=i-2; }
+      if( po[1] == "luft" ) //Region Luft findet sies natuerlich eher
+      { i=i-2; }
+      if( ob->QueryProp(P_SIZE) > 499 ) //Riesige erkennt sie frueher
+      { i=i-2; }
+      call_out("location", i, ob, s[1], 2);
+    }
+    return 1;    
+  }
+  
+  s=explode(action, " ");
+  
+  //NPC-erwarten
+  if(s[0] == "erwarte")
+  {  
+    if(sizeof(s)<=1) {owner->Message(BS("Wen soll die Fledermaus erwarten?")); 
+                      return 1;}
+    s[1]=lower_case(s[1]);
+    tell_room(ENV(TO), BS(owner->Name(WER,1)+" gibt der Fledermaus ein "
+                          "Zeichen und sie haengt ein wenig im Hintergrund "
+                          "ab.")
+                          , ({owner}) );
+    owner->Message(BS("Du gibst der Fledermaus ein Zeichen, sie solle "
+                      "hier auf '"+CAP(s[1])+"' warten."));
+    owner->RemovePursuer(TO);
+    npc=s[1];
+    mode=1;
+    return 1;    
+  }
+
+}
+//**************************************************************************//
+
+
+
+//** Lokation **************************************************************//
+int location(object ob, string name, int flag)
+{
+  string res;
+  
+  //Flags:
+  //0 - invis, nichtvorhanden
+  //1 - lokations-schutz (cain usw.)
+  //2 - okay
+  
+  if(flag == 0)
+  { owner->Message(BS(CAP(name)+" konnte nicht gefunden werden.")); }
+  else if(flag == 1)
+  { owner->Message(BS(CAP(name)+" ist untergetaucht und laesst sich "
+                      "nicht finden.")); }
+  else
+  {
+    TO->move(file_name(ENV(ob)), M_GO | M_SILENT);
+    ENV(TO)->Message(BS("Eine Fledermaus gleitet auf ihren Fluegeln kurz "
+                        "herein, beobachtet die Umgebung"
+                        " und flattert davon."), MSGFLAG_VISUAL);
+    res=ENV(TO)->int_long(owner, TO, 2);
+    owner->Message(break_string("Ein Schmerz zuckt durch Deinen Kopf und kurz"
+                                " siehst Du durch die Augen Deiner Fledermaus"
+                                " ein klares Bild:\n"
+                                +res, 78, 0, 1));
+  }
+  
+  call_out("remove",1);
+  return 1;
+}
+
+//**************************************************************************//
+
+
+
+//** NPC-Erwarten **********************************************************//
+void init()
+{
+  ::init();
+  
+  if(mode)
+  { 
+    if( TP->id(npc) || 
+        lower_case(TP->QueryProp(P_NAME)) == npc)
+    {
+      if(owner)
+      {
+        tell_room(ENV(owner), BS("Eine Fledermaus flattert aufgeregt um "+
+                              owner->Name(WER,1)+" herum. Danach "
+                              "verschwindet sie wieder.") 
+                              , ({owner}) );
+        owner->Message(BS("Eine Fledermaus flattert herein und fliegt "
+                       "um Deinen Kopf herum. Scheinbar ist '"+CAP(npc)+"' "
+                       "jetzt da."));
+        call_out("remove", 1);
+      }
+    }    
+  }
+}
+//**************************************************************************//
+
+
+
+//** StandartFunktionen ****************************************************//
+void die(int poisondeath)
+{
+  if(owner) owner->SetProp(P_RANGER_LAST_ANIMAL, time());
+  ::die(poisondeath);
+}
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  if(player == owner)
+  {call_out("remove", 0);}
+}
+int remove()
+{
+  if(owner) owner->SetProp(P_RANGER_LAST_ANIMAL, time());
+  if(owner) owner->RemovePursuer(TO);
+  return ::remove();
+}
+void reset()
+{
+  ::reset();
+  call_out("remove",0);
+}
+//**************************************************************************//
+
+
+
+//** REACTIONS *************************************************************//
+//--Reactions-----------------------------------------------------------------
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{ if(find_call_out("reaction") != -1) return;
+  call_out("reaction", 0, TP, "kreischt.", "kreischt."); }
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void reaction(object pl, string macher, string andere)
+{
+  if(!ENV(TO))           return;
+  if(!objectp(pl))       return;
+  if(!ENV(pl))           return;
+  if(ENV(TO) != ENV(pl)) return;
+
+  tell_object(pl, BS(Name(WER, 1)+" "+macher));
+  tell_room(ENV(TO), BS(Name(WER, 1)+" "+andere), ({pl}) );
+}
+//**************************************************************************//

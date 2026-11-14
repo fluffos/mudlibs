@@ -1,0 +1,170 @@
+
+/*
+** Standard-Objekt fuer virtuellen Compiler fuer verwahrlostes Haus, unten
+** ---
+** 17 Feb 1997  Woody
+*/
+
+inherit "std/room";
+
+#include <properties.h>
+#include <moving.h>
+#include "files.h"
+
+int offen, gesperrt;
+
+create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+  SetProp(P_INT_LONG,
+    "Du bist nun vor einem Haus angelangt, dessen Anblick nicht gerade "
+    "begeistert: Es scheint ziemlich verwahrlost zu sein, offenbar "
+    "wohnt hier gerade niemand... Allerdings kannst Du von hier aus "
+    "nur wenig erkennen, vielleicht solltest Du Dir das Haus mal von "
+    "innen etwas genauer ansehen? Eine kleine Leiter fuehrt hinauf zu "
+    "einer Tuer, durch die Du das Haus betreten kannst.");
+
+  // muss UNBEDINGT NACH dem SetProp P_INT_LONG kommen !!!
+  SetProp(P_LIGHT, 1);
+  SetProp(P_INDOORS, 0);
+  SetProp (P_ENVIRONMENT, ([ENV_TERRAIN:TT_TOWN, ENV_TEMPERATURE:20]));
+  SetProp(P_INT_SHORT, "Vor einem Haus");
+
+  AddDetail ( ({"boden", "erdboden"}),
+    "Ganz gewoehnlicher Erdboden, wie im ganzen uebrigen Dorf.");
+  AddDetail ( ({"erde"}),
+    "Gewoehnliche, noch nicht ganz so ausgetretene Erde.");
+  AddDetail ( ({"haus"}),
+    "Es macht einen ziemlich verwahrlosten Eindruck, aber mehr erkennst Du "+
+    "von hier aus nicht. Du solltest Dich wirklich einmal im Inneren des "+
+    "Hauses umsehen!");
+  AddDetail ( ({"anblick", "eindruck"}),
+    "Das Haus wirkt wirklich ziemlich verwahrlost.");
+  AddDetail ( ({"inneres"}),
+    "Das Innere des Hauses kannst Du von hier aus nicht erkennen, dazu "+
+    "musst Du schon reingehen...");
+  AddDetail ( ({"leiter"}),
+    "Eine kleine Leiter fuehrt hinauf zu einer Tuer, durch die Du das Haus "+
+    "betreten kannst. Von oben kann man die Leiter sogar nehmen, vermutlich "+
+    "wird sie drinnen auch manchmal benoetigt...");
+  AddSpecialDetail ( ({"holztuer", "tuer", "holztuere", "tuere"}),
+    "d_tuer");
+
+  AddCmd ( ({"schliesse", "schliess"}), "schliesse");
+  AddCmd ( ({"oeffne"}), "oeffne");
+  AddCmd ( ({"betritt", "betrete"}), "rein");
+  
+  AddExit ("suedwesten", FISCHERDORF("room/hauptstr_o"));
+
+  offen = 0;
+  gesperrt = 1;
+
+  previous_object()->CustomizeObject();
+}
+
+string d_tuer()
+{
+  return bs("Eine kleine Holztuer fuehrt ins Innere des Hauses. "+
+   (offen ? "Sie steht gerade offen."
+     : gesperrt ? "Sie ist abgeschlossen."
+       : "Sie ist geschlossen."));
+}
+
+int schliesse (string str)
+{
+  string was;
+  notify_fail ("Was willst Du auf- oder abschliessen? Oder nur schliessen?\n");
+  if (!str) return 0;
+  str=regreplace(str, "holztuer|holztuere|tuere", "tuer", 1);
+  if (str=="tuer") {
+    if (!offen) write ("Aber die Tuer ist doch gar nicht offen!\n");
+    else {
+      offen=0;
+      write ("Du schliesst die Tuer.\n");
+      say (CAP_TPN+" schliesst die Tuer.\n");
+    }
+  }
+  else {
+    if (sscanf(str, "tuer %s", was) != 1) return 0;
+    if (was=="auf") {
+      if (!gesperrt) write ("Aber die Tuer ist doch gar nicht abgesperrt!\n");
+      else {
+        if (present(QO_ID, TP)) {
+          gesperrt=0;
+          write ("Du schliesst die Tuer auf.\n");
+          say (CAP_TPN+" schliesst die Tuer auf.\n");
+        }
+        else
+          write ("Dazu brauchst Du einen passenden Schluessel!\n");
+      }
+    }
+    else if ((was=="ab") || (was=="zu")) {
+      if (gesperrt) write ("Aber die Tuer ist doch schon abgesperrt!\n");
+      else {
+        offen=0;
+        gesperrt=1;
+        write ("Du schliesst die Tuer ab.\n");
+        say (CAP_TPN+" schliesst die Tuer ab.\n");
+      }
+    }
+    else return 0;
+  }
+  return 1;
+}
+
+int oeffne (string str)
+{
+  string womit;
+  object ob;
+  notify_fail ("Was willst womit oeffnen?\n");
+  if (!str) return 0;
+  str=regreplace(str, "holztuer|holztuere|tuere", "tuer", 1);
+  if (str=="tuer") {
+    if (offen) write ("Aber die Tuer ist doch schon offen!\n");
+    else if (!gesperrt) {
+      offen=1;
+      write ("Du oeffnest die Tuer.\n");
+      say (CAP_TPN+" oeffnet die Tuer.\n");
+    }
+    else if (present(QO_ID, TP)) {
+      offen=1;
+      gesperrt=0;
+      write ("Du oeffnest die Tuer mit dem Schluessel.\n");
+      say (CAP_TPN+" oeffnet die Tuer mit einem Schluessel.\n");
+    }
+    else
+      write ("Dazu brauchst Du einen Schluessel, aber den hast Du nicht!\n");
+  }
+  else {
+    if (sscanf(str, "tuer mit %s", womit) != 1) return 0;
+    if (!(ob=present(womit, TP))) {
+      write ("Sowas hast Du nicht.\n");
+      return 1;
+    }
+    if (ob->id(QO_ID)) {
+      offen=1;
+      gesperrt=0;
+      write ("Du oeffnest die Tuer mit dem Schluessel.\n");
+      say (CAP_TPN+" oeffnet die Tuer mit einem Schluessel.\n");
+    }
+    else if (ob->id("schluessel"))
+      write ("Der Schluessel passt nicht!\n");
+    else
+      write ("Die Tuer kriegst Du nur mit einem Schluessel auf, "
+             "nicht mit "+ob->name(WEM)+"!\n");
+  }
+  return 1;
+}
+
+int rein (string str)
+{
+  notify_fail ("Was willst Du betreten?\n");
+  if ((!str) || (str!="haus")) return 0;
+  if (!offen) write ("Aber die Tuer ist doch zu!\n");
+  else
+    TP->move(QDIR("vhaus:"+getuid(TP)), M_GO,
+        "das Haus", "betritt", "kommt herein");
+  return 1;
+}
+

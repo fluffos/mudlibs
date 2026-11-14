@@ -1,0 +1,101 @@
+
+varargs int prep_wirbelwind(object caster, mapping sinfo, int flag)
+{
+  object spear, *victims;
+
+  victims = FindGroup(caster, -1);
+  if (!sizeof(victims))
+  {
+     tell_object(caster, BSC("Aber hier ist ja niemand, den Du mit der "
+         "Wirbelwindattacke angreifen koenntest."));
+    return 0;
+  }
+  if (caster->QueryProp(P_DISABLE_ATTACK))
+  {
+    tell_object(caster, "Du bist kampfunfaehig und kannst keinen Wirbelwind "
+        "machen!\n");
+    return 0;
+  }
+  if (!objectp(spear = caster->QueryProp(P_WEAPON)) || 
+      spear->QueryProp(P_WEAPON_TYPE) != WT_SPEAR)
+  {
+    tell_object(caster, BSC("Du musst einen Speer gezueckt haben, um einen " 
+        "Wirbelwindangriff machen zu koennen!"));
+    return 0;
+  }
+  if (!pay_for_spell(caster, sinfo, !flag))
+    return 0;
+  return 1;
+}
+
+
+int wirbelwind(object caster, mapping sinfo) 
+{
+  object *victims;
+  int suc;
+  object spear;
+  int bonus;
+  int dam;
+  int i;
+
+  if (!prep_wirbelwind(caster, sinfo, 1))
+    return 0;
+  victims = FindGroup(caster, -1);
+  spear = caster->QueryProp(P_WEAPON);
+
+  if ((suc = SpellSuccess(caster,sinfo)) <= 0)
+    return MISSERFOLG;
+
+  environment(caster)->Message(BS(sprintf("%s wirbelt wild im Kreis "
+          "herum und attackiert ihre Feinde mit %s %s.",
+        caster->Name(WER,1), 
+       ({"ihrem", "ihrem", "ihrer"})[spear->QueryProp(P_GENDER)],
+        spear->name(RAW) )),
+      MSGFLAG_VISUAL, ([ MSGFLAG_EXCLUDE : ({caster}) + victims ]) );
+
+  tell_object(caster, "Du wirbelst wild im Kreis herum und verletzt "
+          "dabei alle Deine Feinde.\n");
+
+  bonus = CheckEquip(caster, sinfo[SI_SPELLFUNC]);
+  sinfo[SI_SKILLDAMAGE] += spear->QueryProp(P_WC) / 2 + suc / 300 + bonus;
+  sinfo[OFFSET(SI_SKILLDAMAGE)] += caster->QueryProp(P_WC_FIX) + bonus;
+  sinfo[SI_MAX_DAMAGE] += (caster->QueryProp(P_GUILD_LEVEL) - 7) * 30 + bonus * 2;
+  sinfo[SI_SKILLDAMAGE_TYPE] = spear->QueryProp(P_DAM_TYPE);
+
+  if(sinfo[SI_SKILLPOINTS] > 1)
+  {
+    sinfo[SI_SKILLDAMAGE] = (sinfo[SI_SKILLDAMAGE] * 150) / 100;
+    sinfo[OFFSET(SI_SKILLDAMAGE)] = (sinfo[OFFSET(SI_SKILLDAMAGE)] * 150) / 100;
+    sinfo[SI_MAX_DAMAGE] = (sinfo[SI_MAX_DAMAGE] * 150) / 100;
+  }
+
+  if (IS_LEARNER(caster))
+    printf("dam = %d, off = %d, max = %d damtype = %O\n",
+        sinfo[SI_SKILLDAMAGE], 
+        sinfo[OFFSET(SI_SKILLDAMAGE)], 
+        sinfo[SI_MAX_DAMAGE],
+        sinfo[SI_SKILLDAMAGE_TYPE] );
+
+  for (i = sizeof(victims) - 1; i >= 0; i--)
+  {
+    tell_object(victims[i], BS(sprintf("%s wirbelt wild im Kreis herum und "
+            "greift Dich mit %s %s an.",
+            caster->Name(WER,1),
+            caster->QueryPossPronoun(spear->QueryProp(P_GENDER), WEM, 
+              spear->QueryProp(P_PLURAL)),
+            spear->name(RAW) )));
+
+    dam = TryDefaultAttackSpell(victims[i], caster, sinfo, sinfo[SI_SPELL] + 
+      ([SP_REDUCE_ARMOUR: ([P_BODY: 101 - sinfo[SI_SKILLABILITY] / 150])]) ); 
+
+    if(objectp(victims[i]) && sinfo[SI_SKILLPOINTS] > 2) {
+      TryDefaultAttackSpell(victims[i], caster, sinfo, sinfo[SI_SPELL] + ([SP_REDUCE_ARMOUR: ([P_BODY: 101 - sinfo[SI_SKILLABILITY] / 150])]) ); 
+    }
+
+    if(i != 0) caster->AddSp(-5); // pro getroffenem Gegner SP-Kosten
+
+    if (IS_LEARNER(caster))
+      printf("Schaden = %d\n", dam);
+  }
+  return ERFOLG;
+}

@@ -1,0 +1,129 @@
+
+// waffe fuer gerio von lostboy zum teil von dante sl 97
+//fuer gerio gut, fuer andere nicht
+// 30.12.97 energiespell eingebaut, abgeschaut bei angrox blitzaxt
+//mod by arth
+
+inherit "/std/weapon";
+
+#include <properties.h>
+#include <combat.h>
+#include <weapon.h>
+#include <new_skills.h>
+#include "../def.h"
+
+int zeit;
+
+void create() {
+  if (!is_clone(this_object())) return;
+  ::create();
+  zeit=time();
+  SetProp( P_SHORT, "Ein Krueckstock" );
+  SetProp( P_LONG, "Ein einfacher Krueckstock fuer alte Helden. "
+                   "Er sieht so aus, als koennte er nicht nur zum "
+                   "Abstuetzen von schwachen Knochen gute Dienste "
+                   "leisten, sondern auch in einem Kampf. Er ist in "
+                   "sich gewellt und zeigt ueberall kleine Muster.");
+  AddDetail( ({ "muster", "feuerbaelle" }), 
+          "Die Muster zeigen einen Stock, der einen Feuerball "
+          "ausspuckt.");  
+  SetProp( P_NAME,   "Krueckstock" ); 
+  SetProp( P_GENDER, MALE );
+  SetProp( P_WEIGHT, 250 );
+  SetProp( P_SIZE, 90 );
+  SetProp( P_VALUE, 2500 );
+  SetProp( P_DAM_TYPE, ({DT_BLUDGEON, DT_MAGIC})); 
+  SetProp( P_NR_HANDS, 1 );
+  SetProp( P_WEAPON_TYPE, WT_CLUB );
+  SetProp( P_WC, 65);
+  SetProp( P_WC_BONUS,(["\ngerio":150]));
+  SetProp(P_MATERIAL, ([ MAT_MAGIC:20, MAT_WOOD: 80]) );
+  AddId(({"krueckstock","stock"}));
+  SetProp(P_INFO, ("Dieser Stock hat magische Faehigkeiten. Mit dem "
+                   "magischen Befehl <energie> kannst Du kleine Feuerbaelle "
+                   "auf Deinen Gegner schleudern.\n"));
+  SetProp(P_WIELD_RESTRICTIONS, ([A_INT:9]) );
+  AddCmd("energie", "spell_energie");
+  SetProp(P_COMBATCMDS, ([ "energie":
+            ([ C_MIN:30,
+               C_AVG:50,
+               C_MAX:70,
+               C_DTYPES: ({DT_MAGIC, DT_FIRE}) 
+            ])
+        ]) );
+}
+
+spell_energie(string str) {
+  object gegner; 
+  int current_time;
+  current_time = time();
+  if (QueryProp(P_WIELDED)!=TP) {
+     notify_fail("Du musst den Stock erst zuecken!\n");
+     return 0; 
+  }
+  if ( (time()-QueryProp(P_EQUIP_TIME)) < 11 ) {
+ 	write(BS("Du solltest Dich erst noch an die "+
+                 "Fuehrung dieser Waffe gewoehnen."));
+    return 1;
+  }
+  if (TP->QueryProp(P_SP)< 5) {
+    write(break_string("Du hast nicht genug Magiepunkte.\n") );
+    return 1; 
+  }
+  if(str) {
+    if ( (gegner=present(str, ENV(TP))) && !gegner -> QueryProp(P_INVIS) )
+    {
+      if (!query_once_interactive(gegner) || TP->SelectEnemy(gegner))
+        return cast(gegner);
+      return notify_fail("Du kannst doch keinen Spieler angreifen!\n"),0;
+    }
+    else
+      return notify_fail(capitalize(str)+" ist ja gar nicht anwesend!\n"), 0;
+  }
+  if (gegner=TP->SelectEnemy())
+    return cast(gegner);
+  write(BS("Auf wen willst Du den Feuerball abfeuern?"));
+  return 1;
+}
+
+cast(object gegner) {
+  mapping sinfo;
+  int schaden;
+
+  schaden = 1;
+  if(zeit > time()) {
+    write(BS("Der Stock muss erst wieder Energie sammeln.\n"));
+    return 1;
+  }
+  if(TP->QueryProp(P_ATTACK_BUSY) ) {
+  	write(BS("Du hast im Moment viel zu viel zu tun.\n"));
+  	return 1;
+  }
+  TP->SetProp(P_ATTACK_BUSY, 1);
+  if((TP->QueryProp(P_SP))<5 )  {
+    write(BS("Du hast nicht genug Magiepunkte!"));
+    return 1;
+  }
+  TP->restore_spell_points(-5);
+  if(!gegner) {
+    write(BS("Ein Feuerball feuert aus Deinem Stock und fliegt gen Himmel."));
+    say(CAP(BS("Ein Feuerball feuert aus dem Stock von "+TPN+" und "
+               "fliegt gen Himmel.")) );
+    zeit = 400 + time();
+    return 1;
+  }
+  printf(BS("Ein Feuerball aus Deinem Stock trifft %s.\n"), gegner->name(WEM));
+  say(sprintf(BS("Ein Feuerball aus dem Stock von %s trifft %s.\n"), CAP(TPN),
+                 gegner->name(WEN) ), ({gegner, TP}) );
+  tell_object(gegner, BS("Ein Feuerball aus dem Stock von "+CAP(TPN)+
+                         " trifft Dich.\n"));
+  schaden = 300+random(100);
+  sinfo=([SP_NAME : "energie",
+          SP_PHYSICAL_ATTACK : 0,
+          SP_SHOW_DAMAGE : 1
+        ]);
+  gegner->Defend(schaden, ({DT_MAGIC, DT_FIRE}), sinfo, this_player());
+  zeit=800+time();
+  return 1;
+}
+

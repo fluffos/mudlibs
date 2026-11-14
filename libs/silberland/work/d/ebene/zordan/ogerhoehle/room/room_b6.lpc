@@ -1,0 +1,217 @@
+
+#define ANZ 4
+#include <properties.h>
+#include <language.h>
+#include <bank.h>
+#include "../def.h"
+
+inherit "/std/room";
+
+mixed *all,all2;
+object shop;
+int sum;
+int store_percent_left;
+
+_set_store_percent_left() {
+  store_percent_left=ZENTRALBANK->_query_store_percent_left();
+}
+
+_register_shop(ob) {
+  shop=ob;
+}
+
+create() {
+  ::create();
+  seteuid(getuid());
+  _set_store_percent_left();
+  
+  SetProp( P_INT_SHORT, "Ein ogerischer Vorratsraum" );
+  SetProp( P_INT_LONG,
+    "Du bist im Vorratsraum von Orgens Laden. Hier sammelt er alle seine "
+    "Sachen. Dass Du in diesem Vorratsraum bist, ist eigentlich illegal. "
+    "Viele Regale und Truhen stehen herum. Die meisten Sachen liegen aber "
+    "einfach auf dem Boden." );
+  SetProp( P_LIGHT, 1 );
+  SetProp( P_INDOORS, 1 );
+  SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE: 25, ENV_TERRAIN: TT_CAVE]) );
+
+  AddDetail( ({ "lager","vorratsraum","raum" }), QueryProp(P_INT_LONG));
+
+  AddDetail( ({ "orgen" }),
+    "Der steht doch vielleicht in seinem Laden im Norden.");
+
+  AddDetail( ({ "laden" }),
+    "Der eigentliche Laden ist im Norden. Du kommst doch von dort.");
+
+  AddDetail( ({ "sachen" }),
+    "Viele Sachen liegen herum. Schau Dich einfach nur um.");
+
+  AddDetail( ({ "regal","regale" }),
+    "Die Regale sind angehaeuft mit vielen Sachen.");
+
+  AddDetail( ({ "truhen" }),
+    "Viele der Truhen sind entweder leer oder fest verschlossen. Keine sieht "
+    "auch nur annaehernd danach aus, als das man sie oeffnen koennte!");
+
+  AddDetail( ({ "truhe" }),
+    "Eine kleine Truhe faellt Dir auf. Aber als Du sie oeffnest stellst Du "
+    "fest, dass sie einfach leer ist.");
+
+  AddDetail( ({ "boden" }),
+    "Auf dem Boden liegen alle Sachen von Orgen. Der Boden selber besteht "
+    "aus normalen Holzlatten.");
+
+  AddDetail( ({ "holz" }),
+    "Das ist wohl Holz aus den nahen Waeldern.");
+
+  AddDetail( ({ "wald","waelder" }),
+    "Da musst Du schon raus aus der Hoehle gehen.");
+
+  AddDetail( ({ "hoehle" }),
+    "Du befindest Dich mitten in ihr.");
+
+  AddDetail( ({ "holzlatten","latten" }),
+    "Die Holzlatten schuetzen die Sachen vor Schmutz.");
+
+  AddDetail( ({ "schmutz" }),
+    "Es ist hier nicht sehr schmutizg. Es liegt aber dennoch hier und da ein "
+    "wenig Staub herum.");
+
+  AddDetail( ({ "staub" }),
+    "Ganz normaler Staub.");
+
+  AddDetail( ({ "wand","waende" }),
+    "Der Vorratsraum wurde einfach in das Erdreich gegraben. Daher gibt "
+    "es hier keine richtigen Waende.");
+
+  AddDetail( ({ "erde" }),
+    "Die Waende und die Decke bestehen daraus.");
+
+  AddDetail( ({ "decke" }),
+    "Du kannst nichts an der Decke erkennen. Sie ist einfach nur pechschwarz.");
+
+  AddDetail( ({ "erdreich" }),
+    "Die Hoehle ist mitten ins Erdreich gegraben worden.");
+
+  AddSound( DEFAULT_SOUND,
+    "Du kannst hier gar nichts hoeren.");
+    
+  AddSmell( DEFAULT_SMELL,
+    "Es riecht wie Du vermutet hast nach einem verstaubten Lager.");
+
+  AddSmell( "lafer",
+    "Das Lager riecht sehr staubig.");
+
+  AddExit( "norden", "./room_b5" );
+
+//  AddCmd( ({ "leg","lege","wirf","werf","werfe","zeig","zeige",
+//             "lass","lasse","steck","stecke","geb","gebe","gib" }) , "nofkt");
+             
+  AddItem("/obj/fackel",                           REFRESH_REMOVE);
+  AddItem("/obj/seil",                             REFRESH_REMOVE);
+  AddItem("/d/ebene/zordan/grimow/obj/holzmesser", REFRESH_REMOVE);
+  AddItem("/obj/schaufel",                         REFRESH_REMOVE);
+  AddItem("/obj/stempel",                          REFRESH_REMOVE);
+  AddItem("/obj/thermometer",                      REFRESH_REMOVE);
+  
+  AddItem( NPC "waechter" , REFRESH_DESTRUCT);
+  AddItem( NPC "waechter" , REFRESH_DESTRUCT);
+  AddItem( NPC "waechter" , REFRESH_DESTRUCT);
+}
+
+void clean_double() {}
+
+void reset() {
+  ::reset();
+  _set_store_percent_left();
+  all=all_inventory(this_object());
+  if (sizeof(all)==0) {
+    all=0;
+    return;
+  }
+  all2=order_alist(({({}),({})}));
+  call_out("aufraeumen",5+random(10));
+  if (sum)
+    if (!shop)
+      ZENTRALBANK->PayIn(sum);
+    else
+      shop->_add_money(sum);
+  sum=0;
+} 
+
+aufraeumen() {
+  int i;
+  int size;
+  mixed element,got;
+
+  i=30;
+  if (!all)             // if somehow (?) aufraeumen() is called with all==0 // anatol, 2012-10-09.
+      return;
+  all -= ({ 0 });       // remove gone objects // woody, 2007-05-23
+  size=sizeof(all);
+  if (i>=size) 
+    i=size-1;
+  while (i>0)
+  {
+    element=explode(file_name(all[size-1-i]),"/")[0];
+    if (element=="players"||element=="d")
+      element=explode(file_name(all[size-1-i]),"#")[0];
+    else
+      element=all[size-1-i]->short()+explode(file_name(all[size-1-i]),"#")[0];
+    got=assoc(element,all2);
+    if (pointerp(got))
+    {
+      if (got[1]<ANZ-1) 
+      {
+	got[1]++;
+	all2=insert_alist(element,got,all2);
+      } else 
+      {
+	sum+=all[size-1-i]->QueryProp(P_VALUE)*store_percent_left/100;
+	catch(all[size-1-i]->remove());
+	if (all[size-1-i])
+	  destruct(all[size-1-i]);
+      }
+    } else all2=insert_alist(element,({all[size-1-i],1}),all2);
+    i--;
+  }
+  if (size<31)
+    all=({});
+  else
+    all=all[0..size-31];
+  if (!sizeof(all))
+  {
+    all=0;
+    all2=0;
+  } 
+  else
+    call_out("aufraeumen",0);
+} 
+
+int clean_up(int refcount) { return 1; }
+
+int _query_current_money() {
+  return sum;
+}
+
+int nofkt(string str) {
+  write(BS("Das geht hier nicht ( Anm. von Zordan )!!!"));
+  return 1;
+}
+
+varargs int PreventInsert(object ob) {
+  if (ob->id("geld")) return 1;
+  return ::PreventInsert(ob);
+}
+
+varargs int PreventLeave(object ob, mixed dest) {
+  object wa;
+
+  if(living(ob)) return ::PreventLeave(ob,dest);
+  if(ENV(dest) != ME && ENV(dest) != TP) return ::PreventLeave(ob,dest);
+  if(wa=present("ladenwaechter",ME)) {
+    if(TP) wa->Kill(TP);
+    return 1;
+  }
+  return ::PreventLeave(ob,dest);
+}

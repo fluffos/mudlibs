@@ -1,0 +1,254 @@
+/*
+ * Fluch der Mumie
+ *
+ * Anwendungsgebiet:
+ * kampf gegen mehrere gegner - einzelne Gegner verschwinden so 
+ * kurzzeitig aus dem kampfgeschehen 
+ * Beschraenkung auf maximal 1 Sarg gleichzeitig
+ *
+ * living/corpse:
+ * Erzeugt einen schwarzen Nebel, der das Ziel umgibt, daraus schiessen
+ * Bandagen vor, die das Ziel umwickeln und letztendlich bildet sich
+ * ein Sarg um das Ziel - das Ziel wird in den Sarg gemoved
+ * living:
+ * Das lebende Ziel befreit sich nach und nach von den Bandagen/Sarg
+ * Von aussen sind zunaechst dumpfe Toene spaeter krachende Toene zu
+ * hoeren, dann splittert der Sarg und bricht letztendlich auf - nachdem
+ * der Zauber gebrochen ist, verschwindet alles (Sarg, Bandagen)
+ * in schwarzem Rauch
+ * corpse:
+ * Ziel wird zerstoert, die Sachen landen im Sarg
+ * Mit dem Zauber 'anrufung des kharr-zzteth' kann man eine Mumie aus
+ * dem Sarg auferstehen lassen
+ *
+ * Beschraenkungen der Anwendung:
+ * corpse: keine
+ * living: Size des livings 50-300
+ *         Level des livings < casterlevel + 15
+ *         Level > 50
+ *         P_NOMAGIC des livings < random(101)
+ *         Schutzprop im livings nicht gesetzt (id NO_MUMMY)
+ *         class im living nicht swimming, drache, daemon
+ *         environment des livings: nicht mehr als 1 sarg
+ *         environmentstyp des livings: nicht TT_UNDERWATER, TT_WATER
+ *         environment -> npc_id == guard_exit_id
+ *         interactiv vs interactiv
+ * 
+ * Kosten: 80 MP
+ * Dauer: 10-20 sec
+ * Delay: 6 sec
+ * Level : 7 
+ * Objekte: /gilden/nekromanten/obj/sarg (unterschiedliche Props living
+ *                                        vs corpse)
+ * sarg ist ein behaelter, man kann diesen nicht oeffnen,
+ * sarg loest sich nach einer zeit auf
+ *
+ * Spruch kann nicht durch Skillpunkte verbessert werden!
+ *
+ * Status: anschlussreif
+ * 26.2.2004 Feyaria Bugfix wenn es kein skill-arg gibt
+ * 27.2.2004 Feyaria clone_properties() aufrufen bei leichen
+ *
+ */
+
+mixed fluch_der_mumie_find_victim(object caster, mapping sinfo, int silent)
+{
+  object victim;
+  mapping env,exits;
+  mixed exits_str,help,guard_id;
+  int i;
+
+  victim=FindVictim(sinfo[SI_SKILLARG],caster,0);
+  if(!victim) 
+  {
+    if (!silent) 
+      write("Wen willst Du mit dem Fluch der Mumie strafen?\n");
+    return 0;
+  }
+  if(!victim->id("Leiche")) //es ist keine Leiche - also test ob es lebt!
+    victim=FindLivingVictim(sinfo[SI_SKILLARG],caster);
+  if(!victim) 
+  {
+    if (!silent) 
+      write("Wen willst Du mit dem Fluch der Mumie strafen?\n");
+    return 0;
+  }
+//beschrenkungen testen
+  if(victim->id("Leiche"))
+  {
+    if (!is_humanoid(victim->QueryProp(P_RACE)))
+    {
+      write("Die Koerperform dieser Leiche passt nicht in einen Sarg!\n");
+      return 0;
+    }
+    return victim;
+  }
+  if (victim->QueryProp(P_SIZE)>300)
+  {
+    if (!silent)
+      write(BSC(victim->Name(WER,1)+" ist viel zu gross, um in "
+      "einen Sarg zu passen."));
+    return 0;
+  }
+  if (victim->QueryProp(P_SIZE)<50)
+  {
+    if (!silent)
+      write(BSC(victim->Name(WER,1)+" ist viel zu klein, um "
+      "erfasst zu werden."));
+    return 0;
+  }
+  if (victim->QueryProp(P_LEVEL) > 3*caster->QueryProp(P_LEVEL)/5 ||
+      victim->QueryProp(P_LEVEL) > 40 )
+  {
+    if (!silent)
+      write(BSC(victim->Name(WER,1)+" laesst sich von Dir noch "
+       "nicht durch diesen Spruch beeinflussen."));
+    return 0;
+  }
+  env=environment(victim)->QueryProp(P_ENVIRONMENT);
+  if (mappingp(env) && 
+      (env[ENV_TERRAIN]==TT_WATER || env[ENV_TERRAIN]==TT_UNDERWATER))
+  {
+    if (!silent)
+      write("Hier kann der Spruch nicht wirken.\n");
+    return 0;
+  }
+  if (present(NEKRO_SARG,environment(victim)))
+  {
+    if (!silent)
+      write("Hier ist schon ein Sarg!\n");
+    return 0;
+  }
+  if (victim->is_class_member(({CL_DEMON,CL_DRAGON,CL_SWIMMING,CL_FLYING})) ||
+      victim->id("NO_MUMMY"))
+  {
+    if (!silent)
+      write(BS("Auf "+victim->name(WEN,1)+" kannst Du den Spruch "
+                    "nicht anwenden."));
+    return 0;
+  }
+  if (victim->QueryProp(P_LEVEL) >= 50)
+  {
+    if (!silent)
+      write(BSC(victim->Name(WER,1) + " ist zu maechtig um in einen Sarg "
+          "eingesperrt zu werden."));
+    return 0;  
+  }
+  if (query_once_interactive(caster) && query_once_interactive(victim))
+  {
+    if (!silent)
+      write("Du darfst keinen anderen Spieler angreifen.\n");
+    return 0;
+  }
+  exits=environment(victim)->QueryProp(P_NEW_EXITS);
+  if (mappingp(exits))
+  {
+    exits_str=m_indices(exits); 
+    for (i=sizeof(exits_str);i--;)
+    {
+      help=exits[exits_str[i]];
+      if (!mappingp(help)) continue;
+      guard_id=help[EXG_ID];
+      if (!stringp(guard_id)) continue;
+      if (victim->id(guard_id))
+      { //unser victim guarded die exit
+       if (!silent)
+        write(BSC(victim->Name(WER,1)+" laesst sich von Dir noch "
+         "nicht durch diesen Spruch beeinflussen."));
+       return 0;
+      }
+    }
+  }
+  return victim;
+}
+
+mixed prep_fluch_der_mumie(object caster, mapping sinfo)
+{
+  object victim;
+
+  victim=fluch_der_mumie_find_victim(caster,sinfo,0);
+  if (!victim) return 0;
+
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }                             
+  sinfo[SI_ENEMY]=victim;
+  return sinfo;
+}
+
+int fluch_der_mumie(object caster, mapping sinfo) 
+{
+  object victim,ob;
+  int leiche;
+  string str;
+
+  leiche=0;
+  victim=sinfo[SI_ENEMY];
+  str=sinfo[SI_SKILLARG];
+  if (!present_victim(victim,caster) || !objectp(victim=fluch_der_mumie_find_victim(caster,sinfo,1)))
+  {
+    write(BSC(sprintf("%s! '%s' ist nicht mehr hier! Wie kann man nur "
+            "so versagen?!", caster->QueryProp(P_GENDER)==FEMALE?
+            "NAERRIN":"NARR",CAP(str || "Dein Opfer"))));
+    return 0;
+  }
+  if(victim->id("Leiche"))
+    leiche=1;
+
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  if (SpellSuccess(caster,sinfo)<=0)
+    return MISSERFOLG;
+
+  say(BS(caster->Name(WER,1)+" deutet auf "+victim->name(WEN,1)+" und murmelt "
+        "dabei ein paar unverstaendliche Worte."),({victim,caster}));
+  write(BS("Du deutest auf "+victim->name(WEN,1)+" und murmelst leise: "
+        "Xas'so f'hs! Dnoc l'lixos Xas dio!"));
+  tell_object(victim,BS("Ploetzlich deutet "+caster->name(WER,1)+" auf Dich "
+    "und murmelt dabei unverstaendliche Worte."));
+  if ((!leiche && victim->QueryProp(P_NOMAGIC)>random(101)) || 
+      victim->QueryProp(P_NO_NEKRO_MUMMY))
+  { //bei leichen p_nomagic nicht testen
+    tell_room(environment(caster),BS(
+      "Ploetzlich wird "+victim->name(WER,1)+" von einer schwarzen Wolke "
+      "umgeben. Kaum beruehrt sie "+victim->name(WEN,1)+" faellt sie in "
+      "sich zusammen."),({victim}));
+    tell_object(victim,BS(
+      "Ploetzlich bist Du von einer schwarzen Wolke umgeben, doch kaum "
+      "beruehrt sie Dich, faellt sie auch schon wieder in sich zusammen, "
+      "ohne Dir irgendwie zu schaden."));
+    return ERFOLG;
+  }
+  ob=clone_object(ROOM "sarg");
+  ob->move(environment(caster),M_SILENT|M_NOCHECK);
+  if (leiche)
+  {
+    tell_room(environment(caster),break_string(
+      "Ploetzlich wird "+victim->name(WER,1)+" von einer schwarzen Wolke umgeben, "
+      "Bandagen legen sich fest um "+victim->QueryPronoun(WEN)+" und "
+      +victim->name(WER,1)+" wird in einen Sarg gezogen."));
+    victim->move(ob,M_SILENT|M_NOCHECK);
+    ob->SetupLeichenSarg();
+    clone_properties(ob,victim);
+    ob->SetProp(P_SHORT, "Ein Sarg");
+    ob->SetProp(P_NAME, "Sarg");
+    ob->SetProp(P_GENDER, MALE);
+    ob->SetProp(P_TRANSPARENT, 0);
+    victim->remove(1);
+  }
+  else
+  {
+    victim->Kill(caster);
+    caster->Kill(victim);
+    ob->StartSequence(victim);
+  }
+  UseBlood(2);
+  return ERFOLG;
+}

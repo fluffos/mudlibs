@@ -1,0 +1,442 @@
+/*-----------------------------------------------------------------------------\
+| Waymaster v0.3                                       (C) by Hotaru, 04.07.01 |
+\-----------------------------------------------------------------------------*/
+
+#include <properties.h>
+#include <language.h>
+#include <defines.h>
+#include <moredef.h>
+
+#define WAYMASTER_FILE "/d/ebene/hotaru/master/mastermap"
+#define CutDotC(arg) (arg[<2..] == ".lpc" ? arg[0..<3] : arg)
+
+mixed GetAreaRooms(string area);
+mixed GetAreaMembers(string area);
+varargs void SaveMap(int savenow);
+
+private mapping roommap, roomalis, areas;
+
+// === Functions that can be called from outside ============================ \\
+
+// Finds the way from one room on the map to another and returns the directions
+// in an array. On error, it returns -1, -2 or -3.
+//   -1: startroom was not found on map
+//   -2: targetroom was not found on map
+//   -3: way from startroom to targetroom could not be found
+// The parameter "specialexits" is optional and can receive an array of all
+// accepted special exit IDs, i.e. ({"command","elevator"}).
+varargs mixed FindWay(string startroom, string targetroom, string *specialexits)
+{
+  string *names, *way, *sexits, curroom, exitID, dummy;
+  mapping done;
+  mixed *look;
+  int lookpos;
+  int i, foundit;
+
+  // done is a mapping "room name":"exit to the direction of startroom"
+  done = ([  ]);
+  // look is an array of arrays ({"room name", "exit"})
+  look = ({ ({startroom, ""}) });
+
+  // Translate aliases in targetroom to room names
+  if (member(roomalis, targetroom)) targetroom = roomalis[targetroom];
+  // Check if start and target room are known
+  if (!member(roommap, startroom))  return -1;
+  if (!member(roommap, targetroom)) return -2;
+  if (!specialexits) {
+    sexits = ({ });
+  } else {
+    sexits = specialexits;
+  }
+
+  lookpos = 0;
+  foundit = 0;
+  while (lookpos < sizeof(look)) {
+    // Add room with smallest distance from startroom to "done"
+    done += ([ look[lookpos][0]:look[lookpos][1] ]);
+    // Get exits of this room
+    names = m_indices(roommap[look[lookpos][0]]);
+    for (i=0;i<sizeof(names);i++) {
+      // is exit leading to a known room and was the room not yet checked?
+      if ((!member(done, names[i])) && (member(roommap, names[i]))) {
+        // Check if it's a special exit, and if yes, if we are allowed to use it
+        if ((sscanf(roommap[look[lookpos][0]][names[i]],
+             "@%s:%s", exitID, dummy) != 2) || (member(sexits, exitID) != -1)) {
+          // is exit target room?
+          if (names[i] == targetroom) {
+            foundit = 1;
+            done += ([ names[i]:look[lookpos][0] ]);
+            break;
+          }
+          // Add exits to "look" if not already in "done"
+          look += ({ ({names[i], look[lookpos][0]}) });
+        }
+      }
+    }
+    if (foundit) break;
+    lookpos++;
+  }
+  // Couldn't reach room :(
+  if (!member(done, targetroom)) return -3;
+
+  // Save path to room
+  way = ({ });
+  curroom = targetroom;
+  while (curroom != startroom) {
+    //way = ({done[curroom] + "->" + curroom}) + way;
+    way = ({roommap[done[curroom]][curroom]}) + way;
+    curroom = done[curroom];
+  }
+  // Success! :)
+  return way;
+}
+
+// Same as FindWay, but receives an array of area names as target. The routine
+// searches for the way to the nearest room that lies in at least one of the
+// given areas.
+// On success, it returns the name of the chosen target room and then the way
+// to this room in a string array.
+// On error, it returns -1, -2 or -3.
+//   -1: startroom was not found on map
+//   -2: no matching target rooms were found on map
+//   -3: way from startroom to one of the targetareas could not be found
+//   -4: startroom is already in one of the targetareas!
+varargs mixed FindWayToArea(string startroom, mixed targetareas, string *specialexits)
+{
+  string *names, *way, *sexits, curroom, exitID, dummy;
+  string *targetarr, *targetrooms, targetroom;
+  mapping done, noadd;
+  mixed *look;
+  int lookpos;
+  int i;
+
+  // done is a mapping "room name":"exit to the direction of startroom"
+  done  = ([ ]);
+  // noadd is a mapping of room names that have already been added to "look"
+  noadd = ([ ]);
+  // look is an array of arrays ({"room name", "exit"})
+  look  = ({ ({startroom, ""}) });
+
+  // Check if start room is known
+  if (!member(roommap, startroom))  return -1;
+  // Find all rooms in target area
+  targetarr = ({ });
+  if (!targetareas) return -2;
+  if (stringp(targetareas)) targetarr += ({ targetareas });
+  if (pointerp(targetareas)) targetarr += targetareas;
+  if (!sizeof(targetarr)) return -2;
+  targetrooms = ({ });
+  for(i=0;i<sizeof(targetarr);i++) {
+    targetrooms += (GetAreaRooms(targetarr[i]) - targetrooms);
+  }
+  // Check if any target rooms were found
+  if (!sizeof(targetrooms)) return -2;
+  // is startroom already one of the target rooms?
+  if (member(targetrooms,startroom) != -1) return -4;
+  if (!specialexits) {
+    sexits = ({ });
+  } else {
+    sexits = specialexits;
+  }
+
+  targetroom = "";
+  lookpos = 0;
+  while (lookpos < sizeof(look)) {
+    // Add room with smallest distance from startroom to "done"
+    done += ([ look[lookpos][0]:look[lookpos][1] ]);
+    //write(look[lookpos][0] + "\n");
+    // Get exits of this room
+    names = m_indices(roommap[look[lookpos][0]]);
+    for (i=0;i<sizeof(names);i++) {
+      // Is exit leading to a known room and was the room not yet checked?
+      if ((!member(noadd, names[i])) &&
+          (!member(done, names[i])) &&
+          (member(roommap, names[i]))) {
+        // Check if it's a special exit, and if yes, if we are allowed to use it
+        if ((sscanf(roommap[look[lookpos][0]][names[i]],
+             "@%s:%s", exitID, dummy) != 2) || (member(sexits, exitID) != -1)) {
+          // Is exit in target rooms?
+          if (member(targetrooms,names[i]) != -1) {
+            done += ([ names[i]:look[lookpos][0] ]);
+            targetroom = names[i];
+            break;
+          }
+          //write(look[lookpos][0] + " -> " + names[i] + "\n");
+          // Add exit to "noadd" and "look"
+          noadd += ([ names[i] ]);
+          look  += ({ ({names[i], look[lookpos][0]}) });
+        }
+      }
+    }
+    if (targetroom != "") break;
+    lookpos++;
+  }
+  // Couldn't reach room :(
+  if (!member(done, targetroom)) return -3;
+
+  // Save path to room
+  way = ({ });
+  curroom = targetroom;
+  while (curroom != startroom) {
+    //way = ({done[curroom] + "->" + curroom}) + way;
+    way = ({roommap[done[curroom]][curroom]}) + way;
+    curroom = done[curroom];
+  }
+  // Success! :)
+  return ({ targetroom }) + way;
+}
+
+// Adds a new room to the map.
+// Returns 1 on success or 0 on error (i.e. if room was already mapped)
+int AddRoom(object env)
+{
+  mapping map, newmap;
+  string roomname, *exits, *names;
+  int i;
+
+  if (!env) return 0;
+  roomname = file_name(env);
+
+  // Query exits
+  map = env->QueryProp(P_EXITS);
+  if (!map) map = ([ ]);
+  newmap = ([ ]);
+  exits = m_indices(map);
+  names = m_values(map);
+  // Remove '.c' if found and add exits to mapping
+  for (i=0;i<sizeof(exits);i++) {
+    newmap += ([ CutDotC(names[i]):exits[i] ]);
+  }
+  // Room is already in map
+  if (member(roommap, roomname)) {
+    map = roommap[roomname];
+    // Did we add special exits to this room?
+    if (sizeof(regexp(m_values(map), "^@")) > 0) return 0;
+    // No, check if standard exits have changed
+    if (implode(sort_array(m_indices(newmap) + m_values(newmap), #'>),"|") ==
+        implode(sort_array(m_indices(map) + m_values(map), #'>),"|")) {
+      return 0;
+    }
+  }
+  // (Re-)add room to map
+  roommap += ([ roomname:newmap ]);
+  SaveMap();
+  return 1;
+}
+
+// Adds a new alias to the map or changes an existing alias.
+int AddRoomAlias(string roomname, string roomali)
+{
+  if (!member(roommap, roomname)) return 0;
+  roomalis += ([ roomali:roomname ]);
+  SaveMap();
+  return 1;
+}
+
+// Removes a room alias from the map.
+int RemoveRoomAlias(string roomali)
+{
+  if (!member(roomalis, roomali)) return 0;
+  roomalis -= ([ roomali ]);
+  SaveMap();
+  return 1;
+}
+
+// Returns 1 if a given room is on the map or 0 if not.
+int IsRoomMapped(string roomname)
+{
+  return member(roommap, roomname);
+}
+
+// Returns the mapping roommap. Shouldn't be used if not really necessary.
+// Don't modify it outside because changes are not guaranteed to get saved!
+mapping GetRoomMap() {
+  return roommap;
+}
+
+// Returns an array with the names of all matching rooms
+// Example: QueryMap("/d/polar/.*");
+mixed QueryMap(string str) {
+  return regexp(m_indices(roommap), "^" + str + "\$");
+}
+
+// Deletes all rooms matching a certain pattern
+// Example: DeleteMatchingRooms("/d/polar/.*");
+int DeleteMatchingRooms(string str) {
+  int roomcount;
+  roomcount = sizeof(regexp(m_indices(roommap), "^" + str + "\$"));
+  roommap -= mkmapping(regexp(m_indices(roommap), "^" + str + "\$"));
+  SaveMap();
+  return roomcount;
+}
+
+/* Adds a special exit to the map. Exits that do not appear in P_EXITS can be
+   added this way.
+
+   The parameter "exitstring" should have the following form: @<id>:<command>
+
+   The <id> is an identifier which NPCs can use to differentiate all types of
+   special exits, for example cars, elevators, or just hidden commands. For
+   simple commands without the need of special NPC behaviour, use the
+   identifier "command":
+     @command:climb on rock
+     In this case, the NPC would just have to send the command "climb on rock"
+     to the MUD and could continue its path immediately.
+
+   For other types of exits where an NPC has to wait for things to happen, has
+   to say something to the person he's guiding or whatever, choose your own
+   identifier. I've chosen "elevator" in my example:
+     @elevator:travel with elevator to floor 2
+     Here the NPC would have to wait for the elevator to arrive, go inside,
+     wait for the elevator to arrive at the second floor and continue its path
+     then. You have to implement everything yourself, of course.
+
+   To handle special exits in your NPCs, use something like this:
+     if (sscanf(way[0], "@%s:%s", exittype, exitcmd) == 2) {
+       // Special exit
+       switch (exittype) {
+         // Command-only exit type
+         case "command":
+           command(exitcmd);
+           break;
+         [...]
+         // Unknown exit type
+         default:
+           say("I don't know how to handle this exit: " + way[0] + "\n");
+           break;
+       }
+     } else {
+       // Default exit
+       command(way[0]);
+     }
+*/
+int AddSpecialExit(string from, string to, string exitstring)
+{
+  if (!member(roommap, from)) return 0;
+  if (!member(roommap, to)) return 0;
+  roommap[from] += ([ to:exitstring ]);
+  SaveMap();
+  return 1;
+}
+
+int RemoveSpecialExit(string from, string to)
+{
+  if (!member(roommap, from)) return 0;
+  if (!member(roommap, to)) return 0;
+  if (!member(roommap[from], to)) return 0;
+  roommap[from] -= ([ to ]);
+  SaveMap();
+  return 1;
+}
+
+// Adds a specified room (or pattern) to an area. Automatically creates a new
+// area if necessary.
+// Example: AddRoomToArea("/d/ebene/Midas/.*", "midas")
+int AddRoomToArea(string room, string area)
+{
+  // Check if any rooms match the given pattern
+  if (!sizeof(regexp(m_indices(roommap), "^" + room + "\$"))) return 0;
+  // Check if area is already existing
+  if (!member(areas, area)) {
+    // Create new area
+    areas += ([ area:({room}) ]);
+  } else {
+    // Remove rooms matching the room (pattern) to add
+    areas[area] -= regexp(areas[area], "^" + room + "\$");
+    // Add room (pattern) to area
+    areas[area] += ({ room });
+  }
+  SaveMap();
+  return 1;
+}
+
+// Removes a specified room (or pattern) from an area
+int RemoveRoomFromArea(string room, string area)
+{
+  // Check if area is existing
+  if (!member(areas, area)) return 0;
+  // Check if room (pattern) is a member of the area
+  if (member(areas[area], room) == -1) return 0;
+  // Remove room (pattern) from area
+  areas[area] -= ({ room });
+  // Remove whole area if no rooms are left
+  if (!sizeof(areas[area])) areas -= ([ area ]);
+  SaveMap();
+  return 1;
+}
+
+// Returns an array with the names of all areas the given room is in.
+// If none, it returns ({ }).
+// Example:
+//   It could return ({"midas","menschen","gilden"}) for "/gilden/abenteurer"
+//   to indicate that the given room is in Midas, that it's in the area for the
+//   human race and that it's a guild.
+mixed GetRoomAreas(string room)
+{
+  string *names, *areanames;
+  int i,u;
+  // Translate aliases to room names
+  if (member(roomalis, room)) room = roomalis[room];
+  areanames = ({ });
+  names = m_indices(areas);
+  for(i=0;i<sizeof(names);i++) {
+    for(u=0;u<sizeof(areas[names[i]]);u++) {
+      if (sizeof(regexp(({room}), "^" + areas[names[i]][u] + "\$"))) {
+        areanames += ({ names[i] });
+      }
+    }
+  }
+  return areanames;
+}
+
+// Returns all rooms matching a given area
+mixed GetAreaRooms(string area)
+{
+  string *names, *matching;
+  int i,u;
+  // Check if area is existing
+  if (!member(areas, area)) return ({ });
+  names = m_indices(roommap);
+  matching = ({ });
+  for(i=0;i<sizeof(areas[area]);i++) {
+    matching += (regexp(names, "^" + areas[area][i] + "\$") - matching);
+  }
+  return matching;
+}
+
+// Returns an array of all room patterns in a given area
+mixed GetAreaMembers(string area)
+{
+  // Check if area is existing
+  if (!member(areas, area)) return ({ });
+  return areas[area];
+}
+
+// === Internal stuff ======================================================= \\
+
+void create()
+{
+  // Don't allow master to be cloned
+  if (is_clone(this_object())) { destruct(this_object()); return; }
+
+  seteuid(getuid());
+
+  // Roommap initialisieren
+  if (!restore_object(WAYMASTER_FILE)) {
+    roommap = ([ ]);
+    roomalis = ([ ]);
+    areas = ([ ]);
+  }
+}
+
+// Saves the map - just call it with "SaveMap()", it internally manages not to
+// save the map too often in sequence. Minimum delay between saves is 60 secs.
+varargs void SaveMap(int savenow)
+{
+  if (!savenow) {
+    // Only call_out if no other SaveMap call_out was found
+    if (find_call_out("SaveMap")==-1) call_out("SaveMap", 60, 1);
+    return;
+  }
+  save_object(WAYMASTER_FILE);
+}

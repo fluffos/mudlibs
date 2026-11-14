@@ -1,0 +1,257 @@
+// Schattenportalschriftrolle
+// Schattenwelt
+// Wraz / Mendralim
+
+#include "../def.h"
+
+inherit "std/thing";
+
+object current_reader;
+object reading_start_room;
+int sequence_full_time = 20;
+int i_seq = 0;
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Eine Schattenportalschriftrolle");
+  SetProp(P_LONG,
+    "Diese Schriftrolle ist voller seltsamer Schriftzeichen. Aber aus irgendeinem Grund "
+    "bist Du Dir ganz sicher genau zu wissen, wie Du sie lesen und aktivieren kannst.");
+  
+  AddDetail(({"schriftzeichen","zeichen","schrift"}),
+    "Du verstehst die Schriftzeichen nicht, aber Du bist Dir ganz sicher, dass Du sie "
+    "lesen und aktivieren kannst.");
+
+  SetProp(P_INFO, BS("Die Schriftrolle kann nur an einem Ort, der den Schatten nahe ist, "
+    "erfolgreich ein Portal zur Schattenwelt eroeffnen."));
+  SetProp(P_NAME, "Schattenportalschriftrolle");
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({"schattenportalschriftrolle","schattenschriftrolle","portalschriftrolle",
+    "schriftrolle","rolle","portalrolle","schattenportalrolle"}) );
+
+  SetProp(P_MATERIAL, ([MAT_SHADOW:1, MAT_MISC_MAGIC: 2, MAT_INK: 1, MAT_PERGAMENT:96]) );
+  SetProp(P_WEIGHT, 50);
+  SetProp(P_SIZE, 35);
+  SetProp(P_VALUE, 9000);
+  SetProp(P_MAGIC, 1);
+
+  AddCmd( ({"lies","lese"}), "CmdLesen");
+}
+
+varargs void StopReading(object pl) // StopSequence -----------------------------------------------
+{
+  SetProp(P_NODROP, 0);
+  SetProp(P_NEVERDROP, 0);
+  current_reader = 0;
+  if(pl) pl->SetProp("schattenportalschriftrolle_last_start",0);
+}
+
+varargs void ReadSequence(object pl) // ReadSequence -----------------------------------------------
+{
+  string message_room;
+  string message_pl;
+  string voice_text;
+  string voice_indent_pl;
+  string voice_indent_room;
+  int i;
+  object room;
+
+  i = 4; // default Sekunden zwischen call_out()
+
+  if(!TO || !ENV(TO) || !ENV(ENV(TO))) return;
+  room = ENV(ENV(TO));
+
+  SetProp(P_NODROP, BS("Du bist zu vertieft in das Lesen der Schriftrolle!"));
+  SetProp(P_NEVERDROP, 1);
+
+  // abbrechen, wenn ENV(TO) != pl (dann hat der spieler die schriftrolle irgendwie "verloren")
+  if(ENV(TO) != pl)
+  {
+    StopReading(pl);
+    return;
+  }
+
+  // abbrechen, wenn room != reading_start_room (dann hat sich der Spieler bewegt)
+  if(room != reading_start_room)
+  {
+    pl->Message(BS("Abgelenkt vom Herumlaufen, brichst Du das Lesen der Schriftrolle ab."));
+    room->Message(BS(pl->Name(WER)+" bricht das Lesen der Schriftrolle ab."),
+      MSGFLAG_SOUND,([ MSGFLAG_EXCLUDE : ({ pl }) ]) );
+    StopReading(pl);
+    return;
+  }
+
+  if(pl->QueryProp(P_BLIND))
+  {
+    pl->Message(BS("Da Du nichts sehen kannst, brichst Du das Lesen der Schriftrolle ab."));
+      room->Message(BS(pl->Name(WER)+" scheint blind zu sein und bricht das 'Lesen' der Schriftrolle ab."),
+        MSGFLAG_SOUND,([ MSGFLAG_EXCLUDE : ({ pl }) ]) );
+    StopReading(pl);
+    return;
+  }
+
+  if(pl->InFight())
+  {
+    pl->Message(BS("Der Kampf lenkt Dich zu sehr vom Lesen der Schriftrolle ab, Du brichst ab."));
+    room->Message(BS(pl->Name(WER)+" bricht das Lesen der Schriftrolle aufgrund des Kampfes ab."),
+      MSGFLAG_SOUND,([ MSGFLAG_EXCLUDE : ({ pl }) ]) );
+    i_seq = 0;
+    StopReading(pl);
+    return;
+  }
+
+  switch (i_seq)
+  {
+    case 0:
+      message_room = pl->Name()+" beginnt, von einer Schriftrolle zu lesen.";
+      message_pl = "Du beginnst von der Schriftrolle zu lesen.";
+    break;
+
+    case 1:
+      voice_text = "Inziselio numaga ene Portas ombrer begus bidi Rek!";
+      voice_indent_pl = "Du fluesterst: ";
+      voice_indent_room = pl->Name()+" fluestert: ";
+      i = 6;
+    break;
+
+    case 2:
+      message_room = pl->Name(WESSEN) + " Koerper scheint von magischen Schatten umtanzt.";
+      message_pl = "Du fuehlst, wie sich Dein Koerper mit schattenhafter Magie laedt.";
+    break;
+
+    case 3:
+      voice_text = "Ombra portas avensis ekko atsata no begoras det Nek!";
+      voice_indent_pl = "Du sagst laut: ";
+      voice_indent_room = pl->Name(WER) + " liest laut: ";
+    break;
+
+    case 4:
+      if(strstr(file_name(room),METZELORGIE "room/p0") != -1)
+      // wird eigentlich schon bei Lesebeginn ueberprueft, aber sicher ist sicher
+      {
+        message_room = "Inmitten des Raumes formt sich eine "
+        "trollgrosse Saeule, die zu schimmern beginnt. Es sieht aus wie ein "
+        "Riss... ein Uebergang zu einer anderen, schattenhaften Welt! Dann erscheint "
+        "ein Avatar von Wraz, mustert Dich kurz und nickt kaum wahrnehmbar. Er spricht "
+        "eine magische Silbe und ist sofort wieder verschwunden.";
+        clone_object(METZELORGIE "obj/portal_schatten")->move(room,2);
+      }
+      else
+      {
+        message_room = "Nichts passiert.";
+      }
+      
+      message_pl = message_room;
+      i=2;
+      break;
+
+    case 5: 
+      message_room = pl->Name()+" beendet das Lesen und die Schriftrolle zerbroeselt zu Staub.";
+      message_pl = "Du beendest das Lesen und die Schriftrolle zerbroeselt zu Staub.";
+      i = 0;
+      break;
+
+    default:
+      i_seq = 0;
+      TO->remove();
+      return;
+      break;
+  }
+  if(voice_text && TO && room) room->Message("\n"+break_string(voice_text,78,voice_indent_room),MSGFLAG_SOUND,
+    ([ MSGFLAG_EXCLUDE : ({ pl }) ]));
+  if(pl && voice_text && TO && room) pl->Message("\n"+break_string(voice_text,78,voice_indent_pl),MSGFLAG_SOUND,
+    ([ MSGFLAG_EXCLUDE : ({ pl }) ]));
+
+  if(pl && message_room && TO && room) room->Message("\n"+BS(message_room),MSGFLAG_VISUAL,
+    ([ MSGFLAG_EXCLUDE : ({ pl }) ]));
+  if(pl && message_pl && TO) pl->Message("\n"+BS(message_pl));
+  i_seq++;
+  if(find_call_out("ReadSequence")==-1) call_out("ReadSequence",i,pl);
+}
+
+int CmdLesen(string str)
+{
+
+  if(!interactive(TP)) return 0;
+  if(!ENV(TO)) return 0;
+  if(!ENV(ENV(TO))) return 0;
+
+  reading_start_room = ENV(ENV(TO));
+
+  if(TP != ENV(TO))
+  {
+    TP->Message(BS("Du musst "+name(WEN)+" schon in die Hand "
+   "nehmen."));
+   return -1;
+  }
+
+  if(str && (member_array(str,({"schriftzeichen","zeichen","schrift"})) >= 0))
+  {
+    write(BS("Mit 'lies schriftrolle' kannst Du die Schriftrolle lesen."));
+    return -1;
+  }
+
+  if(!str || !id(str))
+  {
+    write(BS("Was moechtest Du lesen?"));
+    return -1;
+  }
+
+  if(TP->InFight())
+  {
+    write(BS("Der Kampf lenkt Dich zu sehr ab."));
+    return -1;
+  }
+
+  if(TP->QueryProp(P_GHOST))
+  {
+    write(BS("Dein koerperloser Geist kann die Schriftzeichen der Schriftrolle "
+      "nicht erfassen."));
+    return -1;
+  }
+
+  if(TP == current_reader)
+  {
+    write(BS("Du liest doch bereits!"));
+    return -1;
+  }
+
+  if(time() - TP->QueryProp("schattenportalschriftrolle_last_start") < sequence_full_time)
+  {
+    write(BS("Du liest doch bereits eine Schriftrolle!"));
+    return -1;
+  }
+
+  // Nur in Pfad-Raeumen (p0x) lesbar
+  if(ENV(ENV(TO)) && strstr(file_name(ENV(ENV(TO))),METZELORGIE "room/p0") == -1)
+  {
+    write(BS("Du kannst die Schriftrolle nur dort lesen, wo Du den Schatten nahe bist."));
+    return -1;
+  }
+
+  // Lesen starten
+  current_reader = TP;
+  TP->SetProp("schattenportalschriftrolle_last_start",time());
+  ReadSequence(TP);
+  return 1;
+
+}
+
+// ------------------------------------------------------------------------------
+// Reset
+void reset()
+{
+  ::reset();
+  if(!is_clone(TO)) return;
+  
+  // Schriftrolle zerbroeselt nach 1 Jahr
+  if(time() - QueryProp(P_CLONE_TIME) > 31536000)
+  {
+    if(ENV(TO)) ENV(TO)->Message(BS(Name(WER,1)+" zerfaellt zu Staub."));
+    TO->remove();
+  }
+}

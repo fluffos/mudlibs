@@ -1,0 +1,182 @@
+/* 
+ * oktaeder.c - ein hochmagischer Kristalloktaeder, mit dem man als Spieler
+ * bequem Informationen zu Magiern, Regionen und Regionsmagiern abrufen kann.
+ * Der Kristalloktaeder ist ein wenig komfortabler als eine Magierliste der
+ * einfachen Art, das ist der einzige Grund seiner Existenz.
+ * Die Blueprint hat die Sonderfunktion, den Datenbestand zu aktualisieren.
+ *
+ * (c) 1998 Adrian Holzwarth / Anatol@Silberland
+ *
+ * 2012 02 22   "Warum hat das eigentlich", die Zweite. Die Verzeichnisse
+ *              . und .. wurden mitgelesen und loesen einen IooB-Fehler aus.
+ *
+ * 2012 01 23    "Warum hat das eigentlich". Also erstmal von Savefiles auf
+ *               /players umgestellt. Und dann seteuid() an den Anfang des
+ *               create() gestellt, die Blueprint braucht auch die Rechte.
+ *               Warum hat das eigentlich je funktioniert? 
+ *
+ * 2001 02 06    Bugfix in ProcessWizards() - warum hat das eigentlich je
+ *               funktioniert? ;)
+ *
+ */
+
+#pragma strict_types
+#include <properties.h>
+#include "../defines.h"
+#include "/p/daemon/crond/crond.h"
+#define DOMAINTXT "/d/seher/anatol/txt/DOMAINS.txt"
+#define WIZARDTXT "/d/seher/anatol/txt/WIZARDS.txt"
+#define RM 0
+#define MA 1
+#define STEP_SIZE 20   // Urlangsam, aber wen stoerts...
+
+inherit "/std/thing";
+
+private nosave string * todo;
+private nosave mapping wizards;
+private nosave mapping domains;
+
+public void create() {
+  seteuid(getuid(this_object()));
+  if (!is_clone(this_object())) 
+    return;
+  ::create();
+  AddId(({"kristalloktaeder","kristall","oktaeder","oktaeder","SPIELER_TOOL",
+	"a\na\tol_kristalloktaeder"}));
+  SetProp(P_NAME,"Kristalloktaeder");
+  SetProp(P_GENDER,MALE);
+  SetProp(P_SHORT,"Ein Kristalloktaeder");
+  SetProp(P_INFO,break_string(
+      "Dir duenkt, dass man mit 'viso magier' und 'viso regionen' "
+      "das eine oder andere Nuetzliche erfahren koennte, was man aber "
+      "ohnehin in jeder besseren Kneipe lesen kann.",77));
+  SetProp(P_LONG, 
+      "Er funkelt und glitzert geheimnisvoll. Er ist zwar klar, aber nicht "
+      "voellig durchsichtig, was irgendwie nicht ganz zusammen passt. "
+      "Frueher wurden diese Art von Oktaedern als Aufzeichnungsmittel "
+      "wichtiger Dinge verwendet, durch das Zeitalter Der Antimagie "
+      "gerieten die Kristalle jedoch wieder in Vergessenheit.");
+  SetProp(P_SMELL, "Der Oktaeder riecht nach nichts.\n");
+  SetProp(P_SOUND, "Stille.\n");
+  SetProp(P_WEIGHT,300);
+  SetProp(P_SIZE,9);
+  SetProp(P_VALUE,3000);  // GUENSTIG! :o)
+  SetProp(P_MATERIAL,([MAT_CRYSTAL:100,MAT_MAGIC:100]));
+  AddCmd("viso","cmdKW");
+}
+
+nomask nosave int sortWiz(string one, string two) {
+  if ((query_wiz_level(one))!=(query_wiz_level(two)))
+    return ((query_wiz_level(one))>(query_wiz_level(two)));
+  else return one>two;
+}    
+
+nomask nosave void generateFiles() {
+  string *w, *d1, *d2;
+  string t, t2;
+  int i,j, *ii;
+  t="\nDie Magier des Silberlandes\n---------------------------\n";
+  t2="\nDas sind:\n";
+  i=j=0;
+  for(ii=sort_array(m_indices(wizards),#'<);sizeof(ii);ii=ii[1..]) {
+    t+=sprintf("\nMagier der Stufe %d:\n",ii[0]);
+    for (;sizeof(wizards[ii[0]]);wizards[ii[0]]=wizards[ii[0]][1..]) {
+      j++;
+      t+=sprintf("%12s: %s\n",capitalize(wizards[ii[0]][0][0]),
+        (sizeof(wizards[ii[0]][0][1])?
+          implode(map_array((wizards[ii[0]][0][1]),#'upperstring),", "):"")+
+        (((sizeof(d1=wizards[ii[0]][0][2]-wizards[ii[0]][0][1])) &&
+        (sizeof(wizards[ii[0]][0][1])))?", ":"")+
+        (sizeof(d1)?
+        implode(map_array(d1,#'capitalize),", "):""));
+    }
+    t2+=sprintf("%8d Magier der Stufe %d\n",j,ii[0]);
+    i+=j;
+    j=0;
+  }
+  t2+=sprintf("     ----------------------------\n"
+      "%8d Magier gesamt\n\n",i);
+  catch(rm(WIZARDTXT));
+  write_file(WIZARDTXT,t+t2);
+
+  w=sort_array(m_indices(domains),#'<);
+  t="\nDie Regionen des Silberlandes\n-----------------------------\n\n";
+  for (;sizeof(w);w=w[1..])
+    t+=sprintf("%15s: %s\n",capitalize(w[0]),break_string(
+      (sizeof(domains[w[0],RM])?
+        implode(map_array(sort_array(m_indices(domains[w[0],RM]),#'>),
+           #'upperstring),", "):"")+
+       (sizeof(d1=m_indices(domains[w[0],MA])-m_indices(domains[w[0],RM]))
+        && (sizeof(domains[w[0],RM]))?", ":"")+
+      (sizeof(d1)?
+        implode(map_array(sort_array(d1,#'>),
+           #'capitalize),", "):""),
+          77,"                 ",0)[17..]);
+  catch(rm(DOMAINTXT));
+  write_file(DOMAINTXT,t);
+  wizards=([]);
+  domains=([]);
+}
+
+nomask varargs public void ProcessWizards(int flag) {
+  int i;
+  mixed * userinfo; 
+  string * tmparr;
+  string nm;
+
+  //if ((!PO_IS_CRON) && (previous_object()!=this_object())) return;
+  if (is_clone(this_object())) return;
+  if (!flag) {
+    if (sizeof(todo)) return;
+    domains=([]);
+    wizards=([]);
+    todo=({})+get_dir("/players/???*");
+  }  
+  else if (!sizeof(todo)) 
+    return generateFiles();
+  else 
+    for (i=(STEP_SIZE>sizeof(todo)?sizeof(todo):STEP_SIZE);i;i--) {
+      nm=todo[0];
+      if (query_wiz_level(nm)>9) {
+        userinfo=(mixed *)("/secure/master"->get_userinfo(todo[0]));
+        if (!userinfo)
+          raise_error("Shit Happens\n");
+        if (!member(wizards,userinfo[2]))
+          wizards+=([userinfo[2]:({})]);  // Level
+        wizards[userinfo[2]]+=({({nm, sort_array(userinfo[3],#'>),
+            tmparr=sort_array((string*)
+              ("/secure/master"->get_domain_homes(nm)),#'>)})});
+        for (;sizeof(userinfo[3]);userinfo[3]=userinfo[3][1..]) {
+          if (!member(domains,userinfo[3][0])) 
+            domains+=([userinfo[3][0]:([]);([])]);
+          domains[userinfo[3][0],RM]+=([nm]);
+        }
+        for (;sizeof(tmparr);tmparr=tmparr[1..]) {
+          if (!member(domains,tmparr[0])) 
+            domains+=([tmparr[0]:([]);([])]);
+          domains[tmparr[0],MA]+=([nm]);
+        }
+      }
+      todo=todo[1..];
+    }
+  call_out("ProcessWizards",0,1);
+  return;
+}    
+
+nomask nosave int cmdKW(string s){
+  int i;
+   
+  if (!this_player()) return 0;
+  notify_fail("Syntax: viso magier|regionen\n");
+  if ((!s)||(member(({"magier","regionen"}),s)<0)) return 0;
+  notify_fail("Nicht so hastig!\n");
+  if (s=="magier") i=1;
+  if (file_size(i?WIZARDTXT:DOMAINTXT)<=0)
+    write("Der Kristalloktaeder glitzert nur eigenartig.\n");
+  else
+    this_player()->More("Der Kristalloktaeder zeigt Dir die "+
+     (i?"Magier":"Regionen")+ " des Silberlandes.\n"+
+     read_file(i?WIZARDTXT:DOMAINTXT));
+  return 1;
+}
+

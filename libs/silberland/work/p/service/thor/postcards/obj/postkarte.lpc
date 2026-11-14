@@ -1,0 +1,338 @@
+/*********************************
+*  Thor@Silberland               *
+*  Eine Postkarte - postkarte.c  *
+*  1998-09-17                    *
+*********************************/
+
+// 2007-02-25  Woody  Code cleanup, neu: 'motiv <gruppe> alle'
+
+
+#include "../def.h"
+
+inherit "std/thing";
+inherit "mail/nedit";
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+
+
+#define MASKE \
+".-------------------------------------------------------------------------.\n"\
+"|                                            |                            |\n"\
+"|                                            |                            |\n"\
+"|                                            |                            |\n"\
+"|                                            |                            |\n"\
+"|                                            |                            |\n"\
+"|                                            |                            |\n"\
+"|                                            |      An                    |\n"\
+"|                                            |                            |\n"\
+"|                                            |      %-:11s           |\n"\
+"|                                            |                            |\n"\
+"|                                            |      Von                   |\n"\
+"|                                            |                            |\n"\
+"|                                            |      %-:11s           |\n"\
+"|                                            |                            |\n"\
+"|                                            |                            |\n"\
+"|                                            |                            |\n"\
+"`-------------------------------------------------------------------------'\n"
+//12345678901234567890123456789012345678901234|1234567890123456789012345678|
+
+string receiver, motiv, text, sender;
+
+void CreateCard();
+
+create()
+{
+  if (!is_clone(TO) )  return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Eine Postkarte");
+  SetProp(P_LONG,
+    "Dies ist eine magische Postkarte, die Du jemanden schicken "
+    "kannst. Warum die Postkarte magisch ist? Naja, Du kannst Dir ein "
+    "Motiv aussuchen, welches dann auf der Vorderseite erscheint. "
+    "Folgende Befehle sind moeglich: \n"
+    "  <motive>:                  Zeigt an, welche Motivgruppen es gibt.\n"
+    "  <motive 'gruppe'>:         Zeigt die Motive in einer Gruppe an.\n"
+    "  <motiv 'gruppe' 'name'>:   Zeigt das Motiv an.\n"
+    "  <motiv 'gruppe' alle>:     Zeigt alle Motive einer Gruppe an.\n"
+    "  <waehle 'gruppe' 'name'>:  Legt das Motiv fuer die Postkarte fest.\n"
+    "  <empfaenger 'name'>:       Empfaenger der Postkarte.\n"
+    "  <empfaenger>:              Zeigt an, an wen die Karte gerade "
+                                 "adressiert ist.\n"
+    "  <empfaenger loeschen>:     Die Postkarte hat keine Adresse mehr.\n"
+    "  <beschrifte postkarte>:    Das, was Du draufschreiben willst.\n"
+    "  <loesche text>:            Das Textfeld der Postkarte ist wieder leer.\n"
+    "  <unt text>:                Zeigt Dir den Text der Postkarte an.\n");
+  
+  SetProp(P_NAME, "Postkarte");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_MATERIAL, ([MAT_PAPER:90, MAT_MISC_MAGIC:10]));
+  AddId( ({"karte", "postkarte", "\npkarte"}));
+  SetProp(P_INFO, BS("Die Oberflaeche der Postkarte schimmert leicht. Sie "
+                     "kann sich in verschiedene Motive verwandeln."));
+  AddSpecialDetail( ({"motiv", "bild"}), "unt_bild");
+  AddSpecialDetail( "text", "unt_text");
+  
+  SetProp(P_WEIGHT, 10);
+  SetProp(P_VALUE, 500);
+  SetProp(P_NOBUY, 0);
+  SetProp(P_NOSELL, 1);
+
+  AddCmd( ({"motive", "motiv"}), "motives");
+  AddCmd( ({"waehle", "waehl"}), "choose");
+  AddCmd( ({"beschrifte", "beschrift"}), "WriteCard");
+  AddCmd( ({"loesche", "loesch"}), "delete");
+  AddCmd( "empfaenger", "who");
+}
+
+varargs int move(mixed dest, int method)
+{
+  int ret;
+  ret = ::move(dest, method);
+  if( ret == 1 && objectp(dest) && dest->id("\npkasten") ) 
+      CreateCard();
+  return ret;
+}
+
+int motives(string str)
+{
+  int i;
+  string group, motive, out;
+  string *motives;
+
+  if(!str) {
+    out = "Motivgruppen:\n" +
+      sprintf(
+          sprintf( "    %%#-%ds\n", (TP->QueryProp(P_SCREENWIDTH) || 78) ),
+          implode( MOTIVMASTER->GetGroups(), "  \n" ) );
+    write(out);
+    return 1;
+  }
+
+  if(sscanf(str, "%s %s", group, motive) == 2) {
+    if( member( MOTIVMASTER->GetGroups(), group) == -1) {
+      write(BS("Die Motivgruppe "+CAP(group)+" gibt es nicht."));
+      return 1;
+    }
+    else if (member( MOTIVMASTER->GetMotives(group), motive ) == -1)
+    {
+      if (motive == "alle") {
+        motives = MOTIVMASTER->GetMotives(group);
+        if (!sizeof(motives)) {
+          write("Diese Motivgruppe enthaelt keine Motive.\n");
+          return 1;
+        }
+        out = "";
+        for (i=0; i<sizeof(motives); i++) {
+          out += sprintf( "%s\n\n%s\n\n",
+              motives[i], MOTIVMASTER->GetMotive(group,motives[i]) );
+        }
+        TP->More(out);
+        return 1;
+      }
+      write(BS("Das Motiv "+CAP(motive)+" gibt es in der Gruppe "+CAP(group)+
+               "nicht."));
+      return 1;
+    }
+    else {
+      write( MOTIVMASTER->GetMotive(group, motive) );
+      return 1;
+    }
+  }
+      
+  if( member( MOTIVMASTER->GetGroups(), str) != -1) {
+    out = "Motive in der Gruppe " + CAP(str) + ":\n";
+    motives = MOTIVMASTER->GetMotives(str);
+    if (!sizeof(motives)) {
+      out += "(derzeit keine Motive)\n";
+      write(out);
+      return 1;
+    }
+    out += sprintf(
+        sprintf( "    %%#-%ds\n", (TP->QueryProp(P_SCREENWIDTH) || 78) ),
+        implode( motives, "  \n" ) );
+    TP->More(out);
+    return 1;
+  }
+  else {
+    write(BS("Motivgruppe "+CAP(str)+" gibt es nicht."));
+    return 1;
+  }
+}
+
+int choose(string str)
+{
+  string group, motive;
+  
+  notify_fail(BS("Waehle <motivgruppe> <bildname>"));
+  if(!str)
+    return 0;
+  if(sscanf(str, "%s %s", group, motive) != 2)
+    return 0;
+  if( member(call_other(MOTIVMASTER, "GetGroups"), group) == -1) {
+      write(BS("Die Motivgruppe "+CAP(group)+" gibt es nicht."));
+      return 1;
+    }
+  else if(member(call_other(MOTIVMASTER, "GetMotives", group), motive) == -1) {
+      write(BS("Das Motiv "+CAP(motive)+" gibt es in der Gruppe "+CAP(group)+
+               "nicht."));
+      return 1;
+    }
+  else {
+    motiv="Motiv "+CAP(motive)+":\n"
+          +call_other(MOTIVMASTER, "GetMotive", group, motive);
+    write(BS("Die Oberflaeche der Postkarte faengt leicht zu schimmern an, "
+             "es fliessen Farben und Formen durcheinander und ineinander "
+             "und es entsteht ein neues Bild."));
+  return 1;
+  }
+}
+
+int who(string str)
+{
+  if( !str ) {
+    if(receiver) {
+      write(BS("Die Postkarte ist an "+CAP(receiver)+" adressiert."));
+      return 1;
+    }
+    else {
+      write(BS("Die Postkarte ist noch nicht adressiert!"));
+      return 1;
+    }
+  }
+ 
+  if( str == "loeschen" ) {
+    if(receiver) {
+      receiver=0;
+      write(BS("Ok, Empfaenger geloescht."));
+      return 1;
+    }
+    else {
+      write(BS("Aber die Postkarte hat doch noch gar keinen Empfaenger."));
+      return 1;
+    }
+  }
+  
+  else {
+    if(!receiver) {
+      receiver=str;
+      write(BS("Ok, die Postkarte wird an "+CAP(str)+" verschickt."));
+      return 1;
+    }
+    else {
+      receiver=str;
+      write(BS("Ok, Empfaenger auf "+CAP(str)+" geaendert."));
+      return 1;
+    }
+  }
+  return 0;
+}
+
+
+int WriteCard(string str)
+{
+  notify_fail(BS("Was willst Du denn beschriften?"));
+  if( !id(str) )
+    return 0;
+
+  if(!receiver) {
+    write(BS("Schreib zuerst mal einen Empfaenger auf die Karte."));
+    return 1;
+  }
+    
+  write(BS("Bitte Text eingeben (Max. 588 Zeichen, ~h Hilfeseite, ~q Abbruch, "
+           ". wenn fertig)!"));
+  nedit("WriteText");
+  return 1;
+}
+  
+void WriteText(string str)
+{
+  string *str1, *tmp;
+  int i,j;
+  
+  if(!str) {
+    write(BS("Abbruch! Nichts auf die Postkarte drauf geschrieben."));
+  }
+  else {
+    str=regreplace(str,"([^\n])\n([^\n])","\\1 \\2",1); // hack fuer leerzeilen
+    str=break_string(str,42,0,1);
+    sender=TP->name(WEM);
+    str1=explode(str, "\n")[0..15];
+    tmp=explode(sprintf(MASKE, CAP(receiver), CAP(sender)),"\n");
+    j=1;
+    if (sizeof(str1)<15)
+      j++;      // Leerzeile oben, wenn moeglich
+    else if(sizeof(str1)>15) {
+      write(BS("Text ist leider zu lang! Max. 15 Zeilen!"));
+      return;
+    }
+    for( i=0; i<sizeof(str1); i++)
+      tmp[i+j][2..43] = sprintf("%-:42s",str1[i]);
+    text = implode(tmp, "\n")+"\n";
+  }
+}
+
+int delete(string str)
+{
+  notify_fail(BS("Was willst Du loeschen?"));
+
+  if( str == "text" ) {
+    text=0;
+    write(BS("Ok, Text geloescht."));
+    return 1;
+  }
+
+  else if(str == "empfaenger") {
+    receiver=0;
+    write(BS("Ok, Empfaenger geloescht."));
+    return 1;
+  }
+}
+
+string unt_bild()
+{
+  if(motiv)
+    return motiv;
+  else
+    return BS("Die Vorderseite der Postkarte zeigt noch kein Motiv.");
+}
+
+string unt_text()
+{
+  if(text)
+    return text;
+  else
+    return BS("Die Postkarte ist noch nicht beschriftet!");
+}
+
+int CheckCard()
+{
+  if( !receiver || !motiv || !text )
+    return 0;
+  else
+    return 1;
+}
+
+void CreateCard()
+{
+  object ob;
+  ob=clone_object(OBJ("postkarte2.lpc") );
+  ob->move(environment(), M_NOCHECK);
+  ob->SetProp(P_SHORT, "Eine Postkarte von "+sender);
+  ob->SetProp(P_LONG, ob->QueryProp(P_LONG)+"\n"+motiv);
+  ob->SetProp(P_READ_MSG, text);
+  ob->SetProp(P_RECEIVER, receiver);
+  ob->SetProp(P_SENDER, sender);
+  ob->SetProp(P_DELIVER_TRIES, 0);
+  ob->AddId(receiver+"postkarte");
+  call_out("weg", 0);
+}
+
+void weg()
+{
+  TO->remove();
+}

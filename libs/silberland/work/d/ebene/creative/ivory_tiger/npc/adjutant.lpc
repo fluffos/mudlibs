@@ -1,0 +1,340 @@
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <mnpc.h>
+#include <new_skills.h>
+#include <wizlevels.h>
+#include "/sys/living/life.h"
+#include "../files.h"
+#include "../quest.h"
+
+inherit STD("dieb");
+inherit "std/npc/sequencer";
+
+object quester;
+
+int move_away=0;
+int given_ob;
+
+create()
+{
+  object ob;
+
+  ::create();
+
+  SetProp(P_GENDER, MALE);
+  SetProp(P_NAME, "Apoc");
+  SetProp(P_SHORT, "Apoc, der Adjutant");
+  SetProp(P_RACE, "Mensch");
+  AddId(({"apoc", "adjutant"}));
+  SetProp (P_LONG, BS(
+           "Apoc ist der Adjutant des Gildenmeisters und ist immer bemueht,"
+          +" seinem Chef nach bestem Gewissen zu Dienen. Er ist gerade dabei,"
+          +" dem Gildenmeister einen Tee zuzubereiten.")); 
+
+  create_default_npc(35+random(4));
+  customize(QueryProp(P_LEVEL),MALE,"mensch");
+  SetProp(P_ARTICLE, 0);
+  seteuid(getuid(TO));
+  AddLibrary(NPC("npc.lib"), 2, 1);
+
+  (ob=clone_object("/obj/money"))->SetProp(P_AMOUNT, random(200));
+  ob->move(TO);
+
+  CLONEME(OBJ("keybc3"));
+
+  SetProp(P_DEFAULT_INFO, "brueht lieber seinen Tee auf.\n");
+  SetProp(P_ALIGN, 600);
+
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    "Der Dieb laesst @WAS fallen und meint: 'Braucht man das fuer Tee?'\n" }) );
+
+  SetProp(P_SIZE, 190);
+  SetAttribute(A_STR, 30);
+  SetProp(P_HELPERS, QueryProp(P_MAX_HELPERS));
+  SetProp(P_MNPC_FLAGS, 0);
+  //add_select_commands();
+
+  SetChats(4, ({
+        "Apoc sucht verzweifelt etwas.\n", 
+        "Apoc sagt: Wo ist nur der Kandiszucker?\n",
+        "Apoc gruebelt angestrengt nach.\n",
+        "Apoc blickt sich im Raum um.\n",
+        "Apoc blickt Dich fragend an.\n",
+        "Apoc zieht eine Augenbraue hoch.\n",
+        "Jemand teilt Dir mit: Und ich sage Dir, sie ist doch schuld.\n",
+        "Apoc sucht den Raum ab.\n",
+        "Apoc rauft sich verzweifelt die Haare.\n",
+        "Apoc gruebelt: Wo ist er nur ...\n",
+        "Apoc sagt: Ich koennte schwoeren ich hab noch etwas hier ...\n"
+        "Apoc sucht verzweifelt etwas.\n", 
+        "Apoc sagt: Wo ist nur der Kandiszucker?\n",
+        "Apoc gruebelt angestrengt nach.\n",
+        "Apoc blickt sich im Raum um.\n",
+        "Apoc blickt Dich fragend an.\n",
+        "Apoc zieht eine Augenbraue hoch.\n",
+        "Apoc sucht den Raum ab.\n",
+        "Apoc rauft sich verzweifelt die Haare.\n",
+        "Apoc gruebelt: Wo ist er nur ...\n",
+        "Apoc sagt: Ich koennte schwoeren ich hab noch etwas hier ...\n"
+        }) );
+
+  AddInfo(DEFAULT_INFO, "Lass mich, ich muss Tee kochen. Ich habe "
+      "keine Zeit fuer Dich!", "sagt: ");
+  AddInfo( ({"kandiszucker"}),
+      "Hast Du welchen bei Dir? Ich brauche DRINGEND Kandiszucker, sonst "
+      "wird der Tee nichts!", "fragt: ");
+  RegisterGive("kandis", ({
+               ({ "sag Zucker? Kandiszucker! Grossartig, darauf habe ich doch"
+                 +" schon gewartet!!", 2 }),
+               ({ "sag Gleich mal naeher anschauen...", 2 }),
+               ({ "verarbeite", 4 })
+               }));
+  add_action("proceed", "verarbeite");
+  given_ob=0;
+}
+
+give_notify(ob) {
+  sequencer::give_notify(ob);
+//  dieb::give_notify(ob);
+}
+
+init()
+{
+  object lenv;
+
+  ::init();
+
+  if (ENV(TO) && present("geld", ENV(TO)))
+    call_out("command_me", 0, "nimm geld");
+}
+
+
+die()
+{
+  object ob;
+
+  if ((ob=present("schluessel")))
+    call_other(KEYMASTER, "RemoveKey", ob);
+  if ((ob=present(IV_GENERAL_KEY)))
+    ob->remove();
+  ::die();
+}
+
+remove()
+{
+  call_other(THIEFMASTER, "RemoveHelper", TO);
+  ::remove();
+}
+
+
+heart_beat()
+{
+  mixed *way;
+  string *cmds;
+  int i, h;
+  object d;
+
+  ::heart_beat();
+  if (!InFight()) {
+    way=QueryProp(P_HELP_ROOMS);
+    if (sizeof(way)) {
+      SetProp(P_HELPERS, QueryProp(P_MAX_HELPERS));
+      if (stringp(way[0]))
+        cmds=({way[0]});
+      else
+	cmds=way[0];
+      // tell_object(find_player("creative"), sprintf("wohin: %s\n", go_now));
+      way=way[1..];
+      SetProp(P_HELP_ROOMS, way);
+      for (i=0; i<sizeof(cmds); i++)
+        command_me(cmds[i]);
+      if ((d=present("Dieb",ENV(TO))) && d!=QueryProp(P_HELPING))
+        AddPursuer(d);
+      if (present(QueryProp(P_HELPING), ENV(TO))) {
+        (QueryProp(P_HELPING))->AddDefender(TO);
+	command_me("sag Ah, da ist ja der Schurke!!! AUF IHN!!!");
+      }
+    }
+  }
+  else
+    if ((h=QueryProp(P_HELPERS))) {
+      SetProp(P_HELPERS, h-1);
+      tell_room(ENV(TO), Name(WER)+" bruellt: Kommt mir zu Hilfe!!! Ich werde angegriffen!\n");
+      call_other(THIEFMASTER, "RemoveHelper", TO);
+      call_other(THIEFMASTER, "Help", TO);
+    }
+}
+
+void InformDefend(object enemy)
+{
+  Kill(enemy);
+}
+
+Help(object o)
+{
+  object x;
+  string from, to;
+  string *myway;
+
+  if (QueryProp(P_HELPING))
+    return;
+  if ((x=ENV(o)))
+    to=explode(file_name(x),"/")[<1];
+  if ((x=ENV(TO)))
+    from=explode(file_name(x),"/")[<1];
+  if (from==to) {
+    SetProp(P_HELPING, o);
+    call_other(THIEFMASTER, "RemoveHelper", TO);
+    o->AddDefender(TO);
+    command_me("sag Ah, da ist ja der Schurke!!! AUF IHN!!!");
+    return;
+  }
+  //myway=WAYS->FromTo(from, to);
+  if (sizeof(myway)) {
+    SetProp(P_HELPING, o);
+    SetProp(P_HELP_ROOMS, myway);
+    call_other(THIEFMASTER, "RemoveHelper", TO);
+    set_heart_beat(1);
+  }
+}
+
+StopHelp(object o)
+{
+  if (o && QueryProp(P_HELPING)) {
+    SetProp(P_HELPING, 0);
+    SetProp(P_HELP_ROOMS, ({ }));
+    call_other(THIEFMASTER, "RegisterHelper", TO);
+    if (!InFight())
+      set_heart_beat(0);
+  }
+}
+
+varargs int StopHuntFor(object enemy, int silent)
+{
+  object h;
+
+  ::StopHuntFor(enemy, silent);
+  if ((h=QueryProp(P_HELPING)) && present(h))
+    StopHelp(h);
+  call_other(THIEFMASTER, "RegisterHelper", TO);
+}
+
+void NotifyPlayerDeath(object pl, object k, int lostxp)
+{
+  command_me("nimm alles aus leiche");
+  command_me("zuecke_beste_waffe");
+  command_me("trage_beste_ruestungen");
+  StopHelp(QueryProp(P_HELPING));
+  call_other(THIEFMASTER, "RegisterHelper", TO);
+}
+
+
+
+int kandis(object ob) {
+
+  quester = this_interactive();
+  if (ob->id(IV_CANDY)) {
+    ob->remove();
+    given_ob=1;
+    return 1;
+  }
+  if (ob->id(IV_CANDY_SMALL)) {
+    ob->remove();
+    given_ob=2;
+    return 1;
+  }
+  command_me("sag Was soll ich denn damit anfangen?");
+  give_obj(ob, quester);
+  return 0;
+}
+
+
+int proceed() {
+  switch (given_ob) {
+    case 1: command_me("sag Wow, der Brocken ist ganz schoen gross. Den krieg ich ja nie"
+                      +" in eine Tasse!");
+            call_out("go_away", 0);
+            given_ob=0;
+            break;
+    case 2: command_me("sag Hey super, das passt ja genau! Endlich das richtige Stueck"
+                      +" Kandiszucker fuer unseren Teemachkurs!");
+            call_out("give_snuffbox", 0, quester);
+            given_ob=0;
+            break;
+  }
+  return 1;
+}
+
+go_away() {
+  if(move_away) return 0;
+  move_away=1;
+  call_out("back_again", 150);
+  command_me("sag Na dann geh ich schnell in die Apotheke den Brocken "
+      "Kandis zerkleinern.");
+  ME->move(ROOM("e2"), M_GO, "nach Osten", "eilt", "eilt herein");
+  tell_room(ENV(ME), BS("Apoc legt einen grossen Stein in den Moerser und "
+        "stampft darauf herum."));
+  return 1;
+}
+
+int back_again() {
+  move_away=0;
+  ME->move(ROOM("j4"), M_GO, "nach Nordosten", "eilt", "eilt herein");
+  ME->command_me("sag So ein Mist, ich hab den Kandis verloren. ARGL!");
+  command_me("emote weint.");
+  return 1;
+}
+
+give_snuffbox(object dest) {
+  object o;
+  
+  command_me("sag Grossartig, nun kann ich endlich den Tee fuer den Gildenmeister"
+            +" suessen! Danke fuer Deine Bemuehungen, ich hab hier was fuer Dich!");
+  if (!present(dest, ENV(TO))) {
+    command_me("sag Hmm, gerade vorhin war "+dest->Name()+" noch da... Na gut,"
+              +" hat "+(dest->QueryProp(P_GENDER)==MALE?"er":"sie")+" wohl"
+              +" Pech gehabt!");
+    command_me("emote grinst breit.");
+    return 1;
+  }
+  o=clone_object(OBJ("tabaksdose"));
+  o->move(TO, M_NOCHECK);
+  give_obj(o, dest);
+}
+
+varargs int move(mixed dest, int method, string dir, string textout, string textin) {
+  int ret;
+  
+  ret=::move(dest, method, dir, textout, textin);
+  if (dest == find_object(ROOM("j4"))) {
+    call_out("kettle", 0, dest);
+  }
+  return ret;
+}
+
+kettle(object dest) {
+  object k;
+  int empty;
+
+  k=present(IV_KETTLE, dest);
+  if (objectp(k)) {
+    if (k->query_owner()!="apoc") {
+      command_me("sag Grr, das ist nicht mein Teekessel!!");
+      command_me("emote kickt den Teekessel nach draussen und verstaucht sich dabei die kleine Zehe.");
+      command_me("emote flucht lautstark.");
+      k->move(ROOM("k4"), M_NOCHECK);
+      empty=1;
+    }
+  }
+  else
+    empty=1;
+  if (empty) {
+    k=clone_object(OBJ("kessel"));
+    k->set_owner("apoc");
+    k->move(dest, M_NOCHECK);
+    command_me("emote holt seinen Teekessel aus dem Regal und stellt ihn auf den Herd.");
+  }
+}
+

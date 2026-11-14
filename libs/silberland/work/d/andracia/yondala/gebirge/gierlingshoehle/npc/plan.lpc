@@ -1,0 +1,491 @@
+inherit "std/thing";
+
+#include <defines.h>
+#include <moredef.h>
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <vt100.h>
+
+
+mixed *raum_liste;
+int max_x, max_y;
+object owner = 0;
+
+create()
+{
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Eine Schiefertafel");
+  SetProp(P_LONG,
+    "In Deinen Haenden haelst Du eine kleine Schiefertafel, in die ein paar "
+    "Zeichen und Striche geritzt wurden. Es scheint so, als erleichtere sie "
+    "Dir die Orientierung in manchen Gegenden, falls Du mal keinen <plan> "
+    "hast, wo Du grad gelandet bist. ");
+  SetProp(P_NAME, "Schiefertafel");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_VALUE, 0);
+  SetProp(P_WEIGHT, 200);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_MATERIAL, ({ MAT_WOOD, MAT_SLATE }));
+  Set(P_PURSUERS, 0);
+  AddId( ({ "schiefertafel","tafel","plan" }));
+
+  AddCmd("plan","plan");
+  AddCmd("planmodus","planmodus");
+
+}
+
+plan()
+{
+  int i, j;
+  string *karte_voll, *ort_array, ort, region, ort_v, region_v;
+    // leere Raumliste mit nur dem Standort des Spielers erstellen
+  raum_liste=({(string) environment(this_player())});
+    // Ausdehnungen der Karte fuer x: +8 (4 links, 4 rechts)
+    //                        fuer y: +4 (2 oben, 2 unten)
+  max_x=31;
+  max_y=15;
+
+  ort = "";
+  region = "";
+    // leere Karte allokieren
+  karte_voll = allocate(max_y);
+  for(i=0;i<max_y;i++)
+    karte_voll[i]=allocate(max_x);
+	
+  for(i=0;i<max_y;i++) {
+    ort = "";
+    region= "";
+    for(j=0;j<max_x;j++) {
+      karte_voll[i][j]=" ";
+      ort += " ";
+      region += " ";
+    }
+  }
+// Karte starten, bei Standort des Spielers und mit Mittelkoordinaten der Karte
+  karte_voll=raum_ausgaenge(ENV(TP), (int) max_x/2, (int) max_y/2, karte_voll);
+// Startraum eintragen
+  karte_voll[(int) max_y/2][(int) max_x/2]=VT_YELLOW+"#"+VT_NORMAL;
+// Karte zeichnen
+  printf("\n +-------------------------------+\n");
+  for(i=0;i<sizeof(karte_voll);i++) {
+    printf(" |");
+    for(j=0;j<sizeof(karte_voll[i]);j++)
+      printf("%s",karte_voll[i][j]);
+    if (i==0)
+      printf("|+\n");
+    else
+      printf("||\n");
+  }
+	
+  region_v="Region: ";
+	
+  ort_array = explode(file_name(ENV(TP)),"/");
+  switch (ort_array[0]) {
+    case "d" :
+      region_v+=CAP(ort_array[1]);
+      ort_v=CAP(ort_array[3]);
+      if (ort_array[1]=="gebirge" &&
+          ort_array[2]=="durin" &&
+          ort_array[3]=="room") {
+        ort_v="Nidavellir";
+        if (ort_array[4]=="stollen")
+          ort_v="Stollen";
+      }
+      if (ort_array[1]=="mitgard" &&
+          ort_array[2]=="odin" &&
+          ort_array[3]=="anfpark")
+        ort_v="Anfaengerpark Trondheim";
+      if (ort_array[1]=="gebirge" &&
+          ort_array[2]=="boers" &&
+          ort_array[3]=="anfpark")
+        ort_v="Anfaengerpark Nidavellir";
+      if (ort_array[1]=="ljossalfheim" &&
+          ort_array[2]=="freya" &&
+          ort_array[3]=="anfpark_folk")
+        ort_v="Anfaengerpark Folkwang";
+      if (file_name(ENV(TP))=="/d/ljossalfheim/freya/waldweg/obj/wagen") {
+        ort_v="In einem Pferdewagen";
+        region_v="";
+      }
+      if (file_name(ENV(TP))=="/d/mitgard/odin/strand/obj/lastensegler") {
+        ort_v="Auf einem Lastensegler";
+        region_v="";
+      }
+      if (file_name(ENV(TP))=="/d/gebirge/durin/obj/wagen") {
+        ort_v="In einem Ochsenkarren";
+        region_v="";
+      }
+      if (explode(ort_array[sizeof(ort_array)-1],"#")[0]=="stollenwagen1" ||
+          explode(ort_array[sizeof(ort_array)-1],"#")[0]=="stollenwagen2" ||
+          explode(ort_array[sizeof(ort_array)-1],"#")[0]=="stollenwagen3" ||
+          explode(ort_array[sizeof(ort_array)-1],"#")[0]=="stollenwagen4") {
+        ort_v="In einem Stollenwagen";
+        region_v="";
+      }
+      if (ort_array[1]=="seher" &&
+          ort_array[2]=="haus") {
+        region_v="";
+        ort_v="Im Seherhaus von "+CAP(explode(ort_array[3],":")[0]);
+      }
+      break;
+// Muss geaendert werden, sobald Gilden mit mehreren Raeumen existieren
+    case "gilden":
+      region_v+="Eine der Gilden";
+      ort_v=capitalize(ort_array[sizeof(ort_array)-1]);
+      break;
+    case "room":
+      region_v+="Irgendwo";
+      ort_v="";
+      break;
+    case "players":
+      region_v+="Magier-Testgebiet";
+      ort_v="";
+      break;
+    default :
+      region_v="";
+      ort_v="";
+      break;
+  }
+
+  if (region_v!="")
+    region[(max_x/2)-(strlen(region_v)/2)..(max_x/2)+(strlen(region_v)/2)] = region_v;
+  if (ort_v!="")
+    ort[(max_x/2)-(strlen(ort_v)/2)..(max_x/2)+(strlen(ort_v)/2)] = ort_v;
+  if (!(strlen(region_v)%2) &&
+      region_v!="")
+    region += " ";
+  if (!(strlen(ort_v)%2) &&
+      ort_v!="")
+    ort += " ";
+	
+  printf(" |                               ||\n");
+  printf(" |%s||\n",ort);
+  printf(" |%s||\n",region);
+  printf(" +-------------------------------+|\n");
+  printf("  +-------------------------------+\n");
+
+  say(sprintf("%s kramt %s Schiefertafel hervor und riskiert einen kurzen "
+    +"Blick darauf.\n",
+    CAP(TP->name(WER)),TP->QueryPossPronoun(FEMALE, WEN)),TP);
+
+  return 1;
+}
+
+planmodus(string str)
+{
+  notify_fail("Planmodus ein|aus\n");
+  if (str != "") {
+    if (str == "ein") {
+      owner=TP;
+      owner->AddPursuer(TO);
+      SetProp(P_NODROP,"Findest Du Dich wirklich ohne diese Schiefertafel "
+        +"zurecht?\n");
+      printf("Planmodus ein.\n");
+      return 1;
+    }
+    if (str == "aus") {
+      owner->RemovePursuer(TO);
+      SetProp(P_NODROP,0);
+      owner = 0;
+      printf("Planmodus aus.\n");
+      return 1;
+    }
+  }
+  return 0;
+}
+
+plan_klein()
+{
+  int i, j;
+  string *karte_voll;
+
+  raum_liste=({(string) ENV(owner)});
+  max_x=15;
+  max_y=7;
+  karte_voll = allocate(max_y);
+  for(i=0;i<max_y;i++)
+    karte_voll[i]=allocate(max_x);
+  for(i=0;i<max_y;i++)
+    for(j=0;j<max_x;j++)
+      karte_voll[i][j]=" ";
+
+  karte_voll = raum_ausgaenge(ENV(owner), (int) max_x/2,
+    (int) max_y/2, karte_voll);
+  karte_voll[(int) max_y/2][(int) max_x/2]=VT_YELLOW+"#"+VT_NORMAL;
+
+  printf("\n");
+  for(i=0;i<sizeof(karte_voll);i++) {
+    printf(" ");
+    for(j=0;j<sizeof(karte_voll[i]);j++)
+      printf("%s",karte_voll[i][j]);
+    printf("\n");
+  }
+}
+
+varargs int move(mixed dest, int method)
+{
+  int res;
+  res = ::move(dest,method);
+  if ( objectp(owner) && ENV(TO)!=owner) {
+    TO->move(owner,M_GET);
+    plan_klein();
+  }
+  return res;
+}
+
+
+raum_ausgaenge(object raum, int st_x, int st_y,string *raum_aus)
+{
+  int i, j;
+  mixed raum_exits;
+
+  if (raum && objectp(raum))
+    call_other(raum,"???",0);
+
+  if ( !(raum_exits=raum->QueryProp(P_EXITS)))
+    return raum_aus;
+  if (sizeof(raum->QueryProp(P_SPECIAL_EXITS))>0)
+    raum_exits=spezial_ausgaenge(find_object((string)raum), raum_exits);
+
+  for(i=0;i<sizeof(m_indices(raum_exits));i++) {
+    switch(m_indices(raum_exits)[i]) {
+      // case "nordoben":
+      // case "nordunten":
+      case "norden":
+        // ein Feld entfernt vom uebergeben Koordinaten wird an
+        // Stelle st_y und st_x ein Richtungszeichen gesetzt
+        // und dann entsprechend weiter ein Raumzeichen
+        raum_aus[st_y-1][st_x]="|";
+        // Abfrage, ob st_y und st_x in den vorgegebenen
+        // Schranken bleiben und ob der Raum schon in die Liste
+        // der besuchten Raeume aufgenommen wurde
+        // ansonsten -> Abbruch
+        if (((st_y-2)>0) &&
+            member_array(raum_exits[m_indices(raum_exits)[i]],raum_liste)==-1) {
+          if (raum_exits[m_indices(raum_exits)[i]]->QueryProp(P_INDOORS))
+            raum_aus[st_y-2][st_x]=VT_TA_B+"0"+VT_NORMAL;
+          else
+            raum_aus[st_y-2][st_x]="0";
+          raum_liste += ({raum_exits[m_indices(raum_exits)[i]]});
+          // Rekursion mit dem jeweiligen Raumobjekt und seinen
+          // Koordinaten in der Karte als Parameter
+          raum_aus=raum_ausgaenge(raum_exits[m_indices(raum_exits)[i]],
+            st_x, st_y-2,raum_aus);
+        }
+        break;
+
+      // case "nordostoben":
+      // case "nordostunten":
+      case "nordosten":
+        if (raum_aus[st_y-1][st_x+2]=="\\" ||
+            raum_aus[st_y-1][st_x+2]=="X")
+          raum_aus[st_y-1][st_x+2]="X";
+        else
+          raum_aus[st_y-1][st_x+2]="/";
+        if (((st_y-2)>0) &&
+            ((st_x+4)<max_x) &&
+            member_array(raum_exits[m_indices(raum_exits)[i]],raum_liste)==-1) {
+          if (raum_exits[m_indices(raum_exits)[i]]->QueryProp(P_INDOORS))
+            raum_aus[st_y-2][st_x+4]=VT_TA_B+"0"+VT_NORMAL;
+          else
+            raum_aus[st_y-2][st_x+4]="0";
+          raum_liste += ({raum_exits[m_indices(raum_exits)[i]]});
+          raum_aus=raum_ausgaenge(raum_exits[m_indices(raum_exits)[i]],
+            st_x+4, st_y-2,raum_aus);
+        }
+        break;
+
+      // case "ostoben":
+      // case "ostunten":
+      case "osten":
+        raum_aus[st_y][st_x+2]="-";
+        if (((st_x+4)<max_x) &&
+            member_array(raum_exits[m_indices(raum_exits)[i]],raum_liste)==-1) {
+          if (raum_exits[m_indices(raum_exits)[i]]->QueryProp(P_INDOORS))
+            raum_aus[st_y][st_x+4]=VT_TA_B+"0"+VT_NORMAL;
+          else
+            raum_aus[st_y][st_x+4]="0";
+          raum_liste += ({raum_exits[m_indices(raum_exits)[i]]});
+          raum_aus=raum_ausgaenge(raum_exits[m_indices(raum_exits)[i]],
+            st_x+4, st_y,raum_aus);
+        }
+        break;
+
+      // case "suedostoben":
+      // case "suedostunten":
+      case "suedosten":
+      	if (raum_aus[st_y+1][st_x+2]=="/" ||
+      	    raum_aus[st_y+1][st_x+2]=="X")
+          raum_aus[st_y+1][st_x+2]="X";
+        else
+          raum_aus[st_y+1][st_x+2]="\\";
+        if (((st_x+4)<max_x) &&
+            ((st_y+2)<max_y) &&
+            member_array(raum_exits[m_indices(raum_exits)[i]],raum_liste)==-1) {
+          if (raum_exits[m_indices(raum_exits)[i]]->QueryProp(P_INDOORS))
+            raum_aus[st_y+2][st_x+4]=VT_TA_B+"0"+VT_NORMAL;
+          else
+            raum_aus[st_y+2][st_x+4]="0";
+          raum_liste += ({raum_exits[m_indices(raum_exits)[i]]});
+          raum_aus=raum_ausgaenge(raum_exits[m_indices(raum_exits)[i]],
+            st_x+4, st_y+2,raum_aus);
+        }
+        break;
+
+      // case "suedoben":
+      // case "suedunten":
+      case "sueden" :
+        raum_aus[st_y+1][st_x]="|";
+        if (((st_y+2)<max_y) &&
+            member_array(raum_exits[m_indices(raum_exits)[i]],raum_liste)==-1) {
+          if (raum_exits[m_indices(raum_exits)[i]]->QueryProp(P_INDOORS))
+            raum_aus[st_y+2][st_x]=VT_TA_B+"0"+VT_NORMAL;
+          else
+            raum_aus[st_y+2][st_x]="0";
+          raum_liste += ({raum_exits[m_indices(raum_exits)[i]]});
+          raum_aus=raum_ausgaenge(raum_exits[m_indices(raum_exits)[i]],
+            st_x, st_y+2,raum_aus);
+        }
+        break;
+
+      // case "suedwestoben":
+      // case "suedwestunten":
+      case "suedwesten":
+        if (raum_aus[st_y+1][st_x-2]=="\\" ||
+            raum_aus[st_y+1][st_x-2]=="X")
+          raum_aus[st_y+1][st_x-2]="X";
+        else
+          raum_aus[st_y+1][st_x-2]="/";
+        if (((st_x-4)>0) &&
+            ((st_y+2)<max_y) &&
+            member_array(raum_exits[m_indices(raum_exits)[i]],raum_liste)==-1) {
+          if (raum_exits[m_indices(raum_exits)[i]]->QueryProp(P_INDOORS))
+            raum_aus[st_y+2][st_x-4]=VT_TA_B+"0"+VT_NORMAL;
+          else
+            raum_aus[st_y+2][st_x-4]="0";
+          raum_liste += ({raum_exits[m_indices(raum_exits)[i]]});
+          raum_aus=raum_ausgaenge(raum_exits[m_indices(raum_exits)[i]],
+            st_x-4, st_y+2,raum_aus);
+        }
+        break;
+
+      // case "westoben":
+      // case "westunten":
+      case "westen":
+        raum_aus[st_y][st_x-2]="-";
+        if (((st_x-4)>0) &&
+            member_array(raum_exits[m_indices(raum_exits)[i]],raum_liste)==-1) {
+          if (raum_exits[m_indices(raum_exits)[i]]->QueryProp(P_INDOORS))
+            raum_aus[st_y][st_x-4]=VT_TA_B+"0"+VT_NORMAL;
+          else
+            raum_aus[st_y][st_x-4]="0";
+          raum_liste += ({raum_exits[m_indices(raum_exits)[i]]});
+          raum_aus=raum_ausgaenge(raum_exits[m_indices(raum_exits)[i]],
+           st_x-4, st_y,raum_aus);
+        }
+        break;
+
+      // case "nordwestoben":
+      // case "nordwestunten":
+      case "nordwesten":
+        if (raum_aus[st_y-1][st_x-2]=="/" ||
+            raum_aus[st_y-1][st_x-2]=="X")
+          raum_aus[st_y-1][st_x-2]="X";
+        else
+          raum_aus[st_y-1][st_x-2]="\\";
+        if (((st_x-4)>0) &&
+            ((st_y-2)>0) &&
+            member_array(raum_exits[m_indices(raum_exits)[i]],raum_liste)==-1) {
+          if (raum_exits[m_indices(raum_exits)[i]]->QueryProp(P_INDOORS))
+            raum_aus[st_y-2][st_x-4]=VT_TA_B+"0"+VT_NORMAL;
+          else
+            raum_aus[st_y-2][st_x-4]="0";
+          raum_liste += ({raum_exits[m_indices(raum_exits)[i]]});
+          raum_aus=raum_ausgaenge(raum_exits[m_indices(raum_exits)[i]],
+            st_x-4, st_y-2,raum_aus);
+        }
+        break;
+
+      default :
+        break;
+    }
+  }
+  return raum_aus;
+}
+
+spezial_ausgaenge(object raum, mixed raum_exits)
+{	
+  /*switch (file_name(raum)) {
+     case "/d/ljossalfheim/freya/folkwang/room/folkwang_e08":
+      raum_exits+=([
+       "nordwesten":"/d/ljossalfheim/freya/folkwang/room/folkwang_d07",
+       "osten":"/d/ljossalfheim/freya/folkwang/room/folkwang_f08"]);
+      return raum_exits;
+      break;
+    case "/d/ljossalfheim/freya/folkwang/room/laden_e04":
+      raum_exits+=([
+        "westen":"/d/ljossalfheim/freya/folkwang/room/folkwang_d04"]);
+      return raum_exits;
+      break;
+    case "/d/gebirge/durin/room/markt_f10":
+      raum_exits+=([
+        "westen":"/d/gebirge/durin/room/platz_e10",
+        "norden":"/d/gebirge/durin/room/platz_f09"]);
+      return raum_exits;
+      break;
+    case "/d/gebirge/durin/room/markt_f11":
+      raum_exits+=([
+        "westen":"/d/gebirge/durin/room/platz_e11"]);
+      return raum_exits;
+      break;
+    case "/d/gebirge/durin/room/markt_g10":
+      raum_exits+=([
+        "norden":"/d/gebirge/durin/room/platz_g09",
+        "osten":"/d/gebirge/durin/room/platz_h10"]);
+      return raum_exits;
+      break;
+    case "/d/gebirge/durin/room/markt_g11":
+      raum_exits+=([
+        "suedosten":"/d/gebirge/durin/room/oststalag_h12"]);
+      return raum_exits;
+      break;
+    case "/d/gebirge/durin/room/saufburg_e05":
+      raum_exits+=([
+        "sueden":"/d/gebirge/durin/room/platz_e06"]);
+      return raum_exits;
+      break;
+    case "/d/gebirge/durin/room/lazarett_b05":
+      raum_exits+=([
+        "osten":"/d/gebirge/durin/room/platz_c05"]);
+      return raum_exits;
+      break;
+    case "/d/gebirge/durin/room/platz_d07":
+      raum_exits+=([
+        "osten":"/d/gebirge/durin/room/platz_e07",
+        "sueden":"/d/gebirge/durin/room/platz_d08",
+        "norden":"/d/gebirge/durin/room/platz_d06",
+        "westen":"/d/gebirge/durin/room/platz_c07"]);
+      return raum_exits;
+      break;
+    default :*/
+   	  return raum_exits;
+		// break;
+  // }
+}
+
+int remove()
+{
+  if (pointerp(QueryProp(P_PURSUERS)) &&
+      sizeof(QueryProp(P_PURSUERS)) &&
+      objectp(QueryProp(P_PURSUERS)[0]))
+  {
+    QueryProp(P_PURSUERS)[0]->RemovePursuer(this_object());
+    Set(P_PURSUERS,0);
+  }
+  return ::remove();
+}
+        

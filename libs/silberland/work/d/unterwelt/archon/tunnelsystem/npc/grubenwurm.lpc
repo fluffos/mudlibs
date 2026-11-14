@@ -1,0 +1,129 @@
+// 30.06.2002 Archon@WL, erstellt
+// wurm ist von aussen nicht wirklich toedbar
+// man kann in das innere springen (kommando) landet dort
+// in einem raum ROOM(wurm_inneres) - dort ist ein 
+// unsichtbares monster (inneres) welches den schaden
+// an diesen aeusseren npc uebertraegt - beim reinspringen
+// fangen die "innereinen" und der spieler automatisch an zu kaempfen
+/*
+ Rev 1.1 15.10.2003 Archon: fuer sl ueberarbeitet
+*/
+
+#pragma strict_types
+
+inherit "std/npc";
+
+#include <combat.h>
+#include <weapon.h>
+#include <moving.h>
+#include "../def.h"
+
+mapping namen;
+object *zielt;
+
+int block(object player);
+void receive_event(mixed data, string type, int prio);
+
+void create()
+{
+  if (!is_clone(ME)) return;
+  ::create();
+
+  create_default_npc(50);
+
+  namen = ([]);
+  zielt = ({});
+
+  SetProp(P_LONG,"Du erkennst das Maul eines gewaltigen Grubenwurmes - mehr "
+    "ist in dem Gang nicht sichtbar. Riesige scharfe Zaehne ragen heraus und "
+    "werden alles zerschneiden, was in ihre Naehe kommt. Ein Angriff auf das "
+    "Maul ist der reinste Selbstmord. Willst Du diesen Grubenwurm zur "
+    "Strecke bringen, musst Du Dir einen anderen Weg einfallen lassen.");
+
+  AddDetail(({"zaehne"}),
+    "Die Zaehne sind rasiermesserscharf. Eine fuerchterliche Waffe.");
+  AddDetail(({"angriff","selbstmord"}),
+    "Bist Du irre? Du willst Doch nicht etwa angreifen?");
+  AddDetail(({"weg","strecke"}),
+    "Von aussen kannst Du nichts machen, aber vielleicht ...");
+  AddDetail(({"naehe"}),
+    "Du betrachtest eine Weile versonnen das Maul und den Rachen des "
+    "Grubenwurmes. Dabei stellst Du fest, das der Wurm in regelmaessigen "
+    "Abstaenden seine Zaehne aufeinander prallen laesst. Du hast eine Idee.");
+  AddDetail(({"rachen"}),
+    "Wenn man ersteinmal im Rachen ist, sieht der Wurm gar nicht mehr so "
+    "gefaehrlich aus. Dort sollte es auch moeglich sein, das Biest zu "
+    "toeten.");
+  AddDetail(({"idee"}),
+    "Ob Du in den Rachen springen solltest? Wohl keine so gute Idee.");
+
+  SetProp(P_NAME, "Grubenwurm");
+  SetProp(P_SHORT, "Ein Grubenwuerm");
+  SetProp(P_NAME_ADJ,"gewaltig");
+  SetProp(P_ADJECTIVES,({"gewaltiger","gewaltiges","gewaltigen",
+    "gewaltigem"}));
+  SetProp(P_ATTRIBUTES, (["int":1,"str":50,"dex":50,"con":50]));
+  SetProp(P_RACE, "Wurm");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_ALIGN, 0);
+  SetProp(P_HANDS, ({" mit langen Zaehnen",420,DT_BLUDGEON}));
+  SetProp(P_MAX_HP, 5000);
+  SetProp(P_HP, 5000);
+  SetProp(P_WEIGHT, 2000000);
+  SetProp(P_BODY, 0);
+  SetProp(P_NOCORPSE, 1);
+
+  AddId(({"grubenwurm","wurm"}),({"wuermer","grubenwuermer"}));
+
+  AddInfo("\ndefault",
+          "hoert nichts.");
+  AddInfo("archon","jagt ihn.");
+  
+  AddCmd("spring|springe|springen&maul|rachen|mund","spring",
+    "Wohin willst Du springen?");
+}
+
+int spring(string str)
+{
+  object obj;
+
+  call_other(ROOM "wurm_inneres", "???", 0);
+  obj = find_object(ROOM "wurm_inneres"); 
+
+  if (!objectp(obj)) 
+    return notify_fail("BUG - Magier bescheid geben.\n"),0;
+
+  tell_object(PL,
+    "Kurzentschlossen nimmst Du Anlauf und springst durch die scharfen "
+    "Zaehne hindurch.");
+  PL->move(obj,M_GO|M_SILENT);
+  tell_room(ME,break_string(
+    PL->Name(WER)+" nimmt Anlauf und springt mitten in den Rachen des "
+    "Grubenwurmes."),({PL}));
+  tell_object(PL, "Als Du durch die Zaehne hindurch springst, reisst einer "
+    "Dir Dein Bein auf.\n");
+
+  PL->do_damage(random(10) + PL->QueryProp(P_LEVEL), ME);
+  obj->wurm(ME,PL);
+
+  return 1;
+}
+
+int Defend(int dam, mixed dam_type, int spell, object enemy)
+{
+  if (environment(enemy)==environment(ME))
+    return ::Defend(dam/20, dam_type, spell, enemy);
+  return ::Defend(dam*20, dam_type, spell, enemy); //Im Bauch
+}
+
+
+void die(int pdeath)
+{
+  write_file(LOG "gwurm_tode.log",capitalize(getuid(PL))+
+       " hat den groessen Grubenwurm getoetet.  "+ctime(time())+"\n");
+  ::die(pdeath);
+}
+
+mixed PlayerShakes(object pl) { return -1; }
+mixed PlayerTickles(object pl) { return -1; }
+mixed PlayerTousles(object pl) { return -1; }

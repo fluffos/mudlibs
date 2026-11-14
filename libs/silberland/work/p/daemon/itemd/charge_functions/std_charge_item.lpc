@@ -1,0 +1,256 @@
+// charged items,
+// Angrox, 12.10.1999
+
+inherit "std/thing";
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <new_skills.h>
+#include <defines.h>
+#include <moredef.h>
+#include <moving.h>
+#include <wizlevels.h>
+#include "../itemd.h"
+#include "../charge.h"
+
+nosave int what; // 0 .. waffe, 1 .. ruestung
+nosave int charge_time, ob_gender;
+nosave string ch_name, ob_name, saved_info;
+nosave string *gender_add=({"em", "em", "er"});
+nosave object charge_ob;
+
+// Prototyping
+nosave varargs int do_spell(object gegner);
+nosave int go_charged_object();
+object *FindGroup(object pl, int who);
+
+create() {
+  ::create();
+  SetProp(P_LONG, 0);
+  SetProp(P_SHORT, 0);
+  SetProp(P_MATERIAL, MAT_MISC );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NOSELL, 1);
+  AddId(({ITEMD_CHARGE_OBJ_ID}));
+}
+
+void reset() {
+  ::reset();
+  if(!charge_ob) 
+    remove();
+  else 
+    call_out("go_charged_object",0);
+}
+
+void remove() {
+  if(charge_ob) {
+    charge_ob->SetProp(P_INFO, saved_info);
+    charge_ob->SetProp(P_WIELD_FUNC, 0);
+    charge_ob->SetProp(P_WEAR_FUNC, 0);
+  } 
+  ::remove();
+  return ;
+}
+
+void init() {
+   ::init(); 
+  if(!charge_ob) return; 
+  if(!find_object(file_name(charge_ob))) {
+    call_out("remove",0);
+    return;
+  } 
+  if(!present(charge_ob, ENV(ME))) {
+    call_out("go_charged_object",0);
+    return;
+  }
+  return;
+}
+
+
+int initialize() {
+  if(charge_ob) return 0;
+  if(!(charge_ob=QueryProp(CH_CHARGED_OBJECT))) return 0;
+  ch_name=charge_ob->QueryProp(P_NAME);
+  ob_name=charge_ob->name(WER);
+  ob_gender=charge_ob->QueryProp(P_GENDER);
+  saved_info=charge_ob->QueryProp(P_LONG);
+  if(charge_ob->QueryProp(P_WEAPON_TYPE)) {
+    what=0; 
+    charge_ob->SetProp(P_WIELD_FUNC, ME);
+  }
+  else {
+    what=1;
+    charge_ob->SetProp(P_WEAR_FUNC, ME);
+  }
+  charge_ob->SetProp(P_INFO, BS(saved_info+sprintf(
+          QueryProp(CH_INFO_TXT)[what], QueryProp(CH_CHARGES))));
+  AddCmd(QueryProp(CH_CMD), "magic_spell");
+  return 1;
+}
+
+
+int WieldFunc(object ob) {
+  call_out("go_charged_object",2);
+  return 1; 
+}
+
+int WearFunc(object ob) {
+  call_out("go_charged_object",2);
+  return 1; 
+}
+
+nosave int go_charged_object() {
+  if(!charge_ob && !objectp(charge_ob) && !ENV(charge_ob)) return 0;
+  if(!find_object(file_name(charge_ob))) {
+    remove();
+    return 0; 
+  }
+  if(!ENV(ME) || !present(charge_ob, ENV(ME))) 
+    catch(ME->move(ENV(charge_ob), M_NOCHECK));
+  return 1;  
+}
+
+
+object bound_object() {
+  return charge_ob; 
+}
+
+object *
+FindGroup(object pl, int who) {
+  object *res,ob,env;
+  int p1,p2;
+
+  res=({});
+  if (!pl || !(env=environment(pl))) return res;
+  p1=((int)(query_once_interactive(pl)?1:-1));
+  for (ob=first_inventory(env);ob;ob=next_inventory(ob)) {
+    if (!living(ob)) continue;
+    p2=((int)((query_once_interactive(ob)||ob->QueryProp(P_FRIEND))?1:-1));
+    if (p2>0 && !interactive(ob) && query_once_interactive(ob))
+      continue; // keine Netztoten.
+    if (IS_LEARNING(ob) &&
+        (ob->QueryProp(P_INVIS) || (who<0 && !pl->IsEnemy(ob))))
+      continue;
+    if (who<0 && ob->QueryProp(P_NO_GLOBAL_ATTACK))
+      continue;
+    if (p1*p2*who >=0)
+      res+=({ob});
+  }
+  return res;
+}
+
+
+int magic_spell(string str) {
+  object gegner; 
+ 
+  if(!charge_ob || !find_object(file_name(charge_ob))) {
+    remove();
+    return 0;
+  } 
+  if(!present(charge_ob, ENV(ME))) {
+    call_out("go_charged_object",0);
+    return 0;
+  }
+  if(!QueryProp(CH_CHARGES)) {
+    write("Nichts passiert.\n");
+    remove();
+    return 1; 
+  }
+  if(!what) {
+    if(charge_ob->QueryProp(P_WIELDED)!=TP) {
+      return 0; 
+    }
+  }
+  else {
+    if(charge_ob->QueryProp(P_WORN)!=TP) {
+      return 0; 
+    }
+  }
+  if((charge_ob->QueryProp(P_EQUIP_TIME)+2) > time()) {
+    write(sprintf("%s muss erst wieder Energie sammeln!\n", 
+         CAP(ob_name)));
+    return 1; 
+  }
+  if (TP->QueryProp(P_SP)< QueryProp(CH_COST)) {
+    write("Du hast nicht genug Magiepunkte.\n");
+    return 1; 
+  }
+  if(!QueryProp(CH_AREA_SPELL)) {
+    if(str) {
+      if(gegner=present(str, ENV(TP)) )
+        if(!interactive(gegner) || explode(file_name(ENV(TP)),"/")[1]=="pk")
+          return do_spell(gegner);
+    }
+    if(gegner=TP->SelectEnemy())
+      return do_spell(gegner);
+  }
+  return do_spell();
+}
+
+
+nosave varargs int do_spell(object gegner) {
+  mapping sinfo;
+  int dam, charges, i;
+  object *npcs;
+  mixed suc_msgs, fail_msgs, dam_type;
+
+  
+  if(charge_time>time()) {
+    write(sprintf("%s muss erst wieder Energie sammeln.\n", 
+          CAP(ob_name)));
+    return 1;
+  }
+  if(TP->QueryProp(P_ATTACK_BUSY) ) {
+    write("Du bist im Moment zu sehr beschaeftigt.\n");
+    return 1;
+  }
+  TP->SetProp(P_ATTACK_BUSY, 3);
+  TP->AddSp(-QueryProp(CH_COST));
+  charges=QueryProp(CH_CHARGES);
+  
+  if(!QueryProp(CH_AREA_SPELL)) {
+    npcs=({gegner});
+  }
+  else { 
+    npcs=FindGroup(TP, -1); 
+  }
+  npcs-=({0}); // JA, das brauchen wir!!!
+  if(!sizeof(npcs)) {
+    fail_msgs=QueryProp(CH_FAIL_MSGS);
+    write(BS(sprintf(fail_msgs[0], gender_add[ob_gender], ch_name)));
+    say(BS(sprintf(fail_msgs[1],TP->Name(WESSEN), ch_name)));
+    charge_time=20+time(); 
+    charges--;
+    SetProp(CH_CHARGES, charges);
+    charge_ob->SetProp(P_INFO, BS(saved_info+sprintf(
+            QueryProp(CH_INFO_TXT)[what], charges)));
+    return 1;
+  }
+  dam=QueryProp(CH_DAMAGE);
+  dam_type=QueryProp(CH_DAMAGE_TYPE);
+  suc_msgs=QueryProp(CH_SUCCESS_MSGS);
+  for(i=sizeof(npcs)-1;i>=0;i--) {
+    write(BS(sprintf(suc_msgs[0], gender_add[ob_gender], ch_name, 
+              npcs[i]->name(WEM))));
+    say(BS(sprintf(suc_msgs[2], TP->Name(WESSEN), ch_name, npcs[i]->name(WEN))),
+        ({npcs[i], TP}));
+    tell_object(npcs[i], BS(sprintf(suc_msgs[1], ch_name, TP->name(WER))));
+    dam=dam/2+random(dam/2);
+    sinfo=([SP_NAME : "magic_item_charge_damage",
+           SP_PHYSICAL_ATTACK : 0,
+           SP_SHOW_DAMAGE : 1
+           ]);
+    npcs[i]->Defend(dam, dam_type, sinfo, TP);
+  }
+  charges--;
+  charge_time=20+time();
+  SetProp(CH_CHARGES, charges);
+  charge_ob->SetProp(P_INFO, BS(saved_info+sprintf(
+            QueryProp(CH_INFO_TXT)[what], charges)));
+  return 1;
+}
+

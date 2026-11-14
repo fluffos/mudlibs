@@ -1,0 +1,220 @@
+//=========================================================================
+//
+// File:    kaleidoskop.c
+// Created by Ronja
+//
+// Project: Sarumans Quest (Finde die verlorene Schriftrolle)
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit "/std/thing";
+
+#define BEZ "kaleidoskop"
+
+mapping gems;
+string owner = 0;
+int last = 0;
+
+void create()
+{
+  ::create();
+
+  SetProp(P_SHORT, "Ein "+CAP(BEZ));
+  SetProp(P_LONG,
+    "Ein "+CAP(BEZ)+". Was man wohl sieht, wenn man durchschaut? "
+    "Hoffentlich ist es mehr als nur ein lustiges Kinderspielzeug. "
+  );
+
+  AddId( ({"\nspy_finde", BEZ}) );
+
+  SetProp(P_MATERIAL, MAT_MISC );
+  SetProp(P_NAME, CAP(BEZ) );
+  SetProp(P_GENDER, NEUTER );
+  SetProp(P_WEIGHT, 100 );
+  SetProp(P_NOBUY, 1);
+  SetProp(P_VALUE, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NODROP, "Wenn Du Dein "+CAP(BEZ)+" nicht mehr haben moechtest, "
+                    "dann zerbreche es einfach.\n" );
+
+  SetProp(P_NOSELL, "Wenn Du Dein "+CAP(BEZ)+" nicht mehr haben moechtest, "
+                    "dann zerbreche es einfach.\n" );
+
+  AddCmd( ({"beobachte","betrachte", "betracht"}), "cmd_finden" );
+  AddCmd( ({"zerbrech", "zerbreche", "zerbrich"}), "cmd_zerbrechen");
+
+  AddCmd("schau|schaue&durch&"+BEZ,
+    "cmd_schauen",
+    "Wodurch moechtest Du schauen?|Wodurch moechtest Du schauen?"
+  );
+}
+
+void SetOwner(string uuid)
+{
+  if(owner == 0) owner = uuid;
+}
+
+string QueryOwner(string uuid)
+{
+  return owner;
+}
+
+int cmd_zerbrechen(string str)
+{
+  int i;
+
+  notify_fail("Was moechtest Du zerbrechen?\n");
+
+  if(!str || str == "") return 0;
+  if(!id(str))          return 0;
+
+  i = random(341)+241;
+
+  tell_object(TP, BS("Du wirfst d"+name(WEN,0)+" weg und es zerbirst in "+i+
+                     " kleine Splitter!"));
+
+  tell_room(ENV(TP), BS(TP->Name()+" wirft "+name(WEN,0)+" weg und es "
+                        "zerbirst in "+i+" kleine Splitter!"), ({ TP }) );
+
+  remove();
+  return 1;
+}
+
+int cmd_hilfe(string str)
+{
+  if(str == "beobachte" )
+  {
+    write(
+      "BEOBACHTE:\n\n"+
+      "        Mit dem Befehl 'beobachte' kannst Du, wenn Du bereits den\n"+
+      "        Seherstatus erreicht hast, andere Spieler beobachten. Mit\n"+
+      "        'beobachte <spieler>' wirst Du die Langbeschreibung des\n"+
+      "        Raumes von <spieler> sehen, was allerdings einige\n"+
+      "        Magiepunkte kostet.\n");
+    return 1;
+  }
+  return 0;
+}
+
+int is_wizard(object ob)
+{
+  if (IS_WIZARD(ob) && !ob->QueryProp(P_INVIS))
+    return 1;
+  return 0;
+}
+
+int cmd_finden(string str)
+{
+  object player, room;
+  string s, ilist;
+
+  notify_fail( "Wen willst Du beobachten?\n" );
+  if(!str  || str == "") return 0;
+
+  if(!IS_SEER(TP))
+  {
+    tell_object(TP, BS("Du schaust Durch das "+CAP(BEZ)+", siehst aber nur "
+                       "bunte Muster. Vielleicht kann man als Seher mehr "
+                       "erkennen?"));
+    return -1;
+  }
+
+  player = find_player(str);
+
+  if(!player)
+  {
+    tell_object(TP, "Ein Spieler mit diesem Namen ist nicht anwesend.\n");
+    return -1;
+  }
+
+  if(player->QueryProp(P_INVIS))
+  {
+    tell_object(TP, "Ein Spieler mit diesem Namen ist nicht anwesend.\n");
+    return -1;
+  }
+
+  if(IS_WIZARD(player) && !IS_WIZARD(TP))
+  {
+    tell_object(TP, "Bei Magiern geht das leider nicht.\n");
+    return -1;
+  }
+
+  if(player->QueryProp(P_TESTPLAYER) )
+  {
+    tell_object(TP, "Bei Testspielern geht das leider nicht.\n");
+    return -1;
+  }
+
+  if(TP->QueryProp(P_SP) < 20)
+  {
+    tell_object(TP, "Deine Magie reicht dazu nicht aus.\n");
+    return -1;
+  }
+  TP->AddSp(-5);
+
+  if (last == time())
+  {
+    tell_object(TP, "So oft kannst Du nicht beobachten.\n");
+    return -1;
+  }
+  last = time();
+
+  if(ilist = player->QueryProp(P_IGNORE))
+  {
+    if(member(ilist, "beobachte")             != -1  ||
+       member(ilist, getuid(TP))              != -1  ||
+       member(ilist, getuid(TP)+".beobachte") != -1   )
+    {
+      tell_object(TP, BS(player->Name(WER)+" moechte nicht beobachtet "
+                      "werden."));
+      return -1;
+    }
+  }
+
+  if(!(room = ENV(player)))
+  {
+    tell_object(TP, player->Name(WER)+" befindet sich gerade im Nirvana.\n");
+    return -1;
+  }
+
+  if (!IS_WIZARD(TP) && sizeof(filter_array(all_inventory(room), "is_wizard")))
+  {
+    tell_object(TP, 
+        "Eine starke magische Macht blockt Deinen Beobachtungsversuch ab.\n");
+    return -1;
+  }
+
+  if(!((file_name(room)[0..1] == "/d") || (file_name(room)[0..6] == "/gilden")))
+  {
+    tell_object(TP, player->Name(WER)+" befindet sich an einem sehr "
+                    "merkwuerdigen Ort.\n");
+    return -1;
+  }
+
+  if(!IS_WIZARD(TP))
+  {
+    tell_object(player, "Jemand beschwoert Dein Bild herauf.\n" );
+  }
+
+  s = "Du versenkst Deine Gedanken und konzentrierst Dich auf "+
+      player->name(WEN)+"...\n";
+
+  s += environment(player)->int_long(player,player,0 );
+
+  tell_object(TP, s);
+  return 1;
+}
+
+int cmd_schauen(string str)
+{
+  tell_object(TP, BS("Als Du durch das "+CAP(BEZ)+" schaust, kommt Dir die "
+                     "Idee, damit andere Spieler zu beobachten. Denn "
+                     "sicherlich ist dieses "+CAP(BEZ)+" magisch. "));
+
+
+  return 1;
+}
+
+

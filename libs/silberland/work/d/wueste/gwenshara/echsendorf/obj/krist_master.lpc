@@ -1,0 +1,103 @@
+#include <moredef.h>
+
+/* Edelsteinmapping:
+ * Index     : Edelsteinname
+ * 1. Element: Tauschverhaeltnis
+ * 2. Element: Tauschanzahl seit dem letzten Erhoehen d. Verhaeltnisses
+ * 3. Element: Anzahl der Kurswechselungen
+ * 4. Element: Letzte Kursaenderung
+*/
+
+mapping edelsteine;
+int init=0;
+void checkForCourse();
+
+void ini()
+{
+  string *gems;
+  int i;
+  gems="/obj/gemmaster"->QueryGems();
+  edelsteine=([]);
+  for(i=0; i<sizeof(gems); ++i)
+    if(!member(edelsteine, gems[i]))
+      edelsteine+=([gems[i]: 5; 0; 0; 0]);
+  init=1;
+  return;
+}
+
+int deal(string what, string to)
+{
+  if(!member(edelsteine, what) || !member(edelsteine, to))
+   return -1;
+  
+  /* Kursveraenderung */
+  if(edelsteine[to, 1]++ > (edelsteine[to, 2]+1)*10)
+  {
+    edelsteine[to, 0]++;
+    edelsteine[to, 2]++;
+    edelsteine[to, 3] = time();
+  }
+  if(edelsteine[what, 1]++ > (edelsteine[what, 2]+1)*10)
+  {
+    if(edelsteine[what, 0]<1)
+    {
+      log_file("/d/wueste/gwenshara/echsendorf/log/edelsteintausch",
+               what+" hat ein Verhaeltnis von 0:x - reset auf 1:x!\n",
+               78,
+                2);
+      edelsteine[what, 0] = 1;
+    }
+    else edelsteine[what, 0]--;
+    edelsteine[what, 2]++;
+    edelsteine[what, 3] = time();
+  }
+  checkForCourse();
+  return 1;
+}
+
+int GetAmount(string gem)
+{
+  return edelsteine[gem, 0];
+}
+
+void reset()
+{
+  string *indices;
+  int i;
+  indices=m_indices(edelsteine);
+
+  /* Tauschverhaeltnisse normalisieren sich */
+  for(i=0; i<sizeof(edelsteine); ++i)
+   if(edelsteine[indices[i], 3]-time() >= 1800)
+     if(edelsteine[indices[i], 0] > 5)
+       edelsteine[indices[i], 0]--;
+     else if(edelsteine[indices[i], 0] < 5)
+       edelsteine[indices[i], 0]++;
+   checkForCourse();
+  call_out("keep_active", 3);
+}
+
+int CheckGem(string gem)
+{
+  return member(edelsteine, gem);
+}
+
+int isInit()
+{
+  return init;
+}
+
+void keep_active(){}
+
+/* Noetig um zu sichern, dass der Tauschkurs nicht unter 0 faellt */
+void checkForCourse()
+{
+  string *indices;
+  int i;
+  indices=m_indices(edelsteine);
+
+  for(i=0; i<sizeof(edelsteine); ++i)
+    if(edelsteine[indices[i], 0] < 1) edelsteine[indices, 0] = 1;
+
+  return;
+}

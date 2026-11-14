@@ -1,0 +1,341 @@
+// SilberLand MUDLIB
+//
+// secure/warningmaster - handles player warnings
+//
+// $Id: warningmaster.c,v 1.5 2008/01/23 13:51:33 Woody Exp $
+/*
+ * $Log: warningmaster.c,v $
+ * Revision 1.5  2008/01/23 13:51:33  Woody
+ * Added some sanity checking in add_warning_to_player
+ *
+ * Revision 1.4  2003/05/16 12:48:15  Crea
+ * prototypes fixed
+ *
+ * Revision 1.3  2002/08/30 16:02:08  Crea
+ * small bugfix
+ *
+ * Revision 1.2  2002/08/29 19:22:47  Crea
+ * if player logs out before player_banish() there's no player object
+ *
+ * Revision 1.1  2002/08/29 17:11:56  Crea
+ * Initial revision
+ *
+ */
+
+/*
+ * data:
+ * mapping warnings = ([ string player: mapping warning ])
+ * mapping warning  = ([ int id: ({ int lvl, string cause, string warned_by, int time }) ])
+ * mapping warning will be saved in player
+ * 
+ * lvl:
+ * 10 ... low warning
+ * 20 ... critical warning
+ * 30 ... severe warning
+ * 
+ * levels will be summed up - reaching max warning level -> player deletion
+ */
+
+#pragma strong_types
+
+#include <properties.h>
+#include <language.h>
+#include "wizlevels.h"
+#include "warnings.h"
+#include <ansi.h>
+
+#define CHANNELD "p/daemon/channeld"
+
+mixed saveload;
+private int warning_id;
+private nosave mapping warnings;
+
+// prototypes
+//
+// externals:
+
+void create();
+int add_warning(string player, string cause, int lvl);
+int remove_warning(string player, int id);
+int save_me();
+int notify_player_change(object player);
+int get_id();
+int query_prevent_shadow();
+string name();
+
+// internals:
+
+private nosave int write_log(string str);
+private nosave void log(string str);
+private nosave void debug(string msg);
+private nosave int unique_id();
+private nosave int check_permissions();
+private nosave int check_player(string player);
+private nosave int add_warning_to_player(object player, mapping warning);
+nosave void player_banish(string player);
+
+
+void create() {
+  int ec;
+
+  if (is_clone(this_object())) {
+    destruct(this_object());
+    return;
+  }
+  ec=get_eval_cost();
+  seteuid(getuid(this_object()));
+  if (restore_object(WARNING_SAVEFILE))
+    warnings=saveload;
+  else {
+    warnings=([ ]);
+    warning_id=0;
+  }
+  saveload=0;
+  ec=ec-get_eval_cost();
+  log(sprintf("Master gestartet (eval_cost: %d)", ec));
+}
+
+string name() {
+  return "Merlin";
+}
+
+private nosave int write_log(string str) {
+  object po;
+
+  po=(this_interactive() || previous_object());
+  if (!po)
+    po=find_object("/secure/merlin");
+  return write_file(WARNING_LOGFILE, sprintf("%s [%s]: %s\n", ctime(time()), getuid(po), str));
+}
+
+private nosave void log(string str) {
+  debug(str);
+  write_log(str);
+}
+
+int save_me() {
+  saveload=warnings;
+  save_object(WARNING_SAVEFILE);
+  saveload=0;
+  return 1;
+}
+
+private nosave void debug(string msg) {
+  CHANNELD->join("Verwarnung", this_object());
+  CHANNELD->send("Verwarnung", this_object(), msg, MSG_SAY);
+}
+
+int get_id() {
+  return warning_id;
+}
+
+private nosave int unique_id() {
+  warning_id++;
+  return get_id();
+}
+
+private nosave int check_permissions() {
+  if (! (this_interactive() || previous_object()) )
+    return 0;
+/*  tell_object(find_player("creative"),
+      sprintf("warning: ti: %s, po: %s\n", getuid(this_interactive()), getuid(previous_object())));
+      */
+  if (this_interactive() && ! (IS_ARCH(this_interactive()) || getuid(this_interactive())==ROOTID))
+    return 0;
+  return 1;
+}
+
+nosave void player_banish(string player) {
+  object p;
+
+  log(sprintf("%s erreicht maximale Verwarnungspunkte und bekommt eine Spielpause gesetzt",
+        capitalize(player)));
+  call_other(MASTER, "TBanishName", player, -1);
+  if ((p=find_player(player))) {
+    tell_object(p, "Du hast den Bogen ueberspannt. Und Tschuess!!\n");
+    remove_interactive(p);
+  }
+}
+
+
+private nosave int add_warning_to_player(object player, mapping warning) {
+  mapping w;
+  mixed *keys;
+  mixed *data;
+  int *remove_warnings;
+  int i, old_warnings, new_warnings, level, percent, ret;
+  string str, c1, c2, c3, c4;
+
+  warning -= ([ 0 ]);   // woody: remove ([ 0 ])
+  ret=W_OK;
+  keys=m_indices(warning);
+  remove_warnings=({ });
+  for (i=sizeof(keys)-1; i>=0; i--) {
+    if (keys[i] < 0) {
+      // negative id means remove warning
+      remove_warnings += ({ (-1) * keys[i] });
+      warning=m_delete(warning, keys[i]);
+    } else if (keys[i] > 0) {
+      // debug output
+      w = warning[keys[i]];
+      log( sprintf("Verwarnung #%d [%d] an %s erteilt. Grund: %s",
+            keys[i], w[W_LEVEL], capitalize(getuid(player)), w[W_CAUSE]) );
+    }
+  }
+  str="";
+  switch (player->QueryProp(P_TTY)) {
+    case "ansi":
+      c1=ANSI_RED+ANSI_BOLD;
+      c2=ANSI_PURPLE+ANSI_BOLD;
+      c3=ANSI_BOLD+ANSI_YELLOW;
+      c4=ANSI_NORMAL;
+      break;
+    case "vt100":
+      c1=ANSI_BOLD;
+      c2=ANSI_BOLD+ANSI_UNDERL;
+      c3=ANSI_NORMAL;
+      c4=ANSI_NORMAL;
+      break;
+    case "dumb":
+    default:
+      c1=""; c2=""; c3=""; c4="";
+  }
+  w=player->QueryProp(P_WARNINGS) - ([ 0 ]);    // woody: remove ([ 0 ])
+  if (!mappingp(w))
+    w=([]);
+  old_warnings=sizeof(w);
+  w += warning;
+  level=0;
+  for (i=sizeof(remove_warnings)-1; i>=0; i--) {
+    if (member(w, remove_warnings[i])) {
+      log(sprintf("Verwarnung #%d [%d] wird von %s entfernt", remove_warnings[i], 
+            w[remove_warnings[i]][W_LEVEL], capitalize(getuid(player))));
+      level++;
+      w=m_delete(w, remove_warnings[i]);
+    }
+    else {
+      debug(sprintf("%s hat keine Verwarnung #%d!", capitalize(getuid(player)), remove_warnings[i]));
+      ret=W_IDNOTONPLAYER;
+    }
+  }
+  if (level) {
+    str+=sprintf("%sDir wurde%s soeben %s Verwarnung%s erlassen.%s\n", 
+                 c3, (level>1?"n":""), (level>1?to_string(level):"eine")+c1, (level>1?"en":"")+c3, c4);
+  }
+  player->SetProp(P_WARNINGS, w);
+  new_warnings=sizeof(w)-old_warnings;
+  if (new_warnings>0) {
+    str+=sprintf("\aDu hast soeben %s neue %sVerwarnung%s erhalten.\n",
+                 (new_warnings>1?to_string(new_warnings):"eine"), (new_warnings>1?"en":"")+c1, c4);
+  }
+  data=m_values(w);
+  level=0;
+  for (i=sizeof(data)-1; i>=0; i--) {
+    level+=data[i][W_LEVEL];
+  }
+  str+=sprintf("Die Summe Deiner Verwarnungspunkte betraegt jetzt: %s%d%s!!\n", c2, level, c4);
+  debug(sprintf("Summe der Verwarnungspunkte: %d", level));
+  percent=(level*100)/MAX_WARNING_LEVEL;
+  switch (percent) {
+     case 0..49: str+=""; break;
+     case 50..74: str+=sprintf("\n%sViel kannst Du Dir nicht mehr erlauben.%s\n", c3, c4); break;
+     case 75..99: str+=sprintf("\n%sEine kleine %sVerwarnung%s noch, und Du kannst Adieu sagen!%s\n", c3, c2, c3, c4); break;
+     default: str+=sprintf("\nAufgrund Deiner Verfehlungen wirst Du mit einer Spielpause belegt.\n", c3, c4);
+              call_out("player_banish", 4, getuid(player));
+                    // playerdelete() / TBanish(p, -1)
+  }
+  tell_object(player, str);
+  if (member(warnings, getuid(player)))
+    warnings=m_delete(warnings, getuid(player));
+  save_me();
+  return ret;
+}
+
+private nosave int check_player(string player) {
+  mixed *w;
+
+  w=call_other(MASTER, "get_userinfo", player);
+  if (!w)
+    return 0;
+  return 1;
+}
+
+int add_warning(string player, string cause, int lvl) {
+  mapping w;
+  object p;
+  int id;
+
+  if (!check_permissions())
+    return 0;
+  if (!check_player(player))
+    return W_NOSUCHPLAYER;
+  if (member(warnings, player))
+    w=warnings[player];
+  else
+    w=([]);
+  id=unique_id();
+  w += ([ id: ({ lvl, cause, getuid(this_interactive()), time() }) ]);
+  if ((p=find_player(player)))
+    return add_warning_to_player(p, w);
+  else {
+    debug(sprintf("[Vorgemerkt] Erteile Verwarnung #%d an %s", id, capitalize(player)));
+    warnings += ([ player: w ]);
+    save_me();
+    return 1;
+  }
+}
+
+int notify_player_change(object player) {
+  mapping w;
+  string p;
+  int cnt;
+
+  if (!check_permissions())
+    return 0;
+  p=getuid(player);
+  if (!member(warnings, getuid(player)))
+    return 0;
+  w=warnings[p];
+  cnt=sizeof(m_indices(w));
+//  debug(sprintf("%s: Pruefen auf zu erteilende Verwarnungen -> %d", capitalize(p), cnt));
+  add_warning_to_player(player, w);
+  return 1;
+}
+
+int remove_warning(string player, int id) {
+  mapping w;
+  object p;
+
+  if (!check_permissions())
+    return 0;
+  if (!check_player(player))
+    return W_NOSUCHPLAYER;
+  if (id > get_id())
+    return W_NOSUCHID;
+  if (member(warnings, player))
+    w=warnings[player];
+  else
+    w=([]);
+  w += ([ (-1)*id: 0]);
+  if ((p=find_player(player)))
+    return add_warning_to_player(p, w);
+  else {
+    debug(sprintf("[Vorgemerkt] Entferne Warnung #%d von %s", id, capitalize(player)));
+    if (MASTER->QueryTBanished(player)) {
+      log(sprintf("%s wird die Spielpause entzogen.", capitalize(player)));
+      call_other(MASTER, "TBanishName", player, 0);
+    }
+    warnings += ([ player: w ]);
+    save_me();
+    return 1;
+  }
+}
+
+int query_prevent_shadow() {
+  return 1;
+}
+
+string query_pending() {
+}
+
+

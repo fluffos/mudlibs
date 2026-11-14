@@ -1,0 +1,80 @@
+#include <properties.h>
+#include <language.h>
+#include <new_skills.h>
+#include <moredef.h>
+#include "/gilden/bardengilde/bardengilde.h"
+#include <mnpc.h>
+
+inherit "/gilden/bardengilde/obj/std_spellprovider";
+
+mapping bardsWhoPlayed;
+mixed mnpcFlags;
+
+
+public void initialize_bard_spell_teacher(string bard_group) {
+    this_object()->SetProp(P_BARD_GROUP, bard_group);
+    bardsWhoPlayed = ([ ]);
+    mnpcFlags = this_object()->QueryPro(P_MNPC_FLAGS);
+}
+
+protected void learnSong(object who) {
+    string song;
+
+    switch(who->QueryProp(P_BARD_GROUP)) {
+        case BARD_GROUP_ALESTRA:
+          song = "flamme bin ich";
+          break;
+        case BARD_GROUP_TIRENA:
+          song = "windlied der sylphen";
+          break;
+        case BARD_GROUP_KORRIAX:
+          song = "des todes drei trommelschlaege";
+          break;
+        case BARD_GROUP_SARRIAN:
+          song = "das lied vom sturmvogel";
+          break;
+        default:
+          raise_error("illegale bardengruppe");
+          break;
+    }
+
+    if(who->QuerySkill(song) != 0) return;
+
+    tell_object(who, BS(sprintf("%s dankt dir fuer die schoene Musik und verraet dir ein Geheimnis...",
+                this_object()->Name(WER, 1))));
+    tell_room(environment(who), BS(sprintf("%s bedankt sich bei %s fuer die schoene Musik.", 
+              this_object()->Name(WER, 1), who->name(WEM, 1))), ({who}));
+    
+    LearnBardSpell(who, song, "Dieses Lied verleiht dir die Kraft der Geister!", sprintf("spiele '%s'", song));
+    return;
+}
+
+public void reset_mnpc_falgs() {
+    this_object()->SetProp(P_MNPC_FLAGS, mnpcFlags);
+}
+
+public void InformBardSongPlayed(object bard, int success) {
+    if(this_object()->QueryProp(P_BARD_GROUP) == bard->QueryProp(P_BARD_GROUP)) {
+        if(!member(bardsWhoPlayed, getuid(bard))) {
+            bardsWhoPlayed += ([ getuid(bard): success ]);
+        } else {
+            bardsWhoPlayed[getuid(bard)] = bardsWhoPlayed[getuid(bard)] + success;
+        }
+        
+        if(bardsWhoPlayed[getuid(bard)] > 200) {
+            learnSong(bard);
+            bardsWhoPlayed = m_delete(bardsWhoPlayed, getuid(bard));
+        }
+    }
+
+    tell_room(environment(this_object()), BS(sprintf("%s tanzt zur Musik.", this_object()->Name(WER, 1))));
+    this_object()->SetProp(P_MNPC_FLAGS, 0);
+    if(find_call_out("reset_mnpc_flags") < 1) {
+        call_out("reset_mnpc_flags", 120);
+    }
+    return;
+}
+
+public mapping GetBardsWhoPlayed() {
+    return bardsWhoPlayed;
+}

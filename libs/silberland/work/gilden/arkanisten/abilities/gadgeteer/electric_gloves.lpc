@@ -1,0 +1,86 @@
+#include "../../arkanisten.h"
+
+inherit GUILD_FOLDER "abilities/ability.lpc";
+
+public void create() {
+    if(is_clone(TO)) return;
+
+    ::create();
+    SetProp(P_ABILITY_NAME, "Elektrifizierte Handschuhe");
+    SetProp(P_ABILITY_DESCRIPTIPON, 
+        "tbd");    
+    SetProp(P_ABILITY_TYPE, ABILITY_TYPE_ACTIVE);
+    SetProp(P_ABILITY_BASE_ATTRIBUTE, A_INT);
+    SetProp(P_ABILITY_CASTVERB, CAST_VERB_ACTIVATE);
+    SetProp(P_ABILITY_GROUP, ({ABILITY_GROUP_GADGET_POWERUP, ABILITY_GROUP_GADGETS}));
+    SetProp(P_ABILITY_REQUIRES, ({SPRINGLOADED_GLOVES, TESLA_BATON}));
+    SetProp(P_ABILITY_COST, ([
+        P_SP: 15
+    ]));
+    
+    subscribe_to(SPRINGLOADED_GLOVES, EVENT_AFTER_USE);
+}
+
+public mapping prepare_use(object user, mapping sinfo) {
+    sinfo = ::prepare_use(user, sinfo);
+    if(!sinfo) return 0;
+    if(user->QueryProp(P_WATCHER_ELECTRIC_GLOVES) > time()) {
+        tell_object(user, BS("Deine Handschuhe sind bereits aufgeladen."));
+        return 0;
+    }
+    
+    tell_object(user, BS("Du drehst schnell an einer Spulenkurbel deiner Handschuhe."));
+    tell_room(ENV(user), BS(user->Name(WER)+" dreht schnell eine Kurbel an den Handschuhen."), ({user}));
+
+    sinfo[SI_PREPARE_TIME] = 4;
+    sinfo[SI_SPELLFATIGUE] = 4;
+
+    return sinfo;
+}
+
+public void success(object caster, mapping sinfo, int skillcheck) {
+    int duration;
+
+    if(caster->QueryProp(P_WATCHER_ELECTRIC_GLOVES) > time()) {
+        tell_object(caster, BS("Deine Handschuhe sind bereits aufgeladen."));
+        return;
+    }
+
+    tell_object(caster, BS("Mit einem elektrischen Knistern zucken Blitze ueber die Metallteile deiner Handschuhe."));
+    tell_room(ENV(caster), BS("Knisternd zucken Blitze ueber die "+caster->name(WESSEN)+" Handschuhe."), ({caster}));
+    
+    duration = sinfo[SI_SKILLABILITY] / 100 + skillcheck / 100;
+    caster->SetProp(P_WATCHER_ELECTRIC_GLOVES, time() + duration);
+    call_out("end_electric_gloves", duration - 2, caster);
+    return;
+}
+
+public void end_electric_gloves(object caster) {
+    if(caster->QueryProp(P_WATCHER_ELECTRIC_GLOVES) < time()) return;
+
+    tell_object(caster, BS("Das elektrische Knistern deiner Handschuhe verschwindet. Sie sind nicht mehr geladen!"));
+    caster->SetProp(P_WATCHER_ELECTRIC_GLOVES, 0);
+    return;
+}
+
+public void handle_ability_event(string sender_name, int event, mixed payload) {
+    object gloves;
+    object user;
+    mapping sinfo;
+
+    if(sender_name != SPRINGLOADED_GLOVES) return;
+    if(event != EVENT_AFTER_USE) return;
+    if(!mappingp(sinfo=payload)) return;
+    if(!objectp(user = payload["user"])) return;
+    if(user->QueryProp(P_WATCHER_ELECTRIC_GLOVES) < time()) return;
+    if(!objectp(gloves = present(SPRINGLOADED_GLOVES_ID, user))) return;
+
+    if(!gloves->id(TESLA_BATON_ID)) gloves->AddId(TESLA_BATON_ID);
+
+    sinfo[SI_SKILLARG] = sinfo[SI_ENEMY];
+    //pDebug(user, sprintf("electric_gloves :: sinfo=%O\n", sinfo));
+    ABILITY_SERVICE->get_ability_by_name(TESLA_BATON)->use(user, payload["sinfo"]);
+
+    gloves->RemoveId(TESLA_BATON);
+    return;
+}

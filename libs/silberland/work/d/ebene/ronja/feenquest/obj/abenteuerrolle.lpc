@@ -1,0 +1,542 @@
+//=========================================================================
+//
+// File:    abenteuerrolle.c
+// Created by Ronja@SL
+//
+// Project: Feen (amaltheas ring)
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit "std/thing";
+
+#define VERSION 1
+
+string *players;
+
+void create()
+{
+  if (!is_clone(TO))return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Eine Schriftrolle");
+  SetProp(P_LONG,
+    "Ein altes Pergament, mit vielen Flecken und an den Raendern schon "
+    "ziemlich eingerissen. Du kannst sie Dir anschauen."
+  );
+
+  SetProp(P_NAME, "Schriftrolle");
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({"rolle","schriftrolle","abenteuerrolle","\nABENTEUERROLLE"}) );
+
+  SetProp(P_MATERIAL, ([MAT_PAPER:100]) );
+  SetProp(P_WEIGHT, 20);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, BS("Diese Schriftrolle hat viel zuviel Muehen "
+                       "gekostet, als das Du sie einfach verkaufen wuerdest."));
+
+  SetProp(P_MAGIC, BS("Diese Schriftrolle merkt sich viele wichtige "
+                      "Abenteuer von Dir."));
+
+//            1         2         3         4         5         6         7         8
+//   12345678901234567890123456789012345678901234567890123456789012345678901234567890
+  SetProp(P_INFO,
+    "Diese Schriftrolle merkt sich automagisch alle von Dir bestandenen "
+    "Abenteuer. Du kannst Dir Deine Abenteuer mit 'schaue rolle an' "
+    "anzeigen lassen oder sie jemand anderem zeigen 'zeige rolle <name>'. "
+    "Wenn Du Jemanden triffst, der auch eine solche Schriftrolle benutzt, "
+    "dann kannst Du Deine Abenteuer auch mit der Person vergleichen "
+    "'vergleiche rolle mit <name>'.\n"
+    "Fuehlst Du Dich vom zeigen lassen und vergleichen belaestigt, so "
+    "kannst Du die Abenteuerrolle von anderen Spielern ignorieren.\n"
+    "- ignoriere abenteuerrolle\n"
+    "       Du ignorierst saemtliche Versuche anderer Spieler, die Dir ihre \n"
+    "       Abenteuerrolle zeigen wollen oder sich mit Dir vergleichen wollen.\n\n"
+    "- ignoriere abenteuerrolle.name\n"
+    "       Du ignorierst gezielt alle Versuche vom Spieler mit dem Namen 'name'.\n\n"
+    "- ignoriere abenteuerrolle.zeigen\n"
+    "       Niemand kann Dir mehr seine Abenteuerrolle zeigen.\n\n"
+    "- ignoriere abenteuerrolle.vergleichen\n"
+    "       Niemand kann sich mehr mit Dir vergleichen."
+  );
+
+  AddDetail( ({"papier","rolle","schriftrolle"}) ,
+    "Das Pergament ist schon etwas vergilbt und ausgefransst, aber "
+    "man kann noch alles darauf erkennen. "
+  );
+
+  AddCmd( ({"schau","schaue","betrachte","betracht"}) , "cmd_anschauen");
+  AddCmd( ({"zerreiss","zerreisse"})                  , "cmd_zerreissen");
+  AddCmd( ({"zeig","zeige"})                          , "cmd_zeigen");
+  AddCmd( ({"vergleich","vergleiche"})                , "cmd_vergleichen");
+
+  players = ({ });
+}
+
+int QueryVersion()
+{
+  return VERSION;
+}
+
+void reset()
+{
+  ::reset();
+
+  players = ({ });
+}
+
+string plur(int n)
+{
+  if(n > 1) return "e"; else return "";
+}
+
+mapping GetQuests(object pl)
+{
+  mapping q;
+  mixed *allquests;
+  string id;
+  int i,ap,ts;
+
+  q = ([ ]);
+
+  if(!objectp(pl))                return q;
+  if(!query_once_interactive(pl)) return q;
+
+  allquests = pl->QueryProp(P_QUESTS);
+  i = sizeof(allquests);
+
+  while(i--)
+  {
+    id    = to_string(allquests[i][0]);
+    ap    = to_int(allquests[i][1]);
+    ts    = 0;
+    if(sizeof(allquests[i]) == 3) ts = to_int(allquests[i][2]);
+    q += ([id:ap;ts]);
+  }
+
+  return q;
+}
+
+string out(object pl)
+{
+  int i, n, hint;
+  string s, t;
+  mixed *allquests, *quest;
+
+  hint = 0;
+
+  t = "-*-*-*- "+TP->name(WESSEN)+" geloeste Abenteuer -*-*-*- ";
+  while(strlen(t) < 50) t += " ";
+
+  allquests = pl->QueryProp(P_QUESTS);
+  n = sizeof(allquests);
+  s  = "  ________________________________________________________________________ \n";
+//s += " / \\-----       -*-*-*- Deine geloesten Abenteuer -*-*-*-  -----  --------\\\n";
+  s += " / \\-----     "+t+"  --------\\\n";
+  s += " \\~/______________________________________________________________________/\n";
+  s += "  |                                                                       |\n";
+
+
+  for(i=0;i<n;i++)
+  {
+    quest = allquests[i];
+
+    if(sizeof(quest) == 3)
+    {
+      if(quest[2] == -1)
+      {
+        t    = "Nicht verzeichnet";
+        hint = 1;
+      }
+      else
+      {
+        t = dtime(quest[2]);
+      }
+    }
+    else
+    {
+      t    = "Nicht verzeichnet";
+      hint = 1;
+    }
+
+    s += sprintf("  |  %-38s %-27s   |\n",to_string(quest[0]),t);
+  }
+
+  s += "  |                                                                       |\n";
+  s += " __\\----- ----- ------------  ------- ----- -------  --------  -----------\\\n";
+  s += " \\_/______________________________________________________________________/\n\n";
+
+  if(hint)
+  {
+    s += BS("Die Meldung 'Nicht verzeichnet' bedeutet, dass es leider "
+            "nicht mehr verzeichnet ist, wann Du die Quest geloest hast. "
+            "Das ist schlimm, das ist schrecklich, aber nicht zu aendern.");
+  }
+
+  return s;
+}
+
+int cmd_anschauen(string str)
+{
+  int n;
+  string was;
+
+  notify_fail("Was moechtest Du Dir anschauen?\n");
+
+  if(!str || str == "") return 0;
+
+           n = sscanf(str, "%s an", was);
+  if(n!=1) n = sscanf(str, "auf %s", was);
+  if(n!=1) was = str;
+
+  if(!id(was)) return 0;
+
+//TELLPLAYER(out(TP));
+  TP->More(out(TP));
+  TELLOTHERS(TP->Name()+" schaut auf eine Schriftrolle.\n");
+
+  return 1;
+}
+
+int cmd_zerreissen(string str)
+{
+  int i;
+
+  notify_fail("Was moechtest Du zerreissen?\n");
+
+  if(!str || str == "") return 0;
+  if(!id(str))          return 0;
+
+  i = random(341)+241;
+
+  TELLPLAYER("Du zerreisst Deine Schriftrolle in "+i+" kleine Fetzen!\n");
+  TELLOTHERS(BS(TP->Name()+" zerreisst ein Stueck Papier in "+i+" kleine Fetzen!"));
+
+  remove();
+  return 1;
+}
+
+int cmd_zeigen(string str)
+{
+  int i,n,nicht;
+  string wem,was,s,*woerter;
+  object pl;
+
+  notify_fail("Was moechtest Du wem zeigen?\n");
+
+  if(!str || str == "") return 0;
+
+  wem   = "";
+  was   = "";
+  nicht = 0;
+
+  woerter = explode(str," ");
+  i = sizeof(woerter);
+  while(i--)
+  {
+    if(id(woerter[i]))          was   = woerter[i];
+    if(find_player(woerter[i])) wem   = woerter[i];
+    if(woerter[i] == "nicht")   nicht = 1;
+  }
+
+  if(!(was != "" && wem != "")) return 0;
+
+  if(nicht)
+  {
+    TELLPLAYER("Na dann eben nicht!\n");
+    return -1;
+  }
+
+  if(!(pl = find_player(wem)))
+  {
+    TELLPLAYER("Einen Spieler namens "+CAP(wem)+" kenne ich nicht!\n");
+    return -1;
+  }
+
+  if(pl == TP)
+  {
+    TELLPLAYER(BS("Naja, also Dir selbst gegenueber brauchst Du ja nicht "
+                  "mit Deinen Heldentaten prahlen."));
+    return -1;
+  }
+
+  if(s = pl->QueryProp(P_IGNORE))
+  {
+    if(member(s, "abenteuerrolle")             != -1  ||
+       member(s, "abenteuerrolle.zeigen")      != -1  ||
+       member(s, getuid(TP))                   != -1  ||
+       member(s, "abenteuerrolle."+getuid(TP)) != -1   )
+    {
+      TELLPLAYER(BS(pl->Name(WER)+" interessiert sich nicht fuer Deine "
+                 "Abenteuerrolle."));
+      return -1;
+    }
+  }
+
+  if(ENV(TP) != ENV(pl))
+  {
+    TELLPLAYER(BS(pl->Name(WER)+" ist viel zu weit weg, als dass Du "+
+                  pl->QueryPronoun(WEM)+" mit Deinen Heldentaten "
+                  "imponieren koenntest."));
+    return -1;
+  }
+
+  if(member(players,getuuid(pl)) > -1)
+  {
+    TELLPLAYER(BS("Du hast "+pl->Name(WEM)+" gegenueber erst vorhin mit "
+                  "Deinen Heldentaten geprahlt, das brauchst Du ja nun nicht "
+                  "andauernd zu tun."));
+    return -1;
+
+  }
+
+  if(pl->InFight())
+  {
+    TELLPLAYER(BS(pl->Name(WER)+" ist im Moment stark beschaeftigt und hat "
+                  "fuer Deine Heldentaten derzeit kein Interesse."));
+    return -1;
+  }
+
+  if(pl->QueryProp(P_BUFFER))
+  {
+    TELLPLAYER(BS(pl->Name(WER)+" ist im Moment beschaeftigt und hat "
+                  "fuer Deine Heldentaten derzeit kein Interesse."));
+    return -1;
+  }
+
+  TELLPLAYER(BS("Du prahlst "+pl->Name(WEM)+" gegenueber mit Deinen "
+                "Heldentaten und zeigst "+pl->QueryPronoun(WEM)+" Deine "
+                "Abenteuerschriftrolle."));
+
+  tell_object(pl,BS(TP->Name(WER)+" prahlt Dir gegenueber mit "+
+                    TP->QueryPossPronoun(FEMALE,WEM,PLURAL)+" Helden"
+                    "taten: ")+"\n"+out(TP));
+
+  tell_room(ENV(TP),BS(TP->Name(WER)+" zeigt "+pl->Name(WEM)+" "+
+                       TP->QueryPossPronoun(FEMALE,WEN,PLURAL)+
+                       " Heldentaten."), ({TP,pl}) );
+
+  if(!IS_WIZARD(TP)) players += ({ getuuid(pl) }) ;
+
+  return 1;
+}
+
+int cmd_vergleichen(string str)
+{
+  int i,n,nicht;
+
+  int  n_a, n_b, n_a_b;
+  int ap_a,ap_b,ap_a_b;
+
+  string wem,was,s,*key,*woerter;
+  mapping quest_a, quest_b;
+  object pl;
+
+  notify_fail("Was moechtest Du mit wem vergleichen?\n");
+
+  if(!str || str == "") return 0;
+
+  wem   = "";
+  was   = "";
+  nicht = 0;
+
+  woerter = explode(str," ");
+  i = sizeof(woerter);
+  while(i--)
+  {
+    if(id(woerter[i]))          was   = woerter[i];
+    if(find_player(woerter[i])) wem   = woerter[i];
+    if(woerter[i] == "nicht")   nicht = 1;
+  }
+
+  if(!(was != "" && wem != "")) return 0;
+
+  if(nicht)
+  {
+    TELLPLAYER("Na dann eben nicht!\n");
+    return -1;
+  }
+
+  if(!(pl = find_player(wem)))
+  {
+    TELLPLAYER("Einen Spieler namens "+CAP(wem)+" kenne ich nicht!\n");
+    return -1;
+  }
+
+  if(pl == TP)
+  {
+    TELLPLAYER(BS("Naja, also Dir selbst gegenueber brauchst Du ja nicht "
+                  "mit Deinen Heldentaten prahlen."));
+    return -1;
+  }
+
+  if(s = pl->QueryProp(P_IGNORE))
+  {
+    if(member(s, "abenteuerrolle")             != -1  ||
+       member(s, "abenteuerrolle.vergleichen") != -1  ||
+       member(s, getuid(TP))                   != -1  ||
+       member(s, "abenteuerrolle."+getuid(TP)) != -1   )
+    {
+      TELLPLAYER(BS(pl->Name(WER)+" moechte sich nicht mir Dir verleichen."));
+      return -1;
+    }
+  }
+
+  if(ENV(TP) != ENV(pl))
+  {
+    TELLPLAYER(BS(pl->Name(WER)+" ist viel zu weit weg, als dass Du "+
+                  pl->QueryPronoun(WEM)+" mit Deinen Heldentaten "
+                  "imponieren koenntest."));
+    return -1;
+  }
+/*
+  if(member(players,getuuid(pl)) > -1)
+  {
+    TELLPLAYER(BS("Du hast "+pl->Name(WEM)+" gegenueber erst vorhin mit "
+                  "Deinen Heldentaten geprahlt, das brauchst Du ja nun nicht "
+                  "andauernd zu tun."));
+    return -1;
+  }
+*/
+  if(pl->InFight())
+  {
+    TELLPLAYER(BS(pl->Name(WER)+" ist im Moment stark beschaeftigt und hat "
+                  "fuer Deine Heldentaten derzeit kein Interesse."));
+    return -1;
+  }
+
+  if(pl->QueryProp(P_BUFFER))
+  {
+    TELLPLAYER(BS(pl->Name(WER)+" ist im Moment beschaeftigt und hat "
+                  "fuer Deine Heldentaten derzeit kein Interesse."));
+    return -1;
+  }
+
+  if(!IS_WIZARD(TP) && !present("\nABENTEUERROLLE",pl))
+  {
+    TELLPLAYER(BS(pl->Name()+" hat keine Abenteuerrolle. Daher kannst Du "
+                  "auch nichts vergleichen."));
+    return -1;
+  }
+
+  n_a    = 0;
+  n_b    = 0;
+  n_a_b  = 0;
+
+  ap_a   = 0;
+  ap_b   = 0;
+  ap_a_b = 0;
+
+  quest_a = GetQuests(TP);
+  quest_b = GetQuests(pl);
+
+  key = m_indices(quest_a);
+  i = sizeof(key);
+  while(i--)
+  {
+    if(member(quest_b,key[i]))
+    {
+      n_a_b++;
+      ap_a_b += quest_a[key[i]];
+//    tell_object(TP,sprintf("A und B: %s\n",key[i]));
+    }
+    else
+    {
+      n_a++;
+      ap_a += quest_a[key[i]];
+//    tell_object(TP,sprintf("Nur A  : %s\n",key[i]));
+    }
+  }
+
+  key = m_indices(quest_b);
+  i = sizeof(key);
+  while(i--)
+  {
+    if(!member(quest_a,key[i]))
+    {
+      n_b++;
+      ap_b += quest_b[key[i]];
+//    tell_object(TP,sprintf("Nur B  : %s\n",key[i]));
+    }
+  }
+
+//tell_object(TP,sprintf("Rolle: %d %d %d %d %d %d\n",n_a,n_b,n_a_b,ap_a,ap_b,ap_a_b));
+
+  s = "";
+
+  switch(n_a)
+  {
+    case 0:
+      s += "Du hast keine Quest geloest, die nicht auch "+pl->name()+
+           " geloest haette. ";
+      break;
+
+    case 1:
+      s += "Du hast eine Quest geloest, die "+pl->name()+" nicht geloest "
+           "hat. Diese hat Dir "+ap_a+" Abenteuerpunkt"+plur(ap_a)+
+           " eingebracht. ";
+      break;
+
+    default:
+      s += "Du hast "+n_a+" Quests geloest, die "+pl->name()+" noch nicht "
+           "geloest hat. Das hat Dir "+ap_a+" Abenteuerpunkt"+plur(ap_a)+
+           " eingebracht. ";
+      break;
+  }
+
+  switch(n_b)
+  {
+    case 0:
+      s += pl->Name()+" hat keine Quest geloest, die Du nicht auch geloest "
+           "hast. ";
+      break;
+
+    case 1:
+      s += pl->Name()+" hat eine Quest geloest, die Du nicht geloest hast. "
+           "Diese hat "+pl->name()+" "+ap_b+" Abenteuerpunkt"+plur(ap_b)+
+           " eingebracht. ";
+      break;
+
+    default:
+      s += pl->Name()+" hat "+n_b+" Quests geloest, die Du noch nicht "
+           "geloest hast. Das hat "+pl->name()+" "+ap_b+
+           " Abenteuerpunkt"+plur(ap_b)+" eingebracht. ";
+      break;
+  }
+
+  switch(n_a_b)
+  {
+    case 0:
+      s += "Es gibt keine Quest, die ihr beide geloest habt. ";
+      break;
+
+    case 1:
+      s += "Ihr habt eine Quest gemeinsam geloest, die euch "+ap_a_b+
+           " Abenteuerpunkt"+plur(ap_a_b)+" eingebracht hat. ";
+      break;
+
+    default:
+      s += "Ihr habt "+n_a_b+" Quests gemeinsam geloest, welche euch "
+           +ap_a_b+" Abenteuerpunkt"+plur(ap_a_b)+" eingebracht haben. ";
+      break;
+  }
+
+  s = "\n"+BS("Du vergleichst Deine Abenteuer mit denen von "+
+      CAP(getuid(pl))+" und kommst zu dem Schluss:")+
+      "-------------------------------------------------------------------"
+      "---------\n"+
+      BS(s)+
+      "-------------------------------------------------------------------"
+      "---------\n";
+
+  tell_object(TP,s);
+
+//players += ({ getuuid(pl) }) ;
+
+  return 1;
+}
+
+

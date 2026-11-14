@@ -1,0 +1,102 @@
+mapping dirmap = ([
+    "n":"norden",     "s":"sueden", 
+    "w":"westen",     "o":"osten",
+    "nw":"nordwesten","sw":"suedwesten", 
+    "so":"suedosten", "no":"nordosten",
+    "ob":"oben",      "u":"unten", 
+    "nob":"nordoben", "noob":"nordostoben",
+    "oob":"ostoben",  "soob":"suedostoben",
+    "sob":"suedoben", "swob":"suedwestoben",
+    "wob":"westoben", "nwob":"nordwestoben",
+    "nu":"nordunten", "nou":"nordostunten",
+    "ou":"ostunten",  "sou":"suedostunten",
+    "su":"suedunten", "swu":"suedwestunten",
+    "wu":"westunten", "nwu":"nordwestunten",
+    ]);
+
+varargs int prep_weitblick(object caster, mapping sinfo, int flag)
+{
+  string str;
+
+  if (caster->InFight())
+  {
+    tell_object(caster,
+        "Du solltest Dich lieber auf den Kampf konzentrieren.\n");
+    return 0;
+  }
+  if (!str = sinfo[SI_SKILLARG])
+  {
+    tell_object(caster, "Wohin willst Du blicken?\n");
+    return 0;
+  }
+  str = dirmap[str] || str;
+  if (member(m_indices(environment(caster)->QueryProp(P_NEW_EXITS)), str) == -1)
+  {
+    tell_object(caster, "In diese Richtung kannst Du nicht blicken!\n"); 
+    return 0; 
+  }
+  if (sinfo[SI_SKILLABILITY] == MAX_ABILITY && environment(caster) && 
+      file_name(environment(caster))[0..9] == "/d/astral/")
+  {
+    sinfo[SI_RAW_SPELLCOST] = 6;
+    sinfo[SI_SPELLFATIGUE] = 0;
+  }
+  if (!pay_for_spell(caster, sinfo, !flag))
+    return 0;
+  return 1;
+}
+
+int weitblick(object caster, mapping sinfo) 
+{
+  int suc;
+  string str;
+  mapping exits;
+  object room;
+  string desc;
+
+  if (!prep_weitblick(caster, sinfo, 1))
+     return 0;
+
+  if ((suc = SpellSuccess(caster,sinfo)) <= 0)
+    return MISSERFOLG;
+
+  environment(caster)->Message(BS(sprintf("%s laesst ihren Blick in die "
+          "Ferne schweifen.\n", caster->Name(WER,1))),
+      MSGFLAG_VISUAL | MSGFLAG_NO_TP); 
+
+  tell_object(caster, "Du laesst Deinen Blick in die Ferne schweifen.\n");
+
+  if (!(str = sinfo[SI_SKILLARG]))
+    return 0;
+  str = dirmap[str] || str;
+  if (!mappingp(exits = environment(caster)->QueryProp(P_NEW_EXITS)))
+    return 0;
+  if (member(m_indices(exits), str) == -1)
+    return 0;
+  catch(call_other(exits[str][EX_DEST], "???"));
+  if (!objectp(room = find_object(exits[str][EX_DEST])) )
+    return 0;
+
+  if (suc + sinfo[SI_SKILLABILITY] < MAX_ABILITY)
+    desc = room->QueryProp(P_INT_SHORT) + ".\n";
+  else if (suc + sinfo[SI_SKILLABILITY] < 3 * MAX_ABILITY / 2)
+    desc = room->int_short(caster, this_object());
+  else
+    desc = room->int_long(caster, this_object());
+  tell_object(caster, sprintf("\nIn Richtung %s siehst Du:\n%s",
+        capitalize(str), desc));
+
+  if (sinfo[SI_SKILLABILITY] == MAX_ABILITY && suc > 7500 &&
+      mappingp(exits = environment(caster)->QueryProp(P_NEW_EXITS)) &&
+      member(m_indices(exits), str) != -1)
+  { 
+    catch(call_other(exits[str][EX_DEST], "???"));
+    if (objectp(room = find_object(exits[str][EX_DEST])))
+    {
+      desc = room->int_short(caster, this_object());
+      tell_object(caster, sprintf("\nNoch weiter in Richtung %s siehst Du:\n%s",
+                    capitalize(str), desc));
+    }
+  }
+  return ERFOLG;
+}

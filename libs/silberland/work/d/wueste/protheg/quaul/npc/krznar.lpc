@@ -1,0 +1,268 @@
+#include "../def.h"
+
+inherit MOST "mynpc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <new_skills.h>
+#include <moving.h>
+#include <npc.h>
+
+
+#define HFPREIS 299
+#define DELFPREIS 99
+#define LAGER 10
+#define MYMONEY 2000
+
+get_fackel();
+menge_fackel();
+
+int vorrat;
+
+void create() 
+{
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Krznar, der Schlitzer");
+  SetProp(P_LONG,
+	  "Vor Dir steht ein beeindruckendes Bild von einem Dunkelelfen. Eine fast zwei Meter "+
+	  "grosse Gestalt mit einem bedrohlich wirkenden dunklen Umhang, einem schwarzen, tief "+
+	  "ins Gesicht gezogenen Hut, und einem kleinen Sack auf dem Ruecken funkelt Dich "+
+	  "boese an.\n");
+  SetProp(P_NAME, "Krznar");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:0,T_RANGE_MAX:60]));
+  AddId(({"krznar", "schlitzer","NOWIMPY"}));
+  set_living_name("krznar");
+  set_light(-2);
+
+  create_default_npc(22);
+  SetProp(P_HANDS, ({" mit seinen Krummsaebeln",
+		       QueryProp(P_HANDS)[1]+50,DT_BLUDGEON}));
+  SetProp(P_RACE, "Dunkelelf");
+  SetProp(P_SIZE, 190);
+  SetProp(P_ALIGN, -1000);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_VULNERABILITY, ({DT_HOLY,DT_LIGHT}));
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_NOMAGIC, 99);
+  SetProp(P_GUILD, "dunkelelfen");
+  SetProp(P_GUILD_LEVEL, 38);
+
+  ModifySkill("dunkellanze", 10000);
+  ModifySkill("dunkellanze", ([SI_PREPARE_TIME:0, SI_SPELLCOST:0]));
+  ModifySkill("schnell", 10000);
+  ModifySkill("schnell", ([SI_PREPARE_TIME:0, SI_SPELLCOST:10]));
+
+  //  SetProp(P_NOATTACK, "will nicht mit Dir kaempfen!"); gibs jetzt eleganter
+  SetProp(P_MSGIN, "schleicht herein");
+  SetProp(P_MSGOUT, "schleicht");
+  SetProp(P_MMSGIN, "tritt aus dem Schatten hervor");
+  SetProp(P_MMSGOUT, "verschwindet in einem Schatten");
+
+  SetProp(P_MNPC_AREA, ROOM "quaul" );
+  SetProp(P_MNPC_WAIT, ({ 60, 60, 30 }));
+  SetProp(P_MNPC_DEFAULTROOM, ROOM "quaul_3_4_2");
+  SetProp(P_MNPC_FLAGS, MOV_OUTDOORS + MOV_INDOORS + MOV_MOVES + MOV_BACKWARDS);
+  
+  AddInfo(DEFAULT_INFO, "sagt: Nein! Dir verrate ich sicher nichts!\n");
+  AddInfo("krznar",
+	  "Was willst Du wissen von ihm?\n",
+	  "fragt: ");
+  AddInfo(({"hoellenfackel","fackel","fackeln","hoellenfeuer"}),
+	  CLOSURE(menge_fackel),"sagt: ");
+  AddInfo("sack",
+	  "sagt: Darin bewahre ich meine Hoellenfackeln auf!\n");
+  AddInfo(({"umhang","hut"}), "meint: Der ist besonders wertvoll.\n");
+  AddInfo("waren", "sagt: Ich verkaufe diese Hoellenfackeln hier.\n");
+  SetProp(P_REJECT,({REJECT_DROP,"Krznar will Dein Zeugs nicht.\n"}));
+
+  AddCmd(({"kaufe","kauf"}),"get_fackel");
+  
+  AddSpell(9,1,"","" DT_BLUDGEON, "dlanze");
+  AddSpell(1,1,"","", DT_BLUDGEON, "schn");
+
+
+  SetChats(2, ({
+    "Krznar preist seine Waren an.\n",
+      "Krznar haelt Dir eine Hoellenfackel unter die Nase.\n",
+      "Krznar fragt: Willst Du eine Hoellenfackel?\n",
+      "Eine Hoellenfackel erlischt.\nKrznar zuendet sofort eine neue Hoellenfackel an.\n",
+      "Krznar sieht sich um.\n",
+      "Krznar fragt Dich: Hast Du schon mal Feuer direkt aus der Hoelle gesehen?\n",
+      "Krznar verneigt sich vor Dir.\n",
+      "Krznar mustert Dich.\n"}));
+  vorrat=LAGER;
+}
+
+void dlanze(object enemy,int damage, mixed dam_type)
+{
+  command_me("dunkellanze");
+}
+
+void schn(object enemy,int damage, mixed dam_type)
+{
+  command_me("schnell");
+}
+
+string _query_noattack()
+{
+  if(vorrat) return "meint: Stoer mich nicht bei meinen Geschaeften!\n";
+}
+
+init()
+{
+  ::init();
+  call_out("ww",1);
+}
+
+ww()
+{
+  object tp;
+  
+  if(tp=TP)
+    if(present(tp)&&interactive(tp))
+      tell_object(tp, "Krznar verneigt sich vor Dir.\n");
+}
+
+
+reset()
+{
+  ::reset();
+  vorrat=LAGER;
+}
+
+get_fackel(string str)
+{
+  object tp,hf,mo;
+  string rac,ret;
+  
+  notify_fail("Was willst Du denn von wem kaufen?\n");
+  if(!str) return 0;
+  if(str=="fackel von krznar"||str=="hoellenfackel von krznar"||
+     str=="hoellenfackel von krznar")
+    {
+      ret="Krznar sagt: ";
+      if(!vorrat) 
+	return write(ret+"Tut mir leid, ich muss mir erst neue Fackeln holen.\n"),1;
+      tp=TP;
+      rac=tp->QueryProp(P_RACE);
+      switch(rac)
+	{
+	case "Dunkelelf":
+	  if(tp->QueryMoney()<DELFPREIS)
+	    return write(ret+"Du hast ja nichteinmal die "+DELFPREIS+" Muenzen fuer eine "+
+			 "Hoellenfackel!\n"),1;
+	  if(tp->AddMoney(-DELFPREIS))
+	    {
+	      write(ret+"Das kostet "+DELFPREIS+" Muenzen!\n"+
+		    "Du gibst ihm das Geld, worauf er Dir eine Fackel "+
+		    "aushaendigt.\n");
+	      say("Krznar uebergibt "+tp->name(WEM,1)+" eine Fackel.\n",({tp}));
+	      hf=clone_object(OBJ "hf");
+	      if(hf->move(tp)==ME_TOO_HEAVY)
+		{
+		  hf->move(MENV, M_NOCHECK);
+		  write("Die Fackel ist Dir zu schwer und faellt auf den Boden.\n");
+		}
+	      vorrat--;
+
+	      if(!vorrat)
+		ME->AddMoney(MYMONEY+random(500));
+
+	      return write(ret+"Moege das Silberland im Dunkeln versinken!\n"),1;
+	    }
+	  else
+	    return write(ret+"Da scheint etwas nicht zu stimmen, komm doch spaeter "+
+			 "wieder!\n"),1;
+	default:
+	  if(tp->QueryMoney()<HFPREIS)
+	    return write(ret+"Du hast ja nichteinmal die "+HFPREIS+" Muenzen fuer eine "+
+			 "Hoellenfackel!\n"),1;
+	  if(vorrat<5)
+	    return write(ret+"Ich hab leider nicht mehr so viele, Ich behalte den Rest "+
+			 "lieber fuer einen Dunkelelfen.\n"),1;
+	  if(tp->AddMoney(-HFPREIS))
+	    {
+	      write(ret+"Das kostet "+HFPREIS+" Muenzen!\n"+
+		    "Du gibst ihm das Geld, worauf er Dir eine Fackel "+
+		    "aushaendigt.\n");
+	      say("Krznar uebergibt "+tp->name(WEM,1)+" eine Fackel.\n",({tp}));
+	      hf=clone_object(OBJ "hf");
+	      if(hf->move(tp)==ME_TOO_HEAVY)
+		{
+		  hf->move(MENV, M_NOCHECK);
+		  write("Die Fackel ist Dir zu schwer und faellt auf den Boden.\n");
+		}
+	      vorrat--;
+	      return write(ret+"Moege das Silberland im Dunkeln versinken!\n"),1;
+	    }
+	  else
+	    return write(ret+"Da scheint etwas nicht zu stimmen, komm doch spaeter wieder!\n"),1;
+	}
+    }
+  return 0;
+}
+
+menge_fackel()
+{
+  if(!vorrat)
+    return "Tut mir leid, aber ich habe keine Fackeln mehr!\n";
+  else
+    return "Ich habe noch "+vorrat+" Hoellenfackeln!\n"+
+      "Willst Du etwa eine kaufen?\n";
+}
+
+void StartReaction(string verb, string gruppe, string adverb, int touch) {
+  if (find_call_out("reaction") != -1) return;
+  switch (gruppe) 
+    {
+    case "fies":
+      call_out("reaction", 0, TP,
+	       "meint: Haha! Ganz nach meinem Geschmack!\n",
+	       "meint: Haha! Ganz nach meinem Geschmack!\n");
+      break;
+    case "frech":
+      call_out("reaction", 0, TP,
+	       "grinst Dich an.\n",
+	       "grinst "+TP->name(WEN,1)+" an.\n");
+      break;
+    case "froh":
+      call_out("reaction", 0, TP,
+	       "schuettelt nur seinen Kopf.\n", 
+	       "schuettelt nur seinen Kopf.\n");
+      break;
+    case "intim":
+      call_out("reaction", 0, TP,
+	       "schuettelt sich entruestet.\n",
+	       "schuettelt sich entruestet.\n");
+      break;
+    case "nett":
+      call_out("reaction", 0, TP,
+	       "grummelt Dich an.\n",
+	       "grummelt "+TP->name(WEN,1)+" an.\n");
+      break;
+    case "neutral":
+      call_out("reaction", 0, TP,
+	       "fragt Dich: Willst Du nicht eine Hoellenfackel kaufen?\n",
+	       "haelt "+TP->name(WEN,1)+" eine Hoellenfackel unter die Nase.\n");
+      break;
+    }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch) 
+{
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void reaction(object ob, string macher, string andere) 
+{
+  if (present(ob, ENV(TO))) 
+    {
+      tell_object(ob, BS(Name(WER, 1)+" "+macher));
+      tell_room(ENV(TO), BS(Name(WER, 1)+" "+andere), ({ob}));
+    }
+}
+ 

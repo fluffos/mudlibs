@@ -1,0 +1,396 @@
+//=========================================================================
+//
+// File:    koenigin.c
+// Created by Zordan@SL modified Ronja@SL
+//
+// Project: dhrkion
+//
+// ------------------------------------------------------------------------
+// Aenderungen:
+// 07.01.2003: Questorakel hinzugefuegt (Angel)
+// 22.12.2002: Spell Zweifel hinzugefuegt (Angel)
+// 21.12.2002: Haustier fuer die Koenigin (Angel)
+//=========================================================================
+
+#include "../def.h"
+
+inherit "/d/unterwelt/basics/central/npc/std_darkelf";
+inherit "std/orakel";
+
+#define MAX_ZWEIFEL 5
+
+string *verneigt;
+int    callouts;
+int    zweifel;
+
+string quest_info1(string str);
+string quest_info2(string str);
+
+void create()
+{
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Die Dunkelelfenkoenigin");
+  SetProp(P_LONG,
+    "Die Dunkelelfenkoenigin sitzt auf ihrem Thron und wacht ueber ganz "
+    "Dhrkion, ihrem Clan. Sie strahlt Staerke und Macht aus. Hoechstwahr"
+    "scheinlich hat Lloth selber sie zu dem gemacht, was sie jetzt ist. "
+    "Sie gibt auch ein perfektes Bild einer Dunkelelfin ab. Lange weisse "
+    "Haare, dunkelrote Augen und ein makelloses Aussehen. Sie ist wohl auch "
+    "schon mehrere hundert Jahre alt."
+  );
+
+  SetProp(P_NAME, "Dunkelelfenkoenigin");
+  SetProp(P_GENDER, FEMALE);
+  AddId(({"dunkelelfenkoenigin", "elfenkoenigin", "koenigin",
+          "\nkoenigin","\ndunkelelfenkoenigin","NOWIMPY","NOCONTROL"}));
+
+  create_default_darkelf(38,38,20);
+  SetProp(P_HANDS, ({" mit unheiligen Haenden",400,DT_UNHOLY}));
+  SetProp(P_SIZE, 230+random(20));
+  SetProp(P_ALIGN, -1200);
+  SetProp(P_MAX_HANDS, 2);
+
+  SetProp(P_RESISTANCE_STRENGTHS ,
+    ([ DT_FIRE:      0.1, DT_COLD:     -0.1, DT_WATER:      -0.3
+     , DT_AIR:      -0.3, DT_LIGHTNING:-0.1, DT_EXPLOSION:  -0.1
+     , DT_SOUND:    -0.1, DT_LIGHT:     0.5, DT_ELECTRIC:   -0.2
+     , DT_ACID:     -0.1, DT_POISON:   -0.2, DT_TERROR:     -0.9
+     , DT_HOLY:      0.2, DT_UNHOLY:   -0.8, DT_MAGIC:      -0.7
+     , DT_MIND:      0.0, DT_SLASH:     0.0, DT_BLUDGEON:    0.0
+     , DT_PIERCE:    0.0, DT_SQUEEZE:   0.0, DT_WHIP:        0.0
+     , DT_RIP:       0.0
+     ])
+  );
+
+  SetProp(P_NOMAGIC,70);
+
+  SetProp(P_MSGIN, "kommt herein und setzt sich auf den Thron");
+
+  SetProp(P_DIE_MSG,  " verschwindet in der Dunkelheit.\n");
+  SetProp(P_NOCORPSE, 1);
+  SetProp(P_MURDER_MSG, "Das wirst Du mir bereuen!");
+  SetProp(P_KILL_NAME, "Die Dunkelelfenkoenigin");
+  SetProp(P_KILL_MSG, "Versuch das ruhig nochmal!");
+
+  AddInfo(DEFAULT_INFO, "antwortet Dir einfach nicht.\n");
+
+  SetProp(P_LOG_INFO, "dhrkion.log");
+  AddLibrary( NPC "dhrkion.lib",50);
+
+  AddInfo("zordan", "nickt.");
+
+  AddInfo( ({ "fertigkeiten","faehigkeiten"}), "@@gildeninfo@@" );
+
+  AddInfo( ({"verneigxyz"}) ,
+    "Wirst Du mir wohl erst Ehre erweisen und Dich gefaelligst verneigen?"
+    ,
+    "faucht Dich an: ",1
+  );
+/*
+  AddInfo(({"aufgabe","aufgaben","abenteuer","quests","quest","questen"}),
+               "@@all_quests@@", "sagt: ");
+  AddInfo(ME->QuestIDs(), symbol_function("quest_info",ME),"sagt: ");
+*/
+
+  AddInfo(({"aufgabe","aufgaben","abenteuer","quests","quest","questen"}),
+               #'quest_info1, "sagt: ");
+  AddInfo(ME->QuestIDs(), #'quest_info2,"sagt: ");
+
+  AddCmd( ({"verneig","verneige"})      , "cmd_verneigen");
+
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    "Die Dunkelelfenkoenigin denkt doch gar nicht daran.\n" }) );
+
+  SetProp(P_SPELLRATE,85);
+
+  AddSpell(2, 300,
+     "Die Dunkelelfenkoenigin saeht die Saat des Zweifels in Dir.\n",
+     "Die Dunkelelfenkoenigin saeht die Saat des Zweifels in @WEN.\n",
+      DT_MIND, "zweifel");
+
+  AddSpell(1,400,
+    "Die Dunkelelfenkoenigin rammt Dir ein Bein in den Magen.\n",
+    "Die Dunkelelfenkoenigin rammt @WEM ein Bein in den Magen.\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(1,500,
+    "Die Dunkelelfenkoenigin verflucht Dich mit einem sehr boesen Fluch.\n",
+    "Die Dunkelelfenkoenigin verflucht @WEN mit einem sehr boesen Fluch.\n",
+     DT_UNHOLY,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(1,600,
+    "Die Dunkelelfenkoenigin raubt Dir einen Teil Deiner Seele.\n",
+    "Die Dunkelelfenkoenigin raubt @WEM einen Teil der Seele.\n",
+     DT_TERROR,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(1,1,
+     "Die Dunkelelfenkoenigin wirft mit dunklen Strahlen in alle Richtungen.\n",
+     "Die Dunkelelfenkoenigin wirft mit dunklen Strahlen in alle Richtungen.\n",
+      DT_UNHOLY,"roomspell");
+
+  SetAttackChats(10,
+    ({"Die Dunkelelfenkoenigin sagt: Verschwinde hier Du Wurm!\n"
+     ,"Die Dunkelelfenkoenigin schreit: Ab ins Gefaengnis mit Dir!\n"
+     ,"Die Dunkelelfenkoenigin schaut Dich unglaeubig an.\n"
+     ,"Die Dunkelelfenkoenigin schaut Dir tief in die Augen.\n"
+     ,"Die Dunkelelfenkoenigin bruellt: Wachen!!\n"
+     })
+  );
+
+  SUID;
+
+  CLONEME(WEAPON "peitsche");
+  command("zuecke peitsche");
+
+  CLONEME(ARMOUR "chitinkrone");
+  CLONEME(ARMOUR "rotkleid");
+  if (random(100)<50)
+  {
+    switch(random(4))
+    {
+      case 0: CLONEME( ARMOUR "mithrilring" ); break;
+      case 1: CLONEME( ARMOUR "lichtring" ); break;
+      case 2: CLONEME( "/d/gebirge/eros/ruestung/platinring"); break;
+      case 3: CLONEME( "/d/ebene/lamuerte/burg/obj/titanring"); break;
+    }
+  }
+  command("trage alles");
+
+  verneigt = ({ });
+  callouts = 0;
+  zweifel  = MAX_ZWEIFEL;
+}
+
+int _query_wimpy()
+{
+  return 0;
+}
+
+int Defend(int dam, mixed dam_type, mixed spell, object enemy)
+{
+  DHRKIONMASTER->addfeind(enemy);
+  ::Defend(dam, dam_type, spell, enemy);
+}
+
+string quest_info1(string str)
+{
+  if(TP->QueryProp(P_RACE) != "Dunkelelf")
+  {
+    return "Schleich Dich!";
+  }
+
+  call_out("quest_info3",0,TP);
+  return "Also pass auf!";
+}
+
+string quest_info2(string str)
+{
+  if(TP->QueryProp(P_RACE) != "Dunkelelf")
+  {
+    return "Schleich Dich!";
+  }
+
+  return quest_info(
+    str,
+    "Eine solch unwuerdige Aufgabe gibt es nicht!",
+    "Das ist doch ganz einfach! "
+  );
+}
+
+void quest_info3(object player)
+{
+  if(!interactive(player))   return;
+  if(ENV(TO) != ENV(player)) return;
+
+  player->More(all_quests());
+}
+
+
+void roomspell(object enemy, int damage, mixed dam_type)
+{
+  int i;
+  object *pl;
+
+  pl     = filter_array(PresentEnemies(),#'interactive);
+  i      = sizeof(pl);
+  damage = (1000+random(1000)) / i;
+
+  while(i--)
+  if(!IS_WIZARD(pl[i]))
+  {
+    tell_object(pl[i],"Du wirst von einem der Strahlen getroffen.\n");
+    tell_room(ENV(TO),BS(CAP(pl[i]->name(RAW))+" wird von einem der "
+                      "Strahlen getroffen."), ({pl[i]}) );
+
+    pl[i]->Defend(damage, dam_type,
+      ([SP_SHOW_DAMAGE:1,SP_NAME:"Strahlen"]), TO);
+  }
+
+  return;
+}
+
+void zweifel(object enemy, int damage, mixed dam_type)
+{
+  int align, change;
+
+  if(zweifel <= 0) return;
+  zweifel--;
+
+  align  = enemy->QueryProp(P_ALIGN);
+  change = ( 1000 + align ) / 100;
+  align -= change;
+
+  if(align < -1000) align = -1000;
+
+  enemy->SetProp(P_ALIGN, align);
+  return;
+}
+
+void reset()
+{
+  ::reset();
+  verneigt = ({ });
+  callouts = 0;
+  zweifel  = MAX_ZWEIFEL;
+}
+
+void init()
+{
+  ::init();
+
+  if(TP && interactive(TP)) verneigt -= ({ getuid(TP) });
+  if(TP && living(TP) && TP->id("mystixfis"))
+  {
+    SetProp(P_DEFENDERS, QueryProp(P_DEFENDERS) - ({ TP }) );
+  }
+}
+
+void InformDefend(object enemy)
+{
+  Kill(enemy);
+}
+
+void die(int poisondeath)
+{
+  write_file(LOG "spieler.kills",
+    ctime()+": "+CAP(getuid(PL))+" killt die Koenigin!!!\n");
+//  DHRKIONMASTER->addkiller(PL); wurd von std_darkelf uebernommen
+  ::die(poisondeath);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  if(killer == TO)
+  {
+    write_file(LOG "spieler.deads",
+      ctime()+": "+CAP(getuid(player))+" wurde von der Koenigin getoetet ("+lostexp+").\n");
+    DHRKIONMASTER->feindtot(player);
+  }
+}
+
+// Gildenfunktionen
+
+string abiltostring(int abil) {
+  switch (abil) {
+    case 0..999 : return "hundsmiserabel schlecht";
+    case 1000..1499 : return "miserabel";
+    case 1500..1999 : return "uebel";
+    case 2000..2499 : return "unheimlich schlecht";
+    case 2500..2999 : return "sehr schlecht";
+    case 3000..3499 : return "schlecht";
+    case 3500..3999 : return "maessig";
+    case 4000..4499 : return "unterdurchschnittlich";
+    case 4500..4999 : return "durchschnittlich";
+    case 5000..5499 : return "ueberdurchschnittlich";
+    case 5500..5999 : return "befriedigend";
+    case 6000..6499 : return "sehr befriedigend";
+    case 6500..6999 : return "recht gut";
+    case 7000..7499 : return "ganz gut";
+    case 7500..7749 : return "gut";
+    case 7750..7999 : return "wirklich gut";
+    case 8000..8249 : return "sehr gut";
+    case 8250..8499 : return "unglaublich gut";
+    case 8500..8749 : return "ausserordentlich gut";
+    case 8750..8999 : return "phantastisch gut";
+    case 9000..9249 : return "ausgezeichnet";
+    case 9250..9499 : return "hervorragend";
+    case 9500..9749 : return "beinahe meisterhaft";
+    case 9750..9899 : return "meisterhaft";
+    case 9900..9999 : return "beinahe perfekt";
+    default : return "perfekt";
+  }
+}
+
+string gildeninfo() {
+ string gilde, info, *spells;
+ int abil, i;
+ closure qsa;
+
+ gilde = "/gilden/" + (PL->QueryProp(P_GUILD) || "abenteurer");
+ if( gilde!="/gilden/dunkelelfen" )
+   return "sagt: Ich kenn mich nur bei uns Dunkelelfen aus!\n";
+ if (find_object(gilde)) {
+   qsa = symbol_function("QuerySkillAbility", PL);
+   info = "sagt: Ok "+TPN+", wollen wir mal sehen:\n";
+   spells = sort_array(m_indices(gilde->QueryProp(P_GUILD_SKILLS)), #'< );
+   for (i=sizeof(spells)-1, abil=0; i>=0; i--) {
+     if (abil=funcall(qsa, spells[i])) {
+       info += sprintf("Die Dunkelelfenkoenigin sagt: "+
+                 "%-15s %s.\n","'"+CAP(spells[i])+"'", abiltostring(abil));
+     }
+   }
+   info += sprintf("Die Dunkelelfenkoenigin sagt: Insgesamt gesehen bist Du %s.\n",
+             abiltostring(gilde->GuildRating(PL) * 10000 / gilde->MaxGuildRating()));
+   return info;
+ }
+ else
+   return "fragt: In was fuer einer Gilde bist DU denn??\n";
+}
+
+int do_frage(string question,string text)
+{
+  if(member(verneigt,getuid(TP)) == -1) text = "verneigxyz";
+
+  return ::do_frage(question,text);
+}
+
+int cmd_verneigen(string str)
+{
+  string *woerter;
+  int i,itsme,nicht;
+
+  notify_fail("Vor wem moechtest Du Dich verneigen?\n");
+
+  if(!str || str == "") return 0;
+
+  woerter = explode(str," ");
+
+  itsme = 0;
+  nicht = 0;
+
+  i = sizeof(woerter);
+  while(i--)
+  {
+    if(woerter[i] == "nicht") nicht = 1;
+    if(TO->id(woerter[i]))    itsme = 1;
+  }
+
+  if(!itsme) return 0;
+
+  if(nicht)
+  {
+    tell_object(TP,"Du verneigst Dich nicht.\n");
+    return 1;
+  }
+
+  verneigt += ({ getuid(TP) });
+  tell_object(TP,
+    "Du verneigst Dich respektvoll vor der Koenigin.\n"
+    "Die Dunkelelfenkoenigin scheint Dir nun wohlgesonnener.\n"
+  );
+  return 1;
+}
+
+

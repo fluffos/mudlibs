@@ -1,0 +1,309 @@
+//=========================================================================
+//
+// File:    dhrkionmaster.c
+// Created by Ronja@SL
+//
+// Project: Dhrkion
+//
+//=========================================================================
+
+#include "../def.h"
+
+#define SAVEFILE "/d/" REGION "/" MAGIERNAME "/" GEBIET "/master/dhrkionmaster"
+
+#include <ansi.h>
+
+#define MAXKILLS   500
+#define MINUSKILLS 250
+
+nosave string *enemies;
+
+mapping penemies;
+string *listener;
+
+void Msg(string s)
+{
+  object pl;
+  int i;
+
+  i = sizeof(listener);
+  while(i--)
+  {
+    pl = find_player(listener[i]);
+
+    if(!pl)              return;
+    if(!interactive(pl)) return;
+    if(!IS_LORD(pl))     return;
+
+    s = BSI(s+".", "DHRKION: ");
+    if(pl->QueryProp(P_TTY)) s = ANSI_BOLD+ANSI_RED+s+ANSI_NORMAL;
+    tell_object(pl,s);
+  }
+}
+
+void SaveData()
+{
+  save_object(SAVEFILE);
+}
+
+void LoadData()
+{
+  restore_object(SAVEFILE);
+}
+
+void create()
+{
+  if(is_clone(this_object()))
+  {
+    destruct(this_object());
+    return;
+  }
+
+  seteuid(getuid(this_object()));
+
+  enemies  = ({ });
+  penemies = ([ ]);
+  listener = ({ });
+
+  LoadData();
+
+  return;
+}
+
+void reset()
+{
+  enemies = ({ });
+}
+
+int AddEnemy(object player, int silent)
+{
+  if(IS_WIZARD(player))                             return  0;
+  if(member(enemies, getuuid(player)) != -1)        return -1;
+  if(strstr(file_name(player), "dhrkion") > -1)     return -2;
+
+  enemies += ({ getuuid(player) });
+
+  if(silent) return 1;
+/*
+  domainshout(
+    "Die Wachen bruellen: "+player->Name()+" greift uns an!\n",
+    "^/d/" REGION "/" MAGIERNAME "/" GEBIET "/*",1
+  );
+*/
+  return 1;
+}
+
+void DeleteEnemy(object player)
+{
+  enemies -= ({ getuuid(player) });
+}
+
+int IsEnemy(object player)
+{
+  if(IS_WIZARD(player))                             return 0;
+  if(strstr(file_name(player), "dhrkion") > -1)     return 0;
+  if(member(enemies, getuuid(player)) > -1)         return 1;
+
+  if((member(penemies, getuid(player)) > 0) &&
+     (penemies[getuuid(player),0]      > MAXKILLS)) return 1;
+
+  return 0;
+}
+
+void AddKiller(object player)
+{
+  object item;
+  string uuid;
+
+//if(IS_WIZARD(player))    return;
+  if(!interactive(player)) return;
+
+  if((item = present("\npaladintaskitem", player)) &&
+     (item->GetTask(11, player)                    ))
+  {
+    item->SetVar(item->GetVar()+1);
+  }
+
+  call_other("/gilden/paladine/master/npcmaster","delfen_kill",player);
+
+  uuid = getuuid(player);
+
+  if(member(penemies, uuid))
+  {
+    penemies[uuid, 0]++;
+  }
+  else
+  {
+    penemies += ([uuid: 1]);
+  }
+
+  SaveData();
+}
+
+string *QueryEnemies()
+{
+  return filter_array(enemies, #'living);
+}
+
+int TestKills(string key)
+{
+  if(penemies[key, 0] > MAXKILLS) return 1;
+  return 0;
+}
+
+mapping QueryPEnemies()
+{
+  return filter_mapping(penemies, "TestKills");
+}
+
+void Import(int save)
+{
+  string *pl, *info, uid, uuid, out, *lines;
+  int i, wiz, ok, n, kills;
+  mapping temp;
+
+  if(file_size(SAVEFILE ".o") >= 0)
+  {
+    tell_object(TP, "Der Savefile exitiert bereits. Kein Import moeglich.\n");
+    return;
+  }
+
+  lines = explode(read_file("/d/unterwelt/zordan/dhrkion/log/dhrkion.log.o"), "\n");
+
+  pl = explode(lines[1][11..<4], ",");
+
+  temp = ([ ]);
+  out  = "";
+  n    = 0;
+  i    = sizeof(pl);
+
+  while(i--)
+  {
+    sscanf(pl[i], "\"%s\":%d", uid, kills);
+
+    wiz = IS_WIZARD(uid);
+
+    if(info = "/secure/master"->get_userinfo(uid))
+    {
+      ok   = 1;
+      uuid = uid + "_" + info[5];
+      n++;
+    }
+    else
+    {
+      ok    = 0;
+      uuid  = "";
+    }
+
+    if(ok && !wiz && kills > 0)
+    {
+      out += sprintf("%4d) %25s %5d\n", n, uuid, kills);
+      temp += ([ uuid: kills ]);
+    }
+  }
+
+  penemies = temp;
+  SaveData();
+
+  TP->More(out);
+
+  return;
+}
+
+void CleanUp(int save)
+{
+  string *pl, *info, uid, uuid, out, *lines;
+  int i, wiz, ok, n, kills;
+  mapping temp;
+
+  out = "";
+  pl  = m_indices(penemies);
+  i   = sizeof(pl);
+  n   = 0;
+
+  while(i--)
+  {
+    uid   = explode(pl[i], "_")[0];
+    kills = penemies[pl[i], 0];
+
+    wiz = IS_WIZARD(uid);
+
+    if(info = "/secure/master"->get_userinfo(uid))
+    {
+      ok   = 1;
+      uuid = uid + "_" + info[5];
+      n++;
+    }
+    else
+    {
+      ok       = 0;
+      uuid     = "";
+      penemies = m_delete(penemies, pl[i]);
+    }
+
+    if(ok && !wiz && kills > 0)
+    {
+      out += sprintf("%4d) %25s <=> %25s %5d\n", n, uuid, pl[i], kills);
+    }
+  }
+
+  TP->More(out);
+
+  return;
+}
+
+int QueryEnemyKills(object player)
+{
+  if(member(penemies, getuuid(player)))
+  {
+    return penemies[getuuid(player), 0];
+  }
+
+  return 0;
+}
+
+void NPCKilled(object pl, string npcname)
+{
+  string s;
+
+  s = CAP(getuid(pl))+" toetet "+npcname;
+
+  Msg(s);
+  write_file(LOG "spieler.kills", ctime()+": "+s+".\n");
+}
+
+void PlayerKilled(object pl, string npcname, int lostexp)
+{
+  string s;
+/*
+  domainshout(
+    "Die Wachen jubeln: "+pl->Name()+" wurde besiegt!\n",
+    "^/d/" REGION "/" MAGIERNAME "/" GEBIET "/*",1
+  );
+*/
+
+  s = CAP(getuid(pl))+" wurde von "+npcname+" getoetet ("+lostexp+")";
+
+  Msg(s);
+  write_file(LOG "spieler.deads", ctime()+": "+s+".\n");
+}
+
+void AddListener(string uid)
+{
+  if(member(listener, uid) == -1)
+  {
+    listener += ({ uid });
+    SaveData();
+    Msg("Neuer Listener: "+CAP(uid));
+  }
+}
+
+void RemoveListener(string uid)
+{
+  if(member(listener, uid) != -1)
+  {
+    listener -= ({uid});
+    SaveData();
+    Msg("Listener entfernt: "+CAP(uid));
+  }
+}

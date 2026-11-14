@@ -1,0 +1,143 @@
+
+inherit "std/npc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <wizlevels.h>
+#include "/gilden/paladine/paladin.h"
+#include "/gilden/waldlaeufer/ranger_tasks.h"
+
+void create() {
+  object ob;
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein Brueckenwaechter");
+  SetProp(P_LONG,
+       "Vor Dir steht ein grosser Waechter, der ungewuenschte Besucher "
+       "davon abhaelt, die Burg zu betreten.Du solltest es Dir sehr "
+       "gut ueberlegen, ob Du ihn angreifst !");
+
+  SetProp(P_NAME, "Brueckenwaechter");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_HANDS, ({" mit seinen Haenden",200,DT_BLUDGEON }));
+  SetProp(P_GUILD, "paladine");
+  SetProp(P_GUILD_LEVEL, 10);
+  AddId( ({"brueckenwaechter","waechter"}) );
+
+  create_default_npc(20+random(5));
+  SetProp(P_RACE, "Mensch");
+  SetProp(P_BODY, 120);
+  SetProp(P_SIZE, 170+random(20));
+  SetProp(P_ALIGN, 500+random(200));
+  SetProp(P_MAX_HANDS, 2);
+
+  SetProp (P_GUILD, "paladine");
+  SetProp (P_GUILD_LEVEL, 8+random(3));
+
+  SetProp(P_RESISTANCE_STRENGTHS , 
+    ([DT_FIRE:      -0.3, DT_COLD:       0.2, DT_WATER:  -0.2, DT_AIR:    -0.1, 
+      DT_LIGHTNING: -0.1, DT_EXPLOSION:  0.1, DT_SOUND:  -0.2, DT_LIGHT:  -0.3,
+      DT_ELECTRIC:  -0.1, DT_ACID:       0.1, DT_POISON: -0.3, DT_TERROR: -0.1,
+      DT_HOLY:      -1.0, DT_UNHOLY:     0.3, DT_MAGIC:  -0.2 ]) );
+
+  SetProp(P_DIE_MSG,  " faellt toedlich getroffen zu Boden.\n");
+  SetProp(P_NOCORPSE, 0 );
+
+  AddInfo(DEFAULT_INFO, "verrichtet seine Wache und antwortet Dir nicht.\n");
+
+
+  SetProp(P_SPELLRATE,20);
+
+  AddSpell(3,150,
+    "Der Burgwaechter macht eine raffinierte Finte.\n",
+    "Der Burgwaechter macht eine raffinierte Finte.\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(2,200,
+    "Der Burgwaechter fleht Dusty um Hilfe an.\n",
+    "Der Burgwaechter fleht Dusty um Hilfe an.\n",
+     DT_HOLY,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(2,300,
+    "Der Burgwaechter reisst Dir das Fleisch auf.\n",
+    "Der Burgwaechter reisst @WEM das Fleisch auf.\n",
+     DT_RIP,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(1,900,
+    "Der Burgwaechter greift Dich mit der heiligen Macht an.\n",
+    "Der Burgwaechter greift @WEN mit der heiligen Macht an.\n",
+     DT_HOLY,([SP_SHOW_DAMAGE:1]));
+
+
+  SUID;
+  CLONEME("/p/weapon/sword/langschwert");
+  command("zuecke schwert");
+  CLONEME("/gilden/paladine/armour/wappenrock");
+  CLONEME("/gilden/paladine/armour/p_khemd");
+  CLONEME("p/armour/gloves/lederhandschuhe");
+  CLONEME("p/armour/helm/kettenhaube");
+  command("trage alles");
+  call_other(NPCMASTER, "add_npc");
+}
+
+void init() {
+  ::init();
+  if(call_other(NPCMASTER, "IsFeind", TP)) Kill(TP);
+  if(!IsEnemy(TP)) call_out("CheckPerson", 0);
+}
+
+varargs int remove(int arg) {
+  call_other(NPCMASTER, "del_npc");
+  return ::remove();
+}
+
+int Defend(int dam, mixed dam_type, mixed spell, object enemy)
+{
+  call_other(NPCMASTER,"help_me",enemy);
+  return ::Defend(dam, dam_type, spell, enemy);
+}
+
+int CheckPerson() {
+  if(!TP || !present(TP, ENV(ME))) return 0;
+  if(TP->QueryProp(P_RACE)=="Dunkelelf") {
+    if(TP->QueryProp(P_LEVEL)>25 && !IS_LEARNING(TP)) {
+      command_me("sag Stirb, Dunkelelf!");
+      Kill(TP);
+      return 1;
+    }
+    command_me("sag Verschwinde, Du Ausgeburt der Hoelle!");
+  }
+ return 1;
+}
+
+int p_shout(string msg) {
+  if(member(UID_ALLOWED, getuid(previous_object()))==-1)
+    return 0;
+  command_me("prufe "+msg);
+  return 1;
+}
+
+varargs void die(int pd) {
+  object ob, killer;
+
+  p_shout("AAARGH!!!");
+  call_other(NPCMASTER, "del_npc", TP);
+
+  killer = QueryProp(P_KILLER) || TP;
+  if(objectp(killer)) {
+    if(killer->id("\nranger_pet")) {
+      killer = killer->QueryOwner();
+    }
+
+    if(objectp(ob=present(RANGER_TASK_PALA_KILLER, killer)) && ob->QueryStage() == 1) {
+      ob->AcceptKill();
+    }
+  }
+
+  ::die(pd);
+  return;
+}

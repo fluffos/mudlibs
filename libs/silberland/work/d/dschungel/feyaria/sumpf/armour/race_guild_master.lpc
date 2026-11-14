@@ -1,0 +1,961 @@
+// Master fuer das Setzen der Werte und das Verwalten der Rasse-gilden-Ruestungen
+// Feyaria@SilberLand
+// Anm.: Ich hasse Paranoia - Gwenshara
+
+#include "../def.h"
+#include "./race_guild_armour.h"
+#include "/gilden/berserker/berserker_extern.h"
+#include "/gilden/druidenzirkel/druiden_extern.h"
+#include "/gilden/paladine/paladin_extern.h"
+#include "/gilden/nekromanten/nekro_properties.h"
+#include "/gilden/zechpreller/zechpreller_extern.h"
+#include "/gilden/amazonen/amazonen_extern.h"
+#include "/gilden/bardengilde/barden_extern.h"
+#include "/gilden/waldlaeufer/def_extern.h"
+
+mixed* armours = ({});
+
+void racial_setup(object ob, string race);
+void register(object ob);
+
+void create()
+{
+  if( is_clone(TO) ) 
+    destruct(TO);
+  SUID;
+  restore_object(ARMOUR "mastersave");
+}
+
+varargs void setup(object ob, int n, int t) 
+{
+  string* type;
+  string* names;
+  string race;
+  string guild;
+  string rg_name;
+  string at;
+  string at_name;
+  object pob;
+
+  if( !objectp(ob) || !TP )
+    return ;
+  
+  names=RACE_GUILD_NAMES[n];
+  type=RACE_GUILD_ARMOUR_TYPES[t];
+  race=names[0];
+  guild=names[1];
+  rg_name=names[2];
+  at=type[0];
+  at_name=type[1];
+
+
+  write_file(LOG "race_guild_armour",
+      dtime(time()) + ": " + rg_name + at_name + " (" + race + "-" + guild +
+      ") geclont von " + TP->name(WEM) + ".\n");
+  ob->SetProp(P_NAME, rg_name+at_name);
+  ob->SetProp(P_SHORT, ob->QueryProp(P_NAME));
+  ob->SetProp(P_LONG, ob->QueryProp(P_NAME)+"." );
+  ob->AddId( ({lower_case(ob->QueryProp(P_NAME)), race+"-"+guild+"-"+at, 
+               at_name, "\nrga"}) );
+  ob->SetProp(P_INFO, BS("Diese Ruestung kann nur von Mitgliedern der Rasse "+
+       race+" verwendet werden, die auch der Gilde "+CAP(guild)+" angehoeren.") );
+
+  ob->SetProp(P_ARMOUR_TYPE, at );
+  ob->SetProp(P_AC, 9*VALID_ARMOUR_CLASS[at]/10 );
+  ob->SetProp(P_VALUE, 5000+random(5000));
+  ob->SetProp(P_NOBUY, 1);
+  ob->SetProp(P_MAGIC, 6);
+  ob->SetProp(P_NOSELL, 1);
+  ob->SetProp(P_NEVERDROP, 1);
+  ob->SetProp(P_QUALITY_DECAY, 150+random(150));
+  ob->SetProp(P_TEMPERATURE_PROTECTION, ([ 
+        T_COLD_PROT:ob->QueryProp(P_TEMPERATURE_PROTECTION)[T_COLD_PROT]+random(3), 
+        T_HEAT_PROT:ob->QueryProp(P_TEMPERATURE_PROTECTION)[T_HEAT_PROT]+random(2) ]));
+  ob->SetProp(P_WEAR_FUNC, ob );
+  ob->SetProp(P_REMOVE_FUNC, ob );
+  ob->SetProp(P_DEFEND_FUNC, ob );
+  ob->SetProp(P_WEAR_RESTRICTIONS, 
+      ([SR_SEER:1, SR_INCLUDE_RACE: ({race}), P_GUILD:guild]) );
+
+  racial_setup(ob, race);
+  
+  switch(at)
+  {
+    case AT_ARMOUR:
+      ob->SetProp(P_GENDER, MALE);
+      ob->SetProp(P_WEIGHT, 2000);
+      ob->SetProp(P_M_HEALTH_MOD, ([P_HP:3+random(7), P_SP:3+random(7)]) );
+      ob->SetProp(P_MATERIAL, ([ MAT_METAL:100]) );
+      switch(guild)
+      {
+        case "waldlaeufer":
+          ob->SetProp(P_LONG,
+              "Du haeltst einen schwarzen Lederlamellenpanzer in der Hand, der mit gruenen Aufsaetzen "
+              "verziert ist. Zwischen den einzelnen Lamellen erkennst du eine duenne Schicht aus "
+              "Borke, die zusaetzlichen Schutz bietet. Es scheint, als wurde diese Ruestung leicht "
+              "lebendig sein und sich mit der Haut des Traegers verbinden koennen, wenn dieser selbst "
+              "eine Rindenhaut hat. Der Panzer wurde extra fuer die Proportionen von "+race+"n gemacht.");
+          ob->SetProP(P_MATERIAL, ([MAT_LEATHER: 90, MAT_FEATHER: 10]));
+          ob->SetProp(P_RANGER_SPELLCOST, 1+random(5));
+          ob->SetProp(P_RANGER_BONUS, (["rindenhaut":25, "all":5]));
+          break;
+        case "bardengilde":
+          ob->SetProp(P_LONG, 
+               "Bei dieser Ruestung handelt es sich um ein leichtes Mithrilkettenhemd, "
+               "das in allen Regenbogenfarben schimmert. Einzelne Plaettchen, die Noten "
+               "darstellen wurden darauf gehaemmert. Dieser Panzer wurde eigens dafuer "
+               "angerfertigt von "+race+"n getragen zu werden und schuetzende Klaenge zu "
+               "verstaerken.");
+          ob->SetProp(P_MATERIAL, ([ MAT_MITHRIL: 100 ]) );
+          ob->SetProp(P_BARDEN_SPELLCOST, 1+random(5));
+          ob->SetProp(P_BARDEN_BONUS, (["ballade vom drachentoeter":25, 
+                                        "schildsang der walkueren":25,
+                                        "zwergisches ahnenlied": 25,
+                                        "stolze mauer am fluss": 25, 
+                                        "all":5]));
+          break;
+        case "abenteurer":
+        case "dunkelelfen":
+          ob->SetProp(P_LONG,
+              "Ein schwerer Panzer, der perfekt an die Koerperform der Rasse "+
+              race+" angepasst ist. Angeblich laesst er Dich um vieles "
+              "ausdauernder werden.");
+          ob->SetProp(P_M_ATTR_MOD, ([A_CON:2]) );
+          break;
+        case "berserker":
+          ob->SetProp(P_LONG,
+              "Dieser blutrote Panzer ist mit furchterregenden Zeichnungen "
+              "bedeckt, die mit einer Schwarzen Farbe aufgemalt wurden. "
+              "Sicher bekommt jeder Gegner unglaubliche Angst, wenn sich ein "
+              "Berserker mit diesem Panzer in Blutrausch versetzt.");
+          ob->SetProp(P_MATERIAL, ([ MAT_STEEL:100]) );
+          ob->SetProp(P_BERSERKER_BONUS, (["blutrausch":25, "all":5]) );
+          break;
+        case "druidenzirkel":
+          ob->SetProp(P_LONG,
+              "Dieser Panzer besteht aus Stein, er ist aber gar nicht einmal "
+              "so extrem schwer und erstaunlich angenehm zu tragen. Vielleicht "
+              "hilft er ja einem Druiden bei der Ausuebung von Erz-Zaubern und "
+              "bei der Beherrschung von Erzelementaren.");
+          ob->AddId(ELEMENT_RING_ERZ);
+          ob->SetProp(P_ITEMD_ELEMENTAL_VALUE, ([ERZ:10, "all":2]) );
+          ob->SetProp(P_DAM_PROTECTION, ob->QueryProp(P_DAM_PROTECTION)+
+              ([DT_MAGIC:2, DT_FIRE:2, DT_COLD:2, DT_WATER:2, DT_AIR:2, DT_POISON:2]) );
+          ob->SetProp(P_MATERIAL, ([ MAT_STONE:100]) );
+          break;
+        case "paladine":
+          ob->SetProp(P_LONG,
+              "Dieser Kettenpanzer ist vollstaendig aus glaenzendem Mithril "
+              "gefertigt und eines wahren Paladins wuerdig.");
+          ob->SetProp(P_MATERIAL, ([ MAT_MITHRIL:100]) );
+          ob->SetProp(P_DAM_PROTECTION, ob->QueryProp(P_DAM_PROTECTION)+([DT_UNHOLY:1]) );
+          ob->SetProp(P_PALADIN_SPELLCOST, 2+random(5));
+          break;
+        case "nekromanten":
+          ob->SetProp(P_LONG,
+              "Dieser Panzer besteht aus schwarzem Leder, auf das kleine "
+              "Knochenstuecke aufgenaeht wurden, um es widerstandsfaehiger "
+              "zu machen. Auf der Brust bilden die Knochenstuecke die "
+              "Form eines riesigen Totenschaedels. Sicher hilft das bei der "
+              "Beschwoerung von Untoten.");
+          ob->SetProp(P_MATERIAL, ([ MAT_BONE:50, MAT_LEATHER:50]) );
+          ob->SetProp(P_NEKRO_SPELLCOST, 1+random(5));
+          ob->SetProp(P_NEKRO_BONUS, (["anrufung des kharr-zzteth":25, "all":5]));
+          ob->SetProp(P_DAM_PROTECTION, ob->QueryProp(P_DAM_PROTECTION)+([DT_HOLY:1]) );
+          break;
+        case "zechpreller":
+          ob->SetProp(P_LONG,
+              "Dieser Panzer besteht aus hartem Leder, das in reinem "
+              "Alkohol gehaertet wurde, und daher extrem stark nach Alkohol "
+              "riecht. Sowas wird wohl nur ein Zechpreller tragen.");
+          ob->SetProp(P_MATERIAL, ([ MAT_ALCOHOL:50, MAT_LEATHER:50]) );
+          ob->SetProp(P_ZECHPRELLER_SPELLCOST, 1 + random(5));
+          ob->SetProp(P_ZECHPRELLER_BONUS, (["all": 5]));
+          ob->SetProp(P_ZECHPRELLER_REDUCE_ALC, 10 + random(5));
+          break;
+        case "amazonen":
+          ob->SetProp(P_LONG,
+              "Dieser Panzer besteht aus vergoldeter Bronze und bedeckt den "
+              "ganzen Oberkoerper, lasst aber die Schultern frei. Dadurch wird "
+              "die Bewegungsfreiheit nicht eingeschraenkt, was sich vor allem "
+              "bei einem Wirbelwindangriff besonders vorteilhaft auswirkt.");
+          ob->SetProp(P_MATERIAL, ([ MAT_BRONCE:80, MAT_GOLD:20]) );
+          ob->SetProp(P_AMAZONEN_SPELLCOST, 1+random(5));
+          ob->SetProp(P_AMAZONEN_BONUS, (["wirbelwind":25, "all":5]));
+          ob->SetProp(P_AC, 29);
+          break;
+        default:
+      }
+      break;
+    case AT_HELMET:
+      ob->SetProp(P_GENDER, MALE);
+      ob->SetProp(P_WEIGHT, 1000);
+      ob->SetProp(P_M_HEALTH_MOD, ([P_HP:random(5),P_SP:3+random(5)]) );
+      ob->SetProp(P_MATERIAL, ([ MAT_METAL:100]) );
+      switch(guild)
+      {
+        case "waldlaeufer":
+          ob->SetProp(P_LONG, 
+           "Es handelt sich hierbei um eine Kapuze oder Gugel aus einer Mischung aus schwarzem Leder "
+           "und lebendingen Blaettern. Die Blaetter sind so angeordnet, dass sie den Kopf des Traegers "
+           "vollkommen verdecken und so den Eindruck erwecken, als wuerde der Kopf des Traegers in "
+           "einem dunklen Schatten verschwinden. Die Pflanzen, die auf der Kapuze wachsen scheinen sich "
+           "sehr gut fuer Kraeutermixturen zu eignen. Diese Kopfbedeckung ist besonders fuer "+race+"nwaldlaeufer geeignet.");
+          ob->SetProp(P_MATERIAL, ([ MAT_LEATHER:80, MAT_PLANT:20]) );
+          ob->SetProp(P_RANGER_SPELLCOST, 1+random(5));
+          ob->SetProp(P_RANGER_BONUS, (["kraeutermixtur":25, "all":5]));
+          break;
+        case "bardengilde":
+          ob->SetProp(P_LONG,
+          "Dieser Helm ist aus feinem Mithril gehaemmert und zeigt ein zur Haelfte "
+          "froehliches und zur Haelfte trauriges Gesicht. Mit geschlossenem Visier "
+          "ist seine Mundpartie so gefertigt, dass die Stimme des Traegers droehnender "
+          "und damit gefaehrlicher wirkt. Mit diesem Helm rezitierte Worte und Schreie werden "
+          "deine Feinde noch schlimmer verletzen.");
+          ob->SetProp(P_MATERIAL, ([ MAT_MITHRIL:100]) );
+          ob->SetProp(P_BARDEN_SPELLCOST, 1+random(5));
+          ob->SetProp(P_BARDEN_BONUS, (["schrei des verderbens":25, 
+                                        "der besuch des raben": 25,
+                                        "all":5]));
+          ob->SetProp(P_DAM_PROTECTION, ob->QueryProp(P_DAM_PROTECTION)+([DT_SOUND:1]) );
+          break;
+        case "abenteurer":
+        case "dunkelelfen":
+          ob->SetProp(P_LONG,
+              "Ein Helm aus einem seltsamen Metall. Er scheint Dich "
+              "intelligenter zu machen.");
+          ob->SetProp(P_M_ATTR_MOD, ([A_INT:2]) );
+          break;
+        case "berserker":
+          ob->SetProp(P_WEIGHT, 2000);
+          ob->SetProp(P_MATERIAL, ([ MAT_STEEL:100]) );
+          ob->SetProp(P_BERSERKER_BONUS, (["kopfstoss":25, "all":5]) );
+          ob->SetProp(P_EFFECTIVE_WC, 150+random(100));
+          ob->SetProp(P_LONG,
+              "Dieser Helm ist eines wahren Berserkers wuerdig. "
+              "Ein grosser Stachel oben auf dem Helm hat wohl toedliche "
+              "Wirkung, wenn der Berserker seinen gefuerchteten Kopfstoss "
+              "einsetzt.");
+          break;
+        case "druidenzirkel":
+          ob->SetProp(P_LONG,
+              "Dieser Helm besteht aus rotlackiertem Leder. Die rote Farbe "
+              "wurde so kunstfertig aufgetragen, dass es beiname so aussieht, "
+              "als wuerde der Kopf des Traegers in Flammen stehen. Sicher "
+              "erleichtert der Helm den Umgang mit Feuerzaubern und "
+              "Feuerelementaren.");
+          ob->AddId(ELEMENT_RING_FEUER);
+          ob->SetProp(P_ITEMD_ELEMENTAL_VALUE, ([FEUER:10, "all":2]) );
+          ob->SetProp(P_DAM_PROTECTION, ob->QueryProp(P_DAM_PROTECTION)+([DT_FIRE:2]) );
+          ob->SetProp(P_MATERIAL, ([ MAT_LEATHER:100]) );
+          break;
+        case "paladine":
+          ob->SetProp(P_LONG,
+              "Dieser Helm ist gaenzlich aus glaenzendem Mithril gefertigt "
+              "und umschliesst den Kopf vollkommen. Die Ohren sind so dick "
+              "eingepackt, dass man alles nur mehr ganz leise hoert. "
+              "Allerdings macht man einen sehr maechtigen Eindruck mit diesem "
+              "Helm, jeder Paladin waere froh, so seine Gegner beeidrucken zu "
+              "koennen.");
+          ob->SetProp(P_MATERIAL, ([ MAT_MITHRIL:100]) );
+          ob->SetProp(P_PALADIN_SPELLCOST, 2+random(5));
+          ob->SetProp(P_DAM_PROTECTION, ob->QueryProp(P_DAM_PROTECTION)+([DT_SOUND:1]) );
+          break;
+        case "nekromanten":
+          ob->SetProp(P_LONG,
+              "Dieser Helm wurde aus dem Schaedel eines "+race+"s gefertigt. "
+              "So grausam das auch auf lebende Wesen wirkt, umso "
+              "beeindrucktender ist es fuer einen Untoten. Also wird dieser "
+              "Helm wohl die Beherrschung von Untoten guenstig beeinflussen "
+              "koennen.");
+          ob->SetProp(P_MATERIAL, ([ MAT_BONE:100]) );
+          ob->SetProp(P_NEKRO_SPELLCOST, 1+random(5));
+          ob->SetProp(P_NEKRO_BONUS, (["unterwerfung der toten":25, "all":5]));
+          ob->SetProp(P_DAM_PROTECTION, ob->QueryProp(P_DAM_PROTECTION)+([DT_LIGHT:1]) );
+          break;
+        case "zechpreller":
+          ob->SetProp(P_LONG,
+              "Dieser Helm besteht aus hartem Leder, das in reinem "
+              "Alkohol gehaertet wurde, und daher extrem stark nach Alkohol "
+              "riecht. Sowas wird wohl nur ein Zechpreller tragen.");
+          ob->SetProp(P_MATERIAL, ([ MAT_ALCOHOL:50, MAT_LEATHER:50]) );
+          ob->SetProp(P_ZECHPRELLER_SPELLCOST, 1 + random(5));
+          ob->SetProp(P_ZECHPRELLER_BONUS, (["all": 5]));
+          ob->SetProp(P_ZECHPRELLER_REDUCE_ALC, 10 + random(5));
+          break;
+        case "amazonen":
+          ob->SetProp(P_LONG,
+              "Dieser Helm besteht aus vergoldeter Bronze und ist mit vielen "
+              "Verzierungen geschmueckt, wie es Amazonen lieben. Er ist mit "
+              "einem praechtigen Federschmuck verziert und laesst eine Amazone "
+              "damit sehr beeidruckend aussehen, was sich sicher sehr stark "
+              "auf das Selbstbewusstsein auswirkt.");
+          ob->SetProp(P_MATERIAL, ([ MAT_BRONCE:80, MAT_GOLD:20]) );
+          ob->SetProp(P_AMAZONEN_SPELLCOST, 1+random(5));
+          ob->SetProp(P_AMAZONEN_BONUS, (["selbstbeherrschung":25, "all":5]));
+          ob->SetProp(P_AC, 10);
+          break;
+        default:
+      }
+      break;
+    case AT_BRACERS:
+      ob->SetProp(P_PLURAL, 1);
+      ob->SetProp(P_WEIGHT, 800);
+      ob->SetProp(P_M_HEALTH_MOD, ([P_HP:3+random(5),P_SP:random(5)]) );
+      ob->SetProp(P_MATERIAL, ([ MAT_LEATHER:100]) );
+      switch(guild)
+      {
+        case "waldlaeufer":
+          ob->SetProp(P_LONG,
+              "Diese Armschienen bestehen aus schwarzem Leder mit gruenen Einlegearbeiten. "
+              "Feine Mithrilfaeden wurden eingewirkt, um sie zu verstaerken. Den Porportionen "
+              "nach zu urteilen wurden sie speziell fuer "+race+"n angefertigt. Sie sind "
+              "die perfekten Armschienen fuer Waldlaeufer. Durch ihre Machart staerken sie "
+              "die Handgelenke und erleichtern so rasche Bogenschuesse oder Messerstiche.");
+          ob->SetProp(P_MATERIAL, ([ MAT_LEATHER:80, MAT_MITHRIL:20]) );
+          ob->SetProp(P_RANGER_SPELLCOST, 1+random(5));
+          ob->SetProp(P_RANGER_BONUS, (["deutschuss":25, "messerstich":25, "all":5]));
+          break;
+        case "bardengilde":
+          ob->SetProp(P_LONG,
+              "Diese Lederarmschienen sind mit grossen Platten aus Mithril beschlagen. "
+              "Auf jeder dieser Platten wurde eine einzelne Note eingestanzt, die in "
+              "allen Farben des Regenbogens schimmern. Insgesamt gibt es fuer jede der "
+              "Musen eine Note, weshalb du dir sicher bist, dass diese Armschinen "
+              "insbesondere den Schutz der Musen herbeirufen.");
+          ob->SetProp(P_MATERIAL, ([ MAT_LEATHER:80, MAT_MITHRIL:20]) );
+          ob->SetProp(P_BARDEN_SPELLCOST, 1+random(5));
+          ob->SetProp(P_BARDEN_BONUS, (["lorica der musen":25, "all":5]));
+          break;
+        case "abenteurer":
+        case "dunkelelfen":
+          ob->SetProp(P_LONG,
+              "Lederne Armschienen, ideal fuer ein Mitglied der Rasse "+race+
+              "geeignet.");
+          ob->SetProp(P_M_HEALTH_MOD, ([P_HP:10+random(5),P_SP:random(5)]) );
+          break;
+        case "berserker":
+          ob->SetProp(P_LONG,
+              "Diese staehlernen Armschienen sind mit kurzen Dornen bestueckt, "
+              "ein Rammen mit diesen wird wohl aeusserst effektiv sein, also "
+              "sind sie eine ideale Ausruestung fuer einen Berserker.");
+          ob->SetProp(P_MATERIAL, ([ MAT_STEEL:100]) );
+          ob->SetProp(P_BERSERKER_BONUS, (["rammen":25, "all":5]) );
+          ob->SetProp(P_EFFECTIVE_WC, 150+random(100));
+          break;
+        case "druidenzirkel":
+          ob->SetProp(P_LONG,
+              "Diese ledernen Armschienen sind mit kleinen Eiskristallen "
+              "besetzt, die auch bei groesster Hitze nicht schmelzen. Ob "
+              "sie einem Druiden den Umgang mit Eiszaubern und Eiselementaren "
+              "erleichtern koennen?");
+          ob->SetProp(P_MATERIAL, ([ MAT_LEATHER:90, MAT_ICE:10]) );
+          ob->AddId(ELEMENT_RING_EIS);
+          ob->SetProp(P_ITEMD_ELEMENTAL_VALUE, ([EIS:10, "all":2]) );
+          ob->SetProp(P_DAM_PROTECTION, ob->QueryProp(P_DAM_PROTECTION)+([DT_COLD:2]) );
+          break;
+        case "paladine":
+          ob->SetProp(P_LONG,
+              "Diese Armschienen bestehen aus glaenzendem Mithril. Es sind "
+              "verschiedene Bilder von Dusty hineingraviert, was sie natuerlich "
+              "zum Wunsch eines jeden Paladins machen.");
+          ob->SetProp(P_MATERIAL, ([ MAT_MITHRIL:100]) );
+          ob->SetProp(P_PALADIN_SPELLCOST, 2+random(5));
+          ob->SetProp(P_DAM_PROTECTION, ob->QueryProp(P_DAM_PROTECTION)+([DT_TERROR:1]) );
+          break;
+        case "nekromanten":
+          ob->SetProp(P_LONG,
+              "Diese Armschienen bestehen aus schwarzem Leder, auf das kleine "
+              "Knochenstuecke aufgenaeht wurden, um sie widerstandsfaehiger "
+              "zu machen. Die Form der Knochenstuecke erinnert an "
+              "Vampirzaehne. Ob Du damit selber zum Vampir wirst?");
+          ob->SetProp(P_MATERIAL, ([ MAT_BONE:50, MAT_LEATHER:50]) );
+          ob->SetProp(P_NEKRO_SPELLCOST, 1+random(5));
+          ob->SetProp(P_NEKRO_BONUS, (["biss des vampirs":25, "all":5]));
+          ob->SetProp(P_DAM_PROTECTION, ob->QueryProp(P_DAM_PROTECTION)+([DT_FIRE:1]) );
+          break;
+        case "zechpreller":
+          ob->SetProp(P_LONG,
+              "Diese Armschienen bestehen aus hartem Leder, das in reinem "
+              "Alkohol gehaertet wurde, und daher extrem stark nach Alkohol "
+              "riecht. Sowas wird wohl nur ein Zechpreller tragen.");
+          ob->SetProp(P_MATERIAL, ([ MAT_ALCOHOL:50, MAT_LEATHER:50]) );
+          ob->SetProp(P_ZECHPRELLER_SPELLCOST, 1 + random(5));
+          ob->SetProp(P_ZECHPRELLER_BONUS, (["all": 5]));
+          ob->SetProp(P_ZECHPRELLER_REDUCE_ALC, 10 + random(5));
+          break;
+        case "amazonen":
+          ob->SetProp(P_LONG,
+              "Diese Armschienen bestehen aus vergoldeter Bronze, wie sie bei "
+              "Amazonen so beliebt ist. Sie sind mit schoenen Symbolen verziert "
+              "und schuetzen die Unterarme gegen Schlaege. Mit etwas Uebung kann "
+              "man das Gewicht dieser Schienen dazu benutzen, einen Speerstoss "
+              "noch kraeftiger auszufuehren als normal.");
+          ob->SetProp(P_MATERIAL, ([ MAT_BRONCE:80, MAT_GOLD:20]) );
+          ob->SetProp(P_AMAZONEN_SPELLCOST, 1+random(5));
+          ob->SetProp(P_AMAZONEN_BONUS, (["speerstoss":25, "all":5]));
+          ob->SetProp(P_AC, 7);
+          break;
+        default:
+      }
+      break;
+    case AT_GLOVE:
+      ob->SetProp(P_PLURAL, 1);
+      ob->SetProp(P_WEIGHT, 300);
+      ob->SetProp(P_M_HEALTH_MOD, ([P_HP:random(5),P_SP:3+random(5)]) );
+      ob->SetProp(P_MATERIAL, ([ MAT_LEATHER: 100]) );
+      switch(guild)
+      {
+        case "waldlaeufer":
+          ob->SetProp(P_LONG,
+              "Diese Lederhandschuhe sind mit gruenen Blaettern verziert, die "
+              "sich um die Handflaeche winden. Sie sind so geschnitten, dass sie "
+              "besonders gut auf die Haende fon "+race+"n passen. Du bist dir sicher, "
+              "dass sie fuer mehrere Dinge gut geeignet sind. Zum einen sind da feine "
+              "Mithrilfaeden, die magsiche Kraft gut in die Finger leiten, zum anderen "
+              "sind an den Fingerkuppen kleine Krallen eingearbeitet. Der Machart zu "
+              "folge wuerdest du sagen, dass sie Waldlaeufern bei Zaubern helfen, die "
+              "geschickte Finger brauchen, wie der Klingenwirbel oder die Melodie der Ruhe. "
+              "Die Mithrilfaeden erlauben auch ein leichteres Verbinden mit dem Bogen und "
+              "die Krallen helfen kleine Tiere zu beeindrucken oder Tieren anweisungen zum "
+              "Angriff zu geben.");
+          ob->SetProp(P_MATERIAL, ([ MAT_LEATHER:80, MAT_MITHRIL:20]) );
+          ob->SetProp(P_RANGER_SPELLCOST, 1+random(5));
+          ob->SetProp(P_RANGER_BONUS, (["klingenwirbel":15, "melodie der ruhe":15, "tiere des waldes": 15,
+                                        "band des schuetzen": 15, "tierangriff": 15, "all":5]));
+          break;
+        case "bardengilde":
+          ob->SetProp(P_LONG,
+              "Dieses Paar Lederhandschuhe hat jeden Finger in einer anderen Farbe. "
+              "Zusaetzlich dienen kleine Mithrilplaettchen dazu die Fingerkuppen "
+              "beim Spielen eines Instruments besonders zu schuetzen. Mit diesen "
+              "Handschuhen koennen Barden rasante Musikstuecke spielen, deren Klang "
+              "ihre Feinde in die Knie zwingt.");
+          ob->SetProp(P_MATERIAL, ([ MAT_LEATHER:80, MAT_MITHRIL:20]) );
+          ob->SetProp(P_BARDEN_SPELLCOST, 1+random(5));
+          ob->SetProp(P_BARDEN_BONUS, ([
+            "hinter dem sternenwall":25, 
+            "das geheimnis der insel": 25,
+            "beschwoerung der sonne": 25,
+            "also sprach qexyypbmizox": 25,
+            "der fruehling": 25,
+            "der sommer": 25,
+            "der herbst": 25,
+            "der winter": 25,
+            "all":5
+          ]));
+          break;
+        case "abenteurer":
+        case "dunkelelfen":
+          ob->SetProp(P_LONG,
+              "Handschuhe aus feinstem Leder, die sich sehr bequem tragen "
+              "lassen und die Haende von allen schlechten Einfluessen "
+              "schuetzen. Womoeglich verleihen sie Dir auch noch "
+              "enorme Kraefte.");
+          ob->SetProp(P_M_ATTR_MOD, ([A_STR:2]) );
+          break;
+        case "berserker":
+          ob->SetProp(P_LONG,
+              "Staehlerne Handschuhe, wie sie eigentlich nur Berserker "
+              "verwenden. Die aufgeraute Grifflaeche verhindert ein Abrutschen "
+              "der Axt beim Spalten und dadurch wird man wohl mehr Schaden "
+              "machen koennen.");
+          ob->SetProp(P_MATERIAL, ([ MAT_STEEL:100]) );
+          ob->SetProp(P_BERSERKER_BONUS, (["spalten":25, "all":5]) );
+          break;
+        case "druidenzirkel":
+          ob->SetProp(P_LONG,
+              "Einfache Lederhandschuhe, die von aussen keine Besonderheit "
+              "verraten, aber irgendwie fuehlst Du die Macht, die in diese "
+              "Handschuhe eingewoben wurde. Es wird wohl die Macht der "
+              "Elemente sein, die nur Druiden baendigen koennen.");
+          ob->SetProp(P_DRUID_ADD_HAND_DAMAGE, 19 );
+          ob->SetProp(P_DRUID_HAND_DAMAGE_TYPE, GEIST );
+          ob->SetProp(P_ITEMD_ELEMENTAL_VALUE, 2+random(5) );
+          ob->SetProp(P_DAM_PROTECTION, ob->QueryProp(P_DAM_PROTECTION)+([DT_MAGIC:2]) );
+          break;
+        case "paladine":
+          ob->SetProp(P_LONG,
+              "Handschuhe aus glaenzendem Mithril, der Traum eines jeden "
+              "Paladins.");
+          ob->SetProp(P_MATERIAL, ([ MAT_MITHRIL:100]) );
+          ob->SetProp(P_PALADIN_SPELLCOST, 2+random(5));
+          ob->SetProp(P_DAM_PROTECTION, ob->QueryProp(P_DAM_PROTECTION)+([DT_ACID:1]) );
+          break;
+        case "nekromanten":
+          ob->SetProp(P_LONG,
+              "Diese Handschuhe bestehen aus schwarzem Leder, auf das kleine "
+              "Knochenstuecke aufgenaeht wurden, um sie widerstandsfaehiger "
+              "zu machen. Diese Handschuhe scheinen wie geschaffen um "
+              "verfluchte Waffen zu beruehren.");
+          ob->SetProp(P_MATERIAL, ([ MAT_BONE:50, MAT_LEATHER:50]) );
+          ob->SetProp(P_NEKRO_SPELLCOST, 1+random(5));
+          ob->SetProp(P_NEKRO_BONUS, (["fluch der klinge":25, "all":5]));
+          ob->SetProp(P_DAM_PROTECTION, ob->QueryProp(P_DAM_PROTECTION)+([DT_EXPLOSION:1]) );
+          break;
+        case "zechpreller":
+          ob->SetProp(P_LONG,
+              "Diese Handschuhe bestehen aus hartem Leder, das in reinem "
+              "Alkohol gehaertet wurde, und daher extrem stark nach Alkohol "
+              "riecht. Sowas wird wohl nur ein Zechpreller tragen.");
+          ob->SetProp(P_MATERIAL, ([ MAT_ALCOHOL:50, MAT_LEATHER:50]) );
+          ob->SetProp(P_ZECHPRELLER_SPELLCOST, 1 + random(5));
+          ob->SetProp(P_ZECHPRELLER_BONUS, (["all": 5]));
+          ob->SetProp(P_ZECHPRELLER_REDUCE_ALC, 10 + random(5));
+          break;
+        case "amazonen":
+          ob->SetProp(P_LONG,
+              "Diese Handschuhe lassen die Finger frei und behindern dadurch "
+              "die Fingerfertigkeit ueberhaupt nicht. Sie bestehen aus Leder "
+              "und sind mit Stahlnieten verstaerkt. Vor allem beim Aufspiessen "
+              "hat man so den Speer viel besser unter Kontrolle.");
+          ob->SetProp(P_MATERIAL, ([ MAT_LEATHER:80, MAT_STEEL:20]) );
+          ob->SetProp(P_AMAZONEN_SPELLCOST, 1+random(5));
+          ob->SetProp(P_AMAZONEN_BONUS, (["aufspiessen":25, "all":5]));
+          ob->SetProp(P_AC, 7);
+          break;
+        default:
+      }
+      break;
+    case AT_BOOT:
+      ob->SetProp(P_PLURAL, 1);
+      ob->SetProp(P_WEIGHT, 1200);
+      ob->SetProp(P_M_HEALTH_MOD, ([P_HP:3+random(5),P_SP:random(5)]) );
+      ob->SetProp(P_MATERIAL, ([ MAT_LEATHER: 100]) );
+      switch(guild)
+      {
+        case "waldaleufer":
+          ob->SetProp(P_LONG,
+              "Diese Stiefel sind aus schwarzem Leder gefertigt und mit gruenen "
+              "Blattmustern verziert. Sie sind so geschnitten, dass sie besonders "
+              "gut auf die Fuess von "+race+"n passen. An der Sohle sind kleine "
+              "Stacheln aus natuerlichen Dornen eingearbeitet, womit du bessern Halt "
+              "am Boden hast, aber auch einen harten Fusstritt austeilen kannst. "
+              "Eindeutig perfekte Schuhe fuer Waldlaeufer.");
+          ob->SetProp(P_MATERIAL, ([ MAT_LEATHER:80, MAT_PLANT:20]) );
+          ob->SetProp(P_RANGER_SPELLCOST, 1+random(5));
+          ob->SetProp(P_RANGER_BONUS, (["fusstritt":25, "all":5]));
+          break;
+        case "bardengilde":
+          ob->SetProp(P_LONG,
+              "Diese hohen Stiefel haben einige kleine Mithrilgloeckchen angenaeht, "
+              "die im Takt deiner Schritte klingen. Wenn ein kundiger Barde mit ihnen "
+              "richtig aufstampft, kann ihr Klang die Emotionen der Musik noch viel "
+              "besser transportieren.");
+          ob->SetProp(P_MATERIAL, ([ MAT_LEATHER:80, MAT_MITHRIL:20]) );
+          ob->SetProp(P_BARDEN_SPELLCOST, 1+random(5));
+          ob->SetProp(P_BARDEN_BONUS, ([
+            "wiegenlied des leids":25, 
+            "toetet das biest": 25,
+            "haette ich ein herz": 25,
+            "vana-o isil ar elena": 25,
+            "all":5
+          ]));
+          break;
+        case "abenteurer":
+        case "dunkelelfen":
+          ob->SetProp(P_LONG,
+              "Diese Stiefel sind sehr bequem, denn sie sind aus feinstem "
+              "Leder gefertigt.");
+          ob->SetProp(P_M_HEALTH_MOD, ([P_HP:6+random(5), P_SP:6+random(5)]) );
+          break;
+        case "berserker":
+          ob->SetProp(P_LONG,
+              "Diese schweren Kampfstiefel haben kleine Stacheln an der Sohle. "
+              "Damit hat man auch im schweren Gelaende oder auf Eis einen "
+              "perfekten Halt. Was passiert, wenn ein Berserker damit seinen "
+              "Gegner zertritt, kann man sich leicht ausmalen.");
+          ob->SetProp(P_MATERIAL, ([ MAT_STEEL:100]) );
+          ob->SetProp(P_BERSERKER_BONUS, (["zertreten":25, "all":5]) );
+          ob->SetProp(P_EFFECTIVE_WC, 150+random(100));
+          break;
+        case "druidenzirkel":
+          ob->SetProp(P_LONG,
+              "Diese Lederstiefel scheinen komplett wasserdicht zu sein. "
+              "Es handelt sich wohl wieder einmal um eine elementare "
+              "Affinitaet, die wohl nur eine Druide fuer seine Wasserzauber "
+              "und die Beherrschung von Wasserlementaren ausnutzen kann.");
+          ob->AddId(ELEMENT_RING_WASSER);
+          ob->SetProp(P_ITEMD_ELEMENTAL_VALUE, ([WASSER:10, "all":2]) );
+          ob->SetProp(P_DAM_PROTECTION, ob->QueryProp(P_DAM_PROTECTION)+([DT_WATER:2]) );
+          break;
+        case "paladine":
+          ob->SetProp(P_LONG,
+              "Diese Stiefel bestehen komplett aus glaenzendem Mithril. "
+              "Jeder Paladin waere stolz, solche Stiefel zu besitzen.");
+          ob->SetProp(P_MATERIAL, ([ MAT_MITHRIL:100]) );
+          ob->SetProp(P_PALADIN_SPELLCOST, 2+random(5));
+          ob->SetProp(P_DAM_PROTECTION, ob->QueryProp(P_DAM_PROTECTION)+([DT_LIGHTNING:1]) );
+          break;
+        case "nekromanten":
+          ob->SetProp(P_LONG,
+              "Diese Stiefel bestehen aus schwarzem Leder, auf das kleine "
+              "Knochenstuecke aufgenaeht wurden, um sie widerstandsfaehiger "
+              "zu machen. Sie riechen irgendwie nach Moder und Verwesung.");
+          ob->SetProp(P_SMELL, "Die Stiefel riechen nach Moder und Verwesung.");
+          ob->SetProp(P_MATERIAL, ([ MAT_BONE:50, MAT_LEATHER:50]) );
+          ob->SetProp(P_NEKRO_SPELLCOST, 1+random(5));
+          ob->SetProp(P_NEKRO_BONUS, (["hauch der verwesung":25, "all":5]));
+          ob->SetProp(P_DAM_PROTECTION, ob->QueryProp(P_DAM_PROTECTION)+([DT_MAGIC:1]) );
+          break;
+        case "zechpreller":
+          ob->SetProp(P_LONG,
+              "Diese Stiefel bestehen aus hartem Leder, das in reinem "
+              "Alkohol gehaertet wurde, und daher extrem stark nach Alkohol "
+              "riecht. Sowas wird wohl nur ein Zechpreller tragen.");
+          ob->SetProp(P_MATERIAL, ([ MAT_ALCOHOL:50, MAT_LEATHER:50]) );
+          ob->SetProp(P_ZECHPRELLER_SPELLCOST, 1 + random(5));
+          ob->SetProp(P_ZECHPRELLER_BONUS, (["all": 5]));
+          ob->SetProp(P_ZECHPRELLER_REDUCE_ALC, 10 + random(5));
+          break;
+        case "amazonen":
+          ob->SetProp(P_LONG,
+              "Diese Stiefel bestehen aus schwarzem Leder und gehen bis knapp "
+              "unter die Knie. Sie haben einen hohen Absatz und schmiegen sich "
+              "ganz eng an das Bein der Traegerin. Man scheint sich mit ihnen "
+              "sehr schnell bewegen zu koennen.");
+          ob->SetProp(P_MATERIAL, ([ MAT_LEATHER:100]) );
+          ob->SetProp(P_AMAZONEN_SPELLCOST, 1+random(5));
+          ob->SetProp(P_AMAZONEN_BONUS, (["schnelligkeit":25, "all":5]));
+          ob->SetProp(P_AC, 7);
+          break;
+        default:
+      }
+      break;
+    case AT_TROUSERS:
+      ob->SetProp(P_PLURAL, 1);
+      ob->SetProp(P_MATERIAL, ([ MAT_CLOTH: 100]) );
+      ob->SetProp(P_WEIGHT, 1000);
+      ob->SetProp(P_M_HEALTH_MOD, ([P_HP:3+random(5),P_SP:random(5)]) );
+      ob->SetProp(P_MATERIAL, ([ MAT_LEATHER:100]) );
+      switch(guild)
+      {
+        case "waldlaeufer":
+          ob->SetProp(P_LONG,
+              "Diese Hose ist aus gruenem Leder gefertigt und mit einem Muster "
+              "aus rotem Blutdorn verziert. Am oberen Bund ist ein Band aus Wolfszaehnen "
+              "eingearbeitet, dass ihr einen wilden Ausdruck verleiht. Schwarze "
+              "Metallplatten verstaerken die Unterschenkel und Knie, wodurch diese "
+              "Hose einen festen Stand unterstuetzt. Sie ist so geschnitten, dass sie besonders "
+              "gut auf die Beine von "+race+"n passen. Diese Hose ist ideal fuer Waldlaeufer. "
+              "Die Wolfszaehne helfen maechtigere Waldwoelfe zu beherrschen, waehrend der "
+              "feste Stand es dir ermoeglicht gute Zielschuesse zu setzen. Der rote Blutdorn "
+              "ist teilweise echt und die Metallplatten leiten die Kraft des Sturms besonders gut.");
+          ob->SetProp(P_MATERIAL, ([ MAT_LEATHER:80, MAT_METAL:20]) );
+          ob->SetProp(P_RANGER_SPELLCOST, 1+random(5));
+          ob->SetProp(P_RANGER_BONUS, (["waldwolf":15, "klinge des blutdorns":15, "kampfgeist": 15, 
+                                        "zielschuss": 15, "ode des sturmes": 15, "all":5]));
+          break;
+        case "bardengilde":
+          ob->SetProp(P_LONG,
+              "Diese Hose ist bunt und knalleng. Alle deine Vorzuege am Unterlaib "
+              "kommen damit perfekt zur Geltung. Im Schritt wurde eine schuetzende "
+              "schale aus bunt lackiertem Mithril angebracht. Du bist dir sicher, "
+              "dass nur echte Helden, oder Barden, eine solche Hose tragen koennen!");
+          ob->SetProp(P_BARDEN_SPELLCOST, 1 + random(5));
+          ob->SetProp(P_BARDEN_BONUS, (["ruf der helden": 25, "all": 5]));
+          break;
+        case "abenteurer":
+        case "dunkelelfen":
+          ob->SetProp(P_LONG,
+              "Diese Beinschienen sind eng anliegend und verleihen dem Traeger "
+              "eine unglaubliche Geschicklichkeit.");
+          ob->SetProp(P_M_ATTR_MOD, ([A_DEX:2]) );
+          break;
+        case "berserker":
+          ob->SetProp(P_LONG,
+              "Staehlerne Beinschienen, auf die diverse Waffen, vor allem "
+              "Aexte eingraviert sind. Ein Berserker wuerde sicher viel "
+              "selbstvertrauen aus solchen Beinschienen schoepfen und dadurch "
+              "seinen Willen besser staerken koennen.");
+          ob->SetProp(P_MATERIAL, ([ MAT_STEEL:100]) );
+          ob->SetProp(P_BERSERKER_BONUS, (["willenskraft":25, "all":5]) );
+          break;
+        case "druidenzirkel":
+          ob->SetProp(P_LONG,
+              "Diese Beinschienen sind aus gruenem Leder gefertigt, ob das die "
+              "Originalfarbe des Leders ist oder ob es nachtraeglich gefaerbt "
+              "wurde, laesst sich jetzt nicht mehr sagen. Wenn man genauer "
+              "hinsieht, kann man kleine Ornamente erkennen, die in das Leder "
+              "geritzt wurden und alle moeglichen Arten von Pflanzen zeigen.");
+          ob->AddId(ELEMENT_RING_HUMUS);
+          ob->SetProp(P_ITEMD_ELEMENTAL_VALUE, ([HUMUS:10, "all":2]) );
+          ob->SetProp(P_DAM_PROTECTION, ob->QueryProp(P_DAM_PROTECTION)+([DT_POISON:2]) );
+          break;
+        case "paladine":
+          ob->SetProp(P_LONG,
+              "Beinschienen, komplett aus glaenzendem Mithril gefertigt. "
+              "Jeder Paladin waere stolz, diese zu besitzen.");
+          ob->SetProp(P_MATERIAL, ([ MAT_MITHRIL:100]) );
+          ob->SetProp(P_PALADIN_SPELLCOST, 2+random(5));
+          ob->SetProp(P_DAM_PROTECTION, ob->QueryProp(P_DAM_PROTECTION)+([DT_COLD:1]) );
+          break;
+        case "nekromanten":
+          ob->SetProp(P_LONG,
+              "Diese Beinschienen wurden komplett aus Knochen gefertigt. "
+              "In die Knochen sind schreckliche Symbole der Finsterniss "
+              "eingeritzt.");
+          ob->SetProp(P_MATERIAL, ([ MAT_BONE:100]) );
+          ob->SetProp(P_NEKRO_SPELLCOST, 1+random(5));
+          ob->SetProp(P_NEKRO_BONUS, (["schrecken der finsterniss":25, "all":5]));
+          ob->SetProp(P_DAM_PROTECTION, ob->QueryProp(P_DAM_PROTECTION)+([DT_HOLY:1]) );
+          break;
+        case "zechpreller":
+          ob->SetProp(P_LONG,
+              "Diese Beimschienen bestehen aus hartem Leder, das in reinem "
+              "Alkohol gehaertet wurde, und daher extrem stark nach Alkohol "
+              "riecht. Sowas wird wohl nur ein Zechpreller tragen.");
+          ob->SetProp(P_MATERIAL, ([ MAT_ALCOHOL:50, MAT_LEATHER:50]) );
+          ob->SetProp(P_ZECHPRELLER_SPELLCOST, 1 + random(5));
+          ob->SetProp(P_ZECHPRELLER_BONUS, (["all": 5]));
+          ob->SetProp(P_ZECHPRELLER_REDUCE_ALC, 10 + random(5));
+          break;
+        case "amazonen":
+          ob->SetProp(P_LONG,
+              "Diese Beinschienen bestehen aus vergoldeter Bronze und sind mit "
+              "komplizierten Mustern verziert. Am Knie befindet sich ein "
+              "kraeftiger Stachel, der bei einem Knietritt sicher sehr weh tut.");
+          ob->SetProp(P_MATERIAL, ([ MAT_BRONCE:80, MAT_GOLD:20]) );
+          ob->SetProp(P_AMAZONEN_SPELLCOST, 1+random(5));
+          ob->SetProp(P_AMAZONEN_BONUS, (["knietritt":25, "all":5]));
+          ob->SetProp(P_AC, 7);
+          ob->SetProp(P_EFFECTIVE_WC, 150+random(100));
+          break;
+      }
+      break;
+    case AT_CLOAK:
+      ob->SetProp(P_GENDER, MALE);
+      ob->SetProp(P_WEIGHT, 500);
+      ob->SetProp(P_M_HEALTH_MOD, ([P_HP:random(5),P_SP:3+random(5)]) );
+      ob->SetProp(P_MATERIAL, ([ MAT_CLOTH:100]) );
+      switch(guild)
+      {
+        case "waldlaeufer":
+          ob->SetProp(P_LONG, 
+              "Ein gruener Umhang, der zum groessten Teil aus lebendem Efeu besteht. Hier und da "
+              "erkennst du darin kleine Waldspinnen krabbeln, deren dichtes Gespinnst den Umhang "
+              "komplett Blickdicht macht. Er ist in der Laenge auf "+race+"n zugeschnitten und "
+              "perfekt fuer Waldlaeufer geeignet, da er vielfaeltig einsetzbar ist. Hinter dem "
+              "Blickdichten gespinnst kann man Angriffe wie das Ausweiden oder eine Salve an "
+              "Pfeilen vorbereiten ohne, dass Gegner es merken. Die Spinnen reagieren besonders "
+              "gut auf bestimmte Melodien, die dich wendiger machen und locken maechtigere Spinnen "
+              "an. Ebenso ermoeglichen sie dir gemeinsame Angriffe mit einem Tierbegleiter besser "
+              "zu koordinieren.");
+          ob->SetProp(P_MATERIAL, ([ MAT_PLANT:80, MAT_PLANT:20]) );
+          ob->SetProp(P_RANGER_SPELLCOST, 1+random(5));
+          ob->SetProp(P_RANGER_BONUS, (["ausweiden":15, "salve":15, "melodie des ostens": 15, 
+                                        "gemeinsame attacke": 15, "spinne": 15, "all":5]));
+          break;
+        case "bardengilde":
+          ob->SetProp(P_LONG,
+              "Dieser Umhang ist in einem extrem stilsicheren Schnitt gehalten. "
+              "er glitzert in allen Farben des Regebenbogens. In seinem feinen "
+              "Stoff fangen sich immer wieder die Toene der Umgebung, sodass er "
+              "sich gut dazu eignet andere zu beeindrucken.");
+          ob->SetProp(P_BARDEN_SPELLCOST, 1 + random(5));
+          ob->SetProp(P_BARDEN_BONUS, ([
+            "flamme bin ich": 25,
+            "das lied vom sturmvogel": 25,
+            "des todes drei trommelschlaege": 25,
+            "windlied der sylphen": 25,
+            "sieben schritte": 25,
+            "all": 5
+          ]));
+          break;
+        case "dunkelelfen":
+          ob->SetLight(-2); 
+          ob->SetProp(P_LONG,
+              "Ein dunkler Umhang. Er ist aus schwarzem Stoff "
+              "gefertigt und sehr bequem.");
+          ob->SetProp(P_M_HEALTH_MOD, ([P_HP:random(5),P_SP:10+random(5)]) );
+          break;
+        case "abenteurer":
+          ob->SetLight(1); 
+          ob->SetProp(P_LONG,
+              "Ein leuchtender Umhang. Er ist aus gewoehlichem Stoff "
+              "gefertigt und sehr bequem.");
+          ob->SetProp(P_M_HEALTH_MOD, ([P_HP:random(5),P_SP:10+random(5)]) );
+          break;
+        case "berserker":
+          ob->SetLight((race == "Dunkelelf" ? -1 : 1)); 
+          ob->SetProp(P_LONG,
+              "Ein blutroter Umhang, man muss schon Berserker sein, um solch "
+              "eine leuchtende Farbe zu tragen. Angeblich verstaerkt diese "
+              "Farbe ja die koerpereigenen Regenerationnkraefte, aber das "
+              "laesst sich wohl schwer nachweisen, weil Berserker von Grund "
+              "auf schon eine erstaunliche Regenerationsfertigkeit besitzen.");
+          ob->SetProp(P_BERSERKER_BONUS, (["regeneration":25, "all":5]) );
+          break;
+        case "druidenzirkel":
+          ob->SetLight((race == "Dunkelelf" ? -1 : 1)); 
+          ob->AddId(ELEMENT_RING_LUFT);
+          ob->SetProp(P_MATERIAL, ([ MAT_FEATHER:100]) );
+          ob->SetProp(P_LONG, "Dieser Umhang besteht aus Federn aller bekannten "
+              "Voegel und birgt daher die Kraefte der Luft in sich. Unter anderen "
+              "kannst Du Adler-, Falken-, Moewen-, Kranich-, Raben- und Eulenfedern "
+              "erkennen. Er ist von einem "+
+              (race=="Dunkelelf"?"dunklen Schatten":"hellen Leuchten")+" umgeben. "
+              "Sicherlich wirkt sich so ein Umhang positiv auf Luftzauber und "
+              "auf Luftelementare aus.");
+          ob->SetProp(P_ITEMD_ELEMENTAL_VALUE, ([LUFT:10, "all":2]) );
+          ob->SetProp(P_DAM_PROTECTION, ob->QueryProp(P_DAM_PROTECTION)+([DT_AIR:2]) );
+          break;
+        case "paladine":
+          ob->SetLight(1); 
+          ob->SetProp(P_LONG,
+              "Ein leuchtend weisser Umhang mit dem Wappen der Paladine. "
+              "Niemand ausser einem echten Paladin wird wohl je solch einen "
+              "Umhang tragen.");
+          ob->SetProp(P_PALADIN_SPELLCOST, 2+random(5));
+          ob->SetProp(P_DAM_PROTECTION, ob->QueryProp(P_DAM_PROTECTION)+([DT_EXPLOSION:1]) );
+          break;
+        case "nekromanten":
+          ob->SetLight(-2); 
+          ob->SetProp(P_LONG,
+              "Ein dunkler Umhang. Er ist aus schwarzem Stoff "
+              "gefertigt und mit roten und weissen Knochensymbolen bestickt, "
+              "die die Form von Straheln haben. Eine dunkle Aura liegt auf "
+              "diesem Umhang.");
+          ob->SetProp(P_NEKRO_SPELLCOST, 1+random(5));
+          ob->SetProp(P_NEKRO_BONUS, (["strahlen der dunkelheit":25, "all":5]));
+          ob->SetProp(P_DAM_PROTECTION, ob->QueryProp(P_DAM_PROTECTION)+([DT_LIGHT:1]) );
+          break;
+        case "zechpreller":
+          ob->SetProp(P_LONG,
+              "Dieser Umhang besteht aus hartem Leder, das in reinem "
+              "Alkohol gehaertet wurde, und daher extrem stark nach Alkohol "
+              "riecht. Sowas wird wohl nur ein Zechpreller tragen.");
+          ob->SetProp(P_MATERIAL, ([ MAT_ALCOHOL:50, MAT_LEATHER:50]) );
+          ob->SetProp(P_ZECHPRELLER_SPELLCOST, 1 + random(5));
+          ob->SetProp(P_ZECHPRELLER_BONUS, (["all": 5]));
+          ob->SetProp(P_ZECHPRELLER_REDUCE_ALC, 10 + random(5));
+          break;
+        case "amazonen":
+          ob->SetProp(P_LONG,
+              "Ein Umhang aus aus feiner roter Seide mit einer goldenen "
+              "Schnalle, wie er bei Amazonen sehr beliebt ist. Er scheint "
+              "die Lebenskraft seiner Traegerin staerken zu koennen.");
+          ob->SetProp(P_MATERIAL, ([ MAT_SILK:95, MAT_GOLD:5]) );
+          ob->SetProp(P_AMAZONEN_SPELLCOST, 1+random(5));
+          ob->SetProp(P_AMAZONEN_BONUS, (["lebenskraft":25, "all":5]));
+          ob->SetProp(P_AC, 7);
+          break;
+      }
+      break;
+    default:
+      ob->SetProp(P_GENDER, FEMALE);
+      ob->SetProp(P_MATERIAL, ([ MAT_METAL:50, MAT_CLOTH: 50]) );
+      ob->SetProp(P_WEIGHT, 1000);
+  }
+  register(ob);
+}
+
+void racial_setup(object ob, string race)
+{
+  switch(race)
+  {
+    case "Dunkelelf":
+    case "Untoter":
+      ob->SetProp(P_DAM_PROTECTION, 
+          ob->QueryProp(P_DAM_PROTECTION)+([DT_LIGHT:1, DT_HOLY:1]) );
+      break;
+    case "Zwerg":
+      ob->SetProp(P_DAM_PROTECTION, 
+          ob->QueryProp(P_DAM_PROTECTION)+([DT_WATER:1, DT_MAGIC:1]) );
+      break;
+    case "Elf":
+      ob->SetProp(P_DAM_PROTECTION, 
+          ob->QueryProp(P_DAM_PROTECTION)+([DT_UNHOLY:1, DT_HOLY:1]) );
+      break;
+    case "Fee":
+      ob->SetProp(P_DAM_PROTECTION, 
+          ob->QueryProp(P_DAM_PROTECTION)+([DT_UNHOLY:1, DT_TERROR:1]) );
+      break;
+    case "Hobbit":
+      ob->SetProp(P_DAM_PROTECTION, 
+          ob->QueryProp(P_DAM_PROTECTION)+([DT_SOUND:1, DT_LIGHTNING:1]) );
+      break;
+    case "Oger":
+      ob->SetProp(P_DAM_PROTECTION, 
+          ob->QueryProp(P_DAM_PROTECTION)+([DT_TERROR:1, DT_MAGIC:1]) );
+      break;
+    case "Troll":
+      ob->SetProp(P_DAM_PROTECTION, 
+          ob->QueryProp(P_DAM_PROTECTION)+([DT_LIGHT:1, DT_FIRE:1]) );
+      break;
+    case "Mensch":
+      ob->SetProp(P_DAM_PROTECTION, 
+          ob->QueryProp(P_DAM_PROTECTION)+([DT_FIRE:1, DT_COLD:1]) );
+      break;
+  }
+  ob->SetProp(P_DAM_PROTECTION, ob->QueryProp(P_DAM_PROTECTION)+
+      ([m_indices(MAGICAL_DAMAGE_TYPES)[random(sizeof(MAGICAL_DAMAGE_TYPES))]:1]) );
+}
+
+nosave int check(string ob)
+{
+  if (find_object(ob))
+    return 1;
+  return 0;
+}
+
+nosave void check_armours()
+{
+  armours -= ({0});
+  armours = filter_array(armours, "check");
+}
+
+varargs void register(object ob)
+{
+  check_armours();
+  if (objectp(ob))
+    armours += ({file_name(ob)});
+  save_object(ARMOUR "mastersave");
+}
+
+void reset()
+{
+  check_armours();
+}
+
+
+nosave int show_armour(string a)
+{
+  object ob, env;
+  string env_str;
+
+  if (!a)
+    return 0;
+  ob = find_object(a);
+  if (objectp(env = ENV(ob))) 
+  {
+    if (objectp(ENV(env)) && (living(ENV(env)) ||
+          query_once_interactive(ENV(env))))
+      env = ENV(env);
+    if (query_once_interactive(env)) 
+      env_str = capitalize(getuid(env));
+    else if (living(env))
+      env_str = env->Name(RAW);
+    else 
+      env_str = file_name(env);
+  }
+  else env_str = "???";
+  if (ob->QueryProp(P_CLONER) != getuid(TO))
+    env_str += "/" + ob->QueryProp(P_CLONER);
+  printf("%-30s (%d/%d) ENV= %-30s\n",
+      ob->Name(RAW), 
+      ob->QueryProp(P_M_HEALTH_MOD)[P_HP],
+      ob->QueryProp(P_M_HEALTH_MOD)[P_SP],
+      env_str);
+  return 1;
+}
+
+int show_armours()
+{
+  check_armours();
+  if (!TP && (!IS_ELDER(TP) || member(ALLOWED_UIDS, getuid(TP))) )
+    return -1;
+  write("-----------------RACE-GUILD-ARMOURS-----------------------\n");
+  filter_array(armours, "show_armour");
+  return 1;
+}

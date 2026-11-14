@@ -1,0 +1,99 @@
+/*
+ * Feuerball
+ *
+ *
+ * Kosten: 
+ * Level : 10
+ * Objekte:
+ * Damage:
+ *
+ */
+
+int prep_feuerball(object caster, mapping sinfo) 
+{
+  if( !FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+        "Auf wen willst Du einen elementaren Feuerball schleudern?\n") )
+    return 0;
+  write_color("Deine Hand beginnt zu gluehen.\n", FEUER, caster);
+  return 1;
+}
+
+int feuerball(object caster, mapping sinfo) 
+{
+  object victim;
+  int hands, suc, dam;
+  string vnw;  
+  object *victims, ob;
+  int i;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+        "Auf wen willst Du einen elementaren Feuerball schleudern?\n");
+  if (!victim)
+    return 0;
+  sinfo=DoSpellModification(FEUER, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  if ((suc=SpellSuccess(caster,sinfo))<=0)
+    return MISSERFOLG;
+  dam=to_int(sinfo[SI_SKILLDAMAGE]+(exp(caster->QueryProp(P_GUILD_LEVEL)/3.35)*
+    ((float)suc/MAX_ABILITY)));
+  dam=(3*dam/5)+random(2*dam/5);
+  vnw = victim->name(WEM, 2);
+  say(sprintf("%s wirft einen elementaren Feuerball nach %s.\n", 
+              capitalize(caster->name()), vnw), victim);
+  write_color(BS("Du wirfst einen elementaren Feuerball nach "+vnw+"."), 
+      FEUER, caster, 1);
+  tell_object(victim, sprintf("%s wirft einen elementaren Feuerball nach Dir.\n",
+                              capitalize(caster->name())));
+  TryAttackSpell(victim,dam, sinfo[SI_SKILLDAMAGE_TYPE], 
+      ([SP_NAME:sinfo[SI_SPELLNAME],SP_SHOW_DAMAGE:1]),caster,sinfo );
+
+  if(victim && HAS_MYSTERY(caster, MYSTERY_IGNITE) && random(15000) < suc & !present("\n"+FEUER+"pfeil_enhance", victim)) {
+    ob=clone_object(OBJ("arrow_special"));
+    ob->move(victim, M_NOCHECK);
+    ob->SetVariables(caster,FEUER, victim);
+  }
+
+  if( sinfo[SI_SKILLABILITY] == MAX_ABILITY && suc > MAX_ABILITY && 
+      sizeof(victims=caster->PresentEnemies())>1 ) 
+  {
+    dam = dam/sizeof(victims);
+    for(i=sizeof(victims)-1; i>=0; i--)
+    {
+      if (victims[i] != victim)
+      {
+        tell_object(victims[i], BS(
+              "Ein Teil des Feuerballs trifft auch Dich!\n"));
+        TryAttackSpell(victims[i], dam/2+random(dam/2), sinfo[SI_SKILLDAMAGE_TYPE],
+            ([SP_NAME:sinfo[SI_SPELLNAME], SP_SHOW_DAMAGE:1]), caster, sinfo);
+      }
+    }
+  }
+
+  if(sizeof(victims=caster->PresentEnemies()) > 1 && HAS_MYSTERY(caster, MYSTERY_SPARKS)) {
+    victims -= ({victim});
+    victim = victims[random(sizeof(victims))];
+    tell_room(ENV(caster), BS(sprintf("Funken von dem Zauber auf und regnen auf %s nieder.",victim->name(WEN, 2))));
+    TryAttackSpell(victim, dam/2, DT_FIRE, ([SP_NAME:"Funken", SP_SHOW_DAMAGE:1]), caster, sinfo);
+  }
+
+  if(suc > 7000 && HAS_MYSTERY(caster, MYSTERY_SHOCKWAVE) && sizeof(victims=caster->PresentEnemies())) {
+    write_color(BS("Dein Feuerball explodiert und eine Druckwelle fegt durch den Raum."), FEUER, caster, 1);
+    say(sprintf("%s Feuerball explodiert und eine Druckwelle fegt durch den Raum.", caster->Name(WESSEN, 1)));
+    for(i=0;i<sizeof(victims);i++) {
+      if(victims[i]->QueryProp(P_LAST_RAMMEN_TIME)+5 < time() && 
+      caster->QueryProp(P_GUILD_LEVEL)+random(caster->QueryAttribute(A_INT) > victims[i]->QueryAttribute(A_STR))) {
+          tell_room(ENV(victims[i]), BS(sprintf("%s faellt zu Boden.", victims[i]->Name(WER, 2))));
+          victims[i]->SetProp(P_DISABLE_ATTACK, 1);
+          victims[i]->SetProp(P_LAST_RAMMEN_TIME, time());
+         }
+    }
+  }
+
+  return ERFOLG;
+}
+
+

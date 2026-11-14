@@ -1,0 +1,100 @@
+// revive - Zauberstab zum wiederbeleben von toten
+// 11.9.2004 - Feyaria@SilberLand
+//
+#include "../def.h"
+
+inherit OBJ "std_zauberstab";
+
+
+void create()
+{
+  string adj;
+
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  SetProp("ladungen", REVIVE_LADUNGEN + random(REVIVE_LADUNGEN));
+  SetProp(P_NAME, "Zauberstab der Wiederbelebung");
+  SetProp(P_SHORT, Name(WER,0));
+  SetProp(P_LONG, 
+      Name(WER,0) + ". Ob in diesem kleinen Stoeckchen "
+      "wirklich soviel Macht liegt, um jemanden wieder ins Leben "
+      "zurueckzurufen?");
+  AddId (({"\nrevive", "zauberstab der wiederbelebung", "wiederbelebungsstab",
+        "wiederbelebungszauberstab", "zauberstab wiederbelebung"}));
+  SetProp(P_INFO, BS(
+        "Mit 'wiederbelebung <name>' kannst Du einen anderen Spieler "
+        "wieder ins Leben zurueckrufen. Dazu musst Du aber den Zauberstab "
+        "zuecken und genug Magiepunkte uebrig haben."));
+
+  AddCmd( ({"wiederbelebung"}), "cmd_wiederbelebung");
+}
+
+int cmd_wiederbelebung(string str)
+{
+  string* filenames;
+  object pl, corpse, mark;
+  int xp, lvl;
+
+  if (!check())
+    return 0;
+
+  notify_fail("Wen willst Du wiederbeleben?\n");
+  if (!str || !objectp(pl = find_player(str)))
+    return 0;
+
+  notify_fail(pl->Name(WER) + " ist ja gar nicht gestorben!\n");
+  call_other(GRAVEYARD, "???");
+  if (!pl->QueryProp(P_GHOST) ||
+      !objectp(corpse = present("leiche\n" + file_name(pl), find_object(GRAVEYARD))))
+    return 0;
+
+  notify_fail(BS("Du kannst " + pl->name(WEN) + " hier nicht wiederbeleben, "
+        "weil " + pl->QueryPronoun(WER) + " ganz woanders gestorben ist."));
+  filenames = explode(file_name(environment(this_player())), "/");
+  if (filenames[3] != corpse->QueryProp(P_ASTRAL_DIE_ZONE))
+    return 0;
+
+  notify_fail("Du kannst Dich nicht selber wiederbeleben.\n");
+  if (TP == pl || 
+      (TP->QueryProp(P_SECOND) && lower_case(TP->QueryProp(P_SECOND)) == getuid(pl)) ||
+      (pl->QueryProp(P_SECOND) && lower_case(pl->QueryProp(P_SECOND)) == getuid(TP)))
+    return 0;
+  
+  notify_fail("Deine Magie ist zu schwach, um jemanden wiederbeleben zu "
+      "koennen.\n");
+  if (TP->QueryProp(P_SP) < REVIVE_COST)
+    return 0;
+
+  tell_object(pl, this_player()->Name(WER)+" ruft Deinen Geist "
+      "aus dem Totenreich zurueck.\n");
+  write("Du belebst " + pl->name(WEN) + " wieder.\n");
+  say(BS(TP->Name(WER) + " fuchtelt mit " + name(WEM,0) + " in der "
+        "Luft herum, murmelt etwas in einer seltsamen Sprache und ploetzlich "
+        "steht " + pl->name(WER) + " von den Toten wieder auf.\n"), ({pl, TP}));
+
+  pl->move(environment(this_player()), M_TPORT|M_NOCHECK);
+  while (mark = present("\ndeath_mark", pl))
+    mark->remove();
+  pl->SetProp(P_GHOST,0);
+  pl->heal_self(200);
+  pl->SetProp(P_NEXT_SPELL_TIME, time() + 20);
+  TP->AddSp(-REVIVE_COST);
+  TP->SetProp(P_NEXT_SPELL_TIME, time() + 60);
+  xp = pl->QueryProp(P_XP);
+  lvl = pl->QueryProp(P_LEVEL);
+  if (lvl > 90) lvl = 90;
+  pl->resurrect(lvl / 2 + random(lvl / 2));
+  filter_objects(all_inventory(corpse), "move", pl, M_NOCHECK | M_SILENT);
+  corpse->remove_me();
+
+  write_file(LOG "revive", sprintf("%s: %s resurrectet %s (%d XP zurueck) [%s]\n",
+        dtime(time()), 
+        capitalize(getuid(this_player())),
+        capitalize(getuid(pl)),
+        pl->QueryProp(P_XP) - xp,
+        filenames[3]));
+
+  after_spell();
+  return 1;
+}

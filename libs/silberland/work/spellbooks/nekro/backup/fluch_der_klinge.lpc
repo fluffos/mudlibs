@@ -1,0 +1,114 @@
+mixed check_fluch_der_klinge(object caster, mapping sinfo) {
+  object ob;
+  object victim;
+  if(caster->InFight()) {
+    write(BS("TOETE ZUERST!\n"));
+    return 0;
+  }
+  TELL("angrox", sprintf("fluch der klinge: %s\ncaster:%O\n", sinfo[SI_SKILLARG],caster));
+  if(!(ob=present(sinfo[SI_SKILLARG], caster))) {
+    write(BS(sprintf("%s! So etwas hast Du nicht bei Dir!", 
+          checkgender(caster, "NAERRIN", "NARR"))));
+    return 0;
+  }
+  if(member( ({WT_KNIFE, WT_SWORD}), ob->QueryProp(P_WEAPON_TYPE)) == -1) {
+    write(BS(sprintf("%s! DAS IST KEINE KLINGENWAFFE!", 
+          checkgender(caster, "NAERRIN", "NARR"))));
+    return 0;
+  }
+  if(ob->QueryProp(P_WIELDED) == caster) {
+    write(BS(sprintf("%s! Du darfst die Klinge nicht gezueckt haben!", 
+            checkgender(caster, "NAERRIN", "NARR"))));
+    return 0;
+  }
+  if(ob->QueryProp(P_NEKRO_PESTERED)) {
+    write(BS(sprintf("%s Diese Klinge ist schon verflucht!")));
+    return 0;
+  }
+  return ob;
+}
+
+int prep_fluch_der_klinge(object caster, mapping sinfo)
+{
+  if(!(sinfo[SI_SKILLARG]=parse_target(sinfo[SI_SKILLARG]))) {
+    write(BS("Welche Klinge willst Du verfluchen?"));
+    return 0;
+  }
+  if(!objectp(check_fluch_der_klinge(caster,sinfo)))
+    return 0;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  tell_room(ENV(caster), BS(sprintf("%s spricht leise Worte, die Du nicht "
+          "verstehst.\n", caster->Name(WER))), ({caster}));
+  return 1;
+}
+
+int fluch_der_klinge(object caster, mapping sinfo) 
+{
+  object ob,ob2;
+  string str, extra, *dts, obdp, *nekro_dam, nd;
+  mixed obdt;
+  int succ;
+
+  nekro_dam=NEKRO_DTS;
+  if(!(ob=check_fluch_der_klinge(caster,sinfo)))
+    return 0;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }                             
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+
+  if((succ=SpellSuccess(caster,sinfo)+50*CheckEquip(caster, 
+          sinfo[SI_SPELLFUNC])) < -random(5000))
+  {
+    write(BS(sprintf("%s Du hast nun endgueltig zerstoert!", 
+            random_fluch())));
+    ob->remove();
+  }
+  if (succ <= 0) {
+     
+    return MISSERFOLG; 
+  }
+  
+  write(BS(sprintf(
+     "Die fokussierte Macht des Boesen faehrt in %s. %s "
+     "erstrahlt kurz in einem eiskalten Schwarz und scheint nun aus "
+     "blutenden Knochen zu bestehen.", ob->name(WEM,1),
+     ob->Name(WER))));
+  tell_room(ENV(caster), BS(sprintf("Ein kuehler Hauch des Boesen geht durch "
+        "den Raum. Irgendetwas von %s Besitztuemern verstroemt kurz "
+        "eine eiskalte Schwaerze.\n", caster->name(WESSEN))), ({caster}));
+
+  ob2=clone_object(WEAPON "pestered_weapon");
+  TELL("angrox", sprintf("fluch der klinge: ob2 = %O\n", ob2));
+  ob2->reinit(ob, caster);
+      
+  if(!pointerp(obdt=ob->QueryProp(P_DAM_TYPE)))
+    obdt = ({ obdt });
+      
+  nd=nekro_dam[random(sizeof(nekro_dam))];
+  ob2->SetProp(P_DAM_TYPE, 
+      obdt+=({ nd }) );
+
+  if (succ > 8000)
+  {
+    extra=EXTRA_DTS[random(1000) % sizeof(EXTRA_DTS)];
+    ob2->SetProp(P_DAM_TYPE, obdt+=({ extra }) );
+    write(BS(sprintf(
+      "%s %s trifft ab nun zusaetzlich "
+      "mit %s.", ob->Name(WER,1), eng2germ(extra) )));
+  }
+  call_other(OBJ "pestered_weapon_func", "???");
+  ob2->SetProp(P_INFO, (ob2->QueryProp(P_INFO)?ob->QueryProp(P_INFO):"")+
+      "Diese Waffe ist verpestet und macht "+eng2germ(nd)+
+      (extra?" und "+eng2germ(extra):"")+".");
+  ob2->move(caster, M_NOCHECK);
+  ob->remove();
+
+  return ERFOLG;
+}

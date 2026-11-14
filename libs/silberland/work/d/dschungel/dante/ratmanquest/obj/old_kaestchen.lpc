@@ -1,0 +1,361 @@
+/*
+
+ Ein kleines Kaestchen fuer Edelsteine
+ Einmal geoeffnet, kann es nur von diesem Spieler wieder geoeffnet
+ und genommen werden. Man kann es ablegen, aber nicht weggeben.
+
+ Erstellt  : 19. Juli 2000   (Roc akn@fast.de)
+ Geaendert : 11. Januar 2001 (Roc akn@fast.de)
+
+ Dank an Dante fuer seinen "Ruessel" ;)
+ 
+ obj/gem obj/perl obj/
+
+ so ich formatiere und ordne das nun, der code is ja zum kotzen
+ 
+ bugfixing by dante 6.05.01, aber nix grobes
+ 
+ bugfixing by roc 7.11.2003:
+ - das kaestchen kann nun nicht mehr von npcs genommen werden
+ - fingerabdruecke nur von spielern
+ - wird das kaestchen liegengelassen, zerrstoert es sich nach 4
+   resets.
+ - P_WEIGHT_PERCENT auf 25, damit doppelt soviel wie ein beutel
+ 
+*/
+
+inherit "/std/container";
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include <verben.h>
+#include <container.h>
+#include <defines.h>
+#include <moredef.h>
+
+string ownerWho;
+string ownerWhos;
+string pronounWer;
+string pronounWen;
+string nameShort;
+string* lastGrabbed;
+string* allowedItems = ({"/obj/gems", "/obj/pearls"});
+int resetCounter;
+int resetCounterMax = 4;
+
+create() {
+  if( !is_clone(TO) ) return;
+
+  ::create();
+  SetProp(P_SHORT, "Ein kleines Kaestchen");
+  SetProp(P_LONG,
+    "Ein kleines Kaestchen aus Ebenholz mit einigen Verzierungen und "
+    "einem Deckel zum Oeffnen und Schliessen."
+  );
+  SetProp(P_INFO,
+    "Das kleine Kaestchen ist magisch. Es fasst eine Menge mehr, als "
+    "der erste Anschein es vermuten laesst. Wenn Du das erste Mal "
+    "den Deckel hebst, kannst nur Du es in Zukunft oeffnen oder nehmen. "
+    "Das kleine Kaestchen darf nicht weggegeben, jedoch kann es abgelegt "
+    "werden. Du solltest allerdings aufpassen, dass es nicht zu lange "
+    "herumliegt, da es sehr empfindlich auf Umwelteinfluesse reagiert."
+  );
+  AddId(({"kaestchen", "\nrockaestchen"}));
+  SetProp(P_WEIGHT, 250);
+  SetProp(P_GENDER, NEUTER);
+  SetProp(P_MATERIAL, ([MAT_EBONY:80, MAT_BRASS:5, MAT_MISC_MAGIC:15]));
+  SetProp(P_NAME, "Kaestchen");
+  SetProp(P_NAME_ADJ, "klein");
+  SetProp(P_NOSELL,
+    "Auf keinen Fall wirst Du Dein kleines Kaestchen verkaufen.\n"
+  );
+  SetProp(P_ARTICLE, 1);
+  SetProp(P_MAX_WEIGHT, 8000);
+  SetProp(P_WEIGHT_PERCENT, 25);
+  SetProp(P_VALUE, 600);
+  SetProp(P_CNT_STATUS, CNT_STATUS_CLOSED);
+  SetProp(P_TRANSPARENT, 0);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NODROP, "Du kannst es jetzt noch nicht ablegen.\n");
+
+  AddDetail("deckel",
+    "Auf dem Deckel sind besonders schoene Verzierungen eingearbeitet. Du "
+    "kannst ihn oeffnen und schliessen."
+  );
+  AddDetail("verzierungen",
+    "Das Kaestchen und besonders der Deckel ist mit Verzierungen "
+    "verschoenert worden."
+  );
+
+  AddCmd(CMD_OEFFNEN, "openBox");
+  AddCmd(CMD_SCHLIESSEN, "closeBox");
+
+  pronounWer=TO->QueryPronoun(WER);
+  pronounWen=TO->QueryPronoun(WEN);
+  nameShort=name(RAW);
+  resetCounter=resetCounterMax;
+  lastGrabbed=({ });
+}
+
+string long() {
+  string descr, invDescr, grabbedString;
+  int i, pos, flag;
+  string *tempArray, *finalGrabbed;
+
+  descr=QueryProp(P_LONG);
+  grabbedString="";
+  tempArray=({ });
+  finalGrabbed=({ });
+  
+  if( TP ) {
+    pos=member( lastGrabbed, geteuid(TP) );
+  } else {
+    pos=-1;
+  }
+  if( TP && (pos!=-1) ) {
+    for( i=0; i<sizeof(lastGrabbed); i++ ) {
+      tempArray+=({lastGrabbed[i]});
+    }
+    tempArray[pos]="Deinen Fingern";
+    finalGrabbed=tempArray;
+  } else {
+    finalGrabbed=lastGrabbed;
+  }
+  if( sizeof(finalGrabbed)!=0 ) {
+    grabbedString+=CAP(finalGrabbed[0]);
+    if( sizeof(finalGrabbed)>1 ) {
+      if( sizeof(finalGrabbed)>2 ) {
+        for( i=1; i<(sizeof(finalGrabbed)-1); i++ ) {
+          grabbedString+=", "+ CAP(finalGrabbed[i]);
+        }
+      }
+      grabbedString+=" und "+ CAP(finalGrabbed[<1]);
+    }
+    descr+=BS("Du siehst die Fingerabdruecke von "+ grabbedString +
+              " auf dem Deckel.\n"); 
+  }
+  if( !QueryProp(P_TRANSPARENT) && TP ) {
+    return descr+CAP(pronounWer) +" ist geschlossen.\n";
+  }
+  invDescr=make_invlist(TP, all_inventory(TO));
+  //descr+="Last Grabbed: "+ lastGrabbed;
+  
+  if( invDescr!="" ) {
+    descr+=CAP(pronounWer) +" ist geoeffnet und enthaelt:\n"+ invDescr;
+  } else {
+    descr+=CAP(pronounWer) +" ist geoeffnet und leer.\n";
+  }
+  return descr;
+}
+
+string short() {
+  if( stringp(ownerWho) ) {
+    if( !QueryProp(P_CNT_STATUS) ) {
+      return ownerWhos +" "+ nameShort +" (geoeffnet).\n";
+    } else {
+      return ownerWhos +" "+ nameShort +" (geschlossen).\n";
+    }
+  } else {
+     if( !QueryProp(P_CNT_STATUS) ) {
+      return process_string(QueryProp(P_SHORT))+" (geoeffnet).\n";
+    } else {
+      return process_string(QueryProp(P_SHORT))+" (geschlossen).\n";
+    }
+  }
+}
+
+int closeBox(string arg) {
+  string possPronoun;
+
+  if( !id(arg) ) {
+    notify_fail("Was moechtest Du schliessen?\n");
+    return 0;
+  }
+  if( QueryProp(P_CNT_STATUS) ) {
+    write(BS(CAP(name(WER, 1))+" ist doch geschlossen.\n"));
+    return 1;
+  }
+  if( TP ) {
+    if( ownerWho==geteuid(TP) ) {
+      possPronoun=TP->QueryPossPronoun(QueryProp(P_GENDER),
+                                        WEN, SINGULAR);
+      say(BS(CAP(TPN)+" schliesst "+ possPronoun +" "+ nameShort +"."));
+      write(BS("Du schliesst D"+ TO->QueryArticle(WEN, 0, 1, TO->IsPlural())
+      + nameShort +"."));
+    } else {
+      say(BS(CAP(TPN)+" schliesst "+ (name(WEN, 1)) +"."));
+      write(BS("Du schliesst "+ (name(WEN, 1)) +"."));
+    }
+  } else return 0;
+
+  SetProp(P_TRANSPARENT, 0);
+  SetProp(P_CNT_STATUS, CNT_STATUS_CLOSED);
+  return 1;
+}
+
+int openBox(string arg) {
+  string descrLong, possPronoun;
+
+  descrLong=QueryProp(P_LONG);
+  notify_fail("Was moechtest Du oeffnen?\n");
+  if( !arg || !id(arg) ) return 0;
+  if( !QueryProp(P_CNT_STATUS) ) {
+    write(BS(CAP(name(WER, 1))+ " ist schon offen.\n"));
+    return 1;
+  }
+  if( !stringp(ownerWho) && TP ) {
+    ownerWho=geteuid(TP);
+    ownerWhos=CAP(((ownerWhos=ownerWho)[<1]=='s'||
+      ownerWhos[<1]=='x'||ownerWhos[<1]=='z')?
+      ownerWhos+="'":ownerWhos+="s");
+    possPronoun=TP->QueryPossPronoun(FEMALE, WEN, SINGULAR);
+
+    write(BS(
+      "Du legst Deine Hand auf "+ (name(WEN, 1)) +" und versuchst "+
+      pronounWen +" zu oeffnen. "+ CAP(pronounWen) +" leuchtet kurz "
+      "auf und oeffnet sich dann. Ab jetzt kannst nur Du "+
+      (name(WEN, 1)) +" oeffnen und nehmen, "+ CAP(ownerWho) +". ")
+    );
+    say(BS(
+      CAP(TPN) +" legt "+ possPronoun +" Hand auf "+ (name(WEN, 1)) +
+      ". "+ CAP(pronounWer) +" leuchtet kurz auf und oeffnet sich dann.")
+    );
+
+    SetProp(P_CNT_STATUS, CNT_STATUS_OPEN);
+    SetProp(P_TRANSPARENT, 1);
+    SetProp(P_LONG,
+      descrLong+CAP(pronounWer) +" gehoert "+ CAP(ownerWho) +"."
+    );
+    SetProp(P_SHORT, ownerWhos +" "+ nameShort);
+    SetProp(P_NODROP, 0);
+    AddId("kaestchen_from_"+ownerWho);
+    return 1;
+  } else {
+    if( possPronoun=TP->QueryPossPronoun(QueryProp(P_GENDER),
+                                        WEN, SINGULAR) ) {
+      if( ownerWho==geteuid(TP) ) {
+        write(BS("Du oeffnest D"+ TO->QueryArticle(WEN,0,1,TO->IsPlural())
+         +nameShort +"."));
+        say(BS(CAP(TPN) +" oeffnet "+ possPronoun +" "+ nameShort +"."));
+
+        SetProp(P_CNT_STATUS, CNT_STATUS_OPEN);
+        SetProp(P_TRANSPARENT, 1);
+//        lastGrabbed="";        
+        return 1;
+      } else {
+        write(BS(
+          "Du versuchst "+ (name(WEN, 1)) +" zu oeffnen, versagst aber "
+          "jaemmerlich. "+ CAP(pronounWer) +"  gehoert "+ CAP(ownerWho) +
+          " und sollte sich nicht in Deinem Besitz befinden.")
+        );
+        say(BS(
+          CAP(TPN) +" versucht "+ ownerWhos +" "+ nameShort +" zu oeffnen, "
+          "schafft es aber nicht. So ganz legal kommt Dir das nicht vor.")
+        );
+        if( member(lastGrabbed, geteuid(TP))==-1 ) {
+          if( sizeof(lastGrabbed)>9 ) {
+            lastGrabbed=lastGrabbed[1..];
+            lastGrabbed+=({geteuid(TP)});
+          } else {
+            lastGrabbed+=({geteuid(TP)});
+          }
+        }    
+        return 1;
+      }
+    }
+  }
+  return 0;
+}
+
+
+varargs int move(mixed dest, int method) {
+
+  if(!interactive(dest) && living(dest)) {
+    return ME_CANT_BE_TAKEN;
+  }
+
+  if( method==M_GIVE && stringp(ownerWho) ) {
+    write(CAP(pronounWer) +" kann nur abgelegt werden. ");
+    return ME_CANT_BE_INSERTED;
+  }
+
+  if( (method==M_GET || method==M_PUT) && stringp(ownerWho)) {
+    if( TP && geteuid(TP)!=ownerWho ) {
+      say(BS(
+        CAP(TPN) +" versucht vergeblich "+ ownerWhos +" "+ nameShort +
+        " zu nehmen.")
+      );
+      write(CAP(pronounWer) +" gehoert "+ CAP(ownerWho) +". ");
+      if( deep_present("\nrockaestchen", TP)!=0 ) {
+        write("Ausserdem hast Du schon ein "+ nameShort +". ");
+      }
+      if( member(lastGrabbed, geteuid(TP))==-1 ) {
+        if( sizeof(lastGrabbed)>9 ) {
+          lastGrabbed=lastGrabbed[1..];
+          lastGrabbed+=({geteuid(TP)});
+        } else {
+          lastGrabbed+=({geteuid(TP)});
+        }
+      }        
+      return ME_CANT_BE_TAKEN;
+    } else {
+      if( deep_present("\nrockaestchen", TP)!=0  && 
+            deep_present("\nrockaestchen", TP)!=TO) {
+        write(BS(
+          "Du darfst nur ein Kaestchen haben und wurdest vor den Folgen "
+          "gewarnt!\n")
+        );
+        write(BS(
+          "Das Kaestchen explodiert mit lautem Getoese und alle inliegenden "
+          "Sachen werden durch die Luft geschleudert.\n")
+        );
+        say(ownerWhos +" "+ nameShort +" explodiert mit einem lauten Knall.\n");
+        call_out("remove", 1);
+        return ME_CANT_BE_TAKEN;
+      }
+    }
+  }
+  if(resetCounter!=resetCounterMax) {
+    resetCounter=resetCounterMax;
+  }
+  return ::move(dest, method);
+}
+
+varargs int PreventInsert(object ob) {
+  string filename;
+  int i;
+  filename=explode(file_name(ob), "#")[0];
+  
+  if(filename=="/p/magic/supergem") {
+    return ::PreventInsert(ob);
+  }
+  
+  i=strlen(filename)-1;
+  while(filename[i--]!='/');
+  filename=filename[0..i];
+  
+//DEBUG write("FILENAME: "+ filename +"\n");
+  if( filename=="" || member(allowedItems, filename)==-1 ) {
+    return 1;
+  } else {  
+    return ::PreventInsert(ob);
+  }
+}
+
+
+void reset() {
+  ::reset();
+  
+  if(environment(TO) && !query_once_interactive(environment(TO))) {
+    if(!resetCounter) {
+      say("Ein "+ nameShort +" zerbricht und gibt den Inhalt frei.\n");
+      call_out("remove", 0);
+    } else {
+      say("Ein "+ nameShort +" verwittert langsam.\n");
+      resetCounter--;
+    }
+  }  
+}
+
+

@@ -1,0 +1,167 @@
+/* Schneider
+
+Herstellungen vom Troglodytenschneider
+->schwarze Hoehlenkaeferchitinplatten
+->rote Corbonitkaeferchitinplatten
+->gelb Termitenchitinplatten 
+->gruenblaue Scheinstutzchitinplatten
+
+(mehr Chitinplatteninsekten?)
+*/
+
+#include <properties.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <moredef.h>
+#include <mnpc.h>
+#include "../def.h"
+inherit NPC + "trnpc_raw.lpc";
+
+int KOSTEN = 2000; //Kosten zur Herstellung 
+
+#define TY(x) if(find_player("yason")) tell_object(find_player("yason"),x)
+
+// Format ({pfad, rote fasern, weisse fasern, schwarze platten, gelbe platten, rote platten, blaugruene platten})
+mapping erzeugung = ([
+    "pilzfaserhemd, weiss":({ARMOUR+"mushroom_armour_weiss",0,70,0,0,0,0}), 
+    "pilzfaserhose, weiss":({ARMOUR+"mushroom_legs_weiss",0,80,0,0,0,0}), 
+    "pilzfaserschuhe, weiss":({ARMOUR+"mushroom_boots_weiss",0,60,0,0,0,0}),
+    "pilzfaserguertel, weiss":({ARMOUR+"mushroom_belt_weiss",0,50,0,0,0,0}),
+    "pilzfaserumhang, weiss":({ARMOUR+"mushroom_cloak_weiss",0,90,0,0,0,0}),
+    "pilzfaserhemd, rot":({ARMOUR+"mushroom_armour_rot",70,0,0,0,0,0}),
+    "pilzfaserhose, rot":({ARMOUR+"mushroom_legs_rot",80,0,0,0,0,0}),
+    "pilzfaserschuhe, rot":({ARMOUR+"mushroom_boots_rot",60,0,0,0,0,0}),
+    "pilzfaserguertel, rot":({ARMOUR+"mushroom_belt_rot",50,0,0,0,0,0}),
+    "pilzfaserumhang, rot":({ARMOUR+"mushroom_cloak_rot",90,0,0,0,0,0}),
+    "chitinplattenpanzer, schwarz":({ARMOUR+"chitin_armour_schwarz",0,40,80,0,0,0}),
+    "chitinplattenstiefel, schwarz":({ARMOUR+"chitin_boots_schwarz",0,20,60,0,0,0}),
+    "chitinplattenarmschienen, schwarz":({ARMOUR+"chitin_arms_schwarz",0,24,46,0,0,0}),
+    "chitinplattenbeinschienen, schwarz":({ARMOUR+"chitin_legs_schwarz",0,30,50,0,0,0}),
+    "chitinplattenpanzer, gelb":({ARMOUR+"chitin_armour_gelb",0,40,0,80,0,0}),
+    "chitinplattenstiefel, gelb":({ARMOUR+"chitin_boots_gelb",0,20,0,60,0,0}),
+    "chitinplattenarmschienen, gelb":({ARMOUR+"chitin_arms_gelb",0,24,0,46,0,0}),
+    "chitinplattenbeinschienen, gelb":({ARMOUR+"chitin_legs_gelb",0,30,0,50,0,0}),
+    "chitinplattenpanzer, rot":({ARMOUR+"chitin_armour_rot",40,0,0,0,80,0}),
+    "chitinplattenstiefel, rot":({ARMOUR+"chitin_boots_rot",20,0,0,0,60,0}),
+    "chitinplattenarmschienen, rot":({ARMOUR+"chitin_arms_rot",24,0,0,0,46,0}),
+    "chitinplattenbeinschienen, rot":({ARMOUR+"chitin_legs_rot",30,0,0,0,50,0}),
+    "chitinplattenpanzer, gruenblau":({ARMOUR+"chitin_armour_gruenblau",0,40,0,0,0,80}),
+    "chitinplattenstiefel, gruenblau":({ARMOUR+"chitin_boots_gruenblau",0,20,0,0,0,60}),
+    "chitinplattenarmschienen, gruenblau":({ARMOUR+"chitin_arms_gruenblau",0,24,0,0,0,46}),
+    "chitinplattenbeinschienen, gruenblau":({ARMOUR+"chitin_legs_gruenblau",0,30,0,0,0,50})
+    	]);
+string *ruestungen = m_indices(erzeugung);
+
+void create() {
+  if (!is_clone(TO)) return;
+  ::create();
+
+  AddId( ({"miitox", "schneider", "\nmiitox"}) );
+  create_default_npc(15+random(5));
+
+  SetProp(P_NAME, "Miitox");
+  SetProp( P_SHORT, "Miitox, der Schneider");
+  SetProp( P_LONG, BS("Dies ist Miitox, der Schneider. Er hat schmale dreigliedrige Haende und "+
+    "hantiert damit flink seine Werkzeuge zum Schneidern von Kleidung und Ruestungen.. "+
+    "Es irritiert ein kleines bischen in ein Gesicht ohne Augen zu schauen."));
+  SetProp(P_MNPC_DEFAULTROOM, ROOM + "troglodyten_f6.lpc");
+  SetProp(P_MNPC_FLAGS, 0);
+
+  AddInfo( ({"miitox", "schneider"}) , 
+    "Ich bin Miitox der beruehmte Schneider der Hoehlen. Ich kann Euch eine "+
+    "Chitinplattenausruestung schneidern wenn ihr genuegend Rohmaterial bringt. ",
+    "sagt: " );
+  AddInfo( ({"schneiderei"}) , 
+    "In meiner Schneiderei ist alles vorhanden um Chitinplattenruestungen "+
+    "zu reparieren." , "sagt: " );
+
+  SUID;
+  CLONEME(ARMOUR + "mushroom_armour.lpc");
+  CLONEME(ARMOUR + "mushroom_legs.lpc");
+  CLONEME(ARMOUR + "mushroom_boots.lpc");
+  command("trage alles");
+
+  AddCmd( ({"schneider", "schneidre", "schneidere", "schneidern"}), "CmdSchneidern" ); 
+
+}
+
+// schneider <Object> in <farbe>
+int CmdSchneidern(string str)
+{
+	object pilzfasern_rot, pilzfasern_weiss, ob;
+	object chitinplatten_schwarz, chitinplatten_gelb, chitinplatten_rot, chitinplatten_gruenblau;
+	string ausg, was, farbe;
+	string *erg;
+	int i;
+	int anz_pilzfasern_rot, anz_pilzfasern_weiss;
+	int anz_chitinplatten_schwarz, anz_chitinplatten_gelb, anz_chitinplatten_rot, anz_chitinplatten_gruenblau;
+
+  notify_fail( Name(WER, 1)+" ist gerade beschaeftigt.\n");
+  if( InFight() ) return 0; 
+  notify_fail( "Du bist gerade leider am kaempfen.\n");
+  if( TP->InFight() ) return 0; 
+	
+	// Bestaende ermitteln
+	if( !pilzfasern_rot=present("\npilzfaser_rot", TP) ) anz_pilzfasern_rot=0;
+	else anz_pilzfasern_rot=pilzfasern_rot->QueryProp(P_AMOUNT);
+	if( !pilzfasern_weiss=present("\npilzfaser_weiss", TP) ) anz_pilzfasern_weiss=0;
+	else anz_pilzfasern_weiss=pilzfasern_weiss->QueryProp(P_AMOUNT);
+  if( !chitinplatten_schwarz=present("\nchitinplatte_schwarz", TP) ) anz_chitinplatten_schwarz=0;
+	else anz_chitinplatten_schwarz=chitinplatten_schwarz->QueryProp(P_AMOUNT);
+  if( !chitinplatten_gelb=present("\nchitinplatte_gelb", TP) ) anz_chitinplatten_gelb=0;
+	else anz_chitinplatten_gelb=chitinplatten_gelb->QueryProp(P_AMOUNT);
+  if( !chitinplatten_rot=present("\nchitinplatte_rot", TP) ) anz_chitinplatten_rot=0;
+	else anz_chitinplatten_rot=chitinplatten_rot->QueryProp(P_AMOUNT);
+  if( !chitinplatten_gruenblau=present("\nchitinplatte_gruenblau", TP) ) anz_chitinplatten_gruenblau=0;
+	else anz_chitinplatten_gruenblau=chitinplatten_gruenblau->QueryProp(P_AMOUNT);
+	
+	// was man erzeugen kann
+	erg=({});
+	ausg="";
+  for( i=sizeof(ruestungen)-1; i>=0; i--)
+  {
+  	if( anz_pilzfasern_rot>=erzeugung[ruestungen[i]][1] &&
+  		  anz_pilzfasern_weiss>=erzeugung[ruestungen[i]][2] &&
+  		  anz_chitinplatten_schwarz>=erzeugung[ruestungen[i]][3] &&
+  		  anz_chitinplatten_gelb>=erzeugung[ruestungen[i]][4] &&
+  		  anz_chitinplatten_rot>=erzeugung[ruestungen[i]][5] &&
+  		  anz_chitinplatten_gruenblau>=erzeugung[ruestungen[i]][6] )
+  	{	  
+  		erg+=({ruestungen[i]});
+  		ausg+=capitalize(ruestungen[i]+"\n");
+  	}
+  }
+  if( !str )
+  {
+  	if( !sizeof(erg) ) tell_object(TP, Name(WER, 1)+" sagt: Mit euren Ressourcen kann ich euch keine Ruestung erzeugen.\n" );
+    else tell_object(TP, Name(WER, 1)+" sagt: Mit euren Ressourcen kann ich euch folgende Ruestungen erzeugen: \n"+ausg );
+    return 1;
+  }
+
+  if( sscanf(str, "%s in %s", was, farbe )==2 )
+  {
+  	str=was+", "+farbe;
+  }
+  
+  notify_fail( Name(WER, 1)+" sagt: Was wollt Ihr dass ich euch schneidern soll?\n");
+  if( member_array(str, ruestungen ) == -1 ) return 0;
+  notify_fail( Name(WER, 1)+" sagt: Ihr hab nicht genug Geld bei euch.\n");
+  if( TP->QueryMoney() < KOSTEN ) return 0; 
+  notify_fail( Name(WER, 1)+" sagt: Dafuer habt ihr leider nicht die noetigen Ressourcen.\n");
+  if( member_array(str, erg) ==-1 ) return 0; 
+
+  // erzeugen der Ruestung
+  TP->AddMoney(-KOSTEN);
+  if( objectp(pilzfasern_rot) ) pilzfasern_rot->AddAmount(-erzeugung[str][1]);
+  if( objectp(pilzfasern_weiss) ) pilzfasern_weiss->AddAmount(-erzeugung[str][2]);
+  if( objectp(chitinplatten_schwarz) ) chitinplatten_schwarz->AddAmount(-erzeugung[str][3]);
+  if( objectp(chitinplatten_gelb) ) chitinplatten_gelb->AddAmount(-erzeugung[str][4]);
+  if( objectp(chitinplatten_rot) ) chitinplatten_rot->AddAmount(-erzeugung[str][5]);
+  if( objectp(chitinplatten_gruenblau) ) chitinplatten_gruenblau->AddAmount(-erzeugung[str][6]);
+  ob=clone_object(erzeugung[str][0]);
+  if( ob->move(TP, M_GET) < 0 ) ob->move(ENV(TO), M_PUT);	
+  tell_object(TP, Name(WER, 1)+" sagt: Ich habe euch nun "+ob->name(WEN)+" geschneidert.\n");
+  TY( Name(WER, 1)+" teilt Dir mit: Ich habe fuer "+TP->Name()+" "+ob->name(WEN)+" geschneidert.\n" );
+  return 1;
+}

@@ -1,0 +1,197 @@
+/*
+  2006-09-15: Iwo
+      Nicht-Seher werden nun (wenn nicht Troll und nicht NPC)
+      sanft am Eintreten gehindert.
+*/
+
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include "../def.h"
+#include <wizlevels.h>
+
+// Gruppenfunktionalitaet reinladen
+#include "/p/service/iwo/group/group.h"
+
+inherit ROOM "trollraum";
+
+int alert;
+
+create() {
+  ::create();
+
+  SetProp(P_LIGHT,1);
+  SetProp(P_INT_SHORT,"Eingang zum Trollager");
+  SetProp( P_ENVIRONMENT, ([ENV_TEMPERATURE: 18]) );
+  SetProp(P_INT_LONG,
+    "Du befindest Dich am Eingang zum Trollager. Das Lager ist auf einer "
+    "Lichtung errichtet, die von Felsen umgeben ist. Dich ueberkommt ein "
+    "beklemmendes Gefuehl als Du erkennst, dass dieses Felsenportal der "
+    "einzige Ausweg aus dem Lager ist. Du solltest hier lieber vorsichtig "
+    "sein angesichts der herumliegenden und abgenagten Knochen "
+    "verstorbener Abenteurer.");
+
+  AddDetail( ({ "gefuehl" }),
+    "Das ist ein wirklich beklemmendes Gefuehl.");
+
+  AddDetail(({"fels","felsen","felswaende","waende"}),
+    "Sie ragen steil auf allen Seiten des Lagers empor und sind "
+    "unmoeglich zu besteigen.");
+
+  AddDetail(({"felsenportal","portal","durchgang"}),
+    "Ein schmaler Durchgang zwischen den Felsen.");
+
+  AddDetail("knochen",
+    "Sie sind sauber abgenagt.");
+
+  AddDetail( "lichtung",
+    "Eine schoene, grosse, gruene Lichtung.");
+
+  AddDetail( ({"ausweg","ausgang"}),
+    "Der Ausweg liegt im Westen, also wenn Du feig bist, hau bloss ab von "
+    "hier.");
+
+  AddDetail( "eingang",
+    "Der Eingang des Lagers liegt hier, nach Osten kommst du tiefer ins "
+    "Lager hinein.");
+
+  AddSpecialExit("westen","rausda");
+  AddSpecialExit("osten","xosten");
+
+  AddItem(NPC "troll2", REFRESH_DESTRUCT);
+  AddItem(NPC "troll2", REFRESH_DESTRUCT);
+
+  alert=NO;
+}
+
+xosten() {
+  if (TP->QueryProp(P_GHOST) && TP->QueryProp(P_RACE) != "Troll") {
+    write(BS(
+      "Als Geist brauchst Du nicht ins Trollager zu gehen. Die Trolle "
+      "moegen keine Geister ..."));
+    return 1;
+  }
+  if (TP->QueryGuest()) {
+    write(BS(
+      "Gaeste haben bei den Trollen nichts zu suchen. Die Trolle moegen keine "
+      "Gaeste oder besser gesagt: Sie wuerden Dich sofort auffressen."));
+    return 1;
+  }
+  //
+  // Kindersicherung
+  //
+  // Umgehungsgruende: NPC, Troll, Seher, Gruppenmitglied, im Kampf
+  if (query_once_interactive(TP) && TP->QueryProp(P_RACE) != "Troll" 
+         && !IS_SEER(TP) && !GROUPMASTER->IsInGroup(TP) && !TP->InFight()) {
+    // Waechter finden
+    object *guards;
+    object *inv;
+    int i;
+
+    guards = ({});
+
+    inv = all_inventory(this_object());
+
+    for (i = 0; i < sizeof(inv); i++)
+      if ( inv[i]->id("troll") || inv[i]->QueryProp(P_RACE) == "Troll" )
+        if ( living( inv[i] ) )         // woody, 2016-05-09
+          guards += ({ inv[i] });
+
+    if (sizeof(guards) > 0)
+      {
+        // Fuer alle unbeteiligten
+        tell_room(this_object(), break_string(guards[0]->Name(WER) 
+          + " stoesst " + TP->name(WEN) 
+          + " mit " + guards[0]->QueryPossPronoun(FEMALE, WEM, PLURAL)
+          + " riesigen Trollpranken zu Boden.", 78), ({ TP, guards[0] }) );
+        // Das Opfer
+        tell_object(TP, break_string(guards[0]->Name(WER) + " stoesst Dich mit "
+          + guards[0]->QueryPossPronoun(FEMALE, WEM, PLURAL)
+          + " riesigen Trollpranken zu Boden.", 78));
+        // Der Taeter (kann auch ein interactive sein)
+        tell_object(guards[0], break_string("Du stoesst " + TP->name(WEN)
+          + " mit Deinen riesigen Trollpranken zu Boden.", 78));
+        tell_room(this_object(), break_string("Was Du wollen ueberhaupt, Winzling?", 78, guards[0]->Name(WER) + " groehlt: "), ({ guards[0] }));
+        tell_object(guards[0], break_string("Was Du wollen ueberhaupt, Winzling?", 78, "Du groehlst: "));
+        // Die Zuseher
+        for (i = 1; i < sizeof(guards); i++)
+          {
+            tell_object(guards[i], break_string("Du lachst schallend.", 78));
+            tell_room(this_object(), break_string(guards[i]->Name(WER)
+              + " lacht schallend.", 78), ({ guards[i] }) );
+          }
+        return 1;
+      }
+    
+  }
+    
+  TP->move(ROOM "t1", M_GO, "", "geht nach Osten");
+  return 1;
+}
+
+alarm(string art) { 
+  string meldung;
+  int i;
+  object ob;
+
+  if (alert==YES) return;
+  alert=YES;
+  for(i = strlen(art)-1; i >= 0; --i) 
+    art[i..i] = capitalize(art[i..i]);
+  domainshout("Die Trollwache ruft: "+art+"! ALAAARM!!\n", "gebirge");
+  call_out("stopp", 901);
+  tell_room(ME, BS(
+    "Sechs Trollwaechter huepfen ploetzlich von einem Felsvorsprung herab!"));
+  clone_object(NPC "wache")->move(ME, M_SILENT | M_TPORT);
+  clone_object(NPC "wache")->move(ME, M_SILENT | M_TPORT);
+  clone_object(NPC "wache")->move(ME, M_SILENT | M_TPORT);
+  clone_object(NPC "wache")->move(ME, M_SILENT | M_TPORT);
+  clone_object(NPC "wache")->move(ME, M_SILENT | M_TPORT);
+  clone_object(NPC "wache")->move(ME, M_SILENT | M_TPORT);
+}
+
+stopp() { 
+  alert=NO;
+}
+
+isalert() { 
+  return(alert);
+}
+
+rausda() { 
+  int i;
+  object *inv;
+
+  if (TP->QueryProp(P_RACE)!="Troll") {
+    if (present("trollwaechter")) {
+      write(BS(
+        "Der Trollwaechter versperrt Dir den Weg. Der Trollwaechter "
+        "schnauzt Dich an: Nee Freundchen, du bleibst schoen da. Du sollst "
+        "an unserem Bratspiess enden!"));
+      return 1;
+    }
+  }
+  return "/d/gebirge/eros/room/berg_t18";
+}
+
+init() {
+  ::init();
+  if (TP->QueryGuest()) {
+    write(BS(
+      "Gaeste haben bei den Trollen nichts zu suchen. Die Trolle moegen keine "
+      "Gaeste oder besser gesagt: Sie wuerden Dich sofort auffressen."));
+    TP->command_me("westen");
+  }
+}
+
+
+varargs int PreventInsert(object ob)
+{
+  if (!ob->id("\nwalker")) return ::PreventInsert(ob);
+
+  if (ob->QueryProp("walker_walking")) ob->Stopwalk();
+  else ob->MakeMeWalk("trollager");
+  
+  return ::PreventInsert(ob);
+}

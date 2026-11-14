@@ -1,0 +1,511 @@
+/*
+    Talentmaster der Bardengilde
+*/
+#pragma no_clone, no_inherit, no_shadow
+#include "../bardengilde.h"
+#include "../access.h"
+#define TALENTS "/gilden/bardengilde/backup/talents"
+#include <moredef.h>
+#include <combat.h>
+#include <new_skills.h>
+#include <language.h>
+#include <combat.h>
+#include <properties.h>
+#include <moving.h>
+#include "/gilden/berserker/berserker_extern.h"
+
+nosave mapping bards = ([ ]);
+nosave mapping lastTalentReset = ([ ]);
+mixed saveload;
+
+public void create() {
+  seteuid(getuid(this_object()));
+  if (restore_object(TALENTS))
+   bards=saveload;
+  saveload=0;
+  return;
+}
+
+mixed GetSaveLoad()
+{
+  return saveload;
+}
+
+public int DoBackup() {
+  if (!CheckIfAllowed()) return -2;
+  saveload=bards;
+  save_object(TALENTS);
+  rm (BACKUP("talents.log"));
+  write_file(BACKUP("talents.log"),
+             "Letztes Backup: "+dtime(time())+"\n");
+  return 1;
+}
+
+
+public int DoRestore() {
+  if(!CheckIfAllowed()) return -2;
+  if(restore_object(TALENTS))
+    save_object(TALENTS);
+  bards = saveload;
+  return 1;
+}
+
+int isBard(string uid) {
+  return !(member(call_other(BARDENMASTER, "QueryMembers"), uid) < 0);
+}
+
+public int HasTalent(object ob, int talent)
+{
+  string pl;
+  if(!objectp(ob)) return 0;
+  
+  pl = getuid(ob);
+
+  if(!CheckIfAllowed()) return 0;
+  if(!isBard(pl)) return 0;
+  if(!member(bards, pl)) bards += ([ pl:"" ]);
+
+  return test_bit(bards[pl], talent);
+}
+
+public int ActivateTalent(object ob, int talent) {
+  string pl;
+  pl = getuid(ob);
+  if(!CheckIfAllowed()) return -1;
+  if(!isBard(pl)) return -2;
+  if(!member(bards, pl)) bards+=([pl: ""]);
+
+  if(!member(bards, pl)) {
+    bards += ([pl: ""]);
+  }
+
+  bards[pl] = set_bit(bards[pl], talent);
+  DoBackup();
+  return HasTalent(ob, talent);
+}
+
+public int DeactivateTalent(object ob, int talent) {
+  string pl;
+  pl = getuid(ob);
+  if(!CheckIfAllowed()) return -1;
+  if(!isBard(pl)) return -2;
+  if(!member(bards, pl)) bards+=([pl:([])]);
+
+  if(!member(bards, pl)) {
+    bards += ([pl: ""]);
+  }
+
+  bards[pl] = clear_bit(bards[pl], talent);
+
+  DoBackup();
+  return !HasTalent(ob, talent);
+}
+
+public mapping GetAll() {
+  return bards;
+}
+
+public void reset() {
+  DoBackup();
+  return;
+}
+
+public int isAlly(object ob) {
+  return living(ob) && (query_once_interactive(ob) || ob->QueryProp(P_FRIEND));
+}
+
+public object* findAlliesInSameRoomAs(object bard) {
+  object env;
+  env = environment(bard);
+  if(!objectp(env)) return ({});
+
+  return filter_array(all_inventory(env), "isAlly");  
+}
+
+public void InspireAllegro(object bard) {
+  object *allies;
+  int i, iLvl, currentSaSpeed, defaultSaSpeed, newSaSpeed, maxSaSpeed;
+
+  defaultSaSpeed = 200; // Default-Zielwert
+  maxSaSpeed = 600; // Limit
+  newSaSpeed = defaultSaSpeed; // Wert der dem Spieler gesetzt wird
+
+  if(!objectp(bard)) return;
+
+  allies = findAlliesInSameRoomAs(bard);
+  allies += ({ bard });
+  iLvl = bard->QueryProp(P_BARD_INSPIRATION_LEVEL);
+
+  for(i=0; i<sizeof(allies); ++i) {
+    if(allies[i] == bard) continue;
+    // SA_SPEED Limit
+    currentSaSpeed = allies[i]->QuerySkillAttribute(SA_SPEED);
+    if((currentSaSpeed * defaultSaSpeed) / 100 >= maxSaSpeed) // Limit-Ueberschreitung ueberpruefen
+      newSaSpeed = (int) (maxSaSpeed*100/currentSaSpeed);
+    if(allies[i]->ModifySkillAttribute(bard, SA_SPEED, newSaSpeed, iLvl * 2) > 0) {
+      tell_object(allies[i], BS(sprintf("Die Musik von %s inspiriert dich zu schnelleren Angriffen!", bard->name(WEM, 1))));
+    }
+  }
+
+  tell_object(bard, BS("Du inspirierst deine Verbuendeten zu rascheren Attacken!"));
+}
+
+public void InspireHealing(object bard) {
+  object *allies;
+  int i;
+
+  allies = findAlliesInSameRoomAs(bard);
+  for(i=0; i<sizeof(allies); ++i) {
+    allies[i]->AddHp(bard->QueryProp(P_BARD_INSPIRATION_LEVEL) * 3);
+    allies[i]->AddSp(bard->QueryProp(P_BARD_INSPIRATION_LEVEL) * 3);
+    if(allies[i] != bard) {
+      tell_object(allies[i], BS(sprintf("Du schoepfst neue Kraft aus den ermutigenden Worten von %s!", bard->name(WEM, 1))));
+    }
+  }
+
+  tell_object(bard, BS("Voll Inspiration rufst du deinen Verbuendeten ermutigende Worte zu!"));
+}
+
+public void InspireResetSpellpause(object bard) {
+  object *allies;
+  int i;
+
+  allies = findAlliesInSameRoomAs(bard);
+  allies += ({ bard });
+  for(i=0; i<sizeof(allies); ++i) {
+    allies[i]->SetProp(P_NEXT_SPELL_TIME, time()-1);
+    tell_object(allies[i], BS("Deine Konzentration kehrt zurueck!"));
+  }
+}
+
+public void InspireFascination(object bard) {
+  object *victims;
+  int i;
+
+  victims = call_other("/spellbooks/barden_spells", "FindGroupN", bard, -1, bard->QueryProp(P_BARD_INSPIRATION_LEVEL));
+  for(i=0; i<sizeof(victims); ++i) {
+    tell_object(victims[i], BS(sprintf("Voller Faszination starrst du auf %s.", bard->name(WEN, 1))));
+    tell_object(bard, BS(sprintf("%s starrt dich fasziniert an.", victims[i]->Name(WER, 1))));
+    tell_room(environment(victims[i]), BS(sprintf("%s starrt voller Faszination auf %s.", victims[i]->Name(WER, 1), bard->name(WEN, 1))), ({bard}));
+    victims[i]->SetProp(P_DISABLE_ATTACK, (int) (bard->QueryProp(P_BARD_INSPIRATION_LEVEL)/2));
+  }
+  return;
+}
+
+// Ausgeloeste Effekte bei Inspiration
+public void InspirationBurst(object bard) {
+  string uid;
+  int *bursts;
+  uid = getuid(bard);
+  if(!isBard(uid)) return;
+
+  bursts = ({ });
+
+  if(HasTalent(bard, TALENT_ALLEGRO)  && bard->InFight()) {
+    bursts += ({TALENT_ALLEGRO});
+  }
+
+  if(HasTalent(bard, TALENT_ERMUTIGENDE_WORTE)) {
+    bursts += ({TALENT_ERMUTIGENDE_WORTE});
+  }
+
+  if(HasTalent(bard, TALENT_STAKKATO)) {
+    bursts += ({TALENT_STAKKATO});
+  }
+
+  if(HasTalent(bard, TALENT_FASZINIERENDE_VORSTELLUNG) && bard->InFight()) {
+    bursts += ({TALENT_FASZINIERENDE_VORSTELLUNG});
+  }
+
+  if(sizeof(bursts) > 0) {
+    switch(bursts[random(sizeof(bursts))]) {
+      case TALENT_ALLEGRO: InspireAllegro(bard); break;
+      case TALENT_ERMUTIGENDE_WORTE: InspireHealing(bard); break;
+      case TALENT_STAKKATO:  InspireResetSpellpause(bard); break;
+      case TALENT_FASZINIERENDE_VORSTELLUNG: InspireFascination(bard); break;
+      default: break; // nothing happens
+    }
+  }
+}
+
+public int* GetActiveTalents(object bard) {
+  int i;
+  int *activeTalents;
+
+  activeTalents = ({ });
+
+  for(i=0; i<MAX_TALENT_NR; ++i) {
+    if(HasTalent(bard, i)) {
+      activeTalents += ({ i });
+    }
+  }
+
+  return activeTalents;
+}
+
+#define MONTH 2419200 
+
+public int ResetTalents(object bard) {
+  string pl;
+  pl = getuid(bard);
+  if(!CheckIfAllowed()) return -1;
+  if(!isBard(pl)) return -2;  
+  if(member(lastTalentReset, pl)) {
+    if(lastTalentReset[getuid(bard)] + MONTH > time()) {
+      return 0;
+    }
+  }
+
+  bards[pl] = "";
+  //lastTalentReset[pl] = time(); --> in der alpha deaktiviert
+  return 1;
+}
+
+#define SECONDS_IN_A_DAY 86400.0
+public float GetRemainingResetDays(object bard) {
+  string pl;
+  int remainingTime;
+  pl = getuid(bard);
+  if(!CheckIfAllowed()) return -1.0;
+  if(!isBard(pl)) return -2.0;
+  if(!member(lastTalentReset, pl)) {
+    return 0.0;
+  }
+
+  remainingTime = (lastTalentReset[pl] + MONTH - time());
+
+  return  remainingTime / SECONDS_IN_A_DAY;
+}
+
+/*****************************************************************************/
+/*                      Heldenpfade Funktionen                               */
+/*****************************************************************************/
+
+#include "./hero/angara.lpc"
+#include "./hero/arcon.lpc"
+#include "./hero/flammara.lpc"
+#include "./hero/grimm.lpc"
+#include "./hero/khartak.lpc"
+#include "./hero/nogi.lpc"
+#include "./hero/rynoxa.lpc"
+#include "./hero/xulgsch.lpc"
+#include "./hero/fraggin.lpc"
+#include "./hero/zafira.lpc"
+
+#define ON  1
+#define OFF 0
+
+public void EnableHeroPassive(object bard) {
+  string path, funname;
+  path = BARDENMASTER->GetHeroPath(bard);
+  if(!path) return; // hat keinen pfad
+
+  if(!BARDENMASTER->HasHeroPathLevel(bard, path, 3)) return;
+
+  funname = sprintf("HeroPassive_%s", capitalize(path));
+  if(function_exists(funname, TO)) {
+    funcall(symbol_function(funname, TO), bard, ON);
+  }
+  return;
+}
+
+public void DisableHeroPassive(object bard) {
+  string path, funname;
+
+  path = BARDENMASTER->GetHeroPath(bard);
+  if(!path) return; // hat keinen pfad
+
+  funname = sprintf("HeroPassive_%s", capitalize(path));
+  //tell_object(bard, sprintf("disable passive: %s\n", funname));
+
+  if(function_exists(funname, TO)) funcall(symbol_function(funname, TO), bard, OFF);
+  return;
+}
+
+public void HeroAura(object bard, string skill) {
+  string path, funName;
+  int success, auraActive, roll;
+  path = BARDENMASTER->GetHeroPath(bard);
+  if(!path) return;
+  if(!BARDENMASTER->HasHeroPathLevel(bard, path, 1)) return;
+
+  
+
+  auraActive = (skill == SK_SINGING && member(({HERO_ANGARA, HERO_FLAMMARA, HERO_GRIMM, HERO_NOGI, HERO_FRAGGIN}), path) >= 0) ||
+               (skill == SK_MUSIC   && member(({HERO_ARCON, HERO_KHARTAK, HERO_RYNOXA, HERO_XULGSCH, HERO_ZAFIRA}), path) >= 0);
+  if(bard->QueryProp(P_TESTPLAYER)) tell_object(bard, sprintf("HeroAura :: path = %s skill = %s aura = %d\n", path, skill, auraActive));
+
+  if(auraActive) {
+    success = bard->UseSkill(SK_HEROISM(path));
+    roll = random(MAX_ABILITY);
+    if(bard->QueryProp(P_TESTPLAYER)) tell_object(bard, sprintf("%s :: sucess = %d roll = %d\n", SK_HEROISM(path), success, roll));
+
+    if(success < 0) return; // nicht erfolgreich
+    if(roll > (success/2)) return; // zu wenig fuer einen effekt
+
+    funName = sprintf("HeroAura_%s", capitalize(path));
+    if(function_exists(funName, TO)) call_out(funName, 0, bard);
+  } 
+
+  return;
+}
+
+// Manche Heldenfaehigkeiten (z.B. Resistenzen) sind passiv durch Inspiration gesteuert, 
+// diese Funktion wird beim Wechsel des Inspirationslevels durch das Spellbook aufgerufen, 
+// um sie anzupassen.
+public void AdaptHeroPowersToInspiration(object bard) {
+  string path, adaptFunction;
+
+  path = BARDENMASTER->GetHeroPath(bard);
+  if(!path) return; // barde hat keinen pfad oder ist kein barde
+
+  adaptFunction = sprintf("AdaptHeroPower_%s", capitalize(path));
+  if(!function_exists(adaptFunction, TO)) return; // Adaptierfunktion existiert nicht -> kein Anpassen
+
+  if(bard->QueryProp(P_TESTPLAYER)) tell_object(bard, sprintf("talentmaster :: AdaptHeroPowersToInspiration :: path = %s\n", path));
+
+  funcall(symbol_function(adaptFunction, TO), bard);
+  return;
+}
+
+public void AdaptHeroPower_Arcon(object bard) {
+  int level, success;
+  float resistance;
+
+  if(!BARDENMASTER->HasHeroPathLevel(bard, HERO_ARCON, 3)) return; // nur fuer echte helden
+
+  success = bard->UseSkill(SK_HEROISM(HERO_ARCON));
+  level = bard->QueryProp(P_BARD_INSPIRATION_LEVEL);
+  resistance = level / 10.0 * ((float) success/MAX_ABILITY);
+
+  if(bard->QueryProp(P_TESTPLAYER)) 
+    tell_object(bard, sprintf("talentmaster :: AdaptHeroPower_Arcon :: ilvl = %d success = %d resistance = %.2f\n", level, success, resistance));
+
+  if(level <= 0 || bard->QueryProp(P_ALIGN) < 100 || success <= 0) {
+    bard->RemoveResistanceModifier(HERO_ARCON);
+    if(bard->QueryProp(P_TESTPLAYER)) 
+      tell_object(bard, sprintf("talentmaster :: AdaptHeroPower_Arcon :: RemoveResistanceModifier :: ilvl = %d align = %d\n", level, bard->QueryProp(P_ALIGN)));
+    tell_object(bard, BS("Deine Tapferkeit gegen die Kreaturen der Finsternis verebbt."));
+    return;
+  } else {
+    bard->AddResistanceModifier(([DT_UNHOLY: -resistance, DT_TERROR: -resistance]), HERO_ARCON);
+  }
+
+  if(to_int(100*resistance) < bard->QueryProp("arcon_last_resistance_bonus")) {
+    tell_object(bard, BS("Deine Tapferkeit gegen die Kreaturen der Finsternis laesst nach."));
+  } else if( to_int(100*resistance) > bard->QueryProp("arcon_last_resistance_bonus")) {
+    tell_object(bard, BS("Deine Tapferkeit gegen die Kreaturen der Finsternis nimmt zu."));
+  } // else -> keine meldung
+  bard->SetProp("arcon_last_resistance_bonus", to_int(100*resistance));
+}
+
+public void AdaptHeroPower_Flammara(object bard) {
+  int level, success;
+  float resistance;
+
+  if(!BARDENMASTER->HasHeroPathLevel(bard, HERO_FLAMMARA, 3)) return; // nur fuer echte helden
+
+  success = bard->UseSkill(SK_HEROISM(HERO_FLAMMARA));
+  level = bard->QueryProp(P_BARD_INSPIRATION_LEVEL) + 1;
+  resistance = level / 10.0 * ((float) success/MAX_ABILITY);
+
+  if(bard->QueryProp(P_TESTPLAYER)) 
+    tell_object(bard, sprintf("talentmaster :: AdaptHeroPower_Flammara :: ilvl = %d success = %d resistance = %.2f\n", level, success, resistance));
+
+  if(level <= 0 || success <= 0) {
+    bard->RemoveResistanceModifier(HERO_FLAMMARA);
+    if(bard->QueryProp(P_TESTPLAYER)) 
+      tell_object(bard, sprintf("talentmaster :: AdaptHeroPower_Flammara :: RemoveResistanceModifier :: ilvl = %d \n", level));
+    tell_object(bard, BS("Dein inneres Feuer erlischt."));
+    return;
+  } else {
+    bard->AddResistanceModifier(([DT_FIRE: -resistance, DT_EXPLOSION: -resistance]), HERO_ARCON);
+  }
+
+  if(to_int(100*resistance) < bard->QueryProp("flammara_last_resistance_bonus")) {
+    tell_object(bard, BS("Deine innere Flamme wird schwaecher."));
+  } else if( to_int(100*resistance) > bard->QueryProp("flammara_last_resistance_bonus")) {
+    tell_object(bard, BS("Deine innere Flamme waechst an."));
+  } // else -> keine meldung
+  bard->SetProp("flammara_last_resistance_bonus", to_int(100*resistance));
+  return;
+}
+
+public void AdaptHeroPower_Zafira(object bard) {
+  int level, success;
+  float resistance;
+
+  if(!BARDENMASTER->HasHeroPathLevel(bard, HERO_ZAFIRA, 3)) return; // nur fuer echte helden
+
+  success = bard->UseSkill(SK_HEROISM(HERO_ZAFIRA));
+  level = bard->QueryProp(P_BARD_INSPIRATION_LEVEL) + 1;
+  resistance = level / 20.0 * ((float) success/MAX_ABILITY);
+
+  if(bard->QueryProp(P_TESTPLAYER)) 
+    tell_object(bard, sprintf("talentmaster :: AdaptHeroPower_Zafira :: ilvl = %d success = %d resistance = %.2f\n", level, success, resistance));
+
+  if(level <= 0 || success <= 0) {
+    bard->RemoveResistanceModifier(HERO_ZAFIRA);
+    if(bard->QueryProp(P_TESTPLAYER)) 
+      tell_object(bard, sprintf("talentmaster :: AdaptHeroPowerZafira :: RemoveResistanceModifier :: ilvl = %d \n", level));
+    tell_object(bard, BS("Dein Schutz vor den Elementen schwindet."));
+    return;
+  } else {
+    bard->AddResistanceModifier(([DT_FIRE: -resistance, DT_POISON: -resistance, 
+                                 DT_COLD: -resistance, DT_AIR: -resistance, 
+                                 DT_WATER: -resistance]), HERO_ARCON);
+  }
+
+  if(to_int(100*resistance) < bard->QueryProp("zafira_last_resistance_bonus")) {
+    tell_object(bard, BS("Dein elementarer Schutz wird schwaecher."));
+  } else if( to_int(100*resistance) > bard->QueryProp("zafira_last_resistance_bonus")) {
+    tell_object(bard, BS("Dein elementarer Schutz nimmt zu."));
+  } // else -> keine meldung
+  bard->SetProp("zafira_last_resistance_bonus", to_int(100*resistance));
+  return;
+}
+
+
+public void AdaptHeroPower_Grimm(object bard) {
+  int level, success;
+  int strengthIncrease, currentStrBonus;
+  object brosche;
+  mapping attrMod;
+
+  if(!BARDENMASTER->HasHeroPathLevel(bard, HERO_GRIMM, 3)) return; // nur fuer echte helden
+
+  success = bard->UseSkill(SK_HEROISM(HERO_GRIMM));
+  level = bard->QueryProp(P_BARD_INSPIRATION_LEVEL);
+  strengthIncrease = (int) (level * 1.4 * ((float) success/MAX_ABILITY));
+  if(strengthIncrease > 7) {
+    strengthIncrease = 0;
+  }
+
+  if(bard->QueryProp(P_TESTPLAYER)) 
+    tell_object(bard, sprintf("talentmaster :: AdaptHeroPower_Grimm :: ilvl = %d success = %d strength = %d\n", level, success, strengthIncrease));
+
+  if(!objectp(brosche=present("\nbardenbrosche", bard))) return;
+
+  if(strengthIncrease > 0) {
+    attrMod = brosche->QueryProp(P_X_ATTR_MOD);
+    if(mappingp(attrMod) && member(attrMod, A_STR)) {
+      currentStrBonus = attrMod[A_STR];
+    } else {
+      currentStrBonus = 0;
+    }
+  } else {
+    brosche->SetProp(P_X_ATTR_MOD, 0);
+    tell_object(bard, BS("Grimms Kraft verlaesst dich und du schrumpfst zu deinem alten Selbst."));
+    return;
+  }
+
+  brosche->SetProp(P_X_ATTR_MOD, ([A_STR: strengthIncrease]));
+  if(strengthIncrease > currentStrBonus) {
+    tell_object(bard, BS("Du waechst und deine Muskeln schwellen an."));
+  } else if(strengthIncrease < currentStrBonus) {
+    tell_object(bard, BS("Ein Teil von Grimms Kraft verlaesst dich und du wirst etwas kleiner."));
+  }
+
+  return;
+}
+

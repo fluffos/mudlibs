@@ -1,0 +1,183 @@
+/*
+ * Biss des Vampirs
+ *
+ * Es erfolgt Angriff auf die Halsschlagader des victim,
+ * welcher Schaden verursacht, die Haelfte des Realenschadens
+ * wird dem Caster als HP gutgeschrieben
+ *
+ * Stirbt das Victim durch diesen Angriff, kann ein Vampir
+ * entstehen, den der Nekromant beherrschen kann.
+ *
+ * Schaden kann durch Equipment erhoeht werden
+ *
+ * Kosten: 30 MP
+ * Level : 4 
+ * Schaden : 450 + Modifikationen 
+ * Objekte: /gilden/nekromanten/npc/vampir
+ *
+ * Skillpunktefaehig (dam, chance fuer Vampir)
+ *
+ * Status: anschlussreif
+ *
+ */
+//24.06.2003 Archon: umstellung uebergabe sinfo, skillpunkte auswerten
+//27.12.2003 Feyaria: geht nur mehr aus living-victims, ausweichen statt 
+//                    spell abwehren
+
+object biss_des_vampirs_find_victim(object caster,mapping sinfo, int silent)
+{
+  object victim;
+  if(!victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,0)) 
+  {
+    if (!silent)
+     write("Wen willst Du wie ein Vampir beissen?\n");
+    return 0;
+  }
+  if( !is_living(victim) )
+  {
+    write(BSC(random_fluch() + " " + victim->Name(WER) + 
+          " hat ja gar kein Blut!"));
+    return 0;
+  }
+  if( victim->QueryProp(P_SIZE) < 13 )
+  {
+    write(BSC(random_fluch() + " " + victim->Name(WER) + 
+          " ist viel zu klein!"));
+    return 0;
+  }
+  if( victim->QueryProp(P_SIZE) > 666 )
+  {
+    write(BSC(random_fluch() + " " + victim->Name(WER) + 
+          " ist viel zu gross!"));
+    return 0;
+  }
+  return victim;
+}
+
+mixed prep_biss_des_vampirs(object caster, mapping sinfo) 
+{
+  int dam,suc,nr,i;
+  object victim,ob, corpse;
+
+  victim=biss_des_vampirs_find_victim(caster,sinfo,0);
+  if (!victim) return 0;
+  sinfo[SI_ENEMY]=victim;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  return sinfo;
+}
+
+int biss_des_vampirs(object caster, mapping sinfo) 
+{
+  int dam,suc,nr,i,skp, atk, def;
+  object victim,ob, corpse;
+  string str, filename;
+
+  victim=sinfo[SI_ENEMY];
+  str=sinfo[SI_SKILLARG]; //ggf auf anderes ziel umschwenken
+  if (!victim || !present_victim(victim,caster) || 
+      !objectp(victim=biss_des_vampirs_find_victim(caster,sinfo,1)))
+  {
+    write(BSC(sprintf("%s! Dein Opfer ist nicht mehr hier! Wie kann man nur "
+            "so versagen?!", caster->QueryProp(P_GENDER)==FEMALE?
+            "NAERRIN":"NARR")));
+    return 0;
+  }
+
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+
+  suc=SpellSuccess(caster,sinfo);
+  if(suc<=0)
+    return MISSERFOLG;
+
+  skp=get_skillpoints(caster,"biss des vampirs");
+
+  atk = skp + caster->QueryAttribute(A_DEX) + random((4 * (skp/2)) + (3 * caster->QueryProp(P_GUILD_LEVEL)) + (2 * caster->QueryProp(P_GUILD_CIRCLE)));
+  def = victim->QueryAttribute(A_DEX) * victim->QueryProp(P_HP) / victim->QueryProp(P_MAX_HP);
+
+  if( random(atk) < random(def) && !victim->QueryProp(P_BLIND) &&  !victim->QueryProp(P_DISABLE_ATTACK))
+  {
+    write(BSC(sprintf(random_fluch() + " Du versuchst %s zu "
+            "beissen, aber %s weicht aus!",
+            victim->name(WEN), victim->QueryPronoun(WER))));
+    tell_object(victim,BS(sprintf("%s versucht Dich zu beissen, aber "
+            "Du weichst gekonnt aus!", TP->Name(WER))));
+    tell_room(ENV(TP), BS(sprintf("%s versucht %s zu beissen, aber %s "
+            "weicht gekonnt aus.", TP->Name(WER), victim->name(WEN),
+            victim->QueryPronoun(WER))), ({TP, victim}));
+    return ERFOLG;
+  }
+
+  write(BSC(sprintf("Du beisst %s in die Halsschlagader und saugst %s das Blut "
+          "heraus.", victim->name(WEN, 2), victim->QueryPronoun(WEM))));
+  tell_object(victim,BS(sprintf("%s beisst Dich in die Halsschlagader und "
+          "saugt Dein Blut aus.", caster->Name(WER))));
+  tell_room(environment(caster),BS(sprintf("%s beisst %s in die Halsschlagader "
+          "und saugt %s Blut aus.", caster->Name(WER), victim->name(WEN,2),
+          victim->QueryPronoun(WEM))), ({caster, victim}) );
+
+  filename=explode(file_name(victim), "#")[0];
+  dam=sinfo[SI_SKILLDAMAGE]+(
+      caster->QueryProp(P_GUILD_LEVEL)*caster->QueryProp(P_GUILD_CIRCLE));
+  dam+=CheckEquip(caster, sinfo[SI_SPELLFUNC]);
+  dam=DoModificationByAlign(dam, caster, victim);
+  dam=get_dam_with_skillpoints(dam,skp);
+  dam=TryAttackSpell(victim, dam/4+random(3*dam/4), sinfo[SI_SKILLDAMAGE_TYPE], 
+      ([SP_NAME:sinfo[SI_SPELLFUNC],SP_SHOW_DAMAGE:1]), caster,sinfo);
+  if (dam>1) {
+    if(skp>4)
+      caster->AddHp(dam/2);
+    else 
+      caster->AddHp(dam/3);
+  }
+
+  if(skp>9 && suc > 7000 && !objectp(present("\nnekro_unholy_power", caster))) {
+    write(BS("HARHAR! Mit deinem Biss hast du das Herzblut deines Feindes getrunken! "
+             "Unheilige Kraft durchstroemt dich."));
+
+    ob = clone_object("/gilden/bardengilde/obj/bonus");
+    ob->AddId("\nnekro_unoly_power");
+    ob->SetTimeout(10);
+    ob->SetProp(P_X_ATTR_MOD, ([A_STR: dam/5]));
+    ob->SetEndMessage(BS(sprintf("%s Die unheilige Kraft entweicht aus deinen Adern!", random_fluch())));
+    if(ob->move(caster, M_NOCHECK) != 1) {
+      ob->remove(1);
+    }
+    caster->UpdateAttributes();
+    if(!random(2)) caster->ModifySkillAttribute(caster, SA_SPEED, 200, 5);
+
+    if(objectp(victim)) {
+      ob = clone_object("/gilden/bardengilde/obj/bonus");
+      ob->AddId("\nnekro_unoly_depower");
+      ob->SetTimeout(10);
+      ob->SetProp(P_X_ATTR_MOD, ([A_STR: -dam/5]));
+      ob->SetEndMessage(BS(sprintf("Deine Staerke kehrt zurueck!", random_fluch())));
+      if(ob->move(victim, M_NOCHECK) != 1) {
+        ob->remove(1);
+      }
+      victim->UpdateAttributes();
+    }
+  }
+
+  suc += skp * 555; //chance fuer vampir erhoehen mit skillpunkten
+  if (!objectp(victim) && suc>8000 && 
+      (corpse=present("leiche", environment(caster))) &&
+       corpse->QueryProp(P_ORIG_FILENAME) == filename &&
+       corpse->QueryProp(P_KILLER) == caster &&
+       corpse->QueryProp(P_CLONE_TIME) == time())
+  {
+    CloneVampir(corpse, caster, suc);
+  }
+  UseBlood();
+  return ERFOLG;
+}
+

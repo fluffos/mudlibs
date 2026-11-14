@@ -1,0 +1,682 @@
+/* myrrwhyn. Strange name for a priest. Yours isn't better.
+ * ____________________________________(i) Anatol@Silberland (1999-2012) */
+
+// 17.10.2013 (Anatol) - AddInfo()s, P_LOG_INFO ausgebaut.
+
+#pragma strict_types
+
+#include "../defines.h"
+#include "properties.h"
+#include "new_skills.h"
+#include "moving.h"
+#include "combat.h"
+#include SYS "npc.h"
+
+#define HALL ROOM "halle"
+
+inherit STD "npc";
+
+nomask public int prevent_shadow(object o) { return 1; }
+
+private varargs nosave string getPlayerGuild(object pl) {
+  mixed ret;
+
+  if ((!pl) || (!objectp(pl)) || (!query_once_interactive(pl))
+      || (pl->QueryGuest()))
+    return 0;
+  switch((string)this_player()->QueryProp(P_GUILD)) {
+    case 0:
+      ret="den gildenlosen Geschoepfen";
+      break;
+    case "paladine":
+      ret="den edlen Helden aus Aylas Reihen";
+      break;
+    case "druidenzirkel":
+      ret="den magiebewanderten Druiden";
+      break;
+    case "berserker":
+      ret="den wuetenden Axtschwingern";
+      break;
+    case "zechpreller":
+      ret="den Berufsalkoholikern";
+      break;
+    case "abenteurer":
+      ret="der Gilde der mutigen Abenteurer";
+      break;
+    case "dunkelelfen":
+      ret="der fiesen Dunkelelfengilde";
+      break;
+    case "nekromanten":
+      ret="den Kriegern der Dammnis";
+      break;
+    default:
+      ret="einer mir nicht bekannten Gilde";
+      break;
+  }
+  return ret;
+}
+
+nosave string infoRasse() {
+  return 
+      "Die Magie der Wandlung koennen Euch einen eingeschraenkten Teil "
+      "der hoeheren Lebensformen als Familie zur Verfuegung stellen. Dies sind "
+      +(string)call_other(HALL,"GetChoices",0,1)+
+      ". Die Wahl der eigenen Zugehoerigkeit ist keine "
+      "leichtzunehmende Angelegenheit und vor allem bei einem solchen "
+      "Wechsel zumeist mit Konsequenzen verbunden, deshalb bittet mich "
+      "ruhig, ueber die "
+      "Eigenschaften einer Rasse zu referieren (z.B. ''sag Myrrwhyn, bitte "
+      "referiere ueber die Elfen''), ich werde Euren Wuenschen, "
+      "soweit mir moeglich, nachkommen. Habt Ihr euch entschieden, so sprecht "
+      "die magischen Worte, steigt auf das Podest und harret der Dinge, die "
+      "da geschehen.";
+}
+
+nosave string infoName() {
+  if (this_player()) 
+    return "Glaubt Ihr wirklich, dass \""+(string)this_player()->name(RAW)+
+      "\" ein so viel schoenerer Name ist? Ohne Euch kraenken zu wollen, "
+      "ich bin mit meinem Namen zufrieden.";
+  else
+    return "Was ist mit meinem Namen?";
+}
+
+nosave string infoMoeglichkeiten() {
+  string choices;
+  int i;
+
+  if (!this_player()) return "Dazu kann ich leider nichts sagen.";
+  choices=(string)call_other(HALL,"GetChoices",this_player(),1);
+  if (choices) 
+    return "Fuer Euch, "+(string)this_player()->name(WER)+
+      ", Vertreter"+(((int)this_player()->QueryProp(P_GENDER)==MALE)?" ":"in ")
+      +(string)call_other(HALL,"GetPlayerRace",this_player(),2)+
+      ", zugehoerig zu "+(string)getPlayerGuild(this_player())+
+      ", kommen folgende Rassen in Frage: "+choices+"."+
+     ((i=(int)call_other(HALL,"GetInterval",this_player()))?
+       time2string(" Doch leider werdet Ihr Euch noch etwa "
+         "%x %X gedulden muessen...",i):(string)" Ihr muesstet "
+	 "nicht warten und koenntet noch heute Eure Auren aendern lassen.");
+  else return "Ich kann diese Frage nicht beantworten... Oh!";
+}
+
+
+nosave void sorryNoRace(string who) {
+  tell_room(environment(this_object()),
+    break_string("Vergebt, "+who+", aber ueber diese Rasse vermag ich "
+      "nichts zu sagen - die Magie der Wandlung vernahm noch keinen Ruf vom "
+      "Bewahrer jenes Volkes.", 77,"Myrrwhyn bedauert: ",0));
+  return;
+}
+
+nosave void referAboutRace(string race) {
+  tell_room(environment(this_object()),
+    break_string("So vernehmet nun, was ueber "
+      +capitalize(race)+" zu erfahren ist!", 77,"Myrrwhyn verkuendet: ",0));
+  catch(HALL->StartReferSequence(race));
+  return;
+}
+  
+public void catch_tell(string s) {
+  string * seq;
+  string who, race;
+  
+  if ((!this_player())||(!interactive(this_player()))||(!s)||(!stringp(s))
+       ||QueryProp(P_NPC_QUIET))
+    return;
+  s=lowerstring(s); 
+  if
+     (((sscanf(s,"%s sagt: myrrwhyn, bitte referiere ueber die %s\n",
+        who, race)!=2)
+     && (sscanf(s,"%s sagt: myrrwhyn, bitte erlaeutere die %s\n",
+        who, race)!=2)
+     && (sscanf(s,"%s sagt: myrrwhyn, referiere ueber die %s\n",
+        who, race)!=2)
+     && (sscanf(s,"%s sagt: myrrwhyn, referiere ueber %s\n",
+        who, race)!=2)
+     && (sscanf(s,"%s sagt: myrrwhyn, erlaeutere die %s\n",
+        who, race)!=2)   
+     && (sscanf(s,"%s sagt: myrrwhyn, erlaeutere %s\n",
+        who, race)!=2))   
+     || ((who!=lowerstring((string)this_player()->Name(WER)))
+     || (find_call_out("referAboutRace")!=-1) 
+     || (find_call_out("sorryNoRace")!=-1))) return;
+
+  if (member(get_dir(SEQUENCES_DIR "*.seq"),(race=lowerstring(race))+".seq")
+      ==-1)
+    call_out("sorryNoRace",2,who);
+  else {
+    call_out("referAboutRace",4,race);
+  }
+  return;
+}
+
+nomask void create() {
+  int i,j;
+  object o;
+
+  //if ((is_clone(this_object()))||(!previous_object())||
+  //   (file_name(previous_object())!=HALL)) 
+  // return (void) destruct(this_object());
+  ::create();
+
+  SetProp(P_NAME,"Myrrwhyn");
+  SetProp(P_SHORT,"Sternenpriester Myrrwhyn");
+  SetProp(P_LONG,break_string(
+    "Myrrwhyn ist die nachtelfische Abstammung durchaus anzusehen. Er ist "
+    "nicht gerade sehr gross und unter der weit geschnittenen schneeweissen "
+    "Kutte siehst Du rote Haare hervorschauen. Sein guetiges Gesicht strahlt "
+    "Wuerde aus, obschon seine fast kristallgruenen Augen ziemlich vergnuegt "
+    "zu strahlen scheinen. Als Sternenpriester der Wandlung sollte er ueber "
+    "den Austausch der sterblichen Huelle und den damit verbundenen "
+    "Konsequenzen gut informiert sein.",77));
+  AddDetail("kutte",
+    "Die schneeweisse Kutte des Priesters ist sehr weit geschnitten und "
+    "reicht locker bis zum Boden. Die Kapuze haengt ein wenig vornueber, "
+    "doch verdeckt sie nicht das guetige Gesicht.");
+  AddDetail("haare",
+    "Die Haare sind trotz des hohen Alters des Priesters noch echt "
+    "wildkirschrot.");
+  AddDetail("gesicht",
+    "Das Gesicht des Priesters laechelt meist und strahlt eine gewisse "
+    "guetige Wuerde aus. Frech strahlt Dich ein Paar fast kristallgruener "
+    "Augen an.");
+  AddDetail("kapuze",
+    "Die Kapuze ist fest mit der Kutte verbunden.");
+  AddDetail("augen",
+    "Eine sogar fuer Nachtelfen recht ungewoehnliche Augenfarbe -"
+    " kristallgruen.");
+  SetProp(P_SMELL,"Du traust Dich nicht.\n");
+  SetProp(P_SOUND,"Du traust Dich nicht.\n");
+  SetProp(P_RACE,"Nachtelf");
+  SetProp(P_ALIGN,1000);
+  // Nicht mehr mitloggen, dankeschoen.
+  // SetProp(P_LOG_INFO,"anatol/myrrwhyn.info");
+  SetProp(P_KILL_NAME,"Sternenpriester Myrrwhyn");
+  create_default_npc(17);
+  SetProp(P_XP,0); 
+  SetProp(P_NOCORPSE,1);
+  SetProp(P_GENDER, MALE);
+  SetProp(P_DIE_MSG, " verschwindet in einer blauweissen Sternenwolke.\n");
+  SetProp(P_SIZE,175);
+  SetProp(P_WEIGHT,54000);
+  SetProp(P_ARTICLE,0);
+  SetProp(P_MSGIN,"schreitet wuerdevoll herein");
+  SetProp(P_MSGOUT,"schreitet wuerdevoll");
+  SetProp(P_MMSGOUT,"verschwindet in einer blau-weissen Sternenwolke");
+  SetProp(P_MMSGIN,"tritt aus einer blau-weissen Sternenwolke");
+  SetProp(P_HANDS,({" gar nicht",0,DT_BLUDGEON}));
+  AddId(({"myrrwhyn","daemmersang", "myrrwhyn daemmersang",
+          "\nmyrrwhyn","ANATOL_NPC", "priester","sternenpriester"}));
+
+  AddInfo ( DEFAULT_INFO,
+        ({"schaut ratlos.\n",
+          "ist mit der Frage offenbar ueberfordert.\n",
+          "weiss mit der Frage nichts anzufangen.\n",
+          "hat darauf anscheinend noch keine Antwort.\n",
+          "hat ganz offensichtlich die Frage nicht verstanden.\n",
+          "laechelt verschmitzt und zuckt mit den Schultern.\n",
+          "zuckt verlegen mit den Schultern.\n"}));
+  AddInfo(({"aufgabe","abenteuer","abenteuerpunkte","abenteuerpunkt"}),
+      "Nein.","antwortet: ",
+      "Sag' mal, Myrrwhyn, hast Du eine dieser tollen Aufgaben fuer mich? "
+      "So etwas mit Abenteuer und Abenteuerpunkten und so?");
+  AddInfo(({"bewahrer","beschuetzer","magier"}),
+      "Die Beschuetzer und Bewahrer aller Lebewesen und unbelebten "
+      "Dingen werden hier faelschlicherweise oft als Magier bezeichnet. "
+      "Dabei hat das, was sie tun, doch so wenig mit Magie zu tun, vielmehr "
+      "mit harter Arbeit...","sagt: ");
+  AddInfo("augen","Zwei.","sagt: ",0,
+      "Also sag mal, ich bin mir ja nicht so ganz sicher, aber wenn Du "
+      "das jetzt sagen muesstes, also falls ich Dich fragen wuerde, was "
+      "ich nie taete, immerhin geht es mich ja vielleicht auch gar nichts "
+      "an, nicht wahr... aber wieviele Augen hast Du da eigentlich genau?");
+  AddInfo("beruf",
+      "Jeder braucht einen Beruf, und sei es nur eine Berufung. Und ich bin "
+      "ein Sternenpriester, der Euch, wenn Euch nach einer neuen Gestalt "
+      "duerstet, vielleicht helfen kann.","laechelt: ");
+  AddInfo("berserker","Oh, ich persoenlich bin da nicht so begeistert, "
+      "da geht immer so viel kaputt, wenn die Berserker mal loslegen...",
+       "verneint: ");
+  AddInfo("abstammung",
+      "Es ist geradezu offensichtlich, dass ich nachtelfischer Abstammung "
+      "bin, oder?","grinst: ");
+  AddInfo("hoehle", "Ich gestehe, ich spreche vom Tempel ungern als 'Hoehle'. "
+      "dafuer ist es hier doch viel zu... sauber?","wiegelt ab: ");
+  AddInfo("tempel", "Willkommen!","breitet die Arme aus und sagt: ");
+  AddInfo("arbeit", "Oh, habet Ihr eine Ahnung... ich muss mir so oft das "
+      "Gejammer Anatols anhoeren...","seufzt: ",0,
+      "Arbeit? Wer arbeitet hier?");
+  AddInfo("haare",
+      "Ich weiss auch nicht, meine Haare werden und werden nicht "
+      "weiss...","laechelt verschmitzt: ");
+  AddInfo(({"formloser","formlose","formlosen"}),
+      "Nein. Hin und wieder erscheinen hier zwar auch Formlose, um ihren "
+      "Geist und ihre Seele in einer wirklichen Gestalt eine Heimat zu "
+      "geben. Man kann sich natuerlich nicht die Gestalt eines Formlosen "
+      "geben lassen - nur anfangs kann der, der noch nachdenken moechte, "
+      "bevor er sich fuer eine Familie entscheidet, die Formlosen waehlen.",
+      "verneint erklaerend: ",0,"Kann man auch ein Formloser werden?");
+  AddInfo(({"kutte","kapuze","kleidung"}),
+      "Gefaellt Euch meine Kleidung nicht?","stutzt: ");
+  AddInfo(({"halle","hallen","saal"}),
+      "Dies hier sind die Heiligen Hallen der Sternenpriester des Kreises "
+      "der Wandlung - der Tempel der Magie der Wandlung. Fuer gewoehnlich "
+      "werden hier Bittsteller eingewiesen "
+      "und belehrt, hin und wieder aber auch eine Wandlung durchgefuehrt.",
+      "erzaehlt: ",0,"Was fuer eine Halle ist denn das hier?");
+  AddInfo(({"erlaeuterungen","erlaeuterung","referat","referieren",
+        "sequenz"}),
+      "Ich kann euch etwas ueber die verschiedenen Rassen erzaehlen, wenn "
+      "Ihr mich darum bittet - zum Beispiel: ''sag Myrrwhyn, bitte referiere "
+      "ueber die <rasse>'' oder ''sag Myrrwhyn, bitte erlaeutere die <rasse>''"
+      ".","nickt: ",0,"Wie ist das mit den Erlaeuterungen, sind die "
+      "informativ?");
+  AddInfo(({"saeule","saeulen"}),
+      "Die Saeulen sind eigentlich schon immer dagewesen...","gruebelt: ");
+  AddInfo("portal",
+      "Durch dieses Portal kommen die Bittsteller zu uns.","sagt: ");
+  AddInfo("bittsteller",
+      "Nun, so jemand wie Ihr beispielsweise.","zuckt mit den Schultern: ");
+  AddInfo("syntax","Oh, also mit ''sag Myrrwhyn, bitte referiere ueber die "
+      "<rasse>'' werde ich Euch zu jeder Rasse einen kleinen Vortrag halten. "
+      "Habt Ihr Euch fuer einen Wechsel Eurer Rasse entschieden, nutzet "
+      "''muto corpus'' und die Magie der Wandlung wird euch "
+      "weiterhelfen.","erklaert laechelnd: ",1,"So ganz im Vertrauen, ich "
+      "habe das mit der Syntax nicht ganz begriffen...");
+  AddInfo("oger",
+      "Oh, die Oger, ein ziemlich verfressenes Volk und nicht gerade "
+      "sehr helle. Ich weiss nicht viel ueber sie, aber immerhin ein "
+      "paar Kleinigkeiten.","gruebelt: ",0,"Weisst Du etwas ueber "
+      "die Oger?");
+  AddInfo("kleinigkeiten","Es lohnt sich schon, ein wenig darueber zu "
+      "referieren, keine Sorge.","grinst: ");
+  AddInfo("marmor",
+      "Ja, schoen, nicht wahr? Allerdings kommt er mir manchmal als "
+      "etwas zu pompoes vor.", "waegt ab: ");
+  AddInfo("sorge",
+      "Ich habe keine Sorge, danke!","laechelt: ");
+  AddInfo(({"troll","trolle","kloetze"}),
+      "Trolle? Diese hirnlosen Kloetze? Oh... nun, auch ueber sie gibt es "
+      "natuerlich einiges zu sagen, ich referiere gerne ein wenig ueber "
+      "sie - auch wenn sie mir nicht gerade gefallen (''sag Myrrwhyn, bitte "
+      "referiere ueber die Trolle'').","meint: ",0,"Wie ist das mit den "
+      "Trollen, weisst Du etwas ueber sie?");
+  AddInfo(({"elf","elfen"}),
+      "Ach ja, die Spitzohren aus dem Kristallwald. Sie sind ein wenig "
+      "weltfremd und wirken dadurch etwas hochnaesig, aber wenn man ihren "
+      "Gesaengen lauscht, sieht man gerne darueber hinweg.","spricht: ",0,
+      "Ich interessiere mich fuer die Elfen, koenntest Du mir etwas dazu "
+      "sagen?");
+  AddInfo(({"ohren"}),
+      "Wie meinen?","fragt: ");
+  AddInfo(({"gesang","gesaenge"}),
+      "Ja, singen tun wir hier auch, warum fragt Ihr?","fragt: ");
+  AddInfo(({"spitzohr","spitzohren"}),
+      "Nah, von denen gibt es aber verschiedene - Dunkelelfen, Nachtelfen und "
+      "natuerlich die Elfen aus dem Kristallwald. Sie unterscheiden sich "
+      "sehr, verwechselt sie nur nicht!","erlaeutert: ",0,
+      "Kennst Du diese Spitzohren? :o)");
+  AddInfo("kristallwald",
+      "Ich persoenlich war noch nie im Kristallwald, aber es soll dort "
+      "sehr schoen sein.", "bedauert: ",0,"Kennst Du den Kristallwald?");
+  AddInfo(({"dunkelelf","dunkelelfen"}),
+      "Das sind die schwarzen Schafe in der elfischen Familie. Sie sind "
+      "boshaft und scheuen das Tageslicht. Ich kann Euch da so einiges "
+      "erzaehlen...","meint: ",0,"Hmmm, was weisst Du denn von den "
+      "Dunkelelfen?");
+  AddInfo(({"nachtelf","nachtelfen"}),
+      "Hey, ich bin auch einer! Wenn ich Euch etwas ueber die Nachtelfen "
+      "erzaehlen soll, werde ich das gerne tun. Nur richtige "
+      "Nachtelfen-Spieler "
+      "wird es so bald nicht geben.","nickt: ",0,
+      "Kennst Du schon die Nachtelfen? Die soll es doch irgendwann einmal "
+      "geben...");
+  AddInfo(({"hobbit","hobbits"}),
+      "Selbstverstaendlich kenne ich die Hobbits, das kleine Schlemmervolk! "
+      "Ueber sie gibt es so einiges zu berichten.","nickt: ",0,"Kennst Du "
+      "die kleinen Pelzfuesse? Die Hobbits, meine ich!");
+  AddInfo(({"volk","voelker"}),
+      "Oh, es gibt viele Voelker, welches meint Ihr?","fragt zurueck: ");
+  AddInfo("schlemmervolk",
+      "Oh ja, sie wissen zu schlemmen, die Hobbits","grinst: ");
+  AddInfo(({"menschen","mensch"}),
+      "Nun, Menschen gibt es ueberall. Es gibt nicht viel besonderes "
+      "ueber sie zu sagen, aber, wenn Ihr wollt, kann ich das, was ich "
+      "weiss, zusammenfassen.","zuckt mit den Schultern: ",0,
+      "Zu den Menschen kannst Du natuerlich auch etwas sagen, oder?");
+  AddInfo(({"fee","feenwesen","feen","feenvolk"}),
+      "Ja, die Feen... sie sind alle weiblich und nichtmal einen Meter "
+      "gross... ich weiss einiges ueber die Flatterfrauen!","nickt: ",0,
+      "Weisst Du etwas ueber das Feenvolk?");
+  AddInfo("meter","Also etwa... so gross.","gestikuliert: ");
+  AddInfo(({"flatterfrauen","flatterfrau"}),
+      "Oh, aeh... ich habe nichts gesagt!","hustet: ");
+  AddInfo(({"zwerg","zwerge"}),
+      "Aaaah, die Zwerge! Manche Leute koennen nicht genug ueber sie "
+      "laestern, dabei neiden sie ihnen nur ihr Pflichtbewusstsein. "
+      "Zugegeben, die Hellsten sind sie nicht, aber es muss ja nicht "
+      "jeder mit jedem Baum auf Du und Du sein. Ueber die Zwerge weiss "
+      "ich so einiges zu erzaehlen.","nickt: ",0,
+      "Kannst Du etwas ueber die Zwerge berichten?");
+  AddInfo("pflichtbewusstsein",
+      "Oh ja, Zwerge sind sehr pflichtbewusst!","nickt weise: ");
+  AddInfo("berufung",
+      "Meine Berufung - und die eines jeden Sternenpriesters des Kreises "
+      "der Wandlung - ist die Unterstuetzung jener Geschoepfe, die mit "
+      "ihrer Gestalt nicht mehr zufrieden sind. Vielen fehlt der direkte "
+      "Zugang zu der Magie der Wandlung.","erkaert: ");
+  AddInfo(({"info","infos","informationen","information","fragen","frage",
+        "auskunft"}),
+      "Natuerlich vermag ich Euch euren Wissensdurst ein wenig zu stillen, "
+      "doch verleiht Euren Fragen konkretere Gestalt. Beduerft Ihr meinen "
+      "Rat zur Wahl einer Rasse? Moechtet Ihr Eure ganz persoenlichen "
+      "Moeglichkeiten erfahren?","erlaeutert: ",
+      "Kannst Du mir einige Informationen geben?");
+  AddInfo("spieler",
+      "Selbstverstaendlich vermag die Magie der Wandlung nur die "
+      "Gestalt und Rassenzughoerigkeit von Spielern zu aendern. Natuerlich "
+      "koennte sich auch ein Magier der Wandlung unterwerfen, doch davon "
+      "sei besser abgeraten.","erklaert: ");
+  AddInfo("woody",
+      "Ein Zwerg. Auf immer und ewig. Da gibt es fuer mich "
+      "nichts zu tun.","schmunzelt: ");
+  AddInfo("magier",
+      "Kein Kommentar.","schmunzelt: ");
+  AddInfo(({"ausgang","reise", "rueckkehr"}),
+      "Oh... also da hinten geht es durch einen kleinen Gang zurueck ins "
+      "Freie. Dort draussen verkehrt auch der Susagep, der Euch sicher "
+      "zurueck in den Tag bringen wird.","erklaert: ",0,
+      "Oehm, wie komme ich hier wieder weg?");
+  AddInfo("leute",
+      "Irgendwelche Leute halt.","zuckt mit den Schultern: ");
+  AddInfo(({"rassenzugehoerigkeit","hilfe","aenderung","rassenwechsel",
+        "unterstuetzung","gestaltswechsel","umgestaltung","bedingung",
+        "bedingungen", "zugehoerigkeit","rassen","rasse"}),#'infoRasse
+      ,"spricht: ",0,"Kannst Du mir das mit den Rassen und dem Wechsel "
+      "erklaeren? Ich habe da eventuell Interesse...");
+  AddInfo("waehlen","Hier vermoegt ihr Eure Rasse zu waehlen. Fragt mich "
+      "nach den Bedingungen, wenn Ihr mehr wissen moechtet.");
+  AddInfo(({"begehr","gegenfrage"}), 
+      "Es ist nicht hoeflich, einer Frage mit einer "
+      "Gegenfrage zu begegnen. ","tadelt: ");
+  AddInfo(({"stern","sterne","sternen"}),
+      "Gehet hinaus und seht zu den Sternen! Sie sind es, die Euch auch "
+      "in der Nacht den Weg bescheinen, die Euch die Richtung weisen, "
+      "Euch zur Seite stehen. Wir Sternenpriester verstehen uns ebenfalls "
+      "als Helfer, die mit Rat und Tat zur Seite stehen. Ich als Priester "
+      "der Wandlung bin dazu berufen, Euch, die Ihr Eure Gestalt aendern "
+      "wollt, Auskunft und Rat zu geben, wie Euch ein Stern die Richtung "
+      "weisen kann.","erklaert laechelnd: ",0,
+      "Wieso Sterne? Sternenpriester? Ich verstehe das nicht...");
+  AddInfo(({"daemmersang","namen"}),
+      "Meinen Nachnamen fuehre ich nur bei offiziellen Anlaessen.",
+      "sagt: ");
+  AddInfo("tageslicht",
+      "Warum heissen die Dunkelelfen wohl Dunkelelfen?","fragt: ");
+  AddInfo("angelegenheit",
+      "Ueberleget gut, was Ihr wollt, bedenket der Konsequenzen und der "
+      "Erholungsphase Eurer Gestaltsauren!","warnt: ");
+  AddInfo(({"gestaltsaura","gestaltsauren","gestaltauren","gestaltaura"}),
+      "Das ist ein wenig komplex, ich darf es Euch auch nicht genau "
+      "erkaeren, denn Ihr seid kein Sternenpriester. Doch wisst, dass "
+      "jede Gestalt Auren besitzt und dass jenen Auren Gewalt angetan, "
+      "wenn die Gestalt geaendert wird. Wiederholt man dies zu schnell, "
+      "wuerde man den Geist gefaehrden. So bestehen wir Sternenpriester "
+      "der Wandlung auf neun Monate Pause, selbst die Magie der Wandlung "
+      "selbst wuerde euch ihren Dienst verweigern. Glaubet mir, man "
+      "sieht Euren Auren nicht an, wielange sie schon um diese Gestalt "
+      "liegen.","spricht: ",0, "Gestaltsauren? Hae?");
+  AddInfo(({"eigenschaften","eigenschaft"}),
+      "Ja, ich weiss ueber die Eigenschaften der Rassen schon ein wenig "
+      "Bescheid!","nickt: ");
+  AddInfo(({"aura","auren"}),
+      "Welche Art von Auren meint Ihr? Es gibt deren viele!","fragt: ",0,
+      "Hae, Auren?");
+  AddInfo("geist",
+      "Jedes hoehere Lebewesen besitzt einen Geist. Die Gestalt eines "
+      "niederen Geschoepfes zu aendern, das ist keine Kunst - auch wenn "
+      "Sternenpriester dies nicht tun.","erklaert: ");
+  AddInfo("gewalt",
+      "Gestaltsauren tut es gar nicht gut, wenn die Gestalt, um die sie "
+      "liegen und angeordnet sind, veraendert wird!","erkaert: ");
+  AddInfo("unterstuetzung",
+      "Nun, ich kann Euch beispielsweise einiges zu den verschiedenen "
+      "Rassen erzaehlen und Euch erklaeren, wie Ihr vorzugehen habt, "
+      "wenn Ihr Eure Rasse wechseln wollt.","spricht: ",0,
+      "Hm, wie sieht es mit Unterstuetzung aus?");
+  AddInfo(({"familie","kommune","kommunen","gemeinschaft"}),
+      "Einer Rasse anzugehoeren bedeutet mehr als nur bestimmte Eigenschaften "
+      "mit anderen zu teilen. Es ist mehr, man gehoert dazu, ist ein "
+      "Bestandteil einer Gemeinschaft oder Familie, darf oder muss sich "
+      "an Regeln dieser Kommunen halten.","spricht: ");
+  AddInfo(({"wort","geheimwort","worte","magischen worte", "magische worte",
+            "magische worten","worten","woerter","worte"}),
+      "Die Heiligen Hallen sind von Magie erfuellt. Die Worte werden im "
+      "rechten Augenblick zu Euch finden. Wenn Ihr Euch zu einem Wechsel "
+      "Eurer Rassenzugehoerigkeit entschlossen habt, gebt einfach "
+      "''muto corpus'' ein, das weitere ueberlasst uns. Bedenket aber "
+      "die Konsequenzen!", "spricht: ",0,
+      "Oh, magische Worte, klingt ja interessant! Wie lauten sie denn?");
+  AddInfo(({"erholung","konsequenz","konsequenzen","gefahr","gefahren"}),
+      "Wenn Ihr Eure Gestalt wandelt, wird vieles nicht mehr so sein wie "
+      "jetzt und vieles wird verloren gehen. Besondere Fertigkeiten, "
+      "die Ihr nicht in einer Gilde gelernt habt, werden vielleicht "
+      "verschwinden oder sich veraendern. Ebenso werden Fertigkeiten, "
+      "Faehigkeiten und Magie, "
+      "die Euch mit Eurer Rasse gegeben wurden, unwiderbringlich verloren "
+      "gehen - die Eurer neuen Rasse jedoch muesst Ihr erst neu lernen. "
+      "Vielleicht werden Euch auch solche Fertigkeiten, jene Ihr in einer "
+      "Gilde erworben habt, verloren gehen, wenn sie zu sehr von Eurer "
+      "Rasse abhaengig sein sollten, doch kann ich dazu nichts genaues "
+      "sagen. "
+      "Auch, und das ist sehr wichtig, koennt Ihr Eure Gestalt nicht "
+      "beliebig oft wechseln: Die Gestaltsauren Eures Koerpers benoetigen "
+      "mindestens neun Monate, um sich von der Umgestaltung so weit zu "
+      "erholen, dass ein neuerlicher Wechsel der Gestalt moeglich waere. "
+      "Und schlussendlich wird Eure alte Huelle am Ende der Wandlung "
+      "aus dieser Welt getilgt, Ihr solltet Euer wertvolles Gut zuvor "
+      "vielleicht einem Freund anvertrauen.",
+      "warnt: ",0,"Oh... es gibt auch Konsequenzen?");
+  AddInfo(({"wandeln","wandlung","wechsel","wechseln"}),
+      "Die Wandlung ist einer der vielen Kreise der Sternenpriester "
+      "und hat sich ganz der Unterstuetzung der Spieler verschrieben, "
+      "die mit ihrer sterblichen Huelle unzufrieden sind und einer "
+      "anderen Rasse angehoeren wollen. Wenn Ihr also Hilfe braucht "
+      "oder Eure Moeglichkeiten erfahren wollt, so fraget!","erklaert: ");
+  AddInfo(({"priester","sternenpriester"}),
+      "Ja, ich bin ein Sternenpriester. Genauer gesagt ein Sternenpriester "
+      "aus dem Kreis der Wandlung.","nickt laechelnd: ",0,
+      "Bist Du wirklich ein Sternenpriester?");
+  AddInfo("name",#'infoName,"gruebelt: ",0,"Wie kommst Du eigentlich zu diesem "
+      "komischen Namen?");
+  AddInfo("podest",
+      "Oh, das Podest dient eigentlich nur zur Theatralik. Die Magien der "
+      "Wandlung kann hier ueberall wirken. Einzig fuer meine Erlaeuterungen "
+      "zu den verschiedenen Rassen nutze ich das Podest wirklich.",
+      "fluestert: ",0,"Ist das Podest magisch?");
+  AddInfo(({"gilde","gilden","reihen"}),
+      "Wisset, dass manche Gilden die Angehoerigen ausgewaehlter Rassen "
+      "nicht in ihren Reihen dulden. Versteht bitte, dass Ihr, wenn ihr "
+      "in einer solchen Gilde seid, nicht alle Rassen erwaehlen koennt. "
+      "Habt auch Verstaendnis dafuer, falls Euch Faehigkeiten in Eurer "
+      "Gilde verlorengehen... wenn jene zu sehr von Eurer Rasse abhaengig "
+      "sind, ist dies unvermeidlich.","erklaert: ",
+      "Aehm... wie ist das mit meiner Gilde?");
+  AddInfo(({"chor","gesang","chorbeitritt","gesaenge","gesang"}),
+      "Aehm... Verzeiht. Ich bin nicht so musikalisch, als dass ich "
+      "Euch diese Frage angemessen beantworten koennte.");
+  AddInfo("verstaendnis",
+      "Gefahren warten auf jenen, der sich in die Magie "
+      "der Wandlung begibt, doch schreckt es jene, die sich nach anderen "
+      "Auren sehnen, sicher nicht ab.");
+  AddInfo(({"kreis","kreise"}),
+      "Es derer vielerei. Ich habe den Kreis der Wandlung gewaehlt.",
+      "spricht: ");
+  AddInfo(({"faehigkeiten","fertigkeiten"}),
+      "Die Faehigkeiten und Fertigkeiten einer Rasse sind verschieden, "
+      "jedoch sind viele davon noch nicht in die Lebewesen uebergegangen "
+      "- es ist anzunehmen, dass sich dort noch viel tun wird!","spricht: ");
+  AddInfo(({"lebewesen","koerper","kampf","macht","oberflaeche",
+        "silberland","teil","huelle","dinge","eigenschaften","regeln",
+        "bestandteil","getier","baum","leben","geschoepf",
+        "grundkenntnisse","grundkenntnis"}),
+      "Es ist nicht meine Berufung, Grundkenntnisse zu vermitteln - ich "
+      "diene nur, um Lebewesen wie Euch die Moeglichkeiten und Gefahren eines "
+      "Wechsels der Rasse zu vermitteln.","wehrt sacht ab: ");
+  AddInfo(({"wechsel","rasse","gestalt"}),
+      "Hier in den Heiligen Hallen der Sternenpriester des Kreises der "
+      "Wandlung vermagt Ihr mit Hilfe der Magie Deine Rassenzugehoerigkeit "
+      "zu wechseln!", "fluestert ehrfuerchtig: ",0,
+      "Wechsel? Wieso Wechsel?");
+  AddInfo("magie",
+      "Verzeiht, aber mir ist nicht gestattet, ueber Magie zu reden, "
+      "denn schon in Worten liegt Macht, die nicht leichtfertig entfesselt "
+      "werden darf.","bedauert: ");
+  AddInfo("zeit",
+      "Fuer gewoehnlich muss etwas Zeit vergehen, bevor Ihr Eure "
+      "Gestaltsauren veraendern lassen koennt. Der Vorgang setzt "
+      "jenen doch etwas zu, eine Pause ist einfach notwendig.","sagt: ");
+  AddInfo("vorgang",
+      "Ach nein, keine Details!","winkt ab: ");
+  AddInfo("details",
+      "Viele sind an Details nicht interessiert.","bescheidet: ");
+  AddInfo(({"pause","warten","wuensche","frist","zeitspanne","wartezeit",
+        "wahl","moeglichkeiten","moeglichkeit","austausch","angehoerige"}),
+      #'infoMoeglichkeiten,"erklaert: ");
+  AddInfo("anatol",
+      "Ah, ein Nachtelf... ja, er schaut gelegentlich hier vorbei, doch wird "
+      "er vermutlich nie hier seine Rasse wechseln. Er ist als Nachtelf "
+      "ganz gluecklich, scheint mir.", "schmunzelt: ",
+      0,"Anatol kennst _DU_ ja bestimmt, oder?");
+  AddInfo(({"werke","alte werke"}),
+     "Ach, wir verfuegen selbstverstaendlich ueber eine grosse "
+     "Bibliothek. Diese koennen wir Fremden aber leider nicht "
+     "zugaenglich machen, zu wertvoll sind die Schaetze in ihr. "
+     "Vertraut darauf, dass meine persoenliche Hilfe euch mehr "
+     "Hilfe als genug sein wird.", "nickt: ");
+  AddInfo(({"bibliothek","schaetze","schatz"}),
+     "Unsere Bibliothek ist voller Schaetze, ja. So koennen wir "
+     "Sternenpriester anderen mit Rat zur Seite stehen.","weiss: ");
+  AddInfo("mund",
+     "Koennt Ihr den Euren auch so schwer halten? Ich kenne "
+     "das - versucht, Euch auf das Wesentliche zu konzentrieren!",
+     "seufzt: ");
+   AddInfo(({"wesentliche","wesentlich","das wesentliche"}),
+     "Na warum seid Ihr hier? Und weshalb koenntet Ihr gerade "
+     "meinen Rat benoetigen?","schmunzelt: ");
+   AddInfo("susagep",
+     "Ah, Ihr habt die Bekanntschaft des Pegas... aeh... Susageps gemacht? "
+     "Ein praechtiges Geschoepf, aber... ein eigenwilliger Flugstil. "
+     "Ich sehe von weiteren Reisen mit ihm ab.","meint: ");
+   AddInfo("pferd",
+     "Pferd? Welches Pferd? Hier drin? Hier war noch nie ein Pferd, "
+     "wenn ich mich recht erinnere. "
+     "Allerdings soll draussen der Susagep verkehren, das ist etwas anderes.",
+     "beteuert: ",0,"Kennst Du das Pferd?");
+   AddInfo("geruch","Ja? Nach was riecht es denn hier...?","gruebelt: ");
+   AddInfo("weihrauch","Oh, ich habe derzeit keinen Weihrauch verfuegbar.",
+     "bedauert: ");
+   AddInfo("pegasus",
+     "Ich weiss nicht, wer das sein soll.","grinst: ");
+   AddInfo("geschoepf",
+     "Wir sind alle Geschoepfe!","sagt: ");
+   AddInfo(({"untote","untot","untoter"}),
+     "Mit Auren der Gestalt hat der ... Zustand von Untoten rein "
+     "gar nichts zu tun. Wenn ihr untot werden wollt, geht, fragt einen "
+     "Nekromanten.","winkt ab: ",0,"Kann ich auch ein Untoter werden?");
+   AddInfo(({"nekromanten","nekromant"}),
+     "Kein Kommentar.","schaut weg und sagt: ");
+   AddInfo(({"grundkenntnisse", "grundkenntnis"}),
+     "Selbst Grundkenntnisse in der Wandlung vermag ich nicht "
+     "zu vermitteln - aber ich unterstuetze Euch in der Entscheidungs"
+     "findung selbstverstaendlich gern.","sagt: ");
+   AddInfo(({"entscheidung","entscheidungsfindung"}),
+     "Schon einmal habt Ihr euch entscheiden muessen, welchem Volk "
+     "Ihr angehoeren moegt. Ihr koennte diese Entscheidung von "
+     "Zeit zu Zeit umaendern, aber... es koennte auch Konsequenzen "
+     "haben, die Euch nicht gelegen kommen. Ueberlegt also gut.",
+     "sagt: ");
+
+   AddInfo(({"helligkeit","licht"}),"Ja, schoen hier, nicht wahr?");
+  seteuid(getuid(this_object()));
+
+  return;
+}
+
+public void Greet(object pl) {
+  if ((!pl) || (!objectp(pl)) || (!living(pl)) || 
+      (environment(pl)!=environment(this_object()))) {
+    tell_room(environment(this_object()),
+        "Myrrwhyn kuckt etwas erstaunt und zieht die Augenbrauen hoch.\n"
+        "Myrrwhyn fragt: Ich vernahm den Ruf, "
+        "doch wohin eilte der Rufende?\n");
+  }
+  else {
+    tell_room(environment(this_object()),break_string(
+        "Seid gegruesst, "+(string)this_player()->name(WER)+"! Wann immer "
+        "ein Diener aus den Reihen der Sternenpriester aus dem Kreis der "
+        "Wandlung vonnoeten ist, so soll einer erscheinen "
+        "und mit Rat und Tat dem Beduerftigen zur Seite stehen. Denn so wird "
+        "es ueberliefert, von Mund zu Mund, so stand es geschrieben in den "
+        "alten Werken. Also denn, hier bin ich, was ist Euer Begehr?",77,
+        "Myrrwhyn spricht: ",0));
+  }
+  return;
+}
+
+public int SequenceStarted() {
+
+  if (HALL!=file_name(previous_object())) return 0;
+  if (QueryProp(P_NOATTACK))
+    return 0;
+  else SetProp(P_NOATTACK,"ist in den Haenden der Magie unverwundbar.");
+  if (QueryProp(P_NPC_QUIET))
+    return 0;
+  else SetProp(P_NPC_QUIET,([
+        QUIET_MSG:"Jetzt?! Myrrwhyn wuerde eh nicht antworten koennen...",
+        QUIET_FLAG:1]));
+  return 1;
+}
+
+public int SequenceEnded() {
+  SetProp(P_NOATTACK,SetProp(P_NPC_QUIET,0));
+  tell_room(HALL,"Myrrwhyn entsteigt langsam wieder den "
+      "Tiefen seiner Trance.\n");
+  return 1;
+}
+
+public int _query_wimpy() { return 0; }
+public void Attack(object enemy) { return; }
+public void do_damage(int dam, mixed e) { return; }    
+
+public void reset() {
+  ::reset();
+  if (environment(this_object()) && (!QueryProp(P_NPC_QUIET))) {
+    SetProp(P_NPC_QUIET,([QUIET_MSG:"Zu spaet...",QUIET_FLAG:1]));
+    tell_room(environment(this_object()),break_string(
+       "Ich werde mich fuer einige Zeit wieder meinen eigenen "
+       "Angelegenheiten widmen. Falls es Fragen geben sollte, Ihr "
+       "wisst ja, wie Ihr mich rufen koennt...",77,
+       "Myrrwhyn verabschiedet sich: ",1));
+    HALL->LeavePriest(0);
+  }
+  return;
+}
+
+
+public void Defend(int dam, string dt, mixed sp, object e) {
+  if ((!e) || (!objectp(e)) || (!living(e)) || 
+      (environment(e)!=environment(this_object()))) return 0;
+  tell_room(environment(this_object()),break_string(
+      "Was soll das, "+(string)e->name(WER)+"? Haltet Ihr mich fuer so "
+      "unfaehig, und glaubet, dass ich mich nicht zu wehren wuesste? "
+      "Lasset ab, Ihr koenntet es bereuen!",77,"Myrrwhyn spricht: ",0)+
+      "Eine blaue Schutzaura blitzt fuer einen Augenblick um Myrrwhyn auf.\n");
+  e->SetProp(P_SP,0);
+  e->do_damage(5,this_object());
+  e->reduce_hit_point(100+random(100));
+  e->StopHuntFor(this_object(),1);
+  StopHuntFor(e,1);
+  return;
+}

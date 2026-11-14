@@ -1,0 +1,84 @@
+private int canPlayPubsong(object caster) {
+  object pub;
+  int pubflags;
+
+  pub = ENV(caster);
+  if(sizeof(pub->QueryFood() + pub->QueryDrink()) < 1) {
+    tell_object(caster, BS("Dieses Lied kannst du nur in einem Wirtshaus spielen!"));
+    return 0;
+  }
+
+  if(pubflags & PUB_NEEDSKEEPER) {
+    if(!present(pub->QueryProp(P_PUBKEEPER_ID), pub)) {
+      tell_object(caster, BS(sprintf("Ohne %s kannst du das nicht spielen.", pub->QueryProp(P_PUBKEEPER_NAME))));
+      return 0;
+    }
+  }
+
+  if(pub->query_ban(getuid(caster))) {
+    tell_room(pub, BS(sprintf("%s sagt: DU hast hier Spielverbot, %s!\n", 
+                           pub->QueryProp(P_PUBKEEPER_NAME), caster->name(WER, 1))));
+    return 0;
+  }  
+
+  if(objectp(present(SONG_PUB, pub))) {
+    tell_object(caster, BS("Ein solches Lied wirkt hier bereits."));
+    return 0;
+  }
+
+  return 1;
+}
+
+mapping prep_wirtshauslied(object caster, mapping sinfo) {
+  if(caster->InFight()) {
+    tell_object(caster, BS("Im Kampf hast du keine Zeit dafuer!"));
+    return 0;
+  }
+
+  sinfo = prepare_song(caster, sinfo);
+  if(sinfo == 0) return 0;
+  if(!paySpellCost(caster, sinfo, 1)) return 0;
+
+  if(!canPlayPubsong(caster)) return 0;
+
+  tell_room(environment(caster), BS(sprintf("%s raeuspert sich und erregt deine Aufmerksamkeit.", caster->Name(WER, 1))), ({caster}));
+
+  if(sinfo[SI_CAP_NAME] == "Fraggins Totenwache") play_song_text(SPELLSEQ("fraggins_totenwache.seq"), caster);
+  else play_song_text(SPELLSEQ("wirtshauslied.seq"), caster);
+  return sinfo;
+}
+
+public int wirtshauslied(object caster, mapping sinfo) {
+  object song, pub, keeper;
+  float factor;
+  int success;
+  
+  if(!paySpellCost(caster, sinfo)) return 0;
+  if(!canPlayPubsong(caster)) return 0;
+
+  success = SpellSuccess(caster,sinfo);
+  
+  song = clone_object(OBJ("pub_improver"));
+  if(song->move(ENV(caster), M_SILENT|M_NOCHECK) != 1) {
+    tell_object(caster, BS("Das Lied kann sich hier nicht manifestieren!"));
+    return 0;
+  }
+
+  factor = 1.0 + ((float) CheckEquip(caster, lower_case(sinfo[SI_CAP_NAME]))/100.0);
+  song->Setup(sinfo[SI_CAP_NAME], caster, sinfo[SI_SKILLABILITY], success, factor);
+  
+  if(success >= 0) return ERFOLG;
+
+  pub = environment(song);
+  if(success < -5000 && pub->QueryProp(P_PUB_FLAGS)[PUB_HASKEEPER] &&
+     objectp(keeper=present(pub->QueryProp(P_PUBKEEPER_ID), pub))) {
+    tell_room(pub, BS(sprintf("Nach dieser Darbietung ist %s erzuernt und greift an!")));
+    keeper->Kill(caster);
+  } else if(success < -1500) {
+    tell_room(pub, BS(sprintf("Diese Darbietung war so mies, dass %s Lokalverbot erhaelt!", caster->name(WEN, 1))), ({caster}));
+    tell_object(caster, BS("Deine Darbietung war so mies, dass du Lokalverbot erhaeltst!"));
+    pub->set_ban(getuid(caster));
+  }
+  
+  return MISSERFOLG;
+}

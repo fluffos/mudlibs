@@ -1,0 +1,349 @@
+// list_master
+// speichert diverse Listen (schlachtfeld)
+// Wraz / Mendralim
+
+#include "../def.h"
+
+#define LIST_SAVE ZONE "save/sf_toplisten"
+#define LISTE ZONE "list/topwaffensterberliste.read"
+
+mapping liste; // Sterbewaffenliste fuer Hackstock und SF-Uniques/Rares
+mapping sorted_liste; // Sterbewaffenliste sortiert
+mapping sorted_deathlist; // Pfadliste, sortiert nach Spielertoden
+mapping sorted_killlist; // Pfadliste, sortiert nach PfadNPC-Kills
+int last_backup=0;
+
+void create()
+{
+  if(is_clone(TO))
+  {
+    destruct(TO);
+    return;
+  }
+  seteuid(getuid(this_object())); // fuer zugriff auf dateien benoetigt
+
+  restore_object(LIST_SAVE);
+  seteuid(getuid(TO));
+
+  return;
+}
+
+// Magier und Testspieler -> 0
+// nur "echte" Spieler/Seher -> 1
+int is_player_local(string name)
+{
+  return WMASTER->is_player(name);
+}
+
+// Liste: Sterbewaffen ---------------------------------------------------------
+
+// CREATE_SORTED_LISTE ---------------------------------------------------------
+// Erzeugt die gleiche Liste wie "liste" in "sorted_liste", mit:
+// KEY    = lostxp
+// VALUE0 = id (playername_timestamp)
+// VALUE1 = tode
+// VALUE2 = weapon_wem
+void create_sorted_liste(string id, int tode, int lostxp, string weapon_wem)
+{
+  // GANZ WICHTIG: neue variable! sind sonst nur zeiger, und das
+  //  originalobjekt wird modifiziert!!
+  int sorted_lostxp;
+  sorted_lostxp = lostxp;
+
+  // soll verhindern dass es zufaellig 2x den gleichen xp-stand gibt:
+  while (member(sorted_liste,to_int(sorted_lostxp))) sorted_lostxp++;
+
+  sorted_liste += ([to_int(sorted_lostxp):
+    to_string(id);to_int(tode);to_string(weapon_wem)]);
+}
+
+// SAVE_WEAPON_LIST ------------------------------------------------------------
+// Wird von OBJ hackstock.c aufgerufen
+// Speichert den neuen Stand an Toden/LostXP der Sterbewaffe:
+//  Mapping "liste":
+//    KEY    = spielername_zeitstempel (zB "balzac_1602951681")
+//    VALUE0 = tode_anzahl
+//    VALUE1 = lostxp_anzahl (in Millionen)
+//    VALUE2 = waffe_wem (zB "der Axt des Sterbens")
+//  File "list/topwaffensterberliste.read":
+//    Sortierte Liste (Funktion create_sorted_liste) fuer Ausgabe bei
+//    P_LONG von hackstock.c
+string save_weapon_list(string id,int tode,int lostxp, string weapon_wem,
+                        int lostxp2)
+{
+  int i;
+  string list_text;
+  string player;
+  int timestamp;
+  int *sorted_liste_keys;
+
+  string todesadj;
+  string xpadj;
+
+  player="dummy";
+  timestamp=0;
+
+  list_text="\n";
+
+  if(!id||id=="") return "missing id";
+  if(!liste||liste==([])) restore_object(LIST_SAVE);
+  if(!liste||liste==([])) liste = (["id_0":0;0;"der Waffe des Nichts"]);
+
+  lostxp /= 1000000; // Auf Millionen-XP umrechnen
+
+  // Player noch nicht in Liste:
+  if(member(m_indices(liste),id)==-1) liste+=([id: tode; lostxp; weapon_wem]);
+
+  // schon in Liste, aber mit weniger Toden & weniger XP -> eintragen
+  else if (liste[id, 0] < tode && liste[id, 1] <= (lostxp+lostxp2) )
+  {
+    liste[id, 0] = tode;
+    liste[id, 1] = (lostxp) + lostxp2;
+  }
+
+  // neue sortierte Liste erstellen
+  sorted_liste = ([]);//([0:"id_0";0;"der Waffe des Nichts"]);
+  walk_mapping(liste,"create_sorted_liste");
+  sorted_liste_keys = sort_array(m_indices(sorted_liste), #'<); //'
+
+  for(i=0;i<sizeof(sorted_liste_keys);i++)
+  {
+    sscanf( to_string( sorted_liste[ sorted_liste_keys[i], 0 ] ),
+      "%s_%d",player,timestamp);
+    if(player == "id" || player == "dummy") continue;
+    // nur "echte" Spieler, aber ehemalige (nun geloeschte) sollen schon bleiben...
+    // auch mit "ende" ausgeloggte spieler sollen bleiben
+    // idee (loest nur teil des problems)
+    // strstr(call_other("/p/daemon/fingerd","finger_single",player),"Testspieler")
+    //  --> liefert -1 wenn nicht gefunden
+    // --> findet aber auch nicht geladene spieler
+    // /secure/master->get_userinfo(player)
+    // --> findet spieler/magier/testies grundsaetzlich, egal ob geladen oder nicht
+
+    // tode
+    switch(to_int(sorted_liste[sorted_liste_keys[i],1]))
+    {
+      case 0 : continue; break;
+      case 1..2: todesadj = "kratzige"; break;
+      case 3..6: todesadj = "gruselige"; break;
+      case 7..13: todesadj = "duestere"; break;
+      case 14..26: todesadj = "furchteinfloessende"; break;
+      case 27..50: todesadj = "schockierende"; break;
+      case 51..100: todesadj = "schaurige"; break;
+      case 101..200: todesadj = "wahnsinnige"; break;
+      case 201..400: todesadj = "toedliche"; break;
+      case 401..800: todesadj = "TOEDLICHE"; break;
+      case 801..1600: todesadj = "!TOEDLICHE!"; break;
+      case 1601..3200: todesadj = "!!TOEDLICHE!!"; break;
+      case 3201..6400: todesadj = "!!!TOEDLICHE!!!"; break;
+      case 6401..2000000000: todesadj = "!!!!TOEDLICHE!!!!"; break;
+
+      default: todesadj = "error";
+
+    }
+
+    // lostxp
+    switch(to_int(sorted_liste_keys[i]))
+    {
+      case 0             : continue; break;
+      case 1             : xpadj = "sehr kleine"; break;
+      case 2     ..     4: xpadj = "kleine"; break;
+      case 5     ..    10: xpadj = "mittlere"; break;
+      case 11    ..    22: xpadj = "grosse"; break;
+      case 23    ..    46: xpadj = "sehr grosse"; break;
+      case 47    ..   104: xpadj = "extrem grosse"; break;
+      case 105   ..   200: xpadj = "riesige"; break;
+      case 201   ..   400: xpadj = "gigantische"; break;
+      case 401   ..  1200: xpadj = "uebermaechtige"; break;
+      case 1201  ..  2147: xpadj = "fast unmoegliche"; break;
+      case 2148  ..  4300: xpadj = "UNMOEGLICHE"; break;
+      case 4301  ..  8600: xpadj = "!UNMOEGLICHE!"; break;
+      case 8601  .. 17200: xpadj = "!!UNMOEGLICHE!!"; break;
+      case 17201 .. 34400: xpadj = "!!!UNMOEGLICHE!!!"; break;
+      case 34401 .. 68800: xpadj = "!!!!UNMOEGLICHE!!!!"; break;
+
+      default: xpadj = "error";
+
+    }
+
+    list_text+=break_string(
+      sprintf(
+        "Eine %s %s Scharte, geschlagen von %s am %s mit %s. %d Tod"+
+        ( to_int(sorted_liste[sorted_liste_keys[i],1]) == 1 ? "" : "e") +
+        " und %d Millionen Erfahrungspunkte schimmern darin." ,
+        xpadj,
+        todesadj,
+        capitalize( player ),
+        dtime(timestamp)[5..16],//dtime()[5..16],
+        sorted_liste[sorted_liste_keys[i],2], // weapon_wem
+        //to_int(sorted_liste[sorted_liste_keys[i],1]), // tode
+        to_int(liste[player+"_"+timestamp,0]), // tode (aus der Original-Liste!)
+        //to_int(sorted_liste_keys[i]) // lostxp
+        to_int(liste[player+"_"+timestamp,1]) // lostxp (aus der Original-Liste! koennen abweichen)
+      ),
+      78, sprintf("%3d. ",i+1),BS_INDENT_ONCE);
+    //list_text+="\n";
+  }
+
+  rm(LISTE);
+  write_file(LISTE,list_text);
+
+  return id+" "+tode+" "+lostxp+"\n";
+}
+
+// Liste: Pfad-Spieler-Todesliste ----------------------------------------------
+
+// CREATE_SORTED_PFADLISTS -----------------------------------------------------
+// Erzeugt die gleiche Liste wie "death_list" in "sorted_deathlist", mit:
+// KEY    = tode, VALUE0 = playername, VALUE1 = pfadnpc_kills, V2 = ratio
+// sorted_killlist:
+// KEY    = pfadnpc_kills, VALUE0 = playername, VALUE1 = tode, V2 = ratio
+void create_sorted_pfadlists(string player, int player_deaths, int pfadnpc_kills,
+  int ratio)
+{
+  int new_deaths;
+  int new_kills;
+
+  // *100 um bei "Todesgleichstand" differenzieren zu koennen
+  // GANZ WICHTIG: neue variable! sind sonst nur zeiger, und das
+  //  originalobjekt wird modifiziert!!
+  new_deaths = player_deaths * 100;
+  new_kills = pfadnpc_kills * 100;
+
+  // soll verhindern dass es zufaellig 2x den gleichen Todes-Stand gibt:
+  while (member(sorted_deathlist,to_int(new_deaths))) new_deaths++;
+  while (member(sorted_killlist,to_int(new_kills))) new_kills++;
+
+  sorted_deathlist += ([to_int(new_deaths):
+    to_string(player);to_int(new_kills);to_int(ratio)]);
+
+  sorted_killlist += ([to_int(new_kills):
+    to_string(player);to_int(new_deaths);to_int(ratio)]);
+}
+
+// Pfad-Spieler-Todesliste -----------------------------------------------------
+// Wird vom "death_master" abgefragt
+string write_death_list()
+{
+  string deathlist_text;
+  string killlist_text;
+  mapping deathlist; // Original-Liste von death_master.c
+  int *sorted_deathlist_keys;
+  int *sorted_killlist_keys;
+
+  // Fuer die for-Schleife:
+  int i;
+  int deaths;
+  int kills;
+  int ratio;
+  string player;
+
+  // Einlesen des Mappings
+  deathlist = DMASTER->query_deaths_saves();
+
+  // Magier und Testies rausfiltern
+  deathlist = filter_mapping(deathlist, "is_player_local");
+
+  if(!deathlist || deathlist==([])) return "ERROR: list empty";
+
+  // neue sortierte Listen erstellen
+  sorted_deathlist = ([]);
+  sorted_killlist = ([]);
+  walk_mapping(deathlist,"create_sorted_pfadlists");
+  sorted_deathlist_keys = sort_array(m_indices(sorted_deathlist), #'<);
+  sorted_killlist_keys = sort_array(m_indices(sorted_killlist), #'<);
+
+  deathlist_text=sprintf("%3s. %-12s %7s %7s %9s\n\n",
+    "Nr", "Name", "Tode", "Siege", "Handicap");
+  killlist_text=sprintf("%3s. %-12s %7s %7s %9s\n\n",
+    "Nr", "Name", "Siege", "Tode", "Handicap");
+
+  // Spielertode am Pfad (sorted_deathlist)
+  for(i=0;i<sizeof(sorted_deathlist_keys);i++)
+  {
+    player=to_string( sorted_deathlist[ sorted_deathlist_keys[i], 0 ] );
+    if(player == "id" || player == "dummy") continue;
+
+    deaths=to_int(sorted_deathlist_keys[i]/100); // /100 weil: siehe oben
+    kills=to_int(sorted_deathlist[sorted_deathlist_keys[i],1]/100);
+    ratio=to_int(sorted_deathlist[sorted_deathlist_keys[i],2]);
+
+    deathlist_text+=sprintf("%3d. %-12s %7d %7d %9d\n",i+1,
+      capitalize(player),
+      deaths,kills,ratio);
+  }
+
+  // PfadNPC-Kills (sorted_killlist)
+  for(i=0;i<sizeof(sorted_killlist_keys);i++)
+  {
+    player=to_string( sorted_killlist[ sorted_killlist_keys[i], 0 ] );
+    if(player == "id" || player == "dummy") continue;
+
+    kills=to_int(sorted_killlist_keys[i]/100); // /100 weil: siehe oben
+    deaths=to_int(sorted_killlist[sorted_killlist_keys[i],1]/100);
+    ratio=to_int(sorted_killlist[sorted_killlist_keys[i],2]);
+
+    killlist_text+=sprintf("%3d. %-12s %7d %7d %9d\n",i+1,
+      capitalize(player),
+      kills,deaths,ratio);
+  }
+
+  rm(DEATHLIST);
+  write_file(DEATHLIST,deathlist_text);
+  rm(KILLLIST);
+  write_file(KILLLIST,killlist_text);
+
+  return deathlist_text;
+}
+
+// Abfragen --------------------------------------------------------------------
+
+mapping query_weapon_list()
+{
+  return liste;
+}
+
+mapping query_sorted_list()
+{
+  return sorted_liste;
+}
+
+
+// Manipulationen --------------------------------------------------------------
+
+mapping remove_id(string id)
+{
+  liste -= ([id]);
+  return liste;
+}
+
+// Speicherfunktionen ----------------------------------------------------------
+
+void do_save()
+{
+  if(last_backup < time()-604800) // backup jede Woche
+  {
+    save_object(ZONE "save/bkp/save_liste_bkp_"+to_string(time()));
+    last_backup = time();
+  }
+  save_object(LIST_SAVE);
+}
+
+void reset()
+{
+  if(!read_file(ZONE "master/list_master.lpc")) return;
+  do_save();
+}
+
+int remove()
+{
+  if(is_clone(TO)) {
+    destruct(TO);
+    return 1;
+  }
+
+  // nochmal speichern vor dem destruct
+  save_object(LIST_SAVE);
+  destruct(TO);
+  return 1;
+}

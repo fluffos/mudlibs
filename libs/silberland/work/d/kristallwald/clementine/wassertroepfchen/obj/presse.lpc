@@ -1,0 +1,312 @@
+#include "/d/kristallwald/clementine/wassertroepfchen/carolina.h"
+#include <container.h>
+#include <moving.h>
+#include <language.h>
+#include <properties.h>
+#include <combat.h>
+#include <wizlevels.h>
+
+inherit "std/container";
+
+#define MAXITEMS 3
+// wir verbieten die id saft, weil troxa sich bloed gespielt hat und 
+// mehrzeilige saftitems produziert hat... 10/2011
+
+void create()
+{
+  if(!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, 0);
+  SetProp(P_LONG,
+    "Eine ziemlich alt aussehende Weinpresse steht in der Mitte des Raumes. "
+    "Trotz ihres Alters scheint sie allerdings voll funktionstuechtig zu sein. "
+    "Sie besteht aus einem grossen oben offenem Fass, in das man alles was "
+    "zu pressen ist hineingeben kann. "
+    "Seitlich hat sie eine Hebelvorrichtung und einen Auffangbehaelter, der "
+    "das Gepresste dann wohl auffaengt. ");
+  SetProp(P_NAME, "Weinpresse");
+  AddId( ({ "presse", "weinpresse" }) );
+
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_ARTICLE, 1);
+  SetProp(P_NOGET, 1);
+  SetProp(P_MAX_WEIGHT, 10000);
+
+  AddCmd("zieh|ziehe&hebel", "cmd_ziehe", "Was willst Du ziehen?");
+//  AddCmd( ({"gib", "geb", "leg", "gebe" }), "c_geben");
+}
+string short()
+{
+  return "";
+}
+
+varargs string long()
+{
+  string str;
+  string invl;
+
+//  invl = make_invlist(PL, all_inventory(ME),
+//  TP ? (TP->QueryProp(P_SHORTINV) ? 0 : 2) :0);
+  invl = make_invlist(TP, all_inventory(),
+                   interactive(TP) ? (TP->QueryProp(P_SHORTINV) ? 2 : 0) : 0);
+
+//  if (!stringp(str) ) str = "";
+  str = QueryProp(P_LONG);
+
+  if(invl != "")
+    str += "Momentan siehst Du folgendes in der Weinpresse:\n" + invl;
+
+  return str;
+}
+
+// neu
+varargs int PreventInsert(object ob)
+{
+  object* inv;
+  int i;
+  inv = all_inventory();
+
+  if( ob->QueryProp(P_CURSED) ||
+      ob->id("saft")          ||	  
+      ob->id("QUESTOBJ"))
+  {
+    notify_fail(BS("Das willst Du lieber nicht in die Presse legen."));
+    return 1;
+  }
+
+  if(!IS_LEARNING(TP) &&
+     ((TP->QueryProp(P_SIZE) < 90) || (TP->QueryProp(P_FROG) == 1) ))
+  {
+    notify_fail(BS("Du reckst und streckst Dich, aber Du bist zu klein "
+                   "um etwas in die Presse zu legen."));
+    return 1;
+  }
+
+  if(sizeof(inv) >= MAXITEMS)
+  {
+   TP->Message(BS("Das Fass ist voll!"));
+    return -1;
+  }
+ /* //foreach(object ob : inv)
+  for (i=sizeof(inv)-1; i>=0; i--) {
+    if(inv[i]->name(RAW) == inv[i]->name(RAW))
+    {
+        notify_fail(BS("Im Fass der Presse ist bereits "
+                       + inv[i]->name(WEN, 0) + "."));
+        return 1;
+    }
+  }
+*/
+  return ::PreventInsert(ob);
+}
+
+// neu
+varargs int PreventLeave(object ob)
+{
+  if(!IS_LEARNING(TP) &&
+     ((TP->QueryProp(P_SIZE) < 90) || TP->QueryProp(P_FROG) == 1 ))
+  {
+    notify_fail(BS("Du bist einfach zu klein um etwas aus der "
+                "Presse zu nehmen."));
+    return 1;
+  }
+
+  return ::PreventLeave(ob);
+}
+
+// neu
+int cmd_ziehe(string str)
+{
+  environment(TP)->Message(
+                    BS(TP->Name() + " zieht den Hebel der Weinpresse."),
+                       MSGFLAG_VISUAL, ([MSGFLAG_EXCLUDE:({TP})]));
+  write("Du ziehst den Hebel der Weinpresse.\n");
+
+  if(sizeof(all_inventory(TO)) == 0)
+  { write(BS("Du hast doch noch gar nix in die Presse gelegt.")); 
+	  return -1;
+  }
+
+  if( find_call_out("press") == -1 )
+    call_out("press", 1);
+
+  return 1;
+}
+
+// neu
+void press()
+{
+  object* objects;
+  string* names;
+  object ob;
+  int ret,i;
+
+  names = ({});
+  objects = present_objects("alles");
+
+  if(sizeof(objects) && ob = clone_object("/d/kristallwald/clementine/wassertroepfchen/obj/saft"));
+  {
+    environment(TP)->Message(
+                      BS(TP->Name() + " presst etwas aus und fuellt den Saft "
+                         "in eine bereitstehende Flasche."),
+                         MSGFLAG_VISUAL, ([MSGFLAG_EXCLUDE:({TP})]));
+    write(BS("Du presst etwas aus und fuellst den Saft in eine "
+          "bereitstehende Flasche.\n"));
+
+    // Namen holen
+    //foreach(object ob : present_objects("alles"))
+    for(i=sizeof(objects)-1;i>=0;i--)
+    {
+      names += ({objects[i]->name(RAW)});
+      if(objects[i]->QueryProp(P_MAGIC))
+        objects[i]->move("/players/clementine/lager", M_NOCHECK);
+      else if(!objects[i]->remove())
+        objects[i]->destruct();
+    }
+
+    // Name setzen
+    ob->initSaft(names);
+
+    // In Spieler oder Raum moven
+    if((ret = ob->move(TP, M_GET)) != 1)
+      ob->move(environment(), M_NOCHECK);
+      
+  }  
+}
+
+
+/*
+int das_darf_weg(object ob)
+{
+  if( ob->QueryProp(P_CURSED))    return 0;
+  if( ob->QueryProp(P_NEVERDROP)) return 0;
+  if( ob->id("QUESTOBJ"))         return 0;
+  if( ob->QueryProp(P_NODROP))    return 0;
+  if(!ob->QueryProp(P_SHORT))     return 0;
+  if( ob->QueryProp(P_INVIS))     return 0;
+  if(!ob->QueryProp(P_NAME))      return 0;
+
+  if(ob->QueryProp(P_ARMOUR_TYPE) == AT_ARMOUR) return 1;
+  if(ob->QueryProp(P_ARMOUR_TYPE) == AT_CLOAK)  return 1;
+
+  return 0;
+}
+
+
+
+int c_nehmen(string str)
+{
+  object ob;
+  int i,n;
+  string was, wovon;
+
+  notify_fail("Was willst Du woraus nehmen?\n");
+  if(!str || str == "") return 0;
+
+  n = sscanf(str, "%s aus %s", was, wovon);
+  if(n!=2){n=sscanf(str, "%s aus %s", was, wovon);}
+  if(n!=2){return 0;}
+
+  if( !((wovon == "presse") || (wovon == "weinpresse")) )
+  {
+    return 0;
+  }
+  if(!IS_LEARNING(TP) &&
+    ((TP->QueryProp(P_SIZE) < 90) || (TP->QueryProp(P_FROG) == 1) ))
+  {
+    write(BS("Du bist einfach zu klein um etwas aus der Presse zu nehmen."));
+    return -1;
+  }
+
+  if(sizeof(all_inventory(TO)) == 0)
+  {
+    write("Aber in der Presse ist doch gar nichts drinnen!\n");
+    return -1;
+  }
+
+  if(ob = present(was,TO))
+  {
+    if(ME_TOO_HEAVY==ob->move(TP,M_GET|M_SILENT))
+    {
+      write("Das kannst Du nicht mehr tragen!\n");
+      return -1;
+    }
+    else
+    {
+      write("Du nimmst "+ob->name(WEN)+" aus der Presse.\n");
+    }
+    return 1;
+  }
+
+  write("So etwas befindet sich nicht in der Presse.\n");
+  return -1;
+}
+
+
+int c_geben(string str)
+{
+  object ob;
+  int n;
+  string was, woran;
+
+  notify_fail("Was willst Du wo reingeben?\n");
+
+  if(!str || str == "") return 0;
+  n = sscanf(str, "%s in %s", was, woran);
+  if(n!=2){n=sscanf(str, "%s in %s rein", was, woran);}
+  if(n!=2){n=sscanf(str, "%s in %s", was, woran);}
+  if(n!=2){return 0;}
+
+  if( !((woran == "presse") || (woran == "weinpresse") || (woran == "fass")) )
+  {
+    return 0;
+  }
+   
+  if(!IS_LEARNING(TP) &&
+    ((TP->QueryProp(P_SIZE) < 90) || (TP->QueryProp(P_FROG) == 1) ))
+  {
+    write(BS("Du reckst und streckst Dich, aber Du bist zu klein "
+                  "um etwas in die Presse zu geben."));
+    return -1;
+  }
+
+  if(!ob=present(was,TP))
+  {
+    write("Sowas hast Du doch gar nicht bei Dir!\n");
+    return 1;
+  }
+
+  if(sizeof(all_inventory(TO)) >= MAXITEMS)
+  {
+    write(BS("Das Fass der Presse ist schon voll, da geht nix mehr rein!"));
+    return -1;
+  }
+
+  if((ob->QueryProp(P_ARMOUR_TYPE) == AT_ARMOUR) ||
+     (ob->QueryProp(P_ARMOUR_TYPE) == AT_CLOAK))
+  {
+    ob->move(TO,M_PUT||M_SILENT);
+    write("Du gibst "+ob->name(WEN)+" in die Presse.\n");
+
+    return 1;
+  }
+
+  write("Das kannst Du nicht in die Presse geben!\n");
+  return -1;
+}
+
+
+
+void init()
+{
+  ::init();
+
+  if(!TP)              return;
+  if(!interactive(TP)) return;
+  if(IS_WIZARD(TP))    return;
+
+  call_out("getit",0,TP);
+}
+*/

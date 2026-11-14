@@ -1,0 +1,81 @@
+inherit "std/thing";
+#include "../def.h"
+#include "/spellbooks/waldlaeufer/std/restrictions.lpc"
+
+int damage, chance, range, last;
+object caster;
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, 0 );
+  SetProp(P_LONG,  0 );
+  SetProp(P_NAME, 0);
+  SetProp(P_INVIS, 1);
+  SetProp(P_GENDER, FEMALE); 
+  AddId(ODE_OF_STORMS_ID);
+  SetProp(P_MATERIAL, MAT_MAGIC );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_SIZE, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NEVERDROP, 1);
+}
+
+public void Setup(object _caster, int abil, int success) {
+  string s;
+
+  caster = _caster;
+  damage = (int) 100+(abil/100)+(success/200);
+  range  = (int) (caster->QueryAttribute(A_DEX)+abil/88+(success/88)+random(success/100));
+  chance = (int) (abil/150)+(success/400);
+  pDebug(caster, sprintf("ode_des_sturms :: damage=%d range=%d chance=%d\n", damage, range, chance));
+  caster->SetProp(P_TMP_ATTACK_HOOK, ({range+time(), TO, "ode_of_storm"}));
+  caster->SetProp(P_RANGER_ODE_DES_STURMES_ACTIVE, time()+range);
+  call_out("undo_ode_des_sturmes", range);
+  last = time();
+
+  s = caster->QueryProp(P_RANGER_ACTIVE_SPELLS) || "";
+  caster->SetProp(P_RANGER_ACTIVE_SPELLS, set_bit(s, TB_ODS));
+
+  return;
+}
+
+int undo_ode_des_sturmes()
+{
+  string s;
+  if(objectp(caster)) {
+    tell_object(caster, BS("Die Urgewalt der Ode des Sturms klingt ab."));
+    caster->SetProp(P_TMP_ATTACK_HOOK, 0);
+    caster->SetProp(P_RANGER_ODE_DES_STURMES_ACTIVE, 0);
+    s = caster->QueryProp(P_RANGER_ACTIVE_SPELLS) || "";
+    caster->SetProp(P_RANGER_ACTIVE_SPELLS, clear_bit(s, TB_ODS));
+  }
+
+
+  remove(1);
+  return 1;
+}
+
+int ode_of_storm(object enemy)
+{
+  int r;
+
+  if(last+2 >= time()) return 1;
+
+  if(!objectp(enemy)) return 1;
+  r = random(100);
+  pDebug(caster, sprintf("ode_of_storm :: roll=%d chance=%d", r, chance));
+
+  if(r > chance) return 1;
+
+  tell_room(ENV(enemy), BS("Blitz und Donner gehen auf "+enemy->name(WEN)+" nieder."));
+  enemy->Defend(SPELL_DAMAGE_BONUS(caster, "ode des sturmes", 100+random(damage)), ({DT_AIR, DT_LIGHTNING, DT_SOUND}), 0, caster);
+
+  last = time();
+  return objectp(enemy);  
+}

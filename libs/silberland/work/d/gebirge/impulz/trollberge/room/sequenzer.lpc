@@ -1,0 +1,186 @@
+// SEQUENZER (by Impulz@Silberland).. ONLY USE ONCE AT THE SAME TIME !!!
+// Verwendung: Objekt in das Inventar des Spielers clonen und dann
+// die Funktion start() mit dem Parameter des Dateinames das die
+// Sequenz beinhaltet aufrufen. Falls die Sequenzdatei nicht die
+// Endung .seq hat, muss die Endung miteingegeben werden.
+// Eine Dokumentation, welche Befehle der Sequenzer verarbeiten kann,
+// gibts unter ~impulz/doc/sequenzer.dok
+// Verwendung ohne ausdrueckliche Genehmigung von Impulz ist nur den
+// Erzmagiern und Goettern des SILBERLANDES erlaubt.
+// Eine Verwendung in anderen MUDs als Silberland ist ausdruecklich
+// untersagt.
+// Fragen bitte per eMail an impulz@public.owl.de !
+
+
+// __,,..>[Version 0.01a]<..,,__ \\  ALPHA-STATUS !!
+//                                   Nur zum Testen freigegeben.
+
+
+// --- History ---
+// 30/09/98 Dateiueberpruefung
+//          Kommentare moeglich
+//          einfache write-Ausgabe des Sequenzer-Files
+// 01/10/98 getrennte Ausgaben an spieler (!write) und raum (!say) moeglich
+//          Textbloecke, die durch !<befehl> eingeleitet 
+//            werden ersparen staendiges 'write:....'
+//          Pause moeglich, mit !pause <zeit>
+//          Befehle beim Spieler ausloesen (funktioniert noch nicht :( )
+//          !move bewegt TP in den angegebenen raum. Bitte beachten:
+//            1. Man muss den vollstaendigen Pfad (z.B. /d/ebene/...)
+//               eingeben.
+//            2. Das Bewegen erfolgt mit M_SILENT,M_NOCHECK,M_NO_SHOW
+//               Die Bewegung muss man dann mit !write bzw. !say im 
+//               jeweiligen Raum simulieren, falls notwenig
+//            3. Vor dem move wird auf die existenz des raumes ueberprueft
+//               damit es, bei einer falschen eingabe keine debug-meldung gibt
+// --- End History ---
+
+inherit "std/thing";
+#include <thing/properties.h>
+#include <properties.h>
+#include <moredef.h>
+#include <defines.h>
+#include <moving.h>
+
+string *seq;
+int position;
+int befehl;
+// Befehl ist der zuletzt benutze Befehl, der mit ! eingeleitet wurde.
+// So kann man z.b. einmal !write machen und dann werden alle 
+// folgenden Zeilen bis zum naechsten !.. per write ausgegeben.
+
+
+
+int ti(string str)
+{  object ob;
+//   if (ob=find_player("impulz"))
+//     tell_object(ob,str);
+   write(str); 
+   return 1;
+}
+
+create()
+{
+  if (!is_clone(TO)) return;
+  ::create();
+  SetProp(P_SHORT,0);
+  SetProp(P_LONG,0);
+  SetProp(P_NAME,"Sequenzer");
+  AddId("\nimpsequenzer");
+  SetProp(P_VALUE,-1); // unbezahlbar :))
+  SetProp(P_GENDER,MALE);
+  SetProp(P_NEVERDROP,1);
+  SetProp(P_NODROP,
+    "Impulz teilt Dir mit: Was wird das mal wenns fertig is ?\n");
+}
+
+
+int ausgabe(string txt)
+{
+  switch(befehl)
+  {
+   case 0 : return 0;
+   case 1 : {tell_object(TP,break_string(txt));break;}
+   case 2 : say(break_string(txt));break;
+   default: return 0;
+  }
+  return 1;
+}
+
+
+int parse_seq()
+{ int zeit;
+  string inhalt,cmd;
+  if (position >= sizeof(seq))  // Sequenz durchgearbeitet
+    {remove();return 1;}  // Die Rekursion beginnt nun zurueckzulaufen
+
+  inhalt=seq[position];
+  if (inhalt[0]=='#')   // Kommentar
+    inhalt="";
+    
+  if (sscanf(lower_case(inhalt),"!pause %d",zeit)==1) // PAUSE
+    { inhalt="";
+      position+=1;
+      call_out("parse_seq",zeit);
+      return 1;
+    }
+
+/*  if (sscanf(lower_case(inhalt),"!command %s",cmd)==1)
+    { inhalt="";
+      TP->command_me(cmd); // Funktioniert nicht.. warum auch immer
+    }
+*/
+  if (sscanf(lower_case(inhalt),"!move %s",cmd)==1)
+    { inhalt="";
+      if (file_size(cmd)==-1) {write("NF\n");return 1;}; // Das File ex. nicht
+      TP->move(cmd,M_NO_SHOW | M_SILENT | M_NOCHECK);
+    }
+
+  if (lower_case(inhalt)=="!write")
+    { befehl=1;
+      inhalt="";
+    }
+  if (lower_case(inhalt)=="!say")
+    { befehl=2;
+      inhalt="";
+    }
+
+  if (inhalt!="")
+    if (member_array("@WER@",explode(inhalt," "))!=-1)
+     ausgabe(TP->name()+inhalt[5..]);
+    else
+     ausgabe(inhalt);
+  inhalt="";
+  position+=1;
+  parse_seq();
+  return 1;
+}
+
+
+int start(string seqfile)
+{
+
+// Erstmal auf aeussere Fehler bei dem angegebenem File ueberpruefen
+
+  if (!seqfile)
+   { ti("Kein Sequenzerfile angegeben.\n");
+     return 0;
+   }
+  seqfile=lower_case(seqfile);
+  if (file_size(seqfile)==-1) // File gibts net
+   { 
+    if (file_size(seqfile+".seq")==-1) // Oder evtl. mit der Endung .seq ?
+      { ti("Das Sequenzerfile existiert nicht.\n");
+        return 0;
+      };
+    seqfile=seqfile+".seq";
+   }
+    
+
+  if (file_size(seqfile)==-2)
+   // Fuer die ganz harten Faelle
+   { ti("Der Uebergabeparameter ist ein Verzeichnis !\n");
+     return 0;
+   }
+// Ab hier kommt der Parser.. noch ist keine Syntaxueberpruefung eingebaut.
+// Wer also in dem Sequenzer-File muell baut, is selber schuld :)
+  seq=explode(read_file(seqfile), "\n");
+  if (sizeof(seq) < 1)
+   { ti("Die Datei ist leer!\n");
+     return -1;
+   }
+
+// Erste Zeile auf Header ueberpruefen.
+  if (seq[0]!="Sequenzerfile")
+   { ti("Das File hat nicht den korrekten Header!\n");
+     return 0;
+   }
+// File-Header is auch in Ordnung. Juhuu :)
+// Jetzt geht das einlesen mit Hilfe der Funktion parse_seq() los, die 
+// rekursiv aufgerufen wird, bis sie am ende der datei is.
+  position=1;
+  befehl=0;
+  parse_seq();
+  return 1;
+}
+

@@ -1,0 +1,332 @@
+/*
+ * Der Trauschein
+ * ---
+ * Das Original ist der Ehering von Woody, welchen ich mit seiner
+ * freundlichen Erlaubnis als Grundlage benutze.
+ * ---
+ * Autoloadobj-Info: mapping (P_AUTOLOADOBJ)
+ *
+ *   key          value
+ *   --------------------------------
+ *   ER_PARTNER   Ehepartner (getuid)
+ *   ER_DATUM     Datum der Uebergabe
+ *   ER_ZEUGE     Der Trauzeuge
+ *
+ */
+
+
+#include <properties.h>
+#include <armour.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <wizlevels.h>
+#include "../hochzeit.h"
+
+#define ER_PARTNER      "partner"
+#define ER_DATUM        "datum"
+#define ER_ZEUGE        "zeuge"
+
+#define DEBUG TELLL                // DEBUG(x) sollte ein tell_object() sein
+#define DEINWER(ob) (ob->QueryProp(P_GENDER)==MALE ? "Dein Ehemann " : "Deine Ehefrau ")
+
+inherit "std/thing";
+
+private nosave mapping info;
+
+create()
+{
+  if (!is_clone(TO)) return;
+  ::create();
+
+  AddId( ({"trauschein", "\ntrauschein"}) );
+  SetProp(P_SHORT, "Ein Trauschein");
+  SetProp(P_LONG, 
+    "In Deinen Haenden haeltst Du den Trauschein, der Dir "
+    "immer wieder bestaetigt, dass Du verheiratet bist.");
+  SetProp(P_NAME, "Trauschein");
+  SetProp(P_INFO, BS(
+    "Der Trauschein gibt Dir einige Vorrechte. So kannst Du "
+    "zum Beispiel mit dem Befehl 'partner' jederzeit "
+    "die Umgebung Deines Partners beobachten. Mit 'p:' "
+    "(pemote), 'p;' (pgemote) und 'pecho' relativ "
+    "ungestoert mit Deinem Partner kommunizieren."));
+  SetProp(P_GENDER, MALE);
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOSELL, "So ein Trauschein ist ein amtliches Dokument. Das wirft "
+    "man nicht einfach so weg!\n");
+  SetProp(P_NODROP, "So ein Trauschein ist ein amtliches Dokument. Das wirft "
+    "man nicht einfach so weg!\n");
+  SetProp(P_NOBUY, 1);
+
+  SetProp (P_MATERIAL, ([MAT_PERGAMENT:99,MAT_INK:1]) );
+
+  info = ([ ER_PARTNER: 0, ER_DATUM: time(), ER_ZEUGE: 0 ]);
+}
+
+string long()
+{
+  string s,w, lpartner, ldatum, lzeit, lzeuge;
+
+  if(!TP) return QueryProp(P_LONG); // bugfix feyaria
+  lzeuge="";
+  lpartner="";
+
+  lpartner=(info[ER_PARTNER]);
+  ldatum=(dtime(info[ER_DATUM])[5..16]);
+  lzeit=(dtime(info[ER_DATUM])[19..23]);
+  lzeuge=(info[ER_ZEUGE]);
+
+  s = "\n                             TRAUSCHEIN\n\n"
+    + "Hiermit wird " + TPNAM + " bescheinigt, "
+    + "dass " + TPPRO( WER ) + " mit " + capitalize(lpartner)
+    + " verheiratet ist.\n" + "Die Hochzeit wurde am " 
+    + ldatum + " um " + lzeit 
+    + " Uhr vom unterschreibenden Standesbeamten unter Aufsicht des "
+    + "ebenfalls unterzeichnenden Trauzeugen im Standesamt der Region "
+    + "Wasser durchgefuehrt.\n\n"
+    + "    S.H. Immel                        " + capitalize(lzeuge) + "\n"
+    + " (Standesbeamter)                    (Trauzeuge)\n" ;
+  return break_string(s,78,0,1);
+}
+
+string extra_look()
+{
+  object env;
+  string wem;
+  if (!env=environment(this_object())) return "";
+  if (!stringp(wem=info[ER_PARTNER])) return "";
+  return CAP(env->QueryPronoun(WER))+" ist mit "+CAP(wem)+" verheiratet!\n";
+}
+
+WearFunc()
+{
+  // was weiss ich... dem Partner ne Meldung schicken oder sonstwas in der Art
+  return 1;
+}
+
+RemoveFunc()
+{
+  // siehe WearFunc()
+  return 1;
+}
+
+int Renew()
+{
+  string bluename;
+  bluename = explode(file_name(ME),"#")[0];
+  if (catch(call_other(bluename,"???")))
+  {
+    // Error beim versuchten reload - behalten wir also wenigstens
+    // den urspruenglichen Clone des Rings... hmm, und benachrichtigen
+    // wir nen zustaendigen Magier, wenn der grad eingeloggt ist. :)
+    DEBUG (sprintf ("[ER-Debug:] %O failed reloading blueprint!\n", ME));
+    return 0;
+  }
+  // Besser noch waer ein Vergleich mit file_time() des Files... naja :)
+  if (program_time(ME) < program_time(find_object(bluename)))
+  {
+    object neu;
+    neu=clone_object(bluename);
+    neu->move (environment(this_object()), M_NOCHECK);
+    neu->SetProp (P_AUTOLOADOBJ, info);
+    neu->BecomesNetAlive(environment(this_object()));
+    remove(1);  // silent remove
+    return 1;
+  }
+  return 0;
+}
+
+void BecomesNetAlive(object wer)
+{
+  string s;
+  object ob;
+
+  if (Renew()) return;
+  if (!stringp(s=info[ER_PARTNER])) return;
+  if (ob=find_player(s))
+  {
+    tell_object (ob, DEINWER(wer)+wer->name(RAW)+
+                 " ist gerade "+
+                 (wer->QueryProp(P_INVIS)?"unsichtbar ":"")+
+                 "ins Spiel gekommen. :-)\n");
+    write (DEINWER(ob)+CAP(s)+" ist "+
+           (ob->QueryProp(P_INVIS)?"unsichtbar ":"")+"anwesend!\n");
+  }
+  else
+  {
+    write (CAP(s)+" ist leider nicht da.\n");
+    if (ob=find_netdead(s)) {
+      int verpasst;
+      // Mal schaun, ob Partner innerhalb der letzten zwei Stunden da war...
+      if ((verpasst=time()-ob->QueryProp(P_LAST_LOGOUT)) < 7200)
+        write ("Du hast "+ob->QueryPronoun(WEN)+" leider um "+
+          (verpasst < 60 ? verpasst+" Sekunde"+(verpasst==1?"":"n")
+                         : "ungefaehr "+(verpasst/60)+" Minute"+
+                           ((verpasst/60)==1?"":"n"))+" verpasst.\n");
+    }
+  }
+}
+
+void BecomesNetDead(object wer)
+{
+  string s;
+  object ob;
+  if (!stringp(s=info[ER_PARTNER])) return;
+  if (ob=find_player(s))
+    tell_object(ob,DEINWER(wer)+wer->name(RAW)+
+                " hat leider soeben das Spiel verlassen... :-(\n");
+}
+
+mapping _set_autoloadobj(mapping data)
+{
+  object wer;
+
+  if (mappingp(data)) info+=data;  // info um Daten in data _ergaenzen_
+
+  //
+  // offenbar die einzige Methode, ein Login mitzukriegen, wenn man vorher
+  // nicht netztot war (nach Reboot/ende) - einfach schaun, ob das eigene
+  // Spielerobjekt P_AUTOLOADOBJ setzt (in base::move_player_to_start4())
+  //
+  if ((wer=previous_object(1))==environment(this_object()))
+    BecomesNetAlive(wer);
+  return info;
+}
+
+mapping _query_autoloadobj()
+{
+  return info;
+}
+
+void init()
+{
+  ::init();
+  if (environment(this_object())!=TP) return;
+  // Hier folgen die diversen Befehle des Rings...
+  add_action ("partner", "partner");
+  add_action ("pemote", "pemote");
+  add_action ("pemote", "p:", 1);
+  add_action ("pgemote", "pgemote");
+  add_action ("pgemote", "p;", 1);
+  add_action ("pecho", "pecho");
+}
+
+object QueryPartner()
+{
+  object p;
+  string s;
+
+  if (!stringp(s=info[ER_PARTNER])) return 0;
+  if (!(p=find_player(s)))
+  {
+    if (find_netdead(s))
+      notify_fail("Dein Partner ist leider netztot.\n");
+    else
+      notify_fail("Dein Partner ist leider nicht anwesend.\n");
+    return 0;
+  }
+  if (p->QueryProp(P_INVIS)) return 0;
+  return p;
+}
+
+int partner(string str)
+{
+  object p;
+
+  notify_fail( "Du solltest erstmal einen Partner haben.\n" );
+  if (!(p=QueryPartner())) return 0;
+  write("Du konzentrierst Dich auf Deinen Partner und siehst:\n");
+  write(environment(p)->int_long(this_player(), this_object()));
+  if(!present("\ntrauschein", p)) 
+    write("Seltsam! Dein Partner hat keinen Trauschein mehr!\n");
+  return 1;
+}
+
+int pemote (string str)
+{
+  object p;
+  if (!TP) return 0;
+  str=TP->_unparsed_args();
+  if (query_verb()!="pemote")
+    if (stringp(str))
+      str=(query_verb()+" "+str)[2..];
+    else
+      str=query_verb()[2..];
+  notify_fail("Syntax: p:<text> oder pemote <text>\n");
+  if ((!stringp(str)) || (str=="")) return 0;
+  if (!(p=QueryPartner())) return 0;
+  str = TP->name(WER)+" "+str;
+  if (!present(p,environment(TP)))
+    str = "{ "+str+" }";
+  str = BS (str);
+  write (str);
+  tell_object (p, str);
+  return 1;
+}
+
+int pgemote (string str)
+{
+  object p;
+  if (!TP) return 0;
+  str=TP->_unparsed_args();
+  if (query_verb()!="pgemote")
+    if (stringp(str))
+      str=(query_verb()+" "+str)[2..];
+    else
+      str=query_verb()[2..];
+  notify_fail("Syntax: p;<text> oder pgemote <text>\n");
+  if ((!stringp(str)) || (str=="")) return 0;
+  if (!(p=QueryPartner())) return 0;
+  str = TP->name(WESSEN)+" "+str;
+  if (!present(p,environment(TP)))
+    str = "{ "+str+" }";
+  str = BS (str);
+  write (str);
+  tell_object (p, str);
+  return 1;
+}
+
+int pecho (string str)
+{
+  object p;
+  if (!TP) return 0;
+  str=TP->_unparsed_args();
+  notify_fail("Syntax: pecho <text>\n");
+  if ((!stringp(str)) || (str=="")) return 0;
+  if (!(p = QueryPartner())) return 0;
+  if (!present(p,environment(TP)))
+    str = "{ " + str + " }";
+  str = BS(str);
+  write(str);
+  p->Message(str, MSGFLAG_TELL);
+  return 1;
+}
+
+int move (mixed dest, int method)
+{
+  if (objectp(dest) && dest->id("leiche"))
+  {
+    object p;
+    if (p=QueryPartner())
+    {
+      object k;
+      k=QueryProp(P_KILLER);
+      tell_object (p, "Tiefe Trauer und Schmerzen ueberkommen Dich.\n");
+      if (k)
+        tell_object (p, CAP(k->name(WER))+" hat Deinen Partner umgebracht.\n");
+      else
+        tell_object (p, CAP(environment(this_object())->name(RAW))+" scheint gestorben zu sein.\n");
+      tell_object (environment(this_object()),
+        "\nEin letztes Mal noch spuerst Du die mitfuehlende Waerme von "+
+        p->name(RAW)+",\ndoch es ist zu spaet... Der Tod ist staerker.\n\n");
+    }
+    else
+      tell_object (environment(this_object()),
+        "Dein Partner ist leider nicht da, um Dir beizustehen...\n");
+    return ME_CANT_BE_DROPPED;
+  }
+  return ::move(dest, method);
+}
+

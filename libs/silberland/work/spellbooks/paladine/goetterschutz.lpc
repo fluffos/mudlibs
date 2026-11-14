@@ -1,0 +1,165 @@
+// SilberLand MUDlib
+//
+// spellbooks/paladine/goetterschutz.c
+//
+// $Date: 2004/07/15 00:39:04 $
+/* $Revision: 1.3 $
+ * $Log: goetterschutz.c,v $
+ * Revision 1.3  2004/07/15 00:39:04  Feyaria
+ * Abfrage beim ende, damit beende goetterschutzt richtig funktioniert
+ *
+ * Revision 1.2  2003/11/04 12:05:08  Feyaria
+ *  Ende-meldung nur wenn noch aktiv, feinere abstufung und doku beim schutz
+ *
+ * Revision 1.1  2003/07/09 11:39:22  Angrox
+ * Initial revision
+ *
+ */
+
+// Prototypem
+int prep_goetterschutz(object caster, mapping sinfo);
+int goetterschutz(object caster, mapping sinfo);
+void schutz_msg(object caster);
+mixed schutz2(int dam, mixed dam_type, mixed spell, object enemy);
+
+
+
+int prep_goetterschutz(object caster, mapping sinfo) {
+  mixed h;
+  if(h=caster->QueryProp(P_TMP_DEFEND_HOOK)) {
+    if(h[1]==TO && h[2]=="schutz2") {
+      if(h[0]>=time()) {
+        write(BS("Dustys Macht beschuetzt Dich schon, Paladin!\n"));
+        return 0;
+      }
+    }
+    else {
+      return write("Paladin! Du hast schon einen Schutz!\n"), 0;
+    }
+  }
+  if(interactive(caster) && present("\nspiegelschild", caster)) {
+    write("Du hast schon einen Spiegelschild bekommen, Paladin!\n");
+    return 0;
+  }
+  return 1;
+}
+
+int goetterschutz(object caster, mapping sinfo) {
+  int suc, s_time;
+  mixed h;
+  if( !prep_goetterschutz( caster, sinfo) ) return 0;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+      printf(sinfo[SI_SP_LOW_MSG]);
+      return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  Message(caster, 0, BSA(sprintf("Maechtige Dusty! Gewaehre %s Schutz vor dem "
+      +"Boesen!", diener[0][caster->QueryProp(P_GENDER)]), "Du rufst: "), 0);
+  Message(caster, 0, BSA(sprintf("Maechtige Dusty! Gewaehre %s Schutz vor dem "
+      +"Boesen!", diener[0][caster->QueryProp(P_GENDER)]),
+      caster->Name(WER)+" ruft: "), 3);
+  if((suc=SpellSuccess(caster,sinfo))<=0) {
+    Message(caster, 0, BS("Dusty scheint Dich nicht erhoert zu haben."), 0);
+    Message(caster, 0, BS(sprintf("Dusty scheint %s nicht erhoert zu haben.",
+        caster->name(WEN))), 3);
+    return MISSERFOLG;
+  }
+  Message(caster, 0, BS("Durch die goettliche Macht Dustys bildet sich "
+      +"ein silberner Schimmer vor Dir. Von nun an bist Du gegen das Boese "
+      +"gewappnet!"), 0);
+  Message(caster, 0, BS(sprintf("Vor %s bildet sich ein silberner Schimmer.",
+      caster->name(WEM))), 3);
+  s_time=3*caster->QueryProp(P_GUILD_LEVEL)+
+         GetAlign(caster)/30+50*suc/MAX_ABILITY+random(100);
+  s_time=DoModificationByAlign(s_time, caster);
+  caster->SetProp(P_TMP_DEFEND_HOOK, ({s_time+time(), TO, "schutz2"}));
+
+  if(HAS_BLESSING(caster, BLESSING_HARRIER)) {
+    tell_room(ENV(caster), BS("Eine geweihte Kraft des Guten breitet sich aus."));
+    call_out("bodenweihe", 2, caster);
+  }
+
+  call_out("schutz_msg", s_time+1, caster);
+  return ERFOLG;
+}
+
+public int isWeiheTarget(object ob) {
+  return living(ob) && (ob->QueryProp(P_ALIGN) < -400 
+                        || ob->QueryProp(P_RACE) == "Untoter"  || ob->QueryProp(P_RACE) == "Daemon" 
+                        || ob->is_class_member(CL_UNDEAD) || ob->is_class_member(CL_ZOMBIE) 
+                        || ob->is_class_member(CL_SKELETON) || ob->is_class_member(CL_DEMON)) &&
+         !interactive(ob) && !ob->QueryProp(P_NOATTACK);
+}
+
+public void bodenweihe(object caster) {
+  mixed h;
+  object *inv;
+  int i, dam;
+  string *messages;
+
+  if(!objectp(caster)) return;
+  if(!h=caster->QueryProp(P_TMP_DEFEND_HOOK))  return;
+  if(h[1]!=TO || h[2]!="schutz2" || h[0] - time() <= 0) return;
+
+  inv = filter_array(all_inventory(ENV(caster)), "isWeiheTarget");
+  for(i=0; i<sizeof(inv); ++i) {
+    if(!objectp(inv[i])) continue;
+    if(random(100) < inv[i]->QueryProp(P_NOMAGIC)) continue; // rettungswurf geschafft
+
+    if(!random(3)) {
+      messages = ({
+        sprintf("%s fuehlt sich sichtlich unwohl.", inv[i]->Name(WER, 1)),
+        sprintf("Rauch steigt von %s auf.", inv[i]->name(WEM, 1)),
+        sprintf("%s Haut wirf leichte Blasen im Angesicht des Guten.", inv[i]->Name(WESSEN, 1)),
+        sprintf("Die heilige Aura schmerzt %s.", inv[i]->name(WEN, 1)),
+        sprintf("Die Kraft des Guten versengt %s.", inv[i]->name(WEN, 1))
+      });
+
+      tell_room(ENV(inv[i]), BS(messages[random(sizeof(messages))]));
+    }
+
+    dam = caster->QueryProp(P_GUILD_LEVEL) / 2 + inv[i]->QueryProp(P_ALIGN) / 300;
+    inv[i]->AddHp(-1 * dam);
+
+    if(!caster->IsEnemy(inv[i])) {
+      inv[i]->Kill(caster);
+    }
+  }
+
+  call_out("bodenweihe", 2+random(4), caster);
+}
+
+void schutz_msg(object caster) {
+  mixed h;
+  if (!objectp(caster)) return;         // Woody (981122)
+  if (h=caster->QueryProp(P_TMP_DEFEND_HOOK)) {
+    if(h[1]==TO && h[2]=="schutz2" &&
+      (caster->QueryProp(P_TMP_DEFEND_HOOK)[0]) - time() < 10)
+    {
+      caster->SetProp(P_TMP_DEFEND_HOOK, 0);
+      Message(caster, 0, BS("Dein heiliger Schutz loest sich auf!\n"), 0);
+    }
+  }
+  return;
+}
+
+mixed schutz2(int dam, mixed dam_type, mixed spell, object enemy)
+{
+  int nr_damtypes, dam_nr, dam2;
+  dam_nr=0;
+  if (!pointerp(dam_type))
+    dam_type=({dam_type});
+  nr_damtypes=4*sizeof(dam_type);
+  dam=(int)(dam*0.95);          // entstehender Schaden bei heiligem paladin
+  if(member(dam_type, DT_HOLY)!=-1) dam_nr+=4;    // 35%
+  if(member(dam_type, DT_UNHOLY)!=-1) dam_nr+=5;  // 44%
+  if(member(dam_type, DT_TERROR)!=-1) dam_nr+=4;  // 47% 
+  if(member(dam_type, DT_POISON)!=-1) dam_nr+=3;  // 59%  
+  if(member(dam_type, DT_MAGIC)!=-1) dam_nr+=2;   // 71%
+  if(dam_nr)
+    dam-=(dam/2)*dam_nr/nr_damtypes;
+  return ({ dam, dam_type, spell, enemy });
+}
+
+

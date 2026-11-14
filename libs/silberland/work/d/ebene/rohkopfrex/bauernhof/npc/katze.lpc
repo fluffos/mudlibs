@@ -1,0 +1,165 @@
+/*
+ * Eine Katze.
+ * ursprgl. von Rohkopfrex
+ * 2005-10-21  Woody  Katze toetet nun Maeuse und isst gg.falls deren Leichen
+ */
+
+#include "../def.h"
+
+inherit "std/mnpc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <mnpc.h>
+
+void create() {
+
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Eine Katze");
+  SetProp(P_LONG,
+    "Wie auf jedem Bauernhof, gibts auch hier eine niedliche Katze. Diese "
+    "hier hat ein fast ganz schwarzes Fell, nur alle vier Pfoten sind weiss. "
+    "Das schaut echt richtig lieb aus."
+  );
+
+  SetProp(P_NAME, "Katze");
+  SetProp(P_GENDER, FEMALE);
+  AddId("katze");
+
+  create_default_npc(8);
+  SetProp(P_RACE, "Katze");
+  SetProp(P_MAX_HANDS, 4);
+  SetProp(P_SIZE, 40);
+  SetProp(P_HANDS, ({" mit ihren Katzenkrallen",40,DT_RIP}));
+  SetProp(P_ALIGN, -100);
+  SetProp(P_XP, 20000);
+
+  SUID;
+  CLONEME(WEAPON "katzenkralle" );
+  command("zuecke kralle");
+
+  SetProp(P_MNPC_AREA, ROOM );
+  SetProp(P_MNPC_WAIT, ({ 60, 40, 30 }) );
+  SetProp(P_MNPC_DEFAULTROOM, ROOM "stadl1" );
+  SetProp(P_MNPC_FLAGS, MOV_BACKWARDS | MOV_INDOORS | MOV_OUTDOORS | MOV_MOVES);
+
+  SetProp(P_MMSGIN, "kommt angeschlichen");
+  SetProp(P_MMSGOUT, "schleicht davon");
+  SetProp(P_MSGIN, "kommt angeschlichen");
+  SetProp(P_MSGOUT, "schleicht");
+
+  SetProp(P_SMELL,
+    "Die Katze riecht nach Katze. Hoffentlich bist Du nicht allergisch "
+    "dagegen."
+  );
+
+}
+
+void init()
+{
+  if ((TP->id("maus") || TP->id("ratte")) && !TP->QueryProp(P_NOATTACK))
+  {
+    tell_room(ENV(TO), break_string(
+          "Die Katze entdeckt " + TP->name(WEN) +
+          " und stuerzt sich kampflustig auf " +
+          TP->QueryPronoun(WEN) + ".", 78));
+    Kill(TP);
+  }
+}
+
+void reset()
+{
+  object room;
+
+  ::reset();
+/*
+  if(!InFight())
+  {
+    SetProp(P_MNPC_FLAGS, QueryProp(P_MNPC_FLAGS) | MOV_MOVES);
+  }
+*/
+  if(room = ENV(TO))call_out("event",0,1,room);
+  return;
+}
+
+varargs int move(mixed dest, int method,
+                             string dir, string textout, string textin)
+{
+  int ret;
+  object leiche;
+  ret = ::move(dest, method, dir, textout, textin);
+  if (ENV(TO) && (leiche = present("leiche", ENV(TO))))
+  {
+    if (strstr(lower_case(leiche->QueryProp(P_ORIG_NAME)), "maus") != -1) {
+      command("iss leiche");
+    }
+  }
+  return ret;
+}
+
+void Attack(object enemy)
+{
+  ::Attack(enemy);
+  if (!enemy) command("iss leiche");
+}
+
+void event(int i, object room)
+{
+  if(InFight())
+  {
+    SetProp(P_MNPC_FLAGS, QueryProp(P_MNPC_FLAGS) | MOV_MOVES);
+    return;
+  }
+
+  switch(i)
+  {
+    case 1 :
+      SetProp(P_MNPC_FLAGS, QueryProp(P_MNPC_FLAGS) & ~MOV_MOVES);
+      tell_room(room,"Die Katze erstarrt. Hat sie etwa eine Maus entdeckt?\n");
+      break;
+
+    case 2 :
+      tell_room(room,BS("Die Katze springt eine Maus an, die Du vorher gar "
+                        "nicht bemerkt hattest."));
+      break;
+
+    case 3 :
+      tell_room(room,"Die Katze trifft die Maus sehr hart.\n"
+                     "Die Maus verfehlt die Katze.\n\n");
+      break;
+
+    case 4 :
+      tell_room(room,"Die Katze schlaegt die Maus mit dem Krachen brechender Knochen.\n"
+                     "Die Maus verfehlt die Katze.\n\n");
+      break;
+
+    case 5 :
+      tell_room(room,"Die Katze trifft die Maus extrem hart.\n\n"
+                     "Die Maus verfehlt die Katze.\n\n");
+      break;
+
+    case 6 :
+      tell_room(room,"Die Katze trifft die Maus hart.\n"
+                     "Die Maus stirbt.\n\n"
+                     "Eine Leiche wird von der Katze hingebungsvoll verspeist.\n");
+      AddHp(10);
+      break;
+
+    case 7 :
+      tell_room(room,"Die Katze leckt sich zufrieden das Maeulchen.\n");
+      SetProp(P_MNPC_FLAGS, QueryProp(P_MNPC_FLAGS) | MOV_MOVES);
+      break;
+  }
+
+  if(i<7)call_out("event",4,++i,room);
+  return;
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  if(killer==TO)WRITELOG("Eine Katze hat gerade "+UID(player)+" umgebracht");
+  return;
+}

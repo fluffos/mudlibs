@@ -1,0 +1,127 @@
+// Schattengeldboerse - Vorlage: /obj/boerse.c (29.12.2023)
+// Schattenwelt
+// von Wraz / Mendralim
+
+#include "../def.h"
+
+inherit "/std/container";
+
+#define GELDBOERSE "\ngeldboerse"
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+
+void create()
+{
+  ::create();
+  AddId(({"schattenboerse", "schattengeldboerse", "geldboerse", "boerse"}));
+  SetProp(P_NAME, "Schattengeldboerse");
+  SetProp(P_SHORT, "Eine Schattengeldboerse");
+  SetProp(P_LONG, BS("Graue, leichte Schattenstroeme formen dieses seltsame "
+  "Objekt. Diese Schattengeldboerse kann echte, normale Muenzen aufbewahren. "
+  "Du fragst Dich, ob es auch Schattenmuenzen gibt."));
+  SetProp(P_MATERIAL, ([MAT_SHADOW:100]));
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_VALUE,  3200);
+  SetProp(P_NOBUY,1);
+  SetProp(P_WEIGHT, 1);
+  SetProp(P_MAX_WEIGHT, 100000); // entspricht 400k Muenzen (normale Boerse: 200k)
+  SetProp(P_WEIGHT_PERCENT, 10); // Gewicht zehntelt sich (normale Boerse: halbiert)
+}
+
+nosave string _query_keep_on_sell()
+{
+  if (sizeof(all_inventory()) && environment() &&
+      query_once_interactive(environment()))
+     return getuid(environment());
+  return Query(P_KEEP_ON_SELL);
+}
+
+nosave int _query_amount()
+{
+  object ob;
+  if (ob=present("geld", this_object()))
+    return ob->QueryProp(P_AMOUNT);
+}
+
+void AddAmount(int am)
+{
+  object ob;
+  if (ob=present("geld", this_object())) ob->AddAmount(am);
+}
+
+string _query_short()
+{
+  int i;
+  switch (i=QueryProp(P_AMOUNT)) {
+    case 0:  return "Eine leere Schattengeldboerse";
+    case 1:  return "Eine Schattengeldboerse mit einer weltlichen Muenze";
+    default: return "Eine Schattengeldboerse mit "+i+" weltlichen Muenzen";
+  }
+}
+
+varargs int PreventInsert(object ob)
+{
+  object ob2;
+  if (ob && file_name(ob)[0..10]=="/obj/money#")
+    if (!sizeof(all_inventory()) && (ob2=present(GELDBOERSE, environment()))) {
+      write(BS("Du kannst immer nur eine Geldboerse gleichzeitig benutzen - "
+        "egal, ob weltliche oder schattige."));
+      return 1;
+    }
+    else return (int)::PreventInsert(ob);
+  else return 1;
+}
+
+varargs int id(string str, int lvl)
+{
+  if (str==GELDBOERSE && sizeof(all_inventory())) return 1;
+  return (int)::id(str, lvl);
+}
+
+int IsEqual(object ob)
+{
+  int amount;
+  string s1, s2;
+  object ob2;
+
+  if (file_name(ob)[0..10]!="/obj/money#") return 0;
+  if (environment(ob)==this_object()) return 0;
+  if (!sizeof(all_inventory()) && (ob2=present(GELDBOERSE, environment())))
+    return 0;
+  if ( 0 > amount=ob->QueryProp(P_REQUESTED_AMOUNT))
+  {
+    int amount2;
+    amount2=QueryProp(P_AMOUNT);
+    if (-amount>amount2) {
+      ob->AddAmount(amount2);
+      AddAmount(-amount2);
+    }
+    else {
+      ob->AddAmount(-amount);
+      AddAmount(amount);
+    }
+    ob2=this_object();
+    Set(P_LAST_CONTENT_CHANGE,time());
+    while (ob2=environment(ob2))
+       ob2->Set(P_LAST_CONTENT_CHANGE,time());
+  }
+}
+
+varargs int move(mixed dest, int method)
+{
+  int i;
+  object ob;
+
+  if (stringp(dest)) {
+    call_other(dest, "???");
+    dest=find_object(dest);
+  }
+  if (objectp(dest)) ob=present(GELDBOERSE, dest);
+  i=(int)::move(dest, method);
+  if (i!=1) return i;
+  if (!environment()) return 1;
+  if (objectp(ob)) filter_objects(all_inventory(), "move", ob, M_MOVE_ALL);
+  return 1;
+}

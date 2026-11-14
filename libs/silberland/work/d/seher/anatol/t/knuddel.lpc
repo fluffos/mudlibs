@@ -1,0 +1,223 @@
+/* Ups, schau an, ein Knuddel.
+ * Solche Knuddel dienen hauptsaechlich der Nachrichtenuebermittlung,
+ * Sie werden eigentlich *ausschliesslich* von der Knuddel-Schachtel
+ * geclont und dabei ueber setKnuddelText() mit einer Nachricht 
+ * initialisiert.
+ * Man kann sie dann verschenken, der Beschenkte erfaehrt die Mitteilung
+ * durch Essen des Knuddels. Also wer mal eine Einladung zu einer
+ * Hochzeit oder anderen Festivitaeten braucht... 
+ * (c) Anatol@SilberLand 9/97
+ *
+ * Initial  Revision 1.0        - angeschlossen am 07-09-97
+ * 24-09-97 Revision 1.0.1      Bugfix P_CLONER --> "schenker"
+ *
+ */
+
+#pragma strong_types
+#include <properties.h>
+#include <moving.h>
+#define SCHACHTEL  "/d/seher/anatol/t/schachtel"
+nosave int ausgepackt;
+nosave int verschenkt;
+nosave string nachricht;
+nosave object papier;
+
+inherit "/std/thing";  /* /std/food ist leider nicht verpackbar... */
+
+void create() {
+  if (!is_clone(this_object())) return; /*  Blueprint braucht das nicht */
+  ::create();                           /*  Superklasse, super, klasse! */
+  if (file_name(previous_object())[0..26]!=SCHACHTEL) {
+    write("Der Knuddel darf aber nur von seiner Knuddelschachtel erschaffen "
+          "werden.\n");
+    remove();
+  }
+  ausgepackt=0;                         /* noch verpackt, der Knuddel   */
+  verschenkt=0;	                        /* auch noch nicht verschenkt...*/
+  SetProp(P_SHORT,"Ein Knuddel");       /* short() und long() definiert */
+  SetProp(P_LONG,"Ein Knuddel, und wer das liest, ist doof!\n");
+  SetProp(P_NAME,"Knuddel");
+  SetProp(P_GENDER,MALE);
+  SetProp(P_WEIGHT,0);   /* oder wiegen Knuddel etwas? */ 
+  SetProp(P_VALUE,10);   /* materieller Wert ist sehr gering... */
+  SetProp(P_NOBUY,1);
+  SetProp(P_NOSELL,"Mit Knuddel handelt man nicht. Die behaelt man.\n");
+  SetProp(P_NODROP,"Der Knuddel mag aber bei Dir bleiben.\n");
+  SetProp(P_NEVERDROP,1);
+  SetProp(P_MATERIAL,({MAT_PAPER,MAT_MAGIC}));
+  SetProp(P_INFO,"Das ist ein echt suesser kleiner Knuddel!\n");
+  AddAdjective(({"herzfoermig"}));
+  AddId(({"knuddel"}));
+  AddCmd(({"packe","pack"}),"cmdPacke");
+  AddCmd(({"vernasch","vernasche","iss","esse"}),"cmdIss");
+  AddCmd(({"schenke","verschenke","schenk","verschenk"}),"cmdSchenke");
+  AddSpecialDetail(({"botschaft","nachricht","mitteilung"}),
+        "detailBotschaft");
+
+}
+
+varargs string long() {
+  if (!verschenkt)
+    return
+     "Ein kleiner verpackter Knuddel, der Deine Botschaft in sich traegt.\n"
+     "Du kannst ihn an jemanden verschenken, der Deine Mitteilung dann lesen"
+     " kann.\n";
+  else if (ausgepackt)
+    return 
+     "Hmmmmm, lecker! Du siehst einen ausgepackten kleinen Knuddel, der nur\n"
+     "darauf wartet, von Dir vernascht zu werden. Lange kannst Du Dich nicht\n"
+     "mehr beherrschen, vielleicht solltest Du ihn wirklich einfach mal...\n";
+  else
+    return break_string(
+      "Dieser kleine herzfoermige Knuddel ist noch in rotschillerndes Papier"
+      " verpackt. Er sieht richtig suess aus und ist eigentlich zu schade, um"
+      " einfach ausgepackt zu werden. Andererseits scheint "+capitalize(
+      (QueryProp("schenker")?QueryProp("schenker"):"Irgendwer"))+ 
+      " ihn Dir aber "
+      "genau dafuer geschenkt zu haben... Pack' den suessen kleinen Knuddel "
+      "ruhig aus!",77);
+} 
+
+varargs string short() {
+  if (ausgepackt) 
+    return "Ein herzfoermiger kleiner Knuddel.\n";
+  else 
+    return "Ein herzfoermiger kleiner Knuddel (originalverpackt).\n";
+}
+
+nosave string detailBotschaft() {
+  if (verschenkt) 
+    return 0;
+  else 
+    this_player()->More("Mit dem Blick des Schoepfers pruefst "
+      "Du Deine Botschaft:\n"+nachricht);
+  return "";
+}
+
+      
+nosave int cmdSchenke(string args) { 
+  string was, wen;
+  object ziel;
+  notify_fail("Verschenke was an wen? Oder schenke wem was?\n");
+  if (!args) return 0;
+  notify_fail("Ein Geschenk weiterverschenken? "
+       "Nein, das ist DEIN Knuddel!\n");
+  if (verschenkt) return 0;
+  notify_fail("Verschenke was an wen? Oder schenke wem was?\n");
+  if (((query_verb()[0]=='v')&&(sscanf(args,"%s an %s",was,wen)!=2)) ||
+     ((query_verb()[0]!='v')&&(sscanf(args,"%s %s",wen,was)!=2))) return 0;
+  notify_fail("Aeh, das kannst Du SO nicht verschenken...\n");
+  if (!id(was)) return 0;
+  notify_fail("Diese Person ist doch gar nicht im Silberland.\n");
+  if (!ziel=find_player(wen)) return 0;
+  notify_fail(break_string("Ja, schoen, aber "+
+    ziel->name()+" sollte auch neben Dir stehen, oder?\n",77));
+  if ((!environment(this_player())) || (!environment(ziel)) ||
+     (environment(this_player())!=environment(ziel))) return 0;
+  notify_fail(break_string(ziel->Name()+
+    " mag leider nichts mit Dir zu tun haben.\n",77));
+  if ((ziel->QueryProp(P_IGNORE)) 
+       && (member(ziel->QueryProp(P_IGNORE),getuid(this_player()))!=-1))
+    return 0;
+  verschenkt=1;
+  write(break_string("Du schenkst "+ziel->name(WEM)+" einen Knuddel.\n",77));
+  tell_object(ziel,break_string(this_player()->Name()+" schenkt Dir einen "
+    "kleinen Knuddel!\n",77));
+  tell_room(environment(this_player()),break_string(
+    this_player()->Name()+" schenkt "+ziel->name()+" einen kleinen Knuddel.\n"
+    ,77),({this_player(),ziel}));
+  this_object()->move(ziel,M_NOCHECK);  /* Gewichtslos, darf man. */
+  if (this_player()==ziel) {
+    write("Du kommst Dir ein wenig albern vor.\n");
+    say(this_player()->Name()+" kommt sich auch ein wenig albern vor.\n");
+  }
+  return 1;
+}
+
+nosave int cmdPacke(string was) {
+  string hmm, dummy;
+  notify_fail("Was willst Du auspacken?\n");
+  if (!was) return 0;
+  notify_fail("Packe WAS aus?\n");
+  if (sscanf(was,"%s aus%s",hmm,dummy)!=2) return 0; /* siehe Doku */
+  notify_fail("Hm, das kannst Du nicht auspacken.\n");
+  if (!id(hmm)) return 0;
+  notify_fail("Der Knuddel ist doch schon ausgepackt!\n");
+  if (ausgepackt) return 0;
+  notify_fail("Nein, verschenke ihn lieber, selbst auspacken ist oede.\n");
+  if (!verschenkt) return 0;
+  ausgepackt=1;
+  write("Du wickelst den Knuddel vorsichtig aus seinem rot-schillernden\n"
+        "Knuddelpapier aus. Uuuiiii, der sieht richtig lecker aus!\n"); 
+  say(this_player()->Name()+" packt einen Knuddel aus.\n");
+  papier=clone_object("/std/thing"); /* Wenn DAS schiefgeht ... */
+  papier->SetProp(P_NAME,"Knuddelpapier");
+  papier->SetProp(P_SHORT,"Ein bunter Bogen Knuddelpapier");
+  papier->SetProp(P_LONG,"Das Knuddelpapier ist unbeschreiblich bunt. "
+     "Ausserdem stehen ein paar\nZeilen drauf, ziemlich kleingedruckt "
+     "zwar, aber noch leserlich.\n");
+  papier->SetProp(P_WEIGHT,0); /* M_NOCHECK usw... */
+  papier->SetProp(P_GENDER,NEUTER);
+  papier->SetProp(P_VALUE,10);
+  papier->SetProp(P_NOBUY,1); /* pro forma */
+  papier->SetProp(P_MATERIAL,MAT_PAPER);
+  papier->SetProp(P_NOSELL,"Noe, das ist zu schoen, um es zu verkaufen.\n");
+  papier->SetProp(P_NODROP,"Das Papier ist zum Wegwerfen zu schade!\n");
+  papier->SetProp(P_NEVERDROP,1);
+  papier->SetProp(P_INFO,"Und schon wieder ein paar Magiepunkte "
+    "in den Sand gesetzt... ];->\n");
+  papier->AddAdjective(({"bunt"}));
+  papier->AddId(({"knuddelpapier","papier","bogen",
+     "anatol_knuddelpapier","\nknuddelpapier"}));
+  papier->AddDetail("zeilen",
+    "Du kannst versuchen, sie zu lesen.\n");
+  papier->AddReadDetail("zeilen",
+    "Inhaltsstoffe: Zucker, Wasser, Knuddelmasse, Glucosesirup, Kakaomasse,"
+    " Vitamin C (mind. 1%), eine Einladung.\nFuer die Vertraeglichkeit - "
+    "auch bei empfindlichen Maegen - wird garantiert.");
+  papier->AddDetail(({"inhaltsstoffe","zucker","knuddelmasse","glucosesirup",
+    "kakaomasse","vitamin c", "einladung"}),
+    "Das ist wohl in dem leckeren Knuddel drin.\n");
+  papier->move(this_player(),M_NOCHECK);
+  SetProp(P_MATERIAL,MAT_MAGIC);  /* MAT_PAPER ist jetzt wo anders... */
+  return 1;
+}
+
+nosave int cmdIss(string was) {
+  string meldung;
+  notify_fail("Was willst Du vernaschen?\n");
+  if(!was) return 0; 
+  notify_fail("Nein, das geht nicht.\n");
+  if (!id(was)) return 0;
+  notify_fail("Pack' den suessen Knuddel doch erstmal aus, hm?\n");
+  if (!ausgepackt) return 0;  /* (: */
+  notify_fail("Nein, verschenke den Knuddel lieber, selber "
+     "essen macht dick ;-)\n");
+  if (!verschenkt) return 0;
+  say(break_string(this_player()->Name()+" steckt sich einen suessen "
+    "Knuddel in den Mund und laesst ihn mit einem ueberirdischen Laecheln "
+    "auf den Lippen zergehen.",77));
+  meldung=break_string(
+    "Du steckst Dir den Knuddel von "
+     +capitalize((QueryProp("schenker")?QueryProp("schenker"):"Irgendwem"))+
+     " in den Mund und laesst ihn genuesslich "
+    "zergehen. Hmmmmmmmmmmm... Dir wird ganz leicht, Eventuell waren da "
+    "ein paar Inhaltsstoffe beigesetzt, die nicht aufgefuehrt waren... "
+    "Du hoerst Farben, siehst Klaenge, fuehlst Dich einfach nur wohl.\n"
+    "Voellig ueberraschend hast Du eine sehr deutliche Vision:",77,0,1)
+    +nachricht+
+    break_string("Noch halb benebelt und im Freudenrausch knuellst Du "
+    "das Knuddelpapier zu einer kleinen Kugel und isst es gleich auch "
+    "noch. So schlecht schmeckt es noch nicht mal.",77);
+  this_player()->More(meldung);
+  if (objectp(papier)) papier->remove();
+  remove();
+  return 1;
+}
+ 
+
+void setKnuddelText(string text) {
+  if (!text) return;
+  nachricht=text;
+  return;
+}

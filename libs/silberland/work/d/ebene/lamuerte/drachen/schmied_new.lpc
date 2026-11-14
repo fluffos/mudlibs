@@ -1,0 +1,871 @@
+inherit "std/room";
+
+#include <properties.h>
+#include <defines.h>
+#include <moredef.h>
+#include <language.h>
+#include <moving.h>
+#include <wizlevels.h>
+
+#define DRACHEN   "/p/std/dragons/"
+#define SAVE_FILE "/d/ebene/lamuerte/drachen/schmied_new" 
+#define DR        DRACHEN"armnew/drachen"
+
+/* fields of shopitems */
+#define NAME(i)     shopitems[i][0]
+#define FILE(i)     shopitems[i][1]
+#define GOLD(i)     shopitems[i][2]
+#define SCHUPPEN(i) shopitems[i][3]
+
+#define TIME_TO_BUILD 60*30*1   /* 30 min RL */
+
+#define EMONEY      5000
+#define ESCHUPP     5
+
+#define SCHUPPEN_FIX_FAKTOR     0.6
+#define KOSTEN_FIX_FAKTOR       1.2
+
+private mapping data; //([ "user":({({"item1","col","end_time1"}),({"item2","col","end_time2"}),...})])
+private int next_idle_time;  
+
+int set_normal, set_bon1, set_bon2;
+
+nosave private string *COLORS = ({ "rot", "gruen", "blau", "weiss" });
+
+nosave private mixed *shopitems = 
+   ({
+      ({"drachenpanzer"            ,DR"panzer"           ,80000  ,201}),
+//      ({"drachenumhang"            ,DR"umhang"           ,60000  ,90}),
+      ({"drachenstiefel"           ,DR"stiefel"          ,66000  ,132}),
+//      ({"drachenhandschuhe"        ,DR"handschuhe"       ,77000  ,120}),
+      ({"drachenarmschienen"       ,DR"armschienen"      ,54000  ,140}),
+      ({"drachenhelm"              ,DR"helm"             ,77000  ,153}),
+      ({"drachenbeinschienen"      ,DR"beinschienen"     ,45000  ,139}),
+      ({"drachenschild"            ,DR"schild"           ,75000  ,161}),
+   });
+
+
+mixed *std_types =
+({
+    ({"der Haerte","func_main_ac"}),
+    ({"der Propheten","func_main_stat"}),
+    ({"der Unsterblichen","func_main_reboot_save"}),
+    ({"der Hexerei","func_main_mp"}),
+    ({"der Baeren","func_main_hp"}),
+});
+
+mixed *bon_types =
+({
+    ({"feste","beschlagene","func_bonus_ac"}),
+    ({"heilige", "gesalbte","func_bonus_stat"}),
+    ({"energiegeladene", "magische","func_bonus_mp"}),
+    ({"berserkende", "starke","func_bonus_hp"}),
+    ({"glitschige", "gehuellte","func_defend_fire"}),
+    ({"strahlende", "flammende","func_defend_ice"}),
+    ({"glatte", "beschichtete","func_defend_water"}),
+    ({"stromlinige", "luftige","func_defend_air"}),
+    ({"gewuchtete", "krallenbesetzte","func_light_weight"}),
+    ({"durchloecherte", "fellumgebene","func_heat_defense"}),
+    ({"klirrende", "strohueberzogene","func_cold_defense"}),
+    ({"unverwuestliche", "diamantene","func_indestructable"}),
+    ({"anschmiegsame", "koerperfoermige","func_noloose"}),
+});
+
+
+nosave string show_list();   
+string timestring( int d );
+void new_price();
+
+void create()
+{
+   ::create();
+
+   data = ([ ]);
+   next_idle_time = 0;
+
+   SetProp(P_INT_SHORT,"In Haegar's Meisterschmiede");
+   SetProp(P_INT_LONG,
+       "Beeindruckt erblickst Du Haegars neue Meisterschmiede. In zentraler Lage "
+       "befindet sich ein goldener Amboss, daneben steht ein grosser aus Steinen "
+       "gebauter Ofen. An den Waenden haengen edle Spezialwerkzeuge, welche zur " 
+       "Herstellung von Drachenruestungen der neuesten Generation benoetigt werden."
+       );
+
+   AddSound(DEFAULT_SOUND,"Du horchst herum, hoerst aber nichts.");
+   SetProp(P_LIGHT,1);
+   SetProp(P_INDOORS,1);
+   SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE: 29]));
+
+   AddDetail(({"boden"}),
+       "Der Boden ist, obwohl hier viel gearbeitet wird, sehr sauber."
+       );
+   AddDetail(({"decke"}),
+       "Die Decke ist geschwaerzt vom Feuer der Schmiede."
+       );
+   AddDetail(({"schmiede","raum"}),
+       "Sieht ganz nett aus hier drinnen.\n");
+   AddDetail(({"amboss"}),
+       "Der Amboss ist verhaeltnissmaessig gross. Er wird verwendet um "
+       "gluehende Eisenteile zu formen und besteht aus einer Goldlegierung."
+       );
+   AddDetail(({"gold","goldlegierung","legierung"}),
+       "Diese Art von hartem, speziellem Gold ist unbezahlbar teuer, "
+       "nur ein wahrer Meisterschmied kann sich so etwas leisten.");
+   AddDetail(({"eisenteile", "eisenteil"}),
+       "Tja, ein Eisenteil ist ein Eisenteil ist ein Eisenteil. Oder nicht?!"
+       );
+   AddDetail(({"ofen"}),
+       "Der Ofen wird mit Kohle geheizt. In ihm werden Eisenteile zum " 
+       "Gluehen gebracht."
+       );
+   AddDetail( ({"feuer", "gluehen"}),
+       "Das Feuer glueht im Ofen.");
+   AddDetail(({"kohle","holzkohle"}),
+       "Es scheint echte Holzkohle zu sein."
+       );
+   AddDetail(({"stein","steine"}),
+       "Kalt, schwer und hart. Steine eben."
+       );
+   AddDetail(({"wand","waende"}),
+       "An den Waenden haengen viele Werkzeuge. An einer Wand haengt ein Schild."
+       );
+   AddDetail(({"werkzeug","werkzeuge","spezialwerkzeug","spezialwerkzeuge"}),
+       "Zangen, Eisenhalter, Haemmer, also alles was man so braucht."
+       );
+   AddDetail(({"zange","zangen","werkzeug",
+         "werkzeuge","hammer","haemmer"}),
+       "Du findest nichts aussergewoehnliches am Werkzeug."
+       );
+   AddDetail(({"halter","eisenhalter"}),
+       "Unter einem Eisenhalter siehst Du ein Loch."
+       );
+   AddDetail("loch",
+       "Das Loch ist gerade so gross das man eventuell durchpasst. Aber es koennte "+
+       "auch sein das Dich Dein Augenmass taeuscht."
+       );
+   AddDetail(({"ruestung","ruestungen"}),
+       "Komisch, angeblich werden hier Drachenruestungen gebaut, doch Du siehst "+
+       "keine einzige Ruestung."
+       );
+   AddDetail(({"schild","schildchen"}),
+       "Auf dem Schildchen befinden sich Buchstaben. Ob man es lesen kann?"
+       );
+   AddDetail( ({"buchstaben", "buchstabe"}),
+       "A B C D E F G H I J K L M N O P Q R S T U V W X Y Z.");
+
+   AddReadDetail( ({"schild","schildchen"}), "@@show_list@@" );
+
+   new_price();
+
+   AddItem("/d/ebene/lamuerte/drachen/haegar.lpc",REFRESH_DESTRUCT);
+   AddItem("/d/ebene/lamuerte/drachen/tafel.lpc",REFRESH_NONE); 
+   AddItem("/d/ebene/lamuerte/drachen/lockbox.lpc",REFRESH_NONE);
+   AddExit("norden","/d/ebene/lamuerte/burg/weg/12x11y.lpc");
+   
+   AddCmd( ({"liste"}) , "do_list" );
+   AddCmd( ({"kaufe","kauf"}), "do_buy" );
+   AddCmd( "hole", "do_get" );
+   AddCmd( "bestellungen", "show_orders" );
+   AddCmd( ({"kon","kontrolle","kontrolliere"}), "show_aut" ); 
+   AddCmd( ({"erneuer","erneuere"}), "new_aut" );
+   AddCmd( ({"faerb","faerbe"}), "do_color" );
+   AddCmd( ({"zwaeng","zwaenge","kletter","klettere","steig","steige","huepf","huepfe","spring","springe"}), "do_loch");
+   restore_object( SAVE_FILE );
+}
+
+// Handles the player command to squeeze through the hole if conditions are met.
+int do_loch(string str)
+{ 
+  notify_fail("Wohin denn?\n");
+  
+  if(!str) return 0;
+  
+  if ( member_array(str,({"in loch","durch loch","loch","durchs loch","ins loch"})) != -1)
+  {   
+    if( this_player()->QueryProp(P_LEVEL) <= 21 || IS_WIZARD(this_player())) 
+    { 
+      write("Du zwaengst Dich durch ein enges Loch.\n");
+      this_player()->move("/d/ebene/lamuerte/burg/mauer/10_04.lpc",M_GO,
+          "in ein Loch","klettert","klettert aus der Mauer heraus");
+      return 1;
+    } 
+    else
+    { 
+      write(break_string("Du versuchst Dich Durch das Loch zu zwaengen, "+
+          "bist aber zu gross dazu."));
+      return 1;
+    }
+  return 0;
+  }
+}
+
+// Handles the player command to display the list of available armors and their properties.
+int do_list()
+{ 
+  int x,y,z,si,cnt;
+  int i; 
+  string str1,str2,str3;
+ write("Haegar haelt Dir eine Liste seinen Ruestungen vors Gesicht...\n");
+ write(show_list());
+ write("---------------------------------------------------------------------------*=>\n");
+
+ printf("%-25s %-25s %-25s\n","[Farben]", "[Bonus Eigenschaft I]", "[Bonus Eigenschaft II]");
+ write("---------------------------------------------------------------------------*=>\n");
+
+ for(i=0;i<100;i++)
+ {
+   str1=str2=str3="";
+   if(i<sizeof(COLORS))
+     str1=capitalize(COLORS[i]);
+   else if (i==sizeof(COLORS))
+     str1="";
+   else if (i==sizeof(COLORS)+1)
+     str1="---------------------*=>";
+   else if (i==sizeof(COLORS)+2)
+     str1="[Haupteigenschaften]";
+   else if (i==sizeof(COLORS)+3)
+     str1="---------------------*=>";
+   else if (i-sizeof(COLORS)-3<=sizeof(std_types))
+     str1=capitalize(std_types[i-sizeof(COLORS)-4][0]);
+
+
+   if(i< sizeof(bon_types))
+     str2=capitalize(bon_types[i][0])[0..(strlen(bon_types[i][0])-2)];
+   if(i< sizeof(bon_types))
+     str3=capitalize(bon_types[i][1])[0..(strlen(bon_types[i][1])-2)];
+   if(str1!="" || str2!="" || str2!="" )
+     printf("%-25s %-25s %-25s\n",str1,str2,str3);
+ } 
+
+   
+
+ /*
+ write("-Farben:\n");
+ 
+ for (x=0;x<=sizeof(COLORS)-1;x++)
+ {
+   write (x+") "+capitalize(COLORS[x])+".\n");
+ }
+
+ write("\n-Haupteigenschaften:\n");
+ for (x=0;x<=sizeof(std_types)-1;x++)
+ {
+   write (x+") "+capitalize(std_types[x][0])+".\n");
+ }
+
+
+ write("\n-Bonus Eigenschaft I:\n");
+ for (y=0;y<=sizeof(bon_types)-1;y++)
+ {
+   write (y+") "+capitalize(bon_types[y][0])[0..(strlen(bon_types[y][0])-2)]+".\n");
+ }
+
+
+ write("\n-Bonus Eigenschaft II:\n");
+ for (z=0;z<=sizeof(bon_types)-1;z++)
+ {
+   write (z+") "+capitalize(bon_types[z][0])[0..(strlen(bon_types[z][0])-2)]+".\n");
+ }
+*/
+ write("---------------------------------------------------------------------------*=>\n");
+ x=random(4);
+ y=random(6);
+ z=random(5)+7;
+ cnt=random(3);
+ write("Beispiel: kaufe <"+COLORS[cnt]+"en "+bon_types[y][0]+"n "+bon_types[z][1]+"n drachenschild "+lower_case(std_types[x][0])+">\n");
+ write("Anmerkung: gehaertete Drachenruestungen haben einen kleinen Anteil aus Metall!\n"
+       "           (der Haerte, fest, beschlagen)\n");
+ return 1;
+
+}
+
+
+nosave int _flt_old(object ob)
+{
+  if (explode(file_name(ob),"#")[0]=="/d/ebene/lamuerte/drachen/schuppe")
+    return 1;
+  return 0;
+}
+
+
+nosave int new_aut( string arg )
+{
+  object what,schmied,schuppen;
+  int money;
+  int scales;
+
+  
+  notify_fail("Der Schmied sagt: Ich erneuere nichts mehr, kauf was neues.\n");
+  return ( 0 );
+  if ( !(schmied=present("schmied", this_object())) ) {
+    write("Der Schmied ist gerade beschaeftigt. Komm spaeter wieder!\n");
+    return( 1 );
+  }
+ 
+  if (!arg) {
+   write ("Der Schmied sagt: Was willst Du erneuern lassen?\n");
+   return ( 1 );
+  }
+
+  if ( !what=present( arg, this_player()) ) {
+    write(break_string(capitalize(arg)+"? Hast Du doch gar nicht bei Dir!",78));
+    return 1;
+  }
+
+  // Woody: temporaere Moeglichkeit, alte Schuppen zu erneueren
+  // Laalala ich war da :) 
+  if (what->id("\nschupp")) {
+    int i;
+    int altsum;
+    object *obs;
+
+    altsum = 0;
+    obs=deep_inventory(this_player());
+    obs=filter_array(obs,#'_flt_old);
+    for (i=0; i<sizeof(obs); i++)
+      altsum += (int) obs[i]->QueryProp(P_AMOUNT);
+
+    if (!altsum)
+      return write("Du hast doch gar keine alten Schuppen!\n"), 1;
+    if (catch(schuppen=clone_object("/p/std/dragons/obj/schuppe")))
+      return write("Tut mir leid, da ging etwas schief!\n"), 1;
+    schuppen->SetProp(P_AMOUNT, altsum);
+    obs = filter_objects(obs, "remove") - ({ 0 });
+    if (sizeof(obs)) filter_array(obs, #'destruct);
+    if ((int) schuppen->move(this_player(), M_GET) != 1)
+      schuppen->move(this_player(), M_NOCHECK);
+    write("Der Schmied erneuert gewissenhaft alle Deine alten Schuppen.\n");
+    return 1;
+  }
+
+  if (!what->_is_drobj()) {
+    write (break_string("Tut mir leid, aber ich erneuere nur original "
+        "Drachenruestungen der neuesten Generation.", 78,
+        "Der Schmied sagt: "));
+    return ( 1 );
+  }
+
+  if ( (int) what->query_isalo()>=30 ) {
+     write( "Der Schmied sagt: Du kannst dieses Ruestungsteil "
+         "nicht weiter erneuern!\n" );
+     return( 1 );
+  }
+
+  if (!money=(int)this_player()->QueryMoney()) {
+     write("Der Schmied sagt: Ohne Geld brauchst Du das gar nicht "
+         "erst zu probieren.\n");
+     return( 1 );
+  }
+
+  if(!schuppen=deep_present("\nschupp",this_player())) {
+      write("Der Schmied sagt: Wo sind denn die Schuppen?\n");
+      return 1;
+  }
+
+  scales = (int) schuppen->QueryProp(P_AMOUNT);
+
+  if ( (money < EMONEY) || (scales < ESCHUPP) ) {
+    write( "Der Schmied sagt: Ohne genuegend Geld und Schuppen "
+        "geht da gar nichts.\n" );
+    return 1;
+  }
+  what->_up_count( 5+random(10) );
+  this_player()->AddMoney(-EMONEY);
+  schuppen->AddAmount(-ESCHUPP);
+  write("Der Schmied nimmt sich alles was er benoetigt von Dir, erneuert\n"+
+        "Dein Drachenruestungsteil und gibt es Dir wieder.\n");
+
+  return 1;
+}
+
+
+nosave int show_aut( string arg )
+{
+  object what;
+  notify_fail("Der Schmied sagt: Damit kenn ich mich nicht aus.\n");
+ 
+  if (!arg) {
+    write ("Der Schmied sagt: Was willst Du kontrollieren lassen?\n");
+    return ( 1 );
+  }
+
+  if ( !what=present( arg, this_player()) ) {
+    write(break_string(capitalize(arg)+"? Hast Du doch gar nicht bei Dir!",78));
+    return 1;
+  }
+
+  if (!what->_is_drobj()) {
+    write ("Der Schmied sagt: Ich ueberpruefe nur original "
+        "Drachenruestungen der\nDer Schmied sagt: neusten Generation.\n");
+    return ( 1 );
+  } 
+ 
+  if ( (int)what->query_isalo()<=1 ) {
+    write("Der Schmied sagt: Nein, diese Ruestung ist nicht "
+        "mehr rebootsicher.\n");
+    return ( 1 );
+  }
+
+  write(sprintf("Der Schmied sagt: Sieht so aus als ob Deine Ruestung "
+      "noch etwa %d Stunde%s\nDer Schmied sagt: rebootsicher ist.\n",
+      what->query_isalo(), (int)what->query_isalo()==1?"":"n" ));
+  return ( 1 );
+
+  write("Der Schmied sagt: Ich ueberpruefe nur original Drachenruestungen!\n");
+  return ( 1 );
+}
+
+
+nosave int show_orders( string arg )
+{
+   mixed *orders;
+   int i;
+   string t, res;
+
+   if (IS_WIZARD(this_player()))
+   {
+     mixed cust;
+     int j;
+
+     res=sprintf("Bestellungen:\n%74'='s\n","");
+     cust=sort_array(m_indices(data),#'<); //'
+     for (j=0; j<sizeof(cust); j++)
+     {
+       res+=sprintf("%11s: ",capitalize(cust[j]));
+       orders = data[cust[j]];
+       for (i=0; i<sizeof(orders); i++) {
+         t = orders[i][2]<=time() ? "ab sofort"
+           : "in "+timestring( orders[i][2]-time() );
+         res += sprintf( "%"+(i==0?"":"13")+"s- %s (%s), abzuholen %s\n", "",
+             capitalize(explode( orders[i][0], "/")[<1]), orders[i][1], t );
+       }
+     }
+     write(res);
+     return 1;
+   }
+
+   if ( !member( data, (string) this_player()->query_real_name()) )
+   {
+     write( "Du hast hier in letzter Zeit keine Bestellung abgegeben!\n" );
+     return( 1 );
+   }
+
+   orders = data[(string) this_player()->query_real_name()];
+
+   res="Bestellungen:\n"
+       "--------------------------------------------------\n";
+   for( i=sizeof( orders ) - 1;i>=0; i--) {
+      t = orders[i][2]<=time() ? "ab sofort"
+        : "in "+timestring( orders[i][2]-time() );
+      res += sprintf( "- %s (%s), abzuholen %s\n",
+          capitalize(explode( orders[i][0], "/")[<1]), orders[i][1], t );
+   }
+   write(res);
+   return( 1 );
+}
+
+// Handles the player command to pick up all finished orders.
+nosave int do_get( string arg )
+{
+   string res, tprn;
+   mixed *orders;
+   object armour;
+   int i;
+   int got_anything;
+
+   tprn = (string) this_player()->query_real_name();
+   if ( !member( data, tprn) ) {
+      write( "Du hast hier in letzter Zeit keine Bestellung abgegeben!\n" );
+      return( 1 );
+   }
+
+   if ( !arg || arg!="alles ab" ) {
+      write ("Was willst Du hier abholen?\n" );
+      return( 1 );
+   }
+
+   orders = data[tprn];
+
+   res = "Du holst ab:\n-------------------------------------------\n";
+   for( i=sizeof( orders ) - 1;i>=0; i--) {
+      if ( orders[i][2]<=time() ) {
+         got_anything = 1;
+         res += sprintf( "- %s (%s)\n",
+             capitalize(explode( orders[i][0], "/")[<1]), orders[i][1] );
+         armour = clone_object( orders[i][0] );
+         armour->setcol( orders[i][1] ); 
+         armour->set_type( orders[i][3],orders[i][4],orders[i][5] ); 
+         armour->set_creator_name(CAP(tprn));
+         armour->move( this_player(), M_NOCHECK );
+         //write( orders[i][3]+" "+orders[i][4]+" "+orders[i][5]+"\n");
+         data[tprn] -= ({ orders[i] });
+         if ( !sizeof(data[tprn]) ) data -= ([ tprn ]);
+         save_object( SAVE_FILE );
+      }
+   }
+   if (got_anything) {
+      write( res );
+   } else {
+      write( "Keine Deiner Bestellungen ist fertig!\n" );
+   }
+   
+   return( 1 );
+}
+
+// Returns a string representation of the price list for dragon scale armors.
+nosave string show_list()
+{
+   int i, max;
+   string *armourlist;
+   string res;
+
+   res = "\nPreistafel fuer den Kauf von Drachenschuppen-Ruestungen \n"+
+         "---------------------------------------------------------------------------*=>\n";
+
+   max = sizeof(shopitems);
+   for(i=0;i<max;i++) {
+      res += sprintf( "- %2d. %-30.30s:  %3d Schuppen %6d Gold\n",
+                      i+1, capitalize(NAME(i)), SCHUPPEN(i), GOLD(i) );
+      //if ( !((i+1)%3))
+      if ( i==2 )
+         res+="\n";
+   }
+   res+="---------------------------------------------------------------------------*=>";
+   res+="\nKommandos: liste, kaufe <x>, bestellungen, hole alles ab und faerbe\n"; 
+   return( res );
+}
+
+nosave int do_buy(string str)
+{
+   object armor,schuppen, schmied, hammer;
+   int money, scales, i, starttime, x;
+   string col;
+   string tprn;
+   string typ,bon1,bon2;
+   string logstring; 
+
+   set_normal=-1;
+   set_bon1=-1;
+   set_bon2=-1;
+
+   
+   notify_fail("Was? Wie? Wo?\n");
+   
+   if (!str)
+    {write ("Was willst Du kaufen?!\n");
+     return 1;
+    }
+  
+   if ( !(schmied=present("schmied", this_object())) ) {
+      write("Der Schmied ist gerade beschaeftigt. Komm spaeter wieder!\n");
+      return( 1 );
+   }
+
+   
+   
+   if ( !(schmied=present("schmied", this_object())) ) {
+      write("Der Schmied ist gerade beschaeftigt. Komm spaeter wieder!\n");
+      return 1;
+   }
+
+   if(!IS_ARCH(TP)) {
+     if (!money=(int)this_player()->QueryMoney()) {
+        write("Ohne Geld brauchst Du das gar nicht erst zu probieren.\n");
+        return 1;
+     } 
+
+     if(!schuppen=deep_present("\nschupp",this_player())) {
+         write("Wo sind denn die Schuppen?\n");
+         return 1;
+     } 
+
+     if (!deep_present("\nhaegarhammer",this_player()) && 
+         !deep_present("\nhaegarhammer",schmied) )
+     {
+       write( break_string("Bring mir doch bitte noch meinen Hammer. Ein "
+             "boeser Magier hat ihn mir gestohlen und bei einem Drachen "
+             "versteckt. Angeblich hier in Kyranda. Ohne den Hammer kann "
+             "ich leider Deine Bestellung nicht annehmen.", 78,
+             "Der Schmied sagt: "));
+       return 1;
+     }
+
+     if (!deep_present("\nhaegarhammer",schmied) &&
+       hammer=deep_present("\nhaegarhammer",this_player()) )
+     {
+       write("Der Schmied sagt: Oh! Du hast ja meinen Hammer! Vielen Dank!\n");
+       write("Der Schmied nimmt Dir den Hammer weg.\n");
+       hammer->move(schmied,M_NOCHECK);
+     }
+     scales = (int) schuppen->QueryProp(P_AMOUNT); 
+   }
+   else {
+     scales=1000; 
+     money=10000000;
+   }
+
+   // kaufe <gruenen durchloecherten magischen drachenpanzer des propheten>
+ 
+  i=-1;
+  logstring=str;
+
+     if (sscanf( str, "%s %s %s %s %s", col, bon1, bon2, str, typ)!=5) {
+         write("Du musst Farbe, Bonus 1, Bonus 2, Art und Haupteigenschaft angeben!\n");
+         write("z.B. kaufe <gruenen glitschigen gesalbten drachenpanzer der unsterblichen>\n");
+         write("     kaufe <gruene glitschige gesalbte drachenstiefel der unsterblichen>\n");
+         return( 1 );
+      }
+
+      i = sizeof(shopitems)-1;
+      while( i>=0 && upperstring(str)!=upperstring(NAME(i)) )
+         i--;
+
+
+         
+      if(col[strlen(col)-1..strlen(col)]=="n")
+      {
+        col=col[0..(strlen(col)-3)];
+      }
+      else
+      {
+        col=col[0..(strlen(col)-2)];
+      }
+   
+      if(bon1[strlen(bon1)-1..strlen(bon1)]=="n")
+      { 
+        bon1=bon1[0..(strlen(bon1)-2)];
+      }
+
+      if(bon2[strlen(bon2)-1..strlen(bon2)]=="n")
+      { 
+        bon2=bon2[0..(strlen(bon2)-2)];
+      }
+
+      typ="der "+capitalize(typ);
+     
+      //write ("Art: "+str+" Col:"+col+" Bon1:"+bon1+" Bon2:"+bon2+" Typ:"+typ+"\n");
+      //write(member_array(col,COLORS));
+      //write(member_array(bon2,bon_types[0]));
+     
+      for (x=0;x<sizeof(bon_types);x++)
+      {
+        if(member_array(bon1,bon_types[x])==0)
+        {
+          //write("Bon1 place "+x+". Data: "+bon_types[x][0]+"\n");
+          set_bon1=x;
+        }
+      }
+ 
+      for (x=0;x<sizeof(bon_types);x++)
+      {
+        if(member_array(bon2,bon_types[x])==1)
+        {
+          //write("Bon2 place "+x+". Data: "+bon_types[x][1]+"\n");
+          set_bon2=x;
+        }
+      }
+
+      for (x=0;x<sizeof(std_types);x++)
+      { 
+        if(member_array(typ,std_types[x])==0)
+        { 
+          //write("typ place "+x+". Data: "+std_types[x][0]+"\n");
+          set_normal=x;
+        }
+      }
+
+/* 
+      armor=clone_object("/p/std/dragons/armnew/"+str);
+      armor->setcol(col);
+      armor->set_type(set_typ,set_bon1,set_bon2);
+      armor->move(this_player(),M_NOCHECK);
+      return 1;
+*/
+
+
+
+
+   if (member_array( lowerstring(col), COLORS )==-1) {
+      write("Du kannst nur zwischen den Farben:\n");
+      for(i=0;i<sizeof(COLORS);i++) {
+	 write(capitalize(COLORS[i])+" ");
+      }
+      write("\nauswaehlen.\n");
+      return( 1 );
+   }
+  
+   if (set_bon1 == set_bon2)
+   {
+    write("Die beiden Bonusarten vertragen sich so nicht.\n");
+   return( 1 );
+   } 
+
+   if(set_normal==-1 || set_bon1==-1 || set_bon2==-1 )
+   {
+     write("Was willst Du genau haben? Ich versteh Dich so schlecht.\n");
+     return ( 1 );
+   }
+
+   if (i<0 || i>=sizeof(shopitems)) {
+      write("Tut mir leid, so etwas verkaufe ich nicht!\n" );
+      return( 1 );
+   }
+ 
+   
+   col = lowerstring(col);
+   if (money>=GOLD(i) && scales>=SCHUPPEN(i)) {
+      tprn = (string) this_player()->query_real_name();
+      if(!IS_ARCH(TP)) {
+        this_player()->AddMoney( -GOLD(i) );
+        schuppen->AddAmount( -SCHUPPEN(i) );
+      }
+      starttime = (next_idle_time<=time()) ? time() : next_idle_time;
+      write( break_string( sprintf(
+              "Du gibst dem Schmied %d Gold und %d Schuppen fuer %s (%s).\n"
+              "Er teilt Dir daraufhin mit, dass er fuer die Arbeit %s "
+              "braucht, und bittet Dich dann wiederzukommen.",
+              GOLD(i), SCHUPPEN(i), capitalize(NAME(i)), col,
+              timestring( (starttime+TIME_TO_BUILD) - time() ) ),
+            78, 0, 1));
+      if (member( data, tprn))
+         data[tprn] += ({ ({ FILE(i), col, starttime+TIME_TO_BUILD, set_normal , set_bon1, set_bon2 }) });
+      else
+         data += ([ tprn : ({ ({FILE(i), col, starttime+TIME_TO_BUILD, set_normal , set_bon1, set_bon2 }) }) ]);
+      next_idle_time = starttime + TIME_TO_BUILD;
+      save_object( SAVE_FILE );
+      write_file("/d/ebene/lamuerte/drachen/schmied_new.log",ctime()+
+                 ": "+getuid(this_player())+" : "+logstring+"\n"+
+                 ": Haegar erschafft eine Ruestung fuer "+
+                 this_player()->QueryProp(P_NAME) + " ["+str+"]\n");
+   }
+   else
+   {
+     write(break_string(sprintf("Als Du dem Schmied die geforderten %d Gold "
+             "und %d Schuppen geben willst, stellst Du fest, dass Du soviel "
+             "gar nicht bei Dir hast!", GOLD(i), SCHUPPEN(i) ), 78 ) );
+      return( 1 );
+   }
+
+   return( 1 );
+}  
+
+// Converts a time duration in seconds to a human-readable string (days, hours, minutes).
+string timestring( int t )
+{
+   int d, h, m;
+   string res;
+   res = "";
+   d = t/86400;
+   t%=86400;
+   h = t/3600;
+   t%=3600;
+   m = t/60;
+   if (d)
+      res += time2string( "%d %D ", d*86400 );
+   if (h)
+      res += time2string( "%h %H ", h*3600 );
+   if (m)
+      res += time2string( "%m %M", m*60 );
+   return( res );
+}
+
+void reset()
+{object schmied, hammer;
+ ::reset();
+ if ( schmied=present("schmied", this_object())) 
+  {if (hammer=deep_present("\nhaegarhammer",schmied))
+   {
+   hammer->remove();
+   }
+  }
+}    
+ 
+
+mapping data() { return( data ); }
+
+
+// Handles the player command to dye ("faerben") a dragon armor to a new color.
+nosave int do_color( string str )
+{ 
+  object what,schmied,schuppen;
+  int money;
+  int scales;
+  int i;
+  string arg,recol; 
+  notify_fail("Der Schmied sagt: Das kann ich nicht faerben.\n");
+  
+  if ( !(schmied=present("schmied", this_object())) ) {
+    write("Der Schmied ist gerade beschaeftigt. Komm spaeter wieder!\n");
+    return( 1 );
+  }
+  
+  if (!str) {
+   write ("Der Schmied sagt: Was willst Du umfaerben?\n");
+   return ( 1 );
+  }
+
+  if(sscanf(str,"%s nach %s", arg , recol)!=2)
+  {
+    write ("Der Schmied sagt: Das Kommando heisst faerbe <was> nach <farbe>\n");
+    return ( 1 );
+  }
+  else if ( !what=present( arg, this_player()) ) {
+     write(break_string(capitalize(arg)+"? Hast Du doch gar nicht bei Dir!",78));
+     return 1;
+   }
+
+   if (member_array( lowerstring(recol), COLORS )==-1) {
+      write("Du kannst nur zwischen den Farben:\n");
+      for(i=0;i<sizeof(COLORS);i++) {
+     write(capitalize(COLORS[i])+" ");
+      }
+      write("\nauswaehlen.\n");
+      return( 1 );
+   }
+
+  if (!what->_is_drobj()) {
+    write (break_string("Tut mir leid, aber ich faerbe nur original "
+        "Drachenruestungen der neuesten Generation.", 78,
+        "Der Schmied sagt: "));
+    }
+
+  if (!money=(int)this_player()->QueryMoney()) {
+     write("Der Schmied sagt: Ohne Geld brauchst Du das gar nicht "
+         "erst zu probieren.\n");
+     return( 1 );
+  }
+
+  if(!schuppen=deep_present("\nschupp",this_player())) {
+      write("Der Schmied sagt: Wo sind denn die Schuppen?\n");
+      return 1;
+  }
+
+  scales = (int) schuppen->QueryProp(P_AMOUNT);
+
+  if ( (money < (EMONEY*5)) || (scales < (ESCHUPP*5)) ) {
+    write( "Der Schmied sagt: Ohne genuegend Geld und Schuppen "
+        "geht da gar nichts.\n" );
+    return 1;
+  }
+  what->RemoveId( ({"blau","rot","blau","weiss"}) );
+  what->setcol( recol );
+  this_player()->AddMoney(-(EMONEY*5));
+  schuppen->AddAmount(-(ESCHUPP*5));
+  write("Der Schmied nimmt sich alles was er benoetigt von Dir, faerbt\n"+
+        "Dein Drachenruestungsteil und gibt es Dir wieder.\n");
+
+  return 1;
+
+}
+
+// Updates the prices and scale requirements for all shop items based on fixed factors.
+void new_price()
+{int max,i;
+   
+   max = sizeof(shopitems);
+   for(i=0;i<max;i++) {
+     shopitems[i][2]=to_int(shopitems[i][2]*KOSTEN_FIX_FAKTOR);
+     shopitems[i][3]=to_int(shopitems[i][3]*SCHUPPEN_FIX_FAKTOR);
+   } 
+   return;
+}

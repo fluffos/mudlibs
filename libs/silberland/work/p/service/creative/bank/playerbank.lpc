@@ -1,0 +1,354 @@
+//
+// playerbank.c
+// player's bank for managing accounts, master object
+// (c) Crea@SL 2002
+//
+// original idea and concept: Omrani
+/*
+ * $Id$
+ *
+ * $Log$
+ *
+ */
+
+#pragma strong_types
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include <defines.h>
+#include <bank.h>
+#include <wizlevels.h>
+
+#include "def.h"
+#include "playerbank.h"
+
+#define INI_FILE (BLUE_NAME(TO)+".ini")
+#define DEFAULT_SAVEFILE SAVE_DIR("bank")
+
+// globals
+
+mixed saveload;
+
+nosave mapping account_data;
+nosave mapping config;
+nosave string bank_version="$Id$";
+int get_rate_of_interest();
+int get_credit_rate();
+
+// prototypes
+//
+// API
+
+varargs int create_account(string customer, int type);
+int delete_account(string customer);
+string dump_config();
+int get_amount(string customer);
+int pay_in(string customer, int amount);
+int withdraw(string customer, int amount);
+
+// internal functions
+
+nosave nomask int check();
+nosave int check_account(string customer);
+nosave int get_access(string customer);
+nosave int get_credit_limit();
+nosave int get_max_cash();
+nosave int get_min_cash();
+nosave int get_status(string customer);
+nosave int get_type(string customer);
+nosave int parse_ini_line(string str);
+nosave void reload_inifile();
+nosave mapping retrieve_account(string customer);
+nosave int save_accounts();
+nosave string save_file();
+nosave int set_access(string customer);
+nosave int set_amount(string customer, int amount);
+nosave int set_status(string customer, int state);
+nosave int set_type(string customer, int type);
+nosave int update_account(string customer, mapping account);
+
+// gd functions
+
+void create();
+int clean_up(int refcount);
+int query_prevent_shadow();
+void reset();
+
+// prototypes end
+
+void create() {
+  // we are blueprint
+  if (is_clone(TO)) {
+    destruct(TO);
+    return;
+  }
+  seteuid(getuid());
+  account_data=([ ]);
+  config=([ ]);
+  DEBUG("bank", save_file());
+  if (restore_object(save_file()))
+    account_data=saveload;
+  saveload=0;
+  reload_inifile();
+}
+
+void reset() {
+  reload_inifile();
+}
+
+int dump_config() {
+  if (!check())
+    return BANK_FAILURE;
+  printf("%O\n", config);
+  return BANK_SUCCESS;
+}
+
+nosave int parse_ini_line(string str) {
+  string key, type, value, s;
+
+  if (!stringp(str) || !strlen(str) || str[0]=='#') return 0;
+  if (sscanf(str, "%s %s=%s;", type, key, value)!=3) return 0;
+  switch (type) {
+    case "string*":
+      if (sscanf(value, "\"%s\"", s)==1) {
+        if (!member(config, key))
+          config[key]=({ s });
+        else
+          config[key]+=({ s });
+      }
+      break;
+    case "string":
+      if (sscanf(value, "\"%s\"", s)==1) {
+        config[key]=s;
+      }
+      break;
+    case "int":
+      config[key]=to_int(value);
+      break;
+    case "float":
+      config[key]=to_float(value);
+      break;
+    default:
+      raise_error("Error parsing INI_FILE!");
+      return BANK_FAILURE;
+  }
+  return BANK_SUCCESS;
+}
+
+void reload_inifile() {
+  mixed data;
+
+  config=([]);
+  if (data=read_file(INI_FILE))
+    map_array(explode(data, "\n"), #'parse_ini_line);
+}
+
+int clean_up(int refcount) {
+  return 0;
+}
+
+nosave nomask int check() {
+  string* allowed_obs;
+  string ob;
+  object o;
+
+  if (!(TIPO))
+    return BANK_FAILURE;
+  o=TIPO;
+  // player
+  if (o->id("Spieler")) {
+    if (!IS_ARCH(o))
+      return BANK_FAILURE;
+    else
+      return BANK_SUCCESS;
+  }
+  // get filename
+  ob=explode(file_name(o), "#")[0];
+  allowed_obs=config[BANK_ALLOWED_OBS];
+  if (member(allowed_obs, ob)==-1)
+    return BANK_FAILURE;
+  return BANK_SUCCESS;
+}
+
+nosave int check_account(string customer) {
+  return member(account_data, customer);
+}
+
+varargs int create_account(string customer, int type) {
+  mapping m;
+
+  if (!check())
+    return BANK_FAILURE;
+  if (check_account(customer))
+    return BANK_ALREADY_ACCOUNT;
+  m=BANK_ACCOUNT;
+  if (type && intp(type))
+    m[BANK_TYPE]=type;
+  account_data+=m;
+  save_accounts();
+  return BANK_SUCCESS;
+}
+
+int delete_account(string customer) {
+  int amount;
+
+  if (!check())
+    return BANK_FAILURE;
+  amount=get_amount(customer);
+  if (amount<0)
+    return amount;
+  if (amount>0)
+    return BANK_ACCOUNT_NOT_EMPTY;
+  m_delete(account_data, customer);
+  save_accounts();
+  return BANK_SUCCESS;
+}
+
+int pay_in(string customer, int amount) {
+  mapping m;
+  
+  if (!check())
+    return BANK_FAILURE;
+  m=retrieve_account(customer);
+  m[BANK_AMOUNT]+=amount;
+  m[BANK_ACCESS]=time();
+  update_account(customer, m);
+  return BANK_SUCCESS;
+}
+
+int withdraw(string customer, int to_withdraw) {
+  mixed m;
+  int amount, total, fee;
+  
+  if (!check())
+    return BANK_FAILURE;
+  m=retrieve_account(customer);
+  if (intp(m))
+    return m;
+  amount=m[BANK_AMOUNT];
+  fee=get_rate_of_interest()*to_withdraw;
+  total=to_withdraw+fee;
+  if (total > amount)
+    return BANK_NO_CREDIT;
+  set_amount(m, amount-total);
+  update_account(customer, m);
+  return fee;
+}
+
+nosave int set_type(string customer, int type) {
+  mapping m;
+
+  if (!check_account(customer))
+    return BANK_NO_ACCOUNT;
+  m=retrieve_account(customer);
+  m[BANK_TYPE]=type;
+  update_account(customer, m);
+  save_accounts();
+  return BANK_SUCCESS;
+}
+
+nosave int set_status(string customer, int state) {
+  mapping m;
+
+  if (!check_account(customer))
+    return BANK_NO_ACCOUNT;
+  m=retrieve_account(customer);
+  m[BANK_STATUS]=state;
+  update_account(customer, m);
+  save_accounts();
+  return BANK_SUCCESS;
+}
+
+nosave int set_access(string customer) {
+  mapping m;
+
+  if (!check_account(customer))
+    return BANK_NO_ACCOUNT;
+  m=retrieve_account(customer);
+  m[BANK_ACCESS]=time();
+  update_account(customer, m);
+  save_accounts();
+}
+
+int get_amount(string customer) {
+  mixed m;
+
+  m=retrieve_account(customer);
+  if (intp(m))
+    return m;
+  return m[BANK_AMOUNT];
+}
+
+nosave int get_type(string customer) {
+  mapping m;
+
+  if (!check_account(customer))
+    return BANK_NO_ACCOUNT;
+}
+
+nosave int get_status(string customer) {
+  mapping m;
+
+  if (!check_account(customer))
+    return BANK_NO_ACCOUNT;
+}
+
+nosave int get_access(string customer) {
+  mapping m;
+
+  if (!check_account(customer))
+    return BANK_NO_ACCOUNT;
+}
+
+int query_prevent_shadow() {
+  return 1;
+}
+
+int get_rate_of_interest() {
+  return config[BANK_RATE_OF_INTEREST];
+}
+
+int get_credit_rate() {
+  return config[BANK_CREDIT_RATE];
+}
+
+nosave int get_max_cash() {
+  return config[BANK_MAX_CASH];
+}
+
+nosave int get_min_cash() {
+  return config[BANK_MIN_CASH];
+}
+
+nosave int get_credit_limit() {
+  return config[BANK_CREDIT_LIMIT];
+}
+
+nosave string save_file() {
+  string s;
+
+  if (member(config, BANK_SAVE_FILE))
+    return config[BANK_SAVE_FILE];
+  return DEFAULT_SAVEFILE;
+}
+
+nosave int save_accounts() {
+  saveload=account_data;
+  if (!save_object(save_file()))
+    raise_error("Error saving account data");
+  saveload=0;
+  return BANK_SUCCESS;
+}
+
+nosave mixed retrieve_account(string customer) {
+  if (!check_account(customer))
+    return BANK_NO_ACCOUNT;
+  return account_data[customer];
+}
+
+nosave int update_account(string customer, mapping account) {
+  account_data[customer]=account;
+  return BANK_SUCCESS;
+}
+

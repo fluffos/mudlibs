@@ -1,0 +1,339 @@
+// Standard Zechpreller NPC
+// Gwenshara@SilberLand
+
+#include "/gilden/zechpreller/zechpreller_extern.h"
+#include <properties.h>
+#include <new_skills.h>
+#include <combat.h>
+#include <food.h>
+#include <moving.h>
+inherit "std/mnpc";
+
+int myalc;
+object weingeist;
+
+void create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+  myalc=0;
+}
+
+void trunkspruch()
+{
+  object t, tt;
+  int glevel;
+  glevel=QueryProp(P_GUILD_LEVEL);
+
+  if(glevel < 8) return;
+  if(glevel > 8){
+    (t=clone_object("/gilden/zechpreller/obj/trunk"))->move(this_object());
+    t->GenerateDrink(this_object(), 7000+random(2000), 5000+random(5000));
+    t->SetProp(P_FOOD_INFO, t->QueryProp(P_FOOD_INFO)+
+                            ([F_HEAL:({glevel*20, 0})]));
+ }
+ if(glevel > 9){
+    (tt=clone_object("/gilden/zechpreller/obj/trunk"))->move(this_object());
+    tt->GenerateDrink(this_object(), 7000+random(2000), 5000+random(5000));
+    tt->SetProp(P_FOOD_INFO, tt->QueryProp(P_FOOD_INFO)+
+                            ([F_HEAL:({glevel*20, 0})]));
+ }
+ if(objectp(environment(this_object())))
+  tell_room(environment(this_object()),
+    BS("Eine Alkoholwolke senkt sich auf "+Name(WEN)+" herab."));
+}
+
+_query_alcohol() { return myalc; }
+
+varargs void create_default_zechpreller(int level, int glevel, int maxhp)
+{
+  if(intp(maxhp))
+    create_default_npc(level, maxhp);
+  else
+    create_default_npc(level);
+
+  SetProp(P_XP, QueryProp(P_XP) * 4 / 3);
+  SetProp(P_HANDS,
+      ({" mit seinem Mundgeruch",
+       QueryProp(P_HANDS)[1],
+      ({DT_POISON, DT_AIR}) }));
+
+  if(glevel < 1) glevel = 1;
+  if(glevel > 10) glevel = 10;
+  SetProp(P_GUILD, "zechpreller");
+  SetProp(P_GUILD_LEVEL, glevel);
+  AddId( ({"\nzechpreller_npc", "NOWIMPY", "NOCONTROL"}) );
+  SetProp(P_RESISTANCE_STRENGTHS, ([DT_POISON: -0.5,
+                                    DT_ACID: -0.3,
+				    DT_WATER: -0.1]) );
+ // SetProp(P_ALCOHOL, QueryProp(P_MAX_ALCOHOL));
+
+  seteuid(geteuid(this_object()));
+  clone_object("/gilden/zechpreller/obj/z_17erschluessel")->move(this_object());
+  command("trage alles");
+  trunkspruch();
+  myalc=QueryProp(P_MAX_ALCOHOL);
+  SetProp(P_FOOD, 0);
+  SetProp(P_DRINK, 0);
+}
+
+void groehlen(object enemy)
+{
+  say(BS(Name(WER, 1)+" holt tief Luft und groehlt "+
+      enemy->name()+" die aergsten Trinklieder, die Du je gehoert hast, "+
+      "ins Gesicht."), ({enemy}));
+  say(BS("Du erroetest."), ({enemy}));
+
+  tell_object(enemy, BS(Name(WER, 1)+" holt tief Luft und groehlt Dir "+
+       "die aergsten Trinklieder, die Du je gehoert hast, ins Gesicht."));
+  tell_object(enemy,BS("Du erroetest."));
+
+  enemy->SetProp(P_DISABLE_SPELLS,
+         QueryProp(P_LEVEL)/15 + random(QueryProp(P_GUILD_LEVEL))
+	 );
+
+  enemy->Defend(50+(QueryProp(P_GUILD_LEVEL)),
+                DT_AIR,
+                ([SP_SHOW_DAMAGE:1, SP_NAME:"Groehlen"]),
+		this_object()
+	       );
+}
+
+void staenkern(object enemy)
+{
+  say(BS(Name(WER, 1)+" plustert sich vor "+enemy->name()+" auf, rempelt "
+      +enemy->name()+" an und spuckt "+enemy->name()+" ins Gesicht."),
+      ({enemy}));
+
+  tell_object(enemy, BS(Name(WER, 1)+" plustert sich vor Dir auf, rempelt "+
+              "Dich an und spuckt Dir auch noch ins Gesicht!"));
+
+  enemy->SetProp(P_DISABLE_ATTACK,
+         QueryProp(P_LEVEL)/15 + random(QueryProp(P_GUILD_LEVEL))
+	 );
+}
+
+void anhauchen(object enemy)
+{
+  /* Wenn eine angezundene Fackel da is, dann haut das rein! */
+  if(present("fackel", TO))
+    if(present("fackel", TO)->_query_lighted())
+    {
+      say(BS(Name(WER, 1)+" haucht "+enemy->name()+" eine Flammenlanze entgegen!"),
+          ({enemy}));
+
+      tell_object(enemy, BS(Name(WER, 1)+" haucht Dir eine Flammenlanze entgegen!"));
+
+      enemy->Defend(300+( (QueryProp(P_GUILD_LEVEL)*2)+QueryProp(P_LEVEL) ),
+                    DT_FIRE,
+		    ([SP_SHOW_DAMAGE:1, SP_NAME:"Anhauchen"]),
+                    this_object()
+		    );
+      return;
+    }
+
+  say(BS(Name(WER, 1)+" haucht "+enemy->name()+" ins Gesicht."), ({enemy}));
+
+  tell_object(enemy, BS(Name(WER, 1)+" haucht Dir ins Gesicht und bringt Dich "+
+              "fast zum Erbrechen."));
+
+  enemy->Defend(50+( (QueryProp(P_GUILD_LEVEL)*2)+QueryProp(P_LEVEL) )+random(10),
+                ({DT_AIR, DT_POISON}),
+		([SP_SHOW_DAMAGE:1, SP_NAME:"Anhauchen"]),
+		this_object()
+		);
+}
+
+void ruelpser(object enemy)
+{
+  say(BS(Name(WER, 1)+" ruelpst "+enemy->name()+" mit einem ekelerregenden BOEEEEERP an.\n"),
+     ({enemy}));
+
+  tell_object(enemy, BS(Name(WER, 1)+" ruelpst Dir mitten ins Gesicht. Das stinkt als haette "+
+              Name(WER, 1)+" seit Jahren nicht mehr Zaehne geputzt! Dir wird speiuebel."));
+
+  enemy->Defend(50+QueryProp(P_GUILD_LEVEL)+((int) QueryProp(P_LEVEL)/2)+random(5),
+                DT_AIR,
+		([SP_SHOW_DAMAGE:1, SP_NAME:"Ruelpser"]),
+		this_object()
+		);
+}
+
+void rumkugeln()
+{
+  object *enemies;
+  int i;
+  int dam;
+
+  say(BS(Name(WER,1) + " kugelt am Boden herum!"));
+
+  enemies = PresentEnemies();
+  dam = QueryProp(P_LEVEL) * QueryProp(P_GUILD_LEVEL) / 2;
+
+  for(i = sizeof(enemies) - 1; i >= 0; i--)
+  {
+    enemies[i]->Defend(dam / 2 + random(dam / 2),
+                       DT_BLUDGEON,
+                       ([SP_SHOW_DAMAGE:1, SP_NAME:"Raumspell"]),
+		       this_object()
+		       );
+  }
+}
+
+void dunstpanzer()
+{
+  object p;
+  if(objectp(present("\nzechpreller_panzer")) || id("NO_ZECH_ARM")) return;
+  (p=clone_object("/gilden/zechpreller/obj/dunstmantel"))->move(this_object());
+  p->SetVars(QueryProp(P_GUILD_LEVEL)*50, 4*QueryProp(P_GUILD_LEVEL));
+  tell_room(environment(this_object()), 
+            BS(Name(WER)+" ruelpst laut und eine stinkende Alkoholwolke bildet "
+               "sich um "+Name(WEN)+"."));
+  command("trage dunstpanzer");
+}
+
+void alkoholisieren(object victim)
+{
+  object alko;
+  tell_room(environment(this_object()),sprintf(
+           "%s Gesicht wird rot vor Konzentration.\n"
+           "%s wird ganz gruen im Gesicht.\n",
+           Name(WESSEN), victim->Name(WER)), ({this_object(), victim}));
+  tell_object(victim,sprintf(
+             "%s scheint hoch konzentriert und Dir wird ploetzlich furchtbar "
+             "schlecht.\n", Name(WER)));
+
+  if(!random(11-QueryProp(P_GUILD_LEVEL)) &&
+     !present("\nzechpreller_rausch", victim))
+  {
+    alko=clone_object("/gilden/zechpreller/obj/alkoholiker");
+    alko->SetVar(QueryProp(P_GUILD_LEVEL),(10+random(8)+7),victim);
+    alko->move(victim, M_NOCHECK);
+    victim->SetProp(P_ALCOHOL, 
+      (int) victim->QueryProp(P_ALCOHOL)+QueryProp(P_GUILD_LEVEL));
+
+    tell_room(environment(victim),sprintf(
+             "%s scheint ploetzlich betrunkener.\n", victim->Name(WER)));
+  }
+
+  victim->Defend(400+random(200),
+                ({DT_POISON, DT_MAGIC}),
+		([SP_SHOW_DAMAGE:1, SP_NAME:"Alkoholisiere"]),
+		this_object()
+		);
+}
+
+void Attack(object enemy)
+{
+  if(!QueryProp(P_DISABLE_SPELLS) &&
+     QueryProp(P_SPELLRATE) &&
+     random(100) < QueryProp(P_SPELLRATE)
+    )
+  {
+    if(QueryProp(P_GUILD_LEVEL) > 6 && !id("NO_ZECH_ARM")) dunstpanzer();
+    /* Gildenstufe 7 */
+    if(QueryProp(P_GUILD_LEVEL) > 6)
+    {
+      if(!random(5)) alkoholisieren(enemy);
+      else if(!enemy->QueryProp(P_DISABLE_SPELLS) && !random(7))
+        groehlen(enemy);
+      else if(!enemy->QueryProp(P_DISABLE_ATTACK) && !random(7))
+        staenkern(enemy);
+      else if(sizeof(PresentEnemies()) > 1 + random(3))
+        rumkugeln();
+      else if(!random(3))
+        anhauchen(enemy);
+      else
+        ruelpser(enemy);
+     }
+      
+    /* Gildenstufe 6 */
+    if(QueryProp(P_GUILD_LEVEL) > 5 && QueryProp(P_GUILD_LEVEL) < 7)
+    {
+      if(!enemy->QueryProp(P_DISABLE_SPELLS) && !random(7))
+        groehlen(enemy);
+      else if(!enemy->QueryProp(P_DISABLE_ATTACK) && !random(7))
+        staenkern(enemy);
+      else if(sizeof(PresentEnemies()) > 1 + random(3))
+        rumkugeln();
+      else if(!random(3))
+        anhauchen(enemy);
+      else
+        ruelpser(enemy);
+    }
+
+    /* Gildenstufe 3 u. 5 */
+    else if(QueryProp(P_GUILD_LEVEL) < 5 &&
+             QueryProp(P_GUILD_LEVEL) > 2 &&
+	     !random(2))
+    {
+      if(!random(3))
+         anhauchen(enemy);
+      else
+        ruelpser(enemy);
+    }
+
+    /* Alle anderen GS */
+    else
+      ruelpser(enemy);
+  }
+  if( objectp(enemy) )
+    ::Attack(enemy);
+}
+
+void weingeist()
+{
+    weingeist = clone_object("/gilden/zechpreller/npc/weingeist");
+    weingeist->SetMaster(this_object(), 5000+random(5000), random(1000));
+    weingeist->move(environment(this_object()), M_TPORT);
+    weingeist->ActionFight(1);
+    tell_room(environment(this_object()),
+             BS(Name(WER)+" ruelpst einen Weingeist herbei-"));
+}
+
+object getWeingeist()
+{
+  return weingeist;
+}
+
+int Defend(int dam, string *dam_type_list, mixed spell, object enemy)
+{
+  if(!objectp(weingeist) && !random(7) &&
+      QueryProp(P_GUILD_LEVEL) > 9) weingeist(); 
+
+  if(QueryProp(P_HP) < QueryProp(P_MAX_HP)/2 && present("\nzechpreller_drink"))
+  {
+    myalc=0;
+    command("trinke trunk");
+    myalc=QueryProp(P_MAX_ALCOHOL);
+  }
+  if(QueryProp(P_GUILD_LEVEL) > 7 && 
+    member(({DT_BLUDGEON, DT_SLASH, DT_PIERCE, DT_SQUEEZE, DT_WHIP,
+                     DT_RIP}), dam_type_list)
+    && !random(11-QueryProp(P_GUILD_LEVEL)))
+  {
+    tell_object(enemy, BS(Name(WER)+" wankt aus der Reichweite Deiner Attacke!"));
+    tell_room(environment(this_object()), 
+              BS(Name(WER)+" wankt aus der Reichweite der Attacke!"),
+            ({enemy}));
+    return ::Defend( (dam/(QueryProp(P_GUILD_LEVEL)-random(5))),
+                     dam_type_list, spell, enemy);
+  }
+  return ::Defend(dam, dam_type_list, spell, enemy);
+}
+
+void reset()
+{
+  if(!is_clone(this_object())) return;
+  ::reset();
+  if(!present("\nzechpreller_trunk")) trunkspruch();
+}
+
+varargs void die( int poisondeath )
+{
+  if(present("\nzechpreller_dunstmantel"))
+    present("\nzechpreller_dunstmantel")->remove(1);
+  if(present("\nzechpreller_drink"))
+    present("\nzechpreller_drink")->remove(1);
+  ::die(poisondeath);
+}

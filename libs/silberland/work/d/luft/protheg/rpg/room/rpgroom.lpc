@@ -1,0 +1,659 @@
+/*
+** Ein Raum fuer das RPG-Projekt SL
+**
+** Aussehen frei konfigurierbar. Hier laeuft alles ab...
+**
+*/
+
+#include "../def.h"
+
+#define BSC(x,y) break_string(x, 78, y, BS_LEAVE_MY_LFS|BS_NO_PARINDENT)
+
+inherit "std/room";
+inherit "/d/wueste/protheg/most/std_things";
+
+nosave int roomnumber;
+nosave string game;
+
+int allowed_manager(object who)
+{
+  if(!RPGMASTER->GameMaster(who,game)) return 0;
+  return 1;
+}
+
+void SetRoomNumber(int i)
+{
+  roomnumber=i;
+}
+
+int QueryRoomNumber()
+{
+  return roomnumber;
+}
+
+void SetUp(string g)
+{
+  game=g;
+}
+
+string QueryGameName()
+{
+  return game;
+}
+
+int str2env(string str)
+{
+  switch(str)
+    {
+    case "hoehle": return TT_CAVE; break;
+    case "haus": return TT_HOUSE; break;
+    case "huegel": return TT_HILL; break;
+    case "wald": return TT_FOREST; break;
+    case "stadt": return TT_TOWN; break;
+    case "berge": return TT_MOUNTAIN; break;
+    case "wueste": return TT_DESERT; break;
+    case "dschungel": return TT_JUNGLE; break;
+    case "sumpf": return TT_SWAMP; break;
+    case "ebene": return TT_PLAIN; break;
+    case "eis": return TT_ARCTIC; break;
+    case "unterwasser": return TT_UNDERWATER; break;
+    case "wasser": return TT_WATER; break;
+    case "strasse": return TT_ROAD; break;
+    case "luft": return TT_AIR; break;
+    default: return TT_OTHER;
+    }
+}
+
+string env2str(int env)
+{
+  switch(env)
+    {
+    case TT_OTHER: return "Unbekannt"; break;
+    case TT_CAVE: return "Hoehle"; break;
+    case TT_HOUSE: return "Haus"; break;
+    case TT_HILL: return "Huegel"; break;
+    case TT_FOREST: return "Wald"; break;
+    case TT_TOWN: return "Stadt"; break;
+    case TT_MOUNTAIN: return "Berge"; break;
+    case TT_DESERT: return "Wueste"; break;
+    case TT_JUNGLE: return "Dschungel"; break;
+    case TT_SWAMP: return "Sumpf"; break;
+    case TT_PLAIN: return "Ebene"; break;
+    case TT_ARCTIC: return "Eis"; break;
+    case TT_UNDERWATER: return "Unterwasser"; break;
+    case TT_WATER: return "Wasser"; break;
+    case TT_ROAD: return "Strasse"; break;
+    case TT_AIR: return "Luft"; break;
+    default: return "Unbekannt"; break;
+    }
+}
+
+int str2l(string str)
+{
+  if(str=="hell")
+    return 1;
+  
+  return 0;
+}
+
+string l2str(int l)
+{
+  if(l > 0) return "Hell";
+  
+  return "Dunkel";
+}
+
+string t2str(int i)
+{
+  if(i) return "ja";
+  
+  return "nein";
+}
+
+int str2t(string str)
+{
+  if(str=="ja") return 1;
+  
+  return 0;
+}
+
+void create() 
+{
+  ::create();
+  
+  SetProp(P_INT_SHORT, "Ein Raum");
+  SetProp(P_INT_LONG,
+	  "Du stehst in einem nackten Raum.");
+  SetProp(P_LIGHT, 1);
+  SetProp(P_INDOORS, 0);
+  SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE: 15, ENV_TERRAIN: TT_PLAIN]));
+  
+  SetProp(P_NOQUIT, "Nein, hier nicht!");
+  
+  AddSound(DEFAULT_SOUND,
+	   "Du hoerst nichts Besonderes.");
+  
+  AddSmell(DEFAULT_SMELL,
+	   "Du riechst nichts Besonderes.");
+  
+  AddCmd(({"farbfeen","farbfee"}), "keine_farbfeen");
+  
+  AddCmd(({"aender","aendere"}), "cmd_aendern");
+  AddCmd(({"uebersicht"}), "cmd_uebersicht");
+  
+  AddCmd(({"wuerfel","wuerfle"}), "cmd_wuerfeln");
+  
+  AddCmd(({"ruf","rufe"}), "cmd_rufen");
+  
+  PO->CustomizeObject();
+  
+  call_out("whoami", 0);
+  
+  AddExit("welt", "zurueck ins Silberland#" ROOM "rpgoffice");
+}
+
+void whoami()
+{
+  string *f;
+  
+  if(sizeof(f=explode(file_name(), "_"))!=3) return;
+  
+  game=f[1];
+  roomnumber=to_int(f[2]);
+  
+  AddCmd("-"+game, "cmd_gamechannel", 1);
+}
+
+nosave int keine_farbfeen(string str)
+{
+  return write(BS("Trottel!")), 1;
+}
+
+nosave int cmd_rufen(string str)
+{
+  if(!(str=TP->_unparsed_args()))
+    return write(BS("Was willst Du rufen?\n")), 1;
+  
+  write(break_string(str, 78, "Du rufst: "));
+  str=break_string(str, 78, CAP(getuid(TP))+" ruft: ");
+  
+  domainshout(str, "^" ROOM "rpgroom_"+game, 1);
+  
+  write_file(LOG "game_"+game+"_comm", BS(dtime()+": Ruf: "+str));
+  
+  return 1;
+}
+
+int is_gamer(object who)
+{
+  if(!ENV(who)) return 0;
+  
+  if(strstr(file_name(ENV(who)),ROOM "rpgroom_"+game)==0) return 1;
+  
+  return 0;
+}
+
+nosave int cmd_gamechannel(string str)
+{
+  object *u;
+  int i;
+  string cmsg,in;
+  string *m;
+  
+  u=filter_array(users(), "is_gamer");
+  
+  cmsg="";
+  
+  in="[RPG:"+CAP(game);
+  
+  str=TP->_unparsed_args();
+  
+  if(query_verb()=="-"+game) 
+    {
+      if(!strlen(str))
+	return 0;
+    }
+  else
+    if(!strlen(str))
+      str=regreplace(query_verb(), "-"+game, "", 0);
+    else
+      str=regreplace(query_verb(), "-"+game, "", 0)+" "+str;
+  
+  if(str=="?")
+    {
+      for(i=sizeof(u)-1;i>=0;i--)
+	cmsg+=CAP(getuid(u[i]))+(i==0 ? ".":", ");
+      
+      write(BSC(cmsg, in+"] "));
+      
+      return 1;
+    }
+  
+  if(str=="*")
+    {
+      m=RPGMASTER->GetChannelHistory(game);
+      
+      if(!sizeof(m)) 
+	return write(BSC("Absolute Stille...", "[RPG:"+CAP(game)+"] ")), 1;
+      
+      for(i=0;i < sizeof(m);i++)
+	write(m[i]);
+      
+      return 1;
+    }
+  
+  if(strstr(str, ";")==0)
+    {
+      if(strstr(str, ";")==0)
+	str=regreplace(str, ";", "", 0);
+      
+      cmsg=break_string(":"+CAP(TP->Name(WESSEN))+" "+str+"]", 78, 
+			strlen(in)+1, BS_LEAVE_MY_LFS);
+      
+      cmsg[0..strlen(in)] = in; 
+    }
+  else
+    if(strstr(str, ":")==0)
+      {
+	if(strstr(str, ":")==0)
+	  str=regreplace(str, ":", "", 0);
+	
+	cmsg=break_string(":"+CAP(getuid(TP))+" "+str+"]", 78, 
+			  strlen(in)+1, BS_LEAVE_MY_LFS);
+	
+	cmsg[0..strlen(in)] = in; 
+      }
+    else
+      cmsg=BSC(str, in+":"+CAP(getuid(TP))+"] ");
+  
+  for(i=sizeof(u)-1;i>=0;i--)
+    tell_object(u[i], cmsg);
+  
+  write_file(LOG "game_"+game+"_comm", dtime()+":\n"+cmsg);
+  
+  RPGMASTER->AddToChannel(game, cmsg);
+  
+  return 1;
+}
+
+nosave int cmd_wuerfeln(string str)
+{
+  int i,e,a,w,v,t,p,m;
+  string *tmp;
+  
+  if(TP->QueryProp(P_SP) < 2)
+    return write(BS("Dazu fehlt Dir im Moment die Magie!")), 1;
+  
+  str=lower_case(str);
+  
+  if(!strlen(str))
+    str="1w6";
+    
+  if(sizeof(tmp=explode(str, " "))==2)
+    if(tmp[1]=="verdeckt")
+      {
+	str=tmp[0];
+	
+	v=1;
+      }
+    else
+      return write(BS("Syntax: wuerfle <wuerfel> [verdeckt]")), 1;
+  
+  str=regreplace(str, " ", "", 1);
+  
+  e=0;
+  
+  if(sizeof(tmp=explode(tmp[0], "+"))==2)
+    p=to_int(tmp[1]);
+  else
+    p=0;
+
+  if(sizeof(tmp=explode(tmp[0], "-"))==2)
+    m=to_int(tmp[1]);
+  else
+    m=0;
+  
+  if(sizeof(tmp=explode(tmp[0], "w"))==2)
+    {
+      a=to_int(tmp[0]);
+      
+      w=to_int(tmp[1]);
+    }
+  
+  if(a > 30)
+    return write(BS("So viele Wuerfel?!")), 1;
+  
+  if(a < 1)
+    return write(BS("Haettest gern?!")), 1;
+  
+  if(w > 500)
+    return write(BS("So einen Wuerfel gibt es doch gar nicht!")), 1;
+  
+  if(p > 500)
+    return write(BS("So viel?!")), 1;
+  
+  for(i=a;i>0;i--)
+    {
+      t=random(w)+1;
+      e+=t;
+      
+      if(!v)
+	tell_room(ME, BS(TPN+" wuerfelt 1w"+w+" und erhaelt "+t+"."), ({TP}));
+      
+      write(BS("Du wuerfelst 1w"+w+" und erhaelst "+t+"."));
+    }
+  
+  if(!RPGMASTER->GameMaster(TP, game))
+    TP->AddSp(-2);
+  
+  if(a==1 && !p) return 1;
+  
+  e+=p;
+  e-=m;
+  
+  if(!v)
+    tell_room(ME, BS("Zusammen "+(p > 0 ? "mit +"+p+" " : "")+
+		     (m > 0 ? (p > 0 ? "und ":"")+"mit -"+m+" " : "")+
+		     "ergibt das eine Punktzahl von "+e+"."), ({TP}));
+  
+  write(BS("Zusammen "+(p > 0 ? "mit +"+p+" " : "")+
+	   (m > 0 ? (p > 0 ? "und ":"")+"mit -"+m+" " : "")+
+	   "ergibt das eine Punktzahl von "+e+"."));
+    
+  return 1;
+}
+
+varargs void aendern_usage(int flag)
+{
+  write(BSST(" Raum Nummer: "+roomnumber+" von ("+RPGMASTER->QueryRooms(game)+
+	     "), Spiel: \""+game+"\"")+
+	(!flag ? BSST(" Was willst Du denn aendern? Abbrechen mit q.")+
+	 BSST(" Beachte bitte die Gross-kleinschreibung.")+
+	 BSST("=============================================") : "")+
+	BSST(sprintf("(1) %25-s %s","Licht: ",l2str(QueryProp(P_LIGHT))))+
+	BSST(sprintf("(2) %25-s %s","Drinnen: ", t2str(QueryProp(P_INDOORS))))+
+	BSST(sprintf("(3) %25-s %s","Terrain: ", env2str(QueryProp(P_ENVIRONMENT)[ENV_TERRAIN])))+
+	BSST(sprintf("(4) %25-s %s","Standardgeruch: ",QueryProp(P_SMELLS)[DEFAULT_SMELL]))+
+	BSST(sprintf("(5) %25-s %s","Standardgeraeusch: ",QueryProp(P_SOUNDS)[DEFAULT_SOUND]))+
+	BSST(sprintf("(6) %25-s %s","Raummeldungen: ", "'"+
+		   (sizeof(QueryProp(P_ROOM_MSG)) ? 
+		    implode(QueryProp(P_ROOM_MSG), "', '"):"")+"'"))+
+	BSST(sprintf("(7) %25-s %s.","Kurzbeschreibung: ", QueryProp(P_INT_SHORT)))+
+	BSST(sprintf("(8) %25-s %s","Langbeschreibung: ", QueryProp(P_INT_LONG))));
+}
+
+nosave int cmd_uebersicht(string str)
+{
+  if(!TP) return 0;
+  if(!allowed_manager(TP)) return 0;
+  
+  aendern_usage(1);
+
+  return 1;
+}
+
+void change_room(string what, string str)
+{
+  switch(str)
+    {
+    case "1":
+    case "licht": SetProp(P_LIGHT, str2l(lower_case(what))); 
+      break;
+    case "2":
+    case "drinnen": SetProp(P_INDOORS, str2t(lower_case(what))); 
+      break;
+    case "3":
+    case "terrain": SetProp(P_ENVIRONMENT, 
+	    ([ENV_TEMPERATURE: 15, ENV_TERRAIN: str2env(lower_case(what))]));
+      break;
+    case "4":
+    case "geruch":
+    case "standardgeruch": AddSmell(DEFAULT_SMELL, BS(what));
+      break;
+    case "5":
+    case "geraeusch":
+    case "standardgeraeusch": AddSound(DEFAULT_SOUND, BS(what));
+      break;
+    case "6":
+    case "raummeldung":
+    case "raummeldungen":
+      if(what=="loeschen") 
+	AddRoomMessage(({}));
+      else
+	{
+	  AddRoomMessage(QueryProp(P_ROOM_MSG)+({BS(what)}));
+	  
+	  if(find_call_out("WriteRoomMessage")==-1)
+	    call_out("WriteRoomMessage", random(QueryProp(P_MSG_PROB)));
+	}
+      break;
+    case "7":
+    case "kurzbeschreibung": what=regreplace(what, "[.]$", "", 1);
+      SetProp(P_INT_SHORT, what); 
+      break;
+    case "8":
+    case "langbeschreibung": SetProp(P_INT_LONG, what); 
+      break;
+    }
+  write(BSST("Fertig."));
+  
+  write_file(LOG "game_"+game+"_changes", dtime()+": "+TPN+" aendert "+str+
+	     " zu "+what+" ("+explode(file_name(), "/")[<1]+").\n");
+  
+  aendern_usage();
+  write("? ");
+  input_to("customize");
+}
+
+void customize(string str)
+{
+  string *tmp;
+  string what;
+  
+  if(!str)
+    {
+      aendern_usage();
+      write("? ");
+      input_to("customize");
+    }
+  
+  if(strstr(str, "aendere ")==0)
+    str=str[8..];
+  
+  if(sizeof(tmp=explode(str, " ")) > 1)
+    {
+      str=tmp[0];
+      what=implode(tmp[1..], " ");
+    }
+  
+  str=lower_case(str);
+  
+  switch(str)
+    {
+    case "6":
+    case "raummeldung":
+    case "raummeldungen":
+      if(strlen(what))
+	{
+	  change_room(what, str);
+	  return;
+	}
+      write(BSST("Raummeldungen nur einzeln angeben, kommen alle 30 sek. "
+	       "Du kannst alle loeschen mit 'loeschen'."));
+      write("Raummeldung:  ");
+      input_to("change_room", 0, str);
+      return;
+    case "5":
+    case "geraeusch":
+    case "standardgeraeusch": 
+      if(strlen(what))
+	{
+	  change_room(what, str);
+	  return;
+	}
+      write(BSST("Nicht zu umstaendlich, es gibt keinen Editor dafuer."));
+      write("Standardgeraeusch:  ");
+      input_to("change_room", 0, str);
+      return;
+    case "4":
+    case "geruch":
+    case "standardgeruch": 
+      if(strlen(what))
+	{
+	  change_room(what, str);
+	  return;
+	}
+      write(BSST("Nicht zu umstaendlich, es gibt keinen Editor dafuer."));
+      write("Standardgeruch:  ");
+      input_to("change_room", 0, str);
+      return;
+    case "1":
+    case "licht": 
+      if(strlen(what))
+	{
+	  change_room(what, str);
+	  return;
+	}
+      write(BSST("Folgende Einstellungen sind erlaubt:")+
+	    BSST("Hell, dunkel."));
+      write("Licht:  ");
+      input_to("change_room", 0, str);
+      return;
+    case "2":
+    case "drinnen":
+      if(strlen(what))
+	{
+	  change_room(what, str);
+	  return;
+	}
+      write(BSST("Folgende Einstellungen sind erlaubt:")+
+	    BSST("ja, nein."));
+      write("Drinnen:  ");
+      input_to("change_room", 0, str);
+      return;
+    case "7":
+    case "kurzbeschreibung": 
+      if(strlen(what))
+	{
+	  change_room(what, str);
+	  return;
+	}
+      write(BSST("Bitte kurz halten:")+
+	    BSST("z.B.: An einem Bach, In einer gewaltigen Hoehle etc."));
+      write("Kurzbeschreibung:  ");
+      input_to("change_room", 0, str);
+      return;
+    case "3":
+    case "terrain": 
+      if(strlen(what))
+	{
+	  change_room(what, str);
+	  return;
+	}
+      write(BSST("Folgende Terraintypen gibt es:")+
+	    BSST("Hoehle, Haus, Huegel, Wald, Stadt, Berge, Wueste, Dschungel, "
+	       "Sumpf, Ebene, Eis, Unterwasser, Wasser, Strasse, Luft."));
+      write("Terrain:  ");
+      input_to("change_room", 0, str);
+      return;
+    case "8":
+    case "langbeschreibung": 
+      if(strlen(what))
+	{
+	  change_room(what, str);
+	  return;
+	}
+      write(BSST("Nicht zu umstaendlich, es gibt keinen Editor dafuer."));
+      write("Langbeschreibung:  ");
+      input_to("change_room", 0, str);
+      return;
+    case "q":
+    case "quit":
+    case "fertig":
+    case "abbrechen": return;      
+    default:  
+
+      aendern_usage();
+      write("? ");
+      input_to("customize");
+    }
+}
+
+nosave int cmd_aendern(string str)
+{
+  notify_fail(BSST("Welches Objekt willst Du aendern?"));
+  if(!str) return 0;
+  
+  if(str!="raum" && str!="umgebung") return 0;
+  
+  if(!allowed_manager(TP)) 
+    return write(BSST("Du darfst deine Umgebung nicht veraendern!")), 1;
+  
+  aendern_usage();
+  
+  write("? ");
+  
+  input_to("customize");
+  return 1;
+}
+
+string GetExits(object v)
+{
+  if(!sizeof(QueryProp(P_EXITS)))
+    return "";
+  
+  return ::GetExits(v);
+}
+
+void init()
+{
+  ::init();
+  
+  call_out("check_env", 3);
+}
+
+void check_env()
+{
+  if(RPGMASTER->IsGameOpen(game)) return;
+  
+  if(interactive(TP))
+    if(!RPGMASTER->IsPlayer(TP, game))
+      {
+	TP->move(ROOM "rpgoffice",M_NOCHECK);
+	return;
+      }
+}
+
+varargs int PreventLeave(object who, mixed dest)
+{
+  if(stringp(dest))
+    {
+      if(strstr(dest, ROOM "rpgroom_")==0)
+	return ::PreventLeave(who,dest);
+    }
+  else
+    if(strstr(file_name(dest), ROOM "rpgroom_")==0)
+      return ::PreventLeave(who,dest);
+  
+  if(query_once_interactive(who))
+    call_out("check_items", 0, who);
+  
+  return ::PreventLeave(who,dest);
+}
+
+void check_items(object who)
+{
+  object weg;
+  
+  if(strstr(file_name(ENV(who)), ROOM "rpgroom_")==0) return;
+  
+  while(weg=present(RPG_PROJECT_ID, who))
+    {
+      tell_object(who, BSST(weg->Name()+" loest sich auf."));
+      weg->SetProp(P_CURSED, 0);
+      weg->DoUnwear(1);
+      weg->remove(1);
+    }
+}
+
+int clean_up(int refcount) { return 1; }

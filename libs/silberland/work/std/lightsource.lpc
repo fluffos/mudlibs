@@ -1,0 +1,430 @@
+// SilberLand Mudlib
+//
+// std/lightsource.c -- standard light source
+//
+// $Date: 2007/01/23 09:01:13 $
+/* $Revision: 2.4 $
+ * $Log: lightsource.c,v $
+ * Revision 2.4  2007/01/23 09:01:13  Woody
+ * Kleine Bugfixes, Code Cleanup
+ *
+ * Revision 2.3  1999/06/14 17:14:08  Woody
+ * Bugfix in move()
+ *
+ * Revision 2.2  1999/06/14 10:25:50  Woody
+ * Unterwasser-Handling
+ *
+ * Revision 2.1  1997/06/25 11:20:43  Woody
+ * Bugfixing
+ *
+ * Revision 2.0  1997/03/13 03:00:23  Woody
+ * prepared for revision control
+ *
+ * Revision 1.1  96/05/25  18:00:00  Woody
+ * short() Aenderungen wieder retour
+ *
+ * Revision 1.0  22/02/96  23:00:00  Hadra
+ * short() geaendert
+ */                            
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <lightsource.h>
+#include <language.h>
+#include <defines.h>
+#include <moving.h>
+
+#define TRUE  1
+#define FALSE 0
+#define bool  int
+#define QSP	       (PL->QueryProp(P_SP))
+
+#define DFLT_FUEL       20 // 20 Sekunden
+#define DFLT_LIGHTDESC  "brennend"
+
+#define SPELL_POINTS    5       // Lichtquellen anzuenden kostet 5 MP
+#define CALL_OUT_TIME   100     // mind. alle 100 Sekunden fuel pruefen
+#define WATERPROOF_ID   "\nwasserfest"  // brennt auch unter Wasser
+
+#undef DEBUG
+
+/* - global data - */
+nosave private int fuel, max_fuel;
+nosave private bool lighted;
+nosave private int call_time;
+nosave private int lflag=0;
+
+/* - prototypes - */
+void test_remove();
+
+ENVCHECKPROC
+
+void create()
+{
+  thing::create();
+  
+  SetProp( P_NAME, "Lichtquelle" );
+  SetProp( P_SHORT, "Eine Lichtquelle" );
+  SetProp( P_LONG, "Du siehst nichts besonderes.\n" );
+  SetProp( P_GENDER, FEMALE );
+  SetProp( P_FUEL, DFLT_FUEL );
+  SetProp( P_LIGHTDESC, DFLT_LIGHTDESC );
+  SetProp( P_DO_DESTRUCT, TRUE );
+  SetProp( P_VALUE, 5 );
+  Set(P_PURSUERS, 0);
+  
+  AddId( "Lichtquelle" );
+  AddCmd( ({"zuend","zuende"}),   "light" );
+  AddCmd( ({"loesch","loesche"}), "extinguish" );
+  
+  ENVCHECK
+}
+
+/*
+ * Lichtquelle anzuenden
+ */
+int light(string str)
+{
+  string tmp;
+  mapping env;
+
+  _notify_fail( "Zuende was an?\n" );
+
+  if( (!str) || (!sscanf( str, "%s an", tmp )) || (!id( tmp )) )
+    return FALSE;
+  
+  if( environment() != PL ) // Player hat es nicht
+  {
+    _notify_fail( "Erstmal musst Du " + name( WEN, 0 ) + " haben.\n" );
+    return FALSE;
+  }
+  
+  if( lighted )
+  {
+    _notify_fail( CAP( name( WER, 1 ) ) + " brennt schon.\n" );
+    return FALSE;
+  }
+
+  if( !id(WATERPROOF_ID) &&
+      environment(PL) &&
+      mappingp(env=environment(PL)->QueryProp(P_ENVIRONMENT)) &&
+      (env[ENV_TERRAIN]==TT_UNDERWATER) )
+  {
+    _notify_fail( CAP( name( WER, 1 ) ) + " brennt unter Wasser nicht.\n" );
+    return FALSE;
+  }
+
+  if( fuel <= 0 )
+  {
+    _notify_fail( CAP( name( WER, 1 ) ) + " ist abgebrannt.\n" );
+    test_remove();
+    return FALSE;
+  }
+  
+  if(QSP < SPELL_POINTS)
+  {
+    _notify_fail("Du hast nicht genuegend Magiepunkte zum Anzuenden.\n");
+    return FALSE;
+  } 
+
+  lighted = TRUE;
+  call_time = (fuel < CALL_OUT_TIME)? fuel : CALL_OUT_TIME;
+  call_out( "out_of_fuel", call_time );
+
+  if( set_light( 1 ) == 1 )
+    write( "Mit einem kleinen Feuerball zuendest Du "+name( WEN, 0 )+" an.\n"
+	  +"Du kannst wieder etwas sehen.\n" );
+  else
+    write( "Mit einem kleinen Feuerball zuendest Du "+name( WEN, 0 )+" an.\n" );
+  say( PL->Name(WER)
+      + " zuendet " + name( WEN, 0 ) + " mit einem kleinen Feuerball an.\n" );
+
+  if( !id(WATERPROOF_ID) )
+    PL->AddPursuer(this_object());
+
+  PL->restore_spell_points(-SPELL_POINTS);
+  return TRUE;
+}
+
+int splash()
+{
+  int time;
+
+  if( id(WATERPROOF_ID) )
+    return FALSE;
+
+  if( ( time = remove_call_out( "out_of_fuel" ) ) == -1 )
+    time = 0;
+
+  fuel -= (call_time - time);
+  lighted = FALSE;
+
+  if( set_light( -1 ) == 0 )
+  {
+    write( "Zischend erlischt Dein"+(QueryProp(P_GENDER)==FEMALE?"e ":" ")+
+           name(RAW)+". Es wird dunkel.\n" );
+    say( PL->Name(WESSEN)+ " " +name(RAW)+ " erlischt zischend."
+         " Es wird dunkel.\n" );
+  }
+  else
+  {
+    write( "Zischend erlischt Dein"+(QueryProp(P_GENDER)==FEMALE?"e ":" ")+
+           name(RAW)+".\n" );
+    say( PL->Name(WESSEN)+ " " +name(RAW)+ " erlischt zischend.\n" );
+  }
+  if (pointerp(QueryProp(P_PURSUERS)) &&
+      sizeof(QueryProp(P_PURSUERS)) &&
+      objectp(QueryProp(P_PURSUERS)[0]))
+  {
+    QueryProp(P_PURSUERS)[0]->RemovePursuer(this_object());
+  }
+  Set(P_PURSUERS,0);
+
+  if( fuel <= 0 ) test_remove();
+  return TRUE;
+}
+
+void _SetPursued(object ob)
+{
+  mixed *pur;
+
+  if (!pointerp(pur=Query(P_PURSUERS)))
+    pur=({0,({})});
+  else
+    if (objectp(pur[0]))
+      pur[0]->RemovePursuer(ME);
+  pur[0]=ob;
+  Set(P_PURSUERS,pur);
+}
+
+varargs int move(mixed dest, int method)
+{
+  if (PL && lighted)
+    if (environment(dest) &&
+        !(living(dest) || query_once_interactive(dest)))
+    {
+      lflag=1;
+      return ME_CANT_BE_DROPPED;
+    }
+
+  if (pointerp(QueryProp(P_PURSUERS)) &&
+      sizeof(QueryProp(P_PURSUERS)) &&
+      objectp(QueryProp(P_PURSUERS)[0]))
+  {
+    QueryProp(P_PURSUERS)[0]->RemovePursuer(this_object());
+  }
+  Set(P_PURSUERS,0);
+
+  if (stringp(dest) && find_object(dest)) dest=find_object(dest);
+  if (objectp(dest) &&
+      (query_once_interactive(dest) || living(dest)) &&
+      lighted && !id(WATERPROOF_ID))
+    dest->AddPursuer(this_object());
+
+  return ::move(dest, method);
+}
+
+string _query_nodrop()
+{
+  if (lflag) {
+    lflag=0;
+    return sprintf("Aber %s brennt doch noch!\n", name(WER,1));
+  } else
+    return Query(P_NODROP);
+}
+
+int PreventFollow(object dest)
+{
+  mapping env;
+
+  if( !PL || !Query(P_PURSUERS) )
+    return 2;
+
+  if( mappingp(env=environment(PL)->QueryProp(P_ENVIRONMENT)) &&
+      (env[ENV_TERRAIN]==TT_UNDERWATER) && !id(WATERPROOF_ID) )
+  {
+    splash();
+    return 2;
+  }
+  return 1;
+}
+
+int extinguish( string str )
+{
+  int time;
+
+  _notify_fail( "Welche Lichtquelle moechtest Du loeschen?\n" );
+
+  if( (!str) || (!id( str )) )
+    return FALSE;
+  
+  if( !lighted )
+  {
+    _notify_fail( CAP( name( WER, 1 ) ) + " brennt gar nicht.\n" );
+    return FALSE;
+  }
+
+  if( environment() != PL )
+  {
+    _notify_fail( "Erstmal musst Du " + name( WEN, 0 ) + " haben.\n" );
+    return FALSE;
+  }
+
+  if( ( time = remove_call_out( "out_of_fuel" ) ) == -1 )
+    time = 0;
+
+  fuel -= (call_time - time);
+  lighted = FALSE;
+
+  if ( set_light( -1 ) == 0 )
+  {
+    write( "Es wird dunkel.\n" );
+    say( PL->Name(WER) + " macht das Licht aus.\n" );
+  }
+  else
+  {
+    write( "Ok.\n" );
+    say( PL->Name(WER) + " loescht " + name( WEN, 0 ) + " aus.\n" );
+  }
+
+  if (pointerp(QueryProp(P_PURSUERS)) &&
+      sizeof(QueryProp(P_PURSUERS)) &&
+      objectp(QueryProp(P_PURSUERS)[0]))
+  {
+    QueryProp(P_PURSUERS)[0]->RemovePursuer(this_object());
+  }
+  Set(P_PURSUERS,0);
+
+  if( fuel <= 0 ) test_remove();
+  return TRUE;
+}
+
+void out_of_fuel()
+{
+  int res;
+
+  fuel -= call_time;
+
+  if( fuel > 0 )
+  {
+    call_out( "out_of_fuel", call_time );
+    return;
+  }
+
+  res = set_light(-1);
+  lighted = FALSE;
+
+  if (environment()==this_player()) {
+    if (res == 0) {
+      write( CAP( name( WER, 1 ) ) + " erlischt und es wird dunkel.\n" );
+      say( "Es wird dunkel als " + PL->name(WESSEN) + " " + QueryProp(P_NAME)
+	  + " erlischt.\n" );
+    } else {
+      write( CAP( name( WER, 1 ) ) + " erlischt.\n" );
+      say( CAP( name( WER, 0 ) ) + " erlischt.\n" );
+    }
+  }
+  if (pointerp(QueryProp(P_PURSUERS)) &&
+      sizeof(QueryProp(P_PURSUERS)) &&
+      objectp(QueryProp(P_PURSUERS)[0]))
+  {
+    QueryProp(P_PURSUERS)[0]->RemovePursuer(this_object());
+  }
+  Set(P_PURSUERS,0);
+  test_remove();
+}
+
+int remove()
+{
+  if (pointerp(QueryProp(P_PURSUERS)) &&
+      sizeof(QueryProp(P_PURSUERS)) &&
+      objectp(QueryProp(P_PURSUERS)[0]))
+  {
+    QueryProp(P_PURSUERS)[0]->RemovePursuer(this_object());
+    Set(P_PURSUERS,0);
+  }
+  return ::remove();
+}
+
+void test_remove()
+{
+  if( QueryProp( P_DO_DESTRUCT ) )
+    remove();
+}
+
+// Brennstoff nachfuellen
+int AddFuel( int f )
+{
+  if ( (QueryProp(P_FUEL) + f) > QueryProp(P_MAX_FUEL) )
+    f -= QueryProp(P_FUEL) + f - QueryProp(P_MAX_FUEL);
+  if (f <= 0) return 0;
+  fuel += f;
+  return f;
+}
+
+// Property - Funktionen
+
+int _set_lighted( bool l )
+{
+  return lighted = l;
+}
+
+int _query_lighted()
+{
+  return lighted;
+}
+
+int _query_fuel()
+{
+  int tmp;
+
+  if ((tmp=find_call_out("out_of_fuel"))>=0)
+    return fuel-call_time+tmp;
+  else
+    return fuel;
+}
+
+int _set_fuel( int f )
+{
+  if (f > QueryProp(P_MAX_FUEL))
+    if (QueryProp(P_MAX_FUEL) > DFLT_FUEL)
+      fuel = QueryProp(P_MAX_FUEL);
+    else
+      Set(P_MAX_FUEL, f);
+  return fuel = f;
+}
+
+int _set_max_fuel( int mf )
+{
+  if (fuel > mf) {
+    fuel = mf;
+  }
+  return Set(P_MAX_FUEL, mf);
+}
+
+string _query_lightdesc()
+{
+  mixed tmp;
+  int n,i;
+
+  tmp = Query(P_LIGHTDESC);
+  if (!pointerp(tmp)) return tmp;
+  n = sizeof(tmp);
+  i = n * _query_fuel() / QueryProp(P_MAX_FUEL);
+  return tmp[i>=n ? n-1 : i];
+}
+
+/*
+ * short() ueberladen
+ */
+string short()
+{
+  string s;
+  string desc;
+
+  if(!(s=QueryProp(P_SHORT)) || QueryProp(P_INVIS))
+    return 0;
+  return s + ( (lighted)? (" ("+QueryProp(P_LIGHTDESC) +").\n") : ".\n" );
+}
+

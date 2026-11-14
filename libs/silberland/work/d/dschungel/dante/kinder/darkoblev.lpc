@@ -1,0 +1,161 @@
+//obj fuer dunkelelfen das raeume verdunkeln kann
+//erzeugt obj, das dunkel ist
+//je nach int und lev dauer und staerke...
+//die werte muss man noch austesten 
+
+#include "/players/dante/myowndefine.h"
+
+inherit "std/thing";
+#include <moving.h>
+#include <properties.h>
+#include <language.h>
+#define DARK 20   //wie oft kann man verdunkeln
+#define COST 20  //anzahl der mps die es kostet
+
+int count=0;
+int lev, inte, total;
+object ob;
+string *orte;
+
+
+create()
+{
+  if (!is_clone(TO) )  return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Ein Brocken dunkler Materie");
+  SetProp(P_LONG, BS(
+        "Dieser Brocken dunkler Materie wurde geschaffen von einem "
+        "boesartigen Daemon, der sich der schwarzen Magie "
+        "verschrieben hat. Er soll ueber magische Faehigkeiten verfuegen."));
+
+  orte = ({"/gilden/abenteurer",
+      "/d/dschungel/dante/kinder/kinder1"});
+
+  SetProp(P_NAME, "Brocken");
+  AddId(({"brocken","dunkle materie","materie"}));
+
+  SetProp(P_GENDER, MALE);
+  SP(P_INFO, 
+      BS("Mit diesem Brocken kannst Du Dunkelheit erschaffen. "
+        "Wenn Dein Zauber klappt, wird sich Deine Umgebung sofort "
+        "verdunkeln! <syntax: verdunkle umgebung>! "
+        "Wie dunkel und wie lange Dein Zauber nun wirklich "
+        "wirkt, haengt letztendlich nur von Deinen Faehigkeiten ab!"));
+
+  SetProp(P_MATERIAL, ([MAT_MARBLE: 50, MAT_MAGIC:50]) );
+  SetProp(P_WEIGHT, 100);
+  SetProp(P_VALUE, 5000);
+  SetProp(P_NOBUY, 1);
+  ACD(({"verdunkel","verdunkle"}), "dark");
+  SP(P_MAGIC, 1);
+
+}
+
+int dark(string str)   {
+  lev=TP->QueryProp(P_LEVEL);   
+  inte=TP->QueryAttribute(A_INT);
+  total=lev+inte;
+  NF("Was willst Du verdunkeln?!\n");
+
+  if(str!="umgebung")   {
+    return 0; 
+  }
+  else  {
+    if((lev<10)||(inte<10))  {
+      write(BS("Deine Magie ist noch viel zu schwach, als dass "
+            "Du Dich an das Verdunkeln Deiner Umgebung machen "
+            "koenntest!"));
+      say(CAP_TPN+" schaut verzweifelt einen Brocken an!\n");
+      return 1;  
+    }
+    if(present("DANTE_DARK", environment(TP)))   {
+      write("Deine Umgebung wurde bereits verdunkelt!\n");
+      return 1; 
+    }
+    if(file_name(environment(TP))==("/gilden/abenteurer") )   {
+      write
+        ("Nein, diese Umgebung kannst Du nicht verdunkeln!\n");
+      return 1; 
+    }
+    if(TP->QueryProp(P_SP)<=COST)  {
+      write(BS(
+            "Du versuchst Deine Umgebung zu verdunkeln, "
+            "jedoch ist dafuer Deine Magie zu schwach!"));
+      say(BS(CAP_TPN+" versucht Deine Umgebung zu verdunkeln, "
+            "doch hat zu wenig Magie!"));
+      return 1; 
+    }
+
+    if(environment(TP)->QueryProp(P_LIGHT)<=0)   {
+      write("Aber Deine Umgebung ist doch nicht hell.\n");
+      return 1; 
+    }
+
+    if(count>=DARK) {
+      write("Die schwarze Magie Deines Brockens geht zu Ende!\n"
+          "Der Brocken loest sich langsam auf.\n");
+      say(BS("Ein Brocken schwarzer Materie loest sich in den "
+            "Haenden von "+TPN+" auf!"));
+      remove();
+      return 1; 
+    }
+    else   {
+      count++;
+
+      ob=clone_object("d/dschungel/dante/kinder/darkob2lev");
+
+      switch(random(11))    {
+        case 0..7:
+          ob->move(environment(TP), M_GO);
+          ob->SetProp(P_LIGHT, -(total/20));
+          //d.h im minimum -1 
+          ob->dark_time(lev, inte);
+          write("Du schaffst es Deine Umgebung zu verdunkeln!\n");
+          say(CAP_TPN+" verdunkelt mit schwarzer Magie Deine Umgebung!\n");
+          TP->restore_spell_points(-COST);
+          break;
+
+        case 8..9:
+          write(BS("Du versuchst Deine Umgebung zu verdunkeln, schaffst "
+                "es aber nicht!"));
+          say(BS(CAP_TPN+" versucht Deine Umgebung mit schwarzer Magie zu verdunkeln, schafft es "
+                "aber nicht!"));
+          TP->restore_spell_points(-COST);
+          break;
+
+        case 10: 
+          ob->move(environment(TP), M_GO);
+          ob->SetProp(P_LIGHT, -(total/20));
+          ob->dark_time(lev, inte);
+          write(BS("Du schaffst es Deine Umgebung zu verdunkeln, ohne "
+                "dabei Magie zu verlieren!"));
+          say(
+              CAP_TPN+" verdunkelt Deine Umgebung mit schwarzer Magie hoechst erfolgreich!\n");
+          break;
+
+        default:write("BUG!\n");  
+      }
+      return 1;
+    }
+    return 0; 
+  }
+  return 0;
+}
+
+
+reset()  {
+  ::reset();
+
+  if(count>1)   {
+    if(environment(TO))  {
+
+      tell_object(environment(TO),
+          "Dein Brocken leuchtet dunkel auf!\n");
+    }
+
+    count--;  
+  }  
+}
+

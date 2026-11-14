@@ -1,0 +1,236 @@
+/****************************************************************************
+ r3.c, (C) 2002 by Carador for Silberland
+****************************************************************************/
+
+#pragma strong_types
+#include "../def.h"
+#include <verben.h>
+
+inherit RD_STDDIR"reling";
+
+status bumerang_weg;
+object steckt, stiefel;
+
+void reset_vars()
+{
+  bumerang_weg = 0;
+}
+
+private mixed myex()
+{
+  object *sti;
+
+  if (!steckt || this_player() != steckt) return 1;
+
+  sti = this_player()->QueryArmours(AT_BOOT);
+  if (!sti || !sizeof(sti)) {
+    steckt = 0;
+    return 1;
+  }
+  stiefel = sti[0];
+  message(({
+    ({ M_PL_BEST, M_PL_VERB, "versuch", M_PL_AKK_SICH, "zu bewegen, ",
+       M_PL_VERB, "schaff", "es aber nicht, ", M_PL_POSS, 
+        "~en Fuss aus der Planke zu ziehen." }),
+    ({ M_WRITE, "So ein Mist, ", M_BEST, sti[0], 
+       (sti[0]->IsPlural() ? "haben" : "hat") + " sich total "
+       "in der Planke verklemmt. Da wirst Du ohne einen kleinen Strip nicht "
+       "weiterkommen." })
+  }));
+}
+
+void do_entladung()
+{
+  call_out("ende_stiefel", 120);
+  message(({
+    ({ M_ROOM, this_object(), "Puh, Glueck gehabt. Der Blitz schlaegt "
+       "direkt neben Dir in den Fussboden in eine Planke ein." })
+  }));
+}
+
+void stiefel_check()
+{
+  object *sti;
+
+  if (steckt && environment(steckt) != this_object()) steckt = 0;
+ 
+  if ( steckt ||
+       !this_player() ||
+       environment(this_player()) != this_object() ) return;
+
+  sti = this_player()->QueryArmours(AT_BOOT);
+  if (!sti || !sizeof(sti)) {
+  message(({
+      ({ M_SAY, M_PL_BEST, "versinkt ploezlich mit einem "
+         "Bein tief im Fussboden." }),
+      ({ M_WRITE, "Ploetzlich gibt der Fussboden unter Dir nach. "
+         "Du schaust nach unten. Dein einer Fuss gleitet einfach "
+         "durch eine Planke hindurch als ob Du ein Geist waerst." }),
+      2,
+      ({ "Jedoch", M_PL_VERB, "ha", M_PL_PRONOUN, "Glueck und ",
+         M_PL_VERB, "kann", "den Fuss wieder herausziehen." }) }));
+  } else {
+    message(({ 
+      ({ M_SAY, M_PL_BEST, "versinkt ploezlich mit einem "
+         "Bein tief im Fussboden." }),
+      ({ M_WRITE, "Ploetzlich gibt der Fussboden unter Dir nach. "
+         "Du schaust nach unten. Dein einer Fuss gleitet einfach "
+         "durch eine Planke hindurch als ob Du ein Geist waerst." }),
+      2,
+      ({ M_WRITE, "Der Versuch, das Bein wieder herauszuziehen, "
+         "scheitert, da sich ", M_BEST, sti[0], "irgendwie fest "
+         "verklemmt " + (sti[0]->IsPlural() ? "haben" : "hat") +
+         "." }) 
+    }));
+    steckt = this_player();
+    stiefel = sti[0];
+    set_heart_beat(1);
+  }
+}
+
+void heart_beat()
+{
+  object r;
+  object *sti;
+
+  if (!steckt || !present(steckt) || !stiefel) {
+    set_heart_beat(0);
+    steckt = 0;
+    return;
+  }
+
+  sti = steckt->QueryArmours(AT_BOOT);
+  if (!sti || !sizeof(sti)) {
+    set_heart_beat(0);
+  }
+
+  if (member_array(stiefel, sti) < 0) {
+    message(({ ({ M_ROOM, this_object(), M_BEST, stiefel,
+       (stiefel->IsPlural() ? "verschwinden" : "verschwindet") +
+       " irgendwo tief unter der Planke. Aber wo kann das sein? "
+       "Hmm. Mal nachdenken. Wo wuerde denn etwas, das hier durch "
+       "den Boden nach unten faellt, hinfallen? Hmm. Wo koennte "
+       "das nur sein?" }) }));
+    stiefel->move(this_object(), M_PUT);
+    r = RD_TOOLS->load_object(RD_ROOMDIR"void");
+    stiefel->move(r, M_NOCHECK);
+    r = RD_TOOLS->load_object(RD_ROOMDIR"innen");
+    r->set_stiefel(stiefel);
+    remove_call_out("ende_stiefel");
+  }
+
+  if (!sti || !sizeof(sti)) {
+    message(({
+      ({ M_ROOM, this_object(), "Zum Ausgleich ", M_VERB, "komm",
+         steckt, steckt, "wieder frei." }) }));
+  }
+}
+
+void init()
+{
+  ::init();
+
+  if (find_call_out("ende_stiefel") > -1 && interactive(this_player())) {
+    if (steckt == this_player()) steckt = 0;
+    call_out("stiefel_check", 0);
+  }
+  add_action("ziehe_nicht", "ziehe");
+}
+
+status ziehe_nicht(string str)
+{
+  if (this_player() == steckt && str && strstr(str, "an") > -1) {
+    message("Du hast jetzt ganz andere Sorgen, als Dich anzuziehen.");
+    return 1;
+  }
+}
+
+private string planke_long()
+{
+  string desc;
+
+  if (find_call_out("ende_stiefel") < 0 &&
+      (!steckt || !present(steckt))) return "\
+Es ist absolut nichts besonderes am Boden hier. Er besteht aus lauter \
+einzelnen Planken, die nebeneinander befestigt sind. Total stabil und \
+absolut ungefaehrlich.";
+  return "\
+Eigentlich sieht der Fussboden ja ganz harmlos aus. Eigentlich ganz \
+normale Planken neben ganz normalen Planken. Wenn man mal von der einen \
+Planke absieht, in die gerade der magische Blitz eingeschlagen hat. \
+Sie wirkt irgendwie ein klein wenig unwirklich, wenn man genauer hinschaut. \
+Es kommt Dir vor, als wuerde sich die Planke ein kleines Stueck \
+ausserhalb unseres Universums befinden." +
+  (steckt ? "\
+Gut, mag die Planke sein, wo sie ist, hoffentlich der Fuss von " +
+    (!this_player() || steckt == this_player() ? "Dir" :
+        steckt->Name(WEM)) + ", \
+der in der Planke feststeckt, befindet sich noch in DIESEM Universum.":
+            "");
+}
+
+private string wand_long()
+{
+  if (!bumerang_weg) return "\
+Hey, da waere Dir ja doch beinahe was entgangen. Gut, dass Du genau \
+geschaut hast. An der Kabinenwand haengt ein Bumerang. Er faellt kaum \
+auf, weil das Holz des Bumerangs die gleiche Maserung wie die Kabinenwand \
+hat und er einfach so platt an der Wand haengt.";
+  return "\
+Nein, auch bei genauerem Blick auf die Wand faellt Dir nix besonderes auf. \
+Hoechstens vielleicht der Nagel, an dem mal was gehangen hat.";
+}
+
+private string bumerang_long()
+{
+  if (bumerang_weg) return 0; 
+  return "\
+Dies ist ein hoelzerner Bumerang. Er ist flach und leicht abgewinkelt, so \
+wie es ein Bumerang eben ist. Du wirst ihn bestimmt gleich nehmen.";
+}
+
+private mixed nimm_bumerang()
+{
+  object ob;
+
+  if (bumerang_weg) return 0;
+  bumerang_weg = 1;
+  ob = clone_object(RD_OBJDIR"bumerang");
+  if (ob->move(this_player(), M_GET) < 1) ob->move(this_object(), M_NOCHECK);
+  return ({ ({ M_PL, M_PL_VERB, "nimm", "den Bumerang von der Wand." }) });
+}
+
+void create()
+{
+  reling::create();
+  SetProp(P_INT_SHORT, "Backbord, in Hecknaehe");
+  SetProp(P_RD_RELING_LONG,  "\
+Du marschierst die schmale Gasse auf der Backbordseite des Schiffes \
+entlang. Nicht weit von hier ist das Heck. Und direkt hier? Nicht viel \
+eigentlich. Und vor allem nichts besonderes. Dein Blick schweift von der \
+Reling zur Kabinenwand, haelt dort kurz inne und schweift dann weiter \
+zum Boden. All das hast Du irgendwo schonmal in der Art gesehen.");
+  AddDetails(({
+    "maserung", "Verblueffend, wie gut dadurch der Bumerang \
+getarnt wurde.",
+    "bumerang", #'bumerang_long,
+    "nagel", "Ein stinknormaler Nagel.\n",
+    ({ "wand", "kabinenwand" }), #'wand_long,
+    "planken", "\
+Eine Planke fein saeuberlich neben der naechsten.",
+    ({ "schmale gasse", "gasse" }), "\
+Durch diese schmale Gasse muss er kommen!",
+    "heck", "Du kannst es von hier aus schon sehen.",
+    ({ "boden", "fussboden", "planke" }), #'planke_long
+  }));
+  AddDetailAction(
+    "bumerang",
+    map_array(CMD_NEHMEN, #'+, " <me>"),
+    "nimm_bumerang",
+    #'nimm_bumerang
+  );
+  AddExit("vorne", ([ EX_DEST : RD_ROOMDIR"r2",
+                      EX_TESTFUNC : #'myex ]));
+  AddExit("hinten", ([ EX_DEST : RD_ROOMDIR"r4",
+                      EX_TESTFUNC : #'myex ]));
+}

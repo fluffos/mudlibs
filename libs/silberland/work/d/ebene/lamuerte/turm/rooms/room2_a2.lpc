@@ -1,0 +1,201 @@
+#include "../turm.h"
+
+inherit "std/room";
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+
+int i,rep;
+int last_throw;
+
+
+void pfunc();
+void break_down();
+
+
+void create()
+{
+  ::create();
+
+  SetProp(P_INT_SHORT, "Im Turm");
+  SetProp(P_INT_LONG,
+    "Du findest Dich in einem dunklen Teil des Gangs im Turm der tausend Tode wieder. "+
+    "Anders als in den meisten anderen Teilen kannst Du hier keine Fackeln ausmachen. "+
+    "An der Decke haengen einige vertrocknete Schlingpflanzen herum, die es anscheinend "+
+    "ohne Licht nicht ausgehalten haben. Die Ausgaenge fuehren Dich hier vom Osten in den "+
+    "Suedwesten leicht abwaerts fallenden Gang weiter.");
+
+  SetProp(P_LIGHT, 1 );
+  SetProp(P_INDOORS, 1 );
+  SetProp(P_ENVIRONMENT,([ENV_TEMPERATURE: 9, ENV_TERRAIN:TT_HOUSE]) );
+
+ZWEITER
+
+  AddDetail(({"ausgaenge","ausgang"}),
+   "Es gibt zwei davon hier.");
+
+  AddDetail("decke",
+    "Du siehst einen von Schlingpflanzen vollgewucherten Holzpflock.");
+
+  AddDetail(({"schlingpflanzen","pflanzen"}),
+   "Bei naeherer Betrachtung faellt Dir auf, dass die Schlingpflanzen rund um einen langen "+
+   "Holzpflock gewachsen sind, bevor sie abgestorben sind.");
+
+  AddDetail(({"pflock","holzpflock"}),
+   "Der Holzpflock wird von den abgestorbenen Schlingpflanzen gerade noch soweit festgehalten, "+
+   "dass er nicht herunterfaellt. Einige Skeletteile haengen auf dem Pflock. Vielleicht solltest Du was raufwerfen, damit er herunterfaellt.");
+
+  AddDetail (({"skeletteile","skelettteile","teile", "skelett"}),
+   "Die Skelettteile auf dem Pflock ueber Dir, deuten darauf hin, dass mit ihm irgendjemand "+
+   "aufgespiesst und danach an die Decke gehaengt wurde.");
+ 
+  AddDetail(({"fackel","fackeln"}),
+   "An der Wand kannst Du keine finden."); 
+
+  AddDetail("geruch",
+   "Du solltest es mit >rieche< probieren.");
+
+ AddItem("/d/ebene/lamuerte/turm/npc/skelett.lpc",REFRESH_DESTRUCT);
+
+ AddExit("osten", "./room2_a3.lpc" );
+ AddExit("suedwesten", "./room2_b1.lpc" );
+  AddCmd( ({"lege","leg","wirf","werfe","werf"}), "wfunc" );
+}
+
+
+string *wackelmeldungen = ({
+      "Volltreffer!! Der Holzpflock wackelt ein wenig.\n",
+      "Treffer!! Der Holzpflock wackelt bedrohlich.\n",
+      "Du triffst. Der Holzpflock wackelt. Hoffentlich faellt er Dir nicht rauf.\n",
+      "Genau ins Schwarze! Der Holzpflock knarrt und droht bald herunterzufallen.\n"
+    });
+
+int wfunc(string wosn)
+{
+  object ob,pflo;
+  string was,wohin;
+  notify_fail("Syntax: wirf <gegenstand> nach <wohin>\n");
+
+  if(!wosn) {
+    return 0;
+  }
+
+  if (sscanf(wosn,"%s nach %s", was, wohin) == 2) 
+  {
+    if (!ob = present(was,this_player())) {
+     write("Das hast Du ja gar nicht bei Dir!\n");
+     return 1;
+    }
+
+    if (ob->QueryProp(P_WORN)!=0) {
+     write("Das hast Du ja angezogen, wie soll das gehen?\n");
+     return 1;
+    }
+    if(ob->QueryProp(P_CURSED)!=0 || ob->QueryProp(P_NODROP) || ob->QueryProp(P_NEVERDROP)) {
+     write("Nein, das willst Du nicht hochwerfen.\n");
+     return 1;
+    }
+  }
+
+  if (wohin == "pflanzen" || wohin == "schlingpflanzen" || wohin == "pflock" ||wohin == "holzpflock" )
+  {
+
+    if (find_call_out("break_down") != -1)
+    {
+      write("Du solltest lieber schaun, dass Du hier rauskomst!\n");
+      return 1;
+    }
+
+    if (last_throw >= time()) {
+      write("Warte doch noch einen Moment mit dem naechsten Wurf!\n");
+      return 1;
+    }
+    last_throw = time();
+
+    say(this_player()->Name() + " wirft nach dem Holzpflock.\n");
+    if (pflo = deep_present("\npflock",this_player()) ||
+        present("\npflock",this_object()) ||
+        random(100) > 50)
+    {
+      write("Du wirfst Dein Zeug umher, erwischst aber nichts.\n");
+    }
+    else
+    {
+      switch (i)
+      {
+        case 0: case 1:
+        case 2: case 3:
+          write( wackelmeldungen[i++] );
+          break;
+        case 4:
+          i = 0;
+          write("*DONK* Der Holzpflock faengt an sich in Deine Richtung zu bewegen, raus hier!\n");
+          call_out("break_down", 4);
+          break;
+        default:
+          i = 0;
+          write("Huch, irgendwas laeuft hier verkehrt. Jedenfalls passiert nichts.\n"
+              "Frag mal einen Magier!\n");
+      }
+    }
+
+    if (ob->IsPlural())
+      tell_room(this_object(),ob->Name(WER,1)+" krachen auf den Boden.\n");
+    else
+      tell_room(this_object(),ob->Name(WER,1)+" kracht auf den Boden.\n");
+
+    ob->move(environment(this_player()), M_NOCHECK); 
+    return 1;
+  }
+  return 0;
+}
+
+
+void break_down()
+{
+  if (rep==1)
+    tell_room(this_object(), "Mach schon, raus hier, das Ding kommt gleich runter!!!!!!\n");
+  if (rep==2)
+    tell_room(this_object(), "Der Holzpflock faellt herunter!!!!!!!\n");
+  if (rep==3)
+  {
+    rep==0;
+    pfunc();
+    remove_call_out("break_down");
+    return;
+  }
+  rep++;
+  call_out("break_down",8);
+  return;
+}
+
+
+void pfunc()
+{
+  object *people;
+  object hp;
+  int x;
+
+  people = filter_array( all_inventory(this_object()), #'interactive );
+
+  for (x=sizeof(people); x-->0; )
+  {
+    if ( people[x] && (environment(people[x]) == this_object()) )
+    {
+      tell_object(people[x],"Ahhhhhhhhhhh! Der Holzpflock hat Dich voll erwischt.\n");
+      people[x]->move("/d/ebene/lamuerte/turm/rooms/tod", M_NOCHECK,
+          "faellt", "in den Tod", "faellt herein");
+    }
+  }
+ 
+  hp = clone_object("/d/ebene/lamuerte/turm/obj/holzpflock");
+  hp->move(this_object(),M_NOCHECK);
+}
+
+
+void reset()
+{
+  ::reset();
+  i=0;
+}

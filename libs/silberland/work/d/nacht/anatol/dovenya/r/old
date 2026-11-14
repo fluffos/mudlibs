@@ -1,0 +1,1395 @@
+/* Dovenya, Roulette
+ * _____________________________________(i) Anatol@Silberland (1998-2012) */
+
+
+#pragma strict_types
+
+#include "../defines.h"
+#include <ansi.h>
+#include <wizlevels.h>
+#include "../sys/comet.h"
+
+#define HELPDIR DOVENYA "doc/help/roulette/"
+
+inherit DOVENYA "std/room";
+
+#define SAVEFILE DOVENYA_SAVE "comet_roulette"
+
+static mapping vocabulary;
+static mapping chances;
+static mapping chances_aliases;
+static mapping playerconf;
+static int table_status;
+static int table_rolled;
+static mixed table_bets;
+
+public int table_limit;
+
+
+
+#define STAT_FREI 0
+#define STAT_KUGELROLLT 1
+#define STAT_ABGESAGT 2
+#define STAT_GEFALLEN 3
+#define STAT_AUSWERTUNG_M 4
+#define STAT_AUSWERTUNG_G 5
+
+#define STAT_AUSSERBETRIEB           99
+
+
+
+
+#define DB(x) this_player()->Message(x)
+
+#define XNUM 0
+#define XRET 1
+#define XANN 2
+
+
+/* Spaeter umbauen auf "wer die datei schreiben darf, darf aendern */
+
+nomask static int 
+manager_security()
+{
+    return  (  (this_interactive())
+        && (this_player()==this_interactive())
+        &&  (( IS_ARCH(this_interactive())) 
+            || (getuid(this_interactive())=="anatol")));
+}
+
+
+static mapping
+initializePlayerSettings(object player)
+{
+   if ((!objectp(player))||(!living(player)))
+   {
+       return 0;
+   }
+   player->SetProp(P_COMET,
+        ([COMET_LANG:0,
+          COMET_GFX:0,
+          COMET_AUTOCOLLECT:1]));
+   player->Set(P_COMET,SAVE,F_MODE_AS);
+   return ([])+(mapping)(player->QueryProp(P_COMET));
+}
+
+public mapping 
+PlayerSettings(object player)
+{
+   if ((!objectp(player))||(!living(player)))
+   {
+       return 0;
+   }
+   if (!(player->QueryProp(P_COMET)))
+   {
+       return initializePlayerSettings(player);
+   }
+   else
+   {
+       return ([])+(mapping)(player->QueryProp(P_COMET));
+   }
+}
+
+// **********************************************************************
+
+
+nomask static void 
+initializeVariables()
+{
+    
+    table_bets=({});
+
+    playerconf=([
+      "sprache": ({COMET_LANG,([
+        0:"Franzoesisch",
+        1:"Deutsch",
+        2:"Englisch"
+      ])}),
+      "grafik": ({COMET_GFX,([
+        0:"Keine ASCII-Grafiken, keine Farben",
+        1:"ASCII-Grafiken, keine Farben",
+        2:"ASCII-Grafiken und ANSI-Farben"
+      ])}),
+      "gewinne": ({COMET_AUTOCOLLECT, ([
+        0:"Gewinne bleiben stehen",
+        1:"Gewinne werden Dir ausgehaendigt"
+      ])})]);
+
+    chances = ([
+        // Einfache Chancen (1:2)
+        "rouge": ([XNUM:([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36 ]),
+             XRET:1]),
+        "noir":  ([XNUM:([2,4,6,8,10,11,13,15,17,20,22,24,26,28,29,31,33,35 ]),
+             XRET:1]),
+        "pair":  ([XNUM:([2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36 ]),
+             XRET:1]),
+        "impair":([XNUM:([1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31,33,35 ]),
+             XRET:1]),
+        "manque":([XNUM:([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18 ]),
+             XRET:1]),
+        "passe": ([XNUM:([19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,
+             35,36]),XRET:1]),
+        // Mehrfache Chancen (1:3) Dutzende, Reihen
+        "12p":   ([XNUM:([1,2,3,4,5,6,7,8,9,10,11,12]),XRET:2 ]),
+        "12m":   ([XNUM:([13,14,15,16,17,18,19,20,21,22,23,24 ]),XRET:2]),
+        "12d":   ([XNUM:([25,26,27,28,29,30,31,32,33,34,35,36 ]),XRET:2]),
+        "c34":   ([XNUM:([1,4,7,10,13,16,19,22,25,28,31,34 ]),XRET:2]),
+        "c35":   ([XNUM:([2,5,8,11,14,17,20,23,26,29,32,35 ]),XRET:2]),
+        "c36":   ([XNUM:([3,6,9,12,15,18,21,24,27,30,33,36 ]),XRET:2]),
+        "3p":    ([XNUM:([0,1,2]), XRET:11]),
+        "4p":    ([XNUM:([0,1,2,3]),XRET:8]),
+        "1 3":   ([XNUM:([1,2,3]),XRET:11,XANN:"tp"]),
+        "4 6":   ([XNUM:([4,5,6]),XRET:11,XANN:"tp"]),
+        "7 9":   ([XNUM:([7,8,9]),XRET:11,XANN:"tp"]),
+        "10 12": ([XNUM:([10,11,12]),XRET:11,XANN:"tp"]),
+        "13 15": ([XNUM:([13,14,15]),XRET:11,XANN:"tp"]),
+        "16 18": ([XNUM:([16,17,18]),XRET:11,XANN:"tp"]),
+        "19 21": ([XNUM:([19,20,21]),XRET:11,XANN:"tp"]),
+        "22 24": ([XNUM:([22,23,24]),XRET:11,XANN:"tp"]),
+        "25 27": ([XNUM:([25,26,27]),XRET:11,XANN:"tp"]),
+        "28 30": ([XNUM:([28,29,30]),XRET:11,XANN:"tp"]),
+        "31 33": ([XNUM:([31,32,33]),XRET:11,XANN:"tp"]),
+        "34 36": ([XNUM:([34,35,36]),XRET:11,XANN:"tp"]),
+        "1 6":   ([XNUM:([1,2,3,4,5,6]),XRET:5,XANN:"ts"]),
+        "4 9":   ([XNUM:([4,5,6,7,8,9]),XRET:5,XANN:"ts"]),
+        "7 12":  ([XNUM:([7,8,9,10,11,12]),XRET:5,XANN:"ts"]),
+        "10 15": ([XNUM:([10,11,12,13,14,15]),XRET:5,XANN:"ts"]),
+        "13 18": ([XNUM:([13,14,15,16,17,18]),XRET:5,XANN:"ts"]),
+        "16 21": ([XNUM:([16,17,18,19,20,21]),XRET:5,XANN:"ts"]),
+        "19 24": ([XNUM:([19,20,21,22,23,24]),XRET:5,XANN:"ts"]),
+        "22 27": ([XNUM:([22,23,24,25,26,27]),XRET:5,XANN:"ts"]),
+        "25 30": ([XNUM:([25,26,27,28,29,30]),XRET:5,XANN:"ts"]),
+        "28 33": ([XNUM:([28,29,30,31,32,33]),XRET:5,XANN:"ts"]),
+        "31 36": ([XNUM:([31,32,33,34,35,36]),XRET:5,XANN:"ts"]),
+        //  Gevierte (1:9)
+        "1 5"  : ([XNUM:([1,2,4,5]),XRET:8,XANN:"ca"]),
+        "2 6"  : ([XNUM:([2,3,5,6]),XRET:8,XANN:"ca"]),
+        "4 8"  : ([XNUM:([4,5,7,8]),XRET:8,XANN:"ca"]),
+        "5 9"  : ([XNUM:([5,6,8,9]),XRET:8,XANN:"ca"]),
+        "7 11" : ([XNUM:([7,8,10,11]),XRET:8,XANN:"ca"]),
+        "8 12" : ([XNUM:([8,9,11,12]),XRET:8,XANN:"ca"]),
+        "10 14": ([XNUM:([10,11,13,14]),XRET:8,XANN:"ca"]),
+        "11 15": ([XNUM:([11,12,14,15]),XRET:8,XANN:"ca"]),
+        "13 17": ([XNUM:([13,14,16,17]),XRET:8,XANN:"ca"]),
+        "14 18": ([XNUM:([14,15,17,18]),XRET:8,XANN:"ca"]),
+        "16 20": ([XNUM:([16,17,19,20]),XRET:8,XANN:"ca"]),
+        "17 21": ([XNUM:([17,18,20,21]),XRET:8,XANN:"ca"]),
+        "19 23": ([XNUM:([19,20,22,23]),XRET:8,XANN:"ca"]),
+        "20 24": ([XNUM:([20,21,23,24]),XRET:8,XANN:"ca"]),
+        "22 26": ([XNUM:([22,23,25,26]),XRET:8,XANN:"ca"]),
+        "23 27": ([XNUM:([23,24,26,27]),XRET:8,XANN:"ca"]),
+        "25 29": ([XNUM:([25,26,28,29]),XRET:8,XANN:"ca"]),
+        "26 30": ([XNUM:([26,27,29,30]),XRET:8,XANN:"ca"]),
+        "28 32": ([XNUM:([28,29,31,32]),XRET:8,XANN:"ca"]),
+        "29 33": ([XNUM:([29,30,32,33]),XRET:8,XANN:"ca"]),
+        "31 35": ([XNUM:([31,32,34,35]),XRET:8,XANN:"ca"]),
+        "32 36": ([XNUM:([32,33,35,36]),XRET:8,XANN:"ca"]),
+        //  Doppelte Zahlen (1:18)
+        "0 1"  : ([XNUM:([0,1]),XRET:17,XANN:"ch"]),
+        "0 2"  : ([XNUM:([0,2]),XRET:17,XANN:"ch"]), // != 3p
+        "0 3"  : ([XNUM:([0,3]),XRET:17,XANN:"ch"]), // != 4p
+        "1 2"  : ([XNUM:([1,2]),XRET:17,XANN:"ch"]),
+        "1 4"  : ([XNUM:([1,4]),XRET:17,XANN:"ch"]),
+        "2 3"  : ([XNUM:([2,3]),XRET:17,XANN:"ch"]),
+        "2 5"  : ([XNUM:([2,5]),XRET:17,XANN:"ch"]),
+        "3 6"  : ([XNUM:([3,6]),XRET:17,XANN:"ch"]),
+        "4 5"  : ([XNUM:([4,5]),XRET:17,XANN:"ch"]),
+        "4 7"  : ([XNUM:([4,7]),XRET:17,XANN:"ch"]),
+        "5 6"  : ([XNUM:([5,6]),XRET:17,XANN:"ch"]),
+        "5 8"  : ([XNUM:([5,8]),XRET:17,XANN:"ch"]),
+        "6 9"  : ([XNUM:([6,9]),XRET:17,XANN:"ch"]),
+        "7 8"  : ([XNUM:([7,8]),XRET:17,XANN:"ch"]),
+        "7 10" : ([XNUM:([7,10]),XRET:17,XANN:"ch"]),
+        "8 9"  : ([XNUM:([8,9]),XRET:17,XANN:"ch"]),
+        "8 11" : ([XNUM:([8,11]),XRET:17,XANN:"ch"]),
+        "9 12" : ([XNUM:([9,12]),XRET:17,XANN:"ch"]),
+        "10 11" : ([XNUM:([10,11]),XRET:17,XANN:"ch"]),
+        "10 13" : ([XNUM:([10,13]),XRET:17,XANN:"ch"]),
+        "11 12" : ([XNUM:([11,12]),XRET:17,XANN:"ch"]),
+        "11 14" : ([XNUM:([11,14]),XRET:17,XANN:"ch"]),
+        "12 15" : ([XNUM:([12,15]),XRET:17,XANN:"ch"]),
+        "13 14" : ([XNUM:([13,14]),XRET:17,XANN:"ch"]),
+        "13 16" : ([XNUM:([13,16]),XRET:17,XANN:"ch"]),
+        "14 15" : ([XNUM:([14,15]),XRET:17,XANN:"ch"]),
+        "14 17" : ([XNUM:([14,17]),XRET:17,XANN:"ch"]),
+        "15 18" : ([XNUM:([15,18]),XRET:17,XANN:"ch"]),
+        "16 17" : ([XNUM:([16,17]),XRET:17,XANN:"ch"]),
+        "16 19" : ([XNUM:([16,19]),XRET:17,XANN:"ch"]),
+        "17 18" : ([XNUM:([17,18]),XRET:17,XANN:"ch"]),
+        "17 20" : ([XNUM:([17,20]),XRET:17,XANN:"ch"]),
+        "18 21" : ([XNUM:([18,21]),XRET:17,XANN:"ch"]),
+        "19 20" : ([XNUM:([19,20]),XRET:17,XANN:"ch"]),
+        "19 22" : ([XNUM:([19,22]),XRET:17,XANN:"ch"]),
+        "20 21" : ([XNUM:([20,21]),XRET:17,XANN:"ch"]),
+        "20 23" : ([XNUM:([20,23]),XRET:17,XANN:"ch"]),
+        "21 24" : ([XNUM:([21,24]),XRET:17,XANN:"ch"]),
+        "22 23" : ([XNUM:([22,23]),XRET:17,XANN:"ch"]),
+        "22 25" : ([XNUM:([22,25]),XRET:17,XANN:"ch"]),
+        "23 24" : ([XNUM:([23,24]),XRET:17,XANN:"ch"]),
+        "23 26" : ([XNUM:([23,26]),XRET:17,XANN:"ch"]),
+        "24 27" : ([XNUM:([23,27]),XRET:17,XANN:"ch"]),
+        "25 26" : ([XNUM:([25,26]),XRET:17,XANN:"ch"]),
+        "25 28" : ([XNUM:([25,28]),XRET:17,XANN:"ch"]),
+        "26 27" : ([XNUM:([26,27]),XRET:17,XANN:"ch"]),
+        "26 29" : ([XNUM:([26,29]),XRET:17,XANN:"ch"]),
+        "27 30" : ([XNUM:([27,30]),XRET:17,XANN:"ch"]),
+        "28 29" : ([XNUM:([28,29]),XRET:17,XANN:"ch"]),
+        "28 31" : ([XNUM:([28,31]),XRET:17,XANN:"ch"]),
+        "29 30" : ([XNUM:([29,30]),XRET:17,XANN:"ch"]),
+        "29 32" : ([XNUM:([29,32]),XRET:17,XANN:"ch"]),
+        "30 33" : ([XNUM:([30,33]),XRET:17,XANN:"ch"]),
+        "31 32" : ([XNUM:([31,32]),XRET:17,XANN:"ch"]),
+        "31 34" : ([XNUM:([31,34]),XRET:17,XANN:"ch"]),
+        "32 33" : ([XNUM:([32,33]),XRET:17,XANN:"ch"]),
+        "32 35" : ([XNUM:([32,35]),XRET:17,XANN:"ch"]),
+        "33 36" : ([XNUM:([33,36]),XRET:17,XANN:"ch"]),
+        "34 35" : ([XNUM:([34,35]),XRET:17,XANN:"ch"]),
+        "35 36" : ([XNUM:([35,36]),XRET:17,XANN:"ch"]),
+        // Einzelne Zahlen (1:36)
+        "0"     : ([XNUM:([0]),XRET:35,XANN:"p"]),
+        "1"     : ([XNUM:([1]),XRET:35,XANN:"p"]),
+        "2"     : ([XNUM:([2]),XRET:35,XANN:"p"]),
+        "3"     : ([XNUM:([3]),XRET:35,XANN:"p"]),
+        "4"     : ([XNUM:([4]),XRET:35,XANN:"p"]),
+        "5"     : ([XNUM:([5]),XRET:35,XANN:"p"]),
+        "6"     : ([XNUM:([6]),XRET:35,XANN:"p"]),
+        "7"     : ([XNUM:([7]),XRET:35,XANN:"p"]),
+        "8"     : ([XNUM:([8]),XRET:35,XANN:"p"]),
+        "9"     : ([XNUM:([9]),XRET:35,XANN:"p"]),
+        "10"    : ([XNUM:([10]),XRET:35,XANN:"p"]),
+        "11"    : ([XNUM:([11]),XRET:35,XANN:"p"]),
+        "12"    : ([XNUM:([12]),XRET:35,XANN:"p"]),
+        "13"    : ([XNUM:([13]),XRET:35,XANN:"p"]),
+        "14"    : ([XNUM:([14]),XRET:35,XANN:"p"]),
+        "15"    : ([XNUM:([15]),XRET:35,XANN:"p"]),
+        "16"    : ([XNUM:([16]),XRET:35,XANN:"p"]),
+        "17"    : ([XNUM:([17]),XRET:35,XANN:"p"]),
+        "18"    : ([XNUM:([18]),XRET:35,XANN:"p"]),
+        "19"    : ([XNUM:([19]),XRET:35,XANN:"p"]),
+        "20"    : ([XNUM:([20]),XRET:35,XANN:"p"]),
+        "21"    : ([XNUM:([21]),XRET:35,XANN:"p"]),
+        "22"    : ([XNUM:([22]),XRET:35,XANN:"p"]),
+        "23"    : ([XNUM:([23]),XRET:35,XANN:"p"]),
+        "24"    : ([XNUM:([24]),XRET:35,XANN:"p"]),
+        "25"    : ([XNUM:([25]),XRET:35,XANN:"p"]),
+        "26"    : ([XNUM:([26]),XRET:35,XANN:"p"]),
+        "27"    : ([XNUM:([27]),XRET:35,XANN:"p"]),
+        "28"    : ([XNUM:([28]),XRET:35,XANN:"p"]),
+        "29"    : ([XNUM:([29]),XRET:35,XANN:"p"]),
+        "30"    : ([XNUM:([30]),XRET:35,XANN:"p"]),
+        "31"    : ([XNUM:([31]),XRET:35,XANN:"p"]),
+        "32"    : ([XNUM:([32]),XRET:35,XANN:"p"]),
+        "33"    : ([XNUM:([33]),XRET:35,XANN:"p"]),
+        "34"    : ([XNUM:([34]),XRET:35,XANN:"p"]),
+        "35"    : ([XNUM:([35]),XRET:35,XANN:"p"]),
+        "36"    : ([XNUM:([36]),XRET:35,XANN:"p"])
+        ]);
+
+
+// 0-32-15-19-4-21-2-25-17-34-6-27-13-36-11-30-8-23-10-5-24-16-33-1-20-14-31-9-22-18-29-7-28-12-35-3-26
+
+    vocabulary = ([
+        "0"      :   "Zero"   ; "Zero"  ; "Null",
+        "chance_simple" :"Chance Simples";"Simple Bets";"Einfache Chancen",
+        "rouge"  :   "Rouge"  ; "Red"   ; "Rot",
+        "noir"   :   "Noir"   ; "Black" ; "Schwarz",
+        "impair" :   "Impair" ; "Odd"   ; "Ungerade",
+        "pair"   :   "Pair"   ; "Even"  ; "Gerade",
+        "manque" :   "Manque" ; "1-18"  ; "Niedrig",
+        "passe"  :   "Passe"  ; "19-36" ; "Hoch",
+        "12p": "Premier Douzaine"    ; "First Dozen"  ; "Erstes Dutzend",
+        "12m" : "Milieu Douzaine"     ; "Second Dozen" ; "Mittleres Dutzend",
+        "12d": "Dernier Douzaine"    ; "Third Dozen"  ; "Letztes Dutzend",
+        "c" : "Colonne" ; "Column"    ; "Kolonne",
+        "d" : "Douzaine" ; "Dozen"    ; "Dutzend",
+        "c34" : "Colonne 34" ; "Column 34"    ; "Erste Kolonne",
+        "c35" : "Colonne 35" ; "Column 35"    ; "Zweite Kolonne",
+        "c36" : "Colonne 36" ; "Column 36"    ; "Dritte Kolonne",
+        "3p":"Les Trois Premiers";"first three";"ersten drei",
+        "4p":"Les Quatre Premiers";"first four";"ersten vier",
+        "ch":"Cheval";"Split";"Paar",
+        "ts":"Transversale Simple";"Six Line";"Doppelquerreihe",
+        "tp":"Transversale Pleine";"Street";"Querreihe",
+        "ca":"Carre";"Corner";"Geviert",
+        "p":"Plein"; "Full Number"; "Zahl",
+        "prison": "Prison";"Prison";"gesperrt",
+        "rnvp":"Rien ne va plus!";"No more bets!";"Nichts geht mehr!",
+        "fvj":"Faites vos jeux!";"Make your bets!";"Machen Sie Ihr Spiel!",
+     ]);
+
+    chances_aliases = ([
+       "rot":"rouge",
+       "red":"rouge",
+       "schwarz":"noir",
+       "black":"noir",
+       "odd":"impair",
+       "ungerade":"impair",
+       "even":"pair",
+       "gerade":"pair",
+       "1 18":"manque",
+       "niedrig":"manque",
+       "19 36":"passe",
+       "hoch":"passe",
+       "i":"c34",
+       "ii":"c35",
+       "iii":"c36",
+       "colonne 34":"c34",
+       "colonne 35":"c35",
+       "colonne 36":"c36",
+       "p12":"12p",
+       "premier":"12p",
+       "m12":"12m",
+       "milieu":"12m",
+       "d12":"12d",
+       "dernier":"12d",
+       "1 12":"12p",
+       "13 24":"12m",
+       "25 36":"12d",
+       ]);
+}    
+
+  
+public object
+hasJetons(object player, int jetons)
+{
+    object jet;
+    if (objectp(player))
+    {
+        if  ((jet=present(JETONID,player)) && objectp(jet)
+            && ((int)(jet->QueryProp(P_AMOUNT)))>=jetons)
+        {
+            return jet;
+        }
+    }
+    else 
+    {
+        return 0;
+    }
+}
+
+static void 
+addJetons(object player, int jetons)
+{
+   object jet;
+   if (!jet=hasJetons(player,1))
+   {
+        if (jetons < 1)
+        {
+            write("Da ging etwas schief. :(\n");
+        }
+        else
+        {
+            jet=clone_object(OBJ "jeton");
+            jet->SetProp(P_AMOUNT,jetons);
+            jet->move(player,M_NOCHECK);
+        }
+   }
+   else
+   {
+        if ((jetons<0) && ((int)(jet->QueryProp(P_AMOUNT))<jetons))
+        {
+            write("Da ging etwas seltsam schief.\n");
+        }
+        else
+        {
+            jet->AddAmount(jetons);
+            if ((int)(jet->QueryProp(P_AMOUNT))<0)
+            {
+                write("Super... Du hast einen Ganzzahlueberlauf geschafft.\n"
+                    "Jetzt sieh zu, wie du diese... Schulden... loswirst.");
+            }
+        }
+   }
+}
+static mixed
+getChance(string ch)
+{
+    string * matches;
+
+    if ((!ch) || (!stringp(ch)) ||(!strlen(ch))) 
+    {
+        return 0;
+    }
+
+    // Erstmal moegliche Fuellzeichen ("-" und "/") herausnehmen.
+    // Die tauchen in der Chance auf und duerfen angegeben werden,
+    // sind aber optional.
+
+    ch=implode(explode(implode(explode(ch,"-")," "),"/")," ");
+
+    // Idealfall: Die Platzierung ist genau so eingetragen.
+
+    if (member(chances,ch))
+    {
+       return ({ch,chances[ch]});
+    }
+
+    // Vielleicht ist es als Alias eingetragen?
+
+    else if (member(chances_aliases,ch))
+    {
+       return ({chances_aliases[ch],chances[chances_aliases[ch]]});
+    }
+
+    // Jetzt koennten wir eigentlich aufgeben. Schauen wir mal, ob mit
+    // dieser Zeichenfolge zufaellig eine - genau eine - Chance beginnt. 
+
+    else
+    {
+        matches=regexp(m_indices(chances),"^"+ch) + 
+                 regexp(m_indices(chances_aliases),"^"+ch);
+        if (sizeof(matches)==1)
+        {
+            return getChance(matches[0]);
+        }
+
+    }
+    return 0;
+}
+
+varargs public string * 
+getBetList(int lang, object player, int filtered)
+{
+    if (!objectp(player)) 
+    {
+        player=this_player(); // Kann immernoch 0 sein...
+    }
+
+    return map_array(
+        ((filtered&&objectp(player))
+            ?filter_array(table_bets,lambda( ({ 'x, 'y }) ,
+                ({#'== , 
+                    ({#'file_name, 'y  }), 
+                    ({#'[ , 'x , BET_OWNER})})),player)
+            :table_bets),
+         lambda( ({ 'x , 'y, 'z, 'w}) ,
+        ({ #'sprintf , "   %6d auf %-30s (%s)" ,
+            ({#'[ , 'x , BET_STAKE }) ,
+            ({#'sprintf , "'%s'" , 
+                ({#'call_other , 'w , "GetChanceName" , 
+                    ({#'[ , 'x ,  BET_CHANCE_NAME }), 'z})}) ,
+            ({#'? , ({#'== , ({#'file_name , 'y }) ,
+                            ({#'[ , 'x , BET_OWNER })}) ,
+                "Du" ,
+                ({#'? , ({#'find_object , ({#'[ , 'x , BET_OWNER })}) ,
+                    ({#'call_other , ({#'[ , 'x, BET_OWNER}), "Name"}),
+                    "Unbekannt"})})})), player, lang, this_object());
+}
+
+static void 
+Save()
+{
+    save_object(SAVEFILE);
+}
+
+// Das Tischlimit begrenzt den Auszahlungswert.
+// Ein Limit von 50'000 wuerde damit bedeuten, dass 
+// 50'000 auf Schwarz gesetzt werden koennte, aber auf 
+// eine Zahl maximal 1428. 
+
+public int
+SetTableLimit(int new_limit)
+{
+    if (!manager_security())
+    {
+        return 0;
+    }
+    if (new_limit < 10000 )
+    { 
+        return 0;
+    }
+    return table_limit=new_limit;
+    Save();
+    return table_limit;
+}
+
+public int
+TableLimit()
+{
+    return table_limit;
+}
+
+public string 
+detailTableLimits()
+{
+    int lang;
+
+    if (!this_player())
+    {
+        return "";
+    }
+
+    lang=(PlayerSettings(this_player()))[COMET_LANG];
+
+    return sprintf(
+        "Das Limit des Tisches liegt bei %d. Daraus ergeben sich \n"
+        "folgende Maxima fuer Deine Einsaetze Deiner Wetten:\n"
+        "%'.'-30s: %7d\n"
+        "%'.'-30s: %7d\n"
+        "%'.'-30s: %7d\n"
+        "%'.'-30s: %7d\n"
+        "%'.'-30s: %7d\n"
+        "%'.'-30s: %7d\n"
+        "%'.'-30s: %7d\n",
+        table_limit, 
+        // +1
+        sprintf("%s (z.B. %s)",
+            vocabulary["chance_simple",lang],
+            vocabulary["rouge",lang]),
+        table_limit,
+        // +2
+        sprintf("%s, %s", 
+            vocabulary["c",lang],
+            vocabulary["d",lang]),
+        table_limit/2,
+        // +5
+        vocabulary["ts",lang],
+        table_limit/4,
+        // +8
+        sprintf("%s, %s", 
+            vocabulary["ca",lang],
+            vocabulary["4p",lang]),
+        table_limit/8,
+        // +11
+        sprintf("%s, %s", 
+            vocabulary["tp",lang],
+            vocabulary["3p",lang]),
+        table_limit/11,
+        // +17
+        vocabulary["ch",lang],
+        table_limit/17,
+        // +35
+        vocabulary["p",lang],
+        table_limit/35
+        );
+
+}
+
+
+varargs static string
+getFullAnnouncement(int number,int lang)
+{
+   if ((number < 0) || (number > 36))
+   {
+       return "Hilfe, die Kugel ist aus dem Kessel gefallen!";
+   }
+   if (!number)
+   {
+       return 
+           vocabulary["0",lang]+" - die Bank gewinnt!";
+   }
+
+   return sprintf("[ %d ] - %s, %s, %s!",
+      number,
+      (member(chances["rouge"][XNUM],number)
+          ?vocabulary["rouge",lang]
+          :vocabulary["noir",lang]),
+      (member(chances["pair"][XNUM],number)
+          ?vocabulary["pair",lang]
+          :vocabulary["impair",lang]),
+      (member(chances["passe"][XNUM],number)
+          ?vocabulary["passe",lang]
+          :vocabulary["manque",lang]));
+}
+
+/* ********************************************************************** */
+
+public void 
+create() 
+{
+    ::create();
+
+    seteuid(getuid(this_object()));
+
+    if (!restore_object(SAVEFILE))
+    {
+        table_limit=350000;
+    }
+
+    SetProp(P_INDOORS,1);
+    
+    SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE:23,
+                            ENV_TERRAIN:TT_HOUSE,
+                            ])); 
+
+    SetProp(P_INT_SHORT,"Dovenya, Roulette");
+    SetProp(P_INT_LONG,
+        "Schummrige Beleuchtung, die Waende stoffverhangen und den Schall "
+        "daempfend - hier wurde alles getan, um eine entspannte Atmosphaere "
+        "zu schaffen. In der Mitte des Raumes, gut ausgeleuchtet, steht ein "
+        "grosser Roulette-Tisch, den Du Dir unbedingt genauer ansehen musst.");
+
+    AddDetail(({"tisch","roulette","roulette-tisch"}),
+        "Hier steht ein einfacher Roulette-Tisch, rechts der typische "
+        "grosse Kessel, links das Tableau, in gruenem Filz gehalten. Wenn "
+        "Du nicht genau weisst, was Du hier anstellen kannst, versuch' mal "
+        "'hilfe roulette'.");
+
+    AddSpecialDetail(({"limit","limits"}),"detailTableLimits");
+    AddSpecialDetail(({"tableau","felder"}),"detailTableau");
+    AddSpecialDetail(({"wetten","wette"}),"detailWetten");
+    AddSpecialDetail(({"meine wetten","meine wette", 
+        "eigene wetten", "eigene wette"}),"detailEigeneWetten");
+    SetProp(P_GEMA,({0,2,0}));
+    
+    AddExit("lobby",
+        ([ EX_DEST: "./comet", 
+           EX_PLMSG: "Du verlaesst den Roulette-Tisch und gehst "
+               "in die Lobby.\n",
+           EX_MSG: "in die Lobby"]));
+
+    SetProp(P_HIDE_EXITS,({""}));
+    AddCmd(({"einstellung","einstellungen","conf"}),"cmdSettings");
+    AddCmd(({"setz","setze","platzier","platziere"}),"cmdSet");
+    AddCmd(({"hole","hol",}),"cmdHole");
+    AddCmd(({"hilfe"}),"cmdHelp");
+    initializeVariables();
+}
+
+varargs public void 
+Announce(mixed message, object pl)
+{
+    object * rcpt;
+    mapping conf;
+    string output;
+    string lead_in,lead_out;
+    string * msgparts;
+    
+    lead_in="  |>  ";
+    lead_out="  <|  ";
+    if (pl)
+    {
+        if ((!objectp(pl)) 
+            || (!living(pl)) 
+            || (this_object()!=environment(pl)))
+        {
+            return;
+        }
+        rcpt=({pl});
+    }
+    else
+    {
+        rcpt=filter_array(all_inventory(this_object()),#'living);
+    }
+
+    if ((!sizeof(rcpt)) || ( (!intp(message)) && (!stringp(message))))
+    {
+        return;
+    }
+
+    while (sizeof(rcpt))
+    {
+        conf=PlayerSettings(rcpt[0]);
+        
+        // Nachrichtentypen...
+        //   - String. Einfach. Oder auch nicht. Wenn es den String genau
+        //     *so* im Vokabular gibt, wird er uebersetzt.
+        //   - Zahlen. Das sind dann wohl Rolls. Gibts ne Funktion fuer.
+
+
+        if (intp(message))
+        {
+            output=getFullAnnouncement((int)message, (conf[COMET_LANG]));
+        }
+        else if (member(vocabulary,message))
+        {
+            output=vocabulary[message,conf[COMET_LANG]];
+        }
+        else
+        {  
+            output=message;
+        }
+        output="\n"+(conf[COMET_GFX]>1?ANSI_BOLD:"")+
+        break_string(output,60,"               ",1)+
+                (conf[COMET_GFX]>1?ANSI_NORMAL:"")+"\n";
+
+        rcpt[0]->Message(output);
+        rcpt=rcpt[1..];
+    }
+    return;
+}
+
+varargs public string
+GetChanceName(mixed chance, int lang)
+{
+
+    if (stringp(chance))
+    {
+        chance=getChance(chance);
+    }
+    if ((!chance) || (!pointerp(chance)))
+    {
+        return 0;
+    }
+
+    if (member(vocabulary,chance[0]))
+    {
+        return vocabulary[chance[0],lang];
+    }
+    else if (member(chance[1],XANN))
+    {
+        return vocabulary[chance[1][XANN],lang] +" "+
+            (chance[1][XANN]=="ch"
+                ?implode(explode(chance[0]," "),"/")
+                :implode(explode(chance[0]," "),"-"));
+    }
+    else 
+    {
+        return "Schmeeeeerz!";
+    }
+}
+
+
+varargs public string
+GetChanceDescription(string ch, int lang)
+{
+    mixed chance;
+    string fullname;
+    if (!chance=getChance(ch))
+    {
+        return 0;
+    }
+
+    return break_string(sprintf("Beim Gewinn einer Wette auf die Chance '%s' "
+      "erhaeltst Du zu Deinem Einsatz das %d-fache dessen hinzu. Die Wette "
+      "gewinnt, wenn %s faellt: %s.",
+       GetChanceName(chance,lang),
+       chance[1][XRET],
+       (sizeof(chance[1][XNUM])>1
+           ?"eine der folgenden "+ sizeof(chance[1][XNUM])+ " Zahlen"
+           :"folgende Zahl"),
+       implode(
+           map_array(
+               sort_array(
+                   m_indices(chance[1][XNUM]),
+                   #'>),
+               #'to_string),
+          ", ")),77);
+}
+
+varargs public string
+GetDetail(string str, string race)
+{
+    string ret;
+
+    if (!this_player())
+    {
+        return ::GetDetail(str,race);
+    }
+    return (strlen(ret=GetChanceDescription(str, 
+        PlayerSettings(this_player())[COMET_LANG]))
+            ?ret
+            :(::GetDetail(str,race)));
+}
+
+static string
+getBetsOverview(int filtered)
+{
+    string * betlist;
+    int i;
+    string result;
+    if (!this_player())
+    {
+        return "";
+    }
+    betlist=getBetList(PlayerSettings(this_player())[COMET_LANG],
+        this_player(),filtered);
+
+    if (!sizeof(betlist))
+    {
+        return sprintf("Zur Zeit %s keine Wetten auf dem Tableau platziert.\n",
+            (filtered?"hast Du":"sind"));
+    }
+    else
+    {
+        result=sprintf("Zur Zeit %s %d Wette%s auf dem Tableau platziert:\n",
+            (filtered?"hast Du":"sind"),
+            sizeof(betlist),
+            (sizeof(betlist)>1?"n":""));
+        for (i=0;i<sizeof(betlist);i++)
+        {
+            result+=sprintf("%s%s\n",
+                (filtered
+                    ?sprintf("#%-2d ",i+1)
+                    :""),
+                betlist[i]);
+        }
+        return result;
+    }
+}
+
+static string
+detailEigeneWetten()
+{
+    return getBetsOverview(1);
+}
+
+
+static string
+detailWetten()
+{
+    return getBetsOverview(0);
+}
+
+
+static string 
+detailTableau()
+{
+    mapping conf;
+    string cr, cg, cb, cm, bb;
+    string * gfx;
+
+    if ((!this_player()) || (!mappingp(conf=PlayerSettings(this_player()))))
+    {
+        return "Du siehst ein Tableau.\n";
+    }
+    
+    if (conf[COMET_GFX]<1)
+    {
+        return break_string(sprintf(
+            "[Anmerkung der Casino-Betreiber: Hier waere eigentlich eine "
+            "kleine Ascii-Grafik mit dem Tableau zu finden und eine Liste "
+            "der aktuellen Wetten. Ungluecklicherweise hast Du die grafische "
+            "Darstellung abgeschaltet. Deshalb wird Dir hier das Aussehen des "
+            "Tableaus in - vielen - Worten beschrieben.] "
+            "Auf dem Tableau sind viele Felder aufgezeichnet, die meisten "
+            "enthalten Zahlen, einige aber auch anderen Text. In der Mitte "
+            "sind es zunaechst tatsaechlich Zahlen, und zwar in einem "
+            "Rechteck mit drei auf zwoelf Feldern angeordnet, links unten "
+            "beginnend mit der 3, rechts oben mit der 36 endend, so dass etwa "
+            "in der ersten langen Kolonne die Zahlen 1, 4, 7, 10, 13, ... "
+            "stehen. Die Felder sind rot und schwarz, wobei die Musterung "
+            "nicht direkt regelmaessig zu sein scheint. An der Stirnseite, "
+            "also an die 1, 2 und 3 angrenzend, ist ein gruenes Feld mit "
+            "einer Null. Die Laengssseiten werden gesaeumt von grossen "
+            "Textfeldern: %s, %s, %s, %s, %s und %s, die anscheinend gern "
+            "genutzt werden (sonst waeren sie sicher kleiner!). Die andere "
+            "Stirnseite wird von drei Feldern begrenzt, in denen die "
+            "roemischen Ziffern I bis III geschrieben sind - diese gelten "
+            "dann fuer die gesamte Kolonne. Ganz am Rand siehst "
+            "Du noch drei weitere Felder, die sehr klein mit %s, %s und %s "
+            "beschrieben sind.",
+            vocabulary["rouge",conf[COMET_LANG]],
+            vocabulary["noir",conf[COMET_LANG]],
+            vocabulary["pair",conf[COMET_LANG]],
+            vocabulary["impair",conf[COMET_LANG]],
+            vocabulary["manque",conf[COMET_LANG]],
+            vocabulary["passe",conf[COMET_LANG]],
+            vocabulary["12p",conf[COMET_LANG]],
+            vocabulary["12m",conf[COMET_LANG]],
+            vocabulary["12d",conf[COMET_LANG]]
+            ),77);
+    }
+    else
+    {
+        if (conf[COMET_GFX]>1)
+        {
+            cr=ANSI_BG_BLACK+ANSI_RED+ANSI_BOLD;
+            cm=ANSI_BG_BLACK+ANSI_BOLD+ANSI_BLUE;
+            cb=ANSI_BG_BLACK+ANSI_WHITE+ANSI_BOLD;
+            cg=ANSI_BG_BLACK+ANSI_GREEN+ANSI_BOLD;
+            bb=ANSI_BG_BLACK+ANSI_BOLD+ANSI_BLACK;
+        }
+        else
+        {
+            cr=cb=cg=bb="";
+        }
+    }
+    
+    gfx=({
+    bb+"   +-----------+-----------+-----------+       ",
+    bb+"   | "+cm+sprintf("%|9s",vocabulary["manque",conf[COMET_LANG]])+bb+
+       " | "+cm+sprintf("%|9s",vocabulary["impair",conf[COMET_LANG]])+bb+
+       " | "+cm+sprintf("%|9s",vocabulary["rouge",conf[COMET_LANG]])+bb+
+       " |       ",
+    bb+"+--+--+--+--+--+--+--+--+--+--+--+--+--+---+   ",
+    bb+"|"+cg+"  "+bb+"|"+cr+" 3"+bb+"|"+cb+" 6"+bb+"|"+cr+" 9"+bb+"|"+cr+
+        "12"+bb+"|"+cb+"15"+bb+"|"+cr+"18"+bb+"|"+cr+"21"+bb+"|"+cb+"24"+bb+
+        "|"+cr+"27"+bb+"|"+cr+"30"+bb+"|"+cb+"33"+bb+"|"+cr+"36"+bb+"|"+cm+
+        "III"+bb+"|   ",
+    bb+"|"+cg+"  "+bb+"|--+--+--+--+--+--+--+--+--+--+--+--+---+   " ,
+    bb+"|"+cg+" 0"+bb+"|"+cb+" 2"+bb+"|"+cr+" 5"+bb+"|"+cb+" 8"+bb+"|"+cb+
+        "11"+bb+"|"+cr+"14"+bb+"|"+cb+"17"+bb+"|"+cb+"20"+bb+"|"+cr+"23"+bb+
+        "|"+cb+"26"+bb+"|"+cb+"29"+bb+"|"+cr+"32"+bb+"|"+cb+"35"+bb+"|"+cm+
+        " II"+bb+"|   ",
+    bb+"|"+cg+"  "+bb+"|--+--+--+--+--+--+--+--+--+--+--+--+---+   ",
+    bb+"|"+cg+"  "+bb+"|"+cr+" 1"+bb+"|"+cb+" 4"+bb+"|"+cr+" 7"+bb+"|"+cb+
+        "10"+bb+"|"+cb+"13"+bb+"|"+cr+"16"+bb+"|"+cr+"19"+bb+"|"+cb+"22"+bb+
+        "|"+cr+"25"+bb+"|"+cb+"28"+bb+"|"+cb+"31"+bb+"|"+cr+"34"+bb+"|"+cm+
+        "  I"+bb+"|   ",
+    bb+"+--+--+--+--+--+--+--+--+--+--+--+--+--+---+-- ",
+    bb+"   | "+cm+sprintf("%|9s",vocabulary["passe",conf[COMET_LANG]])+bb+
+       " | "+cm+sprintf("%|9s",vocabulary["pair",conf[COMET_LANG]])+bb+
+       " | "+cm+sprintf("%|9s",vocabulary["noir",conf[COMET_LANG]])+bb+
+       " |/"+cm+"12d"+bb+"/  ",
+    bb+"   +-----------+-----------+-----------/"+cm+"12m"+bb+"/   ",
+    bb+"                                      /"+cm+"12p"+bb+"/    "
+    });
+    return implode(gfx,"\n")+"\n";
+}
+
+public string 
+processBet(object player, string input)
+{
+    mixed bet;   // Pointer auf die Wette
+    mapping ret;
+    int stake;     // Einsatz
+    int num1,rum2;
+    string rest;   // Rest-String
+    string rest2;
+    string * matches;
+    int lang;
+
+    bet=0;
+
+    if ((!objectp(player))||(!living(player)))
+    {
+        return 0;
+    }
+    lang=(PlayerSettings(player))[COMET_LANG];
+
+    if (table_status==STAT_ABGESAGT)
+    {
+        return "Aaah, zu spaet, die Kugel wird gleich fallen!";
+    }
+    else if ((table_status!=STAT_FREI) && (table_status!=STAT_KUGELROLLT))
+    {
+        return "Du kannst jetzt leider keine Wetten platzieren.";
+    }
+    
+
+    // Erst pruefen, ob der Einsatz prinzipiell passt. Table Limits koennen 
+    // erst spaeter geprueft werden, diese haengen von der Quote der Wette ab.
+
+    else if ((sscanf(input,"%d%s",stake,rest)==2) && (rest=="")) // Nur Einsatz
+    {
+        return "Auf was moechtest Du Deinen Einsatz abgeben?";
+    }
+    else if (sscanf(input,"%d %s",stake,rest)!=2)  // Fehlzeichen
+    {
+        return "Das mit Deinem Einsatz hat so gar nicht geklappt.";
+    }
+    else if (!stake) // Guter Witz...
+    {
+        return "Wenn Du nichts setzen moechtest, brauchst Du nicht setzen.";
+    }
+    else if (stake<0)  // Bei DEN Chancen wuerde jeder Leerverkaeufe wollen
+    {
+        return "Negative Betraege kannst Du an der Boerse setzen, hier nicht.";
+    }
+    else if (!hasJetons(player,stake)) // Nicht ubernehmen...
+    {
+        return "So viele Jetons hast Du leider nicht.";
+    }
+
+    // Okay. Der Einsatz ist in Ordnung. Wie sieht es mit der Chance aus?
+
+    if (sscanf(rest,"auf %s",rest2)==1) // Weglesen von "auf"
+    {
+        rest=rest2;
+    }
+
+    // Wenn aus dem Text keine eindeutige Chance ermittelt werden kann
+    // wird das mit dem Setzen leider auch nix.
+    
+    if (!bet=getChance(rest)) 
+    {
+        return "Darauf kannst Du keine Wette platzieren.";
+    }
+
+    // Abschliessend Limit pruefen. 100'000 auf Rot tun nicht wirklich
+    // weh, aber 100'000 auf eine Zahl... bei Gewinn wuerden 3.5 Millionen
+    // ausgeschuettet werden. Ob da die Bankaufsicht mitmacht?
+
+    else if ((stake * chances[bet[1][XRET]])>table_limit)
+    {
+        return "Fuer diese Wette ist Dein Einsatz zu hoch und "
+            "wuerde das Tischlimit sprengen.";
+    }
+
+    table_bets+=({ ([ BET_CHANCE:bet[1],
+                BET_TIME:time(),
+                BET_OWNER:file_name(player),
+                BET_STATUS:0,
+                BET_STAKE:stake,
+                BET_CHANCE_NAME:bet[0] ]) });
+
+    addJetons(player, (-1) * stake);
+   
+    player->Message(sprintf("Du platzierst %d Jetons auf '%s'.\n",
+        stake,GetChanceName(bet[0],lang)));
+    Message(sprintf("%s setzt %d Jetons.\n",
+        player->Name(WER), stake),
+        MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({player})]));
+    return 0; // SUCCESS!
+}
+
+
+
+static void
+cleanMasse()
+{
+    mixed masse;
+    object player;
+    int i;
+    int cash;
+
+    if (!sizeof(table_bets))
+    {
+        Message("Es wurden keine Einsaetze getaetigt.\n");
+        return;
+    }
+    masse = filter_array(table_bets,lambda(({ 'x, 'y }), 
+        ({#'! , ({#'member , 
+            ({#'[ , ({#'[ , 'x , BET_CHANCE }) , XNUM }) , 'y })})
+        
+        ), table_rolled);
+    if (!sizeof(masse))
+    {
+        Message("In dieser Runde gibt es keine Masse.\n");
+    }
+    else
+    {
+        cash=0;
+
+        while (sizeof(masse))
+        {
+            // TODO: Verlorene Wette Archivieren
+            // TODO: Statistik fuehren
+            if (player=find_object(masse[0][BET_OWNER]))
+            {
+                player->Message(sprintf(
+                    "Deine Wette mit %d auf '%s' verlor.\n",
+                        masse[0][BET_STAKE],
+                        GetChanceName(masse[0][BET_CHANCE_NAME],
+                            PlayerSettings(player)[COMET_LANG])));
+            }
+            cash+=masse[0][BET_STAKE];
+            table_bets-=({masse[0]});
+            masse=masse[1..];
+        }
+        Message(sprintf("Eine Masse von %d wird eingezogen.\n",cash));
+    }
+}
+
+public void
+processWinnings()
+{
+    mixed winnings;
+    object player;
+    mapping conf;
+
+    int winc,win,i; // Iterieren, evtl bleibt ja was stehen...
+
+    if (!sizeof(table_bets))
+    {
+        return;
+    }
+    for (winc=i=sizeof(table_bets);i-->0;)
+    {
+        win=table_bets[i][BET_STAKE]*(1+table_bets[i][BET_CHANCE][XRET]);
+        if (player=find_object(table_bets[i][BET_OWNER]))
+        {
+            conf=PlayerSettings(player);
+            player->Message(sprintf(
+                "Deine Wette mit %d auf '%s' war erfolgreich.\n",
+                    table_bets[i][BET_STAKE],
+                    GetChanceName(table_bets[i][BET_CHANCE_NAME],
+                        conf[COMET_LANG])));
+        }
+        if (!conf[COMET_AUTOCOLLECT])
+        {
+            if (win > (table_limit/table_bets[i][BET_CHANCE][XRET]))
+            { 
+                if (player)
+                {
+                    player->Message(break_string(sprintf(
+                        "Du kannst die Wette nicht stehen lassen, da sie "
+                        "das Limit fuer diese Wette sprengen wuerde - Du "
+                        "nimmst Gewinn und Einsatz - %d Jetons - auf.",win),
+                        77));
+                    addJetons(player,win);
+                    table_bets[i]=0;
+                }
+                else
+                {
+                    Message(break_string(
+                        "Die Wette, dessen Eigentuemer nicht mehr "
+                        "auffindbar ist, wuerde das Tischlimit sprengen! "
+                        "Der Einsatz wird auf das Tischlimit begrenzt - mit "
+                        "der Differenz machen die Croupiers sich einen "
+                        "wirklich schoenen Abend.",77));
+                    table_bets[i][BET_STAKE]=
+                        table_limit/table_bets[i][BET_CHANCE][XRET];
+                }
+            }
+            else
+            {
+                table_bets[i][BET_STAKE]=win;
+            }
+        }
+        else
+        {
+
+            player->Message(sprintf( 
+                "Du erhaeltst %d Jetons auf die Hand.\n", win));
+            addJetons(player,win);
+            table_bets[i]=0;
+        }
+    }
+    // Eingeholte Wetten tilgen.
+    table_bets-=({0});
+    Message(sprintf("Es %s %s %s. Die Kugel wird wieder aufgenommen.\n",
+        (winc>1?"gewannen":"gewann"),
+        (winc==1
+            ?"eine"
+            :(winc>0
+                ?to_string(winc)
+                :"keine")),
+        (winc>1?"Wetten":"Wette")));
+    return;
+}
+
+public void
+Schedule()
+{
+    if (previous_object()!=this_object())
+    {
+        return;
+    }
+    while (remove_call_out("Schedule")!=-1);
+
+    switch (table_status)
+    {
+
+        case STAT_FREI:
+            if ((!sizeof(table_bets)) || (time()-(table_bets[<1][BET_TIME]))<6)
+            {
+                return call_out("Schedule",2);
+            }
+            else
+            {
+                Message("Die Kugel wird in den Kessel gesetzt "
+                    "und dreht jetzt ihre Kreise.\n");
+                table_status=STAT_KUGELROLLT;
+                return call_out("Schedule",6);
+            }
+            break;
+        case STAT_KUGELROLLT:
+            Announce("rnvp");
+            table_status=STAT_ABGESAGT;
+            return call_out("Schedule",6);
+            break;
+        case STAT_ABGESAGT:
+            Message("Die Kugel springt ein wenig ueber die "
+                "Faecher und bleibt dann liegen.\n");
+            Announce(table_rolled=random(37));
+            table_status=STAT_GEFALLEN;
+            return call_out("Schedule",4);
+            break;
+        case STAT_GEFALLEN:
+            cleanMasse();
+            table_status=STAT_AUSWERTUNG_M;
+            return call_out("Schedule",2);
+            break;
+        case STAT_AUSWERTUNG_M:
+            processWinnings();
+            table_status=STAT_AUSWERTUNG_G;
+            return call_out("Schedule",4);
+            break;
+        case STAT_AUSWERTUNG_G:
+            table_status=STAT_FREI;
+            Announce("fvj");
+            // Koennte ja was stehen geblieben sein:
+            return call_out("Schedule",8); 
+            break;
+        default:
+            return;
+
+    }
+}
+
+
+static int 
+cmdSet(string txt)
+{
+    string err;
+
+    if (!this_player())
+    {
+        return 0;
+    }
+    if (err=processBet(this_player(),txt))
+    {
+        this_player()->Message(break_string(err,77));
+    }
+    else
+    {
+        if (find_call_out("Schedule")<0)
+        {
+            call_out("Schedule",6);
+        }
+    }
+    return 1;
+}
+
+static int
+fetchBet(object player, int thisbet)
+{
+
+
+    return 1;
+}
+
+
+
+static int 
+cmdHole(string txt)
+{
+    string what,dummy;
+    int getbet;
+
+    if (!this_player())
+    {
+        return 0;
+    }
+    notify_fail("Was moechtest Du (ein)holen?\n");
+    if (!txt)
+    {
+        return 0;
+    }
+
+    if ((sscanf(txt,"alle%s",dummy)==1) &&
+            (member((["s"," ein","s ein",""]),dummy)))
+    {
+        return fetchBet(this_player(),-1);
+    }
+    else if ((sscanf(txt,"%d%s",getbet,dummy)==2) &&
+            (member(([""," ein"]),dummy)))
+    {
+        return fetchBet(this_player(),getbet);
+    }
+    notify_fail("Welche Wetten moechtest du einholen?(Tip: 'alle' oder eine\n"
+    "Nummer, die Du beim Untersuchen der eigenen Wetten siehst...)\n");
+    return 0;
+}
+
+
+// Den Hilfebefehl fuer ausgewaehlte Parameter ueberschreiben.
+
+static int 
+cmdHelp(string txt)
+{
+    string * avails;
+    if ( (!this_player())
+        || (!txt)
+        || (!stringp(txt))
+        || (!strlen(txt)) 
+        || (sizeof(explode(txt,"/"))>1))
+    {
+        return 0; // Lassen wir mal die Standardhilfe ran.
+    }
+    avails=map_array(get_dir(HELPDIR "*.txt"),
+        lambda( ({ 'x }), ({#'[..<] ,  'x, 0, 5 })));
+
+    if (member(avails, txt)<0)
+    {
+        return 0;
+    }
+    else
+    {
+        this_player()->More(read_file(HELPDIR + txt + ".txt"));
+    }
+    return 1;
+}
+
+// Ziemlich krudes Interface, aber da muessen die Spieler jetzt
+// erstmal durch... :)
+
+static int
+cmdSettings(string arg)
+{
+    mapping conf;
+    string * arglist;
+    int num;
+    string dummy;
+
+    if ((!this_player()) 
+        || (!(conf=PlayerSettings(this_player()))))
+    {
+        return 0;
+    }
+    
+    if ((!arg) || (arg=="") || (!stringp(arg)))
+    {
+        printf("Deine Einstellungen am Roulette-Tisch:\n");
+        walk_mapping(playerconf, 
+            lambda( 
+                ({ 'x, 'y ,'z}), 
+                ({#'printf , 
+                    "%10s: %d (%s)\n", 'x, 
+                    ({ #'[,  'z, ({ #'[, 'y, 0 })}),
+                    ({#'[ , 
+                        ({ #'[ , 'y , 1 }) , 
+                        ({ #'[,  'z, ({ #'[, 'y, 0 }) })
+                    })
+                })),conf);
+        printf("(Mit '"+query_verb()+" <option>' mehr anzeigen.)\n");
+    }
+    else
+    {
+        arglist=explode(arg," ");
+  
+        if (!member(playerconf,arglist[0]))
+        {
+            printf("Die Option '%s' ist nicht bekannt.\n",arglist[0]);
+        }
+        else
+        {
+            if (sizeof(arglist)==1)
+            {
+                printf("Die Option '%s' kennt folgende Einstellungen:\n",arg);
+                walk_mapping(playerconf[arg][1],
+                    lambda(
+                        ({ 'x, 'y }),
+                        ({#'printf  ,  
+                            "%3d : %s\n",
+                            'x,'y})));
+            }
+            else
+            {
+                if (sizeof(arglist)>2)
+                {
+                    printf("Zu viele Argumente...\n"
+                            "Syntax: %s <option> <zahl>\n",
+                        query_verb());
+                }
+                else
+                {
+                    if ((sscanf(arglist[1],"%d%s",num,dummy)!=2) ||
+                        (dummy!=""))
+                    {
+                        printf("Als Werte bitte nur ganze Zahlen.\n");
+                    }
+                    else if (!member(playerconf[arglist[0]][1],num))
+                    {
+                        printf("Die Option '%s' kennt den Wert %d nicht.\n",
+                            arglist[0],num);
+                    }
+                    else
+                    {
+                        this_player()->SetProp(P_COMET,
+                            (mapping)this_player()->QueryProp(P_COMET)
+                            +([playerconf[arglist[0]][0] : num]));
+                        printf("Option '%s' auf %d gesetzt.\n",
+                            arglist[0],num);
+                    }
+                } 
+    
+            }
+        }
+    }
+    return 1;
+}
+
+

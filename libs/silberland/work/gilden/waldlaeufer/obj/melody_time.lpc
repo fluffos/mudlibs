@@ -1,0 +1,119 @@
+inherit "std/armour";
+#include "../def.h"
+#include "/spellbooks/waldlaeufer/std/restrictions.lpc"
+
+object owner;
+int tickTime, nextTick, bonus;
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Melodie der Zeit" );
+  SetProp(P_LONG,  0 );
+  SetProp(P_NAME, 0);
+  SetProp(P_INVIS, 1);
+  SetProp(P_GENDER, FEMALE); 
+  AddId(MELODY_TIME_ID);
+  SetProp(P_MATERIAL, MAT_MAGIC );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_SIZE, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NEVERDROP, 1);
+
+   
+  SetProp(P_ARMOUR_TYPE, AT_MISC );
+  SetProp(P_AC, 0);
+  SetProp(P_QUALITY_DECAY, 0);
+  SetProp(P_DEFEND_FUNC, TO );
+}
+
+public void Setup(object caster, int ability, int success) {
+  int duration;
+
+  duration = caster->QueryAttribute(A_INT)*2 + success/50 + ability/16; 
+  duration = SPELL_DAMAGE_BONUS(caster, "melodie der zeit", duration);
+  owner = caster;
+  tickTime = 11 - ability/1000 - success/1000;
+  if(tickTime < 0) {
+    bonus = (tickTime/2)*-1;
+    tickTime = 0;
+  }
+
+  nextTick = 0;
+
+  SetProp("end_time", time()+duration);
+
+  DoWear(1);
+
+  pDebug(caster, sprintf("melody_time :: tickTime=%d duration=%d bonus=%d\n", tickTime, duration, bonus));
+
+  call_out("remove", duration);
+  call_out("tick", tickTime);
+
+  set_heart_beat(1);
+  return;
+}
+
+public void tick() {
+  mapping m;
+
+  if(!owner->InFight()) {
+    if(!random(2) && owner->QueryProp(P_HP) < owner->QueryProp(P_MAX_HP)) owner->AddHp(1+random(bonus));
+    if(!random(2) && owner->QueryProp(P_SP) < owner->QueryProp(P_MAX_SP)) owner->AddSp(1+random(bonus));
+    if(owner->QueryProp(P_FOOD) > 0) owner->eat_food(-random(5)-random(bonus));
+    if(owner->QueryProp(P_DRINK) > 0) owner->drink_drink(-random(5)-random(bonus), 0);
+    if(owner->QueryProp(P_ALCOHOL) > 0) owner->drink_drink(0, -random(5)-random(bonus));
+} else if(owner->QuerySkillAttribute(SA_SPEED) <= 100 && !random(10-bonus)) {
+    tell_object(owner, BS("Die Zeit herum verlangsamt sich und du greifst schneller an."));
+    owner->ModifySkillAttribute(owner, SA_SPEED, 150+random(150  + bonus*10), 2+random(bonus));
+}
+
+if(owner->QueryProp(P_POISON) > 0 && !random(5)) owner->AddPoison(-1-random(bonus));
+
+if(mappingp(m=owner->QueryProp(P_BLIND)) && owner->QueryProp(P_BLIND)[BLIND_TIME] > 0) {
+  m[BLIND_TIME] = m[BLIND_TIME] - 1-random(bonus);
+  if(m[BLIND_TIME] < 0) m[BLIND_TIME] = 0;
+  owner->SetProp(P_BLIND, m);
+}
+
+if(mappingp(m=owner->QueryProp(P_DEAF)) && owner->QueryProp(P_DEAF)[DEAF_TIME] > 0) {
+  m[DEAF_TIME] = m[DEAF_TIME] - 1-random(bonus);
+  if(m[DEAF_TIME] < 0) m[DEAF_TIME] = 0;
+  owner->SetProp(P_DEAF, m);
+}
+
+if(mappingp(m=owner->QueryProp(P_PARALYZED)) && owner->QueryProp(P_PARALYZED)[PARALYZE_TIME] > 0) {
+  m[PARALYZE_TIME] = m[PARALYZE_TIME] - 1 -random(bonus);
+  if(m[PARALYZE_TIME] < 0) m[PARALYZE_TIME] = 0;
+  owner->SetProp(P_PARALYZED, m);
+}
+
+if(owner->QueryProp(P_DISABLE_ATTACK) > 0) {
+  owner->SetProp(P_DISABLE_ATTACK, owner->QueryProp(P_DISABLE_ATTACK) - 1 -random(bonus));
+}
+if(owner->QueryProp(P_DISABLE_SPELLS) > 0) {
+  owner->SetProp(P_DISABLE_SPELLS, owner->QueryProp(P_DISABLE_SPELLS) - 1 -random(bonus));
+}
+if(owner->QueryProp(P_NEXT_SPELL_TIME) > time() && !random(5-bonus)) {
+  tell_object(owner, BS("Deine Beschwoerungen sind wieder bereit."));
+  owner->SetProp(P_NEXT_SPELL_TIME, time());
+}
+
+  call_out("tick", tickTime);
+  return;
+}
+
+public void remove(int silent) {
+  if(objectp(owner)) {
+    tell_object(owner, "Der Fluss Zeit normalisiert sich wieder.\n");
+  }
+
+  DoUnwear(1);
+  ::remove(silent);
+  return;
+}

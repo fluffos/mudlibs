@@ -1,0 +1,154 @@
+/*
+ * Beherrschung
+ *
+ *
+ * Kosten: 
+ * Level : 9
+ * Objekte:
+ * Damage:
+ *
+ */
+
+#include <mnpc.h>
+
+mixed prep_beherrschung(object caster, mapping sinfo) 
+{
+  string ele, wem, ele_caster;
+  object victim;
+  if(caster->InFight()) 
+  {
+    printf(BS("Im Kampf kannst Du Dich auf so etwas nicht "
+              "konzentrieren."));
+    return 0;  
+  }
+  if(present(DRUIDEN_SPELL_ENHANCE, caster)) 
+  {
+    write(BS("Du kannst aufgrund Deiner elementaren Veraenderung "
+             "kein Elementar beherrschen!"));
+    return 0;
+  }
+  if(!present(DRUIDENELEMENTAR, ENV(caster))) 
+  {
+    printf(BS("Aber hier ist kein Elementar!\n"));
+    return 0;
+  }
+  if(QueryOwnCreature(caster, 0, 1)) 
+  {
+    printf("Du beherrscht schon ein Elementar.\n");
+    return 0; 
+  }
+  if( !stringp(sinfo[SI_SKILLARG]) )
+  {
+    printf("Wen oder was willst Du beherrschen?\n");
+    return 0;
+  }
+  if( sscanf(sinfo[SI_SKILLARG], "%s von %s", ele, wem) != 2)
+    ele = sinfo[SI_SKILLARG];
+  victim=FindVictim(ele, caster, "Welches Elementar willst Du beherrschen?\n");
+  if(!victim) return 0;
+  if( objectp(victim->QueryProp(ELEMENTAL_CASTER)) )
+    ele_caster = getuid(victim->QueryProp(ELEMENTAL_CASTER));
+  if( objectp(victim->QueryProp(ELEMENTAL_OWNER)) )
+    ele_caster = getuid(victim->QueryProp(ELEMENTAL_OWNER));
+  if(ele_caster && ele_caster != getuid(caster) && ele_caster != wem )
+  {
+    printf(BS("Dieses Elementar wurde von "+CAP(ele_caster)+
+          " herbeigezaubert, Du kannst es mit 'beherrschung elementar von "+
+          ele_caster+"' beherrschen, was aber um einiges mehr magische Kraft "
+          "erfordert!" ));
+    return 0;
+  }
+  if(!victim->id(DRUIDENELEMENTAR)) 
+  {
+    printf(BS("Das ist kein Elementar, oder Du kannst es nicht beherrschen."));
+    return 0; 
+  }
+  write_color(BS("Du konzentrierst Dich darauf, "+victim->name(WEN,1)+
+        " zu beherrschen."), victim->QueryProp(P_ELEMENT), caster);
+  sinfo[SI_ENEMY]=victim;
+  return sinfo;
+}
+
+int beherrschung(object caster, mapping sinfo) 
+{
+  object victim;
+  int suc;
+  string cn, vn, element;
+
+  if(caster->InFight()) 
+  {
+    printf(BS("Im Kampf kannst Du Dich auf so etwas nicht "
+              "konzentrieren."));
+    return 0;  
+  }
+  victim=sinfo[SI_ENEMY];
+  /*
+  if (find_player("woody"))
+    tell_object(find_player("woody"),
+      sprintf("--beherr-- sinfo:%O\n", sinfo));
+  */
+  if (!present_victim(victim,caster))
+  {
+    write("Huch wo ist denn das Elementar hin?\n");
+    return 0;
+  }
+
+  if(victim->QueryProp(ELEMENTAL_CASTER) != caster)
+    sinfo[SI_RAW_SPELLCOST]*=2;
+  if((victim->QueryProp(ELEMENTAL_OWNER)) == caster) 
+  {
+    printf("Du beherrscht das Elementar bereits.\n");
+    return 0;
+  }
+  if(QueryOwnCreature(caster, 0, 1)) 
+  {
+    printf("Du beherrscht schon ein Elementar.\n");
+    return 0; 
+  }
+  if((victim->QueryProp(ELEMENTAL_OWNER)))
+    sinfo[SI_RAW_SPELLCOST]*=4;
+  
+  sinfo=DoSpellModification(victim->QueryElement(), caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  
+  cn=caster->name();
+  vn=victim->name(WEN, 2);
+  tell_room(ENV(caster), BS(sprintf("%s fuehrt magische Bewegungen "
+     +"aus und deutet auf %s.", cn, vn)), ({caster}));
+  write_color(BS(sprintf("Du fuehrst uralte Beherrschungszeichen "
+        +"aus und deutest auf %s.", vn)),victim->QueryProp(P_ELEMENT), caster);
+  
+  suc=SpellSuccess(caster, sinfo);
+  if (suc<=0)
+  {
+    if(suc<-1000) 
+    {  
+      tell_room(ENV(caster), BS(sprintf("%s scheint das %s erzuernt "
+           +"zu haben ...", cn, victim->QueryProp(P_NAME))), ({caster}));
+      tell_object(caster, sprintf("Das Elementar greift Dich an!\n"));
+      victim->SetOwner(caster, suc);
+      victim->SetAggressive(caster);
+      caster->AddPursuer(victim);   
+      victim->Kill(caster);
+    }
+    return MISSERFOLG;
+  }
+  
+  tell_room(ENV(caster), BS(sprintf("Das %s folgt und gehorcht nun %s.",
+            victim->QueryProp(P_NAME), cn)), ({caster}));
+  write_color(victim->Name(WER)+" gehorcht Dir nun!\n", 
+      victim->QueryProp(P_ELEMENT), caster, 1) ; 
+
+  victim->SetProp(P_XP, 0);
+  victim->SetProp(P_MNPC_FLAGS, 0);
+  victim->SetProp(P_FRIEND, 1);
+  victim->SetProp(P_NO_GLOBAL_ATTACK, 1);
+  victim->SetOwner(caster, suc);
+
+  return ERFOLG;
+}

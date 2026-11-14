@@ -1,0 +1,128 @@
+#include <language.h>
+#include <combat.h>
+#include <new_skills.h>
+#include "/sys/living/life.h"
+#include <moving.h>
+#include <wizlevels.h>
+#include <properties.h>
+#include "../files.h"
+#include "../quest.h"
+
+inherit STD("wache");
+inherit "std/npc/sequencer";
+
+int ok;
+object quester;
+
+create()
+{
+  if (!is_clone(this_object()))
+    return;
+
+  ::create();
+  SetProp(P_NAME, "Murhu");
+  AddId("murhu");
+  AddId("waechter");
+  SetProp(P_SHORT, "Murhu, der Waechter");
+  SetProp(P_ALIGN, 100);
+  SetProp(P_LONG,
+      "Das ist Murhu. Er ist ein riesiger Troll und einer der Waechter hier "
+      "in der Diebesgilde. Er ist riesig und sehr staemmig. Vermutlich koennte "
+      "er Dich zu Kleinholz verarbeiten, aber er hat Respekt vor Woody. "
+      "Er hat an seinem Guertel einen grossen Schluesselbund befestigt.");
+  SetProp(P_ARTICLE, 0);
+  AddLibrary(NPC("npc.lib"), 2, 1);
+  clone_object(ARMOUR("guertel"))->move(TO);
+  customize(30+random(5),0,"troll");
+  command_me("ziehe guertel an");
+  AddSpell(3,900,
+    "Murhu verarbeitet Dich zu Kleinholz!\n",
+    "Murhu verarbeitet @WEN zu Kleinholz!\n",
+     DT_RIP,([SP_SHOW_DAMAGE:1]));
+  SetChats(4, ({
+           "Murhu denkt . o O (Ich habe Durst)\n",
+           "Murhu seufzt und sabbert ungluecklich.\n",
+           "Murhu traeumt von einem kuehlen blonden Bierchen.\n",
+           "Murhu sagt: Ich hab Lust auf ein Bier...\n" }) );
+  AddInfo("durst", "Hm, ich hab Lust auf ein Bier.", "sagt: ");
+  AddInfo("bier", "Ich saufe unheimlich gerne. Ich bin Meister im Saufen!", "grinst breit: ");
+  AddInfo("saufen", "Hmm, so ein Bierchen waer jetzt was.", "ueberlegt: ");
+  AddInfo("meister", "Ich habe letzten Monat die Meisterschaft im Saufen gewonnen!", "sagt: ");
+  AddInfo("meisterschaft", "Bei der Meisterschaft habe ich sogar den goldenen Saufbecher gewonnen!", "prahlt: ");
+  AddInfo(({"becher", "saufbecher", "pokal", "wanderpokal"}),
+          "Der goldene Saufbecher ist eine Art Wanderpokal. Meistens gewinnt ihn Heriolf, der Trinkhallenbesitzer,"
+         +" doch letzten Monat war ich um 3 Halbe Bier besser. Lenti ist uebrigens Letzter geworden,"
+         +" hehe. Nun gebuehrt er mir, der goldene Saufbecher, doch ich Schussel hab"
+         +" das Ding irgendwo verloren...", "sagt: ");
+  AddInfo("lenti", "Frag doch mal Lenti nach seinem Trostpreis...", "kichert: ");
+  AddInfo("schussel", "Ich bin echt so ein Schussel, dauernd verliere ich etwas. Dabei war mir der Becher"
+                     +" so viel wert!", "seufzt: ");
+  AddInfo("wert", "Ich verlier den Becher diesen Monat bestimmt wieder an Heriolf, ich hab ja jetzt den Job"
+                 +" als Waechter, und da komm ich nicht mehr so zum ueben.", "snifft: ");
+  AddInfo(({"job", "waechter"}), "Der Job als Waechter ist echt gut. Aber ich darf leider nicht mehr so viel saufen.",
+          "sagt: ");
+  AddInfo("heriolf", "Das Schwein wird diesen Monat sicher die Meisterschaft gewinnen, ich spuer das im Urin!"
+                    +" Ausserdem faselt er dauernd was davon, dass er mir den Becher am liebsten schon jetzt"
+                    +" abnehmen will... Naja, ich kann ihm den Gefallen nicht erfuellen, denn ich hab ihn ja"
+                    +" verloren.", "schimpft: ");
+  AddInfo("gefallen", "Ich werde mich hueten, Heriolf diesen Gefallen zu tun.", "sagt: ");
+  AddInfo("urin", "Hm, ich hab heut noch gar kein Bierchen getrunken, also muss ich noch nicht so dringend.",
+          "grinst: ");
+  RegisterGive("becher", ({
+               ({"sag Der Becher! Hurra! Heriolf wird sich aergern...", 2}),
+               ({"belohnung", 4})
+               }));
+  ok=0;
+  add_action("gift", "belohnung");
+}
+
+give_notify(ob) {
+  sequencer::give_notify(ob);
+}
+
+int becher(object o) {
+  quester=this_interactive();
+  if (o->id(IV_BOOZE_MUG)) {
+    if (present(IV_LOCKPICKNOTE, o)) {
+      command_me("sag Der Becher ist nicht leer, wie soll ich da Bier einfuellen?");
+      give_obj(o, quester);
+      return 0;
+    }
+    o->remove();
+    ok=1;
+    return 1;
+  }
+  command_me("sag Danke Dir, "+quester->Name()+", jetzt bin ich um "+o->name(WEN, 0)+" reicher.");
+  command_me("emote grinst breit.");
+  return 0;
+}
+
+gift() {
+  object y, r, qo;
+  int ret;
+  
+  if (ok && ENV(TO) && present(quester, ENV(TO))) {
+    command_me("sag Danke, dass Du mir den goldenen Saufbecher gebracht hast, "+quester->Name()
+              +"! Ich wuerde am liebsten Heriolfs Gesicht jetzt sehen koennen... Hier hast Du eine"
+              +" kleine Belohnung fuer Deine Muehe!");
+    command_me("emote freut sich ungemein.");
+    r=find_object(ROOM("i1"));
+    if (r)
+      r->set_winner("Murhu");
+    y=clone_object("/d/ebene/creative/feldlager/obj/yari");
+    if(qo=present(IV_QUEST_ITEM, quester)) {
+      y->AddId(IV_QUEST_YARI);
+      ret=qo->set_flag(IV_GET_YARI);
+      if(ret!=1) {
+        write("Oops, da ging etwas schief (ret="+ret+")\n");
+        y->remove();
+        return 1;
+      }
+    }
+    y->move(TO, M_NOCHECK);
+    give_obj(y, quester);
+  }
+  ok=0;
+  return 1;
+}
+

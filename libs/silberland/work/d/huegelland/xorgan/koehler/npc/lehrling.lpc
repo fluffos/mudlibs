@@ -1,0 +1,650 @@
+// Xorgan@SilberLand
+// Koehlerlehrling (QuestNPC fuer die Gesellenpruefung )
+// 1999-06-26
+
+#include "../def.h"
+#include "../kquest.h"
+#include <lightsource.h>
+
+inherit "std/npc";
+
+#define RPGTOOL_ALLOWED_MASTERS ({ "", "aruna", "took", "kyria", "xorgan" })
+#define GHOSTWRITER_ACCESS ({"lim", "graven" })
+
+int brennt = 0;
+
+void create() 
+{
+   if(!is_clone(TO)) 
+      return;
+   
+   ::create();
+
+   SetProp(P_NAME, "Lehrling");
+   SetProp(P_SHORT, "Der Lehrling");
+   
+   SetProp(P_LONG,
+      "Der Koehlerlehrling ist ein junger Mann. Von seinem Alter her koennte "
+      "er schon Geselle sein. Du hast den Eindruck, dass seine Lehrzeit schon "
+      "bald vorueber sein wird. Der Lehrling scheint nervoes und unruhig zu "
+      "sein. Er kann ja kaum ruhig stehen.");
+   
+   SetProp(P_GENDER, MALE);
+   SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:0,T_RANGE_MAX:30]));
+   AddId(({"lehrling", "koehlerlehrling", "NOCONTROL" }));
+   
+   create_default_npc(17);
+   SetProp(P_HANDS, ({" mit seinen Haenden",QueryProp(P_HANDS)[1],DT_BLUDGEON}));
+   SetProp(P_RACE, "Mensch");
+   SetProp(P_SIZE, 170 + random(25));
+   SetProp(P_ALIGN, 100);
+   SetProp(P_MAX_HANDS, 2);
+   SetProp(P_HEAL,0);
+   SetProp(P_AGGRESSIVE,0);
+   SetProp(P_WIMPY, 0);
+   SetProp(P_RESISTANCE_STRENGTHS , 
+      ([DT_FIRE:   -0.1, DT_COLD:      0.1, DT_WATER:  0.0, DT_AIR:    0.0, 
+      DT_LIGHTNING: 0.0, DT_EXPLOSION: 0.0, DT_SOUND:  0.0, DT_LIGHT:  0.0,
+      DT_ELECTRIC:  0.0, DT_ACID:      0.0, DT_POISON: 0.0, DT_TERROR: 0.0,
+      DT_HOLY:      0.0, DT_UNHOLY:    0.0, DT_MAGIC:  0.0 ]) );
+   SetProp(P_NOMAGIC,0);
+   
+   SetProp(P_MSGIN, "kommt an");
+   SetProp(P_MSGOUT, "geht");
+   SetProp(P_MMSGIN, "erscheint in einer Rauchwolke");
+   SetProp(P_MMSGOUT, "verschwindet mit Knall und Schwefelduft");
+
+   SetProp(P_DIE_MSG,  " stirbt.\n");
+   SetProp(P_NOCORPSE, 0 );
+   SetProp(P_NOATTACK,  "sagt: Hilf mir lieber bei meiner Pruefung.\n");
+   
+   SetProp(P_LOG_INFO, "xorgan/lehrling.info");
+   
+   AddInfo(DEFAULT_INFO, "sagt: Ich bin so nervoes! Ich hab alles vergessen. "
+      "Frag lieber den Meister danach.\n");
+
+   AddInfo( ({"hilfe", "helfen"}),
+      "Du wuerdest mir bei meiner Gesellenpruefung helfen? Aber das wird "
+      "schwierig werden. Du muesstest mir schnell zeigen wie man Holzkohle "
+      "herstellt und mein Werkzeug musst Du auch finden. Wennst mir noch immer "
+      "helfen moechtest, dann biete mir Hilfe an.",
+      "sagt: ");
+   
+   AddInfo( ({"pruefung", "gesellenpruefung"}),
+      "Ich hab heute meine Gesellenpruefung. Ich bin ja so nervoes. Ich hab "
+      "alles was ich gelernt habe vergessen. Wie soll ich die Pruefung nur "
+      "schaffen? Zu allem Ueberfluss finde ich mein Werkzeug auch nicht mehr. "
+      "Ich bin verloren!!",
+      "schluchzt: ");
+   
+   AddInfo( ({"werkzeug"}),
+      "Ich hab mein ganzes Werkzeug verloren und ich brauche es dringend fuer "
+      "die Gesellenpruefung.",
+      "sagt verzweifelt: ");
+   
+   SetChats( 2, ({
+      "Der Lehrling laeuft aufgeregt im Kreis herum.\n",
+      "Der Lehrling sagt: Ich hab alles vergessen.\n",
+      "Der Lehrling sagt: Ich werde die Gesellenpruefung nie schaffen.\n",
+      "Der Lehrling seufzt.\n",
+      "Der Lehrling fragt: Hast Du mein Werkzeug gesehen? Ich hab es verlegt.\n"}) );
+      
+   SUID;
+   CLONEME(ARMOUR + "arbhose.lpc" );
+   CLONEME(ARMOUR + "arbjacke.lpc" );
+   command("trage alles");
+   
+   AddCmd( ({ "biete", "biet" }), "BeginQuest" );
+   AddCmd( ({ "schaufle", "schaufel" }), "schaufle" );
+   AddCmd( ({ "zuende", "zuend", "entzuende", "entzuend" }), "zuende" );
+   AddCmd( ({ "mache", "mach", "steche", "stech" }), "steche" );
+   AddCmd( ({ "gubor" }), "gubor" );
+   AddCmd( ({ "key" }), "keycard" );
+   AddCmd( ({ "rpgtool" }), "rpgtool" );
+   AddCmd( ({ "rtest" }), "rtest" );
+
+
+}
+
+
+rtest( string str )
+{
+   write( "Kandidat: " + TP->query_real_name() + "\n" );
+   write( "Result: " + ( member( RPGTOOL_ALLOWED_MASTERS, TP->query_real_name()) != -1 ) + "\n" );
+   return 1;
+}
+
+
+rpgtool( string str )
+{
+   object ob;
+
+   if( member( RPGTOOL_ALLOWED_MASTERS, TP->query_real_name()) != -1 )
+   {
+      if( present( "rpgtool", TP ) )
+      {
+         present( "rpgtool", TP )->remove(1);
+         write( "Der Lehrling tauscht Dein RPG-Tool gegen eine Neue aus.\n" );
+      }
+      else
+      {
+         write( "Der Lehrling gibt Dir Dein neues RPG-Tool.\n" );
+      }
+      ob = clone_object(OBJ + "rpgtool.lpc");
+      ob->SetMaster( TP->query_real_name());
+      ob->move( TP, M_NOCHECK );
+      return 1;
+   }
+   return 0;
+}
+
+
+gubor( string str )
+{
+   if( str == "zuckerldose" )
+   {
+      if( TP->query_real_name() == "gubor" || TP->query_real_name() == "xorgan" )
+      {
+         if( present( "zuckerldose", TP ) )
+         {
+            present( "zuckerldose", TP )->remove(1);
+            write( "Der Lehrling tauscht Deine Zuckerldose gegen eine Neue aus.\n" );
+         }
+         else
+         {
+            write( "Der Lehrling gibt Dir Deine Zuckerldose.\n" );
+         }
+         clone_object(OBJ + "zuckerldose.lpc")->move( TP, M_NOCHECK );
+         return 1;
+      }
+   }
+   return 0;
+}
+
+
+keycard( string str )
+{
+   notify_fail( "Das Kommando lautet: key card\n");
+   if( str == "card" )
+   {
+      if( member( GHOSTWRITER_ACCESS, TP->query_real_name()) != -1 )
+      {
+         if( present( "keycard", TP ) )
+         {
+            present( "keycard", TP )->remove(1);
+            write( "Der Lehrling tauscht Deine Keycard gegen eine Neue aus.\n" );
+         }
+         else
+         {
+            write( "Der Lehrling gibt Dir Deine Keycard.\n" );
+         }
+         clone_object(OBJ + "keycard.lpc")->move( TP, M_NOCHECK );
+         return 1;
+      }
+   }
+   return 0;
+}
+
+
+BeginQuest( string str )
+{
+   object ob;
+   
+   notify_fail( "Was willst Du anbieten?\n");
+   if( str != "lehrling hilfe an" )
+      return 0;
+   
+   if( TP->QueryQuest( QUEST_NAME )) 
+   {
+      
+      write( "Der Lehrling antworten: Du hast mir schon geholfen!\n" );
+      write( "Der Lehrling lehnt deine Hilfe ab.\n");
+      return 1;
+   }
+   
+   if( present( "koehler_quest", TP ))
+   {
+      write( "Der Lehrling erwidert: Weisst schon wie man richtig Holzkohle "
+         "macht?\n" );
+   }
+   else
+   {
+      SUID;
+      clone_object( OBJ + "koehler_quest.lpc")->move( TP, M_NOCHECK );
+      write( "Der Lehrling sagt: Du musst mir hier zeigen wie man Holzkohle "
+         "macht und mein\n");
+      write( "Der Lehrling sagt: Werkzeug suchen und mir geben. Ich waere Dir "
+         "sehr dankbar.\n");
+      write( "Der Lehrling sagt: Bitte mach aber schnell, sonst koennte es zu "
+         "spaet sein.\n");
+   }
+   return 1;
+}
+
+
+schaufle( string str )
+{
+   object quest;
+   
+   notify_fail( "Was willst Du wohin schaufeln?\n" );
+   if( str == "erde auf stapel" || str == "erde auf haufen" )
+   {
+      quest = present( "koehler_quest", TP );
+      if( quest )
+      {
+         if( present( "koehler_schaufel", TP ))
+         {
+            if( quest->GetState() == 2 )
+            {
+               write( BS( "Sorgfaeltig schaufelst Du Erde auf den Stapel. Jetzt "
+                     "ist der Meiler fertig. Der Lehrling schaut Dir genau "
+                     "zu.\n"));
+               say( TPN + " schaufelt Erde auf den Meiler.\n", TP);
+               
+               quest->SetState();
+               
+            }
+            else
+            {
+               if( quest->GetState() >= 3 )
+               {
+                  write( "Du hast den Meiler schon mit Erde bedeckt.\n");
+               }
+               else
+               {
+                  write( "Du bist Dir sicher, dass Du noch etwas vergessen hast.\n");
+               }
+            }
+         }
+         else
+         {
+            write( "Ohne Schaufel kannst Du nicht schaufeln!\n");
+         }
+         return 1;
+      }
+   }
+   return 0;
+}
+
+
+zuende( string str )
+{
+   object quest, ob;
+   int i;
+   
+   notify_fail( "Was willst Du mit was anzuenden?\n" );
+   if( str == "meiler mit fackel an" || str == "meiler mit fackel" || 
+       str == "mit fackel meiler an" || str == "mit fackel meiler" )
+   {
+      quest = present( "koehler_quest", TP );
+      if( quest )
+      {
+         if( quest->GetState() == 3 || ( quest->GetState() == 4  && brennt == 0 ))
+         {
+            ob = present( "fackel", TP );
+            if( ob )
+            {
+               if( ob->QueryProp( P_LIGHTED ))
+               {
+                  if( quest->GetState() == 3 )
+                  {
+                     write( BS( "Du zuendest den Meiler an. Auch jetzt "
+                           "begutachtet der Lehrling dein Tun.\n") + "\n");
+                     say( TPN + " entzuendet den Meiler mit einer Fackel.\n", TP);
+                     
+                     quest->SetState();
+                  }
+                  else
+                  {
+                     write( BS( "Muehsam graebst Du ein Loch in den Meiler und "
+                           "tatsaechlich er ist ausgegangen. Du zuendest den "
+                           "Meiler erneut an. Auch jetzt begutachtet der "
+                           "Lehrling dein Tun.\n") + "\n");
+                     say( TPN + " entzuendet erneut den Meiler mit einer Fackel.\n", TP);
+                  }   
+                  brennt = 1;
+                  
+                  call_out( "brennt", 5);
+               }
+               else
+               {
+                  write( BS( "Du haeltst die Fackel zum Zunder, aber es tut sich "
+                     "nicht viel. Um genau zu sein: Es tut sich absolut "
+                     "nicht. Wie koennte sich auch was tun, wenn Du die "
+                     "Fackel nicht angezuendet hast!\n"));
+               }
+            }
+            else
+            {
+               write( BS( "Man sollte ein schon eine Fackel besitzen, wenn man "
+                  "mit einer Fackel etwas anzuenden will!\n"));
+            }
+         }
+         else
+         {
+            if( quest->GetState() == 4 )
+            {
+               write( "Du hast den Meiler schon angezuendet.\n");
+            }
+            else
+            {
+               if( quest->GetState() < 4 )
+               {
+                  write( "Du bist Dir sicher, dass Du noch etwas vergessen hast.\n");
+               }
+               else
+               {
+                  write( "Du hast dem Lehrling schon gezeigt wie man Holzkohle "
+                     "macht!\n");
+               }
+            }
+         }
+         return 1;
+      }
+   }
+   return 0;
+}
+
+
+brennt()
+{
+   write( BS("Nachdem der Meiler schoen brennt verschliesst Du das Loch im "
+      "Mantel des Meilers mit Erde.\n") + "\n"); 
+   say( TPN + " verschliesst das Loch im Mantel des Meilers mit Erde.\n", TP ); 
+   call_out( "warten", 5, 1 );
+}
+
+
+warten( int count)
+{
+   object quest;
+   
+   quest = present( "koehler_quest", TP );
+   
+   if( quest )
+   {
+      if( count <= 10 )
+      {
+         if( quest->GetState() < 5 )
+         {
+            write( "Du wartest...\n... und wartest ...\n...und denkst . o O (War da "
+               "nicht noch was zu tun?)\n\n");
+         }
+         else
+         {
+            write( "Rauch steigt aus dem Meiler auf. Er scheint noch zu brennen. \n\n");
+         }
+         call_out( "warten", 5, ++count );
+      }
+      else
+      {
+         if( quest->GetState() == 5 )
+         {
+            write( "Der Meiler hat zu rauchen aufgehoert. Die Holzkohle scheint "
+               "fertig zu sein.\n");
+            write( "Der Lehrling raeumt die Kohle weg und grinst zufrieden.\n");
+            write( "Der Lehrling sagt: Danke. Jetzt weiss ich es wieder.\n");
+            write( "Der Lehrling sagt: Nun brauche ich nur mehr mein Werkzeug.\n");
+            quest->SetState();
+         }
+         else
+         {
+            brennt = 0;
+            write( "Irgendwie hast Du das Gefuehl, dass mit dem Meiler etwas "
+               "nicht stimmt.\n");
+         }
+      }
+   }
+}
+
+
+steche( string str )
+{
+   object quest;
+   
+   notify_fail( "Was willst Du wohin stechen?\n" );
+   if( str == "loecher in meiler" || str == "loecher in haufen" )
+   {
+      quest = present( "koehler_quest", TP );
+      if( quest )
+      {
+         if( present( "koehler_schaufel", TP ))
+         {
+            if( quest->GetState() == 4 )
+            {
+               if( brennt == 1 )
+               {
+                  write( BS( "Du stichst einige Loecher in das obere Ende der "
+                     + "Meilers. Sofort entweicht Rauch. Der Lehrling passt "
+                     + "besonders gut auf.\n"));
+                  say( TPN + " sticht Loecher in den Meiler.\n", TP);
+                  
+                  quest->SetState();
+               }
+               else
+               {
+                  write( BS( "Mit dem Meiler scheint etwas nicht zu stimmen. Er "
+                     "ist wohl ausgegangen. Vielleicht hast Du was vergessen.\n"));
+               }
+            }
+            else
+            {
+               if( quest->GetState() == 5 )
+               {
+                  write( "Du hast schon Loecher in den Meiler gestochen.\n");
+               }
+               else
+               {
+                  write( "Du bist Dir sicher, dass Du noch etwas vergessen hast.\n");
+               }
+            }
+         }
+         else
+         {
+            write( "Ohne die Koehlerschaufel kannst Du das nicht machen!\n");
+         }
+         return 1;
+      }
+   }
+   return 0;
+}
+
+
+give_notify( object ob )
+{
+   object quest;
+   object o;
+   int i, ok;
+   
+   quest = present( "koehler_quest", TP );
+   if( quest )
+   {
+      if( quest->GetState() >= 6 )
+      {
+         if( ob->id( "!Koehler") )
+         {
+            if( quest->SetThing( ob->name()) <= 0 )
+            {
+               if( quest->CheckThing( "dummy" ) == -3 )
+               {
+                  ob->remove(1);
+                  
+                  TP->SetProp(P_PARALYZED, ([
+                     PARALYZE_TIME:-1, 
+                     PARALYZE_MSG: "Du willst jetzt nicht weg gehen!\n",
+                     PARALYZE_MSG_OTHER:"",
+                     PARALYZE_END: "",
+                     PARALYZE_END_OTHER: ""]));
+                  write( "Der Lehrling sagt: Sehr gut, " + TPN + "! Du hast mein "
+                     "ganzes Werkzeug gefunden.\n");
+                  
+                  
+                  if( present( "schubkarren", ENV( TP )) )
+                  {
+//                     present( "schubkarren", ENV( TP ))->remove(1);
+                     i = 1;
+                     ok = 1;
+                     while( ok )
+                     {
+                        if( present( "schubkarren " + i, ENV( TP )))
+                        {
+                           o = present( "schubkarren " + i, ENV( TP ));
+                           if( o->CheckOwner(getuid(TP)))
+                           {
+                              o->remove(1);
+                           }
+                           else 
+                           {
+                              i++;
+                           }
+                        }
+                        else
+                        {
+                           ok = 0;
+                        }
+                     }
+                     write( "Der Lehrling sagt: Den Schubkarren brauchst auch "
+                        "nicht mehr.\n\n");
+                  }
+                  write( "Der Lehrling sagt: Nun kann ich mit der Pruefung "
+                     "beginnen.\n");
+                  write( "Der Lehrling ruft: MEISTER!!! MEISTER!!!\n" );
+                  
+                  call_out( "ende1", 5);
+                  
+                  quest->remove(1);
+               }
+               else
+               {
+                  write( "Der Lehrling sagt: Sehr gut! Du hast meine " 
+                     + ob->name( RAW ) + " gefunden!\n" );
+                  write( "der Lehrling bedankt sich bei Dir.\n" );
+                  ob->remove(1);
+               }
+            }
+            else
+            {
+               write( "Der Lehrling sagt: Was soll ich damit? Das ist nicht "
+                  "mein Werkzeug!\n");
+            }
+            
+            return 1;
+         }
+         else
+         {
+            write( "Der Lehrling sagt: Was soll ich damit? Das ist nicht mein "
+               "Werkzeug!\n");
+         }
+      }
+      else
+      {
+         if( ob->id( "!Koehler" ))
+         {
+            write( "Der Lehrling sagt: Du sollst mir doch zeigen wie man "
+               "Holzkohle macht!\n");
+         }
+         else
+         {
+            write( "Der Lehrling sagt: Das braucht man nicht zum Holzkohle "
+               "machen!\n");
+         }
+      }
+   }
+   else
+   {
+      write( "Der Lehrling und sagt: Was soll ich damit?\n");
+   }
+   ob->move( TP );
+   write( "Der Lehrling gibt es Dir wieder zurueck.\n");
+   
+   return 0;
+   
+}
+
+
+ende1()
+{
+   write( "Der Koehlermeister kommt an.\n");
+   write( "Der Koehlermeister sagt: Was gibts, Lehrling?\n");
+   write( "Der Lehrling erwidert. Meister, ich bin bereit fuer meine "
+      "Gesellenpruefung!\n");
+   write( break_string( "Nun gut! Dann zeig was Du gelernt hast und bau einen "
+      "Meiler.\n\n", 78,
+      "Der Koehlermeister antwortet: ") );
+   call_out( "ende2", 5);
+}
+
+
+ende2()
+{
+   write( BS( "Der Lehrling macht sich sofort an die Arbeit. Er legt wie Du es "
+      "ihm gezeigt hast Zunder in die schwarze Flaeche.\n") + "\n");
+   call_out( "ende3", 5);
+}
+
+
+ende3()
+{
+   write( "Sorgfaeltig stapelt er die Scheiter zu einem Haufen.\n\n");
+   call_out( "ende4", 5);
+}
+
+
+ende4()
+{
+   write( "Er bedeckt das Ganze mit Erde und entzuendet den Meiler.\n\n");
+   call_out( "ende5", 5);
+}
+
+
+ende5()
+{
+   write( BS( "Anschliessend verschliesst er das Loch mit Erde und sticht "
+      "Loecher in den Meiler.\n") + "\n");
+   call_out( "ende6", 5);
+}
+
+ende6()
+{
+   write( "Stolz zeigt der Lehrling das Werk seinem Meister.\n");
+   write( BS( "Der Koehlermeister grinst zufrieden und stellt ihm ein paar "
+      "Fragen, die der Lehrling ohne zu zoegern richtig beantwortet.\n" ) + "\n");
+   call_out( "ende7", 5);
+}
+
+ende7()
+{
+   write( "Der Koehlermeister sagt stolz: Gut gemacht mein Sohn. Du hast "
+      "bestanden.\n\n");
+   write( "Der Koehlermeister sagt stolz: Von nun an sollst Du Koehlergeselle "
+      "sein.\n");
+   write( "Der Koehlermeister ueberreicht dem Lehrling ein graues Halstuch.\n\n");
+   clone_object( NPC + "mgeselle.lpc")->move( ENV( TP ), M_TPORT + M_SILENT );
+   call_out( "ende8", 5);
+}
+
+ende8()
+{
+   int ret;
+   
+   write( "Der Koehlermeister sagt: Hmmm. Nun hab ich keinen Lehrling mehr.\n");
+   write( "Der Koehlermeister stellt einen neuen Lehrling ein.\n\n");
+   ret = TP->GiveQuest( QUEST_NAME );
+   TP->SetProp( P_PARALYZED, 1 );
+   
+   if( ret == 1 )
+   {
+      write_file ( LOGFILE, sprintf ("%s  %s hat bei der Gesellenpruefung "
+         "geholfen.\n", dtime(time()), capitalize(TP->query_real_name())));
+   }
+   else
+   {
+      if( ret <= 0 )
+      {
+         write ( "Unbekannter Fehler, bitte den zustaendigen Magier "
+            "verstaendigen!\nFehlercode: " + ret + "\n");
+         write_file ( MYLOG, sprintf ("%s  Fehler: %d bei %s .\n",
+            dtime(time()), ret, capitalize(TP->query_real_name())));
+      }
+   }
+}

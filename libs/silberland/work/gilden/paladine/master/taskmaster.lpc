@@ -1,0 +1,890 @@
+/*
+//
+// Der Taskmaster fuer die Paladingilde
+//
+// Angrox@Silberland
+// 
+//
+// 20.06.1998
+//
+*/
+
+#include <wizlevels.h>
+#include <language.h>
+#include <config.h>
+#include <new_skills.h>
+#include <properties.h>
+#include <ansi.h>
+#include <moving.h>
+#include "../paladin.h"
+
+nosave mixed object2string(mixed name);
+nosave mixed string2object(mixed name);
+nosave int GetGuildLevel(object player);
+nosave int _error(int nr, mixed arg);
+
+
+create() {
+  if (is_clone(this_object())) {
+    destruct(this_object());
+    return 1;
+  }
+  seteuid(getuid(this_object()));
+}
+
+nomask query_prevent_shadow() { return 1; }
+
+
+nosave int CheckIfAllowed() {
+  object ob;
+  string fname;
+  ob=previous_object();
+  fname=file_name(ob);
+  if(!IS_ARCH(getuid(ob)) && member(UID_ALLOWED, getuid(ob))==-1) { 
+      tell_angrox(sprintf("Versuchte Aenderung im Gildenmaster der Paladine "
+         +"von %s (direkt!)\n", CAP(getuid(ob))));
+      tell_zordan(sprintf("Versuchte Aenderung im Gildenmaster der Paladine "
+         +"von %s (direkt!)\n", CAP(getuid(ob))));
+  
+      write_secure_log(ctime()+": Versuchte Aenderung im Taskmaster "
+             +"von "+CAP(getuid(ob))+" (direkt!)\n");
+      return 0;      
+    }
+  return 1;
+}
+
+nosave mixed object2string(mixed name) {
+  if(objectp(name)) return getuid(name);
+  if(stringp(name)) return lower_case(name);
+  return 0;
+}
+
+nosave mixed string2object(mixed name) {
+  if(objectp(name)) return name;
+  if(stringp(name))
+    if(name=find_player(name) || name=find_netdead(name)) return name;
+  return 0;
+}
+
+
+// Task 2
+
+nosave mixed Task2(object player) {
+  object ob;
+  string str;
+  if(!ENV(player)) return 0;
+  str=sprintf("Es gibt eine Aufgabe fuer Dich, %s: In der Naehe von Midas, "
+      +"in Kyranda und im Dschungel gibt es Bettler und Landstreicher. "
+      +"Zeige Deine Gutherzigkeit und bringe den Dreien jeweils "
+      +"3000 Muenzen.",player->Name(WER)); 
+  if(!ob=present(PALADINTASK, player)) {
+    ob=CLONEOB(OBJ("task"));
+    ob->move(player, M_NOCHECK|M_SILENT);
+    ob->SetTask(2, player);
+  }
+  else {
+    if(!ob->GetTask(2, player)) {
+      ob->remove();
+      write("Fehler! Falsches Taskitem! Bitte Magier verstaendigen!\n");
+      return _error(-3, getuid(player)+"/Task2");
+    }
+  }
+  return str;
+}
+
+nosave int CheckTask2(object player, int level) {
+  object ob;
+  if(call_other(PALADINMASTER, "CheckTask", player, 2)) return 1;
+  if(!ob=present(PALADINTASK, player)) return 0;
+  if(!ob->GetTask(2, player)) {
+    ob->remove();
+    write("Fehler! Falsches Taskitem! Bitte Magier verstaendigen!\n");
+    return _error(-3, getuid(player)+"/CheckTask2");
+  }
+  if((test_bit(ob->GetFlag() ,0) && test_bit(ob->GetFlag(), 1) &&
+      test_bit(ob->GetFlag(), 2))|| 
+      call_other(PALADINMASTER, "CheckTask", player, 2)) 
+  {
+    ob->remove();
+    call_other(PALADINMASTER, "SetTask", player, 2);
+    tell_room(ENV(player), 
+      BSA(sprintf("Sehr gut, %s, Du hast Deine Gutherzigkeit unter "
+          +"Beweis gestellt!", 
+          player->name(WER)), GUILDNPC_NAME+" sagt: "));
+    return 1;
+  }
+  return 0;
+}
+
+
+// Task 3
+
+nosave mixed Task3(object player) {
+  object ob;
+  string str;
+  if(!ENV(player)) return 0;
+  str=sprintf("%s, Du musst den Armen zeigen, dass Du auf ihrer Seite "
+              "stehst. Im Huegelland huetet ein Schafhirte seine Schafe und "
+              "er scheint erkrankt zu sein. Hilf ihm in Dusty's Namen!"
+              ,player->Name(WER)); 
+  if(!ob=present(PALADINTASK, player)) {
+    ob=CLONEOB(OBJ("task"));
+    ob->move(player, M_NOCHECK|M_SILENT);
+    ob->SetTask(3, player);
+  }
+  else {
+    if(!ob->GetTask(3, player)) {
+      ob->remove();
+      write("Fehler! Falsches Taskitem! Bitte Magier verstaendigen!\n");
+      return _error(-3, getuid(player)+"/Task3");
+    }
+  }
+  return str;
+}
+
+nosave int CheckTask3(object player, int level) {
+  object ob;
+  if(call_other(PALADINMASTER, "CheckTask", player, 3)) return 1;
+  if(!ob=present(PALADINTASK, player)) return 0;
+  if(!ob->GetTask(3, player)) {
+    ob->remove();
+    write("Fehler! Falsches Taskitem! Bitte Magier verstaendigen!\n");
+    return _error(-3, getuid(player)+"/CheckTask3");
+  }
+  if((test_bit(ob->GetFlag() ,0)) ||
+      call_other(PALADINMASTER, "CheckTask", player, 3)) 
+  {
+    ob->remove();
+    call_other(PALADINMASTER, "SetTask", player, 3);
+    tell_room(ENV(player), 
+      BSA(sprintf("Sehr gut, %s, Du hast uns gezeigt, dass Du den Armen "
+                  "helfen kannst!", 
+          player->name(WER)), GUILDNPC_NAME+" sagt: "));
+    return 1;
+  }
+  return 0;
+}
+
+
+// Task 4 
+
+nosave mixed Task4(object player) {
+  object ob;
+  string str, txt;
+  mapping vars;
+  if(!ENV(player)) return 0;
+  if(!ob=present(PALADINTASK, player)) {
+    ob=CLONEOB(OBJ("task"));
+    ob->move(player, M_NOCHECK|M_SILENT);
+    ob->SetTask(4, player);
+    ob->SetVar((["schatten":0, "seelendieb":0]));
+  }
+  else {
+    if(!ob->GetTask(4, player)) {
+      ob->remove();
+      write("Fehler! Falsches Taskitem! Bitte Magier verstaendigen!\n");
+      return _error(-3, getuid(player)+"/Task4");
+    }
+  }
+  vars=ob->GetVar();
+  txt=sprintf("%d Seelendiebe und %d Schatten", 3-vars["seelendieb"], 
+      3-vars["schatten"]);
+  str=sprintf("Folgende Aufgabe hast Du zu loesen, %s: Im Gebirge, in einer "
+      +"verborgenen Klamm, leben schreckliche Ausgeburten der Hoelle: "
+      +"Seelendiebe und Schatten. Du musst nun eine gewisse Anzahl von "
+      +"Seelendieben und Schatten toeten, und zwar %s!",
+      player->Name(WER), txt);
+  return str;
+}
+
+nosave int CheckTask4(object player, int level) {
+  object ob;
+  if(call_other(PALADINMASTER, "CheckTask", player, 4)) return 1;
+  if(!ob=present(PALADINTASK, player)) return 0;
+  if(!ob->GetTask(4, player)) {
+    ob->remove();
+    write("Fehler! Falsches Taskitem! Bitte Magier verstaendigen!\n");
+    return _error(-3, getuid(player)+"/CheckTask4");
+  }
+  if((test_bit(ob->GetFlag() ,0) && test_bit(ob->GetFlag() ,1)) || 
+      call_other(PALADINMASTER, "CheckTask", player, 4)) 
+  {
+    ob->remove();
+    call_other(PALADINMASTER, "SetTask", player, 4);
+    tell_room(ENV(player), BSA( sprintf("Ah, %s, Du hast die Seelendiebe " 
+        +"und die Schatten vernichtet!",
+        player->name(WER)), GUILDNPC_NAME+" sagt: "));
+    return 1;
+  }
+  return 0;
+}
+
+// Task 5
+
+nosave mixed Task5(object player) {
+  object ob;
+  string str;
+  if(!ENV(player)) return 0;
+  str=sprintf("Es gibt eine Aufgabe fuer Dich, %s: Im fernen Tijara "
+       "hat sich ein Abtruenniger von uns versteckt. Er war einst ein "
+       "Burgwaechter, doch er wandte sich von Dusty ab, legte seinen "
+       "Namen ab und nennt sich seitdem nur mehr 'Ketzer'! Reise nun nach "
+       "Tijara und vernichte diesen Frevler! Ausserdem musst Du ein "
+       "Amulett was er traegt Dusty opfern!",player->Name(WER)); 
+  if(!ob=present(PALADINTASK, player)) {
+    ob=CLONEOB(OBJ("task"));
+    ob->move(player, M_NOCHECK|M_SILENT);
+    ob->SetTask(5, player);
+  }
+  else {
+    if(!ob->GetTask(5, player)) {
+      ob->remove();
+      write("Fehler! Falsches Taskitem! Bitte Magier verstaendigen!\n");
+      return _error(-3, getuid(player)+"/Task5");
+    }
+  }
+  return str;
+}
+
+nosave int CheckTask5(object player, int level) {
+  object ob;
+  if(call_other(PALADINMASTER, "CheckTask", player, 5)) return 1;
+  if(!ob=present(PALADINTASK, player)) return 0;
+  if(!ob->GetTask(5, player)) {
+    ob->remove();
+    write("Fehler! Falsches Taskitem! Bitte Magier verstaendigen!\n");
+    return _error(-3, getuid(player)+"/CheckTask5");
+  }
+  if((test_bit(ob->GetFlag() ,0) && test_bit(ob->GetFlag() ,1)) || 
+      call_other(PALADINMASTER, "CheckTask", player, 5)) 
+  {
+    ob->remove();
+    call_other(PALADINMASTER, "SetTask", player, 5);
+    tell_room(ENV(player), 
+      BSA(sprintf("Gratuliere, %s, Du hast den Ketzer vernichtet! Gepriesen "
+          +"sei Dusty!", 
+          player->name(WER)), GUILDNPC_NAME+" sagt: "));
+    return 1;
+  }
+  return 0;
+}
+
+
+// Task 6
+
+nosave mixed Task6(object player) {
+  object ob;
+  string str;
+  if(!ENV(player)) return 0;
+  str=sprintf("Es gibt eine Aufgabe fuer Dich, %s: Der Schmied Eesthil "
+      +"braucht unsere Hilfe, Paladin! Suche ihn und hilf ihm!",
+      player->Name(WER)); 
+  return str;
+}
+
+nosave int CheckTask6(object player, int level) {
+  object ob;
+  if(call_other(PALADINMASTER, "CheckTask", player, 6)) return 1;
+  if(player->QueryQuest("Eesthils Befreiung")) {
+    call_other(PALADINMASTER, "SetTask", player, 6);
+    tell_room(ENV(player), 
+      BSA(sprintf("Wie ich sehe, hast Du Eesthil bereits geholfen! Sehr "
+          +"gut, Paladin!"), GUILDNPC_NAME+" sagt: "));
+    return 1;
+  }
+  return 0;
+}
+
+// Task 7
+
+nosave mixed Task7(object player) {
+  object ob;
+  string str;
+  if(!ENV(player)) return 0;
+  str=sprintf("Paladin! Ein Frevler hat eine Waffe aus dem geheiligtem "
+      +"Tempel der Dusty gestohlen und ist damit entkommen! Du musst "
+      +"diesen Frevler zur Strecke bringen und das heilige Relikt "
+      +"zurueckerobern! Unsere Spaeher haben den Dieb Richtung "
+      +"Kyranda fluechten gesehen! Eile Dich nun!");
+  if(!ob=present(PALADINTASK, player)) {
+    ob=CLONEOB(OBJ("task"));
+    ob->move(player, M_NOCHECK|M_SILENT);
+    ob->SetTask(7, player);
+  }
+  else {
+    if(!ob->GetTask(7, player)) {
+      ob->remove();
+      write("Fehler! Falsches Taskitem! Bitte Magier verstaendigen!\n");
+      return _error(-3, getuid(player)+"/Task7");
+    }
+  }
+  return str;
+}
+
+nosave int CheckTask7(object player, int level) {
+  object ob;
+  if(call_other(PALADINMASTER, "CheckTask", player, 7)) return 1;
+  if(!ob=present(PALADINTASK, player)) return 0;
+  if(!ob->GetTask(7, player)) {
+    ob->remove();
+    write("Fehler! Falsches Taskitem! Bitte Magier verstaendigen!\n");
+    return _error(-3, getuid(player)+"/CheckTask7");
+  }
+  if((test_bit(ob->GetFlag() ,0) && test_bit(ob->GetFlag(), 1)) || 
+      call_other(PALADINMASTER, "CheckTask", player, 7)) 
+  {
+    ob->remove();
+    call_other(PALADINMASTER, "SetTask", player, 7);
+    tell_room(ENV(player), 
+      BSA(sprintf("Sehr gut, %s! Der Dieb ist vernichtet und der Dolch "
+          +"geopfert! Gepriesen sei Dusty!", 
+          player->name(WER)), GUILDNPC_NAME+" sagt: "));
+    return 1;
+  }
+  return 0;
+}
+
+// Task 8
+
+nosave mixed Task8(object player) {
+  object ob;
+  string str;
+  if(!ENV(player)) return 0;
+  str=sprintf("Hoere, Paladin! In den Tiefen der dustyverdammten "
+      +"Unterwelt hat sich Praesenz eines maechtigen Dieners des "
+      +"Boesen manifestiert. Er ist der Fuerst der Hoelle, und gemeinsam "
+      +"mit seinen verfluchten Untertanen wird er versuchen, unser "
+      +"Land zu verderben. Gebiete ihm Einhalt und vernichte diese "
+      +"Ausgeburt der Hoelle!");
+  if(!ob=present(PALADINTASK, player)) {
+    ob=CLONEOB(OBJ("task"));
+    ob->move(player, M_NOCHECK|M_SILENT);
+    ob->SetTask(8, player);
+  }
+  else {
+    if(!ob->GetTask(8, player)) {
+      ob->remove();
+      write("Fehler! Falsches Taskitem! Bitte Magier verstaendigen!\n");
+      return _error(-3, getuid(player)+"/Task8");
+    }
+  }
+  return str;
+}
+
+nosave int CheckTask8(object player, int level) {
+  object ob;
+  if(call_other(PALADINMASTER, "CheckTask", player, 8)) return 1;
+  if(!ob=present(PALADINTASK, player)) return 0;
+  if(!ob->GetTask(8, player)) {
+    ob->remove();
+    write("Fehler! Falsches Taskitem! Bitte Magier verstaendigen!\n");
+    return _error(-3, getuid(player)+"/CheckTask8");
+  }
+  if(test_bit(ob->GetFlag() ,0) || 
+      call_other(PALADINMASTER, "CheckTask", player, 8)) 
+  {
+    ob->remove();
+    call_other(PALADINMASTER, "SetTask", player, 8);
+    tell_room(ENV(player), 
+      BSA(sprintf("Gratuliere, %s, Du hast den Hoellenfuersten vernichtet! "
+          +"Gepriesen sei Dusty!", 
+          player->name(WER)), GUILDNPC_NAME+" sagt: "));
+    return 1;
+  }
+  return 0;
+}
+
+
+// Task 9
+
+nosave mixed Task9(object player) {
+  object ob;
+  string str;
+  if(!ENV(player)) return 0;
+  str=sprintf("Also %s. Im Lager der Oger werden haeufig Menschen "
+              "gefangengehalten. Geh in das Lager der Oger und befreie einen "
+              "dieser armen Menschen.",player->Name(WER));
+  if(!ob=present(PALADINTASK, player)) {
+    ob=CLONEOB(OBJ("task"));
+    ob->move(player, M_NOCHECK|M_SILENT);
+    ob->SetTask(9, player);
+  }
+  else {
+    if(!ob->GetTask(9, player)) {
+      ob->remove();
+      write("Fehler! Falsches Taskitem! Bitte Magier verstaendigen!\n");
+      return _error(-3, getuid(player)+"/Task9");
+    }
+  }
+  return str;
+}
+
+nosave int CheckTask9(object player, int level) {
+  object ob;
+  if(call_other(PALADINMASTER, "CheckTask", player, 9)) return 1;
+  if(!ob=present(PALADINTASK, player)) return 0;
+  if(!ob->GetTask(9, player)) {
+    ob->remove();
+    write("Fehler! Falsches Taskitem! Bitte Magier verstaendigen!\n");
+    return _error(-3, getuid(player)+"/CheckTask9");
+  }
+  if((test_bit(ob->GetFlag() ,0)) || 
+      call_other(PALADINMASTER, "CheckTask", player, 9))
+  {
+    ob->remove();
+    call_other(PALADINMASTER, "SetTask", player, 9);
+    tell_room(ENV(player), 
+      BSA(sprintf("Sehr gut, %s, Du hast den Menschen aus den Faengen der "
+                  "Oger befreit. Eine sehr gute Tat, die Dusty gefallen wird!", 
+          player->name(WER)), GUILDNPC_NAME+" sagt: "));
+    return 1;
+  }
+  return 0;
+}
+
+
+// Task 10
+
+nosave mixed Task10(object player) {
+  object ob;
+  string str;
+  if(!ENV(player)) return 0;
+  if(!ob=present(PALADINTASK, player)) {
+    ob=CLONEOB(OBJ("task"));
+    ob->move(player, M_NOCHECK|M_SILENT);
+    ob->SetTask(10, player);
+  }
+  else {
+    if(!ob->GetTask(10, player)) {
+      ob->remove();
+      write("Fehler! Falsches Taskitem! Bitte Magier verstaendigen!\n");
+      return _error(-3, getuid(player)+"/Task10");
+    }
+  }
+  str=sprintf("Folgende Aufgabe hast Du zu loesen, %s: Im Bergwerk der "
+      +"Zwerge soll sich - so heisst es - sich eine Horde Untote "
+      +"herumtreiben. Deine ehrenvolle Aufgabe soll nun sein, noch %d dieser "
+      +"Ausgeburten der Unterwelt zu vernichten.",
+      player->Name(WER),14-(ob->GetVar()>14?14:ob->GetVar()));
+  if (!test_bit(ob->GetFlag() ,0))
+  str+=" Ach ja, wenn Du schon in der Gegend bist, dann vernichte auch den "
+       "schrecklichen Balrog, der ebenfalls in diesem Bergwerk hausen soll!";
+  return str;
+}
+
+nosave int CheckTask10(object player, int level) {
+  object ob;
+  if(call_other(PALADINMASTER, "CheckTask", player, 10)) return 1;
+  if(!ob=present(PALADINTASK, player)) return 0;
+  if(!ob->GetTask(10, player)) {
+    ob->remove();
+    write("Fehler! Falsches Taskitem! Bitte Magier verstaendigen!\n");
+    return _error(-3, getuid(player)+"/CheckTask10");
+  }
+  if((ob->GetVar()>=14 && test_bit(ob->GetFlag() ,0)) || 
+      call_other(PALADINMASTER, "CheckTask", player, 10)) 
+  {
+    ob->remove();
+    call_other(PALADINMASTER, "SetTask", player, 10);
+    tell_room(ENV(player), BSA( sprintf("Ah, %s, ich habe von den Zwergen "
+        +"erfahren, dass Du Deine Aufgabe erledigt hast! Sehr gut, Paladin!", 
+        player->name(WER)), GUILDNPC_NAME+" sagt: "));
+    return 1;
+  }
+  return 0;
+}
+
+
+// Task 11
+
+nosave mixed Task11(object player) {
+  object ob;
+  string str;
+  if(!ENV(player)) return 0;
+  if(!ob=present(PALADINTASK, player)) {
+    ob=CLONEOB(OBJ("task"));
+    ob->move(player, M_NOCHECK|M_SILENT);
+    ob->SetTask(11, player);
+  }
+  else {
+    if(!ob->GetTask(11, player)) {
+      ob->remove();
+      write("Fehler! Falsches Taskitem! Bitte Magier verstaendigen!\n");
+      return _error(-3, getuid(player)+"/Task11");
+    }
+  }
+  str=sprintf("Du musst folgende glorreiche Aufgabe erfuellen, %s: "
+              "In der Hauptstadt der Dunkelelfen musst Du unter Beweis "
+              "stellen, dass Du in der Lage bist ganze Rotten dieser "
+              "Frevler hinzuraffen. Du musst noch %d Dunkelelfen in Dustys "
+              "Namen erlegen!",player->Name(WER),20-ob->GetVar());
+  return str;
+}
+
+nosave int CheckTask11(object player, int level) {
+  object ob;
+  if(call_other(PALADINMASTER, "CheckTask", player, 11)) return 1;
+  if(!ob=present(PALADINTASK, player)) return 0;
+  if(!ob->GetTask(11, player)) {
+    ob->remove();
+    write("Fehler! Falsches Taskitem! Bitte Magier verstaendigen!\n");
+    return _error(-3, getuid(player)+"/CheckTask11");
+  }
+  if((ob->GetVar()>=20) || 
+      call_other(PALADINMASTER, "CheckTask", player, 11)) 
+  {
+    ob->remove();
+    call_other(PALADINMASTER, "SetTask", player, 11);
+    tell_room(ENV(player), BSA( sprintf(
+      "Ah, %s, ich habe soeben von Reisenden gehoert, dass Du genuegend "
+      "Dunkelelfen ins Reich des Todes geschickt hast. Sehr gut, Paladin!", 
+        player->name(WER)), GUILDNPC_NAME+" sagt: "));
+    return 1;
+  }
+  return 0;
+}
+
+
+// Task 12
+
+nosave mixed Task12(object player) {
+  object ob;
+  string str;
+  if(!ENV(player)) return 0;
+  str=sprintf("Um weiter aufsteigen zu koennen %s, musst Du in den Tiefen "
+              "unter Midas eine Ausgeburt der Hoelle vernichten und Dusty "
+              "seine Waffe opfern! Diese Ausgeburt liebt die dunkle Nacht!"
+              ,player->Name(WER)); 
+  if(!ob=present(PALADINTASK, player)) {
+    ob=CLONEOB(OBJ("task"));
+    ob->move(player, M_NOCHECK|M_SILENT);
+    ob->SetTask(12, player);
+  }
+  else {
+    if(!ob->GetTask(12, player)) {
+      ob->remove();
+      write("Fehler! Falsches Taskitem! Bitte Magier verstaendigen!\n");
+      return _error(-3, getuid(player)+"/Task12");
+    }
+  }
+  return str;
+}
+
+nosave int CheckTask12(object player, int level) {
+  object ob;
+  if(call_other(PALADINMASTER, "CheckTask", player, 12)) return 1;
+  if(!ob=present(PALADINTASK, player)) return 0;
+  if(!ob->GetTask(12, player)) {
+    ob->remove();
+    write("Fehler! Falsches Taskitem! Bitte Magier verstaendigen!\n");
+    return _error(-3, getuid(player)+"/CheckTask12");
+  }
+  if((test_bit(ob->GetFlag() ,0) && test_bit(ob->GetFlag() ,1)) || 
+      call_other(PALADINMASTER, "CheckTask", player, 12))
+  {
+    ob->remove();
+    call_other(PALADINMASTER, "SetTask", player, 12);
+    tell_room(ENV(player), 
+      BSA(sprintf("Wunderbar, %s, Du hast den miesen Nachtkaempfer erlegt "
+                  "und Dusty sein Schwert geopfert. Ehre sei Dusty!!!",
+          player->name(WER)), GUILDNPC_NAME+" sagt: "));
+    return 1;
+  }
+  return 0;
+}
+
+
+
+// Task 13
+
+nosave mixed Task13(object player) {
+  object ob;
+  string str;
+  if(!ENV(player)) return 0;
+  if(!ob=present(PALADINTASK, player)) {
+    ob=CLONEOB(OBJ("task"));
+    ob->move(player, M_NOCHECK|M_SILENT);
+    ob->SetTask(13, player);
+    ob->SetVar(0);
+  }
+  else {
+    if(!ob->GetTask(13, player)) {
+      ob->remove();
+      write("Fehler! Falsches Taskitem! Bitte Magier verstaendigen!\n");
+      return _error(-3, getuid(player)+"/Task13");
+    }
+  }
+  str=sprintf("%s, folgende Aufgabe wartet auf Dich: In der Unterwelt, "
+      +"nahe der dustyverdammten Stadt Dhrkion hausen schreckliche "
+      +"Insektengeister, auch Sichelschrecken genannt. Von dieser "
+      +"schrecklichen Plage musst Du %d zurueck in die Hoelle schicken!",
+      player->Name(WER),4-ob->GetVar());
+  return str;
+}
+
+nosave int CheckTask13(object player, int level) {
+  object ob;
+  if(call_other(PALADINMASTER, "CheckTask", player, 13)) return 1;
+  if(!ob=present(PALADINTASK, player)) return 0;
+  if(!ob->GetTask(13, player)) {
+    ob->remove();
+    write("Fehler! Falsches Taskitem! Bitte Magier verstaendigen!\n");
+    return _error(-3, getuid(player)+"/CheckTask13");
+  }
+  if(test_bit(ob->GetFlag() ,0)|| 
+      call_other(PALADINMASTER, "CheckTask", player, 13)) 
+  {
+    ob->remove();
+    call_other(PALADINMASTER, "SetTask", player, 13);
+    tell_room(ENV(player), BSA( sprintf("Ah, %s, bei Dusty, diese "
+        +"Aufgabe hast Du vorzueglich gemeistert! Alle 4 Sichelschrecken "
+        +"sind tot!", player->name(WER)), GUILDNPC_NAME+" sagt: "));
+    return 1;
+  }
+  return 0;
+}
+
+
+
+
+// Task 14
+
+#define daemonen ({ "Azathoth", "Cthuga", "Cthulhu", "Glaaki", "Hastur", \
+                    "Nyarlathothep", "Shodagoi", "Shubb-Niggurath", \
+                    "Shudde-M'ell", "Tsathoggua", "Wendigo", "Yibb-Tsstl", \
+                    "Yogsothoth" })
+
+nosave mixed Task14(object player) {
+  object ob;
+  string str,welche,var;
+  int i;
+
+  if(!ENV(player)) return 0;
+  if(!ob=present(PALADINTASK, player)) {
+    ob=CLONEOB(OBJ("task"));
+    ob->move(player, M_NOCHECK|M_SILENT);
+    ob->SetTask(14, player);
+  } else {
+    if(!ob->GetTask(14, player)) {
+      ob->remove();
+      write("Fehler! Falsches Taskitem! Bitte Magier verstaendigen!\n");
+      return _error(-3, getuid(player)+"/Task14");
+    }
+  }
+  welche="";
+  var=ob->GetFlag();
+  for(i=0;i<13;i++) {
+    if(!test_bit(var, i)) {
+      welche+=daemonen[i]+", ";
+    }
+  }
+  if(welche=="") welche="Keine.";
+  str=sprintf("Folgende Aufgabe hast Du zu loesen, %s: Es heisst, "
+      +"dass das Boese in Form von Daemonen die Welt bald heimsuchen "
+      +"wird. Dieses Boese lauert derzeit in einer anderen Dimension, "
+      +"kann aber jederzeit unsere Welt heimsuchen. Ich sehe schon, Du "
+      +"weisst von wem ich rede: Von den grossen Alten. Deine ehrenvolle "
+      +"Aufgabe soll nun sein, einen jeden von ihnen im Namen Dusty's "
+      +"niederzustrecken! Dir fehlen noch: %s\b\b.\n",player->Name(WER),welche);
+  return str;
+}
+
+/*
+/d/unterwelt/clementine/dimension/npc/az.c:
+/d/unterwelt/clementine/dimension/npc/cthuga.c:
+/d/unterwelt/clementine/dimension/npc/cthulhu.c:
+/d/unterwelt/clementine/dimension/npc/glaaki.c:
+/d/unterwelt/clementine/dimension/npc/hastur.c:
+/d/unterwelt/clementine/dimension/npc/nya.c:
+/d/unterwelt/clementine/dimension/npc/sho.c:
+/d/unterwelt/clementine/dimension/npc/shubb.c:
+/d/unterwelt/clementine/dimension/npc/shudde.c:
+/d/unterwelt/clementine/dimension/npc/tsa.c:
+/d/unterwelt/clementine/dimension/npc/wendigo.c:
+/d/unterwelt/clementine/dimension/npc/yibb.c:
+/d/unterwelt/clementine/dimension/npc/yog.c:
+*/
+nosave int CheckTask14(object player, int level) {
+  object ob;
+  int i, foo;
+  string var;
+  foo=0;
+  if(call_other(PALADINMASTER, "CheckTask", player, 14)) return 1;
+  if(!ob=present(PALADINTASK, player)) return 0;
+  if(!ob->GetTask(14,player)) {
+    ob->remove();
+    write("Fehler! Falsches Taskitem! Bitte Magier verstaendigen!\n");
+    return _error(-3, getuid(player)+"/CheckTask14");
+  }
+  var=ob->GetFlag();
+  for(i=0; i<=12;i++) 
+    if(test_bit(var, i)) foo++;
+  
+  if(foo==13 || call_other(PALADINMASTER, "CheckTask", player, 14)) 
+  {
+    ob->remove();
+    call_other(PALADINMASTER, "SetTask", player, 14);
+    tell_room(ENV(player), BSA( sprintf("Paladin! Eine unglaubliche Leistung! "
+        +"Nur ein Auserwaehlter Dusty's konnte diese Aufgabe erledigen!"), 
+        GUILDNPC_NAME+" sagt: "));
+    return 1;
+  }
+  return 0;
+}
+
+
+// Task 15
+
+#define bestien ({ "die Gehoernte", "die Klauen", \
+                   "die Reisser", "die Gefluegelte" })
+
+nosave mixed Task15(object player) {
+  object ob;
+  string str,welche,var;
+  int i;
+  
+  if(!ENV(player)) return 0;
+  if(!ob=present(PALADINTASK, player)) {
+    ob=CLONEOB(OBJ("task"));
+    ob->move(player, M_NOCHECK|M_SILENT);
+    ob->SetTask(15, player);
+  }
+  else {
+    if(!ob->GetTask(15, player)) {
+      ob->remove();
+      write("Fehler! Falsches Taskitem! Bitte Magier verstaendigen!\n");
+      return _error(-3, getuid(player)+"/Task15");
+    }
+  }
+  welche="";
+  var=ob->GetFlag();
+  for(i=0;i<4;i++) {
+    if(!test_bit(var, i)) {
+      welche+=bestien[i]+", ";
+    }
+  }
+  if(welche=="") welche="Keine.";
+  str=sprintf("Hoere, %s! In dem verfluchten Knarkh werden vier toedliche "
+      +"Bestien der Unterwelt gehalten. Finde diese Bestien - und "
+      +"vernichte sie! Dir fehlen noch folgende Bestien: %s\b\b." ,
+      player->Name(WER),welche); 
+  return str;
+}
+
+nosave int CheckTask15(object player, int level) {
+  object ob;
+  int i, foo;
+  string var;
+  foo=0;
+  if(call_other(PALADINMASTER, "CheckTask", player, 15)) return 1;
+  if(!ob=present(PALADINTASK, player)) return 0;
+  if(!ob->GetTask(15,player)) {
+    ob->remove();
+    write("Fehler! Falsches Taskitem! Bitte Magier verstaendigen!\n");
+    return _error(-3, getuid(player)+"/CheckTask15");
+  }
+  var=ob->GetFlag();
+  for(i=0; i<=3;i++) 
+    if(test_bit(var, i)) foo++;
+  
+  if(foo==4 || call_other(PALADINMASTER, "CheckTask", player, 15)) 
+  {
+    ob->remove();
+    call_other(PALADINMASTER, "SetTask", player, 15);
+    tell_room(ENV(player), BSA( sprintf("Paladin! Eine unglaubliche Leistung! "
+        +"Nur ein Auserwaehlter Dusty's konnte diese Aufgabe erledigen!"), 
+        GUILDNPC_NAME+" sagt: "));
+    return 1;
+  }
+  return 0;
+}
+
+/*
+//
+// FUNCTIONS FUNCTIONS FUNCTIONS FUNCTIONS FUNCTIONS FUNCTIONS FUNCTIONS 
+//
+*/
+nosave int GetGuildLevel(object player) {
+  int level;
+  level=player->QueryProp(P_GUILD_LEVEL);
+  if(level<1 || level>14) return -1;
+  else return level;
+}
+
+nosave int _error(int nr, string arg) {
+  string msg;
+  switch(nr) {
+    case  0: break;
+    case -1: msg="Taskmaster: Spieler nicht gefunden ("+arg+")!";
+             break;
+    case -2: msg="Taskmaster: Falsche Gildenlevel ("+arg+")!";         
+            break;
+    case -3: msg="Falsches Taskobjekt ("+arg+")!";
+            break;
+    case -4: msg="Taskmaster: Taskobjektfehler! ("+arg+")!";
+             break;
+    default: msg=sprintf("%s, PO: %O", arg, previous_object());
+  }
+  if(nr<0) {
+  tell_angrox(BSA(msg, ANSI_RED+ANSI_BLINK+"*** "+ANSI_NORMAL));
+  tell_zordan(BSA(msg, ANSI_RED+ANSI_BLINK+"*** "+ANSI_NORMAL));
+  write_error_log(msg+"\n");
+  }
+  return nr;
+}
+
+
+mixed ShowTask(mixed name) {
+  int level;
+  mixed task;
+  if(!name=string2object(name)) return -1;
+  if(!CheckIfAllowed()) return -2;
+  level=GetGuildLevel(name);
+  switch(level+1) {
+    case 2: task=Task2(name); break; 
+    case 3: task=Task3(name); break; 
+    case 4: task=Task4(name); break; 
+    case 5: task=Task5(name); break; 
+    case 6: task=Task6(name); break; 
+    case 7: task=Task7(name); break; 
+    case 8: task=Task8(name); break; 
+    case 9: task=Task9(name); break; 
+    case 10: task=Task10(name); break; 
+    case 11: task=Task11(name); break; 
+    case 12: task=Task12(name); break;
+    case 13: task=Task13(name); break; 
+    case 14: task=Task14(name); break; 
+    case 15: task=Task15(name); break; 
+    default: task=0;         
+  }
+ return task;
+}
+
+int CheckTask(mixed name) {
+  int level, task;
+  if(!name=string2object(name)) return -1;
+  if(!CheckIfAllowed()) return -2;
+  level=GetGuildLevel(name);
+  switch(level+1) {
+    case 2: task=CheckTask2(name, level+1); break;  
+    case 3: task=CheckTask3(name, level+1); break; 
+    case 4: task=CheckTask4(name, level+1); break; 
+    case 5: task=CheckTask5(name, level+1); break; 
+    case 6: task=CheckTask6(name, level+1); break; 
+    case 7: task=CheckTask7(name, level+1); break; 
+    case 8: task=CheckTask8(name, level+1); break; 
+    case 9: task=CheckTask9(name, level+1); break; 
+    case 10: task=CheckTask10(name, level+1); break; 
+    case 11: task=CheckTask11(name, level+1); break; 
+    case 12: task=CheckTask12(name, level+1); break; 
+    case 13: task=CheckTask13(name, level+1); break; 
+    case 14: task=CheckTask14(name, level+1); break; 
+    case 15: task=CheckTask15(name, level+1); break; 
+    default: return 1;        
+  }
+ if(task<1) 
+   return _error(task, sprintf("Error in CheckTask(taskmaster), "
+     +"TP: %O, Fehlercode: %d!", name, task));
+ return 1;
+}
+

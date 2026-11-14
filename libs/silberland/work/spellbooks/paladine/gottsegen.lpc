@@ -1,0 +1,175 @@
+// SilberLand MUDlib
+//
+// spellbooks/paladine/gottsegen
+//
+// $Date: 2006/03/30 19:05:03 $
+/* $Revision: 1.7 $
+ * $Log: gottsegen.c,v $
+ * Revision 1.7  2006/03/30 19:05:03  Feyaria
+ * STR_BUFF statt riesenkraft abfragen
+ *
+ * Revision 1.6  2005/02/28 12:53:50  Feyaria
+ * noch ein Typo
+ *
+ * Revision 1.5  2005/02/28 12:33:34  Feyaria
+ * Typofix
+ *
+ * Revision 1.4  2004/10/17 16:48:49  Feyaria
+ * bugfix bie riesenkraft
+ *
+ * Revision 1.3  2004/06/11 12:49:02  Feyaria
+ * caster -> victim bei riesenkraft abfrage
+ *
+ * Revision 1.2  2004/05/20 16:04:46  Angrox
+ * Gottsegen und Riesenkraft schliessen sich aus.
+ *
+ * Revision 1.1  2003/07/09 11:39:22  Angrox
+ * Initial revision
+ *
+ */
+// Prototypen
+int prep_gottsegen(object caster, mapping sinfo);
+int gottsegen(object caster, mapping sinfo);
+
+
+
+int prep_gottsegen(object caster, mapping sinfo) {
+  object victim;
+  if (sinfo[SI_SKILLARG] == "mich") {
+    sinfo[SI_SKILLARG]=getuid(caster);
+  }
+  victim=FindVictim(sinfo[SI_SKILLARG],caster,
+              BS("Wen willst Du segnen?\n"));
+  if (!victim || (victim && victim->QueryProp(P_INVIS)))
+    return 0;
+  if(present("\nsegen", victim)) {
+    if(victim==caster)
+      write(BS("Aber Du bist schon gesegnet!\n"));
+    else
+      write(BS(sprintf("Paladin! %s ist schon gesegnet!\n",
+          victim->Name(WER))));
+    return 0;
+  }
+  if (IS_WIZARD(victim)) {
+    Message(caster, 0, BS(
+      sprintf("%s ist von Natur aus von Dusty gesegnet!\n",
+      victim->Name(WER))), 0);
+    return 0;
+  }
+  if (victim->QueryGuest()) {
+    Message(caster, 0, BS(
+      sprintf("%s ist ein Gast und bedarf keines Segens!\n",
+      victim->Name(WER))), 0);
+    return 0;
+  }
+  if(!interactive(victim)) {
+    write(BS(sprintf("Dusty laesst Dich %s nicht segnen!\n",
+        victim->name(WER))));
+    return 0;
+  }
+  if(present("STR_BUFF", victim)) {
+    Message(caster, 0, BS(
+          sprintf("Paladin! Dustys Schutz scheint auf %s nicht zu "
+            "halten.", victim==caster?"Dir":victim->name(WEM))));
+    return 0;
+  }
+  return 1;
+}
+
+int gottsegen(object caster, mapping sinfo) {
+  object victim;
+  int suc, heal, time, helper;
+  object segen;
+
+  if( !prep_gottsegen( caster, sinfo) ) return 0;
+  if (sinfo[SI_SKILLARG] == "mich") {
+    sinfo[SI_SKILLARG]=getuid(caster);
+  }
+  victim=FindVictim(sinfo[SI_SKILLARG],caster,
+              BS("Wen willst Du segnen?\n"));
+  if(victim->QueryProp(P_ALIGN)<0) {
+    if(victim==caster)
+      write(BS("Du bist zu boese. Dusty wuerde Dich niemals segnen!\n"));
+    else
+      write(BS(sprintf("%s ist zu boese. Dusty wuerde %s niemals segnen!\n",
+          victim->Name(WER), victim->QueryPronoun(WEN))));
+    return 0;
+  }
+  if(call_other(NPCMASTER, "IsFeind", victim)) {
+    Message(caster,0,
+          BS("BEI DUSTY! Du wuerdeset einen FEIND der Paladine und somit "
+          "auch einen FEIND Deiner Goettin segnen?"),0);
+    return 0;
+  }
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+      printf(sinfo[SI_SP_LOW_MSG]);
+      return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  Message(caster, 0, "Du beginnst leise zu Dusty zu beten!\n", 0);
+  Message(caster, 0, sprintf("%s scheint leise zu Dusty zu beten.\n",
+      caster->Name(WER)), 3);
+  if((suc=SpellSuccess(caster,sinfo))<=0) {
+    Message(caster, 0, "Dusty erhoert Dich nicht!\n", 0);
+    Message(caster, 0, sprintf("Dusty scheint %s nicht zu erhoeren!\n",
+        caster->Name(WEN)), 3);
+    return MISSERFOLG;
+  }
+  suc += caster->QueryProp(P_ALIGN);
+  if(victim==caster) {
+    Message(caster, 0, BS(sprintf("Du spuerst wie die goettliche Macht Dustys "
+         "Dich staerkt! Gepriesen sei Dusty! Lob! Lob! Lob!\n")), 0);
+    Message(caster, 0, BS(sprintf("%s sieht gestaerkt aus und scheint von "
+         "Dustys Macht durchdrungen zu sein.\n", caster->Name(WER))), 3);
+  }
+  else {
+    Message(caster, victim, BS(sprintf("Durch das Gebet von %s fuehlst Du Dich "
+         "von Dustys Macht durchdrungen! Lob sei DUSTY!!!!\n",
+        caster->name(WEM))), 1);
+    Message(caster, victim, BS(sprintf("Durch Dein Gebet zu Dusty scheint %s "
+         "von ihrer Macht durchdrungen zu sein. Lob sei Dusty!\n",
+        victim->name(WER))), 0);
+    Message(caster, victim, BS(sprintf("Durch das Gebet von %s scheint %s "
+         "foermlich von Dustys Macht durchdrungen zu sein.\n",
+        caster->name(WER), victim->name(WER))), 2);
+  }
+  segen=CLONEOB(OBJ("segen"));
+  segen->move(victim, M_NOCHECK|M_SILENT);
+  time=DoModificationByAlign((caster->QueryProp(P_GUILD_LEVEL)*15), caster);
+  if(time>420) time=420;
+  segen->SetVariables(caster, victim, time, suc);
+  // LOGFILE
+  if(enable_spell_log)
+    write_file("/gilden/paladine/spells/gottsegen",
+        sprintf("CST: %O, VIC: %O, CA: %d, suc: %d, time: %d\n",
+        caster, victim, caster->QueryProp(P_ALIGN), suc, time));
+  //
+  if(victim!=caster && caster->QueryProp(P_ALIGN) <1100)
+    caster->SetProp(P_ALIGN, caster->QueryProp(P_ALIGN)+random(10));
+
+  
+  if(HAS_BLESSING(caster, BLESSING_INNER_FIRE) && victim->QuerySkillAttribute(SA_DAMAGE) <= 100) {
+    helper = caster->QueryProp(P_GUILD_LEVEL) * 2;
+    if(victim == caster) helper *= 2;
+
+    victim->ModifySkillAttribute(caster, SA_DAMAGE, 150, helper);
+    call_out("inner_fire_1", helper, caster, victim);
+    tell_object(victim, BS("Der Segen entflammt ein loderndes Feuer im Kampf fuer das Gute in deiner Seele!"));
+  }
+
+  return ERFOLG;
+}
+
+public void inner_fire_1(object caster, object victim) {
+  if(!objectp(victim)) return;
+  victim->ModifySkillAttribute(caster, SA_DAMAGE, 125, caster->QueryProp(P_GUILD_LEVEL) * 2);
+  tell_object(victim, BS("Das Feuer in deiner Seele wird schwaecher."));
+  call_out("inner_fire_2", caster->QueryProp(P_GUILD_LEVEL), caster, victim);
+}
+
+public void inner_fire_2(object caster, object victim) {
+  if(!objectp(victim)) return;
+  tell_object(victim, BS("Das Feuer in deiner Seele verlischt."));
+}
+

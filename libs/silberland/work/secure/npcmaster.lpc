@@ -1,0 +1,569 @@
+/*
+ * SilberLand MUD-Lib
+ * ---
+ * /secure/npcmaster.c
+ * NPC Score Master, maintained by Woody
+ * ---
+ * $Date: 2012/03/21 09:26:25 $
+ * $Revision: 1.12 $
+ * $Log: npcmaster.c,v $
+ * Revision 1.12  2012/03/21 09:26:25  Woody
+ * Alle Funktionen jetzt nomask, neu: ChangePath()
+ *
+ * Revision 1.11  2005/02/22 10:43:01  Feyaria
+ * QueryLastNum
+ *
+ * Revision 1.10  2002/04/30 15:45:00  Woody
+ * Bugfixes in ChangeScore()
+ *
+ * Revision 1.9  2002/04/30 13:25:18  Feyaria
+ * ChangeScore hinzugefuegt
+ *
+ * Revision 1.8  1999/05/22 01:36:59  Woody
+ * Logging eingebaut
+ *
+ * Revision 1.7  1999/05/22 00:55:27  Woody
+ * Balance-Team Handling, allowed(), QueryDump()
+ *
+ * Revision 1.6  1998/09/17 09:06:26  Woody
+ * NPCs aus /players/ werden nicht mehr aufgenommen, QueryScore() neu
+ *
+ * Revision 1.5  1997/06/28 20:03:02  Woody
+ * Bugfix, wenn this_player() in QueryNPC() nicht definiert war
+ * (wie zum Beispiel beim Bumerang -> dann P_KILLER verwenden)
+ *
+ * Revision 1.4  1997/06/08 02:01:33  Woody
+ * Bugfix in QueryNPC()
+ *
+ * Revision 1.3  1997/06/01 15:56:41  Woody
+ * Queue Handling
+ *
+ * Revision 1.2  1997/03/15 23:27:11  Woody
+ * prepared for revision control
+ *
+ * Revision 1.1  96-11-13  Woody
+ * Abfrage, ob Testspieler, oder Filename /test/ enthaelt
+ *
+ * Revision 1.0  96-10-05  Woody
+ * Erste Implementation - uebernommen von der MG-mudlib
+ */
+
+#include "npcmaster.h"
+#include "wizlevels.h"
+#include <properties.h>
+
+// - prototypes --------------------------------------------------------------
+
+nosave void make_num(string key);
+nomask public string *QueryBalance();
+nomask public int AddToBalance(string who);
+nomask public int RemoveFromBalance(string who);
+private nosave int allowed();
+nomask varargs mixed QueryNPC(int score);
+nomask int SetScore(mixed key, int score);
+nomask int ChangePath(string old, string new);
+nomask mixed DelLast();
+nosave int DumpNPCs();
+nomask mixed QueryDump();
+nomask mixed *QueryNPCbyNumber(int num);
+nomask mixed RemoveQueued(string key);
+nomask mixed RemoveQueuedRegexp(string pattern);
+nomask mixed ApproveQueued(string key);
+nomask mixed ApproveQueuedRegexp(string pattern);
+nomask varargs mapping QueryQueued(mixed pattern);
+nomask mapping QueryPending();
+nomask int Recalculate(string s);
+nomask int QueryLastNum();
+
+// - data --------------------------------------------------------------------
+
+// saved
+private int lastNum;
+private mapping npcs;                   // NPC Mapping
+private mapping queued;                 // noch zu bestaetigende Scores
+private mapping pending;                // noch zu vergebende Scores
+private string *balance;                // Balance-Team
+
+// nosave (non-saved)
+private nosave mapping by_num;          // Hilfsmapping (by number)
+private nosave string dump;             // dump string
+
+
+// - functions ---------------------------------------------------------------
+
+void create()
+{
+  seteuid(getuid());
+  npcs=allocate_mapping(0,2);
+  queued=allocate_mapping(0,1);
+  pending=allocate_mapping(0,1);
+  balance=({});
+  if (!restore_object(NPCSAVEFILE))
+  {
+    lastNum=0;
+    npcs=allocate_mapping(0,2);
+    queued=allocate_mapping(0,1);
+    pending=allocate_mapping(0,1);
+    balance=({});
+  }
+  by_num = allocate_mapping(0,2);
+  dump = read_file(NPCDUMPFILE);
+  filter_mapping(npcs, #'make_num/*'*/);
+}
+
+nosave void make_num(string key)
+{
+  by_num += ([ npcs[key,NPC_NUMBER] : key; npcs[key,NPC_SCORE] ]);
+}
+
+nomask public string *QueryBalance()
+{
+  return balance[0..];          // COPY mapping
+}
+
+nomask public int AddToBalance(string who)
+{
+  if (!GOD_SECURITY) return -1;
+  if (member(balance,who)==-1) {
+    balance += ({ who });
+    save_object(NPCSAVEFILE);
+  }
+  return 1;
+}
+
+nomask public int RemoveFromBalance(string who)
+{
+  if (!GOD_SECURITY) return -1;
+  if (member(balance,who)!=-1) {
+    balance -= ({ who });
+    save_object(NPCSAVEFILE);
+  }
+  return 1;
+}
+
+private nosave int allowed()
+{
+  int i;
+  string uid;
+
+  // Routine-Checks
+  if (!WIZARD_SECURITY ||         // (schliesst auch process_call aus)
+      !this_interactive() ||
+      (this_interactive() != this_player()))
+    return 0;
+
+  // Erzmagier duerfen alles. Ausnahmsweise!
+  // (denn eigtl. sollte das Balance-ONLY sein)
+  if (ARCH_SECURITY) return 1;
+
+  // UID muss zu TI gehoeren...
+  if ((uid=getuid(previous_object(i=0))) != getuid(this_interactive()))
+    return 0;
+
+  // ...und in der gesamten Call-Kette gleich sein
+  while (previous_object(++i))
+    if (uid != getuid(previous_object(i)))
+      return 0;
+
+  // und jetzt die Berechtigung von uid pruefen
+  return (member(balance, uid) != -1);
+}
+
+void reset()
+{
+  string who;
+  mixed u,ind;
+  int i,j,changed;
+
+  // check for all users logged in
+  u=users();
+  for (j=sizeof(u)-1; j>=0; j--)
+  {
+    who=getuid(u[j]);
+    if (pointerp((pending[who])) && sizeof(pending[who]))
+    {
+      ind=pending[who];
+      for (i=sizeof(ind)-1; i>=0; i--)
+      {
+        if (member(npcs,ind[i])) {              // has been confirmed
+          u[j]->AddScore(npcs[ind[i],NPC_NUMBER]);
+          pending[who] -= ({ ind[i] });
+          changed=1;
+        }
+        else if (!member(queued,ind[i])) {      // has been discarded
+          pending[who] -= ({ ind[i] });
+          changed=1;
+        }
+      }
+      if (!sizeof(pending[who]))                // nothing left
+        efun::m_delete(pending,who);
+    }
+    else if (member(pending,who)) {
+      efun::m_delete(pending,who);      // discard trash data
+      changed=1;                        // (should never be executed)
+    }
+  }
+
+  // check for non-existing players
+  u=m_indices(pending);
+  for (j=sizeof(u)-1; j>=0; j--)
+    if (file_size("/save/"+u[j][0..0]+"/"+u[j]+".o")<=0) {
+      efun::m_delete(pending,u[j]);
+      changed=1;
+    }
+
+  // save if necessary
+  if (changed) save_object(NPCSAVEFILE);
+}
+
+nomask varargs mixed QueryNPC(int score)
+{
+  string key, who;
+  object ob,killer;
+  mixed ind;
+  int i;
+
+  if (!(ob=previous_object()))
+    return NPC_INVALID_ARG;
+
+  killer=this_player();
+  if (!killer) killer=ob->QueryProp(P_KILLER);
+  if (!killer || !interactive(killer)) return NPC_INVALID_ARG;
+
+  // FIRST OF ALL process pending scores!
+  who=getuid(killer);
+  if (pointerp((ind=pending[who])) && sizeof(ind))
+  {
+    for (i=sizeof(ind)-1; i>=0; i--)
+    {
+      if (member(npcs,ind[i])) {
+        killer->AddScore(npcs[ind[i],NPC_NUMBER]);
+        pending[who] -= ({ ind[i] });
+      }
+      else if (!member(queued,ind[i]))
+        pending[who] -= ({ ind[i] });
+    }
+    if (!sizeof(pending[who])) efun::m_delete(pending,who);
+  }
+
+  key=explode(file_name(previous_object()),"#")[0];
+  if (member(npcs,key))
+    return ({npcs[key,NPC_NUMBER],npcs[key,NPC_SCORE]});
+
+  if (killer->QueryProp(P_TESTPLAYER) || IS_WIZARD(killer))
+  {
+    pending=m_delete(pending,who);      // evtl. aus mapping raus
+    return NPC_INVALID_ARG;
+  }
+  if ((strstr(key, "/test/") != -1) || (key[0..8]=="/players/"))
+    return NPC_INVALID_ARG;
+  if (score<=0 ||
+      member(inherit_list(previous_object()),"std/living/life.lpc") < 0)
+    return NPC_INVALID_ARG;
+
+  queued[key]=score;
+  if (member(pending,who)) {
+    if (member(pending[who],key) == -1)
+      pending[who] += ({ key });
+  } else
+    pending[who] = ({ key });
+
+  save_object(NPCSAVEFILE);
+  return NPC_QUEUED;
+
+  /*
+  npcs[key,NPC_SCORE]=score;
+  npcs[key,NPC_NUMBER]=++lastNum;
+  by_num += ([lastNum:key;score]);
+  save_object(NPCSAVEFILE);
+  call_out("DumpNPCs",0);
+  return ({lastNum,score});
+  */
+}
+
+int QueryScore(mixed fn)
+{
+  if (objectp(fn)) fn=explode(file_name(fn),"#")[0];
+  if (!stringp(fn)) return NPC_INVALID_ARG;
+  if (member(queued,fn)) return NPC_QUEUED;
+  if (!member(npcs,fn)) return 0;
+  return npcs[fn,NPC_SCORE];
+}
+
+nomask int SetScore(mixed key, int score)
+{
+  int x;
+  if (!allowed()) return NPC_NO_PERMISSION;
+  if (intp(key))
+  {
+    string *ind;
+    ind=m_indices(npcs);
+    for (x=sizeof(npcs)-1; x>=0; x--)
+      if (npcs[ind[x],NPC_NUMBER] == key)
+      {
+        key=ind[x];
+        break;
+      }
+      if (intp(key)) return NPC_INVALID_ARG;
+  }
+  if (!stringp(key)) return NPC_INVALID_ARG;
+  if (!member(npcs,key))
+    npcs[key,NPC_NUMBER]=++lastNum;
+  npcs[key,NPC_SCORE]=score;
+  by_num += ([npcs[key,NPC_NUMBER]:key;score]);
+
+  log_file(NPCLOGFILE,
+      "--- SetScore called by "+capitalize(getuid(this_interactive()))+" ("+
+      dtime(time())+")\n"+
+      sprintf(
+        "#%04d  [%2d]  %-66s\n",
+        npcs[key,NPC_NUMBER], score, key));
+
+  queued = m_delete(queued,key);
+  save_object(NPCSAVEFILE);
+  call_out("DumpNPCs",0);
+  return 1;
+}
+
+int ChangeScore(mixed old, mixed new)
+{
+  int nr, score;
+
+  if (!allowed()) return NPC_NO_PERMISSION;
+  if (!member(npcs,old) || member(npcs,new) || (old == new))
+    return NPC_INVALID_ARG;
+
+  nr = npcs[old,NPC_NUMBER];
+  score = npcs[old,NPC_SCORE];
+  npcs = m_delete(npcs, old);
+  npcs[new,NPC_NUMBER] = nr;
+  npcs[new,NPC_SCORE] = score;
+  by_num += ([ nr : new; score ]);
+
+  log_file(NPCLOGFILE,
+      "--- ChangeScore called by "+capitalize(getuid(this_interactive()))+" ("+
+      dtime(time())+")\n"+ sprintf( "#%04d  %s -> %s\n", nr, old, new));
+  save_object(NPCSAVEFILE);
+  call_out("DumpNPCs",0);
+  return 1;
+}
+
+nomask int ChangePath(string old, string new)
+{
+  string *keys;
+  string newk;
+  int i,n,l;
+
+  if (!allowed()) return NPC_NO_PERMISSION;
+  if (!strlen(old) || !strlen(new) || (old == new))
+    return NPC_INVALID_ARG;
+
+  log_file(NPCLOGFILE,
+      sprintf("--- ChangePath(%O,%O) called by %s (%s)\n",
+        old, new, capitalize(getuid(this_interactive())), dtime(time()) ));
+
+  n=0;
+  l=strlen(old)-1;
+  keys=m_indices(npcs);
+
+  for (i=sizeof(keys); i-->0; ) {
+    if (old == keys[i][0..l]) {
+      newk = new + keys[i][l+1..];
+      if (member(npcs,newk)) {
+        log_file(NPCLOGFILE,
+            sprintf("#coll  [%2d]  %s\n", npcs[keys[i],NPC_SCORE], keys[i]));
+      }
+      else
+      {
+        n++;
+        npcs[newk,NPC_NUMBER] = npcs[keys[i],NPC_NUMBER];
+        npcs[newk,NPC_SCORE]  = npcs[keys[i],NPC_SCORE];
+        npcs = m_delete(npcs, keys[i]);
+        by_num += ([ npcs[newk,NPC_NUMBER] : newk; npcs[newk,NPC_SCORE] ]);
+        log_file(NPCLOGFILE,
+            sprintf("#%04d  [%2d]  %s -> %s\n",
+              npcs[newk,NPC_NUMBER], npcs[newk,NPC_SCORE], keys[i], newk));
+      }
+    }
+  }
+  if (n) {
+    save_object(NPCSAVEFILE);
+    call_out("DumpNPCs",0);
+  }
+  return n;
+}
+
+nomask mixed DelLast()
+{
+  string s;
+  if (!allowed()) return NPC_NO_PERMISSION;
+  s="Deleted #"+lastNum+" ["+by_num[lastNum]+":"+
+    by_num[lastNum,NPC_SCORE]+"]\n";
+  npcs = m_delete (npcs, by_num[lastNum]);
+  by_num = m_delete (by_num, lastNum);
+  lastNum--;
+  log_file(NPCLOGFILE,
+      "--- DelLast called by "+capitalize(getuid(this_interactive()))+" ("+
+      dtime(time())+")\n"+s);
+  save_object(NPCSAVEFILE);
+  call_out("DumpNPCs",0);
+  return s;
+}
+
+nosave int DumpNPCs()
+{
+  string *keys;
+  int i, max;
+
+  while (remove_call_out("DumpNPCs") != -1) /* continue */ ;
+
+  dump="";
+  keys=m_indices(npcs);
+  keys=sort_array(keys, #'<);
+  rm(NPCDUMPFILE);
+  for (i=sizeof(keys)-1, max=0;i>=0;i--) {
+    dump += sprintf("%5d %4d %s\n",
+        npcs[keys[i],NPC_NUMBER], npcs[keys[i], NPC_SCORE], keys[i]);
+    max += npcs[keys[i],NPC_SCORE];
+  } 
+  dump += sprintf("====================\n"+"Gesamt: %d Punkte\n",max); 
+  write_file(NPCDUMPFILE, dump);
+  return 1;
+}
+
+nomask mixed QueryDump()
+{
+  if (!allowed()) return NPC_NO_PERMISSION;
+  return dump;
+}
+
+nomask mixed *QueryNPCbyNumber(int num)
+{
+  if (by_num[num])
+    return ({num,by_num[num,NPC_SCORE],by_num[num,NPC_NUMBER]});
+
+  return 0;
+}
+
+nomask mixed RemoveQueued(string key)
+{
+  if (!allowed()) return NPC_NO_PERMISSION;
+  log_file(NPCLOGFILE,
+      "--- RemoveQueued called by "+
+      capitalize(getuid(this_interactive()))+" ("+dtime(time())+")\n"+
+      sprintf("#none  [%2d]  %-66s\n", queued[key], key));
+  queued = m_delete(queued,key);
+  save_object(NPCSAVEFILE);
+  return copy_mapping(queued);
+}
+
+nomask mixed RemoveQueuedRegexp(string pattern)
+{
+  int i;
+  string *match;
+
+  if (!allowed()) return NPC_NO_PERMISSION;
+  log_file(NPCLOGFILE,
+      "--- RemoveQueuedRegExp (\""+pattern+"\") called by "+
+      capitalize(getuid(this_interactive()))+" ("+dtime(time())+")\n");
+  match=regexp(m_indices(queued),pattern);
+  for (i=sizeof(match)-1; i>=0; i--)
+  {
+    log_file(NPCLOGFILE,
+        sprintf("#none  [%2d]  %-66s\n", queued[match[i]], match[i]));
+    queued = m_delete(queued,match[i]);
+  }
+  save_object(NPCSAVEFILE);
+  return copy_mapping(queued);
+}
+
+nomask mixed ApproveQueued(string key)
+{
+  if (!allowed()) return NPC_NO_PERMISSION;
+  if (!stringp(key)) return 0;
+  if (member(queued,key) && !member(npcs,key)) {
+    npcs[key,NPC_SCORE]=queued[key];
+    npcs[key,NPC_NUMBER]=++lastNum;
+    by_num += ([lastNum:key;queued[key]]);
+    queued = m_delete(queued,key);
+    save_object(NPCSAVEFILE);
+    call_out("DumpNPCs",0);
+    log_file(NPCLOGFILE,
+        "--- ApproveQueued called by "+
+        capitalize(getuid(this_interactive()))+" ("+dtime(time())+")\n"+
+        sprintf("#%04d  [%2d]  %-66s\n", lastNum, npcs[key,NPC_SCORE], key));
+    return ({npcs[key,NPC_NUMBER],npcs[key,NPC_SCORE]});
+  }
+  else return NPC_INVALID_ARG;
+}
+
+nomask mixed ApproveQueuedRegexp(string pattern)
+{
+  int i;
+  string *match;
+  mixed added;
+
+  if (!allowed()) return NPC_NO_PERMISSION;
+  if (!stringp(pattern)) return 0;
+  match=regexp(m_indices(queued),pattern);
+  added=({});
+  log_file(NPCLOGFILE,
+      "--- ApproveQueuedRegExp (\""+pattern+"\") called by "+
+      capitalize(getuid(this_interactive()))+" ("+dtime(time())+")\n");
+  for (i=sizeof(match)-1; i>=0; i--)
+  {
+    if (!member(npcs,match[i])) {
+      npcs[match[i],NPC_SCORE]=queued[match[i]];
+      npcs[match[i],NPC_NUMBER]=++lastNum;
+      by_num += ([lastNum:match[i];queued[match[i]]]);
+      queued = m_delete(queued,match[i]);
+      added += ({ ({ match[i], npcs[match[i],NPC_NUMBER],
+                               npcs[match[i],NPC_SCORE] }) });
+      log_file(NPCLOGFILE,
+          sprintf("#%04d  [%2d]  %-66s\n",
+          lastNum, npcs[match[i],NPC_SCORE], match[i]));
+    }
+  }
+  if (!sizeof(added)) return NPC_INVALID_ARG;
+  save_object(NPCSAVEFILE);
+  call_out("DumpNPCs",0);
+  return added;
+}
+
+nomask varargs mapping QueryQueued(mixed pattern)
+{
+  string *match;
+  mapping m;
+  int i;
+
+  if (!stringp(pattern)) return copy_mapping(queued);
+  m=([]);
+  match=regexp(m_indices(queued),pattern);
+  for (i=sizeof(match)-1; i>=0; i--)
+    m[match[i]]=queued[match[i]];
+  return m;
+}
+
+nomask mapping QueryPending()
+{
+  return copy_mapping(pending);
+}
+
+nomask int Recalculate(string s)
+{
+  int i, j;
+
+  if (!s || !strlen(s))
+    return 0;
+
+  for (j=0, i=6*strlen(s)-1; i>0; i--) {
+    if (test_bit(s,i))
+      j+=by_num[i,NPC_SCORE];
+  }
+  return j;
+}
+
+nomask int QueryLastNum()
+{
+  return lastNum;
+}

@@ -1,0 +1,165 @@
+//=========================================================================
+//
+// File:   skeleton.c
+// Created by Ronja@SL
+//
+// Project: std npc
+//
+//=========================================================================
+
+#pragma strong_types
+
+inherit "/p/std/npc/nekro_npc";
+
+#include <properties.h>
+#include <language.h>
+#include <new_skills.h>
+#include <class.h>
+
+#include "/gilden/nekromanten/nekro_properties.h"
+#include "/gilden/nekromanten/nekro.h"
+
+int suc;
+
+void create()
+{
+  if (!is_clone(this_object())) return;
+
+  ::create();
+}
+
+varargs void create_default_skeleton(int level, int maxhp)
+{
+  AddId(({"STD_NPC", "STD_SKELETON", "skelett"}));
+  AddClass( ({CL_UNDEAD, CL_SKELETON}) );
+
+  SetProp(P_NOCORPSE, 1);
+  SetProp(P_DIE_MSG, " zerfaellt zu Staub.\n");
+  SetProp(P_MSGIN, "klappert herein");
+  SetProp(P_MMSGIN, "klappert herein");
+  SetProp(P_MMSGOUT, "klappert hinaus");
+  SetProp(P_MSGOUT, "klappert");
+
+  create_default_npc(level, maxhp);
+  SetProp(P_RESISTANCE_STRENGTHS,
+      ([DT_UNHOLY: -0.5, DT_PIERCE:-0.5, 
+        DT_HOLY: 0.5, DT_LIGHT:0.2, DT_BLUDGEON: 0.2 ]));
+}
+
+varargs void die(int poisondeath)
+{
+  object item, enemy;
+
+  if((enemy = QueryProp(P_KILLER))                &&
+     (item = present("\npaladintaskitem", enemy)) &&
+     (!QueryProp(P_NEKRO_CASTED_BY))              &&
+     (item->GetTask(10, enemy))                   )
+  {
+    item->SetVar(item->GetVar()+1);
+  }
+
+  ::die(poisondeath);
+}
+
+void SetSkeleton(mixed corpse, object caster, int succ)
+{
+  int level, maxlevel;
+  string short_str;
+
+  if(objectp(caster)) 
+  {
+    SetProp(P_NEKRO_CASTED_BY, caster);
+
+    SetProp(P_LONG, QueryProp(P_LONG)[0..<2] +
+        caster->Name()+" hat diesen Untoten beschworen.");
+    suc = succ;  // Fuer XP weitergabe an caster.
+  }
+  if(intp(corpse))
+  {
+    short_str="eines Menschens";
+    SetProp(P_SIZE, 150+random(80));
+    level=corpse;
+  }
+  else
+  {
+    switch( corpse->QueryProp(P_RACE) )
+    {
+      case "Mensch": short_str="eines Menschens"; break;
+      case "Fee":    short_str="einer Fee";       break;
+      case "Elf":    short_str="eines Elfen";     break;
+      case "Zwerg":  short_str="eines Zwerges";    break;
+      default: short_str= "eines "+corpse->QueryProp(P_RACE)+"s";
+    }
+
+    SetProp(P_SIZE, corpse->QueryProp(P_SIZE));
+
+    maxlevel = (caster->QueryProp(A_INT)/2) + caster->QueryProp(P_GUILD_LEVEL)*2+
+        caster->QueryProp(P_GUILD_CIRCLE)+ (12*succ/10000);
+
+    level = 2 * corpse->QueryProp(P_LEVEL)/3;
+    if(level > maxlevel) level=maxlevel;
+    level=((succ*level)/(4*10000))+(3*level/4);
+    if(level > 33) level = 33;
+  }
+
+  SetProp(P_SHORT, "Das Skelett "+ short_str);
+  create_default_npc(level);
+  SetAttribute(A_DEX, 25); // Um alle Waffen zuecken zu koennen
+
+  SetProp(P_HANDS, ({QueryProp(P_HANDS)[0]
+                    ,50+level*5+succ/100
+                    ,QueryProp(P_HANDS)[2]
+                    })
+  );
+
+  SetProp(P_XP, 0);
+  SetProp(P_MAX_HP, level*15 + succ/40); // maximal 450+250
+  SetProp(P_MAX_SP, QueryProp(P_MAX_HP));
+
+  if(mappingp(QueryProp(P_RESISTANCE_STRENGTHS))) 
+    SetProp(P_RESISTANCE_STRENGTHS , QueryProp(P_RESISTANCE_STRENGTHS)+
+      ([DT_UNHOLY: -0.5, DT_PIERCE:-0.5, DT_HOLY: 0.5, DT_LIGHT:0.2, 
+        DT_BLUDGEON: 0.2 ]));
+  else 
+    SetProp(P_RESISTANCE_STRENGTHS,
+      ([DT_UNHOLY: -0.5, DT_PIERCE:-0.5, DT_HOLY: 0.5, DT_LIGHT:0.2, 
+        DT_BLUDGEON: 0.2 ]));
+
+
+  SetProp(P_SPELLS, 0);
+
+  SetProp(P_SPELLRATE, 10+level);
+
+  AddSpell(3,level*5+succ/33,   // Lv.30 & max.success: 150+300
+    "Das Skelett bohrt seine Finger in Deinen Koerper.\n",
+    "Das Skelett bohrt seine Finger in @WESSEN Koerper.\n",
+    DT_PIERCE,([SP_SHOW_DAMAGE:1])
+  );
+
+  AddSpell(2,level*6+succ/40,   // Lv.30 & max.success: 180+250
+    "Das Skelett wirft einen unheiligen Zauber nach Dir.\n",
+    "Das Skelett wirft einen unheiligen Zauber nach @WEM.\n",
+    DT_UNHOLY,([SP_SHOW_DAMAGE:1])
+  );
+
+  if(level>15)
+  {
+    AddSpell(1,level*10+succ/25,   // Lv.30 & max.success: 300+400
+      "Das Skelett beschwoert einen gewaltigen Blitz auf Dich herab.\n",
+      "Das Skelett beschwoert einen gewaltigen Blitz auf @WEN herab.\n",
+      DT_LIGHTNING,([SP_SHOW_DAMAGE:1])
+    );
+  }
+
+  return;
+}
+
+void give_notify(object ob)
+{
+  if( ob->QueryProp(P_ARMOUR_TYPE) && this_player()==QueryProp(P_NEKRO_MASTERED_BY) )
+    command("trage_beste_ruestungen");
+  else if( ob->QueryProp(P_WEAPON_TYPE) && this_player()==QueryProp(P_NEKRO_MASTERED_BY) )
+    command("zuecke_beste_waffe");
+  ::give_notify(ob);
+}
+

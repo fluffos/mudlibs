@@ -1,0 +1,147 @@
+inherit "std/npc";
+inherit "/std/npc/spells";
+
+#include <properties.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include "../def.h"
+
+// Heilspruch
+#define SP_KOSTEN 70
+#define HEAL 100
+
+void create() {
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein Feuerdaemon");
+  SetProp(P_LONG,
+    "Der Feuerdaemon besteht komplett aus Feuer. Dort wo seine "
+    "Augen sein sollten siehst Du nur eine gaehnende Leere. Dennoch "
+    "weisst Du das er genau weiss wo Du bist und was Du vorhast.");
+
+  SetProp(P_NAME, "Feuerdaemon");
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:0,T_RANGE_MAX:60]));
+  AddId(({"feuerdaemon", "daemon"}));
+
+  AddClass(CL_DEMON);
+
+  SetProp(P_GENDER, NEUTER);
+
+  create_default_npc(20);
+
+  SetProp(P_HANDS, ({" mit seinen feuerumhuellten Krallen",
+                   QueryProp(P_HANDS)[1],({DT_RIP, DT_FIRE }) }));
+
+  SetProp(P_RACE, "Daemon");
+  SetProp(P_SIZE, 240);
+  SetProp(P_WEIGHT, 140000);
+  SetProp(P_ALIGN, -1000);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_HEAL,1);
+  SetProp(P_AGGRESSIVE,0);
+  SetProp(P_WIMPY, 0);
+  SetProp(P_ARTICLE, 1);
+  SetProp(P_NOMAGIC,50);
+  SetProp(P_TRANSPARENT, 0);
+
+  SetProp(P_MSGIN, "kommt an");
+  SetProp(P_MSGOUT, "geht");
+  SetProp(P_MMSGIN, "kommt an");
+  SetProp(P_MMSGOUT, "verschwindet");
+
+  SetProp(P_DIE_MSG,  " erlischt.\n");
+  SetProp(P_NOCORPSE, 1 );
+
+  SetProp(P_RESISTANCE_STRENGTHS ,
+    ([ DT_FIRE:     -1.0, DT_COLD:      0.5, DT_WATER:       0.5
+     , DT_AIR:       0.0, DT_LIGHTNING: 0.0, DT_EXPLOSION:   0.0
+     , DT_SOUND:     0.0, DT_LIGHT:     0.0, DT_ELECTRIC:    0.0
+     , DT_ACID:      0.0, DT_POISON:    0.0, DT_TERROR:     -1.0
+     , DT_HOLY:      0.4, DT_UNHOLY:   -1.0, DT_MAGIC:       0.4
+     , DT_MIND:      0.0, DT_SLASH:     0.0, DT_BLUDGEON:    0.0
+     , DT_PIERCE:    0.0, DT_SQUEEZE:   0.0, DT_WHIP:        0.0
+     , DT_RIP:       0.0
+     ])
+  );
+
+  AddInfo(DEFAULT_INFO, "grinst Dich boese an.\n");
+  AddInfo("torian", "Mein Meister.","grinst daemonisch: ");
+  
+  SetProp(P_SPELLRATE,50);
+  AddSpell(5,700,
+    Name()+" wirft einen Feuerball nach Dir!\n",
+    Name()+" wirft einen Feuerball anch @WEN!\n",
+     DT_FIRE,([SP_SHOW_DAMAGE:1]));
+  AddSpell(2,1,
+    Name()+" umhuellt sich mit Feuer!!\n",
+    Name()+" umhuellt sich mit Feuer!!\n",
+    DT_BLUDGEON, "heal");
+
+  SetProp( P_REJECT, ({ REJECT_DESTRUCT,
+    "Der Feuerdaemon verbrennt @WEN.\n" }) );
+
+  SetAttackChats(2, ({
+    "Der Feuerdaemon flackert kurz auf.\n",
+    "Der Feuerdaemon zuengelt.\n"}) );
+
+  SUID;
+}
+
+void die(int poisondeath) {
+  write_file(LOG "npc.kills",
+    ctime()+": "+(CAP(getuid(QueryProp(P_KILLER)||TP))||"<Unbekannt>")+" killt einen Feuerdaemon.\n");
+  ::die(poisondeath);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp) {
+  if(killer == ME)
+    write_file(LOG "npc.deads",
+      ctime()+": Ein Feuerdaemon hat "+CAP(getuid(player))+" umgebracht.\n");
+}
+
+void heal(object enemy,int damage,string damtype)
+{
+  if(TO->QueryProp(P_HP) > TO->QueryProp(P_MAX_HP)/2)
+  {
+    return; // Heilen erst ab Haelfte der Hp
+  }
+  if(QueryProp(P_SP) < SP_KOSTEN)
+  {
+  	return; // zuwenig mp uebrig
+  }
+
+  AddHp(HEAL);
+  AddSp(-SP_KOSTEN);
+  
+  return;
+  
+}
+
+Defend(int dam, string dtype, int spell, object enemy)
+{
+  // falls kein Array, eins draus machen
+  if (!pointerp(dtype))
+    dtype = ({ dtype });
+
+  if (member(dtype, DT_FIRE) != -1)
+  {
+    ENV(TO)->Message(BS("Der Feuerdaemon leuchtet rot auf!\n"), MSGFLAG_VISUAL);
+    heal_self(dam);
+    return ::Defend(0, dtype, spell, enemy);
+  }
+  return ::Defend(dam,dtype,spell,enemy);        
+}
+
+void init()
+{
+  ::init();
+  if(TP && TP->id("drache")) AddDefender(TP);
+  if(TP && TP->id("feuerdaemon")) AddDefender(TP);
+}
+
+void InformDefend(object enemy)
+{
+  Kill(enemy);
+}

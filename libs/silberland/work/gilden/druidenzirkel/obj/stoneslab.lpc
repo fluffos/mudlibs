@@ -1,0 +1,119 @@
+inherit "std/thing";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <moving.h>
+#include "/gilden/druidenzirkel/druiden.h"
+#include <new_skills.h>
+#include "/gilden/berserker/berserker_extern.h"
+#include <wizlevels.h>
+#include "/gilden/druidenzirkel/mysteries.h"
+
+private object owner;
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+//--Beschreibungen---------------------------------------------------------
+  SetProp(P_SHORT, "Ein schwebender Steinbrocken");
+  SetProp(P_LONG,
+    "Dieser grobe Steinbrocken schwebt. Er wirkt sehr robust und etwa "
+    "gross wie eine Trollfaust.");
+
+//--Namen------------------------------------------------------------------
+
+  SetProp(P_INFO, "Dieser Felsbrocken ist eine reine Manifestation des Erzes "
+                  "und wurde von einem Druiden beschworen.");
+  SetProp(P_NAME, "Steinbrocken");
+  SetProp(P_GENDER, MALE);
+  AddId(({"brocken", "steinbrocken", ID_STONESLAB}));
+
+//--Eigenschaften----------------------------------------------------------
+
+  SetProp(P_MATERIAL, MAT_MISC_STONE);
+  SetProp(P_WEIGHT, 50000);
+  SetProp(P_SIZE, 30);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NOGET, 1);
+}
+
+public int SetOwner(object caster, int hits) {
+    if(move(ENV(caster), M_NOCHECK) != 1) {
+        return 0;
+    }
+
+    tell_room(ENV(TO), BS(sprintf("Ein Steinbrocken manifestiert sich aus Sand und beginnt um %s zu schweben.",
+              caster->name(WEN, 0))));
+    caster->AddDefender(TO);
+    SetProp("hits", hits);
+    SetProp(P_SHORT, "Ein Steinbrocken schwebt um " + caster->name(WEN, 1));
+    SetProp(P_LONG, QueryProp(P_LONG) + "Er schwebt um " + caster->name(WEN, 1) + " herum.");
+
+    owner = caster;
+
+    set_heart_beat(1);
+
+    return 1;
+}
+
+private int isPhysicalDamage(mixed dam_type) {
+    int i;
+
+    if(pointerp(dam_type)) {
+        for(i=0; i<sizeof(dam_type); i++) {
+            if(member(PHYSICAL_DAMAGE_TYPES, dam_type[i])) return 1;
+        }
+        return 0;
+    }
+    
+    return member(PHYSICAL_DAMAGE_TYPES, dam_type);
+}
+
+public mixed DefendOther(int dam, mixed dam_type, mixed spell, object enemy) {
+    if(!isPhysicalDamage(dam_type)) {
+        return ({dam, dam_type, spell});
+    }
+
+    if(random(5)) return ({dam, dam_type, spell});
+
+    tell_object(owner, BS("Der Steinblock faengt den Treffer ab."));
+    tell_room(ENV(owner), BS(sprintf("Der Steinblock faengt einen Treffer auf %s ab.", owner->name(WEN))), ({owner}));
+    SetProp("hits", QueryProp("hits") - 1);
+    if(QueryProp("hits") <= 0) {
+        call_out("end", 0);
+    }
+
+    return ({0, dam_type, spell});
+}
+
+public void end() {
+    tell_room(ENV(TO), BS("Der Steinbrocken zerbroeselt zu feinem Sand."));
+    remove(1);
+    return;
+}
+
+public void reset() {
+    ::reset();
+    if(!is_clone(TO)) return;
+
+    end();
+}
+
+public void heart_beat() {
+    if(!objectp(owner)) {
+        end();
+        return;
+    }
+
+    if(ENV(owner) != ENV(TO)) {
+        end();
+    }
+
+    return;
+}

@@ -1,0 +1,216 @@
+/*
+  Der Obsidiandolch, zum verwandeln von Druidenfeuerwuseln
+  Mpkosten 20, geht nur alle paar minuten...
+*/
+
+#pragma strong_types;
+
+#include "../def.h"
+
+inherit "std/weapon";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+
+#define MP 20
+#define MPO 50
+
+#define ELEMENTAL_CASTER "e_caster"
+
+nosave int allowed;
+
+create() 
+{
+  if(!is_clone(TO))  return;
+  ::create();
+  
+  SetProp(P_SHORT, "Ein Opferdolch der Druiden");
+  SetProp(P_LONG,
+	  BS("Eine unheimliche Aura geht von diesem Obsidiandolch aus...")+
+	  BS("Er scheint in Deinen Haenden richtig zu pulsieren...")+
+	  BS("Dem Aussehen nach zu urteilen, duerfte er frueher einmal als "
+	     "Opferdolch verwendet worden sein."));
+
+  SetProp(P_INFO, 
+	  BS("Dies ist tatsaechlich einmal ein Opferdolch gewesen...")+
+	  BS("Du vernimmst ploetzlich Stimmen, die Dich rufen und nach Blut "
+	     "lechzen... Nach dem Blut von elementaren Wesen")+
+	  BS("Worauf wartest Du noch? Zieh los und opfere, morde, "
+	     "meuchle... Hauptsache das Blut fliesst!!"));
+
+  SetProp(P_SOUND, "Die Stimmen fluestern: \'Syntax: opfere <wesen>\'\n");
+
+  SetProp(P_NAME, "Obsidiandolch");
+  SetProp(P_GENDER, MALE);
+  AddId(({"dolch", "obsidiandolch","opferdolch"}));
+
+  AddDetail("aura", 
+	    "Eine unheimliche Aura umgibt diesen Dolch!\n");
+
+  AddDetail("opfer", 
+	    "Geruechten nach, sollen die alten Druiden damit ihre "+
+	    "Elementare geopfert haben.\n");
+
+  SetProp(P_WEAPON_TYPE, WT_KNIFE);
+  SetProp(P_WC, 100);
+  SetProp(P_WC_FIX, 40);
+  SetProp(P_DAM_TYPE, ({DT_PIERCE, DT_UNHOLY}));
+  SetProp(P_NR_HANDS, 1);
+
+  SetProp(P_MATERIAL, ([MAT_OBSIDIAN:80, MAT_MISC_UNHOLY:15, MAT_BLOOD:5]));
+  SetProp(P_WEIGHT, 400);
+  SetProp(P_VALUE, 600);
+  SetProp(P_SIZE, 30);
+
+  SetProp(P_NOBUY, 1);
+  SetProp(P_MAGIC, 1);
+  
+  SetProp(P_WIELD_FUNC, TO);
+  SetProp(P_WIELD_RESTRICTIONS, 
+	  ([A_INT:15, A_DEX:12, 
+	    SR_GOOD:0,
+	    SR_EXCLUDE_RACE:({"Fee"})]));
+  
+  SetProp(P_WC_BONUS, (["kyorl":100]));
+  
+  SetProp(P_ITEMD, ({"verwandelt elementare Wesen", "ist boese", 
+		       "ist ein Opferdolch", "kann nicht von Jedem "
+		       "gezueckt werden"}));
+  
+  AddCmd(({"opfer","opfere"}), "opfern");
+  
+  allowed=1;
+}
+
+int WieldFunc(object waffe) 
+{
+  switch(TP->QueryProp(P_GUILD))
+    {
+    case "spinnenkrieger":
+    case "nekromanten":
+    case "druidenzirkel":
+    case "dunkelelfen": 
+      return 1; 
+      break;
+
+    default: 
+      return write("Der Obsidiandolch weigert sich!!\n"), 0;
+    }     
+  
+  return 0;
+}
+
+nosave int opfern(string str)
+{
+  object wu;
+
+  notify_fail(BS("Wen willst Du denn opfern?"));
+  if(!str) return 0;
+
+  if(str=="elementar"||str=="humuselementar"||str=="luftelementar"||
+     str=="feuerelementar"||str=="wasserelementar"||str=="erzelementar"||
+     str=="eiselementar")
+    {
+      if(!wu=present(str, ENV(TP)))
+	return write(BS("Da ist doch gar kein "+CAP(str)+"!")), 1;
+      
+      if(!ME->QueryProp(P_WIELDED))
+	return write(BS("Du solltest den Dolch erst einmal zuecken!")), 1;
+
+      if(wu->QueryProp(ELEMENTAL_CASTER)==TP)
+	{
+	  if(TP->QueryProp(P_SP) < MP)
+	    return write("Du hebst den Dolch an...\nNichts passiert!\n"
+			 "Scheinbar bist Du nicht maechtig genug!\n"), 1;
+	}
+      else
+	{
+	  if(TP->QueryProp(P_SP) < MPO)
+	    return write("Du hebst den Dolch an...\nNichts passiert!\n"
+			 "Scheinbar bist Du nicht maechtig genug!\n"), 1;
+	}
+
+      if(allowed >= time())
+	return write("Du hebst den Dolch an...\nNichts passiert!\n"
+		     "Scheinbar hat sich seine Energie noch nicht wieder "
+		     "aufgeladen!\n"), 1;
+      
+      return notify_fail("Du bist nicht maechtig genug!\n"),0;
+    }
+  
+  if(str=="feuerwusel"||str=="wusel")
+    {
+      if(!wu=present("feuerwusel",ENV(TP)))
+	return write(BS("Da ist doch gar kein Feuerwusel!\n")), 1;
+
+      if(!ME->QueryProp(P_WIELDED))
+	return write(BS("Du solltest den Dolch erst einmal zuecken!\n")), 1;
+
+      if(wu->id("hoellenfeuerwusel"))
+	return write("Dieser Feuerwusel ist bereits verwandelt!\n"),1;
+
+      if(wu->QueryProp(ELEMENTAL_CASTER)==TP)
+	{
+	  if(TP->QueryProp(P_SP) < MP)
+	    return write("Du hebst den Dolch an...\nNichts passiert!\n"
+			 "Scheinbar bist Du nicht maechtig genug!\n"), 1;
+	}
+      else
+	{
+	  if(TP->QueryProp(P_SP) < MPO)
+	    return write("Du hebst den Dolch an...\nNichts passiert!\n"
+			 "Scheinbar bist Du nicht maechtig genug!\n"), 1;
+	}
+
+      if(allowed >= time())
+	return write("Du hebst den Dolch an...\nNichts passiert!\n"
+		     "Scheinbar hat sich seine Energie noch nicht wieder "
+		     "aufgeladen!\n"), 1;
+	
+      wu->SetProp(P_SHORT, "Ein Hoellenfeuerwusel");
+      wu->SetProp(P_LONG, "Der Hoellenfeuerwusel ist eine handgrosse "+
+		  "Feuerkugel, die die Umgebung in Dunkelheit huellt.\n");
+      wu->SetProp(P_NAME, "Hoellenfeuerwusel");
+      wu->AddId("hoellenfeuerwusel");
+      wu->SetProp(P_LIGHT, -1);
+      wu->SetProp(P_ALIGN, -1000);
+      
+      write("Du hebst den Dolch an...\n\n"
+	    "Die Luft wird ploetzlich ganz dick und die Erde beginnt leicht "
+	    "zu beben...\n\n"
+	    "Worte einer uralten Sprache fliessen Dir ploetzlich aus dem "
+	    "Mund, als sich Dein Griff um den Dolch verfestigt und Du in der "
+	    "Ferne ein seltsames Rauschen vernimmst.\n\n"
+	    "Komplett in Trance versunken blickst Du noch einmal auf den "
+	    "kleinen Feuerwusel herab, wie er da unschuldig vor Dir steht "
+	    "und dann...\n\n"
+	    "... jagst Du den tiefschwarzen Obsidiandolch in das Wesen "
+	    "hinein.\n\n"
+	    "Ploetzlich hebt sich der kleine Feuerwusel in die Luft und "
+	    "beginnt eigenartig zu pulsieren...\n\n"
+	    "Ein Blitz durchzuckt den kleinen Koerper und reisst ihn hinab, "
+	    "bis in die Hoelle und hinterlaesst einen Riss im Boden...\n\n"
+	    "Bevor sich der Riss schliesst, entsteigt ihm ein kleiner "
+	    "Hoellenfeuerwusel...\n");
+
+      say(CAP(TP->name(WER,1))+" hebt einen Dolch an und...\n\n"
+	  "... jagt "+TP->QueryPronoun(WER)+" den tiefschwarzen Obsidiandolch "
+	  "in den Feuerwusel hinein.\n\n"
+	  "Ein Blitz durchzuckt den kleinen Koerper und reisst ihn hinab, bis "
+ 	  "in die Hoelle und hinterlaesst einen Riss im Boden...\n\n"
+	  "Bevor sich der Riss schliesst, entsteigt ihm ein kleiner "
+	  "Hoellenfeuerwusel...\n",TP);
+
+      if(wu->QueryProp(ELEMENTAL_CASTER)==TP)
+	TP->AddSp(-MP);
+      else
+	TP->AddSp(-MPO);
+
+      allowed=time()+900;
+
+      return 1;
+    }
+
+  return 0;
+}

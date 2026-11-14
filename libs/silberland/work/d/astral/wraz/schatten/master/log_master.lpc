@@ -1,0 +1,200 @@
+// log_master
+// Fuer logging, u.a. Spielertode, NPC-Kills (Schattenwelt)
+// Wraz / Mendralim
+// Updates: <none>
+
+#include "../def.h"
+
+#define SAVE_PATH ZONE "save/death_kill_log"
+
+inherit ZONE "master/roman_numeral_conv.lpc";
+
+// key: player_uid
+// 0 value: player_deaths
+// 1: npc_kills [Anzahl]
+// 2: npc_kills als [Schattenlevel]; 
+//    Schattenlevel_des_npc = [(npc_level / 10) * (1 + room_no / 10)] ^2 / 100000 --> Mass fuer Staerke des NPC
+    // zB ein lvl 50 NPC aus Raumnummer 1000 (das ist ca. das Maximum) haette Schattenlevel 2.55
+    // ein lvl 40 NPC aus Raumnummer 10 (ca. Minimum) -> 0.00064
+
+// 3: lostxp (in [MXP])
+// 4: "Spieler toetet NPC" -> mapping mit key = npc->name() + shadow_difficulty_int, value 0 = Anzahl Kills
+// 5: "NPC toetet Spieler" -> mapping mit key = npc->name() + shadow_difficulty_int, 
+//      value 0 = Anzahl "wie oft der NPC diesen Spieler schon getoetet hat"
+mapping death_kill_log; 
+int last_backup=0;
+
+void create()
+{
+  if(is_clone(TO))
+  {
+    destruct(TO);
+    return;
+  }
+  seteuid(getuid(this_object())); // fuer zugriff auf dateien benoetigt
+
+  death_kill_log=allocate_mapping(10,6);
+  restore_object(SAVE_PATH);
+  seteuid(getuid(TO));
+
+  return;
+}
+
+// GetDeathKillLog
+mapping GetDeathKillLog()
+{
+  return death_kill_log;
+}
+
+// OverwriteDeathKillLog
+mapping OverwriteDeathKillLog(mapping new_death_kill_log)
+{
+  death_kill_log = new_death_kill_log;
+  return death_kill_log;
+}
+
+// GetSchattenlevel: int, hat starken Rundungsfehler!
+int GetSchattenlevel(string player)
+{
+  if(!player || player == "") return -1;
+  return to_int(death_kill_log[player,2]/1000); // check if this is 2 or 1
+}
+
+// GetSchattenlevelFloat
+/*float GetSchattenlevelFloat(string player)
+{
+  if(!player || player == "" || !death_kill_log) return -1.0;
+  return to_float(death_kill_log[player,2]/1000.0); // check if this is 2 or 1
+}*/
+
+// death_kill_log-NPC: player-deaths, NPC-deaths
+int DoDeathKillLog(string player,int death,int kill, int lostxp, string npc, int room_no, int lvl)
+{
+  float nonsquared_shadow_lvl;
+
+  DB(BS(sprintf("DoDeathKillLog: player: %s, death: %d, kill: %d, lostxp: %d, npc: %s, room_no: %d, lvl: %d\n",
+   player, death, kill, lostxp, npc, room_no, lvl)));
+
+  player=lower_case(player);
+  if(!player||player=="") 
+  {
+    DB(BS("DoDeathKillLog: return 0 bc. '!player||player==\"\""));
+    return 0;
+  }
+  if(!death_kill_log) restore_object(SAVE_PATH);
+
+  //DB(player+" "+death+" "+kill+" "+lostxp+" "+npc+" "+room_no+" "+lvl+"\n");
+  //DB(to_string(member(m_indices(death_kill_log),player)));
+
+  // Mapping leer oder 0
+  if(!mappingp(death_kill_log) || death_kill_log == ([])) death_kill_log=allocate_mapping(10,6);
+  // Player noch nicht in Liste:
+  if(member(m_indices(death_kill_log),player)==-1) 
+  {
+    death_kill_log+=([player: 0; 0; 0; 0; allocate_mapping(1,1); allocate_mapping(1,1)]);
+    //DB("done\n");
+  }
+  //DB(implode(m_indices(death_kill_log)," ")+"\n");
+  // NPC noch nicht in Liste dieses Players:
+  if(npc && kill && member(m_indices(death_kill_log[player,4]),npc)==-1) death_kill_log[player,4]+=([npc:0]);
+  // NPC noch nicht in Killer-Liste dieses Players:
+  if(npc && death && member(m_indices(death_kill_log[player,5]),npc)==-1) death_kill_log[player,5]+=([npc:0]);
+
+  // add new death/kill
+  death_kill_log[player,0] += death;
+  death_kill_log[player,1] += kill;
+  nonsquared_shadow_lvl = (lvl/10.0)*(1.0+room_no/10.0);
+  death_kill_log[player,2] += to_int( 1000.0 * (nonsquared_shadow_lvl * nonsquared_shadow_lvl) / 100000.0 ); // Schattenlevel
+  death_kill_log[player,3] += (lostxp/1000000);
+  if(npc && kill) death_kill_log[player,4][npc,0] += 1;
+  else if(npc && death) death_kill_log[player,5][npc,0] += 1;
+
+  return 1;
+}
+
+// Spieler- und NPC-Kills loggen
+varargs void LogFile(string filename, string npc, mixed player, int xp)
+{
+  string tpu;
+
+  if(!npc) return;
+  if(!player) tpu = "null";
+  else if(objectp(player))
+  {
+    if(player && interactive(player)) tpu = getuid(player);
+    else if(player->name()) tpu = lower_case(player->name(RAW));
+    else tpu = to_string(player);
+  }
+  else if(stringp(player)) tpu = player;
+  else tpu = to_string(player);
+
+  log_file("d/astral/schatten/"+filename+".log",
+    dtime()+" "+npc+": "+tpu+(xp?(" lostxp: "+xp):"")+"\n");
+}
+
+// death_kill_log: Playerdeath
+// Wird nur von Schatten-NPC aufgerufen, nicht von den "Guten" (zB Dogrok, Aza, etc.)
+int DoPlayerDeathLog(int room_no, int lvl, int diff, string player, int lostxp, string npc)
+{
+  npc += " "+ConvertToRoman(diff+1);
+  LogFile("playerdeaths", npc, player, lostxp);
+  return DoDeathKillLog(player,1,0,lostxp,npc, room_no, lvl);
+}
+
+// death_kill_log: NPCdeath
+// Wird ebenfalls nur von den Schatten-NPC aufgerufen
+int DoNPCKillLog(int room_no, int lvl, int diff, string player, string npc)
+{
+  DB("npc: "+to_string(npc)+"\n");
+  if(!npc||pointerp(npc)) npc = "unknown";
+  DB("npc: "+to_string(npc)+"\n");
+  npc += " "+ConvertToRoman(diff+1);
+  LogFile("npcdeaths", npc, player);
+  return DoDeathKillLog(player,0,1,0,npc, room_no, lvl);
+}
+
+// Betreten und Verlassen der Schattenwelt
+varargs void DoEntryExitLog(object player, object caller, object from, object target, string msg)
+{
+  if(!msg) msg = "none";
+
+  log_file("d/astral/schatten/entry_exit.log",
+    dtime()+
+    ", player: "+player->Name()+" ("+getuid(player)+")"+
+    ", caller: "+(caller->name()?caller->name(RAW):to_string(caller))+
+    ", from: "+(from->name()?from->name(RAW):to_string(from))+
+    ", target: "+(target->name()?target->name(RAW):to_string(target))+
+    ", msg: '"+msg+"'\n");
+}
+
+// Masterobjekt speichern
+void DoSaveMe()
+{
+  if(last_backup < time()-604800) // backup jede Woche
+  {
+    save_object(ZONE "save/bkp/death_kill_log_bkp_"+to_string(time()));
+    last_backup = time();
+  }
+  save_object(SAVE_PATH);
+}
+
+// Reset
+void reset()
+{
+  if(!read_file(ZONE "master/log_master.lpc")) return;
+  DoSaveMe();
+}
+
+// Remove
+int remove()
+{
+  if(is_clone(TO)) {
+    destruct(TO);
+    return 1;
+  }
+
+  // nochmal speichern vor dem destruct
+  save_object(SAVE_PATH);
+  destruct(TO);
+  return 1;
+}

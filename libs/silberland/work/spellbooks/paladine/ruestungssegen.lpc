@@ -1,0 +1,123 @@
+// SilberLand MUDlib
+//
+// spellbooks/paladine/ruestungssegen.c
+//
+// $Date: 2003/11/21 01:33:24 $
+/* $Revision: 1.2 $
+ * $Log: ruestungssegen.c,v $
+ * Revision 1.2  2003/11/21 01:33:24  Feyaria
+ * Haelt laenger wenn man den spell perfekt kann
+ *
+ * Revision 1.1  2003/07/09 11:39:22  Angrox
+ * Initial revision
+ *
+ */
+// Prototypem
+int prep_ruestungssegen(object caster, mapping sinfo);
+int ruestungssegen(object caster, mapping sinfo);
+
+
+
+int prep_ruestungssegen(object caster, mapping sinfo) {
+  string what;
+  object armour;
+  what=sinfo[SI_SKILLARG];
+  if(!what) {
+    write(BS("Was in Dustys Namen moechtest Du segnen?"));
+    return 0;
+  }
+  if(!armour=deep_present(what, caster)) {
+    write("Diese Ruestung besitzt Du nicht, Paladin!\n");
+    return 0;
+  }
+  if(present("\nruestungssegen", caster)) {
+    write("Du hast schon eine Ruestung geweiht, Paladin!\n");
+    return 0;
+  }
+  if(!armour->QueryProp(P_ARMOUR_TYPE)) {
+    write(BS("Das ist keine Ruestung, Paladin!\n"));
+    return 0;
+  }
+  return 1;
+}
+
+
+int ruestungssegen(object caster, mapping sinfo) {
+  object armour, segen;
+  int suc, ac_value, time;
+  string text, what;
+  mapping v_ac;
+  v_ac=VALID_ARMOUR_CLASS;
+  what=sinfo[SI_SKILLARG];
+
+/*
+  if (!caster->QueryProp(P_TESTPLAYER)) {
+  write(BS(
+    "!!! ACHTUNG, dieser Spell musste wegen diverser Bugs abgehaengt werden! "
+    "Wir arbeiten dran, aber wann und wo und wie ... Sorry, Zordan !!!"));
+  return 0;
+  }
+*/
+  if( !prep_ruestungssegen( caster, sinfo) ) return 0;
+  armour=deep_present(what, caster);
+  if(armour->QueryProp(P_ITEMD)) {
+    write(BS("Paladin! Diese magische Ruestung kannst Du nicht segnen!"));
+    return 0;
+  }
+  if(armour->QueryProp(P_DEFEND_FUNC)) {
+    write(BS("PALADIN! Diese Ruestung kannst Du nicht segnen."));
+    return 0;
+  }
+  if(armour->Query(P_DEFEND_FUNC,F_QUERY_METHOD)) {
+    write(BS(
+      "ARGL. Hier stimmt was mit der Ruestung nicht. Bitte benachrichtige "
+      "Angrox oder Zordan sofort!!!"));
+    write_file("/gilden/paladine/spells/ruestungssegen.bad",
+      sprintf("%s: %s mit %O\n",ctime(),CAP(getuid(caster)),armour));
+    return 0;
+  }
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+      printf(sinfo[SI_SP_LOW_MSG]);
+      return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  text="Herrin Dusty, in Deinem Namen weihe "
+      +"ich diese Ruestung, um damit gegen die Ausgeburten der Unterwelt "
+      +"gewappnet zu sein! Ehre sei Dusty! Ehre! "
+      +"Ehre! Ehre!";
+  Message(caster, 0,sprintf("Du beruehrst %s.\n",
+      armour->name(WEN)), 0);
+  Message(caster, 0,sprintf("%s beruehrt %s.\n",
+     caster->Name(WER), armour->name(WEN)), 3);
+  Message(caster, 0, BSA(text,"Du rufst: "), 0);
+  Message(caster, 0, BSA(text, caster->Name(WER)+" ruft: "), 3);
+  if((suc=SpellSuccess(caster, sinfo))<=0) {
+    Message(caster, 0, BS("Dusty scheint Dich nicht zu erhoeren. "
+        +"Nichts passiert."), 0);
+    Message(caster, 0, BS(sprintf("Nichts passiert. Offenbar scheint Dusty "
+        +"%s nicht erhoert zu haben.", caster->name(WER))), 3);
+    armour->TakeFlaw( ({ DT_BLUDGEON }) );
+    return MISSERFOLG;
+  }
+  Message(caster, 0, BS(sprintf("%s leuchtet kurz in silbrigem Licht "
+      +"auf! Dusty hat Dich erhoert! Ehre sei Dusty!\n",
+      armour->Name(WER))), 0);
+  Message(caster, 0, BS(sprintf("%s von %s leuchtet kurz silbrig auf.\n",
+      armour->Name(WER), caster->name(WER))), 3);
+  segen=CLONEOB(OBJ("ruestungssegen"));
+  segen->move(caster, M_NOCHECK|M_SILENT);
+  caster->SetProp(PAL_RUESTUNGSSEGEN, 1);
+  ac_value=((armour->QueryProp(P_AC)/2)+GetAlign(caster)/50)/3;
+  ac_value=DoModificationByAlign(ac_value, caster);
+  if(ac_value<1) ac_value=1;
+  if(ac_value>25) ac_value=25;
+  time=caster->QueryProp(P_GUILD_LEVEL)*(10+random(3));
+  if( sinfo[SI_SKILLABILITY] == MAX_ABILITY )
+    time += caster->QueryProp(P_LEVEL);
+  time=DoModificationByAlign(time, caster);
+  segen->SetVariables(caster, armour, time, ac_value);
+  return ERFOLG;
+}
+
+

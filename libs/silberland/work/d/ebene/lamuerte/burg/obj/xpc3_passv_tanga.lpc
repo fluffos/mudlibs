@@ -1,0 +1,262 @@
+inherit "std/armour";
+
+#include <language.h>
+#include <properties.h>
+#include <combat.h>
+#include <defines.h>
+#include <moving.h>
+#include <new_skills.h>
+#include "../vt100.h"
+
+
+#define ABS(x) (x>0?x:-x)
+
+int startxp=0;
+int currxp;
+int dynxp;
+int tempxp;
+int active=0;
+int timer=0;
+int showamount=500;
+int enemyhp;
+int enemymaxhp;
+int ownerhp=0,ownersp=0,dynhp=0,dynsp=0;
+int autom=0;
+string dynhpstr,dynspstr;
+object owner;
+
+string versnumb="1.1";
+
+create()
+
+{ 
+  if (!is_clone(this_object())) return;
+  ::create();
+  SetProp(P_SHORT,VT_NORMAL+"Ein geiler Tanga");
+  SetProp(P_LONG, 
+   "Ein kleiner XPC. Er kann Dir sagen wieviele Erfahrungspunkte Du so machst. "+
+   "Einschalten kann man Ihn mit <xpcstart>, ausschalten mit <xpcstop>, einen "+
+   "Report kann man mit <xpcreport> erzwingen. Einen Reset gibts mit <xpcreset>.");
+   // und mit <xpcwert 'grenzwert'> kann "+
+   // "eingestellt werden bei wieviel EP zuwachs eie Benachrichtigung kommt.");
+
+   SetProp(P_ARMOUR_TYPE, AT_MISC );
+   SetProp(P_AC, 0);
+   SetProp(P_MATERIAL, MAT_MAGIC );
+   SetProp(P_DEFEND_FUNC, this_object());
+
+  SetProp(P_NOGET,0);
+  SetProp(P_VALUE,20000);
+  SetProp(P_NEVERDROP,1);
+  SetProp(P_WEIGHT,20);
+  SetProp(P_GENDER, MALE);
+  SetProp(P_NAME,"Tanga");
+  AddId(({"xpc","tanga"}));
+ 
+  AddCmd("xpcstart","do_start"); 
+  AddCmd("xpcstop","do_stop"); 
+  AddCmd("xpcreport","do_rep"); 
+  AddCmd("xpcreset","do_reset"); 
+  AddCmd("xpcwert","do_set"); 
+ 
+  seteuid(getuid());
+}
+
+
+
+
+
+int do_start()
+{
+ if (active==1)
+ {
+   write("XP Zaehler bereits eingeschaltet.\n");
+   return 1;
+ }
+
+ if(!this_object()->QueryProp(P_WORN)) {
+     write("Du musst den XPC zuerst anziehen!\n");
+     return 1;
+ }
+
+ SetProp(P_CURSED,"Dazu musst Du den Zaehler zuerst abschalten!\n");
+ 
+ notify_fail("XP Zaehler eingeschaltet...\n");
+ startxp=this_player()->QueryProp(P_XP);
+ currxp=this_player()->QueryProp(P_XP);
+ tempxp=this_player()->QueryProp(P_XP);
+ dynxp=currxp-startxp;
+ active=1;
+ timer=time();
+ SetProp(P_NODROP,"Der XPC ist gestartet, Du kannst ihn so nicht ablegen.\n");
+ set_heart_beat(1);
+ owner=this_player();
+ return 0;
+}
+
+int do_stop()
+{
+ if (active==0)
+ {
+   write("XP Zaehler bereits ausgeschaltet.\n");
+   return 1;
+ }
+ SetProp(P_CURSED,0);
+ set_heart_beat(0);
+ SetProp(P_NODROP,0);
+ notify_fail("XP Zaehler ausgeschaltet...\n");
+ active=0;
+ return 0;
+}
+
+
+
+int do_report(int rmode)
+{
+  int percent;
+  int whatmode;
+
+  whatmode=rmode;
+  
+  if(active==0)
+  {
+    write("XP Zaehler nicht eingeschaltet.\n");
+    return 1;
+  }
+  currxp=owner->QueryProp(P_XP);
+  
+  switch(owner->QueryProp(P_TTY))
+  {
+   case "ansi":
+
+     if( autom==1 || whatmode==1 ){
+     tell_object(owner,VT_MAGENTA+"["+VT_NORMAL+"summe xp: "+VT_MAGENTA+(currxp-startxp)+"]");
+     tell_object(owner,VT_MAGENTA+" ["+VT_NORMAL+"in: "VT_MAGENTA+((time()-timer)/60)+" min"+VT_MAGENTA+"]");
+     tell_object(owner,VT_MAGENTA+" ["+VT_NORMAL+"schnitt: "+VT_MAGENTA+((time()-timer)?((currxp-startxp)/(time()-timer))*3660:(currxp-startxp))+"/h]");
+     tell_object(owner,VT_RED+" ["+VT_NORMAL+"last kill: "+VT_RED+((currxp-startxp)-dynxp)+"]"+VT_NORMAL+"\n");
+     }
+     //tell_object(owner,VT_MAGENTA+"["+VT_NORMAL+"hp:"+VT_MAGENTA+owner->QueryProp(P_HP)+"/"+owner->QueryProp(P_MAX_HP)+"]["+VT_YELLOW+dynhpstr+VT_MAGENTA+"]["+VT_NORMAL+"sp:"+VT_MAGENTA+owner->QueryProp(P_SP)+"/"+owner->QueryProp(P_MAX_SP)+"]["+VT_YELLOW+dynspstr+VT_MAGENTA+"]"+VT_NORMAL);
+     if(enemyhp>0 && enemymaxhp>0){
+       percent=to_int(to_float(enemyhp)/(to_float(enemymaxhp)/100));
+       tell_object(owner,VT_MAGENTA+"["+VT_NORMAL+"target hp: "+VT_MAGENTA+percent+"%] ["+VT_NORMAL+sprintf( "%:25'-'-s", sprintf("%*'*'s", percent / 4, "") )+VT_MAGENTA+"]");
+     }
+       tell_object(owner,VT_NORMAL+"\n");
+    break;
+   case "vt100": 
+     tell_object(owner,"[summe xp: "+(currxp-startxp)+"]");
+     tell_object(owner," [in: "+((time()-timer)/60)+" min]");
+     tell_object(owner," [schnitt: "+((time()-timer)?((currxp-startxp)/(time()-timer))*3660:(currxp-startxp))+"/h]");
+     tell_object(owner," [last kill: "+((currxp-startxp)-dynxp)+"]\n");
+  
+     if(enemyhp>0 && enemymaxhp>0){
+       percent=to_int(to_float(enemyhp)/(to_float(enemymaxhp)/100));
+       tell_object(owner,"[hit p: "+percent+"%] ["+sprintf( "%:25'-'-s", sprintf("%*'*'s", percent / 4, "") )+"]\n");
+     }
+  } 
+  return 1; 
+}
+
+
+int do_rep(){
+  do_report(1);
+  return 1;
+}
+
+int DefendFunc (mixed dam_type, int spell, object enemy)
+{
+ enemyhp=enemy->QueryProp(P_HP);
+ enemymaxhp=enemy->QueryProp(P_MAX_HP); 
+  return 1; 
+}
+
+
+    
+
+void res_xp()
+{
+  dynxp=((owner->QueryProp(P_XP)-startxp));
+  enemyhp=0;
+  enemymaxhp=0;
+  return ;
+}
+
+void heart_beat() 
+{if(!owner->InFight()) call_out("res_xp",0);
+
+  dynhp=owner->QueryProp(P_HP);
+  dynsp=owner->QueryProp(P_SP);
+
+  dynhpstr="";
+  dynspstr="";
+  
+  if( (tempxp+showamount) < (owner->QueryProp(P_XP)) || dynhp!=ownerhp || dynsp!=ownersp)
+  {
+
+    autom=0;
+    if( (tempxp+showamount) < (owner->QueryProp(P_XP))) autom=1;
+
+    dynhp=dynhp-ownerhp;
+    dynsp=dynsp-ownersp;
+    
+    
+    if(dynhp>=0){
+      dynhpstr="+"+to_string(dynhp);
+    }
+    else{
+      dynhpstr=to_string(dynhp);
+    }
+  
+    if(dynsp>=0){
+      dynspstr="+"+to_string(dynsp);
+    }
+    else{
+      dynspstr=to_string(dynsp);
+    }
+    
+    call_out("do_report",0,2);
+    tempxp=owner->QueryProp(P_XP);
+  }
+  
+  ownerhp=owner->QueryProp(P_HP);
+  ownersp=owner->QueryProp(P_SP);
+}
+
+
+do_set(string xx)
+{
+
+  if(!active){
+    tell_object(this_player(),"Der XPC ist nicht eingeschaltet.\n");
+    return 1;
+  }
+
+  if(!xx){
+    tell_object(owner,"Syntx: xpcwert <grenzwert>\n");
+    return 1;
+  }
+ 
+
+  if ( to_int(xx) < 500 || to_int(xx) > 10000)
+  {
+    tell_object(owner,"Falscher Wert. (breeich: 500-10000)\n");
+    return 1;
+  }
+
+  showamount=to_int(xx);
+    tell_object(owner,"Grenzwert wurde auf "+showamount+" eingestellt.\n");
+  return 1;
+}
+
+int do_reset()
+{
+ if (active!=1)
+ {
+   write("XP Zaehler ist doch nicht eingeschaltet.\n");
+   return 1;
+ }
+
+  do_stop();
+  write("XP Zaehler wird resettet.\n");
+  call_out("do_start",3);
+  return 1;
+}

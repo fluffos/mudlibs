@@ -1,0 +1,116 @@
+/***************************************************************************
+ copy.c, Alfe for TubMud '95
+
+ * The function copy() provides a complete copy of any data structure you
+ * might get. The common way of using [0..] for arrays and copy_mapping()
+ * for mappings only copies the 'first floor'. If you have an array being
+ * part of a value of a mapping and an array inside this it will not be
+ * copied with any of the usual ways.
+ * copy() is (as Macbeth at once mentioned) not cheap. Please use it only
+ * if you really need it. In most cases [0..] and copy_mapping() will fit
+ * your task.
+ *
+ * copy() will NO LONGER result in a too deep recursion for recursive data
+ * structures IF RECURSIVE_RESISTENT is defined.
+
+ angepasst fuer SilberLand, Carador, August 2000, Februar 2002
+***************************************************************************/
+
+#pragma strong_types
+#include "../def.h"
+#include RD_SYSDIR"closures.h"
+#include <lpctypes.h>
+
+#define RECURSIVE_RESISTENT
+
+private mixed quote_many(mixed x,int i) {
+  while (i-->0)
+    x = quote(x);
+  return x;
+}
+
+#ifdef RECURSIVE_RESISTENT
+
+varargs mixed copy(mixed source,mixed *source_stack,mixed *result_stack) {
+  mixed h;
+  mixed indices,index;
+  int i,j,width;
+  if (!source_stack)
+    source_stack = ({}), result_stack = ({});
+  switch (typeof(source)) {
+  case T_QUOTED_ARRAY:
+    return quote_many(copy(to_array(source),source_stack,result_stack),
+                      get_type_info(source,1));
+  case T_OBJECT:
+  case T_CLOSURE:
+    ;                   // they cannot be copied *sigh*
+  case T_NUMBER:
+  case T_FLOAT:
+  case T_STRING:
+  case T_SYMBOL:
+    return source;      // they are copied by simple returning
+  case T_POINTER:
+    if ((i=member(source_stack,source)) >= 0)  // recursion found?
+      return result_stack[i];  // return the recursed data
+    source_stack += ({ source });
+    result_stack += ({ allocate(i=sizeof(source)) });
+    while (i--)
+      result_stack[<1][i] = copy(source[i],source_stack,result_stack);
+    return result_stack[<1];
+  case T_MAPPING:
+    if ((i=member(source_stack,source)) >=0)  // recursion found?
+      return result_stack[i];  // return the recursed data
+    source_stack += ({ source });
+    result_stack += ({ allocate_mapping(sizeof(source),
+                                        (width=get_type_info(source,1))) });
+    indices = m_indices(source);
+    for (i=sizeof(indices); i--; ) {  // for all keys
+      index = copy(indices[i],source_stack,result_stack);
+      if (width)
+        for (j=width; j--; )  // for all values
+          result_stack[<1][index,j] = copy(source[indices[i],j],
+                                           source_stack,result_stack);
+      else
+        result_stack[<1] += ([ index ]);
+    }
+    return result_stack[<1];
+  }
+}
+
+#else
+
+mixed copy(mixed source) {
+  mixed indices;
+  mixed h;
+  int i;
+  switch (typeof(source)) {
+  case T_QUOTED_ARRAY:
+    return quote_many(copy(to_array(source)),get_type_info(source,1));
+  case T_OBJECT:
+  case T_CLOSURE:
+    ;                   // they cannot be copied *sigh*
+  case T_NUMBER:
+  case T_FLOAT:
+  case T_STRING:
+  case T_SYMBOL:
+    return source;      // they are copied by simple returning
+  case T_POINTER:
+    return map_array(source,#'copy); // copy all elements
+  case T_MAPPING:
+    h = allocate(get_type_info(source,1));
+    indices = m_indices(source);
+    for (i=sizeof(h); i--; )
+      h[i] = map_array(indices,
+                       lambda(({ 'x,'source }),
+                              ({ (#'copy),
+                                 ({ CL_INDEX,'source,'x,i }) })),
+                       source);
+#if 0  // copy also the indices   Alfe 1997-Feb-08
+    return apply(#'mkmapping,indices,h);
+#else
+    return apply(#'mkmapping,map_array(indices,#'copy),h);
+#endif
+  }
+}
+
+#endif

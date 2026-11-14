@@ -1,0 +1,253 @@
+/*
+ * Unterwerfung der Toten
+ * 
+ * Spruch zwingt Zombies, Skelette, Mumien und ggf 
+ * andere Untote unter die Herrschaft des Casters
+ * Ein schon unterworfener Untoter kann 'geklaut' werden
+ * Untote helfen im Kampf (an/ausschaltbar)
+ * Untote verfolgen Caster (an/ausschaltbar)
+ *
+ * Spruchsuccess ist durch Equipment beeinflussbar
+ * 
+ *
+ * Kosten: 30 MP
+ * Level : 2
+ *
+ *
+ * Status: anschlussreif
+ * Bemerkung: Andere Untoten: Vampir (Opfer des Spruchs "biss des vampirs")
+ *   und Blutgolem auf der Insel der Nekromanten, 1 Golem pro 2 Reset fuer 
+ *   alle Nekromanten, und einem Ghoul durch "Ruf der Ghoule"
+ *
+ */
+
+// 28.04.2003 Archon: parse_target nicht mehr notwendig
+// 30.04.2003 Archon: nun P_CONTROLLABLE_BY_NEKRO als prop
+//                    (test nicht mehr ueber id)
+// 11.06.2003 Archon: uebergabe des victim
+// 16.06.2003 Archon: bugfix, umstellung auf 'neue' uebergabe/aufruf 
+//                    der prep/cast-funktionen, vor umstellung!
+// 23.06.2003 Archon: umstellung sinfo uebergabe
+// 04.08.2003 Archon: bugfix wenn unterworfener npc geklaut wurde
+
+object beherrschung_find_victim(object caster,mapping sinfo,int silent, int skp)
+{
+  object victim,npc;
+  string str;
+
+  str=sinfo[SI_SKILLARG];
+  if(!victim=present(str, environment(caster))) 
+  {
+    if (!silent)
+     write(BSC("So etwas ist hier nicht! Toete etwas, dann kannst Du es "
+        "auch beschwoeren und Deinem Willen unterwerfen!"));
+    return 0;
+  }
+  if(!living(victim)) 
+  {
+    if (!silent)
+     write(sprintf("%s! Einen Gegenstand kannst Du nicht unterwerfen!\n", 
+          caster->QueryProp(P_GENDER)==FEMALE?"NAERRIN":"NARR"));
+    return 0;
+  }
+
+  if(!victim->QueryProp(P_CONTROLLABLE_BY_NEKRO)) 
+  {
+    if(victim->is_class_member(CL_UNDEAD) || 
+        lower_case(victim->QueryProp(P_RACE)) == "geist")
+    {
+      if (!silent)
+       write(BSC(sprintf("%s ist zwar eine untote Kreatur, aber kann von Dir nicht "
+               "beherrscht werden." , victim->Name(WER))));
+    }
+    else 
+    {
+      if (!silent)
+       write(BSC(sprintf("Du kannst %s nicht unterwerfen! Vorher muss "
+              "%s erst tot sein!", victim->name(WEN), 
+              victim->QueryPronoun(WER))));
+      if(!query_once_interactive(victim))
+        caster->Kill(victim);
+    }
+    return 0;
+  }
+
+  if( caster->InFight() ) 
+  {
+    if (!silent)
+      write(BSC("Im Kampf? Toete erst Deine Gegner, dann kannst Du auch sie "
+          "unterwerfen!"));
+    return 0;
+  }
+
+  if(victim->QueryProp(P_NEKRO_MASTERED_BY) == caster) 
+  {
+    if (!silent)
+      write(BSC(sprintf("%s! %s ist bereits Deinem Willen unterworfen!", 
+            caster->QueryProp(P_GENDER)==FEMALE?"NAERRIN":"NARR", 
+            victim->Name(WER))));
+    return 0;
+  }
+
+  // Vor allem fuer Ghoule
+  if(victim->Eating()) {
+    if(!silent)
+      write(BSC(sprintf("%s %s verspeist gerade eine Leiche. Warte lieber "
+              "etwas!", random_fluch(), victim->Name(WER))));
+      return 0;
+  }
+
+  if(caster->QueryProp(P_NEKRO_MASTERED_UNDEADS) == 0) {
+    caster->SetProp(P_NEKRO_MASTERED_UNDEADS, ({}));
+  }
+
+  caster->SetProp(P_NEKRO_MASTERED_UNDEADS, caster->QueryProp(P_NEKRO_MASTERED_UNDEADS) - ({0})); // aufraeumen
+  
+  if(victim->QueryProp(P_NEKRO_UTILITY_UNDEAD) == 0) {
+    if(skp < 10 && sizeof(caster->QueryProp(P_NEKRO_MASTERED_UNDEADS)) > 0 || 
+      skp > 9 && sizeof(caster->QueryProp(P_NEKRO_MASTERED_UNDEADS)) > 1) {
+        if (!silent) {
+          write("BEI ALLEN NIEDERHOELLEN! DU BEHERRSCHT SCHON EINEN UNTOTEN!\n");
+          return 0;
+      }
+    }
+  }
+  
+  if(victim->QueryProp(P_NEKRO_UTILITY_UNDEAD) == 1 &&
+     objectp(npc=caster->QueryProp(P_NEKRO_MASTERED_UTILITY_UNDEAD)))
+  {
+     if (npc->QueryProp(P_NEKRO_MASTERED_BY) == caster)
+     {
+       if (!silent)
+        write("BEI ALLEN NIEDERHOELLEN! DU BEHERRSCHT SCHON EINEN "
+         "UNTOTEN HELFER!\n");
+       return 0;
+     }
+  }
+  return victim;
+}
+
+mixed prep_beherrschung(object caster, mapping sinfo)
+{
+  string str;
+  object victim, wer;
+  int cost;
+  str=sinfo[SI_SKILLARG];
+  if(!stringp(str) || !strlen(str))
+    return write("Narr! Du musst den Spruch schon auf etwas anwenden!\n"),0;
+
+  victim=beherrschung_find_victim(caster,sinfo,0,get_skillpoints(caster,"unterwerfung der toten"));
+  if (!objectp(victim)) return 0;
+  
+  if(victim->QueryProp(P_NEKRO_MASTERED_BY)) sinfo[SI_RAW_SPELLCOST]*=3;
+  if(victim->QueryProp(P_NEKRO_CASTED_BY) != caster) sinfo[SI_RAW_SPELLCOST]*=2;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  sinfo[SI_ENEMY]=victim; //uebergabe des ziels
+  write(BSC(sprintf("Du deutest mit Deiner linken Hand auf %s und intonierst "
+          "Worte, die %s Deinem Willen unterwerfen sollen!", victim->name(WEN),
+          victim->QueryPronoun(WEN))));
+  write(BSA("Iktam Yy'rlem port Hla'tur! Shihaya'zzad ter Ll'artez!", 
+        "Du rufst: "));
+  tell_room(ENV(caster), BS(sprintf("%s deutet mit der linken Hand auf "
+          "%s.", caster->Name(WER), victim->name(WEN))), ({caster}));
+  tell_room(ENV(caster), BSA("Iktam Yy'rlem port Hla'tur! Shihaya'zzad ter "
+        "Ll'artez!", sprintf("%s ruft: ", caster->Name(WER))), ({caster}));
+  return sinfo;
+}
+
+int beherrschung(object caster, mapping sinfo) 
+{
+  string str;
+  object victim, wer;
+  int succ,i, suc_lvl_mod, suc_mod, npc_lvl;
+  int npc_lvl_too_high;
+  int skillpoints;
+
+  npc_lvl_too_high=0;
+  victim=sinfo[SI_ENEMY];
+  str=sinfo[SI_SKILLARG];
+  skillpoints=get_skillpoints(caster,"unterwerfung der toten");
+  if (!present_victim(victim,caster))
+  {
+    write(BSC(sprintf("%s! Die untote Kreatur ist nicht mehr hier! "
+            "Wie kann man nur so versagen?!", caster->QueryProp(P_GENDER)==FEMALE?
+            "NAERRIN":"NARR")));
+    return 0;
+  }
+
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  npc_lvl=victim->QueryProp(P_LEVEL);
+  // Damit koennen maximal lvl 35 npcs beherrscht werden
+  // und pro Skillpunkt kann die Stufe um eines hoeher sein!
+  if((npc_lvl > 10) && (caster->QueryProp(P_GUILD_LEVEL)*5 <  
+        (npc_lvl-skillpoints)))
+  {
+    write(BSC("BEI ALLEN NIEDERHOELLEN! DIESER UNTOTE IST ZU STARK UM VON "
+        "DIR BEHERRSCHT ZU WERDEN!"));
+    tell_room(ENV(caster), BS(sprintf("%s beginnt zu fluchen.", 
+           caster->Name(WER))), ({caster}));
+    return 0;
+  }
+  if(npc_lvl > 10)
+    suc_lvl_mod=npc_lvl*100;
+  else 
+    suc_lvl_mod=0;
+    
+  suc_mod=random(50*CheckEquip(caster,"unterwerfung der toten"))-suc_lvl_mod;
+  suc_mod+=skillpoints*50;
+  if ((succ=SpellSuccess(caster,sinfo)+suc_mod) <= -random(5000))
+  {
+     write(BSC(sprintf(
+       "%s Deine Macht reicht nicht aus um %s zu beherrschen! %s attackiert "
+       "Dich voller Hass! BEI ALLEN NIEDERHOELLEN!", random_fluch(), 
+       victim->name(WEN), CAP(victim->QueryPronoun(WER)))));
+     tell_room(ENV(caster), BS(sprintf("%s attackiert %s voller Hass!", 
+             victim->Name(WER), caster->name(WEN))), ({caster}));
+     victim->Kill(caster);
+     victim->SetAggressive(1);
+     total_fail=1;
+  }
+  if (succ <= 0)
+     return MISSERFOLG;
+  UseBlood();
+  
+  // 2012-08-07 Gwenshara: Manche Untote zaehlen nicht als Diener
+  if(caster->QueryProp(P_TESTPLAYER))
+    tell_object(caster, sprintf("requires slot: %O -> %d", victim,
+	                    victim->requiresUndeadSlot()));
+
+  if(caster->QueryProp(P_NEKRO_MASTERED_UNDEADS) == 0) {
+    caster->SetProp(P_NEKRO_MASTERED_UNDEADS, ({}));
+  }
+						
+  if(victim->requiresUndeadSlot()) {
+    caster->SetProp(P_NEKRO_MASTERED_UNDEADS, caster->QueryProp(P_NEKRO_MASTERED_UNDEADS) + ({victim})); 
+  }
+
+  caster->SetProp(P_NEKRO_MASTERED_UNDEADS, caster->QueryProp(P_NEKRO_MASTERED_UNDEADS) - ({0})); // aufraeumen
+	
+  // Auch Utility Untote brauchen einen eigenen Slot
+  if(victim->QueryProp(P_NEKRO_UTILITY_UNDEAD))
+    caster->SetProp(P_NEKRO_MASTERED_UTILITY_UNDEAD, victim);
+	
+  write(BSC(sprintf(
+          "%s Wille ist gebrochen und %s wird Dir ab nun gehorchen! "
+          "Harhar!", victim->Name(WESSEN,2), victim->QueryPronoun(WER))));
+  tell_room(ENV(caster), sprintf("Der Wille von %s scheint gebrochen zu "
+        "sein!\n", victim->name(WEM)), ({caster}));
+
+  victim->Setprop(P_XP, 0);
+  victim->Setprop(P_AGGRESSIVE, 0);
+  victim->SetMaster(caster);
+  return ERFOLG;
+}

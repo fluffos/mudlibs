@@ -1,0 +1,172 @@
+/****************************************************************/
+/***     Rumatas headband of wizards filename: sband.c        ***/
+/***   Clonable part, but the work will done by the Focus.    ***/
+/****************************************************************/
+inherit "std/armour";
+
+#include <combat.h>
+#include <properties.h>
+#include <language.h>
+#include <wizlevels.h>
+#include <defines.h>
+
+#define FOCUS "/obj/tools/sband/focus"
+#define VERSION "3.10 (12.07.92)"
+#define LINK_NUM 5  /* Must be the same value as in vortex! */
+
+int    quiet; /* keine meldungen ausgeben */
+object owner; /* only the owner can use the headband */
+object links; /* where the links point to */
+
+create()
+{
+  if( IS_BLUE(ME) ) { return; }
+  ::create();
+  links = allocate( LINK_NUM );
+  AddId( ({ "stirnband", "magierstirnband", "band" }) );
+  SetProp( P_WEIGHT, 0 );
+  SetProp( P_GENDER, NEUTER );
+  SetProp( P_ARMOUR_TYPE, AT_HELMET );
+  SetProp( P_SHORT, "Ein Magierstirnband" );
+  SetProp( P_NAME, "Stirnband" );
+}
+
+init()
+{
+  ::init();
+  if( IS_WIZARD(PL) ) {
+    seteuid(getuid(this_player()));
+    add_action( "hband_help", "hilfe" );
+    add_action( "call_focus", "f" );
+    add_action( "call_focus", "focus" );
+  }
+  else
+    call_out("remove",0);
+}
+
+_query_short() { return "Ein Magierstirnband"; }
+_query_read_msg() { return 0; }
+
+long() {
+  string answer;
+  if( owner ) answer = owner->name(WESSEN);
+  else        answer = "ein";
+  answer = 
+     "Dies ist "+answer+" Magierstirnband. Es ist eines der fazinierendsten\n"
+   + "Magierwerkzeuge, die Du je gesehen hast. Es ist so leicht und doch so\n"
+   + "nuetzlich und maechtig, da es seine Kraft direkt aus dem \"magischen\n"
+   + "Focus\" bezieht. Ein kleiner weisser Punkt auf dem Stirnband scheint\n"
+   + "wie ein Auge des Focus' zu strahlen.\n";
+  if( !IS_WIZARD(PL) ) 
+    answer = answer + "Zu dumm, dass Du nichts damit anfangen kannst.\n";
+  return answer;
+}
+
+hband_help( str ) {
+  if( !id( str ) || this_interactive()!=owner ) return 0;
+  write( "Frage lieber den Focus direkt um Hilfe.\n"
+         + "(Gebe dafuer \"focus hilfe\" ein)\n" );
+  return 1;
+}
+
+call_focus( str ) {
+  if( this_interactive()==owner )
+    return call_other( FOCUS, "schedule", str );
+}
+
+/*********************** Autoload stuff *****************************/
+
+_set_autoloadobj( args )
+{
+  int i;
+  for( i=0; i<strlen(args); i++ )
+    switch( args[i] )
+    {
+      case 'w': move( PL );
+                do_wear( "stirnband", 1 );
+                break;
+      case 'q': quiet = 1;
+    }
+}
+
+_query_autoloadobj()
+{
+  if (!IS_WIZARD(this_player())) return 0;
+  return ( quiet ? "q" : "" ) + ( QueryWorn() ? "w" : "" );
+}
+
+/*************************** Link stuff *******************************/
+
+query_link( num ) {
+  if( num>=0 && num<LINK_NUM ) return links[ num ];
+}
+
+set_link( num, arg ) {
+  if( num>=0 && num<LINK_NUM ) links[ num ] = arg;
+}
+
+toggle_quiet()
+{
+  quiet = !quiet;
+}
+
+query_quiet() { return quiet; }
+
+/************************** Armour stuff ****************************/
+
+do_wear( str, silent )
+{
+  int worn, result;
+
+  if( id(str) && environment()==PL &&
+      ( !IS_WIZARD(PL) || (owner!=0 && owner!=PL)) )
+  {
+    write( "Du versuchst, Dir das Stirnband umzulegen, aber das Stirnband\n"
+     + "scheint brennede Strahlen in den Gehirn zu schicken. Nur durch Deine\n"
+     + "schnelle Rekation, das Strinband abzulegen, kannst Du verhindern,\n"
+     + "dass Dein Geist verdampft.\n" );
+    say( PL->QueryProp(P_SHORT)+" versucht vergeblich, sich das Stirnband umzulegen.\n" );
+    return 1;
+  }
+  if( IS_WIZARD(PL) && ( !owner || owner==PL ) )
+    SetProp( P_AC, 99 );
+  else
+    SetProp( P_AC, 0 );
+  worn = QueryWorn();
+  result = armour::do_wear(str, silent);
+  if ( !worn && QueryWorn() )
+  { 
+    owner = PL;
+    SetProp(P_ARTICLE,0);
+    SetProp(P_NAME, owner->name(WESSEN)+" Stirnband" );
+    SetProp(P_SHORT, owner->name(WESSEN)+" Magierstirnband" );
+    if (!silent)
+    {
+      write( "Das Stirnband beginnt sachte zu glimmen.\n" );
+      say( name(WER)+" beginnt sachte zu glimmen.\n" );
+    }
+  }
+  return result;
+}
+
+drop( silently )
+{
+  string verb;
+  if( !IS_WIZARD(PL) ) return 0;
+  if( query_verb()=="quit" ) return 1;
+  if( worn_by ) {
+    tell_object( owner, "Du musst es erst ablegen.\n" );
+    return 1;
+  }
+}
+
+do_unwear( str ) {
+  int result;
+  if( result = armour::do_unwear(str) )
+  {
+    write( "Dein Stirnband wird dunkel.\n" );
+    say( name(WER)+" wird dunkel.\n" );
+    SetProp( P_AC, 0 );
+  }
+  return result;
+}

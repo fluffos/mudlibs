@@ -1,0 +1,173 @@
+/*
+  LagerTool
+  
+  handelt alle wichtigen Funktionen, die mit dem Feldlager zu tun
+  haben.
+  
+  Ver 1.0	nur fuer die Nachrichten.
+*/
+
+inherit "std/thing";
+inherit "/mail/nedit";
+inherit "std/more";
+
+#include "../files.h"
+#include "../std/news.h"
+#include <properties.h>
+#include <language.h>
+#include <wizlevels.h>
+
+string *msg;
+
+create()
+{
+  if (!is_clone(this_object())) return;
+  
+  ::create();
+//  seteuid(getuid(this_object());
+  SetProp(P_SHORT,"Ein LagerTool V1.0");
+  SetProp(P_NAME,"LagerTool");
+  AddCmd("lhelp", "help");
+  AddCmd(({"lusers", "lu"}), "usr");
+  AddCmd(({"lnews", "ln"}), "new");
+  AddCmd(({"lviewnews", "lvn"}), "view");
+  AddCmd(({"ldelnews", "ld"}), "del");
+}
+
+_query_neuter() { return NEUTER; }
+_query_ids() { return ({"lagertool", "ltool"}); }
+_query_nodrop() { return "Das Lagertool kann man nicht entfernen.\n"; }
+_query_neverdrop() { return _query_nodrop(); }
+_query_autoloadobj() { return 1; }
+_query_version() { return "1.0"; }
+
+long()
+{
+  return "Das ist dein ultimatives LagerTool V1.0\n Hilfe mit lhelp.\n";
+}
+
+help()
+{
+  write(
+   "Mit diesem Tool kannst Du die wichtigsten Funktionen des Feldlagers\n"
+  +"kontrollieren. In der aktuellen Version "+_query_version()+" gelten\n"
+  +"folgende Befehle:\n\n"
+  +" lUsers:\n"
+  +"  Anzahl der sich derzeit im Feldlager befindlichen Spieler.\n"
+  +" lNews <titel>:\n"
+  +"  erstellt eine neue Nachricht fuer das Nachrichtensystem.\n"
+  +" lViewNews:\n"
+  +"  gibt eine Liste der vorhandenen Nachrichten aus.\n"
+  +" lDelnews <nr>:\n"
+  +"  loescht die Nachricht Nr. <nr>.\n\n"
+  +"Befehle koennen entweder ausgeschrieben werden oder mit einem l und\n"
+  +"den durch Grossschreibung hervorgehobenen Buchstaben abgekuerzt\n"
+  +"werden.\n");
+  return 1;
+}  
+
+nosave int CheckZone(object u)
+{
+  if (stringp(ENV(u)->QueryProp(P_ZONE)) 
+        && ENV(u)->QueryProp(P_SUBDOMAIN)=="Feldlager") {
+    if (IS_LEARNER(u)) return 0;  // Magier nicht ins Array nehmen.
+    if (getuid(u)==ROOTID) return 0;  // Merlin auch nicht :)
+    if (u->QueryProp(P_NPC)) return 0;  // und auch keine NPC's :)
+    return 1;
+  }
+  return 0;
+}
+
+usr()
+{
+  int i;
+
+  write("Es befinden sich derzeit ");
+  i=sizeof(filter_array(users(),"CheckZone"));
+  write((i?i:"keine")+" Spieler im Feldlager.\n");
+  return 1;
+} 
+
+get_title(string str)
+{
+  if (!str || str=="") {
+    write("Titel des Artikels: ");
+    input_to("get_title", 0);
+  }
+  else {
+    msg=allocate(3);
+    msg[M_TITLE]=str;
+    write("Titel ist: "+str+".\nGib jetzt Deinen Text ein,\n"
+         +"** oder . wenn Du fertig bist, ~q zum Abbrechen, ~h fuer eine Hilfsseite.\n");
+    nedit("PostIt");
+  }
+  return 1;
+}
+
+new(str)
+{
+  write("Neue Nachricht fuer das Feldlager:\n");
+  if (!str || str=="") {
+    write("Titel des Artikels: ");
+    input_to("get_title");
+  }
+  else
+    get_title(str);
+  return 1;
+}
+
+PostIt(str)
+{
+  int ret;
+  
+  if (!str) {
+    write("Dann halt nicht. :)\n");
+    return 1;
+  }
+  msg[M_MESSAGE]=str;
+  ret=call_other(LNEWSD, "WriteNote", msg);
+  if (ret)
+    write("Ok.\n");
+  else
+    write("Hm, da scheint was schiefgelaufen zu sein.\nReturn-Code="+ret+"\n");
+  msg=0;
+  return 1;
+}
+
+view()
+{
+  mixed *n;
+  string str;
+  int i, j;
+    
+  if (i=call_other(LNEWSD, "GetNewsNum")) {
+    n=call_other(LNEWSD, "GetNews");
+    str="Derzeit vorhandene Nachrichten:\n";
+    for (j=0; j<i; j++)
+      str+=" "+sprintf("%2d",j)+". "+n[j][M_TITLE]+"\n";
+  }
+  else
+    str="Derzeit keine vorhandenen Nachrichten.\n";
+  TP->More(str);
+  return 1;
+}
+
+del(s)
+{
+  string str;
+  int i;
+  
+  if (!s || !sscanf(s, "%d", i)) {
+    write("Dieses war wohl keine Zahl :)\n");
+    return 1;
+  }
+  if (i>=call_other(LNEWSD, "GetNewsNum"))
+    str="So viele Nachrichten gibt es nicht.\n";
+  else {
+    call_other(LNEWSD, "RemoveNote", i);
+    str="Nachricht "+i+" erfolgreich geloescht.\n";
+  }
+  write(str);
+  return 1;
+}
+

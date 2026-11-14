@@ -1,0 +1,1513 @@
+// ab_spells.c - Das Spellbook der Abenteurer
+// $Date: 2009/01/26 22:17:01 $
+/* $Revision: 1.6 $
+ * $Log: ab_spells.c,v $
+ * Revision 1.6  2009/01/26 22:17:01  Woody
+ * Pluralhandling fuer identifiziere / Temperaturschutz
+ *
+ * Revision 1.5  2005/12/03 10:44:32  Woody
+ * Feuerball angepasst, Saeurekugel, beide koennen nun bei Misserfolg verletzen!
+ *
+ * Revision 1.4  2002/01/07 13:46:45  Woody
+ * Ab sofort kann man auch die Umgebung identifizieren
+ *
+ * Revision 1.3  2001/02/22 01:06:02  Woody
+ * P_NO_SCORE auswerten
+ *
+ * Revision 1.2  2001/01/24 12:22:05  Woody
+ * Typofix
+ *
+ * Revision 1.1  2000/08/15 18:25:38  Zordan
+ * Initial revision
+ *
+ */
+
+
+// /spellbooks/ab_spells.c  Die Abenteurergilde
+// Im Original von Boing@MorgenGrauen
+// Spells
+/*
+     Lichtblitz: blitz
+       zeigt die Raumbeschreibung des Raumes an
+       Magiepunkte 3, Stufe 2
+
+       Lichtkugel herbeizaubern: licht  (im Silberland disabled)
+         Magiepunkte 5, Stufe 4
+         Dauer: Level * 20 Sekunden
+
+     Gegenstaende untersuchen: identifiziere <objekt>
+       Wenn P_INFO exisitiert, wird dies ausgegeben
+       Ausserdem Ausgabe von P_MATERIAL und, wenn der Spruch
+       besonders gut war, P_WEIGHT und P_VALUE
+       Magiepunkte 12, stufe 6
+
+     Monster/Gegenstaende einschaetzen: schaetz <name>
+       Bei Monstern wird die relative Staerke (LP,WC,AC) sowie deren
+       Gesinnung angezeigt, bei Dingen deren ungefaehren Wert sowie
+       das ungefaehre Gewicht.
+       Magiepunkte 5, Stufe 8
+
+     Pfeilangriff: pfeil <name>
+       Schaden maximal 20, Magiepunkte 10, Stufe 11
+
+     Ausweichen: ausweichen
+       Geht nur im Kampf, 2-10 Sekunden wird ausgewichen (von Geschick
+       und Spell Success abhaengig), in dieser Zeit werden physikalische
+       Schaeden gedrittelt
+       Magiepunkte 25, Stufe 12
+
+     Feuerball: feuerball <name>
+       Schaden maximal 40, Magiepunkte 20, Stufe 15
+
+     Schnelligkeit: schnell
+       Gibt fuer eine bestimmte Zeit zusaetzliche Angriffe
+       Magiepunkte 50, Stufe 17
+
+*/
+
+
+// Versionen
+// 22-08-1995	Mupfel
+// 	Spruchlevel und -kosten fuer AL angepasst, Mupfel 22-08-95
+// 	'Licht' aus Copyrightgruenden disablen (im Gildenobjekt)
+// 	'Identifiziere' jetzt ab Level 6 statt 8, und 12 statt 15 MP Kosten
+// 	'Schaetz'       jetzt ab Level 8 statt 10
+// 20-02-1996 	Mupfel
+//	Schaden (bei Feuerball, Pfeil) wird angezeigt
+// 11-04-1996   Woody
+//      Blitz Spruch
+// 1996/10/03   Woody
+//      schaetz erweitert: Kann auch Dinge einschaetzen, und zeigt
+//                         Alignment des Monsters an
+// 1996/10/13   Woody
+//      schaetz nochmal erweitert: Zeigt bei Dingen auch Gewicht an.
+//      Dafuer kostet's jetzt aber auch 5 MP statt 3...
+// 1996/11/22   Woody
+//      Bei 'blitz' nen Alternativstring fuer Environments ohne int_long()
+// 1997/01/18   Woody
+//      'licht' auskommentieren (ist nur unnoetiger Code, da eh disabled)
+//      Text bei 'blitz' geaendert (Wortwiederholung... :) )
+// 1997/04/17   Woody
+//      'Units bestehEN aus ....' (identifiziere)
+// 1997/07/26   Woody
+//      Bugfix beim schaetzen fuer Units (typofix und Bugfix bei Gewicht),
+//      neuer Spell 'ausweichen'
+// 1997/07/26   Woody
+//      Dritteln des Schadens bei 'ausweichen' reicht auch...
+//      Ausserdem P_TMP_DEFEND_HOOK setzen, wenn es ein eigener,
+//      abgelaufener Eintrag war
+// 1997/09/25   Woody
+//      Identifizieren ans neue Materialsystem angepasst
+// 1997/09/26   Woody
+//      'Units bestehEN aus ....' (identifiziere) - "u_req" statt P_AMOUNT
+// 1997/09/29   Feyaria
+//      Feuerball ist jetzt je nach erfolg unterschiedlich gross
+// 1997/10/18   Woody
+//      Bei 'identifiziere' auch Kaelte/Hitzeschutz anzeigen
+// 1997/10/24   Woody
+//      'schaetz' ist beim Gewicht etwas groeber
+// 1998/01/28   Woody
+//      caster bei Materialliste beruecksichtigen
+// 1998/03/02   Feyaria
+//      neue Spells: Wuergen, Faustschlag
+// 1998/06/21   Woody
+//      'ausweichen' kostenmaessig angepasst: 15 MP fix + 1 MP je ausweichen
+// 1998/10/20   Woody
+//      IsPlural() verwenden
+// 1999/01/29   Woody
+//      'blitz' versteht jetzt auch Parameter
+//
+
+#include <properties.h>
+#include <language.h>
+#include <attributes.h>
+#include <combat.h>
+#include <wizlevels.h>
+#include <new_skills.h>
+#include <npcmaster.h>
+#include <moredef.h>
+#include <moving.h>
+
+#define OBJ "/gilden/abenteurer/obj/"
+
+inherit "/std/spellbook";
+
+create() {
+  ::create();
+  SetProp(P_GLOBAL_SKILLPROPS,
+          ([SI_SPELLFATIGUE:2,              // 2 Sekunden kein neuer Spell
+            SI_SKILLLEARN:5,                // 0.05% pro 2 A_INT
+            OFFSET(SI_SKILLLEARN):10,       // plus 0.1% in jedem Fall
+            SI_SKILLLEARN_ATTRIBUTE: A_INT, // Int ist Learnattribut
+            ]));
+  AddSpell("blitz",3,2);
+  // AddSpell("licht",5,4);
+  AddSpell("identifiziere",12,6);
+  AddSpell("schaetz",5,8);
+  AddSpell("pfeil", 0,
+           ([SI_SKILLRESTR_LEARN:([P_LEVEL:11, SR_EXCLUDE_RACE:
+                ({"Oger", "Troll", "Ork", "Goblin"}) ]),
+             SI_SKILLLEARN:4,
+             OFFSET(SI_SKILLLEARN):9,
+             SI_SKILLRESTR_USE:([SR_FREE_HANDS:1]),
+             SI_SKILLDAMAGE:100,
+             OFFSET(SI_SKILLDAMAGE): 50,
+             SI_SKILLDAMAGE_TYPE:DT_MAGIC,
+             SI_SPELLFATIGUE: 4,
+             ]));
+  AddSpell("faustschlag",10,
+           ([SI_SKILLRESTR_LEARN:([P_LEVEL:11, SR_INCLUDE_RACE:
+                   ({"Oger", "Troll", "Ork", "Goblin"}) ]),
+             SI_SKILLLEARN:4,
+             OFFSET(SI_SKILLLEARN):9,
+             SI_SKILLRESTR_USE:([SR_FREE_HANDS:1]),
+             SI_SKILLDAMAGE:200,
+             SI_NOMAGIC:100,
+             SI_SKILLLEARN_ATTRIBUTE: A_STR,
+             SI_SKILLDAMAGE_TYPE:DT_BLUDGEON
+             ]));
+  AddSpell("werkzeug", 20,
+          ([SI_SKILLRESTR_LEARN: ([P_LEVEL: 12]),
+            SI_SKILLLEARN: 4,
+            OFFSET(SI_SKILLLEARN): 9,
+            SI_NOMAGIC: 100,
+            SI_SKILLLEARN_ATTRIBUTE: A_INT,
+            SI_PREPARE_MSG: "Du konzentrierst dich und fasst in den transdimensionalen Raum.\n",
+            SI_PREPARE_TIME: 6,
+            SI_PREPAREFUNC: "prep_ausruestungsvorteil",
+          SI_SPELLFUNC: "ausruestungsvorteil"]));
+  AddSpell("ausweichen", 15,
+           ([SI_SKILLRESTR_LEARN:([P_LEVEL:15]),
+             SI_SKILLLEARN_ATTRIBUTE: A_DEX
+             ]));
+  AddSpell("feuerball",20,
+           ([SI_SKILLRESTR_LEARN:([P_LEVEL:17, SR_EXCLUDE_RACE:
+                ({"Oger", "Troll", "Ork", "Goblin"}) ]),
+             SI_SKILLLEARN:3,
+             OFFSET(SI_SKILLLEARN):8,
+             SI_SKILLRESTR_USE:([SR_FREE_HANDS:2]), // 2 freie Haende noetig
+             SI_SKILLDAMAGE:300,                    // Schaden: random(300)...
+             OFFSET(SI_SKILLDAMAGE):100,            //     ...plus 100
+             SI_SKILLDAMAGE_TYPE:DT_FIRE,            // Damage Type: Fire
+             SI_SPELLFATIGUE: 2
+             ]));
+  AddSpell("wuergen",20,
+           ([SI_SKILLRESTR_LEARN:([P_LEVEL:17, SR_INCLUDE_RACE: ([
+                ({"Oger", "Troll", "Ork", "Goblin"})]) ]),
+             SI_SKILLLEARN:3,
+             OFFSET(SI_SKILLLEARN):8,
+             SI_SKILLRESTR_USE:([SR_FREE_HANDS:2]),
+             SI_NOMAGIC:100,
+             SI_SKILLLEARN_ATTRIBUTE: A_STR,
+             SI_SKILLDAMAGE:300,
+             OFFSET(SI_SKILLDAMAGE):100,
+             SI_SKILLDAMAGE_TYPE:DT_SQUEEZE,
+             SI_SPELLFATIGUE: 2
+             ]));
+  AddSpell("schnell",25,
+           ([SI_SKILLRESTR_LEARN:([P_LEVEL:20]),
+             SI_SKILLLEARN_ATTRIBUTE: A_DEX
+             ]));
+  AddSpell("saeurekugel",25,
+           ([SI_SKILLRESTR_LEARN:([P_LEVEL:25]),
+             SI_SKILLLEARN:2,
+             OFFSET(SI_SKILLLEARN):5,
+             SI_SKILLRESTR_USE:([SR_FREE_HANDS:2]),
+             SI_SKILLDAMAGE:350,
+             OFFSET(SI_SKILLDAMAGE):200,
+             SI_SKILLDAMAGE_TYPE:DT_ACID,
+             SI_PREPARE_TIME: 2,
+             SI_PREPARE_MSG: "Du beschwoerst eine Saeurekugel.\n",
+             SI_SPELLFATIGUE: 2
+             ]));
+
+  AddSpell("verbinde", 30,
+           ([
+            SI_SKILLRESTR_LEARN:([P_LEVEL: 29]),
+            SI_SKILLLEARN_ATTRIBUTE: A_DEX,
+            SI_SPELLFATIGUE: 6,
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:2])
+           ]));
+  AddSpell("zauberschild", 40,
+           ([
+            SI_SKILLRESTR_LEARN:([P_LEVEL: 33]),
+            SI_SKILLLEARN_ATTRIBUTE: A_INT,
+            SI_SPELLFATIGUE: 4,
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:1])
+           ]));
+  AddSpell("runenwaffe", 50,
+           ([SI_SKILLRESTR_LEARN: ([P_LEVEL: 37]),
+             SI_SKILLLEARN: 4,
+             OFFSET(SI_SKILLLEARN): 9,
+             SI_SKILLLEARN_ATTRIBUTE: A_INT,
+             SI_PREPARE_MSG: "Mit dem Finger beginnst du dir bekannte Runen auf deiner Waffe zu zeichen.\n",
+             SI_PREPARE_TIME: 6,
+             SI_SPELLFATIGUE: 4,
+             SI_PREPAREFUNC: "prep_runenwaffe",
+             SI_SPELLFUNC: "runenwaffe",
+             SI_SKILLRESTR_USE:([SR_FREE_HANDS:1])]));     
+  AddSpell("lagerfeuer", 35,
+             ([SI_SKILLRESTR_LEARN: ([P_LEVEL: 42]),
+               SI_SKILLLEARN_ATTRIBUTE: A_DEX,
+               SI_PREPARE_MSG: "Du schichtest ein kleines Lagerfeuer auf.\n",
+               SI_PREPARE_TIME: 8,
+               SI_SPELLFATIGUE: 6,
+               SI_PREPAREFUNC: "prep_lagerfeuer",
+               SI_SPELLFUNC: "lagerfeuer",
+               SI_SKILLRESTR_USE:([SR_FREE_HANDS:2])]));
+  AddSpell("reittier", 60,
+               ([SI_SKILLRESTR_LEARN: ([P_LEVEL: 46]),
+                 SI_SKILLLEARN_ATTRIBUTE: A_INT,
+                 SI_PREPARE_MSG: "Du stoesst einen hellen Pfiff aus.\n",
+                 SI_PREPARE_TIME: 4,
+                 SI_SPELLFATIGUE: 2,
+                 SI_PREPAREFUNC: "prep_reittier",
+                 SI_SPELLFUNC: "reittier",
+                 SI_SKILLRESTR_USE:([SR_FREE_HANDS:0])]));    
+  AddSpell("verhexe",20,
+                 ([SI_SKILLRESTR_LEARN:([P_LEVEL:50]),
+                   SI_SKILLLEARN:4,
+                   OFFSET(SI_SKILLLEARN):9,
+                   SI_SKILLRESTR_USE:([SR_FREE_HANDS:1]),
+                   SI_SKILLDAMAGE:350,
+                   SI_SKILLDAMAGE_TYPE:DT_UNHOLY,
+                   SI_PREPARE_TIME: 2,
+                   SI_SPELLFATIGUE: 2,
+                   SI_PREPAREFUNC: "prep_verhexe",
+                   SI_SPELLFUNC: "verhexe",
+                   SI_PREPARE_MSG: "Du deutest mit der linken Hand auf dein Opfer und sprichst: Var zul nug Par Hex!\n",
+                   ]));
+  AddSpell("heldenmut",30,
+              ([SI_SKILLRESTR_LEARN:([P_LEVEL:60, P_RACE: "Mensch"]),
+                SI_SKILLRESTR_USE:([SR_FREE_HANDS:0]),
+                SI_PREPARE_TIME: 6,
+                SI_SPELLFATIGUE: 4,
+                SI_PREPAREFUNC: "prep_heldenmut",
+                SI_SPELLFUNC: "heldenmut",
+                SI_PREPARE_MSG: "Du sammelst deinen Heldenmut in dir.\n",
+                ]));
+  AddSpell("trollregeneration", 20,
+              ([SI_SKILLRESTR_LEARN:([P_LEVEL:60, P_RACE: "Troll"]),
+                SI_SKILLRESTR_USE:([SR_FREE_HANDS:0]),
+                SI_PREPARE_TIME: 4,
+                SI_SPELLFATIGUE: 2,
+                SI_PREPAREFUNC: "prep_trollregeneration",
+                SI_SPELLFUNC: "trollregeneration",
+                SI_PREPARE_MSG: "Du versuchst deine Regeneration zu beschleunigen...\n",
+                ]));
+  AddSpell("fressgier",15,
+          ([SI_SKILLRESTR_LEARN:([P_LEVEL:50, P_RACE: "Oger"]),
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:0]),
+            SI_SKILLDAMAGE:450,
+            SI_SKILLDAMAGE_TYPE:DT_RIP,
+            SI_PREPARE_TIME: 2,
+            SI_SPELLFATIGUE: 2,
+            SI_PREPAREFUNC: "prep_fressgier",
+            SI_SPELLFUNC: "fressgier",
+            SI_PREPARE_MSG: BS("Du denkst an das schmackhafte Fleisch deines Opfers..."),
+            ]));
+  AddSpell("zwergenzorn", 33,
+    ([SI_SKILLRESTR_LEARN:([P_LEVEL:60, P_RACE: "Zwerg"]),
+      SI_SKILLRESTR_USE:([SR_FREE_HANDS:0]),
+      SI_PREPARE_TIME: 2,
+      SI_SPELLFATIGUE: 4,
+      SI_PREPAREFUNC: "prep_zwergenzorn",
+      SI_SPELLFUNC: "zwergenzorn",
+      SI_PREPARE_MSG: "Du sammest Wut, heiss wie Magma, in deiner Brust.\n",
+      ]));
+}
+
+// fuer 'schnell' ne andere Failmsg, wenns total daneben geht
+
+nosave int total_fail;
+
+void Misserfolg(object caster, string spell, mapping sinfo)
+{
+  int old_abil;
+  
+  if (!total_fail)
+    write("Der Zauberspruch ist missglueckt.\n");
+  total_fail = 0;  // gleich zuruecksetzen
+  old_abil = sinfo[SI_SKILLABILITY];
+  Learn(caster, spell, sinfo);
+  sinfo=caster->QuerySkill(spell);
+  if (old_abil < (mappingp(sinfo) ? sinfo[SI_SKILLABILITY] : sinfo))
+    write("Du lernst aus Deinem Fehler.\n");
+  else
+    write( "Leider lernst Du nicht aus Deinem Fehler.\n" );
+
+  if ( (spell == "feuerball") && !random(4) &&
+       !sizeof(caster->QueryArmours(AT_GLOVE)) )
+  {
+    write("Du verbrennst Dir zu allem Ueberfluss auch noch die Haende!\n");
+    caster->Defend(50+random(20), DT_FIRE, ([ SP_SHOW_DAMAGE:0 ]), caster);
+  }
+  else if ( (spell == "saeurekugel") && !random(3) &&
+       !sizeof(caster->QueryArmours(AT_GLOVE)) )
+  {
+    write("Du veraetzt Dir zu allem Ueberfluss auch noch die Haende!\n");
+    caster->Defend(80+random(40), DT_ACID, ([ SP_SHOW_DAMAGE:0 ]), caster);
+  }
+}
+
+
+// jetzt die Spells
+
+int schaetz(object caster, mapping sinfo)
+{
+   object victim;
+   int hpdiff, wcdiff, acdiff;
+   int hp, vhp, wc, vwc, ac, vac, gen, val;
+   string result;
+   string vname, vnamegen;
+
+   victim=FindVictim(sinfo[SI_SKILLARG],caster,
+                           "Wen oder was willst Du denn einschaetzen?\n");
+   if (!victim)
+     return 0;
+   if (SpellSuccess(caster,sinfo)<=0)
+      return MISSERFOLG;
+
+   if (!living(victim))
+   {
+     result = sprintf("Du schaetzt %s ab und kommst zu folgendem Schluss:\n",
+                      victim->name(WEN));
+     if (val = victim->QueryProp(P_VALUE))
+       result += sprintf("%s ha%s einen Wert von %d Muenze%s.\n",
+                      capitalize(victim->name(WER,1)),
+                      (victim->IsPlural()) ?
+                        "ben" : "t",
+                      val, (val==1 ? "" : "n"));
+     else
+       result += sprintf("%s %s voellig wertlos...\n",
+                      capitalize(victim->name(WER,1)),
+                      (victim->IsPlural()) ?
+                        "sind" : "ist");
+
+     if (victim->IsUnit())
+       val = victim->QueryProp(P_WEIGHT);
+     else
+       val = victim->QueryProp(P_TOTAL_WEIGHT);
+
+     // ab 6 kg nur mehr auf 1 kg genau
+     if ( (val >= 6000) || (val > (3000+100*caster->QueryProp(P_LEVEL))) )
+       vname = "in etwa "+((val+500)/1000)+" Kilogramm";
+     else
+     {
+       if (val < 100)
+         vname = "so gut wie nichts";
+       else if (val < 950)
+         vname = "schaetzungsweise "+((val+50)-(val+50)%100)+" Gramm";
+         // vname=sprintf("%.1f",to_float(val)/1000);
+       else
+       {
+         if (val >= 1500)
+           val = val+random(100)-random(100);   // ein wenig random :)
+         if (val >= 2000)
+           val=(val+250)-(val+250)%500;
+         else
+           val=(val+125)-(val+125)%250;
+         vname = "ungefaehr "+
+           ({"","ein","zwei","drei","vier","fuenf","sechs"})[val/1000]+
+           ({"","einviertel","einhalb","dreiviertel"})[(val%1000)/250]+
+           " Kilogramm";
+       }
+     }
+
+     result += sprintf("%s wieg%s %s.\n",
+         capitalize(victim->QueryPronoun()),
+         (victim->IsPlural()) ? "en" : "t", vname);
+
+     write (result);
+     return ERFOLG;
+   }
+
+   hp = caster->QueryProp(P_HP);    vhp = victim->QueryProp(P_HP);
+   wc = caster->QueryProp(P_TOTAL_WC);  vwc = victim->QueryProp(P_TOTAL_WC);
+   ac = caster->QueryProp(P_TOTAL_AC);  vac = victim->QueryProp(P_TOTAL_AC);
+   hpdiff = hp - vhp;
+   wcdiff = wc - vwc;
+   acdiff = ac - vac;
+   vname = victim->name(WER, 1);
+   vnamegen = victim->name(WESSEN, 1);
+   gen = victim->QueryProp(P_GENDER);
+
+   if (hpdiff > 2*vhp)
+      result = "Du bist " + victim->name(WEM, 1) + " haushoch ueberlegen.\n";
+   else if (hpdiff > vhp)
+      result = "Du bist viel staerker als " + vname + ".\n";
+   else if (hpdiff > vhp/5)
+      result = "Du bist staerker als " + vname + ".\n";
+   else if (-hpdiff > 2*hp)
+      result = capitalize(vname) + " ist Dir haushoch ueberlegen.\n";
+   else if (-hpdiff > hp)
+      result = capitalize(vname) + " ist viel staerker als Du.\n";
+   else if (-hpdiff > hp/5)
+      result = capitalize(vname) + " ist staerker als Du.\n";
+   else
+      result = capitalize(vname) + " ist etwa gleich stark wie Du.\n";
+   write(result);
+
+   if (acdiff > 2*vac)
+      result = "Deine Ruestung ist unglaublich viel besser als die " 
+     + vnamegen + ".\n";
+   else if (acdiff > vac)
+      result = "Deine Ruestung ist viel besser als die " + vnamegen + ".\n"; 
+   else if (acdiff >vac/5)
+      result = "Deine Ruestung ist besser als die " + vnamegen + ".\n";
+   else if (-acdiff > 2*ac)
+      result = "Die Ruestung " + vnamegen 
+     + " ist unglaublich viel besser als Deine.\n";
+   else if (-acdiff > ac)
+      result = "Die Ruestung " + vnamegen + " ist viel besser als Deine.\n";
+   else if (-acdiff > ac/5)
+      result = "Die Ruestung " + vnamegen + " ist besser als Deine.\n";
+   else
+      result = "Eure Ruestungen sind etwa gleich gut.\n";
+   write(result);
+
+   if (wcdiff > 2*vwc)
+      result = "Deine Waffe ist eigentlich zu gut fuer diesen Gegner.\n";
+   else if (wcdiff > vwc)
+      result = "Deine Waffe ist viel besser als die " +vnamegen + ".\n";
+   else if (wcdiff > vwc/5)
+      result = "Deine Waffe ist besser als die " +vnamegen + ".\n";
+   else if (-wcdiff > 2*wc)
+      result = "Die Waffe " + vnamegen 
+     + " laesst Deine ganz mickrig aussehen.\n";
+   else if (-wcdiff > wc)
+      result = "Die Waffe " + vnamegen + " ist viel besser als Deine.\n";
+   else if (-wcdiff > wc/5)
+      result = "Die Waffe " + vnamegen + " ist besser als Deine.\n";
+   else
+      result = "Eure Waffen sind etwa gleich gut.\n";
+
+  result += capitalize(victim->QueryPronoun(WER) || "es");
+  if ((val = victim->QueryProp(P_ALIGN)) <= -1000)
+    result += " ist von satanischer Gesinnung.\n";
+  else if (val <= -200)
+    result += " ist von boeser Gesinnung.\n";
+  else if (val <= -40)
+    result += sprintf(" ist ein%s unfreundliche%s Zeitgenoss%s.\n",
+        (gen == FEMALE ? "e" : ""), (gen == FEMALE ? "" : "r"),
+        (gen == FEMALE ? "in" : "e") );
+  else if (val <= 40)
+    result += " sieht die Welt mit neutralen Augen.\n";
+  else if (val <= 100)
+    result += " ist eigentlich ganz nett.\n";
+  else if (val <= 200)
+    result += " ist ziemlich nett.\n";
+  else if (val < 1000)
+    result += " ist von ungewoehnlich guter Gesinnung.\n";
+  else
+    result += " strahlt eine gewisse Heiligkeit aus.\n";
+
+  if ((val=NPCMASTER->QueryScore(victim)) == NPC_QUEUED)
+    result += "Ob "+victim->QueryPronoun(WER)+" einen Erstkillerpunkt wert "
+      "ist, ist noch unsicher.\n";
+  else if (val>9)  // 10..
+    result += capitalize(victim->QueryPronoun(WER))+" ist eine ganze Menge "
+      "Erstkillerpunkte wert.\n";
+  else if (val>4)  // 5..9
+    result += capitalize(victim->QueryPronoun(WER))+" ist wohl einige "
+      "Erstkillerpunkte wert.\n";
+  else if (val>2)  // 3..4
+    result += capitalize(victim->QueryPronoun(WER))+" ist wohl mehr als nur "
+      "einen Erstkillerpunkt wert.\n";
+  else if (val>0)  // 1..2
+    result += capitalize(victim->QueryPronoun(WER))+" ist zumindest "
+      "einen Erstkillerpunkt wert.\n";
+  else if (victim->QueryProp(P_NO_SCORE))
+    result += capitalize(victim->QueryPronoun(WER))+" ist bestimmt "
+      "keinen Erstkillerpunkt wert.\n";
+  if (val>=0 && IS_LEARNING(caster))
+    result += capitalize(victim->QueryPronoun(WER))+" ist genau "+
+      val+" Erstkillerpunkt"+(val!=1?"e":"")+" wert.\n";
+
+   write(result);
+   return ERFOLG;
+}
+
+
+int identifiziere(object caster, mapping sinfo)
+{
+  object ob;
+  string *fi;
+  string result;
+  mixed mat;
+  int env;
+
+  if (env = sinfo[SI_SKILLARG] == "umgebung")
+    ob = environment(caster);
+  else
+    ob = FindVictim(sinfo[SI_SKILLARG], caster,
+                    "Was moechtest Du identifizieren?\n");
+
+  if (!ob)
+    return 0;
+
+   if (SpellSuccess(caster,sinfo)<=0)
+    return MISSERFOLG;
+  if (result=ob->info(caster) || ob->QueryProp(P_INFO))
+    printf("Du identifizierst %s.\n%s",
+        ob->name(WEN, 1) || (env ? "Deine Umgebung" : "diesen Gegenstand"),
+        result);
+  else
+    printf("Du kannst nichts besonderes an %s erkennen.\n",
+           (ob->name(WEM, 1) ||
+            (env ? "Deiner Umgebung" : "diesem Gegenstand")));
+
+  /*
+   *  Materialerkennung
+   */
+  if ( /* caster->QueryProp(P_LEVEL)>=10 && */  // keine Levelbeschr. im SL
+      (mat=ob->QueryProp(P_MATERIAL)) && (pointerp(mat)))
+  {
+    // 'lebende Materie' bei NPCs kommt nicht so dolle, aber livings
+    // sollte man schon identifizieren koennen, wg. enable_commands()
+    // (Mupfel@AL)
+    // Anm. Woody: Heisst im SL MAT_MISC_LIVING
+
+    if (living(ob))
+      mat -= ({ MAT_MISC_LIVING });
+
+    if (sizeof(mat))
+      write(break_string(sprintf("%s besteh%s aus %s.",
+          capitalize(
+            ob->name(WER,1) || (env ? "Deine Umgebung" : "Dieser Gegenstand")),
+          ob->IsPlural() ? "en" : "t",
+          ob->MatList(WEM) || "unbekanntem Material"), 78));
+  }
+  else if (mappingp(mat) && sizeof(mat-([MAT_MISC_LIVING,MAT_MISC]) ))
+  {
+    write(break_string(sprintf("%s besteh%s aus %s.",
+        capitalize(
+          ob->name(WER,1) || (env ? "Deine Umgebung" : "Dieser Gegenstand")),
+        ob->IsPlural() ? "en" : "t",
+        ob->MaterialList(WEM, caster) || "unbekanntem Material"), 78));
+  }
+/*
+    if (matlist=ob->MatList(WEM))
+      printf(break_string("%s besteht aus %s.", 78),
+           capitalize(ob->name(WER,1)), matlist);
+    else
+      printf("Du kannst das Material leider nicht identifizieren.\n");
+*/
+
+  /*
+   *  Temperaturschutzerkennung
+   */
+  if (mappingp(mat=ob->QueryProp(P_TEMPERATURE_PROTECTION)))
+  {
+    int c,h,pl;
+    string s;
+
+    s = ob->name(WER,1) || (env ? "Deine Umgebung" : "Dieser Gegenstand"),
+    s = capitalize(s);
+    c = mat[T_COLD_PROT];
+    h = mat[T_HEAT_PROT];
+    pl = ob && ob->IsPlural();
+
+    if (c) {
+      s += sprintf(" %s bei Kaelte ", pl ? "stellen" : "stellt");
+      if (c < -10) s+="eine enorme Belastung";
+      else if (c < -5) s+="eine ziemliche Belastung";
+      else if (c < -2) s+="eine spuerbare Belastung";
+      else if (c < -1) s+="eine leichte Belastung";
+      else if (c < 0)  s+="eine geringe Belastung";
+      else if (c > 10) s+="einen enormen Schutz";
+      else if (c > 5)  s+="einen sehr guten Schutz";
+      else if (c > 2)  s+="einen guten Schutz";
+      else if (c > 1)  s+="einen ganz brauchbaren Schutz";
+      else s+="einen eher geringen Schutz";
+      s+=" dar"+(h ? " und" : "");
+    }
+    if (h) {
+      if (h < -10)
+        s += sprintf(" %s Dich%s bei Hitze enorm stark",
+            pl ? "belasten" : "belastet", (c<-10 ? " auch" : "") );
+      else if (h < -5)
+        s += (pl ? " bringen" : " bringt") +
+          " Dich bei Hitze schnell zum Schwitzen";
+      else if (h < -2)
+        s += (pl ? " lassen" : " laesst") +
+          " Dich bei Hitze leicht schwitzen";
+      else if (h < -1)
+        s += (pl ? " lassen" : " laesst") +
+          " Dich bei Hitze leichter schwitzen";
+      else if (h < 0)
+        s += (pl ? " sind" : " ist") +
+          " bei Hitze eine leichte Belastung fuer Dich";
+      else if (h > 10)
+        s += (pl ? " schuetzen" : " schuetzt") +
+          " Dich unglaublich gut vor Hitze";
+      else if (h > 5)
+        s += (pl ? " bieten" : " bietet") +
+          " Dir einen beachtlichen Hitzeschutz";
+      else if (h > 2)
+        s += (pl ? " schuetzen" : " schuetzt") +
+          " Dich recht gut vor Hitze";
+      else if (h > 1)
+        s += (pl ? " schuetzen" : " schuetzt") +
+          " Dich einigermassen vor Hitze";
+      else
+        s += (pl ? " schuetzen" : " schuetzt") +
+          " Dich ein wenig vor Hitze";
+    }
+    if (c || h) {
+      write(break_string(s+".",78));
+    }
+  }
+
+  return ERFOLG;
+}
+
+/* *** Im SL disabled (wozu gibt's Fackeln ???)
+int
+licht(object caster, mapping sinfo) 
+{
+   object l;
+
+   printf("Du machst eine magische Bewegung.\n");
+   say(sprintf("%s macht eine magische Bewegung.\n",
+	       capitalize(caster->name())));
+
+   if (SpellSuccess(caster,sinfo)<=0)
+      return MISSERFOLG;
+
+   l = clone_object("/obj/misc/lichtkugel");
+   l->move(this_player());  // Gewicht 0
+   l->start_remove(caster->QueryProp(P_LEVEL)*20);
+   printf("Wie aus dem Nichts erscheint eine leuchtende Kugel.\n");
+
+   return ERFOLG;
+}
+*/
+
+int blitz(object caster, mapping sinfo) 
+{
+  object l, env, ob;
+  string str, txt;
+  int success;
+
+  printf("Du konzentrierst Dich auf Deine Umgebung.\n");
+  say(sprintf("%s versinkt fuer einen Augenblick in tiefster Konzentration.\n", 
+               caster->Name()));
+
+  success = SpellSuccess(caster,sinfo);
+  if (success<=0)
+     return MISSERFOLG;
+
+  env=environment(caster);
+  printf("Fuer einen kurzen Augenblick siehst Du alles ganz klar.\n");
+  if (str=sinfo[SI_SKILLARG])
+  {
+    if ((ob=present(str,env)) || (ob=present(str,caster)))
+      if (!ob->QueryProp(P_INVIS) && ob->short() && ob->long()) {
+        write("Du erkennst "+ob->name(WEN)+":\n"+ob->long());
+        return ERFOLG;
+      }
+    if ((txt=env->GetReadDetail(str, caster->QueryProp(P_RACE))) ||
+        (txt=env->GetDetail(str, caster->QueryProp(P_RACE)))) {
+      write(txt);
+      return ERFOLG;
+    }
+    write("Nur das, was Du suchtest, findest Du nicht.\n");
+    return ERFOLG;
+  }
+  else
+  {
+    printf( env->int_long(caster, caster) ||
+            "Irgendwie kannst Du nichts erkennen, "
+            "so sehr Du dich auch anstrengst.\n" );
+  }
+
+  if(success > 6000 && !objectp(present("\nab_lightob", caster))) {
+    write(BS("Ein kleiner Lichtfunkte bleibt zurueck und erhellt die Umgebung fuer dich."));
+    say(BS("Ein kleiner Lichtfunkte erscheint bei "+caster->name(WEM)+"."));
+    ob = clone_object(OBJ "lightob");
+    if(ob->move(caster, M_NOCHECK) == 1) {
+      ob->start(caster, sinfo[SI_SKILLABILITY], success);
+    } else {
+      destruct(ob);
+    }
+
+  }
+
+  return ERFOLG;
+}
+
+int ausweichen(object caster, mapping sinfo)
+{
+  mixed h;
+  int suc,dauer;
+
+  if (!caster->InFight())
+  {
+    write("Aber Du kaempfst doch gar nicht!\n");
+    return 0;
+  }
+  if (h=caster->QueryProp(P_TMP_DEFEND_HOOK))
+  {
+    if ((h[1]==this_object()) && (h[2]=="ausgewichen")) {
+      if (h[0] >= time())
+        return write("Noch mehr ausweichen kannst Du nicht.\n"), 0;
+    } else
+      return write("Irgendwie klappt das gerade nicht.\n"), 0;
+  }
+  if ((suc=SpellSuccess(caster,sinfo)) <= 0)
+    return MISSERFOLG;
+
+  dauer = 2 + caster->QueryAttribute(A_DEX)/6 + (suc/5000);
+  caster->SetProp(P_TMP_DEFEND_HOOK,
+      ({ time()+dauer, this_object(), "ausgewichen" }));
+  write("Du gehst ein wenig in Deckung.\n");
+  call_out("ausweichen_ende", dauer, caster);
+  return ERFOLG;
+}
+
+public void ausweichen_ende(object caster) {
+  tell_object(caster, BS("Du weichst nun nicht mehr aus."));
+  return;
+}
+
+#define AUSWEICH_KOSTEN 1
+
+mixed ausgewichen(int dam, mixed dam_type, mixed spell, object enemy)
+{
+  object caster;
+  caster=previous_object();
+  if (sizeof(filter_array(dam_type,PHYSICAL_DAMAGE_TYPES)))
+  {
+    if (caster->QueryProp(P_SP) < AUSWEICH_KOSTEN) {
+      tell_object(caster,
+        "Du kannst den Angriffen Deines Gegners nicht laenger ausweichen.\n");
+      caster->SetProp(P_TMP_DEFEND_HOOK, 0);
+      return ({ dam, dam_type, spell, enemy });
+    }
+    caster->AddSp(-AUSWEICH_KOSTEN);
+    dam /= 3;
+    if (dam < 20)
+      tell_object(caster, "Du weichst gekonnt aus.\n");
+    else
+      tell_object(caster, "Du weichst ein wenig aus.\n");
+    return ({ dam, dam_type, spell, enemy });
+  }
+  tell_object(caster,
+      "Es gelingt Dir nicht, den Angriffen Deines Gegners auszuweichen.\n");
+  return ({ dam, dam_type, spell, enemy });
+}
+
+int feuerball(object caster, mapping sinfo) {
+  object victim, *pv;
+  int hands, suc, nr;
+  string vnw, feuertext;
+  
+  victim = FindEnemyVictim(
+      sinfo[SI_SKILLARG], caster,
+      "Auf wen willst Du einen Feuerball schleudern?\n");
+
+  if (!victim)
+    return 0;
+   if ( (suc=SpellSuccess(caster,sinfo)) <=0)
+    return MISSERFOLG;
+
+  nr = 1;
+  if( suc<2000 )
+  {
+    feuertext = "ein kleines Feuerbaellchen";
+    sinfo[SI_SKILLDAMAGE] -= 100;
+  }
+  else if( suc<6000 ) {
+    nr = 2;
+    feuertext = "einen Feuerball";
+  }
+  else if( suc<8000 )
+  {  
+    nr = 3;
+    feuertext = "einen grossen Feuerball";
+    sinfo[SI_SKILLDAMAGE] += 40;
+  }  
+  else
+  {   
+    nr = 4; 
+    feuertext = "einen gewaltig grossen Feuerball";
+    sinfo[SI_SKILLDAMAGE] += 100;
+  }
+  vnw = victim->name(WEM, 2);
+  say(sprintf("%s wirft "+feuertext+" nach %s.\n", 
+              capitalize(caster->name()), vnw), victim);
+  printf("Du wirfst "+feuertext+" nach %s.\n", vnw);
+  tell_object(victim, sprintf("%s wirft "+feuertext+" nach Dir.\n",
+                              capitalize(caster->name())));
+
+  TryDefaultAttackSpell(victim,caster,sinfo, ([SP_NAME:"Feuerball",SP_SHOW_DAMAGE:1]));
+  pv = caster->PresentEnemies();
+  pv -= ({victim});
+  while(--nr>0 && sizeof(pv) > 0) {
+    victim = pv[0];
+    pv -= ({victim});
+    if(objectp(victim)) TryDefaultAttackSpell(victim,caster,sinfo, ([SP_NAME:"Feuerball",SP_SHOW_DAMAGE:1])); 
+  }
+  return ERFOLG;
+}
+
+int pfeil(object caster, mapping sinfo) {
+  object victim;
+  int hands, nr, success;
+  string vn, vnw, cn, *nrstr;
+
+
+  victim = FindEnemyVictim(
+      sinfo[SI_SKILLARG], caster,
+      "Nach wem willst Du einen magischen Pfeil werfen?\n");
+
+  if (!victim)
+    return 0;
+
+  if(caster->QueryProp(P_SP) < 10) {
+    write("Du hast nicht genuegend Magiepunkte!\n");
+    return 0;
+  }
+
+  caster->AddSp(-5);
+
+  success = SpellSuccess(caster,sinfo);
+  if (success <= 0)
+    return MISSERFOLG;
+
+  cn = capitalize(caster->name());
+  vnw = victim->name(WEN, 2);
+
+  nr = sinfo[SI_SKILLABILITY] / 3333;
+  if(success > 8000) nr++;
+  if(success >= MAX_ABILITY) nr++;
+
+  nrstr = ({"einen", "zwei", "drei", "vier", "fuenf"});
+
+  say(sprintf("%s feuert %s magische%s Pfeil%s auf %s ab.\n", cn, nrstr[nr-1], nr>1?"":"n", nr>1?"e":"", vnw), victim);
+  write(sprintf("Du feuerst %s magische%s Pfeil%s auf %s ab.\n", nrstr[nr-1], nr>1?"":"n", nr>1?"e":"", vnw));
+  tell_object(victim,sprintf("%s feuert einen magischen Pfeil auf Dich ab.\n",
+                             cn));
+  
+  for(;nr>0;nr--) {
+    if(caster->QueryProp(P_SP) < 5) {
+      write(BS("Deine Magie reicht nicht aus fuer einen weiteren Pfeil!"));
+      break;
+    }
+    if(!objectp(victim)) break;
+    TryDefaultAttackSpell(victim, caster, sinfo, ([SP_NAME:"Pfeil",SP_SHOW_DAMAGE:1]));
+    caster->AddSp(-5);
+  }
+
+  return ERFOLG;
+}
+
+int schnell(object caster, mapping sinfo) {
+  int dauer, erfolg;
+
+  erfolg = SpellSuccess(caster,sinfo);
+  if (-2000 <= erfolg && erfolg<=0)
+    return MISSERFOLG;
+
+  dauer = caster->QueryAttribute(A_DEX) + random(sinfo[SI_SKILLABILITY]/1000);
+  if (erfolg < -2000)
+  {
+    total_fail = 1;
+    write("Der Spruch ging total daneben! Alles wird so zaehhh...\n");
+    caster->ModifySkillAttribute(caster,SA_SPEED,50,dauer);
+    return MISSERFOLG;
+  }
+  if (erfolg > 6000)
+  {
+    write("Du fuehlst Dich ploetzlich sehr viel schneller.\n");
+    caster->ModifySkillAttribute(caster,SA_SPEED,300,dauer/2);
+  }
+  else
+  {
+    write("Du fuehlst Dich ploetzlich deutlich schneller.\n");
+    caster->ModifySkillAttribute(caster,SA_SPEED,200,dauer);
+  }
+
+  return ERFOLG;
+}
+
+int wuergen(object caster, mapping sinfo) 
+{
+  object victim;
+  int hands, suc;
+  string vnw;
+  
+  victim = FindEnemyVictim(sinfo[SI_SKILLARG], caster,"Wen willst Du wuergen?\n");
+
+  if (!victim)
+    return 0;
+   if ( (suc=SpellSuccess(caster,sinfo)) <=0)
+    return MISSERFOLG;
+
+  vnw = victim->name(WEN, 2);
+  say(sprintf("%s wuergt %s.\n", 
+              capitalize(caster->name()), vnw), victim);
+  printf("Du wuergst %s.\n", vnw);
+  tell_object(victim, sprintf("%s wuergt Dich.\n",
+                              capitalize(caster->name())));
+
+  sinfo[SI_SKILLDAMAGE]+=caster->QueryAttribute(A_STR)*3;
+  sinfo[OFFSET(SI_SKILLDAMAGE)]+=(suc+sinfo[SI_SKILLABILITY])/300;
+  TryDefaultAttackSpell(victim,caster,sinfo,([SP_NAME:"Wuergen",SP_SHOW_DAMAGE:1]));
+  if(objectp(victim) && suc > 7000 && victim->QuerySkillAttribute(SA_SPEED) >= 100) {
+    tell_room(ENV(victim), BS(victim->Name(WER)+" ist noch ganz benommen nach diesem Wuergeangriff."));
+    victim->ModifySkillAttribute(caster, SA_SPEED, 50, (suc-7000)/500);
+  }
+  return ERFOLG;
+}
+
+int faustschlag(object caster, mapping sinfo) 
+{
+  object victim;
+  int hands,suc;
+  string vn, vnw, cn;
+
+  victim = FindEnemyVictim(
+      sinfo[SI_SKILLARG], caster,
+      "Wem willst Du einen Faustschlag versetzen?\n");
+
+  if (!victim)
+    return 0;
+  if (suc=SpellSuccess(caster,sinfo)<=0)
+    return MISSERFOLG;
+
+  cn = capitalize(caster->name());
+  vnw = victim->name(WEM, 2);
+  say(sprintf("%s gibt %s einen maechtigen Faustschlag.\n",cn, vnw),
+      victim);
+  printf("Du gibst %s einen maechtigen Faustschlag.\n", vnw);
+  tell_object(victim,sprintf("%s gibt Dir einen maechtigen Faustschlag.\n",
+                             cn));
+  sinfo[SI_SKILLDAMAGE]+=caster->QueryAttribute(A_STR)*2;
+  sinfo[OFFSET(SI_SKILLDAMAGE)]=(suc+sinfo[SI_SKILLABILITY])/500;
+  TryDefaultAttackSpell(victim,caster,sinfo,([SP_NAME:"Faustschlag",SP_SHOW_DAMAGE:1]));
+  if(objectp(victim) && suc > 6000) {
+    tell_room(ENV(victim), BS(victim->Name(WER)+" taumelt nach dem Faustschlag betaeubt herum."));
+    victim->SetProp(P_DISABLE_ATTACK, (suc-6000)/1000);
+    victim->SetProp(P_DISABLE_SPELLS, (suc-6000)/1000);
+  }
+  return ERFOLG;
+}
+
+mapping prep_ausruestungsvorteil(object caster, mapping sinfo) {
+  string arg;
+
+  arg = sinfo[SI_SKILLARG];
+  if(!stringp(arg) || arg == "") {
+    write(BS("Welche Ausruestung benoetigst du?"));
+    return 0;
+  }
+
+  if(arg != "seil" && arg != "schaufel" && arg != "angel" && arg != "holzstock") {
+    write(BS("Du kannst nur  folgende Gegenstaende: ein Seil, eine Schaufel, eine Holustock oder eine Angel"));
+    return 0;
+  }
+
+  say(BS(caster->Name(WER)+" steckt die Hand in ein Dimensionsloch und wuehlt."));
+
+  return sinfo;
+}
+
+int ausruestungsvorteil(object caster, mapping sinfo) {
+  string was;
+  object ob;
+  int success, dauer;
+
+  success = SpellSuccess(caster,sinfo);
+  if(success <= 0) {
+    write("Du wuehlst im Dimensionsspeicher der Abenteurer, findest aber nichts.\n");
+    return MISSERFOLG;
+  }
+
+  switch(sinfo[SI_SKILLARG]) {
+    case "seil": was = "/obj/seil"; break;
+    case "schaufel": was = "/obj/schaufel"; break;
+    case "angel": was = "/p/weapon/spear/angel"; break;
+    case "holzstock": was = "/p/weapon/club/holzstock"; break;
+    default:
+      write(BS("Sowas findest du nicht!"));
+      return 0;
+      break;
+  }
+
+  ob = clone_object(was);
+  if(ob->move(caster) != 1) {
+    write("Du findest das gesuchte Objekt, kannst es aber gerade nicht targen.\n");
+    destruct(ob);
+  } else {
+    write(BS("Du ziehst "+ob->name(WEN)+" aus dem Dimensionsloch hervor.\n"));
+    say(BS(caster->Name(WER)+" zieht "+ob->name(WEN)+" aus einem Dimensionsloch hervor!\n"));
+    ob->SetProp(P_NODROP, 1);
+    ob->SetProp(P_NOSELL, 1);
+    ob->SetProp(P_NEVERDROP, 1);
+    ob->SetProp(P_LONG, ob->QueryProp(P_LONG)+"\nDieses Objekt wurde herbeigerufen.");
+    dauer = sinfo[SI_SKILLABILITY]/1000 + success/100 + caster->QueryAttribute(A_INT);
+    call_out("remove_equipment", dauer, ob, caster);
+  }
+
+  return ERFOLG;
+}
+
+public void remove_equipment(object ob, object caster) {
+  if(!objectp(ob)) return;
+  tell_object(caster, BS(ob->Name(WER)+" loest sich mit einem leisen Zischen wieder auf."));
+  ob->remove(1);
+  return;
+}
+
+public int verbinde(object caster, mapping sinfo) {
+  object target, ob;
+  int success;
+
+  target = FindLivingVictim(sinfo[SI_SKILLARG], caster, "Wen willst du verbinden?\n");
+  if(!objectp(target)) return 0;
+  if(target->QueryProp(P_HP) >= target->QueryProp(P_MAX_HP)) {
+    write(BS("Aber "+target->name(WER)+" hat gar keine Wunden!"));
+    return 0;
+  }
+
+  success = SpellSuccess(caster, sinfo);
+  if(success <= 0) return MISSERFOLG;
+
+  if(target == caster) {
+    tell_object(caster, BS("Du beginnst deine Wunden zu verbinden."));
+    tell_room(ENV(caster), BS(caster->Name(WER)+" beginnt "+caster->QueryPossPronoun(FEMALE, WEN)+" Wunden zu verbinden."), ({caster, target}));
+  } else {
+    tell_object(caster, BS("Du beginnst "+target->name(WESSEN)+" Wunden zu verbinden."));
+    tell_room(ENV(caster), BS(caster->Name(WER)+" beginnt "+target->name(WESSEN)+" Wunden zu verbinden."), ({caster, target}));
+    tell_object(target, BS(caster->Name(WER)+" beginnt deine Wunden zu verbinden."));
+  }
+
+  ob = clone_object(OBJ "healing");
+  ob->move(caster);
+  ob->start(target, caster, sinfo[SI_SKILLABILITY], success);
+  return ERFOLG;
+}
+
+public int zauberschild(object caster, mapping sinfo) {
+  object ob;
+  int success, dauer, schutz;
+
+  if(present("\nab_zauberschild", caster)) {
+    write(BS("Du hast bereits einen Zauberschild!"));
+    return 0;
+  }
+
+  write(BS("Du streckst die Hand aus und sprichst die magischen Worte: Myth! Ful! Zak!"));
+  say(BS(caster->Name(WER)+" streckt die linke Hand aus ind spricht die magischen Worte: Myth! Ful! Zak!"));
+
+  success = SpellSuccess(caster, sinfo);
+  if(success <= 0) {
+    tell_room(ENV(caster), BS("Einen kurzen Moment bildet sich ein schimmernder Schild, der aber sofort wieder zusammenbricht."));
+    return MISSERFOLG;
+  }
+
+  ob = clone_object(OBJ "zauberschild");
+  if(ob->move(caster) != 1) {
+    write(BS("Der Zauberschild kann sich nicht manifestieren!"));
+    destruct(ob);
+    return 0;
+  }
+  write(BS("Ein magisch schimmernder Zauberschild bildet sich vor dir."));
+  say(BS("Ein magisch schimmernder Zauberschild bildet sich vor "+caster->name(WEM)));
+
+  dauer = caster->QueryProp(A_INT) + sinfo[SI_SKILLABILITY] / 100 + success / 200 + caster->QueryProp(P_LEVEL);
+  schutz = sinfo[SI_SKILLABILITY] / 500 + success / 1000;
+  ob->start(caster, dauer, schutz);
+  return ERFOLG;
+}
+
+public mapping prep_runenwaffe(object caster, mapping sinfo) {
+  if(!objectp(caster->QueryProp(P_WEAPON))) {
+    write(BS("Du musst eine Waffe gezueckt haben um sie zu verzaubern!"));
+    return 0;
+  }
+
+  if(objectp(present("\nab_runenwaffe", caster))) {
+    write(BS("Du hast bereits eine verzauberte Waffe."));
+    return 0;
+  }
+
+  tell_room(ENV(caster), BS(caster->Name(WER)+" zeichnet mit den Fingern Runen auf "+caster->QueryProp(P_WEAPON)->name(WEN)+"."), ({caster}));
+
+  return sinfo;
+}
+
+public int runenwaffe(object caster, mapping sinfo) {
+  object rw, weapon;
+  int success, wc, dauer;
+  string *runes, wort;
+
+  if(!objectp(weapon=caster->QueryProp(P_WEAPON))) {
+    write(BS("Du musst eine Waffe gezueckt haben um sie zu verzaubern!"));
+    return 0;
+  }
+  success = SpellSuccess(caster, sinfo);
+  if(success <= 0) {
+    write(BS("Keine der Runen leuchtet auf. Nichts passiert."));
+    say(BS("Nichts passiert."));
+    return MISSERFOLG;
+  }
+
+  runes = ({"Ful", "Myth", "Zak", "Pal", "Ad", "In", "Ber", "Ser", "Ker", "Bal", "Rog", "Lea",
+            "Orc", "Esz", "Tar", "Nec", "Ohm", "An", "Io", "Gul", "Ral", "Pul", "Zod", "Um", 
+            "El", "Rum"});
+
+  wort = runes[random(sizeof(runes))];
+  if(success > 6000) wort += runes[random(sizeof(runes))];
+  if(success > 8000) wort += runes[random(sizeof(runes))];
+  if(success > 9500) wort += runes[random(sizeof(runes))];
+
+  tell_room(ENV(caster), BS("Ploetzlich leuchtet das Runenwort '"+wort+"' auf "+weapon->name(WEM)+" auf!"));
+
+  wc = sinfo[SI_SKILLABILITY] / 100;
+  dauer = caster->QueryAttribtute(A_INT) + caster->QueryProp(P_LEVEL) + success / 90;
+
+  rw = clone_object(OBJ "runenwaffe");
+  rw->start(caster, weapon, wc, dauer);
+  rw->move(caster);
+  return ERFOLG;
+}
+
+varargs public mapping prep_lagerfeuer(object caster, mapping sinfo, int silent) {
+  if(objectp(present("\nab_campfire", ENV(caster)))) {
+    write(BS("Hier hat bereits jemand ein Lagerfeuer errichtet."));
+    return 0;
+  }
+
+  if(!silent) tell_room(ENV(caster), BS(caster->Name(WER)+" schlichtet ein kleines Lagerfeuer auf."), ({caster}));
+
+  return sinfo;
+}
+
+public int lagerfeuer(object caster, mapping sinfo) {
+  object ob;
+  int success;
+
+  if(!prep_lagerfeuer(caster, sinfo)) return 0;
+
+  success = SpellSuccess(caster, sinfo);
+  if(success <= 0) {
+    write(BS("Du bekommst das Feuer einfach nicht in Gang!"));
+    say(BS(caster->Name(WER)+" mueht sich ab ein Lagerfeuer zu entfachen, schafft es aber nicht."));
+    return MISSERFOLG;
+  }
+
+  ob = clone_object(OBJ "lagerfeuer");
+  if(ob->move(ENV(caster)) != 1) {
+    tell_room(ENV(caster), BS("Das Lagerfeuer faellt in sich zusammen."));
+    destruct(ob);
+    return 0;
+  }
+
+  write(BS("Geschickt entfachst du ein angenehm knisterndes Lagerfeuer."));
+  say(BS(caster->Name(WER)+" entfacht ein kleines und angenehm kinsterndes Lagerfeuer."));
+  ob->start(caster->QueryAttribtute(A_DEX) + sinfo[SI_SKILLABILITY] / 200 + success / 200 + caster->QueryProp(P_LEVEL) / 2);
+  return ERFOLG;
+}
+
+public mapping prep_reittier(object caster, mapping sinfo) {
+  object rt;
+  if(objectp(rt = find_living(getuid(TP)+"reittier"))) {
+    if(ENV(rt) == ENV(caster)) {
+      write(BS("Dein "+rt->name(WER)+" ist doch schon hier!"));
+      return 0;
+    }
+  }
+
+  tell_room(ENV(caster), BS(caster->Name(WER)+" stoesst einen hellen Pfiff aus."), ({caster}));
+  return sinfo;
+}
+
+public int reittier(object caster, mapping sinfo) {
+  int suc;
+  object rt;
+
+  suc = SpellSuccess(caster, sinfo);
+  if(suc <= 0) {
+    write(BS("Dein Reittier hat nicht gehorcht."));
+    return MISSERFOLG;
+  }
+
+  if(!objectp(rt = find_living(getuid(TP)+"reittier"))) {
+    rt = clone_object(OBJ "reittier");
+  }
+
+  rt->setup(caster, sinfo[SI_SKILLABILITY], suc);
+
+  write(BS("Dein Reittier reagiert auf deinen Pfiff und eilt herebei."));
+  call_out("come_mount", 0, rt, caster);
+  return ERFOLG;
+}
+
+public void come_mount(object mount, object caster) {
+  if(mount->move(ENV(caster), M_GO) != 1) {
+    tell_object(caster, "Dein Reittier kann nicht kommen!\n");
+    mount->remove(1);
+  }
+}
+
+
+int saeurekugel(object caster, mapping sinfo) {
+  object victim;
+  int hands, suc;
+  string vnw; 
+  
+  victim = FindEnemyVictim(
+      sinfo[SI_SKILLARG], caster,
+      "Auf wen willst Du eine Saeurekugel schleudern?\n");
+
+  if (!victim)
+    return 0;
+   if ( (suc=SpellSuccess(caster,sinfo)) <=0)
+    return MISSERFOLG;
+
+  vnw = victim->name(WEM, 2);
+  say(sprintf("%s wirft eine Saeurekugel nach %s.\n", 
+              capitalize(caster->name()), vnw), victim);
+  printf("Du wirfst eine Saeurekugel nach %s.\n", vnw);
+  tell_object(victim, sprintf("%s wirft eine Saeurekugel nach Dir.\n",
+                              capitalize(caster->name())));
+
+  sinfo[SI_SKILLDAMAGE] += suc/40;
+
+  TryDefaultAttackSpell(victim,caster,sinfo,([SP_NAME:"Saeurekugel",SP_SHOW_DAMAGE:1]));
+  if(objectp(victim) && suc > 7000) {
+    tell_room(ENV(victim), BS(sprintf("Aetzende Saeure bleibt auf %s zurueck!", vnw)));
+    call_out("acid_burn", 0, victim);
+  }
+
+  return ERFOLG;
+}
+
+public void acid_burn(object victim) {
+  if(!objectp(victim)) return;
+  if(!random(5)) {
+    tell_room(ENV(victim), BS(sprintf("Die Saeurerueckstaende auf %s verschwinden.", victim->name(WEM))));
+    return;
+  }
+
+  tell_room(ENV(victim), BS(sprintf("Die Saeure veraetzt %s.", victim->name(WEN))));
+  victim->AddHp(-10 - random(10));
+  call_out("acid_burn", 0, victim);
+  return;
+}
+
+public mapping prep_fressgier(object caster, mapping sinfo) {
+  object victim;
+
+  victim = FindEnemyVictim(sinfo[SI_SKILLARG], caster, "Wen willst du fressen?\n");
+  if(!objectp(victim)) return 0;
+
+  if(caster->QueryProp(P_FOOD) >= caster->QueryProp(P_MAX_FOOD)) {
+    write(BS("Du bist viel zu voll um noch einen Bissen zu machen! Schade :-("));
+    return 0;
+  }
+
+  tell_room(ENV(caster), BS(caster->Name(WER) + " beginnt beim Anblock von "+victim->name(WEM)+" zu sabbern und schmatzen."), ({caster}));
+  return sinfo;
+}
+
+public int fressgier(object caster, mapping sinfo) {
+  object victim, hex;
+  int success, dam;
+
+  victim = FindEnemyVictim(sinfo[SI_SKILLARG], caster, "Wen willst du fressen?\n");
+  if(!objectp(victim)) return 0;
+
+  success = SpellSuccess(caster, sinfo);
+  if(success <= 0) {
+    tell_room(ENV(caster), BS("Deine Kiefer schnappen zu... erwischen aber niemanden!"));
+    return MISSERFOLG;
+  }
+
+  write(BS("Du beisst kraeftig zu und reisst ein grosses Stueck aus "+victim->name(WEM)+" heraus! "));
+  say(BS(caster->Name(WER)+" beisst ein grosses Stueck aus "+victim->name(WEM)+" heraus "
+         "und verchlingt es!!!"));
+
+  sinfo[OFFSET(SI_SKILLDAMAGE)] += success / 100;
+  dam = TryDefaultAttackSpell(victim,caster,sinfo, ([SP_NAME:"Fressgier",SP_SHOW_DAMAGE:1]));
+  if(dam > 0) {
+    caster->AddHp(dam * sinfo[SI_SKILLABILITY] / MAX_ABILITY);
+    caster->eat_food(4 + random(dam / 10));
+    write("Mmmmmmh! DAS SCHMECKT KOESTLICH!!!\n");
+  }
+  return ERFOLG;
+}
+
+
+public mapping prep_verhexe(object caster, mapping sinfo) {
+  object victim;
+
+  victim = FindEnemyVictim(sinfo[SI_SKILLARG], caster, "Wen willst du verhexen?\n");
+  if(!objectp(victim)) return 0;
+
+  if(objectp(present("\nab_hex", victim))) {
+    write(BS("Auf "+victim->name(WEM)+" liegt bereits eine Verhexung!"));
+    return 0;
+  }
+
+  tell_room(ENV(caster), BS(caster->Name(WER) + " deutet mit der linken Hand auf "+victim->name(WEN)+" und spricht: Var-zul nug Par Hex!"), ({caster}));
+  return sinfo;
+}
+
+public int verhexe(object caster, mapping sinfo) {
+  object victim, hex;
+  int success;
+
+  victim = FindEnemyVictim(sinfo[SI_SKILLARG], caster, "Wen willst du verhexen?\n");
+  if(!objectp(victim)) return 0;
+
+  if(objectp(present("\nab_hex", victim))) {
+    write(BS("Auf "+victim->name(WEM)+" liegt bereits eine Verhexung!"));
+    return 0;
+  }
+
+  success = SpellSuccess(caster, sinfo);
+  if(success <= 0) {
+    tell_room(ENV(caster), BS("Ein dunkler Schleier verdichtet sich. Sonst geschieht nichts..."));
+    return MISSERFOLG;
+  }
+
+  caster->SetProp(P_ALIGN, caster->QueryProp(P_ALIGN)-random(10));
+
+  if(random(100) < victim->QueryProp(P_NOMAGIC)) {
+    tell_room(ENV(victim), BS(victim->Name(WER)+" widersteht dem Fluch!"));
+    return ERFOLG;
+  }
+
+  tell_room(ENV(victim), BS("Ein dunkler Schleier verdichtet sich um "+victim->name(WEN)+"."));
+  hex = clone_object(OBJ "hex");
+  if(hex->move(victim, M_NOCHECK) != 1) {
+    destruct(hex);
+  }
+  hex->start(victim, caster, sinfo[SI_SKILLABILITY], success);
+
+  if(success > 8500) {
+    tell_room(ENV(victim), BS("Der Fluch verletzt "+victim->name(WEN)+"!"));
+    sinfo[SI_SKILLDAMAGE] -= caster->QueryProp(P_ALIGN) / 5; // besser wenn man boese ist!
+    TryDefaultAttackSpell(victim,caster,sinfo, ([SP_NAME:"Verhexung",SP_SHOW_DAMAGE:1]));
+  }
+
+  return ERFOLG;
+}
+
+public mapping prep_heldenmut(object caster, mapping sinfo) {
+  if(objectp(present("\nab_racebuff", caster))) {
+    write("Du hast deinen Heldenmut bereits gesammelt!");
+    return 0;
+  }
+
+  return sinfo;
+}
+
+public int heldenmut(object caster, mapping sinfo) {
+  object ob;
+  int success;
+
+  success = SpellSuccess(caster, sinfo);
+  if(success <= 0) {
+    write(BS("Du fuehlst dich gar nicht mutig..."));
+    return MISSERFOLG;
+  }
+
+  tell_object(caster, BS(sprintf("Wahrer Heldenmut flammt in deinem Herzen auf. Voll Stolz reckst du %s empor!",
+    caster->QueryProp(P_WEAPON)?caster->QueryProp(P_WEAPON)->name(WEN):"die Faust")));
+  tell_room(ENV(caster), BS(sprintf("Voll Stolz reckt %s  %s empor! Mutig wie ein echter Held.",
+    caster->name(WER), caster->QueryProp(P_WEAPON)?caster->QueryProp(P_WEAPON)->name(WEN):"die Faust")), ({caster}));
+
+  ob = clone_object(OBJ "heldenmut");
+  if(ob->move(caster) != 1) {
+    destruct(ob);
+    return ERFOLG;
+  }
+
+  ob->start(caster, sinfo[SI_SKILLABILITY], success);
+  return ERFOLG;
+}
+
+public mapping prep_trollregeneration(object caster, mapping sinfo) {
+  if(objectp(present("\nab_racebuff", caster))) {
+    write("Deine Regeneration arbeitet bereits auf Hochtouren!");
+    return 0;
+  }
+
+  return sinfo;
+}
+
+public int trollregeneration(object caster, mapping sinfo) {
+  object ob;
+  int success;
+
+  success = SpellSuccess(caster, sinfo);
+  if(success <= 0) {
+    if(success < -3000) {
+      write(BS("Alte Wunden brechen auf!!!"));
+      caster->AddHp(-random(50));
+    } else {
+      write(BS("Es gelingt dir nicht deine Regeneration anzuregen."));
+    }
+    return MISSERFOLG;
+  }
+
+  tell_object(caster, BS("Ploetzlich beginnt dein Koerper alle Verletzung mit unheimlicher Geschwindigkeit zu regeneriern."));
+  tell_room(ENV(caster), BS("Die Wunden von "+caster->name(WEM)+" beginnen sich ploetzlich vor deinen Augen zu schliessen."), ({caster}));
+
+  ob = clone_object(OBJ "trollregeneration");
+  if(ob->move(caster) != 1) {
+    destruct(ob);
+    return ERFOLG;
+  }
+
+  ob->start(caster, sinfo[SI_SKILLABILITY], success);
+  return ERFOLG;
+}
+
+public mapping prep_zwergenzorn(object caster, mapping sinfo) {
+  if(objectp(present("\nab_racebuff", caster))) {
+    write("Der Zwergenzorn brennt bereits in deiner Brust!");
+    return 0;
+  }
+
+  if(!caster->InFight()) {
+    write(BS("Du kannst dich nur im Kampf in den Zwergenzorn versetzen!"));
+    return 0;
+  }
+
+  return sinfo;
+}
+
+public int zwergenzorn(object caster, mapping sinfo) {
+  object ob;
+  int success;
+
+  if(!caster->InFight()) {
+    write(BS("Du kannst dich nur im Kampf in den Zwergenzorn versetzen!"));
+    return 0;
+  }
+
+  success = SpellSuccess(caster, sinfo);
+  if(success <= 0) {
+    write(BS("Dein Zorn eallt nicht auf"));
+    return MISSERFOLG;
+  }
+
+  tell_object(caster, "We ein Vulkan bricht dein Zorn aus dir hervor.\nDu bruellst: Kar Domadrosch!\n");
+  tell_room(ENV(caster), BS(sprintf("%s bruellt: \"Kar Domadrosch!\" und stuerzt sich wuetend in den Kampf!",
+    caster->name(WER))), ({caster}));
+
+  ob = clone_object(OBJ "zwergenzorn");
+  if(ob->move(caster) != 1) {
+    destruct(ob);
+    return ERFOLG;
+  }
+
+  ob->start(caster, sinfo[SI_SKILLABILITY], success);
+  return ERFOLG;
+}

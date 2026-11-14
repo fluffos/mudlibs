@@ -1,0 +1,148 @@
+CONCEPT
+	erq - External Request Demon
+
+DESCRIPTION
+	Up to version 3.2.1@61, LPMud utilized two external programs
+	in an ad-hoc manner to solve problems: the 'hname' program to
+	resolve IP addresses into meaningful hostnames, and the
+	'indent' program to properly indent LPC files.
+	In version 3.2.1@61 both functions were united in a
+	generalized 'erq' process, to which additional functions may
+	be attached.
+	The erq feature is available if the driver is compiled with
+	ERQ_DEMON defined (in config.h).
+
+	When the driver starts up, it tries to fork off the program
+	'BINDIR/erq --forked' (with BINDIR defined in the Makefile).
+	If this succeeds, the erq may talk with the driver through
+	stdin and stdout (piped through AF_UNIX sockets).
+
+	At runtime, the erq may be changed/removed from within the
+	mudlib using the efun attach_erq_demon(). This efun is given
+	an interactive object as argument, and takes the connection
+	away(!) from this object and stores it as the erq connection
+	to use (an old erq connection is closed first). The object
+	(which now no longer is interactive) is then no longer needed,
+	but may continue to exist.
+	The erq attached this way of course has to use the sockets it
+	opened to communicate with the driver.
+
+	Most of the communication between erq and driver is going to
+	be initiated by the driver (the erq has to look up the
+	hostnames for given IP addresses), but using the efun
+	send_erq() the mudlib may talk with the erq as well.
+
+	The communication between driver and erq is done using
+	messages of specified structures and constants (defined in
+	util/erq.h resp. sys/erq.h). The 'int32's are signed integers
+	of four byte length, and are sent with the MSByte first.
+	Every message must be sent atomically!
+
+	The head of the messages is always the same:
+
+	  struct erq_msghead {
+	    int32  msglen;  /* Total size of message in bytes */
+	    int32  handle;  /* Identification number */
+          }
+
+	The 'handle' number is set by the driver (do not make
+	assumptions about its value) and is used to associated the erq
+	responses with the pending requests. This way the erq is free
+	to respond in an order different to those of the incoming
+	requests.
+
+	The messages send to the erq follow this symbolic format:
+
+	  struct to_erq_msg {
+	    int32  msglen;
+	    int32  handle;
+	    char   request;
+	    char   data[0];
+	  }
+
+	The 'request' denotes which service is requested from the erq,
+	the size and content of 'data' depends on the requested
+	service.
+
+	The answer message from the erq to the driver (if there is one
+	at all) may have two forms:
+
+	  struct from_erq_msg {
+	    int32  msglen;
+	    int32  handle;
+	    char   data[0];
+	  }
+
+	  struct from_erq_keep_msg {
+	    int32        msglen;
+	    const int32  keep = ERQ_KEEP_HANDLE;
+	    int32        handle;
+	    char         data[0];
+	  }
+
+	The replied data from the erq is stored in 'data', which size
+	and content depends on the request answered. The answer is
+	identified by 'header.handle'. Normally, one request results
+	in just one response sent by the erq using struct
+	from_erq_msg, so the handle is recycled after this response.
+	Shall the erq send several responses (or break one response
+	into several parts), the struct from_erq_keep_msg has to be
+	used for all but the last response - this message with its
+	included special handle keeps the real handle alive.
+
+	Mudlib generated erq-calls specify the 'request' and the
+	'data' to be sent, and receive the 'data' replied.
+
+
+	Currently three services are predefined: looking up a
+	hostname, executing and forking an external program.
+	For a program to be executable for erq, it must be placed in
+	or below ERQ_DIR (defined in config.h).
+
+	Hostname lookup:
+
+	  request  : ERQ_RLOOKUP
+	  data sent: struct in_addr.s_addr addr // the address to resolve
+	  data recv: struct in_addr.s_addr addr // the resolved address
+	             char[]                name // the hostname (if any)
+
+	  If the sent address can't be resolved, just the address is
+	  to be returned. The string need not be 0-terminated.
+
+	Execute/Fork program:
+
+	  request  : ERQ_EXECUTE/ERQ_FORK
+	  data sent: char[] command  // the command to execute/
+	  data recv: char   rc       // the success/error code
+	             char   info     // additional information
+
+	  The erq executes the sent command using the execv().
+	  The erq does the processing of the command line arguments
+	  (which must not contain '\') and checks the validity of the
+	  command (it must not start with '/' nor contain '..'), which
+	  is interpreted relative to ERQ_DIR.
+	  The external program is executed from a fork()ed instance of
+	  the erq, however, with ERQ_EXECUTE the erq waits until the
+	  external program finished before replying its response, with
+	  ERQ_FORK the response is immediately sent back.
+
+	  Possible return codes are:
+	    ERQ_OK         : Operation succeeded.
+	    ERQ_E_ARGLENGTH: Too long command.
+	    ERQ_E_ARGFORMAT: Illegal argument given (contains '\');
+	    ERQ_E_ARGNUMBER: Too much arguments (>= 96).
+	    ERQ_E_ILLEGAL  : Command from outside ERQ_DIR requested.
+	    ERQ_E_PATHLEN  : Commandpath too long.
+	    ERQ_E_FORKFAIL : Command could not be forked;
+	                     info holds the errno value.
+
+	  ERQ_EXECUTE features some more return codes:
+	    ERQ_OK         : Operation succeeded, info holds the exit status.
+	    ERQ_SIGNALED   : Command terminated by the signal;
+	                     info denotes which signal.
+	    ERQ_E_NOTFOUND : No process found to wait() for.
+	    ERQ_E_UNKNOWN  : Unknown exit condition from wait().
+
+
+SEE ALSO
+	attach_erq_demon(E), send_erq(E), stale_erq(M)

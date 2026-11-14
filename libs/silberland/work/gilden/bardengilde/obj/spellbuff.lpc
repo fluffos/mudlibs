@@ -1,0 +1,117 @@
+inherit "std/thing";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <defines.h>
+#include <new_skills.h>
+#include <moredef.h>
+#include <moving.h>
+#include "/gilden/bardengilde/bardengilde.h"
+
+object caster;
+int boost, duration, canRecharge, percent;
+float factor;
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+//--Beschreibungen---------------------------------------------------------
+
+  SetProp(P_SHORT, 0);
+  SetProp(P_LONG,
+    "Ein Bannzauber.");
+
+//--Namen------------------------------------------------------------------
+
+  SetProp(P_NAME, "Ein Zauberlied");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_INVIS, 1);
+  AddId(SONG_SPELLBUFF);
+
+//--Eigenschaften----------------------------------------------------------
+
+  SetProp(P_MATERIAL, MAT_MAGIC );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_SIZE, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NEVERDROP, 1);
+
+}
+
+public void Setup(object _caster, int _ability, int _success, float _factor) {
+  string *what;
+
+  factor  = 1.0 + _factor;
+  caster  = _caster;
+
+  percent  = (int) ((100 + (_ability/300) + (_success/400)) * factor);
+  duration = (int) (_ability/50)+(_success/100);
+
+  what = ({"staerker"});
+  caster->ModifySkillAttribute(caster, SA_DAMAGE, (int) (percent*0.9), duration);
+
+  if(_success >= 6000) {
+    what += ({ "laenger" });
+    caster->ModifySkillAttribute(caster, SA_DURATION, percent, duration);
+  }
+
+  if(_success > 9000) {
+    what += ({ "auf mehr Personen" });
+    caster->ModifySkillAttribute(caster, SA_EXTENSION, (int) (percent * 2.0), duration);
+  }
+
+  if(caster->QueryProp(P_TESTPLAYER)) {
+    tell_object(caster, sprintf("percent=%d duration=%d what=%O factor=%.2f\n", percent, duration, what, factor));
+  }
+
+  tell_object(caster, BS(sprintf("Dein Lied verstaerkt die Magie deiner Lieder! Sie wirken nun %s.", implode(what, ", "))));
+  tell_room(ENV(caster), BS("Eine leise Melodie geht von "+caster->Name(WEM)+" aus."), ({caster}));
+
+  call_out("recharge_warning", 3*duration/4);
+  caster->SetProp(P_TMP_BARDS_ZAUBERMELODIE, 1);
+  return;
+}
+
+public void recharge_warning() {
+  if(!objectp(caster)) { 
+    remove(1);
+    return;
+  }
+
+  tell_object(caster, BS("Die Wirkung von 'Lied der Zauber' wird bald enden."));
+  canRecharge = 1;
+  call_out("remove_me", duration/4);
+}
+
+public void remove_me() {
+  if(!objectp(caster)){
+    remove(1);
+    return;
+  }
+
+  tell_object(caster, BS("Die Wirkung der Zaubermelodie verfliegt..."));
+  remove(1);
+  return;
+}
+
+public varargs int remove(int silent) {
+  if(objectp(caster)) caster->SetProp(P_TMP_BARDS_ZAUBERMELODIE, 0);
+  return ::remove(silent);
+}
+
+public int CanRecharge() {
+  return canRecharge;
+}
+
+public void SetupFail(object _caster, int duration) {
+  // blockiert nur den zauber
+  caster = _caster;
+  caster->SetProp(P_TMP_BARDS_ZAUBERMELODIE, 1);
+  call_out("remove_me", duration);
+}

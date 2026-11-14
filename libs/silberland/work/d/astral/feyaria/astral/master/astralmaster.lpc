@@ -1,0 +1,397 @@
+// Master fuer gesamte Astralzone
+// 22.8.2004 Feyaria@SilberLand
+
+#include "../def.h"
+#include "../../gilden.h"
+
+mapping death = ([]);
+mapping fame = ([]);
+mapping flags = ([]);
+mapping times = (["mechanus":0, "djinnistan":0, "inferno":0, "aquatika":0, "frostania":0, 
+                  "draconia":0, "elysia":0, "abgrund":0, "eternia":0]);
+nosave mapping delay = ([
+    "mechanus": 990671, // 11 Tage, 11 Stunden, 11 Minuten und 11 Sekunden
+    "djinnistan": 540366, // 6 Tage, 6 Stunden, 6 Minuten, 6 Sekunden
+    "inferno": 540366, // 6 Tage, 6 Stunden, 6 Minuten, 6 Sekunden
+    "aquatika": 540366, // 6 Tage, 6 Stunden, 6 Minuten, 6 Sekunden
+    "frostania": 540366, // 6 Tage, 6 Stunden, 6 Minuten, 6 Sekunden
+    "draconia": 900610, // 10 Tage, 10 Stunden, 10 Minuten, 10 Sekunden
+    "elysia": 810549, // 9 Tage, 9 Stunden, 9 Minuten, 9 Sekunden
+    "abgrund": 630427, // 7 Tage, 7 Stunden, 7 Minuten, 7 Sekunden
+    "eternia": 2071403, // 23 Tage, 23 Stunden, 23 Minuten, 23 Sekunden
+    ]);
+
+nosave mapping buchstab = ([
+  FLAG_LUXIANA: "Wisse, Sterblicher: der zweite Buchstabe vom Namen des Herrn der Zeit lautet: E";
+                "Luxiana, die Koenigin der Lichtfeen und Herrscherin ueber die Astralebene", 
+  FLAG_PRIMUS: "Wisse, Sterblicher: der dritte Buchstabe vom Namen des Herrn der Zeit lautet: R";
+               "den einzigartigen Primus, den Herrscher ueber Mechanus - die Ebene der Zahlen",
+  FLAG_KALIF: "Wisse, Sterblicher: der vierte Buchstabe vom Namen des Herrn der Zeit lautet: B";
+              "den Djinni Kalif, den Herrscher ueber Djinnistan - die Ebene der Luft",
+  FLAG_PADISHA: "Wisse, Sterblicher: der fuenfte Buchstabe vom Namen des Herrn der Zeit lautet: U";
+                "den Marid Padisha, den Herrscher ueber Aquatika - die Ebene des Wassers",
+  FLAG_SULTAN: "Wisse, Sterblicher: der sechste Buchstabe vom Namen des Herrn der Zeit lautet: X";
+               "dem Efreeti Sultan, den Herrscher ueber das flammende Inferno - die Ebene des Feuers",
+  FLAG_KHAN: "Wisse, Sterblicher: der siebte Buchstabe vom Namen des Herrn der Zeit lautet: O";
+             "den Dao Kahn, den Herrscher ueber Frostania - die Ebene des Eises",
+  FLAG_VULAK: "Wisse, Sterblicher: der achte Buchstabe vom Namen des Herrn der Zeit lautet: R";
+              "den allmaechtigen Vulak'Aerr, den Herrscher ueber Draconia - das Reich der Drachen",
+  FLAG_DEMON : "Wisse, Sterblicher: der neunte Buchstabe vom Namen des Herrn der Zeit lautet: U";
+               "Zyr Xarra, die finstere Herzogin aller Demonen und Herrscherin ueber den finsteren Abgrund",
+  FLAG_ELYSIA : "Wisse, Sterblicher: der zehnte Buchstabe vom Namen des Herrn der Zeit lautet: K";
+                "Elysia, die Verkoerperung aller Tugenden und Herrscherin ueber den heiligen Garten von Elysia",
+  ]);
+
+nosave mixed sort;
+nosave int nr;
+nosave string *history=({});
+nosave int *hist_time=({});
+nosave string output;
+nosave string check;
+#define HIST_LOG LOG "arufe%s.log"
+
+void create()
+{
+  if( is_clone(TO) )
+  {
+    destruct(TO);
+    return;
+  }
+  SUID;
+  restore_object(ASTRALMASTERSAVE);
+}
+
+nosave void Channel(string msg) 
+{
+ // CHMASTER->join("Info",TO);
+ // CHMASTER->send("Info","",msg,MSG_SAY);
+  call_other(find_object("/obj/infomaster"), "InfoMsg", msg);
+}
+
+int levelsort(object a, object b)
+{
+  if (a->QueryProp(P_LEVEL) > b->QueryProp(P_LEVEL))
+    return 1;
+  return 0;
+}
+
+varargs void AddFlag(mixed player, int flag, object *enemies)
+{
+  object pl;
+  int i;
+  if (getuid(previous_object()) != getuid(this_object()))
+    return;
+  if (objectp(player))
+  {
+    pl = player;
+    player = getuid(player);
+  }
+  else
+    if (!objectp(pl = find_player(player)))
+      return;
+  if ((flags[player] & flag || !interactive(pl)) && sizeof(enemies))
+  {
+    enemies = sort_array(enemies, "levelsort");
+    for (i = sizeof(enemies) - 1; i >= 0; i--)
+    {
+      if (flags[getuid(enemies[i])] & flag)
+        continue;
+      pl = enemies[i];
+      player = getuid(pl);
+      i = -1;
+    }
+  }
+  flags[player] |= flag;
+  pl->SetProp(P_DEAF, 0);
+  pl->Message("\n\n" + ANSI_BOLD +
+      break_string(buchstab[flag], 78 , "Ein mystische Stimme teilt Dir mit: ") +
+      ANSI_NORMAL + "\n\n", MSGFLAG_TELL);
+  write_file(LOG "flags", sprintf("[%s] %s bekommt Flag %d (Gesamt %d)\n",
+        dtime(), capitalize(player), flag, flags[player]));
+  if (!IS_LEARNER(pl))
+    Channel(sprintf("%s hat gerade %s besiegt.", 
+            capitalize(player), buchstab[flag,1] ));
+  save_object(ASTRALMASTERSAVE);
+}
+
+int QueryFlag(string player, int flag)
+{
+  if (!member(flags, player))
+    return 0;
+  return (flags[player] & flag) == flag;
+}
+
+nosave void WriteFlags(string name)
+{
+  if (IS_LEARNER(name))
+    return;
+  printf("* %-13s: %2d   %d   %d   %d   %d   %d   %d   %d   %d   %d   %d\n",
+      capitalize(name), (flags[name] & 1) + !!(flags[name] & 2) + !!(flags[name] & 4) +
+      !!(flags[name] & 8) + !!(flags[name] & 16) + !!(flags[name] & 32) +
+      !!(flags[name] & 64) + !!(flags[name] & 128) + !!(flags[name] & 256) +
+      !!(flags[name] & 512), flags[name] & 1, !!(flags[name] & 2), !!(flags[name] & 4),
+      !!(flags[name] & 8), !!(flags[name] & 16), !!(flags[name] & 32),
+      !!(flags[name] & 64), !!(flags[name] & 128), !!(flags[name] & 256),
+      !!(flags[name] & 512) );
+}
+
+void QueryAllFlags()
+{
+  string *names;
+
+  if (!IS_ARCH(TP))
+    return;
+  names = sort_array(m_indices(flags), #'<);
+  write("********************* ASTRAL FLAGS **********************\n");
+  write("                 Tot Ast Mec Dji Aqu Inf Fro Dra Abg Ely Ete\n");  
+  filter_array(sort_array(names, #'>), "WriteFlags");
+  write("********************* ASTRAL FLAGS **********************\n");
+}
+
+varargs int SetTime(string event, int t)
+{
+  write_file(LOG "times", sprintf("[%s] Naechster Event in %s: %s\n",
+      dtime(), capitalize(event), dtime((t || time()) + delay[event] )));
+  save_object(ASTRALMASTERSAVE);
+  return times[event] = t || time();
+}
+
+int QueryTime(string event)
+{
+  if (!member(delay, event))
+  {
+    DB("ASTRALMASTER: Falscher Event!\n");
+    return 0;
+  }
+  if (!member(times, event))
+    return -1;
+  return times[event] + delay[event] - time();
+}
+
+int timeprint(string event)
+{
+  printf("%-12s %s\n",
+      capitalize(event) + ": ",
+      times[event] ? (times[event] + delay[event] > time() ? 
+        dtime(times[event] + delay[event]) : "bereit") : "bereit");
+  return 1;
+}
+
+void QueryAllTimes()
+{
+  filter_array(sort_array(m_indices(delay), #'>), "timeprint");
+}
+
+int AddFame(mixed player, string region, int amount)
+{
+  mapping playerfame;
+  string npc_name;
+
+  if (getuid(previous_object()) != getuid(this_object()) &&
+      getuid(previous_object()) != "feyaria")
+    return -1;
+  if (IS_LEARNER(player) || (objectp(player) && player->QueryProp(P_TESTPLAYER)))
+    return -2;
+  if (objectp(player) && !interactive(player))
+  {
+    if (player->QueryProp(ELEMENTAL_OWNER))
+      player = player->QueryProp(ELEMENTAL_OWNER);
+    else if (player->QueryProp(P_NEKRO_MASTERED_BY))
+      player = player->QueryProp(P_NEKRO_MASTERED_BY);
+    else
+      player = 0;
+  }
+  if (objectp(player))
+    player = getuid(player);
+  if (!stringp(player))
+    return -3;
+  if (member(ALLOWED_ZONES, region) == -1)
+    return -4;
+
+  if (!member(fame, player))
+    fame += ([player: mkmapping(ALLOWED_ZONES + ({"total"}), ({0,0,0,0,0,0,0,0,0,0,0})) ]);
+
+  if (!mappingp(playerfame = fame[player]))
+  {
+    fame = m_delete(fame, player);
+    return -4;
+  }
+  playerfame[region] += amount;
+  playerfame["total"] += amount;
+  if (PO->QueryProp(P_NAME) == "Leiche")
+    npc_name = previous_object(1)->name(WEM,1);
+  else
+    npc_name = PO->name(WEM,1);
+  write_file(FAMELOG + player + ".log", sprintf("[%s] %d Fame von %s (%s), Gesamt: %d/%d\n",
+        dtime(), amount, npc_name, region, playerfame[region], playerfame["total"]));
+  save_object(ASTRALMASTERSAVE);
+  return 1;
+}
+
+mapping QueryFame(mixed player)
+{
+  if (objectp(player))
+    player = getuid(player);
+  return fame[player];
+}
+
+
+int famesort(string a, string b)
+{
+  if (!mappingp(fame[a]) || !mappingp(fame[b]))
+    return 0;
+  if (fame[a][sort] < fame[b][sort])
+    return 1;
+  return 0;
+}
+
+int fameprint(string a)
+{
+  if (!mappingp(fame[a]))
+    return 0;
+  if ((IS_LEARNER(TP) || !IS_LEARNER(a)) && fame[a][sort])
+  {
+    if (check)
+    {
+      if (check == a)
+        output += sprintf("%-11s: %2d. %11d\n", CAP(sort), nr++, fame[a][sort]);
+      else
+        nr++;
+    }
+    else if (nr < 100)
+      output += sprintf("%2d. %-11s: %11d\n", nr++, CAP(a), fame[a][sort]);
+  }
+  return 1;
+}
+
+void FameList(string region)
+{
+  sort = lower_case(region);
+  nr = 1;
+  output = "";
+  filter_array(sort_array(m_indices(fame), "famesort"), "fameprint");
+  TP->More(output);
+}
+
+void FameCheck(string player)
+{
+  int i;
+  string *zones;
+
+  if (!player)
+    return;
+  check = lower_case(player);
+  output = sprintf("Positionen von %s in den 10 Ebenen der Macht:\n"
+    "------------------------------------------------------\n", CAP(player));
+  zones = sort_array(ALLOWED_ZONES + ({"total"}), #'<);
+  for (i = sizeof(zones) -1; i >= 0; i--)
+  {
+    nr = 1;
+    sort = zones[i];
+    filter_array(sort_array(m_indices(fame), "famesort"), "fameprint");
+  }
+  check = 0;
+  output += "------------------------------------------------------\n";
+  TP->More(output);
+}
+
+int AddDeath(mixed player, int xp)
+{
+  int *playerdeath;
+
+  if (getuid(previous_object()) != getuid(this_object()) &&
+      getuid(previous_object()) != "feyaria")
+    return -1;
+  if (objectp(player))
+    player = getuid(player);
+  if (!stringp(player))
+    return -2;
+
+  if (!member(death, player))
+    death += ([player: ({0,0})]);
+
+  if (!pointerp(playerdeath = death[player]))
+  {
+    death = m_delete(death, player);
+    return -4;
+  }
+  playerdeath[0]++;
+  playerdeath[1] += xp;
+  save_object(ASTRALMASTERSAVE);
+  return 1;
+}
+
+int* QueryDeath(mixed player)
+{
+  if (objectp(player))
+    player = getuid(player);
+  return death[player];
+}
+
+int deathsort(string a, string b)
+{
+  if (!pointerp(death[a]) || !pointerp(death[b]))
+    return 0;
+  if (death[a][sort] == death[b][sort])
+    return (death[a][!sort] < death[b][!sort]);
+  return (death[a][sort] < death[b][sort]);
+}
+
+int deathprint(string a)
+{
+  if (!pointerp(death[a]))
+    return 0;
+  if ((IS_LEARNER(TP) || !IS_LEARNER(a)))
+    output += sprintf("%2d. %-11s: %3d Tod%s %11d XP\n", 
+        nr++,
+        CAP(a),
+        death[a][0], 
+        death[a][0] == 1 ? " " : "e",
+        -death[a][1]);
+  return 1;
+}
+
+void DeathList(int flag)
+{
+  sort = flag;
+  nr = 1;
+  output = "";
+  filter_array(sort_array(m_indices(death), "deathsort"), "deathprint");
+  TP->More(output);
+}
+
+varargs int AddHistory(string presay, string msg, int invis, int emote, 
+    string emote_string) 
+{
+  int i;
+  
+  if(!emote) emote=0;
+  if(!emote_string) emote_string=" ";
+  if ( sizeof(history) > 50 )
+  {
+    history=history[1..<1];
+    hist_time=hist_time[1..<1];
+  }
+  history+=({implode(({presay, msg, to_string(invis),to_string(emote), 
+          emote_string}), "&&*%%")});
+  hist_time+=({time()});
+  if(!emote)
+    write_file(sprintf(HIST_LOG, dtime()[13..16]), BS(sprintf("%s - %s%s", dtime(time()), 
+            presay, msg)));
+  else 
+    write_file(sprintf(HIST_LOG, dtime()[13..16]), BS(sprintf("%s - %s", dtime(time()), 
+            sprintf(emote_string, msg))));
+  return 1;
+}
+
+varargs mixed QueryHistory(int lines) 
+{
+  int max, max_size, from;
+  if(!lines) lines=10;
+  max_size=sizeof(hist_time);
+  if(max_size < lines)
+    lines=max_size;
+  from=max_size-lines;
+  return ({hist_time[from..],history[from..]}); 
+}
+

@@ -1,0 +1,156 @@
+#include <properties.h>
+#include <combat.h>
+#include <new_skills.h>
+#include <moving.h>
+#include <mnpc.h>
+#include "../def.h"
+
+inherit NPC + "hofbewohner.lpc";
+
+mapping fieser_moep;
+
+void reset()  {
+  ::reset();
+  fieser_moep = ([]); // Man ist Dir nur bis zum reset boese.
+}
+
+void create() {
+  if (!is_clone(TO)) return; //Abbruch für Blueprint
+  ::create(); //Ausführen von Create in Inherit "std/mnpc"
+  
+  create_default_npc(16); //erstellt Standartwerte für NPC des Level x
+
+  //Properties
+  AddId(({"ulfried", "porst", "knecht", "Ulfried Porst" })); //Bezeichner zur Interaktion
+  SetProp( P_SHORT, "Ulfried Porst, der Knecht des Gehoefts");
+  SetProp( P_LONG, BS("Dies ist Ulfried Porst, der Knecht des Gehoefts. "+
+    "Er ist etwas wortkarg und nicht gerade gesellig aber mit starken Haenden "+
+    "haelt er den Hof in schwung waehrend der Paechter sich mehr um Bier und "+
+    "Reisende kuemmert. "));
+  SetProp( P_GENDER, MALE);
+  SetProp( P_ARTICLE, 0);
+  SetProp( P_NAME, "Ulfried Porst");
+  SetProp( P_WIMPY, 0); //Fluchtschwelle an HP
+  SetProp( P_MNPC_AREA, ({ ROOM + "gehoeft_a", ROOM + "gehoeft_b", ROOM + "gehoeft_c" }) ); // Bereichsangabe für Bewegung
+  SetProp( P_MNPC_DEFAULTROOM, ROOM + "gehoeft_a2.lpc"); // Startpunkt
+  SetProp( P_MNPC_FLAGS, MOV_INDOORS + MOV_OUTDOORS + MOV_BACKWARDS + MOV_MOVES); // Bewegungsmöglichkeiten
+  SetProp( P_KILL_NAME, "Knecht des Gehoefts"); //string für Todessequenz
+ 
+  //Chats
+  SetChats( 1, ({"Ulfried sagt: Lass mich in Ruhe \n"}) ); //rate in %
+  SetAttackChats( 5, ({"Ulfried ruft: Dir werd ichs zeigen! \n", "Ulfried ruft: Mit dir werd ich dir Theke putzen! \n"}) ); // rate in%
+
+  AddInfo( QueryProp(P_IDS), "Das bin ich! ", "sagt: ");
+
+  AddInfo( ({"huhn", "huehner"}), "Hier gibt es einen Huehnerstall mit vielen Huehner.", "sagt: ");
+  AddInfo( ({"kuh", "kuehe"}), "Die Kuehe sind im Stall wo sie hingehoeren. ", "sagt: ");
+  AddInfo( ({"bier"}) , "Ich mag kein Bier, zumindest nicht das von Jost.", "sagt: ");
+  AddInfo( ({"arbeit", "aufgabe", "aufgaben", "quest"}) , 
+  "Fragt lieber Jost, den Herrn der Herberge.", "sagt: ");
+  AddInfo( ({"getreide", "weizen"}) , 
+  "Das Getreide steht hoch auf dem Feld, das wird dieses Jahr eine anstrengende Ernte.", "sagt: ");
+
+  //Ausruestung
+  SUID; //Anmelden als Erzeuger von geclonten Objekten und ausführenden Commands
+  // CLONEME( WEAPON + "" );
+  // command("zuecke waffe");
+  CLONEME( "/p/armour/boots/lederstiefel.lpc" );
+  CLONEME( "/p/armour/armour/hemd.lpc" );
+  CLONEME( ARMOUR + "latzhose.lpc" );
+  command("trage alles");
+}
+
+
+// Reactions (werden von außen gestartet)
+
+void StartReaction(string verb, string gruppe, string adverb, int touch) { 
+  if (find_call_out("reaction") != -1) return; 
+  switch (gruppe) { 
+    case "aengstlich": 
+      call_out("reaction", 0, TP,  
+        "sagt: Du brauchst keine Angst haben. \n", 
+        "sagt zu " + capitalize(this_player()->name()) + ": Du brauchst keine Angst haben. \n"); 
+      break; 
+    case "aergerlich": 
+      call_out("reaction", 0, TP, 
+        "sagt: Du brauchst gar nicht zu schimpfen, Du bist selbst schuld an allem. \n", 
+        "sagt zu " + capitalize(this_player()->name()) + ": Du brauchst gar nicht zu schimpfen, Du bist selbst schuld an allem. \n"); 
+      break; 
+    case "albern": 
+      call_out("reaction", 0, TP, 
+        "sagt: Lass doch bitte den Blödsinn. \n", 
+        "sagt zu " + capitalize(this_player()->name()) + ": Lass doch bitte den Blödsinn. \n"); 
+      break; 
+    case "fies":
+      if( !member(fieser_moep, getuid(this_player()) ) )
+        {
+        fieser_moep+=([getuid(this_player()):1]);
+        call_out("reaction", 0, TP, 
+          "sagt: Wenn du das nochmal machst, werd ich boese. \n", 
+          "sagt zu " + capitalize(this_player()->name()) + ": Wenn du das nochmal machst, werd ich boese. \n"); 
+        break; 
+        }
+      else
+        {
+        fieser_moep[getuid(this_player()),0]++;
+        if(fieser_moep[getuid(this_player()),0] >= 3)
+          {
+          call_out("reaction", 0, TP, 
+            "sagt: Das war zuviel! \n", 
+            "sagt zu " + capitalize(this_player()->name()) + ": Das war zuviel. \n"); 
+            environment(this_object())->set_ban(getuid(this_player()), 3);
+            call_out ("Attack", 3, TP);
+            break;
+          }
+        else
+          {
+          call_out("reaction", 0, TP, 
+            "sagt: Letzte Warnung! \n", 
+            "sagt zu " + capitalize(this_player()->name()) + ": Letzte Warnung! \n"); 
+          break;
+          }
+        }  
+    case "frech": 
+      call_out("reaction", 0, TP, 
+        "sagt: He - Was soll das? \n", 
+        "sagt zu " + capitalize(this_player()->name()) + ": He - Was soll das? \n"); 
+      break; 
+    case "froh": 
+      call_out("reaction", 0, TP, 
+        "grinst.",  
+        "grinst."); 
+      break; 
+    case "intim": 
+      call_out("reaction", 0, TP, 
+        "sagt: Bitte such Dir jemand anderes für sowas. \n", 
+        "sagt zu " + capitalize(this_player()->name()) + ": Bitte such Dir jemand anderes für sowas. \n"); 
+      break; 
+    case "nett": 
+      call_out("reaction", 0, TP, 
+        "laechelt Dir zu. \n", 
+        "laechelt " + capitalize(this_player()->name()) + " freundlich an \n"); 
+      break; 
+    case "neutral": 
+      call_out("reaction", 0, TP, 
+        "zieht die Stirn kraus.", 
+        "zieht die Stirn kraus."); 
+      break; 
+    case "traurig": 
+      call_out("reaction", 0, TP, 
+        "troestet dich. \n", 
+        "troestet " + capitalize(this_player()->name()) + ". \n"); 
+      break; 
+  } 
+} 
+void StartReactionAll(string verb, string gruppe, string adverb, int touch) {
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void reaction(object ob, string akteur, string andere) {
+  if (present(ob, ENV(TO))) {
+    tell_object(ob, BS(Name(WER, 1)+" "+akteur));
+    tell_room(ENV(TO), BS(Name(WER, 1)+" "+andere), ({ob}));
+  }
+}
+
+

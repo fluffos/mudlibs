@@ -1,0 +1,152 @@
+/* SilberLand MUDlib
+ *
+ * /secure/udp/channel.c -- UDP channel handling
+ *
+ * $Date: 2001/07/13 15:54:24 $
+ * $Revision: 1.6 $
+ * $Log: channel.c,v $
+ * Revision 1.6  2001/07/13 15:54:24  Woody
+ * name() beherrscht jetzt ebenfalls Genitiv
+ *
+ * Revision 1.5  2001/07/13 14:50:56  Woody
+ * Intermud g-emote Handling implementiert
+ *
+ * Revision 1.4  1999/09/30 07:49:14  Zordan
+ * BugFix in filter_listeners
+ *
+ * Revision 1.3  1998/09/20 13:47:25  Woody
+ * an neues Channelsystem angepasst
+ *
+ * Revision 1.2  1997/04/14 14:38:48  Woody
+ * Channelausgabe nicht mehr per EMPTY sondern SAY/EMOTE
+ *
+ * Revision 1.1  1997/03/16 00:11:09  Woody
+ * prepared for revision control
+ *
+ */
+
+#include <udp.h>
+
+#include <properties.h>
+#include <daemon.h>
+
+#ifdef ZEBEDEE
+inherit "/sys/format";
+#endif
+
+#define COMMAND		"cmd"
+#define CHANNEL		"channel"
+
+private nosave mixed _name_;
+
+int filter_listeners(object ob, string channel) {
+    return ob->QueryProp(P_INTERMUD) && !ob->QueryProp(P_INVIS);
+}
+
+int udp_channel(mapping data) {
+  object *list;
+  string msg;
+  int i, type;
+
+  object z;
+  
+  /* Compatability with older systems. */
+  if (!data[CHANNEL])
+    data[CHANNEL] = data["CHANNEL"];
+  if (!data[COMMAND])
+    data[COMMAND] = data["CMD"];
+
+  data[DATA]=
+    implode(filter_array(efun::explode(data[DATA], ""), #'>=, " "), "");//'))
+  data[NAME]=
+    implode(filter_array(efun::explode(data[NAME], ""), #'>=, " "), "");//'))
+
+  switch(data[COMMAND])
+  {
+    case "list":
+      /* Request for a list of people listening to a certain channel. */
+      list = filter_array(users(), "filter_listeners", 
+                          this_object(), data[CHANNEL]);
+      if (i = sizeof(list)) {
+        msg = "[" + capitalize(data[CHANNEL]) + "@" +
+          LOCAL_NAME + "] Listening:\n";
+        while(i--)
+          msg +=
+            "    " + capitalize(list[i]->query_real_name()) + "\n";
+      }
+      else
+        msg = "[" + capitalize(data[CHANNEL]) + "@" + LOCAL_NAME 
+        + "] Nobody Listening.\n";
+      INETD->send_udp(data[NAME], ([
+                                    REQUEST: REPLY,
+                                    RECIPIENT: data[SENDER],
+                                    ID: data[ID],
+                                    DATA: msg
+                                  ]));
+      return 1;
+
+    case "emote": /* A channel emote. */
+      if (data["EMOTE"] == 2)
+        type = MSG_GEMOTE;
+      else
+        type = MSG_EMOTE;
+      break;
+
+    default: /* A regular channel message. */
+      type = MSG_SAY;
+      break;
+  }
+  _name_ = capitalize(data[SENDER])+"@"+capitalize(data[NAME]);
+  CHMASTER->send(capitalize(data[CHANNEL]), this_object(),
+		 data[DATA], type);
+  _name_ = 0;
+  return 1;
+}
+
+
+string name(int fall)
+{
+  if (stringp(_name_))
+    if (fall == WESSEN)
+      switch (_name_[<1])
+      {
+        case 'x':
+        case 's':
+        case 'z':
+          return _name_ + "'";
+        default:
+          return _name_ + "s";
+      }
+    else
+      return _name_;
+  else
+    return "<Intermud>";
+}
+
+
+private void _send(string mud, mixed data, mapping request)
+{
+  if(member(data[HOST_COMMANDS], "channel") != -1 ||
+     member(data[HOST_COMMANDS], "*") != -1)
+    INETD->send_udp(data[HOST_NAME], request);
+}
+
+void ChannelMessage(mixed m)
+{
+  mapping request;
+
+  if(m[1] == this_object()) return;
+  request = ([
+	      REQUEST : "channel",
+	      SENDER  : m[1]->name() || capitalize(getuid(m[1])),
+	      "CHANNEL": lower_case(m[0]),
+	      DATA    : implode(explode(m[2], "\n"), " ")]);
+
+  if(m[3] == MSG_EMOTE || m[3] == MSG_GEMOTE)
+  { 
+    request["EMOTE"] = (m[3] == MSG_EMOTE ? 1 : 2);
+    request[COMMAND] = "emote";
+  }
+  walk_mapping( INETD->query("hosts") - ([ lower_case(MUDNAME) ]),
+                #'_send/*'*/, request);
+}

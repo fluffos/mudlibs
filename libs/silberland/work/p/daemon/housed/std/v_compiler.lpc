@@ -1,0 +1,148 @@
+/*
+ *  /p/daemon/housed/std/v_compiler.c - Erzeugung der virtuellen (even
+ *  more virtual!) Raeume, es wird das Haus-Masterobjekt gefragt und 
+ *  um Anpassung der Clones gebeten.
+ *  Um Unfaelle zu vermeiden, darf der Krampf aus /std/virtual/v_compiler
+ *  nicht inheritet werden, Forscherpunkte gibts in von Spielern erzeugten 
+ *  und gewarteten Raeumen sowieso nicht. Es werden aber, um kompatibel zu
+ *  bleiben, die Standardfunktionen nach aussen hin verfuegbar gemacht.
+ *
+ *  Das Objekt wird ausschliesslich von /d/seher/haus/virtual_compiler.c 
+ *  inheritet und liegt nur hier herum, um es dem RCS einfacher zu machen
+ *  und um in einer Distri enthalten sein zu koennen - ohne dass /d/seher 
+ *  existiert.
+ *
+ *  (c) 1998-2000 Mud Silberland - Adrian Holzwarth / Anatol@Silberland
+ *
+ *  2000 12 04 Revision 0.1     Auf Inheritance umgestellt, HOUSED_CARETAKER 
+ *                              verwendet, #defines veraendert und #includes 
+ *                              modifiziert, Code etwas optimiert.
+ *
+ */
+
+#pragma strict_types
+
+#include "../sys/house.h"
+#include <v_compiler.h>
+#include <wizlevels.h>
+
+string * save_list;
+private nosave mapping objects;
+private nosave string last_loaded_file;
+private nosave string compiler_path;
+private nosave string std_object;
+
+public void create() {
+  object o;
+  int i;
+
+  if (file_name(this_object())==HOUSED_HOMEPATH+"std/v_compiler") return;
+  if (file_name(this_object())!=VIRTUAL_COMPILER)
+   return (void)destruct(this_object());
+
+  seteuid(getuid(this_object()));
+  compiler_path=VIRTUAL;
+  if (!restore_object(VIRTUAL+"vc"))
+    save_list=({});
+  else rm(VIRTUAL+"vc.o");
+  objects=([]);
+  if ((sizeof(save_list)) && (this_player()) && (IS_WIZARD(this_player()))) 
+    printf("Fand %d Eintraege im Savefile.\n",sizeof(save_list));
+  for (i=sizeof(save_list);i--;)
+    if (o=find_object("/"+save_list[i])) 
+      objects+=([explode(save_list[i], "/")[<1]:o]);
+}
+
+public string Validate(string file) {
+  switch ((int)call_other(HOUSED,"ValidObject",
+        (file[<2..]==".lpc"?file=file[0..<3]:file))) {
+    case HOUSED_ISAHOUSE: std_object=HOUSED_STD_HOUSE;break;
+    case HOUSED_ISAROOM: std_object=HOUSED_STD_ROOM;break;
+    default: return (string)std_object=0;
+  }
+  return file;
+}
+
+public string CustomizeObject() {
+  string file, owner, dummy;
+  int room_no, house_no;
+
+  if (stringp(last_loaded_file)) 
+    file = last_loaded_file;
+  else 
+    file = Validate(explode(file_name(previous_object()), "/")[<1]);
+  if (((!file) && ((VIRTUAL+file)!=file_name(previous_object()))) ||
+     (!is_clone(previous_object()))) 
+    return 0;
+  last_loaded_file = 0;
+  return (string)HOUSED->CustomizeObject(previous_object(),file);
+}
+
+public mixed compile_object(string file) {
+  object o;
+
+  if (!(file=Validate(file)))
+    return;
+  objects = filter_mapping(objects, lambda(({'k}), ({#'objectp, ({#'[, 
+    ({#'objects}), 'k})})));
+  last_loaded_file = file;
+  if (((o=find_object(VIRTUAL+file))&&(is_clone(o))) || 
+      (o=clone_object(std_object)))
+    objects[file]=o;
+  return o;
+}
+
+public mixed QueryObjects() { 
+  return sort_array(m_values(objects)-({0}),
+    lambda(({'a,'b}),({ #'>,({#'file_name, 'a}),({#'file_name, 'b})})));
+}
+
+public int remove() {
+  if (file_name(this_object())==HOUSED_HOMEPATH+"std/v_compiler") {
+    destruct(this_object());
+    return 1;
+  }
+  save_list=map_array(QueryObjects(),#'file_name);
+  save_object(VIRTUAL+"vc");
+  if (this_interactive()) 
+    tell_object(this_interactive(), sprintf("VC speicherte %d Objekte.\n",
+          sizeof(save_list)));
+  destruct(this_object());
+  return 1 ;
+}
+
+public int NuclearStrike(int flag) {
+  string rumms;
+  object * os;
+  int i;
+
+  if ((!this_interactive()) || (this_player()!=this_interactive()) ||
+      (member(HOUSED_CARETAKER,getuid(this_player()))==-1) ||
+      (process_string()) || (flag!=1093))
+    return 0;
+  rumms= sprintf("\n"  // credit to Joan 'jgs' Stark
+    "                          _ ._  _ , _ ._             \n"
+    "                        (_ ' ( `  )_  .__)           \n"
+    "                       ( (  (    )   `)  ) _)        \n"
+    "                      (__ (_   (_ . _) _) ,__)       \n"
+    "                          `~~`\\ ' . /`~~`            \n"
+    "                          ,::: ;   ; :::,            \n"
+    "                         ':::::::::::::::'           \n"
+    "                 _____________/_ __ \\____________    \n\n");
+  tell_object(this_interactive(),sprintf(
+    "%s\a Alle geladenen virtuellen Objekte (%d) "
+    "werden aus dem Speicher entfernt.\n\n",rumms,
+    i=sizeof(os=QueryObjects())));
+  if (mappingp(objects)) 
+    for (i;i--;) {
+        if (environment(os[i]))
+          tell_object(environment(os[i]),
+            "Hoehere Gewalt laesst etwas verschwinden.\n");
+        tell_room(os[i],sprintf("%s%s\a raeumt gruendlich auf.\n\n",rumms,
+          this_player()->Name()));
+      os[i]->remove();
+      if (objectp(os[i])) destruct(os[i]);
+    }
+  destruct(this_object());
+  return 1;
+}

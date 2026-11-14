@@ -1,0 +1,179 @@
+// SilberLand MUDlib
+//
+// spellbooks/paladine/zielattacke.c
+//
+// $Date: 2009/12/08 21:28:26 $
+/* $Revision: 1.3 $
+ * $Log: zielattacke.c,v $
+ * Revision 1.3  2009/12/08 21:28:26  Angrox
+ * SA_SPEED und eifer ausgeschlossen
+ *
+ * Revision 1.2  2005/04/25 14:56:24  Feyaria
+ * holy nur mehr bei gutem erfolg oder nichtmagischen schwertern als schadenstyp dazu
+ *
+ * Revision 1.1  2003/07/09 11:39:22  Angrox
+ * Initial revision
+ *
+ */
+// Prototypen
+int prep_zielattacke(object caster, mapping sinfo);
+int zielattacke(object caster, mapping sinfo);
+
+
+int prep_zielattacke(object caster, mapping sinfo) {
+  object weapon, victim;
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+             "Welchen Frevler moechtest Du vernichten?\n");
+  if(!victim) return 0;
+  if(!weapon=caster->QueryProp(P_WEAPON)) {
+    write(BS("Paladin! Du musst schon eine Waffe gezueckt haben!\n"));
+    return 0;
+  }
+  if(weapon->QueryProp(P_WEAPON_TYPE)!=WT_SWORD) {
+    write(BS("Paladin! Eine Zielattacke kannst Du nur mit einem Schwert "
+        +"durchfuehren!\n"));
+    return 0;
+  }
+  /* if(weapon->QueryProp(P_NR_HANDS)>1) {
+    write(BS("Paladin! Eine Zielattacke kannst Du nur mit einem "
+        +"einhaendigem Schwert durchfuehren!\n"));
+    return 0;
+  }*/
+  if(interactive(caster) && caster->QueryProp(P_BLIND)) {
+    Message(caster,0,
+      BS("Bei Dusty, Du bist blind und kannst so keine gezielte Attacke "
+         "ausfuehren!\n"),0);
+    return 0;
+  }
+  return 1;
+}
+
+int zielattacke(object caster, mapping sinfo) {
+  object weapon, victim;
+  int wc,suc;
+  float fix;
+  mixed damtype;
+  int weap_cl, gl;
+
+  if( !prep_zielattacke( caster, sinfo) ) return 0;
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+             "Welchen Frevler moechtest Du vernichten?\n");
+  weapon=caster->QueryProp(P_WEAPON);
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+      printf(sinfo[SI_SP_LOW_MSG]);
+      return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  Message(caster, 0, "Du rufst: DUSTY STEH MIR BEI!!\nDu attackierst "
+      +"Deinen Feind!\n", 0);
+  Message(caster, victim, sprintf("%s ruft: DUSTY STEH MIR BEI!!\n%s "
+      +"attackiert %s!\n", caster->Name(WER), caster->Name(WER),
+      victim->name(WEN)), 2);
+  Message(caster, victim, sprintf("%s ruft: DUSTY STEH MIR BEI!!\n%s "
+      +"attackiert Dich!!\n", caster->Name(WER), caster->Name(WER)), 1);
+  if((suc=SpellSuccess(caster, sinfo))<=0) {
+    Message(caster, 0, BS(sprintf("%s weicht geschickt aus. Du verfehlst!\n",
+        victim->Name(WER))), 0);
+    Message(caster, victim, BS(sprintf("%s weicht geschickt aus. %s verfehlt "
+        +"%s.\n", victim->Name(WER), caster->Name(WER),
+        victim->QueryPronoun(WEN))), 2);
+    Message(caster, victim, BS(sprintf("Du weichst geschickt aus. %s "
+        +"verfehlt Dich.", caster->Name(WER))), 1);
+    return MISSERFOLG;
+  }
+  if(suc>8000 && !random(3) && !present("\neifer", caster))
+      victim->ModifySkillAttribute(caster, SA_SPEED, 200, 2+random(6));
+  wc=weapon->QueryProp(P_WC);
+  if(!fix=weapon->QueryProp(P_WC_FIXFACTOR))
+    fix=0.3;
+  if(!pointerp(damtype=weapon->QueryProp(P_DAM_TYPE)))
+    damtype=({DT_HOLY, DT_SLASH});
+  else if (suc > 7000 || !sizeof(damtype & m_indices(MAGICAL_DAMAGE_TYPES)))
+    damtype+=({DT_HOLY});
+
+  weap_cl=wc;
+  gl=caster->QueryProp(P_GUILD_LEVEL);
+
+  wc+=random(20)+wc*caster->QueryProp(P_GUILD_LEVEL)/15+wc*suc/
+    (2*MAX_ABILITY);
+  wc=DoModificationByAlign(wc, caster, victim);
+  if(wc>900) wc=900;
+  sinfo[SI_SKILLDAMAGE]=(int)wc*(1-fix);
+  sinfo[OFFSET(SI_SKILLDAMAGE)]=(int)wc*fix;
+  sinfo[SI_SKILLDAMAGE_TYPE]=damtype;
+  // ZUM LOGGEN DER SPELLSTAERKE!
+  if(enable_spell_log)
+    write_file("/gilden/paladine/spells/zielattacke",
+        sprintf("CST: %O, VIC: %O, CA: %d, VA: %d\n   suc: %d, dam: %d (WC: "
+            +"%d, GL: %d), "
+            +"fix: %.2f\n", caster, victim->Name(RAW),
+            caster->QueryProp(P_ALIGN), victim->QueryProp(P_ALIGN), suc, wc,
+            weap_cl, gl, fix));
+  // ----------------------------
+  Message(caster, 0, BS("Mit goettlicher Wucht dringt Deine Waffe in Deinen "
+      +"Gegner ein! Gepriesen sei Dusty! Heilig! Heilig! Heilig!"), 0);
+  Message(caster, victim, BS(sprintf("Die Waffe von %s dringt mit goettlicher "
+      +"Wucht in Dich ein!!!!!", caster->name(WEM))), 1);
+  Message(caster, victim, BS(sprintf("Die Waffe von %s dringt mit "
+      +"goettlicher Wucht in %s ein!!", caster->name(WEM),
+      victim->name(WEN))), 2);
+      
+  if(TryAttackSpell(victim, wc, damtype, ([SP_NAME:"zielattacke", SP_SHOW_DAMAGE:1, SP_PHYSICAL_ATTACK:1]), caster, sinfo) &&
+     objectp(victim) && HAS_BLESSING(caster, BLESSING_PUNISHMENT) && 
+     time() - victim->QueryProp(P_TMP_PALADINE_LAST_SMITE) > 10 + random(10)) {
+      call_out("divine_punishment", 0, caster, victim);
+     }
+
+  weapon->TakeFlaw();
+
+  return ERFOLG;
+}
+
+public void divine_punishment(object caster, object victim) {
+  string effect;
+  int dimnishingReturn, casterAlign;
+
+  if(!objectp(victim)) return;
+
+  if(time()-victim->QueryProp(P_TMP_PALADINE_LAST_SMITE) < 40) {
+    dimnishingReturn = (40 - (time()-victim->QueryProp(P_TMP_PALADINE_LAST_SMITE))) * 10;
+  } else {
+    dimnishingReturn = 0;
+  }
+
+  casterAlign = (caster->QueryProp(P_ALIGN)>1500 ? 1500 : caster->QueryProp(P_ALIGN)) - dimnishingReturn;
+  if(casterAlign < 200) return;
+
+  if(!victim->QueryProp(P_BLIND) && !random(3)) {
+    effect = sprintf("blendet %s", victim->QueryPronoun(WEN));
+    victim->SetProp(P_BLIND, casterAlign/333);
+  } else if(!victim->QueryProp(P_DISABLE_SPELLS) && victim->QueryProp(P_SPELLRATE) && !random(3)) {
+    effect = sprintf("raubt %s die Zauberkraft", victim->QueryPronoun(WEM));
+    victim->SetProp(P_DISABLE_SPELLS, 1 + random(casterAlign/333));
+  } else if(!victim->QueryProp(P_DISABLE_ATTACK) && !random(2)) {
+    effect = sprintf("schleudert %s zu Boden", victim->QueryPronoun(WEN));
+    victim->SetProp(P_DISABLE_ATTACK, 1 + random(casterAlign/333));
+    victim->SetProp("last_rammen_time", time());
+  } else if(!victim->QueryProp(P_TMP_DEFEND_HOOK)) {
+    effect = sprintf("zertruemmert %sen Schutz", victim->QueryPossPronoun(WESSEN));
+    victim->SetProp(P_TMP_DEFEND_HOOK, ({4 + random(casterAlign/333), TO, "devine_punishment_reduced_armour"}));
+  } else {
+    return;
+  }
+
+  caster->AddSp(-5);
+
+  victim->SetProp(P_TMP_PALADINE_LAST_SMITE, time());
+  
+  Message(caster, 0, BS(sprintf("Goettlicher Zorn faehrt mit aller Macht auf %s herab und %s!",
+                        victim->name(WEN, 1), effect)), 0);
+  Message(caster, victim, BS(sprintf("Goettlicher Zorn faehrt mit aller Macht auf %s herab und %s!",
+                            victim->name(WEN, 1), effect)), 2);
+
+  return;
+}
+
+public mixed* devine_punishment_reduced_armour(int dam, string *dam_type_list, mixed spell, object enemy) {
+  return ({ (int) (dam * 1.1), dam_type_list, spell }); // 10% mehr schaden
+}

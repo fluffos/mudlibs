@@ -1,0 +1,171 @@
+
+// $Date: 2005/01/14 22:21:46 $
+/* $Revision: 1.4 $
+ * $Log: feuerwusel.c,v $
+ * Revision 1.4  2005/01/14 22:21:46  Feyaria
+ * HP abzug statt heilung wenn man wuesel beruehrt.
+ *
+ * Revision 1.3  2003/06/25 13:59:17  Ronja
+ * Lichtitem wird fuer Spieler geclont, der Wusel laeuft wieder hinterher
+ *
+ * Revision 1.2  2003/01/21 11:57:57  Angrox
+ * AddId(SID_NOLEARN)
+ *
+ * Revision 1.1  2002/08/18 13:53:38  Angrox
+ * Initial revision
+ *
+ */
+
+
+inherit "std/npc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <class.h>
+#include <new_skills.h>
+#include "/gilden/druidenzirkel/druiden.h"
+
+object owner, item;
+
+void create()
+{
+
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein Feuerwusel");
+  SetProp(P_LONG,
+    "Der Feuerwusel ist eine handgrosse Feuerkugel, die Dir Licht "
+    "spendet."
+  );
+
+  SetProp(P_NAME, "Feuerwusel");
+  SetProp(P_GENDER, MALE);
+  AddId(({"wusel", "feuerwusel", SID_NOLEARN}));
+
+  create_default_npc(1);
+  SetProp(P_HANDS, ({"mit Flammen",40, DT_FIRE}));
+  SetProp(P_MAX_HP, 100);
+  SetProp(P_BODY, 100);
+  SetProp(P_RACE, "Elementar");
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:-100,T_RANGE_MAX:100]));
+  SetProp(P_SIZE, 30);
+  SetProp(P_ALIGN, 0);
+  SetProp(P_MAX_HANDS, 0);
+  SetProp(P_NOATTACK, "weicht geschickt aus.");
+  SetProp(P_FRIEND,1);
+  SetProp(P_NOCORPSE, 1);
+  SetProp(P_MATERIAL, ([MAT_FIRE:100]) );
+
+  SetProp(P_MSGIN, "wuselt herein");
+  SetProp(P_MSGOUT, "wuselt");
+  SetProp(P_MMSGIN, "erscheint urploetzlich");
+  SetProp(P_MMSGOUT, "loest sich auf");
+
+  AddInfo(DEFAULT_INFO, "versteht Dich doch gar nicht.\n");
+
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    "Der Feuerwusel will Deine Sachen nicht tragen.\n" }) );
+
+  owner   = 0;
+  item    = 0;
+}
+
+void SetOwner(object pl)
+{
+  if(!objectp(pl))     return;
+  if(!interactive(pl)) return;
+
+  if(owner == 0)
+  {
+    owner = pl;
+    pl->AddPursuer(TO);
+  }
+}
+
+object QueryOwner()
+{
+  return owner;
+}
+
+object QueryItem()
+{
+  return item;
+}
+
+void LightOn(int seconds)
+{
+  if(!owner)              return;
+  if(!interactive(owner)) return;
+
+  item = clone_object(OBJ("leuchtitem"));
+  item->move(owner,M_GET|M_NOCHECK|M_SILENT);
+  item->SetProp(P_LIGHT, 1);
+
+  call_out("wegbinich", seconds);
+}
+
+varargs int remove(int silent)
+{
+  if(objectp(item)) item->remove(1);
+
+  ::remove(silent);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  if(player == owner) call_out("wegbinich", 0, 1);
+}
+
+void init()
+{
+  object room;
+
+  ::init();
+
+  if(!(room = ENV(TO))) return;
+
+  if(room->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN]==TT_UNDERWATER ||
+     room->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN]==TT_WATER       )
+  {
+    call_out("WaterDeath", 0);
+  }
+}
+
+void WaterDeath()
+{
+  tell_room(ENV(TO), Name(WER,1)+" verdampft mit einem leisen Zischen.\n");
+  remove();
+}
+
+void wegbinich()
+{
+  tell_room(ENV(TO), Name(WER,1)+" loest sich in ein Rauchwoelkchen auf.\n");
+  remove();
+}
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+  if(touch) call_out("fire", 0);
+}
+
+void fire()
+{
+  tell_room(ENV(TO), sprintf("%s verbrennt sich furchtbar an "
+      "%s!\n%s schreit laut auf!\n", TP->Name(WER), name(WEM,1),
+      TP->Name(WER)), ({TP}));
+
+  tell_object(TP, BS(sprintf("WAHHHH! Du verbrennst Dich furchtbar an "
+      "%s!", name(WEM,1))));
+
+  if(TP->is_class_member(CL_TROLL))
+  {
+    TP->AddHp(-random(20)-11);
+  }
+  else
+  {
+    TP->AddHp(-random(20)-1);
+  }
+}

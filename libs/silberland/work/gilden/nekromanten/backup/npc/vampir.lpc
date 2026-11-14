@@ -1,0 +1,160 @@
+// 12.10.1999 Angrox
+//            SetAggressive hinzugefuegt
+// 06.11.2000 angrox
+//            SetSkeleton geaendert (corpse nun mixed)
+
+inherit "std/npc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <new_skills.h>
+#include "../def.h"
+
+int creation_time;
+int dur=-1;
+int aggr=0;
+
+void create()
+{
+ 
+  if (!is_clone(TO)) return;
+  ::create();
+
+  creation_time=time();
+
+  SetProp(P_SHORT, "Ein Vampir");
+  SetProp(P_LONG,
+    "Ein schattenhaftes Wesen mit langen, spitzen Zaehnen. " );
+  SetProp(P_NAME, ({ "Vampir", "Vampirs", "Vampir", "Vampir"}) );
+  SetProp(P_GENDER, MALE);
+  AddId( ({ "vampir", "Nekromantenvampir",NEKRO_IS_CONTROLABLE }));
+
+  SetProp(P_RACE, "Untoter");
+  SetProp(P_ALIGN, -900);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_NOCORPSE, 1);
+  SetProp(P_NO_GLOBAL_ATTACK, 1);
+  SetProp(P_FRIEND, 1);
+  SetProp(P_MAX_POISON, 0);
+  SetProp(P_TEMPERATURE_RANGE, ([0:-276, 1:500]));
+  SetProp(P_DIE_MSG, " loest sich in seine stinkenden Einzelteile auf.\n");
+
+  AddDetail( ({ "zaehne" }), 
+    "Die Zaehne des Vampirs sind lang und spitz und schauen gefaehrlich aus." );
+
+}
+
+void SetVampir(mixed corpse, mixed caster, int succ)
+{
+  int level, maxlevel;
+ 
+  if(objectp(caster)) {
+    SetProp(P_NEKRO_CASTED_BY, caster);
+    SetProp(P_LONG, QueryProp(P_LONG)[0..<2] + 
+      caster->Name()+" hat diesen Untoten beschworen.");
+    //  SetProp(P_SHORT, "Ein "+corpse->QueryProp(P_RACE)+"zombie");
+    //  AddId(lower_case(corpse->QueryProp(P_RACE))+"zombie");
+  }
+  if(intp(corpse)) {
+    level=corpse;  
+    SetProp(P_SIZE, 150+random(80));
+  }
+  else {
+    SetProp(P_SIZE, corpse->QueryProp(P_SIZE));
+    if(!objectp(caster)) 
+      maxlevel=23+random(25);
+    else 
+      maxlevel=23+caster->QueryProp(P_GUILD_LEVEL);
+    if( (level=corpse->QueryProp(P_LEVEL)*2/3) > maxlevel )  
+      level=maxlevel;
+  }
+
+  create_default_npc(level);
+  SetProp(P_HANDS, ({" mit spitzen Vampirzaehnen", 50+level*5+succ/100,
+                     DT_PIERCE }));
+  SetProp(P_XP, 0);
+  SetProp(P_MAX_HP, level*20 + succ/100); // maximal 600+100
+  SetProp(P_MAX_SP, QueryProp(P_MAX_HP));
+  SetProp(P_BODY, level*3);
+  SetProp(P_RESISTANCE_STRENGTHS, ([ 
+        DT_UNHOLY: -0.5, DT_HOLY:0.5, DT_LIGHT:2 ]));
+  if(!objectp(caster)) 
+    dur=(random(20)+10)*30 + succ/20 + random(100);
+  else 
+    dur=caster->QueryProp(P_GUILD_LEVEL)*30 + succ/20 + random(100);//180+500+100
+
+  SetProp(P_SPELLRATE, 35+2*level);
+
+  AddSpell(1,level*4+succ/40,   // Lv.30 & max.success: 120+250
+    "Der Vampir zerresist Deine Kehle.\n",
+    "Der Vampir zerresist @WESSEN Kehle.\n",
+    DT_RIP,([SP_SHOW_DAMAGE:1]));
+  AddSpell(1,level*5+succ/50,   // Lv.30 & max.success: 150+200
+    "Der Vampir wirft einen unheiligen Zauber nach Dir.\n",
+    "Der Vampir wirft einen unheiligen Zauber nach @WEM.\n",
+    DT_UNHOLY,([SP_SHOW_DAMAGE:1]));
+
+  return;
+}
+
+void heart_beat()
+{
+  ::heart_beat();
+  if (environment() )
+    do_damage(set_light(0));
+}
+
+int SetMaster(object master)
+{
+  if(objectp(master))
+  {
+    SetProp(P_NEKRO_MASTERED_BY, master);
+    master->AddPursuer(TO);
+    return 1;
+  }
+  else return 0;
+}
+
+void InformDefend(object enemy) { Kill(enemy); }
+
+void reset()
+{
+  if (!is_clone(TO)) return ::reset();
+  
+  remove();
+  return;
+}
+
+void init()
+{
+  object ob;
+/*
+  if((time()-creation_time) > dur)
+  {
+    if(objectp(ob=QueryProp(P_NEKRO_MASTERED_BY))) ob->RemovePursuer(TO);
+    call_out("die", 0);
+  }
+*/
+  if(!aggr && objectp(ob=QueryProp(P_NEKRO_CASTED_BY)) && (TP == ob) )
+     ob->AddDefender(TO);
+  ::init();
+  return;
+}
+
+int QueryDuration()
+{
+  return creation_time+dur-time();
+}
+
+int SetAggressive(int x) {
+  object ob;
+  aggr=x;
+  if(intp(x))
+    SetProp(P_AGGRESSIVE, x); 
+  if(objectp(ob=QueryProp(P_NEKRO_CASTED_BY)))
+    ob->RemoveDefender(TO);
+  SetProp(P_NO_GLOBAL_ATTACK, 0);
+  SetProp(P_FRIEND, 0);
+  return 1;  
+}

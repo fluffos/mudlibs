@@ -1,0 +1,176 @@
+// SilberLand Mudlib
+//
+// INSTRUMENT.C -- instrument standard object
+//
+// Andyl@Silberland
+//
+// 1998-12-25
+// 
+// Last updated: 1999-05-26
+//
+// $Date: 1999/05/26 18:20:10 $
+/* $Revision: 1.1 $
+ * $Log: instrument.c,v $
+ * Revision 1.1  1999/05/26 18:20:10  Zordan
+ * Initial revision
+ *
+ */
+
+#pragma strong_types
+
+inherit "/std/thing/properties";
+inherit "/std/thing/commands";
+inherit "/std/thing/restrictions";
+inherit "/std/armour/description";
+inherit "/std/armour/moving";
+inherit "/std/armour/combat";
+inherit "/std/thing/language";
+
+
+#include <config.h>
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <wizlevels.h>
+#include <defines.h>
+#include <new_skills.h>
+#include <moredef.h>
+#include "./instrument.h"
+#include "/gilden/bardengilde/barden_extern.h"
+
+ENVCHECKPROC
+
+public void create()
+{
+  properties::create();
+  commands::create();
+  description::create();
+  combat::create();
+  AddId(({"instrument", "\ninstrument"}));    
+  SetProp(P_ARMOUR_TYPE, AT_SHIELD);
+  ENVCHECK
+
+  AddCmd(({"spiele", "spiel"}), "cmd_play_instrument");
+}
+
+private int successToIndex(int success) {
+  if(success < 0) {
+    return 0;
+  }
+
+  return ((int) (success/1000)) +1;
+}
+
+private string DefaultReplace(string str, object pl)
+{
+  if (strstr(str,"@WER",0) != -1)
+    str = regreplace(str,"@WER",pl->name(WER,1),1);
+  if (strstr(str,"@WESSEN",0) != -1)
+    str = regreplace(str,"@WESSEN",pl->name(WESSEN,1),1);
+  if (strstr(str,"@WEM",0) != -1)
+    str = regreplace(str,"@WEM",pl->name(WEM,1),1);
+  if (strstr(str,"@WEN",0) != -1)
+    str = regreplace(str,"@WEN",pl->name(WEN,1),1);
+  
+   if (strstr(str, "@INSTRUMENT2", 0) != -1) {
+    str = regreplace(str, "@INSTRUMENT2", this_object()->name(WESSEN, 1),1);
+  }
+  if (strstr(str, "@INSTRUMENT3", 0) != -1) {
+    str = regreplace(str, "@INSTRUMENT3", this_object()->name(WEM, 1),1);
+  }
+  if (strstr(str, "@INSTRUMENT4", 0) != -1) {
+    str = regreplace(str, "@INSTRUMENT4", this_object()->name(WEN, 1),1);
+  }
+  if (strstr(str, "@INSTRUMENT", 0) != -1) {
+    str = regreplace(str, "@INSTRUMENT", this_object()->name(WER, 1),1);
+  }
+
+  return str;
+}
+
+private string parse_message(string msg, object pl) {
+  return process_string(DefaultReplace(msg, pl));
+}
+
+private void informBardSong(object owner, int success) {
+  object env, *others;
+  int i;
+  env = environment(owner);
+  if(!objectp(env)) {
+    return;
+  }
+
+  env->InformBardSongPlayed(owner, success);
+  others = all_inventory(env);
+  for(i=0;i<sizeof(others);++i) {
+    others[i]->InformBardSongPlayed(owner, success);
+  }
+  return;
+}
+
+public int cmd_play_instrument(string what) {
+  object owner;
+  int success, bucket, cost;
+
+  owner  = QueryProp(P_WORN);
+
+  notify_fail("Welches Instrument moechtest du spielen?\n");
+  if(!id(what)) return 0;
+  if(!objectp(owner)) {
+    write("Du musst " + name(WEN, 1) + " tragen um das zu tun.\n");
+    return -1;
+  }
+
+  if(owner != this_player()) {
+    write("Du musst " + name(WEN, 1) + " tragen um das zu tun.\n");
+    return -1;
+  }
+
+  if(owner->QuerySkill(SK_MUSIC) == 0) {
+    write(BS("Bevor du das versuchst, solltest du das Muszieren erlernen!"));
+    return -1;
+  }
+
+  if(owner->QueryProp(P_NEXT_SPELL_TIME) > time()) {
+    write(BS("Dazu bist du noch zu erschoepft."));
+    return -1;
+  }
+
+  cost = QueryProp(P_INSTRUMENT_LEVEL) *20;
+  if(this_player()->QueryProp(P_SP) < cost) {
+    write(BS("Dir fehlt die magische Kraft dazu."));
+    return -1;
+  }
+
+  success = owner->UseSkill(SK_MUSIC);
+  bucket = successToIndex(success);
+
+  tell_object(this_player(), BS(parse_message(QueryProp(P_INSTRUMENT_MESSAGES)[bucket][0], this_player())));
+  tell_room(environment(this_player()), BS(parse_message(QueryProp(P_INSTRUMENT_MESSAGES)[bucket][1], this_player())), ({this_player()}));
+
+  // TODO lustige zusaetzeffekte je nach erfolg
+  informBardSong(owner, success);
+
+  this_player()->SetProp(P_NEXT_SPELL_TIME, time()+30);
+  this_player()->AddSp(-cost);
+  return 1;
+}
+
+void init()
+{
+  commands::init();
+  combat::init();
+  description::init();
+}
+
+void reset() {}
+
+
+
+
+
+
+
+
+
+

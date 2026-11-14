@@ -1,0 +1,820 @@
+/*
+** Max, der Wirt                                   (w) Woody@SilberLand
+**
+**    date      Version  comments
+** --------------------------------------------------------------------
+** 1996-01-05     1.0    Release
+** 1996-01-10     1.1    verstaerkt & Schuerze mitgegeben
+**                       livingname "max" fuer Abfrage in kneipe.kaufe
+** 1996-02-28     1.2    +500 LP pro reset, und noch ein wenig staerker
+** 1996-04-04     1.3    include midas.h statt ~woody/files.h
+** 1996-11-08     1.4    Spells sind DT_BLUDGEON, Schaden wird angezeigt
+** 1997-03-12     1.5    P_SIZE
+** 1997-05-22     1.6    Freibier fuer kleine Spieler
+** 1997-08-29     1.7    Ueberarbeitet, mehr Infos
+** 1997-09-27     1.8    Typofix
+** 1997-12-17     1.9    ignoriert spendieren
+** 1998-03-03     1.10   clont sich schuerze aus /p/armour
+** 1998-07-05     1.11   midas.lib
+** 1999-03-16     1.12   Ist jetzt ne BP
+** 2000-10-25     1.13   Laesst sich wieder beliebig oft killen
+** 2001-05-30     1.14   Sagt "Hallo..." :)
+** 2001-06-28     1.15   Nicknames in ein Mapping verlegt
+** 2002-02-05     1.16   Gruss ausrichten (von Landar) implementiert
+** 2002-08-20     1.17   GetNick()
+** 2003-08-07     1.18   Diverse AddInfo's fuer HST
+** 2005-02-24     1.19   Typofix
+*/
+
+inherit "std/npc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+
+#include "../midas.h"
+
+#define FREIBIER_LEV 4          // Maximal-Level fuer Freibier
+#define FREIBIER_XP 20000       // Maximal-XP fuer Freibier
+#define MAX_MAX_KILLS 5         // maximal erlaubte Max-Kills
+
+#ifdef LOGF
+#undef LOGF
+#endif
+#define LOGF "/d/ebene/log/max.kills"
+#define GRUSSLOG "/d/ebene/log/max.gruss"
+#define SCHNAPSLOG "/d/ebene/log/max.schnapszahl"
+#define SAVEFILE "/d/ebene/log/max.savedkills"
+
+#define FEINDE ({})
+
+#define TOMBOLAMASTER "/d/ebene/Midas/std/tombolamaster"
+
+nosave int lastWalk;
+mapping my_kills;
+
+mapping nicks = ([
+                    "alice"   : "Alicerl",
+                    "aruna"   : "Arunchen",
+                    "snoopie" : "Snoopielein",
+                    "yeza"    : "Yezilein",
+                    "yara"    : "Yarilein",
+                    "nutella" : "Schokocreme :-)",
+                    "sauron"  : "Sauri",
+                    "blain"   : "Blaini",
+                    "feyaria" : "Fey",
+                    "woody"   : "Chef",
+                    "hotaru"  : "suesseste Elfin",
+                    "kleine"  : "Kleine",
+                    "ronja"   : "Raeubertochter",
+                    "sternchen":"Sternderl",
+                    "macalla" : "Maci",
+                    "eyrie"   : "Eyri",
+                    "lumin"   : "Luminator",
+                    "yoghurt" : "Yoghi",
+                    "kia"     : "Kiaschnucki",
+                    "creative": "Meister Elton",
+                    "timo"    : "Timmy",
+                    "ponder"  : "Ponder Stibbons",
+                    "eidan"   : "Eidan",
+                    "kailani" : "Lani",
+                    "angrox"  : "Angrox, Du Hirtenbub",
+                    "lamuerte": "Lamuerte, Du Hirtenbub",
+                    "futurama": "Planet Express",
+                    "wumanzu" : "Berserkermamazweitie",
+                    "ademion" : "Addi",
+                    "sweetshe": "Sweetie",
+                    "fenris"  : "Woiferl",
+                    "nei"     : "Neichen",
+                    "kirin"   : "Kiri! Le tiriel",
+                    "ildenar" : "Ilde",
+                    "rakulan" : "Plueschoger",
+                    "torgrimm": "Torgrimm",
+                    "ouzo"    : "Uzi",
+                    "teqlablu": "Teqi",
+                    "hiri"    : "Nekrofellhase",
+                    "aradia"  : "Lady Aradia",
+                    "atlas"   : "Elfenbersi",
+                    "gilagas" : "Elfenheld Gilagas",
+                    "aaliyah" : "edle Dame Aaliyah",
+                    "tower"   : "Tuermchen",
+                    "chivas"  : "Chivas, alter Boersenmakler",
+                    "paul"    : "Paulchen",
+                    "dropkick": "Dropsi",
+                ]);
+
+
+int SetNick(string name, string nick)
+{
+  if (getuid(this_interactive()) != "woody")
+    return -1;
+  nicks[name] = nick;
+  return 1;
+}
+
+
+string GetNick(string who)
+{
+  string tmp;
+
+  if (member( nicks, who ))
+    return nicks[who];
+
+  tmp = regreplace( who,
+      "^([^aeiouy]*[aeiouy][^aeiouy]*)[aeiouy].*$", "\\1i", 0 );
+
+  if (who == tmp)
+    if (tmp[<1] != 'i' && tmp[<1] != 'y' && tmp[<2..] != "ie")
+      tmp += "i";
+    else
+      tmp += "lein";
+
+  return capitalize(tmp);
+}
+
+
+void WriteKillsFile()
+{
+  mixed ind;
+  int i;
+
+  rm(SAVEFILE);
+  ind = sort_array( m_indices(my_kills), #'< );
+  for (i=sizeof(ind); i-->0; )
+    write_file( SAVEFILE, sprintf("%s|%d\n",ind[i],my_kills[ind[i]]) );
+}
+
+
+void ReadKillsFile()
+{
+  string wer,n;
+  mixed lines;
+  int i;
+
+  my_kills=([]);
+  lines=explode(read_file(SAVEFILE),"\n");
+  for (i=0; i<sizeof(lines); i++)
+    if (sscanf(lines[i],"%s|%d",wer,n) == 2)
+      my_kills[wer] = n;
+}
+
+
+void create()
+{
+
+  if (is_clone(this_object()))
+    return destruct(this_object());
+
+  if (!this_interactive() || getuid(this_interactive())!="woody")
+    if (file_name(previous_object())!=ROOM "kneipe")
+      return destruct(this_object());
+
+  ::create();
+  AddId ( ({"max","wirt","\nmax", "NOWIMPY"}) );
+  SetProp (P_LONG, "Vor Dir steht Max, der Wirt.\n"
+    "Er ist von kraeftiger Statur, wirkt aber sehr zuvorkommend und "+
+    "hoeflich. Er wird wohl auch problemlos mit unerwuenschten "+
+    "Gaesten fertig. Er traegt eine gruene Schuerze, wie das "+
+    "alle Wirte fuer gewoehnlich tun.\n"+
+    "Er ist Freund von Woody.\n");
+/*
+  +
+    sizeof(FEINDE) ? "Er ist Feind von "+
+    (sizeof(FEINDE) > 1 ?
+     implode(FEINDE[0..<2], ", ")+" und "+FEINDE[<1] :
+     FEINDE[0]) + ".\n" : "");
+*/
+
+  AddDetail( ({ "statur", "figur" }),
+      "Max ist kraeftig gebaut. Er wird wohl mit jedem Unruhestifter fertig." );
+  AddDetail( ({ "schuerze" }),
+      "Max traegt eine gruene Schuerze." );
+  AddDetail( ({ "gesicht" }),
+      "Er hat ein kantiges, aber keineswegs hageres Gesicht." );
+  AddDetail( ({ "nase" }),
+      "Max' Nase ist anders als es der Name der Kneipe vermuten laesst NICHT rot." );
+  AddDetail( ({ "haare" }),
+      "Viel Haare hat Max nicht mehr, aber die noch uebrigen sind schwarz und lang." );
+  AddDetail( ({ "augen", "auge" }),
+      "Max hat stahlblaue Augen." );
+  AddDetail( ({ "mund" }),
+      "Mit dem redet Max fuer gewoehnlich. Oder trinkt Bier." );
+  AddDetail( ({ "ohr", "ohren" }),
+      "Damit hoert Dir Max aufmerksam zu." );
+  AddDetail( ({ "arm", "arme" }),
+      "Zwei kraeftige Arme verleihen Max' Worten im Zweifelsfall Nachdruck." );
+  AddDetail( ({ "bein", "beine", "fuss", "fuesse" }),
+      "Max steht mit zwei kraeftigen Beinen auf seinen Fuessen fest am Boden." );
+  AddDetail( ({ "hand", "haende" }),
+      "Die kann er blitzschnell zur Faust ballen." );
+  AddDetail( ({ "koerper" }),
+      "Er ist durchtrainiert." );
+
+  SetProp (P_NAME, "Max");
+  SetProp (P_ARTICLE, 0);
+  SetProp (P_GENDER, MALE);
+  SetProp (P_SHORT, "Max, der Wirt");
+  SetProp(P_RACE, "Mensch");
+  SetProp (P_ALIGN, 300);
+  create_default_npc(20);
+  SetProp (P_MAX_HP, 1000);
+  // SetProp (P_LEVEL, 20);
+  // SetProp (P_MAX_SP, 1000);
+  // SetProp (P_XP, 500000);
+  // SetProp (P_BODY, 150);
+  SetProp (P_SIZE, 170+random(10));
+  SetProp (P_MAX_HANDS, 2);
+  SetProp (P_IGNORE, ({ "spendiere" }) );
+  SetProp (P_HANDS, ({" mit seinen kraeftigen Haenden", 160, DT_BLUDGEON}) );
+
+  set_living_name("max");
+
+  // euid setzen, damit schuerze gecloned werden kann
+  SUID;
+
+  // Daten laden bzw. aus Kill-Log erstellen
+  if (file_size(SAVEFILE) < 0)
+  {
+    string wer;
+    mixed lines;
+    int i;
+
+    my_kills=([]);
+    lines=explode(read_file(LOGF),"\n");
+    for (i=0; i<sizeof(lines); i++)
+    {
+      wer = lines[i][50..<2];
+      if (wer[<10..] == " (direkt!)")
+        my_kills[lower_case(wer[0..<11])]++;
+      else
+        my_kills[lower_case(wer)]++;
+    }
+    WriteKillsFile();
+  }
+  else
+    ReadKillsFile();
+
+  // Schuerze clonen
+  CLONEME("/p/armour/cloak/schuerze");
+  command ("ziehe schuerze an");
+
+  SetProp(P_SPELLRATE,40);
+
+  AddSpell(1,300, 
+	   "Max wirft einen vollen Bierkrug nach Dir und trifft Dich hart.\n",
+	   "Max trifft @WEN mit einem vollen Bierkrug hart.\n",
+    DT_BLUDGEON, ([SP_SHOW_DAMAGE:1]) );
+
+  SetChats(2, ({
+    "Max sagt: Willkommen in meiner weithin beruehmten Stadtkneipe!\n",
+    "Max fragt Dich: Hast Du schon eine Friedenskerze in der Kirche entzuendet?\n",
+    "Max mustert Dich erwartungsvoll.\n",
+    "Max bringt einem alten Mann ein Glaeschen Rotwein an einen Tisch.\n",
+    "Max jongliert ein wenig gelangweilt mit vier Glaesern.\n",
+    "Max fuellt einen Krug mit koestlichem Zwergenbier.\n",
+    "Max fuellt etwas widerwillig ein Glas mit Orangensaft.\n",
+    "Max schuettet Cola in ein Glas und verzieht dabei das Gesicht.\n",
+    "Max uebt sich auf eine Rechnung konzentriert in der Kunst der Addition.\n",
+    "Max blickt Dich erwartungsvoll an. Vielleicht solltest Du etwas bestellen?\n",
+  }) );
+
+  SetAttackChats(6, ({
+    "Max faucht: Na warte, das wirst Du bereuen!\n",
+    "Max ruft: Woody, steh mir bei!\n",
+    "Max stiert Dich erbost an.\n",
+    "Du fuehlst Dich schuldig.\n"
+  }) );
+
+  SetProp (P_DIE_MSG,
+      " gibt seinen Widerstand auf und bricht zusammen.\n");
+  SetProp (P_DEFAULT_INFO,
+      "antwortet: Frag nicht so bloed sondern lies erstmal das Menue hier!\n");
+
+  AddInfo("dusty",
+      "grummelt: Die trinkt immer bloss Cola oder Orangensaft.\n");
+  AddInfo("cola",
+      "belehrt Dich: Es heisst DAS Cola, nicht DIE Cola!\n");
+  AddInfo( ({"max","wirt"}),
+      "brummt: Ueber mich gibts nicht viel zu erzaehlen.\n");
+  AddInfo( ({"wasser","leitungswasser","mineralwasser","saft",
+              "traubensaft","orangensaft","wein","birnenschnaps",
+              "blue frog","frog","magic tonic","tonic",
+              "schwarzem pirat","pirat"}),
+    "sagt: Nicht fragen, kaufen!\n");
+  AddInfo( ({"kneipe","kneipen"}),
+      "Gefaellt es Dir hier?", "fragt Dich: ");
+  AddInfo( ({"speisesaal","saal"}),
+      "fragt: Ist er nicht schoen?");
+  AddInfo( ({"hunger","durst","essen","trinken",
+              "getraenk","getraenke","speise","speisen"}),
+      "Wenn Du genug Geld dabei hast, will ich Deinen Hunger und Deinen "
+      "Durst gerne stillen!", "sagt: ");
+  AddInfo( ({"menue","angebot","speisekarte","karte"}),
+      "sagt: Mit <menue> kannst Du Dir einen Ueberblick verschaffen!\n"
+      "Max laechelt freundlich.\n"
+      "Max fluestert Dir zu: Ausserdem hab ich da noch wo Bier...\n", 0, 1);
+  AddInfo( ({"schwaecher","schwaechere","sozial schwaechere"}),
+      "Es kommt immer darauf an, worum es geht.", "sagt: ");
+  AddInfo("bier",
+      "Ja, das steht nicht in der Speisekarte, aber ich hab noch einen "
+      "ziemlich grossen Vorrat an Bier im Keller, @@biertext@@",
+      "fluestert Dir zu: ", 1);
+  AddInfo("vorrat",
+      "Den Vorrat hab ich im Laufe der Zeit angesammelt, aber ich selber "
+      "trinke nicht soviel Bier, sodass ich den je werde aufbrauchen "
+      "koennen...", "fluestert Dir zu: ", 1);
+  AddInfo("keller",
+      "In meinen Keller kommt niemand so schnell hinein!", "sagt: ");
+  AddInfo("landar",
+      "Ein netter Kerl, fuehrt jetzt den Laden ein paar Haeuser "
+      "weiter!", "sagt: ");
+  AddInfo("laden",
+      "Schau halt mal dort vorbei!", "sagt: ");
+  AddInfo("freibier",
+      "@@freibiertext@@", 0, 1);
+  AddInfo("schnaps",
+      "Schnaps fuehren wir auch! Und wenn Du es mit Deinen "
+      "Erfahrungspunkten schaffst, eine Schnapszahl zu erreichen, "
+      "bekommst Du von mir ein paar Drinks auf Kosten des Hauses!",
+      "sagt: ");
+  AddInfo("schnapszahl",
+      "@@schnapszahltext@@", 0, 1);
+  AddInfo("kirin",
+      "Von ihr habe ich einige Brocken Elfisch gelernt! Sehr nette "
+      "und huebsche Elfin, vielleicht manchmal ein bisschen eitel!",
+      "laechelt: "
+      );
+  AddInfo("kaffee",
+      "Kaffee habe ich im Moment leider keinen im Angebot. Yeza "
+      "beschwert sich auch staendig, aber das Geschaeft mit den "
+      "Handelsleuten vom Dschungel laeuft nunmal leider schlecht...",
+      "sagt: ");
+
+  // HST-Truppe: ;)
+  AddInfo("yeza",
+      "Die ist fast so kaffeesuechtig wie Naneth.", "grinst: ");
+  AddInfo("naneth",
+      "Die kaffeesudert immer soviel...", "murmelt: ");
+  AddInfo("nell",
+      "Die hat panische Angst vor Feuerelementaren, seltsam!", "sagt: ");
+  AddInfo("sennah",
+      "groehlt: Captain Psycho!\n");
+  AddInfo("apex",
+      "kichert irre und murmelt was von Holzschwertern.\n");
+  AddInfo("holzschwert",
+      "sagt salbungsvoll: Fuer Dusty!\n");
+  AddInfo("andronicus",
+      "Am liebsten trinkt er das Bier hier mit zwei Frauen im Arm!",
+      "kichert: ");
+  AddInfo("blain",
+      "Der findet die Seitengassen in Midas immer ganz toll!", "grinst: ");
+  AddInfo("legolas",
+      "Ein wirklich schneidiger Elf!", "sagt: ");
+  AddInfo("nemesis",
+      "Sie hat mir die Addition beigebracht! Ausserdem hat sie ein total "
+      "liebes Mathemonster gezaehmt!", "strahlt: ");
+  AddInfo("addition",
+      "Das hat mir Nemesis beigebracht!", "sagt: ");
+  AddInfo("buzzom",
+      "Der beste Sandburgarchitekt, den ich kenne!", "sagt: ");
+  AddInfo("roc",
+      "Roc ist der wahre Meister aller Farbfeen!", "sagt: ");
+  AddInfo("mila",
+      "Eine echt suesse Fee!", "schwaermt: ");
+  AddInfo("juny",
+      "Juny erzaehlt mir immer sehr viel, wenn sie hier ein "
+      "bisschen trinkt.", "grinst: ");
+  AddInfo("angrox",
+      "Sie ritten um die Wette mit dem Steppenwind...", "singt ploetzlich: ");
+  AddInfo("abi03",
+      "Bestanden, in Stralsund!", "strahlt: ");
+  AddInfo("stralsund",
+      "Irgendeine Stadt in einem fernen Land...", "sagt: ");
+  AddInfo("lotte",
+      "Soooooo eine suesse Katze!", "schwaermt: ");
+  AddInfo("dschinghis khan",
+      "Hu! Ha!", "groehlt: ");
+  AddInfo("rikz",
+      "Ein echt netter Saufkumpan!", "sagt: ");
+  AddInfo("sauron",
+      "Ein aeusserst schweigsamer Dunkelelf!", "sagt: ");
+  AddInfo("eldar",
+      "Er ist von seinem Zweitie unterjocht worden!", "sagt: ");
+  AddInfo( ({ "vodka", "wodka" }),
+      "Wodka trinkt man pur und kalt, das macht hundert Jahre alt!",
+      "groehlt: ");
+
+  /*
+  AddInfo ("keller",
+      "In meinen Keller kommt niemand so schnell hinein! Aber "
+      "vielleicht mache ich ja bei Dir eine Ausnahme.", "sagt: ");
+  AddInfo("polaris",
+      "Von Polaris hab ich mir extra Birkenholz liefern lassen.", "sagt: ");
+  AddInfo("birkenholz",
+      "Schoen, nicht wahr!", "sagt: ");
+  AddInfo("weinberge",
+      "Die liegen leider so weit entfernt! Manchmal vergisst der Lieferant "
+      "sogar, dass er mich mit neuem Wein beliefert.", "sagt: ");
+  AddInfo("lieferant",
+      "Moechtest Du mir nicht einmal Wein vorbeibringen und in mein "
+      "Fass im Keller fuellen?", "saeuselt: ");
+  AddInfo("fass",
+      "Das ist im Keller.", "sagt: ");
+  */
+  /*
+  AddInfo ("freundschaftsband",
+      "@@fband@@", 0, 1);
+  */
+
+  AddLibrary( NPC "midas.lib", 3 );
+
+  SetProp( P_REJECT, ({ REJECT_KEEP,
+    "Max strahlt und sagt: Kleine Geschenke erhalten die Freundschaft!\n" }) );
+
+  call_out("DoWalk", 60+random(16));
+  lastWalk=0;
+
+  if (this_interactive() == previous_object())
+    if (getuid(this_interactive())=="woody")
+      move(environment(this_interactive()), M_GO);
+    else
+      move(ROOM "kneipe", M_GO);
+
+  call_out("chkEnv",0);
+
+  AddCmd( ({ "richt", "richte" }), "richte" );
+}
+
+void chkEnv()
+{
+  if (!environment())
+    move(ROOM "kneipe", M_GO);
+}
+
+// + 500 LP pro Reset
+// --------
+void reset()
+{
+  ::reset();
+  if (QueryProp(P_HP) < QueryProp(P_MAX_HP))
+  {
+    say(
+      bs("Max zieht einen Powersnack aus seiner Tasche, verzehrt ihn "+
+      "genuesslich und sieht auf einmal deutlich gestaerkt aus.\n"));
+    SetProp(P_HP, QueryProp (P_HP)+500);
+  }
+}
+
+void init()
+{
+  ::init();
+  if (interactive(TP))
+    if (getuid(TP) == "woody")
+      call_out("hallo", 0, getuid(TP));
+    else if (random(3))
+      call_out("hallo", 0, getuid(TP));
+}
+
+void hallo(string who)
+{
+  object ob;
+  string nm;
+  string hallo;
+
+  if (!ob=find_player(who)) return;
+  if (environment(ob) != environment()) return;
+  if (ob->QueryProp(P_INVIS)) return;
+
+  if (ob->QueryProp(P_FROG)) {
+    tell_room( environment(), "Max sagt: Hallo Froschi! :-)\n" );
+    return;
+  }
+
+  switch (ob->QueryProp(P_RACE))
+  {
+    case "Elf":
+      hallo = "Alae ";
+      break;
+    case "Zwerg":
+    case "Waldzwerg":
+      hallo = "Prost ";
+      break;
+    case "Hobbit":
+    case "Oger":
+      hallo = "Mahlzeit ";
+      break;
+    case "Troll":
+      hallo = "HALLO ";
+      break;
+    case "Dunkelelf":
+      hallo = "Vendui ";
+      break;
+    default:
+      hallo = "Hallo ";
+      break;
+  }
+  nm = GetNick(who);
+  tell_room( environment(), "Max sagt: " + hallo + nm + "!\n" );
+}
+
+
+string biertext()
+{
+  if ((TP->QueryProp(P_LEVEL) > FREIBIER_LEV) &&
+     (TP->QueryProp(P_XP) > FREIBIER_XP))
+       return "den ich schwaecheren Spielern als Freibier anbiete.";
+  else
+    return "den ich gerne mit Dir teile. Frag mich einfach nach Freibier!";
+}
+
+string freibiertext()
+{
+  if ( (TP->QueryProp(P_LEVEL) > FREIBIER_LEV) &&
+       (TP->QueryProp(P_XP) > FREIBIER_XP) )
+  {
+    return "mustert Dich.\n"
+      "Max sagt: Nein, Dir gebe ich kein Freibier, kauf Dir lieber was!\n";
+  }
+  else
+  {
+    if (TP->drink_alcohol(8) && TP->drink_soft(10))
+    {
+      TP->heal_self(10+random(3));
+      say ("Der Wirt bringt "+TP->name(WEM)+" ein Freibier.\n"+
+        CAP(TP->QueryPronoun(WER))+" leert das Glas in einem Zug.\n", TP);
+      return "grinst und bringt Dir ein Freibier.\n"
+        "Du schuettest es runter und fuehlst Dich etwas gestaerkt.\n";
+    }
+    else return "troestet Dich.\n";
+  }
+}
+
+string schnapszahltext()
+{
+  string xp;
+  int n;
+
+  if ( ((n = strlen(xp = to_string(TP->QueryProp(P_XP)))) > 2) &&
+       (xp == sprintf("%'"+xp[0..0]+"'*s",strlen(xp),"")) )
+  {
+    if (TP->drink_soft(10))
+    {
+      n = 50 + 50 * (n-3);
+      TP->heal_self(n);
+      TP->AddExp(1);
+      write_file (SCHNAPSLOG,
+          sprintf( "%s: %s [%s] -> %d\n",
+          dtime(time()), CAP(getuid(TP)), xp, n));
+      say("Der Wirt gibt " + TP->name(WEM) + " ein paar Drinks aus und "
+          "gratuliert " + TP->QueryPronoun(WEM) + ".\n", TP);
+      return "gratuliert Dir herzlich und bringt Dir ein paar Drinks.\n"
+        "Als Ueberraschung ueberreicht er Dir noch einen Erfahrungspunkt.\n"
+        "Du strahlst und fuehlst Dich richtig gut.\n";
+    }
+    else return "troestet Dich.\n";
+  }
+  return "erklaert: Eine Schnapszahl ist eine Zahl, die aus lauter gleichen\n"
+    "Max erklaert: Ziffern besteht, und zwar mindestens drei. Also zum\n"
+    "Max erklaert: Beispiel 333 oder 66666 oder 88888888.\n";
+}
+
+mapping pls=([]);
+
+/*
+string fband()
+{
+  object ob;
+
+  ob=present("fband",this_player());
+  if (!ob)
+    return "sagt: Sowas bekommt man, "
+           "wenn man mit jemandem Freundschaft schliesst!\n";
+
+  if(pls[getuid(this_player())])
+    return "sagt: Aber Du hast doch schon ein neues Freundschaftsband!\n";
+
+  ob->remove();
+  ob=clone_object("/p/service/woody/obj/fband2");
+  ob->move(this_player(),M_NOCHECK);
+  pls[getuid(this_player())]=1;
+  return "gibt Dir ein neues Freundschaftsband.\n";
+}
+*/
+
+mixed QueryNewFbands()
+{
+  return pls;
+}
+
+int _query_chat_chance()
+{
+  if (environment()->id("\nsaal")) return 0;
+  return Query(P_CHAT_CHANCE);
+}
+
+void CallFor(object dest, object pl)
+{
+  int nextWalk, delay;
+
+  if (dest==environment()) return;
+  if (IsEnemy(pl))
+  {
+    tell_room(environment(), "Max ruft zurueck: "
+        "Komm doch selbst her, wenn Du Dich traust!\n", ({TO}));
+    tell_room(dest, "Der Wirt ruft von nebenan: "
+        "Komm doch selbst her, wenn Du Dich traust!\n");
+    return;
+  }
+  if ((nextWalk=find_call_out("DoWalk")) < 10 && nextWalk!=-1) {
+    tell_room(environment(), "Max ruft zurueck: "
+        "Bin ja schon unterwegs, nur die Ruhe!\n", ({TO}));
+    tell_room(dest, "Der Wirt ruft von nebenan: "
+        "Bin ja schon unterwegs, nur die Ruhe!\n");
+    return;
+  }
+  if (time()-lastWalk<30) delay=14; else delay=4;
+
+  //
+  // wer hinter meinem Ruecken bloed/schlecht ueber mich redet, muss damit
+  // rechnen, dass ich ihn nicht sonderlich gern hab. Woody.-
+  //
+  // if (member((["spieler1","spieler2",]),getuid(pl)))
+  //   delay+=20;
+
+  //
+  // Wenn wer boese war :)
+  //
+  if (member( mkmapping(FEINDE), getuid(pl) )) {
+    tell_room(environment(), "Max ruft zurueck: "
+        "Oh, "+capitalize(getuid(pl))+", ihr muesst laenger warten!\n", ({TO}));
+    tell_room(dest, "Der Wirt ruft von nebenan: "
+        "Oh, "+capitalize(getuid(pl))+", ihr muesst laenger warten!\n");
+    delay+=10;
+  }
+  else
+  {
+    tell_room(environment(), "Max ruft zurueck: "
+        "Einen Moment Geduld bitte!\n", ({TO}));
+    tell_room(dest, "Der Wirt ruft von nebenan: "
+        "Einen Moment Geduld bitte!\n");
+  }
+  while (remove_call_out("DoWalk") != -1) /* continue */ ;
+  call_out("DoWalk", delay+random(3), dest, pl);
+}
+
+void DoWalk(object dest, object pl)
+{
+  mixed exits;
+  string msg,msg2;
+  object ob;
+  int i;
+
+  if (dest) {
+    i=random(5);
+    msg=({"schlendert","schaut mal","geht","schlurft","hastet"})[i];
+    msg2=({"schlendert herein","schaut sich suchend um","kommt an",
+        "schlurft herein","kommt hereingehastet"})[i];
+    move(dest, M_GO, "nach nebenan", msg, msg2);
+  }
+  else if (environment())
+  {
+    exits = filter_array( m_indices( environment()->QueryProp(P_EXITS) ),
+              ([ "osten","westen" ]) );
+    if (sizeof(exits))          // na hoffentlich hat er sich ned verirrt ;)
+      command_me( exits[0] );
+  }
+
+  if (dest)
+  {
+    command_me("sag Ja, was kann ich fuer Dich tun?");
+    /*
+    if (!random(3) && pl && (ob=present("xyz",pl)))
+    {
+      command_me("sag Huch, sowas, ich sammle xyz und Du hast eines!");
+      tell_object(pl, "Max klaut Dir Dein xyz.\n");
+      ob->move(ME, M_NOCHECK);
+    }
+    */
+  }
+  while (remove_call_out("DoWalk") != -1) /* continue */ ;
+  call_out("DoWalk", 90+random(30));
+  lastWalk = time();
+}
+
+varargs void die(int p)
+{
+  int direkt;
+  object item;
+  direkt = extern_call() && (previous_object() != this_object());
+  write_file (LOGF,
+      dtime(time())+": Max wird gekillt von "+CAP(getuid(TP))+
+      (direkt ? " (direkt!).\n" : ".\n"));
+  my_kills[getuid(TP)]++;
+  WriteKillsFile();
+  ::die(p);
+}
+
+varargs int move(mixed dest, int method,
+                 string dir, string textout, string textin)
+{
+  object ob;
+  string fn;
+
+  if ((ob=previous_object())==ME)
+    return ::move(dest,method,dir,textout,textin);
+
+  if (file_name(ob)[0..19]=="/d/ebene/Midas/room/")
+    return ::move(dest,method,dir,textout,textin);
+
+  if (this_interactive() && getuid(this_interactive())!="woody")
+    return tell_object(this_interactive(), "Max gehorcht Dir nicht.\n"), -1;
+  else
+    return ::move(dest,method,dir,textout,textin);
+}
+
+/*
+string _query_noattack()
+{
+  mixed str;
+  if (TP && (TP!=ME) && (my_kills[getuid(TP)] > MAX_MAX_KILLS))
+  {
+    return "sagt: Ne, mit Dir mag ich nicht mehr.\n"
+      "Max beendet den Kampf kurzerhand.";
+  }
+}
+*/
+
+int richte(string str)
+{
+  notify_fail("WEM willst Du WAS (von WEM) (aus)richten?\n");
+  if (!str) return 0;
+  if (str == "gruss aus")
+    return notify_fail("Schoen, aber wem?\n"), 0;
+  if (str == "max gruss aus")
+    return notify_fail("Schoen, aber von wem?\n"), 0;
+  if (str == "gruss von landar aus")
+    return notify_fail("Schoen, aber wem willst Du den ausrichten?\n"), 0;
+  if (str != "max gruss von landar aus")
+    return 0;
+
+  write("Du richtest Max einen Gruss von Landar aus.\n");
+  environment()->Message(
+    TP->Name() + " richtet Max einen Gruss von Landar aus.\n",
+    MSGFLAG_SOUND | MSGFLAG_NO_TP );
+
+  write_file (GRUSSLOG,
+      dtime(time()) + ": " + CAP(getuid(TP)) +
+      " richtet Max einen Gruss aus.\n");
+
+  environment()->Message(
+      "Max freut sich.\n" +
+      break_string(
+        "Danke, " + TP->Name() +
+        ", wie geht es dem alten Haudegen denn? Bestimmt gut, na ich "
+        "hoffe, er schaut bald mal wieder bei mir vorbei!", 78,
+        Name() + " sagt: "),
+      MSGFLAG_SOUND );
+
+  return 1;
+
+}
+
+
+void give_notify(object obj)
+{
+  if(InFight(ME)) return ::give_notify(obj); 
+  if(!obj->id("\ngeld")) {
+     return ::give_notify(obj);
+  }
+  if(obj->QueryProp(P_AMOUNT) == 23) { 
+    tell_object(TP, break_string("Wenn am Hinterhof die Hunde bunt werden, "
+          "oeffnet der Pfoertner den Eingang zur Rose!", 78, "Max fluestert "
+          "Dir zu: ")); 
+    tell_room(ENV(ME), sprintf("Max fluestert %s etwas zu.\n", 
+          TP->name(WEM)), ({TP}));
+    command_me("sag Aehmmmmm Danke vielmals!");
+    return ;
+  }
+  return ::give_notify(obj);
+}  
+
+void catch_tell(string str)
+{
+  string tcode, msg, wer;
+  object tmaster;
+  int ret, hours;
+  hours=3;
+  if(sscanf(str, "%s teilt Dir mit: tombolacode %s\n", wer,tcode)==2) {
+    ret=call_other(TOMBOLAMASTER, "AddWinner", TP,tcode,(hours*60*60));
+    switch (ret) {
+      case -1: msg="Du hast bereits einen Code aktiv!"; break;
+      case -2: msg="Das ist kein gueltiger Code!"; break;
+      default: msg=sprintf("Gratuliere! Du kannst nun %d Stunden "
+                   "alles bei mir frei konsumieren!", hours);
+    }
+    TP->Message(break_string(msg, 78, "Max teilt Dir mit: "), MSGFLAG_TELL);
+  }
+  return ;
+}

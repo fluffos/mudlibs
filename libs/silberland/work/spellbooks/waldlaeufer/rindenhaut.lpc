@@ -1,0 +1,83 @@
+//--Die Rindenhaut -----------------------------------------------------------
+// - Malus auf geschicklichkeit
+// - Malus auf speed (80%?)
+// - Schutz vor allen physischen, magischen und gift
+// - Anfaelligkeit auf Elemente (bes. Feuer)
+mapping prep_rindenhaut(object caster, mapping sinfo, int silent) 
+{  
+  if(!GuildItemTest(caster, sinfo) || !FroschTest(caster, sinfo) ||
+     !IsNotInFight(caster, sinfo)) {return 0;}
+  if(present(RINDENHAUT_ID, caster)) 
+  { tell_object(caster, BS("Deine Haut ist schon mit einer Rinde "
+                        "ueberzogen."));
+    return 0; }
+  if(!silent){
+    FirstPrepareFuncSuccessfull(caster, sinfo);
+    tell_room(ENV(caster), BS(caster->Name(WER, 1)+" bleibt still stehen und konzentriert sich."), ({caster}));
+  }
+
+  return sinfo;
+}
+
+int rindenhaut(object caster, mapping sinfo)
+{
+  object haut, malus;
+  string *baumarten;
+  int success, ability, duration, i, gl;
+  
+  if(!mappingp(sinfo=prep_rindenhaut(caster, sinfo, 1))) return 0;
+  
+  //Die holzarten sortiert nach Haerte!
+  baumarten=({"Fichte","Kastanie","Tanne","Linde","Laerche","Kiefer","Birke",
+              "Tethyrahornie","Ulme","Buche","Eiche"});
+            //ansonste waer DER ahorn der einzige baum mit falschem GENDER :-)
+  success=SpellSuccess(caster,sinfo);
+  if(success < (-5000+random(2000)))
+  {
+    tell_object(caster, BSC("Du hast die beschwoerung verpatzt. Du wirst "
+                        "starr wie ein Baum."));
+    caster->SetProp(P_PARALYZED, 
+            ([PARALYZE_TIME: 6, 
+							PARALYZE_MSG: "Du bist erstarrt!\n", 
+							PARALYZE_MSG_OTHER: "%s ist starr wie ein Baum.\n", 
+							PARALYZE_END: "Du hast wieder gefuehl in Deinem Koerper!\n",
+							PARALYZE_END_OTHER: "%s erwacht aus der Starre.\n"]) );
+    return MISSERFOLG;
+  }
+  if(success<0)
+  {
+    tell_object(caster, BSC("Dir gelingt es nicht Dich auf eine Rindenart "
+                        "festzulegen."));
+    return MISSERFOLG;
+  }
+  
+
+  gl=caster->QueryProp(P_GUILD_LEVEL);
+  ability=sinfo[SI_SKILLABILITY];
+  duration=gl*10+(ability/100)*3+(success/100);
+  
+  i = (ability/333) + 10*R_SKILLMASTER->HasSkill(getuid(caster), SCHUTZ_DES_WALDES);
+  i += i * get_equip_bonus(caster, "rindenhaut") / 100;
+
+  
+  haut=clone_object(ARMOUR"invis_armour");
+  haut->SetProp(P_SHORT, "Rindenhaut"); // es kann nur ein AT_MISC pro Short getragen werden
+  haut->move(caster, M_SILENT);
+  haut->SetBonus( ({DT_SLASH,DT_BLUDGEON,DT_PIERCE,DT_SQUEEZE,DT_WHIP,DT_RIP,
+                    DT_POISON, DT_ELECTRIC, DT_MAGIC, DT_MIND}),
+                    i,duration);
+  haut->AddResistance(DT_FIRE,0.2,duration);
+  haut->SetExtraLook(baumarten[(ability/1000)]);
+  haut->AddId(RINDENHAUT_ID);
+
+  if(!R_SKILLMASTER->HasSkill(getuid(caster), KOERPERBEHERRSCHUNG)) {
+    malus=clone_object(OBJ"bonus");
+    malus->move(caster, M_SILENT);
+    malus->SetBonus("dex",(-1), duration);
+    caster->ModifySkillAttribute(SA_SPEED,90,duration);
+  }
+  
+  tell_object(caster, BS("Du erhaelst die Haut einer "+baumarten[(ability/1000)]+"."));
+  tell_room(ENV(caster), BS(caster->Name(WESSEN)+" Haut wird von einer "+baumarten[(ability/1000)]+"nrinde ueberzogen."), ({caster}) );
+  return ERFOLG;
+}

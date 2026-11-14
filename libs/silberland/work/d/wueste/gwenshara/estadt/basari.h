@@ -1,0 +1,7 @@
+#define BASARIROOM   ROOM "basari/"
+#define BASARIOBJ    OBJ "basari/"
+#define BASARIWEAPON WEAPON "basari/"
+#define BASARIARMOUR ARMOUR "basari/"
+#define BASARINPC    NPC "basari/"
+#define BASARIMASTER "/d/wueste/gwenshara/estadt/master/basarimaster"
+#define BASARILOG    LOG "basari.log"

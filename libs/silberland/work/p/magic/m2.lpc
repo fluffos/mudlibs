@@ -1,0 +1,359 @@
+//
+//  Der MAGIESTEIN! von Angrox@SL
+//  Nur zur Verwendung im SL bestimmt! 
+//
+//  Erstellt automatisch eine kleine Karte von der naeheren Umgebung
+// 
+//  11.08.1998  release
+//  
+//
+
+
+inherit "std/unit";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <moving.h>
+#include <defines.h>
+#include <moredef.h>
+#include <ansi.h>
+#include "/p/daemon/itemd/itemd.h"
+#define ta(x)  tell_object(this_player(), x)
+
+#define MAX_XY 10  // _MUSS_ GERADE SEIN !!!!!!!!
+#define COSTS 50   // kosten zum schauen
+
+nosave mapping solved_rooms=([]);
+nosave mapping unsolved_rooms=([]);
+nosave mixed *dir_map=({});
+nosave mixed koords=({});
+nosave object startroom;
+nosave int *coords, *x, *y;
+nosave string *signs=({});
+nosave int ext_fun;
+nosave string *allowed_dirs = ({"norden", "westen", "osten", "sueden", 
+    "nordosten", "nordwesten", "suedosten", "suedwesten"});
+create()
+{
+  if( !is_clone(TO) ) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein Erzmagiestein");
+  SetProp(P_LONG, 
+      "Der Erzmagiestein, den Du in Haenden haeltst, ist ein besonders "
+      "prachtvoll geschliffenes Juwel. Von ihm geht eine besondere "
+      "magische Aura aus, die Dich leicht schaudern laesst. Er "
+      "muss voll magischer Energie sein! Die Macht, die von ihm "
+      "ausgeht, uebertrifft jeden normalen Magiestein bei weitem!");
+  SetProp(P_NAME, ({"Erzmagiestein", "Erzmagiesteine"}));
+  SetProp(P_GENDER, MALE);
+  AddSingularId(({"erzmagiestein","stein", "juwel", "gem"}));
+  AddPluralId(({"erzmagiesteine", "steine", "juwelen", "gems"}));
+  SetProp(P_MATERIAL, MAT_JEWEL );
+  SetGramsPerUnits( 50,1); 
+  SetCoinsPerUnits(5000,1);
+  SetProp(P_AUTOLOADOBJ, 1);
+  SetProp(P_INFO, "Der Erzmagiestein laesst Dich die Umgebung wie ein Vogel "
+      "betrachten, wenn Du in ihn hineinblickst. Du kannst sogar andere "
+      "Spieler (S) und Monster (M) damit entdecken. Die Farben der Raeume "
+      "entsprechen der unterschiedlichen Umgebung.\n"
+      "Man kann ihn auch in 2 normale Magiesteine zerbrechen.");
+  AddCmd (({"blicke", "blick"}), "peer");
+  AddCmd( ({"zerbreche", "zerbrich"}), "cmd_zerbrechen");
+}
+
+//int IsSocketItem() { return SOC_M_MSTONE; }  
+  
+
+_set_extended_function(int flag) {
+  if(flag>0) ext_fun+=flag;
+  else ext_fun=0;
+  return 1;
+}
+
+
+int CrossCheck() {
+  int i, pos;
+  string *test;
+  koords=({});
+  test=({});
+  signs=({});
+  x=({});
+  y=({});
+  koords=m_values(solved_rooms)+dir_map;
+  for(i=sizeof(koords)-1;i>=0;i--) {
+    if((pos=member(test, 
+        to_string(koords[i][0])+to_string(koords[i][1])))!=-1) 
+    {
+      if(member( ({"-","|"}), signs[pos])==-1) signs[pos]="X";
+    }
+    else {
+      test+=({to_string(koords[i][0])+to_string(koords[i][1])});
+      x+=({koords[i][0]});
+      y+=({koords[i][1]});
+      signs+=({koords[i][2]});
+    }
+  }
+  return 1;
+}
+
+
+int PaintMap() {
+  mixed koords;
+  string line,fwd,bwd, col, col_off;
+  int i, j, k,space, ansi; // i fuer y, j fuer x
+  line="";
+  col="";
+  col_off="";
+  if(TP->QueryProp(P_TTY)=="ansi") {
+    ansi=1;
+    col="\e[3"+to_string(random(7)+1)+"m";
+    col_off=ANSI_NORMAL;
+  }
+  for(i=0;i<=MAX_XY;i++) {
+    fwd="      ";
+    bwd="";
+    for(j=0;j<=MAX_XY;j++) {
+      for(k=sizeof(x)-1;k>=0;k--) {
+        if(x[k]==i && y[k]==j) {
+          if(i==(MAX_XY/2) && j==(MAX_XY/2)) {
+            if(ansi) line+=ANSI_RED+"*"+ANSI_NORMAL;
+            else line+="*";
+          }
+          else line+=signs[k];
+          space=1;
+        }
+      }
+      if(!space) line+=" ";
+      space=0;
+    }
+    tell_object(TP, fwd+line+bwd+"\n");
+    line="";
+  }
+  tell_object(TP, BS("Der Magiestein loest sich in einer lautlosen "
+      "Farbexplosion auf!\n"));
+  tell_room(ENV(ENV(ME)), BS(sprintf("Das Juwel in %s Hand loest sich in einer "
+      +"lautlosen Farbexplosion auf!\n", TP->Name(WESSEN))), ({TP}));
+  if(QueryProp(P_AMOUNT)>1) {
+    SetProp(P_AMOUNT, QueryProp(P_AMOUNT)-1);
+    if(ext_fun>0) ext_fun--;
+  }
+  else call_out("remove", 0);
+  TP->SetProp(P_PARALYZED,0);
+  return 1;
+}
+
+
+mixed GetNewCoords(int x, int y, string dir) {
+  int x_ch, y_ch;
+  string sign;
+  x_ch=0;
+  y_ch=0;
+  if(member(allowed_dirs, dir)==-1) return 0;
+  switch(dir) {
+    case "norden": x_ch=-2; break;
+    case "sueden": x_ch=2; break;
+    case "osten" : y_ch=2; break;
+    case "westen": y_ch=-2;break;
+    case "nordosten": x_ch=-2;y_ch=2; break;
+    case "nordwesten": x_ch=-2;y_ch=-2;break;
+    case "suedosten": x_ch=2; y_ch=2;break;
+    case "suedwesten": x_ch=2; y_ch=-2;break;
+  }
+  x+=x_ch;
+  y+=y_ch;
+  
+  if(x>MAX_XY || x<0 || y>MAX_XY || x<0) return 0;
+  return ({x,y});  
+}
+
+string terrain_color(object room, string sign) {
+  string new_sign;
+  string ter;
+  ter=room->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN];
+  if(!ter) ter=TT_OTHER;
+  switch(ter) {
+    case TT_OTHER: new_sign=sign; break;
+    case TT_CAVE: new_sign=ANSI_BOLD+sign+ANSI_NORMAL; break;
+    case TT_HOUSE: new_sign=ANSI_WHITE+sign+ANSI_NORMAL; break;
+    case TT_MOUNTAIN: new_sign=ANSI_BOLD+ANSI_RED+sign+ANSI_NORMAL; break;
+    case TT_TOWN: new_sign=ANSI_WHITE+sign+ANSI_NORMAL; break;
+    case TT_FOREST: new_sign=ANSI_GREEN+sign+ANSI_NORMAL; break;
+    case TT_HILL: new_sign=ANSI_PURPLE+sign+ANSI_NORMAL; break;
+    case TT_JUNGLE: new_sign=ANSI_BOLD+ANSI_GREEN+sign+ANSI_NORMAL; break;
+    case TT_DESERT: new_sign=ANSI_BOLD+ANSI_YELLOW+sign+ANSI_NORMAL; break;
+    case TT_SWAMP: new_sign=ANSI_BOLD+ANSI_WHITE+sign+ANSI_NORMAL; break;
+    case TT_PLAIN: new_sign=ANSI_YELLOW+sign+ANSI_NORMAL; break;
+    case TT_ARCTIC: new_sign=ANSI_CYAN+sign+ANSI_NORMAL; break;
+    case TT_UNDERWATER: new_sign=ANSI_BOLD+ANSI_BLUE+sign+ANSI_NORMAL; break;
+    case TT_WATER: new_sign=ANSI_BLUE+sign+ANSI_NORMAL; break;
+    case TT_ROAD: new_sign=new_sign=ANSI_BOLD+ANSI_PURPLE+sign+ANSI_NORMAL; break;
+  }
+  return new_sign;
+}
+
+
+int testfunc(object room, int x, int y) {
+  int i;
+  mapping exits;
+  string *dirs, *rooms, r_sign, *hidden;
+  object new_room;
+  mixed err;
+  int *new_coords, ansi;
+  
+  if(TP->QueryProp(P_TTY)=="ansi") ansi=1;
+  exits=room->QueryProp(P_EXITS);
+  if(stringp(hidden=room->QueryProp(P_HIDE_EXITS)))
+    for(i=sizeof(hidden)-1;i>=0;i--) 
+      exits=m_delete(exits, hidden[i]);
+  dirs=m_indices(exits);
+  rooms=m_values(exits);
+  if(!member(unsolved_rooms, room)) return 0;
+  for(i=sizeof(dirs)-1;i>=0;i--) {
+    if(!err=catch(rooms[i]->QueryProp("grxgrumpf")) &&
+        !member(solved_rooms, find_object(rooms[i])))
+    {
+      new_room=find_object(rooms[i]);
+      if(pointerp(new_coords=GetNewCoords(x,y,dirs[i])))
+        unsolved_rooms+=([new_room:new_coords]);
+      else {
+        if(ansi) r_sign=ANSI_BOLD+"$"+ANSI_NORMAL;
+        else r_sign="$";
+      }
+    }
+  }
+  unsolved_rooms=m_delete(unsolved_rooms, room);
+  if(!stringp(r_sign)) 
+    r_sign="O";
+  if(ext_fun>0) {
+     if(present("Spieler", room)) r_sign="S";
+     else if(present("NPC", room)) r_sign="M";
+  }
+  if(ansi)
+    r_sign=terrain_color(room, r_sign);
+  solved_rooms+=([room:({x,y,r_sign})]);
+  if(member(dirs, "sueden")!=-1)
+    dir_map+=({({x+1,y,"|"})});
+  if(member(dirs, "osten")!=-1)
+    dir_map+=({({x,y+1,"-"})});
+  if(member(dirs, "suedosten")!=-1)
+    dir_map+=({({x+1,y+1,"\\"})});
+  if(member(dirs, "suedwesten")!=-1)
+    dir_map+=({({x+1,y-1,"/"})});
+  return 1;
+}
+
+
+
+int peer(string str) {
+  object *uns_rooms;
+    int x,y;
+    int i;
+  if(!str) return 0;
+  if(str!="erzmagiestein" && str!="in erzmagiestein")
+    return 0;
+  unsolved_rooms=([]);
+  solved_rooms=([]);
+  dir_map=({});
+  if(!objectp(startroom=ENV(ENV(ME)))) {
+    tell_object(TP, "Der Erzmagiestein kann hier nicht funktionieren!\n");
+    return 1;
+  }
+  if(TP->QueryProp(P_SP)<COSTS) {
+    tell_object(TP, BS("Du blickst in den Erzmagiestein, doch Du hast "
+        +"zuwenig Magiepunkte, um eine Reaktion auszuloesen!\n"));
+    return 1;
+  }
+  TP->SetProp(P_SP, TP->QueryProp(P_SP)-COSTS);
+  unsolved_rooms=([startroom:({MAX_XY/2,MAX_XY/2})]);
+  TP->SetProp(P_PARALYZED, ([
+      PARALYZE_TIME: 20,
+      PARALYZE_MSG : "Du blickst zu angespannt in den Erzmagiestein.\n",
+      PARALYZE_MSG_OTHER: "",
+      PARALYZE_END: "",
+      PARALYZE_END_OTHER: ""]));
+  tell_object(TP, "Du blickst angestrengt in den Erzmagiestein...\n");
+  tell_room(startroom, BS(sprintf("%s nimmt ein Juwel in %se Hand und blickt "
+      +"angestrengt hinein.\n", TP->Name(WER), TP->QueryPossPronoun(WESSEN))),
+      ({TP}));
+  call_out("parse_rooms", 0);
+  return 1;
+}
+
+int proceed_parsing() {
+  CrossCheck();
+  PaintMap();
+  return 1;
+}
+
+
+int parse_rooms() {
+  object *uns_rooms;
+  int x,y,i;
+  i=0;
+  while(sizeof(uns_rooms=m_indices(unsolved_rooms))) { 
+    if(i>20) {
+      call_out("parse_rooms", 0);
+      return 1;
+    }
+    i++;
+    x=unsolved_rooms[uns_rooms[0]][0]; 
+    y=unsolved_rooms[uns_rooms[0]][1];
+    if(member(m_indices(solved_rooms), uns_rooms[0])!=-1) {
+      unsolved_rooms=m_delete(unsolved_rooms, uns_rooms[0]);
+    }
+    else {
+      if(x>=0 && y>=0 && x<=MAX_XY && y<=MAX_XY) {
+        testfunc(uns_rooms[0], x, y);
+      }
+      else unsolved_rooms=m_delete(unsolved_rooms, uns_rooms[0]);
+    }
+  }
+  call_out("proceed_parsing", 0);
+}
+
+void create_magiestein(object pl)
+{
+  object ob;
+  
+  ob = clone_object("/p/magic/magiestein");
+  if (ob->move(pl, M_GET) < 0)
+  {
+    tell_object(pl, "Du laesst Den Magiestein fallen.\n");
+    ob->move(environment(pl), M_NOCHECK);
+  }
+}
+
+int cmd_zerbrechen(string str)
+{
+  notify_fail("Was willst Du zerbrechen?\n");
+  if (!str || !id(str))
+    return 0;
+  write(BS("Du zerbrichst den Erzmagiestein in zwei Teile und erhaeltst zwei "
+      "Magiesteine."));
+  tell_room(environment(this_player()), BS(
+      this_player()->Name(WER,1) + " zerbricht einen Erzmagiestein in zwei "
+      "Teile und erhaelt zwei Magiesteine."), ({TP}) );
+  AddAmount(-1);
+  create_magiestein(TP);
+  create_magiestein(TP);
+  return 1;
+}
+
+void _set_autoloadobj( mixed args )
+{
+  if (pointerp(args))
+    args=args[0];
+  if (stringp(args))
+    sscanf(args,"%d",args);
+  if (!intp(args))
+    args=0;
+  SetProp(P_AMOUNT,args);
+}
+
+int _query_autoloadobj()
+{
+  return (int) Query(P_AMOUNT);
+}
+

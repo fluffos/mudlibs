@@ -1,0 +1,165 @@
+
+inherit "std/npc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include "../def.h"
+
+void create() {
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Der Kopf eines Riesen");
+  SetProp(P_LONG,
+    "Der Kopf des Riesen ist einfach nur gewaltig. Seine Augen, Nasen, Mund "
+    "und Ohren sind einfach nur gigantisch. Du klammerst Dich an seiner Nase "
+    "fest und hoffst, dass es den Riesen nicht stoert. Seine Augen verfolgen "
+    "jeden Deiner Schritte. Besser Du laesst ihn in Ruhe, denn es waere nicht "
+    "sicher nicht undenkbar, dass er Dich mit seinem Mund in einem Happen "
+    "aufisst." );
+  SetProp(P_NAME, "Kopf");
+  SetProp(P_GENDER, MALE);
+  AddId( ({"kopf", "\n_kopf", "NOWIMPY", "NOFALLDOWN"}) );
+
+  create_default_npc(45);
+  SetProp(P_HANDS, ({" mit seinem grossen Mund",600,DT_BLUDGEON}));
+  SetProp(P_RACE, "Riese");
+  SetProp(P_BODY, 270);
+  SetProp(P_SIZE, 350);
+  SetProp(P_ALIGN, -550);
+  SetProp(P_RESISTANCE_STRENGTHS , 
+    ([DT_FIRE:      -0.7, DT_COLD:      -0.8, DT_WATER:  -0.8, DT_AIR:    -0.8, 
+      DT_LIGHTNING: -0.8, DT_EXPLOSION: -0.7, DT_SOUND:  -0.4, DT_LIGHT:  -0.4,
+      DT_ELECTRIC:  -0.8, DT_ACID:      -0.7, DT_POISON: -0.8, DT_TERROR: -0.8,
+      DT_SLASH:     -0.4,
+      DT_HOLY:      -0.8, DT_UNHOLY:    -0.8, DT_MAGIC:  -0.8 ]) );
+//  SetProp(P_NOMAGIC,80);
+
+  SetProp(P_MSGIN, "eines Riesen kommt herein");
+  SetProp(P_MSGOUT, "bewegt sich");
+  SetProp(P_KILL_NAME, "Ein Riese");
+  SetProp(P_KILL_MSG, ({ "verspeist genuesslich eine Leiche.", MSG_EMOTE }) );
+  SetProp( P_MSG_FLAGS, ([P_KILL_MSG:1]) );
+
+  SetProp(P_DIE_MSG,  " wurde abgeschlagen.\n");
+  SetProp(P_NOCORPSE, 1 );
+
+  AddInfo(DEFAULT_INFO, "ignoriert Dich einfach.\n");
+
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    "Der Riese will Deine Spielsachen nicht.\n" }) );
+
+  SetProp(P_SPELLRATE,90);
+
+  AddSpell(3,500,
+    "Der Riese bruellt Dir direkt in Dein Ohr.\n",
+    "Der Riese bruellt @WEN direkt ins Ohr.\n",
+     DT_SOUND,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(3,500,
+    "Der Riese schaut Dir tief in die Augen. Du wirst geblendet.\n",
+    "Der Riese schaut @WEN tief in die Augen.\n",
+     DT_LIGHT,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(3,500,
+    "Der Riese atmet ein und Du wirst in die Nase gezogen.\n",
+    "Der Riese atmet ein und zieht @WEN in seine Nase.\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(2,600,
+    "Der Riese beisst ein Stueck aus Dir raus.\n",
+    "Der Riese beisst ein Stueck aus @WEN raus.\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(1,2000,
+    "Der Riese versucht Dich aufzufressen.\n",
+    "Der Riese versucht @WEN aufzufressen.\n",
+     DT_RIP,([SP_SHOW_DAMAGE:1]));
+
+/*  AddSpell(2, 0,
+    ".\n",
+    "@WEN.\n",
+    DT_MAGIC, "overall" , ([SP_SHOW_DAMAGE:1]) );
+*/
+
+  SetChats(1, ({
+    "Der Riese ruelpst.\n",
+    "Der Riese holt tief Luft.\n",
+    "Die Augen bewegen sich in Deine Richtung.\n",
+    "Der Riese schaut nach oben.\n",
+    "Der Riese ruempft die Nase.\n",
+    "Der Riese atmet aus.\n"}) );
+  SetAttackChats(10, ({
+    "Der Riese pustet Dir ins Gesicht.\n",
+    "Der Riese bruellt: Ich toete Dich!\n",
+    "Der Riese bruellt: Lass mich in Ruhe Du Wurm.\n",
+    "Der Rise sagt: Ich verspeise Dich zum Fruehstueck.\n"}) );
+}
+
+void init() {
+  ::init();
+  if(RIESEMASTER->checkfeind(TP)) { Kill(TP); }
+}
+
+int Defend(int dam, mixed dam_type, mixed spell, object enemy) {
+  if(!interactive(enemy)) dam/=2;
+  RIESEMASTER->addfeind(enemy);
+  return ::Defend(dam, dam_type, spell, enemy);
+}
+
+void die(int poisondeath) {
+  // abchecken ob alle anderen teile kaputt sind !! falls nein -> spieler
+  // rauswerfen und darauf aufmerksam machen !!
+  if(RIESEMASTER->teiltot("kopf") == -1) {
+    SetProp(P_HP,QueryProp(P_MAX_HP)/2);
+    tell_object(TP,BS(
+      "Der Kopf ist zwar schon sehr arg zerfetzt, aber bevor der Riese "
+      "insgesammt gesehen noch so gut drauf ist, kannst Du ihn nicht toeten. "
+      "Der Riese wirft Dich aus seinem Gesichtsbereich raus.\n" ));
+    TP->command_me("unten");
+    Kill(TP);
+    return;
+  }
+  write_file( LOG "riese.kills" ,
+    ctime()+": "+CAP(getuid(PL))+" killt den RIESEN !!!\n");
+  write_file( LOG "riese_total" ,
+    ctime()+": "+CAP(getuid(PL))+" killt den RIESEN !!!\n");
+  ::die(poisondeath);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp) {
+  RIESEMASTER->feindtot(player);
+  write_file( LOG "kopf.deads" ,
+    ctime()+": "+CAP(getuid(player))+" stirbt am Kopf.\n");
+  write_file( LOG "riese_total" ,
+    ctime()+": "+CAP(getuid(player))+" stirbt am Kopf.\n");
+}
+
+varargs object SelectEnemy(object *here) {
+  object enemy;
+  int minhp,hp,i;
+
+  if (!pointerp(here)) {
+    here=PresentEnemies();
+  }
+  here=filter_array(here,#'interactive);
+  if (!sizeof(here)) {
+    return 0;
+  }
+  if(random(2)) {
+    minhp=here[0]->QueryProp(P_HP);
+    enemy=here[i];
+    for(i=1;i<sizeof(here);i++) {
+      if ((hp=here[i]->QueryProp(P_HP)) < minhp) {
+        minhp=hp;
+        enemy=here[i];
+      }
+    }
+  } else {
+    enemy=here[random(sizeof(here))];
+  }
+  return enemy;
+}

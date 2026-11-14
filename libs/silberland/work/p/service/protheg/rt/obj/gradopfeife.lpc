@@ -1,0 +1,1754 @@
+/* 
+** GRADOS HOBBITPFEIFE (Hobbittool)
+**
+** by Andyl@Silberland
+** 
+** 08.03.2003 
+**
+** ---------------------------------
+**
+** 2003-30-03   1.1  Andyl    Last Update
+**
+** 2003-25-06   1.2  PROtheG  Ueberarbeitung, Abgleich mit geaenderten Files
+**                            Ascii bei hoinfo eingebaut, gettitle angepasst
+**
+** 2003-27-06   1.3  PROtheG  Anpassung an Pfeifen aus dem Pfeifenladen
+**                            (stopfen, rauchen)
+**
+** 2003-30-06   1.4  PROtheG  Sequenzen aus den Pfeifen uebernommen, short
+**                            angepasst, extra_look angepasst
+**
+** 2004-Jan-23  1.5  PROtheG  Komplettueberarbeitung und Anpassung an das
+**                            neue Format
+**
+** 2004-Jan-23  1.6  PROtheG  Erzwungenes Update, wegen Bug beim ignore-
+**                            handling
+**
+** 2004-Mai-17  1.7  PROtheG  gettitle P_FROG liefert jetzt ""
+**
+** 2004-Jul-01  1.8  PROtheG  Report_normal und Report_kurz verfeinert
+**
+** 2004-Jul-01  1.9  PROtheG  Ignorieren komplett ueberarbeitet
+**
+** 2005-Feb-04  1.10 PROtheG  hoinfo leicht ueberarbeitet
+**
+*/ 
+
+#pragma strong_types;
+
+#include "../def.h"
+#include <ansi.h>
+#include <exploration.h>
+
+inherit STD "rt";
+
+#define QM "/secure/questmaster"
+
+#define BARRY "/d/huegelland/orw/pfeifenladen/"
+
+#define C +GetColor()+
+#define G +GetColor(ANSI_GREEN)+
+#define W +GetColor(ANSI_WHITE)+
+#define N +NormalColor()+
+
+varargs nosave string huefe(int flag);
+
+int Version() { return 10;}
+
+// Vars fuer Pfeife
+#define RINGERL ({"ein Ringerl","ein unfoermiges Ringerl", \
+                  "ein huebsches Ringerl","ein rundes Ringerl", \
+                  "ein lustiges Ringerl","ein ovales Ringerl", \
+                  "ein nicht sehr huebsches Ringerl" })
+
+nosave int pfeifeangezuendet;
+nosave string pfeifenname = "Grados Hobbitpfeife";
+nosave int pfeifenwert = random(3)+random(3)+random(3);
+nosave int formringerl;
+nosave int pfeifegestopft_blatt;
+nosave int pfeifegestopft_kraut;
+nosave int pfeifegestopft_stern;
+nosave int pfeifegestopft_pflanze;
+
+string det_farbe()
+{
+  return "Jetzt ist sie "+({"blau","cyanfarben","purpur","rot",
+			      "gelb"})[random(5)]+".\n";
+}
+
+nomask void create()
+{
+  string aussehen;
+  
+  if(!is_clone(ME)) return;
+  ::create();
+  
+  aussehen="Die Hobbitpfeife ist "+
+    ({"lang","kurz","laenglich","eher kurz","eher lang"})[random(5)]+
+    ", "+
+    ({"schmal","breit","duenn","dick"})[random(4)]+
+    " und "+
+    ({"gebogen","gerade","geknickt"})[random(3)]+
+    ".";
+  
+  SetProp(P_SHORT, "Grados Hobbitpfeife");
+  SetProp(P_LONG,
+	  BS("Dies ist eine der Hobbitpfeifen von Grado Schnellfuss, einem "
+	     "beruehmten Hobbitabenteurer. Die Pfeifen wurden ihm einst von "
+	     "einem maechtigen Zauberer zum Geschenk gemacht. Diese Pfeife "
+	     "ist von ausgezeichneter Qualitaet und ihr Holz weist einige "
+	     "elfische Schnitzereien auf. Sie scheint ihre Farbe zu aendern.")+
+	  BS(aussehen));
+
+  SetProp(P_NAME, ({"Grados Hobbitpfeife", "Grados Hobbitpfeife",
+		      "Grados Hobbitpfeife", "Grados Hobbitpfeife"}));
+  SetProp(P_GENDER, FEMALE);
+  
+  AddId(({"pfeife", "hobbitpfeife","grados pfeife","grados hobbitpfeife"}));
+  
+  SetProp(P_WEIGHT, 150);
+  SetProp(P_VALUE, 200);
+  SetProp(P_MATERIAL, ([MAT_WOOD:100]));
+  SetProp(P_NODROP, 
+	  BS("Du wuerdest Dich nie von dieser kostbaren Hobbipfeife trennen!"));
+  SetProp(P_ARTICLE, 0);
+  
+  SetProp(P_NOSELL,
+	  "Du wuerdest Dich nie von dieser kostbaren Hobbipfeife trennen!\n");
+  
+  SetProp(P_INFO,
+	  BS("Das ist sicher keine gewoehnliche Pfeife.")+
+	  BS("Sie passt doch wesentlich besser zu einem Hobbit als so "
+	     "ein Teddy. Dieser wuerde die Hobbitpfeife zudem nur negativ "
+	     "beeinflussen."));
+  
+  AddDetail(({"form","aussehen"}),
+	    aussehen);
+  
+  AddSpecialDetail(({"farbe"}), "det_farbe");
+  
+  AddDetail(({"grado","schnellfuss", "grado schnellfuss"}),
+	    "Grado Schnellfuss ist anscheinend ein hobbitscher Abenteurer.");
+  
+  AddDetail(({"holz", "qualitaet"}),
+	    "Das Holz der Hobbitpfeife ist von ausgezeichneter Qualitaet.");
+  
+  AddDetail(({"verzierungen", "verzierung","schnitzerei","schnitzereien"}), 
+	    CLOSURE(huefe));
+  
+  AddCmd("horeport", "Report");
+  
+  //Kommandos fuer die Hobbitkommunikation
+  
+  AddCmd(({"horuf","horufe"}), "Rufen");
+  AddCmd(({"hohist","hohistory"}), "History");
+  AddCmd(({"howink","howinke"}), "howink");
+  AddCmd(({"hoknuddel","hoknuddle","hoknuddele"}), "hoknuddel");
+  AddCmd(({"howuschel","howuschle","howuschele"}), "howuschel");
+  AddCmd(({"hoprost","hoproste"}), "hoproste");
+  AddCmd(({"homahlzeit"}), "homahlzeit");
+  
+  AddCmd(({"hoinfo"}), "hoinfo");
+  AddCmd(({"hower"}), "hower");
+  AddCmd(({"hofarbe","hofarben"}), "hofarbe");
+  
+  AddCmd(({"hopresay"}), "hopresay");
+  
+  AddCmd(({"hohilfe"}), "hohilfe");
+
+
+  // Pfeife funs
+
+  AddCmd(({"stopfe","stopf"}), "fktstopfen");
+  AddCmd(({"rauche","rauch"}), "fktrauchen");
+
+  pfeifegestopft_blatt=0;
+  pfeifegestopft_kraut=0;
+  pfeifegestopft_stern=0;
+  pfeifegestopft_pflanze=0;
+  pfeifeangezuendet=0;
+  
+  GetColor(1);
+  
+  SUID;
+  
+  // r* commands:
+  init_soul_cmds(1);
+}
+
+string info()
+{
+  if((MENV) && (query_once_interactive(MENV)))
+    if(present("universal-teddy", MENV))
+      return BS("Das ist sicher keine gewoehnliche Pfeife.")+
+	BS("Sie passt doch wesentlich besser zu einem Hobbit als so "
+	   "ein Teddy. Dieser wuerde die Hobbitpfeife zudem nur negativ "
+	   "beeinflussen.");
+  
+  return BS("Das ist sicher keine gewoehnliche Pfeife.")+
+    BS("Das Holz der Hobbitpfeife glaenzt geheimnisvoll.");
+}
+
+string Master()
+{
+  return RTM "pfeifenmaster";
+}
+
+string Rasse()
+{
+  return "Hobbit";
+}
+
+string IgnoriereID()
+{
+  return "gradopfeife";
+}
+
+string absolut_fit()
+{
+  return "Du bist nun wieder absolut fit.";
+}
+
+string Report_normal(int hp, int maxhp, int sp, int maxsp)
+{
+  string ret;
+  
+  ret="* Du hast nun ";
+  
+  if(hp==maxhp)
+    ret+="volle Lebenspunkte und ";
+  else
+    ret+=""+hp+" von "+maxhp+" Lebenspunkte und ";
+  
+  if(sp==maxsp)
+    ret+="volle Magiepunkte.";
+  else
+    ret+=""+sp+" von "+maxsp+" Magiepunkte.";
+  
+  return ret;
+}
+
+string Report_kurz(int hp, int maxhp, int sp, int maxsp)
+{
+  string ret;
+  
+  ret="* ";
+  
+  if(hp==maxhp)
+    ret+="LP: "+hp+" und ";
+  else
+    ret+="LP: "+hp+" von ("+maxhp+") und ";
+  
+  if(sp==maxsp)
+    ret+="MP: "+sp;
+  else
+    ret+="MP: "+sp+" von ("+maxsp+")";
+  
+  return ret;
+}
+
+string Region(string str)
+{
+  if(strstr(str, "/d/huegelland/raballion/hobbits")==0)
+    return "Derlim";
+
+  if(strstr(str, "/d/huegelland/orw/pfeifenladen")==0)
+    return "Elessar";
+
+  return "";
+}
+
+string Erneuern_Meldung()
+{
+  return BS(""C"Deine Pfeife beginnt sich zu veraendern..."N"");
+}
+
+string History_leer()
+{
+  return BS("In letzter Zeit war es recht ruhig...");
+}
+
+string History_msg()
+{
+  return "";
+}
+
+string History_format()
+{
+  return "rief Dir zu: ";
+}
+
+string Rufen_syntax()
+{
+  return BS("Was willst Du den anderen Hobbits zurufen?");
+}
+
+string Rufen_format()
+{
+  return "ruft Dir zu: ";
+}
+
+string Rufen_msg()
+{
+  return "Du rufst den Hobbits zu: ";
+}
+
+
+varargs nosave string huefe(int flag)
+{
+  string ret, rcmds;
+  int i;
+  
+  rcmds="";
+  
+  if(IS_SEER(TP))
+    {
+      for(i=sizeof(soulcmds)-1;i>=0;i--)
+	if(i==0)
+	  rcmds+="und "+soulcmds[i][0]+".";
+	else
+	  rcmds+=soulcmds[i][0]+", ";
+      
+      rcmds=break_string(rcmds, 60, " ", BS_NO_PARINDENT);
+    }
+  else
+    {
+      for(i=sizeof(soulcmds)-1;i>=0;i--)
+	if(i==0)
+	  rcmds+="und "+soulcmds[i][0]+"("+soulcmds[i,2]+").";
+	else
+	  rcmds+=soulcmds[i][0]+"("+soulcmds[i,2]+"), ";
+      
+      rcmds=break_string(rcmds, 60, " ", BS_NO_PARINDENT);
+      
+      
+      rcmds+="Die Zahlen in den Klammern sind die Magiekosten.\n \n";
+      
+    }
+  
+  ret="\n \n"
+    "Grados Hobbitpfeife kann Dir anzeigen, wie es um Deine\n"
+    "Lebensenergie und Zauberkraft bestellt ist.\n \n"
+    "Der Befehl dazu lautet:\n"
+    " 'horeport [ein|kurz|farbe|farbekurz|aus]'\n \n"
+    "Grados Hobbitpfeife bietet Dir weiters folgende RVerben an:\n\n"+
+    rcmds+
+    "\nEinige Befehle nur fuer Hobbits:\n"
+    " 'hower, hoinfo, hofarbe, hopresay'\n \n"
+    "RVerben nur fuer Hobbits:\n"
+    " 'howinke, hoknuddel, hoprost, homahlzeit'\n\n"
+    "Hilfe zu den Befehlen erhaelst Du mit:\n"
+    " 'hohilfe'\n \n"
+    "                                                         Ver 1."+Version()+"\n";
+  if(flag) return ret;
+  
+  TP->More(make_document(ret));
+  return "";
+}
+
+nosave int hohilfe(string str)
+{
+  string ret;
+  
+  if(str) str=explode(str, " ")[0];
+  
+  switch(str)
+    {
+    case "horeport": 
+      ret="Der 'horeport' informiert Dich, wie es um Deine "
+	"Lebensenergie und Zauberkraft bestellt ist.\n"
+	"Moegliche Einstellungen sind:\n"
+	"* horeport normal    - Schaltet den Report normal ein.\n"
+	"* horeport kurz      - Schaltet den Report kurz ein.\n"
+	"* horeport farbe     - Schaltet den Report in Farbe ein.\n"
+	"* horeport farbekurz - Schaltet den Report faerbig und\n"
+	"                       kurz ein.\n"
+	"* horeport aus       - Schaltet den Report wieder aus.\n";
+      break;
+    case "hoinfo": 
+      ret="In 'hoinfo' hast Du eine eher zu Hobbits passende Version\n"
+	"der normalen Infoanzeige bei 'info'.\n"
+	"Mit 'hofarbe' kannst Du die Anzeige sogar in wunderschoenen\n"
+	"Farben darstellen lassen.\n"
+	"Einige unwichtige Angaben werden im Normalfall unterdrueckt.\n";
+      break;
+    case "hower": 
+      ret="Mit 'hower' siehst Du, wer aus dem Hobbitsvolk anwesend ist.\n"
+	"*  Wer ist anwesend?\n"
+	"*  Ist er/sie anwesend, oder idle?\n"
+	"*  Was fuer eine Waffe hat er/sie gezueckt?\n"
+	"*  Welche Gesinnung hat er/sie?\n"
+	"*  Wo befindet er/sie sich?\n\n"
+	"Mit 'hower kurz' siehst Du das ganze etwas kompakter.\n";
+      break;
+    case "hofarben":
+    case "hofarbe": 
+      ret="Mit '"+str+" ein|aus' kannst Du die Farbanzeige einstellen.\n";
+      break;
+    case "horuf": 
+    case "horufe": 
+      ret="Mit '"+str+"' hast Du die Moeglichkeit, den anderen Hobbits\n"
+	"etwas mitzuteilen, ohne dass andere Rassen mithoeren koennen.\n"
+	"Mit 'hohist' kannst Du die Rufe nocheinmal lesen.\n";
+      break;
+    case "hohist": 
+      ret="Mit 'hohist' kannst Du versuchen, die Echos der zuletzt\n"
+	"gerufenen Meldungen zu erhaschen...\n"
+	"Jedoch ist die Liste in ihrer Groesse beschraenkt.\n";
+      break;
+    case "howinke":
+    case "howink": 
+      ret="Mit '"+str+"' kannst Du den anderen Hobbits zuwinken.\n"; 
+      break;
+    case "hoknuddel":
+    case "hoknuddle":
+    case "hoknuddele": 
+      ret="Mit '"+str+"' kannst Du die anderen Hobbits alle knuddeln.\n"; 
+      break;
+    case "hoprost":
+    case "hoproste": 
+      ret="Mit '"+str+"' kannst Du allen anderen Hobbits zuprosten.\n"; 
+      break; 
+    case "homahlzeit": 
+      ret="Mit '"+str+"' kannst Du allen anderen Hobbits einen guten Appetit wuenschen.\n"; 
+      break;  
+    case "hopresay":
+      ret="Mit 'hopresay' kannst Du Dir Dein Hobbits-Presay, welches\n"
+	"z.B. bei 'hower' gezeigt wird, permanent als Presay setzen.\n\n"
+	"Mit 'hopresay loeschen' kannst Du Dein Presay entfernen.\n";      
+      break;
+    case "allgemein":
+      ret=huefe(1);
+      break;
+    case "ignoriere":
+    case "ignorieren":
+      ret=ignorieren_hilfe_text();
+      break;
+    default: 
+      ret="Mit 'hohilfe' kannst Du Dich ueber Folgendes informieren:\n \n"
+	"hohilfe <horeport>   Wie sieht es mit Leben u. Magie aus?\n"
+	"        <hoinfo>     Ein etwas anderes 'info'.\n"
+	"        <hower>      Eine Liste aller anwesenden Hobbits.\n"
+	"        <hofarbe>    Farbeinstellungen?\n"
+	"        <hopresay>   Das Hobbitspresay fix setzen.\n"
+	"        <horufe>     Den anderen Hobbits etwas zurufen?\n"
+	"        <hohist>     Wer hat den Hobbits etwas zugerufen?\n"
+	"        <howink>     Winkt den anwesenden Hobbits zu.\n"
+	"        <hoprost>    Prostet den anwesenden Hobbits zu.\n"
+	"        <homahlzeit> 'Guten Appetit' an alle anwesenden Hobbits.\n"
+	"        <hoknuddel>  Knuddelt alle anwesenden Hobbits.\n"
+	"        <allgemein>  Allgemeine Uebersicht.\n"
+	"        <ignoriere>  Uebersicht der Ignorieremoeglichkeiten.\n";
+    }
+  return TP->More(make_dokument(ret)),1;
+}
+
+string Titel(object pl)
+{
+  string ret;
+  
+  // Jaja muss sein ;)
+  if(getuid(pl)=="andyl")
+    return "Hobbitsoundmagier ";
+
+  if(getuid(pl)=="protheg")
+    return "Drowmagier ";
+  
+  if(!pl->QueryProp(Listener()))
+    if(!present(RACETOOLID, pl))
+      return "";
+    else
+      pl->SetProp(Listener(), 1);
+  
+  if(pl->QueryProp(P_FROG))
+    return "";
+  
+  if(IS_WIZARD(pl))
+    return "Hobbitmagier"+FM(pl,"in "," ");
+
+  ret="Hobbit";
+
+  if(pl->QueryProp(P_GUILD)=="druidenzirkel")
+    return ret+"druid"+FM(pl,"in ","e ");
+  
+  if(pl->QueryProp(P_GUILD)=="zechpreller")
+    return ret+"zechpreller"+FM(pl,"in "," ");
+  
+  if(pl->QueryProp(P_GUILD)=="berserker")
+    return ret+"berserker"+FM(pl,"in "," ");
+  
+  if(pl->QueryProp(P_GUILD)=="paladine")
+    return ret+"paladin ";
+  
+  if(pl->QueryProp(P_GUILD)=="bardengilde")
+    return ret+"bard"+FM(pl,"in ","e ");
+
+  if(pl->QueryProp(P_GUILD)=="nekromanten")
+    return ret+"nekromant ";
+    
+  return ret+FM(pl,"dame "," ");
+}
+
+nosave string Hunger(int food, int max_food, int drink, int max_drink)
+{
+  string ret;
+  int f, d;
+  
+  f=food*100/max_food;
+  d=drink*100/max_drink;
+
+  // HUNGER: 00-10: extrem hungrig, 11-20: ausgesprochen hungrig, 21-30: ziemlich hungrig, 31-40: sehr hungrig, 41-50: hungrig, 
+  // HUNGER: 51-60: noch hungrig, 61-70: kaum hungrig, 71-80: beinahe gesaettigt, 81-90: gesaettigt, 91-99: satt, 100: absolut voll. 
+  
+  // DURST: 00-10: extrem durstig, 11-20: ausgesprochen durstig, 21-30: ziemlich durstig, 31-40: sehr durstig, 41-50: durstig, 
+  // DURST: 51-60: noch durstig, 61-70: kaum durstig, 71-80: fast nicht durstig, 81-90: ueberhaupt nicht durstig, 91-99: voll, 100: absolut voll 
+  
+  ret="Du bist ";
+  
+  switch(f)
+    {
+    case 11 ..  20 : ret+="ausgesprochen hungrig"; break;
+    case 21 ..  30 : ret+="ziemlich hungrig"; break;
+    case 31 ..  40 : ret+="sehr hungrig"; break;
+    case 41 ..  50 : ret+="hungrig"; break;
+    case 51 ..  60 : ret+="noch hungrig"; break;
+    case 61 ..  70 : ret+="kaum hungrig"; break;
+    case 71 ..  80 : ret+="beinahe gesaettigt"; break;
+    case 81 ..  90 : ret+="gesaettigt"; break;
+    case 91 .. 100 : ret+="voll angegessen"; break;
+    default : ret+="extrem hungrig"; break;
+    }
+  
+  if((f < 50 && d > 50) ||
+     (f > 50 && d < 50))
+    ret+=" aber ";
+  else 
+    ret+=" und ";
+  
+  switch(d)
+    {
+    case 11 ..  20 : ret+="ausgesprochen durstig"; break;
+    case 21 ..  30 : ret+="ziemlich durstig"; break;
+    case 31 ..  40 : ret+="sehr durstig"; break;
+    case 41 ..  50 : ret+="durstig"; break;
+    case 51 ..  60 : ret+="noch durstig"; break;
+    case 61 ..  70 : ret+="kaum durstig"; break;
+    case 71 ..  80 : ret+="fast nicht durstig"; break;
+    case 81 ..  90 : ret+="ueberhaupt nicht durstig"; break;
+    case 91 .. 100 : ret+="voll angetrunken"; break;
+    default : ret+="extrem durstig"; break;
+    }
+  
+  return ret+".";
+}
+
+nosave int hopresay(string str)
+{
+  string np, op;
+
+  notify_fail(BS("Du kannst mit 'hopresay' nur das Hobbit-Presay setzen!")+
+	      BS("Du kannst aber auch mit 'hopresay loeschen' das Presay "
+		 "loeschen."));
+
+  if(strlen(str)) 
+    if(str=="loeschen")
+      {
+	if(!strlen(TP->QueryProp(P_PRESAY)))
+	  return write(BS("Du hattest doch gar kein Presay gesetzt!?")), 1;
+	
+	TP->SetProp(P_PRESAY, "");
+	
+	return write(BS("Dein Presay wurde geloescht.")), 1;
+      }
+    else
+      return 0;
+
+  
+  np=Titel(TP);
+  
+  if(strlen(op=TP->QueryProp(P_PRESAY)))
+    if(np!=op)
+      write(BS("Dein voriges Presay '"+op+"' wird ersetzt."));
+  
+  TP->SetProp(P_PRESAY, np[0..<2]);
+  
+  write(BS("Du bist nun:")+
+	BS(np+CAP(getuid(TP))+" "+(TP->QueryProp(P_TITLE) || "")));
+  
+  return 1;
+}
+
+nosave int hofarbe(string str)
+{
+  notify_fail(BS("Syntax: hofarbe ein|aus"));
+  if(!str) return 0;
+  
+  if(str=="aus")
+    {
+      Setting(0); 
+      return write(BS("Die Hobbitpfeife zeigt Dir jetzt 'hoinfo' in Schwarz/Weiss.")), 
+	1;
+    }
+
+  if(str=="ein")
+    {
+      Setting(1); 
+      return write(BS("Die Hobbitpfeife zeigt Dir jetzt 'hoinfo' in Farbe.")), 1;
+    }
+  
+  return 0;
+}
+
+nosave int hoinfo(string str)
+{
+  object tp;
+  mapping at;
+  int xp;
+  
+  tp=TP;
+
+  if(tp->QueryProp(P_GHOST))
+    return write(BS("Geister haben keine Punkte!")), 1;
+  
+  at=tp->QueryProp(P_ATTRIBUTES);
+  
+  if(!xpdiff) xpdiff=tp->QueryProp(P_XP);
+  
+  xp=tp->QueryProp(P_XP);
+  
+  write(sprintf(
+    " "G"+-----"N"\n"
+    " "G"|"N" %45.45-s  %23s\n"
+    " "G"|"N"\n"
+    "   Leben: %s           "W" ~~ ~"N"\n"
+    "   Magie: %s          "W"~ ~"N"\n"
+    "                                      "C"____"N"                      "W"~~~"N"\n"
+    "   Erfahrung:        %10d      "C"(___ `-._"N"                "W"_____"N"\n"
+    "   %28.28s          "C"`-._ `-._          ."W"'-----`"C"."N"\n"
+    "   Abenteuer:       %4d [%4d]              "C"`-._ `-._     ."G"=-=-=-=-="C"."N"\n"
+    "   Stufe: %21s  %11s     "C"`._ /`-..-"G"=-=-=-=-=-"C"|"N"\n"
+    "   ____________________________                     "C"`-._             |"N"\n"
+    "                                                         "C"`-.._______.'"N"\n"
+    "   Intelligenz:         %8-s  %-s\n"
+    "   Ausdauer:            %8-s  %-s\n"
+    "   Kraft:               %8-s  %-s\n"
+    "   Geschicklichkeit:    %8-s  %-s\n"
+    "\n"
+    " "G"|"N" %70-s "G"|"N"\n"
+    " "G"|"N" %70-s "G"|"N"\n"
+    " "G"+-----                                                              -----+"N"\n",
+    
+    Titel(tp)+CAP(getuid(tp)),
+    CAP(tp->QueryProp(P_GUILD))+" ["+tp->QueryProp(P_GUILD_LEVEL)+"]",
+    Balken(tp->QueryProp(P_HP), tp->QueryProp(P_MAX_HP), setting, 
+	   tp->QueryProp(P_WIMPY),45),
+    Balken(tp->QueryProp(P_SP), tp->QueryProp(P_MAX_SP), setting,0,45),
+    xp, (xp-xpdiff ? "Unterschied:      "+sprintf("%10d",xp-xpdiff) : ""), 
+    tp->QueryProp(P_QP), QM->QueryAllQP(), 
+    Stufenpunkte(tp), Gesinnung(tp),
+    sprintf("%2d [%2+d]", at[A_INT], tp->QueryAttributeOffset(A_INT)), 
+    Zustand(tp)[1..],
+    sprintf("%2d [%2+d]", at[A_CON], tp->QueryAttributeOffset(A_CON)), 
+    Erschoepfung(tp),
+    sprintf("%2d [%2+d]", at[A_STR], tp->QueryAttributeOffset(A_STR)), 
+    Gewicht(tp),
+    sprintf("%2d [%2+d]", at[A_DEX], tp->QueryAttributeOffset(A_DEX)),
+    (tp->QueryMoney() ? tp->QueryMoney()+" Muenzen" : ""),
+    Hunger(tp->QueryProp(P_FOOD), tp->QueryProp(P_MAX_FOOD), 
+	   tp->QueryProp(P_DRINK), tp->QueryProp(P_MAX_DRINK)),
+    (tp->QueryProp(P_WIMPY) ? (sprintf("Vorsicht: %3d", 
+				       tp->QueryProp(P_WIMPY))+
+			       (tp->QueryProp(P_WIMPY_DIRECTION) ? 
+				" Ri: "+tp->QueryProp(P_WIMPY_DIRECTION):"")):
+     "")));
+  
+  GetColor(1);
+  return 1;
+}
+
+nosave int howink(string str)
+{
+  object *hobbits;
+  string me;
+  int i;
+  
+  if(TP->QueryProp(P_INVIS)) 
+    return write(BS("Das geht nur, wenn Du sichtbar bist!!")),1;
+  
+  hobbits=Alle_Anwesenden(TP);
+  
+  me=Titel(TP)+CAP(getuid(TP));
+  
+  if(!str) str="";  
+  if(str[0]=='/') 
+    str=str[1..<1]+" ";
+  else
+    str="";
+  
+  for(i=sizeof(hobbits)-1;i>=0;i--)
+    tell_object(hobbits[i], BS(me+" winkt allen Hobbits "+str+"aus der Ferne zu."));
+  
+  write(BS("Du winkst allen Hobbits "+str+"aus der Ferne zu."));
+
+  return 1;
+}
+
+nosave int hoknuddel(string str)
+{
+  object *hobbits;
+  string me;
+  int i;
+  
+  if(TP->QueryProp(P_INVIS)) 
+    return write(BS("Das geht nur, wenn Du sichtbar bist!!")),1;
+  
+  hobbits=Alle_Anwesenden(TP);
+  
+  me=Titel(TP)+CAP(getuid(TP));
+  
+  if(!str) str="";  
+  if(str[0]=='/') 
+    str=str[1..<1]+" ";
+  else
+    str="";
+  
+  for(i=sizeof(hobbits)-1;i>=0;i--)
+    tell_object(hobbits[i], 
+		BS(me+" knuddelt alle Hobbits "+str+"aus der Ferne."));
+  
+  write(BS("Du knuddelst alle Hobbits "+str+"aus der Ferne."));
+
+  return 1;
+}
+
+nosave int howuschel(string str)
+{
+  object *hobbits;
+  string me;
+  int i;
+  
+  if(TP->QueryProp(P_INVIS)) 
+    return write(BS("Das geht nur, wenn Du sichtbar bist!!")),1;
+
+  hobbits=Alle_Anwesenden(TP);
+  
+  me=Titel(TP)+CAP(getuid(TP));
+  
+  if(!str) str="";  
+  if(str[0]=='/') 
+    str=str[1..<1]+" ";
+  else
+    str="";
+  
+  for(i=sizeof(hobbits)-1;i>=0;i--)
+    tell_object(hobbits[i], 
+		BS(me+" verwuschelt allen Hobbits "+str+"das Fell aus der "
+		   "Ferne."));
+  
+  write(BS("Du verwuschelst allen Hobbits "+str+"das Fell aus der Ferne."));
+
+  return 1;
+}
+
+nosave int hoproste(string str)
+{
+  object *hobbits;
+  string me;
+  int i;
+
+  if(TP->QueryProp(P_INVIS)) 
+    return write(BS("Das geht nur, wenn Du sichtbar bist!!")),1;
+
+  hobbits=Alle_Anwesenden(TP);
+  
+  me=Titel(TP)+CAP(getuid(TP));
+  
+  if(!str) str="";  
+  if(str[0]=='/') 
+    str=str[1..<1]+" ";
+  else
+    str="";
+  
+  for(i=sizeof(hobbits)-1;i>=0;i--)
+    tell_object(hobbits[i], BS(me+" prostet allen Hobbits "+str+"aus der Ferne zu."));
+  
+  write(BS("Du prostest allen Hobbits "+str+"aus der Ferne zu."));
+  
+  return 1;
+}
+
+nosave int homahlzeit(string str)
+{
+  object *hobbits;
+  string me;
+  int i;
+
+  if(TP->QueryProp(P_INVIS)) 
+    return write(BS("Das geht nur, wenn Du sichtbar bist!!")),1;
+
+  hobbits=Alle_Anwesenden(TP);
+  
+  me=Titel(TP)+CAP(getuid(TP));
+
+  if(!str) str="";  
+  if(str[0]=='/') 
+    str=str[1..<1]+" ";
+  else
+    str="";
+  
+  for(i=sizeof(hobbits)-1;i>=0;i--)
+    tell_object(hobbits[i], BS(me+" wuenscht allen Hobbits einen guten Appetit "+str+"aus der Ferne."));
+  
+  write(BS("Du wuenscht allen Hobbits einen guten Appetit "+str+"aus der Ferne."));
+
+  return 1;
+}
+
+int hower(string str)
+{
+  if(str && str!="kurz")
+    return write(BS("Nimwer [kurz]")), 1;
+  
+  TP->More(make_document(who_list("Folgende Hobbits sind anwesend:\n",
+				  strlen(str))));
+
+  return 1;
+}
+
+void hau_ab(object who)
+{
+  tell_object(who, BS("Als Du die Hobbitpfeife beruehrst, loest "
+		      "sie sich ploetzlich auf..."));
+
+  call_out("remove", 0);
+}
+
+// Pfeifenfunktionen
+// Uebernommen aus Orws Pfeifenwerkstatt
+nosave int fktstopfen(string str)
+{
+  string was;
+  string wohinein;
+  object kr;
+  
+  notify_fail("Was willst Du wo reinstopfen?!\n");
+  if(!str) return 0;
+  
+  if(sscanf(str, "%s in %s", was, wohinein)!=2 &&
+     sscanf(str, "%s mit %s", wohinein, was)!=2)
+    return 0;
+  
+  wohinein=explode(wohinein," ")[0];
+  
+  if(member(({"pfeife","hobbitpfeife"}), wohinein)==-1)
+    return 0;
+
+  if(pfeifegestopft_blatt || pfeifegestopft_kraut ||
+     pfeifegestopft_stern || pfeifegestopft_pflanze)
+    return write(BS("Die Pfeife ist doch schon gestopft!")), 1;
+
+  // Pfeife mit Langgrundblatt stopfen
+  if(was=="langgrundblatt" || was=="grundblatt" || was=="blatt")
+    {
+      if(kr=present("PFEIFENKRAUTBLATT",TP))
+	{
+	  write(BS("Du stopfst das Langgrundblatt in Grados Hobbitpfeife."));
+	  say(BS(TPN+" stopft eine kleine Pfeife."));
+	  
+	  pfeifegestopft_blatt=1;
+	  kr->remove();
+	  return 1;
+	}
+      else
+	return write(BS("Mit welchem Langgrundblatt?")), 1;
+    }
+
+  // Pfeife mit Grottenkraut stopfen
+  if(was=="grottenkraut" || was=="kraut")
+    {
+      if(kr=present("PFEIFENKRAUTKRAUT",TP))
+        {
+          write(BS("Du stopfst das Grottenkraut in Grados Hobbitpfeife."));
+          say(BS(TPN+" stopft eine kleine Pfeife."));
+
+          pfeifegestopft_kraut=1;
+          kr->remove();
+          return 1;
+        }
+        else
+	  return write(BS("Mit welchem Grottenkraut?")), 1;
+      }
+  
+  // Pfeife mit Suedstern stopfen
+  if(was=="suedstern" || was=="stern")
+    {
+      if(kr=present("PFEIFENKRAUTSTERN",TP))
+        {
+          write(BS("Du stopfst den Suedstern in Grados Hobbitpfeife."));
+          say(BS(TPN+" stopft eine kleine Pfeife."));
+
+          pfeifegestopft_stern=1;
+          kr->remove();
+          return 1;
+        }
+        else
+	  return write(BS("Mit welchem Suedstern?")), 1;
+    }
+  
+  // Pfeife mit Nakrafulpflanze stopfen
+  if(was=="nakrafulpflanze" || was=="pflanze")
+    {
+      if(present("PFEIFENKRAUTPFLANZE_1",TP))
+        {
+          write(BS("Du stopfst die zerriebene Nakrafulpflanze in Grados Hobbitpfeife."));
+          say(BS(TPN+" stopft eine kleine Pfeife."));
+
+          pfeifegestopft_pflanze=1;
+          kr->remove();
+          return 1;
+        }
+      
+      if(present("PFEIFENKRAUTPFLANZE_0",TP))
+	return write(BS("Du solltest die Nakrafulpflanze vorher zerreiben.")), 1;
+      else
+	return write(BS("Mit welcher Nakrafulpflanze?")), 1;
+    }
+  
+  write(BS("Sowas kannst Du nicht in Grados Hobbitpfeife stopfen!"));
+  return 1;
+}
+
+// Uebernommen aus Orws Pfeifenwerkstatt
+nosave int fktrauchen(string str)
+{
+  notify_fail(BS("Was willst Du rauchen?!")); 
+  if(!str) return 0;
+  
+  if(!id(str)) return 0;
+  
+  if(pfeifeangezuendet)
+    return write(BS("Du rauchst doch schon Deine Pfeife!")), 1;
+  
+  // Pfeife gestopft mit Langgrundblatt
+  if(pfeifegestopft_blatt)
+    {
+      write(BS("Gemuetlich zuendest Du Dir Deine Pfeife an."));
+      say(BS(TPN+" zuendet sich gemuetlich eine Pfeife an."));
+      
+      SetProp(P_NODROP, "Aber Grados Hobbitpfeife brennt doch gerade!\n");
+      
+      pfeifeangezuendet=1;
+      
+      call_out("blattrauchen1", 15+random(5), TP);
+      return 1;
+    }
+  
+  // Pfeife gestopft mit Grottenkraut
+  if(pfeifegestopft_kraut)
+    {
+      write(BS("Gemuetlich zuendest Du Dir Deine Pfeife an."));
+      say(BS(TPN+" zuendet sich gemuetlich eine Pfeife an."));
+      
+      SetProp(P_NODROP, "Aber Grados Hobbitpfeife brennt doch gerade!\n");
+      
+      pfeifeangezuendet=1;
+      
+      call_out("krautrauchen1", 15+random(5),TP);
+      return 1;
+    }
+  
+  // Pfeife gestopft mit Suedstern
+  if(pfeifegestopft_stern)
+    {
+      write(BS("Gemuetlich zuendest Du Dir Deine Pfeife an."));
+      say(BS(TPN+" zuendet sich gemuetlich eine Pfeife an."));
+      
+      SetProp(P_NODROP, "Aber Grados Hobbitpfeife brennt doch gerade!\n");
+      
+      pfeifeangezuendet=1;
+      
+      call_out("sternrauchen1", 15+random(5),TP);
+      return 1;
+    }
+  
+  // Pfeife gestopft mit einer Nakrafulpflanze
+  if(pfeifegestopft_pflanze)
+    {
+      write(BS("Gemuetlich zuendest Du Dir Deine Pfeife an."));
+      say(BS(TPN+" zuendet sich gemuetlich eine Pfeife an."));
+      
+      SetProp(P_NODROP, "Aber Grados Hobbitpfeife brennt doch gerade!\n");
+      
+      pfeifeangezuendet=1;
+      
+      call_out("pflanzerauchen1", 15+random(5),TP);
+      return 1;
+    }
+  
+  write(BS("Du musst Grados Hobbitpfeife vorher stopfen um sie rauchen zu koennen!"));
+  return 1;
+}
+
+
+// Blattrauchen
+int blattrauchen1(object raucher)
+{
+  if(objectp(raucher))
+    {
+      write(BS("Kleine Rauchwoelkchen kommen aus Deiner Pfeife und Du "
+	       "fuehlst Dich so richtig wohl."));
+      say(BS(raucher->name()+" fuehlt sich richtig wohl."));
+      
+      if(raucher->QueryProp(P_RACE)=="Hobbit")
+	raucher->heal_self(pfeifenwert);
+
+      call_out("blattrauchen2", 25+random(5),raucher);
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+      return 1;
+    }
+}
+
+int blattrauchen2(object raucher)
+{
+  if(objectp(raucher))
+    {
+      write(BS("Du paffst entspannt Deine Pfeife und versuchst kleine Ringe "
+	       "in der Luft entstehen zu lassen."));
+      say(BS(raucher->name()+" raucht entspannt Pfeife."));
+      
+      if(raucher->QueryProp(P_RACE)=="Hobbit")
+	raucher->heal_self(pfeifenwert);
+      
+      call_out("blattrauchen3", 25+random(5),raucher);
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+      return 1;
+    }
+}
+
+int blattrauchen3(object raucher)
+{
+  if(objectp(raucher))
+    {
+      formringerl=random(7);
+
+      write(BS("Nach einigen Versuchen schaffst Du es "+RINGERL[formringerl]+
+	       " zu blasen."));
+      say(BS(raucher->name()+" schafft es "+RINGERL[formringerl]+" zu blasen."));
+      if(raucher->QueryProp(P_RACE)=="Hobbit")
+	raucher->heal_self(pfeifenwert);
+      
+      call_out("blattrauchen4", 15+random(5),raucher);
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+      return 1;
+    }   
+}
+
+int blattrauchen4(object raucher)
+{
+  if(objectp(raucher))
+    {
+      formringerl=random(7);
+
+      write(BS("Du versuchst es weiter und schaffst "+RINGERL[formringerl]+"."));
+      say(BS(raucher->name()+" versucht es weiter und schafft "+
+	     RINGERL[formringerl]+"."));
+
+      if(raucher->QueryProp(P_RACE)=="Hobbit")
+	raucher->heal_self(pfeifenwert);
+
+      call_out("blattrauchen5", 15+random(5),raucher);
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+      return 1;
+    }
+}
+
+int blattrauchen5(object raucher)
+{
+  if(objectp(raucher))
+    {
+      write(BS("Lustig fliegen die Rauchwoelkchen durch die Luft."));
+      say(BS(raucher->name()+" laesst lustige Rauchwoelkchen durch die "
+	     "Luft fliegen."));
+
+      if(raucher->QueryProp(P_RACE)=="Hobbit")
+	raucher->heal_self(pfeifenwert);
+
+      call_out("blattrauchen6", 15+random(5),raucher);
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+    return 1;
+    }
+}
+
+int blattrauchen6(object raucher)
+{
+  if(raucher)
+    {
+      write(BS("Leider ist Grados Hobbitpfeife auch schon wieder leer...\n"));
+      say(BS(raucher->Name()+" steckt Grados Hobbitpfeife wieder weg."));
+      
+      SetProp(P_NODROP, 0);
+      
+      pfeifegestopft_blatt=0;
+      pfeifeangezuendet=0;
+      
+      return 1;
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+      return 1;
+    }
+}
+
+// Krautrauchen
+int krautrauchen1(object raucher)
+{
+  if(objectp(raucher))
+    {
+      write(BS("Kleine Rauchwoelkchen kommen aus Deiner Pfeife und Du "
+	       "fuehlst Dich so richtig wohl. Das Grottenkraut ist echt "
+	       "nicht schlecht."));
+      say(BS(raucher->name()+" raucht genuesslich "+
+	     raucher->QueryPossPronoun(NEUTER,WEN)+" Grottenkraut."));
+      
+      if(raucher->QueryProp(P_RACE)=="Hobbit")
+	raucher->heal_self(pfeifenwert+5);
+      else
+	raucher->heal_self(random(5));
+      
+      call_out("krautrauchen2", 25+random(5),raucher);
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+      return 1;
+    }
+}
+
+int krautrauchen2(object raucher)
+{
+  if(objectp(raucher))
+    {             
+      write(BS("Du paffst entspannt Deine Pfeife und versuchst kleine Ringerl "
+	       "in der Luft entstehen zu lassen."));
+      say(BS(raucher->name()+" raucht entspannt "+
+	     raucher->QueryPossPronoun(FEMALE,WEN)+" Pfeife."));
+
+      call_out("krautrauchen3", 25+random(5),raucher);
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+      return 1;
+    }
+}
+
+int krautrauchen3(object raucher)
+{
+  if(objectp(raucher))
+    {
+      formringerl=random(7);
+      
+      write(BS("Nach einigen Versuchen schaffst Du es "+RINGERL[formringerl]+
+	       " zu blasen."));
+      
+      say(BS(raucher->name()+" schafft es "+RINGERL[formringerl]+
+	     " zu blasen."));
+      
+      if(raucher->QueryProp(P_RACE)=="Hobbit")
+	raucher->heal_self(pfeifenwert+5);
+      else
+	raucher->heal_self(random(5));
+      
+      call_out("krautrauchen4", 15+random(5),raucher);
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+      return 1;
+    }
+}
+
+int krautrauchen4(object raucher)
+{
+  if(objectp(raucher))
+    {
+      formringerl=random(7);
+
+      write(BS("Du versuchst es weiter und schaffst "+RINGERL[formringerl]+
+	       "."));
+      say(BS(raucher->name()+" versucht es weiter und schafft "+
+	     RINGERL[formringerl]+"."));
+
+      call_out("krautrauchen5", 15+random(5),raucher);
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+      return 1;
+    }
+}
+
+int krautrauchen5(object raucher)
+{
+  if(objectp(raucher))
+    {
+      write(BS("Lustig fliegen die Rauchwoelkchen durch die Luft."));
+      say(BS(raucher->name()+" laesst lustige Rauchwoelkchen durch die Luft "
+	     "fliegen."));
+      if(raucher->QueryProp(P_RACE)=="Hobbit")
+	raucher->heal_self(pfeifenwert+5);
+      else
+	raucher->heal_self(random(5));
+
+      call_out("krautrauchen6", 15+random(5),raucher);
+    }
+  else
+    {                                           
+      pfeifeangezuendet=0;
+    return 1;
+    }
+}
+
+int krautrauchen6(object raucher)
+{
+  if(objectp(raucher))
+    {
+      write(BS("Leider ist das Grottenkraut auch schon wieder aus..."));
+      say(BS(raucher->name()+" steckt die Pfeife wieder weg."));
+
+      SetProp(P_NODROP, 0);
+      
+      pfeifegestopft_kraut=0;
+      pfeifeangezuendet=0;
+      return 1;
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+      return 1;
+    }
+}
+
+#define KRAFTTIER ({"Kartoffelkaefer","Leguan","Regenwurm", \
+                    "Ameisenbaer","Grashuepfer","Kuckuck", \
+                    "Ochsenfrosch","Panther","Pinguin", \
+                    "Loewe","Schimpanse","Kater", \
+                    "Alligator","Gorilla","Hirtenhund", \
+                    "Stier","Esel","Salamander", \
+                    "Igel","Wolf","Leopard", \
+                    "Elephant","Weberknecht","Uhu"})
+int art = random(24);
+
+int sternrauchen1(object raucher)
+{
+  if(objectp(raucher))
+    {
+      write(BS("Mit jedem Zug schwinden Deine Sinne ein klein wenig mehr.")+
+	    BS("Du verlierst Dich in Gedanken."));
+      say(BS(raucher->name()+" raucht genuesslich "+
+	     raucher->QueryPossPronoun(MALE,WEN)+" Suedstern."));
+      
+      raucher->SetProp(P_PARALYZED,
+      ([PARALYZE_TIME:-1,
+        PARALYZE_MSG:"Du bist zu benebelt von der Wirkung des Suedsterns.\n",
+        PARALYZE_MSG_OTHER:"Benommen taumelt %s herum.\n",
+        PARALYZE_END:"Langsam kehrt die Kontrolle ueber Deinen Koerper zurueck.\n",
+        PARALYZE_END_OTHER:"%s erwacht aus dem Trancezustand.\n"]));
+      
+      if(raucher->QueryProp(P_RACE)=="Hobbit")
+	raucher->heal_self(pfeifenwert);
+      
+      call_out("sternrauchen2", 25+random(5),raucher);
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+      return 1;
+    }
+}
+
+int sternrauchen2(object raucher)
+{
+  if(objectp(raucher))
+    {
+      write(BS("Du schliesst Deine Augen und entspannst Deinen Koerper."));
+      say(BS(raucher->name()+" schliesst "+
+	     raucher->QueryPossPronoun(FEMALE,WEN)+
+	     " Augen und entspannt sich total."));
+
+      call_out("sternrauchen3", 25+random(5),raucher);
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+      return 1;
+    }
+}
+
+int sternrauchen3(object raucher)
+{
+  if(objectp(raucher))
+    {
+      write(BS("Ein wohlig warmes Gefuehl breitet sich in Dir aus und Du "
+	       "faellst in eine Art Trancezustand."));
+      say(BS(raucher->name()+" pafft laechelnd "+
+	     raucher->QueryPossPronoun(FEMALE,WEN)+" Pfeife."));
+
+      if(raucher->QueryProp(P_RACE)=="Hobbit")
+	raucher->heal_self(pfeifenwert);
+
+      call_out("sternrauchen4", 25+random(5),raucher);
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+      return 1;
+    }
+}
+
+int sternrauchen4(object raucher)
+{
+  if(objectp(raucher))
+    {
+      formringerl=random(7);
+
+      write(BS("Laessig blaest Du "+RINGERL[formringerl]+" und starrst dabei "
+	       "ein Loch in die Luft."));
+      say(BS(raucher->name()+" blaest "+RINGERL[formringerl]+"."));
+
+      call_out("sternrauchen5", 25+random(5),raucher);
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+      return 1;
+    }
+}
+
+int sternrauchen5(object raucher)
+{
+  if(objectp(raucher))
+    {
+      write(BS("Tief in Trance versunken findest Du Dich ploetzlich auf einer "
+	       "Lichtung im Dschungel wieder. Erschrocken drehst Du Dich um "
+	       "als Du ein Geraeusch hinter Dir vom Rand der Lichtung "
+	       "hoerst."));
+      say(BS(raucher->name()+" dreht sich mit erschrockenem Blick um."));
+
+      call_out("sternrauchen6", 25+random(5),raucher);
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+      return 1;
+    }
+}
+
+int sternrauchen6(object raucher)
+{
+  if(objectp(raucher))
+    {
+      write(BS("Aus dem Dickicht taucht ploetzlich ein Tier auf. Du erkennst "
+	       "es, es ist Dein Krafttier... ein "+KRAFTTIER[art]+"."));
+      say(BS(raucher->name()+" benimmt sich merkwuerdig.\n"));
+
+      call_out("sternrauchen7", 15+random(5),raucher);
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+      return 1;
+    }
+}
+
+int sternrauchen7(object raucher)
+{
+  if(objectp(raucher))
+    {
+      if(raucher->QueryProp(P_POISON))
+	{
+	  write(BS("Der "+KRAFTTIER[art]+" guckt Dich grinsend an.")+
+		BS("Der "+KRAFTTIER[art]+" sagt: Hallo "+raucher->name()+
+		   "! Oh, Du bist ja vergiftet!")+
+		BS("Der "+KRAFTTIER[art]+" sagt: Lass mich Dir helfen..."));
+	  say(BS(raucher->name()+" entspannt sich wieder."));
+
+	  call_out("sternrauchen8", 15+random(5),raucher);
+	  return 1;
+	}
+      
+      if(raucher->QueryProp(P_HP)<raucher->QueryProp(P_MAX_HP))
+	{
+	  write(BS("Der "+KRAFTTIER[art]+" guckt Dich grinsend an.")+
+		BS("Der "+KRAFTTIER[art]+" sagt: Hallo "+raucher->name()+
+		   "! Oh, Dir gehts aber nicht gut...!")+
+		BS("Der "+KRAFTTIER[art]+" sagt: Lass mich Dir helfen..."));
+	  say(BS(raucher->name()+" entspannt sich wieder."));
+	  
+	  call_out("sternrauchen8", 15+random(5),raucher);  
+	}
+      else
+	{
+	  write(BS("Der "+KRAFTTIER[art]+" guckt Dich grinsend an.")+
+		BS("Der "+KRAFTTIER[art]+" sagt: Hallo "+raucher->name()+
+		   "! Freut mich Dich gesund anzutreffen.")+
+		BS("Der "+KRAFTTIER[art]+" sagt: Wenns Dir mal nicht gut geht "
+		   "kannst Du mich hier besuchen."));
+	  say(BS(raucher->name()+" entspannt sich wieder."));
+	  
+	  call_out("sternrauchen9", 15+random(5),raucher);
+	}
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+      return 1;
+    }
+}
+
+int sternrauchen8(object raucher)
+{
+  if(objectp(raucher))
+    {
+      write(BS("Der "+KRAFTTIER[art]+" beginnt eine leise Melodie zu summen.")+
+	    BS("Du fuehlst Dich ploetzlich viel besser."));
+
+      if(raucher->QueryProp(P_RACE)=="Hobbit")
+	{
+	  raucher->AddPoison(-(5+random(4)));
+	  raucher->heal_self(pfeifenwert+art+random(50));
+	}
+      else
+	{
+	  raucher->AddPoison(-(1+random(4)));
+	  raucher->heal_self(pfeifenwert+art);
+	}
+
+      say(BS(raucher->name()+" laechelt benommen."));
+
+      call_out("sternrauchen9", 15+random(5),raucher);
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+      return 1;
+    }
+}
+
+int sternrauchen9(object raucher)
+{
+  if(objectp(raucher))
+    {
+      formringerl=random(7);
+
+      raucher->SetProp(P_PARALYZED,0);
+
+      write(BS("Du wachst wieder auf, blaest noch "+RINGERL[formringerl]+
+	       " und dann ist der ganze Suedstern auch schon wieder "
+	       "aufgeraucht. Zufrieden steckst Du die Pfeife wieder weg."));
+      say(BS(raucher->name()+" blaest noch "+RINGERL[formringerl]+
+	     " und steckt die Pfeife wieder weg."));
+
+      SetProp(P_NODROP, 0);
+
+      pfeifegestopft_stern=0;
+      pfeifeangezuendet=0;
+      return 1;
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+      return 1;
+    }
+}
+
+#define FIGUREN ({"eines Stegs","einer Burg","eines Walfaengers", \
+                  "eines Schlosses","eines Wachturms","eines Wasserfalls", \
+                  "eines Turms","eines Bergs","einer riesigen Spinne", \
+                  "eines Torbogens","eines Kraters","einer Eiche", \
+                  "eines Throns","eines Pilzes","eines riesigen Vogels", \
+                  "eines Altars","einer Blutulme","einer kleinen Piazza", \
+                  "einer Huette","einer Kaverne","eines Kerzenhalters", \
+                  "einer Oase","eines riesigen Wurms","einer Kneipe" })
+
+#define ORT     ({"/d/wueste/protheg/kraterrand/room/steg", \
+                  "/gilden/paladine/room/burg_c2", \
+                  "/d/wasser/feyaria/schiffe/walfaenger", \
+                  "/d/ebene/ronja/feenquest/room/kerker", \
+                  "/d/polar/thor/xandim/room/wachturm3", \
+                  "/d/dschungel/dante/weg/room/weg10", \
+                  "/d/ebene/lamuerte/turm/rooms/platte", \
+                  "/d/gebirge/angrox/room/ebene1/bergwerk_r14", \
+                  "/d/unterwelt/zordan/dhrkion/room/wall-e1", \
+                  "/d/ebene/lamuerte/burg/weg/16x6y", \
+                  "/d/unterwelt/basics/central/room/01-01+11", \
+                  "/d/kristallwald/sargola/wald/room/4_0602", \
+                  "/d/gebirge/speedy/trollager/room/boss", \
+                  "/d/gebirge/orw/quest/room/hain4", \
+                  "/d/gebirge/eros/room/berg_d18", \
+                  "/d/dschungel/feyaria/tijara/room/kult", \
+                  "/d/dschungel/feyaria/dorf/room/baum-0b0", \
+                  "/d/ebene/Midas/room/kanal/piazza_c6", \
+                  "/d/gebirge/angrox/4elem/room/hoehle/hoehle_j7", \
+                  "/d/gebirge/orw/grotte/room/grotte8", \
+                  "/d/wueste/arthoas/erg/room/aragh/raum43", \
+                  "/d/gebirge/monimor/room/see", \
+                  "/d/unterwelt/zordan/dhrkion/room/kneipe" })
+     
+int zufall;
+
+
+int pflanzerauchen1(object raucher)
+{
+  if(raucher)
+    {
+      write(BS("Du wunderst Dich ueber den komischen Geschmack der "
+	       "Nakrafulpflanze. Irgendwie nicht schlecht, aber irgendwie "
+	       "auch ganz anders als alles das Du bisher geraucht hast."));
+      say(BS(raucher->name()+" schliesst "+
+	     raucher->QueryPossPronoun(FEMALE,WEN)+
+	     " Augen und entspannt sich total."));
+
+      call_out("pflanzerauchen2", 25+random(5),raucher);
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+      return 1;
+    }
+}
+
+int pflanzerauchen2(object raucher)
+{
+  if(raucher)
+    {
+      formringerl=random(7);
+      
+      write(BS("Vergnuegt springst Du herum und machst "+RINGERL[formringerl]+
+	       ". Du fuehlst Dich total frei, denkst an die Weiten der Wueste."));
+      say(BS(raucher->name()+" blaest vergnuegt "+RINGERL[formringerl]+"."));
+      
+      call_out("pflanzerauchen3", 25+random(5),raucher);
+    }
+  else
+    { 
+      pfeifeangezuendet=0;
+      return 1;
+    }
+}
+
+int pflanzerauchen3(object raucher)
+{
+  if(raucher)
+    {
+      zufall=random(24);
+
+      write(BS("Bilder dringen in Deinen Kopf ein, Bilder "+FIGUREN[zufall]+
+	       ". Du gruebelst ob sie Dir bekannt vorkommen, ob Du dort "
+	       "schon mal warst."));
+      say(BS(raucher->name()+" scheint in Gedanken versunken."));
+
+      call_out("pflanzerauchen4", 25+random(5),raucher);
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+      return 1;
+    }
+}
+
+int pflanzerauchen4(object raucher)
+{
+  if(raucher)
+    {
+      formringerl=random(7);
+      write(BS("Du nimmst einen tiefen Zug aus der Pfeife und machst "
+	       +RINGERL[formringerl]+". Die Bilder verpuffen wieder."));
+      say(BS(raucher->name()+" raucht laessig eine Nakrafulpflanze und "
+	     "blaest "+RINGERL[formringerl]+"."));
+
+      call_out("pflanzerauchen5", 25+random(5),raucher);
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+      return 1;
+    }
+}
+
+int pflanzerauchen5(object raucher)
+{
+  if(raucher)
+    {
+      write(BS("Deine Augen werden muede, Dein Atem wird immer regelmaessiger "
+	       "und die Welt um Dich herum scheint zu verschwimmen."));
+      say(BS(raucher->name()+" bewegt sich immer langsamer."));
+
+      call_out("pflanzerauchen6", 25+random(5),raucher);
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+      return 1;
+    }
+}
+
+int pflanzerauchen6(object raucher)
+{
+  if(raucher)
+    {
+      zufall=random(sizeof(ORT));
+      
+      write(BS("Wieder finden Bilder Zugang zu Deinen Gedanken. "
+	       "Sie nehmen die Form "+FIGUREN[zufall]+" an."));
+      say(BS(raucher->name()+" sieht benommen aus."));
+      
+      call_out("pflanzerauchen7", 15+random(5),raucher);
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+      return 1;
+    }
+}
+
+int pflanzerauchen7(object raucher)
+{
+  if(raucher)
+    {
+      write(BS("Du konzentrierst Dich auf die Bilder. Sie draengen in Deinen "
+	       "Kopf, lassen Dir keine Ruhe. Du versuchst danach zu "
+	       "greifen..."));
+      say(BS(raucher->name()+" taumelt herum."));
+      
+      call_out("pflanzerauchen8", 15+random(5),raucher);
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+      return 1;
+    }
+}
+
+int pflanzerauchen8(object raucher)
+{
+  if(raucher)
+    {
+      write(BS("Erschrocken stellst Du fest, dass sich Dein Koerper langsam "
+	       "aufloest. Du erinnerst Dich an die Nakrafulpflanze und kommst "
+	       "Dir ploetzlich ziemlich bloed vor... wieso musst Du auch "
+	       "jeden Mist den Du findest in der Pfeife rauchen..."));
+      say(BS(raucher->name()+" scheint sich langsam aufzuloesen."));
+      
+      call_out("pflanzerauchen9", 25+random(5),raucher);
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+      return 1;
+    }
+}
+
+int pflanzerauchen9(object raucher)
+{
+  if(raucher)
+    {
+      write(BS("Die Bilder werden immer staerker, Dein Koerper loest sich nun "
+	       "ganz auf... In Deinem Kopf schwirren tausend Muecken..."));
+      say(BS(raucher->name()+" verkrampft sich und loest sich weiter auf."));
+      
+      call_out("pflanzerauchen10", 15+random(5),raucher);
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+      return 1;
+    }
+}
+
+int pflanzerauchen10(object raucher)
+{
+  if(raucher)
+    {
+      write(BS("Ploetzlich findest Du dich an dem Ort wieder, den Du in "
+	       "Deinen Visionen gesehen hast..."));
+
+      raucher->move(ORT[zufall], M_TPORT, 
+		    "vor Deinen Augen",
+		    "verschwindet",
+		    "erscheint mit einem lauten Knall");
+      
+      call_out("pflanzerauchen11", 15+random(5),raucher);
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+      return 1;
+    }
+}
+
+int pflanzerauchen11(object raucher)                                           
+{
+  if(raucher)
+    {
+      write(BS("Total benommen nimmst Du noch einen letzten Zug aus Deiner "
+	       "Pfeife und steckst sie dann weg.\n\n"));
+      say(BS(raucher->name()+" nimmt noch einen letzten Zug aus der Pfeife "
+	     "und steckt sie dann weg."));
+      
+      SetProp(P_NODROP, 0);
+      
+      pfeifegestopft_kraut=0;
+      pfeifeangezuendet=0;
+      return 1;
+    }
+  else
+    {
+      pfeifeangezuendet=0;
+      return 1;
+    }
+}
+
+string short()
+{
+  if(pfeifeangezuendet)
+    SetProp(P_SHORT, "Grados Hobbitpfeife (glimmend)");
+  else
+    if(pfeifegestopft_blatt || pfeifegestopft_kraut ||
+       pfeifegestopft_stern || pfeifegestopft_pflanze)
+      SetProp(P_SHORT, "Grados Hobbitpfeife (gestopft)");
+    else
+      SetProp(P_SHORT, "Grados Hobbitpfeife");
+  
+  return ::short();
+}
+
+// Extralook
+string extra_look()
+{
+  if(!MENV) return "";
+  if(!query_once_interactive(MENV)) return "";
+  
+  if(pfeifeangezuendet)
+    return BS(CAP(MENV->QueryPronoun())+" raucht gerade eine von Grados "
+	      "Hobbitpfeifen.");
+  else
+    return BS(CAP(MENV->QueryPronoun())+" traegt eine von Grados "
+	      "Hobbitpfeifen.");
+}

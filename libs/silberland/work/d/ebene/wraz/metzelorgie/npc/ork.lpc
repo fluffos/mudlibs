@@ -1,0 +1,254 @@
+// Ork
+// Schlachtfeld
+// von Wraz / Mendralim
+
+#include "../def.h"
+#include "schlachtfeld.h"
+
+#define RANDOM_BONUS_DEFEND WMASTER->query_random_bonus_defend()
+
+inherit "/std/npc/spells";
+inherit "/d/huegelland/feyaria/orks/npc/std_ork";
+inherit NPC "npc.lpc";
+
+string *heroes;
+
+void create()
+{
+  if(!is_clone(TO)) return;
+
+  ::create();
+
+  heroes=explode( read_file(ZONE "list/heroes")+"\nwraz" , "\n" );
+
+  SetProp(P_SHORT, "Ein Ork");
+  SetProp(P_LONG,
+    "Dieser Ork sieht aggressiv und kampfbereit aus." );
+
+  SetProp(P_NAME, "Ork");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:0,T_RANGE_MAX:30]));
+  AddId(({"Ork", "Axtexperte", "NOWIMPY", "Krieger", "\nschlachtfeld"}));
+  set_living_name("\nschlachtfeld_minions_by_wraz");
+  SetProp(P_ARTICLE, 1);
+
+  create_default_npc(30+random(8));
+
+  SetProp(P_HANDS, ({" mit seinen orkischen Faeusten"
+                    ,QueryProp(P_HANDS)[1]
+                    , ({DT_BLUDGEON}) }));
+
+  SetProp(P_RACE, "Ork");
+  SetProp(P_SIZE, 180);
+  SetProp(P_WEIGHT, 78000);
+  SetProp(P_ALIGN, -200);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_HEAL,0);
+  SetProp(P_AGGRESSIVE,random(2));
+  SetProp(P_WIMPY, 0);
+  SetProp(P_NOMAGIC,0);
+
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    Name(WER,1)+" nimmt das nicht!!\n" }) );
+
+  SetProp(P_LOG_INFO, "/wraz/fragen_metzelorgie");
+
+  SetProp(P_RESISTANCE_STRENGTHS, QueryProp(P_RESISTANCE_STRENGTHS)+
+               ([DT_RIP: -0.3]) );
+
+  SetProp(P_MSGIN, "kommt schnaufend an");
+  SetProp(P_MSGOUT, "stampft grunzend und quiekend");
+  SetProp(P_MMSGIN, "kommt schnaufend an");
+  SetProp(P_MMSGOUT, "haut ab");
+
+  SetProp(P_MNPC_AREA, ({ ROOM "m"}) );
+  SetProp(P_MNPC_DEFAULTROOM, ROOM "m06");
+  SetProp(P_MNPC_WAIT, ({ 40, 50, 10 }));
+  SetProp(P_MNPC_FLAGS, MOV_OUTDOORS + MOV_MOVES + MOV_BACKWARDS);
+
+  SetProp(P_DIE_MSG,  " schreit auf und faellt dann tot zu Boden.\n");
+  SetProp(P_NOCORPSE, 0 );
+
+  AddInfo(DEFAULT_INFO, "grunzt Dich nur an.\n");
+
+  AddInfo( ({"ork"}),
+    "ICH bin ein Ork!",
+    "grunzt: ");
+
+  SetProp(P_SPELLRATE,45);
+
+  AddSpell(1,450,
+    "Das Blut spritzt, als des Orks Waffe in Dich eindringt!\n",
+    "Das Blut spritzt, als des Orks Waffe in @WEN eindringt!\n",
+     DT_SLASH,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(3,550,
+    "Der Ork beisst Dir in die Schulter!\n",
+    "Der Ork beisst @WEM in die Schulter!\n",
+    DT_RIP,([SP_SHOW_DAMAGE:1]));
+
+  SetChats(3,
+  ({Name(WER, 1)+" bruellt: GROOOAAAAAAAAAAAARRRRRRRRR!!!!\n"
+   ,Name(WER, 1)+" schreit wild!\n"
+   }));
+
+  SetAttackChats(10,
+  ({Name(WER, 1)+" bruellt Dich wild an!!\n",
+   Name(WER, 1)+" grunzt.\n",
+   Name(WER, 1)+" schreit wild im Kampf!\n"
+   }));
+
+  SUID;
+
+  if(!random(6)) {
+    equip(0,1);
+    CLONEME(WEAPON "zackenschwert");
+    command("zuecke schwert");
+  }
+  else equip(1,1);
+
+  SetProp("no_score", 0); // "/d/huegelland/feyaria/orks/npc/std_ork" setzt "P_NO_SCORE" auf 1 -->
+                          // dadurch kann keine Kerbe vergeben werden, der Ork ist aber eine Kerbe
+}
+
+void die(int poisondeath)
+{
+  object ob;
+
+  WMASTER->npc_death_log("standardnpc", TO->Name(RAW), TPU, TPN);
+
+  ob=clone_object(OBJ "bling");
+  WMASTER->bling_prop(ob, lower_case(QueryProp(P_NAME)) );
+  ob->set_collector_value( QueryProp(P_LEVEL)+10 );
+  // Bonus fuer Spell
+  ob->move(TO,M_GET);
+
+  if(!random(1000)) clone_object(OBJ "schluckeroel")->move(TO,M_GET);
+
+  npc::jadering_xp(TP, QueryProp(P_LEVEL));
+
+  call_other(IMASTER, "DropItems", ENV(TO), QueryProp(P_LEVEL));
+  ::die(poisondeath);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  if(killer == TO) WMASTER->npc_kill_log(TO->Name(RAW), getuid(player), lostexp);
+}
+
+
+//--Reactions--------------------------------------------------------------
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+  if(find_call_out("reaction") != -1) return;
+
+  switch (gruppe)
+  {
+    case "aengstlich":
+      call_out("reaction", 0, TP,
+        "lacht Dich aus.",
+        "lacht "+capitalize(getuid(TP))+" aus.",
+        0);
+      break;
+
+    case "aergerlich":
+      call_out("reaction", 0, TP,
+        "stoesst Dich heftig.",
+        "stoesst "+capitalize(getuid(TP))+" heftig.",
+        0);
+      break;
+
+    case "albern":
+      call_out("reaction", 0, TP,
+        "beachtet Dich kaum.",
+        "beachtet "+capitalize(getuid(TP))+" kaum.",
+        0);
+      break;
+
+    case "fies":
+      call_out("reaction", 0, TP,
+        "stuerzt sich auf Dich!",
+        "stuerzt sich auf "+capitalize(getuid(TP))+"!",
+        1);
+      break;
+
+    case "frech":
+      call_out("reaction", 0, TP,
+        "spuckt Dich an und attackiert Dich!",
+        "attackiert "+capitalize(getuid(TP))+"!",
+        1);
+      break;
+
+    case "froh":
+      call_out("reaction", 0, TP,
+        "ignoriert Dich.",
+        "ignoriert "+capitalize(getuid(TP))+".",
+        0);
+      break;
+
+    case "intim":
+      call_out("reaction", 0, TP,
+        "schlaegt Dir ins Gesicht!",
+        "schlaegt "+capitalize(getuid(TP))+" ins Gesicht.",
+        1);
+      break;
+
+    case "nett":
+      call_out("reaction", 0, TP,
+        "ignoriert Dich.",
+        "ignoriert "+capitalize(getuid(TP))+".",
+        0);
+      break;
+
+    case "neutral":
+      call_out("reaction", 0, TP,
+        "ignoriert Dich.",
+        "ignoriert "+capitalize(getuid(TP))+".",
+        0);
+      break;
+
+    case "traurig":
+      call_out("reaction", 0, TP,
+        "lacht ueber Dich!",
+        "lacht ueber "+capitalize(getuid(TP))+"!",
+        0);
+      break;
+  }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void reaction(object pl, string macher, string andere, int kill)
+{
+  if(!ENV(TO))           return;
+  if(!objectp(pl))       return;
+  if(!ENV(pl))           return;
+  if(ENV(TO) != ENV(pl)) return;
+
+  tell_object(pl, BS(Name(WER, 1)+" "+macher));
+  tell_room(ENV(TO), BS(Name(WER, 1)+" "+andere), ({pl}) );
+
+  if(kill) Kill(pl);
+}
+
+int Defend(int dam, string *dtypelist, int spell, object enemy)
+{
+  if ( member(heroes,lower_case( getuid(enemy) )) != -1 )
+    return ::Defend(dam+random(RANDOM_BONUS_DEFEND), dtypelist, spell, enemy);
+
+  else return ::Defend(dam, dtypelist, spell, enemy);
+}
+
+int query_random_bonus_defend()
+{
+  return RANDOM_BONUS_DEFEND;
+}
+
+void InformDefend(object enemy)
+{
+  Kill(enemy);
+}

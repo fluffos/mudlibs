@@ -1,0 +1,217 @@
+
+#include "../def.h"
+
+inherit "std/room";
+
+#include <properties.h>
+#include <language.h>
+
+#define P_LAST_DESERT_ROOM "last_desert_room"
+#define P_LAST_DESERT_TIME "last_desert_time"
+
+#define GO_IN ({ \
+  "Nassgeschwitzt gehst Du weiter.", \
+  "Als Du weitergehst, weht Dir der Sand mitten ins Gesicht.", \
+  "Du gehst forschen Schrittes weiter.", \
+  "Du ueberquerst beim Weitergehen eine kleine Sandduene.", \
+  "Unter der sengenden Hitze der Sonne gehst Du weiter.", \
+  "Endlos gehst Du weiter durch die Wueste.", \
+  "Du gehst einfach normal weiter und...", \
+  "Hinter Dir liegt schon ein weiter Marsch.", \
+  "Langsamen Schrittes gehst Du weiter.", \
+  "Immer schwerer werden Deine Schritte.", \
+  "Du gehst einfach weiter.", \
+  "Dir laufen die Schweissperlen den Koerper herunter.", \
+  "Die Sonne brennt sich auf Dein Haupt.", \
+  "Du erklimmst die naechste Duene.", \
+  "Du gehst ueber eine kleine Duene weiter.", \
+  "So langsam kommen Dir boese Gedanken beim Weiterlaufen.", \
+  "Ein frischer Wind zerzaust Dein Haar beim Weitergehen.", \
+  "Deine Schritte hinterlassen hinter Dir Spuren im Sand." })
+    
+#define GO_OUT ({ \
+  "Du bist noch zu erschoepft von der Wanderung.", \
+  "Deine Fuesse werden Dich erst in ein paar Sekunden weitertragen koennen.", \
+  "Du musst noch ein paar Sekunden ausruhen.", \
+  "Die sengende Hitze laesst Dich noch einen kleinen Moment innehalten.", \
+  "Du musst erstmal wieder zu Atem kommen.", \
+  "Die weite Wanderung hinterlaesst so langsam ihre Spuren.", \
+  "War da nicht gerade noch ein Geraeusch?", \
+  "Du glaubst etwas gesehen zu haben und stoppst noch einmal.", \
+  "Du schuettelst vorher noch einmal Deine Beine.", \
+  "So langsam macht sich ein Krampf in Deinen Beinen bemerkbar.", \
+  "Du solltest auf keinen Fall rennen in der Wueste!", \
+  "Geh das Wandern mal langsamer an, sonst bist Du bald tod!", \
+  "Abrupt bleibst Du stehen und schaust Dich um.", \
+  "Mach mal etwas langsamer!", \
+  "Ein Sonnenstrahl blendet Dich und Du bleibst vorerst stehen.", \
+  "War da am Horizont nicht auf einmal jemand?", \
+  "Sand weht Dir in die Augen und Du reinigst sie erst einmal.", \
+  "Liegt nicht der Geruch von Wasser in der Luft?", \
+  "Dir laufen Schweissperlen das Gesicht hinunter.", \
+  "Dein Koerper ist total durchgeschwitzt.", \
+  "So schnell kannst Du nicht weitergehen.", \
+  "Du musst ein wenig langsamer gehen, sonst stirbst Du gleich vor Ort.", \
+  "Du musst erst einen Fuss aus dem Sand befreien.", \
+  "Geh nicht so schnell in Deinen Tod.", \
+  "Du kannst nicht mehr.", \
+  "In der Wueste sollte man besser nicht so schnell laufen!" })
+
+#define FAILS ({ \
+  "Du durchsuchst den Sand nach '&K', aber leider findest Du nichts.", \
+  "Durch den starken Wind kannst Du '&K' nicht finden, &N!", \
+  "Soetwas findest Du hier gerade nicht.", \
+  "Als &R bleibt Dir '&K' verborgen.", \
+  "Ob es hier wirklich das Detail '&K' gibt?", \
+  "'&K' vergraebt sich schnell vor Dir im Sand.", \
+  "Deine Augen sind voller Sand und Du kannst '&K' nicht erkennen.", \
+  "In der offenen Wueste gibt es garantiert kein '&K'!", \
+  "'&K' schaut Dich verwundert an.", \
+  "'&K' summt eine lustige Melodie.", \
+  "&N, Typos kannst Du aber schon sehr gut. :-)", \
+  "Als &R findest Du sowas hier sicher nicht.", \
+  "Auch &R-&K gibt es hier nicht.", \
+  "Vielleicht solltest Du nach '&K' woanders suchen.", \
+  "Du schaust in die Ferne nach '&K', aber leider kannst Du nichts erkennen.", \
+  "'&K' huepft vor Schreck einen Raum weiter.", \
+  "&N, als &R kannst Du hier nichts wie '&K' erkennen!" })
+
+string oldlong,newlong,*karte,*details;
+int xpos,ypos;
+
+void GenerateKarte();
+
+nomask int query_prevent_shadow() {
+  return 1;
+}
+
+init() {
+  object ob,env;
+  ::init();
+  if (TP && (env=ENV(TP)) && living(TP)) {              // bewegt sich ein Living ?
+    if(objectp(ob=TP->QueryProp(P_LAST_DESERT_ROOM))) { // war diese Living vorher schon in der Wueste ?
+      if(find_object(file_name(ob))) {                  // ist der vorherige Raum noch im Speicher ?
+        if (ob != env) {                                // ist der Spieler auch sicher nicht mehr drin ?
+          if (!sizeof(all_inventory(ob))) {             // ist noch irgendwas im Raum ?
+            ob->remove();                               // falls nicht -> Raum entfernen :)
+          }
+        }
+      }
+    }
+    TP->SetProp(P_LAST_DESERT_ROOM,env);
+    TP->SetProp(P_LAST_DESERT_TIME,time());
+    if(random(100)<5) {
+      write(BS(GO_IN[random(sizeof(GO_IN))]));
+    }
+  }
+}
+
+reset() {
+  object *all,*inv;
+  int i,j;
+  ::reset();
+  all=all_inventory(ME);
+  for (i=0;i<sizeof(all);i++) {
+    if(!query_once_interactive(all[i])) {
+      if (!living(all[i])) {
+         tell_room(ME,BS(sprintf(
+           "%s verschwindet fuer immer im Sand.\n",all[i]->Name())));
+        all[i]->remove();
+      } else if (!present("Spieler",ME)) {
+        inv=deep_inventory(all[i]);
+        for (j=0;j<sizeof(inv);j++) {
+          inv[j]->remove(1);
+        }
+        all[i]->remove();
+      }
+    }
+  }
+  all=filter_array(all_inventory(ME),#'living);
+  if(!sizeof(all)) {
+    call_out("remove",0);
+  }
+}
+
+create() {
+  if(!is_clone(TO)) return;
+  ::create();
+
+  oldlong="Du stehst mitten in der unendlich weiten und heissen Wueste.";
+  newlong=oldlong;
+
+  SetProp( P_INT_SHORT, "In der offenen Wueste" );
+  SetProp( P_INT_LONG,  "@@show_long@@" );
+  SetProp( P_LIGHT, 1 );
+  SetProp( P_INDOORS, 0 );
+  SetProp(P_ENVIRONMENT, 
+    ([ENV_TEMPERATURE: 45+random(11), ENV_TERRAIN: TT_DESERT]) );
+
+  karte=({ });
+  PO->CustomizeObject();
+  GenerateKarte();
+}
+
+int check_time() {
+  if(!IS_WIZARD(TP) && (time() <= TP->QueryProp(P_LAST_DESERT_TIME))) {
+    write(BS(GO_OUT[random(sizeof(GO_OUT))]));
+    return 0;
+  }
+  return 1;
+}
+
+nosave void GenerateKarte() {
+  string *a,*b,*c;
+  int i;
+
+  a=b=c=({ });
+  newlong=break_string(oldlong,72);
+  a=explode(newlong,"\n");
+  for (i=0;i<(8-sizeof(a));i++) {
+    a+=({ "" });
+  }
+  for (i=0;i<5;i++) {
+    b+=({ karte[i]+" "+a[i] });
+  }
+  newlong=implode(b,"\n");
+  for (i=5;i<sizeof(a);i++) {
+    c+=({ a[i] });
+  }
+  if(sizeof(c)>0) newlong+="\n"+BS(implode(c," "));
+  return;
+}
+
+string show_long() {
+  if (!IS_WIZARD(TP) && !present("\n_karte_der_wueste",TP))
+    return BS(oldlong)[0..<2];
+  return newlong[0..<2];
+}
+
+void SetVars(string *k,string l,string *det,int x,int y) {
+  oldlong=l;
+  details=det;
+  karte=k;
+  xpos=x;
+  ypos=y;
+  return;
+}
+
+varargs string GetDetail(mixed key, mixed race) {
+  string str,*erg;
+  
+  if (member(details,key) != -1) {
+    erg=DESERTMASTER->InsertDetail(key);
+    if (pointerp(erg)) details+=erg;
+    details-=({ key });
+  }
+  if (Query(P_DETAILS)[key]) return ::GetDetail(key,race);
+  if (sizeof(FAILS)) {
+    str=FAILS[random(sizeof(FAILS))];
+    str=implode(efun::explode(str,"&N"),CAP(getuid(TP)));
+    str=implode(efun::explode(str,"&k"),key);
+    str=implode(efun::explode(str,"&K"),CAP(key));
+    str=implode(efun::explode(str,"&r"),race);
+    str=implode(efun::explode(str,"&R"),CAP(race));
+    return BS(str);
+  }
+  return 0;
+}

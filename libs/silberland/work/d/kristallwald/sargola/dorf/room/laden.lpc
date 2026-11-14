@@ -1,0 +1,256 @@
+/*
+** Laden in Elessar
+** ---
+**
+**  2002-04-21  PROtheG  Neuueberarbeitung
+**  2002-05-30  PROtheG  Ranadrion als Haendler
+**  2003-05-31  PROtheG  Kein Metall verkaufen, Item-beschraenkung auf 
+**                       MAX_COUNT pro filename, Zwerge duerfen nicht verkaufen
+**  2006-07-25  PROtheG  Permfeinde kriegen kein service
+*/
+
+#include "../def.h"
+#include <laden.h>
+
+inherit "std/laden";
+
+#define MAX_COUNT 5
+
+nosave string schluckerkiller;
+
+void create()
+{
+  ::create();
+ 
+  SetProp(P_LIGHT, 1);
+  SetProp(P_INDOORS, 1);
+  SetProp(P_ENVIRONMENT, ([ENV_TERRAIN:TT_HOUSE, ENV_TEMPERATURE:20]));
+  
+  SetProp(P_INT_SHORT, "Ranadrions Laden");
+  SetProp(P_INT_LONG, 
+	  BS("Du stehst in einem kleinen Elfenladen. Hier kannst Du Dich mit "
+	     "dem noetigen Ruestzeug ausstatten, das Du brauchst, um ein "
+	     "erfolgreicher Abenteurer zu werden. Rechts von Dir steht ein "
+	     "Schrank, der mit Waffen und anderen nuetzlichen Dingen gefuellt "
+	     "ist. Ausserdem haengt eine Tafel an der Wand."));
+
+  SetProp(P_SHOP_FLAGS, SHOP_HASKEEPER | SHOP_NEEDSKEEPER);
+  SetProp(P_SHOPKEEPER_ID, "\nhaendler");
+  SetProp(P_SHOPKEEPER_NAME, "Ranadrion");
+  SetProp(P_SHOPKEEPER_GENDER, MALE);
+
+  AddDetail(({"zeug","ruestzeug","zeugs"}),
+	    "Sieh Dich hier einmal genauer um. Vielleicht findest Du ja "
+	    "ganz nuetzliches Zeugs.");
+
+  AddDetail(({"elfenladen","laden"}), 
+	    "Du stehst mittendrin.");
+
+  AddDetail("abenteurer", 
+	    "So, wie Du einer bist! . o 0 ( naja... )");
+
+  AddDetail("dinge", 
+	    "Allerhand nuetzliches Kleinzeugs.");
+
+  AddDetail("kleinzeugs", 
+	    "Schau doch mal, was der Laden so zu bieten hat...");
+
+  AddDetail(({"waffen","waffe","sachen"}),
+	    "Du siehst Kurzboegen, Langboegen und verschiedene Harnische.");
+  
+  AddDetail(({"schrank","astschrank"}),
+	    "Der Schrank ist eigentlich kein echter Schrank, sondern ein "
+	    "festes Geflecht aus Aesten, in dem allerlei Sachen aufbewahrt "
+	    "werden.");
+
+  AddDetail(({"geflecht"}),
+	    "Dieser Schrank besteht aus einem speziell gewachsenen Geflecht "
+	    "aus Aesten.");
+  
+  AddDetail(({"ast","aeste"}),
+	    "Die Aeste sind zu einem festen, schrankfoermigen Geflecht "
+	    "verwachsen.");
+  
+  AddDetail(({"boegen", "langboegen","kurzboegen", "bogen", 
+		"langbogen", "kurzbogen", "elfen"}), 
+	    "Der Bogen ist die bevorzugte Waffe der Elfen.");
+
+  AddDetail(({"harnisch", "harnische"}), 
+	    "Leichte Lederruestungen und einfache Kleidung liegen im "
+	    "Schrank.");
+
+  AddDetail(({"lederruestung","ruestung","ruestungen", "kleidung",
+		"lederruestungen"}), 
+	    "Lass Dir doch zeigen, was es so alles gibt!");
+
+  AddDetail("tafel", 
+	    "Du kannst sie lesen.");
+
+  AddDetail(({"boden", "wand", "waende", "decke"}),
+	    "Du kannst daran nichts Besonderes erkennen.");
+
+  AddDetail(({"ranadrion","haendler"}),
+	    "Scheinbar ist Ranadrion nicht da...");
+  
+  AddReadDetail("tafel",
+    "Verfuegbare Befehle:\n"
+    "<zeige>             Gibt eine Uebersicht ueber das Angebot im Laden.\n"
+    "<zeige> rue|ver|waf Uebersicht ueber Ruestungen/Verschiedenes/Waffen\n"
+    "<zeige> panzer|helm|umhang|ring|....  \n"
+    "<unt> nummer        Gibt eine Beschreibung eines Gegenstands der Liste aus\n"
+    "<kaufe> nummer oder\n"
+    "<kaufe> etwas       Du kaufst einen bestimmten Gegenstand.\n"
+    "<verkaufe> etwas    Du verkaufst einen Gegenstand, den Du bei Dir hast.\n"
+    "<versetze> etwas    Du verkaufst einen Gegenstand, egal wieviel der\n"
+    "                    Haendler dafuer bezahlt.\n"
+    "<schaetz> etwas     Ranadrion sagt Dir, wieviel ihm ein Gegenstand\n"
+    "                    wert waere, wenn Du ihn verkaufen wuerdest.\n");
+
+  SetStorageRoom(ROOM "lagerrau");
+
+  AddExit("norden", ROOM "1_0616");
+
+  RemoveItem("/obj/entsorg");
+  AddItem(NPC "ranadrion", REFRESH_DESTRUCT);
+  AddItem(NPC "e_schlucker", REFRESH_DESTRUCT);
+}
+
+public void Schlucker(object who)
+{
+  if((objectp(who)) && (interactive(who)) && (ENV(who)==ME))
+    schluckerkiller=getuid(who);
+}
+
+int count_objs(object inv, string fn)
+{
+  if(explode(file_name(inv), "#")[0]==fn)
+    return 1;
+
+  return 0;
+} 
+
+varargs int do_sell(object ob, int force, string prefix, int limit)
+{
+  object *inv;
+  string fn;
+
+  // Haendler da? Meldungen etc.
+  if(!prefix=CheckKeeper(2)) return 0;
+  
+  if((TP) && (lower_case(TP->QueryProp(P_RACE))=="zwerg"))
+    return write(BS("Ranadrion schimpft: Von Zwergen kaufe ich nichts!")), 1;
+
+  if((TP) && (WMASTER->is_elessar_enemy(TP)))
+    return write(BS("Ranadrion schimpf: Von Feinden kaufe ich nichts!")), 1;
+
+  if((TP) && (!present("muellschlucker")) && (schluckerkiller==getuid(TP)))
+    return write(BS("Ranadrion schimpft: Du hast meinen Muellschlucker "
+		    "getoetet, "+CAP(getuid(TP))+"!")+
+		 BS("Ranadrion schimpft: Von Dir kaufe ich nichts!")), 1;
+  
+  if(sizeof(inv=all_inventory(find_object(QueryStorageRoom()))))
+    {
+      fn=explode(file_name(ob), "#")[0];
+
+      inv=filter_array(inv, CLOSURE(count_objs), fn);
+
+      if(sizeof(inv)>=MAX_COUNT)
+	return write(BS("Ranadrion meint: Danke, aber davon habe ich bereits "
+			"genug im Lager.")), 1;
+    }
+
+  if(ob->QueryMaterialGroup(MATGROUP_METAL))
+    return write(BS("Ranadrion meint: Nein, ich kaufe nichts aus Metall!")),1;
+
+  return ::do_sell(ob, force, prefix, limit);
+}
+
+//Ueberschreiben wir halt die buy(string str)
+int buy(string str)
+{
+  int i, val;
+  object ob, store;
+  string prefix, dummy;
+
+  // Im Kampf kann man nichts kaufen
+  if(TP->InFight())
+    return write(BS("Dazu bist Du im Moment viel zu beschaeftigt.")), 1;
+
+  // Haendler da? Meldungen etc.
+  if(!prefix=CheckKeeper(2)) return 0;
+
+  if(TP->QueryProp(P_RACE)=="Zwerg")
+    return write(BS(KeeperPrefix("sagt: ")+"Zwergen verkaufe ich nichts!")), 1;
+  
+  if((TP) && (WMASTER->is_elessar_enemy(TP)))
+    return write(BS("Ranadrion schimpft: Feinden verkaufe ich nichts!")), 1;
+  
+  if((TP) && (!present("muellschlucker")) && (schluckerkiller==getuid(TP)))
+    return write(BS("Ranadrion schimpft: Du hast meinen Muellschlucker "
+		    "getoetet, "+CAP(getuid(TP))+"!")+
+		 BS("Ranadrion schimpft: Dir verkaufe ich nichts!")), 1;
+  
+  if(!str)
+    return write(BS(KeeperPrefix("fragt Dich: ")+"Was willst Du kaufen?")), 1;
+  
+  _notify_fail(BS(prefix+"Das kann ich im Lager nicht finden."));
+
+  // Objekt suchen
+  if(sscanf(str,"%d%s",i,dummy)>0 && i>0)
+    if((dummy==" ab") || (dummy==""))
+      ob=FindInStore(i);
+    else
+      ob=FindInStore(str);
+  else 
+    ob=FindInStore(str);
+  
+  if(!ob) return 0;
+
+  // Geld pruefen
+  val=QueryBuyValue(ob);
+
+  if((i=TP->QueryMoney()) < val) 
+    return write(break_string(ob->Name(WER,1)+" wuerde"+
+			      (ob->IsPlural() ? "n " : " ")+val+" Muenze"+
+			      (val==1 ? "" : "n")+" kosten, Du "+
+			      (i ? "hast aber nur "+i+"."
+			       : "bist aber voellig pleite!"),
+			      78, prefix)), 1;
+  
+  // Geldtransfer
+  TP->AddMoney(-val);
+  mymoney += val;
+
+  // fixed object? (staendig verfuegbar)
+  if(stringp(ob))
+    ob=clone_object((string) ob);
+
+  // Kaufen und als behalten markieren
+  write(BS("Du kaufst "+ob->name(WEN,1)+" um "+val+" Muenze"+
+	   (val==1 ? "":"n")+"."));
+  say(BS(TPN+" kauft "+ob->name(WEN)+"."));
+  ob->SetProp(P_KEEP_ON_SELL, getuid(TP));
+
+  // Kanns der Spieler tragen?
+  if(ob->move(this_player(), M_GET) <= 0)
+  {
+    write(BS(prefix+"Du kannst "+ob->QueryPronoun(WEN)+" nicht mehr tragen!"));
+    ob->move(ENV(TP));       // Objekt in den Raum moven
+  }
+
+  UpdateCounter(ob,-1);
+  return 1;
+}
+
+void reset()
+{
+  ::reset();
+  
+  if(present("muellschlucker"))
+    schluckerkiller=0;
+}
+
+string GetSchluckerkiller()
+{
+  return schluckerkiller;
+}

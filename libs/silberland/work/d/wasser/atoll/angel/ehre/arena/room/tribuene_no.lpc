@@ -1,0 +1,225 @@
+#pragma strong_types
+
+inherit "std/room";
+
+#include "./def.h"
+
+// Laesst Spieler auf den Kampfplatz schreien
+int shout_battle(string args)
+{
+  object server;
+  
+  args = this_player()->_unparsed_args();
+  
+  catch(call_other(PKOBJ "coordinator", "???", 0));
+  server = find_object(PKOBJ "coordinator");
+  if (!objectp(server))
+     return 0;
+   
+  if (stringp(args))
+  {
+     write ("Du bruellst: "+args+"\n");
+     args = this_player()->name()+" bruellt: "+args+"\n";
+     tell_room(this_object(), args, ({this_player()}) );
+     server->transmit_shout(args);
+  }
+     
+  return 1;
+}
+
+// Funktion zum Festhalten von Gegnern
+int paralyze (int zeit, object player)
+{
+  if (objectp(player))
+     player->SetProp(P_TMP_MOVE_HOOK, ({time()+zeit, this_object(), "freeze_in_place"}) );
+}
+
+// Hilfsfunktion fuer Move_Hook
+string freeze_in_place()
+{
+  return "Du solltest Dich erst erheben!\n";
+}
+
+
+// Unterscheiden wir mal die Rassen:
+string distinguish_race()
+{
+   switch (this_player()->QueryProp(P_RACE) )
+   {
+      case "Elf": return BS("Diese Sitzkissen waeren jetzt genau das richtige fuer Dich! Moechtest Du Dich nicht setzen?\n");
+      default : return BS ("Diese Sitzmoeglichkeiten sagen Dir nicht wirklich zu. Schau Dich doch noch weiter um!\n");
+   }
+   
+}
+
+// Funktion zum Setzten:
+int do_sit_down( string args )
+{
+  mixed res;
+  
+  // Pruefung ob evtl. ein MOVE_HOOK gesetzt ist.
+  if (res=this_player()->QueryProp(P_TMP_MOVE_HOOK))
+  {
+    if ( pointerp(res) && sizeof(res) >= 3
+         && intp(res[0]) && time() < res[0]
+         && objectp(res[1]) && stringp(res[2]) )
+       {
+         // In diesem Fall sitzen wir gerade:
+         if (res[1] == this_object())
+         {
+            notify_fail("Du sitzt doch schon!\n");
+            return 0; 
+         }
+         else
+         {
+            notify_fail("Irgendwie kannst Du Dich derzeit nicht bewegen!\n");
+            return 0; 
+         }
+       }
+  }
+   switch (this_player()->QueryProp(P_RACE) )
+   {
+      case "Elf": {
+      	            write (BS("Du laesst Dich sanft auf einem der Sitzkissen nieder und fuehlst Dich zufrieden.\n"));
+      	            tell_room(this_object(), this_player()->name()+" laesst sich sanft auf einem Sitzkissen nieder.\n", ({this_player()}));
+      	            paralyze (1800, this_player());
+      	            return 1;      	               
+      	          }
+      default : {
+      	          write (BS ("Das ist Dir ganz einfach zu unbequem. Du entscheidest Dich dafuer stehen zu bleiben.\n"));
+      	          return 1;
+      	        }
+   }
+}
+
+// Funktion zum Aufstehen:
+int do_get_up( string args )
+{
+   string test;
+   mixed res;
+      
+  notify_fail("Aber Du sitzt Doch noch gar nicht!\n");
+  // Pruefung ob evtl. ein MOVE_HOOK gesetzt ist.
+  if (res=this_player()->QueryProp(P_TMP_MOVE_HOOK))
+  {
+    if ( pointerp(res) && sizeof(res) >= 3
+         && intp(res[0]) && time() < res[0]
+         && objectp(res[1]) && stringp(res[2]) )
+       {
+         // In diesem Fall sitzen wir gerade:
+         if (res[1] == this_object())
+         {
+            write("Du erhebst Dich wieder von Deinem Sitzplatz.\n");
+            tell_room(this_object(), this_player()->name()+" erhebt sich wieder vom Sitzplatz.\n", ({this_player()}));
+            this_player()->SetProp(P_TMP_MOVE_HOOK, 0);
+            return 1; 
+         }
+         else 
+            return 0; 
+       }
+  }
+  return 0;
+}
+
+// Zufaellige Meldungen
+string zuschauer()
+{
+  mixed messages;
+  
+  messages = ({ "Setz doch mal Deine Magie ein Du Versager!!!\n", "Jetzt streng Dich doch mal an!!!\n", "Lass Ihn leben!!! Lass Ihn leben!!!\n", "Buuuuuuh!!!\n", "Nieder mit ihm!!!\n", "Unfair!!! Dieser Schlag war REGELWIDRIG!!!\n" });
+  return messages[random(sizeof(messages)-1)]; 
+}
+
+void create()
+{
+  ::create();
+
+  SetProp( P_LIGHT, 1 );
+  SetProp( P_INT_SHORT, "Nordoestlicher Teil der Arenatribuene in Neutijara");
+  SetProp( P_INT_LONG, break_string("Du stehst auf der nordwestlichen Tribuene der Arena. "+
+           "Von hier aus kannst Du die Kaempfe, auf dem weiter unten gelegenen Kampfplatz, beobachten. "+
+           "Ein komplexes Spiegelsystem ermoeglicht, dass man von jedem Ort der Tribuene aus alle Vorkommnisse auf der Kampfflaeche beobachten kann. "+           
+           "Damit man nicht die ganze Zeit stehen muss, gibt es, wie auch in den anderen Teilen der Tribuene, "+
+           "zweckdienliche Sitzmoeglichkeiten. In diesem Fall sind es weiche Sitzkissen.",78)); // Elfen
+
+  SetProp(P_INDOORS,0);
+
+  SetProp(P_ENVIRONMENT,([ENV_TEMPERATURE: 31, ENV_TERRAIN: TT_TOWN]) );
+
+
+  AddDetail( ({ "sitzkissen", "kissen", "ursprung", "fall" }),
+             "Die Sitzkissen scheinen elfischen Ursprungs zu sein.\n");
+  AddDetail( "sitzmoeglichkeiten",
+             "Es scheint so, als gaebe es in jedem Teil der Tribuene andere Sitzmoeglichkeiten.\n" );
+  AddDetail( ({ "spiegelsystem", "spiegel", "system" }),
+             "Du durchblickst die Funktionsweise dieses Systems nicht wirklich.\n" );
+  AddDetail( ({ "vorkommnisse", "details" }),
+             "Die Spiegel dienen dazu, Dir alle Details der Vorkommnisse auf der Kampfflaeche zu zeigen.\n" );
+  AddDetail( ({ "zeit","begriff" }),
+             "Zeit ist ein abstrakter Begriff.\n");
+  AddDetail( "funktionsweise",
+             "Ja, das wuerdest Du gerne verstehen.\n" );
+  AddDetail( ({ "boden", "fussboden", "holzboden" }),
+	     "Der Boden dieses Teils der Arena besteht aus Buchenholz.\n" );
+  AddDetail( ({ "holz", "buchenholz" }),
+             "Du bist Dir dabei ziemlich sicher, da dieses Holz die typische Charakteristik von Buchenholz besitzt.\n" );
+  AddDetail( ({ "charakteristik","farbe" }),
+             "Buchenholz hat eine zart roetliche Farbe und hohe Stabilitaet.\n" );
+  AddDetail( ({ "stabilitaet", "festigkeit", "abriebfestigkeit", "eigenschaften", "festigkeitseigenschaften" }),
+             "Buchenholz besitzt - faellt Dir gerade ein - besonders gute Festigkeitseigenschaften und hohe Abriebfestigkeit, was dem Boden besonders zugute kommt.\n" );
+  AddDetail( ({ "tribuene", "tribuenen", "innenwand", "innenwaende" }),
+	     "Die Innenwaende der Tribuene bestehen in diesem Teil der Tribuene, wie der Boden, aus Buchenholz.\n" );
+  AddDetail( ({ "wand","waende" }),
+             "Meinst Du die Aussenwand oder die Innenwaende?\n");
+  AddDetail(  "aussenwand",
+              "Die Aussenwand dieses Abschnittes besteht - soweit Du das beurteilen kannst - aus hellem Eichenholz.\n" );
+  AddDetail(  "eichenholz",
+             "Wie das Buchenholz, besitzt auch das Eichenholz hervorragende Eigenschaften.\n" );
+  AddDetail( ({ "decke" }),
+             "Du siehst zum Himmel hoch und denkst: . o O ( Warum suche ich auf einer Freilichttribuene eine Decke? ).\n" );
+  AddDetail( ({ "tribuehne","freilichttribuene" }),
+             "So etwas befindet sich immer im Freien.\n" );
+  AddDetail( ({ "freien" }),
+             "'Im Freien' heisst in etwa soviel wie: 'Nicht in einem abgeschlossenen, ueberdachten Raum'.\n" );
+  AddDetail( ({ "himmel" }),
+             "Die gluehend heisse Sonne scheint Dich vom Himmel herab anzugrinsen.\n" );
+  AddDetail( ({ "sonne", "hitze" }), 
+             "Ob es ihr Spass macht Dich mit unsaeglicher Hitze zu quaelen?\n");
+  AddDetail( "spass",
+             "Du bezweifelst dass die Sonne das mit Absicht macht, nur um Dich zu quaelen.\n" );
+  AddDetail( "absicht",
+             "Du bist Dir beinahe sicher dass keine Absicht dahintersteckt.\n");
+  AddDetail( ({ "licht","lichtverhaeltnisse" }),
+             "Die Lichtverhaeltnisse sind nahezu perfekt, Du wirst sicher alles von einem Kampf in der Arena mitbekommen.\n" );
+  AddDetail( ({ "arena","arenen","gebaeude", "kaempfe" }),
+             "Eine Arena ist ein Platz auf dem Duelle ausgetragen werden.\n" );
+  AddDetail( ({ "duell","duelle" }),
+             "Darueber frag am besten einen Vertreter der Arenaleitung aus.\n" );
+  AddDetail( ({ "arenaleitung", "vertreter" }),
+             "Versuch es einmal im suedlichen Teil der Eingangshalle.\n" );
+  AddDetail( ({ "eingangshalle", "eingang", "halle" }),
+             "Es ist die Halle am Eingang der Arena.\n");
+  AddDetail( ({ "platz","kampfplatz", "kampfflaeche" }),
+             "Die Arena ist stadienartig - oval angelegt.\n" );
+  AddDetail( ({ "teil", "ort", "abschnitt" }),
+             "Du befindest Dich im nordoestlichen Teil der Tribuene.\n");
+
+  AddSmell( DEFAULT_SMELL,
+            "Hier riecht es nach frischer Luft.\n" );
+            
+  AddSmell( "luft",
+            "Ein wenig Luft tut Dir bei dieser Hitze gut.\n" );
+     
+  AddSound( DEFAULT_SOUND,
+            "Du kannst immer wieder Zuschauer hoeren, die etwas auf die Kampfflaeche bruellen.\n" );   
+
+  AddSound( "zuschauer",
+            #'zuschauer );               
+
+  AddExit("westen", ([EX_DEST : ROOM "tribuene_nw"]) );
+  AddExit("suedosten", ([EX_DEST : ROOM "tribuene_o"]) );
+  
+  AddCmd ( ({"bruelle", "bruell" }), "shout_battle");
+  AddCmd ( ({"setze", "setz", "sitz" }), "do_sit_down");
+  AddCmd ( "erhebe", "do_get_up");  
+}

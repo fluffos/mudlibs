@@ -1,0 +1,285 @@
+//=========================================================================
+//
+// File:    master.c
+// Created by Ronja@SL
+//
+// Project: Eheringquest
+//
+//=========================================================================
+
+#include "../def.h"
+
+#include <ansi.h>
+
+#define SAVEFILE "/d/" REGION "/" MAGIERNAME "/" GEBIET "/master/master"
+
+mapping playerinfo;
+
+string *listener;
+
+void create()
+{
+  if(is_clone(this_object()))
+  {
+    destruct(this_object());
+    return;
+  }
+
+  seteuid(getuid(this_object()));
+
+  playerinfo  = ([ ]);
+  listener    = ({ });
+
+  restore_object(SAVEFILE);
+
+  return;
+}
+
+void Msg(string s)
+{
+  object pl;
+  int i;
+
+  write_file(LOG "ehe.log",ctime()+": "+s+".\n");
+
+  i = sizeof(listener);
+  while(i--)
+  {
+    pl = find_player(listener[i]);
+    if(!pl)              return;
+    if(!interactive(pl)) return;
+    if(!IS_WIZARD(pl))   return;
+
+    s = BSI(s+".","XAT: ");
+    if(pl->QueryProp(P_TTY)) s = ANSI_BOLD+ANSI_RED+s+ANSI_NORMAL;
+    tell_object(pl,s);
+  }
+}
+
+//--------------------------------------------------------------------------
+
+int IsQuester(string uuid)
+{
+  return member(playerinfo, uuid);
+}
+
+int DeleteQuester(string uuid)
+{
+  if(!IsQuester(uuid)) return 0;
+  playerinfo = m_delete(playerinfo, uuid);
+  save_object(SAVEFILE);
+  return 1;
+}
+
+void StartQuest(string uuid)
+{
+  if(IsQuester(uuid)) return;
+
+  playerinfo += ([uuid
+                 :ctime(time())   // Startzeitpunkt der Quest;          ( 0)
+                 ;0               // Truhe geoeffnet?                   ( 1)
+                 ;1               // Falle ist scharf                   ( 2)
+                 ;1               // Schloss an der Truhe noch heil?    ( 3)
+                 ;0               // Karte in der Grotte sichtbar?      ( 4)
+                 ;0               // Spieler kennt Yilrah               ( 5)
+                 ;0               // Steinblock selbst geoeffnet        ( 6)
+                 ;0               //  ( 7)
+                 ;0               //  ( 8)
+                 ;0               //  ( 9)
+                 ;0               //  (10)
+                 ;0               //  (11)
+                 ;0               //  (12)
+                 ]);
+
+  save_object(SAVEFILE);
+}
+
+//--------------------------------------------------------------------------
+
+int QueryChestOpened(string uuid)
+{
+  if(!IsQuester(uuid)) return 0;
+  return playerinfo[uuid, 1];
+}
+
+int QueryTrapActive(string uuid)
+{
+  if(!IsQuester(uuid)) return 1;
+  return playerinfo[uuid, 2];
+}
+
+int QueryChestLocked(string uuid)
+{
+  if(!IsQuester(uuid)) return 1;
+  return playerinfo[uuid, 3];
+}
+
+int QueryMap(string uuid)
+{
+  if(!IsQuester(uuid)) return 0;
+  return playerinfo[uuid, 4];
+}
+
+int QueryYilrah(string uuid)
+{
+  if(!IsQuester(uuid)) return 0;
+  return playerinfo[uuid, 5];
+}
+
+int QueryBoulder(string uuid)
+{
+  if(!IsQuester(uuid)) return 0;
+  return playerinfo[uuid, 6];
+}
+
+//--------------------------------------------------------------------------
+
+int SetChestOpen(string uuid)
+{
+  if(!IsQuester(uuid)) return 0;
+  playerinfo[uuid, 1] = 1;
+  save_object(SAVEFILE);
+  return 1;
+}
+
+int SetTrapInactive(string uuid)
+{
+  if(!IsQuester(uuid)) return 0;
+  playerinfo[uuid, 2] = 0;
+  save_object(SAVEFILE);
+  return 1;
+}
+
+int SetTrapActive(string uuid)
+{
+  if(!IsQuester(uuid)) return 0;
+  playerinfo[uuid, 2] = 1;
+  save_object(SAVEFILE);
+  return 1;
+}
+
+int SetChestUnlocked(string uuid)
+{
+  if(!IsQuester(uuid)) return 0;
+  playerinfo[uuid, 3] = 0;
+  save_object(SAVEFILE);
+  return 1;
+}
+
+int SetMap(string uuid)
+{
+  if(!IsQuester(uuid)) return 0;
+  playerinfo[uuid, 4] = 1;
+  save_object(SAVEFILE);
+  return 1;
+}
+
+int SetYilrah(string uuid)
+{
+  if(!IsQuester(uuid)) return 0;
+  playerinfo[uuid, 5] = 1;
+  save_object(SAVEFILE);
+  return 1;
+}
+
+int SetBoulder(string uuid)
+{
+  if(!IsQuester(uuid)) return 0;
+  playerinfo[uuid, 6] = 1;
+  save_object(SAVEFILE);
+  return 1;
+}
+
+//--------------------------------------------------------------------------
+
+void AddListener(string uid)
+{
+  if(member(listener, uid) == -1)
+  {
+    listener += ({ uid });
+    save_object(SAVEFILE);
+    Msg("Neuer Listener: "+CAP(uid));
+  }
+}
+
+void RemoveListener(string uid)
+{
+  if(member(listener, uid) != -1)
+  {
+    listener -= ({uid});
+    save_object(SAVEFILE);
+    Msg("Listener entfernt: "+CAP(uid));
+  }
+}
+
+//--------------------------------------------------------------------------
+
+void Out(string str, int l)
+{
+  tell_object(TP, "| " + str + sprintf("%" + (l-strlen(str)-4) + "s", " ") +
+                  "|\n");
+  return;
+}
+
+void Report()
+{
+  int l, i, j, p;
+  string z1, z2, npl, s, z, *pl, plname, plid;
+
+  if(!TP)              return;
+  if(!interactive(TP)) return;
+
+  if(!IS_LORD(TP))
+  {
+    Msg(CAP(getuid(TP)) + "versuchte grade, sich Details fuer die "
+        "Runenquest anzusehen");
+    return;
+  }
+
+  z1 = "+==============================================================="
+       "=============+\n";
+  l  = strlen(z1);
+  z2 = "+---------------------------------------------------------------"
+       "-------------+\n";
+
+  tell_object(TP, z1);
+  Out("Uebersicht ueber die Quest: Rette Xatanas Ehe ",l);
+  tell_object(TP, z2);
+
+  z = "1-Truhe geoeffnet?                2-Falle ist scharf";
+  Out(z, l);
+  z = "3-Schloss an der Truhe noch heil? 4-Karte in der Grotte sichtbar?";
+  Out(z, l);
+  z = "5-Spieler kennt Yilrah            6-Steinblock bewegt?";
+  Out(z, l);
+  z = "                                                     1 2 3 4 5 6 7 8 9";
+  Out(z, l);
+  tell_object(TP, z2);
+
+  pl = m_indices(playerinfo);
+  i = sizeof(pl);
+  while(i--)
+  {
+    plname = CAP(explode(pl[i], "_")[0]);
+    plid   = explode(pl[i], "_")[1];
+
+    z = sprintf("%-13s %10s %s =>", plname, plid, playerinfo[pl[i], 0]);
+
+    for(j=1;j<10;j++)
+    {
+      if(playerinfo[pl[i], j] == 0)
+      {
+        z += " o";
+      }
+      else
+      {
+        z += " X";
+      }
+    }
+
+    Out(z, l);
+  }
+
+  tell_object(TP, z1);
+}
+

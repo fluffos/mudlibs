@@ -1,0 +1,212 @@
+
+private object FindSpearInKoecher(object caster)
+{
+  object koecher;
+  object *inv;
+  int i;
+
+  if (!objectp(koecher = present("speerkoecher", caster)))
+    return 0;
+
+  inv = all_inventory(koecher);
+  for (i = sizeof(inv) - 1; i >= 0; i--)
+  {
+    if (!objectp(inv[i]))
+      continue;
+    if (inv[i]->QueryProp(P_WEAPON_TYPE) != WT_SPEAR)
+      continue;
+    if (inv[i]->QueryProp(P_NODROP) || inv[i]->QueryProp(P_CURSED))
+      continue;
+    return inv[i];
+  }
+  return 0;
+}
+
+varargs int prep_speerwurf(object caster, mapping sinfo, int flag)
+{
+  object spear, victim;
+  int skp;
+
+  if (!caster->InFight())
+  {
+    tell_object(caster,
+        "Wieso willst Du Deinen Speer werfen wenn Du gar "
+        "nicht kaempfst?\n");
+    return 0;
+  }
+  victim = FindEnemyVictim(sinfo[SI_SKILLARG], caster,
+      "Auf wen willst Du Deinen Speer werfen?\n");
+  if (!victim)
+    return 0;
+  sinfo[SI_ENEMY] = victim;
+  if (caster->QueryProp(P_DISABLE_ATTACK))
+  {
+    tell_object(caster, "Du bist kampfunfaehig und kannst jetzt Deinen Speer "
+        "nicht werfen!\n");
+    return 0;
+  }
+
+  // Vor Zahlung pruefen, ob ueberhaupt ein Speer verfuegbar ist.
+  // Ohne mind. 2 Verbesserungen darf nur ein Speer aus dem Speerkoecher
+  // verwendet werden (der gezueckte Speer wird sonst nicht geworfen).
+  skp = AMAZONEN_TALENTMASTER->QuerySpentPoints(getuid(caster), "speerwurf");
+  if (!objectp(spear = FindSpearInKoecher(caster)))
+  {
+    if (skp < 2)
+    {
+      tell_object(caster, "Du musst einen Speer im Speerkoecher tragen.\n");
+      return 0;
+    }
+    spear = caster->QueryProp(P_WEAPON);
+    if (!objectp(spear) || spear->QueryProp(P_WEAPON_TYPE) != WT_SPEAR)
+    {
+      tell_object(caster, "Du brauchst einen Speer im Speerkoecher oder "
+          "musst einen Speer gezueckt haben.\n");
+      return 0;
+    }
+  }
+  if (spear->QueryProp(P_NODROP) || spear->QueryProp(P_CURSED))
+  {
+    tell_object(caster, sprintf("Du kannst %s nicht werfen!\n",
+          spear->name(WEN,1)));
+    return 0;
+  }
+  if (!pay_for_spell(caster, sinfo, !flag))
+    return 0;
+  return 1;
+}
+
+int speerwurf(object caster, mapping sinfo) 
+{
+  object victim;
+  int suc;
+  object spear;
+  int from_koecher;
+  string str1;
+  int bonus;
+  int dam;
+  int skp;
+
+  if (!prep_speerwurf(caster, sinfo, 1))
+    return 0;
+  victim = FindEnemyVictim(sinfo[SI_SKILLARG], caster, "");
+  if (!victim)
+    return 0;
+  sinfo[SI_ENEMY] = victim;
+  skp = sinfo[SI_SKILLPOINTS];
+  if (objectp(spear = FindSpearInKoecher(caster)))
+    from_koecher = 1;
+  else
+  {
+    from_koecher = 0;
+    if (skp < 2)
+    {
+      tell_object(caster, "Du musst einen Speer im Speerkoecher tragen.\n");
+      return 0;
+    }
+    spear = caster->QueryProp(P_WEAPON);
+  }
+  if (!objectp(spear) || spear->QueryProp(P_WEAPON_TYPE) != WT_SPEAR)
+  {
+    tell_object(caster, "Du hast keinen Speer zum Werfen.\n");
+    return 0;
+  }
+  if (spear->QueryProp(P_NODROP) || spear->QueryProp(P_CURSED))
+  {
+    tell_object(caster, sprintf("Du kannst %s nicht werfen!\n",
+          spear->name(WEN,1)));
+    return 0;
+  }
+
+  if ((suc = SpellSuccess(caster,sinfo)) <= 0)
+    return MISSERFOLG;
+
+  if (!from_koecher)
+  {
+    spear->DoUnwield(1);
+    if (spear->QueryProp(P_WIELDED))
+    {
+      tell_object(caster, BSC(sprintf("Aus irgendeinem Grund kannst Du %s nicht "
+              "werfen!", spear->name(WEN,1))));
+      return 0;
+    }
+  }
+
+  if (spear->QueryProp(P_ARTICLE)) str1 = "D"; else str1 = "";
+  environment(caster)->Message(BS(sprintf("%s wirft %s %s auf %s.",
+        caster->Name(WER,1), 
+        caster->QueryPossPronoun(spear->QueryProp(P_GENDER), WEM),
+        spear->name(RAW), victim->name(WEN,1) )),
+      MSGFLAG_VISUAL, ([ MSGFLAG_EXCLUDE : ({ caster, victim }) ]) );
+
+  tell_object(caster, BSC(sprintf("Du wirfst %s%s auf %s.\n", 
+          str1, spear->name(WEM,0), victim->name(WEN,1) )));
+
+  tell_object(victim, BS(sprintf("%s wirft %s %s auf Dich.",
+        caster->Name(WER,1),
+        caster->QueryPossPronoun(spear->QueryProp(P_GENDER), WEM),
+        spear->name(RAW) )));
+
+  bonus = CheckEquip(caster, sinfo[SI_SPELLFUNC]) / 2;
+  sinfo[SI_SKILLDAMAGE] += spear->QueryProp(P_WC) / 2 + suc / 200 + bonus + (sinfo[SI_SKILLPOINTS] > 0 ? caster->QueryProp(P_GUILD_LEVEL) * 5 : 0);
+  sinfo[OFFSET(SI_SKILLDAMAGE)] += spear->QueryProp(P_WC_FIX) + bonus;
+  sinfo[SI_MAX_DAMAGE] += (caster->QueryProp(P_GUILD_LEVEL) - 5) * 10 + bonus;
+  sinfo[SI_SKILLDAMAGE_TYPE] = spear->QueryProp(P_DAM_TYPE);
+
+  if (IS_LEARNER(caster))
+    printf("dam = %d, off = %d, max = %d damtype = %O\n",
+        sinfo[SI_SKILLDAMAGE], 
+        sinfo[OFFSET(SI_SKILLDAMAGE)], 
+        sinfo[SI_MAX_DAMAGE],
+        sinfo[SI_SKILLDAMAGE_TYPE] );
+
+  dam = TryDefaultAttackSpell(victim, caster, sinfo, sinfo[SI_SPELL] + 
+      ([SP_REDUCE_ARMOUR: ([P_BODY: 101 - sinfo[SI_SKILLABILITY] / 200])]) );
+
+  if (IS_LEARNER(caster))
+    printf("Schaden = %d\n", dam);
+
+  if(sinfo[SI_SKILLPOINTS] < 2) {
+    if (random(2) && objectp(victim))
+    {
+      spear->move(victim, M_NOCHECK);
+      tell_object(caster, BSC(sprintf("%s bleibt in %s stecken.",
+              spear->Name(WER,1), victim->name(WEM,2))));
+    }
+    else
+    {
+      spear->move(environment(caster), M_NOCHECK);
+      tell_object(caster, sprintf("%s faellt zu Boden.\n",
+            spear->name(WER,1)));
+    }
+
+    if (!from_koecher &&
+        (victim = present("speerkoecher", caster)) && 
+        (dam = sizeof(all_inventory(victim))) &&
+        objectp(spear = all_inventory(victim)[dam - 1]) &&
+        spear->QueryProp(P_WEAPON_TYPE) == WT_SPEAR &&
+        spear->move(caster, M_GET) > 0)
+    {
+      tell_object(caster, BSC(sprintf("Du nimmst %s aus Deinem Speerkoecher und zueckst "
+            "%s.", spear->name(WEN,1), spear->QueryPronoun(WEN))));
+      spear->wield_me(1);
+    }
+  } else {
+    // der speer kommt zurueck
+    tell_object(caster, BSC(sprintf("%s kommt zu Dir zurueck.", spear->Name(WER,1))));
+    spear->move(caster, M_GET);
+    spear->wield_me(1);
+    caster->AddSp(-10);
+  }
+
+  if(objectp(victim) && !interactive(victim) && sinfo[SI_SKILLPOINTS] > 2 && !victim->QueryProp("amz_crippled")) {
+    // gegner wird verkrueppelt, dex senken
+    victim->SetAttribute(A_DEX, victim->QueryAttribute(A_DEX)/2);
+    victim->SetProp("amz_crippled", 1);
+    tell_room(environment(caster), BS(sprintf("%s wird durch den Speerwurf von %s verkrueppelt!",
+          victim->name(WER,1), caster->name(WER,1))), ({victim, caster}) );
+    tell_object(victim, BS("Du wirst durch den Speerwurf verkrueppelt und Deine Geschicklichkeit sinkt!"));
+    tell_object(caster, BS(sprintf("Du verkrueppelst %s mit Deinem Speerwurf!", victim->name(WEN,1))));
+  }
+  return ERFOLG;
+}

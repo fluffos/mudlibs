@@ -1,0 +1,191 @@
+inherit "std/mnpc";
+inherit "std/npc/spells";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <mnpc.h>
+#include <new_skills.h>
+#include <wizlevels.h>
+
+#include "../files.h"
+
+#define KEYMASTER "d/ebene/creative/ebony_tiger/std/keymaster"
+#define THIEFMASTER "d/ebene/creative/ebony_tiger/std/thiefmaster"
+#define DWAF ({"/p/weapon/messer", "/p/weapon/dolch", "/p/weapon/langdolch"})
+
+create()
+{
+  object ob;
+
+  ::create();
+  AddId("dieb");
+  SetProp (P_GENDER, MALE);
+  SetProp (P_NAME, "Dieb");
+  SetProp (P_SHORT, "Ein Dieb");
+  SetProp(P_RACE, "Dieb");
+  SetProp (P_LONG, BS(
+           "Der Dieb ist klein, untersetzt und traegt einen dunklen Bart. An"
+          +" seinem Guertel haengt ein Schluesselbund mit vielen Dietrichen.")); 
+  AddDetail("bart", BS(
+            "Der Bart des Diebs bedeckt sein Gesicht komplett."));
+  AddDetail("gesicht", BS(
+            "Das Gesicht des Diebes ist vollstaendig mit Bart ueberwuchert."));
+  AddDetail("guertel", BS(
+            "An dem schmalen Lederguertel haengt ein Schluesselbund."));
+  AddDetail("schluesselbund", BS(
+            "An dem Schluesselbund findest Du fuer jede passende Gelegenheit"
+           +" einen Dietrich."));
+  AddDetail("dietrich", BS(
+            "Mit diesem Dietrich scheint der Dieb jede Tuer knacken zu koennen."));
+
+  create_default_npc(19);
+  seteuid(getuid(TO));
+
+  (ob=clone_object("/obj/money"))->SetProp(P_AMOUNT, random(200));
+  ob->move(TO);
+
+  SetProp(P_SPELLRATE,15);
+
+  SetProp(P_DEFAULT_INFO, "ignoriert Dich und blickt sich gestresst um.\n");
+
+  SetProp( P_REJECT, ({ REJECT_KEEP,
+    "Der Dieb schnappt @WEN und murmelt: 'Wahrscheinlich haette ich es sowieso gestohlen.'\n" }) );
+  AddDefaultSpell(3, 100, DS_REDUCE_WC);
+  AddDefaultSpell(1, 150, DS_DISARM);
+
+  SetProp(P_MNPC_AREA, ROOM(""));
+  SetProp(P_LOG_INFO, 1);
+  SetProp(P_MNPC_WAIT, ({ 15, 30, 120 }));
+  SetProp(P_MNPC_DEFAULTROOM, ROOM("o4"));
+  SetProp(P_MNPC_FLAGS, MOV_INDOORS + MOV_MOVES);
+  SetProp(P_SIZE, 150);
+  SetProp(P_TRANSPARENT, 0);
+  SetProp(P_MAX_HELPERS, 1);
+  SetProp(P_HELPERS, QueryProp(P_MAX_HELPERS));
+  SetAttribute(A_STR, 40);
+  ob=KEYMASTER->DistributeKey();
+  if (ob)
+    ob->move(TO);
+  THIEFMASTER->RegisterThief(TO);
+
+  ob=clone_object(DWAF[random(sizeof(DWAF))]);
+  ob->move(TO);
+  command_me("zuecke Waffe");
+}
+
+
+init()
+{
+  ::init();
+
+  if (ENV(TO) && present("geld", ENV(TO)))
+    call_out("command_me", 0, "nimm geld");
+  if (TP && TP->id("Dieb"))
+    AddDefender(TP);
+}
+
+catch_tell()
+{
+  try_klau();
+}
+
+try_klau()
+{
+  object ob;
+  object *victim, *items;
+  int i, v;
+
+  victim=({});
+  if (ENV(TO)) {
+    for (ob=first_inventory(ENV(TO)); ob; ob=next_inventory(ob)) {
+      if (living(ob) && ob!=TO)
+        if (!IS_LEARNER(ob) && !ob->QueryProp(P_TESTPLAYER))
+          victim+=({ob});
+    }
+    items=({});
+    if ((i=sizeof(victim)) && !(random(100)%4)) {
+      v=random(i);
+      for (ob=first_inventory(victim[v]); ob; ob=next_inventory(ob))
+        if (!ob->IsUnit() && ob->QueryProp(P_VALUE)>1500)
+          if (!ob->QueryProp(P_NODROP) && !ob->QueryProp(P_NEVERDROP)
+              && !ob->QueryProp(P_NOGET) && !ob->QueryProp(P_CURSED))
+            items+=({ob});
+      if (sizeof(items)) {
+        i=random(sizeof(items));
+        call_out("klau", 0, victim[v], items[i]);
+      }
+    }
+  }
+}
+
+klau(object vic, object what)
+{
+  if (present(vic, ENV(TO)) && present(what, vic)) {
+    if (what->move(TO, M_GIVE|M_SILENT)==1) {
+      tell_object(vic, CAP(name(WER))+" klaut Dir "+what->name(WEN)+".\n");
+      tell_room(ENV(TO), (CAP(name(WER))+" klaut "+vic->name(WEM)+" "+what->name(WEN)+".\n", ({ vic })));
+    }
+    else
+      tell_object(vic, CAP(name(WER))+" wollte Dir "+what->name(WEN)+" abnehmen, hat aber versagt.\n");
+  }
+}
+
+die()
+{
+  object ob;
+
+  ob=present("schluessel");
+  if (ob)
+    KEYMASTER->RemoveKey(ob);
+  ::die();
+}
+
+int remove()
+{
+  THIEFMASTER->RemoveThief(TO);
+  return ::remove();
+}
+
+heart_beat()
+{
+  int h;
+
+  ::heart_beat();
+  if (InFight() && (h=QueryProp(P_HELPERS))) {
+    SetProp(P_MAX_HELPERS, h-1);
+    THIEFMASTER->Help(TO);
+  }
+  else
+    if (!InFight())
+      SetProp(P_HELPERS, QueryProp(P_MAX_HELPERS));
+}
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+  while(find_call_out("react")!=-1) ;
+  switch (gruppe) {
+    case "fies":
+      call_out("react", 0, TP, "grummelt Dich an", "grummelt "+TPN+" an"); break;
+    case "frech":
+      call_out("react", 0, TP, "gibt Dir eine Ohrfeige", "gibt "+TPN+" eine Ohrfeige");
+      TP->reduce_hit_point(4); break;
+    case "intim":
+      call_out("react", 0, TP, "schreit: LASS DAS!!!", "schreit: LASS DAS!!!"); break;
+  }
+}
+
+void react(object to, string vic, string oth)
+{
+  if (present(to, ENV(TO))) {
+    tell_object(to, BS(Name(WER, 1)+" "+vic+"."));
+    tell_room(ENV(TO), BS(Name(WER, 1)+" "+oth+"."), ({to}));
+  }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+

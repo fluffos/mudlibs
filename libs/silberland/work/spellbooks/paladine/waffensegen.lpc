@@ -1,0 +1,164 @@
+// SilberLand MUDlib
+//
+// spellbooks/paladine/waffensegen.c
+//
+// $Date: 2003/11/21 01:33:04 $
+/* $Revision: 1.2 $
+ * $Log: waffensegen.c,v $
+ * Revision 1.2  2003/11/21 01:33:04  Feyaria
+ * Haelt laenger wenn man den spell perfekt kann
+ *
+ * Revision 1.1  2003/07/09 11:39:22  Angrox
+ * Initial revision
+ *
+ */
+// Prototypen
+int prep_waffensegen(object caster, mapping sinfo);
+int waffensegen(object caster, mapping sinfo);
+
+
+int prep_waffensegen(object caster, mapping sinfo) {
+  object weapon, wielded;
+  string what;
+  what=sinfo[SI_SKILLARG];
+  if(!what) {
+    write(BS("Was in Dustys Namen moechtest Du segnen?"));
+    return 0;
+  }
+  if(!wielded=caster->QueryProp(P_WEAPON)) {
+    write("Paladin! Du hast keine Waffe gezueckt!\n");
+    return 0;
+  }
+  if(!weapon=deep_present(what, caster)) {
+    write("Diese Waffe besitzt Du nicht, Paladin!\n");
+    return 0;
+  }
+  if(weapon->id(what) && !wielded->id(what)) {
+    write(BS("Paladin! Du musst schon die Waffe gezueckt haben, die "
+        +"Du segnen willst!\n"));
+    return 0;
+  }
+  weapon=wielded;
+  if(present("\nwaffensegen", caster)) {
+    write("Du hast schon eine Waffe geweiht, Paladin!\n");
+    return 0;
+  }
+  return 1;
+}
+
+int waffensegen(object caster, mapping sinfo) {
+  object weapon, segen;
+  int suc, wc_value, time, wc_boni;
+  string text, what;
+  what=sinfo[SI_SKILLARG];
+
+  /*
+  write(BS(
+    "!!! ACHTUNG, dieser Spell musste wegen diverser Bugs abgehaengt werden! "
+    "Wir arbeiten dran, aber wann und wo und wie ... Sorry, Zordan !!!"));
+  return 0;
+  */
+  if ( !prep_waffensegen( caster,  sinfo) ) return 0;
+  weapon=caster->QueryProp(P_WEAPON);
+  if(weapon->id(AMARYLLION)) {
+    write(BS("Paladin! Du kannst Amaryllion nicht weihen, denn es ist "
+            +"schon geweiht!"));
+    return 0;
+  }
+  if(weapon->QueryProp(P_CURSED)) {
+    write(BS("Bei Dusty, diese Waffe ist verflucht und laesst sich nicht "
+           +"weihen!"));
+    return 0;
+  }
+  if(weapon->QueryProp(P_ITEMD)) {
+    write(BS("Paladin! Diese magische Waffe kannst Du nicht weihen!"));
+    return 0;
+  }
+  if(weapon->Query(P_WC,F_QUERY_METHOD) ||
+     weapon->Query(P_WC_BONUS,F_QUERY_METHOD)) {
+    write(BS(
+      "ARGL. Hier stimmt was mit der Waffe nicht. Bitte benachrichtige "
+      "Angrox oder Zordan sofort!!!"));
+    write_file("/gilden/paladine/spells/waffensegen.bad",
+      sprintf("%s: %s mit %O\n",ctime(),CAP(getuid(caster)),weapon));
+    return 0;
+  }
+  if(caster->QueryProp(P_GUILD_LEVEL) < 13 && 
+      (weapon->QueryProp(P_WIELD_FUNC) || weapon->QueryProp(P_UNWIELD_FUNC))) 
+  {
+    write(BS(
+      "Auch mit groesster Muehe wuerde es Dir nicht gelingen, diese "
+      "Waffe zu weihen. Sie scheint naemlich schon etwas besonderes "
+      "zu koennen!"));
+    return 0;
+  }
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+      printf(sinfo[SI_SP_LOW_MSG]);
+      return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  text="Herrin Dusty, in Deinem Namen weihe "
+      +"ich Dir diese Waffe, um damit die Ausgeburten der Unterwelt "
+      +"und die verderbten Seelen zu vernichten! Ehre sei Dusty! Ehre! "
+      +"Ehre! Ehre!";
+  Message(caster, 0,sprintf("Du reckst %s gen Himmel.\n",
+      weapon->name(WEN)), 0);
+  Message(caster, 0,sprintf("%s reckt %s gen Himmel.\n",
+     caster->Name(WER), weapon->name(WEN)), 3);
+  Message(caster, 0, BSA(text,"Du rufst: "), 0);
+  Message(caster, 0, BSA(text, caster->Name(WER)+" ruft: "), 3);
+  if((suc=SpellSuccess(caster, sinfo))<=0) {
+    Message(caster, 0, BS("Dusty scheint Dich nicht zu erhoeren. "
+        +"Nichts passiert."), 0);
+    Message(caster, 0, BS(sprintf("Nichts passiert. Offenbar scheint Dusty "
+        +"%s nicht erhoert zu haben.", caster->name(WER))), 3);
+    weapon->TakeFlaw();
+    return MISSERFOLG;
+  }
+  weapon->DoUnwield(1);
+  if(weapon->QueryProp(P_WIELDED)) {
+    write(BS(
+      "Ein dunkler Blitz trifft Dich mitten ins Herz! Diese Waffe "
+      "solltest Du besser mit Vorsicht geniessen!"));
+    return 0;
+  }
+  Message(caster, 0, BS(sprintf("%s leuchtet kurz in silbrigem Licht "
+      +"auf! Dusty hat Dich erhoert! Ehre sei Dusty!\n",
+      weapon->Name(WEN))), 0);
+  Message(caster, 0, BS(sprintf("%s von %s leuchtet kurz silbrig auf.\n",
+      weapon->Name(WEN), caster->name(WER))), 3);
+  segen=CLONEOB(OBJ("waffensegen"));
+  wc_boni=caster->QueryProp(P_GUILD_LEVEL)+
+          (weapon->QueryProp(P_WC)*1*suc)/(3*MAX_ABILITY);
+  wc_boni=DoModificationByAlign(wc_boni/3, caster)+(2*wc_boni/3);
+  if (wc_boni < 10) wc_boni=10;
+  // durch die Aenderung von woody vom 12.3. in combat.c notwendig
+  // geworden, da  WC+WC_BONUS NICHT mehr > MAX_WEAPON_CLASS sein kann!!!:
+  if ((weapon->QueryProp(P_WC)+weapon->QueryProp(P_DAMAGED)
+        +wc_boni) > MAX_WEAPON_CLASS)
+    wc_boni=MAX_WEAPON_CLASS-
+      (weapon->QueryProp(P_WC)+weapon->QueryProp(P_DAMAGED));
+  if (wc_boni > 125) wc_boni=125;
+  //  tell_angrox(wc_value+"/"+wc_boni+"\n");
+  
+  // ZUM LOGGEN DER SPELLSTAERKEN
+  if(enable_spell_log)
+    write_file("/gilden/paladine/spells/waffensegen",
+      sprintf("CST: %O, CA: %d, suc: %d, wc: %d, wc_boni: %d/%d\n",
+          caster, caster->QueryProp(P_ALIGN), suc, weapon->QueryProp(P_WC),
+          wc_boni, DoModificationByAlign(wc_boni/3, caster)+(2*wc_boni/3)));
+  // ----------------------------
+ 
+  time=caster->QueryProp(P_GUILD_LEVEL)*(10+random(6));
+  if( sinfo[SI_SKILLABILITY] == MAX_ABILITY )
+    time += caster->QueryProp(P_LEVEL);
+  time=DoModificationByAlign(time, caster);
+  segen->SetVariables(caster, weapon, time, wc_boni);
+  segen->move(caster, M_NOCHECK|M_SILENT);
+  caster->SetProp(PAL_WAFFENSEGEN, 1);
+  weapon->wield_me(1);
+  return ERFOLG;
+}
+
+

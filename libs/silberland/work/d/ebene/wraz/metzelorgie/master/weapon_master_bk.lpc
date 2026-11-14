@@ -1,0 +1,127 @@
+// weapon_master
+// alle sterbewaffen rufen in deren reset update_weapons() auf (schlachtfeld)
+// auch der Jadering (ARMOUR ring.c) ruft im reset() hier ein update_rings() auf
+
+#include "../def.h"
+
+// DIESE WERTE WERDEN IN ALLE STERBEWAFFEN GESETZT (in deren reset)
+int sfbonus = 70;
+int odds_increase_multiply = 1500;
+float def_mult_factor = 1.3; // DEFAULT 1.3
+float a_con = -2957.0, b_con = 500.0, c_con = 400.0;
+float d_con = 1.5, e_con = 8.0, f_con = 8.0; // Update 12.5.22; previous e_con = 7.0
+float def_one_hand = 0.666;
+
+// ---> auf 1 setzen um updates im reset() der sterbewaffen zu aktivieren
+//  -> activate_updating(1)
+int on = 0;
+
+int debug = 0;
+
+void create()
+{
+  if(is_clone(TO))
+  {
+    destruct(TO);
+    return;
+  }
+  seteuid(getuid(this_object())); // fuer zugriff auf dateien benoetigt
+  seteuid(getuid(TO));
+
+  return;
+}
+
+// ------ update_weapons() ---------------------------------------------------
+void update_weapons(object weap)
+{
+  float new_d_con;
+  int tode;
+  float one_hand_d_factor; // temporaer fuer alte Waffen
+  float one_hand_e_f_factor; // temporaer fuer alte Waffen
+
+  one_hand_d_factor = 1.0;
+  one_hand_e_f_factor = 1.0;
+
+  if(on)
+  {
+    new_d_con = d_con;
+    tode = 0;
+    if(weap->QueryProp(P_WIELDED)) tode = weap->query_tode(getuid(weap->QueryProp(P_WIELDED)));
+
+    // Mai 2022
+    // (kann ca. im Mai 2023 entfernt werden, wenn sich alle alten Waffen aufgeloest haben sollten)
+    // Einhaendige Waffen machen ca. 2/3 Schaden (im Vgl. zu 2-Hand)
+    // das hier ist ein workaround fuer alte Waffen; neue haben eine andere HitFunc mit 2/3 Faktor direkt drin
+    if(weap->QueryProp(P_NR_HANDS) == 1 && !weap->QueryProp("one_hand_update"))
+    {
+      one_hand_d_factor = 0.7; // Update 25.8.22 (zuvor: 0.5)
+      one_hand_e_f_factor = 1.6; // zuvor: 2.0
+    }
+
+    // d_con Update: ab 200 Toden reduziert sich d_con langsam
+    if(tode) new_d_con = (d_con*one_hand_d_factor*(200+(tode-200)*0.1))/tode;
+    new_d_con = new_d_con < d_con*one_hand_d_factor ? new_d_con : d_con*one_hand_d_factor; // greift erst wenn es unter "default d_con" faellt
+    if(new_d_con <= 0.0) new_d_con = d_con*one_hand_d_factor;
+
+    weap->set_hitfunc_factors(
+      a_con, 
+      b_con, 
+      c_con, 
+      new_d_con, 
+      e_con*one_hand_e_f_factor, 
+      f_con*one_hand_e_f_factor, 
+      sfbonus,
+      odds_increase_multiply, 
+      def_mult_factor,
+      def_one_hand);
+  }
+  // DEBUG
+  if(debug && find_player("wraz")) find_player("wraz")->Message(
+    "weapon_master, on = " + on + 
+    ", weap->name(): "+weap->name()+
+    ", P_WIELDED: "+ (weap->QueryProp(P_WIELDED) ? weap->QueryProp(P_WIELDED)->Name() : "0")+
+    ", new_d_con: "+new_d_con+
+    " (d_con: "+d_con+")"+
+    ", one hand factors: "+one_hand_e_f_factor+", "+one_hand_d_factor+
+    "\n");
+}
+
+// ------ update_weapons() ---------------------------------------------------
+void update_rings(object ring)
+{
+  // hier kann man fuer die Jaderinge was einbauen -> set_defaults()
+}
+
+// ------ activate_updating() ---------------------------------------------------
+int activate_updating(int _on)
+{
+  on = _on;
+  return on;
+}
+
+// ------ query_updating() ---------------------------------------------------
+int query_updating() { return on; }
+
+// ------ enable_debug() ---------------------------------------------------
+int enable_debug() 
+{ 
+  debug = 1;
+  return debug; 
+}
+
+// ------ disable_debug() ---------------------------------------------------
+int disable_debug() 
+{ 
+  debug = 0;
+  return debug; 
+}
+
+// ------ remove() -----------------------------------------------------------
+int remove()
+{
+  if(is_clone(TO)) {
+    destruct(TO);
+    return 1;
+  }
+  return 0;
+}

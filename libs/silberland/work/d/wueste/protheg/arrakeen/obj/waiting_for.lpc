@@ -1,0 +1,162 @@
+/*
+  Ein Samen der Lauscherpflanze
+  wenn einmal aktiviert, dann wartet es auf eine bestimmte Id oder P_NAME
+  dann wird der Spieler benachrichtigt....
+  
+  2002-04-15  Protheg  Neuueberarbeitet
+*/
+
+#include "../def.h"
+
+inherit "std/thing";
+
+nosave string opfer, beobachter;
+nosave int activated;
+
+void create()
+{
+  if(!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein Samenkorn");
+  SetProp(P_LONG, 
+	  BS("Ein unscheinbares kleines Samenkorn."));
+
+  SetProp(P_INFO, 
+	  BS("Dieses Samenkorn stammt von einer Pflanze, die wegen ihrer "
+	     "Eigenschaften auch 'Lauscherpflanze' genannt wird. Einmal "
+	     "richtig eingepflanzt, kann die Pflanze einem verraten, wenn "
+	     "jemand Bestimmtes bei ihr auftaucht."));
+
+  SetProp(P_NAME, "Samenkorn");
+  SetProp(P_NAME_ADJ, "klein");
+  AddAdjective(({"kleines","kleinen","kleine"}));
+
+  SetProp(P_GENDER, NEUTER);
+  SetProp(P_VALUE, 1);
+  SetProp(P_WEIGHT, 5);
+  SetProp(P_NOBUY, 1);
+  AddId(({"\nlauschersamenkorn","korn","samen","samenkorn"}));
+
+  AddCmd(({"pflanze","pflanz"}), "pflanzen");
+
+  opfer="niemand";
+
+  beobachter="";
+
+  activated=0;
+}
+
+public string QueryOpfer()
+{
+  return opfer;
+}
+
+nosave int pflanzen(string str)
+{
+  object destination;
+
+  notify_fail(BS("Was willst Du denn einpflanzen?"));
+  if(!str) return 0;
+
+  if(str=="korn"||str=="korn ein"||str=="samenkorn"||str=="samenkorn ein"||
+     str=="samen"||str=="samen ein")
+    {
+      if(!(objectp(destination=ENV(TP)))) 
+	return write(BS("Da scheint etwas nicht zu stimmen!!")), 1;
+
+      if(destination->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN]==TT_UNDERWATER)
+	return write(BS("Hier? Unterwasser?")), 1;
+	
+      ME->move(ENV(TP), M_PUT);
+      
+      if(ENV(ME)==TP)
+	return write(BS("Da scheint etwas nicht zu stimmen!! Bist Du Dir "
+			"sicher, dass man den Samen hier pflanzen darf?")), 1;
+      
+      write(BS("Du legst das Samenkorn vorsichtig ab und weichst zurueck...")+
+	    BS("Das Korn beginnt zu leuchten und scheint sich daraufhin "
+	       "aufzuloesen."));
+
+      SetProp(P_SHORT, "");
+      SetProp(P_LONG, "");
+      SetProp(P_INVIS, 1);
+      SetProp(P_NOGET, "");
+      RemoveId(({"korn","samenkorn"}));
+
+      activated=1;
+
+      beobachter=getuid(TP);
+
+      write(BS("Die kleine Lauscherpflanze teilt Dir mit: Auf wen soll ich "
+	       "denn nun warten? (Abbruch mit q)")+
+	    "Bei welchem Wesen, willst Du benachrichtigt werden: ");
+      
+      input_to("getopfer");
+
+      return 1;
+    }
+
+  return 0;
+}
+
+void getopfer(string str)
+{
+  if(str=="q")
+    {
+      write(BS("Die kleine Lauscherpflanze verwelkt ploetzlich..."));
+      
+      activated=0;
+      
+      call_out("remove", 0);
+      
+      return;
+    }
+
+  opfer=lower_case(str);
+  
+  write(BS("Du wirst nun benachrichtigt wenn '"+CAP(opfer)+
+	   "' hier erscheint."));
+  
+  DB("*** Lauscherpflanze by "+CAP(beobachter)+" wartet auf "+CAP(opfer)+".\n");
+  
+  write_file(LOG "lauscherpflanze", 
+	     ctime()+" -  by "+CAP(beobachter)+" wartet auf "+CAP(opfer)+".\n");
+}
+
+void init()
+{
+  if(!is_clone(TO)) return;
+  ::init();
+
+  if(!activated) return;
+  
+  if((TP->id(opfer)) || (lower_case(TP->name(RAW))==opfer))
+    if(find_player(beobachter))
+      find_player(beobachter)->Message(
+                  "Eine Lauscherpflanze teilt Dir mit: '"+
+		  CAP(opfer)+"' ist bei mir erschienen!\n",
+		  MSGFLAG_TELL);
+}
+
+void reset()
+{
+  if(!is_clone(TO)) return;
+  ::reset();
+
+  if(!activated) return;
+
+  if(activated>5+random(2))
+    call_out("remove", 5);
+  else
+    activated++;
+}
+
+int remove()
+{
+  if((activated) && (find_player(beobachter)))
+    find_player(beobachter)->Message("Eine Lauscherpflanze teilt Dir mit: "+
+				     "Hilf mir! Ich verwelke!\n",
+				     MSGFLAG_TELL);
+  ::remove();
+}

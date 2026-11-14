@@ -1,0 +1,168 @@
+
+/*
+
+  /obj/pearlmaster
+
+  2001-01-10  1:1 von Dante uebernommen vom /obj/gemmaster.c
+  2001-02-02  ab sofort kann man den Typ der Perlen mit uebergeben
+
+  Usage:
+
+  "/obj/pearlmaster"->DistributePearl(amount, rand, art, automove, typ)
+
+    ergibt amount + random(rand) Perlen
+
+    art         0                   eine beliebige Perle
+                1                   lauter verschiedene Perlen
+    
+    automove    Wenn Objekt, Perlen nach Objekt moven,
+                sonst previous_object bei != 0
+
+    typ         string oder array von perlen, die ausschliesslich
+                gecloned werden duerfen    
+
+*/
+
+#define PEARLLOC "/obj/pearls"
+#define PEARLLOG "obj/PEARLS"
+#define PEARLDAILY "obj/PEARLS_DAILY"
+
+#include <language.h>
+#include <properties.h>
+#include <moving.h>
+
+
+nosave string *pearls;
+nosave int nr,nrlast;
+mapping daily_pearls;
+int total_pearls = 0;
+
+string *QueryPearls();
+int *EmptyArray();
+
+void create()
+{
+  if (is_clone(this_object())) {
+    destruct(this_object());
+    return;
+  }
+  pearls=(get_dir(PEARLLOC+"/*.lpc"));
+  log_file(PEARLLOG, sprintf("[%s]: %3d pearls loaded.\n",
+    dtime(time())[5..],sizeof(pearls))); 
+  nr=0;
+  nrlast=0;
+  daily_pearls = mkmapping(QueryPearls(), EmptyArray());
+}
+
+varargs mixed DistributePearl(int amount, int rand, int art, 
+                              mixed automove, mixed wantpearls)
+{
+  int i,j,r;
+  object o, whereto;
+  object *ob;
+  string *clpearls;
+  string type;
+
+  clpearls=QueryPearls();
+  if(!pointerp(wantpearls))
+    if(stringp(wantpearls))
+      wantpearls=({ wantpearls });
+  if(pointerp(wantpearls))
+    clpearls=clpearls & wantpearls;
+  
+  if (!(i=sizeof(clpearls)))
+    return 0;
+  if (automove && objectp(automove))
+    whereto=automove;
+  else
+    whereto=previous_object();
+  if (!rand)
+    rand=1;
+  if (!amount)
+    amount=1;
+  r=random(rand);
+  // vergebene Perlen mitloggen, damit wir endlich eine ca.
+  // Uebersicht haben, wieviele wirklich im Spiel sind
+  log_file(PEARLLOG, sprintf("[%s]: %3d pearls for %O\n",
+    dtime(time())[5..],amount+r,whereto));
+  nr+=(amount+r);
+  nrlast+=(amount+r);
+  if (art) {
+    ob=({});
+    for (j=amount+r; j>0; j--) {
+      o=clone_object(PEARLLOC+"/"+(type = clpearls[random(i)]));
+      if (automove && objectp(whereto) && objectp(o))
+          o->move(whereto, M_MOVE_ALL|M_NOCHECK);
+      ob+=({o});
+      if (type)
+        daily_pearls[type]++;
+    }
+    ob -= ({ 0 });
+    return ob;
+  }
+  type = clpearls[random(i)];
+  o=clone_object(PEARLLOC+"/"+type);
+  o->SetProp(P_AMOUNT, amount+r);
+  daily_pearls[type] += amount + r;
+  if (automove && objectp(o) && objectp(whereto))
+    o->move(whereto, M_MOVE_ALL|M_NOCHECK);
+  return o;
+}
+
+string *QueryPearls()
+{
+  return map_array( pearls, lambda( ({ 'a }), ({ #'[..<], 'a, 0, 3 }) ) );
+}
+
+int QueryStatsTotal()
+{
+  return nr;
+}
+
+int QueryStatsLast()
+{
+  return nrlast;
+}
+
+void reset()
+{
+  log_file(PEARLLOG,sprintf("[%s]: nr of pearls in last reset(): %5d\n"
+                                "[%s]: nr of pearls total:           %5d\n",
+    dtime(time())[5..],nrlast,dtime(time())[5..],nr));
+  nrlast=0;
+}
+
+int* EmptyArray()
+{
+  int* empty;
+  int i;
+
+  empty = ({});
+  for (i = sizeof(pearls); i > 0; i--)
+    empty += ({0});
+  return empty;
+}
+
+nosave void write_daily_log(string pearl)
+{
+  log_file(PEARLDAILY, sprintf("%25s: %4d\n", pearl, daily_pearls[pearl]));
+  total_pearls += daily_pearls[pearl];
+}
+
+int pearl_sort(string pearl1, string pearl2)
+{
+  if (daily_pearls[pearl1] < daily_pearls[pearl2])
+    return 1;
+  else
+    return 0;
+}
+
+void DailyReport()
+{
+  log_file(PEARLDAILY, sprintf("\n==================== %s ====================\n",
+        dtime()[0..16]));
+  total_pearls = 0;
+  filter_array(sort_array(m_indices(daily_pearls), "pearl_sort"), "write_daily_log");
+  log_file(PEARLDAILY, sprintf("%25s: %4d\n", "Summe", total_pearls));
+  daily_pearls = mkmapping(QueryPearls(), EmptyArray());
+}

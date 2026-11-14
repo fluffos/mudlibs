@@ -1,0 +1,227 @@
+mapping prep_melodie_der_avatara(object caster, mapping sinfo, int silent) 
+{ 
+  //Aenderungen der Werte im sinfo Mapping vermeiden!
+  if(!FroschTest(caster, sinfo) || 
+     !IsNotInFight(caster,sinfo)||
+     !BlindTest(caster,sinfo)     )
+    return 0;
+         
+  if(!present(IAMA_ID, caster)) { 
+    tell_object(caster, BS("Ohne Deine Iama geht das nicht!")); 
+    return 0; 
+  }
+
+  if(present(AVATARA_ARMOUR_ID, caster)) { 
+    tell_object(caster,BS("Du kannst die Tierkoenige nicht schon wieder um Hilfe bitten."));
+    return 0;
+  }
+
+  if(!silent){
+    tell_room(ENV(caster), BS(sprintf("%s spielt eine komplexe, auf- und abschwellende Melodie, um die "
+                                      "Avatara, die Tierkoenige um zu ehren.", caster->Name(WER))), ({caster}));
+    FirstPrepareFuncSuccessfull(caster, sinfo);
+  }
+
+ 
+  return sinfo;
+}
+
+string *shuffle_array(string *arr) {
+    int i, j;
+    string tmp;
+    for (i = sizeof(arr) - 1; i > 0; i--) {
+        j = random(i + 1);
+        tmp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = tmp;
+    }
+    return arr;
+}
+
+
+// Constants
+#define MAX_SUCCESS 10000
+#define ABILITY_DIVISOR 2000
+#define DURATION_MULTIPLIER 15
+#define PROTECTION_LEVELS ({ "kaum", "etwas", "viel", "sehr starken" })
+
+int melodie_der_avatara(object caster, mapping sinfo)
+{
+    object armour;
+    int i, j, success, ability, protection_level;
+    float faktor;
+    string *str, selected, *avatara, title, sel;
+    mapping m, prep_sinfo ;
+
+    str = ({ });
+
+    // Prep and validate
+    prep_sinfo = prep_melodie_der_avatara(caster, sinfo, 1);
+    if(!mappingp(prep_sinfo)) return 0;
+    selected = prep_sinfo[SI_SKILLARG];
+
+    // Success check (original logic)
+    success = SpellSuccess(caster, prep_sinfo);
+    if(success < (-5000 + random(2000)))
+    {
+        tell_object(caster, BSC("Du hast den Avatara mit der falschen Melodie veraergert!"));
+        caster->AddSp(-10 - random(10));
+        caster->AddHp(-10 - random(10));
+        return MISSERFOLG;
+    }
+    if(success < 0)
+    {
+        tell_object(caster, BSC("Du hast die Melodie nicht richtig wiedergegeben. Die Macht der Avatara bleibt dir fern."));
+        return MISSERFOLG;
+    }
+
+    ability = prep_sinfo[SI_SKILLABILITY];
+    if(R_SKILLMASTER->HasSkill(getuid(caster), SCHUTZ_DES_WALDES))
+    {
+        success = MAX_SUCCESS;
+    }
+
+    // Calculate i and clamp
+    i = (ability / ABILITY_DIVISOR) + ((success + MAX_SUCCESS) / MAX_SUCCESS);
+    i = min(i, 3); // Prevent out-of-bounds
+
+    // Avatara mapping (structured)
+    m = ([
+        "eoin": ([
+            "damage_type": DT_LIGHT,
+            "description": "die Sonne und Helligkeit",
+            "color": "gelben",
+            "title": "die Schwanenkoenigin"
+        ]),
+        "arawn": ([
+            "damage_type": DT_UNHOLY,
+            "description": "dem Boesen",
+            "color": "violetten",
+            "title": "der Fluchrabe"
+        ]),
+        "morcan": ([
+            "damage_type": DT_TERROR,
+            "description": "Angst und Furcht",
+            "color": "schwarzen",
+            "title": "der Schattenwolf"
+        ]),
+        "ciaran": ([
+            "damage_type": DT_COLD,
+            "description": "Eis und Kaelte",
+            "color": "eisblauen",
+            "title": "der Elchkoenig"
+        ]),
+        "fiachra": ([
+            "damage_type": DT_POISON,
+            "description": "Gifte und Angriffe der Natur",
+            "color": "gruenen",
+            "title": "die Giftschlange"
+        ]),
+        "belenus": ([
+            "damage_type": DT_MAGIC,
+            "description": "Magie und Zauberei",
+            "color": "silbernen",
+            "title": "der Drache"
+        ]),
+        "thorondor": ([
+            "damage_type": DT_LIGHTNING,
+            "description": "Blitzschlaegen",
+            "color": "blau-weissen",
+            "title": "der Donnervogel"
+        ]),
+        "bran": ([
+            "damage_type": DT_AIR,
+            "description": "Sturm und Wind",
+            "color": "hellblauen",
+            "title": "der Sturmfalke"
+        ]),
+        "lir": ([
+            "damage_type": DT_HOLY,
+            "description": "dem Guten",
+            "color": "goldenen",
+            "title": "der weisse Hirsch"
+        ]),
+        "aedan": ([
+            "damage_type": DT_FIRE,
+            "description": "Flammen und Hitze",
+            "color": "roten",
+            "title": "der Sonnenluchs"
+        ]),
+        "brenin": ([
+            "damage_type": DT_ACID,
+            "description": "Veraetzungen und Saeure",
+            "color": "braunen",
+            "title": "die Kroetenherrin"
+        ])
+    ]);
+    avatara = m_indices(m);
+
+    // Calculate faktor and protection level
+    faktor = (success + ability) / 28571.0 * (1.0 + get_equip_bonus(caster, "melodie der avatara") / 100.0);
+    write(sprintf("faktor: %f\n", faktor));
+
+// Select avatara
+    if(R_SKILLMASTER->HasSkill(getuid(caster), AVATARA_NAMEN) && stringp(selected) && member(m, lower_case(selected)))
+    {
+        i = 1;
+        tell_object(caster, BS("Du flehst um die Unterstuetzung von " + CAP(selected) + "."));
+        str += ({ lower_case(selected) });
+        title = m[lower_case(selected)]["title"];
+        tell_object(caster, BS(CAP(selected) + " " + title + " gewaehrt dir Unterstuetzung."));
+        protection_level = min(3, to_int(faktor * 10 / 3)); // Scale faktor to 0-3
+        protection_level = max(0, protection_level);
+
+        tell_object(caster, BS(sprintf("Du bekommst %s zusaetzlichen Schutz vor %s.",
+                                      PROTECTION_LEVELS[protection_level],
+                                      m[lower_case(selected)]["description"])));
+        tell_room(ENV(caster), BS(caster->Name(WER, 1) + " wird von einem " +
+                                  m[lower_case(selected)]["color"] + " Schimmer umgeben."), ({ caster }));
+    }
+    else
+    {
+        tell_object(caster, BS("Die Tierkoenige erhoehren dich!"));
+        i = 1 + (success > 4000 ? 1 : 0) + (success > 7000 ? 1 : 0);
+        avatara = shuffle_array(avatara);
+        for(j = 0; j < i; ++j)
+        {
+            sel = avatara[j];
+            str += ({ sel });
+            title = m[sel]["title"];
+
+            // Calculate faktor and protection level
+            protection_level = min(3, to_int(faktor * 10 / 3)); // Scale faktor to 0-3
+            protection_level = max(0, protection_level);
+
+            tell_object(caster, BS(CAP(sel) + " " + title + " gewaehrt dir Unterstuetzung."));
+            tell_object(caster, BS(sprintf("Du bekommst %s zusaetzlichen Schutz vor %s.",
+                                          PROTECTION_LEVELS[protection_level],
+                                          m[sel]["description"])));
+            tell_room(ENV(caster), BS(caster->Name(WER, 1) + " wird von einem " +
+                                      m[sel]["color"] + " Schimmer umgeben."), ({ caster }));
+        }
+    }
+
+     armour = clone_object(ARMOUR"invis_armour");
+     armour->SetProp(P_SHORT, "Schutz der Avatara");
+     armour->move(caster, M_SILENT);
+     armour->AddId(AVATARA_ARMOUR_ID);
+
+    for(j = 0; j < sizeof(str); ++j)
+    {
+        armour->AddResistance(m[str[j]]["damage_type"], faktor, DURATION_MULTIPLIER * (ability/1000));
+    }
+    caster->UpdateResistanceStrengths();
+
+    // Call outs
+    call_out("avatara_end_message", DURATION_MULTIPLIER * (ability/1000), caster, title);
+    call_out("iama_voice_of_nature", 0, caster);
+    present(IAMA_ID, caster)->SongPlayed();
+
+    return ERFOLG;
+}
+
+public void avatara_end_message(object caster, string name, string title) {
+  tell_object(caster, BS(sprintf("Der Blick der Tierkoenige wendet sich von dir ab. Die Unterstuetzung der Avatara schwindet.",
+                         CAP(name), title)));
+  return;
+}

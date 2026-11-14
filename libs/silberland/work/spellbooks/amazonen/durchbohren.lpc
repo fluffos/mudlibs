@@ -1,0 +1,102 @@
+// Durchbohren: Schwerer Speer-Stoss mit Bonus gegen geschwaechte Gegner.
+
+varargs int prep_durchbohren(object caster, mapping sinfo, int flag)
+{
+  object victim, spear;
+
+  if (!caster->InFight())
+  {
+    tell_object(caster, "Du kannst nur im Kampf jemanden durchbohren.\n");
+    return 0;
+  }
+
+  victim = FindEnemyVictim(sinfo[SI_SKILLARG], caster,
+      "Wen willst Du durchbohren?\n");
+  if (!victim)
+    return 0;
+
+  if (caster->QueryProp(P_DISABLE_ATTACK))
+  {
+    tell_object(caster, "Du bist kampfunfaehig und kannst niemanden durchbohren!\n");
+    return 0;
+  }
+
+  if (!objectp(spear = caster->QueryProp(P_WEAPON)) ||
+      spear->QueryProp(P_WEAPON_TYPE) != WT_SPEAR)
+  {
+    tell_object(caster, "Du brauchst einen gezueckten Speer zum Durchbohren!\n");
+    return 0;
+  }
+
+  if (!pay_for_spell(caster, sinfo, !flag))
+    return 0;
+
+  sinfo[SI_ENEMY] = victim;
+  return 1;
+}
+
+
+int durchbohren(object caster, mapping sinfo)
+{
+  object victim, spear;
+  int suc, bonus, dmg_bonus;
+  mapping wounds;
+
+  if (!prep_durchbohren(caster, sinfo, 1))
+    return 0;
+
+  victim = FindEnemyVictim(sinfo[SI_SKILLARG], caster, "");
+  if (!victim)
+    return 0;
+
+  if ((suc = SpellSuccess(caster,sinfo)) <= 0)
+    return MISSERFOLG;
+
+  spear = caster->QueryProp(P_WEAPON);
+  bonus = CheckEquip(caster, sinfo[SI_SPELLFUNC]);
+
+  sinfo[SI_SKILLDAMAGE] += (spear ? spear->QueryProp(P_WC) : 0) + bonus + 100 * sinfo[SI_SKILLPOINTS];
+  sinfo[OFFSET(SI_SKILLDAMAGE)] += (spear ? spear->QueryProp(P_WC_FIX) * 2 : 0) + bonus;
+  sinfo[SI_MAX_DAMAGE] += (caster->QueryProp(P_GUILD_LEVEL) - 8) * 40 + bonus * 3;
+  sinfo[SI_SKILLDAMAGE_TYPE] = spear ? spear->QueryProp(P_DAM_TYPE) : DT_PIERCE;
+
+  // Situational Schadensbonus.
+  dmg_bonus = 0;
+  if (victim->QueryProp(P_DISABLE_ATTACK))
+    dmg_bonus += 200;
+  if (victim->QueryProp(P_LAST_RAMMEN_TIME) &&
+      time() - victim->QueryProp(P_LAST_RAMMEN_TIME) <= 5)
+    dmg_bonus += 300;
+  if (mappingp(wounds = victim->QueryProp(P_AMAZONEN_WOUNDED)) && wounds[caster])
+    dmg_bonus += 100;
+  if (victim->QuerySkillAttribute(SA_SPEED) < 100)
+    dmg_bonus += 200;
+  if (victim->QueryProp(P_HP) * 5 < victim->QueryProp(P_MAX_HP)) // <20%
+    dmg_bonus += 300;
+
+  if (dmg_bonus)
+  {
+    sinfo[SI_SKILLDAMAGE] = sinfo[SI_SKILLDAMAGE] * (100 + dmg_bonus) / 100;
+    sinfo[OFFSET(SI_SKILLDAMAGE)] = sinfo[OFFSET(SI_SKILLDAMAGE)] * (100 + dmg_bonus) / 100;
+  }
+
+  pDebug(caster, sprintf("durchbohren: damage=%d offset=%d\n", sinfo[SI_SKILLDAMAGE], sinfo[OFFSET(SI_SKILLDAMAGE)]));
+
+  environment(caster)->Message(BS(sprintf("%s rammt den Speer mit voller Wucht in %s.",
+        caster->Name(WER,1), victim->name(WEM,1))),
+      MSGFLAG_VISUAL, ([ MSGFLAG_EXCLUDE : ({ caster, victim }) ]) );
+
+  tell_object(caster, BSC(sprintf("Du versuchst %s zu durchbohren!\n",
+        victim->name(WEM,1))));
+  tell_object(victim, BS(sprintf("%s versucht, Dich mit einem wuchtigen Stich zu durchbohren!",
+        caster->Name(WER,1))));
+
+  TryDefaultAttackSpell(victim, caster, sinfo, sinfo[SI_SPELL]);
+
+  if(objectp(victim) && sinfo[SI_SKILLPOINTS] > 2) {
+    victim->SetProp(P_BODY, victim->QueryProp(P_BODY) / 2);
+    tell_room(ENV(victim), BS("Die Verteidigung von " + victim->name(WEM) + " ist nach dem Durchbohren reduziert."));
+  }
+
+  return ERFOLG;
+}

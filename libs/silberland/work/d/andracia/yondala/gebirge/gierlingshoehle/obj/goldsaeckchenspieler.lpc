@@ -1,0 +1,828 @@
+//
+#include "../def.h"
+inherit "std/thing";
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <wizlevels.h>
+#include <defines.h>
+#include <moredef.h>
+#include <class.h>//fuer die Vision
+#include <ansi.h>//fuer die Farben
+object besitzer;
+nosave int lastHP, lastSP, aktiv=0, farbe=0;
+//string aktStr;
+void create() 
+{
+  if( !is_clone(TO) ) return;
+  ::create();
+  SetProp(P_SHORT, "Ein Goldsaeckchen");
+  SetProp(P_LONG,
+  "Dies ist das Goldsaeckchen eines Kobolds.\n"
+  "Es ermoeglicht Dir, Deine Lebenspunkte und Deinen Gesundheitsstatus zu sehen. \n"
+  "Tippe dazu einfach 'koboldreport' ein.\n"
+  "Ausserdem erlaubt es Dir die Interaktion mit anderen Spielern:\n"
+  "kknuddel, kwink, klieb, klob, kfeuer, kgratulier, kstrahl, klach, kkicher, ktroeste, kdanke, "
+  "kgruesse, knick, kwzick, ekuschel, kstubs, kgrins, krufe.");
+  SetProp(P_NAME, "Goldsaeckchen");
+  SetProp(P_GENDER, NEUTER);
+  AddId( ({"saeckchen","goldsaeckchen", "\ngoldsaeckchenspieler"}) );
+
+  SetProp(P_MATERIAL, ({MAT_COTTON, MAT_GOLD, MAT_MISC_MAGIC }));
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NODROP, "Ohne Dein Goldsaeckchen waerst Du nur ein halber Kobold.\n");
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_AUTOLOADOBJ, 1);                                     
+
+  AddCmd( ({ "koboldreport"}), "koboldreport");
+//koboldfernverben
+  AddCmd( ({ "kknuddel","kknuddle"}), "kknuddel");
+  AddCmd( ({ "kwink","winke"}), "kwink");
+  AddCmd( ({ "klieb", "kliebe"}), "klieb");
+  AddCmd( ({ "klob", "klobe"}), "klob"); 
+  AddCmd( ({ "kfeuer", "kfeuere"}), "kfeuer");
+  AddCmd( ({ "kgratulier"}), "kgratulier");   
+  AddCmd( ({ "kstrahl","kstrahle"}), "kstrahl");
+  AddCmd( ({ "klach","klache"}), "klach");
+  AddCmd( ({ "kkicher", "kkichere"}), "kkicher");   
+  AddCmd( ({ "ktroeste","ktroest"}), "ktroeste");   
+  AddCmd( ({ "kdanke", "kdank"}), "kdanke");
+  AddCmd( ({ "kgruesse", "kgruess"}), "kgruesse");   
+  AddCmd( ({ "knick", "knicke"}), "knick");
+  AddCmd( ({ "kzwick", "kkneif", "kzwicke","kkneife"}), "kzwick");
+  AddCmd( ({ "kkuschel","kkuschle"}), "kkuschel");   
+  AddCmd( ({ "kstubs","kstubse"}), "kstubs");
+  AddCmd( ({ "kgrins","kgrinse"}), "kgrins");
+  AddCmd( ({ "krufe", "kruf"}), "krufe");
+//  AddCmd( ({ "khist"}), "khist");
+
+  lastHP = lastSP = -1;
+}
+string extra_look()
+{
+		return capitalize(environment()->QueryPronoun())+
+    " hat ein Goldsaeckchen an die Huefte gebunden.\n";
+}
+
+int koboldreport(string str)
+{
+	notify_fail("koboldreport ein|aus|farbe||?\n");
+	besitzer=environment();
+	if(str=="ein")
+		{
+			aktiv=1;
+			farbe=0;
+			write("Der Koboldreport ist nun einfarbig eingeschaltet.\n");
+      lastHP = besitzer->QueryProp(P_HP);
+      lastSP = besitzer->QueryProp(P_SP);
+      besitzer->AddHpHook(ME);
+			return 1;
+		}
+	if(str=="aus")
+		{
+			aktiv=0;
+			write("Der Koboldreport ist nun ausgeschaltet.\n");
+			besitzer->RemoveHpHook(ME);
+			return 1;
+		}	
+	if(str=="farbe")
+		{
+			aktiv=1;
+			farbe=1;
+			write("Der Koboldreport ist nun mehrfarbig eingeschaltet.\n");
+      lastHP = besitzer->QueryProp(P_HP);
+      lastSP = besitzer->QueryProp(P_SP);
+      besitzer->AddHpHook(ME);
+			return 1;
+		}
+	if(str=="?")
+		{
+			write("************************************************************************\n"+
+		        "* Der Koboldreport                                                     *\n"+
+		        "* Mit <koboldreport ein> stellst Du Deinen Report einfarbig ein        *\n"+
+		        "* Mit <koboldreport farbe> stellst Du Deinen Report bunt ein.          *\n"+
+		        "* Mit <koboldreport> bekommst Du Deinen aktuellen Status angezeigt     *\n"+
+		        "*                                                                      *\n"+
+		        "* Der Koboldreport setzt sich wie folgt zusammen:                      *\n"+
+		        "*                                                                      *\n"+
+		        "* LP:x(+-y) - MP:x(+-y) -> Deine Lebens- und Magiepunkte (+-Aenderung) *\n"+
+		        "* gesund                -> bist Du gerade vergiftet, taub oder blind?  *\n"+
+		        "* Haarfarbe             -> gruen = Frosch.                             *\n"+
+  		      "* zaubern:              -> kannst Du gerade zauber? ja oder nein.      *\n"+
+	  	      "*                                                                      *\n"+
+		        "************************************************************************\n");
+		  return 1;		
+		}
+  if(!str)
+  	{
+			tell_object(besitzer,"- LP: "+besitzer->QueryProp(P_HP)+" - MP: "+besitzer->QueryProp(P_SP)+" - ");
+     //Status: Wenn Frosch, blind oder taub: Anzeige: krank, sonst: gesund
+		if(besitzer->QueryProp(P_POISON)||
+			 besitzer->QueryProp(P_DEAF)||
+			 besitzer->QueryProp(P_BLIND)) tell_object(besitzer," krank - ");
+                               else tell_object(besitzer,"gesund - ");
+    if(besitzer->QueryProp(P_FROG)) tell_object(besitzer,"gruen -");
+                               else tell_object(besitzer, besitzer->QueryProp(P_HAIR_COLOR)+ " - ");
+
+//Kann gesepellt werden? Ja/nein
+    if(besitzer->QueryProp(P_NEXT_SPELL_TIME)<time()) tell_object(besitzer," zaubern:ja\n");
+    else tell_object(besitzer," zaubern: nein\n");
+    return 1;
+    }     
+	return 0;}
+
+
+NotifyHpChange()
+{
+	  int    hp, mhp, sp, msp;
+	  if(!aktiv) return;
+
+  // Sicherheits-Check
+  if (!previous_object() || !besitzer || (besitzer != previous_object()))
+    return;
+if(besitzer!=environment()) return;
+
+  // Test auf Geist
+  if (besitzer->QueryProp(P_GHOST)) return;
+
+  // aktuelle Werte ermitteln
+  hp = besitzer->QueryProp(P_HP);
+  mhp = besitzer->QueryProp(P_MAX_HP);
+  sp = besitzer->QueryProp(P_SP);
+  msp = besitzer->QueryProp(P_MAX_SP);
+
+
+  // Test auf Tod
+  if ((hp<=0) || (!living(besitzer)))
+  {
+    //tell_object(besitzer, "Dein Zweig des Lebens zerfaellt.\n");
+    // TO-remove();
+ 			aktiv=0;
+			besitzer->RemoveHpHook(ME);
+  }
+
+//Anzeige:
+//LP:x(+-y) - MP:x(+-y) - gesund - Haarfarbe - zaubern: ja
+
+
+
+if(!farbe)
+	{//fuer den Fall, dass Frosch, weil dann ists unter null und springt dauernd hin und her
+		if(lastHP==hp&&sp<=0&&besitzer->QueryProp(P_FROG)==1&&lastSP<=0) tell_object(besitzer,"");
+		
+		else
+			{
+		//Lebenspunkte anzeigen lassen (+-Aenderung)				
+		if(lastHP>hp)
+			{
+				lastHP=lastHP-hp;
+				tell_object(besitzer,"- LP: "+hp+"(-"+lastHP+") ");
+			}
+		else if(lastHP==hp)
+				tell_object(besitzer,"- LP: "+hp+"(+-0) ");
+		else
+			{
+				lastHP=hp-lastHP;
+				tell_object(besitzer,"- LP: "+hp+"(+"+lastHP+") ");	
+			}
+					
+
+//Magiepunkte(+-Aenderung
+			if(sp<=0&&besitzer->QueryProp(P_FROG)==1&&lastSP<=0)
+				tell_object(besitzer,"- MP: 0(+-0) ");
+			else if(lastSP>sp)
+			{
+				lastSP=lastSP-sp;
+				tell_object(besitzer,"- MP: "+sp+"(-"+lastSP+") ");
+			}
+		else if(lastSP==sp)
+			{
+				lastSP=sp-lastSP;
+				tell_object(besitzer,"- MP: "+sp+"(+-0) ");			
+			}
+		else
+			{
+				lastSP=sp-lastSP;
+				tell_object(besitzer,"- MP: "+sp+"(+"+lastSP+") ");			
+			}
+		
+//		tell_object(besitzer,"- MP: "+sp+"("+sp-lastSP+") - ");
+
+//Status: Wenn Frosch, blind oder taub: Anzeige: krank, sonst: gesund
+		if(besitzer->QueryProp(P_POISON)||
+			 besitzer->QueryProp(P_DEAF)||
+			 besitzer->QueryProp(P_BLIND)) tell_object(besitzer," krank - ");
+                               else tell_object(besitzer,"gesund - ");
+    if(besitzer->QueryProp(P_FROG)) tell_object(besitzer,"gruen -");
+                               else tell_object(besitzer, besitzer->QueryProp(P_HAIR_COLOR)+ " - ");
+
+//Kann gesepellt werden? Ja/nein
+    if(besitzer->QueryProp(P_NEXT_SPELL_TIME)<time()) tell_object(besitzer," zaubern:ja\n");
+    else tell_object(besitzer," zaubern: nein\n");
+    }
+}
+
+else//in Farbe
+	{ //Farbe fuer Lebenspunkte
+		if(lastHP==hp&&sp<=0&&besitzer->QueryProp(P_FROG)==1&&lastSP<=0) tell_object(besitzer,"");
+		
+		else
+			{
+				tell_object(besitzer,"-");
+					{
+						if(lastHP>hp)
+			{
+				lastHP=lastHP-hp;
+		    if(hp*100/mhp<21)	tell_object(besitzer,ANSI_RED+" LP: "+hp+"(-"+lastHP+") "+ANSI_NORMAL);
+				else if(hp*100/mhp<41)	tell_object(besitzer,ANSI_PURPLE+" LP: "+hp+"(-"+lastHP+") "+ANSI_NORMAL);
+				else if(hp*100/mhp<61)	tell_object(besitzer,ANSI_BLUE+" LP: "+hp+"(-"+lastHP+") "+ANSI_NORMAL);
+				else if(hp*100/mhp<81)	tell_object(besitzer,ANSI_CYAN+" LP: "+hp+"(-"+lastHP+") "+ANSI_NORMAL);
+				else tell_object(besitzer,ANSI_GREEN+" LP: "+hp+"(-"+lastHP+") "+ANSI_NORMAL);				
+			}
+		else if(lastHP==hp)
+			{
+		         if(hp*100/mhp<21)	tell_object(besitzer,ANSI_RED+" LP: "+hp+"(+-0) "+ANSI_NORMAL);
+				else if(hp*100/mhp<41)	tell_object(besitzer,ANSI_PURPLE+" LP: "+hp+"(+-0) "+ANSI_NORMAL);
+				else if(hp*100/mhp<61)	tell_object(besitzer,ANSI_BLUE+" LP: "+hp+"(+-0)"+ANSI_NORMAL);
+				else if(hp*100/mhp<81)	tell_object(besitzer,ANSI_CYAN+" LP: "+hp+"(+-0)"+ANSI_NORMAL);
+				else                    tell_object(besitzer,ANSI_GREEN+" LP: "+hp+"(+-0)"+ANSI_NORMAL);		
+				}		
+		else
+			{
+				lastHP=hp-lastHP;
+		    if(hp*100/mhp<21)	tell_object(besitzer,ANSI_RED+" LP: "+hp+"(+"+lastHP+") "+ANSI_NORMAL);
+				else if(hp*100/mhp<41)	tell_object(besitzer,ANSI_PURPLE+" LP: "+hp+"(+"+lastHP+") "+ANSI_NORMAL);
+				else if(hp*100/mhp<61)	tell_object(besitzer,ANSI_BLUE+" LP: "+hp+"(+"+lastHP+") "+ANSI_NORMAL);
+				else if(hp*100/mhp<81)	tell_object(besitzer,ANSI_CYAN+" LP: "+hp+"(+"+lastHP+") "+ANSI_NORMAL);
+				else tell_object(besitzer,ANSI_GREEN+" LP: "+hp+"(+"+lastHP+") "+ANSI_NORMAL);				
+			}
+		if(sp<=0&&besitzer->QueryProp(P_FROG)==1&&lastSP<=0)
+				tell_object(besitzer,ANSI_RED+"- MP: 0(+-0) "+ANSI_NORMAL+" - ");
+			
+		else if(lastSP>sp)
+			{
+				lastSP=lastSP-sp;
+				tell_object(besitzer,"-");
+		    if(sp*100/msp<21)	tell_object(besitzer,ANSI_RED+" MP: "+sp+"(-"+lastSP+") "ANSI_NORMAL);
+		    else if(sp*100/msp<41) tell_object(besitzer,ANSI_PURPLE+" MP: "+sp+"(-"+lastSP+") "+ANSI_NORMAL);
+		    else if(sp*100/msp<61)	tell_object(besitzer,ANSI_BLUE+" MP: "+sp+"(-"+lastSP+") "+ANSI_NORMAL);
+	    	else if(sp*100/msp<81)	tell_object(besitzer,ANSI_CYAN+" MP: "+sp+"(-"+lastSP+") "+ANSI_NORMAL);
+		    else tell_object(besitzer,ANSI_GREEN+" MP: "+sp+"(-"+lastSP+") "+ANSI_NORMAL);
+
+				
+				tell_object(besitzer,"- MP: "+sp+"(-"+lastSP+") ");
+			}
+	else if(lastSP==sp)
+			{
+				tell_object(besitzer,"-");
+		    if(sp*100/msp<21)	tell_object(besitzer,ANSI_RED+" MP: "+sp+"(+-0) "ANSI_NORMAL);
+		    else if(sp*100/msp<41) tell_object(besitzer,ANSI_PURPLE+" MP: "+sp+"(+-0) "+ANSI_NORMAL);
+		    else if(sp*100/msp<61)	tell_object(besitzer,ANSI_BLUE+" MP: "+sp+"(+-0) "+ANSI_NORMAL);
+	    	else if(sp*100/msp<81)	tell_object(besitzer,ANSI_CYAN+" MP: "+sp+"(+-0) "+ANSI_NORMAL);
+		    else tell_object(besitzer,ANSI_GREEN+" MP: "+sp+"(+-0) "+ANSI_NORMAL);
+		    }
+		else
+			{
+				lastSP=sp-lastSP;
+				tell_object(besitzer,"-");
+		    if(sp*100/msp<21)	tell_object(besitzer,ANSI_RED+" MP: "+sp+"(+"+lastSP+") "+ANSI_NORMAL);
+		    else if(sp*100/msp<41) tell_object(besitzer,ANSI_PURPLE+" MP: "+sp+"(+"+lastSP+") "+ANSI_NORMAL);
+		    else if(sp*100/msp<61)	tell_object(besitzer,ANSI_BLUE+" MP: "+sp+"(+"+lastSP+") "+ANSI_NORMAL);
+	    	else if(sp*100/msp<81)	tell_object(besitzer,ANSI_CYAN+" MP: "+sp+"(+"+lastSP+") "+ANSI_NORMAL);
+		    else tell_object(besitzer,ANSI_GREEN+" MP: "+sp+"(+"+lastSP+") "+ANSI_NORMAL);
+			}
+				tell_object(besitzer,"- ");		
+
+		if(besitzer->QueryProp(P_POISON)||
+			 besitzer->QueryProp(P_DEAF)||
+			 besitzer->QueryProp(P_BLIND)) tell_object(besitzer,ANSI_RED+" krank"+ANSI_NORMAL);
+    else tell_object(besitzer,"gesund");
+		
+		tell_object(besitzer," - ");    
+		
+		if(besitzer->QueryProp(P_FROG)) tell_object(besitzer,ANSI_GREEN+"gruen"+ANSI_NORMAL);
+    else tell_object(besitzer, besitzer->QueryProp(P_HAIR_COLOR));
+		
+		tell_object(besitzer," - ");    
+    if(besitzer->QueryProp(P_NEXT_SPELL_TIME)<time()) tell_object(besitzer,"zaubern:ja\n");
+    else tell_object(besitzer,ANSI_RED+"zaubern: nein\n"+ANSI_NORMAL);
+    }
+}
+}
+  // neue Werte merken
+  lastHP = hp; 
+  lastSP = sp;
+
+}
+
+string koboldsex()//ermittelt das Geschlecht des Spielers und gibt bei weiblich ein "in" zurueck
+{
+	string koboldsex;
+	koboldsex="";
+	
+	if(TP->QueryProp(P_GENDER)==FEMALE) koboldsex="in";
+	return koboldsex;
+	}
+ 
+/*int ehist()
+{
+	string ausgabe;
+	ausgabe=call_other("/d/tal/yondala/aboriville/obj/zweigmaster.lpc","gerufenes");
+	write (ausgabe);
+	return 1;
+	}
+*/
+
+int check_if_kobold(object spieler)
+{  
+	if (spieler!=TP)
+	return spieler->id("Koboldspieler");
+	else return 0;
+	}
+
+int krufe(string aktStr)
+{
+  int i;
+	object *kobolde;
+	object kobold;
+
+	notify_fail("Was moechtest Du den anderen Kobolden mitteilen?\n");
+	aktStr = this_player()->_unparsed_args();	// verhindert das die mudlib den Text parsed
+	if (!aktStr) return 0;
+	
+//	call_other("/d/tal/yondala/aboriville/obj/zweigmaster.lpc","jemandruft", aktStr, TP);//soll spaeter in den Gildenraum
+
+	kobolde=filter_array(users(),"check_if_kobold");//finde alle spieler
+
+			for(i=sizeof(kobolde)-1;i>=0;i--)
+				tell_object(kobolde[i],"Kobold"+koboldsex()+" "+TPN+" ruft Euch zu: "+aktStr+"\n");
+
+			write("Du rufst den Kobolden zu: "+aktStr+"\n");
+	 
+ 	 return 1;
+
+	}
+
+//ab hier noch anpassen
+
+int kknuddel(string str)
+{
+	int i;
+	object *kobolde;
+	object kobold;
+	if(!str)
+		{
+			kobolde=filter_array(users(),"check_if_kobold");//finde alle spieler
+			for(i=sizeof(kobolde)-1;i>=0;i--)
+				tell_object(kobolde[i],"Kobold"+koboldsex()+" "+TPN+" knuddelt Euch aus der Ferne.\n");
+			write("Du knuddelst alle Kobolde aus der Ferne.\n");
+		}
+	else
+		{
+			if(kobold=find_living(str))
+				{
+					tell_object(kobold, "Kobold"+koboldsex()+" "+TPN+" knuddelt Dich aus der Ferne.\n");
+					write("Du knuddelst "+capitalize(str)+" aus der Ferne.\n");
+				}
+			else
+				write("Wen moechtest Du aus der Ferne knuddeln?\n");
+			}
+ 	 
+ 	 return 1;
+
+}
+
+int kwink(string str)
+{
+	int i;
+	object *kobolde;
+	object kobold;
+	if(!str)
+		{
+			kobolde=filter_array(users(),"check_if_kobold");//finde alle spieler
+			for(i=sizeof(kobolde)-1;i>=0;i--)
+				tell_object(kobolde[i], "Kobold"+koboldsex()+" "+TPN+" winkt Euch aus der Ferne zu.\n");
+	
+			write("Du winkst allen Kobolde aus der Ferne zu.\n");
+		}
+	else
+		{
+			if(kobold=find_living(str))
+				{
+					tell_object(kobold, "Kobold"+koboldsex()+" "+TPN+" winkt Dir aus der Ferne zu.\n");
+					write("Du winkst "+capitalize(str)+" aus der Ferne zu.\n");
+				}
+			else
+				write("Wem moechtest Du aus der Ferne zuwinken?\n");
+			}
+return 1;
+}
+
+
+
+int klieb(string str)
+{
+	int i;
+	object *kobolde;
+	object kobold;
+	if(!str)
+		{
+			kobolde=filter_array(users(),"check_if_kobold");//finde alle spieler
+			for(i=sizeof(kobolde)-1;i>=0;i--)
+				tell_object(kobolde[i], "Kobold"+koboldsex()+" "+TPN+" liebt Euch alle aus der Ferne.\n");
+	
+			write("Du gestehst allen Kobolde Deine Liebe aus der Ferne.\n");
+		}
+	else
+		{
+			if(kobold=find_living(str))
+				{
+					tell_object(kobold, "Kobold"+koboldsex()+" "+TPN+" liebt Dich aus der Ferne.\n");
+					write("Du gestehst "+capitalize(str)+" Deine Liebe aus der Ferne.\n");
+				}
+			else
+				write("Wem moechtest Du aus der Ferne Deine Liebe gestehen?\n");
+			}
+return 1;
+}
+			
+			
+int klob(string str)
+{
+	int i;
+	object *kobolde;
+	object kobold;
+	if(!str)
+		{
+			kobolde=filter_array(users(),"check_if_kobold");//finde alle spieler
+			for(i=sizeof(kobolde)-1;i>=0;i--)
+				tell_object(kobolde[i], "Kobold"+koboldsex()+" "+TPN+" lob Euch aus der Ferne.\n");
+	
+			write("Du lobst alle Kobolde aus der Ferne.\n");
+		}
+	else
+		{
+			if(kobold=find_living(str))
+				{
+					tell_object(kobold, "Kobold"+koboldsex()+" "+TPN+" lobt Dich aus der Ferne.\n");
+					write("Du lobst "+capitalize(str)+" aus der Ferne.\n");
+				}
+			else
+				write("Wen moechtest Du aus der Ferne loben?\n");
+			}
+return 1;
+}			
+			
+int kfeuer(string str)
+{
+	int i;
+	object *kobolde;
+	object kobold;
+	if(!str)
+		{
+			kobolde=filter_array(users(),"check_if_kobold");//finde alle spieler
+			for(i=sizeof(kobolde)-1;i>=0;i--)
+				tell_object(kobolde[i], "Kobold"+koboldsex()+" "+TPN+" feuert Euch aus der Ferne an.\n");
+	
+			write("Du feuerst Kobolde aus der Ferne an.\n");
+		}
+	else
+		{
+			if(kobold=find_living(str))
+				{
+					tell_object(kobold, "Kobold"+koboldsex()+" "+TPN+" feuert Dich aus der Ferne an.\n");
+					write("Du feuerst "+capitalize(str)+" Dich aus der Ferne an.\n");
+				}
+			else
+				write("Wen moechtest Du aus der Ferne anfeuern?\n");
+			}
+return 1;
+}			
+			
+			
+int kgratulier(string str)
+{
+	int i;
+	object *kobolde;
+	object kobold;
+	if(!str)
+		{
+			kobolde=filter_array(users(),"check_if_kobold");//finde alle spieler
+			for(i=sizeof(kobolde)-1;i>=0;i--)
+				tell_object(kobolde[i], "Kobold"+koboldsex()+" "+TPN+" gratuliert Euch allen aus der Ferne.\n");
+	
+			write("Du gratulierst allen Kobolde aus der Ferne.\n");
+		}
+	else
+		{
+			if(kobold=find_living(str))
+				{
+					tell_object(kobold, "Kobold"+koboldsex()+" "+TPN+" gratuliert Dir aus der Ferne.\n");
+					write("Du gratulierst "+capitalize(str)+" aus der Ferne.\n");
+				}
+			else
+				write("Wem moechtest Du aus der Ferne gratulieren?\n");
+			}
+return 1;
+}		
+			
+			
+
+int kstrahl (string str)
+{
+	int i;
+	object *kobolde;
+	object kobold;
+	if(!str)
+		{
+			kobolde=filter_array(users(),"check_if_kobold");//finde alle spieler
+			for(i=sizeof(kobolde)-1;i>=0;i--)
+				tell_object(kobolde[i], "Kobold"+koboldsex()+" "+TPN+" strahlt Euch aus der Ferne an.\n");
+	
+			write("Du strahlst alle Kobolde aus der Ferne an.\n");
+		}
+	else
+		{
+			if(kobold=find_living(str))
+				{
+					tell_object(kobold, "Kobold"+koboldsex()+" "+TPN+" strahlt Dich aus der Ferne an.\n");
+					write("Du strahlst "+capitalize(str)+" aus der Ferne an.\n");
+				}
+			else
+				write("Wen moechtest Du aus der Ferne anstrahlen?\n");
+			}
+return 1;
+}
+
+
+int klach(string str)
+{
+	int i;
+	object *kobolde;
+	object kobold;
+	if(!str)
+		{
+			kobolde=filter_array(users(),"check_if_kobold");//finde alle spieler
+			for(i=sizeof(kobolde)-1;i>=0;i--)
+				tell_object(kobolde[i], "Kobold"+koboldsex()+" "+TPN+" lacht Euch aus der Ferne zu.\n");
+	
+			write("Du lachst allen Kobolde aus der Ferne zu.\n");
+		}
+	else
+		{
+			if(kobold=find_living(str))
+				{
+					tell_object(kobold, "Kobold"+koboldsex()+" "+TPN+" lacht Dir aus der Ferne zu.\n");
+					write("Du lachst "+capitalize(str)+" aus der Ferne zu.\n");
+				}
+			else
+				write("Wem moechtest Du aus der Ferne zulachen?\n");
+			}
+return 1;
+}	
+			
+			
+int kkicher(string str)
+{
+	int i;
+	object *kobolde;
+	object kobold;
+	if(!str)
+		{
+			kobolde=filter_array(users(),"check_if_kobold");//finde alle spieler
+			for(i=sizeof(kobolde)-1;i>=0;i--)
+				tell_object(kobolde[i], "Kobold"+koboldsex()+" "+TPN+" kichert Euch aus der Ferne.\n");
+	
+			write("Du kicherst alle Kobolde aus der Ferne an.\n");
+		}
+	else
+		{
+			if(kobold=find_living(str))
+				{
+					tell_object(kobold, "Kobold"+koboldsex()+" "+TPN+" kichert aus der Ferne.\n");
+					write("Du kicherst "+capitalize(str)+" aus der Ferne an.\n");
+				}
+			else
+				write("Wen moechtest Du aus der Ferne ankichern?\n");
+			}
+return 1;
+}	
+			
+			
+int ktroeste(string str)
+{
+	int i;
+	object *kobolde;
+	object kobold;
+	if(!str)
+		{
+			kobolde=filter_array(users(),"check_if_kobold");//finde alle spieler
+			for(i=sizeof(kobolde)-1;i>=0;i--)
+				tell_object(kobolde[i], "Kobold"+koboldsex()+" "+TPN+" troestet Euch aus der Ferne.\n");
+	
+			write("Du troestest alle Kobolde aus der Ferne.\n");
+		}
+	else
+		{
+			if(kobold=find_living(str))
+				{
+					tell_object(kobold, "Kobold"+koboldsex()+" "+TPN+" troestet Dich aus der Ferne.\n");
+					write("Du troestet "+capitalize(str)+" aus der Ferne.\n");
+				}
+			else
+				write("Wen moechtest Du aus der Ferne troesten?\n");
+			}
+return 1;
+
+}			
+			
+			
+int kdanke(string str)
+{
+	int i;
+	object *kobolde;
+	object kobold;
+	if(!str)
+		{
+			kobolde=filter_array(users(),"check_if_kobold");//finde alle spieler
+			for(i=sizeof(kobolde)-1;i>=0;i--)
+				tell_object(kobolde[i], "Kobold"+koboldsex()+" "+TPN+" bedankt sich bei Euch aus der Ferne.\n");
+	
+			write("Du bedankst Dich bei allen Kobolde aus der Ferne.\n");
+		}
+	else
+		{
+			if(kobold=find_living(str))
+				{
+					tell_object(kobold, "Kobold"+koboldsex()+" "+TPN+" bedankt sich bei Dir aus der Ferne.\n");
+					write("Du bedankst Dich bei "+capitalize(str)+" aus der Ferne.\n");
+				}
+			else
+				write("Wem moechtest Du aus der Ferne danken?\n");
+			}
+return 1;
+}			
+			
+			
+int kgruesse(string str)
+{
+	int i;
+	object *kobolde;
+	object kobold;
+	if(!str)
+		{
+			kobolde=filter_array(users(),"check_if_kobold");//finde alle spieler
+			for(i=sizeof(kobolde)-1;i>=0;i--)
+				tell_object(kobolde[i], "Kobold"+koboldsex()+" "+TPN+" gruesst Euch aus der Ferne.\n");
+	
+			write("Du gruesst alle Kobolde aus der Ferne.\n");
+		}
+	else
+		{
+			if(kobold=find_living(str))
+				{
+					tell_object(kobold, "Kobold"+koboldsex()+" "+TPN+" gruesst Dich aus der Ferne.\n");
+					write("Du gruesst "+capitalize(str)+" aus der Ferne.\n");
+				}
+			else
+				write("Wen moechtest Du aus der Ferne gruessen?\n");
+			}
+return 1;
+}			
+			
+			
+int knick(string str)
+{
+	int i;
+	object *kobolde;
+	object kobold;
+	if(!str)
+		{
+			kobolde=filter_array(users(),"check_if_kobold");//finde alle spieler
+			for(i=sizeof(kobolde)-1;i>=0;i--)
+				tell_object(kobolde[i], "Kobold"+koboldsex()+" "+TPN+" nickt Euch aus der Ferne zu.\n");
+	
+			write("Du nickst allen Kobolde aus der Ferne zu.\n");
+		}
+	else
+		{
+			if(kobold=find_living(str))
+				{
+					tell_object(kobold, "Kobold"+koboldsex()+" "+TPN+" nickt Dir aus der Ferne zu.\n");
+					write("Du nickst "+capitalize(str)+" aus der Ferne zu.\n");
+				}
+			else
+				write("Wem moechtest Du aus der Ferne zunicken?\n");
+			}
+return 1;
+}			
+			
+			
+int kzwick(string str)
+{
+	int i;
+	object *kobolde;
+	object kobold;
+	if(!str)
+		{
+			kobolde=filter_array(users(),"check_if_kobold");//finde alle spieler
+			for(i=sizeof(kobolde)-1;i>=0;i--)
+				tell_object(kobolde[i], "Kobold"+koboldsex()+" "+TPN+" zwickt Euch aus der Ferne.\n");
+	
+			write("Du zickst alle Kobolde aus der Ferne.\n");
+		}
+	else
+		{
+			if(kobold=find_living(str))
+				{
+					tell_object(kobold, "Kobold"+koboldsex()+" "+TPN+" zwickt Dich aus der Ferne.\n");
+					write("Du zwickst "+capitalize(str)+" aus der Ferne.\n");
+				}
+			else
+				write("Wen moechtest Du aus der Ferne zwicken?\n");
+			}
+return 1;
+}			
+			
+			
+int kkuschel(string str)
+{
+	int i;
+	object *kobolde;
+	object kobold;
+	if(!str)
+		{
+			kobolde=filter_array(users(),"check_if_kobold");//finde alle spieler
+			for(i=sizeof(kobolde)-1;i>=0;i--)
+				tell_object(kobolde[i], "Kobold"+koboldsex()+" "+TPN+" kuschelt aus der Ferne mit Euch.\n");
+	
+			write("Du kuschelst mit allen Kobolde aus der Ferne.\n");
+		}
+	else
+		{
+			if(kobold=find_living(str))
+				{
+					tell_object(kobold, "Kobold"+koboldsex()+" "+TPN+" kuschelt aus der Ferne mit Dir.\n");
+					write("Du kuschelst aus der Ferne mit "+capitalize(str)+".\n");
+				}
+			else
+				write("Wen moechtest Du aus der Ferne kuscheln?\n");
+			}
+return 1;
+}			
+			
+			
+int kstubs(string str)
+{
+	int i;
+	object *kobolde;
+	object kobold;
+	if(!str)
+		{
+			kobolde=filter_array(users(),"check_if_kobold");//finde alle spieler
+			for(i=sizeof(kobolde)-1;i>=0;i--)
+				tell_object(kobolde[i], "Kobold"+koboldsex()+" "+TPN+" stubst Euch aus der Ferne an.\n");
+	
+			write("Du stubst alle Kobolde aus der Ferne an.\n");
+		}
+	else
+		{
+			if(kobold=find_living(str))
+				{
+					tell_object(kobold, "Kobold"+koboldsex()+" "+TPN+" stubst Dich aus der Ferne an.\n");
+					write("Du stubst "+capitalize(str)+" aus der Ferne an.\n");
+				}
+			else
+				write("Wen moechtest Du aus der Ferne anstubsen?\n");
+			}
+return 1;
+}
+
+int kgrins(string str)
+{
+	int i;
+	object *kobolde;
+	object kobold;
+	if(!str)
+		{
+			kobolde=filter_array(users(),"check_if_kobold");//finde alle spieler
+			for(i=sizeof(kobolde)-1;i>=0;i--)
+				tell_object(kobolde[i], "Kobold"+koboldsex()+" "+TPN+" grinst Euch aus der Ferne an.\n");
+	
+			write("Du grisnt alle Kobolde aus der Ferne an.\n");
+		}
+	else
+		{
+			if(kobold=find_living(str))
+				{
+					tell_object(kobold, "Kobold"+koboldsex()+" "+TPN+" grinst Dich aus der Ferne an.\n");
+					write("Du grinst "+capitalize(str)+" aus der Ferne an.\n");
+				}
+			else
+				write("Wen moechtest Du aus der Ferne angrinsen?\n");
+			}
+return 1;
+}

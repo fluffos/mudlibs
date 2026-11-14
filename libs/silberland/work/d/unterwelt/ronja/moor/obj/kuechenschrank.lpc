@@ -1,0 +1,229 @@
+//=========================================================================
+//
+// File:    kuechenschrank.c
+// Created by Ronja@SL
+//
+// Project: moor
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit "/std/container";
+
+private int open_key, lock_key, is_open, is_locked;
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+  is_open = 0; is_locked = 0;
+  open_key = 0; lock_key = 0;
+
+
+  SetProp(P_SHORT, "Ein Kuechenschrank");
+  SetProp(P_LONG,
+    "Ein alter Kuechenschrank. Er ist voellig schlicht und besteht aus "
+    "einem Dir unbekannten, hellen Holz. Kraeftige Angeln halten die Tueren. "
+  );
+
+  SetProp(P_NAME, "Kuechenschrank");
+  AddId( ({"schrank","kuechenschrank","\nKUECHENSCHRANK"}) );
+
+  SetProp(P_GENDER, MALE);
+  SetProp(P_MATERIAL, ([MAT_WOOD:95,MAT_IRON:5]) );
+  SetProp(P_MAX_WEIGHT, 15000);
+  SetProp(P_WEIGHT, 200000000);
+  SetProp(P_CNT_STATUS, CNT_STATUS_CLOSED);
+
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NOGET, "Der Schrank ist viel zu unhandlich und zu schwer zum mitnehmen.\n");
+  SetProp(P_CNT_STATUS, CNT_STATUS_CLOSED);
+
+  AddDetail( ({"holz"}) ,
+    "Das Holz ist die voellig unbekannt."
+  );
+
+  AddSpecialDetail( ({"tuer","tueren"}) , "detail_tueren" );
+
+  AddDetail( ({"angeln"}) ,
+    "Die Angeln halten die Tueren. Sie sehen sehr stabil aus."
+  );
+
+  AddCmd( CMD_OEFFNEN                                , "cmd_oeffnen");
+  AddCmd(({"schliess", "schliesse", "verschliesse"}) , "cmd_schliessen");
+
+}
+
+int PreventInsert(object ob)
+{
+  if(ob->QueryProp(P_ARMOUR_TYPE) || ob->QueryProp(P_WEAPON_TYPE))
+  {
+    return 1;
+  }
+
+  return 0;
+}
+
+int reset()
+{
+  ::reset();
+
+  if(is_open)
+  {
+    tell_room(ENV(TO),BS("Ploetzlich schliessen sich die Tueren "
+                         "des Kuechenschrankes."));
+    SetProp(P_CNT_STATUS, CNT_STATUS_CLOSED);
+  }
+
+}
+
+int _set_cnt_status(int st)
+{
+  switch (st)
+  {
+    case CNT_STATUS_OPEN :
+      is_open = 1; is_locked = 0;
+      break;
+    case CNT_STATUS_CLOSED :
+      is_open = 0;
+      break;
+    case CNT_STATUS_LOCKED :
+      is_open = 0; is_locked = 1;
+      break;
+    default :
+      return -1;  // Fehlerstatus
+  }
+  SetProp(P_TRANSPARENT, is_open);
+  return Set(P_CNT_STATUS, st);
+}
+
+// Methode zum Abfragen des Container-Status
+int _query_cnt_status()
+{
+  if (is_locked)
+    return CNT_STATUS_LOCKED;
+  if (is_open)
+    return CNT_STATUS_OPEN;
+  else
+    return CNT_STATUS_CLOSED;
+  return -1;   // Fehlerstatus
+}
+
+// Methode zum Setzen eines Schluessels (wenn P_CNT_KEY gesetzt
+// wird, wird angenommen, dass ein Schluessel erforderlich ist)
+mixed _set_cnt_key(mixed key)
+{
+  if (stringp(key))
+  {
+    open_key = lock_key = 1;
+    return Set(P_CNT_KEY, ([CNT_STATUS_OPEN:key,CNT_STATUS_LOCKED:key]));
+  }
+  else if (mappingp(key))
+  {
+    open_key = stringp(key[CNT_STATUS_OPEN]);
+    lock_key = stringp(key[CNT_STATUS_LOCKED]);
+    return Set(P_CNT_KEY, key);
+  }
+  else
+    return -1;  // Fehlerstatus
+}
+
+// short() ueberschreiben, damit der Status mitausgegeben wird:
+string short()
+{
+  string sh;
+
+  if (QueryProp(P_INVIS)) return 0;
+
+  return "";
+
+  if (sh = QueryProp(P_SHORT))
+    if (is_open)
+      return process_string(sh) + " (geoeffnet).\n";
+    else
+      return process_string(sh) + (is_locked?" (ab":" (") + "geschlossen).\n";
+}
+
+// long() ueberschreiben, damit der Status mitausgegeben wird:
+varargs string long()
+{
+  string descr, inv_descr;
+
+  descr = process_string(QueryProp(P_LONG));
+  if(!QueryProp(P_TRANSPARENT))
+    return descr+capitalize(QueryPronoun())+" ist "+(is_locked?"ab":"")+"geschlossen.\n";
+
+  inv_descr = make_invlist(PL, all_inventory(ME));
+  if (inv_descr != "")
+    descr += capitalize(QueryPronoun()) + " ist geoeffnet und enthaelt:\n" + inv_descr;
+  else
+    descr += capitalize(QueryPronoun()) + " ist geoeffnet und leer.\n";
+  return descr;
+}
+
+int cmd_oeffnen(string str)
+{
+
+  notify_fail("Was moechtest Du oeffnen?\n");
+  if (!str || str=="") return 0;
+
+  notify_fail("Das kannst Du nicht oeffnen.\n");
+
+  if(!id(str)) return 0;
+
+  if(is_open)
+  {
+    TELLPLAYER(Name(WER,1)+" ist doch schon geoeffnet!\n");
+    return 1;
+  }
+
+  TELLPLAYER(BS("Mit einem leisen Quietschen der Tueren oeffnest Du den "
+                "Kuechenschrank. "
+  ));
+
+  TELLOTHERS(BS(TPN+" oeffnet mit einem leisen Quietschen der Tueren den Kuechenschrank."
+  ));
+
+  SetProp(P_CNT_STATUS, CNT_STATUS_OPEN);
+  return 1;
+}
+
+int cmd_schliessen(string str)
+{
+  object key;
+
+  notify_fail("Was moechtest Du schliessen?\n");
+  if (!str || str=="" || !id(str)) return 0;
+
+  TELLPLAYER(BS("Du gibst den Tueren den Kuechenschrankes einen Schubs und "
+                "mit einem *PENG* fallen sie ins Schloss. "
+  ));
+
+  TELLOTHERS(BS(TPN+" gibt den Tueren den Kuechenschrankes einen Schubs "
+                "und mit einem *PENG* fallen sie ins Schloss."
+  ));
+  SetProp(P_CNT_STATUS, CNT_STATUS_CLOSED);
+  return 1;
+}
+
+string detail_tueren(string str)
+{
+  string s;
+
+  if(is_open)
+  {
+    s = "Die Tueren des Schrankes sind geoeffnet.";
+  }
+  else
+  {
+    s = "Die Tueren des Schrankes sind geschlossen.";
+  }
+
+  return BS(s);
+}
+

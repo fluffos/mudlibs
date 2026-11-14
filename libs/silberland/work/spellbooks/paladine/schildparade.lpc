@@ -1,0 +1,227 @@
+// SilberLand MUDlib
+//
+// spellbooks/paladine/schildparade.c
+//
+// $Date: 2009/01/25 09:14:34 $
+/* $Revision: 1.5 $
+ * $Log: schildparade.c,v $
+ * Revision 1.5  2009/01/25 09:14:34  Angrox
+ * Meldungen veraendert
+ *
+ * Revision 1.4  2004/08/20 11:53:00  Angrox
+ * Abfrage auf Schildparade entfernt
+ *
+ * Revision 1.3  2004/07/15 00:44:02  Feyaria
+ * Abfrage beim ende, damit beende goeschildparade richtig geht
+ *
+ * Revision 1.2  2003/11/04 12:26:39  Feyaria
+ * ende-meldung nur wenn noch aktiv
+ *
+ * Revision 1.1  2003/07/09 11:39:22  Angrox
+ * Initial revision
+ *
+ */
+// Prototypem
+int schildparade(object caster, mapping sinfo);
+int shield_check(object caster);
+nosave void schildparade_end(object caster);
+mixed schildparade_func(int dam, mixed dam_type, mixed spell, object enemy);
+
+
+
+int schildparade(object caster, mapping sinfo) {
+  mixed h;
+  int suc,dauer;
+  string txt, gilde;
+  string *msgs;
+  string flame;
+  gilde=caster->QueryProp(P_GUILD);
+  if(gilde=="paladine") {
+    msgs=({ BS("Paladin! Du musst Dich schon im Kampf befinden, um "
+            "die Schildparade anwenden zu koennen!"),
+            BS("Paladin! Du hast bereits eine Schildparade aufrecht!"),
+            BS("Paladin! Du hast schon einen Schutz!"),
+            BS("Paladin! Du musst schon ein Schild tragen!"),
+            BS("Du nimmst Dein Schild fester in die Hand und betest zu "
+              "Dusty!"),
+            "%s nimmt %s Schild fester in die Hand!",
+            BS("Dusty scheint Deine Gebete nicht zu erhoeren!"),
+            BS("Nichts passiert.") 
+            });   
+  } else if(gilde == "todesritter") {
+    flame=caster->QueryProp(P_GENDER)==FEMALE?"NAERRIN":"NARR";
+    msgs=({ BS(flame+"! Du musst Dich schon im Kampf befinden, um "
+            "parieren zu koennen!"),
+            BS(flame+"! Du parierst bereits!"),
+            BS("HA! Du kannst gerade nicht parieren!"),
+            BS(flame+"! Du benoetigst eine zweihaendige Waffe dazu!"),
+            BS("Du nimmst Deine Waffe entschlossen in die Hand! Kein "
+              "Streich wird Deine Waffe passieren!"),
+            "%s nimmt %se Waffe fester in die Hand!",
+            BS("BEI ALLEN NIEDERHOELLEN! DEINE PARADE GING SCHIEF!"),
+            BS("Nichts passiert.") 
+            });   
+  }
+  if (!caster->InFight()) {
+    write(msgs[0]);
+    return 0;
+  }
+  if (h=caster->QueryProp(P_TMP_DEFEND_HOOK)) {
+    if ((h[1]==TO) && (h[2]=="schildparade_func")) {
+      if (h[0] >= time())
+        return write(msgs[1]),0;
+    } else
+      return write(msgs[2]), 0;
+  }
+  /*
+  if(interactive(caster) && deep_present("\nspiegelschild", caster)) {
+    write("Du hast schon einen Spiegelschild bekommen, Paladin!\n");
+    return 0;
+  }
+  */
+  if(shield_check(caster)<0) {
+    write(BS(msgs[3]));
+    return 0;
+  }
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+      printf(sinfo[SI_SP_LOW_MSG]);
+      return 0;
+  }
+  Message(caster, 0, msgs[4], 0);
+  Message(caster, 0, sprintf(msgs[5], caster->Name(), caster->QueryPossPronoun(WESSEN)), 3);
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  if ((suc=SpellSuccess(caster,sinfo)) <= 0) {
+    Message(caster, 0, msgs[6], 0);
+    Message(caster, 0, msgs[7], 3);
+    return MISSERFOLG;
+  }
+  dauer=2+2*caster->QueryAttribute(A_DEX)/3+(suc/2000);
+  dauer=DoModificationByAlign(dauer, caster);
+  call_out("schildparade_end", dauer-2, caster);
+  caster->SetProp(P_TMP_DEFEND_HOOK,
+      ({time()+dauer, TO, "schildparade_func" }));
+  txt="Dusty! Steh mir bei, die Attacken meines Gegners zu parieren!";
+  Message(caster, 0, BSA(txt, "Du rufst: "), 0);
+  Message(caster, 0, BS("Du reckst Dein Schild gen Himmel!"), 0);
+  Message(caster, 0, BSA(txt, caster->Name(WER)+" ruft: "), 3);
+  Message(caster, 0, BS(sprintf("%s reckt %s Schild gen Himmel!",
+      caster->Name(WER), caster->QueryPossPronoun(WER))), 3);
+  return ERFOLG;
+}
+
+nosave void schildparade_end(object caster) {
+  mixed h;
+  if (!objectp(caster)) return;         // Woody (981122)
+  if (h=caster->QueryProp(P_TMP_DEFEND_HOOK)) {
+    if ((h[1]==TO) && (h[2]=="schildparade_func") &&
+      (caster->QueryProp(P_TMP_DEFEND_HOOK)[0]) - time() < 10)
+    {
+      caster->SetProp(P_TMP_DEFEND_HOOK, 0);
+      Message(caster, 0, BS("Deine Schildparade laesst langsam nach, "
+            "Paladin!"), 0);
+    }
+  }
+  return;
+}
+
+int shield_check(object caster)
+{
+  object *arr;
+  int i,x;
+  // 99-05-01 (woody)
+  if (!caster) return 0;        // sicher ist sicher :)
+/*
+  return sizeof(filter_array(caster->QueryProp(P_ARMOURS),
+        lambda( ({'x}), ({ #'==,
+            ({ #'call_other, 'x, "QueryProp", P_ARMOUR_TYPE }),
+            AT_SHIELD }) )));
+*/
+  x=-1;
+  arr=caster->QueryProp(P_ARMOURS);
+  for(i=sizeof(arr)-1;i>=0;i--)
+    if(arr[i]->QueryProp(P_ARMOUR_TYPE)==AT_SHIELD)
+      x=i;
+  return x;
+}
+
+mixed schildparade_func(int dam, mixed dam_type, mixed spell, object enemy)
+{
+  object caster;
+  mixed shield;
+  int rnd, anz, ac, weight, special_ac;
+
+  if (!living(caster = previous_object()))
+    return ({ dam, dam_type, spell, enemy });
+
+  // Nur bei physischem Schaden(santeil) wirksam:
+  if (sizeof(filter_array(dam_type,PHYSICAL_DAMAGE_TYPES)) ||
+      (HAS_BLESSING(caster, BLESSING_COURAGE) && sizeof(filter_array(dam_type, ([DT_TERROR:1, DT_UNHOLY:1])))) )
+  {
+    shield = caster->QueryArmours(AT_SHIELD);   // returns array of shields
+    if (!sizeof(shield))
+    {
+      Message(caster,0, BS("Ohne Schild keine Schildparade, Paladin!"), 0);
+      caster->SetProp(P_TMP_DEFEND_HOOK, 0);
+      return ({ dam, dam_type, spell, enemy });
+    }
+    else
+      shield = shield[0];       // ersten (== einzigen) Schild nehmen
+
+    // der Versuch, Schild eh weglassen, wenn man sowieso verfehlt wird
+    // anz ... Anzahl wirksamer Ruestungen
+    anz = sizeof( filter_objects( caster->QueryProp(P_ARMOURS),
+                                  "QueryProp", P_AC ) );
+
+    // tell_zordan(sprintf(" -> %d %d %d %d\n",dam,sizeof(armours),anz,anz*5));
+    if (dam < anz * 5) return ({ dam, dam_type, spell, enemy });
+
+    // Schild nimmt zusaetzlichen Schaden durch die Parade:
+    catch(shield->TakeFlaw( dam_type ));
+
+    // Kosten (random 1-3 MP)
+    rnd = 1 + random(3);
+
+    // Ist er dadurch kaputtgegangen? Oder hat der Caster zuwenig MP?
+    if ( !shield || (caster->QueryProp(P_SP) < rnd) ) {
+      Message(caster, 0, BS("Deine Schildparade laesst nach!"), 0);
+      caster->SetProp(P_TMP_DEFEND_HOOK, 0);
+      return ({ dam, dam_type, spell, enemy });
+    }
+
+    // MP abziehen, Schildqualitaet feststellen
+    caster->AddSp(-rnd);
+    ac = shield->QueryProp(P_AC);
+    weight = shield->QueryProp(P_WEIGHT);
+    special_ac = shield->QueryProp(P_PALADIN_SCHILDPARADE_AC);
+    special_ac += shield->QueryProp(P_EFFECTIVE_AC);
+
+    // Abhaengigkeit von der Schildqualitaet:
+    if (random(VALID_ARMOUR_CLASS[AT_SHIELD] + (weight / 300)) <= ac)
+    { 
+      // Schadensreduzierung:
+      dam -= ((ac + special_ac + random(ac)) * dam) / 100;
+
+      // Meldungen an Spieler und Raum:
+      if(HAS_BLESSING(caster, BLESSING_COURAGE) && sizeof(filter_array(dam_type, ([DT_TERROR:1, DT_UNHOLY:1])))) {
+        Message(caster, 0, BS(sprintf("Tapfer reckst du dein Schild empor und parierst den Angriff damit "+
+                (dam < 40 ? "" : "ein wenig ")+ ".")), 0);
+      } else {
+        Message(caster, 0,
+          BS("Du parierst die Attacke " + (dam < 40 ? "" : "ein wenig ") +
+             "mit Deinem Schild!"), 0);
+      }
+      if (ENV(caster))
+        Message(caster, 0,
+            BS(sprintf("%s pariert die Attacke %smit %s Schild!",
+                caster->Name(WER),
+                (dam < 40 ? "" : "ein wenig "),
+                caster->QueryPossPronoun(MALE,WEM))), 3);
+    }
+  }
+  return ({ dam, dam_type, spell, enemy });
+}
+
+
+
+

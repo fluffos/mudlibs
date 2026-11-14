@@ -1,0 +1,191 @@
+//=========================================================================
+//
+// File:    lab11.c
+// Created by Ronja@SL
+//
+// Project: Feen
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit LABY "lab00.lpc" ;
+
+void create()
+{
+  ::create();
+
+  longtext2 = "Der Durchgang nach Norden ist durch ein Tor versperrt. ";
+
+  SetProp(P_HECKE, HECKE_BRESCHE_ZU);
+
+  AddDetail( ({"tor","gitterstaebe","gitterstaeben","staebe","durchgang"}) ,
+    "Das Tor ist fest verschlossen und besteht aus massiven "
+    "Gitterstaeben, durch die Du gerade noch so durchschauen kannst."
+  );
+
+  AddDetail( ({"lichtung", "licht", "seite"}) ,
+    "Du musst schon naeher hingehen."
+  );
+
+  AddSpecialDetail( ({"bresche","loch"}) , "detail_bresche");
+
+  AddItem(NPC "wildkatze.lpc", REFRESH_DESTRUCT);
+
+  AddCmd( CMD_OEFFNEN               , "cmd_oeffnen");
+  AddCmd( ({"schau","schaue"})      , "cmd_schauen");
+  AddCmd( CMD_KLETTERN+CMD_ZWAENGEN , "cmd_zwaengen");
+
+  AddExit( ({"osten","sueden","westen"}), ([EX_FUNC:"ausgang"]) );
+
+  AddSpecialExit( "norden", "nordausgang" );
+}
+
+int nordausgang(string str)
+{
+  TELLPLAYER("Das Tor ist geschlossen.\n");
+  return 1;
+}
+
+string detail_bresche(string str)
+{
+  string s;
+
+  if(QueryProp(P_HECKE) == HECKE_BRESCHE_AUF)
+  {
+    s = "Ein kleines Loch in der Hecke, gross genug fuer die Wildkatze, "
+        "aber nicht gross genug fuer Dich. Eventuell koenntest Du ja mit einem "
+        "geeigneten Gartenwerkzeug ein wenig an der Hecke schneiden, um die "
+        "Bresche zu vergroessern?";
+  }
+  else
+  {
+    s = "Sowas siehst Du da nicht!";
+  }
+
+  return BS(s);
+}
+
+int npcraus()
+{
+  object npc;
+
+  if(!npc=present("\nWILDKATZE",TO)) return 0;
+
+  if(!present("\nHUTSCHLEIER",TP))
+  {
+    TELLPLAYER(BS("Du oeffnest die Mausefalle und die Maus springt in "
+                  "aller Eile heraus und verschwindet in der Hecke. "
+                  "Die Wildkatze blinzelt nur kurz der Maus nach und "
+                  "macht ansonsten keinerlei Anstalten, die Maus zu "
+                  "fangen. Anscheinend ist sie voellig satt."));
+    return 0;
+  }
+
+  TELLPLAYER(BS("Du oeffnest die Mausefalle und die Maus springt in "
+                "aller Eile heraus. Die Wildkatze sieht die Maus und "
+                "macht sich sprungbereit. Als die Maus in der Hecke "
+                "verschwindet springt ihr die Wildkatze nach und "
+                "hinterlaesst eine kleine Bresche in der Hecke. "
+  ));
+
+  npc->move("/room/npcasylraum", M_TPORT|M_NOCHECK|M_SILENT);
+  tell_room(TO,"Die Wildkatze springt in eine Bresche.\n");
+  call_out("npcrein", 300, npc);
+  SetProp(P_HECKE, HECKE_BRESCHE_AUF);
+
+  return 1;
+}
+
+void npcrein(object npc)
+{
+  int result;
+
+  if( (result = npc->move(TO, M_TPORT|M_NOCHECK|M_SILENT)) == 1)
+  {
+    tell_room(TO, "Die Wildkatze streunt wieder herein und putzt sich "
+                  "zufrieden.\n");
+  }
+  else
+  {
+    npc->remove();
+    FMASTER->Msg("WILDKATZE reintransen ging schief mit "+result);
+  }
+  SetProp(P_HECKE, HECKE_BRESCHE_AUF);
+}
+
+int cmd_zwaengen(string str)
+{
+  notify_fail("Wo willst Du Dich durchzwaengen?\n");
+
+  if(!str || str == "") return 0;
+  if(!(str == "bresche"       ||
+       str == "durch bresche" ))return 0;
+
+  if(QueryProp(P_HECKE) == HECKE_BRESCHE_ZU) return 0;
+
+  TELLPLAYER(BS("Du versuchst Dich durch die Bresche zu zwaengen, aber "
+                "Du bist zu gross und die Hecke gibt einfach nicht nach. "
+                "Eventuell solltest Du die Bresche mit einem geeignetem "
+                "Gartenwerkzeug vergroessern."));
+  TELLOTHERS(BS(CTPN+" versucht sich durch die Bresche zu zwaengen, "
+                "aber die Bresche ist einfach zu klein."));
+
+  return 1;
+}
+
+int cmd_schauen(string str)
+{
+  notify_fail("Wo willst Du hindurchschauen?\n");
+
+  if(!str || str == "") return 0;
+  if(!(str == "durch staebe"                ||
+       str == "durch gitterstaebe"          ||
+       str == "durch tor"                   ||
+       str == "durch staebe hindurch"       ||
+       str == "durch gitterstaebe hindurch" ||
+       str == "durch tor hindurch"          ))return 0;
+
+  TELLPLAYER(BS("Du schaust durch die Staebe hindurch und kannst auf "
+                "der anderen Seite eine Lichtung erkennen, die in "
+                "einem eigentuemlichen Licht erstrahlt."
+  ));
+
+  return 1;
+}
+
+int cmd_oeffnen(string str)
+{
+  object ob;
+
+  notify_fail("Was willst Du oeffnen?\n");
+
+  if(!str || str == "") return 0;
+  if(!(str == "tor"                           ||
+       str == "tor mit schluessel"            ||
+       str == "tor mit glasschuessel"         ||
+       str == "tor mit glaesernem schluessel" )) return 0;
+
+  if(!ob=present("\nGLASSCHLUESSEL",TP))
+  {
+    TELLPLAYER("Du hast keinen passenden Schluessel dabei.\n");
+    return 1;
+  }
+
+  TELLPLAYER(BS("Du steckst den Schluessel in das Schluesselloch und "
+                "versuchst, den Schluessel herumzudrehen, doch das "
+                "Schloss klemmt und scheint lange nicht geoelt worden "
+                "zu sein. Vorsichtig probierst Du es weiter, und "
+                "da passiert es: Du drehst mit zuviel Kraft und "
+                "der Glasschuessel zerbirst in 1000 kleine Splitter."
+  ));
+
+  TELLOTHERS(TPN+" versucht das Tor zu oeffnen.\n");
+
+  FMASTER->Msg(TPUID+" zerbricht den Glasschuessel");
+  ob->remove();
+
+  return 1;
+}
+
+

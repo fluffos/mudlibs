@@ -1,0 +1,202 @@
+
+#include "../paladin.h"
+
+inherit "std/room";
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include <wizlevels.h>
+#include <ansi.h>
+
+int was;
+string *liste;
+
+#define SDMASTER "/obj/sehertormaster"
+
+
+reset() {
+  ::reset();
+  if (was==0) was=random(4)+1;
+}
+
+create() {
+  ::create();
+
+  was=random(4)+1;
+  liste=({0,
+    ARMOUR("p_khemd"),
+    ARMOUR("p_armschienen"),
+    ARMOUR("p_helm"),
+    ARMOUR("p_beinschienen") });
+
+  SetProp( P_INT_SHORT, "Eine kleine Kammer" );
+  SetProp( P_INT_LONG,
+    "Du findest Dich in einer kleinen, duesteren Kammer wieder. Viel Staub "
+    "zeugt davon, dass sich hier nur selten jemand aufhaelt. Die Kammer ist "
+    "bis auf einen Tisch komplett leer." );
+  SetProp( P_LIGHT, 1 );
+  SetProp( P_INDOORS, 1 );
+  SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE: 10, ENV_TERRAIN: TT_HOUSE]) );
+
+  AddDetail( ({ "kammer" }), QueryProp(P_INT_LONG));
+
+  AddDetail( ({ "staub" }),
+    "Der Staub muss Wochen alt sein. Ueberall liegt er herum und Du kannst "
+    "keine Spuren oder sowas in der Art finden.");
+
+  AddDetail( ({ "spuren","spur","loch","wochen" }),
+    "Tod teilt Dir mit: *GRUMMEL, GUT DASS ES NOCH NETTE MAGIER GIBT, SONST...*");
+
+  AddDetail( ({ "art" }),
+    "Nichts in dieser Art eben.");
+
+  AddDetail( ({ "decke" }),
+    "Die Decke hat sich auf wunderbare Weise wieder geschlossen. Von einem "
+    "Loch oder so ist weit und breit nichts zu sehen. Du wirst schon einen "
+    "anderen Ausgang suchen muessen.");
+
+  AddDetail( ({ "ausgang" }),
+    "Manchmal ist mehr da als man denkt.");
+
+  AddDetail( ({ "weise","magie" }),
+    "Das kann nur Magie gewesen sein.");
+
+  AddDetail( ({ "waende","wand" }),
+    "Die Waende sind fest vermauert. Die Suedwand schaut aber schon etwas "
+    "komisch aus.");
+
+  AddDetail( ({ "suedwand" }),
+    "Irgendwie ist die Suedwand anders. Du weiss aber nicht genau warum.");
+
+  AddDetail( ({ "boden" }),
+    "Auf dem Boden kannst Du nur Staub erkennen.");
+
+  AddSound( DEFAULT_SOUND,
+    "Aus dem Sueden hoerst Du leises Haemmern.");
+    
+  AddSound( "haemmern",
+    "Das Haemmern kommt eindeutig aus dem Sueden. Leise, aber dennoch gut "
+    "zu hoeren.");
+    
+  AddReadDetail( ({ "schild" }),
+    "Diese Ruestung wurde extra von Dusty bestellt.");
+
+  AddSmell( DEFAULT_SMELL,
+    "Es riecht staubig.");
+
+  AddSmell( "staub",
+    "*oerkz* Abgestanden riecht es.");
+
+  AddSpecialDetail( ({ "tisch" }), "tischfkt");
+
+  AddCmd( ({ "nimm","nehme","nehm" }), "nimmfkt" );
+
+  SetProp( P_HIDE_EXITS, ({ "sueden" }) );
+
+  AddSpecialExit( "sueden", "suedenfkt" );
+
+  AddItem(NPC("ruestung"), REFRESH_DESTRUCT);
+
+}
+
+init() {
+  ::init();
+  if(IS_SEER(TP) && !SDMASTER->DoorIsKnown())
+    call_out("SeerDoor", 8);
+}
+
+nosave void SeerDoor() {
+  if(!present(TP, ME)) return 0;
+  if(member(call_other(NPCMASTER, "GetFeinde"), getuid(TP))!=-1) {
+    tell_object(TP, "Als Feind der Paladine fuehlst Du Dich hier "
+        "unwohl!\n");
+    return ; 
+  }
+  if(TP->QueryProp(P_ALIGN)<1000) {// wenn align < 1000 -> kein tor 
+    tell_object(TP, "Dein Gefuehl sagt Dir, Du bist zu boese.\n");
+    return ;
+  }
+  if( SDMASTER->DiscoverDoor(ROOM("w_weg_a1"))) {
+    tell_object(TP, BS("Du spuerst die Macht Dustys in diesem Raum! Durch "
+        "Deine gute Gesinnung spuerst Du, wie Dusty fuer Dich etwas in der "
+        "Burg enthuellt. Vielleicht solltest Du Dir nochmal alles genau "
+        "ansehen?"));
+    write_file(LOG("sehertor"), sprintf(
+        "%s: %s findet das Sehertor (align: %d)\n",dtime(time()),CAP(getuid(TP)),
+        TP->QueryProp(P_ALIGN)));
+    tell_angrox(sprintf("%s***%s %s findet das Sehertor auf Burg Sturmfels!\n",
+        ANSI_RED, ANSI_NORMAL, CAP(getuid(TP))));
+    tell_zordan(sprintf("%s***%s %s findet das Sehertor auf Burg Sturmfels!\n",
+        ANSI_RED, ANSI_NORMAL, CAP(getuid(TP))));
+  }
+  else
+    tell_object(TP, BS("Du fuehlst die Macht Dustys!"));
+  return;
+}
+
+
+string tischfkt(string dummy) {
+  string str;
+  object ob;
+  str= "Der Tisch besteht aus normalem Holz. Auf ihm steht ein kleines "
+      +"Schild und es liegt folgendes darauf: ";
+  if (was) {
+    ob=clone_object(liste[was]);
+    str+=ob->Name();
+    ob->remove();
+  } else {
+    str+="Nichts";
+  }
+  str+=".";
+  return BS(str);
+}
+
+int nimmfkt(string str) {
+  object ob,npc;
+  string nehm;
+  notify_fail("WAS nehmen ?\n");
+  if (was == 0) return 0;
+  if (!str) return 0;
+  if (sscanf(str, "%s vom tisch" , nehm) != 1 &&
+      sscanf(str, "%s von tisch" , nehm) != 1) 
+  {
+    return 0;
+  }
+  if(npc=present("\nschatzkammer_waechter", ME)) {
+    write(sprintf("%s laesst Dich hier nichts nehmen!\n",
+          npc->Name(WER)));
+    return 1;
+  }
+  ob=clone_object(liste[was]);
+  if (nehm != LOWER(ob->QueryProp(P_NAME))) {
+    ob->remove();
+    return 0;
+  }
+  write(BS("Du nimmst "+ob->name()+" vom Tisch an Dich."));
+  say(BS(CAP_TPN+" nimmt etwas vom Tisch an sich."));
+  ob->SetProp(P_AC,ob->QueryProp(P_AC)+2);
+  ob->SetProp(P_LONG,ob->QueryProp(P_LONG)[0..<2]+
+    " Ein besonderes Schimmern sticht in Dein Auge. Diese Ruestung muss "
+    "etwas ganz besonderes sein." );
+  ob->SetProp(P_VALUE,ob->QueryProp(P_VALUE)+5000);
+  ob->AddId("\ndustyruestung");
+  was=0;
+  ob->move(TP,M_NOCHECK);
+  write_paladin_log("ruestung", sprintf("%s findet eine besondere Ruestung. "
+    "Lvl:%d, IP:%s\n", TP->Name(WER),TP->QueryProp(P_LEVEL),
+    TP->QueryProp(P_CALLED_FROM_IP)));
+  return 1;
+}
+
+int suedenfkt(string str) {
+  write(BS(
+    "Du stemmst Dich einfach mal gegen die suedliche Wand. Und siehe da, "
+    "sie gibt tatsaechlich nach. Die Wand dreht sich und Du wirst in die "
+    "Schmiede geschleudert. Einen Rueckweg in die Kammer siehst Du von hier "
+    "aus aber nicht mehr."));
+  TP->move( ROOM("burg_e2") , M_GO, 0,
+    "verschwindet durch die Wand nach Sueden",
+    "kommt auf einmal durch eine Wand im Norden herein");
+  return 1;
+}

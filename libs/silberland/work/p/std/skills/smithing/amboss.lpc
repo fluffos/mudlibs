@@ -1,0 +1,289 @@
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include <combat.h>
+#include <wizlevels.h>
+#include <defines.h>
+#include <moredef.h>
+#include <new_skills.h>
+#include "/p/daemon/skillmaster/skillmaster.h"
+#include "/p/daemon/itemd/itemd.h"
+
+#define ARMOR(x) ("/p/std/skills/smithing/armour/"+x)
+#define WEAPON(x) ("/p/std/skills/smithing/weapon/"+x)
+
+// Prototypes
+int obtain_armorsmithing_skill(object pl);
+nosave int DoMagic(object ob, string pre, string suf);
+
+
+
+// Variables
+string *level_names =
+({ "PLACEHOLDER",
+   "Schmiedeneuling",
+   "Schmiedelehrling",
+   "Schmiedegeselle",
+   "Schmiedekundige",
+   "Schmiedeerprobte",
+   "Schmiedegepruefte",
+   "Schmiedegelehrte",
+   "Schmiedeweise",
+   "Schmiedebeherrschende",
+   "Schmiedekunstmeisternde"
+   });
+
+
+int s_skill=1,g_skill=1;
+string NKNAME;
+
+mixed *armor_types =
+({
+    ({ "PLACEHOLDER" }),
+    ({1,0, "Paar Handschuhe aus kupferner Kette", "Ein Paar kupferne Kettenhandschuhe",
+      1, "lederriemen", 1, "kupferbarren","Handschuh",1,"kupfer_items",1}),
+    ({1,0, "Kettenhelm", "Ein kupferner Kettenhelm",
+      1, "lederriemen", 1, "kupferbarren","Helm",1,"kupfer_items",1}),
+    ({1,0, "Kettenhose", "Eine kupferne Kettenhose",
+      2, "lederriemen", 1, "kupferbarren","Hosen",1,"kupfer_items",1}),
+    ({1,40, "Paar Kettenschuhe", "kupferne Kettenschuhe",
+      1, "lederriemen", 1, "kupferbarren","Schuhe",1,"kupfer_items",1}),
+    ({1,50, "Paar kupferene Armschienen", "Ein Paar kupferne Kettenarmschienen",
+      1, "lederriemen", 1, "kupferbarren","Armschienen",1,"kupfer_items",1}),
+    ({1,50, "I", "Ein kupferner Kettenpanzer",
+      2, "lederriemen", 2, "kupferbarren","Bandagen",0,
+      "/p/std/skills/smithing/armour/armour/kupferpanzer_kette.lpc",1}),
+
+});
+
+
+void create()
+{
+  if (!is_clone(this_object()))
+    return;
+  ::create();
+  SetProp(P_NAME,"Amboss");
+  SetProp(P_SHORT,"Ein Amboss");
+  SetProp(P_LONG,"Du siehst einen Amboss.");
+  AddId( ({"\nschmiedeamboss","amboss"}) );
+  SetProp(P_GENDER, MALE);
+  SetProp(P_NOGET, 1);
+
+  AddCmd(({"schmiede","schmied"}), "func_schmiede");
+  AddCmd(({"schmiedeformen","sf"}), "func_muster");
+  
+  call_other(SKILLMASTER, "???");
+  
+}
+
+void check_sk_values() {
+    s_skill=SKILLMASTER->QuerySkill(this_player(),SK_SEWING);
+    return;
+}
+
+varargs string long() {
+  s_skill=SKILLMASTER->QuerySkill(this_player(),SK_ARMOURSMITHING);
+  return BS( "Du siehst einen Amboss" );
+}
+
+
+//-----SCHMIEDE BEGIN-----
+func_schmiede(mixed in){
+  int amount;
+  string fell;
+  object *barren_present;
+  object *leder_present;
+  object *dest_now;
+  mixed presuf;
+  int r,s,i;
+ 
+  r=0;
+  s=0;
+  amount=0;
+
+  barren_present=({});
+  dest_now=({});
+  
+  NKNAME=capitalize(getuid(this_player()));    
+  notify_fail(break_string("Was willst du schmieden? Nr. 1,2,.."+
+      " (siehe Kommando <schmiedeformen>)"));
+ 
+  if(!in) return 0;
+  
+  i=to_int(in);
+
+  call_other(SKILLMASTER, "???");
+
+  if(interactive(TP) && (SKILLMASTER->QuerySkill(TP, SK_ARMOURSMITHING)==-1))
+     obtain_sewing_skill(TP);
+  
+  if(i<1 || i>(sizeof(armor_types)-1)) return 0;
+
+//  ({1,5, "lkappe", "Eine lederne Kappe", 1, "biberfell", 1, "raupenseide"}),
+
+  if(armor_types[i][1]>s_skill) return 0;
+  
+  write("Du versuchst folgendes zu schmieden: "+armor_types[i][3]+".\n");
+ // write(armor_types[to_int(i)][4]);
+  amount=sizeof(barren_present=filter_objects(all_inventory(this_player()),
+                "id",armor_types[i][5]));
+  if(amount<armor_types[i][4]){
+    write("Fehlende Komponenten: "+capitalize(armor_types[i][5])+
+          " ("+(armor_types[i][4]-amount)+" Stk.)");
+    r=1;
+  } 
+   
+  amount=sizeof(leder_present=filter_objects(all_inventory(this_player()),
+                "id",armor_types[i][7]));
+  if(amount<armor_types[i][6]){
+    if(r==1) write(" und "); else write ("Fehlende Komponenten: ");
+    write(capitalize(armor_types[i][7])+
+          " ("+(armor_types[i][6]-amount)+" Stk.)");
+    r=1;
+  }
+  if(r==1){
+    write(".\n");
+   return 1;
+  }
+ 
+  for(r=0;r<armor_types[i][4];r++){
+    s++;
+    dest_now+=({barren_present[r]});    
+  }
+  if(s<armor_types[i][4]){
+    write("Du hast nur "+s+" Stk. "+
+        capitalize(armor_types[i][5])+
+        "e brauchst jedoch "+
+        armor_types[i][4]+" Stk.\n");
+    return 1;
+  }
+  
+ for(r=0;r<=armor_types[i][6]-1;r++) {
+     if((sizeof(leder_present)-1) >= r) 
+       dest_now+=({leder_present[r]});
+  }
+
+  write("Du nimmst folgende Dinge zur Hand:\n");
+  for(r=0;r<=sizeof(dest_now)-1;r++) {
+    write(" -"+dest_now[r]->QueryProp(P_SHORT)+"\n");
+    if(pointerp(dest_now[r]->QueryProp(P_ITEMD_PRE_SUFFIX))) {
+        presuf=dest_now[r]->QueryProp(P_ITEMD_PRE_SUFFIX);
+    }
+    dest_now[r]->remove(0);
+  }
+
+  write ("Du beginnst...\n");
+  tell_room(environment(this_player()),NKNAME+" beginnt auf dem Amboss zu schmieden.\n",
+      ({this_player()})); 
+  call_out("build_armor",1,i, presuf); 
+
+  return 1;
+}
+
+
+int build_armor(int i, mixed presuf){
+   object cob;
+   string *parts;
+   int suc;
+
+  call_other(SKILLMASTER, "???");
+
+  //leichter etwas naehen, schwerer den skill hochzubringen
+  if(armor_types[i][11]==1) {
+  suc=SKILLMASTER->UseSkill(TP, SK_ARMOURSMITHING, -2000, 2000);
+  s_skill=SKILLMASTER->QuerySkill(this_player(),SK_ARMOURSMITHING);
+  }
+   if(suc>0) {
+      write ("Du erzeugst: "+armor_types[i][3]+".\n");
+    tell_room(environment(this_player()),BS(NKNAME+" erzeugt: "
+          +armor_types[i][3]+"."), ({this_player()}));
+
+      if(armor_types[i][2]=="I"){
+          cob=clone_object(armor_types[i][10]);
+        cob->move(this_player(),M_NOCHECK);
+      }
+      else {
+      cob=clone_object(ARMOR(armor_types[i][10]));
+      cob->move(this_player(),M_NOCHECK);
+      cob->SetProp(P_ARMOUR_TYPE,armor_types[i][8]);
+      parts=explode(armor_types[i][3]," ");
+      cob->AddId(lower_case(parts[sizeof(parts)-1]));
+      cob->SetProp(P_SHORT,armor_types[i][3]);
+      if(s_skill<9500) {
+        cob->SetProp(P_SHORT,armor_types[i][3]);
+      cob->SetProp(P_AC,armor_types[i][9]);
+      }
+      else if(random(10)){
+        cob->SetProp(P_SHORT,armor_types[i][3]+
+            " (erzeugt von "+
+            capitalize(getuid(this_player()))+
+            ")"
+            );
+      }
+      else {
+        cob->SetProp(P_SHORT,armor_types[i][3]+
+            " (erzeugt von "+
+            capitalize(getuid(this_player()))+
+            ") (hochqualitativ)"
+            );
+        cob->SetProp(P_AC,armor_types[i][9]+1);
+      }
+      cob->SetProp(P_NAME,armor_types[i][2]);
+      cob->AddId(explode(lower_case(armor_types[i][2])," "));
+      cob->AddId(lower_case(armor_types[i][8]));
+      cob->_init_armor();
+      }
+      if(suc > 9250 && pointerp(presuf) && sizeof(presuf)==2 &&
+          (presuf[0]!="" && presuf[1]!="") && !random(2)) 
+      {
+        tell_object(TP, BS("Durch Deine aussergewoehnlichen Naehfertigkeiten "
+              "hast Du magische Eigenschaften in Dein Werk weben koennen!"));
+        DoMagic(cob, presuf[0], presuf[1]);
+         
+      }
+    return 1;
+   }
+  write("Du warst zu ungeschickt! Leider hast Du alles vernichtet.\n");
+  return 1;
+}
+
+int func_muster(string i){
+  int x;
+  int y;
+
+  check_sk_values();
+  
+  y=0;
+  notify_fail("Welche Seite der Schmiedeformen haettes Du gerne? schmiedeformen <1..10>\n");
+
+  if(to_int(i) < 1 || to_int(i) > 10) return 0;
+  
+  
+  write("----------------------------------------------------------------\n");
+  write("In Ausbildungsstufe "+i+" ("+level_names[to_int(i)]+") kannst Du \n");
+  write("mit Deinem momentanen Koennen folgendes herstellen:\n");
+  write("----------------------------------------------------------------\n");
+  for (x=1;x<=sizeof(armor_types)-1;x++)
+  {
+    if(to_int(i)==to_int(armor_types[x][0])&&(s_skill>=armor_types[x][1])){
+
+    y++;
+// write(sprintf("%2d. %s - Erfahrung: %1d\n    Kosten: %1d Stk. %s und %1d Stk. %s\n",
+ write(sprintf("%2d. %s \n    Kosten: %1d Stk. %s und %1d Stk. %s\n",
+      x,armor_types[x][3],armor_types[x][4],
+      capitalize(armor_types[x][5]),
+     armor_types[x][6],
+      capitalize(armor_types[x][7])));
+    }
+  }
+  if(!y) write ("Noch gar nichts.\n");
+  write("----------------------------------------------------------------\n");
+  return 1;
+}
+
+nosave int DoMagic(object ob, string pre, string suf) {
+  call_other(ITEMD, "SetMagicItem",ob, pre, suf);
+  return 1;
+}

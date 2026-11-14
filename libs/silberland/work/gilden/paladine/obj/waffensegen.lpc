@@ -1,0 +1,224 @@
+
+inherit "std/thing";
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <new_skills.h>
+#include <defines.h>
+#include <moredef.h>
+#include <moving.h>
+#include "../paladin.h"
+#include "../blessing.h"
+
+object traeger;
+object caster;
+string weapon;
+string damtype;
+int value, sets;
+object hitFunc;
+
+create() {
+  if( !is_clone(TO) ) return;
+  ::create();
+  sets=0;
+  SetProp(P_SHORT, 0);
+  SetProp(P_WEAPON_TYPE, WT_MISC);
+  SetProp(P_WC, 0);
+  SetProp(P_WEIGHT, 0);  
+  SetProp(P_VALUE, 1);
+  SetProp(P_NOBUY, 1); 
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NOSELL, 1);
+  AddId(({PALADINITEM, "\nwaffensegen"}));
+
+  if(getuid(previous_object())!="GUILD.pal_spells") {
+   call_out("remove", 1);
+   return 0;
+  }
+  SUID;
+}
+
+int SetVariables(object caster1, object weapon1, int time, int wc) {
+  if(sets) {
+    call_out("remove", 0);
+    return 0;
+  }
+  caster=caster1;
+  weapon=file_name(weapon1);
+  value=wc;
+  if (value > 40) 
+  {
+    value = 40;
+    if (!random(3) &&
+        !sizeof(m_indices(MAGICAL_DAMAGE_TYPES) & weapon1->QueryProp(P_DAM_TYPE)))
+    {
+      damtype = ({DT_LIGHT, DT_HOLY, DT_HOLY})[random(3)];
+      weapon1->Set(P_DAM_TYPE, symbol_function("dt_change", TO), F_QUERY_METHOD);
+      tell_object(caster,
+          weapon1->Name(WER,1) + " wird von einer Aura aus heiligem Licht umgeben.\n");
+    }
+    else if (!random(3) && weapon1->QueryMaterial(MAT_SILVER)< 10)
+    {
+      weapon1->Set(P_MATERIAL, symbol_function("mat_change", TO), F_QUERY_METHOD);
+      tell_object(caster,
+          weapon1->Name(WER,1) + " scheint nun aus heiligem Silber zu bestehen.\n");
+    }
+  }
+  weapon1->Set(P_WC_BONUS, symbol_function("wc_change", TO), F_QUERY_METHOD);
+  weapon1->Set(P_NOBUY, symbol_function("wc_change", TO), F_QUERY_METHOD);
+  weapon1->Set(P_CURSED, symbol_function("cursed", TO), F_SET_METHOD);
+  call_out("remove", time);
+  sets=1;
+
+  if(HAS_BLESSING(caster, BLESSING_BLESSED_BLADE)) {
+    // Achtung: Schwarze Magie mit verketten HitFuncs...
+    SetProp(P_WIELDED, caster);
+    SetProp(P_NAME, weapon1->QueryProp(P_NAME));
+    SetProp(P_ARTICLE, weapon1->QueryProp(P_ARTICLE));
+    //tell_object(caster, sprintf("DEBUG: caster=%O wielded=%O\n", caster, QueryProp(P_WIELDED)));
+    hitFunc    = weapon1->QueryProp(P_HIT_FUNC);
+    weapon1->Set(P_HIT_FUNC, symbol_function("overwrite_hit_func", this_object()), F_QUERY_METHOD);
+    tell_object(caster, BS("Ein heiliger Geist Faehrt in deine Waffe ein und weiht sie dem Guten."));
+  }
+
+  return 1;
+}
+
+public object black_magic_wield() {
+  return ENV(TO);
+}
+
+public object overwrite_hit_func() {
+  return this_object();
+}
+
+public int HitFunc(object enemy) {
+  int extBonus, reduction, r;
+  object debuff;
+
+  extBonus = 0;
+  if(objectp(hitFunc)) {
+      extBonus = hitFunc->HitFunc(enemy);
+  }
+
+  r = random(30 + caster->QueryAttribute(A_DEX));
+
+  if(enemy->QueryProp(P_ALIGN) < 0 && !random(3) && r > enemy->QueryAttribute(A_DEX) && !objectp(present("\npaladin_wound 4"))) {
+      reduction = -1 * (caster->QueryProp(P_GUILD_LEVEL) / 2) + (enemy->QueryProp(P_ALIGN) / 500);
+      debuff = clone_object("/gilden/bardengilde/obj/bonus");
+      debuff->AddId("\npaladin_wound");
+      debuff->SetProp(P_X_ATTR_MOD, ([A_STR: reduction, A_DEX: reduction]));
+      debuff->SetEndMessage(sprintf("Die schwaechende Wunde von %s laesst nach.", caster->name(WEM, 1)));
+      debuff->SetTimeout(caster->QueryAttribute(A_INT));
+      if( (r=debuff->move(enemy, M_NOCHECK)) != 1) {
+        debuff->remove(1);
+      } else {
+        enemy->UpdateAttributes();
+        tell_room(ENV(enemy), BS(sprintf("Ein gleissendes Licht blitzt auf und hinterlaesst eine schwaechende Wunde bei %s.",
+                enemy->name(WEM, 1))));
+      }
+  }
+
+  return extBonus;
+}
+
+mixed QueryVariables() {
+  return ({caster, weapon, value});
+}
+
+string* dt_change()
+{
+  return weapon->Query(P_DAM_TYPE) + ({damtype});
+}
+
+mapping mat_change()
+{
+  return ([MAT_SILVER: 100]);
+}
+
+mapping wc_change() {
+  object wer;
+  if (objectp(wer = weapon->QueryProp(P_WIELDED)) && 
+      wer->QueryProp(P_ALIGN) < 0 ) 
+  {
+    wer->AddHp(-1);
+    return (["Spieler":-100]);
+  }
+  return (["Spieler":value]);
+}
+
+int cursed(mixed c) {
+  object wer;
+  if (objectp(wer = weapon->QueryProp(P_WIELDED)) && 
+      wer->QueryProp(P_GUILD) == "paladine" &&
+      wer->QueryProp(P_GUILD_LEVEL) >= 15 && 
+      !weapon->QueryProp(P_CURSED))
+  {
+    if (find_player("dusty"))
+    {
+      tell_object(wer, "Dustys Macht verhindert, dass " + weapon->name(WER,1) +
+          "verflucht wird.\n");
+        wer->AddSp(-random(5));
+    }
+    else
+    {
+      if (wer->QueryProp(P_SP) >= 10)
+      {
+        tell_object(wer, "Dein Waffensegen verhindert, dass " + weapon->name(WER,1) + 
+            "verflucht wird.\n");
+        wer->AddSp(-10);
+      }
+      else
+        tell_object(wer, "Deine Magie ist zu niedrig, um das Verfluchen " + 
+            weapon->name(WESSEN,1) + " zu verhindern.\n");
+    }
+    return 0;
+  }
+  return weapon->Set(P_CURSED, c);
+}
+
+remove() {
+  object weap;
+  mixed ob;
+  
+  if(weapon) {
+    if(weap=find_object(weapon)) {
+      if (ENV(weap)) traeger=ENV(weap);
+      if(objectp(caster) && find_player(getuid(caster))) 
+        tell_object(caster, BS(sprintf("Der Waffensegen von %s erlischt!\n", 
+                    weapon->name(WEM))));
+      if(objectp(traeger) && caster!=traeger) 
+        tell_object(traeger, BS(sprintf("Der Waffensegen von %s erlischt!\n", 
+                    weapon->name(WEM))));
+      ob=weap->QueryProp(P_WIELDED);
+      weap->Set(P_WC_BONUS, 0, F_QUERY_METHOD);
+      weap->Set(P_NOBUY, 0, F_QUERY_METHOD);
+      weap->Set(P_CURSED, 0, F_QUERY_METHOD);
+      weap->Set(P_HIT_FUNC, 0, F_QUERY_METHOD);
+      if(ob) {
+        weap->DoUnwield(1);
+        weap->wield_me(1);
+      }
+    }
+  }
+  while(remove_call_out("remove")!=-1);
+  ::remove();
+}
+
+init() {
+ ::init();
+ if(!living(ENV(ME)))
+   call_out("remove", 0);
+}
+
+reset() {
+  ::reset();
+  if (is_clone(TO)) call_out("remove", 0);
+}
+
+/*
+BecomesNetDead(object wer) {
+  call_out("remove", 0);
+}
+*/

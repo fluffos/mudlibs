@@ -1,0 +1,86 @@
+#include "../def.h"
+#include "/gilden/bardengilde/barden_extern.h"
+
+inherit "/std/room";
+
+public void create() {
+    if(is_clone(TO)) {
+        destruct(TO);
+        return;
+    }
+
+    ::create();
+
+    SetProp(P_SHORT, "Zwischen den Welten");
+    SetProp(P_INT_SHORT, "Im Astralraum");
+    SetProp(P_INT_LONG, "Graues Wabern umgibt dich.");
+    SetProp(P_LIGHT, 1);
+    SetProp(P_INDOORS, 0);
+    SetProp(P_NOMAGIC, 1);
+    SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE: 20, ENV_TERRAIN: TT_AIR]));
+
+    SetProp(P_CONNECTED_REGIONS, ({}));
+
+    AddCmd( ({"unt", "untersuche", "untersuch"}), "cmd_nixda");
+}
+
+public int cmd_nixda(string str) {
+    write(BS("Du bist so schnell unterwegs, dass du das nicht tun kannst."));
+    return 1;
+}
+
+public void ConnectRegion(string name) {
+    SetProp(P_CONNECTED_REGIONS, QueryProp(P_CONNECTED_REGIONS) + ({name}));
+    AddExit(name, ([EX_DEST: ROOM+name, EX_TESTFUNC: "moveCost", 
+                    EX_MSG_OUT: "fliegt", EX_MSG: "in die Region "+CAP(name),
+                    EX_MSG_IN: "fliegt herein"]));
+    return;
+}
+
+public void AddDestination(string name) {
+    if(!member(TRAVEL_GOALS, name)) {
+        raise_error("Ungueltiges Reiseziel");
+        return;
+    }
+
+    AddExit(name, ([EX_DEST: TRAVEL_GOALS[name], EX_TESTFUNC: "moveCost", 
+                    EX_MSG_OUT: "landet", EX_MSG: "in der Naehe von "+CAP(name),
+                    EX_MSG_IN: "fliegt herein"]));
+    return;
+}
+
+public varargs string GetExits(object viewer) {
+    string *exitNames, ret;
+    int i;
+    if(!objectp(viewer)) return "Hier geht es nicht weiter.\n";
+
+    exitNames = m_indices(QueryProp(P_EXITS));
+    if(sizeof(exitNames) <= 0) return "Hier geht es nicht weiter.\n";
+
+    ret = "Du erkennst folgende Orte, and denen du landen kannst:\n";
+    for(i=0; i<sizeof(exitNames); ++i) {
+        if(member(QueryProp(P_CONNECTED_REGIONS), exitNames[i]) >= 0) continue;
+        ret += "  * "+ capitalize(exitNames[i])+"\n";
+    }
+
+    exitNames = QueryProp(P_CONNECTED_REGIONS);
+    if(sizeof(exitNames) > 0) {
+        ret += "Von hier aus kannst du in folgende Regionen weiterfliegen:\n";
+        for(i=0; i<sizeof(exitNames); ++i) {
+            ret += "  * " + capitalize(exitNames[i]) + "\n";
+        }
+    }
+
+    return ret+"\nWohin soll es weiter gehen?\n";
+}
+
+public int moveCost() {
+    if(TP->QueryProp(P_SP) < 10) {
+        tell_object(TP, BS("Dir fehlt gerade die Kraft um weiter zu fliegen."));
+        return 0;
+    }
+
+    TP->AddSp(-10);
+    TP->SetProp(P_NEXT_SPELL_TIME, time() + 10);
+    return 1;
+}

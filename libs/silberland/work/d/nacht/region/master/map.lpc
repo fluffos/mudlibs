@@ -1,0 +1,435 @@
+/* map server for the dovenya island
+ * __________________________________________(i) Anatol@Silberland (2012) */
+
+#pragma strict_types
+
+#include "../defines.h"
+#include <ansi.h>
+#include <wizlevels.h>
+
+#define SAVEFILE SAVEDIR "map"
+
+#define BO_NW      0
+#define BO_NO      1
+#define BO_SW      2
+#define BO_SO      3
+#define BO_N       4
+#define BO_S       5
+#define BO_W       6
+#define BO_O       7
+
+#define CENTER_COL_MARK     ANSI_BOLD+ANSI_RED+"X"+ANSI_NORMAL
+#define GRATICULE_GFX       0   // mono+=1 ==> 1
+#define GRATICULE_CENTER    2   // mono+=1 ==> 3
+#define GRATICULE_LOCK      4
+
+/* 
+ * Map structure: Implemented as mapping so that negative indices
+ * are allowed (as well as) common positives one. 
+ *
+ * Since it is no real 1:1 charmap - there are 4 (!) chars between 
+ * two coordinates on the x axis, and 2 chars on the y axis - the 
+ * real map is considerably larger (therefore the graticules).
+ * 
+ * And since it should be possible to set a marker, the graticule 
+ * center must be able to be overwritten. With visible characters
+ * only, this would be an easy matter (graticule[1][2]), but 
+ * the usage of ansi coloring codes complicate the matters 
+ * considerably. Therefore a signal character has to be assigned.
+ * This character must not be used in the whole mapping, except
+ * for this very intent.
+ * 
+ * This character shall be `
+ * The Backtick has been chosen, because on some terminals one 
+ * cannot keep the backtick apart from the normal ' tick.
+ *
+ * So: DO NEVER EVER USE THE BACKTICK IN THE MAP GRAPHICS.
+ * 
+ * - The position followed a double backtick `` is the center 
+ *   position. THIS IS IMPORTANT. If you feel like put another
+ *   color on the center position, it should look like:
+ *   "`33..`34``o`33..".
+ *   *ALWAYS* re-set colorisation after the center character.
+
+ * - A single backtick ` leads into an ansi code sequence and
+ *  is subsituted 
+
+ * m["x|y|z"] = ({ string colstr1, string colstr2, string colstr3 }), 
+ *              ({ string monostr1, string monostr2, string monostr3 }), 
+ *              int center_offset_color,
+ *              int center_offset_mono,
+ *              int lock   })
+ */
+
+
+
+// variables to save: 
+
+public mapping m;            // THE DATA (yes!)
+public mixed undo;           // keep one update/delete for undo
+
+// statics: 
+
+nosave mixed no_graticule;   // graphical issues - "no data"
+nosave mixed borders;        // graphical issues - the borders.
+
+nosave closure map_encode;   // holds lambda for raw --> ansi encoding
+nosave closure map_decode;   // holds lambda for ansi --> raw decoding
+
+
+
+// ----------------------------------------------------------------------
+
+// returns "true" for regular access of domain lords of d:nacht
+
+nosave int 
+authorized() 
+{
+    return ((this_player())
+         && (this_player()==this_interactive()) 
+         && (!process_call())
+         && (IS_WIZARD(this_player())) 
+         && (member((string*)(((mixed)("/secure/master"->get_userinfo(
+               getuid(this_player()))))[3]),"nacht")>=0));
+}
+
+nosave void
+save()
+{
+    save_object(SAVEFILE);
+}
+
+
+nosave string 
+key(int x, int y, int z) 
+{
+    return sprintf("%d|%d|%d",x,y,z);
+}
+
+
+varargs nosave string * 
+graticule(int x, int y, int z, int mono)
+{
+    if (!member(m,key(x,y,z))) 
+        return no_graticule[GRATICULE_GFX + mono];
+    else
+        return m[key(x,y,z)][GRATICULE_GFX + mono];
+}
+
+varargs nosave int
+graticule_center(int x, int y, int z, int mono)
+{
+    if (!member(m,key(x,y,z))) 
+        return no_graticule[GRATICULE_CENTER + mono];
+    else
+        return m[key(x,y,z)][GRATICULE_CENTER + mono];
+}
+
+// ----------------------------------------------------------------------
+
+public int
+query_prevent_shadow()
+{
+    return 1;
+}
+
+varargs public string * 
+EncodeGraticule(string * in, int mono) 
+{
+    return map_array(in, map_encode,mono);
+}
+
+// means: decoding is to be done here
+
+public string *
+ExportGraticule(int x, int y, int z)
+{
+    string * export;
+
+    if (!member(m,key(x,y,z)))
+        return 0;
+    export=({})+m[key(x,y,z)][GRATICULE_GFX];
+    export+=({export[1][(m[key(x,y,z)][GRATICULE_CENTER])..]});
+    export[1]=export[1][0..(m[key(x,y,z)][GRATICULE_CENTER]-1)];
+    export=map_array(export, map_decode);
+    return ({ export[0], export[1]+"``"+export[3], export[2]});
+}
+
+
+public int 
+DeleteGraticule(int x, int y, int z) 
+{
+    if (!member(m,key(x,y,z)))
+        return 0;
+    if (!authorized()) 
+        return -1;
+    if (m[key(x,y,z)][GRATICULE_LOCK]) 
+        return -2;
+    undo=({key(x,y,z),m[key(x,y,z)]});
+    m-=([key(x,y,z)]);
+    save();
+    return 1;
+}
+
+varargs public int 
+UpdateGraticule(int x, int y, int z, string * in, int testonly) 
+{
+    mixed  * g;
+    string * data;
+    string * mono;
+    string * work;
+    string * rexpl;
+    int i,j;
+    if (((abs(x)>1000) || (abs(y)>1000) || (abs(z)>1000)) ||
+        (sizeof(in)!=3) || (!stringp(in[0])) || (!stringp(in[1]))
+         || (!stringp(in[2]))) 
+        return 0;
+    if (!authorized()) 
+        return -1;
+    if (member(m,key(x,y,z)) && (m[key(x,y,z)][GRATICULE_LOCK])) 
+        return -2;
+    data=({})+in;
+    work=explode(data[1],"``");
+    if (sizeof(work)!=2)
+        return -3;
+    data[1]=work[0];
+    data+=({work[1]});
+    mono=map_array(data,map_encode,1);
+    data=map_array(data,map_encode,0);
+    g= ({
+        ({ data[0],data[1]+data[3],data[2] }),
+        ({ mono[0],mono[1]+mono[3],mono[2] }),
+    strlen(data[1]),
+    strlen(mono[1]),
+    0});
+    if ((strlen(g[1][0])!=5) || (strlen(g[1][1])!=5) || (strlen(g[1][2])!=5))
+    return -4;
+    if (testonly)
+    {
+        printf("Graticules would look like:\n.-------.\n| " + 
+                    g[0][0] + ANSI_NORMAL + " |\n| "
+                    + g[0][1] + ANSI_NORMAL + " |\n| "
+                    + g[0][2] + ANSI_NORMAL + " |\n'-------'\n");
+    }
+    else
+    {
+        if (member(m,key(x,y,z)))
+            undo=({key(x,y,z),m[key(x,y,z)]});
+        else
+            undo=({key(x,y,z),0});
+        m[key(x,y,z)]=g;
+        save();
+    }
+    return 1;
+}
+
+public int 
+LockGraticule(int x, int y, int z) 
+{
+    if (!member(m,key(x,y,z)))
+        return 0;
+    if (!authorized()) return -1;
+    if (m[key(x,y,z)][GRATICULE_LOCK])
+        return -2;
+    m[key(x,y,z)][GRATICULE_LOCK]=1;
+    save();
+    return 1;
+}
+
+public int 
+UnlockGraticule(int x, int y, int z) 
+{
+    if (!member(m,key(x,y,z)))
+        return 0;
+    if (!authorized()) return -1;
+    m[key(x,y,z)][GRATICULE_LOCK]=0;
+    save();
+    return 1;
+}
+
+public int
+Undo()
+{
+    if (!undo)
+        return 0;
+    if (!authorized() )
+        return -1;
+    if ((pointerp(undo)) && (sizeof(undo)==2))
+    {
+        if (undo[1])
+            m[undo[0]]=undo[1];
+        else
+        {
+            if (member(m,undo[0]))
+                m-=undo[0];
+            else
+                return -2;
+        }
+        undo=0;
+        return 1;
+    }
+    return -3;
+}
+
+varargs public string
+Map(int x, int y, int z, int r, int mark, int mono, int show_coord)
+{
+    string * g;  
+    int i,j, k, xl, xh, yl, yh;  
+    string * res; 
+    string * tmp;
+    string line;
+
+    if ((abs(x)>1000) || (abs(y)>1000) || (abs(z)>1000) || (r<0)) 
+        return 0;
+    if (mono) 
+        mono=1;
+
+    if (show_coord)
+    {
+        line=sprintf("%-5d  ",z);
+        for (j=x-r-1;j++<x+r;) 
+            line+=sprintf("%|5d ",j)[0..<2];
+        res=({line});
+    }
+    else 
+        res=({});
+
+    res+=({(show_coord?"     ":"")+borders[mono][BO_NW]+
+          sprintf("%"+to_string(5+(5*2*r))+"'"+borders[mono][BO_N]+"'s","")+
+          borders[mono][BO_NO]});
+
+    for (i=y-r-1;i++<y+r;) 
+    {
+        if (show_coord)
+            tmp=({"     "+borders[mono][BO_W],
+                  sprintf("%5d",i)+borders[mono][BO_W],
+                  "     "+borders[mono][BO_W]});
+        else
+            tmp=({borders[mono][BO_W],borders[mono][BO_W],borders[mono][BO_W]});
+        for (j=x-r-1;j++<x+r;) 
+        {
+        g=graticule(j,i,z,mono);
+            for (k=3;k--;) 
+            if ((mark) && (i==y) && (j==x) && (k==1))
+                tmp[k]+=g[k][0..(graticule_center(j,i,z,mono)-1)] + 
+                (mono?"X":CENTER_COL_MARK) + 
+                 g[k][(graticule_center(j,i,z,mono)+1)..] + ANSI_NORMAL;
+        else
+                tmp[k]+=g[k]+ANSI_NORMAL;
+        } 
+        for (k=3;k--;)
+        tmp[k]+=borders[mono][BO_O];
+    res+=tmp;
+    } 
+    res+=({(show_coord?"     ":"")+borders[mono][BO_SW]+
+          sprintf("%"+to_string(5+(5*2*r))+"'"+borders[mono][BO_S]+"'s","")+
+          borders[mono][BO_SO]}); 
+    if (show_coord)
+       res+=({res[0]});
+    return implode(res,"\n")+"\n";
+}
+
+public void 
+ShowUndo()
+{
+    printf("Undo holds:\n%O\n",undo);
+    return;
+}
+
+public void  
+ShowGraticule(int x, int y, int z)
+{
+    printf("Graticule %d/%d/%d:\n",x,y,z);
+    if (!member(m,key(x,y,z))) 
+        printf("N/A\n");
+    else
+        printf(m[key(x,y,z)][0][0]+ANSI_NORMAL+"\n" + 
+               m[key(x,y,z)][0][1]+ANSI_NORMAL+"\n" + 
+               m[key(x,y,z)][0][2]+ANSI_NORMAL+"\n");
+    return;
+}
+
+// ----------------------------------------------------------------------
+// create() does nothing important besides restoring the savefile and
+// initialising some global nosave variables.
+
+public void 
+create()
+{
+    seteuid(getuid(this_object()));
+    if (!restore_object(SAVEFILE))
+        m=([]);
+
+    if ((this_player()) && (IS_WIZARD(this_player())))
+        printf("*** %s loaded with %d graticules. ***\n",
+            file_name(this_object()), sizeof(m));
+          
+    no_graticule=({({".---.","| ? |","'---'"}),
+                   ({".---.","| ? |","'---'"}),2,2,0});
+
+    borders=({
+        ({ 
+            ANSI_BOLD+ANSI_BLACK+",-",
+            "-."+ANSI_NORMAL,
+            ANSI_BOLD+ANSI_BLACK+"'-",
+            "-'"+ANSI_NORMAL,
+            "-",
+            "-",
+            ANSI_BOLD+ANSI_BLACK+"|"+ANSI_NORMAL+" ",
+            " "+ANSI_BOLD+ANSI_BLACK+"|"+ANSI_NORMAL 
+        }),
+        ({".-","-.","'-","-'","-","-","| "," |"})
+        });
+
+    map_encode=lambda(({'x, 'm}),
+        ({#'implode, 
+            ({#'map_array, 
+                ({#'regexplode, 'x , "`[0-9][0-9]" }), 
+                lambda(({'s, 'n}), 
+                    ({#'?, 
+                        ({#'== , '`', ({#'[, 's , 0}) }),
+                        ({#'?, ({#'==, 'n, 0}), 
+                             ({#'sprintf, "\e[%dm",
+                                 ({#'to_int, 
+                                     ({#'extract ,  's , 1 , 2 }) 
+                                 }) 
+                             }),
+                             ""
+                         }), 
+                         's 
+                     })), 
+                'm}), 
+            ""}));
+
+    map_decode=lambda( ({'x}) ,
+        ({#'implode,
+            ({#'map_array, 
+                ({#'regexplode, 'x , "\e\\[[0-9]*m"}), 
+                lambda(({'s,}), 
+                    ({#'?, 
+                        ({#'== , "\e[" , ({#'extract ,  's , 0 , 1 }) }),
+                        ({#'sprintf, 
+                            "`%02d",
+                            ({#'to_int, 
+                                ({#'+,
+                                    ({#'extract ,  's , 2 , 2 }) ,
+                                    ({#'?, ({#'&&,
+                                          ({#'>=, ({#'[ ,  's , 3 }) , '0' }),
+                                          ({#'<=, ({#'[ ,  's , 3 }) , '9' })
+                                           }),
+                                        ({#'extract, 's , 3, 3}),
+                                        ""
+                                    })
+                                })
+                            })
+                         }),
+                        's
+                      })
+                    )
+           }),
+           ""
+        }));
+                                            
+}
+

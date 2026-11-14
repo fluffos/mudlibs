@@ -1,0 +1,188 @@
+/**************************
+**
+**  Stadtwaechter, Rev. 1
+**
+**  4.9.1997 by Muaddib@SL
+**
+***************************/
+
+inherit "std/mnpc";
+
+#include "../def.h"
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <mnpc.h>
+
+#define WMASTER "/d/wueste/muaddib/arrakeen/npc/bashar.lpc"
+
+create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+  
+  SetProp(P_SHORT, "Ein Stadtwaechter");
+  SetProp(P_LONG, BS("Die Stadtwaechter werden in Arrakeen gut geschult und "+
+		     "ausgebildet, um etwaigen Angriffen trotzen zu koennen. "+
+		     "Auch werden sie in den Kuensten der Magie unterwiesen.\n"
+		     ));
+  SetProp(P_NAME, "Waechter");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_INFO, BS( "Der Waechter sieht ziemlich kraeftig aus und "+
+		      "ist von einer schwachen magischen Aura umhuellt.\n" ));
+  AddId( ({"waechter", "stadtwaechter", "\narrakeenwaechter"}) );
+  
+  create_default_npc(20);
+  SetProp(P_ALIGN, 200);
+  SetProp(P_RACE, "Nomade");
+  SetProp(P_SIZE, 180);
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:15, T_RANGE_MAX:50]));
+
+  SUID;
+
+
+  CLONEME(ARMOUR "w_panzer");	
+  CLONEME(WEAPON "c_schwer");
+  CLONEME(ARMOUR "umhang");
+  TO->command_me("ziehe panzer an");
+  TO->command_me("zueck schwert");
+  TO->command_me("ziehe umhang an");
+
+  AddInfo(DEFAULT_INFO, "sagt: Lass mich in Ruhe, ich habe einen Job.\n");
+
+  SetChats(1, ({
+    "Der Waechter schaut Dich skeptisch an.\n",
+      "Der Waechter mustert Dich argwoehnisch.\n",
+      "Der Waechter schaut sich aufmerksam um.\n",
+      "Der Waechter erschlaegt eine Fliege.\n",
+      "Der Waechter lauscht angestrengt, doch nichts passiert.\n" }) );
+  
+  SetAttackChats(10, ({
+    "Der Waechter schaut Dich boese an.\n",
+      "Der Waechter lacht ueber Deinen Kampfstil.\n",
+      "Der Waechter schaut Dich an und zischt: \"Verraeter!\"\n",
+      "Der Waechter taeuscht Dich und steht ploetzlich ganz woanders.\n" }) );
+
+  SetProp(P_DIE_MSG, " wirft Dir einen veraechtlichen Blick zu und stirbt.\n");
+  SetProp(P_KILL_NAME, "Die Gerechtigkeit");
+  SetProp(P_KILL_MSG, "Tod den Verraetern!\n");
+  SetProp(P_WIMPY, 0);
+
+  SetProp(P_SPELLRATE, 20);
+  AddSpell(3,100, "wirft Dir einen boesen Blick zu.\n",
+	         "schaut @WEN seltsam an.\n", DT_MAGIC);
+  AddSpell(2,200, "beschwoert einen Sandsturm ueber Dir.\n",
+	          "beschwoert einen Sandsturm ueber @WEM.\n", DT_PIERCE);
+  AddSpell(5,300, "wirft einen Feuerball auf Dich.\n",
+	         "wirft einen Feuerball auf @WEN.\n", DT_MAGIC);
+
+	
+  SetProp(P_MNPC_AREA, (ROOM));
+  SetProp(P_MNPC_DEFAULTROOM, ROOM "room_d2");
+  SetProp(P_MNPC_FLAGS, MOV_BACKWARDS+MOV_INDOORS+MOV_OUTDOORS+MOV_MOVES);
+  
+  WMASTER->add_wache();
+
+}
+
+void Defend(int damage, string dam_type, mixed spell, object enemy)
+{
+  WMASTER->hilferuf(enemy);
+  ::Defend(damage, dam_type, spell, enemy);
+}
+
+Attack(object enemy)
+{
+  int i;
+  object ob; 
+  string raum;
+  string *raum2;
+  mapping exits; string *ausgaenge;
+  exits = environment()->QueryProp(P_EXITS);
+  ausgaenge = m_indices(exits);
+  for( i = sizeof(ausgaenge)-1; i>=0; i-- )
+  {
+    if( !objectp(enemy) ) return;
+    raum2=explode(exits[ausgaenge[i]], "#");
+    raum= raum2[sizeof(raum2)-1];    
+    for( ob=first_inventory(raum);ob;ob=next_inventory(ob) )
+      if( living(ob) && !query_once_interactive(ob) && 
+         ob->id("\narrakeenwaechter") )
+      {
+        raum = environment(this_player());
+        ob->move(raum,M_TPORT,0, "eilt einem Kameraden zuhilfe",
+          "kommt seinem Kameraden zuhilfe");
+        ob->Kill(enemy);
+        return ::Attack(enemy);
+      }
+  }
+  if (!objectp(enemy)) return;
+  for (ob=first_inventory(environment());ob;ob=next_inventory(ob))
+    if(living(ob) && !query_once_interactive(ob) 
+       && ob->id("\narrakeenwaechter"))
+      ob->Kill(enemy);
+  return ::Attack(enemy);
+
+}
+
+remove(int arg)
+{
+  WMASTER->remove_wache(this_object());
+  ::remove(arg);
+}
+
+void init()
+{
+  ::init();
+  if( WMASTER->IsFeind(TP) )
+    Kill(TP);
+}
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+  if (find_call_out("react") != -1) {
+  switch(gruppe) {
+	case "fies":
+	  call_out("react", 0, TP, "schaut Dich veraechtlich an",
+                   "schaut "+TPN+" veraechtlich an");break;
+	case "lieb":
+	  call_out("react", 0, TP, "schaut Dich angewiedert an",
+	           "schaut "+TPN+" angewidert an");break;
+	case "aergerlich":
+	  call_out("react", 0, TP, "mustert Dich streng",
+	           "mustert "+TPN+" streng");break;
+	case "traurig":
+	  call_out("react", 0, TP, "faehrt Dich an: Nerv mich nicht",
+	           "faehrt "+TPN+"an: Nerv mich nicht");break;
+	case "intim":
+	  call_out("react", 0, TP, "fluestert Dir zu: Lass das, das darf nur "+
+	                           "meine Frau",
+	           "fluestert "+TPN+" irgendetwas zu");break;
+	case "aengstlich":
+	  call_out("react", 0, TP, "erschreckt Dich fuerchterlich",
+	           "erschreckt Dich fuerchterlich");break;
+	default:
+	  call_out("react", 0, TP, "sagt: Lass mich in Ruhe, ich hab zu tun",
+	           "sagt: Lass mich in Ruhe, ich hab zu tun");break;
+    }
+  }
+}
+
+void react(object to, string victim, string others)
+{
+  if (present(to, ENV(TO))) {
+    tell_object(to, BS(Name(WER, 1) + " "+victim+".\n"));
+    tell_object(ENV(TO), BS(Name(WER, 1)+" "+others+".\n"));
+  }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+
+
+

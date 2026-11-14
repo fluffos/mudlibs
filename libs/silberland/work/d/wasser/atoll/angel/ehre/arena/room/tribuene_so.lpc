@@ -1,0 +1,250 @@
+#pragma strong_types
+
+inherit "std/room";
+
+#include "./def.h"
+
+// Laesst Spieler auf den Kampfplatz schreien
+int shout_battle(string args)
+{
+  object server;
+  
+  args = this_player()->_unparsed_args();
+  
+  catch(call_other(PKOBJ "coordinator", "???", 0));
+  server = find_object(PKOBJ "coordinator");
+  if (!objectp(server))
+     return 0;
+   
+  if (stringp(args))
+  {
+     write ("Du bruellst: "+args+"\n");
+     args = this_player()->name()+" bruellt: "+args+"\n";
+     tell_room(this_object(), args, ({this_player()}) );
+     server->transmit_shout(args);
+  }
+     
+  return 1;
+}
+
+// Funktion zum Festhalten von Gegnern
+int paralyze (int zeit, object player)
+{
+  if (objectp(player))
+     player->SetProp(P_TMP_MOVE_HOOK, ({time()+zeit, this_object(), "freeze_in_place"}) );
+}
+
+// Hilfsfunktion fuer Move_Hook
+string freeze_in_place()
+{
+  return "Du solltest Dich erst erheben!\n";
+}
+
+
+// Unterscheiden wir mal die Rassen:
+string distinguish_race()
+{
+   switch (this_player()->QueryProp(P_RACE) )
+   {
+      case "Fee": return BS("Diese Stuehle scheinen ja wie fuer Feen geschaffen zu sein! Moechtest Du Dich nicht setzen?\n");
+      default : return BS ("Diese Sitzmoeglichkeiten sagen Dir nicht wirklich zu. Schau Dich doch noch weiter um!\n");
+   }
+   
+}
+
+// Funktion zum Setzten:
+int do_sit_down( string args )
+{
+  mixed res;
+  
+  // Pruefung ob evtl. ein MOVE_HOOK gesetzt ist.
+  if (res=this_player()->QueryProp(P_TMP_MOVE_HOOK))
+  {
+    if ( pointerp(res) && sizeof(res) >= 3
+         && intp(res[0]) && time() < res[0]
+         && objectp(res[1]) && stringp(res[2]) )
+       {
+         // In diesem Fall sitzen wir gerade:
+         if (res[1] == this_object())
+         {
+            notify_fail("Du sitzt doch schon!\n");
+            return 0; 
+         }
+         else
+         {
+            notify_fail("Irgendwie kannst Du Dich derzeit nicht bewegen!\n");
+            return 0; 
+         }
+       }
+  }
+   switch (this_player()->QueryProp(P_RACE) )
+   {
+      case "Fee": {
+      	               write (BS("Du flatterst zu einem der Stuehle hoch und laesst Dich zufrieden nieder.\n"));
+      	               tell_room(this_object(), this_player()->name()+" flattert zu einem Stuhl hoch und laesst sich zufrieden nieder.\n", ({this_player()}));
+      	               paralyze (1800, this_player());
+      	               return 1;      	               
+      	             }
+      default : {
+      	          write (BS ("Das ist Dir ganz einfach zu unbequem. Du entscheidest Dich dafuer stehen zu bleiben.\n"));
+      	          return 1;
+      	        }
+   }
+}
+
+// Funktion zum Aufstehen:
+int do_get_up( string args )
+{
+   string test;
+   mixed res;
+      
+  notify_fail("Aber Du sitzt Doch noch garnicht!\n");
+  // Pruefung ob evtl. ein MOVE_HOOK gesetzt ist.
+  if (res=this_player()->QueryProp(P_TMP_MOVE_HOOK))
+  {
+    if ( pointerp(res) && sizeof(res) >= 3
+         && intp(res[0]) && time() < res[0]
+         && objectp(res[1]) && stringp(res[2]) )
+       {
+         // In diesem Fall sitzen wir gerade:
+         if (res[1] == this_object())
+         {
+            write("Du erhebst Dich wieder von Deinem Sitzplatz.\n");
+            tell_room(this_object(), this_player()->name()+" erhebt sich wieder vom Sitzplatz.\n", ({this_player()}));
+            this_player()->SetProp(P_TMP_MOVE_HOOK, 0);
+            return 1; 
+         }
+         else 
+            return 0; 
+       }
+  }
+  return 0;
+}
+
+// Zufaellige Meldungen
+string zuschauer()
+{
+  mixed messages;
+  
+  messages = ({ "Setz doch mal Deine Magie ein Du Versager!!!\n", "Jetzt streng Dich doch mal an!!!\n", "Lass Ihn leben!!! Lass Ihn leben!!!\n", "Buuuuuuh!!!\n", "Nieder mit ihm!!!\n", "Unfair!!! Dieser Schlag war REGELWIDRIG!!!\n" });
+  return messages[random(sizeof(messages)-1)]; 
+}
+
+void AddNPC ()
+{
+  AddItem(NPC "arena_visitor", REFRESH_DESTRUCT);
+}
+
+void create()
+{
+  ::create();
+
+  SetProp( P_LIGHT, 1 );
+  SetProp( P_INT_SHORT, "Suedoestlicher Teil der Arenatribuene in Neutijara" );
+  SetProp( P_INT_LONG, break_string("Du stehst auf der suedwestlichen Tribuene der Arena. "+
+           "Von hier aus kannst Du die Kaempfe, auf dem weiter unten gelegenen Kampfplatz, beobachten. "+
+           "Ein komplexes Spiegelsystem ermoeglicht, dass man von jedem Ort der Tribuene aus alle Vorkommnisse auf der Kampfflaeche beobachten kann. "+
+           "Damit man nicht die ganze Zeit stehen muss, gibt es, wie auch in den anderen Teilen der Tribuene, "+
+           "zweckdienliche Sitzmoeglichkeiten. In diesem Fall sind es kleine, mit weichem Samt ueberzogene, Hochstuehle. "+
+           "Nach Osten fuehrt eine Treppe zum Ausgang hinunter.",78)); // Feen
+
+  SetProp(P_INDOORS,0);
+
+  SetProp(P_ENVIRONMENT,([ENV_TEMPERATURE: 31, ENV_TERRAIN: TT_TOWN]) );
+
+  AddDetail( "treppe", 
+             "Ueber die Treppe kommst Du wieder in den nordlichen Teil der Eingangshalle.\n");
+  AddDetail( ({ "eingangshalle","ausgang" }),
+             "Halte Dich dort suedlich, wenn Du zum Ausgang willst.\n" );
+  AddDetail( ({ "ort", "abschnitt" }) ,
+             "Dies ist der suedoestliche Teil der Tribuene.\n" );
+  AddDetail( ({ "sitzmoeglichkeiten", "teil", "fall" }),
+             "Dieser Teil der Tribuene scheint fuer Feen bestimmt zu sein.\n" );
+  AddDetail( ({ "feen","wesen" }),
+             "Feen sind huebsche, kleine magische Wesen mit Fluegeln." );
+  AddDetail( ({ "fluegel", "fluegeln", "strecken" }),
+             "Mit ihren Fluegeln koennen Feen kurze Strecken flatternd zuruecklegen.\n" );
+  AddDetail( ({ "stuehle", "samt", "hochstuehle" }),
+             "Das Samt der Stuehle ist wirklich kuschelig weich.\n" );
+  AddDetail( ({"spiegel", "system", "spiegelsystem" }),
+             "Du findest es einfach nuetzlich und machst Dir keine Gedanken, wie das genau funktionieren koennte.\n" );
+  AddDetail( ({ "gedanken", "zeit"  }),
+             "Du verwendest Deine Zeit lieber fuer andere Dinge.\n" );
+  AddDetail( "dinge",
+             "Such Dir einfach etwas aus!\n" );
+  AddDetail( "vorkommnisse",
+             "Die solltest Du genau verfolgen!\n" );
+  AddDetail( ({ "boden", "fussboden", "holzboden" }),
+	     "Der Boden dieses Teils der Arena besteht aus Fichtenholz.\n" );
+  AddDetail( ({ "holz", "fichtenholz" }),
+             "Du bist Dir dabei ziemlich sicher, da dieses Holz die typische Charakteristik von Fichtenholz besitzt.\n" );
+  AddDetail( ({ "charakteristik", "farbe", "maserung" }),
+             "Fichtenholz hat eine ins Orange gehende Farbe, praegnante Maserung aber keine wirklich gute Stabilitaet.\n" );
+  AddDetail( "orange",
+             "Orange ist eine Farbe benannt nach der Frucht 'Orange'.\n" );
+  AddDetail( "frucht",
+             "Ob die wohl im Dschungel waechst?\n");
+  AddDetail( "dschungel",
+             "Im Dschungel wachsen unzaehlige Fruechte.\n" );
+  AddDetail( "fruechte",
+             "Sieh Dich einfach mal genauer im Dschungel um.\n" );
+  AddDetail( ({ "stabilitaet", "festigkeit", "eigenschaften", "festigkeitseigenschaften" }),
+             "Fichtenholz besitzt - bist Du Dir sogar ganz sicher, nachdem Du die Abnuetzungserscheinungen am Boden begutachtet hast, "+
+             "- keine besonderen Festigkeitseigenschaften, Du solltest Dich hier umsichtig verhalten, damit Du nichts kaputt machst.\n" );
+  AddDetail( ({ "abnuetzungserscheinungen", "erscheinung", "erscheinungen", "stellen" }),
+             "Der Boden weist an vielen Stellen deutliche Spuren der Abnuetzung auf.\n" );
+  AddDetail( ({ "spur", "spuren", "abnuetzung", "abnutzung", "begehen" }),
+             "Der Boden ist stellenweise aufgerauht und vom vielen Begehen eingedrueckt.\n" );
+  AddDetail( ({ "tribuene", "tribuenen", "innenwand", "innenwaende" }),
+	     "Die Innenwaende der Tribuene bestehen in diesem Teil der Tribuene, wie der Boden, aus Fichtenholz.\n" );
+  AddDetail( ({ "wand", "waende" }),
+             "Meinst Du die Aussenwand oder die Innenwaende?\n");
+  AddDetail(  "aussenwand",
+              "Die Aussenwand dieses Abschnittes besteht - Du glaubst Dich dumpf zu erinnern - aus Tannenholz.\n" );
+  AddDetail(  "tannenholz",
+             "Wie das Fichtenholz, besitzt auch das Tannenholz keine besonders guten Festigkeitseigenschaften.\n" );
+  AddDetail( ({ "decke" }),
+             "Du wirfst einen skeptischen Blick nach oben, laesst Dich aber dann doch von Deinen Augen ueberzeugen, dass es hier keine Decke gibt. "+
+             "Statt der Decke siehst Du jedoch - wie koennte es anders sein - den Himmel ueber Dir.\n" );
+  AddDetail( ({ "augen", "blick", "hand" }),
+             "Du haeltst Dir die Hand vor Augen und ... Du siehst sie!\n" );
+  AddDetail( ({ "himmel" }),
+             "Die gluehend heisse Sonne treibt Dir den Schweiss aus den Poren.\n" );
+  AddDetail( ({ "poren", "schweiss" }),
+             "Du schwitzt aus allen Poren, ein Bad im Meer wuerde dem sicher abhelfen.\n" );
+  AddDetail( ({ "bad","meer" }),
+             "Ein Bad im Meer, das waere jetzt richtig erfrischend!\n" );
+  AddDetail( "sonne",
+             "Die gluehende heisse Sonne trocknet Deinen Schweiss fast schneller als Du schwitzen kannst.\n");
+  AddDetail( ({ "arena","arenen","gebaeude" }),
+             "Eine Arena ist ein Platz auf dem Duelle ausgetragen werden.\n" );
+  AddDetail( ({ "duell", "duelle", "kaempfe" }),
+             "Duelle sind faire und ehrenvolle Kaempfe.\n" );
+  AddDetail( ({ "platz","kampfplatz", "kampfflaeche" }),
+             "In diesem Fall ist es ein rund angelegter Platz.\n" );
+  AddDetail( ({ "treppe" }),
+             "Auf ihr kommst Du wieder hinunter zum Ausgang.\n" );
+  
+  AddSmell( DEFAULT_SMELL,
+            "Hier riecht es nach frischer Luft.\n" );
+            
+  AddSmell( "luft",
+            "Ein wenig Luft tut Dir bei dieser Hitze gut.\n" );
+     
+  AddSound( DEFAULT_SOUND,
+            "Du kannst immer wieder Zuschauer hoeren, die etwas auf die Kampfflaeche bruellen.\n" );   
+            
+  AddSound( "zuschauer",
+            #'zuschauer );               
+
+  AddExit("ostunten", ([ EX_DEST : ROOM "nordteil",
+                             EX_MSG  : "die Treppe hinunter zum Eingang"]) );
+
+  AddExit("westen", ([EX_DEST : ROOM "tribuene_sw"]) );
+  
+  AddCmd ( ({"bruelle", "bruell" }), "shout_battle");
+  AddCmd ( ({"setze", "setz", "sitz" }), "do_sit_down");
+  AddCmd ( "erhebe", "do_get_up");
+  
+  call_out ("AddNPC", 0);
+}

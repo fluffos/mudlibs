@@ -1,0 +1,1393 @@
+/********************************************************************
+ * Klasse: Standardklasse fuer allgemeine Haustiere                 *
+ * Datei: /p/service/angel/haustiere/std_pet.c                      *
+ *                                                                  *
+ * BITTE UNBEDINGT das #define MY_PET_VERSION bei einer Aenderung   *
+ * aktualisieren!!                                                  *           
+ *                                                                  *
+ *                                                                  *
+ * Version 1.20.2 (18.09.2022) Gwenshara
+ *          - ID NOCONTROL hinzugefuegt, damit Pets nicht gestohlen *
+ *            werden                                                *
+ * Version  1.20.1ki (29.11.2004) Koomi                             *
+ *          - mir widerstrebt, da so eine Kindergartenversion zu    *
+ *            produzieren, aber ich hoffe, dass man das durch       *
+ *            Diskussion loesen kann                                *
+ * Version  1.20.1 (22.11.2004) Koomi                               *
+ *          - das Speichern des Haustieres wird nimmer abgefangen   *
+ *            und erzeugt einen Laufzeitfehler falls save_object()  *
+ *            fehlschlaegt.                                         *
+ * Version: 1.20 (17.11.2004) Koomi                                 *
+ *          - Einbau von P_PET_MOVINGTYPE, das savefile sollte      *
+ *            da noch ladbar sein...                                *
+ * Version: 1.19 (22.09.03):                                        *
+ *          - go_to_sleep() wurde abgesichert -> !is_clone ...      *
+ * Version: 1.18 (22.08.03):                                        *
+ *          - Das Haustier geht beim Reset schlafen, wenn der       *
+ *            Besitzer nicht mehr eingeloggt ist.                   *
+ *          - Zeit in der das Haustier "beleidigt" ist korrigiert   *
+ *            (und Bug entfernt).                                   *
+ * Version: 1.17 (20.08.03):                                        *
+ *          - ID "NOPETATTACK" fuer NPCs die nicht von Haus-        *
+ *            tieren angegriffen werden sollen.                     *
+ *          - Haustiere koennen nicht eingeschuechtert werden.      *
+ *          - Ein Tod kostet 50% Loyality                           *
+ *          - Kompatibilitaetspatch wegen neuem AddCmd in Funktion  *
+ *            RestorePet().                                         *
+ * Version: 1.16 (13.04.03):                                        *
+ *          - Geister werden nicht angegriffen (incomplete!)        *
+ * Version: 1.15 (11.03.03):                                        *
+ *          - Bugfix: Stelle an der das alte Savefile geloescht     *
+ *                    wird ist berichtigt.                          *
+ *          - Event-Tiere auf /d/event/... werden nicht fuer die    *
+ *            Loyalitaetseinbussen beruechsichtigt                  *
+ * Version: 1.14 (10.03.03):                                        *
+ *          - AddId(lowercase(Name())); beim restore hinzugefuegt   *
+ * Version: 1.13 (03.02.03):                                        *
+ *          - Levelunterschied Opfer - Jaeger eingebaut             *
+ *          - Questnpcs werden nicht mehr angegriffen               *
+ * Version: 1.12 (30.01.03):                                        *
+ *          - Es wird nun im Schlafraum geschlafen                  *
+ *            (nicht gegruesst etc)!                                *
+ * Version: 1.11 (21.01.03):                                        *
+ *          - Es werden nur mehr Seherhaeuser bewacht               *
+ *          - man kann nun die Begruessung der Haustiere ignorieren *
+ * Version: 1.10 (20.01.03):                                        *
+ *          - neue IDs gegen Missbrauch beim restore                *
+ *          - Es wird "parken" der Pets verhindert                  *
+ * Version: 1.09 (17.01.03):                                        *
+ *          - casus check in parse_text                             *
+ * Version: 1.08 (15.01.03):                                        *
+ *          - Logfiles fuer die Loyality eingebaut                  *
+ * Version: 1.07 (11.01.03):                                        *
+ *          - "spron" fuer den Parser erlaubt                       *
+ * Version: 1.06 (07.01.03):                                        *
+ *          - Logfile (abuse) erweitert um das verwendete Verb      *
+ * Version: 1.05 (03.01.03):                                        *
+ *          - Logfile in Defend (wg. Missbrauch)                    *
+ *          - Warnung in P_PET_NOATTACK_MSG                         *
+ *          - SID_NOLEARN eingebaut                                 *
+ * Version: 1.04 (30.12.02):                                        *
+ *          - Bugfix in ExploreBodies                               *
+ * Version: 1.03 (29.12.02):                                        *
+ *          - Version als Property                                  *
+ * Version: 1.02 (28.12.02):                                        *
+ *          - Bugfix in PredatorCheck                               *
+ *          - Aenderungen in go_to_sleep()                          *
+ *            - Haustier bewacht nicht und folg nicht mehr          *
+ * Version: 1.01 (26.12.02):                                        *
+ *          - Bugfix in ExploreBodies                               *
+ *          - Bugfix in give_name                                   *
+ *          - Verfroschung verhindern                               *
+ * Version: 1.0 Release (20.12.02)                                  *
+ ********************************************************************/
+ 
+/*
+ToDo:
+-----
+- Problem mit renew (und anderen Aenderungen des Spielerobjekts) beheben
+*/
+
+inherit "std/npc/sequencer";
+inherit "/std/npc";
+inherit "std/player/soul";
+
+#include "/d/def.h"
+#include "std_pet.h"
+
+/* BITTE IMMER BEI AENDERUNG IN FOLGENDEN FORMAT EINTRAGEN!
+ * vx.xx (Datum, Magiername)
+ *
+ * Danke :-)
+ */
+#define MY_PET_VERSION "v1.20.2 (18.09.2022, Gwenshara)"
+
+mixed  prey_list;
+mixed  friends_list, greeted_players, reported_players;
+int    report_status, food_status, play_status;
+int    wants_help;
+
+
+
+void ModifyLoyality ( int joy );
+varargs string QuerySaveFileName( string name, string uid );
+int SavePet ();
+object RestorePet ( string uid );
+string FindOwner( string uid );
+string parse_text ( string str );
+
+
+// 26. 12. 2002 Verfroschung verhindern
+_query_frog()
+{
+   return 0;
+}
+
+// 30.01.2003
+int is_sleeping()
+{
+   return (environment() == find_object ("/p/service/angel/haustiere/pet_room"));
+}
+
+/************ Begruessungsroutinen *************/
+
+// Filtert die zu Gruessenden:
+int filter_people(object ob)
+{
+   if ( (!ob->QueryProp(P_INVIS)) && interactive (ob))
+      return 1;
+   else
+      return 0;
+}
+
+
+void ExploreBodies ()
+{
+   mixed ids, objs;
+   int joy, i;
+
+   if ( !pointerp (prey_list) || !objectp ( environment (this_object()) ) )
+      return 0;
+
+   objs = all_inventory ( environment (this_object()) );
+
+   for (i=0; i < sizeof (objs); i++)
+   {
+	 // 26.12.2002 ... Check auf gueltiges Objekt
+	 if ( objectp (objs[i]) )
+	 {
+       if ( !objs[i]->id("Leiche") )
+          return 0;
+
+       ids = objs[i]->QueryProp( P_IDS );
+
+       if ( !pointerp(ids) )
+          return 0;
+
+       ids = explode ( ids[<1], "\n" );
+
+       if ( ids[0] != "leiche" )
+          return 0;
+
+       if ( sizeof (ids) < 2 )
+          return 0;
+
+       ids = explode ( ids[1], "#" );
+
+       if ( !pointerp (prey_list) || ( member ( prey_list, ids[0] ) == -1  ) )
+          return 0;
+
+       if ( objs[i]->QueryDecay() < 6 )
+          return 0;
+
+       say ( Name() + " " + QueryProp(P_PET_TRIUMPH_MSG) + "\n" );
+       joy = 10 + objs[i]->QueryProp(P_LEVEL) - QueryProp(P_LEVEL);
+
+       if ( joy > 0 && !food_status )
+       {
+          ModifyLoyality ( joy );
+          food_status = 1;
+       }
+
+       objs[i]->remove();
+     }
+   }
+}
+
+void AttackPrey ( object prey )
+{
+  object pl;
+
+  pl = find_player( QueryProp(P_PET_OWNER_NAME) );
+
+  if ( objectp ( prey ) && environment (prey) == environment (this_object()) &&
+       !prey->id("QUESTOBJ") && !prey->id("NOPETATTACK") && !prey->id("geist")
+       && !prey->id("zombie")  && prey->QueryProp(P_LEVEL)
+        < (QueryProp(P_LEVEL)+5) )
+  {
+    if ( !pointerp ( prey_list ) )
+      prey_list = ({ explode ( file_name( prey ), "#" )[0] });
+    else if(member(prey_list, explode(file_name(prey), "#")[0]) == -1)
+      prey_list += ({ explode ( file_name( prey ), "#" )[0] });
+
+     // 11.03.03 Events wirken sich nicht negativ auf die Tiere aus.
+    if ( (!objectp(pl) || query_idle(pl) > 600 ||
+         environment (pl) != environment (this_object())) &&
+         strstr(file_name(prey), "event/") == -1 )
+    {
+      say (name()+" sieht veraergert aus.\n");
+      ModifyLoyality ( -5 );
+      return;
+    }
+
+    Kill (prey);
+  }
+}
+
+// Sollte ein NPC auf der Speisekarte des Haustiers stehen, so gnade ihm Woody ...
+void PredatorCheck( object ob )
+{
+   int i;
+   mixed enemies;
+
+   // Spieler oder deren Haustiere werden nicht verspeist!
+   if ( query_once_interactive (ob) || ob->QueryProp(P_FRIEND) )
+      return 0;
+
+   enemies = QueryProp(P_PET_ENEMIES);
+
+   for (i=0; i < sizeof (enemies); i++)
+   {
+	  if ( stringp(enemies[i]) && 
+               ( ob->id(enemies[i]) || 
+                 ( stringp(ob->QueryProp(P_RACE)) && 
+                   lower_case( ob->QueryProp(P_RACE) )==lower_case(enemies[i]))
+               )
+             )
+	  {
+	     call_out ( "AttackPrey", 1, ob );
+	     say (Name()+" "+sprintf( QueryProp(P_PET_ATTACK_MSG)+"\n", ob->name(WEN) ) );
+	     return 0;
+      }
+   }
+}
+
+init ()
+{
+   object owner;
+   string msg;
+
+   ::init();
+   // Im Schlafraum wird NIX gemacht!
+   if ( is_sleeping() )
+      return;
+
+   PredatorCheck( this_player() );
+
+   owner = find_player(QueryProp(P_PET_OWNER_NAME));
+   if ( report_status && (owner != this_player()) && (!pointerp(reported_players) || (member (reported_players, this_player()) == -1)) )
+   {
+      if (objectp(owner))
+      {
+	     if ( sizeof ( QueryProp(P_RACESTRING) >= WEN ) )
+	        msg = this_player()->QueryProp(P_RACESTRING)[WEN];
+	     if ( !stringp ( msg ) )
+	        msg = this_player()->QueryProp(P_RACE);
+
+	     msg = this_player()->QueryArticle(WEN, 0, 1) + msg;
+
+	     // Nur mehr Seherhaeuser bewachen!
+         if ( strstr(file_name(environment(this_object())), "seher/haus") >= 0 )
+            tell_object (owner, Name()+" "+sprintf(QueryProp(P_PET_REPORT_MSG), msg )+"\n");
+      }
+
+      if (!pointerp(reported_players))
+         reported_players = ({ this_player() });
+      else
+         reported_players += ({ this_player() });
+   }
+   call_out("greet_check",0);
+}
+
+// Haustier-Ignoranten filtern:
+int filter_ignorants( object ob )
+{
+  if( pointerp(ob->QueryProp(P_IGNORE)) && (member(ob->QueryProp(P_IGNORE), "haustiere") != -1) )
+    return 1;
+}
+
+// Array mit den Haustier-Ignoranten finden:
+mixed get_ignorants ()
+{
+   mixed ignorants;
+
+   ignorants = filter_array (all_inventory ( environment (this_object()) ), #'filter_ignorants);
+   if ( pointerp(ignorants) )
+      return  ignorants;
+   else
+      return ({});
+}
+
+// Begruesungsroutine
+void greet_player()
+{
+   mixed msgs;
+
+   if ( !objectp(this_player()) || !objectp(environment(this_player())) )
+      return 0;
+
+   if ( environment (this_player()) != environment(this_object()) || this_player()->QueryProp(P_INVIS) )
+      return;
+
+   if ( (this_player()->query_real_name() == QueryProp(P_PET_OWNER_NAME)) )
+   {
+	  msgs = QueryProp(P_PET_GREETS_OWNER);
+	  if ( !pointerp( msgs ) || sizeof( msgs ) != 2 )
+	  {
+		 say ("Fehler: Bitte Begruessungstext fuer den Besitzer neu definieren!\n");
+		 return 0;
+	  }
+
+	  if ( stringp ( msgs[0] ) && strlen ( msgs[0] ) )
+	  {
+         if ( !pointerp(this_player()->QueryProp(P_IGNORE)) || (member(this_player()->QueryProp(P_IGNORE), "haustiere") == -1 ) )
+            tell_object (this_player(), Name()+" "+parse_text( msgs[0] )+"\n");
+         say (Name()+" "+parse_text( msgs[1] )+"\n", ({this_player()})+get_ignorants() );
+      }
+   }
+   else
+   if ( member(friends_list, this_player()->query_real_name()) == -1  )
+   {
+	  msgs = QueryProp(P_PET_GREETS_STRANGER);
+	  if ( !pointerp( msgs ) || sizeof( msgs ) != 2 )
+	  {
+		 say ("Fehler: Bitte Begruessungstext fuer Fremde neu definieren!\n");
+		 return 0;
+	  }
+	  if ( stringp ( msgs[0] ) && strlen ( msgs[0] ) )
+	  {
+         if ( !pointerp(this_player()->QueryProp(P_IGNORE)) || (member(this_player()->QueryProp(P_IGNORE), "haustiere") == -1 ) )
+            tell_object (this_player(), Name()+" "+parse_text( msgs[0] )+"\n");
+         say (Name()+" "+parse_text( msgs[1] )+"\n", ({this_player()})+get_ignorants() );
+      }
+   }
+   else
+   {
+	  msgs = QueryProp(P_PET_GREETS_FRIEND);
+	  if ( !pointerp( msgs ) || sizeof( msgs ) != 2 )
+	  {
+		 say ("Fehler: Bitte Begruessungstext fuer Freunde neu definieren!\n");
+		 return 0;
+	  }
+	  if ( stringp ( msgs[0] ) && strlen ( msgs[0] ) )
+	  {
+         if ( !pointerp(this_player()->QueryProp(P_IGNORE)) || (member(this_player()->QueryProp(P_IGNORE), "haustiere") == -1 ) )
+            tell_object (this_player(), Name()+" "+parse_text( msgs[0] )+"\n");
+         say (Name()+" "+parse_text( msgs[1] )+"\n", ({this_player()})+get_ignorants() );
+      }
+   }
+}
+
+void greet_check()
+{
+   if ( !objectp(this_player()) )
+      return 0;
+
+   if ( !interactive(this_player()) && !this_player()->QueryProp(P_FRIEND) )
+      return 0;
+
+   if ( !pointerp( greeted_players ) || member ( greeted_players, this_player() ) == -1 )
+      call_out ( "greet_player", 0 );
+   else
+      return 0;
+
+   if (!pointerp(greeted_players))
+      greeted_players = ({ this_player() });
+   else
+      greeted_players += ({ this_player() });
+}
+
+
+/************** Implementierung der eingebauten Kommandos ******************/
+
+int bewache ( mixed args )
+{
+   if ( this_player()->query_real_name() != QueryProp(P_PET_OWNER_NAME) )
+   {
+	  write ("Das ist doch garnicht Dein Haustier!\n");
+      return 0;
+   }
+
+   if ( member (args, "nicht") != -1 )
+   {
+      write ( Name(RAW) + " hat nun wieder nur mehr Augen fuer Dich.\n");
+      say ( Name(RAW) + " hat nun wieder nur mehr Augen fuer "+this_player()->name(WEN)+".\n", ({this_player()}) );
+      report_status = 0;
+      return 1;
+   }
+
+   if ( strstr(file_name(environment(this_object())), "seher/haus") < 0 )
+   {
+      say ( Name(RAW) + " moechte diesen Ort nicht bewachen.\n" );
+      return 1;
+   }
+
+   if ( member (args, "haus") != -1 || member (args, "heim") != -1 || member (args, "ort") != -1
+        || member (args, "platz") != -1 || member (args, "raum") != -1 )
+   {
+	  this_player()->RemovePursuer( this_object() );
+      say ( Name(RAW) + " beobachtet diesen Ort nun ganz genau.\n" );
+
+      report_status = 1;
+      return 1;
+   }
+
+   write ("Was soll "+Name(RAW)+" denn bewachen oder nicht mehr bewachen?\n");
+   return 0;
+}
+
+int folge ( )
+{
+   if ( this_player()->query_real_name() != QueryProp(P_PET_OWNER_NAME) )
+   {
+	  write ( "Das ist doch gar nicht Dein Haustier!\n" );
+      return 0;
+   }
+
+   if ( member (this_player()->QueryPursuers(), this_object()) == -1 )
+   {
+      this_player()->AddPursuer( this_object() );
+      report_status = 0;
+      write (Name(RAW)+" "+parse_text( QueryProp(P_PET_FOLLOW_MSG)[0] )+"\n");
+      say (Name(RAW)+" "+parse_text( QueryProp(P_PET_FOLLOW_MSG)[1] )+"\n", ({this_player()}));
+      return 1;
+   }
+
+   write (Name(RAW) + " folgt Dir doch schon!\n");
+   return 0;
+}
+
+int warte ( )
+{
+   if ( this_player()->query_real_name() != QueryProp(P_PET_OWNER_NAME) )
+   {
+	  write ("Das ist doch gar nicht Dein Haustier!\n");
+      return 0;
+   }
+
+   if ( member (this_player()->QueryPursuers(), this_object()) != -1 )
+   {
+      this_player()->RemovePursuer( this_object() );
+      write (Name(RAW)+" "+parse_text( QueryProp(P_PET_STOP_MSG)[0] )+"\n");
+      say (Name(RAW)+" "+parse_text( QueryProp(P_PET_STOP_MSG)[1] )+"\n", ({this_player()}));
+      return 1;
+   }
+   write (Name(RAW)+" folgt Dir doch gar nicht!\n");
+}
+
+int hilf ( mixed args )
+{
+   if ( this_player()->query_real_name() != QueryProp(P_PET_OWNER_NAME) )
+   {
+	  write ("Das ist doch garnicht Dein Haustier!\n");
+      return 0;
+   }
+
+   if ( member (args, "nicht") != -1 )
+   {
+      say (Name(RAW)+" entspannt sich sichtlich.\n");
+      this_player()->RemoveDefender(this_object());
+      wants_help = 0;
+      return 1;
+   }
+
+   if ( member (args, "kampf") != -1 || member (args, "schlacht") != -1 )
+   {
+      write ( Name(RAW) + " laesst Dich nicht mehr aus den Augen.\n");
+      say ( Name(RAW) + " laesst "+this_player()->name(WEN)+" nicht mehr aus den Augen.\n", ({this_player()}) );
+      this_player()->AddDefender(this_object());
+      wants_help = 1;
+      return 1;
+   }
+
+   write ("Wo soll Dir "+name()+" beistehen bzw. nicht beistehen?\n");
+   return 0;
+}
+
+
+// Prueft ob der angegebene Name moeglich ist:
+int verify_name (string name)
+{
+  // Pruefung ob ein Spieler bereits so heisst.
+  if (file_size(sprintf("/save/%c/%s.o", lower_case(name)[0], lower_case(name))) > 0)
+     return 0;
+
+  // Pruefung ob der Name gesperrt ist:
+  if ( "/secure/master"->QueryBanished(name) )
+     return 0;
+
+  // Pruefung ob schon ein Haustier so heisst:
+  if ( stringp( FindOwner( lower_case (name) ) ) )
+     return 0;
+
+  // Pruefung ob sonst ein NPC so heisst.
+  if (find_living(name))
+     return 0;
+  else
+     return 1;
+}
+
+// Hilfsfunktion aus der Lib
+varargs string query_c_article(int casus, int plural)
+{
+  if (plural)
+    return ({ "die ", "der ", "den ", "die "})[casus];
+  return ({ ({ "das ", "des ", "dem ", "das " }),
+            ({ "der ", "des ", "dem ", "den " }),
+            ({ "die ", "der ", "der ", "die " }) })
+         [(int)QueryProp( P_GENDER ) % 3][casus];
+}
+
+string short ()
+{
+   if ( stringp ( QueryProp(P_PET_OWNER_NAME) ) )
+      return QueryProp(P_NAME) + ", "+query_c_article(WER)+QueryProp(P_RACE) + " von " + capitalize(QueryProp(P_PET_OWNER_NAME)) + ".\n";
+   else
+      return QueryProp(P_NAME) + ", "+query_c_article(WER)+QueryProp(P_RACE) + ".\n";
+}
+
+string QueryMood ()
+{
+   switch ( QueryProp(P_PET_LOYALITY) )
+   {
+	  case 100:      return " und sieht vollends gluecklich aus!";
+	  case 90 .. 99: return " und sieht sehr gluecklich aus.";
+	  case 80 .. 89: return " und sieht gluecklich aus.";
+	  case 70 .. 79: return " und sieht sehr zufrieden aus.";
+	  case 60 .. 69: return " und sieht ziemlich zufrieden aus.";
+	  case 50 .. 59: return " und sieht zufrieden aus.";
+	  case 40 .. 49: return " und sieht unzufrieden aus.";
+	  case 30 .. 39: return " und sieht ungluecklich aus.";
+	  case 20 .. 29: return " und sieht sehr ungluecklich aus.";
+	  case 10 .. 19: return " und sieht extrem ungluecklich aus!";
+	  case 1 .. 9: return " und sieht verwirrt aus!";
+	  default: return " und sieht stark verwirrt aus!";
+   }
+}
+
+string long ()
+{
+  string output;
+
+  output = ::long();
+
+  output = output[0 .. strlen(output) - 3];
+  return output + QueryMood() + "\n";
+}
+
+void InitSpells ()
+{
+  return;
+}
+
+// Gib Deinem Tier einen Namen:
+int give_name (string args)
+{
+  string str, id;
+
+  notify_fail ("Wen oder was willst Du wie benennen?\n");
+  if (!stringp(args))
+     return 0;
+
+  sscanf( args, "%s %s", id, str );
+
+  if ( member(QueryProp(P_IDS), id) == -1 )
+	 return 0;
+
+  notify_fail ("Das ist doch gar nicht Dein Haustier!\n");
+  if ( this_player()->query_real_name() != QueryProp(P_PET_OWNER_NAME) )
+     return 0;
+
+  notify_fail ("Es ist noch zu frueh Deinem Haustier einen anderen Namen zu geben!\n");
+  if ( time() < QueryProp(P_PET_RENAME_DELAY) && (!IS_LEARNER(this_player())) )
+     return 0;
+
+  notify_fail ("Wie moechstest Du Dein Haustier (be)nennen?\n");
+  if (!stringp(str))
+     return 0;
+
+  notify_fail ("Der Name Deines Haustiers darf nur ein Wort lang sein!\n");
+  if ( sizeof(explode ( str, " ")) > 1 || sizeof(explode ( str, " ")) == 0 )
+     return 0;
+
+  notify_fail ("Dieser Name darf nicht vergeben werden!\n");
+  if ( !verify_name (str) )
+     return 0;
+  else
+  {
+	 // Sollte das Haustier umbenannt werden -> altes save_file loeschen!
+	 rm( QuerySaveFileName() + ".o" );
+
+	 // 26.12.2002: RassenID bleibt!
+	 if ( lower_case (QueryProp(P_NAME)) != "haustier" && lower_case (QueryProp(P_NAME)) != lower_case (QueryProp(P_RACE)) )
+	    RemoveId ( lower_case (QueryProp(P_NAME)) );
+	 AddId( str );
+	 SetProp (P_NAME, capitalize(str) );
+     SetProp(P_ARTICLE, 0);
+     InitSpells ();
+	 tell_object (this_player(), "Du gibst Deinem Haustier den Namen: "+capitalize(str)+".\n");
+     say (this_player()->Name()+" gibt "+this_player()->QueryPossPronoun(NEUTER, WEM, 0)+" Haustier den Namen: "+capitalize(str)+".\n", ({ this_player() }));
+
+
+	 // Der Name des Haustieres darf nur alle 24h geaendert werden:
+	 SetProp (P_PET_RENAME_DELAY, time()+86400);
+	 set_living_name(str);
+	 SavePet();
+	 return 1;
+  }
+}
+
+// Das Haustier zieht sich zurueck
+void go_to_sleep ()
+{
+   object owner;
+   
+   // Nur clone werden bewegt! 22.09.2003 (Angel)
+   if (!is_clone(this_object()))
+      return;
+      
+   prey_list = 0;
+   report_status = 0;
+
+   owner = find_player( QueryProp(P_PET_OWNER_NAME) );
+
+   if ( objectp(owner) )
+      owner->RemovePursuer( owner );
+
+   SavePet();
+   if ( objectp (environment (this_object()) ) )
+      tell_room ( environment (this_object()), Name(RAW)+ " geht ins Reich der schlafenden Haustiere.\n" );
+   move ( SLEEPING_PETS, M_NOCHECK|M_SILENT );
+}
+
+// Haustiere koennen von Spielern nicht verletzt werden:
+string checkattack ()
+{
+   if ( !objectp(this_player()) )
+      return 0;
+
+   if (interactive(this_player()))
+	  return QueryProp(P_PET_NOATTACK_MSG)+"\n";
+   else
+      return 0;
+}
+
+int Defend(int dam, string *dam_type_list, mixed spell, object enemy)
+{
+   if ( interactive(enemy) )
+   {
+	  if (objectp(enemy))
+	  {
+         write_file( "/p/service/angel/haustiere/log/abuse.log",sprintf("%s %s greift "+Name(WER)+" an (Verb: %O).\n",dtime(time()), capitalize(enemy->query_real_name()), spell ) );
+	     tell_object (enemy, QueryProp(P_PET_NOATTACK_MSG));
+	     StopHuntFor( enemy, 1 );
+	     enemy->StopHuntFor( this_object(), 1 );
+      }
+	  return 0;
+   }
+   return ::Defend(dam, dam_type_list, spell, enemy);
+}
+
+// Haustiere sterben nicht sondern ziehen sichzurueck und verlieren Loyalitaet
+void die ( int poisondeath )
+{
+   object	po;
+   
+   /* Kindergarten Modus an. 29.11.2004 Koomi */
+   /* ich hoffe, dass man solche latenten Aggressionen von Magiern gegenueber
+    * anderen Magiern bzw deren Objekte durch sachliche Diskussion vermeiden 
+    * kann und solcher Kindergartenspiele vermeiden kann
+    */
+    
+   po=previous_object();
+   if(po)
+   {
+      if(po->id("wan ling"))
+      {
+        if(environment())
+	{
+	  tell_room(environment(),
+	    Name(RAW)+" weicht geschickt aus und beisst Wan Ling zu Tode.\n");
+	}
+	po->die();
+	return;
+      }
+   }   
+   /* Kindergarten Modus aus */
+
+   prey_list = 0;
+   say ( Name(RAW) + " " + QueryProp(P_PET_DEFEAT_MSG) + "\n" );
+   SetProp( P_HP, QueryProp(P_MAX_HP));
+   ModifyLoyality (-50);
+   SetProp( P_PET_RETURN_DELAY, ( time() + ( 100 - QueryProp( P_PET_LOYALITY ) + 1) * 3600 ) );
+   go_to_sleep();
+}
+
+// Haustiere fliegen nicht aus dem Speicher
+clean_up( int ref )
+{
+  return 1;
+}
+
+/********** Verhalten wenn das Haustier einen Gegenstand erhaelt ***********/
+
+// Lass alles fallen:
+void drop_stuff ( object ob )
+{
+   mixed stuff;
+   int   i;
+
+   if ( objectp(ob) )
+   {
+	  say ( Name(WER)+ " will "+ob->name(WEN)+" nicht.\n" );
+      ob->move(environment(this_object()), M_PUT);
+      return;
+   }
+
+   stuff = all_inventory();
+
+   for ( i = 0; i < sizeof (stuff); i++ )
+   {
+	  say ( Name(WER)+ " will "+stuff[i]->name(WEN)+" nicht.\n" );
+      stuff[i]->move(environment(this_object()), M_PUT);
+   }
+
+}
+
+// Haustier futtert das Essen und reagiert auf die Qualitaet:
+void consume_food ( object ob, int joy )
+{
+   switch (joy)
+   {
+	  case 0:  say ( break_string (Name(WER) + " schlingt "+ob->name(WEN)+" hinunter, es scheint nicht sonderlich gut zu schmecken.", 78) );
+	           if ( !food_status && (this_player()->query_real_name() == QueryProp(P_PET_OWNER_NAME))  )
+	              ModifyLoyality ( random (2) );
+	           food_status = 1;
+	           break;
+	  case 1:  say ( break_string (Name(WER) + " macht sich ueber "+ob->name(WEN)+" mit Appetit her.", 78) );
+	           if ( !food_status && (this_player()->query_real_name() == QueryProp(P_PET_OWNER_NAME))  )
+	              ModifyLoyality (1);
+	           food_status = 1;
+	           break;
+	  case 2:  say ( break_string (Name(WEM) + " scheint "+ob->name(WER)+" sehr gut zu schmecken.", 78) );
+	           if ( !food_status && (this_player()->query_real_name() == QueryProp(P_PET_OWNER_NAME)) )
+	              ModifyLoyality (2);
+	           food_status = 1;
+	           break;
+	  case 3:  say ( break_string (Name(WER) + " hat "+ob->name(WEN)+" anscheinend zum Lieblingsgericht gewaehlt und ist restlos gluecklich.", 78) );
+	           if ( !food_status && (this_player()->query_real_name() == QueryProp(P_PET_OWNER_NAME)))
+	              ModifyLoyality (3);
+	           food_status = 1;
+	           break;
+	  default: say ( break_string (Name(WER) + " isst "+ob->Name(WEN)+" auf und schaut zufrieden.", 78) );
+	           break;
+   }
+   ob->remove();
+}
+
+// Basisfunktion fuer das Verhalten bzgl. erhaltenen Gegenstaenden:
+int check_give( object obj )
+{
+   int i, joy;
+   mixed ids, food;
+
+   joy = -1;
+
+   ids = obj->QueryProp(P_IDS);
+   food = QueryProp(P_PET_FOOD);
+
+   for (i=0; i < sizeof(ids); i++)
+   {
+	  if ( member (food, ids[i]) )
+	  {
+		 if ( food[ids[i]] > joy )
+		    joy = food[ids[i]];
+      }
+   }
+   if ( joy > -1 )
+   {
+      call_out("consume_food", 0, obj, joy);
+      return 0;
+   }
+   call_out("drop_stuff", 0, obj);
+   return 0;
+}
+
+/****************** Initialisierung *******************/
+
+void create ()
+{
+  ::create();
+
+  SetProp(P_PET_VERSION, MY_PET_VERSION);
+
+  Set(P_LONG, SAVE, F_MODE_AS);
+
+  Set(P_NAME, SAVE, F_MODE_AS);
+  SetProp(P_NAME, "Haustier");
+
+//  Set(P_RACE, SAVE, F_MODE_AS);
+  SetProp(P_RACE, "Haustier");
+
+  Set(P_ARTICLE, SAVE, F_MODE_AS);
+  SetProp(P_ARTICLE, 1);
+
+//  Set(P_BODY, SAVE, F_MODE_AS);
+  Set(P_HP, SAVE, F_MODE_AS);
+  Set(P_MAX_HP, SAVE, F_MODE_AS);
+  Set(P_XP, SAVE, F_MODE_AS);
+//  Set(P_LEVEL, SAVE, F_MODE_AS);
+//  Set(P_HANDS, SAVE, F_MODE_AS);
+  Set(P_SIZE, SAVE, F_MODE_AS);
+  Set(P_ALIGN, SAVE, F_MODE_AS);
+
+  create_default_npc(1);
+
+  Set(P_DETAILS, SAVE, F_MODE_AS);
+
+  Set(P_PET_MOVINGTYPE, SAVE, F_MODE_AS);
+  SetProp(P_PET_MOVINGTYPE, PM_WALKING);
+
+  Set(P_PET_XP, SAVE, F_MODE_AS);
+  SetProp( P_PET_XP, 0);
+
+  Set(P_PET_OWNER_NAME, SAVE, F_MODE_AS);
+  SetProp( P_PET_OWNER_NAME, 0);
+
+  Set(P_PET_RENAME_DELAY, SAVE, F_MODE_AS);
+  SetProp( P_PET_RENAME_DELAY, 0);
+  
+  Set(P_PET_RETURN_DELAY, SAVE, F_MODE_AS);
+  SetProp( P_PET_RENAME_DELAY, 0);
+
+  Set(P_PET_REPORT_MSG, SAVE, F_MODE_AS);
+  SetProp( P_PET_REPORT_MSG, "hat gerade %s gesehen");
+
+  Set(P_PET_GREETS_OWNER, SAVE, F_MODE_AS);
+  SetProp( P_PET_GREETS_OWNER, ({ "begruesst $sname4 hoch erfreut.", "begruesst $oname4 hoch erfreut." }) );
+
+  Set(P_PET_GREETS_FRIEND, SAVE, F_MODE_AS);
+  SetProp( P_PET_GREETS_FRIEND, ({ "begruesst $sname4 freudig.", "begruesst $oname4 freudig." }) );
+
+  Set(P_PET_GREETS_STRANGER, SAVE, F_MODE_AS);
+  SetProp( P_PET_GREETS_STRANGER, ({ "begruesst $sname4.", "begruesst $oname4." }) );
+
+  SetProp( P_PET_PRICE, 10000);
+
+  SetProp( P_PET_NOATTACK_MSG, BS("An Haustieren Faehigkeiten zu trainieren ist nicht erlaubt! Vergehen werden aufgezeichnet und geahndet!") );
+
+  SetProp( P_PET_ATTACK_MSG, "macht sich zum Angriff auf %s bereit!");
+
+  SetProp( P_PET_TRIUMPH_MSG, "macht sich ueber die Leiche des toten Feindes her.");
+
+  Set(P_PET_LOYALITY, SAVE, F_MODE_AS);
+  SetProp( P_PET_LOYALITY, 100);
+
+  Set(P_PET_DEFEAT_MSG, SAVE, F_MODE_AS);
+  SetProp( P_PET_DEFEAT_MSG, "zieht sich gekraenkt zurueck.");
+
+  Set(P_PET_COMMANDS, SAVE, F_MODE_AS);
+  SetProp( P_PET_COMMANDS, ({"folge", ({"komm", "mit"}), "warte", ({"folge", "mir", "nicht"}), "bewache", ({"bewache"}), "hilf", ({"hilf", "mir"}) }) );
+
+  Set(P_PET_REACTIONS, SAVE, F_MODE_AS);
+  SetProp( P_PET_REACTIONS, ([]) );
+
+  SetProp( P_PET_ENEMIES, ({}) );
+
+  Set(P_PET_FOLLOW_MSG, SAVE, F_MODE_AS);
+  SetProp( P_PET_FOLLOW_MSG, ({ "folgt Dir nun.", "folgt nun $oname3." }) );
+
+  Set(P_PET_STOP_MSG, SAVE, F_MODE_AS);
+  SetProp( P_PET_STOP_MSG, ({ "folgt Dir nun nicht mehr.", "folgt $oname3 nun nicht mehr." }) );
+
+  SetProp( P_PET_FOOD, ([]) );
+
+  SetProp( P_PET_FORBIDDEN_CMDS, ({ "nimm", "gib", "leg", "lege", "trag", "trage", "zieh", "ziehe", "antworte",
+            "zueck", "zuecke", "steck", "stecke", "wirf", "werfe", "sag", "toete", "tanze", "beglueckwuensche",
+            "philosophiere", "verfluche", "emote" }) );
+
+  SetProp( P_INFO, "Bei diesem Tier duerfte es sich um ein Haustier handeln, soviel ist sicher.\n");
+
+  SetProp( P_FRIEND, 1);
+
+  seteuid(getuid(this_object()));
+
+  enable_commands();
+  add_soul_commands();
+
+  friends_list = ({});
+
+  AddInfo ( DEFAULT_INFO, "Scheint nicht zu verstehen." );
+
+  Set(P_COMMANDS, SAVE, F_MODE_AS);
+  AddCmd( ({"taufe", "benenne", "nenne"}), "give_name" );
+
+  AddId( ({"haustier", "\nhaustier", "NOWIMPY", "NOCONTROL"}) );
+  AddId(SID_NOLEARN);
+
+  RegisterGive( "check_give", ({}) );
+}
+
+// Unser Hautier steht dem Besitzer bei!
+// (sofern es erlaubt ist)
+void InformDefend(object enemy)
+{
+   if ( wants_help && objectp(enemy) && !enemy->Id("NOPETATTACK") )
+      Kill(enemy);
+}
+
+// Werte beim Reset zuruecksetzen
+reset ()
+{
+   ::reset();
+   greeted_players = 0;
+   reported_players = 0;
+   food_status = 0;
+   play_status = 0;
+   if ( !objectp( find_player( QueryProp( P_PET_OWNER_NAME ) ) ) )
+      go_to_sleep();
+}
+
+/************** Lade- & Speicherroutinen **************/
+
+// Extrahiert den Namen des Haustieres aus den Dateinamen der savefiles
+string FindPet( string uid )
+{
+   int i, max;
+   string name, player;
+   mixed files;
+
+   files = get_dir(SAVEFILE_DIR+"*");
+   max = sizeof(files);
+   for (i=0; i < max; i++)
+   {
+      sscanf(files[i], "pet_%s_%s.o", name, player);
+      if (player == uid)
+         return name;
+   }
+}
+
+// Extrahiert den Namen des Besitzers aus den Dateinamen der savefiles
+string FindOwner( string uid )
+{
+   int i, max;
+   string name, player;
+   mixed files;
+
+   files = get_dir(SAVEFILE_DIR+"*");
+   max = sizeof(files);
+   for (i=0; i < max; i++)
+   {
+      sscanf(files[i], "pet_%s_%s.o", name, player);
+      if (name == uid)
+         return player;
+   }
+}
+
+varargs string QuerySaveFileName( string name, string uid )
+{
+     return sprintf(
+	 SAVEFILE_DIR+"pet_%s_%s",
+	 (name || lower_case(QueryProp(P_NAME))),
+	 (uid || lower_case(QueryProp(P_PET_OWNER_NAME))) );
+}
+
+// Zum Sichern der Haustierdaten
+int SavePet ()
+{
+   string err;
+
+   if( stringp ( QueryProp(P_PET_OWNER_NAME) ) )
+   {
+     save_object( QuerySaveFileName() );
+     return 1;
+   }
+   return 0;
+}
+
+// Zum Laden der Haustierdaten
+object RestorePet ( string uid )
+{
+   string name;
+
+   name = FindPet( uid );
+   if ( stringp( name ) )
+   {
+      restore_object ( QuerySaveFileName(name, uid) );
+      set_living_name (lower_case(Name(RAW)));
+      AddId( ({"haustier", "\nhaustier", "NOWIMPY"}) );
+      AddId(lower_case(Name(RAW)));
+      AddId(SID_NOLEARN);
+      // Emergency-Fix wegen neuem AddCmd:
+      SetProp( P_COMMANDS, (["nenne":({"give_name"});({0});({0}),"taufe":({"give_name"});({0});({0}),"benenne":({"give_name"});({0});({0})]) );
+      return this_object();
+   }
+   else
+   {
+	  if ( find_player (uid) )
+	     tell_object ( find_player (uid), "Dein Haustier ist leider unauffindbar!\n" );
+	  remove();
+   }
+}
+
+// Funktion zum Modifizieren der Loyalitaet
+void ModifyLoyality ( int joy)
+{
+  int loyality;
+  object owner, tool;
+
+  loyality = QueryProp(P_PET_LOYALITY);
+
+  loyality += joy;
+
+  if ( loyality > 100 )
+     loyality = 100;
+
+  write_file( "/p/service/angel/haustiere/log/loyality.log",sprintf("%s loyality of "+Name(WER)+" towards %s changes %d -> %d (Verb: %s).\n",dtime(time()), capitalize(QueryProp(P_PET_OWNER_NAME)), QueryProp(P_PET_LOYALITY), loyality, to_string(query_verb()) ) );
+
+  if ( loyality < 0 )
+  {
+	 owner = find_player ( QueryProp(P_PET_OWNER_NAME) );
+	 if ( objectp (owner) )
+	 {
+		tool = present ( "\nstd_pet_item", owner );
+
+		if ( objectp (tool) )
+		   tool->remove();
+
+	    tell_object ( owner, "Du hast das Vetrauen von "+Name(WEM)+" zu "+
+	              "Dir nun voellig zerstoert!\n"+Name(WER)+" verlaesst Dich.\n" );
+	    say ( owner->Name()+" hat das Vetrauen von "+Name(WEM)+" voellig zerstoert!\n"
+	                       +Name(WER)+" verlaesst "+owner->name()+".\n", ({ owner }) );
+     }
+	 rm( QuerySaveFileName() + ".o" );
+	 call_out ("remove", 0);
+	 return;
+  }
+  SetProp (P_PET_LOYALITY, loyality);
+}
+
+// Entfernt Sonderzeichen aus einem String
+string remove_special_keys( string text )
+{
+   int i;
+   string result;
+
+   result = "";
+
+   for ( i = 0; i < strlen(text); i++ )
+   {
+      if ( text[i] == ' ' || text[i] == ''' || ( text[i] >= 'A' &&  text[i] <= 'Z') || ( text[i] >= 'a' &&  text[i] <= 'z') )
+         result += text[i .. i];
+   }
+   return result;
+}
+
+/****** Befehle an das Haustier ***********/
+
+// Funktion zum Ausfuehren eines allgemeinen Kommandos
+void do_cmd ( string cmd )
+{
+   while ( strlen(cmd) && (  cmd[0] < 'A' || (cmd[0] > 'Z' && cmd[0] < 'a') || cmd[0] > 'z') )
+         cmd = cmd[1 .. strlen(cmd)-1];
+
+   if (!command_me ( cmd ))
+      command_me("emote schaut verwirrt drein.");
+}
+
+varargs string str_replace ( string text, string to_replace, string replacement, int sensitive )
+{
+   mixed parts;
+   int i;
+
+   if ( !stringp ( text ) || !stringp ( to_replace ) || !stringp ( replacement ) )
+      return text;
+
+   parts = explode ( text, " ");
+
+   for (i=0; i < sizeof(parts); i++)
+   {
+      if ( !sensitive )
+      {
+         if ( lower_case(parts[i]) == lower_case(to_replace) )
+            parts[i] = replacement;
+      }
+      else
+      {
+         if ( parts[i] == to_replace )
+            parts[i] = replacement;
+      }
+   }
+   return implode (parts, " ");
+}
+
+// Das Haustier erhaelt die Moeglichkeit auf Saetze, welche mit seinem
+// Namen beginnen zu reagieren:
+void catch_tell( string msg )
+{
+   string cmd_string, original_string, pet_name;
+   mixed commands, cmd_keys, tmp_keys, owner_name;
+   int i, j, test;
+
+   if ( !stringp ( QueryProp(P_PET_OWNER_NAME) ) || !strlen(msg) > 2 || !objectp (this_player()) )
+      return 0;
+
+   msg = str_replace ( msg[0 .. strlen(msg)-2], "mich", lower_case(this_player()->name()), 0 );
+
+   if ( !( sscanf (msg, "%s sagt: %s %s", owner_name, pet_name, original_string) == 3 ) &&
+        !( sscanf (msg, "%s teilt Dir mit: %s", owner_name, original_string) == 2 ))
+      return 0;
+
+   if ( !stringp (owner_name) )
+      return 0;
+
+   owner_name = explode(owner_name, " ")[<1];
+
+   if ( owner_name != capitalize ( QueryProp(P_PET_OWNER_NAME) ) ||  lower_case (owner_name) != lower_case(this_player()->query_real_name()))
+      return 0;
+
+   if ( (strstr ( msg, "teilt Dir mit:") > 0) && (strstr ( msg, "teilt Dir mit:") < strstr ( msg, original_string)) )
+   {
+	   if ( environment (this_player()) != environment (this_object()) )
+	   {
+	      write( Name()+" ist doch gar nicht anwesend!\n");
+	      return 0;
+       }
+
+	   write ("Du gibtst "+name(WEM)+" ein Zeichen.\n");
+	   say ( capitalize(owner_name) + " gibt "+name(WEM)+" ein Zeichen.\n", ({ this_player() }));
+   }
+   else
+   {
+	   if ( !stringp (pet_name) || strstr (lower_case(pet_name), lower_case(name(RAW))) == -1)
+          return 0;
+   }
+
+   cmd_string = remove_special_keys (original_string);
+
+   commands = explode (cmd_string, " ");
+
+   cmd_keys =  QueryProp(P_PET_COMMANDS);
+
+   for (i=0; i < sizeof(cmd_keys); i += 2)
+   {
+	  test = 1;
+	  tmp_keys = commands;
+	  for (j=0; j < sizeof(cmd_keys[i+1]); j++)
+	  {
+		 if ( member (tmp_keys, cmd_keys[i+1][j]) == -1 )
+		    test = 0;
+		 else
+		    tmp_keys -= ({ cmd_keys[i+1][j] });
+	  }
+	  if (test)
+	  {
+	     call_out ( cmd_keys[i], 0, tmp_keys );
+	     return;
+      }
+   }
+
+   while ( cmd_string[0] == ' ' )
+   {
+	  cmd_string = cmd_string[1 .. strlen(cmd_string)-1];
+   }
+
+   if (member(QueryProp(P_PET_FORBIDDEN_CMDS), commands[0]) == -1)
+   {
+      call_out ( "do_cmd", 0, original_string );
+   }
+   else
+   {
+      call_out ( "do_cmd", 0, "emote will das nicht.");
+      return;
+   }
+}
+
+// Funktion zum Aendern eines Kommandos
+void ChangeCommand ( string key, string command )
+{
+   int pos;
+   mixed cmds, values;
+
+   cmds = QueryProp(P_PET_COMMANDS);
+   pos = member ( cmds, key );
+
+   if ( pos == -1 || pos > sizeof(cmds) )
+      return;
+
+   values = explode ( command, " ");
+
+   if ( sizeof ( values ) )
+   {
+      cmds[pos+1] = values;
+      SetProp(P_PET_COMMANDS, cmds);
+   }
+}
+
+/******** Reaktionsgestaltung des Haustiers *********/
+
+varargs string QueryDein(int casus,int gender,int zahl)
+{
+  return
+    ({ ({({"dein", "deine"}),({"dein", "deine"}),({"deine", "deine"})}),
+       ({({"deines","deiner"}),({"deines","deiner"}),({"deiner","deiner"})}),
+       ({({"deinem","deinen"}),({"deinem","deinen"}),({"deiner","deinen"})}),
+       ({({"dein","deine"}),({"deinen","deine"}),({"deine","deine"})})
+       })[casus][gender][zahl];
+}
+
+
+// einfacher Parser
+string parse_text ( string str )
+{
+   int pos, casus;
+   string name_string;
+
+   if ( !stringp (str) )
+      return 0;
+
+   do
+   {
+      if ( (pos = member (str, '$')) != -1 )
+      {
+      	 if ( strlen(str) < pos+7 ) // in dem Fall liegt ein Fehler in der Syntax vor.
+      	 {
+      	    write ("Fehler: Inkorrekte Anzahl von Parametern fuer '$'!\n");
+      	    return str;
+      	 }
+
+         name_string = "";
+
+         casus = to_int(str[pos+6 .. pos+6])-1; // Wenn nicht angegeben ist es 0
+
+         if (casus < 0 || casus > 4)
+            casus = 0;
+
+         if ( str[pos+1] == 's' )
+         {
+            if ( str[pos+2 .. pos+5] == "name" )
+               name_string = capitalize(this_player()->QueryDu(casus));
+            if ( str[pos+2 .. pos+5] == "pron" )
+               name_string = capitalize(this_player()->QueryDu(casus));
+            if ( str[pos+2 .. pos+3] == "bf" )
+               name_string = capitalize(QueryDein( casus, to_int(str[pos+4 .. pos+4]), to_int(str[pos+5 .. pos+5])  ));
+         }
+
+         if ( str[pos+1] == 'o' )
+         {
+            if ( str[pos+2 .. pos+5] == "name" )
+               name_string = this_player()->name(casus);
+            if ( str[pos+2 .. pos+5] == "pron" )
+               name_string = this_player()->QueryPronoun(casus);
+            if ( str[pos+2 .. pos+3] == "bf" )
+               name_string = this_player()->QueryPossPronoun( to_int(str[pos+4 .. pos+4]), casus, to_int(str[pos+5 .. pos+5])  );
+         }
+
+         if ((pos-1 >= 0) && (pos+7 < strlen(str)))
+            str = str[0 .. pos-1] + name_string + str[pos+7 .. strlen(str)-1];
+         else
+         {
+            if ( (pos-1 < 0) && (pos+7 >= strlen(str)) )
+               return name_string;
+
+            if ( (pos-1 < 0) )
+               str = capitalize(name_string) + str[pos+7 .. strlen(str)-1];
+
+            if ( (pos+7 >= strlen(str)) )
+               str = str[0 .. pos-1] + name_string;
+         }
+      }
+   } while (pos != -1);
+   return str;
+}
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+  if (find_call_out("react")!= -1)
+     return;
+
+  if ( gruppe == "fies" && (QueryProp(P_PET_OWNER_NAME) == this_player()->query_real_name()) )
+     ModifyLoyality (-1);
+
+  if ( !QueryProp(P_PET_REACTIONS)[gruppe] )
+     return;
+  else
+     call_out("react", 0, parse_text(QueryProp(P_PET_REACTIONS)[gruppe, 0]), parse_text(QueryProp(P_PET_REACTIONS)[gruppe, 1]) );
+}
+
+void react(string victim, string others)
+{
+  if (present(this_player(), environment(this_object())))
+  {
+    if( !others ) others = victim;
+    tell_object(this_player(), break_string(Name(WER, 1) + " "+victim, 78) );
+    tell_room(environment(this_object()), break_string(Name(WER, 1)+" "+others, 78), ({this_player(),this_object()}) );
+  }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+
+// Funktion zum anpassen der Haustier-Reaktionen
+void ModifyReaction ( string group, string victim, string others )
+{
+   if ( member ( REACTION_GROUPS, group ) != -1 )
+      SetProp(P_PET_REACTIONS, QueryProp(P_PET_REACTIONS) + ([ group : victim; others ]) );
+}
+
+/********* Zugriffsfunktionen ***********/
+
+void AddFriend( string name )
+{
+   friends_list += ({ lower_case(name) });
+}
+
+void RemoveFriend( string name )
+{
+   friends_list -= ({ lower_case(name) });
+}
+
+mixed GetFriends ()
+{
+   return friends_list;
+}
+
+void SetFriends ( mixed friends )
+{
+   friends_list = friends;
+}
+
+int get_play_status ()
+{
+   return play_status;
+}
+
+void set_play_status ( int value )
+{
+   play_status = value;
+}
+
+mixed get_prey_list ()
+{
+   return prey_list;
+}
+
+string QueryVersion ()
+{
+   return QueryProp(P_PET_VERSION);
+}
+
+
+/********** Logging *************/
+
+AddExp( int e )
+{
+  int experience;
+
+  experience = QueryProp(P_PET_XP);
+  if((experience+=e) < 0) experience = 0;
+  return SetProp(P_PET_XP, experience);
+}
+
+varargs int StopHuntFor( mixed arg, int silent )
+{
+  if (IsEnemy (arg) )
+  {
+    call_out ( "ExploreBodies", 0 );
+    write_file( "/p/service/angel/haustiere/log/pet_xp.log",sprintf("%s Owner: %s ("+Name(WER)+"): StopHuntFor "+file_name(previous_object())+", TOTAL_XP = "+QueryProp(P_PET_XP)+".\n",dtime(time()),capitalize(QueryProp(P_PET_OWNER_NAME)) ) );
+  }
+  return ::StopHuntFor( arg, silent );
+}

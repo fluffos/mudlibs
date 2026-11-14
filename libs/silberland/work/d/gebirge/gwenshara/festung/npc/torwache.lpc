@@ -1,0 +1,204 @@
+inherit "std/npc";
+
+#include <properties.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include "../def.h"
+
+#define EVIL_WARN   (-200)   // unter diesem Align gibt's eine Warnung
+#define EVIL_HOSTILE (-800)  // darunter wird angegriffen
+
+int warned;
+
+void create() {
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Eine Torwache der Goldenen Rose");
+  SetProp(P_LONG,
+    "Eine wachsame Wache in hellem Kettenhemd und Mantel mit der goldenen Rose. "
+    "Haltung und Blick sind ruhig, doch nichts entgeht ihr. Sie steht fest vor dem Tor "
+    "und laesst den Wind und das Licht ueber den Stahl ziehen.");
+  SetProp(P_NAME, "Torwache");
+  SetProp(P_GENDER, FEMALE);
+  AddId(({"torwache","wache","paladinwache","rosenwache"}));
+
+  create_default_npc(22);
+
+  // Natuerliche Angriffe ohne Item-Abhaengigkeit
+  SetProp(P_HANDS, ({
+    " mit ihrem Speer",  QueryProp(P_HANDS)[1], DT_PIERCE,
+  }));
+
+  SetProp(P_RACE, "Mensch");
+  SetProp(P_SIZE, 170);
+  SetProp(P_WEIGHT, 78000);
+  SetProp(P_ALIGN, 1000); 
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_HEAL, 2);
+  SetProp(P_AGGRESSIVE, 0);
+  SetProp(P_WIMPY, 0);
+  SetProp(P_NOMAGIC, 0);
+
+  // leichte Paladin-Resistenzen
+  SetProp(P_RESISTANCE_STRENGTHS , 
+    ([ DT_HOLY:-0.20, DT_UNHOLY:0.20, DT_TERROR:-0.15 ]) );
+
+  SetProp(P_MSGIN, "tritt an den Posten");
+  SetProp(P_MSGOUT, "wechselt den Posten");
+  SetProp(P_MMSGIN, "erscheint unter dem Banner der Goldenen Rose");
+  SetProp(P_MMSGOUT, "verschwindet unter dem Banner der Goldenen Rose");
+
+  SetProp(P_DIE_MSG,  " sinkt lautlos in die Knie und stuerzt zur Seite.\n");
+  SetProp(P_NOCORPSE, 0 );
+  SetProp(P_MURDER_MSG, "Im Namen Dustys: Du wirst Antwort geben!");
+  SetProp(P_KILL_NAME, "Torwache");
+  SetProp(P_KILL_MSG, "Der Weg bleibt rein.");
+
+  AddInfo(DEFAULT_INFO, "neigt knapp den Kopf. \"Reisender, nenne Dein Anliegen.\".\n");
+
+  AddInfo(({"tor","banner","rose"}),
+    "Das Tor wird vom Orden der Goldenen Rose gehalten. Eintritt bedeutet Schutz und Pflicht.",
+    "erklaert: ");
+
+  SetProp(P_LOG_INFO, "npc_torwache");
+
+  SetProp(P_REJECT, ({ REJECT_DROP,
+    "<name> schuettelt den Kopf: \"Ich trage keine fremden Sachen.\".\n" }) );
+
+  // Keine Zauber – einfache Wache
+  SetProp(P_SPELLRATE,0);
+
+  SetChats(3, ({
+    "Die Torwache prueft den Weg und lauscht in den Wind.\n",
+    "Ein kurzes Gebet perlt ueber die Lippen der Torwache.\n",
+    "Die goldene Rose am Mantel der Wache schimmert im fahlen Licht.\n"
+  }) );
+  SetAttackChats(6, ({
+    "Die Torwache ruft: \"Im Namen Dustys: Halte ein!\".\n",
+    "Der Speer der Torwache blitzt vor.\n",
+    "Die Schulter der Torwache prallt mit Wucht gegen Dich.\n"
+  }) );
+
+  warned = 0;
+
+   SUID;
+  CLONEME("/p/weapon/spear/hellebarde");
+  command("zuecke hellebarde");
+  CLONEME("/p/armour/armour/kettenpanzer");
+  if(random(2)) CLONEME("/p/armour/helm/kettenhaube");
+  if(random(2)) CLONEME("/p/armour/bracers/messingarmschienen");
+  command("trage alles");
+}
+
+void init() {
+  ::init();
+  call_out("gate_scan", 1);
+}
+
+int is_evil(object ob) {
+    mixed al;
+    if (!objectp(ob) || !living(ob) || ob==ME) return 0;
+    al = ({int})ob->QueryProp(P_ALIGN);
+    return intp(al) ? al : 0;
+}
+
+void gate_scan() {
+    int i, al;
+    object *inv, ob;
+
+    if(!InFight()) {
+        inv = all_inventory(environment());
+        for (i=0; i<sizeof(inv); ++i) {
+            ob = inv[i];
+            al = is_evil(ob);
+            if (!al) continue;
+
+            if (al <= EVIL_HOSTILE) {
+            tell_object(ob, BS(Name(WER,1)+" hebt den Speer: \"Du traegst Finsternis. "
+                "Hier endet dein Weg!\""));
+            say(BS(Name(WER,1)+" senkt den Speer gegen "+ob->Name(WEN,1)+"."), ({ob}));
+            Kill(ob);
+            warned = 0;
+            return;
+            }
+
+            if (al <= EVIL_WARN && !warned) {
+            warned = 1;
+            tell_object(ob, BS(Name(WER,1)+" spricht ruhig: \"Reinige dein Herz, Reisender. "
+                "Dies ist geweihtes Land.\""));
+            say(BS(Name(WER,1)+" mustert "+ob->Name(WEN,1)+" wachsam."), ({ob}));
+            // kleine Gnadenfrist
+            call_out("gate_scan", 8);
+            return;
+            }
+        }
+    }
+    // regelmaessige Pruefung
+    call_out("gate_scan", 10);
+}
+
+// Reaktionssystem – kurz & formell
+void StartReaction(string verb, string gruppe, string adverb, int touch) {
+  if (find_call_out("reaction") != -1) return;
+  switch (gruppe) {
+    case "nett":
+    case "neutral":
+      call_out("reaction", 0, TP,
+        "hebt die Hand zum Gruss und bleibt am Platz.",
+        "nickt knapp, ohne den Posten zu verlassen.");
+      break;
+    case "froh":
+      call_out("reaction", 0, TP,
+        "laechelt kurz, die Augen bleiben wachsam.",
+        "laechelt knapp und richtet den Mantel.");
+      break;
+    case "aergerlich":
+    case "fies":
+      call_out("reaction", 0, TP,
+        "hebt warnend den Schild.",
+        "hebt warnend den Schild und macht einen Schritt vor.");
+      break;
+    case "aengstlich":
+      call_out("reaction", 0, TP,
+        "atmet ruhig und haelt die Stellung.",
+        "bleibt standhaft am Tor.");
+      break;
+    case "albern":
+    case "intim":
+      call_out("reaction", 0, TP,
+        "schmunzelt kaum merklich und sagt nichts.",
+        "schmunzelt und blickt wieder zum Weg.");
+      break;
+    case "traurig":
+      call_out("reaction", 0, TP,
+        "senkt fuer einen Moment den Blick.",
+        "senkt den Blick und wird still.");
+      break;
+  }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch) {
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void reaction(object ob, string macher, string andere) {
+  if (present(ob, ENV(TO))) {
+    tell_object(ob, BS(Name(WER, 1)+" "+macher));
+    tell_room(ENV(TO), BS(Name(WER, 1)+" "+andere), ({ob}));
+  }
+}
+
+void die(int poisondeath) {
+  write_file(LOG "npc.kills",
+    ctime()+": "+(CAP(getuid(QueryProp(P_KILLER)||TP))||"<Unbekannt>")+
+    " toetet die "+name(WEN,1)+".\n");
+  ::die(poisondeath);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp) {
+  if(killer == ME)
+    write_file(LOG "npc.deads",
+      ctime()+": "+Name(WER,1)+" hat gerade "+CAP(getuid(player))+" am Tor gerichtet.\n");
+}

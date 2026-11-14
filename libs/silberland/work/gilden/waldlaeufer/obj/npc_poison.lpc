@@ -1,0 +1,114 @@
+/*****************************************************************************
+Vergiftung von NPC (auch bei Spielern einsetzbar)
+(c) Lilyth, Torian, Delgo @ Silberland <sl.mud.at>
+12.09.05 - Begin
+
+07.01.2024 - Gwenshara: Erweitert und verbessert
+
+*****************************************************************************/
+#include "../def.h"
+#include <attributes.h>
+inherit "std/thing";
+
+int counter;
+object victim, caster;
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, 0 );
+  SetProp(P_LONG,  0 );
+  SetProp(P_NAME, 0);
+  SetProp(P_INVIS, 1);
+  SetProp(P_GENDER, FEMALE);
+  AddId(NPC_POISON_ID);
+  SetProp(P_MATERIAL, MAT_MAGIC );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_SIZE, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NEVERDROP, 1);
+  
+  set_next_reset(180); // in 3min reset
+  counter=0;
+}
+
+public void poison(object victim, object _caster, int skp, int success) {
+  object ob;
+  int dam;
+  
+  ob=victim;
+  if(!objectp(caster)) caster = _caster;
+  if(!objectp(caster)) return;
+  if(!objectp(ob)) {
+    remove(1);
+    return;
+  }
+
+  if(!living(ob)) {
+    remove(1);
+    return;
+  }
+
+  if(counter>caster->QueryProp(P_GUILD_LEVEL)/2) {
+    if(objectp(ENV(ob))) tell_room(ENV(ob), BS(sprintf("%s hat das Gift ueberwunden.", ob->Name(WER, 1))));
+    remove(1);
+    return;
+  }
+
+  // gift mit skill debufft
+  if(counter == 0 && skp) {
+    SetProp(P_X_ATTR_MOD, ([A_DEX: -1*(caster->QueryProp(P_GUILD_LEVEL)), A_STR: -1*(caster->QueryProp(P_GUILD_LEVEL))]));
+    tell_room(ENV(ob), BS("Das Gift schwaecht "+ob->name(WEN, 1)+"."));
+  }
+
+  if(!skp) success = random(2000);
+
+  if( objectp(caster) ) { 
+    dam = 100 + random(success/33);
+    pDebug(caster, sprintf("ranger_poison :: victim=%O dam=%d\n", ob, dam));
+    ob->Defend(dam, DT_POISON,
+      ([SP_NAME: "ranger_poison", SP_SHOW_DAMAGE:
+        ({
+           ({ -1, "Das Gift kann dir nichts anhaben.",
+                  "@WER1 widesteht dem Gift.",
+                  ""}),
+           ({  0, "Du fuehlst dich unwohl.",
+                  "@WER1 fuehlt sich unwohl!",
+                  "@WER1 fuehlt sich unwohl!"}),
+           ({  5, "Uebelkeit steigt in dir auf.",
+                  "@WER1 wid blass und scheint sich nicht wohl zu fuehlen.",
+                  "@WER1 wid blass und scheint sich nicht wohl zu fuehlen." }),
+           ({ 10, "DasGift brennt in deinen Adern.",
+                  "@WER1 verieht das Gesicht vor Schmerzen!",
+                  "@WER1 verieht das Gesicht vor Schmerzen!" }),
+           ({ 15, "Das Gift ist wie Feuer in deinem Koerper.",
+                  "@WER1 wankt vor Schmerzen nur noch hin und her!",
+                  "@WER1 wankt vor Schmerzen nur noch hin und her!"}),
+           ({ 20, "Du kippst fast um, weil das Gift so stark ist.",
+                  "@WER1 wird durch das Gift fast bewusstlos!",
+                  "@WER1 wird durch das Gift fast bewusstlos!"}),
+           ({ 25, "Du fuehlst das Leben schwinden, als das Gift durch deine Adern rauscht!",
+                  "@WER1 strauchelt und faellt beinahe tot zu Boden!",
+                  "@WER1 strauchelt und faellt beinahe tot zu Boden!"}),
+       })]), caster);
+    if(!objectp(ob)) remove(1);
+    counter++; 
+  }
+  call_out("poison", random(6), ob, caster, skp, success); 
+}
+
+public object QueryOwner() {
+  return caster;
+}
+
+void reset()
+{
+  while (remove_call_out("posion") != -1); 
+  if (!is_clone(TO)) return;
+  TO->remove();
+}  

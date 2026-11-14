@@ -1,0 +1,139 @@
+/*
+** Kampfwache, Derlim  (w) Raballion
+** ---
+** 1997-09-30  0.1  urfassung, kopie von Kampfsoldat Midas
+** 1997-10-07  0.2  ne wache permanent begleiten
+** 1997-10-14  0.3  Namen richtig
+*/
+
+inherit "std/mnpc";
+// inherit "std/inpc/select";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <mnpc.h>
+#include <new_skills.h>
+#include <wizlevels.h>
+
+#include "../def.h"
+
+#define pddeb(x) if (find_player("raballion")) tell_object(find_player("raballion"),(x))
+
+init()
+{
+  ::init();
+  if (TP && TP->id("HOBBIT") ) AddDefender(TP);
+}
+
+create()
+{
+  if (!is_clone(this_object())) return;  // (return on BP)
+
+  ::create();
+  SetProp (P_SHORT, "Eine Kampfechse");
+  SetProp (P_NAME, "Kampfechse");
+  AddId ( ({"kampfechse", "echse", "wache", "SCHUPPEN_WUSCHEL", "HOBBIT"}) );
+  SetProp (P_GENDER, FEMALE);
+  SetProp (P_ALIGN, 50+random(50));
+  create_default_npc(15+random(3));
+  SetProp(P_RESISTANCE_STRENGTHS, ([ DT_FIRE    : -0.5, DT_COLD     : 0.5, ]) );
+  SetProp (P_SIZE, 200+random(20));
+  SetProp (P_RACE, "Echse");
+  SetProp (P_MAX_HANDS, 4);
+  SetProp (P_HANDS, ({" mit ihren Echsenzaehnen", 180, DT_RIP}) );
+  SetProp (P_MSGOUT, "meint, hier ist alles in Ordnung und geht weiter");
+  SetProp (P_MSGIN, "kommt an, um nach dem Rechten zu sehen");
+
+  SUID;
+  CLONEME( ARMOUR "echsenhaut");
+  command("trage alles");
+
+  SetProp(P_SPELLRATE,15);
+
+  SetProp (P_DIE_MSG, " zischt noch einmal laut auf und stirbt.\n");
+  SetProp (P_DEFAULT_INFO, "zischt Dich an.\n");
+
+  SetProp (P_MNPC_AREA, ROOM );
+  SetProp (P_MNPC_WAIT, ({ 10+random(20), 90, 120 }));
+  SetProp (P_MNPC_DEFAULTROOM, ROOM "wachraum");
+  SetProp (P_MNPC_FLAGS, MOV_OUTDOORS + MOV_MOVES);
+  enable_commands();
+  call_out("setz_namen",0);
+}
+
+void InformDefend(object enemy)
+{
+  Kill(enemy);
+}
+
+void setz_namen()
+{
+  if( QueryProp(P_NAME)=="Kampfechse" )
+    SetProp(P_NAME, "Cis");
+  SetProp (P_ARTICLE, 0);
+  AddId(LOWER(name(RAW)));
+  AddInfo (LOWER(name(RAW)), "nickt.\n");
+
+  SetAttackChats(6, ({
+    Name(WER,1)+" zischt: Na warte, dasss wirsssst Du bereuen!\n",
+    Name(WER,1)+" tritt Dich.\n"}) );
+
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    Name(WER,1)+" zischt: Dasss brauch ich nicht!" }) );
+
+  AddSpell(2,150, 
+    Name(WER,1)+" trifft Dich mit voller Wucht.\n",
+    Name(WER,1)+" trifft @WEN mit voller Wucht.\n",
+    DT_BLUDGEON, ([SP_SHOW_DAMAGE:1]) );
+  AddSpell(1,250, 
+    Name(WER,1)+" versetzt Dir einen schweren Schlag mit ihrem Schwanz.\n",
+    Name(WER,1)+" versetzt @WEM einen schweren Schlag mit ihrem Schwanz.\n",
+    DT_BLUDGEON, ([SP_SHOW_DAMAGE:1]) );
+
+  SetProp (P_SHORT, Name()+", die Kampfechse");
+  SetProp (P_LONG,
+    Name()+", die Kampfechse, mustert Dich mit unbewegter Miene. Sie "+
+    "bewacht die Stadt gegen Seherueberfaelle. Ihre kraeftige "+
+    "Statur scheint zum Kaempfen wie geschaffen.");
+
+  set_living_name(LOWER(name(RAW)));
+}
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+  if( gruppe=="fies" )
+    call_out("kill",2+random(3));
+  if(touch || gruppe=="frech" || gruppe=="fies")
+    call_out("touch",0);
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+  StartReaction(verb, gruppe, adverb, touch);
+} 
+
+void touch()
+{
+  write(Name(WER,1)+ " zischt Dich wuetend an.\n");
+  say(Name(WER,1)+" zischt "+TPN+" wuetend an.\n", ({TP}));
+}
+
+void kill()
+{
+  if( IS_LEARNING(TP) )
+  {
+    write(Name(WER,1)+" traut sich nicht, Dich anzugreifen.\n");
+    say(Name(WER,1)+" traut sich nicht, "+TPN+" anzugreifen.\n", ({TP}) );
+  }
+  else
+    Kill(TP);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  write_file(LOG "deads",
+    ctime()+": "+Name(WER,1)+" hat gerade "+CAP(getuid(PL))+" umgebracht.\n");
+}
+

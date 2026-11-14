@@ -1,0 +1,1142 @@
+/*****************************************************************************
+Adler,Baer,Spinne,Wolf
+06.08.05 - Begin
+11.07.06 - Neuerarbeitung
+*****************************************************************************/
+//** INCLUDE + INHERIT + DEFINE ********************************************//
+#include "../def.h"
+
+inherit "std/npc";
+inherit "/std/npc/spells";
+//-- Vars --------------------------------------------------------------------
+object owner;
+int defence, defendChance;
+string rasse;
+float defenseReduction;
+//-- Prototypes --------------------------------------------------------------
+int order(string action);
+int slow(object enemy);
+int netz(object enemy);
+int poison(object enemy);
+//**************************************************************************//
+
+
+
+//** Standardfunktionen ****************************************************//
+//-- Create ------------------------------------------------------------------
+void create()
+{
+  if(!is_clone(TO)) return;
+  ::create();
+  
+  SetProp(P_FRIEND, 1);
+  SetProp(P_NO_GLOBAL_ATTACK, 1); 
+  SetProp(P_ARTICLE, 1);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_HEAL, 0);
+  SetProp(P_AGGRESSIVE, 0);
+  SetProp(P_WIMPY, 0);
+  SetProp(P_NO_SCORE, 1);
+  AddInfo(DEFAULT_INFO, "kann Deine Sprache nicht verstehen.\n");
+  AddId(({NOCONTROL, NOWIMPY, FELL_WUSCHEL, SUMMON_ID, SKILL_NOLEARN }));
+  AddClass( ({CL_ANIMAL }) ); 
+  SUID;
+}
+
+//-- Remove ------------------------------------------------------------------
+int remove()
+{
+  if(objectp(owner)) {
+     owner->RemovePursuer(TO);
+     owner->RemoveDefender(TO); 
+     present(GUILD_OBJ_ID, owner)->UnregisterSummon();
+  }
+  while(remove_call_out("remove")!=-1);
+  return ::remove(); 
+}
+
+//-- Haut beim Spielertod ab -------------------------------------------------
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  if(objectp(owner) && (player == owner)) { remove(); }
+}
+
+//-- Verschwindet beim Tod ---------------------------------------------------
+void die(int poisondeath)
+{
+  remove();
+}
+
+//-- Bei ranger_npc verschwindet das Tier nicht beim Reset -------------------
+void reset() 
+{
+  if(!is_clone(TO)) return; 
+  ::reset();  
+  if(objectp(owner) && !interactive(owner) && (owner->id(DEFAULT_RANGER_ID)) )
+  { return; }
+  remove(); 
+}
+//**************************************************************************//
+
+
+
+//** Customize *************************************************************//
+//-- Auslagerung wegen der Skillpunkte noetig --------------------------------
+mixed* _query_hands() {
+  int i, skill, level;
+  mixed *handsbase;
+
+  handsbase = QueryProp(P_HANDS+"_base");
+  level = QueryProp(P_LEVEL);
+
+  if(level<=30) {
+    i = 10 * level;
+  } else {
+    i = 300 + 5 * (level - 30);
+  }
+
+ 
+  if(objectp(owner)) {
+    i += 5 * owner->QueryAttribute(A_STR);
+    i += owner->QueryProp(P_TOTAL_WC)/2;
+    if(R_SKILLMASTER->HasSkill(getuid(owner), TIER_ATTACKEN)) {
+      i = i + i/4;
+    }
+  }
+
+  return ({handsbase[0], handsbase[1]+i, handsbase[2]});  
+}
+
+//-- Auslagerung wegen der Skillpunkte noetig --------------------------------
+int _query_body() {
+  int i, j, skill, lv, ac;
+
+  lv = QueryProp(P_LEVEL);
+
+  i = 4 * lv;
+  
+  if(objectp(owner)) {
+    if(R_SKILLMASTER->HasSkill(getuid(owner), TIER_VERTEIDIGUNG)) {
+
+    }
+    i += owner->QueryProp(P_TOTAL_AC)/2;
+  }
+  
+  return i;  
+}
+
+public int _query_spellrate() {
+  int i;
+
+  i = QueryProp(P_LEVEL)/2;
+
+  if(objectp(owner)) {
+    i += owner->QueryAttribute(A_INT);
+  }
+
+  return i;
+}
+
+//-- Vorfunktion als dreate_default_npc ersatz -------------------------------
+int cdn(int level)
+{
+  SetProp(P_LEVEL, level);
+  SetProp(P_ATTRIBUTES, ([A_CON: level, A_DEX: level,
+                          A_STR: level, A_INT: level]));  
+  SetProp(P_MAX_HP, 10+level*level);
+  if(objectp(owner)) {
+    SetProp(P_MAX_HP, QueryProp(P_MAX_HP) + owner->QueryAttribute(A_CON) * 10);
+  }
+  SetProp(P_MAX_SP, QueryProp(P_MAX_HP));
+  SetProp(P_XP, 0);
+
+  return 1;
+}
+
+//-- Die Anpassung -----------------------------------------------------------
+int customize(object caster, string r, int success, int ability)
+{ 
+  int level;
+
+  defence = 1; // automatisch mitkaempfen
+  
+  if(!caster) return 0;
+  if(member( ({"wolf","adler","baer","spinne","waldgeist"}), lower_case(r)) == -1)
+  { tell_object(caster, BS("Ein Fehler ist aufgetreten.(Summons/Customize)"));
+    return 0;}
+  owner=caster; rasse=r;
+  owner->AddPursuer(TO);
+  owner->AddDefender(TO);
+  if(success < 0) success=0;
+  if(success > 10000) success=10000;
+  SetProp(P_HANDS+"_base", ({ "",0,({DT_BLUDGEON}) }));
+
+  present(GUILD_OBJ_ID, owner)->RegisterSummon();
+    
+  switch(rasse)
+  {
+    case "wolf":
+      SetProp(P_SHORT, "Ein Waldwolf");
+      SetProp(P_LONG,
+        "Der Waldwolf ist eine Kreatur die im Wald von Tethyr zuhause ist. "
+        "Er fletscht seine Zaehne und entbloesst sein riesiges Gebiss. Das "
+        "schwarze Fell ist struppig und dreckig. Der Wolf scheint schon "
+        "einige Kaempfe hinter sich gebracht zu haben.");
+      SetProp(P_NAME, "Wolf");
+      SetProp(P_GENDER, MALE);
+      AddId( ({"wolf", "waldwolf", WOLF_ID, WOLF_ID+"_"+getuid(owner)}) );
+      SetProp(P_RACE, "Wolf");
+      AddClass( ({CL_NIGHTVISION }) );
+      SetProp(P_MAX_HANDS, 2);
+      SetProp(P_RESISTANCE_STRENGTHS ,
+      ([ DT_FIRE:  0.2, DT_COLD: -0.3, DT_WATER: -0.1, DT_SOUND:  0.2, 
+         DT_MIND: -0.2 ]) );
+      SetProp(P_MSGIN, "schleicht herein");
+      SetProp(P_MSGOUT, "schleicht");
+      SetProp(P_MMSGIN, "knurrt");
+      SetProp(P_MMSGOUT, "schleicht davon");
+      SetProp(P_DIE_MSG,  " rennt davon.\n");
+      SetProp(P_NOCORPSE,  1);
+      SetProp(P_KILL_NAME, "Ein Waldwolf");
+      AddInfo(({"lilyth", "torian", "delgo"}), "knurrt.","");
+      
+      SetAttackChats(1, ({
+        Name(WER, 1)+" kaempft immer wilder.\n",
+        Name(WER, 1)+" attackiert von hinten.\n" }) );
+        
+      // level 10 - 23
+      level=owner->QueryProp(P_GUILD_LEVEL) - 2;
+      level += (success*3)/10000; //min 0; max +3
+      level = SPELL_DAMAGE_BONUS(owner, "waldwolf", level);
+
+      if(ENV(owner)->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN] == TT_FOREST) {
+        level+=2; 
+      }
+
+      if(cdn(level)) {
+        SetProp(P_MAX_HP, QueryProp(P_MAX_HP)*3/4); // -> haelt weniger aus
+        SetProp(P_HANDS+"_base", ({ " mit seinen Pfoten",
+                            (8*level),
+                            ({DT_RIP}) }));//270-450 -> macht mehr schaden
+        SetProp(P_SIZE, 180+(level*3));
+        SetProp(P_WEIGHT, QueryProp(P_SIZE)*300);
+        SetProp(P_ALIGN, -200+random(100));
+      }
+    break;
+    
+    case "adler":
+      SetProp(P_SHORT, "Ein Adler");
+      SetProp(P_LONG,
+        "Der Adler segelt ruhig und gleichmaessig ueber Deinem Kopf. Sein "
+        "stellenweises blau gefaerbtes Gefieder kennzeichnet seine Herkunft. "
+        "Sein spitzer Schnabel und seine scharfen Krallen sind nicht zu "
+        "unterschaetzende Waffen.");
+      SetProp(P_NAME, "Adler");
+      SetProp(P_GENDER, MALE);
+      RemoveId( ({"FELL_WUSCHELN"}) );
+      AddId(({"adler", HAWK_ID, FEDERN_WUSCHEL, HAWK_ID+"_"+getuid(owner)}));
+      SetProp(P_RACE, "Adler");
+      AddClass( ({CL_FLYING }) );
+      SetProp(P_MAX_HANDS, 2);
+      SetProp(P_RESISTANCE_STRENGTHS ,
+        ([ DT_COLD:  0.2, DT_AIR: -0.5, DT_LIGHTNING:  0.2 ]) );
+      SetProp(P_MSGIN, "fliegt herein");
+      SetProp(P_MSGOUT, "fliegt");
+      SetProp(P_MMSGIN, "landet hier");
+      SetProp(P_MMSGOUT, "erhebt sich in die Luefte");
+      SetProp(P_DIE_MSG,  " kreischt laut und fliegt davon.\n");
+      SetProp(P_KILL_NAME, "Ein Adler");
+      AddInfo(({"lilyth", "torian", "delgo"}), "kreischt.","");
+  
+      SetAttackChats(1, ({
+        Name(WER, 1)+" faengt an zu kratzen.\n",
+        Name(WER, 1)+" flattert wild mit den Fluegeln.\n" }) ); 
+        
+      // Level 10 - 22
+      level = caster->QueryProp(P_GUILD_LEVEL);
+      level+=(success*3)/10000; //min 0; max +3
+      level = SPELL_DAMAGE_BONUS(owner, "adler", level);
+      if(ENV(owner)->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN] == TT_MOUNTAIN) {
+        level+=2; 
+      }
+
+      if(cdn(level))
+      {
+        SetProp(P_MAX_HP, (QueryProp(P_MAX_HP)*3)/2);
+        SetProp(P_SIZE, 110+level*3);
+        SetProp(P_WEIGHT, QueryProp(P_SIZE)*200);
+        SetProp(P_ALIGN, 200+random(200));
+        SetProp(P_NOMAGIC, level-15);
+        SetProp(P_HANDS+"_base", ({ " mit seinen Krallen", 0,
+                            ({DT_RIP, DT_PIERCE}) }));
+      }
+    break;
+    
+    case "baer":
+      SetProp(P_SHORT, "Ein Schwarzbaer");
+      SetProp(P_LONG,
+        "Der Schwarzbaer kommt aus dem Wald Tethyrs. Er ist sehr gross und "
+        "unheimlich kraeftig. Das Fell ist schon an manchen Stellen "
+        "zerissen. Der Baer lebt aber noch, er scheint viel auszuhalten.");
+      SetProp(P_NAME, "Baer");
+      SetProp(P_GENDER, MALE);
+      AddId(({"baer", "schwarzbaer", BEAR_ID, BEAR_ID+"_"+getuid(owner)}));
+      SetProp(P_RACE, "Baer");
+      SetProp(P_MAX_HANDS, 2);
+      SetProp(P_MSGIN, "stapft herein");
+      SetProp(P_MSGOUT, "stapft");
+      SetProp(P_MMSGIN, "knurrt");
+      SetProp(P_MMSGOUT, "stapft davon");
+      SetProp(P_DIE_MSG,  " bruellt laut und verschwindet schnell.\n");
+      SetProp(P_KILL_NAME, "Ein Schwarzbaer");
+      AddInfo(({"lilyth", "torian", "delgo"}), "bruellt.","");
+      /*SetChats(1, ({
+        Name(WER, 1)+" trottet neben Dir her.\n",
+        Name(WER, 1)+" brummt.\n" }) );*/
+      SetAttackChats(1, ({
+        Name(WER, 1)+" faengt an zu bruellen.\n",
+        Name(WER, 1)+" teilt mit seinen Pranken aus.\n" }) );
+      SetProp(P_RESISTANCE_STRENGTHS ,
+        ([ DT_COLD: -0.5, DT_WATER: -0.2, DT_ACID:  0.2, DT_MAGIC:  0.2 ]) );
+   
+      // level 14 - 19
+      level = owner->QueryProp(P_GUILD_LEVEL); 
+      level+=(success*3)/10000; //min 0; max +3
+      level = SPELL_DAMAGE_BONUS(owner, "schwarzbaer", level);
+      if(ENV(owner)->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN] == TT_FOREST) {
+         level+=2; 
+      }
+
+      if(cdn(level)) {
+        SetProp(P_MAX_HP, QueryProp(P_MAX_HP) * 3 / 2); // unser tank
+        SetProp(P_SIZE, 300+level*3);
+        SetProp(P_WEIGHT, QueryProp(P_SIZE)*600);
+        SetProp(P_ALIGN, 100+random(100));
+        SetProp(P_NOMAGIC, level+6);
+        SetProp(P_HANDS+"_base", ({" mit seinen Pranken", QueryProp(P_HANDS)[1],
+                         ({DT_BLUDGEON})   }) );
+      }
+
+
+    break;
+    
+    case "spinne":
+      SetProp(P_SHORT, "Eine Riesenspinne");
+      SetProp(P_LONG, "Die grosse Spinne aus dem Tal von Tethyr ist wohl das "
+        "haesslichste was Du seit langem gesehn hast. Die kalten Augen "
+        "starren Dich an und beobachten jede deiner Bewegungen. Die haarigen "
+        "Beine sind mit Krallen besetzt.");
+      SetProp(P_NAME, "Riesenspinne");
+      SetProp(P_GENDER, FEMALE);
+      AddId(({"spinne", "riesenspinne", SPIDER_ID, SPIDER_ID+"_"+getuid(owner)}));
+      SetProp(P_RACE, "Spinne");
+      AddClass( ({CL_NIGHTVISION }) );
+      SetProp(P_MAX_HANDS, 8);
+      SetProp(P_MSGIN, "krabbelt herein");
+      SetProp(P_MSGOUT, "krabbelt");
+      SetProp(P_MMSGIN, "krabbelt herein");
+      SetProp(P_MMSGOUT, "krabbelt davon");
+      SetProp(P_DIE_MSG,  " krabbelt davon.\n");
+      SetProp(P_KILL_NAME, "Eine Riesenspinne");
+      /*SetChats(1, ({
+        Name(WER, 1)+" starrt Dir in die Augen.\n",
+        Name(WER, 1)+" bewegt sich leise.\n" }) );*/
+      SetAttackChats(1, ({
+        Name(WER, 1)+" beisst.\n",
+        Name(WER, 1)+" greift mit allen Beinen an.\n" }) );
+      SetProp(P_RESISTANCE_STRENGTHS ,
+        ([ DT_FIRE:  0.1, DT_COLD: -0.1, DT_ACID: -0.2, DT_POISON: -0.7, DT_LIGHT: 0.2]));
+
+      // level 15 - 20
+      level = caster->QueryProp(P_GUILD_LEVEL);
+      level+=(success*3)/10000; //min 0; max +3
+      level = SPELL_DAMAGE_BONUS(owner, "spinne", level);
+      if(ENV(owner)->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN] == TT_FOREST || 
+         ENV(owner)->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN] == TT_CAVE) { 
+          level+=2; 
+      }
+
+      if(cdn(level)) {
+        SetProp(P_SIZE, 90+level*4);
+        SetProp(P_WEIGHT, QueryProp(P_SIZE)*200);
+        SetProp(P_ALIGN, -200-random(200));
+        SetProp(P_HANDS+"_base", ({" mit ihren Mandibeln", 0, ({DT_PIERCE, DT_POISON}) }) );
+      }
+    break;
+  case "waldgeist":
+      SetProp(P_SHORT, "Ein wandelnder Baum");
+      SetProp(P_LONG,
+        "Dieser Baum wurde durch die Kraft eines Waldgeists zum Leben erweckt. Die Magie eines "
+        "Waldlaeufers hat den Baum mit einem Waldgeist beseelt.");
+      SetProp(P_NAME, "Waldgeist");
+      SetProp(P_GENDER, MALE);
+      AddId( ({"geist", "waldgeist", "baum", WOODSPIRIT_ID, WOODSPIRIT_ID+"_"+getuid(owner)}) );
+      SetProp(P_RACE, "Elementar");
+      AddClass( ({CL_NIGHTVISION }) );
+      SetProp(P_MAX_HANDS, 2);
+      SetProp(P_RESISTANCE_STRENGTHS ,
+      ([ DT_FIRE:  1.0, DT_WATER: -0.8, DT_RIP: 0.2, DT_SLASH: 0.2, DT_BLUDGEON: -0.8, DT_SQUEEZE: -1.0, DT_PIERCE: -0.8, DT_WHIP: -0.8 ]) );
+      SetProp(P_MSGIN, "stapft herein");
+      SetProp(P_MSGOUT, "stapft");
+      SetProp(P_MMSGIN, "waechst aus dem Boden");
+      SetProp(P_MMSGOUT, "verschwindet im Boden");
+      SetProp(P_DIE_MSG,  " faellt wie ein gefaellter Baum.\n");
+      SetProp(P_NOCORPSE,  1);
+      
+      level=owner->QueryProp(P_GUILD_LEVEL);
+
+      cdn(level);
+    
+      SetProp(P_HANDS+"_base", ({ " mit Haenden aus maechtigen Aesten",
+                            (5*level),
+                            ({DT_BLUDGEON}) }));
+      SetProp(P_SIZE, 270+(level*3));
+      SetProp(P_WEIGHT, QueryProp(P_SIZE)*400);
+      SetProp(P_ALIGN, 0);
+      break;
+    default:
+        raise_error("undefined summon type");
+        break;
+  }
+  
+  SetProp(P_LONG, QueryProp(P_LONG)+"Er gehorcht "+to_string(owner->name(WEM, 1))+".");
+  AddId( ({lower_case(to_string(QueryProp(P_NAME)))}) );
+  AddId(({NOZAEHMUNG}));
+  SetProp( P_REJECT, ({ REJECT_DROP, Name(WER,1)+" kann sowas nicht.\n" }) );
+ 
+  // Verweildauer...
+  if(RANGERMASTER->GetMasterAbility(getuid(owner)) != MASTER_ABIILITY_PERMANENT_SUMMON)
+    call_out("go_away", 60*ability/1000 + success/1000*30);
+
+  return 1;
+}
+
+public void go_away() {
+  if(objectp(ENV(TO))) {
+    tell_room(ENV(TO), BS(Name(WER)+" blickt sich kurz um und verlaesst euch dann wieder."));
+  }
+
+  remove(1);
+  return;
+}
+
+//-- die staerkeren Exemplare ------------------------------------------------
+int pimp() {
+  int level;
+  
+  if(!objectp(owner)) { return 0; } 
+  switch(rasse)
+  {
+    case "wolf":
+      rasse="schattenwolf"; 
+      SetProp(P_NAME, "Schattenwolf");
+      SetProp(P_SHORT, "Ein Schattenwolf");
+      SetProp(P_LONG,
+        "Der Schattenwolf ist eine furchteinfloessende Bestie, die nur von "
+        "den Waldlaeufern gerufen werden kann. In alten Religionen galten "
+        "sie als Diener der Totenwelt. Erkennen kannst Du nur unscharfe "
+        "Umrisse und zwei leuchtende blaue Augen. Dieses Exemplar wurde von "
+        +owner->name(WEN, 1)+" gerufen.");
+      AddId(({SHADOW_WOLF_ID, "schattenwolf" }));
+      RemoveId( ({"waldwolf"}) );
+      SetProp(P_MSGIN, "kommt aus dem Schatten");
+      SetProp(P_MSGOUT, "huscht");
+      SetProp(P_MSGIN, "kommt aus den Schatten");
+      SetProp(P_MSGOUT, "wird zum Schatten");
+      SetProp(P_DIE_MSG,  "wird zu "+owner->name(WESSEN, 1)+" Schatten.\n");
+      SetProp(P_KILL_NAME, "Ein Schattenwolf");
+     
+      SetAttackChats(1, ({
+        Name(WER, 1)+" wird schneller.\n",
+        Name(WER, 1)+" wird zu einem undurchdringlichen Schatten.\n" }) );
+
+      SetProp(P_SPELLRATE, level);
+      // passende spells
+
+      SetProp(P_RESISTANCE_STRENGTHS , ([ 
+       DT_LIGHT:  0.5, DT_TERROR: -0.5, DT_HOLY: -0.4, DT_UNHOLY: -0.5, 
+       DT_MAGIC: 0.3, DT_SLASH: -0.5, DT_BLUDGEON: -0.5, DT_PIERCE: -0.5, 
+       DT_SQUEEZE: -0.5,DT_WHIP: -0.5, DT_RIP:-0.5 ]) );
+    break;
+    
+    case "adler":
+      rasse="riesenadler";      
+      SetProp(P_NAME, "Riesenadler");
+      SetProp(P_SHORT, "Ein Riesenadler");
+      SetProp(P_LONG,
+        owner->Name(WER, 1)+" hat Diesen Koenig der Luefte zu sich gerufen "
+        "um Unterstuetzung im Kampf zu erfahren. Du kannst den Adler nicht "
+        "genauer betrachten da er umherkreist. Doch Du bist Dir sicher die "
+        "Krallen sind nicht harmlos.");
+      AddId(({"riesenadler", GIANT_HAWK_ID}));
+      SetProp(P_KILL_NAME, "Ein Riesenadler");
+
+      SetProp(P_SPELLRATE, level);
+      // passende spells
+
+      SetProp(P_RESISTANCE_STRENGTHS ,
+      ([ DT_COLD:  0.2, DT_AIR: -0.9, DT_LIGHTNING:  0.2 ]) );
+    break;
+    
+    case "baer":
+      rasse="grizzly";
+      SetProp(P_SHORT, "Ein Grizzly");
+      SetProp(P_LONG,
+        "Dieser Riese des Waldes wurde "+owner->name(WEM, 1)+" geschickt. "
+        "Die Baeren galten seit Anbeginn der Zeit als Beschuetzer des "
+        "Waldes. Mit ihrer grossen Kraft sind sie in der Lage Baeume "
+        "auszureissen, doch gefuerchteter sind sie wegen ihrer Zaehigkeit.");
+      SetProp(P_NAME, "Grizzly");
+      SetProp(P_GENDER, MALE);
+      SetProp(P_KILL_NAME, "Ein Grizzly");
+      RemoveId(({"schwarzbaer", BEAR_ID}));
+      AddId(({"grizzly"}));
+
+      SetProp(P_SPELLRATE, level);
+      // passende spells
+
+      SetProp(P_RESISTANCE_STRENGTHS , ([
+       DT_COLD: -0.5, DT_WATER: -0.2, DT_ACID:  0.2, DT_MAGIC:  0.2, 
+       DT_SLASH: -0.2, DT_BLUDGEON: -0.2, DT_PIERCE: -0.2, DT_SQUEEZE: -0.2,
+       DT_WHIP: -0.2, DT_RIP: -0.2]) );
+    break;
+    
+    case "spinne":
+      rasse="schwertspinne";
+
+      SetProp(P_NAME, "Schwertspinne");
+      SetProp(P_SHORT, "Eine Schwertspinne");
+      SetProp(P_LONG,
+        owner->Name(WER, 1)+" hat Diesen Schrecken der Unterwelt zu sich "
+        "gerufen um Unterstuetzung im Kampf zu erhalten. Die Spinne hat "
+        "lange Beine mit besonders Scharfen Seiten, die 'Schwerter' genannt werden. "
+        " Du bist sicher sie weiss hervorragend damit umzugehen.");
+      SetProp(P_NAME, "Schwertspinne");
+      AddId(({"schwertspinne", SWORD_SPIDER_ID}));
+      RemoveId( ({"riesenspinne"}) );
+      SetProp(P_KILL_NAME, "Eine Schwertspinne");
+      /*SetChats(1, ({
+        Name(WER, 1)+" starrt Dir in die Augen.\n",
+        Name(WER, 1)+" bewegt sich leise.\n"}) );*/
+      SetAttackChats(1, ({
+        Name(WER, 1)+" beisst.\n",
+        Name(WER, 1)+" greift mit allen Beinen an.\n" }) );
+      
+      SetProp(P_SPELLRATE, level);
+      // passende spells
+
+      SetProp(P_HANDS, ({" mit ihren Schwertbeinen", QueryProp(P_HANDS)[1], 
+                       ({DT_SLASH, DT_RIP}) }) );
+      SetProp(P_RESISTANCE_STRENGTHS ,
+       ([DT_FIRE:  0.2, DT_COLD: -0.1, DT_ACID: -0.5, DT_POISON: -1.0, DT_LIGHT: 0.3]) );
+    break;
+  }
+
+  SetProp(P_LONG, QueryProp(P_LONG)+"Er gehorcht "+to_string(owner->name(WEM, 1))+".");
+
+  return 1;
+}
+
+//-- Boreon, der Wolf der Totenwelt ------------------------------------------
+int to_boreon()
+{
+  if(member(({"wolf","schattenwolf"}), rasse) == -1) {return 0;}
+  
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_SHORT, "Boreon, der Waechter der Totenwelt");
+  SetProp(P_LONG,
+    "Der zwei Meter grosse Wolf ist nur aus duestersten Legenden bekannt. "
+    "Boreon, bekannt als der Waechter der Totenwelt. Du kannst ihn nicht "
+    "richtig mit Deinen Blick fixieren, da er staendig vor Deinen Augen "
+    "verschwimmt. Sein Fell besteht nur aus tiefschwarzen Schatten, doch die "
+    "Krallen an seiner Pfote sind sicher nicht so harmlos wie Schatten.");
+  AddDetail( ({"fell","haare"}),
+    "Du kannst zwar manchmal eine Kontur erkennen, doch sobald Du naeher "
+    "hinschaust, verschwindet Diese wieder.");
+  AddDetail( ({"konturen","kontur"}),
+    "Ploetzlich steht Boreon ein paar Meter weiter weg.");
+  AddDetail( ({"auge","augen"}),
+    "Sollte die Legende wahr sein, wirst Du Diese Augen nach Deinem Tod "
+    "wiedersehen, und sie werden sich an Dich erinnern ...");
+  AddDetail( ({"legende","tod"}),
+    "Laut einer alten Legende, wartet Boreon an den Pforten zum Tor der "
+    "Totenwelt. Wenn man dann seinem pruefenden Blick nciht wiederstehen "
+    "kann, wird man als Untoter zur Welt zurueckkehren... aber das ist nur "
+    "eine Sage aus fremden Welten.");
+  AddDetail( ({"kralle","krallen", "pfote"}),
+    "Du glaubst einen metallischen Schimmer zu erkennen, doch vermutlich "
+    "denkst Du Dir das nur.");
+  SetProp(P_NAME, "Boreon");
+  SetProp(P_GENDER, MALE);
+  AddId( ({"boreon", BOREON_ID}) );
+  RemoveId( ({"waldwolf", "schattenwolf"}) );
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_RESISTANCE_STRENGTHS , ([ 
+    DT_LIGHT:  0.5, DT_TERROR: -1.0, DT_HOLY: -0.5, DT_UNHOLY: -1.0, 
+    DT_MAGIC:  0.3, DT_SLASH: -0.7, DT_BLUDGEON: -0.7, DT_PIERCE: -0.7, 
+    DT_SQUEEZE: -0.5,DT_WHIP: -0.5, DT_RIP:-0.5 ]) );
+  SetProp(P_MSGIN, "knurrt in Deinem Schatten");
+  SetProp(P_MSGOUT, "schleicht");
+  SetProp(P_MMSGIN, "knurrt in Deinem Schatten");
+  SetProp(P_MMSGOUT, "schleicht davon");
+  SetProp(P_DIE_MSG,  " kehrt zur Pforte zurueck.\n");
+  SetProp(P_NOCORPSE,  1);
+  SetProp(P_KILL_NAME, "Der Waechter der Totenwelt");
+  SetProp(P_CHATS, 0);
+  SetProp(P_ACHATS, 0);
+  if(cdn(30))
+  {
+    SetProp(P_MAX_HP, QueryProp(P_MAX_HP)*2);
+    SetProp(P_HANDS+"_base", ({ " mit seinen krallenbesetzten Pfoten", 
+                        150,
+                        ({DT_SLASH, DT_TERROR}) }));
+    SetProp(P_SIZE, 210); SetProp(P_WEIGHT, 1); SetProp(P_ALIGN, 0);
+    SetProp(P_NOMAGIC, 25);
+  }
+  return 1;
+}
+
+//-- Tekki, der Patron des Waldes --------------------------------------------
+int to_tekki()
+{
+  if(member(({"baer","grizzly"}), rasse) == -1) {return 0;}
+  
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_SHORT, "Tekki, der Patron des Waldes");
+  SetProp(P_LONG,
+    "Die riesige Gestalt ist im Wald von Tethyr als Tekki bekannt. Tekki ist "
+    "ein Nachfahre eines der aeltesten Waldgeister und beschuetzt seit "
+    "ewiger Zeit die Waelder im SilberLand. Sein Fell scheint sich dem Wald "
+    "anzupassen und Du glaubst auch er koenne den Wald selbst veraendern, "
+    "wenn er es moechte.");
+  AddDetail( ({"fell","haare"}),
+    "Im Wald von Tethyr wird es ein dunkles Blau annehmen, aber in den "
+    "anderen Waeldern wird sich die Faerbung in gruen oder braun aendern.");
+  AddDetail( ({"augen","auge"}),
+    "Die Augen blicken beruhigend auf Dich herab. Tekki scheint recht "
+    "friedlich zu sein, doch die Pranken werden Angreifer schon vertreiben "
+    "koennen.");
+  AddDetail( ({"pranke","pranken", "tatze"}),
+    "Mit diesen Pranken sollte es Tekki nicht weiter schwer fallen, ganze "
+    "Baeume zu entwurzeln. Stell Dich ihnen nicht in den Weg.");
+  AddDetail( ({"waldgeist","waldgeister", "geist"}),
+    "Es heisst jeder Wald haette einen eigenen Waldgeist, und all diese "
+    "stammen vom selben Geist ab. Dies ist jedoch nur eine Geschichte von "
+    "Vielen ...");
+  SetProp(P_NAME, "Tekki");
+  SetProp(P_GENDER, MALE);
+  AddId( ({"tekki", TEKKI_ID}) );
+  RemoveId( ({"grizzly"}) );
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_RESISTANCE_STRENGTHS , 
+    ([DT_FIRE:  0.2, DT_COLD: -1.0, DT_WATER:  0.1, DT_AIR: -0.3, 
+      DT_EXPLOSION: -0.2, DT_SOUND: -0.5, DT_LIGHT: -0.2, DT_ACID:  0.3, 
+      DT_POISON: -0.2, DT_TERROR: -1.0, DT_HOLY: -0.5, DT_UNHOLY: -0.5, 
+      DT_MAGIC: -0.3, DT_MIND: -1.0, DT_BLUDGEON: -0.8, DT_PIERCE: -0.7, 
+      DT_SQUEEZE: -0.7,DT_WHIP: -0.7, DT_RIP:-0.7]));
+  SetProp(P_MSGIN, "stapft lautlos herein");
+  SetProp(P_MSGOUT, "stapft");
+  SetProp(P_MMSGIN, "stapft lautlos herein");
+  SetProp(P_MMSGOUT, "stapft davon");
+  SetProp(P_DIE_MSG,  " kehrt zur Pforte zurueck.\n");
+  SetProp(P_NOCORPSE,  1);
+  SetProp(P_KILL_NAME, "Der Patron des Waldes");
+  SetProp(P_CHATS, 0);
+  SetProp(P_ACHATS, 0);
+  if(cdn(30))
+  {
+    SetProp(P_MAX_HP, QueryProp(P_MAX_HP)*2);
+    SetProp(P_HANDS, ({ " mit seinen maechtigen Pranken", 0,
+                        ({DT_SQUEEZE, DT_RIP}) }));
+    SetProp(P_SIZE, 378); SetProp(P_WEIGHT, (QueryProp(P_SIZE)*700)); 
+    SetProp(P_ALIGN, 500); SetProp(P_NOMAGIC, 34);
+  }
+  return 1;
+}
+
+//-- Ank'su'namun, die Rache der Unterwelt -----------------------------------
+int to_anksunamun()
+{
+  if(member(({"spinne","schwertspinne"}), rasse) == -1) {return 0;}
+  
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_SHORT, "Ank'su'namun, die Rache der Unterwelt");
+  SetProp(P_LONG,
+    "Ank'su'namun ist wohl einer der furchterregensten Spinnen, die jemals "
+    "in der Unterwelt gesichtet wurden. genau wie eine Schwertspinne "
+    "bestehen ihre Arme aus langen Schwertern. Doch die Klingen sind aus "
+    "langem matt glaenzenden Obsidian, und erscheinen dir ungleich "
+    "schaerfer. der restliche Koerper der Kreatur ist mit einem aehnlichen "
+    "Material gepanzert, auf dem nur ganz duenn ein seidenschwarzes Fell "
+    "waechst.");
+  AddDetail( ({"fell","haare"}),
+    "Die Haare sind so kurz aber dicht gesaeht, dass sich das Fell wie ein "
+    "Samtteppich anfuehlen wuerde, wenn Du sie beruehren koenntest.");
+  AddDetail( ({"klingen","schwerter", "schwert", "klinge"}),
+    "Sie sind nachtschwarz und Du glaubst, dass sie allein im gehen die Luft "
+    "schneiden.");
+  AddDetail( ({"augen","gesicht"}),
+    "Es gelingt Dir nicht das Gesicht anzusehen.");
+  AddDetail( ({"panzer","oberkoerper"}),
+    "Du solltest nicht versuchen ihn zu durchdringen.");
+  SetProp(P_NAME, "Ank'su'namun");
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({"anksunamun", ANKSUNAMUN_ID}) );
+  RemoveId( ({"riesenspinne"}) );
+  SetProp(P_MAX_HANDS, 8);
+  SetProp(P_RESISTANCE_STRENGTHS ,
+    ([DT_FIRE:  0.2, DT_COLD: -0.5, DT_ACID: -1.0, DT_POISON: -1.0, 
+      DT_TERROR: -1.0, DT_UNHOLY: -1.0, DT_HOLY: -0.3]) );
+  SetProp(P_MSGIN, "erscheint lautlos hinter Dir");
+  SetProp(P_MSGOUT, "stakst");
+  SetProp(P_MMSGIN, "erscheint lautlos hinter Dir");
+  SetProp(P_MMSGOUT, "verschwindet");
+  SetProp(P_DIE_MSG,  " kehrt in die Unterwelt zurueck.\n");
+  SetProp(P_NOCORPSE,  1);
+  SetProp(P_KILL_NAME, "Die Rache der Unterwelt");
+  SetProp(P_CHATS, 0); SetProp(P_ACHATS, 0);
+  if(cdn(30))
+  {
+    SetProp(P_MAX_HP, QueryProp(P_MAX_HP)*2);
+    SetProp(P_HANDS, ({ " mit ihren Schwertarmen", 50,
+                        ({DT_SQUEEZE, DT_RIP}) }));
+    SetProp(P_SIZE, 182); SetProp(P_WEIGHT, (QueryProp(P_SIZE)*500)); 
+    SetProp(P_ALIGN, -500); SetProp(P_NOMAGIC, 19);
+  }
+  return 1;
+}
+
+//**************************************************************************//
+
+
+ 
+//** Komunikation **********************************************************//
+//-- Die Kommandos auffangen -------------------------------------------------
+void catch_tell(string str)
+{
+  string who,target,action;
+  
+  if(!((query_verb() == "sag") /*|| (query_verb()[0..0] == "'")*/))return;
+                              //buggt. 
+  if(sscanf(str,"%s sagt: %s %s",who,target,action) != 3)      return;
+  if(!id(target))                                              return;
+  if(find_player(lower_case(who)) != owner)                    return;
+  if(action[<1..] == "\n") action = action[0..<2];
+  action = lower_case(action);
+  call_out("order",0,action);
+  return;
+}
+
+//-- Befehle auswerten -------------------------------------------------------
+int order(string action)
+{
+  object *enemies;
+  object enemy;
+  mixed envo, envt;
+  string *s;
+  int i;
+  
+  enemies=({}); enemy=0;
+  if(!objectp(TO) || !objectp(owner) || !objectp(envt=ENV(TO)) || 
+     !objectp(envo=ENV(owner))) {return 0;}
+
+  if(action == "verschwinde"  ||
+     action == "hau ab"       ||
+     action == "verzieh dich" ||
+     action == "geh")
+  { envo->Message(BS(Name(WER, 1)+" "+QueryProp(P_MMSGOUT)+"."));
+    remove();
+    return 1;}
+  
+  if(action == "kaempfe"         ||
+     action == "kaempfe mit mir" ||
+     action == "kaempfe mit"     ||
+     action == "hilf mir")
+  { owner->Message(BS(Name(WER, 1)+" schaut Dir kurz in die Augen "
+                        "und Du weist, "+QueryPronoun()+" hat verstanden.")); 
+    if(pointerp(enemies=owner->PresentEnemies()) && (sizeof(enemies)>0))
+    { for(i=0; i<=sizeof(enemies)-1; i++)
+      {Kill(enemies[i]);} }
+    owner->AddDefender(TO);
+    defence=1;
+    return 1; }
+    
+  if(action == "sitz" || action == "brav") 
+  { envo->Message(BS(Name(WER, 1)+" schuettelt nur den Kopf.")); 
+    return 1;}
+    
+  if(action == "pause"       ||
+     action == "kampfpause"  ||
+     action == "stopp")
+  { envo->Message(BS(Name(WER, 1)+" haelt sich vorerst zurueck.")); 
+    owner->RemoveDefender(TO);
+    defence=0;
+    enemies=QueryEnemies()[0];
+    for(i=0; i<=sizeof(enemies)-1; i++)
+    { enemies[i]->StopHuntFor(TO,1);
+      StopHuntFor(enemies[i],1); }
+    return 1; }
+    
+  s=explode(action, " ");
+  for(i=0;i<=sizeof(s)-1;i++)
+  {s[i]=lower_case(s[i]);}
+
+  //Adler:
+  if( (member(({"adler", "riesenadler"}), rasse) != -1) &&
+      (s[0] == "sturzflug" || s[0] == "attacke") )
+  { 
+    if(sizeof(s)<=1) 
+    { owner->Message(BS("Wen soll "+name(WER, 1)+" mit einem Sturzflug "
+                     "angreifen?")); return 1;}
+                     
+    if(!(owner->InFight()))     //Im Kampf?
+    { owner->Message(BS("Das geht nur im Kampf!")); return 1;}
+    
+    if( 30+QueryProp(P_RANGER_LAST_SWOOP) >= time() )
+    //Schon/Noch Stuzflug aktiv?
+    { owner->Message(BS(Name(WER, 1)+" kann noch keinen Sturzflug machen!"));
+      return 1;}
+      
+    if(!defence) //Kaempft der Adler mit?
+    { owner->Message(BS(Name(WER, 1)+" muss schon mit Dir zusammen "
+                     "kaempfen.")); return 1;}
+                     
+    if(!envt || (envt->QueryProp(P_INDOORS)) == 1 ) //unter freien Himmel?
+    { owner->Message(BS("Das geht nur im Freien.")); return 1;} 
+    
+    if( !objectp(enemy=present(s[1], envo)) )
+    { owner->Message(BS("'"+CAP(s[1])+"' ist kein anwesender Feind."));
+      return 1;}
+      
+    tell_room(envt, BS(owner->Name(WER,1)+" gibt "+name(WEM, 1)+" ein "
+                          "Zeichen und "+name(WER, 1)+" steigt in den Himmel "
+                          "hinauf."), ({owner}) );
+    owner->Message(BS("Du gibst "+name(WEM, 1)+" ein Zeichen und "
+                      +name(WER, 1)+" steigt in den Himmel hinauf."));
+    move(ROOM "air", M_GO | M_SILENT);
+    SetProp(P_RANGER_LAST_SWOOP, time());
+    owner->RemovePursuer(TO);
+    call_out("sturzflug", 4, enemy); 
+    return 1;
+  }
+  
+  //Spinne:
+  if( (member(({"schwertspinne"}), rasse) != -1) &&
+      (s[0] == "fang" || s[0] == "fange") ) 
+  {
+    if(!(owner->InFight())) 
+    { owner->Message(BS("Das geht nur im Kampf!")); return 1;}
+    //letztes Netz noch nicht lange genug her?
+    if(30+(QueryProp(P_RANGER_LAST_NET)) >= time() ) 
+    {owner->Message(BS(Name(WER, 1)+" ist noch nicht soweit!"));return 1;}
+    if( defence==0) //Kaempft die Spinne mit?
+    {owner->Message(BS(Name(WER,1)+" muss schon mit Dir zusammen kaempfen."));
+     return 1;}
+    if( !objectp(enemy=present(s[1], ENV(owner))) )
+    { owner->Message(BS("'"+CAP(s[1])+"' ist kein anwesender Feind."));
+      return 1;}
+    tell_room(envo,BS(owner->Name(WER, 1)+" gibt "+name(WEM, 1)+" ein "
+                         "Zeichen."),({owner}));
+    tell_object(owner, BS(Name(WER,1)+" hat verstanden."));
+    netz(enemy);
+    return 1;
+  }
+  
+  if( (member(({"spinne", "schwertspinne"}), rasse) != -1) &&
+      (s[0] == "laehme" || s[0] == "betaeube") ) 
+  {   
+    if(!(owner->InFight())) 
+    { owner->Message(BS("Das geht nur im Kampf!")); return 1;}
+    //letztes Netz noch nicht lange genug her?
+    if( 20+(QueryProp(P_RANGER_LAST_NET)) >= time() ) 
+    {owner->Message(BS(Name(WER, 1)+" ist noch nicht soweit!"));return 1;}
+    if( defence==0) //Kaempft die Spinne mit?
+    {owner->Message(BS(Name(WER,1)+" muss schon mit Dir zusammen kaempfen."));
+     return 1;}
+    if( !objectp(enemy=present(s[1], ENV(owner))) )
+    { owner->Message(BS("'"+CAP(s[1])+"' ist kein anwesender Feind."));
+      return 1;}
+    tell_room(envo,BS(owner->Name(WER, 1)+" gibt "+name(WEM, 1)+" ein "
+                         "Zeichen."),({owner}));
+    tell_object(owner, BS(Name(WER,1)+" hat verstanden."));
+    slow(enemy); 
+    return 1;
+  } 
+  
+  return 1;
+}
+//**************************************************************************//
+
+
+
+//** BewegungsFunktionen ***************************************************//
+//-- init --------------------------------------------------------------------
+void init()
+{
+  object room; 
+  
+  ::init();
+  if(!(room=ENV(TO))) return;
+  if( (room->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN]==TT_UNDERWATER) &&
+      (member( ({"adler", "riesenadler"}), rasse) != -1) )
+  { owner->Message(BS(Name(WER, 1)+" kann nicht tauchen und "
+                   +QueryProp(P_MSGOUT)+" davon.")); remove();}
+}
+//--Hier werden die erfahrungspunkte aufgeschlagen und ausgewertet------------
+int AddExp(int points)
+{ if(owner) {owner->AddExp(points/2);}
+  return ::AddExp(points);}
+  
+//-- Wer ist der owner -------------------------------------------------------
+mixed get_owner() {return owner;}
+  
+//**************************************************************************//
+
+
+
+//** KampfFunktionen *******************************************************//
+//-- OwnerVerteidigung -------------------------------------------------------
+mixed DefendOther(int dam, mixed dam_type, mixed spell, object enemy)
+{ 
+  int i, k, defenseChance, absorbedDamage;
+  mixed env;
+  float reduction;
+  
+  if(!defence || !objectp(owner)) {
+    return ({dam, dam_type, spell}); 
+  }
+
+  if( id(BEAR_ID) || id(SPIDER_ID) ) { 
+    k=0; 
+    for(i=0;i<=sizeof(dam_type)-1;i++) {
+      if(member(PHYSICAL_DAMAGE_TYPES, dam_type[i])) {
+        k++;
+      } 
+    }
+
+    // nur phyischer schaden wird abgefangen
+    pDebug(owner, sprintf("pet :: DefendOther :: physicalDamgeTypes=%d\n", k));
+    if(k <= 0 ) {
+      return ({dam, dam_type, enemy});
+    }
+
+    if(QueryProp(P_NAME) == "Tekki") {
+      defenseChance = 2;
+      reduction = 0.5;
+    } else {
+      switch(rasse) {
+        case "grizzly":       reduction = 0.33; defenseChance=3; break;
+        case "baer":          reduction = 0.25; defenseChance=3; break;
+        case "schwertspinne": reduction = 0.15; defenseChance=4; break;
+        case "spinne":        reduction = 0.10; defenseChance=5; break;
+      }
+    }
+
+    if(R_SKILLMASTER->HasSkill(getuid(owner), SCHUTZ_DES_WALDES)) {
+      defenseChance--;
+      reduction += 0.05;
+    }
+
+    defenseChance -= (sizeof(owner->QueryProp(P_DEFENDERS) ) - 1);
+
+    if(!random(defenseChance)) {
+      if(!random(10)) {
+        tell_object(owner, BS(sprintf("%s wirft sich schuetzend vor dich und faengt den Treffer ab!", Name(WER, 1))));
+        tell_room(ENV(TO), BS(sprintf("%s wirft sich schuetzend vor %s und faengt den Treffer ab.", 
+                            Name(WER, 1), owner->name(WEN, 1))), ({owner}));
+        absorbedDamage = dam;
+      } else {
+        tell_object(owner, BS(sprintf("%s faengt einen Teil des Angriffs fuer dich ab.", Name(WER, 1))));
+        tell_room(ENV(TO), BS(sprintf("%s faengt einen Teil des Angriffs fuer %s ab.", 
+                            Name(WER, 1), owner->name(WEN, 1))), ({owner}));
+        absorbedDamage = (int) (dam * reduction);
+      }
+
+      do_damage(absorbedDamage, enemy);
+      dam -= absorbedDamage;
+    }
+  }
+
+  return ({dam, dam_type, spell});  
+} 
+
+public void InformDefend(object enemy) {
+  Kill(enemy);
+  return;
+}
+
+
+//-- EigenVerteidigung -------------------------------------------------------
+int Defend(int dam, mixed dam_type, mixed spell, object enemy) {
+  if(objectp(owner) && (enemy==owner)) {
+    tell_object(owner, BS(Name(WER, 1)+" verlaesst Dich."));
+    remove(); 
+    return 0;
+  }
+
+  return ::Defend(dam, dam_type, spell, enemy); 
+}
+
+//-- Der Angriff -------------------------------------------------------------
+void Attack(object enemy) {
+  if(random(100) < QueryProp(P_SPELLRATE)) {
+    if(id(HAWK_ID) &&  30+QueryProp(P_RANGER_LAST_SWOOP) < time() && !ENV(TO)->QueryProp(P_INDOORS) ) {
+      tell_room(ENV(TO), BS(Name(WER)+" steigt hoch in den Himmel auf!"));
+      move(ROOM "air", M_GO | M_SILENT);
+      owner->RemovePursuer(TO);
+      call_out("sturzflug", 4, enemy);
+    }
+
+    if((id("schwertspinne")) && 30+(QueryProp(P_RANGER_LAST_NET)) < time()) {
+      netz(enemy);
+    } else if(id(SPIDER_ID) && 30+(QueryProp(P_RANGER_LAST_NET)) < time()) {
+      slow(enemy);
+    } else if(id(SPIDER_ID)) {
+      poison(enemy);
+    }
+  }
+
+  if(id(BEAR_ID) && random(5) && IsEnemy(enemy)) {
+    // der Baer verteidigt viel, greift dafuer wenig an
+    return;
+  }
+
+  if(id(SPIDER_ID) && !id("ank'su'namun")) {
+    return; // die spinne greift normal gar nicht an
+  }
+
+  if(objectp(owner) && (ENV(owner) != ENV(TO))) {
+    return;
+  } 
+
+  if(member(({"boreon"}), lower_case(QueryProp(P_NAME)))!=-1 && !random(3)) {
+    // boreon hat 2 angriffe
+    ModifySkillAttribute(this_object(),SA_SPEED, 200, 2);
+  }
+
+  if(objectp(enemy) && objectp(owner)) {
+    call_other(GUILD_ROOM, "registerArchenemyAttack", enemy, owner);
+  }
+
+  ::Attack(enemy); 
+}
+
+//-- Sturzflug des Adlers ----------------------------------------------------
+int sturzflug(object enemy)
+{
+  int dam;
+  string *dam_type;
+  mixed env;
+  
+  if(!objectp(TO) || !objectp(owner) || !objectp(env=ENV(owner)) )
+  { remove(); return 0; }
+  if(!move(env, M_NOCHECK) || env != ENV(TO)) { return 0; }
+  owner->AddPursuer(TO);
+  if( !objectp(enemy) )
+  { owner->Message(BS("Hier ist kein Feind mehr!")); return 1;}
+  if( ENV(enemy) != env ) 
+  { owner->Message(BS(enemy->Name(WER, 1)+" ist nichtmehr hier.")); return 1;}
+  if( !(owner->IsEnemy(enemy)) ) 
+  {owner->Message(BS(enemy->Name(WER,1)+" ist nicht Dein Feind.")); return 1;}
+  tell_room(env, BS(Name(WER, 1)+" bricht aus den Wolken hervor und rast "
+                      "mit unglaublicher Geschwindigkeit auf "
+                      +enemy->name(WEN, 1)+" zu."), ({enemy}) );
+  tell_object(enemy, BS(Name(WER, 1)+" bricht aus den Wolken hervor und rast "
+                      "mit unglaublicher Geschwindigkeit auf Dich zu."));
+  dam_type=({DT_AIR, DT_RIP});
+  dam=100*(owner->QueryProp(P_GUILD_LEVEL));
+  dam-=500; dam+=10*QueryProp(P_LEVEL); 
+  if( member(QueryProp(P_IDS), GIANT_HAWK_ID) != -1 )
+  {dam+=random(301);} 
+  else {dam+=random(101);}  //dam=1080 .. 1508
+  enemy->Defend(dam, dam_type , 0, TO);
+  SetProp(P_RANGER_LAST_SWOOP, time());
+  return 1;
+}
+
+public int poison(object enemy) {
+  mixed env;
+  object p;
+
+  if(!objectp(owner)) return 0;
+  if(objectp(present(NPC_POISON_ID+"_spider_"+getuid(owner), enemy))) return 0; // schon vergiftet
+  
+  if(!objectp(TO) || !objectp(owner) || !objectp(env=ENV(owner)) ||
+     !objectp(enemy) ) { return 0; }
+  tell_room(env, BS(Name(WER, 1)+" beisst "+enemy->name(WEN, 1)+" und "
+                         +enemy->Name(WER, 1)+" wird vergiftet.")
+               , ({enemy}) );
+  tell_object(enemy, BS(Name(WER, 1)+" beisst Dich und Du wirst vergiftet."));
+  p=clone_object(OBJ "npc_poison"); 
+  p->AddId(NPC_POISON_ID+"_spider_"+getuid(owner));
+  p->move(enemy, M_NOCHECK|M_SILENT);
+  p->poison(enemy, owner, 0, random(QueryProp(P_LEVEL) * 200));
+  return 1;
+}
+
+//-- Verlangsamen der Spinne -------------------------------------------------
+int slow(object enemy)
+{
+  mixed env;
+  
+  if(!objectp(TO) || !objectp(owner) || !objectp(env=ENV(owner)) ||
+     !objectp(enemy) ) { return 0; }
+  tell_room(env, BS(Name(WER, 1)+" beisst "+enemy->name(WEN, 1)+" und "
+                         +enemy->Name(WER, 1)+" faengt an zu taumeln.")
+               , ({enemy}) );
+  tell_object(enemy, BS(Name(WER, 1)+" beisst Dich und Du faengst an zu "
+                     "taumeln."));
+  enemy->ModifySkillAttribute(enemy, SA_SPEED
+         , (110-2*QueryProp(P_LEVEL)), 4+2*(random(2)+1) ); 
+  SetProp(P_RANGER_LAST_NET, time());
+  return 1;
+}
+
+//-- Netz der Spinnne --------------------------------------------------------
+int netz(object enemy)
+{
+  mixed env;
+  
+  if(!objectp(TO) || !objectp(owner) || !objectp(env=ENV(owner)) ||
+     !objectp(enemy) ) { return 0; }
+  tell_room(env, BS(Name(WER, 1)+" wirft ein Netz ueber "
+                    +enemy->name(WEN, 1)+". "+enemy->Name(WER, 1)+
+                    " ist in einem Netz gefangen!"), ({enemy}) );
+  tell_object(enemy, BS(Name(WER, 1)+" wirft ein Netz ueber Dich. Du bist "
+                     "gefangen!"));
+  enemy->SetProp(P_PARALYZED, ([PARALYZE_TIME: (4+2*(random(2)+1)), 
+				    	   PARALYZE_MSG: BS("Du bist in dem Spinnennetz gefangen!"), 
+							   PARALYZE_MSG_OTHER: "%s strampelt hilflos im Netz.\n", 
+							   PARALYZE_END: BS("Du hast Dich aus dem Netz befreit."), 
+							   PARALYZE_END_OTHER: "%s hat sich aus dem Netz befreit.\n"]));
+  SetProp(P_RANGER_LAST_NET, time());
+  return 1;
+}
+
+//**************************************************************************//
+
+
+
+//** REACTIONS *************************************************************//
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{ string msg;
+
+  msg="schreckt zurueck.";
+  if(member(({"schwertspinne","grizzly",
+              "riesenadler","schattenwolf"}), rasse) != -1)
+  {msg="bleibt voellig unbeeindruckt.";}
+  if(QueryProp(P_NAME)=="Boreon") {msg="knurrt leise.";}
+  if(QueryProp(P_NAME)=="Tekki") {msg="brummt nur.";}
+  if(QueryProp(P_NAME)=="Ank'su'namun") {msg="steht ploetzlich woanders.";}
+  if(find_call_out("reaction") != -1) return;
+  call_out("reaction", 0, TP, msg, msg); }
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{ return StartReaction(verb, gruppe, adverb, touch);}
+void reaction(object pl, string macher, string andere)
+{ if(!ENV(TO))           return;
+  if(!objectp(pl))       return;
+  if(!ENV(pl))           return;
+  if(ENV(TO) != ENV(pl)) return;
+  tell_object(pl, BS(Name(WER, 1)+" "+macher));
+  tell_room(ENV(TO), BS(Name(WER, 1)+" "+andere), ({pl}) ); }
+//**************************************************************************//

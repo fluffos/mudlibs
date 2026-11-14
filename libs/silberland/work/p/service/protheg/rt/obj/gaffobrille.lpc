@@ -1,0 +1,516 @@
+#pragma strong_types;
+
+#include "../def.h"
+#include <ansi.h>
+#include <exploration.h>
+
+inherit STD "rt";
+
+#define QM "/secure/questmaster"
+
+#define SOULFILE SOUL "Gaffo"
+
+//Somit ist moeglich "blabla"+C+"blabla"+N
+#define C GetColor()
+#define S(x) GetColor(x)
+#define N NormalColor()
+
+nosave int lastlogin; 
+
+//Liefert die aktuelle Versionsnummer
+int Version() { return 1;}
+
+nomask void create()
+{
+  if(!is_clone(ME)) return;  // (return on BP)
+  ::create();
+
+  SetProp(P_SHORT, "Ein grosses Gaffomonokel");
+  SetProp(P_LONG,
+	  "Dieses schmucke Gaffomonokel fuer extragrosse Augen hast du von Kuckeline "
+    "bekommen. Achte darauf und verliere es nicht, dann "
+	     "wird es Dir viele Dienste erweisen koennen.");
+  SetProp(P_NAME, "Gaffomonokel");
+  SetProp(P_GENDER, NEUTER);
+  AddId(({"monokel", "gaffomonokel"}));
+  
+  SetProp(P_WEIGHT, 400);
+  SetProp(P_MATERIAL, ([MAT_BRASS:99,MAT_GLASS:1]));
+  
+  SetProp(P_NOSELL,
+	  "Du kannst das Monokel doch nicht einfach verkaufen!\n");
+  
+  SetProp(P_INFO,
+	  "Dieses Monokel kann Dir viele Dienste erweisen.");
+
+  AddDetail("dienste", CLOSURE(huefe));
+  
+  AddCmd("gafforeport", "Report");
+  
+  //Cmds fuer die Komunikation
+  AddCmd(({"gaffogroehle","gaffogroehl"}), "Rufen");
+  AddCmd(({"gaffohist"}), "History");
+  AddCmd(({"gaffowink","gaffowinke"}), "gaffwink");
+  
+  //AddCmd(({"gaffoinfo"}), "gaffoinfo");
+  AddCmd(({"gaffower"}), "gaffower");
+  AddCmd(({"gaffofarbe","gaffofarben"}), "gaffofarbe");
+
+  AddCmd(({"gaffopresay"}), "gaffopresay");
+
+  //Hilfeanzeige
+  AddCmd(({"gaffohilfe"}), "gaffohilfe");
+  
+  GetColor(1);
+  
+  SUID;
+
+  // r* commands:
+  init_soul_cmds(1);
+}
+
+//Liefert den Filename zum Masterobjekt
+string Master()
+{
+  return RTM "gaffomaster";
+}
+
+// liefert den String fuers ignorieren (ignoriere bla)
+string IgnoriereID()
+{
+  return "monokel";
+}
+
+// liefert den String fuer die Rasse
+string Rasse()
+{
+  return "Gaffo";
+}
+
+// Meldung fuer Report wenn absolut fit
+string absolut_fit()
+{
+  return "Du bist nun wieder absolut fit.";
+}
+// Report Zeilen normal
+string Report_normal(int hp, int maxhp, int sp, int maxsp)
+{
+  string ret;
+  
+  ret="* Du hast ";
+  
+  if(hp==maxhp)
+    ret+="volle Lebenspunkte und ";
+  else
+    ret+=""+hp+" von "+maxhp+" Lebenspunkte und ";
+  
+  if(sp==maxsp)
+    ret+="volle Magiepunkte.";
+  else
+    ret+=""+sp+" von "+maxsp+" Magiepunkte.";
+  
+  return ret;
+}
+
+// Report Zeilen kurz
+string Report_kurz(int hp, int maxhp, int sp, int maxsp)
+{
+  string ret;
+  
+  ret="* ";
+  
+  if(hp==maxhp)
+    ret+="LP: "+hp+" und ";
+  else
+    ret+="LP: "+hp+" von ("+maxhp+") und ";
+  
+  if(sp==maxsp)
+    ret+="MP: "+sp;
+  else
+    ret+="MP: "+sp+" von ("+maxsp+")";
+  
+  return ret;
+}
+
+// Spezialbehandlungen von Aufenthaltsorten bei werliste
+string Region(string str)
+{
+  if(strstr(str, "/d/ebene/Gaffos/")==0)
+    return "Gaffodorf";
+  
+  return "";
+}
+
+//Wird ausgegeben, wenn sich das Tool selbst erneuert
+string Erneuern_Meldung()
+{
+  return BS(C+"Die Monokel schimmert kurz..."+N);
+}
+
+//Meldung wenn die History noch leer ist
+string History_leer()
+{
+  return BS("In letzter Zeit war es ruhig...");
+}
+
+//Ueberschrift der History
+string History_msg()
+{
+  return "";
+}
+
+// <Spieler> <History_format> huhu
+//zb: Protheg teilte Dir mit: huhu
+string History_format()
+{
+  return "rief dir zu: ";
+}
+
+//NotifyFail beim rufen
+string Rufen_syntax()
+{
+  return BS("Was willst du anderen Gaffos zugroehlen?");
+}
+
+// <Spieler> <Rufen_format> huhu
+//zb: Protheg teilt Dir mit: huhu
+string Rufen_format()
+{
+  return "groehlt dir zu: ";
+}
+
+//Format der Rufenausgabe an den Spieler
+string Rufen_msg()
+{
+  return "Du groehlt den Gaffos zu: ";
+}
+
+varargs nosave string huefe(int flag)
+{
+  string ret, rcmds;
+  int i;
+  
+  rcmds="";
+
+  //Formatierung der r* commands. fuer seher keine mpkosten
+  if(IS_SEER(TP))
+    {
+      for(i=sizeof(soulcmds)-1;i>=0;i--)
+	if(i==0)
+	  rcmds+="und "+soulcmds[i][0]+".";
+	else
+	  rcmds+=soulcmds[i][0]+", ";
+      
+      rcmds=break_string(rcmds, 60, " ", BS_NO_PARINDENT);
+    }
+  else
+    {
+      for(i=sizeof(soulcmds)-1;i>=0;i--)
+	if(i==0)
+	  rcmds+="und "+soulcmds[i][0]+"("+soulcmds[i,2]+").";
+	else
+	  rcmds+=soulcmds[i][0]+"("+soulcmds[i,2]+"), ";
+      
+      rcmds=break_string(rcmds, 60, " ", BS_NO_PARINDENT);
+      
+      rcmds+="Zahlen in Klammern Magiepunkte, die die\n"
+	"Aktionen kosten.\n \n";
+      
+    }
+  
+    ret="\n \n"
+    "Das Gaffomonokel kann Dir anzeigen, wie es um Deine\n"
+    "Lebensenergie und Zauberkraft bestellt ist.\n \n"
+    "Der Befehl dazu lautet:\n"
+    " 'gafforeport [ein|kurz|farbe|farbekurz|aus]'\n \n"
+    "Das Gaffomonokel bietet Dir weiters folgende RVerben an:\n\n"+
+    rcmds+
+    "\nEinige Befehle nur fuer Gaffos:\n"
+    " 'gaffower, gaffoinfo, gaffofarbe, gaffopresay'\n \n"
+    "RVerben nur fuer Gaffos:\n"
+    " 'gaffowinke, gaffoknuddel, gaffoprost'\n\n"
+    "Hilfe zu den Befehlen erhaelst Du mit:\n"
+    " 'gaffohilfe'\n \n"
+    "                                                         Ver 1."+Version()+"\n";
+
+  //in der Hilfefunktion brauchen wir kein document-format
+  if(!flag) return ret;
+  
+  TP->More(make_document(ret));
+  return "";
+}
+
+nosave int gaffohilfe(string str)
+{
+  string ret;
+  
+  if(str) str=explode(str, " ")[0];
+  
+  switch(str)
+    {
+    case "gafforeport": 
+      ret="Der 'gafforeport' informiert Dich, wie es um Deine "
+	"Lebensenergie und Zauberkraft bestellt ist.\n"
+	"Moegliche Einstellungen sind:\n"
+	"* gafforeport normal    - Schaltet den Report normal ein.\n"
+	"* gafforeport kurz      - Schaltet den Report kurz ein.\n"
+	"* gafforeport farbe     - Schaltet den Report in Farbe ein.\n"
+	"* gafforeport farbekurz - Schaltet den Report faerbig und\n"
+	"                          kurz ein.\n"
+	"* gafforeport aus       - Schaltet den Report wieder aus.\n";
+      break;
+    case "gaffoinfo": 
+      ret="In 'gaffoinfo' hast Du eine eher zu Gaffos passende Version\n"
+	"der normalen Infoanzeige bei 'info'.\n"
+	"Mit 'gaffofarbe' kannst Du die Anzeige sogar in wunderschoenen\n"
+	"Farben darstellen lassen.\n"
+	"Einige unwichtige Angaben werden im Normalfall unterdrueckt.\n";
+      break;
+    case "gaffower": 
+      ret="Mit 'gaffower' siehst Du, wer aus dem Gaffovolk anwesend ist.\n"
+	"*  Wer ist anwesend?\n"
+	"*  Ist er/sie anwesend, oder idle?\n"
+	"*  Was fuer eine Waffe hat er/sie gezueckt?\n"
+	"*  Welche Gesinnung hat er/sie?\n"
+	"*  Wo befindet er/sie sich?\n\n"
+	"Mit 'gaffower kurz' siehst Du das ganze etwas kompakter.\n";
+      break;
+    case "gaffofarben":
+    case "gaffofarbe": 
+      ret="Mit '"+str+" ein|aus' kannst Du die Farbanzeige einstellen.\n";
+      break;
+    case "gaffogroehle": 
+    case "gaffogroehl": 
+      ret="Mit '"+str+"' hast Du die Moeglichkeit, den anderen Gaffos\n"
+	"etwas mitzuteilen, ohne dass andere Rassen mithoeren koennen.\n"
+	"Mit 'gaffohist' kannst Du die Rufe nocheinmal lesen.\n";
+      break;
+    case "gaffohist": 
+      ret="Mit 'gaffohist' kannst Du versuchen, die Echos der zuletzt\n"
+	"gerufenen Meldungen zu erhaschen...\n"
+	"Jedoch ist die Liste in ihrer Groesse beschraenkt.\n";
+      break;
+    case "gaffowinke":
+    case "gaffowink": 
+      ret="Mit '"+str+"' kannst Du den anderen Gaffos zuwinken.\n"; 
+      break;
+    case "gaffoknuddel":
+      ret="Mit '"+str+"' kannst Du die anderen Gaffos alle knuddeln.\n"; 
+      break;
+    case "gaffopresay":
+      ret="Mit 'gaffopresay' kannst Du Dir Dein Gaffos-Presay, welches\n"
+	"z.B. bei 'gaffower' gezeigt wird, permanent als Presay setzen.\n\n"
+	"Mit 'gaffopresay loeschen' kannst Du Dein Presay entfernen.\n";      
+      break;
+    case "allgemein":
+      ret=huefe(1);
+      break;
+    case "ignoriere":
+    case "ignorieren":
+      ret=ignorieren_hilfe_text();
+      break;
+    default: 
+      ret="Mit 'gaffohilfe' kannst Du Dich ueber Folgendes informieren:\n \n"
+	"gaffohile <gafforeport>   Wie sieht es mit Leben u. Magie aus?\n"
+	"          <gaffoinfo>     Ein etwas anderes 'info'.\n"
+	"          <gaffower>      Eine Liste aller anwesenden Gaffos.\n"
+	"          <gaffofarbe>    Farbeinstellungen?\n"
+	"          <gaffopresay>   Das Gaffospresay fix setzen.\n"
+	"          <gaffogroehle>     Den anderen Gaffos etwas zurufen?\n"
+	"          <gaffohist>     Wer hat den Gaffos etwas zugerufen?\n"
+	"          <gaffoknuddel>  Knuddelt alle anwesenden Gaffos.\n"
+	"          <allgemein>  Allgemeine Uebersicht.\n"
+	"          <ignoriere>  Uebersicht der Ignorieremoeglichkeiten.\n";
+    }
+  return TP->More(make_dokument(ret)),1;
+}
+
+void BecomesNetAlive(object who)
+{
+  xpdiff=-1;
+
+  if((ENV(ME)) && (ENV(ME)==who))
+    {
+      netalivebug=0;
+      
+      call_out("erneuern", 0);
+      
+      xpdiff=who->QueryProp(P_XP);
+      
+    }
+}
+
+string Titel(object pl)
+{
+  string ret;
+  
+  if(!pl->QueryProp(Listener()))
+    if(!present(RACETOOLID, pl))
+      return "";
+    else
+      pl->SetProp(Listener(), 1);
+  
+  if(pl->QueryProp(P_FROG))
+    return "";
+  
+  ret="Gaffo";
+
+  if(IS_WIZARD(pl))
+    return ret+"magier"+FM(pl,"in "," ");
+
+  if(pl->QueryProp(P_GUILD)=="zechpreller")
+    return ret+"saeufer"+FM(pl,"in "," ");
+  
+  if(pl->QueryProp(P_GUILD)=="berserker")
+    return ret+"berserker"+FM(pl,"in "," ");
+  
+  if(pl->QueryProp(P_GUILD)=="nekromanten")
+    return ret+"nekromant ";
+
+  if(pl->QueryProp(P_GUILD)=="paladine")
+    return ret+"paladin ";
+
+  if(pl->QueryProp(P_GUILD)=="waldlaeufer")
+    return ret+"waldlaeuferin ";
+  
+  return ret+FM(pl,"frau "," ");
+}
+
+nosave int gaffofarbe(string str)
+{
+  notify_fail(BS("Syntax: gaffofarbe ein | aus"));
+  if(!str) return 0;
+  
+  if(str=="aus")
+    {
+      Setting(0); 
+
+      return write(BS("Keine Farbe.")), 1; 
+    }
+  
+  if(TP->QueryProp(P_TTY)!="ansi")
+    return write(BS("Du hast nicht 'stty ansi' gemacht!")), 1;
+  
+  Setting(1); 
+  
+  return write(BS("Es wird bunt!")), 1; 
+}
+
+nosave int gaffopresay(string str)
+{
+  string np, op;
+
+  notify_fail(BS("Du kannst mit 'gaffopresay' nur das Gaffo-Presay setzen!")+
+	      BS("Du kannst aber auch mit 'gaffopresay loeschen' das Presay "
+		 "loeschen."));
+
+  if(strlen(str)) 
+    if(str=="loeschen")
+      {
+	if(!strlen(TP->QueryProp(P_PRESAY)))
+	  return write(BS("Du hattest doch gar kein Presay gesetzt!?")), 1;
+	
+	TP->SetProp(P_PRESAY, "");
+	
+	return write(BS("Dein Presay wurde geloescht.")), 1;
+      }
+    else
+      return 0;
+
+  
+  np=Titel(TP);
+  
+  if(strlen(op=TP->QueryProp(P_PRESAY)))
+    if(np!=op)
+      write(BS("Dein voriges Presay '"+op+"' wird ersetzt."));
+  
+  TP->SetProp(P_PRESAY, np[0..<2]);
+  
+  write(BS("Du bist nun:")+
+	BS(np+CAP(getuid(TP))+" "+(TP->QueryProp(P_TITLE) || "")));
+  
+  return 1;
+}
+nosave int gaffwink  (string str)
+{
+  object *hobbits;
+  string me;
+  int i;
+  
+  if(TP->QueryProp(P_INVIS)) 
+    return write(BS("Das geht nur, wenn Du sichtbar bist!!")),1;
+  
+  hobbits=Alle_Anwesenden(TP);
+  
+  me=Titel(TP)+CAP(getuid(TP));
+  
+  if(!str) str="";  
+  if(str[0]=='/') 
+    str=str[1..<1]+" ";
+  else
+    str="";
+  
+  for(i=sizeof(hobbits)-1;i>=0;i--)
+    tell_object(hobbits[i], BS(me+" winkt allen Gaffos "+str+"aus der Ferne zu."));
+  
+  write(BS("Du winkst allen Gaffos "+str+"aus der Ferne zu."));
+
+  return 1;
+}
+
+nosave int gaffoknuddel(string str)
+{
+  object *hobbits;
+  string me;
+  int i;
+  
+  if(TP->QueryProp(P_INVIS)) 
+    return write(BS("Das geht nur, wenn Du sichtbar bist!!")),1;
+  
+  hobbits=Alle_Anwesenden(TP);
+  
+  me=Titel(TP)+CAP(getuid(TP));
+  
+  if(!str) str="";  
+  if(str[0]=='/') 
+    str=str[1..<1]+" ";
+  else
+    str="";
+  
+  for(i=sizeof(hobbits)-1;i>=0;i--)
+    tell_object(hobbits[i], 
+		BS(me+" knuddelt alle Gaffos "+str+"aus der Ferne."));
+  
+  write(BS("Du knuddelst alle Gaffos "+str+"aus der Ferne."));
+
+  return 1;
+}
+
+
+int gaffower(string str)
+{
+  if(str && str!="kurz")
+    return write(BS("gaffower [kurz]")), 1;
+  
+  TP->More(make_document(who_list("Folgende Gaffos sind anwesend:\n",
+				  strlen(str))));
+
+  return 1;
+}
+
+string extra_look()
+{
+  return capitalize(environment()->QueryPronoun())+
+    " traegt ein grosses Gaffomonokel in rechten Auge.\n";
+}
+
+void hau_ab(object who)
+{
+  tell_object(who, BS("Als Du das Monokel beruehrst, loest "
+  "es sich ploetzlich auf..."));
+  
+  RemoveCmd(0);
+ 
+  call_out("remove", 0);
+}
+

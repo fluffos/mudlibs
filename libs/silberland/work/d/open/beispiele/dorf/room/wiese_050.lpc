@@ -1,0 +1,208 @@
+//=========================================================================
+//
+// File:    wiese_050.c
+// Created by Ronja
+//
+// Project: beispielgebiet
+//
+// Ein Objekt im Inventar des Spielers wird ausgetauscht. Problem des
+// Gewichts wird aufgezeigt. Desweiteren wird ein Objekt im Inventar des
+// Spielers veraendert. Die Funktionen present und move werden eroertert.
+//
+//=========================================================================
+
+#include "../def.h"
+
+#include <food.h> //Wirbrauchen
+
+inherit "std/room"; //wir erben alle eigenschaften des Standardraumes
+
+void create()
+{
+  ::create();
+
+  SetProp(P_INT_SHORT, "Eine Feuerstelle");
+  SetProp(P_INT_LONG,
+    "Unweit der Wiese befindet sich eine Feuerstelle.");
+
+  SetProp(P_LIGHT, 1);
+  SetProp(P_INDOORS, 0);
+  SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE: 25, ENV_TERRAIN: TT_TOWN]) );
+
+  AddDetail( ({"boden"}) ,
+    "Du stehst auf einer Wiese.");
+
+  AddDetail( ({"himmel"}) ,
+    "Der Himmel zeigt nichts besonderes.");
+
+  AddDetail( ({"feuerstelle"}) ,
+    "Sie ist noch warm. Du koenntest Dir einen Braten grillen oder braten.");
+
+//-------------------------------------------------------------------------
+// Einen plappernden Papagei einfuegen
+//-------------------------------------------------------------------------
+
+  AddItem(NPC "papagei_080", REFRESH_DESTRUCT);
+
+//-------------------------------------------------------------------------
+// Wir zeigen, wie man einen Gegenstand im Inventar des Spielers austauscht
+// oder veraendert. Grillt man, so tauschen wir aus, braet man, so
+// veraendern wir. Das dient nur als Lernziel, in de Praxis wird man sich
+// natuerlich fuer das eine oder andere entscheiden.
+//-------------------------------------------------------------------------
+
+  AddCmd( ({"brat","brate"})        , "cmd_braten");
+  AddCmd( ({"grill","grille"})      , "cmd_grillen");
+
+//-------------------------------------------------------------------------
+// Und nun noch die Ausgaenge
+//-------------------------------------------------------------------------
+
+  AddExit("nordosten", ROOM "wiese_030");
+}
+
+//-------------------------------------------------------------------------
+// Beim grillen tauschen wir das Objekt im Spieler aus.
+//-------------------------------------------------------------------------
+
+
+int cmd_grillen(string str)
+{
+  object braten;
+
+  notify_fail("Was moechtest Du grillen?\n");
+
+  if(!str || str == "") return 0;
+  if(!(str == "braten"         ||
+       str == "lammbraten"         )) return 0;
+
+//-------------------------------------------------------------------------
+// present ermittelt, ob sich im Inventar des Spielers ein Objekt befindet,
+// welches sich mit einer entsprechenden Id ansprechen laesst und gibt
+// dieses zurueck, anderenfalls 0
+//-------------------------------------------------------------------------
+
+  braten = present("roher_lamm_braten",TP);
+
+//-------------------------------------------------------------------------
+// wenn der Spieler keinen Lammbraten bei sich hat, gibts einen Hinweis
+//-------------------------------------------------------------------------
+
+  if(braten == 0)
+  {
+    tell_object(TP,"Du hast keinen Braten dabei, den Du grillen koenntest!\n");
+    return -1; //syntax ok, aber nicht sinnvoll, daher -1
+  }
+
+//-------------------------------------------------------------------------
+// So, der spieler hat also tatsaechlich einen Braten dabei. Nun tun wir
+// folgendes:
+// - entfernen des rohen Bratens
+// - clonen des neuen Bratens
+// - bewegen des neuen Bratens in den Spieler
+//-------------------------------------------------------------------------
+
+  braten->remove();
+  braten = clone_object(OBJ "braten_011");
+
+//-------------------------------------------------------------------------
+// Jetzt bewegen wir den Braten in den Spieler. In diesem Fall duerfen
+// mit M_NOCHECK arbeiten, da wir ja den alten Braten entfernt haben.
+// Gewichtsprobleme gibt es dann nicht, sofern der neue braten leichter
+// oder gleichschwer ist.
+//-------------------------------------------------------------------------
+
+  braten->move(TP,M_GET|M_NOCHECK);
+
+//-------------------------------------------------------------------------
+// Ein Hinweis tut natuerlich not.
+//-------------------------------------------------------------------------
+
+  tell_object(TP,BS("Du nimmst Deinen rohen Braten und grillst Ihn. Da "
+                    "wird er doch gleich bekoemmlicher."));
+  return 1;
+}
+
+//-------------------------------------------------------------------------
+// Hier waehlen wir einen anderen Weg, um den Braten zu veraendern.
+//-------------------------------------------------------------------------
+
+int cmd_braten(string str)
+{
+  object braten;
+
+  notify_fail("Was moechtest Du braten?\n");
+
+  if(!str || str == "") return 0;
+  if(!(str == "braten"         ||
+       str == "lammbraten"         )) return 0;
+
+//-------------------------------------------------------------------------
+// present ermittelt, ob sich im Inventar des Spielers ein Objekt befindet,
+// welches sich mit einer entsprechenden Id ansprechen laesst und gibt
+// dieses zurueck, anderenfalls 0
+//-------------------------------------------------------------------------
+
+  braten = present("roher_lamm_braten",TP);
+
+//-------------------------------------------------------------------------
+// wenn der Spieler keinen Lammbraten bei sich hat, gibts einen Hinweis
+//-------------------------------------------------------------------------
+
+  if(braten == 0)
+  {
+    tell_object(TP,"Du hast nichts dabei, was Du braten koenntest!\n");
+    return -1; //syntax ok, aber nicht sinnvoll, daher -1
+  }
+
+//-------------------------------------------------------------------------
+// Jetzt veraendern wir den Braten:
+// - P_SHORT umsetzen
+// - P_LONG  umsetzen
+//-------------------------------------------------------------------------
+
+  braten->SetProp(P_SHORT, "Ein Lammbraten");
+  braten->SetProp(P_LONG, "Ein gebratener Lammbraten. Riecht richtig lecker.");
+
+//-------------------------------------------------------------------------
+// Adjektive umsetzen. AddAdjective fuegt nur Adjektive hinzu, das "roh"
+// wollen wir aber loeschen, dazu muss man direkt P_ADJECTIV manipulieren
+//-------------------------------------------------------------------------
+
+  braten->SetProp(P_ADJECTIVES,0);
+  braten->SetProp(P_NAME_ADJ, ({"gebraten"}) );
+  braten->AddAdjective( ({"gebratenen","gebratener","gebratenem","gebratenes","gebratene"}) );
+
+//-------------------------------------------------------------------------
+// Foodinfo umsetzen
+//-------------------------------------------------------------------------
+
+  braten->SetProp(P_FOOD_INFO,
+      ([
+         F_HEAL    : ({ 20,10 }), // braten heilt 20 Lebens- und 10 Magiepunkte
+         F_SOAK    : 20,          // saettigt dabei um 20 Punkte
+         F_DRINK   : 0,           // Trinksaettigung 0
+         F_ALCOHOL : 0,           // Alkohol auch keiner ;)
+         F_POISON  : 0,           // Vergiftet ist sie auch nicht
+         F_MSG     : "Du verschlingst den Braten gierig.",
+         F_MSG_ROOM: "verschlingt gierig einen Braten.",
+         F_VERB    : "essen"      // Wird fuer Fehlermeldung "Was willst Du
+      ]) );                       // essen" benoetigt
+
+//-------------------------------------------------------------------------
+// Nicht vergessen, die id "roher_lamm_braten" zu entfernen!
+//-------------------------------------------------------------------------
+
+  braten->RemoveId("roher_lamm_braten");
+
+//-------------------------------------------------------------------------
+// Ein Hinweis tut natuerlich not.
+//-------------------------------------------------------------------------
+
+  tell_object(TP,BS("Du nimmst Deinen rohen Braten und braetst Ihn. Da "
+                    "wird er doch gleich bekoemmlicher."));
+
+  return 1;
+}
+
+

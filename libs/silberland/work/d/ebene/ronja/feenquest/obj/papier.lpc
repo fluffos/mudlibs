@@ -1,0 +1,148 @@
+//=========================================================================
+//
+// File:    papier.c
+// Created by Ronja@SL
+//
+// Project: Feen
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit "std/thing";
+
+mapping spieler;
+
+void create()
+{
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein altes Pergament");
+  SetProp(P_LONG,
+    "Ein altes, zerknuelltes Pergament. Wird wohl jemand weggeworfen "
+    "haben. "
+  );
+
+  AddId(({"papier","stueck papier","pergament"}));
+
+  SetProp(P_NAME_ADJ, ({"alt"}) );
+  AddAdjective( ({"alten","alter","altem","altes","alte"}) );
+
+  SetProp(P_MATERIAL, ([MAT_PAPER:100]) );
+  SetProp(P_INFO, "Es sieht sehr alt aus und irgendwas ist auf ihm notiert.\n");
+  SetProp(P_NAME, "Pergament");
+  SetProp(P_GENDER, NEUTER);
+
+  SetProp(P_WEIGHT, 8);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+
+  spieler = ([ ]);
+}
+
+void MovePaper(int silent)
+{
+  mapping exits;
+  string  *ind,exit,room;
+  object here;
+
+  if(!(here = ENV(TO))) return;
+  if(!here->id("Raum")) return;
+
+  exits = here->QueryProp(P_EXITS);
+  if (!mappingp(exits)) return;
+  ind   = m_indices(exits);
+  if (!sizeof(ind)) return;
+
+  exit = ind[random(sizeof(ind))];
+  room = exits[exit];
+
+  if(room[0..33] != ROOM "bhof")
+  {
+    room = ROOM "bhof5";
+    exit = "westen";
+  }
+
+  if(!silent) tell_room(ENV(TO),Name(WER,1)+" wird vom "
+                        "Wind nach "+CAP(exit)+" geweht.\n");
+  TO->move(room, M_SILENT|M_NOCHECK);
+  tell_room(ENV(TO),Name(WER,0)+" wird vom Wind hereingeweht.\n");
+}
+
+void GetPaper(object pl, object room)
+{
+  object ob;
+  string uuid;
+
+  uuid = getuuid(pl);
+
+  if((member(spieler, uuid) && spieler[uuid, 0] > 2) ||
+     present("\nFEENPERGAMENT", pl) )
+  {
+    tell_object(pl,BS("Oups, gerade als Du "+name(WEN,1)+" aufnehmen "
+                      "wolltest wurde "+QueryPronoun(WER)+" vom Wind "
+                      "fortgeweht."));
+
+    tell_room(ENV(pl),BS(CTPN+" bueckt sich, um "+name(WEN,0)+" aufzuheben, "
+                         "doch gerade in diesem Augenblick wird "+
+                         QueryPronoun(WER)+" fortgeweht."), ({pl}) );
+
+  }
+  else
+  {
+    ob=clone_object(OBJ "pergament.lpc");
+    ob->move(pl, M_GET|M_SILENT);
+
+    ob->SetProp(P_NODROP, BS("Wenn Du "+name(WEN,1)+" nicht mehr haben "
+                             "moechtest, dann zerreisse "+QueryPronoun(WEN)+
+                             " doch einfach. "));
+    ob->SetProp(P_NEVERDROP, 1);
+
+    tell_object(pl, "Du nimmst "+name(WEN,1)+" an Dich.\n");
+    tell_room(ENV(pl), CTPN+" hebt "+name(WEN,0)+" auf.\n", ({pl}) );
+
+    if(member(spieler, uuid))
+    {
+      spieler[uuid, 0]++;
+    }
+    else
+    {
+      spieler += ([uuid: 0]);
+    }
+  }
+
+  TO->move(room, M_PUT|M_NOCHECK|M_SILENT);
+  MovePaper(1);
+}
+
+void init()
+{
+  int t;
+
+  ::init();
+
+  if(!TP)              return;
+  if(!interactive(TP)) return;
+  if(!ENV(TO))         return;
+
+  if(ENV(TO) == TP)
+  {
+    while(remove_call_out("MovePaper") != -1);
+    call_out("GetPaper",0,TP,ENV(TP));
+  }
+
+  if(find_call_out("MovePaper") > -1) return ;
+
+  t = random(2)+2;
+  if(IS_WIZARD(TP)) t += 10;
+  call_out("MovePaper",t,0);
+}
+
+void reset()
+{
+  ::reset();
+
+  spieler = ([ ]);
+}
+

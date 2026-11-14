@@ -1,0 +1,221 @@
+
+// Spiegelschild der Paladine
+// Changes:
+// 14.02.2000 Angrox
+//            Becomesnetdead auskommentiert
+
+inherit "std/armour";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <new_skills.h>
+#include "../paladin.h"
+#include <wizlevels.h>
+#include <defines.h>
+#include <moredef.h>
+
+int suc,level;
+int last_time;
+
+create() {
+  if( !is_clone(TO) ) return;
+  ::create();
+
+  suc=0;
+  last_time=0;
+
+  AddId (({PALADINITEM, "\nspiegelschild"}));
+  SetProp (P_SHORT, 0);
+  SetProp (P_INVIS, 1);
+  SetProp (P_GENDER, MALE);
+  SetProp (P_WEIGHT, 0);
+  SetProp (P_NODROP, 1);
+  SetProp (P_NEVERDROP, 1);
+  SetProp (P_MAGIC, 1);
+  SetProp (P_ARMOUR_TYPE, AT_SHIELD );
+  SetProp (P_AC, 0);
+  SetProp (P_MATERIAL, MAT_MAGIC  );
+  SetProp (P_VALUE, 0);
+  SetProp (P_NOBUY, 1);
+  SetProp (P_NOSELL, 1);
+  SetProp (P_DEFEND_FUNC, TO );
+
+  if(getuid(previous_object())!="GUILD.pal_spells" && 
+     !IS_ARCH(getuid(previous_object()))) {
+   call_out("remove", 1);
+   return 0;
+  }
+}
+
+int DefendFunc(mixed dam_type, mixed spell, object enemy) {
+  int i,min;
+  string *was;
+  object owner;
+
+  // Fix: keine doppelten Zurueckschlaege mehr wegen Rekursionsgefahr
+  // nur noch ein Rueckschlag pro time() moeglich !!!
+  
+  if(last_time==time()) return 0;
+
+  if (suc==0 || level==0 || !owner=MENV) {
+    call_out("remove", 1);
+    return 0;
+  }
+  if (random(11-(int)2*level/3)) return 0;
+  i=0; 
+  was=({ });
+
+  if(mappingp(spell) && spell[SI_SKILLDAMAGE] != 0)
+    min=spell[SI_SKILLDAMAGE];
+  else
+    min=(level-12)*50;
+
+  if (member(dam_type, DT_LIGHTNING) != -1) {
+    i=suc/130;
+    was+=({ DT_LIGHTNING });
+  }
+  if (member(dam_type, DT_LIGHT) != -1) {
+    i=suc/60;
+    was+=({ DT_LIGHT });
+  }
+  if (member(dam_type, DT_SOUND) != -1) {
+    i=suc/180;
+    was+=({ DT_SOUND });
+  }
+  if (member(dam_type, DT_EXPLOSION) != -1) {
+    i=suc/80;
+    was+=({ DT_EXPLOSION });
+  }
+  if (member(dam_type, DT_TERROR) != -1) {
+    i=suc/70;
+    was+=({ DT_TERROR });
+  }
+  if (member(dam_type, DT_MAGIC) != -1) {
+    i=suc/50;
+    was+=({ DT_MAGIC });
+  }
+  if (member(dam_type, DT_UNHOLY) != -1) {
+    i=suc/40;
+    was+=({ DT_UNHOLY });
+  }
+  if (member(dam_type, DT_POISON) != -1) {
+    i=suc/100;
+    was+=({ DT_POISON });
+  }
+  if (member(dam_type, DT_ACID) != -1) {
+    i=suc/100;
+    was+=({ DT_ACID });
+  }
+  if (member(dam_type, DT_ELECTRIC) != -1) {
+    i=suc/130;
+    was+=({ DT_ELECTRIC });
+  }
+  if (member(dam_type, DT_HOLY) != -1) {
+    i=suc/80;
+    was+=({ DT_HOLY });
+  }
+  if (i>0) {
+    last_time=time();
+    i+=random(min);
+    tell_object(owner,BS(
+      "Der goettliche Spiegelschild Dustys wirft einen Teil auf "+
+      enemy->name(WEN)+" zurueck."));
+    tell_object(enemy,BS(
+      "Der goettliche Spiegelschild von "+owner->name(WEN)+" wirft einen "
+      "Teil auf Dich zurueck."));
+    if (interactive(owner)) {
+      owner->AddSp(-(random(2)+1));
+    }
+    //TELL("angrox", sprintf("Spiegelschild -- i: %d, was: %O, min: %d, spell: %O\n",i,was,min,spell));
+    enemy->Defend(i, 
+                  was, 
+                  ([SP_SHOW_DAMAGE:1,
+                    SP_NAME:"Spiegelschild",
+                    SP_PHYSICAL_ATTACK: 0]), 
+                  owner );
+    return random(level/2)+(level/2);
+  }
+  return 0;
+}
+
+string extra_look() {
+  object player;
+  if(!player=ENV(ME)) return "";
+  if(player->QueryProp(P_GENDER)==FEMALE)
+    return "Du kannst Dein eigenes Spiegelbild irgendwie "
+           "an ihrem Koerper erkennen.\n";
+  else 
+    return "Du kannst Dein eigenes Spiegelbild irgendwie "
+           "an seinem Koerper erkennen.\n";
+}
+
+int start_remove(int time,int suc1) {
+  object owner;
+  
+  if (!owner=MENV) {
+    call_out("remove", 1);
+    return 0;
+  }
+  if (owner->QueryProp(P_GUILD) != "paladine" && !IS_WIZARD(owner)) {
+    call_out("remove", 1);
+    return 0;
+  }
+  if(getuid(previous_object())!="GUILD.pal_spells" &&
+      !IS_WIZARD(owner)) {                                                             
+    call_out("remove", 1);                                                                                         
+    return 0;                                                                                                      
+  }      
+  call_out("remove_me", time);
+  level=owner->QueryProp(P_GUILD_LEVEL);
+  SetProp (P_AC, 10+(level-12)*5);
+  suc=suc1;
+  return 1;
+}
+
+remove_me() {
+  object player, room;
+  if(player=ENV(ME)) 
+    tell_object(player, "Dein Spiegelschild verblasst.\n");
+  if(room=ENV(player))
+    tell_room(room, sprintf("Du kannst Dein Spiegelbild nicht mehr an %s "
+                            "erkennen.\n", player->name(WER)), ({player}));
+  remove();
+}
+
+/* Auskommentiert, da Spieler immer reconnecten  <angrox, 14.02.2000>
+void BecomesNetDead(object player) {
+  if(player==MENV) {
+    remove_me();
+  }
+}
+*/
+
+reset() {
+  ::reset();
+  call_out("remove", 1);
+}
+
+varargs int DoWear(int silent, int all) {
+  int ret;
+  if (all) return 0;
+  ret=::DoWear(1,all); // silent
+  return ret;
+}
+
+varargs int DoUnwear(int silent, int all) {
+  int ret;
+  if (all) return 0;
+  if(previous_object() && previous_object() != ME &&
+     previous_object()->QueryProp(P_ARMOUR_TYPE) == AT_SHIELD) {
+    if(MENV) tell_object(MENV,BS(
+      "PALADIN!!! Du hast schon einen Spiegelschild von Dusty erhalten!"));
+    return 0;
+  }
+  ret = ::DoUnwear(1); // silent
+  return ret;
+}
+
+void Setup(int special_wc) {
+  SetProp(P_PALADIN_SCHILDPARADE_AC, special_wc);
+}

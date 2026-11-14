@@ -1,0 +1,259 @@
+// Spielerschatten
+// Schattenwelt
+// Von Wraz / Mendralim
+
+#include "../def.h"
+inherit "/std/npc/spells";
+inherit "std/npc";
+inherit NPC "npc.lpc";
+
+object owner;
+int shadowlvl;
+float log_shadowlvl;
+
+string ShadowChat();
+string GetList();
+
+void create()
+{
+  if(!is_clone(TO)) return;
+
+  ::create();
+
+  AddDetail( ({""}),
+    "");
+
+  SetProp(P_ARTICLE,0);
+  AddAdjective(({"astral","astraler"}));
+  SetProp(P_GENDER, MALE);
+  AddId(({"schatten","\nspielerschatten"}));
+
+  create_default_shadownpc(20,0,1);
+  RemoveId("\nschattenwache");
+
+  SetProp(P_AGGRESSIVE,0);
+
+  SetProp(P_RACE, "Untoter");
+  SetProp(P_SIZE, 150+random(41));
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_ALIGN, -1000);
+  SetProp(P_MAX_HANDS, 2);
+  //SetProp(P_NOMAGIC,0);
+
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    "@CAP_WER faellt einfach auf den Boden.\n" }) );
+
+  SetProp(P_LOG_INFO, "/wraz/fragen_schatten");
+
+  SetProp(P_MSGIN, "zeichnet sich auf dem Boden ab");
+  SetProp(P_MSGOUT, "verschwindet");
+  SetProp(P_MMSGIN, "zeichnet sich auf dem Boden ab");
+  SetProp(P_MMSGOUT, "verschwindet");
+
+  SetProp(P_DIE_MSG,  " verschwindet.\n");
+  SetProp(P_NOCORPSE, 1 );
+
+  AddInfo(DEFAULT_INFO, "reagiert nicht.\n");
+
+  AddInfo( ({"erfahrung","schattenerfahrung"}),
+  #'GetList); //'
+
+  SetChats(1,
+  ({#'ShadowChat //'
+   }));
+
+  SetProp(P_SPELLRATE,20);
+
+  AddSpell(30,1,
+    Name(WER,1)+" entzieht Dir mit seiner Beruehrung Kraft.\n",
+    Name(WER,1)+" entzieht @WEM mit seiner Beruehrung Kraft.\n",
+    DT_MAGIC, "CastAttrDrain", ([SP_SHOW_DAMAGE:0]) );
+
+  AddDefaultSpell(5, 300, DS_FEAR,
+   Name(WER,1)+" klebt furchterregend an Dir, Du willst nur noch weg!\n");
+
+  AddSpell(1,1,
+    "",
+    "",
+    DT_MAGIC, "hide", ([SP_SHOW_DAMAGE:0]) );
+
+  SUID;
+}
+
+// ------------------------------------------------------------------------------
+void CastAttrDrain(object enemy, int damage, mixed dam_type)
+{
+  object ob;
+  ob = clone_object(OBJ "attr_drain");
+  ob->Setup(([A_STR:-1-random(2)]));
+  ob->move(enemy,M_NOCHECK);
+}
+
+// ------------------------------------------------------------------------------
+void SetOwner(object player)
+{
+  if(!living(player)) return;
+
+  owner = player;
+  shadowlvl = LOGMASTER->GetSchattenlevel(getuid(player)); // max (theoretisch): int-limit
+  log_shadowlvl = log(to_float(shadowlvl) > 0.0 ? to_float(shadowlvl) : 1.0) / log(10.0); // max: ca. 9
+
+  DB("spielerschatten SetOwner() ("+TPU+"): shadowlvl = "+shadowlvl+"\n");
+
+  TO->create_default_shadownpc(
+    20+3*to_int(log_shadowlvl), // bis ca. 47
+    500+to_int(log_shadowlvl*log_shadowlvl)*550, // HP: von ca. 500 bis ueber 44.000
+    1);
+    
+  AddId(({"\n"+lower_case(getuid(player))+"spielerschatten"}));
+  RemoveId("\nschattenwache");
+  AddAdjective(lower_case(owner->name()));
+
+  SetProp(P_SPELLRATE,20+5*to_int(log_shadowlvl));
+  SetProp(P_AGGRESSIVE,0);
+  SetProp(P_SIZE, owner->QueryProp(P_SIZE));
+  SetProp(P_KILL_NAME, owner->Name(WESSEN)+" Schatten");
+
+  owner->AddPursuer(TO);
+}
+
+// ------------------------------------------------------------------------------
+string _query_short()
+{
+  if(!owner) return "Jemands Schatten";
+  else if(owner == TP) return "Dein Schatten";
+  else return owner->Name(WESSEN)+" Schatten";
+}
+
+// ------------------------------------------------------------------------------
+string _query_long()
+{
+  string long_text;
+  long_text = " astraler Schatten zeichnet sich am Boden ab. "
+    "Er scheint irgendwie ein Eigen-'Leben' zu haben.";
+  if(!owner) return BS("Jemand's"+long_text);
+  else if(owner == TP) return BS("Dein"+long_text);
+  else return BS(owner->Name(WESSEN)+long_text);
+}
+
+// ------------------------------------------------------------------------------
+string _query_name()
+{
+  if(!owner) return "Jemands Schatten";
+  else return owner->Name(WESSEN)+" Schatten";
+}
+
+
+// ------------------------------------------------------------------------------
+string ShadowChat()
+{
+  switch (random(10))
+  {
+    case 0: return Name(WER,1)+" bewegt sich von selbst!\n"; break;
+    case 1: return Name(WER,1)+" flackert leicht.\n"; break;
+    case 3: if(!random(10)) 
+      return "In Deinem Geist blitzt ploetzlich das Wort 'Schattenerfahrung' auf!\n"; 
+      else return "";
+      break;
+    default: return "";
+  }
+}
+
+// ------------------------------------------------------------------------------
+string GetList()
+{
+  if(QueryProp("last_question_time")>time()-4)
+    return 0;
+  SetProp("last_question_time", time());
+  LISTMASTER->CreateSortedLists();
+  TP->More(BS("Dir scheint, Dein Schatten schmunzelt ueber Dich. Ob das moeglich ist? "
+    "Dann erscheinen Dir Namen und Zahlen vor Deinem inneren Auge: ")+
+    "\n"+read_file(SHADOWLVLLIST));
+  return 0;
+}
+
+// ------------------------------------------------------------------------------
+int _query_paralyzed() {return 0;}
+nosave int _set_paralyzed(mixed para) {return 0;}
+
+// ------------------------------------------------------------------------------
+void die(int poisondeath)
+{
+  object ob;
+
+  // CallNPCKillLog(); absichtlich deaktiviert!
+
+  if(TP && owner && TP == owner)
+  {
+    // ev. alten Schattenstring entfernen
+    if(present("\nschattenstring",TP)) 
+    {
+      present("\nschattenstring",TP)->remove();
+      TP->Message(BS("Dein Schattenstring erneuert sich."));
+    }
+    // neuen clonen
+    ob = clone_object(OBJ "schattenstring");
+    DB("spielerschatten die() ("+TPU+"): log_shadowlvl = "+log_shadowlvl+"\n");
+    ob->Setup(TP,log_shadowlvl);
+    ob->move(TP,M_NOCHECK);
+  }
+
+  ::die(poisondeath);
+}
+
+// ------------------------------------------------------------------------------
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  // CallPlayerDeathLog(player, killer, lostexp); absichtlich deaktiviert!
+
+  if(owner && player == owner) TO->remove();
+  //call_out("leiche_verwandeln",2+random(5));
+}
+
+// ------------------------------------------------------------------------------
+void BecomesNetDead(object spieler)
+{
+  if(spieler == owner)
+    owner->RemovePursuer(TO);
+}
+
+// ------------------------------------------------------------------------------
+void init() 
+{
+  object *inv;
+  int i, no_of_shadows;
+
+  ::init();
+
+  if(TP && TP == owner && interactive(TP) && member(TP->QueryPursuers(),TO) == -1) {
+    TP->AddPursuer(TO);
+  }
+
+  if(!ENV(TO) || !owner) return;
+
+  inv=all_inventory(ENV(TO));
+  no_of_shadows = 0;
+
+  // Man kann nur 1 Schatten haben
+  for(i=0;i<sizeof(inv);i++)
+  {
+    if( inv[i]->id("\n"+lower_case(getuid(owner))+"spielerschatten"))
+    {
+      if(no_of_shadows == 0) no_of_shadows = 1;
+      else
+      {
+        ENV(TO)->Message(BS(
+          "Ein Schatten verschwindet."));
+        TO->remove(1);
+        return;
+      }
+    }
+  }
+}
+
+// ------------------------------------------------------------------------------
+void reset()
+{
+ ::reset();
+ //if(!is_clone(TO)) return;
+}

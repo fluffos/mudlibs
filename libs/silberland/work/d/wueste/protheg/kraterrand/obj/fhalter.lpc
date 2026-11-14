@@ -1,0 +1,274 @@
+#include "../def.h"
+
+inherit "std/thing";
+
+#define MAX_STUECK 5
+#define FWEIGHT 500
+#define SWEIGHT 800
+
+nosave int licht, stueck;
+nosave object lastone;
+
+void create()
+{
+  if(!is_clone(ME)) return;
+  ::create();
+  
+  SetProp(P_SHORT, "Ein Fackelhalter");
+  SetProp(P_NAME, "Fackelhalter");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_VALUE, 200);
+  SetProp(P_WEIGHT, SWEIGHT);
+  
+  SetProp(P_MATERIAL, ([MAT_IRON:30, MAT_MISC_WOOD:70]));
+  
+  AddId(({"halter","fackelhalter"}));
+  
+  AddCmd("befestige", "lichtdazu");
+  AddCmd("loese", "lichtweg");
+
+  licht=0;
+  stueck=0;
+  lastone=0;
+}
+
+string long()
+{
+  string l;
+
+  l="Ein grosser Fackelhalter mit fuenf Einschueben fuer Fackeln oder "+
+    "Hoellenfackeln, an dem zur Zeit ";
+
+  if(!stueck)
+    l+="keine Fackeln befestigt sind.";
+  else
+    {
+      switch(stueck)
+	{
+	  case 1: l+="eine Fackel befestigt ist.";break;
+	  case 2: l+="zwei Fackeln befestigt sind.";break;
+	  case 3: l+="drei Fackeln befestigt sind.";break;
+	  case 4: l+="vier Fackeln befestigt sind.";break;
+	  case 5: l+="alle Einschuebe belegt sind.";
+	}
+    }
+
+  l+="\nMan kann bis zu fuenf Fackeln befestigen und sie einzeln\n"+
+    "wieder abloesen, doch sind sie danach unbrauchbar.\n";
+
+  SetProp(P_LONG,l);
+
+  return::long();
+}
+
+nosave int lichtdazu(string str)
+{
+  int intensity;
+  string what, where, ret;
+  object ob;
+
+  notify_fail(BS("Was willst Du denn woran befestigen?"));
+  if(!str) return 0;
+
+  if(sscanf(str,"%s an %s", what, where)!=2) return 0;
+
+  if(where=="halter"||where=="fackelhalter") 
+    {
+      if(!ob=present(what, TP)) 
+	return write(BS("Aber das hast Du doch gar nicht bei Dir!!")), 1;
+
+      if(member(ob->QueryProp(P_IDS),"fackel")==-1)
+	return write(BS("Man kann daran nur Fackeln befestigen!")), 1;
+
+      if(!ob->QueryProp(P_LIGHTED))
+	return write(BS("Das bringt doch nichts wenn die Fackel nicht "
+			"brennt!")), 1;
+
+      if(stueck==MAX_STUECK)
+	return write(BS("Es sind bereits alle fuenf Einschuebe besetzt.")), 1;
+
+      if(!ob->id("hoellenfackel"))
+	{
+	  if(licht < 0) 
+	    return write(BS("So eine Fackel kannst Du hier nicht befestigen, "
+			    "da der Fackelhalter von Hoellenfeuer umschlungen "
+			    "ist.")), 1;
+	  else
+	    intensity=1;
+	}
+      else
+	{
+	  if(licht>0) 
+	    return write(BS("So eine Fackel kannst Du hier nicht befestigen, "
+			    "da der Fackelhalter von normalem Feuer "
+			    "umschlungen ist.")), 1;
+	  else
+	    intensity=-1;
+	}
+
+      stueck++;
+
+      licht+=(int)intensity;
+
+      SetProp(P_LIGHT, licht);
+
+      ob->remove();
+
+      ME->SetProp(P_WEIGHT, ME->QueryProp(P_WEIGHT)+FWEIGHT);
+
+      ret="Du steckst eine Fackel in einen der freien Einschuebe, somit ";
+
+      switch(stueck)
+	{
+	case 1: ret+="ist nun ein Einschub belegt. "    ; break;
+	case 2: ret+="sind nun zwei Einschuebe belegt. "; break;
+	case 3: ret+="sind nun drei Einschuebe belegt. "; break;
+	case 4: ret+="sind nun vier Einschuebe belegt. "; break;
+	case 5: ret+="sind nun alle Einschuebe belegt. ";
+	}
+
+      if(!licht)
+	ret+="Deine Umgebung wird dadurch kaum beeinflusst.\n";
+      else
+	ret+="Deine Umgebung wird dadurch "+
+	  ((licht>3||(licht<-3))? "stark ":"schwach ")+
+	  ((int)licht<0 ? "verdunkelt":"erhellt")+".\n";
+      
+      TP->AddPursuer(ME);
+      
+      lastone=TP;
+
+      if(stueck)
+	SetProp(P_NAME_ADJ, "schwer");
+
+      if(stueck>3)
+	SetProp(P_NAME_ADJ, "sehr schwer");
+
+      if(licht>0) 
+	SetProp(P_MATERIAL, 
+		([MAT_IRON:30,MAT_MISC_WOOD:70,MAT_FIRE:50]));
+
+      if(licht<0) 
+	SetProp(P_MATERIAL, 
+		([MAT_IRON:30,MAT_MISC_WOOD:70,MAT_FIRE:50,MAT_MISC_UNHOLY:50]));
+      return write(ret), 1;
+    }
+  return write(BS("Woran willst Du das befestigen?")), 1;
+}
+
+string info()
+{
+  string i;
+  
+  if(!licht)
+    i="Deine Umgebung wird durch den Fackelhalter kaum beeinflusst.\n";
+  else
+    i="Deine Umgebung wird durch den Fackelhalter "+
+      ((licht>3||(licht<-3))? "stark ":"schwach ")+
+      ((int)licht<0 ? "verdunkelt":"erhellt")+".\n";
+  SetProp(P_INFO, i);
+  
+  return ::info();
+}
+
+void reset()
+{
+  ::reset();
+
+  if(licht && stueck)
+    call_out("decrease",5);
+}
+
+void decrease()
+{
+  object pl;
+  
+  stueck--;
+
+  if(licht<0) licht++;
+  else licht--;
+
+  if(query_once_interactive(pl=environment(ME)))
+    tell_object(pl,
+		BS("Eine Fackel an Deinem Fackelhalter ist abgebrannt.")+
+		BS("Du loest sie ab und wirfst sie weg..."));
+
+  SetProp(P_WEIGHT, QueryProp(P_WEIGHT)-FWEIGHT);
+
+  if(!stueck)
+    {
+      licht=0;
+      SetProp(P_WEIGHT, SWEIGHT);
+      SetProp(P_MATERIAL, ([MAT_IRON:30,MAT_MISC_WOOD:70]));
+    }
+
+  SetProp(P_LIGHT, licht);
+}
+
+nosave int lichtweg(string str)
+{
+  notify_fail(BS("Was willst Du denn wovon loesen?"));
+  if(!str) return 0;
+
+  if(str=="fackel von halter"||str=="fackel von fackelhalter")
+    {
+      if(!stueck)
+	return write(BS("Aber es ist doch keine Fackel befestigt!")),1;
+
+      stueck--;
+
+      if(licht>0) licht--;
+      if(licht<0) licht++;
+      write("Du nimmst "+(!stueck ? "die letzte Fackel ":"eine Fackel ")+
+	    "vom Halter und wirfst sie weg.\n");
+      ME->SetProp(P_WEIGHT, ME->QueryProp(P_WEIGHT)-FWEIGHT);
+
+      if(!stueck) 
+	{
+	  licht=0;
+	  SetProp(P_WEIGHT, SWEIGHT);
+	  SetProp(P_MATERIAL, ([MAT_IRON:30,MAT_MISC_WOOD:70]));
+	}
+      
+      SetProp(P_LIGHT, licht);
+      //set_light(-1);
+
+      return 1;
+    }
+
+  return 0;
+}
+
+void init()
+{
+  ::init();
+  
+  if(licht && (TP==MENV) && (lastone!=TP))
+    if(lastone) 
+      lastone->RemovePursuer(ME);
+    else 
+      TP->AddPursuer(ME);
+}
+
+int PreventFollow(object dest)
+{
+  mapping env;
+  
+  if(!stueck)
+    return SetProp(P_LIGHT,0),2;
+
+  if((mappingp(dest->QueryProp(P_ENVIRONMENT))) &&
+     (env[ENV_TERRAIN]==TT_UNDERWATER))
+    {
+      licht=0;
+      stueck=0;
+      SetProp(P_LIGHT, 0);
+
+      tell_object(MENV,
+		  BS("Zischend verloeschen Die Fackeln des Fackelhalters im "
+		     "Wasser.")+
+		  BS("Veraergert loest Du sie ab und wirfst sie weg.");
+      return 2;
+    }
+  return 1;
+}

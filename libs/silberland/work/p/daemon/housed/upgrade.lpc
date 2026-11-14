@@ -1,0 +1,213 @@
+/*
+ *  /p/daemon/housed/upgrade.c - Verwaltet das Aufwerten der Seherhaeuser
+ *
+ *  (c) 1998-2000 Mud Silberland - Adrian Holzwarth / Anatol@Silberland
+ *
+ *  2012-01-25 Anatol             Beschreibung des Upgrades hinzugefuegt
+ *  2001-02-16 Anatol             seteuid() vorgezogen
+ *  2000-12-04 Anatol             Jaja, nicht fragen. *seufz*
+ *
+ */
+
+#pragma strict_types
+
+#include "sys/housed_priv.h"
+#include "sys/upgrade.h"
+
+mixed * upgrades;
+
+public int query_prevent_shadow(object ob) { return 1; }
+
+private nosave void save() { return save_object(HOUSED_UPGRADE_SAVEFILE); }
+
+public void create() { 
+  seteuid(getuid(this_object()));
+  if (!restore_object(HOUSED_UPGRADE_SAVEFILE))
+    upgrades=({});
+  // HOUSED_ERROR_LOG(sprintf("UPGRADE LOADED (%O)",this_interactive()));
+}
+
+nosave int secure() {
+  return ((this_interactive()) && (this_interactive()==this_player()) &&
+      (getuid(previous_object())==getuid(this_object())));
+}
+
+nosave int verysecure() {
+  return ((secure()) &&
+    (member(HOUSED_CARETAKER,getuid(this_player()))!=-1));
+}
+
+/* Upgrade() wird von aussen aufgerufen. Uebergeben wird lediglich die
+ * Kennziffer des Upgrades (die ist fuer jeden Upgrade eindeutig, d.h. wenn
+ * einmal eine Kennziffer zugewiesen und verwendet wurde, darf sie nicht 
+ * wieder neu belegt werden) und den Namen des Beguenstigten. Die Hausnummer
+ * wird fest zugewiesen und nicht uebergeben.
+ * Aufrufen duerfen jeweils fuer eine Kennziffer nur ein bestimmtes Objekt,
+ * was zwar ein wenig paranoisch ist, aber gemessen am Schaden, der entstehen
+ * kann, nur weil ein Kollege mal versuchen wollte, ob das geht... weia.
+ */
+
+public int MayUpgrade(int no, string owner) {
+  object house;
+
+  if ((!intp(no))||(!stringp(owner))||(!owner)||(!previous_object()))
+    return HOUSE_UPGRADE_BAD_CALL;
+  else if ((no>=sizeof(upgrades)) ||
+          (((string)upgrades[no][HOUSED_UPGRADE_FN])!=
+      explode(file_name(previous_object()),"#")[0]))
+    return HOUSE_UPGRADE_ACCESS_FAILURE;
+  else if (!house=(object)HOUSED->FindHouse(owner,
+        upgrades[no][HOUSED_UPGRADE_HOUSENO]))
+    return HOUSE_UPGRADE_NO_SUCH_HOUSE;
+  else if (house->QueryUpgraded(no))
+    return HOUSE_UPGRADE_ALREADY_DONE;
+  else return 1;
+
+}
+
+public int Upgrade(int no, string owner) {
+
+  object house;
+  int res;
+  
+  if ((res=MayUpgrade(no, owner))!=1) return res;
+  else if (!house=(object)HOUSED->FindHouse(owner,
+        upgrades[no][HOUSED_UPGRADE_HOUSENO]))
+    return HOUSE_UPGRADE_NO_SUCH_HOUSE; // Doublette
+  else {
+    switch (upgrades[no][HOUSED_UPGRADE_TYPE]) {
+
+       case HDUPT_GOODIE:
+         printf("Not yet implemented.\n");
+         return 0;
+         break;
+   
+       case HDUPT_ROOM: 
+         if ((res=(int)HOUSED->AddRoom(owner, 
+                 upgrades[no][HOUSED_UPGRADE_HOUSENO],
+                 upgrades[no][HOUSED_UPGRADE_INFO]))!=1) {
+           HOUSED_ERROR_LOG(sprintf("UPGRADE ROOM FAILED: %s %d. (%d)",
+                 owner,res,no)); 
+           return HOUSE_UPGRADE_FAILED;
+         } // Endlich klappte es. :)
+         else {
+           if (!house->Upgraded(no)) {
+           HOUSED_ERROR_LOG(sprintf("UPGRADE ROOM FAILED [Upgraded()]: "
+                 "%s %d. (%d)", owner,res,no)); 
+           return HOUSE_UPGRADE_ACCESS_FAILURE;
+           }
+           return 1;
+         }
+         break;
+
+       default:
+         printf("There is nothing else...\n");
+         return 0;
+         break;
+    }
+    return 0; // Never.
+  }
+}
+
+/* Nur um nachzusehen, was da eigentlich da ist...  Wenn das mit einem 
+ * map_array() auch geht, ohne auf die Lfd-Nr verzichten zu muessen, 
+ * sage mir das wer, ich war zu faul, das zu probieren... :) */
+ 
+public string ListUpgrades() {
+  int i;
+  string s;
+  s="";
+  for (i=sizeof(upgrades);i--;)
+    s=sprintf("%3d. %-30s [%s: %s] (HNR %d) '%s'\n",i,
+        upgrades[i][HOUSED_UPGRADE_FN],
+        (upgrades[i][HOUSED_UPGRADE_TYPE]==HDUPT_ROOM?"Raeume":"Goodie"),
+        to_string(upgrades[i][HOUSED_UPGRADE_INFO]),
+        upgrades[i][HOUSED_UPGRADE_HOUSENO],upgrades[i][HOUSED_UPGRADE_DESC] )+s;
+  return s;
+}
+
+/* Fuer Abfrage "in code", wird ggf aus raum 0 aufgerufen... */
+
+public mixed QueryUpgrades()  {
+  return ({}) + upgrades;   // no reference return;
+}
+
+/* Eine kleine Hilfsfunktion, die mal schnell zusammenrechnet, wieviel
+ * Raeume ein bestimmtes Seherhaus insgesamt theoretisch haben koennte. */
+
+nosave int totalPossibleRooms(int hnr) {
+  int x,i;
+
+  x=0;
+  for (i=sizeof(upgrades);i--;)
+    if ((upgrades[i][HOUSED_UPGRADE_HOUSENO]==hnr)
+        && (upgrades[i][HOUSED_UPGRADE_TYPE]==HDUPT_ROOM))
+      x+=(int)(upgrades[i][HOUSED_UPGRADE_INFO]);
+  return x;
+}
+
+/* Anhaengen eines weiteren erlaubten Objektes an die Liste. Duerfen tun
+ * das nur Objekte aus /p/daemon/housed mit TP/TI der verwaltenden Personen.
+ * Es wird stumpf an das Array angehaengt - einzige Sicherheitsabfrage: 
+ * Sollte die Gesamtsumme der moeglichen Raeume eine gewisse Anzahl 
+ * uebersteigen, ist schluss mit lustig. */
+
+public int AddUpgrade(string fn, int houseno, int upg_type, mixed upg_info, string upg_desc) {
+  if (!verysecure()) return 0;
+  if ((!stringp(fn))||(!fn)||(!intp(houseno))||(!intp(upg_type))||(!upg_info))
+    return 0;
+  if (!upg_desc) upg_desc="Irgendetwas";
+  if ((upg_type==HDUPT_ROOM) && 
+      ((totalPossibleRooms(houseno)+(int)upg_info)>98))
+    return 0;
+  upgrades+=({({fn, upg_type, upg_info, houseno, upg_desc})});
+  save();
+  return 1;
+}
+
+/* Man darf einmal verwendete Positionen nicht rausloeschen, da man einem
+ * Seher auch kaum bereits angehaengte und beschriebene Raeume einfach wieder
+ * herausloeschen darf. Aber man kann sie veraendern - wobei man auch hier
+ * tunlichst darauf achten soll, welche Differenzen alt/neu da bei den 
+ * Haeusern entstehen, die bereits upgegradet wurden. */
+
+public int ModifyUpgrade(int n, string fn, int houseno, int upg_type, 
+    mixed upg_info, string upg_desc) {
+  if (!verysecure()) return 0;
+  if ((!stringp(fn))||(!fn)||(!intp(houseno))||(!intp(upg_type))||
+      (!intp(n))||(!upg_info))
+    return 0;
+  if (!upg_desc) upg_desc="Irgendwas";
+  if ((n>=sizeof(upgrades))||(n<0)) return 0;
+  if ((upg_type==HDUPT_ROOM) && 
+     ((totalPossibleRooms(houseno)+(int)upg_info)>98))
+    return 0;
+  upgrades[n]=({fn, upg_type, upg_info, houseno, upg_desc});
+  save();
+  return 1;
+}
+
+/* Liefert ein bestimmte Array (bzw. eine Kopie davon) aus dem 
+ * Upgrader-Array. Die Bedienkonsole holt sich so die Daten, um sie
+ * vor einer Aenderung eines einzelnen Eintrags anzeigen zu koennen. */
+
+public mixed QueryUpgrade(int n) {
+  if (!intp(n)) return 0;
+  if ((n>=sizeof(upgrades))|| (n<0)) return 0;
+  return ({})+upgrades[n];
+}
+
+/* Wieviele Upgrader sind denn schon eingetragen? */
+
+public int QueryTotalUpgrades() {
+  return sizeof(upgrades);
+}
+
+/* Falls man nachfragen moechte, ob ein bestimmtes Haus bereits
+ * schon aufgewertet wurde...                                     */
+
+public int AlreadyUpgraded(string owner, int no, int upgr) {
+  object o;
+  return  ((o=(object)HOUSED->FindHouse(owner,no))?
+      (int)o->QueryUpgraded(upgr):0);
+}

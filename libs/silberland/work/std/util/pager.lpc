@@ -1,0 +1,257 @@
+// SilberLand MUDlib
+//
+// std/util/pager.c -- generic pager
+//
+// $Date: 2002/01/30 12:26:13 $
+/* $Revision: 2.11 $
+ * $Log: pager.c,v $
+ * Revision 2.11  2002/01/30 12:26:13  Woody
+ * Alle this_interactive() bzw. this_player() durch this_object() ersetzt,
+ * MORE_HLS eingefuehrt
+ *
+ * Revision 2.10  2002/01/06 02:46:44  Woody
+ * eval_command() besser kommentiert, Bugfix: Exit-Funktion auch bei zeilen 0!
+ *
+ * Revision 2.9  2001/12/01 16:42:46  Woody
+ * Variable MORE_HI fuer Highlighting verwenden
+ *
+ * Revision 2.8  2000/08/11 20:47:31  Zordan
+ * Sicherheitscheck in eval_command. tell_object statt write
+ *
+ * Revision 2.7  1998/09/27 15:09:07  Woody
+ * Sicherheitsabfrage fuer nonexistente Files in More()
+ *
+ * Revision 2.6  1998/09/24 15:45:18  Woody
+ * Bugfix fuer Files ohne \n am Schluss
+ *
+ * Revision 2.5  1998/09/22 17:11:01  Woody
+ * More hoffentlich endgueltig gefixt *aechz*
+ *
+ * Revision 2.4  1998/09/20 18:36:40  Woody
+ * LCMD setzen, 'Oops' Bug gefixt, Highlighting gefixt
+ *
+ * Revision 2.3  1998/09/14 11:42:44  Woody
+ * Bei Suche nach Regexp werden gefundene Stellen highlighted
+ *
+ * Revision 2.2  1997/11/05 16:27:04  Woody
+ * P_MORE_FLAGS des Spielers auswerten (E_ABS Mode)
+ *
+ * Revision 2.1  1997/09/17 14:44:36  Woody
+ * Bugfix fuer zeilen==0
+ *
+ * Revision 2.0  1997/03/13 02:41:33  Woody
+ * prepared for revision control
+ *
+ * Revision 1.8  1995/05/08  21:39:30  Hate
+ * added E_CAT
+ *
+ * Revision 1.7  1995/05/04  15:13:38  Hate
+ * *** empty log message ***
+ *
+ * Revision 1.4  1995/05/03  15:38:32  Hate
+ * added flags to More(), now inly E_PROMPT stops at end of file
+ *
+ * Revision 1.3  1995/05/03  14:44:54  Hate
+ * there's always a bug in fread()
+ * but we fixed it!
+ *
+ * Revision 1.2  1995/05/03  13:03:00  Jof
+ * fixed command() bug (must be eval_command())
+ *
+ * Revision 1.2  1995/05/03  10:48:47  leo
+ * fixed bug in file read
+ *
+ * Revision 1.1  1995/05/02  19:19:05  mud
+ * Initial revision
+ *
+ */
+
+#pragma strong_types
+
+inherit "/std/util/input";
+
+#include <shells.h>
+#include <pager.h>
+#include <ansi.h>
+#include "/std/sys_debug.h"
+
+string prompt(mixed pinfo, string add)
+{
+  return sprintf(MSG_PROMPT+"%s", stringp(add)?add:"");
+}
+
+string fread(mixed pinfo, int begin, int c)
+{
+  if(begin > pinfo[MAXL] || begin < 1) return 0;
+  if(pinfo[FILE]) return read_file(pinfo[TEXT], begin, c);
+  else
+  {
+    int start, end, l, x;
+#ifdef O_SPEED
+# ifdef O_SPEED_UP
+    if(member(pinfo[JUNK], begin)) 
+    {
+      start = pinfo[JUNK][begin];
+      if(!(end = pinfo[JUNK][begin+c]))
+        end = strlen(pinfo[TEXT]);
+      else end--;
+      return pinfo[TEXT][start..end];
+    }
+    return 0;
+# else 
+    end = pinfo[JUNK][begin / JUNKSIZE];
+# endif
+#endif
+#ifndef O_SPEED_UP
+    l = begin + c; start = -1;
+# ifdef SPEED_UP
+    l -= begin / JUNKSIZE;
+# endif
+    while(l && (end = strstr(pinfo[TEXT], "\n", end+1)) > -1)
+    {
+      if(l == c) start = end;
+      l--;
+    }
+    if(start == -1) return 0;
+    return pinfo[TEXT][start..(end < 0 ? strlen(pinfo[TEXT]) : end)];
+#endif
+  }
+}
+
+mixed call(mixed ctrl, mixed ctrlargs)
+{
+  if(!ctrl || (stringp(ctrl) && !(ctrl = symbol_function(ctrl)))) return 0;
+  if(!pointerp(ctrlargs)) return funcall(ctrl);
+  return apply(ctrl, ctrlargs);
+}
+
+ 
+varargs int eval_command(mixed in, mixed pinfo)
+{
+  string cprompt, tmp;
+  mapping vars;
+
+  cprompt = "";
+  if (stringp(in)) pinfo[LCMD]=in;
+
+  // Quit?
+  if(in == "q" || in == "x") {
+    call(pinfo[CTRL], pinfo[CARG]); 
+    return 1;
+  }
+
+  if(!in || (stringp(in) && !strlen(in)))
+    pinfo[CURL] += pinfo[PAGE];
+  else
+    if(in != -1)
+      return 0;
+
+  // Ende des Textes erreicht?
+  if(pinfo[CURL] > pinfo[MAXL])
+    return (call(pinfo[CTRL], pinfo[CARG]), 1); 
+
+  // Current Line und Prompt
+  if(pinfo[CURL] <= 0) pinfo[CURL] = 1;
+  if(pinfo[CURL] == 1) cprompt = MSG_TOP;
+  if(pinfo[CURL] + pinfo[PAGE] > pinfo[MAXL]) cprompt = MSG_BOTTOM;
+
+  // Text auslesen
+  if(!tmp = fread(pinfo, pinfo[CURL], pinfo[PAGE]))
+    return (write(MSG_OOPS+"\n"), 0);
+
+  // Umgebungsvariablen des Spielers
+  vars = this_object()->QueryProp(P_FILESYS) || ([ ]);
+
+  // Suche nach regulaerem Ausdruck? -> Highlighting!
+  if (pinfo[REGX] &&
+      ( ( stringp(pinfo[LCMD]) && pinfo[LCMD][0]=='/' ) ||
+        ( member( ([ "1","true","on","ein","an" ]) , vars["MORE_HLS"] ) ) ) &&
+      member((["ansi","vt100"]),this_object()->QueryProp(P_TTY)))
+  {
+    string hi;
+
+    if (stringp(vars["MORE_HI"]))
+      hi = getcolor(vars["MORE_HI"]);
+    else
+      hi = ANSI_INVERS;
+
+    tmp = efun::implode(map_array(efun::explode(tmp,"\n"), #'regreplace,
+          "(" + pinfo[REGX] + ")", hi + "\\1" + ANSI_NORMAL, 1),"\n");
+  }
+
+  // Text und Prompt ausgeben
+  if(query_once_interactive(this_object()))
+    tell_object(this_object(), tmp);
+  else
+    write(tmp);
+
+  // Kein Prompt erwuenscht oder Ende des Textes erreicht?
+  if(!(pinfo[FLAG] & E_PROMPT) &&
+     pinfo[CURL] + pinfo[PAGE] > pinfo[MAXL])
+    return (call(pinfo[CTRL], pinfo[CARG]), 1);
+
+  // Naechstes Kommando abfragen
+  if(!(pinfo[FLAG] & E_CAT) &&
+     (pinfo[MAXL] > pinfo[PAGE] || (pinfo[FLAG] & E_PROMPT)))
+  {
+    input(#'prompt, ({ pinfo, cprompt }), #'eval_command, ({ pinfo }));
+  }
+  else
+  {
+    // Fertig - gg.falls Exit-Funktion aufrufen
+    if (closurep(pinfo[CTRL])) call(pinfo[CTRL], pinfo[CARG]); 
+  }
+  return 1;
+}
+
+varargs public void More(string txt, int file,
+			 mixed ctrl, mixed ctrlargs,
+			 int flags)
+{
+  int j;
+  mixed tmp, pinfo;
+  if(!txt) return call(ctrl, ctrlargs);
+  //         TEXT, FILE, CURL, MAXL, PAGE, REGX, CTRL, CARG,     FLAG,  LCMD
+  pinfo = ({ txt,  file, 1,    0,    20,   0,    ctrl, ctrlargs, flags, 0 });
+  if(!pinfo[FILE] && pinfo[TEXT][<1] != '\n') pinfo[TEXT] += "\n";
+#ifdef O_SPEED
+  pinfo += ({ ([1:0]) });
+#endif
+  if(!pinfo[FILE]) {
+    while((j = strstr(pinfo[TEXT], "\n", j+1)) != -1)
+#ifdef O_SPEED
+# ifdef O_SPEED_UP
+      pinfo[JUNK][++pinfo[MAXL]+1] = j+1;
+# else
+      if(!(++pinfo[MAXL] % JUNKSIZE)) 
+        pinfo[JUNK][pinfo[MAXL]+1] = j+1;
+# endif
+#else
+      pinfo[MAXL]++;
+#endif
+  }
+  else
+  {
+    if(file_size(pinfo[TEXT])<0) return call(ctrl, ctrlargs);
+    while((tmp = read_file(pinfo[TEXT], pinfo[MAXL]+1, MAX_LINE_READ))
+          && strlen(tmp))
+    {
+      pinfo[MAXL] += sizeof(Explode(tmp, "\n"))-1;
+      if (tmp[<1]!='\n') pinfo[MAXL]++;
+    }
+    pinfo[MAXL]++;
+  }
+  pinfo[PAGE] = PAGELENGTH;
+
+  // zeilen 0:
+  if (!pinfo[PAGE])
+    pinfo[FLAG] |= E_CAT;
+
+  if (query_once_interactive(this_object()))
+    pinfo[FLAG] |= this_object()->QueryProp(P_MORE_FLAGS);
+
+  pinfo[CURL] = 1;
+  eval_command(-1, pinfo);
+  return;
+}
+

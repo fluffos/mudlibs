@@ -1,0 +1,1923 @@
+// Bersekergilde im Silberland
+// 11-10-1996    Feyaria@SilberLand
+
+/*  Die Spells und Skills
+
+Skill axe_figthing
+  Besser Kaempfen mit Aexten
+  Ab Gildenstufe 1
+
+zerstoerung
+  Damit kann man Dinge zerstoeren, es kann aber passieren, dass man
+  sich dabei selber verletzt.
+  SP:4, Ab Gildenstufe 1
+
+waffenkunde
+  Schaetzt eine Waffe ein und gibt P_INFO aus (wenn vorhanden)
+  SP:11, Ab Gildenlevel 1
+
+schaetz
+  Schaetzt die Kampfkraft des Gegners ein
+  SP:4, Ab Gildenstufe 2
+
+zertreten
+  Angriff nur gegen kleine Gegner, Schaden abhengig vom Gewicht
+  der Schuhe, Schaden zwischen 60 und 444
+  SP:8, Ab Gildenstufe 2
+
+wueten
+  Die Anwesenden erschrecken
+  SP:7, Ab Gildenstufe 3
+
+augeinauge
+  Hierbei konzentriet man sich auf einen Gegner und trifft ihn oefters
+  Man bekommt auch hin und wieder eine Meldung, wie es dem Gegner so geht
+  SP:12, Ab Gildenstufe 3
+ 
+regeneration
+  Schnellere Regeneration und ueberwindung von gift, taub, blind und frosch
+  SP:30, Ab Gildenstufe 4
+
+rammen
+  Einen Gegner zu Boden stossen
+  SP:6, Ab Gildenstufe 4
+
+kampfschrei
+  Angriffsspell, bei schwachen Gegnern wird P_WIMPY gesetzt
+  SP:10, Ab Gildenstufe 5
+ 
+willenskraft
+  Durch blosse Willenskraft schafft man es, den Koeper gegen Umwelteinfluesse
+  zu schuetzen, zB gegen Hitze, Kaelte und bestimme magische Schadenstypen
+  SP:20, Ab Gildenstufe 5
+
+kopfstoss
+  Angriff gegen gleichgrosse Gegner, Schaden abhaengig vom
+  Gewicht des Helms, Schaden zwischen 10 und 555
+  SP: 12, Ab Gildenstufe 6
+
+eisenhaut
+  Staerkt die Ruestung
+  SP:25, Ab Gildenstufe 6
+
+spalten
+  Harter Hieb mit der Axt, versucht den Gegner zu toeten
+  SP:50, Ab Gildenstufe 7
+
+blutrausch
+  Mehrere schnelle und harte Attacken, Ruestung wird gestaerkt,
+  aber man kann nicht fliehen
+  SP:130, Ab Gildenstufe 8
+
+schlachtruf
+  Kampfanfang, Schaden gegen alle Gegner
+  SP:20, Ab Gildenstufe 9
+  
+*/
+
+#include <properties.h>
+#include <language.h>
+#include <attributes.h>
+#include <combat.h>
+#include <doors.h>
+#include <living/combat.h>
+#include <wizlevels.h>
+#include <new_skills.h>
+#include <moving.h>
+#include <class.h>
+#include "/gilden/berserker/def.h"
+
+#define DB(x) tell_object(find_player("feyaria"),x)
+
+inherit "/std/spellbook";
+
+void create()
+{
+  ::create();
+  SetProp(P_GLOBAL_SKILLPROPS,
+          ([SI_SPELLFATIGUE: 2,              // 2 Sekunden kein neuer Spell
+            SI_SKILLLEARN: 2,                // 0.04% pro 2 A_STR 
+            OFFSET(SI_SKILLLEARN): 3,        // plus 0.05% in jedem Fall
+            SI_SKILLRESTR_USE: ([SR_FUN:"StirnbandTest"]),
+            SI_SKILLLEARN_ATTRIBUTE: A_STR,
+            SI_SP_LOW_MSG:"Deine Konzentration ist fuer diese Faehigkeit zu "
+                          "gering.\n",
+            SI_TIME_MSG: "Du bist noch zu erschoepft von Deiner letzten "
+                         "Aktion.\n",
+            ]));
+  AddSpell("zerstoerung",4,
+           ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:1]),
+             SI_SPELLFATIGUE: 4,
+             SI_PREPARE_TIME: 2,     
+             SI_PREPARE_MSG: "Du sammelst Deine Kraft fuer einen Akt der "
+                             "Zerstoerung.\n",
+             SI_SKILLLEARN: 3,
+             SI_SKILLLEARN_ATTRIBUTE: A_STR,
+             SI_SP_LOW_MSG: "Du benoetigst 4 Magiepunkte fuer das Zerstoeren "
+                            "von Gegenstaenden.\n",
+			 ]));
+  AddSpell("waffenkunde",11,
+           ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:1]),
+             SI_SPELLFATIGUE: 4,
+             SI_SKILLLEARN: 6,
+             OFFSET(SI_SKILLLEARN): 6, 
+             SI_PREPARE_TIME: 1,
+             SI_PREPARE_MSG: "Du rufst Dir alles in Erinnerung, was Kronang "
+                             "Dir ueber Waffen beigebracht hat.\n",
+             SI_SKILLRESTR_USE: ([SR_FUN:"BlindTest"]),
+             SI_SKILLLEARN_ATTRIBUTE: A_INT, 
+             SI_SP_LOW_MSG: "Du benoetigst 11 Magiepunkte, um eine Waffe "
+                            "zu erkunden.\n",
+             ]));
+  AddSpell("schaetz",5,
+           ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:2]),
+             SI_SPELLFATIGUE: 4,
+             SI_SKILLLEARN: 3,
+             SI_PREPARE_TIME: 1,     
+             SI_PREPARE_MSG: "Du schaetzt Kampfstaerke, Groesse, Aussehen "
+                             "und Ausruestung.\n",
+             SI_SKILLRESTR_USE: ([SR_FUN:"BlindTest"]),
+             SI_SKILLLEARN_ATTRIBUTE: A_INT,
+             SI_SP_LOW_MSG: "Du benoetigst 5 Magiepunkte, um einen Gegner "
+                            "einzuschaetzen.\n", 
+             ]));
+  AddSpell("rammen",6,
+           ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:4]),
+             SI_SPELLFATIGUE: 2,
+             SI_PREPARE_TIME: 1,
+             SI_PREPARE_MSG: "Du bereitest Dich auf das Rammen vor.\n",
+             SI_SKILLDAMAGE: 30,
+             OFFSET(SI_SKILLDAMAGE): 30,
+             SI_NOMAGIC:100,
+             SI_SKILLRESTR_USE: ([SR_FUN:"FroschTest", A_DEX:15 ]),
+             SI_SKILLDAMAGE_TYPE: DT_BLUDGEON,
+             SI_SKILLLEARN_ATTRIBUTE: A_STR,
+             SI_SP_LOW_MSG: "Du benoetigst 6 Magiepunkte, um einen Gegner zu "
+                            "rammen.\n",
+             ]));
+  AddSpell("wueten", 7,
+           ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:3]),
+             SI_SPELLFATIGUE: 6,
+             SI_PREPARE_TIME: 2,     
+             SI_PREPARE_MSG: "Du sammelst genug Wut in Deinem Inneren "
+                             "zusammen.\n",
+             SI_SKILLRESTR_USE: ([SR_FUN:"FroschTest"]),
+             SI_SKILLLEARN_ATTRIBUTE: A_STR,
+             SI_SP_LOW_MSG: "Du benoetigst 7 Magiepunkte, um ganz wild "
+                            "herumzuwueten.\n",
+             ]));
+
+  AddSpell("regeneration",30,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:4]),
+             SI_SPELLFATIGUE: 20,   
+             SI_PREPARE_TIME: 10,
+             SI_PREPARE_MSG: "Du entspannst Deinen Koerper.\n",
+             SI_DIFFICULTY: 50,
+             SI_SKILLLEARN_ATTRIBUTE: A_CON,
+             SI_SP_LOW_MSG: "Du benoetigst 30 Magiepunkte, um Deinen "
+                            "Koerper zu regenerieren.\n",
+             ]));
+  AddSpell("kampfschrei",10,
+           ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:5]),
+             SI_SKILLDAMAGE: 50,
+             OFFSET(SI_SKILLDAMAGE): 50,
+             SI_SKILLRESTR_USE: ([SR_FUN:"FroschTest", A_CON:17]),
+             SI_SKILLDAMAGE_TYPE: ({DT_TERROR, DT_SOUND}),
+             SI_SKILLLEARN_ATTRIBUTE: A_CON,
+             SI_SP_LOW_MSG: "Du benoetigst 10 Magiepunkte fuer einen "
+                            "Kampfschrei.\n",
+             ]));
+  AddSpell("augeinauge",12,
+           ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:3]),
+             SI_SPELLFATIGUE: 2,
+             SI_PREPARE_TIME: 1,     
+             SI_PREPARE_MSG: "Du bekommst einen starren Blick.\n",
+             SI_SKILLRESTR_USE: ([SR_FUN:"BlindTest"]),
+             SI_SKILLLEARN_ATTRIBUTE: A_STR,
+             SI_SP_LOW_MSG: "Du benoetigst 12 Magiepunkte fuer einen "
+                            "Kampf Auge in Auge.\n",
+             ]));
+  AddSpell("zertreten",8,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:2]),
+             SI_DIFFICULTY: 50,
+             SI_SKILLRESTR_USE: ([SR_FUN:"BlindTest"]),
+             SI_SKILLDAMAGE_TYPE: DT_SQUEEZE,
+             SI_SKILLLEARN_ATTRIBUTE: A_STR,
+             SI_NOMAGIC:100,
+             SI_SP_LOW_MSG: "Du benoetigst 8 Magiepunkte, um einen Gegner "
+                            "zu zertreten.\n",
+             SI_SPELL:([
+               SP_NAME: "zertreten",
+               SP_PHYSICAL_ATTACK:1,
+               SP_SHOW_DAMAGE:({
+               ({ -1, "@WER2 tritt neben Dir auf den Boden.",
+                      "Du trittst neben @WEM1 auf den Boden.",
+                      "@WER2 tritt neben @WEM1 auf den Boden."}),
+               ({  0, "@WER2 stiefelt Dich leicht.",
+                      "Du stiefelst @WEN1 leicht.",
+                      "@WER2 stiefelt @WEN1 leicht." }),
+               ({  5, "@WER2 stiefelt Dich hart.",
+                      "Du stiefelst @WEN1 hart.",
+                      "@WER2 stiefelt @WEN1 hart." }),
+               ({ 10, "@WER2 stiefelt Dich sehr hart.",
+                      "Du stiefelst @WEN1 sehr hart.",
+                      "@WER2 stiefelt @WEN1 sehr hart." }),
+               ({ 15, "@WER2 stiefelt Dich extrem hart.",
+                      "Du stiefelst @WEN1 extrem hart.",
+                      "@WER2 stiefelt @WEN1 extrem hart." }),
+               ({ 20, "@WER2 zerdrueckt Dich.",
+                      "Du zerdrueckst @WEN1.",
+                      "@WER2 zerdrueckt @WEN1." }),
+               ({ 30, "@WER2 drueckt Dich tief in den Boden hinein.",
+                      "Du drueckst @WEN1 tief in den Boden hinein.",
+                      "@WER2 drueckt @WEN1 tief in den Boden hinein." }),
+               ({ 40, "@WER2 zermantscht Dich zu Brei.",
+                      "Du zermanscht @WEN1 zu Brei.",
+                      "@WER2 zermanscht @WEN! zu Brei." }),
+               }), ]),
+             ]));
+  AddSpell("willenskraft",20,
+           ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:5]),
+             SI_SPELLFATIGUE: 4,
+             SI_PREPARE_TIME: 1,     
+             SI_PREPARE_MSG: "Du versuchst, Deinen Willen zu staerken.\n",
+             SI_SKILLRESTR_USE: ([SR_FUN:"FroschTest"]),
+             SI_SKILLLEARN_ATTRIBUTE: A_INT,
+             SI_SP_LOW_MSG: "Du benoetigst 20 Magiepunkte um Deinen Willen "
+                            "zu kraeftigen.\n",
+             ]));
+  AddSpell("kopfstoss",15,
+            ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:6]),
+             SI_SKILLRESTR_USE: ([SR_FUN:"FroschTest", A_DEX:17]),
+             SI_SKILLDAMAGE_TYPE: DT_BLUDGEON,
+             SI_SKILLLEARN_ATTRIBUTE: A_DEX,
+             SI_NOMAGIC:100,
+             SI_SP_LOW_MSG: "Du benoetigst 15 Magiepunkte fuer einen "
+                            "Kopfstoss.\n",
+             SI_SPELL:([
+               SP_NAME: "kopfstoss",
+               SP_PHYSICAL_ATTACK:1,
+               SP_SHOW_DAMAGE:({
+               ({ -1, "@WESSEN2 Kopf trifft nur Luft.",
+                      "Dein Kopf trifft nur Luft.",
+                      "@WESSEN2 Kopf trifft nur Luft."}),
+               ({  0, "@WER2 streift Dich.",
+                      "Du streifst @WEN1.",
+                      "@WER2 streift @WEN1." }),
+               ({  5, "@WER2 verletzt Dich.",
+                      "Du verletzt @WEN1.",
+                      "@WER2 verletzt @WEN1." }),
+               ({ 10, "@WER2 verletzt Dich schwer.",
+                      "Du verletzt @WEN1 schwer.",
+                      "@WER2 verletzt @WEN1 schwer." }),
+               ({ 15, "@WER2 verletzt Dich sehr schwer.",
+                      "Du verletzt @WEN1 sehr schwer.",
+                      "@WER2 verletzt @WEN1 sehr schwer." }),
+               ({ 20, "@WER2 bricht Dir die Nase.",
+                      "Du brichst @WEM1 die Nase.",
+                      "@WER2 bricht @WEM1 die Nase." }),
+               ({ 30, "@WER2 zerschmettert Dein Gesicht.",
+                      "Du zerschmetterst @WESSEN1 Gesicht.",
+                      "@WER2 zerschmettert @WESSEN1 Gesicht." }),
+               ({ 40, "@WER2 schlaegt Dein Gesicht zu Brei.",
+                      "Du schlaegst @WESSEN1 Gesicht zu Brei.",
+                      "@WER2 schlaegt @WESSEN1 Gesicht zu Brei." }),
+               }), ]),
+             ]));
+  AddSpell("eisenhaut",25,
+           ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:6]),
+             SI_SPELLFATIGUE: 4,
+             SI_PREPARE_TIME: 3,     
+             SI_SKILLLEARN: 1,
+             si_PREPARE_MSG: "Deine Haut beginnt sich zu veraendern.\n",
+             SI_SKILLRESTR_USE: ([SR_FUN:"StirnbandTest", A_CON: 19]), 
+             SI_DIFFICULTY: 80,
+             SI_SKILLLEARN_ATTRIBUTE: A_CON,
+             SI_SP_LOW_MSG: "Du benoetigst 25 Magiepunkte, um Deine Haut hart "
+                            "wie Eisen zu machen.\n",
+             ]));
+  AddSpell("spalten",50,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:7]),
+             SI_SPELLFATIGUE: 8,
+             SI_SKILLLEARN: 1,
+             SI_PREPARE_TIME: 2,     
+             SI_PREPARE_MSG: "Du nimmst Deine Axt fest in die Hand und "
+                             "spannst Deine Muskeln an.\n",
+             SI_SKILLRESTR_USE: ([SR_FUN:"BlindTest", A_DEX:20]),
+             SI_DIFFICULTY: 200,
+             SI_SKILLDAMAGE_TYPE: DT_SLASH,
+             SI_NOMAGIC:100,
+             SI_SKILLLEARN_ATTRIBUTE: A_STR,
+             SI_SP_LOW_MSG: "Du benoetigst 50 Magiepunkte, um Deinen Gegner zu "
+                            "spalten.\n",
+             ]));
+  AddSpell("blutrausch",130,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:8]),
+             SI_SPELLFATIGUE: 30,
+             SI_PREPARE_TIME: 4,    
+             SI_SKILLLEARN: 5,
+             OFFSET(SI_SKILLLEARN): 5,
+             SI_PREPARE_MSG: "Du schnaubst aergerlich und scharrst wuetend "
+                             "mit Deinen Fuessen.\n",
+             SI_DIFFICULTY: 400,
+             SI_SKILLRESTR_USE: ([SR_FUN:"FroschTest", A_CON:22]),
+             SI_SKILLLEARN_ATTRIBUTE: A_STR,
+             SI_SP_LOW_MSG: "Du benoetigst 130 Magiepunkte, um Dich in "
+                            "Blutrausch zu versetzen.\n",
+             ]));
+  AddSpell("schlachtruf",20,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:9]),
+             SI_SPELLFATIGUE: 2,
+             SI_SKILLLEARN: 3,
+             SI_PREPARE_TIME: 4,     
+             SI_PREPARE_MSG: "Du fuellst Deine Lungen mit Luft.\n",
+             SI_SKILLRESTR_USE: ([SR_FUN:"StirnbandTest", A_CON:24]),
+             SI_DIFFICULTY: 500,
+             SI_SKILLLEARN_ATTRIBUTE: A_STR,
+             SI_SP_LOW_MSG: "Du benoetigst 20 Magiepunkte fuer einen "
+                            "Schlachtruf.\n",
+             ]));
+}
+
+string StirnbandTest(object caster, mapping sinfo)
+{
+  object stirnband;
+  if( present("\nberserker_panik", caster) )
+    return "In Deiner Panik kannst Du nichts machen!\n";
+  if( (stirnband = present("\nberserker_stirnband", caster)) &&
+         stirnband->QueryProp(P_WORN) == caster )
+    return 0;
+  else
+   return "Wo ist denn Dein blutrotes Stirnband?\n";
+}
+
+string FroschTest(object caster, mapping sinfo)
+{
+  if (caster->QueryProp(P_FROG))
+    return "Als Frosch kannst Du das nicht!\n";
+  return StirnbandTest(caster, sinfo);
+}
+
+string BlindTest(object caster, mapping sinfo)
+{
+  if (caster->QueryProp(P_BLIND))
+    return "Da Du blind bist, kannst Du das nicht machen!\n";
+  return StirnbandTest(caster, sinfo);
+}
+
+nosave int total_fail;
+
+void Misserfolg(object caster, string spell, mapping sinfo)
+{
+  int old_abil;
+
+  if (!total_fail)
+  {
+    switch(spell)
+    {
+      case "waffenkunde":
+        write("Du kannst nichts besonderes erkennen.\n");
+        break;
+      case "schaetz":
+        write("Du verschaetzt Dich total.\n");
+        break;
+      case "rammen":
+        write("Aus dem Rammen wird nur ein kleiner Schubser.\n");
+        break;
+      case "wueten":
+        write("Dein Wueten laesst alle unbeeindruckt.\n");
+        break;
+      case "kampfschrei":
+      case "schlachtruf":
+        write("Nur eine heiseres Kraechzen kommt aus Deiner Kehle.\n");
+        break;
+      case "augeinauge":
+        write("Du kannst Deinem Gegner nicht in die Augen blicken.\n");
+        break;
+      case "zertreten":
+        write("Du stampfst wild herum, triffst aber niemanden.\n");
+        break;
+      case "willenskraft":
+        write("Deine Willenskraft ist zu schwach.\n");
+        break;
+      case "kopfstoss":
+        write("Dein Kopfstoss ging meilenweit daneben.\n");
+        break;
+      case "eisenhaut":
+        write("Deine Haut veraendert sich ueberhaupt nicht.\n");
+        break;
+      case "spalten":
+        write("Deine Axt saust vorzeitig durch die Luft und trifft "
+              "niemanden.\n");
+        break;
+      case "blutrausch":
+        write("Du kannst einfach Dein Blut nicht zum Rauschen bringen.\n");
+        break; 
+      case "regeneration":
+        write("Du kannst Deine Heilkraefte nicht zur Geltung bringen.\n");
+        break; 
+      default:
+        write("Der Zauberspruch ist missglueckt.\n");
+    }
+  }
+  total_fail = 0;  // gleich zuruecksetzen
+  old_abil = sinfo[SI_SKILLABILITY];
+  Learn(caster, spell, sinfo);
+  sinfo=caster->QuerySkill(spell);
+  if (old_abil < (mappingp(sinfo) ? sinfo[SI_SKILLABILITY] : sinfo))
+    write( "Du lernst aus Deinem Fehler.\n" ); 
+  else
+    write( "Leider lernst Du nicht aus Deinem Fehler.\n" );
+}
+
+int zerstoerung(object caster, mapping sinfo)
+{
+  int suc;
+  string str;
+  object ob;
+  
+  if(!str=sinfo[SI_SKILLARG] )
+  {
+    write("Was willst Du zerstoeren?\n");
+	return 0;
+  }
+  if(!ob=present(str,caster))
+  {
+    write("Du hast doch gar kein "+capitalize(str)+"?\n");
+	return 0;
+  }
+  if( caster->InFight() )
+  {
+    write("Willst Du nicht lieber Deine Gegner vorher vernichten?\n");
+    return 0;
+  }
+  if(living(ob)) 
+  {
+    write("Bekaempfe "+ob->name(WEN)+" lieber wie ein richtiger Berserker!\n");
+        return 0;
+  }
+  if( ob->QueryProp(P_CURSED) || ob->QueryProp(P_MAGIC) || ob->id("QUESTOBJ") )
+  {
+    write( break_string("Eine unbekannte Macht hindert Dich daran, "+ 
+      ob->name(WEN)+ " zu zerstoeren.",78));
+    return 0;
+  }
+  if( ob->IsUnit() )
+  {
+    write("Das geht noch nicht!\n");
+    return 1;
+  }
+  if( ob->QueryProp(P_WIELDED) )
+    ob->DoUnwield();
+  if( ob->QueryProp(P_WORN) )
+    ob->DoUnwear();
+  if( ob->QueryProp(P_WIELDED) )
+  {
+    write("Du solltest "+ ob->name(WEN,1)+ " zuerst zurueckstecken!\n");
+    return 0;
+  }
+  if( ob->QueryProp(P_WORN) )
+  {
+    write("Du solltest "+ ob->name(WEN,1)+ " zuerst ausziehen!\n");
+    return 0;
+  }
+  if( !ob->QueryProp(P_VALUE) )
+  {
+    write(ob->Name(WER)+" zerbroeselt sofort zu Staub.\n");
+    say(caster->Name(WER)+" zerstoert "+ob->name(WEN)+".\n");
+    ob->remove();
+    return 0;
+  }
+  if (suc=SpellSuccess(caster,sinfo)<=0)
+  {
+    total_fail=1;
+    write("Du schaffst es nicht, "+ob->name(WEN)+ " zu zerstoeren.\n");
+    if( ( ob->QueryProp(P_WC)>70 || ob->QueryProp(P_WEIGHT)>500 ) 
+        && !random(3) )
+    {
+      write("Leider verletzt Du Dich dabei selber.\n");
+      caster->reduce_hit_point(random( 1+(10000-suc)/500 ));
+    }
+    return MISSERFOLG;
+  }
+  switch(random(8))
+  {
+    case 0:
+      tell_object(caster, 
+        "Du zerstoerst voller Berserkerwut "+ ob->name(WEN)+".\n");
+      tell_room(environment(caster), caster->Name(WER) + 
+        " zerstoert voller Berserkerwut " + ob->name(WEN)+".\n", ({caster}) );
+      break;
+    case 1:
+      tell_object(caster,break_string( 
+        "Du wirfst "+ ob->name(WEN)+" zu Boden und huepfst solange wild darauf "
+        "herum bis nur mehr kleine Staubteilchen uebrigbleiben.",78));
+      tell_room(environment(caster), break_string(
+        caster->Name(WER) + " wirft "+ob->name(WEN)+" zu Boden und huepft "
+        "solange wild darauf herum bis nur mehr kleine Staubteilchen "
+        "uebrigbleiben.",78), ({caster}) );
+      break;
+    case 2:
+      tell_object(caster, break_string( 
+        "Du nimmst "+ ob->name(WEN)+" in Deinen Mund und kaust solange darauf "
+        "herum, bis nichts mehr davon uebrig bleibt.",78));
+      tell_room(environment(caster), break_string(
+        caster->Name(WER) + " nimmt " + ob->name(WEN)+ " in " +
+        caster->QueryPossPronoun(MALE,WEN,SINGULAR)+" Mund und kaut solange "
+        "darauf herum, bis nichts mehr davon uebrig bleibt.",78), ({caster}) );
+      break;
+    case 3:
+      tell_object(caster, break_string( 
+        "Du nimmst "+ ob->name(WEN)+" in Deine Faeuste und biegst und drueckst "
+        "solange herum, bis nur mehr ein Haeufchen Schrott uebrig bleibt.",78));
+      tell_room(environment(caster), break_string(
+        caster->Name(WER) + " nimmt " + ob->name(WEN)+ " in " +
+        caster->QueryPossPronoun(FEMALE,WEN,PLURAL)+" Faeuste und biegt und "
+        "drueckt solange herum, bis nur mehr ein Haeufchen Schrott "
+        "uebrig bleibt.",78), ({caster}) );
+      break;
+    case 4:
+      tell_object(caster, break_string( 
+        "Du spannst Deine Muskeln an und zerreisst "+ ob->name(WEN)+" in "
+        "kleine Teile.",78));
+      tell_room(environment(caster), break_string(
+        caster->Name(WER) + " spannt "+
+        caster->QueryPossPronoun(MALE,WEN,PLURAL)+ " Muskeln an und zerreisst "
+        + ob->name(WEN)+" in kleine Teile.",78 ), ({caster}) );
+      break;
+    case 5:
+      tell_object(caster, break_string( 
+        "Du nimmst alle Deine Kraft zusammen und zerstueckelst " 
+        + ob->name(WEN)+" in winzige Teilchen.",78));
+      tell_room(environment(caster), break_string(
+        caster->Name(WER) + " nimmt alle "+
+        caster->QueryPossPronoun(FEMALE,WEN)+ " Kraft zusammen und "
+        "zerstueckelt " + ob->name(WEN)+" in winzige Teilchen.",78 ), 
+        ({caster}) );
+      break;
+    case 6:
+      tell_object(caster, break_string( 
+        "Du zerstaeubst " + ob->name(WEN)+" mit einem einzigen, gewaltigen "
+        "Hieb.",78));
+      tell_room(environment(caster), break_string(
+        caster->Name(WER) + " zerstaeubt " + ob->name(WEN)+" mit einem "
+        "einzigen, gewaltigen Hieb.",78 ), ({caster}) );
+      break;
+    case 7:
+      tell_object(caster, break_string( 
+        "Mit all Deiner Kraft zerreisst Du " + ob->name(WEN)+".", 78));
+      tell_room(environment(caster), break_string(
+        "Mit all " + caster->QueryPossPronoun(FEMALE,WEM,SINGULAR)+" Kraft "
+        "zerreisst " + caster->name(WER) + " " + ob->name(WEN)+ ".", 78 ),
+        ({caster}) );
+      break;
+  }
+  if( ( ob->QueryProp(P_WC)>100 || ob->QueryProp(P_WEIGHT)>1000 ) 
+      && !random(3) )
+  {
+    write("Leider verletzt Du Dich dabei selber.\n");
+    caster->reduce_hit_point(random( 1+(10000-suc)/1000 ));
+  }
+  ob->remove();
+  caster->ModifySkill("zerstoerung",([SI_USR:sinfo[SI_USR]+1]),0,"berserker");
+  return ERFOLG;  
+}
+
+int waffenkunde(object caster, mapping sinfo)
+{
+  object ob;
+  string* fi;
+  string cn;
+  string result, gewicht, preis, fix_str, abn_str, wie;
+  int wert, i, suc, abn;
+  float fix;
+  mapping mat;
+  if( !sinfo[SI_SKILLARG] || !(ob=present(sinfo[SI_SKILLARG], caster)) )
+  {
+    write("Welche Waffe moechtest Du erkunden?\n");
+    return 0;
+  }
+  if( caster->InFight() )
+  {
+    write("In einem Kampf hast Du zu wenig Zeit, um eine Waffe genau zu "
+          "untersuchen!\n");
+    return 0;
+  }
+  cn = caster->name();
+  if( result=ob->QueryProp(P_WEAPON_TYPE) )
+  {
+    if( (suc=SpellSuccess(caster,sinfo))<=0 )
+    {
+      total_fail=1;
+      write("Du kannst nichts besonderes an "+ob->name(WEM,1)+ " erkennen.\n");
+      return MISSERFOLG;
+    }
+    switch(ob->QueryProp(P_WC))
+    {
+      case  0..70:  wie="mit einem veraechtlichen Gesichtsausdruck"; break;
+      case 71..140: wie="unzufrieden"; break;
+      case 141..210: wie="zufrieden"; break;
+      case 211..300: wie="begeistert"; break;
+    }
+    tell_room(environment(caster), break_string(
+      caster->Name()+ " nimmt "+ob->name(WEN,2)+" in die Haende und laesst "+
+      ob->QueryPronoun(WEN)+" pruefend mehrfach durch die Luft pfeifen, "
+      "anschliessend steckt "+caster->QueryPronoun(WER)+" "+
+      ob->QueryPronoun(WEN)+" "+wie+" wieder weg.",78),({caster}) );
+    switch( result )
+    {
+      case WT_AXE:   
+        write("Eine Axt, wie sie genau zu Dir passt!\n");
+        break;
+      case WT_SWORD: 
+        write(capitalize(ob->name(WER,1)) +" benutzt man wie ein Schwert.\n");
+        break;
+      case WT_KNIFE: 
+        write("Was willst Du mit so einem kleinen Messer?\n");
+        break;
+      case WT_CLUB:  
+        write(capitalize(ob->name(WER,1))+" benutzt man wie eine Keule!\n");
+        break;
+      case WT_SPEAR: 
+        write(capitalize(ob->name(WER,1))+ " benutzt man wie einen Speer!\n");
+        break;
+      case WT_WHIP:  
+        write(capitalize(ob->name(WER,1))+" benutzt man wie eine Peitsche.\n");
+        break;
+      case WT_CHAIN:
+        write(capitalize(ob->name(WER,1))+ " ist ein Kettenwaffe.\n");
+        break;
+      case WT_BOW:
+        write(capitalize(ob->name(WER,1))+ " ist ein Bogen.\n");
+        break;
+      default:       
+        write("Das ist aber eine merkwuerdige Waffe!\n");
+    }
+
+    wert=ob->QueryProp(P_WC)+ob->QueryProp(P_DAMAGED)+random(10)-5;
+// ein bischen ungenauigkeit muss sein :)
+    if(      wert>=275 ) result="unschlagbare";
+    else if( wert>=250 ) result="meisterhafte";
+    else if( wert>=225 ) result="hervorragende";
+    else if( wert>=200 ) result="extrem gute";
+    else if( wert>=175 ) result="sehr gute";
+    else if( wert>=150 ) result="gute";
+    else if( wert>=125 ) result="durchschnittliche";
+    else if( wert>=100 ) result="mittelmaessige";
+    else if( wert>=75 )  result="schlechte";
+    else if( wert>=50 )  result="sehr schlechte";
+    else                 result="extrem schlechte";
+
+    wert=ob->QueryProp(P_WEIGHT)+random(100)-50;
+    if( wert>=5000 )      gewicht="unhandlich schwere";
+    else if( wert>=3000 ) gewicht="sehr schwere";
+    else if( wert>=1500 ) gewicht="schwere";
+    else if( wert>=1000 ) gewicht="mittelschwere";
+    else if( wert>500 )   gewicht="leichte";
+    else                  gewicht="sehr leichte";
+
+     wert=ob->QueryProp(P_VALUE)+random(100)-50;
+    if( wert>=5000 )      preis="unbezahlbare";
+    else if( wert>=3000 ) preis="sehr teure";
+    else if( wert>=1500 ) preis="teure";
+    else if( wert>=1000 ) preis="mittelteure";
+    else if( wert>500 )   preis="billige";
+    else if( wert>200 )   preis="sehr billige";
+    else if( wert>10 )    preis="fast wertlose";
+    else                  preis="wertlose";
+
+    fix=ob->QueryProp(P_WC_FIXFACTOR);
+    if(      fix>=0.8 ) fix_str="excellent";
+    else if( fix>=0.7 ) fix_str="extrem gut";
+    else if( fix>=0.6 ) fix_str="sehr gut";
+    else if( fix>=0.4 ) fix_str="gut";
+    else if( fix>=0.3 ) fix_str="normal";
+    else if( fix>=0.2 ) fix_str="schlecht";
+    else if( fix>=0.1 ) fix_str="sehr schlecht";
+    else                fix_str="extrem schlecht";
+
+    abn=ob->QueryProp(P_QUALITY_DECAY);
+    if(      abn>900 ) abn_str="praktisch gar nicht";
+    else if( abn>500 ) abn_str="extrem langsam";
+    else if( abn>300 ) abn_str="sehr langsam";
+    else if( abn>200 ) abn_str="langsam";
+    else if( abn>120 ) abn_str="etwas langsamer";
+    else if( abn>90  ) abn_str="normal";
+    else if( abn>70  ) abn_str="etwas schneller";
+    else if( abn>50  ) abn_str="schnell";
+    else if( abn>30  ) abn_str="sehr schnell";
+    else if( abn>10  ) abn_str="extrem schnell";
+    else if( abn>0   ) abn_str="fuerchterlich schnell";
+    else               abn_str="gar nicht";
+    
+    write( break_string (capitalize(ob->name(WER,1))+ " ist eine " + result +
+       ", " + gewicht +" und "+ preis + " Waffe, liegt "+fix_str+" in der Hand "
+       "und nuetzt sich "+abn_str+" ab.",78) );
+   
+    write("Der Zustand "+ob->name(WESSEN,1)+" ist "+ob->dam_desc()+".\n");
+    switch( ob->QueryProp(P_NR_HANDS) )
+    {
+      case 0: wie = "keine Hand"; break;
+      case 1: wie = "eine Hand"; break;
+      case 2: wie = "zwei Haende"; break;
+      case 3: wie = "drei Haende"; break;
+      case 4: wie = "vier Haende"; break;
+      default: wie = "sehr viele Haende";
+    } 
+    write("Du benoetigst "+wie+", um "+ob->QueryPronoun(WEN)+" zu fuehren.\n");
+
+    if( result=ob->QueryProp(P_INFO) )
+      write(sprintf("Du identifizierst %s:\n%s", ob->name(WEN, 1), result));
+    if( (mat=ob->QueryProp(P_MATERIAL)) && (pointerp(mat)) )
+    {
+      if (sizeof(mat))
+        write(break_string(sprintf("%s besteh%s aus %s.", ob->Name(WER,1),
+              (ob->IsUnit() && ob->QueryProp("u_req") != 1 ? "en" : "t"),
+              ob->MatList(WEM) || "unbekanntem Material"), 78));
+    }
+    else if (mappingp(mat) /* && sizeof(mat-([MAT_MISC_LIVING]) ) */ )
+    {
+      write(break_string(sprintf("%s besteh%s aus %s.", ob->Name(WER,1),
+            (ob->IsUnit() && ob->QueryProp("u_req") != 1 ? "en" : "t"),
+            ob->MaterialList(WEM,caster) || "unbekanntem Material"), 78));
+    }
+    for(i=0;i<sizeof(ob->QueryProp(P_DAM_TYPE));i++)
+    {
+      switch(ob->QueryProp(P_DAM_TYPE)[i])
+      {
+        case DT_SLASH:    
+          write("Mit "+ob->name(WEM,1)+" fuehrt man wuchtige Schlaege aus.\n");
+          break;
+        case DT_PIERCE:   
+          write("Mit "+ob->name(WEM,1)+" sticht man auf den Gegner ein.\n");
+          break;
+        case DT_BLUDGEON: 
+          write("Mit "+ob->name(WEM,1)+" schlaegt man den Gegner ungespitzt "
+                 "in den Boden.\n");
+          break;
+        case DT_RIP:      
+          write("Mit "+ob->name(WEM,1)+" reisst man dem Gegner die Haut "
+                 "auf.\n");
+          break;
+        case DT_WHIP:     
+          write("Mit "+ob->name(WEM,1)+" peitscht man den Gegner aus.\n");
+          break;
+        case DT_SQUEEZE:  
+          write("Mit "+ob->name(WEM,1)+" zerquetscht man den Gegner.\n");
+          break;
+        case DT_FIRE:
+          if( suc >4000 && caster->QueryProp(P_GUILD_LEVEL)>4 )
+            write(ob->Name(WER,1)+" ist extrem heiss.\n");
+          break;
+        case DT_COLD: 
+          if( suc >4000 && caster->QueryProp(P_GUILD_LEVEL)>4 )
+            write(ob->Name(WER,1)+" ist extrem kalt.\n");
+          break;
+        case DT_SOUND:
+          if( suc >4000 && caster->QueryProp(P_GUILD_LEVEL)>4 )
+            write(ob->Name(WER,1)+" macht unangehemen Laerm.\n");
+          break;
+        case DT_TERROR:
+          if( suc >4000 && caster->QueryProp(P_GUILD_LEVEL)>4 )
+            write(ob->Name(WER,1)+" erschreckt die Gegner.\n");
+          break;
+        case DT_POISON:
+          if( suc >4000 && caster->QueryProp(P_GUILD_LEVEL)>4 )
+            write(ob->Name(WER,1)+" scheint vergiftet zu sein.\n");
+          break;
+        case DT_LIGHT:
+          if( suc >4000 && caster->QueryProp(P_GUILD_LEVEL)>4 )
+            write(ob->Name(WER,1)+" strahlt helles Licht aus.\n");
+          break;
+        case DT_LIGHTNING:
+          if( suc >4000 && caster->QueryProp(P_GUILD_LEVEL)>4 )
+            write(ob->Name(WER,1)+" ist von kleinen Blitzen umgeben.\n");
+          break;
+        case DT_HOLY:
+          if( suc >4000 && caster->QueryProp(P_GUILD_LEVEL)>4 )
+            write(ob->Name(WER,1)+" hat eine heilige Austrahlung.\n");
+          break;
+        case DT_UNHOLY:
+          if( suc >4000 && caster->QueryProp(P_GUILD_LEVEL)>4 )
+            write(ob->Name(WER,1)+" hat eine daemonische Austrahlung.\n");
+          break;
+        case DT_ACID:
+          if( suc >4000 && caster->QueryProp(P_GUILD_LEVEL)>4 )
+            write("Von "+ob->name(WEM,1)+" tropft Saeure auf den Boden.\n");
+          break;
+        case DT_ELECTRIC:
+          if( suc >4000 && caster->QueryProp(P_GUILD_LEVEL)>4 )
+            write(ob->name(WER,1)+" ist elektrisch aufgeladen.\n");
+          break;
+        case DT_AIR:
+        case DT_WATER:
+        case DT_EXPLOSION:
+        case DT_MAGIC:
+          if( suc >4000 && caster->QueryProp(P_GUILD_LEVEL)>4 )
+            write(ob->Name(WER,1)+" scheint irgendwie magisch zu sein.\n");
+          break;
+      }
+    }
+  }
+  else if (!living(ob) )
+  {
+    if( ob->QueryProp(P_ARMOUR_TYPE) )
+      write(ob->Name(WER)+" ist eine Ruestung.\n");
+    if( ob->QueryProp(P_INFO) )
+      write("An "+ob->name(WEM)+" erkennst Du folgendes:\n"+
+        ob->QueryProp(P_INFO));
+    else
+      write(ob->name(WER)+" besitzt keine Besonderheiten.\n");
+  }
+  else
+    write( capitalize(ob->name(WER,1))+ " ist doch gar keine Waffe.\n");
+  caster->ModifySkill("waffenkunde",([SI_USR:sinfo[SI_USR]+1]),0,"berserker");
+  return ERFOLG;
+}
+
+int schaetz(object caster, mapping sinfo)
+{
+  object victim;
+  int vhp, vwc, vac, vsr, vsz, msz, diff, danger;
+  string result;
+  string vname;
+  mixed slash;
+  mapping resist;
+  
+  /*
+  int i;
+  string *arm, s;
+  mapping res
+
+  if( !sinfo[SI_SKILLARG] && ( IS_WIZARD(this_player()) ||
+      this_player()->QueryProp(P_TESTPLAYER)=="Feyaria" ) )
+  {
+    s = "Fuer die Testphase - Deine Skills:\n";
+    res = this_player()->QueryProp(P_NEWSKILLS);
+    arm = m_indices(res);
+    for (i = sizeof(arm)-1;i>=0;i--)
+    {
+      s += arm[i]+": ";
+      if (mappingp(res[arm[i]])) s += res[arm[i]][SI_SKILLABILITY];
+      else s += res[arm[i]];
+      s += "\n";
+    }
+    write( s );
+    return 1;
+  }
+*/
+  
+  victim=FindLivingVictim(sinfo[SI_SKILLARG],caster,
+                           "Wen moechtest Du einschaetzen?\n");
+  if (!victim)
+    return 0;
+  if( victim == caster )
+  {
+    write(break_string(
+      "Du bist gleich gross, gleich stark und gleich gut im Kaempfen "
+      "wie Du selbst. Aber das ist wohl auch keine Ueberraschung:)",78));
+    return 0;
+  }
+  if( (SpellSuccess(caster,sinfo))<=0)
+  {
+    tell_object(victim, caster->Name(WER) +" versucht, Dich einzuschaetzen.\n");
+    return MISSERFOLG;
+  }
+
+  msz = caster->QueryProp(P_SIZE);
+  vhp = victim->QueryProp(P_HP)+random(51)-25;
+  vwc = victim->QueryProp(P_TOTAL_WC)+random(21)-10;
+  vac = victim->QueryProp(P_TOTAL_AC)+random(21)-10;
+  vsr = victim->QueryProp(P_SPELLRATE)+random(5)-2;
+  vsz = victim->QueryProp(P_SIZE)+random(11)-5;
+// ein bischen ungenauigkeit muss sein :)
+  vname = victim->name(WER, 1);
+
+  write(break_string(capitalize(vname)+ " gehoert der Rasse "+
+    capitalize(victim->QueryProp(P_RACE))+" an und kaempft mit "+
+    victim->QueryProp(P_MAX_HANDS)+" Gliedmassen.",78) );
+  if (vhp > 1500)
+  {
+    result = capitalize(vname)+" haelt wahnsinnig viel Schaden aus.\n";
+
+  }
+  else if (vhp > 1000)
+  {
+    result = capitalize(vname)+" haelt ausserordentlich viel Schaden aus.\n";
+    danger+=2;
+  }
+  else if (vhp > 800)
+  {
+    result = capitalize(vname) + " haelt extrem viel Schaden aus.\n";
+    danger++;
+  }
+  else if (vhp > 600)
+    result = capitalize(vname) + " haelt sehr viel Schaden aus.\n";
+  else if (vhp > 400)
+    result = capitalize(vname) + " haelt viel Schaden aus.\n";
+  else if (vhp > 200)
+    result = capitalize(vname) + " haelt einigen Schaden aus.\n";
+  else if ( vhp > 120)
+    result = capitalize(vname) + " haelt nur wenig Schaden aus.\n";
+  else if ( vhp > 80)
+    result = capitalize(vname) + " haelt nur sehr wenig Schaden aus.\n";
+  else if ( vhp > 35)
+    result = capitalize(vname) + " haelt nur extrem wenig Schaden aus.\n";
+  else 
+    result = "Du kannst " + victim->name(WEN,1) + " mit einem Schlag "
+             "zerschmettern.\n";
+  write(result);
+
+  if (vac > 270 )
+  {
+    result = capitalize(vname) + " hat eine Haut wie Stahl.\n";
+    danger+=3;
+  }
+  else if ( vac > 200)
+  {
+    result = capitalize(vname) + " hat eine extrem gute Ruestung.\n"; 
+    danger++;
+  }
+  else if ( vac > 160)
+    result = capitalize(vname) + " hat eine sehr gute Ruestung.\n"; 
+  else if ( vac > 120)
+    result = capitalize(vname) + " hat eine gute Ruestung.\n";
+  else if ( vac > 80)
+    result = capitalize(vname) + " hat eine schlechte Ruestung.\n";
+  else if ( vac > 40)
+    result = capitalize(vname) + " kann Dir keinen nennenswerten "
+      "Widerstand entgegensetzen.\n";
+  else
+    result = "Deine Axt wird " + victim->name(WEN,1) +" in Stuecke hauen.\n";
+  write(result);
+
+  if ( vwc > 450)
+  {
+    result = capitalize(vname) + " kann Dich mit einem Schlag vernichten.\n";
+    danger+=4;
+  }
+  else if ( vwc > 300)
+  {
+    result = capitalize(vname) + " kann Dich in kleine Stuecke hauen.\n";
+    danger+=2;
+  }
+  else if ( vwc > 240)
+  {
+    result = capitalize(vname) + " kann Dich stark verletzen.\n";
+    danger++;
+  }
+  else if ( vwc > 200)
+    result = capitalize(vname) + " kann Dir hart zusetzen.\n";
+  else if ( vwc > 160)
+    result = capitalize(vname) + " kann Dir sehr viel Schaden zufuegen.\n";
+  else if ( vwc > 130)
+    result = capitalize(vname) + " kann Dir viel Schaden zufuegen.\n";
+  else if ( vwc > 100)
+    result = capitalize(vname) + " kann Dir Schaden zufuegen.\n";
+  else if ( vwc > 80)
+    result = capitalize(vname) + " kann Dir etwas Schaden zufuegen.\n";
+  else if ( vwc > 60)
+    result = capitalize(vname) + " kann Dich nur wenig Schaden zufuegen.\n";
+  else if ( vwc > 40)
+    result = capitalize(vname) + " wird Dich kaum verletzen koennen.\n";
+  else
+    result = capitalize(vname) + " kann Dich hoechstens kitzeln.\n";
+  write(result);
+
+  if ( vsr > 80)
+  {
+    result = capitalize(vname) + " ist extrem hinterhaeltig.\n";
+    danger+=3;
+  }
+  else if ( vsr > 60)
+  {
+    result = capitalize(vname) + " ist ein hinterhaeltiger und trickreicher "
+             "Gegner.\n";
+    danger+=2;
+  }
+  else if ( vsr > 40)
+  {
+    result = capitalize(vname) + " kaempft sehr trickreich.\n";
+    danger++;
+  }
+  else if ( vsr > 20)
+    result = capitalize(vname) + " hat einige Tricks auf Lager.\n";
+  else if ( vsr > 3)
+    result = capitalize(vname) + " hat nur wenige Tricks auf Lager.\n";
+  else
+    result = capitalize(vname) + " ist sehr fair im Kampf.\n";
+  write(result);
+
+  if (vsz > (5*msz))
+    result = capitalize(vname) + " ist riesig gross.\n";
+  else if ( vsz > (3* msz)  )
+    result = capitalize(vname) + " ist sehr viel groesser als Du. (rammen)\n"; 
+  else if ( vsz > (2* msz)  )
+    result = capitalize(vname) + " ist viel groesser als Du. (rammen, kopfstoss)\n"; 
+  else if ( vsz > (3* msz)/2  )
+    result = capitalize(vname) + " ist groesser als Du. (rammen, kopfstoss)\n"; 
+  else if ( vsz > (6* msz) /5 )
+    result = capitalize(vname) + " ist etwas groesser als Du. (rammen, "
+      "kopfstoss)\n"; 
+  else if ( vsz < msz/10 )
+    result =  capitalize(vname) +  " ist winzig klein. (zertreten)\n";
+  else if ( vsz < msz/3 )
+    result =  capitalize(vname) + " ist viel kleiner als Du. (zertreten)\n";
+  else if ( vsz < (3*msz)/5 )
+    result =  capitalize(vname) + " ist kleiner als Du. (rammen)\n";
+  else if ( vsz < (4*msz)/5 )
+    result =  capitalize(vname) + " ist etwas kleiner als Du. (rammen)\n";
+  else
+    result = "Ihr seid etwa gleich gross. (rammen, kopfstoss)\n";
+  write(result);
+
+  if( victim->QueryProp(P_DEAF) )
+    write(break_string( capitalize(vname)+" scheint taub zu sein und ist "
+      "daher mit einem Kampfschrei nicht zu beeindrucken.", 78 ));
+  if( victim->QueryProp(P_BLIND) )
+  {
+    write(break_string( capitalize(vname)+" ist blind und daher sicher ein "
+      "leicht zu besiegender Gegner.", 78) );
+    danger-=5;
+  }
+
+  diff = caster->QueryProp(P_ALIGN)-victim->QueryProp(P_ALIGN);
+  if (diff > 1000)
+    result = "Du bist heilig im Vergleich zu "+ victim->name(WEM, 1) +".\n";
+  else if (diff > 600)
+    result = "Du bist viel braver als " + vname + ".\n";
+  else if (diff > 300)
+    result = "Du bist braver als " + vname + ".\n";
+  else if (diff > 150)
+    result = "Du bist etwas braver als " + vname + ".\n";
+  else if (-diff > 1000)
+    result = "Du bist satanisch im Vergleich zu "+ victim->name(WEM, 1) + ".\n";
+  else if (-diff > 600)
+    result = "Du bist viel boeser als " + vname + ".\n";
+  else if (-diff > 300)
+    result = "Du bist boeser als " + vname + ".\n";
+  else if (-diff > 150)
+    result = "Du bist etwas boeser als " + vname + ".\n";
+  else
+    result = "Eure Gesinnung ist etwa gleich gut (oder boese).\n";
+  write(result);
+
+  diff=victim->QueryProp(P_WIMPY);
+  if(diff)
+  {
+    if( diff > victim->QueryProp(P_MAX_HP)/2 || diff > 100 )
+      result = capitalize(vname) + " ist ein voelliger Feigling.\n";
+    else if ( diff > victim->QueryProp(P_MAX_HP)/3 || diff >50 )
+      result = capitalize(vname) + " ist sehr feige.\n";
+    else if ( diff > victim->QueryProp(P_MAX_HP)/4 || diff >20 )
+      result = capitalize(vname) + " ist feige.\n";
+    else if ( diff > victim->QueryProp(P_MAX_HP)/5 || diff >10 )
+      result = capitalize(vname) + " ist etwas feige.\n";
+    else 
+      result = capitalize(vname) + " ist ein ganz klein wenig feige.\n";
+    write(result);
+  }
+  if( resist=victim->QueryProp(P_RESISTANCE_STRENGTHS) )
+  {
+    if( slash= resist[DT_SLASH] )
+    {
+      if( (float) slash < -0.2 )
+        write(victim->Name(WER,1)+" laesst sich durch Axthiebe nicht "
+            "beeidrucken :-(.\n");
+      if( (float) slash > 0.3 )
+        write("Deine Axt wird "+victim->name(WEN,1)+" in kleine Stueckchen "
+            "hauen!\n");
+      danger-=(int) (slash*10.0);
+    }
+  }
+
+  diff=(caster->QueryProp(P_LEVEL)+caster->QueryProp(P_GUILD_LEVEL)*4)/2
+       -victim->QueryProp(P_LEVEL)+random(5)-2-danger;
+  if(diff <-25)
+    result = "Insgesamt hast Du keine Chance gegen "+victim->name(WEN,1)+".\n";
+  else if(diff <-15)
+    result = "Du wirst "+victim->name(WEN,1)+" kaum besiegen koennen.\n";
+  else if(diff <-5)
+    result = "Du wirst "+victim->name(WEN,1)+" nur mit viel Muehe besiegen "
+    "koennen.\n";
+  else if(diff >5)
+    result = "Du wirst "+victim->name(WEN,1)+" leicht besiegen koennen.\n";
+  else if(diff >15)
+    result = "Es wird ein Kinderspiel, "+victim->name(WEN,1)+" zu besiegen.\n";
+  else if(diff >25)
+    result = "Du kannst ueber "+victim->name(WEN,1)+" nur lachen.\n";
+  else
+    result = "Das wird ein spannender und ausgeglichener Kampf.\n";
+  write(result);
+
+  if( victim->QueryProp(P_NOATTACK) || victim->QueryProp(P_XP)==0 )
+     write("Eigentlich lohnt sich ein Kampf gegen "+victim->name(WEN,1)+
+           " gar nicht.\n");
+
+  if( stringp(victim->QueryProp(P_INFO)) )
+    write("Zusaetzlich erkennst Du noch folgendes an "+victim->name(WEM,1)+
+	   ":\n"+victim->QueryProp(P_INFO)  );
+
+  tell_object(victim, caster->Name(WER) +" schaetz Dich erfolgreich ein.\n");
+
+// eventuell angabe, ob gegner genen axthiebe resistent oder anfaellig ist.
+  caster->ModifySkill("schaetz",([SI_USR:sinfo[SI_USR]+1]),0,"berserker");
+  return ERFOLG;
+}
+
+int zertreten(object caster, mapping sinfo)
+{
+  object victim;
+  object *schuhe;
+  string vnw, cn, schuhname;
+  int dam, suc, body, weight, ac;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wen willst Du zertreten?\n");
+  if (!victim)
+    return 0;
+  if( victim->QueryProp(P_SIZE) > caster->QueryProp(P_SIZE)/3 )
+  {
+    write(sprintf("Aber %s ist doch viel zu gross zum Zertreten.\n",
+      victim->name(WER, 2) ));
+    return 0;
+  }
+  
+  if( (suc=SpellSuccess(caster,sinfo))<=0)
+    return MISSERFOLG;
+
+  schuhe=filter_objects(caster->QueryProp(P_ARMOURS), "id", AT_BOOT);
+  if (sizeof(schuhe) && objectp(schuhe[0]))
+  {
+    schuhe[0]->TakeFlaw( ({DT_SQUEEZE}) );
+    if( (weight=schuhe[0]->QueryProp(P_WEIGHT)) > 1500 ) 
+      weight=1500; 
+    ac=schuhe[0]->QueryProp(P_AC);
+    schuhname= schuhe[0]->name(WEM,1);
+  }
+  else
+  {
+    if( member(({"Troll", "Hobbit"}), capitalize(caster->QueryProp(P_RACE)))
+        == -1 && !random(3) && interactive(caster) )
+    {
+      write("Schmerzhaft trittst Du mit blossen Fuessen zu. Ob das eine gute "
+            "Idee war?\n");
+      caster->reduce_hit_point( 5+random(10) );
+      return ERFOLG;
+    }
+    else
+    {
+      weight=100;
+      ac=1;
+      schuhname="blossen Fuessen";
+      if( capitalize(caster->QueryProp(P_RACE))=="Troll" )
+        weight=600;
+      if( capitalize(caster->QueryProp(P_RACE))=="Hobbit" )
+        ac=6;
+    }
+  }
+
+  dam = (sinfo[SI_SKILLABILITY] + 3 * suc  
+        + random( weight * caster->QueryAttribute(A_STR) )) 
+        * ac / VALID_ARMOUR_CLASS[AT_BOOT];
+  if( sizeof(schuhe) && schuhe[0]->QueryProp(P_EFFECTIVE_WC) )
+    dam+=schuhe[0]->QueryProp(P_EFFECTIVE_WC)*caster->QueryProp(P_GUILD_LEVEL)
+      *caster->QueryProp(P_GUILD_LEVEL);
+  if( dam> 44444 ) dam=44444;
+  cn = caster->name();
+  vnw = victim->name(WEN, 2);
+  say(capitalize(cn) + " zertrittst "+ vnw +" unter "+ schuhname + ".\n",
+      victim);
+  write("Du zertrittst "+ vnw +" unter "+ schuhname +".\n");
+  tell_object(victim, capitalize(cn)+ " zertritt Dich unter " +
+    schuhname+".\n");
+  if( suc > 3333 ) 
+    body=100-random(suc)/100;
+  else 
+    body = 100;
+  TryAttackSpell(victim, dam/100, DT_SQUEEZE, sinfo[SI_SPELL]+
+    ([SP_REDUCE_ARMOUR: ([P_BODY:body, AT_BOOT:1, AT_TROUSERS:1])]), 
+    caster,sinfo );
+  caster->ModifySkill("zertreten",([SI_USR:sinfo[SI_USR]+1]),0,"berserker");
+  return ERFOLG;
+}
+
+int wueten(object caster, mapping sinfo)
+{
+  object *anwesende;
+  int i, suc, clv, vlv;
+  object ob;
+
+  suc=SpellSuccess(caster,sinfo);
+  
+  anwesende=filter_array(all_inventory(environment(caster)),#'living);
+  if( sizeof(anwesende)<=1 )
+  {
+    write("Warum willst Du hier wueten, wo doch gar niemand da ist?\n");
+    return 0;
+  }
+  if( caster->InFight() )
+  {
+    write("Du wuetest ja schon gegen Deine Gegner!\n");
+    return 0;
+  }
+  if( suc<-2000 )
+  {
+    write("Du wuetest herum und bist von Dir selber erschreckt.\n");
+    say(caster->Name()+ " wuetet wie ein kleines Kind.\n"+
+        "Du lachst "+caster->name(WEN)+" aus.\n");
+    total_fail=1;
+    caster->SetProp(P_WIMPY, caster->QueryProp(P_WIMPY)+random(30));
+    if( suc<-4000 )
+    {
+      (ob=clone_object(OBJ "panik"))->move(caster, M_NOCHECK);
+      ob->fluechten("sich selbst");
+    }
+    else
+      caster->CheckWimpyAndFlee();
+    return MISSERFOLG;
+  }
+  if( suc<=0 )
+    return MISSERFOLG;
+
+  write("Du wuetest wie ein Wilder und schuechterst alle Anwesenden ein.\n");
+  say(caster->Name()+ " wuetet wie ein Wilder und schuechtert Dich ein.\n");
+  clv=caster->QueryProp(P_LEVEL);  
+  for(i=0;i<sizeof(anwesende);i++)
+  {
+    vlv = anwesende[i]->QueryProp(P_LEVEL);
+    if(anwesende[i]!=caster && vlv<clv && ! anwesende[i]->id("NOWIMPY") && 
+        ! anwesende[i]->is_class_member(CL_UNDEAD) && 
+        ! anwesende[i]->is_class_member(CL_DEMON)  )
+    {
+      anwesende[i]->SetProp(P_WIMPY, anwesende[i]->QueryProp(P_WIMPY)+
+        random((clv-vlv)+(suc+sinfo[SI_SKILLABILITY])/1000));
+      tell_object(anwesende[i], "Du bekommst Angst vor "+ caster->name()+".\n");
+      if( !interactive(anwesende[i]) && !random(10) )
+         anwesende[i]->Kill(caster);
+      if( anwesende[i]->QueryProp(P_WIMPY)+random(20) >  
+          anwesende[i]->QueryProp(P_HP) )
+      {
+        (ob=clone_object(OBJ "panik"))->move(anwesende[i], M_NOCHECK);
+        ob->fluechten(caster->Name());
+      }
+    }
+  }
+  caster->ModifySkill("wueten",([SI_USR:sinfo[SI_USR]+1]),0,"berserker");
+  return ERFOLG;
+}
+
+int augeinauge(object caster, mapping sinfo)
+{
+  object victim;
+  int suc, pref;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+           "Mit wem willst Du einen Kampf Auge in Auge fuehren?\n");
+  if (!victim)
+    return 0;
+  if( caster->QueryProp(P_PREFERED_ENEMY) && caster->QueryProp(P_PREFERED_ENEMY)[1] )
+  {
+    write("Du befindest Dich bereits in einem Kampf Auge in Auge!\n");
+    return 0;
+  }
+  suc=SpellSuccess(caster,sinfo);
+  if( suc<-8000 )
+  {
+    write("Du schaust so angestrengt, dass Du erblindest!\n");
+    total_fail=1;
+    caster->SetProp(P_BLIND, 3*caster->QueryProp(P_GUILD_LEVEL)-suc/50);
+    return MISSERFOLG;
+  }
+  if( suc<=0 )
+    return MISSERFOLG;
+  
+  pref=50+caster->QueryProp(P_GUILD_LEVEL)*2+(suc+sinfo[SI_SKILLABILITY])/800
+       +caster->QueryAttribute(A_INT)/3;
+  if( pref> 95 ) pref = 95;
+  caster->SetProp(P_PREFERED_ENEMY, ({pref, victim}) );
+  write(sprintf("Du befindest Dich jetzt im Kampf Auge in Auge mit %s.\n", 
+    victim->name(WEM, 2)));
+  tell_object(victim, capitalize(caster->Name())+" kaempft jetzt Auge "
+    "in Auge mit Dir.\n" );
+  caster->ModifySkill("augeinauge",([SI_USR:sinfo[SI_USR]+1]),0,"berserker");
+  return ERFOLG;
+}
+
+int regeneration(object caster, mapping sinfo)
+{
+  int i, suc, blind;
+
+  if( caster->InFight() )
+  {
+    write("Such Dir lieber einen ruhigen Ort fuer die Regeneration!\n");
+    return 0;
+  }
+  suc=SpellSuccess(caster,sinfo);
+  caster->SetProp(P_DISABLE_ATTACK,9);
+
+  if( suc < -3000 )
+  {
+    total_fail = 1;
+    tell_object(caster,"Oh! Die Regeneration verkehrt sich ins Gegenteil!\n");
+    switch( random(10) )
+    {
+      case 0:
+        tell_object(caster,"Du verwandelst Dich in einen Frosch!\n");
+        caster->SetProp(P_FROG,1);
+        break;
+      case 1:
+        tell_object(caster,"Du verlierst Dein Augenlicht!\n");
+        caster->SetProp(P_BLIND,-suc/(1+random(100)) );
+        break;
+      case 2:
+        tell_object(caster,"Du kannst ploetzlich nichts mehr hoeren!\n");
+        caster->SetProp(P_DEAF,-suc/(1+random(100)));
+        break;
+      case 3:
+        tell_object(caster,"Du bist voellig erschoepft!\n");
+        caster->SetProp(P_MV,0);
+        break;
+      case 4:
+        tell_object(caster,"Dein Bauch schmerzt!\n");
+        caster->SetProp(P_FOOD,caster->QueryProp(P_MAX_FOOD));
+        break;
+      case 5:
+        tell_object(caster,"Du fuehlst Dich voellig betrunken!\n");
+        caster->SetProp(P_ALCOHOL,caster->QueryProp(P_MAX_ALCOHOL));
+        break;
+      case 6:
+        tell_object(caster,"Deine Nieren scheinen zu platzen!\n");
+        caster->SetProp(P_DRINK,caster->QueryProp(P_MAX_DRINK));
+        break;
+     default:
+        tell_object(caster,"Du fuehlst Dich um vieles schwaecher!\n");
+        caster->reduce_hit_point(1+random(-suc/100));
+        break;
+    }
+    return MISSERFOLG;
+  }
+
+  if( suc<=0 )
+    return MISSERFOLG;
+
+  if( caster->QueryProp(P_FROG) && suc > random(8000) && 
+      caster->QueryProp(P_GUILD_LEVEL)>=5 )
+  {
+    caster->SetProp(P_FROG,0);
+    tell_object(caster,"Du bist kein Frosch mehr!\n");
+    i++;
+  }
+  if( caster->QueryProp(P_BLIND) && suc > random(10000) && 
+      caster->QueryProp(P_GUILD_LEVEL)>=6 )
+  {
+    caster->SetProp(P_BLIND,0);
+    tell_object(caster,"Du bist nicht mehr blind!\n");
+    i++;
+  }
+  if( intp(blind=caster->QueryProp(P_BLIND)) && suc > random(5000) && 
+      caster->QueryProp(P_GUILD_LEVEL)>=4 )
+  {
+    caster->SetProp(P_BLIND, blind/2);
+    tell_object(caster,"Der Schmerz in Deinen Augen wird leichter!\n");
+    i++;
+  }
+  if( caster->QueryProp(P_DEAF) && suc > random(10000) &&
+      caster->QueryProp(P_GUILD_LEVEL)>=6 )
+  {
+    caster->SetProp(P_DEAF,0); 
+    tell_object(caster,"Du bist nicht mehr taub!\n");
+    i++;
+  }
+  if( intp(blind=caster->QueryProp(P_DEAF)) && suc > random(5000) && 
+      caster->QueryProp(P_GUILD_LEVEL)>=4 )
+  {
+    caster->SetProp(P_DEAF, blind/2);
+    tell_object(caster,"Der Schmerz in Deinen Ohren wird leichter!\n");
+    i++;
+  }
+  if( caster->QueryProp(P_POISON) && suc > random(5000) && 
+      caster->QueryProp(P_GUILD_LEVEL)>=7 )
+  {
+    caster->AddPoison(-suc/900);        // Maximal -11
+    if( caster->QueryProp(P_POISON) )
+      tell_object(caster, "Deine Vergiftung schwaecht sich deutlich ab.\n");
+    else
+      tell_object(caster,"Du ueberwindest Deine Vergiftung!\n");
+    i++;
+  }
+  if( caster->QueryProp(P_HP)<caster->QueryProp(P_MAX_HP) && suc>random(4000) )
+  {
+    caster->reduce_hit_point(-suc/200);   // Maximal +50 LP
+    i++;
+  }
+  if( caster->QueryProp(P_DRINK) > caster->QueryProp(P_MAX_DRINK)/2 
+      && suc > random(7000) && caster->QueryProp(P_GUILD_LEVEL)>=6 )
+  {
+    caster->SetProp(P_DRINK, caster->QueryProp(P_DRINK)-suc/250); // Maximal -40
+    i++;
+  }
+  if( caster->QueryProp(P_FOOD) > caster->QueryProp(P_MAX_FOOD)/2
+      && suc > random(7000) && caster->QueryProp(P_GUILD_LEVEL)>=6 )
+  {
+    caster->SetProp(P_FOOD, caster->QueryProp(P_FOOD)-suc/250); // Maximal -40
+    i++;
+  }
+  if( caster->QueryProp(P_ALCOHOL) > caster->QueryProp(P_MAX_ALCOHOL)/2
+      && suc > random(7000) && caster->QueryProp(P_GUILD_LEVEL)>=6 )
+  {
+    caster->SetProp(P_ALCOHOL, caster->QueryProp(P_ALCOHOL)-suc/250);
+    i++;
+  }
+  if( caster->QueryProp(P_MV)<caster->QueryProp(P_MAX_MV)/2
+      && suc>random(5000) && caster->QueryProp(P_GUILD_LEVEL)>=5 )
+  {
+    caster->SetProp(P_MV, caster->QueryProp(P_MV)+suc/30); // Maximal +333 Moves
+    i++;
+  }
+  if( present("MALA", caster) && suc>random(7000) )
+  {
+    present("MALA", caster)->story30();
+    i++;
+  }
+  switch(i)
+  {
+    case 0: 
+      tell_object(caster,"Die Regeneration hat keinen Effekt.\n");
+      break;
+    case 1: 
+      tell_object(caster,"Du fuehlst Dich ein wenig besser.\n");
+      break;
+    case 2: 
+      tell_object(caster,"Du fuehlst Dich besser.\n");
+      break;
+    case 3: 
+      tell_object(caster,"Du fuehlst Dich um vieles besser.\n");
+      break;
+    case 4: 
+      tell_object(caster,"Du fuehlst Dich regeneriert.\n");
+      break;
+    case 5: 
+      tell_object(caster,"Du fuehlst Dich voellig regeneriert.\n");
+      break;
+    default: 
+      tell_object(caster,"Du fuehlst Dich wie ein komplett neuer "+
+        caster->QueryProp(P_RACE)+".\n");
+      break;
+  }
+  caster->ModifySkill("regeneration",([SI_USR:sinfo[SI_USR]+1]),0,"berserker");
+  return ERFOLG;
+}
+
+int rammen(object caster, mapping sinfo)
+{
+  object victim;
+  object *schuhe;
+  string vnw, cn;
+  int dam, suc;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wen willst Du rammen?\n");
+  if (!victim)
+    return 0;
+  if( victim->QueryProp(P_SIZE) < caster->QueryProp(P_SIZE)/3 )
+  {
+    write(sprintf("Aber %s ist doch viel zu klein zum Rammen.\n",
+      victim->name(WER, 2) ));
+    return 0;
+  }
+  if( victim->QueryProp(P_SIZE) > caster->QueryProp(P_SIZE)*5 )
+  {
+    write(sprintf("Aber %s ist doch viel zu gross zum Rammen.\n",
+      victim->name(WER, 2) ));
+    return 0;
+  }
+  suc=SpellSuccess(caster,sinfo);
+  if( suc < -3000 )
+  {
+    write("Dein Rammen ging voellig daneben.\n"
+          "Du faellst auf den Boden.\n");
+    say(caster->name(WER)+" faellt auf den Boden.\n");
+    caster->SetProp(P_DISABLE_ATTACK, random(suc/-2500) );
+    total_fail=1;
+    return MISSERFOLG;
+  }
+  if( suc <= 0 )
+    return MISSERFOLG;
+
+  dam = (sinfo[SI_SKILLABILITY] + suc)/500 + 
+        random(2*caster->QueryAttribute(A_STR));
+  cn = caster->name(WER);
+  vnw = victim->name(WEN, 2);
+  say(capitalize(cn) + " rammt "+ vnw +" mit "+
+      caster->QueryPossPronoun(MALE,WEN)+" Schulter.\n", victim);
+  write("Du rammst "+ vnw +" mit Deiner Schulter.\n");
+  tell_object(victim, capitalize(cn)+ " rammt Dich mit "+
+      caster->QueryPossPronoun(MALE,WEN)+" Schulter.\n");
+   TryAttackSpell(victim, dam, DT_BLUDGEON, 
+      ([SP_NAME:"rammen",SP_SHOW_DAMAGE:1]), caster,sinfo );
+  if( victim && random(sinfo[SI_SKILLABILITY]+suc)>random(6000) )
+  {
+    if( random(caster->QueryAttribute(A_STR)) > 
+        random(victim->QueryAttribute(A_STR)) &&
+        random(caster->QueryProp(P_SIZE)) > 
+        random(victim->QueryProp(P_SIZE)/2) )
+    {
+      victim->SetProp(P_DISABLE_ATTACK,1+random(2));
+      tell_object(victim, caster->Name(WER,1)+" wirft Dich zu Boden.\n");
+      tell_object(caster, "Du wirfst "+victim->name(WEN,1)+" zu Boden.\n");
+      tell_room(environment(caster), caster->Name(WER,1)+" wirft "+
+        victim->name(WEN,1)+" zu Boden.\n", ({caster,victim}) );
+    }
+  }
+  caster->ModifySkill("rammen",([SI_USR:sinfo[SI_USR]+1]),0,"berserker");
+  return ERFOLG;
+}
+
+int kampfschrei(object caster, mapping sinfo)
+{
+  object victim;
+  string vnw, cn;
+  int dam, suc, dauer;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wen willst Du mit Deinem Kampfschrei erschrecken?\n");
+  if (!victim)
+    return 0;
+  suc=SpellSuccess(caster,sinfo);
+  if( suc<-4000 && !caster->QueryProp(P_DEAF) )
+  {
+    write("Du bruellst so laut, dass Du selber taub wirst.\n");
+    total_fail=1;
+    caster->SetProp(P_DEAF, 3*caster->QueryProp(P_GUILD_LEVEL)-suc/50);
+    return MISSERFOLG;
+  }
+  if( suc<=0 )
+    return MISSERFOLG;
+  
+  dam=50+random(50)+caster->QueryProp(P_GUILD_LEVEL)*2+
+      caster->QueryProp(P_LEVEL)/4;
+
+  cn = caster->name();
+  vnw = victim->name(WEN, 2);
+  say(sprintf("%s bruellt %s an.\n",capitalize(cn), vnw), victim);
+  write(sprintf("Du bruellst %s an.\n", vnw));
+  tell_object(victim,sprintf("%s bruellt Dich an.\n", capitalize(cn)));
+  if( victim->QueryProp(P_DEAF) )
+  {
+    write(sprintf("%s scheint taub zu sein und ist von Deinem Schrei gar nicht "
+       "beeindruckt.\n", capitalize(vnw) ));
+    tell_object(victim, "Zu Deinem Glueck kannst Du gar nichts hoeren.\n");
+    dam/=2;
+  } 
+  if( dam>75 )
+  {
+    dauer = 1 + (suc/1000 + random(caster->QueryProp(P_LEVEL)/2))/2;
+    victim->ModifySkillAttribute(caster, SA_SPEED, 50, dauer);
+  }
+  TryAttackSpell(victim, dam, ({DT_TERROR, DT_SOUND}), 
+            ([SP_NAME:"kampfschrei",SP_SHOW_DAMAGE:1]),caster,sinfo );
+  if( dam>100 && suc>8000 )
+  {
+    if(victim)  // Victim koennte am Kampfschrei gestorben sein!!!
+    {
+      tell_object(victim, "Das laute Schreien laesst Dich ertauben.\n");
+      victim->SetProp(P_DEAF, caster->QueryProp(P_GUILD_LEVEL)+suc/500 ); 
+    }
+  }
+  caster->ModifySkill("kampfschrei",([SI_USR:sinfo[SI_USR]+1]),0,"berserker");
+  return ERFOLG;
+}
+
+int willenskraft(object caster, mapping sinfo)
+{
+  int suc;
+  object ob;
+
+  if( present("\nberserker_willenskraft", caster) )
+  {
+    write("Aber Dein Wille ist schon gekraeftigt!\n");
+    return 0;
+  }
+
+  suc=SpellSuccess(caster,sinfo);
+  if( suc<-4000 )
+  {
+    write("Dein Wille wird total schwach.\n");
+    total_fail=1;
+    (ob=clone_object(OBJ "panik"))->move(caster, M_NOCHECK);
+    ob->fluechten("sich selbst");
+    return MISSERFOLG;
+  }
+  if (suc<=0)
+    return MISSERFOLG;
+  
+  write("Deine Wille ist gestaerkt.\n");
+  say(caster->name(WESSEN)+ " Wille ist gestaerkt.\n");
+  (ob=clone_object(OBJ "willenskraft"))->move(caster, M_NOCHECK);
+  ob->willenskraft(suc, sinfo[SI_SKILLABILITY] );
+  caster->ModifySkill("willenskraft",([SI_USR:sinfo[SI_USR]+1]),0,"berserker");
+  return ERFOLG;
+}
+
+int kopfstoss(object caster, mapping sinfo)
+{
+  object victim;
+  object *helm;
+  string vnw, cn;
+  int dam, suc, weight, ac;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wem willst Du einen Kopfstoss verpassen?\n");
+  if (!victim)
+    return 0;
+  if( victim->QueryProp(P_SIZE) < ( 8*caster->QueryProp(P_SIZE) )/10 )
+  {
+    write(sprintf("Aber %s ist doch viel zu klein fuer einen Kopfstoss.\n",
+      victim->name(WER, 2) ));
+    return 0;
+  }
+  if( victim->QueryProp(P_SIZE) > ( 3*caster->QueryProp(P_SIZE) ) )
+  {
+    write(sprintf("Aber %s ist doch viel zu gross fuer einen Kopfstoss.\n",
+      victim->name(WER, 2) ));
+    return 0;
+  }
+  if ( (suc=SpellSuccess(caster,sinfo))<=0)
+    return MISSERFOLG;
+  helm=filter_objects(caster->QueryProp(P_ARMOURS), "id", AT_HELMET);
+  if (sizeof(helm) && objectp(helm[0]))
+  {
+    helm[0]->TakeFlaw( ({DT_BLUDGEON}) );
+    if( (weight=helm[0]->QueryProp(P_WEIGHT)) > 1500 ) 
+      weight=1500; 
+    ac=helm[0]->QueryProp(P_AC);
+  }
+  else
+  {
+    if( !random(3) && interactive(caster) )
+    {
+      write("Schmerzhaft stoesst Du mit blossem Kopf zu. Ob das eine gute "
+            "Idee war?\n");
+      caster->reduce_hit_point( 5+random(10) );
+      return ERFOLG;
+    }
+    else
+    {
+      weight = 100;
+      ac = 2;
+    }
+  }
+    
+  dam = ( sinfo[SI_SKILLABILITY] + 2 * suc + 
+      random( weight* caster->QueryAttribute(A_STR) ))
+      * ac / VALID_ARMOUR_CLASS[AT_HELMET];
+  if( sizeof(helm) && helm[0]->QueryProp(P_EFFECTIVE_WC) )
+    dam+=helm[0]->QueryProp(P_EFFECTIVE_WC)*caster->QueryProp(P_GUILD_LEVEL)
+      *caster->QueryProp(P_GUILD_LEVEL);
+  if( dam> 66666 ) dam=66666;
+  cn = caster->name();
+  vnw = victim->name(WEM, 2);
+  say(sprintf("%s gibt %s einen harten Kopfstoss.\n",capitalize(cn), vnw),
+     victim);
+  write(sprintf("Du gibst %s einen harten Kopfstoss.\n", vnw));
+  tell_object(victim,sprintf("%s gibt Dir einen harten Kopfstoss.\n",
+     capitalize(cn)));
+  TryAttackSpell(victim, dam/100, DT_BLUDGEON, sinfo[SI_SPELL], caster,sinfo);
+  caster->ModifySkill("kopfstoss",([SI_USR:sinfo[SI_USR]+1]),0,"berserker");
+  return ERFOLG;
+}
+
+int eisenhaut(object caster, mapping sinfo)
+{
+  int suc;
+  mixed h;
+
+  if( ! caster->InFight() )
+  {
+    write("Ausserhalb eines Kampfes ist eine Eisenhaut etwas sinnlos!\n");
+    return 0;
+  }
+  if (h=caster->QueryProp(P_TMP_DEFEND_HOOK))
+  {
+    if ((h[1]==this_object()) && (h[2]=="eisenhaut2")) 
+    {
+      if (h[0] >= time())
+        return write("Deine Haut ist bereits aus Eisen.\n"), 0;
+    } 
+    else
+      return write("Irgendwie klappt das gerade nicht.\n"), 0;
+  }
+  suc=SpellSuccess(caster,sinfo);
+  if( suc<-4000 )
+  {
+    write("Das ging total daneben! Deine Haut wird ploetzlich ganz gruen.\n");
+    total_fail=1;
+    caster->SetProp(P_FROG,"berserker_eisenhaut_frosch");
+    return MISSERFOLG;
+  }
+  if (suc<=0)
+    return MISSERFOLG;
+  
+  write("Deine Haut bekommt einen metallischen Schimmer.\n");
+  say(caster->name(WESSEN)+ " Haut bekommt einen metallischen Schimmer.\n");
+  caster->SetProp(P_TMP_DEFEND_HOOK, 
+   ({ time()+5*caster->QueryProp(P_GUILD_LEVEL)+(suc+sinfo[SI_SKILLABILITY]) /
+      400, this_object(), "eisenhaut2"}));
+  caster->ModifySkill("eisenhaut",([SI_USR:sinfo[SI_USR]+1]),0,"berserker");
+  return ERFOLG;
+}
+
+mixed eisenhaut2(int dam, mixed dam_type, mixed spell, object enemy)
+{
+  if (!pointerp(dam_type))
+    dam_type = ({ dam_type });
+  if( member_array( dam_type, ({DT_SLASH, DT_RIP, DT_BLUDGEON, DT_PIERCE, 
+      DT_WHIP, DT_SQUEEZE}) )!=-1 )
+    dam=dam*(4+random(5))/10;
+  return ({ dam, dam_type, spell, enemy });
+}
+
+int spalten(object caster, mapping sinfo)
+{
+  object victim;
+  object waffe;
+  string vnw, cn;
+  int dam, suc;
+  mixed damtype;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wen willst Du spalten?\n");
+  if (!victim)
+    return 0;
+  if( !(waffe=caster->QueryProp(P_WEAPON)) || 
+        waffe->QueryProp(P_WEAPON_TYPE)!=WT_AXE )
+  {
+    write("Dazu musst Du schon eine Axt gezueckt haben!\n");
+    return 0;
+  }
+  if( (suc=SpellSuccess(caster,sinfo))<=0)
+      return MISSERFOLG;
+      
+  write(sprintf("Du hebst D%s ueber den Kopf %s.\n",
+    waffe->name(WEN,0), victim->name(WESSEN,2) ) );
+  say(sprintf("%s holt mit %s %s weit aus.\n", capitalize(caster->name()),
+     caster->QueryPossPronoun(waffe->QueryProp(P_GENDER), WEM, SINGULAR), 
+     waffe->name(RAW)) );
+  caster->SetProp(P_DISABLE_ATTACK,2);
+  call_out("spalten2", 2, caster, victim, sinfo, suc);
+  caster->ModifySkill("spalten",([SI_USR:sinfo[SI_USR]+1]),0,"berserker");
+  return ERFOLG;
+}
+
+spalten2(object caster, object victim, mapping sinfo, int suc)
+{
+  object waffe;
+  string vnw, cn;
+  int dam;
+  mixed damtype;
+
+  if( !(waffe=caster->QueryProp(P_WEAPON)) || 
+        waffe->QueryProp(P_WEAPON_TYPE)!=WT_AXE )
+  {
+    write("Mitten im Spalten solltest Du nicht Deine Axt wegstecken!\n");
+    return;
+  }
+  if( !victim || !present(victim, environment(caster)) )
+  {
+    write(sprintf("Du wirbelst D%s herum, aber Dein Gegner ist leider nicht "
+           "mehr da.\n",waffe->name(WEN,0)));
+    return;
+  }
+  cn = caster->name();
+  vnw = victim->name(WEN, 2);
+  damtype=waffe->QueryProp(P_DAM_TYPE);
+  dam = (sinfo[SI_SKILLABILITY]+ suc) * caster->QueryAttribute(A_STR) *
+    ((victim->QueryProp(P_MAX_HP)+1)/(victim->QueryProp(P_HP)+1)) *
+    caster->QueryProp(P_GUILD_LEVEL)/7;
+  if( dam> 2000000) dam=2000000;
+  say(sprintf("%s spaltet %s mit %s %s.\n",capitalize(cn), vnw,
+    caster->QueryPossPronoun(waffe->QueryProp(P_GENDER), WEM, SINGULAR),
+    waffe->name(RAW)), victim);
+  write(sprintf("Du spaltest %s mit D%s.\n", vnw, waffe->name(WEM,0)));
+  tell_object(victim,sprintf("%s spaltet Dich mit %s %s\n", capitalize(cn),
+    caster->QueryPossPronoun(waffe->QueryProp(P_GENDER), WEM, SINGULAR),
+    waffe->name(RAW) ));
+  if( dam>1000000 )
+    victim->SetProp(P_DISABLE_ATTACK,1+random(2));
+  TryAttackSpell(victim, dam/1000, damtype,
+    ([SP_NAME:"spalten", SP_SHOW_DAMAGE:1, SP_PHYSICAL_ATTACK:1]), 
+    caster,sinfo );
+  waffe->TakeFlaw();
+  caster->SetProp(P_DISABLE_ATTACK,random(2));
+}
+
+int blutrausch(object caster, mapping sinfo)
+{
+  int dauer, suc;
+  object ob, waffe;
+
+  if( ! caster->InFight() )
+  {
+    write("Ausserhalb eines Kampfes ist der Blutrausch etwas sinnlos!\n");
+    return 0;
+  }
+  if( !(waffe=caster->QueryProp(P_WEAPON)) || 
+        waffe->QueryProp(P_WEAPON_TYPE)!=WT_AXE )
+  {
+    write("Dazu musst Du schon eine Axt gezueckt haben!\n");
+    return 0;
+  }
+
+  suc=SpellSuccess(caster,sinfo);
+  dauer = caster->QueryAttribute(A_STR) + caster->QueryAttribute(A_CON)+
+          random(sinfo[SI_SKILLABILITY]+suc)/1000;
+  if (suc < -3000)
+  {
+    total_fail = 1;
+    write("Der Blutrausch ging total daneben! Du wirst so friedlich...\n");
+    caster->ModifySkillAttribute(caster,SA_SPEED,50,dauer);
+    return MISSERFOLG;
+  }
+  if( suc <= 0 )
+    return MISSERFOLG;
+  
+  say(sprintf("%s versetzt sich in Blutrausch.\n",capitalize(caster->name())));
+  write("Du versetzt Dich in einen moerderischen Blutrausch!!!\n");
+//  caster->command_me("toete alle");
+  (ob=clone_object(OBJ "blutrausch"))->move(caster,M_NOCHECK);
+  ob->blutrausch( suc, dauer/2);
+  caster->ModifySkill("blutrausch",([SI_USR:sinfo[SI_USR]+1]),0,"berserker");
+  return ERFOLG;
+}
+
+int schlachtruf(object caster, mapping sinfo)
+{
+  object *enemies;
+  object ob;
+  int i, suc, dam;
+  
+  if( caster->InFight() )
+  {
+    write("Du befindest Dich schon mitten in einer Schlacht!\n");
+    return 0;
+  }
+  enemies=FindGroup(caster, -1);
+  if(!enemies || !sizeof(enemies))
+  {
+    write("Im letzen Moement machst Du doch Deinen Mund wieder zu.\n"
+          "Ohne Gegner macht ein Schlachtruf ja gar keinen Spass.\n");
+    return 0;
+  }
+  suc=SpellSuccess(caster,sinfo);
+  if( suc<-4000 )
+  {
+    write("Du bruellst so laut, dass Du selber taub wirst.\n");
+    total_fail=1;
+    caster->SetProp(P_DEAF,-suc/10);
+    return MISSERFOLG;
+  }
+  if (suc<=0) return MISSERFOLG;
+  if ( suc>7000 ) 
+    domainshout("Du hoerst den gewaltigen Schlachtruf von "+
+      caster->name(WEM)+"!\n"
+      "Deine Ohren droehnen und Du bist etwas veraengstigt.\n", "dschungel"); 
+  else 
+    say("Ein ohrenbetaeubender Schlachtruf kommt aus "+caster->name(WESSEN)+
+      " Kehle.\n");
+  write("Ein ohrenbetaeubender Schlachtruf kommt aus Deiner Kehle.\n");
+  for(i=sizeof(enemies)-1;i>=0;i--)
+  {
+    dam = sinfo[SI_SKILLABILITY] / 50 + random( suc * 
+      (caster->QueryAttribute(A_CON)+caster->QueryAttribute(A_STR))) / 750; 
+    TryAttackSpell(enemies[i], dam, ({DT_SOUND, DT_TERROR}), 
+          ([SP_NAME:"schlachtruf",SP_SHOW_DAMAGE:1]),caster,sinfo );
+    caster->Kill(enemies[i]);
+    if( enemies[i] && dam > 400 && suc > random(10000) )
+    {
+      tell_object(enemies[i], "Das laute Schreien laesst Dich ertauben.\n");
+      enemies[i]->SetProp(P_DEAF,1);
+    }
+    if( enemies[i] && random(suc+sinfo[SI_SKILLABILITY]) > random(12000) )
+    {
+      enemies[i]->SetProp(P_DISABLE_ATTACK,1+random(4));
+      tell_object(enemies[i], "Du faellst vor Schreck zu Boden.\n");
+      tell_room(environment(caster), enemies[i]->Name(WER,1)+" faellt vor "
+        "Schreck zu Boden.\n", ({enemies[i]}) );
+    }
+    else if( enemies[i] && random(suc+sinfo[SI_SKILLABILITY]) > random(20000) )
+    {
+      enemies[i]->SetProp(P_WIMPY, enemies[i]->QueryProp(P_WIMPY)+
+        random((suc+sinfo[SI_SKILLABILITY])/300));
+      tell_object(enemies[i], "Du bekommst Angst vor "+ caster->name()+".\n");
+      if( enemies[i]->QueryProp(P_WIMPY) >  enemies[i]->QueryProp(P_HP) )
+      {
+        (ob=clone_object(OBJ "panik"))->move(enemies[i], M_NOCHECK);
+        ob->fluechten(caster->Name());
+      }
+    }
+  }
+  caster->ModifySkill("schlachtruf",([SI_USR:sinfo[SI_USR]+1]),0,"berserker");
+  return ERFOLG;
+}
+

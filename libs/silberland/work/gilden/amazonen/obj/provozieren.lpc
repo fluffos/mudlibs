@@ -1,0 +1,102 @@
+// Provokations-Effekt: haelt P_PREFERED_ENEMY und P_BODY-Reduktion temporaer.
+
+inherit "std/thing";
+
+#include "../def.h"
+#include <living/combat.h>
+
+private object caster;
+private int body_reduction;
+private int pref_chance;
+private mixed old_pref_enemy;
+
+void create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  AddId(({"\namz_provozieren", AMAZON_PROVOZIEREN}));
+  SetProp(P_SHORT, 0);
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_MAGIC, 1);
+  SetProp(P_INVIS, 1);
+
+  if (getuid(previous_object()) != SPELL_UID)
+    call_out("remove", 1);
+}
+
+int start_remove(int time)
+{
+  call_out("remove", time);
+  return 1;
+}
+
+void setup(object _caster, object victim, int _chance, int _reduction, int _dur, int original_body)
+{
+  if (!objectp(victim))
+  {
+    call_out("remove", 0);
+    return;
+  }
+
+  caster = _caster;
+  pref_chance = _chance;
+  body_reduction = _reduction;
+
+  old_pref_enemy = victim->QueryProp(P_PREFERED_ENEMY);
+  victim->SetProp(P_PREFERED_ENEMY, ({pref_chance, caster}));
+
+  if (body_reduction > 0)
+  {
+    victim->SetProp(P_BODY, victim->QueryProp(P_BODY) - body_reduction);
+    if (objectp(caster))
+      pDebug(caster, sprintf("Provozieren: P_BODY %d -> %d (%d sec, chance %d%%)\n",
+            original_body, victim->QueryProp(P_BODY), _dur, pref_chance));
+  }
+  else
+  {
+    if (objectp(caster))
+      pDebug(caster, sprintf("Provozieren: ohne P_BODY-Reduktion (%d sec, chance %d%%)\n",
+            _dur, pref_chance));
+  }
+
+  start_remove(_dur);
+}
+
+varargs int remove(int silent)
+{
+  object victim;
+  mixed cur_pref;
+
+  victim = environment();
+  if(!living(victim)) {
+    return ::remove(silent);
+  }
+  if (objectp(victim))
+  {
+    if (body_reduction > 0)
+      victim->SetProp(P_BODY, victim->QueryProp(P_BODY) + body_reduction);
+
+    cur_pref = victim->QueryProp(P_PREFERED_ENEMY);
+    if (pointerp(cur_pref) &&
+        sizeof(cur_pref) == 2 &&
+        cur_pref[0] == pref_chance &&
+        cur_pref[1] == caster)
+      victim->SetProp(P_PREFERED_ENEMY, old_pref_enemy);
+
+    if (!silent)
+    {
+      if (objectp(caster) && objectp(victim))
+        tell_object(caster, BS(sprintf("%s laesst sich nicht mehr so leicht provozieren.\n",
+              victim->Name(WER, 1))));
+      if( objectp(victim)) tell_object(victim, "Du findest wieder Deine Deckung.\n");
+    }
+  }
+
+  return ::remove(silent);
+}

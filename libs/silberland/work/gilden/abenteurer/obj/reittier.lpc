@@ -1,0 +1,358 @@
+
+inherit "std/npc";
+
+#include <properties.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <moredef.h>
+#include <class.h>
+
+object owner;
+int customized, mounted, old_mv;
+
+void create() {
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein Reitpferd");
+  SetProp(P_LONG,
+    "Ein pferd, auf dem man reiten kann");
+  SetProp(P_NAME, "Pferd");
+  SetProp(P_GENDER, NEUTER);
+  AddId(({"\nab_mount"}));
+  create_default_npc(20);
+
+  SetProp(P_HANDS, ({" mit seinen Hufen",QueryProp(P_HANDS)[1],DT_BLUDGEON}));
+  SetProp(P_RACE, "Pferd");
+  SetProp(P_SIZE, 0);
+  SetProp(P_WEIGHT, 75000);
+
+  SetProp(P_MSGIN, "kommt an");
+  SetProp(P_MSGOUT, "galoppiert");
+  SetProp(P_MMSGIN, "erscheint in einer Rauchwolke");
+  SetProp(P_MMSGOUT, "verschwindet mit Knall und Schwefelduft");
+
+  SetProp(P_DIE_MSG,  " laeuft davon.\n");
+  SetProp(P_NOCORPSE,    1);
+  SetProp(P_NOATTACK, 1);
+  SetProp(P_FRIEND, 1);
+
+  SetProp(P_WEIGHT_PERCENT, 0);
+
+  SUID;
+
+  customized = mounted = 0;
+
+  AddCmd(({"reite", "reit"}), "cmd_mount");
+  AddCmd("steige|steig&ab|runter", "cmd_absteigen");
+  AddCmd(({"nimm", "nehme"}), "cmd_nehmen");
+}
+
+private void save_vars() {
+    SetProp("orig_"+P_WEIGHT, QueryProp(P_WEIGHT));
+    SetProp("orig_"+P_SHORT, QueryProp(P_SHORT));
+    SetProp(P_WEIGHT, 0);
+    SetProp(P_SHORT, 0);
+}
+
+private void restore_vars() {
+    SetProp(P_WEIGHT, QueryProp("orig_"+P_WEIGHT));
+    SetProp(P_SHORT, QueryProp("orig_"+P_SHORT));
+}
+
+public int cmd_absteigen() {
+    if(!mounted) return 0;
+    write(BS("Du steigst von "+name(WEM)+" ab."));
+    say(BS(TPN+" steigt von "+name(WEM)+" ab."), ({TP}));
+    restore_vars();
+    move(ENV(TP), M_NOCHECK|M_SILENT);
+
+    owner->Set(P_TITLE, 0, F_QUERY_METHOD);
+    owner->Set(P_MAX_MV, 0, F_QUERY_METHOD);
+    owner->Set(P_MV, 0, F_SET_METHOD);
+
+    mounted = 0;
+    return 1;
+}
+
+public int cmd_mount(string str) {
+    string who;
+
+    if(mounted) return 0;
+
+    if(!objectp(owner)) {
+        remove();
+        return 0;
+    }
+
+    notify_fail("Auf wem willst du reiten?\n");
+    if(!id(str)) {
+        if(sscanf(str, "auf %s", who) != 1) return 0;
+        if(!id(who)) return 0;
+    }
+
+    notify_fail("Das ist nicht dein Reittier.\n");
+    if(owner != TP) return 0;
+
+    owner->Set(P_TITLE, symbol_function("override_title", TO), F_QUERY_METHOD);
+    owner->Set(P_MAX_MV, symbol_function("override_mv", TO), F_QUERY_METHOD);
+    owner->SetProp(P_MV, QueryProp(P_MAX_MV));
+    owner->Set(P_MV, symbol_function("override_set_mv", TO), F_SET_METHOD);
+    old_mv = QueryProp(P_MV);
+
+    mounted = 1;
+    save_vars();
+    if(move(TP, M_NOCHECK|M_SILENT) != 1) {
+        write(BS("Du kannst gerade nicht aufsteigen."));
+        restore_vars();
+        return -1;
+    }
+
+    write(BS("Du kletterst auf den Ruecken von "+name(WEM)));
+    write(BS("mit <steig ab> kannst du wieder absteigen."));
+    say(BS(TPN+" klettert auf den Ruecken von "+name(WEM)), ({TP}));
+    return 1;
+}
+
+public string override_title() {
+    return sprintf("%s%s reitet auf %s", owner->QueryProp(P_PRESAY), owner->name(WER), name(WEM));
+}
+
+public int override_mv() {
+    return QueryProp(P_MAX_MV);
+}
+
+public int override_set_mv(int new_mv) {
+    if(new_mv != old_mv && new_mv <= 0) {
+        tell_object(owner, BS("Dein Reittier ist erschoepft. Du steigt ab."));
+        owner->command_me("steig ab");
+    } else if(new_mv != old_mv && new_mv >= QueryProp(P_MAX_MV)) {
+        tell_object(owner, BS("Dein Reittier ist voll erholt."));
+    }
+
+    old_mv = new_mv;
+    SetProp(P_MV, old_mv);
+
+    return old_mv;
+}
+
+public int id(string what) {
+    if(!mounted) return ::id(what);
+    if(what == "\nab_mount") return 1;
+    return 0;
+}
+
+public void customize() {
+    if(customized) return;
+    if(!objectp(owner)) return;
+    switch(lower_case(owner->QueryProp(P_RACE))) {
+        case "zwerg":
+            SetProp(P_SHORT, owner->Name(WESSEN)+" Bergziege");
+            SetProp(P_LONG, "Diese uebergrosse weisse Bergziege dient traditionell Zwergen "
+                            "als Reittier. Sie ist ein bulliges Tier mit dichtem Fell und "
+                            "kleinen schwarzen Hoernern. Ihre schwarzen Knopfaugen schauen "
+                            "gerade so unter dem weissen Haaar hervor. Ein robuster, "
+                            "schwarzer Sattel it auf ihren Ruecken gebunden.");
+            SetProp(P_RACE, "Ziege");
+            SetProp(P_SIZE, 140);
+            SetProp(P_WEIGHT, 75000);
+            SetProp(P_GENDER, FEMALE);
+            AddId(({"ziege", "bergziege"}));
+            SetProp(P_NAME, "Bergziege");
+            break;
+        case "elf":
+            SetProp(P_SHORT, owner->Name(WESSEN)+" Reithirsch");
+            SetProp(P_LONG, "Vor dir steht ein Hirsch, den Elfen zum Reiten gezaehmt haben. "
+                            "Er ist gross und stark, dennoch bewegt er sich elegant. Ein "
+                            "maechtiges Geweih erhebt sich von seinem Kopf. Du bist dir "
+                            "sicher, dass nur Elfen auf so einer Majestaet des Waldes reiten "
+                            "duerfen.");
+            SetProp(P_RACE, "Hirsch");
+            SetProp(P_SIZE, 180);
+            SetProp(P_WEIGHT, 99000);
+            SetProp(P_GENDER, MALE);
+            AddId(({"hirsch", "reithirsch"}));
+            SetProp(P_NAME, "Reithirsch");
+            break;
+        case "hobbit":
+            SetProp(P_SHORT, owner->Name(WESSEN)+" Riesendachs");
+            SetProp(P_LONG, "Dieser Dachs ist eindeutig groesser als seine normalen "
+                            "Artgenossen. Seine spitze Schnauze schnueffelt nach dir und "
+                            "mit seinen kleinen Ohren lauscht er aufmerksam. Ein weisser "
+                            "Streifen zieht sich durch das graue Fell ueber den Ruecken, "
+                            "auf dem ein Sattel angebracht ist. Das ist das typische "
+                            "Reittier der Hobbits.");
+            SetProp(P_RACE, "Dachs");
+            SetProp(P_SIZE, 120);
+            SetProp(P_WEIGHT, 80000);   
+            SetProp(P_GENDER, MALE);
+            AddId(({"dachs", "riesendachs"}));
+            SetProp(P_NAME, "Riesendachs");
+            break;  
+        case "oger":
+            SetProp(P_SHORT, owner->Name(WESSEN)+" Reiteber");
+            SetProp(P_LONG, "Das ist ein riesger, borstiger und gemein dreinblickender "
+                            "Eber. Seine Borsten glaenzen in speckigem rotbraun und eine "
+                            "drahtige Maehne ziert seinen Nacken. Grosse hauer ragen aus "
+                            "seinem Maul und sein Russel schnueffelt staendig nach Futter. "
+                            "Eindeutig das Reittier eines Ogers.");
+            SetProp(P_RACE, "Schwein");
+            SetProp(P_SIZE, 170);
+            SetProp(P_WEIGHT, 280000);
+            SetProp(P_GENDER, MALE);
+            AddId(({"eber", "reiteber"}));
+            SetProp(P_NAME, "Reiteber");
+            break;
+        case "troll":
+            SetProp(P_SHORT, owner->Name(WESSEN)+" Bergpuma");
+            SetProp(P_LONG, "Dieser Bergpuma ist riesig. Ein muskelbepackter Bergloewe "
+                            "mit einem gelbbraunen Fell. Gelbe Katzenaugen funkeln dich "
+                            "herausfordernd an. Du bist dir sicher, dass nur ein Troll "
+                            "so eine Bestie reiten kann.");
+            SetProp(P_RACE, "Loewe");
+            SetProp(P_SIZE, 180);
+            SetProp(P_WEIGHT, 180000);
+            SetProp(P_GENDER, MALE);
+            AddId(({"puma", "bergpuma"}));
+            SetProp(P_NAME, "Bergpuma");
+            break;
+        case "fee":
+            SetProp(P_SHORT, owner->Name(WESSEN)+" Libellendrache");
+            SetProp(P_LONG, "Der Libellendrache ist ein kleiner schillernder Drache mit "
+            " den Fluegeln einer Libelle und sechs Beinen. Er kann auch gar kein Feuer "
+            "speien und geheort deshalb zu den Pseudodrachen. Feen nutzen Libellendrachen "
+            "gerne als Reittiere.");
+            SetProp(P_RACE, "Drache");
+            SetProp(P_SIZE, 180);
+            SetProp(P_WEIGHT, 180000);
+            AddClass(({CL_FLYING}));
+            AddId(({"WUSCHEL_SCHUPPEN", "drachen", "libellendrache"}));
+            SetProp(P_GENDER, MALE);
+            SetProp(P_NAME, "Libellendrache");
+            break;
+        case "gaffo":
+            SetProp(P_SHORT, owner->Name(WESSEN)+" Riesenreitfrosch");
+            SetProp(P_LONG, "Dieser Frosch ist eine uebergrosse Bullenkroete. Er hat eine "
+            "gruen-braune, warzige Haut und grosse Glubschaugen. Auf seinem Ruecke ist ein "
+            "bequemer Sattel festgemacht, auf dem man gut Platz hat. Das ist das typische "
+            "Reittier eines Gaffos.");
+            SetProp(P_RACE, "Frosch");
+            SetProp(P_SIZE, 180);
+            SetProp(P_WEIGHT, 180000);
+            AddId(({"WUSCHEL_SCHUPPEN", "frosch", "reitfrosch", "riesenreitfrosch"}));
+            SetProp(P_GENDER, MALE);
+            SetProp(P_NAME, "Riesenreitfrosch");
+            break;
+        case "mensch":
+        default:
+            SetProp(P_SHORT, owner->Name(WESSEN)+" Streitross");
+            SetProp(P_LONG, "Dieser grosse, schwarze Kaltblueter ist ein Streitross erster "
+            "Guete, wie es nur in den Staellen der Ebene bei Midas gezuechtet wird. Auf seinem "
+            "breiten Ruecken ist ein Sattel mit Satteltaschen angebracht, auf dem man gut "
+            "reiten kann.");
+            SetProp(P_RACE, "Pferd");
+            SetProp(P_SIZE, 180);
+            SetProp(P_WEIGHT, 280000);
+            AddId(({"WUSCHEL_FELL", "pferd", "ross", "streitross"}));
+            SetProp(P_GENDER, MALE);
+            SetProp(P_NAME, "Streitross");
+            break;
+    }
+
+    set_living_name(getuid(TP)+"reittier");
+
+    customized = 1;
+    return;
+}
+
+public void setup(object caster, int ability, int success) {
+    int dauer, carry;
+
+    owner = caster;
+    dauer = caster->QueryAttribute(A_INT) * 3 + caster->QueryProp(P_LEVEL) * 5 + ability + success / 2;
+    SetProp(P_MAX_MV, QueryProp(P_MAX_MV) + dauer);
+    SetProp(P_MV, QueryProp(P_MAX_MV));
+    customize();
+    return;
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp) {
+  if(player == owner) {
+    tell_room(ENV(TO), Name(WER)+" laeuft davon.");
+  }
+  return;
+}
+
+void BecomesNetDead(object player) {
+    if(player == owner) {
+        tell_room(ENV(TO), Name(WER)+" laeuft davon.");
+    }
+    return;   
+}
+
+public void heart_beat() {
+    object *enemies, e;
+    ::heart_beat();
+    if(mounted && objectp(owner) && owner->InFight()) {
+        if(!random(2)) {
+            tell_room(ENV(owner), Name(WER)+" von "+owner->name(WEM)+" wird im Kampf getroffen!");
+            do_damage(random(30));
+        }
+        if(!random(5)) {
+           enemies = owner->PresentEnemies();
+           if(sizeof(enemies) > 0) {
+            e = enemies[random(sizeof(enemies))];
+            tell_room(ENV(owner), BS(Name(WER)+" tritt nach "+e->name(WEM)+"."));
+            e->AddHp(-random(30));
+           }
+        }
+    }
+    return;
+}
+
+public void reset() {
+    int go;
+
+    ::reset();
+    if(!is_clone()) return;
+    if(mounted) return;
+
+    go = 0;
+    if(!objectp(owner)) go = 1;
+    else if(!find_player(owner)) go = 1;
+    
+    if(ENV(owner) != ENV(TO)) go = 1; 
+    
+    if(go) {
+        tell_room(ENV(TO), BS(Name(WER)+" laeuft davon."));
+        move("/room/npcasylraum", M_NOCHECK|M_SILENT);
+    }
+    return;
+}
+
+public void give_notify(object ob) {
+    if(TP != owner) {
+        tell_object(TP, BS(Name(WER)+" nimmt "+ob->name(WEN)+" nicht an."));
+        ob->move(TP, M_NOCHECK);
+    }
+    return;
+}
+
+public int cmd_nehmen(string str) {
+    string what, who;
+    object ob;
+    if(TP != owner) return 0;
+    if(sscanf(str, "%s von %s", what, who) != 2) return 0;
+    if(!id(who)) return 0;
+    if(!objectp(ob = present(what))) return 0;
+
+    if(ob->move(TP, M_GET) != 1) {
+        write(BS("Du kannst "+ob->name(WEN)+" gerade nicht tragen."));
+        return -1;
+    }
+
+    write(BS("Du nimmst "+ob->name(WEN)+" aus den Satteltaschen von "+name(WEM)+"."));
+    say(BS(TPN+" nimmt "+ob->name(WEN)+" aus den Satteltaschen von "+name(WEM)+"."), ({TP}));
+    return 1;
+}

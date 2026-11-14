@@ -1,0 +1,169 @@
+/*
+// /d/gebirge/angrox/4elem/obj/weapon/blitzschwert.c
+// 30-04-1997  Angrox@SilberLand 
+// Blitzschwert
+//
+//
+// 
+// Update 
+//   23-10-1998 -> verschoben nach /gilden/paladine/weapon
+
+*/
+// $Date: 2002/05/28 14:19:09 $
+/* $Revision: 1.2 $
+ * $Locker:  $
+ * $Log: blitzschwert.c,v $
+ * Revision 1.2  2002/05/28 14:19:09  Angrox
+ * dos->unix conv
+ *
+ * Revision 1.1  2002/05/28 14:09:22  Angrox
+ * Initial revision
+ *
+ */
+
+inherit "std/weapon";
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <new_skills.h>
+#include "../paladin.h"
+
+#define COST 30
+int zeit, first_use;
+int allow_unwield=1;
+
+create()
+{
+  if (!is_clone(TO) )  return;
+
+  ::create();
+  zeit=time();
+  SetProp(P_SHORT, "Das Blitzschwert");
+  SetProp(P_LONG, BS( 
+    "Das Blitzschwert ist aus einem weissen Material gefertigt, "
+   +"welches staendig von kleinen Blitzen umzuckt wird. Es sieht "
+   +"sehr maechtig aus.\n"));
+  SetProp(P_INFO, "Das Blitzschwert kann Deine Feinde mit dem "
+      +"myastischen Kommando \"turran\" vernichten...");
+  SetProp(P_MAGIC, 1);
+  SetProp(P_NAME, "Blitzschwert");
+  SetProp(P_GENDER, NEUTER);
+  AddId( ({"schwert", "blitzschwert"}) );
+  SetProp(P_WEAPON_TYPE, WT_SWORD );
+  SetProp(P_WC, 200);
+  SetProp(P_WC_FIXFACTOR, 0.3);
+  SetProp(P_DAM_TYPE, ({DT_SLASH, DT_LIGHTNING}) );
+  SetProp(P_NR_HANDS, 1);
+  SetProp(P_MATERIAL, ([MAT_TITANIUM:50, MAT_LIGHTNING:40, MAT_MISC_MAGIC:10]));
+  SetProp(P_WEIGHT, 1000);
+  SetProp(P_VALUE, 3000+random(300));
+  SetProp(P_NOBUY, 1);
+  SetProp(P_WIELD_FUNC, TO);
+  SetProp(P_UNWIELD_FUNC, TO);
+  SetProp(P_WIELD_RESTRICTIONS, ([P_LEVEL:45, A_STR: 17])); 
+ 
+  AddCmd("turran", "spell_turran");
+  SetProp(P_COMBATCMDS,
+        ([ "turran":
+            ([ C_MIN:40,
+               C_AVG:55,
+               C_MAX:70,
+               C_DTYPES: ({DT_LIGHTNING}) ]) ]) );
+
+}
+
+int WieldFunc(object ob, int silent)
+{
+  first_use=time()+10;
+  return 1;
+}
+
+int UnwieldFunc(object waffe, int silent) {
+  if(!allow_unwield) {
+    write("Du kannst das Blitzschwert nicht loslassen! Hilfe! "
+        "Was ist da los?\n");
+    return 0;
+  }
+  return 1;
+}
+
+spell_turran(string str) {
+ object gegner; 
+ if (QueryProp(P_WIELDED)!=TP) {
+   notify_fail("Du musst das Schwert erst zuecken!\n");
+   return 0; 
+ }
+ if (TP->QueryProp(P_SP)< COST) {
+   write("Du hast nicht genug Magiepunkte.\n");
+   return 1; 
+ }
+ if(first_use>time()) {
+   write("Das Schwert muss erst Kraft sammeln.\n");
+   return 1;
+ }
+ if(str) {
+  if(gegner=present(str, ENV(TP)) )
+    if( !interactive(gegner))
+      return blitz(gegner);
+ }
+ if(gegner=TP->SelectEnemy())
+   return blitz(gegner);
+ write("Da ist ja gar kein Gegner.\n");
+ return 1;
+}
+
+
+blitz(object gegner)
+{
+ mapping sinfo;
+ int schaden;
+ 
+ schaden=1;
+ if(zeit>time())
+   {
+    write("Das Schwert muss erst wieder Energie sammeln.\n");
+    return 1;
+   }
+ if(TP->QueryProp(P_ATTACK_BUSY) ) 
+   {
+    write("Du bist im Moment zu sehr beschaeftigt.\n");
+    return 1;
+   }
+ TP->SetProp(P_ATTACK_BUSY, 3);
+ if((TP->QueryProp(P_SP))<COST )
+   {
+    write("Du hast nicht genug Magiepunkte!");
+    return 1;
+   }
+ TP->restore_spell_points(-COST);
+ if(!gegner)
+   {
+    write(BS("Ein Blitz zuckt aus Deinem Schwert und schlaegt "
+        +"im Boden ein."));
+    say(BS("Ein Blitz zuckt aus dem Schwert  von "+TPN+" und "
+        +"schlaegt im Boden ein."));
+    zeit=2000+time();
+    return 1;
+    }
+ printf(BS("Ein Blitz aus Deinem Schwert trifft %s.\n"), gegner->name(WEM));
+ say( sprintf(BS("Ein Blitz aus dem Schwert von %s trifft %s.\n"), CAP(TPN),
+       gegner->name(WEN) ), ({gegner, TP}) );
+ tell_object(gegner, BS("Ein Blitz aus dem Schwert von "+CAP(TPN)+
+                        " trifft Dich.\n"));
+ schaden=300+random(300);
+ sinfo=([SP_NAME : "turran",
+         SP_PHYSICAL_ATTACK : 0,
+         SP_SHOW_DAMAGE : 1
+         ]);
+ gegner->Defend(schaden, ({DT_LIGHTNING}), sinfo, this_player());
+ TP->ModifySkillAttribute(TP, SA_QUALITY, 150, 2);
+ allow_unwield=0;
+ call_out("allow_unwield_func", 6);
+ zeit=2000+time();
+ return 1;
+}
+
+void allow_unwield_func() {
+   allow_unwield=1;
+   return ;
+}

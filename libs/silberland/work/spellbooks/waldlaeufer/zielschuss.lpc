@@ -1,0 +1,82 @@
+mapping prep_zielschuss(object caster, mapping sinfo, int silent)
+{  
+  object ob;
+
+  if(!TestNoTrance(caster, sinfo)) return 0;
+  
+  //Aenderungen der Werte im sinfo Mapping vermeiden!
+  if(!GuildItemTest(caster, sinfo) || !FroschTest(caster, sinfo) || 
+     !BowTest(caster,sinfo)     ||
+     !BlindTest(caster,sinfo)     )
+    return 0;
+
+  if(!objectp(ob=sinfo[SI_ENEMY])) { 
+    ob=FindEnemyVictim(sinfo[SI_SKILLARG],caster, "Wen moechtest Du anvisieren?\n");
+    if(!ob) return 0; 
+  }
+  sinfo[SI_ENEMY]=ob;
+  if(!silent){FirstPrepareFuncSuccessfull(caster, sinfo);}
+
+  aim(caster, sinfo);
+  tell_room(ENV(caster), BS(caster->Name(WER, 1)+" zieht einen Pfeil auf und zielt konzentriert."), ({caster}));
+  if(!ob->IsEnemy(caster)) ob->Kill(caster);
+  return sinfo;
+}
+
+int zielschuss(object caster, mapping sinfo) 
+{
+  object ob, weapon;
+  int dam, ability, success, i, casterDex, targetDex, targetHp, targetMaxHp, hitValue, dc;
+  mixed dt;
+
+  if(!mappingp(sinfo=prep_zielschuss(caster, sinfo, 1))) return 0;
+  ob=sinfo[SI_ENEMY];
+
+  caster->SetProp(P_DISABLE_ATTACK, 3); // und nachher durchatmen
+
+  success=SpellSuccess(caster,sinfo);
+  if(success<0)
+  {
+    tell_object(caster,BSC("Der setzt den Schuss ins absolute Nichts."));
+    return MISSERFOLG;
+  }
+
+  ability=sinfo[SI_SKILLABILITY];
+  
+  // ein alles oder nichts schuss...
+  dam=sinfo[SI_SKILLDAMAGE];
+  casterDex = caster->QueryAttribute(A_DEX);
+  dam += (caster->QueryProp(P_GUILD_LEVEL)*5) +//5-100
+          success/100 + //-100 - +100
+          ability/200 + // bis zu +500
+          casterDex * 20; // bis zu +80
+
+  sinfo[SI_SKILLDAMAGE] = dam;
+
+  targetDex = ob->QueryAttribute(A_DEX)*3;
+  targetHp = ob->QueryProp(P_HP);
+  targetMaxHp = ob->QueryProp(P_MAX_HP);
+  hitValue = success/333 + casterDex;
+  dc = targetDex * targetHp / targetMaxHp;
+
+  if(caster->QueryProp(P_TESTPLAYER)) {
+    tell_object(caster, sprintf("zielschuss :: hitCheck :: hitValue=%d (%d/333 + %d) dc=%d (%d * %d / %d)\n", 
+                hitValue, success, casterDex, dc, targetDex, targetHp, targetMaxHp));
+  }
+
+  tell_object(caster, BS("Du hast Dein Ziel erfasst und Dein Pfeil verlaesst die Sehne ..."));
+  tell_room(ENV(caster), BS(caster->Name(WER, 1)+" laesst einen gut gezielten Pfeil von der Sehne..."), 
+                         ({caster}));
+
+  if( hitValue < dc ) {
+    tell_room(ENV(ob), BS("... und " + ob->Name(WER, 1) + " weicht dem Schuss aus."));
+  } else {
+    tell_object(caster, BS("... und du triffst dein Ziel mitten in den Koerper!"));
+    tell_room(ENV(ob), BS("... und trifft " + ob->Name(WER, 1) + " mitten in den Koerper!"), ({caster}));
+    ExecuteAttackSpell(ob, caster, sinfo, ([SP_SHOW_DAMAGE:1]), ATTACK_SPELL_BOW);
+  }
+
+  reload(caster, sinfo);
+  return ERFOLG;
+}
+

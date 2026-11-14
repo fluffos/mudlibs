@@ -1,0 +1,385 @@
+// Schattengaul
+// Schattenwelt
+// Von Wraz / Mendralim
+
+#include "../def.h"
+inherit "/std/npc/spells";
+inherit "std/npc";
+inherit NPC "npc.lpc";
+
+object owner;
+
+void create()
+{
+  if(!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Ein Schattengaul");
+  SetProp("short_basic", QueryProp(P_SHORT));
+  SetProp(P_LONG,
+    "Der Schattengaul sieht wie ein untoter Esel aus. "
+    "Er ist von Schatten umgeben, die staendig aus ihm herauszuwabern scheinen. "
+    "Besonders gefaehrlich wirkt er nicht, aber man weiss ja nie.");
+
+  AddDetail( ({""}),
+    "");
+
+  SetProp(P_NAME, "Schattengaul");
+  SetProp(P_GENDER, MALE);
+  AddId(({"schattengaul","gaul","esel","\nlastentier"}));
+
+  create_default_shadownpc(24+random(3),0,0,3000); // level, maxhp, incorp, hplimit = 3000
+  SetProp(P_MAX_HP, 50+QueryProp(P_MAX_HP)); // mindestens 50 HP
+  // Existiert von Raum sn001 bis sn300 --> HP:
+  //   1: 50+12  =  62
+  //  10: 50+14  =  64
+  //  50: 50+21  =  71
+  // 100: 50+36  =  86 --> ueberlebt dauerhaft in Astral (nicht-Schattenumgebung)
+  // 200: 50+107 = 157 --> ueberlebt dauerhaft in realer Umgebung (nicht-Astral)
+  // 300: 50+299 = 349
+
+  AddClass( ({CL_ANIMAL}) );
+
+  SetProp(P_HANDS, ({" mit seinem Maul", QueryProp(P_HANDS)[1] , ({DT_RIP}) }) );
+
+  //SetProp(P_XP, (QueryProp(P_XP)*7)/4);
+
+  SetProp(P_RACE, "Untoter");
+  SetProp(P_SIZE, 150+random(15));
+  SetProp(P_WEIGHT, 60000+random(5000));
+  SetProp(P_ALIGN, -100);
+  SetProp(P_MAX_HANDS, 0);
+  SetProp(P_NOMAGIC,10);
+
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    BS(Name(WEM,1)+" rutscht @WER einfach wieder vom Ruecken. So funktioniert das anscheinend nicht.") }) );
+
+  SetProp(P_LOG_INFO, "/wraz/fragen_schatten");
+
+  SetProp(P_MSGIN, "trottet herein");
+  SetProp(P_MSGOUT, "trottet davon");
+  SetProp(P_MMSGIN, "erscheint");
+  SetProp(P_MMSGOUT, "verschwindet");
+
+  SetProp(P_DIE_MSG,  " zerfaellt zu Schatten.\n");
+  SetProp(P_NOCORPSE, 1 );
+
+  SetProp(P_INFO, BS("Der Schattengaul scheint, wie ein 'normaler' Gaul auch, ein Lastentier "
+    "zu sein. Du belaedst ihn, indem Du ihm etwas gibst. Danach kannst Du ihn entladen oder "
+    "bestimmte Gegenstaende entnehmen."));
+
+  AddInfo(DEFAULT_INFO, "macht: 'I-Aaaah, Iii-aaaaaah!'\n");
+
+  AddInfo( ({""}),
+  "","ruft: ");
+
+  SetChats(1,
+  ({Name(WER,1)+" macht: 'I-Aaaaaah, Iii-aaaaaaaah!'\n",
+    "@@HideCalledByChat@@",
+    "","","","","",""
+   }));
+
+
+  SetProp(P_SPELLRATE,20);
+
+  AddSpell(30, 150+room_no,
+    Name(WER,1)+" tritt mit seinen Hufen nach Dir.\n",
+    Name(WER,1)+" tritt mit seinen Hufen nach @WEM.\n",
+    DT_BLUDGEON, ([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(1,1,
+    "",
+    "",
+    DT_MAGIC, "hide", ([SP_SHOW_DAMAGE:0]) );
+
+  SUID;
+
+  AddCmd("entlade", "CmdEntladen");
+  AddCmd("entnimm|entnehme", "CmdEntnehmen");
+}
+
+// ------------------------------------------------------------------------------
+int CmdEntnehmen(string str)
+{
+  string ob_name, gaul_name;
+  object ob;
+
+  if(!interactive(TP)) return 0;
+  else if(!ENV(TO)) return 0;
+
+  else if(!str || sscanf(str, "%s aus %s", ob_name, gaul_name) != 2)
+  {
+    write(BS("Was moechtest Du woraus entnehmen?"));
+    return -1;
+  }
+
+  else if(!ob = present(ob_name,TO))
+  {
+    write(BS("Hier ist doch gar kein*e '"+ob_name+"'!"));
+    return -1;
+  }
+
+  else if(!TO->id(gaul_name))
+  {
+    write(BS("Woraus moechtest Du das entnehmen?"));
+    return -1;
+  }
+
+  else if(ob->id("schattenpacktaschen"))
+  {
+    if(sizeof(all_inventory(TO)) > 1)
+    {
+      write(BS("Entlade die Taschen doch lieber, bevor Du sie abnimmst."));
+      return -1;
+    }
+    else
+    {
+      ob->move(TP,M_NOCHECK);
+      write(BS("Du nimmst dem Schattengaul "+ob->name(WEN)+" wieder ab."));
+      ENV(TP)->Message(BS(TPN+" nimmt dem Schattengaul "+ob->name(WEN)+" ab."),
+        MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+      TO->SetProp(P_NODROP, 0);
+      TO->SetProp(P_REJECT, TO->QueryProp("reject_saved"));
+      return 1;
+    }
+  }
+
+  else if (ob->move(TP,M_GET) < 0)
+  {
+    write(BS("Du kannst "+ob->name(WEN)+" nicht tragen, und legst "+ob->QueryPronoun(1)+
+      " daher auf den Boden."));
+    ENV(TP)->Message(BS(TPN+" nimmt "+ob->name(WEN)+" aus den Schattenpacktaschen des Schattengauls "
+      "und legt "+ob->QueryPronoun(1)+ " auf den Boden."),
+      MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+    ob->move(ENV(TO),M_NOCHECK);
+    return 1;
+  }
+
+  else
+  {
+    write(BS("Du nimmst "+ob->name(WEN)+" aus den Schattenpacktaschen des Schattengauls."));
+    ENV(TP)->Message(BS(TPN+" nimmt "+ob->name(WEN)+" aus den Schattenpacktaschen des Schattengauls."),
+      MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+    return 1;
+  }
+}
+
+// ------------------------------------------------------------------------------
+int CmdEntladen(string str)
+{
+  object it, next;
+  int i;
+  int tot_weight;
+
+  i=0;
+  tot_weight = 0;
+
+  if(!TO->id(str)) return 0;
+  if(!ENV(TO)) return 0;
+
+  for(it=first_inventory(TO);it;)
+  {
+    next=next_inventory(it); // siehe man-page first_inventory --> Problem ist das move()
+    if(it->QueryProp(P_NODROP) || // kann nicht weggegeben werden
+      !it->QueryProp(P_SHORT) || // ist unsichtbar
+      it->id("schattenpacktaschen") || // Packtaschen werden nicht automatisch entnommen
+      it->move(ENV(TO),M_PUT) < 0) // Bewegung aus einem anderen Grund nicht moeglich
+    {
+      it = next;
+      continue;
+    } 
+    
+    else 
+    {
+      //DB(BS(it->Name()));
+      tot_weight += it->QueryProp(P_WEIGHT);
+      i++;
+      it = next;
+    }
+  }
+
+  if(!i)
+  {
+    TP->Message(BS("Der Schattengaul hat nichts dabei."));
+    return -1;
+  }
+  
+  else
+  {
+    TP->Message(BS("Du entlaedst den Schattengaul vollstaendig."));
+    if(tot_weight >= 20000) TP->Message(BS("Ganz schoen anstrengend!"));
+    TP->do_exhaust(tot_weight/214); // Bei 1400 Erschoepfungspunkten waere man komplett erschoepft,
+        // wenn man mehr als 300 kg vom Gaul ablaedt :)
+    ENV(TP)->Message(BS(TPN+" entlaedt den Schattengaul. Dieser scheint erleichtert."),MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+    return 1;
+  }
+  
+}
+
+// ------------------------------------------------------------------------------
+void RemoveOwner()
+{
+  if(owner) owner->RemovePursuer(TO);
+  SetProp(P_NOATTACK,0);
+  SetProp("has_schattenleine",0);
+  SetProp(P_SHORT, QueryProp("short_basic"));
+  owner = 0;
+  return;
+}
+
+// ------------------------------------------------------------------------------
+void SetOwner(object player)
+{
+  if(!living(player)) return;
+
+  owner = player;
+
+  DB("schattengaul: SetOwner() ("+TPU+")\n");
+    
+  RemoveId("\nschattenwache");
+
+  SetProp("short_basic",QueryProp(P_SHORT));
+  SetProp(P_SHORT, QueryProp("short_basic")+" (angeleint von "+TPN+")");
+
+  SetProp(P_AGGRESSIVE,0);
+  SetProp(P_NOATTACK,1);
+  SetProp("has_schattenleine",1);
+
+  if(find_call_out("CheckEnvDamage")==-1) call_out("CheckEnvDamage",600+random(60));
+
+  owner->AddPursuer(TO);
+}
+
+// ------------------------------------------------------------------------------
+int PreventFollow(object dest)
+{
+  call_other("/room/death/death_room","???");
+
+  if(dest && dest == find_object("/room/death/death_room")) return 1;
+
+  if(!owner) 
+  {
+    RemoveOwner();
+    return 2;
+  }
+
+  else if(!interactive(owner))
+  {
+    return 1;
+  }
+
+  else if(owner->QueryProp(P_GHOST))
+  {
+    return 1;
+  }
+
+  else return 0;
+
+}
+
+// ------------------------------------------------------------------------------
+string HideCalledByChat()
+{
+  npc::hide();
+  //return Name(WER,1)+" verschwindet.\n";
+  return "";
+}
+
+// ------------------------------------------------------------------------------
+void hide(object enemy, int damage, mixed dam_type, string room_file_name)
+{
+  npc::hide(enemy,damage,dam_type,room_file_name);
+}
+
+// ------------------------------------------------------------------------------
+int _query_paralyzed() {return 0;}
+nosave int _set_paralyzed(mixed para) {return 0;}
+
+// ------------------------------------------------------------------------------
+void die(int poisondeath)
+{
+  DropShadowItems();
+  CallNPCKillLog();
+
+  ::die(poisondeath);
+}
+
+// ------------------------------------------------------------------------------
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  CallPlayerDeathLog(player, killer, lostexp);
+  //if(owner && player == owner) TO->remove();
+}
+
+// ------------------------------------------------------------------------------
+void init() 
+{
+  object *inv;
+  int i, no_of_donkeys;
+
+  ::init();
+
+  if(TP && TP == owner && interactive(TP) && member(TP->QueryPursuers(),TO) == -1) {
+    TP->AddPursuer(TO);
+  }
+
+  if(!ENV(TO) || !owner) return;
+
+  /*inv=all_inventory(ENV(TO));
+  no_of_donkeys = 0;
+
+  // Man kann nur 1 Gaul haben
+  for(i=0;i<sizeof(inv);i++)
+  {
+    if( inv[i]->id("\n"+lower_case(getuid(owner))+"schattengaul"))
+    {
+      if(no_of_donkeys == 0) no_of_donkeys = 1;
+      else
+      {
+        ENV(TO)->Message(BS(
+          "Ein Schattengaul verschwindet."));
+        TO->remove(1);
+        return;
+      }
+    }
+  }*/
+}
+
+// ------------------------------------------------------------------------------
+void CheckEnvDamage()
+{
+  int dmg;
+
+  if(!TO || !ENV(TO)) return;
+
+  if(find_call_out("CheckEnvDamage")==-1) call_out("CheckEnvDamage",600+random(60));
+
+  // Ausserhalb der Schattenwelt bzw der Astralwelt nimmt der Schattengaul Schaden
+  // -> ausserhalb Astral, viel Schaden
+  if (strstr(file_name(ENV(TO)), "/d/astral/") == -1)
+  {
+    ENV(TO)->Message(BS(Name(WER)+" wiehert stoerrisch und schwer leidend in dieser realen Umgebung."),
+        MSGFLAG_SOUND);
+    dmg=(-25-random(130)); // 157 HP_MAX ueberleben das fix (siehe oben)
+  }
+
+  // -> ausserhalb Schatten, aber innerhalb Astral, weniger Schaden
+  else if (strstr(file_name(ENV(TO)), "/d/astral/wraz/schatten/") == -1)
+  {
+    ENV(TO)->Message(BS(Name(WER)+" wiehert stoerrisch und leidend in dieser schattenarmen Welt."),
+        MSGFLAG_SOUND);
+    dmg=(-15-random(70)); // 86 HP HP_MAX ueberleben das fix (siehe oben)
+  }
+
+  TO->AddHp(dmg);
+  if(dmg && TO->QueryProp(P_HP) <= 1) TO->die();
+}
+
+// ------------------------------------------------------------------------------
+void reset()
+{
+ ::reset();
+ if(!is_clone(TO)) return;
+ if(find_call_out("CheckEnvDamage")==-1) call_out("CheckEnvDamage",600+random(60));
+}

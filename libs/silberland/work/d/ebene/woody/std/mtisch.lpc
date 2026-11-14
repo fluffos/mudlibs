@@ -1,0 +1,712 @@
+// (c) by Thomas Winheller (Padreic@mg.mud.de)
+
+inherit "std/room";
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include <combat.h>
+#include <wizlevels.h>
+#include "files.h"
+
+#define BECHER "/d/ebene/woody/std/wbecher"
+#define MAX_LOSE 4    /* so oft kann man verlieren :) */
+
+// INTERFACE
+void AddZuschauer();   // this_player() wird in Liste der Zuschauer aufgenommen
+void RemoveZuschauer(); // this_player() wird aus der Liste der Z. entfernt
+int  Player();          // Anzahl der am Spiel beteiligten Spieler
+int  Playing();         // 0 falls gerade nicht gespielt, ansonsten <> 0
+void SetPlaying();      // setzt das playingflag
+void LoseRound(object pl, int lose); // bestraft pl, fuer sein Versagen
+void RemovePlayer(object pl, int silent); // pl scheidet aus
+void tell_zuschauer(string text); // gibt <text> an alle Zuschauer aus
+void winning(object pl); // erklaert pl zum Sieger des Spiels
+
+object NextPlayer(object pl); // Liefert den Spieler, der nach pl dran ist
+object LastPlayer(); // Liefert den Spieler, der als letztes dran war
+
+nosave object* zuschauer;
+nosave int playing;
+nosave object last_player;
+nosave int akt_player;
+nosave int tell_flag; // wird benoetigt um in catch_tell dinge auszublenden
+
+nosave string rd_regeln();
+
+
+void spielstand_liste(object ob)
+{  
+   int i;
+   if (living(ob)) {
+      write(ob->Name(WER, RAW));
+      if (present(WBECHER, ob)) 
+        write("*: ");
+        else write(": ");
+      for(i=ob->QueryProp(LOSE_ROUND);i<MAX_LOSE;i++)
+        write("I");
+      write("\n");
+   }
+}
+
+string spielstand()
+{
+  if (!playing)
+    return "Ihr habt doch noch gar kein Spiel angefangen, "
+      "wie soll es denn da schon\neinen Spielstand geben?\n";
+  write("Es steht derzeit wie folgt:\n");
+  filter_array(all_inventory(), "spielstand_liste");
+  return "";
+}
+
+void create()
+{
+  ::create();
+  zuschauer=({});
+  playing=0;
+  last_player=0;
+  akt_player=0;
+  SetProp(P_SHORT,
+    "Einige Spieler, die an einem Tisch sitzen und Maexchen spielen");
+  SetProp(P_LONG,
+    "Ein schoener alter Holztisch, wie er in jeder Kneipe stehen koennte. Das "
+    "einzig besondere an ihm sind eine Liste und ein kleines Regelbuch, die "
+    "auf dem Tisch liegen.");
+  SetProp(P_INT_SHORT, "An einem Maexchentisch");
+  SetProp(P_NOGET, "Der Tisch ist wirklich zu schwer um ihn einzustecken.\n");
+  SetProp(P_NAME, "Tisch");
+  SetProp(P_NOMAGIC, 100);
+  SetProp(P_GENDER, MALE);
+  SetProp(P_NO_TPORT, NO_TPORT);
+  AddReadDetail(({"buch", "regelbuch"}), #'rd_regeln);
+
+/*
+    "'Maexchen das ultimative Spiel fuer Jung und Alt' ist so einfach, dass "
+    "sie es theoretisch sogar mit Orks spielen koennten (vorausgesetzt sie "
+    "wuerden die Regeln akzeptieren und sie nicht waerend des Spiels mit "
+    "ihrer Keule aendern :).\n"
+    "Nun aber zum eigentlich Spiel; waehrend dem Spiel geht ein Wuerfelbecher "
+    "rum und man hat jetzt eigentlich nur 3 Moeglichkeiten, zwischen denen mal "
+    "waehlen kann.\n"
+ "1. man <wuerfelt> und <behauptet> dann man haette eine Zahl geworfen, die\n"
+ "   groesser als die ist, die einem der Vordermann bereits gegeben hat.\n"
+ "2. man glaubt, dass der Vordermann untertrieben hat und <behauptet> dann,\n"
+ "   unter dem Wuerfelbecher laege sogar eine noch hoerere Zahl.\n"
+ "3. man glaubt nicht, das _mindestens_ soviel unter dem Becher liegt, wie\n"
+ "   vom Vordermann behauptet. In diesem Falle sollte man den Becher dann\n"
+ "   <aufdecken>. Dieses ist dann entweder fuer einen selbst oder fuer den\n"
+ "   Vordermann der Moment der Wahrheit.\n"
+ "4. Da ein Maexchen immer doppelt zaehlt, hat man bei ihm die Moeglichkeit,\n"
+ "   es zu <glauben>, das bedeutet man verliert \"nur\" einfach, darf dafuer\n"
+ "   aber auch nicht nachschauen, ob es wirklich eins war :)\n"
+    "Wert der Wuerfe:\n"
+    "normale Wuerfe, Einerpasch, Zweierpasch..., Sechserpasch, Maexchen (21),"
+    "wobei bei einem normalen Wurf der hoehere Wuerfel*10 zum zweiten Wuerfel "
+    "addiert wird, d.h. der niedrigste Wurf ist die 31 (21 ist ja das "
+    "Maexchen).\n\n"
+    "              Viel Spass wuenschen Ihnen die Padreic'schen Spielewerke\n"
+    "              aus einem fernen Land namens MorgenGrauen.\n"
+    "\n"
+    "Dieses Produkt ist von Umtausch & Reklamationen jedweder Art "
+    "ausgeschlossen.\n");
+*/
+
+  AddReadDetail("liste", #'spielstand);
+  AddSpecialDetail(({"tisch", "maexchentisch"}), "long");
+  AddSpecialDetail("liste", "spielstand");
+  AddSpecialDetail("spielstand", "spielstand");
+  AddDetail(({"buch", "regelbuch"}), "Ein kleines Buechlein mit den Regeln dieses Spiels, Du kannst es lesen.\n");
+  AddId("tisch");
+  AddId("maexchentisch");
+  AddId(MTISCH);
+  AddCmd(({"spiele", "spiel"}), "spielen");
+  AddCmd("beende", "beenden");
+  AddCmd(({"verlasse", "verlass"}), "verlassen");
+  AddCmd(({"steh", "stehe"}), "aufstehen");
+  AddCmd(({"schau", "schaue"}), "zuschauen");
+  AddCmd("beobachte", "beobachten");
+  AddCmd("nimm", "nehmen");
+  // in diesen Raum ist es verboten unsichtbar zu sein
+  AddCmd("invis", "invisabfangen");
+  // wird NICHT abgefangen, jedoch werden sie als Spieler/Zuschauer ausgetragen
+  AddCmd(({"home", "goto"}), "magierbewegung");
+  AddCmd(({"emote", "echo"}), "echos");
+  AddCmd(({":", ";"}), "echos", 1);
+  SetProp(P_NO_GLOBAL_ATTACK,1);
+  SetProp(P_NOATTACK, 1);
+  enable_commands();
+  AddItem(BECHER, REFRESH_DESTRUCT); // REFRESH_NONE sollte man ja vermeiden
+}
+
+nosave int echos(string text)
+{
+   if (!present(this_player(), this_object())) return 0;
+   if (!text) text="";
+   text+=query_verb();
+   if (strstr(text, "wuerf", 0)!=-1) {
+     if (this_player()->QueryProp(P_GENDER)==FEMALE)
+       write("Du alte Fuscherin! "
+           "Wuerfel gefaelligst wie alle anderen auch mit dem Becher.\n");
+     else
+       write("Du alter Fuscher! "
+           "Wuerfel gefaelligst wie alle anderen auch mit dem Becher.\n");
+     return 1;
+   }
+}
+
+void catch_tell(string msg)
+{
+  if (tell_flag || !environment() || present(PO, environment())) return;
+  tell_zuschauer(msg);
+}
+
+string _query_int_long()
+{
+   object* liste;
+   object f,l;
+   string text;
+   int i;
+//   if (!present(this_player(), this_object())) return "";
+   liste=filter_array(all_inventory(), #'living);
+   switch (i=sizeof(liste)) {
+     case 0: text="Das hier sehen eh nur Magier.\n"; break;
+     case 1: text="Derzeit sitzt Du noch alleine am Tisch.\n"; break;
+     case 2: this_player()==liste[0] ? text=liste[1]->Name(WER, RAW)
+                                     : text=liste[0]->Name(WER, RAW);
+              text="Derzeit sitzt nur "+text+" mit Dir am Tisch.\n"; break;
+     default: if (liste[i-1]==this_player()) i--;
+              l=liste[i-1];
+              if (liste[i-2]==this_player()) i--;
+              f=liste[i-2];
+              text="Derzeit sitzen "+f->Name(WER, RAW);
+              for(i=i-3;i>=0;i--)
+                if (liste[i]!=this_player())
+                  text+=", "+liste[i]->Name(WER, RAW);
+              text+=" und "+l->Name(WER, RAW)+" mit Dir am Tisch.\n";
+   }
+   return text;
+}
+
+varargs string GetExits(object viewer)
+{
+  return "Mit <verlasse tisch> kannst Du vom Tisch wieder aufstehen.\n"
+         "Mit <beende spiel> kann der aktuelle Spieler das Spiel "
+         "vorzeitig abbrechen.\n";
+}
+
+string long()
+{
+   object* liste;
+   string text;
+   int i;
+   if (present(this_player(), this_object())) return Query(P_LONG);
+   liste=filter_array(all_inventory(), #'living);
+   switch (i=sizeof(liste)) {
+     case 0: text="Derzeit sitzt noch niemand"; break;
+     case 1: text="Derzeit sitzt nur "+liste[0]->Name(WER, RAW); break;
+     default: text="Derzeit sitzen "+liste[i-1]->Name(WER, RAW);
+              for(i=i-2;i>0;i--)
+                text+=", "+liste[i]->Name(WER, RAW);
+              text+=" und "+liste[0]->Name(WER, RAW);
+   }
+   if (playing)
+     text+=" am Tisch und spielen Maexchen. "
+       "Wenn Du moechtest, kannst Du ja ein bisschen zuschauen.\n";
+     else
+       text+=" am Tisch.\n"
+         "Solltest Du mitspielen wollen... (Syntax: spiele maexchen)\n";
+   return Query(P_LONG)+text;
+}
+
+nosave string rd_regeln()
+{
+  if (this_player())
+    this_player()->More( "\n"
+    "'Maexchen, das ultimative Spiel fuer Jung und Alt' ist so einfach, dass "
+    "Ihr es theoretisch sogar mit Orks spielen koenntet (vorausgesetzt, sie "
+    "wuerden die Regeln auch akzeptieren und sie nicht waehrend des Spiels "
+    "mit ihrer Keule aendern :) ).\n\n"
+    "Nun aber zum eigentlichen Spiel: waehrend des Spiels geht ein "
+    "Wuerfelbecher rum und man hat jetzt eigentlich nur 3, manchmal auch 4 "
+    "Moeglichkeiten, zwischen denen mal waehlen kann:\n\n"
+ "1. Man <wuerfelt> und <behauptet> dann man haette eine Zahl geworfen, die\n"
+ "   groesser als die ist, die einem der Vordermann bereits gegeben hat.\n"
+ "2. Man glaubt, dass der Vordermann untertrieben hat und <behauptet> dann,\n"
+ "   unter dem Wuerfelbecher laege sogar eine noch hoerere Zahl.\n"
+ "3. Man glaubt nicht, das _mindestens_ soviel unter dem Becher liegt, wie\n"
+ "   vom Vordermann behauptet. In diesem Falle sollte man den Becher dann\n"
+ "   <aufdecken>. Dieses ist dann entweder fuer einen selbst oder fuer den\n"
+ "   Vordermann der Moment der Wahrheit.\n"
+ "4. Da ein Maexchen immer doppelt zaehlt, hat man bei ihm die Moeglichkeit,\n"
+ "   es zu <glauben>, das bedeutet man verliert \"nur\" einfach, darf dafuer\n"
+ "   aber auch nicht nachschauen, ob es wirklich eins war :)\n\n"
+    "Wert der Wuerfe:\n"
+    "normale Wuerfe, Einerpasch, Zweierpasch..., Sechserpasch, Maexchen (21),"
+    "wobei bei einem normalen Wurf der hoehere Wuerfel*10 zum zweiten Wuerfel "
+    "addiert wird, d.h. der niedrigste Wurf ist die 31 (21 ist ja das "
+    "Maexchen).\n\n"
+    "              Viel Spass wuenschen Euch die Padreic'schen Spielewerke\n"
+    "              aus einem fernen Land namens MorgenGrauen.\n"
+    "\n"
+    "Dieses Produkt ist von Umtausch & Reklamationen jedweder Art "
+    "ausgeschlossen.\n\n");
+  return "";
+}
+
+string teile_mit()
+{
+  if (!previous_object()) return 0;
+  if (!present(previous_object(), this_object())) {
+    previous_object()->Set(P_DEAF, 0, F_QUERY_METHOD);
+    return previous_object()->Query(P_DEAF);
+  }
+  if (!member((["teil","teile","erzaehl","erzaehle"]),query_verb()))
+    return previous_object()->Query(P_DEAF);
+  if (!present(this_player(), this_object()))
+    return previous_object()->Query(P_DEAF);
+  tell_room(this_object(), break_string(
+    this_player()->Name(WER)+" fluestert "+previous_object()->name(WEM)
+   +" etwas ins Ohr.", 78), ({ this_player(), previous_object() }));
+}
+
+void init()
+// unsichtbare haben in diesem Raum nichts zu suchen.
+{
+  ::init();
+  if (!this_player())
+  {
+    log_file("report/woody.rep", ctime()+" BUG! no this_player() in init() "
+        "of ["+file_name()+"].\n");
+    return;
+  }
+  if ((this_player()->QueryProp(P_INVIS))&&(present(this_player(), TO)))
+  {
+    write("Diesen Raum solltest Du nicht unsichtbar betreten, da Du damit "
+        "das laufende\nSpiel stoeren wuerdest. Wenn Du einfach nur unentdeckt "
+        "das Spiel verfolgen\nmoechtest, dann schau einfach wie ein normale "
+        "Spieler zu <schau bei spiel zu>.\n");
+    tell_flag=1;
+    if (!ENV(TO))
+    {
+      write("BUG! Der Tisch hat kein environment()\n");
+      this_player()->move("/gilden/abenteurer", M_SILENT|M_NOCHECK);
+      log_file("report/woody.rep", ctime(time())+
+          " Bug im Maexchentisch ("+file_name(TO)+"): kein environment.\n");
+    }
+    else if (this_player()->move(ENV(TO), M_GO|M_NO_SHOW)!=1)
+    {
+      write("Du kannst auf die Spieler im Raum ["+file_name(ENV(TO))+
+          "] warten.\n");
+      this_player()->move("/gilden/abenteurer", M_NOCHECK);
+    }
+    tell_flag=0;
+    return;
+  }
+  // normale NPCs wie z.B. Haustiere, haben hier nichts zu suchen
+  tell_flag=1;
+  if (!interactive(this_player()) && (!this_player()->id(MSPIELER)) &&
+      present(this_player(), TO) )
+    if ((!ENV(TO))||(this_player()->move(ENV(TO), M_GO|M_SILENT)!=1))
+      this_player()->move("/room/void", M_NOCHECK|M_SILENT);
+  if (playing && present(this_player(), TO)) {
+    write("Es laeuft derzeit schon ein Spiel, dass Du stoeren wuerdest :(\n");
+    if (ENV(TO))
+      this_player()->move(ENV(TO), M_GO|M_NO_SHOW);
+    else log_file("report/woody.rep", ctime(time())+
+        " Bug im Maexchentisch ("+file_name(TO)+"): kein environment.\n");
+  }
+  if (!playing) this_player()->SetProp(LOSE_ROUND, 0); // Property loeschen
+  tell_flag=0;
+  this_player()->Set(P_DEAF, #'teile_mit, F_QUERY_METHOD);
+}
+
+int magierbewegung()
+{
+  if (!IS_LEARNING(this_player())) return 0;
+  if (present(this_player(), this_object())) RemovePlayer(this_player(), 1);
+  RemoveZuschauer();
+}
+
+int invisabfangen()
+// in diesem Raum duerfen Magier sich nicht unsichtbar machen
+{
+  if (!IS_LEARNER(this_player())) return 0;
+  if (!present(this_player(), this_object())) return 0;
+  write("In diesem Raum solltest Du Dich bitte nicht unsichtbar machen.\n");
+  return 1;
+}
+
+int spielen(string was)
+{
+  if (!ENV(TO)) return 0;
+  if (present(this_player(), this_object())) return 0;
+  notify_fail("Moechtest Du mit Maexchen spielen? (Syntax: spiele Maexchen)\n");
+  if (was!="maexchen") return 0;
+  if (this_player()->InFight())
+  {
+    write("Du bist noch zu sehr in den Kampf vertieft.\n");
+    return 1;
+  }
+  if (!playing)
+  {
+    tell_flag=1;
+    zuschauer-=({ this_player() });
+    this_player()->move(this_object(), M_GO, "an den Tisch", "setzt sich",
+                                           "setzt sich auch an den Tisch");
+    tell_flag=0;
+  }
+  else write("Es ist derzeit leider schon ein Spiel im Gange.\n");
+  return 1;
+}
+
+int beenden(string was)
+{
+  object ob;
+  if (!ENV(TO)) return 0;
+  if (!present(this_player(), this_object())) return 0;
+  notify_fail("Moechtest Du das Spiel beenden? (Syntax: beende spiel)\n");
+  if (was!="spiel") return 0;
+  if (!(ob=present(WBECHER, this_player())))
+  {
+     write("Nur der Spieler der gerade am Zug ist darf das Spiel beenden.\n");
+     return 1;
+  }
+  else
+  {
+    int max,i;
+    object *inv;
+    inv=all_inventory();
+    max=MAX_LOSE;
+    for (i=sizeof(inv)-1;i>=0;i--)
+      if (inv[i]->QueryProp(LOSE_ROUND)<max) max=inv[i]->QueryProp(LOSE_ROUND);
+    if (this_player()->QueryProp(LOSE_ROUND)>max)
+    {
+       write("Nur der Spieler der gerade fuehrt darf das Spiel beenden.\n");
+       return 1;
+    }
+    tell_room(this_object(), this_player()->Name(WER)+" beendet das Spiel.\n");
+    tell_zuschauer(this_player()->Name(WER)+" beendet das Spiel.\n");
+    playing=0;
+    ob->NewGame();
+  }
+  return 1;
+}
+
+int verlassen(string was)
+{
+  if (!ENV(TO)) return 0;
+  if (!present(this_player(), this_object())) return 0;
+  notify_fail("Moechtest Du den Tisch verlassen? (Syntax: verlasse Tisch)\n");
+  if (was!="tisch" && was!="spiel") return 0;
+  tell_flag=1;
+  if (playing) {
+    write("Du stehst vom Tisch auf und verlaesst vorzeitig das Spiel.\n");
+    this_player()->move(ENV(TO), M_GO, "das Spiel", "verlaesst",
+        "steht vom Tisch auf und verlaesst das Spiel");
+  }
+  else
+  {
+    write("Du steht wieder vom Tisch auf.\n");
+    this_player()->move(ENV(TO), M_GO, "wieder vom Tisch auf", "steht",
+        "steht wieder vom Tisch auf");
+  }
+  tell_flag=0;
+  return 1;
+}
+
+int aufstehen(string was)
+{
+  if (!ENV(TO)) return 0;
+  if (!present(this_player(), this_object())) return 0;
+  notify_fail("Moechtest vom Tisch aufstehen?\n");
+  switch(was) {
+    case "auf":
+    case "vom tisch auf":
+    case "von tisch auf": verlassen("tisch"); return 1;
+    default:
+  }
+}
+
+void BecomesNetDead(object pl)
+{
+  if (!ENV(TO) || !present(pl, TO)) return;
+  tell_flag=1;
+  if (playing)
+    pl->move(ENV(TO), M_GO, "das Spiel", "verlaesst",
+        "steht vom Tisch auf und verlaesst das Spiel");
+  else
+    pl->move(ENV(TO), M_GO, "wieder vom Tisch auf", "steht",
+        "steht wieder vom Tisch auf");
+  tell_flag=0;
+}
+
+int zuschauen(string was)
+{
+  notify_fail("Wobei willst Du zuschauen?\n");
+  switch (was) {
+    case "bei spiel zu":
+    case "bei maexchen zu":
+      AddZuschauer();
+      if (playing)
+        write("Gespannt schaust Du nun dem Spiel zu.\n");
+      else
+        write("Gespannt wartest Du darauf, dass das Spiel endlich beginnt.\n");
+      return 1;
+    default: return 0;
+  }
+}
+
+int beobachten(string was)
+{ notify_fail("Moechtest Du vielleicht beim Maexchenspiel zuschauen?\n"); }
+
+void AddZuschauer()
+{
+  int i;
+  if (member_array(this_player(), zuschauer)==-1) {
+    zuschauer+=({ this_player() });
+    // nur um eine Meldung zu bekommen, wenn sich der Spieler weiterbewegt.
+    this_player()->AddPursuer(this_object());
+  }
+  else write("Du schaust doch schon zu.\n");
+}
+
+int PreventFollow(object dest)
+// wenn der Spieler den Raum verlaesst, ist er kein Zuschauer mehr.
+{
+  if (dest==ENV(TO)) return 1;
+  RemoveZuschauer();
+  return 2;
+}
+
+void RemoveZuschauer()
+{  zuschauer-=({ this_player() }); }
+
+void tell_zuschauer(string was)
+{
+   zuschauer-=({0});
+   filter_array(zuschauer, #'tell_object, was);
+}
+
+int Playing()
+{ return playing; }
+
+void SetPlaying()
+// wenn this_player im raum ist, startet das spiel (sonst endet ein begonnenes)
+{  
+   object *liste;
+   playing=0;
+   liste=filter_array(all_inventory(), #'living);
+   if (!sizeof(liste)) return;
+   akt_player=member_array(this_player(), liste);
+   if (akt_player<0) return;
+   playing=1;
+   last_player=this_player();
+}
+
+varargs int PreventInsert(object ob)
+{
+  if (ob->id(WBECHER)) return 0;
+  if (!living(ob)) {
+    ob->move(ENV(TO), M_PUT);
+    if (!query_verb()) return 1;
+    if (!ob->QueryProp(P_SHORT)) return 1;
+    write("Du laesst "+ob->Name(WEN)+" fallen.\n");
+    tell_room(TO, TP->Name(WER, RAW)+" laesst "+
+        ob->Name(WEN)+" fallen.\n", ({TP}));
+    tell_zuschauer(TP->Name(WER, RAW)+" laesst "+
+        ob->Name(WEN)+" fallen.\n");
+    return 1;
+  }
+  // wenn das Spiel einmal gestartet hat, darf hier nix und niemand mehr rein
+  if (playing) return 1;
+  return ::PreventInsert(ob);
+}
+
+int Player()
+{ return sizeof(filter_array(all_inventory(), #'living)); }
+
+object NextPlayer(object pl)
+// pl - duerfte im Normalfall this_player() sein
+{
+  object ob;
+  last_player=pl;
+  ob=pl;
+  while ( (ob=next_inventory(ob))&&(!living(ob)) ); // sucht next living
+  if (!ob) {
+    ob=first_inventory();
+    while((ob)&&(!living(ob))&&(ob=next_inventory(ob))&&(ob!=pl));
+  }
+  if ((!ob)||(ob==pl)) 
+    return this_object();
+  return ob;
+}
+
+object LastPlayer()
+{ return last_player; }
+
+varargs void RemovePlayer(object pl, int silent)
+{
+  object ob;
+  if (ob=present(WBECHER, pl)) {
+    ob->move(ob=NextPlayer(pl), M_GIVE|M_NOCHECK);
+    write("Du gibst den Wuerfelbecher an "+ob->name(WEN, RAW)+" weiter.\n");
+    if (!silent)
+    {
+      tell_object(ob, pl->Name(WER, RAW)+
+          " scheidet aus dem Spiel aus und gibt Dir den Wuerfelbecher.\n");
+      tell_room(TO, pl->Name(WER, RAW)+
+          " scheidet aus und gibt "+ob->name(WEM, RAW)+" den Wuerfelbecher.\n",
+          ({ pl, ob }));
+      tell_zuschauer(pl->Name(WER, RAW)+" scheidet aus und gibt "+
+          ob->name(WEM, RAW)+" den Wuerfelbecher.\n");
+    }
+    else
+    {
+      tell_object(ob, pl->Name(WER, RAW)+" gibt Dir den Wuerfelbecher.\n");
+      tell_room(TO, pl->Name(WER, RAW)+" gibt "+
+          ob->name(WEM, RAW)+" den Wuerfelbecher.\n", ({ pl, ob }));
+      tell_zuschauer(pl->Name(WER, RAW)+" gibt "+ob->name(WEM, RAW)+
+          " den Wuerfelbecher.\n");
+    }
+  }
+  else if (!silent)
+  {
+    tell_room(TO, pl->Name(WER, RAW)+
+        " scheidet aus dem Spiel aus.\n", ({ pl }));
+    tell_zuschauer(pl->Name(WER, RAW)+" scheidet aus dem Spiel aus.\n");
+  }
+  // Nicht Zuschauer bekommen nur eine "normale" Bewegung zu sehen
+  // ist sonst naemlich sehr irritierend
+  if (!silent)
+  {
+    tell_object(pl, "Damit bist Du wohl soeben ausgeschieden.\n"
+                   +"Deprimiert stehst Du auf und verlaesst den Tisch.\n");
+    if (ENV(TO))
+      tell_room(ENV(TO), pl->Name(WER, RAW)+" kommt an.\n", zuschauer);
+  }
+  pl->move(ENV(TO), M_GO|M_SILENT);
+}
+
+void LoseRound(object pl, int lose)
+{
+  if (!objectp(pl) || !present(pl, this_object())) {
+    tell_room(this_object(),
+        "Leider ist der Verlierer dieser Runde schon nicht mehr anwesend.\n");
+    tell_zuschauer("Leider ist der Verlierer dieser Runde schon nicht mehr "
+        "anwesend.\n");
+    return;
+  }
+  tell_object(pl, "Du hast diese Runde leider verloren.\n");
+  tell_room(this_object(), pl->Name(WER, RAW)+
+      " hat diese Runde wohl verloren.\n", ({ pl }) );
+  tell_zuschauer(pl->Name(WER, RAW)+" hat diese Runde wohl verloren.\n");
+  pl->SetProp(LOSE_ROUND, pl->QueryProp(LOSE_ROUND)+lose);
+  if (pl->QueryProp(LOSE_ROUND)>=MAX_LOSE)
+  {
+    RemovePlayer(pl);
+    // auf wunsch von Matis schaut man anschliessend erstmal automatisch zu
+    zuschauer+=({ pl });
+    pl->AddPursuer(this_object());
+  }
+  else
+  {
+    // Wuerfelbecher grabschen :)
+    object wb;
+    if (pl==this_player()) return; // er hat den Becher sowieso schon
+    if (objectp(wb=present(WBECHER, this_player())))
+      wb->move(pl, M_GIVE|M_NOCHECK);
+  }
+}
+
+void exit()
+{
+   object* liste;
+   object ob,pl;
+   pl=previous_object();
+   if (!pl)
+   {
+     log_file("report/woody.rep", ctime()+
+         " BUG! no previous_object() in exit() of ["+file_name()+"].\n");
+     return;
+   }
+   if (ob=present(WBECHER, pl))
+     if (!playing)
+     {
+       ob->move(this_object(), M_PUT|M_NOCHECK);
+       write("Du laesst den Wuerfelbecher fallen.\n");
+       tell_room(TO, pl->Name(WER, RAW)+
+           " laesst den Wuerfelbecher fallen.\n", ({ pl }));
+       tell_zuschauer(pl->Name(WER, RAW)+
+           " laesst den Wuerfelbecher fallen.\n");
+     }
+     else
+     {
+       ob->move(ob=NextPlayer(pl), M_GIVE|M_NOCHECK);
+       write("Du gibst den Wuerfelbecher an "+ob->Name(WEN, RAW)+" weiter.\n");
+       tell_object(ob, pl->Name(WER, RAW)+" gibt Dir den Wuerfelbecher.\n");
+       tell_room(TO, pl->Name(WER, RAW)+" gibt "+ob->Name(WEM, RAW)+
+           " den Wuerfelbecher.\n", ({ pl, ob }));
+       tell_zuschauer(pl->Name(WER, RAW)+" gibt "+ob->Name(WEM, RAW)+
+           " den Wuerfelbecher.\n");
+     }
+   if (playing)
+   {
+     liste=filter_array(all_inventory(), #'living);
+     if (sizeof(liste)==2)
+       if (liste[0]==pl)
+         winning(liste[1]);
+         else winning(liste[0]);
+   }
+   pl->SetProp(WARNUNG, 0);    // Propertys loeschen und freigeben
+   pl->SetProp(LOSE_ROUND, 0); 
+   pl->Set(P_DEAF, 0, F_QUERY_METHOD);
+   ::exit();
+}
+
+void winning(object pl)
+{
+  object ob;
+  if (!playing) return;
+  playing=0;
+  pl->SetProp(LOSE_ROUND, 0); // Property loeschen
+  tell_object(pl, "Nachdem Du als einziger uebrig geblieben bist, "
+      "hast Du das Spiel wohl gewonnen.\n"
+      "Gluecklich stehst Du auf und verkuendest laut: Gewonnen!\n");
+  tell_room(TO, pl->Name(WER, RAW)+" grinst breit und sagt: Gewonnen!\n",
+      ({ pl }));
+  tell_zuschauer(pl->Name(WER, RAW)+" grinst breit und sagt: Gewonnen!\n");
+  zuschauer=({});
+  if (!interactive(pl) && (ob=present(WBECHER, pl)))
+    ob->move(this_object(), M_PUT|M_NOCHECK);
+}
+
+nosave int nehmen(string was)
+{
+  switch(was)
+  {
+    case "liste":
+      write("Warum willst Du denn immer gleich alles nehmen, "
+          "Du kannst die Liste doch\nauch einfach so lesen!\n");
+      return 1;
+    case "buch":
+    case "regelbuch":
+      write("Warum willst Du denn immer gleich alles nehmen, "
+          "Du kannst das Buch doch\nauch einfach so lesen!\n");
+      return 1;
+    default: return 0;
+  }
+}
+
+remove()
+{
+  object ob;
+  while(ob=deep_present(WBECHER, TO)) {
+    ob->remove();
+    if (ob) destruct(ob); // sonst koennte es eine endlosschleife geben
+  }
+  return ::remove();
+}
+
+int clean_up(int refcount) { return 1; }
+

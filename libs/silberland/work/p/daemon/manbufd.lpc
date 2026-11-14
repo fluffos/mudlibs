@@ -1,0 +1,409 @@
+// SilberLand MUDlib
+//
+// p/daemon/manbufd.c -- caching man page daemon
+//
+// $Date: 2010/11/17 14:27:58 $
+/* $Revision: 1.6 $
+ * $Log: manbufd.c,v $
+ * Revision 1.6  2010/11/17 14:27:58  Woody
+ * Meldung in _fill() eindeutiger gemacht
+ *
+ * Revision 1.5  2008/12/26 10:20:48  Woody
+ * Kleine sprachliche Aenderungen
+ *
+ * Revision 1.4  2003/06/18 13:43:12  Woody
+ * Pfade mit . oder _ vorn beim Cachefuellen ignorieren
+ *
+ * Revision 1.3  2003/06/10 12:16:46  Woody
+ * Substringsuche, wenn man-page nicht gefunden (by Archon@SL)
+ *
+ * Revision 1.2  2002/01/06 23:56:15  Woody
+ * MB_STRING, MB_ICASE flags, case insensitive man page search
+ *
+ * Revision 1.1  2001/03/01 15:14:03  Woody
+ * Initial revision
+ *
+ */
+
+
+/*
+ * uebernommen aus der Wunderland Mudlib
+ * Kann Seiten auch als String zurueckliefern
+ * Autor: Fiona@Wunderland
+ */
+
+#include <config.h>
+#include <defines.h>
+
+#define START "/doc"
+#define MAX_GREPS 30
+#define MB_STRING       1       // return as string
+#define MB_ICASE        2       // ignore case
+
+#pragma strong_types
+
+// cache data
+nosave mapping cache;           // actual cache
+// statistical data
+nosave int stHits, stMisses, stEntered, stInvalid, stNotFound;
+
+// prototypes
+public varargs string query_man(string path, string* key, int flags);
+private varargs void fill_cache(string path, string key, int icase);
+private void old_search(string path, string* key);
+public string* grep_man(string key, string path);
+public void _fill();
+
+
+/*
+ * Diese Funktion durchsucht den Cache nach einer bereits gefundenen Seite,
+ * sonst wird sie gesucht und im Cache eingetragen. Ist indirekt gesetzt,
+ * so wird die Seite als Funktionswert zurueckgeliefert, ansonsten wird sie
+ * direkt an this_player() ausgegeben.
+ * Wird eine Seite gefunden, so wird der entsprechende Eintrag im key
+ * Array auf 0 gesetzt; uebergibt man also diesen Parameter by reference,
+ * kann man im Nachhinein feststellen, welche Seiten gefunden wurden.
+ * Wenn path nicht im Standardpfad liegt, wird indirect ignoriert und der
+ * Cache bleibt aussen vor.
+ */
+public varargs string query_man(string path, string* key, int flags)
+{
+  string ret, *filenames, *tmp, text, *syn;
+  int i, j, num, dump;
+
+  if (!path) path = START;
+  if (path[0..strlen(START)]!=(START+"/")[0..strlen(path)-1])
+  {
+    old_search(path, &key);
+    return 0;
+  }
+
+  syn = ({ });
+  filenames = ({});
+  num = sizeof(key);
+
+  for (i = 0; i < num; i++)
+  {
+    if (!member(cache, key[i]))
+    {
+      stMisses++;
+      fill_cache(path, key[i],flags);
+      if (!member(cache, key[i]))   // Key immer noch nicht gefunden, also im
+                                    // /doc/.manbuf nach synonym schauen
+      {
+        if (!sizeof(syn) && (text = read_file(START + "/.manbuf")))
+          syn = regexplode(text, "([ \t][ \t]*|\n)");
+        if ((j=member(syn, key[i])) != -1) {
+          key[i] = syn[j+2];
+          if (!member(cache, key[i]))
+            fill_cache(path, key[i]);
+        }
+      }
+    }
+    else
+      stHits++;
+
+    tmp=0;
+    if (member(cache, key[i]))
+    {
+      tmp=map_array(cache[key[i]], #'+, "/"+key[i]);
+      if (sizeof(filter_array(tmp, lambda( ({ 'x }),
+                ({ #'==, ({ #'file_size, 'x }), -1 }) ))))
+      {
+        // gecachtes file ist (teilweise) verschwunden ?!!
+        stInvalid++;
+        cache = m_delete(cache, key[i]);
+        fill_cache(path, key[i]);
+        if (member(cache, key[i]))
+          tmp = map_array(cache[key[i]], #'+, key[i]);
+        else tmp = 0;
+      }
+      if (tmp) {
+        filenames += tmp;
+        key[i] = 0;
+      }
+    }
+    // Man-Page nicht gefunden -> Loggen (Zordan)
+    if (!tmp)
+    {
+      object ob;
+
+      tmp = grep_man(key[i], path);
+      if (sizeof(tmp)) 
+      {
+	filenames += ({ "|" + key[i] + "|" + implode(tmp, ", ") });
+        key[i] = 0;
+      }
+      else
+      {
+        ob = this_player() || this_interactive();
+        stNotFound++;
+        log_file("daemon/MANBUF",
+            sprintf("[%s] %11s - %s%s\n",
+              ctime(),
+              ob ? capitalize(getuid(ob)) : file_name(previous_object()),
+              key[i], (path != START+"/" ? " (in Section "+path+")":"") ));
+      }
+    }
+  }
+
+  ret = "";
+  key -= ({ 0 });
+  dump = (num = sizeof(filenames)) > 1;
+
+  for (i = 0; i < num; i++)
+  {
+    if (filenames[i][0]=='|')
+    {
+      tmp = explode(filenames[i], "|");
+      if (sizeof(tmp) > 1)
+      {
+        if (lower_case(tmp[0]) == lower_case(tmp[1]) && (flags & MB_ICASE))
+          filenames[i] = cache[tmp[1]][0] + tmp[1];
+        else
+        {
+          ret += sprintf( "%'-'|78s\n","['"+tmp[0]+"' nicht gefunden]");
+          ret += break_string(tmp[1], 78, "Versuche: ", BS_INDENT_ONCE);
+          continue;
+        }
+      }
+    }
+
+    // Security.
+    filenames[i] = MASTER->make_path_absolute(filenames[i]);
+    if (filenames[i][0..strlen(START)-1] != START)
+      continue;
+
+    // Trennstrich.
+    // if (num > 1)        // optional nur, wenn mehr als eine Seite gefunden
+    ret += sprintf( "%'-'|78s\n", "[" +
+        explode( filenames[i], "/" )[<1] + "]" );
+
+    // Directory?
+    if (file_size(filenames[i]) == -2)
+    {
+      ret += "Themen fuer Abschnitt " +
+             efun::explode(filenames[i],"/")[<1]+":\n" +
+             break_string(
+                 implode(get_dir(filenames[i]+"/*") -
+                   ({ ".", "..", ".synonym" }), ", "), 78);
+    }
+    else        // Datei
+    {
+      if (MASTER->valid_read(filenames[i], getuid(previous_object())))
+        ret += read_file(filenames[i]);
+      else
+        ret += filenames[i] + ": Zugriff verweigert.\n";
+    }
+  }
+  if (flags & MB_STRING)
+    return ret;
+  else
+    this_player()->More(ret);
+
+  return 0;
+}
+
+private string add(string s1, string s2)
+{
+  return s2+"/"+s1;
+}
+
+private void cacheEnter(string key, string path)
+{
+  if (!member(cache, key))              // new entry?
+  {
+    cache += ([ key: ({ path }) ]);
+    stEntered++;
+    return;
+  }
+  if (member(cache[key],path) == -1)    // new path?
+    cache[key] += ({ path });
+}
+
+private varargs void fill_cache(string path, string key, int icase)
+{
+  string *files, *matches;
+  int i;
+
+  // no trailing '/'
+  if (path[<1]=='/') path=path[0..<2];
+
+  if (pointerp(files=get_dir(path+"/*"))) {
+    // no entries with leading '.'
+    files = filter_array(files, lambda( ({'x}),
+      ({#'!=, ({ #'[, 'x, 0 }), '.' }) ));
+  }
+  else
+    return;
+
+    if (member(files, key) != -1)
+      cacheEnter(key, path);
+
+  // no subdirs with leading '_'
+  files = filter_array(files, lambda( ({'x}),
+    ({#'!=, ({ #'[, 'x, 0 }), '_' }) ));
+  // canonify
+  files = map_array(files, #'add, path);
+  // filter subdirs only
+  files = filter_array(files, lambda( ({'x}),
+    ({#'==, ({ #'file_size, 'x }), -2 }) ));
+  // recurse!
+  map_array(files, #'fill_cache, key, icase);
+}
+
+private void old_print(string file)
+{
+  this_player()->More(file, 1);
+}
+
+private void old_search(string path, string* key)
+{
+  string *files, *treffer;
+  files=get_dir(path+"/*")-({".", ".."});
+  treffer=files&key;
+  key-=treffer;
+  if (sizeof(treffer)) {
+    treffer=map_array(treffer, #'add, path);
+    map_array(treffer, #'old_print);
+  }
+  files=map_array(files, #'add, path);
+  map_array(files, #'old_search, &key);
+}
+
+void create()
+{
+  if (is_clone(this_object())) raise_error("Cloning not allowed.");
+  cache = ([ ]);
+  call_out("renew_man",0);
+}
+
+int remove() {
+  printf("Mancache cleared.\n");
+  destruct(this_object());
+  return 1;
+}
+
+mapping QueryCache()
+{
+  return cache;
+}
+
+void Stat()
+{
+  string s,sd;
+  mixed c;
+  int i,di;
+
+  s=sprintf(
+      "\nmanbuf man-page-buffer (%s)\n"
+      "Up since %s\n"
+      "Hits: %d, misses: %d, entered: %d, invalid: %d, not found: %d\n",
+      ctime()[11..18], ctime(program_time()),
+      stHits, stMisses, stEntered, stInvalid, stNotFound);
+
+  di=0;
+  sd="";
+  c=sort_array(m_indices(cache), #'>);
+  for (i=sizeof(c)-1; i>=0; i--)
+    if (sizeof(cache[c[i]])>1)
+    {
+      di++;
+      sd+=sprintf("  %s: %s\n",c[i],implode(cache[c[i]],", "));
+    }
+
+  if (di)
+    s+="\n"+di+" Key(s) mit mehrfachen Eintraegen:\n"+sd;
+  this_player()->More(s+"\n");
+}
+
+private void _c_fill(string file, string path) 
+{
+  string* dateien, here;
+  int i;
+
+  // Ignore deprecated file specifications
+  if (file[0] == '.' || file[0] == '_')
+    return;
+
+  here = path + file + "/";
+  dateien = get_dir(here + "*");
+  if (!dateien) return; // War kein Dir
+  dateien -= ({ ".", ".." });
+
+  for (i=sizeof(dateien); i-->0; ) 
+  {
+    cacheEnter(dateien[i],here);
+    _c_fill(dateien[i], here);
+  }
+}
+
+public void _fill() 
+{
+  printf("manbufd: indexing manpages...\n");
+  cache=([]);
+  _c_fill("",START);
+  printf("manbufd: %d pages found.\n", sizeof(cache));
+}
+
+int in_path(string *in,string path)
+{
+  int i,l;
+
+  l = strlen(path) - 1;
+  if (!pointerp(in)) return 0; //fehler
+  for (i = sizeof(in);i-->0; )
+    if (in[i][0..l] == path)
+      return 1;
+  return 0;
+}
+
+// Durchsuchen des Caches mit Teilstring
+public string* grep_man(string key, string path) 
+{
+  string *all, *beg, *ret;
+  int i;
+
+  ret = ({});
+  if (!stringp(key) || !strlen(key)) return ({});
+  key = lower_case(key);
+  all = m_indices(cache);
+
+  // Eintraege, die mit . oder _ beginnen, rausfiltern
+  all = filter_array(all, lambda( ({'x}), ({#'!=, ({ #'[, 'x, 0 }), '.' }) ));
+  all = filter_array(all, lambda( ({'x}), ({#'!=, ({ #'[, 'x, 0 }), '_' }) ));
+
+  // beg...Seiten, die mit key beginnen
+  beg = filter_array(all, lambda( ({'x}),
+    ({#'==, ({ #'lower_case, ({ #'[..], 'x, 0, (strlen(key)-1) }) }), key }) ));
+  // all...Seiten, die key beinhalten
+  all = filter_array(all, lambda( ({'x}),
+    ({#'!=, ({ #'strstr, ({ #'lower_case, 'x }), key }), -1 }) ));
+  all -= beg;
+
+  // Checken ob mind. 1 Seite des Eintrags zugaenglich
+  beg = filter_array(beg, lambda( ({'x}),
+    ({#'in_path, ({ #'[, cache, 'x }), path }) ));
+  all = filter_array(all, lambda( ({'x}),
+    ({#'in_path, ({ #'[, cache, 'x }), path }) ));
+
+  // Sortieren
+  beg = sort_array(beg, #'>);
+  all = sort_array(all, #'>);
+
+  // Haben wir schon mehr als MAX_GREPS beg-Eintraege?
+  if (sizeof(beg) > MAX_GREPS)
+    return beg[0..MAX_GREPS-1] + ({ "..." });
+
+  // Haben wir insgesamt mehr als MAX_GREPS Eintraege?
+  if ((sizeof(beg) + sizeof(all)) > MAX_GREPS)
+    return (beg + all)[0..MAX_GREPS-1] + ({ "..." });
+
+  // Nein, gesamtes Ergebnis zurueckliefern
+  return beg + all;
+}
+
+void renew_man()
+{
+  _fill();
+}

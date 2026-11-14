@@ -1,0 +1,176 @@
+/*
+ * Empathie der Schatten
+ *
+ * Uebertraegt Lebenspunkte des Nekromanten auf das Ziel. Paladine 
+ * bekommen dadurch einen "Makel", der Ihre Spellkosten erhoeht. Wenn der
+ * Success > 6000 ist und das Opfer ein Align > 100 hat wird eine eventuelle
+ * Blindheit, Taubheit und Verfroschung auf das Opfer uebertragen.
+ *
+ * Kosten: 10 MP
+ * Level : 2 
+ * Schaden: 30+random(30)
+ * Hp's beim Ziel: ca 30 (varibale durch Align)
+ *
+ * Skillpunktefaehig (weniger schaden, mehr hp)
+ *
+ * Status: anschlussreif
+ *
+ */
+
+object schattenempathie_find_victim(object caster,mapping sinfo, int silent)
+{
+  object victim;
+  string str;
+
+  str=sinfo[SI_SKILLARG];
+  if (!victim=present(str,environment(caster)))
+  {
+    if (!silent)
+     write("So etwas siehst Du da nicht!\n");
+    return 0;
+  }
+  if(victim == caster) {
+    write(sprintf("%s So geht das nicht!\n", random_fluch()));
+    return 0;
+  }
+  return victim;
+}
+
+int prep_schattenempathie(object caster, mapping sinfo)
+{
+  object victim;
+  string str;
+  str=sinfo[SI_SKILLARG];
+  if(!stringp(str) || !strlen(str))
+  {
+    write("Wem moechtest Du Deine Lebensenergie uebertragen?\n");
+    return 0;
+  } 
+  victim=schattenempathie_find_victim(caster,sinfo,0);
+  if (!victim) return 0;
+  sinfo[SI_ENEMY]=victim;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  tell_room(ENV(caster), BS(sprintf("%s scheint in Gedanken versunken zu "
+          "sein und grinst dabei haemisch.", caster->Name())),({caster}));
+  return 1;
+}
+
+int schattenempathie(object caster, mapping sinfo) 
+{
+  object victim;
+  int suc,hp,dam,skp,help;
+  string str;
+ 
+  victim=sinfo[SI_ENEMY];
+  str=sinfo[SI_SKILLARG];
+  if (!present_victim(victim,caster))
+  {
+    write(BSC(sprintf("%s! '%s' ist nicht mehr hier! Wie kann man nur "
+            "so versagen?!", caster->QueryProp(P_GENDER)==FEMALE?
+            "NAERRIN":"NARR",CAP(str))));
+    return 0;
+  }
+  if (victim->QueryProp(P_HP)==victim->QueryProp(P_MAX_HP))
+  {
+    write(BSC(sprintf("%s! '%s' braucht Deine Hilfe gar nicht!", 
+            caster->QueryProp(P_GENDER)==FEMALE?
+            "NAERRIN":"NARR",CAP(str))));
+    return 0;
+  }
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+
+  write(BSC(sprintf(
+    "Du konzentrierst Dich auf Deine Essenz und laesst Deine unheilige "
+    "Lebensenergie zu %s stroemen!", victim->name(WEM))));
+
+  say(BS(sprintf("%s verzieht %s Gesicht zu einer Grimasse.", 
+          caster->Name(WER), caster->QueryPossPronoun(WESSEN))));
+
+  suc=SpellSuccess(caster,sinfo);
+  skp=get_skillpoints(caster,"empathie der schatten");
+  dam=30+random(30);
+  dam-=(int) (skp*2);
+  if(dam < 5) dam = 5;
+
+  if (suc <= 0)
+  {
+     do_spellbook_damage(dam/4,caster, "Entzug der Lebensenergie",0);
+     return MISSERFOLG;
+  }
+  write(BSC(sprintf("Ein Schatten loest sich von Deinem Koerper, und mit ihm "
+        "verschwindet ein Teil Deiner Lebensessenz. Der Schatten schwebt "
+        "auf %s zu und vereinigt sich mit %s. %s sieht gestaerkt aus.",
+        victim->name(WEN), victim->QueryPronoun(WEM), 
+        CAP(victim->QueryPronoun(WER)))));
+
+  tell_object(victim, BS(sprintf("Aus dem Koerper von %s loest sich ein "
+          "Schatten und schwebt auf Dich zu. Du kannst noch erkennen "
+          "das %s geschwaecht wirkt, da dringt der Schatten schon in Dich "
+          "ein!", caster->name(WER), caster->name(WER))));
+  tell_room(ENV(caster), BS(sprintf("Aus dem Koerper von %s loest sich ein "
+          "Schatten und schwebt auf %s zu. Der Schatten verschmilzt mit "
+          "%s und %s sieht ploetzlich gesuender aus!",caster->name(WER),
+          victim->name(WEN), victim->QueryPronoun(WEM), 
+          victim->QueryPronoun(WER))), ({caster, victim}));
+  if(suc > 6000 && skp > random(7) && victim->QueryProp(P_ALIGN) > 100) {
+    if(help=caster->QueryProp(P_BLIND)) {
+      write("Du bist nicht mehr blind!\n");
+      tell_room(ENV(caster), BS(sprintf("%s kann auf einmal wieder sehen! "
+              "%s ist auf einmal blind!", caster->Name(WER), 
+              victim->Name(WER))), 
+          ({caster}));
+      tell_object(victim, BS("Ploetzlich wirst Du blind!"));
+      victim->SetProp(P_BLIND, help);
+    }
+    if(help=caster->QueryProp(P_FROG)) {
+      write("Du bist nicht mehr verfroscht!\n");
+      tell_room(ENV(caster), BS(sprintf("%s wird wieder normal! %s wird "
+              "ein Frosch!", caster->Name(WER), victim->Name(WER))), 
+          ({caster}));
+      tell_object(victim, BS("Ploetzlich wirst Du ein Frosch. Quak!"));
+      victim->SetProp(P_FROG, help);
+    }
+    if(help=caster->QueryProp(P_DEAF)) {
+      write("Du bist nicht mehr taub!\n");
+      tell_room(ENV(caster), BS(sprintf("%s kann auf einmal wieder hoeren! "
+              "%s ist auf einmal taub!", caster->Name(WER), 
+              victim->Name(WER))), 
+          ({caster}));
+      tell_object(victim, BS("Ploetzlich wirst Du taub!"));
+      victim->SetProp(P_DEAF,help);
+    }
+  }
+  do_spellbook_damage(dam,caster, "Entzug der Lebensenergie",0);
+
+  hp=DoModificationByAlign(30+random(10),caster, victim);
+  hp+=skp;
+
+  if( victim->QueryProp(P_NEKRO_MASTERED_BY) == caster || victim == caster->QueryProp(P_NEKRO_MASTERED_UTILITY_UNDEAD)) {
+    hp*=2; // Auf einen eigenen Untoten wirkt es doppelt so gut.
+
+    // bei 10 SKP kann man vom eigenen untoten LeP absaugen
+    if(skp > 9 && !objectp(victim->QueryProp(P_NEKRO_LIFE_LINK))) {
+      victim->SetProp(P_NEKRO_LIFE_LINK, caster);
+      write(BS(sprintf("Eine Verbindung aus dunkler Macht entsteht zwischen dir und %s. Du kannst nun auf seine "
+                       "Essenz zugreifen! (<lebensentzug [untoter]>)", victim->name(WEN, 1))));
+      say(BS(sprintf("Ein Band aus dunkler Energie verbindet %s und %s.", caster->name(WEN, 1), victim->name(WEN, 1))));
+    }
+  }
+
+  victim->AddHp(hp);
+  if( victim->QueryProp(P_ALIGN)>-800 )
+    victim->SetProp(P_ALIGN, victim->QueryProp(P_ALIGN)-random(40));
+
+  UseBlood();
+  return ERFOLG;
+}

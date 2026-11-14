@@ -1,0 +1,207 @@
+
+// xplog.c
+// (hier koennte jemand schreiben, was das file ueberhaupt tut)
+//
+// 17.1.2004  (Feyaria?)  P_LOST_XP -> P_TOTAL_LOST_XP
+// 21.1.2004  Woody       die 4 restlichen P_LOST_XP -> P_TOTAL_LOST_XP
+
+
+#include "../def.h"
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include <wizlevels.h>
+
+#define COSTS 10
+#define tage ({  "Sonntag","Samstag","Freitag","Donnerstag","Mittwoch", \
+                 "Dienstag","Montag","Sonntag","Samstag","Freitag", \
+                 "Donnerstag","Mittwoch","Dienstag","Montag" })
+#define namen ({ "Son","Sam","Fre","Don","Mit","Die","Mon","Son","Sam", \
+                 "Fre","Don","Mit","Die","Mon" })
+  
+nosave string owner;
+nosave mapping tabelle;
+nosave string currday;
+nosave int lasttime;
+
+void CheckDay();
+
+create() {
+  string str;
+  object ob;
+  int i,wo;
+  
+  if (!is_clone(TO)) return;
+  ::create();
+
+  if (ob=MENV||TP) {
+    str=CAP(((str=geteuid(ob))[<1]=='s'||str[<1]=='x'||str[<1] =='z')?str+="'":str+="s");
+    owner=getuid(ob);
+    SetProp( P_ARTICLE, 0 );
+  } else {
+    str="Ein";
+    owner="";
+    SetProp( P_ARTICLE, 1 );
+  }
+
+  SetProp(P_SHORT, str+" Knochen des Kampfes");
+  SetProp(P_LONG, "@@GetLong@@" );
+  SetProp(P_INFO, BS(
+    "Dieser magische Knochen ermittelt Deine taeglichen Gewinne und Verluste "
+    "an Erfahrung. Allerdings kann er Dir das nur in gewissen Zeitabstaenden "
+    "vermitteln."));
+  SetProp(P_NAME, str+" Knochen des Kampfes");
+  SetProp(P_GENDER, MALE);
+  AddId( ({ "QUESTOBJ","QUESTITEM","knochen","\n_mag_knochen","xplog",
+            "knochen des kampfes","NOUNCURSE" }) );
+
+  currday=dtime(time())[0..2];
+  tabelle=([ ]);  
+  wo=member(namen,currday);
+  if(wo>6) wo-=7;
+  lasttime=time()-1000;
+  
+  for(i=0;i<7;i++) {
+    tabelle+=([ i:tage[wo+i];0;0;0;0 ]);
+  }
+  tabelle[0,0]=tage[wo];
+  tabelle[0,1]=ob->QueryProp(P_XP);
+  tabelle[0,3]=ob->QueryProp(P_XP);
+  tabelle[0,2]=ob->QueryProp(P_TOTAL_LOST_XP);
+  tabelle[0,4]=ob->QueryProp(P_TOTAL_LOST_XP);
+
+  SetProp(P_MATERIAL, ([ MAT_BONE: 90, MAT_MISC_MAGIC: 10 ]) );
+  SetProp(P_WEIGHT, 100);
+  SetProp(P_VALUE, 5000);
+  SetProp(P_MAGIC, 1);
+  SetProp(P_CURSED, 1);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  
+  AddDetail ("aura",
+    "Die blutrote Aura umgibt den ganzen Knochen und ist sicher aus "
+    "reiner Magie.");
+  AddDetail ("stosszahn",
+    "Der magische Knochen hat nur in etwa die Groesse eines Stosszahnes.");
+  AddDetail ("magie",
+    "Dieser Knochen des Kampfes ist sogar ganz sicher hochmagisch.");
+  AddDetail ( ({"kampf","kampfes" }),
+    "Der Knochen des Kampfes traegt nicht umsonst seinen Namen.");
+}
+
+string GetLong() {
+  string str,tmp;
+  int i,sump,summ;
+  
+  CheckDay();
+  str="Dieser magische Knochen strahlt eine blutrote Aura aus.\n";
+  str+="Er ist fast so gross wie ein Stosszahn, aber lange nicht so schwer.";
+  if(!IS_WIZARD(TP)) { 
+    if(TP->QueryProp(P_SP) < COSTS) return str;
+    if(time()-lasttime < 300) return str;
+    if(TP->QueryProp(P_FROG) || TP->QueryProp(P_GHOST) || TP->InFight()) 
+      return str;
+  }
+  lasttime=time();
+  str+="\n";
+  str+=BS("Auf einmal bildet sich ein Bild in Deinem Kopf:");
+  str+="                     )       )     (*      (                     \n";
+  str+="               |\\   /|      /|     |\\      |\\   /|              \n";
+  str+="             __| \\ | \\     / |     | \\     / | / |__            \n";
+  str+="             \\    \\   \\   |  \\  ^  /  |   /   /    /           \n";
+  str+="              \\        \\.,\\   )/ \\(   /,./        /            \n";
+  str+="               \\----\\        /- M -\\          /--/              \n";
+  str+="                     \\,./\\/\\/       \\/  \\/\\,./               \n";
+  str+="                          \\ <d)     (6>/                          \n";
+  str+="                           \\ /``'-'``\\/                          \n";
+  str+="    ^                      |\\(c,.-.,o)                         ^  \n";
+  str+="  (`'`)-----------------------( |vv| )-----------------------(`'`) \n";
+  str+="   \\ /                         \\|  |/                         \\ /\n";
+  str+="   | |  Wochentag:       | Gewinn:         | Verlust:         | |  \n";
+  str+="   | | ------------------+-----------------+----------------- | |  \n";
+  if(!IS_WIZARD(TP)) TP->AddSp(-COSTS);
+  tabelle[0,3]=TP->QueryProp(P_XP);
+  tabelle[0,4]=TP->QueryProp(P_TOTAL_LOST_XP);
+  for(i=0;i<7;i++) {
+    switch(i) {
+      case 0: tmp="Heute (bisher)"; break;
+      case 1: tmp="Gestern"; break;
+      case 2: tmp="Vorgestern"; break;
+      default: tmp=tabelle[i,0]; break;
+    }
+    sump+=(tabelle[i,3]-tabelle[i,1])+(tabelle[i,4]-tabelle[i,2]);
+    summ+=tabelle[i,4]-tabelle[i,2];
+    str+=sprintf("   | |  %-16s | %15d | %15d  | | \n", 
+           tmp,
+           (tabelle[i,3]-tabelle[i,1])+(tabelle[i,4]-tabelle[i,2]),
+           tabelle[i,4]-tabelle[i,2] );
+  }
+  str+="   | | ------------------+-----------------+----------------- | | \n";
+  str+=sprintf("   | |  Summe:           | %15d | %15d  | | \n",sump,summ);
+  str+="   | |        /`'\\ '\\ '\\                    /` /` /`'\\        | |\n";
+  str+="  (,.,)------( |( \\/ \\/ )------------------( \\/ \\/ )| )------(,.,)\n";
+  str+="              \\ v /  / /                    \\ \\  \\ V /        \n";
+  str+="               `'-'--'-'                     '-'--'-`             ";
+  return str;
+}
+
+init() {
+  ::init();
+  if(getuid(MENV) != owner) {
+    call_out("remove_me",0);
+    return;
+  }
+  CheckDay();
+}
+
+remove_me() {
+  if(MENV) tell_object(MENV,BS(
+    Name()+" zerfaellt zu Staub, weil er keinen Bezug mehr zu seinem "
+    "Eigentuemer hat."));
+  ME->remove();
+}
+
+reset() {
+  ::reset();
+  if (!is_clone(TO)) return;
+  //  CheckDay();
+  if(find_call_out("CheckDay") == -1)
+    call_out("CheckDay",30+random(30)); // damit der Reset erhalten bleibt(!!!)
+}
+
+void CheckDay() {
+  string str;
+  int i,wo;
+  object ob;
+  
+  if(!ob=MENV || !query_once_interactive(ob) || getuid(ob) != owner) {
+    call_out("remove_me",0);
+    return;
+  }
+  str=dtime(time())[0..2];
+  if(currday==str) return;
+
+  currday=str;
+  wo=member(namen,currday);
+  if(wo>6) wo-=7;
+  tabelle[0,3]=ob->QueryProp(P_XP);
+  tabelle[0,4]=ob->QueryProp(P_TOTAL_LOST_XP);
+ 
+  for(i=6;i>0;i--) {
+    tabelle[i,4]=tabelle[i-1,4];      
+    tabelle[i,3]=tabelle[i-1,3];      
+    tabelle[i,2]=tabelle[i-1,2];      
+    tabelle[i,1]=tabelle[i-1,1];      
+    tabelle[i,0]=tabelle[i-1,0];
+  }
+ 
+  tabelle[0,0]=tage[wo];
+  tabelle[0,1]=ob->QueryProp(P_XP);
+  tabelle[0,3]=ob->QueryProp(P_XP);
+  tabelle[0,2]=ob->QueryProp(P_TOTAL_LOST_XP);
+  tabelle[0,4]=ob->QueryProp(P_TOTAL_LOST_XP);
+}

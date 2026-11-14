@@ -1,0 +1,62 @@
+
+int schildschlag(object caster, mapping sinfo) 
+{
+  object victim;
+  int suc;
+  object shield;
+  int dam;
+
+  victim = FindEnemyVictim(sinfo[SI_SKILLARG], caster,
+      "Wen willst Du mit deinem Schild treffen?\n");
+  if (!victim)
+    return 0;
+  if (caster->QueryProp(P_DISABLE_ATTACK))
+  {
+    tell_object(caster, "Du bist kampfunfaehig und kannst jetzt keinen "
+        "Schildschlag machen!\n");
+    return 0;
+  }
+  if (!sizeof(caster->QueryArmours(AT_SHIELD)) )
+  {
+    tell_object(caster, "Du musst einen Schild tragen haben, um einen " 
+        "Schildschlag machen zu koennen!\n");
+    return 0;
+  }
+
+  shield = caster->QueryArmours(AT_SHIELD)[0];
+
+  if (!(sinfo = pay_for_spell(caster, sinfo)))
+    return 0;
+
+  if ((suc = SpellSuccess(caster,sinfo)) <= 0)
+    return MISSERFOLG;
+
+  environment(caster)->Message(BS(sprintf("%s schlaegt mit %s zu.", caster->Name(WER,1), shield->name(WESSEN))), MSGFLAG_VISUAL, ([ MSGFLAG_EXCLUDE : ({ caster, victim }) ]) );
+
+  tell_object(caster, BSC(sprintf("Du schlaegst mit %s zu.\n", shield->name(WESSEN))));
+  tell_object(victim, BS(sprintf("%s schlaegt mit %s auf Dich ein.\n", caster->Name(WER,1), shield->name(WESSEN))));
+
+  sinfo[SI_SKILLDAMAGE] += shield->QueryProp(P_AC) * 5 + suc / 200;
+  sinfo[OFFSET(SI_SKILLDAMAGE)] += shield->QueryProp(P_AC);
+  sinfo[SI_MAX_DAMAGE] += caster->QueryProp(P_GUILD_LEVEL) * 10;
+  if(sinfo[SI_SKILLPOINTS] > 2)
+    sinfo[SI_SKILLDAMAGE] += random(caster->QueryProp(P_GUILD_LEVEL) * 10);
+
+  pDebug(caster, 
+    sprintf("dam = %d, off = %d, max = %d\n",
+        sinfo[SI_SKILLDAMAGE], 
+        sinfo[OFFSET(SI_SKILLDAMAGE)], 
+        sinfo[SI_MAX_DAMAGE])
+  );
+
+  dam = TryDefaultAttackSpell(victim, caster, sinfo, sinfo[SI_SPELL] + 
+      ([SP_REDUCE_ARMOUR: ([P_BODY: 101 - sinfo[SI_SKILLABILITY] / 100])]) );
+
+  if (objectp(victim) && suc > (6000 - (sinfo[SI_SKILLPOINTS]*500)) && victim->QueryProp(P_DISABLE_ATTACK)==0) {
+    tell_room(environment(victim), BS(sprintf("%s taumelt durch den heftigen Schildschlag zurueck.", victim->Name(WER,1))), ({ victim }) );
+    victim->SetProp(P_DISABLE_ATTACK, 1 + ((suc-6000)/2000) + sinfo[SI_SKILLPOINTS]);
+  }
+  if (IS_LEARNER(caster))
+    printf("Schaden = %d\n", dam);
+  return ERFOLG;
+}

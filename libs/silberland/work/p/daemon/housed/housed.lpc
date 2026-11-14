@@ -1,0 +1,757 @@
+/*
+ *  /p/daemon/housed/housed.c - Daemon zur Verwaltung der Seherhauser
+ *
+ *  Das Seherhaeuser-Masterobjekt beruht architektonisch im 
+ *  wesentlichen auf dem MorgenGrauen-Hausverwalter von Wargon.
+ *
+ *  Der Master verwaltet ein grosses Mapping, in dem alle Seherhaeuser
+ *  gefuehrt werden, er legt Haeuser und Raeume neu an, soll spaeter die
+ *  moeglichen Goodies verteilen koennen, und er beantwortet auch die
+ *  Anfragen neu erzeugter Standardraeume, die wissen wollen, ob sie ein
+ *  Seherhaus haben.
+ *
+ *  (c) 1998-2000 Mud Silberland - Adrian Holzwarth / Anatol@Silberland
+ *
+ *  1999 02 16 Revision 0.6 Erweitert die Anhangsregionen um die Gilden-
+ *                          verzeichnisse, als "RM" gilt alle mit Schreib-
+ *                          rechten im dortigen Verzeichnis.
+ *
+ *  2000 11 16 Revision 0.7 Umzug nach /p/daemon/housed,
+ *                          verwendet jetzt HOUSED_CARETAKER in verysecure(),
+ *                          logging nach /log/daemon/
+ *
+ *  2000 11 25 Revision 0.8 PCrunch() sicherheitshalber auf eine Tiamak-
+ *                          Loesung umgestellt - bei grossen Seherhaeusern
+ *                          Geschwindigkeitsgewinn der Funktion etwa 50% 
+ *                          bei den Commands, Faktor 10 bis 50 (je nach 
+ *                          Raumgroesse) bei den Details. Tiamak eben ;)
+ *
+ *  2000 12 04 Revision 0.9 (globale Variable etc.), includes umgestellt.
+ *
+ *  2001 02 16 Revision 0.10  seteuid() vorgezogen
+ *
+ *  2001 11 15 Revision 0.11 Bugfix in GetInfo(), gleiche Raeume liessen
+ *                           nur einen Eintrag im Array zu - umgestellt 
+ *                           nach Hausname, Sortierung nach Anschlussraeume
+ *                           allerdings dabei verloren. Quickhack.
+ *
+ *  2002 12 14 Revision 0.12 Bugfix in DeleteHouse(), call_other() schlug
+ *                           fehl, wenn Haus nicht geladen war (Mapping war
+ *                           vorher aktualisiert -> catch() drumrum).
+ *
+ *  2012 01 23 Revision 0.12 Bugfix in DeleteRoom(), genau derselbe wie in
+ *                           DeleteHouse() (woah). Diesmal ein find_object()
+ *                           vorangestellt. Und bei DeleteHouse() auch.
+ *
+ */
+
+#pragma strict_types
+
+#include <properties.h>
+#include <wizlevels.h>
+#include <rooms.h>
+#include <moving.h>
+#include "sys/house.h"
+#include "sys/housed.h"
+#include "sys/housed_priv.h"
+
+#define VERSION "0.12"
+
+mapping data;
+
+nosave mapping rooms;
+
+public int query_prevent_shadow(object ob) { return 1; }
+
+
+/**********************************************************************
+ *                         Interne Funktionen                         *
+ **********************************************************************/
+
+private nosave void save() { return save_object(HOUSED_SAVEFILE); }
+
+private nosave void removeGoodies(string owner, int nr) { return; }
+
+private nosave void reload(){ 
+  if (!restore_object(HOUSED_SAVEFILE))
+    data=([]);
+  return;
+}
+
+nosave int secure() {
+  return ((this_interactive()) && (this_interactive()==this_player()) &&
+      (getuid(previous_object())==getuid(this_object())));
+}
+
+nosave int verysecure() {
+  return ((secure()) &&
+    (member(HOUSED_CARETAKER,getuid(this_player()))!=-1));
+}
+
+private nosave void updateRoomMapping() {
+  string * uids;
+  string * huids;       
+  string fn;
+  int * ikeys;
+
+  rooms=([]);
+  if (!sizeof(uids=m_indices(data))) return;
+  for (;sizeof(uids);uids=uids[1..]) 
+    for (ikeys=m_indices(data[uids[0]]);sizeof(ikeys);ikeys=ikeys[1..]) 
+      if (fn=data[uids[0]][ikeys[0]][H_ENV_FILE_NAME]) {
+        if (!member(rooms,fn)) 
+          rooms+=([fn:({({sprintf("%s:%02d:00",uids[0],ikeys[0]),
+               data[uids[0]][ikeys[0]][H_ENTER_DIRECTION]})})]);
+        else
+          rooms[fn]+=({({sprintf("%s:%02d:00",uids[0],ikeys[0]),
+                    data[uids[0]][ikeys[0]][H_ENTER_DIRECTION]})});
+      }
+  return;
+}
+
+private nosave string getMatchDir(string direction) {
+  int p;
+
+  if ((p=member(PROPER_EXITS,direction))==-1) return 0;
+  else return (p<(sizeof(PROPER_EXITS)/2)?
+      PROPER_EXITS[p+sizeof(PROPER_EXITS)/2]:
+      PROPER_EXITS[p-sizeof(PROPER_EXITS)/2]);
+}
+
+private nosave int dump() {
+  string * keys;
+  int * ikeys;
+  int i,j;
+
+  rm(HOUSED_HOMEPATH "HAEUSER");
+  i=j=0;
+  keys=sort_array(m_indices(data),#'>);
+  for (;sizeof(keys);keys=keys[1..]) {
+    ikeys=sort_array(m_indices(data[keys[0]]),#'>);
+    for (;sizeof(ikeys);ikeys=ikeys[1..]) {
+      write_file(HOUSED_HOMEPATH "HAEUSER",
+          sprintf("%12s %02d/%02d %s%s\n",keys[0],
+            ikeys[0],data[keys[0]][ikeys[0]][H_ROOMS],
+            (data[keys[0]][ikeys[0]][H_ENV_FILE_NAME]?
+            data[keys[0]][ikeys[0]][H_ENV_FILE_NAME]:""),
+            (data[keys[0]][ikeys[0]][H_ENTER_DIRECTION]?
+            ":"+data[keys[0]][ikeys[0]][H_ENTER_DIRECTION]:"")));
+      i++;
+      j+=data[keys[0]][ikeys[0]][H_ROOMS]+1;
+    }
+  }
+  write_file(HOUSED_HOMEPATH "HAEUSER",
+      sprintf("---- %s: Es gibt %d Seherhaeuser (%d Raeume) ----\n",
+        dtime(time())[5..], i,j));
+  return 1;
+}
+
+private nosave int properName(string target) {
+  return ((stringp(target)&&(target))?
+    sizeof(regexp(({target}),"^[a-z]*:[0-9][0-9]:[0-9][0-9]$")):0);
+}
+  
+private nosave varargs int installExit(mixed owner, int nr, string con, 
+    string dir, int verbose_only) {
+  object o;
+
+   // DB(sprintf("iE with own:%O nr:%O con:%O dir:%O\n",owner,nr,con, dir));
+  if (objectp(owner)) 
+    o=owner;
+  else if ((stringp(owner)) && 
+      ((catch(call_other(sprintf("%s%s:%02d:00",VIRTUAL,owner,nr),"???")))
+      || (!o=find_object(sprintf("%s%s:%02d:00",VIRTUAL,owner,nr)))))
+    return 0;
+  return (int)o->InstallExit(con, dir, verbose_only); 
+}
+
+/* Diese Funktion ueberprueft und kuerzt die Ausgaenge der Raeume, sie 
+ * musste leicht angepasst werden. */
+
+private nosave int checkExits(string owner,int house_no,int room_no,int rem) {
+  int x, y,i, bar;
+  int gar, bage;
+  string hname,foo, *dirs;
+  object here, there;
+  mapping exits;
+
+  x = 0;
+  do {
+    hname = sprintf("%s:%02d:%02d",owner, house_no, room_no);
+    y=0;
+    // DB(sprintf("checkExits: Processing %O\n",hname));
+    if (catch(call_other(VIRTUAL+hname, "???"))) {
+      printf("error loading %O!\n", VIRTUAL+hname);
+      continue;
+    }
+    here = find_object(VIRTUAL+hname);
+    exits = (mapping)(here->QueryProp(P_EXITS));
+    dirs = m_indices(exits)-({"raus"});  // Bleibt mal drin
+
+    for (i=sizeof(dirs)-1; i>=0; i--) {
+      // DB(sprintf("checkExits: exitx[dirs[i]] is %O - %O\n",exits[dirs[i]],
+      //      dirs[i]));
+      if (sscanf(exits[dirs[i]], VIRTUAL+"%s:%d:%d", foo, gar, bage) == 3) {
+        if (foo!=owner) { // wird gebraucht, falls wir doch mal crosslinks
+          x++;            // zulassen
+          if (rem) {
+            catch(call_other(exits[dirs[i]], "???"));
+            there = find_object(exits[dirs[i]]);
+            if (!there) continue;
+            catch(there->SeerhouseRemoveExit(
+                 PROPER_EXITS[(member(PROPER_EXITS,dirs[i])+
+                 sizeof(PROPER_EXITS)/2)%2]));
+            catch(there->Save());
+          }
+        }
+        // DB(sprintf("bage is %O, data... is %O\nhere is %O\n",bage,
+        // data[owner][house_no][H_ROOMS],here));
+        if (bage>data[owner][house_no][H_ROOMS]) {
+          catch(here->SeerhouseRemoveExit(dirs[i]));
+          y++;
+        }
+      }
+    }
+    if (y) 
+      (catch(here->Save()));
+  } while(--room_no >= 0);
+  return x;
+}
+
+/* checkAccess uebernimmt einen Teil der Ueberpruefungen fuer das
+ * An- und Abhaengen von Haeusern */
+
+nosave int checkAccess(string owner, int nr, string con, int mode) {
+  string *p;   // mode == 1 == connect
+  if (!secure()) 
+    return HOUSE_NO_PERMISSION;
+  else if ((!owner) || (!stringp(owner))) 
+    return HOUSE_BAD_OWNER;
+  else if ((!member(data,owner)) || (!member(data[owner],nr)))
+    return HOUSE_NOT_EXISTING;
+  else if ((!mode) && (!sizeof(regexp(({con}),"^/(d|gilden)/[a-z]*/"))))
+    return HOUSE_NODOMAIN_ENVIRONMENT;
+  else if ((mode) && (!con=data[owner][nr][H_ENV_FILE_NAME]))
+    return HOUSE_NOT_CONNECTED;
+  else if ((strlen(con)) && ((sizeof(p=explode(con,"/"))<3) || 
+    (((p[0]=="d") && (member(((mixed)"/secure/master"->get_userinfo(
+     getuid(this_player())))[3],p[1])==-1)) || ((p[0]=="gilden") && 
+    (!("/secure/master"->valid_write(con,getuid(this_player())))))) && 
+    (member(HOUSED_CARETAKER,getuid(this_player()))==-1)))
+    return (mode?HOUSE_DISCONNECT_NO_DOMAIN_LORD:HOUSE_CONNECT_NO_DOMAIN_LORD);
+  else return 0;
+}
+
+
+
+/**********************************************************************
+ *                              create()                              *
+ **********************************************************************/
+
+public void create() {
+  if (is_clone(this_object()))
+    destruct(this_object());
+  seteuid(getuid(this_object()));
+  if (!restore_object(HOUSED_SAVEFILE))
+    data = ([]);
+  // HOUSED_ERROR_LOG(sprintf("HOUSED LOADED v%s. (%O)", VERSION,
+  //      this_interactive())); 
+  if ((this_player()) && (IS_WIZARD(this_player())))
+    tell_object(this_player(),sprintf("Seherhausverwalter v%s: Hi %s!\n",
+          VERSION, this_player()->name(WER)));
+  updateRoomMapping();
+}
+
+
+/**********************************************************************
+ * Funktionen, die (auch) von "ausserhalb" aufgerufen werden koennen  *
+ **********************************************************************/
+
+public void Save() { return (void)(verysecure()?save():0); }
+
+public void Dump() { return (void)(verysecure()?dump():0); }
+
+public void Reload() { return (void)(verysecure()?reload():0); }
+
+/* ValidObject() wird vom virtual_compiler aufgerufen und ueberprueft, 
+ * ob der Name fuer ein Haus oder einen Raum zulaessig ist und gibt 
+ * entsprechendes Ergebnis (int) zurueck.  */
+
+public int ValidObject(string target) {
+  string owner, dummy;
+  int nr, hnr;
+
+  if ((!target)||(!stringp(target))||(!properName(target))) return 0;
+  if ((sscanf(target,"%s:%d:00%s",owner,hnr,dummy)==3) &&
+      (dummy=="") && (member(data,owner)) && (member(data[owner],hnr)))
+    return HOUSED_ISAHOUSE;
+  else if ((sscanf(target,"%s:%d:%d%s",owner,hnr,nr,dummy)==4) && 
+      (dummy=="") && (member(data,owner)) && (member(data[owner],hnr)) &&
+      (data[owner][hnr][H_ROOMS]>=nr) && (nr>0))
+    return HOUSED_ISAROOM;
+  else return 0;
+}
+
+public string CustomizeObject(object o, string file) {
+  string owner, dummy; 
+  int house_no, room_no;
+
+  if ((sscanf(file,"%s:%d:%d%s",owner,house_no,room_no, dummy)!=4)
+      || (dummy!="") || (!objectp(o))) 
+    return 0;
+  o->SetOwner(owner, house_no, room_no);
+  o->Load();
+  if ((!room_no) && (member(data[owner][house_no],H_ENTER_DIRECTION)) &&
+     (data[owner][house_no][H_ENTER_DIRECTION]!=0))
+    installExit(o, house_no,data[owner][house_no][H_ENV_FILE_NAME] ,
+        data[owner][house_no][H_ENTER_DIRECTION]);
+  return file;
+}
+
+/* Die Funktion tut ziemlich genau, was man von ihr erwartet - sie liefert, 
+ * falls moeglich, einen Objektzeiger auf das Haus nr der Person owner 
+ * zurueck. */
+
+public varargs object FindHouse(string owner, int nr) {
+  string house;
+
+  if ((!owner)||(!stringp(owner)) || 
+      (ValidObject(house=sprintf("%s:%02d:00",owner,nr))!=HOUSED_ISAHOUSE))
+    return 0;
+  catch(call_other(VIRTUAL+house,"???"));
+  return find_object(VIRTUAL+house);
+}
+
+/* QueryHouses() - diese Funktion wird von Raeumen aufgerufen, die wissen
+ * wollen, ob sie sich um Seherhaeuser kuemmern muessen. */
+
+public varargs mixed QueryHouses(object o) {
+  return (rooms[file_name(((objectp(o) && o)?o:previous_object()))]);
+}
+
+/* HasHouse() - wird von /std/player/base abgefragt, wenn entschieden werden
+ * muss, wo der Spieler aufwacht... wichtig: Das haus muss auch angeschlossen
+ * sein :o) Aufgewacht wird generell in Haus NULL, da gibts keine Wahl. */
+
+public string HasHouse(string s) {
+  if ((!stringp(s)) || (!s)) return 0;
+  if ((!member(data,s)) || (!member(data[s],0)) || 
+      (!data[s][0][H_ENV_FILE_NAME]) || (!data[s][0][H_ENTER_DIRECTION]))
+    return 0;
+  return sprintf("%s%s:%02d:00",VIRTUAL,s,0);
+}
+
+
+/* Query() wird von den Haeusern aufgerufen, die gerne etwas ueber sich
+ * erfahren moechten :o) */
+
+public mixed Query(string owner, int house_no, int what) {
+  if ((!member(data, owner)) || (!member(data[owner],house_no)) ||
+        (!member(data[owner][house_no], what))) 
+    return 0;
+  else return data[owner][house_no][what];
+}
+
+/* NewHouse() traegt eine neues Haus mit der Nummer nr in das Daten-Mapping 
+ * ein und laed das Haus - also den <uid>:<nr>:00-Raum - auch gleich. Dieses
+ * Objekt ist spaeter auch fuer den ganzen Krempel zustaendig, der fuer den 
+ * Anschlussraum von Bedeutung ist. */
+
+public int NewHouse(string owner, int nr) {
+  string fn;
+  object h;
+
+  if (!verysecure()) 
+    return HOUSE_NO_PERMISSION;
+  if ((!owner) || (!stringp(owner)))
+    return HOUSE_BAD_OWNER;
+  if ((member(data,owner)) && (member(data[owner],nr)))
+    return HOUSE_ALREADY_EXISTING;
+  if (!member(data, owner)) 
+    data+=([owner:([])]);
+  data[owner]+=([nr:([H_ENV_FILE_NAME:0,
+                      H_ENTER_DIRECTION:0,
+                      H_ROOMS:0])]);
+  updateRoomMapping();
+  fn=sprintf("%s%s:%02d:00",VIRTUAL,owner,nr);
+  catch(call_other(fn, "???"));
+  if (!objectp(h = find_object(fn))) {
+    data[owner]-=([nr]);
+    if (!sizeof(data[owner]))
+      data-=([owner]); 
+    updateRoomMapping();
+    return HOUSE_HOUSE_COMPILE_FAIL;
+  }
+  h->Save();
+  dump();
+  save();
+  HOUSED_LOG(sprintf("NEW_HOUSE: %s:%02d:00. (%O)",owner, nr,
+    this_interactive())); 
+  return 1;
+}
+
+/* AddRoom() packt zum Haus nr des Besitzers owner einen Raum oder 
+ * mehrere Raeume drauf und laed diese. Bei 99 ist Schluss, aber das 
+ * ist ja wohl ausreichend :o)  */
+
+public varargs int AddRoom(string owner, int nr, int anz) {
+  object r;
+  string fn;
+  int i;
+
+  if ((!verysecure())&&(previous_object()!=find_object(HOUSED_UPGRADE)))
+    return HOUSE_NO_PERMISSION;
+  if (!stringp(owner) || (!owner)) return HOUSE_BAD_OWNER;
+  if ((!member(data,owner))|| (!member(data[owner],nr)))
+    return HOUSE_NOT_EXISTING;
+  if (!anz) anz=1;
+  if ((anz<0) || (anz>100))
+    return HOUSE_BAD_ROOM_NUMBER;
+  if (anz+data[owner][nr][H_ROOMS]>99) 
+    return HOUSE_MUCH_TOO_MUCH_ROOMS;
+  for (i=0;i<anz;i++) {
+    data[owner][nr][H_ROOMS]++; 
+    fn=sprintf("%s%s:%02d:%02d",VIRTUAL,owner,nr,data[owner][nr][H_ROOMS]);
+    catch(call_other(fn, "???"));
+    if (objectp(r = find_object(fn)))
+      r->Save();
+  }
+  save();
+  dump();
+  HOUSED_LOG(sprintf("NEW_ROOM: %s:%02d:%02d.(+%d) (%O)",owner, nr,
+    data[owner][nr][H_ROOMS], anz, 
+    (previous_object()))); 
+  return 1;
+}
+
+
+/* Der letzte Raum eines Hauses *muss* mit DeleteHouse() geloescht
+ * werden, das ist durchaus so beabsichtigt... ansonsten loescht
+ * DeleteRoom() die much letzten Raeume des Hauses nr von owner
+ * und zerstoert auch die eventuell existierenden Objekte. Wird
+ * much nicht mit uebergeben oder ist 0, defaultet es zu 1, nr ist
+ * im Default 0. Das Loeschen des Savefiles, das leider in /d/seher
+ * liegt (und damit eine andere euid hat, wird dem Seherhausraum selbst
+ * auf's Auge gedrueckt. */
+
+public varargs int DeleteRoom(string owner, int nr, int much) {
+  object h;
+  string fn;
+  int i;
+
+  if (!verysecure()) return HOUSE_NO_PERMISSION;
+  if (!stringp(owner) || (!owner)) return HOUSE_BAD_OWNER;
+  if ((!member(data,owner))|| (!member(data[owner],nr)))
+    return HOUSE_NOT_EXISTING;
+  if (!much) much=1;
+  if ((much<1) || ((data[owner][nr][H_ROOMS]-much)<0))
+    return HOUSE_BAD_ROOM_NUMBER;
+  for (i=much;i;i--) {
+    if (find_object(sprintf("%s%s:%02d:%02d",VIRTUAL,owner,nr,
+      data[owner][nr][H_ROOMS])))
+        call_other(sprintf("%s%s:%02d:%02d",VIRTUAL,owner,nr,
+        data[owner][nr][H_ROOMS]--),"Liquidate");
+  }
+  checkExits(owner, nr, data[owner][nr][H_ROOMS],1);
+  save();
+  dump();
+  HOUSED_LOG(sprintf("DEL_ROOMS: %s:%02d:%02d [-%d]. (%O)",owner, nr,
+    data[owner][nr][H_ROOMS],much, this_interactive())); 
+  return 1;
+}
+
+/* DeleteHouse() *loescht* das komplette Haus (also alle Savefiles) und 
+ * die Reportmeldungen unwiderruflich! Die Objekte werden dabei auch 
+ * zerstoert, gruendlich ist die Funktion ja, muss man ihr lassen... */
+
+public int DeleteHouse(string owner, int nr) {
+  object h;
+  int r;
+  string tmp;
+  int i;
+
+  if (!verysecure()) return HOUSE_NO_PERMISSION;
+  if ((!owner) || (!stringp(owner))) return HOUSE_BAD_OWNER;
+  if ( (!member(data,owner)) || (!member(data[owner],nr)))
+    return HOUSE_NOT_EXISTING;
+  tmp=data[owner][nr][H_ENV_FILE_NAME];
+  i=r=data[owner][nr][H_ROOMS];
+  data[owner]-=([nr]);
+  if (!sizeof(data[owner]))
+    data-=([owner]);
+  save();
+  dump();
+  if ((tmp) && (find_object(tmp)))
+    catch(find_object(tmp)->CheckForHouses());
+  removeGoodies(owner,nr);
+  for (;r>=0;r--) 
+    if (find_object(sprintf("%s%s:%02d:%02d",VIRTUAL,owner,nr, r)))
+      call_other(sprintf("%s%s:%02d:%02d",VIRTUAL,owner,nr, r), "Liquidate");
+  if (file_size(tmp=REPFILE(owner,nr))>0)
+    rm(tmp);
+  HOUSED_LOG(sprintf("DEL_HOUSE: %s:%02d:00-%02d. (%O)",owner, nr, i, 
+      this_interactive())); 
+  return 1;
+}
+
+/* ConnectHouse(), ReconnectHouse() und DisconnectHouse() tun, sofern man
+ * berechtigt ist, diese Funktionen aufzurufen, genau das, was man von 
+ * ihnen erwarten darf. */
+
+public int ConnectHouse(string owner, int nr, string con, string dir) {
+  string str,err;
+  int x;
+  
+  if (x=checkAccess(owner, nr, con, 0))
+    return x;
+  else if ((data[owner][nr][H_ENV_FILE_NAME]) || 
+     (data[owner][nr][H_ENTER_DIRECTION]))
+    return HOUSE_ALREADY_CONNECTED;
+  else if ((!dir) || (member(PROPER_EXITS,dir)==-1)) 
+    return HOUSE_BAD_ENTER_DIRECTION;
+  else if ((!con) || (!stringp(con)) || (catch(call_other(con,"???"))) ||
+     (strlen(con)<5))
+    return HOUSE_BAD_ENVIRONMENT;
+  else if ((catch(call_other(con,"???"))) || (!find_object(con)))
+    return HOUSE_FAIL_ENVIRONMENT_LOAD;
+  else if (is_clone(find_object(con))) 
+    return HOUSE_CLONED_ENVIRONMENT;
+  else if (member(inherit_list(find_object(con)),"std/room.lpc")==-1)
+    return HOUSE_NOROOM_ENVIRONMENT;
+
+  data[owner][nr]+=([H_ENV_FILE_NAME:con, H_ENTER_DIRECTION:dir]);
+  updateRoomMapping();
+
+  if (err=catch(x=(int)call_other(con,"CheckForHouses"))) {
+    data[owner][nr]+=([H_ENV_FILE_NAME:0, H_ENTER_DIRECTION:0]);
+    updateRoomMapping();
+    return HOUSE_FAIL_ENVIRONMENT_LOAD;
+  }
+  else if (x<0) {
+    data[owner][nr]+=([H_ENV_FILE_NAME:0, H_ENTER_DIRECTION:0]);
+    updateRoomMapping();
+    return HOUSE_ENVIRONMENT_CANT_CONNECT;
+  }
+  else if (!installExit(owner, nr, con, dir)) {
+    data[owner][nr]+=([H_ENV_FILE_NAME:0, H_ENTER_DIRECTION:0]);
+    updateRoomMapping();
+    catch(call_other(con,"CheckForHouses"));
+    return HOUSE_HOUSE_EXIT_CLASH;
+  }
+  save();
+  dump();
+  
+  HOUSED_LOG(sprintf("CONNECT: %s:%02d:00 -> %s. (%O)", owner, nr,
+    explode(con,"/")[1],this_interactive())); 
+  return 1;
+}
+
+public int ReconnectHouse(string owner, int nr, string con, string dir) {
+  string x,y,y2,err;
+  int i;
+
+  if ((i=checkAccess(owner, nr, con, 0))||
+      (i=checkAccess(owner,nr,data[owner][nr][H_ENV_FILE_NAME],1)))
+    return i;
+  else if (((!y=data[owner][nr][H_ENV_FILE_NAME])) || 
+      (((!con) && (!(con=data[owner][nr][H_ENV_FILE_NAME])))))
+    return HOUSE_NOT_CONNECTED;
+  else if ((!dir) && (!(dir=data[owner][nr][H_ENTER_DIRECTION])))
+    return HOUSE_BAD_ENTER_DIRECTION;
+  else if ((((!dir) && (!(dir=data[owner][nr][H_ENTER_DIRECTION])))) ||
+       (member(PROPER_EXITS,dir)==-1)) 
+    return HOUSE_BAD_ENTER_DIRECTION;
+  else if ((!con) || (!stringp(con)) || (catch(call_other(con,"???"))) ||
+     (strlen(con)<5))
+    return HOUSE_BAD_ENVIRONMENT;
+  else if ((catch(call_other(con,"???"))) || (!find_object(con)))
+    return HOUSE_FAIL_ENVIRONMENT_LOAD;
+  else if (is_clone(find_object(con))) 
+    return HOUSE_CLONED_ENVIRONMENT;
+  else if (member(inherit_list(find_object(con)),"std/room.lpc")==-1)
+    return HOUSE_NOROOM_ENVIRONMENT;
+  y2=data[owner][nr][H_ENTER_DIRECTION];
+  data[owner][nr]+=([H_ENV_FILE_NAME:con, H_ENTER_DIRECTION:dir]);
+  updateRoomMapping();
+
+  if (err=catch(i=(int)call_other(con,"CheckForHouses"))) {
+    data[owner][nr]+=([H_ENV_FILE_NAME:y, H_ENTER_DIRECTION:y2]);
+    updateRoomMapping();
+    return HOUSE_FAIL_ENVIRONMENT_LOAD;
+  }
+  else if (i<0) {
+    data[owner][nr]+=([H_ENV_FILE_NAME:y, H_ENTER_DIRECTION:y2]);
+    updateRoomMapping();
+    return HOUSE_ENVIRONMENT_CANT_CONNECT;
+  }
+  else if (!installExit(owner, nr, con, dir,1)) {
+    data[owner][nr]+=([H_ENV_FILE_NAME:y, H_ENTER_DIRECTION:y2]);
+    updateRoomMapping();
+    catch(call_other(con,"CheckForHouses"));
+    return HOUSE_HOUSE_EXIT_CLASH;
+  }
+  installExit(owner, nr, 0, 0);
+  installExit(owner, nr, con, dir);
+  save();
+  dump();
+  if (y!=con)
+    catch(call_other(y,"CheckForHouses"));
+  HOUSED_LOG(sprintf("RECON: %s:%02d:00  %s -> %s. (%O)",owner, nr,
+    ((stringp(x) && x)?x:"?"),explode(con,"/")[1],this_interactive())); 
+  return 1;
+}
+
+public int DisconnectHouse(string owner, int nr) {
+  string con;
+  int x;
+
+  if (x=checkAccess(owner, nr, "", 1))
+    return x;
+  else if (!con=data[owner][nr][H_ENV_FILE_NAME]) 
+    return HOUSE_NOT_CONNECTED;
+  data[owner][nr][H_ENV_FILE_NAME]=0;
+  data[owner][nr][H_ENTER_DIRECTION]=0;
+  updateRoomMapping();
+  save();
+  dump();
+  installExit(owner, nr, 0, 0);
+  catch(call_other(con,"CheckForHouses"));  // Abhaengen geht auch ohne Objekt
+  HOUSED_LOG(sprintf("DISCO: %s:%02d:00 [%s]. (%O)",owner, nr,
+    explode(con,"/")[1],this_interactive())); 
+  return 1;
+}
+
+
+/* *stoehn* filter_array() macht einen extern_call....  */
+
+public int isDDir(string s) {  return (file_size("/d/"+s)==-2); }
+
+public string GetInfo(string s) {
+  string txt;
+  string * ind1;
+  int * ind2;
+  int len, j;
+  mapping x;
+ 
+  if (!sizeof(data)) return "Keine Raeume vorhanden.\n"; 
+  if (!s) s="";
+  x=([]);
+
+  if (member(filter_array(get_dir("/d/*")-({".",".."}),"isDDir"),s)!=-1) {
+    len=strlen(s)+3;
+    j=0;
+    txt=sprintf("Region %s:\n",capitalize(s));
+    s="/d/"+s+"/";
+    ind1=m_indices(data);
+    for (;sizeof(ind1);ind1=ind1[1..]) {
+      ind2=m_indices(data[ind1[0]]);
+      for (;sizeof(ind2);ind2=ind2[1..])
+        if (data[ind1[0]][ind2[0]][H_ENV_FILE_NAME]?
+            (data[ind1[0]][ind2[0]][H_ENV_FILE_NAME][0..(len)]==s):0) {
+          x+=([
+             sprintf("%12s:%02d:%02d",ind1[0],ind2[0],
+             data[ind1[0]][ind2[0]][H_ROOMS]):
+             data[ind1[0]][ind2[0]][H_ENV_FILE_NAME];
+             data[ind1[0]][ind2[0]][H_ENTER_DIRECTION]]);
+          j+=data[ind1[0]][ind2[0]][H_ROOMS]+1;
+        }
+    } 
+    len=sizeof(ind1=sort_array(m_indices(x),#'>));
+    for (;sizeof(ind1);ind1=ind1[1..])
+      txt+=sprintf("%18s %s:%s\n", ind1[0],x[ind1[0],0],x[ind1[0],1]);
+    txt+=sprintf("Insgesamt %d Anschluesse und %d Raeume.\n",len,j);  
+    return txt;
+  }
+  else if (member(data,s)) {
+    txt=sprintf("Spieler %s:\n",capitalize(s));
+    ind2=sort_array(m_indices(data[s]),#'>);
+    for (;sizeof(ind2);ind2=ind2[1..])
+      txt+=sprintf("%12s:%02d:%02d %s%s\n",s,ind2[0],
+            data[s][ind2[0]][H_ROOMS],
+            (data[s][ind2[0]][H_ENV_FILE_NAME]?
+            data[s][ind2[0]][H_ENV_FILE_NAME]:""),
+            (data[s][ind2[0]][H_ENTER_DIRECTION]?
+            ":"+data[s][ind2[0]][H_ENTER_DIRECTION]:""));
+    return txt;
+  }
+  else if (s=="") {
+    txt=sprintf("Gesamtstatus:\n",capitalize(s));
+    ind1=sort_array(m_indices(data),#'>);
+    for (;sizeof(ind1);ind1=ind1[1..]) {
+      ind2=sort_array(m_indices(data[ind1[0]]),#'>);
+      for (;sizeof(ind2);ind2=ind2[1..])
+        txt+=sprintf("%12s:%02d:%02d %s%s\n",ind1[0],ind2[0],
+              data[ind1[0]][ind2[0]][H_ROOMS],
+              (data[ind1[0]][ind2[0]][H_ENV_FILE_NAME]?
+              data[ind1[0]][ind2[0]][H_ENV_FILE_NAME]:""),
+              (data[ind1[0]][ind2[0]][H_ENTER_DIRECTION]?
+              ":"+data[ind1[0]][ind2[0]][H_ENTER_DIRECTION]:""));
+    } 
+    return txt;
+  }
+  else return sprintf("Keine Region oder Spielereintrag \"%s\" gefunden.\n",
+     s);
+}
+
+/**********************************************************************
+ * Das Kommando und Detailmapping wird verkleinert, also aequivalente 
+ * Eintraege zusammengefasst * -> Speicherplatz- und Ladezeiteinsparung!  
+ * Die Funktion ist von Tiamak, signifikant schneller als die Wargons.
+ */
+
+public mixed PCrunch(mapping prop) {
+  string *ci, *cv, *ri, *rt, *rf, t1, t2;
+  mixed eq, ret;
+  int i, j, offset;
+  closure sf;
+
+  if ( m_sizeof(prop) == 0 )
+    return ([]);
+
+  ci = m_indices(prop);
+ ret = ({});
+
+    if ( mappingp(prop[ci[0]]) ){ /* H_COMMANDS */
+      sf = lambda( ({ 'key, 'v0, 'v1, 'index, 'lri, 'lrt, 'lrf }),
+        ({#',, ({#'+=, 'lri, ({#'({, ({#'+, 'index, 'key }) }) }),
+               ({#'+=, 'lrt, ({#'({, 'v0 }) }),
+               ({#'+=, 'lrf, ({#'({, 'v1 }) }) }) );
+
+    ri = rt = rf = ({});
+    for ( i = sizeof(ci); i--; )
+      walk_mapping( prop[ci[i]], sf, ci[i]+" ", &ri, &rt, &rf );
+    i = sizeof(ri)-1;
+    while ( i >= 0 ){
+      eq = ({ ri[i] });
+      t1 = rt[i];
+      t2 = rf[i];
+      rt[i] = 0;
+      offset = 0;
+    while ( (j = member(rt[offset..], t1)) > -1 )
+      if ( rf[offset+j] == t2 ){
+        eq += ({ ri[offset+j] });
+        rt[offset+j] = 0;
+      }
+      else
+        offset += j+1;
+        ret += ({ ({ eq, t1, t2 }) });
+      while( (--i >= 0) && !rt[i] );
+    }
+  }
+  else {
+    cv = m_values(prop);
+    i = sizeof(ci)-1;
+    while ( i >= 0 ) {
+      eq = ({ ci[i] });
+      t1 = cv[i];
+      cv[i] = 0;
+      while ( (j = member(cv, t1)) > -1 ) {
+        eq += ({ ci[j] });
+        cv[j] = 0;
+      }
+      ret += ({ ({ eq, t1 }) });
+      while( (--i >= 0) && !cv[i] );
+    }
+  }
+ return ret;
+}

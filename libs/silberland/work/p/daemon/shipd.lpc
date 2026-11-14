@@ -1,0 +1,113 @@
+// SilberLand MUDlib
+//
+// /p/daemon/shipd.c -- Ship Daemon
+//
+// $Date: 2001/07/26 17:58:29 $
+/* $Revision: 1.2 $
+ * $Log: shipd.c,v $
+ * Revision 1.2  2001/07/26 17:58:29  Woody
+ * QueryHarbours() wg. Konflikt mit std/transport in QueryAllHarbours() umbenannt
+ *
+ * Revision 1.1  1999/05/11 11:37:05  Woody
+ * Initial revision
+ *
+ */
+
+
+#pragma strong_types
+#pragma combine_strings
+
+#define NEED_PROTOTYPES
+
+#include <daemon.h>
+#include <config.h>
+#include <properties.h>
+
+// global data (subject to change!!!)
+string *data;               // save/load data; only used if updated
+nosave mapping ships;       // enthaelt Zuordnung ([ Schiff: ({ Haefen }) ])
+nosave mapping harbours;    // enthaelt Zuordnung ([ Hafen: ({ Schiffe }) ])
+
+
+void create()
+{
+  int i,j;
+  string *h;
+
+  seteuid(getuid(this_object()));
+  ships=([]);
+  harbours=([]);
+  if (file_size(SHIPD_SAVEFILE+".o") > 0)
+  {
+    if (!restore_object(SHIPD_SAVEFILE))
+      raise_error("shipd: invalid savefile "+SHIPD_SAVEFILE+"\n");
+    if (pointerp(data))
+      for (i=sizeof(data)-1; i>=0; i--)
+        if (find_object(data[i]))
+        {
+          h=find_object(data[i])->QueryHarbours();
+          for (j=sizeof(h)-1; j>=0; j--)
+            AddHarbour(find_object(data[i]), h[j]);
+        }
+    rm(SHIPD_SAVEFILE+".o");
+  }
+}
+
+
+int remove()
+{
+  data=m_indices(ships);
+  save_object(SHIPD_SAVEFILE);
+  destruct(this_object());
+  return 1;
+}
+
+
+public void AddHarbour(object ship, string harbour)
+{
+  if (!member(ships,file_name(ship)))
+    ships += ([ file_name(ship) : ({ harbour }) ]);
+  else if (member(ships[file_name(ship)],harbour) == -1)
+    ships[file_name(ship)] += ({ harbour });
+
+  if (!member(harbours,harbour))
+    harbours += ([ harbour : ({ file_name(ship) }) ]);
+  else if (member(harbours[harbour],file_name(ship)) == -1)
+    harbours[harbour] += ({ file_name(ship) });
+}
+
+
+public void RemoveShip(object ship)
+{
+  string *h;
+  int i;
+
+  efun::m_delete(ships, file_name(ship));
+  h=m_indices(harbours);
+  for (i=sizeof(h)-1; i>=0; i--)
+    harbours[h] -= file_name(ship);
+}
+
+
+public varargs mixed HasShip(object harbour, string ship)
+{
+  mixed obs;
+
+  if (!objectp(harbour)) return 0;
+  if (!obs=harbours[file_name(harbour)]) return 0;
+  obs=map_array(obs,#'find_object)-({0});
+  if (stringp(ship)) obs=filter_objects(obs,"id",ship);
+  return sizeof(obs) ? obs : 0;
+}
+
+
+public mixed RouteExists(object ship, string dest)
+{
+  if (!objectp(ship) || !stringp(dest)) return 0;
+  return ship->HasRoute(dest);
+}
+
+public mapping QueryShips() { return copy_mapping(ships); }
+
+public mapping QueryAllHarbours() { return copy_mapping(harbours); }
+

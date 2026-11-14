@@ -1,0 +1,240 @@
+// SilberLand MUDlib
+//
+// p/daemon/infolibd.c -- Verwaltung der Info Libaries fuer NPCs
+//
+// $Date: 2001/10/21 20:08:41 $
+/* $Revision: 1.2 $
+ * $Log: infolibd.c,v $
+ * Revision 1.2  2001/10/21 20:08:41  Woody
+ * Optionaler Parameter fuer Stat() - library
+ *
+ * Revision 1.1  2001/02/17 09:56:15  Woody
+ * Initial revision
+ *
+ * alte Logs:
+ * Sep 01, 1997  Woody  um silent erweitert
+ * Feb 21, 1997  Woody  keepnl Verhalten gefixt
+ * Feb 19, 1997  Woody  NewLib() fuer localflag vorbereitet (std/npc/info.c)
+ * Feb 12, 1997  Woody  Initial Revision
+ *
+ */
+
+/*
+ * ------------------------------------------------------------------------
+ *
+ * Library-Konzept:
+ *
+ * Ein NPC kann per AddLibrary() (in std/npc/info.c implementiert) eine
+ * Bibliothek zu seiner Wissensbasis hinzufuegen. Wird er nach einem
+ * Schluesselwort befragt, dass NICHT von einer AddInfo() Information
+ * abgedeckt ist, so wendet er sich mit einer Anfrage (oder mehreren,
+ * wenn er mehrere Libraries in seiner Wissensbasis referenziert hat) an
+ * den libmaster, genauer an GetInfo(), der die Bibliotheken bei Bedarf
+ * laedt und dann im Speicher verwaltet. Als Parameter bekommt GetInfo
+ * den Informationslevel, den der NPC ueber die entsprechende Bibliothek
+ * besitzt, sowie das Spielerobjekt des fragenden Spielers (ermoeglicht
+ * spaeter mal weitergehende Parametrisierung, etwa align-abhaengige
+ * Auskunft). Findet der libmaster eine Information, die den uebergebenen
+ * Parametern genuegt, wird diese als Array retourniert, ansonsten wird
+ * 0 zurueckgegeben.
+ *
+ * Die eigentlichen Informationen (Bibliotheken) sind in einfachen
+ * Textdateien gespeichert, die das folgende Format besitzen muessen:
+ *
+ * # Kommentar
+ * info:<level>:<key1> [,<key2> [,<key3>...]]
+ * indent: <"indentstring">
+ * silent: <"silentstring">
+ * options: [ keepnl ]
+ * text...
+ *
+ * Das heisst: Eine neue Information wird durch das Schluesselwort
+ * "info:" gefolgt vom Informationslevel (eine Masszahl fuer die Qualitaet
+ * der Information) und nach einem weiteren Doppelpunkt einer durch Kommata
+ * getrennten Liste von Schluesseln eingeleitet. Es sollten *keine*
+ * unnoetigen Leerzeichen verwendet werden.
+ * Mit "indent:" kann noch ein Einrueckstring festgelegt werden (selbe
+ * Bedeutung wie bei AddInfo()), entweder in doppelten Hochkomma, oder
+ * einfach nur als Text (in dem Fall wird automatisch ein Leerzeichen
+ * angehaengt).
+ * Mit "silent:" kann noch ein Alternativtext festgelegt werden (selbe
+ * Bedeutung wie bei AddInfo()), entweder in doppelten Hochkomma, oder
+ * einfach nur als Text (in dem Fall wird automatisch ein Leerzeichen
+ * angehaengt). Oder 0 oder 1. Siehe AddInfo() Dokumentation.
+ * Mit "options:" kann man diverse Optionen, durch Kommata getrennt,
+ * festlegen. Im Moment gibt es nur die Option 'keepnl', d.h. die
+ * im Text enthaltenen Zeilenumbrueche werden beibehalten.
+ * Zuletzt folgt der Text (beliebig viele Zeilen), bis eine "info:"
+ * Zeile die naechste Information einleitet.
+ * Saemtliche Zeilen, die mit '#' beginnen, werden ignoriert.
+ *
+ * ------------------------------------------------------------------------
+ */
+
+
+#include <properties.h>
+#include <daemon.h>
+
+mapping infos;
+int hits, misses, errors;
+
+/*
+ * Format des Mappings infos:
+ *  key: "library"
+ *  val0: mapping data:
+ *        key:  string "level:key"
+ *        val0: data string
+ *        val1: indent string
+ *        val2: silent string
+ *
+ */
+
+void create() {
+  if (is_clone(this_object())) return destruct(this_object());
+  seteuid(getuid(this_object()));
+  infos = ([]);
+  hits = misses = errors = 0;
+}
+
+int remove() { return 0; }
+
+varargs int NewLib(string file, int localflag, object npc, int level)
+{
+  int i, j, skip, lev, keepnl;
+  string str, keys, d1, d2;
+  string *s, *opt;
+  mixed indent;
+  mixed silent;
+  mapping data;
+
+  skip = 1;
+  if (!str=read_file(file)) return 0;
+  s = explode (str, "\n");
+  data = allocate_mapping(1,3);
+
+  for (i=0; i<sizeof(s); i++)
+  {
+    if ((s[i]=="") || (s[i][0]=='#')) continue;
+    if (s[i][0..4]=="info:") {
+      if (!skip) {
+        opt = explode (keys, ",");
+        if (localflag)
+          npc->AddInfo(opt, (keepnl?str:str[0..<2]), indent, silent);
+        else
+          for (j=0; j<sizeof(opt); j++)
+            data +=
+              ([ lev+":"+opt[j]: (keepnl?str:str[0..<2]); indent; silent ]);
+      }
+      sscanf(s[i], "info:%d:%s", lev, keys);
+      if (localflag && (lev > level))
+        skip=1;
+      else
+        skip=0;
+      keepnl=0;
+      str="";
+      indent="sagt: ";
+      silent=0;
+    }
+    else if (skip)
+      continue;
+    else if (s[i][0..6]=="indent:") {
+      if (sscanf(s[i], "indent:%s\"%s\"%s", d1, indent, d2) != 3) {
+        indent=implode(explode(s[i][7..], " "), " ");
+        if (indent=="0") indent=0; else indent += " ";
+      }
+    }
+    else if (s[i][0..6]=="silent:") {
+      if (sscanf(s[i], "silent:%s\"%s\"%s", d1, silent, d2) != 3) {
+        silent=implode(explode(s[i][7..], " "), " ");
+        if (silent=="0") silent=0;
+        else if (silent=="1") silent=1; else silent += "\n";
+      }
+      else silent=implode(efun::explode(silent, "\\n"), "\n");
+    }
+    else if (s[i][0..7]=="options:") {
+      opt = explode(implode(explode(s[i][8..]," "), ""), ",");
+      if (member(opt, "keepnl") != -1) keepnl=1;
+    }
+    else {
+      str += implode(efun::explode(s[i], "\\n"), "\n");
+      if ((str[<1]!='\n') && (str[<1]!=' ')) str += (keepnl ? "\n" : " ");
+    }
+  }
+  if (!skip) {
+    opt = explode (keys, ",");
+    if (localflag)
+      npc->AddInfo(opt, (keepnl?str:str[0..<2]), indent, silent);
+    else
+      for (j=0; j<sizeof(opt); j++)
+        data += ([ lev+":"+opt[j]: (keepnl?str:str[0..<2]); indent; silent ]);
+  }
+  if (!localflag) infos += ([ file: data ]);
+  return 1;
+}
+
+mixed GetInfo(string library, string key, int level, object player)
+{
+  int i;
+  if (!member(infos, library))
+    NewLib(library);
+  if (!member(infos, library)) {
+    errors++; misses++; return 0;
+  }
+  for (i=level; i>=0; i--)      // Information hoechstmgl. Qualitaet suchen
+  {
+    if (member(infos[library], i+":"+key)) {
+      hits++;
+      return ({ infos[library][i+":"+key, 0],
+                infos[library][i+":"+key, 1],
+                infos[library][i+":"+key, 2] });
+    }
+  }
+  misses++;
+  return 0;
+}
+
+void DiscardLib (string library)
+{
+  infos = m_delete (infos, library);
+}
+
+varargs void Stat(string library)
+{
+  int i,j,k;
+  string *libs;
+  string s;
+
+  s = sprintf(
+    "\nNPC Info Libmaster (%s)\n"
+    "Up since: %s\n"
+    "Hits: %d, misses: %d, errors: %d\n\n"
+    "Loaded Libraries:\n\n",
+    ctime()[11..18], dtime(program_time()), hits, misses, errors);
+
+  if (stringp(library))
+  {
+    if (!member(infos, library))
+      s += library + ": no such library.\n\n";
+    else
+    {
+      s += library + " found with following keys:\n" +
+           break_string( implode( m_indices(infos[library]) , ", "), 78 ) +
+           "\n";
+    }
+  }
+  else
+  {
+    libs = m_indices(infos);
+    k=0;
+    for (i=sizeof(libs)-1; i>=0; i--) {
+      s += sprintf ("  %'.'-:60s %3d keys\n", libs[i]+" ",
+             j=sizeof(infos[libs[i]]));
+      k += j;
+    }
+    s += sprintf("  %'-'69s\n", "");
+    s += sprintf("  %-19s"+
+    " %'.'40s %3d keys\n\n", sizeof(libs)+" libraries total", "", k);
+  }
+  this_player()->More(s);
+}
+

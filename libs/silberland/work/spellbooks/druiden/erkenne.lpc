@@ -1,0 +1,154 @@
+/*
+ * Erkenne
+ *
+ *
+ * Kosten: 
+ * Level : 1
+ * Objekte:
+ * Damage:
+ *
+ */
+
+int erkenne(object caster, mapping sinfo)  
+{  
+  object ob; 
+  string cn, result; 
+  int suc, i;
+  mapping res, prot;
+  string *damtypes;
+  int *damnr;
+  mixed ele;
+
+  if(caster->InFight()) 
+  {
+    printf(BS("Du kannst Dich nicht auf die Muster des Zaubers "
+              +"konzentrieren."));
+    return 0;  
+  }
+  ob=FindVictim(sinfo[SI_SKILLARG], caster, 
+                BS("Welchem Gegenstand moechtest Du seine "
+                  +"Geheimnisse entreissen?\n")); 
+  if (!ob) 
+    return 0; 
+  sinfo=DoSpellModification(HUMUS, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  cn = caster->name();
+   if ((suc=SpellSuccess(caster,sinfo))<=0)
+    return MISSERFOLG;
+  printf(BS("Die Elemente gewaehren Dir einen Blick "
+             +"in die Struktur des Objektes:\n"));
+  printf("------------------------------------------------"
+        +"------------------------------\n");       
+//  if (result=ob->info(caster) || ob->QueryProp(P_INFO))
+//    printf(BS(result));
+//    modified by Crea: BS not necessary, QueryProp dito
+  if (result=ob->info(caster))
+    printf(result);
+  else
+    printf("%s %s keine Geheimnisse.\n",
+           ob->Name(WER), ob->IsPlural()? "bergen":"birgt");     
+  if(ob->QueryProp(P_MAGIC))
+     printf(BS(CAP(ob->QueryPronoun(WER))+" "+(ob->IsPlural()? "sind":"ist")+
+           " eindeutig magisch."));
+  if(ob->QueryProp(P_NEVERDROP))
+     printf(BS(CAP(ob->QueryPronoun(WER))+" "+(ob->IsPlural()? "bleiben":"bleibt")+
+           " Dir auch nach Deinem Tod erhalten."));
+  if(ob->QueryProp(P_CURSED) && suc>4000) {
+    if(!ob->id(DRUIDENAMULETT) && !ob->id("elementarpanzer"))
+       printf(BS("Auf "+ob->QueryPronoun(WEM)+" scheint ein Fluch "
+           +"zu liegen!\n"));
+  }
+  else 
+     printf("Auf "+ob->QueryPronoun(WEM)+" scheint kein Fluch zu liegen.\n");
+  if(ob->QueryProp(P_AUTOLOADOBJ))
+     printf(BS(CAP(ob->QueryPronoun(WER))+" schein"+(ob->IsPlural()?"en":"t")+
+           " Dir auch nach einem Weltuntergang erhalten zu bleiben.\n"));
+  result=GetMaterialString(ob, caster);
+  printf(BS(result+"\n"));
+  res = ([DT_FIRE: "Feuer",
+          DT_WATER: "Wasser",
+          DT_AIR: "Luft",
+          DT_COLD: "Eis",
+          DT_MAGIC: "Magie",
+          DT_POISON: "Gift",
+        ]);
+
+  if(ob->QueryProp(P_ARMOUR_TYPE) && mappingp(prot=ob->QueryProp(P_DAM_PROTECTION)))
+  {
+    result = "";
+    damtypes = m_indices(prot);
+    damnr = m_values(prot);
+    for(i=sizeof(damtypes)-1; i>=0; i--)
+    {
+      if( member(res, damtypes[i]) )
+      {
+        switch(damnr[i])
+        {
+          case 1: break;
+          case 2: result+="besser "; break;
+          case 3: result+"stark "; break;
+          default: result+"extrem "; 
+        }
+        result+="gegen "+res[damtypes[i]]+", ";
+      }
+    }
+    if(strlen(result))
+      printf(BS(ob->Name(WER,1)+" schuetz"+(ob->IsPlural()?"en":"t")+
+            " zusaetzlich "+result[0..<3]+"."));
+  }
+  if(ele=ob->QueryProp(P_ITEMD_ELEMENTAL_VALUE))
+  {
+    if(intp(ele))
+      printf(BS(ob->Name(WER,1)+" verringer"+(ob->IsPlural()?"n":"t")+
+            " die Kosten Deiner Zauber."));
+    else
+    {
+      for(i = sizeof(ele) - 1; i >= 0; i--)
+      {
+        result= m_indices(ele)[i];
+        if (result == "all") 
+          result = "aller Zauber";
+        else
+          result = "Deiner "+CAP(result)+"zauber";
+        printf(BS(ob->Name(WER,1)+" verringer"+(ob->IsPlural()?"n":"t")+
+              " die Kosten "+result+"."));
+      }
+    }
+  }
+  if(ob->QueryProp(P_DRUID_ADD_HAND_DAMAGE)) {
+    printf(BS(ob->Name(WER,1) + " verbesser"+(ob->IsPlural()?"n":"t")+
+          " den Handkampf."));
+    result="";
+    // elementarhandschuhe haben 30
+    switch((ob->QueryProp(P_DRUID_ADD_HAND_DAMAGE)*100/30)) {
+      case 0..49:     result+=" viel schwaecher "; break;
+      case 50..99:    result+=" schwaecher "; break;
+      case 100:       result+=" gleich stark "; break;
+      case 101..149:  result+=" staerker "; break;
+      case 150..200:  result+=" sehr viel staerker "; break;
+      default:        result+=" unglaublich viel staerker ";
+    }
+    if(!ob->id(ELEMENTARHANDSCHUHE))
+      printf(BS(ob->Name(WER,1) + (ob->IsPlural()?" sind":" ist")+result+
+             "im Vergleich zu den Elementarhandschuhen."));
+    
+  }
+  if(ob->QueryProp(P_DRUID_HAND_DAMAGE_TYPE))
+    printf(BS(ob->Name(WER,1) + " veraender"+(ob->IsPlural()?"n":"t")+
+          " den Schadenstyp der Elementarhand."));
+
+  if(ob->QueryProp(P_ARMOUR_TYPE) || ob->QueryProp(P_WEAPON_TYPE)) 
+  {
+    if(QueryMetal(ob)>0 && !(ob->id(DRUID_ALLOWED_METAL_ITEM)))
+      printf(BS(sprintf("Du kannst %s aufgrund des hohen Metallgehaltes "
+              +"nur erschwert oder gar nicht benutzen.\n", ob->name(WEN))));
+  }
+  printf("------------------------------------------------"
+      +"------------------------------\n");
+  return ERFOLG;
+}

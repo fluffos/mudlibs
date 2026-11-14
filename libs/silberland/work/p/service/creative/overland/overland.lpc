@@ -1,0 +1,1029 @@
+/***************************************************************/ 
+/*                         OVERLAND                            */
+/* reload overland1%;im ob overland1%;ic load_overland_data    */
+/* ic get_overland_view_data @techdemo|tech1|11|20             */
+/***************************************************************/ 
+// #include "/obj/std_defs.h"
+#include "overland.h"
+#include "overland_data.lpc"
+#include "genOverlandRoom.h"
+// #include "/includes/colourcodes.h"
+#include "vt100.h"
+#include "overland_cache.lpc"
+
+string apply_mask_fun(string txt, int idx);
+
+void create() {
+  if ( is_clone(this_object()) ) {
+    destruct( this_object() );
+    return;
+  }
+  this_object()->load_overland_data();
+}
+
+/***************************************************************/ 
+/*                           RESET                             */
+/***************************************************************/ 
+void reset( )
+{
+  this_object()->load_overland_data();
+}
+
+/***************************************************************/ 
+/*                   UNIFIED POSITION                          */
+/* unify overland position                                     */
+/***************************************************************/ 
+public nomask mixed * unify_position( string position )
+{
+  mixed *ret;
+  int *map;
+
+  if ( !position || position[ 0 ] != '@' )
+    return 0;
+  ret = explode( position[1..], "|" );
+  switch ( sizeof( ret ) ) {
+    case 4: if ( !overland_data[ LOC_WORLD( ret ) ] || !overland_data[ LOC_WORLD( ret ) ][ LOC_PLAIN( ret ) ] ) 
+              return 0;
+            LOC_VIEW_X( ret ) = to_int( LOC_VIEW_X( ret ) );
+            LOC_VIEW_Y( ret ) = to_int( LOC_VIEW_Y( ret ) );
+            break;
+    case 5: if ( !overland_data[ LOC_WORLD( ret ) ] || !overland_data[ LOC_WORLD( ret ) ][ LOC_PLAIN( ret ) ] || !overland_data[ LOC_WORLD( ret ) ][ LOC_PLAIN( ret ) ][ LOC_MAP( ret ) ] )
+              return 0;
+            map = overland_data[ LOC_WORLD( ret ) ][ LOC_PLAIN( ret ) ][ LOC_MAP( ret ) ][ OL_DATA_MAPPOSITION ];
+            LOC_VIEW_X( ret ) = map[ 0 ] + to_int( ret[ 3 ]);
+            LOC_VIEW_Y( ret ) = map[ 1 ] + to_int( ret[ 4 ]);
+            ret = ret[0..3];
+            break;
+    default: return 0;
+  }
+  return ret;
+}
+
+public nomask string build_unified_position( mixed * pos )
+{
+  if (!pos || sizeof( pos ) != 4 )
+    return 0;
+
+  return ( sprintf( "@%s|%s|%d|%d", pos[0], pos[1], pos[2], pos[3] ) );
+}
+
+/***************************************************************/ 
+/*                      MASK VIEWS                             */
+/* apply a circular mask to a view                             */
+/***************************************************************/ 
+#define MASK_CHAR "%"
+
+private mapping masks = ([ ]);
+
+private nomask int _calc_offset( float hy2, int kat )
+{
+  kat = abs(kat);
+  return to_int(sqrt(hy2 - (float)(kat*kat)));
+}
+
+private nomask varargs string create_mask( int rad, int size )
+{
+  int    off;
+  string line;
+  float  tmp;
+  int size2, i, h;
+  string *mask;
+
+  if ( !size )
+    size = OLVIEW_SIZE;
+
+  size2 = size / 2;
+
+  mask = ({ });
+
+  tmp = (float)rad + 0.5;
+  tmp *= tmp;
+
+  for ( i = 0; i < size2 - rad; i++) mask+= ({ strmul(" ",size) });
+  //   write( sprintf("1:%O\n", mask) );
+
+  for ( h = max(size2 - rad, 0); h <= min(size2 + rad, size-1); h++ ) {
+
+    off = min(_calc_offset(tmp, size2 - h ), size2);
+    //      write(" off="+off+"\n");
+    line = strmul(MASK_CHAR,(off*2+1));
+    off = size2 - off;
+    if (off < 0) off = 0;
+    mask += ({ strmul(" ",off)+line+strmul(" ",off) });
+  }
+
+  for ( i = 0; i < size2 - rad; i++) mask+= ({ strmul(" ",size) });
+
+  return implode(mask,"\n");
+}
+
+public nomask varargs string get_mask( int rad, int size )
+{
+  int crad;
+  string key;
+
+  if ( !size )
+    size = OLVIEW_SIZE;
+
+  size = abs( size );
+
+  crad = min(abs(rad), (int)(( size/2 )*1.5));
+
+  key = crad+"|"+size;
+  if ( !member( masks, key ) ){
+    masks[ key ] = create_mask( crad, size );
+  }
+
+  return masks[ key ];
+}
+
+protected nomask string my_regreplace( string text, string pattern,
+                                       closure replacepattern, int flags ) {
+  string *matches;
+  string match;
+  int i, arr_len, str_pos, match_len;
+
+  matches = regexplode( text, pattern );
+  arr_len = sizeof( matches );
+  str_pos = 0;
+  for ( i = 0; i < arr_len; i++ ) {
+    match = matches[i];
+    match_len = strlen( match );
+    // every second element is a match
+    if ( i % 2 ) {
+      matches[i] = funcall( replacepattern, match, str_pos );
+    }
+    str_pos += match_len;
+  }
+  return implode( matches, "" ); 
+}
+
+string _apply_mask_tmp_;
+
+string apply_mask_fun( string txt, int idx ) {
+  return _apply_mask_tmp_[idx..idx+strlen(txt)-1];
+}
+
+protected nomask void apply_mask( string * view, int rad )
+{
+  int size, nsize;
+  string tmp, mask;
+  int i;
+
+  size=0;
+  if ( !view ) return;
+
+  for (i = 1; i <= ((rad <= 4)?2:3); i++){
+    if ( !view[ i ]  ) 
+      continue;
+
+    _apply_mask_tmp_ = view[i];
+
+    nsize = (int)sqrt( (float)strlen( _apply_mask_tmp_ ) );
+    if ( nsize != size ){
+      size = nsize;
+      mask = get_mask( rad, size );
+    }
+
+    view[ i ] = my_regreplace(mask,MASK_CHAR+MASK_CHAR"*", #'apply_mask_fun, 1);
+  }
+}
+
+/* some mask related output */
+public string info_masks_cached()
+{
+  return ( sizeof(masks)+" ("+implode( sort_array(m_indices(masks), #'>), ", ")+")\n");
+}
+
+
+/***************************************************************/ 
+/*                      CLIP THE PLAIN                         */
+/* get a clipping of the plain                                 */
+/***************************************************************/ 
+private string get_plain_clipping( string world, string plain, int xpos, int ypos, int size )
+{
+  string view;
+
+  view = get_default_landscape( world, plain, size );
+
+  view = merge_maps( view, world, plain, xpos, ypos, size );
+
+  return view; 
+}
+
+//TODO
+public nomask string get_sourrounding( string position )
+{
+  mixed *pos;
+
+  pos = unify_position( position );
+  if ( !pos )
+    return 0;
+
+  return get_plain_clipping( LOC_WORLD( pos ), LOC_PLAIN( pos ), LOC_VIEW_X( pos )-1, LOC_VIEW_Y( pos )-1, 3 );
+}
+
+public nomask string get_landscape( string position )
+{
+  mixed *pos;
+  
+  pos = unify_position( position );
+  if ( !pos )
+    return 0;
+
+  return get_plain_clipping( LOC_WORLD( pos ), LOC_PLAIN( pos ), LOC_VIEW_X( pos ), LOC_VIEW_Y( pos ), 1 );
+}
+
+/***************************************************************/ 
+/*                    DECODE THE PLAIN                         */
+/* decode a part of the plain                                  */
+/***************************************************************/ 
+private mapping _plain_data_;
+private string decode( string in, int pos )
+{
+  //   write( "["+in+"]>"+_plain_data_[ in[ 0..0 ], 1 ]+"\n" );
+  /*string ret =*/ return strmul(_plain_data_[ in[ 0..0 ], 1 ],strlen( in )); 
+  //   write( "["+ret+"]\n" );
+  //   return ret;
+}
+
+protected string build_pattern_fun( string txt ) {
+  return sprintf("\\%s\\%s*", txt, txt);
+}
+
+private string decode_plain_view( string view, string world, string plain )
+{
+  string data;
+
+  data = implode( map_array( m_indices( mkmapping( efun::explode( view , "" ) ) - ([ "\n", " " ]) ), #'build_pattern_fun ), "|" );
+//        lambda( ({'a}), ({ #'+, ({ #'+, "\\", 'a }), "+"}) ) ) , "|" );
+//        (: "\\"+$1+"+" :) ), 
+  _plain_data_ = overland_data[ world ][ plain ][ OL_DATA_PLAINDATA ];
+
+  return my_regreplace( view, data, (#'decode), 1 );
+}
+
+/***************************************************************/ 
+/*                CALCULATE THE VIEW SIZE                      */
+/* calculate the viewable section                              */
+/*                                                             */
+/*        dDd                                                  */
+/*       gcCcg                                                 */
+/*      gfbBbfg                                                */
+/*     dcbaAabcd                                               */
+/*     DCBAXABCD                                               */
+/*     dcbaAabcd                                               */
+/*      gfbBbfg                                                */
+/*       gcCcg                                                 */
+/*        dDd                                                  */
+/*                                                             */ 
+/***************************************************************/ 
+private int _plain_transparent_;
+
+int _check( int x )
+{
+  if ( _plain_transparent_ && x == ' ' )
+    return ( 1 );
+  else
+    return (_plain_data_[ to_string( ({ x }) ) ] ? !_plain_data_[ to_string( ({ x }) ), 2 ] : 0);
+  /*   switch (x) {
+       case ' ': return 0;
+       case '.':
+       case ':': return 1;
+       case 'N':
+       case '#': return 0;
+       }
+       return 1;*/
+}
+
+void do_vsection( string *in, int dir, string *ret, int size )
+{
+  int A,B,C,D,a,b,c,d,f,g;
+
+  ret[size][size] = in[size][size];
+
+  A = _check( in[size + 1*dir][size] );
+  if( A>0 ) B = _check( in[size + 2*dir][size] );
+  if( B>0 ) C = _check( in[size + 3*dir][size] );
+  if( C>0 ) D = _check( in[size + 4*dir][size] );
+  if( A ) ret[size + 1*dir][size]=in[size+1*dir][size];
+  if( B ) ret[size + 2*dir][size]=in[size+2*dir][size];
+  if( C ) ret[size + 3*dir][size]=in[size+3*dir][size];
+  if( D ) ret[size + 4*dir][size]=in[size+4*dir][size];
+
+  if( A )                    a = _check( in[size + 1*dir][size - 1] );
+  if( B || a>0 )             b = _check( in[size + 2*dir][size - 1] );
+  if( C || B>0 && b>0 )      c = _check( in[size + 3*dir][size - 1] );
+  if( D || c>0 )             d = _check( in[size + 4*dir][size - 1] );
+  if( a>0 && b>0 )           f = _check( in[size + 2*dir][size - 2] );
+  if( a>0 && b>0 && (c>0 || f>0) )   g = _check( in[size + 3*dir][size - 2] );
+  if( a ) ret[size + 1*dir][size - 1]=in[size + 1*dir][size - 1];
+  if( b ) ret[size + 2*dir][size - 1]=in[size + 2*dir][size - 1];
+  if( c ) ret[size + 3*dir][size - 1]=in[size + 3*dir][size - 1];
+  if( d ) ret[size + 4*dir][size - 1]=in[size + 4*dir][size - 1];
+  if( f ) ret[size + 2*dir][size - 2]=in[size + 2*dir][size - 2];
+  if( g ) ret[size + 3*dir][size - 2]=in[size + 3*dir][size - 2];
+
+  a=b=c=d=f=g=0;
+  if( A )                    a = _check( in[size + 1*dir][size + 1] );
+  if( B || a>0 )             b = _check( in[size + 2*dir][size + 1] );
+  if( C || B>0 && b>0 )      c = _check( in[size + 3*dir][size + 1] );
+  if( D || c>0 )             d = _check( in[size + 4*dir][size + 1] );
+  if( a>0 && b>0 )           f = _check( in[size + 2*dir][size + 2] );
+  if( a>0 && b>0 && (c>0 || f>0) )   g = _check( in[size + 3*dir][size + 2] );
+  if( a ) ret[size + 1*dir][size + 1]=in[size + 1*dir][size + 1];
+  if( b ) ret[size + 2*dir][size + 1]=in[size + 2*dir][size + 1];
+  if( c ) ret[size + 3*dir][size + 1]=in[size + 3*dir][size + 1];
+  if( d ) ret[size + 4*dir][size + 1]=in[size + 4*dir][size + 1];
+  if( f ) ret[size + 2*dir][size + 2]=in[size + 2*dir][size + 2];
+  if( g ) ret[size + 3*dir][size + 2]=in[size + 3*dir][size + 2];
+}
+
+void do_hsection( string * in, int dir, string * ret, int size )
+{
+  int A,B,C,D,a,b,c,d,f,g;
+
+  A = _check( in[size][size + 1*dir] );
+  if( A>0 ) B = _check( in[size][size + 2*dir] );
+  if( B>0 ) C = _check( in[size][size + 3*dir] );
+  if( C>0 ) D = _check( in[size][size + 4*dir] );
+  if( A ) ret[size][size + 1*dir]=in[size][size + 1*dir];
+  if( B ) ret[size][size + 2*dir]=in[size][size + 2*dir];
+  if( C ) ret[size][size + 3*dir]=in[size][size + 3*dir];
+  if( D ) ret[size][size + 4*dir]=in[size][size + 4*dir];
+
+  if( A )                    a = _check( in[size - 1][size + 1*dir] );
+  if( B || a>0 )             b = _check( in[size - 1][size + 2*dir] );
+  if( C || B>0 && b>0 )      c = _check( in[size - 1][size + 3*dir] );
+  if( D || c>0 )             d = _check( in[size - 1][size + 4*dir] );
+  if( a>0 && b>0 )           f = _check( in[size - 1][size + 2*dir] );
+  if( a>0 && b>0 && (c>0 || f>0) )   g = _check( in[size - 2][size + 3*dir] );
+  if( a ) ret[size - 1][size + 1*dir]=in[size - 1][size + 1*dir];
+  if( b ) ret[size - 1][size + 2*dir]=in[size - 1][size + 2*dir];
+  if( c ) ret[size - 1][size + 3*dir]=in[size - 1][size + 3*dir];
+  if( d ) ret[size - 1][size + 4*dir]=in[size - 1][size + 4*dir];
+  if( f ) ret[size - 2][size + 2*dir]=in[size - 2][size + 2*dir];
+  if( g ) ret[size - 2][size + 3*dir]=in[size - 2][size + 3*dir];
+
+  a=b=c=d=f=g=0;
+  if( A )                    a = _check( in[size + 1][size + 1*dir] );
+  if( B || a>0 )             b = _check( in[size + 1][size + 2*dir] );
+  if( C || B>0 && b>0 )      c = _check( in[size + 1][size + 3*dir] );
+  if( D || c>0 )             d = _check( in[size + 1][size + 4*dir] );
+  if( a>0 && b>0 )           f = _check( in[size + 2][size + 2*dir] );
+  if( a>0 && b>0 && (c>0 || f>0) )   g = _check( in[size + 2][size + 3*dir] );
+  if( a ) ret[size + 1][size + 1*dir]=in[size + 1][size + 1*dir];
+  if( b ) ret[size + 1][size + 2*dir]=in[size + 1][size + 2*dir];
+  if( c ) ret[size + 1][size + 3*dir]=in[size + 1][size + 3*dir];
+  if( d ) ret[size + 1][size + 4*dir]=in[size + 1][size + 4*dir];
+  if( f ) ret[size + 2][size + 2*dir]=in[size + 2][size + 2*dir];
+  if( g ) ret[size + 2][size + 3*dir]=in[size + 2][size + 3*dir];
+}
+
+private string calculate_visible_area( string view, string world, string plain )
+{
+  string *in;
+  string *ret;
+  int i, size;
+
+  in = explode( view, "\n" );
+  size = sizeof( in );
+
+  ret = allocate( size );
+
+  for ( i = 0; i < size; i ++ )
+    ret[i] = strmul(" ", size);
+
+  do_vsection( in, 1, ret, size/2 );
+  do_vsection( in, -1, ret, size/2 );
+  do_hsection( in, 1, ret, size/2 );
+  do_hsection( in, -1, ret, size/2 );
+
+  return implode(ret,"\n");
+}
+/***************************************************************/ 
+/*                 MASKING THE ACTUAL PLAIN                    */
+/* spare out the visible area                                  */
+/***************************************************************/
+#define CLIP_A "¥"
+#define CLIP_B "§"
+private string _clip_view;
+private int    _clip_count;
+private string clip( string in, int pos )
+{
+  int len;
+
+  len = strlen( in );
+  _clip_view[ pos..(pos+len-1) ] = _clip_count ? strmul(CLIP_A, len) : strmul(CLIP_B, len);
+
+  _clip_count = !_clip_count;
+
+  return in;
+}
+
+private string clip_view( string view, string mask )
+{
+  string data;
+
+  _clip_view = view;
+  _clip_count = 0;
+
+  data = implode( map_array( m_indices( mkmapping( efun::explode( mask , "" ) ) - ([ "\n", " " ]) ), #'build_pattern_fun ), "|" );
+//        lambda( ({'a}), ({ #'+, ({ #'+, "\\", 'a }), "+"}) ) ) , "|" );
+
+  my_regreplace( mask, data, (#'clip), 1 );
+  return _clip_view;
+}
+
+/***************************************************************/ 
+/*                 ADDING THE VIEWED ZONES                     */
+/* which zones can be seen here                                */
+/***************************************************************/
+
+mapping _zones_;
+
+filter_zones( mixed key, mixed x, mixed y, mixed size ) {
+  return ( _zones_[ key, ZONE_DATA_POSX ] >= x &&
+         _zones_[ key, ZONE_DATA_POSX ] < (x + size) &&
+         _zones_[ key, ZONE_DATA_POSY ] >= y &&
+         _zones_[ key, ZONE_DATA_POSY ] < (y + size) );
+}
+
+private string get_visible_zones( string world, string plain, int xpos, int ypos, int size )
+{
+  string view;
+  string *zones;
+  string zone;
+  int tmp, i ;
+
+  view = (strmul( ( strmul( " ", size ) +"\n" ), size ))[0..<2];
+
+  //write( "XPOS= "+xpos+" YPOS="+ypos+" ("+size+")\n");
+  //write( sprintf("test=%O\n",overland_data[ world ][ plain ][ OL_DATA_ZONES ]));
+
+  _zones_ = overland_data[ world ][ plain ][ OL_DATA_ZONES ];
+
+  zones = m_indices( filter_mapping( _zones_, #'filter_zones, xpos, ypos, size ) );
+  /*
+  zones = filter( overland_data[ world ][ plain ][ OL_DATA_ZONES ],
+      (: 
+       $2[ ZONE_DATA_POSX ] >= $3 && $2[ ZONE_DATA_POSX ] < ($3 + $5) &&
+       $2[ ZONE_DATA_POSY ] >= $4 && $2[ ZONE_DATA_POSY ] < ($4 + $5) :), 
+      xpos, ypos, size );
+  */
+
+  for ( i = sizeof( zones ) - 1; i >= 0; i-- ) {
+    zone = zones[i];
+//  foreach( string zone : zones ){
+    //      write("dx="+(zones[ zone, ZONE_DATA_POSX ] - xpos )+" dy="+(zones[ zone, ZONE_DATA_POSY ] - ypos )+"\n");
+    tmp = (size + 1) * (_zones_[ zone, ZONE_DATA_POSX ] - xpos ) + ( _zones_[ zone, ZONE_DATA_POSY ] - ypos );
+    view[ tmp..tmp ] = ( _zones_[ zone, ZONE_DATA_TYPE ] == OLROOM_TYPE_ZONE ?"@":"*" ); 
+  }
+
+  view[ (size+1)*(size/2) + (size/2) ] = 'X';
+  return view;
+}
+
+/***************************************************************/ 
+/*                    PREPARE VIEW DATA                        */
+/* prepare the datastructure for calculating the view          */
+/* [0] location string                                         */
+/* [1] lower plain (background)                                */
+/* [2] actual plain (the one you are on)                       */
+/* [3] view plain (the area you can see)                       */
+/* [4] zones that can be seen                                  */
+/***************************************************************/ 
+public nomask mixed * get_overland_view_data( string position )
+{
+  mixed *pos;
+  mixed *ret;
+  int xpos, ypos;
+  string lplain;
+
+  pos = unify_position( position );
+  if ( !pos )
+    return 0;
+
+  ret = allocate( OLVIEW_PLAINS );
+
+  /* [0] location string                                         */
+  OLVIEW_POSITION( ret ) = build_unified_position( pos );
+
+  xpos = LOC_VIEW_X( pos ) - OLVIEW_RADIUS;
+  ypos = LOC_VIEW_Y( pos ) - OLVIEW_RADIUS;
+  //write( "XPOS= "+xpos+" YPOS="+ypos+" \n");
+
+  /* [1] lower plain (background)                                */
+  lplain = overland_data[ LOC_WORLD( pos ) ][ LOC_PLAIN( pos ) ][ OL_DATA_LOWER_PLAIN ];
+  if ( lplain && overland_data[ LOC_WORLD( pos ) ][ LOC_PLAIN( pos ) ][ OL_DATA_TRANSPARENT ] ){
+    OLVIEW_LOWER_PLAIN( ret ) = get_plain_clipping( LOC_WORLD( pos ), lplain, xpos, ypos, OLVIEW_SIZE );
+    OLVIEW_LOWER_PLAIN( ret ) = decode_plain_view(  OLVIEW_LOWER_PLAIN( ret ),  LOC_WORLD( pos ), lplain );
+  }
+
+  /* [2] actual plain (the one you are on)                       */
+  OLVIEW_PLAIN( ret ) = get_plain_clipping( LOC_WORLD( pos ),  LOC_PLAIN( pos ), xpos, ypos, OLVIEW_SIZE );
+
+  /* [3] view plain (the area you can see)                       */
+  _plain_data_ = overland_data[ LOC_WORLD( pos ) ][ LOC_PLAIN( pos ) ][ OL_DATA_PLAINDATA ];
+  _plain_transparent_ = overland_data[ LOC_WORLD( pos ) ][ LOC_PLAIN( pos ) ][ OL_DATA_TRANSPARENT ];
+  OLVIEW_VISIBLE_PLAIN( ret ) = calculate_visible_area( OLVIEW_PLAIN( ret ), LOC_WORLD( pos ),  LOC_PLAIN( pos ) );
+  OLVIEW_PLAIN( ret ) = clip_view( OLVIEW_PLAIN( ret ), OLVIEW_VISIBLE_PLAIN( ret ) );
+
+  /* [4] zones that can be seen                                  */
+  OLVIEW_ZONES( ret ) = get_visible_zones( LOC_WORLD( pos ),  LOC_PLAIN( pos ), xpos, ypos, OLVIEW_SIZE );
+
+  return ret;
+}
+
+/***************************************************************/ 
+/*                      COLOUR VIEW                            */
+/* convert the whole thing into an colored view                */
+/***************************************************************/ 
+private string _merge_map_;
+
+/***************************************************************/ 
+/* merge the layer with the placed objects with the act layer  */
+/***************************************************************/ 
+protected string merge_object_layer_fun( string txt, int idx ) {
+  if ( member( " gGX", _merge_map_[ idx ] ) == -1 /*!= ' '*/ )
+    _merge_map_[ idx..idx ] = txt;
+  return "";   
+}
+
+private string merge_object_layer( string act, string obj )
+{
+  if ( !obj )
+    return act;
+  _merge_map_ = act;
+  my_regreplace( obj, "[^ ]", #'merge_object_layer_fun, 1 );
+  /*
+  (:
+        if ( member( " gGX", _merge_map_[ $2 ] ) == -1 )
+        _merge_map_[ $2..$2 ] = $1;
+        return "";   
+        :), 1 );
+        */
+
+  return _merge_map_;
+}
+
+private nomask string merge_view( string * view )
+{
+  /*   string ret = copy( OLVIEW_PLAIN( view ) );
+
+       string colours = implode( map( m_indices( mkmapping( explode( OLVIEW_PLAIN( view ), "" ) ) - ([ "\n", "g", "G", "X", "{", "}" ]) ), (: "\\"+$1+"+" :) ), "|" );
+
+       string ret = regreplace( merge_object_layer( OLVIEW_PLAIN( _colour_view_ ), OLVIEW_ZONES( _colour_view_ )  ), 
+       colours+"|[@*{}gGX]", (#'compute_colours), 1 );
+       */
+}
+
+/***************************************************************/ 
+/*                      VIEW RANGE                             */
+/* range the player sees on that plain                         */
+/***************************************************************/ 
+public int calculate_view_range( object plr, string world, string plain )
+{
+  /*
+  int day = TIME_MASTER->day();
+  int d   = plr->query_darkie();
+  return ((day&&!d)||(!day&&d)?7:4);
+  */
+  return 7;
+}
+
+/***************************************************************/ 
+/*                    VISIBLE PLAYER                           */
+/* colours the view the player sees                            */
+/***************************************************************/ 
+private int      _obj_view_size_;
+private string   _obj_location_;
+private int      _obj_dx_;
+private int      _obj_dy_;
+private object   _obj_plr_;
+
+protected string eval_livings( string in, int pos )
+{
+  object room;
+  object *inv;
+
+  if ( _merge_map_[ pos ] != ' ' ){
+    return "";
+  }
+
+  room = rooms[ sprintf("%s%d|%d", _obj_location_, _obj_dx_+pos/(_obj_view_size_+1), _obj_dy_+pos%(_obj_view_size_+1) ) ];
+
+  //   write( sprintf("%s > %O >",sprintf("%s%d|%d", _obj_location_, _obj_dx_+pos/(_obj_view_size_+1), _obj_dy_+pos%(_obj_view_size_+1) ) , room));
+  if ( !room ) {
+    //      write("\n");
+    return "";
+  }
+
+  inv = filter_array( all_inventory( room ), #'interactive );
+  //   write( sizeof( inv )+"\n" );
+  if ( sizeof( inv /*filter( inv, (: !$1->is_invis_for( _obj_plr_ ) :) )*/ ) ){
+    _merge_map_[ pos ] = 'G';
+  }
+
+  return "";
+}
+
+protected string find_visible_livings( string world, string plain, int xpos, int ypos, string * view, object plr, int rad )
+{
+  int size2;
+
+  _merge_map_ = OLVIEW_ZONES( view );
+
+  _obj_view_size_ = (int)sqrt( (float)strlen( OLVIEW_PLAIN( view ) ) );
+  size2 = _obj_view_size_/2;
+  _obj_plr_ = plr;
+  _obj_location_ = sprintf("@%s|%s|", world, plain);
+  _obj_dx_ = xpos - size2;//OL_VIEW_RADIUS;
+  _obj_dy_ = ypos - size2;//OL_VIEW_RADIUS;
+
+  my_regreplace( OLVIEW_VISIBLE_PLAIN( view ), "[^ ]", (#'eval_livings), 1 );
+
+  return _merge_map_;   
+}
+
+/***************************************************************/ 
+/*                    COLOUR THE VIEW                          */
+/* colours the view the player sees                            */
+/***************************************************************/ 
+#define CDEBUG 0
+private mapping _colour_filter_ = ([ 0:"",
+    "reset":VT_TA_AO,
+    "bblack":VT_B_BLACK,
+    "bred":VT_B_RED,
+    "bgreen":VT_B_GREEN,
+    "bbrown":VT_B_BROWN,
+    "byellow":VT_B_YELLOW,
+    "bblue":VT_B_BLUE,
+    "bmagenta":VT_B_MAGENTA,
+    "bcyan":VT_B_CYAN,
+    "bwhite":VT_B_WHITE,
+    //"underline":CC_UNDERLINE
+    ]); 
+
+private mixed * _colour_view_;
+
+private string   _colour_pos_;
+private int      _colour_xpos_;
+private int      _colour_ypos_;
+
+private int      _colour_size_;
+private mapping  _colour_zones_;
+
+private mapping _colour_data_;
+
+private string * eval_zone( int pos )
+{
+  //   write( "POSITION="+pos+" size="+_colour_size_+" ("+(pos/(_colour_size_+1))+"/"+((pos%(_colour_size_+1)))+")\n"); 
+  string loc;
+
+  loc = sprintf( "%s|%d|%d", _colour_pos_, 
+      _colour_xpos_+(pos/(_colour_size_+1)), 
+      _colour_ypos_+(pos%(_colour_size_+1)) ); 
+
+  //ODEBUG( loc );
+  return /*( ({ CC_BRED+CC_WHITE, "*" }) );*/({ _colour_zones_[ loc, ZONE_DATA_COLOUR ], _colour_zones_[ loc, ZONE_DATA_CHAR ], (_colour_zones_[ loc, ZONE_DATA_TYPE ] == OLROOM_TYPE_ZONE ) }); 
+  ///ODEBUG( hmp );
+  //COLOUR_INFO( hmp );
+  //return hmp;
+  // ret #3 = visibility (range | connect )
+}
+
+private string _calculate_colours( string in, int pos )
+{
+  string currentMapchar;
+  string colour;
+
+#if CDEBUG   
+  write( "["+in+"]>" );
+#endif   
+
+  currentMapchar = in[ 0..0 ];
+  colour = VT_TA_AO;
+
+  if ( currentMapchar == CLIP_A || currentMapchar == CLIP_B ) { 
+    currentMapchar = OLVIEW_VISIBLE_PLAIN( _colour_view_ )[ pos..pos ]; 
+    colour += _colour_data_[ currentMapchar, PDATA_VCOLOR ];
+    in = strmul( _colour_data_[ currentMapchar, PDATA_VCHAR ], strlen( in ) );
+#if CDEBUG   
+    write( " %^green%^V%^reset%^["+in+"]>" );
+#endif   
+  } else {
+    string *tmp;
+
+    tmp = 0;
+    switch ( currentMapchar ){
+      case " ": break;
+      case "@":
+        case "*": 
+        tmp = eval_zone( pos );
+      //colour = tmp[ 0 ];//CC_BRED+CC_BLACK; 
+      in = tmp[ 1 ];
+      //break;
+      default :
+      if ( member( _colour_data_, currentMapchar ) ){
+        colour += _colour_data_[ currentMapchar, PDATA_HCOLOR ];
+        in = strmul( _colour_data_[ currentMapchar, PDATA_HCHAR ], strlen( in ) );
+      } else {
+        //               write( sprintf(" vpChar=%O",to_string( ({ OLVIEW_VISIBLE_PLAIN( _colour_view_ )[ pos ] }) )) );
+        //               write( sprintf(" pC=%O",_colour_data_[ OLVIEW_PLAIN( _colour_view_ ), PDATA_HCOLOR ]) );
+        if ( OLVIEW_VISIBLE_PLAIN( _colour_view_ )[ pos ] != ' ' )
+          colour = _colour_data_[ OLVIEW_VISIBLE_PLAIN( _colour_view_ )[ pos..pos ], PDATA_VCOLOR ];
+        else {
+          colour = _colour_data_[ OLVIEW_PLAIN( _colour_view_ )[ pos..pos ], PDATA_HCOLOR ];
+          if ( tmp && !tmp[ 2 ] ) 
+            in = strmul( _colour_data_[ OLVIEW_PLAIN( _colour_view_ )[ pos..pos ], PDATA_HCHAR ], strlen( in ) );
+        }
+
+        /*
+        if ( !tmp || tmp[ 2 ] )
+          colour = terminal_colour( colour, _colour_filter_ )+(tmp?tmp[0]:VT_RED);
+          */
+        colour += (tmp?tmp[0]:VT_RED);
+      }
+    }
+
+#if CDEBUG   
+    write( " %^red%^H%^reset%^["+in+"]>" );
+#endif   
+  }
+
+  if ( currentMapchar == " " || in[0] == ' ' ){
+    if ( OLVIEW_LOWER_PLAIN( _colour_view_ ) )
+      in = VT_TA_AO+OLVIEW_LOWER_PLAIN( _colour_view_ )[ pos..(pos+strlen(in)-1) ];
+    else
+      in = VT_TA_AO+in;   
+#if CDEBUG
+    write( " -\" \"- ["+COLOUR_INFO(in)+"]\n" );
+#endif      
+    return ( in );
+  }   
+
+#if CDEBUG
+  write( " ["+COLOUR_INFO(colour+in)+"]\n" );
+#endif      
+
+  return ( VT_TA_AO+colour+in );  
+}
+
+public string colour_overland_view( mixed * view )
+{
+  mixed *pos;
+  string colours;
+  string ret;
+
+  pos = unify_position( OLVIEW_POSITION( view ) );
+  if ( !pos )
+    return 0;
+
+  _colour_view_ = view;
+
+  _colour_pos_ = sprintf("@%s|%s", LOC_WORLD( pos ), LOC_PLAIN( pos ));
+  _colour_size_ = (int)sqrt( (float)strlen( OLVIEW_PLAIN( view ) ) );
+
+  _colour_xpos_ = LOC_VIEW_X( pos ) - (_colour_size_/2);
+  _colour_ypos_ = LOC_VIEW_Y( pos ) - (_colour_size_/2);
+
+  _colour_data_ = overland_data[ LOC_WORLD( pos ) ][ LOC_PLAIN( pos ) ][ OL_DATA_PLAINDATA ];   
+  _colour_zones_ = overland_data[ LOC_WORLD( pos ) ][ LOC_PLAIN( pos ) ][ OL_DATA_ZONES ];
+  //write( sprintf("%O\n",_colour_data_) );
+
+  colours = implode( map_array( m_indices( mkmapping( efun::explode( OLVIEW_PLAIN( view ) , "" ) ) - ([ "\n" ]) ), #'build_pattern_fun), "|" );
+//        lambda( ({'a}), ({ #'+, ({ #'+, "\\", 'a }), "+"}) ) ) , "|" );
+
+//  colours = implode( map( m_indices( mkmapping( explode( OLVIEW_PLAIN( view ), "" ) ) - ([ "\n" ]) ), (: "\\"+$1+"+" :) ), "|" );
+  //write( colours+"\n" ); 
+
+  //write( sprintf("%O\n",merge_object_layer( OLVIEW_PLAIN( view ), OLVIEW_ZONES( view ) )) );
+
+  ret = my_regreplace( merge_object_layer( OLVIEW_PLAIN( view ), OLVIEW_ZONES( view ) ),
+      colours+"|[@*gGX]", (#'_calculate_colours), 1 );
+  //write( "\n"+ret+"\n" ); 
+  return ret;
+}
+
+/***************************************************************/ 
+/*                         VIEW                                */
+/* calculates the view the player sees                         */
+/***************************************************************/ 
+public string calculate_overland_view( string * view, object plr )
+{
+  mixed *pos;
+  int rad;
+
+  pos = unify_position( OLVIEW_POSITION( view ) );
+  if ( !pos )
+    return 0;
+
+  rad = calculate_view_range( plr, LOC_WORLD( pos ), LOC_PLAIN( pos ) );
+
+  apply_mask( &view, rad );
+
+  OLVIEW_ZONES( view ) = find_visible_livings( LOC_WORLD( pos ), LOC_PLAIN( pos ), LOC_VIEW_X( pos ),  LOC_VIEW_Y( pos ), 
+      view, plr, rad );
+
+  return colour_overland_view( view );
+  //   return 0;
+}
+
+/***************************************************************/ 
+/*                        MOVING                               */
+/* calculates the view the player sees                         */
+/***************************************************************/
+#if 0
+#include "overland_moving.lpc"
+#include "/room/genRoom.h"
+#else
+
+#define _DIR_IDX_ 0
+#define _DIR_DX_ 1
+#define _DIR_DY_ 2
+
+private mapping _directions_ =
+ ([ "norden": 1; -1;  0,
+    "osten" : 6;  0;  1,
+    "sueden": 9;  1;  0,
+    "westen": 4;  0; -1 ]);
+
+private nomask object create_room( string location )
+{
+  mixed *pos;
+  object room;
+  string surrounding;
+  mapping plain_data;
+  string *dirs;
+  string dir;
+  int i, idx, dx, dy;
+  mapping zones;
+
+  pos = unify_position( location );
+  if ( !pos )
+    return 0;
+
+  room = clone_object( OVERLAND_ROOM );
+  if ( !room ) 
+    raise_error("Couldn't clone OverlandRoom!\n"); 
+
+  room->set_location( location );
+
+  surrounding = get_sourrounding( location );
+  plain_data = overland_data[ LOC_WORLD( pos ) ][ LOC_PLAIN( pos ) ][ OL_DATA_PLAINDATA ];
+
+  dirs = m_indices( _directions_ );
+  for ( i = sizeof( dirs ) - 1; i >= 0; i -- ) {
+    dir = dirs[i];
+    idx = _directions_[dir, _DIR_IDX_];
+    dx = _directions_[dir, _DIR_DX_];
+    dy = _directions_[dir, _DIR_DY_];
+//  foreach( string cmd, string dir, int idx, int dx, int dy : _directions_ ){
+    if ( plain_data[ surrounding[ idx..idx ] ] ){
+      if ( plain_data[ surrounding[ idx..idx ], 9 ] )//ROOM_DATA_CANENTER
+        room->AddExit( dir, sprintf("@%s|%s|%d|%d", LOC_WORLD( pos ), LOC_PLAIN( pos ), LOC_VIEW_X( pos )+dx, LOC_VIEW_Y( pos )+dy ) ); 
+      else
+        room->AddGuardedExit( dir, sprintf("@%s|%s|%d|%d", LOC_WORLD( pos ), LOC_PLAIN( pos ), LOC_VIEW_X( pos )+dx, LOC_VIEW_Y( pos )+dy ),
+                              "NO_GUARD", plain_data[ surrounding[ idx..idx], 10 ] ); //ROOM_DATA_BLOCKMESSAGE
+    }
+  }
+
+  zones = overland_data[ LOC_WORLD( pos ) ][ LOC_PLAIN( pos ) ][ OL_DATA_ZONES ];
+
+  if ( zones[ location ] && zones[ location, ZONE_DATA_TYPE ] != OLROOM_TYPE_ZONE  ){ 
+    string plain;
+    //ODEBUG( zones[ location, ZONE_DATA_FLAGS ] );
+    plain = overland_data[ LOC_WORLD( pos ) ][ LOC_PLAIN( pos ) ][ OL_DATA_LOWER_PLAIN ];
+    if ( plain && (zones[ location, ZONE_DATA_FLAGS ] & OLROOM_FLAG_PLAIN_DOWN) ){
+      room->AddExit( "unten", sprintf("@%s|%s|%d|%d", LOC_WORLD( pos ),  plain, LOC_VIEW_X( pos ), LOC_VIEW_Y( pos ) ) );
+    }
+    plain = overland_data[ LOC_WORLD( pos ) ][ LOC_PLAIN( pos ) ][ OL_DATA_UPPER_PLAIN ];
+    if ( plain && (zones[ location, ZONE_DATA_FLAGS ] & OLROOM_FLAG_PLAIN_UP) ){
+      room->AddExit( "oben", sprintf("@%s|%s|%d|%d", LOC_WORLD( pos ), plain, LOC_VIEW_X( pos ), LOC_VIEW_Y( pos ) ) );
+    }
+
+    //OLROOM_FLAG_PLAIN_DOWN
+  }
+
+  return room;  
+}
+
+public nomask int move( object living, string dest, string msg, string cmd )
+{
+  mixed *pos;
+  object dest_obj;
+
+  pos = unify_position( dest );
+  if ( !living || !dest || !pos ) 
+    return 0;
+
+  dest = build_unified_position( pos );
+
+  //write( "moving to "+dest+"\n" );
+  dest_obj = rooms[ dest ];
+  //write( sprintf("found <%O>\n", dest_obj ) );
+  if ( !dest_obj ) {
+    mapping zones;
+
+    zones = overland_data[ LOC_WORLD( pos ) ][ LOC_PLAIN( pos ) ][ OL_DATA_ZONES ];
+    //ODEBUG( zones );
+    //ODEBUG( zones[ dest ] );
+    //ODEBUG( zones[ dest, ZONE_DATA_TYPE ] );
+    if ( zones[ dest ] && zones[ dest, ZONE_DATA_TYPE ] == OLROOM_TYPE_ZONE ){
+      dest = zones[ dest, ZONE_DATA_ENTRYS ][ cmd ];
+      if ( !dest ) return 1;
+      else if ( dest[ 0 ] == '!' ) {
+        tell_object( living, dest[1..]+"\n" );
+        return 1;
+      } else dest_obj = (object)dest;
+
+    } else {
+      dest_obj = create_room( dest );
+      if ( !dest_obj ) return 0;
+      //write( sprintf("Adding room: %O (%O)\n", dest_obj, dest_obj->get_location() ) );
+      //rooms += ([ dest_obj->query_location(): dest_obj ]); 
+      cache_room( dest_obj );
+    }
+  }
+
+  living->move_living( dest_obj, msg, 0, cmd);
+}
+
+#endif
+
+public nomask string query_destination( string dest, string cmd )
+{
+  mixed *pos;
+  object dest_obj;
+
+  pos = unify_position( dest );
+  if ( !dest || !pos ) 
+    return 0;
+
+  dest = build_unified_position( pos );
+
+  //write( "moving to "+dest+"\n" );
+  dest_obj = rooms[ dest ];
+  //write( sprintf("found <%O>\n", dest_obj ) );
+  if ( !dest_obj ) {
+    mapping zones;
+
+    zones = overland_data[ LOC_WORLD( pos ) ][ LOC_PLAIN( pos ) ][ OL_DATA_ZONES ];
+    //ODEBUG( zones );
+    //ODEBUG( zones[ dest ] );
+    //ODEBUG( zones[ dest, ZONE_DATA_TYPE ] );
+    if ( zones[ dest ] && zones[ dest, ZONE_DATA_TYPE ] == OLROOM_TYPE_ZONE ){
+      dest = zones[ dest, ZONE_DATA_ENTRYS ][ cmd ];
+      if ( !dest ) return 0;
+      else if ( dest[ 0 ] == '!' ) {
+        //tell_object( living, dest[1..]+"\n" );
+        return dest;
+      } else dest_obj = (object)dest;
+
+    } else {
+      dest_obj = create_room( dest );
+      if ( !dest_obj ) return 0;
+      //write( sprintf("Adding room: %O (%O)\n", dest_obj, dest_obj->get_location() ) );
+      //rooms += ([ dest_obj->query_location(): dest_obj ]); 
+      cache_room( dest_obj );
+    }
+  }
+  return (string)dest_obj;
+  //living->move_living( dest_obj, msg, 0, cmd);
+}
+
+/***************************************************************/ 
+/*                         TEST                                */
+/* calculates the view the player sees                         */
+/***************************************************************/ 
+
+int _ec_;
+
+public void _test()
+{
+  mixed *view;
+  string tmp;
+
+  //   mixed * view = get_overland_view_data("@techdemo|tech1|11|20");
+  view = get_overland_view_data("@techdemo|tech1|15|25");
+
+  PROFILE( tmp = colour_overland_view( view ) );
+
+  write( tmp+"\n" );
+}
+
+public void _test1()
+{
+  mixed *view;
+  string tmp;
+
+  //   mixed * view = get_overland_view_data("@techdemo|tech1|11|20");
+  view = get_overland_view_data("@techdemo|tech1|15|25");
+
+  write( sprintf("%O\n",view ) );
+
+  PROFILE( tmp = calculate_overland_view( view, this_player() ) );
+
+  write( tmp+"\n" );
+}

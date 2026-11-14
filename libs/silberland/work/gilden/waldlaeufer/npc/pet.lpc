@@ -1,0 +1,1747 @@
+/*****************************************************************************
+Die Pets der Gilde
+(c) Lilyth, Torian, Delgo @ Silberland <sl.mud.at>
+16.09.05 - Begin
+TODO:
+  - evtl. noch einen Report?
+*****************************************************************************/
+//** INCLUDE + INHERIT + DEFINE ********************************************//
+#include "/gilden/waldlaeufer/def.h"
+inherit "std/npc";
+inherit "/std/npc/spells";
+#include "/gilden/waldlaeufer/functions.h"
+
+//--defines-------------------------------------------------------------------
+#define R(x) to_string(this_player()->Name(x))
+#define P(x) to_string(this_object()->name(x))
+#define E(x) to_string(enemy->name(x))
+
+#define MOD_PEACE 0
+#define MOD_ATTACK 1
+
+#define NORMAL 0
+#define BIEST 1
+
+#define REDUCE_AC "reduce_ac"
+#define REDUCE_WC "reduce_wc"
+#define RAMMEN "rammen"
+#define NO_ATTACK "no_attack"
+#define SLOW "slow"
+#define PBLIND "blind"
+#define DEFENCE "defence"
+#define NOMAGIC "nomagic"
+#define BLEED "bleeding"
+
+#define SPEED "speed"
+#define SPEED_DEX "speed_dex"
+#define DEX A_DEX
+#define STR A_STR
+#define CON A_CON
+#define BODY "body"
+#define DAMAGE "damage"
+#define INT A_INT
+
+//--Vorfunktionen-------------------------------------------------------------
+private nosave int CanComeback();
+int QueryBiest();
+int QueryTeam();
+int hand_damage(int level);
+int body(int level);
+int SavePet();
+void SetDietime();
+int QueryDietime();
+varargs int new_level(int gainedLevels);
+
+//--globale Variablen---------------------------------------------------------
+private nosave int breakcounter;
+private nosave int mode;
+private nosave int fightmode;
+private nosave int teamtime;
+private nosave object owner;
+private nosave int teampower;
+private nosave int incarnation;
+private nosave mixed* hand_base;
+private nosave int hand_overwrite;
+private nosave string current_tierkoenig;
+private nosave mapping res_str_overwrite;
+
+//--aus dem Savefile uebernommen----------------------------------------------
+string category;
+mapping p;
+int beastReady;
+
+ //Levelexp fuer level 0 bis 40 (auch wenn man nicht alle braucht)
+int *next_level=({0, 
+  1000,  2000,  3000,  4000,  5000,  6000,  7000,  8000,  9000, 10000,
+ 11000, 12000, 13000, 14000, 15000, 16000, 17000, 18000, 19000, 20000,
+ 21000, 22000, 23000, 24000, 25000, 26000, 27000, 28000, 29000, 30000,
+ 31000, 32000, 33000, 34000, 35000, 36000, 37000, 38000, 39000, 40000});
+
+//**************************************************************************//
+
+public int QueryIncarnation() {
+  return incarnation;
+}
+
+
+
+//** Standardfunktionen ****************************************************//
+//-- Create ------------------------------------------------------------------
+void create()
+{
+  if(!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_FRIEND, 1);
+  SetProp(P_NO_GLOBAL_ATTACK, 1); 
+  SetProp(P_NO_SCORE, 1); 
+  enable_commands();
+  mode=MOD_PEACE;
+  teamtime=0;
+  beastReady=1;
+  hand_overwrite = 0;
+  SUID;
+
+  AddCmd(({"nenne", "nenn", "benenne", "benenn", "taufe", "tauf"}), "cmd_rename");
+}
+
+public int cmd_rename(string str) {
+  string wen, wie, oldName;
+
+  if(TP != owner) return 0;
+  if(QueryProp(P_RANGER_PET_RENAMED)) {
+    write(BS("Du hast deinem Begleiter schon einen Namen gegeben."));
+    return -1;
+  }
+
+  notify_fail("Wen willst du wie taufen?\n");
+  if(!str || str == "") return 0;
+  if(sscanf(str, "%s %s", wen, wie) != 2) return 0;
+
+  notify_fail("Aber sojemand ist hier doch gar nicht?\n");
+  if(!id(wen)) return 0;
+
+  oldName = QueryProp(P_NAME);
+  write(BS(sprintf("%s hoert nun auf den Namen %s.", oldName, wie)));
+  SetProp(P_NAME, capitalize(wie));
+  SetProp(P_SHORT, sprintf("%s, %sgezaehmte %s von %s", wie, QueryArticle(WER, 1), oldName, owner->Name(WEM)));
+  AddId(wie);
+  SetProp(P_RANGER_PET_RENAMED, 1);
+  SetProp(P_ARTICLE, 0);
+  return 1;
+}
+
+string _query_noattack() {
+  if(TP == owner) return "will nicht gegen dich kaempfen.";
+  if(interactive(TP)) return "gehoert einem anderen Spieler.";
+  return 0;
+}
+
+//-- Wer ist der Besitzer? ---------------------------------------------------
+mixed QueryOwner()
+{ if(owner) { return owner; }
+  return 0; }
+  
+//-- Beim Tod verschwinden ---------------------------------------------------
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  if(objectp(owner) && (player == owner))
+  { call_out("remove", 0); }
+  return;
+}
+
+//-- Remove ------------------------------------------------------------------
+int remove()
+{
+  string path;
+  
+  if(!objectp(owner) || !interactive(owner)) { return ::remove(); }
+
+  SetProp("ranger_pet_remove_time", time());
+  
+  path=MEMBERS_PETS+lower_case(to_string(owner->QueryProp(P_NAME)))+".o";
+  if((file_size(path))>0) {
+    SavePet();
+  } 
+  
+  owner->RemovePursuer(TO);
+  owner->RemoveDefender(TO);
+  while(remove_call_out("remove")!=-1);
+  return ::remove();
+}
+
+//-- Reset -------------------------------------------------------------------
+void reset()
+{
+  mixed env;
+  
+  ::reset();
+  
+  if( objectp(owner) && owner->id(DEFAULT_RANGER_ID) ) return; 
+
+  if(!objectp(owner)  || !interactive(owner) || !objectp(find_player(QueryProp(P_RANGER_PET_OWNER)))) {
+    remove();
+    return;
+  }
+  
+  /*Warum nehmen wir einem Tiermeister seine Faehigkeiten fuer lange Zeit weg??
+  if(breakcounter>=4)
+  {
+    SetDietime();
+    if(objectp(env=ENV(TO)))
+    { tell_room(env,BS(Name()+" braucht eine Ruhepause und verschwindet.")); }
+    remove(); 
+  }*/
+  breakcounter+=1;
+
+  if(!beastReady) {
+    beastReady=1;
+    if(objectp(env=ENV(TO))) {
+      tell_room(env, BS(sprintf("%s erholt sich und kann wieder von einem Naturgeist beseelt werden",
+                Name(WER))));
+    }
+    set_next_reset(3600);
+  }
+}
+//**************************************************************************//
+
+public int _query_spellrate() {
+
+  if(QueryIncarnation()) {
+    return QueryAttribute(A_INT);
+  }
+
+  if(QueryProp(P_LEVEL) > 10 && QueryProp(P_SPELLS)) {
+   return QueryProp(P_LEVEL) / 2;
+  }
+  return 0;
+}
+
+//** Speichern und Laden ***************************************************//
+//--Die Erschaffung-----------------------------------------------------------
+int second_create(object caster, mixed m)
+{
+  string s, *indices;
+  int i;
+  mixed env;
+  object dto;
+  
+  if(!objectp(caster) || !living(caster) || !objectp(TO) ||
+     !objectp(env=ENV(caster)) )
+  { return 0; }
+  if(!interactive(caster) && stringp(m) && m!=0){ s=m; }
+  else { s=getuid(caster); }
+  s=MEMBERS_PETS+s;
+  
+  if(file_size(s+".o") > 0){ 
+    owner=caster; 
+    dto = clone_object(OBJ "pet_data_holder");
+    dto->LoadFrom(s);
+    indices = m_indices(dto->GetData());
+    for(i=0; i<sizeof(indices); ++i) {
+      if(indices[i] == P_HANDS) {
+        hand_base = dto->GetData()[indices[i]];
+      } else {
+        SetProp(indices[i], dto->GetData()[indices[i]]);
+      }
+    }
+    destruct(dto);
+  }
+  else {
+    tell_object(caster, BS("Dein Tier gibt es nicht."));
+    remove();
+    return 0;
+  }
+  if(!CanComeback())
+  {
+    tell_object(caster,BS("Dein Tier benotigt noch eine Ruhepause, bis Du es "
+                          "wieder rufen kannst."));
+    remove();
+    return 0;
+  }
+  
+  AddHp(time()-QueryProp("ranger_pet_remove_time"));
+
+  move(env, M_GO|M_SILENT);
+  PETMASTER->SetPet(caster, TO);
+  caster->AddPursuer(TO);
+  caster->AddDefender(TO);
+  breakcounter=0;
+  teamtime=0;
+
+  if(QueryProp(P_LEVEL) > QueryProp(P_RANGER_MAX_PET_LEVEL)) {
+    pDebug(owner, sprintf("ranger pet :: max level(%d) < level (%d)", QueryProp(P_RANGER_MAX_PET_LEVEL), QueryProp(P_LEVEL)));
+    new_level(QueryProp(P_RANGER_MAX_PET_LEVEL) - QueryProp(P_LEVEL));
+  }
+
+  if(lower_case(QueryProp(P_RACE)) == "npc" || lower_case(QueryProp(P_RACE)) == "tier") {
+    SetProp(P_RACE, capitalize(QueryProp(P_RANGER_PET_RACE)));
+  }
+
+  res_str_overwrite = QueryProp(P_RESISTANCE_STRENGTHS);
+  hand_overwrite = 1;
+  return 1;
+}
+
+//--Speichern-----------------------------------------------------------------
+int SavePet() {
+  object dto;
+
+  if(QueryBiest()) return 1;
+  if(QueryIncarnation()) return 0;
+  if(!objectp(owner) || !interactive(owner)) { return 1; }
+
+  hand_overwrite = 0;
+  
+  dto = clone_object(OBJ "pet_data_holder");
+  dto->copyData(TO);
+  dto->Save(owner);
+  destruct(dto);
+
+  hand_overwrite = 1;
+
+  return 1;
+}
+//**************************************************************************//
+
+
+
+//** XPs/Level *************************************************************//
+//-- Auslagerung wegen der Skillpunkte noetig --------------------------------
+int hand_damage(int level)
+{
+  int i, skill;
+ 
+  if(objectp(owner)) {
+     skill = (R_SKILLMASTER->HasSkill(getuid(owner), TIER_ATTACKEN));
+  }
+
+  if(level<=30) {
+    i = 10 * QueryAttribute(A_STR);
+  } else {
+    i = 300 + 5 * (QueryAttribute(A_STR) - 30);
+  }
+
+  if(skill) i = (int) (i * 1.1);
+  
+  return i;  
+}
+
+
+//-- Auslagerung wegen der Skillpunkte noetig --------------------------------
+int body(int level)
+{
+  int i, skill;
+
+   if(objectp(owner)) {
+     skill = (R_SKILLMASTER->HasSkill(getuid(owner), TIER_VERTEIDIGUNG));
+  }
+
+  i = 4* level;
+
+  if(skill) {
+    i = (int) (i * 1.1);
+  }
+  
+  return i;  
+}
+
+public int _query_body() {
+  return body(QueryProp(P_LEVEL));
+}
+
+//--Anpassung des NPCs--------------------------------------------------------
+varargs int new_level(int gainedLevels)
+{
+  int level;
+  
+  level=QueryProp(P_LEVEL);
+  if(!objectp(owner)) { return 0; }
+  if(level>=MAX_LEVEL && gainedLevels > 0) return 1;
+  if(level>=QueryProp(P_RANGER_MAX_PET_LEVEL) && gainedLevels > 0) return 1;
+  if(gainedLevels != 0) {
+    level += gainedLevels;
+  } else {
+    level += 1;
+  }
+
+  SetProp(P_LEVEL, level);
+  SetProp(P_ATTRIBUTES, ([A_CON: level, A_DEX: level,
+                          A_STR: level, A_INT: level]));  
+  SetProp(P_MAX_HP, 30+level*level);
+  SetProp(P_MAX_SP, QueryProp(P_MAX_HP));
+  SetProp(P_HANDS, ({QueryProp(P_HANDS)[0],
+                    hand_damage(level), QueryProp(P_HANDS)[2] }) );
+  SetProp(P_XP, 0);
+
+  SavePet();
+  if(gainedLevels>=0) tell_object(owner, BS(Name(WER)+" ist staerker geworden."));
+  else tell_object(owner, BS(Name(WER)+" ist schwaecher geworden!"));
+  return 1;
+}
+
+public int GetNextLevelXp() {
+  int level;
+
+  level = QueryProp(P_LEVEL);
+  if(level >= QueryProp(P_RANGER_MAX_PET_LEVEL)) return -1;
+  return next_level[1+level];
+}
+
+//--Hier werden die erfahrungspunkte aufgeschlagen und ausgewertet------------
+int AddExp(int points)
+{
+  int al;
+  
+  if(RANGERMASTER->GetMasterAbility(getuid(owner)) == MASTER_ABIILITY_POWERFUL_COMPANION) {
+    owner->AddExp(points);
+  } else {  
+    if(objectp(owner) && QueryProp(P_LEVEL) < QueryProp(P_RANGER_MAX_PET_LEVEL) ) { 
+      owner->AddExp(points/2); 
+    } else {
+      owner->AddExp(points);
+      return ::AddExp(0);
+    }
+  }
+  
+  al=QueryProp(P_LEVEL);
+  if(al>=(sizeof(next_level)-1)) {
+    al=(sizeof(next_level)-2);
+  }
+
+  if(QueryProp(P_XP) >= (next_level[1+al]) && QueryProp(P_LEVEL) < QueryProp(P_RANGER_MAX_PET_LEVEL)) { 
+    new_level(); 
+  } else { 
+    if(!random(6)) SavePet(); // speicher sparender
+  }
+
+  return ::AddExp(points);
+}
+//**************************************************************************//
+  
+  
+  
+//** Komunikation **********************************************************//
+//--Kommandos empfangen-------------------------------------------------------
+void catch_tell(string str)
+{
+  string who,target,action;
+
+  if(!objectp(owner) || !interactive(owner)) return;
+  
+  if(!((query_verb() == "sag") /*|| (query_verb()[0..0] == "'")*/))return;
+                              //buggt. 
+  if(sscanf(str,"%s sagt: %s %s",who,target,action) != 3)      return;
+  if(!id(target))                                              return;
+  if(find_player(lower_case(who)) != owner)                    return;
+  if(action[<1..] == "\n") action = action[0..<2];
+  action = lower_case(action);
+  call_out("order",0,action);
+  return;
+}
+
+public void attack_order(string action) {
+  int space;
+  string target;
+  object enemy;
+
+  space = strstr("toete hansi", " ", 0);
+  if(space < 0) {
+    command_me("emote sieht sich verwirrt um.");
+    return;
+  }
+
+  target = action[space+1..];
+  if(!objectp(enemy = present(target, ENV(TO)))) {
+    command_me("emote sucht das Ziel, findet aber niemanden.");
+    return;
+  }
+
+  if(query_once_interactive(enemy)) {
+    command_me("emote winselt leise.");
+    return;
+  }
+
+  command_me("emote stuerzt sich auf "+enemy->name(WEN));
+  Kill(enemy);
+  return;
+}
+
+//--Die moeglichen Anweisungen------------------------------------------------
+int order(string action)
+{
+  object *enemies;
+  int i;
+  string path;
+  mixed env;
+  
+  path=MEMBERS_PETS+lower_case(to_string(owner->QueryProp(P_NAME)))+".o";
+  if(!objectp(TO) || !objectp(owner) || !objectp(env=ENV(owner)))
+  { return 0; }
+
+  if(action == "versteck dich"  ||
+     action == "verstecke dich" ||
+     action == "geh")
+  { tell_room(env, BS(Name()+" verschwindet."));
+    call_out("remove", 0);
+    return 1;}
+    
+  if(action == "du bist frei" ||
+     action == "verschwinde"  ||
+     action == "hau ab"       ||
+     action == "verzieh dich")
+  { if(!objectp(owner) || !interactive(owner)) return 1;
+    tell_room(env, BS(Name()+" verschwindet fuer Immer."));
+    if((file_size(path))>0) { rm(path); }
+    call_out("remove", 0);
+    return 1;}
+  
+  if(action == "kaempfe"     ||
+     action == "kaempf"      ||
+     action == "kaempfe mit" ||
+     action == "hilf mir"    ||
+     action == "kaempfe mit mir")
+  { tell_object(owner, BS(Name()+" kaempft jetzt mit Dir zusammen."));
+    if(pointerp(enemies=owner->PresentEnemies()) && (sizeof(enemies)>0))
+    { for(i=0; i<=sizeof(enemies)-1; i++)
+      {Kill(enemies[i]);} }
+    owner->AddDefender(TO);
+    mode=MOD_ATTACK;
+    return 1; } 
+    
+  if(action == "pause"       ||
+     action == "kampfpause"  ||
+     action == "stopp")
+  { tell_object(owner, BS( "Du kaempfst jetzt alleine.")); 
+    owner->RemoveDefender(TO);
+    mode=MOD_PEACE;
+    enemies=QueryEnemies()[0];
+    for(i=0; i<=sizeof(enemies)-1; i++)
+    { enemies[i]->StopHuntFor(TO,1);
+      StopHuntFor(enemies[i],1); }
+    return 1; } 
+
+  if(action[0..3] == "toet" || action[0..8] == "attackiere") {
+    attack_order(action);
+  }
+  
+}
+//**************************************************************************//
+
+
+
+//** Sterben/Pause und Wiederbeleben ***************************************//
+//--Die Pausezeit erimmteln---------------------------------------------------
+int QueryDietime()
+{
+  string backupfile, *lines, *pos;
+  int i, dietime;  
+  
+  if(!objectp(owner) || !interactive(owner)) { return 1; }
+  
+  dietime=0;
+  if(backupfile=read_file(R_PET_DIETIME))
+  {
+    lines=explode(backupfile, "\n");
+    for(i=0; i<=sizeof(lines)-1; i++)
+    {
+      pos=explode(lines[i], "**");
+      if(to_string(pos[0])==QueryProp(P_RANGER_PET_OWNER))
+      { dietime=to_int(pos[1]); }
+    }
+  }
+  return dietime;
+}
+
+//--Ist die Zeit vorbei?------------------------------------------------------
+int CanComeback()
+{
+  if(objectp(owner) && !interactive(owner)) return 1;
+  
+  if(QueryDietime()+600 > time()) return 0; //10 Min Pause
+  return 1;
+}
+
+//--Pausezeit wird gesetzt----------------------------------------------------
+int SetDietime()
+{
+  string backupfile, *lines, *pos, new_file;
+  int i;  
+  
+  if(!objectp(owner) || !interactive(owner)) return 1;
+  
+  if(backupfile=read_file(R_PET_DIETIME))
+  {
+    new_file="";
+    lines=explode(backupfile, "\n");
+    for(i=0; i<=sizeof(lines)-1; i++)
+    {
+      pos=explode(lines[i], "**");
+      if(to_string(pos[0])==QueryProp(P_RANGER_PET_OWNER))
+      { continue; }
+      new_file+=to_string(lines[i])+"\n"; 
+    }
+    new_file+=QueryProp(P_RANGER_PET_OWNER)+"**"+to_string(time())+"\n";
+    write_bytes(R_PET_DIETIME, 0, new_file);
+    return 1;
+  }
+  return 0;
+}
+
+//--Pausezeit beim DIE--------------------------------------------------------
+void die(int poisondeath)
+{ 
+  int lostxp;
+  if(objectp(ENV(TO))) {
+    tell_room(ENV(TO), BS(Name(WER)+" zieht sich schwer verwundet zurueck."));
+  }
+  SetDietime();
+
+  lostxp = QueryProp(P_LEVEL) * 1500;
+  if(QueryProp(P_XP)-lostxp < 0) {
+    lostxp -= QueryProp(P_XP);
+    new_level(-1); // wir fallen um ein level nach unten
+    SetProp(P_XP, GetNextLevelXp()-lostxp);
+  } else {
+    SetProp(P_XP, QueryProp(P_XP) - lostxp);
+  }
+
+  remove(1);
+  return;
+}
+//**************************************************************************//
+
+
+
+//** KampfFunktionen/Spells ************************************************//
+//--Welche spezielle Eigenschaft hat das Tier? (Kraft des Tieres)-------------
+int SwitchBonus(int faktor)
+{
+  string c, s;
+  mapping m;
+  int i, skill, t, k, n, v;
+  object bonus;
+  
+/*Rasse       Eigenschaft
+  wolf:       Staerke, Geschick
+  katze:      Geschick
+  baer:       Staerkebonus, Ausdauer
+  riese:      Staerkebonus
+  vogel:      Ausdauerbonus
+  spinne:     Intelligenz
+  panzertier: Body
+  huftier:    Ausdauerbonus
+  echse:      Geschick, Body
+  kleintier:  Geschick
+*/
+  
+  if(!objectp(owner) || !objectp(TO) ) { return 0; }
+  c=QueryProp(P_RANGER_PET_RACE);
+  skill=R_SKILLMASTER->HasSkill(getuid(owner), GEWALT_DER_URAHNEN);
+  if(faktor<1) faktor=1;
+  if(faktor>(5+5*skill)) faktor=(5+5*skill);
+  
+  if(QueryBiest()) i=2;
+  else {i=1;}
+
+  m=(["wolf":      "Aehnlich einem Wolf, attackierst Du Deine Feinde.";
+                   ({DEX, STR}),
+      "katze":     "Mit unendlicher Geschmeidigkeit fuehrst Du Deinen Kampf.";
+                   ({DEX}),
+      "baer":      "Du erhaelst die Kraft und das Durchhaltevermoegen eines Baeren.";
+                   ({STR, CON}),
+      "riese":     "Deine Muskeln wachsen enorm an und Du wirst Deine Feinde "
+                   "zerschmettern.";
+                   ({STR}),
+      "vogel":     "Die Schwerelosigkeit erfasst Dich und Du bewegst Dich mit"
+                   " leichten Bewegungen fort.";
+                   ({CON}),
+      "spinne":    "Deine Sinne flackern kurz und die Gerissenheit der Spinne erfuellt dich.";
+                   ({INT}),
+      "panzertier":"Du fuehlst wie Deine Haut haerter wird.";
+                   ({BODY}),
+      "huftier":   "Endlose Landstriche ziehen an Deinem geistigen Auge "
+                   "vorbei und Du spuerst wie Du ohne Muehe ganze Berge "
+                   "erklimmen koenntest.";
+                   ({CON}),
+      "echse":     "Du siehst Dich mit einem Schuppenkleid geschichkt durch die Reihen der Feinde "
+                   "schlaengeln.";
+                   ({DEX, BODY}),
+      "kleintier": "Deine Bewegungen werden schneller und geschickter.";
+                   ({DEX}),
+      "insekt":    "Wie das Surren tausender Fluegel rasen deine Gedanken und deine Haut wird zu hartem "
+                   "Chitin";
+                   ({INT,BODY})]);
+  
+  s=BS(to_string("Du spuerst auf einmal eine geistige Verbindung zu "+P(WEM)+
+                 ". "+m[c, 0]));
+
+  n = sizeof(m[c, 1]);
+  for(k=0; k<n; k++) {
+    switch(m[c, 1][k])
+    {
+      case SPEED: 
+        v = limit(200*i/n, 200, 400);
+        v = SPELL_DAMAGE_BONUS(owner, "kraft des tieres", v);
+        owner->ModifySkillAttribute(owner, SA_SPEED, v, SPELL_DAMAGE_BONUS(owner, "kraft des tieres", faktor*2)); 
+        t=faktor*20;
+        pDebug(owner, sprintf("kraft_des_tieres :: speed=%d t=%d\n", v, t));
+      break;
+      case DEX:
+      case CON:
+      case STR:
+      case INT:
+        v = limit((i*faktor/2)+random(1+i)/n, 1, 10);
+        v = SPELL_DAMAGE_BONUS(owner, "kraft des tieres", v);
+        bonus=clone_object(OBJ"bonus");
+        bonus->move(owner, M_SILENT);
+        bonus->SetBonus(m[c, 1][k],v,60*faktor);
+        t=60*faktor;
+        pDebug(owner, sprintf("kraft_des_tieres :: %s=%d t=%d\n", m[c, 1][k], v, t));
+        break;
+      case BODY:
+        v = limit((faktor*(i+1)+random(faktor))/n, 1, 100);
+        v = SPELL_DAMAGE_BONUS(owner, "kraft des tieres", v);
+        bonus=clone_object(ARMOUR"invis_armour");
+        bonus->SetProp(P_SHORT, "Kraft des Tieres");
+        bonus->move(owner, M_SILENT);
+        bonus->SetBonus( ({DT_SLASH, DT_BLUDGEON, DT_PIERCE, DT_SQUEEZE, DT_WHIP, DT_RIP}) , v, 30*faktor);
+        t=30*faktor;
+        pDebug(owner, sprintf("kraft_des_tieres :: body=%d t=%d\n", v, t));
+        break;
+    }
+  }
+  tell_object(owner, s);  
+  return t;
+}
+
+//--Setzt auf den TEAM-Modus (Kampfgeist)-------------------------------------
+int SetTeam(int duration, int ability, int success)
+{
+  duration=limit(duration,1,10);
+  teamtime=time()+duration*30;
+  teampower = ability/1000 + success/1000;
+  return 1;
+}
+
+//--beendet den TeamModus (testzwecke)----------------------------------------
+int UndoTeam()
+{ teamtime=0; return 1; }
+
+//--Schon im TEAM-Modus?------------------------------------------------------
+int QueryTeam() 
+{ 
+  if((teamtime)>=time()) return 1; 
+  return 0; 
+}
+
+//--Kaempft das Tier mit?-----------------------------------------------------
+int QueryFight() 
+{ 
+  if(mode==MOD_ATTACK) return 1; 
+  return 0; 
+}
+
+//--Erweckt das Biest im Pet (Kraft der Ahnen)--------------------------------
+int SetBiest(int faktor)
+{
+  int old_level, level;
+  string *msg;
+  
+  if(!objectp(owner) || !objectp(TO) ) { return 0; }
+  if(QueryBiest()) return 0;
+  faktor=limit(faktor,1,15);
+  
+  old_level=QueryProp(P_LEVEL);
+  SetProp(P_LEVEL, faktor+QueryProp(P_LEVEL));
+  level=QueryProp(P_LEVEL);
+  
+  SetProp(P_ATTRIBUTES, ([A_CON: level, A_DEX: level,
+                          A_STR: level, A_INT: level]));  
+  SetProp(P_MAX_HP, 30+level*level);
+  SetProp(P_MAX_SP, QueryProp(P_MAX_HP));
+  SetProp(P_HANDS, ({QueryProp(P_HANDS)[0],
+                    hand_damage(level), QueryProp(P_HANDS)[2] }) );
+  
+  call_out("ReBiest", 60*faktor, old_level);
+  fightmode=BIEST;
+  return 1;
+}
+
+//--ReBiest verwandelt das Tier zurueck---------------------------------------
+int ReBiest(int level)
+{
+  if(level>30) { level=30; }
+  SetProp(P_LEVEL, level);
+  SetProp(P_ATTRIBUTES, ([A_CON: level, A_DEX: level,
+                          A_STR: level, A_INT: level]));  
+  SetProp(P_MAX_HP, 30+level*level);
+  SetProp(P_MAX_SP, QueryProp(P_MAX_HP));
+  SetProp(P_HANDS, ({QueryProp(P_HANDS)[0],
+                    hand_damage(level), QueryProp(P_HANDS)[2] }) );
+  fightmode=NORMAL;
+  if(owner) { tell_object(owner, BS(Name(WER, 1)+" wird wieder normal.")); }
+  beastReady = 0;
+  set_next_reset(600 + random(600));
+  return 1;  
+}
+
+//--Schon im BIEST-Modus?-----------------------------------------------------
+int QueryBiest() 
+{ 
+  if(fightmode==BIEST) { return 1; }
+  return 0; 
+}
+
+public int QueryBiestReady() {
+  return beastReady;
+}
+
+//--Mit welcher Kraft greift das Tier an? (Gemeinsame Attacke)----------------
+int QueryStrength(int i)
+{
+  int damage, baseDamage;
+  i=limit(i,1,5);
+  baseDamage = QueryProp(P_HANDS)[1];
+  damage =  baseDamage + random(i*baseDamage/10) + 10*QueryAttribute(A_STR)/3;
+  pDebug(owner, sprintf("pet :: QueryStrength :: hands=%d str=%d i=%d damage=%d\n",
+                        baseDamage, QueryAttribute(A_STR), i, damage));
+  return damage;
+}
+
+//--Verteidigung des Owners---------------------------------------------------
+mixed DefendOther(int dam, mixed dam_type, mixed spell, object enemy)
+{ 
+  string c, *dts, msg;
+  int i, t, bufferedDamage;
+  mixed env;
+  float reduction;
+  
+  if(!objectp(owner) || !objectp(TO) || !objectp(env=ENV(TO)) ) { 
+    return ({dam, dam_type, spell}); 
+  }
+  
+  c=QueryProp(P_RANGER_PET_RACE);
+  dts = m_indices(PHYSICAL_DAMAGE_TYPES); // wir fangen grundsaetzlich nur physische angriffe ab
+  
+  if(QueryTeam() && QueryProp(P_RANGER_LAST_PET_DEFENCE)+2<=time() && !random(15-teampower)) {
+    t = 0;
+    if(pointerp(dam_type)) {
+      for(i=0; i<sizeof(dam_type); ++i) {
+        if(member(dts, dam_type[i]) >= 0) {
+          t++;
+        }
+      }
+    } else if(member(dts, dam_type) >= 0) {
+      t = 1;
+    }
+
+    if(t<=0) return ({dam, dam_type, spell}); // kein schaden den wir abfangen koennen
+
+    reduction = (teampower + random(QueryProp(P_LEVEL))) / 100.0; // bis zu 20% fixe schadenreduktion mit level drin ist auch der Biest-Mode eingerechnet
+    if(c == "panzertier") reduction = reduction * 1.5; // panzertiere blocken besser
+    reduction = reduction * ((float) t)/sizeof(dam_type); // bei mehrfach schaden zaehlt nur was wir absorbieren koennen
+    bufferedDamage = (int) (dam * reduction);
+    bufferedDamage = SPELL_DAMAGE_BONUS(owner, "kampfgeist", bufferedDamage);
+
+    if(owner->QueryProp(P_TESTPLAYER)) {
+      tell_object(owner, sprintf("kampfgeist :: reduction=%.2f bufferedDamage=%d remainder=%d\n", reduction, bufferedDamage, dam - bufferedDamage));
+    }
+    
+
+    if(bufferedDamage > dam) {
+      msg =  BS(Name(WER)+" faengt den Treffer vollstaendig ab.");
+      bufferedDamage = dam;
+    } else {
+      msg = BS(Name(WER)+" faengt einen Teil des Treffers ab.");
+    }
+
+    tell_object(owner, msg);
+    
+    Defend(bufferedDamage*2, dam_type, ([SP_SHOW_DAMAGE: 1, SP_NAME: "kampfgeist"]), enemy); // wir werden getroffen
+    
+    SetProp(P_RANGER_LAST_PET_DEFENCE, time());
+
+    return ({dam - bufferedDamage, dam_type, spell});
+  }
+
+  return ({dam, dam_type, spell});  
+}
+
+public void InformDefend(object enemy) {
+  if(mode==MOD_ATTACK) {
+    Kill(enemy);
+  }
+  return;
+}
+
+public int Defend(int dam, string *dam_type_list, mixed spell, object enemy) {
+  if(QueryProp("panzertier_defense") > 0) {
+    dam -= random(dam);
+    SetProp("panzertier_defense", QueryProp("panzertier_defense")-1);
+    if(QueryProp("panzertier_defense") <= 0) {
+      tell_object(owner, BS("Der harte Panzer von "+Name(WEM)+" ist aufgebraucht."));
+    }
+  }
+
+  return ::Defend(dam, dam_type_list, spell, enemy);
+}
+
+//-- Der eigene Angriff ------------------------------------------------------
+void Attack(object enemy)
+{
+  int dam, oldStr;
+  string c;
+
+  if(enemy == owner) {
+    tell_object(enemy, BS(Name(WER)+" kaempft nicht gegen dich."));
+    StopHuntFor(enemy);
+    enemy->StopHuntFor(this_object());
+    return;
+  }
+  
+  c=QueryProp(P_RANGER_PET_RACE);
+  dam=(2*QueryProp(P_HANDS)[1]+10*(QueryProp(P_ATTRIBUTES)[A_STR]))/3;
+  if(QueryTeam() && QueryBiest())
+  { 
+    if(c=="panzertier") dam=dam*2;
+    else {dam=(dam*5)/2;}
+    enemy->Defend(dam, QueryProp(P_HANDS)[2], 0, TO); 
+    return;
+  }
+  else if(QueryBiest())
+  { 
+    if(c=="panzertier") dam=(dam*3)/2;
+    else {dam=dam*2;}    
+    enemy->Defend(dam, QueryProp(P_HANDS)[2], 0, TO); 
+    return;
+  }
+  
+  oldStr = -1;
+  if(QueryProp(P_PREFERED_ENEMY)) {
+    // markierte beute!
+    oldStr = QueryAttribute(A_STR);
+    SetAttribute(A_STR, (int) (QueryAttribute(A_STR) * (1.0 + owner->QueryProp(P_GUILD_LEVEL) / 50 )));
+  }
+  ::Attack(enemy);
+  if(oldStr > 0) {
+    SetAttribute(A_STR, oldStr);
+  }
+
+  if(objectp(enemy) && objectp(owner)) {
+    call_other(GUILD_ROOM, "registerArchenemyAttack", enemy, owner);
+  }
+
+  if(owner->QueryProp(P_GUILD_LEVEL) > 19 && objectp(enemy) && c=="wolf" && RANGERMASTER->GetMasterAbility(getuid(owner)) == MASTER_ABIILITY_DEEP_BOND && !random(5)) {
+    // zusatzangriff
+    tell_object(owner, BS("Wie ein Wolf umrundest du dein Opfer und schlaegst ploetzlich zu."));
+    owner->Attack(enemy);
+  }
+
+  return;
+}
+
+//--Vorfunktion fuer den TMP_ATTACK_HOOK--------------------------------------
+int noattack(object enemy) { 
+  switch(random(3)) {
+    case 0:
+      tell_room(ENV(enemy), PO->Name(WER)+" schlaegt vor Verwirrung daneben.\n");
+      return 0;
+      break;
+    case 1:
+      tell_room(ENV(enemy), PO->Name(WER)+" hat sich vor Verwirrung selbst verletzt.\n");
+      PO->AddHp(-QueryProp(P_LEVEL));
+      return 0;
+      break;
+    default: return 1;
+  }
+
+  return 1;
+}
+
+//--Der Spezialangriff (Tierangriff)------------------------------------------
+int SpezialAttack(object enemy, int ability, int success)
+{
+  mapping m, sinfo;
+  int dam, d, i, bonus;
+  string c;
+  mixed env;
+  object ob;
+
+  i = ability / 2000;
+  
+  /*Rasse     Angriff          Schaden     Zusatzeffekt
+  
+  wolf:       biss          -> RIP      ** blutende wunde  -> reduce total_ac
+  katze:      kratzen       -> RIP      ** blutende wunde  -> reduce total_ac
+  baer:       bruellen      -> SOUND    ** veraengstigt    -> reduce total_wc
+  riese:      trampeln      -> SQUEEZE  ** zu boden werfen
+  vogel:      fluegelschlag -> SLASH    ** 1-2 runden verwirrt, ATTACK_HOOK
+  spinne:     stechen       -> POISON   ** verlangsamen
+! panzertier: verteidigen   ->          ** 1-2 komplette angriffe abwehren  !
+  huftier:    rammen        -> BLUDGEON ** zu boden werfen
+  echse:      biss          -> SLASH    ** verlangsamen
+  kleintier:  kratzen       -> SLASH    ** augen zerkratzt -> blind
+
+             key       0              1          2     3        4
+  mapping=([gruppe:caster-meldung;env-meldung;damage;dam_type;effekt]);*/
+  
+  if(!objectp(owner) || !objectp(TO) || !objectp(env=ENV(TO)) || !objectp(enemy) ) return 0;
+
+  i = limit(i,1,5);
+  c=QueryProp(P_RANGER_PET_RACE);
+  dam = (int) ((QueryProp(P_HANDS)[1] / 2) + ability/2000 * 50 + success / 2000 * 50); //Schaden wird beim BIEST automatisch hoeher
+  
+  /*if((c=="panzertier") && ((QueryProp(P_RANGER_LAST_PET_DEFENCE)+12)>=time()))
+  {
+    tell_object(owner, BS("Dein Tier kann Dich noch nicht wieder eine "
+                          "ganze Attacke fuer Dich abfangen."));
+    return 0;
+  }*/
+  m=(["wolf":      "Du zeigst auf "+E(WEN)+" und "+P(WER)+" springt "+E(WEN)+
+                   " an und beisst zu.";
+                   CAP(P(WER))+" springt "+E(WEN)+" an und beisst zu.";
+                   dam; DT_RIP; REDUCE_AC,
+      "katze":     "Du zeigst auf "+E(WEN)+" und "+P(WER)+" springt "+E(WEN)+
+                   " an."+P(WER)+" faehrt die Krallen aus.";
+                   CAP(P(WER))+" greift "+E(WEN)+" mit den Krallen an.";
+                   dam; DT_RIP; BLEED,
+      "baer":      "Du zeigst auf "+E(WEN)+" und "+P(WER)+" richtet sich auf "
+                   "und bruellt "+E(WEN)+" an.";
+                   CAP(P(WER))+" richtet sich auf und bruellt "+E(WEN)+" an.";
+                   dam; DT_SOUND; REDUCE_WC,
+      "riese":     "Du zeigst auf "+E(WEN)+" und "+P(WER)+" rennt auf "
+                   +E(WEN)+" zu um "+E(WEN)+" zu zertrampeln.";
+                   CAP(P(WER))+" rennt auf "+E(WEN)+" zu um "+E(WEN)+" zu "
+                   "zertrampeln.";
+                   dam; DT_SQUEEZE; RAMMEN,
+      "vogel":     "Du zeigst auf "+E(WEN)+" und "+P(WER)+" fliegt auf "
+                   +E(WEN)+" zum, um "+E(WEM)+" abzulenken.";
+                   CAP(P(WER))+" fliegt im Sturzflug auf "+E(WEN)+" zu.";
+                   dam; DT_SLASH; NO_ATTACK,
+      "spinne":    "Du zeigst auf "+E(WEN)+" und "+P(WER)+" krabbelt auf "
+                   +E(WEN)+" zu und setzt zum Stich an.";
+                   CAP(P(WER))+" krabbelt auf "+E(WEN)+" zu.";
+                   dam; DT_POISON; SLOW,
+      "panzertier":"Der Panzer von "+CAP(P(WEM))+" verhaertet sich.";
+                   CAP(P(WESSEN))+" Panzer verhaertet sich.";
+                   0; DT_MAGIC; DEFENCE,
+      "huftier":   "Du zeigst auf "+E(WEN)+" und "+P(WER)+" rammt "+E(WEN)+
+                   " mit voller Kraft.";
+                   CAP(P(WER))+" rammt "+E(WEN)+" mit voller Kraft.";
+                   dam; DT_BLUDGEON; RAMMEN,
+      "echse":     "Du zeigst auf "+E(WEN)+" und "+P(WER)+" schnellt vor und "
+                   "beisst "+E(WEN)+".";
+                   CAP(P(WER))+" schnellt nach vorne und beisst "+E(WEN)+".";
+                   dam; DT_SLASH; SLOW,
+      "kleintier": "Du zeigst auf "+E(WEN)+" und "+P(WER)+" springt "+E(WEN)+
+                   " an um "+E(WEM)+" die Augen zu zerkratzen.";
+                   CAP(P(WER))+" springt "+E(WEN)+" an und kratzt wie wild.";
+                   dam; DT_SLASH; PBLIND,
+      "insekt":    "Du zeigst auf "+E(WEN)+". "+CAP(P(WER))+" fliegt surrend um "+
+                   E(WEN)+" herum und beisst "+E(WEN);
+                   CAP(P(WER))+" surrt um "+E(WEN)+" herum und beisst.";
+                   dam; DT_RIP; NOMAGIC]);
+  
+  tell_object(owner, BS(to_string(m[c, 0])) );
+  tell_room(env, BS(to_string(m[c, 1])), ({owner, TO}) );    
+  
+  if(c!="panzertier") {   
+    sinfo=([SI_SPELLNAME: TIERANGRIFF,
+            SI_SPELLFATIGUE: 6,
+            SI_SKILLDAMAGE: m[c, 2] ]);
+    sinfo=GUILD_SPELLBOOK->ComboModification(enemy, owner, sinfo);
+
+    d=enemy->Defend(SPELL_DAMAGE_BONUS(owner, "tierangriff", sinfo[SI_SKILLDAMAGE]), m[c, 3], 0, TO);
+
+    if(!d || !objectp(enemy) ) {GUILD_SPELLBOOK->ComboFail(owner, sinfo);}
+    else {GUILD_SPELLBOOK->ComboDone(owner, enemy, sinfo);}
+  }
+
+  if(to_string(m[c, 4]) == DEFENCE) {
+    SetProp("panzertier_defense", SPELL_DAMAGE_BONUS(owner, "tierangriff", ability/3333+success/3333+QueryProp(P_LEVEL)/10));
+    return 1;
+  }
+  
+  if(objectp(enemy) && (QueryBiest() || success > 8000)) {
+    switch (to_string(m[c, 4]))
+    {
+      case REDUCE_AC: //TOTAL_AC nicht aenderbar->BODY reduzieren
+        if(interactive(enemy)) break; //noch was einfallen lassen
+        tell_room(env, BS(CAP(P(WER))+" hat die Panzerung von "+E(WEM)+" zerfetzt."), ({enemy}) );
+        tell_object(enemy, BS("Fuerchterliche Schmerzen durchzucken deinen "
+                           "Koerper, als Du von scharfen Klauen aufgerissen "
+                           "wirst."));        
+        enemy->SetProp(P_BODY, SPELL_DAMAGE_BONUS(owner, "tierangriff", (enemy->QueryProp(P_BODY))-((enemy->QueryProp(P_BODY))/20)));
+        break;
+      case REDUCE_WC:
+        if(interactive(enemy)) break; //noch was einfallen lassen
+        if((enemy->QueryProp(P_LEVEL))<=(QueryProp(P_LEVEL)) )
+        {
+          tell_room(env, BS(CAP(P(WER))+" hat "+E(WEN)+" veraengstigt. "
+                             +CAP(E(WER))+"greift jetzt schwaecher an."), 
+                    ({enemy}) );
+          tell_object(enemy, BS("Du bekommst Angst vor "+P(WEM)+". Du traust "
+                             "Dich kaum, noch anzugreifen."));        
+          enemy->SetAttribute(A_STR, (enemy->QueryAttribute(A_STR) - ability/2000 - success/2000 + QueryProp(P_LEVEL)/10) );
+        }
+        break;
+      case RAMMEN:
+        tell_room(env, BS(CAP(P(WER))+" hat "+E(WEN)+" zu Boden "
+                           "geworfen. "), ({enemy}) );
+        tell_object(enemy, BS(CAP(P(WER))+" die kraeftige Attacke hat Dich "
+                           "von den Fuessen geholt."));        
+        enemy->SetProp(P_LAST_RAMMEN_TIME, time()+i+QueryProp(P_LEVEL)/5);
+        enemy->SetProp(P_DISABLE_ATTACK, success/2000);
+        break;
+      case NO_ATTACK:
+        tell_room(env, BS(CAP(P(WER))+" hat "+E(WEN)+" total verwirrt. "), 
+                  ({enemy}) );
+        tell_object(enemy, BS(CAP(P(WER))+" greift Dich nichtmehr an, aber "
+                           "dafuer weist Du jetzt auch nichtmehr wo oben und "
+                           "unten ist."));        
+        enemy->SetProp(P_TMP_ATTACK_HOOK, ({time()+(ability/3333 + success/2000 + QueryProp(P_LEVEL)/5), TO, "noattack"}));
+        break;
+      case SLOW:
+        tell_room(env, BS(CAP(P(WER))+" hat "+E(WEN)+" stark verwundet. "+
+                           E(WER)+" wird langsamer."), ({enemy}) );
+        tell_object(enemy, BS(CAP(P(WER))+" hat Dich schwer verletzt. Deine "
+                           "Bewegungen werden traege."));
+        enemy->ModifySkillAttribute(TO, SA_SPEED, 50,  QueryProp(P_LEVEL)/5 + ability/3333 + success/3333);
+        break;
+      case PBLIND:
+        tell_room(env, BS(CAP(P(WER))+" hat "+E(WEM)+" die Augen "
+                           "zerkratzt. "+E(WER)+" ist jetzt blind.")
+                           , ({enemy}) );
+        tell_object(enemy, BS(CAP(P(WER))+" hat Dir die Augen zerkratzt. Du "
+                           "bist blind!"));
+        enemy->SetProp(P_BLIND, ability/2000 + success/2000 + QueryProp(P_LEVEL)/5);
+        break;
+      case NOMAGIC:
+        tell_room(env, BS(CAP(P(WER)+" hat "+E(WEN)+" so sehr abgelenkt, dass "
+                          +E(WER)+" sich weniger auf Spezialangriffe konzentriert!")), ({enemy}));
+        enemy->SetProp(P_SPELLRATE, enemy->QueryProp(P_SPELLRATE)-ability/10000 - success/3333 - QueryProp(P_LEVEL)/2);
+        break;
+      case DEFENCE: 
+        SetProp("panzertier_defense", ability/3333+success/3333+QueryProp(P_LEVEL)/10);
+      case BLEED:
+        enemy->SetProp(P_RANGER_EVISCERATED_UNTIL, time() + ability/2000 + success / 3333);
+        call_other("/spellbooks/waldlaeufer_spells", "eviscerate_bleed", enemy, QueryProp(P_LEVEL)/2 + ability/1000 + success/2000, owner);
+        tell_room(env, BS(CAP(P(WER))+" reisst "+E(WEM)+" eine blutende Wunde."), ({enemy}) );
+        tell_object(enemy, BS("Fuerchterliche Schmerzen durchzucken deinen "
+                           "Koerper, als Du von scharfen Klauen aufgerissen "
+                           "wirst."));
+        break;
+    }
+  }
+  return 1;
+}
+//**************************************************************************//
+
+
+
+//** Reaktionen ************************************************************//
+//--Die Reaktionen sortiert nach Gruppen und Tierrassen-----------------------
+string cr(string gruppe, int i)
+{
+  mapping emotions, pets;
+  string c;
+
+  i=(i-1);
+  
+  if(!c=QueryProp(P_RANGER_PET_RACE)) { return 0; }
+
+  pets=(["wolf":"knurrt leise";"knurrt leise";
+                "knurrt bedrohlich";"knurrt bedrohlich";
+                "zieht eine Augenbraue hoch";"zieht eine Augenbraue hoch";
+                "schnappt nach Dir";"schnappt nach "+R(WEM);
+                "knurrt bedrohlich";"knurrt bedrohlich";
+                "senkt den Kopf";"senkt den Kopf";
+                "macht erschrocken einen Satz zurueck";
+                  "macht erschrocken einen Satz zurueck";
+                "knurrt";"knurrt";
+                "knurrt";"knurrt";
+                "stupst Dich kurz an";"stupst "+R(WEN)+" kurz an",
+         "katze":"schaut an Dir vorbei ins Leere";
+                   "schaut an "+R(WEM)+" vorbei ins Leere";
+                 "faucht Dich an";"faucht "+R(WEN)+" an";
+                 "wendet den Blick von Dir ab";
+                   "wendet den Blick von "+R(WEM)+" ab";
+                 "springt Dich mit einem lauten Fauchen an";
+                   "springt "+R(WEN)+" mit einem lauten Fauchen an";
+                 "schleicht sich in den Hintergrund";
+                   "schleicht sich in den Hintergrund";
+                 "schnurrt leise";"schnurrt leise";
+                 "versucht Dich zu krallen";
+                   "versucht "+R(WEN)+" zu krallen";
+                 "schleicht um Deine Beine";
+                   "schleicht um "+R(WESSEN)+" Beine";
+                 "faucht leise";"faucht leise";
+                 "schaut Dir tief in die Augen. Du wirst ruhig";
+                   "schaut "+R(WEM)+" tief in die Augen",
+         "baer":"trottet etwas zurueck";"trottet etwas zurueck";
+                "richtet sich vor Dir zur vollen Groesse auf";
+                  "richtet sich vor "+R(WEM)+" zur vollen Groesse auf";
+                "stupst Dich";"stupst "+R(WEN);
+                "bruellt Dich laut an und schlaegt mit der Pranke nach Dir";
+                  "bruellt "+R(WEN)+" laut an und schlaegt mit der Pranke "
+                  "nach "+R(WEM);
+                "legt eine Tatze auf Deine Schulter und brummt";
+                  "legt eine Tatze auf "+R(WESSEN)+" Schulter und brummt";
+                "brummt tief";"brummt tief";
+                "schubst Dich weg";"schubst "+R(WEN)+" weg";
+                "brummt leise";"brummt leise";
+                "brummt";"brummt";
+                "stupst Dich";"stupst "+R(WEN),
+         "riese":"stapft nach hinten";"stapft nach hinten";
+                 "beachtet Dich nicht";"beachtet "+R(WEN)+" nicht";
+                 "bemerkt nichts";"bemerkt "+R(WEN)+" nicht";
+                 "rammt Dich leicht. Du faellst nach hinten um";
+                   "rammt "+R(WEN)+" leicht. "+R(WER)+" faellt nach hinten"
+                   " um";
+                 "stampft einmal laut auf";"stampft einmal laut auf";
+                 "beachtet Dich nicht";"beachtet "+R(WEN)+" nicht";
+                 "schnaubt aergerlich";"schnaubt aergerlich";
+                 "schnaubt";"schnaubt";
+                 "verharrt an Ort und Stelle";"verharrt an Ort und Stelle";
+                 "beachtet Dich nicht";"beachtet "+R(WEN)+" nicht",
+         "vogel":"fliegt kurz weg";"fliegt kurz weg";
+                 "kreischt Dich an";"kreischt "+R(WEN)+" an";
+                 "fliegt unbeeindruckt die Runde";
+                   "fliegt unbeeindruckt die Runde";
+                 "weicht aus";"weicht "+R(WEM)+" aus";
+                 "fliegt ueber Dich hinweg und kratzt Dich leicht";
+                   "fliegt ueber "+R(WEN)+" hinweg und kratzt "+R(WEN)+" "
+                   "leicht";
+                 "blickt Dich ruhig an";"blickt "+R(WEN)+" ruhig an";
+                 "bleibt ruhig sitzen";"bleibt ruhig sitzen";
+                 "gleitet eine Runde";"gleitet eine Runde";
+                 "gleitet eine Runde";"gleitet eine Runde";
+                 "kommt vorsichtig naeher";
+                   "kommt vorsichtig auf "+R(WEN)+" zu",
+         "spinne":"erstarrt in der Bewegung";"erstarrt in der Bewegung";
+                  "krabbelt schnell davon";"krabbelt schnell davon";
+                  "bewegt sich langsam von Dir weg";
+                    "bewegt sich langsam von "+R(WEM)+" weg";
+                  "starrt Dich an. Zumindest glaubst Du das. Du schluckst";
+                    "starrt "+R(WEN)+" an. "+R(WER)+" schluckt leise.";
+                  "erstarrt in der Bewegung";"erstarrt in der Bewegung";
+                  "beachtet Dich nicht";"beachtet "+R(WEN)+" nicht";
+                  "erstarrt in der Bewegung. Du bist echt eklig";
+                    "erstarrt in der Bewegung. "+R(WER)+" ist echt eklig";
+                  "bewegt sich langsam von Dir weg";
+                    "bewegt sich langsam von "+R(WEM)+" weg";
+                  "erstarrt in der Bewegung";"erstarrt in der Bewegung";
+                  "bewegt sich langsam von Dir weg";
+                    "bewegt sich langsam von "+R(WEM)+" weg",
+         "panzertier":"war zu langsam fuer eine Reaktion";
+                        "war zu langsam fuer eine Reaktion";
+                      "war zu langsam fuer eine Reaktion";
+                        "war zu langsam fuer eine Reaktion";
+                      "kann nicht lachen";"kann nicht lachen";
+                      "hat nichts bemerkt. Der Panzer ist zu dick";
+                        "bemerkt nichts von "+R(WEM);
+                      "bewegt sich nicht";"bewegt sich nicht";
+                      "kriecht 'aufgeregt' umher. Allerdings sieht das aus "
+                        "wie immer";
+                        "kriecht 'aufgeregt' umher. Allerdings sieht das aus "
+                        "wie immer";
+                      "wird rot, oder bildest Du Dir das ein";
+                        "wird rot, oder bildest Du Dir das ein";
+                      "freut sich";"freut sich";
+                      "war zu langsam fuer eine Reaktion";
+                        "war zu langsam fuer eine Reaktion";
+                      "blickt Dich traurig an";
+                        "blickt "+R(WEN)+" traurig an",
+         "huftier":"bleibt unbeeindruckt stehen";
+                     "bleibt unbeeindruckt stehen";
+                   "bleibt unbeeindruckt stehen";
+                     "bleibt unbeeindruckt stehen";
+                   "schuettelt den Kopf";"schuettelt den Kopf";
+                   "rammt Dich";"rammt "+R(WEN);
+                   "stoesst Dich leicht mit dem Kopf";
+                     "stoesst "+R(WEN)+" leicht mit dem Kopf";
+                   "scharrt mit den Hufen";"scharrt mit den Hufen";
+                   "macht einige kleine Spruenge zurueck";
+                     "macht einige kleine Spruenge zurueck";
+                   "scharrt mit den Hufen";"scharrt mit den Hufen";
+                   "scharrt mit den Hufen";"scharrt mit den Hufen";
+                   "blickt Dich aus grossen Augen an";
+                     "schaut "+R(WEN)+" an",
+         "echse":"zischt leise";"zischt leise";
+                 "huscht davon";"huscht davon";
+                 "beachtet Dich nicht";"beachtet Euch nicht";
+                 "schnappt nach Dir";"schnappt nach "+R(WEM);
+                 "naehert sich Dir auf bedrohlicher Art und Weise";
+                   "naehert sich "+R(WEM)+" auf bedrohlicher Art und Weise";
+                 "bewegt sich nicht";"bewegt sich nicht";
+                 "erstarrt auf einmal";"erstarrt auf einmal";
+                 "weicht Dir aus";"weicht "+R(WEM)+" aus";
+                 "reagiert nicht";"zeigt keine Reaktion";
+                 "zeigt keine Reaktion";"reagiert nicht",
+         "kleintier":"schaut Dich mit grossen Augen an";
+                       "schaut Dich mit grossen Augen an";
+                     "ignoriert Dich";"ignoriert "+R(WEN);
+                     "schaut drollig";"schaut drollig";
+                     "beisst Dich und rennt weg";
+                       "beisst "+R(WEN)+" und rennt weg";
+                     "wuselt davon";"wuselt davon";
+                     "wuselt aufgeregt um Dich herum";
+                       "wusel aufgeregt um "+R(WEN)+" herum";
+                     "schaut lieb";"schaut lieb";
+                     "richtet sich kurz vor Dir auf";
+                       "richtet sich kurz vor "+R(WEM)+" auf";
+                     "schaut Dich fragend an";"schaut "+R(WEN)+" fragend an";
+                     "schaut Dich troestend an";
+                       "schaut "+R(WEN)+" troestend an"]);
+  
+  emotions=(["aengstlich": pets[c,  0]; pets[c,  1],    //0
+             "aergerlich": pets[c,  2]; pets[c,  3],    //1
+             "albern":     pets[c,  4]; pets[c,  5],    //2
+             "fies":       pets[c,  6]; pets[c,  7],    //3
+             "frech":      pets[c,  8]; pets[c,  9],    //4
+             "froh":       pets[c, 10]; pets[c, 11],    //5
+             "intim":      pets[c, 12]; pets[c, 13],    //6
+             "nett":       pets[c, 14]; pets[c, 15],    //7
+             "neutral":    pets[c, 16]; pets[c, 17],    //8
+             "traurig":    pets[c, 18]; pets[c, 19] ]); //9
+        
+  return to_string(emotions[gruppe, i]);
+}
+
+//--Start der Reaktionen------------------------------------------------------
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{ if(find_call_out("reaction") != -1) return;
+  call_out("reaction", 0, TP, cr(gruppe,1), cr(gruppe,2)); }
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{ return StartReaction(verb, gruppe, adverb, touch); }
+
+//--Ausgabe der Reaktionen----------------------------------------------------
+void reaction(object pl, string macher, string andere)
+{
+  if(!ENV(TO))           return;
+  if(!objectp(pl))       return;
+  if(!ENV(pl))           return;
+  if(ENV(TO) != ENV(pl)) return;
+
+  tell_object(pl, BS(Name(WER, 1)+" "+macher+"."));
+  tell_room(ENV(TO), BS(Name(WER, 1)+" "+andere+"."), ({pl}) );
+}
+//**************************************************************************//
+
+public int _query_ranger_max_pet_level() {
+  int lvl;
+  if(!objectp(owner)) return 30;
+
+  lvl = 10;
+  lvl += owner->QueryProp(P_GUILD_LEVEL); 
+  if(R_SKILLMASTER->HasSkill(getuid(owner), VERBESSERTE_ZAEHMUNG)) {
+    lvl += 5;
+  }
+  if(R_SKILLMASTER->HasSkill(getuid(owner), TIER_RESPEKT)) {
+    lvl += 5;
+ }
+
+  return lvl;
+}
+
+public int AddHp(int value) {
+  object koecher;
+  int r;
+
+  r = ::AddHp(value);
+  if(objectp(owner) && objectp(koecher=present(GUILD_OBJ_ID, owner))) {
+    koecher->NotifyHpChange(1);
+  }
+
+  return r;
+}
+
+public int do_damage(int dam, mixed enemy) {
+  object koecher;
+  int r;
+
+  r = ::do_damage(dam, enemy);
+  if(objectp(owner) && objectp(koecher=present(GUILD_OBJ_ID, owner))) {
+    koecher->NotifyHpChange(1);
+  }
+
+  return r;
+}
+
+public void ActivateSupportBenefit(int ability, int success) {
+  int duration, chance;
+  string msgOwner, msgOthers;
+
+  if(!objectp(owner)) return;
+
+  duration = SPELL_DAMAGE_BONUS(owner, "gemeinsame attacke", owner->QueryAttribute(A_INT)/2 + ability/200 + success/100);
+  chance   = owner->QueryAttribute(A_INT) +  ability/333 + success/666;
+
+  switch(QueryProp(P_RANGER_PET_RACE)) {
+    case "wolf":
+      // beisst zu und verlangsamt den gegner damit kurz 
+      msgOwner  = Name(WER)+" stellt sich knurrend an deine Seite und wartet auf eine Gelegenheit zuzuschnappen.";
+      msgOthers = Name(WER)+" stellt sich knurrend an die Seite von "+owner->Name(WEM)+".";
+      break;
+    case "katze":
+      // gegner umwerfen
+      msgOwner  = Name(WER)+" huscht durch die Beine deine Gegner.";
+      msgOthers = Name(WER)+" beginnt durch die Beine von "+owner->Name(WESSEN)+" Gegnern zu laufen.";
+      break;
+    case "baer":
+      // zusaetzlicher angriff
+      msgOwner  = Name(WER)+" laeuft hinter deine Gegner und stellt sich auf die Hinterbeine.";
+      msgOthers = Name(WER)+" laeuft um die Gegner von "+owner->Name(WEM)+" herum und stellt sich auf die Hinterbeine.";
+      break;
+    case "riese":
+      // miss chance fuer gegner
+      msgOwner  = Name(WER)+" beginnt deine Gegner zum umkreisen und wirbelt Staub auf.";
+      msgOthers = Name(WER)+" beginnt die Feinde zum umkreisen und Staub aufzuwirbeln.";
+      break;
+    case "vogel":
+      // bonus schaden fuer waffenskill
+      msgOwner  = Name(WER)+" steigt hoch ueber deinen Feinden kreisend auf und sucht nach Schwachstellen.";
+      msgOthers = Name(WER)+" steigt auf und dreht kreischend Kreise ueber den Kaempfenden.";
+      break;
+    case "spinne":
+      // webt in kokon ein -> schutz
+      msgOwner  = Name(WER)+" beginnt einen dicken Faden zu weben, um dich notfalls damit zu schuetzen.";
+      msgOthers = Name(WER)+" beginnt einen dicken Faden zu weben.";
+      break;
+    case "panzertier":
+      // umwerfen
+      msgOwner  = Name(WER)+" scharrt mit den Fuessen und wartet auf seine Gelegenheit.";
+      msgOthers = Name(WER)+" scharrt nervoes mit den Fuessen.";
+      break;
+    case "huftier":
+      // rüstung zertruemmern
+      msgOwner  = Name(WER)+" wendet deinen Gegnern das Hinterteil zu, um sofort zuzutreten.";
+      msgOthers = Name(WER)+" wendet sich um, um mit den Hinterhufen zu treten.";
+      break;
+    case "echse":
+      // gegner vergiften
+      msgOwner  = Name(WER)+" faucht und macht sich bereit mit seinen giftigen Zaehnen zuzubeissen.";
+      msgOthers = Name(WER)+" feucht und bleckt gifttriefende Zaehne.";
+      break;
+    case "kleintier":
+      // zauberkosten reduziert
+      msgOwner  = Name(WER)+" schmiegt sich eng an dich.";
+      msgOthers = Name(WER)+" schmiet sich eng an "+owner->Name(WEN)+".";
+      break;
+    case "insekt":
+      // angriffe schwaechen
+      msgOwner  = Name(WER)+" plustert sich schillernd auf, bereit loszuwirbeln.";
+      msgOthers = Name(WER)+" plustert sich schillernd auf.";
+      break;
+  }
+
+  owner->SetProp(P_RANGER_PET_SUPPORT, ({TO, time()+duration, chance}));
+  tell_object(owner, BS(msgOwner));
+  tell_room(ENV(TO), BS(msgOthers), ({owner}));
+
+  pDebug(owner, sprintf("gemeinsame attacke :: duration=%d chance=%d\n", duration, chance));
+
+  call_out("endSupport", duration);
+  return;
+}
+
+public void endSupport() {
+  while(find_call_out("endSupport") != -1) remove_call_out("endSupport");
+
+  owner->SetProp(P_RANGER_PET_SUPPORT, 0);
+  tell_object(owner, BS(Name(WER)+" greift nicht mehr gemeinsam mit dir an."));
+  tell_room(ENV(TO), BS(Name(WER)+" greift nicht mehr gemeinsam mit "+owner->Name(WEM)+" an."), ({owner}));
+  return;
+}
+
+public int supportRanger(object enemy) {
+  int *support, r, i;
+  string msgOwner, msgOthers;
+  object ob;
+
+  support = owner->QueryProp(P_RANGER_PET_SUPPORT);
+  if(!pointerp(support)) return 0; // support nicht aktiv
+
+  if(time() > support[1]) {
+    endSupport();
+    return 0;
+  }
+
+  // effekt schon aktiv
+  if(objectp(present(SPIDER_KOKON_ID, owner)) && QueryProp(P_RANGER_PET_RACE) == "spinne" ||
+     objectp(present(NPC_POISON_ID+"_companion_"+getuid(owner), enemy)) && QueryProp(P_RANGER_PET_RACE) == "echse" ||
+     objectp(present(SPELLSUPPORT, owner)) && QueryProp(P_RANGER_PET_RACE == "kleintier")) return 0; 
+     
+
+  if(random(100) > support[2]) return 0; // nicht ausgeloest
+
+  owner->AddSp(-2);
+
+  r = 0;
+  switch(QueryProp(P_RANGER_PET_RACE)) {
+    case "wolf":
+      // beisst zu und verlangsamt den gegner damit kurz 
+      msgOwner  = Name(WER)+" schnappt nach den Gliedmassen von "+enemy->name(WEM)+".";
+      msgOthers = Name(WER)+" schnappt nach den Gliedmassen von "+enemy->name(WEM)+".";
+      enemy->ModifySkillAttribute(TO, SA_SPEED, 50,  QueryProp(P_LEVEL)/4);
+      break;
+    case "katze":
+      // gegner umwerfen
+      msgOwner  = Name(WER)+" bringt "+enemy->name(WEN)+" zu Fall.";
+      msgOthers = Name(WER)+" bringt "+enemy->name(WEN)+" zu Fall.";
+      enemy->SetProp(P_LAST_RAMMEN_TIME, time()+QueryProp(P_LEVEL)/2);
+      enemy->SetProp(P_DISABLE_ATTACK, QueryProp(P_LEVEL)/10);
+      break;
+    case "baer":
+      // zusaetzlicher angriff
+      msgOwner  = Name(WER)+" laesst die Pranken auf "+enemy->name(WEN)+" herabsausen.";
+      msgOthers = Name(WER)+" laesst die Pranken auf "+enemy->name(WEN)+" herabsausen.";
+      i = QueryAttribute(A_STR);
+      SetAttribute(A_STR, i + QueryProp(P_LEVEL));
+      Attack(enemy);
+      SetAttribute(A_STR, i);
+      break;
+    case "riese":
+      // miss chance fuer gegner
+      msgOwner  = Name(WER)+" wirbelt Staub um "+enemy->Name(WEN)+" auf.";
+      msgOthers  = Name(WER)+" wirbelt Staub um "+enemy->Name(WEN)+" auf.";
+      enemy->SetProp(P_BLIND, QueryProp(P_LEVEL) / 4);
+      break;
+    case "vogel":
+      // bonus schaden fuer waffenskill
+      msgOwner  = Name(WER)+" stoesst einen schrillen Schrei aus, der dich den richtigen Moment zum Angriff hinweist.";
+      msgOthers = Name(WER)+" stoesst einen schrillen Schrei aus.";
+      r = QueryProp(P_LEVEL)*5 + random(QueryProp(P_LEVEL)*5);
+      break;
+    case "spinne":
+      // webt in kokon ein -> schutz
+      msgOwner  = Name(WER)+" wirft Spinnfaeden nach dir, die dich in einen schuetzenden Kokon einweben.";
+      msgOthers = Name(WER)+" webt "+owner->name(WEN)+" in einen schuetzenden Konkon.";
+      ob = clone_object(ARMOUR"invis_armour");
+      ob->SetProp(P_SHORT, "Spinnenkokon"); // es kann nur ein AT_MISC pro Short getragen werden
+      ob->move(owner, M_SILENT);
+      ob->SetBonus( ({DT_SLASH,DT_BLUDGEON,DT_PIERCE,DT_SQUEEZE,DT_WHIP,DT_RIP,
+                        DT_POISON}), QueryProp(P_LEVEL)/2, 4);
+      ob->AddId(SPIDER_KOKON_ID);
+      break;
+    case "panzertier":
+      msgOwner  = Name(WER)+" rammt "+enemy->name(WEN)+" mit aller Kraft und "+enemy->QueryPronoun()+" faellt zu Boden.";
+      msgOthers =  Name(WER)+" rammt "+enemy->name(WEN)+" mit aller Kraft und "+enemy->QueryPronoun()+" faellt zu Boden.";
+      enemy->SetProp(P_LAST_RAMMEN_TIME, time()+QueryProp(P_LEVEL)/4);
+      enemy->SetProp(P_DISABLE_ATTACK, QueryProp(P_LEVEL)/20);
+      Attack(enemy);
+      break;
+    case "huftier":
+      // rüstung zertruemmern
+      msgOwner  = Name(WER)+" tritt "+enemy->name(WEN)+" mit den Hufen und zertruemmert dessen Schutz.";
+      msgOthers = Name(WER)+" tritt "+enemy->name(WEN)+" mit den Hufen und zertruemmert dessen Schutz.";
+      if(!interactive(enemy)) enemy->SetProp(P_BODY, (enemy->QueryProp(P_BODY))-(QueryProp(P_LEVEL)));
+      break;
+    case "echse":
+      // gegner vergiften
+      msgOwner  = Name(WER)+" erwischt "+enemy->name(WEN)+" mit einem Giftbiss.";
+      msgOthers = Name(WER)+" erwischt "+enemy->name(WEN)+" mit einem Giftbiss.";
+      ob=clone_object(OBJ "npc_poison"); 
+      ob->AddId(NPC_POISON_ID+"_companion_"+getuid(owner));
+      ob->move(enemy, M_NOCHECK|M_SILENT);
+      ob->poison(enemy, owner, 0, random(QueryProp(P_LEVEL) * 100));
+      break;
+    case "kleintier":
+      // zauberkosten reduziert
+      msgOwner  = Name(WER)+" staerkt dein Band zur Natur und erleichtert deine Zauber.";
+      msgOthers = Name(WER)+" drueckt sich eng an "+owner->Name(WEN)+".";
+      ob = clone_object(ARMOUR"invis_armour");
+      ob->SetProp(P_SHORT, "Zauberbonus"); // es kann nur ein AT_MISC pro Short getragen werden
+      ob->move(owner, M_SILENT);
+      ob->SetProp(P_RANGER_SPELLCOST, QueryProp(P_LEVEL));
+      ob->AddId(SPELLSUPPORT);
+      break;
+    case "insekt":
+      // angriffe schwaechen
+      msgOwner  = Name(WER)+" lenkt "+enemy->name(WEN)+" ab.";
+      msgOthers =Name(WER)+" lenkt "+enemy->name(WEN)+" ab.";
+      enemy->SetProp(P_TMP_ATTACK_HOOK, ({time()+(QueryProp(P_LEVEL)/5), TO, "noattack"}));
+      SetProp("support_noattack", enemy);
+      break;
+  }
+
+  tell_object(owner, BS(msgOwner));
+  tell_room(ENV(TO), BS(msgOthers), ({owner}));
+
+  if(QueryProp(P_SP) < 5) {
+    tell_object(owner, BS(Name(WER)+" ist erschoepft."));
+    endSupport();
+  } else {
+    AddSp(-5);
+  }
+  
+  return r;
+}
+
+public string pet_race_to_king(string race) {
+  return ([
+  "wolf":       ({"morcan", "morcan", "morcan", "lir"})[random(4)],
+  "katze":      ({"aedan", "aedan", "aedan", "eoin"})[random(4)],
+  "baer":       ({"morcan", "ciaran"})[random(2)],
+  "riese":      ({"belenus", "thorondor"})[random(2)],
+  "vogel":      ({"eoin", "arawn", "thorondor", "bran"})[random(3)],
+  "spinne":     ({"fiachra", "arawn"})[random(2)],
+  "panzertier": ({"fiachra", "lir"})[random(2)],
+  "huftier":    ({"ciaran", "bran", "lir"})[random(3)],
+  "echse":      ({"belenus", "brenin"})[random(2)],
+  "kleintier":  ({"eoin", "bran", "brenin", "aedan"})[random(4)],
+  "insekt":     ({"brenin", "fiachra"})[random(2)]
+  ])[race];
+}
+
+public string tk_dam_type(string tk) {
+  return ([
+    "eoin":      DT_LIGHT,      
+    "arawn":     DT_UNHOLY,
+    "morcan":    DT_TERROR,
+    "ciaran":    DT_COLD,
+    "fiachra":   DT_POISON,
+    "belenus":   DT_MAGIC,
+    "thorondor": DT_LIGHTNING,
+    "bran":      DT_AIR,
+    "lir":       DT_HOLY,
+    "aedan":     DT_FIRE,
+    "brenin":    DT_ACID
+  ])[tk];
+}
+
+public string tk_attr_bonus(string tk) {
+  return ([
+    "eoin":      A_DEX,      
+    "arawn":     A_INT,
+    "morcan":    A_STR,
+    "ciaran":    A_CON,
+    "fiachra":   A_DEX,
+    "belenus":   A_INT,
+    "thorondor": A_STR,
+    "bran":      A_DEX,
+    "lir":       A_CON,
+    "aedan":     A_DEX,
+    "brenin":    A_CON
+  ])[tk];
+}
+
+public string attr_boost_text(string attr) {
+ return ([
+    A_INT: "Die Augen von "+name(WEM, 1)+" sind ploetzlich von einer Schlaeue und Intelligenz erfuellt.",
+    A_CON: Name(WER, 1)+" atmet schwer durch und wirkt ploetzlich wesentlich robuster.",
+    A_STR: "Am ganzen Koerper von "+name(WEM, 1)+" wachsen feste Muskeln.",
+    A_DEX: Name(WESSEN, 1)+" Bewegungen sind ploetzlich viel geschmeidiger."
+  ])[attr];
+}
+
+public string tk_protection_text(string tk) {
+  return ([
+  "eoin":      "Sonne und Helligkeit",      
+  "arawn":     "dem Boesen",
+  "morcan":    "Angst und Furcht",
+  "ciaran":    "Eis und Kaelte",
+  "fiachra":   "Gifte und Angriffen der Natur",
+  "belenus":   "Magie und Zauberei",
+  "thorondor": "Blitzschlaegen",
+  "bran":      "Sturm und Wind",
+  "lir":       "dem Guten",
+  "aedan":     "Flammen und Hitze",
+  "brenin":    "Veraetzungen und Saeure",
+  ])[tk];
+}
+
+string tk_hand_message(string tk) {
+  return ([
+    "eoin":       "Schwingen aus Licht",      
+    "arawn":      "finsteren Fluechen",
+    "morcan":     "einer fuerchterlichen Praesenz",
+    "ciaran":     "eisigen Hufen",
+    "fiachra":    "giftigen Zaehnen",
+    "belenus":    "uralter Magie",
+    "thorondor":  "gewaltigen Fluegeln aus Blitz und Donner",
+    "bran":       "brausendem Sturmwind",
+    "lir":        "einer heiligen Aura",
+    "aedan":      "brennenden Krallen",
+    "brenin":     "einer giftigen Zunge",
+  ])[tk];
+}
+
+
+int SetIncarnation(int ability, int success) {
+  string attr;
+  object bonus;
+  int duration;
+
+  incarnation = limit(ability/2000 + success/2000, 1, 10);
+  duration = random(owner->QueryAttribute(A_INT) * 10) + ability/16 + success / 16;
+
+  pDebug(owner, sprintf("pet :: SetIncarnation incarnation=%d duration=%d\n", incarnation, duration));
+
+  current_tierkoenig = pet_race_to_king(QueryProp(P_RANGER_PET_RACE));
+  tell_room(ENV(TO), BS(sprintf("Der Tierkoenig %s beseelt %s mit urtuemlicher Kraft.", capitalize(current_tierkoenig), name(WEN, 1))));
+  tell_room(ENV(TO), BS(sprintf("%s erhaelt einen Schutz vor %s.", Name(WER, 1), tk_protection_text(current_tierkoenig))));
+
+  if(incarnation > 4) {
+    attr = tk_attr_bonus(current_tierkoenig);
+    tell_room(ENV(TO), BS(attr_boost_text(attr)));
+    bonus = clone_object(OBJ "bonus");
+    if(!bonus->move(TO)) {
+      destruct(bonus);
+    } else {
+      bonus->SetBonus(attr, incarnation * 2, duration);
+      bonus->AddId("\ntk_incarnation");
+    }
+    UpdateAttributes();
+  }
+
+  if(incarnation > 6) {
+    tell_room(ENV(TO), BS(sprintf("%s Angriffe werden zu %s.", Name(WESSEN, 1), tk_hand_message(current_tierkoenig))));
+  }
+
+  SetProp(P_HP, QueryProp(P_MAX_HP));
+  SetProp(P_SP, QueryProp(P_MAX_SP));
+
+  call_out("deincarnate", duration);
+}
+
+public void deincarnate() {
+  if(!QueryIncarnation()) return;
+
+  incarnation = 0;
+  if(present("\ntk_incarnation")) present("\ntk_incarnation")->remove(1);
+  
+  tell_room(ENV(TO), BS("Die Macht der Tierkoenige verlaesst "+name(WEN, 1)+" wieder."));
+  return;
+}
+
+public mixed* _query_hands() {
+  mixed *dt;
+
+  if(!hand_overwrite) return hand_base;
+
+  if(QueryIncarnation() > 6) {
+    dt = hand_base[2];
+    if(!pointerp(dt)) dt = ({ dt });
+    return ({tk_hand_message(current_tierkoenig), hand_damage(QueryProp(P_LEVEL)), dt + ({ tk_dam_type(current_tierkoenig) }) });
+  }
+
+  if(!hand_base) return 0;
+
+  return ({ hand_base[0],  hand_damage(QueryProp(P_LEVEL)), hand_base[2] });
+}
+
+public mapping _query_resistance_strengths() {
+  float f;
+
+  if(!hand_overwrite) return res_str_overwrite;
+  if(!QueryIncarnation()) return res_str_overwrite;
+
+  if(!mappingp(res_str_overwrite)) res_str_overwrite = ([]);
+
+  f = -0.1 * QueryIncarnation();
+
+  return res_str_overwrite + ([tk_dam_type(current_tierkoenig): f]);
+}

@@ -1,0 +1,124 @@
+mixed prep_freundschaftslied(object caster, mapping sinfo)
+{
+    object ob, victim;
+    string bardGroup;
+    int cbc;
+
+    if(caster->InFight()) {
+      write(BS("Fuer dieses Zauberlied brauchst du Ruhe und Konzentration!"));
+      return 0;
+    }
+
+    sinfo = prepare_song(caster, sinfo);
+    if(sinfo == 0) {
+            return 0;
+    }
+
+    victim = FindLivingVictim(sinfo[SI_SKILLARG],caster, "Wen willst du in deinen Bann schlagen?\n");
+    if(!objectp(victim)) {
+      write(BS("Nanu?! Dein Ziel ist gar nicht mehr da!"));
+      return 0;
+    }
+
+    cbc = canBeCharmed(victim, caster);
+    switch(cbc) {
+      case -2: write(BS("Du kannst nur humanoide, denkende und lebendige Wesen in deinen Bann schlagen!"));
+               return 0;
+               break;
+      case -1: write(BS("Mitspieler kannst du nur mit Worten betoeren, nicht mit Magie.\n"));
+               return 0;
+               break;
+      case 0:  write(sprintf("%s wuerde deiner Verzauberung sicher widerstehen koennen!\n", victim->Name(WER,1)));
+               return 0;
+               break;
+    }
+    
+    if(caster->QueryProp(P_BARD_CHARMED)) {
+        if(TALENTMASTER->HasTalent(caster, TALENT_KANON)) {
+         if(!caster->QueryProp(P_BARD_CHARMED)->CanRecharge()) {
+            write(BS("Dieser Zauber kann noch nicht erneuert werden."));
+            return 0;
+         }
+
+         if(caster->QueryProp(P_BARD_CHARMED) != victim) {
+            write(BS("Du kannst diesen Zauberbann nur auf dein bestehendes Opfer anwenden!"));
+         }
+        }else {
+            write(BS("Du hast bereits jemanden in deinen Bann geschlagen!"));
+            return 0;
+        }
+    }
+    
+    if(!paySpellCost(caster, sinfo, 1)) return 0;
+ 
+    play_song_text(SPELLSEQ("freundschaftslied.seq"), caster);
+    return sinfo;
+}
+
+int freundschaftslied(object caster, mapping sinfo)
+{
+    object victim, charmed;
+    int suc, abil, helper;
+    float factor;
+    string song, bg;
+
+    if(caster->InFight()) {
+      write(BS("Fuer dieses Zauberlied brauchst du Ruhe und Konzentration!"));
+      return 0;
+    }
+
+    victim = FindLivingVictim(sinfo[SI_SKILLARG],caster, "Wen willst du in deinen Bann schlagen?\n");
+    if(!objectp(victim)) {
+      write(BS("Nanu?! Dein Ziel ist gar nicht mehr da!"));
+      return 0;
+    }
+
+    // Spellkosten
+    if(!paySpellCost(caster, sinfo)) return 0;
+
+    // GELUNGEN?
+    if((suc=SpellSuccess(caster,sinfo))<=0)
+    {
+         if(suc < -1500) {
+             say(BS(sprintf("%s wird wuetend!", victim->Name(WER))));
+             victim->Kill(caster);
+         } else {
+             write(BS(sprintf("%s bleibt unbeeindruckt.\n", victim->Name(WER))));
+         }
+         return MISSERFOLG;
+    }
+
+    abil = sinfo[SI_SKILLABILITY];
+
+    if(victim == caster->QueryProp(P_BARD_CHARMED)) {
+      raise_error("not implemented yet");
+    }
+
+    factor = ((float) CheckEquip(caster, song))/100.0;
+    if(TALENTMASTER->HasTalent(caster, TALENT_TAMBOURMAJOR)) {
+        factor += 0.05 + ((float) caster->QueryProp(P_BARD_INSPIRATION_LEVEL)) / 100.0;
+    }
+
+    // Zauberabwehr pruefen
+    helper = (caster->QueryAttribute(A_INT) / 2);
+    helper = (int) (helper * factor);
+    if(TALENTMASTER->HasTalent(caster, TALENT_AGITATOR)) {
+      helper += caster->QueryProp(P_BARD_INSPIRATION_LEVEL);
+    }
+    if( (victim->QueryProp(P_NOMAGIC)-helper) > random(101) ) {
+      write(BS("Fuer einen Moment wallt rosa Rauch um " + victim->Name(WESSEN) + " Kopf auf, doch er loest sich sofort wieder auf. "
+               + victim->Name(WER) + " widersetzt sich deiner Magie!"));
+      say(BS("Fuer einen Moment wallt rosa Rauch um " + victim->Name(WESSEN) + " Kopf auf, doch er loest sich sofort wieder auf."));
+      return ERFOLG;
+    }
+
+    charmed = clone_object(NPC("charmed"));
+    charmed->Setup("sieben schritte", caster, sinfo[SI_SKILLABILITY], suc, factor, victim);
+    victim->remove(1);
+    charmed->move(environment(caster), M_SILENT|M_NOCHECK);
+
+    tell_room(environment(caster), BS(sprintf("Eine kleine Wolke aus rosa Nebel pufft um Kopf von %s auf.", charmed->name(WEM, 1))));
+    charmed->command_me(sprintf("sag Schoen, dass wir uns kennenlernen, %s! Ich werde dich eine Weile begleiten.",
+                        caster->Name(WER)));
+    return ERFOLG;
+}

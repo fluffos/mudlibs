@@ -1,0 +1,176 @@
+/*
+**  Lolas Highheels!
+**
+**  In Anlehnung an die Stiefel des Rausschmeissers aus dem Grand Hotel 
+**  in Tijara
+**
+**  2001-04-02  PROtheG  1st try
+**
+*/
+
+#include "/players/protheg/def.h"
+
+inherit "std/armour";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <new_skills.h>
+
+#define COST 10
+nosave int zeit, first_use, kaputt;
+
+create()
+{
+  if(!is_clone(ME)) return;
+  ::create();
+  
+  SetProp(P_SHORT, "Lolas Stilettoheels");
+  SetProp(P_LONG, 
+	  BS("Diese Stilettoheels gehoerten einst der scharfen Lola. Ob "
+	     "Du wohl genauso umwerfend darin aussehen wirst, wie sie?"));
+  SetProp(P_NAME, "Stilettoheels");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_PLURAL, 1);
+
+  AddId(({"highheels","stiefel","heels","\nstilettoheels","stilettoheels",
+	    "stilettos"}));
+
+  SetProp(P_NAME_ADJ, ({"rot"}));
+  AddAdjective(({"rot","rote","roten"}));
+
+  SetProp(P_ARMOUR_TYPE, AT_BOOT);
+  SetProp(P_AC, 3);
+  SetProp(P_EFFECTIVE_WC, 200);
+  SetProp(P_MATERIAL, MAT_LEATHER);
+  SetProp(P_WEIGHT, 900);
+  SetProp(P_VALUE, 626);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_WEAR_RESTRICTIONS, 
+	  ([P_GENDER:FEMALE,P_LEVEL:10, A_DEX:10, A_STR:10]) );
+  
+  AddCmd("heelkick", "treten");
+  SetProp(P_WEAR_FUNC, TO);
+
+  kaputt=0;
+  zeit=time();
+}
+
+int WearFunc(object ruestung, int silent)
+{
+  if(kaputt)
+    return write(BS("Leider ist der Absatz abgebrochen und die Stilettoheels "
+		    "somit unbrauchbar.")),0;
+  first_use=time()+10;
+  return 1;
+}
+
+long()
+{
+  SetProp(P_LONG,
+	  BS("Diese Stilettoheels gehoerten einst der scharfen Lola. Ob "
+	     "Du wohl genauso umwerfend darin aussehen wirst, wie sie? "+
+	     (kaputt ? "Leider scheint ein Absatz abgebrochen zu sein!":"")));
+  return ::long();
+}
+
+info()
+{
+  if(kaputt)
+    SetProp(P_INFO,
+	    BS("Leider ist einer der Absaetze abgebrochen, sonst haette man "
+	       "die Stilettoheels als Waffe gebrauchen koennen..."));
+  else
+    if(TP && TP->QueryProp(P_GENDER)==FEMALE)
+      SetProp(P_INFO, 
+	      BS("Mit diesen Stilettoheels kannst Du es der Maennerwelt im "
+		 "Kampf mal so richtig zeigen und dorthin treten, wo es sie "
+		 "am meisten schmerzt!! Fuer nur geringe 10 Magiepunkte "
+		 "kannst Du Deinen Feinden mit dem Befehl 'heelkick <name>' "
+		 "schmerzvolle, stichwundenartige Verletzungen hinzufuegen "
+		 "und Dich dann darueber freuen, wenn sie sich wie Wuermer "
+		 "vor Schmerzen auf dem Boden winden. Natuerlich musst Du "
+		 "die Stilettoheels dabei tragen!"));
+    else
+      SetProp(P_INFO, 
+	      BS("Diese Stilettoheels sind, wenn von Frauen getragen, sehr "
+		 "gefaehrliche Mordwerkzeuge! Huete Dich vor ihren Tritten!"));
+  return ::info();
+}
+
+int treten(string str, int fastload)
+{
+  object enemy;
+  
+  notify_fail("Wem moechtest Du denn mit Deinen Stiefeln Schmerzen zufuegen?\n");
+  if(stringp(str) && (enemy=present(str, environment(TP))))
+    {
+      if(enemy==TP)
+	return write(BS("Dich selber treten? Nana!")),1;
+      
+      if( query_once_interactive(enemy) && !TP->SelectEnemy(enemy) )
+        return write("Du kannst doch keinen anderen Spieler angreifen!\n"), 1;
+
+      if(kaputt)
+	return write(BS("Mit dem gebrochenen Absatz? Damit wirst Du nicht "
+			"viel erreichen!")),1;
+		     
+      if(!QueryProp(P_WORN))
+	return write(BS("Du musst die Stiefel schon anziehen dazu!")),1;
+
+      if(first_use > time())
+	return write(BS("Aber Du hast die Stiefel doch gerade erst angezogen!")),1;
+
+      if(zeit > time())
+	return write(BS("Bei so vielen Tritten wuerde Dir doch der Absatz "
+			"abbrechen!")),1;
+      
+      if(TP->QueryProp(P_SP)<COST)
+	return write(BS("Du hast nicht genug Magiepunkte fuer den Tritt!")),1;
+
+      if(TP->QueryProp(P_ATTACK_BUSY))
+	return write(BS("Du koenntest umfallen, wenn Du jetzt noch zu einem "
+			"Tritt ansetzt!")),1;
+      
+      TP->SetProp(P_ATTACK_BUSY, 2);
+
+      printf("Du trittst %s Deine Stilettoheels in "+
+	     ({"den Bauch","die Brust","den Ruecken","die Nieren",
+		 "das Becken","den Unterleib"})[random(6)]+".\n", 
+	     enemy->name(WEM));
+      say(sprintf(BS("%s tritt %s mit %s Stilettoheels."), CAP(TPN),
+		  enemy->name(WEN), TPPP(FEMALE,WEM,PLURAL) ), enemy );
+      tell_object(enemy, 
+		  CAP(TPN)+" tritt Dich heftig mit den Stilettoheels!\n");
+
+      enemy->Defend(111+random(333), DT_BLUDGEON,
+		    ([SP_NAME:"gewaltiger Tritt", SP_PHYSICAL_ATTACK:1,
+//		    SP_REDUCE_ARMOUR:([AT_HELMET:1, AT_BOOT:1]),
+		    SP_SHOW_DAMAGE:1]), TP);
+      TP->AddSp(-COST);
+
+      TakeFlaw(({DT_BLUDGEON}));
+
+      if(fastload) return 1;
+
+      if(random(100)==17)
+	{
+	  write(BS("Dein Tritt war wohl ziemlich ungeschickt, denn ploetzlich "
+		   "bricht der spitze Absatz ab..."));
+	  kaputt=1;
+	  SetProp(P_VALUE, 2);
+	  DoUnwear();
+	  return 1;
+	}
+      zeit=time()+5*60;
+      return 1; 
+    }
+  else
+    return 0;
+}
+
+int bereit()
+{
+  return (QueryProp(P_WORN) && time()>zeit);
+}
+

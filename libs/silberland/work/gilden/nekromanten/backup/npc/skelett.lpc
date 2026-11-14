@@ -1,0 +1,176 @@
+// 12.10.1999 Angrox
+//            SetAggressive hinzugefuegt
+// 06.11.2000 angrox
+//            SetSkeleton geaendert (corpse nun mixed)
+
+inherit "std/npc";
+inherit "std/inpc/select.lpc";
+
+#include <properties.h>
+#include <combat.h>
+#include <new_skills.h>
+#include <class.h>
+#include "../def.h"
+
+int creation_time;
+int dur=-1;
+int aggr=0;
+
+void create()
+{
+ 
+  if (!is_clone(TO)) return;
+  ::create();
+
+  creation_time=time();
+
+  SetProp(P_SHORT, "Ein Skelett");
+  SetProp(P_LONG,
+    "Ein Skelett, das nur mehr aus Knochen besteht. Zwei leere Augenhoehlen "
+    "aus dem graesslichen Totenschaedel starren Dich hasserfuellt an. " );
+  SetProp(P_NAME, "Skelett" );
+  SetProp(P_GENDER, NEUTER);
+  AddId( ({ "skelett", "Nekromantenskelett",NEKRO_IS_CONTROLABLE }));
+
+  SetProp(P_RACE, "Untoter");
+  SetProp(P_ALIGN, -700);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_NOCORPSE, 1);
+  SetProp(P_NO_GLOBAL_ATTACK, 1);
+  SetProp(P_FRIEND, 1);
+  SetProp(P_HP_DELAY, 1);
+  SetProp(P_MAX_FOOD, 0);
+  SetProp(P_MAX_DRINK, 0);
+  SetProp(P_MAX_ALCOHOL, 0);
+  SetProp(P_MAX_POISON, 0);
+  SetProp(P_TEMPERATURE_RANGE, ([0:-276, 1:500]));
+  SetProp(P_DIE_MSG, " zerfaellt zu Staub.\n");
+  AddClass(CL_SKELETON);
+
+  AddDetail( ({ "knochen" }), 
+    "Das Skelett besteht nur aus bleichen Knochen." );
+  AddDetail( ({ "totenschaedel", "schaedel" }), 
+    "Das Skelett hat einen graesslichen Totenschaedel." );
+
+  add_select_commands();
+
+}
+
+void SetSkeleton(mixed corpse, object caster, int succ)
+{
+  int level, maxlevel;
+  string short_str;
+  
+  SetProp(P_NEKRO_CASTED_BY, caster);
+  
+  SetProp(P_LONG, QueryProp(P_LONG)[0..<2] + 
+     caster->Name()+" hat diesen Untoten beschworen.");
+  if(intp(corpse)) {
+    short_str="eines Menschens";
+    SetProp(P_SIZE, 150+random(80));
+    level=corpse;  
+  }
+  else {
+    switch( corpse->QueryProp(P_RACE) ){
+      case "Mensch": short_str="eines Menschens"; break;
+      case "Fee": short_str="einer Fee"; break;
+      case "Elf": short_str="eines Elfen"; break;
+      case "Zwerg": short_str="eines Zwerges"; break;
+      default: short_str= "eines "+corpse->QueryProp(P_RACE)+"s";
+    }
+    SetProp(P_SIZE, corpse->QueryProp(P_SIZE));
+    maxlevel=(caster->QueryProp(A_INT)/2)+caster->QueryProp(P_GUILD_LEVEL)*2+
+        caster->QueryProp(P_GUILD_CIRCLE)+ (12*succ/10000);
+    level=2*corpse->QueryProp(P_LEVEL)/3;
+    if( level > maxlevel) 
+       level=maxlevel;
+    level=((succ*level)/(4*10000))+(3*level/4);
+  }
+  SetProp(P_SHORT, "Das Skelett "+ short_str);
+  create_default_npc(level);
+  SetProp(P_HANDS, ({" mit knochigen Haenden", 50+level*5+succ/100,
+                     DT_BLUDGEON }));
+  SetProp(P_XP, 0);
+  SetProp(P_MAX_HP, level*8 + succ/50); // maximal 240+200
+  SetProp(P_MAX_SP, QueryProp(P_MAX_HP));
+  SetProp(P_RESISTANCE_STRENGTHS, ([ 
+        DT_UNHOLY: -0.5, DT_PIERCE:-0.5, DT_HOLY: 0.5, DT_LIGHT:0.2 ]));
+
+  SetProp(P_SPELLRATE, 10+level);
+
+  AddSpell(3,level*4+succ/40,   // Lv.30 & max.success: 120+250
+    "Das Skelett bohrt seine Finger in Deinen Koerper.\n",
+    "Das Skelett bohrt seine Finger in @WESSEN Koerper.\n",
+    DT_PIERCE,([SP_SHOW_DAMAGE:1]));
+  AddSpell(2,level*5+succ/50,   // Lv.30 & max.success: 150+200
+    "Das Skelett wirft einen unheiligen Zauber nach Dir.\n",
+    "Das Skelett wirft einen unheiligen Zauber nach @WEM.\n",
+    DT_UNHOLY,([SP_SHOW_DAMAGE:1]));
+  if( level>15 )
+     AddSpell(1,level*10+succ/30,   // Lv.30 & max.success: 300+333
+      "Das Skelett beschwoert einen gewaltigen Blitz auf Dich herab.\n",
+      "Das Skelett beschwoert einen gewaltigen Blitz auf @WEN herab.\n",
+      DT_LIGHTNING,([SP_SHOW_DAMAGE:1]));
+
+  return;
+}
+
+void give_notify(object ob)
+{
+  if( ob->QueryProp(P_ARMOUR_TYPE) && TP==QueryProp(P_NEKRO_MASTERED_BY) ) 
+    command("trage_beste_ruestungen");
+  else if( ob->QueryProp(P_WEAPON_TYPE) && TP==QueryProp(P_NEKRO_MASTERED_BY) )
+    command("zuecke_beste_waffe");
+  ::give_notify(ob);
+}
+
+
+int SetMaster(object master)
+{
+  object oldmaster;
+
+  if(!objectp(master)) return 0;
+  if(oldmaster=QueryProp(P_NEKRO_MASTERED_BY)) {
+    oldmaster->RemoveDefender(TO);
+    oldmaster->RemovePursuer(TO);
+    tell_object(oldmaster, BS(sprintf("Bei allen Niederhoellen! %s hat "
+            "die Herrschaft ueber Deinen Diener uebernommen!", 
+            master->Name(WER))));
+  }
+  SetProp(P_NEKRO_MASTERED_BY, master);
+  master->AddPursuer(TO);
+  master->AddDefender(TO);
+  return 1;
+}
+
+
+void InformDefend(object enemy) { Kill(enemy); }
+
+void reset()
+{
+  if (!is_clone(TO)) return ::reset();
+
+  tell_room(MENV, "Das Skelett zerfaellt zu Staub.\n");
+  remove();
+  return;
+}
+
+void init()
+{
+  return ::init();
+}
+
+
+
+int SetAggressive(int x) {
+  object ob;
+  aggr=x;
+  if(intp(x))
+    SetProp(P_AGGRESSIVE, x); 
+  if(objectp(ob=QueryProp(P_NEKRO_CASTED_BY)))
+    ob->RemoveDefender(TO);
+  SetProp(P_NO_GLOBAL_ATTACK, 0);
+  SetProp(P_FRIEND, 0);
+  return 1;  
+}
+

@@ -1,0 +1,164 @@
+/*
+ Dungeon topmaster
+ Iwo@SL
+*/
+ 
+#pragma strong_types
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <defines.h>
+#include <wizlevels.h>
+#include <moredef.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <ansi.h>
+
+#include "../def.h"
+
+mapping descenders = ([]);
+int deepest_level;
+int lastsave;
+string *deepest_players;
+
+// Ok, time to build the object
+void create()
+{
+  int i;
+  int lvl;
+  string *members;
+  // No Copy of this object should exist
+  if( is_clone(TO) ) return;
+  ::create();
+
+
+  // set euid
+  seteuid(getuid(TO));  
+  
+restore_object(DUNGTOPMASTER);
+
+  members = m_indices(descenders);
+
+  for (i=0;i<sizeof(members);i++)
+    {
+      if (descenders[members[i],0]>deepest_level)
+        deepest_level = descenders[members[i],0];
+    }
+}
+
+
+int NotifyLvlDesc(object pl, int lvl)
+{
+  string uid;
+
+  if (IS_WIZARD(pl)) return 0;
+
+  if (lvl < 10) return 0;
+  
+  uid = getuid(pl);
+  
+  if (!member(descenders, uid)) descenders += ([uid:0;0;0;0,]);
+  
+  if (descenders[uid,0] > lvl) return 0;
+  
+  descenders[uid,0] = lvl;
+
+  tell_object(pl, BS("Du hast soeben Deine bisher tiefste Ebene unterschritten!\n"));
+
+  if (lvl > deepest_level && lvl > 20)
+    {
+      shout(BS(sprintf("%s hat soeben mit Ebene %d den bisher tiefsten "
+             "erreichten Punkt des Pandaemoniums unterschritten!\n", CAP(getuid(pl)), lvl)));
+      deepest_level = lvl;
+    }
+
+  save_object(DUNGTOPMASTER);
+  
+  return lvl;
+}
+
+void NotifyNpcDeath(object killer)
+{
+  string uid;
+  int kills;
+
+  uid = getuid(killer);
+
+  if (!member(descenders, uid)) return;
+  
+  descenders[uid,1]++;
+  
+  save_object(DUNGTOPMASTER);
+  
+  return;
+  
+}
+
+
+int SortHelp(string uid1, string uid2)
+{
+  if (descenders[uid1,0]<descenders[uid2,0]) return 1;
+  else if (descenders[uid1,0]>descenders[uid2,0]) return 0;
+  else return descenders[uid1,1]<descenders[uid2,1];
+}
+
+
+int ReadToplist(object pl)
+{
+  string *toplist;
+  string fullstring;
+  int i;
+
+  if (lastsave < time()+30)
+    {
+      toplist =  sort_array(m_indices(descenders), #'SortHelp);
+
+      fullstring = sprintf("     %15.15-s%9.9s%9.9s\n", "Name", "Ebene", "Kills");
+  
+      for (i=0;i<sizeof(toplist);i++)
+        {
+          fullstring += sprintf("     %15.15-s%9.4d%9.8d\n", CAP(toplist[i]),
+                      descenders[toplist[i],0],
+                      descenders[toplist[i],1]);
+        }
+  
+      rm(DUNGPATH "master/toplist.read");
+  
+      write_file(DUNGPATH "master/toplist.read",fullstring); 
+
+      lastsave = time();
+    }
+
+  fullstring = read_file(sprintf("%s/master/toplist.read", DUNGPATH));
+
+  pl->More(fullstring);  
+
+  return 1;
+}
+
+
+int QueryPlayerLevel(object pl)
+{
+  string uid;
+  
+  uid = getuid(pl);
+  
+  if (member(descenders, uid)) return descenders[uid];
+
+  return 0;
+}
+
+
+void runes()
+{
+  TELL("iwo", implode(DUNGRUNES, ""));
+}
+
+// We don't reset
+void reset()
+{
+  return;
+}

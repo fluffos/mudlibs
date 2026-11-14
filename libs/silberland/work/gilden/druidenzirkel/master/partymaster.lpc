@@ -1,0 +1,136 @@
+/*
+//
+// Der Partymaster
+//
+// Angrox@Silberland
+//
+// 18.10.1997
+*/
+
+// #include "/secure/wizlevels.h"
+// #include <language.h>
+// #include <config.h>
+
+#include "/gilden/druidenzirkel/druiden.h"
+
+mixed saveload;
+nosave mapping party=([ ]);
+
+create()
+{
+  if (is_clone(this_object())) 
+    {
+    destruct(this_object());
+    return 1;
+    }
+  seteuid(getuid(this_object()));
+  if (restore_object(PARTYLIST))
+     party=saveload;
+}
+
+query_prevent_shadow() { return 1; }
+
+
+/* Neue Party eroeffnen 
+// Rueckgabe: -2 ... Partyname existiert schon
+              -1 ... Fehlende Argumente
+               0 ... Gruender ist schon in einer Gruppe
+               1 ... ok
+*/
+int NewParty(object pl, string partyname)
+{
+ int i,j;
+ string *p_namen;
+ partyname=lower_case(partyname);
+ if(party!=([]))
+   {
+    p_namen=m_indices(party);
+    if(!pl || !partyname) return -1;
+    for(i=sizeof(p_namen)-1;i>=0; i--)
+     {
+      if(p_namen[i]==partyname) return -2;
+      for (j=3; j>=0; j--)
+       {
+         if(party[p_namen[i], j]==getuid(pl))
+             return 0;
+       }
+     }
+   }
+ party+=([partyname:getuid(pl);"";"";""]);
+ present("\ndruidenamulett", TP)->SetProp(PARTY_LEADER, partyname);
+ saveload=party;
+ save_object(PARTYLIST);
+ saveload=0;
+ return 1;
+}
+
+
+/* Party beitreten 
+// Rueckgabe: -4 ... Es existiert noch ueberhaupt keine Party
+              -3 ... Partyname existiert nicht
+              -2 ... Fehlende Argumente
+              -1 ... Party voll
+               0 ... Spieler ist schon in einer Gruppe
+               1 ... ok
+*/
+int JoinParty(object pl, string partyname)
+{
+ int i,j, free;
+ string *p_namen;
+
+ free=-1;
+ if(!pl || !partyname) return -2;
+ partyname=lower_case(partyname);
+ if(party==([])) return -4;
+ p_namen=m_indices(party);
+ if(member(p_namen, partyname)==-1)
+     return -3;
+ for(i=sizeof(p_namen)-1;i>=0; i--)
+   {
+    for (j=3; j>=0; j--)
+      {
+       if(party[p_namen[i], j]==getuid(pl))
+             return 0;
+      }
+   }   
+ for(i=3; i>=0; i--)
+   {
+    if(party[partyname, i]=="")
+       free=i;
+   }
+ if(free==-1) return -1;
+ party[partyname, free]=getuid(pl);
+ present("\ndruidenamulett", pl)->SetProp(PARTY_MEMBER, 
+                                party[partyname, 0]);
+ saveload=party;
+ save_object(PARTYLIST);
+ saveload=0;
+ return 1;
+}
+
+
+
+
+/* Party loeschen */
+int DeleteParty(object pl, string partyname)
+{
+ int i;
+ object player;
+ object ob;
+
+ if(!pl || !partyname) return -1;
+ if(pl!=party[partyname]) return 0;
+ for (i=3; i>=0; i--)
+   {
+    if(ob=find_player(party[partyname,i]))
+      tell_object(ob, sprintf("%s loest die Gruppe %s auf.\n", 
+         pl->name(), partyname));
+   }
+ party=m_delete(party, partyname);
+ saveload=party;
+ save_object(PARTYLIST);
+ saveload=0;
+ return 1;
+}
+
+

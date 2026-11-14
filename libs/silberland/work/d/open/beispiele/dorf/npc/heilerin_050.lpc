@@ -1,0 +1,263 @@
+//=========================================================================
+//
+// File:    heilerin_050
+// Created by Ronja@SL
+//
+// Project: testgebiet
+//
+// Heilen, ver- und entfroschen werden gezeigt. Desweiteren wie man Spielern
+// Geld abknoepft.
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit "std/npc";
+
+inherit "/std/player/moneyhandler"; // um dem Spieler Geld abzuknoepfen,
+                                    // bemuehen wir zusaetzlich noch den
+                                    // Moneyhandler
+
+int heilung;            // so oft kann die Heilerin heilen
+
+string *spieler_frosch; //hier merken wir uns die spieler, die wir vor
+                        //kurzem verfroscht haben
+
+void create()
+{
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Eine Heilerin");
+  SetProp(P_LONG,
+    "Verena, die Heilerin des Dorfes. Sie beherscht aber auch die dunklen "
+    "Maechte, kann Dich also auch vergiften oder verfroschen."
+  );
+
+  SetProp(P_NAME, "Verena");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:0,T_RANGE_MAX:80]));
+
+  AddId( ({"verena","heiler","heilerin"}) );
+  AddClass(CL_HUMAN); // siehe /sys/class.h
+
+  create_default_npc(25);
+  SetProp(P_HANDS, ({" mit ihren Haenden",QueryProp(P_HANDS)[1],DT_BLUDGEON}));
+  SetProp(P_RACE, "Mensch");
+  SetProp(P_SIZE, 165);
+  SetProp(P_ALIGN, 800);
+  SetProp(P_MAX_HANDS, 2);
+
+  SetProp(P_WIMPY, 0);
+
+//-------------------------------------------------------------------------
+// Dieser NPC hat einen richtigen Namen: Verena. Standardmaessig schreibt
+// die Mudlib den bestimmten bzw unbestimmten Artikel vor den Namen. Die
+// Funktion name(WER) wuerde also 'die Verena' zurueckgeben. Damit dies
+// bei NPCs mit einem Eigennamen nicht passiert, muss man dies mit
+// P_ARTICLE einstellen:
+//-------------------------------------------------------------------------
+
+  SetProp(P_ARTICLE, 0);
+
+  SetProp(P_MSGIN, "kommt herein");
+  SetProp(P_MSGOUT, "geht");
+  SetProp(P_MMSGIN, "kommt herein");
+  SetProp(P_MMSGOUT, "geht kurz weg");
+
+  AddInfo(DEFAULT_INFO, "Ich kann Dich heilen!","fragt Dich: ");
+
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    Name(WER)+" will Deine Sachen nicht tragen.\n" }) );
+
+  SetChats(3,
+    ({Name(WER,1)+" sagt: Ich bin die Heilerin des Dorfes!\n"
+     })
+  );
+
+  SetAttackChats(10,
+    ({Name(WER,1)+" zuernt: Das ist also der Dank!\n"
+     })
+  );
+
+  AddCmd( ({"heile","heil"})                , "cmd_heilen");
+  AddCmd( ({"verfrosch","verfrosche"})      , "cmd_verfroschen");
+  AddCmd( ({"entfrosch","entfrosche"})      , "cmd_entfroschen");
+
+  heilung = 5; // 5 heilungen zulassen
+
+  spieler_frosch = ({ }); // wir haben noch niemanden verfroscht
+}
+
+void init()
+{
+  ::init();
+
+//-------------------------------------------------------------------------
+// Wir begruessen den Spieler und sagen ihm, was wir koennen
+//-------------------------------------------------------------------------
+
+  if(TP && interactive(TP)) call_out("init_hallo",0,TP);
+}
+
+void init_hallo(object player)
+{
+  if(!player)                return;
+  if(!interactive(player))   return;
+  if(ENV(player) != ENV(TO)) return;
+
+  tell_room(ENV(TO),break_string(
+    "Hallo "+TP->name()+", wenn ich Dich heilen soll, so sage \"heile mich\", "
+    "wenn ich Dich verfroschen soll, so sage \"verfrosche mich\" und wenn "
+    "ich Dich entfroschen soll, so sage \"entfrosche mich\."
+
+    ,78,Name(WER,1)+" sagt: ",1));
+}
+
+//-------------------------------------------------------------------------
+// Beim heilen unbedingt drauf achten, dass dieses nicht endlos geht.
+// Wir geben Verena 5 heilungen mit, die sich erst im reset
+// aufladen. Im normalen Spiel waere dies schon viel zu viel
+//-------------------------------------------------------------------------
+
+void reset()
+{
+  // Im reset() braucht man die gleiche abfrage wie im create();
+  if (!is_clone(TO)) return;  
+  ::reset();
+
+  heilung += 1;
+  if(heilung > 5) heilung = 5; // auf 5 begrenzen
+
+  spieler_frosch = ({ }); // verfroschen tun wir auch wieder
+}
+
+//-------------------------------------------------------------------------
+// Das eigentliche heilen
+//-------------------------------------------------------------------------
+
+int cmd_heilen(string str)
+{
+  notify_fail("Zum heilen \"heile mich\" eigeben!\n");
+
+  if(!str || str == "") return 0;
+  if(!(str == "mich"))  return 0;
+
+//-------------------------------------------------------------------------
+// Verena ist erschoepft?
+//-------------------------------------------------------------------------
+
+  if(heilung <= 0)
+  {
+    tell_object(TP, "Verenas heilenden Kraefte muessen sich erst "
+                    "regenerieren.\n");
+
+    return -1; // die -1 sollte langsam klar sein :)
+  }
+
+//-------------------------------------------------------------------------
+// baucht der spieler heilung?
+//-------------------------------------------------------------------------
+
+  if(TP->QueryProp(P_MAX_HP) == TP->QueryProp(P_HP))
+  {
+    tell_object(TP,"Du brauchst doch gar keine Heilung!\n");
+    return -1;
+  }
+
+  tell_object(TP,"Verena heilt Dich.\n");
+  TP->AddHp(50); // man kann auch AddSp verwenden, um die Magiepunkte
+                 // zu erhoehen. AddHp/AddSp sorgen selbst dafuer,
+                 // das nicht ueber P_MAX_HP hinaus geheilt werden kann
+
+  return 1;
+}
+
+//-------------------------------------------------------------------------
+// Spieler verfroschen. Achtung! Wer sowas vorhat, sollte tunlichst drauf
+// achten, keine endlose Uebungsstelle zu schaffen! Verfroschen
+// sollte maximal einmal pro Spieler pro Reset funktionieren!
+//-------------------------------------------------------------------------
+
+int cmd_verfroschen(string str)
+{
+  notify_fail("Wen moechtest Du verfroschen?\n");
+
+  if(!str || str == "") return 0;
+  if(!(str == "mich" )) return 0;
+
+//-------------------------------------------------------------------------
+// Ist der Spieler schon ein Frosch?
+//-------------------------------------------------------------------------
+
+  if(TP->QueryProp(P_FROG))
+  {
+    tell_object(TP,"Aber Du bist doch bereits ein Frosch!\n");
+    return -1;
+  }
+
+//-------------------------------------------------------------------------
+// Wurde der Spieler vor kurzem bereits verfroscht?
+//-------------------------------------------------------------------------
+
+  if(member(spieler_frosch,getuuid(TP)) != -1)
+  {
+    tell_object(TP,"Du kannst Dich im Augenblick nicht verfroschen.\n");
+    return -1;
+  }
+
+//-------------------------------------------------------------------------
+// Also los: 1,2,Frosch!
+//-------------------------------------------------------------------------
+
+  TP->SetProp(P_FROG, 1); // das war es schon, und hat gar nicht wehgetan
+  spieler_frosch += ({ getuuid(TP) }); //merken tun wird es uns aber noch
+
+  tell_object(TP,"Du fuehlst Dich auf einmal so gruen.\n");
+
+  return 1;
+}
+
+//-------------------------------------------------------------------------
+// Entfroschen kann man immer machen, allerdings sollte es nicht ganz
+// umsonst sein. Wir nehmen 500 Muenzen dafuer.
+//
+// Zum einfachen handeln des Geldes gibt es einen Moneyhandler
+//-------------------------------------------------------------------------
+
+int cmd_entfroschen(string str)
+{
+  notify_fail("Wen moechtest Du entfroschen?\n");
+
+  if(!str || str == "") return 0;
+  if(!(str == "mich" )) return 0;
+
+//-------------------------------------------------------------------------
+// ueberpruefen, ob der Spieler ueberhaupt 500 Muenzen hat!
+//-------------------------------------------------------------------------
+
+  if(TP->QueryMoney() < 500) //QueryMoney geht nur, wenn man den
+                             //Moneyhandler inheritet hat!
+  {
+    tell_object(TP,"Du hast nicht genug Geld dabei.\n");
+    return -1;
+  }
+
+  TP->SetProp(P_FROG, 0);           // Frosch zuruecknehmen
+  TP->AddMoney(-500);               // 500 Muenzen abziehen
+
+//-------------------------------------------------------------------------
+// Eingenommenes Geld muss der Zentralbank zugefuehrt werden, sonst gibts
+// Inflation :)
+//
+// => Die 500 Muenzen werden zu 100% an die Zentralbank ueberwiesen.
+//-------------------------------------------------------------------------
+
+  "p/daemon/zentralbank"->PayIn(500, 100);
+
+  tell_object(TP,"Du wirst groesser und groesser und groesser und groesser.\n");
+  return 1;
+}
+
+
+

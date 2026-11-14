@@ -1,0 +1,431 @@
+//=========================================================================
+//
+// File: aura.c
+// Created by Gwenshara
+//
+// Project: Bardengilde
+//
+//=========================================================================
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <defines.h>
+#include <new_skills.h>
+#include <moredef.h>
+#include "/gilden/bardengilde/bardengilde.h"
+
+#define COST 1
+
+string group, *dam_array, dischargeMessage;
+mixed room_msg;
+int charges, initialCharges, next_spell, time;
+object caster, owner;
+float factor;
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+//--Beschreibungen---------------------------------------------------------
+
+  SetProp(P_SHORT, 0);
+  SetProp(P_LONG,
+    "Eine Aura.");
+
+//--Namen------------------------------------------------------------------
+
+  SetProp(P_NAME, "Aura");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_INVIS, 1);
+  AddId(SONG_SMALL_AURA);
+
+//--Eigenschaften----------------------------------------------------------
+
+  SetProp(P_MATERIAL, MAT_MAGIC );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_SIZE, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NEVERDROP, 1);
+
+  dischargeMessage = "";
+
+  AddCmd("beende|beend&aura|lied vom sturmvogel|flamme bin ich|des todes drei trommelschlaege|zafiras elementare elegie", "cmd_ende");
+}
+
+public int cmd_ende(string str) {
+  write(BS("Mit einem lauten Knall entlaedst du die Energie deiner Aura. Es schmerzt!"));
+  say(BS("Mit einem Knall bricht sich magische Energie um "+TPN+" herum Bahn."));
+  TP->AddHp(-charges*3);
+  remove(1);
+  return 1;
+}
+
+private int modifyBySkillAttribute(int baseVal, string skillAttribute) {
+  return (int) (baseVal * (owner->QuerySkillAttribute(skillAttribute) / 100.0));
+}
+
+void load(object _target, string g, int c, float f)
+{
+  if(c>20) c = 20;
+  group   = g;
+  factor  = f;
+  owner = _target;
+  next_spell = time();
+
+  charges = modifyBySkillAttribute(c, SA_DURATION);
+  if(charges < 1) {
+    charges = 1;
+  }
+
+  initialCharges = charges;
+
+  call_out("charge_"+g, 0);
+  call_out("display_room_message", 130+random(30));
+  return;
+}
+
+public void display_room_message() {
+  object room;
+  string *msg;
+
+  if(!objectp(owner)) {
+    remove(1);
+    return;
+  }
+
+  room = environment(owner);
+  if(!objectp(room)) {
+    remove(1);
+    return;
+  }
+
+  if(objectp(find_netdead(getuid(owner)))) {
+    return;
+  }
+
+  if(room_msg == 0) {
+    return;
+  }
+
+  msg = room_msg[random(sizeof(room_msg))];
+
+  tell_object(owner, BS(msg[0]));
+  tell_room(room, BS(msg[1]), ({owner}));
+
+  call_out("display_room_message", 30+random(30));
+}
+
+public void BecomesNetAlive(object player) {
+  if(player == owner) {
+    call_out("display_room_message", 5+random(30));
+  }
+  return;
+}
+
+public void BecomesNetDead(object player) {
+  while(remove_call_out("display_room_message") != -1);
+  return;
+}
+
+void charge_zafira()
+{
+  string *dtypes;
+  tell_object(owner, BS("Ein Wirbel an roher elementarer Kraft umfaengt dich. Kurz stoben Flammen auf, Regen geht nieder und "
+                        "gefriert sofort. Fuer einen Moment spriessen Blumen um dich herum, nur um von einer Windboehe "
+                        "fortgerissen zu werden. Zu letzt erbebt die Erde kurz unter deinen Fuessen."));
+  tell_object(owner, BS("Du kannst nun die elementaren Kraefte als Elementarpfeile entfesseln! (<feuerpfeil>, <wasserpfeil>, <erzpfeil>, "
+                        "<luftpfeil>, <eispfeil>, <humuspfeil>, <magiepfeil>)"));
+  tell_room(ENV(owner), BS(sprintf("Ein Wirbel an roher elementarer Kraft umfaengt %s. Kurz stoben Flammen auf, Regen geht nieder und "
+                        "gefriert sofort. Fuer einen Moment spriessen Blumen um dich herum, nur um von einer Windboehe "
+                        "fortgerissen zu werden. Zu letzt erbebt die Erde kurz unter deinen Fuessen.",
+    owner->name(WEN, 1))), ({owner}));
+ 
+  room_msg = ({
+    ({"Der Boden unter deinen Fuessen zittert leicht.", "Der Boden unter deinen Fuessen zittert leicht."}),
+    ({"Ein wenig Regen geht um dich nieder.", "Ein wenig Regen geht um dich nieder."}),
+    ({"Dein Atem bildet Dampfwolken.", owner->Name(WESSEN, 1) + " Atem bildet Dampfowlken. Dir ist kalt."}),
+    ({"Um dich herum spriessen Blumen.", "Um " + owner->name(WEN, 1) + " spriessen Blumen."}),
+    ({"Kleine Feuerwusel tanzen um dich herum.", "Kleine Feuerwusel tanzen um "+owner->Name(WEN, 1)+" herum."}),
+    ({"Luftwirbel bilden sich um dich und lassen dein Haar wehen.", "Luftwirbel lassen " + owner->name(WESSEN, 1) + " Haar wehen."})
+  });
+
+  dischargeMessage = "Die Kraft der Element um dich wird schwaecher.";
+
+  AddCmd( ({"eispfeil", "humuspfeil", "erzpfeil", "luftpfeil", "feuerpfeil", "wasserpfeil", "magiepfeil"}), "element_arrow");
+  return;
+} 
+void charge_alestra()
+{
+  string *dtypes;
+  tell_object(owner, BS("Du wirst kurz in Flammen gehuellt! Die Geister von Feuer und Hitze waren von deinem Lied beeindruckt. "
+                        "Du kannst nun die Kraft der Flammen entfesseln! (syntax: brenne)"));
+  tell_room(ENV(owner), BS(sprintf("Ein Ring aus Flammen lodert rund um %s auf. Bei dieser Hitze kommst du ins schwitzen.",
+    owner->name(WEN, 1))), ({owner}));
+
+  dtypes = ({DT_FIRE});
+  if(TALENTMASTER->HasTalent(owner, TALENT_ALTE_GESCHICHTEN)) {
+    dtypes += ({ DT_EXPLOSION });
+  }
+
+  dam_array = ({ dtypes,
+                BS("Du flammst kurz auf!"),
+                BS("Eine Flamme rast von "+owner->Name(WEM)+" auf Dich zu!"),
+                BS("Eine Flamme rast von "+owner->Name(WEM)+" auf %s zu!")});
+
+  room_msg = ({
+    ({"Kleine Flammen tanzen auf deiner Kleidung.", "Kleine Flammen tanzen auf " + owner->name(WESSEN, 1) + " Kleidung."}),
+    ({"Um dich Herum bildet sich ein kleiner Flammenkreis.", "Um " + owner->name(WEN, 1)+ " herum bildet sich ein kleiner Flammenkreis."}),
+    ({"Du atmest ein kleines Rauchwoelkchen aus.", owner->Name(WER, 1) + " atmet eine kleine Rauchwolke aus."}),
+    ({"Eine Woge der Hitze geht von dir aus.", "Eine Woge der Hitze geht von " + owner->name(WEM, 1) + " aus."}),
+    ({"Es riecht nach verbranntem Holz.", "Es riecht nach verbranntem Holz."}),
+    ({"Ein paar Ascheflocken bilden sich um dich herum.", "Ascheflocken wehen um " + owner->name(WEN, 1) + "."})
+  });
+
+  dischargeMessage = "Funken spruehen um dich herum. Deine innere Flamme wird kleiner.";
+
+  AddCmd( ({"brenne", "brenn"}), "damage");
+  return;
+}
+
+void charge_tirena()
+{
+  string *dtypes;
+  tell_object(owner, BS("Einen kurzen Moment weht ein Sturm um Dich. Es scheint, die Sylphen waren von deinem Spiel beeindruckt. "
+                        "Du kannst nun die Kraft des Sturms entfesseln! (syntax: wehe)"));
+  tell_room(ENV(owner), BS(sprintf("Eine heftige Sturmboe geht von %s aus. Dreck und Staub wird herumgeschleudert.",
+    owner->name(WEM, 1))), ({owner}));
+  
+  dtypes = ({DT_AIR});
+  if(TALENTMASTER->HasTalent(owner, TALENT_ALTE_GESCHICHTEN)) {
+    dtypes += ({ DT_COLD });
+  }
+  
+  dam_array = ({ dtypes,
+                BS("Eine Windmauer geht von Dir aus!"),
+                BS("Ein Windstoss rast von "+owner->Name(WEM)+" auf Dich zu!"),
+                BS("Ein Windstoss rast von "+owner->Name(WEM)+" auf %s zu!")});
+
+  room_msg = ({
+    ({"Deine Haare wehen leicht im Wind.", owner->Name(WESSEN, 1)+" Haare wehen leicht im Wind."}),
+    ({"Ein sanfter Windhauch umweht dich.", "Ein sanfter Windhauch umweht dich."}),
+    ({"Eine kurze Boehe geht von dir aus.", "Eine kurze Windboehe geht von " + owner->name(WEM, 1)+ " aus."}),
+    ({"Eine Wolke Staub und Dreck wirbelt um dich.", "Eine Wolke aus Staub und Dreck wirbelt um " + owner->name(WEN, 1)+"."}),
+    ({"Du hoerst das leise Fluestern der Sylphen.", "Ein leises Murmeln erhebt sich um " + owner->name(WEN, 1)+"."}),
+    ({"Eine unsichtbare Gestalt spielt kichernd mit deinem Haar.", "Du hoerst ein leises Kichern von " + owner->name(WEM, 1)+"."})
+  });
+
+  dischargeMessage = "Der Wind um dich wird schwaecher. Ein Wenig von der Kraft der Sylphen verlaesst dich.";
+         
+  AddCmd( ({"wehe", "weh"}), "damage");
+  return;
+}
+
+void charge_korriax()
+{
+  string *dtypes;
+  tell_object(owner, BS("Eine dunkle Gestalt legt einen aetherischen Mantel um dich. Es scheint, du hast den Tod beeindruckt. "
+                        "Du kannst nun die Furcht vor dem Tod entfessln! (syntax: aengstige)"));
+  tell_room(ENV(owner), BS(sprintf("Eine dunkle Gestalt legt einen aetherischen Mantel um %s. Du fuerchtest Dich!", 
+                                   owner->Name(WEN, 1))), ({owner}));
+  
+  dtypes = ({DT_TERROR});
+  if(TALENTMASTER->HasTalent(owner, TALENT_ALTE_GESCHICHTEN)) {
+    dtypes += ({ DT_UNHOLY });
+  }
+  
+  dam_array = ({ dtypes,
+                BS("Du strahlst Furcht aus!"),
+                BS("Du fuerchtest Dich fuerchterlich vor "+owner->Name(WEM)+"!"),
+                BS("%s fuerchtet sich vor "+owner->Name(WEM)+"!")});
+
+  room_msg = ({
+    ({"Ein kalter Schauer laeuft deinen Ruecken hinab.", owner->Name(WER, 1)+" bekommt Gaensehaut."}),
+    ({"Du siehst alle um dich etwas zurueckweichen.", "Du weichst einen Schritt vor " + owner->name(WEM, 1) + " zurueck."}),
+    ({"Du hoerst ein unbestimmbares Wispern und Raunen.", "Ein unbestimmbares Wispern und Raunen ist von " + owner->name(WEM, 1) + " zu hoeren."}),
+    ({"Eine geisterhafte Erscheinung wandert durch dich hindurch.", "Eine geisterhafte Erscheinung wandert durch " + owner->name(WEN, 1) + "."}),
+    ({"Ein umheimliches Gluehen erhellt dich kurz.", owner->Name(WER, 1) + " wird kurz von einem unheimlichen Gluehen erhellt."}),
+    ({"Kurz erscheint ein duesterer, durchscheinender Mantel um dich.", owner->Name(WER, 1) + " wird kurz von einem flatternden Geistermantel umgeben."})
+  });
+
+  dischargeMessage = "Du merkst die Todesangst von dir weichen. Der Mantel des Todes wird leichter um deine Schultern.";
+
+  AddCmd( ({"aengstige", "aengstig"}), "damage");
+  return;
+}
+
+void charge_sarrian()
+{
+  string *dtypes;
+  tell_object(owner, BS("Blitze zucken um Dich! Die Geister von Blitz und Donner scheinen beeindruckt von dir. "
+                        "Du kannst nun die Kraft des Gewitters entfesseln! (syntax: blitz)"));
+  tell_room(ENV(owner), BS(sprintf("Mehrere Blitze zucken von %s Instrument aus in den Boden. Dir stehen die Haare zu Berge.",
+    owner->name(WESSEN, 1))), ({owner}));
+  
+
+  dtypes = ({DT_LIGHTNING});
+  if(TALENTMASTER->HasTalent(owner, TALENT_ALTE_GESCHICHTEN)) {
+    dtypes += ({ DT_LIGHT });
+  }
+    
+  dam_array = ({ dtypes,
+                BS("Ein Blitz zuckt von Dir weg!"),
+                BS("Ein Blitz trifft Dich!"),
+                BS("Ein Blitz trifft %s!")});
+
+  AddCmd( ({"blitze", "blitz"}), "damage");
+
+  room_msg = ({
+    ({"Alle deine Haare stehen dir zu Berge", owner->Name(WESSEN, 1)+" Haare stehen zu Berge."}),
+    ({"Ein leises Summen geht von dir aus.", "Ein leises Summen geht von " + owner->name(WEM, 1) + " aus."}),
+    ({"Ein paar kleine Blitze zucken von dir aus zu Boden.", "Ein paar kleine Blitzen zucken von " + owner->name(WEM, 1) + " aus zu Boden."}),
+    ({"Du hoerst leises Donnergrollen.", "Du hoerst leises Donnergrollen."}),
+    ({"Deine Augen leuchten kurz blaeulich auf.", "In " + owner->name(WESSEN, 1) + " Augen zucken kleine Blitze."}),
+    ({"Blitze zucken um dich herum.", "Ein paar Blitze zucken von " + owner->name(WEM, 1) + " aus um dich herum."})
+  });
+
+  dischargeMessage = "Blitze zucken aus deinen Fuessen in den Boden hinab. Dein Gewitter wird schwaecher.";
+
+  return;
+}
+
+public int getCharges() {
+  return charges; 
+}
+
+varargs private void discharge(int silent) {
+  string msg;
+  msg = BS(dischargeMessage);
+  if(!silent && objectp(owner) && !objectp(find_netdead(owner)) && stringp(msg)) {
+    tell_object(owner, msg);
+  }
+
+  if(--charges <= 0) {
+    if(objectp(owner)) {
+      msg = BS("Deine Aura loest sich auf!");
+      if(stringp(msg)) tell_object(owner, msg);
+    }
+    remove(1);
+  }
+  return;
+}
+
+int damage(string str)
+{
+  object *targets, t, *enemies;
+  int n, m, damage, dmgOffset;
+  mapping sinfo;
+  if(owner->QueryProp(P_TESTPLAYER)) {
+    tell_object(owner, sprintf("eval_cost = %d\n", get_eval_cost()));
+  }
+
+  notify_fail("Das geht nur im Kampf!\n");
+  if(!owner->InFight()) return 0;
+
+  // Check ob Nutzungspause um ist
+  notify_fail("Deine Aura muss sich erst wieder aufladen!\n");
+  if(next_spell>time()) return 0;
+
+  // Schaden berechnen
+  damage = (int) (150 * (1 + factor));
+  dmgOffset = damage/3;
+
+  sinfo =  ([SI_SKILLDAMAGE: damage,  
+             OFFSET(SI_SKILLDAMAGE): dmgOffset, 
+             SI_SKILLDAMAGE_TYPE: dam_array[0],
+            SI_RAW_SPELLCOST: COST,
+            SI_SKILLRESTR_USE:([P_GUILD_LEVEL:3])]);
+
+    // MP kosten
+    if(owner->QueryProp(P_TMP_BARDS_ZAUBERMELODIE)) {
+      sinfo[SI_RAW_SPELLCOST] *= 2;
+    }
+  
+    if(owner->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+      tell_object(owner, BS("Du hast nicht genuegend magische Macht um die Aura zu entfachen."));
+      return -1;
+    }
+    owner->AddSp(-1 * sinfo[SI_RAW_SPELLCOST]);
+
+  // Ziel suchen
+  targets = ({ });
+  enemies = owner->PresentEnemies();
+  m = 1;
+  if(TALENTMASTER->HasTalent(owner, TALENT_FORTE_FORTISSIMO)) {
+    m += owner->QueryProp(P_BARD_INSPIRATION_LEVEL);
+  }
+  m = modifyBySkillAttribute(m, SA_EXTENSION);
+  if(m>sizeof(enemies)) m = sizeof(enemies);
+
+  for(n=0; n<m; n++) {
+    if(member(targets, enemies[n]) < 0) {
+      targets += ({ enemies[n] });
+    }
+  }
+
+  // Meldungen ausgeben
+  tell_object(owner, dam_array[1]);
+
+  for(n=0; n<sizeof(targets); ++n) {
+    if(objectp(present(SONG_FEAR_BUILDUP, targets[n])) && targets[n]->QueryProp(P_DISABLE_ATTACK) > 0) {
+      tell_object(owner, BS(sprintf("Dein Angriff erwischt %s im Zustand geistiger Verwirrung!", targets[n]->name(WEN, 1))));
+      sinfo[SI_SKILLDAMAGE] += sinfo[OFFSET(SI_SKILLDAMAGE)];
+    }
+
+    tell_object(targets[n], dam_array[2]);
+    tell_room(ENV(owner), sprintf(dam_array[3], targets[n]->Name(WER, 1)), ({owner, targets[n]}));
+    "/spellbooks/barden_spells"->TryDefaultAttackSpell(targets[n], owner, sinfo, ([SP_NAME:"barden_kampfspell_klein", SP_SHOW_DAMAGE:1]));
+    owner->AddSp((int) ((-1 * sinfo[SI_RAW_SPELLCOST])/2));
+  }
+
+  // Nur alle 5 Sekunden moeglich
+  next_spell = time()+5;
+
+  // Ladung abziehen
+  discharge(1);
+
+  return 1;
+}
+
+public int CanRecharge() {
+  return charges <= (int) (initialCharges/4);
+}
+
+public void reset() {
+  ::reset();
+  if(!objectp(owner) || objectp(find_netdead(getuid(owner)))) {
+    remove(1);
+  }
+
+  discharge();
+}
+
+public int element_arrow(string str) {
+  string pfeil, dtype;
+
+  pfeil = capitalize(query_verb());
+  write("pfeil fuer: " + query_verb()+"\n");
+
+  switch(query_verb()) {
+    case "feuerpfeil": dtype = DT_FIRE; break;
+    case "wasserpfeil": dtype = DT_WATER; break;
+    case "luftpfeil": dtype = DT_AIR; break;
+    case "erzpfeil": dtype = DT_BLUDGEON; break;
+    case "eispfeil": dtype = DT_COLD; break;
+    case "humuspfeil": dtype = DT_POISON; break;
+    default: dtype = DT_MAGIC; break;
+  }
+  
+  dam_array = ({ ({dtype}), 
+                BS("Du wirfst einen "+pfeil+"."), 
+                BS(owner->Name(WER)+" wirft einen "+pfeil+" nach dir!"),
+                BS(owner->Name(WER)+" wirft einen "+pfeil+" nach %s!")});
+
+  return damage(str);
+}

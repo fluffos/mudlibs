@@ -1,0 +1,118 @@
+inherit "/gilden/bardengilde/obj/std_song_effect";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <defines.h>
+#include <new_skills.h>
+#include <moredef.h>
+#include "/gilden/bardengilde/bardengilde.h"
+#include "bard_song.h"
+
+private mapping attributes = ([
+    BARD_GROUP_KORRIAX: ({A_STR, A_CON, A_DEX, A_INT}),
+    BARD_GROUP_ALESTRA: ({A_DEX, A_INT, A_CON, A_STR}),
+    BARD_GROUP_TIRENA:  ({A_INT, A_DEX, A_STR, A_CON}),
+    BARD_GROUP_SARRIAN: ({A_CON, A_DEX, A_INT, A_STR}),
+    HERO_GRIMM: ({A_STR, A_CON, A_STR, A_CON})
+]);
+
+private int canRecharge, duration;
+
+public void create() {
+    if (!is_clone(TO)) return;
+    ::create();
+  
+    AddId(({SONG_BUFF}));
+
+    setSilentEnd(1);
+
+    canRecharge = 0;
+}
+
+public void prepareSong() {
+    int bonusPoints, x;
+    mapping attributeModifier;
+    string group;
+
+    // max. +5 +4 +3 +2 = 14 (max succes, absolut + max spellbuff)
+    // standard max. +5 +3 -> ohne spellbuff
+    // +3 durch ability, +5 success
+    bonusPoints = (ability/3333) + (success/5000);
+    bonusPoints = modifyBySkillAttribute(bonusPoints, SA_DAMAGE);
+    bonusPoints = (int) (bonusPoints * factor);
+
+    if(TALENTMASTER->HasTalent(caster, TALENT_AGITATOR)) {
+        bonusPoints += caster->QueryProp(P_BARD_INSPIRATION_LEVEL);
+    }
+
+    if(BARDENMASTER->HasHeroPathLevel(caster, HERO_GRIMM, 2)) {
+        group = HERO_GRIMM;
+    } else {
+        group = BARDENMASTER->GetBardGroup(caster);
+    }
+
+    attributeModifier = ([attributes[group][0]: (bonusPoints>5 ? 5 : bonusPoints)]);
+    bonusPoints -= 5;
+    if(bonusPoints > 0) {
+        attributeModifier += ([attributes[group][1]: (bonusPoints>4 ? 4 : bonusPoints)]);
+        bonusPoints -= 4;
+        if(bonusPoints > 0) {
+            attributeModifier += ([attributes[group][2]: (bonusPoints>3 ? 3 : bonusPoints)]);
+            bonusPoints -= 3;
+        }
+        if(bonusPoints > 0) {
+            attributeModifier += ([attributes[group][3]: (bonusPoints>2 ? 2 : bonusPoints)]);
+        }
+    }
+
+    if(bonusPoints > 0) {
+        x=0;
+        for(;bonusPoints>0; bonusPoints--) {
+            attributeModifier[attributes[group][x%4]]++;
+            x++;
+        }
+    }
+
+    SetProp(P_X_ATTR_MOD, attributeModifier);
+
+    if(BARDENMASTER->HasHeroPathLevel(caster, HERO_GRIMM, 2)) {
+        bonusPoints = caster->UseSkill(SK_HEROISM(HERO_GRIMM)) / 1000;
+        bonusPoints = modifyBySkillAttribute(bonusPoints, SA_DAMAGE);
+        SetProp(P_X_HEALTH_MOD,([P_HP: bonusPoints]));
+    }
+
+    caster->UpdateAttributes();
+
+
+    duration = caster->QueryProp(P_GUILD_LEVEL) * 20 + ability/200 + success/400;
+    duration = modifyBySkillAttribute(duration, SA_DURATION);
+    call_out("recharge_warning", (3*duration/4));
+
+    if(caster->QueryProp(P_TESTPLAYER)) {
+        tell_object(caster, sprintf("bonusPoints=%d duration=%d modifier=%O\n", bonusPoints, duration, attributeModifier));
+    }
+}
+
+public void recharge_warning() {
+    int remainder; 
+    
+    remainder = duration/4;
+    if(!objectp(victim)) remove(1);
+
+    tell_object(victim, BS("Deine heldenhafte Ausstrahlung wird schwaecher."));
+    canRecharge = 1;
+    if(caster->QueryProp(P_TESTPLAYER)) tell_object(caster, sprintf("heldenlied :: remaining duration = %d\n", remainder));
+    call_out("endSong", remainder);
+}
+
+public int CanRecharge() {
+    return canRecharge;
+}
+
+public void onEndSong() {
+    if(objectp(victim)) {
+        tell_object(victim, BS("Deine heldenhafte Ausstrahlung verblasst."));
+        tell_room(environment(victim), BS(sprintf("%s heldenhafte Ausstrahlung verblasst.", victim->Name(WESSEN, 1))), ({victim}));
+    }
+}

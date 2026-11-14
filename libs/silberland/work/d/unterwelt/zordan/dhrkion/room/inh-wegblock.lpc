@@ -1,0 +1,176 @@
+//=========================================================================
+//
+// File:    inh-wegblock.c
+// Created by Ronja@SL based on Zordan@SL
+//
+// Project: Dhrkion
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit "std/room";
+
+int thisroom;
+int dark;
+
+void create()
+{
+  ::create();
+
+  thisroom = -1;
+  dark     =  0;
+
+  AddCmd( ({ "setz","setze" }) ,        "cmd_setzen" );
+  AddCmd( ({ "nimm","nehm","nehme" }) , "cmd_nehmen" );
+
+  AddSpecialExit( "ausgang", "exit_ausgang" );
+  SetProp(P_HIDE_EXITS, ({"ausgang"}) );
+}
+
+void init()
+{
+  if(TP && interactive(TP))
+  {
+    if(TP->QueryQuest(QUESTNAME))
+    {
+      SetProp(P_LIGHT, 0 + dark);
+    }
+    else
+    {
+      SetProp(P_LIGHT, 1 + dark);
+    }
+  }
+
+  ::init();
+}
+
+string DisplayRunes(object player)
+{
+  string s;
+
+  if(RUNENMASTER->IsQuester(getuuid(player)))
+  {
+    s = RUNENMASTER->GetWord(getuuid(player), thisroom);
+    s = RUNENMASTER->Translate(getuuid(player), s);
+    return s+"\n\n";
+  }
+
+  return "";
+}
+
+void Lighten()
+{
+  dark = 0;
+  SetProp(P_LIGHT, QueryProp(P_LIGHT)+dark);
+}
+
+void Darken()
+{
+  dark = -1;
+
+  while(remove_call_out("Lighten") != -1);
+  call_out("Lighten", 1800);
+
+  SetProp(P_LIGHT, QueryProp(P_LIGHT)+dark);
+}
+
+int exit_ausgang(string str)
+{
+  notify_fail("Ja, wo ist der denn, der Ausgang?\n");
+  return 0;
+}
+
+int cmd_setzen(string str)
+{
+  object rune;
+  int was, wo, i;
+
+  if(!RUNENMASTER->IsQuester(getuuid(TP))) return 0;
+
+  notify_fail("Du hast gar keine Rune bei Dir.\n");
+
+  if(!present("\n_quest_rune", TP)) return 0;
+
+  notify_fail("Syntax: setz rune x an stelle y <x,y=zahl, wobei 1=ganz links>.\n");
+
+  if(!str || str == 0) return 0;
+
+  if(sscanf(str, "rune %d an stelle %d", was, wo) !=2 ) return 0;
+
+  notify_fail("Diese Position macht keinen Sinn.\n");
+  wo--;
+
+  if (wo<0) return 0;
+
+  notify_fail("Diese Rune hast Du nicht.\n");
+
+  if ((was < 0) || (was > 4)) return 0;
+
+  rune = present(sprintf("\n_quest_rune %d", was), TP);
+
+  if(!objectp(rune)) return 0;
+
+  notify_fail("Hier hast Du schon eine Rune eingesetzt!\n");
+  if(RUNENMASTER->QueryRuneStatus(getuuid(TP), thisroom) != 1) return 0;
+
+  tell_object(TP,"Du setzt die Rune an die Position "+(wo+1)+" ein.\n");
+  RUNENMASTER->PutRune(getuuid(TP), thisroom, wo, rune->QueryChar());
+  rune->remove();
+
+  return 1;
+}
+
+int cmd_nehmen(string str)
+{
+  object rune;
+  string s;
+
+  if(!RUNENMASTER->IsQuester(getuuid(TP))) return 0;
+
+  notify_fail("Was willst Du nehmen?\n");
+  if(!str || str == "") return 0;
+
+  if(str != "rune") return 0;
+
+  switch(RUNENMASTER->QueryRuneStatus(getuuid(TP), thisroom))
+  {
+    case -2:
+      tell_object(TP, BS("Hier ist keine Rune eingesetzt, die Du nehmen "
+                         "koenntest. Und diese Meldung durfte eigentlich"
+                         "gar kommen. Mach Meldung an Ronja."));
+      return -1;
+      break;
+
+    case -1:
+      tell_object(TP, "Hier ist keine Rune eingesetzt, die Du nehmen "
+                      "koenntest.\n");
+      return -1;
+      break;
+
+    case 1:
+      tell_object(TP, "Hier ist keine Rune eingesetzt, die Du nehmen "
+                      "koenntest.\n");
+      return -1;
+      break;
+  }
+
+  rune = clone_object("/d/unterwelt/zordan/runenquest/obj/rune");
+
+  if(rune->move(TP, M_GET) != 1)
+  {
+    tell_object(TP, "Die Rune ist zu schwer fuer Dich, Du Schwaechling!\n");
+    rune->remove();
+  }
+  else
+  {
+    tell_object(TP, "Du nimmst die kleine Rune wieder an Dich.\n");
+    s = RUNENMASTER->TakeRune(getuuid(TP), thisroom);
+    rune->SetProp(P_LONG, RUNENMASTER->Translate(getuuid(TP), s));
+    rune->SetChar(s);
+  }
+
+  return 1;
+}
+
+

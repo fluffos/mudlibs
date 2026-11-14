@@ -1,0 +1,197 @@
+inherit "std/weapon";
+
+#include <properties.h>
+#include <combat.h>
+#include <moredef.h>
+#include <defines.h>
+#include <new_skills.h>
+#include "/p/daemon/skillmaster/skillmaster.h"
+
+#define COST 33
+#define LADE_COST 100
+int zeit, first_use, filled;
+
+create()
+{ 
+  if (!is_clone(this_object())) return;
+  ::create();
+  zeit=time();
+  filled = 3;
+  SetProp(P_SHORT,"Kreth der Vernichter");
+  SetProp(P_LONG,
+        "Du betrachtest Kreth, ein wellig geformtes Schwert aus einem harten, "+
+        "eisigen Material geformt ist. Sein Griff ist mit einem roten Band "+
+        "umschlungen, welches aus purer Seide besteht. Dieser Bihaender "+
+        "zaehlt wahrscheinlich zu den staerksten Waffen des Landes. ");
+  SetProp(P_NAME, "Kreth");
+  AddId( ({"kreth","schwert", "langschwert","vernichter" }));
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_WC, 246 );
+  SetProp(P_WC_FIX, 55 );
+  SetProp(P_QUALITY_DECAY, 300);
+  SetProp(P_WEIGHT, 2300 );
+  SetProp(P_VALUE, 6000); 
+  SetProp(P_NOBUY,1);
+  SetProp(P_WEAPON_TYPE, WT_SWORD);
+  SetProp(P_DAM_TYPE, ({DT_COLD,DT_SLASH}));
+  SetProp(P_NR_HANDS, 2);
+  SetProp(P_MATERIAL, ([MAT_ICE:40,MAT_IRIDIUM:50,MAT_SILK:10]) );
+  SetProp(P_WIELD_RESTRICTIONS, ([SR_SEER:1, A_STR:18, P_LEVEL:40]) );
+  SetProp(P_ARTICLE,0);
+  SetProp(P_INFO, 
+  "Du bist im Besitz von Kreth, dem maechtigsten Schwert der weissen \n"+
+  "Drachenritter. Es richtet nicht nur gewaltigen physikalischen Kaelteschaden an,\n"+
+  "sondern es bringt mit seiner magischen Eislanze Tod und Verderben \n"+
+  "ueber seine Feinde. Jedoch kostet diese Kraft seinem Besitzer magische\n"+
+  "Energie und eine Kralle eines Kobolds, wenn er Kreth wieder mit \n"+
+  "Magie laden will. Beschuetze Kreth, auf dass es nie in falsche Haende\n"+
+  "geraten mag.\n");
+
+  AddCmd("lade","lfunc");
+  AddCmd("eislanze","efunc");
+  SetProp(P_WIELD_FUNC, TO);
+}
+
+int WieldFunc(object waffe, int silent)
+{
+  first_use=time()+10;
+  return 1;
+}
+
+int efunc(string str)
+{
+  object enemy;
+ 
+  notify_fail("Auf wen moechtest Du eine Eislanze schleudern?\n");
+  if( stringp(str) && (enemy=present(str, environment(TP))) )
+  {
+    if( query_once_interactive(enemy) && !TP->SelectEnemy(enemy) )
+    { 
+      write("Du kannst doch keinen anderen Spieler angreifen!\n");
+      return 1;
+    }
+    if (!QueryProp(P_WIELDED))
+    {
+      write("Ohne zuecken geht da gar nichts!\n");
+      return 1;
+    }
+    if( time() < first_use ) 
+    {
+      write("Du hast Kreth doch gerade erst gezueckt.\n");
+      return 1;
+    }
+    if( zeit > time() )
+    {
+      write("Nicht so schnell! Ueberanspruche Kreth nicht!\n");
+      return 1;
+    }  
+    if (filled <= 0)
+    {
+      write("Es scheint als haette Kreth keine magische Energie mehr!\n");
+      return 1;
+    }
+    if (TP->QueryProp(P_SP) < COST)
+    {
+      write("Du hast nicht genug Magiepunkte dafuer!\n");
+      return 1;
+    }
+    if (TP->QueryProp(P_ATTACK_BUSY))
+    {
+      write("Nicht so schnell!\n");
+      return 1;
+    }
+    write("Kreth wird ganz kalt und faengt an, in einem eisigen Licht zu "
+        "gluehen.\n");
+    call_out("lanze",2+random(2),enemy);
+    TP->AddSp(-COST);
+    TP->SetProp(P_ATTACK_BUSY, 10);
+    return 1; 
+  }
+ return 0;
+}
+
+lanze(object enemy)
+{
+  int slayer;
+  if (TP->QueryProp(P_ATTACK_BUSY))
+  {
+    write("Nicht so schnell!\n");
+    return;
+  }
+  if(!enemy || !present(enemy,environment(TP)))
+  {
+    write("Die Eislanze verpufft ohne einen Gegner zu treffen.\n");
+  }
+  else
+  {
+    printf("Du wirfst eine Eislanze nach %s.\n", enemy->name(WEM));
+    say(sprintf(BS("%s wirft %s Eislanze nach %s."), CAP(TPN),
+        TPPP(FEMALE,WEN,PLURAL), enemy->name(WEM)), enemy );
+    tell_object(enemy, CAP(TPN)+" wirft eine Eislanze nach Dir.\n " );
+   
+    if (!random(1000))
+      slayer=random(1000);
+     else 
+       slayer=0;
+     enemy->Defend(slayer+333+random(999), DT_COLD, 
+         ([SP_NAME:"maechtige Eislanze", SP_SHOW_DAMAGE:1]), TP);
+  }
+  TP->SetProp(P_ATTACK_BUSY, 1);
+  filled--;
+  if (random(400)==250)
+  {
+    if(SKILLMASTER->UseSkill(TP, SK_LUCK) > 0)
+      write( "Wow! Hast Du ein Glueck! Fast haette sich Kreth aufgeloest!\n");
+    else
+    {
+      write("Kreth zerfaellt zu Staub. Da hat wohl was nicht mit den \n"
+          "magischen Energien geklappt. So ein Pech!\n");
+      remove(1); 
+    }
+  }
+  zeit=time()+(15+random(10))*60;
+}
+    
+lfunc(str)
+{
+  object kralle;
+  notify_fail("Kreth scheint sich nicht angesprochen zu fuehlen.\n");
+  if ( str!="kreth" && str!="schwert" && str!="bihaender" ) return 0;
+
+  if (filled>=3) 
+  {
+    write("Kreth glueht kurz auf.\n");
+    return 1;
+  }
+  if (this_player()->QueryProp(P_SP) <= LADE_COST)
+  {
+    write("Deine magische Energie ist zu niedrig, um Kreth zu laden.\n");
+    return 1;
+  }
+  if (!kralle=deep_present("\nkkralle",this_player()))
+  {
+    write("Du brauchst eine Koboldskralle, um Kreth aufzuladen.\n");
+    return 1;
+  }
+  if (random(400)==250)
+  {
+    if(SKILLMASTER->UseSkill(TP, SK_LUCK) > 0)
+      write( "Wow! Hast Du ein Glueck! Fast haette sich Kreth aufgeloest!\n");
+    else
+    {
+      write("Kreth zerfaellt zu Staub. Da hat wohl was nicht mit den \n"
+          "magischen Energien geklappt. So ein Pech!\n");
+      remove(1); 
+    }
+  }
+  this_player()->AddSp(-LADE_COST);
+  kralle->remove();
+  filled+=1+random(2);
+  write (
+    "Du spiesst eine Koboldskralle mit Kreth auf.\n"+
+    "Deine magische Energie scheint auf Kreth ueberzugehen.\n"+
+    "Kreth glueht in hellem Rot auf.\n"+
+    "Die Koboldskralle verbrennt.\n");
+  return 1;
+}
+

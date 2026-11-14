@@ -1,0 +1,782 @@
+//////////////////////////////////////////////////
+//                                              //
+//     wroom - Standard-Inherit-Raum fuer alle  //
+//             Unterwasserraeume                //
+//                                              //
+//     Erstellt: 01/99                          //
+//                                              //
+//     Letzte Aenderung: 17/09/99               //
+//                                              //
+//     (c) by Cirion@Silberland                 //
+//                                              //
+//                                              //
+// ACHTUNG: Dieses File ist zur unbeschraenkten //
+// Nutzung freigegeben, solange es UNVERAENDERT //
+// bleibt. Aenderungswuensche bitte an mich,    //
+// ich werde sie dann nach moeglichkeit         //
+// umsetzten.                                   // 
+//                                              //
+//////////////////////////////////////////////////
+
+/*
+** Dokumentation ausgelagert nach /d/wasser/cirion/doc/wroom.txt
+*/
+
+#include <properties.h>
+#include <moving.h>
+
+#include "/d/wasser/cirion/water.h"
+
+#ifndef P_WEXIT_CMD
+#define P_WEXIT_CMD "wexit_cmd"
+#endif
+#ifndef P_WEXIT_DEST
+#define P_WEXIT_DEST "wexit_dest"
+#endif
+#ifndef P_WEXIT_MSG
+#define P_WEXIT_MSG "wexit_msg"
+#endif
+#ifndef P_WEXIT_HIDDEN
+#define P_WEXIT_HIDDEN "wexits_hidden"
+#endif
+#ifndef P_DEXIT_DIR
+#define P_DEXIT_DIR "dexit_dir"
+#endif
+#ifndef P_DEXIT_DEST
+#define P_DEXIT_DEST "dexit_dest"
+#endif
+#ifndef P_WROOM_SINK
+#define P_WROOM_SINK "wroom_sink"
+#endif
+
+inherit "std/room";
+
+object luft;
+nosave string ausgabe;
+
+int AddHiddenWaterExit(string cmd,string dest);
+int Add_Water_Exit(string cmd,string dest);
+int AddWaterExit(string cmd,string dest);
+int AddDiveExit(string dir,string dest);
+string exit_exists(string direction);
+
+void create()
+{
+  	
+  ::create();
+  
+  SetProp(P_WROOM_SINK,1);
+  SetProp(P_WEXIT_MSG,({}));
+  SetProp(P_WEXIT_DEST,({}));
+  SetProp(P_WEXIT_CMD,({}));
+  SetProp(P_WEXIT_HIDDEN,({}));
+  SetProp(P_DEXIT_DIR,({}));
+  SetProp(P_DEXIT_DEST,({}));
+
+  SetProp(P_ENVIRONMENT, ([ENV_TERRAIN:TT_UNDERWATER]));
+  AddDetail ( ({"blaeschen", "blasen","blubbern"}),
+    "Die Blaeschen verlassen Deinen Mund und steigen langsam zur Wasserober-\n"+
+    "flaeche.\n");
+  AddSound ( ({"blubbern"}),
+  "Das Blubbern hoert sich wirklich lustig an.\n");
+  AddCmd ( ({"tauche", "tauch"}), "tauche_rum");
+  AddCmd ( ({"sag","sage","ruf","rufe","frag","frage","red","rede","antworte","fluester","fluestere"}),"sage");
+  AddCmd ( ({"schwimm","schwimme"}),"schwimme_rum");
+
+}
+
+void init()
+{
+  object ob;
+
+  ::init();
+  if ( !present("\nluft",TP)
+    && interactive(TP)
+    && !TP->QueryProp(P_GHOST)
+    && !IS_WIZARD(TP))
+  {
+    clone_object(WOBJ+"/wluft")->move(this_player(),M_GET|M_NOCHECK);
+  }
+  if (QueryProp(P_ENVIRONMENT)[ENV_TERRAIN] == TT_UNDERWATER)
+  {
+    if (ob=present("\nluft",TP))
+       ob->heart_beat_on();	
+  }
+}
+
+RemoveExit(string cmd)
+{
+  string *wexit_cmd;
+  string *wexit_msg;
+  string *wexit_dest;
+  int *wexit_hidden;
+  int i,j;
+  if (cmd=="0")
+  {
+    wexit_cmd=({});
+    SetProp(P_DEXIT_DIR,wexit_cmd);	
+    SetProp(P_DEXIT_DEST,wexit_cmd);	
+    SetProp(P_WEXIT_CMD,wexit_cmd);	
+    SetProp(P_WEXIT_MSG,wexit_cmd);	
+    SetProp(P_WEXIT_DEST,wexit_cmd);	
+    SetProp(P_WEXIT_HIDDEN,wexit_cmd);
+    ::RemoveExit(cmd);
+    return;
+  }
+  if (2>sizeof(explode(cmd," ")))
+    cmd="nach "+cmd;
+  wexit_cmd=QueryProp(P_DEXIT_DIR);
+  wexit_dest=QueryProp(P_DEXIT_DEST);
+  for (i=sizeof(wexit_cmd);i-->0;)
+  {
+    if (cmd==wexit_cmd[i])
+    {
+      for (j=i;j<sizeof(wexit_cmd)-1;j++)
+      {
+        wexit_cmd[j]=wexit_cmd[j+1];
+        wexit_dest[j]=wexit_dest[j+1];
+      }
+      wexit_cmd=wexit_cmd[0..<2];
+      wexit_dest=wexit_dest[0..<2];	
+      SetProp(P_DEXIT_DIR,wexit_cmd);
+      SetProp(P_DEXIT_DEST,wexit_dest);
+      RemoveExit("\n"+cmd);
+      return;
+    }	
+  }
+  wexit_cmd=QueryProp(P_WEXIT_CMD);
+  wexit_dest=QueryProp(P_WEXIT_DEST);
+  wexit_msg=QueryProp(P_WEXIT_MSG);
+  for (i=sizeof(wexit_cmd);i-->0;)
+  {
+    if (cmd==wexit_cmd[i])
+    {
+      for (j=i;j<sizeof(wexit_cmd)-1;j++)
+      {
+        wexit_cmd[j]=wexit_cmd[j+1];
+        wexit_dest[j]=wexit_dest[j+1];
+        wexit_msg[j]=wexit_msg[j+1];
+      }
+      wexit_cmd=wexit_cmd[0..<2];
+      wexit_dest=wexit_dest[0..<2];
+      wexit_msg=wexit_msg[0..<2];	
+      SetProp(P_WEXIT_CMD,wexit_cmd);
+      SetProp(P_WEXIT_DEST,wexit_dest);
+      SetProp(P_WEXIT_MSG,wexit_msg);
+      RemoveExit("\n"+cmd);
+      return;
+    }	
+  }
+  ::RemoveExit(cmd);
+  return;
+}
+
+int AddHiddenWaterExit(string cmd,string dest)
+{
+int *wexit_hidden;
+ 
+Add_Water_Exit(cmd,dest);
+  
+wexit_hidden=QueryProp(P_WEXIT_HIDDEN)+({1});
+SetProp(P_WEXIT_HIDDEN,wexit_hidden);  
+return 1;
+}
+
+int AddWaterExit(string cmd,string dest)
+{
+int *wexit_hidden;
+ 
+Add_Water_Exit(cmd,dest);
+  
+wexit_hidden=QueryProp(P_WEXIT_HIDDEN)+({0});
+SetProp(P_WEXIT_HIDDEN,wexit_hidden);  
+return 1;
+}
+
+int AddDiveExit(string dir,string dest)
+{
+  string *dexit_dir;
+  string *dexit_dest;
+  
+  if (-1==member(({"oben","unten"}),dir))
+     return 0;
+  
+  AddExit("\n"+dir,"nach "+dir+"#"+dest);
+
+  dexit_dir=QueryProp(P_DEXIT_DIR)+({dir});
+  dexit_dest=QueryProp(P_DEXIT_DEST)+({dest});
+  
+  SetProp(P_DEXIT_DIR,dexit_dir);
+  SetProp(P_DEXIT_DEST,dexit_dest);
+  
+  return 1;	
+}
+
+int Add_Water_Exit(string cmd,string dest)
+{
+  string *array;	
+  string *wexit_cmd;
+  string *wexit_msg;
+  string *wexit_dest;
+  
+  if(1==sizeof(explode(dest,"#")))
+  {
+    AddExit("\n"+cmd,"nach "+CAP(cmd)+"#"+dest);
+  }
+  else
+    AddExit("\n"+cmd,dest);
+     
+  if (sizeof(explode(dest,"#"))==1)
+  {
+    wexit_cmd=QueryProp(P_WEXIT_CMD)+({"nach "+cmd});
+    wexit_msg=QueryProp(P_WEXIT_MSG)+({"nach "+CAP(cmd)});
+    wexit_dest=QueryProp(P_WEXIT_DEST)+({dest});
+    SetProp(P_WEXIT_CMD,wexit_cmd);
+    SetProp(P_WEXIT_DEST,wexit_dest);
+    SetProp(P_WEXIT_MSG,wexit_msg);
+  }
+  else if(sizeof(explode(cmd," "))==1)
+  {
+    array=explode(dest,"#");
+    wexit_cmd=QueryProp(P_WEXIT_CMD)+({"nach "+cmd});
+    wexit_msg=QueryProp(P_WEXIT_MSG)+({array[0]});
+    wexit_dest=QueryProp(P_WEXIT_DEST)+({array[1]});
+    SetProp(P_WEXIT_CMD,wexit_cmd);
+    SetProp(P_WEXIT_DEST,wexit_dest);
+    SetProp(P_WEXIT_MSG,wexit_msg);
+  }
+  else
+  {
+    array=explode(dest,"#");
+    wexit_cmd=QueryProp(P_WEXIT_CMD)+({cmd});
+    wexit_msg=QueryProp(P_WEXIT_MSG)+({array[0]});
+    wexit_dest=QueryProp(P_WEXIT_DEST)+({array[1]});
+    SetProp(P_WEXIT_CMD,wexit_cmd);
+    SetProp(P_WEXIT_DEST,wexit_dest);
+    SetProp(P_WEXIT_MSG,wexit_msg);
+  }
+  return 1;
+	
+}
+
+varargs int PreventInsert(object ob)
+{
+   if (living(ob)) return ::PreventInsert(ob);
+
+   if ((-1==find_call_out("auftrieb"))&&(1==QueryProp(P_WROOM_SINK)))
+      call_out("auftrieb", 0);
+   
+   return ::PreventInsert(ob);
+}
+
+void auftrieb()
+{
+  object *things;
+  object ob;
+  object *aufsteigob;
+  object *absinkob;
+  int i,j,invswim;	
+  object *deepinv;
+	
+  things = all_inventory(TO) -
+           filter_array(all_inventory(TO), #'living) -
+           filter_array(all_inventory(TO), #'query_once_interactive); 
+  aufsteigob=({});
+  absinkob=({});
+  //Aufsteige- und Absinkliste erstellen, inklusive deep_inventory
+  for (i=sizeof(things);i-->0;)
+  {
+    ob=things[i];
+    if (objectp(ob) && ENV(ob)==TO)
+    {
+      //Nur fuer Debug-zwecke (also hoffentlich ueberfluessig)
+      //tell_room(TO,"Absinkobjekt Nr. "+i+" :"+ob->Name()+" .\n");
+      //tell_room(TO,"Umgebung: "+ENV(ob)->QueryProp(P_SHORT)+" .\n");
+      deepinv=({});
+      invswim=0;
+      deepinv=deep_inventory(ob);
+      for(j=sizeof(deepinv);j-->0;)
+      {
+        invswim+=deepinv[j]->QueryMaterialGroup(MATGROUP_SWIMABLE);
+      }	
+      invswim+=ob->QueryMaterialGroup(MATGROUP_SWIMABLE);
+      invswim/=sizeof(deepinv)+1;
+      if (45>invswim)
+      {
+        absinkob+=({ob});
+      }
+      else if ((55<invswim)&&(!(TO->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN]==TT_WATER)))
+      {
+        aufsteigob+=({ob});
+      }
+    }
+  }
+  //Ende Listenerstellen
+  //Beginn Ausgabe Absinken
+  if (1==sizeof(absinkob))
+  {
+    tell_room(TO,BS( absinkob[0]->Name()+" beginnt langsam abzusinken.\n"));
+  }
+  else if (2==sizeof(absinkob))
+  {
+    tell_room(TO,BS( absinkob[0]->Name()+" und "+absinkob[1]->name()+" beginnen langsam abzusinken.\n"));
+  }
+  else if (2<sizeof(absinkob))
+  {
+    ausgabe=absinkob[1]->Name();
+    for (i=sizeof(absinkob);i-->2;)
+    {
+      ausgabe+=", "+absinkob[i]->name();  
+    }
+    ausgabe+=" und "+absinkob[0]->name()+" beginnen langsam abzusinken.\n";
+    tell_room(TO,BS(ausgabe));
+  }
+  //Ende Ausgabe Absinken
+  //Beginn Ausgabe Aufsteigen
+  if (1==sizeof(aufsteigob))
+  {
+    tell_room(TO,BS( aufsteigob[0]->Name()+" beginnt langsam aufzusteigen.\n"));
+  }
+  else if (2==sizeof(aufsteigob))
+  {
+    tell_room(TO,BS( aufsteigob[0]->Name()+" und "+aufsteigob[1]->name()+" beginnen langsam aufzusteigen.\n"));
+  }
+  else if (2<sizeof(aufsteigob))
+  {
+    ausgabe=aufsteigob[1]->Name();
+    for (i=sizeof(aufsteigob);i-->2;)
+    {
+      ausgabe+=", "+aufsteigob[i]->name();  
+    }
+    ausgabe+=" und "+aufsteigob[0]->name()+" beginnen langsam aufzusteigen.\n";
+    tell_room(TO,BS(ausgabe));
+  }
+  //Ende Ausgabe Aufsteigen
+  //Beginn call_out
+  if (sizeof(things)!=0)
+  {
+    call_out("auftrieb_ende",8,aufsteigob, absinkob);
+  }
+  //Ende call-out
+  
+  return;	
+}
+
+void auftrieb_ende(object *aufsteigob, object *absinkob)
+{
+  string raum;
+  object ob;
+  int i,j;	
+  object *aufob;
+  object *abob;
+  object *deepinv;
+  
+  aufob=({});
+  abob=({});
+	
+  //Aufsteige- und Absinkliste pruefen
+  for (i=sizeof(aufsteigob);i-->0;)
+  {
+    ob=aufsteigob[i];
+    if (objectp(ob) && ENV(ob)==TO)
+    {
+      aufob+=({ob});
+    }
+  }
+  for (i=sizeof(absinkob);i-->0;)
+  {
+    ob=absinkob[i];
+    if (objectp(ob) && ENV(ob)==TO)
+    {
+      //Nur fuer debug-zwecke
+      //tell_room(TO,"Absinkobjekt Nr. "+i+" :"+ob->Name()+" .\n");
+      //tell_room(TO,"Umgebung: "+ENV(ob)->QueryProp(P_SHORT)+" .\n");
+      abob+=({ob});
+    }
+  }
+  
+  if (1==QueryProp(P_INDOORS))
+  {
+  //Beginn Ausgabe Absinken
+    if (1==sizeof(abob))
+    {
+      tell_room(TO,BS( abob[0]->Name()+" sinkt weiter ab und bleibt unten liegen.\n"));
+    }
+    else if (2==sizeof(abob))
+    {
+      tell_room(TO,BS( abob[0]->Name()+" und "+abob[1]->name()+" sinken weiter ab und bleiben unten liegen.\n"));
+    }  
+    else if (2<sizeof(abob))
+    {
+      ausgabe=abob[1]->Name();
+      for (i=sizeof(abob);i-->2;)
+      {
+        ausgabe+=", "+abob[i]->name();  
+      }
+      ausgabe+=" und "+abob[0]->name()+" sinken weiter ab und bleiben unten liegen.\n";
+      tell_room(TO,BS(ausgabe));
+    }
+    //Ende Ausgabe Absinken
+    //Beginn Ausgabe Aufsteigen
+    if (1==sizeof(aufob))
+    {
+      tell_room(TO,BS( aufob[0]->Name()+" steigt weiter auf und bleibt oben haengen.\n"));
+    }
+    else if (2==sizeof(aufob))
+    {
+      tell_room(TO,BS( aufob[0]->Name()+" und "+aufob[1]->name()+" steigen weiter auf und bleiben oben haengen.\n"));
+    }
+    else if (2<sizeof(aufob))
+    {
+      ausgabe=aufob[1]->Name();
+      for (i=sizeof(aufob);i-->2;)
+      {
+        ausgabe+=", "+aufob[i]->name();  
+      }
+      ausgabe+=" und "+aufob[0]->name()+" steigen weiter auf und bleiben oben haengen.\n";
+      tell_room(TO,BS(ausgabe));
+    }
+    //Ende Ausgabe Aufsteigen
+  }
+  else
+  {
+    if (""!=raum=exit_exists("oben"))
+    {
+      if (1==sizeof(aufob))
+      {
+        tell_room(TO,BS( aufob[0]->Name()+" steigt weiter auf und verschwindet nach oben.\n"));
+        tell_room(raum,BS( aufob[0]->Name()+" steigt von unten herauf.\n"));
+      }
+      else if (2==sizeof(aufob))
+      {
+        tell_room(TO,BS( aufob[0]->Name()+" und "+aufob[1]->name()+" steigen weiter auf und verschwinden nach oben.\n"));
+        tell_room(raum,BS( aufob[0]->Name()+" und "+aufob[1]->name()+" steigen von unten herauf.\n"));
+      }
+      else if (2<sizeof(aufob))
+      {
+        ausgabe=aufob[1]->Name();
+        for (i=sizeof(aufob);i-->2;)
+        {
+          
+          ausgabe+=", "+aufob[i]->name();  
+        }
+        ausgabe+=" und "+aufob[0]->name();
+        tell_room(TO,BS( ausgabe+" steigen weiter auf und verschwinden nach oben.\n"));
+        tell_room(raum,BS(ausgabe+" steigen von unten herauf.\n")); 
+      }
+      for (i=sizeof(aufob);i-->0;)
+      {
+        aufob[i]->move(raum, M_NOCHECK);
+      }
+    }
+    else
+    {
+      if (1==sizeof(aufob))
+      {
+        tell_room(TO,BS( aufob[0]->Name()+" steigt weiter auf und verschwindet in der Hoehe.\n"));
+      }
+      else if (2==sizeof(aufob))
+      {
+        tell_room(TO,BS( aufob[0]->Name()+" und "+aufob[1]->name()+" steigen weiter auf und verschwinden in der Hoehe.\n"));
+      }
+      else if (2<sizeof(aufob))
+      {
+      	ausgabe=aufob[1]->Name();
+        for (i=sizeof(aufob);i-->2;)
+        {
+          ausgabe+=", "+ aufob[i]->name();  
+        }
+        ausgabe+= " und "+aufob[0]->name()+" steigen weiter auf und verschwinden in der Hoehe.\n";
+        tell_room(TO,BS(ausgabe));
+      }
+      for (i=sizeof(aufob);i-->0;)
+      {
+        deepinv=deep_inventory(aufob[i]);
+        for(j=sizeof(deepinv);j-->0;)
+        {
+          deepinv[j]->remove();
+          if ((deepinv[j])&&(!living(deepinv[j])))
+            destruct(deepinv[j]);
+        }	
+        aufob[i]->remove();
+        if ((aufob[i])&&(!living(aufob[i])))
+          destruct(aufob[i]);
+        return;
+      }
+    }
+    if (""!=raum=exit_exists("unten"))
+    {
+      if (1==sizeof(abob))
+      {
+        tell_room(TO,BS( abob[0]->Name()+" sinkt weiter ab und verschwindet nach unten.\n"));
+        tell_room(raum,BS( abob[0]->Name()+" sinkt von oben herab.\n"));
+      }
+      else if (2==sizeof(abob))
+      {
+        tell_room(TO,BS( abob[0]->Name()+" und "+abob[1]->name()+" sinken weiter ab und verschwinden nach unten.\n"));
+        tell_room(raum,BS( abob[0]->Name()+" und "+abob[1]->name()+" sinken von oben herab.\n"));
+      }
+      else if (2<sizeof(abob))
+      {
+      	ausgabe=abob[1]->Name();
+        for (i=sizeof(abob);i-->2;)
+        { 	
+          ausgabe+=", "+ abob[i]->name();  
+        }
+        ausgabe+=" und "+abob[0]->name();
+        tell_room(TO,BS(ausgabe+" sinken weiter ab und verschwinden nach unten.\n"));
+        tell_room(raum,BS(ausgabe+" sinken von oben herab.\n"));
+      }
+      for (i=sizeof(abob);i-->0;)
+      {
+        abob[i]->move(raum, M_NOCHECK);
+      }
+    }
+    else
+    {
+      if (1==sizeof(abob))
+      {
+        tell_room(TO,BS( abob[0]->Name()+" sinkt weiter ab und verschwindet in der Tiefe.\n"));
+      }
+      else if (2==sizeof(abob))
+      {
+        tell_room(TO,BS( abob[0]->Name()+" und "+abob[1]->name()+" sinken weiter ab und verschwinden in der Tiefe.\n"));
+      }
+      else if (2<sizeof(abob))
+      {
+      	ausgabe=abob[1]->Name();
+        for (i=sizeof(abob);i-->2;)
+        {
+          ausgabe+=", "+abob[i]->name();  
+        }
+        ausgabe+= " und "+abob[0]->name()+" sinken weiter ab und verschwinden in der Tiefe.\n";
+        tell_room(TO,BS(ausgabe));
+      }
+      for (i=sizeof(abob);i-->0;)
+      {
+        deepinv=deep_inventory(abob[i]);
+        for(j=sizeof(deepinv);j-->0;)
+        {
+          deepinv[j]->remove();
+          if ((deepinv[j])&&(!living(deepinv[j])))
+            destruct(deepinv[j]);
+        }	
+        abob[i]->remove();
+        if ((abob[i])&&(!living(abob[i])))
+          destruct(abob[i]);
+        return;
+      }
+    }
+  }
+  return;
+}
+
+string exit_exists(string direction)
+{
+  int i,pos;
+  string *wexit_cmd;
+  string *wexit_dest;
+  string *dexit_dir;
+  string *dexit_dest;
+  
+  wexit_cmd=QueryProp(P_WEXIT_CMD);
+  wexit_dest=QueryProp(P_WEXIT_DEST);
+  dexit_dir=QueryProp(P_DEXIT_DIR);
+  dexit_dest=QueryProp(P_DEXIT_DEST);
+  
+  for (i=0;i<=sizeof(wexit_cmd);i++)
+  {
+    if (-1!=pos=member(wexit_cmd,direction))
+    {
+      return wexit_dest[pos];
+    }
+  }
+
+  for (i=0;i<=sizeof(dexit_dir);i++)
+  {
+    if (-1!=pos=member(dexit_dir,direction))
+    {
+      return dexit_dest[pos];
+    }
+  }
+
+ return "";
+}
+
+int schwimme_rum(string cmd)
+{
+  int i,pos;
+  string *wexit_cmd;
+  string *wexit_msg;
+  string *wexit_dest;
+
+  notify_fail("Wohin moechtest Du schwimmen?\n");
+  if (!cmd) return 0;
+  
+  switch (cmd)
+  {
+    case "nach n":cmd="nach norden";
+                 break;
+    case "nach nw":cmd="nach nordwesten";
+                 break;
+    case "nach w":cmd="nach westen";
+                 break;
+    case "nach sw":cmd="nach suedwesten";
+                 break;
+    case "nach s":cmd="nach sueden";
+                 break;
+    case "nach so":cmd="nach suedosten";
+                 break;
+    case "nach o":cmd="nach osten";
+                 break;
+    case "nach no":cmd="nach nordosten";
+                 break;
+    case "nach ob":cmd="nach oben";
+                 break;
+    case "nach u":cmd="nach unten";
+                 break;
+    case "nach nob":cmd="nach nordoben";
+                 break;
+    case "nach nwob":cmd="nach nordwestoben";
+                 break;
+    case "nach wob":cmd="nach westoben";
+                 break;
+    case "nach swob":cmd="nach suedwestoben";
+                 break;
+    case "nach sob":cmd="nach suedoben";
+                 break;
+    case "nach soob":cmd="nach suedostoben";
+                 break;
+    case "nach oob":cmd="nach ostoben";
+                 break;
+    case "nach noob":cmd="nach nordostoben";
+                 break;
+    case "nach nu":cmd="nach nordunten";
+                 break;
+    case "nach nwu":cmd="nach nordwestunten";
+                 break;
+    case "nach wu":cmd="nach westunten";
+                 break;
+    case "nach swu":cmd="nach suedwestunten";
+                 break;
+    case "nach su":cmd="nach suedunten";
+                 break;
+    case "nach sou":cmd="nach suedostunten";
+                 break;
+    case "nach ou":cmd="nach ostunten";
+                 break;
+    case "nach nou":cmd="nach nordostunten";
+                 break;
+  }
+  
+  wexit_cmd=QueryProp(P_WEXIT_CMD);
+  wexit_msg=QueryProp(P_WEXIT_MSG);
+  wexit_dest=QueryProp(P_WEXIT_DEST);
+	
+  for (i=0;i<=sizeof(wexit_cmd);i++)
+  {
+    if (-1!=pos=member(wexit_cmd,cmd))
+    {
+      write("Du schwimmst "+wexit_msg[pos]+".\n");
+      this_player()->move(wexit_dest[pos],M_GO|M_NOCHECK,"","schwimmt "+wexit_msg[pos],"schwimmt herein"); 
+      return 1;
+    }
+  }
+  return 0;
+  
+}
+
+string GetExits()
+{
+  int i,vis_zahl,max_zahl;
+  string exits;
+  string *exit_array;
+  	
+  string *wexit_msg;
+  string *wexit_hidden;
+  
+  wexit_msg=QueryProp(P_WEXIT_MSG);
+  wexit_hidden=QueryProp(P_WEXIT_HIDDEN);
+  
+  vis_zahl=0;
+  max_zahl=sizeof(wexit_msg);
+  exit_array=allocate(max_zahl);
+  
+  for (i=0;i<max_zahl;i++)
+  {
+    if (wexit_hidden[i]==0)
+    {
+      exit_array[vis_zahl]=wexit_msg[i];
+      vis_zahl++;
+    }
+  }
+  
+  if (vis_zahl==0)
+  {
+    exits="Es gibt keine sichtbaren Ausgaenge.\n";
+  }
+  else if ((vis_zahl)==1)
+  {
+    exits="Du kannst "+exit_array[0]+" schwimmen.\n";	
+  }
+  else if (vis_zahl==2)
+  {
+    exits="Du kannst "+exit_array[0]+" und "+exit_array[1]+" schwimmen.";
+  }
+  else
+  {
+    exits="Du kannst ";
+    for (i=0;i<vis_zahl-2;i++)
+    {
+      exits+=exit_array[i]+", ";
+    }
+    exits+=exit_array[i]+" und "+exit_array[i+1]+" schwimmen.";
+  }
+  	
+  return BS(exits);
+}
+
+int sage(string str)
+{
+  if ((QueryProp(P_ENVIRONMENT)[ENV_TERRAIN]==TT_UNDERWATER)
+   &&(!IS_WIZARD(TP))
+   &&(-1==member(WSPEAKING_RACES,TP->QueryProp(P_RACE))))
+  {
+    write("Du versuchst etwas zu sagen, doch es kommt nur ein Blubbern zustande,\n"+
+          "mit dem einige Luftblaeschen Deinen Mund verlassen.\n");
+    say (this_player()->name(WER,2)+" bewegt die Lippen, und mit einem Blubbern verlassen einige\n"+
+    				    "Luftblaeschen "+TP->QPP(MALE,WEN,SINGULAR)+" Mund.\n");
+    return 1;	
+  }
+  return 0;
+}
+
+int tauche_rum(string cmd)
+{
+  int i,pos;
+  string *dexit_dir;
+  string *dexit_dest;
+
+  notify_fail ("Wohin moechtest Du tauchen?\n");
+  if (!cmd) return 0;
+	
+  dexit_dir=QueryProp(P_DEXIT_DIR);
+  dexit_dest=QueryProp(P_DEXIT_DEST);
+	
+  for (i=0;i<=sizeof(dexit_dir);i++)
+  {
+    if ((-1!=pos=member(dexit_dir,"unten")) && (-1!=member(({"runter","nach unten","unter","ab"}),cmd)))
+    {
+      write("Du holst tief Luft und tauchst nach Unten.\n");
+      this_player()->move(dexit_dest[pos],M_GO|M_NOCHECK,"","taucht nach Unten","taucht herunter"); 
+      return 1;
+    }
+    else if ((-1!=pos=member(dexit_dir,"oben")) && (-1!=member(({"hoch","nach oben","auf"}),cmd)))
+    {
+      write("Du tauchst auf...\n");
+      this_player()->move(dexit_dest[pos],M_GO|M_NOCHECK,"","taucht auf","taucht auf"); 
+      return 1;
+    }
+  }
+  return 0;	
+}

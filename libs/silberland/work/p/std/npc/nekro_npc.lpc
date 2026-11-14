@@ -1,0 +1,907 @@
+//=========================================================================
+//
+// File:   std_nekro_npc.c
+// Created by Archon@SL;Ronja@SL
+//
+// Project: std npc
+//
+// Alle NPC die Nekromanten unterwerfen koennen, erben diesen NPC
+//=========================================================================
+
+/*
+ 2012-08-09 Gwenshara: Utilit Undead koennen vernichtet werden
+
+ 2012-08-07 Gwenshara: Nekromanten koennen mehrere Untote haben, wenn
+                       requireUndeadSlot() 0 liefert. 
+                       + Utility Undead
+   
+ Rev Miregalmeinordner Gwenshara: Seelensammler greifen nur noch angreifbare
+                     npc an.
+ Rev 1.4 12.02.2007 Angrox: Untote koennen nicht mehr vergiftet werden.
+ Rev 1.3 26.11.2006 Gwenshara: Untote greifen keine Haustiere mehr an
+ Rev 1.2 10.09.2006 Gwenshara: gather_souls ausgebessert hat gebuggt
+ Rev 1.1 06.08.2003 Archon: short bei SetMaster angepasst
+ Rev 1.0 19.04.2003 Archon: erstellt
+         11.11.2004 Feyaria: nur mehr maximal einen Untoten beschwoeren
+*/
+
+#pragma strong_types
+
+inherit "std/mnpc";
+
+#include <properties.h>
+#include <language.h>
+#include <defines.h>
+#include <moredef.h>
+#include <new_skills.h>
+#include <mnpc.h>
+#include <class.h>
+
+#include "/gilden/nekromanten/nekro_properties.h"
+#include "/gilden/nekromanten/nekro.h"
+
+#define TG(x) if(find_player("gwenshara")) tell_object(find_player("gwenshara"), "-- NEKRO: "+x);
+#define COMBAT_MODE_DEFAULT "nichts"
+#define COMBAT_MODE_TANK "verteidigung"
+#define COMBAT_MODE_ATTACK "angriffe"
+#define COMBAT_MODE_SPELL "zauber"
+#define COMBAT_MODE_SUPPORT "unterstuetzung"
+#define P_COMBAT_MODE "combat_mode"
+
+int ProcessPlayer(object *players);
+int ProcessNpc(object *npcs);
+int ProcessItems(object *objects);
+int SetResetRemove();
+string QueryPosition();
+
+private object my_master;
+private int xp_for_master = 0;
+private int reset_remove = 0;
+private int fighting = 1;
+private int level_xp=0;
+private int runner=0;
+private int skill_udt=0;
+private string oldmsgout="";
+private int banished = 0;
+private int resets_to_live = 0;
+
+void create()
+{
+  if (!is_clone(TO)) return;
+  ::create();
+  SetProp(P_CONTROLLABLE_BY_NEKRO, 1);
+  SetProp(P_TEMPERATURE_RANGE, ([0:-276,1:500]) );
+  SetProp(P_NEKRO_UTILITY_UNDEAD, 0);
+  AddId( ({"NOWIMPY", "NOCONTROL"}) );
+
+  // 2012-08-09 Gwenshara
+  AddCmd( ({"vernichte", "vernicht",
+            "zerstoere", "zerstoer"}),
+          "cmd_free_slave");
+
+  AddCmd( ({"lebensentzug", "lebenentzug"}), "cmd_life_link");
+  SetProp(P_COMBAT_MODE, COMBAT_MODE_DEFAULT);
+}
+
+public int cmd_life_link(string str) {
+  int hp;
+
+  if(QueryProp(P_NEKRO_LIFE_LINK) != TP) return 0;
+
+  notify_fail("Wessen Leben willst du entziehen?\n");
+  if(!id(str)) return 0;
+
+  hp = TP->QueryProp(P_GUILD_LEVEL) + random(TP->QueryProp(P_GUILD_CIRCLE) * 3);
+
+  write(BS(sprintf("Mit einem Ruck deiner Finger befiehlst du die kuenstlichen Essenz, die %s am Unleben haelt "
+                   "zu dir. Ein Hauch roter Energie stroemt aus deinem untoten Diener in dich ein. HARRRR! ERFRISCHEND!",
+                   name(WEN, 1))));
+  tell_room(ENV(TP), BS(sprintf("%s vollfuehrt eine ruckartige Geste mit den Fingern und ein Hauch roter Energie stroemt aus %s "
+                 "zu %s.", TPN, name(WEM, 1), TP->QueryPossPronoun())), ({TP}));
+
+  TP->AddHp(hp);
+  do_damage(hp*2 + random(hp), TP);
+
+  return 1;
+}
+
+// 2012-08-09 Gwenshara
+int cmd_free_slave(string str)
+{
+  int skp;
+  string sname;
+
+  if(!objectp(my_master))
+    return 0;
+
+  if(TP->QueryProp(P_GUILD) != "nekromanten")
+    return 0;
+
+  if(TP != my_master)
+    return 0;
+
+  sname="unterwerfung der toten";
+  skp=call_other("/spellbooks/nekro_spells", "get_skillpoints", TP, sname);
+  
+  // erst ab 3 SKP
+  if(skp < 3)
+  {
+    notify_fail("Dein Wissen reicht nicht aus, um Deine untoten Diener zu "
+                "vernichten!\n");
+    return 0;
+  }
+
+  notify_fail("Welchen Diener willst du vernichten?\n");
+  if(!str || str == "") return 0;
+  if(!id(str)) return 0;
+
+  tell_object(TP, BS("Du konzentrierst Dich auf die daemonischen "
+              "Maechte die Deinen Diener zusammen halten und "
+              "intonierst die Worte von Xul'Bar'Nag."));
+  tell_room(ENV(TP), BS(TP->Name(WER)+" ruft unverstaendliche, "
+            "duestere Worte und vollfuehrt nekromantische Gesten."),
+            ({TP}));
+
+  // vernichtete untote geben keine XP
+  xp_for_master = 0;
+  banished      = 1;
+
+  call_out("die", 0, 0);
+  return 1;
+}
+
+int SetMaster(object master)
+{
+  object oldmaster;
+
+  if(!objectp(master)) return 0;
+  if(objectp(oldmaster=QueryProp(P_NEKRO_CASTED_BY)))
+    oldmaster->RemoveDefender(TO);
+  if(objectp(oldmaster=QueryProp(P_NEKRO_MASTERED_BY)))
+  {
+    oldmaster->RemoveDefender(this_object());
+    oldmaster->RemovePursuer(this_object());
+    tell_object(oldmaster, break_string(sprintf("Bei allen Niederhoellen! %s hat "
+            "die Herrschaft ueber Deinen Diener uebernommen!",
+            master->Name(WER)),78));
+  }
+  SetProp(P_NEKRO_MASTERED_BY, master);
+  my_master=master;
+//Einige Sicherheiten
+  if (stringp(QueryProp(P_NEKRO_OLD_SHORT)))
+    SetProp(P_SHORT,QueryProp(P_NEKRO_OLD_SHORT));
+  SetProp(P_NEKRO_OLD_SHORT,QueryProp(P_SHORT));
+  if (stringp(QueryProp(P_SHORT)))
+    SetProp(P_SHORT,QueryProp(P_SHORT)+" (von "+master->name(WEM)+" kontrolliert)");
+  SetProp(P_NO_GLOBAL_ATTACK,1);
+  SetProp(P_FRIEND,1);
+  SetProp(P_MNPC_FLAGS,0);
+  SetProp(P_AGGRESSIVE, 0);
+//chats weg, da diese ggf an spezielle raeume bzw gegebenheiten gebunden sind
+  SetProp(P_CHATS,0);
+  SetProp(P_ACHATS,0);
+  SetProp(P_COMMANDS,0);
+  // 30.03.2011 - Wenn die XPs bleiben, kriegen die Spieler beim Tod des NPCs zu viel XP. (angrox)
+  SetProp(P_XP, 0);
+  master->AddPursuer(TO);
+  master->AddDefender(TO);
+  if (oldmsgout == "")
+      oldmsgout = QueryProp(P_MSGOUT);
+  SetProp(P_MSGOUT, oldmsgout + " " + master->name(WEM) + " hinterher");
+  fighting = 1;
+//  call_out("SetNoLearn", 4);  
+  // nolearn ist ein mist, dann lernt man ja bei empathie und blutpakt usw nie was...
+  //TG(BS(sprintf("%O: %O unterworfen.", my_master, TO)))
+  return 1;
+}
+
+//(von x kontrolliert) ggf entfernen, wenn master nicht mehr da
+string _query_short()
+{
+  if (!objectp(my_master) && stringp(QueryProp(P_NEKRO_OLD_SHORT)))
+  {
+    SetProp(P_SHORT,QueryProp(P_NEKRO_OLD_SHORT));
+    SetProp(P_NEKRO_OLD_SHORT,0);
+  }
+  return Query(P_SHORT);
+}
+
+int Defend(int dam, string dam_type, mixed spell, object enemy)
+{
+  SetProp(P_POISON,0); // untote werden nicht vergiftet
+  if(QueryProp(P_COMBAT_MODE) == COMBAT_MODE_ATTACK) {
+    // offensiver modus = mehr schaden
+    dam = (int) (dam * 1.1);
+  }
+
+  return ::Defend(dam,dam_type,spell,enemy);
+}
+
+void InformDefend(object enemy)
+{
+  if(!runner && !IsEnemy(enemy))
+    Kill(enemy);
+}
+
+public mixed DefendOther(int dam,mixed dam_type,mixed spell,object enemy) {
+  if(!enemy->IsEnemy(TO) && !runner)
+    enemy->Kill(TO);
+
+  if(QueryProp(P_COMBAT_MODE) == COMBAT_MODE_TANK && !random(2)) {
+    if(!random(2)) {
+      tell_object(my_master, BS(sprintf("%s wirft sich schuetzend vor dich und steckt den Treffer fuer dich ein.", Name(WER, 1))));
+      tell_room(ENV(TO), BS(sprintf("%s wirft sich schuetzend vor %s und faengt den Treffers ab.", 
+                            Name(WER, 1), my_master->name(WEN, 1))), ({my_master}));
+      dam = 0;
+      do_damage(dam);
+    } else {
+      dam -= dam / 4;
+      do_damage(dam/4, enemy);
+    }
+  }
+
+  return ({dam, dam_type, spell});
+}
+
+int SetAggressive(int x)
+{
+  object ob;
+
+  if(intp(x))
+    SetProp(P_AGGRESSIVE, x);
+  if(objectp(ob=QueryProp(P_NEKRO_CASTED_BY)))
+    ob->RemoveDefender(TO);
+  if(objectp(ob=QueryProp(P_NEKRO_MASTERED_BY)))
+  {
+    fighting = 0;
+    ob->RemoveDefender(TO);
+    ob->RemovePursuer(TO);
+  }
+  SetProp(P_NO_GLOBAL_ATTACK,0);
+  SetProp(P_FRIEND,0);
+  return 1;
+}
+
+void message(object pl)
+{
+  switch(random(4))
+  {
+    case 3:
+      command_me("sag Jawohl, Meister.");
+    break;
+    case 2:
+      tell_room(environment(TO),break_string(Name(WER,1)+
+        " gehorcht widerwillig."));
+    break;
+    case 1:
+      tell_room(environment(TO),break_string(Name(WER,1)+" versucht sich "
+        "zu widersetzen, schafft es aber nicht."));
+    break;
+    default:
+      tell_room(environment(TO),break_string(Name(WER,1)+" beugt sich "
+        "dem Befehl von "+pl->name(WEN,1)+"."),({pl}));
+      tell_object(pl,break_string(Name(WER,1)+" beugt sich Deinem "
+        "Befehl."));
+    break;
+  }
+}
+
+void not_now(object pl)
+{
+  tell_room(environment(pl),Name(WER,1)+" reagiert nicht.\n");
+}
+
+void help_me(object pl)
+{
+  mixed *def;
+  
+  // Utility Untote helfen nicht im Kampf
+  if(QueryProp(P_NEKRO_UTILITY_UNDEAD))
+  {
+    tell_object(pl,break_string(Name(WER,1)+" blickt dich regungslos an."));
+    tell_room(environment(pl),break_string(Name(WER,1)+" blickt "
+      +pl->name(WEN,1)+" regungslos an."),({pl}));
+	  return;
+  }
+  
+  def = pl->QueryProp(P_DEFENDERS);
+
+  fighting = 1;
+  if (pointerp(def) && member(def, TO) > -1)
+  { //macht er ja schon
+    tell_object(pl,break_string(Name(WER,1)+" knurrt Dich an."));
+    tell_room(environment(pl),break_string(Name(WER,1)+" knurrt "
+      +pl->name(WEN,1)+" an."),({pl}));
+    return;
+  }
+  pl->AddDefender(TO);
+  message(pl);
+}
+
+void no_fighting(object pl)
+{
+  mixed *def;
+  def = pl->QueryProp(P_DEFENDERS);
+
+  fighting = 0;
+  if (!pointerp(def) || member(def, TO) == -1)
+  { //macht er ja schon
+    tell_object(pl,break_string(Name(WER,1)+" knurrt Dich an."));
+    tell_room(environment(pl),break_string(Name(WER,1)+" knurrt "
+      +pl->name(WEN,1)+" an."),({pl}));
+    return;
+  }
+  pl->RemoveDefender(TO);
+  message(pl);
+}
+
+void follow_me(object pl)
+{
+  mixed *pur;
+  pur=pl->Query(P_PURSUERS);
+
+  if (pointerp(pur) && member(pur[1], TO)>-1)
+  { //macht er ja schon
+    tell_object(pl,break_string(Name(WER,1)+" knurrt Dich an."));
+    tell_room(environment(pl),break_string(Name(WER,1)+" knurrt "
+      +pl->name(WEN,1)+" an."),({pl}));
+    return;
+  }
+  pl->AddPursuer(TO);
+  message(pl);
+}
+
+void stay_here(object pl)
+{
+  mixed *pur;
+  pur=pl->Query(P_PURSUERS);
+
+  if (!pointerp(pur) || member(pur[1], TO)==-1)
+  { //macht er ja schon
+    tell_object(pl,break_string(Name(WER,1)+" knurrt Dich an."));
+    tell_room(environment(pl),break_string(Name(WER,1)+" knurrt "
+      +pl->name(WEN,1)+" an."),({pl}));
+    return;
+  }
+  pl->RemovePursuer(TO);
+  message(pl);
+}
+
+public void rename(object pl, string nName) {
+  if(QueryProp("renamed") ||call_other("/spellbooks/nekro_spells", "get_skillpoints", pl, "unterwerfung der toten") < 1) {
+    command_me("emote ignoriert den Befehl.");
+    return;
+  }
+
+  SetProp(P_NAME, CAP(nName));
+  SetProp(P_SHORT, QueryProp(P_SHORT) + " ["+CAP(nName)+"]");
+  SetProp("renamed", 1);
+  SetProp(P_ARTICLE, 0);
+  AddId(nName);
+  command_me("emote beugt sich dem Befehl widerwillig und hoert jetzt auf den neuen Namen.");
+  return;
+}
+
+int gather_souls(object pl) {
+  string sname;
+  object *soulcollectors;
+  
+  // Utility Untote sammeln keine Seelen
+  if(QueryProp(P_NEKRO_UTILITY_UNDEAD))
+  {
+    tell_object(pl,break_string(Name(WER,1)+" blickt dich regungslos an."));
+    tell_room(environment(pl),break_string(Name(WER,1)+" blickt "
+      +pl->name(WEN,1)+" regungslos an."),({pl}));
+	  return 0;
+  }
+  
+  sname="unterwerfung der toten";
+  skill_udt=call_other("/spellbooks/nekro_spells", "get_skillpoints", pl, sname);
+
+  // pruefen, ob noch ein seelensammler erlaubt
+  soulcollectors = pl->QueryProp(P_NEKRO_SOUL_COLLECTOR);
+  if(!pointerp(soulcollectors)) soulcollectors = ({});
+  soulcollectors -= ({0}); // tote eintraege loeschen
+
+  if( (skill_udt > 7 && sizeof(soulcollectors) > 1) || // ab 8 SKP darf man 2 seelensammler haben
+      (skill_udt < 8 && sizeof(soulcollectors) > 0) ) { // sonst nur 1 
+    tell_object(pl, "Deine Macht reicht nicht, um noch einen Seelensammler auszusenden!\n");
+    tell_room(environment(pl),break_string(Name(WER,1)+" knurrt "
+      +pl->name(WEN,1)+" an."),({pl}));
+    return 0;
+  }
+
+  stay_here(pl);
+  SetResetRemove();
+  SetProp(P_MSGOUT, oldmsgout);
+  call_out("run", 2);
+  call_out("check_process", 20);
+  tell_object(pl, BS(sprintf("%s macht sich nun auf die Suche "
+          "nach Seelen.",Name(WER,1))));
+  runner=1;
+
+  // ab 5 SKP darf man neben dem Seelensammler noch einen Untoten kontrollieren
+  if(skill_udt > 4) {
+    pl->SetProp(P_NEKRO_MASTERED_UNDEADS, 0);
+  }
+
+  // seelensammler registrieren
+  soulcollectors += ({ TO });
+  pl->SetProp(P_NEKRO_SOUL_COLLECTOR, soulcollectors);
+
+  if(sizeof(soulcollectors) > 0) {
+    AddId(sprintf("%sseelensammler%d", getuid(pl), sizeof(soulcollectors)));
+    set_living_name(sprintf("%sseelensammler%d", getuid(pl), sizeof(soulcollectors)));
+  } else { 
+    AddId(getuid(pl)+"seelensammler");
+    set_living_name(getuid(pl)+"seelensammler");
+  }
+
+  return 1;
+}
+
+public void fight_mode(object pl, string modus) {
+  if(modus == QueryProp("combat_mode")) {
+    command_me("emote macht nichts anders als vorher.");
+    return;
+  }
+
+  if(modus == COMBAT_MODE_ATTACK) {
+    command_me("emote geht in eine lauernde Angriffshaltung.");
+  } else if(modus == COMBAT_MODE_TANK) {
+    command_me("emote stellt sich schuetzend vor den Meister.");
+  } else if(modus == COMBAT_MODE_DEFAULT) {
+    command_me("emote nimmt eine neutrale Haltung ein.");
+  } else {
+    command_me("emote stoehnt und wankt verwirrt herum. Der Befehl scheint nicht klar gewesen zu sein.");
+    return;
+  }
+
+  SetProp(P_COMBAT_MODE, modus);
+
+  return;
+}
+
+public void execute_command(object pl, string *cmds) {
+  string cmd;
+
+  if(sizeof(cmds) < 1) {
+    move(ENV(pl), M_GO);
+      return;
+  }
+
+  cmd = cmds[0];
+  command_me(cmd);
+  call_out("execute_command", 0, pl, cmds);
+  return;
+}
+
+private void execute_commands(object pl, string commandChain) {
+  string *cmds;
+  if(commandChain == "" || !commandChain) return;
+
+  cmds = explode(commandChain, ";");
+  execute_command(pl, cmds);
+  return;
+}
+
+void catch_tell(string str)
+{
+  string wer,was, npc;
+  mixed my_name;
+  if (!query_verb()) return ;
+  if(TP!=my_master) return ;
+  
+  if(sscanf(str, "%s teilt Dir mit: %s\n", wer, was)==2) {
+    if(strstr(lower_case(was), "wo bist du")!=-1) {
+      TP->Message(break_string(QueryPosition(),78, sprintf(
+              "%s teilt Dir mit: ", Name(WER))), MSGFLAG_TELL);
+      return ;
+    }
+  }
+  if(runner) return;
+  my_name=QueryProp(P_NAME);
+  if(query_verb() == "sag" || query_verb()[0..0] == "'")
+  {
+    my_name=QueryProp(P_NAME);
+    if(pointerp(my_name)) my_name=my_name[0];
+    if(!stringp(my_name)) my_name="sklave";
+    if (sscanf(str,"%s sagt: %s %s\n",wer,npc,was)!=3) return;
+    if (lower_case(my_name) != lower_case(npc)) return;
+    if (InFight())
+      not_now(TP);
+    if (was[0..7]=="hilf mir")
+      help_me(TP);
+    else if (was[0..9]=="kampfpause")
+      no_fighting(TP);
+    else if (was[0..8]=="folge mir")
+      follow_me(TP);
+    else if (was[0..9]=="bleib hier")
+      stay_here(TP);
+    else if (was[0..12]=="sammle seelen")
+      gather_souls(TP);
+    else if (was[0..19] == "hoere auf den namen ")
+      rename(TP, was[20..]);
+    else if(QueryProp(P_NEKRO_INTELLIGENT_UNDEAD)) {
+      if(was[0..21] == "konzentriere dich auf ") fight_mode(TP, was[22..]);
+      else if(was[0..25] == "fuehre diese befehle aus:") execute_commands(TP, was[26..]);
+    }
+  }
+  return;
+}
+
+varargs void die( int poisondeath )
+{
+  object caster, *inv;
+  int i;
+
+  if( objectp(caster=QueryProp(P_NEKRO_MASTERED_BY)) )
+  {
+    if (xp_for_master)
+      log_file("/gilden/nekro_xp", sprintf("[%s] %O stirbt schon wieder!\n",
+                        dtime(time()), this_object()));
+    else
+    {
+      xp_for_master = (XP_RATIO + 2 * caster->QueryProp(P_GUILD_LEVEL) +
+          caster->QueryProp(P_GUILD_CIRCLE)) * QueryProp(P_XP) / 100;
+      caster->AddExp(xp_for_master);
+      log_file("/gilden/nekro_xp", sprintf("[%s] %O bekommt %d Xp von %O\n",
+                        dtime(time()), caster, xp_for_master, this_object()));
+    }
+  }
+
+  // Vom Beschwoerer zerstoerte Untote raeumen ihr Inventar aus 
+  // (Anti-Bug-Use)
+  if(banished)
+  {
+    inv = deep_inventory();
+    for(i=0; i<sizeof(inv); ++i)
+    {
+      inv[i]->remove(1);
+    }
+  }
+
+  ::die(poisondeath);
+}
+
+nosave void SetNoLearn() {
+  AddId(SID_NOLEARN);
+  return;
+}
+
+int PreventFollow(object dest)
+{
+  object caster;
+
+  if( objectp(caster=QueryProp(P_NEKRO_MASTERED_BY)) )
+  {
+    if(living(caster) && !query_once_interactive(caster))  return 0; //NPC
+    if(interactive(caster) && !caster->QueryProp(P_GHOST)) return 0; //spieler
+  }
+  return 1;
+}
+
+void BecomesNetDead(object ob)
+{
+  if(ob == QueryProp(P_NEKRO_MASTERED_BY) && find_call_out("NetDeadRemove")==-1)
+  {
+    if(InFight())
+      call_out("NetDeadRemove", 10);
+    else 
+      call_out("NetDeadRemove", 30);
+  }
+  return;
+}
+
+void BecomesNetAlive(object ob) 
+{
+  if(ob == QueryProp(P_NEKRO_MASTERED_BY) && find_call_out("NetDeadRemove")!=-1)
+  {
+    remove_call_out("NetDeadRemove");
+  }
+  return;
+}
+
+void NetDeadRemove() {
+   remove();
+   return;
+}
+
+int SetResetRemove() {
+  reset_remove=1;
+}
+
+public void SetResetsToLive(int n) {
+  resets_to_live = n;
+}
+
+void reset() {
+  object master;
+
+  ::reset();
+
+  if(resets_to_live>0) {
+    resets_to_live--;
+    if(objectp(master=QueryProp(P_NEKRO_MASTERED_BY)) && QueryProp(P_NEKRO_BLOOD_PACT)) {
+      tell_object(master, BS(sprintf("Die Macht deines Blutpakts mit %s haelt deinen untoten Diener am Leben! "
+                                     "AAARGH! Doch du musst dafuer zahlen!!", name(WEM, 2))));
+      tell_room(ENV(master), BS(sprintf("%s verzieht vor Schmerzen das Gesicht, als sich dunkle Energie von %s Koerper loest.",
+                                master->Name(WER, 1), master->QueryPossPronoun(MALE, WEM))), ({master}));
+      master->AddHp(-(QueryProp(P_LEVEL)/2));
+      master->AddSp(-(QueryProp(P_LEVEL)/2));
+    }
+  }
+
+  if(!resets_to_live && reset_remove) {
+    die();
+  }
+}
+
+void NotifyPlayerDeath(object victim, object killer, int lost_xp)
+{
+  if (victim == QueryProp(P_NEKRO_MASTERED_BY))
+    die();
+}
+
+void init()
+{
+  ::init();
+  if (fighting && objectp(my_master) && 
+      present(my_master, environment())) 
+  {
+    AddDefender(my_master);
+  }
+  SetProp(P_POISON,0);
+  return ;
+}
+
+
+
+varargs void run(string last_exit_room, int enemy_check)
+{
+  string *exits;
+  mapping exit_map;
+  string last_exit,chosen_exit,my_room;
+  object *inv;
+  int i,stop;
+
+  if(!ENV(ME)) return;
+  // changed pointerp() to mapping() below - Woody, 21.20.2007
+  if (mappingp(exit_map = ENV(ME)->QueryProp(P_NEW_EXITS))) 
+    exits = m_indices(exit_map);
+  if ((!pointerp(exits) || !sizeof(exits)) && last_exit_room) {
+    call_out("run", 4, file_name(ENV(ME)));
+    ME->move(last_exit_room, M_GO);
+    return ;
+  }
+  if(last_exit_room) {
+    for(i=sizeof(exits)-1;i>=0;i--) {
+      if(exit_map[exits[i]]["ex_dest"] == last_exit_room) {
+        last_exit = exits[i];
+        exits -= ({ exits[i] });
+      }
+    }
+  }
+  if(!sizeof(exits))
+    chosen_exit = last_exit;
+  else 
+    chosen_exit=exits[random(sizeof(exits))];
+  // Check des INVS
+  inv = all_inventory(ENV(ME))-({ME});
+  stop += ProcessPlayer(filter_array(inv, #'query_once_interactive)); //'
+  stop += ProcessNpc(filter_array(inv, "npc_check"));
+  stop += ProcessItems(filter_array(inv, "item_check"));
+  if (stop < 0) return;
+  my_room = file_name(ENV(ME));
+  if (chosen_exit)
+    command_me(chosen_exit);
+  if(find_call_out("run")==-1) 
+    call_out("run", 2, my_room);
+  AddHp(5);
+  return;
+}
+
+int npc_check(object ob) {
+  if(!living(ob) || query_once_interactive(ob))
+    return 0;
+  if(ob->is_class_member(CL_UNDEAD) || ob->is_class_member(CL_DEMON))
+    return 0;
+  return 1;
+}
+
+int item_check(object ob) {
+  if(!living(ob)) return 1;
+  return 0;
+}
+
+int ProcessPlayer(object *players) {
+  /*
+  if(!sizeof(players)) return 1;
+  if(!random(2)) {
+    pl=players[random(sizeof(players))];
+    command_me(sprintf("sag %s, weitermachen!", pl->Name(WER)));
+  }
+  */
+  return 1;
+}
+
+
+// Zu Testzwecken
+int Kill(object e)
+{
+  if(e->QueryProp(P_NOATTACK) != 0) return 0;
+  return ::Kill(e);
+}
+
+int ProcessNpc(object *npcs) { 
+  object npc;
+  int i;
+  if(!sizeof(npcs)) return 1;
+  if(to_int(100*QueryProp(P_HP)/QueryProp(P_MAX_HP) < 80)) 
+    return 1;
+  for(i=sizeof(npcs)-1;i>=0;i--) {
+    if(npcs[i]->QueryProp(P_LEVEL) < QueryProp(P_LEVEL) &&
+        npcs[i]->QueryProp(P_HP) < QueryProp(P_HP) && 
+        !npcs[i]->QueryProp(P_NOATTACK))
+    {
+      npc=npcs[i];
+    }
+  }
+  if(objectp(npc) && !InFight() && npc->QueryProp(P_NOATTACK) == 0) {
+    //while (remove_call_out("run") != -1)
+    //  continue;
+    ME->Kill(npc);
+    return -10;
+  }
+  return 1;
+}
+
+int ProcessItems(object *objects) { 
+  object ob;
+
+  if(!sizeof(objects)) return 1;
+  if(file_name(environment(this_object()))[0..8] == "/d/seher/") return 1;
+
+  ob=objects[random(sizeof(objects))];
+  command_me("nimm alles");
+
+  return 1;
+}
+
+void gain_level() {
+  create_default_npc(QueryProp(P_LEVEL)+1);
+  SetProp(P_XP, 0);
+  return;
+}
+
+
+void check_next_level() {
+  if(level_xp > (QueryProp(P_LEVEL)*1000)) {
+    level_xp=0;
+    //gain_level(); // Mal auskommentiert
+  }
+  return ;
+}
+
+void Attack(object enemy) {
+  int x, enemy_name, enemy_name_wem, oldStr;
+  int xp;
+
+  if(enemy->id("\nhaustier")) // Damit keine Haustiere angegriffen werden @Gwenshara
+  {
+    enemy->StopHuntFor(TO);
+    StopHuntFor(enemy);
+    return;
+  }
+
+  if(!runner) {
+    if(QueryProp(P_COMBAT_MODE) == COMBAT_MODE_TANK) return;
+    else if(QueryProp(P_COMBAT_MODE) == COMBAT_MODE_ATTACK) {
+      oldStr = QueryAttribute(A_STR);
+      SetAttribute(A_STR, oldStr*2);
+    }
+
+    return ::Attack(enemy);
+
+    if(QueryProp(P_COMBAT_MODE) == COMBAT_MODE_ATTACK) {
+      SetAttribute(A_STR, oldStr);
+    }
+
+    return;
+  }
+
+  enemy_name=enemy->name(WEN);
+  enemy_name_wem=enemy->name(WEM);
+  xp=QueryProp(P_XP);
+  ::Attack(enemy);
+  xp=QueryProp(P_XP)-xp;
+  SetProp("npc_gained_xp", QueryProp("npc_gained_xp")+xp);
+  level_xp+=xp;
+  if(!random(3))
+    check_next_level();
+  if(enemy)
+    enemy->SetProp(P_HB,1);
+  if(!enemy && find_call_out("run")==-1) {
+    call_out("run", 2);
+    command_me("nimm alles aus leiche");
+    if(ENV(ME) && present("leiche", ENV(ME)))
+      present("leiche", ENV(ME))->remove();
+    tell_room(ENV(ME), BS(sprintf("Die Seele von %s wird von %s "
+            "aufgesogen!", enemy_name_wem, ME->name(WEM))));
+    if(objectp(my_master)) {
+      tell_object(my_master, BS(sprintf("* %s hat eine Seele erbeutet!",Name(WER))));
+      //TG(BS(sprintf("%O: * %s hat eine Seele erbeutet!",my_master, Name(WER))))
+      my_master->AddHp(2);
+      my_master->AddSp(5);
+    }
+    call_other(NEKROMASTER, "AddBloodPool",1);
+  }
+  return ;
+}
+
+void heart_beat() {
+  if(runner) {
+    set_heart_beat(1);
+    SetProp(P_HB,1);
+  }
+  ::heart_beat();
+  return ;
+}
+
+
+int check_process() {
+  if(InFight()) { 
+    call_out("check_process", 2);
+    return 1;
+  }
+  if(find_call_out("run")==-1)
+    call_out("run", 0);
+
+  if(to_int(100*QueryProp(P_HP)/QueryProp(P_MAX_HP) < 20)) 
+    if(find_call_out("run")==-1)
+      call_out("run", 2);
+
+  call_out("check_process", 2);
+  return 1;
+}
+
+mixed QueryMaster() {
+  return my_master;
+}
+
+int remove() {
+  if(objectp(my_master) && runner) {
+     tell_object(my_master, BS(sprintf("*** %s hat sich gerade aufgeloest!",
+             Name(WER))));
+     //TG(BS(sprintf("%O *** %s hat sich gerade aufgeloest!",  my_master, Name(WER))))
+  }
+  return ::remove();
+}
+
+string QueryPosition() {
+  object env;
+  string *dir;
+  env=ENV(ME);
+  if(!env) {
+    return "Nichts hier. Nichts zum ... vernichten ...";
+  }
+  dir=explode(file_name(env), "/");
+  if(dir[0]=="d") {
+    return sprintf("%s! %s! Alles ... toeten ...", CAP(dir[1]), 
+        env->QueryProp(P_INT_SHORT));
+  }
+  else if(dir[0]=="players") {
+    return "Muss "+CAP(dir[1])+" toeten ... vernichten ... Bluuuut!";
+  }
+  else if(dir[0]=="gilden") {
+    return "Blut! Knochen! Verdammnis! Alle ... Gilden ... ausloeschen!";
+  }
+  return "CHCH!";
+}
+
+// Wenn requiresUndeadSlot() 0 liefert zaehlt er nicht zu den beherrschten
+// Dienern eines Nekromanten (2012-08-07 Gwenshara)
+int requiresUndeadSlot()
+{
+  return 1;
+}

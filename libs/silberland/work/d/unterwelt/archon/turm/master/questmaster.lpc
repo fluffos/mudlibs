@@ -1,0 +1,343 @@
+// Ein paar Funktionen um besser die Quest-Positionen zu verwalten
+// 19.03.2003 Archon: - erstellt
+/*
+ Rev 1.1 21.07.2003 Archon: meldung am ende an spieler, dass er zu caroll soll
+ Rev 1.0 19.03.2003 Archon: erstellt
+*/
+#include "../def.h"
+//#include "/gilden/dunkelelfen/dunkelelfen.h" //wegen D_DRIDER ...
+
+int questende_last=0;
+
+//0 wenn nicht in quest sonst 1
+int is_inquest(object pl)
+{
+  if (mappingp(pl->QueryProp(P_ARCHON_TURMQUEST))) return 1;
+  return 0;
+}
+
+void set_start(object pl,int was)
+{
+  if (was<1 || was>2) return;
+  pl->SetProp(P_ARCHON_TURMQUEST,([
+    "Pos":1,
+    "Art":was,
+    "Runenwissen":-1,
+    "Runegegeben":-1,
+    "Richtungen":({random(3),random(3),random(3),random(3),
+                   random(3),random(3),random(3),random(3)}),
+    "Runen":({1,1,0,0,1,1,1,1,1}) ])); //0 rune noch nicht im raum gefunden!
+}
+
+void clear_quest(object pl)
+{
+  pl->SetProp(P_ARCHON_TURMQUEST,0);
+}
+
+//0 wenn icht in quest, oder wenn andere questart gespielt wird
+int get_quest_pos(object pl)
+{
+  mixed info;
+  info=pl->QueryProp(P_ARCHON_TURMQUEST);
+  if (!mappingp(info)) return 0;
+  return info["Pos"];
+}
+
+//0 nicht in quest, sonst 2 (boese) oder 1 (gut)
+int get_quest_kind(object pl)
+{
+  mixed info;
+  info=pl->QueryProp(P_ARCHON_TURMQUEST);
+  if (!mappingp(info)) return 0;
+  return info["Art"];
+}
+
+int advance_quest(object pl)
+{
+  mixed info;
+  info=pl->QueryProp(P_ARCHON_TURMQUEST);
+  if (!mappingp(info)) return 0;
+  info["Pos"]=info["Pos"]+1;
+  pl->SetProp(P_ARCHON_TURMQUEST,info);
+  return info["Pos"];
+}
+
+int set_rune_found(object pl,int welche,int was)
+{
+  mixed info;
+  info=pl->QueryProp(P_ARCHON_TURMQUEST);
+  if (!mappingp(info)) return 0;
+  if (welche<1 || welche>9) return 0;
+  welche--;
+  info["Runen"][welche]=was;
+  pl->SetProp(P_ARCHON_TURMQUEST,info);
+  return info["Runen"][welche];
+}
+
+int get_rune_found(object pl,int welche)
+{
+  mixed info;
+  info=pl->QueryProp(P_ARCHON_TURMQUEST);
+  if (!mappingp(info)) return 0;
+  if (welche<1 || welche>9) return 0;
+  welche--;
+  return info["Runen"][welche];
+}
+
+int get_all_runen_done(object pl)
+{
+  mixed info;
+  int i,count;
+  count=0;
+  info=pl->QueryProp(P_ARCHON_TURMQUEST);
+  if (!mappingp(info)) return 0;
+  for (i=9;i--;)
+    if (info["Runen"][i]==3) count++;
+  return count;
+}
+
+int get_runen_knowhow(object pl)
+{
+  mixed info;
+  info=pl->QueryProp(P_ARCHON_TURMQUEST);
+  if (!mappingp(info)) return 0;
+  return (info["Runenwissen"]==1);
+}
+
+int set_runen_knowhow(object pl)
+{
+  mixed info;
+  info=pl->QueryProp(P_ARCHON_TURMQUEST);
+  if (!mappingp(info)) return 0;
+  info["Runenwissen"]=1;
+  pl->SetProp(P_ARCHON_TURMQUEST,info);
+  return 1;
+}
+
+mixed get_ways(object pl,int raum)
+{
+  mixed info;
+  if (raum<1 || raum>4) return 0;
+  raum--;
+  info=pl->QueryProp(P_ARCHON_TURMQUEST);
+  if (!mappingp(info)) return 0;
+  return ({ info["Richtungen"][raum*2], info["Richtungen"][raum*2+1] });
+}
+
+int get_rune_given(object pl)
+{
+  mixed info;
+  info=pl->QueryProp(P_ARCHON_TURMQUEST);
+  if (!mappingp(info)) return 0;
+  return (info["Runegegeben"]==1);
+}
+
+int set_rune_given(object pl)
+{
+  mixed info;
+  info=pl->QueryProp(P_ARCHON_TURMQUEST);
+  if (!mappingp(info)) return 0;
+  info["Runegegeben"]=1;
+  pl->SetProp(P_ARCHON_TURMQUEST,info);
+  return 1;
+}
+
+int show_ende(object pl,mixed npcs_gut,mixed npcs_boese)
+{
+  int i;
+  object v,o;
+  npcs_boese-=({0});
+  npcs_gut-=({0});
+  v=find_object(ROOM "vorturm");
+/*
+  while (o=present(D_DRIDER,v)) 
+    o->remove(1); //in diesen kampf keine drider!!
+*/
+  if (!sizeof(npcs_boese) && !sizeof(npcs_gut))
+  {
+    tell_room(v,break_string(
+      "Oh das war wohl ein Unendschieden - wenn man es so bezeichnen "
+      "will. Jedenfalls sind nun alle TOT."));
+    if (objectp(pl) && environment(pl)==v)
+     tell_object(pl,
+      "Du denkst bei Dir .o( So das wars! Nichts wie zu Caroll )\n");
+    return 1;
+  }
+  if (!sizeof(npcs_boese))
+  {
+    tell_room(v,break_string(
+      "Der Kampf ist vorbei, die Verteidiger haben gewonnen und treten, "
+      "nachdem sie die Leichen durchsucht haben, nun den Rueckzug an. "
+      "Eine kurze gegenseitige Gratulation und dann macht sich jeder "
+      "auf den Weg."));
+    for (i=sizeof(npcs_gut);i--;)
+      npcs_gut[i]->finish_endfight();
+    if (objectp(pl) && environment(pl)==v)
+     tell_object(pl,
+      "Du denkst bei Dir .o( So das wars! Nichts wie zu Caroll )\n");
+    return 1;
+  }
+  if (!sizeof(npcs_gut))
+  {
+    tell_room(v,break_string(
+      "Der Kampf ist vorbei, die Dunkelelfen haben die Verteidiger "
+      "abgeschlachtet und preisen nun Lloth und raeumen die Leichen aus. "
+      "Dann fallen sie ueber den Turm her und zerstoeren ihn gruendlich. "
+      "Da es hier keinen mehr zu toeten gibt, zieht die Patrouille wieder ab."));
+    v->dturm(); //zerstoerter turm
+    for (i=sizeof(npcs_boese);i--;)
+      npcs_boese[i]->finish_endfight();
+    if (objectp(pl) && environment(pl)==v)
+     tell_object(pl,
+      "Du denkst bei Dir .o( So das wars! Nichts wie zu Caroll )\n");
+    return 1;
+  }
+  npcs_gut[0]->Kill(npcs_boese[0]); //sicher gehen!
+  return 0;
+}
+
+void endkampf(object pl,int art,int pos,mixed npcs_gut,mixed npcs_boese)
+{
+  int i,j,wait;
+  object h;
+  
+  if (pos>4)
+    wait=5;
+  else
+    wait=0;
+  switch(pos)
+  {
+    case 1: //asyncrhones erschaffen nicht vorhander clones
+      P_ARCHON_NPCMASTER->MakeNpcs(2);
+      questende_last=time();
+    break;
+    case 2:
+      P_ARCHON_NPCMASTER->MakeNpcs(1);
+    break;
+    case 3:
+      wait=2; //asynchron sicher abwarten
+    break;
+    case 4: //nun koennen wir die clones holen
+      npcs_boese=(mixed)P_ARCHON_NPCMASTER->GetNpcs(2);
+      npcs_gut=(mixed)P_ARCHON_NPCMASTER->GetNpcs(1);
+      if (!pointerp(npcs_boese) || !pointerp(npcs_gut))
+      {
+        tell_object(pl,"Error bei Endkampf - Magier bescheid geben!\n");
+        return;
+      }
+      i=sizeof(npcs_boese);
+      if (i>8) //wir wollen maximal 16 kaempfende npc's haben!!!
+      {
+        i-=8;
+        for (;i--;)
+        {
+//nur mit 8 kaempfen - restliche muessen aber auch weg -> removen im wait_room
+          h=npcs_boese[random(sizeof(npcs_boese))];
+          npcs_boese-=({h});
+          h->SetProp(P_NOATTACK,1);
+          h->move(ROOM "wait_room",M_GO,"","rennt ploetzlich weg","");
+          call_out("removen",random(20),h);
+        }
+      }
+      i=sizeof(npcs_gut);
+      if (i>8)
+      {
+        i-=8;
+        for (;i--;)
+        {
+//nur mit 8 kaempfen - restliche muessen aber auch weg -> removen im wait_room
+          h=npcs_gut[random(sizeof(npcs_gut))];
+          npcs_gut-=({h});
+          h->SetProp(P_NOATTACK,1);
+          h->move(ROOM "wait_room",M_GO,"","rennt ploetzlich weg","");
+          call_out("removen",random(20),h);
+        }
+      }
+    break;
+  }
+  if (art==1)
+  {
+    switch(pos)
+    {
+      case 1..4: break;
+      case 5:
+        pl->SetProp(P_PARALYZED,0);
+        tell_object(pl,break_string(
+          "Du hast das Gefuehl, als ob gleich der Kampf beginnen koennte. "
+          "Also rennst Du los, um zum Turmausgang zu gelangen."));
+        pl->move(ROOM "vorturm",M_GO,"","rennt los","erscheint");
+        npcs_boese-=({0});
+        for (i=sizeof(npcs_boese);i--;)
+          npcs_boese[i]->goto_endfight(art);
+        tell_room(find_object(ROOM "vorturm"),break_string(
+          "Kaum ist die Patrouille der Dunkelelfen eingetroffen und beginnt "
+          "sofort mit dem Angriff auf den Turm. Dieser wehrt sich jedoch "
+          "selbstaendig und schleudert "
+          "maechtige Eisblitzen in die Gruppe der Angreifer. Die Dunkelelfen "
+          "muessen schwere Verluste hinnehmen, bevor sie sich neu formatieren "
+          "koennen und die Angriffe des Turmes nachlassen."));
+      break;
+      case 6:
+        npcs_gut-=({0});
+        for (i=sizeof(npcs_gut);i--;)
+          npcs_gut[i]->goto_endfight(art);
+        tell_room(find_object(ROOM "vorturm"),break_string(
+          "Die voellig ueberraschten Dunkelelfen werden nun auch noch von "
+          "den Verteidigern des Turmes angegriffen und werden diesen "
+          "Kampf kaum ueberleben."));
+      break;
+      default:
+        npcs_gut-=({0});
+        npcs_boese-=({0});
+        if (show_ende(pl,npcs_gut,npcs_boese)) return;
+      break;
+    }        
+  }
+  else
+  {
+    switch(pos)
+    {
+      case 1..4: break;
+      case 5:
+        pl->SetProp(P_PARALYZED,0);
+        tell_object(pl,break_string(
+          "Du hast das Gefuehl, als ob gleich der Kampf beginnen koennte. "
+          "Also rennst Du los, um zum Turm zu gelangen."));
+        pl->move(ROOM "vorturm",M_GO,"","rennt los","erscheint");
+        npcs_boese-=({0});
+        for (i=sizeof(npcs_boese);i--;)
+          npcs_boese[i]->goto_endfight(art);
+        tell_room(find_object(ROOM "vorturm"),break_string(
+          "Kaum ist die Patrouille der Dunkelelfen eingetroffen, beginnen "
+          "sie den Turm anzugreifen. Schon schnell zeigt sich, dass die "
+          "Schutzrunen voellig ueberlastet sind, woraufhin diese auch schon "
+          "zusammenbrechen und der Turm und sein Inneres ist dem magischen "
+          "Angriff der Dunkelelfen schutzlos ausgeliefert."));
+      break;
+      case 6:
+        npcs_gut-=({0});
+        for (i=sizeof(npcs_gut);i--;)
+          npcs_gut[i]->goto_endfight(art);
+        tell_room(find_object(ROOM "vorturm"),break_string(
+          "Endlich treffen die Verteidiger ein, doch sind sie so "
+          "benommenen, dass sie den erbamungslosen Angriff der Dunkelelfen "
+          "kaum ueberleben werden."));
+      break;
+      default:
+        if (show_ende(pl,npcs_gut,npcs_boese)) return;
+      break;
+    }
+  }
+  call_out("endkampf",wait,pl,art,++pos,npcs_gut,npcs_boese);
+}
+
+int get_questende_last()
+{
+  return questende_last;
+}
+
+void removen(object was)
+{
+  if (!objectp(was)) return;
+  was->remove(1);
+}

@@ -1,0 +1,157 @@
+//////////////////////////////////////////////////
+//                                              //
+//     Stahlrohr-Container                      //
+//                                              //
+//     Erstellt: 12/03/99                       //
+//                                              //
+//     Letzte Aenderung: 12/03/99               //
+//                                              //
+//     (c) by Cirion@Silberland                 //
+//                                              //
+//                                              //
+//                                              //
+//////////////////////////////////////////////////
+
+#include "/d/wasser/cirion/riff/riff.h"
+
+inherit "std/container";
+
+nosave int zustand;
+
+void create()
+{
+  if( !is_clone(TO) ) return;
+  container::create();
+  zustand=2;
+  SetProp(P_SHORT, "Stahlrohr");
+  SetProp(P_ARTICLE,"Ein");
+  SetProp(P_LONG, 
+    "Dies ist ein rundes, etwas einen halben Meter langes Stahlrohr, an einem Ende "
+    "zugeschweisst, am anderen mit einer aufgeschraubten Metallkappe verschlossen. "
+    "Irgendwie erinnert Dich das Stahlrohr an den Testie eines Magiers.");
+  SetProp(P_NAME, "Stahlrohr");
+  SetProp(P_GENDER, NEUTER);
+  AddId(({"rohr","stahlrohr","\nciristahlrohr"}));
+  SetProp(P_VALUE, 0);
+  SetProp(P_WEIGHT, 500);
+  SetProp(P_MATERIAL,([MAT_STEEL:80,MAT_IRON:20]));
+  AddDetail(({"ende"}),    
+    "Dieses Ende ist verschweisst, man kann es nicht oeffnen.");    
+  AddDetail(({"metallkappe","kappe"}),
+    "An den Raendern der Kappe ist das ansonsten intakte Rohr ein wenig angerostet.");
+  SetProp(P_MAX_WEIGHT, 500);
+  SetProp(P_WEIGHT_PERCENT, 80); 
+}
+
+varargs int PreventInsert(object ob) 
+{
+  if (zustand!=0)
+  {
+    write("Die Kappe is doch noch geschlossen.\n");
+    return 1;	
+  }
+  if (2<sizeof(all_inventory(TO)))
+  if (40<=ob->QueryProp(P_SIZE))
+  {
+    write("Das ist viel zu gross, um es in das Rohr zu stecken.\n");
+    return 1;
+  }
+  return ::PreventInsert(ob); 
+}
+
+init()
+{
+  container::init();
+  add_action("oele_kappe","oele");
+  add_action("oele_kappe","oel");
+  add_action("oeffne_kappe","oeffne");
+}
+
+int oele_kappe(string str)
+{
+  object lampe;
+        
+  notify_fail("Was moechtest Du denn oelen?\n");
+  if (-1==member(({"kappe",
+                   "rohr",
+                   "kappe mit oel",
+                   "rohr mit oel",
+                   "kappe mit lampenoel",
+                   "rohr mit lampenoel",
+                   "kappe mit oel in lampe",
+                   "rohr mit oel in lampe",
+                   "kappe mit oel aus lampe",
+                   "roh mit oel aus lampe"
+                   }),str))
+  {
+    return 0;
+  }
+  else if (!lampe=present("\ncirilampe",TP))
+  {
+    write("Du hast doch gar kein Oel.\n");      
+    return 1;
+  }
+  else if (1!=lampe->GetContent())
+  {
+    write("In der Lampe ist doch gar kein Oel mehr.\n");
+    return 1;
+  }
+  else if (zustand!=2)
+  {
+    write("Das ist doch schon geoelt.\n");
+    return 1;	
+  }  
+  else if (1!=lampe->GetOpen())
+  {
+    write(BS("Dazu muesste der Deckel an der Seite der Oellampe "
+      "schon offen sein."));
+    return 1;
+  }  
+  if(ENV(TP)->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN] == (TT_UNDERWATER||TT_WATER))
+  {
+    write(BS(
+      "O nein, Du bist mit dem offenen Deckel an der Lampe ins Wasser gegangen, "
+      "jetzt ist das ganze Oel entwichen."));
+    lampe->SetContent(0);
+    return 1;
+  }
+  write(BS("Du giesst das Oel aus der Lampe ueber die Kappe des Rohres. "
+           "Jetzt sollte es wesentlich leichter aufgehen."));           
+  zustand=1;
+  lampe->SetContent(0);
+  return 1;
+}
+
+int oeffne_kappe(string str)
+{
+  if (-1==member(({"kappe","rohr","stahlrohr"}),str))
+  {
+    return 0;
+  }
+  else
+  {
+    if (zustand==2)
+    {
+      write(BS("So sehr Du Dich auch bemuehst, das Rohr ist an der Kappe einfach zu verrostet, "
+            "als dass Du es oeffnen koenntest."));
+      return 1;
+    }
+    else if (zustand==1)
+    {
+      write(BS("Jetzt, da es geoelt ist, drehst Du die Kappe des Rohres ohne Schwierigkeiten ab "
+               "und oeffnest es."));	
+    SetProp(P_LONG, 
+      "Dies ist ein rundes, etwas einen halben Meter langes Stahlrohr, an einem Ende "
+      "zugeschweisst, doch am anderen Ende kannst Du hineinschauen.");
+    zustand=0;
+    clone_object(OBJ"/landkarte.lpc")->move(TO,M_NOCHECK);
+    clone_object(OBJ"/schublkey.lpc")->move(TO,M_NOCHECK);
+    }
+    else if (zustand==0)
+    {
+      write(BS("Das ist doch schon offen."));
+      return 1;	
+    }
+  }
+  return 1;	
+}

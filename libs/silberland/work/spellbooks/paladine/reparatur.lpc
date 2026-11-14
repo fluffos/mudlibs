@@ -1,0 +1,253 @@
+// SilberLand MUDlib
+//
+// spellbooks/paladine/reparatur.c
+//
+// $Date: 2005/02/03 19:34:00 $
+/* $Revision: 1.2 $
+ * $Log: reparatur.c,v $
+ * Revision 1.2  2005/02/03 19:34:00  Feyaria
+ * meldung wenn gegenstand zerstoert wurde.
+ *
+ * Revision 1.1  2003/07/09 11:39:22  Angrox
+ * Initial revision
+ *
+ */
+// Prototypem
+int prep_reparatur(object caster, mapping sinfo);
+int reparatur(object caster, mapping sinfo);
+
+public void improve_quality(object caster, object ob) {
+  mixed qualityDecay, *keys;
+  int iVal, i;
+
+  iVal = caster->QueryAttribute(A_DEX)/2 + caster->QueryProp(P_GUILD_LEVEL); 
+
+  qualityDecay = ob->QueryProp(P_QUALITY_DECAY);
+  if(intp(qualityDecay)) {
+    qualityDecay += iVal;
+  } else if(mappingp(qualityDecay)) {
+    keys = m_indices(qualityDecay);
+    for(i=0; i<sizeof(qualityDecay); ++i) {
+      qualityDecay[keys[i]] = qualityDecay[keys[i]]+iVal;
+    }
+  }
+
+  ob->SetProp(P_QUALITY_DECAY, qualityDecay);
+  ob->AddId(ID_BLESSING_IMPROVED);
+
+  tell_object(caster, BS(sprintf("Durch deine hohe Kunstfertigkeit wurde die Haltbarkeit von %s verbessert.",
+              ob->name(WEM, 1))));
+  return;
+}
+
+int prep_reparatur(object caster, mapping sinfo) {
+  string str;
+  object ob;
+  if(caster->InFight()) {
+    Message(caster,0,
+      BS("Du solltest erst Deinen Gegner fuer Dusty besiegen!"),0);
+    return 0;
+  }
+  if(caster->QueryProp(P_BLIND)) {
+    Message(caster,0,
+      BS("Bei Dusty, Du bist blind und kannst so nichts reparieren!\n"),0);
+    return 0;
+  }
+  if (ENV(caster) && ENV(caster)->_query_total_light() < 1) {
+    Message(caster,0,
+      BS("Bei Dusty, hier ist es VIEL zu dunkel dafuer!\n"),0);
+    return 0;
+  }
+  str=sinfo[SI_SKILLARG];
+  if(!str) {
+    write(BS("Was in Dustys Namen moechtest Du reparieren?"));
+    return 0;
+  }
+  if(!ob=present(str, caster)) {
+    write("Diesen Gegenstand besitzt Du gar nicht, Paladin!\n");
+    return 0;
+  }
+  if(environment(ob) != caster) {
+    write(BS("Du musst den Gegenstand schon bei Dir tragen, Paladin!\n"));
+    return 0;
+  }
+  return 1;
+}
+
+int reparatur(object caster, mapping sinfo) {
+  object ob;
+  string result, str;
+  int suc,was;
+  int dam, wert, rep, damrest, plus, fail_dam;
+  mapping temp;
+
+  // In der Reparatur wird via while-schleife desoeftern repariert
+  // bzw. DoSpellModification aufgerufen. Die Mod-Funktion alleine
+  // ist schon kritisch bzgl. Laufzeit, durch den sequentiellen 
+  // Aufruf in Reparatur wird die max eval ueberschritten.
+  // Vorschlag: Alle fuer diesen Spell fixen werte am Anfang
+  // von Reparatur in lokale Variablen speichern und dann erst
+  // while'n. Besonders kritisch sind die present's in DoSpellMod.
+  // Da uU um Spieler und im Raum bei der Standarte zahlreiche
+  // Items sind
+  //tell_object(caster, BS("Dusty laesst derzeit keine Reparaturen zu!"));
+  //return 0;
+
+
+  if( !prep_reparatur( caster, sinfo) ) return 0;
+  if(!ob=present(sinfo[SI_SKILLARG], caster)) {
+    write(BS("Bei Dusty! Da ging etwas schief!\n"));
+  }
+  if(ob->QueryProp(P_WEAPON_TYPE)) {
+    if(ob->QueryProp(P_WEAPON_TYPE) == WT_MISC) {
+      write(BS("Diesen seltsamen Waffentyp kannst Du nicht reparieren, Paladin!"));
+      return 0;
+    }
+    wert = ob->QueryProp(P_WC);
+    plus = 1;
+  } else if(ob->QueryProp(P_ARMOUR_TYPE)) {
+    if(ob->QueryProp(P_ARMOUR_TYPE) == AT_MISC) {
+      write(BS("Diesen seltsamen Ruestungstyp kannst Du nicht reparieren, Paladin!"));
+      return 0;
+    }
+    wert = ob->QueryProp(P_AC);
+    plus = 2;
+  } else {
+    write("Du kannst nur Waffen und Ruestungen reparieren, Paladin!\n");
+    return 0;
+  }
+  if(ob->Query(P_WC,F_QUERY_METHOD) || ob->Query(P_AC,F_QUERY_METHOD)) {
+    write(BS(
+      "Auf diesem Gegenstand liegt ein Segen von Dusty. Du kannst ihn solange "
+      "nicht reparieren!!"));
+    return 0;
+  }
+  if(!dam=ob->QueryProp(P_DAMAGED)) {
+    write("Dieser Gegenstand bedarf gar keiner Reparatur, Paladin!\n");
+    return 0;
+  }
+  damrest=(wert+dam)*(78+caster->QueryProp(P_GUILD_LEVEL))/100;
+  if (wert>=damrest) {
+    Message(caster, 0, BS(sprintf(
+      "Deine Faehigkeiten reichen nicht dafuer aus, um "+ob->name(WEN)+
+      " weiter zu reparieren, Paladin!")), 0);
+    return 0;
+  }
+  rep=caster->QueryProp(P_GUILD_LEVEL)/plus;
+  if (wert+rep > damrest) {
+    rep=damrest-wert;
+  }
+
+  if (rep < 1) {
+    Message(caster, 0, BS(
+      "Oh bei Dusty, mit diesem Gegenstand stimmt etwas nicht."), 0);
+    tell_za(sprintf(
+      "Achtung, Fehler im Paladin-Spell 'Reparatur': PL: %s, OBJ: %O, REP: "
+      "%d, WERT: %d, DAM: %d, DAMREST: %d\n",
+      getuid(caster),ob,rep,wert,dam,damrest));
+    return 0;
+  }
+
+  temp=copy_mapping(sinfo);
+  temp[SI_RAW_SPELLCOST]=temp[SI_RAW_SPELLCOST] * rep * plus;
+  temp=DoSpellModification(caster, temp);
+
+  while ((caster->QueryProp(P_SP) < temp[SI_RAW_SPELLCOST]) && (rep > 0)) {
+    rep--;
+    temp=copy_mapping(sinfo);
+    temp[SI_RAW_SPELLCOST]=temp[SI_RAW_SPELLCOST] * rep * plus;
+    temp=DoSpellModification(caster, temp);
+// tell_zordan(sprintf("%d %d %d %d %O\n",wert,dam,damrest,rep,sinfo));
+  }
+
+  sinfo[SI_RAW_SPELLCOST]=sinfo[SI_RAW_SPELLCOST] * rep * plus;
+  sinfo=DoSpellModification(caster, sinfo);
+
+  if ((caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) || (rep < 1)) {
+    Message(caster,0,sinfo[SI_SP_LOW_MSG],0);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+
+  Message(caster, 0, BS(
+    sprintf("Du faengst mit Dustys Unterstuetzung an, %s zu reparieren.\n",
+            ob->name(WEN,1))),0);
+  Message(caster, 0, BS(
+    sprintf("%s faengt mit Dustys Unterstuetzung an, %s zu reparieren.\n",
+             caster->Name(WER),ob->name(WEN))),3);
+  if ((suc=SpellSuccess(caster,sinfo))<=0)
+  {
+    Message(caster, 0, "Bei Dusty! Deine Reparatur schlaegt fehl!\n", 0);
+    Message(caster, 0, BS(
+      sprintf("%s kann die Reparatur nicht vollenden und bricht sie ab.",
+      caster->Name(WER))),3);
+    // in 10% der Fehlschlaege etwas Damage (woody, 30.8.2000)
+    if (random(100) > 90)
+      fail_dam=ob->Damage(random(3));
+      if(!objectp(ob)) 
+        Message(caster, 0, BS(
+            "Unvorsichtig wie Du bist, hast Du den Gegenstand zerstoerst!"),
+            0);
+      else switch (fail_dam) {
+        case 2:
+          Message(caster, 0, BS(
+            sprintf("Unvorsichtig wie Du bist, beschaedigst Du %s sogar "
+              "etwas!", ob->name(WEN,1))), 0);
+        case 1:
+          Message(caster, 0, BS(
+            sprintf("Unvorsichtig wie Du bist, beschaedigst Du %s sogar "
+              "ein bisschen!", ob->name(WEN,1))), 0);
+      }
+    return MISSERFOLG;
+  }
+  if (rep/2 > 7) rep=15;
+  switch(rep/2) {
+    case 7:  str="sehr gut"; break;
+    case 6:  str="ziemlich gut"; break;
+    case 5:  str="recht gut"; break;
+    case 4:  str="mittelmaessig"; break;
+    case 3:  str="teilweise"; break;
+    case 2:  str="ein wenig"; break;
+    default: str="sehr wenig"; break;
+  }
+  Message(caster,0, BS(
+    sprintf("Um Deine Haende bildet sich ein silberner Schimmer. Die "
+            "Reparatur geht gut voran und Du steckst %s %s "
+            "repariert wieder ein.",ob->name(WEN,1),str)), 0);
+  Message(caster,0, BS(
+    sprintf("Um die Haende von %s bildet sich ein silberner Schimmer. Die "
+            "Reparatur geht gut voran und %s steckt %s %s repariert "
+            "wieder ein.",
+            caster->name(WEM),caster->QueryPronoun(WER),
+            ob->name(WEN,1),str)), 3);
+  Message(caster, 0, BS(
+    "Der Schimmer um Deine Haende verblasst wieder.\n"),0);
+  Message(caster, 0, BS(
+    sprintf("Der Schimmer um %s Haende verblasst wieder.\n",
+             caster->name(WESSEN))),3);
+
+  // woody (30.8.2000): niemals nicht P_AC oder P_WC vor dem
+  //   Korrigieren der P_DAMAGED setzen, sonst folgt u.U. fuer
+  //   kurze Zeit ein ungueltiger Gesamtwert!! Stattdessen die
+  //   vorgesehene Funktion Damage() verwenden!
+  /*
+  if( ob->QueryProp(P_WEAPON_TYPE)) {
+    ob->SetProp(P_WC,ob->QueryProp(P_WC)+rep);
+  } else if( ob->QueryProp(P_ARMOUR_TYPE)) {
+    ob->SetProp(P_AC,ob->QueryProp(P_AC)+rep);
+  }
+  ob->SetProp(P_DAMAGED,ob->QueryProp(P_DAMAGED)-rep);
+  */
+
+  ob->Damage(-rep);     // um 'rep' Schadenspunkte reparieren
+
+  if(HAS_BLESSING(caster, BLESSING_RESTORATION) && !ob->id(ID_BLESSING_IMPROVED)) {
+    // wenn der caster die segnung hat und das item noch nicht verbesser wurde, erhoehen wir seine haltbarkeit
+    // der call_out verlagert die kosten in eine eigene ausführung (pest durch cholera ersetzt?)
+    call_out("improve_quality", 0, caster, ob);
+  }
+
+  return ERFOLG;
+}
+
+

@@ -1,0 +1,101 @@
+/*
+ * Omi-cron ist ein kleines Tool, das den Umgang mit dem cron-daemon
+ * (hat aber nichts mit Hoelle und so zu tun), erleichtern soll. Die
+ * Funktionen kann man im cron natuerlich auch alle "haendisch" auf-
+ * rufen, aber - wer sagt schon "nein" zu ein wenig Komfort?
+ *
+ * (c) 1998-1999 Adrian Holzwarth / Anatol@Silberland
+ */
+
+#pragma strict_types
+
+#define DB(x) if (find_player("anatol")) tell_object(find_player("anatol"),x)
+
+#include <properties.h>
+#include <wizlevels.h>
+#include "/p/daemon/crond/crond.h"
+#include <language.h>
+
+inherit "/std/tool";
+
+nomask nosave int SetShort(string rawstring) {
+  string s, owner;
+  if (((environment())||(this_player())) && 
+      (owner=getuid(environment(this_object())||this_player())))
+    s=capitalize(((s=owner)[<1]=='s'||s[<1]=='x'||s[<1] =='z')?s+="' ": 
+                                                               s+="s ");
+  else
+    s=QueryArticle(); 
+  SetProp(P_SHORT , s+rawstring);
+  return 1;
+}
+
+nomask nosave string completeCronPath(string filename) {
+  string s;
+  s=(string)"/secure/master"->make_path_absolute(filename);
+  if (s[<8..<1]!="crontab") {
+    if (s[<1]!='/') s+="/";
+    s+="crontab";
+  }
+  return s;
+}
+
+nomask void create() {
+  if (!is_clone(this_object())) return;
+    ::create();
+    
+  SetProp(P_LONG,
+    "Das ist das fabelhafte 'Omi Cron', ein Hilfmittel, welches Dir den " 
+    "Umgang mit  dem  cron-Daemon vereinfacht.  Er stellt  Dir folgende "
+    "Befehle zur Verfuegung:\n"
+ "  crontab anz [<uid>]   - Anzeigen der unter 'uid' angemeldeten crontabs\n"
+ "  crontab upd <crontab> - Anmelden/Updaten einer crontab\n"
+ "  crontab abm <crontab> - Abmelden einer crontab (loescht die Datei nicht)\n"
+    "Beispiel: \"crontab upd ~/\", \"crontab abm +seher/anatol/crontab\"\n");
+  SetShort("Omi Cron");
+  SetProp(P_WEIGHT,0);
+  SetProp(P_MATERIAL,MAT_MISC_SPICE); 
+  SetProp(P_NODROP,"Omi Cron wirft man nicht einfach weg.\n");
+  SetProp(P_NEVERDROP,1);
+  SetProp(P_AUTOLOADOBJ,1);
+  SetProp(P_NOBUY,1);
+  SetProp(P_NOSELL,1);
+  SetProp(P_VALUE,0);
+  SetProp(P_NAME,"Omi Cron");
+  SetProp(P_ARTICLE,0);
+  SetProp(P_GENDER,NEUTER);
+  AddId(({"omicron","omi cron","TOOL","omi","cron","anatol_omi_cron",
+     "OMICRON","a\na\tol_tool"}));
+  AddCmd("crontab","cmdCrontab");
+}
+
+nomask nosave int cmdCrontab(string str) {
+  string s1, s2;
+  
+  if ((!this_player())||(this_player()!=this_interactive()) ||
+      process_call()) return 0;
+  if (!IS_WIZARD(this_player())) {
+    remove();
+    return 0;
+  }
+  str=(string)this_player()->_unparsed_args();
+  if ((!str)||(str=="")||(str=="anz")) {
+    this_player()->More(PRINTCRONTABS(getuid(this_player())));
+    return 1;
+  }
+  if (str=="upd") 
+    UPDATECRONTAB(completeCronPath(""));
+  else if (str=="abm") 
+    REMOVECRONTAB(completeCronPath(""));
+  else if (sscanf(str,"upd %s",s1)==1)
+    UPDATECRONTAB(completeCronPath(s1));
+  else if (sscanf(str,"abm %s",s1)==1)
+    REMOVECRONTAB(completeCronPath(s1));
+  else if (sscanf(str,"anz %s",s1)==1)
+    this_player()->More(PRINTCRONTABS(s1));
+  else {
+    notify_fail("Omi Cron Synax: crontab upd|abm|anz ...\n");
+    return 0;
+  }
+  return 1;
+}

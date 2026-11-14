@@ -1,0 +1,321 @@
+/*
+ * Der Neid-Klau-Sammli
+ * $Id: klau.c,v 1.6 2009/01/29 07:55:36 Woody Exp $
+ * ---
+ * $Date: 2009/01/29 07:55:36 $
+ * $Revision: 1.6 $
+ * $Log: klau.c,v $
+ * Revision 1.6  2009/01/29 07:55:36  Woody
+ * Debugmeldung wenn Geld verschwunden, wohin
+ *
+ * Revision 1.5  2009/01/29 07:54:47  Woody
+ * Geldsuche via geld()
+ *
+ * Revision 1.4  1997/09/02 13:35:40  Woody
+ * Loggt seine Geburt mit :)
+ *
+ * Revision 1.3  1997/05/22 10:15:43  Woody
+ * Klaut Spielern < Level 8 und < 80k EP nichts mehr
+ *
+ * Revision 1.2  1997/05/20 20:40:41  Woody
+ * Klaut jetzt maximal 1/100 (statt 1/300el), verzoegerte Textausgabe
+ *
+ * Revision 1.1  1997/03/15 20:38:26  Woody
+ * prepared for revision control
+ *
+ */
+
+/*
+ * Eigenschaften:
+ *  - Wandert im ganzen SL umher
+ *  - Stiehlt Spielern Geld aus dem Inventory und aus Beuteln,
+ *    je nach Alignment mehr (wenn gut) oder weniger (wenn boese)
+ *  - Ist relativ stark und hat vier gefaehrliche Spells
+ *  - Klaut Spielern, die er toetet, all ihr Geld
+ *  - Loggt so gut wie alles mit
+ */
+
+inherit "std/mnpc";
+
+#include <properties.h>
+#include <npc.h>
+#include <mnpc.h>
+#include <language.h>
+#include <combat.h>
+#include <wizlevels.h>
+#include <moving.h>
+#include <new_skills.h>
+// #include "/d/gebirge/dusty/zwerge/files.h"
+#include "../midas.h"
+
+#define MIN_FRACTION 100    // klaue mindestens ein 100-stel pro Reset
+#ifdef LOGF
+#undef LOGF
+#endif
+#define LOGF "/d/ebene/log/neidklau.log"
+#define MIN_XP 80000
+#define MIN_LEVEL 8
+
+object mygeld;    // Das eigene Geld-Objekt
+mapping
+  gestohlen,      // Ein Mapping SPIELER:GELD, das angibt, wieviel Geld
+                  // einem Spieler seit dem letzten Reset gestohlen wurde
+  gest_total;     // Ein Mapping SPIELER:GELD, das angibt, wieviel Geld
+                  // dem Spieler insgesamt bereits gestohlen wurde
+
+create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  AddId(({"neid", "klau", "sammli", "neid-klau", "neid-klau-sammli"}));
+  SetProp(P_GENDER, MALE);
+  SetProp(P_NAME, "Neid-Klau-Sammli");
+  SetProp(P_SHORT, "Der Neid-Klau-Sammli");
+  SetProp(P_LONG,
+    "Neid-Klau-Sammli heiss ich Koboldwicht,\n"
+    "aufs Klauen, Sammeln bin ich erpicht,\n"
+    "stets jedes Ding zu allen Orten\n"
+    "nur immer sammeln, klauen, horten\n"
+    "und niemals schenken, noch was geben:\n"
+    "ein Neid-Klau-Sammli Koboldleben!\n");  
+
+  create_default_npc(20);
+  SetProp(P_MAX_HP, 1200+random(200));   // Setzt (bei NPCs) auch gleich P_HP
+  SetProp(P_XP, 1200000);
+  SetProp(P_ALIGN, -800-random(200));
+  SetProp(P_HEAL, -50);
+  SetProp(P_HANDS, ({" mit riesengrossen Krallentatzen", 350}));
+  SetProp(P_SIZE, 140+random(10));
+  SetProp(P_BODY, 100+random(20));
+  SetProp(P_RACE, "Kobold");
+  SetProp(P_MURDER_MSG, "Diese Welt kann mir gestohlen bleiben!");
+  SetProp(P_KILL_NAME, "Der boese Neid-Klau-Sammli");
+  SetProp(P_KILL_MSG, "Da siehst Du, was Du davon hast! "
+      "Und jetzt krall ich mir all Dein Geld!");
+  SetProp(P_RESISTANCE_STRENGTHS,
+      ([ DT_FIRE:0.3,
+         DT_COLD:-0.3,
+         DT_SOUND:-0.3,
+         DT_MAGIC:-0.5,
+         DT_BLUDGEON:-0.2,
+         DT_SQUEEZE:-0.2,
+         DT_SLASH:-0.2,
+         DT_PIERCE:-0.2,
+         DT_RIP:-0.2,
+         DT_WHIP:-0.2,
+         DT_UNHOLY:-0.8,
+         DT_HOLY:0.6,
+         DT_LIGHT:0.2,
+       ]) );
+
+  SetProp (P_MNPC_AREA, "/");
+  SetProp (P_MNPC_WAIT, ({ 5, 20, 30 }));        
+  SetProp (P_MNPC_DEFAULTROOM, ("/d/ebene/Silberwald/room_a01"));
+  SetProp (P_MNPC_FLAGS, MOV_OUTDOORS + MOV_MOVES); 
+
+  SetProp (P_SPELLRATE, 40);
+  AddSpell(10, 400,
+    "Der Neid-Klau-Sammli springt Dich an und beisst Dich.\n",
+    "Der Neid-Klau-Sammli beisst @WEN mit seinen kraeftigen Zaehnen.\n",
+    DT_PIERCE, ([SP_SHOW_DAMAGE:1]) );
+  AddSpell(5, 600,
+    "Der Neid-Klau-Sammli wirft gewaltige Eispfeile nach Dir.\n",
+    "Der Neid-Klau-Sammli wirft Eispfeile nach @WEM.\n",
+    DT_COLD, ([SP_SHOW_DAMAGE:1]) );
+  AddSpell(3, 1000,
+    "Der Neid-Klau-Sammli schleudert einen gewaltigen Feuerstrahl nach Dir.\n",
+    "Der Neid-Klau-Sammli schleudert einen gewaltigen Feuerstrahl nach @WEM.\n",
+    DT_FIRE, ([SP_SHOW_DAMAGE:1]) );
+  AddSpell(1, 1500,
+    "Der Neid-Klau-Sammli beschwoert einen Blitz auf Dich herab.\n",
+    "Der Neid-Klau-Sammli beschwoert einen Blitz auf @WEN herab.\n",
+    DT_LIGHTNING, ([SP_SHOW_DAMAGE:1]) );
+
+  AddInfo(DEFAULT_INFO,
+    "Ich will nur Dein Geld!",
+    "lechzt: ");
+
+  gestohlen = ([]);
+  gest_total = ([]);
+  SUID;
+  mygeld = clone_object ("/obj/money");
+  mygeld->move(ME);
+  mygeld->SetProp(P_AMOUNT, 300+random(20)*10);         // Anfangssalaer
+  write_file (LOGF,
+      dtime(time())+": NKS startet mit "+mygeld->QueryProp(P_AMOUNT)+
+      " Muenzen.\n");
+
+  write_file (LOGF,
+      dtime(time())+": NKS wird geboren von "+
+      file_name(previous_object())+".\n");
+
+}
+
+int ismoney(object ob)
+{
+  return file_name(ob)[0..10] == "/obj/money#";
+}
+
+object geld()
+{
+  int i;
+  object *inv;
+
+  if (mygeld && (environment(mygeld) == ME))
+    return mygeld;
+  inv = all_inventory();
+  inv = filter_array(inv, "ismoney");
+  if (!sizeof(inv)) {
+    if (mygeld)
+      raise_error(
+          sprintf("Geldobjekt verschwunden! mygeld=%O, ENV=%O\n",
+            mygeld, environment(mygeld) ) );
+    else
+      raise_error("Geldobjekt verschwunden!!\n");
+    return mygeld=0;
+  }
+  else
+    return mygeld=inv[0];
+}
+
+
+init()
+{
+  int x, x1, n, res, beutel, frac;
+  object *inv;
+  string who;
+
+  res = ::init();
+  who = getuid(TP);
+  if (IS_LEARNER(TP) || TP->QueryProp(P_TESTPLAYER) || !interactive(TP))
+    return res;
+  if ((TP->QueryProp(P_XP) < MIN_XP) && (TP->QueryProp(P_LEVEL) < MIN_LEVEL))
+    return res;
+
+  // Haben wir schonmal zugeschlagen?
+  if (member(gestohlen, who)  /* && member(gest_total, who) */  )
+  {
+    call_out("textout", 0,
+        Name(WER,1)+" zeigt Dir "+(n=gest_total[who])+" Muenze"+
+        (n==1 ? "" : "n")+", "+"die einmal Dir gehoert ha"+
+        (n==1 ? "t" : "ben") + " !\n"+
+        Name(WER,1)+" grinst Dich haemisch an.\n",
+        0,
+        Name(WER,1)+" grinst "+TP->name(WEN)+" haemisch an.\n",
+        Name(WER,1)+" grinst "+TP->name(WEM)+" haemisch nach.\n");
+    return res;
+  }
+
+  inv = deep_inventory(TP);
+  inv = filter_array(inv, "ismoney");
+  if (!sizeof(inv)) return res;
+
+  // Anteil, den wir klauen...
+  if ((x=TP->QueryProp(P_ALIGN)) > 0)
+    frac = 100000 / (x+500);    // Heiligen Spielern 1/66el, neutralen 1/200el
+  else
+    frac = MIN_FRACTION;        // Boesen Spielern 1/300el
+
+  x = beutel = 0;
+  for (n=sizeof(inv)-1; n>=0; n--)
+  {
+    x1 = inv[n]->QueryProp(P_AMOUNT) / frac;
+    x += x1;
+    inv[n]->AddAmount(-x1);
+    if (x1 && (environment(inv[n]) != TP)) beutel=1;
+  }
+  if (!x) return res;   // ARGL, war nix :(
+
+  call_out("textout", 0,
+      Name(WER,1)+" klaut Dir "+x+" Muenze"+(x==1 ? "" : "n")+(beutel?
+      " und verschont dabei auch nicht Deine Taschen und Beutel":"")+"!\n",
+      "Dein Geldbeutel ist leichter geworden.\n",
+      Name(WER,1)+" klaut "+TP->name(WEM)+
+      (x >= 500 ? " eine Menge" : " etwas")+" Geld !\n",
+      Name(WER,1)+" grinst "+TP->name(WEM)+" haemisch nach.\n");
+
+  geld()->AddAmount(x);
+  gestohlen += ([ who : x ]);
+  gest_total[who] += x;
+
+  write_file (LOGF,
+      dtime(time())+": NKS stiehlt "+CAP(who)+" "+x+" Muenzen.\n");
+
+  return res;
+}
+
+// textout()
+// pl:  Text, der an den Bestohlenen geht.
+// pl2: Dito, wenn Bestohlener nicht mehr im Raum.
+// rm:  Text, der an den Raum geht.
+// rm2: Dito, wenn Bestohlener nicht mehr im Raum.
+// ---
+textout(pl, pl2, rm, rm2)
+{
+  if (!TP || !ME) return;
+  if (ENV(TP)==ENV(ME)) {
+    tell_object(TP, pl);
+    tell_room(ENV(ME), rm, ({ TP }) );
+  }
+  else {
+    if (pl2) tell_object(TP, pl2);
+    if (rm2) tell_room(ENV(ME), rm2, ({ TP }) );
+  }
+}
+
+reset()
+{
+  ::reset();
+  gestohlen = ([]);
+}
+
+void NotifyPlayerDeath(object pl, object killer, int lost_exp)
+{
+  string who;
+  object *inv,ob;
+  int i,total;
+
+  who=getuid(pl);
+  write_file (LOGF, dtime(time())+": NKS killt "+CAP(who)+".\n");
+  if (killer!=ME) return;       // Bin ueberhaupt ich der Killer, oder laeuft
+  ob=present("leiche", MENV);   // da einiges falsch?
+  if (!ob) return;              // Huch, keine Leiche gefunden!
+  inv=deep_inventory(ob);       // Schau mer mal...
+  inv = filter_array(inv, "ismoney");
+  SetProp(P_KILL_MSG, "Da siehst Du, was Du davon hast! "
+      "Und mein Geld kriegst Du erst nicht!");
+  if (!sizeof(inv)) return;     // Oha, kein Geld, schade...
+
+  // Geld Geld Geld!!! *KLAU* :-)
+  total=0;
+  for (i=sizeof(inv); i-->0;) {
+    total+=inv[i]->QueryProp(P_AMOUNT);
+    inv[i]->remove();
+  }
+  geld()->AddAmount(total);
+  SetProp(P_KILL_MSG, "Da siehst Du, was Du davon hast! "
+      "Ach ja. Danke fuer die"+(total==1 ? "" : " "+total)+
+      " Muenze"+(total>1?"n!":"!"));
+
+  // Eintragen nicht vergessen
+  gestohlen[who] += total;
+  gest_total[who] += total;
+  write_file (LOGF,
+      dtime(time())+": NKS klaut "+CAP(who)+" nach Tod "+total+" Muenzen.\n");
+  SetProp(P_KILL_MSG, "Da siehst Du, was Du davon hast! "
+      "Und jetzt krall ich mir all Dein Geld!");
+}
+
+varargs void die(int p)
+{
+  int direkt;
+  direkt = extern_call() && (previous_object() != this_object());
+
+  write_file (LOGF,
+      dtime(time())+": NKS (Geld: "+geld()->QueryProp(P_AMOUNT)+
+      ") wird gekillt von "+CAP(getuid(TP))+
+      (direkt ? " (direkt!).\n" : ".\n"));
+  ::die(p);
+}
+

@@ -1,0 +1,190 @@
+/*
+  Room
+  Standardraum fuer das Feldlager.
+ 
+  Abgewandelt fuer Los Brunnos
+
+*/
+
+inherit "/std/room";
+inherit "/std/more";
+
+#include <wizlevels.h>
+#include <properties.h>
+#include "../def.h"
+#include "../well_level.h"
+#include <ansi.h>
+
+int _query_nomagic()
+{
+  if( present("\nmyst") )
+    return 1000;
+  return 0;
+}
+
+
+string* _query_hide_exits()
+{
+  if( present("\nmyst") )
+    return ({"norden", "westen", "sueden", "osten", "raus", "dimensionssprung", "wurmloch"});
+  return 0;
+}
+
+
+varargs int PreventInsert(object ob)
+{
+  if (ob && IS_LEARNER(ob) && !IS_ELDER(ob) &&
+      member(ALLOWED_UIDS, getuid(ob)) == -1)
+  {
+    tell_object(ob, "\nDu darfst den Brunnen nicht betreten!\n");
+    return 1;
+  }
+  return 0;
+}
+
+
+void init()
+{
+  int i;
+  mapping exits;
+  string * ex;
+  string room;
+  object lastenv;
+
+  if (this_player() && IS_LEARNER(this_player()) && !IS_ELDER(this_player()) &&
+      member(ALLOWED_UIDS, getuid(this_player())) == -1 )
+  {
+    if (query_verb() != "at")
+    {
+      tell_object(this_player(), ANSI_BOLD +"\nIllegales Betreten des Brunnens!\n"+
+          "Magier haben hier nichts zu suchen!\n" + ANSI_NORMAL + "\n");
+      call_out("remove_wiz", 0, this_player()->QueryProp(P_LAST_COMMAND_ENV));
+    }
+    if (find_player("feyaria"))
+      tell_object(find_player("feyaria"),
+          ANSI_PURPLE + ANSI_BOLD + 
+          "[Brunnen:] " + capitalize(getuid(this_player())) + " wollte den Brunnen betreten!\n" +
+          "[Brunnen:] Cmd = " + query_verb() + " " + this_player()->_unparsed_args() + 
+          ANSI_NORMAL + "\n");
+    write_file(LOGS "illegal_enter",
+        sprintf("%s %s %s %s\n",
+          dtime(), capitalize(getuid(this_player())), 
+          query_verb(), this_player()->_unparsed_args()));
+  }
+  ::init();
+
+  if (!this_player() || !query_once_interactive(this_player()))
+    return;
+  if (dtime()[19..20] == "05" && to_int(dtime()[22..23]) < 15)
+  {
+    tell_object(this_player(), "Ein magischer Strudel wirft Dich aus dem Raum.\n");
+    this_player()->move(ROOMS "rebuildroom", M_NOCHECK);
+    return;
+  }
+  if (this_player()->QueryProp(P_GHOST))
+    call_out("remove_ghost", 60);
+
+  exits=QueryProp(P_NEW_EXITS);
+  ex=m_indices(exits);
+  for(i=sizeof(ex)-1; i>=0; i--)
+  {
+    room=exits[ex[i]]["ex_dest"];
+    if (room && !find_object(room) )
+      call_other(room, "???");
+//    filter_array(all_inventory(find_object(room)), "npc_init");
+  }
+}
+
+void npc_init(object ob)
+{
+  if (living(ob) && !query_once_interactive(ob))
+    ob->init();
+}
+
+void remove_ghost()
+{
+  if (this_player() && environment(this_player()) &&
+      this_player()->QueryProp(P_GHOST) &&
+      well_level(this_player()))
+  {
+    tell_object(this_player(), "Ein magischer Strudel wirft Dich aus dem Raum.\n");
+    this_player()->move(ROOMS "rebuildroom", M_NOCHECK);
+  }
+}
+
+void remove_wiz(object lastenv)
+{
+  if (!this_player() || environment(this_player()) != this_object())
+    return;
+  this_player()->SetProp(P_TMP_MOVE_HOOK, 0);
+  this_player()->move(objectp(lastenv) && lastenv != this_object() ? lastenv : "/room/void", 
+      M_SILENT | M_GO | M_NOCHECK);
+}
+
+void create()
+{
+  ::create();
+  AddCmd(({"bwhere", "bwhe", "bwo"}), "whe");
+  SetProp(P_SUBDOMAIN, "Brunnen");
+  SetProp(" never clean ", 1);
+}
+
+
+nosave int CheckZone(object u)
+{
+  if (!(ENV(u))) return 0;      // gerade einloggende Spieler...
+  if (stringp(ENV(u)->QueryProp(P_ZONE)) &&
+      ENV(u)->QueryProp(P_SUBDOMAIN) == "Brunnen" &&
+      !IS_LEARNER(u)) 
+    return 1;
+  return 0;
+}
+
+
+int whe(string str)
+{
+  int i, j;
+  object *usrs;
+  string u_name, u_lev, u_loc, u_zone, u_end;
+
+  if (!(i = sizeof(usrs = filter_array(users(),"CheckZone"))))
+  {
+    write("Es befinden sich derzeit keine Spieler im Brunnen.\n");
+    return 1;
+  }
+  switch(TP->QueryProp(P_TTY)) 
+  {
+    case "ansi" : u_name = ANSI_GREEN + ANSI_BOLD; u_lev = ANSI_YELLOW + ANSI_BOLD;
+                  u_zone = ANSI_NORMAL; u_loc = ANSI_CYAN;
+                  u_end = ANSI_NORMAL; break;
+    case "vt100": u_name = ANSI_BOLD; u_lev = ANSI_NORMAL; u_loc = ANSI_BOLD;
+                  u_zone = ANSI_NORMAL; u_end = ANSI_NORMAL; break;
+    default     : u_name = u_lev = u_loc = u_zone = u_end="";
+  }
+
+  str = "Derzeit befinden sich folgende Spieler im Brunnen:\n"
+        "       Name      Stufe      Zone              Ort\n"
+        "-+--------------+-----+-----------------+--------------------------\n";
+  for (j = 0; j < i; j++) 
+  {
+    str += sprintf(" | %s%-12s%s | %s%3d%s | %s%-15s%s | %s%s%s\n",
+        u_name, CAP(getuid(usrs[j])), u_end,
+        u_lev, usrs[j]->QueryProp(P_LEVEL), u_end,
+        u_zone, environment(usrs[j])->QueryProp(P_ZONE), u_end,
+        u_loc, (IS_WIZARD(TP) ? file_name(environment(usrs[j])) : 
+          environment(usrs[j])->QueryProp(P_INT_SHORT)), u_end
+        );
+  }
+  TP->More(str+"\n");
+  return 1;
+} 
+
+void reset()
+{
+  if (present("\nschutzsteinkreis"))
+  {
+    set_next_reset(2 * 60);
+    return;
+  }
+  ::reset();
+}

@@ -1,0 +1,163 @@
+// Ratte
+// Schlachtfeld
+// von Wraz / Mendralim
+
+#include "../def.h"
+
+inherit "std/mnpc";
+inherit "/std/npc/spells";
+inherit NPC "npc.lpc";
+
+void create()
+{
+  int i;
+
+  if(!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Eine grauslige Ratte");
+  SetProp(P_LONG,
+    "Diese Ratte sieht zum Fuerchten aus.");
+
+  SetProp(P_NAME, "Ratte");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:0,T_RANGE_MAX:30]));
+  AddId(({"ratte", "NOWIMPY", "\nschlachtfeld"}));
+  set_living_name("\nschlachtfeld_minions_by_wraz");
+  SetProp(P_ARTICLE, 1);
+
+  create_default_npc(8+random(4));
+
+  SetProp(P_HANDS, ({" mit ihren Pfoten"
+                    ,QueryProp(P_HANDS)[1]
+                    , ({DT_BLUDGEON})
+                    }));
+
+  SetProp(P_RACE, "Ratte");
+  SetProp(P_SIZE, 8+random(5));
+  SetProp(P_WEIGHT, 400+random(81));
+  SetProp(P_ALIGN, 0);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_HEAL,0);
+  SetProp(P_AGGRESSIVE,0);
+  SetProp(P_WIMPY, 0);
+  SetProp(P_NOMAGIC,0);
+
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    Name(WER,1)+" kann nichts tragen.\n" }) );
+
+  SetProp(P_MSGIN, "kriecht herein");
+  SetProp(P_MSGOUT, "kriecht flink");
+  SetProp(P_MMSGIN, "kriecht herein");
+  SetProp(P_MMSGOUT, "kriecht davon");
+
+  SetProp(P_MNPC_AREA, ({ ROOM "m" }) );
+  SetProp(P_MNPC_DEFAULTROOM, ROOM "m14");
+  SetProp(P_MNPC_WAIT, ({ 20, 30, 10 }));
+  SetProp(P_MNPC_FLAGS, MOV_OUTDOORS + MOV_MOVES + MOV_BACKWARDS);
+
+  SetProp(P_DIE_MSG,  " faellt tot zu Boden.\n");
+  SetProp(P_NOCORPSE, 0 );
+
+  AddInfo(DEFAULT_INFO, "versteht Dich doch gar nicht.\n");
+
+  SetChats(3,
+  ({Name(WER, 1)+" schnueffelt herum.\n",
+    Name(WER, 1)+" hopst umher.\n",
+    Name(WER, 1)+" quiekt Dich an.\n"
+   }));
+
+  SetAttackChats(10,
+  ({Name(WER, 1)+" quiekt!\n"
+   }));
+
+  CLONEME("/d/ebene/lamuerte/burg/obj/rattenzahn");
+  for(i=random(5);i<4;i++) CLONEME("/d/ebene/lamuerte/burg/obj/rattenzahn");
+}
+
+void die(int poisondeath)
+{
+  mapping players_bling;
+  int tpbling;
+  players_bling = SMASTER->query_save();
+  tpbling = players_bling[getuid(TP)];
+
+  if ( (TP->QueryProp(P_LEVEL) < 50) && // kleine Spieler bis lvl 50 jedenfalls
+       (tpbling < 150000 ))
+    SetProp(P_CORPSE_PROPS,
+      ([P_HEAL: 1+random(30) ]) );
+
+  else if ( tpbling > 0 ?   // wenn in der Bling-Liste
+      !random(1000000/tpbling) :  // ... dann Random,
+      0 )                         // ... sonst gar nicht
+  {  // Heilung: 1 bis 40
+    SetProp(P_CORPSE_PROPS,
+      ([P_HEAL: random( to_int(1 + (40-exp(
+      -(tpbling ? tpbling : 150000.0 )
+      /200000.0)*40))) ]) );
+  }
+
+  if (QueryProp(P_CORPSE_PROPS))
+  {
+    // mit Pech ist die Ratte doch nicht so bekoemmlich
+    if(!tpbling && !random(10) ) SetProp(P_CORPSE_PROPS,
+      ([P_HEAL: -QueryProp(P_CORPSE_PROPS)[P_HEAL] ]) );
+    else if (tpbling && !random(1+(tpbling/10000)))
+      SetProp(P_CORPSE_PROPS,
+        ([P_HEAL: -QueryProp(P_CORPSE_PROPS)[P_HEAL] ]) );
+
+    TP->Message(BS("Deine letzte Attacke richtet die Ratte koestlich her! "
+                   "Ganz sicher bist Du Dir aber nicht..."));
+  }
+
+  WMASTER->npc_death_log("standardnpc", TO->Name(RAW), TPU, TPN);
+
+  npc::jadering_xp(TP, QueryProp(P_LEVEL));
+  ::die(poisondeath);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  if(killer == TO) WMASTER->npc_kill_log(TO->Name(RAW), getuid(player), lostexp);
+}
+
+void InformDefend(object enemy)
+{
+  Kill(enemy);
+}
+
+/*string beissen()
+{
+  if(random(1000)<100) // Zusammen mit Chat geschieht das ca alle 3000 Runden
+  {
+    object *players;
+    int i;
+
+    call_other(OBJ "pest", "???");
+
+    players=filter_array(all_inventory(ENV(TO)), #'interactive);
+    i=random(sizeof(players));
+
+    if(!players) return "";
+
+    if(!present(find_object(OBJ "pest"),players[i]))
+    {
+      clone_object(OBJ "pest")->move(players[i], M_NOCHECK);
+
+      tell_object(players[i], BS(
+        "Ploetzlich springt Dich eine Ratte an und beisst Dich!"));
+
+      tell_room(ENV(players[i]), BS(
+        "Eine Ratte springt "+players[i]->Name()+" an und beisst "
+        +players[i]->QueryPronoun(WESSEN)+"!"), ({players[i]}) );
+
+      return "";
+    }
+
+    else return "";
+
+  }
+
+  else return "";
+}*/

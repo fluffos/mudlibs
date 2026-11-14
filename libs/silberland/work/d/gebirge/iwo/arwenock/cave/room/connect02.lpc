@@ -1,0 +1,267 @@
+
+inherit "std/room";
+
+#pragma strong_types
+
+#include <wizlevels.h>
+#include <properties.h>
+#include <ansi.h>
+#include <defines.h>
+#include <moredef.h>
+#include <moving.h>
+
+#include "../../def.h"
+
+int door_open = 0;
+int door_unlocked = 0;
+
+
+void create()
+{
+  object ob;
+
+  if (is_clone(TO)) return;
+  ::create();
+  seteuid(getuid(TO));
+
+  SetProp(P_LIGHT, 0);
+  SetProp(P_INDOORS, 1);
+  SetProp(P_TRANSPARENT, 0);
+  SetProp(P_NO_TPORT, NO_TPORT);
+
+  SetProp(P_ENVIRONMENT, ([ ENV_TERRAIN: TT_CAVE,
+                            ENV_TEMPERATURE: 25 ]));
+
+  SetProp(P_INT_SHORT, "Tief in einem Berg");
+  SetProp(P_INT_LONG, "Hier im Fels sieht es irgendwie ueberall "
+    "gleich aus. Dunkler, stellenweise von Russ geschwaerzter "
+    "Fels ueber Dir, neben Dir - ja sogar unter Dir. Die Luft "
+    "riecht und schmeckt irgendwie abgestanden. Es ist ekelhaft "
+    "warm und gelegentlich streifen Dich irgendwelche Dinge. Der "
+    "felsige Untergrund laedt nicht gerade ein ein Nickerchen zu "
+    "machen und irgemdwie fuehlst Du Dich beobachtet. Es scheint, als "
+    "haette der Berg hier Augen und Ohren. @@doorstate@@");
+
+  AddDetail( ({ "russ" }),
+    "Der Russ an den Waenden und der Decke stammt wohl von Fackeln "
+    "und Lampen.");
+  AddDetail( ({ "fels" }),
+    "Der Fels rundum Dich ist scharfkantig und kalt. Von gemuetlich weit weg.");
+  AddDetail( ({ "luft" }),
+    "Riecht ekelerregend.");
+  AddDetail( ({ "dinge" }),
+    "Du moechtest garnicht wissen welcke ekligen Dinge sich hier "
+    "herumtreiben.");
+  AddDetail( ({ "untergrund", "boden" }),
+    "Der Boden hier besteht wie alles aus Fels. Hie und da liegt "
+    "etwas Staub herum.");
+  AddDetail( ({ "staub" }),
+    "Du kannst nichts daran erkennen was Dich interessieren wuerde.");
+  AddDetail( ({ "berg" }),
+    "Du befindest Dich hier tief im Berg. Alles was Dich umgibt ist "
+    "Teil von ihm.");
+  AddDetail( ({ "augen" }),
+    "Du fuehlst Dich beobachtet.");
+  AddDetail( ({ "ohren" }),
+    "Du fuehlst Dich belauscht.");
+  AddDetail( ({ "decke" }),
+    "Die Decke besteht voellig aus Fels. Sie wirkt etwas geschwaerzt. "
+    "Manche Stellen sehen aus als wuerde sich jeden Moment ein "
+    "Felsbrocken loesen.");
+  AddDetail( ({ "felsbrocken", "brocken" }),
+    "Teile des Gesteins.");
+  AddDetail( ({ "gestein", "gesteins" }),
+    "Der Fels, der Dich umgibt.");
+  AddDetail( ({ "stellen" }),
+    "Als wuerde sich gleich ein Felsbrocken loesen.");
+  AddDetail( ({ "waende", "wand" }),
+    "Die Waende bestehen aus Fels und sind stellenweise extrem "
+    "scharfkantig. Manchmal sind sogar Blutflecken zu sehen deren "
+    "Ursprung Du garnicht ergruenden moechtest.");
+  AddDetail( ({ "blutflecken", "flecken" }),
+    "Die Flecken sind eingetrocknet und schon beinahe schwarz.");
+  AddDetail( ({"ursprung"}),
+    "Den moechtest Du garnicht ergruenden.");
+
+
+  AddCmd(({ "oeffne", "oeffen" }), "open_fkt");
+  AddCmd(({ "schliesse", "schliess" }), "close_fkt");
+  //AddCmd(({ "sperre", "sperr" }),
+  //  "unlock_fkt");
+
+  AddExit("osten", CAVEPATH+"/room/connect03");
+
+  AddItem(APATH+"npc/caveguard", REFRESH_DESTRUCT);
+  AddItem(APATH+"npc/caveguard", REFRESH_DESTRUCT);
+}
+
+
+int DoorOpen()
+{
+  return door_open;
+}
+
+int DoorUnlocked()
+{
+  return door_unlocked;
+}
+
+
+int UnlockDoor()
+{
+  return door_unlocked = 1;
+}
+
+int unlock_fkt(string str)
+{
+  notify_fail("Was moechtest Du aufsperren?\n");
+  if (!str || (str != "tuer auf" && str != "tuere auf")) return 0;
+
+  notify_fail("Die Tuere ist doch schon offen!\n");
+  if (DoorUnlocked()) return 0;
+
+  if (!deep_present("\narkenskey", TP))
+    {
+      tell_object(TP, BS("Du hast keinen passenden Schluessel dabei!"));
+      if (!IS_LORD(TP)) return 0;
+      tell_room(ENV(TP), BS("Magische Kraefte sprengen das Tuerschloss."));
+    }
+
+  tell_room(ENV(TP), BS(TP->Name(WER) + " sperrt die Tuer auf."), ({TP}));
+  tell_object(TP, BS("Du sperrst die Tuer auf."));
+
+  notify_fail("Die Tuer laesst sich nicht aufsperren.");
+  if (ENV(TP) == ME)
+    {
+      if (!"/d/gebirge/iwo/arwenock/cave/room/connect01"->UnlockDoorOtherside()) return 0;
+    }
+  else tell_room(ME, BS("Die Tuer wird von der anderen Seite aufgesperrt."));
+
+  return UnlockDoor();  
+
+}
+
+
+string doorstate()
+{
+  if (DoorOpen())
+    return "Eine offne schwere Holztuer.";
+  return "Eine geschlossene schwere Holztuer.";
+}
+
+int UnlockDoorOtherside()
+{
+  if (!unlock_fkt("tuer auf")) return 0;
+}
+
+
+int OpenDoorOtherside()
+{
+  if (present("\ncaveguard", ME)) return 0;
+  tell_room(ME, BS("Die Tuer wird von der anderen Seite geoeffnet."));
+  door_open = 1;
+  AddExit("westen", CAVEPATH+"/room/connect01");
+  return 1;
+}
+
+
+int OpenDoor()
+{
+  notify_fail("Die schwere Holztuer ist doch schon offen!\n");
+  if (DoorOpen()) return 1; 
+
+  //notify_fail("Die schwere Holztuer ist verschlossen.\n");
+
+  //if (!DoorUnlocked()) return 0;
+
+  notify_fail("Die schere Holztuer laesst sich nicht oeffnen.\n");
+  if (!"/d/gebirge/iwo/arwenock/cave/room/connect01"->OpenDoorOtherside()) return 0;
+
+  tell_object(TP, BS("Du oeffnest die schwere Holztuer."));
+
+  tell_room(TP, BS(TP->Name(WER) + " oeffnet die schwere Holztuer."),
+    ({ TP }));
+
+  door_open = 1;
+  AddExit("westen", CAVEPATH+"/room/connect01");
+
+  return 1;
+}
+
+
+int close_fkt(string str)
+{
+  notify_fail("Was moechtest Du schliessen?\n");
+  if (!str || (str != "tuer" && str != "tuere")) return 0;
+
+  notify_fail("Die Tuere ist doch schon geschlossen!\n");
+  if (!door_open) return 0;
+
+  if (ENV(TP) == ME)
+    {
+      notify_fail("Die Tuer laesst sich nicht schliessen!\n");
+      if (!"/d/gebirge/iwo/arwenock/cave/room/connect01"->CloseDoorOtherside()) return 0;
+    }
+  else 
+    {
+      tell_room(ME, BS("Die Tuer wird von der anderen Seite geschlossen."));
+      //tell_room(ENV(TP), BS("Die Tuer faellt ins Schloss."));
+    }
+
+  tell_room(ENV(TP), BS(TP->Name(WER) + " schliesst die Tuer."), ({ TP }));
+  tell_object(TP, BS("Du schliesst die Tuer."));
+
+  //tell_room(ME, BS("Die Tuer faellt ins Schloss."));
+
+  door_open = 0;
+
+  return 1;
+}
+
+int ArkensOpenDoor()
+{
+  if (!PO->id("\narkens")) return 0;
+
+  if (DoorOpen()) return 1; 
+
+  return OpenDoor();
+
+}
+
+
+int open_fkt(string str)
+{
+  notify_fail("Was moechtest Du oeffnen?\n");
+  if (!str || (str != "tuer" && str != "holztuer"
+        && str != "tuere" && str != "holztuere")) return 0;
+
+  return OpenDoor();
+}
+
+
+void init()
+{
+  if (door_open) AddExit("westen", CAVEPATH+"/room/connect01");
+  else RemoveExit("westen");
+
+  if (TP->id("\narkens"))
+    if (!present("\ncaveguard", ME))
+      AMASTER->NotifyCaveOpen();
+
+  ::init();
+}
+
+void reset()
+{
+  if (AMASTER->EventActive()) return;
+  ::reset();
+}   
+
+
+
+/*
+varargs int remove(int silent)
+{
+  return ::remove(int silent);
+}
+*/

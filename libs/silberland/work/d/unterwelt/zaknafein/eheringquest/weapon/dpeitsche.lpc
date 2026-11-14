@@ -1,0 +1,256 @@
+//=========================================================================
+//
+// File:    dpeitsche.c
+// Created by Zaknafein@SL
+//
+// Project: Eheringquest
+//
+//  Die Totenpeitsche (hat Xatana dabei)
+//
+//  hilft im Kampf gegen 'gute' Gegner  -  ist u.a. fuer Nekros gedacht
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit "std/weapon";
+
+void in_liste(object enemy , string enemyname);
+string *opfer;
+string lauschen_func();
+int hurt=0;
+int healwielder=1;
+int energy=300;
+
+void create()
+{
+  if(!is_clone(this_object())) return;
+
+  ::create();
+
+  opfer = ({ });
+
+  SetProp(P_SHORT, "Totenpeitsche");
+  SetProp(P_LONG,
+    "Diese handliche Peitsche stellt offenbar eine gefaehrliche Waffe dar. "
+    "Sie besteht aus schwarzem Leder und rasiermesserscharfen Metall"
+    "splittern, die an der Spitze befestigt sind. Der Griff scheint mit "
+    "Elfenhaut umwickelt worden zu sein! Kleine Totenkoepfe baumeln am "
+    "Griff."
+  );
+
+  SetProp(P_NAME, "Totenpeitsche");
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({ "totenpeitsche" , "peitsche" }) );
+  SetProp (P_MATERIAL, ([MAT_LEATHER:70,MAT_IRON:10,MAT_SKIN:10, MAT_BONE:10]) );
+  SetProp(P_VALUE, 12000);
+  SetProp(P_WEIGHT, 2250);
+  SetProp(P_WEAPON_TYPE, WT_WHIP);
+  SetProp(P_DAM_TYPE, DT_WHIP);
+  SetProp(P_WC, 200);
+  SetProp(P_NR_HANDS, 1);
+  SetProp(P_WC_BONUS, (["\nzakxatana":300]) );
+
+  SetProp(P_INFO, BS("Diese Peitsche unterstuetzt auf magische Art "
+                     "besonders den Kampf gegen das Gute! Du spuerst "
+                     "deutlich, wie von ihr eine Aura des Boesen ausgeht! "
+                     "Sei vorsichtig! Es geht auch eine Bedrohung von ihr "
+                     "aus! Es wird sich lohnen, sie genau zu untersuchen!"));
+
+  SetProp(P_SENSITIVE, ({
+            ({ SENSITIVE_ATTACK, DT_HOLY,  80 }),
+            ({ SENSITIVE_ATTACK, DT_UNHOLY, 80 })
+            }) );
+
+  SetProp(P_HIT_FUNC, TO);
+  SetProp(P_WIELD_FUNC, TO);
+  SetProp(P_UNWIELD_FUNC, TO);
+  SetProp(P_KILL_NAME, "Die Macht des Boesen");
+  SetProp(P_WC_FIX, 30);
+  SetProp(P_WIELD_RESTRICTIONS, ([
+                                 A_DEX : 24,
+                                 A_STR : 22,
+                                 A_INT : 20,
+                                 P_LEVEL : 38,
+                                 P_XP : 10000000,
+                                 P_FROG : 1,
+//                                 SR_SEER : 1       Variable SR_SEER not declared !  ???
+                                 ]) );
+  AddDetail( ({"leder"})  ,
+    "Es handelt sich um schwarzes und aeusserst strapazierfaehiges Leder."
+   );
+
+  AddDetail( ({ "spitze" , "metallsplitter" , "splitter" }) ,
+    "Die Metallsplitter koennen deinem Gegner schwere Wunden zufuegen."
+  );
+
+  AddDetail( ({ "griff" , "haut" , "elfenhaut"}) ,
+    "Der Griff besteht tatsaechlich zum Teil aus Elfenhaut! Er ist so "
+    "geformt, dass die Peitsche extrem gut in der Hand liegt."
+  );
+
+  AddDetail( ({ "koepfe" , "totenkoepfe" }) ,
+    "Kann das sein? Die Totenkoepfe wirken irgendwie lebendig! Einer "
+    "scheint Dich sogar anzugrinsen!"
+  );
+
+  AddDetail( ({ "kopf" , "totenkopf" }) ,
+    "Der kleine Totenkopf fluestert Dir etwas zu. Lausche mal an der "
+    "Peitsche!"
+  );
+
+  SetProp(P_SMELL, "Ein leichter Verwesungsgeruch entstroemt der Peitsche. "
+                   "Er stammt wohl von Hautresten, aus denen der Griff "
+                   "besteht!");
+
+  SetProp(P_SOUND, #'lauschen_func );
+}
+
+varargs void trigger_sensitive_attack(object enemy, string key,
+                                      int dam, mixed spell)
+{
+  int healvar;
+
+  if((TO->QueryProp(P_WIELDED)!=0) && (random(5)==1))
+  {
+    if(key == DT_HOLY)
+    {
+      healvar=random(dam/10);
+      if(energy>0)
+      {
+        QueryProp(P_WIELDED)->heal_self(healvar);
+        tell_object(QueryProp(P_WIELDED), "Die Peitsche leuchtet rot auf und gibt dir Lebenskraft!\n");
+        energy=energy-healvar;
+      }
+    }
+    if(key == DT_UNHOLY)
+    {
+      QueryProp(P_WIELDED)->do_damage(random(50), TO);
+      tell_object(QueryProp(P_WIELDED), "Blitze zucken aus der Peitsche und verletzen dich stark!\n");
+    }
+  }
+}
+
+int HitFunc(object enemy)
+{
+  string enemyname;
+  enemyname=enemy->name(WER, 0);
+
+  if(enemy->QueryProp(P_ALIGN) > 600)
+  {
+    if(random(5) == 0)
+    {
+      tell_object(QueryProp(P_WIELDED), "Die Macht der Peitsche wendet sich gegen deinen Feind!\n");
+      return 20+random(60);                         // Schaden wird erhoeht!
+    }
+  }
+
+  call_out("in_liste", 1, enemy, enemyname);
+
+  return 0;                                               // Schaden wird nicht erhoeht!
+}
+
+int WieldFunc(object waffe)
+{
+  if (this_player()->QueryProp(P_ALIGN) > 300 )
+  {
+    tell_object(environment(TO), BS("Das Boese in der Peitsche wendet sich gegen dich! "
+                                    "Die kleinen Totenkoepfe beissen dir in den Hals und in den Bauch!\n"));
+    set_heart_beat(1);
+    hurt=1;
+  }
+
+  return 1;
+}
+
+int UnwieldFunc(object waffe)
+{
+  if(hurt == 1)
+  {
+    set_heart_beat(0);
+    tell_object(QueryProp(P_WIELDED), "Panikartig steckst du die Waffe zurueck. Dir geht es gleich viel "
+                                      +"besser!\n");
+    hurt=0;
+  }
+
+  return 1;
+}
+
+heart_beat()
+{
+  if(TO->QueryProp(P_WIELDED) != 0)
+  {
+    QueryProp(P_WIELDED)->do_damage(random(10), TO);
+  }
+  else
+  {
+    set_heart_beat(0);
+  }
+}
+
+void reset()
+{
+ ::reset();
+
+  if(TO->QueryProp(P_WIELDED)!=0)
+  {
+    if(random(49)==1)
+    {
+       tell_object(QueryProp(P_WIELDED), "Du verlierst die Kontrolle ueber das Boese in der Peitsche!\n");
+       set_heart_beat(1);
+       hurt = 1;
+    }
+
+    tell_object(QueryProp(P_WIELDED), BKS("Ein kleiner Totenkopf am Griff deiner Totenpeitsche beisst dir "
+                                         +"in den Unterarm und saugt dir etwas Blut aus. Die Peitsche "
+                                         +"strahlt daraufhin kurz roetlich auf. Sie hat wieder Energie!\n"));
+
+    QueryProp(P_WIELDED)->do_damage(10+random(10), TO);
+
+    if(random(2)==1) healwielder = 1;
+   }
+
+  energy = 300;
+}
+
+void in_liste(object enemy , string enemyname)
+{
+  if(!objectp(enemy))                           //  Gegner wurde gekillt! Merken!
+  {
+     if(member(opfer, enemyname ) == -1)
+     opfer += ({ enemyname });
+  }
+}
+
+string lauschen_func()
+{
+  string liste;
+  int i;
+
+  if(find_player(MAGIERNAME)) tell_object(find_player(MAGIERNAME),
+  break_string("------>  "+capitalize(TP->query_real_name())+" lauscht an der Totenpeitsche!", 78));
+
+  write("Einer der Totenkoepfe fluestert dir zu:\n");
+  if(sizeof(opfer)==0)
+  {
+    return "Ziehe ins Land und rotte das Gute aus! Lausche dann wieder an mir!\n";
+  }
+
+  liste="Du hast bereits ";
+
+  for(i=sizeof(opfer)-1; i>=0; i--)
+   {
+       liste = liste+opfer[i]+", ";
+   }
+   write(BS(liste[0..<3]+" mit dieser Peitsche getoetet oder warst daran massgeblich beteiligt! Sehr gut!"));
+
+  if((sizeof(opfer)>50) && (TO->QueryProp(P_WIELDED)!=0) && (healwielder==1))
+  {
+    write(BKS("Dafuer werde ich dich nun belohnen..."));
+     QueryProp(P_WIELDED)->heal_self(20+random(80));
+     healwielder=0;
+  }
+
+  return "";
+}
+

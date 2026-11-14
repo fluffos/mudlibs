@@ -1,0 +1,585 @@
+/*
+ Status functions for Group master
+ Iwo@SL
+*/
+ 
+
+// Someone is allowed to group?
+private nosave int HasGroupAbility(object pl)
+{
+  if (member(group_enabled, getuid(pl))==-1
+       && !pl->QueryProp(P_TESTPLAYER)
+       && !IS_WIZARD(pl))
+    return 0;
+  return 1;
+}
+
+
+
+private nosave int ListGroups(object pl)
+{
+  string fullstring;
+  string *hgroups;
+  int i;
+  int master;
+
+  if (sizeof(groups) < 1)
+    {
+      TellP(pl, "Keine aktiven Gruppen.");
+      return 1;
+    }
+   
+  master = IS_ARCH(this_player()) || getuid(this_player()) == "iwo";
+  hgroups = m_indices(groups);
+ 
+  if (master)
+  {
+    TellP(pl, "+-----------------+---------+-------------+-------------------------------");
+    TellP(pl, "| Gruppe          | Groesse | Leader      |  Members");
+    TellP(pl, "+-----------------+---------+-------------+-------------------------------");
+  }
+  else
+  {
+    TellP(pl, "+-----------------+---------+-------------+");
+    TellP(pl, "| Gruppe          | Groesse | Leader      |");
+    TellP(pl, "+-----------------+---------+-------------+");
+  }
+
+  for (i=0;i<sizeof(hgroups);i++)
+    {
+      if (IsPublic(hgroups[i])) fullstring = "|*";
+      else fullstring = "| ";
+      fullstring += hgroups[i] + strmul(" ", 15 - strlen(hgroups[i]))
+                 + " | ";
+		 
+      fullstring += strmul (" ", 7 - strlen(to_string(sizeof(groups[hgroups[i], 1])))) 
+		 + to_string(sizeof(groups[hgroups[i], 1]))
+		 + " | ";
+      fullstring += capitalize(groups[hgroups[i], 0]) + strmul(" ", 11 - strlen(groups[hgroups[i], 0]))		 
+                 + " | ";
+      if (master)
+        tell_object(pl, break_string(implode(m_indices(groups[hgroups[i],1]), ", "),
+              pl->QueryProp(P_SCREENWIDTH), fullstring, BS_INDENT_ONCE));
+      else
+        TellP(pl, fullstring);
+      if (master)
+        TellP(pl, "+-----------------+---------+-------------+-------------------------------");
+      else
+        TellP(pl, "+-----------------+---------+-------------+");
+      
+    }
+    
+  return 1;
+    
+}
+
+
+
+
+
+// Group exists?
+int IsGroup(string grp)
+{
+  if (member(groups, grp)) return 1;
+  return 0; 
+}
+
+
+// Player is member of group?
+int IsMember(string grp, string pl)
+{
+  if (!IsGroup(grp)) return 0;
+  if (member(groups[grp, 1], pl)) return 1;
+  return 0;
+}
+
+// group is public accessible?
+int IsPublic(string grp)
+{
+  if (!IsGroup(grp)) return 0;
+  if (groups[grp, 2]==1) return 1;
+  return 0;
+}
+
+// pl is leader of grp?
+int IsLeader(string grp, string pl)
+{
+  if (!IsGroup(grp)) return 0;
+  if (!IsMember(grp, pl)) return 0;
+  
+  if (groups[grp, 0] == pl) return 1;
+  
+  return 0;
+}
+
+// Whois leader of a group?
+string QueryLeader(string grp)
+{
+  if (!IsGroup(grp)) return 0;
+  
+  return groups[grp, 0];
+}
+
+
+int NumMembers(string grp)
+{
+  if (!IsGroup(grp)) return 0;
+  return sizeof(groups[grp, 1]);
+}
+
+
+int IsInGroup(object pl)
+{
+  string s_pl;
+  
+  s_pl = getuid(pl);
+  
+  if (!member(affiliations, s_pl))
+      return 0;
+  return 1;
+}
+
+
+string GroupAffiliation (object pl)
+{
+  string s_pl;
+  
+  s_pl = getuid(pl);
+  
+  if (!member(affiliations, s_pl))
+      return 0;
+
+  return affiliations[s_pl, 0];
+}
+
+
+string *GroupMembers (string grp)
+{
+  if (!IsGroup(grp)) return 0;
+  return m_indices(groups[grp, 1]);
+}
+
+
+int GroupAvgLvl (string grp)
+{
+  string *members;
+  object ob;
+  int i;
+  int lvl;
+
+  if (!IsGroup(grp)) return 0;
+
+  if (!members = GroupMembers(grp)) return 0;
+
+  for (i=0;i<sizeof(members);i++)
+    {
+      if (!ob = find_player(members[i])) continue;
+      lvl += ob->QueryProp(P_LEVEL);
+    }
+
+  return lvl / sizeof(members);
+  
+}
+
+// Show member positions
+int LocateMembers(object pl)
+{
+  string *members;
+  string fullstring;
+  string grp, s_pl;
+  string leader;
+  object hpl;
+  int i;
+
+  fullstring = "";
+  
+  s_pl = getuid(pl);
+  
+  if (!member(affiliations, s_pl))
+    {
+      TellP(pl, "Du bist doch gar kein Gruppenmitglied.");
+      return 1;
+    }
+      
+  grp = affiliations[s_pl, 0];
+  
+  leader = QueryLeader(grp);
+
+  members = m_indices(groups[grp, 1]);  
+
+  for (i=0;i<sizeof(members);i++)
+    {
+      if (members[i] != s_pl)
+        {
+	  if (members[i] == leader)
+	    fullstring = sprintf("*%s",CAP(members[i]));
+	  else
+	    fullstring = sprintf(" %s",CAP(members[i]));
+          fullstring += strmul(" ", 11 - strlen(members[i])) + " - ";
+          if (hpl = find_player(members[i]))
+	    {
+	      if (ENV(hpl))
+	        {
+		  fullstring += ENV(hpl)->QueryProp(P_INT_SHORT);
+		}
+	      else fullstring += "Irgendwo";
+	      TellP(pl, fullstring);
+	    }
+	}
+    }
+}
+
+
+
+
+// Return a set of Arrays containing members, hp, sp, XP inc, weapon
+mixed GroupStatus(object pl, string grp)
+{
+  string *members, s_pl;
+  mapping m_members;
+  object ob_pl;
+  string str;
+  int i;
+
+  m_members = ([]);
+  s_pl = getuid(pl);
+
+
+  if (!IS_WIZARD(pl) || !grp || grp == "")
+    {
+      if (!member(affiliations, s_pl))
+        {
+          TellP(pl, "Du bist doch gar kein Gruppenmitglied.");
+          return 1;
+        }
+
+      grp = affiliations[s_pl, 0];
+
+    }
+
+    // Just failsafe
+    if (!IsGroup(grp))
+      {
+        TellP(pl, "Keine solche Gruppe.");
+	return 1;
+      }
+
+  
+  members = m_indices(groups[grp, 1]);
+
+  for (i = 0; i<sizeof(members); i++)
+    {
+      if (!ob_pl = find_player(members[i]))
+        {
+	  groups[grp,1] = m_delete(groups[grp,1],members[i]);
+	  continue;
+	}
+      m_members += ([ members[i]:  ob_pl->QueryProp(P_HP); ob_pl->QueryProp(P_MAX_HP); ob_pl->QueryProp(P_SP); ob_pl->QueryProp(P_MAX_SP); ob_pl->QueryProp(P_XP) - groups[grp, 1][getuid(ob_pl), 1]; ob_pl->QueryProp(P_WEAPON), ]);
+    }
+
+  PrintGroupStatus(pl, grp, m_members);
+
+  return 1;
+}
+
+
+// Print a groups status
+int PrintGroupStatus(object pl, string grp, mapping stati)
+{
+  string name, hp, sp, xp, weapon;
+  string *members, fullstring, helper, col_pre, col_suf;
+  string leader, g_attack_command, pl_attack_command;
+  string hstr_weap;
+  object hpl, gobj;
+  int i;
+  int color, hint, hint2;
+
+  // mapping stati:
+  // name: lp; max lp; sp ; max sp; xp; weapon,
+ 
+  
+  // Ok, now format the mapping and print it out
+  // Col 1: 15, 2: 9, 3: 9, 4: 10, 5: 25
+
+  members = m_indices(stati);
+
+  leader = QueryLeader(grp);
+
+  g_attack_command = groups[grp, 3];
+
+  gobj = present("\ngobj", pl);
+
+  color = gobj->QueryProp(P_GROUPREPORT_COLOR);
+
+  TellPnb(pl, "+----------------------------------------------------------------------------+");
+  fullstring = sprintf("| Status der Gruppe: %s%s|", grp, strmul(" ", 56 - strlen(grp)));
+  TellPnb(pl, fullstring);
+  TellPnb(pl, "+------------+---+---------+---------+----------+------------------------+---+");
+  TellPnb(pl, "| Mitglied   |K  |Ausdauer | Magie   |EP Zuwachs| Waffe                  |PEF|");
+  TellPnb(pl, "+------------+---+---------+---------+----------+------------------------+---+");
+
+  for (i = 0; i <sizeof(members); i++)
+    {
+      // Membername (leader gets an *)
+      if (members[i]==leader)
+        fullstring = sprintf("|*%s", CAP(members[i]));
+      else
+        fullstring = sprintf("| %s", CAP(members[i]));
+      
+      fullstring += strmul(" ", 11 - strlen(members[i])) + "|";
+
+      // Group Attack Command
+      pl_attack_command = groups[grp, 1][members[i], 4];
+      if (!pl_attack_command || pl_attack_command=="")
+        fullstring += "-";
+      else if (pl_attack_command == "-")
+        fullstring += "X";
+      else
+        {
+          if (color)
+            {
+              if (pl_attack_command == g_attack_command)
+                col_pre = ANSI_GREEN;
+              else col_pre = ANSI_PURPLE;
+              col_suf = ANSI_NORMAL;
+            }
+          else { col_pre = ""; col_suf = ""; }
+          if (pl_attack_command == g_attack_command)
+            fullstring += col_pre + "G" + col_suf;
+          else fullstring+= col_pre + "A" + col_suf;
+        }
+
+      // ZWEI FREIE FLAGS
+      fullstring += "--|";
+
+      hint2 = (stati[members[i], 0]*100)/stati[members[i],1];
+      // This for color report
+      if (color)
+        {
+	   switch(hint2)
+	    {
+	      case 25 .. 49 :
+	        col_pre = gobj->QueryProp(P_GROUPREPORT_COLSET)[2];
+	        break;
+	      case 50 .. 74 :
+	        col_pre = gobj->QueryProp(P_GROUPREPORT_COLSET)[1];
+	        break;
+	      case 75 .. 100 :
+	        col_pre = gobj->QueryProp(P_GROUPREPORT_COLSET)[0];
+	        break;
+	      default:
+	        col_pre = gobj->QueryProp(P_GROUPREPORT_COLSET)[3];
+		break;
+            }
+	  col_suf = ANSI_NORMAL;
+	}
+      else { col_pre = ""; col_suf = ""; }
+
+      // Asudauer
+      if ((groups[grp, 1][members[i],2] == 1 && 
+            !present("\nblutrausch", find_player(lower_case(members[i])))) || IS_WIZARD(pl))
+        fullstring += col_pre
+                    + strmul(" ", 4 - strlen(to_string(stati[members[i], 0]))) 
+                    + to_string(stati[members[i], 0])
+		    + "/"
+		    + to_string(stati[members[i], 1])
+		    + strmul(" ", 4 - strlen(to_string(stati[members[i], 1])))
+                    + col_suf
+		    + "|";
+      else
+        {
+	  hint = (stati[members[i], 0]*900)/(stati[members[i],1]*100);
+          fullstring += col_pre 
+	             + strmul("#", hint)
+                     + strmul(" ", 9 - hint)
+		     + col_suf 
+	             + "|";
+	}
+      // Magie	     
+      hint2 = (stati[members[i], 2]*100)/stati[members[i],3];
+      // This for color report
+      if (color)
+        {
+	   switch(hint2)
+	    {
+	      case 25 .. 49 :
+	        col_pre = gobj->QueryProp(P_GROUPREPORT_COLSET)[2];
+	        break;
+	      case 50 .. 74 :
+	        col_pre = gobj->QueryProp(P_GROUPREPORT_COLSET)[1];
+	        break;
+	      case 75 .. 100 :
+	        col_pre = gobj->QueryProp(P_GROUPREPORT_COLSET)[0];
+	        break;
+	      default:
+	        col_pre = gobj->QueryProp(P_GROUPREPORT_COLSET)[3];
+		break;
+            }
+	  col_suf = ANSI_NORMAL;
+	}
+      else { col_pre = ""; col_suf = ""; }
+      if (groups[grp, 1][members[i],2] == 1 || IS_WIZARD(pl))
+      fullstring += col_pre
+                    + strmul(" ", 4 - strlen(to_string(stati[members[i], 2]))) 
+                    + to_string(stati[members[i], 2])
+		    + "/"
+		    + to_string(stati[members[i], 3])
+		    + strmul(" ", 4 - strlen(to_string(stati[members[i], 3])))
+		    + col_suf
+		    + "|";
+      else
+        {
+	  hint = (stati[members[i], 2]*900)/(stati[members[i],3]*100);
+          fullstring += col_pre
+	             + strmul("#", hint)
+                     + strmul(" ", 9 - hint)
+		     + col_suf 
+	             + "|";
+	}
+
+      // EP Zuwachs
+      if (groups[grp, 1][members[i],2] == 1 || IS_WIZARD(pl))
+      fullstring += strmul(" ", 10 - strlen(to_string(stati[members[i], 4])))
+                    + to_string(stati[members[i], 4])
+		    + "|";
+      else
+        {
+	  fullstring += "         ?|";
+	}
+		    
+      // Waffe
+      if (groups[grp, 1][members[i],2] == 1 || IS_WIZARD(pl))
+        if (stati[members[i], 5] != 0)
+          {
+          // Old style naming may use an array as P_NAME
+	  if (pointerp(stati[members[i], 5]->QueryProp(P_NAME)))
+	    helper = stati[members[i], 5]->QueryProp(P_NAME)[0][0..22];
+	  else
+            helper = stati[members[i], 5]->QueryProp(P_NAME)[0..22];
+
+          fullstring += " " + capitalize(helper)
+  	              + strmul(" ", 23 - strlen(helper))
+		      + "|";      
+          }
+        else fullstring += " Keine                  |";
+      else fullstring += " Unbekannt              |";
+
+      hpl = find_player(members[i]);
+      
+      // Paralyzed
+      if (hpl->QueryProp(P_PARALYZED)) fullstring += "P";
+      else fullstring += "-";
+      // Exhausted
+      if (hpl->QueryProp(P_MV)*100/hpl->QueryProp(P_MAX_MV)<10) fullstring += "E";
+      else fullstring += "-";
+      // Frog
+      if (hpl->QueryProp(P_FROG)) fullstring += "F";
+      else fullstring += "-";
+    
+      fullstring += "|";
+
+
+      TellPnb(pl, fullstring);      
+      if (i == sizeof(members)-1)
+        TellPnb(pl, "+------------+---+---------+---------+----------+------------------------+---+");
+      
+    }
+  
+  return 1;
+}
+
+
+// This sends group report
+void NotifyHpChange(string grp, object pl)
+{
+  int hp, maxhp, mp, maxmp, color, last, diff, hint, i;
+  object gobj, ob_member;
+  string fullstring, col_pre, col_suf, col_bold, s_pl, *members;
+
+  if (!objectp(pl)) return;
+
+  if (!IsGroup(grp)) return;
+
+  s_pl = getuid(pl);
+  
+  gobj = present("\ngobj", pl);
+  
+  if (!gobj || !gobj->QueryProp(P_GROUPREPORT)) return;
+  
+  hp = pl->QueryProp(P_HP);
+  maxhp = pl->QueryProp(P_MAX_HP);
+  last = affiliations[s_pl, 1];
+  diff = hp - last;
+  
+  if (diff < 0) diff = diff * -1;
+  
+  if (diff < maxhp/4) return;
+
+  affiliations[s_pl, 1] = hp;
+
+  mp = pl->QueryProp(P_SP);
+  maxmp = pl->QueryProp(P_MAX_SP);
+
+  members = m_indices(groups[grp, 1]);
+
+  for (i=0; i < sizeof(members); i++)
+    {
+      if (members[i] == s_pl || !ob_member=find_player(members[i])) continue;
+
+      gobj = present("\ngobj", ob_member);
+  
+      if (!gobj->QueryProp(P_GROUPREPORT)) return;
+
+
+      if (gobj->QueryProp(P_GROUPREPORT_COLOR))
+        {
+          hint = hp*100/maxhp;
+          switch(hint)
+            {
+	      case 25 .. 49 :
+	        col_pre = gobj->QueryProp(P_GROUPREPORT_COLSET)[2];
+	        break;
+	      case 50 .. 74 :
+	        col_pre = gobj->QueryProp(P_GROUPREPORT_COLSET)[1];
+   	        break;
+	      case 75 .. 100 :
+                col_pre = gobj->QueryProp(P_GROUPREPORT_COLSET)[0];
+	        break;
+	      default:
+	        col_pre = gobj->QueryProp(P_GROUPREPORT_COLSET)[3];
+                break;
+            }
+          col_suf = ANSI_NORMAL;
+	  col_bold = ANSI_BOLD;
+        }
+      else { col_pre = ""; col_suf = ""; col_bold = ""; }
+      
+      fullstring = col_pre;
+      fullstring += "-----[ "
+                  + col_bold
+		  + CAP(s_pl)
+		  + strmul(" ", 11 - strlen(s_pl))
+		  + col_suf + col_pre
+		  + "]-------"
+		  + "[ LPs:"
+		  + col_bold
+		  + strmul(" ", 4 - strlen(to_string(hp)))
+		  + to_string(hp) + "/"
+		  + to_string(maxhp)
+		  + strmul(" ", 4 - strlen(to_string(maxhp)))
+		  + col_suf + col_pre
+		  + "]-----"
+		  + "[ MPs:"
+		  + col_bold
+		  + strmul(" ", 4 - strlen(to_string(mp)))
+		  + to_string(mp) + "/"
+		  + to_string(maxmp)
+		  + strmul(" ", 4 - strlen(to_string(maxmp)))
+		  + col_suf + col_pre
+		  + "]---------------"
+		  + col_suf;
+      TellPnb(ob_member, fullstring);
+    }
+
+  return;
+}

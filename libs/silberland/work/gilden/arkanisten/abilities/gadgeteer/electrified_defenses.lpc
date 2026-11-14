@@ -1,0 +1,54 @@
+#include "../../arkanisten.h"
+
+inherit GUILD_FOLDER "abilities/ability.lpc";
+
+public void create() {
+    if(is_clone(TO)) return;
+
+    ::create();
+    SetProp(P_ABILITY_NAME, CAP(ELECTRIFIED_DEFENSES));
+    SetProp(P_ABILITY_DESCRIPTIPON, 
+       "Deine Uhrwerkruestung ist mit deinem Kettenblitzprojektor verbunden. "
+       "Wenn du von einem Nahkampfangriff getroffen wirst, entlaedt sich ein "
+       "starker Stromstoss, der den Angreifer schockt und Schaden zufuegt. "
+       "Die Chance, dass der Angreifer geschockt wird, steigt mit deiner Faehigkeit.");    
+    SetProp(P_ABILITY_TYPE, ABILITY_TYPE_PASSIVE);
+    SetProp(P_ABILITY_BASE_ATTRIBUTE, A_DEX);
+    SetProp(P_ABILITY_GROUP, ({ABILITY_GROUP_GADGET_POWERUP, ABILITY_GROUP_GADGETS}));
+    SetProp(P_ABILITY_REQUIRES, ({CLOCKWORK_ARMOUR, CHAIN_LIGHTING_PROJECTOR}));
+    SetProp(P_ABILITY_MIN_GUILD_LEVEL, 11);
+    
+    subscribe_to(CLOCKWORK_ARMOUR, EVENT_AFTER_USE);
+}
+
+public void activate_for(object user) {
+    tell_object(user, BS("Ueber einen duennen Draht verbindest du deine Uhrwerkruestung mit dem Blitzstab."));
+}
+
+
+public void handle_ability_event(string sender_name, int event, mixed payload) {
+    object gloves;
+    object user, enemy;
+    mapping sinfo;
+    int success;
+
+    if(sender_name != CLOCKWORK_ARMOUR) return;
+    if(event != EVENT_AFTER_USE) return;
+    if(!mappingp(sinfo=payload["sinfo"])) return;
+    if(!objectp(user = payload["user"])) return;
+    if(!objectp(gloves = present(CLOCKWORK_ARMOUR_ID, user))) return;
+    /*if(!objectp(enemy = sinfo[SI_ENEMY])) return;
+    if(enemy->QueryProp(P_WATCHER_INFERNO_UNTIL) > time()) return;*/
+
+    success = use(user, ([SI_ABILITY_SILENT: 1]), 1);
+    pDebug(payload["user"], sprintf("electrified_defenses :: success=%d abil=%d\n", success, sinfo[SI_SKILLABILITY]));
+
+    if(random(100) < success/1000 + sinfo[SI_SKILLABILITY]/1000) {
+        tell_object(user, BS("Ein heftiger Stromstoss entlaedt sich ueber deine Uhrwerkruestung und trifft deinen Angreifer!"));
+        tell_room(environment(user), BS("Ein heftiger Stromstoss entlaedt sich ueber die Uhrwerkruestung von " + user->Name(WESSEN) + " und trifft den Angreifer!"), ({ user }));
+        enemy = user->PresentEnemies()[random(sizeof(user->PresentEnemies()))];
+        enemy->Defend(150 + success/100 + sinfo[SI_SKILLABILITY]/50, DT_ELECTRIC, ([SP_SHOW_DAMAGE:1, SP_NAME: ELECTRIFIED_DEFENSES]), user);
+    }
+   
+    return;
+}

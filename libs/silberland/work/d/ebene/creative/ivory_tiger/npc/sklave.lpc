@@ -1,0 +1,144 @@
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <wizlevels.h>
+#include "../files.h"
+
+inherit "std/npc";
+
+string help_me();
+
+nosave int away;
+
+void create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  SetProp(P_SHORT, "Tarion der Sklave");
+  SetProp(P_LONG, 
+      "Tarion der Sklave hat den ganzen Tag nichts anderes zu"
+      " tun als fuer das Wasser in den Raeumen der Gilde zu sorgen."
+      " Er ist riesengross, und baerenstark. Seine Kraefte braucht"
+      " er auch um die gewaltige Kurbel drehen zu koennen.");
+  SetProp(P_WEIGHT, 280000);
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_NAME, "Tarion");
+  SetProp(P_GENDER, MALE);
+  AddId(({"sklave", "tarion"}));
+  AddInfo("kurbel", "Puh, das ewige Kurbeldrehen ist so anstrengend...",
+          "stoehnt: ");
+  AddInfo("kurbeldrehen", "Wenn mir doch nur jemand mal die Arbeit abnehmen"
+                         +" wuerde...", "seufzt traurig: ");
+  AddInfo("arbeit", "Ich haette da wohl eine kleine Aufgabe fuer Dich.",
+          "fluestert: ");
+//  AddInfo("geheimnis", "", 0);
+  AddInfo("aufgabe", "Hmm, wuerdest Du mal an meiner Kurbel drehen? Wenn Du"
+                     " das wirklich moechtest, dann frag mich einfach nach Hilfe."
+                     " Du musst jedoch die Lieblingsaufenthalte der Tiger genauestens"
+                     " studiert haben, um mir helfen zu koennen, nur so bekommst Du"
+                     " genug Kraft fuer diese Kurbel!", "fluestert Dir ins Ohr: ",
+                    "fluestert @WEM etwas zu.\n");
+  AddInfo("format", "Meinst Du das Bildformat?", "fragt: ");
+  AddInfo("laterne", "Da drueben steht sie doch. In der Nische!", "sagt: ");
+  AddInfo("hilfe", #'help_me, "sagt: ");
+  create_default_npc(18);
+  SetProp(P_ALIGN, 0);
+  SetProp(P_MAX_HANDS, 2); 
+  SetProp(P_RACE, "Troll");
+  SetProp(P_SIZE, 355);
+  SetAttribute(A_STR, 45);
+  SetProp(P_DEFAULT_INFO, "laesst sich beim Drehen der Kurbel nicht stoeren.\n");
+  SetProp(P_RESISTANCE_STRENGTHS, ([DT_WATER: -0.5, DT_FIRE: 0.5]) );
+
+  SetChats(2, ({"Tarion stoehnt laut.\n",
+                "Der Sklave dreht unter gewaltiger Anstrengung an der Kurbel.\n",
+                "Tarion aechzt.\n",
+                "Tarion murmelt: 'Wann bin ich endlich erloest'\n",
+                "Tarion sagt: Gottseidank leuchtet die Laterne...\n",
+                "Die Muskeln von Tarion beeindrucken Dich.\n"}));
+  seteuid(getuid(this_object()));
+
+  clone_object("/p/armour/trousers/lendenschurz")->move(TO);
+  command_me("trage schurz");
+  away=0;
+}
+
+string help_me() {
+  int c;
+  object plr;
+
+  c=call_other(SWMASTER, "all_ok");
+  if (c && !away) {
+    write("Tarion sagt: Oh fein!\n");
+    plr=TP;
+    if (IS_WIZARD(plr) && !IS_ARCH(plr)) {
+      return "sagt: Pah, mit Magiern mache ich keinen Deal!";
+    }
+    away=1;
+    call_out("tarion_move", 2, plr);
+    return "Ok, ich raste mich mal kurz in der Apotheke aus.";
+  }
+  return "Das geht jetzt nicht, Du hast die Aufenthalte der Tiger noch nicht genau genug beobachtet,"
+        +" schau doch mal in der Apotheke ein wenig genauer nach, da koenntest Du ein paar hilfreiche"
+        +" Informationen darueber finden...";
+}
+
+tarion_move(object plr) {
+  TO->move(ROOM("e2"), M_GO);
+  call_out("tarion_tell", 2, plr);
+}
+
+tarion_tell(object plr) {
+  tell_object(plr, break_string("Wenn Du es schaffst, die Kurbel eine volle Umdrehung zu drehen,"
+                               +" hab ich Dir eine Belohnung aufgehoben.", 78, "Tarion teilt Dir mit: "));
+  call_other(ROOM("l6"), "set_turn", plr);
+  call_out("tarion_back", 20, plr);
+}
+
+tarion_back(object plr) {
+  object o;
+  object dest;
+
+  dest=ROOM("l6");
+
+  TO->move(dest, M_GO);
+  if (call_other(dest, "query_turned")==plr) {
+    write("Tarion freut sich.\n");
+    tell_object(plr, "Tarion fluestert Dir zu: Hier habe ich Deine Belohnung.\n");
+    o=clone_object(OBJ("keyn45"));
+    if (o) {
+      o->move(TO);
+      command_me("gib schluessel an "+lower_case(plr->name()));
+      IV_LOGQUEST(getuid(plr), "Knoepfe in richtiger Reihenfolge gedrueckt");
+    }
+    call_other(SWMASTER, "reset");
+  }
+  else
+    tell_object(plr, "Tarion fluestert Dir zu: Du hast es nicht geschafft, die Kurbel zu drehen. Keine Belohnung!\n");
+  call_other(ROOM("l6"), "reset_turner");
+  away=0;
+}
+
+init() {
+  object d;
+
+  ::init();
+  d=ENV(TO);
+  if (file_name(d) == ROOM("l6") && d->query_laterne()) {
+    //d->add_laterne();
+    if(!find_call_out("tr")) {
+      call_out("tr", 4, d);
+    }
+  }
+  
+}
+
+tr(object d) {
+    tell_room(d, "Tarion sagt: Hmpf, hier ist es mir zu dunkel.\n");
+    tell_room(d, "Tarion holt eine Laterne unter seinem Lendenschurz hervor"
+                +" und stellt sie in eine Nische.\nEs wird sanft heller.\n");
+}
+

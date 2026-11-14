@@ -1,0 +1,342 @@
+/*
+** Donation Room in Midas  (w) Woody@SL
+** ---
+** Verwendung ausserhalb des Silberlands strikt untersagt.
+** ---
+** 2004-08-10  Woody  Started work
+*/
+
+inherit "std/room";
+
+#include <properties.h>
+#include <new_skills.h>
+#include <moving.h>
+#include "files.h"
+#include "donation.h"
+
+
+void create()
+{
+  ::create();
+  SetProp(P_INT_SHORT, "Im Spendenraum");
+  SetProp(P_INT_LONG,
+      "Du stehst in einer grossen, geraeumigen Halle. Viele Regale stapeln "
+      "sich, meterhoch tuermt sich alter Krimskrams und metallene aber auch "
+      "lederne Ruestungen schimmern Dir entgegen. Bla laber fasel.");
+
+  SetProp(P_LIGHT, 1);
+  SetProp(P_INDOORS, 1);
+  SetProp(P_ENVIRONMENT, ([ ENV_TEMPERATURE: 22, ENV_TERRAIN: TT_HOUSE ]) );
+
+  AddCmd( "spende", "cmd_spende" );
+}
+
+
+int ItemAccepted(object ob, string err)
+{
+  mapping r;
+  string at;
+
+  if (at = ob->QueryProp(P_NO_DONATE)) {
+    err = stringp(at) ? at : ob->Name(WER,1) + " kann nicht gespendet werden.";
+    return 0;
+  }
+  if (!ob->QueryProp(P_ARMOUR_TYPE) && !ob->QueryProp(P_WEAPON_TYPE)) {
+    err = ob->Name(WER,1) + " ist weder eine Ruestung noch eine Waffe.";
+    return 0;
+  }
+  if (ob->QueryProp(P_AUTOLOADOBJ)) {
+    err = ob->Name(WER,1) +
+      " ist rebootfest und kann daher nicht gespendet werden!";
+    return 0;
+  }
+  if (ob->QueryProp(P_VALUE) > 5000) {
+    err = ob->Name(WER,1) + " ist zu wertvoll.";
+    return 0;
+  }
+  if (ob->QueryProp(P_NOSELL)) {
+    err = ob->Name(WER,1) + " kannst Du hier leider nicht spenden.";
+    return 0;
+  }
+  /*
+  // Licht/Schattenitems akzeptieren??
+  if (ob->QueryProp(P_LIGHT)) {
+    err = ob->Name(WER,1) + " kann leider nicht akzeptiert werden.";
+    return 0;
+  }
+  */
+  if (ob->QueryProp(P_HIT_FUNC) || ob->QueryProp(P_DEFEND_FUNC)) {
+    err = ob->Name(WER,1) + " ist zu maechtig.";
+    return 0;
+  }
+  if (mappingp(r = ob->QueryProp(P_WEAR_RESTRICTIONS) ||
+                   ob->QueryProp(P_WIELD_RESTRICTIONS)))
+  {
+    // Die folgenden Einschraenkungen sind noch tolerierbar:
+    if (sizeof(r - ([ P_GENDER, SR_EXCLUDE_RACE, SR_INCLUDE_RACE, P_FROG ]) ))
+    {
+      err = ob->Name(WER,1) + " hat zuviele Einschraenkungen.";
+      return 0;
+    }
+  }
+  if ( (ob->QueryProp(P_WC) + ob->QueryProp(P_DAMAGED)) > 160) {
+    err = ob->Name(WER,1) + " ist zu stark.";
+    return 0;
+  }
+  if (at = ob->QueryProp(P_ARMOUR_TYPE))
+    if ( (ob->QueryProp(P_AC) + ob->QueryProp(P_DAMAGED)) >=
+         KEEP_ARMOUR_CLASS[at])
+    {
+      err = ob->Name(WER,1) + " ist zu stark.";
+      return 0;
+    }
+  if (at = ob->QueryProp(P_DONATED)) {
+    err = ob->Name(WER,1) + " ist doch schon einmal gespendet worden" +
+      (stringp(at) ? ", und zwar von " + capitalize(at) : "") + "!";
+    return 0;
+  }
+
+  return 1;
+}
+
+
+void ModifyDonatedItem(object ob)
+{
+  // Wenn nicht eh schon gesetzt: unverkaeuflich machen
+  if (!ob->QueryProp(P_NOSELL))
+    ob->SetProp(P_NOSELL, 1);
+
+  /*
+  // Licht/Schattenitems entwerten?
+  if (ob->QueryProp(P_LIGHT))
+    ob->SetProp(P_LIGHT, 0);
+  */
+
+  // An gespendeten Objekten kann man nichts lernen
+  ob->AddId(SID_NOLEARN);
+
+  // Spender im Objekt erfassen
+  ob->SetProp(P_DONATED, getuid(TP));
+
+  ob->SetProp(P_LONG, QueryProp(P_LONG) +
+      ob->Name(WER,1) + " weist eine kleine Markierung auf.\n");
+  ob->AddDetail("markierung", "Sie kennzeichnet " + ob->name(WEN,1) +
+      "als gespendetes Objekt.\n");
+
+}
+
+
+int cmd_spende(string arg)
+{
+  string err;
+  object ob, schrotti;
+
+  if (!arg)
+    return notify_fail("WAS moechtest Du spenden?\n"), 0;
+
+  if (!schrotti = present("lagerverwalter"))
+    return notify_fail("Du kannst nichts spenden, solange der Lagerverwalter "
+        "nicht da ist.\n"), 0;
+
+  ob = present(arg, TP);
+  if (!ob)
+    return notify_fail("So etwas hast Du nicht dabei.\n"), 0;
+
+  if (ob->QueryProp(P_NODROP))
+    return write("So wirst Du " + ob->name(WEN,1) + " nicht los.\n"), 0;
+
+  if (!ItemAccepted(ob, &err))
+  {
+    write(break_string(err, schrotti->Name(WER,1) + " sagt: ", 78));
+    return 1;
+  }
+
+  if (ob->move(ROOM "donationlager", M_PUT) != 1)
+  {
+    write(break_string("Du kannst " + ob->name(WEN,1) + " nicht ablegen!",
+          schrotti->Name(WER,1) + " sagt: ", 78));
+    return 1;
+  }
+
+  ModifyDonatedItem(ob);
+
+  // Phase 3: Lagerung
+  // - Gegenstand wandert ins Lager
+  // - Spender wird in Liste eingetragen
+}
+
+/*
+
+Re^7: Navi (Woody, 27. Jan 2003, 00:03:19):
+~#! rn=Lamyra rt=1043611318 rg=allgemein
+~#! tid=1043499733
+(Antwort auf den letzten Artikel des Threads, kein direkter Bezug)
+Prinzipiell ist so eine Ausruestung fuer Anfaenger sicher nicht so
+schlecht, aber waere es nicht besser, wenn genau fuer solche An-
+faenger der bereits zigfach angedachte "Donation Room", der von
+hoeheren Spielern mit "Kleinkram" befuellt werden kann, der dann
+entwertet und antispellmarkiert wird, umgesetzt wuerde? Damit das
+ganze funktioniert, koennte man dann natuerlich auch Topspender-
+listen und so... ;-) nicht, dass ich nicht auf das ZUSAMMENspiel
+von Sehern und Spielern vertrauen wuerde...
+
+Ok, machen wirs ein wenig konkreter:
+Ein Raum mit einem NPC, der ein Lager hat. Diesem kann man dann mit
+"spende <gegenstand>" eine beliebige Ruestung oder auch Waffe mit
+bestimmten Einschraenkungen (nicht zu teuer, keine Sonderfunktionen,
+Wear-Restrictions maximal fuer Rasse, nicht zu gut/stark) uebergeben,
+der NPC entwertet den Gegenstand (oder macht ihn unverkaeuflich),
+markiert ihn als Nicht-Spellobjekt und legt ihn dann in sein Lager.
+Ein Anfaenger, der antrabt, bekommt auf Wunsch von einem bestimmten
+Typ ("NPC, hast Du ein Hemd fuer mich?") eine passende und auch fuer
+ihn verwendbare Ruestung (Mithrilhemden fuer Zwerge, seidene und
+durchsichtige ;) Nachthemden fuer Elfinnen) aus dessen Fundus.
+Natuerlich geht das nur bis zu einem bestimmten Level und nicht
+unentwegt bzw. maximal <n> Gegenstaende pro <Zeiteinheit>. Dabei
+koennte der NPC bereits von Anfang an eine Handvoll Gegenstaende
+lagernd haben, um direkt nach einem Reboot nicht ganz leer da
+zu stehen.
+
+Wie hoert sich das an? Welche Einschraenkungen soll es fuer Spender,
+Gegenstaende und Anfaenger eurer Meinung nach geben? Was koennte bei
+dieser Idee schiefgehen?
+
+
+Woody.-
+
+-----------------------------------------------------------------------------
+
+Re^8: Navi (Flummi, 27. Jan 2003, 00:14:01):
+~#! rn=Woody rt=1043622199 rg=allgemein
+~#! tid=1043499733
+Also ich finde diese Idee mit dem Ausruestungs-NPC sehr gut.
+Die Liste halte ich zwar nicht wirklich fuer notwendig aber fuer uns
+listengeile Mudder sicher recht lustig.
+
+Was mir weniger gefaellt ist das ein Newbie nur eine gewisse Anzahl
+Gegenstaende pro Reset haben darf. Grad wenn ein kleiner vielleicht gleich
+wieder stirbt kann er sich dann keine Ausruestung mehr holen.
+Vielleicht koennte der NPC abfragen welche Ausruestungsteile der Spieler schon
+hat und ihm nur solche geben die er eben no ned hat. Also 'frage NPC nach
+umhang' 'Du hast doch schon einen Umhang im inventar. Zieh ihn doch einfach
+mal an.'
+
+Flummi (ein Herz fuer Newbies :))
+
+-----------------------------------------------------------------------------
+
+Re^8: Navi (Clementine, 27. Jan 2003, 00:14:17):
+~#! rn=Woody rt=1043622199 rg=allgemein
+~#! tid=1043499733
+Find ich immer noch super die Idee.
+Auf das mit dem Reboot jedoch noch ein kleines Kommentar.
+Der Npc muesste nicht unbedingt gleich Gegenstaende lagernd haben, da es
+sowieso immer ganz viele liebe Seher und Spieler gibt, die bei Max Regale
+aufstellen, und mit allen moeglichen Kram vollfuellen.
+Es gibt ja soviele Gegner die man anfangs nur wegen deinem Item haut, und den
+Rest dann dort liegen laesst. Ich koennt mir auf vorstellen, dass dann statt
+Den Regalen Spieler und Seher ihre 'ueberfluessigen' Gegenstaende gleich zu
+dem 'Laden' bringen.
+Das wuerd sich sowieso zeigen denk ich :)
+
+lg
+clemchen
+
+-----------------------------------------------------------------------------
+
+Re^9: Navi (Flummi, 27. Jan 2003, 00:17:31):
+~#! rn=Flummi rt=1043622841 rg=allgemein
+~#! tid=1043499733
+Uuuuuuuuups noch was vergessen :)
+
+Was ich auch noch vorschlagen wollte war, das die Sachen die gespendet werden
+einfach umgewandelt werden. Also in 'Erstausruestungsumhang,
+Erstausruestungsschuhe, ...' (halt bisserl phantasievollere Namen, is ma auf
+die schnelle nix eingefallen) damit ein Spieler der so Gegenstaende findet
+weiss ahja, Newbieausruestung, nix mit zerstoerung oder verkaufen oder opfern.
+Ooooder, der Newbie wird die Ausruestung erst wieder los wenn er/sie es dem
+NewbieNPC wieder zurueckgibt (damit haeufen sich dann ned die 100000
+Ausruestunggegenstaende die weggewerfen werden sobalds von einem Seher was
+gscheiteres geschenkt bekommen.
+
+Flummi (denkt noch weiter drueber nach :))
+
+-----------------------------------------------------------------------------
+
+Re^10: Navi (Levitikus, 27. Jan 2003, 00:18:19):
+~#! rn=Flummi rt=1043623051 rg=allgemein
+~#! tid=1043499733
+also ich waer dafuer dass jeder anfaengergegenstand 0 muenzen bringt
+
+-----------------------------------------------------------------------------
+
+
+
+Re^11: Navi (Flummi, 27. Jan 2003, 00:18:47):
+~#! rn=Levitikus rt=1043623099 rg=allgemein
+~#! tid=1043499733
+Jo, dann hast aber bald ueberall wertloses Zeugs rumliegen.
+Des haeuft sich mit der Zeit.
+
+-----------------------------------------------------------------------------
+
+
+
+Re^12: Navi (Mendralim, 27. Jan 2003, 15:47:47):
+~#! rn=Flummi rt=1043623127 rg=allgemein
+~#! tid=1043499733
+dann brauch ma halt nen npc der herumrennt und ueberfluessige gegenstaende
+aufsammelt und kaputt macht oder wieder kleinen spielern gibt
+
+-----------------------------------------------------------------------------
+
+Re^4: ähm ja (Justus, 27. Jan 2003, 21:12:14):
+~#! rn=Largo rt=1043688851 rg=schmarrn
+~#! tid=1043669920
+huhu! Ich es erstmal gesagt eine ziemlich gute Initiative, dass so was mal in
+Angriff genommen wird. Ich moechte euch nur kurz die Palaseite vorstellen *gg*
+Wir Paladine opfern so gut wie alle unsere Sachen unserer Goettin Dusty, oder
+verkaufe sie im Notfall auch, damit wir wieder Geld fuers tanken haben, um
+weiterhin das Boese zu zerschlagen... Daher waere ich persoenlich weniger fuer
+eine "Spender-Topliste" , sondern mehr dafuer, dass _jeder_ Seher in gewissen
+Zeitabstaenden oder irgendwie anders geregelt etwas abgeben _muss_, dass
+jedoch zwischendurch _immer_ kann, selbstverstaendlich. So bleibt die Funktion
+erhalten; wir Paladine koennen weiter opfern und zwischendurch was abdruecken,
+was wir dann natuerlich "mussten" ;-) Das war kurz meine Sicht der Dinge..
+Zum anderen waere klitzekleine Belohnungen die man von dem NPC im Spenderlager
+auch sehr fein. An was fuer Belohnungen denke ich? Ich denke mehr so an
+wertlosere Dinge, die Spass machen, aber keinen Vorteil gegen ueber anderen
+machen. Vielleicht, dass man z.b. einen Gutschein kriegt(nach einigen
+Spenden), mit dem man z.b. entweder im Seherladen irgendwelchen "Ramsch"
+gratis kriegt (mehr so zum gag) oder halt einen Gutschein fuer diesen
+Troedelhaendler in Neutijara, dass man sich dort irgendwas aussuchen kann.
+
+Mag sich jetzt scheisse anhoeren, aber ich steh auf solche lustigen Gutscheine
+und Gags zwischen durch *fg*
+
+MfG Hochelfenpaladin Justus, durchgewuschelt
+
+-----------------------------------------------------------------------------
+
+Re: Re: Naid-Klau-Sammli (Woody, 27. Jan 2003, 22:11:50):
+~#! rn=Justus rt=1043699293 rg=allgemein
+~#! tid=1043699249
+Ich kann mir nicht vorstellen, dass Seher/Spieler zum Spenden gezwungen
+werden sollen - das hat mit dem Begriff "Spenden" genau gar nichts
+mehr zu tun (eher mit dem Begriff "Steuern"...). Spenden soll eine
+freiwillige Sache bleiben - und "Belohnungen" fuers Spenden ausser
+einer Liste finde ich eigentlich auch nicht sonderlich passend.
+
+Der Neidklausammli klaut seit ewigen Zeiten kleinen Spielern nichts,
+dass er aber zum Robin Hood wird und Geld an kleine abdrueckt, wider-
+spricht seinem Charakter, daher muss ich dem leider auch eine Absage
+erteilen.
+
+Die Idee mit Donation Rooms ist uebrigens wesentlich aelter als das
+PK-Mud (und dass dort derlei Konzepte ebenfalls umgesetzt w{e/u}rden
+ist nicht weiter verwunderlich).
+
+
+Woody.-
+
+ */

@@ -1,0 +1,359 @@
+/*
+
+okidiki das ganze is nun anders, das lichtobj ist nun leer, aber man kann es aufladen
+und zwar mit gems, magiekristallen und spaeter vielleicht mit anderen dingen auch
+noch.....
+dante
+
+kleine Aenderung, dass die items nicht im netztoten raum vergluehen...
+PROtheG
+
+variable zeitl rausgehaut -> anzeige sinkt jetzt
+
+Cmd energie weg, wegen ueberschneidung mit anderen items...
+Dafuer nun bei der Long
+
+bugfix, wegen P_CURSED
+
+*/
+
+#define BKS(x) break_string(x,78,"",1)
+#define PLUR(x,y) (ME->QueryProp(P_PLURAL) ? x : y)
+
+inherit "std/armour";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <wizlevels.h>
+#include "/players/dante/myowndefine.h"
+#include "privat.h"
+#include <ansi.h>
+
+int max_resets, ndead;
+
+varargs weg_damit(int i)  
+{
+  SetProp(P_CURSED, 0);
+  if(i) remove(1);
+  else  remove();
+}
+
+create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  AddId(({"PRIVATE_LICHT", "l"}));
+
+  SetProp(P_SHORT, "Ein leuchtendes Dingsbums");
+  SetProp(P_LONG, BKS("Das Dingsbums leuchtet in einem angenehmen blauen Licht."));
+  
+  SetProp(P_NAME, "Dingsbums");
+  SetProp(P_GENDER, NEUTER);
+  SetProp(P_LIGHT, 0);
+  SetProp(P_WEIGHT, 200);
+  SetProp(P_VALUE, 300+random(200));
+  SetProp(P_ARMOUR_TYPE, AT_MISC);
+  SetProp(P_AC, 0);
+  SetProp(P_MAGIC, 1);
+  SetProp(P_MATERIAL, ([MAT_MISC:100]));
+  SetProp(P_INFO, BS(
+    "Das ist eines der magischen Lichtobjekte! "
+    "Du kannst davon immer nur eines besitzen! "
+    "Es spendet nur Licht wenn es auch getragen wird! "
+    "Wenn Du es bekommst hat es fuer eine gewisse Zeit genug "
+    "Energie, die aber immer weniger wird. Wenn das Lichtobj "
+    "leer ist, zerstoert es sich selbst. "
+    "Du kannst die Zeit aber jederzeit erhoehen, indem Du einen "
+    "Edelstein hineinsteckst. <syntax: luxifizier(e) edelsteinname>."));
+    
+  SetProp(P_WEAR_FUNC, TO);
+  SetProp(P_REMOVE_FUNC, TO);
+  ndead=0;
+  max_resets=2;
+  
+  ACD(({"luxifizier","luxifiziere"}), "get_more_light");
+//  ACD("energie", "anzeige");
+  seteuid(getuid(ME));
+}
+
+long()  
+{
+  int i, wert;
+  string l;
+
+  l=::long();
+
+  if(max_resets <= 0)  
+    {
+      write(BS("Dein Lichtobjekt ist leer und explodiert auf einmal!"));
+      call_out("weg_damit", 1);
+      return l;
+    }
+  
+  wert=max_resets*5;
+  
+  if(max_resets > 0)  
+    {
+      l+="\nEnergie: ";
+      //write("0  10  20  30  40  50  60  70  80  90  100\n");
+      for(i=0;i<max_resets;i++)    
+	{
+	  //write(""+ANSI_BG_RED+"  "+ANSI_NORMAL+""+ANSI_BLACK+"|"+ANSI_NORMAL+"");
+	  l+=""+ANSI_BG_RED+" "+ANSI_WHITE+"|"+ANSI_NORMAL+"";
+	}
+      
+      l+=" "+wert+"%\n"+ANSI_NORMAL+"";
+      
+      return l;  
+    }
+  return l;
+}
+
+int get_more_light(string str)   
+{
+  int val;
+  
+  object ob;
+  
+  NF("Was willst Du luxifizieren?!\n");
+
+  if(!str) return 0;
+  
+  ob=present(str, TP);
+  
+  if(member(({"edelstein","edelsteine","stein","steine"}),str)!=-1)  
+    return write("Welchen Edelstein willst Du genau zertruemmern?!\n"),1;
+
+  if(member(({
+    "turmalin", "opal", "diamant","rubin","smaragd","lapislazuli",
+      "bergkristall","amethyst","onyx","zirkon","granat","topas",
+      "bernstein", "aquamarin","saphir"}),str)!=-1)   
+    {
+      if(TP->InFight())  
+	return write(BS("Im Kampf kannst Du nichts luxifizieren.")),1;
+        
+      if(!ob)
+	return write("Aber Du hast doch gar keinen "+capitalize(str)+"!\n"),1;
+
+      if(ob) 
+	{
+	  val=ob->QP(P_VALUE);    
+        
+	  if(max_resets>=20)   
+	    return write(BS(
+		 "Dein magisches Lichtobjekt ist bereits total aufgeladen. "
+                  "Leider kannst Du keine Luxifikation mehr durchfuehren!")),1;
+
+	  if(max_resets<20)
+	    {
+	      write(BS(
+		   "Du reibst "+ob->name(WEN)+" an Deinem Lichtobjekt und "
+		   "ploetzlich wird es extrem hell um Dich herum. Ein Strahl "
+		   "schiesst aus dem Lichtobjekt heraus und scheint "+
+		   ob->name(WEN)+" einzusaugen. Dann gibt es einen "
+		   "lauten Knall und der Edelstein ist verschwunden und das "
+		   "Lichtobjekt wird kurz von einem Ruck hin und hergerissen. "
+		   "Die Luxifikation war erfolgreich."));
+
+	   //   write(""+max_resets+" vorher\n");
+	      
+	      max_resets=1+max_resets+val/200;
+        if(max_resets > 20) max_resets=20;	      
+	    //  write(""+max_resets+" hacher\n");
+	      
+  
+	      say(BS(CAP_TPN+" nimmt einen Edelstein und reibt ihn an einem "
+		     "Lichtobjekt. Ploetzlich wird es extrem hell um Dich "
+		     "herum. Ein Strahl schiesst aus dem Lichtobjekt "
+		     "heraus und scheint "+ob->name(WEN)+" einzusaugen. "
+		     "Dann gibt es einen lauten Knall und der Edelstein ist "
+		     "verschwunden und das Lichtobjekt wird kurz von einem "
+		     "Ruck hin und hergerissen. Die Luxifikation von "
+		     ""+CAP_TPN+" war erfolgreich."));
+
+	      ob->AddAmount(-1);
+	      
+	      
+	      return 1;
+	    }
+	  
+	  
+	  return 1; 
+	}
+      return 0; 
+    }
+  
+  else
+    return write("Das kannst Du nicht luxifizieren!\n"),1;
+  
+  return 0; 
+}
+
+void BecomesNetDead(object spieler){ ndead=1;}
+void BecomesNetAlive(object spieler){ ndead=0;}
+
+init()
+{
+  ::init();
+
+  SP(P_LIGHT, 0);
+  
+  if(!environment(TO)) return;
+  
+  if(present("PRIVATE_LICHT 2", environment(TO))) 
+    {
+      if(interactive(environment(TO)))
+         tell_object(environment(TO), ME->Name(WER)+" zerspring"+
+         PLUR("en","t")+" in tausend Stuecke!!\n");
+ 
+      if(!interactive(environment(TO)))
+	say(BS(ME->Name(WER)+" zerspring"+
+	PLUR("en","t")+" in tausend Stuecke!!\n"));
+
+      call_out("weg_damit", 1);     
+     }
+
+  if(!QueryWorn()) 
+     SetProp(P_LIGHT, 0);
+  //das is alles nur fuer sicherheit; wer weiss was manche mags so tun  
+}
+
+int WearFunc(object me)
+{
+  object pl;
+
+  pl=this_player();     // nicht ganz unwichtig (bugfix by woody, 8.11.00)
+
+  if(present("PRIVATE_LICHT 2"))
+    weg_damit();
+  
+  if(max_resets)
+    SetProp(P_LIGHT, 1);  
+ 
+  write(BKS("Ein Teil Deiner Energie fliesst in "+PLUR("","d")+
+  ME->name(WEN)+".\n"+PLUR(""+ME->Name(WER),"D"+ME->name(WER))+" leuchte"+
+  PLUR("n","t")+" hell auf."));
+  pl->AddSp(-random(5));
+
+/* 
+
+ if(pl=ENV(TO))
+    if(interactive(pl))
+      if(pl->QueryProp(P_SP)<10)
+	{
+	  SetProp(P_KILL_NAME, ME->NAME(WER));
+	  pl->SetProp(P_SP, 0);
+	  pl->do_damage(5);
+	}
+      else
+	pl->AddSp(-10);
+
+*/
+
+  return 1; 
+}
+
+
+
+int RemoveFunc(object me)
+{
+  if(QP(P_LIGHT))
+    write(BKS(PLUR(""+ME->Name(WER),"D"+ME->name(WER))+" erl"+PLUR("oeschen!","ischt!")+""));
+
+  SP(P_LIGHT, 0);
+  return 1;
+}
+      
+reset()
+{
+  object pl;
+  
+  ::reset();
+
+  if(ndead) return;
+
+  if(pl=QueryWorn())
+    {
+       if(!query_once_interactive(pl)) weg_damit();
+
+       max_resets--;
+
+       tell_object(pl, PLUR(""+ME->Name(WER),"D"+ME->name(WER))+" staerk"+PLUR("en","t")+
+       		   " sich durch Deine Energie!\n"+(max_resets==1 ? PLUR(""+ME->Name(WER),"D"+ME->name(WER))+
+       		   " beginn"+PLUR("en","t")+" seltsam zu vibrieren.\n":""));
+pl->AddSp(-random(5));
+       
+       if(!random(500))  
+       {
+         tell_object(pl,
+           "Dein magisches Lichtobjekt erzeugt eine Interferenz der dunkelelfischen "
+           "Spektralebene und wird von der Macht der Spinnenkrieger sofort vernichtet!\n"
+           "WUMMMMM!!! Die Explosion verletzt Dich leicht.\n");
+         pl->AddHp(-10);
+         pl->AddSp(-10);
+         
+         weg_damit(1);
+         return;
+       }
+       
+       /*
+       if(pl->QueryProp(P_SP)<10)
+	 {
+	   SetProp(P_KILL_NAME, ME->NAME(WER));
+	   pl->SetProp(P_SP, 0);
+	   pl->do_damage(5);
+	 }
+       else
+         pl->AddSp(-10);
+*/
+       
+       
+       
+       
+       if(max_resets)
+	 SetProp(P_LIGHT, 1);
+       
+       if((!max_resets) || (max_resets < 0))
+	 {
+	   //SetProp(P_CURSED, 1);
+	   //SetProp(P_LIGHT, 1);
+	   tell_object(pl, PLUR(""+ME->Name(WER),"D"+ME->name(WER))+
+	   	" blitzt auf und verglueht.\n");
+	   write_file(PRIVDIR+"lux",
+	     dtime(time())+": "+ME->QP(P_NAME)+" zerfa"+PLUR("llen","ellt")+" in den Haenden von "+
+	     CAP(getuid(pl))+"\n");
+	   weg_damit(1);  
+	 }
+	/* 
+       if(!max_resets)
+	 {
+	   tell_object(pl, "D"+ME->name(WER)+" wird schwarz und zerbroeckelt!\n");
+	   SetProp(P_CURSED, 0);
+	   weg_damit(1);
+	 }
+	 */
+    }
+  else
+    SetProp(P_LIGHT, 0);
+}
+
+QueryMaxResets()
+{
+  return max_resets;
+}
+
+SetMaxResets(int i)
+{
+  string who;
+  
+  if(ENV(ME))
+    if(query_once_interactive(ENV(ME)))
+    	who=CAP(getuid(ENV(ME)));
+  write_file(PRIVDIR+"lux",
+     dtime(time())+": "+CAP(getuid(PO))+" used SetMaxResets("+i+
+     (strlen(who) ? " - "+who:"")+")\n");
+  return max_resets=i;	
+}
+

@@ -1,0 +1,245 @@
+//=========================================================================
+//
+// File:    dung_04_03.c
+// Created by Speedy
+//
+// Project: Sarumans Quest (Finde die verlorene Schriftrolle)
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit ROOM "dung-inh";
+
+void create()
+{
+  ::create();
+
+  // etwas entfernt von einer Tuer kann man an der Mauer eine Kurbel finden,
+  // funktioniert aber nicht, da die Kette fuer die Gittertuer gerissen ist:
+  // Alte Kette raus, neue rein, kurbeln.
+
+  AddSpecialDetail( ({"gitter","fallgitter"}), "detail_gitter" );
+  AddSpecialDetail( ({"wand","waende","mauer","mauern"}), "detail_mauer" );
+  AddSpecialDetail( ({"platte"}), "detail_platte" );
+  AddSpecialDetail( ({"zahnraeder","raeder"}), "detail_raeder" );
+  AddSpecialDetail( ({"mechanismus"}),  "detail_mechanismus" );
+  AddSpecialDetail( ({"loch"}), "detail_loch" );
+  AddSpecialDetail( ({"schrauben"}), "detail_schrauben" );
+
+  AddDetail( ({"kurbel"}),
+    "Die Kurbel dient dazu, das Fallgitter hochzukurbeln, vielleicht "
+    "solltest Du es mal probieren. "
+  );
+
+  AddCmd( ({"drehe","dreh","kurbel","kurble","kurbele"}), "cmd_kurbeln" );
+  AddCmd( ({"schraube","schraub"}),                       "cmd_schrauben" );
+  AddCmd( ({"reiss","reisse","brich","brech","breche"}),  "cmd_brechen" );
+  AddCmd( ({"repariere"}),                                "cmd_reparieren" );
+  AddCmd( CMD_OEFFNEN,                                    "cmd_oeffnen" );
+
+  AddExit("norden", GETEXIT("04_02") );
+  AddExit("osten" , GETEXIT("05_03") );
+  AddExit("westen", ([EX_DEST : GETEXIT("03_03"),EX_TESTFUNC : "exittest"]));
+
+}
+
+int exittest(string dir)
+{
+  if(SMASTER->QueryDoorStatus(TPUID,"D") == DOOROPENED) return 1;
+  TELLPLAYER("Der Durchgang nach Westen ist durch ein geschlossenes "
+             "Gitter blockiert.\n");
+  return 0;
+}
+
+string _query_int_long()
+{
+  string s;
+
+  if(SMASTER->QueryDoorStatus(TPUID,"D") == DOOROPENED)
+    s = "Im Westen befindet sich ein offenes Fallgitter. ";
+  else
+    s = "Im Westen befindet sich ein geschlossenes Fallgitter. ";
+
+  return BS(ltext1+s);
+}
+
+int cmd_oeffnen(string str)
+{
+  notify_fail( "Was willst Du oeffnen?\n" );
+  if(!str || str == "") return 0;
+  if(!(str=="gitter" || str=="fallgitter")) return 0;
+
+  if(SMASTER->QueryDoorStatus(TPUID,"D") == DOOROPENED)
+  {
+    TELLPLAYER("Aber das Gitter ist doch schon offen.\n");
+    return 1;
+  }
+
+  TELLPLAYER("So bringst Du das Gitter nie auf.\n");
+  return 1;
+}
+
+
+int cmd_reparieren(string str)
+{
+  object ob;
+
+  if(!SMASTER->QueryFlag(TPUID,F_PLATTE_AUF)) return 0;
+
+  notify_fail("Was willst Du womit reparieren?\n");
+  if(!str || str == "") return 0;
+
+  if(!(str == "mechanismus mit kette" || str == "mechanismus")) return 0;
+
+  if(!(ob=present("\nspy_kette", TP)))
+  {
+    TELLPLAYER("Dazu scheint Dir etwas zu fehlen.\n");
+    return 1;
+  }
+
+  TELLPLAYER(BS("Du nimmst die Kette, und setzt sie auf die Zahnraeder. "
+                "Hoffentlich funktioniert der Mechanismus jetzt wieder. "));
+  SMASTER->SetFlag(TPUID,F_KETTE_REPARIERT);
+  ob->remove();
+  return 1;
+}
+
+string detail_mechanismus(string str)
+{
+  if(!SMASTER->QueryFlag(TPUID,F_PLATTE_AUF))
+    return "Sowas siehst Du auch da nicht!\n";
+
+  return "Der Mechanismus ist gut gebaut, er besteht aus vielen kleinen "
+         "Zahnraedern.\n";
+}
+
+string detail_raeder(string str)
+{
+  if(!SMASTER->QueryFlag(TPUID,F_PLATTE_AUF))
+    return "Sowas siehst Du auch da nicht!\n";
+
+  return BS("Die Zahnraeder dienen dazu, damit das Fallgitter leichter "
+            "aufgeht, scheint eine Art Mechanismus zu sein, der die "
+            "Kraftuebertragung verstaerkt. ");
+}
+
+string detail_loch(string str)
+{
+  if(!SMASTER->QueryFlag(TPUID,F_PLATTE_AUF))
+    return "Sowas siehst Du auch da nicht!\n";
+
+  if(!SMASTER->QueryFlag(TPUID,F_KETTE_REPARIERT))
+    return BS("Du schaust in das Loch, und entdeckst viele Zahnraeder, und "
+              "jetzt wird Dir auch klar, warum das Gitter nicht aufgeht, "
+              "irgendjemand hat die Zugkette gestohlen, vielleicht kann man "
+              "das wieder reparieren. ");
+
+  return BS("Du schaust in das Loch, und entdeckst viele Zahnraeder, der "
+            "Mechanismus duerfte jetzt wieder funktionieren, nachdem eine "
+            "Kette drinnen ist. ");
+}
+
+int cmd_brechen(string str)
+{
+  notify_fail( "Was willst Du aufbrechen?\n" );
+  if(!str || str == "") return 0;
+  if(!(str == "platte auf"      ||
+       str == "platte herunter" ||
+       str == "platte runter"   )) return 0;
+
+  TELLPLAYER(BS("Du brichst die Platte auf, sie ist zwar kaputt, aber "
+                "jetzt kannst Du in das Loch schauen, das sie verdeckt "
+                "hatte."));
+  SMASTER->SetFlag(TPUID,F_PLATTE_AUF);
+  return 1;
+}
+
+int cmd_schrauben(string str)
+{
+  if(!SMASTER->QueryFlag(TPUID,F_PLATTE_GEFUNDEN)) return 0;
+  notify_fail( "Was willst Du schrauben?\n" );
+  if(!str || str == "") return 0;
+
+  if(!(str=="platte" || str == "platte ab")) return 0;
+
+  TELLPLAYER("Die Schrauben sitzen voellig fest, die schraubt keiner mehr "
+             "ab.\n");
+  return 1;
+}
+
+string detail_platte(string str)
+{
+  if(!SMASTER->QueryFlag(TPUID,F_PLATTE_GEFUNDEN))
+    return "Sowas siehst Du hier nicht!\n";
+
+  if(!SMASTER->QueryFlag(TPUID,F_PLATTE_AUF))
+    return BS("Die Platte ist an die Wand geschraubt, vielleicht kannst Du "
+              "sie irgendwie herunterbekommen, sie gibt auch leicht nach "
+              "wenn Du sie betastest... vielleicht ist sie ja nicht stabil.");
+
+  return "Die kaputte Platte liegt neben der Mauer am Boden.\n";
+}
+
+string detail_schrauben(string str)
+{
+  if(!SMASTER->QueryFlag(TPUID,F_PLATTE_GEFUNDEN))
+    return "Sowas siehst Du hier nicht!\n";
+
+  if(SMASTER->QueryFlag(TPUID,F_PLATTE_AUF))
+    return "Sowas siehst Du hier nicht!\n";
+
+  return "Die Schrauben halten die Platte fest an die Mauer.\n";
+}
+
+int cmd_kurbeln(string str)
+{
+  notify_fail("Woran willst Du kurbeln?\n");
+  if(!str || str == "") return 0;
+  if(!(str == "an kurbel"   ||
+       str == "kurbel"      ||
+       str == "gitter hoch" )) return 0;
+
+  SMASTER->SetFlag(TPUID,F_PLATTE_GEFUNDEN);
+
+  if(SMASTER->QueryDoorStatus(TPUID,"D") == DOOROPENED)
+  {
+    TELLPLAYER(BS("Du versuchst an der Kurbel zu drehen, doch das Gitter "
+                  "ist ja bereits oben."));
+    return 1;
+  }
+
+  if(SMASTER->QueryFlag(TPUID,F_KETTE_REPARIERT))
+  {
+    TELLPLAYER("Du kurbelst an der Kurbel und das Gitter oeffnet sich.\n");
+    SMASTER->SetDoorStatus(TPUID,"D",DOOROPENED);
+    return 1;
+  }
+
+  TELLPLAYER(BS("Du kurbelst an der Kurbel, doch irgenwie scheint das nicht "
+                "zu funktionieren, die Kurbel dreht sich durch, wie wenn "
+                "keine Zugkette vorhanden waere. "));
+  return 1;
+}
+
+string detail_mauer(string str)
+{
+  if(!SMASTER->QueryFlag(TPUID,F_PLATTE_GEFUNDEN))
+    return "An der Wand entdeckst Du eine Kurbel.\n";
+
+  if(!SMASTER->QueryFlag(TPUID,F_PLATTE_AUF))
+    return BS("Da die Kurbel ja nicht zu funktionieren scheint, suchst Du "
+              "die Wand nach was anderem ab. Und Du findest auch ca. 1 "
+              "Meter davon entfernt eine kleine Platte. ");
+
+  return "An der Wand siehst Du ein Loch, wo eine Platte angeschraubt war.\n";
+}
+
+string detail_gitter(string str)
+{
+  if(SMASTER->QueryDoorStatus(TPUID,"D") == DOOROPENED)
+    return "Das Fallgitter ist geoeffnet, Du kannst durchgehen.\n";
+
+  return "Das Fallgitter ist zu, das geht sicher nicht so einfach auf.\n";
+}
+

@@ -1,0 +1,104 @@
+/*
+* Dieses Lied heilt die Taubheit aller Zuhoerer. Die Kosten skalieren mit der Menge der geheilten nach oben.
+*/
+mapping prep_taublied(object caster, mapping sinfo)
+{
+  object target;
+  sinfo = prepare_song(caster, sinfo);
+  if(sinfo == 0) {
+    return 0;
+  }
+
+  if(!paySpellCost(caster, sinfo, 1)) return 0;
+
+  if(!objectp(present("\nbard_stimmgabel", caster))) {
+    tell_object(caster, BS("Dafuer benoetigst du eine Stimmgabel!"));
+    return 0;
+  }
+  say(BS(caster->Name(WER)+" zueckt eine Stimmgabel und schlaegt sie an."));
+
+  return sinfo;
+}
+
+int check_if_deaf(object ob) {
+  return ob->QueryProp(P_DEAF) != 0;
+}
+
+
+int taublied(object caster, mapping sinfo)
+{
+  object *targets, stimmgabel;
+  int abil, suc, duration, i, n;
+  int deaf, reduction;
+
+  targets = filter_array(all_inventory(environment(caster)), "check_if_deaf");
+  if(sizeof(targets) < 1) {
+    write(BS("Hier ist offenbar niemand, der von dem Ton profitiert. Schade :("));
+    return 0;
+  }
+  
+  /* Spellkosten :) */
+  if(!paySpellCost(caster, sinfo)) return 0;
+
+  stimmgabel = present("\nbard_stimmgabel", caster);
+  if(!objectp(stimmgabel)) {
+    tell_object(caster, BS("Nanu?! Du hattest doch gerade noch eine Stimmgabel in der Hand!"));
+    return 0;
+  }
+
+  // GELUNGEN?
+  if((suc=SpellSuccess(caster,sinfo))<=0)
+  {
+     write(BS(({
+       "Es war leider der falsche Ton!",
+       "Die Stimmgabel klingt nur ganz leise.",
+       "Der Ton klingt merkwuerdig verwakelt."
+     })[random(3)]));
+
+     if(suc < -1500) {
+       if(!random(2)) {
+         write(BS("Der Ton schmerzt in deinen Ohren!"));
+         caster->AddHp(-10 + random(6));
+         stimmgabel->use(caster, 5+random(5));
+       } else {
+         write(BS("Ohje! Die Stammgabel geht bei deinem Versuch kaputt!"));
+         stimmgabel->broken(caster);
+       }
+     }
+     return MISSERFOLG;
+  }
+
+
+  tell_object(caster, BS("Du spielst einen sehr hohen Ton, der in deinen Ohren klingelt."));
+  tell_room(environment(caster), BS(sprintf("%s spielt einen sehr hohen Ton, der in deinen Ohren klingelt.", caster->Name(WER, 1))), ({caster}));
+
+  abil = sinfo[SI_SKILLABILITY];
+
+  n = (3 * caster->QuerySkillAttribute(SA_EXTENSION))/100;
+  if(TALENTMASTER->HasTalent(caster, TALENT_FORTE_FORTISSIMO)) {
+    n += caster->QueryProp(P_BARD_INSPIRATION_LEVEL);
+  }
+
+  for(i=0; i<sizeof(targets) && n > 0; i++) {
+    deaf = targets[i]->QueryProp(P_DEAF)[DEAF_TIME];
+    reduction = sinfo[SI_SKILLABILITY]/500 + suc / 500;
+    if(TALENTMASTER->HasTalent(caster, TALENT_HEILER)) {
+      reduction = (int) (reduction * (1.1 + ((float) (10 * caster->QueryProp(P_BARD_INSPIRATION_LEVEL)) / 100.0)));
+    }
+
+    deaf -= reduction;
+
+    if(deaf <= 0) {
+      tell_object(targets[i], BS("Der Ton durchdringt deine Taubheit und Du hoerst wieder!"));
+      targets[i]->SetProp(P_DEAF, 0);
+    } else {
+      tell_object(targets[i], BS("Deine Taubheit wird leichter!"));
+      targets[i]->SetProp(P_DEAF, targets[i]->QueryProp(P_DEAF) + ([DEAF_TIME: deaf]));
+    }
+    n--;
+  }
+
+  stimmgabel->use(caster, 1);
+
+  return ERFOLG;
+}

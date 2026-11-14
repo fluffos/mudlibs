@@ -1,0 +1,181 @@
+/* 
+** Geld fuer das RPG-Projekt SL
+**
+** Kann nichts, aber dafuer ist das Aussehen frei konfigurierbar.
+**
+*/
+
+nosave string game;
+
+#include "../def.h"
+
+inherit "std/unit";
+
+int allowed_env()
+{ 
+  if(!MENV) return 0; 
+  
+  if((living(MENV)) && (strstr(file_name(ENV(MENV)), ZONE)==0)) 
+    return 1; 
+ 
+  if(strstr(file_name(MENV), ZONE)==0) 
+    return 1; 
+  
+  return 0; 
+}
+
+int allowed_manager(object who)
+{
+  if(!RPGMASTER->GameMaster(who,game)) return 0;
+  return 1;
+}
+
+void create() 
+{
+  if(!is_clone(TO)) return;
+  ::create();
+  
+  SetProp(P_SHORT, "Kupfermuenzen");
+  SetProp(P_NAME, ({"Kupfermuenze","Kupfermuenzen"}));
+  SetProp(P_GENDER, FEMALE);
+  AddId(({RPG_PROJECT_ID, "requisit","kupfergeld","SKILL_NOLEARN"}));
+  
+  AddSingularId("kupfermuenze");
+  AddPluralId("kupfermuenzen");
+  
+  SetProp(P_MATERIAL, MAT_COPPER);
+  
+  SetCoinsPerUnits(1,1);
+  SetGramsPerUnits(1,1);
+  
+  AddCmd(({"aender","aendere"}), "cmd_aendern");
+}
+
+varargs void aendern_usage(int flag)
+{
+  write((!flag ? BSST(" Was willst Du denn aendern? Abbrechen mit q.")+
+	 BSST(" Beachte bitte die Gross-kleinschreibung.")+
+	 BSST("=============================================") : "")+
+	BSST(sprintf("(1) %25-s %d","Menge: ", QueryProp(P_AMOUNT))));
+}
+
+void change_obj(string what, string str)
+{
+  int amount;
+  
+  amount=to_int(explode(what, " ")[<1]);
+  
+  if(amount >= 1) 
+    if(amount <= 20000)
+      {
+	SetProp(P_AMOUNT, amount); 
+
+	write_file(LOG "game_"+game+"_changes", dtime()+": "+TPN+" aendert "+str+
+		   " zu "+what+" ("+explode(file_name(), "/")[<1]+").\n");
+	
+	write(BSST("Fertig."));
+	
+	return;
+      }
+  
+  write(BSST("Bitte einen Wert groesser 0 und kleiner 20000"));
+  
+  aendern_usage();
+  write("? ");
+  input_to("customize");
+}
+
+void customize(string str)
+{
+  string *tmp;
+  string what;
+  
+  if(!str)
+    {
+      aendern_usage();
+      write("? ");
+      input_to("customize");
+    }
+  
+  if(strstr(str, "aendere ")==0)
+    str=str[8..];
+  
+  if(sizeof(tmp=explode(str, " ")) > 1)
+    {
+      str=tmp[0];
+      what=implode(tmp[1..], " ");
+    }
+  
+  switch(str)
+    {
+    case "1": 
+    case "menge": 
+      if(strlen(what))
+	{
+	  change_obj(what, str);
+	  return;
+	}
+      write(BSST("Bitte einen Wert groesser 0 und kleiner 20000"));
+      write("Menge:  ");
+      input_to("change_obj", 0, str);
+      return;
+    case "q":
+    case "quit":
+    case "fertig":
+    case "abbrechen": return;      
+    default:  
+
+      aendern_usage();
+      write("? ");
+      input_to("customize");
+    }
+}
+
+nosave int cmd_aendern(string str)
+{
+  notify_fail(BSST("Welches Objekt willst Du aendern?"));
+  if(!str) return 0;
+  
+  if(!id(str)) return 0;
+  
+  if(!allowed_manager(TP)) 
+    return write(BSST("Du darfst dieses Objekt nicht veraendern!")), 1;
+  
+  aendern_usage();
+  
+  write("? ");
+  
+  input_to("customize");
+  return 1;
+}
+
+void NotifyClone(object other)
+{
+  other->SetUp(game);
+}
+
+void init()
+{
+  ::init();
+  
+  if(!allowed_env())
+    remove();
+}
+
+void reset()
+{
+  ::reset();
+  
+  if(!allowed_env())
+    remove();
+}
+
+void SetUp(string g)
+{
+  game=g;
+}
+
+string QueryGameName()
+{
+  return game;
+}

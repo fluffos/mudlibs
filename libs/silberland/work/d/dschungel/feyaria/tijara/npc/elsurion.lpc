@@ -1,0 +1,862 @@
+// /d/dschungel/feyaria/ttijara/npc/elsurion.c
+// B
+// Elsurion, der Kraeuterhaendler und Meisterzauberer
+// 19-09-96  Feyaria@AnderLand 
+//  1-11-96  Feyaria@SilberLand 
+// 18-08-97  aufgabe fuer druidengilde
+// 12-05-01  angrox,creative
+//           give_notify() und ivory_questfun veraendert bzw neu
+
+inherit "std/npc";
+inherit "std/npc/spells";
+
+#include "../def.h"
+#include "/d/ebene/creative/ivory_tiger/quest.h"
+#include "/gilden/nekromanten/nekro_properties.h"
+#include "/d/astral/feyaria/astral.h"
+#define ELEMENTAL_OWNER "e_owner"
+
+#define INSEL "/d/dschungel/feyaria/felseninsel/room/strand4"
+#define IVORY_QUESTITEM "/d/ebene/creative/ivory_tiger/obj/imbue"
+
+int schutz, verkaufen;
+object *time= ({});
+
+public string windflasche() {
+  if(this_player()->QueryProp(P_GUILD) != "bardengilde") {
+    return "Mit einer Windflasche kann man natuerlich Winde einfangen. Aber damit koenntest du "
+           "ohnehin nichts anfangen. Die Winde werden nur von guter Musik angelockt.";
+  }
+
+  if(this_player()->QuerySkillAbility("Musizieren") < 1000) {
+    return "Mit einer Windflasche kann man natuerlich Winde einfangen. Aber damit koenntest du "
+           "noch nichts anfangen. Wenn du ein besserer Musikant bist, leihe ich sie dir gerne.";
+  }
+
+  if(objectp(present("\nbard_windflasche", this_player()))) return "Ich habe dir meine Flasche doch schon geborgt!";
+  if(this_player()->QuerySkill("lied der winde") != 0) {
+    return "Du hast die Winde bereits unterworfen. Wozu willst du das nochmal tun?";
+  }
+
+  call_out("give_windflasche", 0);
+  return "In der Tat habe ich eine Windflasche uebrig. Mit ihr kannst du die Winde einfangen. "
+         "Doch bedenke! Dies ist kein leichtes unterfangen. Du kannst die Winde mit deiner Musik "
+         "herbeirufen und, wenn du sie ausreichend schwaechst, werden sie in die Flasche gesogen. "
+         "Sobald du alle Winde gefangen hast, musst du die Flasche in einem Zug leertrinken!";
+
+}
+
+void create()
+{
+  if (IS_BLUE(ME)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Elsurion, der Kraeuterhaendler");
+  SetProp(P_LONG, BS(
+    "Diesem alten Elf sieht man seine grosse Lebenserfahrung an. Von seinem "
+    "schwaechlichen Aeusseren sollte man sich nicht taeuschen lassen, denn "
+    "er hat auf seinen langen Reisen die Kunst der Zauberei erlernt und "
+    "gilt als einer der erfahrensten Zauberer im SilberLand."));
+  SetProp(P_NAME, "Elsurion");
+  SetProp(P_INFO, BS(
+    "Elsurion ist von einer schuetzenden magischen Aura umgeben.") );
+  SetProp(P_ARTICLE, SINGULAR);
+  SetProp(P_GENDER, MALE);
+  AddId(({"elf", "waldelf", "elsurion", "haendler", "kraeuterhaendler",
+          "zauberer", "\nelsurion"}));
+  set_living_name("elsurion");
+  SetProp(P_SMELL, "Elsurion riecht nach Kraeutern und wuerzigen "
+     "Zauberzutaten.\n");
+ 
+  create_default_npc(45, 1000);
+  SetAttribute(A_STR, 10);
+  SetAttribute(A_INT, 90);
+  SetProp(P_BODY, 50);
+  SetProp(P_MAX_SP, 5000);
+  SetProp(P_HANDS,({" mit seinen alten Haenden",350,DT_BLUDGEON}) );
+  SetProp(P_RACE, "Elf");
+  SetProp(P_SIZE, 200+random(30));
+  SetProp(P_ALIGN, 300);
+  SetProp(P_RESISTANCE_STRENGTHS,
+    ([ DT_FIRE:-0.3, DT_POISON:-0.5, DT_MAGIC:-0.95, DT_SOUND: -0.3,
+       DT_LIGHT:-0.2, DT_HOLY:-0.1, DT_UNHOLY:0.1, DT_ACID:0.3  ]) );
+  SetProp(P_NOMAGIC,33);
+   
+  SetChats(3, ({
+    "Elsurion murmelt irgendwas Unverstaendliches.\n",
+    "Elsurion kramt in den Taschen seines Guertels herum.\n",
+    "Elsurion sortiert ein paar Kraeuter.\n",
+    "Elsurion kratzt sich am Kopf.\n",
+    "Elsurion philosophiert ueber Zauberzutaten.\n",
+    "Elsurion zupft an seiner Robe.\n",
+    "Elsurion mustert Dich von oben bis unten.\n",
+    "Elsurion schaut nachdenklich in den Himmel.\n",
+    "Elsurion zieht einen Ring der Todeszauberverstaerkung an.\n",
+    "Elsurion murmelt etwas von der Bruderschaft der Wissenden.\n",
+    "Elsurion warnt Dich: Die Prophezeihung wird sich bald erfuellen!\n",
+    "Elsurion sagt: Ich kann Zauberstaebe mit vielen Ladungen wieder aufteilen!\n",
+  }) );
+
+  SetAttackChats(10, ({
+    "Elsurion ruft: Mein Todeszauber wird Dich vernichten!\n",
+    "Elsurion zeigt mit dem Finger auf Dich und sagt: STIRB!\n",
+    "Elsurion sagt: Lass mich in Ruhe oder ich verwandle Dich in einen "
+      "Frosch!\n",
+  }) );
+
+  AddInfo(DEFAULT_INFO, ({
+    "sagt: Hmm, davon habe auch ich in meinem langem Leben noch nichts "
+    "gehoert.\n",
+    "sagt: Willst Du nicht doch ein paar Kraeuter kaufen?\n",
+    "sagt: Ach, das ist ja trivial!\n",
+    "sagt: Das moechte ich auch gerne wissen.\n",
+    "macht eine abwehrende Geste.\n",
+    "sagt: Was denkst Du eigentlich von mir?\n",
+    "seufzt: Ach, wie schoen war das frueher.\n",
+    "beachtet Dich gar nicht.\n",
+    "gruebelt ueber diese Frage.\n",
+    "staunt nur.\n",
+    "fragt: Wie hast Du das jetzt gemeint.\n",
+    "denkt kurz nach und schuettelt dann den Kopf.\n",
+    "kratzt sich am Kopf.\n",
+    "sagt: Du kannst aber komische Fragen stellen.\n",
+    "seufzt: Tut mir leid, darueber weiss ich nichts.\n",
+    "sagt: Keine Ahnung.\n",
+    "sagt: Hmm, ich werde darueber nachdenken.\n",
+    "antwortet etwas, aber Du verstehst es nicht.\n",
+    "gratuliert Dir zu Deiner Weisheit.\n",
+    "sagt: Ach ja, wie war das gleich....\n",
+    "sagt: War wirklich nett, mit Dir zu plaudern.\n"}) );    
+
+  AddLibrary(NPC "spieler.lib",1); 
+  AddLibrary(NPC "tijara.lib" ,1);
+  AddLibrary(NPC "nekro_history_elsurion.lib" ,1);
+  AddLibrary(NPC "elsurion_macht.lib" ,1);
+
+  AddInfo("feyaria",
+    "Feyaria hat mich erschaffen.","sagt: ");
+  AddInfo( ({"elsurion","meisterzauberer", "name"}),
+    "Ich bin Elsurion der Meisterzauberer.","prahlt: ");
+  AddInfo( ({"todeszauber"}),
+    "Mein Todeszauber kann Dich in einem Schlag vernichten.",
+    "belehrt Dich: ");
+  AddInfo( ({"zauber", "zauberei", "zaubersprueche", "zauberer", "zaubern",
+             "zauberspruch", "magie", "magier", "magiekundig",
+             "magiekunde"}),
+    "Ich bin ein maechtiger Zauberer und sehr intelligent.","belehrt Dich: ");
+  AddInfo( ({"kraeuter", "kraeuterhaendler", "kraeuterhandel", "kraut",
+             "kraeutern", "dschungelpflanzen"}),
+    "Ich handle mit seltenen Kraeutern aus dem Dschungel.","sagt: ");
+  AddInfo( ({"robe", "zauberrobe"}),
+    "Das ist meine Zauberrobe.", "sagt: ");
+  AddInfo( ({"guertel"}),
+    "Das ist mein Guertel.", "sagt: ");
+  AddInfo( ({"zitteraalherz", "blutstein", "haare", "froschschenkel",
+     "giftefeu", "efeu", "herz", "stein", "bueschel", "zutaten", 
+     "zauberzutaten"}),
+    "Ich brauche meine Zauberzutaten zum Zaubern. Wenn Du welche uebrig "
+    "hast, kannst Du sie mir ja verkaufen.", "sagt: ");
+  AddInfo( ({"wunderkraut", "heilmittel"}),
+    "Das Wunderkraut ist ein maechtiges Heilmittel.", "sagt: ");
+  AddInfo( ({"tod", "leben", "schlag"}),
+    "Ich kann Dich mit einem Schlag vom Leben in den Tod schicken.", 
+    "sagt streng: ");
+  AddInfo( ({"taschen", "tasche"}),
+    "In den Taschen meines Guertels sind meine Zauberzutaten.", "sagt: ");
+  AddInfo( ({"elf", "elfen"}),
+    "Ja, ich bin ein Elf.", "zeigt auf sich und sagt: ");
+  AddInfo( ({"wirselkraut", "rotblatt", "wirselkr", "blatt"}),
+    "Das kannst Du hier kaufen.", "sagt: ");
+  AddInfo( ({"schutz", "blitz", "vergiften" ,"verfroschen", "frosch",
+             "feuerkugel", "feuerball", "giftpfeil", "pfeil"}),
+     "Diesen Zauber beherrsche ich absolut perfekt.", "vertraut Dir an: ");
+  AddInfo( ({"geschichten", "geschichte", "maerchen"}),
+    "Ich kenne viele Geschichten. Sag mir doch, um welche es geht.",
+    "sagt: ");
+  AddInfo( ({"ratten", "ratte", "rattenplage", "plage"}),
+    "Der Gouverneur wird zur Zeit von einer Rattenplage geplagt.",
+    "seufzt: ");
+  AddInfo( ({"rattenfaenger"}),
+    "Du musst Dir schon was einfallen lassen, um die Ratten unschaedlich "
+    "zu machen. Aber ich erinnere mich an ein Maerchen, in dem ein "
+    "Rattenfaenger mit einem kleinen Musikinstrument die Ratten weglocken "
+    "konnte.", "erinnert sich: ");
+  AddInfo( ({"instrument", "musikinstrument"}),
+    "Leider weiss ich nicht mehr, um welches Musikinstrument es sich "
+    "gehandelt hat, aber es war ganz aus Holz geschnitzt.", "gruebelt: ");
+  AddInfo( ({"pfeife", "pfeifen", "holzpfeifchen", "holzpfeife", "pfeifchen"}),
+    "Hmm, da kenn ich mich auch nicht so gut aus, das ist eher eine "
+    "Spezialitaet von Hobbits. Frag mal einen Hobbit, es wohnen und arbeiten "
+    "einige hier in Tijara.", "sagt: ");
+  AddInfo( ({"maerchen", "geschichte", "schutzzauber"}),
+    "Suchst Du etwa einen Schutzzauber gegen Ratten? Ich hab da mal von "
+    "einem Hobbit gehoert, der Ratten mit einer Holzpfeife weggelockt hat.",
+    "sagt: ");
+  AddInfo( ({"hobbit", "hobbits"}),
+    "Viele Hobbits arbeiten und wohnen hier in Tijara.", "sagt: ");
+  AddInfo( ({"tauchen", "atmen", "unter wasser atmen"}),
+    "Mit Hilfe von Kajubo-knospen kann man unter Wasser atmen. Du findest "
+    "an der Kueste vielleicht einige Straeucher mit Kajubo-Knospen.",
+    "erzaehlt Dir: "); 
+  AddInfo( ({"kajubo", "kajubostrauch", "kajubostraeucher", "kajuboknospen",
+             "kajuboknospe", "kajubo-knospe", "kajubo strauch",
+             "kajubo-strauch"}),
+    "An der Kueste wachsen Kajubostraeucher. Ihre Knospen sind sehr wertvoll. "
+    "Wenn Du welche findest, kannst Du sie mir verkaufen.", "sagt: ");
+  AddInfo( ({"echse", "gelbschwanzechse", "dreikoepfige gelbschwanzechse"}),
+    "Die dreikoepfige Gelbschwanzechse hat einen sehr wertvollen Schwanz.",
+    "erzaehlt: ");
+  AddInfo( ({"schwanz", "gelbschwanz", "echsenschwanz"}),
+    "Fuer einen Schwanz der Gelbschwanzechse werde ich Dich reich belohnen.",
+    "verspricht Dir: ");
+  AddInfo( ({"hotel", "grand hotel", "grandhotel"}),
+    "Das Grand Hotel ist gleich nebenan. Dort verkehren nur vornehme Leute.",
+    "sagt: ");
+  AddInfo( ({"anvar", "druide"}),
+      "Du meinst Anvar den Druiden? Der versteht gar nichts von Magie!",
+      "sagt abfaellig: ");
+  AddInfo( ({"zauberstab", "zauberstaebe"}),
+      "Fuer laeppische 9999 Muenzen kann ich einen Zauberstab mit Ladungen "
+      "in zwei Teile zerlegen.", "sagt: ");
+
+  // Infos fuer Bardenquest
+  AddInfo( ({"wind", "winde"}),
+    "Es gibt in jeder der wichtigen Himmelsrichtungen einen Wind: Norden, Sueden, Osten und Westen. "
+    "Man sagt, mit einer Windflasche koenne man sie einfangen.",
+    "sagt: ");
+
+  AddInfo( ({"lied der winde"}),
+    "Ah. Noch so jemand, der danach trachtet die Elemente zu unterwerfen, aber bei den Druiden "
+    "abgewiesen wurde? Das Lied der Winde ist eine alte Beschwoerung, die nur ein Kundiger "
+    "zu singen vermag. Um sie zu erfahren, muss man die vier Winde unterwerfen.",
+    "gruebelt: ");
+
+  AddInfo( "suedwind",
+    "Um den Suedwind zu finden, musst du in die heisse Wueste. Es heisst, dass es in einem "
+    "merkwuerdigen Dorf voller boesartiger Kreaturen einen Turm geben soll. Von dem aus, "
+    "kannst du einen bestaendigen Sandsturm beobachten. Das ist der richtige Ort, um den "
+    "Suedwind zu rufen!",
+    "erzaehlt: ");
+
+  AddInfo( "westwind",
+    "Der Westwind zieht oft ueber den Kristallwald. So erzaehlen es die Riesenalken zumindest. "
+    "Ich denke, dass du wohl den hoechsten Baum im Kristallwald erklimmen muesstest, um einen "
+    "guten Ort zur Beschwoerung des Westwinds zu finden.",
+    "erzaehlt: ");
+
+  AddInfo( "ostwind",
+    "Der Ostwind ist wild und stuermisch. Um ihn anzurufen musst du wohl den sturumtostesten "
+    "Gipfel im ganzen Silberland aufsuchen. Und das wird nicht reichen. Dort musst du einen der "
+    "hoechsten Punkte erklimmen. Lengenden zu folge befindet sich dieser Gipfel nahe einem Lager "
+    "der Trolle. Allerdings sind die Legenden schon alt, und aus der Zeit, als das Gebirge noch "
+    "nicht besiedelt war. Jetzt sieht dieser Ort vermutlich anders aus, und ist vermutlich "
+    "besiedelt worden.",
+    "erzaehlt: ");
+
+  AddInfo( "nordwind",
+    "Den Nordwind? Hm, ja. Dieser Wind ist gar nicht so schwer zu finden. Ich selbst habe ihn "
+    "einst auf einem Pass noerdlich von Smoersky heraufbeschworen. In diesem Pass tobt ein "
+    "dichtes Schneetreiben, das perekt dafuer geeignet ist.",
+    "erzaehlt: ");
+
+  AddInfo( ({"windflasche"}), #'windflasche, "meint: ");
+
+  // Fragen, die er nicht beantworten kann, mitloggen
+  SetProp(P_LOG_INFO, "feyaria/elsurion");
+
+  SetProp(P_DIE_MSG, " stirbt mit einer maechtigen magischen Entladung.\n");
+  SetProp(P_KILL_NAME, "Der Meisterzauberer Elsurion");
+  SetProp(P_KILL_MSG, "Niemand kann meinen Todeszauber bezwingen!");
+  SetProp(P_MURDER_MSG, ({
+      "Das naechste Mal erwischt Dich mein Todeszauber, %s!",
+      "Wie konnte %s nur meinem Todeszauber entkommen?",
+      "Das naechste Mal hab ich mehr Zauberzutaten, %s!"})[random(3)]);
+  
+  SetProp(P_SPELLRATE, 95);
+  AddSpell(10, 1,
+    "Elsurion breitet die Haende aus und sagt: SCHUTZ.\n",
+    "Elsurion breitet die Haende aus und sagt: SCHUTZ.\n",
+    DT_MAGIC, "spell_schutz");
+  AddDefaultSpell(8, 450, DS_POISON,
+    "Elsurion trifft Dich mit einem Giftpfeil ins Bein.\n",
+    "Elsurion trifft @WEN mit einem Giftpfeil ins Bein.\n",
+    1);
+  AddSpell(7, 550,
+    "Aus Elsurions Augen zuckt ein Kugelblitz auf Dich zu.\n",
+    "Aus Elsurions Augen zuckt ein Kugelblitz auf @WEN zu.\n",
+    DT_LIGHTNING, ([SP_SHOW_DAMAGE:1]));
+  AddDefaultSpell(6, 900, DS_MASS_DAMAGE,
+    "Elsurion wirft eine lodernde Flammenkugel in den Raum.\n",
+    "Elsurion wirft eine lodernde Flammenkugel in den Raum.\n",
+    DT_FIRE);
+  AddSpell(5, 1,
+    "Elsurions Haende fangen ploetzlich zu brennen an.\n",
+    "Elsurions Haende fangen ploetzlich zu brennen an.\n",
+    DT_MAGIC, "spell_hands");
+  AddDefaultSpell(4, 250, DS_ANTIMAGIC,
+    "Elsurion huellt Dich in eine Kugel schimmerden Lichts ein.\n",
+    "Elsurion huellt @WEN in eine Kugel schimmerden Lichts ein.\n",
+    4);
+  AddDefaultSpell(4, 350, DS_SLOW,
+    "Elsurion friert Dich ein.\n",
+    "Elsurion friert @WEN ein.\n",
+    2);
+  AddSpell(4, 300,
+    "Elsurion dreht seine Hand im Kreis und verwirrt Dich voellig.\n",
+    "Elsurion dreht seine Hand im Kreis und verwirrt @WEN voellig.\n",
+    DT_MAGIC, "spell_crazy",([SP_SHOW_DAMAGE:1]));
+  AddSpell(3, 400,
+    "Elsurion dringt schmerzhaft in deinen Geist ein.\n",
+    "Elsurion starrt @WEN zwingend an.\n",
+    DT_MIND, "spell_zwing",([SP_SHOW_DAMAGE:1]));
+  AddSpell(3, 200,
+    "Elsurion fuchtelt mit einer Flasche Alkohol vor Deiner Nase herum.\n",
+    "Elsurion fuchtelt mit einer Flasche Alkohol vor @WESSEN Nase herum.\n",
+    DT_MAGIC, "spell_alk",([SP_SHOW_DAMAGE:1]));
+  AddDefaultSpell(2, 150, DS_FROG);
+  AddSpell(1, 1,
+    "Elsurion vernichtet Dich mit dem gefuerchteten Todeszauber.\n",
+    "Elsurion vernichtet @WEN mit dem gefuerchteten Todeszauber.\n",
+    DT_MAGIC, "spell_death");
+  
+  SUID;
+  CLONEME(ARMOUR "zauberrobe");
+  CLONEME(ARMOUR "guertel");
+  command("trage alles");  
+  CLONEME(OBJ "blutstein");
+  command("steck blutstein in guertel");
+  CLONEME(OBJ "frosch");
+  command("steck froschschenkel in guertel");
+  CLONEME(OBJ "giftefeu");
+  command("steck giftefeu in guertel");
+  CLONEME(OBJ "haare");
+  command("steck haare in guertel");
+  CLONEME(OBJ "zitteraalherz");
+  command("steck zitteraalherz in guertel");
+  CLONEME(OBJ "wunder");
+  command("steck wunderkraut in guertel");
+  if( !random(4) )
+    CLONEME("/p/magic/msack");
+  CLONEME("/gilden/druidenzirkel/obj/flasche");
+
+  schutz=2;
+}
+
+public void give_windflasche() {
+  object flasche;
+  flasche = clone_object("/gilden/bardengilde/obj/quest/windflasche");
+  if(flasche->move(this_player(), M_GET) != 1) {
+    command("sag Komm wieder, wenn du die Flasche auch tragen kannst!");
+    flasche->remove(1);
+    return;
+  }
+
+  tell_room(environment(this_object()), Name(WER, 1) + " gibt " + this_player()->Name(WER, 1) + " eine Flasche.\n", ({this_player()}));
+  tell_object(this_player(), Name(WER, 1) + " gibt Dir eine Flasche.\n");
+  return;
+}
+        
+int Defend(int dam, mixed dam_type, mixed spell, object enemy)
+{
+  int i;
+  object *ob;
+  object owner;
+
+  if( enemy->id("NPC") && !random(3) )
+  {
+    enemy->StopHuntFor(ME);
+    StopHuntFor(enemy);
+    owner = enemy->QueryProp(ELEMENTAL_OWNER) ||  // Elementar
+            enemy->QueryProp(P_NEKRO_MASTERED_BY) || // Nekro-Pet
+            (enemy->QueryMaster() ? find_player(lower_case(enemy->QueryMaster())) : 0); // Daemon
+    if(objectp(owner))
+    {
+      owner->RemovePursuer(enemy);
+      owner->RemoveDefender(enemy);
+    }
+    tell_room(MENV, enemy->Name(WER,2)+" kaempft jetzt fuer Elsurion.\n");
+    if( sizeof(ob = PresentEnemies())) 
+      for(i=sizeof(ob)-1;i--;i>=0)
+        enemy->Kill(ob[i]);
+    return 0;
+  }
+  if( enemy->QueryProp(P_LEVEL)<20)
+  {
+    if( enemy->QueryProp(P_GENDER)==FEMALE)
+      tell_object(enemy,
+          "Elsurion sagt: Was willst Du eigentlich, meine Kleine?\n");
+    else
+    {
+      tell_object(enemy,
+        "Elsurion sagt: Was willst Du eigentlich, Du Fratz?\n");
+      if(random(5)) 
+      {
+        tell_object(enemy,
+          "Elsurion verwandelt Dich in einen Frosch.\n");
+        tell_room(ENV(enemy),
+          "Elsurion verwandelt "+enemy->name(WEN)+" in einen Frosch.\n");
+        enemy->SetProp(P_FROG,1);
+      }            
+    }
+    if(random(2))
+    {
+      tell_object(enemy,
+        "Elsurion sagt: Geh mir aus den Augen!\n"
+        "Dir wird schwindlig und ploetzlich bist du ganz woanders.\n");
+      tell_room(ENV(enemy),
+        "Elsurion laesst "+enemy->name(WEN)+" einfach verschwinden.\n", ({enemy}));
+      enemy->move(INSEL,M_TPORT);
+    }
+    enemy->StopHuntFor(ME);
+    StopHuntFor(enemy);
+    return 0;
+  }
+  if(schutz && dam>33)
+  {
+    if( --schutz==0 ) 
+    {
+      tell_room(ENV(enemy),
+        "Elsurions Schutzhuelle loest sich auf.\n");
+    }
+    return ::Defend(dam/10, dam_type, spell, enemy);
+  }
+  return ::Defend(dam, dam_type, spell, enemy);
+}
+
+
+void spell_schutz(object enemy, int damage, mixed dam_type)
+{
+  tell_room(ENV(enemy),
+    "Elsurion wird von einer Schutzhuelle eingehuellt.\n");
+  if( (schutz+=random(12)+5)>20 ) schutz=20;
+  
+}
+
+void spell_gift( object enemy, int damage, mixed dam_type)
+{
+  enemy->AddPoison(1+random(2));
+}
+
+void spell_fire(object enemy, int damage, mixed dam_type)
+{
+  object *enemies;
+  int i;
+  
+  enemies = PresentEnemies(); 
+  if( enemies && sizeof(enemies) )
+  {
+    for( i=sizeof(enemies)-1;i>=0;i--)
+    {
+      enemies[i]->Defend(100+random(800), DT_FIRE, 
+        ([SP_SHOW_DAMAGE:1,SP_NAME:"flammenkugel"]), TO );
+    }
+  }
+}
+
+void spell_death(object enemy, int damage, mixed dam_type)
+{
+  object ob;
+  write_file(LOG "elsurion",
+    ctime()+": "+CAP(getuid(enemy))+" bekommt den Todeszauber.\n");
+ if (random(100) < enemy->QueryAttribute(A_INT))  // int-prozentige Abwehr
+  {
+    tell_object(enemy,
+      "Du beisst die Zaehne zusammen und wehrst den Zauber ab.\n");
+    tell_room(ENV(enemy),
+      "Elsurion wird von einem magischen Rueckschlag getroffen.\n");
+    TO->reduce_hit_point( random(20) );    
+    return;
+  }
+  if( ob=present("\ntodeszauberschutz", enemy) )
+  {
+    if( ob->QueryProp(P_WORN) && random(66) < enemy->QueryAttribute(A_INT) )
+    {
+      tell_object(enemy,
+        "Dein Amulett leuchtet auf und wehrt den Zauber ab.\n");
+      tell_room(ENV(enemy), "Elsurion wird von einem gewaltigen magischen "
+        "Rueckschlag getroffen.\n");
+      write_file(LOG "elsurion",
+        ctime()+": "+CAP(getuid(enemy))+" : magischer Rueckschlag.\n");
+      TO->do_damage( random(100) );
+      if( random(2) )
+      {
+        tell_object(enemy, "Dein Amulett zerfaellt zu Staub.\n");        
+        ob->remove();
+      }
+      return;
+    }
+    else
+    {
+      tell_object(enemy,
+        "Dein Amulett kann den Todeszauber nur etwas abschwaechen.\n");
+      enemy->do_damage( 111+random(222), TO );
+      verkaufen=1;
+      return;
+    }
+  }
+  tell_object(enemy,
+    "\n\nDir wird ploetzlich schwarz vor den Augen .....\n\n\n");
+  write_file(LOG "elsurion",
+    ctime()+": "+CAP(getuid(enemy))+" stirbt ducht Todszauber.\n");
+  enemy->do_damage(1000000, TO);
+  verkaufen=1;
+}
+
+void spell_hands(object enemy, int damage, mixed dam_type)
+{
+  SetProp(P_HANDS,({" mit brennenden Haenden", 777, DT_FIRE}) );
+  SetProp(P_SPELLRATE, 20);
+  call_out("end_hands",random(10)+4);
+}
+
+void end_hands()
+{
+  SetProp(P_HANDS,({" mit seinen alten Haenden", 350, DT_BLUDGEON}) );
+  SetProp(P_SPELLRATE, 95);
+}
+
+void spell_crazy(object enemy, int damage, mixed dam_type)
+{
+  int i;
+  object *ob;
+
+  if( !interactive(enemy) )
+  {
+    enemy->StopHuntFor(ME);
+    StopHuntFor(enemy);
+    tell_room(MENV, enemy->Name(WER,2)+" kaempft jetzt fuer Elsurion.\n");
+    if( sizeof(ob = PresentEnemies()))
+      for(i=sizeof(ob)-1;i--;i>=0)
+        enemy->Kill(ob[i]);
+    return;
+  }
+  enemy->SetProp(P_WIMPY, random(200));
+  if( IS_SEER(enemy) ) 
+    enemy->SetProp(P_WIMPY_DIRECTION, "rufe Hilfe, ich sterbe gleich!");
+}
+
+void spell_alk(object enemy, int damage, mixed dam_type)
+{
+  int alc;
+  int i;
+  object *ob;
+
+  if( !interactive(enemy) )
+  {
+    enemy->StopHuntFor(ME);
+    StopHuntFor(enemy);
+    tell_room(MENV, enemy->Name(WER,2)+" kaempft jetzt fuer Elsurion.\n");
+    if( sizeof(ob = PresentEnemies()))
+      for(i=sizeof(ob)-1;i--;i>=0)
+        enemy->Kill(ob[i]);
+    return;
+  }
+  if( enemy->QueryProp(P_GUILD)=="zechpreller" ) 
+    alc = 0;
+  if( enemy->QueryProp(P_GUILD)=="druidenzirkel" ) 
+    alc = enemy->QueryProp(P_MAX_ALCOHOL) / 2;
+  else 
+    alc = enemy->QueryProp(P_MAX_ALCOHOL) ;
+  enemy->SetProp(P_ALCOHOL, alc);
+}
+
+void spell_zwing(object enemy, int damage, mixed dam_type)
+{
+  int i;
+  object *ob;
+  
+  if( !interactive(enemy) )
+  {
+    enemy->StopHuntFor(ME);
+    StopHuntFor(enemy);
+    tell_room(MENV, enemy->Name(WER,2)+" kaempft jetzt fuer Elsurion.\n");
+    if( sizeof(ob = PresentEnemies()))
+      for(i=sizeof(ob)-1;i--;i>=0)
+        enemy->Kill(ob[i]);
+    return;
+  }
+  switch(random(6))
+  {
+    case 0: 
+      domainshout( CAP(enemy->name())+ " ruft: Ich bin so bloed und greife "
+        "Elsurion an!\n");
+      break;
+    case 1:
+      domainshout( CAP(enemy->name())+ " ruft: Elsurion ist echt ein harter "
+        "Gegner!\n");
+      break;
+    case 2:
+      tell_object(enemy, "Du wirst alle Deine Sachen weg.\n");
+      for(i=sizeof(ob=all_inventory(enemy));i>0;i--)
+      {
+        ob[i]->move(MENV, M_PUT);
+      } 
+      enemy->command_me("wirf alles weg");
+      break;
+    case 3:
+      tell_object(enemy, "Du gibts Deine Waffe an Elsurion.\n");
+      if( enemy->QueryProp(P_WEAPON) )
+      {
+        enemy->QueryProp(P_WEAPON)->move(TO, M_GIVE);
+      }
+      enemy->command_me("gib alle waffen an elsurion");
+      verkaufen=1;
+      break;
+    case 4:
+      tell_object(enemy, "Du gibts alle Deine Ruestungen an Elsurion.\n");
+      for(i=sizeof(ob=enemy->QueryProp(P_ARMOURS))-1;i>0;i--)
+      {
+        ob[i]->move(TO, M_GIVE);
+      }
+      enemy->command_me("gib alle ruestungen an elsurion");
+      command("trage alles");
+      verkaufen=1;
+      break;
+    case 5:
+      enemy->Kill(present("muellschlucker",MENV));
+      break;
+  }
+}
+
+void give_notify(object ob)
+{
+  object *all_inv;
+  int i, ivory_questitems;
+  object kraut;
+  object quest_item;
+  string adj;
+  // Wird fuer die Quest von Crea benoetigt (Ivory Tigers)
+  if (ob->id(IV_POT)) 
+  {
+    if (ob->query_owner()!=getuid(TP)) 
+    {
+      command_me("emote wirft einen Blick in den Tiegel.");
+      command_me("sag He, Du bist doch gar nicht derjenige, der den Tiegel besorgt hat!");
+      command_me("emote schimpft und wirft den Tiegel veraechtlich weg.");
+      ob->move(ENV(ME));
+      return;
+    }
+    ivory_questitems = 0;
+    all_inv = all_inventory(ob);
+    for (i = sizeof(all_inv) - 1; i >= 0; i--) 
+    {
+      if (all_inv[i]->id(IV_HEARTPOWDER) || all_inv[i]->id(IV_FAT) ||
+          all_inv[i]->id(IV_MOSSPOWDER))
+      {
+        ivory_questitems++;
+      }
+    } 
+    if (sizeof(all_inv) > 3) ivory_questitems = 0;
+    if(ivory_questitems != 3) {
+      command_me("sag Das kann unmoeglich funktionieren!");
+      command_me("emote schimpft und wirft den Tiegel veraechtlich weg.");
+      ob->move(ENV(ME));
+      return;
+    }
+    command_me("sag Einen Moment, dass muss sehr sorgfaeltig verruehrt werden.");
+    tell_room(ENV(ME), BS("Elsurion beginnt sehr schnell in der Mixtur "
+	  "zu ruehren!"));
+    tell_object(TP, BS("Du beobachtest konzentriert was Elsurion gerade "
+	"macht."));
+    quest_item=deep_present(IV_QUEST_ITEM, TP);
+    if(quest_item && quest_item->check_completed()!=1) {
+      command_me("sag Irgendetwas stimmt mit dem Tiegel nicht. Vannor schickt Dich, richtig? "
+          "Hast Du den Tiegel auch Vannor gezeigt? Hast Du alles selber geholt und wirklich nichts "
+          "ausgelassen? Mir scheint, dass Du irgendwas vergessen hast!");
+      command_me("emote wirft den Tiegel weg.");
+      ob->move(ENV(ME));
+      return ;
+    }
+    call_out("ivory_questfunc", 12, ob, all_inv, ivory_questitems); 
+    return;
+  }
+  else if ((ob->id("\ngoldschwanz")))
+  {
+    write("Elsurion bedankt sich bei Dir und gibt Dir ein Wunderkraut als "
+            "Belohnung.\n");
+    say( "Elsurion bedankt sich bei "+ TP->name(WEM) +".\n", ({TP}) );
+    kraut = clone_object( OBJ "wunder");
+    kraut->move(ME, M_NOCHECK);
+    if (kraut->move(TP, M_GIVE) == ME_TOO_HEAVY)
+      {
+        command("sag Leider kannst Du es nicht tragen, hier hast Du den "
+            "Schwanz wieder zurueck.");
+        ob->move(TP, M_NOCHECK);
+        kraut->remove();
+      }
+      else
+        ob->remove();
+      return;
+    }
+    else if (ob->id("\nastral_zauberstab"))
+    {
+      if (TP->QueryMoney() < 10000)
+      {
+        command("sag Das Zerteilen von Zauberstaeben kostet 9999 Muenzen!\n");
+        ob->move(TP, M_NOCHECK);
+        say("Elsurion gibt " + ob->name(WEN,1) + " wieder zurueck.\n");
+        return;
+      }
+      if (ob->QueryProp("ladungen") < 2)
+      {
+        command("sag Dieser Zauberstab hat zu wenige Ladungen!\n");
+        ob->move(TP, M_NOCHECK);
+        say("Elsurion gibt " + ob->name(WEN,1) + " wieder zurueck.\n");
+        return;
+      }
+      say(BS("Elsurion teilt den Zauberstab in 2 Teile, gib einen zurueck "
+            "und wirft den anderen auf den Boden.\n"));
+      kraut = clone_object(explode(file_name(ob), "#")[0]);
+      kraut->SetProp(P_NAME_ADJ, adj = ob->QueryProp(P_NAME_ADJ)[0]);
+      kraut->SetProp(P_ADJECTIVES, 0);
+      kraut->AddAdjective( ({adj, adj + "en", adj + "er"}) );
+      kraut->SetProp("ladungen", ob->QueryProp("ladungen") / 2);
+      ob->SetProp("ladungen", ob->QueryProp("ladungen") / 2);
+      ob->move(TP, M_NOCHECK);
+      kraut->move(ENV(TP), M_NOCHECK);
+      TP->AddMoney(-9999);
+    }
+    else
+      ::give_notify(ob);
+    return ::give_notify(ob);
+  }
+
+#define  ELEMENT_SECURE "secure_prop"
+
+  // Kills mitloggen
+  void die(int poisondeath)
+  {
+    object spieler, ob;
+    spieler=ME->QueryProp(P_KILLER);
+    if( spieler &&
+       (spieler->QueryProp(P_GUILD))=="druidenzirkel" &&
+       (spieler->QueryProp(P_GUILD_LEVEL))==13)
+    {
+     call_other("/gilden/druidenzirkel/master/druidenmaster",
+                "SetTask", spieler, 14);
+     call_other("/gilden/druidenzirkel", "LogTask", spieler, 14);
+    }
+    if (spieler && (ob = present("\nzechpreller_quest_11", spieler)))
+      ob->Mark();
+    write_file(LOG "elsurion",
+      ctime()+": "+CAP(getuid(TP))+" killt Elsurion.\n");
+    if( !IS_LEARNER(TP) )
+      domainshout(CAP(TP->Name())+ 
+          " hat den Meisterzauberer Elsurion bezwungen.\n");
+    ::die(poisondeath);
+  }
+
+  void NotifyPlayerDeath(object player, object killer, int lostexp)
+  {
+    write_file(LOG "elsurion",
+      ctime()+": Elsurion hat gerade "+CAP(getuid(player))+" umgebracht.\n");
+  //  command("nimm alles aus leiche");
+  //  command("trage alles");
+    verkaufen=1;
+  //  heal_self(100);
+  }
+
+  void reset()
+  {
+    object ob;
+    ::reset();
+    if (!is_clone(this_object()) ) return;
+  /*
+    if( verkaufen )
+    {
+      for(ob=first_inventory(TO);ob;ob=next_inventory(ob))
+      {
+        if( ob->QueryProp(P_AUTOLOADOBJ))
+          ob->SetProp(P_KEEP_ON_SELL, getuid(TO));
+      }
+      move(ROOM "waffen_c4",M_TPORT);
+      command("verkaufe alles");
+      command("nimm alles");
+      move(ROOM "laden_c3", M_TPORT);
+      command("verkaufe alles");
+      command("nimm alles");
+      command("wirf kiste weg");
+      command("wirf last weg");
+      command("wirf ballen weg");
+      command("wirf kiste weg");
+      command("wirf last weg");
+      command("wirf ballen weg");
+      move(ROOM "kraeuter_b6", M_TPORT);
+      verkaufen=0;
+    }
+  */
+    tell_room(MENV,"Elsurion verschwindet kurz und kommt voellig erfrischt "
+        "wieder.\n");
+    heal_self(500);
+    schutz=0;
+    time =({});
+  }
+
+
+  nosave void ivory_questfunc(object obj, object * all_inv, int ivory_questitems) 
+  {
+    object ob,quest_item;
+    int i;
+    quest_item=deep_present(IV_QUEST_ITEM, TP);
+  if(quest_item && quest_item->check_completed()==1 &&
+      quest_item->check_owner(TP)) 
+  {
+    if(ivory_questitems!=3) {
+      command_me("sag Tja, leider stimmt da etwas nicht. Am besten "
+	"ueberpruefst Du die Rezeptur nochmal.");
+      tell_room(ENV(ME), sprintf("Elsurion gibt %s an %s.\n", obj->name(WEN), 
+        TP->name(WER)), ({TP}));
+      tell_object(TP, sprintf("Elsurion gibt Dir %s.\n", obj->name(WEN)));
+      obj->move(TP, M_NOCHECK|M_SILENT);
+      return;
+    }
+    tell_room(ENV(ME), BS("Ein kleines Stinkewoelkchen steigt mit einem "
+	    "kleinen *KAWUFF* aus dem Tiegel auf.\n"));
+    if(ENV(ME)!=ENV(TP)) {
+      command_me(sprintf("Huch, wo ist %s denn hin. Ich habe doch noch %s "
+	  "Tiegel. Naja, dann entsorge ich den mal.", TP->name(WER), 
+	  TP->QPP(MALE, WESSEN, PLURAL)));
+      quest_item->reset_quest();
+    }
+    else {
+      command_me("sag So, bitte sehr. Der Balsam ist fertig.");
+      ob=clone_object(IVORY_QUESTITEM);
+      ob->set_may_apply_balm(TP->query_real_name());
+      tell_room(ENV(ME), sprintf("Elsurion gibt %s an %s.\n", ob->name(WEN), 
+      TP->name(WER)), ({TP}));
+      tell_object(TP, sprintf("Elsurion gibt Dir %s.\n", ob->name(WEN)));
+      ob->move(TP, M_NOCHECK|M_SILENT);
+      tell_object(TP, BS("Du hast Dir genau eingepraegt wie Elsurion den "
+	    "Balsam gemischt hat. Du wirst jedoch nie einen so hochmagischen "
+	    "Balsam wie Elsurion mischen koennen. Darauf verwettest Du "
+	    "Deine Leber."));
+      //quest_item->reset_quest();
+    }
+  }
+  else {
+     command_me("sag Hier stimmt etwas nicht. Du scheinst nicht alles "
+	 "selber gemacht zu haben. Willst Du mich betruegen?");
+  }
+  for(i=sizeof(all_inv)-1;i>=0;i--)
+    all_inv[i]->remove();
+  obj->remove();
+  return; 
+}
+
+int do_frage(string question, string text)
+{
+  if (ASTRALMASTER->QueryFlag(getuid(this_player()), FLAG_TIME) && 
+      member(time, TP) == -1)
+  {
+    time += ({TP});
+    write(break_string("Ich sehe, Du hast die maechtigen Wesen der Ebenen der "
+          "Macht besiegt, nun bist Du bereit, Dich dem Herrn der Zeit zu "
+          "stellen. Dazu musst Du den Trippelpunkt in der Astralebene finden "
+          "und den geheimen Namen der Herrn der Zeit aussprechen." ,
+          78, "Elsurion fluestert Dir zu: "));
+    say ("Elsurion fluestert " + TP->name(WEM) + " etwas zu.\n", 
+        ({TP}));
+    return 1;
+  }
+  return ::do_frage(question, text);
+}

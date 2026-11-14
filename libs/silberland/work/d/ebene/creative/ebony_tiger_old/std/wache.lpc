@@ -1,0 +1,222 @@
+inherit "std/npc";
+inherit "std/npc/spells";
+inherit "std/inpc/select";
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include <combat.h>
+#include "../files.h"
+
+#define KEYMASTER "d/ebene/creative/ebony_tiger/std/keymaster"
+#define WAYS "d/ebene/creative/ebony_tiger/std/guildways"
+#define THIEFMASTER "d/ebene/creative/ebony_tiger/std/thiefmaster"
+
+create()
+{
+  object ob;
+
+  ::create();
+
+  AddId("Wache");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_NAME, "Dieb");
+  SetProp(P_SHORT, "Ein Dieb");
+  SetProp(P_RACE, "Dieb");
+  SetProp (P_LONG, BS(
+           "Der Dieb ist klein, untersetzt und traegt einen dunklen Bart. An"
+          +" seinem Guertel haengt ein Schluesselbund mit vielen Dietrichen.")); 
+  AddDetail("bart", BS(
+            "Der Bart des Diebs bedeckt sein Gesicht komplett."));
+  AddDetail("gesicht", BS(
+            "Das Gesicht des Diebes ist vollstaendig mit Bart ueberwuchert."));
+  AddDetail("guertel", BS(
+            "An dem schmalen Lederguertel haengt ein Schluesselbund."));
+  AddDetail("schluesselbund", BS(
+            "An dem Schluesselbund findest Du fuer jede passende Gelegenheit"
+           +" einen Dietrich."));
+  AddDetail("dietrich", BS(
+            "Mit diesem Dietrich scheint der Dieb jede Tuer knacken zu koennen."));
+
+  create_default_npc(19);
+  seteuid(getuid(TO));
+
+  (ob=clone_object("/obj/money"))->SetProp(P_AMOUNT, random(200));
+  ob->move(TO);
+
+  SetProp(P_DEFAULT_INFO, "ignoriert Dich und blickt sich gestresst um.\n");
+
+  SetProp( P_REJECT, ({ REJECT_KEEP,
+    "Der Dieb schnappt @WEN und murmelt: 'Wahrscheinlich haette ich es sowieso gestohlen.'\n" }) );
+  SetProp(P_SPELLRATE, 20);
+  AddDefaultSpell(5, 180, DS_REDUCE_WC);
+  AddDefaultSpell(3, 250, DS_DISARM);
+  AddDefaultSpell(1, 330, DS_FEAR);
+
+  SetProp(P_SIZE, 150);
+  SetProp(P_TRANSPARENT, 0);
+  SetAttribute(A_STR, 40);
+  ob=KEYMASTER->DistributeKey();
+  if (ob)
+    ob->move(TO);
+  SetProp(P_HELPING, 0);
+  SetProp(P_HELP_ROOMS, ({ }));
+  SetProp(P_MAX_HELPERS, 1);
+  SetProp(P_2ATTACK, 0);
+  SetProp(P_HELPERS, QueryProp(P_MAX_HELPERS));
+  SetProp(P_DIE_MSG, " schluckt noch schnell einen Generalschluessel und stirbt.\n");
+  add_select_commands();
+  THIEFMASTER->RegisterHelper(TO);
+  clone_object(OBJ("gkey"))->move(TO);
+}
+
+
+init()
+{
+  object lenv;
+
+  ::init();
+
+  if (TP && TP->id("Spieler") && (lenv=TP->QueryProp(P_LAST_COMMAND_ENV)) &&
+             (lenv==find_object(ROOM("s3")) ||
+	     lenv==find_object("d/ebene/creative/feldlager/room/a8_a7")))
+    call_out("command_me", 0, "sag Guten Tag, "+TPN+"! Willkommen in der"
+	    +" Gilde des Elfenbeineren Tigers. Mach ja keinen Aerger, Du"
+	    +" koenntest selber schneller in der Patsche stecken als"
+	    +" Du denkst!");
+  if (ENV(TO) && present("geld", ENV(TO)))
+    call_out("command_me", 0, "nimm geld");
+}
+
+
+die()
+{
+  object ob;
+
+  if ((ob=present("schluessel")))
+    KEYMASTER->RemoveKey(ob);
+  if ((ob=present("GKEY")))
+    ob->remove();
+  ::die();
+}
+
+remove()
+{
+  THIEFMASTER->RemoveHelper(TO);
+  ::remove();
+}
+
+
+heart_beat()
+{
+  mixed *way;
+  string *cmds;
+  int i, h;
+  object d;
+
+  ::heart_beat();
+  if (!InFight()) {
+    way=QueryProp(P_HELP_ROOMS);
+    if (sizeof(way)) {
+      SetProp(P_HELPERS, QueryProp(P_MAX_HELPERS));
+      if (stringp(way[0]))
+        cmds=({way[0]});
+      else
+	cmds=way[0];
+      // tell_object(find_player("creative"), sprintf("wohin: %s\n", go_now));
+      way=way[1..];
+      SetProp(P_HELP_ROOMS, way);
+      for (i=0; i<sizeof(cmds); i++)
+        command_me(cmds[i]);
+      if ((d=present("Dieb",ENV(TO))) && d!=QueryProp(P_HELPING))
+        AddPursuer(d);
+      if (QueryProp(P_HELPING)) {
+        if (present(QueryProp(P_HELPING), ENV(TO))) {
+          (QueryProp(P_HELPING))->AddDefender(TO);
+          command_me("sag Ah, da ist ja der Schurke!!! AUF IHN!!!");
+        }
+      }
+      else
+        if (QueryProp(P_2ATTACK) && present(QueryProp(P_2ATTACK))) {
+          (TO)->Kill(QueryProp(P_2ATTACK));
+          command_me("sag Ah, da ist ja der Schurke!!! AUF IHN!!!");
+        }
+    }
+  }
+  else
+    if ((h=QueryProp(P_HELPERS))) {
+      SetProp(P_HELPERS, h-1);
+      tell_room(ENV(TO), Name(WER)+" bruellt: Kommt mir zu Hilfe!!! Ich werde angegriffen!\n");
+      THIEFMASTER->RemoveHelper(TO);
+      THIEFMASTER->Help(TO);
+    }
+}
+
+void InformDefend(object enemy)
+{
+  Kill(enemy);
+}
+
+Help(object o)
+{
+  object x;
+  string from, to;
+  string *myway;
+
+  if (QueryProp(P_HELPING))
+    return;
+  if ((x=ENV(o)))
+    to=explode(file_name(x),"/")[<1];
+  if ((x=ENV(TO)))
+    from=explode(file_name(x),"/")[<1];
+  if (from==to) {
+    SetProp(P_HELPING, o);
+    THIEFMASTER->RemoveHelper(TO);
+    o->AddDefender(TO);
+    command_me("sag Ah, da ist ja der Schurke!!! AUF IHN!!!");
+    return;
+  }
+  if ((x=o->PresentEnemies()[0]))
+    SetProp(P_2ATTACK, x);
+  myway=WAYS->FromTo(from, to);
+  if (sizeof(myway)) {
+    SetProp(P_HELPING, o);
+    SetProp(P_HELP_ROOMS, myway);
+    THIEFMASTER->RemoveHelper(TO);
+    set_heart_beat(1);
+  }
+}
+
+StopHelp(object o)
+{
+  if (o && QueryProp(P_HELPING) || QueryProp(P_2ATTACK)) {
+    SetProp(P_HELPING, 0);
+    SetProp(P_2ATTACK, 0);
+    SetProp(P_HELP_ROOMS, ({ }));
+    THIEFMASTER->RegisterHelper(TO);
+    if (!InFight())
+      set_heart_beat(0);
+  }
+}
+
+varargs int StopHuntFor(object enemy, int silent)
+{
+  object h;
+
+  ::StopHuntFor(enemy, silent);
+  if ((h=QueryProp(P_HELPING)) && present(h))
+    StopHelp(h);
+  THIEFMASTER->RegisterHelper(TO);
+}
+
+void NotifyPlayerDeath(object pl, object k, int lostxp)
+{
+  command_me("nimm alles aus leiche");
+  command_me("zuecke_beste_waffe");
+  command_me("trage_beste_ruestungen");
+  if (QueryProp(P_HELPING))
+    StopHelp(QueryProp(P_HELPING));
+  THIEFMASTER->RegisterHelper(TO);
+}
+
+

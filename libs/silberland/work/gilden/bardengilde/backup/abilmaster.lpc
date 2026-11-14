@@ -1,0 +1,110 @@
+/*
+** Ability-Master der Bardengilde
+**
+** by Andyl@Silberland
+**
+** 2002-09-20
+**
+** Last updated: 2002-09-20
+**
+*/
+
+
+#include <wizlevels.h>
+#include <language.h>
+#include <config.h>
+#include <new_skills.h>
+#include <properties.h>
+
+#include "../bardengilde.h"
+
+mixed saveload;
+nosave mapping bards=([ ]);
+
+/*
+ Doch besser ein Mapping von mappings, so braucht man nur einmal laden :)
+ also ([spieler:([spell:abil, spell:abil, ...]), spieler2:([...])...])
+ */
+
+create()
+{
+  if (is_clone(this_object())) {
+    destruct(this_object());
+    return 1;
+  }
+  seteuid(getuid(this_object()));
+  if (restore_object(ABILLIST))
+    bards=saveload;
+  saveload=0;
+}
+
+query_prevent_shadow() { return 1; }
+
+
+nosave int CheckIfAllowed()
+{
+ object ob;
+ string fname;
+ ob=previous_object();
+ fname=file_name(ob);
+  
+ if(!IS_ARCH(getuid(ob)) && member(UID_ALLOWED, getuid(ob))==-1) { 
+     tell_andyl(sprintf("Versuchte "
+      +"Aenderung im Abilmaster von %s (direkt!)\n", CAP(getuid(ob))));
+     write_secure_log(ctime()+": Versuchte Aenderung im Abilmaster "
+             +"von "+CAP(getuid(ob))+" (direkt!)\n");
+     return 0;      
+   }
+ return 1;
+}
+
+int CheckAbility(object pl, string spell, int abil)
+{
+  mapping spells;
+  if(!CheckIfAllowed()) return -2;
+  if(!member(bards, getuid(pl))) 
+    bards+=([getuid(pl):([])]);
+  spells=bards[getuid(pl)];
+  if(!member(spells, spell))
+    spells+=([spell:abil]);
+  if(spells[spell] < abil) {
+    write_secure_log(sprintf("%s: Veraenderte Ability: %s(%d) -> %d von %s\n", 
+	      ctime(), spell, spells[spell], abil, CAP(getuid(pl))));
+    return 1;
+  }
+  return 0;
+}
+
+int UpdateAbility(object pl, string spell, int new_abil)
+{
+  mapping spells;
+  if(!CheckIfAllowed()) return -2;
+  if(!member(bards, getuid(pl))) return -1;
+  spells=bards[getuid(pl)];
+  if(!member(spells, spell))
+    spells+=([spell:new_abil]);
+  spells[spell]=new_abil;
+  bards[getuid(pl)]=spells;
+  saveload=bards;
+  save_object(ABILLIST);
+  return 1;
+}
+
+mixed QueryAllAbils()
+{
+ return bards;
+}
+
+int DeleteEntry(string player)
+{
+  if(!CheckIfAllowed()) return -2;
+  if(!member(bards, player)) return -1;
+  bards=m_delete(bards, player);
+  saveload=bards;
+  save_object(ABILLIST);
+  return 1;
+}
+
+
+
+

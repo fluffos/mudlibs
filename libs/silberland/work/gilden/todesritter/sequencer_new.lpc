@@ -1,0 +1,197 @@
+
+/*
+**
+** Sequencer fuer die Zeremonien der Paladine 
+** Zordan@SL
+**
+** 03.02.1999  Dritte Person integriert
+** 20.01.1999  Fuer allgemeinen Gildengebraucht geaendert
+** 19.05.2003  Archon: Ausgaben fuer BS optimiert (umbrueche waren falsch)
+**                     indent kann nun einzeln angegeben werden
+**                     tell_room/tell_object bei -- ist nun durch ** getrennt
+**
+*/
+
+#include <properties.h>
+#include <moving.h>
+#include <defines.h>
+#include <moredef.h>
+//#include "../paladin.h"
+
+private nosave string prefix;
+private nosave string *seq;
+private nosave string lname, sname, third, third_pronoun_wen, third_posspronoun;
+private nosave string third_pronoun_wer;
+private nosave int cur;
+private nosave object player;
+private nosave closure fkt;
+private nosave int stop;
+void sequence_player_left(mixed player);
+void StopSequence();
+object SeqPlayer();
+
+string mess(string str) {
+  if (!str || str=="") return str;
+  str=implode(efun::explode(str,"&&"),player->name(WER,2));
+  str=implode(efun::explode(str,"&?"),player->name(WESSEN,2));
+  str=implode(efun::explode(str,"&!"),player->QueryPronoun(WER));
+  str=implode(efun::explode(str,"&1"),player->QueryPronoun(WER));
+  str=implode(efun::explode(str,"&2"),player->QueryPronoun(WESSEN));
+  str=implode(efun::explode(str,"&3"),player->QueryPronoun(WEM));
+  str=implode(efun::explode(str,"&4"),player->QueryPronoun(WEN));
+  str=implode(efun::explode(str,"&="),player->QueryPossPronoun(1));
+  str=implode(efun::explode(str,"&#"),player->QueryPossPronoun(2));
+  str=implode(efun::explode(str,"&*"),lname); //gildennpc langname
+  str=implode(efun::explode(str,"&+"),sname); //gildennpc kurzname
+  if(third)
+    str=implode(efun::explode(str,"&5"),third); //name einer 3. person
+  if(third_pronoun_wer)
+    str=implode(efun::explode(str,"&6"),third_pronoun_wer); //pronoun 3. person
+  if(third_pronoun_wen)
+    str=implode(efun::explode(str,"&7"),third_pronoun_wen); //pronoun 3. person
+  if(third_posspronoun)
+    str=implode(efun::explode(str,"&8"),third_posspronoun);
+                                              //posspronoun einer 3. person 
+  if (str[<1]!=' ') str+=" "; //damit beim zusammenfuegen immer ein " " da ist!
+  return str;
+}
+
+int SetNames(string longname, string shortname) {
+  lname=longname;
+  sname=shortname;
+  return 1;
+}
+
+int SetThirdPerson(string name, string pronoun_wer, string pronoun_wen, 
+    string posspronoun) 
+{
+  third=name;
+  third_pronoun_wer=pronoun_wer;
+  third_pronoun_wen=pronoun_wen;
+  third_posspronoun=posspronoun;
+  return 1;
+}
+
+int LoadSequenz(string filename, object ob, closure cl) {
+  if (filename[0] != '/') {
+    filename=filename;
+  }
+  seq=explode(read_file(filename), "\n");
+  if (sizeof(seq) < 1) return -1;
+  cur=0;
+  player=ob;
+  fkt=cl;
+  call_out("Step", 0);
+  return 1;
+}
+
+void Step() {
+  string s,cmd,arg;
+  string out,indent,out_r,indent_r;
+  int next_is_indent;
+
+  if(stop || !objectp(player) || !query_once_interactive(player) || 
+      ENV(player) != ME) 
+  {
+    stop=0;
+    TELL("angrox", sprintf("*** SEQ_NEW: stop = %O, player= %O, "
+        "ENV(pl)= %O, ME= %O\n", stop,player,ENV(player),ME));
+    TELL("feyarifeyaria", sprintf("*** SEQ_NEW: stop = %O, player= %O, "
+        "ENV(pl)= %O, ME= %O\n", stop,player,ENV(player),ME));
+    sequence_player_left(player);
+    return;
+  }
+
+  while (cur < sizeof(seq)) 
+  {
+    s=seq[cur++];
+    if (s[0]=='#') continue;
+    cmd=0;
+    sscanf(s,"%s %s", cmd, arg);
+    if (!cmd) cmd=s;
+    out="";
+    indent="";
+    out_r="";
+    indent_r="";
+    switch (cmd) 
+    {
+      case "pause":
+        call_out("Step", to_int(arg));
+        return;
+      break;
+      case "++":
+        while ((s=seq[cur++]) != "++") 
+        {
+          if (s == "*") 
+            out+="\n";
+          else if (strlen(s)>3 && s[0..2]=="+i:")
+            indent=mess(s[3..]);
+          else 
+            out+=mess(s);
+        }
+        tell_room(ME,break_string(out,78,indent));
+      break;
+      case "--": //meldungen an player und raum ohne player - getrennt durch **
+        while ((s=seq[cur++]) != "--" && s!="**") 
+        {
+          if (strlen(s)>3 && s[0..2]=="+i:")
+          {
+            if (s == "*") 
+              out+="\n";
+            else if (strlen(s)>3 && s[0..2]=="+i:")
+              indent=mess(s[3..]);
+            else 
+              out+=mess(s);
+          }
+          else  {
+            out+=mess(s);
+          }
+        }
+        if (s!="--")
+        {
+         while ((s=seq[cur++]) != "--") 
+         {
+          if (strlen(s)>3 && s[0..2]=="+i:")
+          {
+            if (s == "*") 
+              out_r+="\n";
+            else if (strlen(s)>3 && s[0..2]=="+i:")
+              indent_r=mess(s[3..]);
+            else 
+              out_r+=mess(s);
+          }
+          else  {
+            out_r+=mess(s);
+          }
+         }
+        }
+        tell_object(player,break_string(out,78,indent));
+        if (out_r!="") 
+          tell_room(ME, break_string(out_r,78,indent_r), ({ player }));
+      break;
+      case "stop":
+        if (fkt != 0 && closurep(fkt))
+          funcall(fkt,player);
+        return;
+      break;
+      default:
+        TELL("zordan","PARSE ERROR IN SEQUENCER AT LINE #"+cur+" !!\n");
+        TELL("angrox","PARSE ERROR IN SEQUENCER AT LINE #"+cur+" !!\n");
+        TELL("archon","PARSE ERROR IN SEQUENCER AT LINE #"+cur+" !!\n");
+      break;
+    }
+  }
+}
+
+void sequence_player_left(mixed player) {
+  return;
+}
+
+void StopSequence() {
+  stop=1;
+  return ;
+}
+
+object SeqPlayer() {
+  return player;
+}

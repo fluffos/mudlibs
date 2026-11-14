@@ -1,0 +1,252 @@
+/*
+** Zweiti-Stempel
+** ---
+** date        ver  from   what
+** 1996-04-20  1.0  Woody  released
+** 1998-09-01  1.1  Woody  "druecke-auf" deaktiviert
+** 1999-03-10  1.2  Woody  Auch in Blueprint create() abarbeiten
+** 2001-01-22  1.3  Woody  nix mehr aus players includen...
+** 2003-07-07  1.4  Woody  P_SECOND_MARK beruecksichtigen, SKILL_NOLEARN
+*/
+
+#pragma strict_types
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include <wizlevels.h>
+#include <defines.h>
+#include <moredef.h>
+
+
+#define STEMPEL_BEST    "/obj/stempel_bestaetigung"
+#define STEMPEL_BEST_ID "\nzweitibestaetigung"
+#define STEMPEL_ID      "\nzweitistempel"
+
+object zettel, owner, who_ob;
+string who;
+
+
+void create()
+{
+  ::create();
+  SetProp(P_SHORT, "Ein kleiner Stempel");
+  SetProp(P_LONG,
+    "Mit diesem Stempel kannst Du Dich als Zweitspieler markieren. "
+    "Alles was Du dazu tun musst, ist, Dir den Stempel aufzudruecken. "
+    "(Syntax: \"stempel von <name>\", um als Zweitspieler von <name> "
+    "markiert zu werden). Beachte aber, dass es keinen Weg gibt, "
+    "diese Markierung rueckgaengig zu machen; Du bist dann fuer "
+    "immer als Zweitspieler (\"Zweiti\") markiert!");
+  SetProp(P_NAME, "Stempel");
+  SetProp(P_GENDER, MALE);
+  AddId( ({ "stempel", STEMPEL_ID, "SKILL_NOLEARN" }) );
+  SetProp(P_WEIGHT, 10);
+  SetProp(P_VALUE, 10);
+  SetProp(P_NEVERDROP, 1);    // Wird beim Tod nicht in die Leiche gelegt
+  SetProp(P_MATERIAL, MAT_PLASTIC);
+  SetProp(P_INFO, "Die Syntax ist:\n"+
+    //"druecke stempel auf    um als Zweitspieler markiert zu werden\n"+
+    "stempel von <name>     um als Zweitspieler des angegebenen Spielers\n"+
+    "                       markiert zu werden. Dieser muss die Markierung\n"+
+    "                       dann allerdings bestaetigen.\n"+
+    "zerstoere stempel      um den Stempel zu zerstoeren.\n");
+
+  // AddCmd (({"druecke","drueck"}), "Druecke");
+  AddCmd("stempel", "Stempel");
+  AddCmd("zerstoere", "Zerstoere");
+
+  zettel = 0;
+  if ((owner = MENV) && !query_once_interactive(owner)) owner=0;
+}
+
+/*
+int Druecke(string str)
+{
+  string s, dummy;
+  mixed z;
+  if (!str || sscanf(str, "%s auf%s", s, dummy) != 2) return 0;
+  if (!id(s) || dummy!="") return 0;
+  if (zettel)
+  {
+    write (BS("Du hast bereits einen Zettel verschickt. Warte, bis "+
+      who+" Deinen Zettel entweder zerreisst oder unterzeichnet!\n"));
+    return 1;
+  }
+  if (z=TP->QueryProp(P_SECOND))
+  {
+    write ("Aber Du bist doch schon Zweitspieler"+
+      (stringp(z) ? " von "+z : "") + "!\n");
+    return 1;
+  }
+  TP->SetProp(P_SECOND, 1);
+  write (BS("Du tauchst den Stempel tief ins Stempelkissen und drueckst "+
+    "ihn Dir kraeftig auf die Stirn. Zurueck bleibt ein grosser, gut "+
+    "lesbarer Aufdruck \"Zweiti\"."));
+  remove();
+  return 1;
+}
+*/
+
+int Stempel(string str)
+{
+  string s;
+  mixed z,m;
+
+  if (TP!=MENV)
+    return notify_fail("Du solltest den Stempel erstmal nehmen!\n"), 0;
+
+  notify_fail ("Als wessen Zweitspieler willst Du Dich markieren?\n"+
+    "Syntax: stempel von <name>\n");
+
+  if (!stringp(str) || strlen(str) < 5 || str[0..3]!="von ")
+    return 0;
+
+  str = str[4..];
+
+  if (zettel)
+    return notify_fail(BS("Du hast bereits einen Zettel verschickt. "
+          "Warte, bis "+who+" Deinen Zettel entweder zerreisst oder "
+          "unterzeichnet!")), 0;
+
+  who = capitalize(str);
+  if (!(who_ob=find_player(str)) ||
+      (!IS_LEARNING(TP) && IS_LEARNER(who_ob) && who_ob->QueryProp(P_INVIS)))
+    return notify_fail("Spieler "+who+" kann ich leider nicht finden!\n"), 0;
+
+  if (TP==who_ob)
+    return notify_fail ("Du willst Dein eigener Zweiti sein?? "+
+        "Och, lass das mal lieber...\n"), 0;
+
+  if (present(STEMPEL_BEST_ID, who_ob))
+    return notify_fail (who+" hat bereits einen Zettel!\n"), 0;
+
+  if (present(STEMPEL_BEST_ID, TP))
+    return notify_fail ("Unterschreib erst mal Deinen eigenen Zettel, "+
+        "oder zerreisse ihn!\n"), 0;
+
+  if (z = (mixed) TP->QueryProp(P_SECOND))
+  {
+    write("Aber Du bist doch schon Zweitspieler"+
+      (stringp(z) ? " von "+z : "") + "!\n");
+    if (stringp(z) && (z != who)) write("Kleine Identitaetskrise? ;-)\n");
+    return 1;
+  }
+
+  z = (mixed) who_ob->QueryProp(P_SECOND);
+  m = (mixed) who_ob->QueryProp(P_SECOND_MARK);
+
+  if (z && (m >= 0))
+  {
+    write(
+        "Aber "+who+" ist doch selbst Zweitspieler" +
+        (m && stringp(z) ? " von "+z : "") + "!\n");
+    return 1;
+  }
+
+  if (!z) {
+    zettel = CLONEOB(STEMPEL_BEST);
+    zettel->move(who_ob, M_NOCHECK);
+    zettel->SetStempel(ME, capitalize(getuid(TP)), TP->QueryProp(P_GENDER));
+    tell_object(who_ob,
+        TPN +
+        " will sich als Dein Zweiti markieren und schickt Dir einen Zettel.\n"
+        "Bitte bestaetige die Markierung (lies dazu die Bestaetigung).\n");
+  } else {
+    tell_object(who_ob,
+        TPN +
+        " will sich als Dein Zweiti markieren und schickt Dir einen Zettel.\n"
+        "Da Du bereits Zweiti bist, zerreisst Du den Zettel sofort.\n");
+  }
+  write("Ok, Antrag abgeschickt. Bitte warte auf die Bestaetigung.\n");
+  return 1;
+}
+
+
+int StempelOk(string str)
+{
+  if (!str) return 0;
+  if (!owner) return 0;
+  if (who_ob->QueryProp(P_SECOND)) return 0;
+  if (owner->QueryProp(P_SECOND)) return 0;
+  tell_object (owner, str+" bestaetigt die Markierung.\n"+
+    "Du bist fortan als Zweitspieler von "+str+" markiert.\n");
+  owner->SetProp(P_SECOND, str);
+  return 1;
+}
+
+
+int StempelCancel(string str)
+{
+  if (!str) return 0;
+  tell_object (owner, str+" verweigert die Markierung.\n");
+  zettel = 0;
+  return 1;
+}
+
+
+int Zerstoere(string str)
+{
+  if (TP!=MENV)
+    return notify_fail("Du solltest den Stempel erstmal nehmen!\n"), 0;
+
+  if (!str || !id(str))
+    return notify_fail("Was willst Du zerstoeren?\n"), 0;
+
+  write("Du verfaellst dem Zerstoerungswahn. "
+        "Der arme Stempel muss dran glauben...\n");
+  remove();
+  return 1;
+}
+
+int remove()
+{
+  if (zettel)
+  {
+    if (objectp(owner))
+      tell_object(owner, BS("Der Zettel, den Du "+who+" geschickt hast, "+
+        "wandert auf magische Weise in die "+MUDNAME+"-Archive."));
+    if (environment(zettel))
+      tell_object(environment(zettel),
+        "Der Zettel wandert auf magische Weise in die "+MUDNAME+
+        "-Archive.\n");
+    zettel->remove();
+    zettel=0;
+  }
+  if (owner)
+    tell_object (owner, "Der Stempel zerfaellt in seine Bestandteile.\n");
+  return ::remove();
+}
+
+varargs int move(mixed dest, int method)
+{
+  int res;
+  if ((res=::move(dest, method))==1)
+  {
+    if (zettel)
+    {
+      if (objectp(owner))
+        tell_object(owner, BS("Der Zettel, den Du "+who+" geschickt hast, "+
+          "wandert auf magische Weise in die "+MUDNAME+"-Archive."));
+      if (environment(zettel))
+        tell_object(environment(zettel),
+          "Der Zettel wandert auf magische Weise in die "+MUDNAME+
+          "-Archive.\n");
+      zettel->remove();
+      zettel=0;
+    }
+    if (stringp(dest)) dest=find_object(dest);
+    if (objectp(dest) && query_once_interactive(dest))
+      owner=dest;
+    else
+      owner=0;
+  }
+  return res;
+}
+
+object query_owner()
+{
+  return owner;
+}

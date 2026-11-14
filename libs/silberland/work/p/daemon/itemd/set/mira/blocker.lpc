@@ -1,0 +1,127 @@
+#include "../def.h"
+
+inherit ITEMD_SET_PATH "std_set_armour";
+
+#define COST 15
+
+int blocker = 0;
+
+void create() 
+{
+  if( !is_clone(this_object()) ) return;
+  ::create();
+
+  SetProp(P_SET, "Miras Verteidigung");
+  SetProp(P_SET_ITEM, "Miras Blocker");
+  SetProp(P_NR_SET_ITEMS, 4);
+  SetProp(P_SET_BONUS, ([
+        0:([P_M_HEALTH_MOD:([P_HP:1,P_SP:1])]),
+        1:([P_M_HEALTH_MOD:([P_HP:2,P_SP:2])]),
+        2:([P_M_HEALTH_MOD:([P_HP:3,P_SP:3])]),
+        3:([P_M_HEALTH_MOD:([P_HP:4,P_SP:4])]),
+        ]));
+  SetProp(P_ITEMD, ({"gehoert zu Miras Verteidigung", 
+        "entfaltet die volle Wirkung erst gemeinsam mit anderen Sachen",
+        "wehrt zusaetzlichen Schaden ab", 
+        "erhoeht Lebenspunkte und Magiepunkte",
+        "schuetzt besser", "nutzt sich viel langsamer ab" }) );
+
+  SetProp(P_SHORT, QueryProp(P_SET_ITEM));
+  SetProp(P_LONG,
+    "Miras Blocker ist ein kleiner Rundschild. Von der Kleinheit sollte man "
+    "sich aber nicht taeuschen lassen, denn mit diesem Schild lassen sich "
+    "Zaubersprueche abblocken. So konnte Mira auch zauberkundige Gegner "
+    "ungeschoren bessiegen");
+  SetProp(P_INFO,BS(
+      "Mit diesem Schild kannst Du die Zauber Deiner Feinde abwehren. "
+      "Um diese Verteidigung zu aktivieren, musst Du lediglich 'zauberblocker'"
+      " eingeben."));
+  SetProp(P_NAME, QueryProp(P_SET_ITEM));
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_GENDER, MALE);
+  AddId( ({"blocker", "miras blocker" }) );
+
+  SetProp(P_ARMOUR_TYPE, AT_SHIELD );
+  SetProp(P_AC, 28);
+  SetProp(P_MATERIAL, ([MAT_STEEL: 100]) );
+  SetProp(P_WEIGHT, 1000);
+  SetProp(P_VALUE, 7000);
+  SetProp(P_QUALITY_DECAY, 700);
+
+  SetProp(P_DEFEND_FUNC, TO);
+  SetProp(P_REMOVE_FUNC, TO);
+
+  SetProp(P_WEAR_RESTRICTIONS, ([A_CON:15, A_STR:15]) );
+  AddCmd( ({"zauberblocker"}), "cmd_blocken");
+}
+
+int DefendFunc (mixed dam_type, int spell, object enemy) {
+  return 1 + setmight()*setmight()/2;
+}
+
+int cmd_blocken(string str)
+{
+  int dauer;
+  if(TP!=QueryProp(P_WORN))
+    return notify_fail("Du musst Miras Blocker erst tragen!\n"),0;
+  if(!TP->InFight())
+    return notify_fail("Du musst im Kampf sein zum Blocken!\n"),0;
+  if(setmight()<1)
+    return notify_fail("Du hast nicht genugend Teile von Miras "
+        "Verteidigung zum Blocken!\n"),0;
+  if(TP->QueryProp(P_TMP_DEFEND_HOOK))
+    return notify_fail("Du hast schon eine Verteidigung aktiv!\n"),0;
+  if(TP->QueryProp(P_SP)<COST)
+    return notify_fail("Du hast zu wenig Magiepunkte zum Blocken!\n"),0;
+  dauer=10+random(25);
+  TP->SetProp(P_TMP_DEFEND_HOOK, ({ time()+dauer, this_object(), "blocking"}));
+  write("Du konzentriest Dich voll auf das Blockieren der gegnerischen "
+      "Zauber.\n");
+  blocker = 1;
+  call_out("block_ende",dauer,TP);
+  return 1;
+}
+
+varargs void block_ende(object who, int silent)
+{
+  if(who && blocker)
+  {
+    if(!silent)
+      tell_object(who, "Du hast jetzt genuegend Zauber geblockt!\n");
+    who->SetProp(P_TMP_DEFEND_HOOK, 0);
+  }
+  blocker = 0;
+}
+
+mixed blocking(int dam, mixed dam_type, mixed spell, object enemy)
+{
+  int cost;
+  object who;
+
+  if(environment()!=(who=QueryProp(P_WORN)))
+  {
+    if(who)
+      who->SetProp(P_TMP_DEFEND_HOOK, 0);
+    return ({ dam, dam_type, spell, enemy });
+  }
+  if( spell)
+  {
+    cost=30-2*setmight()*setmight()+dam/77;
+    if(random(3*who->QueryAttribute(A_INT))>
+       random(2*enemy->QueryAttribute(A_INT)) && 
+       who->QueryProp(P_SP)>cost)
+    {
+      tell_object(who, "Du blockst den Zauber ab!\n");
+      who->AddSp(-cost);
+      TakeFlaw(cost*3);
+      return ({ 0, dam_type, spell, enemy });
+    }
+  }  
+  return ({ dam, dam_type, spell, enemy });
+}
+
+int RemoveFunc(object ruest,int silent)
+{
+  block_ende(QueryProp(P_WORN, silent));
+  return ::RemoveFunc(ruest, silent);
+}

@@ -1,0 +1,160 @@
+#include "../def.h"
+
+inherit SPELLOBJ "unit";
+
+object player;
+int cntr;
+
+void create()
+{
+
+  ::create();
+  if (!is_clone(this_object())) return;
+  SetProp(P_NAME, ({"'Caposc' Schriftrolle", "'Caposc' Schriftrollen"}));
+  SetProp(P_SHORT, "Eine 'Caposc' Schriftrolle");
+  SetProp(P_LONG, 
+      "Du siehst eine alte Papyrusrolle in Deinen Haenden. Sie ist schon etwas "
+      "vergilbt und der Rand des Papyrus sieht etwas zerschlissen aus. Auf der "
+      "Schriftrolle befinden sich einige magische Runen, welch Du versuchen "
+      "kannst zu lesen, darunter sieht man ein mit wackeliger Hand gezeichnetes "
+      "Strichmaennchen, welches vor einem magischem Portal steht.");            
+
+  SetProp(P_GENDER,FEMALE);
+
+  AddReadDetail(({"rolle","schriftrolle","papyrus","runen", "caposc",
+        "caposc rolle", "caposc schriftrolle"}),"@@cast_now@@");
+
+  AddId (({"\nbrunnenrolle"}));
+  AddId("caposc");
+  AddSingularId(({"schriftrolle", "rolle"}));
+  AddPluralId(({"schriftrollen", "rollen"}));
+  AddSingularId("caposc schriftrolle");
+  AddPluralId("caposc schriftrollen");
+  AddSingularId("caposc rolle");
+  AddPluralId("caposc rollen");
+
+  cntr=10;
+}
+
+void remove_me() 
+{
+  while (remove_call_out("remove_me") != -1);
+  while (remove_call_out("cast_now") != -1);
+  write("Die Papyrusrolle loest sich auf.\n");
+  if( player)
+    player->SetProp(P_TMP_MOVE_HOOK, 0);
+  player = 0;
+  cntr = 10;
+  SetProp(P_NODROP, 0);
+  AddAmount(-1);
+}
+
+varargs mixed player_tries_to_move(mixed dest, int methods, string direction, 
+    string textout, string textin)
+{
+  if (player && player->QueryProp(P_GHOST))
+  {
+    player->SetProp(P_TMP_MOVE_HOOK,0);
+    while(remove_call_out("cast_now") != -1);
+    call_out("remove_me",0);
+    return ({dest, methods, direction, textout, textin});
+  }
+  call_out("remove_me",2);
+  return(break_string("Als Du versuchst, wegzulaufen, brichst Du das Lesen "+
+        "der Schriftrolle ab, bleibst aber stehen.",78));
+}
+
+string cast_now() {
+  object obj;
+
+  if(!player)
+  {
+    if(!(player = this_player()))
+    {
+      remove_me();
+      return "";
+    }
+  }
+  switch(cntr) {
+
+    case 10..20 :
+      if(!this_player()->QueryProp(P_TMP_MOVE_HOOK)){
+        this_player()->SetProp(P_TMP_MOVE_HOOK, ({ time()+200,
+              this_object(), "player_tries_to_move" }) );
+      }
+      else
+      {
+        write("Aus irgendeinem Grund kannst Du die Schriftrolle nicht "
+            "lesen.\nDu wirst schon wissen, warum!\n");
+        return "";
+      }
+      SetProp(P_NODROP, 1);
+      write("Du versuchst die magischen Runen auf dem Papyrus laut zu lesen.\n");
+      say(this_player()->Name(WER,1)+" faengt an von einer magischen Papyrusrolle zu lesen.\n");
+      RemoveReadDetail(({"rolle","schriftrolle","papyrus","runen"}),"@@cast_now@@");
+      AddReadDetail(({"rolle","schriftrolle","papyrus","runen"}),"Du liest ja schon.");
+      break;
+
+    case 21..40 :
+      if (file_name(environment(this_player()))[0..26]!=ZONE)
+      {
+        write("Als Du versuchst, die Rolle zu lesen, loest sie sich in Rauch auf.\n");
+        say("Als "+this_player()->Name(WER,1)+" versucht, die Rolle "+
+            "zu lesen, loest sie sich in Rauch auf.\n");
+        call_out("remove_me",2);
+        return "";
+      }
+      write("Du liest die Runen laut vor.\nDu sagst: Numaga ene Portas begus bidi Rek!\n");
+      say(this_player()->Name(WER,1)+" sagt: Numaga ene Portas begus bidi Rek!\!\n");
+      break;
+
+    case 41..60 :
+      write("Du spuerst wie sich Dein Koerper mit magischer Energie laedt.\n");
+      say(this_player()->Name(WER,1)+" wird von einer gluehenden roten Aura eingehuellt!\n");
+      break; 
+
+    case 61..80 :
+      write("Du rufst: Portas avensis ekko no begoras det Nek!\n");
+      say(this_player()->Name(WER,1)+" ruft:  Portas avensis ekko no begoras det Nek!\n");
+      break;
+
+    case 81..100 :
+      write("Inmitten des Raumes oeffnet sich ein Portal!\n");
+      say(this_player()->Name(WER,1)+" erzeugt ein leuchtendes Portal inmitten des Raumes.\n");
+      obj=clone_object(SPELLOBJ "portal.lpc");
+      if(!find_living("wellentrancenpc")) call_other(NPC "eingang.lpc","???");
+      obj->set_dest(environment(this_player()));
+      obj->set_remove_time(130);
+      obj->move(environment(find_living("wellentrancenpc")),M_NOCHECK);
+
+      obj=clone_object(SPELLOBJ "portal.lpc");
+      if(!find_living("wellentrancenpc"))
+        call_other(NPC "eingang", "???");
+      obj->set_dest(environment(find_living("wellentrancenpc")));
+      obj->set_remove_time(131);
+      obj->move(environment(this_player()),M_NOCHECK);
+      if( this_player())
+        this_player()->SetProp(P_TMP_MOVE_HOOK, 0);
+      break;
+  }
+
+
+  if(cntr>80) 
+    call_out("remove_me",1);
+  else
+  {
+    cntr=cntr+20;
+    call_out("cast_now",4+random(6));
+  }
+  return "Du konzentrierst Dich.";
+}
+
+varargs int move(mixed dest,int method) {
+  if (find_call_out("remove_me") != -1 ||
+     find_call_out("cast_now") != -1)
+  {
+     write("Die Schriftrolle laesst sich nicht bewegen!\n");
+     return 0;
+  }
+  return ::move(dest,method);
+}

@@ -1,0 +1,595 @@
+// 22.04.2003 - erste Version von Archon
+/*
+ Rev 1.2 30.07.2003 Archon: rep
+ Rev 1.1 21.07.2003 Archon: rep
+ Rev 1.0 22.04.2003 Archon: erstellt
+*/
+
+#include "../def.h"
+inherit STD "turm";
+
+#pragma strict_types, pedantic
+
+void create();
+void create_aussen_unten(int wo);
+string detail_rune();
+string detail_hand();
+void wegdamit(object was,object pl,object raum);
+void wirfweg(object pl);
+void fallentest(object pl,int pos);
+void init();
+void raumtest();
+void set_rune_found(object pl,int was);
+int get_rune_found(object pl);
+int get_quest_kind(object pl);
+mixed query_last(); //welcher spieler hat hier als letztes etwas veraendert
+int cmd_aktiviere(string str);
+int cmd_klettern(string str);
+void inraum_wegdamit(object was,object raum);
+void aufraeumen();
+
+nosave mixed last_manipulate;
+nosave int time_stamp;
+nosave int unten;
+
+void create()
+{
+  ::create();
+
+  last_manipulate=0;
+
+  SetProp(P_INDOORS, 1);
+  SetProp(P_LIGHT, 1);
+  SetProp(P_ENVIRONMENT,([ENV_TEMPERATURE:10, ENV_TERRAIN:TT_CAVE]));
+  SetProp(P_KILL_NAME,"Ein schwerer Sturz"); //ist auch in ROOM "vorturm" def
+  SetProp(P_INT_SHORT, "Ein Standardraum");
+  SetProp(P_INT_LONG, "Ein Standardraum. Du solltest nicht hier sein!");
+  SetProp(P_ARCHON_RUNE_IN_QUEST,-1);
+
+  AddDetail(({"turm","inneren","aussen","aeusserm","ort"}),
+    "Du bist Aussen ausserhalb des Turmes, jedoch weit oberhalb des Bodens.");
+  AddDetail(({"boden","tiefe","grund","hoehlenboden","hoehlengrund"}),
+    "Ohje der Boden ist weit unter Dir. Hoffentlich stuerzt Du nicht ab.");
+  AddDetail(({"umgebung"}),
+    "Schau Dich nur genau um.");
+  AddDetail(({"rune","runen","symbol","runensymbol"}),#'detail_rune);
+  AddDetail(({"angriff"}),
+    "Wer weiss wann der Turm einem Angriff trotzen muss.");
+  AddDetail(({"beduerfniss","beduerfnisse","beduerfnis","beduerfnissen"}),
+    "Du weisst doch was Du willst, oder? Also los manipuliere die Rune.");
+  AddDetail(({"decke"}),
+    "Die Decke kannst Du nicht erkennen.");
+  AddDetail(({"wind","luft"}),
+    "Der Wind weht hier oben sehr stark. Halt Dich bloss gut fest, sonst "
+    "reisst es Dich noch in die Tiefe.");
+  AddDetail(({"pfeifen"}),
+    "Lausche lieber.");
+  AddDetail(({"geruch","verbrannt","verbranntem","verbranntes"}),
+    "Rieche lieber.");
+  AddDetail(({"halt"}),
+    "Gott sei Dank - Du findest genug Halt, um nicht in die Tiefe zu "
+    "stuerzen.");
+  AddDetail(({"gott","dank"}),
+    "Willst Du einem Gott danken?");
+  AddDetail(({"position"}),
+    "Du willst hier wieder weg.");
+  AddDetail(({"hoehle","hohlraum","raum"}),
+    "Du befindest Dich in einer Hoehle gewaltigen Ausmasses. "
+    "Selbst der riesige Turm, auf dem Du Dich befindest, wirkt "
+    "winzig im Vergleich zu der Hoehle in der er steht. "
+    "Du kannst einfach nicht fassen, wie ein so grosser Hohlraum "
+    "unter der Erde existieren kann."); 
+  AddDetail(({"ausmass"}),
+    "Einfach gewaltig ...");
+  AddDetail(({"erde"}),
+    "Du bist irgendwo unter der Erde im Reich der Dunkelelfen.");
+  AddDetail(({"sturz"}),
+    "Ein Sturz koennte schnell toedlich enden.");
+  AddDetail(({"kampfspuren","kampfesspuren","kampf"}),
+    "Die Turmwaende sind von deutlichen Kampfspuren ueberzogen.");
+  
+  AddSound(({DEFAULT_SOUND,"wind","pfeift","pfeifen"}),
+    "Der Wind weht hier oben sehr heftig und pfeift dabei gruselig.");
+  AddSmell(({"geruch","luft","verbrannt","verbranntes",
+             "verbranntem",DEFAULT_SMELL}),
+    "In der Luft liegt der Geruch von Verbranntem.");
+    
+  call_out("raumtest",1);
+  
+  AddCmd(({"aktiviere","aktivier"}),"cmd_aktiviere");
+  AddCmd(({"ziehe","ziehen","nachziehen","aender","aendere","veraender",
+           "veraendere"}),"cmd_veraendere");
+  AddCmd(({"manipuliere","manipulier","manipulieren",
+           "passe","passen","anpassen"}),"cmd_manipuliere");
+}
+
+void create_aussen_mitte()
+{
+  AddDetail(({"wand","waende","turmwand","turmwaende",
+              "aussenwand","aussenwaende"}),
+    "Die Turmwand bestehen aus Dir unbekanntem Gestein. Eine Rune ist in "
+    "die Wand eingelassen worden.");
+  AddDetail(({"balkon"}),
+    "Du stehst auf einem kleinen Balkon, welcher hier aus der Turmwand "
+    "heraus ragt. Ein dunkles Loch fuehrt zurueck in das Innere des Turmes.");
+  AddDetail(({"loch"}),
+    "Das Loch wirkt dunkel und bedrohlich. Du bist nicht sicher, ob Du "
+    "durch es wieder in den Turm hinein gehen solltest.");
+  AddDetail(({"gestein"}),
+    "Ist doch egal woraus die Waende sind, das einzige Interessante hier, "
+    "ist die Rune, welche in der Turmwand eingelassen ist.");
+  AddDetail(({"interessante"}),
+    "Meinst Du die Rune?");
+  AddDetail(({"innere"}),
+    "Das liegt hinter dem schwarzen Loch in der Turmwand.");
+}
+
+void create_aussen_unten(int wo)
+{
+  unten=wo;
+  AddDetail(({"wand","waende","turmwand","turmwaende",
+              "aussenwand","aussenwaende"}),
+    "Du haeltst Dich an der Wand des Turmes fest, um nicht hinab "
+    "zu stuerzen. Zum Glueck ist diese sehr uneben, von Rissen und "
+    "Spalten durchsetzt, so dass Du genuegend Halt findest.");
+  AddDetail(({"halt"}),
+    "Du solltest Dich nur kurzzeitig mit einer Hand festhalten. "
+    "Nicht das Du noch hinab stuerzt.");
+  AddDetail(({"hoehe"}),
+    "Der Grund der Hoehle ist schon ein Stueckchen weg. Solltest "
+    "Du hinabstuerzen wird Dir dies sehr weh tun.");
+  AddDetail(({"stueckchen","stueck"}),
+    "Zu tief um den Sturz unbeschadet zu ueberstehen.");
+  AddDetail(({"wind","luft"}),
+    "Der Wind weht hier nur sehr leicht.");
+  AddDetail(({"hand","haende"}),#'detail_hand);
+  AddDetail(({"fuss","fuesse"}),
+    "Deine Fuesse hast Du in tiefe Spalten oder Risse gestemmt, "
+    "um hier oben Halt zu finden.");
+  AddDetail(({"spalte","spalten","riss","risse"}),
+    "Tiefe Risse und Spalten durchziehen die Turmwaende. In ihnen "
+    "kannst Du halt finden. Da sie sich ueber die gesamte Aussenwand "
+    "erstrecken, koenntest Du die Wand entlang klettern.");
+
+  AddSound(({DEFAULT_SOUND,"wind","pfeift","pfeifen"}),
+    "Der Wind weht hier nur saft, doch trotzdem ist ein leichtes "
+    "Pfeifen zu hoeren.");
+
+  AddCmd(({"kletter","klettere","klettern"}),"cmd_klettern");
+}
+
+string detail_rune()
+{
+  if (get_rune_found(PL)<1) return 0;
+  if (!last_manipulate)
+   return break_string(
+    "Die Rune sieht etwas mitgenommen aus. Ob sie den Turm gegen einen "
+    "Angriff noch genuegend schuetzen kann ist ziemlich ungewiss. "
+    "Du solltest sicher gehen und die Rune Deinen Beduerfnissen anpassen.");
+  return break_string(
+    "Die Rune leuchtet leicht, als ob gerade jemand die Rune aktiviert "
+    "oder manipuliert hat.");
+}
+
+string detail_hand()
+{
+  if (!PL->QueryProp(P_USED_HANDS))
+    return break_string("Du hast "+PL->QueryProp(P_MAX_HANDS)+" Haende, "
+      "in dennen Du zur Zeit nichts haeltst.");
+  return break_string("Du hast "+PL->QueryProp(P_MAX_HANDS)+" Haende "
+    "und haeltst mit ihnen noch etwas fest. Steck dies besser weg, denn "
+    "Du benoetigst Deine Haende, um Dich hier festzuhalten.");
+}
+
+void wegdamit(object was,object pl,object raum)
+{
+  if (was->QueryProp(P_CURSED)) return;
+  if (was->QueryProp(P_WIELDED))
+  {
+    if (!was->DoUnwield(1)) return;
+    was->move(raum,M_PUT);
+    tell_room(raum,
+      break_string("Ploetzlich faellt "+was->name(WER,0)+" herab."));
+    tell_object(pl,
+      break_string("Als Du Dich hektisch festhaeltst, entfaellt Dir "
+                   +was->name(WER,0)+" und stuerzt in die Tiefe."));
+  }
+  if (was->QueryProp(P_WORN) && 
+      (AT_SHIELD==(string)was->QueryProp(P_ARMOUR_TYPE)))
+  {
+    if (!was->DoUnwear(1)) return;
+    was->move(raum,M_PUT);
+    tell_room(raum,
+      break_string("Ploetzlich faellt "+was->name(WER,0)+" herab."));
+    tell_object(pl,
+      break_string("Als Du Dich hektisch festhaeltst, entfaellt Dir "
+                   +was->name(WER,0)+" und stuerzt in die Tiefe."));
+  }
+}
+
+void wirfweg(object pl)
+{
+  object raum;
+  if (!objectp(pl) || environment(pl)!=ME) return;
+  call_other(ROOM "vorturm","???",0);
+  raum=find_object(ROOM "vorturm");
+  map_array(all_inventory(pl),#'wegdamit,pl,raum);
+}
+
+//kann eigentlich nur bei cursed hands passieren, oder wenn die 
+//spieler wieder eine waffen/schild zuecken
+void fallentest(object pl,int pos)
+{ 
+  object raum;
+  if (!objectp(pl) || environment(pl)!=ME) return;
+  if (pl->QueryProp(P_USED_HANDS) || pl->QueryProp(P_MAX_HANDS)<2)
+  {
+    switch(pos)
+    {
+      case 2: 
+        tell_object(pl,
+          break_string("Ploetzlich verlierst Du den Halt und stuerzt in "
+                       "die Tiefe."));
+        tell_room(environment(pl),break_string("Ploetzlich verliert "+
+          pl->name(WER,1)+" den halt und stuerzt in die Tiefe."),({pl}));
+        pl->move(ROOM "vorturm",M_GO,"",
+          "verliert ploetzlich den Halt und stuerzt in die Tiefe.",
+          "kracht von oben herab.");
+        pl->do_damage(100+random(200));
+        return;
+      break;
+      default:
+        if ((int)pl->QueryProp(P_MAX_HANDS)<2)
+         tell_object(pl,
+           break_string("Du konntest Dich gerade noch einmal festhalten! "
+                        "Ohne mehr Haende, Du ABSTUERZEN - "
+                        "verschwinde von hier."));
+        else
+         tell_object(pl,
+           break_string("Du konntest Dich gerade noch einmal festhalten! "
+                     "Wenn Du nicht bald alle Haende frei bekommst, wirst "
+                     "Du ABSTUERZEN."));
+        tell_room(environment(pl),break_string(PL->name(WER,1)+
+          " konnte sich gerade nochmal festhalten."),({pl}));
+        pos=2;
+      break;
+    }
+  }
+  call_out("fallentest",15,pl,pos);
+}
+
+void init()
+{
+  ::init();
+  if (!PL) return;
+  if (unten)
+  {
+    call_out("wirfweg",1,PL);
+    call_out("fallentest",1,PL,1);
+  }
+}
+
+void reset()
+{
+  ::reset();
+  last_manipulate=0;
+}
+
+void raumtest()
+{
+  if ((QueryProp(P_ARCHON_RUNE_IN_QUEST)<1 || 
+       QueryProp(P_ARCHON_RUNE_IN_QUEST)>9) 
+      && file_name(ME)!=(STD "runenwand"))
+    raise_error("P_ARCHON_RUNE_IN_QUEST not set");
+}
+
+void set_rune_found(object pl,int was)
+{
+  last_manipulate=getuid(pl);
+  set_next_reset(600);
+  P_ARCHON_QUESTMASTER->set_rune_found(pl,
+                        QueryProp(P_ARCHON_RUNE_IN_QUEST),was);
+}
+
+int get_rune_found(object pl)
+{
+  return (int)P_ARCHON_QUESTMASTER->get_rune_found(pl,
+                                    QueryProp(P_ARCHON_RUNE_IN_QUEST));
+}
+
+int get_runen_knowhow(object pl)
+{
+  return (int)P_ARCHON_QUESTMASTER->get_runen_knowhow(pl);
+}
+
+int get_quest_kind(object pl)
+{
+  return (int)P_ARCHON_QUESTMASTER->get_quest_kind(pl);
+}
+
+int get_all_runen_done(object pl)
+{
+  return (int)P_ARCHON_QUESTMASTER->get_all_runen_done(pl);
+}
+
+mixed query_last()
+{
+  return last_manipulate;
+}
+
+int cmd_aktiviere(string str)
+{
+  object stab;
+  int rune;
+  if (!S_STANDARD->check_cmd(str,
+       "rune",
+       "Was willst Du aktivieren?"))
+    return 0;
+  
+  if (get_rune_found(PL)<1)
+    return notify_fail("Aber Du siehst hier keine Rune!\n"),0;
+
+  if (get_rune_found(PL)==3)
+    return notify_fail("Aber Du hast diese Rune doch schon veraendert!\n"),0;
+
+  if (objectp(last_manipulate) && PL!=last_manipulate)
+    return notify_fail(break_string(
+     "Du Rune leuchtet noch leicht, woran Du erkennst, dass die Rune "
+     "erst vor kurzem manipuliert wurde. Du musst noch etwas warten.")),0;
+
+  if (get_rune_found(PL) && last_manipulate==PL && time_stamp<time()-240)
+    return notify_fail(break_string("Aber Du hast die Rune doch schon "
+      "aktiviert. Du kannst jetzt das Runensymbol veraendern.")),0;
+
+  if (!(stab=(object)S_STANDARD->present_clone(WEAPON "runenstab",PL)))
+    return notify_fail(break_string(
+      "Ohne ein entsprechendes machtvolles Artefakt, kannst "
+      "Du dies nicht vollbringen!")),0;
+  if (!stab->query_loaded())
+    return notify_fail("Der Runenstab muss fuer diese Aufgabe aufgeladen "
+                       "sein.\n"),0;
+
+  rune=(int)QueryProp(P_ARCHON_RUNE_IN_QUEST);
+  if (rune==9 && get_all_runen_done(PL)<8)
+    return notify_fail(break_string(sprintf(
+      "Diese Zentrumsrune kannst Du erst manipulieren, wenn Du mit den anderen "
+      "acht Runen fertig bist. Du hast erst %d Runen veraendert.",get_all_runen_done(PL)))),0;
+
+  tell_room(ME,break_string(
+    PL->Name(WER,1)+" fuchtelt mit einem Stab herum."),({PL}));
+  write(break_string(
+    "Du ergreifst den Runenstab und haeltst die Spitze auf die Rune. "
+    "In dem Augenblick, wo sie die Rune beruehrt murmeltst Du 'hex "
+    "urba itus sancto'. Als Du verstummst, schimmert die Oberflaeche "
+    "der Rune rot und Du kannst nun das Symbol der Rune nachziehen."));
+  set_rune_found(PL,2);
+  time_stamp=time();
+
+  return 1;
+}
+
+int cmd_veraendere(string str)
+{
+  object stab;
+  int rune,art,anz;
+
+  if (!S_STANDARD->check_cmd(str,
+       "rune",
+       "Was willst Du manipulieren?"))
+    return 0;
+
+  if (get_rune_found(PL)<1)
+    return notify_fail("Aber Du siehst hier keine Rune!\n"),0;
+
+  if (get_rune_found(PL)==3)
+    return notify_fail("Aber Du hast diese Rune doch schon veraendert!\n"),0;
+
+  if (!last_manipulate)
+    return notify_fail(break_string("Aber die Rune ist kalt und hart. So "
+      "kannst Du nie das Runensymbol veraendern. Aktiviere die Rune "
+      "zunaechst.")),0;
+
+  if (objectp(last_manipulate) && PL!=last_manipulate)
+    return notify_fail(break_string(
+     "Du Rune leuchtet noch leicht, woran Du erkennst, dass die Rune "
+     "erst vor kurzem manipuliert wurde. Du musst noch etwas warten.")),0;
+
+  if (get_rune_found(PL) && last_manipulate==PL && time_stamp<time()-240)
+    return notify_fail(break_string("Die Rune ist schon viel zu kalt. "
+      "Du musst sie erst erneut aktivieren, bevor Du das Symbol veraendern "
+      "kannst.")),0;
+
+  if (!(stab=(object)S_STANDARD->present_clone(WEAPON "runenstab",PL)))
+    return notify_fail("Ohne ein entsprechendes machtvolles Artefakt, kannst "
+                       "Du dies nicht vollbringen!\n"),0;
+  if (!stab->query_loaded())
+    return notify_fail("Der Runenstab muss fuer diese Aufgabe aufgeladen "
+                       "sein.\n"),0;
+  if (!get_runen_knowhow(PL))
+    return notify_fail(break_string("Du hast ja ueberhaupt keine Ahnung, wie "
+      "Du das Runensymbol veraendern solltest.")),0;
+
+  tell_room(ME,break_string(
+    PL->Name(WER,1)+" fuchtelt mit einem Stab herum."),({PL}));
+
+  write("Du erschaffst mit dem Runenstab ein neues Runensymbol.\n");
+  set_rune_found(PL,3);
+  switch(get_quest_kind(PL))
+  {
+    case 1:
+      write(break_string(
+            "Unter Deiner geschickten Hand entsteht eine neue Rune. Diese "
+            "ist eine Mischung aus der schon vorher hier gewesenen Rune und "
+            "den Runen Algiz, Eihwarz und Isa. Nachdem Du fertig bist "
+            "kannst Du regelrecht den starken Schutz, welchen die Rune "
+            "liefert spueren."));
+    break;
+    default:
+      write(break_string(
+            "Unter Deiner geschickten Hand entsteht eine neue Rune. Diese "
+            "ist eine Mischung aus der schon vorher hier gewesenen Rune und "
+            "den Runen Teiwaz, Hagalaz und Sowilo. Mit einem boesem Laecheln "
+            "betrachtest Du Dein Werk und kannst regelrecht spueren, wie sich "
+            "die Macht der Rune gegen den Turm wendet."));
+    break;
+  }
+  rune=(int)QueryProp(P_ARCHON_RUNE_IN_QUEST);
+  anz=get_all_runen_done(PL);
+  if (anz==9)
+  { //weiter ...
+    art=(int)get_quest_kind(PL);
+    P_ARCHON_QUESTMASTER->advance_quest(PL); //6->7
+    if (art==1)
+    {
+      P_ARCHON_QUESTMASTER->advance_quest(PL); //7->8 gute landen nicht im knast
+      write(break_string(
+        "Du hast es geschafft, die letzte Rune ist manipuliert. Nun nichts "
+        "wie zurueck zum Magier."));
+    }
+    else
+     write(break_string(
+      "Du hast es geschafft, die letzte Rune ist manipuliert. Nun nichts "
+      "wie zurueck zur Priesterin."));
+  }
+  else
+    write(sprintf("Du hast jetzt %d Runen veraendert.\n",anz));
+  return 1;
+}
+
+int cmd_manipuliere(string str)
+{
+  if (!S_STANDARD->check_cmd(str,
+       "rune",
+       "Was willst Du manipulieren?"))
+    return 0;
+  write("Willst Du die Rune veraendern bzw nachziehen?\n");
+  return 1;
+}
+
+int default_klettern(object pl)
+{
+  switch(random(5))
+  {
+    case 4:
+      tell_object(pl,break_string(
+        "Du kletterst schon eine Weile, als sich der Steinbrocken "
+        "unter Deiner rechten Hand loest und mit Dir droht in die "
+        "Tiefe zu stuerzen. Nur mit Muehe und unter einigen schmerzhaften "
+        "Wunden, kannst Du Dich noch halten und beschliesst "
+        "daraufhin, lieber umzukehren."));
+      pl->AddHp(-20);
+    break;
+    case 3:
+      tell_object(pl,break_string(
+        "Du kletterst mit frischer Kraft los, doch stellst Du "
+        "schon nach kurzer Zeit fest, dass dies eine Sackgasse ist. "
+        "So ein mist. Die Muehe war umsonst."));
+    break;
+    case 2:
+      tell_object(pl,break_string(
+        "Du kletterst schon eine Weile, als Dich unverhofft von "
+        "Hinten etwas angreift. Ohne zu zoegern machst Du kehrt "
+        "und legst so schnell Du kannst eine gehoerige Distanz "
+        "zwischen Dir und dem Ort des Angriffes."));
+      pl->AddHp(-10);
+    break;
+    case 1:
+      tell_object(pl,break_string(
+        "Nachdem Du schon ein gutes Stueck geklettert bist, krabbelt "
+        "ploetzlich eine riesige Spinne neben Dir die "
+        "Turmwand entlang. Mit weiten Augen trittst Du lieber den "
+        "Ruecktritt an, bevor sie Dich noch angreift."));
+    break;
+    default:
+      tell_object(pl,break_string(
+        "Mit viel Schwung kletterst Du weiter, als ploetzlich neben "
+        "Dir Gesteinsbrocken in die Tiefe stuerzen. Die noch fallenden "
+        "Brocken vor Augen, befindest Du es fuer weiser umzukehren."));
+    break;
+  }
+  pl->move(ME,M_GO,"","klettert weiter","klettert herein");
+  return 1;
+}
+
+int cmd_klettern(string str)
+{
+  mixed ways;
+  string *words,wo;
+  int richtung,p;
+
+  if (!S_STANDARD->check_cmd(str,
+       "rechts|links|linksoben|rechtsoben|linksunten|rechtsunten",
+       "Wohin willst Du klettern?\n"
+       "Du kannst nach rechts, rechtsoben, rechtsunten, links, linksoben oder"
+       "\nlinksunten klettern."))
+    return 0;
+
+  p = 100*((int)PL->QueryProp(P_TOTAL_WEIGHT)-(int)PL->QueryProp(P_WEIGHT))
+      /(int)PL->QueryProp(P_MAX_WEIGHT);
+  if (p>70)
+    return notify_fail(
+      "So schwer wie Du beladen bist, wuerdest Du nur abstuerzen.\n"),0;
+  
+  words  = efun::explode(lower_case(str)," ");
+  if (member_array("rechtsoben",words)!=-1) richtung=0;
+  if (member_array("rechts",words)!=-1) richtung=1;
+  if (member_array("rechtsunten",words)!=-1) richtung=2;
+  if (member_array("linksoben",words)!=-1) richtung=3;
+  if (member_array("links",words)!=-1) richtung=4;
+  if (member_array("linksunten",words)!=-1) richtung=5;
+  
+  ways=(mixed)P_ARCHON_QUESTMASTER->get_ways(PL,unten);
+  if (!pointerp(ways)) ways=({1,1});
+  ways[1]+=3;
+
+  if (ways[0]!=richtung && ways[1]!=richtung)
+    return default_klettern(PL);
+  
+  if (ways[0]==richtung)
+  {
+    richtung=unten+1;
+    if (richtung>4) richtung=1;
+    PL->move(ROOM +sprintf("aussen_%d",richtung),M_GO,"",
+      "klettert weiter","klettert herein");
+  }
+  else
+  {
+    richtung=unten-1;
+    if (richtung<1) richtung=4;
+    PL->move(ROOM +sprintf("aussen_%d",richtung),M_GO,"",
+      "klettert weiter","klettert herein");
+  }
+  switch(richtung)
+  {
+    case 1: wo="Suedseite"; break;
+    case 2: wo="Ostseite"; break;
+    case 3: wo="Nordseite"; break;
+    default: wo="Westseite"; break;
+  }
+  write(break_string(
+    "Du kletterst vorsichtig weiter und kommst langsam voran. "
+    "Nach einiger Zeit schaffst Du es die "+wo+" des "
+    "Turmes zu erreichen und stopst. Hier findest Du bestimmt "
+    "eine Rune."));
+  return 1;  
+}
+
+void inraum_wegdamit(object was,object raum)
+{
+  if (living(was)) return; //bei npc + spieler true
+  if (was->QueryProp(P_INVIS)) return;
+  if (!was->QueryProp(P_SHORT) || !was->QueryProp(P_LONG)) return;
+  was->move(raum,M_PUT);
+  tell_room(raum,
+    break_string("Ploetzlich faellt "+was->name(WER,0)+" herab."));
+  tell_room(ME,was->Name(WER,1)+" faellt in die Tiefe.\n");
+}
+
+//in _query_int_long() aufrufen!! - bei den unteren raeumen
+void aufraeumen()
+{
+  object raum;
+  call_other(ROOM "vorturm","???",0);
+  raum=find_object(ROOM "vorturm");
+  map_array(all_inventory(ME),#'inraum_wegdamit,raum);
+}

@@ -1,0 +1,467 @@
+/*****************************************************************************
+Die Spinne der Gilde
+(c) Lilyth, Torian, Delgo @ Silberland <sl.mud.at>
+06.08.05 - Begin
+
+*****************************************************************************/
+
+//** INCLUDE + INHERIT + DEFINE ********************************************//
+#include "../def.h"
+
+inherit "std/npc";
+inherit "/std/npc/spells";
+
+object owner;
+int net, defend;
+
+//**************************************************************************//
+
+
+
+//** CREATE ****************************************************************//
+void create()
+{
+  if(!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Eine Riesenspinne");
+  SetProp(P_LONG,
+    "Die grosse Spinne aus dem Tal von Tethyr ist wohl das haesslichste "
+    "was Du seit langem gesehn hast. Die kalten Augen starren Dich an und "
+    "beobachten jede deiner Bewegungen. Die haarigen Beine sind mit "
+    "Krallen besetzt.");
+  SetProp(P_NAME, "Riesenspinne");
+  SetProp(P_GENDER, FEMALE);
+  AddId(({"spinne", "riesenspinne", "\nranger_spider"
+        , NOCONTROL, NOWIMPY, SKILL_NOLEARN, FELL_WUSCHEL }));
+  SetProp(P_RACE, "Spinne");
+  AddClass( ({CL_ANIMAL, CL_NIGHTVISION }) );
+  SetProp(P_ARTICLE, 1);
+  create_default_npc(18);
+  SetProp(P_FRIEND, 1);
+  SetProp(P_NO_GLOBAL_ATTACK, 1);
+  SetProp(P_HANDS, ({" mit ihren Beinen", QueryProp(P_HANDS)[1],
+                    ({DT_RIP})   }) );
+  SetProp(P_SIZE, 120);
+  SetProp(P_WEIGHT, 35000);
+  SetProp(P_ALIGN, -400);
+  SetProp(P_MAX_HANDS, 8);
+  SetProp(P_HEAL, 0);
+  SetProp(P_AGGRESSIVE, 0);
+  SetProp(P_WIMPY, 0);
+  SetProp(P_NOMAGIC, 10);
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    Name(WER,1)+" kann sowas nicht.\n" }) );
+
+  SetProp(P_MSGIN, "krabbelt herein");
+  SetProp(P_MSGOUT, "krabbelt");
+  SetProp(P_MMSGIN, "krabbelt herein");
+  SetProp(P_MMSGOUT, "krabbelt");
+  SetProp(P_DIE_MSG,  " krabbelt davon.\n");
+  SetProp(P_NOCORPSE,  1);
+  SetProp(P_KILL_NAME, "Eine Riesenspinne");
+  AddInfo(DEFAULT_INFO, "kann Deine Sprache nicht verstehen.\n");
+
+  SetProp(P_SPELLRATE, 0);
+  
+  SetChats(1,
+  ({Name(WER, 1)+" starrt Dir in die Augen.\n",
+    Name(WER, 1)+" bewegt sich leise.\n",
+   }) );
+  SetAttackChats(10,
+  ({Name(WER, 1)+" beisst.\n",
+    Name(WER, 1)+" greift mit allen Beinen an.\n",
+   }) );
+   
+  net=time();
+  defend=0;
+   
+}
+//**************************************************************************//
+
+
+
+//** Komunikation **********************************************************//
+void catch_tell(string str)
+{
+  string who,target,action;
+  
+  if(!((query_verb() == "sag") /*|| (query_verb()[0..0] == "'")*/))return;
+                              //buggt. 
+  if(sscanf(str,"%s sagt: %s %s",who,target,action) != 3)      return;
+  if(!id(target))                                              return;
+  if(find_player(lower_case(who)) != owner)                    return;
+  if(action[<1..] == "\n") action = action[0..<2];
+  action = lower_case(action);
+  call_out("order",0,action);
+  return;
+}
+
+int order(string action)
+{
+  object *enemies;
+  object enemy;
+  string *s;
+  int i, mode;
+
+  enemies=({});
+  enemy=0;
+  mode=0;
+
+  if(action == "verschwinde"  ||
+     action == "hau ab"       ||
+     action == "verzieh dich" ||
+     action == "geh")
+  { ENV(owner)->Message(BS(TO->Name(WER, 1)+" krabbelt schnell davon."));
+    TO->remove();
+    return 1;}
+  
+  if(action == "kaempfe"         ||
+     action == "kaempfe mit mir" ||
+     action == "kaempfe mit"     ||
+     action == "hilf mir")
+  { ENV(owner)->Message(BS(TO->Name(WER, 1)+" stellt sich hinter Dir auf.")); 
+    owner->AddDefender(TO);
+    defend=1;
+    return 1; } 
+    
+  if(action == "pause"       ||
+     action == "kampfpause"  ||
+     action == "stopp")
+  { ENV(owner)->Message(BS(TO->Name(WER, 1)+" erstarrt in ihrer Bewegung.")); 
+    owner->RemoveDefender(TO);
+    defend=0;
+    enemies=TO->QueryEnemies()[0];
+    for(i=0; i<=sizeof(enemies)-1; i++)
+    { enemies[i]->StopHuntFor(TO,1);
+      TO->StopHuntFor(enemies[i],1); }
+    return 1; } 
+  
+  //Laehmen und Fangen
+  
+  //ziel angegeben?  
+  s=explode(action, " ");
+  if(sizeof(s)<=1) {owner->Message(BS("Wen soll "+TO->Name(WER, 1)+" "
+                                   "laehmen?")); 
+                    return 1;}
+  s[1]=lower_case(s[1]);
+
+  if(s[0] == "fang"       ||
+     s[0] == "fange") 
+  { if(TO->QueryProp(P_NAME) == "Schwertspinne")
+    {mode=1;}
+    else{ owner->Message(BS("Das kann "+TO->Name(WER, 1)+" nicht!")); 
+          mode=0; 
+          return 1;}   
+  }
+  
+  if(s[0] == "laehme"       ||
+     s[0] == "betaeube"     ||
+     s[0] == "fang"         ||
+     s[0] == "fange")
+  { 
+    //Im Kampf?
+    if(!(owner->InFight())) 
+    { owner->Message(BS("Das geht nur im Kampf!")); 
+      return 1;}
+    
+    //letztes Netz noch nicht lange genug her?
+    if( (net+10) >= time() ) 
+    { owner->Message(BS(TO->Name(WER, 1)+" ist noch nicht soweit!"));
+      return 1;}
+    
+    //Kaempft die Spinne mit?
+    if( defend==0)
+    { owner->Message(BS(TO->Name(WER, 1)+" muss schon mit Dir zusammen "
+                     "kaempfen.")); 
+      return 1;}
+      
+    //Ist das ziel ein Feind?
+    enemies=TO->QueryEnemies()[0];
+    if(sizeof(enemies) == 0 )
+    { owner->Message(BS("'"+CAP(s[1])+"' ist kein Feind."));
+      return 1;}
+    for(i=0; i<=sizeof(enemies)-1; i++)
+    { //ist der Feind im Raum?
+      if(ENV(enemies[i])!=ENV(owner)) 
+      { enemies-=({enemies[i]}); } 
+    }
+    for(i=0; i<=sizeof(enemies)-1; i++)
+    {
+      if(lower_case(enemies[i]->QueryProp(P_NAME))==s[1])
+      { enemy=enemies[i]; i=sizeof(enemies);}
+      else if( (member_array(s[1], (enemies[i]->QueryProp(P_IDS))) ) != -1)
+      { enemy=enemies[i]; i=sizeof(enemies);}
+    }
+    if(!enemy)
+    { owner->Message(BS("'"+CAP(s[1])+"' ist kein anwesender Feind."));
+      return 1;}
+     
+    if(mode) {call_out("netz", 0, enemy); return 1; }
+    else {call_out("slow", 0, enemy); return 1;}
+  } 
+  
+}
+
+//**************************************************************************//
+
+
+
+//** SPEZIAL_ATTACKE *******************************************************//
+int slow(object enemy)
+{
+
+  net=time();
+  ENV(owner)->Message(BS(TO->Name(WER, 1)+" beisst "+enemy->Name(WEN)+". "
+                         +enemy->Name(WER)+" faengt an zu taumeln."));
+  enemy->ModifySkillAttribute(enemy, SA_SPEED
+         , (110-2*TO->QueryProp(P_LEVEL)), 4+2*(random(2)+1) ); 
+  return 1;
+}
+int netz(object enemy)
+{
+
+  net=time();
+  ENV(owner)->Message(BS(TO->Name(WER, 1)+" wirft ein Netz ueber "
+                         +enemy->Name(WEN)+
+                         ". "+enemy->Name(WER)+" ist in einem Netz "
+                         "gefangen!")); 
+  enemy->SetProp(P_PARALYZED, ([PARALYZE_TIME: (4+2*(random(2)+1)), 
+				    	   PARALYZE_MSG: BS("Du bist in dem Spinnennetz gefangen!"), 
+							   PARALYZE_MSG_OTHER: "%s strampelt hilflos im Netz.\n", 
+							   PARALYZE_END: BS("Du hast Dich aus dem Netz befreit."), 
+							   PARALYZE_END_OTHER: "%s hat sich aus dem Netz befreit.\n"]));
+  return 1;
+}
+
+void Attack(object enemy)
+{
+  if(owner)
+  {
+    if(ENV(owner)!=ENV(TO)) return;
+  }
+  ::Attack(enemy);
+}
+
+//**************************************************************************//
+
+
+
+//** CUSTOMIZE *************************************************************//
+//-- Die Schwertspinne -------------------------------------------------------
+int shadow_wolf(object caster, int success)
+{
+  int level;
+  
+  
+  // WERTE
+  if(!caster) return 0;
+  if(!success) return 0;
+  
+  owner=caster;
+  
+  if(success < 0) success=0;
+  if(success > 10000) success=10000;
+  
+  level = 28; 
+  level-=random(3); //min -2; max +0
+  if(ENV(owner)->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN] == 4) //FORREST
+  { level+=2; } //max +2 
+  
+  
+  //ANPASSUNG
+  SetProp(P_SHORT, "Eine Schwertspinne");
+  SetProp(P_LONG,
+    owner->Name()+" hat Diesen Schrecken der Unterwelt zu sich gerufen um "
+    "Unterstuetzung im Kampf zu erhalten. Die Spinne hat keine Beine sondern "
+    "lange scharfe Schwerter auf denen sie durch die Gegen stakst. Du bist "
+    "sicher sie weiss hervorragend damit umzugehen.");
+  SetProp(P_NAME, "Schwertspinne");
+  AddId(({"schwertspinne", "\nranger_sword_spider"}));
+  SetProp(P_KILL_NAME, "Eine Schwertspinne");
+  //create_default_npc(level)- BEGIN
+  SetProp(P_LEVEL, level);
+  SetProp(P_ATTRIBUTES, ([A_CON: level, A_DEX: level,
+                          A_STR: level, A_INT: level]));
+  SetProp(P_MAX_HP, 30+level*level);
+  SetProp(P_MAX_SP, QueryProp(P_MAX_HP));
+  SetProp(P_HANDS, ({" mit ihren Krallen",
+                    10*level, ({DT_RIP}) }) );
+  SetProp(P_BODY, 4*level);
+  SetProp(P_XP, 0);
+  //create_default_npc(level) - ENDE
+  SetProp(P_MAX_HP, QueryProp(P_MAX_HP)*2);
+  SetProp(P_SIZE, 110+level*3);
+  SetProp(P_WEIGHT, QueryProp(P_SIZE)*450);
+  SetProp(P_ALIGN, -1000+random(200));
+  SetProp(P_NOMAGIC, level+5);
+  
+  SetProp(P_RESISTANCE_STRENGTHS ,
+    ([ DT_FIRE:      0.2, DT_COLD:     -0.1, DT_ACID:       -0.5, 
+       DT_POISON:   -1.0, ]) );
+       
+  SetChats(1,
+  ({Name(WER, 1)+" starrt Dir in die Augen.\n",
+    Name(WER, 1)+" bewegt sich leise.\n",
+   }) );
+  SetAttackChats(10,
+  ({Name(WER, 1)+" beisst.\n",
+    Name(WER, 1)+" greift mit allen Beinen an.\n",
+   }) );
+     
+  //ZUSATZFUNKTIONEN
+  owner->AddPursuer(TO);
+  owner->AddDefender(TO);
+  defend=1;
+  
+  return 1;
+}
+
+//-- Der normale Schwarzbaer -------------------------------------------------
+int customize(object caster, int success)
+{
+  int level;
+  
+  // WERTE
+  if(!caster) return 0;
+  if(!success) return 0;
+  
+  owner=caster;
+  
+  if(success < 0) success=0;
+  if(success > 10000) success=10000;
+  
+  level =20;
+  level+=(success*3)/10000; //min 0; max +3
+  if(ENV(owner)->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN] == 4) //FORREST
+  { level+=2; } //max +2 
+  
+  //ANPASSUNG  
+  SetProp(P_LONG, 
+    QueryProp(P_LONG)+"Sie gehorcht "+to_string(owner->Name())+".");
+  //create_default_npc(level)- BEGIN
+  SetProp(P_LEVEL, level);
+  SetProp(P_ATTRIBUTES, ([A_CON: level, A_DEX: level,
+                          A_STR: level, A_INT: level]));
+  SetProp(P_MAX_HP, 30+level*level);
+  SetProp(P_MAX_SP, QueryProp(P_MAX_HP));
+  SetProp(P_HANDS, ({" mit ihren Beinen",
+                    10*level, ({DT_RIP}) }) );
+  SetProp(P_BODY, 4*level);
+  SetProp(P_XP, 0);
+  //create_default_npc(level) - ENDE
+  SetProp(P_MAX_HP, QueryProp(P_MAX_HP)*5/3);
+  SetProp(P_SIZE, 90+level*4);
+  SetProp(P_WEIGHT, QueryProp(P_SIZE)*200);
+  SetProp(P_ALIGN, -200-random(200));
+  SetProp(P_NOMAGIC, level-15);
+    
+  SetProp(P_RESISTANCE_STRENGTHS ,
+    ([ DT_FIRE:      0.1, DT_COLD:     -0.1, DT_ACID:       -0.2, 
+       DT_POISON:   -0.5, ]) );
+     
+  SetProp(P_MSGOUT, "krabbelt hinter "+to_string(owner->Name())
+                    +" hinterher" );
+  SetProp(P_MMSGOUT, "folgt "+to_string(owner->Name()) );
+  
+  //ZUSATZFUNKTIONEN
+  owner->AddPursuer(TO);
+  owner->AddDefender(TO);
+  defend=1;
+  
+  return 1;
+}
+
+mixed DefendOther(int dam, mixed dam_type, mixed spell, object enemy)
+{ 
+  int dam_new;
+  
+  if( member_array("slash",dam_type)   !=-1  ||
+      member_array("pierce",dam_type)  !=-1  ||
+      member_array("bludgeon",dam_type)!=-1  ||
+      member_array("rip",dam_type)     !=-1  ||
+      member_array("whip",dam_type)    !=-1  ||
+      member_array("squeeze",dam_type) !=-1)
+  {
+    if(TO->QueryProp(P_NAME) == "Schwertspinne") 
+    { 
+      dam_new=dam/3;
+      tell_room(ENV(TO), BS(Name(WER,1)+" faengt einen Angriff fuer "+
+                          owner->Name(WEN)+" ab!\n"), ({owner}) );
+      owner->Message(BS(Name(WER, 1)+" faengt einen Angriff fuer Dich ab."));
+    }
+    else 
+    { 
+      dam_new=dam/4;
+      tell_room(ENV(TO), BS(Name(WER,1)+" schwaecht einen Angriff fuer "+
+                          owner->Name(WEN)+" ab!\n"), ({owner}) );                          
+      owner->Message(BS(Name(WER, 1)+" schwaecht einen Angriff fuer Dich "
+                                     "ab."));
+    }
+  }
+  enemy->Kill(TO);
+  dam=dam-dam_new;
+
+  //Mit mehreren Armen kann die Spinne 2 Aktionen ausfuehren
+  return ({dam, dam_type, spell}); //-> ergo defendOther + Attack 
+} 
+
+//**************************************************************************//
+
+
+
+//** StandartFunktionen ****************************************************//
+void die(int poisondeath)
+{
+  if(objectp(owner)) owner->RemovePursuer(TO);
+  if(objectp(owner)) owner->RemoveDefender(TO);
+  defend=0;
+  ::die(poisondeath);
+}
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  if(player == owner)
+  {TO->remove();}
+}
+int remove()
+{
+  if(objectp(owner)) owner->RemovePursuer(TO);
+  if(objectp(owner)) owner->RemoveDefender(TO);
+  defend=0;
+  while(remove_call_out("remove")!=-1);
+  return ::remove();
+}
+void reset()
+{
+  ::reset();
+  call_out("remove",0);
+}
+//**************************************************************************//
+
+
+
+//** REACTIONS *************************************************************//
+//--Reactions-----------------------------------------------------------------
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{ if(find_call_out("reaction") != -1) return;
+  call_out("reaction", 0, TP, "starrt aus leeren Augen."
+         , "starrt aus leeren Augen."); }
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void reaction(object pl, string macher, string andere)
+{
+  if(!ENV(TO))           return;
+  if(!objectp(pl))       return;
+  if(!ENV(pl))           return;
+  if(ENV(TO) != ENV(pl)) return;
+
+  tell_object(pl, BS(Name(WER, 1)+" "+macher));
+  tell_room(ENV(TO), BS(Name(WER, 1)+" "+andere), ({pl}) );
+}
+//**************************************************************************//

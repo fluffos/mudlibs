@@ -1,0 +1,371 @@
+#include "../arkanisten.h"
+
+inherit "/std/thing.lpc";
+
+public void create() {
+    if(is_clone(TO)) return;
+
+    SetProp(P_ABILITY_NAME, 0);
+    SetProp(P_ABILITY_DESCRIPTIPON, 0);    
+    SetProp(P_ABILITY_TYPE, ABILITY_TYPE_PASSIVE);
+    SetProp(P_ABILITY_BASE_ATTRIBUTE, A_INT);
+    SetProp(P_ABILITY_CASTVERB, 0);
+    SetProp(P_ABILITY_GROUP, ({}));
+    SetProp(P_ABILITY_COST, ([]));
+    SetProp(P_ABILITY_REQUIRES, 0);
+    SetProp(P_ABILITY_SPELLBREAK, 1);
+}
+
+public string skill_name() {
+    return lower_case(QueryProp(P_ABILITY_NAME));
+}
+
+
+varargs private void fire_event(int event, mixed payload) {
+    EVENT_DISPATCH->fire_event(skill_name(), event, payload);
+}
+
+public void subscribe_to(string ability, int event) {
+    EVENT_DISPATCH->subscribe_to(ability, event, TO);
+}
+
+public mapping apply_modifications(int mod_type, mapping payload) {
+    return EVENT_DISPATCH->apply_modifications(skill_name(), mod_type, payload);
+}
+
+public void modify(string other, int type) {
+    EVENT_DISPATCH->modify(other, type, TO);
+}
+
+nosave varargs object find_victim(string wen, object pl) {
+    object victim;
+
+    if (!pl) return 0;
+
+    if (!strlen(wen)) {
+        if (victim = pl->QueryEnemy()) return victim;
+        return 0;
+    }
+
+    if (victim = present(wen, environment(pl))) return victim;
+    if (victim = present(wen, pl)) return victim;
+
+    return 0;
+}
+
+varargs object FindVictim(string wen, object pl, string msg) {
+    object vic;
+
+    if (!(vic = find_victim(wen, pl)) && msg) write(msg);
+    return vic;
+}
+
+varargs object FindLivingVictim(string wen, object pl, string msg) {
+    object vic;
+
+    if (!(vic = FindVictim(wen, pl, msg))) return 0;
+
+    if (!living(vic)) {
+        printf("%s lebt doch nicht!\n", capitalize(vic->name()));
+        return 0;
+    }
+
+    return vic;
+}
+
+varargs object FindEnemyVictim(string wen, object pl, string msg) {
+    object vic;
+    mixed noattack;
+    int arena;
+
+    if (!(vic = FindLivingVictim(wen, pl, msg))) {
+        if ((stringp(wen) && wen != "") || !objectp(pl)) return 0;
+        if (!(vic = pl->SelectEnemy())) return 0;
+    }
+
+    if (noattack = vic->QueryProp(P_NOATTACK)) {
+        if (stringp(noattack))
+            write(vic->Name(WER, 1) + " " + noattack + "\n");
+        else
+            write(vic->Name(WER, 1) + " springt geschickt aus Deiner Reichweite.\n");
+        return 0;
+    }
+
+    if (vic == pl) {
+        write("Du koenntest Dir dabei wehtun.\n");
+        return 0;
+    }
+
+    if (query_once_interactive(vic) && query_once_interactive(pl) &&
+        !(IS_LEARNER(pl) && IS_LEARNER(vic)) &&
+        !(vic->QueryProp(P_TESTPLAYER))) {
+        arena = call_other("/obj/pkmaster", "PK_allowed", environment(pl), pl, vic);
+        if (!arena) {
+            write(vic->Name(WER) + " ist ein Spieler!\n"
+                "Das Angreifen von Spielern ist hier nicht erlaubt!\n");
+            return 0;
+        }
+    }
+
+    if (!pl->IsEnemy(vic)) pl->Kill(vic);  // War es bisher kein Feind? Jetzt ist es einer.
+    return vic;
+}
+
+public bool c(object user) {
+    if(user->QueryProp(P_GUILD) != GUILD_NAME) return false;
+    return true;
+}
+
+public bool has_learned(object user) {
+    return member(user->QueryProp(P_NEWSKILLS), skill_name());
+}
+
+public int is_ability() {
+    return true;
+}
+
+varargs public bool can_learn(object user, int silent) {
+    string *requirements, req;
+    object dep;
+    int idx;
+
+    if(has_learned(user)) {
+        if(!silent) tell_object(user, BS("Du beherrscht diese Faehigkeit bereits."));
+        return false;
+    }
+
+    if(pointerp(requirements = QueryProp(P_ABILITY_REQUIRES))) {
+        foreach(idx, requirements, req, {
+            if(objectp(dep=ABILITY_SERVICE->get_ability_by_name(req)) && !dep->has_learned(user)) {
+                if(!silent) tell_object(user, BS("Du benoetigst die Faehigkeit '"+dep->QueryProp(P_ABILITY_NAME)+"'"));
+                return false;
+            }
+        });
+    }
+
+    if(user->QueryProp(P_GUILD_LEVEL) < QueryProp(P_ABILITY_MIN_GUILD_LEVEL)) {
+        if(!silent) tell_object(user, BS(sprintf("Dazu musst du mindestens Gildenstufe %d sein.", QueryProp(P_ABILITY_MIN_GUILD_LEVEL))));
+        return false;
+    }
+    return true;
+}
+
+public bool learn_ability(object user) {
+    if(has_learned(user)) return false;
+    if(!can_learn(user, 1)) return false;
+    user->ModifySkill(skill_name(), ([SI_SKILLABILITY: 2000, SI_ABILITY_OBJECT: file_name(TO)]));
+    tell_object(user, BS("Du erlernst die Faehigkeit '"+QueryProp(P_ABILITY_NAME)+"''."));
+    return true;
+}
+
+#define SMUL(x,y) ((x<0 && y<0)?(-1*x*y):(x*y))
+public int calculate_success(object caster, int abil) {
+    int res;
+    res=abil + abil / MAX_ABILITY - random(MAX_ABILITY-(abil==MAX_ABILITY?2000:0));
+    return res;
+}
+
+public mapping prepare_use(object user, mapping sinfo) {
+    if(QueryProp(P_ABILITY_SPELLBREAK)  &&  (user->QueryProp(P_NEXT_SPELL_TIME) > time() || user->QueryProp(P_DISABLE_SPELLS))) {
+        tell_object(user, BS("Du kannst noch keine neue Faehigkeit einsetzen!"));
+        return 0;
+    }
+
+    sinfo[SI_SKILLABILITY] = user->QuerySkillAbility(skill_name());
+    return sinfo;
+}
+
+private bool pay_cost(object user, mapping sinfo) {
+    mapping cost;
+    string *indices, type;
+    int v, idx;
+
+    if(!mappingp(cost = QueryProp(P_ABILITY_COST))) return true;
+    if(mappingp(sinfo[SI_RAW_SPELLCOST])) {
+        cost = sinfo[SI_RAW_SPELLCOST];
+    }
+
+    pDebug(user, sprintf("ability :: pay_cost :: cost=%O\n", cost));
+
+    cost = apply_modifications(MODIFY_COST, ([
+        SI_ABILITY_USER: user,
+        SI_RAW_SPELLCOST: cost
+    ]))[SI_RAW_SPELLCOST];
+
+    pDebug(user, sprintf("ability :: pay_cost :: modified cost=%O\n", cost));
+
+    indices = m_indices(cost);
+    foreach(idx, indices, type, {
+        switch(type) {
+            case P_SP:
+                pDebug(user, sprintf("ability :: pay_cost :: SP cost=%d user has %d\n", cost[P_SP], user->QueryProp(P_SP)));
+                v = cost[P_SP];
+                if(user->QueryProp(P_SP) < v) {
+                    tell_object(user, BS("Dazu benoetigst du "+v+" Magiepunkte."));
+                    return false;
+                }
+                user->AddSp(-v);
+                break;
+            case P_MV:
+                pDebug(user, sprintf("ability :: pay_cost :: MV cost=%d user has %d\n", cost[P_MV], user->QueryProp(P_MV)));
+                v = cost[P_MV];
+                if(user->QueryProp(P_MV) < v) {
+                    tell_object(user, "Du bist zu erschoepft dafuer!\n");
+                    return false;
+                }
+                user->do_exhaust(v);
+                break;
+            case P_HP:
+                pDebug(user, sprintf("ability :: pay_cost :: HP cost=%d user has %d\n", cost[P_HP], user->QueryProp(P_HP)));
+                v = cost[P_HP];
+                if(user->QueryProp(P_HP) < v) {
+                    tell_object(user, "Das wuerde dich toeten!\n");
+                    return false;
+                }
+                user->AddHp(-v);
+        }
+    });
+
+    return true;
+}
+
+public int on_use_before_evaluation(object user, mapping sinfo, int skillcheck) {
+    pDebug(user, sprintf("ability :: on_use_before_evaluation :: skillcheck=%d\n", skillcheck));
+    if(!pay_cost(user, sinfo)) {
+        return false;
+    }
+    return true;
+}
+
+public int on_use_after_eval(object user, mapping sinfo, int skillcheck) {
+    if(skillcheck < 0) return MISSERFOLG;
+    return ERFOLG;
+}
+
+private bool is_silent_sinfo(mapping sinfo) {
+    if(!member(sinfo, SI_ABILITY_SILENT)) return false;
+    return sinfo[SI_ABILITY_SILENT];
+}
+
+private bool is_nolearn_sinfo(mapping sinfo) {
+    if(!member(sinfo, SI_ABILITY_NOLEARN)) return false;
+    return sinfo[SI_ABILITY_NOLEARN];
+}
+
+public void failed(object caster, mapping sinfo, int skillcheck) {
+    if(!is_nolearn_sinfo(sinfo)) caster->LearnSkill(skill_name(), 1+random(caster->QueryAttribute(QueryProp(P_ABILITY_BASE_ATTRIBUTE))), 0);
+    if(!is_silent_sinfo(sinfo)) tell_object(caster, BS("Du lernst aus deinem Fehler."));
+    return;
+}
+
+public void success(object caster, mapping sinfo, int skillcheck) {
+    return;
+}
+
+varargs public int use(object user, mapping sinfo, int returnSuccess) {
+    int res, success_code;
+
+    if(!has_learned(user)) return 0;
+    if(!mappingp(sinfo)) sinfo = ([]);
+    if(QueryProp(P_ABILITY_SPELLBREAK)  && (user->QueryProp(P_NEXT_SPELL_TIME) > time() || user->QueryProp(P_DISABLE_SPELLS))) {
+        tell_object(user, BS("Du kannst noch keine neue Faehigkeit einsetzen!"));
+        return 0;
+    }
+
+    //pDebug(user, sprintf("ability - use :: sinfo=%O\n", sinfo));
+
+    if(!member(sinfo, SI_SKILLABILITY)) sinfo[SI_SKILLABILITY] = user->QuerySkillAbility(skill_name());
+
+    res = calculate_success(user, sinfo[SI_SKILLABILITY]);
+
+    if(!on_use_before_evaluation(user, sinfo, res)) {
+        return 0;
+    }
+
+    success_code = on_use_after_eval(user, sinfo, res);
+
+    if(member(sinfo, SI_SPELLFATIGUE)) {
+        user->SetProp(P_NEXT_SPELL_TIME, time()+sinfo[SI_SPELLFATIGUE]);
+    }
+    
+    if(success_code == MISSERFOLG) {
+        failed(user, sinfo, res);
+    } else if(success_code == ERFOLG) {
+        res = apply_modifications(MODIFY_SKILLCHECK_RESULT, ([
+            SI_ABILITY_USER: user,
+            SI_ABILITY_VALUE: res,
+            SI_SKILLABILITY: sinfo[SI_SKILLABILITY],
+            SI_ABILITY_SINFO: sinfo
+        ]))[SI_ABILITY_VALUE];
+        success(user, sinfo, res);
+    }
+
+    fire_event(EVENT_AFTER_USE, (["user": user, "sinfo": sinfo]));
+
+    if(returnSuccess) return res;
+    return success_code;
+}
+
+// called to set up a passive ability for a player
+public void activate_for(object user) {
+    return;
+}
+
+// called to tear down a passive for a player
+public void deactivate_for(object user) {
+    return;
+}
+
+public int default_attack_spell(object enemy, object user, mapping sinfo, mixed spell) {
+    int r;
+    mapping payload;
+
+    if(!member(sinfo, SI_ABILITY_USER)) sinfo[SI_ABILITY_USER] = user;
+    sinfo = apply_modifications(MODIFY_DAMAGE, sinfo);
+    
+    r = call_other("/std/spellbook", "TryDefaultAttackSpell", enemy, user, sinfo, spell);
+    payload = copy_mapping(sinfo);
+    payload[SI_ENEMY] = enemy;
+    payload["user"] = user;
+    payload["damage_dealt"] = r;
+    fire_event(EVENT_AFTER_ATTACK, payload);
+}
+
+public void register_attack_ability(object caster) {
+    if(!mappingp(caster->QuerySkill(SK_FIGHT))) {
+        // make sure the combat ability is set
+        caster->ModifySkill(SK_FIGHT, ([SI_SKILLABILITY: 0, SI_SKILLFUNC: "Kampfskill"]), 100, "waechter");
+    }
+    
+    present(GUILD_OBJ_ID, caster)->AddAttackAbility(skill_name());
+    return;
+}
+
+public void unregister_attack_ability(object caster) {
+    present(GUILD_OBJ_ID, caster)->RemoveAttackAbility(skill_name());   
+}
+
+public void register_defensive_ability(object caster) {
+    if(!mappingp(caster->QuerySkill(SK_MAGIC_DEFENSE))) {
+        caster->ModifySkill(SK_MAGIC_DEFENSE, ([SI_SKILLABILITY: 0, SI_SKILLFUNC: "Verteidigungsskill"]), 100, "waechter");
+    }
+    
+    present(GUILD_OBJ_ID, caster)->AddDefenseAbility(skill_name());
+    return;
+}
+
+public void unregister_defensive_ability(object caster) {
+    present(GUILD_OBJ_ID, caster)->RemoveDefenseAbility(skill_name());   
+}
+
+public int get_free_hands(object user) {
+    int fhands;
+    mapping mod;
+    fhands = user->QueryProp(P_MAX_HANDS) - user->QueryProp(P_USED_HANDS);
+    mod = apply_modifications(MODIFY_FREE_HAND_CALCULATION, ([
+        SI_ABILITY_USER: user,
+        P_NR_HANDS: fhands,
+    ]));
+    if(member(mod, P_NR_HANDS)) fhands = mod[P_NR_HANDS];
+    return fhands;
+}

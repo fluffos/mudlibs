@@ -1,0 +1,208 @@
+inherit "std/thing";
+#include "../def.h"
+#include "/spellbooks/waldlaeufer/std/restrictions.lpc"
+
+object weapon;
+int critChance, gemChance, bonus;
+string loadedGem;
+
+mapping GEM_DAM_TYPE = ([
+  "almandin": ({DT_LIGHTNING, "mit Blitzen zuckende"}), 
+  "granat": ({DT_LIGHTNING, "mit Blitzen zuckende"}),
+  "amethyst": ({DT_SOUND, "hoerbar summende"}),
+  "aquamarin": ({DT_WATER, "bewegende, blaue"}),
+  "bergkristall": ({DT_HOLY, "guelden strahlende"}),
+  "bernstein": ({DT_LIGHT, "hell leuchtende"}),
+  "diamant": ({DT_EXPLOSION, "instabile flackernde"}),
+  "lapislazuli": ({DT_ACID, "wabrend gruenliche"}),
+  "opal": ({DT_MAGIC, "in allen Farben schlillernde"}),
+  "onyx": ({DT_TERROR, "fuerchterlich zitternde"}),
+  "rubin": ({DT_FIRE, "rot brennende"}),
+  "saphir": ({DT_COLD, "eiskalte, blau-weisse"}),
+  "smaragd": ({DT_POISON, "schleimig gruene"}),
+  "tigerauge": ({DT_MIND, "geisterhafte"}),
+  "topas": ({DT_AIR, "flirrende"}),
+  "turmalin": ({DT_UNHOLY, "lichtverschlingende"}),
+  "zirkon": ({DT_ELECTRIC, "elektrisch knisternde"})
+]);
+
+mapping GEM_ATTR_BONUS = ([
+  "oktarin": ({ ({P_X_HEALTH_MOD, ([P_SP: 10]) }), "magisch leuchtende" }),
+  "aventurin": ({ ({P_X_ATTR_MOD, ([A_CON: 2]) }), "lebendig wirkende"}),
+  "jadeit": ({ ({P_X_ATTR_MOD, ([A_DEX: 2]) }), "unstet wabernde"}),
+  "jaspis": ({ ({P_X_ATTR_MOD, ([A_INT: 2]) }), "mit raetselhaften Runen versehene"}),
+  "peridot": ({ ({"anticurse", 1 }), "pulsierend helle"}),
+  "pyrit": ({ ({"heal_magic", 1 }), "saugend irisirende"}),
+  "sugilith": ({ ({"heal_life", 1 }), "saugend lebendige"}),
+  "tuerkis": ({ ({P_X_HEALTH_MOD, ([P_HP: 10]) }), "lebendig pulsierende"})
+]);
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, 0 );
+  SetProp(P_LONG,  0 );
+  SetProp(P_NAME, 0);
+  SetProp(P_INVIS, 1);
+  SetProp(P_GENDER, FEMALE); 
+  AddId(EDGE_SOUL_ID);
+  SetProp(P_MATERIAL, MAT_MAGIC );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_SIZE, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NEVERDROP, 1);
+}
+
+public void Setup(object _weapon, object caster, int ability, int success) {
+  int duration;
+
+  duration = caster->QueryProp(P_GUILD_LEVEL) * 10 + success/200 + ability/100;
+  weapon = _weapon;
+  bonus = SPELL_BONUS(caster, "seele der klinge");
+
+  SetProp("end_time", time()+duration);
+
+  critChance = ability/1000 + random(success/1000);
+  critChance += critChance * bonus / 100;
+  if(critChance > 60) critChance = 60;
+
+  weapon->SetProp(P_UNWIELD_FUNC, TO);
+
+  pDebug(caster, sprintf("soul_edge :: critChance=%d duration=%d\n", critChance, duration));
+
+  if(!objectp(weapon->QueryProp(P_WIELDED))) {
+    weapon->DoWield();
+  }
+
+  if(success > 5000) {
+    tell_object(weapon->QueryProp(P_WIELDED), BS("Am Griff deiner Waffe bildet sich ein kleiner Sockel aus Ranken, in den du Edelsteine einsetzen kannst (setze <stein> ein)."));
+    AddCmd(({"setze", "setz"}), "cmd_einsetzen");
+  }
+  call_out("remove", duration);
+  return;
+}
+
+public int cmd_einsetzen(string str) {
+  string was, aura, id;
+  mixed *entry, n;
+  object gem;
+
+  notify_fail("Was willst du einsetzen?\n");
+  if(str == 0) return 0;
+  if(sscanf(str, "%s ein", was) != 1) return 0;
+  if(was == "edelstein" || was == "stein") {
+    notify_fail("Welchen Edelstein meinst du genau?\n");
+    return 0;
+  }
+  /*if(loadedGem != 0) {
+    notify_fail("Du hast bereits einen aktiven Edelstein!\n");
+    return 0;
+  }*/
+
+  if(!objectp(gem = present(was, TP))) {
+    notify_fail("So einen Edelstein hast du nicht bei dir!\n");
+    return 0;
+  }
+
+  n = gem->QueryProp(P_NAME);
+  if(pointerp(n)) id = n[0];
+  else id = n;
+
+  id = lower_case(id);
+
+  if(member(GEM_DAM_TYPE, id)) {
+    entry = GEM_DAM_TYPE[id];
+  } else if(member(GEM_ATTR_BONUS, id)) {
+    entry = GEM_ATTR_BONUS[id];
+  } else {
+    entry = ({ ({ "wc_bonus", 5+random(15) }), "scharf fokussierte" });
+  }
+
+  write(BS("Du legst "+gem->name(WEN, 1)+" in den Sockel aus Ranken und die Klinge wird von einer "+entry[1]+"n Aura umgeben."));
+  say(BS(TP->Name(WER)+" legt einen "+gem->name(WEN, 1)+" in den Sockel der Klinge und sie wird von einer "+entry[1]+"n Aura umgeben"));
+
+  SetProp(P_X_HEALTH_MOD, 0);
+  SetProp(P_DAM_TYPE, 0);
+  SetProp(P_X_ATTR_MOD, 0);
+  SetProp("anticurse", 0);
+  SetProp("heal_magic", 0);
+  SetProp("heal_life", 0);
+
+  if(stringp(entry[0])) { // schadenstyp
+    SetProp(P_DAM_TYPE, entry[0]);
+  } else if(pointerp(entry[0])) { // andere property
+    SetProp(entry[0][0], entry[0][1]);
+  } else {
+    raise_error("ungueltige zuweisung der property");
+  }
+
+  gem->AddAmount(-1);
+
+  return 1;
+}
+
+varargs int remove(int silent) {
+  object owner;
+
+  if(!is_clone(TO)) return ::remove(silent);
+
+  if(objectp(weapon)) {
+    weapon->SetProp(P_UNWIELD_FUNC, 0);
+  }
+
+  if(!silent && objectp(owner = weapon->QueryProp(P_WIELDED))) { 
+    tell_object(owner, BS("Deine Verbindung zu der Klinge erlischt."));
+  }
+
+  return ::remove(silent);
+}
+
+
+public int UnwieldFunc(object waffe, int silent) {
+  remove(silent);
+  return 1;
+}
+
+public int CheckCritical(mapping sinfo) {
+  object enemy, owner;
+  int i;
+
+  if(!objectp(enemy = sinfo[SI_ENEMY])) return 0;
+  if(!objectp(owner = weapon->QueryProp(P_WIELDED))) return 0;
+
+
+  if(random(100) < critChance) {
+    tell_object(owner, BS("Die Klinge vibriert kurz in deiner Hand und lenkt dich zu einer Schwachstelle deines Gegners."));
+    return weapon->QueryProp(P_WC);
+  }
+
+  if(QueryProp("anticurse") && QueryProp(P_CURSED)) {
+    tell_object(owner, BS("Die Klinge in deiner Hand strahlt hell auf und hebt einen Fluch auf sich selbst auf."));
+    SetProp(P_CURSED, 0);
+  }
+
+  if(QueryProp("heal_magic")) {
+    i = 1 + random(5);
+    i += i * bonus / 100;
+    owner->AddSp(i);
+  }
+
+  if(QueryProp("heal_life")) {
+    i = 1 + random(5);
+    i += i * bonus / 100;
+    owner->AddHp(i);
+  }
+
+  if(QueryProp("wc_bonus")) {
+     i = random(QueryProp("wc_bonus"));
+     i += i * bonus / 100;
+     return i;
+  }
+
+  return 0;
+}

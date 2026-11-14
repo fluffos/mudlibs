@@ -1,0 +1,94 @@
+//--Die Zaehmung -------------------------------------------------------------
+/*Problem: spaetere Spells brauchen eine eindeutige Rassenzuordnung. Da aber 
+viele NPC mit Rassen wie "Tier" oder "npc" oder voelligen neuschoepfungen 
+"eierlegendewollmilchsau" rumlaufen, ist es unmoeglich alle rassen einfach zu
+uebernehmen. Daher alle Tier-Rassen des Muds auflisten und Kategorisieren*/
+mapping prep_zaehmung(object caster, mapping sinfo, int silent) 
+{ 
+  object ob;
+  int success, ability, max_level, max_level_diff;
+  mixed res;
+
+  if(!TestNoTrance(caster, sinfo)) return 0;
+  
+  if(!GuildItemTest(caster, sinfo) || !FroschTest(caster, sinfo) || 
+     !AnimalTest(caster,sinfo)  ||
+     !BlindTest(caster,sinfo)     )
+    return 0;
+
+  ability=sinfo[SI_SKILLABILITY];
+   
+  //Hier Test auf Eles, Daemonen, sonstiges begleitgetier, am besten 
+  //auslagern
+    
+  //Nur ein gezaehmtes Tier pro Ranger  
+  if(PETMASTER->IsPetOwner(caster->QueryProp(P_NAME)))
+  { tell_object(caster, BS("Du hast noch ein gezaehmtes Tier!"));
+    return 0;}
+
+  ob = FindVictim(sinfo[SI_SKILLARG], caster, 
+                  "Welches Tier moechtest Du zaehmen?\n");
+  if(!ob) return 0;  
+
+  //allg. zaehmbarkeit ausgelagert  
+  if(!PETMASTER->is_zaehmbar(caster,ability,ob,0)) return 0;
+
+  if(!silent)
+  {
+    caster->SetProp(P_TMP_ATTACK_HOOK, ({ time()+sinfo[SI_PREPARE_TIME]+2, 
+                                          caster, "zaehmung_hook"}) );
+    tell_room(ENV(caster), BS(caster->Name()+" kniet vor "+ob->name(WEM, 1)+
+                           " nieder und schaut beruhigend in die Augen von "
+                           +ob->name(WEM)+"."), ({caster}) );
+    tell_object(caster, BS("Du kniest nieder und schaust "
+                        +ob->name(WEM, 1)+" direkt in die Augen. Der Kampf "
+                        "der Geister beginnt."));
+    ob->Kill(caster);
+  }
+
+  aim(caster, sinfo); // keine Angriffe des Waldlaeufers beim Zaehmen. Wir sind beschaeftigt!
+  if(R_SKILLMASTER->HasSkill(getuid(caster), TIER_RESPEKT)) {
+    // Wenn das Tier Respekt vor uns hat, haut es uns weniger
+    ob->ModifySkillAttribute(caster, SA_SPEED, 50, sinfo[SI_PREPARE_TIME]);
+  }
+
+  // bonus laesst uns schneller zaubern
+  sinfo[SI_PREPARE_TIME] -= sinfo[SI_PREPARE_TIME] * get_equip_bonus(caster, "zaehmung") / 100;
+
+  sinfo[SI_ENEMY]=ob;
+  if(!silent){FirstPrepareFuncSuccessfull(caster, sinfo);}
+  return sinfo;
+}
+ 
+int zaehmung(object caster, mapping sinfo)
+{
+  object pet_transformer, ob;
+  mixed res;
+  string category;
+  int success;
+  
+  if(!mappingp(sinfo=prep_zaehmung(caster, sinfo, 1))) return 0;
+  ob=sinfo[SI_ENEMY];  
+
+  success=SpellSuccess(caster,sinfo);
+  if(success<1000)
+  {
+    tell_object(caster, BSC("Du konntest den Geist nicht ueberwinden."));
+    return MISSERFOLG;
+  }
+  
+  
+  res=PETMASTER->PetCategory(ob);
+  if( !stringp(res) )
+  { tell_object(caster, BS("Mit Diesem Tier koenntest Du nichts anfangen."));
+    return 0;}
+  category=res;
+ 
+  caster->StopHuntFor(ob);
+  ob->StopHuntFor(caster);
+  pet_transformer=clone_object(NPC"pet2");
+  pet_transformer->customize(caster, ob, category);
+  //Rest geschieht im pet
+    
+  return ERFOLG;
+}

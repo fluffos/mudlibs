@@ -1,0 +1,146 @@
+// Perlenkette von Elysia
+// 16.10.2004 Feyaria
+
+inherit "/std/armour";
+
+#include "../def.h"
+#include "../../gilden.h"
+
+#define MAX_PEARLS 300
+int pearls = MAX_PEARLS;
+
+void create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  SetProp(P_SHORT, "Eylsias Perlenkette der absoulten Tugend");
+  SetProp(P_LONG, 
+    "Das ist die Perlenkette von Elysia, der Verkoerperung der absoulten "
+    "Tugend. Sie besteht aus Hunderten von wunderschoenen Perlen und ist so "
+    "lange, dass man sie sich gleich mehrere Male um den Hals schlingen kann.");
+  SetProp(P_NAME, "Elysias Perlenkette");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_ARTICLE, 0);
+  AddId (({"kette", "perlenkette", "elysias perlenkette", 
+        "elysias perlenkette der absoulten tugend", "\nelysiaruestung"}) );
+  SetProp(P_INFO,
+      BS("Diese Perlenkette ist nicht nur wunderschoen, sondern auch "
+        "hochgradig magisch. Die Perlen beschuetzen Dich vor feindlichen "
+        "Angriffen, aber dazu muss man immer wieder neue Perlen auf die "
+        "Kette auffaedeln."));
+
+  AddSpecialDetail( ({"perlen auf kette", "perlen auf perlenkette"}), "det_perlen");
+
+  SetProp(P_ARMOUR_TYPE, AT_AMULET);
+  SetProp(P_AC, 5);
+  SetProp(P_MATERIAL, ([MAT_GOLD: 10, MAT_PEARL: 90]) );
+  SetProp(P_WEIGHT, 10);
+  SetProp(P_VALUE, 70000);
+  SetProp(P_MAGIC, 12);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_QUALITY_DECAY, 1000);
+  SetProp(P_TEMPERATURE_PROTECTION, ([T_COLD_PROT: 1, T_HEAT_PROT: 1]) );
+  SetProp(P_WEAR_RESTRICTIONS, ([SR_SEER: 1, P_LEVEL: 70]) );
+  SetProp(P_M_HEALTH_MOD, ([P_HP: 9, P_SP: 9]) );
+  SetProp(P_M_MAX_HEALTH_MOD, ([P_HP:5, P_SP:5]) );
+  SetProp(P_DAM_PROTECTION, QueryProp(P_DAM_PROTECTION) + 
+      ([DT_UNHOLY: 2, DT_MAGIC: 2, DT_MIND: 2, DT_FIRE: 2]) );
+  SetProp(P_DEFEND_FUNC, TO);
+
+  AddCmd( ({"faedel", "faedle"}), "cmd_auffaedeln");
+
+  SUID;
+    
+  SetProp(P_ITEMD_TMPMAGIC, ({2222, 2222}) );
+  find_object(ITEMD)->RegisterNewItem(this_object(), TIME_ID);
+}
+
+void _set_autoloadobj(mixed data)
+{     
+  SetProp(P_ITEMD_TMPMAGIC, data);
+  SetProp(P_NODROP, 1);
+}
+
+mixed _query_autoloadobj()
+{   
+  return QueryProp(P_ITEMD_TMPMAGIC);
+}
+
+void reset()
+{
+  if (!is_clone(this_object())) return;
+  ::reset();
+  call_out("heal", 10 + random(200)); 
+} 
+
+void heal()
+{ 
+  object wer;
+  int a;
+
+  if (objectp(wer = QueryProp(P_WORN)) && interactive(wer) &&
+      (wer->QueryProp(P_HP) < wer->QueryProp(P_MAX_HP) ||
+       wer->QueryProp(P_SP) < wer->QueryProp(P_MAX_SP)))
+  {
+    tell_object(wer, 
+        "Die Tugendhaftigekeit von Elysia geht auf Dich ueber.\n");
+    wer->heal_self(10 + pearls);
+    if ((a = wer->QueryProp(P_ALIGN)) < 1000)
+      wer->SetProp(P_ALIGN, a + random(100));
+  }
+}
+
+int cmd_auffaedeln(string str)
+{
+  string was;
+  string worauf;
+  object ob;
+
+  notify_fail("Was willst Du worauf auffaedeln?\n");
+  if (!str)
+    return 0;
+  if (sscanf(str, "%s auf %s auf", was, worauf) != 2)
+    return 0;
+  if (!id(worauf))
+    return 0;
+  if (!objectp(ob = present(was, TP)))
+    return notify_fail("Du hast ja gar kein " + capitalize(was) + "!\n"), 0;
+  if (strstr(file_name(ob), "/obj/pearls/") == -1)
+    return write("Du kannst nur Perlen auf Elysias Perlenkette auffaedeln!\n"), -1;
+  if (ob->QueryProp(P_REQUESTED_AMOUNT) != 1)
+    return write("Du kannst immer nur einzelne Perlen auffaedeln!\n"), -1;
+  if (was == "perle")
+    return write("Welche Perle genau meinst Du?\n"), -1;
+  if (pearls >= MAX_PEARLS)
+    return write("Mehr Perlen haben auf der Kette nicht Platz!\n"), -1;
+  
+  write("Du faedelst " + ob->name(WEN,1) + " auf Elysias Perlenkette auf.\n");
+  ob->AddAmount(-1);
+  pearls++;
+  return 1;
+}
+
+int DefendFunc(string *dtyp, mixed spell, object enemy)
+{
+  if (pearls && !random(7) && sizeof(dtyp & m_indices(MAGICAL_DAMAGE_TYPES)))
+  {
+    tell_object(QueryProp(P_WORN), 
+        "Eylsias Perlenkette faengt einen Teil des Schadens ab");
+    if (!random(5))
+    {
+      tell_object(QueryProp(P_WORN), ",\naber eine Perle wird beschaedigt.\n");
+      pearls--;
+    }
+    else
+      tell_object(QueryProp(P_WORN), ".\n");
+    return pearls / 10 + random(pearls);
+  }
+  return 0;
+}
+
+
+string det_perlen()
+{
+  return BS("Momentan sind "+pearls+" Perlen auf der Ketten aufgefaedelt.");
+}

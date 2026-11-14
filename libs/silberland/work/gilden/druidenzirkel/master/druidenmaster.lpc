@@ -1,0 +1,644 @@
+/*
+//
+// Der Gildenmaster fuer die Druidengilde
+//
+// Angrox@Silberland
+//
+// 31.06.1997
+// 19.11.2000 angrox
+//            Historyfunktionen aus dem nekromaster.c uebernommen
+// 10.01.2002 angrox
+//            Logischen Fehler in CalculateRating ausgebessert: Wenn 
+//            ein Spieler online ist wird die P_LAST_LOGIN time nicht
+//            zur ev. Senkung des ratings herangezogen.
+// 23.09.2002 besser P_LAST_LOGOUT statt P_LAST_LOGIN ( Fall: Spieler war 1
+//            Monat permanent online und loggt nun aus......)
+//  4.02.2005 Element bei legendaeren druiden           
+*/
+
+#include <wizlevels.h>
+#include <language.h>
+#include <config.h>
+#include <new_skills.h>
+#include <properties.h>
+
+#include "/gilden/druidenzirkel/druiden.h"
+
+mixed saveload;
+nosave mapping druids=([ ]);
+nosave mapping top=([ ]);
+nosave mapping tmp_top=([ ]);   // waehrend der call_out Kette benoetigt...
+nosave string *legendary=({});
+nosave string *number_one;
+nosave string *history=({});
+nosave int *hist_time=({});
+nosave string *mhistory=({});
+nosave int *mhist_time=({});
+
+int MakeReadList();
+int SetNumberOne();    
+
+create()
+{
+  if (is_clone(this_object())) 
+    {
+    destruct(this_object());
+    return 1;
+    }
+  seteuid(getuid(this_object()));
+  if (restore_object(MEMBERLIST))
+     druids=saveload;
+  if (restore_object(TOPLIST))
+     top=saveload;
+  if (restore_object(LEGENDARY))
+     legendary=saveload;
+     saveload=0;
+  SetNumberOne();    
+}
+
+query_prevent_shadow() { return 1; }
+
+
+nosave int CheckIfAllowed()
+{
+ object ob;
+ string fname;
+ ob=previous_object();
+ fname=explode(file_name(ob), "#")[0];
+ if(fname!="/d/gebirge/angrox/npc/balrog" &&
+    fname!="/d/gebirge/angrox/4elem/npc/ritter" &&
+    fname!="/d/dschungel/feyaria/tijara/npc/elsurion" &&
+    fname!="/d/wasser/stahldorn/knarkh/npc/h_bestie" &&
+    !IS_ARCH(getuid(ob)) && 
+    getuid(ob)!="GUILD.druidenzirkel"  &&
+    getuid(ob)!="GUILD.druiden_spells")
+   { 
+     if(find_player("angrox")) {
+      tell_object(find_player("angrox"), sprintf("Versuchte "
+         +"Aenderung im Gildenmaster von %s (direkt!)\n", CAP(getuid(ob))));
+     }
+    write_secure_log("Versuchte Aenderung im Gildenmaster "
+             +"von "+CAP(getuid(ob))+" (direkt!)\n");
+    return 0;      
+   }
+ return 1;
+}
+
+nosave mixed object2string(mixed name)
+{
+  if(objectp(name)) return getuid(name);
+  if(stringp(name)) return lower_case(name);
+  return 0;
+}
+
+int DoBackup()
+{
+ if (!CheckIfAllowed()) return -2;
+ saveload=druids;
+ save_object(MEMBERBACKUP);
+ saveload=0;
+ rm (DRUIDEN("backup/backup.log"));
+ write_file(DRUIDEN("backup/backup.log"),
+             "Letztes Backup: "+dtime(time())+"\n");
+ return 1;
+}
+
+int DoRestore()
+{
+ if(!CheckIfAllowed()) return -2;
+ if(restore_object(MEMBERBACKUP))
+      save_object(MEMBERLIST);
+ saveload=0;
+ return 1;
+}
+
+
+
+/* Neues Mitglied hinzufuegen */
+int AddMember(mixed pl)
+{
+ if(!pl=object2string(pl)) return -3;
+ if(member(druids, pl))
+      return 0;
+ if (!CheckIfAllowed()) return -2;
+ //           0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6  
+ druids+=([pl:0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;""]);
+ saveload=druids;
+ save_object(MEMBERLIST);
+ saveload=0;
+ return 1;
+}
+
+/* Mitglied loeschen */
+int DeleteMember(mixed pl)
+{
+ if(!pl=object2string(pl)) return -1;
+ if (!CheckIfAllowed()) return -2;
+ if(!member(druids, pl))
+   return -1;
+ druids=m_delete(druids, pl);
+ saveload=druids;
+ save_object(MEMBERLIST);
+ saveload=0;
+ call_out("DeleteLegendary",0,pl);
+ return 1;
+}
+
+/* Setzen einer Aufgabe */
+int SetTask(object pl, int task)
+{
+ if(!pl || !objectp(pl) || task<1 || task>15) return -1;
+ //tell_object(pl, sprintf("%O\n",druids));
+ if (!CheckIfAllowed()) return -2;
+ druids[getuid(pl), task]=1;
+ druids[getuid(pl), 1]=pl->QueryProp(P_GUILD_LEVEL);
+ saveload=druids;
+ save_object(MEMBERLIST);
+ saveload=0;
+ return 1;
+}
+
+int DeleteTask(object pl, int task)
+{
+ if(!pl || task<1 || task>15) return -1;
+ if (!CheckIfAllowed()) return -2;
+ druids[getuid(pl), task]=0;
+ saveload=druids;
+ save_object(MEMBERLIST);
+ saveload=0;
+ return 1;
+}
+
+int SetLvl16Quest(object pl, int value) 
+{
+  if(!pl) return -1;
+  if (!CheckIfAllowed()) return -2;
+  if(value<1) value=1;
+  druids[getuid(pl),15]=value;
+  saveload=druids;
+  save_object(MEMBERLIST);
+  saveload=0;
+  return 1;
+}
+
+int QueryLvl16Quest(object pl) 
+{
+  return druids[getuid(pl),15];
+}
+
+mixed QueryMembers() {
+  return m_indices(druids);
+}
+
+mapping QueryAll() {
+  return druids; 
+}
+
+mixed QueryMemberEntry(string pl) {
+  if(!member(druids, pl)) return 0;
+  return ({druids[pl],druids[pl,1],druids[pl,16]});
+  //         xp           lvl          element
+}
+
+void QueryMemberTasks(string pl) {
+  int i;
+  if(!member(druids, pl)) return 0;
+  for(i=2;i<=15;i++) {
+    write("Task "+i+": "+druids[pl,i]+"\n");
+  }
+  return ;
+
+}
+/* Welchem Zweig & welcher Elementarauswahl gehoert 
+   der Druide an? */
+string GetDruidElement(mixed pl)
+{
+ if(!pl=object2string(pl)) return ""; 
+ if(!member(druids, pl)) return "";
+ return druids[pl, 16];
+}
+
+int SetDruidElement(mixed pl, string element)
+{
+ if(!pl=object2string(pl)) return -1;
+ //if(!member(MEMBERLIST, pl)) return -1;
+ if (!CheckIfAllowed()) return -2;
+ druids[pl, 16]=element;
+ saveload=druids;
+ save_object(MEMBERLIST);
+ saveload=0;
+ return 1; 
+}
+
+/* Levels updaten */
+int UpdateMemberLevels() 
+{
+ int i;
+ object pl;
+ string *names;
+ names=m_indices(druids);
+ for(i=sizeof(names)-1; i>=0;i--) {
+   if((pl=find_player(names[i]))||(pl=find_netdead(names[i])))
+     druids[names[i], 1]=pl->QueryProp(P_GUILD_LEVEL);
+ }
+ saveload=druids;
+ save_object(MEMBERLIST);
+ return 1;
+}
+
+
+/* Abfragen einer Aufgabe */
+int CheckTask(object pl, int task)
+{
+ if(!pl || task<1 || task>15) return -1;
+ if(druids[getuid(pl), task])
+   return 1;
+ else return 0; 
+}
+
+/* Ueberpruefen der vorhergegangen Tasks */
+int CheckPreviousTasks(object pl, int task_number)
+{
+ int i;
+ if(!pl || task_number<1 || task_number>15) return -1;
+ for(i=task_number-1;i>=1;i--) {
+   if(!druids[getuid(pl), i])
+     return 0;
+ }
+ return 1;
+}
+
+
+int CheckXp(object pl, int cur_xp)
+{
+ if(!pl || !cur_xp) return -1;
+ //if(!member(MEMBERLIST, pl)) return -1;
+ if(druids[getuid(pl), 0] > (cur_xp+pl->QueryProp(P_TOTAL_LOST_XP)))
+      return 0;
+ else return 1;
+}
+
+int GetXpDifference(object pl, int cur_xp)
+{
+ if(!pl) return -1;
+ return druids[getuid(pl), 0]-(cur_xp+pl->QueryProp(P_TOTAL_LOST_XP));
+}
+
+
+int SetXp(object pl, int needed_xp)
+{
+ if(!pl || !needed_xp) return -1;
+ if (!CheckIfAllowed()) return -2;
+ druids[getuid(pl), 0]=needed_xp+pl->QueryProp(P_TOTAL_LOST_XP);
+ saveload=druids;
+ save_object(MEMBERLIST);
+ saveload=0;
+ return 1;
+}
+
+/* Den Besten herausfiltern und in einer Variablen speichern. */
+int SetNumberOne()
+{
+ int i, *topratings, bestrating;
+
+ bestrating = 0;
+ topratings = m_indices(top);
+
+ for(i = sizeof(topratings)-1; i>=0; i--)
+   if(topratings[i] > bestrating)
+     bestrating = topratings[i];
+
+ number_one = top[bestrating];
+ return 1; 
+}
+
+/* Den Besten ausgeben */
+mixed QueryNumberOne()
+{
+ return number_one;
+}
+
+// History des mages_shout
+int AddMagesHistory(string presay, string msg) {
+  int i;
+  
+  if ( sizeof(mhistory) > 20 )
+  {
+    mhistory=mhistory[1..<1];
+    mhist_time=mhist_time[1..<1];
+  }
+  mhistory+=({implode(({presay, msg}), "&&*%%")});
+  mhist_time+=({time()});
+  return 1;
+}
+mixed QueryMagesHistory() {
+  return ({mhist_time,mhistory}); 
+}
+
+// History des guild_shout
+int AddHistory(string presay, string msg, int invis) {
+  int i;
+  
+  if ( sizeof(history) > DHIST_LEN )
+  {
+    history=history[1..<1];
+    hist_time=hist_time[1..<1];
+  }
+  history+=({implode(({presay, msg, to_string(invis)}), "&&*%%")});
+  hist_time+=({time()});
+  write_file(DHIST_LOG, sprintf("%s - %s%s", dtime(time()), 
+        presay, msg));
+  return 1;
+}
+mixed QueryHistory() {
+  return ({hist_time,history}); 
+}
+
+/* Berechnung der Wertung */
+int CalculateRating(string player, int rating, int stufe, int gstufe)
+{
+ int last;
+ float mod;
+ object pl;
+
+ rating+=11*stufe+222*gstufe;
+ //tell_angrox(sprintf("Name: %s, Rating: %d", player, rating));
+ if(!find_player(player)) {
+   last=call_other(SAVEMASTER, "QueryFileProp", player, P_LAST_LOGOUT);
+   if((time()-2592000)>last) {         // 3600*24*30 = 30 tage
+     mod=1-((time()-2592000-last)/86400)*0.05;
+     if((rating=(int)(rating*mod))<0) rating=1;
+     //tell_angrox(sprintf(", tdif: %d, ",(time()-1728000-last) ));
+   }
+ }
+ //tell_angrox(sprintf(", Rating.mod: %d\n", rating));
+ return rating;
+}
+
+/* Fuers Austreten -> Raus aus der Topliste */
+
+int DeleteTopEntry(string player)
+{
+  int *topratings, i; 
+  string *topnames;
+  if (!CheckIfAllowed()) return -2;
+  topnames=m_values(top);
+  topratings=m_indices(top);
+  for(i=sizeof(topnames)-1;i>=0;i--) 
+    if(member(topnames[i], player)!=-1) 
+      top[topratings[i]]-=({player});
+  saveload=top;
+  save_object(TOPLIST);
+  return 1;
+}
+
+int AddLegendary(string player)
+{
+  object legend;
+  if (!CheckIfAllowed()) return -2;
+  if(member(legendary, player)==-1) 
+    legendary+=({player});
+  else return 0;
+  saveload=0;
+  DeleteTopEntry(player);
+  saveload=legendary;
+  save_object(LEGENDARY);
+  saveload=0;
+  if( (legend = find_player(player)) || (legend = find_netdead(player)) )
+    legend->SetProp(P_GUILD_TITLE, 
+        ({"", "der legendaere Druide", "die legendaere Druidin"})
+        [legend->QueryProp(P_GENDER)] );
+  return 1;
+}
+
+int DeleteLegendary(string player)
+{
+  object legend;
+  if (!CheckIfAllowed()) return -2;
+  if(member(legendary, player)!=-1) 
+    legendary-=({player});
+  else return 0;
+  saveload=0;
+  saveload=legendary;
+  save_object(LEGENDARY);
+  saveload=0;
+  if( (legend = find_player(player)) || (legend = find_netdead(player)) )
+    call_other("/gilden/druidenzirkel", "adjust_title", legend);
+  return 1;
+}
+
+int CheckLegendary(string player, int rating) {
+  if(rating < 9990)
+  {
+    DeleteLegendary(player);
+    return -1;
+  }
+  else if(rating >=9990) 
+  {
+    AddLegendary(player);
+  }
+  return 1;
+}
+
+mixed QueryLegendary() {
+  return legendary; 
+}
+
+/* Topliste updaten */
+/*
+int UpdateTopList()
+{
+  string *names;
+  int rating, i, test, xi, g_rat;
+  object pl;
+  names=m_indices(druids);
+  top=([]);
+  for(i=sizeof(names)-1;i>=0;i--) {
+    rating=0;
+    if(query_wiz_level(names[i])<3) {
+      if(((pl=find_player(names[i]))||(pl=find_netdead(names[i]))) &&
+          !pl->QueryProp(P_TESTPLAYER))
+      {
+         rating=CalculateRating(names[i], g_rat=pl->QueryProp(P_GUILD_RATING), 
+               pl->QueryProp(P_LEVEL));
+      }
+      else if(call_other(SAVEMASTER, "QueryFileProp", names[i],P_TESTPLAYER)==0)
+        {
+          rating=CalculateRating(names[i], g_rat=call_other(SAVEMASTER, 
+                "QueryFileProp", names[i], P_GUILD_RATING), 
+                call_other(SAVEMASTER, "QueryFileProp", names[i], 
+                P_LEVEL));
+        }
+    } 
+    if(rating && CheckLegendary(names[i],g_rat)==-1) {
+      if(!member(top, rating)) {
+        top+=([rating:({names[i]})]);
+      }
+      else top[rating]+=({names[i]});
+    }
+    g_rat=0;
+  } 
+  for(i=sizeof(m_indices(top))-1;i>=0;i--) {
+    if(!sizeof(m_values(top)[i]))
+       top=m_delete(top, m_indices(top)[i]);
+  }
+  saveload=top;
+  save_object(TOPLIST);
+  saveload=0;
+  return 1;   
+}
+*/
+
+//#define WDB(xx) if(find_player("angrox")) \
+//   tell_object(find_player("angrox"),sprintf("[%s] %s\n",ctime()[11..18],xx));
+#define WDB(xx)
+
+/* Topliste updaten (ohne Parameter aufrufen!!) */
+varargs int UpdateTopList(mixed names)
+{
+  int rating, i, g_rat;
+  object pl;
+
+  // Immer nur ein Update auf einmal
+  if (find_call_out("UpdateTopList") != -1)
+    return 0;
+
+  if (!names)
+  {
+    names = m_indices(druids);
+    tmp_top = ([ ]);
+  }
+
+  i = 0;
+  while (i < sizeof(names))
+  {
+    //WDB("now processing "+names[i]+"...");
+    rating = g_rat = 0;
+    if(query_wiz_level(names[i]) < 10)
+    {
+      if(((pl=find_player(names[i])) || (pl=find_netdead(names[i]))) &&
+          !pl->QueryProp(P_TESTPLAYER))
+      {
+        if(pl->QueryProp(P_GUILD) != "druidenzirkel" ) {
+          WDB(names[i]+" ist kein Druide!\n");
+          call_out("DeleteMember",0,pl);
+          i++;
+          continue;
+        }
+        rating = CalculateRating( names[i],
+                                  g_rat = pl->QueryProp(P_GUILD_RATING),
+                                  pl->QueryProp(P_LEVEL),
+                                  druids[names[i],1]);
+      }
+      else if(call_other(SAVEMASTER, "QueryFileProp", names[i],P_TESTPLAYER)==0)
+      {
+        if(call_other(SAVEMASTER, "QueryFileProp", names[i],P_GUILD) != 
+            "druidenzirkel" )
+        {
+          WDB(names[i]+" ist kein Druide!\n");
+          call_out("DeleteMember",0,pl);
+          i++;
+          continue;
+        }
+        rating = CalculateRating( names[i],
+                                  g_rat = call_other(SAVEMASTER,
+                                    "QueryFileProp", names[i], P_GUILD_RATING),
+                                  call_other(SAVEMASTER,
+                                    "QueryFileProp", names[i], P_LEVEL),
+                                  druids[names[i],1]);
+      }
+    } 
+    WDB("now processing "+names[i]+"..."+rating);
+    if(rating && CheckLegendary(names[i],g_rat) == -1) {
+      if(!member(tmp_top, rating)) {
+        tmp_top += ([rating:({names[i]})]);
+      }
+      else tmp_top[rating] += ({names[i]});
+    }
+
+    i++;
+    if ((i >= 20) && sizeof(names) > i)
+    {
+      WDB("callout iteration");
+      names = names[i..];
+      call_out("UpdateTopList", 2, names);
+      return 2;
+    }
+  }
+
+  WDB("deleting zerovalued druids");
+  for(i = sizeof(m_indices(tmp_top)); i-->0;) {
+    if(!sizeof(m_values(tmp_top)[i]))
+       tmp_top = m_delete(tmp_top, m_indices(tmp_top)[i]);
+  }
+  top = tmp_top;        // top passt jetzt
+  tmp_top = ([ ]);
+
+  WDB("saving");
+  saveload=top;
+  save_object(TOPLIST);
+  saveload=0;
+
+  // Abschliessendes...
+  WDB("MakeReadList");
+  MakeReadList();
+  WDB("SetNumberOne");
+  SetNumberOne();    
+  WDB("Finished.");
+
+  return 1;
+}
+
+/* Topliste in file 'toplist.read' schreiben, Ausgabe ueber 'more' */
+int MakeReadList()
+{
+ int *arm, i, j, k,tabs, stufe, nummer;
+ float best, fac;
+ string name, element, l_druids;
+
+ rm(REALTOPLIST);
+ l_druids="";
+ nummer=1;
+ write_file(REALTOPLIST, "(Stand vom "+dtime()[0..23]+
+     ")\n\nLEGENDAERE DRUIDEN:\n");
+ for(i=0;i<=sizeof(legendary)-1;i++) {
+   if(stringp(legendary[i]))
+     l_druids+=CAP(legendary[i])+"(" + 
+       capitalize(druids[legendary[i], 16]) + "), ";
+ }
+ if(l_druids=="") l_druids="Keine  ";
+ l_druids+="\b\b";
+ write_file(REALTOPLIST, break_string(l_druids,60, "\t")+"\n\n");
+ write_file(REALTOPLIST, "        Name\t\tElement\tGstufe\tWertung "
+                        +"(Nr.1=100)\n");
+ write_file(REALTOPLIST, "--------------------------------------"
+                     +"--------------------\n");
+ arm=sort_array(m_indices(top), #'>); //');
+ k=sizeof(arm);
+ if(k>100) k=100;
+ for(i=k-1;i>=0;i--) {
+   if(arm[i]) {
+     if(i==k-1) {
+       best=(float)arm[i];
+     }
+     for(j=sizeof(top[arm[i]])-1;j>=0;j--) {
+       name=CAP(top[arm[i]][j]);
+       fac=(float)(arm[i]/best)*100;
+       if(!catch(element=capitalize(druids[lower_case(name), 16])) &&
+           nummer<100) {
+         tabs=2-(int)(strlen(name)/8);
+         stufe=druids[lower_case(name), 1];
+         if(arm[i]==1)
+	   write_file(REALTOPLIST, sprintf("%2d.\t%s%*'\t's%s\t%2d\t  -.---\n", 
+ 		    nummer, name, tabs, "", element, stufe)); 
+         else 
+           write_file(REALTOPLIST, sprintf("%2d.\t%s%*'\t's%s\t%2d\t%7.3f\n", 
+                    nummer, name, tabs, "", element, stufe, fac));
+         nummer++;
+       }
+     }
+   }
+ }
+ return 1;
+}
+

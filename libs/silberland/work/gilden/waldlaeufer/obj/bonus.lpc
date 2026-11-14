@@ -1,0 +1,281 @@
+/*****************************************************************************
+InvisObjekt geplant fuer saemtliche Boni der Gilde
+(Dex, Str, Con, Int, lebenspunkte, magiepunkte)
+(c) Lilyth, Torian, Delgo @ Silberland <sl.mud.at>
+28.1.06 - Begin
+
+*****************************************************************************/
+#include "../def.h"
+inherit "std/thing";
+
+#define P_REMOVE_TIME "remove_time"
+#define P_VISION "switch_the_vision"
+#define OFF 0
+#define NIGHT 1
+#define DAY 2
+
+object owner;
+
+//** StandardFunktionen ****************************************************//
+//-- Create eines typischen Invisobjekts -------------------------------------
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, 0 );
+  SetProp(P_LONG,  0 );
+  SetProp(P_NAME, 0);
+  SetProp(P_INVIS, 1);
+  SetProp(P_GENDER, NEUTER);
+  AddId(INVIS_BONUS_ID);
+  SetProp(P_MATERIAL, MAT_MAGIC );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_SIZE, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_REMOVE_TIME, 0); 
+  SetProp(P_VISION, OFF); 
+}
+
+
+//-- Falls ein call_out durch ausloggen gestoert wurde -----------------------
+void BecomesNetAlive(object spieler)
+{ 
+  int rest;
+  
+  if(spieler != owner) remove(1); return;
+  if(find_call_out("remove")) return;
+  if(QueryProp(P_REMOVE_TIME) <= time()) remove(1); return;
+  rest=QueryProp(P_REMOVE_TIME)-time();
+  if(rest<1) rest=1;
+  call_out("remove", rest);
+  return;
+}
+//**************************************************************************//
+
+
+
+//** BonusFunktionen *******************************************************//
+//-- Bonus setzen und call_out aufrufen --------------------------------------
+int SetBonus(string eigenschaft, int faktor, int duration)
+{
+  int skill;
+  
+  if(!eigenschaft ||!faktor || !ENV(TO) || !duration) {remove(1); return 0;}
+  owner=ENV(TO);
+  
+  switch(eigenschaft)
+  { case "int":   SetProp(P_X_ATTR_MOD,([A_INT:faktor]));         break;
+    case "str":   SetProp(P_X_ATTR_MOD,([A_STR:faktor]));         break;
+    case "con":   SetProp(P_X_ATTR_MOD,([A_CON:faktor]));         break;
+    case "dex":   
+      skill=R_SKILLMASTER->HasSkill(getuid(owner), KOERPERBEHERRSCHUNG);
+      if(skill && !(present(RINDENHAUT_ID, owner)) ) faktor+=2;
+      SetProp(P_X_ATTR_MOD,([A_DEX:faktor]));
+    break;
+    case "life": SetProp(P_X_HEALTH_MOD,([P_HP:faktor,P_SP:0])); break;
+    case "magic":  SetProp(P_X_HEALTH_MOD,([P_HP:0,P_SP:faktor])); break;}
+    
+  SetProp(P_REMOVE_TIME, time()+duration);
+  call_out("remove", duration);
+  return 1;
+}
+
+//-- Ein eigenes Removeaufrufen fuer andere Spells ---------------------------
+int new_remove(int duration)
+{
+  if(!ENV(TO) || !duration) {remove(1); return 0;}
+  owner=ENV(TO);
+  SetProp(P_REMOVE_TIME, time()+duration);
+  call_out("remove", duration);
+  return 1;
+}
+
+//-- Das eigen remove --------------------------------------------------------
+int remove(int silent)
+{
+  string s;
+  if(owner && ENV(TO) && owner==ENV(TO) ) 
+  {
+    if(QueryProp(P_VISION)!=OFF) {
+      if(QueryProp(P_VISION)==NIGHT && owner->QueryProp(P_RACE)!="Dunkelelf")  {
+        owner->RemoveClass(CL_NIGHTVISION);
+      }
+      tell_object(owner, BS("Deine Sehkraft wird wieder normal."));
+    }
+
+    if(id(WATERBREATH_ID) && !silent) {
+      tell_object(owner, BS("Deine Kiemen bilden sich zurueck."));
+    }
+
+    s = owner->QueryProp(P_RANGER_ACTIVE_SPELLS);
+    if(!stringp(s)) s = "";
+    if(id(RINDENHAUT_ID)) {
+      s = clear_bit(s, TB_RINDENHAUT);
+    }
+  
+    if(id(VISION_ID)) {
+      s = clear_bit(s, TB_VISION);
+    }
+  
+    if(id(KRAFT_DES_TIERES_ID)) {
+      s = clear_bit(s, TB_KRAFT_DES_TIERES);
+    }
+
+    if(id(MELODIE_DES_OSTENS_ID)) {
+      s = clear_bit(s, TB_MDO);
+    }
+
+    owner->SetProp(P_RANGER_ACTIVE_SPELLS, s);
+  }
+  
+  return ::remove(1);
+}
+//**************************************************************************//
+
+public void AddId(mixed ids) {
+  string s;
+  if(!pointerp(ids)) {
+    ids = ({ ids });
+  }
+
+  if(objectp(owner)) {
+    s = owner->QueryProp(P_RANGER_ACTIVE_SPELLS);
+    if(!stringp(s)) s = "";
+    if(member(ids, RINDENHAUT_ID) > -1) {
+      s = set_bit(s, TB_RINDENHAUT);
+    }
+
+    if(member(ids, VISION_ID) > -1) {
+      s = set_bit(s, TB_VISION);
+    }
+
+    if(member(ids, KRAFT_DES_TIERES_ID) > -1) {
+      s = set_bit(s, TB_KRAFT_DES_TIERES);
+    }
+
+    if(member(ids, MELODIE_DES_OSTENS_ID) > -1) {
+      s = set_bit(s, TB_MDO);
+    }
+
+    owner->SetProp(P_RANGER_ACTIVE_SPELLS, s);
+  }
+
+  ::AddId(ids);
+  return;
+}
+
+//**************************************************************************//
+//-- Kontrollitem fuer Day/Nightvision ---------------------------------------
+int SetVision(int duration)
+{
+  if(!ENV(TO) || !duration) {remove(1); return 0;}
+  owner=ENV(TO); if(duration<0) {duration=duration*(-1);}
+  
+  if(owner->QueryProp(P_RACE)== "Dunkelelf") 
+  { 
+    SetProp(P_VISION, DAY); AddId(DAYVISION_ID); 
+    owner->Message(BS("Deine Augen werden die eines Raubtiers. Du gleichst die Schwaeche deines Volkes aus."));
+    set_heart_beat(1); // nachdem hier niemand die shell veraendern darf -> entblinden im heart_beat
+  }
+  else 
+  {
+    SetProp(P_VISION, NIGHT); AddId(NIGHTVISION_ID);
+    owner->AddClass(CL_NIGHTVISION);
+    owner->Message(BS("Deine Augen werden die eines Raubtiers. Du kannst nun im Dunklen sehen."));
+  }
+  RemoveId(INVIS_BONUS_ID);
+  AddId(VISION_ID);
+  
+  SetProp(P_REMOVE_TIME, time()+duration);
+  call_out("remove", duration);
+  return 1;  
+}
+
+public string extra_look() {
+  if(id(VISION_ID)) return sprintf("%s Augen sehen aus wie die eines Raubtiers.", CAP(owner->QueryPossPronoun(NEUTER, WER, PLURAL)));
+  return 0;
+}
+
+// im Kampf wird so die Gesundheit der Gegner angezeigt
+public void SetLifeSense() {
+  SetProp(P_RANGER_LIFE_SENSE, 1);
+  tell_object(ENV(TO), BS("Du spuehrst nun die Gesundheit deiner Gegner."));
+  return;
+}
+
+public void SetDetectLife() {
+  AddCmd(({"schau", "schaue"}), "call_for_detect_life");
+  tell_object(ENV(TO), BS("Deine Sinne sind so geschaerft, dass du Lebewesen in deiner Umgebung erkennen kannst."));
+}
+
+public int call_for_detect_life(string str) {
+  if(find_call_out("detect_life")==-1) {
+    call_out("detect_life", 0);
+  }
+  return 0; // wir wollen nur injecten, nicht abfangen
+}
+
+public int is_alife(object ob) {
+  return living(ob);
+}
+
+public void detect_life() {
+  object pl, env, *envInv, targetRoom;
+  mapping exits;
+  string *directions, room, msg;
+  int i;
+
+  pl = ENV(TO);
+  if(!objectp(pl)) return;
+  if(!objectp(env=ENV(pl))) return;
+
+  exits = env->QueryProp(P_EXITS);
+  directions = m_indices(exits);
+  if(sizeof(directions) < 1) return; // keine Ausgaenge
+
+  for(i=0; i < sizeof(directions); i++) {
+    room = exits[directions[i]];
+    call_other(room, "???"); // raum laden
+    if(!objectp(targetRoom=find_object(room))) continue; // kein raum
+
+    envInv = filter_array(all_inventory(targetRoom), "is_alife");
+    if(sizeof(envInv) > 0) {
+      if(pl->QueryProp(P_GUILD_LEVEL) < 12) {
+        msg = sprintf("Aus Richtung %s spuehrst du andere Lebewesen.", CAP(directions[i]));
+      } else {
+        msg = sprintf("In Richtung %s spuehrst du %d Lebewesen.", CAP(directions[i]), sizeof(envInv));
+      }
+
+      switch(pl->QueryProp(P_TTY)) {
+        case "ansi" :  msg = ANSI_GREEN + ANSI_BG_BLACK + msg + ANSI_NORMAL; break;
+        case "vt100" : msg = ANSI_BOLD + msg + ANSI_NORMAL; break;
+      }
+
+      tell_object(pl, BS(msg));
+    }
+  }
+  return;
+}
+
+//**************************************************************************//
+
+public void heart_beat() {
+  object owner;
+  mapping blind;
+
+  owner = ENV(TO);
+  if(QueryProp(P_VISION) == DAY && objectp(owner) && mappingp(blind=owner->QueryProp(P_BLIND))) {
+    if(blind[BLIND_MSG] == "Du bist vom hellen Licht geblendet.\n") {
+      owner->SetProp(P_BLIND, 0);
+      tell_object(owner, BS("Deine Augen gewoehnen sich rasch an die Helligkeit."));
+    }
+  }
+
+  return;
+}

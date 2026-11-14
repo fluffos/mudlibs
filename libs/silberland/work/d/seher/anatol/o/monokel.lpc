@@ -1,0 +1,280 @@
+/* 
+ * Das Monokel erleichtert die Arbeit beim Metzeln, man kann sich das
+ * untersuchen der Gegner sparen. Die Genauigkeit ist 5%, damit doppelt
+ * so gut wie die beim blossen Untersuchen durch den Spieler. 
+ * Das Ganze funktioniert (natuerlich) nicht im Dunkeln oder bei einem
+ * blinden Spieler. Ach ja, der Alkohollevel des Spielers fliesst, sofern
+ * ein gewisser Level ueberschritten ist, unguenstig in die Berechnung mit 
+ * ein.    
+ * (c) 1998 Adrian Holzwarth / Anatol@Silberland
+ * 
+ * Initial  Revision 1.0      - angeschlossen am 07-09-97
+ * 17-04-98 Revision 1.1      - CL_NIGHTVISION beruecksichtigt
+ * 13-01-99 Revision 1.2      - strict_types, ../defines.h, logging
+ * 14-01-01 Revision 1.3      - logging auf /log geaendert, TABs raus,
+ *                              Umzug nach /d/seher/anatol/t/, *stoehn*,
+ *                              und CannotSee() wird ENDLICH auch beachtet.
+ * 04-01-04 Revision 1.4      - Eine Abfrage rausgeworfen.
+ * 12-01-30 Revision 1.5      - Glasbuchwahrscheinlichkeit aus Anlass
+ *                              anders geregelt.
+ * 12-08-24 Revision 1.6      - Glasbuchwahrscheinlichkeit umgebaut. Umzug
+ *                              von ./t nach ./o.
+ *
+ */
+
+#pragma strict_types
+
+inherit "std/thing";
+
+#include <class.h>
+#include <language.h>
+#include <properties.h>
+#include <wizlevels.h>
+#include "../defines.h"
+#define SLOG(f,x) log_file(LOG+f,sprintf("%s: %s",LOGTIME,x))
+
+// Musste aufgrund Irregularitaeten etwas geaendert werden, leider.
+// Glasbruch in eine Variable versteckt.
+
+// 4 * 7 * 24 * 60 * 60 = 4 Wochen = 2419200
+#define DESTRUCT_WARRANTED_TIME_FRAME             2419200 
+#define DESTRUCT_BASE_PROBABILITY                10000000
+#define DESTRUCT_PROBABILITY_RAISE_PER_DAY           1000
+#define DESTRUCT_PROBABILITY_RAISE_PER_USAGE            5
+
+nosave int sold_by_seer_shop;
+nosave int use_counter;
+
+public void 
+create() 
+{
+    if (!is_clone(this_object())) 
+        return;
+    ::create();
+    
+    SetProp(P_SHORT, "Ein Monokel (getragen)");
+  
+    SetProp(P_LONG,break_string(
+        "Diese Art der Sehhilfen ist zwar hoffnungslos veraltet, jedoch ist's "
+        "des oefteren recht geschickt, wenn man die Welt nuechtern betrachtet "
+        "durch ein anderes Auge sehen kann...",77));
+    SetProp(P_INFO, "Irgendetwas sagt Dir, dass Du mal \"guck\" und \"gugg\""
+        " versuchen solltest.\n");
+    SetProp(P_NAME, "Monokel");
+    SetProp(P_GENDER, NEUTER);
+    SetProp(P_WEIGHT, 0);                 // Da ggf. AUTOLOAD...
+    SetProp(P_VALUE, 7999);
+    SetProp(P_NOBUY,0);      
+    SetProp(P_NODROP,"Du willst das Monokel nicht ablegen.\n");      
+    SetProp(P_NEVERDROP,1);
+    SetProp(P_SHOW_INV,1);
+    SetProp(P_MATERIAL,MAT_GLASS);
+    AddId(({"monokel","\nmonokel","\a\n\a\tol_monokel","SEHER_TOOL"}));
+    AddCmd(({"gugg","guck"}),"npc_look");
+
+    sold_by_seer_shop=0;
+    use_counter=0;
+}
+
+public string
+_query_info()
+{
+    string ret;
+    ret="Irgendetwas sagt Dir, dass Du mal \"guck\" und \"gugg\""
+        " versuchen solltest.\n";
+
+    if (environment() && IS_LEARNER(environment()))
+        return ret+"Dies Monokel wird ewig halten.\n";
+    if (environment() && !IS_SEER(environment()))
+        return ret+"Allerdings ist das nur etwas fuer Seher.\n";
+    
+    if ((time()-sold_by_seer_shop)<DESTRUCT_WARRANTED_TIME_FRAME)
+        return ret+break_string("Der Hersteller sichert noch "+
+            time2string("%x %X",
+            DESTRUCT_WARRANTED_TIME_FRAME-(time()-sold_by_seer_shop) )+ 
+            " Glasbruchfreiheit zu.",77);
+    else
+        return ret+break_string("Die Herstellergarantie des Monokels gegen "
+            "Glasbruch ist abgelaufen. Das ist sogar schon "+ 
+            time2string("%x %X",
+            (time()-sold_by_seer_shop)-DESTRUCT_WARRANTED_TIME_FRAME)+ 
+            " her, ohje.",77);
+}
+
+public string 
+_query_short() 
+{
+    return 
+        ("Ein Monokel"+((environment()&&living(environment()))
+            ?" (getragen)"
+            :""));
+}
+
+
+public int
+_query_autoloadobj()
+{
+    return (environment() && IS_LEARNER(environment()));
+}
+
+nosave int 
+istZiel(object what) 
+{
+    if (!living(what)) 
+        return 0;
+    if (query_verb()=="gugg") 
+        return ((!(what->QueryProp(P_INVIS))) || IS_LEARNER(this_player()));
+    if ((what->QueryEnemies()) &&
+        (member_array(this_player(),((mixed *)what->QueryEnemies())[0])!=-1))
+        return 1;
+    else 
+        return 0;
+}
+
+
+nosave string 
+get_msg(object liv) 
+{
+    string str;
+    int maxhp,percent,alc_percent;
+    if (!objectp(liv)) 
+        return "";
+    if (!maxhp=(int)liv->QueryProp(P_MAX_HP))
+        return liv->Name() + " ist nicht lebensfaehig ?!\n";
+    percent=(100* ((int)liv->QueryProp(P_HP)) / maxhp) ;
+    alc_percent=(100*((int)this_player()->QueryProp(P_ALCOHOL)
+        / (int)this_player()->QueryProp(P_MAX_ALCOHOL)));
+    alc_percent=((alc_percent>30)?alc_percent-20:0);
+    percent-=random(alc_percent/2)+(alc_percent/2);
+    switch (percent) 
+    {
+        case  0:        str="wird den naechsten Treffer nicht ueberleben";
+                        break;
+        case  1..5 :    str="ist so gut wie am Ende";
+                        break;
+        case  6..10:    str="spuert bald das Ende nahen";
+                        break;
+        case 11..15:    str="spuert die Lebensenergie schwinden";
+                        break;
+        case 16..20:    str="ist in einem aeusserst bedenklichen Zustand";
+                        break;
+        case 21..25:    str="ist in einem sehr ueblen Zustand";
+                        break;
+        case 26..30:    str="ist in einem ueblen Zustand";
+                        break;
+        case 31..35:    str="ist in einem sehr schlechten Zustand";
+                        break;
+        case 36..40:    str="ist in einem ziemlich schlechten Zustand";
+                        break;
+        case 41..45:    str="macht einen sehr angeschlagenen Eindruck";
+                        break;
+        case 46..50:    str="macht einen ziemlich angeschlagenen Eindruck";
+                        break;
+        case 51..55:    str="machte schon einen wesentlich besseren Eindruck";
+                        break;
+        case 56..60:    str="machte schon einen deutlich besseren Eindruck";
+                        break;
+        case 61..65:    str="machte schon einen besseren Eindruck";
+                        break;
+        case 66..70:    str="fuehlt sich nicht mehr so gut";
+                        break;
+        case 71..75:    str="ist noch recht gut drauf";
+                        break;
+        case 76..79:    str="ist bei ordentlicher Gesundheit";
+                        break;
+        case 81..85:    str="ist bei guter Gesundheit";
+                        break;
+        case 86..90:    str="ist bei sehr guter Gesundheit";
+                        break;
+        case 91..95:    str="ist bei hervorragender Gesundheit";
+                        break;
+        case 96..99:    str="ist bei ausgezeichneter Gesundheit";
+                        break;
+        case 100..10000:str="ist bei bester Gesundheit";
+                        break;
+        default:      str="ist nicht von dieser Seite";
+    }
+    return (liv->Name()+" "+str+".\n");
+}
+
+nosave int willBreakOnUsage()
+{
+    // 1. Zeitraum, den das Monokel auf jeden Fall uebersteht.
+    
+    if ((time()-sold_by_seer_shop)<DESTRUCT_WARRANTED_TIME_FRAME)
+        return 0;
+
+    return
+        (random(DESTRUCT_BASE_PROBABILITY) <
+           (
+                (DESTRUCT_PROBABILITY_RAISE_PER_DAY *
+                   ((time()-sold_by_seer_shop-DESTRUCT_WARRANTED_TIME_FRAME)
+                   / 86400))
+                + DESTRUCT_PROBABILITY_RAISE_PER_USAGE * use_counter
+           ) );
+}
+
+
+public int npc_look() 
+{
+    object * livings;
+    string message;
+    message="";
+    if ((!environment(this_object())||
+        (environment(this_object())!=this_player()))) return 0;
+    if (this_player()->QueryProp(P_BLIND)) 
+    {
+        write("Du schaust angestrengt durch das Monokel, siehst aber nichts. "
+        "Koennte\ndas eventuell daran liegen, dass Du blind bist?\n");
+        return 1;
+    }
+    if (this_player()->CannotSee(1)) 
+    {
+        write("Verflixt, verflixt, verflixt, "
+            "Du siehst nichts, absolut nichts.\n");
+        return 1;
+    }
+
+    if (!IS_SEER(this_player())||
+        ((!IS_WIZARD(this_player()))&&(willBreakOnUsage()))) 
+    {
+        write("Du schaust angestrengt durch das Monokel, bist aber fuer einen "
+            "Moment\netwas zu unachtsam - Aaargh!, das Monokel faellt zu "
+            "Boden und zerspringt\nin 1093 kleine Scherben.\n");
+        say(this_player()->Name(WESSEN)+
+            " Monokel faellt zu Boden und zerspringt.\n");
+        SLOG("monokel",sprintf("%s (%s) verlor das Monokel. (c:%d, d:%d)\n",
+      this_player()->Name(),(IS_SEER(this_player())?"Seher":"Spieler"),
+        use_counter,(time()-sold_by_seer_shop)/86400));
+        remove();
+        return 1;
+    }
+    livings=(filter_array(all_inventory(environment(this_player())),"istZiel"))
+        -({this_player()});
+    if (!sizeof(livings))
+        message=((query_verb()=="gugg")
+            ?"Hier gibt es keine Lebewesen.\n"
+            :"Du bist hier mit keinem Lebewesen im Kampf.\n");
+    else 
+    {
+        message=implode(map_array(livings,#'get_msg),"");
+        use_counter++;
+    }
+    this_player()->More(message);
+    return 1;
+}
+
+// Beim Kauf aus dem Seherladen auf _jeden_ Fall kein Autoloader,
+// dafuer erst richtig benutzbar.
+
+void soldBySeerShop() 
+{
+    sold_by_seer_shop=time();
+    return;
+}
+
+public int 
+QuerySoldBySeerShop() 
+{ 
+    return sold_by_seer_shop; 
+}

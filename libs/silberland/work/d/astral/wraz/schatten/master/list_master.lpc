@@ -1,0 +1,204 @@
+// list_master
+// erzeugt/sortiert Listen (Schattenwelt)
+// Wraz / Mendralim
+
+#include "../def.h"
+
+#define LIST_SAVE ZONE "save/shadow_toplisten"
+#define LISTE ZONE "list/topwaffensterberliste.read"
+
+inherit ZONE "master/roman_numeral_conv.lpc";
+
+mapping sorted_deaths; // Death/Kill-Liste nach Toden sortiert
+mapping sorted_kills; // Death/Kill-Liste nach NPC-Kills sortiert
+mapping sorted_shadowlevels; // Death/Kill-Liste nach NPC-Kills [Schattenlevel] sortiert
+
+// -----------------------------------------------------------------------
+void create()
+{
+  if(is_clone(TO))
+  {
+    destruct(TO);
+    return;
+  }
+  seteuid(getuid(this_object())); // fuer zugriff auf dateien benoetigt
+
+  seteuid(getuid(TO));
+
+  return;
+}
+
+// -----------------------------------------------------------------------
+// Kopiert aus METZELORGIE "master/master.lpc"
+// Magier und Testspieler -> 0, nur "echte" Spieler/Seher -> 1
+int is_player(string name)
+{
+  if(!name || name == "") return 0;
+  name=lower_case(name);
+  // Existiert der Spielername im save? Findet auch nichtgeladene Spieler
+  if(!("/secure/master"->get_userinfo(name))) return 0;
+  // Rausfiltern, wenn "Testspieler" in der finger-Info vorkommt
+  if(strstr(call_other("/p/daemon/fingerd","finger_single",name),"Testspieler")
+     != -1) return 0;
+  // Rausfiltern, wenn in shell Magier
+  if(("/secure/master"->get_userinfo(name)[4]) == "/std/shells/magier") return 0;
+
+  return 1;
+}
+
+// -----------------------------------------------------------------------
+// sorted_deaths:
+// KEY    = tode, VALUE0 = playername, VALUE1 = npc_kills
+// sorted_kills:
+// KEY    = npc_kills, VALUE0 = playername, VALUE1 = tode
+void WalkLists(string player, int player_deaths, int npc_kills, int shadowlvl_k, 
+  int lostxp_mio, mapping killed_npc, mapping killing_npc)
+{
+  int new_deaths;
+  int new_kills;
+  int new_shadowlvl_k;
+
+  // *100 um bei "Todesgleichstand" differenzieren zu koennen
+  // GANZ WICHTIG: neue variable! sind sonst nur zeiger, und das
+  //  originalobjekt wird modifiziert!!
+  new_deaths = player_deaths * 100;
+  new_kills = npc_kills * 100;
+  new_shadowlvl_k = shadowlvl_k;
+
+  // soll verhindern dass es zufaellig 2x den gleichen Wert gibt:
+  while (member(sorted_deaths,to_int(new_deaths))) new_deaths++;
+  while (member(sorted_kills,to_int(new_kills))) new_kills++;
+  while (member(sorted_shadowlevels,new_shadowlvl_k)) new_shadowlvl_k += 1;
+
+  sorted_deaths += ([to_int(new_deaths):
+    to_string(player);to_int(new_kills);new_shadowlvl_k]);
+
+  sorted_kills += ([to_int(new_kills):
+    to_string(player);to_int(new_deaths);new_shadowlvl_k]);
+
+  sorted_shadowlevels += ([new_shadowlvl_k:
+    to_string(player);to_int(new_deaths);to_int(new_kills)]);
+}
+
+// Erzeugen der sortierten Listen -----------------------------------------------------
+string CreateSortedLists()
+{
+  string deathlist_text;
+  string killlist_text;
+  string shadowlvl_text;
+  mapping death_kill_list; // Original-Liste von log_master.c
+  int *sorted_deaths_keys;
+  int *sorted_kills_keys;
+  int *sorted_shadowlvl_keys;
+
+  // Fuer die for-Schleife:
+  int i;
+  int deaths;
+  int kills;
+  string shadowlvl_str;
+  string player;
+
+  // Einlesen des Mappings
+  death_kill_list = LOGMASTER->GetDeathKillLog();
+
+  // Magier und Testies rausfiltern
+  death_kill_list = filter_mapping(death_kill_list, "is_player");
+
+  if(!death_kill_list || death_kill_list==([])) return "list empty";
+
+  // neue sortierte Listen erstellen
+  sorted_deaths = ([]);
+  sorted_kills = ([]);
+  sorted_shadowlevels = ([]);
+  walk_mapping(death_kill_list,"WalkLists");
+  sorted_deaths_keys = sort_array(m_indices(sorted_deaths), #'<); //'
+  sorted_kills_keys = sort_array(m_indices(sorted_kills), #'<); //'
+  sorted_shadowlvl_keys = sort_array(m_indices(sorted_shadowlevels), #'<); //'
+
+  deathlist_text=sprintf("%7s %-18s %7s %6s\n\n",
+    "","Schattenkrieger*in", "Tode", "Siege");
+  killlist_text=sprintf("%7s %-18s %7s %6s\n\n",
+    "","Schattenkrieger*in", "Siege", "Tode");
+  shadowlvl_text=sprintf(" %5s %-18s %16s %7s %6s\n\n",
+    "","Schattenkrieger*in", "Schattenstufen", "Siege", "Tode");
+
+  // Spielertode (sorted_deaths)
+  for(i=0;i<sizeof(sorted_deaths_keys);i++)
+  {
+    player=to_string( sorted_deaths[ sorted_deaths_keys[i], 0 ] );
+    if(player == "id" || player == "dummy") continue;
+
+    deaths=to_int(sorted_deaths_keys[i]/100); // /100 weil: siehe oben
+    kills=to_int(sorted_deaths[sorted_deaths_keys[i],1]/100);
+
+    deathlist_text+=sprintf("%7s. %-18s %7d %6d\n",
+      ConvertToRoman(i+1),
+      capitalize(player),
+      deaths,kills);
+  }
+
+  // NPC-Kills (sorted_kills)
+  for(i=0;i<sizeof(sorted_kills_keys);i++)
+  {
+    player=to_string( sorted_kills[ sorted_kills_keys[i], 0 ] );
+    if(player == "id" || player == "dummy") continue;
+
+    kills=to_int(sorted_kills_keys[i]/100); // /100 weil: siehe oben
+    deaths=to_int(sorted_kills[sorted_kills_keys[i],1]/100);
+
+    killlist_text+=sprintf("%7s. %-18s %7d %6d\n",
+      ConvertToRoman(i+1),
+      capitalize(player),
+      kills,deaths);
+  }
+
+  // Schattenstufen (sorted_shadowlevels)
+  for(i=0;i<sizeof(sorted_shadowlevels);i++)
+  {
+    player=to_string( sorted_shadowlevels[ sorted_shadowlvl_keys[i], 0 ] );
+    if(player == "id" || player == "dummy") continue;
+
+    /* // ist jetzt kein float mehr! wurde dafuer mit 1000 multipliziert
+    // Wenn der Wert sehr hoch ist, einfach float als string nehmen, zB 1.4688e+06
+    if(sorted_shadowlvl_keys[i] > 20000000.0)
+      shadowlvl_str = to_string(sorted_shadowlvl_keys[i]);
+    // Wenn sehr klein -> nimm nur die ersten Stellen vom float, zB 1.46
+    else if(sorted_shadowlvl_keys[i] < 10.0 && strlen(to_string(sorted_shadowlvl_keys[i])) >=3)
+      shadowlvl_str = to_string(sorted_shadowlvl_keys[i])[0..3];
+    // Ansonsten... bastel es schoen zusammen :)
+    else*/
+      shadowlvl_str = to_string(to_int(sorted_shadowlvl_keys[i]/1000)) + "." +
+        to_string(to_int(sorted_shadowlvl_keys[i])-to_int(sorted_shadowlvl_keys[i]/1000*1000))[0..1];
+
+    deaths=to_int(sorted_shadowlevels[sorted_shadowlvl_keys[i],1]/100);
+    kills=to_int(sorted_shadowlevels[sorted_shadowlvl_keys[i],2]/100);
+
+    shadowlvl_text+=sprintf(" %5s %-18s %16s %7d %6d\n",
+      ConvertToRoman(i+1),
+      capitalize(player),
+      shadowlvl_str,
+      kills,
+      deaths);
+  }
+
+  rm(DEATHLIST);
+  write_file(DEATHLIST,deathlist_text);
+  rm(KILLLIST);
+  write_file(KILLLIST,killlist_text);
+  rm(SHADOWLVLLIST);
+  write_file(SHADOWLVLLIST,shadowlvl_text);
+
+  return shadowlvl_text;
+}
+
+// -----------------------------------------------------------------------
+mapping query_sorted_kills()
+{
+  return sorted_kills;
+}
+
+// -----------------------------------------------------------------------
+mapping query_sorted_deaths()
+{
+  return sorted_deaths;
+}

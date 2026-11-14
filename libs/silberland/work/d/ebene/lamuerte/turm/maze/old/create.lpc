@@ -1,0 +1,349 @@
+inherit "room/genRoomNew";
+#include "/room/genRoom.h"
+#include "/obj/masters.h"
+#include "/obj/std_defs.h"
+
+#define PATH  "domains/wastelands/zones/mountain_spiders/open/"
+#define FILES "phase_mountains"
+
+string  *map, *bigmap;
+string  symbols;
+mapping descriptions;
+
+string *load_map(string file);                      //loads the map with name file(.map)  
+private mixed *get_room_descriptions(string file);  //loads the descriptions with name file(.descr)
+string *create_zone();                              //calculates the exits
+private string *prepare_maze();                     //expands the map to the working map
+string *add_maze(string *map);
+void create_room(string pos, string *exits, string descr);
+
+void reset( int tick )
+{
+   ::reset( tick );
+   if ( tick ) return;
+
+   set_short( "This is a MAZE !!\n" );
+
+   set_long( "Phase spiders maze\n");
+
+   add_property("no_clean_up");
+
+   set_type( INDOOR_LIGHT );
+   set_landscape( IROOM );
+
+   call_out("do_load",10);  
+//   load_map("phase");
+//   bigmap = create_zone();
+}
+
+void do_load(){
+   load_map("phase");
+   bigmap = create_zone();
+}
+
+void init()
+{
+   ::init();
+   add_action( "do_map", "zonemap" );
+}
+
+int do_map(string arg)
+{
+   if( arg != "big" )
+      TOBJ(TP, implode(map, "\n"));
+   else
+     TOBJ(TP, implode(bigmap, "\n"));
+
+   return 1;
+}
+
+string *load_map(string file)
+{
+   string data, *tmp;
+   int i;
+   
+   if (file_size(PATH+file+".map") < 0){
+      write("Couldn't find map '"+file+"'\n");
+      return 0;
+   }
+   
+   data = read_file(PATH+file+".map");
+         
+   tmp = explode( data, "\n" );
+   tmp -= ({ "" });
+   
+   symbols = tmp[0];
+   map = tmp[1..];
+
+   tmp = explode( symbols, "," ); 
+   
+   descriptions = ([ ]);
+   for( i = 0; i < sizeof(tmp); i++){
+     descriptions += ([ tmp[i]: get_room_descriptions(tmp[i]) ]);
+   }
+   descriptions -= ([ 0 ]);
+   
+   return( map );
+}
+
+mapping test()
+{ return descriptions; }
+
+private mixed *get_room_descriptions(string file)
+{
+   string data, *descr;
+   mixed *ret;
+   int i;
+   
+   if (file_size(PATH+file+".descr") <= 0)
+      return 0;
+
+   data = read_file(PATH+file+".descr");
+   
+   descr = explode( data, "\n" );
+   data = implode( descr, " " );
+   
+   descr = explode( data, "#");
+
+   ret = ({ });
+   for (i = 0; i < sizeof(descr); i++)
+     ret += ({ explode( descr[i], "* ") }); 
+
+   ret -= ({ }); 
+   return( ret[1..] );
+}
+
+#define CHAR_NONE '.'
+#define EXIT "#"
+#define WALL " "
+
+string *create_zone()
+{
+   string *tmp, *rooms, *pos, *exits;
+   int i, j;
+
+   rooms = ({ });
+   for(i = 0;i < sizeof(map); i++){
+      for( j = 0; j < strlen(map[i]); j++){
+         if( map[i][j] != CHAR_NONE ) rooms += ({ i+"-"+j }); 
+      }
+   }
+   rooms -= ({ 0 });
+
+   tmp = prepare_maze();
+   tmp = add_maze(tmp);
+   
+   for ( i = 0; i < sizeof(rooms); i++){
+      pos = explode( rooms[i], "-" );
+      exits = ({ });
+      if (tmp[to_int(pos[0])*2][to_int(pos[1])*2+1] == EXIT[0]) exits += ({ "N"+(to_int(pos[0])-1)+"-"+pos[1] });//north
+      if (tmp[to_int(pos[0])*2+2][to_int(pos[1])*2+1] == EXIT[0]) exits += ({ "S"+(to_int(pos[0])+1)+"-"+pos[1] });//south      
+      if (tmp[to_int(pos[0])*2+1][to_int(pos[1])*2] == EXIT[0]) exits += ({ "W"+pos[0]+"-"+(to_int(pos[1])-1) });//west
+      if (tmp[to_int(pos[0])*2+1][to_int(pos[1])*2+2] == EXIT[0]) exits += ({ "E"+pos[0]+"-"+(to_int(pos[1])+1) });//east      
+      exits -= ({ 0 });
+      create_room(rooms[i], exits, map[to_int(pos[0])][to_int(pos[1])..to_int(pos[1])]);
+   }
+   return tmp;
+}
+
+private string *prepare_maze()
+{
+   string *tmp, line, etmpline, wtmpline;
+   int i, j, pos;
+
+   if (!map) return( 0 );
+
+   etmpline = ""; wtmpline = "";
+   for(i = 0;i < strlen(map[0])*2 + 1; i++){
+      etmpline += EXIT; wtmpline += WALL;
+   }
+   etmpline = WALL + etmpline[1..(strlen(etmpline)-2)] + WALL; 
+   tmp = ({ wtmpline });
+
+   for(i = 0;i < sizeof(map); i++){
+      line = etmpline;
+      for( j = 0; j < strlen(map[i]); j++){
+         pos = j*2 + 1;
+         if( map[i][j] == CHAR_NONE ) 
+            line[(pos-1)..(pos+1)] = WALL + WALL + WALL;
+         else line[pos] = map[i][j];
+      }
+      tmp += ({ line, etmpline });
+   }
+   tmp[sizeof(tmp)-1] = wtmpline;
+
+   for(i = 2;i < sizeof(tmp)-2; i += 2){
+      for( j = 0; j < strlen(tmp[i]); j++){
+         if( tmp[i-1][j..j] == WALL|| tmp[i+1][j..j] == WALL) 
+            tmp[i][j..j] = WALL;
+      }
+   }
+
+   tmp -= ({ "" });
+   return( tmp );
+}
+
+private string north(string pos, string *free)
+{
+   string *tmp, npos;
+   
+   tmp = explode(pos, "/");
+   npos = (to_int(tmp[0]) - 2)+"/"+tmp[1];
+   if(member(free,npos) > -1) return npos;
+   else return "";
+}
+
+private string east(string pos, string *free)
+{
+   string *tmp, npos;
+   
+   tmp = explode(pos, "/");
+   npos = tmp[0]+"/"+(to_int(tmp[1]) + 2);
+   if(member(free,npos) > -1) return npos;
+   else return "";
+}
+
+private string west(string pos, string *free)
+{
+   string *tmp, npos;
+   
+   tmp = explode(pos, "/");
+   npos = tmp[0]+"/"+(to_int(tmp[1]) - 2);
+   if(member(free,npos) > -1) return npos;
+   else return "";
+}
+
+private string south(string pos, string *free)
+{
+   string *tmp, npos;
+   
+   tmp = explode(pos, "/");
+   npos = (to_int(tmp[0]) + 2)+"/"+tmp[1];
+   if(member(free,npos) > -1) return npos;
+   else return "";
+}
+
+
+string *add_maze(string *map)
+{
+   string *walls, *free, *exits, tmp, oldpos, *p1, *p2;
+   int s, z, i;
+   walls = ({ }); free = ({ });
+   for(z = 0; z < sizeof(map); z += 2){
+      for( s = 0; s < strlen(map[z]); s += 2){
+         if(map[z][s..s] == WALL) walls += ({  z+"/"+s  });
+         else free += ({  z+"/"+s });
+      }
+   }
+
+   while(sizeof(free) > 0){
+     oldpos = walls[random(sizeof(walls))];
+     while(oldpos){
+        exits = ({ north(oldpos,free),east(oldpos,free),south(oldpos,free),west(oldpos,free) });
+        exits -= ({ "", 0 });  
+        if( sizeof(exits) > 0 ){
+           tmp = exits[random(sizeof(exits))];
+           
+           p1 = explode(oldpos,"/");
+           p2 = explode(tmp,"/");
+           
+           map[to_int(p2[0])][to_int(p2[1])] = WALL[0]; 
+           map[(to_int(p2[0])+to_int(p1[0]))/2][(to_int(p2[1])+to_int(p1[1]))/2] = WALL[0];
+          
+           walls += ({ tmp });
+           free -= ({ tmp });
+
+           oldpos = tmp;
+        }
+        else oldpos = 0;
+     }
+   }
+   
+   return map; 
+}
+
+void create_room(string pos, string *exits, string descr)
+{
+   string data, *tmpdata, file, *tmp;
+   int d, i;
+
+   file = PATH + FILES + "_" + pos + ".lpc";
+   rm( file );
+
+   if( member(descriptions, descr) ){ 
+      if (!descriptions[descr] || sizeof(descriptions[descr]) == 0) {
+         write("missing descriptions for "+descr+" ("+descr+".descr)\n");
+         return;
+      }
+      d = random(sizeof(descriptions[descr]));
+      tmp = descriptions[descr][d];
+
+      data  = "inherit \"room/genRoom\";\n";
+      data += "#include \"/room/genRoom.h\"\n";
+      data += "#include \"/obj/std_defs.h\"\n\n";
+      data += "void reset( int tick ) {\n";
+      data += "  ::reset( tick );\n";
+      data += "  if ( tick ) return;\n";
+      data += "  set_short( \""+tmp[0]+"\" );\n";
+      data += "  set_long( \""+tmp[3]+"\\n\");\n";
+      data += "  set_type( "+tmp[1]+" );\n";
+      data += "  set_landscape( "+tmp[2]+" );\n\n";
+      data += "<EXITS>\n";
+      for(i = 4; i < sizeof(tmp); i++)
+         data += tmp[i]+"\n";
+      data += "  replace_program( \"/room/genRoom\" );\n"; 
+      data += "}\n";
+   }
+   else {
+      if (file_size(PATH+descr+".descr") < 0){
+         write("missing description file for "+descr+" ("+descr+".descr)\n");
+         return ;
+      }
+
+      data = read_file(PATH+descr+".descr");
+   }
+
+   tmpdata = explode(data, "<EXITS>\n");
+   if (sizeof(tmpdata) == 2){
+      for(i = 0; i < sizeof(exits); i++){
+         switch(exits[i][0]){
+            case 'N': tmpdata[0] += "  add_exit(\"north\", 0, \"" + FILES + "_" + exits[i][1..] + "\", \"n\", 0);\n"; break;
+            case 'E': tmpdata[0] += "  add_exit(\"east\", 0, \"" + FILES + "_" + exits[i][1..] + "\", \"e\", 0);\n"; break;
+            case 'S': tmpdata[0] += "  add_exit(\"south\", 0, \"" + FILES + "_" + exits[i][1..] + "\", \"s\", 0);\n"; break;
+            case 'W': tmpdata[0] += "  add_exit(\"west\", 0, \"" + FILES + "_" + exits[i][1..] + "\", \"w\", 0);\n"; break;                    
+         }
+      }
+   }
+   write_file( file, implode(tmpdata, "\n") );
+}
+
+int in_zone(object o){
+  if (E(o) && E(o)->query_zone() == TO->query_zone()) return 1;
+  return 0;
+}
+
+string show_map(int plr)
+{
+   string ret, pos, *tmp;
+   object *plrs;
+   int i;
+
+   ret = implode( map, "\n" );
+
+   if( plr )
+      plrs = users();
+   else
+      plrs = ({ previous_object() });
+   plrs = filter_array(plrs, "in_zone", TO);
+   plrs -= ({ 0 });
+   DCHAT( sizeof(plrs) )
+      for( i = 0; i < sizeof( plrs ); i++){
+         tmp = explode(path_to_filename(to_string(E(plrs[i]))), "_");
+         if(sizeof(tmp)<2) continue;   
+         DCHAT( tmp[1] );
+         tmp = explode( tmp[sizeof(tmp)-1], "-" );
+         ret[(to_int(tmp[0])*(strlen(map[0])+1))+to_int(tmp[1])] = 'X';
+      }
+   for(i = 0; i < strlen(ret); i++){ if(ret[i] == CHAR_NONE) ret[i..i] = " "; }
+   return ret;
+}

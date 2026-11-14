@@ -1,0 +1,555 @@
+/*
+//
+//   Der Master fuer die Froschhoehle
+//   Uebernommen aus der Wueste von Zordan
+*/
+
+#include "../def.h"
+#include "hoehle.h"
+
+nosave string *map;        // hier wird die Karte der Hoehle gehalten
+nosave string *workmap;    // hier werden die temporaeren Dinge gehalten
+nosave mapping rooms;      // enthaelt ein Mapping mit den speziellen Ausgaengen
+nosave mapping npcs;       // enthaelt ein Mapping mit den speziellen NPC's
+nosave mapping clonednpcs; // enthaelt alle derzeit geclonten NPC's
+nosave string *clonedobj;
+nosave int nrnpcs;         // globale anzahl der geclonten NPC's
+
+#define MAXGLOBALNPC 100
+
+mapping saverooms;
+mapping savenpcs;
+
+int query_prevent_shadow() { return 1; }
+
+void create() 
+{
+  string file;
+  int i,size;
+  
+  if(is_clone(TO)) 
+    { 
+      destruct(TO); 
+      return;
+    }
+
+  SUID;
+  
+  // Karte laden
+  map=workmap=({ });
+  size=file_size(FROGMAP);
+  if(size<0) 
+    {
+      ME->remove();
+      return;
+    }
+  
+  file=read_file(FROGMAP);
+  
+  if(!stringp(file)) 
+    {
+      ME->remove();
+      return;
+    }
+  
+  map=explode(file,"\n");
+  file="";
+  
+  for(i=0;i<strlen(map[0]);i++) 
+    file+=" ";
+  
+  for(i=0;i<sizeof(map);i++)
+    workmap+=({ file });
+  
+  nrnpcs=0;
+  clonedobj=({ });
+  
+  // die speziellen Ausgaenge laden
+  saverooms=([]);
+  savenpcs=([]);
+  clonednpcs=([]);
+  rooms=([]);
+
+  if(restore_object(FROGROOMS)) 
+    {
+      rooms=saverooms;
+      npcs=savenpcs;
+    }
+}
+
+void reset() 
+{
+  int i;
+  string name;
+
+  for(i=sizeof(clonedobj)-1;i>=0;i--) 
+    {
+      if(!find_object(clonedobj[i])) 
+	{
+	  name=explode(clonedobj[i],"#")[0];
+	  if(member(clonednpcs,name)) 
+	    {
+	      if(clonednpcs[name]>1) 
+		clonednpcs[name]--;
+	      else 
+		clonednpcs=m_delete(clonednpcs,name);
+	     
+	      clonedobj-=({ clonedobj[i] });
+	    }
+	}
+    }
+  
+  nrnpcs=sizeof(clonedobj);
+  call_out("dont_swap",0);
+}
+
+void dont_swap() { int i; i=0; }
+
+nosave int secure() 
+{ 
+  if (!PO) return 0;
+  if (geteuid(PO) != geteuid(TI)) return 0;
+  if (TI != TP) return 0;
+  if (!IS_LORD(TI)) return 0;
+  return 1;
+}
+
+int showmap() 
+{
+  int i;
+  
+  if(!IS_LORD(TP)) return -1;
+  
+  for (i=0;i<sizeof(map);i++) 
+    tell_object(TP,map[i]+"\n");
+  
+  return 1;
+}
+
+string *getkarte(int x, int y)
+{
+  string *karte;
+
+  if(x<1 || x>138 || y<1 || y>48) return ({ "","","","","" });
+  
+  karte=({ });
+  karte+=({ " ___ " });
+  karte+=({ "|"+regreplace(map[y-1][x-1..x+1],"\\."," ",1)+"|" });
+  karte+=({ "|"+regreplace(map[y][x-1..x+1],"\\."," ",1)+"|" });
+  karte+=({ "|"+regreplace(map[y+1][x-1..x+1],"\\."," ",1)+"|" });
+  karte+=({ " --- " });
+  karte[2][2..2]="#";
+  
+  return karte;
+}
+
+string *getlong(int x, int y) 
+{
+  string *str,ind,*det,*pfad;
+  int i,r;
+  ind=x+":"+y;
+  str=det=({ });
+
+  if(member(rooms,ind) != 0) 
+    {
+      str+=({"Das ist ein Raum, den Spieler waehrend des Spiels gar nicht "
+	       "betreten koennen. Sollten sich hier Spieler aufhalten wird "
+	       "SEHR darum gebeten, dieses 'Protheg' sofort zu melden, danke!!"});
+      str+=({ ({ "" }) });
+      
+      if(find_player("protheg")) 
+	tell_object(find_player("protheg"),
+		    BS(sprintf("*** Spieler %s ist in Wueste illegal auf x=%d y=%d!!!\n",CAP(getuid(TP)),x,y)));
+      
+    } 
+  else 
+    {
+      r=random(sizeof(DHOEHLE))/2*2;
+      ind=DHOEHLE[r];
+      
+      for (i=0;i<sizeof(DHOEHLE[r+1]);i++) 
+	det+=({DHOEHLE[r+1][i] });
+      
+      r=random(sizeof(DFERNE))/2*2;
+      ind+=DFERNE[r];
+      
+      for(i=0;i<sizeof(DFERNE[r+1]);i++) 
+	det+=({DFERNE[r+1][i] });
+      
+      r=random(sizeof(DBODEN))/2*2;
+      ind+=DBODEN[r];
+      
+      for(i=0;i<sizeof(DBODEN[r+1]);i++) 
+	det+=({DBODEN[r+1][i] });
+    
+      r=random(sizeof(DDECKE))/2*2;
+      ind+=DDECKE[r];
+      
+      for(i=0;i<sizeof(DDECKE[r+1]);i++) 
+	det+=({DDECKE[r+1][i] });
+    
+      if(random(100)>50) 
+	{
+	  r=random(sizeof(DSONSTIGES))/2*2;
+	  ind+=DSONSTIGES[r];
+	  
+	  for(i=0;i<sizeof(DSONSTIGES[r+1]);i++) 
+	    det+=({DSONSTIGES[r+1][i] });
+	  
+	}
+      
+      str+=({ ind });
+      str+=({ det });
+    }
+  
+  return str;
+}
+
+string * InsertDetail(mixed key) 
+{
+  string *det;
+  mixed what;
+  int r,i;
+  
+  det=({ });
+  
+  if(member(DDETAILS,key) != 0) 
+    {
+      what=DDETAILS[key];
+      r=random(sizeof(what))/2*2;
+      PO->AddDetail(key,what[r]);
+      for (i=0;i<sizeof(DDETAILS[r+1]);i++) 
+	det+=({ DDETAILS[r+1][i] });
+    }
+  
+  return det;
+}
+
+mapping getexits(int x, int y) 
+{
+  mapping ex;
+  string *richt,*ausg,ind;
+  int i,xl,yl;
+
+  ausg= ({ "","","","","","","","","" });
+  richt=({ "","","","","","","","","" });
+  richt[0]=map[y-1][x-1..x-1];
+  richt[1]=map[y-1][x..x];
+  richt[2]=map[y-1][x+1..x+1];
+  richt[3]=map[y][x-1..x-1];
+  richt[5]=map[y][x+1..x+1];
+  richt[6]=map[y+1][x-1..x-1];
+  richt[7]=map[y+1][x..x];
+  richt[8]=map[y+1][x+1..x+1];
+  ex=([ ]);
+
+  for(i=0;i<9;i++) {
+    yl=y-1+(i/3);
+    xl=x-1+(i%3);
+    ind=xl+":"+yl;
+    if(member(rooms,ind) != 0)  // spezieller Ausgang vorhanden ?
+      ausg[i]=rooms[ind];
+    else 
+      if(richt[i]==".") 
+	ausg[i]=ROOM "hoehle:"+(xl)+":"+(yl); // normale Hoehle
+  }
+
+  if (x>0) 
+    {
+      if(ausg[3] != "") ex+=([ "westen": ausg[3] ]);
+      if (y>0)  
+	if(ausg[0] != "") ex+=([ "nordwesten": ausg[0] ]);
+      if (y<49) 
+	if(ausg[6] != "") ex+=([ "suedwesten": ausg[6] ]);
+    }
+  
+  if (x<45) 
+    {
+      if(ausg[5] != "") ex+=([ "osten": ausg[5] ]);
+      if (y>0)  
+	if(ausg[2] != "") ex+=([ "nordosten": ausg[2] ]);
+      if (y<49) 
+	if(ausg[8] != "") ex+=([ "suedosten": ausg[8] ]);
+    }
+  
+  if (y>0)  
+    if(ausg[1] != "") ex+=([ "norden": ausg[1] ]);
+  
+  if (y<21) 
+    if(ausg[7] != "") ex+=([ "sueden": ausg[7] ]);
+  
+  return ex;
+}
+
+string getnpc(int x,int y) 
+{
+  string str,ind,*files;
+  int r;
+
+  ind=x+":"+y;
+  str="";
+  if(member(npcs,ind) != 0) 
+    str=npcs[ind];
+  else 
+    if((nrnpcs+1) < MAXGLOBALNPC) 
+      if(random(100)<50) 
+	if(random(3))
+	  str=NPC "frosch";
+	else
+	  {
+	    files=get_dir(NPC "rnd*.lpc");
+	    r=random(sizeof(files));
+	    str=files[r];
+	    str=NPC+str[0..<3];
+	  }
+  
+  return str;
+}
+
+int newnpc(object ob) 
+{
+  string fname;
+  fname=file_name(ob);
+  
+  if((nrnpcs+1) > MAXGLOBALNPC) return 0;
+  
+  if(strstr(fname,"#") != -1) 
+    {
+      fname=explode(fname,"#")[0];
+      
+      if(member(clonednpcs,fname)) 
+	{
+	  if(clonednpcs[fname]>=1) return 0;  // hier noch anpassen
+	  clonednpcs[fname]++;
+	} 
+      else 
+	clonednpcs+=([ fname: 1 ]);
+      
+    clonedobj+=({ file_name(ob) });
+    nrnpcs++;
+    return 1;
+  }
+  return 0;
+}
+
+void removenpc(object ob) 
+{
+  string fname;
+  fname=file_name(ob);
+  if(strstr(fname,"#") != -1) 
+    {
+      fname=explode(fname,"#")[0];
+      if(member(clonednpcs,fname)) 
+	if(clonednpcs[fname]>1) 
+	  clonednpcs[fname]--;
+	else 
+	  clonednpcs=m_delete(clonednpcs,fname);
+      clonedobj-=({ file_name(ob) });
+    }
+  
+  return;
+}
+
+void getallnpcs() 
+{
+  if(!IS_WIZARD(TP)) return;
+  
+  printf("%O\n",clonednpcs);
+  printf("%O\n",clonedobj);
+  write(nrnpcs+"\n");
+  return;
+}
+
+mixed ShowRooms() 
+{
+  if(!secure()) return -1;
+  return rooms;
+}
+
+int AddRoom(string name) 
+{
+  int x,y;
+  string foo,foo2,file,ind;
+  if(!secure()) return -1;
+  if(!name) 
+    {
+      write("*** Fehler in AddRoom: Kein Zielraum angegeben!\n");
+      return -2;
+    }
+  
+  if(!ENV(TP)) 
+    {
+      write("*** Fehler in AddRoom: Hier ist kein Environment!\n");
+      return -2;
+    }
+  
+  file=file_name(ENV(TP));
+  
+  if(sscanf(file,"%s:%d:%d%s",foo,x,y,foo2)!=4) 
+    {
+      write("*** Fehler in AddRoom: Hier ist kein gueltiger Raum der Hoehle!\n");
+      return -2;
+    }
+  
+  if(x<0 || x>139 || y<0 || y>49) 
+    {
+      write("*** Fehler in AddRoom: Hier ist kein gueltiger Raum der Hoehle!\n");
+      return -2;
+    }
+  
+  ind=x+":"+y;
+  
+  if(member(rooms,ind) != 0) 
+    {
+      write("*** Fehler in AddRoom: Hier existiert schon ein spezieller Raum!\n");
+      write("*** Fehler in AddRoom: "+rooms[ind]+"\n");
+      return -2;
+    }
+  
+  if(!sizeof(get_dir(name+".lpc"))) 
+    {
+      write("*** Fehler in AddRoom: "+name+".c kann nicht gefunden werden!\n");
+      return -2;
+    }
+  
+  rooms+=([ ind : name ]);
+  saverooms=rooms;
+  save_object(FROGROOMS);
+  write("*** AddRoom: "+name+".c\n");
+  write("*** AddRoom: bei x="+x+", y="+y+" hinzugefuegt!\n");
+  return 1;
+}
+
+int DeleteRoom(int x,int y) 
+{
+  string ind,name;
+  
+  if(!secure()) return -1;
+  if(x<0 || x>139 || y<0 || y>49) 
+    {
+      write("*** Fehler in DeleteRoom: 0<x<139 und 0<y<49!\n");
+      return -2;
+    }
+  
+  ind=x+":"+y;
+  
+  if(member(rooms,ind) != 1) 
+    {
+      write("*** Fehler in DeleteRoom: Bei x="+x+", y="+y+" existiert kein Raum!\n");
+      return -2;
+    }
+  
+  name=rooms[ind];
+  rooms=m_delete(rooms,ind);
+  saverooms=rooms;
+  save_object(FROGROOMS);
+  write("*** DeleteRoom: "+name+".c\n");
+  write("*** DeleteRoom: bei x="+x+", y="+y+" entfernt!\n");
+  return 1;
+}
+
+mixed ShowNpcs() 
+{
+  if(!secure()) return -1;
+  return npcs;
+}
+
+int AddNpc(string name) 
+{
+  int x,y;
+  string foo,foo2,file,ind;
+
+  if(!secure()) return -1;
+  
+  if(!name) 
+    {
+      write("*** Fehler in AddNpc: Kein NPC-Filename angegeben!\n");
+      return -2;
+    }
+  
+  if(!ENV(TP)) 
+    {
+      write("*** Fehler in AddNpc: Hier ist kein Environment!\n");
+      return -2;
+    }
+  
+  file=file_name(ENV(TP));
+  
+  if (sscanf(file,"%s:%d:%d%s",foo,x,y,foo2)!=4) 
+    {
+      write("*** Fehler in AddNpc: Hier ist kein gueltiger Raum der Hoehle!\n");
+      return -2;
+    }
+  
+  if (x<0 || x>139 || y<0 || y>49) 
+    {
+      write("*** Fehler in AddNpc: Hier ist kein gueltiger Raum der Hoehle!\n");
+      return -2;
+    }
+  
+  ind=x+":"+y;
+  
+  if(member(npcs,ind) != 0) 
+    {
+      write("*** Fehler in AddNpc: Hier existiert schon ein spezieller NPC!\n");
+      write("*** Fehler in AddNpc: "+npcs[ind]+"\n");
+      return -2;
+    }
+  
+  if(!sizeof(get_dir(name+".lpc"))) 
+    {
+      write("*** Fehler in AddNpc: "+name+".c kann nicht gefunden werden!\n");
+      return -2;
+    }
+  
+  npcs+=([ ind : name ]);
+  savenpcs=npcs;
+  save_object(FROGROOMS);
+  write("*** AddNpc: "+name+".c\n");
+  write("*** AddNpc: bei x="+x+", y="+y+" hinzugefuegt!\n");
+  return 1;
+}
+
+int DeleteNpc(int x,int y) 
+{
+  string ind,name;
+  
+  if(!secure()) return -1;
+  
+  if(x<0 || x>139 || y<0 || y>49) 
+    {
+      write("*** Fehler in DeleteNpc: 0<x<139 und 0<y<49!\n");
+      return -2;
+    }
+  
+  ind=x+":"+y;
+  
+  if(member(npcs,ind) != 1) 
+    {
+      write("*** Fehler in DeleteNpc: Bei x="+x+", y="+y+" existiert kein NPC!\n");
+      return -2;
+    }
+  
+  name=npcs[ind];
+  npcs=m_delete(npcs,ind);
+  savenpcs=npcs;
+  save_object(FROGROOMS);
+  write("*** DeleteNpc: "+name+".c\n");
+  write("*** DeleteNpc: bei x="+x+", y="+y+" entfernt!\n");
+  return 1;
+}
+
+void freeplayer(object pl) 
+{
+  int x,y;
+  string str;
+  
+  while(map[y][x..x] != ".") 
+    {
+      x=random(45);
+      y=random(20);
+    }
+  
+  str=ROOM "hoehle:"+x+":"+y;
+  pl->move(str, M_GO + M_SILENT);
+}

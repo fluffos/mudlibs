@@ -1,0 +1,314 @@
+//fertig und getestet
+/*
+EPIDEE: 1.) Mit diesem Speer kann man die Fische jagen, die bei den Zufallsereignissen
+            gecloned werden.
+            func_jagd() Zeile 68
+*/
+inherit "std/weapon";
+#include <moving.h>
+#include <properties.h>     
+#include <combat.h>        
+#include <language.h>    
+#include <new_skills.h>
+#include "/d/dschungel/trintrasil/myowndefine.h"
+
+create()
+{
+
+if (!is_clone(this_object()))
+return;
+::create();
+
+SetProp (P_NAME, "Fischspeer");
+SetProp (P_GENDER, MALE);
+SetProp (P_VALUE, 130);
+SetProp (P_WEIGHT, 700);
+SetProp (P_WEAPON_TYPE, WT_SPEAR);
+
+SP(P_LONG, BS(
+"Der Fischspeer ist ein kurzer sehr leichter Speer aus Bambus. Seine Spitze "
+"ist zugeschnitzt und in Feuer gehaertet. Er eignet sich kaum als Waffe. Er "
+"wird lediglich zum Jagen von Fischen verwendet."));
+
+AddId(({"speer","fischspeer","spiess","fischspiess"}));
+
+SP(P_SHORT, "Ein Fischspeer");
+SetProp(P_INFO, BS("Mit diesem Fischspeer kannst Du auf dem Rio de la Puseta "
+"Fische jagen die besonders knapp unter der Oberflaeche schwimmen."));
+SetProp (P_DAM_TYPE, ({ DT_SLASH}));
+SetProp (P_NOBUY, 0);
+SetProp (P_WC, 3);
+SetProp (P_NR_HANDS, 1);
+SetProp (P_MATERIAL, ([MAT_WOOD:100]));
+
+AD(("bambus"),
+  "Bambus ist hart und sehr leicht. Bei einem echten Kampf wuerde dieser Speer "
+  "wohl leicht zerbrechen, aber zum Jagen von Fischen ist er ideal.");
+  
+AD(({"fisch","fisch"}),
+  "Solche Fischspeere werden oft auf dem Rio de la Puseta verwendet");
+  
+AD(({"rio","rio de la puseta","puseta"}),
+  "Der Rio de la Puseta ist der groesste bekannte Fluss im Dschungel.");;
+  
+AD(("jagen"),
+  "Wenn Fische nahe genug der Wasseroberflaeche schwimmen, kannst Du sie mit "
+  "dem Fischspeer jagen.");
+  
+AD(("kampf"),
+  "Als Waffe ist der Speer nahezu untauglich.");   
+
+AD(("feuer"),
+  "Das Bambus wurde zugespitzt und ueber dem Feuer ausgehaertet.");
+
+AddCmd(({"jage","steche","spiesse"}), "func_jagd");
+
+}   
+
+func_jagd(string str) {
+	
+	string was, wen;
+	object jagdobjekt, jaeger;
+	object speer, umgebung;
+	string *keys, *values;
+	int i, type;
+	
+	jaeger = this_player();
+	
+	if(!str) {
+		
+		return 0;
+	}
+	
+	if(str) {
+	
+		if( sscanf(str, "%s mit %s" , wen ,was)==2 ) {
+		    	
+			if(was=="speer"||was=="fischspeer"||was=="spiess"||was=="fischspiess"||was="speer auf") {
+				
+				jagdobjekt=present(wen, ENV(TP));
+				speer=this_object();
+				
+				umgebung=environment(TP);
+				
+				if(!umgebung)  {
+					
+					write(BS("Du schwebst im Nichts. Hier gibt es keine "
+					"Fische."));
+					return 1; 
+				}
+					
+				keys=m_indices(umgebung->QueryProp(P_ENVIRONMENT));
+				values=m_values(umgebung->QueryProp(P_ENVIRONMENT));
+				
+				if(!sizeof(keys) || !sizeof(values ))  {
+					
+					write(BS("Sag mal wo befindest Du Dich ueberhaupt?!?"));
+					return 1;
+				}
+				
+				for(i=0; i < sizeof(keys); i++) {
+					
+					if(keys[i]=="env_terrain" )  {
+						type=values[i];
+					}
+					
+				}
+				
+				if(type!=13 && type!=12) {
+					
+					write(BS("Wie willst Du auf dem Land nach "
+					"Fischen jagen?"));
+					return 1;
+				}
+					
+				if(type==12) {
+						
+					write(BS("Unter Wasser kann man mit dem Speer "
+					"schlecht jagen."));
+					return 1;
+				}
+				
+				if(type==13) {
+					
+					if( !ENV(TP)->QueryProp("riopuseta") ) {//im stdriopuseta eingebaut
+						
+						write(BS("In diesem Gewaesser kann man nicht "
+						"gut mit dem Fischspeer jagen."));
+						return 1;
+					}
+					
+					else {
+						if(!speer->QueryWielded())  {
+							
+							write(BS("Du musst den Fischspeer erst "
+							"zuecken bevor Du damit jagen "
+							"kannst."));
+							return 1;
+						}
+						
+						if( speer->QueryWielded() && wen=="fisch" && 
+						!jagdobjekt ) {
+							
+							write(BS("Du siehst hier keinen Fisch "
+							"ausser den auf dem Du gerade reitest. "
+							"Den wirst Du wohl nicht umbringen "
+							"wollen."));
+							return 1;
+						}
+						
+						if( speer->QueryWielded() && wen !="fisch" && 
+						!jagdobjekt   ) {
+							
+							write(BS("Was willst Du jagen? Hier "
+							"ist kein "+CAP(wen)+"."));
+							return 1;
+						}
+						
+						if( speer->QueryWielded() && jagdobjekt && 
+						jagdobjekt->id("EFISCH") ) {
+							
+							if( jagdobjekt->flight()>=3 ) {
+								
+								tell_room(ENV(jagdobjekt),BS(""+CAP(jagdobjekt->name(WER, 1))+" "
+								"flieht schnell tiefer unter Wasser."));
+								jagdobjekt->remove();
+								return 1;
+							}
+							
+							if( jagdobjekt->flight()<3 ) {
+								
+								switch(random(9)) {
+									
+									case 0: 
+									write(BS("Du stoesst mit dem Speer zu, aber "
+									""+jagdobjekt->name(WER, 1)+" weicht blitzschnell "
+									"aus."));
+									say(BS(""+TPN+" stoesst mit einem Fischspeer "
+									"ins Wasser, scheint aber nichts gefangen zu "
+									"haben."));
+									jagdobjekt->flightcount();
+									break;
+									
+									case 1:
+									write(BS("Du stoesst blitzschnell ins Wasser, "
+									"aber "+jagdobjekt->name(WER, 1)+" weicht gerade "
+									"noch aus."));
+									say(BS(""+TPN+" stoesst mit einem Fischspeer "
+									"ins Wasser und verfehlt den Fisch."));
+									jagdobjekt->flightcount();
+									break;
+									
+									case 2:
+									write(BS("Du stoesst mit dem Fischspeer leider "
+									"daneben. Versuche es noch einmal bevor "
+									""+jagdobjekt->name(WER, 1)+" abtaucht."));
+									say(BS(""+TPN+" verfehlt "+jagdobjekt->name(WEN, 0)+""
+									"mit einem Fischspeer."));
+									jagdobjekt->flightcount();
+									break;
+									
+									case 3..8:
+									if(jagdobjekt->QueryProp(P_GENDER)==FEMALE) {
+										
+										write(BSL("Du zielst und stoesst "
+										"blitzschnell mit dem Speer ins Wasser."
+										"\nDu triffst "+jagdobjekt->name(WEN, 1)+" "
+										"genau in der Mitte und spiesst sie "
+										"auf."));
+										say(BS(""+TPN+" faengt "
+										""+jagdobjekt->name(WEN, 0)+" mit einem "
+										"Fischspeer."));
+										jagdobjekt->clone_food(jaeger);
+										return 1;
+									}
+									
+									if(jagdobjekt->QueryProp(P_GENDER)==MALE) {
+										
+										write(BSL("Du zielst und stoesst "
+										"blitzschnell mit dem Speer ins Wasser."
+										"\nDu triffst "+jagdobjekt->name(WEN, 1)+" "
+										"genau in der Mitte und spiesst ihn "
+										"auf."));
+										say(BS(""+TPN+" faengt "
+										""+jagdobjekt->name(WEN, 0)+" mit einem "
+										"Fischspeer."));
+										jagdobjekt->clone_food(jaeger);
+										return 1;
+									}
+									
+									if(jagdobjekt->QueryProp(P_GENDER)==NEUTER) {
+										
+										write(BSL("Du zielst und stoesst "
+										"blitzschnell mit dem Speer ins Wasser."
+										"\nDu triffst "+jagdobjekt->name(WEN, 1)+" "
+										"genau in der Mitte und spiesst es "
+										"auf."));
+										say(BS(""+TPN+" faengt "
+										""+jagdobjekt->name(WEN, 0)+" mit einem "
+										"Fischspeer."));
+										jagdobjekt->clone_food(jaeger);
+										return 1;
+									}
+									
+									break;
+									
+									default:
+									write(BS("Du stoesst mit dem Fischspeer leider "
+									"daneben. Versuche es noch einmal bevor "
+									""+jagdobjekt->name(WER, 1)+" abtaucht."));
+									say(BS(""+TPN+" verfehlt "+jagdobjekt->name(WEN, 0)+""
+									"mit einem Fischspeer."));
+									jagdobjekt->flightcount();
+									return 1;
+								}//switch(random zu
+								
+								return 1;
+							}//jagdobjekt->flight()<3 zu
+							
+							return 1;
+						}//jagdobjekt->id("EFISCH") zu
+						
+						if( speer->QueryWielded() && jagdobjekt && 
+						!jagdobjekt->id("EFISCH") && 
+						!jagdobjekt->id("fisch") ) {
+							
+							write(BS("Wie der Name schon sagt ist der Fischspeer "
+							"eigentlich nur zum Jagen von Fischen geeignet.")); 
+							return 1; 
+						}
+						
+						if( speer->QueryWielded() && jagdobjekt && 
+						!jagdobjekt->id("EFISCH") &&
+						jagdobjekt->id("fisch") ) {
+							
+							write(BS("Den Fisch kannst Du mit dem kurzen Speer nicht "
+							"erreichen. Du musst auf eine bessere Jagdbeute warten.")); 
+							return 1;
+						}
+						
+						return 1;
+					}//if(ENV(TP)->QueryProp("dschungelfluss") zu
+					
+					return 1;
+				}//if( ENV(TP)->not water ) zu
+
+				return 1;
+			}//if(was=="speer") zu
+			
+			else {
+				write(BS("Wen willst Du mit was jagen?"));
+				return 1;
+			}
+			 
+			return 1;
+		}//if(sscanfunc zu
+		
+		else {
+			write(BS("Wen willst Du mit was jagen?"));
+			return 1;
+		}
+		
+		return 0;
+	}//if(str) zu
+}//funktion zu

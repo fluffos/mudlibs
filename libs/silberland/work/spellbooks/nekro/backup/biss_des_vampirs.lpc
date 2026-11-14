@@ -1,0 +1,88 @@
+/*
+ * Biss des Vampirs
+ *
+ * Es erfolgt Angriff auf die Halsschlagader des victim,
+ * welcher Schaden verursacht, die Haelfte des Realenschadens
+ * wird dem Caster als HP gutgeschrieben
+ *
+ * Stirbt das Victim durch diesen Angriff, kann ein Vampir
+ * entstehen
+ *
+ * Schaden kann durch Equipment erhoeht werden
+ *
+ * Kosten: 20 MP
+ * Level : 4 
+ * Schaden : 450 + 1->49
+ * Objekte: /gilden/nekromanten/npc/vampir
+ *
+ * Skillpunktefaehig (dam, ggf chance fuer Vampir?)
+ *
+ */
+
+int prep_biss_des_vampirs(object caster, mapping sinfo) 
+{
+  int dam,suc,nr,i;
+  object victim,ob, corpse;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wen willst Du wie ein Vampir beissen?\n");
+  if (!victim)
+    return 0;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  return 1;
+}
+
+int biss_des_vampirs(object caster, mapping sinfo) 
+{
+  int dam,suc,nr,i;
+  object victim,ob, corpse;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wen willst Du wie ein Vampir beissen?\n");
+  if (!victim)
+    return 0;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  if ((suc=SpellSuccess(caster,sinfo))<=0)
+  {
+    caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+    return MISSERFOLG;
+  }
+  write(BS(sprintf("Du beisst %s in die Halsschlagader und saugst %s das Blut "
+          "heraus.", victim->name(WEN, 2), victim->QueryPronoun(WEM))));
+  tell_object(victim,BS(sprintf("%s beisst Dich in die Halsschlagader und "
+          "saugt Dein Blut aus.", caster->Name(WER))));
+  tell_room(environment(caster),BS(sprintf("%s beisst %s in die Halsschlagader "
+          "und saugt %s Blut aus.", caster->Name(WER), victim->name(WEN,2),
+          victim->QueryPronoun(WEM))), ({caster, victim}) );
+
+  dam=sinfo[SI_SKILLDAMAGE]+(
+      caster->QueryProp(P_GUILD_LEVEL)*caster->QueryProp(P_GUILD_CIRCLE));
+  dam+=CheckEquip(caster, sinfo[SI_SPELLFUNC]);
+  dam=DoModificationByAlign(dam, caster, victim);
+  if (dam > sinfo[SI_MAX_DAMAGE] ) dam=sinfo[SI_MAX_DAMAGE];
+//TODO: dam durch skillpunkte modifizieren
+ 
+  dam=TryAttackSpell(victim, dam/4+random(3*dam/4), sinfo[SI_SKILLDAMAGE_TYPE], 
+      ([SP_NAME:sinfo[SI_SPELLFUNC],SP_SHOW_DAMAGE:1]), caster,sinfo);
+  if (dam>1)
+    caster->AddHp(dam/2);
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+//TODO: ggf chance durch skillpunkte modifizieren???
+  if (!objectp(victim) && suc>8 && 
+      (corpse=present("leiche", environment(caster))) &&
+      corpse->QueryProp(P_KILLER)==caster ) 
+  {
+    CloneVampir(corpse, caster, suc);
+  }
+  return ERFOLG;
+}
+

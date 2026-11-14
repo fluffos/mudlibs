@@ -1,0 +1,134 @@
+//=========================================================================
+//
+// File: improvisiert.c
+// Created by Gwenshara
+//
+//=========================================================================
+
+#include "../zech.h"
+#include <combat.h>
+#include <weapon.h>
+#include <container.h>
+#include <moving.h>
+#include <properties.h>
+
+inherit "std/weapon";
+inherit "std/container";
+
+private object orig, owner;
+private int goend, ready;
+private closure hitf;
+
+public void create() {
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+  goend=0;
+  ready=0;
+}
+
+public int UnwieldFunc(object waffe, int silent) {
+  if(waffe != TO) return 1;
+
+  goend = 1;
+  tell_object(owner, BS("Du hoerst auf zu improvisieren!"));
+  call_out("remove", 0, 1);
+  return 1;
+}
+
+private void copyHitFuncIfDefined(object source) {
+  if(!objectp(source->QueryProp(P_HIT_FUNC))) {
+    return;
+  }
+
+  hitf = symbol_function("HitFunc", source);
+}
+
+private void copyPropertiesFrom(object ob) {
+  mapping properties;
+  mixed ind, val;
+  int i;
+  string *not_set;
+
+  not_set=({"clone_time","commands","cloner","last_use"});
+
+  properties=ob->__query_properties(ob,0)[0];
+  ind=m_indices(properties);
+  val=m_values(properties);
+
+  for(i=sizeof(ind)-1;i>=0;i--) 
+  {
+    if(member(not_set,ind[i])==-1) 
+      SetProp(ind[i],val[i]);
+  } 
+}
+
+private void setWeaponProperties() {
+  SetProp(P_UNWIELD_FUNC, TO);
+  SetProp(P_WIELDED_TEXT, "improvisiert");
+  SetProp(P_WEAPON_TYPE, WT_CLUB);
+
+  if(QueryProp(P_DAM_TYPE) == 0) {
+    SetProp(P_DAM_TYPE, ({DT_BLUDGEON}));
+  }
+}
+
+private void setContainerProperties() {
+  SetProp(P_WEIGHT_PERCENT, 0);
+  SetProp(P_MAX_WEIGHT, 99999999999999);
+}
+
+private void configure() {
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NODROP, 1);
+
+  SetProp(P_ARMOUR_TYPE, 0); // notwendig, damit nicht als ruestung gewertet
+
+  setWeaponProperties();
+  setContainerProperties();
+ 
+  AddId("\nzechpreller_improvisiert");
+  AddId("\nzechpreller_special");
+}
+
+public void activate(int wc, int fix, object original, object caster) {
+  copyPropertiesFrom(original);  
+  configure();
+  copyHitFuncIfDefined(original);
+
+  SetProp(P_WC, wc);
+  SetProp(P_WC_FIX, fix);
+
+  original->SetProp("zechpreller_next_improvisiere", time()+60);
+  original->Set(P_WIELDED, symbol_function("get_owner"), F_QUERY_METHOD);
+
+  ready=1;
+  owner = caster;
+  orig = original;
+  
+  original->move(TO, M_PUT|M_NOCHECK);
+}
+
+public int _query_itemd_no_magic() {
+  return 1;
+}
+
+public int HitFunc(object enemy) {
+  if(!objectp(orig)) {
+    Damage(9999);
+  }
+
+  if(closurep(hitf)) {
+    funcall(hitf, enemy);
+  }
+}
+
+public closure _query_hitf() {
+  return hitf;
+}
+
+public object get_owner() {
+  return QueryProp(P_WIELDED);
+}

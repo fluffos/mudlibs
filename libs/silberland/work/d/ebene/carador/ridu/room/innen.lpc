@@ -1,0 +1,685 @@
+/****************************************************************************
+ innen.c, (C) 2002 by Carador for Silberland
+****************************************************************************/
+
+#pragma strong_types
+#include "../def.h"
+#include <verben.h>
+
+inherit RD_ROOM;
+
+status modell_weg;
+status rohr_weg;
+status anleitung_weg;
+status treppe_offen;
+status brief_weg;
+status tisch_geschoben;
+object auf_tisch;
+object stiefel;
+mixed stids;
+
+int clean_up(int ref)
+{
+  if (stiefel)
+    return 1;
+  return ::clean_up(ref);
+}
+
+object query_stiefel()
+{
+  return stiefel;
+}
+
+void set_stiefel(object s)
+{
+  stiefel = s;
+  stids = s->QueryProp(P_IDS);
+  if (!stids || !pointerp(stids))
+    stids = ({ s->QueryProp(P_NAME) });
+  stids = map_array(stids, #'lower_case);
+  stids -= ({ "ding" });
+  AddDetail(stids, "Das ist ja echt seltsam, " +
+    s->name(WER,1) + " steck" + 
+    (s->IsPlural() ? "en" : "t") + " teilweise in der Raumdecke. Du fragst " +
+    "Dich, wie sowas nur passieren konnte. Nur einen Moment spaeter ziehst " +
+    "Du Deine Frage wieder zurueck. Denn hier, und zu dem Schluss bist Du " + 
+    "mittlerweile gekommen, scheint alles moeglich zu sein.");
+}
+
+private mixed moewen_check(mixed arg)
+{
+  string args;
+
+  args = this_player()->_unparsed_args()||"";
+  if (RD_LIBDIR"mover"->query_moewen() &&
+      strstr(lower_case(args), "aber flott") < 0) {
+    message("Du hoerst draussen immer noch die Moewen kreischen. Und ihr "
+            "Kreischen hoert sich SEHR gefaehrlich an. Du solltest besser "
+            "hier drin bleiben, bis alles vorueber ist. Falls Du diesen "
+            "ausnahmsweise ehrlich gemeinten Rat ignorieren moechtest "  
+            "und dennoch nach oben gehen moechtest, so tippe bitte: "
+            "'oben aber flott'. Gesuender waere es jedoch, hier drinnen "
+            "den Moewen zu lauschen.");
+    return 0;
+  }
+  return 1;
+}
+
+void reset_vars()
+{  
+  object k;
+
+  tisch_geschoben = 0;
+  brief_weg = 0;
+  modell_weg = 0;
+  rohr_weg = 0;
+  anleitung_weg = 0;
+  treppe_offen = 0;
+  if (stiefel) {
+    RemoveDetail(stids);
+    stids = 0;
+    stiefel->remove();
+    stiefel = 0;
+  }
+
+  k = present("\nridu#kiste", this_object());
+  if (!k) {
+    clone_object(RD_OBJDIR"kiste")->move(this_object(), M_NOCHECK);
+  } else { 
+    k->reset_vars();
+  }
+
+}
+
+private mixed nimm_anleitung()
+{
+  object ob;
+  if (anleitung_weg) return 0;
+ 
+  anleitung_weg = 1;
+  ob = clone_object(RD_OBJDIR"anleitung");
+  if (ob->move(this_player(), M_GET) < 0) ob->move(this_object(), M_NOCHECK);
+  return ({ ({ M_PL_BEST, M_PL_VERB, "nimm", "die Anleitung vom Regal." }) });
+}
+
+private mixed nimm_brief()
+{
+  object ob;
+  if (brief_weg) return 0;
+ 
+  brief_weg = 1;
+  ob = clone_object(RD_OBJDIR"brief");
+  if (ob->move(this_player(), M_GET) < 0) ob->move(this_object(), M_NOCHECK);
+  return ({ ({ M_PL_BEST, M_PL_VERB, "nimm", "den Brief vom Tisch." }) });
+}
+
+private string raumdecke_long()
+{
+  if (!stiefel) return
+    "Da faellt Dir leider nichts besonderes auf.";
+  return "Na sowas, was ist denn das? An der ansonsten voellig unauffaelligen "
+    "Raumdecke, siehst Du ganz unschuldig " +
+     stiefel->name(WEN) + " haengen. Seltsamerweise steck" + 
+     (stiefel->IsPlural() ? "en" : "t") + " " + 
+     stiefel->QueryPronoun(WER) + " noch teilweise in der Decke fest. " +
+     "Du muesstest " + stiefel->name(WEN,1) + " schon aus der Decke " +
+     "herausschnitzen, wenn Du " +
+     stiefel->QueryPronoun(WEN) + " haben willst.";
+}
+
+private string anleitung_long()
+{
+  if (anleitung_weg) return 0;
+  return "Du solltest sie nehmen, dann kannst Du mehr erkennen.";
+}
+
+private string brief_long()
+{
+  if (brief_weg) return 0;
+  return "Du solltest ihn nehmen, dann kannst Du mehr erkennen.";
+}
+
+
+private string papiere_long()
+{
+  if (anleitung_weg) return "\
+Du schaust die Papiere durch, siehsts aber nichts, worauf Du scharf waerst.";
+  return "\
+Die meisten der Papiere sehen langweilig aus. Auf einem steht allerdings das \
+Wort 'Anleitung'. Die Anleitung weckt sofort Dein Interesse.";
+}
+
+private mixed krabble_treppe()
+{
+  if (!treppe_offen) 
+    return "Das geht so nicht.";
+
+  message("Du zwaengst Dich unter die Treppe.");
+  this_player()->move(
+    RD_ROOMDIR"treppe",
+    M_GO,
+    "unter die Treppe",
+    "krabbelt"
+  );
+  return 1;
+}
+
+private mixed ziehe_knopf()
+{
+  if (treppe_offen) return "\
+Stell Dir eine Holzplatte vor, die mitten im Raum irgendwo an die Wand \
+gelehnt ist. Stell Dir weiter vor, jemand wuerde jetzt an dem Knopf \
+ziehen. Was wuerde passieren? Nix! Also laesst Du's bleiben.";
+  treppe_offen = 1;
+  return ({
+    ({ M_PL_BEST, M_PL_VERB, "zieh", " am Knopf der Holzvertaefelung." }),
+    ({ "Die gesamte Vertaefelung loest sich sanft aus der Seitenwand "
+       "der Treppe. Wenn man wollte, koennte man nun unter die Treppe "
+       "krabbeln." }),
+    ({ M_ROOM, RD_TOOLS->load_object(RD_ROOMDIR"treppe"),
+       "Die Vertaefelung wird von aussen entfernt." }),
+    ({ M_PL_BEST, M_PL_VERB, "lehn", " die Vertaefelung an die Wand." })
+  });
+}
+
+private string treppe_long()
+{
+  if (!treppe_offen) return "\
+Die Treppe, die mit ihrer einen Seite direkt an die Backbordwand grenzt, \
+fuehrt wieder nach draussen. Die andere Seite ist mit einer Holzvertaefelung \
+verkleidet.";
+  return "\
+Die Treppe, die mit ihrer einen Seite direkt an die Backbordwand grenzt, \
+fuehrt wieder nach draussen. Auf der anderen Seite der Treppe war eine \
+Vertaefelung, die allerdings jemand entfernt und beiseite gestellt hat. \
+Man koennte jetzt unter die Treppe krabbeln.";
+}
+
+private mixed oeffne_schublade()
+{
+  if (rohr_weg)
+     return ({ ({ M_PL_BEST, M_PL_VERB ,"oeffne", " die Schublade am "
+      "Tisch und schliesst sie gleich wieder." }),
+           ({ M_WRITE, "(Weil eh nix drin war.)" }) });
+
+  rohr_weg = 1;
+  clone_object(RD_OBJDIR"fernrohr")->move(this_object(), M_NOCHECK);
+  return ({
+    ({ "Mit mehr Kraft als eigentlich noetig, ", M_PL_VERB, "zieh",
+       M_PL_BEST, "die Schublade des Tischs heraus." }),
+    ({ "Dabei faellt ein Fernrohr heraus und auf den Boden. Hoffentlich "
+       "ist es nicht kaputt." }),
+    ({ M_SAY, M_PL_BEST, "schliesst die Schublade gleich wieder." }),
+    ({ M_WRITE, "Du hast gedacht, die Schublade sei verschlossen und "
+       "hast deshalb gleich ein bisserl fester gezogen. Dass Du dabei "
+       "gleich die ganze Schublade in der Hand hast, daran hast Du nicht "
+       "gedacht. Weil's Dir doch ein wenig peinlich ist, schliesst "
+       "Du die Schublade gleich wieder." }) });
+}
+
+private mixed schuettle_decken()
+{
+  object r;
+
+  if (modell_weg) {
+   message("Nicht noetig. Die sehen schon superausgeschuettelt aus.");
+   return 2;
+  }
+  modell_weg = 1;
+
+  clone_object(RD_OBJDIR"modell")->move(this_object(),M_NOCHECK);
+  r = clone_object("std/npc");
+  r->SetProp(P_NAME, "Ratte");
+  r->AddId(({ "kleine ratte", "ratte" }));
+  r->SetProp(P_ARTICLE,1);
+  r->SetProp(P_NAME_ADJ, "klein");
+  r->SetProp(P_GENDER, FEMALE);
+  r->SetProp(P_SIZE, 30);
+  r->create_default_npc(2);
+  r->SetProp(P_SHORT, "eine kleine Ratte");
+  r->SetProp(P_LONG, "\
+Eine fiese, kleine, eklige Ratte mit einer ziemlich kurzen Lebenserwartung, \
+wie ich hoffe.");
+  r->SetProp(P_AGGRESSIVE, 1);
+  r->move(this_object(), M_NOCHECK|M_SILENT);
+  return ({
+    ({ M_PL_BEST, M_PL_VERB, "schuettel", "die Decken aus." }),
+    ({ "Aus den Decken faellt so einiges heraus. Die ekligeren Dinge "
+       "erwaehnen wir nicht, ansonsten purzeln Dir eine kleine Ratte und "
+       "irgendetwas aus Holz vor die Fuesse." }) });
+}
+
+
+private string tisch_long()
+{
+  return "\
+Natuerlich darf in so einem Raum ein ordentlicher Tisch nicht fehlen. Auf \
+dem Tisch steht eine grosse Tonschale. Ausserdem hat der Tisch, wie es sich \
+fuer einen anstaendigen Tisch gehoert, eine Schublade." +
+  (!brief_weg ? " Auf dem Tisch liegt ein Brief." : "");
+}
+
+status auf_tisch()
+{
+  return auf_tisch && (auf_tisch == this_player()) &&
+    environment(auf_tisch) == this_object();
+}
+
+int tisch_geschoben()
+{
+  return tisch_geschoben;
+}
+
+private mixed schieb_tisch(mixed args)
+{
+  if (auf_tisch == this_player())
+    return "\
+Wie soll das funktionieren? Den Tisch schieben, solange man selbst drauf ist?";
+
+  if (!args[G_OBJECT]->id("\nridu#reserve")) {
+    notify_fail("Das geht nicht.\n");
+    return 0;
+  }
+
+  if (!present("\nridu#reserve", this_object()))
+    return "Der Tisch bewegt sich keinen Millimeter vom Fleck.";
+
+  if (tisch_geschoben)
+    return "Da isser doch schon. Passt wunderbar.";
+
+  tisch_geschoben = 1;
+  return ({
+    ({ "Kkkkkkrrrrrrrrrrrrrrrrrrrrrrrrrrrzzzzz." }),
+    ({ M_PL, M_PL_VERB, "schieb", "den Tisch unter den Stein." })
+  });
+}
+
+private mixed kletter_tisch()
+{
+  if (auf_tisch && environment(auf_tisch) == this_object() &&
+      interactive(auf_tisch)) {
+    if (auf_tisch == this_player()) return "Aber da bist Du doch schon.";
+    return "\
+Aber " + auf_tisch->name() + " ist schon auf dem Tisch. Und da ist nur \
+Platz fuer einen.";
+  }
+  auf_tisch = this_player();
+  return ({ ({ M_PL, M_PL_VERB, "kletter", " auf den Tisch." }) });
+}
+
+private mixed schiebe_error(mixed arg)
+{
+  if (present("\nridu#reserve"))
+  return "Du koenntest den Tisch unter den Stein schieben.\n";
+  return 0;
+}
+
+private mixed decken_long()
+{
+  if (modell_weg) return "\
+Kaum zu glauben, hier hat wohl jemand die Quests verwechselt. Wir sind hier \
+NICHT in 'Renoviere das verwahrloste Schiff', aber dennoch, die Stoffdecken \
+sehen perfekt ausgeschuettelt aus und jetzt, wo sie ausgeschuettelt sind, \
+erkennt man auch wieder das schoene Karomuster.";
+  return "\
+Auch hier faellt Dir nichts weiter auf, als dass die Decken vielleicht mal \
+gruendlich ausgeschuettelt werden muessten.";
+}
+
+private string karomuster_long()
+{
+  if (!modell_weg) return 0;
+
+  return "\n\
++-----+-----+-----+-----+-----+-----+-----+-----+\n\
+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|\n\
+||T|H|||T|H|||T|H|||T|E|||T|H|||T|H|||T|E|||T|E||\n\
+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|\n\
+||E|O|||E|O|||E|O|||H|O|||E|O|||E|O|||H|O|||H|O||\n\
+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|\n\
++-----+-----+-----+-----+-----+-----+-----+-----+\n\
+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|\n\
+||T|H|||T|H|||T|H|||T|E|||T|H|||T|H|||T|E|||T|E||\n\
+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|\n\
+||E|O|||E|O|||E|O|||H|O|||E|O|||E|O|||H|O|||H|O||\n\
+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|\n\
++-----+-----+-----+-----+-----+-----+-----+-----+\n\
+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|\n\
+||T|H|||T|H|||T|H|||T|E|||T|H|||T|H|||T|E|||T|E||\n\
+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|\n\
+||E|O|||E|O|||E|O|||H|O|||E|O|||E|O|||H|O|||H|O||\n\
+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|+-+-+|\n\
++-----+-----+-----+-----+-----+-----+-----+-----+\n\n";
+}
+
+private mixed moewen_sound()
+{
+  int m;
+
+  if (!(m = RD_LIBDIR"mover"->query_moewen()))
+    return "\
+Du kannst nichts hoeren. Draussen ist es absolut ruhig. Du kannst also jetzt\n\
+gefahrlos nach draussen gehen.\n";
+
+  return "\
+Hui, das hoert sich ja nach richtig vielen Moewen an. Und jeder, der schon\n\
+mal Hitchcocks's Die Voegel gesehen hat, weiss, dass das SEHR gefaehrlich\n\
+sein kann. Und Tod kann Dir sicher die Namen von Spielern nennen, die dies\n\
+bestaetigen wuerden. Aber ehrlich gesagt bist Du nicht scharf drauf, Tod\n\
+zu interviewen. Stattdessen haengst Du Deine Ohren nochmal kraeftig in\n\
+Richtung Treppe und glaubst zu erkennen, dass draussen mindestens noch\n" +
+  RD_LIBDIR"grammar"->get_numeral(m+1) + " Moewen ihr Unwesen treiben.\n";
+}
+
+private string moewen_long()
+{
+  int m;
+
+  if (!(m=RD_LIBDIR"mover"->query_moewen()))
+    return "Keine Moewe zu sehen.\n";
+
+  return "\
+Hier drinnen sind gluecklicherweise keine Moewen. Aber draussen glaubst Du,\n\
+mindestens " + RD_LIBDIR"grammar"->get_numeral(m+1) + " Moewen zu erkennen.\n";
+}
+
+status schneide_check()
+{
+  object w;
+
+  return !!( (w = this_player()->QueryProp(P_WEAPON)) &&
+             ( w->QueryProp(P_WEAPON_TYPE) == WT_SWORD ||
+               w->QueryProp(P_WEAPON_TYPE) == WT_AXE ||
+               w->QueryProp(P_WEAPON_TYPE) == WT_KNIFE ) );
+}
+
+private mixed schnitz_decke(mapping args)
+{
+  if (!stiefel) 
+    return "Da is nix zum Rausschnitzen in der Decke. Sorry.";
+ 
+  if (member(stids, args[G_OBJECT, 1]) < 0)
+    return "Aber das ist doch gar nicht in der Raumdecke. Dort siehst Du nur "+
+      stiefel->name(WEN,1) + ".";
+
+  if (!schneide_check())
+    return "Schoen und gut, aber Du hast gar nichts gezueckt, was sich "
+      "zum Schnitzen eignet!";
+
+  if (auf_tisch != this_player()) return 
+    "Von hier unten kommst Du da aber nicht ran. Aber kein Problem, der "
+    "Tisch steht genau unter Deinem Objekt der Begierde. Du muesstest nur "
+    "rauf steigen.";
+
+  message(({
+    ({ M_PL, M_PL_VERB, "schnitz", "ein Weilchen an ",
+       M_DAT_BEST, stiefel, " in der Raumdecke herum." }),
+    2,
+    ({ "Und tatsaechlich, steter Tropfen hoehlt den Stein, ",
+       M_PL_PRONOUN, M_PL_VERB, "bekomm", M_AKK_BEST, stiefel,
+       "tatsaechlich heraus." }) }));
+
+  stiefel->move(this_object(), M_NOCHECK);
+  stiefel->move(this_player(), M_GET);
+  RemoveDetail(stids);
+  stids = 0;
+  stiefel = 0;
+  return 1;
+}
+
+
+void create()
+{
+  object ob, r;
+  RD_ROOM::create();
+#if 0
+  ob = clone_object("/obj/fackel");
+  r = RD_TOOLS->load_object(RD_ROOMDIR"void");
+  ob->move(r, M_NOCHECK);
+  set_stiefel(ob);
+#endif
+  SetProp(P_RD_RIDU_AREA,1);
+  SetProp(P_LIGHT, 1);
+  SetProp(P_INDOORS, 1);
+  SetProp(P_INT_SHORT, "Im Inneren des Schiffs");
+  SetProp(P_INT_LONG, "\
+Du stehst in einem kleinen, schmuddeligen Raum im Inneren des Schiffs und \
+hast hiermit den Ort gefunden, wo sich Ridu aufhaelt, wenn er keine \
+Pferdeaepfel nach Spielern wirft. In einer Ecke siehst Du ein Schlaflager sowie \
+die Dinge, die man im taeglichen Leben braucht, in einer weiteren Ecke thront \
+eine schwere Kiste. Ein Tisch mit Stuhl steht \
+an der Steuerbordwand, dahinter haengt ein Wandregal. Raus kommst Du, indem \
+Du einfach die hoelzerne Treppe wieder nach oben gehst, also, falls Du \
+jetzt schon wieder raus willst.");
+  AddDetails(({
+    "interesse", "Na los, schnapp sie Dir!",
+    "wort", "Anleitung.",
+    "spieler", "Der Anfang vom Uebel!",
+    ({ "anfang", "uebel" }), "Schlimmer sind nur noch Magier.",
+    "magier", "Oder?",
+    "ridu", "Ridu? Kennst Du schon, oder? Alt, haesslich, boese, Dieb.",
+    "pferdeaepfel", "Schonmal gesehen wie er das macht? Oder schonmal "
+       "selber einen geworfen? Ist bestimmt spassig.",
+    ({ "muster", "karomuster" }), #'karomuster_long,
+    ({ "buchstaben", "buchstabe", "ifm", "mitarbeiter", "firma" }), "\
+Jemand, wahrscheinlich ein Mitarbeiter einer Firma namens 'IFM' muss wohl \
+mit einem Loetkolben die Buchstaben in die Kiste gebrannt haben. Kann auch \
+sein, dass er kleine Feuerbaelle statt einem Loetkolben benutzt hat.",
+    "loetkolben", "Okay, es gibt noch keine Loetkolben. Dann doch Magie.",
+    "magie", "Also genau weisst Du's nicht. Aber vielleicht ging's "
+             "wirklich mit Feuerbaellen.",
+    "feuerbaelle", "Kleine Baelle aus Feuer. Bestimmt schonmal wo gesehen.",
+    "holz", "Absolut normal!",
+    ({ "schraube", "schrauben" }), "\
+Diese Schrauben halten die Kiste auf jeden Fall fest auf dem Boden.",
+    ({ "schiff", "inneren", "inneres" }), "\
+Ein bisschen kommst Du Dir vor wie Pinocchio im Bauch des Wals, als Du hier \
+auf die Waende des Schiffs blickst.",
+    ({ "bauch", "wal", "pinocchio" }), "\
+Dir ist so, als haettest Du sowas mal gelesen.",
+    ({ "leben", "dinge" }), "\
+Na Dinge halt, Dinge, die jeder braucht, die im Spiel unwichtig sind und die \
+halt doch da sein muessen. Ein bissle was zu Essen, zu Trinken, Klamotten, \
+Zahnbuerste usw. usw.",
+    ({ "details", "spiel", "spass" }), "\
+Ja, das hier soll ein Spiel sein, und wenn es Dir Spass macht, sinnlose \
+Details anzuschauen, bitteschoen. Das hier war eins!",
+   ({ "essen", "trinken", "klamotten", "zahnbuerste" }), "\
+Bei genauerer Betrachtung kommst Du zu dem Schluss, dass das nichts fuer \
+Dich ist.",
+   "schluss", "Nein, keine Diskussion, nicht fuer Dich geeignet.",
+   "diskussion", "AUS!",
+   ({ "ort", "raum" }), #'_query_int_long,
+   ({ "ecken", "ecke"}), 
+      "Zwei interessante Ecken. Eine mit 'ner Kiste, eine mit einem "
+           "Schlaflager.",
+   "ecke mit kiste", "In der Ecke mit der Kiste steht eine Kiste.",
+   "ecke mit schlaflager", "\
+Kommen wir nun zur 500 Muenzen-Frage...\n\
+In der Ecke mit dem Schlaflager steht...\n\
+A) ein Schlaflager\n\
+B) ein Schlotfeger\n\
+C) ein Wegelagerer\n\
+D) ein Kugellager?\n",
+   ({ "lager", "schlaflager" }), "\
+Das Schlaflager besteht einfach aus ein paar uebereinander geschichteten \
+Decken und sieht nicht wirklich appetitlich aus.",
+   "decke", "\
+Stoffdecke oder Raumdecke, was bitte schoen darf's sein?",
+   "raumdecke", #'raumdecke_long,
+   ({ "stoffdecken", "stoffdecke", "decken" }), #'decken_long,
+   "tisch", #'tisch_long,
+   "brief", #'brief_long,
+   "schublade", "\
+Sie ist geschlossen (weil sie auch eine anstaendige Schublade ist).",
+   "stuhl", "\
+Ein ganz normaler Stuhl, wirklich nichts besonderes daran.",
+   ({ "auffaelliges",
+      "waende", "fussboden",
+      "boden", "wand", "steuerbordwand", "backbordwand" }), "\
+Du siehst nichts Auffaelliges.",
+   ({ "regal", "wandregal" }), "\
+Verschiedene Papiere liegen auf dem Wandregal.",
+   ({ "papier", "papiere" }), #'papiere_long,
+   "anleitung", #'anleitung_long,
+   ({ "treppe", "hoelzerne treppe" }), #'treppe_long,
+   "ungewoehnliches", "... NICHTS Ungewoehnliches ...",
+   ({ "vertaefelungen", "seite", 
+      "holzvertaefelungen",
+      "vertaefelung", "holzvertaefelung" }), "\
+An der Holzvertaefelung, die die eine Seite der Treppe abschliesst ist \
+auch nichts Ungewoehnliches. Sie bildet einfach einen sauberen Abschluss, \
+dass man den Verhau unter der Treppe nicht sieht. Allerdings ist die \
+Maserung ziemlich huebsch.",
+   "verhau", "Praktisch, wenn man sowas hat. Wir haben sowas.",
+   ({ "abschluss", "arbeit" }), "Saubere Arbeit, haettest Du nicht \
+besser gemacht.",
+   ({ "moewe", "moewen" }), #'moewen_long,
+   "maserung", "\
+Ja, schon sehr schoen gemasert ist die Vertaefelung. Immer schoen \
+gleichmaessig und kaum Knoerze im Holz. Bis auf eine Stelle.",
+   "stelle", "An der Stelle ist ein richtig fetter Knorz.",
+   "knoerze", "\
+Kaum welche zu sehen.",
+   "knorz", "\
+Hey, das ist ja gar kein Knorz, das ist ja ein kleiner Holzknopf, wo man \
+dran ziehen koennte.",
+   ({ "holzknopf", "knopf" }), "\
+Ziehhhhhhhh!"
+  }));
+
+  AddDetailAction(
+    ({ "raumdecke", "decke" }),
+    map_array(({ "schnitz", "schnitze" }), #'+, " <object> aus <me> heraus"),
+    "schnitz_decke",
+    #'schnitz_decke
+  );
+  AddErrorMessage("schnitz",
+    "Also gut, weil die Syntax kompliziert ist, hier die genaue Anleitung:\n\
+schnitz hmhmhm aus raumdecke heraus\n");
+  AddErrorMessage("schnitze",
+    "Also gut, weil die Syntax kompliziert ist, hier die genaue Anleitung:\n\
+schnitz hmhmhm aus raumdecke heraus\n");
+
+  AddDetailAction(
+    "tisch",
+    map_array(({ "schieb", "schiebe", "verschiebe", "rueck", "ruecke" }),
+      #'+, " <me> unter <object>"),
+    "schieb_tisch",
+    #'schieb_tisch
+  );
+  AddErrorMessage(({ "schiebe", "verschiebe", "rueck", "ruecke", "schieb" }),
+    #'schiebe_error);
+
+  AddDetailAction(
+    "tisch",
+    map_array(CMD_KLETTERN, #'+, " auf <me>"),
+    "kletter_tisch",
+    #'kletter_tisch
+  );
+
+  AddDetailAction(
+    "brief",
+    map_array(CMD_NEHMEN, #'+, " <me>"),
+    "nimm_brief",
+    #'nimm_brief
+  );
+
+  AddDetailAction(
+    "anleitung",
+    map_array(CMD_NEHMEN, #'+, " <me>"),
+    "nimm_anleitung",
+    #'nimm_anleitung
+  );
+
+  AddDetailAction(
+    ({ "holzknopf", "knopf" }),
+    ({ "zieh <me>", "ziehe <me>", "ziehe an <me>", "ziehe am <me>",
+       "zieh an <me>", "zieh am <me>" }),
+    "ziehe_knopf",
+    #'ziehe_knopf
+  );
+  AddErrorMessage("zieh", "Schoen, nur wo dran ziehen?");
+  AddErrorMessage("ziehe", "Schoen, nur wo dran ziehen?");
+
+  AddDetailAction(
+    "treppe",
+    map_array(({ "krabble" })+CMD_KRIECHEN, #'+, " unter <me>"),
+    "krabble_treppe",
+    #'krabble_treppe
+  );
+
+  AddDetailAction(
+    "schublade", "oeffne <me>", "oeffne_schublade", #'oeffne_schublade);
+ 
+  AddDetailAction(
+    ({ "decken", "stoffdecke", "stoffdecken", "decke" }),
+    ({ "schuettel <me>", "schuettel <me> aus",
+       "schuettele <me>", "schuettele <me> aus",
+       "schuettle <me>", "schuettle <me> aus" }),
+    "schuettle_decken",
+    #'schuettle_decken
+  );
+
+  AddCmd(CMD_KLETTERN, "kletter_runter");
+  AddCmd("krabble", "krabble_nicht");
+
+  AddExit("oben", ([ EX_DEST:RD_ROOMDIR"r4",
+                     EX_TESTFUNC:#'moewen_check ]));
+
+
+  clone_object(RD_OBJDIR"schale")->move(this_object(), M_NOCHECK);
+  clone_object(RD_OBJDIR"kiste")->move(this_object(), M_NOCHECK);
+
+  AddRule("glaube <text>", "glaube_fliegen", RD_LIBDIR"mover");
+  AddRule("glaub <text>", "glaube_fliegen", RD_LIBDIR"mover");
+  AddRule("meditier", "meditiere", RD_LIBDIR"mover");
+  AddRule("meditiere", "meditiere", RD_LIBDIR"mover");
+  AddRule("meditier <text>", "meditiere", RD_LIBDIR"mover");
+  AddRule("meditiere <text>", "meditiere", RD_LIBDIR"mover");
+  AddErrorMessage("glaub","Moechtest Du vielleicht ans Fliegen glauben?");
+  AddErrorMessage("glaube","Moechtest Du vielleicht ans Fliegen glauben?");
+
+
+  AddSound(DEFAULT_SOUND, "Hier ist es wenigstens nicht so zugig wie "
+    "draussen. Dafuer ist draussen die Aussicht besser. Man kann halt "
+    "nicht alles haben.");
+  AddSound(({ "moewe", "moewen" }), #'moewen_sound);
+  AddSmell(DEFAULT_SMELL, "Hier riecht's nach allem Moeglichen und auch "
+    "wieder nach Nichts. Auf jeden Fall nichts Missionskritisches.");
+
+}
+
+status kletter_runter(string str)
+{
+  if (!str || strstr(str, "unte") < 0) {
+    if (auf_tisch == this_player())
+      notify_fail("Vielleicht moechtest Du vom Tisch runter steigen?\n");
+    return 0;
+  }
+  if (strstr(str, "treppe") > -1) return 0;
+  if (auf_tisch != this_player()) {
+    notify_fail("Aber Du bist doch gar nicht auf dem Tisch.\n");
+    return 0;
+  }
+  auf_tisch = 0;
+  message(({ ({ M_PL, M_PL_VERB, "kletter", "vom Tisch runter." }) }));
+  return 1;
+}
+
+varargs int PreventLeave(object ob, mixed dest)
+{
+  if (auf_tisch && auf_tisch == ob) {
+    auf_tisch = 0;
+    message(({({ ob, M_VERB, "stolper", ob, " vom Tisch runter." }) }));
+  }
+}
+
+status krabble_nicht(string arg)
+{
+  if (!arg) {
+    message("Schoen und gut, aber wohin?");
+    return 1;
+  }
+  notify_fail("Schoen und gut, aber wohin?\n");
+}

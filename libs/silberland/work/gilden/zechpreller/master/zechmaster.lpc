@@ -1,0 +1,557 @@
+/*
+//
+// Der Gildenmaster fuer die Zechpreller
+//
+// Angrox@Silberland
+//
+// 31.06.1997
+
+// 13-01-2004 Gwenshara
+// 'zrufe'-History in den Master verlegt, es wird auch
+// mitgeloggt
+//
+*/
+
+
+
+
+#include <wizlevels.h>
+#include <language.h>
+#include <config.h>
+#include <new_skills.h>
+#include <properties.h>
+
+#include "../zech.h"
+#define TG(x) tell_object(find_player("gwenshara"), x+"\n")
+#define DRINKERS "/gilden/zechpreller/members/drinkers"
+
+mixed saveload;
+nosave mapping zecher=([ ]);
+nosave mapping top=([ ]);
+nosave string *number_one;
+nosave string *history=({});
+nosave mapping alcohol_drunken=([ ]);
+
+int DeleteTopEntry(string player);
+
+int GetDrinkerPoints(object who);
+
+create()
+{
+  if (is_clone(this_object())) 
+    {
+    destruct(this_object());
+    return 1;
+    }
+  seteuid(getuid(this_object()));
+  if (restore_object(MEMBERLIST))
+     zecher=saveload;
+  if (restore_object(TOPLIST))
+     top=saveload; 
+  if(restore_object(DRINKERS))
+    alcohol_drunken=saveload;
+  SetNumberOne();    
+}
+
+query_prevent_shadow() { return 1; }
+
+int CheckIfAllowed()
+{
+ object ob;
+ string fname;
+ ob=previous_object();
+ fname=file_name(ob);
+ if (0)   {
+   write_file(LOG("secure.log"), 
+      dtime(time())+": Versuchte Aenderung im Gildenmaster "
+      +"von "+CAP(getuid(ob))+"\n");
+   return 0;
+ }
+ return 1;
+}
+
+int DoBackup()
+{
+ if (!CheckIfAllowed()) return -2;
+ saveload=zecher;
+ save_object(MEMBERBACKUP);
+ saveload=0;
+
+ saveload=alcohol_drunken;
+ save_object(DRINKERS);
+ saveload=0;
+ rm(ZECH("backup/backup.log"));
+ write_file(ZECH("backup/backup.log"),
+             "Letztes Backup: "+dtime(time())+"\n");
+ return 1;
+}
+
+int DoRestore()
+{
+ if(!CheckIfAllowed()) return -2;
+ if (restore_object(MEMBERLIST))
+     zecher=saveload;
+  if (restore_object(TOPLIST))
+     top=saveload; 
+  if(restore_object(DRINKERS))
+    alcohol_drunken=saveload;
+ saveload=0;
+ return 1;
+}
+
+
+/* Neues Mitglied hinzufuegen */
+int AddMember(mixed pl)
+{
+ string name;
+ if (!CheckIfAllowed()) return -2;
+ if(objectp(pl)) name=getuid(pl);
+ else 
+   if(!find_player(pl) && !find_netdead(pl))
+     return 0;
+   else name=lower_case(pl);
+ if(member(zecher, name))
+   return 0;
+ zecher+=([name:0;0;0]);
+ saveload=zecher;
+ save_object(MEMBERLIST);
+ saveload=0;
+ return 1;
+}
+
+/* Mitglied loeschen */
+int DeleteMember(mixed pl)
+{
+ string name;
+ if(objectp(pl)) name=getuid(pl);
+ else 
+   if(!find_player(pl) && !find_netdead(pl))
+     return 0;
+   else name=pl;
+ if (!CheckIfAllowed()) return -2;
+ if(!member(zecher, name))
+   return -1;
+ zecher=m_delete(zecher, name);
+ saveload=zecher;
+ save_object(MEMBERLIST);
+ saveload=0;
+ DeleteTopEntry(pl);
+ return 1;
+}
+int CheckXp(object pl, int cur_xp)
+{
+ if(!pl || !cur_xp) return -1;
+ //if(!member(MEMBERLIST, pl)) return -1;
+ if(zecher[getuid(pl), 0] > cur_xp)
+      return 0;
+ else return 1;
+}
+
+int GetXpDifference(object pl, int cur_xp)
+{
+ if(!pl) return -1;
+ return zecher[getuid(pl), 0]-cur_xp;
+}
+
+int SetXp(object pl, int needed_xp)
+{
+ if(!pl || !needed_xp) return -1;
+ if (!CheckIfAllowed()) return -2;
+ zecher[getuid(pl), 0]=needed_xp;
+ saveload=zecher;
+ save_object(MEMBERLIST);
+ saveload=0;
+ return 1;
+}
+
+
+CheckMembers()
+{
+return m_indices(zecher);
+}
+
+
+mixed QueryMemberEntry(string pl) {
+  if(!member(zecher, pl)) return 0;
+  return ({zecher[pl],zecher[pl,1],zecher[pl,2]});
+}
+
+/* Levels updaten */
+int UpdateMemberLevels() 
+{
+ int i;
+ object pl;
+ string *names;
+ names=m_indices(zecher);
+ for(i=sizeof(names)-1; i>=0;i--) {
+   if((pl=find_player(names[i]))||(pl=find_netdead(names[i])))
+     zecher[names[i], 1]=pl->QueryProp(P_GUILD_LEVEL);
+ }
+ saveload=zecher;
+ save_object(MEMBERLIST);
+ return 1;
+}
+
+
+
+/* Den Besten herausfiltern und in einer Variablen speichern. */
+int SetNumberOne()
+{
+ int i, *topratings, bestrating;
+ bestrating=0;
+ topratings=m_indices(top);
+ for(i=sizeof(topratings)-1;i>=0;i--)
+   if(topratings[i]>bestrating) bestrating=topratings[i];
+ number_one=top[bestrating];
+ return 1; 
+}
+
+/* Den Besten ausgeben */
+mixed QueryNumberOne()
+{
+ return number_one;
+}
+
+
+/* Berechnung der Wertung */
+int CalculateRating(string player, int rating, int stufe)
+{
+ int last;
+ float mod;
+ object pl;
+ rating+=2*stufe;
+
+ //tell_angrox(sprintf("Name: %s, Rating: %d", player, rating));
+ if(pl=find_player(player) || pl=find_netdead(player))
+   last=pl->QueryProp(P_LAST_LOGIN);
+ else
+   last=call_other(SAVEMASTER, "QueryFileProp", player, P_LAST_LOGIN);
+ if((time()-1728000)>last) {         // 3600*24*20 = 20 tage
+   mod=1-((time()-1728000-last)/86400)*0.05;
+   if((rating=(int)(rating*mod))<0) rating=1;
+ }
+
+  // Getrunkenen Alkohol miteinrechnen
+ if(member(alcohol_drunken, player))
+   rating+=GetDrinkerPoints(pl);
+
+ //tell_angrox(sprintf(", Rating.mod: %d\n", rating));
+ return rating;
+}
+
+/* Fuers Austreten -> Raus aus der Topliste */
+
+int DeleteTopEntry(string player)
+{
+  int *topratings, i;
+  string *topnames;
+  if (!CheckIfAllowed()) return -2;
+  topnames=m_values(top);
+  topratings=m_indices(top);
+  for(i=sizeof(topnames)-1;i>=0;i--)
+    if(member(topnames[i], player)!=-1)
+      top[topratings[i]]-=({player});
+  saveload=top;
+  save_object(TOPLIST);
+  return 1;
+}
+
+void CheckForWizards(string *names)
+{
+  int i, j;
+  mixed s;
+//  TG("Check initialisiert!");
+  for(i=0; i<sizeof(names); i++)
+  {
+    s=names[i];
+    for(j=0; j < sizeof(s); j++)
+      if(query_wiz_level(s[j]) > 2)
+        DeleteTopEntry(s[j]);
+  }
+}
+
+void CheckForNotInGuild(string *names)
+{
+  int i, j;
+  mixed s;
+  object ob;
+ // TG("Check initialisiert!");
+  for(i=0; i<sizeof(names); i++)
+  {
+    s=names[i];
+    for(j=0; j < sizeof(s); j++)
+      if(objectp(ob=find_player(s[j]))
+	 && ob->QueryProp(P_GUILD) != "zechpreller")
+      {
+	//TG(s[j]+": "+ob->QueryProp(P_GUILD));
+        DeleteMember(s[j]);
+      }
+      else if(objectp(ob=find_netdead(s[j])) && 
+	      ob->QueryProp(P_GUILD) != "zechpreller")
+      {
+	//TG(s[j]);
+        DeleteMember(s[j]);
+      }
+  }
+}
+
+
+/* Topliste updaten */
+int UpdateTopList()
+{
+  string *names, *topnames;
+  int rating, i, j, *topratings, test;
+  object pl;
+  
+  names=m_indices(zecher);
+  topnames=m_values(top);
+  topratings=m_indices(top);
+  if((i=sizeof(names))>100) i=100;
+
+  CheckForWizards(topnames); // Magier aus der Topliste schmeissen
+  CheckForNotInGuild(topnames); // Nicht Zechpreller auch schmeissen
+  
+  for(i=i-1;i>=0;i--)
+  {
+    rating=0;
+  
+    if(query_wiz_level(names[i])<3) {
+      if(((pl=find_player(names[i]))||
+	  (pl=find_netdead(names[i]))) &&
+          !pl->QueryProp(P_TESTPLAYER) &&
+	  pl->QueryProp(P_GUILD_LEVEL) < 11)
+      {
+      rating=CalculateRating(names[i], pl->QueryProp(P_GUILD_RATING),
+                             pl->QueryProp(P_LEVEL));
+      }
+      else if(objectp(pl) && 
+	      pl->QueryProp(P_GUILD_LEVEL) > 10) // Ab GS 11 raus
+        DeleteTopEntry(getuid(pl));
+      else {
+        if(call_other(SAVEMASTER, "QueryFileProp", names[i], P_TESTPLAYER)==0)
+          rating=CalculateRating(
+		 names[i], 
+		 call_other(SAVEMASTER, "QueryFileProp", names[i], P_GUILD_RATING),
+                 call_other(SAVEMASTER, "QueryFileProp", names[i], P_LEVEL));
+      }
+    }
+    
+    if(rating) {
+      for(j=sizeof(topnames)-1;j>=0;j--)
+	if(member(topnames[j], names[i])!=-1) 
+	{
+          top[topratings[j]]-=({names[i]});
+        }
+      
+      if(!member(top, rating)) {
+        top+=([rating:({names[i]})]);
+      }
+      
+      else top[rating]+=({names[i]});
+    }
+   
+  }
+  
+  for(i=sizeof(m_indices(top))-1;i>=0;i--)
+  {
+    if(!sizeof(m_values(top)[i]))
+       top=m_delete(top, m_indices(top)[i]);
+  }
+
+  saveload=top;
+  save_object(TOPLIST);
+  return 1;
+}
+
+string QueryErbReadList()
+{
+ string *erben, erbtext;
+ object pl;
+ int i;
+
+ erben = call_other(ERBMASTER, "QueryErben");
+ erbtext = "GILDENERBEN: ";
+ //TG("Erben: "+sizeof(erben));
+ if(sizeof(erben))
+ {
+   for(i=0;i<sizeof(erben);++i)
+   {
+     DeleteTopEntry(erben[i]);
+     if(objectp(pl=find_player(erben[i])) ||
+	objectp(pl=find_netdead(erben[i])) &&
+	!pl->QueryProp(P_TESTPLAYER))
+     {
+       if(!IS_WIZARD(erben[i]))
+       erbtext+=capitalize(erben[i])+ "("+capitalize(
+	        call_other(ERBMASTER, "QueryReadableErbe", erben[i]))+"), ";
+    //   else TG("WIZARD: "+erben[i]);
+     }
+   }
+ }
+
+ return erbtext;
+}
+
+/* Topliste in file 'toplist.read' schreiben, Ausgabe ueber 'more' */
+int MakeReadList()
+{
+ int *arm, i, j, tabs, stufe, nummer, alcohol;
+ float best, fac;
+ string name, *erben, erbtext;
+ rm(REALTOPLIST);
+
+ /* Gildenerben ! */
+ erbtext = QueryErbReadList();
+ write_file(REALTOPLIST, BSA(erbtext, "")+"\n");
+
+ nummer=1;
+ write_file(REALTOPLIST, "        Name\t\tGstufe\tWertung\t"
+                        +"\tAlkohol getrunken\n");
+ write_file(REALTOPLIST, "--------------------------------------"
+                     +"------------------------------\n");
+ arm=sort_array(m_indices(top), #'>); //');
+ for(i=sizeof(arm)-1;i>=0;i--) {
+   if(arm[i]) {
+     if(i==sizeof(arm)-1)
+       best=(float)arm[i];
+     for(j=sizeof(top[arm[i]])-1;j>=0;j--) {
+       name=CAP(top[arm[i]][j]);
+       fac=(float)(arm[i]/best)*100;
+       tabs=2-(int)(strlen(name)/8);
+       stufe=zecher[lower_case(name), 1];
+       alcohol=alcohol_drunken[lower_case(name)];
+       if(arm[i]==1)
+   write_file(REALTOPLIST, sprintf("%2d.\t%s%*'\t's%2d\t  -.---\n",
+        nummer, name, tabs, "", stufe));
+       else
+   write_file(REALTOPLIST, sprintf("%2d.\t%s%*'\t's%2d\t%7.3f \t%d\n",
+                    nummer, name, tabs, "", stufe, fac, alcohol));
+       nummer++;
+     }
+   }m_values(top);
+ }
+ return 1;
+}
+
+/*History-Funs*/
+
+int ShowHistory()
+{
+ int i;
+ string *msgs;
+ write(BS("Folgendes haben Dir Deine Saufkumpanen/innen mitgeteilt:\n"));
+ write(BS("---------------------------------------------"
+	  +"-------------------------------"));
+ for(i=0;i<=sizeof(history)-1;i++) {
+   msgs=explode(history[i],"&&*%%");
+   if(sizeof(msgs) > 2)  {
+     write(BS(msgs[0]));
+     write(BSA(msgs[2], msgs[1]));
+   }
+ }
+ write(BS("---------------------------------------------"
+	  +"-------------------------------"));
+ return 1;
+}
+
+int AddHistory(string presay, string msg)
+{
+ int i;
+ string timestring;
+ timestring=dtime(time())[19..26];
+ if(sizeof(history)>5)
+   history-=({history[0]});
+ history+=({implode(({timestring, presay, msg}), "&&*%%")});
+ 
+ if(interactive(TP)) //mitloggen der History
+  write_file(ZHIST_LOG, sprintf("%s - %s%s\n", dtime(time()), 
+        presay, msg));
+ return 1;
+}
+
+mixed QueryHistory()
+{
+ return history;
+}
+
+void ClearHistory() //damit man die History notfalls haendisch loeschen kann
+{
+  history=({});
+}
+
+//Zum testen
+mixed *QueryZechIndices()
+{
+  return m_indices(zecher);
+}
+
+string *QueryTop()
+{
+  return m_values(top);
+}
+
+// Alkoholkonsum mitloggen!
+//
+void DrinksAlcohol(object who, int amnt)
+{
+  if(!CheckIfAllowed()) return;
+  if(!member(alcohol_drunken, getuid(who)))
+    alcohol_drunken+=([getuid(who):amnt]);
+  else
+    alcohol_drunken+=([getuid(who):alcohol_drunken[getuid(who)]+amnt]);
+  return;
+}
+
+int HasDrunken(object who)
+{
+  return alcohol_drunken[getuid(who)];
+}
+
+int who_drinks_more(string p1, string p2)
+{
+  int a, b;
+  a = alcohol_drunken[p1];
+  b = alcohol_drunken[p2];
+
+  if(a>b) return -1;
+  if(a<b) return 1;
+  return 0;
+}
+
+int GetDrinkerPoints(object who)
+{
+  string uid, *arr;
+  if(!objectp(who) ||
+     (!find_player(who) && !find_netdead(who)))
+    return 0;
+  uid = getuid(who);
+  if(!member(alcohol_drunken, who)) return -1;
+
+  arr = sort_array(m_indices(alcohol_drunken), "who_drinks_more", TO);
+  
+  return member(arr, uid);
+}
+
+string GetTopDrinker()
+{
+  string *arr, list;
+  int i;
+
+  arr = sort_array(m_indices(alcohol_drunken), "who_drinks_more", TO);
+
+  list = "Spieler\tAlkoholkonsum\n";
+  list+="---------------------------------------\n";
+  for(i=0; i<sizeof(arr); ++i)
+  {
+    list+=sprintf("%d. %s\t%d\n", i+1, capitalize(arr[i]), alcohol_drunken[arr[i]]);
+  }
+  list+="---------------------------------------\n";
+
+  return list;
+}
+
+void update_complete_toplist()
+{
+  UpdateTopList();
+  MakeReadList();
+}

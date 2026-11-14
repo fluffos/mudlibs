@@ -1,0 +1,232 @@
+// Krone des Daemonenfuresten
+// 03.09.2004 Feyaria
+
+inherit "/std/armour";
+
+#include "../def.h"
+#include "/p/daemon/itemd/itemd.h"
+
+#define DEFEND_VALUE 33
+
+string set_long_desc();
+
+string* gems = ({});
+
+mapping gem2dt = ([
+    "turmalin": DT_UNHOLY, 
+    "bergkristall": DT_HOLY, 
+    "tigerauge": DT_MIND, 
+    "amethyst": DT_SOUND, 
+    "bernstein": DT_LIGHT, 
+    "opal": DT_MAGIC, 
+    "lapislazuli": DT_ACID, 
+    "onyx": DT_TERROR, 
+    "zirkon": DT_ELECTRIC, 
+    "topas": DT_AIR, 
+    "granat": DT_LIGHTNING, 
+    "aquamarin": DT_WATER, 
+    "smaragd": DT_POISON, 
+    "saphir": DT_COLD, 
+    "rubin": DT_FIRE, 
+    "diamant": DT_EXPLOSION,
+      ]);
+
+mapping dt2gem = ([
+    DT_UNHOLY: "turmalin", 
+    DT_HOLY: "bergkristall", 
+    DT_MIND: "tigerauge", 
+    DT_SOUND: "amethyst", 
+    DT_LIGHT: "bernstein", 
+    DT_MAGIC: "opal", 
+    DT_ACID: "lapislazuli", 
+    DT_TERROR: "onyx", 
+    DT_ELECTRIC: "zirkon", 
+    DT_AIR: "topas", 
+    DT_LIGHTNING: "granat", 
+    DT_WATER: "aquamarin", 
+    DT_POISON: "smaragd", 
+    DT_COLD: "saphir", 
+    DT_FIRE: "rubin", 
+    DT_EXPLOSION: "diamant",
+    ]);
+
+void create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  SetProp(P_SHORT, "Die fuenfstrahlige Krone der Daemonenfuerstin");
+  set_long_desc();
+  SetProp(P_NAME, "Krone der Daemonenfuerstin");
+  SetProp(P_NAME_ADJ, "fuenfstrahlig");
+  SetProp(P_GENDER, FEMALE);
+  AddId (({"krone", "daemonenkrone", "daemonenfuerstkrone", 
+        "daemonenfuerstinnenkrone", "\nabgrundkrone"}) );
+  AddAdjective( ({"fuenfstrahlig", "fuenfstrahlige", "fuenfstrahligen"}) );
+  SetProp(P_INFO,
+      BS("Du kannst die Einbuchtungen mit Edelsteinen bestuecken, um die "
+        "Schutzwirkung der Krone zu erhoehen."));
+
+  SetProp(P_ARMOUR_TYPE, AT_HELMET);
+  SetProp(P_AC, 15);
+  SetProp(P_MATERIAL, ([MAT_FLESH: 30, MAT_BLOOD:10, MAT_MISC_UNHOLY:10, 
+                        MAT_SLIME:10, MAT_MISC_POISON:10, MAT_BONE:30]) );
+  SetProp(P_WEIGHT, 1500);
+  SetProp(P_VALUE, 10000);
+  SetProp(P_MAGIC, 13);
+  SetProp(P_QUALITY_DECAY, 1500);
+  SetProp(P_WEAR_RESTRICTIONS, ([SR_SEER: 1, P_LEVEL: 60, SR_GOOD: -100]) );
+  SetProp(P_M_HEALTH_MOD, ([P_HP: 6, P_SP: 6]) );
+  SetProp(P_M_MAX_HEALTH_MOD, ([P_HP: 5, P_SP: 5]) );
+  SetProp(P_DAM_PROTECTION, QueryProp(P_DAM_PROTECTION) + 
+      ([DT_UNHOLY: 1, DT_HOLY: 1, DT_POISON: 1, DT_ACID: 1, DT_TERROR: 1]) );
+  SetProp(P_EFFECTIVE_WC, 270);
+  SetProp(P_DEFEND_FUNC, TO);
+
+  AddCmd( ({"bestuecke", "bestueck"}), "cmd_bestuecken");
+  SetProp(P_ITEMD_TMPMAGIC, ({2222, 2222}) );
+  find_object(ITEMD)->RegisterNewItem(this_object(), TIME_ID);
+}
+
+string set_long_desc()
+{
+  int i, j;
+  string gem_text;
+
+  gem_text = "";
+  if (sizeof(gems))
+  {
+    for (i = sizeof(gems) - 1, j = i; i >= 0; i--)
+    {
+      if (i == 0 && i != j)
+        gem_text += " und ";
+      else if (i < j)
+        gem_text += ", ";
+      gem_text += "ein " + capitalize(dt2gem[gems[i]]);
+    }
+  }
+  if (gem_text == "")
+    gem_text = "nichts";
+  SetProp(P_LONG, 
+    "Die Krone der Daemonenfuerstin besteht aus verrotteten Knochen, "
+    "an denen noch altes, verfaultes Fleisch haengt. Von den fuenf "
+    "Zacken tropft staendig eine uebelriechende, stinkende, giftige "
+    "Fluessigkeit auf den Boden. Unter jeder Zacke gibt es eine kleine "
+    "Einbuchtung. In den Einbuchtungen befindet sich momentan "+
+    gem_text + ".");
+}
+
+void AddResistance()
+{
+  environment()->RemoveResistanceModifier();
+  environment()->AddResistanceModifier( 
+      mkmapping(gems, ({-0.07,-0.07,-0.07,-0.07,-0.07})) );
+}
+
+int cmd_bestuecken(string str)
+{
+  string was;
+  string womit;
+  object ob;
+
+  notify_fail("Was willst Du womit bestuecken?\n");
+  if (!str)
+    return 0;
+  if (sscanf(str, "%s mit %s", was, womit) != 2)
+    return 0;
+  if (!id(was) && was != "einbuchtung")
+    return 0;
+  if (!objectp(ob = present(womit, TP)))
+    return notify_fail("Du hast ja gar kein " + capitalize(womit) + "!\n"), 0;
+  if (strstr(file_name(ob), "/obj/gems/") == -1)
+    return write("Du kannst die Daemonenkrone nur mit Edelsteinen bestuecken!\n"), -1;
+  // Bugfix
+  if (!gem2dt[womit])
+    return write("Dieser Edelstein ist nicht maechtig genug fuer die Daemonenkrone!\n"), -1;
+  // Bugfix
+  if (ob->QueryProp(P_REQUESTED_AMOUNT) != 1)
+    return write("Du kannst die Daemonenkrone nur mit einzelnen Edelsteinen "
+        "bestuecken!\n"), -1;
+  if (womit == "edelstein")
+    return write("Welchen Edelstein genau meinst Du?\n"), -1;
+  if (member(gems, gem2dt[womit]) != -1)
+    return write("Da steckt ja schon ein " + capitalize(womit) + " in der "
+        "Daemonenkrone!\n"), -1;
+  if (sizeof(gems) == 5)
+    return write("Alle Einbuchtungen in der Daemonenkrone sind besetzt!\n"), -1;
+  
+  write("Du bestueckst " + name(WEN,1) + " mit " + ob->name(WEM,0)+ ".\n");
+  ob->AddAmount(-1);
+  gems += ({gem2dt[womit]});
+  set_long_desc();
+  if (QueryProp(P_WORN))
+    AddResistance();
+  return 1;
+}
+
+int DefendFunc(string *dtyp, mixed spell, object enemy)
+{
+  if (sizeof(dtyp & gems))
+  {
+    if (!random(100))
+    {
+      tell_object(QueryProp(P_WORN), "Deine Daemonenkrone wird beschaedigt.\n");
+      gems -= dtyp;
+      AddResistance();
+      set_long_desc();
+      return 0;
+    }
+    if (!random(3))
+      tell_object(QueryProp(P_WORN), 
+          "Deine Daemonenkrone faengt einen Teil des Schadens ab.\n");
+    return DEFEND_VALUE / 2 + random(DEFEND_VALUE);
+  }
+  return 0;
+}
+
+int WearFunc(object ruest,int silent)
+{
+  AddResistance();
+  return 1;
+}
+
+int RemoveFunc(object ruest,int silent)
+{
+  QueryProp(P_WORN)->RemoveResistanceModifier();
+  return 1;
+}
+
+void reset()
+{
+  if (!is_clone(this_object())) return;
+  ::reset();
+  call_out("heal", 10 + random(200));
+}
+
+void heal()
+{
+  object wer;
+  int align;
+
+  if( objectp(wer = QueryProp(P_WORN)) && interactive(wer) && 
+      (align = wer->QueryProp(P_ALIGN)) < 500 &&
+      (wer->QueryProp(P_HP) < wer->QueryProp(P_MAX_HP) ||
+       wer->QueryProp(P_SP) < wer->QueryProp(P_MAX_SP)))
+  {
+    tell_object(wer, Name(WER,1) + " bestaerkt Dich in Deiner Bosheit.\n");
+    wer->heal_self(200 - align / 4);
+    if (align > -1000)
+      wer->SetProp(P_ALIGN, align - random(100));
+  }
+}
+
+void _set_autoloadobj(mixed data)
+{ 
+  SetProp(P_ITEMD_TMPMAGIC, data);
+  SetProp(P_NODROP, 1);
+}
+
+mixed _query_autoloadobj()
+{ 
+  return QueryProp(P_ITEMD_TMPMAGIC);
+}

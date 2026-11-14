@@ -1,0 +1,112 @@
+// Hose mit Hitzeschutz
+// 08.04.2004 Feyaria
+
+inherit "/std/armour";
+
+#include "../def.h"
+#include "../../gilden.h"
+
+#define COST 50
+#define TEMPLIMIT 40
+
+int temp = 0;
+
+void create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  SetProp(P_SHORT, "Die Wasserhose");
+  SetProp(P_LONG, 
+    "Diese Hose besteht aus Wasser. Ob man nass wird, wenn man sie traegt?");
+  SetProp(P_NAME, "Wasserhose");
+  SetProp(P_GENDER, FEMALE);
+  AddId (({"hose", "wasserhose", "\naquatikawasserhose"}) );
+  SetProp(P_INFO, BS(
+      "Diese Hose bietet Dir ueberragenden Hitzeschutz! "
+      "In besonders heissen Gebieten kannst Du noch einen zusaetzlichen "
+      "Hitzeschutz aktivieren."));
+
+  AddDetail( ({"wasser"}),
+      "Das Wasser dieser Hose ist hochgradig magisch.");
+  SetProp(P_ARMOUR_TYPE, AT_TROUSERS);
+  SetProp(P_AC, 9);
+  SetProp(P_MATERIAL, ([MAT_WATER: 100]) );
+  SetProp(P_WEIGHT, 500);
+  SetProp(P_VALUE, 2000);
+  SetProp(P_MAGIC, 5);
+  SetProp(P_QUALITY_DECAY, 1500);
+  SetProp(P_TEMPERATURE_PROTECTION, ([T_COLD_PROT: -3, T_HEAT_PROT: 8]) );
+  SetProp(P_WEAR_RESTRICTIONS, ([SR_SEER: 1]) );
+  SetProp(P_M_HEALTH_MOD, ([P_HP: 1, P_SP: 1]) );
+  SetProp(P_DAM_PROTECTION, QueryProp(P_DAM_PROTECTION) + ([DT_WATER: 2]) );
+  SetProp(P_ITEMD_ELEMENTAL_VALUE, ([WASSER: 4+random(4)]) );
+  SetProp(P_REMOVE_FUNC, TO);
+  SetProp(P_WEAR_FUNC, TO);
+
+  AddCmd( ({"aktiviere", "aktivier"}), "cmd_aktivieren");
+  SUID;
+}
+
+int cmd_aktivieren(string str)
+{
+  mapping env;
+
+  if (!QueryProp(P_WORN) || !ENV(TP)) 
+    return 0;
+  notify_fail("Was willst Du aktivieren?\n");
+  if (str != "hitzeschutz")
+    return 0;
+  if (TP->QueryProp(P_SP) < COST)
+    return write("Dazu hast Du zu wenig Magiepunkte!\n"), -1;
+  if (!mappingp(env = ENV(TP)->QueryProp(P_ENVIRONMENT)))
+    return write("Bug! Hier gibt es keine Temperatur!\n"), -1;
+  if (env[ENV_TEMPERATURE] < TEMPLIMIT && 
+      !strstr(file_name(environment(TP)), "feuerkneipe"))
+    return write("Hier ist es nicht heiss genug!\n"), -1;
+  if (TP->QueryProp(P_TEMPERATURE_OFFSET))
+    return write("Du hast schon eine Form von Temperaturschutz!\n"), -1;
+  write("Magisches Wasser umhuellt Deinen Koerper und kuehlt Dich ab.\n"
+      "Es bleibt solange aktiv, bis Du die Wasserhose ausziehst.\n");
+  TP->SetProp(P_TEMPERATURE_OFFSET, -20);
+  TP->AddSp(-COST);
+  temp = 1;
+  return 1;
+}
+
+int RemoveFunc(object me)
+{
+  if(temp)
+    QueryProp(P_WORN)->SetProp(P_TEMPERATURE_OFFSET, 0);
+  temp = 0;
+  QueryProp(P_WORN)->RemoveResistanceModifier();
+  return 1;
+}
+
+int WearFunc(object ruest,int silent)
+{
+  environment()->AddResistanceModifier( ([DT_WATER:-0.05]) );
+  return 1;
+}
+
+void reset()
+{
+  ::reset();
+  call_out("heal", 10 + random(200));
+} 
+
+void heal()
+{
+  object wer;
+
+  if (!is_clone(this_object()))
+    return;
+  if (objectp(wer = QueryProp(P_WORN)) && interactive(wer) &&
+      (wer->QueryProp(P_HP) < wer->QueryProp(P_MAX_HP) ||
+       wer->QueryProp(P_SP) < wer->QueryProp(P_MAX_SP)))
+  {
+    tell_object(wer, "Frisches Wasser sprudelt von " + name(WEM,1) + " in "
+        "Deinen Mund und heilt Dich.\n");
+    wer->heal_self(44);
+  }
+}

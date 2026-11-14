@@ -1,0 +1,1013 @@
+/*
+** Ayden der Masseur Yara@SL
+** ---
+** 2005-12-13  1.0  Yara  initial version
+*/
+
+#include "../def.h"
+inherit NPC + "y_npc_inh";
+#include "ayden_info.h"
+#include <food.h>
+#include <bank.h>
+
+//Anzahl der Massageschritte
+#define MASSCNT 15
+
+object kunde;
+mixed oelArray; //Liste der Oelnamen
+object oelObj; //Oel, welches der Kunde bei sich haben muss
+mixed massArray; //Hilfsarray um Reihenfolge der Massagemeldungen festzulegen
+string mKey; //Key fuer Zugriff auf Info-Mapping infoMap
+
+int money; 
+
+void reset() {
+  ZENTRALBANK->PayIn(money);
+  money=0;
+  ::reset();
+}
+
+//normale chats  
+mixed chats = ({
+  "Ayden streicht sich verlegen durchs Haar.\n",
+  "Ayden blickt Dich verwegen an.\n",
+  "Ayden riecht einfach gut!\n",
+  "Ayden zwinkert Dir zu.\n",
+  "Ayden laechelt Dich an.\n",
+  "Ayden ist einfach unwiderstehlich.\n"});
+
+//massagechats
+mixed mchats = ({
+  "Ayden konzentriert sich ganz auf die Massage.\n",
+  "Ein angenehmer Duft verteilt sich im ganzen Raum.\n",
+  "Ayden sagt: Ich hoffe es ist angenehm so.\n",
+  "Der Duft des Massageoels stroemt in Deine Nase.\n",
+  "Aydens Muskeln kommen zum Vorschein, als er noch intensiver massiert.\n",
+  "Beim Anblick von Aydens Muskeln wirst Du schwach, Du verspuerst grosse \n"
+  "Lust, Dich lange massieren zu lassen.\n"});
+
+//////////////////////////////////////////////////////////////////////////////
+// Prototypen
+string writeInfo(string str, string key);
+string writeInd();
+string propRieche();
+string infoTuch(string str);
+
+//////////////////////////////////////////////////////////////////////////////
+// AddInfo-Closures
+string infoOel(string str) {return writeInfo(str,"oel");}
+string indOel() {return writeInd();}
+string infoSeele(string str) {return writeInfo(str,"seele");}
+string indSeele() {return writeInd();}
+string infoLiebe(string str) {return writeInfo(str,"liebe");}
+string indLiebe() {return writeInd();}
+string infoEleganz(string str) {return writeInfo(str,"eleganz");}
+string indEleganz() {return writeInd();}
+string infoKoerper(string str) {return writeInfo(str,"koerper");}
+string indKoerper() {return writeInd();}
+string infoWesen(string str) {return writeInfo(str,"wesen");}
+string indWesen() {return writeInd();}
+string infoArten(string str) {return writeInfo(str,"arten");}
+string indArten() {return writeInd();}
+string infoStress(string str) {return writeInfo(str,"stress");}
+string indStress() {return writeInd();}
+string infoEntspannung(string str) {return writeInfo(str,"entspannung");}
+string indEntspannung() {return writeInd();}
+string infoDrachenoel(string str) {return writeInfo(str,"drachenoel");}
+string indDrachenoel() {return writeInd();}
+string infoMondoel(string str) {return writeInfo(str,"mondoel");}
+string indMondoel() {return writeInd();}
+string infoOrientoel(string str) {return writeInfo(str,"orientoel");}
+string indOrientoel() {return writeInd();}
+string infoDuftoel(string str) {return writeInfo(str,"duftoel");}
+string indDuftoel() {return writeInd();}
+string infoKaempfen(string str) {return writeInfo(str,"kaempfen");}
+string indKaempfen() {return writeInd();}
+string infoTag(string str) {return writeInfo(str,"tag");}
+string indTag() {return writeInd();}
+string infoVerspannung(string str) {return writeInfo(str,"verspannung");}
+string indVerspannung() {return writeInd();}
+string infoNacht(string str) {return writeInfo(str,"nacht");}
+string indNacht() {return writeInd();}
+string infoHaut(string str) {return writeInfo(str,"haut");}
+string indHaut() {return writeInd();}
+string infoTraum(string str) {return writeInfo(str,"traum");}
+string indTraum() {return writeInd();}
+string infoMassage(string str) {return writeInfo(str,"massage");}
+string indMassage() {return writeInd();}
+
+//////////////////////////////////////////////////////////////////////////////
+void create() {
+  ::create();
+  if(!is_clone(TO)) return;
+
+  create_default_npc (18);
+
+  set_living_name("ayden");
+  seteuid(getuid(this_object()));
+  AddId(({"ayden","masseur","traumtyp","traummann","mann","junge"}));
+  SetProp(P_NAME, "Ayden");
+
+  SetProp(P_INFO, "Ayden ist der Traum aller Frauen.");
+  SetProp(P_SHORT, "Ayden, der talentierte Masseur");
+  SetProp(P_LONG,
+    "Ayden hat dunkelbraune Augen, die wildes Feuer und "
+    "zugleich die Ruhe eines Sonnenaufgangs in sich tragen. "
+    "Sein Haar ist so dunkel wie seine Augen und wirkt immer ein "
+    "wenig zerzaust. Seine Haut verraet, dass er ein Kind der "
+    "Sonne ist. Ein Blick entlang seines Koerpers "
+    "spiegelt seine kraeftigen Muskeln wieder, die zugleich weich "
+    "fliessend sind, wie sein Gang. Er ist sicherlich Meister seines "
+    "Fachs!" );
+  SetProp(P_GENDER, MALE);
+  SetProp(P_RACE, "Mensch");
+  SetProp(P_SIZE, 190);
+  SetProp(P_HANDS, ({" mit einem Flaeschchen Massageoel", 
+                   QueryProp(P_HANDS)[1],QueryProp(P_HANDS)[2] }));
+  SetProp(P_ALIGN, 0);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_AGGRESSIVE, 0);
+  SetProp(P_DIE_MSG, " schaut Dich entsetzt mit gebrochenem Herzen an.\n");
+  SetProp(P_NOMAGIC,20);
+  SetProp(P_MSGIN, "wirft Dir einen Blick zu, der Deine Sinne beruehrt");
+  SetProp(P_MSGOUT, "wirft Dir einen vielsagenden Blick zu");
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_DEFAULT_INFO, "zuckt mit den Schultern.");
+  SetProp(P_LOG_INFO, "yara/ayden.info");
+  SetProp(P_SMELL, #'propRieche);  
+  SetProp( P_REJECT, ({ REJECT_DROP,""}) );
+  SetProp(P_NOATTACK, "springt geschickt aus Deiner Reichweite.\n");
+
+  kunde = 0;
+  oelArray = ({ "antistressoel",  
+                "entspannungsoel",
+                "drachenoel",
+                "mondoel",
+                "orientoel",
+                "duftoel"});
+  
+  SetChats(1, ({
+    "Ayden streicht sich verlegen durchs Haar.\n",
+    "Ayden blickt Dich verwegen an.\n",
+    "Ayden riecht einfach gut!\n",
+    "Ayden zwinkert Dir zu.\n",
+    "Ayden laechelt Dich an.\n",
+    "Ayden ist einfach unwiderstehlich.\n"}) );
+
+//TODO
+//info arbeit, job, zeit, kaffee, cocktailbar
+  AddInfo(({"bergamotte","bergamott","bergamottoel","mandel","mandeloel","mandeloel","lavendel"}),
+    "Im Silberland gibt es viele, die sich damit besser auskennen als ich.","sagt: ",0);
+  AddInfo(({"frauen","frau"}),"Ich biete meine Kunst nur Frauen an.","sagt: ",0);
+  AddInfo(({"maennern","maenner","mann"}),"Maenner massiere ich nicht.","sagt: ",0);
+  AddInfo(({"massagetuechern","tuechern","massagetuch","massagetuecher","tuch","tuecher"}),#'infoTuch,"sagt: ",0);
+  AddInfo(({"massageoelen","massageoel","oel","oele","oelen","massageoele"}),#'infoOel,#'indOel,1);
+  AddInfo(({"seele","seelen","geist"}),#'infoSeele,#'indSeele,1);
+  AddInfo(({"liebe","lieben"}),#'infoLiebe,#'indLiebe,1);
+  AddInfo(({"eleganz"}),#'infoEleganz,#'indEleganz,1);
+  AddInfo(({"koerper"}),#'infoKoerper,#'indKoerper,1);
+  AddInfo(({"wesen","schoenheit"}),#'infoWesen,#'indWesen,1);
+  AddInfo(({"sortimenten","arten","art","mischungen","mischung","sortiment","sortimente"}),#'infoArten,#'indArten,1);
+  AddInfo(({"antistressoel","stressoel","stress"}),#'infoStress,#'indStress,1);
+  AddInfo(({"entspannungsoel","entspannung"}),#'infoEntspannung,#'indEntspannung,1);
+  AddInfo(({"drachenoel","drache","drachen"}),#'infoDrachenoel,#'indDrachenoel,1);
+  AddInfo(({"geheimnissen","mondoel","mond","geheimnisse","geheimnis"}),#'infoMondoel,#'indMondoel,1);
+  AddInfo(({"orient","orientoel"}),#'infoOrientoel,#'indOrientoel,1);
+  AddInfo(({"duftoel","duft"}),#'infoDuftoel,#'indDuftoel,1);
+  AddInfo(({"gegnern","drachenkaempfen","kaempfen","kampf","gegner"}),#'infoKaempfen,#'indKaempfen,1);
+  AddInfo(({"tagen","tag","tage"}),#'infoTag,#'indTag,1);
+  AddInfo(({"verspannung","verspannungen","nachfrage","nacken"}),#'infoVerspannung,#'indVerspannung,1);
+  AddInfo(({"nacht","nachts","sex"}),#'infoNacht,#'indNacht,1);
+  AddInfo(({"pflegen","haut","pflege"}),#'infoHaut,#'indHaut,1);
+  AddInfo(({"traum","traeume","traeumen"}),#'infoTraum,#'indTraum,1);
+  AddInfo(({"massieren","massagen","massage","kunst"}),#'infoMassage,#'indMassage,1);
+  
+  AddLibrary(NPC + "bar_info.lib",10);
+
+  AddDetail(({"augen","auge","feuer","ruhe","aufgewecktheit","sonnenaufgang"}), 
+    "Aydens Augen sind wild wie Feuer und doch ruhig wie ein Sonnenaufgang.\n");
+  AddDetail(({"haar","haare"}),
+    "Das Haar ist dunkelbraun und leicht zerzaust.\n");
+  AddDetail(({"haut","kind","sonne"}),
+    "Aydens Haut ist sonnengebraeunt.\n");
+  AddDetail(({"koerper","blick","muskeln","muskel"}),
+    "Aydens Koerper ist das, was man perfekt nennen koennte.\n");
+  AddDetail(({"gang"}),
+    "Er ist weich und fliessend.\n");
+  AddDetail(({"meister"}),
+    "Ein wahrer Meister.\n");
+  AddDetail(({"fach","fachs"}),
+    "Ayden ist ein Masseur.\n");
+
+
+  AddCmd(({"waehle", "waehl"}), "cmdWaehle");
+
+  AddCmd(({"beruehre","beruehr"}), "cmdBeruehr");
+//  AddCmd(({"kuess", "kuesse","knutsch","liebe", "lieb"}), "cmdLiebe");
+  AddCmd(({"zerzause","zerzaus","zause","zaus"}), "cmdZerzause");
+  AddCmd(({"kuschl","kuschel","kuschele","kuschle"}), "cmdKuschel");
+  AddCmd(({"laechl","laechle","laechel"}), "cmdLaechel");
+  AddCmd(({"wein","weine"}), "cmdWeine");
+  AddCmd(({"flausche","flausch"}), "cmdFlausche");
+  AddCmd(({"kuesse","kuess","knutsch","knutsche"}), "cmdKuesse");
+  AddCmd(({"streichel","streichel","streichle","streichele"}), "cmdStreichel");
+  AddCmd(({"himmel","himmle"}), "cmdHimmel");
+  AddCmd(({"hopse","hops","huepf","huepfe"}), "cmdHopse");
+  AddCmd(({"tanz","tanze"}), "cmdTanze");
+  AddCmd(({"umarme","umarm"}), "cmdUmarme");
+  AddCmd(({"schmuse","schmus"}), "cmdSchmuse");
+  AddCmd(({"knabbere","knabber"}), "cmdKnabbere");
+
+}
+
+
+
+//////////////////////////////////////////////////////////////////////////////
+// writeInfo ist fuer die Unterscheidung des Geschlechts
+// bei der AddInfo-Antwort verantwortlich
+string writeInfo(string str, string key) {
+  string tstr;
+  
+  if(!member(infoMap,key)) 
+    return "Da stimmt was nicht, wende Dich bitte an Magierin Yara.";
+  
+  if(kunde != 0)
+    return "Einen Moment bitte, ich massiere gerade " + kunde->Name() + ".";
+
+  if(TP->QueryProp(P_GENDER)!=FEMALE) {
+    if(member(infoMap,"m_"+key)) mKey = "m_"+key;
+    else mKey = "stdMInfo";
+  }
+  else mKey = key;
+
+  //Ausgabe der Frage
+  say(TP->Name() + " fragt Ayden nach " + capitalize(str) + ".\n",TP);
+
+  //Ausgabe der Meldung an den Raum (in infoMap[mKey,2])
+  tstr = regreplace(infoMap[mKey,2], "_TPN", TP->Name(), 1);
+  say(break_string(tstr,78),TP);
+
+  return infoMap[mKey,0];
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// writeInd ist fuer die Unterscheidung des Geschlechts
+// beim AddInfo-Indent verantwortlich
+string writeInd() {
+  if(kunde != 0) return "meint laechelnd: ";
+  return infoMap[mKey,1]; //mKey wurde in writeInfo gesetzt
+}
+
+//////////////////////////////////////////////////////////////////////////////
+string infoTuch(string str) {
+  object ob;
+  string tstr;
+  int ret;
+  
+  if(TP->QueryProp(P_GENDER) != FEMALE)
+    return "Die Tuecher sind alle schon reserviert.";
+
+  for(ob=first_inventory(TP);ob;ob=next_inventory(ob)) {
+    if(ob->id("tuch")) 
+      if(ob->id("\ny_tuch"))
+        return "Oh ich sehe, Du hast schon ein Tuch, " + TP->Name() + ".";
+ }
+
+  ob = 0;
+  if( ob=clone_object(OBJ + "tuch") ) {
+    ret = ob->move(TP, M_GET);
+    if(ret == ME_TOO_HEAVY || ret == ME_TOO_MUCH)
+      return "Du kannst leider kein Tuch mehr tragen, "
+             +TP->Name(RAW)+".";
+  }
+  else return "Huch, ich habe keine frischen Tuecher mehr.";
+
+  say("Ayden gibt " + TP->Name() + " ein Tuch.\n",TP);
+  write("Ayden gibt Dir ein Tuch.\n");
+
+  return "Hier hast Du ein schoenes flauschiges Tuch, " + TP->Name() + ".";
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Property P_SMELL
+string propRieche() {
+  say(TP->Name()+" riecht an Ayden.\n",TP);
+  if(TP->QueryProp(P_GENDER) == FEMALE)
+    return "Du naeherst Dich Ayden moeglichst unauffaellig und atmest "
+      +"seinen Geruch ein.\nMhmmm!! Er riecht so gut, dass Du am "
+      +"liebsten immer in seiner Naehe waerst.\n";
+  
+  else
+    return "Du kannst Aydens Geruch nicht wirklich einordnen, ahnst aber, "
+      + "dass er wohl\nziemlich anziehend auf Frauen wirken muss.\n";
+}
+
+
+//////////////////////////////////////////////////////////////////////////////
+void trinke(object ob) {
+  int i;
+  if(!ob) return;
+
+  i = random(10);
+  switch (i) {
+    case 0: case 1: case 2: command("trinke cocktail");
+            break;
+    case 3: case 4: case 5: command("nippe cocktail");
+            break;
+    case 6: case 7: case 8: command("schluerfe cocktail");
+            break;
+    case 9: command("trinke cocktail aus");
+  }
+
+  if(ob) call_out("trinke", random(30)+5, ob);
+}
+
+//////////////////////////////////////////////////////////////////////////////
+void give_notify(object ob) {
+  object tmp;
+  int cnt;
+
+  if(ob->id("\ny_tuch")) {
+    tell_room(environment(TO), "Ayden raeumt ein Tuch weg.\n");
+    ob->remove();
+  }
+  else if(ob->id("\ny_cocktail")) {
+    for(cnt=0,tmp=first_inventory(TO);tmp;tmp=next_inventory(tmp)) {
+      if(ob->id("\ny_cocktail")) cnt++;
+    }      
+    if(cnt > 1) {
+      tell_room(environment(TO), "Ayden hat schon einen Cocktail.\n"
+                                  "Ayden legt "+ob->name(WEN, 0)+ " ab.\n");
+      ob->move(environment(TO), M_NOCHECK);
+    }
+    else {
+      tell_room(environment(TO), "Ayden freut sich.\n");
+      trinke(ob);
+    }
+  }
+  else if(ob->id("getraenk") ||
+          ob->id("drink") ||
+          ob->id("wasser") ||
+          ob->id("trank") ||
+          ob->id("flasche") ||
+          ob->id("glas") ||
+          ob->id("milch") ||
+          ob->id("kaffee") ||
+          ob->id("becher")) {
+    tell_room(environment(TO), "Ayden freut sich und trinkt "
+                                +ob->name(WEN, 1)+" aus.\n");
+    ob->remove();
+  }
+  else if(ob->QueryProp(P_FOOD_INFO) ||
+          ob->id("kuchen") ||
+          ob->id("keks") ||
+          ob->id("bonbon") ||
+          ob->id("eis") ||
+          ob->id("nahrung") ||
+          ob->id("food")) {
+    tell_room(environment(TO), "Ayden freut sich und isst "
+                                +ob->name(WEN, 1)+" auf.\n");
+    ob->remove();
+  }
+  else {
+    tell_room(environment(TO), "Ayden moechte das nicht tragen und legt "
+                               +ob->name()+ " ab.\n");    
+    ob->move(environment(TO), M_NOCHECK);
+  }
+}
+  
+
+//////////////////////////////////////////////////////////////////////////////
+// benutzt von liege.c
+object getKunde() {
+  return kunde;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Vorbedingungen fuer Massage
+string checkConditions() { 
+  object ob, liege;
+  status oel, tuch;
+
+  oel=0;
+  tuch=0;
+
+  if(TP->QueryProp(P_GENDER) != FEMALE)
+    return "Ayden sagt veraechtlich: Ich massiere keine Maenner.\n";
+
+  if( kunde != 0 && present(kunde->Name()) )
+    return break_string("Ich massiere grad " + kunde->Name() + ". "
+                        "Warte bitte noch ein wenig, "+TP->Name()+".",
+                        78,"Ayden sagt: ");
+
+  for( ob=first_inventory(TP); ob; ob=next_inventory(ob) ) {
+    if(ob->id("\ny_oel") ) {
+      oelObj = ob; //dieses Objekt wird gebraucht zum Aktivieren des Duftes
+      continue; }
+    if( ob->id("\ny_tuch") && ob->QueryWorn() ) {
+      tuch=1;
+      continue; }
+  }
+  if( !tuch )
+    return "Ayden sagt: Du traegst noch kein Massagetuch, "+TP->Name()+".\n";
+  if( !oelObj ) 
+    return "Ayden sagt: Du hast noch kein Oel gewaehlt, "+TP->Name()+".\n";
+
+  if( !(liege = present("\ny_liege", environment(TO))) )
+    return "Ayden fragt: Huch, wo ist meine Massageliege?\n";
+
+  if( liege->get_liegender() != TP )
+    return "Ayden sagt: Leg Dich doch bitte auf die Liege, "+TP->Name()+".\n";
+
+  for( ob=first_inventory(TP); ob; ob=next_inventory(ob) ) {
+    string armour;
+    armour = ob->QueryProp(P_ARMOUR_TYPE);
+    if( armour != AT_RING  && armour != AT_AMULET && armour != AT_MISC )
+      if( ob->QueryProp(P_WORN) )
+        return break_string("Du musst schon Deine Ruestung ausziehen, "
+          "wenn ich Dich massieren soll, "+TP->Name()+". Deinen Schmuck darfst Du "
+          "natuerlich anbehalten.",
+          78,"Ayden meint: "); 
+  }
+  
+  if(TP->QueryMoney() < 1200)
+    return break_string("Die Massage kostet 1200 Muenzen, leider hast Du "
+              "nicht so viel bei Dir, "+TP->Name()+".", 78, "Ayden sagt: ");
+  else {
+    TP->AddMoney(-1200);
+    money+=1200;
+    write("Du bezahlst 1200 Muenzen fuer eine Massage.\n");
+    log_file(LOG+"massage.log", dtime()+" "+TP->Name(RAW) +".\n");
+  }
+
+//Alle Konditionen erfuellt
+  return "";
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Massagesequenz
+void massage(int i) {
+  //Leerzeilen einfuegen (pro Sekunde eine, jew. 4 zw. einzelnen 
+  //Massageschritten
+  if(i%4 != 0)   
+    write("\n");
+  else
+    write( break_string(massMap[massArray[i/4],0],78) );
+//    say(   break_string( massMap[massArray[i/4],1],78 ) );
+
+  i += 1;
+
+  if(i<(MASSCNT + (MASSCNT-1)*3)) call_out("massage",1, i );
+  else {
+    kunde = 0;
+    say(BS("Ayden beendet die Massage von "+TP->Name()+"."),TP);
+    SetChats(1,chats);
+  }
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Initialisierung der Massagesequenz (Reihenfolge)
+void massageStart() {
+  int j,i,tmp,t;
+  string s;
+
+  //Abbruch wenn Bedingungen nicht erfuellt sind
+  s = checkConditions();
+  if( s != "" ) {
+    say(s);
+    return;
+  }
+
+  kunde = TP;
+
+  //Duft aktivieren, der nach einer festgelegten Zeit verschwindet
+  oelObj->dufte(); 
+    
+  massArray = allocate(MASSCNT);
+  massArray[0] = 1; //die ersten zwei Massageschritte sind immer gleich
+  massArray[1] = 2;
+  massArray[MASSCNT-1] = sizeof(massMap); //immer der gleiche Abschluss
+
+  //zufaellige Reihenfolge der Massageschritte ohne sofortige Wiederholung
+  tmp = random(sizeof(massMap)-2-1) +3; 
+  for(j=2;j<MASSCNT-1;j++) {
+    massArray[j] = tmp;
+    do {t = random(9)+3;} while(t==tmp);
+    tmp = t;
+  }
+
+  //Start der Sequenz
+  say(BS("Ayden beginnt "+TP->Name()+" zu massieren."),TP);
+  call_out("massage",1,0);
+
+  //neue Chats
+  SetChats(20,mchats);
+
+}
+
+//////////////////////////////////////////////////////////////////////////////
+void cleanUp() {
+  object tuch;
+
+  while(tuch=present("\ny_tuch", environment(TO))) {
+    tuch->remove();
+    say("Ayden raeumt ein Tuch weg.\n");
+  }
+}
+
+//////////////////////////////////////////////////////////////////////////////
+void catch_tell(string str) {
+  string pln;
+  object pl;
+
+  if(!str) return;
+
+  if( !sscanf(str,"%s sagt: massiere mich ayden",pln) &&
+      !sscanf(str,"%s sagt: massiere mich",pln) &&
+      !sscanf(str,"%s sagt: massier mich",pln) &&
+      !sscanf(str,"%s sagt: zu ayden massiere mich",pln) &&
+      !sscanf(str,"%s sagt: zu ayden massier mich",pln) &&
+      !sscanf(str,"%s sagt: ayden massiere mich",pln) &&
+      !sscanf(str,"%s sagt: massier mich ayden",pln) &&
+      !sscanf(str,"%s sagt: ayden massier mich",pln) )
+    return;
+  else
+    massageStart();
+
+  return;
+}
+
+
+
+
+//////////////////////////////////////////////////////////////////////////////
+// Auswaehlen eines Oels
+int cmdWaehle(string str) {
+  int i;
+  object ob;
+  notify_fail("Welches Oel moechtest Du waehlen?\n");
+
+  if( TP->QueryProp(P_GENDER) != FEMALE ) {
+    say(TP->Name()+" will sich ein Oel auswaehlen.\n");
+    say("Ayden sagt: Das Massageoel ist nur fuer die "
+        "zarte Haut einer Frau bestimmt.\n");
+    
+    return 1;
+  }
+
+  //immer nur ein oelobjekt im spieler
+  for(ob=first_inventory(TP);ob;ob=next_inventory(ob)) {
+    if(ob->id("\ny_oel")) {
+      ob->remove(1);
+      break;
+    }
+  }
+
+  for(i=0;i<sizeof(oelArray);i++) {
+    if( (str == oelArray[i]) || (str == (oelArray[i] + " aus")) ) {
+      if( oelObj=clone_object(OBJ + "oel") ) {
+        oelObj->move( TP ,M_NOCHECK );
+        oelObj->setOel(str); //Art des Oels setzen
+
+        write("Du waehlst das "+capitalize(str)+" aus.\n");
+        say(TP->Name()+" waehlt das "+capitalize(str)+" aus.\n",TP);
+        say("Ayden sagt: Eine gute Wahl.\n");
+
+      }
+      return 1;
+    }
+  }
+  return 0;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+int cmdBeruehr(string str) {
+  notify_fail("Wen willst Du beruehren?\n");
+  if (!id(str)) return 0;
+  if(TP->QueryProp(P_GENDER) == FEMALE) {
+    write(
+      "Du kannst Dich nicht mehr zurueck halten und musst Ayden einfach beruehren.\n"
+      "Du spuerst die feinen Haerchen auf seinem Arm.\n"
+      "Ayden wirft Dir einen zaertlichen Blick zu, laechelt Dich an und streicht\n"
+      "sanft ueber Deine Wange.\n"
+      "Dir laeuft ein wohliger Schauer ueber den Ruecken.\n");
+    say(TP->Name(WER)+" beruehrt Ayden.\n"
+      "Ayden wendet sich " +TP->Name(WEN)+ " zu und streicht sanft ueber "
+      + TP->QueryPossPronoun(FEMALE,WEN) + " Wange.\n",TP);
+  }
+  else {
+    write("Ayden sagt muerrisch: Finger weg!\n");
+    say(TP->Name(WER)+" versucht Ayden zu beruehren.\n"
+      +"Ayden sagt muerrisch: Finger weg!\n",TP);
+  }      
+  return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+int cmdZerzause(string str){
+  notify_fail("Wen willst Du zerzausen?\n");
+  if (!id(str)) return 0;
+  if(TP->QueryProp(P_GENDER) == FEMALE) {
+    write("Mutig gehst Du auf Ayden zu und zerzaust ihm das Haar.\n"
+      "Er schmunzelt und faehrt Dir anschliessend mit der Hand durch "
+      "Dein Haar.\n"
+      "Er fluestert Dir zu: Seidenweich... ein Traum!\n"
+      "Er schaut Dir tief in die Augen.\n");
+    say(TP->Name(WER) + " geht auf Ayden zu und zerzaust ihm das Haar.\n"
+      "Ayden schmunzelt, faehrt ebenfalls durch " + TP->Name(WESSEN) +
+      " und fluestert " + TP->QueryPronoun(WEM) + " etwas zu.\n",TP);
+  }
+  else {
+    write("Ayden schlaegt Deine Hand weg und sagt: Hey, lass das!\n");
+    say(TP->Name(WER) + " versucht Aydens Haar zu zerzausen.\n"
+      "Ayden schlaegt " + TP->Name(WESSEN) + " Hand weg und sagt: "
+      "Hey, lass das!\n",TP);
+  }
+  return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+int cmdKuschel(string str) {
+    notify_fail("An wen willst Du Dich ankuscheln?\n");
+    if (!id(str)) return 0;
+
+  if(TP->QueryProp(P_GENDER) == FEMALE) {
+    write("Du kuschelst Dich an Ayden an.\n"
+          "Ayden legt sanft seinen Arm um Deine Taille und drueckt Dich sacht an sich.\n");
+    say(TP->Name(WER) + " kuschelt sich an Ayden an.\n"
+        "Ayden legt sanft seinen Arm um " + TP->Name(WESSEN) + " Taille und "
+        "drueckt sie sacht an sich.\n",TP);
+  }
+  else {
+    write("Ayden schubst Dich weg und schaut Dich schief von der Seite an.\n");
+    say(TP->Name(WER) + " kuschelt sich an Ayden an.\n"
+        "Ayden schubst " + TP->Name(RAW) + " weg und schaut ihn schief von der Seite an.\n",TP);
+  }
+
+  return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+int cmdLaechel(string str) {
+  string what;
+  
+	notify_fail("Wen moechtest Du anlaecheln?\n");
+
+  if(!str) return 0;
+  if(sscanf(str,"%s an",what) == 1) str = what;
+
+	if (!id(str)) return 0;
+
+  if(TP->QueryProp(P_GENDER) == FEMALE) {
+    write("Du laechelst Ayden an und versuchst ihm den hinreissensten "
+	    "Blick zuzuwerfen,\nden Deine Augen faehig sind zu produzieren... \n"
+	    "Da! Ayden macht einen Schritt auf Dich zu und es kribbelt in deinem "
+	    "Bauch.\nJetzt ist er Dir ganz nahe und blickt Dir tief in die Augen.\n");
+    say(TP->Name(WER) + " schenkt Ayden ein zauberhaftes Laecheln.\n",TP);
+  }
+  else return 0;
+
+  return 1;
+}
+
+
+//////////////////////////////////////////////////////////////////////////////
+int cmdWeine(string str) {
+  string what;
+  
+	notify_fail("Bei wem moechtest Du Dich ausweinen?\n");
+
+  if(!str) return 0;
+	if(sscanf(str,"bei %s aus",what) == 1) str = what;
+	else if(sscanf(str,"%s aus",what) == 1) str = what;
+	
+	if (!id(str)) return 0;
+
+  if(TP->QueryProp(P_GENDER) == FEMALE) {
+  	write("Du wirfst Dich schluchzend und laut weinend Ayden in "
+	    "die Arme und bist totungluecklich.\n"
+	    "Ayden wischt Dir liebevoll mit einem Taschentuch die Traenen "
+	    "weg\nund meint aufmunternd: Ist doch alles gut.\n"
+	    "Du weinst Dich bei Ayden aus.\n");
+    say(TP->Name(WER) + " weint sich bei Ayden aus.\n"
+      "Ayden wischt ihr liebevoll mit einem Taschentuch die Traenen "
+      "weg\nund meint aufmunternd: Ist doch alles gut.\n",TP);
+  }
+  else return 0;
+  
+  return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+int cmdFlausche(string str) {
+    notify_fail("Wen willst Du flauschen?\n");
+    if (!id(str)) return 0;
+
+  if(TP->QueryProp(P_GENDER) == FEMALE) {
+    write("Du gehst auf Ayden zu und flauschst ihn sanft.\n");
+    write(break_string(
+      "Ayden lehnt seinen Kopf laechelnd an Deinen und streift Dir "
+      "zaertlich mit den Fingerspitzen vom Hals entlang zum Kinn.",78));
+    say(TP->Name(WER) + " flauscht Ayden.\n",TP);
+    say(break_string(
+      "Ayden lehnt seinen Kopf an " + TP->Name(WESSEN) + " und streift ihr "
+      "zaertlich mit den Fingerspitzen vom Hals entlang zum Kinn.",78),TP);
+  }
+  else {
+    write("Ayden wirft Dir einen veraechtlichen Blick zu.\n"
+          "Du haelst erschrocken inne.\n");
+    say(break_string(
+      TP->Name(WER) + " versucht Ayden zu flauschen, haelt aber erschrocken "
+      "inne, als er Aydens veraechtlichen Blick bemerkt.",78),TP);
+  }
+
+  return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+int cmdKuesse(string str) {
+    notify_fail("Wen willst Du kuessen?\n");
+    if (!id(str)) return 0;
+
+  if(TP->QueryProp(P_GENDER) == FEMALE) {
+    write(break_string(
+      "Du fuehlst ein Kribbeln in Deinem Bauch, als Du auf Ayden "
+      "zugehst und ihm frech Deine Lippen auf seine drueckst. Als Du "
+      "merkst wie er sanft an Deinen Lippen knabbert und liebevoll mit "
+      "seiner Zunge ueber selbige streift, durchflutet Dich nur noch ein "
+      "unbaendiges Gefuehl puren Gluecks.",78));
+    say(TP->Name(WER) + " und Ayden kuessen sich innig.\n",TP);
+  }
+  else {
+    write("Ayden ruft: 'Igitt!' und spuckt angewidert aus.\n");
+    say(TP->Name(WER) + " kuesst Ayden.\n"
+      "Ayden ruft: 'Igitt!' und spuckt angewidert aus.\n",TP);
+  }
+
+  return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+int cmdStreichel(string str) {
+    notify_fail("Wen willst Du streicheln?\n");
+    if (!id(str)) return 0;
+
+  if(TP->QueryProp(P_GENDER) == FEMALE) {
+    write(break_string(
+      "Achtsam streichelst Du ueber Aydens Arm und blickst ihn "
+      "vertraeumt an, da zieht er Dich zur Seite und streift Dir ueber "
+      "den Ruecken, waehrend er zaertlich an Deinem Hals knabbert.",78));
+    say(TP->Name(WER) + " und Ayden treten etwas abseits und streicheln sich "
+      "zaertlich.\n",TP);
+  }
+  else {
+    write("Ayden wirft Dir einen veraechtlichen Blick zu.\n"
+          "Du haelst erschrocken inne.\n");
+    say(break_string(
+      TP->Name(WER) + " versucht Ayden zu streicheln, haelt aber erschrocken "
+      "inne, als er Aydens veraechtlichen Blick bemerkt.",78),TP);
+  }
+
+  return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+int cmdHimmel(string str) {
+  string what;
+  
+  notify_fail("Wen willst Du anhimmeln?\n");
+  
+  if(!str) return 0;
+
+  if(sscanf(str,"%s an",what) == 1) str = what;
+  
+  if (!id(str)) return 0;
+
+  if(TP->QueryProp(P_GENDER) == FEMALE) {
+    write(break_string(
+      "Du himmelst Ayden mit verklaerten Augen an, was ihm wirklich gut "
+      "zu gefallen scheint.",78));
+    say(TP->Name(WER) + " himmelt Ayden an.\n",TP);
+  }
+  else {
+    write(break_string(
+      "Du himmelst Ayden mit verklaerten Augen an, was ihm nicht wirklich "
+      "zu gefallen scheint.",78));
+    say(break_string(
+      TP->Name(WER) + " himmelt Ayden mit verklaerten Augen an, was Ayden "
+      "nicht wirklich zu gefallen scheint.",78),TP);
+  }
+
+  return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+int cmdHopse(string str) {
+  string what;
+  
+  notify_fail("Um wen willst Du hopsen?\n");
+  
+  if(!str) return 0;
+
+  if(sscanf(str,"um %s",what) == 1) str = what;
+  
+  if (!id(str)) return 0;
+
+  if(TP->QueryProp(P_GENDER) == FEMALE) {
+    write(break_string(
+      "Uebermuetig hopst Du um Ayden herum und im passenden Augenblick "
+      "faengt er Dich auf und dreht sich lachend mit Dir einmal im Kreis.",78));
+    say(break_string(
+      TP->Name(WER) + " hopst uebermuetig um Ayden herum und im "
+      "passenden Augenblick faengt er sie auf und dreht sich "
+      "lachend mit ihr einmal im Kreis.",78),TP);
+  }
+  else return 0;
+    
+  return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+int cmdTanze(string str) {
+  string what;
+  
+  notify_fail("Mit wem willst Du tanzen?\n");
+  
+  if(!str) return 0;
+
+  if(sscanf(str,"mit %s",what) == 1) str = what;
+  
+  if (!id(str)) return 0;
+
+  if(TP->QueryProp(P_GENDER) == FEMALE) {
+    write(break_string(
+      "Du tanzt mit Ayden eine leidenschaftlichen Tango.",78));
+    say(break_string(
+      TP->Name(WER) + " schnappt sich Ayden und die "
+      "beiden tanzen einen leidenschaftlichen Tango.",78),TP);
+  }
+  else {
+    write(break_string(
+      "Ayden will nicht mit Dir tanzen.",78));
+    say(break_string(
+      TP->Name(WER) + " versucht mit Ayden zu tanzen, aber Ayden "
+      "weigert sich vehement.",78),TP);
+  }
+
+  return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+int cmdUmarme(string str) {
+  notify_fail("Mit wem willst Du tanzen?\n");
+  
+  if (!id(str)) return 0;
+
+  if(TP->QueryProp(P_GENDER) == FEMALE) {
+    write(break_string(
+      "Du lehnst Dich sanft an Ayden an, woraufhin er dich fest, aber "
+      "liebevoll umarmt. Du fuehlst Dich so geborgen und sicher, dass Du "
+      "Deinen Kopf gegen seinen lehnst und zu traeumen beginnst...",78));
+    say(break_string(
+      TP->Name(WER) + " wird zaertlich von Ayden umarmt.",78),TP);
+  }
+  else {
+    write(break_string(
+      "Du versuchst Ayden zu umarmen, aber er weicht geschickt aus.",78));
+    say(break_string(
+      TP->Name(WER) + " versucht Ayden zu umarmen, aber Ayden weicht "
+      "geschickt aus.",78),TP);
+  }
+
+  return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+int cmdSchmuse(string str) {
+  string what;
+  
+  notify_fail("Mit wem willst Du schmusen?\n");
+  
+  if(!str) return 0;
+
+  if(sscanf(str,"mit %s",what) == 1) str = what;
+
+  if (!id(str)) return 0;
+
+  if(TP->QueryProp(P_GENDER) == FEMALE) {
+    write(break_string(
+      "Ayden lehnt seine Stirn an Deine und streift sanft mit seiner "
+      "Nase ueber Deine, bis letztendlich euer beider Stirn und Nasen "
+      "zu einer Linie geworden sind und Ayden geniesserisch die Augen "
+      "geschlossen hat.",78));
+    say(break_string(
+      TP->Name(WER) + " schmust zaertlich mit Ayden.",78),TP);
+  }
+  else {
+    write(break_string(
+      "Du versuchst mit Ayden zu schmusen, aber er weicht geschickt aus.",78));
+    say(break_string(
+      TP->Name(WER) + " versucht mit Ayden zu schmusen, aber Ayden weicht "
+      "geschickt aus.",78),TP);
+  }
+
+  return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+int cmdKnabbere(string str) {
+  string what;
+  notify_fail("Was willst Du knabbern?\n");
+  
+  if(!str) return 0;
+  if(sscanf(str,"an %s",what) == 1) str = what;
+  if (!id(str)) return 0;
+
+  if(TP->QueryProp(P_GENDER) == FEMALE) {
+    write(break_string(
+      "Du naeherst Dich Ayden und knabberst zaertlich an seinem "
+      "Ohr. Ayden umarmt Dich und haucht sanfte Kuesse auf Deinen "
+      "Hals.",78));
+    say(break_string(
+      TP->Name(WER) + " knabbert Ayden am Ohr.",78),TP);
+  }
+  else {
+    write(break_string(
+      "Du versuchst an Aydens Ohr zu knabbern, aber er weicht "
+      "geschickt aus.",78));
+    say(break_string(
+      TP->Name(WER) + " versucht an Aydens Ohr zu knabbern, aber "
+      "Ayden weicht geschickt aus.",78),TP);
+  }
+
+  return 1;
+}
+
+
+// Reactions
+void StartReaction(string verb, string gruppe, string adverb, int touch) {
+  if (find_call_out("reaction") != -1) return;
+  switch (gruppe) {
+    case "aengstlich":
+        call_out("reaction", 0, TP,
+        "sagt: Hab keine Angst "+TP->Name()+".",
+        "sagt: Hab keine Angst "+TP->Name()+".");
+      break;
+    case "aergerlich":
+//        call_out("reaction", 0, TP,
+//        "poliert unbeteiligt ein paar Glaeser.",
+//        "poliert unbeteiligt ein paar Glaeser.");
+        break;
+    case "albern":
+        call_out("reaction", 0, TP,
+        "kichert leise.",
+        "kichert leise.");
+      break;
+    case "fies":
+      call_out("reaction", 0, TP,
+        "sagt: Hey lass das!",
+        "sagt: Hey lass das, "+TP->Name()+"!");
+      break;
+    case "frech":
+      call_out("reaction", 0, TP,
+        "grinst Dich an.",
+        "grinst "+TP->Name()+" an.");
+      break;
+    case "froh":
+      call_out("reaction", 0, TP,
+        "strahlt Dich an.", 
+        "strahlt "+TP->Name()+" an.");
+      break;
+    case "intim":
+      call_out("reaction", 0, TP,
+        "sagt: Ich muss noch arbeiten, aber vielleicht nach Dienstschluss?", 
+        "sagt: Ich muss noch arbeiten, aber vielleicht nach Dienstschluss?");
+      break;
+    case "nett":
+      call_out("reaction", 0, TP,
+        "laechelt Dich an.",
+        "laechelt "+TP->Name()+" an.");
+      break;
+    case "neutral":
+      call_out("reaction", 0, TP,
+        "steht herum und sieht gut aus.", 
+        "steht herum und sieht gut aus.");
+      break;
+    case "traurig":
+      call_out("reaction", 0, TP,
+        "troestet Dich.",
+        "troestet "+TP->Name()+".");
+      break;
+  }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch) {
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void reaction(object ob, string macher, string andere) {
+  if (present(ob, ENV(TO))) {
+    tell_object(ob, BS(Name(WER, 1)+" "+macher));
+    tell_room(ENV(TO), BS(Name(WER, 1)+" "+andere), ({ob}));
+  }
+}

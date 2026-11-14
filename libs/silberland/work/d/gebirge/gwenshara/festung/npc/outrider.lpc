@@ -1,0 +1,192 @@
+inherit "std/mnpc";
+
+#include <properties.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include "../def.h"
+
+#define EVIL_THRESH   (-800)   // ab hier gilt man ihm als „boese“
+
+void create() {
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein Paladinreiter der Goldenen Rose");
+  SetProp(P_LONG,
+    "Ein wachsamer Reiter in hellem Kettenhemd und mit einem wettergegerbten Mantel. "
+    "Auf der Brust prangt die goldene Rose. Er haelt die Zuegel eines gedrungenen "
+    "Bergponys und traegt Schwert und Schild griffbereit. Sein Blick ist ruhig, aber fest.");
+  SetProp(P_NAME, "Paladinreiter");
+  SetProp(P_GENDER, MALE);
+  AddId(({"paladin","vorreiter","paladinvorreiter","ritter","wache", "reiter"}));
+  create_default_npc(25);
+
+  SetProp(P_HANDS, ({
+    " mit seinem Schwert",  QueryProp(P_HANDS)[1], DT_SLASH,
+  }));
+
+  SetProp(P_RACE, "Mensch");
+  SetProp(P_SIZE, 175);
+  SetProp(P_WEIGHT, 85000);
+  SetProp(P_ALIGN, 1200);    
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_HEAL, 3);
+  SetProp(P_AGGRESSIVE, 0);
+  SetProp(P_WIMPY, 0);
+  SetProp(P_NOMAGIC, 0);
+
+  // Widerstaende – Paladin-like
+  SetProp(P_RESISTANCE_STRENGTHS , 
+    ([ DT_HOLY:-0.25, DT_UNHOLY:0.25, DT_TERROR:-0.20, DT_MIND:-0.10, DT_COLD:-0.05 ]) );
+
+  SetProp(P_MSGIN, "reitet heran");
+  SetProp(P_MSGOUT, "reitet davon");
+  SetProp(P_MMSGIN, "tritt aus dem Nebel, die Rose auf der Brust glimmend");
+  SetProp(P_MMSGOUT, "verschwindet im Nebel, die Hufe klingen leise");
+
+  SetProp(P_DIE_MSG,  " sinkt auf ein Knie, senkt das Haupt und stuerzt dann zu Boden.\n");
+  SetProp(P_NOCORPSE, 0 );
+  SetProp(P_MURDER_MSG, "Im Namen der Dusty wirst du gerichtet werden!");
+  SetProp(P_KILL_NAME, "Paladinreiter");
+  SetProp(P_KILL_MSG, "Gerechtigkeit kennt keine Furcht.");
+
+  AddInfo(DEFAULT_INFO, "mustert Dich wachsam und hebt die Hand zum Gruss.\n");
+
+  AddInfo( ({"orden","rose","banner"}),
+    "Der Orden der Goldenen Rose schuetzt diese Wege und dient dem Licht.",
+    "erklaert: ");
+
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    "Der Paladinreiter schuettelt den Kopf: \"Ich trage keine fremden Lasten.\".\n" }) );
+
+  // „Smite Evil“ – seltener heiliger Schlag
+  SetProp(P_SPELLRATE, 10);
+  AddSpell(1, 250,
+    Name(WER, 1)+" ruft das Licht an und ein Strahl faehrt auf Dich hernieder!\n",
+    Name(WER,1)+" hebt das Schwert, und ein Strahl heiligen Lichts faehrt auf @WEN hernieder!\n",
+    DT_HOLY, ([ SP_SHOW_DAMAGE:1 ]) );
+
+  SetChats(3, ({
+    Name(WER, 1)+" richtet das Banner an seiner Lanze.\n",
+    "Ein leises Gebet von "+name(WEM, 1)+" verhallt im Wind.\n",
+    "Die goldene Rose an der Brust von "+name(WEM, 1)+" glimmt matt.\n"
+  }) );
+  SetAttackChats(8, ({
+    "Der Vorreiter ruft: \"Zurueck in die Schatten mit dir!\".\n",
+    "Heiliges Licht umfaengt das Schwert des Vorreiters.\n",
+    "Der Schild des Vorreiters prallt funkenstiebend gegen dich.\n",
+    "Der Paladinreiter ruft: FUER DUSTY!\n",
+  }) );
+
+
+  SetProp(P_MNPC_AREA, ROOM + "weg");
+  SetProp(P_MNPC_WAIT, ({30, 20, 40}));
+  SetProp(P_MNPC_DEFAULTROOM, ROOM "weg_12");
+  SetProp(P_MNPC_FLAGS, MOV_BACKWARDS+MOV_OUTDOORS+MOV_MOVES);
+
+  SUID;
+  CLONEME("/p/weapon/spear/lanze");
+  command("zuecke lanze");
+  CLONEME("/p/armour/helm/kampfhelm");
+  CLONEME("/p/armour/armour/kettenpanzer");
+  command("trage alles");
+}
+
+// --- Verhaltenslogik: reagiert auf boese Spieler in der Umgebung ---
+void init() {
+  ::init();
+  call_out("scan_for_evil", 0);
+}
+
+int is_evil_target(object ob) {
+  mixed al;
+  if (!objectp(ob)) return 0;
+  if (!living(ob)) return 0;
+  if (ob==ME) return 0;
+  // falls Spieler/NPC ohne Align: behutsam
+  al = ob->QueryProp(P_ALIGN);
+  return intp(al) && al <= EVIL_THRESH;
+}
+
+void scan_for_evil() {
+  object *inv, ob;
+  int i;
+  if (!environment()) return;
+  inv = all_inventory(environment());
+  for (i=0; i<sizeof(inv); ++i) {
+    ob = inv[i];
+    if (is_evil_target(ob)) {
+      tell_object(ob, BS(Name(WER,1)+" hebt die Hand: \"Im Namen Dustys: "
+        "Halte ein und bekenne dich!\""));
+      say(BS(Name(WER,1)+" richtet sein Schwert gegen "+ob->Name(WEN,1)+"."), ({ob}));
+      // Angriff starten
+      Kill(ob);
+      return;
+    }
+  }
+}
+
+// Reactions (kurz, ritterlich)
+void StartReaction(string verb, string gruppe, string adverb, int touch) {
+  if (find_call_out("reaction") != -1) return;
+  switch (gruppe) {
+    case "nett":
+    case "neutral":
+      call_out("reaction", 0, TP,
+        "neigt den Kopf zum Gruss.",
+        "nickt knapp und haelt die Zuegel fester.");
+      break;
+    case "froh":
+      call_out("reaction", 0, TP,
+        "laechelt kurz unter dem Helm.",
+        "laechelt und schickt ein kurzes Gebet gen Himmel.");
+      break;
+    case "aergerlich":
+    case "fies":
+      call_out("reaction", 0, TP,
+        "hebt warnend den Schild.",
+        "hebt warnend den Schild und tritt einen Schritt vor.");
+      break;
+    case "aengstlich":
+      call_out("reaction", 0, TP,
+        "blickt sich kurz um, bleibt aber standhaft.",
+        "atmet ruhig und bleibt aufrecht im Sattel.");
+      break;
+    case "intim":
+    case "albern":
+      call_out("reaction", 0, TP,
+        "schmunzelt kaum merklich.",
+        "schmunzelt und schiebt die Lanze ein Stueck zur Seite.");
+      break;
+    case "traurig":
+      call_out("reaction", 0, TP,
+        "senkt fuer einen Moment den Blick.",
+        "senkt den Blick und formt stumme Worte.");
+      break;
+  }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch) {
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void reaction(object ob, string macher, string andere) {
+  if (present(ob, ENV(TO))) {
+    tell_object(ob, BS(Name(WER, 1)+" "+macher));
+    tell_room(ENV(TO), BS(Name(WER, 1)+" "+andere), ({ob}));
+  }
+}
+
+void die(int poisondeath) {
+  write_file(LOG "npc.kills",
+    ctime()+": "+(CAP(getuid(QueryProp(P_KILLER)||TP))||"<Unbekannt>")+
+    " toetet den "+name(WEN,1)+".\n");
+  ::die(poisondeath);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp) {
+  if(killer == ME)
+    write_file(LOG "npc.deads",
+      ctime()+": "+Name(WER,1)+" hat gerade "+CAP(getuid(player))+" gerichtet.\n");
+}

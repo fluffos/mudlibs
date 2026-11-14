@@ -1,0 +1,100 @@
+/*****************************************************************************
+Fuegt dem Spieler nach Duration schaden zu (do_damage!)
+(c) Lilyth, Torian, Delgo @ Silberland <sl.mud.at>
+11.7.06 - Begin
+*****************************************************************************/
+#include "../def.h"
+inherit "std/thing";
+
+#define P_REMOVE_TIME "remove_time"
+object owner;
+int rdamage;
+
+//** StandardFunktionen ****************************************************//
+//-- Create eines typischen Invisobjekts -------------------------------------
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, 0 );
+  SetProp(P_LONG,  0 );
+  SetProp(P_NAME, 0);
+  SetProp(P_INVIS, 1);
+  SetProp(P_GENDER, NEUTER);
+  AddId(PLAYER_DAMAGE_ID);
+  SetProp(P_MATERIAL, MAT_MAGIC );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_SIZE, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_REMOVE_TIME, 0); 
+  SetProp(P_KILL_NAME, "Ein Pakt mit den Schatten");
+}
+
+
+//-- Falls ein call_out durch ausloggen gestoert wurde -----------------------
+void BecomesNetAlive(object spieler)
+{ 
+  int rest;
+  
+  if(spieler != owner) remove(1); return;
+  if(find_call_out("remove")) return;
+  if(QueryProp(P_REMOVE_TIME) <= time()) remove(1); return;
+  rest=QueryProp(P_REMOVE_TIME)-time();
+  if(rest<1) rest=1;
+  call_out("remove", rest);
+  return;
+}
+//**************************************************************************//
+
+
+
+//** DamageFunktionen ******************************************************//
+//-- Damage/Duration setzen und call_out aufrufen ----------------------------
+int SetDamage(int dam, int duration)
+{
+  float resBonus;
+  if(!dam ||!duration || !ENV(TO)) {remove(1); return 0;}
+  owner=ENV(TO);
+  rdamage=dam;
+  
+  SetProp(P_X_ATTR_MOD, ([A_INT: -dam, A_DEX: -dam, A_CON: -dam, A_STR: -dam]));
+  SetProp(P_REMOVE_TIME, time()+duration);
+
+  if(R_SKILLMASTER->HasSkill(getuid(owner), VERBESSERTER_PAKT)) {
+    resBonus = owner->QueryProp(P_GUILD_LEVEL)/40.0;
+    resBonus *= -1.0;
+    owner->AddResistanceModifier(([DT_PIERCE: resBonus, DT_BLUDGEON: resBonus, DT_SQUEEZE: resBonus,
+                                   DT_SLASH: resBonus, DT_RIP: resBonus]));
+    tell_object(owner, BS("Dein Verbleiben in der Halbwelt laesst Waffen teilweise durch dich gleiten."));
+  }
+
+  owner->UpdateAttributes();
+  tell_object(owner, BS("Ein Teil von dir verbleibt noch in der Welt der Schatten und du bist weniger stofflich..."));
+  tell_room(ENV(owner), BS(owner->Name(WER)+" wirkt noch nicht ganz stofflich."), ({owner}));
+  call_out("remove", duration);
+  return 1;
+}
+
+//-- Das eigen remove --------------------------------------------------------
+int remove(int silent)
+{
+  if(owner && ENV(TO) && owner==ENV(TO) && rdamage ) { 
+    tell_object(owner, BS("Du kehrst vollstaendig aus den Schatten zurueck und wirst wieder normal."));
+    tell_room(ENV(owner), BS(owner->Name(WER)+" wird wieder ganz stofflich."), ({owner}));
+    SetProp(P_X_ATTR_MOD, 0);
+    owner->RemoveResistanceModifier();
+    owner->UpdateAttributes(); 
+  }
+  return ::remove(1);
+}
+//**************************************************************************//
+
+public string extra_look() {
+  return CAP(owner->QueryPronoun())+" wirkt halb durchscheinend und schattenhaft.";
+}

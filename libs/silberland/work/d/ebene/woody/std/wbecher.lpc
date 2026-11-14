@@ -1,0 +1,482 @@
+// (c) by Thomas Winheller (Padreic@mg.mud.de)
+
+inherit "std/thing";
+inherit "/d/ebene/woody/std/dice.lpc";
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include "files.h"
+
+private nosave int gewuerfelt;
+private nosave int w1,w2,o1,o2,mind;
+private nosave object wuerfler;
+
+#define HOME environment(this_player())
+
+create() {
+   if (!is_clone(this_object())) return;
+   ::create();
+   AddId("becher");
+   AddId("wuerfelbecher");
+   AddId(WBECHER);
+   gewuerfelt=0;
+   wuerfler=this_object();
+   w1=1;
+   w2=0;
+   o1=1;
+   o2=0;
+   mind=10;
+   SetProp(P_SHORT, "Ein Wuerfelbecher");
+   SetProp(P_LONG,
+     "Es ist ein kleiner aus Leder gefertigter Wuerfelbecher, indem sich zwei "
+     "kleine sechsseitige Wuerfel befinden. Ausserdem gehoert zu diesem Set "
+     "auch noch ein kleines mit gruenem Filz beklebtes Tablett, mit dessen "
+     "Hilfe man den Becher elegant schuetteln kann, ohne das die Wuerfel "
+     "dabei rausfliegen koennen.");
+   SetProp(P_NAME, "Wuerfelbecher");
+   SetProp(P_NODROP, "Wenn Du aus dem Spiel ausscheiden willst, "
+       "dann steh einfach vom Tisch auf.\n");
+   SetProp(P_VALUE, 0);
+   SetProp(P_GENDER, MALE);
+   SetProp(P_WEIGHT, 0);
+   AddDetail("tablet",
+       "Ein kleines mit gruenem Filz bezogenes Tablett, auf dem sich weder "
+       "Forscherpunkte noch Zaubertraenke verstecken lassen.");
+   AddDetail("filz",
+       "Der Filz ist gruen, aber das wusstest Du ja auch schon vorher, oder?");
+   AddDetail("set",
+       "Das Set besteht aus einem Wuerfelbecher, "
+       "2 Wuerfeln und einem kleinen Tablett.");
+   AddCmd(({"wuerfeln", "wuerfel", "wuerfle"}), "wuerfeln");
+   AddCmd("aufdecken", "aufdecken");
+   AddCmd(({"glaub", "glaube", "glauben"}), "glauben");
+   AddCmd("decke", "decken");
+   AddCmd("behaupte", "behaupten");
+}
+
+int move(mixed dest, int method)
+{
+  int i;
+  i=::move(dest, method);
+  if (i!=1) return i;
+  if (!environment()) return 1; // man weiss ja nie :)
+  if (environment()->id(MSPIELER)) {
+    environment()->SetProp(MZAHL, 10);
+    environment()->SetProp(MMIND, 10);
+    environment()->StartPlay(); // sorgt dafuer, dass das spiel nie festhaengt
+  }
+  return 1;
+}
+
+int aufrunden(int i)
+// liefert den "aufgerundeten" wert von i
+{
+  int z1, z2;
+  z1=i/10;
+  z2=i%10;
+  switch(i) {
+    case 10: return 31;
+    case 11: return 22;
+    case 21: return 99;
+    case 22: return 33;
+    case 33: return 44;
+    case 44: return 55;
+    case 55: return 66;
+    case 65: return 11;
+    case 66: return 21;
+    default: if (z1==z2+1)
+               i=(z1+1)*10+1;
+             else i=z1*10+z2+1;
+             return i;
+  }
+}
+
+int abrunden(int i)
+// liefert den "abgerundeten" wert von i (evtl. fuer Teamspiel wichtig)
+{
+  int z1, z2;
+  z1=i/10;
+  z2=i%10;
+  switch(i) {
+    case 10: return 31;
+    case 11: return 65;
+    case 21: return 66;
+    case 22: return 11;
+    case 31: return 31;
+    case 33: return 22;
+    case 44: return 33;
+    case 55: return 44;
+    case 66: return 55;
+    default: if (z2==1)
+               i=(z1-1)*11-1;
+             else i=z1*10+z2-1;
+             return i;
+  }
+}
+
+string wname(int i)
+// liefert den Namen eines Wurfes.
+{
+  switch(i)
+  {
+    case  0: return "was besseres als Maexchen";
+    case 10: return "eine 31";
+    case 21: return "ein Maexchen";
+    case 11: return "einen Einerpasch";
+    case 22: return "einen Zweierpasch";
+    case 33: return "einen Dreierpasch";
+    case 44: return "einen Viererpasch";
+    case 55: return "einen Fuenferpasch";
+    case 66: return "einen Sechserpasch";
+    case 99: return  "was besseres als Maexchen";
+    default: return "eine "+i+"";
+  }
+}
+
+int gelogen(int w1, int w2, int o1, int o2)
+// 0 falls gar nicht gelogen, 1 falls "normal" gelogen, 2 wenn "maexchen" gel.
+{
+  if ((w1==o1)&&(w2==o2)) return 0;
+  if ((o1==2)&&(o2==1)) return 0; // da kann er ja behaupten was we will :)
+  // pasch behauptet?
+  if (w1==w2) {
+    // pasch untertrieben?
+    if ((o1==o2)&&(w1<o1)) return 0;
+    if (o1*10+o2==21) return 0;
+    return 1;
+  }
+  if (w1*10+w2==21) return 2;
+  if (w1*10+w2<o1*10+o2) return 0;
+  if (o1==o2) return 0;
+  return 1;
+}
+
+void NewGame()
+{
+  gewuerfelt=0;
+  wuerfler=this_object();
+  w1=1;
+  w2=0;
+  o1=1;
+  o2=0;
+  mind=10;
+}
+
+int wuerfeln(string str)
+{
+  int i;
+  // Spiel startet nun
+  if (!present(this_object(), this_player())) {
+    write("Nimm den Becher doch erstmal!\n");
+    return 1;
+  }
+  if (!objectp(wuerfler)) wuerfler=this_object();
+  if (!HOME->Playing()) {
+    if (HOME->Player()<2) {
+      write("Alleine zu spielen, macht doch auch keinen Spass.\n");
+      return 1;
+    }
+    HOME->SetPlaying();
+    write("Ok, Du startest nun das Spiel.\n");
+    tell_room(HOME, TP->Name(WER, RAW)+
+        " startet nun das Spiel.\n", ({ this_player() }));
+    HOME->tell_zuschauer(TP->Name(WER, RAW)+" startet nun das Spiel.\n");
+    gewuerfelt=0;
+    wuerfler=this_object();
+    w1=1;
+    w2=0;
+    o1=1;
+    o2=0;
+    mind=10;
+  }
+   if ((!gewuerfelt) && (w1==2) && (w2==1)) {
+    write("Ueber ein Maexchen kannst Du doch gar nicht kommen.\n");
+    return 1;
+  }
+  if (gewuerfelt)
+  {
+    w1=random(6)+1;
+    w2=random(6)+1;
+    if (w1<w2) {
+      i=w1;
+      w1=w2;
+      w2=i;
+    }
+    write("Du wuerfelst noch einmal blind, darfst jetzt aber natuerlich "
+        "nicht mehr\ndrunter schauen.\n");
+    tell_room(HOME, wuerfler->Name(WER, RAW)+
+        " wuerfelt noch einmal blind.\n", ({ TP }));
+    HOME->tell_zuschauer(wuerfler->Name(WER, RAW)+
+        " wuerfelt noch einmal blind.\n");
+    return 1; // duerfte ja immer >0 sein
+  }
+  else
+  {
+    gewuerfelt=1;
+    o1=w1; // er glaubt das Ergebnis ja, damit ist es dann real
+    o2=w2;
+    // NPCs koennen sich eine eigene Wuerfelfunktion schreiben
+    if ((!interactive(TP))&&(TP->QueryProp(WUERFELN)))
+    {
+      w1=call_other(this_player()->QueryProp(WUERFELN), "wuerfeln", TO);
+      if (w1) {
+        w2=w1%10;
+        w1=w1/10;
+      }
+      else { // hat wohl nicht geklappt...
+        w1=random(6)+1;
+        w2=random(6)+1;
+      }
+    }
+    else { // ansonsten ganz normal...
+      w1=random(6)+1;
+      w2=random(6)+1;
+    }
+    if (w1<w2) {
+      i=w1;
+      w1=w2;
+      w2=i;
+    }
+    wuerfler=this_player();
+    // Wer wirklich keinen Scroll moechte, kann es hiermit ein wenig reduzieren
+    if (str=="blind")
+      write("Selbstsicher wie Du bist schaust Du nicht einmal "
+          "nach was Du geworfen hast.\n");
+    else if (this_player()->QueryProp(P_BRIEF))
+    {
+      if (!TP->QueryProp(WARNUNG))
+      {
+        write("Du siehst beim Wuerfeln jetzt erstmal "
+            "immer nur die Kurzbeschreibung.\n");
+        TP->SetProp(WARNUNG, 1);
+      }
+      write("Du hast "+wname(w1*10+w2)+" geworfen.\n");
+    }
+    else
+    {
+      if (TP->QueryProp(WARNUNG))
+      {
+        write("Du siehst beim Wuerfeln jetzt erstmal immer nur die "
+            "Langbeschreibung.\n");
+        TP->SetProp(WARNUNG, 0);
+      }
+      switch (random(2))        // gleiches Recht fuer alle ;)
+      {
+        case 0:  write("Du wuerfelst und betest zu Dusty, "
+                       "dass sie Dir ein Maexchen geben moege.\n"); break;
+        default: write("Du wuerfelst und betest zu Woody, "
+                       "dass er Dir ein Maexchen geben moege.\n"); break;
+      }
+      for (i=1;i<6;i++)
+        write("  "+dice(w1, i)+"    "+dice(w2, i)+"\n");
+    }
+    if (str=="blind")
+    {
+      tell_room(HOME, wuerfler->Name(WER, RAW)+
+          " wuerfelt selbstsicher und schaut nichtmal nach was "+
+          wuerfler->QueryPronoun()+" geworfen hat.\n", ({ TP }));
+      HOME->tell_zuschauer(wuerfler->Name(WER, RAW)+
+          " wuerfelt selbstsicher und schaut nichtmal nach was "+
+          wuerfler->QueryPronoun()+" geworfen hat.\n");
+    }
+    else
+    {
+      if (o2==0)
+      {
+        tell_room(HOME, wuerfler->Name(WER, RAW)+
+            " wuerfelt und startet damit eine neue Runde.\n", ({ TP }));
+        HOME->tell_zuschauer(wuerfler->Name(WER, RAW)+
+            " wuerfelt und startet damit eine neue Runde.\n");
+      }
+      else
+      {
+        tell_room(HOME, wuerfler->Name(WER, RAW)+
+            " hat sich entschieden zu wuerfeln.\n", ({ TP }));
+        HOME->tell_zuschauer(wuerfler->Name(WER, RAW)+
+            " hat sich entschieden zu wuerfeln.\n");
+      }
+    }
+  }
+  return w1*10+w2; // duerfte ja immer >0 sein
+}
+
+nosave int glauben()
+{
+  if (gewuerfelt)
+  {
+    write("Du hast doch selbst gewuerfelt!\n");
+    return 1;
+  }
+  if (o2==0)
+  {
+    write("Was moechtest Du denn glauben? "
+        "Es hat doch noch niemand gewuerfelt!\n");
+    return 1;
+  }
+  if (w1!=2 || w2!=1) {
+    write("Man kann nur ein Maexchen glauben "
+        "(hat sonst ja auch wenig Sinn...)\n");
+    return 1;
+  }
+  if (!objectp(wuerfler)) wuerfler=this_object();
+  write("Du glaubst "+wuerfler->name(WEM, RAW)+", dass "+
+      wuerfler->QueryPronoun()+" ein Maexchen hat und deckst nicht auf.\n");
+  tell_room(HOME, this_player()->Name(WER, RAW)+" glaubt "+
+      wuerfler->name(WEM, RAW)+", dass "+wuerfler->QueryPronoun()+
+      " ein Maexchen hat und deckt nicht auf.\n", ({ this_player() }));
+  HOME->tell_zuschauer(this_player()->Name(WER, RAW)+" glaubt "+
+      wuerfler->name(WEM, RAW)+", dass "+wuerfler->QueryPronoun()+
+      " ein Maexchen hat und deckt nicht auf.\n");
+  HOME->LoseRound(this_player(), 1);
+  gewuerfelt=0;
+  wuerfler=this_object();
+  w1=1;
+  w2=0;
+  o1=1;
+  o2=0;
+  mind=10;
+  return 1;
+}
+
+int aufdecken()
+{
+  if (gewuerfelt) {
+    write("Willst Du etwa Deinen eigenen Wurf anzweifeln?\n");
+    return 1;
+  }
+  if (o2==0) {
+    write("Es hat doch noch ueberhaupt niemand gewuerfelt.\n");
+    return 1;
+  }
+  if (!objectp(wuerfler)) wuerfler=this_object();
+  tell_room(HOME, TP->Name(WER, RAW)+" glaubt "+wuerfler->Name(WEM, RAW)+
+      " nicht und hebt auf.\n", ({ this_player() }));
+  HOME->tell_zuschauer(TP->Name(WER, RAW)+" glaubt "+wuerfler->Name(WEM, RAW)+
+      " nicht und hebt auf.\n");
+  if (gelogen(w1, w2, o1, o2))
+  {
+    write(wuerfler->Name(WER, RAW)+" hatte nur "+wname(o1*10+o2)+
+        " geworfen, haette aber "+wname(w1*10+w2)+" haben muessen.\n");
+    tell_room(HOME, wuerfler->Name(WER, RAW)+" hatte nur "+wname(o1*10+o2)+
+        " geworfen, haette aber "+wname(w1*10+w2)+" haben muessen.\n",
+        ({ this_player() }));
+    HOME->tell_zuschauer(wuerfler->Name(WER, RAW)+" hatte nur "+
+        wname(o1*10+o2)+" geworfen, haette aber "+wname(w1*10+w2)+
+        " haben muessen.\n");
+    if (w1==2 && w2==1)
+      HOME->LoseRound(wuerfler, 2);
+    else
+      HOME->LoseRound(wuerfler, 1);
+//      HOME->LoseRound(HOME->LastPlayer(), 2);
+//    else HOME->LoseRound(HOME->LastPlayer(), 1);
+  }
+  else
+  {
+    if ((w1==o1)&&(w2==o2))
+    {
+      write(wuerfler->Name(WER, RAW)+" hatte aber wirklich "+
+          wname(o1*10+o2)+" geworfen :(.\n");
+      tell_room(HOME, wuerfler->Name(WER, RAW)+" hatte aber wirklich "+
+          wname(o1*10+o2)+" geworfen.\n", ({ this_player() }));
+      HOME->tell_zuschauer(wuerfler->Name(WER, RAW)+" hatte aber wirklich "+
+          wname(o1*10+o2)+" geworfen.\n");
+    }
+    else
+    {
+      write(wuerfler->Name(WER, RAW)+" hatte sogar "+wname(o1*10+o2)+
+          " geworfen, da hast Du Dich wohl kraeftig geirrt.\n");
+      tell_room(HOME, wuerfler->Name(WER, RAW)+" hatte aber sogar "+
+          wname(o1*10+o2)+" geworfen.\n", ({ this_player() }));
+      HOME->tell_zuschauer(wuerfler->Name(WER, RAW)+" hatte aber sogar "+
+          wname(o1*10+o2)+" geworfen.\n");
+    }
+    if (o1==2 && o2==1)
+      HOME->LoseRound(this_player(), 2);
+    else HOME->LoseRound(this_player(), 1);
+  }
+  gewuerfelt=0;
+  wuerfler=this_object();
+  w1=1;
+  w2=0;
+  o1=1;
+  o2=0;
+  mind=10;
+  return 1;
+}
+
+nosave int decken(string was)
+{
+  notify_fail("Willst Du vielleicht etwas aufdecken?\n");
+  if (was=="auf") return aufdecken();
+}
+
+int behaupten(string was)
+{
+  int z1,z2;
+  object pl;
+  if (w2==0) {
+    write("Vielleicht solltest Du erstmal wuerfeln, "
+        "bevor Du irgendetwas behauptest!\n");
+    return 1;
+  }
+  if (!gewuerfelt && w1==2 && w2==1) {  // hoffentlich funkt das so...
+    write("Du hast schon ein Maexchen gesagt bekommen, "
+        "da kommst Du nicht drueber.\n");
+    return 1;
+  }
+  notify_fail("Was moechtest Du behaupten? (Syntax: behaupte <zahl>)\n");
+  if (!was) return 0;
+  if (sscanf(was, "%d", z1)!=1) return 0;
+  z2=z1%10;
+  z1=z1/10;
+  if ((z1<1)||(z1>6)||(z2<1)||(z2>6)) {
+    write("So eine Zahl kannst Du doch unmoeglich geworfen haben.\n");
+    return 1;
+  }
+  if (z2>z1) {
+    write("Ungueltige Eingabe! Meintest Du vielleicht "+z2+z1+"?\n");
+    return 1;
+  }
+  if (!objectp(wuerfler)) wuerfler=this_object();
+// war ein Denkfehler :)
+//  if ((gewuerfelt&&gelogen(o1, o2, z1, z2)) ||
+//     ((!gewuerfelt)&&(gelogen(w1, w2, z1, z2))))
+  if (gelogen(mind/10, mind%10, z1, z2))
+  {
+    write("Das reicht leider nicht, Du musst mindestens behaupten, "
+        "Du haettest\n"+wname(mind)+" geworfen.\n");
+    return 1;
+  }
+  pl=HOME->NextPlayer(this_player());
+  move(pl, M_GET);
+  pl->SetProp(MMIND, mind);
+  mind=z1*10+z2;
+  pl->SetProp(MZAHL, mind);
+  wuerfler=TP;
+
+  write("Du behauptest, Du haettest mindestens "+wname(mind)+" geworfen "
+       +"und gibst den Becher an "+pl->Name(WEN, RAW)+" weiter.\n");
+  tell_room(HOME, wuerfler->Name(WER, RAW)+" behauptet, "+
+      wuerfler->QueryPronoun()+" haette mindestens "+wname(mind)+
+      " geworfen und gibt den Becher an "+pl->name(WEN, RAW)+" weiter.\n",
+      ({ this_player(),pl }));
+  tell_object(pl, wuerfler->Name(WER, RAW)+" behauptet, "+
+      wuerfler->QueryPronoun()+" haette mindestens "+wname(mind)+
+      " geworfen und gibt den Becher an Dich weiter.\n");
+  HOME->tell_zuschauer(wuerfler->Name(WER, RAW)+" behauptet, "+
+      wuerfler->QueryPronoun()+" haette mindestens "+wname(mind)+
+      " geworfen und gibt den Becher an "+pl->name(WEN, RAW)+" weiter.\n");
+
+  if (gewuerfelt)
+  {
+    o1=w1; // reales Ergebnis
+    o2=w2;
+  }
+  w1=z1; // behauptetes Ergebnis
+  w2=z2;
+  gewuerfelt=0;
+  mind=aufrunden(mind);
+  return 1;
+}
+

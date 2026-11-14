@@ -1,0 +1,573 @@
+
+/*
+//
+//   Der Master fuer die offene Wueste - Zordan@SL
+//
+*/
+
+#include "../def.h"
+#include <wizlevels.h>
+#include "desert.h"
+
+nosave string *map;        // hier wird die Karte der Wueste gehalten
+nosave string *workmap;    // hier werden die temporaeren Dinge gehalten
+nosave mapping rooms;      // enthaelt ein Mapping mit den speziellen Ausgaengen
+nosave mapping npcs;       // enthaelt ein Mapping mit den speziellen NPC's
+nosave mapping clonednpcs; // enthaelt alle derzeit geclonten NPC's
+nosave string *clonedobj;
+nosave int nrnpcs;         // globale anzahl der geclonten NPC's
+nosave int xpos1,ypos1,r1,xpos2,ypos2,r2; // die beiden sandstuerme, die wandern
+
+nosave int isinsturm(int x,int y);
+
+#define MAXGLOBALNPC 100
+
+mapping saverooms;
+mapping savenpcs;
+
+query_prevent_shadow() { return 1; }
+
+//////////////////////////////////////////////////////////////////////////////
+//
+// Create()
+//
+//////////////////////////////////////////////////////////////////////////////
+
+create() {
+  string file;
+  int i,size;
+
+  if (is_clone(TO)) { 
+    destruct(TO); 
+    return 1;
+  }
+
+  // Karte der Wueste laden
+  map=workmap=({ });
+  size=file_size(DESERTMAP);
+  if(size<0) {
+    ME->remove();
+    return;
+  }
+  file=read_file(DESERTMAP);
+  if(!stringp(file)) {
+    ME->remove();
+    return;
+  }
+  map=explode(file,"\n");
+  file="";
+  for(i=0;i<strlen(map[0]);i++) {
+    file+=" ";
+  }
+  for(i=0;i<sizeof(map);i++) {
+    workmap+=({ file });
+  }
+
+  nrnpcs=0;
+  clonedobj=({ });
+
+  // die speziellen Ausgaenge laden
+  saverooms=([ ]);
+  savenpcs=([ ]);
+  clonednpcs=([ ]);
+  rooms=([ ]);
+  if (restore_object(DESERTROOMS)) {
+    rooms=saverooms;
+    npcs=savenpcs;
+  }
+
+  // die Sandstuerme
+  xpos1=random(139);
+  xpos2=random(139);
+  ypos1=random(49);
+  ypos2=random(49);
+  r1=2;
+  r2=4;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+//
+// Dirty Hack dagegen, dass dieser Master weder ausgelagert, noch keinen
+// reset() mehr hat, egal zu welchem Zeitpunkt
+//
+//////////////////////////////////////////////////////////////////////////////
+
+reset() {
+  int i;
+  string name;
+  for(i=sizeof(clonedobj)-1;i>=0;i--) {
+    if(!find_object(clonedobj[i])) {
+      name=explode(clonedobj[i],"#")[0];
+      if(member(clonednpcs,name)) {
+        if(clonednpcs[name]>1) {
+          clonednpcs[name]--;
+        } else {
+          clonednpcs=m_delete(clonednpcs,name);
+        }
+        clonedobj-=({ clonedobj[i] });
+      }
+    }
+  }
+  nrnpcs=sizeof(clonedobj);
+  call_out("MoveStuerme",0);
+  call_out("dont_swap",0);
+}
+dont_swap() { int i; i=0; }
+
+//////////////////////////////////////////////////////////////////////////////
+//
+// Secure Options
+//
+//////////////////////////////////////////////////////////////////////////////
+
+nosave int secure() { 
+  if (!PO) return 0;
+  if (geteuid(PO) != geteuid(TI)) return 0;
+  if (TI != TP) return 0;
+  if (!IS_LORD(TI)) return 0;
+  return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+//
+// Ausgabe der Karte der ganzen Wueste fuer Magier
+//
+//////////////////////////////////////////////////////////////////////////////
+
+int showmap() {
+  int i;
+  if(!IS_WIZARD(TP)) return -1;
+  for (i=0;i<sizeof(map);i++) {
+    write(map[i]+"\n");
+  }
+  return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+//
+// Karte generieren fuer einen bestimmten Punkt auf der Karte
+//
+//////////////////////////////////////////////////////////////////////////////
+
+string *getkarte(int x, int y) {
+  string *karte;
+  if(x<1 || x>138 || y<1 || y>48) return ({ "","","","","" });
+  karte=({ });
+  karte+=({ " ___ " });
+  karte+=({ "|"+regreplace(map[y-1][x-1..x+1],"[Kkw]",".",1)+"|" });
+  karte+=({ "|"+regreplace(map[y][x-1..x+1],"[Kkw]",".",1)+"|" });
+  karte+=({ "|"+regreplace(map[y+1][x-1..x+1],"[Kkw]",".",1)+"|" });
+  karte+=({ " ~~~ " });
+  return karte;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+//
+// Longbeschreibung generieren anhand der akt. Position
+//
+// Wueste, Hitze, Ferne, Boden, Himmel, Position, Sonstiges
+//
+//////////////////////////////////////////////////////////////////////////////
+
+string *getlong(int x, int y) {
+  string *str,ind,*det;
+  int i,r;
+  ind=x+":"+y;
+  str=det=({ });
+  if(member(rooms,ind) != 0) {
+    str+=({ "Das ist ein Raum, den Spieler waehrend des Spiels gar nicht "
+            "betreten koennen. Sollten sich hier Spieler aufhalten wird "
+            "SEHR darum gebeten, dieses 'Zordan' sofort zu melden, danke!!" });
+    str+=({ ({ "" }) });
+  } else {
+    r=random(sizeof(DWUESTE))/2*2;
+    ind=DWUESTE[r];
+    for (i=0;i<sizeof(DWUESTE[r+1]);i++) {
+      det+=({ DWUESTE[r+1][i] });
+    }
+    r=random(sizeof(DHITZE))/2*2;
+    ind+=DHITZE[r];
+    for (i=0;i<sizeof(DHITZE[r+1]);i++) {
+      det+=({ DHITZE[r+1][i] });
+    }
+    r=random(sizeof(DFERNE))/2*2;
+    ind+=DFERNE[r];
+    for (i=0;i<sizeof(DFERNE[r+1]);i++) {
+      det+=({ DFERNE[r+1][i] });
+    }
+    r=random(sizeof(DBODEN))/2*2;
+    ind+=DBODEN[r];
+    for (i=0;i<sizeof(DBODEN[r+1]);i++) {
+      det+=({ DBODEN[r+1][i] });
+    }
+    if(random(100)>50) {
+      r=random(sizeof(DSONSTIGES))/2*2;
+      ind+=DSONSTIGES[r];
+      for (i=0;i<sizeof(DSONSTIGES[r+1]);i++) {
+        det+=({ DSONSTIGES[r+1][i] });
+      }
+    }
+    str+=({ ind });
+    str+=({ det });
+  }
+  return str;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+//
+// Exits generieren anhand der akt. Position
+//
+//////////////////////////////////////////////////////////////////////////////
+
+mapping getexits(int x, int y) {
+  mapping ex;
+  string *richt,*ausg,ind;
+  int i,xl,yl;
+
+  ausg= ({ "","","","","","","","","" });
+  richt=({ "","","","","","","","","" });
+  richt[0]=map[y-1][x-1..x-1];
+  richt[1]=map[y-1][x..x];
+  richt[2]=map[y-1][x+1..x+1];
+  richt[3]=map[y][x-1..x-1];
+  richt[5]=map[y][x+1..x+1];
+  richt[6]=map[y+1][x-1..x-1];
+  richt[7]=map[y+1][x..x];
+  richt[8]=map[y+1][x+1..x+1];
+  ex=([ ]);
+
+  for(i=0;i<9;i++) {
+    yl=y-1+(i/3);
+    xl=x-1+(i%3);
+    ind=xl+":"+yl;
+    if(member(rooms,ind) != 0) { // spezieller Ausgaeng vorhanden ?
+      ausg[i]=rooms[ind];
+    } else if(isinsturm(xl,yl)) {  // sind wir in einem sandsturm ?
+      if(richt[i]=="." || richt[i]=="k" || richt[i]=="K" || richt[i]=="w") 
+        ausg[i]=ROOM "sturm";
+    } else {
+      if(richt[i]==".") ausg[i]=ROOM "desert:"+(xl)+":"+(yl); // normale Wueste
+      if(richt[i]=="k") ausg[i]=ROOM "desert:"+(xl)+":"+(yl); // Karawanenweg
+      if(richt[i]=="K") ausg[i]=ROOM "desert:"+(xl)+":"+(yl); // K. Bahnhof
+      if(richt[i]=="w") ausg[i]=ROOM "desert:"+(xl)+":"+(yl); // Weg
+    }
+  }
+
+  if (x>0) {
+    if(ausg[3] != "") ex+=([ "westen": ausg[3] ]);
+    if (y>0)  
+      if(ausg[0] != "") ex+=([ "nordwesten": ausg[0] ]);
+    if (y<49) 
+      if(ausg[6] != "") ex+=([ "suedwesten": ausg[6] ]);
+  }
+  if (x<139) {
+    if(ausg[5] != "") ex+=([ "osten": ausg[5] ]);
+    if (y>0)  
+      if(ausg[2] != "") ex+=([ "nordosten": ausg[2] ]);
+    if (y<49) 
+      if(ausg[8] != "") ex+=([ "suedosten": ausg[8] ]);
+  }
+  if (y>0)  
+    if(ausg[1] != "") ex+=([ "norden": ausg[1] ]);
+  if (y<49) 
+    if(ausg[7] != "") ex+=([ "sueden": ausg[7] ]);
+  return ex;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+//
+// NPC's clonen/erlauben lassen zu clonen
+// verwaltung der NPC's in der offenen wueste global, anmelden, abmelden
+//
+//////////////////////////////////////////////////////////////////////////////
+
+string getnpc(int x,int y) {
+  string str,ind,*files;
+  int r;
+
+  ind=x+":"+y;
+  str="";
+  if(member(npcs,ind) != 0) {
+    str=npcs[ind];
+  } else {
+    if ((nrnpcs+1) < MAXGLOBALNPC) {
+      if(random(100)<5) {
+        files=get_dir(NPC "*.lpc");
+        r=random(sizeof(files));
+        str=files[r];
+        str=NPC+str[0..<3];
+      }
+    }
+  }
+  return str;
+}
+
+int newnpc(object ob) {
+  string fname;
+  fname=file_name(ob);
+  if((nrnpcs+1) > MAXGLOBALNPC) return 0;
+  if(strstr(fname,"#") != -1) {
+    fname=explode(fname,"#")[0];
+    if(member(clonednpcs,fname)) {
+      if(clonednpcs[fname]>=1) return 0;  // hier noch anpassen
+      clonednpcs[fname]++;
+    } else {
+      clonednpcs+=([ fname: 1 ]);
+    }
+    clonedobj+=({ file_name(ob) });
+    nrnpcs++;
+    return 1;
+  }
+  return 0;
+}
+
+void removenpc(object ob) {
+  string fname;
+  fname=file_name(ob);
+  if(strstr(fname,"#") != -1) {
+    fname=explode(fname,"#")[0];
+    if(member(clonednpcs,fname)) {
+      if(clonednpcs[fname]>1) {
+        clonednpcs[fname]--;
+      } else {
+        clonednpcs=m_delete(clonednpcs,fname);
+      }
+      clonedobj-=({ file_name(ob) });
+    }
+  }
+  return;
+}
+
+void getallnpcs() {
+  if(!IS_WIZARD(TP)) return;
+  printf("%O\n",clonednpcs);
+  printf("%O\n",clonedobj);
+  write(nrnpcs+"\n");
+  return;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+//
+// Verwaltung der speziellen Raeume, adden, delete, und show
+// fuer das Adden und Deleten wurde auf IS_LORD begrenzt !!!
+//
+//////////////////////////////////////////////////////////////////////////////
+
+mixed ShowRooms() {
+  if(!secure()) return -1;
+  return rooms;
+}
+
+int AddRoom(string name) {
+  int x,y;
+  string foo,foo2,file,ind;
+  if(!secure()) return -1;
+  if(!name) {
+    write("*** Fehler in AddRoom: Kein Zielraum angegeben!\n");
+    return -2;
+  }
+  if(!ENV(TP)) {
+    write("*** Fehler in AddRoom: Hier ist kein Environment!\n");
+    return -2;
+  }
+  file=file_name(ENV(TP));
+  if (sscanf(file,"%s:%d:%d%s",foo,x,y,foo2)!=4) {
+    write("*** Fehler in AddRoom: Hier ist kein gueltiger Raum der Wueste!\n");
+    return -2;
+  }
+  if (x<0 || x>139 || y<0 || y>48) {
+    write("*** Fehler in AddRoom: Hier ist kein gueltiger Raum der Wueste!\n");
+    return -2;
+  }
+  ind=x+":"+y;
+  if(member(rooms,ind) != 0) {
+    write("*** Fehler in AddRoom: Hier existiert schon ein spezieller Raum!\n");
+    write("*** Fehler in AddRoom: "+rooms[ind]+"\n");
+    return -2;
+  }
+  if(!sizeof(get_dir(name+".lpc"))) {
+    write("*** Fehler in AddRoom: "+name+".c kann nicht gefunden werden!\n");
+    return -2;
+  }
+  rooms+=([ ind : name ]);
+  saverooms=rooms;
+  save_object(DESERTROOMS);
+  write("*** AddRoom: "+name+".c\n");
+  write("*** AddRoom: bei x="+x+", y="+y+" hinzugefuegt!\n");
+  return 1;
+}
+
+int DeleteRoom(int x,int y) {
+  string ind,name;
+  if(!secure()) return -1;
+  if(x<0 || x>139 || y<0 || y>48) {
+    write("*** Fehler in DeleteRoom: 0<x<139 und 0<y<49!\n");
+    return -2;
+  }
+  ind=x+":"+y;
+  if(member(rooms,ind) != 1) {
+    write("*** Fehler in DeleteRoom: Bei x="+x+", y="+y+" existiert kein Raum!\n");
+    return -2;
+  }
+  name=rooms[ind];
+  rooms=m_delete(rooms,ind);
+  saverooms=rooms;
+  save_object(DESERTROOMS);
+  write("*** DeleteRoom: "+name+".c\n");
+  write("*** DeleteRoom: bei x="+x+", y="+y+" entfernt!\n");
+  return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+//
+// Verwaltung der speziellen NPCS, adden, delete, und show
+// fuer das Adden und Deleten wurde auf IS_LORD begrenzt !!!
+//
+//////////////////////////////////////////////////////////////////////////////
+
+mixed ShowNpcs() {
+  if(!secure()) return -1;
+  return npcs;
+}
+
+int AddNpc(string name) {
+  int x,y;
+  string foo,foo2,file,ind;
+  if(!secure()) return -1;
+  if(!name) {
+    write("*** Fehler in AddNpc: Kein NPC-Filename angegeben!\n");
+    return -2;
+  }
+  if(!ENV(TP)) {
+    write("*** Fehler in AddNpc: Hier ist kein Environment!\n");
+    return -2;
+  }
+  file=file_name(ENV(TP));
+  if (sscanf(file,"%s:%d:%d%s",foo,x,y,foo2)!=4) {
+    write("*** Fehler in AddNpc: Hier ist kein gueltiger Raum der Wueste!\n");
+    return -2;
+  }
+  if (x<0 || x>139 || y<0 || y>48) {
+    write("*** Fehler in AddNpc: Hier ist kein gueltiger Raum der Wueste!\n");
+    return -2;
+  }
+  ind=x+":"+y;
+  if(member(npcs,ind) != 0) {
+    write("*** Fehler in AddNpc: Hier existiert schon ein spezieller NPC!\n");
+    write("*** Fehler in AddNpc: "+npcs[ind]+"\n");
+    return -2;
+  }
+  if(!sizeof(get_dir(name+".lpc"))) {
+    write("*** Fehler in AddNpc: "+name+".c kann nicht gefunden werden!\n");
+    return -2;
+  }
+  npcs+=([ ind : name ]);
+  savenpcs=npcs;
+  save_object(DESERTROOMS);
+  write("*** AddNpc: "+name+".c\n");
+  write("*** AddNpc: bei x="+x+", y="+y+" hinzugefuegt!\n");
+  return 1;
+}
+
+int DeleteNpc(int x,int y) {
+  string ind,name;
+  if(!secure()) return -1;
+  if(x<0 || x>139 || y<0 || y>48) {
+    write("*** Fehler in DeleteNpc: 0<x<139 und 0<y<49!\n");
+    return -2;
+  }
+  ind=x+":"+y;
+  if(member(npcs,ind) != 1) {
+    write("*** Fehler in DeleteNpc: Bei x="+x+", y="+y+" existiert kein NPC!\n");
+    return -2;
+  }
+  name=npcs[ind];
+  npcs=m_delete(npcs,ind);
+  savenpcs=npcs;
+  save_object(DESERTROOMS);
+  write("*** DeleteNpc: "+name+".c\n");
+  write("*** DeleteNpc: bei x="+x+", y="+y+" entfernt!\n");
+  return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+//
+// Die beiden Sandstuerme
+//
+//////////////////////////////////////////////////////////////////////////////
+
+int GetSturm() {
+  if(!secure()) return -1;
+  write(sprintf("Sandsturm 1: x=%i y=%i r=%i\n",xpos1,ypos1,r1));
+  write(sprintf("Sandsturm 2: x=%i y=%i r=%i\n",xpos2,ypos2,r2));
+  return 1;
+}
+
+void MoveStuerme() {
+  switch(random(8)) {
+    case 0: if(xpos1>0)   xpos1--;
+            break;
+    case 1: if(xpos1<138) xpos1++;
+            break;
+    case 2: if(ypos1>0)   ypos1--;
+            break;
+    case 3: if(ypos1<48) ypos1++;
+            break;
+    case 4: if(xpos1>0)   xpos1--;
+            if(ypos1>0)   ypos1--;
+            break;
+    case 5: if(xpos1>0)   xpos1--;
+            if(ypos1<48) ypos1++;
+            break;
+    case 6: if(xpos1<138) xpos1++;
+            if(ypos1>0)   ypos1--;
+            break;
+    case 7: if(xpos1<138) xpos1++;
+            if(ypos1<48) ypos1++;
+            break;
+  }
+  switch(random(8)) {
+    case 0: if(xpos2>0)   xpos2--;
+            break;
+    case 1: if(xpos2<138) xpos2++;
+            break;
+    case 2: if(ypos2>0)   ypos2--;
+            break;
+    case 3: if(ypos2<48) ypos2++;
+            break;
+    case 4: if(xpos2>0)   xpos2--;
+            if(ypos2>0)   ypos2--;
+            break;
+    case 5: if(xpos2>0)   xpos2--;
+            if(ypos2<48) ypos2++;
+            break;
+    case 6: if(xpos2<138) xpos2++;
+            if(ypos2>0)   ypos2--;
+            break;
+    case 7: if(xpos2<138) xpos2++;
+            if(ypos2<48) ypos2++;
+            break;
+  }
+}
+
+nosave int isinsturm(int x,int y) {
+  float rs1,rs2;
+  rs1=sqrt(((float)xpos1-(float)x)*((float)xpos1-(float)x)+
+           ((float)ypos1-(float)y)*((float)ypos1-(float)y));
+  rs2=sqrt(((float)xpos2-(float)x)*((float)xpos2-(float)x)+
+           ((float)ypos2-(float)y)*((float)ypos2-(float)y));
+  if((int)rs1<=r1) return 1;
+  if((int)rs2<=r2) return 1;
+  return 0;
+}
+
+void freeplayer(object pl) {
+  int x,y;
+  string str;
+  while(map[y][x..x] != ".") {
+    x=random(139);
+    y=random(49);
+  }
+  str=ROOM "desert:"+x+":"+y;
+  pl->move(str, M_GO + M_SILENT);
+}

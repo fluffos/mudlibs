@@ -1,0 +1,223 @@
+inherit "/std/thing";
+
+#include "../files.h"
+#include "../sys/vt100.h"
+#include "../sys/sea.h"
+#include "../sys/ovk.h"
+#include <properties.h>
+#include <thing.h>
+
+create()
+{
+  ::create();
+
+  SetProp(P_SHORT, "Ein Overland-Konverter V1.0");
+  SetProp(P_LONG, "Das ist Dein Overland-Konverter.\n"
+         +"Mit ihm kannst Du Grafikfiles in ein fuer das MUD lesbares Format umwandeln.\n"
+         +"Eine Liste der Befehle bekommst Du mit 'oh' / 'ohelp'\n");
+  SetProp(P_GENDER, NEUTER);
+  SetProp(P_NAME, "Overland-Konverter");
+  SetProp(P_AUTOLOADOBJ, 1);
+  AddId("ovk");
+  AddId("overlandkonverter");
+  AddId("overland-konverter");
+  AddId("tool");
+
+  AddCmd("ocv", "conv");
+  AddCmd("oconvert", "conv");
+  AddCmd("ol", "loadmap");
+  AddCmd("oload", "loadmap");
+  AddCmd("os", "savemap");
+  AddCmd("osave", "savemap");
+  AddCmd("oh", "usage");
+  AddCmd("ohelp", "usage");
+  AddCmd("oac", "add_city");
+  AddCmd("oaddcity", "add_city");
+  AddCmd("oi", "o_info");
+  AddCmd("oinfo", "o_info");
+}
+
+int width, height;
+mixed *cities;
+string *map;
+
+nosave string inf, outf;
+
+int usage()
+{
+  write( VT_RED+"Usage:"+ANSI_NORMAL+"\n\n"
+        +" "+VT_YELLOW+VT_TA_B+"OC"+ANSI_NORMAL+"on"+VT_YELLOW+VT_TA_B+"V"+ANSI_NORMAL+"ert <src-file>\n"
+        +"   src-file    Has to be in XPM-Format with extension, else .xpm default\n\n"
+        +" "+VT_YELLOW+VT_TA_B+"OA"+ANSI_NORMAL+"dd"+VT_YELLOW+VT_TA_B+"C"+ANSI_NORMAL+"ity <nr> <connroom>\n"
+        +"   nr          number of city\n"
+        +"   connroom    full filename of connector room\n\n"
+        +" "+VT_YELLOW+VT_TA_B+"OS"+ANSI_NORMAL+"ave    <dest-file>\n"
+	    +"   dest-file   only name should be given, will be saved as .o\n\n"
+        +" "+VT_YELLOW+VT_TA_B+"OL"+ANSI_NORMAL+"oad    <src-file>\n"
+	    +"   src-file    only name should be given, will be loaded as .o\n\n"
+        +" "+VT_YELLOW+VT_TA_B+"OI"+ANSI_NORMAL+"nfo\n"
+	    +"               prints out information about current map\n\n"
+       );
+
+  return 1;
+}
+
+int conv(mixed str)
+{
+  string dummy;
+  string *lines, *submap;
+  int i, j, upb, ok;
+  mapping associate;
+
+ 
+  notify_fail("Wrong number of Arguments!\n");
+  if (!stringp(str))
+    return 0;
+  if (sscanf(str, "%s", inf)!=1)
+    return 0;
+  
+  if (strstr(inf, "/")==-1)
+    inf=this_player()->QueryProp(P_CURRENTDIR)+"/"+inf;
+  
+  notify_fail("Source file not accessible!\n");
+  write(sprintf("converting infile %s ...\n", inf));
+  if (file_size(inf)==-1)
+    return 0;
+
+  lines=explode(explode(read_file(inf), "}")[0], ",");
+  
+  upb=sizeof(lines);
+  map=({ });
+
+  for (i=0; i<upb; i++) {
+	submap=explode(implode(explode(lines[i], "\n"), ""), "\"");
+	map+=({ submap[sizeof(submap)-1] });
+  }
+
+  submap=( explode(map[0], " ") ) - ({ "" });
+  map-=({ map[0] });
+  width=to_int(submap[0]);
+  height=to_int(submap[1]);
+
+  ok=1;
+  associate=([ ]);
+  while (ok)
+    if (strstr(map[0], "#")>-1) {
+	  submap=explode(map[0], " ");
+	  switch (submap[2]) {
+	    case PATH_COL: associate+=([ submap[0][0]: OV_PATH ]); break;        /*  Weg            */
+	    case WATER_COL: associate+=([ submap[0][0]: OV_WATER ]); break;       /*  Wasser         */
+	    case BRIDGE_COL: associate+=([ submap[0][0]: OV_BRIDGE ]); break;      /*  Steg           */
+	    case DESERT_COL: associate+=([ submap[0][0]: OV_DESERT ]);break;       /*  Wueste         */
+	    case FOREST_COL: associate+=([ submap[0][0]: OV_FOREST ]); break;      /*  Wald           */
+	    case GRASS_COL: associate+=([ submap[0][0]: OV_GRASS ]); break;       /*  Wiese          */
+	    case MOUNTAIN_COL: associate+=([ submap[0][0]: OV_MOUNTAIN ]); break;    /*  Berg           */
+	    case HILL_COL: associate+=([ submap[0][0]: OV_HILL ]); break;        /*  Huegel         */
+        case CITY_COL: associate+=([ submap[0][0]: OV_CITY ]); break;        /*  Stadt          */
+        case REEF_COL: associate+=([ submap[0][0]: OV_REEF ]); break;        /*  Riff           */
+		default: associate+=([ submap[0][0]: OV_OTHERS ]);                    /*  Sonstiges      */
+	  }
+	  map-= ({ map[0] });
+	}
+	else
+	  ok=0;
+
+  upb=sizeof(map);
+  /* if (map[upb-1][0]=='}')
+    map-=({ map[--upb] }); */
+  cities=({ });
+  for (i=0; i<upb; i++)
+    for (j=strlen(map[i])-1; j>=0; j--) {
+	  map[i][j..j]=associate[map[i][j]];
+      if (map[i][j..j]==OV_CITY)
+        cities+=({ ({ j, i, "" }) });
+    }
+  for (i=0; i<sizeof(cities); i++) 
+    write(sprintf("City #%-2d found on coordinates x: %d, y: %d!\n", 
+                  i+1, cities[i][0], cities[i][1]));
+
+  return 1;
+}
+
+loadmap(mixed str)
+{ 
+  string dummy;
+  int i;
+
+  notify_fail("Wrong number of Arguments!\n");
+  if (!stringp(str))
+    return 0;
+  if (sscanf(str, "%s", inf)!=1)
+    return 0;
+  
+  if (strstr(inf, "/")==-1)
+    inf=this_player()->QueryProp(P_CURRENTDIR)+"/"+inf;
+  if (sscanf(inf, "%s.o", dummy)==1)
+    inf=inf[0..strlen(outf)-2];
+
+  restore_object(inf);
+  write(sprintf("reading %s\n"
+               +"height: %d, width: %d, number of cities: %d\n",
+                inf, height, width, sizeof(cities)));
+  for (i=0; i<sizeof(cities); i++)
+    write(sprintf("City #%-2d on coordinates x: %d, y: %d\n", i, cities[i][0], cities[i][1]));
+
+  return 1; 
+}
+
+o_info()
+{
+  int i;
+  write(sprintf("infile: %s\n"
+               +"height: %d, width: %d, number of cities: %d\n",
+                (stringp(inf)?inf:"none"), height, width, sizeof(cities)));
+  for (i=0; i<sizeof(cities); i++)
+    write(sprintf("City #%-2d on coordinates x: %d, y: %d\n", i, cities[i][0], cities[i][1]));
+
+  return 1; 
+}
+  
+savemap(mixed str)
+{ 
+  string dummy;
+
+  notify_fail("Wrong number of Arguments!\n");
+  if (!stringp(str))
+    return 0;
+  if (sscanf(str, "%s", outf)!=1)
+    return 0;
+  
+  if (strstr(outf, "/")==-1)
+    outf=this_player()->QueryProp(P_CURRENTDIR)+"/"+outf;
+  if (sscanf(outf, "%s.o", dummy)==1)
+    outf=outf[0..strlen(outf)-2];
+
+  save_object(outf);
+  write(sprintf("writing %s\n"
+               +"new overland map created with height: %d, width: %d, number of cities: %d\n",
+                outf, height, width, sizeof(cities)));
+
+  return 1; 
+}
+
+add_city(mixed str)
+{
+  int num;
+  string room;
+
+  notify_fail("Wrong number of Arguments!\n");
+  if (!stringp(str))
+    return 0;
+  if (sscanf(str, "%d %s", num, room)!=2)
+    return 0;
+
+  notify_fail("number too high!\n");
+  if (num>sizeof(cities))
+    return 0;
+  
+  write(sprintf("City %s added at coordinates x: %d, y: %d\n",
+                room, cities[num-1][0], cities[num-1][1]));
+  cities[num-1][2]=room;
+  return 1;
+}
+

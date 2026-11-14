@@ -1,0 +1,283 @@
+#pragma strong_types
+
+inherit "std/laden";
+
+#include <properties.h>
+#include <laden.h>
+#include "../def.h"
+//#include "../basari.h"
+
+int GetValueOf(object ob);
+void SetBuyValue(string value);
+void SetPrice(int val);
+void WantToBuy(object pl);
+void End();
+
+int geboten, preis, timeout, times;
+string feilschend;
+object was;
+
+void create()
+{
+  ::create();
+  geboten=0;
+  preis=0;
+  times=10;
+
+  SetProp( P_LIGHT, 1 );
+  SetProp( P_INT_SHORT, "Am Mada Basari");
+  SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE: 40, ENV_TERRAIN: TT_TOWN]) );
+  SetProp(P_INDOORS, 0);
+
+//-----Details Anfang-----
+  AddDetail( "sand",
+            "Hier gibt es viel davon. Du bist ja auch in der Wueste.");
+
+  AddDetail( ({"wueste","wuesten"}),
+            "Die Wueste ist trocken und voll mit Sand.");
+
+  AddDetail( ({"himmel"}),
+            "Er ist strahlend blau.");
+
+  AddDetail( "sonne",
+             "Sie brennt unertraeglich auf dich herunter.");
+//-----Details Ende-----
+
+  AddSmell( DEFAULT_SMELL,
+	    "Hier riecht es nach vielen exotischen Gewuerzen und Kamel.");
+  AddSmell( ({"gewuerze","gewuerzen"}),
+            "Die vielen verschiedenen Gewuerze riechen gut.");
+  AddSmell( "kamel",
+            "Ierks! Das stinkt!");
+
+  AddSound( DEFAULT_SOUND,
+            "Von ueberall her hoerst Du die Stimmen der Haendler, die ihre "
+            "Waren feil bieten.");
+  AddSound( ({"stimmen","haendler"}),
+            "Von ueberall her droehnen die Stimmen der Haendler.");
+
+  AddCmd( ({"feilsche","feilsch"}), "feilschen");
+  AddCmd( ({"biete","biet"}), "bieten");
+  AddCmd( ({"kaufe","kauf","bestell"}), "kaufen");
+}
+
+/* kaufen abfangen */
+int kaufen(string str)
+{
+  int bf, mult;
+  notify_fail("Was willst Du kaufen?\n");
+  if(!str || str == "") return 0;
+  if(!BASARIMASTER->IsFeilscher(getuid(TP)))
+  {
+    ::buy(str);
+    return 1;
+  }
+
+  mult=(BASARIMASTER->QueryMult(getuid(TP)))*QueryBuyFact();
+  bf=QueryBuyFact();
+  SetBuyFact(mult);
+  ::buy(str);
+  SetBuyFact(bf);
+  return 1;
+}
+
+/* Folgendes: Die AddCmd-funs zum feilschen */
+int feilschen(string str){
+  int num;
+
+  notify_fail("Worum möchtest Du feilschen?\n");
+
+  if(!str) return 0;
+  if(sscanf(str, "um %d", num) != 1) return 0;
+  if(!(feilschend == 0))
+  {
+    write(QueryProp(P_SHOPKEEPER_NAME)+" ist gerade mit "+CAP(feilschend)+" beschaeftigt.\n");
+    return -1;
+  }
+  if(BASARIMASTER->IsFeilscher(getuid(TP)))
+  {
+    write(QueryProp(P_SHOPKEEPER_NAME)+" feilscht nicht mehr mit Dir.\n");
+    return -1;
+  }
+
+  was=FindInStore(num);
+  SetPrice(GetValueOf(was));
+
+  //string break_string(string str, int width, string indent)
+  Message(break_string("Fuer "+preis+" Muenzen gehoert "+was->QueryArticle()+
+       was->QueryProp(P_NAME)+" Dir, "+TPN+"!", 78, QueryProp(P_SHOPKEEPER_NAME)+" sagt: "));
+  write("Mit 'biete <preis>' schlaegst Du Dein Angebot vor.\n");
+  feilschend=getuid(TP);
+
+  call_out("timer", 10);
+  //call_out("WantToBuy", 0, TP);
+  return 1;
+}
+
+/* Cmd-Fun zum bieten */
+int bieten(string str)
+{
+  int multi;
+  notify_fail("Wieviel moechtest Du bieten?\n");
+  if(!str) return 0;
+  if(!to_int(str))
+  {
+    write("Du musst schon einen Betrag bieten.\n");
+    return -1;
+  }
+  if(!(feilschend == getuid(TP)))
+  {
+    write(QueryProp(P_SHOPKEEPER_NAME)+" kuemmert sich gar nicht um Dich.\n");
+    return -1;
+  }
+  if(times<=0)
+  {
+    multi=2+random(2);
+    BASARIMASTER->AddFeilscher(getuid(TP), multi);
+    Message(break_string("Also wirklich! Das reicht! Absofort verlangen wir "+
+            multi+"-mal so viel von Dir, "+TPN+"!", 78, QueryProp(P_SHOPKEEPER_NAME)+" sagt: "));
+    End();
+    return -1;
+  }
+  times--;
+  SetBuyValue(str);
+  write("Du bietest "+str+" Muenzen.\n");
+  say(TPN+" bietet "+str+" Muenzen.\n");
+  WantToBuy(TP);
+  return 1;
+}
+
+/* 1. Das beenden des Feilschens
+   2. Wird ausgefuehrt wenn die biet-zeit um ist
+   3. Zum abfragen des lokalen Geldstatus
+   4. Liefert den Kaufwert des objects ob
+   5. Setzt das aktuelle Feilsch-gebot
+   6. Setzt den aktuellen Feilssch-preis
+   7. Eventuelle Warnung
+*/
+
+// 1.
+void End()
+{
+  feilschend=0;
+  preis=0;
+  geboten=0;
+  timeout=0;
+  was=0;
+  remove_call_out("timer");
+}
+
+// 2.
+void timer()
+{
+  timeout=1;
+  Message(break_string("Wenn Du nicht vernuenftig bietest Dann kannst Du das Geschaeft "
+            "vergessen!", 78, QueryProp(P_SHOPKEEPER_NAME)+" sagt: "));
+  End();
+}
+
+// 3.
+int Money()
+{
+  return mymoney;
+}
+
+// 4.
+int GetValueOf(object ob)
+{
+  return ob->QueryProp(P_VALUE)*QueryBuyFact();
+}
+
+// 5.
+void SetBuyValue(string value)
+{
+  geboten=to_int(value);
+}
+
+// 6.
+void SetPrice(int val)
+{
+  preis=val;
+}
+
+// 7.
+void Warning()
+{
+  switch(times)
+  {
+    case 5: Message(break_string("Du bist ja ganz schoen hart beim "
+                     "feilschen!", 78, QueryProp(P_SHOPKEEPER_NAME)+" sagt: "));
+            break;
+    case 3: Message(break_string("Lange mach ich das nicht mehr mit!",
+                     78, QueryProp(P_SHOPKEEPER_NAME)+" sagt: "));
+	     break;
+    case 2: Message(break_string("Jetzt reichts aber dann!",
+                    78, QueryProp(P_SHOPKEEPER_NAME)+" sagt: "));
+	    break;
+    case 0: Message(break_string("Das ist meine letzte Warnung! Noch ein Versuch micht "
+                    "hinunter zu treiben und Du kannst es vergessen!",
+		    78, QueryProp(P_SHOPKEEPER_NAME)+" sagt: "));
+	    break;
+  }
+}
+
+/* Hier wird das eigentliche Feilschen getan - sehr wuest... */
+void WantToBuy(object pl)
+{
+ if(geboten >= preis) // Wenn der gebotene Wert ueber dem aktuellen Kaufwert liegt wird gekauft
+  {
+    if(pl->QueryMoney() < geboten) // Falls man zu wenig Geld zum Kaufen hat
+    {
+      Message(break_string("So viel Geld hast Du nicht, "+pl->name()+"!",
+              78, QueryProp(P_SHOPKEEPER_NAME)+" sagt: "));
+      remove_call_out("timer");
+      End();
+      return;
+    }
+
+    Message(break_string("Bitte! Hier hast Du "+was->QueryArticle()+
+       was->QueryProp(P_NAME)+", "+pl->name()+"!", 78, QueryProp(P_SHOPKEEPER_NAME)+" sagt: "));
+    pl->AddMoney(-geboten);
+    mymoney+=geboten;
+    was->move(pl, M_GET);
+    End();
+    return;
+  }
+  
+  if(preis <= GetValueOf(was)/4) // Der Haendler feilscht nur bis zu einem Mindestwert
+  {
+    preis=(int) GetValueOf(was)/4+random(preis/2);
+    Message(break_string("Das ist zu wenig!", 78, QueryProp(P_SHOPKEEPER_NAME)+" sagt: "));
+    Warning();
+    return;
+  }
+  if(geboten <= (int) (preis*0.7)) // Man muss mindestens 70% des Preises bieten
+  {
+    Message(break_string("Du musst schon etwas mehr bieten...", 78, QueryProp(P_SHOPKEEPER_NAME)+" sagt: "));
+    Warning();
+    return;
+  }
+  preis-=(int) ( ( (preis-geboten)/2) + random( (preis-geboten)/2) ); // Der Preis wird gesenkt
+
+  Message(break_string("Fuer "+preis+" Muenzen gehoert "+was->QueryArticle()+ // Eine passende Textausgabe kommt
+       was->QueryProp(P_NAME)+" Dir, "+TPN+"!", 78, QueryProp(P_SHOPKEEPER_NAME)+" sagt: "));
+  write("Mit 'biete <preis>' schlaegst Du ein Angebot vor.\n");
+  
+  remove_call_out("timer"); // Wir entfernen den call_out auf timer...
+  call_out("timer", 15);    // und setzen einen neuen
+  Warning(); // Es wird ueberprueft ob eine Warnung an den Spieler ausgegeben werden soll
+}
+
+/* BecomesNetDead() wird hier ueberschrieben */
+void BecomesNetDead(object spieler)
+{
+  if(getuid(spieler) == feilschend)
+   End();
+}
+
+/* NotifyPlayerDeath() wird ueberschrieben */
+void NotifyPlayerDeath(object victim, object killer, int lost_xp)
+{
+  if(getuid(victim) == feilschend)
+    End();
+}

@@ -1,0 +1,156 @@
+FUNKTION:
+     varargs void AddCmd(mixed cmd, mixed func, int flag);
+     varargs void AddCmd(mixed cmd, mixed func, string errormsg);
+
+DEFINIERT IN:
+     /std/thing/commands.c
+
+ARGUMENTE:
+     cmd
+          String, Regel oder Array von Strings mit dem/den Namen des
+          Kommandos.
+
+          Bsp:
+          (String)  "wirf"
+          (Array)   ({"wirf","werfe","werfen"})
+          (Regel)   "wirf|werfe|werfen"
+          (Regel 2) "wirf|werfe|werfen&apfel|birne&auf&vogel"
+
+          Bei einer komplexen Syntax wird folglich ein String angegeben,
+          der alle notwendigen Schluesselworte und deren zulaessige Synonyme
+          beschreibt.
+
+          Nur wenn aus JEDER Synonymgruppen ein Wort im Spielerkommando
+          enthalten ist, wird die Funktion aufgerufen (Synonymgruppen sind
+          durch '&' getrennt)
+
+          Bei der Regel 2 fuehrt das zu:
+          wirf apfel auf vogel -> ok
+          werfe die birne auf den vogel -> ok
+          werfe die kleine birne schnell auf den wegfliegenden vogel -> ok
+          werfe die birne gegen die wand -> inkorrekt (fehlt: vogel, auf)
+
+     func
+          String mit dem Namen der aufzurufenden Funktion oder eine closure,
+          die ausgefuehrt werden soll.
+
+          Bsp:
+            #'cmd_werfen
+            "cmd_werfen"
+
+     flag (int, optinal)
+          Falls ungleich Null, wird func bei allen Kommandos aufgerufen, die
+          mit cmd beginnen.
+
+          Anmerkung: dies sollte nur in Ausnahmefaellen verwendet werden
+
+     errormsg (string, optional)
+          Kann anstelle von flags verwenden werden. Hier kann zu jeder
+          Synonymengruppe eine einzelne Fehlermeldung angegeben werden.
+          Die Fehlermeldungen werden durch '|' von einander getrennt.
+          Ist fuer eine Synonymengruppe keine Fehlermeldung vorhanden
+          (sizeof Syngruppe > sizeof Fehlermeldungen) wird 'Wie bitte?'
+          ausgegeben.
+
+          Bsp:
+          "Was willst Du werfen?|Willst Du AUF etwas werfen?|Worauf "
+          "willst Du werfen?"
+
+BESCHREIBUNG:
+     Dem Objekt wird ein neues Kommando hinzugefuegt. Dieses steht sofort
+     nach dem AddCmd()-Aufruf zur Verfuegung.
+
+BEMERKUNGEN:
+     Die Befehle koennen sowohl von Spielern (mittels direkter Eingabe) als
+     auch von NPCs (mittels command()) aufgerufen werden.
+
+     Bei Spielern werden die Befehlsargumente vorher noch bearbeitet, um
+     eine "natuerlichere" Syntax zu erlauben. Die unbearbeiteten Argumente
+     stehen in der Funktion nur via this_player()->_unparsed_args() zur
+     Verfuegung, muessen also explizit abgefragt werden, wenn dies not-
+     wendig sein sollte. Die herausgefilterten Woerter sind zB:
+     das, der, die, des, dem, den, ein, eine, einer, eines
+
+     Das Objekt, das das Kommando per AddCmd() hinzufuegt, muss sich also
+     nur im Einflussbereich des Spielers befinden, nicht notwendigerweise
+     in dessen Inventory (Beispiel: Raeume, Gegenstaende im selben Raum,
+     etc.). Gegebenenfalls (bei Gegenstaenden) ist also in der Funktion
+     bzw. Closure noch zu pruefen, ob sie der Spieler schon genommen hat!
+     Alternativ koennte man hierzu auch eine geeignetere Kombination von
+     init() und add_action() verwenden, dies ist jedoch nicht zu empfehlen.
+
+     Ein weiterer Grund, weshalb AddCmd() einem init() / add_action()
+     Konstrukt vorzuziehen ist, ist die Vergabe von Forscherpunkten fuer
+     Aktionen: Es ist derzeit technisch nicht moeglich (und auch nicht
+     geplant), fuer Aktionen, die per add_action() definiert wurden,
+     einen FP zu vergeben. Fuer AddCmd() Aktionen ist dies jedoch ohne
+     Probleme moeglich, Voraussetzung fuer die Vergabe des FP ist aber
+     nicht nur das erfolgreiche Vollenden der Aktion, sondern vor allem
+     der Rueckgabewert 1. Auf diese Weise ist es moeglich, die Vergabe
+     gezielt zu steuern, und trotzdem bei bestimmten Aktionen mit einem
+     Rueckgabewert von z.B. -1 (also ungleich 0 und ungleich 1) die
+     weitere Verarbeitung zu unterdruecken und trotzdem keinen FP zu
+     vergeben.
+
+     Beispiele fuer die FP-Vergabe:
+
+     - eine ungueltige Syntax (z.B. "kletter") gibt in der Regel ein
+       notify_fail und ein return 0, der FP wird nicht vergeben.
+
+     - Eine gueltige Syntax ("kletter auf baum") hingegen wird mit
+       return 1 beendet und fuehrt zur Vergabe des FP (falls er denn
+       auch eingetragen ist).
+
+     - Eine gueltige, aber im Moment aufgrund der Randbedingungen nicht
+       moegliche Syntax (z.B. "faelle baum" wenn die Axt nicht scharf
+       genug ist, o.ae.) gibt eine entsprechende Ausgabe per write()
+       aus und gibt -1 zurueck. Damit wird der FP nicht vergeben, aber
+       die weitere Auswertung durch etwaige andere, das Verb definierende
+       Objekte unterbunden.
+
+
+BEISPIELE:
+
+       AddCmd("test", "testfunc");
+       AddCmd("teste", "testfunc");
+
+     Das Objekt versteht jetzt die Befehle test und teste. Zur Ausfuehrung
+     dieser Befehle wird die Funktion testfunc() aufgerufen.
+
+       AddCmd( ({ "test", "teste" }), "testfunc" );
+
+     Dieses Beispiel hat die gleiche Wirkung wie das vorhergehende; man
+     spart allerdings eine Zeile Quelltext und die Ausfuehrungszeit des
+     zweiten AddCmd().
+
+       AddCmd("test", "testfunc", 1);
+
+     Bei allen Kommandos, die mit "test" beginnen, wird testfunc()
+     aufgerufen, also bei test oder teste, aber auch bei testament. Hier
+     muss dann die testfunc() eventuell schauen, ob wirklich ein gueltiges
+     Kommando eingegeben wurde.
+
+       AddCmd("wirf|werfe|werfen&apfel|birne&auf&vogel",
+         #'cmd_werfen,
+         "Was willst Du werfen?|Willst Du AUF etwas werfen?|Worauf "
+         "willst Du werfen?");
+
+     Das Object versteht jetzt die Befehle wirf, werfe und werfen.
+     Dabei wird bei jeder Eingabe zusaetzlich getestet, ob die zusaetzliche
+     Anforderung des Kommandos erfuellt ist. Wurde in dem Kommando weder
+     Birne noch Apfel geschrieben wird die Fehlermeldung 'Was willst Du
+     werfen?' per notify_fail ausgegeben (sofern kein anderes Kommando
+     korrekt erkannt wird). Bei der Auswertung wird nacheinander jede
+     Synonymengruppe durchgetestest und ggf. die Fehlermeldung ausgegeben.
+
+     Mehrere AddCmd's mit gleichen Verben koennen kombiniert werden.
+
+       AddCmd("wirf|werfe|werfen&apfel|birne&auf&vogel",
+         #'cmd_werfen);
+       AddCmd("wirf|werfe|werfen&stein&auf&rabe",
+         #'cmd_werfen2);
+
+SIEHE AUCH:
+     RemoveCmd(L), _unparsed_args(L), add_action(E), command(L),
+     /std/thing/commands.c
+

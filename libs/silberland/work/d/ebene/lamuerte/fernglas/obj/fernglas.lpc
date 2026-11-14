@@ -1,0 +1,188 @@
+inherit "std/thing"; 
+#include <wizlevels.h>
+#include <language.h>
+#include <properties.h>
+#include <combat.h>
+#include <moving.h>
+
+string backuproom,backupdir;
+int last;
+
+void create()
+{ 
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  SetProp(P_SHORT,"Ein Fernglas");
+  SetProp(P_LONG, 
+      "Ein kleines Fernglas. Mit ihm kannst Du in andere Raeume gucken. "
+      "Mit dem Befehl 'gucke <richtung>' kannst Du es benutzen. Von hier "
+      "aus kannst Du in folgende Richtungen gucken: @@pla@@");
+  SetProp(P_VALUE,500);
+  SetProp(P_WEIGHT,20);
+  SetProp(P_GENDER, NEUTER);
+  SetProp(P_NAME,"Fernglas");
+  SetProp(P_NODROP,"Nein, das Fernglas gibst Du nicht mehr her.\n");
+  SetProp(P_NEVERDROP, 1);
+  AddId( ({"lam\nfernglas","glas","fernglas"}));
+
+  backuproom = "";
+  backupdir = ""; 
+  AddCmd( ({"guck","gucke"}), "do_zoom" );
+  seteuid(getuid());
+}
+
+mapping dirmap = ([
+      "n":"norden", "s":"sueden", "w":"westen", "o":"osten",
+      "nw":"nordwesten", "sw":"suedwesten", "so":"suedosten", "no":"nordosten",
+      "ob":"oben", "u":"unten", 
+
+      "nob":"nordoben", "noob":"nordostoben",
+      "oob":"ostoben",  "soob":"suedostoben",
+      "sob":"suedoben", "swob":"suedwestoben",
+      "wob":"westoben", "nwob":"nordwestoben",
+      "nu":"nordunten", "nou":"nordostunten",
+      "ou":"ostunten",  "sou":"suedostunten",
+      "su":"suedunten", "swu":"suedwestunten",
+      "wu":"westunten", "nwu":"nordwestunten",
+    ]);
+
+string dirs(string str)
+{
+  return dirmap[str] || str;
+}
+
+int do_zoom(string str)
+{
+  string *exits;
+  string backup;
+  object ob;
+  string roomname;
+
+  exits=m_indices(environment(this_player())->QueryProp(P_EXITS));
+
+  if (!str){
+    notify_fail("Wohin willst Du gucken?\n");
+    return 0;
+  }
+
+  str = dirs(str);
+  if (member_array(str,exits)==-1) {
+    if (str=="nirgendwohin") {
+      write("Du blickst ins Nirgendwo und erkennst nichts.\n");
+      return -1;
+    }
+    notify_fail("In diese Richtung kannst Du nicht gucken!\n"); 
+    return 0; 
+  }
+
+  if(this_player()->QueryProp(P_BLIND)){
+    write("Du bist BLIND, Du siehst nichts.\n");
+    return -1;
+  }
+
+  ob=environment(this_player());
+  roomname=file_name(ob);
+  if (roomname[0..9] != "/d/astral/" && !IS_WIZARD(this_player()))
+  {
+    if(this_player()->QueryProp(P_SP)<=30) {
+      write("Du hast nicht genug Magie dafuer.\n");
+      return -1;
+    }
+
+    this_player()->AddSp(-20 - random(10));
+
+    if (random(100)>(65+this_player()->QueryAttribute(A_INT)) &&
+        !environment(this_player())->QueryProp(P_INDOORS) &&
+        environment(this_player())->QueryProp(P_LIGHT) > 0){
+      write("Autsch, Du blickst genau in die Sonne und wirst geblendet.\n");
+      this_player()->SetProp(P_BLIND,10+random(20));
+      return -1;
+    }
+  }
+  else if (time() - last < 4)
+  {
+    if(this_player()->QueryProp(P_SP)<=5) {
+      write("Du hast nicht genug Magie dafuer.\n");
+      return -1;
+    }
+    this_player()->AddSp(-2-random(4));
+  }
+  last = time();
+  this_player()->AddSp(-1);
+
+  backuproom=environment(this_player())->QueryProp(P_EXITS)[str];
+  backupdir=str;
+  catch(call_other(backuproom, "???"));
+  if (!find_object(backuproom))
+  {
+    write("In Richtung " + capitalize(backupdir) +
+          " kannst Du rein gar nichts erkennen.\n"); 
+    return -1;
+  }
+
+  say(capitalize(this_player()->QueryProp(P_NAME))+" blickt mit "+
+      this_player()->QueryPossPronoun(NEUTER, WEM, SINGULAR) +
+      " Fernglas Richtung " + capitalize(str)+ ".\n");
+
+  tell_object(this_player(), "-----------------------------------------------------------------------------");
+  tell_object(this_player(),"\nAls Du in Richtung "+capitalize(backupdir)+
+      " guckst, kannst folgendes erkennen:\n");
+
+  if(backuproom->QueryProp(P_LIGHT)<1 && (random(100)>98) ) {
+    tell_object(this_player(),"Nichts.\n"+"\n");
+    tell_object(this_player(), "-----------------------------------------------------------------------------");
+    tell_object(this_player(),"\n"); 
+    return -1;
+  }
+
+  tell_object( this_player(),
+      "\n" + backuproom->QueryProp(P_INT_SHORT) +
+      sprintf("\n%"+strlen(backuproom->QueryProp(P_INT_SHORT))+"'-'s\n", "") +
+      backuproom->int_long(this_player(),this_object()) +
+      "-----------------------------------------------------------------------------\n");
+  return 1;
+}
+
+
+string pla()
+{
+  mapping exits;
+  string *exitinds;
+  mixed hidden;
+
+  // sicher ist sicher ..... Feyaria
+  if (this_player() && environment(this_player()))
+  {
+    hidden = environment(this_player())->QueryProp(P_HIDE_EXITS);
+
+    if (hidden && !pointerp(hidden))
+      return "Nirgendwohin!";
+
+    exits=environment(this_player())->QueryProp(P_EXITS);
+    exitinds=m_indices(exits);
+
+    if (hidden && pointerp(hidden))
+      exitinds -= hidden;
+
+    if (sizeof(exitinds) > 1) {
+      return implode( exitinds[0..sizeof(exitinds)-2], ", " ) +
+             " und " + exitinds[sizeof(exitinds)-1] + ".\n";
+    }
+    else if (sizeof(exitinds)) {
+      return exitinds[0] + ".\n";
+    }
+    else
+      return "Nirgendwohin.\n";
+  }
+  return "Nirgends!\n";
+}
+
+string long()
+{
+  return break_string(
+      "Ein kleines Fernglas. Mit ihm kannst Du in andere Raeume gucken. "
+      "Mit dem Befehl 'gucke <richtung>' kannst Du es benutzen. Von hier "
+      "aus kannst Du in folgende Richtungen gucken: " + pla(), 78);
+}
+

@@ -1,0 +1,1167 @@
+//  Projekt   : Barry's Pfeifenladen
+//  NPC Name  : Tobi Ledersohle
+//  Erstellt  : 30.03.2001 (Orw)
+//  Geaendert : -
+
+inherit "std/npc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <new_skills.h>
+#include <moving.h>
+#include <npc.h>
+#include "../def.h"
+
+
+string uhrzeitinfo(string key);
+string bestellungsinfo(string key);
+nosave string * veraergert;
+string *begruesst=({});
+
+#define HOLZ ({"...zur Haelfte aus Holz", \
+               "...zu mehr als der Haelfte aus Holz", \
+               "...zu fast dreiviertel aus Holz", \
+               "...zu mehr als dreiviertel aus Holz", \
+               "...fast ausschliesslich aus Holz", \
+               "...aus reinem Holz"})
+
+mapping bzeit   = ([]); // Besteller und Bestellzeit
+mapping produkt = ([]); // Besteller und Gegenstand
+#define WERKSTATT ROOM "pfeifenwerkstatt.lpc"
+
+#define EMASTER "/d/huegelland/orw/pfeifenladen/enemymaster.lpc"
+#define ENEMY(wer) (member(EMASTER->QueryFeinde(), getuid(wer))!=-1)
+               
+int holzpfeifenpreis = 800;
+int preis;         // Holzpfeifenpreis minus Holzanteil des Gegenstandes
+                   // je reiner das Holz um so leichter fuer Tobi eine 
+                   // Pfeife zu machen
+int beschaeftigt;  // 1 wenn Tobi gerade mit einem Kunden verhandelt
+                   // 0 wenn Tobi gerade Zeit hat
+object gegenstand; // wird benoetigt damit Tobi in get_auftrag den 
+                   // Gegenstand zurueckgibt
+
+
+
+
+void create() 
+{
+  if (!is_clone(TO)) return;
+  ::create();
+
+  veraergert = ({});
+
+  SetProp(P_SHORT, "Tobi Ledersohle");
+  SetProp(P_LONG,
+    "Vor Dir steht ein kleiner staemmiger Hobbit. Er ist ein Meister "
+    "im Pfeifenbauen. Seine braunen wuscheligen Haare sind sorgfaeltig "
+    "ueber die teils ziemlich kahlen Stellen gekaemmt. Hobbits werden ja "
+    "allgemein als sehr geschickt bezeichnet, doch Tobi scheint in dieser "
+    "Faehigkeit alle zu uebertreffen. Du koenntest stundenlang seine "
+    "Schnitzkunst und die Gewandheit mit der er die verschiedensten "
+    "Materialien bearbeitet bewundern. Die Haare an seinen Armen und "
+    "Fuessen sind mit vielen Saegespaenen uebersaet.");
+  SetProp(P_NAME, "Tobi");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:0,T_RANGE_MAX:30]));
+  AddId(({"tobi", "ledersohle", "pfeifenhersteller","hersteller","hobbit",
+          "PFEIFENTOBI"}));
+  enable_commands();
+  set_living_name("tobi");
+
+  create_default_npc(18);
+  SetProp(P_HANDS, ({
+    " mit seinen behaarten Haenden",QueryProp(P_HANDS)[1],DT_BLUDGEON}));
+  SetProp(P_MAX_HP, QueryProp(P_MAX_HP)+random(20));
+  SetProp(P_BODY, QueryProp(P_BODY)+random(10));
+  SetProp(P_XP, QueryProp(P_XP)+100*100); // Bonus fuer Spells
+  SetProp(P_RACE, "Hobbit");
+  SetProp(P_SIZE, 95+random(6));
+  SetProp(P_ALIGN, 300+random(100));
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_HEAL,10);
+  SetProp(P_AGGRESSIVE,0);
+  SetProp(P_WIMPY, 0);
+  SetProp(P_RESISTANCE_STRENGTHS,
+      ([ DT_TERROR    : -0.1,
+         DT_MAGIC     : -0.1,
+         DT_SOUND     :  0.2,
+         DT_LIGHTNING :  0.1,
+         DT_POISON    :  0.1,
+         DT_FIRE      : -1.0 ]) );
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_NOMAGIC,0);
+  SetProp(P_REJECT,
+    ({ REJECT_GIVE, "Tobi ist im Moment zu beschaeftigt und gibt @WEN wieder "
+                    "zurueck.\n" }) );
+
+  SetProp(P_MSGIN, "kommt an");
+  SetProp(P_MSGOUT, "geht");
+  SetProp(P_MMSGIN, "erscheint in einer Rauchwolke");
+  SetProp(P_MMSGOUT, "verschwindet mit Knall und Schwefelduft");
+
+  SetProp(P_DIE_MSG,  " faellt toetlich getroffen zu Boden.\n");
+  SetProp(P_NOCORPSE, 0 );
+  SetProp(P_MURDER_MSG, "Was war das jetzt fuer ein Mist?");
+  SetProp(P_KILL_NAME, "Tobi Ledersohle");
+  SetProp(P_KILL_MSG, "Pah! Hast Dich wohl ein wenig ueberschaetzt!");
+
+/* Details */
+
+  AddDetail( ({"meister"}),
+    "Tobi ist ein wahrer Meister der Pfeifenherstellung.");
+  AddDetail( ({"haare"}),
+    "Tobi hat braunes wuscheliges Haar das am Kopf schon einige kahle "
+    "Stellen aufweist.");
+  AddDetail( ({"stellen","stelle","glatze"}),
+    "Sorgfaelltig hat Tobi seine Haare ueber seine Glatze gekaemmt.");
+  AddDetail( ({"arme","fuesse"}),
+    "Tobis Arme und Fuesse sind mit Saegespaenen uebersaet.");
+
+/* Infos */
+
+// Defaultinfos
+  AddInfo(DEFAULT_INFO, ({
+    "zuckt mit den Schultern.\n",
+    "denkt . o O ( So eine bloede Frage! )\n",
+    "fragt: Redest Du immer soviel Mist?\n",
+    "fragt: Bist Du das erste Mal hier?\n",
+    "sagt: Hmm.. fuer solchen Bloedsinn hab ich keine Zeit!\n",
+    "fragt: Wie bitte?\n",
+    "fragt: Wie meinst Du das?\n",
+    "fragt: Kannst Du das nochmal wiederholen?\n",
+    "sagt: Ich glaub, ich hoer schlecht!\n",
+    "gruebelt: Hmmm....., tja...., soso....\n",
+    "sagt: Ach wirklich? Was Du nicht sagst!\n",
+    "kratzt sich hinter dem Ohr.\n",
+    "schaut Dich mit grossen Augen an.\n",
+    "schaut Dich erstaunt an.\n",
+    "sagt: Das meinst Du doch nicht ernst!\n",
+    "staunt: Ach wirklich! Das ist mir aber ganz neu!\n",
+    "sagt: Das hab ich mich auch schon immer gefragt.\n",
+    "sagt: Du kannst aber komische Fragen stellen!\n",
+    "sagt: Ich hab noch nie von sowas gehoert!\n",
+    "beachtet Dich gar nicht.\n",
+    "seufzt.\n",
+    "verwuschelt Deine Haare.\n",
+    "ignoriert Deine dummen Fragen.\n",
+    "dreht sich uninteressiert weg.\n",
+    "kichert.\n",
+    "grinst Dich an.\n",
+    "gruebelt.\n",
+    "knuddelt Dich.\n",
+    "bleibt stumm.\n",
+    "fragt: Wie heisst Du ueberhaupt?\n",
+    "sagt: Lass uns das Thema wechseln.\n",
+    "lacht Dich aus.\n",
+    "sagt: Nein, Nein und nochmals NEIN!\n",
+    "sagt: Das ist doch alles Bloedsinn!\n",
+    "fragt sich: Warum red ich eigentlich mit Dir?\n",
+    "laechelt Dich an.\n",
+    "meint: Frag doch jemand anders!\n" }) );
+
+// Chats
+  SetChats(3, ({
+    "Tobi wischt ueber seine Werkbank.\n",
+    "Tobi feilt an einem Holzstueck herum.\n",
+    "Tobi warnt: Verletz Dich nicht an den Holzspaenen!\n",
+    "Tobi flucht ueber eine stumpfe Feile.\n",
+    "Tobi laesst eine Pfeife pruefend durch seine Finger gleiten.\n",
+    "Tobi erzaehlt ein wenig ueber Derlim.\n",
+    "Tobi sortiert sein Werkzeug.\n",
+    "Tobi seufzt.\n",
+    "Tobi grinst Dich an.\n",
+    "Tobi steckt seine Haende in die Hosentaschen und gaehnt.\n",
+    "Tobi begutachtet eine halb fertige Pfeife.\n",
+    "Tobi putzt seinen Schraubstock.\n",
+    "Tobi fragt: Stehst Du gern bloed rum?\n",
+    "Tobi zieht sich die Hose hoch.\n",
+    "Tobi isst einen Keks.\n",
+    "Tobi raeuspert sich.\n",
+    "Tobi guckt in den Ofen.\n",
+    "Tobi waermt sich die Haende beim Ofen.\n",
+    "Tobi arbeitet beim Schleifgeraet.\n",
+    "Tobi schuettelt seine Schuerze aus.\n",
+    "Tobi lehnt sich gemuetlich an die Werkbank.\n",
+    "Tobi schneuzt sich die Nase.\n",
+    "Tobi reibt sich die Haende.\n",
+    "Tobi gruebelt eine Weile vor sich hin.\n",
+    "Tobi mustert Dich.\n",
+    "Tobi ueberprueft die Tiegel auf dem Regal.\n",
+    "Tobi rastet sich ein wenig aus.\n",
+    "Tobi wischt sich die Haende in der Schuerze ab.\n",
+    "Tobi laechelt Dich an.\n",
+    "Tobi lackiert eine Pfeife.\n",
+    "Tobi gaehnt laut.\n",
+    "Tobi schaut sich gemuetlich um.\n"
+    }) );
+
+  SetAttackChats(10, ({
+    "Tobi arglt.\n",
+    "Tobi schreit: Wieso machst Du das?\n",
+    "Tobi sagt: Immer diese Jugend!\n",
+    "Tobi tritt Dir gegen das Schienbein.\n",
+    "Tobi wird nun echt wuetend.\n",
+    "Tobi ruft: Hilfe!\n",
+    "Tobi fragt: Musst Du unbedingt einen kleinen Hobbit angreifen?\n",
+    "Tobi gibt Dir eine Ohrfeige.\n",
+    "Tobi ballt seine behaarten Faeuste.\n",
+    "Tobi geht in Deckung.\n"
+    }) );
+
+// NPC-Library von Derlim
+  AddLibrary(STDINFOS,1,1);
+
+// Antworten des NPCs
+  AddInfo( ({"magier","regionsmitarbeiter"}),
+    "Es gibt einige Magier hier im Silberland, einer davon ist Orw.",
+    "sagt: ");
+  AddInfo( ({"orw"}),
+    "Ich kenne Orw gut, er war oft hier, leider "
+    "arbeitet er schon wieder an neuen Gebieten, aber er kommt mich "
+    "regelmaessig besuchen.\n"
+    "Achja, bevor ichs vergess... Jegliche Beschwerden bezueglich "
+    "der Werkstatt gehen an ihn und nicht an mich!",
+    "sagt: ");
+  AddInfo( ({"beschwerden","beschwerde"}),
+    "Hast Du eine Beschwerde? Dann schick eine Mail an Orw und belaesstige "
+    "nicht mich damit!",
+    "sagt zornig: ");
+  AddInfo( ({"mail"}),
+    "Du weisst doch wie man eine Mail schreibt, oder?",
+    "fragt: ");
+  AddInfo( ({"gebiete","gebieten"}),
+    "Orw arbeitet bestimmt schon an neuen Gebieten.",
+    "sagt: ");
+  AddInfo( ({"hauptplatz","platz","hauptstrasse"}),
+    "Der Hauptplatz von Derlim liegt im nordwestlich von hier.",
+    "sagt: ");
+  AddInfo( ({"urlaub"}),
+    "Im Kristallwald Urlaub machen waer bestimmt mal schoen.",
+    "sagt: ");
+  AddInfo( ({"namen","name"}),
+    "Ich heisse Tobi!",
+    "sagt: ");
+  AddInfo( ({"tobi","ledersohle"}),
+    "Das bin ich!",
+    "laechelt: ");
+  AddInfo( ({"huegelland","heimat"}),
+    "Das Huegelland ist meine Heimat.",
+    "sagt: ");
+  AddInfo( ({"decke"}),
+    "Guck nach oben, da ist die Decke.",
+    "grinst: ");
+  AddInfo( ({"sache","gebraeuche","einfuehlungsvermoegen"}),
+    "Fuer Fragen zur Stadtverwaltung wende Dich bitte direkt an Raballion.",
+    "sagt: ");
+  AddInfo( ({"fragen","frage"}),
+    "Du fragst nach einer Frage, was ist denn bei Dir kaputt?",
+    "kichert: ");
+  AddInfo( ({"geselligkeit"}),
+    "Geselligkeit ist bei uns Hobbits bekannt.",
+    "grinst: ");
+  AddInfo( ({"eigenheiten"}),
+    "Naja wir essen halt viel und so, aber Du wirst schon herausfinden, "
+    "dass wir sehr nett sind.",
+    "sagt: ");
+  AddInfo( ({"burschen","maedels"}),
+    "Meinst Du die Elfen?",
+    "fragt: ");
+  AddInfo( ({"probleme","problem"}),
+    "Ich hab keins, Du etwa schon?",
+    "fragt: ");
+  AddInfo( ({"weg","wege"}),
+    "Es gibt hier viele Wege...",
+    "sagt: ");
+  AddInfo( ({"nordtor","norden"}),
+    "Das liegt im Norden.",
+    "sagt: ");
+  AddInfo( ({"westweg","westen"}),
+    "Der liegt im Westen.",
+    "sagt: ");
+  AddInfo( ({"dickschaedel","dingen"}),
+    "Zwerge haben in manchen Dingen einen ziemlichen Dickschaedel.",
+    "grummelt: ");
+  AddInfo( ({"geier"}),
+    "Frag mal den Geier vielleicht weiss der es.",
+    "lacht: ");
+  AddInfo( ({"gottseidank"}),
+    "Jaja.. Gottseidank!.",
+    "sagt: ");
+  AddInfo( ({"werkstatt","werkstaette"}),
+    "Das ist meine kleine, bescheidene Werkstatt. Hier stelle ich Pfeifen "
+    "aus verschiedensten Materialien her.",
+    "sagt: ");
+  AddInfo( ({"werkbank","bank"}),
+    "Jaja... die gute alte Werkbank. Ich sollte mir mal eine Neue zulegen, "
+    "aber an dieser haengen soviele Erinnerungen.",
+    "sagt: ");
+  AddInfo( ({"neue","neue werkbank","neuer werkbank"}),
+    "Hm... Nein, ich behalte diese hier.",
+    "sagt: ");
+  AddInfo( ({"erinnerung","erinnerungen"}),
+    "An dieser Werkbank haengen viele Erinnerungen.",
+    "sagt: ");
+  AddInfo( ({"farbflecken","flecken"}),
+    "Die bekomm ich einfach nicht weg.",
+    "arglt: ");
+  AddInfo( ({"schraubstock","stock"}),
+    "Den brauch ich zur Herstellung der Pfeifen.",
+    "sagt: ");
+  AddInfo( ({"schleifgeraet","geraet"}),
+    "Das brauche ich um die Pfeifen schoen glatt zu schleifen.",
+    "sagt: ");
+  AddInfo( ({"schleifscheibe","scheibe"}),
+    "Das Schleifgeraet hat eine Schleifscheibe, sehr gut erkannt.",
+    "kichert: ");
+  AddInfo( ({"holzspaene","spaene","haufen"}),
+    "Wenn man viel arbeitet kommt schon ein ganz schoen grosser "
+    "Haufen Spaene zusammen.",
+    "grinst: ");
+  AddInfo( ({"ofen"}),
+    "Den Ofen benutze ich um die Tonpfeifen zu haerten.",
+    "sagt: ");
+  AddInfo( ({"feuer"}),
+    "Durch das Feuer im Ofen ist es hier schoen warm.",
+    "sagt: ");
+  AddInfo( ({"lampe","lichtquelle"}),
+    "Wenn ich die nicht haette!",
+    "seufzt: ");
+  AddInfo( ({"eimer"}),
+    "In dem Eimer unter der Werkbank ist Lack.",
+    "sagt: ");
+  AddInfo( ({"lack"}),
+    "Den brauche ich um die Pfeifen zu lackieren.",
+    "sagt: ");
+  AddInfo( ({"laden","wohlfuehlladen","pfeifenladen","nebenraum"}),
+    "Mein Bruder betreibt den Laden im Nebenraum.",
+    "sagt: ");
+  AddInfo( ({"bruder","kerl"}),
+    "Barry ist ein echt netter Kerl, er steht vorn im Laden.",
+    "sagt: ");
+  AddInfo( ({"waren","ware"}),
+    "Da fragst Du besser Barry, er ist fuer den Verkauf zustaendig.",
+    "sagt: ");
+  AddInfo( ({"silberland","land"}),
+    "Ohoh, bist Du etwa neu hier? Das Silberland ist das Land in dem "
+    "wir uns hier befinden.",
+    "grinst: ");
+  AddInfo( ({"barry"}),
+    "So heisst mein Bruder.",
+    "sagt: ");
+  AddInfo( ({"abenteurer"}),
+    "Die kommen oefters hier her, sie haben ihre Gilde in Midas.",
+    "sagt: ");
+  AddInfo( ({"pfeifen","pfeife"}),
+    "Ich stelle hier verschiedene Pfeifen her. Die Standardpfeifen, die Du "
+    "bei meinem Bruder zu kaufen bekommst sind aus Ton. Sie sind nicht "
+    "schlecht, aber wenn man wirklich Pfeifen liebt hat man eine von mir "
+    "geschnitzte Holzpfeife.",
+    "sagt: ");
+  AddInfo( ({"standardpfeife","tonpfeife","standardpfeifen","tonpfeifen"}),
+    "Meine Standardpfeifen sind aus Ton, Du kannst bei Barry eine kaufen.",
+    "sagt: ");
+  AddInfo( ({"holzpfeifen","holzpfeife"}),
+    "Falls Du eine Holzpfeife willst brauchst Du einen Gegenstand der "
+    "genuegend Holzanteil hat um daraus eine Pfeife zu schnitzen.",
+    "sagt: ");
+  AddInfo( ({"holzanteil","anteil"}),
+    "Wenn Du wissen willst welche Gegenstaende in Deinem Inventar "
+    "genuegend Holzanteil bestitzen, kann ich Dein Inventar durchsuchen "
+    "und Dir alle aufzaehlen, die fuer mich in Frage kommen.\n"
+    "Mit \"lasse tobi inventar durchsuchen\" schaue ich mir mal alle "
+    "Deine Gegenstaende durch.",
+    "sagt: ");
+  AddInfo( ({"gegenstaende","gegenstand"}),
+    "Wenn Du wissen willst welche Gegenstaende in Deinem Inventar zur "
+    "Pfeifenherstellung benutzt werden koennen, musst Du mich Dein "
+    "Inventar durchsuchen lassen.",
+    "sagt: ");
+  AddInfo( ({"inventar","inventory"}),
+    "Lass mich mal Dein Inventar durchsuchen.",
+    "sagt: ");
+  AddInfo( ({"materialien","material"}),
+    "Meine Pfeifen sind aus Ton und Holz.",
+    "sagt: ");
+  AddInfo( ({"ton"}),
+    "Aus Ton sind die ganzen Standardpfeifen die Du bei Barry kaufen kannst.",
+    "sagt: ");
+  AddInfo( ({"holz","hoelzer"}),
+    "Ich schnitze Pfeifen aus Gegenstaenden die hauptsaechlich aus "
+    "Holz bestehen. Wenn Du wissen willst welche Gegenstaende in Deinem "
+    "Inventar genuegend Holzanteil bestitzen, kann ich Dein Inventar "
+    "durchsuchen und Dir alle aufzaehlen, die fuer mich in Frage kommen.\n"
+    "Mit \"lasse tobi inventar durchsuchen\" schaue ich mir mal alle "
+    "Deine Gegenstaende durch.",
+    "sagt: ");
+  AddInfo( ({"pfeifenkraeuter","kraeuter","pfeifenkraut","kraut"}),
+    "Es gibt viele verschiedene Pfeifenkraeuter. In meinem Laden bekommst "
+    "Du aber nur Langgrundblaetter zu kaufen. Die anderen Kraeuter sind "
+    "zu selten um sie hier anzubieten.",
+    "sagt: ");
+  AddInfo( ({"langgrundblaetter","grundblaetter","blaetter","langgrundblatt",
+             "grundblatt","blatt"}),
+    "Das Langgrundblatt ist das am leichtesten zu findende Pfeifenkraut, "
+    "hier in Derlim.",
+    "sagt: ");
+  AddInfo( ({"grottenkraut","grottenkraeuter"}),
+    "Das Grottenkraut rauche ich am liebsten, leider findet man es "
+    "nirgends in Derlim.",
+    "sagt: ");
+  AddInfo( ({"suedstern","stern","suedsterne","sterne"}),
+    "Der Suedstern waechst nur in sehr sonnigen Regionen.",
+    "sagt: ");
+  AddInfo( ({"nakrafulpflanze","pflanze","nakrafulpflanzen","pflanzen"}),
+    "Davon hab ich schon mal gehoert, ist auch ein Pfeifenkraut. "
+    "Leider ist diese Pflanze so selten, dass ich noch nie eine bekommen "
+    "habe.",
+    "sagt: ");
+  AddInfo( ({"region","regionen"}),
+    "Du bist hier in der Region Huegelland.",
+    "sagt: ");
+  AddInfo( ({"pfeifenherstellung","herstellung"}),
+    "Die Pfeifenherstellung ist eine uralte Kunst.",
+    "sagt: ");
+  AddInfo( ({"kunst","kuenste"}),
+    "Die Kunst der Pfeifenherstellung ist sehr schwer zu erlernen.",
+    "sagt: ");
+  AddInfo( ({"tabakpflanze"}),
+    "Meinst Du die Nakrafulpflanze?",
+    "fragt: ");
+  AddInfo( ({"fluffi","pudel","haustier"}),
+    "Fluffi ist mein kleiner Pudel, er schlaeft meist in seinem Korb.",
+    "sagt stolz: ");
+  AddInfo( ({"korb"}),
+    "In dem Korb schlaeft Fluffi.",
+    "sagt: ");
+
+
+// SpecialInfos
+  AddInfo( ({"zeit","uhrzeit","datum"}),
+    #'uhrzeitinfo, "sagt: ", 1);
+  AddInfo( ({"bestellung","bestellungen"}),
+    #'bestellungsinfo, "sagt: ", 1);
+
+
+/*
+  AddInfo( ({"",""}),
+    ".",
+    "sagt: ");
+*/
+//  SetProp(P_LOG_INFO, "npc_logfile");
+
+
+// Tobi's Zaubersprueche
+  SetProp(P_SPELLRATE,15);
+  AddSpell(5,100,
+    "Tobi tritt Dir in den Bauch.\n",
+    "Tobi tritt @WEM in den Bauch.\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1]));
+  AddSpell(3,150,
+    "Tobi wirft Dir eine Feile nach.\n",
+    "Tobi wirft @WEM eine Feile nach.\n",
+     DT_PIERCE,([SP_SHOW_DAMAGE:1]));
+  AddSpell(2,200,
+    "Tobi spannt Deine Hand im Schraubstock ein.\n",
+    "Tobi spannt @WESSEN Hand im Schraubstock ein.\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1]));
+
+
+// AddCmds
+  AddCmd( ({"lasse","lass"}), "inventory_check");
+    beschaeftigt=0;
+  AddCmd( ({"hole","hol"}),   "pfeife_abholen");
+
+// Tobi's Inventar
+  SUID;
+  CLONEME("/p/armour/cloak/lederschuerze" );
+  CLONEME("/p/armour/trousers/lederhose" );
+  CLONEME("/p/armour/armour/weste" );
+  command("trage alles");
+  CLONEME(WEAPON "feile" );
+  command("zuecke feile");
+  
+  bzeit   = WERKSTATT->get_bzeit();
+  produkt = WERKSTATT->get_produkt();
+}
+
+
+/* Funktionen */
+
+// Tobi ueberprueft ob der Spieler was bestellt hat und obs schon fertig ist
+// Die fertige Pfeife wird dann noch mit dem Material des Gegenstandes aus
+// dem sie gemacht wurde versehen und ein paar andere Sachen werden uebergeben
+int pfeife_abholen(string str)
+{
+  notify_fail("Was moechtest Du abholen?\n");
+  if(!str) return 0;
+  if(str=="pfeife ab" || str=="bestellung ab")
+  {
+    object pfeife;
+    object obj;
+    string spieler;
+    spieler=getuid(TP);
+    if(member(bzeit, spieler))
+    {
+      if (!objectp((obj = produkt[spieler])))
+      {
+        write(break_string("Der Gegenstand, aus dem ich die Pfeife machen "
+              "sollte, ist leider verschwunden, es tut mir echt leid.",
+              78, "Tobi sagt: "));
+        return 1;
+      }
+      if((6-(time()-bzeit[spieler]))<0) // 10 min Fertigungsdauer
+      {
+        write("Tobi sagt: Ich hoffe Du freust Dich ueber die Pfeife die ich "
+              "Dir aus \n"
+              "Tobi sagt: "+obj->name(WEM,1)+" gemacht habe.\n"
+              "Tobi gibt Dir die Holzpfeife.\n");
+        say("Tobi gibt "+TPN+" eine Holzpfeife.\n",TP);
+        // Ab hier wird die neue Pfeife an den Gegenstand aus dem sie gemacht
+        // wurde angepasst
+        pfeife=clone_object(OBJ"holzpfeife.lpc"); 
+        pfeife->set_pfeifenwert(obj->QueryMaterialGroup(MATGROUP_WOOD)/10-5);
+        pfeife->SetProp(P_MATERIAL,
+          obj->QueryProp(P_MATERIAL));
+        pfeife->SetProp(P_GEGENSTAND,
+          obj->name(WEM,0));
+        write_file(LOG "pfeifen.log",
+          ctime()+": "+TPN+" holt eine Pfeife ab.\n"
+          "Sie wurde aus "
+          +obj->name(WEM,0)+" gemacht.\n");
+	obj->remove();
+        pfeife->move( this_player(), M_NOCHECK );
+        bzeit   -= ([spieler]);
+        produkt -= ([spieler]);
+        WERKSTATT->set_bzeit(bzeit);
+        WERKSTATT->set_produkt(produkt);
+        return 1;
+      }
+      if((600-(time()-bzeit[spieler]))<60) // unter einer Minute wird die
+      {                                    // Restzeit in Sekunden angezeigt
+        write("Tobi sagt: Du musst noch "+(600-(time()-bzeit[spieler]))+
+              " Sekunden warten. Es dauert halt ein \n"
+              "Tobi sagt: wenig um eine Pfeife aus "+obj->name(WEM,1)+
+              " zu machen.\n");
+        say("Tobi sagt: Du musst noch "+(600-(time()-bzeit[spieler]))+" "
+            "Sekunden warten, damit Du Dir Deine\n"
+            "Tobi sagt: Pfeife abholen kannst, "+TPN+".\n",TP);
+        return 1;
+      }
+      else
+      {
+        write("Tobi sagt: Du musst noch "+(10-((time()-bzeit[spieler])/60))+
+              " Minuten warten. Es dauert halt ein \n"
+              "Tobi sagt: wenig um eine Pfeife aus "+obj->name(WEM,1)+
+              " zu machen.\n");
+        say("Tobi sagt: Du musst noch "+(10-((time()-bzeit[spieler])/60))+" "
+            "Minuten warten, damit Du Dir Deine\n"
+            "Tobi sagt: Pfeife abholen kannst, "+TPN+".\n",TP);
+        return 1;
+      }
+    }
+    else
+    {
+      write("Tobi sagt: Aber Du hast doch gar nichts bestellt...\n");
+      return 1;
+    }
+  }
+  return 0;
+}
+
+// Tobi ueberprueft das Inventar des Spielers und gibt alle
+// Gegenstaende die einen hoeheren Holzanteil als 50% haben
+// nach einer kurzen Sequenz in einer Liste aus
+int inventory_check(string str)
+{
+  notify_fail("Wen moechtest Du Was durchsuchen lassen?\n");
+  if(!str) return 0;
+  if (str=="tobi inventar durchsuchen" || 
+      str=="tobi durchsuchen" ||
+      str=="inventar durchsuchen")
+  {
+    if(beschaeftigt==0)
+    {
+      write("Tobi sagt: Mal gucken was Du so bei Dir hast...\n");
+      say("Tobi sagt: Mal gucken was Du so bei Dir hast, "+TPN+"...\n",TP);
+      TP->SetProp(P_PARALYZED,
+      ([PARALYZE_TIME:7,
+        PARALYZE_MSG:"Warte mal bis Tobi Dein Inventar durchsucht hat.\n",
+        PARALYZE_MSG_OTHER:"",
+        PARALYZE_END:"",
+        PARALYZE_END_OTHER:""]));
+      beschaeftigt=1;
+      call_out("inventar",3);
+      return 1;
+    }
+    if(beschaeftigt==1)
+    {
+      write(BS("Tobi ist gerade mit etwas anderem beschaeftigt, schau spaeter "
+            "nochmal vorbei.\n"));
+      return 1;
+    }
+  }
+  return 0;
+}
+
+int inventar()
+{
+    write("Tobi schaut sich all Deine Reichtuemer an.\n");
+    say("Tobi schaut sich "+TPN+"s Reichtuemer an...\n",TP);
+    call_out("inventar1",3);
+    return 1;
+}
+
+int inventar1()
+{
+    write("Tobi kramt in Deinem Inventar herum...\n");
+    say("Tobi kramt in "+TPN+"s Inventar herum...\n",TP);
+    call_out("inventar2",3);
+    return 1;
+}
+
+int inventar2()
+{
+    write("Tobi gruebelt: Hm... was haben wir da so alles...\n");
+    say("Tobi gruebelt: Hm... was haben wir da so alles...\n",TP);
+    call_out("inventar3",3);
+    return 1;
+}
+
+int inventar3()
+{
+  object *ob;
+  string liste;
+  int i;
+  liste = "";
+  ob=deep_inventory(TP);
+  for (i=0;i<sizeof(ob);i++) // Hier werden alle Objects die mehr als 50%
+  {                          // Holzanteil haben in die Liste geschrieben
+    if((ob[i]->QueryMaterialGroup(MATGROUP_WOOD))>=50)
+    {
+      liste+=sprintf("%25-s %s \n",CAP(ob[i]->name(WER,0)),
+                   HOLZ[(ob[i]->QueryMaterialGroup(MATGROUP_WOOD))/10-5]);
+    }
+  }
+  if(strlen(liste))
+  {
+    write("Tobi sagt: Folgende Sachen hab ich gefunden...\n"
+          "Tobi sagt: Wenn Du sie mir gibst, mache ich Dir eine huebsche "
+          "Pfeife daraus.\n");
+    say("Tobi zaehlt "+TPN+" die Gegenstaende auf welche er gefunden hat.\n",TP);
+    beschaeftigt=0;
+    TP->More(liste); // Liste wird ausgegeben - mit Name 
+                     // und ungefaehrem Holzanteil der gefunden Objekte
+  }
+  else
+  {
+    write("Tobi sagt: Leider hab ich nichts passendes gefunden...\n");    
+    say("Tobi sagt: Leider hab ich nichts gefunden, "+TPN+".\n",TP);
+    beschaeftigt=0;
+  }
+  return 1;
+}
+
+// Reaktionen wenn Tobi etwas vom Spieler bekommt
+void give_notify(object ob)
+{
+  if(beschaeftigt==0)
+  {
+    if((ob->QueryMaterialGroup(MATGROUP_WOOD))>=50)
+    {
+      gegenstand=ob;
+      preis=holzpfeifenpreis-(gegenstand->QueryMaterialGroup(MATGROUP_WOOD));
+      beschaeftigt=1;
+      write("Tobi sagt: OK, Ich mach Dir eine Pfeife draus!\n"
+            "Tobi sagt: Das kostet Dich aber "+preis+" Muenzen...\n"
+            "Tobi sagt: Willst Du eine herstellen lassen? (ja/nein)\n");
+      say("Tobi tuschelt irgendetwas mit "+TPN+".\n",TP);
+      input_to("get_auftrag");
+      return;
+    }
+    if(ob->QueryMaterialGroup(MATGROUP_WOOD))
+    {
+      write(BS("Tobi sagt: Der Holzanteil ist zu gering um eine "
+            "Pfeife daraus zu bauen...\n"));
+      say("Tobi tuschelt irgendetwas mit "+TPN+".\n",TP);
+      ob->move(this_player(),M_NOCHECK);
+      write("Tobi gibt Dir "+ob->name(WEN, 1)+" wieder zurueck.\n");
+      say("Tobi gibt "+TPN+" "+ob->name(WEN, 1)+" wieder zurueck.\n",TP);
+    }
+    else
+    {
+      write(BS("Tobi sagt: Da ist ja gar kein Holz drin! Daraus kann ich "
+               "keine Pfeife bauen...\n"));
+      say("Tobi tuschelt irgendetwas mit "+TPN+".\n",TP);
+      ob->move(this_player(),M_NOCHECK);
+      write("Tobi gibt Dir "+ob->name(WEN, 1)+" wieder zurueck.\n");
+      say("Tobi gibt "+TPN+" "+ob->name(WEN, 1)+" wieder zurueck.\n",TP);
+    }
+  }
+  else
+  {
+    ::give_notify(ob);
+  }
+}
+
+// Antwortet der Spieler mit "j" wird die Pfeifenbausequenz ausgefuehrt
+get_auftrag(string str)
+{
+  string antwort;
+  int bestellzeit;
+  string spieler;
+  spieler=getuid(TP);
+  antwort=lower_case(str);
+  if(antwort=="j" ||
+     antwort=="ja")
+  {
+    if(TP->QueryMoney()>=preis)
+    {
+      if (!member(bzeit, spieler))
+      {
+        write("Tobi sagt: Nun gut dann werde ich jetzt mit der Herstellung "
+              "beginnen.\n"
+              "Tobi sagt: Frag mich nach der Bestellung wenn Du wissen willst "
+              "wie lang ich\n"
+              "Tobi sagt: noch brauche.\n");
+        say(TPN+" gibt bei Tobi eine Bestellung auf.\n",TP);
+        TP->AddMoney(-preis);
+        bestellzeit=time();
+        bzeit   += ([spieler:bestellzeit]);
+        produkt += ([spieler:gegenstand]);
+        WERKSTATT->set_bzeit(bzeit);
+        WERKSTATT->set_produkt(produkt);
+        beschaeftigt=0; 
+      }
+      else
+      {
+        write("Tobi sagt: Du hast gerade eine Bestellung bei mir laufen.\n");
+        beschaeftigt=0;
+        gegenstand->move(this_player(),M_NOCHECK);
+        write("Tobi gibt Dir "+gegenstand->name(WEN, 1)+" wieder zurueck.\n");
+        say("Tobi gibt "+TPN+" "+gegenstand->name(WEN, 1)+" wieder zurueck.\n",TP);
+      }
+    }
+    else
+    {
+      write("Tobi sagt: Leider hast Du die "+preis+" Muenzen nicht...\n"
+            "Tobi sagt: Komm mit dem Geld wieder und ich werd Dir aus "
+            +gegenstand->name(WEM,1)+" \n"
+            "Tobi sagt: eine Pfeife bauen.");
+      beschaeftigt=0;
+      gegenstand->move(this_player(),M_NOCHECK);
+      write("Tobi gibt Dir "+gegenstand->name(WEN, 1)+" wieder zurueck.\n");
+      say("Tobi gibt "+TPN+" "+gegenstand->name(WEN, 1)+" wieder zurueck.\n",TP);
+    } 
+  }
+  else
+  {
+    write("Tobi sagt: Na gut dann eben nicht...\n");
+    beschaeftigt=0;
+    gegenstand->move(this_player(),M_NOCHECK);
+    write("Tobi gibt Dir "+gegenstand->name(WEN, 1)+" wieder zurueck.\n");
+    say("Tobi gibt "+TPN+" "+gegenstand->name(WEN, 1)+" wieder zurueck.\n",TP);
+  }
+}
+
+
+// Spezielle AddInfos
+string uhrzeitinfo(string key)
+{
+  return "Hmm... mal gucken... es ist jetzt genau... \n"+dtime()+".\n";
+}
+
+string bestellungsinfo(string key)
+{
+  string spieler;
+  object obj;
+
+  spieler=getuid(TP);  
+  if(member(bzeit, spieler))
+  {
+    if (!objectp((obj = produkt[spieler])))
+    {
+      return "Der Gegenstand, aus dem ich die Pfeife machen "
+            "sollte, ist leider verschwunden, es tut mir echt leid.";
+            
+    }
+    if((600-(time()-bzeit[spieler]))<0) // Ist die Pfeife fertig?
+    {
+      say(TPN+" fragt Tobi nach der Bestellung.\n",TP);
+      return "Die Pfeife die ich fuer Dich aus "+obj->name(WEM,1)+
+             " machen sollte ist jetzt fertig. Du bekommst sie mit "
+             "\"hole pfeife ab\".";
+    }
+    if((600-(time()-bzeit[spieler]))<60) // Weniger als eine Minute Restzeit
+    {                                       // werden Sekunden angezeigt
+      say(TPN+" fragt Tobi nach der Bestellung.\n",TP);
+      return "Du hast mir "+obj->name(WEN,0)+" gegeben und ich "
+             "mach Dir daraus eine Pfeife. Ich brauche aber noch "
+             +(600-(time()-bzeit[spieler]))+" Sekunden um sie "
+             "fertigzustellen.";
+    }
+    else                                    // Es dauert noch...
+    {
+      say(TPN+" fragt Tobi nach der Bestellung.\n",TP);
+      return "Du hast mir "+obj->name(WEN,0)+" gegeben und ich "
+             "mach Dir daraus eine Pfeife. Ich brauche aber noch "
+             +(10-((time()-bzeit[spieler])/60))+" Minuten um sie "
+             "fertigzustellen.";
+    }
+  }
+  else
+  {
+    say(TPN+" fragt Tobi nach der Bestellung.\n",TP);
+    return "Du hast nichts bei mir bestellt.";
+  }
+}
+
+// Damit Tobi seinen Pudel verteidigt
+void InformDefend(object enemy)
+{
+  Kill(enemy);
+}
+
+
+// init
+init()
+{
+  ::init();
+  if(ENEMY(TP))
+  {
+    say("Tobi schreit: Stirb, "+TPN+"!!!\n");
+    TO->Kill(TP);
+    return;
+  }
+  if(TP && TP->id("TOBIHAUSTIER")) AddDefender(TP);
+  if(interactive(TP)&& member(begruesst,getuid(TP))==-1) 
+    call_out("hallo",0);
+  if(TP->id("TOBIHAUSTIER"))
+  {
+    call_out("fluffistreicheln",2);
+    return;
+  }
+  if(TP->id("feuerwusel")) // Feuerwusel mag der liebe Tobi gar nicht...
+  {
+    call_out("wuseltoeten",3);
+    return;  
+  }
+  if(TP->id("feuerelementar")) // Feuerelementare ebenfalls nicht...
+  {
+    call_out("elementartoeten",3);
+    return;  
+  }
+}
+
+// Begruessung des Spielers wenn er/sie den Laden betritt
+void hallo() 
+{ 
+  if( MENV!=ENV(TP) ) return;
+  begruesst += ({ getuid(TP) });  
+  if (TP->QueryProp(P_RACE)=="Hobbit") // Hobbits werden mit ihrem Namen
+  {                                    // angesprochen
+    switch(random(3))         
+    {
+    case 0:
+      tell_room(environment(TO), "Tobi sagt: Hallo, wie gehts "+TPN+"?\n"
+      "Tobi sagt: Freut mich, dass Du mich mal wieder besuchst!\n");
+      break;
+    case 1:
+      tell_room(environment(TO), "Tobi freut sich: Hallo, "+TPN+"!\n");
+      break;
+    case 2:
+      tell_room(environment(TO), "Tobi grinst: Hi, schoen, dass Du mich "
+                                 "besuchst, "+TPN+"!\n");
+      break;
+    default:
+      tell_room(environment(TO), "Tobi sagt: Hi!\n");
+    }
+  }
+  else                                  // Andere Rassen werden nicht
+  {                                     // mit dem Namen angesprochen
+    switch(random(3))         
+    {
+    case 0:
+      tell_room(environment(TO), "Tobi sagt: Hallo, wie gehts "
+      +(((int)this_player()->QueryProp(P_GENDER)==FEMALE)?"Frau":"Herr")+" "
+      +capitalize((string)this_player()->QueryProp(P_RACE))+"?\n");
+      break;
+    case 1:
+      tell_room(environment(TO), "Tobi staunt: Oh! Ein"
+      +(((int)this_player()->QueryProp(P_GENDER)==FEMALE)?"e":"")+" "
+      +capitalize((string)this_player()->QueryProp(P_RACE))+""
+      +(((int)this_player()->QueryProp(P_GENDER)==FEMALE)?"in":"")+" "
+      "in meiner kleinen Werkstatt?\n"
+      "Tobi staunt: Hat sich meine Handwerkskunst schon so weit "
+      "herumgesprochen?\n");
+      break;
+    case 2:
+      tell_room(environment(TO), "Tobi sagt: Was fuehrt Dich zu mir, "
+      +capitalize((string)this_player()->QueryProp(P_RACE))+""
+      +(((int)this_player()->QueryProp(P_GENDER)==FEMALE)?"in":"")+"?\n");
+      break;
+    default:
+      tell_room(environment(TO), "Tobi sagt: Hi!\n");
+    }
+  }
+}
+
+// Sequenz wenn Fluffi aus dem Korb kommt
+void fluffistreicheln()
+{
+    tell_room(environment(TO), 
+      "Tobi grinst: Ui, Fluffi ist ja auch mal munter!\n"
+      "Tobi grinst: Komm her mein Kleiner!\n"
+      "Tobi streichelt sein kleines Huendchen.\n");
+    return;
+}
+
+// Sequenz wenn ein Feuerelementar in den Raum kommt
+void elementartoeten()
+{
+    tell_room(environment(TO), 
+      "Tobi schreit: NA TOLL!!! EIN FEUERELEMENTAR!!!\n"
+      "Tobi schreit: Und hier sind ueberall Holzspaene!!!\n");
+    call_out("elementartoeten1",4);
+    return;
+}
+
+void elementartoeten1()
+{
+  object elementar;
+  if (elementar=present("feuerelementar"))
+  {
+    tell_room(environment(TO), 
+      "Tobi schreit: Verlass sofort meine Werkstatt, Du bloedes Elementar!\n");
+    call_out("elementartoeten2",4);
+    return;  
+  }
+  else
+  {
+    tell_room(environment(TO), 
+      "Tobi seufzt: Puh, nochmal Glueck gehabt, haette mir die ganze Werkstatt\n"
+      "Tobi seufzt: abfackeln koennen, das Viech.\n");
+    return;    
+  }
+}
+
+void elementartoeten2()
+{
+  object elementar;
+  if (elementar=present("feuerelementar"))
+  {
+    tell_room(environment(TO), 
+      "Tobi schreit: Ich sags zum letzten Mal...\n"
+      "Tobi schreit: Wenn Du nicht sofort gehst, muss ich handgreiflich werden!\n");
+    call_out("elementartoeten3",4);
+    return;  
+  }
+  else
+  {
+    tell_room(environment(TO), 
+      "Tobi seufzt: Puh, nochmal Glueck gehabt, haette mir die ganze Werkstatt\n"
+      "Tobi seufzt: abfackeln koennen, das Viech.\n");
+    return;    
+  }
+}
+
+void elementartoeten3()
+{
+  object elementar;
+  if (elementar=present("feuerelementar"))
+  {
+    tell_room(environment(TO), 
+      "Tobi schreit: Du wolltest es so... AUF IN DEN KAMPF!!!\n");
+    Kill(elementar);
+    call_out("elementartoeten4",6);
+    return;  
+  }
+  else
+  {
+    tell_room(environment(TO), 
+      "Tobi seufzt: Puh, nochmal Glueck gehabt, haette mir die ganze Werkstatt\n"
+      "Tobi seufzt: abfackeln koennen, das Viech.\n");
+    return;    
+  }
+}
+
+void elementartoeten4()
+{
+  object elementar;
+  if (elementar=present("feuerelementar"))
+  {
+    tell_room(environment(TO), 
+      "Tobi schreit: STIRB ENDLICH!!! WUAH!!!\n");
+    return;  
+  }
+  else
+  {
+    tell_room(environment(TO), 
+      "Tobi grinst: Toll, weg is es!!!\n");
+    return;    
+  }
+}
+
+
+
+// Sequenz wenn ein Feuerwusel in den Raum kommt
+void wuseltoeten()
+{
+    tell_room(environment(TO), 
+      "Tobi schreit: WUAH!!! EIN FEUERWUSEL!!!\n"
+      "Tobi schreit: Willst Du dass hier alles abbrennt?\n");
+    call_out("wuseltoeten1",4);
+    return;
+}
+
+void wuseltoeten1()
+{
+  object wusel;
+  if (wusel=present("feuerwusel"))
+  {
+    tell_room(environment(TO), 
+      "Tobi laeuft hektisch herum.\n");
+    call_out("wuseltoeten2",4);
+    return;  
+  }
+  else
+  {
+    tell_room(environment(TO), 
+      "Tobi seufzt: Puh, nochmal Glueck gehabt, haette mir die ganze Werkstatt\n"
+      "Tobi seufzt: abfackeln koennen, das Viech.\n");
+    return;    
+  }
+}
+
+void wuseltoeten2()
+{
+  object wusel;
+  if (wusel=present("feuerwusel"))
+  {
+    tell_room(environment(TO), 
+      "Tobi holt einen Eimer Wasser und schuettet ihn ueber den Wusel.\n"
+      "Es zischt laut und... weg ist er der arme kleine Wusel.\n");
+    wusel->remove();
+    return;  
+  }
+  else
+  {
+    tell_room(environment(TO), 
+      "Tobi seufzt: Puh, nochmal Glueck gehabt, haette mir die ganze Werkstatt\n"
+      "Tobi seufzt: abfackeln koennen, das Viech.\n");
+    return;  
+  }
+}
+
+
+// Mitloggen wenn ein Spieler den NPC killt:
+void die(int poisondeath) {
+  write_file(LOG "npc.kills",
+    ctime()+": "+CAP(getuid(PL))+" killt Tobi.\n");
+  EMASTER->AddFeinde(getuid(TP));
+  ::die(poisondeath);
+}
+// Mitloggen wenn ein Spieler vom NPC gekillt wird:
+void NotifyPlayerDeath(object player, object killer, int lostexp) 
+{
+  if(killer == ME)
+    write_file(LOG "npc.deads",
+      ctime()+": Tobi hat gerade "+CAP(getuid(player))+" umgebracht.\n");
+}
+
+
+// Reactions
+void StartReaction(string verb, string gruppe, string adverb, int touch) {
+  if (find_call_out("reaction") != -1) return;
+  switch (gruppe) {
+    case "aengstlich":
+      call_out("reaction", 0, TP, 
+        "kitzelt Dich beruhigend am Kinn.",
+        "kitzelt "+TPN+" beruhigend am Kinn.");
+      break;
+    case "aergerlich":
+      call_out("reaction", 0, TP,
+        "troestet Dich.",
+        "troestet "+TPN+".");
+      break;
+    case "albern":
+      call_out("reaction", 0, TP,
+        "waelzt sich vor Lachen auf dem Boden.",
+        "waelzt sich vor Lachen auf dem Boden.");
+      break;
+    case "fies":
+      if ( member(veraergert,getuid(TP)) != -1 )
+      	call_out( "reaction_pudelruf", 0, TP,
+      	  "hat genug von Deinen Frechheiten.",
+      	  "hat genug von "+TP->name(WESSEN)+" Frechheiten." );
+      else 
+        call_out( "reaction", 0, TP,
+          "schreit: Verdammt, mach das nicht nochmal, "+TPN+"!",
+          "schreit: Verdammt, mach das nicht nochmal, "+TPN+"!" );
+        veraergert += ({ getuid(TP) });  
+      break;
+    case "frech":
+      call_out("reaction", 0, TP,
+        "schreit: RAUS! Ich will Dich hier nicht mehr sehen!",
+        "schreit: RAUS! Ich will Dich hier nicht mehr sehen, "+TPN+"!");
+      break;
+    case "froh":
+      call_out("reaction", 0, TP,
+        "laechelt froehlich.", 
+        "laechelt froehlich.");
+      break;
+    case "intim":
+      call_out("reaction", 0, TP,
+        "erroetet: Oh, komm doch oefter vorbei bei mir.",
+        "erroetet: Oh, komm doch oefter vorbei bei mir, "+TPN+".");
+      break;
+    case "nett":
+      call_out("reaction", 0, TP,
+        "knuddelt Dich mit seinen kraeftigen haarigen Armen.",
+        "knuddelt "+TPN+" mit seinen kraeftigen haarigen Armen.");
+      break;
+    case "neutral":
+      call_out("reaction", 0, TP,
+        "grinst Dich an.",
+        "grinst "+TPN+" an.");
+      break;
+    case "traurig":
+      call_out("reaction", 0, TP,
+        "drueckt Dich an seine behaarte Brust und troestet Dich.",
+        "drueckt "+TPN+" an seine behaarte Brust und troestet "
+        +TP->QueryPronoun(WEN)+".");
+      break;
+  }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch) 
+{
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void reaction(object ob, string macher, string andere) 
+{
+  if (present(ob, ENV(TO))) 
+  {
+    tell_object(ob, BS(Name(WER, 1)+" "+macher));
+    tell_room(ENV(TO), BS(Name(WER, 1)+" "+andere), ({ob}));
+  }
+}
+
+void reaction_pudelruf(object ob, string macher, string andere) 
+{
+  if (present(ob, ENV(TO))) 
+  {
+    tell_object(ob, BS(Name(WER, 1)+" "+macher));
+    tell_room(ENV(TO), BS(Name(WER, 1)+" "+andere), ({ob}));
+  }
+  veraergert -= ({ getuid(TP) }); 
+  call_other(WERKSTATT, "tobi_verteidigung", 1);
+}
+
+reset()
+{
+  ::reset();
+  begruesst = ({});
+}

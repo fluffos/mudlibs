@@ -1,0 +1,421 @@
+/* /d/gebirge/angrox/<gebiet>/npc/ritter.c 
+//  
+// Angrox Zauberwerkstatt
+// 
+// Bonusgegner -> Soordhin, der Steinritter
+//                Abaenderung des Waechtergolems
+// 29-04-1997  
+//
+// Besonderheiten: 
+//       - wehrt zu 10% Spells ab.
+//       - kann Ruestungsteile vernichten.
+//       - kann einen Angreifer entwaffnen.
+//       - kann einen Angreifer in den naechsten Raum werfen 
+//         und fuer 20sek bewusstlos schlagen.
+//       - kann einen Angreifer im Raum fuer 3 sek bewusslos
+//         schlagen
+//       - kann selbststaendig zur nahegelegenen Tankstelle 
+//         laufen und sich heilen.
+//       
+// 
+// Updates:  
+//           22-05-97 Logfiles added
+//                    Spells im AttackChat                    
+//           03-08-98 Berserker 
+*/                   
+
+
+inherit "std/inpc";
+inherit "std/npc/spells";
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <new_skills.h>
+#include "/sys/living/life.h"
+#include <moving.h>
+//#include <mnpc.h>
+#include <inpc.h>
+#include "../4elem.h"
+
+
+int unterwegs;
+
+int cur_hp, max_hp, cur_money, amount;
+object cash;
+
+void create()
+{
+  unterwegs=0;
+  if (!is_clone(TO)) return;
+  ::create();
+  SUID;
+  SetProp(P_SHORT, "Soordhin, der Steinritter");
+  SetProp(P_LONG, BS("Der Steinritter ist eine zwei Meter grosse "
+       +"Steinstatue, mit besten Waffen und Ruestungen ausgestattet, "
+       +"und bereit jeden, der sich im entgegenstellt, zu toeten. Gegen "
+       +"ihn alleine anzutreten ist eine haessliche Art des Freitodes.\n")); 
+  SetProp (P_ARTICLE, 0);
+  SetProp(P_NAME, "Soordhin");
+  SetProp(P_GENDER, MALE); 
+  SetProp(P_AGGRESSIVE, 1);
+  AddId(({"ritter", "steinritter", "soordhin"}));
+  enable_commands();
+  set_living_name("soordhin");
+ 
+  
+  create_default_npc(35);
+ /*
+  // P_LEVEL   = 25
+  // P_SP/P_HP = x*8+42        =242 -> 666
+  // P_HANDS   = x*10          =250 -> 250
+  // P_BODY    = x*4           =120 -> 144 
+  // P_XP      = HP*HANDS*5    =500*3*250*5=1875000
+                                    ^
+                                    2x tanken extra 
+  */
+  
+  
+  SetAttribute(A_STR, 35);
+  SetAttribute(A_DEX, 25);
+  SetProp(P_HANDS, ({" mit steinernen Faeusten",250,DT_BLUDGEON}));
+  SetProp(P_MAX_HP, 800); 
+  SetProp(P_HP, 800);
+  SetProp(P_BODY, 160);
+//  SetProp(P_XP, 500*3*25*5); // Bonus fuer Spells
+  SetProp(P_RACE, "ritter");
+  SetProp(P_SIZE, 200);
+  SetProp(P_ALIGN, 0); 
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_HEAL,-10);
+  SetProp(P_AGGRESSIVE,0);
+  SetProp(P_WIMPY, 0);
+  
+  SetProp(P_RESISTANCE, ({ DT_SLASH, DT_POISON, DT_TERROR, DT_LIGHT, 
+                           DT_PIERCE, DT_BLUDGEON})); 
+  SetProp(P_NOMAGIC,15);
+
+  SetProp(P_MSGIN, "stampft herein");
+  SetProp(P_MSGOUT, "stapft weiter");
+  SetProp(P_MMSGIN, "waechst aus der Erde");
+  SetProp(P_MMSGOUT, "versinkt im Boden");
+                       
+  SetProp(P_DIE_MSG, " zerbroeckelt zu Staub.\n");  
+  SetProp(P_NOCORPSE, 0 );
+  SetProp(P_MURDER_MSG, "WUAHHHHHHHHHHH!! Die Rache wird MEIN sein!!");
+  SetProp(P_KILL_NAME, "Soordhin");
+  SetProp(P_KILL_MSG, "Meister, ich habe Deine Befehle befolgt!");
+
+  AddInfo(DEFAULT_INFO, "ignoriert Dich.\n");
+  //SetProp(P_LOG_INFO, "npc_logfile");
+  
+
+  // Es reicht, Soordhin muss Berserker werden!
+  SetProp(P_GUILD, "berserker");
+  call_other("/gilden/berserker","learn_berserker_skills", 10000, 10000);
+  ModifySkill("blutrausch", 10000);
+  ModifySkill("blutrausch", ([SI_PREPARE_TIME:0, SI_SPELLCOST:0]) );
+  
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    "Soordhin laesst Deine Sachen fallen.\n" }) );
+
+  SetProp(P_NOMAGIC, 15);
+
+  SetProp(P_SPELLRATE,35);
+  AddSpell(4,800,
+    "Soordhin vernichtet Dich mit einem einzigen Schlag.\n",
+    "Soordhin vernichtet @WEN mit einem einzigen Schlag.\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(5,900,
+    "Soordhin schlaegt mit toetlicher Wucht auf Dich ein.\n",
+    "Soordhin schlaegt mit toetlicher Wucht auf @WEN ein.\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(2, 1500, 
+    "Soordhin pruegelt auf Dich ein bis Du roechelst.\n",
+    "Soordhin pruegelt auf @WEN ein. @WEN beginnt zu roechln.\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1])); 
+
+  AddDefaultSpell(4,1, DS_DISARM
+    "Soordhin entwaffnet Dich!\n",
+    "Soordhin entwaffnet @WEN !\n");
+
+  AddSpell(6,400,
+    "Soordhin zermalmt Dich zwischen seinen Fingern.\n",
+    "Soordhin zermalmt @WEN zwischen seinen Fingern.\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(4, 1000, 
+    "Soordhin schlaegt Dich bewusstlos.\n",
+    "Soordhin schlaegt @WEN bewusslos.\n",
+     DT_BLUDGEON, "bewusstlos");
+
+  AddSpell(4,800, 
+    "Soordhin schlaegt Dich mit Urgewalten aus dem Raum.\n",
+    "Soordhin schlaegt @WEN mit Urgewalten aus dem Raum.\n",
+     DT_BLUDGEON, "rausschlagen"); 
+
+  AddSpell(2,800, 
+    "Soordhin zerstoert Deine Ruestung!\n",
+    "Soordhin zerstoert @WESSEN Ruestung!\n",
+     DT_BLUDGEON, "spell_armour");
+
+  SetAttackChats(70, ({
+    "@@use_spell@@",
+    "@@AttackBlast@@",
+    "@@AttackLight@@",
+    "@@AttackMedium@@",
+    "@@AttackSerious@@"}) );
+
+SUID;
+AddWeapon("blitzaxt", WEAP("blitzaxt"));
+AddArmour("helm", ARMO("loewenhelm"));
+AddArmour("panzer", ARMO("diamantpanzer"));
+AddArmour("guertel", ARMO("str-guertel"));
+AddArmour("stirnband", "/gilden/berserker/obj/stirnband");
+AddMoney(5000+random(5000));
+}
+
+
+
+string use_spell() {
+  object en;
+  object ob;
+  if(en = QueryEnemy()) {
+    ob=present("geld", ME);
+    if(ob && (ob->QueryProp(P_AMOUNT)<500) && 
+        !present("\nberserker_blutrausch", ME) )
+      command_me("blutrausch");
+    return "";
+  }
+  return "";
+}
+
+void spell_armour(object enemy, int damage, mixed dam_type)
+{
+ int groesse,i;
+ object was;
+ object* ob;
+ ob=enemy->QueryProp(P_ARMOURS);
+ groesse=sizeof(ob);
+ if(groesse)
+ {
+   was= ob[random(groesse)];
+   for(i=random(1000);i>0;i--)
+     was->TakeFlaw(dam_type);
+ }
+ else 
+   enemy->do_damage(20);
+}
+
+
+void entwaffnen(object enemy, int damage, mixed dam_type)
+{
+ int groesse;
+ object* ob1, ob2;
+ string waffenname;
+ ob1=enemy->QueryProp(P_WEAPON);
+ if (ob1 && !(ob1->QueryProp(P_CURSED)))
+  {
+     ob1->UnWield();
+     ob1->move(ENV(ME), M_NOCHECK); 
+   }
+ else enemy->do_damage(15);
+}
+
+
+void rausschlagen(object enemy, int damage, mixed dam_type)
+{
+ object *raeume, ob;
+ int groesse;
+ raeume=m_values(environment()->QueryProp(P_EXITS));
+ groesse=sizeof(raeume);
+ enemy->move(raeume[random(groesse)], M_GO, "", "fliegt raus", 
+             "wird hereingeschleudert und bleibt bewusstlos liegen"); 
+ enemy->SetProp(P_PARALYZED, ([
+        PARALYZE_TIME:40,
+        PARALYZE_MSG: "Aber Du bist Doch bewusstlos!\n",
+        PARALYZE_END: "Du wachst auf.\n",
+        PARALYZE_END_OTHER: "%s wacht auf.\n"]));
+  
+ //ob=CLONEOB(OBJ2("bewusstlosigkeit"));
+ //ob->move(enemy, M_NOCHECK);
+}
+
+void bewusstlos(object enemy, int damage, mixed dam_type)
+{
+ object ob;
+ ob=CLONEOB(OBJ2("bewusstlosigkeit2")); 
+ ob->move(enemy, M_NOCHECK);
+ enemy->SetProp(P_PARALYZED, ([
+     PARALYZE_TIME:4, 
+     PARALYZE_MSG: "Aber Du bist Doch bewusstlos!\n",
+     PARALYZE_END: "Du wachst auf.\n",
+     PARALYZE_END_OTHER: "%s wacht auf.\n"]));
+}
+
+
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+ object ob;
+ int anzahl;
+ domainshout(BS("Der Tod ruft: "+player->name(WER, RAW)+" ist Dank "
+     +"Soordhin um "+lostexp+" Erfahrungspunkte aermer!"));
+ if(ob=deep_present("muenzen", environment(player)))
+   {
+   anzahl=ob->QueryProp(P_AMOUNT);
+   ob->remove();
+   AddMoney(anzahl);
+   tell_room(ENV(killer), BS("Soordhin nimmt alle Muenzen aus der Leiche."));
+   }
+ command_me("nimm alles aus leiche");
+ command_me("iss leiche");
+ if( killer == TO )
+    write_file(LOG ("soordhin.kills"),
+       sprintf( ctime()+": Soordhin hat gerade "+CAP(getuid(player))
+       +" umgebracht - %d EP!\n", lostexp));
+ return ;
+}
+
+
+Defend(int dam, string dam_type, mixed spell, object enemy)
+{
+  object ob;  
+  if (unterwegs==0)
+    { 
+     if(ob=present("muenzen", ME)) 
+       {
+         cur_hp=ME->QueryProp(P_HP);
+         max_hp=ME->QueryProp(P_MAX_HP);
+         if(cur_hp <= (int)(0.3*max_hp))
+	         {
+              unterwegs++;
+              cur_money=ob->QueryProp(P_AMOUNT);
+              amount=((max_hp-cur_hp)*10)-100;
+              if(amount > cur_money) 
+                     amount=cur_money;
+           } 
+       } 
+    } 
+  ::Defend(dam, dam_type, spell, enemy);
+}
+
+heart_beat() {
+  object ob, en; 
+  int i, x, eval, old_eval;
+  switch(unterwegs) {
+    case 0: break;
+    case 1: if(ob=present("\nblutrausch", ME))
+              ob->remove();
+            command_me("turran");
+            unterwegs++;
+    case 2: command_me("westen");
+            unterwegs++;
+            break;
+    case 3: command_me("oben");
+            unterwegs++;
+            break;
+    case 4: command_me("opfere "+amount+" muenzen");
+            unterwegs++;
+            break;
+    case 5: command_me("klettere runter");
+            unterwegs++;
+            break;
+    case 6: command_me("osten");
+            unterwegs=0;
+            SetProp(P_HB, 0);
+            break;
+    //default: unterwegs++; 
+    //         break;
+   }
+  ::heart_beat();
+  SetProp(P_HB, 1);
+  
+  if((sizeof(en=PresentEnemies()))<2) return;
+  for(i=sizeof(en)-1;i>=0;i--) {
+    eval=2*en[i]->QueryProp(P_TOTAL_AC)+en[i]->QueryProp(P_TOTAL_WC)+
+      3*en[i]->QueryProp(P_HP);
+    if(eval<x) x=i;
+    old_eval=eval;
+  } 
+  SetProp(P_PREFERED_ENEMY, ({70, en[x]}));
+}
+
+
+void die(int poisondeath)
+{
+
+object spieler;
+spieler=ME->QueryProp(P_KILLER);
+if((spieler->QueryProp(P_GUILD))=="druidenzirkel" &&
+     (spieler->QueryProp(P_GUILD_LEVEL))==14)
+  {
+    call_other("/gilden/druidenzirkel/master/druidenmaster",
+                "SetTask", spieler, 15);
+  } 
+shout(BS("Jubel brandet durch das SilberLand: "+TP->name(WER, RAW)
+      +" hat soeben Soordhin, den Steinritter, bezwungen!!")); 
+write_file(LOG("soordhin.kills"),
+    dtime(time())+": "+CAP(getuid(TP))+" toetet Soordhin.\n");
+::die(poisondeath);
+}
+
+
+
+string AttackLight()
+{
+ object en;
+ if (en = QueryEnemy()) 
+  {
+    tell_room(MENV,BS("Soordhin schlaegt auf "
+      + capitalize(en->name()) + " ein."), ({en}));
+    tell_object(en, "Soordhin schlaegt auf Dich ein.\n");
+    en->Defend(100+random(300), DT_SLASH,
+        ([SP_NAME:"Light", SP_SHOW_DAMAGE:1]), TO);
+  }
+  return "";
+}
+
+string AttackMedium()
+{
+ object en;
+ if (en = QueryEnemy()) 
+  {
+    tell_room(MENV,BS("Soordhin schlaegt stark auf "
+      + capitalize(en->name()) + " ein."), ({en}));
+    tell_object(en, "Soordhin schlaegt stark auf Dich ein.\n");
+    en->Defend(300+random(400), DT_SLASH,
+        ([SP_NAME:"Medium", SP_SHOW_DAMAGE:1]), TO);
+  }
+  return "";
+}
+
+string AttackSerious()
+{
+ object en;
+ if (en = QueryEnemy()) 
+  {
+    tell_room(MENV,BS("Soordhin schlaegt sehr hart auf "
+      + capitalize(en->name()) + " ein."), ({en}));
+    tell_object(en, "Soordhin schlaegt sehr hart auf Dich ein.\n");
+    en->Defend(700+random(500), DT_SLASH,
+        ([SP_NAME:"Serious", SP_SHOW_DAMAGE:1]), TO);
+  }
+  return "";
+}
+
+string AttackBlast()
+{
+ object en;
+ if (en = QueryEnemy()) 
+  {
+    tell_room(MENV,BS("Soordhin vernichtet "
+      + capitalize(en->name()) + " ohne Gnade."), ({en}));
+    tell_object(en, "Soordhin vernichtet Dich ohne Gnade.\n");
+    en->Defend(500+random(900), DT_SLASH,
+        ([SP_NAME:"Blast", SP_SHOW_DAMAGE:1]), TO);
+  }
+  return "";
+}
+
+

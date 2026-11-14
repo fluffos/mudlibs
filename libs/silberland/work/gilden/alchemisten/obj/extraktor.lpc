@@ -1,0 +1,105 @@
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include <wizlevels.h>
+#include <moving.h>
+
+#ifndef MATMASTER
+#define MATMASTER "/p/daemon/materialdb.lpc"
+#endif
+
+#ifndef TP
+#define TP this_player()
+#endif
+
+#ifndef MATUNIT
+#define MATUNIT "/players/stahldorn/gilde/alchemisten/obj/material2.lpc"
+#endif
+
+create()
+{
+  if (!is_clone(this_object()) )  return;
+  ::create();
+  SetProp(P_SHORT, "Der Extraktor - (c) Stahldorn");
+  SetProp(P_NAME, "Extraktor");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_LONG, "Damit kann man extrahieren. Was sonst?");
+  SetProp(P_NOBUY, 1);
+  AddId("extraktor");
+  AddCmd( ({"extrahier", "extrahiere", "extract"}), "extraktion");
+}
+
+int extraktion(string str)
+{
+  object ob, ob2;
+  mapping mats;
+  string *strmats, ret;
+  int i, gramm;
+  float weight, proz;
+
+  if(!IS_WIZARD(TP)) {
+    notify_fail("Du bist ja ned amal Magier! Lass das lieber sein.\n");
+    return 0;
+  }
+
+  if(!str) {
+    notify_fail("Was willst Du denn extrahieren?\n");
+    return 0;
+  }
+  
+  if(!ob=present(str, TP)){
+    notify_fail("Sowas hast Du nicht bei Dir.\n");
+    return 0;
+  }
+
+  if(ob->id("alch_material\n")){
+    notify_fail("Das ist doch schon extrahiert!\n");
+    return 0;
+  }
+
+  weight=ob->QueryProp(P_WEIGHT);
+  if(weight<50){
+    notify_fail("Das ist doch viel zu klein zum extrahieren.\n");
+    return 0;
+  }
+
+  if(ob->QueryProp(P_CURSED) || ob->QueryProp(P_MAGIC)){
+    notify_fail("Aus irgendeinem Grund gelingt die Extraktion dabei nicht.\n");
+    return 0;
+  }
+  notify_fail("BUG! Stahldorn (oder einen andern Unfaehigen) verstaendigen.\n");
+
+  if(!mappingp(mats = ob->QueryProp(P_MATERIAL))) return 0;
+  strmats = m_indices(mats);
+
+  ob->move(environment(TP), M_PUT);
+  ret="";
+  for(i=sizeof(strmats)-1;i>=0;i--)
+  {
+    proz= ((float) mats[strmats[i]]) / 100.0;
+    ob2=clone_object(MATUNIT);
+    ob2->move(TP, M_GET);
+
+    if(member(MATMASTER->GetGroupMembers(MATGROUP_WOOD), strmats[i])>-1)
+      strmats[i] = MAT_MISC_WOOD;
+    if(member(MATMASTER->GetGroupMembers(MATGROUP_PAPER), strmats[i])>-1)
+      strmats[i] = MAT_PAPER;
+    if(member(MATMASTER->GetGroupMembers(MATGROUP_CLOTH), strmats[i])>-1)
+      strmats[i] = MAT_CLOTH;
+
+    ob2->SetMaterial(strmats[i]);
+    ob2->AddAmount(gramm = (int) 
+        (proz*((75.0 + (float) random(15)) / 100.0)*weight));
+    ret+= gramm+" Gramm "; 
+//    write("Debug sagt: "+strmats[i]+"\n");
+    ret+=(MATMASTER->MaterialName(strmats[i], 0, 100));
+    ret+=((i>1)?", ":(i==1)?" und ":"");
+  }
+  ret+=".";
+  write(break_string("Du spaltest "+ob->name(WEN)+" in "+ret, 78));
+  tell_room(environment(TP), 
+    break_string(TP->Name()+" spaltet "+ob->name(WEN)+" in "+ret, 78), ({TP}));
+  ob->remove();
+  return 1;
+}

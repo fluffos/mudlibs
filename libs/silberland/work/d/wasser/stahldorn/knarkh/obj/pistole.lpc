@@ -1,0 +1,237 @@
+#include "../def.h"
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+
+
+#define MAXTANK 10      //maximale Fluessigkeitsmenge im vollen Tank
+
+int tank;               //Fluessigkeit im Tank
+int eschk;              //Fluessigkeit in der Kammer
+int bereit;             //der Ladevorgang dauert ein paar Sekunden :->
+
+create()
+{
+  if (!is_clone(TO) )  return;
+  ::create();
+
+  tank=0;
+  eschk=0;
+  bereit=1;
+
+  SetProp(P_SHORT, "Eine Spezial-Hyper-Hochdruck-Extrem-Spritzpistole 97");
+  SetProp(P_LONG, BS( 
+    "Dies ist eine Spezial-Hyper-Hochdruck-Extrem-Spritzpistole 97 "
+    "- auch Spritzpistole oder kurz SprPi genannt - "
+    "fuer Hobby- und Profispritzer. Sie besteht hauptsaechlich aus einem "
+    "ballonformigen Wassertank, der mit einem Gewirr von Schlaeuchen "
+    "mit der Muendungsspritze (MueSpr) verbunden ist. An der Unterseite "
+    "erkennst Du einen Abzug und einen seltsamen Pumpmechanismus durch "
+    "den die Fuellfluessigkeit (FueFl) in die Einzelschusskammer (ESchK) "
+    "gepumpt wird.") );
+  SetProp(P_INFO, BS( 
+     "Mit dem Befehl \"pumpe pistole\" kannst Du die ESchK "
+     "mit FueFl aus dem Haupttank (HptTnk) "
+     "fuellen. Wenn die ESchK voll ist, also eine Ladung FueFl enthaelt, "
+     "kann man mit \"spritze <opfer> [an]\" seinen Gegner mit der FueFl "
+     "bespritzen. Im Falle eines leeren HptTnks kann man "
+     "logischerweise die ESchK nicht mehr "
+     "aufpumpen und muss deshalb an einer geeigneten Nachfuellstelle "
+     "(NFueSt) den HptTnk mit dem Befehl \"fuelle haupttank\" erneut "
+     "mit FueFl fuellen.") );
+  SetProp(P_NAME, "Spritzpistole");
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({"spritzpistole", "pistole", "sprpi"}) );
+  AddAdjective("97");
+
+  SetProp(P_MATERIAL, 
+     ([ MAT_PLASTIC:20,MAT_LEATHER:10,MAT_METAL:10,MAT_MISC_MAGIC:5,MAT_GUM:20,MAT_WATER:35]));
+  SetProp(P_WEIGHT, 160);
+  SetProp(P_VALUE, 500);
+  SetProp(P_NOBUY, 0);
+
+  AddSpecialDetail( ({ "eschk", "einzelschusskammer", "kammer" }), 
+    "eschk_desc");
+  AddSpecialDetail( ({ "hpttnk", "haupttank", "tank" }), "tank_desc");
+
+  AddCmd("pumpe", "pumpen");
+  AddCmd("fuelle", "fuellen");
+  AddCmd("spritze", "spritzen");
+  AddCmd("leere", "leeren");
+}
+
+GetReady()
+{
+  bereit = 1;
+}
+
+pumpen(string str)
+{
+  if (tank < 0) tank = 0;
+
+  if (str != "pistole")
+  {
+    notify_fail("Was willst Du pumpen?\n");
+    return 0;
+  }
+  if (!tank)
+  {
+    notify_fail("Aber der Tank ist doch leer!\n");
+    return 0;
+  }
+  if (!bereit)
+  {
+    notify_fail("Warte, so schnell geht das nicht.\n");
+    return 0;
+  }
+  if (eschk)
+  {
+    notify_fail("Aber die ESchK ist doch noch voller FueFl!\n");
+    return 0;
+  }
+
+  bereit=0;
+  call_out("GetReady", 3);
+  write("Du pumpst die ESchK mit FueFl aus dem HptTnk voll.\n");
+  say(TPN + " pumpt an "+TPPP(FEMALE, WEM, SINGULAR)+" Spritzpistole herum.\n");
+  tank--;
+  eschk = 1;
+  return 1;
+}
+
+fuellen (string str)
+{
+  if (member( ({"tank", "haupttank", "pistole"}), str) < 0)
+  {
+    notify_fail("Was willst Du fuellen?\n");
+    return 0;
+  }
+
+  if ( ENV(TP)->GetDetail("wasser", TP->QueryProp(P_RACE)) )
+  {
+    if (tank)
+      write("Du leerst den Tank und fuellst ihn mit frischem Wasser auf.\n");
+    if (!tank)
+      write("Du fuellst den Tank mit Wasser auf.\n");
+    say(TPN + " fuellt den Tank " + TPPP(FEMALE,WESSEN,SINGULAR) +
+        " Pistole mit Wasser.\n");
+    tank = MAXTANK;
+    return 1;
+  }
+
+  notify_fail(
+    "Du befindest Dich nicht an einer geeigneten Stelle zum Nachfuellen.\n");
+  return 0;
+}
+
+leeren(string *str)
+{
+   notify_fail ("Was willst du leeren?\n");
+   if (!str) return 0;
+   str=explode(str, " ");
+   if (member( ({"tank", "haupttank", "pistole"}), str[0]) < 0)
+      return 0;
+   if(!tank)
+   {
+     notify_fail("Der Tank ist bereits leer.\n");
+     return 0;
+   } 
+
+   tank=0;
+   write("Du leerst den HptTnk Deiner SprPi aus.\n");
+   say(TPN + " leert den Tank "+TPPP(FEMALE,WESSEN,SINGULAR) + 
+             " Spritzpistole aus.\n");
+   return 1;
+}
+
+
+spritzen(string *str)
+{
+  mixed enemy;
+  float wasserallergie;
+  mixed allergien;
+  
+  if(!eschk)
+  {
+    notify_fail( BS(
+      "Du musst erst FueFl aus dem HptTnk in die ESchK pumpen, bevor Du "
+      "jemanden mit deiner SprPi 97 bespritzen kannst!") );
+    return 0;
+  }
+
+  notify_fail("Wen willst Du anspritzen?\n");
+  if(sizeof(str=explode(str, " ")) < 1) return 0;
+  if(!enemy=present(str[0], ENV(TP))) return 0;
+  if(!living(enemy)) return 0;
+  if(!bereit)
+  {
+    notify_fail( BS(
+      "Warte einen Moment. Die ESchK hat sich noch nicht vollstaendig "
+      "mit FueFl aus dem HptTnk gefuellt.") );
+    return 0;
+  }
+
+  if(enemy == TP)
+  {
+     notify_fail("Du willst Dich doch nicht selber anspritzen?\n");
+     return 0;
+  }
+  
+  eschk=0;
+
+  wasserallergie=0.0;
+  allergien=enemy->QueryProp(P_RESISTANCE_STRENGTHS);
+  if (mappingp(allergien) && (member(allergien, DT_WATER)))
+     wasserallergie=allergien[DT_WATER];
+
+  if(interactive(enemy) || (wasserallergie <= 0.0))
+  {
+    tell_object(enemy, BS(
+      TPN + " holt eine Spezial-Hyper-Hochdruck-Extrem-Spritzpistole 97 "
+      "hervor und zielt damit auf Dich. PLATSCH! ZISCH! WASCH! Du bist nun "
+      "pudelnass!") );
+    say( BS(
+      TPN + " holt eine Spezial-Hyper-Hochdruck-Extrem-Spritzpistole 97 hervor "
+      "und zielt damit auf " + enemy->name() +
+      ". PLATSCH! ZISCH! WASCH! " + enemy->Name() + " wird vollgespritzt "
+      "und schaut ziemlich daemlich drein."), enemy );
+    write( BS(
+      "Du holst Deine Spezial-Hyper-Hochdruck-Extrem-Spritzpistole 97 "
+      "hervor und spritzt " + enemy->name(WEN) + " pudelnass.") );
+    return 1;
+  }
+
+  if(living(enemy))
+  {
+    write("Du spritzt "+enemy->name()+" mit der FueFl an.\n");
+    say(TPN + " bespritzt "+enemy->name(WEN)+" mit Wasser.\n");
+    enemy->Defend(150 + random(100), DT_WATER, 0, TP);
+    return 1;
+  }
+
+  notify_fail(
+    "Komisch. Du spritzt und spritzt, aber irgendwas stimmt nicht.\n");
+  return 0;
+}
+
+
+string tank_desc (string str)
+{
+  if (tank > 1)
+    return "Der Haupttank enthaelt "+tank+" Ladungen Wasser.\n";
+  if (tank == 1)
+    return "Der Haupttank enthaelt eine letzte Ladung Wasser.\n";
+  else
+    return "Der Haupttank ist leer.\n";
+}
+
+string eschk_desc (string str)
+{
+  if (eschk)
+    return "Die Einzelschusskammer ist mit Wasser gefuellt.\n";
+  else
+    return "Die Einzelschusskammer ist leer.\n";
+}

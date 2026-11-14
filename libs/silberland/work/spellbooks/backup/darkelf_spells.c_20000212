@@ -1,0 +1,816 @@
+/*
+
+   Das Spellbook der Dunkelelfen im SilberLand von   Zordan@SL
+  
+   Aenderungen: 
+     08.02.1998 - Init
+     01.03.1998 - Ueberarbeitung auf mehr Abhaengigkeit vom Lichtlevel
+
+
+Vorwort:
+
+Die Spells der Dunkelelfen lehnen sich sehr stark an die der Abenteurer an,
+da die Dunkelefen selber keine eigene Gilde sind, sondern ein Artverwandter
+der Abenteurer. Also sind auch die Staerken an die der Abenteurer angepasst.
+Hinzugekommen ist ein Spell mehr ( Drider ).
+
+
+Die Spells im Einzelnen:
+
+     Dunkelheit im Raum schaffen: 'dunkelheit'
+       Je nach Success wird der Lichtlevel im aktuellen Raum um x 
+       Punkte nach unten gesetzt fuer eine auch vom Success abhaengige Zeit
+       Magiepunkte 10, Stufe 2
+
+     Gegenstaende identifizieren: 'identifiziere <gegenstand>'
+       Wenn P_INFO exisitiert, wird dies ausgegeben
+       Ausserdem Ausgabe von P_MATERIAL und, wenn der Spruch
+       besonders gut war, P_WEIGHT und P_VALUE
+       Magiepunkte 12, stufe 6
+
+     Monster/Gegenstaende einschaetzen: 'schaetz <name>'
+       Bei Monstern wird die relative Staerke (LP,WC,AC) sowie deren
+       Gesinnung angezeigt, bei Dingen deren ungefaehren Wert sowie
+       das ungefaehre Gewicht.
+       Magiepunkte 5, Stufe 8
+
+     Terrorblitz: 'terrorblitz [name]'
+       Ein kleiner dunkler Blitz des Boesen selber wird auf den Gegner 
+       abgeschossen
+       Schaden maximal 20, Magiepunkte 10, Stufe 11
+
+     Ausweichen: 'ausweichen'
+       Geht nur im Kampf, 2-10 Sekunden wird ausgewichen (von Geschick
+       und Spell Success abhaengig), in dieser Zeit werden physikalische
+       Schaeden gedrittelt
+       Magiepunkte 25, Stufe 12
+
+     Dunkellanze: 'dunkellanze [name]'
+       Eine finstere Lanze aus purer Magie wird auf den Gegner geschleudert.
+       Schaden maximal 40, Magiepunkte 20, Stufe 15
+
+     Schnelligkeit: 'schnell'
+       Gibt fuer eine bestimmte Zeit zusaetzliche Angriffe
+       Dauer und Staerke vom Success abhaengig
+       Magiepunkte 50, Stufe 17
+
+     Drider: 'drider'
+       Als Ausgleich fuer die Nachteile der Dunkelelfen, weil das meiste des
+       Silberlandes hell ist, koennen sie einen kleinen Drider rufen, der
+       ihnen im Kampf beisteht.
+       Magiepunkte: 100, Stufe 20
+
+*/
+
+#define STRICH \
+  "--------------------------------------------------------------------------\n"
+
+#define DUNKEL ({ " gar nicht"," sehr wenig"," wenig","", \
+                  " stark"," sehr stark"," unglaubich stark" })
+
+#include <properties.h>
+#include <language.h>
+#include <attributes.h>
+#include <combat.h>
+#include <wizlevels.h>
+#include <new_skills.h>
+#include <moving.h>
+
+#include "/gilden/dunkelelfen/dunkelelfen.h"
+
+inherit "/std/spellbook";
+
+static int total_fail;
+
+create() {
+  ::create();
+
+  SetProp(P_GLOBAL_SKILLPROPS, ([
+    SI_SPELLFATIGUE:2,
+    SI_SKILLLEARN:7,
+    OFFSET(SI_SKILLLEARN):8,
+    SI_SP_LOW_MSG:BS("Du hast nicht genuegend Magiepunkte um "
+                    +"diesen Zauber zu sprechen."),
+    SI_TIME_MSG: "Du bist noch zu erschoepft um einen Zauber zu sprechen.\n",
+    SI_SKILLRESTR_USE: ([SR_FUN:"checkspell"]),
+    SI_SKILLLEARN_ATTRIBUTE: A_INT, ]) );
+
+  AddSpell("identifiziere",12,5);                   // Kosten  12, Stufe  5
+
+  AddSpell("schaetz",5,8);                          // Kosten   5, Stufe  8
+
+  AddSpell("terrorblitz",10, ([                     // Kosten  10, Stufe 10
+    SI_SKILLRESTR_LEARN:([P_LEVEL:10]),
+    SI_SKILLRESTR_USE:([SR_FREE_HANDS:1]),
+    SI_SKILLDAMAGE:200,
+    SI_SKILLDAMAGE_TYPE: ({ DT_TERROR }) ]) );
+
+  AddSpell("ausweichen", 25, 12);                   // Kosten  25, Stufe 12
+
+  AddSpell("dunkellanze",20, ([                     // Kosten  20, Stufe 15
+    SI_SKILLRESTR_LEARN:([P_LEVEL:15]),
+    SI_SKILLRESTR_USE:([SR_FREE_HANDS:2]),
+    SI_SKILLDAMAGE:300,
+    OFFSET(SI_SKILLDAMAGE):100,
+    SI_SKILLDAMAGE_TYPE: ({ DT_UNHOLY }) ]) );
+
+  AddSpell("schnell",50,17);                        // Kosten  50, Stufe 17
+
+  AddSpell("dunkelheit",40, ([                      // Kosten  40, Stufe 20
+    SI_SKILLRESTR_LEARN:([P_LEVEL:20]),
+    SI_SKILLRESTR_USE:([SR_FREE_HANDS:2]),
+    SI_SPELLFATIGUE:6 ]) );
+
+  AddSpell("drider",200, ([                         // Kosten 200, Stufe 25
+    SI_SKILLRESTR_LEARN:([P_LEVEL:25]),
+    SI_SKILLRESTR_USE:([SR_FREE_HANDS:2]),
+    SI_SPELLFATIGUE:10,
+    SI_PREPARE_TIME:10,
+    SI_PREPARE_MSG:"Du flehst Lloth um einen helfenden Drider an.\n" ]) );
+}
+
+
+// Abchecken ob man zaubern darf
+
+checkspell(object caster) {
+  if(caster->QueryProp(P_FROG)) {
+    write(BS("Du kannst als Frosch nicht zaubern!"));
+    return "";
+  }
+  if(caster->QueryProp(P_GHOST)) {
+    write(BS("Du kannst als Geist nicht zaubern!"));
+    return "";
+  }
+  if(caster->QueryProp(P_ALIGN) > 400) {
+    write(BS("Du bist nicht boese genug zum Zaubern!"));
+    return "";
+  }
+  return 0;
+}
+
+// Abchecken bei Erfolg
+
+void Erfolg(object caster, string spell, mapping sinfo) {
+  caster->ModifySkill(spell,([SI_USR:sinfo[SI_USR]+1]),0,
+      "dunkelelfen");
+  return ::Erfolg(caster,spell,sinfo);
+}
+
+// Abchecken bei Misserfolg
+
+void Misserfolg(object caster, string spell, mapping sinfo) {
+  int old_abil;
+  caster->ModifySkill(spell,([SI_USR:sinfo[SI_USR]+1]),0,"dunkelelfen");
+  if (!total_fail) {
+    switch(spell) {
+      case "identifiziere":
+        write("Du kannst leider nichts besonderes erkennen.\n");
+        break;
+      case "schaetz":
+        write("Du verschaetzt Dich total.\n");
+        break;
+      case "terrorblitz":
+        write("Dein Terrorblitz verpufft sofort.\n");
+        break;
+      case "ausweichen":
+        write("Du schaffst es nicht mehr auszuweichen.\n");
+        break;
+      case "dunkellanze":
+        write("Deine Dunkellanze verschwindet sofort nach dem Entstehen.\n");
+        break;
+      case "schnell":
+        write("Du schaffst es leider nicht Deine Angriffe zu beschleunigen.\n");
+        break;
+      case "dunkelheit":
+        write("Deine Dunkelheit war nicht stark genug.\n");
+        break;
+      case "drider":
+        write("Dein Gebet war nicht innig genug.\n");
+        break;
+      default:
+        write("Dein Zauberspruch ist Dir missglueckt.\n");
+        break;
+    }
+  }
+  total_fail=0;  // gleich zuruecksetzen, besser und sicherer ist das
+  old_abil=sinfo[SI_SKILLABILITY];
+  Learn(caster, spell, sinfo);
+  sinfo=caster->QuerySkill(spell);
+  if (old_abil < (mappingp(sinfo) ? sinfo[SI_SKILLABILITY] : sinfo))
+    write("Fuer die Zukunft lernst Du aus Deinem Fehler.\n");
+  else
+    write("Leider lernst Du aus Deinem Fehler nichts dazu.\n" );
+  return;
+}
+
+
+// Die Dunkelheit . der Dunkelelf kann in einem Raum den Lichtlevel
+// um gewisse Level senken. Haengt alles vom success ab
+
+int dunkelheit(object caster, mapping sinfo) {
+  int dauer, erfolg, licht, dazu;
+  object ob;
+
+  if (caster->InFight()) {
+    write("Du kannst den Raum im Kampf nicht verdunkeln!\n");
+    return 0;
+  }
+
+  if (present(D_DUNKEL,ENV(caster))) {
+    write("Lloth hat diesen Raum schon veraendert. Du musst warten!\n");
+    return 0;
+  }
+
+  write(BS(
+    "Du breitest Deine Haende gen Boden aus und versuchst eine Dunkelheit "
+    "zu beschwoeren."));
+  say(BS(
+    CAP(caster->Name())+" breitet die Haende gen Boden aus."));
+
+  erfolg = SpellSuccess(caster,sinfo);
+  if ((-3000 <= erfolg) && (erfolg <= 0)) return MISSERFOLG;
+
+  licht=ENV(caster)->QueryProp(P_LIGHT);
+  dauer = caster->QueryAttribute(A_INT) + 12*random(sinfo[SI_SKILLABILITY]/1000)
+         +caster->QueryProp(P_GUILD_LEVEL);
+  ob=clone_object(OBJ("dunkelheit"));
+  ob->remove_me(dauer);
+  if (erfolg < 0)       // effektiv < -3000 (s.o.)
+  {
+    total_fail = 1;
+    tell_room(ENV(caster),BS(
+      "Eine dunkle Wolke schwebt aus dem Raus heraus!"));
+    write("Dein Zauberspruch ging total daneben!\n");
+    say(CAP(caster->Name())+" macht den Raum heller.\n");
+    ob->SetProp(P_LIGHT, 1-erfolg/1000);
+    ob->move(ENV(caster), M_NOCHECK|M_SILENT); 
+    return MISSERFOLG;
+  }
+  // dazu=1+erfolg/1000;        // fuehrte zu Bug in DUNKEL[dazu]
+  dazu=1+erfolg/2000;           // -> geaendert (woody)
+  tell_room(ENV(caster),BS(
+    "Eine dunkle Wolke schwebt aus dem Boden heraus in den Raum herein."));
+  write("Du verdunkelst den Raum"+DUNKEL[dazu]+".\n");
+  say(CAP(caster->Name())+" verdunkelt den Raum"+DUNKEL[dazu]+".\n");
+  ob->SetProp(P_LIGHT, -dazu);
+  ob->move(ENV(caster), M_NOCHECK|M_SILENT); 
+  return ERFOLG;
+}
+
+
+// Der Identifiziere Spell, bis auf Magic/Cursed/Nerverdrop den Abenteurern
+// entnommen, ausserdem gehen Livings nicht
+
+int identifiziere(object caster, mapping sinfo) {
+  object ob;
+  string* fi;
+  string result;
+  mapping mat;
+  int suc;
+
+  if (caster->InFight()) {
+    write("Du kannst im Kampf nichts identifizieren!\n");
+    return 0;
+  }
+
+  ob=FindVictim(sinfo[SI_SKILLARG], caster, "Was moechtest Du identifizieren?\n");
+  if (!ob) return 0;
+
+  if(ob==caster) {
+    write(BS(
+      "Du kannst Dich nicht selber identifidingesen (Der Typo "
+      "ist extra wegen Verdandi fuer immer vorhanden)!"));
+    return 0;
+  }
+
+
+
+/*
+  if (living(ob)) {
+    write("Du kannst Lebewesen nicht identifizieren!\n");
+    return 0;
+  }
+*/
+  if ((suc=SpellSuccess(caster,sinfo)) <= 0) return MISSERFOLG;
+
+  write("Du identifizierst "+ob->name(WEN, 1)+":\n");
+  say(CAP(caster->Name())+" betrachtet "+ob->name(WEN, 1)+" genauer.\n");  
+
+  write(STRICH);
+  if (result=ob->info(caster) || ob->QueryProp(P_INFO))
+    write(result);
+  else
+    write(BS(
+      "Du kannst nichts besonderes an "+CAP(ob->name(WEM, 1))+" erkennen.\n"));
+
+  if (ob->QueryProp(P_MAGIC) && suc>1000)
+    write(BS(CAP(ob->QueryPronoun(WER))+" scheint magisch zu sein.\n"));
+  else 
+    write(BS(CAP(ob->QueryPronoun(WER))+" scheint nicht magisch zu sein.\n"));
+  if (ob->QueryProp(P_NEVERDROP))
+    write(BS(CAP(ob->QueryPronoun(WER))
+            +" bleibt Dir wohl auch nach einem Tod erhalten.\n"));
+  if (ob->QueryProp(P_CURSED) && suc>2000) {
+    write(BS("Auf "+ob->QueryPronoun(WEM)+" scheint ein Fluch zu liegen!\n"));
+  }  else {
+    write(BS("Auf "+ob->QueryPronoun(WEM)+" scheint kein Fluch zu liegen.\n"));
+  }
+
+  if ((mat=ob->QueryProp(P_MATERIAL)) && (pointerp(mat))) {
+    if (sizeof(mat))
+      write(break_string(sprintf("%s besteh%s aus %s.",
+           ob->Name(WER,1),
+           (ob->IsUnit() && ob->QueryProp(P_REQUESTED_AMOUNT) != 1 ? "en" : "t"),
+           ob->MatList(WEM) || "unbekanntem Material"), 78));
+  } else if (mappingp(mat) && sizeof(mat-([MAT_MISC_LIVING]) )) {
+    write(break_string(sprintf("%s besteh%s aus %s.",
+         ob->Name(WER,1),
+         (ob->IsUnit() && ob->QueryProp(P_REQUESTED_AMOUNT) != 1 ? "en" : "t"),
+         ob->MaterialList(WEM, caster) || "unbekanntem Material"), 78));
+  }
+
+  if (mappingp(mat=ob->QueryProp(P_TEMPERATURE_PROTECTION))) {
+    int c,h;
+    string s;
+    s=ob->Name(WER,1);
+    c=mat[T_COLD_PROT];
+    h=mat[T_HEAT_PROT];
+    if (c) {
+      s+=" stellt bei Kaelte ";
+      if (c < -10) s+="eine enorme Belastung";
+      else if (c < -5) s+="eine ziemliche Belastung";
+      else if (c < -2) s+="eine spuerbare Belastung";
+      else if (c < -1) s+="eine leichte Belastung";
+      else if (c < 0)  s+="eine geringe Belastung";
+      else if (c > 10) s+="einen enormen Schutz";
+      else if (c > 5)  s+="einen sehr guten Schutz";
+      else if (c > 2)  s+="einen guten Schutz";
+      else if (c > 1)  s+="einen ganz brauchbaren Schutz";
+      else s+="einen eher geringen Schutz";
+      write(break_string(s+" dar.",78));
+    }
+    if (h) {
+      s=ob->Name(WER,1);
+      if (h < -10) s+=" belastet Dich"+(c<-10 ? " auch" : "")+
+                      " bei Hitze enorm stark";
+      else if (h < -5) s+=" bringt Dich bei Hitze schnell zum Schwitzen";
+      else if (h < -2) s+=" laesst Dich bei Hitze leicht schwitzen";
+      else if (h < -1) s+=" laesst Dich bei Hitze leichter schwitzen";
+      else if (h < 0)  s+=" ist bei Hitze eine leichte Belastung fuer Dich";
+      else if (h > 10) s+=" schuetzt Dich unglaublich gut vor Hitze";
+      else if (h > 5)  s+=" bietet Dir einen beachtlichen Hitzeschutz";
+      else if (h > 2)  s+=" schuetzt Dich recht gut vor Hitze";
+      else if (h > 1)  s+=" schuetzt Dich einigermassen vor Hitze";
+      else s+=" schuetzt Dich ein wenig vor Hitze";
+      write(break_string(s+".",78));
+    }
+  }
+  write(STRICH);
+  return ERFOLG;
+}
+
+
+// Der 'schaetz' Spruch. Nahezu komplett der Abenteurer uebernommen
+
+int schaetz(object caster, mapping sinfo) {
+  object victim;
+  int hpdiff, wcdiff, acdiff;
+  int hp, vhp, wc, vwc, ac, vac, gen, val, suc;
+  string result;
+  string vname, vnamegen;
+
+  if (caster->InFight()) {
+    write("Du kannst im Kampf nichts einschaetzen!\n");
+    return 0;
+  }
+
+  victim=FindVictim(sinfo[SI_SKILLARG],caster,
+    "Wen oder was willst Du denn einschaetzen?\n");
+  if (!victim) return 0;
+  if ((suc=SpellSuccess(caster,sinfo)) <= 0) return MISSERFOLG;
+  
+  if(victim==caster) {
+    write(BS(
+      "Du schaetzt Dich ein und meinst, Du bist eigentlich genau so, "
+      "wie Du immer warst. Dunkelelfmaessig boese."));
+    return 0;
+  }
+  
+  result="Du schaetzt "+victim->name(WEN)+" ab und kommst zu folgendem Schluss:\n";
+  result+=STRICH;
+  if (!living(victim)) {
+    say(CAP(caster->Name())+" schaetzt "+victim->name(WEN, 1)+" ein.\n");  
+    if (val=victim->QueryProp(P_VALUE)) {
+      result+=sprintf("%s ha%s einen Wert von %d Muenze%s.\n",
+             capitalize(victim->name(WER,1)),
+             (victim->IsUnit() && victim->QueryProp(P_REQUESTED_AMOUNT) != 1) ?
+             "ben" : "t", val, (val==1 ? "" : "n"));
+    } else {
+      result+=sprintf("%s %s total wertlos.\n",
+             capitalize(victim->name(WER,1)),
+             (victim->IsUnit() && victim->QueryProp(P_REQUESTED_AMOUNT) != 1) ?
+             "sind" : "ist");
+    }
+    if (victim->IsUnit()) {
+      val=victim->QueryProp(P_WEIGHT);
+    } else {
+      val=victim->QueryProp(P_TOTAL_WEIGHT);
+    }
+    if ( (val >= 6000) || (val > (3000+100*caster->QueryProp(P_LEVEL))) ) {
+      vname="ungefaehr "+((val+500)/1000)+" Kilogramm";
+    } else {
+      if (val < 100)
+        vname="nahezu nichts";
+      else if (val < 950)
+        vname="schaetzungsweise "+((val+50)-(val+50)%100)+" Gramm";
+      else {
+        if (val >= 1500)
+          val=val+random(100)-random(100);
+        if (val >= 2000)
+          val=(val+250)-(val+250)%500;
+        else
+          val=(val+125)-(val+125)%250;
+        vname="ungefaehr "+
+          ({"","ein","zwei","drei","vier","fuenf","sechs"})[val/1000]+
+          ({"","einviertel","einhalb","dreiviertel"})[(val%1000)/250]+
+          " Kilogramm";
+      }
+    }
+    result+=sprintf("%s wieg%s %s.\n",
+           capitalize(victim->QueryPronoun()),
+           (victim->IsUnit() &&
+           victim->QueryProp(P_REQUESTED_AMOUNT) != 1) ? "en" : "t", vname);
+    result+=STRICH;
+    write (result);
+    return ERFOLG;
+  }
+
+  hp=caster->QueryProp(P_HP);
+  vhp=victim->QueryProp(P_HP);
+  wc=caster->QueryProp(P_TOTAL_WC);
+  vwc=victim->QueryProp(P_TOTAL_WC);
+  ac=caster->QueryProp(P_TOTAL_AC);
+  vac=victim->QueryProp(P_TOTAL_AC);
+  hpdiff=hp-vhp;
+  wcdiff=wc-vwc;
+  acdiff=ac-vac;
+  vname=victim->name(WER, 1);
+  vnamegen=victim->name(WESSEN, 1);
+  gen=victim->QueryProp(P_GENDER);
+
+  tell_object(victim,CAP(caster->Name())+" mustert Dich.\n");
+  say(CAP(caster->Name())+" mustert "+victim->name(WEN,2)+".\n",victim);
+
+  if (hpdiff > 2*vhp)
+     result+="Du bist "+victim->name(WEM, 1)+" haushoch ueberlegen.\n";
+  else if (hpdiff > vhp)
+     result+="Du bist viel staerker als "+vname+".\n";
+  else if (hpdiff > vhp/5)
+     result+="Du bist staerker als "+vname+".\n";
+  else if (-hpdiff > 2*hp)
+     result+=CAP(vname)+" ist Dir haushoch ueberlegen.\n";
+  else if (-hpdiff > hp)
+     result+=CAP(vname)+" ist viel staerker als Du.\n";
+  else if (-hpdiff > hp/5)
+     result+=CAP(vname)+" ist staerker als Du.\n";
+  else
+     result+=CAP(vname)+" ist etwa gleich stark wie Du.\n";
+
+  if (acdiff > 2*vac)
+    result+="Deine Ruestung ist unglaublich viel besser als die "+vnamegen+".\n";
+  else if (acdiff > vac)
+    result+="Deine Ruestung ist viel besser als die "+vnamegen+".\n"; 
+  else if (acdiff >vac/5)
+    result+="Deine Ruestung ist besser als die "+vnamegen+".\n";
+  else if (-acdiff > 2*ac)
+    result+="Die Ruestung "+vnamegen+" ist unglaublich viel besser als Deine.\n";
+  else if (-acdiff > ac)
+    result+="Die Ruestung "+vnamegen+" ist viel besser als Deine.\n";
+  else if (-acdiff > ac/5)
+    result+="Die Ruestung "+vnamegen+" ist besser als Deine.\n";
+  else
+    result+="Eure Ruestungen sind etwa gleich gut.\n";
+
+  if (wcdiff > 2*vwc)
+    result+="Deine Waffe ist eigentlich schon zu gut fuer diesen Gegner.\n";
+  else if (wcdiff > vwc)
+    result+="Deine Waffe ist viel besser als die " +vnamegen+".\n";
+  else if (wcdiff > vwc/5)
+    result+="Deine Waffe ist besser als die " +vnamegen+".\n";
+  else if (-wcdiff > 2*wc)
+    result+="Die Waffe "+vnamegen+" laesst Deine ganz mickrig aussehen.\n";
+  else if (-wcdiff > wc)
+    result+="Die Waffe "+vnamegen+" ist viel besser als Deine.\n";
+  else if (-wcdiff > wc/5)
+    result+="Die Waffe "+vnamegen+" ist besser als Deine.\n";
+  else
+    result+="Eure Waffen sind etwa gleich gut.\n";
+
+  result+=capitalize(victim->QueryPronoun(WER) || "es");
+  if ((val=victim->QueryProp(P_ALIGN)) <= -1000)
+    result+=" ist von satanischer Gesinnung.\n";
+  else if (val <= -200)
+    result+=" ist von boeser Gesinnung.\n";
+  else if (val <= -40)
+    result+=sprintf(" ist ein%s unfreundliche%s Zeitgenoss%s.\n",
+          (gen == FEMALE ? "e" : ""), (gen == FEMALE ? "" : "r"),
+          (gen == FEMALE ? "in" : "e") );
+  else if (val <= 40)
+    result+=" ist so ziemlich neutral.\n";
+  else if (val <= 200)
+    result+=" ist eigentlich ganz nett.\n";
+  else if (val < 1000)
+    result+=" ist von guter Gesinnung.\n";
+  else
+    result+=" strahlt eine gewisse Heiligkeit aus.\n";
+  result+=STRICH;
+  write(result);
+
+  return ERFOLG;
+}
+
+
+// Der Terrorblitz. Aehnlich dem Pfeil der Abenteurer. 
+// Allerdings kann man den Kampf damit nicht beginnen
+
+int terrorblitz(object caster, mapping sinfo) {
+  object victim;
+  int hands,suc,light;
+  string vn, vnw, cn;
+
+  if (!caster->InFight()) {
+    write("Du kannst nur im Kampf einen Terrorblitz werfen!\n");
+    return 0;
+  }
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+         "Nach wem willst Du einen Terrorblitz werfen?\n");
+  if (!victim) return 0;
+  if ((suc=SpellSuccess(caster,sinfo))<=0) return MISSERFOLG;
+
+  light=ENV(caster)->_query_total_light();
+  if (light != 0) {
+    sinfo[SI_SKILLDAMAGE]-=5*light;
+    sinfo[OFFSET(SI_SKILLDAMAGE)]-=5*light;
+  }
+
+  cn=CAP(caster->name());
+  vnw=victim->name(WEN, 2);
+  say(cn+" wirft einen Terrorblitz auf "+vnw+".\n", victim);
+  write("Du wirfst einen Terrorblitz auf "+vnw+".\n");
+  tell_object(victim,cn+" wirft einen Terrorblitz auf Dich.\n");
+  TryDefaultAttackSpell(victim,caster,sinfo,
+    ([SP_NAME:"Terrorblitz",SP_SHOW_DAMAGE:1]));
+  return ERFOLG;
+}
+
+
+// Ausweichen, angelehnt an Abenteurer, wirkt aber ein 
+// wenig besser bei guten Gegnern und schlechter bei boesen Gegnern
+
+int ausweichen(object caster, mapping sinfo) {
+  mixed h;
+  int suc,dauer;
+
+  if (!caster->InFight()) {
+    write("Du kannst nur im Kampf ausweichen!\n");
+    return 0;
+  }
+  if (h=caster->QueryProp(P_TMP_DEFEND_HOOK)) {
+    if ((h[1]==this_object()) && (h[2]=="ausgewichen")) {
+      if (h[0] >= time())
+        write("Du kannst nicht noch mehr ausweichen!\n");
+        return 0;
+    } else
+      write("Lloth mag das im Moment wohl nicht!\n");
+      return  0;
+  }
+  if ((suc=SpellSuccess(caster,sinfo)) <= 0)
+    return MISSERFOLG;
+
+  dauer= 2 + caster->QueryAttribute(A_DEX)/6 + (suc/5000);
+  caster->SetProp(P_TMP_DEFEND_HOOK,
+      ({ time()+dauer, this_object(), "ausgewichen" }));
+  write("Du konzentrierst Dich mehr auf den Kampf und gehst ein wenig in Deckung.\n");
+  say(CAP(caster->Name())+" konzentriert sich mehr auf den Kampf.\n");
+  return ERFOLG;
+}
+
+mixed ausgewichen(int dam, mixed dam_type, mixed spell, object enemy) {
+  if (sizeof(filter_array(dam_type,PHYSICAL_DAMAGE_TYPES))) {
+    if (enemy->QueryProp(P_ALIGN) < -500) {
+      dam /= 2;
+    } else if (enemy->QueryProp(P_ALIGN) > 500) {
+      dam /= 4;
+    } else {
+      dam /= 3;
+    }
+    if (dam < 10) {
+      tell_object(previous_object(), "Du weichst sehr gekonnt aus.\n");
+    } else if (dam < 20) {
+      tell_object(previous_object(), "Du weichst gekonnt aus.\n");
+    } else {
+      tell_object(previous_object(), "Du weichst ein wenig aus.\n");
+    }
+    return ({ dam, dam_type, spell, enemy });
+  }
+  tell_object(previous_object(),
+      "Es gelingt Dir leider nicht, diesem Angriff auszuweichen.\n");
+  return ({ dam, dam_type, spell, enemy });
+}
+
+
+// Die Dunkellanze der Dunkelelfen. Schaden genauso wie Feuerball
+// bei den Abenteurern, nur bin ich dafuer, dass es vom success abhaengt :)
+// Ausserdem mag ich es nicht, wenn man den Kampf damit anfangen kann
+
+int dunkellanze(object caster, mapping sinfo) {
+  object victim;
+  int hands, suc,light;
+  string vnw, lanzetext;
+
+  if (!caster->InFight()) {
+    write("Du kannst nur im Kampf eine Dunkellanze schleudern!\n");
+    return 0;
+  }
+  
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+    "Auf wen willst Du eine Dunkellanze schleudern?\n");
+  if (!victim) return 0;
+  if ((suc=SpellSuccess(caster,sinfo)) <=0) return MISSERFOLG;
+
+  light=ENV(caster)->_query_total_light();
+  if (light != 0) {
+    sinfo[SI_SKILLDAMAGE]-=10*light;
+    sinfo[OFFSET(SI_SKILLDAMAGE)]-=10*light;
+  }
+
+  if( suc<2000 ) {
+    lanzetext="eine winzige Dunkellanze";
+    sinfo[SI_SKILLDAMAGE]-=50;
+    sinfo[OFFSET(SI_SKILLDAMAGE)]-=random(50);
+  } else if( suc<4000 ) {
+    lanzetext="eine kleine Dunkellanze";
+    sinfo[SI_SKILLDAMAGE]-=25;
+    sinfo[OFFSET(SI_SKILLDAMAGE)]-=random(25);
+  } else if( suc<6000 ) {
+    lanzetext="eine Dunkellanze";
+  } else if( suc<8000 ) {
+    lanzetext="eine grosse Dunkellanze";
+    sinfo[SI_SKILLDAMAGE]+=25;
+    sinfo[OFFSET(SI_SKILLDAMAGE)]+=random(25);
+  } else {
+    lanzetext="eine gewaltig grosse Dunkellanze";
+    sinfo[SI_SKILLDAMAGE]+=50;
+    sinfo[OFFSET(SI_SKILLDAMAGE)]+=random(50);
+  }
+  vnw=victim->name(WEN, 2);
+  say(CAP(caster->name())+" wirft "+lanzetext+" auf "+vnw+".\n", victim);
+  write("Du wirfst "+lanzetext+" auf "+vnw+".\n");
+  tell_object(victim, CAP(caster->name())+" wirft "+lanzetext+" auf Dich.\n" );
+
+  TryDefaultAttackSpell(victim,caster,sinfo,
+    ([SP_NAME:"Dunkellanze",SP_SHOW_DAMAGE:1]));
+  return ERFOLG;
+}
+
+int schnell(object caster, mapping sinfo) {
+  int dauer, erfolg, light;
+
+  if (!caster->InFight()) {
+    write("Du kannst Dich nur im Kampf schneller machen!\n");
+    return 0;
+  }
+  
+  erfolg = SpellSuccess(caster,sinfo);
+  if (-2000 <= erfolg && erfolg<=0) return MISSERFOLG;
+
+  dauer = caster->QueryAttribute(A_DEX) + random(sinfo[SI_SKILLABILITY]/1000);
+
+  light=ENV(caster)->_query_total_light();
+  if (light != 0) {
+    dauer-=2*light;
+    dauer-=2*light;
+  }
+
+  if (erfolg < -2000) {
+    total_fail = 1;
+    write("Der Zauberspruch ging total daneben! Alles wird so zaehhh...\n");
+    say(CAP(caster->Name())+" scheint auf einmal langsamer zu sein.\n");
+    caster->ModifySkillAttribute(caster,SA_SPEED,50,dauer);
+    return MISSERFOLG;
+  }
+  say(CAP(caster->Name())+" scheint auf einmal ein wenig flotter zu sein.\n");
+/* zu gut :|
+  if (erfolg > 9000) {
+    write("Du fuehlst Dich ploetzlich unglaublich viel schneller.\n");
+    caster->ModifySkillAttribute(caster,SA_SPEED,400,dauer/2);
+  } else 
+*/
+  if (erfolg > 6000) {
+    write("Du fuehlst Dich ploetzlich sehr viel schneller.\n");
+    caster->ModifySkillAttribute(caster,SA_SPEED,300,dauer/2);
+  } else {
+    write("Du fuehlst Dich ploetzlich deutlich schneller.\n");
+    caster->ModifySkillAttribute(caster,SA_SPEED,200,dauer);
+  }
+
+  return ERFOLG;
+}
+
+int drider(object caster, mapping sinfo) {
+  object ob, *inv;
+  int suc,i,level,light;
+
+  if (caster->InFight()) {
+    write("Im Kampf kannst Du nicht zu Lloth beten!\n");
+    return 0;
+  }
+
+//  write(BS("Du betest kurz zu Lloth und hoffst auf einen Abgesandten.\n"));
+  say(CAP(caster->Name())+" haelt ein kurzes Gebet zu Lloth.\n");
+  
+  inv=all_inventory(ENV(caster));
+  inv=filter_array(inv, #'living);
+  for(i=sizeof(inv)-1;i>=0;i--) {
+    if(inv[i]->QueryProp(P_IDS)) {
+      if(member(inv[i]->QueryProp(P_IDS), D_DRIDER) != -1) {
+        if(lower_case(inv[i]->QueryProp(D_CASTER))==getuid(caster)) {
+          write("Lloth hat Dir schon einen Drider geschickt.\n");
+          return 0; 
+        }
+      }
+    }
+  }
+
+  light=ENV(caster)->_query_total_light();
+  if (light>2) {
+    write("Bei diesem grausamen Licht wird Lloth Dir keine Hilfe senden!\n");
+    return 0;
+  }
+
+  level=caster->QueryProp(P_GUILD_LEVEL)/3+random(3)+1;
+  level-=light*2;
+
+  if (level<1) {
+    write("Es entsteht kurz eine dunkle Wolke, die aber sofort wieder verschwindet!\n");
+    return 0;
+  }
+
+  if (level>20) level=20;
+  ob=clone_object(NPC("drider"));
+  ob->create_default_npc(level);
+  ob->SetProp(P_HANDS, ({" mit einem seiner Beine", level*(6+random(6)), DT_PIERCE}));
+  ob->SetProp(P_BODY, level*4);
+  ob->SetProp(D_CASTER, caster->QueryProp(P_NAME));
+  ob->SetProp(P_XP, 0);
+  ob->AddId(D_DRIDER);
+  caster->AddPursuer(ob);
+  suc=SpellSuccess(caster,sinfo);
+  if (suc <= 0) {
+    if (suc < -1500) {
+      write(BS(
+        "Auf einmal entsteht direkt neben Dir ein Drider aus einer dunklen "
+        "Wolke und greift Dich an.\n" ));
+      say(BS(
+        "Auf einmal entsteht direkt neben Dir ein Drider aus einer dunklen "
+        "Wolke und greift "+CAP(caster->Name())+" an.\n"));
+      ob->SetProp(P_LONG, "Vor Dir steht ein Drider wie man sie von den "
+        "Dunkelelfen gewohnt ist. Sein Spinnenrumpf wird gekroent durch einen "
+        "stattlichen Oberbau. "
+        "Er greift nur "+caster->QueryProp(P_NAME)+" an.");
+      ob->SetProp(P_MSGOUT, "verfolgt "+caster->QueryProp(P_NAME));
+      ob->SetProp(P_FRIEND, 0);
+      ob->move(ENV(caster), M_NOCHECK|M_SILENT); 
+      ob->Kill(caster);
+      if (!present(ob,ENV(caster))) {
+        ob->remove();
+        write("Der Drider kann Dich nicht finden und "
+               "Lloth holt ihn wieder zu sich.\n");
+      }
+    }
+    return MISSERFOLG;
+  }
+  write(BS(
+    "Auf einmal entsteht neben Dir ein Drider aus einer dunklen Wolke und "
+    "ist bereit Dich in Deinen Kaempfen zu unterstuetzen."));
+  say(BS(
+    "Auf einmal entsteht neben Dir ein Drider aus einer dunklen Wolke "
+    "und wird "+CAP(caster->Name())+" im Kampf unterstuetzen." ));
+  ob->SetProp(P_LONG, "Vor Dir steht ein Drider wie man sie von den "
+    "Dunkelelfen gewohnt ist. Sein Spinnenrumpf wird gekroent durch einen "
+    "stattlichen Oberbau. "
+    "Er unterstuetzt "+caster->QueryProp(P_NAME)+" im Kampf.");
+  ob->SetProp(P_MSGOUT, "begleitet "+caster->QueryProp(P_NAME));
+  ob->SetProp(P_FRIEND, 1);
+  ob->SetProp(P_NO_GLOBAL_ATTACK, 1);
+  caster->AddDefender(ob);
+  caster->AddPursuer(ob);
+  ob->move(ENV(caster), M_NOCHECK|M_SILENT);
+  if (!present(ob,ENV(caster))) {
+    ob->remove();
+    write("Der Drider kann Dich nicht finden und "
+          "Lloth holt ihn wieder zu sich.\n");
+  }
+  return ERFOLG;
+}

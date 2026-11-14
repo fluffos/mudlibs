@@ -1,0 +1,149 @@
+/*
+ * Hauch der Verwesung
+ * Angriffspell gegen einen Gegner. Verursacht direkten Schaden auf einen 
+ * lebenden Gegener (keine Untoten, keine Golems, keine Elementare, keine 
+ * Daemonen). Eine Stoff- oder Lederruestung des Gegner nimmt dadurch 
+ * Schaden
+ * Zauber dient auch zum Verwesen einer Leiche, aus der ein "Haufen Knochen"
+ * entsteht, die zum Beschwoeren eines Skelettes dienen
+ *
+ * Kosten: 40 MP
+ * Level : 4
+ * Fatigue: 4
+ * Prep time: 2
+ * Diff : 150
+ * Damage: 0 ... 888 
+ * Objekte: /gilden/nekromanten/npc/auge
+*/
+int prep_hauch_der_verwesung(object caster, mapping sinfo)
+{
+  object victim;
+  if(!(sinfo[SI_SKILLARG]=parse_target(sinfo[SI_SKILLARG]))) {
+    write(BS("Wen willst Du mit dem Hauch der Verwesung strafen?"));
+    return 0;
+  }
+  victim=FindVictim(sinfo[SI_SKILLARG],caster,
+      "Wen willst Du mit dem Hauch der Verwesung strafen?\n");
+  if (!victim) return 0;
+  if( !victim->id("Leiche") )
+    victim=FindLivingVictim(sinfo[SI_SKILLARG],caster,
+        "Wen willst Du mit dem Hauch der Verwesung strafen?\n");
+  if (!victim){
+    write(BS(sprintf("%s Sowas ist nicht hier! Schau Dich genauer um!",
+            random_fluch())));
+    return 0;
+  }  
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }                             
+
+  return 1;
+}
+
+int hauch_der_verwesung(object caster, mapping sinfo) 
+{
+  object victim, ob;
+  object *armours;
+  int dam, i,suc;
+
+  victim=FindVictim(sinfo[SI_SKILLARG],caster,
+      "Wen willst Du mit dem Hauch der Verwesung strafen?\n");
+  if (!victim) return 0;
+  if( victim->id("Leiche") ) 
+    dam=-1;
+  else
+    victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+        "Wen willst Du mit dem Hauch der Verwesung strafen?\n");
+  if (!victim) return 0;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  if (suc=SpellSuccess(caster,sinfo)<=0)
+    return MISSERFOLG;
+
+  if( dam==-1 ) {
+    say(BS(sprintf(
+            "%s murmelt ein paar Worte, woraufhin %s furchtbar zu zucken "
+            "beginnt. Du bemerkst kleine Maden, die sich in %s Haut bohren "
+            "und das Fleisch in einer rasenden Geschwindigkeit von den Knochen "
+            "nagen.",
+            caster->Name(WER), victim->name(WER, 2), 
+            victim->QueryPossPronoun(FEMALE,WEN,SINGULAR))), 
+        ({victim, caster}) );
+    write(BSA("Nes'ser f'hic! Dne l'los Ned dam!", "Du murmelst leise: "));
+    write(BS(sprintf(
+            "%s beginnt furchtbar zu zucken! Hunderte kleine Maden bohren "
+            "sich in %s Haut und nagen das Fleisch in rasender "
+            "Geschwindigkeit von den Knochen.",
+            victim->Name(WER, 2), 
+            victim->QueryPossPronoun(FEMALE,WEN,SINGULAR) )));
+
+    if( is_humanoid(victim->QueryProp(P_RACE)) ) {
+      tell_room(ENV(caster), BS("Als die Maden schliesslich verschwunden sind "
+            "bleibt nur ein Knochenhaufen uebrig!"));
+      ob=clone_object( OBJ "knochen");
+      clone_properties(ob,victim);
+      ob->Setup();
+      ob->move( ENV(caster), M_NOCHECK);
+      victim->remove();
+    }
+    else {
+      tell_room(ENV(caster), BS("Als die Maden schliesslich verschwunden sind "
+            "bleibt nichts mehr zurueck!"));
+      if( !random(3) ) {
+        victim->SetProp(P_KILLER, caster);
+        write(BS(sprintf("%s Du hast eine Pforte ins Totenreich aufgestossen!",
+              random_fluch())));
+        tell_room(ENV(caster), sprintf("%s hat eine Pforte ins Totenreich "
+              "aufgestossen!", caster->Name(WER)), ({caster}));
+        CloneGhost(victim, caster, 10000);
+      }
+      else
+        victim->remove();
+    }
+  }
+  else {
+    if( !is_living(victim) ) {
+      write(BS(sprintf("%s %skann gar nicht verfaulen! Deine "
+            "unheilge Anrufung verfliegt ohne Wirkung!", random_fluch(),
+            victim->Name(WER,1))));
+    }
+    else {
+      tell_room(ENV(caster), BSA("Ika-haar Turz'waa tortem Gr'traf!", 
+            sprintf("%s ruft: ", caster->Name(WER))), ({caster}));
+      say(BS(sprintf(
+              "%s schreit furchtbar auf! Du bemerkst kleine Maden, die sich in "
+              "%s Haut bohren.",victim->Name(WER, 2), 
+              victim->QueryPossPronoun(FEMALE,WEN,SINGULAR))), ({victim, caster}) );
+      write(BSA("Ika-haar Turz'waa tortem Gr'traf!", "Du rufst: "));
+      write(BS(sprintf("%s schreit gequaelt, als kleine Maden sich in %s "
+              "Haut bohren!", victim->Name(WER),
+              victim->QueryPossPronoun(FEMALE,WEN,SINGULAR))));
+      tell_object(victim, BS(
+            "Ploetzlich durchdringt Dich eine Welle von Schmerzen!"
+            "Hunderte kleine Maden bohren sich in Deine Haut."));
+      dam=sinfo[SI_SKILLDAMAGE]+caster->QueryProp(P_GUILD_LEVEL)*3+
+        caster->QueryProp(P_GUILD_CIRCLE)*3+(2*suc*caster->
+            QueryAttribute(A_INT)/MAX_ABILITY);
+      dam+=CheckEquip(caster, sinfo[SI_SPELLFUNC]);
+      dam=random(DoModificationByAlign(dam, caster, victim));
+      if (dam > sinfo[SI_MAX_DAMAGE] ) dam=sinfo[SI_MAX_DAMAGE];
+      if( armours=victim->QueryProp(P_ARMOURS) ){
+        for(i=sizeof(armours)-1;i>=0;i--){
+          if( armours[i]->QueryMaterialGroup(MATGROUP_BIO)>10 ||
+              armours[i]->QueryMaterialGroup(MATGROUP_CLOTH)>10 ||
+              armours[i]->QueryMaterialGroup(MATGROUP_PAPER)>10 ) 
+            armours[i]->Damage(random(3));
+        }
+      }
+      TryAttackSpell(victim, dam, sinfo[SI_SKILLDAMAGE_TYPE],
+          ([SP_NAME:"Nekromantenfaeulnis",SP_SHOW_DAMAGE:1]), caster, sinfo);
+    }
+  }
+  return ERFOLG;
+}

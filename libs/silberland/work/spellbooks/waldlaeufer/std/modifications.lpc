@@ -1,0 +1,346 @@
+//** EquipMent-Verwaltung **************************************************//
+//-- Sammelt die Kostenersparnisse -------------------------------------------
+/*
+  Funktionsweise:
+  Nur in Waffen und Ruestungen gesetzt, also werden diese einfach abgegrast 
+  nach der property und der aufaddierte Wert auf die gesamtkosten berechnet
+*/
+int get_equip_cost(object caster, int cost)
+{
+  mixed obs,ob;
+  int i,j;
+  
+  j=0;
+  obs=caster->QueryProp(P_ARMOURS);
+  if(objectp(ob=caster->QueryProp(P_WEAPON))) {obs+=({ob});}
+  for(i=0;i<sizeof(obs);i++)
+  { j+=obs[i]->QueryProp(P_RANGER_SPELLCOST); }
+  j=limit(j,0,MAX_SPELLCOST);
+  cost-=(cost*j)/100;
+  return cost;
+}
+
+int get_equip_bonus(object caster, string spell) {
+  mixed obs,ob,m;
+  int i,j,k;
+  
+  j=0; k=0;
+  obs=caster->QueryProp(P_ARMOURS);
+  if(objectp(ob=caster->QueryProp(P_WEAPON))) {obs+=({ob});}
+  for(i=0;i<sizeof(obs);i++)
+  { 
+    m=obs[i]->QueryProp(P_RANGER_BONUS);
+    if(mappingp(m) && ((k=m[spell]) || (k=m["all"])) )  {j+=k; }
+  }
+  j=limit(j,0,MAX_RANGER_BONUS);
+  return j;
+}
+
+//-- Erhoeht den Spelldamage (Prozente) --------------------------------------
+/*
+  Funktionsweise:
+  Nur in Waffen und Ruestungen gesetzt, also werden diese einfach abgegrast 
+  nach dem uebergebenen Spell (oder "all") und das gesamt-ergebnis zurueck
+  gegeben
+*/
+int get_equip_damage(object caster, string spell, int dam)
+{
+  int j;
+  j = get_equip_bonus(caster, spell);
+  dam+=(dam*j)/100;
+  return dam;
+}
+//**************************************************************************//
+
+
+
+//** KostenBeeinflussung ***************************************************//
+//-- Hauptfunktion -----------------------------------------------------------
+mapping CostModification(object caster, mapping sinfo)
+{
+  int gl;
+  
+  //Im Wald?
+  if(IsInForest(caster))
+  { sinfo[SI_SPELLCOST]=(sinfo[SI_SPELLCOST]*8)/10; }
+  
+  //Ausruestung
+  sinfo[SI_SPELLCOST]=get_equip_cost(caster, sinfo[SI_SPELLCOST]);
+
+  //Skill
+  if(R_SKILLMASTER->HasSkill(getuid(caster), GUNST_DER_FLAMME)) { 
+    if(!random(40-caster->QueryProp(P_GUILD_LEVEL))) {
+      tell_object(caster, BS("Die Gunst der Flamme naehrt deine Anrufung!"));
+      sinfo[SI_SPELLCOST] = 0; 
+    } else {
+      sinfo[SI_SPELLCOST] = (int) (sinfo[SI_SPELLCOST] * (1.0 - (caster->QueryProp(P_GUILD_LEVEL) / 50.0))); 
+    }
+  }
+  
+  //Gildenstufe
+  if((gl=caster->QueryProp(P_GUILD_LEVEL))>15)
+  { sinfo[SI_SPELLCOST]-=gl-15; }
+  
+  //Abschliessende Eingrenzung der Kosten
+  sinfo[SI_SPELLCOST]=limit(sinfo[SI_SPELLCOST], 5, 200);
+  return sinfo;
+}
+//**************************************************************************//
+
+
+
+//** Erzfeind **************************************************************//
+//-- Ist der Feind ein Erzfeind? ---------------------------------------------
+int IsArchEnemy(string caster, object ob)
+{
+  if(RANGERMASTER->is_archenemy_of(caster, ob)) {return 1;}
+  return 0;
+}
+//**************************************************************************//
+
+
+
+//**************************************************************************//
+//-- Combos ------------------------------------------------------------------
+/*
+  Funktionsweise: Combos werden aufgeladen und mit einer Attacke die 
+    aufgesammelte Energie freigegeben in einer finalen Attacke. (Natuerlich 
+    nur auf einen Gegnern). Man kann sich das so vorstellen, dass man z.B.
+    imemr auf die selbe Wunde attackiert oder aus dem Schwung der 
+    vorangegangenen Attacke Kraft fuer die naechste nimmt.
+  Anzahl der Ladungen: Ich denke ich werde von mind. 1 Ladung und max. 4 
+    Ladungen mit anschliessender Entladung ausgehen. Die bekannteste Combo
+    aus dem SilberLand ist sowieso rammen - zertreten, hier laesst sich das
+    z.B. durch Fusstritt und Messerstich/Ausweiden darstellen.
+  Benutzte Spells: (nur Angriffsspells +  Stolperdraht (SD))
+    - Messerstich (MS)
+    - Deutschuss (DS)
+    - Fusstritt (FT)
+    - Klingenwirbel (KW)
+    - Messerwurf (MW)
+    - Ausweiden (A)
+    - Zielschuss (ZS)
+    - Giftpfeil (GP)
+    - Tierangriff (TA)
+    - Gemeinsame Attacke (GA)
+    - Salve (S)
+    Einige koennen ihre Combo-Wirkung erst unter Einfluss eines anderen Spells
+    entfalten lassen (z.B. Ode des Sturmes, oder Geschwindigkeit)
+  2er-Combos:
+    Gegner-am-Boden:
+    - <gegner liegt am boden> (bersi, drui, FT, SD, einige TA)
+    -> MS/DS/A
+    selbe Wunde:
+    - MS -> A
+    - DS -> ZS
+    - TA -> GA
+    - MW -> A
+  3er-Combos:
+    - KW -> MS -> A
+    - KW -> FT -> A    
+    - S -> DS -> ZS
+    - DS -> GP -> ZS
+    - TA -> GP -> GA
+  4er-Combos:
+    - KW -> MS -> FT -> A
+    - S -> DS -> FT -> ZS
+  5er-Combo:
+    - KW -> MS -> MW -> FT -> A
+  
+  Beachte:
+    - die finsih-moves(!) muss immer ZS,A oder GA sein
+    - die 2er Rammen Combos werden extra behandelt
+    - die finsish-moves kommen nur am ende einer combo vor!
+  Aufbau der Property:
+  ({zeit in der noch combo gueltig ist, spells welche die combo fortfuehren,
+    counter})
+*/
+string *finish_spells=({ZIELSCHUSS, AUSWEIDEN, GEMEINSAME_ATTACKE});
+string *charge_spells=({MESSERSTICH, DEUTSCHUSS, FUSSTRITT, KLINGENWIRBEL,
+                        MESSERWURF, GIFTPFEIL, TIERANGRIFF, SALVE});
+string *combo_spells=finish_spells+charge_spells;
+
+//-- Das Niederliegen der Gegner ---------------------------------------------
+mapping FalldownModification(object enemy, object caster, mapping sinfo)
+{
+  string spell;
+  
+  spell=sinfo[SI_SPELLNAME];
+  if(member(({MESSERSTICH, DEUTSCHUSS, AUSWEIDEN, ZIELSCHUSS}), spell) == -1)
+  {return sinfo;}
+  if((enemy->QueryProp(P_LAST_RAMMEN_TIME)+2)<time())
+  { return sinfo; }
+  sinfo[OFFSET(SI_SKILLDAMAGE)]+=100+random(100); 
+
+  tell_object(caster, BS("Du nutzt aus, dass "+enemy->name(WER, 1)+" am Boden liegt."));
+  return sinfo;
+}
+
+//-- Die Finsish-Moves ausgeben ----------------------------------------------
+mixed get_finish_spells() {return finish_spells;}
+
+//-- Die Charge-Spells ausgeben ----------------------------------------------
+mixed get_charge_spells() {return charge_spells;}
+
+//-- Alle ComboSpells ausgeben -----------------------------------------------
+mixed get_combo_spells() {return combo_spells;}
+
+//-- Ist der aktuelle Spell ein combos-pell? ---------------------------------
+int is_combo_spell(string spell) {return (member(combo_spells, spell) != -1);}
+
+//-- Welcher Spell kann noch folgen? -----------------------------------------
+mixed get_next_spells(string spell)
+{
+  switch(spell)
+  {
+    case MESSERSTICH:   return ({FUSSTRITT, MESSERWURF, AUSWEIDEN}); break;
+    case DEUTSCHUSS:    return ({FUSSTRITT, GIFTPFEIL, ZIELSCHUSS}); break;
+    case FUSSTRITT:     return ({AUSWEIDEN, ZIELSCHUSS});            break;
+    case KLINGENWIRBEL: return ({MESSERSTICH, FUSSTRITT});           break;
+    case MESSERWURF:    return ({FUSSTRITT, AUSWEIDEN});             break;
+    case GIFTPFEIL:     return ({ZIELSCHUSS, AUSWEIDEN});   break;
+    case TIERANGRIFF:   return ({DEUTSCHUSS, MESSERSTICH}); break;
+    case SALVE:         return ({DEUTSCHUSS});                       break;
+  }
+  return ({});  
+}
+
+//-- Wieviel Zeit hat man maximal fuer den naechsten spell? ------------------
+int get_highest_prepare_time(string *spells)
+{
+  int i,ht,pt;
+  
+  ht=0;
+  for(i=0;i<sizeof(spells);i++)
+  {
+    pt=QuerySpell(spells[i])[SI_PREPARE_TIME];
+    if(pt>ht) {ht=pt;}
+  }
+  return ht;
+}
+
+//-- Hauptfunktion -----------------------------------------------------------
+mapping ComboModification(object enemy, object caster, mapping sinfo)
+{
+  string spell;
+  mixed combo, allowed_spells;
+  int t, counter, charge_spell, finish_spell, ht, can_see;
+  
+  //noch pausiert?
+  combo=caster->QueryProp(P_RANGER_COMBO);
+  if(intp(combo) && combo>time()) { return sinfo;}
+  
+  spell=sinfo[SI_SPELLNAME];
+  if((member(combo_spells, spell) == -1)) { 
+    return sinfo; 
+  }
+  
+  can_see=( (IS_WIZARD(getuid(caster)) || caster->QueryProp(P_TESTPLAYER)) 
+            && (caster->QueryProp(P_RANGER_SHOW_COMBOS)==1) );
+  finish_spell=(member(finish_spells, spell) != -1);
+  charge_spell=!finish_spell;
+  allowed_spells=get_next_spells(spell);
+  ht=get_highest_prepare_time(allowed_spells);
+  combo=enemy->QueryProp(P_RANGER_COMBO);
+  
+  /*if(pointerp(combo))
+  {
+    DBD("Zeit-Frist: "+to_string(combo[0]));
+    DBD("Zeit: "+to_string(time()));
+    DBD("Zeit-rest: "+to_string(combo[0]-time()));
+  }*/
+  
+  if(    !(pointerp(combo)) 
+      || (sizeof(combo)!=3) 
+      || (combo[0])<time() 
+      || (member(combo[1], spell) == -1) ) //Neue Combo beginnen
+  {
+    //DBD("Finish-spell in neuer Combo");
+    if(finish_spell) {return sinfo;}
+    //DBD("neue Combo");
+    if(can_see)
+    { tell_object(caster, BSC(ANSI_RED+"Combo-Chance; "
+                          "Moegliche Spells: "+ANSI_NORMAL+
+                          implode(allowed_spells, ", ")+"."));}
+    t=time()+sinfo[SI_SPELLFATIGUE]+ht;
+    combo=({t,allowed_spells,1});
+    enemy->SetProp(P_RANGER_COMBO, combo);
+    sinfo[SI_COMBO_COUNTER]=1;
+    return sinfo;
+  }
+  counter=combo[2];
+  counter++;
+
+  sinfo[OFFSET(SI_SKILLDAMAGE)] += counter * 50;
+
+  if(finish_spell) //Finish-Move
+  {
+    //DBD("Finish-Move - Damage: "+to_string(counter*150));
+    if(can_see) 
+    {
+      tell_object(caster, BS(ANSI_RED+"Combo-Damage: "+
+                          to_string(counter*150)+""+ANSI_NORMAL));
+    }
+    tell_object(caster, BS("Du setzt zu einer finalen Attacke auf "
+                        +enemy->name(WEN, 1)+" an."));
+    sinfo[OFFSET(SI_SKILLDAMAGE)]+=(counter*150);
+    combo=({0,allowed_spells,0});
+    enemy->SetProp(P_RANGER_COMBO, combo);
+    caster->SetProp(P_RANGER_COMBO, time()+6);
+
+    sinfo[OFFSET(SI_SKILLDAMAGE)] += counter * 100;
+
+    sinfo[SI_COMBO_COUNTER]=0;
+    return sinfo;
+  }
+
+  //weiter aufladen
+  t=time()+sinfo[SI_SPELLFATIGUE]+ht;
+  //DBD("Charge-Spell - Counter: "+to_string(counter));
+  if(can_see)
+  {
+    tell_object(caster, BSC(ANSI_RED+"Combo-Counter: "+ANSI_NORMAL+
+                        to_string(counter)+ANSI_RED+"; "
+                        "Moegliche Spells: "+ANSI_NORMAL+
+                        implode(allowed_spells, ", ")+"."));
+  }
+  combo=({t,allowed_spells,counter});
+  enemy->SetProp(P_RANGER_COMBO, combo);
+  sinfo[SI_COMBO_COUNTER]=counter;
+  return sinfo;
+}
+
+//-- Die Attacke ist nicht gelungen ------------------------------------------
+void ComboFail(object caster, mapping sinfo)
+{ if(sinfo[SI_COMBO_COUNTER]!=0) {caster->SetProp(P_RANGER_COMBO, time()+4);}}
+
+//-- Die Attacke ist gelungen ------------------------------------------------
+void ComboDone(object caster, object enemy,  mapping sinfo)
+{
+  int i;
+  
+  if(!i=sinfo[SI_COMBO_COUNTER]) {return;}
+  switch(i)
+  {
+    case 2:
+      tell_object(caster, BS("Dir ist es gelungen wieder "
+                          +enemy->name(WESSEN, 1)+" Wunde zu treffen."));
+    break;
+    case 3:
+      tell_object(caster, BS("Erneut hast Du zielgenau attackiert und "
+                          "die Verletzungen "+enemy->name(WESSEN, 1)+
+                          " verschlimmert."));
+    break;
+    case 4:
+      tell_object(caster, BS("Du hast wieder "+enemy->name(WESSEN, 1)+
+                          " Schachwachpunkt getroffen. "+enemy->Name(WER, 1)+
+                          " wankt hin und her."));
+    break;
+    default: 
+      tell_object(caster, BS("Du verursachst bei "+enemy->name(WEM, 1)+" eine"
+                          " Wunde."));  
+    break;
+  }
+}
+
+//**************************************************************************//

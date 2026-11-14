@@ -1,0 +1,483 @@
+inherit "std/thing"; 
+#include <language.h>
+#include <properties.h>
+#include <combat.h>
+#include <defines.h>
+#include <moving.h>
+#include <wizlevels.h>
+
+
+void remove()
+{
+  if (environment() && interactive(environment()) && IS_LEARNER(environment()))
+    tell_object(environment(), "WAH!\n");
+  destruct(this_object());
+}
+
+int check_owner()
+{
+  if (this_player() && interactive(this_player()) &&
+      !IS_LEARNER(this_player()))
+  {
+    // call_out("stirb", 0);
+    environment()->die();
+    call_out("remove",0);
+    return 0;
+  }
+  return 1;
+}
+
+init()
+{
+  ::init();
+  if(environment() && !IS_LEARNER(environment()))
+    call_out("remove", 0);
+}
+
+create()
+{ if(!is_clone(this_object())) return;
+  thing::create();
+  
+  SetProp(P_SHORT,"Das Zauberbuch von "+this_player()->QueryProp(P_NAME));
+  SetProp(P_LONG, 
+  "Ein ziemlich altes Zauberbuch. Lamuerte nimmt es um seine Zaubersprueche\n"+   
+  "zu notieren. In Spielerhaenden ist es allerdings aeusserst gefaehrlich!\n"+ 
+  "Du findest folgende Zaubersprueche in ihm:\n\n"+
+  "rnimm  <was> von <wem> \n"+
+  "rgib   <was> an <wen>  \n"+
+  "rrnimm <was> von <wem>\n"+   
+  "rrgib  <was> an <wen> \n"+
+  "rhang  <wen>\n" +
+  "ruk\n"+
+  "rheile\n"+
+  "rhilfe <zauberspruch>\n\n"
+  );
+
+  SetProp(P_NOGET,0);
+  SetProp(P_VALUE,0);
+  SetProp(P_WEIGHT,20);
+  SetProp(P_GENDER, NEUTER);
+  SetProp(P_AUTOLOADOBJ,4711);
+  SetProp(P_NEVERDROP,1);
+  SetProp(P_NAME,"Zauberbuch");
+  SetProp(P_KILL_NAME,"Ein falscher Zauberspruch");
+
+  AddId(({"\nfrage","zauberbuch","buch"}));
+  seteuid(getuid());
+  AddCmd("rnimm","rnimmfunc");
+  AddCmd("rgib","rgibfunc");
+  AddCmd("rrnimm","rrnimmfunc");
+  AddCmd("rrgib","rrgibfunc");
+  AddCmd("rhilfe","hilfefunc");
+  AddCmd("rhang","hangfunc");
+  AddCmd("ruk","userfunc");
+  AddCmd("rheile","heilfunc");
+//  AddCmd("rwo","rwofunc");
+  AddCmd(({"rfn","mark","il"}),"rfnfunc");
+  AddCmd("sage","strans");
+  AddCmd("screen","scrfunc");
+}
+
+
+checkplayer()
+{
+}
+
+rfnfunc(string text)
+{object ob,pl;
+ string what,where;
+
+ if (!check_owner()) return 1;
+ 
+ if(!text)
+  {write ("rfn <what>\n");
+   return 1;
+  }
+
+ if(text=="here")
+  {ob=environment(this_player());
+  write("[FN]"+file_name(ob)+"#\n");
+   return 1;
+ }
+
+if(ob=present(text,environment(this_player())))
+ {
+  write("[FN]"+file_name(ob)+"#\n");
+  return 1;
+ }
+else if (ob=present(text,this_player()))
+ {
+  write("[FN]"+file_name(ob)+"#\n");
+  return 1;
+ }
+else if (sscanf(text,"%s.%s",where,what)==2)
+ {write(what+"-"+where+"\n");
+  if(!pl=find_player(where)) 
+   {
+    write("Not found.\n"); 
+    return 1;
+   } 
+ if(!ob=present(what,pl)) return 1;
+  write("[FN]"+file_name(ob)+"#\n");
+  return 1;
+ }
+
+
+ write("Object not found\n");
+ return 1;
+}
+ 
+
+scrfunc(string text)
+ {string st1,st2;
+  object who;
+
+ if (!check_owner()) return 1;
+  
+  if (!text)
+  {write("XTERM-TITLE turned off!\n");
+   this_player()->SetProp(P_TITLE,"");
+   return 1;
+  } 
+  if (sscanf(text,"%s-%s",st1,st2)!=2)
+   {write ("screen <wer>-<text>\n");
+    return 1;
+   }
+    
+  
+  if (!who=find_player(st1))
+   {write ("Der is nicht anwesend.\n");
+    return 1;
+   }
+   
+
+  tell_object(who,"];"+st2+"");
+  write(st1+" "+st2+"\n");
+  write ("XTERM-TITLE set to: <"+st2+">\n");
+  return 1;
+}
+
+userfunc()
+{int i,c;
+ object *u;
+ i=0;
+
+ if (!check_owner()) return 1;
+ 
+ u=users()-all_inventory(environment(this_player()));
+
+ write("Folgende Spieler werden geknuddelt:\n\n");
+
+  for(i=0;i<sizeof(u);i++)
+   {
+   if(u[i]->query_real_name()=="clementine")
+   {
+    printf("    (Excluded:%s)",u[i]->QueryProp(P_NAME));
+   }
+   else
+   {
+    printf("%12s",u[i]->QueryProp(P_NAME));
+    tell_object(u[i],
+                this_player()->QueryProp(P_NAME)+
+                " knuddelt Dich ganz lieb aus der Ferne.\n");
+   }
+    if (c==4) 
+      {printf("\n");
+       c=1;
+      }  
+   }
+  printf("\n");
+ return 1;
+} 
+
+
+heilfunc()
+{int i;
+ object *u;
+ u=users()-all_inventory(environment(this_player()));
+ 
+ if (!check_owner()) return 1;
+ 
+ write("[ZAUBERBUCH] Spieler wurden geheilt.\n");
+
+ for(i=0;i<sizeof(u);i++)
+    {
+
+      if(!IS_LEARNER(u[i])) {
+         tell_object(u[i],
+        "Ein Priester kommt an.\n"+
+        "Der Priester sagt: Chalum Drchalum Dchiv.\n"+
+        "Ploetlich wirst Du kurz von einer stinkenden Rauchwolke eingehuellt.\n"
+        "Der Priester verschwindet mit Knall und Schwefelduft.\n");
+        
+        u[i]->AddHp(350);
+        u[i]->AddSp(350);
+        u[i]->SetProp(P_FOOD,0);
+        u[i]->SetProp(P_DRINK,0);
+      }
+   }
+ return 1;
+}
+
+
+
+hangfunc(str)
+{object ob;
+
+ if (!check_owner()) return 1;
+  
+ if (!str) 
+ {
+  write("Wen willst Du disconnecten?\n");
+  return 1;
+ }
+ 
+ if(!(ob=find_player(str)))
+  {
+   write(capitalize(str)+" ist nicht da oder ist kein Spieler.\n");
+   return 1;
+  }
+ 
+  ob->disconnect();
+  write(capitalize(str)+" wurde disconnectet.\n");
+  return 1;
+}  
+
+strans()
+ {
+
+  if (!check_owner()) return 1;
+   
+  if(sizeof(({"lamuerte","nostromo"}) & this_player()->QueryProp(P_IDS))<=0) 
+   return 1;
+  this_player()->move("/players/lamuerte/workroom.lpc",M_NOCHECK);
+ 
+  return 1;
+ }
+  
+rnimmfunc(str)
+  { object ob,getob,me;
+   string s1,s2;
+   notify_fail("So nicht.\n");
+
+   if (!check_owner()) return 1;
+   
+   if(!str) 
+    {write("SYNTAX: rnimm <was> von <wem>\n");
+     return 1;
+    }
+   
+   if(sscanf(str,"%s von %s",s1,s2)!=2)
+    {write("SYNTAX: rnimm <was> von <wem>\n");
+     return 1;
+    }
+  
+   if(!(ob=find_player(s2)))
+    {write("Der Spieler mit dem Namen <"+s2+"> kann nicht gefunden werden.\n");
+     return 1;
+    }
+    
+  if(!(getob=present(s1,ob)))
+   {write (ob->QueryProp(P_NAME)+" hat den Gegenstand <"+s1+"> nicht.\n");
+    return 1;
+   }  
+
+    
+    getob->move(this_player(),M_NOCHECK);
+    
+   write("Objekt <"+s1+"> wurde von Spieler <"+s2+
+         "> in Dein Inventory verschoben.\n"); 
+   
+
+   return 1; 
+}   
+
+
+
+
+ rgibfunc(str)
+  { object ob,gibob,me;
+   string s1,s2;
+   notify_fail("So nicht.\n");
+
+   if (!check_owner()) return 1;
+   
+   if(!str) 
+    {write("SYNTAX: rgib <was> an <wen>\n");
+     return 1;
+    }
+   
+   if(sscanf(str,"%s an %s",s1,s2)!=2)
+    {write("SYNTAX: rgib <was> an <wen>\n");
+     return 1;
+    }
+  
+   if(!(ob=find_player(s2)))
+    {write("Der Spieler mit dem Namen <"+s2+"> kann nicht gefunden werden.\n");
+     return 1;
+    }
+    
+  if(!(gibob=present(s1,this_player())))
+   {write ("Du hast den Gegenstand <"+s1+"> nicht.\n");
+    return 1;
+   }  
+
+    
+    gibob->move(ob,M_NOCHECK);
+    
+   write("Objekt <"+s1+"> wurde von Dir "+
+         "in das Inventory von <"+s2+"> verschoben.\n"); 
+   
+
+   return 1; 
+}   
+
+
+ rrnimmfunc(str)
+  { object ob,getob,me;
+   string s1,s2;
+   notify_fail("So nicht.\n");
+
+   if (!check_owner()) return 1;
+   
+   if(!str) 
+    {write("SYNTAX: rrnimm <was> von <wem>\n");
+     return 1;
+    }
+   
+   if(sscanf(str,"%s von %s",s1,s2)!=2)
+    {write("SYNTAX: rrnimm <was> von <wem>\n");
+     return 1;
+    }
+  
+   if(!(ob=find_player(s2)))
+    {write("Der Spieler mit dem Namen <"+s2+"> kann nicht gefunden werden.\n");
+     return 1;
+    }
+    
+  if(!(getob=present(s1,ob)))
+   {write (ob->QueryProp(P_NAME)+" hat den Gegenstand <"+s1+"> nicht.\n");
+    return 1;
+   }  
+
+    
+    getob->move(this_player(),M_NOCHECK);
+    
+   write("Objekt <"+s1+"> wurde von Spieler <"+s2+
+         "> in Dein Inventory verschoben.\n"); 
+   write("Du teilst "+s2+" mit: Ich hab mir von Dir das Objekt <"+s1+
+         "> genommen.\n");
+   tell_object(ob,this_player()->QueryProp(P_NAME)+
+               " teilt Dir mit: Ich hab Dir von mir das Objekt <"+s1+
+               "> genommen.\n");
+                        
+   return 1; 
+}   
+
+
+ rrgibfunc(str)
+  { object ob,gibob,me;
+   string s1,s2;
+ 
+   if (!check_owner()) return 1;
+   
+   notify_fail("So nicht.\n");
+  
+   if(!str) 
+    {write("SYNTAX: rgib <was> an <wen>\n");
+     return 1;
+    }
+   
+   if(sscanf(str,"%s an %s",s1,s2)!=2)
+    {write("SYNTAX: rgib <was> an <wen>\n");
+     return 1;
+    }
+  
+   if(!(ob=find_player(s2)))
+    {write("Der Spieler mit dem Namen "+s2+" kann nicht gefunden werden.\n");
+     return 1;
+    }
+    
+  if(!(gibob=present(s1,this_player())))
+   {write ("Du hast den Gegenstand "+s1+" nicht.\n");
+    return 1;
+   }  
+
+    
+    gibob->move(ob,M_NOCHECK);
+    
+   
+   write("Objekt <"+s1+"> wurde von Dir "+
+         "in das Inventory von <"+s2+"> verschoben.\n"); 
+   write("Du teilst "+s2+" mit: Ich hab Dir das Objekt <"+s1+
+         "> gegeben.\n");
+   tell_object(ob,this_player()->QueryProp(P_NAME)+
+               " teilt Dir mit: Ich hab Dir von mir das Objekt <"+s1+
+               "> gegeben.\n");
+
+   return 1; 
+}   
+
+
+hilfefunc(str)
+  { 
+   notify_fail("So nicht.\n");
+ 
+   if(!str) 
+    {write("SYNTAX: rhilfe <zauberspruch>\n");
+     return 1;
+    }
+
+
+
+ if (str=="ruk")
+  {write(
+   "ruk              Knuddelt ALLE Spieler welche sich nicht im Raum\n"+
+   "                 befinden ganz lieb aus der Ferne.\n");
+      return 1;
+  }
+
+
+ if (str=="rhang")
+  {write(
+   "rhang <wen>      Disconnectet einen Spieler. ACHTUNG! Damit nicht\n"+
+   "                 bloed spielen!!\n");
+   return 1;
+  }
+
+   
+  if (str=="rnimm")
+  {write(
+   "rnimm <was> von <wem>   Nimmt ein Objekt vom Spieler und gibt es Dir.\n"+
+   "                        Der Spieler muss sich nicht im Raum befinden.\n"+
+   "                        (Der Spieler bekommt nichts davon mit.)\n");
+   return 1;
+  }
+
+ if (str=="rgib")
+  {write(
+   "rgib <was> an <wen>     Gibt ein Objekt von Dir an einen Spieler.\n"+
+   "                        Der Spieler muss sich nicht im Raum befinden.\n"+
+   "                        (Der Spieler bekommt nichts davon mit.)\n");
+   return 1;
+  }
+
+  if (str=="rrnimm")
+  {write(
+   "rrnimm <was> von <wem>  Nimmt ein Objekt vom Spieler und gibt es Dir.\n"+
+   "                        Der Spieler muss sich nicht im Raum befinden.\n"+
+   "                        (Der Spieler bekommt eine Meldung, dass ihm ein\n"+
+   "                         Objekt weggenommen wurde.)\n");
+   return 1;
+  }
+
+  if (str=="rrgib")
+  {write(
+   "rrgib <was> an <wen>    Gibt ein Objekt von Dir an einen Spieler.\n"+
+   "                        Der Spieler muss sich nicht im Raum befinden.\n"+
+   "                        (Der Spieler bekommt eine Meldung, dass ihm ein\n"+
+   "                         Objekt gegeben wurde.)\n");
+   return 1;
+  }
+  return 1;
+}

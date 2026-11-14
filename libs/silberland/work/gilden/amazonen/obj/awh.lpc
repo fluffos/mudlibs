@@ -1,0 +1,94 @@
+// Lebenskraft der Amazonen
+
+inherit "std/thing";
+#include "../def.h"
+
+object caster; 
+int success;
+int ability;
+int skp;
+
+void create() 
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  AddId(({"\namz_abwehrhaltung"}));
+  SetProp(P_SHORT, 0); 
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_MAGIC, 1);
+  SetProp(P_INVIS, 1);
+
+  if (getuid(previous_object()) != SPELL_UID)
+    call_out("remove", 1);
+}
+
+void init()
+{
+  ::init();
+  if (!TO || !MENV || MENV->QueryProp(P_GUILD) != GUILDNAME)
+    call_out("remove",0);
+}
+
+int start_remove(int time) 
+{
+  call_out("remove", time);
+  return 1;
+}
+
+varargs int remove(int silent) 
+{
+  object player, ob;
+  if (player = environment()) 
+  {
+    if (!silent) tell_object(caster, "Du senkst deinen Speer und bist nicht mehr in Abwehrhaltung.\n");
+    caster->SetProp(P_TMP_DEFEND_HOOK, 0);
+  }
+  return ::remove(silent);
+}
+
+public setup(object _caster, int _success, int _ability, int _skp) {
+  // Setup der Abwehrhaltung
+  pDebug(_caster, "Setup Abwehrhaltung mit Erfolg " + success + " und Fähigkeit " + ability + "\n");
+  caster = _caster;
+  success = _success;
+  ability = _ability;
+  skp = _skp;
+  return;
+}
+
+mixed* Abwehrhaltung(int dam, string *dam_type_list, mixed spell, object enemy) {
+  // Gegenangriff in Abwehrhaltung
+  int damage;
+  int chance;
+  object weapon;
+
+  weapon = caster->QueryProp(P_WEAPON);
+  if (!objectp(weapon))
+    return ({dam, dam_type_list, spell});
+
+  if(weapon->QueryProp(P_WEAPON_TYPE) != WT_SPEAR)
+    return ({dam, dam_type_list, spell});
+
+  chance = success / 100 + ability / 200 + caster->QueryProp(P_GUILD_LEVEL) / 2;
+  if (chance > 80) chance = 80;
+  if(skp>1) chance += 10;
+
+  pDebug(caster, sprintf("Abwehrhaltung Gegenangriffschance = %d\n", chance));
+
+  if( random(100) < chance ) {
+    damage = caster->QueryAttribute(A_STR)*3 + ((int) (weapon->QueryProp(P_WC)/2 * (((float)success / MAX_ABILITY)))) + random((int) ((weapon->QueryProp(P_WC) * (((float)ability / MAX_ABILITY)))));
+    damage = (int) (damage * (100.0 + caster->QuerySkillAttribute(SA_DAMAGE)) / 100.0);
+    if(skp>2) damage += random(caster->QueryProp(P_GUILD_LEVEL)*10);
+    pDebug(caster, sprintf("Abwehrhaltung Gegenangriffsschaden = %d\n", damage));
+    tell_object(caster, BS(enemy->name(WER,1)+" greift dich an, aber du nutzt die Luecke fuer einen Gegenagriff!"));
+    enemy->Defend(damage, DT_PIERCE, ([SP_SHOW_DAMAGE:1, SP_NAME:"Abwehrhaltung", SP_RECURSIVE: 1, SP_PHYSICAL_ATTACK: 1]), caster );
+  }
+
+  return ({dam, dam_type_list, spell});
+}

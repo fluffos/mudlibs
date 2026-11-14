@@ -1,0 +1,498 @@
+// Master zur Verwaltung der Enhanced Items
+#include "../def.h"
+#include "enhanced_items.h"
+#include "/p/daemon/itemd/itemd.h"
+#pragma strong_types
+#pragma save_types
+
+// liste der objekte mit special effects
+//   ([ item: ([effect: endtime]) ])
+nosave mapping items;
+nosave mapping cost_category;
+nosave mapping duration_category;
+nosave mapping effects;
+
+// cache aufbau:
+//  ([ "effect#duration": total cost; duration, property, value, multiple, lastuse ])
+nosave mapping cache;
+
+
+mapping saveload0, saveload1, saveload2;
+
+// Prototypen
+void Load(int i);
+void Save(int i);
+
+void reset() {
+    call_out("check_items", 0);
+}
+
+void create()
+{
+  if(is_clone(this_object()))
+  {
+    destruct(this_object());
+    return;
+  }
+
+  seteuid(getuid(this_object()));
+
+  items             = ([ ]);
+  cost_category     = ([ ]);
+  duration_category = ([ ]);
+  effects           = ([ ]);
+  cache             = ([ ]);
+
+  Load(SAVE_ITEMS | SAVE_INITDATA);
+  if(effects == 0) effects = ([ ]);
+  return;
+}
+
+// Laedt je nach angegebenem Modus
+void Load(int mode)
+{
+  // Items aus dem Savefile lesen
+  if(mode&SAVE_ITEMS)
+  {
+    restore_object(SAVEFILE_ITEMS);
+	items = saveload0;
+  }
+
+  // Initialdaten lesen
+  if(mode&SAVE_INITDATA)
+  {
+    restore_object(SAVEFILE_INITDATA);
+	cost_category     = saveload0;
+	duration_category = saveload1;
+	effects           = saveload2;
+  }
+  return;
+}
+
+// Speichert nach angegebenem Modus
+void Save(int mode)
+{
+  // Items aus dem Savefile lesen
+  if(mode&SAVE_ITEMS)
+  {
+    saveload0 = items;
+	saveload1 = 0;
+	saveload2 = 0;
+    save_object(SAVEFILE_ITEMS);
+  }
+
+  // Initialdaten lesen
+  if(mode&SAVE_INITDATA)
+  {
+	saveload0 = cost_category;
+	saveload1 = duration_category;
+	saveload2 = effects;
+	save_object(SAVEFILE_INITDATA);
+  }
+  return;
+}
+
+//--Kostenkategorien-----------------------------------------------------------
+
+varargs int AddCostCategory(string name, int cost)
+{
+  int cat_nr;
+  cat_nr = 0;
+
+  if(!name) return -1;
+  if(member(cost_category, name)) return -2;
+
+  cost_category[name] = cost;
+
+  cat_nr = m_sizeof(cost_category);
+  call_out("Save", 0, SAVE_INITDATA);
+  return cat_nr;
+}
+
+varargs int ModifyCostCategory(string name, int new_cost)
+{
+  if(!name) return -1;
+  if(!member(cost_category, name)) return -2;
+
+  cost_category[name] = new_cost;
+  call_out("Save", 0, SAVE_INITDATA);
+  return new_cost;
+}
+
+int DeleteCostCategory(string name)
+{
+  if(!member(cost_category, name)) return -1;
+  cost_category = m_delete(cost_category, name);
+  return 1;
+}
+
+mapping GetCostCategories()
+{
+  return cost_category;
+}
+
+//--Zeitfaktoren---------------------------------------------------------------
+
+varargs int AddDurationCategory(string name, float factor, int duration)
+{
+  int cat_nr;
+  cat_nr = 0;
+
+  if(!name) return -1;
+  if(member(duration_category, name)) return -2;
+
+  duration_category+=([name: factor;duration]);
+
+  cat_nr = m_sizeof(duration_category);
+  call_out("Save", 0, SAVE_INITDATA);
+  return cat_nr;
+}
+
+varargs int ModifyDurationCategory(string name, float new_factor, int duration)
+{
+  if(!name) return -1;
+  if(!member(duration_category, name)) return -2;
+
+  duration_category[name, 0] = new_factor;
+  if(duration) duration_category[name, 1] = duration;
+  call_out("Save", 0, SAVE_INITDATA);
+  return 1;
+}
+
+int DeleteDurationCategory(string name)
+{
+  if(!member(duration_category, name)) return -1;
+  duration_category = m_delete(duration_category, name);
+  return 1;
+}
+
+mapping GetDurationCategories()
+{
+  return duration_category;
+}
+
+int IsValidCategory(string cat) {
+    if(member(duration_category, cat)) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+//--Effekte--------------------------------------------------------------------
+
+varargs int AddEffect(string name, string cost, string property,
+                      mixed value, int multiple)
+{
+  int cat_nr;
+  cat_nr = 0;
+
+  if(!name) return -1;
+  if(member(effects, name)) return -2;
+  if(!member(cost_category, cost)) return -3;
+
+  effects+=([name: cost;property;value;multiple]);
+
+  cat_nr = m_sizeof(effects);
+  call_out("Save", 0, SAVE_INITDATA);
+  return cat_nr;
+}
+
+varargs int ModifyEffect(string name, string cost, string property,
+                         mixed value, int multiple)
+{
+  if(!name) return -1;
+  if(!member(effects, name)) return -2;
+  if(!member(cost_category, cost)) return -3;
+
+  effects[name, 0] = cost;
+  if(property) effects[name, 1] = property;
+  if(value)    effects[name, 2] = value;
+  if(multiple) effects[name, 3] = multiple;
+  call_out("Save", 0, SAVE_INITDATA);
+  return 1;
+}
+
+int DeleteEffect(string name)
+{
+  if(!member(effects, name)) return -1;
+  effects = m_delete(effects, name);
+  return 1;
+}
+
+mapping GetEffects()
+{
+  return effects;
+}
+
+int GetCostOfEffect(string name)
+{
+  string category;
+  if(!member(effects, name)) return -1;
+  category = effects[name, 0];
+  return cost_category[category];
+}
+
+//--Item Management------------------------------------------------------------
+void register_item(object item, string property, int duration) {
+    mapping new;
+
+    new = ([ item: property; time()+duration ]);
+    tell_object(find_player("gwenshara"), sprintf("i: %O p: %s d: %d -> new = %O\n", item, property, time() + duration, new));
+    
+    items += new;
+    Save(SAVE_ITEMS);
+}
+
+void check_items() {
+    object *tbc, item;
+    mixed current, original;
+    int i;
+    string property;
+
+    if(m_sizeof(items) <= 0) {
+        return; // nothing to do
+    }
+
+    tbc = m_indices(items);
+    for(i = 0; i < sizeof(tbc); i++) {
+        item = tbc[i];
+        if(objectp(item) && item->GetProp(P_MAGIC_THREADS)) {
+            if(time() > items[item, 1]) {
+                // duration is over - remove effect
+                property = items[item, 0];
+                //current = item->QueryProp(property);
+                original = item->QueryProp(P_BACKUP(property));
+                item->SetProp(property, original);
+                item->SetProp(P_MAGIC_THREADS, 0);
+            }
+        }
+
+        items = m_delete(items, item);
+    }
+}
+
+//--Effekte anwenden-----------------------------------------------------------
+int IsPrepared0(string prepared_name)
+{
+  if(member(cache, prepared_name))
+    return 1;
+  return 0;
+}
+
+int IsPrepared(string effect, string duration)
+{
+  string name;
+  name = implode(({effect, duration}), "#");
+  return IsPrepared0(name);
+}
+
+string PrepareEffectApplication(string effect, string duration)
+{
+  string prep_name, attribute;
+  int cost, value, multiple, duration_t;
+
+  if(!member(effects, effect) || !member(duration_category, duration))
+    return "";
+
+  prep_name = implode(({effect, duration}), "#");
+  if(member(cache, prep_name))
+    cache[prep_name, 5] = time();
+
+  if(IsPrepared(effect, duration)) return prep_name;
+
+  cost      = (int) GetCostOfEffect(effect)*duration_category[duration, 0];
+  attribute = effects[effect, 1];
+  value     = effects[effect, 2];
+  multiple  = effects[effect, 3];
+  duration_t  = duration_category[duration, 1];
+
+  cache += ([prep_name: cost; duration_t; attribute; value; multiple; time()]);
+  return prep_name;
+}
+
+void SetCacheDirty(string indicator)
+{
+  string *keys, *split;
+  int i;
+
+  keys = m_indices(cache);
+  for(i=0; i<sizeof(keys); ++i)
+  {
+    split = explode(keys[i], "#");
+	if(strstr(indicator, split[0]) >= 0 ||
+	   strstr(indicator, split[1]) >= 0)
+	   m_delete(cache, keys[i]);
+  }
+
+  return;
+}
+
+
+int CheckPlayer(object pl, string prepared_name)
+{
+  int xp, plxp;
+  if(!objectp(pl))
+    return CHECK_PLAYER_NOPLAYER;
+
+  if(!member(cache, prepared_name))
+      return APPLY_NOT_PREPARED;
+
+  xp   = cache[prepared_name, 0];
+  plxp = pl->QueryProp(P_XP);
+  if(plxp < (int) xp)
+    return CHECK_PLAYER_NOXP;
+
+  return CHECK_PLAYER_OK;
+}
+
+int CheckItem(object item, string prepared_name)
+{
+  int mat_percent;
+
+  mat_percent = 0;
+
+  if(!objectp(item))
+    return CHECK_ITEM_NOITEM;
+
+  if(!item->QueryProp(P_ARMOUR_TYPE))
+    return CHECK_ITEM_NOARMOUR;
+
+  if(item->QueryProp(P_ITEMD_NO_MAGIC))
+    return CHECK_ITEM_NOMAGIC;
+
+  mat_percent += item->QueryMaterial(MAT_CLOTH);
+  mat_percent += item->QueryMaterial(MAT_SILK);
+  mat_percent += item->QueryMaterial(MAT_VELVET);
+  mat_percent += item->QueryMaterial(MAT_COTTON);
+  mat_percent += item->QueryMaterial(MAT_FELT);
+  mat_percent += item->QueryMaterial(MAT_BAUSCH);
+  mat_percent += item->QueryMaterial(MAT_SATIN);
+  mat_percent += item->QueryMaterial(MAT_HAIR);
+  mat_percent += item->QueryMaterial(MAT_SKIN);
+  mat_percent += item->QueryMaterial(MAT_FEATHER);
+  mat_percent += item->QueryMaterial(MAT_PELT);
+  mat_percent += item->QueryMaterial(MAT_WOOL);
+  mat_percent += item->QueryMaterial(MAT_LEATHER);
+
+  if(mat_percent < 33)
+    return CHECK_ITEM_WRONGMAT;
+
+  if(item->QueryProp(P_AUTOLOAD))
+    return CHECK_ITEM_NOAUTOL;
+
+  if(item->QueryProp(P_MAGIC_THREADS) > 0)
+    return CHECK_ITEM_ALREADY;
+
+  return CHECK_ITEM_OK;
+}
+
+int CheckPlayerItem(object pl, object item, string prep_name)
+{
+  int retcode;
+  retcode = CheckPlayer(pl, prep_name)|CheckItem(item, prep_name);
+  return retcode;
+}
+
+mapping GetCache()
+{
+  return cache;
+}
+
+mapping modifyMap(mapping current, mapping new)
+{
+    mixed *keys, *values;
+    int i;
+
+    keys   = m_indices(new);
+    values = m_values(new);
+
+    for(i=0; i<sizeof(keys); ++i) {
+        current[keys[i]] = values[i];
+    }
+
+    return current;
+}
+
+int ApplyEffect(object pl, object item, string prepared_name)
+{
+    string property;
+    mixed value, current_value, new_value;
+    int duration, cost, multiple;
+
+    if(!objectp(item)) return APPLY_NO_ITEM;
+    if(!objectp(pl)) return APPL_NO_PLAYER;
+    if(!IsPrepared0(prepared_name))
+        return APPLY_NOT_PREPARED;
+
+    cost     = cache[prepared_name, 0];
+    duration = cache[prepared_name, 1];
+    property = cache[prepared_name, 2];
+    value    = cache[prepared_name, 3];
+    multiple = cache[prepared_name, 4];
+
+    current_value = item->QueryProp(property);
+    new_value     = current_value;
+
+    if(mappingp(current_value)) {
+        if(member(current_value, value)) {
+            // adapt current mapping
+            new_value = modifyMap(new_value, value);
+        } else {
+            // add new value to the mapping when not present
+            new_value += ([ value ]);
+        }
+    } else if(pointerp(current_value)) {
+        if(member(current_value, value) < 0) {
+            // only add if not already present
+            new_value += ({ value });
+        }
+    } else {
+        new_value = value;
+    }
+
+    item->SetProp(property + "_backup", current_value);
+    item->SetProp(property, new_value);
+    item->SetProp(P_MAGIC_THREADS, 1);
+    pl->AddXp(to_int(cost) * -1);
+
+    register_item(item, property, to_int(duration));
+}
+
+string CheckResultToString(int cr) {
+    string s;
+    s = "";
+    if(cr & CHECK_PLAYER_NOPLAYER) {
+        s += "Offenbar bist du kein Spieler?!\n";
+    }
+
+    if(cr & CHECK_PLAYER_NOXP) {
+        s += "Du hast nicht genuegend Erfahrungspunkte!\n";
+    }
+
+    if(cr & CHECK_ITEM_NOITEM) {
+        s += "Der angegebene Gegenstand existiert nicht!\n";
+    }
+
+    if(cr & CHECK_ITEM_NOMAGIC) {
+        s += "Magische Gegenstaende koennen so nicht verzaubert werden!\n";
+    }
+
+    if(cr & CHECK_ITEM_NOARMOUR) {
+        s += "Dieser Gegenstand ist keine Ruestung!\n";
+    }
+
+    if(cr & CHECK_ITEM_WRONGMAT) {
+        s += "Der Gegenstand besteht nicht aus genuegend Stoff!\n";
+    }
+
+    if(cr & CHECK_ITEM_NOAUTOL) {
+        s += "Dieser Gegenstand ist bereits von Permanzmagie verzaubert!\n";
+    }
+
+    if(cr & CHECK_ITEM_ALREADY) {
+        s += "In diesem Objekt sind bereits magische Faeden eingewoben.\n";
+    }
+
+    return s;
+}

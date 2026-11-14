@@ -1,0 +1,103 @@
+inherit "std/room";  
+
+#include <wizlevels.h>
+#include <properties.h>
+#include <moving.h>
+
+void create()
+{
+  ::create();
+
+  SetProp(P_INDOORS, 1);
+  SetProp(P_LIGHT, 1);
+  SetProp(P_INT_SHORT, "Du bist ... tot?");
+  SetProp(P_INT_LONG, "Beinahe waerst Du gestorben, doch Du hattest Glueck. "
+      "Du findest Dich in einem kalten Raum wieder, ein einziger Ausgang "
+      "fuehrt ueber eine Leiter nach oben.");
+  SetProp(P_KILL_NAME, "Der Turm der tausend Tode");
+
+  AddExit("oben","/d/ebene/lamuerte/turm/rooms/1.lpc");
+}	
+
+
+void init()
+{
+  object ob,next;
+  ::init();
+
+  if (this_player()->QueryProp(P_GHOST))        // Is scho a Leich...?
+    return;
+
+  if (IS_WIZARD(this_player()) || this_player()->QueryProp(P_TESTPLAYER)) {
+    write("Na gut, Dich lass ma mal nicht gleich sterben...\n");
+    return;
+  }
+
+  this_player()->do_damage(100+random(450),this_object());
+
+  if (this_player() && this_player()->QueryProp(P_GHOST))
+  {
+    write_file("/d/ebene/lamuerte/turm/TODESRAUM.log",
+        ctime() + ": Der Turm kostete gerade "+
+        this_player()->Name()+" das Leben.\n");
+    if (ob = present("leiche")) ob->remove();
+    call_out("dienow", 1, this_player());
+  }
+}
+
+
+void dienow(object tp)
+{
+  object *things;
+  object ob,next;
+  mixed dest;
+  int x;
+
+  if (IS_WIZARD(tp) || tp->QueryProp(P_TESTPLAYER)) {
+    write("Na gut, Dich lass ma mal nicht gleich sterben...\n");
+    return;
+  }
+ 
+  things = deep_inventory(this_object() );
+ 
+  for (x = sizeof(things); x-->0; )
+  {
+    ob = things[x];
+ 
+    if (query_once_interactive(ob) ||
+        query_once_interactive(environment(ob)) ||
+        (environment(environment(ob)) && 
+         query_once_interactive(environment(environment(ob)))))
+      continue;
+    if (ob->QueryProp(P_INVIS) || !ob->short()) {
+      dest = tp;
+      write_file("/d/ebene/lamuerte/turm/INVISOBJ.log",
+          ctime() + ": Invisobjekt " + file_name(ob) + "\n");
+    }
+    else if (ob->id("geld") || ob->id("geldboerse") ||
+             (ob->QueryProp(P_NOBUY) != 0))
+      dest = "/d/ebene/lamuerte/turm/rooms/schatz";
+
+    // Lamuerte-Version:
+    /* else if ((ob->QueryProp(P_NODROP) != 1) ||
+             (ob->QueryProp(P_NEVERDROP) != 1) ) */
+
+    // Alles, was nicht no- oder neverdrop ist, kommt in den Laden
+    // (Anm.: neverdrop-Zeug bleibt normal sowieso beim Spieler)
+    else if ( !(ob->QueryProp(P_NODROP) || ob->QueryProp(P_NEVERDROP)) )
+      dest = "/d/ebene/lamuerte/turm/rooms/supermarkt_store";
+    else
+      dest = tp;
+
+    if (stringp(dest))
+    {
+      if (!find_object(dest))
+        call_other(dest, "???");
+
+      if (! (dest = find_object(dest)) )
+        raise_error("BUG LOADING " + dest);
+    }
+
+    ob->move(dest, M_NOCHECK);
+  }
+}

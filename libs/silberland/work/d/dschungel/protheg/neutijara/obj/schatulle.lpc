@@ -1,0 +1,227 @@
+/*
+  Schmuckschatulle, abgeleitet von Dantes Ruessel ;)
+  
+  Fuer Geschenke, kann man die Schatulle fuer 1 mal nur fuer eine bestimmte
+  Person aufmachbar machen.
+*/
+
+#include <properties.h>
+#include <language.h>
+#include <container.h>
+#include "../def.h"
+
+inherit "/std/container";
+
+nosave int offen;
+nosave string wer_darf;
+
+create()  
+{
+  ::create();
+  
+  AddId(({"schatulle","schmuckschatulle"}) );
+  SetProp(P_NAME, "Schmuckschatulle");
+  SetProp(P_LONG,
+	  BS("Eine mit Plattgold verzierte Schmuckschatulle aus edlem "
+	     "Eichenholz. Sie wird oft dafuer verwendet, edle Geschenke "
+	     "zu ueberreichen. "));
+
+  SetProp(P_INFO,
+	  BS("Geschenke zu Ueberreichen ist viel edler, wenn das Geschenk "
+	     "vorher schoen verpackt wird. Du kannst es in diese Schatulle "
+	     "legen und mit \"geschenk fuer <name>\" versperren, sodass "
+	     "nur <name> die Schatulle oeffnen kann.")+
+	  BS("Nach dem Oeffnen, ist die Schatulle jedoch wieder normal "
+	     "zu oeffnen und zu schliessen."));
+
+  AddDetail(({"gold","plattgold"}),
+	    "Die Schatulle ist mit reichlich Plattgold verziert.");
+  AddDetail(({"holz","eichenholz"}),
+	    "Die Schatulle besteht aus massivem, jedoch sehr leichten "
+	    "Eichenholz. Wahrscheinlich magisches Holz aus dem Elfenland.");
+  AddDetail(({"land","elfenland","elessar"}),
+	    "Das Elfenland ist nicht weit von Elessar.");
+  AddDetail(({"geschenk","geschenke"}),
+	    "Diese Schmuckschatulle ist hervorragend dazu geeignet, "
+	    "Geschenke zu ueberreichen.");
+
+  SetProp(P_NOBUY, 1);
+  SetProp(P_VALUE, 500);
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_MAX_WEIGHT, 2000);
+  SetProp(P_TRANSPARENT, 0);
+  SetProp(P_TOTAL_OBJECTS, 2);
+
+  SetProp(P_MATERIAL, ([MAT_OAK:90, MAT_GOLD:9, MAT_MISC_MAGIC:1]));
+
+
+  SetProp(P_SHORT, "Eine Schmuckschatulle");
+  SetProp(P_CNT_STATUS,CNT_STATUS_CLOSED); /* neue Propertie, danke, Boing! */
+  
+  AddCmd(({"oeffne"}),"oeffne");
+  AddCmd(({"schliess","schliesse"}), "schliesse");
+  AddCmd(({"geschenk"}), "geschenk");
+
+  SUID;
+  offen=0;
+}
+
+nosave geschenk(string str)
+{
+  string who;
+
+  notify_fail(BS("Fuer wen soll das ein Geschenk werden?"));
+  if(!str) return 0;
+
+  if(sscanf(str, "fuer %s", who)==1)
+    {
+      if(file_size("/save/"+who[0..0]+"/"+who+".o")<0)
+	return notify_fail(BS("Aber "+CAP(who)+" gibt es doch gar nicht.")),0;
+      
+      if((stringp(wer_darf)) && wer_darf!=who)
+	return notify_fail(BS("Diese Schatulle ist bereits fuer "+
+			      CAP(wer_darf)+" bestimmt!")),0;
+
+      if(!sizeof(all_inventory()))
+	return notify_fail(BS("Aber die Schatulle enthaelt noch nichts!")), 0;
+
+      if(who==getuid(TP))
+	return notify_fail(BS("Egoist!")), 0;
+
+      wer_darf=who;
+      
+      if(offen)
+	{
+	  SetZu();
+	  write(BS("Du verschliesst sorgfaeltig den Deckel und denkst "
+		   "dabei fest an "+CAP(wer_darf)+". Nun kann erst "
+		   "wieder "+CAP(wer_darf)+" die Schatulle oeffnen."));
+	  tell_room(ENV(TP), BS(TPN+" schliesst "+name(WEN,1)+"."), ({TP}));
+	  return 1;
+	}
+      else
+	return write(BS("Du nimmst die Schatulle fest in Deine Haende und "
+			"denkst an "+CAP(wer_darf)+". Nun kann sie erst "
+			"wieder "+CAP(wer_darf)+" oeffnen.")),1;
+    }
+  
+  return 0;
+}
+
+nosave QueryAllowed(object pl)
+{
+  //wenn nicht erlaubt 0 sonst 1
+
+  if(stringp(wer_darf))
+    if(wer_darf==getuid(pl))
+      return 1;
+    else
+      return 0;
+  
+  return 1;
+}
+
+long() 
+{
+  string descr, inv_descr;
+
+  descr=process_string(QueryProp(P_LONG));
+
+  if(stringp(wer_darf))
+    descr+=BS("Diese Schatulle enthaelt ein Geschenk fuer "+CAP(wer_darf)+
+	      ", daher darf sie auch nur "+CAP(wer_darf)+" oeffnen.");
+
+  if(!QueryProp(P_TRANSPARENT))
+    return descr+BS(CAP(QueryPronoun())+" ist geschlossen.");
+  
+  inv_descr=make_invlist(TP, all_inventory(TO));
+
+  if(inv_descr!="")
+    descr+=BS(CAP(QueryPronoun())+" ist geoeffnet und enthaelt:")+inv_descr;
+  else 
+    descr+=BS(CAP(QueryPronoun())+" ist geoeffnet und leer.");
+
+  return descr;
+}
+
+short()
+{
+  string sh;
+  
+  if(QueryProp(P_INVIS))
+    return 0;
+
+  if(sh=QueryProp(P_SHORT))
+    if(offen) 
+      return process_string(sh)+" (geoeffnet).\n";
+    else 
+      if(stringp(wer_darf))
+	return process_string(sh)+" (magisch verschlossen).\n";
+      else
+	return process_string(sh)+" (geschlossen).\n";
+}
+
+SetOffen()
+{
+  offen=1;
+  wer_darf=0;
+  
+  SetProp(P_TRANSPARENT,1);
+  SetProp(P_CNT_STATUS, CNT_STATUS_OPEN);
+}
+
+SetZu()
+{
+  offen=0;
+  
+  SetProp(P_TRANSPARENT,0);
+  SetProp(P_CNT_STATUS, CNT_STATUS_CLOSED);
+}
+
+nosave schliesse(str)
+{
+  notify_fail(BS("WAS moechtest Du schliessen?"));
+
+  if(!id(str)) return 0;
+
+  if(!offen) return write(BS(Name(WER,1)+" ist doch bereits geschlossen.")), 1;
+
+  write(BS("Du schliesst die Schmuckschatulle."));
+  say(BS(TPN+" schliesst eine Schmuckschatulle."), ({TP}));
+
+  SetZu();
+
+  return 1;
+}
+
+nosave oeffne(str)
+{
+  string was, womit;
+  object obj;
+
+  notify_fail(BS("WAS moechtest Du oeffnen?"));
+  if (!str) return 0;
+
+  if(id(str)) 
+    {
+      if(offen)
+	return write(BS(Name(WER,1)+" ist doch schon offen.")), 1;
+      
+      if(!QueryAllowed(TP))
+	return notify_fail(BS("Diese Schatulle ist zur Zeit nur von "+
+			      CAP(wer_darf)+" zu oeffnen.")), 0;
+      
+      if(stringp(wer_darf))
+	write(BS("Der Inhalt der Schmuckschatulle war nur fuer Dich "
+		 "bestimmt!")+
+	      BS("Du oeffnest die Schmuckschatulle."));
+      else
+	write(BS("Du oeffnest die Schmuckschatulle."));
+      say(BS(TPN+" oeffnet eine Schmuckschatulle."));
+      
+      SetOffen();
+      
+      return 1;
+    }
+}
+

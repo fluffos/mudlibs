@@ -1,0 +1,245 @@
+/*************************************************
+**                                              **
+** Eine magische Pyramide                       **
+**                                              **
+** (c) 2000 by Cirion@Silberland,               **
+**                                              **
+** Mit dieser Pyramide und einem Sternstein     **
+** kann man ein temporaeres Sternentor erzeugen **
+**                                              **
+*************************************************/
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include "/d/wasser/cirion/gems/gems.h"
+  
+string cmdReadRunes();
+
+object * marks; 
+string * rooms,gemtype;
+int gemsize;
+  
+create()
+{
+  if (!is_clone(this_object()) ) 
+    return;
+
+  ::create();
+
+  rooms=({0,0});
+  marks=({0,0});
+  SetProp(P_NAME,"Glaspyramide");
+  SetProp(P_SHORT,"Eine kleine Glaspyramide");
+  SetProp(P_LONG,
+    "Du siehst einen kleinen, glaesernen, pyramidenaehnlichen Gegenstand. "
+    "Er hat eine sechseckige Grundflaeche und eine nach oben zulaufende "
+    "Spitze. An seiner Unterseite laesst sich eine daumengrosse, fast "
+    "kugelfoermige Einbuchtung erkennen. Am unteren Rand laeuft ein "
+    "schmales, elegant graviertes Runenband um die Pyramide herum.");
+  AddDetail(({"grundflaeche","unterseite"}),
+    "Die Grundflaeche oder auch Unterseite der Pyramide ist sechseckig "
+    "und hat eine daumengrosse, fast kugelfoermige Einbuchtung.");
+  AddDetail(({"spitze","seiten"}),
+    "Die sechs Seiten der Pyramide laufen zu einer Spitze zusammen.");
+  AddDetail("einbuchtung",
+    "An der Unterseite der Pyramide ist eine daumengrosse, fast "
+    "kugelfoermige Einbuchtung. Vielleicht kann man hier etwas hineinlegen.");
+  AddDetail(({"runen","runenband","band","rand"}),
+    "Um den unteren Rand der Pyramiden laeuft ein elegantes, schmales, "
+    "eingraviertes Runenband herum.");
+  AddReadDetail(({"runen","runenband","band"}),#'cmdReadRunes);
+  SetProp(P_MATERIAL,([MAT_GLASS:100]));
+  SetProp(P_MAGIC,1);
+  SetProp(P_INFO,  
+    "Diesem Gegenstand scheint eine magische Kraft innezuwohnen.");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_WEIGHT, 80);
+  SetProp(P_VALUE,7500);
+  AddId(({"pyramide","glaspyramide"}));
+  SetProp(P_NOBUY, 1);
+  AddCmd(({"markiere","markier"}),"cmdSetMark");
+  AddCmd(({"lege","leg","stecke","steck"}),"cmdPut");
+  AddCmd(({"aktivier","aktiviere"}),"cmdActivate");
+}
+
+string cmdReadRunes()
+{
+  if (this_player() && this_player()->QueryAttribute(A_INT)>23)
+    return break_string(
+      "Die Runen beschreiben, dass der Pyramide eine seltene "
+      "magische Kraft innewohnt. Legt man einen Sternstein in "
+      "ihre Unterseite, so kann man mit Ihr zwei Orte 'markieren' "
+      "(markiere raum 1/2). Mit 'aktiviere sternportal' werden "
+      "diese sodann durch ein magisches Portal verbunden, welches "
+      "nur dem Besitzer zugaenglich ist.");
+  else
+    return break_string(
+      "Du kannst die Runen nicht entziffern. Vielleicht bist "
+      "Du einfach zu dumm dazu?");
+}
+
+int cmdPut(string str)
+{
+  string what,where;
+  object gem;
+        
+  notify_fail("Lege was wo hinein?\n");        
+  if (!stringp(str))
+    return 0;
+  if (sscanf(str,"%s in %s",what,where)!=2)
+    return 0;
+  if (!id(where) && where!="einbuchtung")
+    return 0;
+  if (!gem=present(what,this_player()))
+  {
+    write("So etwas besitzt Du gar nicht.\n");      
+    return 1;
+  }
+  if (!gem->id("EDELSTEIN"))
+  {
+    write("Das scheint nicht zu funktionieren.\n");      
+    return 1;
+  }
+  else if (!gem->id(STARGEMID))
+  {
+    write(break_string(
+      "Du legst den "+gem->name()+" in die Einbuchtung an der Unterseite der "
+      "Pyramide, doch nichts geschieht. Offensichtlich ist das nicht "
+      "der richtige Edelstein."));
+    return 1;
+  }
+  else
+  {
+    write(break_string(
+      "Du legst "+gem->name(WEN)+" in die Einbuchtung an der Unterseite der "
+      "Pyramide. Sie blitzt einmal gleissend "+GEMCOLORS[gem->QueryGemType()]+
+      " auf, dann ist "+gem->name(WER)+" fest mit Ihrer Unterseite "
+      "verschmolzen, welche nun voellig glatt ist."));      
+    SetProp(P_LONG,
+      "Du siehst einen kleinen, glaesernen, pyramidenaehnlichen Gegenstand. "
+      "Er hat eine sechseckige Grundflaeche und eine nach oben zulaufende "
+      "Spitze. In seine Unterseite ist ein "+gem->name()+" eingelassen. Am unteren "
+      "Rand laeuft ein schmales, elegant graviertes Runenband um die Pyramide "
+      "herum.");
+    AddDetail(({"grundflaeche","unterseite"}),
+      "Die Grundflaeche oder auch Unterseite der Pyramide ist sechseckig. "
+      "In der Mitte der Grundflaeche ist ein "+gem->name()+" eingelassen.");
+    RemoveDetail("einbuchtung");
+    RemoveCmd(({"lege","leg","stecke","steck"}));
+    gemtype=gem->QueryGemType();
+    gemsize=gem->QueryGemSize();
+    gem->remove();
+    return 1;
+  }
+}
+
+int cmdSetMark(string str)
+{
+  int no;
+  string room;
+  object mark;
+
+  notify_fail("Markiere raum oder was meinst Du?\n");        
+  if (!stringp(str) || -1==strstr(str,"raum"))
+    return 0;
+   
+  notify_fail("Welchen Raum moechtest Du markieren (1/2)?\n");
+  if (sscanf(str,"raum %d",no)!=1)
+    return 0;
+  if (no!=1 && no!=2)
+    return 0;
+  
+  if (!gemtype)
+  {
+    write("Das geht wohl noch nicht.\n");     
+    return 1;
+  }
+  no--;
+  
+  room=file_name(environment(this_player()));
+
+  if (-1!=member(rooms,room))
+  {
+    write(break_string(
+      "Nichts passiert. Offensichtlich laesst sich ein Ort nur einmal "
+      "markieren."));   
+    return 1;   
+  }
+  else if (environment(this_player())->QueryProp(P_NO_TPORT))
+  {
+    write(break_string(
+      "Die Pyramide glimmt kurz auf, wird dann aber wieder dunkel. "
+      "Scheinbar wird die Magie der Pyramide an diesem Ort von "
+      "einer anderen Macht blockiert.")); 
+    return 1;
+  }
+  else if (TP->QueryProp(P_SP)<MP_MARK)
+  {
+    write(break_string(
+      "Du hast nicht genuegend Magiepunkte, um die Kraefte der Pyramide "
+      "zu benutzen."));
+    return 1;
+  }
+  else 
+  {
+    write("Die Pyramide blitzt einmal kurz "+GEMCOLORS[gemtype]+" auf.\n");
+    this_player()->AddSp(-MP_MARK);
+    rooms[no]=room;
+    mark=clone_object(GEM_OBJ"/starmark");
+    mark->SetMark(getuid(this_player()),gemtype,this_object());
+    mark->move(room,M_NOCHECK);
+    mark->Appear();
+    if (objectp(marks[no]))
+      marks[no]->Disappear();
+    marks[no]=mark;
+    return 1;
+  }   
+}
+
+int cmdActivate(string str)
+{
+  notify_fail("Was moechtest Du denn aktivieren?\n");
+  if (str!="portal" && str!="sternportal" && str!="sternenportal")
+    return 0;
+
+  if (!objectp(marks[0]) || !objectp(marks[1]))
+  {
+    write(break_string(
+      "Nichts passiert. Scheinbar hast Du noch nicht zwei Orte markiert.\n"));
+    return 1;
+  }
+  else if (TP->QueryProp(P_SP)<MP_ACTIVATE)
+  {
+    write(break_string(
+      "Du hast nicht genuegend Magiepunkte, um die Kraefte der Pyramide "
+      "zu benutzen."));
+    return 1;    
+  }
+  this_player()->AddSp(-MP_ACTIVATE);
+  if (GATEMASTER->GateExists(getuid(this_player())))
+    GATEMASTER->RemoveGate(getuid(this_player()));
+  if (objectp(marks[0]))
+    marks[0]->Disappear();
+  if (objectp(marks[1]))
+    marks[1]->Disappear();
+  GATEMASTER->AddGate(getuid(this_player())
+    ,rooms[0],rooms[1],gemtype,DURATION*gemsize);
+  write("In einem gleissenden Blitz verschwindet die Pyramide.\n");
+  remove();
+  return 1;     
+  
+}
+
+RemoveMark(object mark)
+{
+  int no;
+
+  if (-1!=member(marks,mark))
+  {
+    no=member(marks,mark);
+    marks[no]=0;
+    rooms[no]=0;
+  }  
+}

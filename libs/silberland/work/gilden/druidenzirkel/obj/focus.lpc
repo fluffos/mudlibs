@@ -1,0 +1,278 @@
+inherit "std/thing";
+
+// #define FOCUS_LOGGING
+#include <properties.h>
+#include <combat.h>
+#include <defines.h>
+#include <moredef.h>
+#include <ansi.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <wizlevels.h>
+#include "../druiden.h"
+
+#define DAM_MOD ([1:110, 2:120, 3:130, 4:140, 5:150])
+#define COST_MOD ([1:110, 2:125, 3:150, 4:170, 5:200])
+#define ADJ ([1:"klein"; ({"kleiner", "klein", "kleinen"}), \
+              2:"mittler"; ({"mittel", "mittlerer", "mittleren"}),\
+              3:"gross"; ({"gross", "grosser", "grossen"}),\
+              4:"maechtig"; ({"maechtig", "maechtiger", "maechtigen"}),\
+              5:"ultimativ"; ({"ultimativ", "ultimativer", "ultimativen"}) ])
+#define SPECIAL ([FEUER: "rubin", WASSER: "aquamarin", LUFT: "topas", ERZ: "opal", EIS: "saphir", HUMUS: "smaragd"])
+#define LOAD_TEXT ({"fast leer", "nicht ganz halbvoll", "halbvoll", "mittelvoll", "fast voll", "randvoll"})
+
+int size, max_amount, amount, cost_mod, dam_mod;
+string element, long_str;
+
+void create()
+{
+  if(!is_clone(TO))
+    return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Ein elementarer Fokus");
+  SetProp(P_NAME, "Fokus");
+  SetProp(P_INFO,
+      "Zum Aktivieren benoetigt man einen Edelstein.\n"
+      "Syntax: aktiviere fokus mit <edelstein>\n"
+      "Da man nur einen aktiven Fokus haben kann, kann man ihn auch deaktivieren.\n"
+      "Syntax: deaktiviere fokus\n"
+      "Da der Fokus nach einiger Zeit Energie verliert, kann man ihn wieder aufladen.\n"
+      "Syntax: lade fokus mit <edelstein> auf\n");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_WEIGHT, 0);  
+  SetProp(P_VALUE, 1000);
+  SetProp(P_NOBUY, 1); 
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NOSELL, 1);
+  AddId(({ DRUIDEN_FOCUS, "fokus" }));
+
+  AddCmd( ({"aktiviere", "aktivier"}), "cmd_aktivieren");
+  AddCmd( ({"deaktiviere", "deaktivier"}), "cmd_deaktivieren");
+  AddCmd( ({"lade", "lad"}), "cmd_aufladen");
+  size = max_amount = 1;
+  element = "keines";
+  SUID;
+}
+
+int SetVariables(string _element, int _size) 
+{
+  switch (_element)
+  {
+    case FEUER: SetProp(P_MATERIAL, MAT_FIRE); break;
+    case WASSER: SetProp(P_MATERIAL, MAT_WATER); 
+                 SetProp(P_INFO,
+                     "Zum Aktivieren benoetigt man eine Perle oder einen Aquamarin.\n "
+                     "(Syntax: aktiviere fokus mit <perle|aquamarin>\n"
+                     "Da man nur einen aktiven Fokus haben kann, kann "
+                     "man ihn auch deaktivieren.\n"
+                     "Syntax: deaktiviere fokus\n"
+                     "Da der Fokus nach einiger Zeit Energie verliert, "
+                     "kann man ihn wieder aufladen.\n"
+                     "Syntax: lade fokus mit <perle|aquamarin> auf\n");
+                 break;
+    case EIS: SetProp(P_MATERIAL, MAT_ICE); break;
+    case LUFT: SetProp(P_MATERIAL, MAT_AIR); break;
+    case ERZ: SetProp(P_MATERIAL, MAT_METAL); break;
+    case HUMUS: SetProp(P_MATERIAL, MAT_MISC_PLANT); break;
+    default:
+      remove();
+      return 0;
+  }
+  if (_size < 1 || _size > 5)
+    return remove(),0;
+  element = _element;
+  size = _size;
+  max_amount = amount = 10000 * size;
+  cost_mod = COST_MOD[size];
+  dam_mod = DAM_MOD[size];
+  AddId(lower_case(element+"fokus"));
+  SetProp(P_NAME, CAP(element+"fokus"));
+  SetProp(P_NAME_ADJ, ADJ[size,0]);
+  SetProp(P_SHORT, Name(WER,0) );
+  AddAdjective( ADJ[size,1]);
+  return 1;
+}
+
+mixed QueryVariables()
+{
+  return ({element, size, amount, max_amount});
+}
+
+varargs mapping Focus(object player, mapping sinfo, int flag)
+{
+  if (amount > 0 || flag)
+  {
+#ifdef FOCUS_LOGGING
+    write_file(LOG("focus.log"), sprintf("%s: %O (%s %d %d %d) old: %d/%d/%d,",
+          dtime(time()), player, element, size, amount, max_amount, 
+          sinfo[SI_SKILLDAMAGE], sinfo[SI_RAW_SPELLCOST],sinfo[SI_MAX_DAMAGE]));
+#endif
+    sinfo[SI_SKILLDAMAGE] = dam_mod * sinfo[SI_SKILLDAMAGE] / 100;
+    sinfo[SI_RAW_SPELLCOST] = cost_mod * sinfo[SI_RAW_SPELLCOST] / 100;
+    sinfo[SI_MAX_DAMAGE] = (100 + (dam_mod - 100) / 2) * sinfo[SI_MAX_DAMAGE] / 100;
+    amount -= sinfo[SI_SKILLDAMAGE] / 10;
+#ifdef FOCUS_LOGGING
+    write_file(LOG("focus.log"), sprintf(" new: %d/%d/%d, amount: %d\n",
+          sinfo[SI_SKILLDAMAGE], sinfo[SI_RAW_SPELLCOST],sinfo[SI_MAX_DAMAGE],
+          amount));
+#endif
+    if (amount < 0) amount = 0;
+  }
+  return sinfo;
+}
+
+int DotDamage(int damage)
+{
+  return damage * dam_mod / 100;
+}
+
+void remove_me()
+{
+  if (amount > 0)
+    return;
+  if (MENV && interactive(MENV))
+    call_other(DRUIDENSPELLS, "write_color", 
+        Name(WER,1)+" loest sich auf!\n", element, MENV);
+  remove();
+}
+
+int cmd_aktivieren(string str)
+{
+  string focus, gemname;
+  object gem;
+
+  notify_fail("Was willst Du mit was aktivieren?\n");
+  if (!str) 
+    return 0;
+  if (sscanf(str, "%s mit %s", focus, gemname) != 2) 
+    return 0;
+  if (!id(focus)) 
+    return notify_fail("Du hast ja gar kein "+CAP(focus)+"!\n"),0;
+  if (!objectp(gem=present(gemname, TP)))
+    return notify_fail("Du hast ja gar kein "+CAP(gemname)+"!\n"),0;
+  if ((element == WASSER && file_name(gem)[0..11] != "/obj/pearls/")) 
+    return notify_fail("Du brauchst eine Perle, um "+name(WEN,1)+" zu aktivieren!\n"),0;
+  if (element != WASSER && file_name(gem)[0..9] != "/obj/gems/") 
+    return notify_fail("Du brauchst einen Edelstein, um "+name(WEN,1)+" zu aktivieren!\n"),0;
+  if (present(DRUIDEN_FOCUS "aktiv", TP) )
+    return notify_fail("Du hast doch schon einen Fokus aktiv!\n"),0;
+  if (amount <= 0)
+  {
+    call_other(DRUIDENSPELLS, "write_color", BS(Name(WER,1)+
+          " ist leer und wird sich bald aufloesen, wenn Du "
+          "ihn nicht schnell auflaedst!\n"), element, TP);
+    call_out("remove_me", 60);
+    return 1;
+  }
+  if (TP->QueryProp(P_GUILD_LEVEL) - size < 11)
+    return write("Deine Gildenstufe reicht dazu nicht aus!\n"),1;
+  gem->AddAmount(-1);
+  AddId(({DRUIDEN_FOCUS "aktiv",DRUIDEN_FOCUS + element}));
+  call_other(DRUIDENSPELLS, "write_color", Name(WER,1)+" ist jetzt aktiv!\n"
+      "Du fuehlst die Macht des Elements "+CAP(element)+" in Dir!\n",
+      element, TP);
+  return 1;
+}
+
+int cmd_deaktivieren(string str)
+{
+  if (!id(str) ) 
+    return notify_fail("Was willst Du deaktivieren?\n"),0;
+  if (!id(DRUIDEN_FOCUS "aktiv") )
+    return notify_fail(Name(WER,1)+ " ist doch gar nicht aktiv!\n"),0;
+  if (amount == 0)
+  {
+    call_other(DRUIDENSPELLS, "write_color", BS(Name(WER,1)+
+          " ist leer und wird sich bald aufloesen, wenn Du "
+          "ihn nicht schnell auflaedst!\n"), element, TP);
+    call_out("remove_me", 60);
+    return 1;
+  }
+  RemoveId(({DRUIDEN_FOCUS "aktiv",DRUIDEN_FOCUS + element}));
+  call_other(DRUIDENSPELLS, "write_color", 
+      Name(WER,1)+" ist jetzt nicht mehr aktiv!\n", element, TP);
+  return 1;
+}
+
+int cmd_aufladen(string str)
+{
+  string was, womit;
+  object ob;
+  int value;
+  int req;
+
+  notify_fail("Was willst Du womit aufladen?\n");
+  if (!str ) return 0;
+  if (sscanf(str, "%s mit %s auf", was, womit) != 2 &&
+      sscanf(str, "%s mit %s", was, womit) != 2)
+    return 0;
+  if (!id(was) ) return 0;
+  if (!objectp(ob=present(womit,TP)) ) return 0;
+  if (element != WASSER && file_name(ob)[0..9] != "/obj/gems/" )
+    return write("Du kannst "+name(WEN,1)+" nur mit Edelsteinen aufladen!\n"),-1;
+  else if (element == WASSER && file_name(ob)[0..11] != "/obj/pearls/" && 
+       file_name(ob)[0..18] != "/obj/gems/aquamarin")
+    return write("Du kannst "+name(WEN,1)+" nur mit Perlen und Aquamarinen aufladen!\n"),-1;
+
+  write("Du laedst "+name(WEN,1)+" mit "+ob->name(WEM)+" auf.\n");
+  req = ob->QueryProp(P_REQUESTED_AMOUNT);
+  value = req * ob->QueryCoinsPerUnits()[0];
+  if (ob->id( SPECIAL[element] ) ) 
+    value *= 3;
+  amount += value * TP->QueryAttribute(A_INT) / 30;
+  if (amount >= max_amount)
+  {
+    amount = max_amount;
+    write(Name(WER,1) + " ist nun vollstaendig aufgeladen!\n");
+  }
+  ob->AddAmount(-req);
+  return 1;
+}
+
+void reset()
+{
+  object wer;
+  if (!is_clone(TO))
+    return;
+  ::reset();
+  if ((wer=MENV) && (interactive(wer) || ((wer=ENV(MENV)) && interactive(wer))) &&
+      id(DRUIDEN_FOCUS "aktiv"))
+  {
+    max_amount -= size * size * random(40 - wer->QueryAttribute(A_INT));
+    if (amount > max_amount) 
+      amount = max_amount;
+  }
+  if (element == "keines" || max_amount <= 0) 
+  {
+    if(wer)
+      tell_object(wer, "Dein beschaedigter Fokus loest sich auf.\n");
+    call_out("remove", 0);
+  }
+}
+
+string long()
+{
+  return BS(
+    Name(WER,1)+" ist eine kleine Kugel, die ganz aus magischem "+
+    CAP(element)+ " besteht. "
+    "Wenn der Fokus aktiviert ist, verstaerkt er den Schaden von "+
+    CAP(element)+"zaubern, was aber einen hoeheren Einsatz an Magie "
+    "erfordert. Der Fokus ist momentan "+ 
+    (id(DRUIDEN_FOCUS+"aktiv")?"aktiv":"inaktiv")+
+    " und "+(amount > 0 ? LOAD_TEXT[5 * amount / max_amount] : "voellig leer")+".");
+}
+
+mixed _query_nodrop()
+{
+  return id(DRUIDEN_FOCUS "aktiv") ? "Du kannst keinen aktiven Fokus ablegen!\n" : 0;
+}
+
+int SetAmount(int a)
+{
+  amount = a;
+}
+
+int QueryAmount() { return amount; }
+

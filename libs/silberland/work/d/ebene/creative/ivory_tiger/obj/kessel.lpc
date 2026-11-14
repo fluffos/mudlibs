@@ -1,0 +1,247 @@
+inherit "std/thing";
+
+#include <language.h>
+#include <properties.h>
+#include <wizlevels.h>
+#include "../files.h"
+#include "../quest.h"
+
+string owner;
+
+int boil, kettle_water, kettle_moss, b_base;
+
+create() {
+  if (!is_clone(this_object()))
+    return;
+
+  ::create();
+
+  SetProp(P_NAME, "Kessel");
+  AddSpecialDetail("aufschrift", "tag");
+  SetProp(P_IVORY, 1);
+  SetProp(P_VALUE, 0);
+  SetProp(P_GENDER, MALE);
+  SetProp(P_WEIGHT, 300);
+  SetProp(P_MATERIAL, ([MAT_IRON:100]));
+  AddId("kessel");
+  AddId(IV_KETTLE);
+  AddCmd(({"giess", "giesse"}), "pour");
+  AddCmd(({"fuell", "fuelle"}), "fill");
+  b_base=boil=kettle_water=kettle_moss=0;
+  owner="Niemand";
+}
+
+string tag() {
+  return BS("Dies ist der Teekessel von "+CAP(owner)+".");
+}
+
+string _query_short() {
+  string str;
+
+  str="Der Teekessel von "+CAP(owner);
+  if (ENV(TO) && file_name(ENV(TO))==ROOM("j4"))
+    str+=" steht auf dem Herd";
+  if (boil)
+    str+=" (kochend)";
+  return str;
+}
+
+string _query_long() {
+  string str;
+
+  str=BS("Das ist ein ganz besonderer Teekessel. Mit ihm kann man"
+     +"bestimmt leckeren Tee zubereiten, natuerlich kann man den"
+     +"Kessel auch dazu benutzen, um beispielsweise Moosbueschel"
+     +"auszukochen und dadurch zu Moospulver zu verarbeiten. Der"
+     +"Kessel traegt ausserdem eine Aufschrift.")+"\n";
+  if (kettle_water || kettle_moss || b_base) {
+    str+="\nDarin siehst Du:\n";
+    if (kettle_water)
+      if (boil)
+        str+="Wasser, das heftig kocht.\n";
+      else
+        str+="Wasser.\n";
+    if (kettle_moss)
+      str+="Moos.\n";
+    if (kettle_water && kettle_moss && !boil)
+      str+="Du kannst den Kessel jetzt erwaermen.\n";
+    if (b_base)
+      str+="Moospulver.\nDu kannst versuchen, das Pulver"
+          +" in ein entsprechendes Gefaess zu giessen.\n";
+  }
+  else
+    str+=" Man koennte ihn mit Zutaten fuellen.\n";
+  return str;
+}
+
+int check_permissions() {
+  if (!IS_ARCH(TI) && file_name(PO)[0..29]!=PATH) {
+    raise_error("Hugo will nicht arbeiten!");
+    return 0;
+  }
+  return 1;
+}
+
+set_owner(string str) {
+  if (check_permissions())
+    owner=str;
+}
+
+string get_owner() {
+  return owner;
+}
+
+_query_noget() {
+  object r;
+
+  if (boil)
+    return "Du wuerdest Dir am heissen Kessel die Finger verbrennen!\n";
+  r=ENV(TO);
+  if (r && r == find_object(ROOM("j4")) && owner == "apoc" && present("apoc", r))
+    return "Apoc wuerde Dir nie erlauben, den Kessel zu nehmen!\n";
+  return 0;
+}
+
+fill(str)
+{
+  string was, womit;
+  object o,f,b;
+
+  notify_fail("Womit willst Du den Teekessel fuellen?\n");
+  if (!str)
+    return 0;
+  if (TP->query_real_name() != owner) {
+    write("Das ist nicht Dein eigener Teekessel. Du kannst ihn nicht befuellen.\n");
+    return 1;
+  }
+  if (sscanf(str, "%s mit %s", was, womit)!=2)
+    return 0;
+  if (!id(was))
+    return 0;
+  if (b_base) {
+    write(BS("Das geht jetzt nicht! Der Kessel enthaelt etwas Wertvolles!"));
+    return 1;
+  }
+  switch (womit) {
+    case "moosbueschel":
+    case "bueschel":
+    case "moos": if (kettle_moss) {
+                   write(BS("Da ist schon Moos im Teekessel!"));
+                   return 1;
+                 }
+                 if (o=present(IV_MOSS, TP)) {
+                   write(BS("Du steckst das Moosbueschel in den Teekessel."));
+                   if(b=deep_present(IV_QUEST_ITEM, TP))
+                      b->set_flag(IV_INSERT_MOSS);
+                   kettle_moss=1;
+                   if (kettle_water)
+                     write(BS("Du kannst den Kessel jetzt erwaermen."));
+                   o->remove();
+                   return 1;
+                 }
+                 else {
+                   write(BS("Sowas hast Du nicht bei Dir."));
+                   return 1;
+                 }
+                 break;
+    case "wasser": if (kettle_water) {
+                     write(BS("Da ist schon Wasser im Teekessel!"));
+                     return 1;
+                   }
+                   if (o=present(IV_BOTTLE, TP))
+                     if (o->QueryCnt()) {
+                       write(BS("Du giesst das Wasser aus der Flasche in den Teekessel."));
+                       o->SetCnt(0);
+                       if (b=deep_present(IV_QUEST_ITEM, TP))
+                          b->set_flag(IV_INSERT_WATER);
+                       kettle_water=1;
+                       if (kettle_moss)
+                         write(BS("Du kannst den Kessel jetzt erwaermen."));
+                       return 1;
+                     }
+                     else {
+                       write(BS("In der Wasserflasche ist gar kein Wasser!"));
+                       return 1;
+                     }
+                   else {
+                     write(BS("Sowas hast Du nicht bei Dir."));
+                     return 1;
+                   }
+                   break;
+    default: write(BS("Du willst den Kessel damit jetzt nicht fuellen."));
+             return 1;
+  }
+}
+
+
+int query_filled() {
+  return kettle_moss && kettle_water && !boil;
+}
+
+pour(str)
+{
+  string was, wohin;
+  object t,b;
+
+  notify_fail("Was willst Du wo hinein giessen?\n");
+  if (!str)
+    return 0;
+  if (sscanf(str, "%s in %s", was, wohin)!=2)
+    return 0;
+  if (was!="moospulver" && was !="pulver")
+    return 0;
+  if (!b_base) {
+    write(BS("Da ist noch kein Moospulver."));
+    return 1;
+  }
+  if (!(t=present(wohin, TP))) {
+    write(BS("Das hast Du doch gar nicht bei Dir!"));
+    return 1;
+  }
+  switch (wohin) {
+    case "lederbeutel":
+    case "beutel": write(BS(
+                   "Ein Beutel ist wohl kein richtiger Aufbewahrungsort."));
+                   return 1;
+                   break;
+    case "tiegel": if (!t->id(IV_POT)) {
+                     write(BS(
+                           "Hm, scheinbar ist dieser Tiegel nicht geeignet,"
+                          +" um darin das Moospulver zu plazieren."));
+                     return 1;
+                   }
+                   write(BS("Du giesst das Pulver in den Tiegel."));
+                   b_base=0;
+                   t->AddMossPowder();
+                   if(b=deep_present(IV_QUEST_ITEM, TP))
+                      b->set_flag(IV_POWDER2POT);
+                   return 1;
+                   break;
+    default: write(BS("Es gibt viel geeignetere Gefaesse fuer Moospulver."));
+             return 1;
+  }
+}
+
+int query_moss() {
+  return kettle_moss;
+}
+
+int query_water() {
+  return kettle_water;
+}
+
+remove_water() {
+  if (check_permissions())
+    kettle_water=0;
+}
+
+remove_moss() {
+  if (check_permissions())
+    kettle_moss=0;
+}
+
+set_boil() {
+  if (check_permissions())
+    b_base=1;
+}
+

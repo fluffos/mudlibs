@@ -1,0 +1,1092 @@
+/*
+** Report- und Statusitem "Der Fingerhut" by PROtheG@Sl
+** Bei Bugs oder Verbesserungsvorschlaegen mailme ;)
+**
+** 2001-03-16  1.0  PROtheG   Initial Release
+** 
+** [...]
+**
+** 2002-03-18  1.5  PROtheG   Ueberarbeitet (pragma), Autoload fuer ERZSEHER
+**                            P_TTY beruecksichtigt, Farbabstufung bei 
+**                            Standard-text-farbe, 
+**
+** 2002-04-05  1.6  PROtheG   vt100 raus nur noch ansi
+**
+** 2006-03-06  1.7  PROtheG   fh zeigen [alle] und owner durch MENV ersetzt
+*/
+
+#include <ansi.h>
+#include "../def.h"
+
+inherit "std/armour";
+inherit MOST "std_things";
+
+#define STDTXT "Lebenspunkte #lp# (#lpdiff#) Magiepunkte #mp# (#mpdiff#)"
+#define STDLPTXT " Lebenspunkte: #lp# (#lpdiff#)"
+#define STDMPTXT " Magiepunkte: #mp# (#mpdiff#)"
+
+#define MAX_LAENGE 36
+#define LAENGE(x, y) ((x * (MAX_LAENGE + 1)) / y)
+
+#define MAILERDEMON "/secure/mailer"
+
+#define VERSION "1.6"
+
+#define ERZSEHER_LEVEL 45
+
+int balken, noidle, anzeige, farbabstufung;
+nosave int anzmp, anzlp, lp, lpdiff, lpmax, mp, mpdiff, mpmax, lastlp, lastmp, aktiv=0;
+//nosave object owner;
+string lptxt, mptxt, txt, exowner;
+nosave string *vcol, *typ;
+nosave mixed lti,ltime;
+mapping colors;
+
+string ch(string str) { if(str==ANSI_NORMAL) return ""; else return str;}
+
+string text_farbe() { return ch(colors["v_text"])+ch(colors["h_text"]); }
+string text_balken_farbe() { return colors["btext"]; }
+string lp_farbe() { return ch(colors["v_lp"])+ch(colors["h_lp"]); }
+string lp_balken_akt() { return colors["lp_aktuell"]; }
+string lp_balken_max() { return colors["lp_max"]; }
+string mp_farbe() { return ch(colors["v_mp"])+ch(colors["h_mp"]); }
+string mp_balken_akt() { return colors["mp_aktuell"]; }
+string mp_balken_max() { return colors["mp_max"]; }
+string fl_balken() { return colors["fl"]; }
+string xp_farbe() { return colors["v_xp"]+colors["h_xp"]; }
+string align_farbe() { return ch(colors["v_align"])+ch(colors["h_align"]); }
+
+varargs void SetStandardColor(string str)
+{
+  mapping standard;
+
+  standard=(["v_text":ANSI_NORMAL, "v_lp":ANSI_NORMAL, "v_mp":ANSI_NORMAL,
+	     "h_text":ANSI_NORMAL, "h_lp":ANSI_NORMAL, "h_mp":ANSI_NORMAL,
+	     "v_xp":ANSI_NORMAL, "v_align":ANSI_NORMAL, 
+	     "h_xp":ANSI_NORMAL, "h_align":ANSI_NORMAL, 
+	     "fl":ANSI_BG_BLUE, "btext":ANSI_NORMAL,
+	     "lp_aktuell":ANSI_BG_GREEN, "lp_max":ANSI_BG_RED,
+	     "mp_aktuell":ANSI_BG_GREEN, "mp_max":ANSI_BG_RED]);
+  if(!str) 
+    colors=standard;
+  else 
+    colors[str]=standard[str];
+}	   
+
+void create()
+{
+  if(!is_clone(ME)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein Fingerhut");
+  SetProp(P_INFO, 
+	  BS("Als Du den Fingerhut genauer untersuchst, ueberkommt Dich "+
+	     "das Gefuehl, dass Dir der Fingerhut etwas sagen will."));
+
+  AddDetail(({"porzellan","porzelan"}),
+	    "Allerfeinstes Porzellan, pass auf, dass es nicht zerbricht!");
+
+  AddDetail(({"gravierungen","gravierung","geheimnis"}),
+	    "Leider kannst Du diese Gravierungen nicht entziffern.");
+
+  SetProp(P_SOUND,
+	  BS("Eine Stimme in Deinem Kopf teilt Dir mit:")+
+	  BS("  Du kannst mit 'fh hilfe' alles ueber meine "
+	     "Faehigkeiten erfahren!"));
+
+  SetProp(P_NAME, "Fingerhut");
+  SetProp(P_GENDER, MALE);
+  AddId(({"fingerhut","\nreport",
+	    "\nprotheg_ursuper_questbelohnung_fingerhut"}));
+
+  SetProp(P_WEIGHT, 15);
+
+  SetProp(P_MAGIC,1);
+  SetProp(P_NOBUY,1);
+  SetProp(P_NODROP,1);
+  SetProp(P_NEVERDROP,1);
+
+  SetProp(P_MATERIAL, ([MAT_CERAMIC:100, MAT_MISC_MAGIC:100]));
+  SetProp(P_ARMOUR_TYPE, AT_MISC);
+  SetProp(P_WEAR_FUNC, ME);
+  SetProp(P_REMOVE_FUNC, ME);
+  SetProp(P_WORN_TEXT, "aufgesteckt");
+
+  lastlp=lastmp=-1;
+  anzmp=anzlp=anzeige=0;
+
+  txt=STDTXT;
+  lptxt=STDLPTXT;
+  mptxt=STDMPTXT;
+
+  SetStandardColor();
+
+  exowner="niemandem";
+
+  balken=0;
+
+  vcol=({
+    "schwarz","rot","gruen","gelb",
+    "blau","rosa","cyan","weiss",
+    "normal"});
+
+  typ=({
+    "v_text", "v_lp", "v_mp",
+    "h_text", "h_lp", "h_mp",
+    "v_xp", "v_align", "fl",
+    "h_xp", "h_align", "btext",
+    "lp_aktuell", "lp_max",
+    "mp_aktuell", "mp_max"});
+  
+  AddCmd("fh","fh");
+  
+  SUID;
+}
+
+string long()
+{
+  SetProp(P_LONG, 
+	  BS("In Deinen Haenden haeltst Du einen kleinen Fingerhut "
+	     "aus Porzellan. Die raetselhaften Gravierungen auf ihm "
+	     "scheinen auf irgendein verborgenes Geheimnis zu verweisen."));
+
+  if(!QueryProp(P_WORN))
+    SetProp(P_LONG, 
+	    QueryProp(P_LONG)+
+	    BS("Dieser Fingerhut wurde "+(exowner=="niemandem" ? 
+               "noch niemals":"zuletzt von "+CAP(exowner))+
+	       " getragen."));
+
+  return::long();
+}
+
+int fhsave()
+{
+  if(!TP) return 0;
+  
+  save_object(ARMOUR "fingerhut_save/"+getuid(TP));
+
+  return write(BS("Deine aktuellen Einstellungen wurden gespeichert.")), 1;
+}
+
+int fhload()
+{
+  if(!TP) return 0;
+  
+  if(restore_object(ARMOUR "fingerhut_save/"+getuid(TP)))
+    return write(BS("Deine zuletzt gespeicherten Einstellungen wurden neu "
+		    "geladen.")), 1;
+
+  if(file_size(ARMOUR "fingerhut_save/"+getuid(TP))==-1)
+    return write(BS("Du hast doch noch gar nicht gespeichert, wie willst Du "
+		    "denn dann etwas laden?")), 1;
+  
+  return write(BS("BUG! Bitte PROtheG verstaendigen!")), 1;
+}
+
+nosave int show_help(string str)
+{
+  string ret;
+  
+  if(!str)
+    return 
+      write(make_document("Mit 'fh hilfe' kannst Du Dich ueber "
+			  "folgende Themen informieren:\n"
+			  "\n"
+			  "fh hilfe <idle>\n"
+			  "         <text>\n"
+			  "         <farbe>\n"
+			  "         <info>\n"
+			  "         <zeigen>\n"
+			  "         <balken>\n"
+			  "         <speichern>\n"
+			  "         <laden>\n")),1;
+  str=LOWER(str);
+
+  switch(str)
+    {
+    case "idle":
+      ret="Syntax: fh idle noidle|<wert>|normal\n"
+	"\n"
+	"Mit \"fh idle\" kannst Du das Scrollen etwas erleichtern...\n"
+	"  \"noidle\"   heisst, dass nicht mehr angezeigt wird, wenn du\n"
+	"             langsam hochidlest.\n"
+	"\n"
+	"  <wert>     kannst Du auf eine bestimmte Zahl setzen, dann\n"
+	"             erfolgt alle x hochgeidleten Punkte eine Meldung.\n"
+	"\n"
+	"  \"normal\"   jede einzelne Aenderung Deiner Lebenspunkte wird\n"
+	"             Dir mitgeteilt.\n";
+	break;
+    case "text":
+      ret="Syntax: fh text lp|mp <text>\n"
+	"\n"
+	"Mit \"fh text\" kannst Du Dir Deine eigene Reportmeldung festlegen.\n"
+	"'lp', 'mp' gelten fuer Die Balkenanzeige (lp links, mp rechts)\n" 
+	"\n"
+	"Variablen, die Du dabei einsetzen kannst:\n"
+	"(Die Zahlen in Klammern stehen fuer die Laenge)\n" 
+	"\n"
+	" #lp# , #mp#         Deine aktuellen Lp/Mp (3)\n"
+	" #lpmax# , #mpmax#   Deine maximalen Lp/Mp (3)\n"
+	" #lpdiff# , #mpdiff# Die Lp/Mp Differenz zum letzten Report (4)\n"
+	"\n";
+      if(IS_SEER(TP))
+	ret+=
+	  "Fuer Seher:\n"
+	  " #align#             Deine Gesinnung (7)\n"
+	  " #xp#                XP Anzeige (9)\n"
+	  " #zustand#           Eine Zustandanzeige mit:\n"
+	  "                     G - Geist, F - Frosch,\n"
+	  "                     P - paralysiert\n"
+	  "                     T - taub, B - blind,\n"
+	  "                     v/V - leicht/schwer vergiftet,\n"
+	  "                     N - zaubererschoepfung,\n"
+	  "                     <Zahl> - gibts neue Mail? (8)\n"
+	  "\n";
+      ret+=
+	"Falls Du mal etwas falsch gemacht hast, oder Dir die Meldung\n"
+	"nicht gefaellt, kannst Du mit 'fh text standard' jederzeit\n"
+	"auf die Standardmeldung zuruecksetzen.\n"
+	"PS: Nicht vergessen, Maximallaenge sind 78 Zeichen.\n";
+      break;
+    case "farbe":
+    case "farben":
+      ret="Syntax: fh farbe <typ> <farbe> [typ] [farbe] etc.\n"
+	"\n"
+	"Mit \"fh farbe\" kannst Du Dir Deinen Report farbig gestalten.\n"
+	"\n"
+	"Moegliche Farben:\n"
+	"-------------------\n"
+	"weiss, schwarz, rot, gruen, blau, rosa, cyan, gelb, normal\n"
+	"\n"
+	"Typen fuer Textanzeige:\n"
+	"-------------------------\n"
+	" v_text, h_text   - Vorder- Hintergrundfarbe des Textes\n"
+	" v_lp, h_lp       - Vorder- Hintergrundfarbe der Lebenspunkte\n"
+	" v_mp, h_mp       - Vorder- Hintergrundfarbe der Magiepunkte\n"+
+	(IS_SEER(TP) ?
+	 " v_xp, h_xp       - Vorder- Hintergrundfarbe der Xp\n"
+	 " v_align, h_align - Vorder- Hintergrundfarbe der Gesinnung\n":
+	 "")+
+	"\n"
+	"Mit 'fh farbe abstufung' wird die gesamte Zeile automatisch\n"
+	"in einer den Lebenspunkten angepassten Farbe dargestellt.\n"
+	"(Nochmalige Eingabe hebt die Farbabstufung wieder auf.)\n"
+	"\n"
+	"Typen fuer Balkenanzeige:\n"
+	"---------------------------\n"
+	" fl                  - Farbe fuer den Fluchtlevelbalken\n"
+	" btext               - Farbe fuer den Balkentext\n"
+	" lp_aktuell, lp_max  - Farbe fuer den aktuellen / maximalen\n"
+	"                       Lebenspunktebalken\n"
+	" mp_aktuell, mp_max  - Farbe fuer den aktuellen / maximalen\n"
+	"                       Magiepunktebalken\n"
+	"\n"
+	"Mit 'fh farbe standard' bzw. 'fh farbe <farbe> standard ...'\n"
+	"kannst Du alle bzw. nur eine/mehrere Farben zuruecksetzen.\n"
+	"PS: Nicht vergessen!! Dein Terminal muss Farben unterstuetzen,\n"
+	"    sonst bringt das ganze nichts ('stty ansi').\n";
+      break;
+    case "info":
+      ret="Mit \"fh info\" kannst Du Dir Deine aktuellen \n"
+	"Fingerhuteinstellungen anzeigen lassen.\n";
+      break;
+    case "balken":
+      ret="Syntax: fh balken ein|aus\n"
+	"\n"
+	"Mit 'fh balken ein|aus' kannst Du die Balkenanzeige \n"
+	"de- aktivieren.\n";
+      break;
+    case "laden":
+      ret="Damit kannst Du Deine gespeicherten Einstellungen laden.\n";
+      break;
+    case "speichern":
+      ret="Damit kannst Du Deine aktuellen Einstellungen sichern.\n";
+      break;
+    case "zeigen":
+      ret="Mit \"fh zeigen\" wird Deine aktuelle Statuszeile ausgegeben.\n"
+	"Mit \"fh zeigen alle\" sehen alle in Deiner Umgebung Deine\n"
+	"aktuelle Statuszeile.\n";
+      break;
+    default : ret="Darueber gibt es keine hilfe!\n";
+    }
+  
+  TP->More(make_document(ret));
+
+  return 1;
+}
+
+nosave int fhidle(string str)
+{
+  int i;
+  
+  notify_fail(BS("Syntax: fh idle noidle | <wert> | normal"));
+  if(!str) return 0;
+
+  str=LOWER(str);
+
+  switch(str)
+    {
+    case "noidle":
+      noidle=1;
+      return write(BS("Du wirst jetzt nicht mehr benachrichtigt, wenn Du "
+		      "hinaufidlest.")), 1;
+
+    case "normal":
+      noidle=0;
+      anzeige=0;
+      return write(BS("Du wirst jedesmal benachrichtigt, wenn Du "
+		      "hinaufidlest.")), 1;
+
+    default: i=to_int(str); 
+      if(!i || i < 0 ||
+	 ((i > TP->QueryProp(P_MAX_HP)) && (i > TP->QueryProp(P_MAX_SP))))
+	return 0; 
+      else 
+	{ 
+	  anzeige=i; 
+	  noidle=0; 
+	  return write(BS("Du wirst jetzt alle "+i+" Punkte benachrichtigt, "
+			  "wenn Du hinaufidlest.")), 1;
+	}
+    }
+}
+
+nosave string QueryIdle()
+{
+  if(noidle) 
+    return "noidle";
+
+  if(!noidle && !anzeige) 
+    return "normal";
+
+  return to_string(anzeige);
+}
+
+void SetColor(string col, string what)
+{
+  int i;
+
+  if(col=="btext") i=1;
+
+  switch(what)
+    {
+    case "rot": 
+      if(i)
+	colors[col]=ANSI_RED; 
+      else 
+	colors[col]=ANSI_BG_RED; 
+      break;
+    case "gruen": 
+	if(i)
+	  colors[col]=ANSI_GREEN; 
+	else 
+	  colors[col]=ANSI_BG_GREEN; 
+	break;
+    case "gelb": 
+      if(i)
+	colors[col]=ANSI_YELLOW; 
+      else 
+	colors[col]=ANSI_BG_YELLOW; 
+      break;
+    case "blau": 
+      if(i)
+	colors[col]=ANSI_BLUE; 
+      else 
+	colors[col]=ANSI_BG_BLUE; 
+      break;
+    case "rosa": 
+      if(i)
+	colors[col]=ANSI_PURPLE; 
+      else 
+	colors[col]=ANSI_BG_PURPLE; 
+      break;
+    case "cyan": 
+      if(i)
+	colors[col]=ANSI_CYAN; 
+      else 
+	colors[col]=ANSI_BG_CYAN; 
+      break;
+    case "weiss": 
+      if(i)
+	colors[col]=ANSI_WHITE; 
+      else 
+	colors[col]=ANSI_BG_WHITE; 
+      break;
+    case "schwarz": 
+      if(i)
+	colors[col]=ANSI_BLACK; 
+      else 
+	colors[col]=ANSI_BG_BLACK; 
+      break;
+    case "normal": 
+    default: 
+      colors[col]=ANSI_NORMAL;
+    }
+}      
+
+nosave int valid_color(string str)
+{
+  if(member(vcol, str)==-1) return 0;
+  return 1;
+}  
+
+nosave int valid_typ(string str)
+{
+  if(member(typ, str)==-1) return 0;
+  return 1;
+}  
+
+nosave int fhfarbe(string str)
+{
+  int i, siz;
+  string *col;
+
+  notify_fail(BS("Syntax: fh farbe <typ> <farbe> [typ] [farbe] etc."));
+  if(!str) return 0;
+
+  str=LOWER(str);
+
+  if(str=="standard") 
+    {
+      SetStandardColor();
+      return write(BS("Standardfarben wurden wieder hergestellt.")), 1;
+    }
+
+  if(str=="abstufung" || str=="farbabstufung")
+    {
+      if(farbabstufung)
+	farbabstufung=0;
+      else
+	farbabstufung=1;
+      
+      return write(BS("Statuszeile wird nun "+(farbabstufung?"":"nicht mehr ")+
+		      "mit Farbabstufung angezeigt.")), 1;
+    }
+
+  col=explode(str, " ");
+
+  siz=sizeof(col);
+
+  if(siz%2) return 0;
+
+  for(i=0;i<siz;i=i+2)
+    {
+      if(col[i]=="standard")
+	{
+	  SetStandardColor(col[i]);
+	  write(BS("Setze '"+col[i]+"' auf Standard zurueck..."));
+	  continue;
+	}
+
+      if(!valid_color(col[i+1]))
+	{
+	  write(BS(CAP(col[i+1])+" scheint keine gueltige Farbe zu sein!"));
+	  continue;
+	}
+
+      if(!valid_typ(col[i])) 
+	{ 
+	  write(BS(CAP(col[i])+" scheint kein gueltiger Typ zu sein!"));
+	  continue;
+	}
+
+      SetColor(col[i], col[i+1]);
+
+      write(BS("Setze '"+col[i]+"' auf '"+CAP(col[i+1])+"' ..."));
+    }
+  return 1;
+}
+
+nosave string get_state()
+{
+  string ret;
+  int mail;
+
+  if(!objectp(MENV)) return "";
+
+  if(MENV->QueryProp(P_GHOST)) ret="G";
+  else ret="-";
+
+  if(MENV->QueryProp(P_FROG)) ret+="F";
+  else ret+="-";
+
+  if(MENV->QueryProp(P_PARALYZED)) ret+"P";
+  else ret+="-";
+
+  if(MENV->QueryProp(P_BLIND)) ret+="B";
+  else ret+="-";
+
+  if(MENV->QueryProp(P_DEAF)) ret+="T";
+  else ret+="-";
+
+  if(MENV->QueryProp(P_POISON)) 
+    ret+=(MENV->QueryProp(P_POISON) > 5 ? "V": "v");
+  else ret+="-";
+
+  if(MENV->QueryProp(P_NEXT_SPELL_TIME)>time()) ret+="N";
+  else ret+="-";
+
+  if(mail=MAILERDEMON->FingerMail(getuid(MENV)))
+    if(mail>9) ret+="X";
+    else ret+=to_string(mail);
+  else ret+="-";
+
+  return ret;
+}
+
+nosave string get_align()
+{
+  int i;
+  
+  if(objectp(MENV)) i=MENV->QueryProp(P_ALIGN);
+
+  if(!intp(i)) return "???";
+
+  if(i<= -1200) return "diabolisch";
+
+  switch(i)
+    {
+    case -1199 .. -1000: return "satanisch";
+    case  -999 ..  -800: return "sehr boese";
+    case  -799 ..  -500: return "boese";
+    case  -499 ..  -200: return "gemein";
+    case  -199 ..   -40: return "frech";
+    case   -39 ..    39: return "neutral";
+    case    40 ..   199: return "nett";
+    case   200 ..   499: return "lieb";
+    case   500 ..   799: return "gut";
+    case   800 ..   999: return "sehr gut";
+    case  1000 ..  1199: return "heilig";
+    default:           return "erleuchtet";
+    }
+}
+
+nosave string lp2color(string was)
+{
+  string ret;
+
+  switch((MENV->QueryProp(P_HP) * 100) / MENV->QueryProp(P_MAX_HP))
+    {
+    case  0 ..  20: ret=ANSI_RED+ANSI_BOLD;    break;
+    case 21 ..  40: ret=ANSI_BLUE+ANSI_BOLD;   break;
+    case 41 ..  60: ret=ANSI_CYAN+ANSI_BOLD;   break;
+    case 61 ..  80: ret=ANSI_YELLOW+ANSI_BOLD; break;
+    case 81 .. 100: ret=ANSI_GREEN+ANSI_BOLD;  break;
+    default: ret=ANSI_NORMAL;
+    }
+  return ret+was+ANSI_NORMAL;
+}
+
+varargs string Parse_Ausgabe(string str, int nocolor)
+{
+  int i, siz;
+  string ausgabe;
+  string *words;
+  
+//  if((owner->QueryProp(P_TTY)!="vt100") && (owner->QueryProp(P_TTY)!="ansi"))
+  if((MENV->QueryProp(P_TTY)!="ansi") || (farbabstufung && !balken))
+    nocolor=1;
+  
+  words=explode(str, "#");
+
+  siz=sizeof(words);
+
+  ausgabe="";
+
+  for(i=0;i<siz;i++)
+    switch(words[i])
+      {
+      case "lp": 
+	if(nocolor) ausgabe+=sprintf("%3d",lp);
+	else ausgabe+=lp_farbe()+sprintf("%3d",lp)+ANSI_NORMAL;
+	continue;
+      case "mp": 
+	if(nocolor) ausgabe+=sprintf("%3d",mp);
+	else ausgabe+=mp_farbe()+sprintf("%3d",mp)+ANSI_NORMAL;
+	continue;
+      case "lpmax": 
+	if(nocolor) ausgabe+=sprintf("%3d",lpmax);
+	else ausgabe+=lp_farbe()+sprintf("%3d",lpmax)+ANSI_NORMAL;
+	continue;
+      case "mpmax": 
+	if(nocolor) ausgabe+=sprintf("%3d",mpmax);
+	else ausgabe+=mp_farbe()+sprintf("%3d",mpmax)+ANSI_NORMAL;
+	continue;
+      case "lpdiff":
+	if(nocolor) 
+	  ausgabe+=sprintf("%4s",(lpdiff<0 ? "-"+ to_string(lpdiff*-1):
+				  "+"+to_string(lpdiff)));
+	else ausgabe+=lp_farbe()+
+	       sprintf("%4s",(lpdiff<0 ? "-"+to_string(lpdiff*-1):
+			      "+"+to_string(lpdiff)))+ANSI_NORMAL;
+	continue;
+      case "mpdiff": 
+	if(nocolor) 
+	  ausgabe+=sprintf("%4s",(mpdiff<0 ? "-"+to_string(mpdiff*-1):
+				  "+"+to_string(mpdiff)));
+	else ausgabe+=mp_farbe()+
+	       sprintf("%4s",(mpdiff<0 ? "-"+to_string(mpdiff*-1):
+			      "+"+to_string(mpdiff)))+ANSI_NORMAL;
+	continue;
+      case "align": 
+	if(IS_SEER(MENV)) 
+	  if(nocolor) ausgabe+=sprintf("%-7s",get_align());
+	  else ausgabe+=align_farbe()+sprintf("%-7s",get_align())+ANSI_NORMAL; 
+	continue;
+      case "xp": 
+	if(IS_SEER(MENV)) 
+	  if(nocolor) ausgabe+=sprintf("%9d",(MENV->QueryProp(P_XP)));
+	  else ausgabe+=xp_farbe()+sprintf("%9d",(MENV->QueryProp(P_XP)))
+		 +ANSI_NORMAL; 
+	continue;
+      case "zustand": 
+	if(IS_SEER(MENV)) 
+	  if(nocolor) ausgabe+=get_state();
+	  else ausgabe+=text_farbe()+get_state()+ANSI_NORMAL; 
+	continue;
+      default : 
+	if(nocolor) ausgabe+=words[i];
+	else 
+	  ausgabe+=text_farbe()+words[i]+ANSI_NORMAL;
+	continue;
+      }
+  
+  if((farbabstufung) && (!balken))
+    return lp2color(ausgabe);
+  
+  return ausgabe;
+}
+
+nosave string do_balken()
+{
+  string lpret, mpret;
+  int i,fl;
+  
+  lpret=Parse_Ausgabe(lptxt,1)+duplicate(" ", MAX_LAENGE);
+  mpret=Parse_Ausgabe(mptxt,1)+duplicate(" ", MAX_LAENGE);
+
+  mpret=mpret[0..MAX_LAENGE];
+  lpret=lpret[0..MAX_LAENGE];
+
+  // Lp Balken
+
+  i=LAENGE(lp, lpmax);
+
+  lpret=lpret[0..i] + lp_balken_max() + lpret[(i+1)..]+ANSI_NORMAL;
+
+  if((fl=MENV->QueryProp(P_WIMPY)) && (fl < lp)) 
+    {
+      i=LAENGE(fl, lpmax);
+      lpret=fl_balken()+lpret[0..i]+lp_balken_akt()+lpret[(i+1)..];
+    }
+  else
+    if(fl)
+      lpret=fl_balken()+lpret;
+    else
+      lpret=lp_balken_akt()+lpret;
+
+  // Mp Balken
+  i=LAENGE(mp, mpmax);
+  mpret=mp_balken_akt()+mpret[0..i] + mp_balken_max() + mpret[(i+1)..]+ANSI_NORMAL;
+  
+  return text_balken_farbe()+lpret+" : "+text_balken_farbe()+mpret+"\n";
+}
+
+void NotifyHpChange()
+{
+  
+  if(!previous_object()||(MENV != previous_object())) 
+    return;
+
+  if(!aktiv)
+    {
+      if(MENV!=find_netdead(getuid(MENV)))
+	MENV->RemoveHpHook(ME); 
+      return;
+    }
+
+  lp=MENV->QueryProp(P_HP);
+  lpmax=MENV->QueryProp(P_MAX_HP);
+  mp=MENV->QueryProp(P_SP);
+  mpmax=MENV->QueryProp(P_MAX_SP);
+  lpdiff=lp-lastlp;
+  mpdiff=mp-lastmp;
+  
+  if((lp==lpmax)&&(mp==mpmax)) 
+    {
+      if(balken)
+	tell_object(MENV, do_balken());
+      else
+	tell_object(MENV, Parse_Ausgabe(txt)+"\n");
+      tell_object(MENV, 
+		  BS(text_farbe()+"Du bist nun wieder absolut fit."+
+		     ANSI_NORMAL));
+      lastlp=lp; 
+      lastmp=mp; 
+      anzmp=anzlp=0;
+      return;
+    }
+
+  if(noidle) 
+    if((lpdiff==1)||(mpdiff==1)) 
+      { 
+	lastlp=lp; 
+	lastmp=mp; 
+	return;
+      }
+  
+  /*
+    if(anzeige) 
+    {
+    if(((lpdiff==1)&&(!mpdiff) && (anzlp<(anzeige-1)))||
+    ((lpdiff==1)||(mpdiff==1))&&
+    (anzmp<(anzeige-1))&&(anzlp<anzeige))	 
+    }
+  */  
+  
+  if(present("\ndeath_mark",MENV)) return;
+  
+  if((lp < lastlp)||(lp != lastlp && mp == mpmax)||(mp != lastmp)||(lpdiff>2))
+    {
+      if(anzeige) 
+	if(((lpdiff==1)||(mpdiff==1))&&
+	   (anzmp<(anzeige-1))&&(anzlp<anzeige-1))
+	  {
+	    if(lastlp!=lp) anzlp++;
+	    if(lastmp!=mp) anzmp++;
+	    lastlp=lp; 
+	    lastmp=mp; 
+	    return;
+	  }
+      lpdiff+=anzlp;
+      mpdiff+=anzmp;
+      anzmp=anzlp=0;
+      if(balken)
+	tell_object(MENV, do_balken());
+      else
+	tell_object(MENV, Parse_Ausgabe(txt)+"\n");
+      lastlp = lp; lastmp = mp;
+      return;
+    }
+}
+
+void activate(object ob)
+{
+  if(objectp(ob)) 
+    {
+      aktiv=1;
+      ob->AddHpHook(ME);
+      lastlp=ob->QueryProp(P_HP);
+      lastmp=ob->QueryProp(P_SP);
+      lp=MENV->QueryProp(P_HP);
+      lpmax=MENV->QueryProp(P_MAX_HP);
+      mp=MENV->QueryProp(P_SP);
+      mpmax=MENV->QueryProp(P_MAX_SP);
+    } 
+  else 
+    {
+      if(ob=(MENV||TP)) ob->RemoveHpHook(ME);
+
+      if(objectp(MENV))
+	exowner=MENV->name(WEM,0);
+      else
+	exowner="niemandem";
+      
+      aktiv=0;
+
+      call_out("inactive_wear_check", 0);
+    }
+}
+
+void inactive_wear_check()
+{
+  if(!aktiv)
+    if(QueryProp(P_WORN)) DoUnwear(1);
+}
+
+int WearFunc(object ruest,int silent)
+{
+  if(!silent)
+    write(BS("Ploetzlich fuellt sich Dein Kopf mit einer eigenartigen "
+	     "Stimme..."));
+
+  activate(TP);
+
+  return 1;
+}
+
+int RemoveFunc(object me, int silent)
+{ 
+  activate(0);
+
+  if(!silent)
+    write(BS("Ploetzlich fuehlst Du eine grosse Leere in Deinem Kopf."));
+
+  return 1;
+}
+
+varargs int checklength(string str,int maxlength)
+{
+  int i, siz, length;
+  string *words;
+  
+  words=explode(str, "#");
+
+  siz=sizeof(words);
+
+  length=0;
+
+  for(i=0;i<siz;i++)
+    {
+      switch(words[i])
+	{
+	case "lp": length+=3;
+	  continue;
+	case "mp": length+=3;
+	  continue;
+	case "lpmax": length+=3;
+	  continue;
+	case "mpmax": length+=3;
+	  continue;
+	case "lpdiff": length+=4;
+	  continue;
+	case "mpdiff": length+=4;
+	  continue;
+	case "align": if(IS_SEER(MENV)) length+=10;
+	  continue;
+	case "xp": if(IS_SEER(MENV)) length+9;
+	  continue;
+	case "zustand": if(IS_SEER(MENV)) length+=8;
+	    continue;
+	default : length+=strlen(words[i]);
+	}
+    }
+
+  if((maxlength) && (length >= MAX_LAENGE))
+    return 0;
+  
+  if(length>=79) return 0;
+  
+  return 1;
+}
+
+nosave int fhbalken(string str)
+{
+  notify_fail(BS("Syntax: fh balken ein | aus"));
+  if(!str) return 0;
+
+  str=LOWER(str);
+  
+  if(str=="ein")
+    {
+      balken=1;
+      return write(BS("Der Report wird nun als Balkendiagramm "
+		      "dargestellt.")), 1;
+    }
+
+  if(str=="aus")
+    {
+      balken=0;
+      return write(BS("Der Report wird nun wieder normal dargestellt.")), 1;
+    }
+}
+
+nosave int fhtext(string str)
+{
+  string was, args;
+  string *tmp;
+  
+  notify_fail(BS("Syntax: fh text [lp | mp] <text>"));
+  if(!str) return 0;
+
+  tmp=explode(str," ");
+
+  was=tmp[0];
+
+  if(sizeof(tmp)>=2)
+    args=implode(tmp[1..]," ");
+
+  switch(was)
+    {
+    case "lp": 
+      if(args=="standard") 
+	lptxt=STDLPTXT;
+      else
+	if(!strlen(args))
+	  lptxt="";
+	else
+	  if(!checklength(args,1)) 
+	    return write(BS("Das ist ja viel zu lang.")), 1;
+	  else 
+	    lptxt=args;
+      return write("Neue Reportmeldung fuer "+was+":\n"+lptxt+"\n"), 1;
+      case "mp": 
+	if(args=="standard") 
+	  mptxt=STDMPTXT;
+	else
+	if(!strlen(args))
+	  mptxt="";
+	else
+	  if(!checklength(args,1)) 
+	    return write("Das ist ja viel zu lang.\n"),1;
+	  else mptxt=args;
+	return write("Neue Reportmeldung fuer "+was+":\n"+mptxt+"\n"), 1;
+      case "standard": 
+	txt=STDTXT;
+	write(BS("Standardtext wiederhergestellt."));
+	break;
+      default: 	
+	if(!strlen(args))
+	  return 0;
+	else
+	  txt=str;
+    }
+  return write("Neue Reportmeldung :\n"+txt+"\n"), 1;
+}
+
+nosave int fhzeigen(string str)
+{
+  if(balken)
+    tell_object(MENV, do_balken());
+  else
+    tell_object(MENV, Parse_Ausgabe(txt)+"\n");
+  
+  if(str=="alle")
+    if(balken)
+      tell_room(ENV(TP),TP->Name(WESSEN)+" Zustand:\n"+do_balken(), ({TP}));
+    else
+      tell_room(ENV(TP),TP->Name(WESSEN)+" Zustand:\n"+Parse_Ausgabe(txt)+"\n",
+		({TP}));
+  
+  return 1;
+}
+
+nosave int fhinfo()
+{
+  string ret;
+  
+  ret=sprintf("\n"
+	      "                   ===================\n"
+	      "                    F I N G E R H U T  v"+VERSION+"\n"
+	      "                   =================== "
+	      "(c) by PROtheG@Silberland\n"
+	      "\n"
+ 	      "Farben:\n"
+	      "   Textfarbe:  %3s   LP-farbe: %3s   MP-Farbe: %3s\n"
+	      "   Alignfarbe: %3s   Xpfarbe:  %3s\n"
+	      "\n"
+	      "Balkenanzeige:\n"
+	      "   BalkenText: %3s          BalkenFluchtlevel: %3s\n"
+	      "   Balken LP akutell: %3s   Balken LP maximal: %3s\n"
+	      "   Balken MP aktuell: %3s   Balken MP maximal: %3s\n"
+	      "\n"
+ 	      "Report-text                       Idlen:        %6s \n"
+ 	      "%-60s\n"
+	      "\n"
+	      "Balkentext LP\n"
+	      "   \"%-35s\"\n"
+	      "\n"
+	      "Balkentext MP\n"
+	      "   \"%-35s\"\n"
+	      "\n",
+	      
+	      text_farbe()+"xXx"+ANSI_NORMAL, 
+	      lp_farbe()+"xXx"+ANSI_NORMAL,
+	      mp_farbe()+"xXx"+ANSI_NORMAL,
+	      align_farbe()+"xXx"+ANSI_NORMAL,
+	      xp_farbe()+"xXx"+ANSI_NORMAL,
+	      text_balken_farbe()+"xXx"+ANSI_NORMAL,
+	      fl_balken()+"xXx"+ANSI_NORMAL,
+	      lp_balken_akt()+"xXx"+ANSI_NORMAL,
+	      lp_balken_max()+"xXx"+ANSI_NORMAL,
+	      mp_balken_akt()+"xXx"+ANSI_NORMAL,
+	      mp_balken_max()+"xXx"+ANSI_NORMAL,
+	      QueryIdle(), txt[0..55]+(txt[56] ? " ...":""),
+	      lptxt,mptxt);
+
+  TP->More(make_document(ret));
+
+  return 1;
+}
+
+nosave int fh(string str)
+{
+  string was, args;
+  string *tmp;
+  
+  notify_fail(BS("Syntax: fh <befehl> [argumente] (z.b. 'fh hilfe')"));
+  if(!str) return 0;
+
+  if(!QueryProp(P_WORN))
+    return write(BS("Dazu musst Du den Fingerhut tragen!")), 1;
+  
+  str=TI->_unparsed_args();
+
+  tmp=explode(str," ");
+
+  was=tmp[0];
+
+  if(sizeof(tmp)>=2)
+    args=implode(tmp[1..]," ");
+
+  was=LOWER(was);
+
+  switch(was)
+    {
+    case "hilfe": 
+      return show_help(args);
+    case "idle": 
+      return fhidle(args);
+    case "text": 
+      return fhtext(args);
+    case "farbe": 
+      return fhfarbe(args);
+    case "farben": 
+      return fhfarbe(args);
+    case "balken": 
+      return fhbalken(args);
+    case "info": 
+      return fhinfo();
+    case "laden": 
+      return fhload();
+    case "speichern": 
+      return fhsave();
+    case "zeigen":
+    case "zeige":
+      return fhzeigen(args);
+    }
+}
+
+int remove(int silent)
+{
+  activate(0);
+  
+  //  if(aktiv && TP) TP->RemoveHpHook(ME);
+
+  return ::remove(silent);
+}
+
+varargs int move(mixed dest, int method)
+{
+  int res;
+  object env;
+  
+  res=::move(dest, method);
+  
+  if((IS_LEARNER(MENV)) || (MENV->QueryProp(P_LEVEL) >= ERZSEHER_LEVEL))
+    SetProp(P_AUTOLOADOBJ, 1); // fuer Magier und Erzseher autoload
+  else
+    SetProp(P_AUTOLOADOBJ, 0);
+  
+  return res;
+}
+
+/*
+void BecomesNetAlive(object pl)
+{
+  if((objectp(pl)) && (MENV) && (pl==MENV) && aktiv)
+    owner=pl;
+}
+*/

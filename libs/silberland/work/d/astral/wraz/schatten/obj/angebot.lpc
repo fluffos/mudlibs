@@ -1,0 +1,189 @@
+// Angebot, die Schatten zu betreten (Teleport)
+// von Wraz / Mendralim
+// Spell von Schatten
+
+#include "../def.h"
+
+inherit "std/thing";
+
+string typ = "geber";
+int roomNumber = 0;
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, 0);
+  SetProp(P_LONG,"");
+
+  SetProp(P_NAME, "Angebot");
+  SetProp(P_GENDER, NEUTER);
+  AddId("\nwrazangebot");
+
+  SetProp(P_MATERIAL, ([MAT_MISC_INVIS:100]) );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_SIZE, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NEVERDROP, 1);
+
+  call_out( "ende", 570+random(60) );
+}
+
+varargs string Setup(string str, int _roomNumber)
+{
+  if(str == "geber") 
+  {
+    typ = "geber";
+    RemoveCmd( ({"akzeptiere"}));
+    AddCmd( ({"unterbreite"}), "cmd_unterbreiten");
+  }
+  else if(str == "nehmer") 
+  {
+    typ = "nehmer";
+    roomNumber = _roomNumber;
+    RemoveCmd( ({"unterbreite"}));
+    AddCmd( ({"akzeptiere"}), "cmd_akzeptieren");
+  }
+
+  return typ;
+}
+
+void ende()
+{
+  if( ENV(TO) && interactive( ENV(TO) ) )
+  {
+    if(typ == "geber") 
+      tell_object( ENV(TO), BS(
+        "Die Moeglichkeit, das Angebot zu unterbreiten, verstreicht ungenutzt.") );
+    else if(typ == "nehmer") 
+      tell_object( ENV(TO), BS(
+        "Die Moeglichkeit, die Schatten zu betreten, verstreicht ungenutzt.") );
+  }
+
+  TO->remove(1);
+  return;
+}
+
+int cmd_unterbreiten(string str)
+{
+  string spieler;
+  string angebot;
+  object ob;
+
+  if(!interactive(TP)) return 0;
+  if(!ENV(TO)) return 0;
+
+  if(TP != ENV(TO))
+  {
+   return -1;
+  }
+
+  else if(!str || sscanf(str, "%s %s", spieler, angebot) != 2)
+  {
+    write(BS("Wem moechtest Du das Angebot, die Schattenwelt zu betreten, unterbreiten? "
+     "<unterbreite spieler*in angebot>"));
+    return -1;
+  }
+
+  else if(angebot != "angebot")
+  {
+    write(BS("Wem moechtest Du das _Angebot_ unterbreiten? <unterbreite spieler*in angebot>"));
+    return -1;
+  }
+
+  else if(!find_player(spieler) || !interactive(find_player(spieler)))
+  {
+    write(BS("Aber '"+spieler+"' ist doch gar kein*e anwesende*r Spieler*in!"));
+    return -1;
+  }
+
+  else if(query_wiz_level(find_player(spieler)) < 1)
+  {
+    write(BS(find_player(spieler)->Name()+" ist leider kein*e Seher*in!"));
+    return -1;
+  }
+
+  else if(strstr(file_name(ENV(find_player(spieler))), ROOM) != -1)
+  {
+    write(BS(find_player(spieler)->Name()+" wandelt bereits in den Schatten!"));
+    return -1;
+  }
+
+  else
+  {
+    TP->Message(BS("Du konzentrierst Dich kurz, und unterbreitest "+
+      find_player(spieler)->Name()+" das Angebot, in die Schatten einzutreten. "+
+      capitalize(find_player(spieler)->QueryPronoun())+" hat, das fuehlst Du, nun kurze Zeit "
+      "die Moeglichkeit, das Angebot anzunehmen."));
+
+    ob = clone_object(OBJ "angebot");
+    if(TO && ENV(TO) && ENV(ENV(TO))) ob->Setup("nehmer",ENV(ENV(TO))->get_room_no());
+    else ob->Setup("nehmer",0);
+    ob->move(find_player(spieler),M_NOCHECK);
+    find_player(spieler)->Message("\n\n"+
+      BS("Ein kalter Luftzug kommt auf, und ein Schauer ueberkommt Dich, als ein Schatten ueber "
+        "Dich faellt! Vor Deinem inneren Auge erscheint "+TPN+", vage, aber doch eindeutig. "
+        "Das Gefuehl ist nicht in Worte zu fassen, doch Du weisst genau, dass Dir soeben das "
+        "Angebot unterbreitet wurde, in die Schattenwelt zu treten! Ueberlege gut und rasch, "
+        "ob Du das Angebot annehmen moechtest (<akzeptiere angebot>), denn die Schatten sind "
+        "schwer zu erreichen, noch schwerer zu verlassen, und noch viel schwieriger zu "
+        "ueberleben!")+
+      "\n\n");
+
+    TO->remove(1);
+    return 1;
+  }
+
+}
+
+int cmd_akzeptieren(string str)
+{
+  string angebot;
+  object ob;
+
+  if(!interactive(TP)) return 0;
+  if(!ENV(TO)) return 0;
+
+  if(TP != ENV(TO))
+  {
+   return -1;
+  }
+
+  else if(!str || sscanf(str, "%s", angebot) != 1)
+  {
+    write(BS("Moechtest Du das Angebot, die Schattenwelt zu betreten, akzeptieren? "
+     "<akzeptiere angebot>"));
+    return -1;
+  }
+
+  else if(angebot != "angebot")
+  {
+    write(BS("Moechtest Du das Angebot, die Schattenwelt zu betreten, akzeptieren? "
+     "<akzeptiere angebot>"));
+    return -1;
+  }
+
+  else
+  {
+    TP->Message(BS("Du schliesst die Augen, und akzeptierst das Angebot."));
+
+    // Raumnummer variieren (Spieler kommt suedlich von "geber" an)
+    roomNumber -= random(20);
+    if(roomNumber < 0) roomNumber = 0;
+
+    // Raum ggf. erzeugen:
+    RMASTER->write_next_room(ROOM + "sn" + RMASTER->get_lead_zeros(roomNumber));
+    // Spieler moven:
+    TP->move(ROOM + "sn" + RMASTER->get_lead_zeros(roomNumber),M_GO,
+    ", begleitet von Schatten, in eine andere Welt",
+    "verschwindet","erscheint wie aus dem Nichts dieser Welt");
+
+    TO->remove(1);
+    return 1;
+  }
+
+}

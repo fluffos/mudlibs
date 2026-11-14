@@ -1,0 +1,157 @@
+
+inherit "std/npc";
+
+#include <properties.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include "berserkerstufe11.h"
+#include "../def.h"
+#include <npcmaster.h>
+
+void create() 
+{
+  object ob;
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Kletina, die Ahnin der Menschenberserker");
+  SetProp(P_LONG,
+      "Kletina ist eine sehr grosse Menschenfrau mit lockigem rotbraunem "
+      "Haar, das nur durch ihr rotes Stirnband gebaendigt wird. Ihre "
+      "Lederruestung is auch komplett blutrot gefaerbt. Auch ihre "
+      "maechtige Axt ist rot, wahrschienlich sogar mit echtem Blut "
+      "gefaerbt.");
+  SetProp(P_NAME, "Kletina");
+  SetProp(P_GENDER, FEMALE);
+  AddId(({"berserkerin", "ahnin", "kletina", "mensch", "menschenberserker"}));
+
+  create_default_npc(35);
+  SetProp(P_HANDS, ({" mit ihrer Axt",QueryProp(P_HANDS)[1],DT_BLUDGEON}));
+  SetProp(P_RACE, "Mensch");
+  SetProp(P_SIZE, 200);
+  SetProp(P_ALIGN, 0);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_NO_SCORE, 1);
+  SetProp(P_KILL_NAME, "Der Weg der Ahnen");
+
+  SetProp(P_MSGIN, "kommt an");
+  SetProp(P_MSGOUT, "geht");
+  SetProp(P_MMSGIN, "erscheint in einer Rauchwolke");
+  SetProp(P_MMSGOUT, "verschwindet mit Knall und Schwefelduft");
+
+  SetProp(P_DIE_MSG,  " loest sich in Luft auf.\n");
+  SetProp(P_NOCORPSE, 1 );
+
+  AddInfo(DEFAULT_INFO, "sagt: Du musst mich besiegen, um auf den Weg der "
+      "Ahnen zu bestehen!\n");
+  AddLibrary(NPC "kronang.lib", 1);
+
+  SetProp(P_RESISTANCE_STRENGTHS, ([DT_SOUND: 1, DT_TERROR:0.5]) );
+  SetProp(P_GUILD, "berserker");
+  SetProp(P_GUILD_LEVEL, 10);
+  call_other("/gilden/berserker","learn_berserker_skills", 10000, 10000);
+
+  SUID;
+  CLONEME("/p/weapon/axe/langaxt");
+  command("zuecke axt");
+  CLONEME("/gilden/berserker/obj/stirnband");
+  command("trage alles");
+
+  AddCmd( ({"zertreten", "rammen", "kopfstoss", "spalten",
+        "blutrausch", "kampfschrei"}), "nix");
+}
+
+int nix(string str)
+{
+  if (!InFight(TP) && query_verb()!="blutrausch") return 0;
+  write("Du musst diesen Kampf gewinnen, ohne Dich auf "+query_verb()+" zu "
+      "verlassen!\n");
+  return 1;
+}
+
+void die(int poisondeath) 
+{
+  object ob, wer;
+  log_file(B11_LOG, "["+ dtime()+"] "+
+      sprintf("%O",QueryProp(P_KILLER)||TP)+
+      " killt die Menschenberserkerin.\n");
+  if( (wer=QueryProp(P_KILLER)) || (wer=TP) )
+  {
+    ob = wer->QueryProp(P_WEAPON);
+    if (ob) ob->remove(1); 
+    if (ob) destruct(ob);
+    while (ob = deep_present("axt", wer)) 
+    {
+      if (ob) ob->remove(1); 
+      if (ob) destruct(ob);
+    }
+    ob=clone_object(WEAPON "berserkeraxt");
+    ob->SetProp(P_SHORT, wer->Name(WESSEN)+" legendaere Berserkeraxt");
+    ob->SetProp(P_NAME_ADJ, "legendaer");
+    ob->SetProp(P_NODROP, 1);
+    ob->move(wer,M_NOCHECK);
+    wer->SetProp(P_GUILD_LEVEL, 10);
+    ob->wield_me();
+    wer->heal_self(400);
+    WLOG( LOG "Berserkeraxt", "bekommt eine Berserkeraxt fuer GS 11");
+    environment()->AddExit("weiter", "./weg_der_ahnen10");
+  }
+  ::die(poisondeath);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp) 
+{
+  if(killer == ME)
+    log_file(B11_LOG, "["+dtime()+"] Die Menschenberserkerin hat gerade "+
+        sprintf("%O",(player))+" umgebracht.\n");
+  call_out("corpsemove", 4);
+  heal_self(2000);
+}
+
+void corpsemove()
+{
+  present("leiche")->move("/gilden/berserker", M_NOCHECK);
+}
+
+int _query_wimpy() { return 0; }
+
+void Attack(object enemy)
+{
+  if( !QueryProp(P_DISABLE_SPELLS) )
+  {
+    if( !QueryProp(P_TMP_DEFEND_HOOK) && random(2) )
+      command_me("eisenhaut");
+    else if( !present("\nberserker_willenskraft",TO) && random(2) )
+      command_me("willenskraft");
+    else if( !QueryProp(P_PREFERED_ENEMY) && random(2) && interactive(enemy) )
+      command_me("augeinauge");
+    else if ( time() - enemy->QueryProp("last_rammen_time")<4 )
+      command_me("zertreten");
+    else if( random(10)<3 && !enemy->QueryProp(P_DEAF) )
+      command_me("kampfschrei");
+    else
+    {
+      switch( 100*enemy->QueryProp(P_SIZE)/QueryProp(P_SIZE))
+      {
+        case 0..30: command_me("zertreten"); break;
+        case 80..300: if( random(3) ) command_me("kopfstoss");
+                        else command_me("rammen"); break;
+        default: command_me("rammen"); break;
+      }
+    }
+  }
+  enemy->SetProp(P_FOOD, enemy->QueryProp(P_MAX_FOOD));
+  enemy->SetProp(P_DRINK, enemy->QueryProp(P_MAX_DRINK));
+  if( enemy ) ::Attack(enemy);
+}
+
+mixed _query_deaf() { return 0; }
+
+void reset()
+{
+  ::reset();
+  if (!is_clone(TO)) return;
+  if( !InFight()) heal_self(2000);
+}

@@ -1,0 +1,156 @@
+//dante sl 98 -99
+
+inherit "/p/std/dragons/dragon";
+#include <wizlevels.h>       
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <class.h>
+#include "/players/dante/myowndefine.h"
+
+object enemy;
+
+void reset()
+{
+  object ob,next;
+
+  ::reset();
+
+  if (!is_clone(this_object())) return;
+
+  if(!InFight())  {
+
+    tell_room(environment(TO),
+        "Die Drachenmutter laeuft bruellend auf und davon.\n");
+    move("/room/npcasylraum", M_TPORT+M_SILENT);
+    deep_remove();
+  }
+}
+
+void create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  SetProp(P_NAME, "Drachenmutter");
+  SetProp(P_NAME_ADJ, "aggressiv");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_ARTICLE, 1);
+  create_default_dragon(2,3+random(2),0,5+random(7));            
+  SetProp(P_SHORT, "Eine aggressive Drachenmutter");
+  SetProp(P_LONG, BS(
+        "Dieser Drache ist sehr aufgebracht und eher aggressiv. Und das mit Grund! "
+        "Ein Drachenbaby wurde getoetet und sowas findet eine Mutter nie lustig. "
+        "Also huete Dich vor ihr."));
+
+  AddId(({"drache", "mamadrache","drachenmutter", "mutter"}));
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:0, T_RANGE_MAX:50]));
+
+  SetProp(P_HEAL,20);
+  SetProp(P_AGGRESSIVE,0);
+  SetProp(P_MSGIN, "kriecht fauchend herein");
+  SetProp(P_MSGOUT, "kriecht fauchend");
+  SetProp(P_MMSGIN, "rast fauchend und tobend herein");
+  SetProp(P_MMSGOUT, "schlaengelt davon");
+
+  SetProp(P_DIE_MSG,  " zuckt noch einmal auf und stirbt dann laut bruellend!\n");
+
+  SetProp(P_MURDER_MSG, "Meine Drachenbabys sind nun alleine!!!\n");
+  SetProp(P_KILL_NAME, "Eine boese Drachenmutter");
+  SetProp(P_KILL_MSG, "Ich habe den Tod meines Drachenbabys geraecht!\n");
+
+  SetProp(P_MSG_FLAGS, ([P_KILL_MSG:0, P_MURDER_MSG:0 ]));
+
+
+  AddInfo(DEFAULT_INFO, "zischt laut!\n");
+  AddInfo("dante", "Dante, der bloede Sack!","sagt: ");
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    "Was soll der Drache damit?!\n" }) );
+
+  AddCmd( ({"norden", "sueden", "osten", "westen", "nordwesten", 
+        "nordosten", "suedosten", "suedwesten"}), "block");
+  enemy=0;
+  SUID;
+  set_next_reset((20+random(15))*60);
+} 
+
+int block(string str)
+{
+  if(InFight(TP) && !random(5))
+    return write ("Die Drachenmutter blockiert den Weg.\n"),1;
+  return 0;
+}
+
+varargs void die(int poisondeath)
+{
+  write_file("/d/gebirge/dante/friedhof/log/drachen",
+      ctime()+": "+getuid(TP)+" killt Mamma.\n");
+
+  ::die(poisondeath);
+}
+
+void AddKiller(object player)
+{
+  Kill(player);
+  enemy=player;
+  SetProp(P_SHORT, "Eine aggressive Drachenmutter ("+
+      capitalize(getuid(enemy))+"toeter)");
+}
+
+void init()
+{
+  ::init();
+  if( TP && TP==enemy)
+    Kill(enemy);
+}
+ 
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+
+  write_file("/d/gebirge/dante/friedhof/log/drachen",
+      ctime()+": "+CAP(getuid(PL))+" wird gekillt von Mamma.\n");
+  if (player == enemy)
+  {
+    player->RemovePursuer(TO);
+    enemy=0;
+  }
+}
+
+
+int PreventFollow(object dest)
+{
+  if( file_name(dest)=="/room/death/death_room")  {
+
+    TO->move("/d/gebirge/dante/friedhof/room/babyhoehle", M_NOCHECK,
+        "bruellend ind die Hoehle des Babydrachens", "laeuft",
+        "kommt bruellend herein");
+    enemy->RemovePursuer(TO);
+    enemy=0;
+    return 2;  
+  }
+  if (!present(enemy, environment()) && find_call_out("summon") == -1)
+   call_out("summon", 60);
+  return 1;
+}
+
+void summon()
+{
+  while (remove_call_out("summon") != -1) ;
+  if (objectp(enemy) && !enemy->QueryProp(P_GHOST) && interactive(enemy) &&
+      !present(enemy, environment()))
+  {
+    tell_object(enemy, "Die Drachenmama beschwoert Dich zurueck in die "
+        "Drachenhoehle.\n");
+    enemy->move("/d/gebirge/dante/friedhof/room/babyhoehle", M_TPORT);
+  }
+}
+
+int Defend(int dam, string *dam_type, mixed spell, object e)
+{
+  if (e == enemy)
+    while (remove_call_out("summon") != -1) ;
+  return ::Defend(dam, dam_type, spell, e);
+}
+  

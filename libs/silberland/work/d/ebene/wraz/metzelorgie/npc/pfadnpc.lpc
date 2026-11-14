@@ -1,0 +1,173 @@
+// Schlachtfeld
+// Wraz / Mendralim
+// die "Pfad des Todes" NPC erben von hier
+
+#include "../def.h"
+
+inherit "std/thing/properties";
+
+float hpfactor;
+object special_ob;
+
+object query_bling_object()
+{
+  return special_ob;
+}
+
+void modify_hp(object player)
+{
+  float ratio, currenthpfactor;
+
+  if(!player) return;
+  if( !interactive(player) ) return;
+
+  ratio = to_float(DMASTER->query_death_ratio(getuid(player)));
+
+  if(QueryProp("last_modify_hp") > (time()-86400)) return; // 1x pro Tag hoechstens
+  if(ratio == -1.0) return; // player steht noch nicht in der Liste
+
+  ratio *= 3.0; // Update 1.12.22
+
+  SetProp("last_modify_hp", time());
+
+  if(find_player("wraz"))
+    find_player("wraz")->Message("ratio: " + ratio+ "\n");
+
+  // Erleichterung durch Bling (siehe save_master.c)
+  //  Formel von ring.c (leicht adaptiert); ratio bekommt x aufaddiert, wobei:
+  //  "temp_bling" = 0     --> x = 0.0
+  //  "temp_bling" = 30000 --> x = 0.146 
+  if(player->QueryProp("temp_bling"))
+    ratio += (2 * ((- 52.8 + 7.6 * log( player->QueryProp("temp_bling")+1050.0 )) / 350.0));
+  
+  if(!player->QueryProp("temp_bling_last_halving") ||
+    player->QueryProp("temp_bling_last_halving") < time()-60*60*24*7)
+  { 
+    player->SetProp("temp_bling_last_halving", time());
+    player->SetProp("temp_bling",player->QueryProp("temp_bling")/2);
+    player->Message(BS("Einige der Kampftricks, die Dir Ahtawqa zugefluestert hat, "
+    "sind schon laenger her... Du kannst Dich nicht mehr an alles erinnern."));
+  }
+  
+  if(find_player("wraz"))
+    find_player("wraz")->Message(player->Name()+ ", "+
+      "temp_bling: " + player->QueryProp("temp_bling")+ ", "+
+      "ratio (new): " + ratio+ "\n");
+
+  // Faktor fuer HP_MAX anpassung berechnen
+  //  reicht von 0.47 bis 2.46
+  hpfactor =
+  1.0 /
+      ( 0.5 * exp(
+        ( (ratio<0.0) ? (0.0) :
+                           ( (ratio>1.3) ? (1.3) : (ratio)
+                           )
+        ) )
+        / exp(1.0)
+      );
+
+  DB(BS(player->Name()+" hpfactor: "+hpfactor));
+
+  // Faktor fuer derzeitige HP
+  currenthpfactor = to_float(QueryProp(P_HP)) / to_float(QueryProp(P_MAX_HP));
+
+  SetProp(P_MAX_HP, to_int(QueryProp(P_MAX_HP) * hpfactor));
+  SetProp(P_HP, to_int(QueryProp(P_MAX_HP) * currenthpfactor));
+
+  // Spellrate auch modifizieren
+  if(QueryProp(P_SPELLRATE))
+    SetProp(P_SPELLRATE, (QueryProp(P_SPELLRATE) * hpfactor) <= 100.0 ?
+      to_int(QueryProp(P_SPELLRATE) * hpfactor) : 100);
+
+  // Nachricht an den Spieler
+  //if(ratio == 0.0) // player noch nie gestorben
+  //  player->Message(BS("Der Pfad hat Dich noch nie bezwungen!"));
+
+  //else 
+  if(ratio < 0.95) // player zu selten gestorben ;)
+    player->Message(BS("Fuerchtest Du den Tod?"));
+
+  else if (ratio > 1.05) // player oft genug gestorben
+    player->Message(BS("Der Tod fuerchtet Dich!"));
+
+  else // player hat das "ideale" Sterbeverhaeltnis
+    player->Message(BS("Leben und Tod sind in Dir ausgewogen."));
+
+}
+
+void npc_dies(int poisondeath)
+{
+  object ob;
+  string bling_prop_name;
+  int collector_value;
+  float col_val_factor;
+
+  WMASTER->npc_death_log("pfadnpc", TO->Name(RAW), TPU, TPN);
+
+  ob=clone_object(OBJ "bling");
+
+  switch (TO->Name(RAW))
+  {
+    case "Wolfbarghest":
+    case "Goblinbarghest":
+    case "Barghest":
+      bling_prop_name = "barghest";
+      collector_value = 130;
+      ob->move(TO,M_GET);
+      WMASTER->set_status("last_wache",1);
+      WMASTER->crazy_golem();
+      break;
+    case "Druide":
+      ob->remove();
+      ob = query_bling_object();
+      bling_prop_name = ""; // dadurch ist der WMASTER bling_prop Aufruf deaktiviert
+      collector_value = QueryProp(P_GUILD_LEVEL)+130;
+      break;
+    case "Ghoul":
+      bling_prop_name = "ghoul";
+      collector_value = 70;
+      ob->move(TO,M_GET);
+      break;
+    case "Feenekromantin":
+      bling_prop_name = "nekromantin";
+      collector_value = 120;
+      ob->move(TO,M_GET);
+      break;
+    case "Troll":
+      bling_prop_name = "troll";
+      collector_value = 100;
+      ob->move(TO,M_GET);
+      break;
+    case "Zechpreller":
+      bling_prop_name = "zechi";
+      collector_value = 75;
+      ob->move(TO,M_GET);
+      break;
+    case "Zyklopengestalt":
+      ob->remove();
+      ob = query_bling_object();
+      bling_prop_name = ""; // dadurch ist der WMASTER bling_prop Aufruf deaktiviert
+      collector_value = 90;
+      break;
+    default:
+      bling_prop_name = "";
+      collector_value = 0;
+      break;
+  }
+
+  if(ob)
+  {
+    if (hpfactor == 0) hpfactor = 0.47;
+    WMASTER->bling_prop(ob, bling_prop_name);
+    ob->AddId("Bling","Pfadbling");
+    // collector_value wird angepasst: 47 .. 223 % (siehe oben)
+    ob->set_collector_value(
+      to_int( hpfactor * (QueryProp(P_LEVEL)+collector_value) ) );
+  }
+
+  DMASTER->save_npcdeath(getuid(TP));
+  TP->Message(BS("Der Tod "+TO->name(WESSEN,1)+" scheint den Pfad fuer Dich "
+                     "zu verdunkeln..."));
+
+  call_other(IMASTER, "DropItems", ENV(TO), QueryProp(P_LEVEL));
+}

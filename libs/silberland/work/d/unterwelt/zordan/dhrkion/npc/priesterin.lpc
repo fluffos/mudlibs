@@ -1,0 +1,793 @@
+//=========================================================================
+//
+// File:    priesterin.c
+// Created by ZORDAN@SL
+//
+// Project: DHRKION
+//
+//=========================================================================
+
+#include "../def.h"
+
+#include <wizlevels.h>
+
+inherit STDDARKELF;
+
+#define QUESTNAMEJUWEL     "Finde das Juwel"
+
+string *informed, *key, *yukky;
+int callouts;
+
+//--------------------------------------------------------------------------
+// Prototypes
+//--------------------------------------------------------------------------
+
+string info_belohnung (string str);
+
+//--------------------------------------------------------------------------
+
+void create()
+{
+  if(!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Eine Hohenpriesterin");
+  SetProp(P_LONG,
+    "Vor Dir steht eine sehr alte Dunkelelfenpriesterin. An ihrer "
+    "Ausstrahlung bemerkst Du gleich ihre hohe heilige Persoenlichkeit. "
+    "Nur wirklich gute Kaempfer wuerden es jemals wagen sie anzugreifen. "
+    "Sie steht vor dem Altar und betet."
+  );
+
+  SetProp(P_NAME, "Hohenpriesterin");
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({"hohenpriesterin","priesterin","hohepriesterin"
+          ,"\npriesterin", "NOWIMPY" }) );
+
+  create_default_darkelf(35,35,0);
+
+  SetProp(P_HANDS, ({" mit unheiligen Haenden", 400, DT_UNHOLY}));
+  SetProp(P_SIZE, 210+random(30));
+  SetProp(P_ALIGN, -800);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_WIMPY, 0);
+
+  SetProp(P_RESISTANCE_STRENGTHS ,
+    ([ DT_FIRE:      0.1, DT_COLD:      0.0, DT_WATER:      -0.2
+     , DT_AIR:      -0.2, DT_LIGHTNING:-0.2, DT_EXPLOSION:   0.1
+     , DT_SOUND:    -0.2, DT_LIGHT:     0.1, DT_ELECTRIC:   -0.1
+     , DT_ACID:     -0.1, DT_POISON:    0.0, DT_TERROR:      0.0
+     , DT_HOLY:      0.1, DT_UNHOLY:   -0.6, DT_MAGIC:      -0.6
+     , DT_MIND:      0.0, DT_SLASH:     0.0, DT_BLUDGEON:    0.0
+     , DT_PIERCE:    0.0, DT_SQUEEZE:   0.0, DT_WHIP:        0.0
+     , DT_RIP:       0.0,
+     ])
+  );
+
+  SetProp(P_NOMAGIC,20);
+
+  SetProp(P_MSGIN, "kommt ehrfuerchtig herein");
+  SetProp(P_MSGOUT, "verschwindet");
+
+  SetProp(P_DIE_MSG, " stoesst noch ein Stossgebet zu Lloth und faellt "
+                     "tot um.\n");
+
+  AddInfo(DEFAULT_INFO, "sagt: Psssst.\n");
+
+  SetProp(P_LOG_INFO, "dhrkion.log");
+
+  AddLibrary( NPC "dhrkion.lib",1);
+
+#include "./priesterin.h"
+
+  AddInfo( ({"runen","rune"}),               "@@info_runen@@" );
+  AddInfo( ({"schluessel","torschluessel"}), "@@info_schluessel@@" );
+  AddInfo( ({"hilfe"}),                      "@@info_hilfe@@" );
+  AddInfo( ({"kerbholz","belohnung"}),       #'info_belohnung );
+
+  SetProp( P_REJECT, ({ REJECT_GIVE,
+    "Die Hohenpriesterin gibt Dir @WEN wieder.\n" }) );
+
+  SetChats(1,
+    ({"Die Hohenpriesterin kniet sich vor den Altar.\n"
+     ,"Die Hohenpriesterin verschraenkt die Arme.\n"
+     ,"Die Hohenpriesterin steht regungslos im Tempel.\n"
+     ,"Die Hohenpriesterin beobachtet Dich ganz genau.\n"
+     ,"Die Hohenpriesterin murmelt etwas von 'Licht'.\n"
+     ,"Die Hohenpriesterin haelt ein kurzes Gebet.\n"
+     }) );
+
+  SetProp(P_SPELLRATE,80);
+
+  AddSpell(1,300,
+    "Die Hohenpriesterin huellt Dich in eine tiefe Dunkelheit.\n",
+    "Die Hohenpriesterin huellt @WEN in eine tiefe Dunkelheit.\n",
+     DT_TERROR,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(1,300,
+    "Die Hohenpriesterin beschwoert eine laute Stimme in Deinem Ohr.\n",
+    "Die Hohenpriesterin versucht @WEN taub zu machen.\n",
+     DT_SOUND,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(1,500,
+    "Die Hohenpriesterin versucht Dir die Seele aus dem Leib zu reissen.\n",
+    "Die Hohenpriesterin versucht @WEN die Seele aus dem Leib zu reissen.\n",
+     DT_UNHOLY,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(1,1,"","",DT_MAGIC, "spell_laehmen");
+
+  AddSpell(1,1,"","",DT_MAGIC, "spell_heilen");
+
+  AddCmd( ({"biete","biet"})            ,"cmd_bieten" );
+  AddCmd( ({"erklaer","erklaere" })     ,"cmd_erklaeren" );
+  AddCmd( ({"uebersetz","uebersetze" }) ,"cmd_uebersetzen" );
+  AddCmd( ({"zeig","zeige" })           ,"cmd_zeigen" );
+  AddCmd( ({"beende" })                 ,"cmd_beenden" );
+  AddCmd( ({"questinfo"})               ,"cmd_questinfo");
+
+  SUID;
+
+  CLONEME(WEAPON "peitsche" );
+  command("zuecke peitsche");
+  CLONEME(ARMOUR "priesterrobe" );
+  command("trage alles");
+
+  informed = ({ });
+  key      = ({ });
+  yukky    = ({ });
+}
+
+nosave void inform_player(object pl)
+{
+  if(!pl)                return;
+  if(!interactive(pl))   return;
+  if(ENV(pl) != ENV(TO)) return;
+
+  if(member(informed, getuuid(pl)) == -1)
+  {
+    informed += ({ getuuid(pl) });
+
+    tell_room(ENV(TO), BSI(
+      "Hallo "+pl->name()+"! Herzlich willkommen in unserer schoenen Stadt "
+      "Dhrkion, welche mitten unter der Erde im SilberLand gelegen ist. "
+      "Dein Leben als Dunkelelf wird Dich durch viele Orte fuehren und Du "
+      "wirst eine Menge Abenteuer bestehen. Wenn Du gleich zu Anfang ein "
+      "kleines Abenteuer erleben moechtest, dann solltest Du Odania suchen "
+      "und sie nach einer Aufgabe fuer Dich fragen (Syntax: frag odania "
+      "nach aufgabe).", "Die Priesterin sagt: "));
+  }
+  else
+  {
+    tell_room(ENV(TO), BSI(
+      "Hallo "+pl->name()+", hast Du die Aufgabe von Odania schon "
+      "erfuellt?", "Die Priesterin fragt: "));
+  }
+}
+
+void inform_player_runes(object player)
+{
+  tell_object(player, BSI(
+    "Sehr gut "+player->name(RAW)+". Du hast alle Runen gefunden und "
+    "richtig eingesetzt. Du solltest jetzt so schnell wie moeglich nach "
+    "oben gehen und den Dunkelzauber aussprechen. Danach komm dann wieder "
+    "zu mir. Vielleicht habe ich ja noch eine Belohnung fuer Deinen "
+    "Erfolg!", "Die Priesterin sagt: "));
+}
+
+void reset()
+{
+  ::reset();
+
+  informed = ({ });
+  key      = ({ });
+  yukky    = ({ });
+
+  callouts = 0;
+}
+
+void init()
+{
+  object ob;
+
+  ::init();
+
+  if(!TP) return;
+
+  if(TP->id("\ndrider")) AddDefender(TP);
+
+  if(!interactive(TP)) return;
+
+  if(RUNENMASTER->QueryAllDone(getuuid(TP)))
+  {
+    call_out("inform_player_runes", 0, TP);
+  }
+
+  if(TP->QueryProp(P_LEVEL) < 3     &&
+    !TP->QueryQuest(QUESTNAMEJUWEL) &&
+     TP->QueryProp(P_RACE)=="Dunkelelf") call_out("inform_player",4,TP);
+}
+
+int Defend(int dam, mixed dam_type, mixed spell, object enemy)
+{
+  DHRKIONMASTER->addfeind(enemy);
+  ::Defend(dam, dam_type, spell, enemy);
+}
+
+void spell_laehmen(object enemy, int damage, mixed dam_type)
+{
+  tell_room(ENV(TO),
+    "Die Hohenpriesterin laehmt "+enemy->name()+".\n", ({ enemy }) );
+
+  tell_object(enemy,"Die Hohenpriesterin laehmt Dich.\n");
+  enemy->ModifySkillAttribute(ME,SA_SPEED,25+random(51),60);
+
+  return 0;
+}
+
+void spell_heilen(object enemy, int damage, mixed dam_type)
+{
+  int i,act,max;
+
+  tell_room(MENV,
+    "Die Hohenpriesterin raubt einen Teil der Lebenspunkte von "+
+    enemy->name()+".\n", ({ enemy }));
+
+  tell_object(enemy,
+    "Die Hohenpriesterin raubt einen Teil Deiner Lebenspunkte.\n" );
+
+  i = 10+random(10);
+  act = TO->QueryProp(P_HP);
+  max = TO->QueryProp(P_MAX_HP);
+
+  if(act+i > max)
+  {
+    TO->SetProp(P_HP,max);
+    enemy->do_damage(act+i-max);
+  }
+  else
+  {
+    TO->SetProp(P_HP, act+i);
+    enemy->do_damage(i);
+  }
+
+  return;
+}
+
+varargs void die(int poisondeath)
+{
+  object enemy;
+
+  if(enemy = QueryProp(P_KILLER))
+    write_file(LOG "spieler.kills",
+      ctime()+": "+CAP(getuid(PL))+" killt die Priesterin.\n");
+
+  ::die(poisondeath);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  if(killer == ME)
+  {
+    write_file(LOG "spieler.deads",
+      ctime()+": "+CAP(getuid(player))+" wurde von der Priesterin getoetet ("+lostexp+").\n");
+    DHRKIONMASTER->feindtot(player);
+  }
+}
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+  if(callouts > 5) return;
+
+  callouts++;
+
+  switch(gruppe)
+  {
+    case "aengstlich":
+      call_out("reaction", 0, TP,
+        "sagt: Ein Dunkelelf hat niemals Angst, "+TPN+"!",
+        "sagt: Ein Dunkelelf hat niemals Angst, "+TPN+"!");
+      break;
+
+    case "aergerlich":
+      call_out("reaction", 0, TP,
+        "gibt Dir eine Ohrfeige.",
+        "gibt "+TPN+" eine Ohrfeige.");
+      break;
+
+    case "albern":
+      call_out("reaction", 0, TP,
+        "sagt: Hoer auf damit, "+TPN+"!",
+        "sagt: Hoer auf damit, "+TPN+"!");
+      break;
+
+    case "fies":
+      if(member(yukky, getuuid(TP)) == -1)
+      {
+        call_out("reaction", 0, TP,
+          "sagt: Lass das "+TPN+" oder ich werde Dich vernichten!",
+          "sagt: Lass das "+TPN+" oder ich werde Dich vernichten!");
+        yukky += ({ getuuid(TP) });
+      }
+      else
+      {
+        Kill(TP);
+      }
+      break;
+
+    case "frech":
+      call_out("reaction", 0, TP,
+        "ignoriert Dich einfach.",
+        "ignoriert "+TPN+" einfach.");
+      break;
+
+    case "froh":
+      call_out("reaction", 0, TP,
+        "schaut Dich unglaeubig an.",
+        "schaut "+TPN+" unglauebig an.");
+      break;
+
+    case "intim":
+      call_out("reaction", 0, TP,
+        "schreit: Bist Du noch zu retten, "+TPN+"?",
+        "schreit: Bist Du noch zu retten, "+TPN+"?");
+      break;
+
+    case "nett":
+      call_out("reaction", 0, TP,
+        "sagt: Du hast noch viel zu lernen, "+TPN+"!",
+        "sagt: Du hast noch viel zu lernen, "+TPN+"!");
+      break;
+
+    case "neutral":
+      call_out("reaction", 0, TP,
+        "schaut Dich einfach nur noch an.",
+        "schaut "+TPN+" einfach nur noch an.");
+      break;
+
+    case "traurig":
+      call_out("reaction", 0, TP,
+        "bittet Dich den Tempel zu verlassen.",
+        "bittet "+TPN+" den Tempel zu verlassen.");
+      break;
+  }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void reaction(object pl, string macher, string andere)
+{
+  callouts--;
+
+  if(ENV(pl) == ENV(TO))
+  {
+    tell_object(pl, BS(Name(WER, 1)+" "+macher));
+    tell_room(ENV(TO), BS(Name(WER, 1)+" "+andere), ({pl}));
+  }
+}
+
+void InformDefend(object enemy)
+{
+  Kill(enemy);
+}
+
+string info_schluessel(string str)
+{
+  object ob;
+
+  if(TP->QueryProp(P_RACE) != "Dunkelelf")
+  {
+    return "sagt: Dir gebe ich sicher keinen Schluessel, "+TPN+"!\n";
+  }
+
+  if(deep_present("\n_torschluessel",TP))
+  {
+    return "sagt: Aber Du hast doch schon einen Torschluessel!\n";
+  }
+
+  if(member(key, getuuid(TP)) != -1)
+  {
+    return "sagt: Ich habe Dir doch erst vor kurzem einen Schluessel "
+           "gegeben!\n";
+  }
+
+  ob = clone_object("/d/unterwelt/basics/central/obj/torschluessel");
+  if(ob->move(TP, M_GET) == 1)
+  {
+    key += ({ getuuid(TP) });
+    return "gibt "+TPN+" einen Torschluessel.\n";
+  }
+
+  ob->remove();
+  return "lacht: Du bist viel zu schwach um diesen Schluessel zu "
+         "tragen!\n";
+}
+
+// questteil
+
+string info_hilfe(string str)
+{
+  if(TP->QueryQuest(QUESTNAME) == 1)
+  {
+    return "sagt: Du hast mit doch schon geholfen, "+TPN+".\n";
+  }
+
+  if(!RUNENMASTER->IsQuester(getuuid(TP)))
+  {
+    return BS(
+      "sagt: Du koenntest mir bei einem Problem mit Runen helfen.");
+  }
+
+  tell_object(TP, BSI(
+    "Such die Runen und setze sie ein. Wichtig dabei ist, dass die "
+    "Woerter auf den Bloecken richtig sind. Ich kann Dir die Uebersetzung "
+    "von sechs Runen sagen. Gib 'uebersetze <buchstaben>' ein. Das geht "
+    "allerdings erst, wenn Du alle vier Runen gefunden hast. Zusaetzlich "
+    "kann ich Dir die gefundenen Runen uebersetzen. Dazu musst Du sie mir "
+    "einfach zeigen. Ausserdem kann ich Dir jederzeit eine kleine "
+    "Erklaerung zu jeder Rune geben. Dazu geb einfach 'erklaere "
+    "<buchstabe> ein. Ausserdem hast Du die Moeglichkeit jederzeit "
+    "Deine Hilfe zu beenden.", "Die Priesterin sagt: "));
+
+  return "faengt an zu beten.";
+}
+
+string info_runen(string str)
+{
+  if(!RUNENMASTER->IsQuester(getuuid(TP)))
+  {
+    tell_object(TP, BSI(
+      "Ok "+TPN+", es gibt ein schlimmes Problem mit den Runen hier in "
+      "Dhrkion. Die Runen habe ich vor langer Zeit aufgestellt und mit "
+      "einem Zauber belegt, weil ein uns feindlich gesonnener Mensch einen "
+      "Lichtzauber ueber unseren Marktplatz ausgesprochen hat. Leider hat "
+      "er vor ein paar Tagen ein paar Runen entwendet und sie ueber ganz "
+      "Dhrkion verteilt. Deine Aufgabe waere es, diese Runen zu finden, sie "
+      "wieder an ihren richtigen Platz zu legen und dann oben im Tempel "
+      "den Dunkelzauber auszusprechen. Wenn Du das fuer mich machen "
+      "moechtest, dann biete einfach Deine Hilfe an.", "Die Priesterin "
+      "sagt: "));
+  }
+  else
+  {
+    tell_object(TP, BSI(
+      "Du musst alle vier Runen finden und an die richtige Stelle auf "
+      "den Steinbloecken einsetzen. Danach kannst Du dann nach oben "
+      "gehen und den Dunkelzauber aussprechen. Die Runen selber hat "
+      "ein Mensch in ganz Dhrkion versteckt. Du wirst schon danach "
+      "suchen muessen.","Die Priesterin sagt: "));
+  }
+
+  return "schaut Dich fragend an.";
+}
+
+int cmd_bieten(string str)
+{
+  object ob;
+
+  notify_fail("Moechtest Du vielleicht Deine Hilfe anbieten?\n");
+
+  if(!str || str == "") return 0;
+  if(!(str == "hilfe an" ||
+       str == "priesterin hilfe an" ||
+       str == "hohenpriesterin hilfe an" )) return 0;
+
+  if(RUNENMASTER->IsQuester(getuuid(TP)))
+  {
+    tell_object(TP, BSI("Aber Du hilfst mir doch schon. Wie weit bist "
+                        "Du denn bisher?", "Die Priesterin sagt: "));
+    return -1;
+  }
+
+  if(TP->QueryQuest(QUESTNAME))
+  {
+    tell_object(TP, BSI(
+      "Ich danke Dir "+TPN+", aber Du warst ja schon einmal so nett und "
+      "hast mir geholfen. Leider hat dieser fiese Mensch jetzt einen "
+      "Schutzzauber ausgesprochen, so dass Du mir nicht wieder helfen "
+      "kannst.", "Die Priesterin sagt: "));
+
+    return -1;
+  }
+
+  tell_object(TP, BSI(
+    "Super, "+TPN+". Dann mach Dich mal so schnell es geht auf den Weg, "
+    "such die Runen und setze sie ein. Wichtig dabei ist, dass die "
+    "Woerter auf den Bloecken richtig sind. Leider aendern sie sich mit "
+    "diesem Dunkelzauber jedesmal, so dass ich Dir bei der Suche nach den "
+    "richtigen Woertern nicht helfen kann. Achja, ich haette fast etwas "
+    "vergessen: Ich kann Dir die Uebersetzung von sechs Runen sagen. "
+    "Gib 'uebersetze <buchstaben>' ein. Das geht allerdings erst, wenn Du "
+    "alle vier Runen gefunden hast. Zusaetzlich kann ich Dir die "
+    "gefundenen Runen uebersetzen. Dazu musst Du sie mir einfach kurz "
+    "zeigen. Solltest Du Dir das alles nicht merken koennen, dann "
+    "erklaere ich es Dir gerne nochmal. Frag mich dazu einfach nach "
+    "'hilfe'.", "Die Priesterin sagt: "));
+
+  RUNENMASTER->DeleteQuest(getuuid(TP));
+  RUNENMASTER->StartQuest(getuuid(TP));
+
+  return 1;
+}
+
+int cmd_uebersetzen(string str)
+{
+  int ret, cq;
+
+  notify_fail("Was soll ich denn uebersetzen?\n");
+  if(!str || str =="") return 0;
+
+  ret = -1;
+
+  switch(cq = RUNENMASTER->CheckQuestion(getuuid(TP), str))
+  {
+    case  1:
+      tell_object(TP, BSI("In dieser Reigenfolge sind das diese Runen: ",
+                          "Die Priesterin sagt: ")+
+                          RUNENMASTER->Translate(getuuid(TP), str) + "\n\n");
+
+      RUNENMASTER->SetQuestion(getuuid(TP), str);
+
+      ret = 1;
+      break;
+
+    case  0:
+      tell_object(TP, BSI("Ich habe jetzt keine Zeit fuer Dich!", "Die "
+                          "Priesterin sagt: "));
+      break;
+
+    case -1:
+      tell_object(TP, BSI("Einige Buchstaben kennst Du doch schon durch "
+                          "die Runen!", "Die Priesterin sagt: "));
+      break;
+
+    case -2:
+      tell_object(TP, BSI("Einige Buchstaben in Deiner Frage sind mehrfach "
+                          "vorhanden.", "Die Priestrin wundert sich:"));
+      break;
+
+    case -3:
+      tell_object(TP, BSI("Es muessen genau sechs Zeichen sein!", "Die "
+                          "Priesterin sagt: "));
+      break;
+
+    case -4:
+      tell_object(TP, BSI("Also alles andere ausser Buchstaben macht "
+                          "einfach keinen Sinn!", "Die Priesterin sagt: "));
+      break;
+
+    case -5:
+      tell_object(TP, BSI("Du hast noch nicht alle vier Runen gefunden. "
+                          "Deshalb kann ich Dir noch keine Uebersetzung "
+                          "anbieten!", "Die Priesterin sagt: "));
+      break;
+
+    case -6:
+      str = RUNENMASTER->QueryQuestion(getuuid(TP));
+
+      tell_object(TP, BSI("Du hast von mir schon eine Uebersetzung "
+                          "bekommen. Die Buchstaben \""+str+"\" waren "
+                          "uebersetzt: ", "Die Priesterin sagt: ")+
+                          RUNENMASTER->Translate(getuuid(TP), str) + "\n\n");
+
+      break;
+
+    default:
+      RUNENMASTER->MSG("BUG! CheckQuestion lieferte "+cq+" zurueck");
+      break;
+  }
+
+  return ret;
+}
+
+int cmd_erklaeren(string str)
+{
+  string s;
+
+  notify_fail("Welchen Buchstaben moechtest Du erklaert haben?\n");
+
+  if(!str || str == "")               return 0;
+  if(strlen(str) != 1)                return 0;
+  if((str[0] < 97) || (str[0] > 122)) return 0;
+
+  if(!RUNENMASTER->IsQuester(getuuid(TP)))
+  {
+    tell_object(TP, BSI("Dafuer habe ich im Moment keine Zeit!", "Die "
+                        "Priesterin raunt Dich an: "));
+    return -1;
+  }
+
+  s = sprintf("Diese Rune heisst %s und ihre Bedeutung ist: \"%s\". "
+              "Man koennte sie folgenden Dingen zuordnen: %s.",
+              RUNENMASTER->GetRuneDescription(getuuid(TP), str, 1),
+              RUNENMASTER->GetRuneDescription(getuuid(TP), str, 2),
+              RUNENMASTER->GetRuneDescription(getuuid(TP), str, 3));
+
+  tell_object(TP, BSI(s, "Die Priesterin sagt: "));
+
+  return 1;
+}
+
+int cmd_zeigen(string str)
+{
+  object ob,*env,rune;
+  int i;
+  string *wort, wem, was, s, c;
+
+  notify_fail("Die Priesterin interessiert sich allenfalls fuer Runen.\n");
+
+  if(!str || str == "") return 0;
+
+  if(!RUNENMASTER->IsQuester(getuuid(TP)))
+  {
+    tell_object(TP, BSI("Dafuer habe ich im Moment keine Zeit!", "Die "
+                        "Priesterin raunt Dich an: "));
+    return -1;
+  }
+
+  wort = explode(str, " ");
+  switch(sizeof(wort))
+  {
+    case 2:
+      wem = wort[0];
+      if(wort[1] == "rune")
+      {
+        was = "\n_quest_rune";
+      }
+      else
+      {
+        was = wort[1];
+      }
+
+      break;
+
+    case 3:
+      wem = wort[0];
+      if(wort[1] == "rune")
+      {
+        was = "\n_quest_rune" + " " + wort[2];
+      }
+      else
+      {
+        was = wort[1] + " " + wort[2];
+      }
+      break;
+
+    default:
+      return 0;
+      break;
+  }
+
+  if(!id(wem)) return 0;
+  if(!(ob = present(was, TP))) return 0;
+  if(!ob->id("\n_quest_rune")) return 0;        // woody, 14.5.2004
+
+//DBR(sprintf("%O %O wem=%s was=%s\n",ob,wort,wem,was));
+
+  c = ob->QueryChar();
+
+  s = sprintf("Diese Rune entspricht dem Buchstaben \"%s\", sie heisst %s "
+              "und ihre Bedeutung ist: \"%s\". "
+              "Man koennte sie folgenden Dingen zuordnen: %s.",
+              c,
+              RUNENMASTER->GetRuneDescription(getuuid(TP), c, 1),
+              RUNENMASTER->GetRuneDescription(getuuid(TP), c, 2),
+              RUNENMASTER->GetRuneDescription(getuuid(TP), c, 3));
+
+  tell_object(TP, BSI(s, "Die Priesterin sagt: "));
+
+  return 1;
+}
+
+int cmd_beenden(string str)
+{
+  object ob;
+
+  notify_fail("Was moechtest Du beenden? Deine Hilfe bei den Runen?\n");
+
+  if(!str || str == "") return 0;
+  if(!(str == "hilfe"       ||
+       str == "quest"       ||
+       str == "runenquest"  ||
+       str == "aufgabe"     ))      return 0;
+
+  if(!RUNENMASTER->IsQuester(getuuid(TP)))
+  {
+    tell_object(TP, BSI("Aber Du hilfst mir doch gar nicht!",
+                        "Die Priesterin schaut erstaunt: "));
+    return -1;
+  }
+
+  tell_object(TP, BSI("Sehr schade, "+CAP_TPN+". Aber ok, Du bist von "
+                      "Deiner Hilfe befreit.", "Die Priesterin seufzt: "));
+
+  RUNENMASTER->DeleteQuester(getuuid(TP));
+
+  while(ob = deep_present("\n_quest_rune",TP))
+  {
+    ob->remove();
+  }
+
+  return 1;
+}
+
+string info_belohnung(string str)
+{
+  object ob;
+  string s;
+
+  if(RUNENMASTER->IsQuester(getuuid(TP)))
+  {
+    tell_object(TP, BSI("Vielleicht habe ich ja fuer Dich eine Belohnung. "
+                        "Allerdings musst Du dafuer Deine Aufgabe erst "
+                        "ganz erledigen und wieder Dunkelheit ueber "
+                        "Dhrkion bringen!", "Die Priesterin sagt: "));
+    return "betet wieder zu lloth." ;
+  }
+
+  if(!TP->QueryQuest(QUESTNAME))
+  {
+    tell_object(TP, BSI("Ich haette da eine Aufgabe fuer Dich. Ich "
+                        "wuerde Dich auch dafuer belohnen. Frag mich "
+                        "doch einfach mal nach Hilfe!",
+                        "Die Priesterin sagt: ")+
+                        "Die Priesterin schaut Dich fragend an.\n");
+    tell_room(ENV(TO), "Die Priesterin schaut "+TPN+" fragend an.\n", ({TP}));
+    return "verfaellt in eine kurze Trance.";
+  }
+
+  if(ob = present("\n_kerbholz",TP))
+  {
+    ob->remove();
+    s = BSI("Du hast die Aufgabe erfuellt und wieder Dunkelheit ueber "
+            "Dhrkion gebracht. Ich ersetze Dir Dein Kerbholz gegen ein "
+            "neues.", "Die Priesterin sagt: ");
+  }
+  else
+  {
+    s = BSI("Du hast die Aufgabe erfuellt und wieder Dunkelheit ueber "
+            "Dhrkion gebracht. Dafuer bekommst Du dieses Stueck Holz. "
+            "Falls Du Deines auf irgendeine Art und Weise einmal "
+            "verlieren solltest, so komm einfach wieder zu mir und ich "
+            "werde Dir wieder eines geben.", "Die Priesterin runzelt "
+            "die Stirn: ");
+  }
+
+  ob = clone_object(OBJ "kerbholz");
+
+  if(ob->move(TP, M_GET) == 1)
+  {
+    s += "Die Priesterin gibt Dir einen Holzstab.\n";
+    tell_room(ENV(TO), "Die Priesterin gibt "+TP->name(WEM)+" einen "
+                       "Holzstab.\n",
+              ({TP}));
+  }
+  else
+  {
+    ob->remove();
+    s = BSI("Du hast Dir eine Belohnung redlich verdient. Allerdings "
+            "kannst Du die Belohnung nicht mehr tragen. Werde erstmal "
+            "staerker, Du Schwaechling!","Die Priesterin runzelt die "
+            "Stirn: ");
+  }
+
+  tell_object(TP, s);
+
+  return "widmet sich wieder ihren Aufgaben.";
+}
+
+int cmd_questinfo(string str)
+{
+  if(!IS_LORD(TP)) return 0;
+
+  if(!str || str == "") str = getuuid(TP);
+
+  RUNENMASTER->QueryQuest(str);
+
+  return 1;
+}
+
+

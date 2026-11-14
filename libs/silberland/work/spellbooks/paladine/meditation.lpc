@@ -1,0 +1,138 @@
+// SilberLand MUDlib
+//
+// spellbooks/paladine/meditation.c
+//
+//
+// $Date: 2003/12/07 18:17:02 $
+/* $Revision: 1.2 $
+ * $Log: meditation.c,v $
+ * Revision 1.2  2003/12/07 18:17:02  Angrox
+ * sinfo[SI_SKILLARG] Abfrage auf ""
+ *
+ * Revision 1.1  2003/07/09 11:39:22  Angrox
+ * Initial revision
+ *
+ */
+// Prototypen
+int prep_meditation(object caster, mapping sinfo);
+int meditation(object caster, mapping sinfo);
+
+int prep_meditation(object caster, mapping sinfo) {
+  object *inv;
+  string * type;
+
+  if(caster->InFight())
+    {
+      Message(caster,0,
+        BS("Du solltest erst Deinen Gegner fuer Dusty besiegen!"),0);
+      return 0;
+    }
+
+  if(ENV(caster)) 
+    {
+      inv=filter_array(all_inventory(ENV(caster)), #'living)-
+          filter_array(users(),"is_wiz_level_ge",ME,LEARNER_LVL);
+      if(sizeof(inv)>1)
+        {
+          Message(caster, 0, BS("Du musst alleine sein, um meditieren "
+              + "zu koennen, Paladin!"), 0);
+          return 0;
+        }
+    }
+
+
+  // Hier wird der testteil getrennt
+  if (!IS_LORD(caster) && !caster->QueryProp(P_TESTPLAYER))
+    {
+      if(sinfo[SI_SKILLARG]!=0 && sinfo[SI_SKILLARG]!="") 
+        {
+          Message(caster,0,
+            BS("Du kannst nur ganz alleine fuer Dich meditieren."),0);
+          return 0;
+        }
+       return 1;
+    }
+
+  switch(sinfo[SI_SKILLARG])
+    {
+      case "koerper":
+        return 1;
+      case "konzentration":
+        return 1;
+      default:
+        Message(caster, 0, BS("Worauf moechtest Du Dich bei Deiner "
+          "Meditation konzentrieren?"), 0);
+        return 0;
+    }
+
+}
+
+int meditation(object caster, mapping sinfo) {
+  object ob, *inv;
+  int suc,dauer,step, i;
+
+  if( !prep_meditation( caster, sinfo) ) return 0;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    Message(caster,0,sinfo[SI_SP_LOW_MSG],0);
+    return 0;
+  }
+
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  Message(caster, 0, BS(
+    "Du kniest nieder und legst einen Unterschenkel auf den Boden. Du "
+    "schliesst Deine Augen, verschraenkst Deine Arme und versuchst jetzt fuer "
+    "Dusty in eine sehr tiefe Meditation zu versinken."), 0);
+  Message(caster, 0, BS(sprintf(
+    "%s kniet nieder und legt einen Unterschenkel auf den Boden. %s Augen "
+    "schliessen sich.\n",
+    caster->Name(WER), CAP(caster->QueryPossPronoun(2)))), 3);
+  if((suc=SpellSuccess(caster, sinfo))<=0) {
+    Message(caster, 0, BS(
+      "Du spuerst einen stechenden Schmerz in Deinem Herzen und reisst Deine "
+      "Augen wieder auf. Im Moment gelingt es Dir einfach nicht, in eine "
+      "tiefe Meditation zu versinken."), 0);
+    Message(caster, 0, BS(sprintf(
+      "%s verzieht das Gesicht und %s reisst %s Augen wieder auf.",
+      caster->Name(WER), caster->QueryPronoun(WER),
+      caster->QueryPossPronoun(2))), 3);
+    return MISSERFOLG;
+  }
+  dauer=15+2*caster->QueryProp(P_GUILD_LEVEL)+(caster->QueryAttribute(A_INT)
+        *suc/MAX_ABILITY);
+    // min=15+2*6=27 Sekunden , max=15+30+30=75 sekunden
+  dauer=DoModificationByAlign(dauer, caster);
+  if (dauer>80) dauer=80;
+  step=7-(caster->QueryProp(P_GUILD_LEVEL)/4+suc/4500);
+    // min=7-3-2=2 , max=7-1-0=6
+  if (step<2) step=2;
+  //tell_zordan("Dauer: "+dauer+", Step:"+step+"\n");
+  ob=clone_object(OBJ("meditation"));
+  ob->move(caster, M_NOCHECK|M_SILENT);
+
+  // Hier wieder die Spaltung fuer testies und LORDS
+  if (IS_LORD(caster) || caster->QueryProp(P_TESTPLAYER))
+    ob->settype(sinfo[SI_SKILLARG]);
+  else
+    ob->settype("default");
+
+
+  ob->start_remove(dauer,step,suc);
+
+  caster->SetProp(P_PARALYZED, ([
+            PARALYZE_TIME:100000,
+            PARALYZE_MSG:
+              "Bei Dusty, Du bist in eine tiefe Meditation versunken.\n",
+            PARALYZE_MSG_OTHER:
+              "%s ist in eine tiefe Meditation versunken.\n",
+            PARALYZE_END:"",
+            PARALYZE_END_OTHER:"" ]));
+  Message(caster, 0, BS(
+    "Du wirst total ruhig und versinkst in eine tiefe Meditation."), 0);
+  Message(caster, 0, BS(sprintf(
+    "%s wird total ruhig und versinkt in eine tiefe Meditation.",
+    caster->Name(WER))), 3);
+  return ERFOLG;
+}
+
+

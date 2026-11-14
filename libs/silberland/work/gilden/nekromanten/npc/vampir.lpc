@@ -1,0 +1,179 @@
+// 12.10.1999 Angrox
+//            SetAggressive hinzugefuegt
+// 06.11.2000 angrox
+//            SetSkeleton geaendert (corpse nun mixed)
+// 30.05.2003 Archon
+//            anpassung auf /p/std/npc/nekro_npc, 
+//            alles rausgeworfen, was nicht genutzt wurde (copy/paste)
+
+inherit "/p/std/npc/nekro_npc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <new_skills.h>
+#include <class.h>
+#include "../def.h"
+
+int creation_time;
+int dur=-1;
+
+void create()
+{
+ 
+  if (!is_clone(TO)) return;
+  ::create();
+
+  creation_time=time();
+
+  SetProp(P_SHORT, "Ein Vampir");
+  SetProp(P_LONG,
+    "Ein schattenhaftes Wesen mit langen, spitzen Zaehnen. " );
+  SetProp(P_NAME, ({ "Vampir", "Vampirs", "Vampir", "Vampir"}) );
+  SetProp(P_GENDER, MALE);
+  AddId( ({ "vampir", "Nekromantenvampir" }));
+
+  SetProp(P_RACE, "Untoter");
+  SetProp(P_ALIGN, -900);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_NOCORPSE, 1);
+  SetProp(P_NO_GLOBAL_ATTACK, 1);
+  SetProp(P_FRIEND, 1);
+  SetProp(P_MAX_POISON, 0);
+  SetProp(P_HP_DELAY, 0);
+  SetProp(P_TEMPERATURE_RANGE, ([0:-276, 1:500]));
+  SetProp(P_DIE_MSG, " loest sich in seine stinkenden Einzelteile auf.\n");
+
+  SetProp(P_MSGIN, "schleicht herein");
+  SetProp(P_MSGOUT, "schleicht");
+  SetProp(P_MMSGIN, "kommt in Fledermausgestalt hereingeflogen");
+  SetProp(P_MMSGOUT, "verwandelt sich in eine Fledermaus und fliegt weg");
+
+  AddDetail( ({ "zaehne" }), 
+    "Die Zaehne des Vampirs sind lang und spitz und schauen gefaehrlich aus." );
+
+  SetChats( 1,({
+        "Der Vampir zeigt seine spitzen Fangzaehne.\n",
+        "Der Vampir fletscht die Zaehne.\n",
+        "Der Vampir durstet nach Blut.\n",
+        "Der Vampir schaut Dich mit tiefroten Augen an.\n",
+        BS("Der Vampir verwandelt sich kurz in eine Fledermaus, fliegt eine "
+          "Runde, landet dann wieder und verwandelt sich wieder zurueck."),
+        "Der Vampir leckt seine Fangzaehne.\n",
+        "Der Vampir hat Dein Blut gerochen!\n",
+        "Der Vampir sucht nach einem Opfer, das er beissen kann.\n",
+        }) );
+
+  SetResetRemove();
+}
+
+void SetVampir(mixed corpse, mixed caster, int succ)
+{
+  int level, maxlevel;
+  string short_str;
+ 
+  if(intp(corpse)) 
+  {
+    level=corpse;  
+    SetProp(P_SIZE, 150+random(80));
+  }
+  else {
+    SetProp(P_LONG, QueryProp(P_LONG) + 
+        "Er gehoerte frueher der Rasse " + corpse->QueryProp(P_RACE) + 
+        " an, aber jetzt ist er ein untotes Wesen, dass allen Lebenden "
+        "nur das Blut aussaugen will. ");
+    SetProp(P_SIZE, corpse->QueryProp(P_SIZE));
+    if(!objectp(caster)) 
+      maxlevel=23+random(25);
+    else 
+      maxlevel=23+caster->QueryProp(P_GUILD_LEVEL);
+    if( (level=corpse->QueryProp(P_LEVEL)*2/3) > maxlevel )  
+      level=maxlevel;
+  }
+  if(objectp(caster)) 
+  {
+    SetProp(P_NEKRO_CASTED_BY, caster);
+    SetProp(P_LONG, QueryProp(P_LONG)[0..<2] + 
+      caster->Name()+" hat diesen Untoten beschworen.");
+  }
+
+  create_default_npc(level);
+  SetProp(P_HANDS, ({" mit spitzen Vampirzaehnen", 50+level*8+succ/50,  
+                     DT_PIERCE }));
+  SetProp(P_XP, 0);
+  SetProp(P_MAX_HP, level*20 + succ/50); // maximal 600+200
+  SetProp(P_MAX_SP, QueryProp(P_MAX_HP));
+  SetProp(P_BODY, level*6);
+  SetProp(P_RESISTANCE_STRENGTHS, ([ 
+        DT_UNHOLY: -0.5, DT_HOLY:0.5, DT_LIGHT:2 ]));
+  if(!objectp(caster)) 
+    dur=(random(20)+10)*50 + succ/10 + random(300);
+  else 
+    dur=caster->QueryProp(P_GUILD_LEVEL)*50 + caster->QueryProp(P_GUILD_CIRCLE)*50 + 
+      succ/10 + random(500);//350+350+1000+500
+
+  SetProp(P_SPELLRATE, 35+2*level);
+
+  AddSpell(2,level*9+succ/40,   // Lv.30 & max.success: 270+250
+    "Der Vampir zerreisst Deine Kehle.\n",
+    "Der Vampir zerreisst @WESSEN Kehle.\n",
+    DT_RIP,([SP_SHOW_DAMAGE:1]));
+  AddSpell(2,level*7+succ/50,   // Lv.30 & max.success: 210+200
+    "Der Vampir wirft einen unheiligen Zauber nach Dir.\n",
+    "Der Vampir wirft einen unheiligen Zauber nach @WEM.\n",
+    DT_UNHOLY,([SP_SHOW_DAMAGE:1]));
+  AddSpell(1, level*6+succ/66,   // Lv.30 & max.success: 180+150
+    "Der Vampir saugt Dir Blut ab.\n",
+    "Der Vampir saugt @WEM Blut ab.\n",
+    DT_UNHOLY, "life_drain", ([SP_SHOW_DAMAGE:1]));
+
+  SetProp("life_drain_divisor", 20);
+
+  return;
+}
+
+void life_drain(object enemy, int damage, mixed dam_type)
+{
+  object master;
+  if( enemy->is_class_member(CL_DEMON) || 
+      enemy->is_class_member(CL_UNDEAD) ||
+      member( ({"geist", "elementar", "golem"}), 
+        lower_case(enemy->QueryProp(P_RACE)) ) != -1)
+    return;
+  AddHp(damage/10);
+  if(objectp(master = QueryProp(P_NEKRO_MASTERED_BY)) && 
+      present(master, ENV(TO)) && master != enemy)
+  {
+    tell_object(master, "Dein Vampir teilt das abgesaugte Blut mit Dir.\n");
+    master->AddHp(damage/QueryProp("life_drain_divisor"));
+  }
+}
+
+void heart_beat()
+{
+  object master;
+
+  //nimmt in licht schaden
+  ::heart_beat();
+  if (environment())
+    do_damage(set_light(0));
+
+  if(objectp(master=QueryProp(P_NEKRO_MASTERED_BY)) && present(master, ENV(TO)) && QueryProp("life_link") && !random(10-QueryProp("life_link"))) {
+    if(master->QueryProp(P_HP) < master->QueryProp(P_MAX_HP)) {
+      master->AddHp(random(QueryProp("life_link")));
+      tell_object(master, BS("Die unheilige Aura des Vampirs regeneriert dich."));
+    }
+  }
+}
+
+void init()
+{
+  ::init();
+  if(dur>0 && creation_time+dur<time())
+    call_out("die",0);
+}
+
+int QueryDuration()
+{
+  return creation_time+dur-time();
+}

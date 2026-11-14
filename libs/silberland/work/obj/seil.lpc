@@ -1,0 +1,157 @@
+// /obj/seil.c   Ein Seil
+// Das Seil kann an Gegenstaende gebunden werden.
+// Dafuer ruft es in dem Gegenstand die Funktion 'tie' mit der ID des
+// Gegenstandes als Parameter auf. Wenn diese '1' oder den Namen des
+// Gegenstandes zurueckgibt, ist das Seil dort festgebunden. Analog
+// dazu ruft 'binde seil los' im Zielgegenstand 'untie' (ohne Parameter)
+// auf, ein Rueckgabewert von '1' signalisiert das erfolgreiche Losbinden.
+// Die Funktion 'query_tied_to_ob()' gibt das Objekt zurueck, an das das
+// Seil gebunden ist, oder 0, wenn das Seil nicht angebunden ist.
+// Ein Seil kann nur an einer Seite festgebunden werden.
+// Kommentare und kleinere Aenderungen von Mupfel@AnderLand
+
+// IDEE: Seil verlaengern: 'verlaengere seil1 mit seil2' (Laenge * 2)
+//       Seil verstaerken: 'verstaerke seil1 mit seil2' (Staerke * 2)
+
+#pragma strict_types
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include <defines.h>
+
+private nosave object tied_to_ob;
+private nosave string tied_name;
+
+void create()
+{
+  if (IS_BLUE(ME)) return;
+  ::create();
+  AddId(({"Seil", "seil"}));
+  SetProp(P_SHORT, "Ein Seil@@tied@@");
+  SetProp(P_LONG,
+      "Du siehst ein ganz normales Seil. Du kannst es an Gegenstaenden festbinden.\n");
+  SetProp(P_NAME, "Seil");
+  SetProp(P_GENDER, NEUTER);
+  SetProp(P_VALUE, 15);
+  SetProp(P_WEIGHT, 300);
+  AddCmd(({"binde", "bind", "knote", "befestige"}), "tie");
+}
+
+nosave string tied()
+{
+  if (tied_to_ob)
+    return ", das an "+
+      (tied_name?tied_name:(string)(tied_to_ob->name(WEM)))+
+      " festgebunden ist";
+  else
+    return "";
+}
+
+mixed _query_noget()
+{
+  if (tied_to_ob)
+    return "Das geht nicht, solange das Seil festgebunden ist.\n";
+  return 0;
+}
+
+int tie(string str)
+{
+  string seil, was;
+  object ob;
+  string verb;
+
+  notify_fail("Binde was?\n");
+  if (!stringp(str)) return 0;
+
+  verb = query_verb();
+
+  if (sscanf(str, "%s an %s", seil, was) != 2 &&
+      sscanf(str, "%s los", seil) != 1)
+    return 0;
+
+  // Seil anbinden
+
+  if (sscanf(str, "%s an %s", seil, was)==2)
+  {
+    if (tied_to_ob)
+    {
+      write("Es ist bereits irgendwo festgebunden.\n");
+      return 1;
+    }
+
+    if (!id(seil)) return 0;
+
+    if (was == "mich")
+    {
+      notify_fail("Warum willst Du das denn machen?\n");
+      return 0;
+    }
+
+    if (!ob = present(was, PL))           // Im Inventory?
+      ob = present(was, environment(PL)); // Im Environment?
+    if (!ob)                              // Vielleicht das Env selber?
+      if (call_other(environment(PL), "id", was))
+        ob = environment(PL);
+
+    notify_fail( "So etwas findest Du hier nicht.\n" );
+    if (!ob) return 0;
+
+    if (!(tied_name=(string)call_other(ob, "tie", was)))
+    {
+      if (ob != environment(PL))
+      {
+        write("Du kannst das Seil nicht an "+ob->name(WEM)+" festbinden.\n");
+        return 1;
+      }
+      else
+      {
+        write("Du kannst das Seil nicht daran festbinden.\n");
+        return 1;
+      }
+
+    }
+    // Seil aus Inventory in Environment verschieben
+    if (environment() == PL)
+      move(environment(PL), M_PUT);
+
+    tied_to_ob = ob;
+
+    if (tied_to_ob != environment(PL))
+      tied_name = (string)(tied_to_ob->name(WEM));
+    else
+      if(!stringp(tied_name)) tied_name = "etwas";
+
+    write("Du bindest das Seil an "+tied_name+" fest.\n");
+    say(PL->name()+" bindet das Seil an "+tied_name+" fest.\n");
+    return 1;
+  }
+
+  // Seil losbinden
+
+  if ((verb == "binde" || verb == "bind" || verb == "knote" ) && 
+      sscanf(str, "%s los", seil)==1)
+  {
+    if (!tied_to_ob)
+    {
+      write("Das Seil ist nirgendwo festgebunden.\n");
+      return 1;
+    }
+    if (!call_other(tied_to_ob, "untie"))
+    {
+      write("Das klappt leider nicht.\n");
+      return 1;
+    }
+    write("Du bindest das Seil los.\n");
+    say(PL->name()+" bindet das Seil los.\n");
+    tied_to_ob = (object) 0;
+    return 1;
+  }
+}
+
+object query_tied_to_ob()
+{
+  return tied_to_ob;
+}

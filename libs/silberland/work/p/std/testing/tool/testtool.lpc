@@ -1,0 +1,194 @@
+inherit "/std/tool";
+
+#include <properties.h>
+#include <ansi.h>
+#include <moredef.h>
+
+#include "../testing.h"
+
+mapping statusToText;
+int failed, successful, executed;
+
+public void create() {
+    ::create();
+
+    statusToText = ([
+        1: ANSI_GREEN + "OK" + ANSI_NORMAL,
+        0: ANSI_RED + "FAILED" + ANSI_NORMAL,
+        -1: ANSI_YELLOW + "???" + ANSI_NORMAL
+    ]);
+
+    SetProp(P_NAME, "Testing Tool");
+    SetProp(P_SHORT, "Testing Tool");
+    SetProp(P_LONG, 
+    "Dieses Tool unterstuetzt im automatisierten (Unit)Testen und der "
+    "Testausfuehrung. Go Code Quality!\n"
+    "Mit 'test [pfad]' oder 'tt [pfad]' kannst du alle Tests ausfuehren, die  "
+    "sich im aktuellen Ordner oder einem der Unterordner befinden.");
+
+    AddId(({"testtool", "testing-tool", "test-tool", "tt", "\ntestingtool"}));
+
+    AddCmd( "test|tt|testtool", "cmd_runtest");
+    AddCmd( "testlist|tl|test-list", "cmd_list_tests");
+
+    seteuid(getuid());
+}
+
+private int endsWith(string str, string suffix) {
+    int strLen, suffixLen;
+    strLen = strlen(str);
+    suffixLen = strlen(suffix);
+    return str[strLen-suffixLen..] == suffix;
+}
+
+private string *recursivelyGetAllTests(string dir) {
+    string *tests, *files, fname;
+    int i, fsize;
+
+    files = get_dir(dir);
+
+    if(sizeof(files) < 1) {
+        write("file not found\n");
+        return tests;
+    }
+
+    tests = ({});
+    for(i=0; i<sizeof(files); i++) {
+        if(files[i] == "." || files[i] == "..") {
+            continue;
+        }
+
+        fname = sprintf("%s%s", dir[0..strlen(dir)-2], files[i]);
+        fsize = file_size(fname);
+
+        if(fsize == -2) {
+            tests += recursivelyGetAllTests(fname+"/*");
+        } else if(endsWith(fname, "_test.lpc")) {
+            tests += ({ fname });
+        }
+    }
+
+    return tests;
+}
+
+private void printTestList(string *list) {
+    int i;
+
+    for(i=0; i<sizeof(list); i++) {
+        tell_object(this_player(), sprintf("%d. %s\n", i+1, list[i]));
+    }
+}
+
+private string argumentToPath(string args) {
+    string dir;
+
+    if(!args || args == "") {
+        dir = this_player()->QueryProp(P_CURRENTDIR);
+    } else {
+        dir = args;
+    }
+
+     if(!endsWith(dir, "/*")) {
+        dir += "/*";
+    }
+    
+    return dir;
+}
+
+public int cmd_list_tests(string args) {
+    string *tests;
+
+    tests = recursivelyGetAllTests(argumentToPath(args));
+    printTestList(tests);
+
+    return 1;
+}
+
+private void writeColored(string message, string lineColor) {
+    string msg;
+
+    msg = sprintf("%s%s%s", lineColor, message, ANSI_NORMAL);
+    tell_object(this_player(), msg);
+}
+
+private writeColoredAndCentered(string message, string lineColor) {
+    string msg;
+    msg = sprintf("%|78s\n", message);
+    writeColored(msg, lineColor);
+}
+
+private void printSingleTestResult(mapping results) {
+    int i;
+    string *keys;
+    mapping result;
+
+    keys = m_indices(results);
+    for(i=0; i<sizeof(keys); i++) {
+        result = results[keys[i]];
+        executed++;
+
+        write(sprintf("  %50s: %s\n", keys[i], statusToText[result[T_STATUS]]));
+        if(result[T_STATUS] == T_FAILED) {
+            failed++;
+            writeColored(sprintf("  %25s: %s\n", "reason", result[T_REASON]), ANSI_BG_RED+ANSI_WHITE);
+        } else if(result[T_STATUS] == T_SUCCESS) {
+            successful++;
+        }
+    }
+}
+
+private void printSummary() {
+    write("\n\nSummary: ");
+    writeColored(sprintf("%d", successful), ANSI_GREEN);
+    write(" Successful. ");
+    writeColored(sprintf("%d", failed), ANSI_RED);
+    write(" Failed.");
+    if( (failed+successful) != executed) {
+        writeColored(sprintf(" %d UNKNOWN", executed-(failed+successful)), ANSI_YELLOW);
+    }
+    write(sprintf(" %d Total.\n", executed));
+}
+
+private void printTestResults(mapping results) {
+    int i;
+    string *keys;
+    mapping result;
+
+    keys = m_indices(results);
+    for(i=0; i<sizeof(keys); i++) {
+        result = results[keys[i]];
+        printSingleTestResult(result);
+    }
+
+   printSummary();
+}
+
+private void executeTestsFromFiles(string *testFiles) {
+    mapping results;
+    int i;
+
+   writeColoredAndCentered("EXECUTION", ANSI_BG_BLUE+ANSI_WHITE);
+
+    results =  ([ ]);
+    for(i=0; i<sizeof(testFiles); i++) {
+        writeColored(sprintf("%s\n", testFiles[i]), ANSI_BG_WHITE+ANSI_BLACK);
+        call_other(testFiles[i], "destruct");
+        results = ([testFiles[i]: call_other(testFiles[i], "runTests")]);
+        printTestResults(results);
+    }
+}
+
+public int cmd_runtest(string args) {
+    string *tests;
+
+    successful = failed = executed = 0;
+
+    writeColoredAndCentered("SCANNING", ANSI_BG_GREEN+ANSI_BLACK);
+    tests = recursivelyGetAllTests(argumentToPath(args));
+    writeColoredAndCentered(sprintf("FOUND: %d", sizeof(tests)), ANSI_BG_YELLOW+ANSI_BLACK);
+
+    executeTestsFromFiles(tests);
+
+    return 1;
+}
+

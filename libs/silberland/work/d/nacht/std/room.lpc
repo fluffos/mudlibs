@@ -1,0 +1,84 @@
+
+#pragma strong_types
+#include "../defines.h"
+#include <wizlevels.h>
+
+inherit STD "thing/log_deaths";
+inherit STD "thing/fail";
+inherit "/std/room";
+
+private nosave string * stupids;
+private nosave string * fail_messages;
+private nosave string * skydetails;
+
+nosave void SetStupids(string * targets) {
+  if ((targets) && (pointerp(targets))) stupids=targets; 
+  return;
+}
+
+nosave void SetFailMessages(string * messages) {
+  if ((messages) && (pointerp(messages)) && (sizeof(messages)))
+    fail_messages=messages;
+  return;
+}
+
+   /* loggt mit, wenn jemand bestimmte Details untersucht 
+    * ("fangschaltungen"). werden solche nicht gesetzt, 
+    * passiert nix. */
+
+varargs public string GetDetail(mixed key, mixed race) {
+  string ret;
+  string *path;
+
+  if (Query(P_DETAILS)[key])
+    return ::GetDetail(key,race);
+  if ((sizeof(stupids)) && ((this_player()) && (member(stupids, key)!=-1)) 
+      && (!IS_LEARNER(this_player()))
+      && (query_once_interactive(this_player()))) {
+
+    path = explode(file_name(this_object()),"/");
+    if ((sizeof(path)>3) && (path[0]=="d") &&
+      (sizeof(get_dir(path[0]=("/d/" +path[1]+"/"+path[2]+"/log")))))
+      write_file(path[0] + "/stupids.log", /* Format fuer ext. Shellscript */
+      sprintf("%s | %s | %s | %s\n",dtime(time())[5..], file_name(this_object()),
+        file_name(this_player()),key));
+  }
+
+  // Funktionalitaet ausgesetzt - steht dem Untersuche-Fokus entgegen.
+  // Der Fokus faellt von einem Objekt immer (leise) auf den Raum zurueck,
+  // wenn hier ein Pseudodetail zurueckgegeben wird.
+  // 18.06.2013 09:22:20 
+  /*
+  if (sizeof(fail_messages)) 
+    return process_string(fail_messages[random(sizeof(fail_messages))]);
+  */
+  return 0;
+}
+
+/* Sternenhimmel-Implementation... in create() muss einmal Sky() aufgerufen
+ * werden, damit im Raum der Sternenhimmel sichtbar ist. Im reset() nimmt
+ * der Raum selbststaendig ein Update vor, in remove() meldet er sich ab. */
+
+nomask nosave void QuerySkyDetail(string det) {
+  return ZODIAC->QuerySkyDetail(det);
+}
+
+nomask nosave void Sky() {
+  if (sizeof(skydetails)) 
+    RemoveDetail(skydetails);
+  AddSpecialDetail(skydetails=ZODIAC->QuerySkyDetails(),
+      "QuerySkyDetail");
+}
+
+public void reset() {
+  if (sizeof(skydetails))
+    Sky();
+  ::reset();
+}
+
+public int remove() {
+  if (sizeof(skydetails))
+    ZODIAC->CancelSky();
+  ::remove();
+}
+

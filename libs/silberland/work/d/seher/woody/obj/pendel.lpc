@@ -1,0 +1,275 @@
+/*
+** Ein Pendel
+** zur Reset-Vorhersage
+** ---
+** (c) 2000,2001 by Woody@SL
+**
+** 2001-01-22   arbeitet jetzt sekundengenau (ohne dies natuerlich dem
+**              Spieler zu verraten) dank "Eichung" im Reset
+**
+*/
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <defines.h>
+#include <moredef.h>
+#include <wizlevels.h>
+#include <objectinfo.h>
+#include <new_skills.h>
+#include <combat.h>
+
+#define KOSTEN          50      // MP fuers schwingen
+#define WARTEZEIT      180      // geht nur alle mind. 3 Minuten
+#define RGRAN          300      // Reset Granularity (dzt. 300 Sekunden)
+#define MAX_PERIOD    3600      // max. 3600 Sekunden vorausschauen
+#define MAX_USES        50      // die ersten 50 Versuche sind gefahrlos...
+#define EXPLODE_CHANCE 111      // ...danach Explosion mit Chance 1:111 :)
+#define EXPLODE_DAMAGE 999      // Schaden durch die Explosion
+
+#define CLONES_ALLOWED
+
+nosave int next=0;
+nosave int geeicht=0;
+nosave int uses=0;
+
+
+void create()
+{
+#ifdef CLONES_ALLOWED
+  if (!is_clone(ME)) return;
+#else
+  if (is_clone(ME)) return (void) destruct(this_object());
+#endif
+  ::create();
+  SetProp(P_SHORT, "Ein silbernes Pendel");
+  SetProp(P_LONG,
+      "Das Pendel besteht aus einer silbern glaenzenden Schnur, "
+      "an deren Ende eine einer sicherlich sehr wertvollen Silberkugel "
+      "haengt. Allerdings meinst Du, eine gewisse magische Aura zu "
+      "spueren, die um die Kugel zu pulsieren scheint.");
+  SetProp(P_NAME, "Pendel");
+  SetProp(P_NAME_ADJ, "silbern");
+  SetProp(P_GENDER, NEUTER);
+  AddId( ({"pendel"}) );
+  AddAdjective( ({ "silbern", "silbernes" }) );
+  SetProp(P_VALUE, 25000);
+  SetProp(P_WEIGHT, 750);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_MATERIAL, ([ MAT_SILVER:95,MAT_CLOTH:5,MAT_MAGIC:100 ]) );
+  SetProp(P_KILL_MSG, "Hab' ich etwas zu heftig ausgeschlagen?");
+
+  AddDetail( ({"schnur"}),
+          "Die Schnur glaenzt irgendwie silbrig, sogar sie duerfte "
+          "sehr kostbar sein." );
+  AddDetail( ({"ende"}),
+          "Die Schnur hat deren zwei, und an einem von ihnen ist eine "
+          "Kugel aus reinstem Silber befestigt." );
+  AddDetail( ({"kugel","silberkugel"}),
+          "Die Kugel besteht aus reinstem Silber und macht das Pendel "
+          "wohl zu einem materiell gesehen aeusserst wertvollen "
+          "Gegenstand. Doch nur die duemmsten Zwerge wuerden in dem "
+          "Pendel ein rein materialistisches Gut sehen." );
+  AddDetail( ({"zwerge"}),
+          "Naja, sie haben dafuer andere Tugenden." );
+  AddDetail( ({"tugend","tugenden"}),
+          "Ausdauer, Kampfkraft, Mut, und vor allem Trinkfestigkeit. ;)" );
+  AddDetail( ({"ausdauer","kampfkraft","mut"}),
+          "Das malst Du Dir am besten selber aus. ;)" );
+  AddDetail( ({"trinkfestigkeit"}),
+          "Das malscht Du Dir, *Hicks!*, am beschten schelber ausch. ;)" );
+  AddDetail( ({"gut"}),
+          "Nicht Du auch noch! Das Pendel ist mehr als nur das!" );
+  AddDetail( ({"aura"}),
+          "Du kannst die magische Aura nicht sehen, aber eindeutig "
+          "spueren. Ein wenig verwundert Dich das schon, aber aendern "
+          "kannst Du das nunmal nicht, also akzeptierst Du es und "
+          "haeltst das Pendel ehrfurchtsvoll in Haenden." );
+  AddDetail( ({"haende"}),
+          "In Deinen Haenden, hoffentlich." );
+  AddDetail( ({"silber","metall"}),
+          ([ 0       : "Silber ist ein sehr wertvolles Metall.",
+             "zwerg" : "Silber ist ja schoen und gut, "
+                       "aber Gold ist Dir doch lieber. ;)" ]) );
+
+  SetProp( P_INFO, break_string(
+        "Mit dem Pendel kannst Du den Zeitpunkt der naechsten Verschiebungen "
+        "im Raum-Zeit-Gefuege des Raums, in dem Du Dich gerade befindest, "
+        "vorhersagen. Allerdings wirst Du eine Menge Konzentration und "
+        "magische Kraft benoetigen, um das Pendel zu beherrschen.\n"
+        "Das Pendel benoetigt am Anfang eine gewisse Zeit, um sich mit "
+        "der Magie in Einklang zu bringen. Wenn Du es bei Dir traegst "
+        "und nicht irgendwo achtlos in einen Beutel steckst, wirst Du "
+        "schon merken, wenn das geschehen ist.\n"
+        "Bestimmt ist dieses Pendel einzigartig im gesamten Silberland.",
+        78, 0, 1) );
+
+  AddCmd( ({"schwing","schwinge"}), "schwing");
+
+  set_next_reset(0);    // moeglichst bald kalibrieren!
+}
+
+
+void reset()
+{
+  if (!geeicht)
+  {
+    if (environment() && interactive(environment()))
+      tell_object(environment(),
+          "Das Pendel vibriert ploetzlich leicht.\n");
+    SetProp( P_INFO, break_string(
+        "Mit dem Pendel kannst Du den Zeitpunkt der naechsten Verschiebungen "
+        "im Raum-Zeit-Gefuege des Raums, in dem Du Dich gerade befindest, "
+        "vorhersagen. Allerdings wirst Du eine Menge Konzentration und "
+        "magische Kraft benoetigen, um das Pendel zu beherrschen.\n"
+        "Das Pendel ist mit der Magie in Einklang.\n"
+        "Bestimmt ist dieses Pendel einzigartig im gesamten Silberland.",
+        78, 0, 1) );
+  }
+  // in jedem Reset neu eichen - federt Zeitschwankungen ab
+  geeicht = time();
+}
+
+
+int nextreset(object ob)
+{
+  mixed arr;
+  int n,t;
+
+  if (!geeicht ||
+      !pointerp(arr = object_info(environment(TP))) ||
+      (sizeof(arr) < OIB_NEXT_RESET) ||
+      !intp(n=arr[OIB_NEXT_RESET]))
+    return -1;
+
+  t = geeicht;
+  if ((t > n) || ((n-time()) > MAX_PERIOD))
+    return n+RGRAN/2;
+
+  while (n > t) t+=RGRAN;
+  return t;
+}
+
+
+int schwing(string was)
+{
+  string msg;
+  mixed arr;
+  int dam;
+  int n;
+
+  notify_fail("Was willst Du schwingen?\n");
+  if (!id(was) || !TP) return 0;
+
+  if (environment() != TP)
+    return notify_fail("Dazu solltest Du das Pendel erstmal nehmen!\n"), 0;
+
+  if ((time() < next) && !IS_LEARNING(TP)) {
+    write("Das Pendel muss sich vor seinem naechsten Einsatz "
+        "erst wieder beruhigen!\n");
+    return 1;
+  }
+  next = time() + WARTEZEIT;
+
+  // Meldung...
+  environment(TP)->Message(
+      TP->Name()+" schwingt bedaechtig ein Pendel hin und her.\n",
+      MSGFLAG_VISUAL | MSGFLAG_NO_TP);
+  write(break_string(
+        "Du schwingst das Pendel bedaechtig hin und her und laesst "
+        "einen Teil Deiner magischen Kraefte ueber Deine Finger "
+        "in das Pendel fliessen.", 78));
+
+  // Naechster Reset?
+  if ((n = nextreset(environment(TP))) < 0)
+  {
+    write(
+        "Es schwingt langsam hin und her, bis es schliesslich wieder ruht.\n"
+        "Irgendwas stimmt da wohl nicht so ganz...\n");
+    return 1;
+  }
+
+  uses++;
+  n -= time();          // n := Anzahl Sekunden bis zum Reset
+
+  if ( (uses > MAX_USES) && (random(EXPLODE_CHANCE) == (EXPLODE_CHANCE / 2)) )
+  {
+      TP->AddSp(-KOSTEN);
+      SetProp(P_KILL_NAME, "Hunderte kleine Spitzen einer Explosion");
+      SetProp(P_KILL_MSG, ({ 0,0,PLURAL }) );
+      write(
+            "\nDas Pendel vibriert ploetzlich immer staerker, bis es "
+            "schliesslich zu\ngluehen beginnt. Du siehst es richtig "
+            "pulsieren, bekommst Angst, ANGST,\nUNBESCHREIBLICHE ANGST.\n\n"
+            "Schliesslich passiert es.\n\n"
+            "Das Pendel explodiert in hunderte kleine spitze Teile.\n"
+            "Die Spitzen treffen Dich extrem hart.\n");
+      environment(TP)->Message(
+            "Das Pendel vibriert ploetzlich immer staerker und faengt an, "
+            "zu gluehen.\n"
+            "Es pulsiert, wird groesser und groesser, und...\n\n"
+            "...explodiert in hundert kleine spitze Teile!!!\n\n"
+            "Die Spitzen treffen "+TP->name(WEN,1)+" extrem hart.\n\n",
+          MSGFLAG_VISUAL | MSGFLAG_NO_TP);
+      TP->Defend(EXPLODE_DAMAGE, DT_PIERCE, ([ SP_SHOW_DAMAGE:0 ]), ME );
+      remove(1);
+      return 1;
+  }
+
+  // Nun zu den Kosten.
+  if (!IS_LEARNING(TP))
+  {
+    // Nicht genug MP ?  Bedienen wir uns halt an den LP *harrharr*
+    if ((dam=TP->QueryProp(P_SP)-KOSTEN) < 0)
+    {
+      write(break_string("Ohweh, Dir fehlt wohl einfach die noetige "
+           "Konzentration und magische Kraft, um das Pendel zu beherrschen! "
+           "Es macht sich ploetzlich selbstaendig und trifft Dich hart am "
+           "Kopf!!!\n", 78));
+      environment(TP)->Message(
+          break_string("Ploetzlich macht sich das Pendel selbstaendig und "
+            "trifft "+TP->name(WEN)+
+            " hart am Kopf! Das muss weh getan haben...",78),
+          MSGFLAG_VISUAL | MSGFLAG_NO_TP);
+      TP->do_damage(-3*dam,this_object());
+      TP->AddSp(-KOSTEN);
+      return 1;
+    }
+    TP->AddSp(-KOSTEN);
+  }
+
+  // Textausgabe...
+  //
+  msg = "Das Pendel schlaegt ";
+  switch(n)
+  {
+    case     0..119: msg += "ploetzlich unglaublich stark aus!";
+                     break;
+    case   120..299: msg += "ploetzlich extrem stark aus!";
+                     break;
+    case   300..449: msg += "ploetzlich sehr stark aus!";
+                     break;
+    case   450..599: msg += "ploetzlich stark aus!";
+                     break;
+    case   600..899: msg += "ploetzlich aus!";
+                     break;
+    case  900..1199: msg += "ein wenig aus.";
+                     break;
+    case 1200..1799: msg += "ein klein wenig aus.";
+                     break;
+    default: msg += "kaum merkbar aus.";
+  }
+  environment(TP)->Message(msg + "\n", MSGFLAG_VISUAL);
+
+  if (n < 1800)
+    next += (1800 - dam) / 6;   // max. +300 nochmal
+
+  return 1;
+}
+
+
+string QueryData()
+{
+  return sprintf("[RESET-PENDEL] next use: %s, geeicht: %d\n",
+      dtime(next), geeicht);
+}

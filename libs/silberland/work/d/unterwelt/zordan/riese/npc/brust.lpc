@@ -1,0 +1,138 @@
+
+inherit "std/npc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include "../def.h"
+
+void create() {
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Eine ueberdimensionale Brust");
+  SetProp(P_LONG,
+    "Du siehst eine ueberdimensional gross Brust eines Riesen. Brusthaare "
+    "und zwei Brustwarzen kannst Du erkennen. Das dumpfe Klopfen des "
+    "Herzens kannst Du auch hoeren." );
+  SetProp(P_NAME, "Brust");
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({"brust", "\n_brust", "NOWIMPY", "NOFALLDOWN"}) );
+
+  create_default_npc(38);
+  SetProp(P_HANDS, ({" mit einer Brustwarze",350,DT_BLUDGEON}));
+  SetProp(P_RACE, "Riese");
+  SetProp(P_BODY, 240);
+  SetProp(P_SIZE, 480);
+  SetProp(P_ALIGN, -350);
+  SetProp(P_RESISTANCE_STRENGTHS , 
+    ([DT_FIRE:      -0.7, DT_COLD:      -0.8, DT_WATER:  -0.8, DT_AIR:    -0.7, 
+      DT_LIGHTNING: -0.4, DT_EXPLOSION: -0.7, DT_SOUND:  -0.7, DT_LIGHT:  -0.7,
+      DT_ELECTRIC:  -0.4, DT_ACID:      -0.7, DT_POISON: -0.7, DT_TERROR: -0.7,
+      DT_SLASH:     -0.3,
+      DT_HOLY:      -0.7, DT_UNHOLY:    -0.7, DT_MAGIC:  -0.7 ]) );
+//  SetProp(P_NOMAGIC,20);
+
+  SetProp(P_MSGIN, "wird vom Riesen reinbewegt");
+  SetProp(P_MSGOUT, "bewegt sich");
+
+  SetProp(P_DIE_MSG,  " ist zerstoert, das Herz schlaegt aber weiter.\n");
+  SetProp(P_NOCORPSE, 1 );
+  SetProp(P_KILL_NAME, "Ein Riese");
+  SetProp(P_KILL_MSG, ({ "verspeist genuesslich eine Leiche.", MSG_EMOTE }) );
+  SetProp( P_MSG_FLAGS, ([P_KILL_MSG:1]) );
+
+  AddInfo(DEFAULT_INFO, "kann nicht reden.\n");
+
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    "Der Riese will Deine Spielsachen nicht.\n" }) );
+
+  SetProp(P_SPELLRATE,100);
+
+  AddSpell(2,550,
+    "Der Riese versucht Dich abzuschuetteln.\n",
+    "Der Riese versucht @WEN abzuschuetteln.\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(2,700,
+    "Der Riese holt sehr tief Luft. Der Brustkasten zerquetscht Dich.\n",
+    "Der Brustkasten zerquetscht @WEN .\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(1,950,
+    "Der Riese drueckt Dich gegen eine Wand.\n",
+    "Der Riese drueckt @WEN gegen eine Wand.\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1]));
+
+/*  AddSpell(2, 0,
+    ".\n",
+    "@WEN.\n",
+    DT_MAGIC, "overall" , ([SP_SHOW_DAMAGE:1]) );
+*/
+
+  SetChats(1, ({
+    "Der Riese ruelpst.\n",
+    "Der Riese holt tief Luft.\n",
+    "Das Herz schlaegt dumpf.\n"}) );
+  SetAttackChats(10, ({
+    "Der Riese pustet Dir hart ins Gesicht.\n",
+    "Die Knochen des Riesen knarren.\n",
+    "Die Haare richten sich auf.\n"}) );
+}
+
+void init() {
+  ::init();
+  if(RIESEMASTER->checkfeind(TP)) { Kill(TP); }
+}
+
+int Defend(int dam, mixed dam_type, mixed spell, object enemy) {
+  if(!interactive(enemy)) dam/=2;
+  RIESEMASTER->addfeind(enemy);
+  return ::Defend(dam, dam_type, spell, enemy);
+}
+
+void die(int poisondeath) {
+  if(!present("\n_brust_ab")) { CLONE( OBJ "abbrust",MENV); }
+  RIESEMASTER->teiltot("brust");
+  write_file( LOG "brust.kills" ,
+    ctime()+": "+CAP(getuid(PL))+" killt die Brust.\n");
+  write_file( LOG "riese_total" ,
+    ctime()+": "+CAP(getuid(PL))+" killt die Brust.\n");
+  ::die(poisondeath);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp) {
+  RIESEMASTER->feindtot(player);
+  write_file( LOG "brust.deads" ,
+    ctime()+": "+CAP(getuid(player))+" stirb an der Brust.\n");
+  write_file( LOG "riese_total" ,
+    ctime()+": "+CAP(getuid(player))+" stirb an der Brust.\n");
+}
+
+varargs object SelectEnemy(object *here) {
+  object enemy;
+  int minhp,hp,i;
+
+  if (!pointerp(here)) {
+    here=PresentEnemies();
+  }
+  here=filter_array(here,#'interactive);
+  if (!sizeof(here)) {
+    return 0;
+  }
+  if(random(2)) {
+    minhp=here[0]->QueryProp(P_HP);
+    enemy=here[i];
+    for(i=1;i<sizeof(here);i++) {
+      if ((hp=here[i]->QueryProp(P_HP)) < minhp) {
+        minhp=hp;
+        enemy=here[i];
+      }
+    }
+  } else {
+    enemy=here[random(sizeof(here))];
+  }
+  return enemy;
+}

@@ -1,0 +1,1652 @@
+/*
+ * housed/std/room.c - Der Basisraum der Haeuser - im Wesentlichen 
+ * (noch) von Wargon@Morgengrauen, der mir seinen Code freundlicherweise
+ * zur Verfuegung stellte.
+ *
+ * (c) 1998-2000 Mud Silberland - Adrian Holzwarth / Anatol@Silberland
+ *
+ * Veraendert vor Anschluss:
+ * - #pragma strict_types (*aechz*), 
+ * - CostumizeObject(), 
+ * - generelle Anpassungen an das SL-Seherhauskonzept, DAS waren vielleicht
+ *   Naechte... (DANKE, Woody! :o))
+ * - Geraeusche und Gerueche
+ * - Temperatur
+ * - Erlaube-Geschichten vorerst deaktiviert.
+ *
+ *  1998 01 14 Revision 0.1   "uebersicht" ab IS_SPECIAL aufrufbar (Anatol)
+ *
+ *  1998 01 15 Revision 0.2   "meldungen" jetzt nach Haeuser sortiert, 
+ *                            "loesche" gibt notify_fails() aus, lesbare
+ *                            Details dort und auch bei "aendere" gefixt
+ *                            - Bugs aus dem MG. Bugfix in Owner(). (Anatol)
+ *
+ *  2000 11 18 Revision 0.3   Umzug nach housed/std/, Bugfix fuer "ausgang",
+ *                            Ausgaenge in den aktuellen Raum waren moeglich.
+ *                            (Anatol)
+ *
+ *  2000 12 06 Revision 0.4   "ausgang richtungen. Und die Erkenntnis, dass
+ *                            ich das hier mal komplett ueberarbeiten sollte...
+ *
+ *  2001 11 19 Revision 0.5   Owner() hat Hintertuer fuer "Caretaker", "raum
+ *                            lang" und "raum kurz" loeschbar.
+ *
+ *  2002 01 15 Revision 0.6   clean_double() ist jetzt original und wird von
+ *                            room:reset() aufgerufen..
+ *
+ *  2012 01 25 Revision 0.7   Upgrades anzeigen, falls Raum 0.
+
+ *  2012 01 26 Revision 0.8   clean_up() jeden Reset aufrufen, jedoch stumpf
+ *                            einen clean counter von 4 setzen (niemals 
+ *                            removen, wenn fremde Objekte zerstoert werden
+ *                            wuerden).
+ */
+
+#pragma strict_types
+
+#include "../sys/housed_priv.h"
+#include "../sys/house.h"
+#include <properties.h>
+#include <wizlevels.h>
+#include <properties.h>
+#include <moving.h>
+
+inherit "std/room";
+
+inherit HOUSED_HOMEPATH "std/room/usercmd";
+inherit HOUSED_HOMEPATH "std/room/losa";
+inherit "/mail/nedit";
+
+nosave void setOwner();
+
+public int query_prevent_shadow() { return 1; }
+
+nosave string *detail;
+nosave string owner;
+nosave int house_no, room_no;
+nosave int flag, csaved;
+nosave string *ausgaenge = PROPER_EXITS;
+
+public string IsSeerHouse() { return (owner?capitalize(owner):0); }
+
+public void BecomesNetDead(object pl);
+varargs void Save(int crunched);
+void Load();
+
+/* Seherhausausgaenge... bei "ausgang" eine Meldung ausgeben. */
+
+public void SeerhouseAddExit(mixed cmd, mixed dest) {
+  AddExit(cmd,dest);
+  if (stringp(cmd))
+    tell_room(this_object(),break_string(sprintf(
+    "Mit leisem Knistern erscheint ein Ausgang '%s'.",to_string(cmd)),77));
+  HOUSED_PATHFINDER->UpdateExits(QueryProp(P_EXITS));
+}
+
+public void SeerhouseRemoveExit(mixed cmd) {
+  RemoveExit(cmd);
+  if (stringp(cmd))
+    tell_room(this_object(),break_string(sprintf(
+    "Mit einem Whopp verschwindet der Ausgang '%s'.",
+    to_string(cmd)),77));
+  HOUSED_PATHFINDER->UpdateExits(QueryProp(P_EXITS));
+}
+
+
+private nosave string normstr(string str) {
+  return implode(efun::explode(str,"@@"),"**");
+}
+
+private nosave string *brk(string str) {
+  int i;
+  string *t1, *t2;
+
+  if (!str) return 0;
+  t1 = regexplode(str, ", *");
+  for (t2 = ({}), i=sizeof(t1)-1; i>=0; i-=2)
+    t2 = ({t1[i]}) + t2;
+  return t2;
+}
+
+private nosave int befCheck(string bef) {
+  if (member(bef, ' ') > -1)
+    return 0;
+
+  if (member(m_indices(QueryProp(P_COMMANDS)) - 
+       ({"oeffne","schliess","schliesse"}), bef) > -1 ||
+     (member(ausgaenge+({"raus"}), bef) > -1 && 
+       member(m_indices(QueryProp(P_EXITS)), bef) == -1))
+    return 0;
+  return 1;
+}
+
+public varargs int Owner(mixed allowed) {
+  string *ext;
+  object test;
+
+  if (objectp(allowed) && query_once_interactive(allowed))
+    test = allowed;
+  else
+    test = this_player();
+  /* Backdoor */
+  if (member(HOUSED_CARETAKER,getuid(test))>=0) return 1;
+
+  if (allowed) {
+    ext = (THQ(H_ACCESS)?(string*)THQ(H_ACCESS):({}))+({capitalize(owner)});
+    if (member(ext, capitalize(getuid(test))) < 0) {
+      notify_fail( "Das darfst Du hier nicht!\n" );
+      return 0;
+    }
+  }
+  else if ((getuid(test) != owner) && 
+    (getuid(test) != getuid(this_object()))) {
+    notify_fail( "Das hier ist nicht Dein Haus - oder was auch immer!\n" );
+    return 0;
+  }
+  return 1;
+}
+
+public varargs string arr_out(mixed array, string none, string one, 
+   string many, int flag) {
+
+  string tmp;
+  mixed arr;
+  int i;
+
+  if (!sizeof(array))
+    tmp = none;
+  else if (sizeof(array)==1) {
+    if (array[0]==DEFAULT_SMELL) array[0]="(Raum)";
+    tmp = sprintf(one,array[0]);
+  }
+  else {
+    arr = sort_array(array, #'>);
+    if (arr[0]==DEFAULT_SMELL) arr[0]="(Raum)";
+    tmp = many;
+    if (flag & 2)
+      tmp += implode(arr, ", ")+".";
+    else {
+      tmp += implode(arr[0..<2], ", ");
+      tmp += (" und "+arr[<1]+".");
+    }
+  }
+  if (flag & 1)
+    return(break_string(tmp, 75, 0, 1));
+  else
+    write(break_string(tmp, 75, 0, 1));
+}
+
+public void create() {
+  seteuid(getuid(this_object()));
+
+  if (!is_clone(this_object()) && 
+    (sizeof(efun::explode(file_name(this_object()),"std"))==2)) return;
+
+  room::create();
+  usercmd::create();
+  losa::create();
+
+  Set(P_INT_LONG, SAVE, F_MODE_AS);
+  Set(P_INT_SHORT, SAVE, F_MODE_AS);
+  Set(P_NEW_EXITS, SAVE, F_MODE_AS);
+  Set(P_DETAILS, SAVE, F_MODE_AS);
+  Set(P_READ_DETAILS, SAVE, F_MODE_AS);
+  // Das ist jetzt H_OWNSMELLS Set(P_SMELLS, SAVE, F_MODE_AS);
+  // Das ist jetzt H_OWNSOUNDS Set(P_SOUNDS, SAVE, F_MODE_AS);
+  Set(P_LIGHT, SAVE, F_MODE_AS);
+  Set(P_ENVIRONMENT, SAVE, F_MODE_AS);
+
+  SetProp(P_IDS, ({"Ding", "hier", "Raum", "raum", "sehe\rhaus"}));
+  SetProp(P_NAME, "Zuhause");
+  SetProp(P_GENDER, 0);
+  SetProp(P_TRANSPARENT, 0);
+  SetProp(P_NOGET, 1);
+  SetProp(P_LIGHT, 1);
+  SetProp(P_INDOORS, 1);
+  SetProp(P_ENVIRONMENT,([ ENV_TEMPERATURE:20, ENV_TERRAIN:TT_HOUSE]));
+  // SetProp(P_SOUNDS, ([]));
+  // SetProp(P_SMELLS, ([]));
+
+  AddCmd( ({ "beschreib", "beschreibe" }), "beschreiben" );
+  AddCmd("uebersicht", "uebersicht");
+  AddCmd("ausgang", "cmdAusgang");
+  AddCmd( ({"loesche", "loesch"}), "loesch");
+  AddCmd( ({"wirf", "werf", "werfe" }), "wirf");
+  AddCmd( ({"sperr", "sperre"}), "cmdSperre");
+  AddCmd( ({"kopier", "kopiere" }), "kopieren");
+  AddCmd("licht", "licht");
+  AddCmd("temperatur", "temperatur");
+  AddCmd( ({"aendere", "aender" }), "aendern");
+  AddCmd( ({"meldung", "meldungen"}), "report");
+  previous_object()->CustomizeObject();
+
+}
+
+public void init() {
+  object haus;
+
+
+  room::init();
+  nedit::init_rescue();
+  
+   // Init-Zaehler, Debug-Zwecke.
+
+  SetProp(" my init count ", ((int)QueryProp(" my init count "))+1);
+
+  if (QueryProp(" my init count ")>1)
+      DB("trace","Init ("+QueryProp(" my init count ")+"): "
+           +file_name(this_object())+(this_player()?" "+file_name(this_player()):""));
+  else
+      DB("info","Init: "
+           +file_name(this_object())+(this_player()?" "+file_name(this_player()):""));
+
+  if (this_player() && query_once_interactive(this_player()) &&
+      IS_LEARNER(this_player()) && getuid(this_player()) != owner) {
+    if (this_player()->QueryProp(P_INVIS)) {
+      say(capitalize(getuid(this_player()))+" betritt unsichtbar den Raum.\n");
+      printf(" /-\\-/-\\-/-\\-/-\\-/-\\-/-\\-/-\\---- ACHTUNG! ----/-\\-/-\\"
+         "-/-\\-/-\\-/-\\-/-\\-/-\\-/-\\\n |-/-\\-/ Du bist moeglicherweise in"
+         " einem privaten Raum und stoerst!  \\-/-\\-|\n /-\\-/-\\-/-\\-/-\\-"
+         "/-\\-/-\\-/-\\------------------/-\\-/-\\-/-\\-/-\\-/-\\-/-\\-/-\\-"
+         "/-\\\n");
+    }
+  }
+  /* if (this_player() && query_once_interactive(this_player()) && 
+     (!interactive(this_player())))
+    BecomesNetDead(this_player());  */
+}
+
+
+/* Seherhaeuser versuchen schon im reset(), sich aus dem Speicher
+ * zu nehmen. Zumindest, wenn sie leer sind. Greift nicht mehr, sobald
+ * Goodies im Spiel sind. 27.01.2012 12:57:37  -Anatol  */
+
+public void reset() {
+  room::reset();
+  losa::reset();
+  if (!objectp(first_inventory())) 
+    clean_up(1);  // 1  := standard loaded object (room)
+}
+
+/* clean_up nimmt den Raum aus dem Speicher, wenn...
+ * 1. alle Objekte, die er selbst erzeugt hat, im Raum sind oder
+ *    zwischenzeitlich zerstaert wurden.
+ * 2. (a) der Raum zwischen zwei clean_up-Versuchen nicht ge init()et
+ *    wurde. ODER (b) der Raum (bis auf o.g. Objekte) leer ist.
+ *
+ * Fuer Seherhaeuser wird 2.(a) unter Vorbehalt ausser Kraft gesetzt: 
+ * Seherhaeuser sollen sich niemals aus dem Speicher nehmen, wenn 
+ * Objekte in ihnen sind, die sie nicht selbst erzeugt haben. D.h. 
+ * das Ablegen einer /obj/fackel hindert einen Seherhausraum fuer 
+ * die gesamte Uptime am selbst-remove().
+ * Diese Ausnahme greift NUR, wenn der Besitzer im Lauf des letzten
+ * Jahres eingeloggt war. Ansonsten gilt das Haus als verwaist und
+ * wird wie ein normaler Raum behandelt. Das ist besser als die 
+ * Alternative - das waere das Abhaengen dieser Raeume gewesen.
+ *
+ * Fuer alle anderen Faelle soll aber die Standardmechanik greifen.
+ *
+ * 26.01.2012 - Anatol
+ * 27.01.2012 - Anatol
+ */
+
+#define ONE_YEAR_IN_SECONDS 31557600
+
+public int clean_up(int arg) {
+  mixed inv;
+  string owner_save;
+
+
+  if (!QueryOwner()||(!stringp(QueryOwner()))||(strlen(QueryOwner())<1))
+     return (int)::clean_up(arg);
+
+  owner_save=sprintf("/save/%c/%s.o",QueryOwner()[0],QueryOwner());
+
+  if ((file_size(owner_save)) && 
+     ((file_time(owner_save) + ONE_YEAR_IN_SECONDS)>time())) {
+      Set(" clean counter ",4);
+  }
+  else {
+      DB("trace","Cleanup("+Query(" clean counter ")+"--): "+file_name(this_object()));
+  }
+  losa::reset();  // Evtl. gepackt speichern...
+  return (int)::clean_up(arg);
+}
+
+public int remove() {
+ DB("info","Remove: "+file_name(this_object()));
+ ::remove();
+}
+
+// Ab naechstem Reboot raeumen auch Seherhaeuser auf, wenn sie wollen.
+// Die Jan 15 22:53:30 CET 2002 - Anatol
+// public void clean_double() {}
+
+public void BecomesNetDead(object pl) {
+  if (!Owner(pl))
+    if (!catch(call_other(HMQ(H_ENV_FILE_NAME),"???")))
+      pl->move(HMQ(H_ENV_FILE_NAME), M_GO, 0, 
+        "schlafwandelt heraus", "schlafwandelt herein" );
+}
+
+nosave mixed ick(object pl) {
+  if (pl && IS_LEARNER(pl) && pl->QueryProp(P_INVIS) && getuid(pl)!=owner)
+    return "("+capitalize(getuid(pl))+")";
+  return 0;
+}
+
+public string int_long(object v1, object v2) {
+  string ret;
+  mixed *inv;
+
+  ret = ::int_long(v1, v2);
+  if (!ret || !this_player() || environment(this_player()) != this_object())
+    return ret;
+  inv = filter_array(all_inventory(this_object()),#'interactive) - ({ v1 });
+  inv = map_array(inv, #'ick) - ({ 0 });
+  return ret + break_string(implode(inv, ", "), 78);
+}
+
+public int lies(string str) {
+  notify_fail("Was moechtest Du lesen?\n");
+  if (!str) return 0;
+  if (this_player()->CannotSee())
+    return 1;
+  if (str = QueryProp(P_READ_DETAILS)[str]) {
+    this_player()->More(str);
+    return 1;
+  }
+  return 0;
+}
+
+public int wirf(string str) {
+  string wen;
+  int i;
+  object pl, target, *list;
+
+  if (!(str=((string)(this_player())->_unparsed_args(1)))||str=="")
+    return 0;
+  if (sscanf(str,"%s raus",wen)!=1)
+    return 0;
+  if ((environment(this_player())!=this_object()) || 
+      (!(target=find_object((string)HMQ(H_ENV_FILE_NAME)))))
+    return 0;
+  if (!Owner()) {
+    notify_fail("Hey, hey, Du bist hier doch nicht Zuhause...\n");
+    return 0;
+  }
+  if (wen=="alle") {
+    list=filter_array(all_inventory(this_object()),#'living)-
+      ({this_player(),0});
+    if (sizeof(list)==0) {
+      notify_fail("Aber Du bist hier doch eh allein!\n");
+      return 0;
+    }
+  } 
+  else if (wen == "alles") {
+    list = all_inventory(this_object());
+    list -= (filter_array(list, #'living)+({0, present(SPECIALID)}));
+    if (sizeof(list)==0) {
+      notify_fail("Aber hier ist nichts zum wegwerfen!\n");
+      return 0;
+    }
+  } 
+  else {
+    pl=present(wen,this_object());
+    if (!pl) {
+      notify_fail("So jemanden sehe ich hier nicht.\n");
+      return 0;
+    }
+    else if (pl->id(SPECIALID)) {
+      notify_fail("Du kannst "+(string)pl->name(WEN)+" nicht wegwerfen!\n" );
+      return 0;
+    }
+    list=({pl});
+  }
+  for (i=sizeof(list)-1;i>=0;i--) {
+    tell_object(list[i],sprintf("%s wirft Dich aus %s Haus.\n",
+     (string)this_player()->Name(WER),
+     (string)this_player()->QueryPossPronoun(NEUTER,WEM)));
+     tell_room(target, sprintf("%s kommt in hohem Bogen hereingeflogen.\n",
+                       (string)list[i]->Name(WER)));
+    list[i]->move(target,M_SILENT|M_GO);
+    tell_room(this_object(),sprintf("%s wirft %s aus %s Zuhause.\n",
+      (string)this_player()->Name(WER),
+      (string)list[i]->name(WEN),
+      (string)this_player()->QueryPossPronoun(NEUTER,WEM)), ({this_player()}));
+    printf("Du wirfst %s aus Deinem Zuhause.\n",(string)list[i]->name(WEN));
+    // noch gibts keine Nervmonster  this_player()->RemovePursuer(list[i]);
+  }
+  return 1;
+}
+
+
+public varargs string SetOwner(string o, int nr, int num) {
+  SetProp(P_INT_SHORT, "Im Zuhause von "+capitalize(o));
+  SetProp(P_INT_LONG, break_string(sprintf("Ein total langweiliger Raum, %s "
+          "sollte sich mal darum kuemmern.",capitalize(o)),76));
+  room_no = num;
+  house_no = nr;
+  return owner = o;
+}
+
+
+public varargs string QueryOwner(int withNr) {
+  return (withNr ? sprintf("%s:%02d:%02d",owner,house_no,room_no) : owner);
+}
+
+nosave int befEingabe(string *bef);
+
+public varargs int beschreiben(string str, int f) {
+  string *parts;
+  int sp, ret;
+
+  if (!Owner())
+    return 0;
+
+  if (!f && (!(str=(string)this_player()->_unparsed_args()) || str == "")) {
+    notify_fail("Was willst Du denn beschreiben?\n" );
+    return 0;
+  }
+
+  sp = sizeof(parts = explode(str, " "));
+  detail = 0;
+  flag = f;
+
+  switch(parts[0][0..3]) {
+    case "raum":      
+      if (sp == 1 || parts[1] == "lang")
+      flag |= LANG;
+      else if (parts[1] == "kurz")
+      flag |= KURZ;
+      printf("Bitte %sbeschreibung des Raumes eingeben.\n", 
+          (flag & LANG ? "Lang" : "Kurz"));
+      break;
+    case "gera":     
+      flag |= GERAEUSCH;
+      str = implode(parts[1..]," ");
+      write(break_string(sprintf(
+       "Bitte Geraeuschbeschreibung fuer %s eingeben.\n",
+       (sp>1?"'"+str+"'":"den Raum")),77));
+      break;
+    case "geru":     
+      flag |= GERUCH;
+      str = implode(parts[1..]," ");
+      write(break_string(sprintf(
+       "Bitte Geruchsbeschreibung fuer %s eingeben.\n",
+       (sp>1?"'"+str+"'":"den Raum")),77));
+      break;
+    case "deta":     
+      if (sp==1) {
+      notify_fail("Welches Detail willst Du denn beschreiben?\n");
+      return 0;
+      }
+      flag |= DETAIL;
+      str = implode(parts[1..]," ");
+      write("Bitte Beschreibung fuer '"+str+"' eingeben.\n");
+      break;
+    case "lesb":      // lesbare Details
+      notify_fail("Welches lesbare Detail willst Du denn beschreiben?\n");
+      if (sp == 1) return 0;
+      if (parts[1] == "details" || parts[1] == "detail") {
+      if (sp == 2) return 0;
+      str = implode(parts[2..]," ");
+      }
+      else
+      str = implode(parts[1..]," ");
+      flag |= RDETAIL;
+      write( "Bitte Beschreibung fuer '"+str+"' eingeben.\n");
+      break;
+    case "befe":      // Befehle
+      ret = 0;
+      if (sp == 1)
+      notify_fail("Welchen Befehl willst Du denn beschreiben?\n");
+      else
+      ret = befEingabe(brk(implode(parts[1..]," ")));
+      return ret;
+      break;
+    default:
+      notify_fail(break_string("Das kannst Du nicht beschreiben! Eine Liste "
+        "der Dinge, die Du hier beschreiben kannst, erhaeltst Du mit 'hilfe "
+        "beschreibe' - vielleicht brauchst Du ja ein Faltblatt dafuer...",76));
+      return 0;
+      break;
+  }
+  detail = brk(str);
+  if ((sizeof(detail)==1) && (detail[0]=="")) detail=0;
+  write("(Beenden mit . oder **, Abbruch mit ~q)\n");
+  nedit("beschreibung");
+  return 1;
+}
+
+nosave void beschreibung(string str) {
+  if (!str) {
+    write("Nichts geaendert!\n");
+    return;
+  }
+  str = normstr(str);
+  if (flag & LANG)
+    SetProp(P_INT_LONG, str);
+  else if (flag & KURZ) {
+    if (sizeof(explode(str,"\n")) > 1 || sizeof(explode(str,".")) > 2 
+          || strlen(str) > 75) {
+      write( "Das ist fuer eine Kurzbeschreibung zu lang!\n"
+        "Sorry, bitte denke Dir eine andere Kurzbeschreibung aus.\n" );
+      return;
+    }
+    else SetProp(P_INT_SHORT, explode(explode(str,"\n")[0],".")[0]);
+  }
+  else if (flag & DETAIL)
+    AddDetail(detail, str);
+  else if (flag & RDETAIL)
+    AddReadDetail(detail, str);
+  else if (flag & GERAEUSCH) {
+    if (!detail)
+      AddSound(DEFAULT_SOUND, str);
+    else 
+      AddSound(detail, str);
+  }
+  else if (flag & GERUCH) {
+    if (!detail)
+      AddSmell(DEFAULT_SMELL, str);
+    else 
+      AddSmell(detail, str);
+  }
+  else
+    write( "Huch! Unbekanntes Flag ("+flag+")... Sag Anatol Bescheid...\n");
+  write("OK.\n");
+  Save();
+}
+
+nosave int befEingabe(string *bef) {
+  int i;
+  string *com;
+
+  notify_fail("Kein Befehl zum Beschreiben uebrig... ;)\n");
+  for (com = ({}), i=sizeof(bef)-1; i>=0; i--) {
+    if (!befCheck(bef[i]))
+      write("Der Befehl '"+bef[i]+"' kann nicht beschrieben werden!\n");
+    else
+      com += ({ bef[i] });
+  }
+  if (!sizeof(com))
+    return 0;
+  arr_out(com, 0, "Zu beschreibender Befehl: %s", 
+    "Zu beschreibende Befehle:\n");
+  write( "Bitte Parameter eingeben (evtl. durch Kommata getrennt).\n]");
+  input_to("getBefParam", 0, com);
+  return 1;
+}
+
+nosave void getBefParam(string param, string *bef) {
+  if (!param || param == "")
+    detail = ({ bef, "" });
+  else if (param == "@NF@" || param == "@nf@")
+    detail = ({ bef, 1 });
+  else
+    detail = ({ bef }) + brk(lower_case(param));
+  write(break_string(sprintf("Gib nun bitte den Text ein, der %s ausgegeben "
+          "werden soll.\n"
+      +"(Beenden mit . oder **, Abbruch mit ~q)\n",
+    stringp(detail[1]) ? "fuer diesen Befehl" : "als Fehlermeldung" )));
+  nedit("getBefText");
+}
+
+private nosave string preparse(string str, string *invalid);
+
+nosave void getBefText(string text) {
+  string my, *txt, *warn;
+  mixed bef;
+  int i;
+  mapping desc, com;
+
+  if (!text || text == "") {
+    write("** Abbruch! **\n");
+    detail = 0;
+    return;
+  }
+  bef = detail[0];
+  txt = explode(text, "@@\n");
+  warn = ({});
+  my = preparse(txt[0], &warn);
+  if (sizeof(txt) > 1)
+    text = preparse(txt[1], &warn);
+  else
+    text = 0;
+  AddUserCmd(bef, (stringp(detail[1]) ? detail[1..] : ({ "@NF@" })), my, text);
+  Save();
+  arr_out(warn, "OK.", "WARNUNG! Ungueltiger Platzhalter: %s",
+                   "WARNUNG! Ungueltige Platzhalter: ");
+  detail = 0;
+}
+
+private nosave string preparse(string str, string *invalid) {
+  int i, p, warn;
+  string *txt, *t2, rpl;
+
+  txt = efun::explode(str, "@");
+  for (i=sizeof(txt)-1; i>=0; i--) {
+    if (strlen(txt[i])>=2) {
+      switch(txt[i][0..1]) {
+      case "WE":  // Name
+        warn = (strlen(txt[i]) < 3) ||
+             ((p=member(({"R","S","M","N"}), txt[i][2..2])) < 0);
+        if (!warn)
+          rpl = "W"+to_string(p);
+        break;
+      case "PW":  // Personalpronomen
+        warn = (strlen(txt[i]) < 4) ||
+             ((p=member(({"R","S","M","N"}), txt[i][3..3])) < 0);
+        if (!warn)
+          rpl = "P"+to_string(p);
+        break;
+      case "BN":  // Possessivpronomen
+      case "BM":
+      case "BF":
+        warn = (strlen(txt[i]) < 6) ||
+             ((p=member(({"R","S","M","N"}), txt[i][5..5])) < 0);
+        if (!warn) {
+          rpl = "B"+to_string(p);
+          warn = ((p=member(({"N","M","F"}), txt[i][1..1])) < 0);
+          if (!warn) {
+            rpl += to_string(p);
+            warn = ((p=member(({"S","P"}), txt[i][2..2])) < 0);
+            if (!warn)
+            rpl += to_string(p);
+            else
+            rpl = 0;
+          }
+          else
+            rpl = 0;
+        }
+        break;
+      case "PA":
+        txt[i] = "F"+txt[i][4..];
+      default:
+        warn = 0;
+        rpl = 0;
+      }
+      if (rpl) {
+        warn = sizeof(t2 = regexplode(txt[i], "(WER|WESSEN|WEM|WEN)")) < 2;
+        if (!warn) {
+          t2[1] = rpl;
+          t2[0] = "";
+          txt[i] = implode(t2, "");
+        }
+      }
+      if (warn)
+      invalid += ({ "@"+explode(txt[i]," ")[0] });
+    }
+  }
+  return implode(txt, "@");
+}
+
+nosave void loesch_alles(string str) {
+  if (str == "ja" || str == "Ja") {
+    SetProp(P_DETAILS, ([]));
+    SetProp(P_SMELLS, ([]));
+    SetProp(P_SOUNDS, ([]));
+    SetProp(P_READ_DETAILS, ([]));
+    SetProp(H_COMMANDS, ([]));
+    write( "OK, alle (lesbaren) Details, Geraeusche, Gerueche und Befehle "
+        "geloescht!\n" );
+    Save();
+  }
+  else write( "Nichts geloescht!\n" );
+}
+
+nosave void loesch_etwas(string str, string prop) {
+  if (str == "ja" || str == "Ja") {
+    SetProp(prop, ([]));
+    write("OK.\n");
+    Save();
+  }
+  else write( "Nichts geloescht!\n" );
+}
+
+public int loesch(string str) {
+  string *s, *t, p, q;
+  int i, ret;
+  mapping com;
+
+  if (!Owner())
+    return 0;
+  else if (!(str=(string)this_player()->_unparsed_args()) || str == "") {
+    notify_fail("Welches Detail, Geraeusch, Geruch oder welchen Befehl "
+        "moechtest Du loeschen?\n");
+    return 0;
+  }
+  else if (str == "alles") {
+    write( "Wirklich alles loeschen (ja/nein)?\n]");
+    input_to("loesch_alles");
+    return 1;
+  }
+  else if(str=="meldungen") {
+    if (file_size(REPFILE(owner,house_no)) > 0) {
+      rm(REPFILE(owner,house_no));
+      write("Rueckmeldungen geloescht.\n");
+    }
+    else {
+      write("Keine Rueckmeldungen gefunden - auch nicht schlecht.\n");
+    }
+    return 1;
+  }
+  else if(str=="raum kurz") {
+    write(QueryProp(P_INT_SHORT)+
+      "\nKurzbeschreibung des Raumes zurueckgesetzt.\n");
+    SetProp(P_INT_SHORT,"Ein total leerer Raum");
+    Save();
+    return 1;
+  }
+  else if (str=="raum lang") {
+    write("Die Langbeschreibung war:\n"+QueryProp(P_INT_LONG)+
+            "Langbeschreibung geloescht.\n");
+    SetProp(P_INT_LONG,"Ein total leerer Raum.\n");
+    Save();
+    return 1;
+  }
+  s = brk(str);
+  s = ({ (t=explode(s[0], " "))[0] })+({ implode(t[1..]," ") })+s[1..];
+  ret = 1;
+  flag = 0;
+
+  switch(s[0]) {
+    case "geruch":
+      s = s[1..];
+      flag |= GERUCH;
+      break;
+    case "geraeusch":
+      s = s[1..];
+      flag |= GERAEUSCH;
+      break;
+    case "detail":
+      s = s[1..];
+      flag |= DETAIL;
+      break;
+    case "lesbar":
+    case "lesbares":
+    case "lesbare":
+      flag |= RDETAIL;
+      s = s[1..];
+      if ((sizeof(s)) && (s[0][0..5] =="detail")) 
+        s[0]=s[0][7..];
+      break;
+    case "befehl":
+      s = s[1..];
+      break;
+    case "alle":
+      switch (s[1]) {
+        case "geraeusche":
+          q = "Geraeusche";
+          p = P_SOUNDS;
+          break;
+        case "gerueche":
+          q = "Gerueche";
+          p = P_SMELLS;
+          break;
+        case "details":
+          q = "Details";
+          p = P_DETAILS;
+          break;
+        case "lesbaren details":
+          q = "lesbaren Details";
+          p = P_READ_DETAILS;
+          break;
+        case "befehle":
+          q = "Befehle";
+          p = H_COMMANDS;
+          break;
+        default:
+          write("Du kannst alle Befehle, alle Details, alle Geraeusche,\n"
+               "alle Gerueche und alle lesbaren Details loeschen!\n");
+          return 1;
+          break;
+      }
+      printf("Wirklich alle %s loeschen (ja/nein)?\n]", q);
+      input_to("loesch_etwas", 0, p);
+      return 1;
+      break;
+    default:
+      return 0;   // Verliert zwar Flexibilitaet, ist aber sicherer.
+      break;
+  }
+  if ((sizeof(s)==1)&&(s[0]=="")) {
+    if (flag & GERAEUSCH) {
+      if (!QueryProp(P_SOUNDS)[DEFAULT_SOUND]) {
+        write( "Hier ist kein Raumgeraeusch beschrieben.\n");
+        ret= 1;
+      }
+      else {
+        RemoveSound(DEFAULT_SOUND);
+        write("Raumgeraeusch wurde geloescht.\n");
+        ret = 1;
+      }
+    }
+    else if (flag & GERUCH) {
+      if (!QueryProp(P_SMELLS)[DEFAULT_SMELL]) {
+        write( "Hier ist kein Raumgeruch beschrieben.\n");
+      }
+      else {
+        RemoveSmell(DEFAULT_SMELL);
+        write("Raumgeruch wurde geloescht.\n");
+      }
+      ret = 1;
+    }
+    else {
+      if (!flag) 
+        write("Welchen Befehl moechtest Du loeschen?\n");
+      else if (flag & GERAEUSCH) 
+        write("Welches Geraeusch moechtest Du loeschen?\n");
+      else if (flag & GERUCH) 
+        write("Welchen Geruch moechtest Du loeschen?\n");
+      else if (flag & DETAIL) 
+        write("Welches Detail moechtest Du loeschen?\n");
+      else if (flag & RDETAIL) 
+        write("Welches lesbare Detail moechtest Du loeschen?\n");
+      else 
+        write("Loesche... was? (unbekanntes Flag -> Mail Anatol!)\n");
+      return 1;
+    }
+  }
+  else {
+    for (i=sizeof(s)-1; i>=0; i--) {
+      if (!flag) {  // Befehl soll geloescht werden...
+        if (member(com=Query(H_COMMANDS), s[i])) {
+          com = m_delete(com, s[i]);
+          write(break_string("Befehl '"+s[i]+"' wurde geloescht.\n"));
+          Set(H_COMMANDS, com);
+        }
+        else if (sizeof(t=explode(s[i], " ")) > 1 &&
+               member(com, t[0]) &&
+               member(com[t[0]], p=implode(t[1..], " "))) {
+          com[t[0]] = m_delete(com[t[0]], p);
+          write(break_string("Befehl '"+s[i]+"' wurde geloescht.\n"));
+          Set(H_COMMANDS, com);
+        }
+        else {
+          write(break_string("Befehl '"+s[i]+"' nicht vorhanden.\n"));
+          ret = 1;
+        }
+      }
+      else {
+        if (flag & GERAEUSCH) {
+          if (!QueryProp(P_SOUNDS)[s[i]])
+            write( break_string("Das Geraeusch '"+s[i]+"' gibt es nicht.\n"));
+          else {
+            RemoveSound(s[i]);
+            write( break_string("Geraeusch '"+s[i]+"' wurde geloescht.\n"));
+          }
+          ret = 1;
+        }
+        if (flag & GERUCH) {
+          if (!QueryProp(P_SMELLS)[s[i]])
+            write("Den Geruch '"+s[i]+"' gibt es nicht.\n");
+          else {
+            RemoveSmell(s[i]);
+            write(break_string("Geruch '"+s[i]+"' wurde geloescht.\n"));
+          }
+          ret = 1;
+        }
+        if (flag & DETAIL) {
+          if (!QueryProp(P_DETAILS)[s[i]])
+            write(break_string("Das Detail '"+s[i]+"' gibt es nicht.\n"));
+          else {
+            RemoveDetail(s[i]);
+            write(break_string("Detail '"+s[i]+"' wurde geloescht.\n"));
+          }
+          ret = 1;
+        }
+        if (flag & RDETAIL) {
+          if (!QueryProp(P_READ_DETAILS)[s[i]])
+            write(break_string("Das lesbare Detail '"+s[i]+
+                  "' gibt es nicht.\n"));
+          else {
+            RemoveReadDetail(s[i]);
+            write(break_string("Lesbares Detail '"+s[i]+
+                  "' wurde geloescht.\n"));
+          }
+        ret = 1;
+        }
+      }
+    }
+  }
+  Save();
+  return ret;
+}
+
+nosave varargs int cmdSperre(string str, int intern) {
+  mapping ex, cmds;
+  int hin, zurueck;
+
+  if (!Owner())
+    return 0;
+
+  if (!intern)
+    if (!(str=(string)this_player()->_unparsed_args()) || str == "") {
+      notify_fail( "Syntax: sperre <ausgang>\n" );
+      return 0;
+    }
+
+  str = lower_case(str);
+  ex = QueryProp(P_EXITS);
+
+  // zurueck = (hin + sizeof(ausgaenge)/2) % sizeof(ausgaenge);
+  if (!member(ex,str) || (hin = member(ausgaenge,str)) < 0) {
+    printf( "Es gibt hier keinen Ausgang '%s'!\n", str);
+    return 1;
+  }
+  else if (room_no == 0 && 
+      (ausgaenge[(((hin+sizeof(ausgaenge)/2))%sizeof(ausgaenge))]==(string)
+         HMQ(H_ENTER_DIRECTION))) { 
+    write( "Du kannst doch nicht Dein Tor zur Welt loeschen!\n" );
+    return 1;
+  }
+  else if ((!intern)&&(!HOUSED_PATHFINDER->MayRemoveExit(ex[str]))) {
+    write(break_string(sprintf("Wuerdest Du den Ausgang '%s', sperren, "
+            "koenntest Du von hier nicht mehr in den anderen Raum gelangen! "
+            "Du wirst zuerst einen anderen Ausgang erschaffen muessen, "
+            "bevor Du diesen hier sperren kannst...\n", 
+            str),77));
+    return 1;
+  }
+  else
+    zurueck = (hin + sizeof(ausgaenge)/2) % sizeof(ausgaenge);
+
+  ex[str]->SeerhouseRemoveExit(ausgaenge[zurueck]);
+  cmds = (mapping)(ex[str]->QueryProp(H_COMMANDS));
+  cmds = m_delete(cmds, ausgaenge[zurueck]);
+  ex[str]->SetProp(H_COMMANDS, cmds);
+  ex[str]->Save();
+  SeerhouseRemoveExit(str);
+  cmds = QueryProp(H_COMMANDS);
+  cmds = m_delete(cmds, str);
+  SetProp(H_COMMANDS, cmds);
+  Save();
+  printf( "OK, der Ausgang '%s' wurde entfernt.\n", str );
+  Save();
+  return 1;
+}
+
+nosave int cmdAusgang(string str) {
+  int nr, maxNr, hin, zurueck, i;
+  string da,hier,*ind;
+  closure hausProp;
+  mapping exits;
+
+  if (!Owner())
+    return 0;
+
+  hier=0;
+
+  if ((str) && (str=="richtungen")) {
+    arr_out(ausgaenge, 0, 0, "Es sind folgende Ausgaenge moeglich:\n");
+    return 1;
+  }
+
+  notify_fail("Syntax: ausgang <richtung> <nr>\n");
+  if (!(str=(string)this_player()->_unparsed_args()) ||
+      (sscanf(str, "%s %d", hier, nr) != 2 ))
+    return 0;
+  
+
+  da = (string)THROOM(nr);
+  maxNr = (int)HMQ(H_ROOMS);
+
+  notify_fail("Dieser Ausgang ist nicht moeglich. Schau doch mit \"ausgang "
+      "richtungen\"\nnach, was es im Moment an moeglichen Ausgaengen gibt.\n");
+  if ( (hin = member(ausgaenge, lower_case(hier))) < 0) 
+    return 0;
+  
+  zurueck = (hin + sizeof(ausgaenge)/2) % sizeof(ausgaenge);
+  hier = THROOM(room_no);
+
+  if (nr < 0 || nr > maxNr)
+    printf("Die Nummer darf sich nur im Bereich zwischen 0 und %d "
+      "bewegen, mehr\nRaeume hat das Haus leider nicht.\n", maxNr );
+  else if ( nr == room_no)
+    printf( "Aber dies hier IST doch Raum %d!\n", room_no );
+  else if (member(m_indices(exits=QueryProp(P_EXITS)), ausgaenge[hin]) != -1)
+    write( "Aus diesem Raum fuehrt schon ein Ausgang in diese Richtung!\n" );
+  else if (member(m_indices((mapping)(da->QueryProp(P_EXITS))), 
+    ausgaenge[zurueck]) != -1)
+    printf( "Es fuehrt schon irgendwo ein Ausgang in Richtung '%s' nach "
+      "Raum %d!\n", ausgaenge[hin], nr);
+  else {
+    SeerhouseAddExit(ausgaenge[hin], da);
+    Save();
+    da->SeerhouseAddExit(ausgaenge[zurueck], hier);
+    da->Save();
+    if (member(m_values(exits), da) != -1) {
+      // *sigh* O(n), so auf die Schnelle...
+      i=sizeof(ind=m_indices(exits));
+      while ((--i>=0) && (exits[ind[i]]!=da));
+      cmdSperre(ind[i],1);
+    }
+    printf( "OK, der Ausgang '%s' zum Raum %d wurde eingerichtet.\n", 
+      ausgaenge[hin], nr );
+  }
+  return 1;
+}
+
+
+public varargs int uebersicht(string dummy, string pre) {
+  string *xc, *xd, o, raus, str, upglist;
+  mixed *com;
+  mapping tmp;
+  int i,j,k;
+
+  if ( (getuid(this_player()) != owner) && (!IS_SPECIAL(this_player())) &&
+       ((member(HOUSED_CARETAKER,getuid(this_player()))<0)))
+    return 0;
+
+  i = (int)HMQ(H_ROOMS);
+
+  if (i)
+    str = sprintf( "Dein Haus verfuegt ueber %d Raeume.\n"
+       "Du stehst in Raum %d (%s).\n", i+1, room_no, QueryProp(P_INT_SHORT) );
+  else
+    str = sprintf( "Dein Haus verfuegt ueber einen Raum (%s)\n", 
+      QueryProp(P_INT_SHORT));
+  if ((!room_no)&&((upglist=((string)call_other(this_object(),"QueryUpgrades")))!=""))
+    str +=break_string("Folgende Erweiterungen hat es erhalten: " + upglist,78);
+    
+  str += "\n";
+  str += arr_out(m_indices(QueryProp(P_DETAILS)),
+           "Du hast keine Details beschrieben.",
+           "Du hast das Detail '%s' beschrieben.",
+           "Du hast folgende Details beschrieben:\n", 1 );
+  str += ("\n" + arr_out(m_indices(QueryProp(P_READ_DETAILS)),
+           "Du hast keine lesbaren Details beschrieben.",
+           "Du hast das lesbare Detail '%s' beschrieben.",
+           "Du hast folgende lesbaren Details beschrieben:\n", 1 ) );
+  str += ("\n" + arr_out(m_indices(QueryProp(P_SOUNDS)),
+           "Du hast keine Geraeusche beschrieben.",
+           "Du hast das Geraeusch '%s' beschrieben.",
+           "Du hast folgende Geraeusche beschrieben:\n", 1 ) );
+  str += ("\n" + arr_out(m_indices(QueryProp(P_SMELLS)),
+           "Du hast keine Gerueche beschrieben.",
+           "Du hast den Geruch '%s' beschrieben.",
+           "Du hast folgende Gerueche beschrieben:\n", 1 ) );
+  tmp = Query(H_COMMANDS);
+  xc = sort_array(m_indices(tmp),#'<);
+  if (!sizeof(xc))
+    str += ("\nDu hast keine Befehle beschrieben.\n");
+  else {
+    if (sizeof(xc) == 1 && sizeof(xd=m_indices(tmp[xc[0]])) == 1)
+      str += ("\nDu hast den Befehl '"+
+            xc[0]+((xd[0] == "") ? "" : " "+xd[0])+
+            "' beschrieben.\n");
+    else {
+      str += "\nDu hast folgende Befehle beschrieben:\n";
+      for (com = ({}), j=sizeof(xc)-1; j >= 0; j--) {
+      xd = sort_array(m_indices(tmp[xc[j]])-({"@NF@"}),#'>);
+      if ((sizeof(xd) > 1) && (xd[0] == "")) {
+        raus = "* "+xc[j]+", "+xc[j]+" ";
+        xd = xd[1..];
+      }
+      else
+        raus = "* "+xc[j]+" ";
+      str += arr_out(xd, "", raus+"%s", raus, 3);
+      }
+    }
+  }
+
+  raus = (member(QueryProp(P_EXITS),"raus") ? "raus: Nach draussen.\n" : 0 );
+  tmp = m_delete(QueryProp(P_EXITS), "raus");
+  xc = m_indices(tmp);
+  xd = m_values(tmp);
+
+  if (!sizeof(xc) && !raus)
+    str += "\nES GIBT KEINE AUSGAENGE!\n";
+  else {
+    str +=  "\nEs gibt folgende Ausgaenge:\n";
+    for (i=sizeof(xc)-1; i>=0; i--)
+      if (xd[i]==(string)HMQ(H_ENV_FILE_NAME))
+        str+= sprintf("%s: In die Welt (%s).\n",xc[i],(string)
+            xd[i]->QueryProp(P_INT_SHORT));
+      else
+        str += sprintf( "%s: Nach Raum %d (%s).\n",
+                 xc[i], (j=to_int(xd[i][<1..])),
+                 xd[i]->QueryProp(P_INT_SHORT) );
+  }
+  str += ((raus||"")+(pre||""));
+  this_player()->More(str);
+  return 1;
+}
+
+public int kopieren(string str) {
+  string was, alt, n, *neu, *par, err;
+  mixed das;
+  mapping com;
+  int i;
+
+  if (!Owner())
+    return 0;
+
+  notify_fail(
+    "'kopiere detail <von> nach <nach>' oder\n"
+    "'kopiere lesbares detail <von> nach <nach>' oder\n"
+    "'kopiere geruch <von> nach <nach>' oder\n"
+    "'kopiere geraeusch <von> nach <nach>' oder\n"
+    "'kopiere befehl <befehl> [<parameter>] nach <befehl> [<parameter>]'!\n");
+
+  if (!(str=(string)this_player()->_unparsed_args()) || str == "")
+    return 0;
+
+  neu = explode(str, " ");
+  was = neu[0][0..5];
+  if (was == "detail" || was == "befehl" || 
+      was == "geraeusch" || was == "geruch")
+    str = implode(neu[1..], " ");
+  else if (was == "lesbar")
+    str = implode(neu[2..], " ");
+  else return 0;
+
+  if (sscanf(str, "%s nach %s", alt, n) != 2)
+    return 0;
+
+  neu = brk(n);
+  switch(was) {
+    case "detail":
+      err = "Detail";
+      if (das = GetDetail(alt)) {
+      AddDetail(neu, das);
+      Save();
+      }
+      break;
+    case "geruch":
+      err = "Geruch";
+      if (das = GetSmell(alt)) {
+      AddSmell(neu, das);
+      Save();
+      }
+      break;
+    case "geraeusch":
+      err = "Geraeusch";
+      if (das = GetSound(alt)) {
+      AddSound(neu, das);
+      Save();
+      }
+      break;
+    case "lesbar":
+      err = "lesbares Detail";
+      if (das = QueryProp(P_READ_DETAILS)[alt]) {
+      AddReadDetail(neu, das);
+      Save();
+      }
+      break;
+    case "befehl":
+      err = "Befehl";
+      was = (par=explode(alt, " "))[0];
+      if (member(com=QueryProp(H_COMMANDS),was)) {
+        if (sizeof(par) == 1) { // <bef> nach <bef1,bef2,...>
+          das = com[was];
+          for (i=sizeof(neu)-1; i>=0; i--) {
+            if (befCheck(neu[i])) {
+              if (com[neu[i]])
+                com[neu[i]] += das;
+              else
+                com += ([ neu[i] : das ]);
+            }
+            else
+              write("Ungueltiger Befehl: '"+neu[i]+"'.\n");
+          }
+        }
+        else {            // <bef> <parameter> nach <bef1,bef2,...>
+          alt = implode(par[1..]-({""})," ");
+          if (das = com[was][alt]) {
+            for (i=sizeof(neu)-1; i>=0; i--) {
+              if (befCheck(neu[i])) {
+                das = ([ alt : com[was][alt];com[was][alt,1] ]);
+                if (com[neu[i]])
+                  com[neu[i]] += das;
+                else
+                  com += ([ neu[i] : das ]);
+              }
+              else {
+                par = explode(neu[i], " ");
+                n = par[0];
+                if (befCheck(n)) {
+                  das = ([ implode(par[1..], " ") : 
+                      com[was][alt];com[was][alt,1] ]);
+                  if (com[n])
+                    com[n] += das;
+                  else
+                    com += ([ n : das ]);
+                }
+                else
+                  write("Ungueltiger Befehl: '"+neu[i]+"'.\n");
+              }
+            }
+          }
+        }
+        Save();
+      }
+      break;
+    default:
+      write( "Du kannst nur Details, lesbare Details, Geraeuche, \n"
+             "Gerueche und Befehle kopieren!\n" );
+      return 1;
+  }
+  if (!das)
+    write(break_string(sprintf( "Kann %s '%s' nicht finden!\n", err, alt)));
+  else
+    write( "OK!\n" );
+
+  return 1;
+}
+
+public int temperatur(string str) {
+  int t, h,l;
+
+  if (!Owner()) 
+    return 0; 
+  if (!str || (str !="angenehm" && str!="kuehl" && str!="warm")) {
+    notify_fail("Was denn? Temperatur angenehm, kuehl oder warm?\n");
+    return 0;
+  }
+  h=(int)(((mapping)
+      this_player()->QueryProp(P_TEMPERATURE_RANGE))[T_RANGE_MAX]);
+  l=(int)(((mapping)
+      this_player()->QueryProp(P_TEMPERATURE_RANGE))[T_RANGE_MIN]);
+  t=QueryProp(P_ENVIRONMENT)[ENV_TEMPERATURE];
+  switch (str) {
+    case "angenehm":
+      if (t==(h+l)/2) {
+        notify_fail("Aber die Temperatur ist doch schon richtig angenehm!\n");
+        return 0;
+      }
+      else if (t>(h+l)/2) 
+        tell_room(this_object(),"Ploetzlich wird es kuehler.\n");
+      else
+        tell_room(this_object(),"Ploetzlich wird es waermer.\n");
+      write("Aaaaaah, so fuehlst Du Dich richtig wohl!\n");
+      SetProp(P_ENVIRONMENT, QueryProp(P_ENVIRONMENT)+
+          ([ENV_TEMPERATURE:(h+l)/2]));
+      break;
+    case "kuehl":
+      if (t==l) {
+        notify_fail("Aber hier ist es Dir doch schon kuehl genug!\n");
+        return 0;
+      }
+      else if (t>l) 
+        tell_room(this_object(),"Ploetzlich wird es kuehler.\n");
+      else
+        tell_room(this_object(),"Ploetzlich wird es waermer.\n");
+      write("Ui, aber kuehler darf es wirklich nicht werden!\n");
+      SetProp(P_ENVIRONMENT, QueryProp(P_ENVIRONMENT)+
+          ([ENV_TEMPERATURE:l]));
+      break;
+ 
+    case "warm":
+      if (t==h) {
+        notify_fail("Aber hier ist es Dir doch schon warm genug!\n");
+        return 0;
+      }
+      else if (t>h) 
+        tell_room(this_object(),"Ploetzlich wird es kuehler.\n");
+      else
+        tell_room(this_object(),"Ploetzlich wird es waermer.\n");
+      write("Ui, aber waermer darf es wirklich nicht werden!\n");
+      SetProp(P_ENVIRONMENT, QueryProp(P_ENVIRONMENT)+
+          ([ENV_TEMPERATURE:h]));
+      break;
+    default: write("Was hat Anatol HIER verbrochen?\n");
+      break;
+  }
+  Save();
+  return 1;
+}
+
+ 
+public int licht(string str) {
+  int ll, tl;
+
+  if (!Owner())
+    return 0;
+  if (!str || (str != "an" && str != "aus")) {
+    notify_fail("Syntax: 'licht an' oder 'licht aus'\n");
+    return 0;
+  }
+  ll = QueryProp(P_LIGHT);
+  tl = QueryProp(P_TOTAL_LIGHT);
+  switch(str) {
+  case "an":
+    if (tl > 0)
+      write("Aber es ist doch schon hell!\n");
+    else {
+      SetProp(P_LIGHT, ll-tl+1);
+      tell_room(this_object(), "Es wird wieder hell.\n");
+      Save();
+    }
+    break;
+  case "aus":
+    if (tl <= 0)
+      write("Aber es ist doch schon dunkel!\n");
+    else {
+      SetProp(P_LIGHT, ll-tl);
+      tell_room(this_object(), "Es wird dunkel.\n");
+      Save();
+    }
+    break;
+  }
+  return 1;
+}
+
+#define CASUS ({ "WER", "WESSEN", "WEM", "WEN" })
+
+nosave string rpXchg(string s) {
+  int c,p,g;
+
+  switch(s[0..1]) {
+    case "@W":
+      c = to_int(s[2..2]);
+      return ("@"+CASUS[c]);
+    case "@P":
+      c = to_int(s[2..2]);
+      return ("@P"+CASUS[c]);
+    case "@B":
+      c = to_int(s[2..2]);
+      g = to_int(s[3..3]);
+      p = to_int(s[4..4]);
+      return ("@B"+({"N", "M", "F"})[g]+({"S", "P"})[p]+CASUS[c]);
+    case "@F":
+      return "@PARA";
+    default:
+      return s;
+  }
+}
+
+private nosave string reParse(string s1, string s2) {
+  string *p;
+
+  if (s2)
+    s1 = s1+"@@\n"+s2;
+  p = regexplode(s1, "(@W[0-3]|@P[0-3]|@B[0-3][0-2][0-1])");
+  p = map_array(p, #'rpXchg);
+  return implode(p, "");
+}
+
+private nosave string getPreText(string prop, string expr) {
+  mixed crunched;
+  int i;
+
+  crunched = (mixed)(HOUSED->PCrunch(QueryProp(prop)));
+  if (!crunched || !pointerp(crunched))
+    return 0;
+  if (prop == H_COMMANDS && strstr(expr, " ") < 0)
+    expr = expr+" ";
+  for (i=sizeof(crunched)-1; i>=0; i--)
+    if (member(crunched[i][0], expr) >= 0)
+      break;
+  if (i<0)
+    return 0;
+  detail = crunched[i][0];
+  if (prop == H_COMMANDS)
+    return reParse(crunched[i][1], crunched[i][2]);
+  else
+    return crunched[i][1];
+}
+
+varargs int aendern(string str, int f) {
+  string *parts, pre;
+  int sp, sr, ret;
+
+  if (!Owner())
+    return 0;
+  if (!f && (!(str=(string)(this_player()->_unparsed_args())) || str == "")) {
+    notify_fail("Was willst Du denn aendern?\n" );
+    return 0;
+  }
+  sp = sizeof(parts = explode(str, " "));
+  sr = sizeof(brk(str));
+  detail = 0;
+  flag = f;
+  switch(parts[0][0..3]) {
+    case "raum":      // Lang- oder Kurzbeschreibung
+      if (sp == 1 || parts[1] == "lang") {
+        flag |= LANG;
+        pre=QueryProp(P_INT_LONG);
+      }
+      else if (parts[1] == "kurz") {
+        write("Nimm dazu doch bitte 'beschreibe'!\n");
+        return 1;
+      }
+      break;
+    case "meld":
+      if (file_size(REPFILE(owner,house_no)) > 0)
+        pre = read_file(REPFILE(owner,house_no));
+      else {
+        write("Ich finde keine Meldungen aus Deinem Haus!\n");
+        return 1;
+      }
+      flag |= REPORT;
+      break;
+    case "geru":     
+      if (sr>1) {
+        notify_fail("Du kannst immer nur einen Geruch aendern!\n");
+        return 0;
+      }
+      flag |= GERUCH;
+      pre = getPreText(P_SMELLS, (sp>1?implode(parts[1..], " "):
+            DEFAULT_SMELL));
+      break;
+    case "gera":     
+      if (sr>1) {
+        notify_fail("Du kannst immer nur ein Geraeusch aendern!\n");
+        return 0;
+      }
+      flag |= GERAEUSCH;
+      pre = getPreText(P_SOUNDS, (sp>1?implode(parts[1..], " "):
+            DEFAULT_SOUND));
+      break;
+    case "deta":      // Details
+      if (sp==1) {
+        notify_fail("Welches Detail willst Du denn aendern?\n");
+        return 0;
+      }
+      if (sr>1) {
+        notify_fail("Du kannst immer nur ein Detail aendern!\n");
+        return 0;
+      }
+      flag |= DETAIL;
+      pre = getPreText(P_DETAILS, implode(parts[1..], " "));
+      break;
+    case "lesb":      // lesbare Details
+      notify_fail("Welches lesbare Detail willst Du denn aendern?\n");
+      if (sp == 1) return 0; // TODO
+      if ((parts[1] == "details" || parts[1] == "detail"))
+        parts=({parts[0]})+parts[2..];
+      if (sp == 1) return 0; 
+      if (sr>1) {
+        notify_fail("Du kannst immer nur ein lesbares Detail aendern!\n");
+        return 0; 
+      }
+      flag |= RDETAIL;
+      pre = getPreText(P_READ_DETAILS, implode(parts[1..], " "));
+      break;
+    case "befe":      // Befehle
+      ret = 0;
+      if (sp == 1) {
+        notify_fail("Welchen Befehl willst Du denn aendern?\n");
+        return 0;
+      }
+      if (sr>1) {
+        notify_fail("Du kannst immer nur einen Befehl aendern!\n");
+        return 0;
+      }
+      flag |= BEFEHL;
+      pre = getPreText(H_COMMANDS, implode(parts[1..], " "));
+      break;
+    default:
+      notify_fail(break_string("Das kannst Du nicht aendern! Eine Liste der "
+        "Dinge, die Du hier aendern kannst, erhaeltst Du mit 'hilfe "
+        "aendere' - vielleicht brauchst Du ja ein Faltblatt dafuer...",76));
+      return 0;
+      break;
+  }
+  if (!pre)
+    write("Hm, sowas ist hier noch nicht beschrieben...\n");
+  else {
+    write( "Aendere nun den Text.\n(Beenden mit . oder **, Abbruch mit ~q, "
+      "Hilfe mit ~h)\n" );
+    nedit( "aenderung", pre );
+  }
+  return 1;
+}
+
+nosave void aenderung(string str) {
+  string *warn;
+  string *s;
+
+  if (!str) {
+    write("Nichts geaendert!\n");
+    return;
+  }
+  if (flag && !(flag & BEFEHL))
+    str = normstr(str);
+  warn = ({ });
+  if (flag & LANG)
+    SetProp(P_INT_LONG, str);
+  else if (flag & GERUCH) {
+    if ((!detail) || (!sizeof(detail))) {
+      if (str == "") 
+        RemoveSmell(DEFAULT_SMELL);
+      else 
+        AddSmell(DEFAULT_SMELL, str);
+    }
+    else {
+      if (str == "") 
+        RemoveSmell(detail);
+      else 
+        AddSmell(detail, str);
+    }
+  }
+  else if (flag & GERAEUSCH) {
+    if ((!detail) || (!sizeof(detail))) {
+      if (str == "") 
+        RemoveSound(DEFAULT_SOUND);
+      else 
+        AddSound(DEFAULT_SOUND, str);
+    }
+    else {
+      if (str == "") 
+        RemoveSound(detail);
+      else 
+        AddSound(detail, str);
+    }
+  }
+  else if (flag & DETAIL) {
+    if (str == "")
+      RemoveDetail(detail);
+    else
+      AddDetail(detail, str);
+  }
+  else if (flag & RDETAIL) {
+    if (str == "")
+      RemoveReadDetail(detail);
+    else
+      AddReadDetail(detail, str);
+  }
+  else if (flag & BEFEHL) {
+    if (str == "")
+      RemUserCmd(detail);
+    else {
+      s = explode(preparse(str, &warn), "@@\n");
+      if (sizeof(s) > 1 && s[1] != "")
+      AddUserCmd(detail, 0, normstr(s[0]), normstr(s[1]));
+      else
+      AddUserCmd(detail, 0, normstr(s[0]), 0);
+    }
+  }
+  else if (flag & REPORT) {
+    rm(REPFILE(owner,house_no));
+    if (str != "")
+      write_file(REPFILE(owner,house_no), str);
+  }
+  else
+    write( "Huch! Unbekanntes Flag ("+flag+")... Sag Anatol Bescheid...\n");
+  arr_out(warn, "OK.", "WARNUNG! Ungueltiger Platzhalter: %s",
+                   "WARNUNG! Ungueltige Platzhalter: ");
+  Save();
+}
+
+int SmartLog(string ofile, string typ, string msg, string date) {
+  object home;
+  string hn, foo, bar;
+
+  log_file(sprintf("%s%s:%02d.rep",HOUSED_HOUSES_REPORTDIR,owner,house_no),
+    sprintf("%s von %s in Raum %d (%s):\n%s\n",
+      typ, capitalize(getuid(this_player())), room_no, date,
+      break_string(msg,78)));
+  if (IS_WIZARD(owner)) {
+    log_file("report/"+owner+".rep",
+      sprintf("MELDUNG von %s im Seherhaus %d, Raum %d (%s):\n"
+      "Bitte zur Kenntnis nehmen! (Mit dem Befehl 'meldungen')  -Anatol\n\n",
+      capitalize(getuid(this_player())), house_no, room_no, date));
+  }
+  if (!(home = find_object(hn=TH))) {
+    call_other(hn, "???");
+    home = find_object(hn);
+  }
+  home->Set(H_REPORT, home->Query(H_REPORT)+1);
+  home->Save();
+  return 1;
+}
+
+nosave int report(string str) {
+  string rep, *lines;
+  int rNum, l, s;
+  string d, *new, *tmp, prev;
+  int nr, nextNr, m;
+
+  // if (!Owner(this_player()))
+  if (!Owner())
+    return 0;
+  if (file_size(REPFILE(owner,house_no)) <= 0) {
+    write("Keine Rueckmeldungen zu finden... Du bist wunschlos gluecklich.\n");
+    return 1;
+  }
+  rep = read_file(REPFILE(owner,house_no));
+  if (!rep) {
+    write( "Oha! Die Datei mit den Meldungen ist zu gross! Sag doch bitte "
+       "mal\nAnatol Bescheid!\n");
+    return 1;
+  }
+
+  if (str) {
+    if (str == "hier")
+      rNum = room_no;
+    else
+      rNum = to_int(str);
+    if (rNum > HMQ(H_ROOMS)) {
+      write( "So viele Raeume hast Du gar nicht!\n");
+      return 1;
+    }
+    lines = explode(rep, "\n");
+    s = sizeof(lines);
+    for (l=0; prev == 0; l++)
+      if (sscanf(lines[l], "%s von %s in Raum %d %s:", d, d, nr, d)==4)
+        prev=lines[l];
+    for ( new = ({}), tmp=({}); l<s; l++) {
+      m=sscanf(lines[l], "%s von %s in Raum %d %s:", d, d, nextNr, d);
+      if (m != 4 && nr == rNum)
+        tmp += ({ lines[l] });
+      if (m==4) {
+        if (sizeof(tmp)) {
+          new = new + ({ prev }) + tmp;
+          tmp = ({});
+        }
+        nr = nextNr;
+        prev = lines[l];
+      }
+    }
+    if (sizeof(tmp))
+      new = new + ({prev}) + tmp;
+    rep = implode(new, "\n");
+  }
+
+  this_player()->More(rep);
+  return 1;
+}
+

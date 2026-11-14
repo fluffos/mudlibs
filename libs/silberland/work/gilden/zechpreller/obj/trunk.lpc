@@ -1,0 +1,476 @@
+//=========================================================================
+//
+// File:    trunk.c
+// Created by Gwenshara@SL
+//
+// Project: Zechpreller
+//
+//=========================================================================
+
+/*
+ * Drinkklassen: Schnaepse, Weine, Biere, Grossbraeu, Spezailgetraenke
+ */
+
+#include "../zech.h"
+
+inherit "std/food";     
+
+#include <food.h>  
+#include "../zech.h"
+#include <properties.h>
+#include <new_skills.h>
+#include <moving.h>
+#include <class.h>
+
+string inhalt, casterName;
+int erfolg, ability, glvl, undeaf, unpoison, unblind;
+string *schnaepse  = ({"Ruebenschnaps", "Tannenschnaps", "Birnenschnaps",
+                       "Zwergenspiritus", "Zauberschnaps", "Steinschnaps",
+                       "Moosschnaps", "Blutschnaps"});
+string *weine      = ({"Rotwein", "Elfenwein", "Derlimer", "Erzwein",
+                       "Weisswein", "Trollwein", "Dunkelwein", "Rebenwein"});
+string *biere      = ({"Urtyp", "Elfenbraeu", "Starkbier", "Tipfer", 
+                       "Urbraeu", "Weizenbier", "Gerstenbier"});
+string *grossbraeu = ({"Met", "Hirschbraeu", "Hirnreiniger", "Felsenbraeu",
+                       "Sturmfelsbraeu", "Vodka", "Spiritus", "Weinbrand",
+                      });
+object c;
+
+void create()
+{
+  if(!is_clone(this_object())) return;  
+
+  ::create( ({"trink", "trinke"}) );
+
+  SetProp(P_SHORT, "Ein Flaeschchen mit "+inhalt);
+  SetProp(P_LONG,
+    "Ein mit "+inhalt+" gefuelltes, durchsichtes Flaeschchen. "
+    "Es wurde von "+casterName+" geschaffen."
+  );
+
+  SetProp(P_GENDER, NEUTER);
+  SetProp(P_NAME, "Flaeschchen");
+  AddId( ({ "flaeschchen", "trunk", "\nzechpreller_drink" }) );
+
+  SetProp(P_WEIGHT, 50);
+  SetProp(P_VALUE, 0);
+  SetProp(P_MATERIAL, ([ MAT_GLASS:80, MAT_MISC_FLUID:20 ]) );
+  
+  SetProp(P_FOOD_INFO,
+      ([
+         F_HEAL    : ({ 0,0 }), 
+         F_SOAK    : 0,        
+         F_DRINK   : 0,         
+         F_ALCOHOL : 0,         
+         F_POISON  : 0,         
+         F_MSG     : "Du trinkst aus einem Flaeschchen.",
+         F_MSG_ROOM: "trinkt aus einem Flaeschchen.",
+         F_VERB    : "trinken" 
+      ]) );
+  SetProp(P_CURSED, 1);
+}
+
+
+/* koennte man auch direkt ueber FOOD_INFO regeln... */
+private void UnPoison(object pl)
+{
+  tell_object(pl, BS("Dein Blut wird etwas gereinigt!"));
+  pl->AddPoison(-2-(glvl-9)); // entgiften
+  return;
+}
+
+private void UnBlind(object pl)
+{
+  tell_object(pl, BS("Dein Blick wird klarer, als der Alkohol in Dein Hirn schiesst."));
+  pl->SetProp(P_BLIND, 0); //entblinden
+  return;
+}
+
+private void UnDeaf(object pl)
+{
+  tell_object(pl, BS("Der Alkohol stroemt durch Deine Ohren."));
+  pl->SetProp(P_DEAF, 0); //enttauben
+  return;
+}
+
+void BeimEssen()
+{
+  object ob;
+  //write(load_name(TP));
+  /* Enttauben */
+  if(id("ohrenreiniger") ||
+     (undeaf && (TP->QueryProp(P_DEAF) != 0) && !random(14-((int) erfolg/1000))))
+  {
+    UnDeaf(TP);
+  }
+  
+  /* Entblinden */
+  if(id("methylalkohol") ||
+     (unblind && (TP->QueryProp(P_BLIND) != 0) && !random(12-((int) erfolg/1000))))
+  {
+    UnBlind(TP);
+  }
+
+  /* Entgiften */
+  if(id("kamillentee") ||
+     (unpoison && (TP->QueryProp(P_POISON) != 0) && !random(10-((int) erfolg/1000))))
+  {
+    UnPoison(TP);
+  }
+
+  if(id("magenreiniger"))
+  {
+    tell_object(TP, BS("In Deinem Magen rumoert es!"));
+    tell_room(ENV(TP), BS(TPN+" sieht hungrig aus!"), ({TP}));
+    if(TP->QueryProp(P_FOOD) < 20) TP->SetProp(P_FOOD, 0);
+      TP->SetProp(P_FOOD, TP->QueryProp(P_FOOD)-20);
+    if(TP->QueryProp(P_DRINK) < 20) TP->SetProp(P_DRINK, 0);
+      TP->SetProp(P_DRINK, TP->QueryProp(P_DRINK)-20);
+  }
+
+  if(id("yellow frog") && TP->QueryProp(P_FROG))
+  {
+    tell_object(TP, BS("Dir wird ganz gelb vor Augen und Du waechst!"));
+    tell_room(ENV(TP), BS(TP->Name(WER)+" ist nun kein Frosch mehr!"), ({TP}));
+    TP->SetProp(P_FROG, 0);
+  }
+  else if(id("yellow frog") && !TP->QueryProp(P_FROG))
+    tell_object(TP, BS("Der Yellow Frog bewirkt gar nichts!"));
+
+  if(id("blubbersaft") && !objectp(present("\nwaterbreath", TP)))
+  {
+    ob=clone_object("/d/dschungel/feyaria/kueste/obj/waterbreath");
+    ob->move(TP, M_NOCHECK);
+    ob->atmen((1+glvl+erfolg/15000+ability/1500)*60);
+    tell_object(TP, BS("Der Blubbersaft blubbert in Deinem Mund und Du kannst unter Wasser Atmen!"));
+  }
+  else if(objectp(present("\nwaterbreath", TP)) && id("blubbersaft"))
+    tell_object(TP, BS("Du atmest schon im Wasser!"));
+
+  if(id("fliegenpilzsud") && !objectp(present("\nwings", TP)))
+  {
+    if(TP->is_class_member(CL_FLYING))
+	{
+	  tell_object(TP, BS("Bei Dir scheint der Fliegenpilzsud keine Wirkung zu haben..."));
+	}
+	else
+	{
+      ob = clone_object("/d/astral/feyaria/djinnistan/obj/wings");
+      ob->move(TP, M_NOCHECK);
+      ob->fliegen(TP, (1+glvl+erfolg/15000+ability/1500)*60);
+      tell_object(TP, BS("Alles dreht sich! Huiii! Du hast das Gefuehl zu fliegen!"));
+      tell_room(ENV(TP), BS(TP->Name(WER)+" beginnt zu schweben."));
+	}
+  }
+  else if(id("fliegenpilzsud") && !objectp(present("\nwings", TP)))
+    tell_object(TP, BS("Du bist doch schon abgehoben!"));
+
+  if(lower_case(TP->QueryProp(P_GUILD)) == "zechpreller")
+    call_other(ZECHMASTER, "DrinksAlcohol", TP, QueryProp(P_FOOD_INFO)[F_ALCOHOL]);
+}
+
+void UpdateDesc()
+{
+  SetProp(P_SHORT, "Ein Flaeschchen mit "+inhalt);
+  SetProp(P_LONG,
+    "Ein mit "+inhalt+" gefuelltes, durchsichtes Flaeschchen. "
+    "Es wurde von "+casterName+" geschaffen."
+  );
+
+  return;
+}
+
+private void Classify(int class)
+{
+  switch(class)
+  {
+    case 1: inhalt = schnaepse[random(sizeof(schnaepse))];
+            SetProp(P_FOOD_INFO,
+            ([
+              F_HEAL    : ({ 10+random(glvl-5),10+random(glvl-5) }), 
+              F_SOAK    : 0,        
+              F_DRINK   : 1,         
+              F_ALCOHOL : 5,         
+              F_POISON  : 0,         
+              F_MSG     : "Du trinkst aus einem mit "+inhalt+" gefuellten Flaeschen.",
+              F_MSG_ROOM: "trinkt aus einem mit "+inhalt+" gefuellten Flaeschchen.",
+              F_VERB    : "trinken" 
+             ]) );
+            AddId("schnaps");
+            break;
+    case 2: inhalt = weine[random(sizeof(weine))];
+            SetProp(P_FOOD_INFO,
+            ([
+              F_HEAL    : ({ 20+random(glvl-4),20+random(glvl-4) }), 
+              F_SOAK    : 0,        
+              F_DRINK   : 2,         
+              F_ALCOHOL : 7,         
+              F_POISON  : 0,         
+              F_MSG     : "Du trinkst aus einem mit "+inhalt+" gefuellten Flaeschen.",
+              F_MSG_ROOM: "trinkt aus einem mit "+inhalt+" gefuellten Flaeschchen.",
+              F_VERB    : "trinken" 
+             ]) );
+            AddId("wein");
+            break;
+    case 3: inhalt = biere[random(sizeof(biere))];
+            SetProp(P_FOOD_INFO,
+            ([
+              F_HEAL    : ({ 25+random(glvl-3),25+random(glvl-3) }), 
+              F_SOAK    : 0,        
+              F_DRINK   : 3,         
+              F_ALCOHOL : 9,         
+              F_POISON  : 0,         
+              F_MSG     : "Du trinkst aus einem mit "+inhalt+" gefuellten Flaeschen.",
+              F_MSG_ROOM: "trinkt aus einem mit "+inhalt+" gefuellten Flaeschchen.",
+              F_VERB    : "trinken" 
+             ]) );
+            AddId("bier");
+            break;
+   case 4: inhalt = grossbraeu[random(sizeof(grossbraeu))];
+            SetProp(P_FOOD_INFO,
+            ([
+              F_HEAL    : ({ 30+random(glvl-3),30+random(glvl-3) }), 
+              F_SOAK    : 0,        
+              F_DRINK   : 4,         
+              F_ALCOHOL : 12,         
+              F_POISON  : 0,         
+              F_MSG     : "Du trinkst aus einem mit "+inhalt+" gefuellten Flaeschen.",
+              F_MSG_ROOM: "trinkt aus einem mit "+inhalt+" gefuellten Flaeschchen.",
+              F_VERB    : "trinken" 
+             ]) );
+            break;
+   default: raise_error("Illegale Drinkklasse!");
+            break;
+
+  }
+
+  AddId(lower_case(inhalt));
+  UpdateDesc();
+  return;
+}
+
+private void SpecialClass()
+{
+  /* nur wenn der spell sehr gut gelungen ist! */
+  if(!(erfolg > 8000)) Classify(4);
+
+  switch(random(10))
+  {
+   case 0: inhalt = "Felsspalter";
+           SetProp(P_FOOD_INFO,
+            ([
+              F_HEAL    : ({ 30+random(glvl-3),30+random(glvl-3) }), 
+              F_SOAK    : 0,        
+              F_DRINK   : 5,         
+              F_ALCOHOL : 20,         
+              F_POISON  : 0,         
+              F_MSG     : "Du trinkst aus einem mit "+inhalt+" gefuellten Flaeschen.",
+              F_MSG_ROOM: "trinkt aus einem mit "+inhalt+" gefuellten Flaeschchen.",
+              F_VERB    : "trinken" 
+             ]) );
+            SetProp(P_INFO, BS("Felsspalter ist ein extrem alkoholartiges "
+                                "Zwergengetraenk."));
+            AddId( ({"spalter", "felsspalter"}) );
+            break;
+    case 1: inhalt = "Goetterblut";
+            SetProp(P_FOOD_INFO,
+            ([
+              F_HEAL    : ({ 0,50 }), 
+              F_SOAK    : 0,        
+              F_DRINK   : 5,         
+              F_ALCOHOL : 5,         
+              F_POISON  : 0,         
+              F_MSG     : "Du trinkst aus einem mit "+inhalt+" gefuellten Flaeschen.",
+              F_MSG_ROOM: "trinkt aus einem mit "+inhalt+" gefuellten Flaeschchen.",
+              F_VERB    : "trinken" 
+             ]) );
+            SetProp(P_INFO, BS("Goetterblut ist extrem hochmagisch."));
+            AddId( ({"blut", "goetterblut"}) );
+            break;
+    case 2: inhalt = "Drachenfeuer";
+            SetProp(P_FOOD_INFO,
+            ([
+              F_HEAL    : ({ 50,0 }), 
+              F_SOAK    : 0,        
+              F_DRINK   : 5,         
+              F_ALCOHOL : 5,         
+              F_POISON  : 0,         
+              F_MSG     : "Du trinkst aus einem mit "+inhalt+" gefuellten Flaeschen.",
+              F_MSG_ROOM: "trinkt aus einem mit "+inhalt+" gefuellten Flaeschchen.",
+              F_VERB    : "trinken" 
+             ]) );
+            SetProp(P_INFO, BS("Mit Drachenfeuer kann man Wunden hervoragend versorgen."));
+            AddId( ({"feuer", "drachenfeuer"}) );
+            break;
+    case 3: inhalt = "Magenreiniger";
+            SetProp(P_FOOD_INFO,
+            ([
+              F_HEAL    : ({ 30+random(glvl-3),30+random(glvl-3) }), 
+              F_SOAK    : 0,        
+              F_DRINK   : 0,         
+              F_ALCOHOL : 5,         
+              F_POISON  : 0,         
+              F_MSG     : "Du trinkst aus einem mit "+inhalt+" gefuellten Flaeschen.",
+              F_MSG_ROOM: "trinkt aus einem mit "+inhalt+" gefuellten Flaeschchen.",
+              F_VERB    : "trinken" 
+             ]) );
+            SetProp(P_INFO, BS("Der Magenreiniger spuelt so richtig durch!"));
+            AddId( ({"reiniger", "magenreiniger"}) );
+            break;
+    case 4: inhalt = "Methylalkohol";
+	    SetProp(P_FOOD_INFO,
+	    ([
+   	      F_HEAL    : ({ 0, 0}), 
+              F_SOAK    : 0,        
+              F_DRINK   : 1,         
+              F_ALCOHOL : 0,         
+              F_POISON  : 0,         
+              F_MSG     : "Du trinkst aus einem mit "+inhalt+" gefuellten Flaeschen.",
+              F_MSG_ROOM: "trinkt aus einem mit "+inhalt+" gefuellten Flaeschchen.",
+              F_VERB    : "trinken"
+	    ]) );
+	    SetProp(P_INFO, BS("Methylalkohol erneuert Deine Sehnerven!"));
+	    AddId( ({"alkohol","methylalkohol","\nzechpreller_drink_nocount"}) );
+	    break;
+    case 5: inhalt = "Blubbersaft";
+	    SetProp(P_FOOD_INFO,
+	    ([
+   	      F_HEAL    : ({ 0, 0}), 
+              F_SOAK    : 0,        
+              F_DRINK   : 10,         
+              F_ALCOHOL : 0,         
+              F_POISON  : 0,         
+              F_MSG     : "Du trinkst aus einem mit "+inhalt+" gefuellten Flaeschen.",
+              F_MSG_ROOM: "trinkt aus einem mit "+inhalt+" gefuellten Flaeschchen.",
+              F_VERB    : "trinken"
+	    ]) );
+	    SetProp(P_INFO, BS("Blubbersaft erzeugt Luftblasen im Magen!"));
+	    AddId( ({"saft","blubbersaft","\nzechpreller_drink_nocount"}) );
+    case 6: inhalt = "Kamillentee";
+	    SetProp(P_FOOD_INFO,
+	    ([
+   	      F_HEAL    : ({ 0, 0}), 
+              F_SOAK    : 0,        
+              F_DRINK   : 2,         
+              F_ALCOHOL : 0,         
+              F_POISON  : 0,         
+              F_MSG     : "Du trinkst aus einem mit "+inhalt+" gefuellten Flaeschen.",
+              F_MSG_ROOM: "trinkt aus einem mit "+inhalt+" gefuellten Flaeschchen.",
+              F_VERB    : "trinken"
+	    ]) );
+	    SetProp(P_INFO, BS("Kamillentee reinigt Dein Blut!"));
+	    AddId( ({"tee","kamillentee","\nzechpreller_drink_nocount"}) );
+	    break;
+    case 7: inhalt = "Ohrenreiniger";
+	    SetProp(P_FOOD_INFO,
+	    ([
+   	      F_HEAL    : ({ 0, 0}), 
+              F_SOAK    : 0,        
+              F_DRINK   : 1,         
+              F_ALCOHOL : 5,         
+              F_POISON  : 0,         
+              F_MSG     : "Du trinkst aus einem mit "+inhalt+" gefuellten Flaeschen.",
+              F_MSG_ROOM: "trinkt aus einem mit "+inhalt+" gefuellten Flaeschchen.",
+              F_VERB    : "trinken"
+	    ]) );
+	    SetProp(P_INFO, BS("Dieses Gesoeff pfeift durch Deine Ohren!"));
+	    AddId( ({"reiniger","ohrenreiniger","\nzechpreller_drink_nocount"}) );
+	    break;
+    case 8: inhalt = "Yellow Frog";
+	    SetProp(P_FOOD_INFO,
+	    ([
+   	      F_HEAL    : ({ 0, 0}), 
+              F_SOAK    : 0,        
+              F_DRINK   : 10,         
+              F_ALCOHOL : 10,         
+              F_POISON  : 0,         
+              F_MSG     : "Du trinkst aus einem mit "+inhalt+" gefuellten Flaeschen.",
+              F_MSG_ROOM: "trinkt aus einem mit "+inhalt+" gefuellten Flaeschchen.",
+              F_VERB    : "trinken"
+	    ]) );
+	    SetProp(P_INFO, BS("Der Yellow Frog ist das Gegenteil eines Blue Frog!"));
+	    AddId( ({"frog","yellow frog","\nzechpreller_drink_nocount"}) );
+	    break;
+    case 9: inhalt = "Fliegenpilzsud";
+	    SetProp(P_FOOD_INFO,
+	    ([
+   	      F_HEAL    : ({ 0, 0}), 
+              F_SOAK    : 0,        
+              F_DRINK   : 10,         
+              F_ALCOHOL : 10,         
+              F_POISON  : 0,         
+              F_MSG     : "Du trinkst aus einem mit "+inhalt+" gefuellten Flaeschen.",
+              F_MSG_ROOM: "trinkt aus einem mit "+inhalt+" gefuellten Flaeschchen.",
+              F_VERB    : "trinken"
+	    ]) );
+	    SetProp(P_INFO, BS("Dieser Sud wird aus einem fliegenden Pilz gekocht!"));
+	    AddId( ({"sud","fliegenpilzsud","\nzechpreller_drink_nocount"}) );
+	    break;
+    default: raise_error("Kein passender Erfolg geliefert!");
+             break;
+  }
+  UpdateDesc();
+}
+
+/* Das Erzeugen eines Drinks */
+void GenerateDrink(object caster, int abil, int suc)
+{
+  int duration;
+  erfolg     = suc;
+  ability    = abil;
+  glvl       = caster->QueryProp(P_GUILD_LEVEL);
+  casterName = caster->Name(WER);
+  c          = caster;
+  
+  // Grossklasseneinteilung
+  switch(abil)
+  {
+     case    0 .. 5000: Classify(1);
+                        break;
+     case 5001 .. 7000: Classify(2);
+                        unpoison=1; // Entgiften moeglich
+                        break;
+     case 7001 .. 8000: Classify(3);
+                        unpoison = 1; // Entgiften moeglich
+                        unblind  = 1; // Entblinden moeglich
+                        break;
+     case 8001 .. 9999: Classify(4);
+                        unpoison = 1; // Entgiften moeglich
+                        unblind  = 1; // Entblinden moeglich
+                        undeaf   = 1; // Enttauben moeglich
+                        break;
+     case        10000: SpecialClass();
+                        unpoison = 1; // Entgiften moeglich
+                        unblind  = 1; // Entblinden moeglich
+                        undeaf   = 1; // Enttauben moeglich
+                        break;
+    default: tell_object(caster, "Ein Fehler ist aufgetreten! Versaendige einen Magier!\n");
+             raise_error("Kein entsprechender Skillwert vorhanden!");
+             break;
+  }
+ 
+  if(!id("\nzechpreller_drink_nocount"))
+    caster->SetProp(P_ZECHPRELLER_DRINKS, caster->QueryProp(P_ZECHPRELLER_DRINKS)+1);
+  return;
+}
+
+varargs int remove(int s)
+{
+  if (objectp(c) && !id("\nzechpreller_drink_nocount")) { 
+    c->SetProp(P_ZECHPRELLER_DRINKS, c->QueryProp(P_ZECHPRELLER_DRINKS)-1);
+  }
+  return ::remove(s);
+}
+
+void reset()
+{
+  if(!is_clone(TO)) return;
+  if(!living(ENV(TO))) remove();
+  ::reset();
+}
+
+string QueryInhalt()
+{
+  if(!stringp(inhalt)) return "Nothing";
+  else return inhalt;
+}

@@ -1,0 +1,71 @@
+
+#include <properties.h>
+#include <daemon.h>
+#include <wizlevels.h>
+#include <moving.h>
+
+#define AD_PAUSE 20*60          // 20 minutes minimum interval per player
+#define AD_INTERVAL 120         // interval between ads
+#define AD_RETRY 60             // retry if unsuccessful
+
+#define SAVEFILE "/room/ads/admaster"
+
+mapping pl = ([ ]);
+
+void create() {
+  if (is_clone(this_object())) return destruct(this_object());
+  seteuid(getuid(this_object()));
+  if (!restore_object(SAVEFILE)) {
+    pl = ([ ]);
+  }
+  save_object(SAVEFILE);
+  call_out("do_ad",10);
+}
+
+nomask int remove() {
+  destruct(this_object());
+  return 1;
+}
+
+void SetLastAd(string uid, int lasttime) {
+  pl[uid] = lasttime;
+  save_object(SAVEFILE);
+}
+
+mapping QueryLastAd(string uid) {
+  return pl[uid];
+}
+
+mapping QueryLastAds() {
+  return copy_mapping(pl);
+}
+
+int check_last_seq(object u) {
+  return (pl[getuid(u)] <= (time() - AD_PAUSE));
+}
+
+void do_ad()
+{
+  mixed u;
+  u = filter_objects( users(), "InFight" );
+  u = filter_array( u, "check_last_seq" );
+
+  if (sizeof(u))
+  {
+    SetLastAd(getuid(u[0]), time());
+    clone_object( "room/ads/ads_mark" )->move( u[0], M_NOCHECK );
+    if (find_player("woody"))
+      tell_object(find_player("woody"),
+          sprintf("AdMaster: Sending ad to %O\n", u[0]));
+    call_out("do_ad",AD_INTERVAL+random(AD_INTERVAL / 2));
+  }
+  else
+  {
+    /*
+    if (find_player("woody"))
+      tell_object(find_player("woody"),
+          sprintf("AdMaster: Sending no ads.\n"));
+    */
+    call_out("do_ad",AD_RETRY+random(AD_RETRY / 2));
+  }
+}

@@ -1,0 +1,423 @@
+/*
+  Master fuer Hochzeit, Ardulvhier
+*/
+
+#include "../def.h"
+#include <mail.h>
+
+inherit MOST "std_things";
+
+#define TERMIN LOG "hochzeits_termine"
+#define CT(x) BS(sprintf("%65|s", x))
+
+mapping termine;
+nosave int preparing, clothes, executing, no_more_today, timeout;
+
+nomask query_prevent_shadow() { return 1; }
+
+nomask void create()
+{
+  if(is_clone(ME)) return destruct(ME);
+
+  SUID;
+
+  termine=([]);
+  restore_object(TERMIN);
+
+  call_out("hochzeits_vorbereitungen", 2);
+}
+
+nomask reset()
+{
+  if(preparing) 
+    timeout++;
+  else
+    call_out("hochzeits_vorbereitungen", 2);      
+
+  if(timeout > 6) Storno();
+  
+  if(no_more_today!=to_int(dtime()[5..6]))
+    no_more_today=0;    
+}
+
+nomask public int Hochzeit_laeuft()
+{
+  return executing;
+}
+
+nomask public int Vorbereitungen()
+{
+  return preparing;
+}
+
+nomask public int Storno(int i)
+{
+  if(((!i) && (preparing))|| (i==preparing))
+    {
+      if(member(termine, preparing))
+	termine=m_delete(termine, preparing);
+      
+      preparing=0;
+      executing=0;
+      clothes=0;
+      timeout=0;
+    }
+  else
+    {
+      if(!member(termine, i)) return 0;
+      
+      termine=m_delete(termine, i);
+    }
+
+  save_object(TERMIN);
+
+  write_file(LOG "hochzeit",
+	     ctime()+" - Hochzeit storniert"+(PO ? "":" (timeout)")+".\n"
+	     "   PO: "+(PO ? sprintf("%O", PO):"-><-")+"\n");
+    
+  return 1;
+}
+
+nomask public int Keine_Hochzeit()
+{
+  return !Vorbereitungen() && !Hochzeit_laeuft();
+}
+
+nomask public string Braut()
+{
+  if(preparing || executing)
+    return termine[preparing||executing][1];
+}
+
+nomask public string Braeutigam()
+{
+  if(preparing || executing)
+    return termine[preparing||executing][2];
+}
+
+nomask public string Zeuge()
+{
+  if(preparing || executing)
+    return termine[preparing||executing][3];
+}
+
+nomask public int Geschlossene_Gesellschaft()
+{
+  if(preparing || executing)
+    return termine[preparing||executing][4];
+}
+
+nomask public int Eingeladen(string wer)
+{
+  string *gaeste;
+  
+  if(preparing || executing)
+    gaeste=termine[preparing||executing][5];
+  else
+    return 0;
+
+  if(!sizeof(gaeste)) return 0;
+  
+  if(member(gaeste, wer)==-1) return 0;
+
+  return 1;  
+}
+
+nomask public varargs string Termin_Liste(int flag)
+{
+  int i;
+  string ret;
+  int *tmp;
+  
+  if(!sizeof(termine)) return 0;
+  
+  tmp=m_indices(termine);
+  tmp=sort_array(tmp, CLOSURE(<));
+  
+  ret=CT("Hochzeitstermine")+
+    CT("====================")+"\n";
+  
+  for(i=sizeof(tmp)-1;i>=0;i--)
+    ret+=sprintf("%17s um %2d Uhr:\n%65|s\n\n",
+		 dtime(tmp[i])[0..16], termine[tmp[i]][0],
+		 CAP(termine[tmp[i]][1])+" und "+CAP(termine[tmp[i]][2])+
+		 ", als Zeuge: "+CAP(termine[tmp[i]][3])+
+		 (termine[tmp[i]][4]==1 ? " (privat)": " (oeffentlich)"));
+  
+  if(flag) return ret;
+  else return make_document(ret);
+}
+
+nomask public varargs int Kleidungsausgabe(int flag)
+{
+  if(!PO) return -1;
+  
+  if(explode(file_name(PO), "#")[0]!=NPC "dienerin") return -1;
+
+  if(!preparing) return 0;
+  
+  if(flag) clothes=1;
+  
+  if(flag) DB("*** Kleidungsausgabe, clothes gesetzt!\n");
+
+  return clothes;
+}
+
+nomask public int Starte_Hochzeit()
+{
+  if(!PO) return -1;
+  
+  if(file_name(PO)!=ROOM "tempel") return -1;
+
+  executing=preparing;
+  preparing=0;
+  clothes=0;
+
+  DB("*** Hochzeit wird gestartet!\n");
+
+  return 1;
+}
+
+nomask varargs public int Termin_frei(int tag, mixed flag)
+{
+  int i;
+  int *tmp;
+
+  if(no_more_today!=to_int(dtime()[5..6]))
+    no_more_today=0;
+  
+  if((dtime(tag)[0..16]==dtime(time())[0..16]) && no_more_today)
+    return -1;
+  
+  //Nicht weiter als 1 Woche;
+  if(tag >= time()+60*60*24*7) return 0;
+  //if(tag < time()) return 0;
+
+  if(sizeof(tmp=m_indices(termine)))
+    for(i=sizeof(tmp)-1;i>=0;i--)
+      {
+	DB("*** Checking Hochzeitstermin: "+dtime(tmp[i])[0..16]+"\n");
+
+	if(stringp(flag))
+	  if(flag==termine[tmp[i]][1]) 
+	    {
+	      DB("*** "+CAP(flag)+" hat schon reserviert!\n");
+	      return 0;
+	    }
+	
+	if(dtime(tmp[i])[0..16]==dtime(tag)[0..16]) 
+	  {
+	    DB("*** Found Termin: "+termine[tmp[i]][0]+" Uhr "+
+	       (termine[tmp[i]][4] ? "(closed) ":"(open) ")+
+	       CAP(termine[tmp[i]][1])+" und "+CAP(termine[tmp[i]][2])+
+	       " mit Zeuge: "+CAP(termine[tmp[i]][3])+".\n");
+	    
+	    if(intp(flag)) return tmp[i];
+	    
+	    return 0;
+	  }
+      }
+  
+  return 1;
+}
+
+nomask public int hochzeits_vorbereitungen()
+{
+  int tmp;
+  
+  if(preparing || executing || no_more_today) return -2;
+  if((tmp=Termin_frei(time(), 1)) && (tmp < 2)) return -1;
+
+  if((termine[tmp][0] <= 2) || (termine[tmp][0] < time()+60*60*2))
+    {
+      preparing=tmp;
+      timeout=0;
+      clothes=0;
+      
+      DB("*** Aktiviere Vorbereitungen!\n");
+      
+      if(find_player(Braeutigam()))
+	find_player(Braeutigam())->Message(break_string(
+		"Die Vorbereitungen fuer Eure Hochzeit laufen nun an!", 78,
+		"Eine Dienerin teilt Dir mit: "), MSGFLAG_TELL);
+
+      if(find_player(Braut()))
+	find_player(Braut())->Message(break_string(
+		"Die Vorbereitungen fuer Eure Hochzeit laufen nun an!", 78,
+		"Eine Dienerin teilt Dir mit: "), MSGFLAG_TELL);
+
+      if(find_player(Zeuge()))
+	find_player(Zeuge())->Message(break_string(
+		"Die Vorbereitungen fuer die Hochzeit von "+CAP(Braut())+
+		" und "+CAP(Braeutigam())+" laufen nun an!", 78,
+		"Eine Dienerin teilt Dir mit: "), MSGFLAG_TELL);
+      
+      return 1;
+    }
+
+  return 0;
+}
+
+nomask nosave void Mail_verteilen(mapping data)
+{
+  mixed* mail;
+  string text, er, sie, zeuge;
+  
+  er=CAP(data["er"]);
+  sie=CAP(data["sie"]);
+  zeuge=CAP(data["zeuge"]);
+  
+  text=
+    CT("Offizielle Einladung zur Hochzeit")+
+    CT("von")+
+    sprintf("%30s und %30-s\n", "\""+sie+"\"", "\""+er+"\"")+
+    CT("-------------------------------------")+
+    "\n"+
+    CT("Hiermit")+
+    CT("gewaehrt Euch die Hohepriesterin Lotu-Varia eine Audienz, ")+
+    CT("um der Vermaehlung von "+sie+" und "+er+" beiwohnen ")+
+    CT("zu koennen.")+
+    "\n"+
+    CT("Stattfinden wird die Zeremonie")+
+    CT("\""+dtime(data["tag"])[0..16]+" um "+data["uhrzeit"]+" Uhr\"")+
+    CT("mit "+zeuge+" als Zeugen")+
+    CT("im grossen Tempel in Ardulvhier.")+
+    "\n"+
+    CT("Falls Ihr keinen anderen Weg hierher kennt,")+
+    CT("koennt Ihr im Dschungel bei K'yorl Okh Chak'ar")+
+    CT("um Durchlass bitten.")+
+    "\n"+
+    (data["art"] ? 
+     CT("Die Trauung wird in geschlosser Gesellschaft abgehalten.")+
+     CT("Nur mit dieser Einladung wird man eingelassen!")+
+     CT("Einlass erfolgt nur kurz vor der Hochzeit.")+
+     CT("Vergesst nicht, allzu gute oder heilige Charaktere werden")+
+     CT("trotz Einladung nicht ueberall Einlass erlangen."):
+     CT("Ihr koennt dazu mitnehmen, wen Ihr wollt!")+
+     CT("Vergesst nicht, allzu gute oder heilige Charaktere erlangen")+
+     CT("nicht ueberall Einlass."))+
+    "\n"+
+    CT("Die Trauung kann auch etwas frueher/spaeter anfangen!")+
+    "\n"+
+    CT("Wer nicht rechtzeitig kommt, wird nicht mehr hereingelassen!");
+  
+  //return tell_object(find_player("protheg"), make_document(text));
+  
+  mail = allocate(9);
+  mail[MSG_FROM] = "Hochzeitsservice Ardulvhier";
+  mail[MSG_SENDER] = MUDNAME;
+  mail[MSG_RECIPIENT] = zeuge;
+  mail[MSG_CC]=data["gaesteliste"];
+  mail[MSG_BCC]="protheg";
+  mail[MSG_SUBJECT]="Einladung";
+  mail[MSG_DATE]=dtime(time());
+  mail[MSG_ID]=MUDNAME+":"+time();
+  mail[MSG_BODY]=make_document(text);
+  
+  return "/secure/mailer"->DeliverMail(mail, 1);
+}
+
+nomask public int Neuer_Termin(mapping data)
+{
+  if(!PO) return -1;
+    
+  if(explode(file_name(PO), "#")[0]!=NPC "dienerin") return -1;
+  
+  termine+=([data["tag"]:
+	     ({data["uhrzeit"], data["sie"], data["er"], data["zeuge"], 
+		 data["art"], data["gaesteliste"]})]);
+  
+  save_object(TERMIN);
+  
+  DB("*** Neuer Termin: "+dtime(data["tag"])+"\n");
+
+  hochzeits_vorbereitungen();
+  
+  if(sizeof(data["gaesteliste"]))
+    Mail_verteilen(data);
+  
+  return 1;
+}
+
+nomask varargs public int Hochzeit_fertig(int flag)
+{
+  if(!PO) return -1;
+  
+  if(file_name(PO)!=ROOM "tempel") return -1;
+  
+  if(!flag)
+    LLOTH->Hochzeitsinform(Braut(), Braeutigam());
+
+  termine=m_delete(termine, executing);
+
+  save_object(TERMIN);
+
+  timeout=0;
+  preparing=0;
+  executing=0;
+  clothes=0;
+  no_more_today=to_int(dtime()[5..6]);
+  
+  return 1;
+}
+
+nomask public int Bereits_vorhanden(string wer)
+{
+  int i;
+  int *ind;
+  
+  if(!sizeof(ind=m_indices(termine))) return 0;
+  
+  for(i=sizeof(ind)-1;i>=0;i--)
+    if((termine[ind[i]][1]==wer) || (termine[ind[i]][2]==wer))
+      return ind[i];
+
+  return 0;
+}
+
+mixed Termin_Data(int i)
+{
+  if(member(termine, i))
+    return termine[i];
+  
+  return 0;
+}
+
+int Termin_Storno(int i)
+{
+  if(member(termine, i))
+    {
+      termine-=termine[i];
+      return 1;
+    }
+
+  return 0;
+}
+
+mapping dumpvars()
+{
+  return termine;
+}
+
+mapping delvars()
+{
+  if(!TP) return 0;
+  if(getuid(TP)!="protheg") return 0;
+
+  termine=([]);
+  save_object(TERMIN);
+
+  timeout=0;
+  preparing=0;
+  executing=0;
+  clothes=0;
+  no_more_today=0;
+
+  return termine;
+}
+
+void blubb()
+{
+  if((TP) && (getuid(TP)=="protheg"))
+    no_more_today=0;
+}

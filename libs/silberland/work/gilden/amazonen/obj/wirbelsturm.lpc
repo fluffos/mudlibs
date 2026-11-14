@@ -1,0 +1,103 @@
+// Wirbelsturm: Raumobjekt fuer Sturmwirbel. Debufft Gegner im Herzschlag.
+
+#include "../def.h"
+
+inherit "std/thing";
+
+object owner;
+int power;
+int end_time;
+
+void create()
+{
+  if (!is_clone(TO)) return;
+  ::create();
+
+  AddId(({"\namz_wirbelsturm", "wirbelsturm", "sturmwirbel", "sturm"}));
+  SetProp(P_NAME, "Wirbelsturm");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_SHORT, "Ein Wirbelsturm tobt hier");
+  SetProp(P_LONG,
+    "Ein rotierender Luft- und Gewitterwirbel zieht durch den Raum und "
+    "reisst alles mit sich, was sich ihm in den Weg stellt.\n");
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_MAGIC, 1);
+
+  if (getuid(previous_object()) != SPELL_UID)
+    call_out("remove", 1);
+}
+
+public void setup_wirbelsturm(object pl, int p, int dur)
+{
+  owner = pl;
+  power = p;
+  end_time = time() + dur;
+  set_heart_beat(1);
+}
+
+public void heart_beat()
+{
+  object envt, enemy, *enemies;
+  int debuff_len;
+
+  if (!objectp(owner) || !objectp(envt = environment()))
+  {
+    remove();
+    return;
+  }
+
+  if (environment(owner) != envt)
+  {
+    remove();
+    return;
+  }
+
+  if (time() > end_time || !owner->QueryProp(P_AMAZONEN_ASCENT))
+  {
+    tell_room(envt, BS("Der Wirbelsturm beruhigt sich und loest sich auf.\n"));
+    remove();
+    return;
+  }
+
+  if (!owner->InFight())
+    return;
+
+  enemies = owner->PresentEnemies();
+  if (!pointerp(enemies) || !sizeof(enemies))
+    return;
+
+  enemy = enemies[random(sizeof(enemies))];
+  if (!objectp(enemy))
+    return;
+
+  if(random(3)) return;
+  enemy->Defend(random(power*50/2), DT_AIR, ([SP_SHOW_DAMAGE: 1, SP_NAME: "sturmwirbel", SP_PHYSICAL_ATTACK: 1, SP_RECURSIVE: 1]), owner);
+  if(!objectp(enemy)) return;
+
+  if(enemy->QueryProp(P_BLIND) || enemy->QueryProp(P_DISABLE_ATTACK)) return;
+
+  debuff_len = 1 + power / 3 + random(power / 2 + 1);
+
+  if (random(2))
+  {
+    tell_room(envt, BS("Der Wirbelsturm wirbelt " + enemy->name(WEN) + " so, dass sie kaum etwas sieht!\n"),
+      ({enemy}) );
+    tell_object(enemy, BS("Der Wirbelsturm blendet Dich mit Staub und Funken!\n"));
+    enemy->SetProp(P_BLIND, random(debuff_len));
+  }
+  else
+  {
+    tell_room(envt, BS("Der Wirbelsturm reisst " + enemy->name(WEN) + " aus dem Tritt!\n"),
+      ({enemy}) );
+    tell_object(enemy, BS("Der Wirbelsturm laesst Dich taumeln!\n"));
+    enemy->SetProp(P_DISABLE_ATTACK, random(debuff_len/2));
+  }
+}
+
+varargs int remove(int silent)
+{
+  set_heart_beat(0);
+  return ::remove(silent);
+}
+

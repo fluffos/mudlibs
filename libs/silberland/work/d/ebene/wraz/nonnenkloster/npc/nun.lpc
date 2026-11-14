@@ -1,0 +1,713 @@
+// Gesellenstueck
+// Nonne - nun.c
+// Von Wraz / Mendralim
+
+inherit "std/mnpc";
+
+#include "../def.h"
+#include <mnpc.h>
+
+string *name, *nun_hunter=({""}), player_name="";
+object nun=TO, *find_nuns;
+int i, arc, si, singing, type;
+
+/* type:
+  0: magic : standard
+  1: feuer : -0.2 feuer, +0.1 eis, +0.4 wasser (abweichungen von standartwerten)
+  2: cold  : -0.2 eis, -0.1 wasser, +0.4 feuer (w.o.)
+  3: water : -0.2 wasser, -0.1 eis, +0.4 feuer (w.o.)
+  4: sound, lightning, light, electric
+           : -0.2 laerm, -0.2 elektro, -0.2 licht, -0.2 blitz, +0.1 wasser,
+             -0.1 luft
+*/
+
+void aye()
+{
+  string names;
+  string *ar_names;
+  int rand, o, nuns;
+  
+  find_nuns=find_livings("\nnuns_by_wraz");
+  names=read_file(NPC "nun_names_small");
+  ar_names=explode(names, "\n");
+
+  rand=random(sizeof(ar_names)); // zufallszahl, liegt innerhalb der zahl der
+  				 // namen im file
+  names=ar_names[rand];		 // string wird zufallsname
+  names=capitalize(names);
+  name=({ar_names[rand],names});
+
+  nuns=sizeof(find_nuns);
+  //write_file(NPC "namen", "jo des geht, nuns: "+nuns+"\n");
+  
+  for(o=0; o<nuns; o++) // Pruefen, ob eine Nonne schon so heisst!
+  {
+    //write_file(NPC "namen","name: "+
+    //find_nuns[o]->QueryProp(P_NAME)+"\n");
+    if(find_nuns[o]->QueryProp(P_NAME)==
+    	"Schwester "+name[1])
+    {
+      names=read_file(NPC "nun_names_small");
+      ar_names=explode(names, "\n");
+  
+      rand=random(sizeof(ar_names)-1); // zufallszahl, liegt innerhalb der
+        			       // zahl der namen im file
+      names=ar_names[rand];	       // string wird zufallsname
+      names=capitalize(names);
+      name=({name[0]+" "+ar_names[rand],name[1]+" "+names});
+    }
+  }
+}
+
+void create() 
+{
+  if(!is_clone(TO)) return;
+  if(getuid(previous_object())!=getuid(find_object(ROOM "bedroom"))) {
+  	TO->remove(0);
+  	return; } // notwendig, weil ../bedroom alle nonnen im spiel zaehlt
+  ::create();
+
+  aye();
+  
+  SetProp(P_SHORT, "Schwester "+name[1]);
+  SetProp(P_LONG,
+    "Die Nonne geht gemaechlich durch die Gegend, streichelt dabei Blaetter "
+    "der hier "
+    "stehenden Pflanzen und grinst froehlich. Sie heisst "+name[1]+".");
+  SetProp(P_NAME, "Schwester "+name[1]);
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:15,T_RANGE_MAX:40]));
+  AddId(({"nonne", name[0], "schwester", "NOWIMPY", "\nangroxistunserheld"}));
+  set_living_name("\nnuns_by_wraz");
+
+  create_default_npc(28+random(6));
+  
+  SetProp(P_XP, 5 * QueryProp(P_XP) / 4);
+  
+  switch(random(5))
+  {
+    case 0:
+     SetProp(P_HANDS, ({" mit Naturkraeften",
+     (QueryProp(P_LEVEL)-10)*10+random(50),
+     DT_MAGIC}));
+     type=0;
+     break;
+    case 1:
+     SetProp(P_HANDS, ({" mit feurigen Naturkraeften",
+     (QueryProp(P_LEVEL)-10)*10+random(50),
+     DT_FIRE}));
+     type=1;
+     break;
+    case 2:
+     SetProp(P_HANDS, ({" mit der Gewalt des Winters",
+     (QueryProp(P_LEVEL)-10)*10+random(50),
+     DT_COLD}));
+     type=2;
+     break;
+    case 3:
+     SetProp(P_HANDS, ({" mit der Naturkraft des Meeres",
+     (QueryProp(P_LEVEL)-10)*10+random(50),
+     DT_WATER}));
+     type=3;
+     break;
+    default:
+     SetProp(P_HANDS, ({" mit Blitz und Donner",
+     (QueryProp(P_LEVEL)-10)*10+random(50),
+     ({DT_SOUND,DT_LIGHTNING,DT_LIGHT,DT_ELECTRIC}) }));
+     type=4;
+     break;
+  }
+  // Magie deshalb, weil die Nonnen ja auch mit Naturkraeften angreifen, nicht
+  // mit ihren Haenden (ich stell mir eine Nonne mit Haenden herschlagend sehr
+  // strange vor ;)
+  SetProp(P_RACE, "Mensch");
+  SetProp(P_SIZE, 140+random(41));
+  SetProp(P_WEIGHT, 60000+random(12000));
+  SetProp(P_ALIGN, 1000);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_HEAL,0);
+  SetProp(P_AGGRESSIVE,0);
+  SetProp(P_WIMPY, 0);
+  
+  switch (type)
+  {
+    case 0:
+     SetProp(P_RESISTANCE_STRENGTHS , 
+       ([DT_FIRE:     -0.3, DT_COLD:  -0.3, DT_WATER:  -0.3, DT_AIR:    -0.5, 
+         DT_EXPLOSION: 0.4, DT_SOUND:  0.2, DT_LIGHT:  -0.2, DT_ACID:    0.2, 
+         DT_POISON:    0.2, DT_TERROR: 0.5, DT_HOLY:   -1.0, DT_UNHOLY:  0.5, 
+         DT_MIND:     -0.3, DT_SLASH:  0.2, DT_BLUDGEON:0.1, DT_PIERCE:  0.2,
+         DT_RIP:       0.2, DT_WHIP:   0.2, DT_SQUEEZE: 0.1]) );
+    break;
+    
+    case 1:
+    SetProp(P_RESISTANCE_STRENGTHS , 
+       ([DT_FIRE:     -0.5, DT_COLD:  -0.2, DT_WATER:   0.1, DT_AIR:    -0.5, 
+         DT_EXPLOSION: 0.4, DT_SOUND:  0.2, DT_LIGHT:  -0.2, DT_ACID:    0.2, 
+         DT_POISON:    0.2, DT_TERROR: 0.5, DT_HOLY:   -1.0, DT_UNHOLY:  0.5, 
+         DT_MIND:     -0.3, DT_SLASH:  0.2, DT_BLUDGEON:0.1, DT_PIERCE:  0.2,
+         DT_RIP:       0.2, DT_WHIP:   0.2, DT_SQUEEZE: 0.1]) );
+    break;
+    
+    case 2:
+      SetProp(P_RESISTANCE_STRENGTHS , 
+       ([DT_FIRE:      0.1, DT_COLD:  -0.5, DT_WATER:  -0.4, DT_AIR:    -0.5, 
+         DT_EXPLOSION: 0.4, DT_SOUND:  0.2, DT_LIGHT:  -0.2, DT_ACID:    0.2, 
+         DT_POISON:    0.2, DT_TERROR: 0.5, DT_HOLY:   -1.0, DT_UNHOLY:  0.5, 
+         DT_MIND:     -0.3, DT_SLASH:  0.2, DT_BLUDGEON:0.1, DT_PIERCE:  0.2,
+         DT_RIP:       0.2, DT_WHIP:   0.2, DT_SQUEEZE: 0.1]) );
+    break;
+    
+    case 3:
+      SetProp(P_RESISTANCE_STRENGTHS , 
+       ([DT_FIRE:      0.1, DT_COLD:  -0.4, DT_WATER:  -0.5, DT_AIR:    -0.5, 
+         DT_EXPLOSION: 0.4, DT_SOUND:  0.2, DT_LIGHT:  -0.2, DT_ACID:    0.2, 
+         DT_POISON:    0.2, DT_TERROR: 0.5, DT_HOLY:   -1.0, DT_UNHOLY:  0.5, 
+         DT_MIND:     -0.3, DT_SLASH:  0.2, DT_BLUDGEON:0.1, DT_PIERCE:  0.2,
+         DT_RIP:       0.2, DT_WHIP:   0.2, DT_SQUEEZE: 0.1]) );
+    break;
+    
+    case 4:
+      SetProp(P_RESISTANCE_STRENGTHS , 
+       ([DT_FIRE:     -0.3, DT_COLD:  -0.3, DT_WATER:  -0.3, DT_AIR:    -0.6, 
+         DT_EXPLOSION: 0.4, DT_SOUND:  0.0, DT_LIGHT:  -0.4, DT_ACID:    0.2, 
+         DT_POISON:    0.2, DT_TERROR: 0.5, DT_HOLY:   -1.0, DT_UNHOLY:  0.5, 
+         DT_MIND:     -0.3, DT_SLASH:  0.2, DT_BLUDGEON:0.1, DT_PIERCE:  0.2,
+         DT_RIP:       0.2, DT_WHIP:   0.2, DT_SQUEEZE: 0.1, 
+         DT_LIGHTNING:-0.2, DT_ELECTRIC:-0.2,]) );
+     break;
+     
+     default:
+       SetProp(P_RESISTANCE_STRENGTHS , 
+       ([DT_FIRE:     -0.3, DT_COLD:  -0.3, DT_WATER:  -0.2, DT_AIR:    -0.5, 
+         DT_EXPLOSION: 0.4, DT_SOUND:  0.2, DT_LIGHT:  -0.2, DT_ACID:    0.2, 
+         DT_POISON:    0.2, DT_TERROR: 0.5, DT_HOLY:   -1.0, DT_UNHOLY:  0.5, 
+         DT_MIND:     -0.3, DT_SLASH:  0.2, DT_BLUDGEON:0.1, DT_PIERCE:  0.2,
+         DT_RIP:       0.2, DT_WHIP:   0.2, DT_SQUEEZE: 0.1]) );
+      break;
+   }
+    
+    
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_NOMAGIC, 30-random(10));
+  
+  switch(random(4))
+  {
+   case 0:
+    SetProp(P_MSGIN, "schreitet herein");
+    SetProp(P_MSGOUT, "geht gemaechlich");
+   break;
+   case 1:
+    SetProp(P_MSGIN, "schleicht herein");
+    SetProp(P_MSGOUT, "schlendert leise");
+   case 2:
+    SetProp(P_MSGIN, "kommt an");
+    SetProp(P_MSGOUT, "gleitet");
+   break;
+   default:
+    SetProp(P_MSGIN, "tappt herein");
+    SetProp(P_MSGOUT, "geht lautlos");
+   break;
+  }
+  
+  switch(random(3))
+  {
+   case 0..1:
+    SetProp(P_MMSGIN, "erscheint");
+   break;
+   default:
+    SetProp(P_MMSGIN, "ist ploetzlich da");
+   break;
+  }
+  
+  SetProp(P_MMSGOUT, "entschwindet");
+
+  switch(random(7))
+  {
+   case 0..4:
+    SetProp(P_DIE_MSG,  " sackt leblos zusammen.\n");
+   break;
+   default:
+    SetProp(P_DIE_MSG, " stoehnt noch einmal und stirbt.\n");
+   break;
+  }
+  
+  SetProp(P_NOCORPSE, 0 );
+  switch(random(11))
+  {
+   case 0..5:
+    SetProp(P_MURDER_MSG, "Ich verzeihe Dir!");
+   break;
+   case 6..7:
+    SetProp(P_MURDER_MSG, "Moege das Leben Dir gnaedig sein!");
+   break;
+   case 8..9:
+    SetProp(P_MURDER_MSG, "Meine Zeit ward gekommen.");
+   break;
+   default:
+    if(random(5)==0) SetProp(P_MURDER_MSG, "Das Leben ist wie eine Bluete: "
+    "Irgendwann verwelkt es auch!");
+   break;
+  }
+  
+  switch(random(14))
+  {
+   case 0..8:
+    SetProp(P_KILL_MSG, "Oh nein! Was habe ich nur getan!");
+   break;
+   case 9..11:
+    SetProp(P_KILL_MSG, "BITTE! Verzeihe mir!");
+   break;
+   default:
+    if(random(10)==0) SetProp(P_KILL_MSG, "Oh nein! Ich bin eine Moerderin!");
+   break;
+  }
+  
+  SetProp(P_MNPC_AREA, ({ROOM "eraum", ROOM "gang", ROOM "k", ROOM "o",
+  			 ROOM "wobtreppe", ROOM "wtreppe", ROOM "sing",
+  			 ROOM "bedroom"}));
+  SetProp(P_MNPC_WAIT, ({50+random(30),50,40}));
+  SetProp(P_MNPC_DEFAULTROOM, ROOM "bedroom");
+  SetProp(P_MNPC_FLAGS, MOV_BACKWARDS + MOV_INDOORS + MOV_MOVES + MOV_MAYLOAD+ 
+  	   MOV_SPECIAL);
+  
+  switch(random(3))
+  {
+   case 0:
+    AddInfo(DEFAULT_INFO, "laechelt Dich hoeflich an.\n");
+   break;
+   case 1:
+    AddInfo(DEFAULT_INFO, "blickt Dich nur grinsend an.\n");
+   break;
+   default:
+    AddInfo(DEFAULT_INFO, "grinst Dir zu.\n");
+   break;
+  }
+  AddInfo(({"natur","mutter"}), "Die Natur ist wunderbar!","sagt: ");
+  AddInfo(({"birnensymbol","symbol","birne","markenzeichen"}),
+   "Das ist unser Markenzeichen! Wir verehren die Natur und alles was "
+   "sie tut, "
+   "daher haben wir eine ihrer Fruechte als unser Symbol auserkoren!",
+   "meint: ");
+  AddInfo(({"kloster"}),
+   "Dieses Kloster ist unsere Heimat! Wir verbringen hier unser "
+   "friedliches "
+   "Leben in Eintracht mit Mutter Natur.","laechelt: ");
+  AddInfo(({"heimat"}),
+   "Das Kloster ist unsere Heimat! Es bietet uns alles, was wir zum "
+   "Leben brauchen!",
+   "sagt: ");
+  AddInfo(({"leben"}),
+   "Wir fuehren hier ein heiliges Leben im Bunde mit der Natur. "
+   "Sie beschuetzt uns.",
+   "grinst: ");
+  AddInfo(({"eintracht"}),
+   "Eintracht und Frieden!","sagt: ");
+  AddInfo(({"frieden"}),
+   "Wer den Frieden hier stoert, gegen den muessen wir uns wehren. "
+   "Auch wenn wir "
+   "sehr ungerne jemandem weh tun! Wir koennen doch alle zusammen "
+   "leben!",
+   "meint: ");
+  AddInfo(({"bunde","bund"}),
+   "Einst gingen wir einen Bund mit der Natur ein, uns gegenseitig zu "
+   "schuetzen und ehren! Bis heute haben wir dies nicht bereut.",
+   "laechelt: ");
+  AddInfo(({"sex","ficken","geschlechtsverkehr"}), // Fuer die Freaks ;)
+   "Wir fristen hier ein Leben in vollkommener Enthaltsamkeit.",
+   "sagt: ");
+  AddInfo(({"enthaltsamkeit"}),
+   "Sie ist ein wichtiger Bestandteil unseres Bundes mit Mutter Natur!",
+   "meint ueberzeugt: ");
+  AddInfo(({"bestandteil"}),
+   "Wie meinst Du das?", "fragt: ");
+  AddInfo(({"form"}),
+   "Meinst du vielleicht die Form unseres Gesangraumes?", "fragt: ");
+  AddInfo(({"gesangraum","singraum","form des gesangraumes","form des "
+  "gesangraums","form gesangraum","form des gesangsraumes"}),
+   "Unser Gesangraum ist oval, dadurch haben wir dort eine optimale Akustik "
+   "und koennen wunderbar schoene Lieder singen.","sagt: ");
+  AddInfo(({"akustik"}),
+   "In unserem Singraum haben wir eine sehr gute Akustik, das ist wichtig "
+   "um die Stimme voll zum Ausdruck zu bringen.","meint: ");
+  AddInfo(({"lieder","singen"}),
+   "Wir singen hauptsaechlich Lieder ueber die Schoenheit der Natur!",
+   "antwortet Dir: ");
+  AddInfo(({"stimme"}),
+   "Laaaaaaaaaa!","singt: ");
+  AddInfo(({"ausdruck"}),
+   "Laaaaaa - h - Laaaaaaaa!", "singt nochmal: ");
+  AddInfo(({"schoenheit"}),
+   "Die wahre Schoenheit besitzt nur wer vollkommen natuerlich ist, danach "
+   "trachten wir hier.", "sagt: ");
+  AddInfo(({"lied"}),
+   "Soll ich Dir eines vorsingen? Dann sag das doch einfach!",
+   "sagt erfreut: ");
+  AddInfo(({"name","vorname","vornamen","namen"}),
+   "Ich heisse "+name[1]+".","sagt: ");
+  AddInfo(({name[0]}),
+   "Ja, das ist mein Name!","antwortet: ");
+  AddInfo("tempelschatz",
+   "Nein, lieber Angrox! Wir haben keinen Tempelschatz.","meint: ");
+  AddInfo("orgel",
+   "Sie ist sehr alt! Weil sie so schwer ist koennen wir Dinge, die unter "
+   "sie fallen, nicht mehr herausholen.","sagt: ");
+  AddInfo("dinge",
+   "Manchmal verlieren auch wir etwas.","sagt: ");
+  AddInfo("spendenglas",
+   "Wir wuerden uns sehr freuen, wenn Du uns etwas spendest!","sagt: ");
+  AddInfo("pflanzen",
+   "Die Pflanzen sind ein wunderschoener Teil der Natur!","sagt: ");
+  AddInfo("boese",
+   "Das Boese ist hier nicht willkommen!","meint: ");
+  AddInfo("das boese",
+   "DAS BOESE ist im Brunnen und wurde schon oefters von tapferen Helden "
+   "nieder gestreckt!","sagt: ");
+  AddInfo("brunnen",
+   "Du koenntest schwoeren, dass der Brunnen dort ist, wo er normalerweise "
+   "nicht ist.","sagt: ");
+  AddInfo("helden",
+   "Es gibt viele Helden im SilberLand.","sagt: ");
+  AddInfo("gott",
+   "Wir glauben an keinen Gott, nur an die Natur.","sagt: ");
+  AddInfo("nonne",
+   "Ich bin eine Nonne!","sagt: ");
+  AddInfo(({"kutte","kutten"}),
+   "Wir Nonnen tragen nur Kutten.","sagt: ");
+  AddInfo("ausgang",
+   "Den Ausgang findest Du im Norden des unteren Stockwerkes.","sagt: ");
+  AddInfo("drache",
+   "Drache? Hier? Nein! Hier ist kein Drache!","meint ueberzeugt: ");
+  AddInfo("ayla",
+   "Ayla ist das Oberhaupt der Paladine","sagt: ");
+  AddInfo("paladine",
+   "Ihr Oberhaupt ist Ayla.","sagt: ");
+  AddInfo("berserker",
+   "Kronang ist neben Andruil der staerkste Berserker!","sagt: ");
+  AddInfo("kronang",
+   "Kronang fuehrt die Berserkergilde an und bildet neue Berserker aus.",
+   "sagt: ");
+  AddInfo("andruil",
+   "Andruil ist ein echter Held! Er wurde als erster eine Berserkerlegende "
+   "und ist jetzt sogar Berserkergildenmeister!","sagt: ");
+  AddInfo(({"gildenmeister","berserkergildenmeister"}),
+   "Frag doch lieber Kronang, oder Andruil!","sagt: ");
+
+  SetProp(P_LOG_INFO, "wraz/nonne.log");
+
+  SetProp( P_REJECT, ({ REJECT_GIVE,
+    "Schwester "+name[1]+" grinst dankbar, hat fuer @WEN aber keine "
+    "Verwendung.\n" }) );
+
+  SetProp(P_SPELLRATE,50);
+  AddSpell(9,200,
+    "Die Nonne beschwoert einen Zauber auf Dich.\n",
+    "Die Nonne beschwoert einen Zauber auf @WEN.\n",
+     ({DT_MAGIC, DT_HOLY}),([SP_SHOW_DAMAGE:1]));
+   AddSpell(3,500,
+    "Du wirst von unglaublichen Kraeften bedraengt!\n",
+    "@WER wird von einer starken Kraft attackiert.\n",
+    ({DT_MAGIC, DT_MIND}),([SP_SHOW_DAMAGE:1]));
+  AddSpell(1,900,
+    "Schwester "+name[1]+" ruft die Maechte der Natur zu Hilfe!\n",
+    "@WER wird von unfassbaren Naturmaechten angegriffen!\n",
+    ({DT_MAGIC, DT_AIR, DT_WATER, DT_FIRE, DT_COLD, DT_HOLY}),
+    ([SP_SHOW_DAMAGE:1]));
+    
+  if(random(9)==0) AddSpell(4,1100+random(110),
+      "Schwester "+name[1]+" murmelt etwas, woraufhin ein riesiger Blitz von "
+      "der Decke auf Dich zu schiesst!!\n",
+      "Schwester "+name[1]+" murmelt einige Worte, ploetzlich schiesst ein "
+      "gigantischer Blitz auf @WEN herab!\n",
+      ({DT_LIGHTNING, DT_MAGIC}), ([SP_SHOW_DAMAGE:0]));
+
+  SetChats(2, ({
+    "Die Nonne kniet kurz nieder.\n",
+    "Die Nonne laechelt Dich an.\n",
+    "Schwester "+name[1]+" geht zu einer Pflanze und pflegt sie sorgsam.\n"}));
+  SetAttackChats(10, ({
+    "Die Nonne fleht Dich an: Bitte! Hoer auf zu kaempfen! BEENDE die "
+    "Schlacht!\n",
+    "Schwester "+name[1]+" beginnt bitterlich zu weinen. Verschone sie!\n",
+    "Die Nonne blickt Dich nur traurig an...\n"}) );
+    
+  SUID; // gleich wie seteuid(getuid());
+
+  CLONEME(ARMOUR "kutte" );
+  command("trage alles");
+  
+  if(random(3)==0) CLONEME(OBJ "bluete");
+  if(random(6)==0) CLONEME(OBJ "bsymbol");
+  if(random(200)==0) CLONEME(OBJ "gbsymbol");
+  
+  AddCmd( ({"beende","beend"}), "cmd_peace");
+  
+  i=0; arc=0; si=0; singing=0;
+}
+
+void die(int poisondeath) // --- VOID DIE -----------------------------------
+{
+  int nuns, o;
+  
+  if(!random(5)) "/obj/gemmaster"->DistributeGem(1, 0, 1, nun);
+  
+  write_file(LOG "nonnen.kills",
+    dtime()+": "+TP->QueryProp(P_UID)+" ("+TPN+") killt Nonne.\n");
+  
+  find_nuns=find_livings("\nnuns_by_wraz");
+  
+  nuns=sizeof(find_nuns);
+  
+  for(o=0; o<nuns; o++) // funktioniert aus irgendeinem grund nicht
+  {
+    call_other(find_nuns[o],"take");
+    call_other(find_nuns[o],"rem_corpse0");
+  }
+  
+  if(TP->QueryProp(P_GUILD)=="nekromanten") {
+    TP->AddExp(3000+nun->QueryProp(P_LEVEL)*100);
+    write_file(LOG "nekro_bonus", TPN+"\n"); }
+    // Bonus, da Nekromanten durch die permanente Helligkeit benachteiligt
+    // sind
+  
+  ::die(poisondeath);
+  
+}
+
+// --- VOID NOTIFYPLAYERDEATH -----------------------------------------------
+void NotifyPlayerDeath(object player, object killer, int lostexp) 
+{
+  if(killer == TO)
+  {
+    write_file(LOG "nonne.deads",
+      dtime()+": Nonne killt "+player->Name()+". XP:"+lostexp+"\n");
+  }
+}
+
+void rrr(object player) // --- VOID RRR -------------------------------------
+{
+  player->Message("Der Kampf ist beendet. "
+	"Die Nonne will Dir nicht weh tun!\n");
+  return;
+}
+
+void rem_corpse0() // --- VOID REM_CORPSE0 ----------------------------------
+{
+  int nobj, o;
+  string filen;
+  
+  nobj=sizeof(all_inventory(ENV(nun)));
+  
+  for(o=0; o<nobj; o++)
+  {
+    //ENV(nun)->Message("1\n");
+    filen=all_inventory(ENV(nun))[o]->QueryProp(P_ORIG_FILENAME);
+    //ENV(nun)->Message("1.1 filen:"+filen+", o: "+o+" \n");
+    if(!filen) filen="k";
+    //ENV(nun)->Message("2 "+filen+" \n");
+    
+    if(filen==NPC "nun"&&arc==0&&
+    !all_inventory(ENV(nun))[o]->QueryProp("beeing_removed")) {
+    all_inventory(ENV(nun))[o]->SetProp("beeing_removed", 1);
+    call_out("rem_corpse",2,ENV(nun),all_inventory(ENV(nun))[o]);
+    arc=1;
+    return; }
+  }
+}
+
+void singen() // --- VOID SINGEN --------------------------------------------
+{
+  if(!nun) return;
+  switch (si)
+  {
+    case 0:
+    if(!ENV(nun)) return;
+    ENV(nun)->Message(
+     QueryProp(P_NAME)+" singt:\n"
+     " Alle Voegel sind schon da,\n"
+     " Alle Voegel, alle!\n"
+     " Welch ein Singen, Musiziern,\n"
+     " Pfeifen, Zwitschern, Tirelier'n!\n"
+     " Fruehling will nun einmarschier'n,\n"
+     " Kommt mit Sang und Schalle.\n\n");
+     si++;
+     call_out("singen",6);
+    break;
+    
+    case 1:
+    if(!ENV(nun)) return;
+    ENV(nun)->Message(
+    QueryProp(P_NAME)+" singt lauter:\n"
+     " Wie sie alle lustig sind,\n"
+     " Flink und froh sich regen!\n"
+     " Amsel, Drossel, Fink und Star\n"
+     " Und die ganze Vogelschar\n"
+     " Wuenschet dir ein frohes Jahr,\n"
+     " Lauter Heil und Segen! \n\n");
+    si++;
+    call_out("singen",6+random(2));
+    break;
+    
+    default:
+    if(!ENV(nun)) return;
+    ENV(nun)->Message(
+    QueryProp(P_NAME)+" singt voller Ueberzeugung:\n"
+     " Was sie uns verkuendet nun\n"
+     " Nehmen wir zu Herzen:\n"
+     " Wir auch wollen lustig sein,\n"
+     " Lustig wie die Voegelein,\n"
+     " Hier und dort, Feld aus, Feld ein,\n"
+     " Singen springen, scherzen!  \n\n");
+     si=0;
+     singing=0;
+     break;
+   }
+}
+
+void init() // --- VOID INIT ------------------------------------------------
+{ 
+  ::init();
+  
+  call_out("take",2);
+  
+  if(TP && IsEnemy(TP))
+  {
+    nun->StopHuntFor(TP, 1);
+    TP->StopHuntFor(nun, 1);
+    call_out("rrr",2,TP);
+  }
+  if(TP && ENV(nun)==find_object(ROOM "bedroom")&&getuid(TP)!=getuid(nun)
+     && TP->QueryProp(P_UID) != "wraz")
+  call_out("rauswurf",0,TP);
+ /* {
+    TP->Message(BS("Die Nonne blickt Dich empoert an und wirft Dich "
+    "kurzerhand "
+    "aus dem Schlafraum."));
+    TP->move(ROOM "gang",M_GO,"rausgeworfen","wird von einer Nonne",
+    "wird aus dem Tor im Westen rausgeworfen");
+  }*/
+  
+  if(ENV(nun)==find_object(ROOM "sing") && random(100)<20 && !singing)
+  { // nonne sing im singraum von selbst
+    singing=1;
+    call_out("singen",2);
+  }
+  
+  rem_corpse0();
+}
+
+void rauswurf(object player)
+{
+  if(!player||!interactive(player)) return; // isser noch eingeloggt?
+  if(!ENV(player)) return; // hat er environment?
+  if(ENV(player)!=find_object(ROOM "bedroom")) return; // issa im bedroom?
+  if(ENV(nun)!=find_object(ROOM "bedroom")) return; // is die nonne im bedroom?
+  
+   TP->Message("\nDie Nonne blickt Dich empoert an und wirft Dich "
+   "kurzerhand "
+   "aus dem Schlafraum.\n\n");
+   TP->move(ROOM "gang",M_GO,"rausgeworfen","wird von einer Nonne",
+   "wird aus dem Tor im Westen rausgeworfen");
+   return;
+}
+
+int cmd_peace(string str) // --- INT CMD_PEACE ------------------------------
+{
+  if(!str) return 0;
+  
+  if(str=="schlacht"||str=="kampf") {
+  if(!IsEnemy(TP)) return 0;
+   
+  if(nun_hunter==0||member(nun_hunter,TPN)<0) {
+  nun->StopHuntFor(TP, 1);
+  TP->StopHuntFor(nun, 1);
+  write(BS("Du versoehnst Dich mit der Nonne. Sie ist dankbar und "
+  "gluecklich!"));
+  player_name=player_name+" "+TPN;
+  nun_hunter=explode(player_name, " ");
+  return 1; }
+  
+  write(BS("Nein! Das willst Du nicht mehr! Du willst sie TOETEN!!"));
+  return -1; }
+  
+  else return 0;
+}
+
+void rem_corpse(object room, object corpse) // --- VOID REM_CORPSE ----------
+{
+  //room->Message("3\n");
+  if(!nun) { arc=0; return; }
+  if(!corpse) { arc=0; return; }
+  if(!present(nun, room)) { arc=0; return; }
+  if(!present(corpse, ENV(nun))) { arc=0; return; }
+  //room->Message("4\n");
+  
+  room->Message(nun->QueryProp(P_NAME)+" kniet vor "+
+  corpse->QueryProp(P_ORIG_NAME)+"s Leiche nieder, reckt ihre Arme \nin die "
+  "Luft und ruft: \n"
+  "Maechte der Natur, nehmt diesen Leichnahm zu Euch auf! "
+  "In Ehrfurcht bitte \nich um ewiges Leben fuer diese treue Seele!\n");
+  
+  call_out("rem_corpse2",4, room, corpse);
+}
+
+void rem_corpse2(object room, object corpse) // --- VOID REM_CORPSE2 --------
+{
+  if(!corpse) { arc=0; return; }
+  if(!present(corpse, room)) { arc=0; return; }
+  
+  switch (i)
+  {
+    case 0:
+    room->Message(BS("Ploetzlich kommt ein Wind auf, welcher die Leiche "
+    "umkreist."));
+    break;
+    
+    case 1:
+    room->Message(BS("Nach einigen Augenblicken wird der Wind schwaecher "
+    "und der leblose Koerper beginnt zu verschwinden."));
+    break;
+    
+    default:
+    room->Message(BS("Zeitgleich mit der Windstille verschwindet die Leiche "
+    "komplett."));
+    nun->command_me("nimm kutte aus leiche");
+    nun->command_me("nimm edelstein aus leiche");
+    corpse->remove(1);
+    i=0;
+    arc=0;
+    return;
+    break;
+  }
+  i++;
+  call_out("rem_corpse2",4+random(3),room,corpse);
+}
+
+void take() // --- VOID TAKE ------------------------------------------------
+{
+  nun->command_me("nimm kutte");
+  nun->command_me("nimm edelstein");
+  nun->command_me("nimm tuch");
+}
+
+void catch_tell(string str) // --- VOID CATCH TELL --------------------------
+{
+  string who, what;
+  object room;
+
+  if(!(room=ENV(TO))) return;
+  if(InFight())       return;
+
+  if(sscanf(str,"%s sagt: %s", who, what)==2)
+  {
+    what = what[0..<2];
+    
+    if(strstr(lower_case(what), name[0], 0)!=-1&&
+    (strstr(lower_case(what), "lied", 0)!=-1||strstr(lower_case(what),
+     "sing",0)!=-1)
+    &&!singing) {
+    singing=1;
+    call_out("singen",2); }
+  }
+  return;
+}

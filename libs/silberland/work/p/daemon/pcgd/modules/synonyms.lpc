@@ -1,0 +1,87 @@
+#include "../pcgd_intern.h"
+
+// invert the synonym mapping, e.g. "Haus=Huette|Gebaeude" is defined, than this functionn will
+// return the mapping "Gebaeude=Haus|Huette, Huette=Haus|Gebaeude". This is used to create complete
+// and interchangible synonymlists
+private mapping invertSynonymList(mapping synonyms) {
+    int i, j;
+    string *keys, *currentSynonyms, currentWord;
+    mapping ret;
+
+    ret = ([ ]);
+    keys = m_indices(synonyms);
+    for(i=0; i<sizeof(keys); ++i) {
+        currentSynonyms = synonyms[keys[i]];
+        for(j=0; j<sizeof(currentSynonyms); ++j) {
+            currentWord = currentSynonyms[j];           
+            ret[currentWord] = currentSynonyms - ({ currentWord }) + ({ keys[i] });
+        }
+    }
+
+    return ret;
+}
+
+// fills the synonym list with undefined inverse-synonyms
+private mapping autofillSynonymList(mapping synonyms) {
+    mapping inverse, ret;
+    int i;
+    string *keys;
+
+    inverse = invertSynonymList(synonyms);
+    keys = m_indices(inverse);
+    ret = ([ ]);
+    for(i=0; i<sizeof(keys); ++i) {
+        if(member(synonyms, keys[i])) continue; // word already defined, no addition required
+        ret[keys[i]] = inverse[keys[i]];
+    }
+    return synonyms + ret;
+}
+
+// Replaces words in the given input string with synonyms from within the biome description.
+//
+// biomePath     - folder that defines the biome
+// input         - input string where words are to be replaced
+// synonymChance - chance that a word in the string will be replaced with an available synonym
+public string SynonymizeString(string biomePath, string input, float synonymChance) {
+    // TODO handle sentence end (., ?, !)
+    mapping biome, synonyms;
+    string *words, output, word, *synWords;
+    int i, chance;
+
+    biome = this->GetBiome(biomePath);
+    if(!biome) return 0;
+
+    synonyms = biome[BIOME_IND_DESCRIPTION][BIOME_IND_DESCR_SYNONYMS];
+    synonyms = autofillSynonymList(synonyms);
+    if(sizeof(synonyms) <= 0) return input; // no synonyms defined, so return original
+
+    chance = to_int(synonymChance * 100);
+
+    words = explode(input, " ");
+    output = "";
+    for(i=0; i<sizeof(words); ++i) {
+        word = words[i];
+        if(!member(synonyms, word) || random(100) > chance) {
+            output += word;
+         } else {
+            synWords = synonyms[word];
+            output += synWords[random(sizeof(synWords))];
+        }
+
+        if(i!=sizeof(words)-1) output += " ";
+    }
+
+    return output;
+}
+
+// Returns potential synonyms for the given string 
+public string* GetSynonymFor(string biomePath, string str) {
+    mapping synonyms, biome;
+
+    biome = this->GetBiome(biomePath);
+    if(!biome) return 0;
+
+    synonyms = biome[BIOME_IND_DESCRIPTION][BIOME_IND_DESCR_SYNONYMS];
+    synonyms = autofillSynonymList(synonyms);
+    return synonyms[str];
+}

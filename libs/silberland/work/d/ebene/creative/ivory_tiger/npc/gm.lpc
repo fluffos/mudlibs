@@ -1,0 +1,197 @@
+
+//inherit "std/npc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <mnpc.h>
+#include "../files.h"
+#include "../quest.h"
+//#include "../std/race_includes.lpc"
+
+inherit STD("dieb");
+inherit "std/npc/sequencer";
+
+object quester;
+
+int given_ob;
+
+void create() {
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Perdruan der Gildenmeister");
+  SetProp(P_LONG,
+    "Vor Dir steht ein grossgewachsener Mensch mit einer riesigen Narbe "
+    "am Kinn: Perdruan der Gildenmeister! Er hat rabenschwarze Haare und "
+    "ebensolche Augen. Als Gildenmeister der Diebesgilde ist sicherlich "
+    "nicht mit ihm zu spassen. Seine Diebesfertigkeiten sind im ganzen "
+    "Silberland beruehmt, also pass bloss auf, sonst koenntest Du bald "
+    "nackt dastehen.");
+  SetProp(P_NAME, "Perdruan");
+  SetProp(P_ARTICLE, 0);
+  AddLibrary(NPC("npc.lib"), 2, 1);
+  SetProp(P_GENDER, MALE);
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:0,T_RANGE_MAX:30]));
+  AddId(({"perdruan", "gildenmeister", "meister", "Messermeister"}));
+
+  create_default_npc(40+random(3));
+  customize(QueryProp(P_LEVEL), MALE, "mensch");
+  SetProp(P_HANDS, ({" mit seinen Haenden",QueryProp(P_HANDS)[1],DT_BLUDGEON}));
+  SetProp(P_XP, QueryProp(P_XP)+500*100); // Bonus fuer Spells
+  SetProp(P_RACE, "Mensch");
+  SetProp(P_SIZE, 202);
+  SetProp(P_ALIGN, 0);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_HEAL,0);
+  SetProp(P_AGGRESSIVE,0);
+  SetProp(P_WIMPY, 0);
+  SetProp(P_MNPC_FLAGS, 0);
+  SetProp(P_RESISTANCE_STRENGTHS , 
+    ([DT_FIRE:     -0.3, DT_COLD:     -0.2, DT_WATER: -0.1, DT_AIR:    0.0, 
+      DT_LIGHTNING: 0.0, DT_EXPLOSION:-0.1, DT_SOUND:  0.0, DT_LIGHT: -0.2,
+      DT_ELECTRIC:  0.0, DT_ACID:      0.0, DT_POISON:-0.2, DT_TERROR:-0.2,
+      DT_HOLY:     -0.2, DT_UNHOLY:   -0.2, DT_MAGIC:  0.0, DT_MIND:   0.0 ]) );
+  SetProp(P_NOMAGIC,0);
+
+  SetProp(P_MSGIN, "kommt an");
+  SetProp(P_MSGOUT, "geht");
+  SetProp(P_MMSGIN, "erscheint in einer Rauchwolke");
+  SetProp(P_MMSGOUT, "verschwindet mit Knall und Schwefelduft");
+
+  SetProp(P_DIE_MSG,  " faellt tot zu Boden.\n");
+  SetProp(P_NOCORPSE, 0 );
+  SetProp(P_MURDER_MSG, "Lenti! Wo warst Du-hu-huuuu als ich Dich so sehr brauchte?");
+  SetProp(P_KILL_NAME, "Perdruan");
+  SetProp(P_KILL_MSG, "Alle Deine Besitztuemer gehoeren nun uns!");
+
+  AddInfo(DEFAULT_INFO, "versteht Dich doch gar nicht.\n");
+  AddInfo( ({"angrox", "creative"}), "Die habe ich auch schon bestohlen.","sagt: ");
+  AddInfo("tee", "Ich liebe Tee!", "sagt: ");
+  CLONEME(OBJ("keyab3"));
+
+
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    "Perdruan will Deine Sachen nicht tragen.\n" }) );
+
+  SetProp(P_SPELLRATE,60);
+  AddSpell(1,500,
+    "Perdruan schlitzt Dich auf!\n",
+    "Perdruan schlitzt @WEN auf!\n",
+     DT_PIERCE,([SP_SHOW_DAMAGE:1]));
+  AddSpell(1,600,
+    "Perdruan schlaegt Dir ins Gesicht!\n",
+    "Perdruan schlaegt @WEN ins Gesicht!\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1]));
+
+  SUID;
+  CLONEME( "/p/armour/boots/lederstiefel" );
+  CLONEME( "/p/armour/amulet/amulett" );
+  CLONEME( "/p/armour/armour/lederpanzer" );
+  command("trage alles");
+
+  AddInfo( ({"tabaksdose", "schnupftabak", "schnupftabaksdose", "tabak"}),
+          "Ich liebe Schnupftabak. Wenn Du welchen fuer mich besorgst, so soll das Dein"
+         +" Schaden nicht sein!", "sagt: ");
+
+  RegisterGive("tabaksdose", ({
+               ({ "sag Wow, Schnupftabak... Cool!", 2 }),
+               ({ "sag Da muss ich mir doch gleich mal eine Prise genehmigen.", 2 }),
+               ({ "verarbeite", 3 })
+               }));
+  given_ob=0;
+  add_action("proceed", "verarbeite");
+}
+
+give_notify(ob) {
+  sequencer::give_notify(ob);
+}
+
+int tabaksdose(object ob) {
+  quester=this_interactive();
+  if (ob->id(IV_SNUFFBOX)) {
+    if (present(IV_SNUFF, ob)) {
+      given_ob=1;
+      return 1;
+    }
+    command_me("sag Die Dose ist doch leer, bring mir doch eine Tabaksdose, die mit Schnupftabak"
+              +" gefuellt ist!");
+    give_obj(ob, quester);
+    return 0;
+  }
+  if (ob->id(IV_SNUFF)) {
+    ob->remove();
+    given_ob=2;
+    return 1;
+  }
+  command_me("sag Das kann ich wohl kaum schnupfen...");
+  give_obj(ob, quester);
+  return 0;
+}
+
+int proceed() {
+  object t, d;
+
+  switch (given_ob) {
+    case 1:
+            command_me("emote kippt sich eine Prise Schnupftabak auf den Handruecken und zieht"
+                      +" einmal kraeftig hoch.");
+            d=present(IV_SNUFFBOX, TO);
+            t=present(IV_SNUFF, d);
+            t->remove();
+            command_me("sag Danke, "+quester->Name()+"!");
+            if (random(100) < 33) {
+              tell_room(ENV(TO), BS(
+                    "Perdruans Augen gluehen hell und furchteinfloessend. Du glaubst, einem Drachen"
+                   +" in die Augen zu sehen!"));
+              call_out("belohnung", 4, quester);
+              d->remove();
+            }
+            else {
+              tell_room(ENV(TO), BS(
+                    "Perdruans Augen wirken stumpf wie die Knopfaugen eines Plueschdrachen."
+                   +" Du kicherst verlegen."));
+              call_out("dose_retour", 2, d, quester);
+            }
+            given_ob=0;
+            break;
+    case 2:
+            command_me("sag Mist, nun ist mir der Schnupftabak zwischen den Fingern durchgeronnen!");
+            given_ob=0;
+            break;
+  } 
+  return 1;
+}
+
+belohnung(object dest) {
+  string n;
+
+  n=dest->Name();
+  command_me("sag Wow, der Stoff ist aber effektiv!");
+  command_me("emote wirkt noch ganz benommen.");
+  call_out("command_me", 3, sprintf("sag %s, %s, sieh nur... der Stern!", n, n));
+  call_out("command_me", 6, sprintf("sag Captain %s, VORSICHT... ein fliegender ... Chirte?", n));
+  call_out("command_me", 9, "emote wird wieder normal.");
+  call_out("belohnung2", 12, dest);
+}
+
+dose_retour(object d, object dest) {
+  command_me("sag Wow, der Stoff war nicht schlecht... aber da gibts noch besseren! Versuch mal,"
+            +" ob die kraeftigere Variante auftreiben kannst ;)");
+  give_obj(d, dest);
+}
+
+belohnung2(object dest) {
+  object o;
+
+  command_me("emote hirtet gekonnt um Dich herum.");
+  command_me("sag Alter, das Zeug ist geil! Hier hast Du eine Belohnung!");
+  if (present(dest, ENV(TO))) {
+    o=clone_object(OBJ("schokonuss"));
+    o->move(TO, M_NOCHECK);
+    give_obj(o, dest);
+  }
+}
+

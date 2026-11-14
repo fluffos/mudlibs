@@ -1,0 +1,119 @@
+// Beschworener Sturmschild der Amazonen (Orakel).
+
+#include "../def.h"
+
+inherit "std/armour";
+
+object owner;
+int success, ability, expire, damage, chance, skillpoints;
+
+void create()
+{
+  if (!is_clone(TO)) return;
+  ::create();
+
+  AddId(({"sturmschild", "\namz_sturmschild", "schild"}));
+  SetProp(P_NAME, "Sturmschild");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_MAGIC, 1);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_WEIGHT, 500);
+  SetProp(P_VALUE, 0);
+  SetProp(P_MATERIAL, ([ MAT_LIGHT: 50, MAT_MISC_MAGIC: 50 ]));
+  SetProp(P_SHORT, "Ein wirbelnder Sturmschild");
+  SetProp(P_LONG,
+    "Ein schildfoermiger Wirbel aus Wind und elektrischer Energie, der Deinen "
+    "Arm umhuellt und jede Bewegung begleitet.");
+  SetProp(P_ARMOUR_TYPE, AT_SHIELD);
+}
+
+void remove_sturmschild()
+{
+  if (objectp(owner))
+  {
+    owner->SetProp(P_AMAZONEN_STURMSCHILD, 0);
+  }
+  remove();
+}
+
+varargs int remove(int silent)
+{
+  if (objectp(owner))
+    owner->SetProp(P_AMAZONEN_STURMSCHILD, 0);
+  if (!silent && objectp(owner))
+    tell_object(owner, "Der Sturmschild loest sich im Wind auf.\n");
+  return ::remove(silent);
+}
+
+void heart_beat()
+{
+  if (expire && time() > expire)
+  {
+    remove_sturmschild();
+    return;
+  }
+  if (!objectp(owner) || environment() != owner)
+  {
+    remove_sturmschild();
+    return;
+  }
+
+  if (!random(10) && owner->InFight())
+  {
+    string *msgs;
+    msgs = ({
+      "Wind und Blitze umspielen " + owner->name(WEN) + " Sturmschild.\n",
+      "Ein Sturmwirbel schuetzt " + owner->name(WEN) + " Arm.\n",
+      "Der Sturmschild um " + owner->name(WEN) + " knistert leise.\n",
+      "Elektrische Energie flackert um " + owner->name(WEN) + " Sturmschild.\n",
+    });
+    tell_room(environment(owner), msgs[random(sizeof(msgs))], ({owner}));
+  }
+}
+
+public varargs void setup_shield(object who, int suc, int abil, int dur, int skp)
+{
+  int ac;
+
+  if (skp > 0)
+    dur *= 2;
+
+  owner = who;
+  success = suc;
+  ability = abil;
+  skillpoints = skp;
+  expire = time() + dur;
+
+  ac = abil / 500 + suc / 1000;
+  if (ac > 30) ac = 30;
+  SetProp(P_AC, ac);
+
+  damage = abil / 66 + suc / 66;
+  chance = who->QueryAttribute(A_INT) + abil / 1000 + suc / 2000;
+  if (skp > 1)
+    chance += 10;
+
+  // Defend-Hook installieren.
+  SetProp(P_DEFEND_FUNC, TO);
+  owner->SetProp(P_AMAZONEN_STURMSCHILD, 1);
+  set_heart_beat(1);
+  pDebug(owner, sprintf("sturmschild setup: owner=%O, success=%d, ability=%d, expire=%d, ac=%d, damage=%d, chance=%d\n",
+    owner, success, ability, expire, QueryProp(P_AC), damage, chance));
+}
+
+int DefendFunc(string *dtyp, mixed spell, object enemy)
+{
+  if (!objectp(owner) || !objectp(enemy))
+    return 0;
+
+  if(random(100) < chance) {
+    tell_object(owner, "Dein Sturmschild entlaedt einen Blitz in Deinen Angreifer!\n");
+    tell_object(enemy, "Ein Blitz aus dem Sturmschild trifft Dich!\n");
+    tell_room(environment(enemy), "Ein Blitz aus " + owner->name(WESSEN)+" Schild entlaedt sich in " + enemy->name(WEN)+".", ({owner, enemy}));
+    enemy->Defend(damage/2 + random(damage), ({DT_LIGHTNING}), ([SP_SHOW_DAMAGE:1, SP_NAME:"sturmschild", SP_RECURSIVE:1]), owner);
+  }
+  return random(QueryProp(P_AC)/3) * (skillpoints > 2 ? 2 : 1);
+}

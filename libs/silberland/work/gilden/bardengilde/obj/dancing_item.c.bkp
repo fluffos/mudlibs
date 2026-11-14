@@ -1,0 +1,212 @@
+inherit "/gilden/bardengilde/obj/std_song_effect";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <defines.h>
+#include <new_skills.h>
+#include <moredef.h>
+#include "/gilden/bardengilde/bardengilde.h"
+#include "bard_song.h"
+
+int duration, wc, wcFix, canRecharge, remainingTicks, lastDamageSet;
+object wieldFunc, unwieldFnc;
+
+public void create() {
+    if (!is_clone(TO)) return;
+    ::create();
+  
+    AddId(({SONG_DANCING_ITEM}));
+
+    SetProp(P_NOGET, 1);
+
+    setSilentEnd(1);
+}
+
+private string remainingTicksText() {
+    string msg;
+    switch(remainingTicks) {
+        case 4: msg = "%s tanzt voll Energie wild herum."; break;
+        case 3: msg = "%s tanzt in wilden Drehungen und Spiralen."; break;
+        case 2: msg = "%s schwebt in langsamen Kreisen um dich herum."; break;
+        case 1: msg = "%s wirkt schon sehr muede und kann dem Takt des Tanzes kaum noch folgen."; break;
+        default: msg = "%s tanzt eigentlich gar nicht mehr."; break;
+    }
+
+    return sprintf(msg, victim->Name(WER, 1));
+}
+
+public int CanRecharge() {
+    return canRecharge;
+}
+
+public int overwrite_wc() {
+    return wc;
+}
+
+public int overwrite_wc_fix() {
+    int r;
+
+    r = wcFix;
+    if(TALENTMASTER->HasTalent(TALENT_TAMBOURMAJOR)) {
+        r += 5 * caster->QueryProp(P_BARD_INSPIRATION_LEVEL);
+    }
+
+    return r;
+}
+
+public int overwrite_nr_hands() {
+    return 1;
+}
+
+public int overwrite_dancing_weapon() {
+    return 1;
+}
+
+public string overwrite_wielded_text() {
+    switch(remainingTicks) {
+        case 4: return "wild tanzend"; break;
+        case 3: return "tanzend"; break;
+        case 2: return "langsam tanzend"; break;
+        case 1: return "muede"; break;
+        default: return "erschoepft"; break;
+    }
+    return "???";
+}
+
+public string* overwrite_wield_text() {
+    return ({victim->Name(WER, 2) + " beginnt um dich herum zu tanzen.\n", 
+             victim->Name(WER, 1) + " beginnt um " + caster->name(WEN, 1) + " zu tanzen.\n"});
+}
+
+public object overwrite_wield_func() {
+    return this_object();
+}
+
+public object overwrite_unwield_func() {
+    return this_object();
+}
+
+public int overwrite_damaged() {
+    return 1;
+}
+
+public void overwrite_set_wc(int wc) {
+    tell_object(caster, spritnf("attempted overwrite P_WC -> %d\n", wc));
+    return; // WC darf nicht uebersteuert werden
+}
+
+public void overwrite_set_total_wc(int wc) {
+    tell_object(caster, spritnf("attempted overwrite P_TOTAL_WC -> %d\n", wc));
+    return; // TOTAL_WC darf nicht uebersteuert werden
+}
+
+public void overwrite_set_damaged(int damage) {
+    tell_object(caster, spritnf("attempted overwrite P_DAMAGED -> %d\n", damage));
+    lastDamageSet = damage;
+    return;
+}
+
+// eine tanzende Waffe kann nicht verflucht werden...
+public object overwrite_cursed() {
+    return 0;
+}
+
+public int WieldFunc(object waffe, int silent) {
+    if(objectp(wieldFunc) && !wieldFunc->WieldFunc(waffe, silent)) {
+        call_out("endSong", 0);
+        return 0;
+    }
+
+    return 1;
+}
+
+public int UnwieldFunc(object waffe, int silent) {
+    if(objectp(unwieldFnc) && !unwieldFnc->UnwieldFunc(waffe, silent)) {
+        return 0;
+    }
+
+    call_out("endSong", 0);
+    return 1;
+}
+
+public void prepareSong() {
+
+    wc    = (int) (victim->QueryProp(P_WC) * (ability/20000.0 + success/40000.0)); // 100 % WC gibts nur bei max ability und success
+    wc    = modifyBySkillAttribute(wc, SA_DAMAGE);
+    wc    = (int) (wc * factor);
+
+    wcFix = (int) (victim->QueryProp(P_WC_FIX) * (caster->QueryAttribute(A_DEX)/100 + (success/40000.0))); // wc_fix auf basis geschick und erfolg
+    wcFix = (int) (wc * factor);
+    
+    victim->Set(P_WC, symbol_function("overwrite_wc", this_object()), F_QUERY_METHOD);
+    victim->Set(P_WC, symbol_function("overwrite_set_wc", this_object()), F_SET_METHOD);
+    victim->Set(P_WC, symbol_function("overwrite_set_total_wc", this_object()), F_SET_METHOD);
+    victim->Set(P_DAMAGED, symbol_function("overwrite_set_damaged", this_object()), F_SET_METHOD);
+    victim->Set(P_WC_FIX, symbol_function("overwrite_wc_fix", this_object()), F_QUERY_METHOD);
+    victim->Set(P_NR_HANDS, symbol_function("overwrite_nr_hands", this_object()), F_QUERY_METHOD);
+    victim->Set(P_WIELDED_TEXT, symbol_function("overwrite_wielded_text", this_object()), F_QUERY_METHOD);
+    victim->Set(P_WIELD_TEXT, symbol_function("overwrite_wield_text", this_object()), F_QUERY_METHOD);
+    victim->Set(P_WIELD_FUNC, symbol_function("overwrite_wield_func", this_object()), F_QUERY_METHOD);
+    victim->Set(P_UNWIELD_FUNC, symbol_function("overwrite_unwield_func", this_object()), F_QUERY_METHOD);
+    victim->Set(P_BARD_DANCING_WEAPON, symbol_function("overwrite_dancing_weapon", this_object()), F_QUERY_METHOD);
+    victim->Set(P_CURSED, symbol_function("overwrite_cursed", this_object()), F_QUERY_METHOD);
+    victim->Set(P_NO_DAMAGE_DESTRUCT, symbol_function("overwrite_damaged", this_object()), F_QUERY_METHOD);
+
+    // haelt maximal 20 + 10 + 8 = 38 Minuten -> 2-3 mal pro stunde casten um dauerhaft die waffe zu haben
+    duration = (ability/5000) * 10 * 60 + (success/2000) * 60 + (caster->QueryAttribute(A_INT) / 5) * 60;
+    duration = modifyBySkillAttribute(duration, SA_DURATION);
+    duration = (int) (duration * factor);
+
+    remainingTicks = 4;
+
+    call_out("reduceRemainingTicks", duration/4);
+
+    if(caster->QueryProp(P_TESTPLAYER)) {
+        tell_object(caster, sprintf("%s :: wc=%d wc_fix=%d duration=%d\n", songName, wc, wcFix, duration));
+    }
+
+    if(!victim->wield_me() || caster->QueryProp(P_WEAPON) != victim) {
+        if(caster->QueryProp(P_TESTPLAYER)) {
+            tell_object(caster, sprintf("%s :: wield failed\n", songName, wc, wcFix));
+            remove(1);
+        }
+    }
+}
+
+public void reduceRemainingTicks() {
+    remainingTicks--;
+    if(remainingTicks <= 2) {
+        canRecharge;
+    }
+
+    tell_object(caster, BS(remainingTicksText()));
+    return;
+}
+
+public void onEndSong() {
+    if(objectp(victim)) {
+        tell_object(caster, BS(sprintf("%s hoert auf zu tanzen.", victim->Name(WER, 1))));
+
+        // Erhaltenen Schaden nachholen
+        victim->Set(P_WC, 0, F_SET_METHOD);
+        victim->Set(P_DAMAGED, 0, F_SET_METHOD);
+        victim->Damage(lastDamageSet);
+    }
+}
+
+public void NotifyPlayerDeath(object victim, object killer, int lost_xp) {
+    if(victim == caster) {
+        endSong();
+    }
+}
+
+public void BecomesNetAlive(object spieler) {
+    if(spieler == caster) {
+        victim->DoUnwield();
+    }
+}
+
+public string extra_look() {
+    return sprintf("%s tanzt um %s herum.\n", victim->Name(WER, 2), caster->QueryPronoun(WEN));
+}

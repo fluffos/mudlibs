@@ -1,0 +1,199 @@
+/*
+
+   Master fuer die Laeuseplage - Zordan@SL
+
+*/
+
+inherit "/std/thing";
+
+#include <moving.h>
+#include <properties.h>
+#include <wizlevels.h>
+#include "../laeuse.h"
+ 
+object *laeusearray=({ });
+object *playerarray=({ });
+
+int maxdauer;
+void EndLaeuseEvent();
+
+create() {
+  if (is_clone(this_object())) {
+    destruct(this_object());
+    return 1;
+  }
+  seteuid(getuid(this_object()));
+  SetProp(P_NAME, "Ein Bettler");
+}
+
+query_prevent_shadow() { return 1; }
+
+nosave int check_secure() {
+  object ob;
+  ob=previous_object();
+  if (IS_ARCH(getuid(ob))) return 1;
+  if (getuid(ob)=="zordan") return 1;
+  if (getuid(ob)=="malar") return 1;
+  
+  //if (file_name(ob)[0..12] == "/event/laeuse") return 1;
+  if (file_name(ob)[0..8] == "/d/event/") return 1; 
+  //August 2004 by Malar - Gab Probleme beim Loggen deswegen.
+  
+  write_file(LAEUSELOG,ctime()+": "+CAP(getuid(ob))+" hat versucht etwas "
+    "im Laeusemaster zu machen.\n");
+  return 0;
+}
+
+void Channel(string msg) {
+ if(!check_secure()) return;
+// catch(VOICEMASTER->SendToChannel("Event",TO,SAY,msg));
+  CHMASTER->join("Event",TO);
+  CHMASTER->send("Event",TO,msg,MSG_SAY);
+
+}
+
+void NewLaus(object von, object fuer) {
+  object ob;
+  if(!check_secure()) return;
+  tell_room(ENV(von),"Igit. Eine Laus springt von "+von->Name()+" zu "
+                      +fuer->Name()+" rueber.\n", ({ von,fuer }) );
+  tell_object(von,
+    "Eine Laus springt von Dir zu "+fuer->Name()+" rueber.\n");
+  tell_object(fuer,
+    "Ihhhh. Eine Laus springt von "+von->Name()+" zu Dir rueber.\n");
+  ob=CLONEOB(LAUS);
+  ob->move(fuer, M_NOCHECK);
+  laeusearray+=({ob});
+}
+
+int RemoveLaus(object ob) {
+  if(!check_secure()) return -2;
+  if(member(laeusearray, ob) == -1) return -1;
+  laeusearray-=({ob});
+  if ((sizeof(laeusearray) == 0) && (find_call_out("EndLaeuseEvent")+1))
+    EndLaeuseEvent();
+  return 1;
+}
+
+int RemoveAll() {
+  int i;
+  object ob;
+  if(!check_secure()) return -2;
+  for(i=sizeof(laeusearray)-1;i>=0;i--) {
+    if(objectp(laeusearray[i])) {
+      ob=ENV(laeusearray[i]);
+      tell_object(ob,
+        "Auf einmal fallen alle Laeuse von Dir herunter und fallen tot zu Boden.\n");
+      tell_room(ENV(ob),
+        "Lauter tote Laeuse fallen von "+ob->Name()+" herunter.\n", ({ ob }) );
+      laeusearray[i]->remove();
+    }
+  }
+  laeusearray=({});
+  Channel(
+    "Wie ich soeben erfahren habe, sind alle meine Tierchen dahingerafft. "
+    "In Zukunft werde ich aber trotzdem versuchen besser auf sie aufzupassen." );
+  return 1;
+}
+
+mixed GetAll() {
+  if(!check_secure()) return -2;
+  return laeusearray;
+}
+
+int GetAmount() {
+  if(!check_secure()) return -2;
+  return sizeof(laeusearray);
+}
+
+int PutLaus(mixed player) {
+  object ob,playerob;
+  if(!check_secure()) return -2;
+  if (stringp(player)) playerob=find_living(player);
+  else if (objectp(player)) playerob=player;
+  else return -1;
+  if ((playerob) && (interactive(playerob))) {
+    ob=CLONEOB(LAUS);
+    ob->move(playerob, M_NOCHECK);
+    laeusearray+=({ob});
+    return 1;
+  }
+  return -1;
+}
+
+string name() {
+  return "Ein Bettler";
+}
+
+mixed StartEvent(int prozent,int dauer) {
+  object *ob;
+  int i,j;
+  int anzahl;
+  if(!check_secure()) return -2;
+  if(find_call_out("EndLaeuseEvent")+1)
+    return "Das Event wurde schon gestartet!";
+  if ((prozent < 10 ) || ( prozent > 60))
+    return "<prozent> muss zwischen 10 und 60 liegen !";
+  if ((dauer < 10 ) || ( dauer > 60))
+    return "<dauer> muss zwischen 10 und 60 liegen !";
+  ob=users();
+  playerarray=({});
+  anzahl=0;
+  for(i=sizeof(ob)-1;i>=0;i--) {
+    if(ob[i]->QueryProp(P_LEVEL)>=10) {
+      if ((!IS_WIZARD(ob[i])) && (query_idle(ob[i]) < 120)) {
+        playerarray+=({ob[i]});
+      }
+    }
+  }
+  anzahl=sizeof(playerarray)*prozent/100-1;
+  maxdauer=dauer/2*60;
+  if (sizeof(playerarray)<5)
+    return "Zu wenig hochstufige Spieler fuer das Event vorhanden !";
+  if (anzahl<3)
+    return "Zu wenig hochstufige Spieler waeren am Anfang angesteckt !";
+  call_out("EndLaeuseEvent",dauer*60+30);
+  call_out("LaeuseEvent",120);
+  Channel(
+    "Es ist mir sehr peinlich das zu sagen, aber leider sind mir ein "
+    "paar meiner 'Mitbewohner' abhanden gekommen. Ihr solltet sehen das "
+    "Ihr Euch selber helft und die kleinen Tierchen Euch nicht ganz "
+    "auffressen. *seufz*");
+  for(i=0;i<anzahl;i++) {
+    do {
+      j=random(sizeof(playerarray));
+    } while (!objectp(playerarray[j]));
+    write(playerarray[j]->Name()+" hat eine Laus bekommen.\n");
+    PutLaus(playerarray[j]);
+    tell_object(playerarray[j],BS(
+      "Ein Bettler laeuft an Dir vorbei und auf einmal spuerst Du ein "
+      "seltsames Kribbeln auf Deiner Haut."));
+    playerarray[j]=0;
+  }
+  return "Laeuseevent erfolgreich gestartet.";
+}
+
+void EndLaeuseEvent() {
+  if(!check_secure()) return;
+  if(find_call_out("EndLaeuseEvent")+1)
+    remove_call_out("EndLaeuseEvent");
+  if(find_call_out("LaeuseEvent")+1)
+    remove_call_out("LaeuseEvent");
+  RemoveAll();
+}
+
+int dauer() {
+  return maxdauer;
+}
+
+void LaeuseEvent() {
+  int anzahl;
+  if(!check_secure()) return;
+  anzahl=sizeof(laeusearray);
+  if (anzahl>0) {
+    Channel(
+      "Mein Jucken auf der Haut sagt mir, dass noch "+anzahl+" meiner "
+      "kleinen Bewohner unter Euch weilen." );
+    call_out("LaeuseEvent",120);
+  }
+}

@@ -1,0 +1,112 @@
+// Umhang mit Kaelteschutz
+// 10.06.2004 Feyaria
+
+inherit "/std/armour";
+
+#include "../def.h"
+#include "../../gilden.h"
+
+#define COST 50
+#define TEMPLIMIT -20
+
+int temp = 0;
+
+void create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  SetProp(P_SHORT, "Der Lavaumhang");
+  SetProp(P_LONG, 
+    "Dieser Umhang besteht aus gluehender Lava, was wohl passiert, wenn man ihn anzieht?");
+  SetProp(P_NAME, "Lavaumhang");
+  SetProp(P_GENDER, MALE);
+  AddId( ({"umhang", "lavaumhang", "\ninfernofeuerumhang"}) );
+  SetProp(P_INFO, BS(
+      "Dieser Umhang bietet Dir ueberragenden Kaelteschutz! "
+      "In besonders kalten Gebieten kannst Du noch einen zusaetzlichen "
+      "Kaelteschutz aktivieren."));
+
+  AddDetail( ({"lava"}),
+      "Die Lava dieses Umhangs ist hochgradig magisch.");
+  SetProp(P_ARMOUR_TYPE, AT_CLOAK);
+  SetProp(P_AC, 8);
+  SetProp(P_MATERIAL, ([MAT_FIRE: 100]) );
+  SetProp(P_WEIGHT, 300);
+  SetProp(P_VALUE, 2000);
+  SetProp(P_MAGIC, 5);
+  SetProp(P_QUALITY_DECAY, 1500);
+  SetProp(P_TEMPERATURE_PROTECTION, ([T_COLD_PROT: 8, T_HEAT_PROT: -3]) );
+  SetProp(P_WEAR_RESTRICTIONS, ([SR_SEER: 1]) );
+  SetProp(P_M_HEALTH_MOD, ([P_HP: 1, P_SP: 1]) );
+  SetProp(P_DAM_PROTECTION, QueryProp(P_DAM_PROTECTION) + ([DT_FIRE: 2]) );
+  SetProp(P_ITEMD_ELEMENTAL_VALUE, ([FEUER: 4+random(4)]) );
+  SetProp(P_REMOVE_FUNC, TO);
+  SetProp(P_WEAR_FUNC, TO);
+
+  AddCmd( ({"aktiviere", "aktivier"}), "cmd_aktivieren");
+  SUID;
+}
+
+int cmd_aktivieren(string str)
+{
+  mapping env;
+
+  if (!QueryProp(P_WORN) || !ENV(TP)) 
+    return 0;
+  notify_fail("Was willst Du aktivieren?\n");
+  if (str != "kaelteschutz")
+    return 0;
+  if (TP->QueryProp(P_SP) < COST)
+    return write("Dazu hast Du zu wenig Magiepunkte!\n"), -1;
+  if (!mappingp(env = ENV(TP)->QueryProp(P_ENVIRONMENT)))
+    return write("Bug! Hier gibt es keine Temperatur!\n"), -1;
+  if (env[ENV_TEMPERATURE] > TEMPLIMIT &&
+      !strstr(file_name(environment(TP)), "eiskneipe"))
+    return write("Hier ist es nicht kalt genug!\n"), -1;
+  if (TP->QueryProp(P_TEMPERATURE_OFFSET))
+    return write("Du hast schon eine Form von Temperaturschutz!\n"), -1;
+  write("Magisches Feuer umhuellt Deinen Koerper und waermt Dich.\n"
+      "Es bleibt solange aktiv, bis Du den Lavaumhang ausziehst.\n");
+  TP->SetProp(P_TEMPERATURE_OFFSET, 20);
+  TP->AddSp(-COST);
+  temp = 1;
+  return 1;
+}
+
+int RemoveFunc(object me)
+{
+  if(temp)
+    QueryProp(P_WORN)->SetProp(P_TEMPERATURE_OFFSET, 0);
+  temp = 0;
+  QueryProp(P_WORN)->RemoveResistanceModifier();
+  return 1;
+}
+
+int WearFunc(object ruest,int silent)
+{ 
+  environment()->AddResistanceModifier( ([DT_FIRE:-0.05]) );
+  return 1;
+}
+
+void reset()
+{
+  if (!is_clone(this_object())) return;
+  ::reset();
+  call_out("heal", 10 + random(200)); 
+} 
+
+void heal()
+{ 
+  object wer;
+
+  if (objectp(wer = QueryProp(P_WORN)) && interactive(wer) &&
+      (wer->QueryProp(P_HP) < wer->QueryProp(P_MAX_HP) ||
+       wer->QueryProp(P_SP) < wer->QueryProp(P_MAX_SP)))
+  {
+    tell_object(wer, 
+        "Der Lavaumhang leuchtet auf und heilt Dich.\n");
+    wer->heal_self(44);
+  }
+}
+

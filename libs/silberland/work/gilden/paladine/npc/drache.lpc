@@ -1,0 +1,330 @@
+//
+// Ein Blauer Drache
+//   (Std-File von LaMuerte@Silberland)
+//
+// Angrox@SilberLand
+//
+// 17.07.1997
+// 
+
+inherit "p/std/dragons/dragon";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h> // fuer die damage types
+#include <moving.h> // fuer REJECT_KEEP
+#include <defines.h>
+#include <moredef.h>
+#include <new_skills.h>
+#include <wizlevels.h>
+#include "../paladin.h"
+
+#define COST 250
+nosave int busy=0;
+nosave int is_moving=0;
+
+void create()
+{ int zufall;
+  object ob;
+  if (!is_clone(this_object())) return;
+  ::create();    
+  create_default_dragon(5,5,1,random(5)+8);
+  SetProp(P_SHORT, "Pyrdonalikardwat, der Bewahrer von Sturmfels, ein "
+      "junger goldener Drache");
+  SetProp(P_NAME, "Pyrdonalikardwat");
+  AddId("pyrdonalikardwat");
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_NAME_ADJ, 0);
+  SetProp(P_LONG, 
+       "Pyrdonalikardwat, der Bewahrer der Burg Sturmfels, "
+       "ein junger weiser goldender Drache, steht "
+       "in Dustys Dienst, die Burg vor uebermaechtigen Angriffen "
+       "zu beschuetzen. Sollte er Dir einmal auf den Fersen sein, so "
+       "bist Du in Dustys Augen in Ungnade gefallen, dann ist es "
+       "zu spaet Deine Suenden zu bereuen! Seine goldenen Augen "
+       "starren Dich an, scheinen in Deine Seele zu blicken, "
+       "und sie nach Deinen geheimsten und am besten verborgensten "
+       "Suenden zu durchsuchen.");
+  SetProp(P_GUILD, "paladine");
+  SetProp(P_GUILD_LEVEL, 15);
+  SetProp(P_KILL_MSG, "Es war mir eine Freude, Euch zu vernichten!");
+  SetProp(P_DIE_MSG, " faellt mit einen lauten Donnern zu Boden.\n");
+  SetProp(P_MURDER_MSG, "Ihr hattet nur Glueck, %s. Verlasst Euch nicht "
+      "staendig darauf, es koennte einmal fatal enden.");
+  SetProp(P_ALIGN, 1000);
+  SUID;
+  //CLONEME("/p/magic/luftkraut");
+  CLONEME(ARMOUR("wappenrock"));
+  CLONEME(OBJ("goldschluessel"));
+  call_other(NPCMASTER,"add_npc");
+
+  AddSpell(1,1000,
+    "Die Macht Dustys vernichtet Dich!\n",
+    "Die Macht Dustys vernichtet @WEN!\n",
+     DT_HOLY,([SP_SHOW_DAMAGE:1]));
+  AddLibrary(LIBS("allgemein.lib"), 1);
+  AddLibrary(LIBS("ayla.lib"),      1);
+  AddLibrary(LIBS("schenke.lib"),   1);
+  AddLibrary(LIBS("schmied.lib"),   1);
+  AddLibrary(LIBS("laden.lib"),     1);
+  AddLibrary(LIBS("drache.lib"),    5);
+}
+
+
+die(int poisondeath) {
+  write_file(LOG("dragon.kills"),
+      dtime(time())+": "+CAP(getuid(TP))+" toetet den Drachen.\n");
+  command_me("prufe Lebt wohl. Schuetzt die Burg vor ...");
+  call_other(NPCMASTER,"del_npc");
+  ::die(poisondeath);
+}
+
+
+void NotifyPlayerDeath(object player, object killer, int lostexp) {
+  if(killer==TO)
+    write_file(LOG ("dragon.kills"),
+       sprintf( ctime()+": Der Drache hat gerade "+CAP(getuid(player))
+       +" umgebracht - %d EP!\n", lostexp));
+  command_me("prufe Und so faehrt der Frevler in die Niederhoellen..."); 
+  return ;
+}
+
+int Defend(int dam, mixed dam_type, mixed spell, object enemy) {
+  call_other(NPCMASTER, "help_me", enemy,"Sterbliche attackieren mich!");
+  return ::Defend(dam, dam_type, spell, enemy);
+}
+
+remove(int arg) {
+ call_other(NPCMASTER,"del_npc");
+  ::remove(arg);
+}
+
+void init() {
+  ::init();
+  if(call_other(NPCMASTER,"IsFeind",TP)) Kill(TP);
+}
+
+int do_no_breath_spell(object liv) {
+  if(!query_once_interactive(liv) && 
+      member(call_other(NPCMASTER, "GetNpcs"), file_name(liv))!=-1)
+  {
+    return 1;
+  }
+  return ::do_no_breath_spell(liv);
+}
+
+//    Beschreibung
+//    -------------
+//    create_default_dragon(a,b,c,d);
+//    a...DrachenLevel  Wert:1-5
+//    b...DrachenAlter  Wert:1-12
+//    c...Alignment     Wert:0/1
+//    d...Schuppen      Wert:0-..
+//   --------------  
+//   
+//   zu a,c:
+//   
+//   Die DrachenLevel sind Alignmentabhaengig (gut/boese) unterteilt in:
+//    
+//       |   # Gut         |    # Boese
+//    *1 | Kupfer Drachen  | Schwarzer Drachen  
+//    *2 | Bronze Drachen  | Weisser Drachen
+//    *3 | Messing Drachen | Gruener Drachen
+//    *4 | Silber Drachen  | Blauer Drachen
+//    *5 | Gold Drachen    | Roter Drachen
+//  
+//     *...Wert a    #...Wert c
+//   -------------- 
+//   
+//   zu b:
+//   
+//   Weiters gibt es noch 12 Altersabstufungen, und zwar:
+//    
+//                kundig erfahren weise
+//    jung      |   1   |   2    |  3   |
+//    erwachsen |   4   |   5    |  6   |
+//    alt       |   7   |   8    |  9   |
+//    steinalt  |  10   |  11    | 12   | 
+//   --------------
+//   
+//   zu d:
+//   
+//   Dieser Wert legt fest wieviele Drachenschuppen ein Drache
+//   bei sich traegt. (..werden benoetigt um bei Schmieden versch.
+//   DrachenRuestungsTeile fertigen zu lassen.)
+//  
+//   Momentan Beschraenkungen noch nicht festgelegt!
+//   (mal schaun...)
+//   ----------------
+//   
+//   Es werden jetzt allerhand Props festgelegt, die auf den Drachen
+//   abgestimmt sind. Eigentlich sollte man nur mehr (wenn man will)
+//   Die P_LONG umsetzen. 
+//   Sollte man Ruestungsteile reinclonen?! Mal ueberlegen...
+//   Geld kann man reinclonen wenn man will...
+int IsBusy() {
+  return busy;
+}
+
+int IsMoving() {
+  return is_moving;
+}
+
+void SetBusy() {
+  busy=1;
+}
+
+void SetFree() {
+  busy=0;
+  command_me("sag Meine Aufgabe hier ist erfuellt!");
+  call_out("go_home", 0);
+}
+
+int DoWay(mixed way) {
+  int i;
+  SetBusy();
+  is_moving=1;
+  //tell_angrox("Waechter: Weg fun ok!\n");
+  //tell_angrox(sprintf("Waechterweg: %O\n", way));
+  if(!sizeof(way)) return 0;
+  call_out("NextStep", 2, way);
+  return 1;
+}
+
+nosave int NextStep(mixed way) {
+  if(!sizeof(way)) {
+    is_moving=0;
+    call_out("SetFree", 500);
+    return 1;
+  }
+  command_me(way[0]);
+  //tell_angrox(sprintf("%O --> %s\n", ME, way[0]));
+  call_out("NextStep", 2, way[1..]);
+  return 1;
+}
+
+void go_home() {
+   ME->move(ROOM("burg_no_turm4"), M_GO);
+   return ;
+}
+ 
+void catch_tell(string str) {
+  string sayer, to_protect;
+  object pl,npc;
+  mixed way;
+  if(sscanf(str, "%s sagt: beschuetze %s!\n", sayer, to_protect)!=2)
+    return ;
+  if(!pl=find_player(lower_case(sayer))) return ;
+  to_protect=lower_case(to_protect);
+  if(pl->QueryProp(P_GUILD)!="paladine") {
+    call_out("say_delayed", 0, sprintf("sag Verschwinde, Sterbliche%s", 
+          TP->QueryProp(P_GENDER)==FEMALE?"":"r"));
+    return ;
+  }
+  if(call_other(PALADINMASTER, "QueryNumberOne")[0] != getuid(pl) &&
+      !IS_ARCH(TP)) 
+  {
+    call_out("say_delayed", 0, "sag Ich gehorche nur dem Streiter des Lichts "
+        "und Dusty persoenlich!");
+    return ;
+  }
+  if(member( ({"ayla", "mythar", "portal", "seherportal"}), 
+        lower_case(to_protect))==-1) 
+  {
+    return ;
+  }
+
+  if(member( ({"portal", "seherportal" }), to_protect)!=-1) {
+    if (pl->QueryProp(P_SP) < COST)
+    {
+      call_out("say_delayed", 0, "sag Deine Macht ist zu gering, um mich "
+          "herumzokommandieren!");
+      return;
+    }
+    pl->AddSp(-COST);
+    call_other(ROOM("w_weg_a1"), "???");
+    way=find_object(WAYD)->find_way(ENV(ME),find_object(ROOM("w_weg_a1")));
+    call_out("say_delayed", 0, "sag Ich werde sehen, was ich tun kann!");
+    call_out("DoWay", 0, way[1]);
+    write_file(LOG("drachen_befehlen"), sprintf("%s: %O befiehlt %O von %s "
+        "zum Seherportal\n", dtime(time()), pl, ME, file_name(ENV(pl))));
+    return ;
+  }
+  npc=find_living(to_protect);
+  if(!npc) {
+    call_out("say_delayed", 0, sprintf("sag %s scheint "
+          "nicht hier zu sein!", CAP(to_protect)));
+    return ;
+  }
+  if(IsBusy()) {
+    call_out("say_delayed", 0, "sag Nicht jetzt!");
+    return ;
+  }
+  if(!ENV(npc) || explode(file_name(ENV(npc)), "/")[0]!="gilden") {
+    call_out("say_delayed", 0, "sag Dorthin gehe ich nicht!");
+    return ;
+  }
+  call_other(WAYD, "???");
+  way=find_object(WAYD)->find_way(ENV(ME), ENV(npc));
+  if(sizeof(way) < 2 || !sizeof(way[1])) {
+    command_me("sag Was wollt Ihr?");
+    return ;
+  }
+  if (pl->QueryProp(P_SP) < COST)
+  {
+    call_out("say_delayed", 0, "sag Deine Macht ist zu gering, um mich "
+        "herumzokommandieren!");
+    return;
+  }
+  pl->AddSp(-COST);
+  call_out("say_delayed", 0, "sag Ich werde sehen, was ich tun kann!");
+  write_file(LOG("drachen_befehlen"), sprintf("%s: %O befiehlt %O von %s "
+        "zu %s (%s)\n", dtime(time()), pl, ME, file_name(ENV(pl)), 
+        CAP(to_protect), file_name(ENV(npc))));
+  call_out("DoWay", 0, way[1]);
+  return ;
+}
+
+void say_delayed(string str) {
+   command_me(str);
+   return ;
+}
+
+
+int check_enemy(object wer) {
+  if(!living(wer)) return 0;
+  if(wer->QueryProp(P_GUILD)=="paladine") return 0;
+  return 1;
+}
+
+void breath_spell()
+{
+  int i,j;
+  object *inv; 
+  object *armours;
+  
+  tell_room(MENV, Name(WER,1)+" spuckt Feuer in den ganzen Raum "
+      "und zerstoert Deine Ruestung.\n");
+  inv=filter_array(all_inventory(environment(this_object())), "check_enemy" );
+  for(i=sizeof(inv)-1;i>=0;i--) 
+  {
+    //if(member_array("drache",inv[i]->QueryProp(P_IDS))!=-1 ||
+    // debuggt von Angrox 26112001
+    if(do_no_breath_spell(inv[i]))
+      continue; 
+    else
+    {
+      inv[i]->Defend(breathdamage/2+random(breathdamage/2), DT_FIRE, 
+       ([SP_SHOW_DAMAGE:1,SP_NAME:"Dragonbreath"]), this_object());
+      if( pointerp(inv[i]) && pointerp(armours=inv[i]->QueryProp(P_ARMOURS)) ) 
+        for(j=0;j<sizeof(armours);j++)
+        {
+          if( !random(3) && armours[i]->QueryProp(P_AC) && 
+              !armours[i]->id("drachenruestung") && 
+              armours[i]->QueryProp(P_QUALITY_DECAY) )
+            armours[i]->TakeFlaw(50+random(dragonage*(dragontype+5)));
+        }
+    }
+  }
+  return;
+}

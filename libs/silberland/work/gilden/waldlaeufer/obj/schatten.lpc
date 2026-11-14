@@ -1,0 +1,108 @@
+/*****************************************************************************
+Pakt der Schatten - Kontrollelement
+(c) Lilyth, Torian, Delgo @ Silberland <sl.mud.at>
+25.11.05 - Begin
+
+*****************************************************************************/
+#include "../def.h"
+inherit "std/thing";
+
+object sh;
+int zeit;
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, 0 );
+  SetProp(P_LONG,  0 );
+  SetProp(P_NAME, 0);
+  SetProp(P_INVIS, 1);
+  SetProp(P_GENDER, MALE);
+  AddId(SHADOW_CONTROL_ID);
+  SetProp(P_MATERIAL, MAT_MAGIC );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_SIZE, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NEVERDROP, 1);
+  
+  zeit=time();
+  call_out("remove", 20);
+  
+}
+
+string disable()
+{ return "Die Schatten lassen Dich nicht los..."; }
+
+int get_control(object s)
+{
+  object pl;
+  
+  sh=s;
+  pl=ENV(TO);
+  if( !(pl) )              {return 0;}
+  if( !(interactive(pl)) ) {return 0;}
+  pl->Message(BS("Du konzentrierst Dich auf die Bewegungen Deines "
+                 "Schattens..."));
+  pl->SetProp(P_TMP_MOVE_HOOK, ({time()+4, TO, "disable"}));
+  pl->SetProp(P_TMP_ATTACK_HOOK, ({time()+4, TO, "disable"}));
+  pl->SetProp(P_TMP_DEFEND_HOOK, ({time()+4, TO, "disable"}));
+  pl->SetProp(P_TMP_DIE_HOOK, ({time()+4, TO, "disable"}));
+  input_to("cmd");
+  return 1;
+}
+
+nosave void cmd(string str)
+{
+  object ob;
+
+  if(!objectp(sh)) {
+    remove();
+  }
+  
+  ob=ENV(TO);
+  sh->explore(str, TO, ob);
+  if((zeit+20)<=time()) 
+  { 
+    call_out("remove",0);
+    return;
+  }
+  input_to("cmd");
+  return;  
+}
+varargs int remove(int silent)
+{
+  object ob, pd;
+  int i, hasSkill;
+  mapping m;
+
+  if(!is_clone(TO)) {
+    return ::remove(silent);
+  }
+  
+  ob=ENV(TO);
+  if(sh && ob) {
+    ENV(sh)->Message(BS(sh->Name(WER)+" verformt sich."));
+    ENV(sh)->Message(BS(ob->Name(WER, 1)+" tritt aus dem Schatten hervor.")
+                     , MSGFLAG_VISUAL, ([ MSGFLAG_EXCLUDE : ({ ob }) ]));
+    ob->Message(BS("Du verlaesst Die Welt der Schatten."), MSGFLAG_VISUAL);
+    ob->move(ENV(sh), M_TPORT | M_SILENT | M_NO_SHOW);
+  } else {
+    ob->move("/gilden/waldlaeufer", M_TPORT);
+  }
+
+  if(sh){ 
+    sh->remove(1); 
+  }
+  
+  pd=clone_object(OBJ"player_damage");
+  hasSkill = R_SKILLMASTER->HasSkill(getuid(ob), VERBESSERTER_PAKT);
+  pd->move(ob, M_SILENT); 
+  pd->SetDamage((int) (22 - ob->QueryProp(P_GUILD_LEVEL)/2 * (hasSkill?2:0.5)), 30+random(30));
+  
+  return ::remove(silent);
+}

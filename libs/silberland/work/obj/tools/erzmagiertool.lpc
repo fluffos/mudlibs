@@ -1,0 +1,3446 @@
+// Beinhaltet /obj/tools/eptool, /obj/tools/questtool, /obj/tools/newstool, 
+// /obj/tools/zttool, /obj/tools/tortool, /gilden/tools/gt und 
+// obj/tools/sheriffstern
+
+inherit "std/tool";
+inherit "std/more";
+
+#include <properties.h>
+#include <wizlevels.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <ansi.h>
+#include <exploration.h>
+#include <npcmaster.h>
+#include <questmaster.h>
+#include <defines.h>
+#include <moredef.h>
+#include "/gilden/tools/gt.h"
+#include <vt100.h>
+#include <warnings.h>
+
+
+#define VERSION "1.1"
+
+#define NF notify_fail
+
+#define P_LONG_EP "long_ep"
+#define P_LONG_NPC "long_npc"
+#define P_LONG_QUEST "long_quest"
+#define P_LONG_NEWS "long_news"
+#define P_LONG_ZT "long_zt"
+#define P_LONG_TOR "long_tor"
+#define P_LONG_GUILD "long_guild"
+#define P_LONG_ERZ "long_erz"
+#define P_LONG_LOG "long_log"
+
+#define UA this_interactive()->_unparsed_args()
+
+nosave object owner;
+
+void create_ep();
+void create_tor();
+void create_quest();
+void create_news();
+void create_zt();
+void create_guild();
+void create_log();
+void create_sheriff();
+string long_stern();
+nosave int SetColors(string terminal);
+
+void create()
+{
+  string str;
+
+  if (IS_BLUE(ME)) return;
+  ::create();
+  owner = PL;
+
+  AddId( "erzmagiertool" );
+  SetProp(P_ARTICLE,0);
+  SetProp(P_GENDER, NEUTER);
+
+  str=capitalize(((str=getuid(this_player()))[<1]=='s'||str[<1]=='x'||
+        str[<1]=='z')?str+="'":str+="s");
+  SetProp(P_NAME, str+" Erzmagier-Tool");
+  SetProp(P_SHORT, str+" Erzmagier-Tool v"+VERSION);
+
+  SetProp(P_LONG_ERZ,
+      "Das Erzmagiertool:\n"
+      "Es beinhaltet das Newstool, ZTtool, Questtool, Sehertortool, EPtool,\n"
+      "NPCTool, Gildentool, Logtool und Sheriffstern.\n"
+      "Du kannst jedes Tool einzeln untersuchen.\n");
+  call_out("env_check",0);
+  create_ep();
+  create_tor();
+  create_quest();
+  create_news();
+  create_zt();
+  create_guild();
+  create_log();
+  create_sheriff();
+}
+
+varargs int move(mixed dest, int method)
+{
+  if (dest != owner) return ME_CANT_BE_DROPPED;
+  else return ::move(dest, method);
+}
+
+void env_check()
+{
+  if (!environment()) return destruct(this_object());
+}
+
+void init()
+{
+  if( !IS_ARCH(environment(this_object())) )
+    call_out("remove",0);
+  ::init();
+
+  add_action("addg","addg");
+  add_action("removeg","removeg");
+  add_action("addw","addw");
+  add_action("removew","removew");
+  add_action("addd","addd");
+  add_action("removed","removed");
+  add_action("addr","addr");
+  add_action("remover","remover");
+  add_action("setg","setg");
+  add_action("setexpire","setexpire");
+  add_action("expire","expire");
+  add_action("ginfo","ginfo");
+  add_action("setmaxmsg","setmaxmsg");
+
+  add_action("GHelp", "ghilfe");
+  add_action("gilden_skills", "gsk");
+  add_action("gilden_skills_sortet", "gsks");
+  add_action("gci","gci");
+  add_action("gssk", "gssk");
+  add_action("gska", "gska");
+  add_action("grsk", "grsk");
+  add_action("gmsk", "gmsk");
+  add_action("gs", "gs");
+  SetColors(environment(this_object())->QueryProp(P_TTY));  
+
+  call_out("check_logs", 0);
+}
+
+int _query_autoloadobj() { return 1; }
+
+string last_id="";
+
+int id(string str)
+{
+  int yes;
+  if (yes=::id(str)) last_id=str;
+  return yes;
+}
+
+string _query_long()
+{
+  if (last_id=="npctool") return QueryProp(P_LONG_NPC);
+  if (last_id=="eptool") return QueryProp(P_LONG_EP);
+  if (last_id=="questtool") return QueryProp(P_LONG_QUEST);
+  if (last_id=="zttool") return QueryProp(P_LONG_ZT);
+  if (last_id=="newstool") return QueryProp(P_LONG_NEWS);
+  if (last_id=="tortool") return QueryProp(P_LONG_TOR);
+  if (last_id=="gildentool") return QueryProp(P_LONG_GUILD);
+  if (last_id=="logtool") return QueryProp(P_LONG_LOG);
+  if (last_id=="sheriffstern" || last_id=="verwarnungstool") return long_stern();
+  return QueryProp(P_LONG_ERZ);
+}
+
+//---------------------------------------------------------------------------
+//                                EP - TOOL
+//---------------------------------------------------------------------------
+
+void create_ep()
+{
+  AddId(({"eptool","ep-tool"}));
+  AddId(({"npctool","npc-tool"}));
+  SetProp(P_LONG_EP,
+   "Das EP-Tool [v"+VERSION+"] dient der Administration von Exploration Points.\n\n"
+
+   "Implementierte Kommandos (fuer Erzmagier++):\n"
+   " epa(dd) <objekt>:<typ>:<eps>:<keys>     Exploration Point(s) hinzufuegen\n"
+   " epc(hange) <objekt>:<typ>:<eps>:<keys>  Exploration Point(s) aendern\n"
+   " epd(el) <objekt>:<typ>                  EP entfernen\n"
+   " eps(how) <nummer> | <objekt>[:<typ>]    EP #x oder eines Objekts anzeigen\n"
+   " epi(nfo) [<spieler>]                    Diverse Infos anzeigen\n"
+   " epdump                                  Saemtliche EPs anzeigen \n"
+   " epaot <object>                          Fuegt ein Orakel Objekt hinzu\n"
+   " eprot <object>                          Entfernt ein Orakel Objekt\n"
+   " epsot                                   Zeigt alle Orakel Objekte an\n"
+   " epaoq <frage>:<pfad>                    Fuegt eine Orakel Frage hinzu\n"
+   " eproq <frage>                           Entfernt eine Orakel Frage\n"
+   " epsoq                                   Zeigt alle Orakel Fragen an\n"
+   " epfoc                                   Berechnet neue Orakel Fragen sofort\n"
+   " unt npctool                             fuer Infos zur Erstkill-Verwaltung\n\n"+
+   break_string(
+   "<objekt> ist eine Objektangabe, wobei auch der Suffix 'im raum' bzw. "
+   "'in mir' erlaubt ist, um festzulegen, ob sich das Objekt im Raum "
+   "oder im Inventory befindet. Die Angabe 'hier' steht fuer den "
+   "Raum, in dem man grade steht.", 78)+"\n"+
+   break_string(
+   "<typ> ist 'det' (Detail, Read-/Special-Detail), 'sens' (raumspezifischer "
+   "Geruch oder Geraeusch (eines Raums, NICHT eines Objekts!)) "
+   "'exit' (Ausgang), 'cmd' (ein AddCmd-Kommand), 'info' (Infos von einem NPC) "
+   "oder 'misc' (eigene GiveExplorationPoint()-Aufrufe im Objekt).", 78)+"\n"+
+   break_string(
+   "<keys> sind, durch Kommas getrennt, saemtliche (!!) moegliche Schluessel,\n"
+   "also Detail, Ausgang, Kommando-Verb oder Info-Schluesselwort\n"
+   "des NPCs. Dabei sind wirklich saemtliche moeglichen Schluessel anzugeben,\n"
+   "zB. 'kletter' und auch 'klettere' (\"kletter, klettere\"), wenn beides\n"
+   "dieselbe Aktion ausloest.\n", 78)+"\n"
+  );
+
+  SetProp(P_LONG_NPC,
+   "Das NPC-Tool [v"+VERSION+"] dient der Administration von Erstkills.\n\n"
+
+   "Implementierte Kommandos (fuer Erzmagier++):\n"
+   " npcs(et) <objekt>|<nummer>:<bonus>      NPC-Killerbonus hinzufuegen/aendern\n"
+   " npcc(hange) <objekt>|<nummer>:<neues objekt>   NPC-Filename aendern\n"
+   " npcp(ending) [<spieler>|?]              Bonus-Spielerqueue anzeigen\n"
+   " npcq(ueue) [<regexp>]                   Bonus-Queue anzeigen\n"
+   " npca(pprove) <dateiname>                Bonus bestaetigen\n"
+   " npcar <regexp>                          Bonus nach Regexp bestaetigen\n"
+   " npcr(emove) <dateiname>                 Eintrag aus der Queue loeschen\n"
+   " npcrr <regexp>                          Eintraege -\"- nach Regexp loeschen\n"
+   " npcdump [<regexp>]                      Saemtliche NPC-Boni anzeigen\n"+
+   " unt eptool                              fuer Infos zur EP-Verwaltung\n\n"+
+
+   break_string(
+   "<objekt> ist eine Objektangabe, wobei auch der Suffix 'im raum' bzw. "
+   "'in mir' erlaubt ist, um festzulegen, ob sich das Objekt im Raum "
+   "oder im Inventory befindet. Die Angabe 'hier' steht fuer den "
+   "Raum, in dem man grade steht.", 78)+"\n"
+  );
+
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NODROP, "Lass das lieber nicht wo rumliegen.\n");
+  SetProp(P_NOBUY, 1);
+  AddCmd(({ "epa", "epadd" }),   "epAdd");
+  AddCmd(({ "epc", "epchange" }),"epChange");
+  AddCmd(({ "epd", "epdel" }),   "epDel");
+  AddCmd(({ "eps", "epshow" }),  "epShow");
+  AddCmd(({ "epi", "epinfo" }),  "epInfo");
+  AddCmd("epdump", "epDump");
+  AddCmd(({ "epaot" }), "epAddOracleTrusted");
+  AddCmd(({ "eprot" }), "epRemoveOracleTrusted");
+  AddCmd(({ "epsot" }), "epShowOracleTrusted");
+  AddCmd(({ "epaoq" }), "epAddOracleString");
+  AddCmd(({ "eproq" }), "epRemoveOracleString");
+  AddCmd(({ "epsoq" }), "epShowOracleString");
+  AddCmd(({ "epfoc" }), "epForceOracleCalc");
+  AddCmd(({ "npcs", "npcset" }),   "npcSet");
+  AddCmd(({ "npcp", "npcpending" }),   "npcPending");
+  AddCmd(({ "npcq", "npcqueue" }),     "npcQueue");
+  AddCmd(({ "npca", "npcapprove" }),   "npcApprove");
+  AddCmd(({ "npcar" }),                "npcApproveRegexp");
+  AddCmd(({ "npcr", "npcremove" }),    "npcRemove");
+  AddCmd(({ "npcrr" }),                "npcRemoveRegexp");
+  AddCmd("npcdump",                    "npcDump");
+  AddCmd(({ "npcc", "npcchange" }),    "npcChange");
+  // "  npcs(how) <objekt>                      NPC-Killerbonus anzeigen\n"
+  // AddCmd(({ "npcs", "npcshow" }),  "npcShow");
+}
+object GetObj(string s)
+{
+  object ob;
+  string s1, s2;
+
+  // Raum?
+  if ((s == "hier") || (s == "here"))
+    return environment(PL);
+
+  // Einschraenkungen bzgl. Environment:
+  if (sscanf(s, "%s in mir", s1)) return present(s1, PL);
+  if (sscanf(s, "%s im raum", s1)) return present(s1, environment(PL));
+
+  // Keine Einschraenkungen, einfach suchen:
+  if (!(ob = present(s, environment(PL))))
+    ob = present(s, PL);
+
+  // Last resort: Filename
+  if (!ob) ob = find_object(s);
+
+  return ob;
+}
+
+int epAddChange(string str, int changeflag)
+{
+  string s_ob,s_typ,s_keys, *keys;
+  int i, type, eps;
+  object ob;
+
+  str=this_player()->_unparsed_args();
+  NF("Nicht genug Parameter angegeben!\n"
+     "Syntax: epa(dd) <objekt>:<typ>:<eps>:<keys>\n"
+     "bzw. epc(hange) <objekt>:<typ>:<eps>:<keys>\n");
+  if (!str) return 0;
+  if (sscanf(str, "%s:%s:%d:%s", s_ob, s_typ, eps, s_keys) < 4)
+    return 0;
+
+  if ((type=member(EP_TYP_STR, s_typ)) < 0)
+    return NF("Ungueltiger EP-Typ!\n"), 0;
+
+  ob = GetObj(s_ob);
+  if (!ob)
+    return NF("Objekt nicht gefunden!\n"), 0;
+
+  if ((eps<0) || (eps>EPS_MAX))
+    return NF("Ungueltige EP-Anzahl!\n"), 0;
+
+  // keys = explode (implode(explode(s_keys," "),""), ",");  // spaces raus
+  keys = explode (s_keys, ",");  // nee, spaces drin sind schon o.k.
+  for (i=sizeof(keys)-1; i>=0; i--)                 // nur leading/trailing
+    keys[i] = implode (explode(keys[i], " "), " "); // spaces wolln wir nicht
+
+  i = changeflag ? EPMASTER->ChangeEPObject(ob, type, keys, eps)
+                 : EPMASTER->AddEPObject (ob, type, keys, eps);
+  if (i<0)
+  {
+    switch (i)
+    {
+      case EPERR_NOT_ARCH:
+        return NF("Funktion ist Erzmagiern vorbehalten!\n"), 0;
+      case EPERR_INVALID_OB:
+        return NF("Das angegebene Objekt ist fuer EPs nicht zulaessig!\n"), 0;
+      case EPERR_INVALID_ARG:
+        return NF("Ungueltiges Argument!\n"), 0;
+      default:
+        return NF("Unbekannter Fehler!\n"), 0;
+    }
+  }
+  write ("Ok, EP hinzugefuegt. Insgesamt gibt es nun "+i+" EPs.\n");
+  write (sprintf("%-4s  [%2d]  %:-40s  %:-20s\n",
+         s_typ, eps, file_name(ob), implode(keys, ",") ));
+  return 1;
+}
+
+int epAdd(string str)
+{
+  return epAddChange(str,0);
+}
+
+int epChange(string str)
+{
+  return epAddChange(str,1);
+}
+
+int npcSet(string str)
+{
+  string s_ob;
+  int i, bonus, num;
+  object ob;
+
+  str=this_player()->_unparsed_args();
+  NF("Nicht genug Parameter angegeben!\n"
+     "Syntax: npcs(et) <objekt>:<bonus> oder <nummer>:<bonus>\n");
+  if (!str) return 0;
+  if (sscanf(str, "%d:%d", num, bonus) == 2)
+    s_ob=NPCMASTER->QueryNPCbyNumber(num)[2];
+  else if (sscanf(str, "%s:%d", s_ob, bonus) == 2)
+  {
+    if (s_ob[0] != '/')
+    {
+      ob = GetObj(s_ob);
+      if (!ob) return NF("Objekt nicht gefunden!\n"), 0;
+      s_ob = explode(file_name(ob),"#")[0];
+    }
+    else
+      if (s_ob[<2..] == ".lpc")
+        s_ob = s_ob[0..<3];
+  }   
+  if (bonus<0) return NF("Ungueltiger Bonus!\n"), 0;
+
+  i = NPCMASTER->SetScore(s_ob, bonus);
+
+  if (i<1)
+  {
+    switch (i)
+    {
+      case NPC_NO_PERMISSION:
+        return NF("Funktion ist Erzmagiern vorbehalten!\n"), 0;
+      case NPC_INVALID_ARG:
+        return NF("Ungueltiges Argument!\n"), 0;
+      default:
+        return NF("Unbekannter Fehler!\n"), 0;
+    }
+  }
+  write ("Ok, Bonus gesetzt:\n");
+  write (sprintf("[%d] %s\n", bonus, s_ob));
+  return 1;
+}
+
+int npcPending(string str)
+{
+  mapping m,p;
+  mixed   ind;
+  int     i,j;
+  string  res;
+
+  m=NPCMASTER->QueryPending();
+  p=NPCMASTER->QueryQueued();
+  if (!sizeof(m))
+    res="Derzeit keine Spieler in der Pending Queue.\n";
+  else if (stringp(str))
+    if (str=="?")
+      res=break_string("Derzeit sind folgende Spieler in der Queue:\n"+
+          implode( map_array(sort_array(m_indices(m), #'>), #'capitalize),
+            ", ")+".", 78, 0, 1);
+    else if (!member(m,str))
+      res=capitalize(str)+" hat keine Eintraege in der Pending Queue.\n";
+    else {
+      res=sprintf("%s (%s):\n", capitalize(str),
+          find_player(str) ? "anwesend" :
+          find_netdead(str) ? "netztot seit "+
+          dtime(file_date("/save/"+str[0..0]+"/"+str+".o")) :
+          "zuletzt ausgeloggt: "+
+          dtime(file_date("/save/"+str[0..0]+"/"+str+".o")));
+      for (j=sizeof(m[str])-1; j>=0; j--)
+        res+=sprintf("  %'.'-50s... %s\n", m[str][j],
+             member(p,m[str][j]) ? p[m[str][j]] + " (?)"
+               : to_string(NPCMASTER->QueryScore(m[str][j])));
+    }
+  else {
+    res="";
+    ind=sort_array(m_indices(m), #'<);
+    for (i=sizeof(ind)-1; i>=0; i--) {
+      res+=sprintf("%s (%s):\n", capitalize(ind[i]),
+          find_player(ind[i]) ? "anwesend" :
+          find_netdead(ind[i]) ? "netztot seit "+
+          dtime(file_date("/save/"+ind[i][0..0]+"/"+ind[i]+".o")) :
+          "zuletzt ausgeloggt: "+
+          dtime(file_date("/save/"+ind[i][0..0]+"/"+ind[i]+".o")));
+      for (j=sizeof(m[ind[i]])-1; j>=0; j--)
+        res+=sprintf("  %'.'-50s... %s\n", m[ind[i]][j],
+             member(p,m[ind[i]][j]) ? p[m[ind[i]][j]] + " (?)"
+               : to_string(NPCMASTER->QueryScore(m[ind[i]][j])));
+    }
+  }
+  this_player()->More(res);
+  return 1;
+}
+
+int npcQueue(string str)
+{
+  mapping m;
+  mixed ind;
+  int i;
+
+  if (str) str=this_player()->_unparsed_args();
+  m=NPCMASTER->QueryQueued(str);
+  ind=sort_array(m_indices(m), #'<);
+  if (!sizeof(ind))
+    write("Derzeit keine NPCs"+
+        (str ? ", die '"+str+"' matchen" : "")+" in der Queue.\n");
+  else
+  for (i=sizeof(ind)-1; i>=0; i--)
+    write(sprintf("%:'.'-52s... P_XP ergaebe %d Punkte\n",
+          ind[i]+" ", m[ind[i]]));
+  return 1;
+}
+
+int npcApprove(string str)
+{
+  int i;
+  mixed x;
+
+  str=this_player()->_unparsed_args();
+  NF("Nicht genug Parameter angegeben!\n"
+     "Syntax: npca(pprove) <dateiname>\n");
+  if (!str) return 0;
+
+  if (str[<2..] == ".lpc") str=str[0..<3];
+  if (file_size(str+".lpc") <= 0)
+    return write(str+".c nicht gefunden oder ungueltig!\n"), 1;
+
+  x = NPCMASTER->ApproveQueued(str);
+  if (pointerp(x)) {
+    write(sprintf("Killbonus (%d) fuer %s bestaetigt [#%d]\n",
+        x[1], str, x[0]));
+    return 1;
+  }
+  else switch (x)
+    {
+      case NPC_NO_PERMISSION:
+        return NF("Funktion ist Erzmagiern vorbehalten!\n"), 0;
+      case NPC_INVALID_ARG:
+        return NF("Ungueltiges Argument!\n"), 0;
+      default:
+        return NF("Unbekannter Fehler!\n"), 0;
+    }
+}
+
+int npcApproveRegexp(string str)
+{
+  int i;
+  mixed x;
+
+  str=this_player()->_unparsed_args();
+  NF("Nicht genug Parameter angegeben!\n"
+     "Syntax: npcar <regexp>\n");
+  if (!str) return 0;
+
+  x = NPCMASTER->ApproveQueuedRegexp(str);
+  if (pointerp(x)) {
+    write("Killbonus bestaetigt fuer:\n");
+    for (i=0; i<sizeof(x); i++)
+      write(sprintf("#%4d  [%3d]  %-40s\n",
+          x[i][1], x[i][2], x[i][0]));
+    write(sprintf("-----------\nInsgesamt %d Eintraege bestaetigt.\n",
+        sizeof(x)));
+  }
+  else if (x==NPC_INVALID_ARG)
+    write("Keine passenden Eintraege gefunden!\n");
+  else switch (x)
+    {
+      case NPC_NO_PERMISSION:
+        return NF("Funktion ist Erzmagiern vorbehalten!\n"), 0;
+      /*
+      case NPC_INVALID_ARG:
+        return NF("Ungueltiges Argument!\n"), 0;
+      */
+      default:
+        return NF("Unbekannter Fehler!\n"), 0;
+    }
+  return 1;
+}
+
+int npcRemove(string str)
+{
+  int i,n;
+  mixed x;
+
+  str=this_player()->_unparsed_args();
+  NF("Nicht genug Parameter angegeben!\n"
+     "Syntax: npcr(emove) <dateiname>\n");
+  if (!str) return 0;
+
+  n = sizeof(NPCMASTER->QueryQueued());
+  if (str[<2..] == ".lpc") str=str[0..<3];
+  x=NPCMASTER->RemoveQueued(str);
+  if (mappingp(x))
+    if (sizeof(x) != n)
+      write("Ok, Eintrag '"+str+"' aus Queue entfernt.\n");
+    else
+      write("Kein Eintrag dieses Namens in der Queue!\n");
+  else switch (x)
+    {
+      case NPC_NO_PERMISSION:
+        return NF("Funktion ist Erzmagiern vorbehalten!\n"), 0;
+      case NPC_INVALID_ARG:
+        return NF("Ungueltiges Argument!\n"), 0;
+      default:
+        return NF("Unbekannter Fehler!\n"), 0;
+    }
+  return 1;
+}
+
+int npcRemoveRegexp(string str)
+{
+  int i,n;
+  mixed x;
+
+  str=this_player()->_unparsed_args();
+  NF("Nicht genug Parameter angegeben!\n"
+     "Syntax: npcrr <regexp>\n");
+  if (!str) return 0;
+
+  n = sizeof(NPCMASTER->QueryQueued());
+  x=NPCMASTER->RemoveQueuedRegexp(str);
+  if (mappingp(x))
+    if (n=n-sizeof(x))
+      write("Ok, "+n+(n==1?" Eintrag":" Eintraege")+" aus Queue entfernt.\n");
+    else
+      write("Keine passenden Eintraege in der Queue!\n");
+  else switch (x)
+    {
+      case NPC_NO_PERMISSION:
+        return NF("Funktion ist Erzmagiern vorbehalten!\n"), 0;
+      case NPC_INVALID_ARG:
+        return NF("Ungueltiges Argument!\n"), 0;
+      default:
+        return NF("Unbekannter Fehler!\n"), 0;
+    }
+  return 1;
+}
+
+int npcDump(string str)
+{
+  string d;
+
+  if ((this_interactive() != this_player()) || (this_player() != owner))
+    return NF("Du bist dazu nicht berechtigt!\n"), 0;
+  if (!stringp(d=NPCMASTER->QueryDump()))
+    return NF("Du bist dazu nicht berechtigt!\n"), 0;
+  if (str)
+    d=implode(regexp(explode(d,"\n"),str=this_player()->_unparsed_args()),"\n");
+  this_player()->More(str ? "NPC-Dump nach regexp \""+str+"\":\n"+d : d);
+  return 1;
+}
+
+int npcChange(string str)
+{
+  string old, new;
+  int i, bonus, num;
+  object ob;
+
+  str=this_player()->_unparsed_args();
+  NF("Nicht genug Parameter angegeben!\n"
+     "Syntax: npcc(hange) <objekt>|<nummer>:<neues objekt>\n");
+  if (!str) return 0;
+  if (sscanf(str, "%d:%s", num, new) == 2)
+    old=NPCMASTER->QueryNPCbyNumber(num)[2];
+  else if (sscanf(str, "%s:%s", old, new) == 2)
+  {
+    if (old[0] != '/')
+    {
+      ob = GetObj(old);
+      if (!ob) return NF("Objekt nicht gefunden!\n"), 0;
+      old = explode(file_name(ob),"#")[0];
+    }
+    else
+      if (old[<2..] == ".lpc")
+        old = old[0..<3];
+  }   
+  else
+    return NF("Falsche Parameter!\n"), 0;
+  if (new[0] != '/')
+  {
+    ob = GetObj(new);
+    if (!ob) return NF("Objekt nicht gefunden!\n"), 0;
+    new = explode(file_name(ob),"#")[0];
+  }
+  else
+    if (new[<2..] == ".lpc")
+      new = new[0..<3];
+
+  i = NPCMASTER->ChangeScore(old, new);
+
+  if (i<1)
+  {
+    switch (i)
+    {
+      case NPC_NO_PERMISSION:
+        return NF("Funktion ist Erzmagiern vorbehalten!\n"), 0;
+      case NPC_INVALID_ARG:
+        return NF("Ungueltiges Argument!\n"), 0;
+      default:
+        return NF("Unbekannter Fehler!\n"), 0;
+    }
+  }
+  write ("Ok, Filename geaendert:\n");
+  write (sprintf("von: %s\nauf: %s\n", old, new));
+  return 1;
+}
+
+int epDel(string str)
+{
+  string s_ob, s_typ;
+  int i, type;
+  object ob;
+
+  str=this_player()->_unparsed_args();
+  NF("Nicht genug Parameter angegeben!\n"
+     "Syntax: epd(el) <objekt>:<typ>\n");
+  if (!str) return 0;
+  if ((i=sscanf(str, "%s:%s", s_ob, s_typ)) < 2)
+    return 0;
+  if ((type=member(EP_TYP_STR, s_typ)) < 0)
+    return NF("Ungueltiger EP-Typ!\n"), 0;
+
+  ob = GetObj(s_ob);
+  if (!ob)
+    return NF("Objekt nicht gefunden!\n"), 0;
+
+  i = EPMASTER->RemoveEPObject (ob, type);
+  if (i<0)
+  {
+    switch (i)
+    {
+      case EPERR_NOT_ARCH:
+        return NF("Funktion ist Erzmagiern vorbehalten!\n"), 0;
+      case EPERR_INVALID_OB:
+        return NF("Das angegebene Objekt ist fuer EPs nicht zulaessig!\n"), 0;
+      case EPERR_INVALID_ARG:
+        return NF("Ungueltiges Argument!\n"), 0;
+      case EPERR_NO_ENTRY:
+        return NF("Objekt hatte keinen FP!\n"), 0;
+      default:
+        return NF("Unbekannter Fehler!\n"), 0;
+    }
+  }
+  write (sprintf("%-4s  %:-70s\n", s_typ, file_name(ob) ));
+  write ("Ok, EP geloescht. Insgesamt gibt es nun "+i+" EPs.\n");
+  return 1;
+}
+
+int epShow(string str)
+{
+  string s_ob, s_typ, s;
+  mixed *result;
+  int i, type;
+  object ob;
+
+  str=this_player()->_unparsed_args();
+  NF("Nicht genug Parameter angegeben!\n"
+     "Syntax: eps(how) <nummer> | <objekt>[:<typ>]\n");
+  if (!str) return 0;
+  if ((i=sscanf(str, "%s:%s", s_ob, s_typ)) < 2)
+  {
+    s_ob=str;
+    s_typ="";
+  }
+  ob = GetObj(s_ob);
+  if (!ob)
+    if (s_ob==to_string(i=to_int(s_ob)))
+    {
+      result = ({ "", 0, ({}), 0 });
+      result = EPMASTER->QueryEPEntry(i);
+      if (!result)
+        return NF("Die EP-Tabelle hat keinen Eintrag #"+i+".\n"), 0;
+      else if (intp(result))
+        switch(result)
+        {
+          case EPERR_NOT_ARCH:
+            write("Funktion ist Erzmagiern vorbehalten!\n");
+            break;
+          default:
+            write("Unbekannter Fehler!\n");
+        }
+      else
+      {
+        write (sprintf("EP-Nr: #%d, Objekt: \"%s\", Typ: \"%s\"\n"
+                       "EPs: %d, Keys: ({ %s })\n",
+               i, result[0], EP_TYP_STR[result[1]],
+               result[3], implode(result[2], ", ") ));
+      }
+      return 1;
+    }
+    else
+      return NF("Objekt nicht gefunden!\n"), 0;
+  s="";
+  s_ob = explode(file_name(ob), "#")[0];
+  result = ({ ({}), 0, 0 });
+  if (s_typ!="")
+  {
+    if ((type=member(EP_TYP_STR, s_typ)) < 0)
+      return NF("Ungueltiger EP-Typ!\n"), 0;
+    if ((result=EPMASTER->QueryEPObject (ob, type) ))
+      s = sprintf ("%-4s  #%04d  %:-25s  [%2d]  ({ %.25s })\n",
+                   s_typ, result[EPM_NUM], s_ob[<25..],
+                   result[EPM_EPS], implode(result[EPM_KEY], ",") );
+  }
+  else
+  {
+    for (type=0; type<=EP_TYP_MAX; type++)
+    {
+      result = ({ ({}), 0, 0 });
+      if (pointerp(result=EPMASTER->QueryEPObject (ob, type)))
+        s += sprintf ("%-4s  #%04d  %:-25s  [%2d]  ({ %.25s })\n",
+                     EP_TYP_STR[type], result[EPM_NUM], s_ob[<25..],
+                     result[EPM_EPS], implode(result[EPM_KEY], ",") );
+    }
+  }
+  if (s!="")
+    write (
+    "type  bitnr  file name of object        EPs   Keys\n"+
+    "-----------------------------------------------------------------------------\n"+
+    s);
+  else
+    if (intp(result) && (result < 0))
+      switch(result)
+      {
+        case EPERR_NOT_ARCH:
+          write("Funktion ist Erzmagiern vorbehalten!\n");
+          break;
+        case EPERR_INVALID_OB:
+          write("Das angegebene Objekt ist fuer EPs nicht zulaessig!\n");
+          break;
+        default:
+          write("Unbekannter Fehler!\n");
+      }
+    else
+      write ("Das Objekt "+s_ob+" hat keine EP"+
+        (s_typ != "" ? " vom Typ \""+s_typ+"\".\n" : ".\n"));
+  return 1;
+}
+
+int epInfo(string str)
+{
+  object ob;
+
+  if (!str)
+  {
+    write (
+      sprintf ("Anzahl der EP-Objekte: %d\n"+
+               "Maximum an erreichbaren EPs: %d\n"+
+               "Aktueller EP-Durchschnitt: %d\n",
+               EPMASTER->QueryMaxEPObjects(),
+               EPMASTER->QueryMaxEP(),
+               EPMASTER->QueryAverage() ));
+  }
+  else
+  {
+    ob=find_player(str);
+    if (!ob)
+      return NF("Spieler "+capitalize(str)+" nicht gefunden!\n"), 0;
+    write (
+      sprintf ("%s hat %d EP gefunden.\n",
+        capitalize(getuid(ob)), EPMASTER->QueryExplorationPoints(ob) ));
+  }
+  return 1;
+}
+
+int epDump(string str)
+{
+  int result;
+  result = EPMASTER->dumpEP();
+  if (result < 0) switch(result)
+  {
+    case EPERR_NOT_ARCH:
+      write("Funktion ist Erzmagiern vorbehalten!\n");
+      break;
+    default:
+      write("Unbekannter Fehler!\n");
+  }
+  return 1;
+}
+
+int epAddOracleString(string str)
+{
+  int result,i;
+  string frage,pfad;
+    
+  str=this_player()->_unparsed_args();
+  NF("Nicht genug Parameter angegeben!\n"
+     "Syntax: epaos <frage>:<pfad>\n");
+  if (!str) return 0;
+
+  if ((i=sscanf(str, "%s:%s", frage, pfad)) < 2) return 0;
+
+  frage=lowerstring(frage);
+  pfad=(string)MASTER->make_path_absolute(pfad);
+  if(strlen(pfad) < 6)
+    return NF("Pfad ist viel zu kurz!\n"), 0;
+  
+  if(file_size(pfad) != -2)
+    return NF("Pfad "+pfad+" wurde nicht gefunden!\n"), 0;
+ 
+  result=EPMASTER->AddOracleString(frage,pfad);
+  if (result<0)
+  {
+    switch (result)
+    {
+      case EPERR_NOT_ARCH:
+        return NF("Funktion ist Erzmagiern vorbehalten!\n"), 0;
+      case EPERR_INVALID_OB:
+        return NF("Das angegebene Objekt ist fuer das Orakel nicht zulaessig!\n"), 0;
+      case EPERR_INVALID_ARG:
+        return NF("Ungueltiges Argument!\n"), 0;
+      case EPERR_NO_ENTRY:
+        return NF("Objekt hatte keinen Eintrag!\n"), 0;
+      default:
+        return NF("Unbekannter Fehler!\n"), 0;
+    }
+  }
+  write(break_string("Ok, Frage \""+frage+"\" mit dem Pfad "
+           "\""+pfad+"\" in FP-Orakel eingetragen.\n"));
+  return 1;
+}
+
+int epRemoveOracleString(string str)
+{
+  mixed result;
+  string frage,pfad;
+    
+  str=this_player()->_unparsed_args();
+  NF("Nicht genug Parameter angegeben!\n"
+     "Syntax: epros <frage>\n");
+  if (!str) return 0;
+
+  frage=lowerstring(str);
+  
+  result=EPMASTER->RemoveOracleString(frage);
+  if (intp(result) && result<0)
+  {
+    switch (result)
+    {
+      case EPERR_NOT_ARCH:
+        return NF("Funktion ist Erzmagiern vorbehalten!\n"), 0;
+      case EPERR_INVALID_OB:
+        return NF("Das angegebene Objekt ist fuer das Orakel nicht zulaessig!\n"), 0;
+      case EPERR_INVALID_ARG:
+        return NF("Ungueltiges Argument!\n"), 0;
+      case EPERR_NO_ENTRY:
+        return NF("Objekt hatte keinen Eintrag!\n"), 0;
+      default:
+        return NF("Unbekannter Fehler!\n"), 0;
+    }
+  }
+  if(stringp(result))
+    write(break_string("Ok, Frage \""+frage+"\" mit dem Pfad "
+             "\""+result+"\" aus FP-Orakel entfernt.\n"));
+  return 1;
+}
+
+int epShowOracleString(string str)
+{
+  mixed result;
+  int i;
+    
+  result=EPMASTER->ShowOracleString();
+  if (intp(result) && result<0)
+  {
+    switch (result)
+    {
+      case EPERR_NOT_ARCH:
+        return NF("Funktion ist Erzmagiern vorbehalten!\n"), 0;
+      case EPERR_INVALID_OB:
+        return NF("Das angegebene Objekt ist fuer das Orakel nicht zulaessig!\n"), 0;
+      case EPERR_INVALID_ARG:
+        return NF("Ungueltiges Argument!\n"), 0;
+      case EPERR_NO_ENTRY:
+        return NF("Objekt hatte keinen Eintrag!\n"), 0;
+      default:
+        return NF("Unbekannter Fehler!\n"), 0;
+    }
+  }
+  if(pointerp(result))
+  {
+    write("Eingetragene Orakel Fragen:\n");
+    for(i=0;i<sizeof(result);i++)
+    {
+      printf("%3d: %s\n",i,result[i]);
+    }
+  }
+  else
+  {
+    write("Derzeit sind gar keine Orakel Fragen eingetragen.\n");
+  }
+  return 1;
+}
+
+int epAddOracleTrusted(string str)
+{
+  object ob;
+  int result;
+    
+  str=this_player()->_unparsed_args();
+  NF("Nicht genug Parameter angegeben!\n"
+     "Syntax: epaot <objekt>\n");
+  if (!str) return 0;
+
+  ob = GetObj(str);
+  if (!ob)
+    return NF("Objekt nicht gefunden!\n"), 0;
+  
+  str=explode(file_name(ob),"#")[0]+".lpc";
+
+  result=EPMASTER->AddOracleTrusted(str);
+  if (result<0)
+  {
+    switch (result)
+    {
+      case EPERR_NOT_ARCH:
+        return NF("Funktion ist Erzmagiern vorbehalten!\n"), 0;
+      case EPERR_INVALID_OB:
+        return NF("Das angegebene Objekt ist fuer das Orakel nicht zulaessig!\n"), 0;
+      case EPERR_INVALID_ARG:
+        return NF("Ungueltiges Argument!\n"), 0;
+      case EPERR_NO_ENTRY:
+        return NF("Objekt hatte keinen Eintrag!\n"), 0;
+      default:
+        return NF("Unbekannter Fehler!\n"), 0;
+    }
+  }
+  write("Ok, \""+str+"\" eingetragen.\n");
+  write("Ab jetzt gibt es "+result+" eingetragene Orakel-Objekte.\n");
+  return 1;
+}
+
+int epRemoveOracleTrusted(string str)
+{
+  object ob;
+  int result;
+    
+  str=this_player()->_unparsed_args();
+  NF("Nicht genug Parameter angegeben!\n"
+     "Syntax: eprot <objekt>\n");
+  if (!str) return 0;
+
+  ob = GetObj(str);
+  if (!ob)
+    return NF("Objekt nicht gefunden!\n"), 0;
+  
+  str=explode(file_name(ob),"#")[0];
+
+  result=EPMASTER->RemoveOracleTrusted(str);
+  if (result<0)
+  {
+    switch (result)
+    {
+      case EPERR_NOT_ARCH:
+        return NF("Funktion ist Erzmagiern vorbehalten!\n"), 0;
+      case EPERR_INVALID_OB:
+        return NF("Das angegebene Objekt ist fuer das Orakel nicht zulaessig!\n"), 0;
+      case EPERR_INVALID_ARG:
+        return NF("Ungueltiges Argument!\n"), 0;
+      case EPERR_NO_ENTRY:
+        return NF("Objekt hatte keinen Eintrag!\n"), 0;
+      default:
+        return NF("Unbekannter Fehler!\n"), 0;
+    }
+  }
+  write("Ok, \""+str+"\" ausgetragen.\n");
+  write("Ab jetzt gibt es nur noch "+result+" eingetragene Orakel-Objekte.\n");
+  return 1;
+}
+
+int epShowOracleTrusted(string str)
+{
+  mixed result;
+  int i;
+    
+  result=EPMASTER->ShowOracleTrusted();
+  if (intp(result) && result<0)
+  {
+    switch (result)
+    {
+      case EPERR_NOT_ARCH:
+        return NF("Funktion ist Erzmagiern vorbehalten!\n"), 0;
+      case EPERR_INVALID_OB:
+        return NF("Das angegebene Objekt ist fuer das Orakel nicht zulaessig!\n"), 0;
+      case EPERR_INVALID_ARG:
+        return NF("Ungueltiges Argument!\n"), 0;
+      case EPERR_NO_ENTRY:
+        return NF("Objekt hatte keinen Eintrag!\n"), 0;
+      default:
+        return NF("Unbekannter Fehler!\n"), 0;
+    }
+  }
+  if(pointerp(result))
+  {
+    write("Eingetragene Orakel-Objekte:\n");
+    for(i=0;i<sizeof(result);i++)
+    {
+      printf("%3d: %s\n",i,result[i]);
+    }
+  }
+  else
+  {
+    write("Derzeit sind gar keine Orakel Objekte eingetragen.\n");
+  }
+  return 1;
+}
+
+int epForceOracleCalc(string str)
+{
+  int result;
+
+  result=EPMASTER->CalcOracle(0);
+  if(result != EPERR_NOT_ARCH)
+    write("Neue Berechnung fuer das FP-Orakel gestartet!\n");
+  else
+    write("Neue Berechnung fuer das FP-Orakel konnte nicht gestartet werden!\n");
+  return 1;
+}
+
+//---------------------------------------------------------------------------
+//                                ZT - TOOL
+//---------------------------------------------------------------------------
+
+#define PM "/secure/potionmaster"
+
+void create_zt()
+{
+  string str;
+
+  AddId("zttool");
+  AddId("zaubertranktool");
+  SetProp(P_LONG_ZT,
+   "Das ZaubertrankTool dient der Administration von Zaubertraenken.\n\n"
+  +"implementierte Kommandos:\n"
+  +"  AddZT        <room>              : Neuen Zaubertrankeintrag einfuegen\n"
+  +"  ActiVateZT   <room> <liste>      : Zaubertrank in Liste einfuegen.\n"
+  +"  DeactiVateZT <room>              : Deaktiviert einen ZT.\n"
+  +"  HasZT        <room>              : Zeigt ob der Raum einen ZT hat.\n"
+  +"  ChangeZTPath <oldroom> <newroom> : Aendert den Pfad des ZTs.\n"
+  +"  ZTListe                          : Erstellt eine neue ZT-Liste in \n"
+  +"                                     /secure/ARCH/TRAENKE\n"
+  + " <room> ist der komplette Pfadname des Raumes in der Zaubertrank\n"
+  + " gefunden werden kann, oder \"here\", d.h. der aktuelle Raum.\n"
+  + " <liste> ist eine zahl von 0 bis 4, je nach Schwierigkeit den\n"
+  + " Zaubertrank zu finden.\n\n"
+  +"  (Alle Kommandos koennen abgekuerzt werden.)\n"
+  +"   -> Beispiel: AddZT == AZT == azt == addzt\n");
+
+  AddCmd(({ "AddZT", "addzt", "AZT", "azt" }),                 "Add_ZT");
+  AddCmd(({ "AcitiVateZT", "activatezt", "avzt", "AVZT" }),    "ActivateZT");
+  AddCmd(({ "DeactiVateZT", "deactivatezt", "DVZT", "dvzt"}),  "DeactivateZT");
+  AddCmd(({ "ZTListe", "ztliste", "ZTL", "ztl"}),              "ListZT");
+  AddCmd(({ "HasZT", "haszt", "HZT", "hzt"}),                  "HasZT");
+  AddCmd(({ "ChangeZTPath", "changeztpath", "CZTP", "cztp"}),  "ChangeZTPath");
+}
+
+Add_ZT (string room)
+{
+  int errlvl;
+  notify_fail("Die Funktion benoetigt einen Raumnamen als Parameter.\n");
+  if ( !stringp(room) || room == "" ) return 0;
+  if (room == "here") room = file_name(environment(this_player()));
+  errlvl =  PM->AddPotionroom(room);
+  switch(errlvl)
+  {
+    case  0: write("Bitte wende Dich fuer das Eintragen neuer Zaubertraenke an\n"
+                 + "den zustaendigen Erzmagier.\n");
+             break;
+    case -1: write("Der Raumname fehlt oder ist ungueltig.\n");
+             break;
+    case -2: write("Der angegebene Raum existiert nicht.\n");
+             break;
+    case -3: write("Der angegebene Raum steht schon in der Liste aller Zaubertraenke.\n");
+             break;
+    case -4: write("Der angegebene Raum liegt nicht in /room/potion.\n");
+             break;
+//  Die letzte Meldung wurde nur der Vollstaendigkeit halber aufgenommen
+    default: write("Raum wurde als Nummer "+errlvl+" in die Liste aller Zaubertraenke aufgenommen.\n");
+  }
+  return 1;
+}
+
+ActivateZT(string eingabe)
+{
+  int errlvl;
+  string *strs;
+  notify_fail("Bitte die Parameter <room> und <liste> angeben.\n");
+  strs = explode(eingabe, " ");
+  if (sizeof(strs) != 2 ) return 0;
+  if (strs[1] < "0" || strs[1] > "4")
+  {
+    write("<liste> muss ein Wert von 0 bis 4 sein.\n");
+    return 1;
+  }
+  if (strs[0] == "here") strs[0] = file_name(environment(this_player()));
+  errlvl = PM->ActivateRoom(strs[0], (int) strs[1]);
+  switch(errlvl)
+  {
+    case  1: write("Raum wurde aktiviert.\n");
+             break;
+    case  0: write("Bitte wende Dich fuer das Eintragen von Zaubertraenken an\n"
+                 + "den zustaendigen Erzmagier.\n");
+             break;
+    case -1: write("<liste> muss ein Wert von 0 bis 4 sein.\n");
+             break;
+    case -2: write("Der angegebene Raum steht nicht in der Liste aller Zaubertraenke.\n");
+             break;
+    case -3: write("Der Raum ist bereits aktiviert.\n");
+             break;
+    default: write("Unbekannter Fehler.\n");
+  }
+  return 1;
+}
+
+DeactivateZT(string room)
+{
+  int errlvl;
+  notify_fail("Die Funktion benoetigt einen Raumnamen als Parameter.\n");
+  if ( !stringp(room) || room == "" ) return 0;
+  if (room == "here") room = file_name(environment(this_player()));
+  errlvl = PM->DeactivateRoom(room);
+  switch(errlvl)
+  {
+    case -1: write("Der angegebene Raum steht nicht in der liste der Zaubertraenke.\n");
+             break;
+    case  0: write("Das Deaktivieren von Zaubertraenken ist nur Erzmagiern erlaubt.\n");
+             break;
+    case  1: write("Raum wurde deaktiviert.\n");
+  }
+  return 1;
+}
+
+ListZT()
+{
+  PM->DumpList();
+  write("Neue Liste erstellt.\n");
+  return 1;
+}
+
+HasZT(string room)
+{
+  notify_fail("Die Funktion benoetigt einen Raumnamen als Parameter.\n");
+  if ( !stringp(room) || room == "" ) return 0;
+  if (room == "here") room = file_name(environment(this_player()));
+  if (PM->HasPotion((object)room) == -1)
+  {
+    write("Kein ZT fuer den Raum gefunden.\n");
+    return 1;
+  }
+  write("Der Raum hat einen ZT.\n");
+  return 1;
+}
+
+ChangeZTPath(string arg)
+{
+  string *paths;
+  int num;
+
+  notify_fail("Die Funktion benoetigt zwei Raumnamen als Parameter.\n");
+  if (!stringp(arg) || arg == "") return 0;
+  paths = explode(arg, " ");
+  if (sizeof(paths) != 2) return 0;
+  // fuer 2 braucht man noch keine Schleife... :-)
+  if (paths[0] == "here") paths[0] = file_name(environment(this_player()));
+  if (paths[1] == "here") paths[1] = file_name(environment(this_player()));
+  if (paths[0] == paths[1])
+  {
+    write("Die Pfade sollten schon verschieden voneinander sein.\n");
+    return 1;
+  }
+  if (PM->HasPotion(paths[0]) == -1)
+  {
+    write("'"+paths[0]+"' enthaelt keinen ZT.\n");
+    return 1;
+  }
+  switch (num = PM->ChangeRoomPath(paths[0], paths[1]))
+  {
+    case 0:
+      write("Sicherheitsfehler!\n");
+      break;
+    case -1:
+      write("Alten Pfad nicht gefunden!\n");
+      break;
+    case -2:
+      write("Neuen Pfad nicht gefunden!\n");
+      break;
+    case -3:
+      write("Kein ZT im alten Pfad!\n");
+      break;
+    case -4:
+      write("ZT im neuen Pfad bereits vorhanden!\n");
+      break;
+    case -5:
+      write("Neuer Pfad kann nicht geladen werden!\n");
+      break;
+    default:
+      write("Pfad wurde geaendert, ZT-Nummer: " + num + "\n");
+      break;
+  }
+  return 1;
+}
+
+//---------------------------------------------------------------------------
+//                                NEWS - TOOL
+//---------------------------------------------------------------------------
+
+#include <news.h>
+
+void create_news()
+{
+  string str;
+  SetProp(P_LONG_NEWS,"Ein News-Gruppen-Tool.\n"
+         "Befehle: addg      <grname> <ownername>   : Gruppe erzeugen\n"
+         "removeg   <grname>               : Gruppe loeschen\n"
+         "addw      <grname> <username>    : Schreibberechtigten eintragen\n"
+         "removew   <grname> <username>    : Schreibberechtigten austragen\n"
+         "addd      <grname> <username>    : Loeschberechtigten eintragen\n"
+         "removed   <grname> <username>    : Loeschberechtigten austragen\n"
+         "addr      <grname> <username>    : Leseberechtigten eintragen\n"
+         "remover   <grname> <username>    : Leseberechtigten austragen\n"
+         "ginfo     [<regexp>]             : Info ueber Gruppen abfragen\n"
+         "setexpire <grname> <tage>        : Expiretime setzen\n"
+         "setmaxmsg <grname> <anz>         : Maxmsg setzen\n"
+         "setg <grname> <loeschlev> <schreiblev> <leselev> <maxmsg> <expire>\n");
+  AddId("newstool");
+  AddId("newsgruppentool");
+  AddId("news-gruppen-tool");
+}
+
+addr(str)
+{
+  mixed *arr;
+  string st1, st2;
+  
+  if ((str=UA)=="" || sscanf(str,"%s %s",st1,st2) !=2){
+    write("addr <groupname> <username>\nAnschliessend darf der User unabhaengig vom Wizlevel die Gruppe lesen.\n");
+    return 1;
+  }
+  
+  arr=explode(st2," ")-({""});
+  switch ("/secure/news"->AddAllowed(st1,({}),({}),arr)){
+    case 0: write("Param err\n"); break;
+    case 1: write("Ok.\n"); break;
+    case -1: write("No permission\n"); break;
+    case -2: write("No such board\n"); break;
+  }
+  return 1;
+}
+
+remover(str)
+{
+  mixed *arr;
+  string st1, st2;
+
+  if (!(str=UA) || sscanf(str,"%s %s",st1,st2) !=2){
+    write("remover <gruppenname> <username>\nDanach darf der User die Gruppe nur noch lesen, wenn sein Wizlevel dies erlaubt.\n");
+    return 1;
+  }
+
+  arr=explode(st2," ")-({""});
+  switch ("/secure/news"->RemoveAllowed(st1,({}),({}),arr)){
+    case 0: write("Param err\n"); break;
+    case 1: write("Ok.\n"); break;
+    case -1: write("No permission\n"); break;
+    case -2: write("No such board\n"); break;
+  }
+  return 1;
+}
+
+addd(str)
+{
+  mixed *arr;
+  string st1, st2;
+
+  if (!(str=UA) || sscanf(str,"%s %s",st1,st2) !=2){
+    write("addd <gruppe> <user>\nUser darf Artikel loeschen (unabh vom Wizlevel)\n");
+    return 1;
+  }
+
+  arr=explode(st2," ")-({""});
+  switch ("/secure/news"->AddAllowed(st1,arr,({}),({}))){
+    case 0: write("Param err\n"); break;
+    case 1: write("Ok.\n"); break;
+    case -1: write("No permission\n"); break;
+    case -2: write("No such board\n"); break;
+  }
+  return 1;
+}
+
+removed(str)
+{
+  mixed *arr;
+  string st1, st2;
+
+  if (!(str=UA) || sscanf(str,"%s %s",st1,st2) !=2){
+    write("removed <gruppe> <user>\nUser darf nur noch Artikel loeschen, wenn sein Wizlevel das erlaubt.\n");
+    return 1;
+  }
+
+  arr=explode(st2," ")-({""});
+  switch ("/secure/news"->RemoveAllowed(st1,arr,({}),({}))){
+    case 0: write("Param err\n"); break;
+    case 1: write("Ok.\n"); break;
+    case -1: write("No permission\n"); break;
+    case -2: write("No such board\n"); break;
+  }
+  return 1;
+}
+
+addw(str)
+{
+  mixed *arr;
+  string st1, st2;
+
+  if (!(str=UA) || sscanf(str,"%s %s",st1,st2) !=2){
+    write("addw <gruppe> <user>\nUser darf Artikel schreiben (unabh vom Wizlevel)\n");
+    return 1;
+  }
+
+  arr=explode(st2," ")-({""});
+  switch ("/secure/news"->AddAllowed(st1,({}),arr,({}))){
+    case 0: write("Param err\n"); break;
+    case 1: write("Ok.\n"); break;
+    case -1: write("No permission\n"); break;
+    case -2: write("No such board\n"); break;
+  }
+  return 1;
+}
+
+removew(str)
+{
+  mixed *arr;
+  string st1, st2;
+
+  if (!(str=UA) || sscanf(str,"%s %s",st1,st2) !=2){
+    write("removew <gruppe> <user>\nUser darf nur noch Artikel schreiben, wenn sein Wizlevel dies erlaubt.\n");
+    return 1;
+  }
+
+  arr=explode(st2," ")-({""});
+  switch ("/secure/news"->RemoveAllowed(st1,({}),arr,({}))){
+    case 0: write("Param err\n"); break;
+    case 1: write("Ok.\n"); break;
+    case -1: write("No permission\n"); break;
+    case -2: write("No such board\n"); break;
+  }
+  return 1;
+}
+
+setg(str)
+{
+  string name;
+  int dlevel, wlevel, rlevel, maxmessages, expire;
+
+  if (!(str=UA) ||
+      sscanf(str,"%s %d %d %d %d %d",name,dlevel,wlevel,rlevel,maxmessages,expire) != 6) {
+    write("setg <gruppe> <loeschlevel> <schreiblevel> <leselevel> <maxmessages> <expire>\nGruppenparameter setzen, Bedeutung (Defaultwerte in Klammern):\n\
+    name              : Der Name der Newsgroup\n\
+    loeschlevel  (20) : Wizlevel, ab dem User Artikel loeschen koennen\n\
+    schreiblevel ( 0) : Wizlevel, ab dem User Artikel schreiben koennen\n\
+    leselevel    ( 0) : Wizlevel, ab dem User Artikel lesen koennen\n\
+    maxmessages  (40) : Maximale Anzahl Artikel in einer Newsgruppe\n\
+    expire       (-1) : Expiretime in Tagen, -1 = nie\n");
+    return 1;
+  }
+  expire=86400*expire;
+  switch("/secure/news"->SetGroup(name, dlevel, wlevel, rlevel, maxmessages,expire)){
+    case 1: write("Ok.\n"); break;
+    case 0: write("Param error.\n"); break;
+    case -1: write("No permission\n"); break;
+    case -2: write("No such group\n"); break;
+  }
+  return 1;
+}
+
+setexpire(str)
+{
+  string name;
+  int expire;
+  mixed *gr;
+
+  if (!(str=UA)||sscanf(str,"%s %d",name,expire)!=2)
+  {
+    write("setexpire <gruppe> <tage>\n");
+    return 1;
+  }
+  expire=86400*expire;
+  if (!pointerp((gr="/secure/news"->GetGroup(name))))
+  {
+    write("Get group error\n");
+    return 1;
+  }
+  switch("/secure/news"->SetGroup(name, gr[G_DLEVEL], gr[G_WLEVEL], gr[G_RLEVEL], gr[G_MAX_MSG],expire)){
+    case 1: write("Ok.\n"); break;
+    case 0: write("Param error.\n"); break;
+    case -1: write("No permission\n"); break;
+    case -2: write("No such group\n"); break;
+  }
+  return 1;
+}
+
+setmaxmsg(str)
+{
+  string name;
+  int maxmsg;
+  mixed *gr;
+  
+  if (!(str=UA)||sscanf(str,"%s %d",name,maxmsg)!=2)
+  {
+    write("setexpire <gruppe> <tage>\n");
+    return 1;
+  }
+  if (!pointerp((gr="/secure/news"->GetGroup(name))))
+  {
+    write("Get group error\n");
+    return 1;
+  }
+  switch("/secure/news"->SetGroup(name, gr[G_DLEVEL], gr[G_WLEVEL], gr[G_RLEVEL], maxmsg, gr[G_EXPIRE])){
+    case 1: write("Ok.\n"); break;
+    case 0: write("Param error.\n"); break;
+    case -1: write("No permission\n"); break;
+    case -2: write("No such group\n"); break;
+  }
+  return 1;
+}
+
+ginfo(str)
+{
+  string *groups;
+  string result;
+  mixed *gr;
+  int i;
+  
+  groups = NEWSSERVER->GetGroups();
+  if ((str=UA)) groups = regexp( groups, str );
+
+  if (!sizeof(groups)) {
+    write("No matching groups found\n");
+    return 1;
+  }
+  groups = sort_array( groups, #'> );
+
+  result = "";
+  result +=
+    "Name                     Owner       Exp  #De #Wr #Rd DLev WLev RLev Max #Msgs\n"
+    "------------------------------------------------------------------------------\n";
+
+  for (i = 0; i < sizeof(groups); i++)
+  {
+    if (!pointerp((gr="/secure/news"->GetGroup(groups[i]))))
+    {
+      result += groups[i] + ": Get group error\n";
+    }
+    else
+    {
+      result += sprintf(
+        "%-24s %-11s %3d  %3d %3d %3d %4d %4d %4d %3d %5d\n",
+        gr[G_NAME], capitalize(gr[G_OWNER]), gr[G_EXPIRE] / 86400,
+        sizeof(gr[G_DELETERS]), sizeof(gr[G_READERS]), sizeof(gr[G_WRITERS]),
+        gr[G_DLEVEL], gr[G_WLEVEL], gr[G_RLEVEL],
+        gr[G_MAX_MSG], sizeof(gr[G_MESSAGES]) );
+    }
+  }
+  result +=
+    "------------------------------------------------------------------------------\n"+
+    sizeof(groups) + (str ? " matching" : "") + " groups found.\n";
+
+  this_player()->More(result);
+  return 1;
+}
+
+removeg(str)
+{
+  if (!(str=UA))
+  {
+    write("removeg <gruppenname>\nGruppe LOESCHEN.\n");
+    return 0;
+  }
+  switch("/secure/news"->RemoveGroup(str)){
+    case 1: write("Ok. Bitte nicht vergessen, das Savefile der Newsgroup von Hand zu entfernen !\n"); break;
+    case 0: write("Param error.\n"); break;
+    case -1: write("No permission\n"); break;
+    case -2: write("No such group"); break;
+  }
+  return 1;
+}
+
+addg(str)
+{
+  string name, owner;
+
+  if (!(str=UA) || sscanf(str,"%s %s",name,owner)!=2)
+  {
+    write("addg <gruppe> <user>\nGruppe anlegen, <user> wird Besitzer der Gruppe\n");
+    return 1;
+  }
+  switch ("secure/news"->AddGroup(name, owner)){
+    case 1: write("Ok.\n"); break;
+    case 0: write("Param error.\n"); break;
+    case -1: write("No permission.\n"); break;
+    case -2: write("Group already there\n"); break;
+    case -3: write("Owner not found.\n"); break;
+    case -4: write("Savefile already in use.\n"); break;
+  }
+  return 1;
+}
+  
+expire()
+{
+  "/secure/news"->expire_all();
+  write("Expiring startet.\n");
+  return 1;
+}
+
+
+
+//---------------------------------------------------------------------------
+//                                QUEST - TOOL
+//---------------------------------------------------------------------------
+
+#define QNAME 0
+#define QP    1
+#define XP    2
+#define ALLOW 3
+#define INFO  4
+#define LEVEL 5
+#define NEED  6
+#define WIZ   7
+#define NR    8
+#define END   9
+
+#define LOGFILE "/log/ARCH/quests"
+
+
+void Load_NumKey     ();
+int  Add_Quest       ( string str );
+void ReadNewQuest    ( string str );
+int  Remove_Quest    ( string str );
+int  Change_Quest    ( string str );
+int  Restore_Quest   ( string str );
+int  Set_Quest       ( string str );
+int  Remove_Quest    ( string str );
+int  Query_Quest     ( string str );
+int  Query_Keys      ( string str );
+int  Query_Quests    ( string str );
+int  ActivateQuest   ( string str );
+int  DeactivateQuest ( string str );
+int  GetReturn       ( string str );
+
+nosave string name;
+nosave int    qp;
+nosave int    xp;
+nosave int    level;
+nosave int    need;
+nosave string *allowed;
+nosave string info;
+nosave mixed  wizard;
+nosave int    number;
+nosave mapping num_key;
+
+nosave int    counter;
+nosave mixed  *savequest;
+nosave string savekey;
+nosave int    do_change;
+nosave string changekey;
+
+
+void create_quest()
+{
+  string str;
+
+  AddId("questtool");
+  AddId("qt");
+  SetProp(P_LONG_QUEST,
+   "Das QuestTool dient der Administration von Quests. (by Kirk, 10.11.94)\n"
+  +"Implementierte Kommandos:\n\n"
+  +"  AddQ                          : Neuen Questeintrag einfuegen\n"
+  +"  RemoveQ     <quest>           : Questeintrag loeschen\n"
+  +"  ChangeQ     <quest>           : Questeintrag aendern\n"
+  +"  ReStoreQ                      : Zuletzt geloeschten oder geaenderten\n"
+  +"                                : Questeintrag restaurieren\n"
+  +"  SetQ        <spieler> <quest> : Quest als 'geloest' markieren\n"
+  +"  DelQ        <spieler> <quest> : Quest als 'nicht geloest' markieren\n"
+  +"  QueryQ      <quest>           : Questeintrag anzeigen\n"
+  +"  QueryK                        : Alle Keys und Indices anzeigen\n"
+  +"  QueryAllQ                     : Alle Eintraege vollstaendig anzeigen\n"
+  +"  ActiVateQ   <quest>           : Quest im Questmaster aktivieren\n"
+  +"  DeactiVateQ <quest>           : Quest im Questmaster deaktivieren\n\n"
+  +"  fuer <quest> kann der Index verwendet werden, den QueryK liefert!\n\n"
+  +"  (Alle Kommandos koennen abgekuerzt werden.)\n"
+  +"   -> Beispiel: DeactiVateQ == DVQ == dvq == deactivateq\n");
+
+
+  AddCmd(({ "AddQ", "addq", "AQ", "aq" }),                 "Add_Quest");
+  AddCmd(({ "RemoveQ", "removeq", "RQ", "rq" }),           "Remove_Quest");
+  AddCmd(({ "ChangeQ", "changeq", "CQ", "cq" }),           "Change_Quest");
+  AddCmd(({ "ReStoreQ", "restoreq", "RSQ", "rsq" }),       "Restore_Quest");
+  AddCmd(({ "SetQ", "setq", "SQ", "sq" }),                 "Set_Quest");
+  AddCmd(({ "DelQ", "delq", "DQ", "dq" }),                 "Del_Quest");
+  AddCmd(({ "QueryQ", "queryq", "QQ", "qq" }),             "Query_Quest");
+  AddCmd(({ "QueryK", "queryk", "QK", "qk" }),             "Query_Keys");
+  AddCmd(({ "QueryAllQ", "queryallq", "QAQ", "qaq" }),     "Query_Quests");
+  AddCmd(({ "ActiVateQ", "activateq", "AVQ", "avq" }),     "ActivateQuest");
+  AddCmd(({ "DeactiVateQ", "deactivateq", "DVQ", "dvq" }), "DeactivateQuest");
+  counter = QNAME;
+  savekey = "";
+  do_change = 0;
+  num_key = ([]);
+}
+
+
+nosave string wizString(mixed wiz)
+{
+  // it's a string
+  if (!pointerp(wiz))
+    return capitalize((string) wiz);
+  // it's empty
+  if (!sizeof(wiz)) return "";
+  // it's same wizard author and responsible
+  if ((sizeof(wiz)==2) && (wiz[0]==wiz[1]))
+    return capitalize((string) wiz[0]);
+  // all other cases
+  return implode(map_array(wiz, #'capitalize), "/");
+}
+
+private nosave void Load_NumKey()
+{
+  string *keys;
+  int i;
+
+  if ( !(keys = (string*) QM->QueryAllKeys()) )
+    return;
+  keys=sort_array(keys,#'>);//')
+  for (i = 0, num_key = ([]); i < sizeof(keys); i++)
+    num_key += ([(i+1)+"":keys[i]]);
+}
+
+int Add_Quest(string str)
+{
+  counter = QNAME;
+  write( "Neue Quest: (Abbruch mit '.' oder '~q')\n" );
+  write( "Key :\n" ); 
+  input_to( "ReadNewQuest" );
+  return 1;
+}
+
+void ReadNewQuest (string str)
+{
+  mixed *oldquest;
+  int errstat;
+  int active;
+
+  if (str == "~q" || str == ".")
+  {
+    counter = QNAME;
+    if (do_change)
+    {
+      do_change = 0;
+      changekey = "";
+      savekey = "";
+      savequest = ({});
+    }
+    return;
+  }
+
+  switch (counter)
+  {
+    // Frage 1: Questname
+    case QNAME:
+      if ((!str || !strlen(str)) && do_change)
+	name = savekey;
+      else
+	name = str;
+      counter++;
+      write( sprintf("Punkte (>0) [%d]:\n",
+		      (do_change?(int)savequest[0]:10)) ); 
+      input_to( "ReadNewQuest" );
+      break;
+
+    // Frage 2: zu vergebende Abenteuerpunkte
+    case QP:
+      if ((!str || !strlen(str)))
+	if (do_change)
+	  qp = (int) savequest[0];
+	else
+	  qp = 10;
+      else
+	sscanf( str, "%d", qp );
+      counter++;
+      write( sprintf("Erfahrung (>=0) [%d]:\n",
+		      (do_change?(int)savequest[1]:qp*1000)));
+      input_to( "ReadNewQuest" );
+      break;
+
+    // Frage 3: zu vergebende Erfahrungspunkte
+    case XP: 
+      if((!str||!strlen(str)))
+	if(do_change)
+	  xp = (int) savequest[1];
+	else
+	  xp = qp * 1000;
+      else
+	sscanf( str, "%d", xp );
+      counter++;
+      write( sprintf("Filenamen file1[,file2,...])%s:\n",
+		      (do_change?" ["+implode((string *)savequest[2],",")+"]":
+		       "")) );
+      input_to( "ReadNewQuest" );
+      break;
+
+    // Frage 4: Dateiname(n) fuer die GiveQuest() Objekte
+    case ALLOW:
+      if((!str||!strlen(str)) && do_change)
+	allowed = (string *) savequest[2];
+      else
+	allowed = explode(implode(explode(str,".lpc"),""),",");
+      counter++;
+      write( sprintf("Info%s:\n", (do_change?
+				     " ["+
+                                     break_string(
+                                       (string) savequest[3]+"]",78,6)[6..]
+				     :"")) );
+      input_to( "ReadNewQuest" );
+      break;
+
+    // Frage 5: Kurze Beschreibung der Quest (fuers Orakel)
+    case INFO:
+      if((!str||!strlen(str)) && do_change)
+	info = (string) savequest[3];
+      else
+	info = str;
+      counter++;
+      write( sprintf("Stufe (0<=lev<=20) [%d]:\n",
+		      (do_change?(int)savequest[4]:0)) );
+      input_to( "ReadNewQuest" );
+      break;
+
+    // Frage 6: Schwierigkeitsstufe
+    case LEVEL:
+      if((!str||!strlen(str)))
+	if(do_change)
+	  level = (int) savequest[4];
+	else
+	  level = 0;
+	sscanf( str, "%d", level );
+      counter++;
+      write( sprintf("Pflicht ([0..normal, 1..Pflicht, 2..optional]) [%d]:\n",
+		      (do_change?(int)savequest[5]:0)) ); 
+      input_to( "ReadNewQuest" );
+      break;
+
+    // Frage 7: 'Optionalitaet' der Quest
+    case NEED:
+      if((!str||!strlen(str)))
+	if(do_change)
+	  need = (int) savequest[5];
+	else
+	  need = 0;
+      else
+	sscanf( str, "%d", need );
+      counter++;
+      write( sprintf("Magier (oder \"Autor/Magier\")%s:\n",
+		      (do_change ?
+                       " ["+wizString(savequest[7])+"]" :
+                       "")) );
+      input_to( "ReadNewQuest" );
+      break;
+
+    // Frage 8: zustaendiger Magier
+    case WIZ:
+      if((!str||!strlen(str)) && do_change)
+	wizard = savequest[7];
+      else {
+        str = lower_case(str);
+	wizard = explode(str,"/");
+        if (sizeof(wizard) < 2)
+          wizard += wizard;
+        else if (sizeof(wizard) > 2)
+          wizard = wizard[0..1];
+      }
+      counter++;
+      write( sprintf("Geschafft [%d]:\n",
+            (do_change ? (int) savequest[8] : 0)) );
+      input_to( "ReadNewQuest" );
+      break;
+
+    // Frage 9: Anzahl der erfolgten Loesungen
+    case NR:
+      if((!str||!strlen(str)))
+        if(do_change)
+          number = (int) savequest[8];
+        else
+          number = 0;
+      else
+        number = to_int(str);
+      counter++;
+      write( "Eintragen (j/n)?\n" );
+      input_to( "ReadNewQuest" );
+      break;
+
+    // Frage 10: Eintragen j/n ?
+    case END:
+      counter=QNAME;
+
+      if ( str != "j" && str != "ja" && str != "y" && str != "yes" )
+        return;
+
+      active = 0;
+      if ( do_change && changekey && strlen(changekey) )
+      {
+        oldquest = (mixed *) QM->QueryQuest ( changekey );
+
+        if ( !pointerp ( oldquest ) || !sizeof ( oldquest ) )
+        {
+          write( "Alten Eintrag nicht gefunden.\n" );
+          return;
+        }
+
+        errstat = (int) QM->RemoveQuest( changekey );
+
+	do_change = 0;
+	changekey = "";
+
+        switch ( errstat )
+        {
+          case  0: write( "Zugriff auf alten Eintrag verweigert.\n" ); return;
+          case -1: write( "Parameterfehler beim Loeschen.\n" ); return;
+          case -2: write( "Alten Eintrag nicht gefunden.\n" ); return;
+          default: write( "Alter Eintrag geloescht.\n" );
+        }
+	active    = oldquest[6];
+	savequest = oldquest;
+	savekey   = changekey;
+      }
+
+      // add new Quest deactivated by default and keep old active flag
+      // if changing an existing entry
+      errstat= (int)QM->AddQuest(name,qp,xp,allowed,info,level,need,active,
+				 wizard,number);
+
+      switch ( errstat )
+      {
+        case  0: write( "Zugriff verweigert.\n" ); break;
+        case -1: write( "Key ungueltig oder strlen(key) < 5.\n" ); break;
+        case -2: write( "QP ungueltig oder < 1.\n" ); break;
+        case -3: write( "XP ungueltig.\n" ); break;
+        case -4: write( "Filename(n) ungueltig.\n" ); break;
+        case -5: write( "Info ungueltig.\n" ); break;
+	case -6: write( "Stufe ungueltig oder < 0 oder > 20.\n" ); break;
+        case -7: write( "Aktiv-Flag < 0 oder > 1.\n" ); break;
+        case -8: write( "Magiername ungueltig.\n" ); break;
+        default: write( "Eintrag eingefuegt.\n" );
+      }
+    default:
+      return;
+  }
+}
+
+int Remove_Quest( string str )
+{
+  mixed *oldquest;
+  string newstr;
+  int errstat;
+
+  if ( !(str=UA) )
+  {
+    write( "Syntax: RemoveQ <name>\n" );
+    return 1;
+  }
+
+  Load_NumKey();
+
+  if ( !(newstr = num_key[str+""]) )
+    newstr = str;
+
+  oldquest = (mixed *) QM->QueryQuest ( newstr );
+
+  if ( !pointerp ( oldquest ) || !sizeof ( oldquest ) )
+  {
+    write( "Keine Quest dieses Namens gefunden.\n" );
+    return 1;
+  }
+
+  errstat = (int) QM->RemoveQuest( newstr );
+
+  switch ( errstat )
+  {
+    case  0: write( "Zugriff verweigert.\n" ); break;
+    case -1: write( "Parameterfehler.\n" ); break;
+    case -2: write( "Quest nicht gefunden.\n" ); break;
+    default: write( "Quest entfernt.\n" );
+  }
+
+  savequest = oldquest;
+  savekey   = newstr;
+
+  return 1;
+}
+
+int Change_Quest( string str )
+{
+  mixed *oldquest;
+  string newstr;
+
+  if ( !(str=UA) )
+  {
+    write( "Syntax: ChangeQ <quest>\n" );
+    return 1;
+  }
+
+  Load_NumKey();
+
+  if ( !(newstr = num_key[str+""]) )
+    newstr = str;
+
+  oldquest = (mixed *) QM->QueryQuest ( newstr );
+
+  if ( !pointerp( oldquest ) || !sizeof ( oldquest ) )
+  {
+    write( "Keine Quest dieses Namens gefunden.\n" );
+    return 1;
+  }
+
+  do_change = 1;
+  changekey = newstr;
+  savekey = newstr;
+  savequest = oldquest;
+
+  write( "Aktueller Eintrag:\n");
+  write( "Key       : "+newstr+"\n" );
+  write( "Punkte    : "+oldquest[0]+"\n" );
+  write( "Erfahrung : "+oldquest[1]+"\n" );
+  write( "Filenamen : "+implode(oldquest[2],",")+"\n" );
+  write( "Info      : "+oldquest[3]+"\n" );
+  write( "Stufe     : "+oldquest[4]+"\n" );
+  write( "Pflicht   : "+oldquest[5]+"\n" );
+  write( "Magier    : "+wizString(oldquest[7])+"\n" );
+  write( "Geschafft : "+oldquest[8]+"\n" );
+  
+  write( "\nNeue Quest:     (mit '.' oder '~q' kann abgebrochen werden)\n" );
+  write( sprintf("Key [%s]:\n", savekey) );
+  input_to( "ReadNewQuest" );
+
+  return 1;
+}
+
+int Restore_Quest( string str )
+{
+  int errstat;
+
+  if ( !savekey || !strlen(savekey) )
+  {
+    write( "\nTut mir leid!\n" );
+    write( "Nichts zum Restaurieren gefunden ...\n" );
+    return 1;
+  }
+
+  errstat = 
+	(int)QM->AddQuest( savekey, (int) savequest[0], (int) savequest[1],
+			  (string *) savequest[2], (string) savequest[3],
+			  (int) savequest[4], (int) savequest[5],
+			  (int) savequest[6], savequest[7],
+                          (int) savequest[8] );
+
+  switch ( errstat )
+  {
+    case  0: write( "Zugriff verweigert.\n" ); break;
+    case -1: write( "Key ungueltig oder strlen(key) < 5.\n" ); break;
+    case -2: write( "QP ungueltig oder < 1.\n" ); break;
+    case -3: write( "XP ungueltig.\n" ); break;
+    case -4: write( "Filename(n) ungueltig.\n" ); break;
+    case -5: write( "Info ungueltig.\n" ); break;
+    case -6: write( "Stufe ungueltig oder < 0 oder > 20.\n" ); break;
+    case -7: write( "Aktiv-Flag < 0 oder > 1.\n" ); break;
+    case -8: write( "Magiername ungueltig.\n" ); break;
+    default: write( "'"+savekey+"' restauriert.\n" );
+  }
+  savekey = "";
+  return 1;
+}
+
+int Set_Quest( string str )
+{
+  string quest, player, newquest;
+  object ob;
+  int ret;
+
+  if ( !(str=UA) || sscanf( str, "%s %s", player, quest ) != 2 )
+  {
+    write( "Syntax: SetQ <player> <quest>\n" );
+    return 1;
+  }
+
+  Load_NumKey();
+
+  if ( !(newquest = num_key[quest+""]) )
+    newquest = quest;
+
+  if ((ob=find_player(player))) {
+    ret = (int) ob->GiveQuest(newquest,"__silent__");
+    write(ERRNO_2_STRING("GQ",ret)+"\n");
+    if (ret==1)
+      write_file(LOGFILE,
+          sprintf("%s: (set) %s -> %s: \"%s\"\n",
+          dtime(time()), capitalize(getuid(this_interactive())),
+          capitalize(getuid(ob)), newquest));
+  }
+  else
+    write("Kein solcher Spieler eingeloggt.\n");
+  return 1;
+}
+
+int Del_Quest( string str )
+{
+  string quest, player, newquest;
+  object ob;
+  int ret;
+
+  if( !(str=UA) || sscanf( str, "%s %s", player, quest ) != 2 )
+  {
+    write( "Syntax: DelQ <player> <quest>\n" );
+    return 1;
+  }
+
+  Load_NumKey();
+
+  if( !(newquest = num_key[quest+""]) )
+    newquest = quest;
+
+  if((ob=find_player(player))) {
+    ret = (int) ob->DeleteQuest(newquest);
+    write(ERRNO_2_STRING("DQ",ret)+"\n");
+    if (ret==1)
+      write_file(LOGFILE,
+          sprintf("%s: (del) %s -> %s: \"%s\"\n",
+          dtime(time()), capitalize(getuid(this_interactive())),
+          capitalize(getuid(ob)), newquest));
+  }
+  else
+    write("Kein solcher Spieler eingeloggt.\n");
+  return 1;
+}
+
+int Query_Quest( string str )
+{
+  mixed *quest;
+  string newstr;
+  int i;
+
+  if ( !(str=UA) )
+  {
+    write( "Syntax: QueryQ <quest>\n" );
+    return 1;
+  }
+
+  Load_NumKey();
+
+  if ( !(newstr = num_key[str+""]) )
+	newstr = str;
+
+  quest = (mixed *) QM->QueryQuest( newstr );
+
+  if ( !pointerp( quest ) || !sizeof ( quest ) )
+  {
+    write( "Keine Quest dieses Namens gefunden.\n" );
+    return 1;
+  }
+
+  write( "Aktueller Eintrag:\n");
+  write( "Key       : "+newstr );
+  if(quest[6])
+    write(" (aktiviert)\n");
+  else
+    write(" (deaktiviert)\n");
+  write( "Punkte    : "+quest[0]+"\n" );
+  write( "Erfahrung : "+quest[1]+"\n" );
+  write( break_string ( implode( quest[2], " " ), 78, "Filenamen : " ) );
+  write( break_string ( quest[3], 78, "Info      : " ) );
+  write( "Stufe     : "+quest[4]+"\n" );
+  switch ( (int) quest[5] )
+  {
+    case 0:
+      write( "Pflicht   : optional, zaehlt zu den "+QP_PERCENT+"%\n" );
+      break;
+    case 1:
+      write( "Pflicht   : zwingend, zaehlt zu den "+QP_PERCENT+"%\n" );
+      break;
+    case 2:
+      write( "Pflicht   : optional, zaehlt nicht zu den "+QP_PERCENT+"%\n" );
+      break;
+    default:
+      write( "Pflicht   : unbekannter Status\n" );
+  }
+  write( "Magier    : "+wizString(quest[7])+"\n" );
+  write( "Geschafft : "+quest[8]+"\n");
+  return 1;
+}
+
+int Query_Keys( string str )
+{
+  string *keys, active;
+  mixed *quest;
+  int i;
+
+  if ( !(keys = (string *) QM->QueryAllKeys()) )
+    return 1;
+
+  write( "\n" );
+  keys=sort_array(keys,#'>);//')
+  for (i = 0; i < sizeof(keys); i++)
+  {
+    quest = (mixed *) QM->QueryQuest(keys[i]);
+    if(quest[6])
+      active="*";
+    else
+      active=" ";
+    write(sprintf("%2d%s %-33s%s",i+1,quest[6]?"*":" ",keys[i],
+	              !(i%2)?" ":"\n"));
+  }
+  if(i%2)
+    write("\n");
+
+  return 1;
+}
+
+int Query_Quests( string str )
+{
+  mixed *quest;
+  string *keys, rstr;
+  int i;
+
+  if ( !(keys = (mixed *) QM->QueryAllKeys()) )
+    return 1;
+
+  keys=sort_array(keys,#'>);//')
+  for (i = 0, rstr = ""; i < sizeof(keys); i++)
+  {
+    quest = (mixed *) QM->QueryQuest(keys[i]);
+    rstr += "\nKey       : "+keys[i];
+    if(quest[6])
+      rstr += " (aktiviert)\n";
+    else
+      rstr += " (deaktiviert)\n";
+    rstr += "Punkte    : "+quest[0]+"\n" +
+      "Erfahrung : "+quest[1]+"\n" +
+	break_string ( implode( quest[2], " " ), 78, "Filenamen : " ) +
+	  break_string ( quest[3], 78, "Info      : " ) +
+	    "Stufe     : "+quest[4]+"\n";
+
+    switch ( (int) quest[5] )
+    {
+      case 0:
+        rstr += "Pflicht   : optional, zaehlt zu den "+QP_PERCENT+"%\n";
+	break;
+      case 1:
+	rstr += "Pflicht   : zwingend, zaehlt zu den "+QP_PERCENT+"%\n";
+	break;
+      case 2:
+	rstr += "Pflicht   : optional, zaehlt nicht zu den "+QP_PERCENT+"%\n";
+	break;
+      default:
+	rstr += "Pflicht   : unbekannter Status\n";
+    }
+    rstr += "Magier    : "+wizString(quest[7])+"\n";
+    rstr += "Geschafft : "+quest[8]+"\n";
+  }
+  More( rstr, 0 );
+  return 1;
+}
+
+int ActivateQuest( string str )
+{
+  mixed *quest;
+  string newstr;
+  int errstat;
+
+  if ( !(str=UA) )
+  {
+    write( "Syntax: ActiVateQ <quest>\n" );
+    return 1;
+  }
+
+  Load_NumKey();
+
+  if ( !(newstr = num_key[str+""]) )
+	newstr = str;
+
+  switch( QM->SetActive( newstr, 1 ) )
+  {
+    case -3: write( "Ungueltiger Flag.\n" ); break;
+    case -2: write( "Quest war bereits aktiviert.\n" ); break;
+    case -1: write( "Keine Quest dieses Namens gefunden.\n" ); break;
+    case  0: write( "Zugriff verweigert\n" ); break;
+    case  1: write( "Quest '"+newstr+"' aktiviert.\n" ); break;
+    default: write( "unbekannter Fehlerstatus.\n" );
+  }
+  return 1;
+}
+
+int DeactivateQuest( string str )
+{
+  mixed *quest;
+  string newstr;
+  int errstat;
+
+  if ( !(str=UA) )
+  {
+    write( "Syntax: DeactiVateQ <quest>\n" );
+    return 1;
+  }
+
+  Load_NumKey();
+
+  if ( !(newstr = num_key[str+""]) )
+	newstr = str;
+
+  switch( QM->SetActive( newstr, 0 ) )
+  {
+    case -3: write( "Ungueltiger Flag.\n" ); break;
+    case -2: write( "Quest war bereits deaktiviert.\n" ); break;
+    case -1: write( "Keine Quest dieses Namens gefunden.\n" ); break;
+    case  0: write( "Zugriff verweigert\n" ); break;
+    case  1: write( "Quest '"+newstr+"' deaktiviert.\n" ); break;
+    default: write( "unbekannter Fehlerstatus.\n" );
+  }
+  return 1;
+}
+
+
+//---------------------------------------------------------------------------
+//                                TOR - TOOL
+//---------------------------------------------------------------------------
+
+
+#define TM "/obj/sehertormaster"
+#define DOORFILE "/etc/sehertore"
+
+mapping doors;
+
+void create_tor()
+{
+  string str;
+
+  restore_object(DOORFILE);
+  if (!doors) doors=([]);
+
+  AddId("tortool");
+  AddId("sehertortool");
+
+  SetProp(P_LONG_TOR,
+   "Das Sehertor-Tool dient der Administration von Sehertoren.\n\n"
+  +"Implementierte Kommandos:\n"
+  +"  sts(how)                      : Liste aller Sehertore anzeigen\n"
+  +"  stg(oto)    <n>               : trans zu Sehertor\n"
+  +"  stk(osten) <spieler>          : aktuelle Teleportkosten dieses Spielers\n"
+  +"Und fuer Erzmagier++:\n"
+  +"  sta(dd)     <room> [<n>]      : Neues Sehertor Nr. n einfuegen\n"
+  +"  std(el)     <n>               : Sehertor entfernen\n"
+  +"  stc(hange)  <n> <newroom>     : Sehertor verlegen\n\n"
+  +" <room> ist der komplette Pfadname des Raumes, der das Sehertor\n"
+  +" enthaelt, oder \"here\", d.h. der aktuelle Raum.\n");
+
+  AddCmd(({ "sts", "stshow" }),   "stShow");
+  AddCmd(({ "stg", "stgoto" }),   "stGoto");
+  AddCmd(({ "stk", "stkosten" }),   "stCost");
+  AddCmd(({ "sta", "stadd" }),    "stAdd");
+  AddCmd(({ "std", "stdel" }),    "stDel");
+  AddCmd(({ "stc", "stchange" }), "stChange");
+}
+
+void ReloadDoorFile()
+{
+  restore_object(DOORFILE);
+  if (!doors) doors = ([ ]);
+}
+
+void SaveDoorFile()
+{
+  save_object(DOORFILE);
+  TM->ReloadDoorFile();
+}
+
+int stShow(string str)
+{
+  int i, n;
+  string *ind, lst;
+  mixed *inf, ix;
+
+  ReloadDoorFile();
+  inf=({});
+  ind=m_indices(doors);
+  if (sizeof(ind)) for (i=sizeof(ind)-1; i>=0; i--) {
+    ix=ind[i];
+    if (!n=doors[ix]) continue;
+    inf+=({({n,doors[ix,1],ix})});
+  }
+  inf=sort_array(inf,lambda(({'x,'y}),
+                            ({#'<,({#'[, 'x, 0}),({#'[, 'y, 0})})));
+  lst = ANSI_BOLD+"Liste aller Sehertore:"+ANSI_NORMAL+"\n\n";
+  for (i=sizeof(inf)-1;i>=0;i--)
+    lst += sprintf(" %s%2d.%s %s\n     [%s]\n",
+      ANSI_BOLD, inf[i][0], ANSI_NORMAL, inf[i][1], inf[i][2]);
+  this_player()->More(lst);
+
+  return 1;
+}
+
+int stGoto(string str)
+{
+  int i, n;
+  string *ind;
+  // "  stg(oto)    <n>               : trans zu Sehertor\n\n"
+  notify_fail (
+    "syntax: stgoto <n>\n"+
+    "  <n> ........ Nummer des Sehertors, zu dem teleportiert werden soll.\n");
+  if (!stringp(str)) return 0;
+  if (sscanf(str, "%d", n) != 1) return 0;
+
+  ReloadDoorFile();
+  ind=m_indices(doors);
+  if (sizeof(ind)) for (i=sizeof(ind)-1; i>=0; i--) {
+    if (doors[ind[i]]==n) {
+      write ("Ok, teleportiere zu Sehertor "+n+".\n");
+      this_player()->move(ind[i], M_TPORT);
+      return 1;
+    }
+  }
+  write ("Kein Sehertor mit dieser Nummer gefunden!\n");
+  return 1;
+}
+
+int stAdd(string str)
+{
+  string s, *ind;
+  int n, m, i;
+
+  if (!IS_ARCH(this_interactive())) return 0;
+  notify_fail (
+    "syntax: stadd <room> [<n>]\n"+
+    "  <room> ..... Raum in dem sich das Sehertor befindet (oder \"here\").\n"+
+    "  <n> ........ Nummer, die das Tor bekommen soll.\n"+
+    "               (falls ausgelassen, wird die Nummer automatisch vergeben)\n");
+  if (!stringp(str)) return 0;
+  str=this_player()->_unparsed_args()+" ";
+  if (sscanf(str, "%s %d", s, n) == 1) n=0;
+  else
+    if (sscanf(str, "%s %d", s, n) != 2) return 0;
+  if (s=="here") s=file_name(environment(this_player()));
+
+  ReloadDoorFile();
+  ind=m_indices(doors);
+  if (sizeof(ind)) for (i=sizeof(ind)-1; i>=0; i--)
+  {
+    if (doors[ind[i]]==n) {
+      write ("Ein Sehertor mit dieser Nummer gibt es bereits!\n  - "+
+        doors[ind[i],1]+" ["+ind[i]+"]\n");
+      return 1;
+    }
+    if (doors[ind[i]]>m) m=doors[ind[i]];
+  } else m=0;
+  if (n==0) n=m+1;
+  write (sprintf("Ok, fuege Raum \"%d. %s\" hinzu.\n"+
+    "Beschreibung (~q Abbruch): ", n, s));
+  input_to ("stAdd2", 0, s, n);
+  return 1;
+}
+
+void stAdd2(string str, string s, int n)
+{
+  if (!IS_ARCH(this_interactive())) return 0;
+  if (str=="~q") { write("Ok, Abbruch!\n"); return; }
+  ReloadDoorFile();
+  doors += ([ s: n; str ]);
+  write ("Ok, eingetragen.\n");
+  SaveDoorFile();
+}
+
+int stDel(string str)
+{
+  int i, n;
+  string *ind;
+
+  if (!IS_ARCH(this_interactive())) return 0;
+  notify_fail (
+    "syntax: stdel <n>\n"+
+    "  <n> ..... Nummer des Sehertors, das entfernt werden soll (oder \"here\").\n");
+  if (!stringp(str)) return 0;
+  ReloadDoorFile();
+  if (str=="here")
+  {
+    str=file_name(environment(this_player()));
+    if (!member(doors, str))
+      write ("Hier ist kein Sehertor (oder es ist nicht in der Liste)!\n");
+    else {
+      write ("Sehertor \""+doors[str, 1]+"\" wirklich loeschen? (j/n) ");
+      input_to ("stDel2", 0, str);
+    }
+    return 1;
+  }
+  if (sscanf(str, "%d", n) != 1) return 0;
+  ind=m_indices(doors);
+  if (sizeof(ind)) for (i=sizeof(ind)-1; i>=0; i--)
+    if (doors[ind[i]]==n) {
+      write ("Sehertor \""+doors[ind[i], 1]+"\" wirklich loeschen? (j/n) ");
+      input_to ("stDel2", 0, ind[i]);
+      return 1;
+    }
+  write ("Kein Sehertor mit dieser Nummer gefunden!\n");
+  return 1;
+}
+
+int stDel2(string str, string ind)
+{
+  if (!IS_ARCH(this_interactive())) return 0;
+  if ((str=="j") || (str=="ja")) {
+    write ("Ok, Sehertor #"+doors[ind]+" (\""+doors[ind, 1]+"\") geloescht.\n");
+    doors -= ([ind]);
+    SaveDoorFile();
+  } else {
+    write ("Ok, Abbruch.\n");
+  }
+}
+
+int stChange(string str)
+{
+  int i, n;
+  string s, *ind;
+
+  if (!IS_ARCH(this_interactive())) return 0;
+  // "  stc(hange)  <n> <newroom>     : Sehertor verlegen\n"
+  notify_fail (
+    "syntax: stchange <n> <room>\n"+
+    "  <n> ........ Nummer, des zu verlegenden Sehertors.\n"+
+    "  <room> ..... Raum, in den das Sehertor verlegt werden soll (oder \"here\").\n");
+  if (!stringp(str)) return 0;
+  str=this_player()->_unparsed_args();
+  if (sscanf(str, "%d %s", n, s) != 2) return 0;
+
+  ReloadDoorFile();
+  if (s=="here") s=file_name(environment(this_player()));
+  ind=m_indices(doors);
+  if (sizeof(ind)) for (i=sizeof(ind)-1; i>=0; i--)
+    if (doors[ind[i]]==n) {
+      write ("Sehertor \""+doors[ind[i], 1]+"\" wirklich verlegen? (j/n) ");
+      input_to ("stChange2", 0, ind[i], s);
+      return 1;
+    }
+  write ("Kein Sehertor mit dieser Nummer gefunden!\n");
+  return 1;
+}
+
+int stChange2(string str, string ind, string s)
+{
+  if (!IS_ARCH(this_interactive())) return 0;
+  if ((str=="j") || (str=="ja")) {
+    write ("Ok, Sehertor #"+doors[ind]+" (\""+doors[ind, 1]+"\") verlegt.\n");
+    doors += ([s: doors[ind,0]; doors[ind, 1]]);
+    doors -= ([ind]);
+    SaveDoorFile();
+  } else {
+    write ("Ok, Abbruch.\n");
+  }
+}
+
+int stCost(string str)
+{
+  int kosten;
+  notify_fail("syntax: stkosten <spieler|alle>\n");
+  if( !str ) return 0;
+  if( str == "alle" )
+    return TM->query_all_kosten(),1;
+  if( !kosten = TM->query_kosten(str) )
+    write(CAP(str) + " ist nicht im Sehertormaster registriert!\n");
+  else
+    write(CAP(str) + " zahlt momentan "+kosten+" Magiepunkte fuer den "
+        "naechsten Teleport.\n"); 
+  return 1;
+}
+
+
+//---------------------------------------------------------------------------
+//                                GILDEN - TOOL
+//---------------------------------------------------------------------------
+
+#define LINE1 "=============================================================================="
+#define LINE2 "+============================================================================+"
+
+// VARIABLEN
+private string *color;
+
+// PROTOTYPES
+nosave string array2string(mixed array);
+
+nosave int GTHelp();
+nosave varargs int gilden_skills(string str, int flag);
+
+void create_guild() 
+{
+  SetProp(P_LONG_GUILD, sprintf(
+    "%s\nDas Gildentool.\nDieses Tool dient zum Warten "
+    "der Gilden des SilberLandes.\nFolgende Gilden werden "
+    "unterstuetzt:\n\t- Abenteurer\n\t- Druidenzirkel\n\t- Paladine\n\t"
+    "- Berkserker\n\t- Nekromanten\n\n"
+    "Hilfe mit <ghilfe>.\n%s\n", LINE1, LINE1));
+  AddId( ({"gt", "gildentool", "tool", "kontrolltool"}) );
+}
+
+//
+// HILFFUNKTIONEN
+//
+nosave int SetColors(string terminal) {
+  // Farbgebung von Zordan@SL
+  color = ({ 0,0,0,0,0 });
+  if(terminal=="ansi") {
+    color[0] = ANSI_NORMAL;
+    color[1] = ANSI_BOLD;
+    color[2] = ANSI_UNDERL;
+    color[3] = ANSI_BLUE;
+    color[4] = ANSI_RED;
+  } else if (terminal=="vt100") {
+    color[0]=ANSI_NORMAL;
+    color[1]=ANSI_BOLD;
+    color[2]=ANSI_BOLD;
+    color[3]=ANSI_NORMAL;
+    color[4]=ANSI_NORMAL;
+  } else {
+    color[0]=color[1]=color[2]=color[3]=color[4]=ANSI_NORMAL;
+  }
+
+}
+
+nosave string array2string(mixed array) {
+  int i, len, pos;
+  string text; 
+  mixed hlp;
+  text="";
+  if(mappingp(array)) return "Too complex arguments";
+  if(!pointerp(array)) 
+    return implode(explode(sprintf("%O", array), "\n"), " ");
+  for(i=sizeof(array)-1;i>=0;i--) {
+    if(pointerp(array[i]))
+      hlp=array2string(array[i]);
+    else 
+      hlp=array[i];
+    if(stringp(hlp))
+      hlp=implode(explode(hlp, "\n"), " ");
+    text+=sprintf("%O, ",hlp);
+  }
+  //text+="\b\b";
+  return text;
+}
+
+//
+// Hilfeseite
+//
+nosave int GHelp() {
+  string txt, hlpline;
+  txt="| %-30s | %-41s |\n";
+  hlpline=sprintf("+%*'='s+%*'='s+\n",32,"",43,"");
+  write(sprintf("\n%s\n| %s%|74s%s |\n%s\n",LINE2,color[1],
+      "-=- Funktionen des Gildentools -=-",color[0],LINE2));
+  write(sprintf(txt, "Name", "Funktion"));
+  write(hlpline);
+  write(sprintf(txt, "ghilfe", "Hilfeseite aufrufen"));
+  write(sprintf(txt, "gci <gilde|alle>", "Gildenitem(s) clonen"));
+  write(sprintf(txt, "gsk <spieler>", "Skills anzeigen"));
+  write(sprintf(txt, "gsks <spieler>", "Skills sortiert anzeigen"));
+  write(sprintf(txt, "gssk <spieler> <skill>", "Speziellen Skill anzeigen"));
+  write(sprintf(txt, "gska <spieler> <attrib>", "Skillattribut anzeigen"));
+  write(sprintf(txt, "grsk <spieler> <skill>", "Skill loeschen"));
+  write(sprintf(txt, "#gask <spieler> <skill>", "Skill der eigenen Gilde "
+      "setzen"));
+  write(sprintf(txt, "gmsk <spieler> <skill> <wert>", "Skillwert veraendern"));
+  write(sprintf(txt, "gs <spieler>", "Spielereintrag im Gildensavefile "
+      "zeigen"));
+  write(hlpline+"\n");
+      
+  return 1;
+}
+
+nosave mapping newskills;
+
+int skill_sort(string a, string b)
+{
+  int skill1, skill2;
+
+  if (mappingp(newskills[a]))
+    skill1 = newskills[a]["si_abil"];
+  else if (intp(newskills[a]))
+    skill1 = newskills[a];
+  else return 0;
+  if (mappingp(newskills[b]))
+    skill2 = newskills[b]["si_abil"];
+  else if (intp(newskills[b]))
+    skill2 = newskills[b];
+  else return 0;
+  if (skill1 == skill2)
+    return a > b;
+  if (skill1 < skill2)
+    return 1;
+  return 0;
+}
+
+// 
+// Ausgabe der Gildenskills. Mit freundlicher Genehmigung von Zordan@SL
+//  
+nosave varargs int gilden_skills(string str, int flag) {
+  object pl;
+  mapping all;
+  int anzahl,i,mittel,skill,usr,summe;
+  string gilde,*skills,dummy;
+  if (!str) str=getuid(TP);
+  notify_fail("*** gsk: Spieler "+color[4]+CAP(str)+color[0]+" nicht gefunden !\n");
+  if (!str) return 0;
+  if (!pl=find_player(str)) { pl=find_living(str); }
+  if (!pl)                  { pl=find_netdead(str); }
+  if (!pl) return 0;
+  all=pl->QueryProperties();
+  gilde=all["guild"];
+  if(!gilde) { gilde=all["default_guild"]; }
+  if(!gilde) { gilde="abenteurer"; }
+  write("+=============================================================================\n");
+  write("| Gildenrating von "+color[1]+CAP(str)+color[0]+" ("+CAP(gilde)+"), "+
+      "Gildenstufe: "+pl->QueryProp(P_GUILD_LEVEL)+", Spielerstufe: "+
+      pl->QueryProp(P_LEVEL)+"\n");
+  newskills=all["newskills"];
+  if (!mappingp(newskills)) {
+    write("+=============================================================================\n");
+    write("| Hat gar keine Skills !!!\n");
+    write("+=============================================================================\n");
+    return 1;
+  }
+  if (!newskills[gilde]) {
+    write("+=============================================================================\n");
+    write("| Gehoert keiner Gilde an !?!\n");
+    write("+=============================================================================\n");
+    return 1;
+  }
+  write("+================+=======+========+===========================================\n");
+write("| Spellname:     | Skill | USR:   |   INT: "+pl->QueryAttribute(A_INT)+
+    ", CON: "+pl->QueryAttribute(A_CON)+", STR: "+pl->QueryAttribute(A_STR)+
+    ", DEX: "+pl->QueryAttribute(A_DEX)+"\n");
+  write("+================+=======+========+===========================================\n");
+  newskills = newskills[gilde];
+  if (flag)
+    skills=sort_array(m_indices(newskills),"skill_sort");
+  else
+    skills=sort_array(m_indices(newskills),#'>);
+  anzahl=sizeof(skills);
+  for (i=0;i<anzahl;i++) {
+    dummy = skills[i];
+    dummy = dummy[0..14];
+    write("| "+dummy+"..............."[strlen(dummy)..]);
+    usr=0;
+    if (mappingp(newskills[skills[i]])) {
+      skill=newskills[skills[i]]["si_abil"];
+      if(lower_case(skills[i])[0]==skills[i][0]) // Spell
+        usr=newskills[skills[i]]["si_usr"];
+      else usr=0; // Skill
+    } else if (intp(newskills[skills[i]])) {
+      skill=newskills[skills[i]];
+    } else {
+      skill=-1;
+    }
+    mittel+=skill;
+    summe+=usr;
+    printf("| %5d | %6d | ",skill,usr);
+    write("******************************************"[0..(skill*41/10000)]);
+    write("\n");
+  }
+  mittel/=anzahl;
+  write("+================+=======+=======+============================================\n");
+  printf("| Anzahl: %s%2d%s   Mittel: %s%5d%s   Summe: %s%7d%s   HP: %3d/%3d   SP: %3d/%3d.\n",
+      color[1], anzahl, color[0], 
+      color[1], mittel, color[0],
+      color[1], summe, color[0],
+      pl->QueryProp(P_HP), pl->QueryProp(P_MAX_HP),
+      pl->QueryProp(P_SP), pl->QueryProp(P_MAX_SP) 
+      );
+  write("+=============================================================================\n");
+  return 1;
+}
+
+nosave int gilden_skills_sortet(string str) {
+  return gilden_skills(str, 1);
+}
+
+//
+// Gildenitems clonen
+//
+nosave varargs int gci(string str) {
+  object gi;
+  string error;
+  if(!str) {
+    write("*** Syntax: gci <gilde|alle>\n");
+    return 1;
+  }
+  str=lower_case(str);
+  switch(str) {
+    case "druidenzirkel":
+      if(gi=present("\ndruidenamulett", TP))
+        gi->remove();
+      error=(CLONE(DRUIDEN_DIR("armour/d_amulett"), TP));
+      break;
+    case "paladine":
+      if(gi=present("\npaladinwappenrock", TP))
+        gi->remove();
+      error=catch(CLONE(PALADIN_DIR("armour/wappenrock"), TP));
+      break;
+    case "berserker":
+      if(gi=present("\nberserker_stirnband", TP))
+        gi->remove();
+      error=catch(CLONE(BERSERKER_DIR("obj/stirnband"), TP));
+      break;
+    case "zechpreller":
+      if(gi=present("\nz_17erschluessel", TP))
+        gi->remove();
+      error=catch(CLONE(ZECHPRELLER_DIR("armour/z_17erschluessel"), TP));
+      break;
+    case "nekromanten":
+      if(gi=present("\nSchaedelmaske", TP))
+        gi->remove();
+      error=catch(CLONE(NEKROMANTEN_DIR("armour/maske"), TP));
+      break;
+    case "alle":
+      if(gi=present("\ndruidenamulett", TP))
+        gi->remove();
+      error=catch(CLONE(DRUIDEN_DIR("armour/d_amulett"), TP));
+      if(gi=present("\npaladinwappenrock", TP))
+        gi->remove();
+      error=catch(CLONE(PALADIN_DIR("armour/wappenrock"), TP));
+      if(gi=present("\nberserker_stirnband", TP))
+        gi->remove();
+      error=catch(CLONE(BERSERKER_DIR("obj/stirnband"), TP));
+      if(gi=present("\nz_17erschluessel", TP))
+        gi->remove();
+      error=catch(CLONE(ZECHPRELLER_DIR("obj/z_17erschluessel"), TP));
+      if(gi=present("\nSchaedelmaske", TP))
+        gi->remove();
+      error=catch(CLONE(NEKROMANTEN_DIR("armour/maske"), TP));
+      break;
+    default: error="Unbekanntes Kriterium!!";
+  }
+  if(stringp(error)) 
+    write("*** "+error+"\n");
+  else write("*** Item(s) geclont.\n");
+  return 1;
+}
+
+nosave int gssk(string str) {
+  string pl_name, skill_name, *vals, *vals2,txt, hlpline;
+  object pl;
+  mapping skill, s_book;
+  int i, j;
+
+  s_book=SPELLBOOKS;
+  str=TP->_unparsed_args();
+  txt="| %-30s | %-41s |\n";
+  hlpline=sprintf("+%*'='s+%*'='s+\n",32,"",43,"");
+  if(!str) {
+    write("*** Syntax: gssk <spieler> <skill>\n");
+    return 1;
+  }
+  if(sscanf(str, "%s %s", pl_name, skill_name)!=2) {
+    write("*** Syntax: gtssk <spieler> <skill>\n");
+    return 1;
+  } 
+  pl_name=lower_case(pl_name);
+  if (!pl=find_player(pl_name))  
+    pl=find_living(pl_name);
+  if (!pl)                   
+    pl=find_netdead(pl_name);
+  if (!pl) { 
+    write("*** Spieler "+CAP(pl_name)+" nicht gefunden!\n");
+    return 1;
+  }
+  if(!mappingp(skill=pl->QuerySkill(skill_name))) {
+    write("*** Skill "+CAP(skill_name)+" nicht in Spieler gefunden!\n");
+    return 1;
+  }
+  write(sprintf("\n%s\n| %s%|74s%s |\n%s\n",LINE2,color[1],
+      sprintf("-=- %s-skill von %s -=-", CAP(skill_name), CAP(pl_name)),
+      color[0],LINE2));
+  for(i=sizeof(vals=m_indices(skill))-1;i>=0;i--) {
+    write(sprintf(txt, vals[i], array2string(skill[vals[i]])[<41..]));
+  }
+  write(hlpline);
+  if(member(s_book, pl->QueryProp(P_GUILD))) {
+    skill=call_other(s_book[pl->QueryProp(P_GUILD)], "QuerySpell", skill_name);
+    if(skill) {
+      for(i=sizeof(vals=m_indices(skill))-1;i>=0;i--) {
+        if(mappingp(skill[vals[i]])) {
+          write(sprintf(txt, vals[i], ""));
+          for(j=sizeof(vals2=m_indices(skill[vals[i]]))-1;j>=0;j--) {
+            write(sprintf(txt, "    "+vals2[j], 
+                array2string(skill[vals[i]][vals2[j]])[<41..]));
+          }
+        }
+        else
+          write(sprintf(txt, vals[i], array2string(skill[vals[i]])[<41..]));
+      }
+    }
+    write(hlpline);
+  }
+  return 1;
+}
+
+//
+// Skillattribute anzeigen
+//
+nosave int gska(string str) {
+  string txt, hlpline, *attr;
+  object pl;
+  int i;
+  txt="| %-30s | %-41s |\n";
+  hlpline=sprintf("+%*'='s+%*'='s+\n",32,"",43,"");
+  attr=({SA_SPEED, SA_DAMAGE, SA_QUALITY, SA_DURATION, SA_EXTENSION,
+      SA_RANGE, SA_ENEMY_SAVE});
+  
+  if(str) {
+    if (!pl=find_player(str))  
+      pl=find_living(str);
+    if (!pl)                   
+      pl=find_netdead(str);
+    if (!pl) { 
+      write("*** Spieler "+CAP(str)+" nicht gefunden!\n");
+      return 1;
+    }
+  }
+  else { pl=TP; }
+  write(sprintf("\n%s\n| %s%|74s%s |\n%s\n",LINE2,color[1],
+      sprintf("-=- Skillattribute von %s -=-", CAP(getuid(pl))),
+      color[0],LINE2));
+  for(i=sizeof(attr)-1;i>=0;i--) {
+    write(sprintf(txt, attr[i], to_string(pl->QuerySkillAttribute(attr[i]))));
+  }
+  write(hlpline);
+  return 1;
+}
+
+//
+// Skill loeschen *ARCH ONLY*
+//
+nosave int grsk(string str) {
+  string pl_name, skill_name;
+  object pl;
+  int i, j;
+  str=TP->_unparsed_args();
+  if(!str) {
+    write("*** Syntax: grsk <spieler> <skill>\n");
+    return 1;
+  }
+  if(sscanf(str, "%s %s", pl_name, skill_name)!=2) {
+    write("*** Syntax: grsk <spieler> <skill>\n");
+    return 1;
+  } 
+  pl_name=lower_case(pl_name);
+  if (!pl=find_player(pl_name))  
+    pl=find_living(pl_name);
+  if (!pl)                   
+    pl=find_netdead(pl_name);
+  if (!pl) { 
+    write("*** Spieler "+CAP(pl_name)+" nicht gefunden!\n");
+    return 1;
+  }
+  if(!pl->QuerySkill(skill_name)) {
+    write("*** Skill "+CAP(skill_name)+" nicht in Spieler gefunden!\n");
+    return 1;
+  }
+  pl->SetProp(P_NEWSKILLS, m_delete(pl->QueryProp(P_NEWSKILLS),skill_name));
+  write("\n*** SKILL '"+CAP(skill_name)+"' in Spieler "+CAP(pl_name)+
+      " geloescht!\n");
+  return 1;
+}
+
+//
+// Skillwert modifizieren 
+//
+nosave int gmsk(string str) {
+  string pl_name, skill_name;
+  object pl;
+  int old_val, new_val, wert;
+  str=TP->_unparsed_args();
+  if(!str) {
+    write("*** Syntax: gmsk <spieler> <skill> <wert>\n");
+    return 1;
+  }
+  if(sscanf(str, "%s %s %d", pl_name, skill_name, wert)!=3) {
+    write("*** Syntax: gmsk <spieler> <skill> <wert>\n");
+    return 1;
+  } 
+  pl_name=lower_case(pl_name);
+  if (!pl=find_player(pl_name))  
+    pl=find_living(pl_name);
+  if (!pl)                   
+    pl=find_netdead(pl_name);
+  if (!pl) { 
+    write("*** Spieler "+CAP(pl_name)+" nicht gefunden!\n");
+    return 1;
+  }
+  if(!pl->QuerySkill(skill_name)) {
+    write("*** Skill "+CAP(skill_name)+" nicht in Spieler gefunden!\n");
+    return 1;
+  }
+  old_val=pl->QuerySkill(skill_name)["si_abil"];
+  pl->ModifySkill(skill_name, wert);
+  new_val=pl->QuerySkill(skill_name)["si_abil"];
+  write("\n*** Skill "+CAP(skill_name+" in Spieler "+CAP(pl_name)+ " von "
+        +old_val+" auf "+new_val+" veraendert!\n"));
+  return 1;
+}
+
+
+nosave int gs(string str) {
+  string pl_name, guild_name, *gilden,*g_master,hlpline,txt;
+  int i;
+  object pl;
+  mixed entry,x;
+  mapping guildmaster;
+  
+  txt="| %-30s | %-41O |\n";
+  hlpline=sprintf("+%*'='s+%*'='s+\n",32,"",43,"");
+  guildmaster=GILDENMASTER;
+  gilden=m_indices(guildmaster);
+  g_master=m_values(guildmaster);
+  str=TP->_unparsed_args();
+  if(!str) {
+    write("*** Syntax: gs <spieler>\n");
+    return 1;
+  }
+  if(sscanf(str, "%s", pl_name)!=1) {
+    write("*** Syntax: gs <spieler>\n");
+    return 1;
+  }
+  if(pl = find_player(pl_name) || pl = find_netdead(pl_name) ) {
+    guild_name=pl->QueryProp(P_GUILD);
+    if( member(gilden,guild_name)!=-1 ) 
+      if(!entry=call_other(guildmaster[guild_name], "QueryMemberEntry", pl_name)) 
+        guild_name=0;
+  }
+  if( !guild_name ) {
+    for(i=sizeof(guildmaster)-1;i>=0;i--) {
+      write("*** Suche in: "+CAP(gilden[i])+" ...\n");
+      if(entry=call_other(g_master[i], "QueryMemberEntry", pl_name)) {
+        guild_name=gilden[i];
+        break;
+      }
+    }
+  }
+  if(!guild_name) {
+    write("*** Spieler "+CAP(pl_name)+" in keiner Gilde gefunden.\n");
+    return 1;
+  } 
+  write(sprintf("\n%s\n| %s%|74s%s |\n%s\n",LINE2,color[1],
+      sprintf("-=- Spieler: %s, Gilde: %s -=-", CAP(pl_name), CAP(guild_name)),
+      color[0],LINE2));
+  switch(guild_name) {
+    case "druidenzirkel":
+      write(sprintf(txt, "needed XP+LXP", entry[0]));
+      write(sprintf(txt, "Gildenstufe", entry[1]));
+      write(sprintf(txt, "Element", entry[2]));
+      break;
+    
+   case "paladine":
+      write(sprintf(txt, "Gildenstufe", entry[0]));
+      write(sprintf(txt, "Spielerstufe", entry[1]));
+      write(sprintf(txt, "needed XP+LXP",  entry[2]));
+      write(sprintf(txt, "Align",  entry[3]));
+      write(sprintf(txt, "Geld fuer naechste Stufe",  entry[4]));
+      write(sprintf(txt, "Gesamt geopfert", entry[5]));
+      write(sprintf(txt, "Tasks", entry[6]));
+      break;
+      
+   case "zechpreller":
+      write(sprintf(txt, "needed XP+LXP", entry[0]));
+      write(sprintf(txt, "Gildenstufe", entry[1]));
+      break;
+      
+   case "berserker":
+      write(sprintf(txt, "needed XP+LXP", entry[0]));
+      write(sprintf(txt, "Gildenstufe", entry[1]));
+      write(sprintf(txt, "Spielerstufe", entry[2]));
+      write(sprintf(txt, "Rasse", entry[3]));
+      write(sprintf(txt, "Waffe", entry[4]));
+      write(sprintf(txt, "Reportmodus", entry[5]));
+      write(sprintf(txt, "Macht", entry[6]));
+      write(sprintf(txt, "Lehre", entry[7]));
+      write(sprintf(txt, "Reportfarbe", entry[8]));
+      break;
+   
+   case "nekromanten":
+      write(sprintf(txt, "Gildenstufe", entry[0]));
+      write(sprintf(txt, "Innerer Kreis", entry[1]));
+      write(sprintf(txt, "needed XP",  entry[2]));
+      write(sprintf(txt, "Spielerstufe", entry[3]));
+      write(sprintf(txt, "Align",  entry[4]));
+      write(sprintf(txt, "Geopferter Paladin",  entry[5][0]));
+      write(sprintf(txt, "Lost XP fuer naechsten Stufe",  entry[6]));
+      write(sprintf(txt, "Lost XP seit Beitritt",  entry[7]));
+      write(sprintf(txt, "NPC Levels fuer naechste Stufe", entry[8]));
+      write(sprintf(txt, "NPC Levels seit Beitritt", entry[9]));
+      write(sprintf(txt, "Anzahl der geopferten NPCs", entry[10]));
+      write(sprintf(txt, "NPCs fuer naechsten Grad", entry[11]));
+      break;
+  } 
+  write(hlpline+"\n");
+  return 1;
+}
+
+#define SAVEFILE  "/players/"+geteuid()+"/.logtool"
+
+// definieren von "inline" Funktionen:
+#define allowed()   (!process_call() && PL==RPL && geteuid()==getuid(RPL))
+
+mapping logs;
+
+nosave void check_logs()
+{
+  filter_array(sort_array(m_indices(logs), #'>), lambda( ({ 'x }), ({#'?, 
+    ({#'!=, ({#'[, logs, 'x, 2}), ({#'file_date, ({#'[, logs, 'x, 0}) }) }),
+       ({#'tell_object, ({#'environment }), ({#'sprintf,
+       "Neue Eintraege in <%s>.\n", 'x }) }), 0})));
+}
+
+void create_log()
+{
+  if (!restore_object(SAVEFILE)) {
+    logs=([ "repfile": sprintf("/log/report/%s.rep", geteuid()); 0; 0 ]);
+    if (IS_ARCH(geteuid()))
+      logs+=(["snooplog": "/log/SNOOP"; 0; 0, "killer": "/log/KILLER"; 0; 0]);
+  }
+  AddId("logtool");
+  AddCmd("mark", "aktualisieren");
+  AddCmd(m_indices(logs), "read_log");
+  AddCmd("AddLog", "add_log");
+  AddCmd("DelLog", "del_log");
+}
+
+void reset()
+{
+  ::reset();
+  if (!is_clone(ME) || !environment()) return;
+  call_out("check_logs", 0);
+}
+
+varargs string _query_long_log() 
+{
+   return "Folgende Logfiles werden derzeit von Deinem Logtool verwaltet:\n\n"
+         +implode(map_array(sort_array(m_indices(logs), #'>),
+          lambda( ({ 'x }), ({#'sprintf, " %1s %-14s - %s", ({#'?, ({#'!=,
+          ({#'[,logs,'x, 2}), ({#'file_date,({#'[,logs,'x, 0})})}),"*",""}),
+          ({#'sprintf, "<%s>", 'x}), ({#'[, logs, 'x, 0})}) ) ), "\n")
+         +"\n\nMit <mark> koennen alle Eintraege als gelesen markiert und "
+         +"mit Add- und\nDelLog Logfiles in die Liste aufgenommen bzw. aus "
+         +"der Liste entfernt werden.\n";
+}
+
+nosave int aktualisieren(string str)
+{
+  if (!allowed()) return 0;
+  if (str && str!="") {
+    if (!logs[str]) {
+      notify_fail("Ein solches Logfile ist nicht in der Liste enthalten.\n");
+      return 0;
+    }
+    logs[str, 1]=file_size(logs[str, 0]);
+    logs[str, 2]=file_date(logs[str, 0]);
+  }
+  else filter_array(m_indices(logs), lambda( ({ 'x }),({#', ,
+   ({#'=, ({#'[, logs, 'x, 1}), ({#'file_size, ({#'[, logs, 'x, 0}) }) }),
+   ({#'=, ({#'[, logs, 'x, 2}), ({#'file_date, ({#'[, logs, 'x, 0}) })})})));
+  write("Done!\n");
+  save_object(SAVEFILE);
+  return 1;
+}
+
+nosave int read_log(string str)
+{
+  int si;
+  if (!allowed()) return 0;
+  si=file_size(logs[query_verb(),0]);
+  if (str)
+    PL->more(logs[query_verb(),0]);
+  else {
+    if (si<0 || file_date(logs[query_verb(), 0])==logs[query_verb(), 2])
+      write("Keine neuen Eintraege in <"+query_verb()+">.\n");
+    else {
+      write("Folgendes ist neu in <"+query_verb()+">.\n");
+      if (si<logs[query_verb(),1])
+        PL->more(logs[query_verb(),0]);
+      else PL->More(read_bytes(logs[query_verb(),0],logs[query_verb(),1],si));
+    }
+  }
+  logs[query_verb(), 1]=si;
+  logs[query_verb(), 2]=file_date(logs[query_verb(), 0]);
+  save_object(SAVEFILE);
+  return 1;
+}
+
+nosave int add_log()
+{
+  string key, path, str;
+  str=PL->_unparsed_args();  
+  if (!allowed() || !str || sscanf(str, "%s %s", key, path)!=2) {
+    notify_fail("Syntax: AddLog <key> <path>\n");
+    return 0;
+  }
+  key=lower_case(key);
+  if (logs[key]) {
+    notify_fail("Es gibt schon ein Logfile mit diesem Key in der Liste.\n");
+    return 0;
+  }
+  logs+=([ key: path; 0; 0 ]);
+  AddCmd(key, "read_log");
+  save_object(SAVEFILE);
+  write("Logfile <"+key+"> in die Liste aufgenommen.\n");
+  return 1;
+}
+
+nosave int del_log(string str)
+{
+  if (!allowed() || !str) {
+    notify_fail("WELCHES Logfile soll aus der Liste entfernt werden?\n");
+    return 0;
+  }
+  if (!logs[str]) {
+    notify_fail("Logfile nicht in Liste enthalten.\n");
+    return 0;
+  }
+  logs=m_delete(logs,str);
+  RemoveCmd(str);
+  save_object(SAVEFILE);
+  write("Logfile <"+str+"> aus Liste entfernt.\n");
+  return 1;
+}
+
+#define HIGH "high"
+#define WARN "warn"
+#define AOUT "aout"
+#define CMDS "cmds"
+#define OPTN "optn"
+
+#define W_CMDS ({"anhaengen", "entfernen", "zeigen", \
+                 "add", "remove", "show", \
+                 "a", "e", "z", "r", "s"})
+
+mapping cols;
+void colors();
+
+void create_sheriff()
+{
+  AddId("verwarnungstool");
+  AddId("sheriffstern");
+  AddCmd(({"verwarnung", "warning", "warn"}), "warn");
+  AddCmd("sternhilfe", "help");
+  AddCmd("lastinfo", "lastcmd");
+  cols=([]);
+  colors();
+}
+
+void colors() {
+  switch (this_interactive()->QueryProp(P_TTY)) {
+    case "ansi":
+      cols[HIGH]=VT_TA_B+VT_YELLOW;
+      cols[WARN]=VT_TA_B+VT_RED;
+      cols[CMDS]=VT_TA_B+VT_GREEN;
+      cols[OPTN]=VT_CYAN;
+      cols[AOUT]=VT_TA_AO;
+      break;
+    case "vt100":
+      cols[HIGH]=VT_TA_B;
+      cols[CMDS]=VT_TA_B;
+      cols[OPTN]=VT_TA_U;
+      cols[WARN]=VT_TA_U;
+      cols[AOUT]=VT_TA_AO;
+      break;
+    case "dumb":
+      cols[HIGH]="";
+      cols[CMDS]="";
+      cols[WARN]="";
+      cols[OPTN]="";
+      cols[AOUT]="";
+    default:
+  }
+  return;
+}
+
+string syntax() {
+  string str;
+
+  str="";
+  str+=sprintf("      %sverwarnung%s [ %sanhaengen%s | %sentfernen%s | %szeigen%s ] [ %soptionen%s ]\n", 
+               cols[WARN], cols[AOUT], cols[CMDS], cols[AOUT], cols[CMDS], cols[AOUT], cols[CMDS], cols[AOUT],
+               cols[OPTN], cols[AOUT]);
+  str+=sprintf(" oder %swarning%s    [ %sadd%s       | %sremove%s    | %sshow%s   ] [ %soptions%s  ]\n", 
+               cols[WARN], cols[AOUT], cols[CMDS], cols[AOUT], cols[CMDS], cols[AOUT], cols[CMDS], cols[AOUT],
+               cols[OPTN], cols[AOUT]);
+  return str;
+}
+
+string add_syntax() {
+  string str;
+
+  str="";
+  str+=sprintf(" %sverwarnung%s %sanhaengen%s <spieler> <lvl> <grund>\n", cols[WARN], cols[AOUT], cols[CMDS], cols[AOUT]);
+  str+=sprintf("            Verwarnt Spieler <spieler> mit Warnlevel <lvl> und <grund>\n\n");
+  return str;
+}
+
+string remove_syntax() {
+  string str;
+
+  str="";
+  str+=sprintf(" %sverwarnung%s %sentfernen%s <spieler> <id>\n", cols[WARN], cols[AOUT], cols[CMDS], cols[AOUT]);
+  str+=sprintf("            Entfernt Verwarnung <id> von Spieler <spieler>\n\n");
+  return str;
+}
+
+string show_syntax() {
+  string str;
+
+  str="";
+  str+=sprintf(" %sverwarnung%s %szeigen%s [<spieler>]\n", cols[WARN], cols[AOUT], cols[CMDS], cols[AOUT]);
+  str+=sprintf("            Zeigt Verwarnungen der eingeloggten Spieler oder von <spieler>\n\n");
+  return str;
+}
+
+help(string str) {
+  string s;
+
+  colors();
+  s="";
+  s+=syntax();
+  s+=add_syntax();
+  s+=remove_syntax();
+  s+=show_syntax();
+  this_player()->More(s);
+  return 1;
+}
+
+string long_stern() {
+  string str;
+
+  colors();
+  str=sprintf("Das ist Dein %sSheriffstern%s.", cols[HIGH], cols[AOUT]);
+  str+=" Du kannst damit folgende Befehle absetzen:\n\n";
+  str+=syntax();
+  str+=sprintf("\nMit <%ssternhilfe%s> bekommst Du weitere Informationen.\n\n", cols[CMDS], cols[AOUT]);
+  return str;
+}
+
+string status_line(string warndate, string plr, string id, string lvl, 
+    string cause) 
+{
+  return sprintf(" %s%-20s%s | %s%-15s%s | %s%5s%s | %s%3s%s | %s%-20s%s\n",
+      "", warndate, "",
+      cols[WARN], plr, cols[AOUT], cols[OPTN], id, cols[AOUT],
+      cols[CMDS], lvl, cols[AOUT], cols[AOUT], cause, cols[AOUT]);
+}
+
+int check_warnings(object u) {
+  mapping w;
+  if ((w=u->QueryProp(P_WARNINGS)) && sizeof(w)>0)
+    return 1;
+  return 0;
+}
+
+int warn(string str) {
+  string cmd, options, player, cause, args, out;
+  int lvl, ret, i, j;
+  object p, *u;
+  mapping w;
+  mixed *ww;
+
+  args=this_player()->_unparsed_args();
+  colors();
+  notify_fail("Syntax:\n"+syntax());
+  if (!str)
+    return 0;
+  if (sizeof(explode(args, " "))==1)
+    sscanf(args, "%s", cmd);
+  else
+    sscanf(args, "%s %s", cmd, options);
+  if (member(W_CMDS, cmd)==-1)
+    return 0;
+  switch (cmd) {
+    case "anhaengen":
+    case "add":
+    case "a":
+              notify_fail("Syntax:\n"+add_syntax());
+              if (!options) return 0;
+              if (sscanf(options, "%s %d %s", player, lvl, cause)!=3)
+                return 0;
+              ret=call_other(WARNING_MASTER, "add_warning", player, lvl, cause);
+              if (ret==W_NOSUCHPLAYER) {
+                write("Kein solcher Spieler.\n");
+                return 1;
+              }
+              break;
+    case "entfernen":
+    case "remove":
+    case "e":
+    case "r":
+              notify_fail("Syntax:\n"+remove_syntax());
+              if (!options) return 0;
+              if (sscanf(options, "%s %d", player, lvl)!=2)
+                return 0;
+              ret=call_other(WARNING_MASTER, "remove_warning", player, lvl, cause);
+              switch (ret) {
+                case W_NOSUCHPLAYER:
+                  write("Kein solcher Spieler.\n");
+                  return 1;
+                case W_NOSUCHID:
+                  write(sprintf("Keine Verwarnung mit ID %d gefunden.\n", lvl));
+                  return 1;
+                case W_IDNOTONPLAYER:
+                  write(sprintf("Spieler %s hat keine Verwarnung mit ID %d.\n", player, lvl));
+                  return 1;
+                default:
+              }
+              break;
+    case "zeigen":
+    case "show":
+    case "z":
+    case "s":
+              notify_fail("Syntax:\n"+show_syntax());
+              u=({ });
+              if (options && options!="") {
+                if (strlen(options)>0 && sizeof(explode(options, " "))!=1)
+                  return 0;
+                if ((p=find_player(lower_case(options))))
+                  u += ({ p });
+              }
+              else
+                u=users();
+              u=filter_array(u, #'check_warnings);
+              if (sizeof(u)==0) {
+                write("Niemand mit Verwarnungen gefunden.\n");
+                return 1;
+              }
+              out=status_line("Zeit", "Spieler", " ID ", "lvl", "Grund");
+              out+="----------------------+-----------------+-------+-----+-------\n";
+              for (i=sizeof(u)-1; i>=0; i--) {
+                w=u[i]->QueryProp(P_WARNINGS);
+                ww=m_indices(w);
+                for (j=sizeof(ww)-1; j>=0; j--)
+                  out+=status_line(dtime(to_int(w[ww[j]][W_TIME]))[5..16],capitalize(getuid(u[i])), to_string(ww[j]), to_string(w[ww[j]][W_LEVEL]), w[ww[j]][W_CAUSE]);
+              }
+              out+="\n";
+              this_player()->More(out);
+              return 1;
+              break;
+    default:
+  }
+  return 1;
+}
+
+int lastcmd(string str) {
+  mixed *w;
+  object pl;
+  int last_in, last_out;
+  string out, in, ret, day_in, date_in, time_in, day_out, date_out, time_out;
+
+  notify_fail("Syntax: last <spieler>\n");
+  if (!str)
+    return 0;
+  if (sizeof(explode(str, " "))>1)
+    return 0;
+  ret=sprintf("%s: ", capitalize(str));
+  w=call_other(MASTER, "get_userinfo", str);
+  if (!w) {
+    ret+="ist kein Spieler.\n";
+    write(ret);
+    return 1;
+  }
+  colors();
+  pl=find_player(str);
+  if (!pl) {
+    pl=find_netdead(str);
+  }
+  if (!pl) {
+    ret+="war noch nicht eingeloggt.\n";
+    write(ret);
+    return 1;
+  }
+  last_in=pl->QueryProp(P_LAST_LOGIN);
+  in=dtime(last_in);
+  last_out=pl->QueryProp(P_LAST_LOGOUT);
+  out=dtime(last_out);
+  day_in=implode(explode(explode(in, ",")[0], " "), " ");
+  date_in=implode(explode(explode(in, ",")[1], " "), " ");
+  time_in=implode(explode(explode(in, ",")[2], " "), " ");
+  day_out=implode(explode(explode(out, ",")[0], " "), " ");
+  date_out=implode(explode(explode(out, ",")[1], " "), " ");
+  time_out=implode(explode(explode(out, ",")[2], " "), " ");
+
+  if (last_in < last_out) {
+    if (date_in == date_out) {
+      ret+=sprintf("%s%s, %s%s %s%s%s - %s%s%s\n", cols[CMDS], day_in, date_in, cols[AOUT], cols[HIGH], time_in, cols[AOUT], cols[HIGH], time_out, cols[AOUT]);
+    } else {
+      ret+=sprintf("%s%s, %s%s %s%s%s - %s%s, %s%s %s%s%s\n", cols[CMDS], day_in, date_in, cols[AOUT], cols[HIGH], time_in, cols[AOUT], cols[CMDS], day_out, date_out, cols[AOUT], cols[HIGH], time_out, cols[AOUT]);
+    }
+  } else {
+    if (date_in == date_out) {
+      ret+=sprintf("%s%s, %s%s %s[..]%s - %s%s%s; %s%s%s - %s[..]%s\n", cols[CMDS], day_out, date_out, cols[AOUT], cols[OPTN], cols[AOUT], cols[HIGH], time_out, cols[AOUT], cols[HIGH], time_in, cols[AOUT], cols[OPTN], cols[AOUT]);
+    } else {
+      ret+=sprintf("%s%s, %s%s %s[..]%s - %s%s%s; %s%s, %s%s %s%s%s - %s[..]%s\n", cols[CMDS], day_out, date_out, cols[AOUT], cols[OPTN], cols[AOUT], cols[HIGH], time_out, cols[AOUT], cols[CMDS], day_in, date_in, cols[AOUT], cols[HIGH], time_in, cols[AOUT], cols[OPTN], cols[AOUT]);
+    }
+  }
+  write(ret);
+  return 1;
+}
+

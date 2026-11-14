@@ -1,0 +1,409 @@
+#include <properties.h>
+#include <combat.h>
+#include <defines.h>
+#include <new_skills.h>
+#include <moredef.h>
+#include <class.h>
+#include <moving.h>
+#include "/gilden/bardengilde/bardengilde.h"
+#include "/gilden/bardengilde/barden_skills.h"
+#include "bard_song.h"
+#include "/gilden/berserker/berserker_extern.h"
+inherit "/gilden/bardengilde/obj/std_song_effect";
+
+
+private string *dam_types;
+
+// 10 phasen - pro phase:
+// ({ Gender, Objektname, Objektshort, Objektlong, Raummeldung })
+mixed *states;
+
+private object *regEnemies, *summonedZombies;
+
+private int damage, speed, duration, maxDamage, currentStage, lastIncrease, endTime, critChance;
+private string grp;
+
+public void create() {
+    
+
+     if (!is_clone(TO)) return;
+    ::create();
+  
+    AddId(({}));
+
+    SetProp(P_NOGET, 1);
+
+    setSilentEnd(0);
+    regEnemies = ({});
+    summonedZombies = ({});
+}
+
+public void resetIds() {
+    SetProp(P_IDS, ({"Ding"}));
+    AddId(sprintf("%s_%s", SONG_ROOM_DAMAGE, getuid(caster)));
+}
+
+private void changeStage(int newStage) {
+    mixed *state;
+
+    if(newStage < 0 || newStage > 9) return;
+
+    if(caster->QueryProp(P_TESTPLAYER)) {
+        tell_object(caster, sprintf("room_damage :: changeStage :: oldStage=%d newStage =%d\n", currentStage, newStage));
+    }
+
+    currentStage = newStage;
+
+    SetProp(P_INVIS, 0);
+
+    // ({ Gender, Objektname, Objektshort, Objektlong, Raummeldung })
+    state = states[currentStage];
+    SetProp(P_GENDER, state[0]);
+
+    if(state[1] != 0) SetProp(P_NAME, state[1]);
+    if(state[2] != 0) SetProp(P_SHORT, state[2]);
+    if(state[3] != 0) SetProp(P_LONG, state[3]);
+    if(state[5] != 0) {
+        resetIds();
+        AddId(state[5]);
+    }
+
+    tell_room(environment(this_object()), BS(state[4]));
+    return;
+}
+
+public varargs void prepareSong() {
+    int moreDamtypes;
+
+    if(!caster->QueryProp(P_NPC)) grp = BARDENMASTER->GetBardGroup(caster);
+    else grp = caster->QueryProp(P_BARD_GROUP);
+
+    if(lowerstring(songName) == "fest der schatten") grp = HERO_XULGSCH;
+
+    moreDamtypes = TALENTMASTER->HasTalent(caster, TALENT_ALTE_GESCHICHTEN);
+    switch(grp) {
+        case BARD_GROUP_ALESTRA:
+            dam_types = ({ DT_UNHOLY });
+            if(moreDamtypes) dam_types += ({ DT_COLD });
+            states = ({
+                ({MALE, "Dimensionsriss", "Ein Dimensionsriss", "Ein kleiner Riss zwischen den Welten schwebt in der Luft.","Ein Riss aus grauem Wabern tut sich zwischen den Welten auf...", ({"riss", "dimensionsriss"})}),
+                ({MALE, 0, "Ein wachsender Dimensionsriss", 0, "Der Dimensionsriss erweitert sich...", 0}),
+                ({MALE, 0, "Ein offener Dimensionsriss", 0, "Kalter Nebel tritt aus dem grauen Rauschen zwischen den Welten hervor...", 0}),
+                ({MALE, "Tentakel", "Tentakel greifen hier aus einem Dimensionsriss", "Durch einen Riss zwischen den Welten ragen krakenartige Tentakel!","Grauenhafte Tentakel schiessen aus dem Dimensionsriss hervor und schlagen wild um sich.", ({"tentakel"})}),
+                ({MALE, 0, 0, "Tentakel wuehlen sich aus einem Dimensionsriss","Die Tentakel schieben sich weiter aus dem Riss hervor...", 0}),
+                ({NEUTER, "Sternengezuecht", "Ein grauenerregendes Sternengezuecht", "Ein grauenerregendes Sternengezuecht kriecht aus einem Dimensionsriss","Hinter den Tenakeln schiebt sich ein grauenerregendes Sternengezuecht durch den Dimensionsriss.", ({"gezuecht", "sternengezuecht"})}),
+                ({NEUTER, 0, "Ein grauenerregendes Sternengezuecht", "Das Sternengezuecht ist zwei Schritt gross, mit ledrigen Fluegeln und einem tentakelbewaehrtem Maul.", "Wuetend und bruellend peitscht das Sternengezuecht um sich.", 0}),
+                ({NEUTER, 0, "Ein riesiges Sternengezuecht", 0, "Das Sternengezuecht waechst weiter an.", 0}),
+                ({NEUTER, 0, "Ein grauenerregendes Sternengezuecht mit roten Augen", 0, "Das Sternengezuecht bruellt laut auf, als seine Augen rot gluehen.", 0}),
+                ({NEUTER, 0, "Ein wild tobendes, grauenerregendes Sternengezuecht mit roten Augen", 0, "Das Sternengezuecht tobt in wilder Rage durch den Raum.", 0}),
+            });
+            break;
+        case BARD_GROUP_KORRIAX:
+            dam_types = ({ DT_LIGHTNING });
+            if(moreDamtypes) dam_types += ({ DT_SOUND });
+            states = ({
+                ({NEUTER, "Woelkchen", "Ein kleines Woelkchen", "Ein kleines Regenwoelkkchen gleitet durch den Raum.","Ein kleines Regenwoelkchen kondensiert im Raum.", ({"regenwolke", "wolke", "woelkchen", "regenwoelkchen"})}),
+                ({NEUTER, 0, "Ein dunkles Regenwoelkchen", 0, "Mehr und mehr kleine Woelkchen ballen sich zusammen.", 0}),
+                ({FEMALE, "Gewitterwolke", "Eine Gewitterwolke", "Eine Gewitterwolke haengt ueber dir.", "Die kleinen Woelkchen ballen sich zu einer Gewitterwolke zusammen.", ({"wolke", "gewitterwolke"})}),
+                ({FEMALE, 0, "Eine duestere Gewitterwolke schwebt ueber dir", 0, "Die einzelnen Wirbel der Gewitterwolke werden bedrohlich und duester.", 0}),
+                ({FEMALE, 0, 0, 0, "Immer mehr Blitze zucken krachend durch die Gewitterwolke.", 0}),
+                ({MALE, "Gewittersturm", "Ein Gewittersturm blitzt und donnert hier", "Einige Gewitterwolken haben sich hier zu einem echten Sturm zusammengebraut.","Mehrere Wolken wallen auf und bilden einen regelrechten Gewittersturm.", ({"sturm", "gewitter", "gewittersturm"})}),
+                ({MALE, 0, "Ein heftiger Gewittersturm tobt", 0, "Der Gewittersturm schwillt immer weiter an.", 0}),
+                ({MALE, 0, 0, 0, "Hell zucken immer mehr Blitze zu Boden und huellen alles in ein gespenstisches Licht.", 0}),
+                ({FEMALE, "Superzelle", "Eine hell blitzende Superzelle entlaedt sich um dich herum", "Eine hell blitzende Superzelle entlaedt sich um dich herum.", "Das Gewitter schwillt zu einer grossen Superzelle an, die rings um Blitze niedergehen laesst.", ({"gewitter", "zelle", "superzelle"})}),
+                ({FEMALE, 0, "Eine wild tobende Superzelle schleudert Blitz und Donner in alle Richtungen", 0, "Kraeftige Blitze donnern ringsum zu Boden. Die Superzelle nimmt gigantische Ausmasse an!", 0}),
+            });
+            break;
+        case BARD_GROUP_SARRIAN:
+            dam_types = ({ DT_ACID });
+            if(moreDamtypes) dam_types += ({ DT_POISON });
+            states = ({
+                ({FEMALE, "Saeuredaempfe", "Ein Hauch aetzender Daempfe kriecht ueber den Boden", "Gruenlich-gelbliche Saeuredaempfe wehen hier sanft durchscheinend ueber den Boden.","Gruen-gelbliche Daempfe beginnen aus dem Boden aufzusteigen", ({"hauch", "dampf", "daempfe", "saeuredeaempfe"})}),
+                ({FEMALE, 0, "Aetzende Daempfe wallen ueber den Boden", 0, "Immer mehr dicker, gruenlicher Dampf quillt aus dem Boden hervor.", 0}),
+                ({FEMALE, "Saeuregasfontaene", "Giftig-aetzendes Gas sprudelt hier in einer kleinen Fontaene aus dem Boden", "Gruenliches, aetzendes Gas sprudelt hier in einer Fontaene hervor und verteilt sich schwer ueber den Boden.", "Mit einem zischenden Geraeusche beginnt aetzendes Gas in einer kleinen Fontaene aus dem Boden zu sprudeln.", ({"fontaene", "saeurefontaene", "fontaene"})}),
+                ({FEMALE, 0, "Aetzendes Gas sprudelt hier in einer Fontaene aus dem Boden", 0, "Die Giftgasfontaene waechst weiter an.", 0}),
+                ({MALE, "Saeuregeysir", "Aetzendes Gas sprudelt hier geysirartig hervor", 0, "Die Giftfontaene schwillt zu einem Geysir an!", ({"geysir", "saeuregeysir"})}),
+                ({MALE, 0, "Aetzendes Gas sprudelt geysirartig aus mehreren Rissen im Boden hervor", "Aus mehreren Rissen im Boden sprudelt aetzendes Gas hervor.","Knirschend und Kackend bilden sich Risse im Boden, aus denen weiter aetzendes Gas stroemt.", ({"sturm", "gewitter", "gewittersturm"})}),
+                ({MALE, "Saeurenebel", "Aus einem grossen Loch im Boden speit Saeurenebel", "Ein gruenlich leuchtendes Loch im Boden speit einen unablaessigen Strom an Saeurenabel.", "Mit einem stoehnenden Krachen brechen die Risse im Boden ein und ein grosses Loch entsteht aus dem bestaendig Saeurenebel sprueht.", ({"loch", "nebel", "saeurenebel"})}),
+                ({MALE, 0, 0, 0, "Du vermeinst, dass sich in dem spruehenden Saeurenebel immer wieder graessliche Fratzen bilden", 0}),
+                ({FEMALE, "Saeurefratze", "Wiederwaertige, untote Saeurefratzen entsteigen einem gigantischen Geysir", "Aus einem gruenlich leuchtenden Loch im Boden sprudelt ein gewaltiger Sauregeysir, dem immer wieder Fratzen aus Saeurenebel entsteigen.", "Immer wieder entsteigen daemonische Saurefratzen dem Geysir und stroemen durch den Raum.", ({"gewitter", "zelle", "superzelle"})}),
+                ({FEMALE, "Saeuredaemon", "Ein untote Saeuredaemon entsteigt einem Loch im Boden", "Aus einem gruen leuchtenden Loch im Boden steigt ein Saeuredaemon mit wabernden Wolken aus purem Gift.", "Mit einem unheiligen Heulen entsteigt dem Loch im Boden ein verrottender Saeuredaemon!", 0}),
+            });
+            break;
+        case BARD_GROUP_TIRENA:
+            dam_types = ({ DT_FIRE, DT_LIGHT });
+            states = ({
+                ({MALE, "Lichtpunkt", "Ein kleiner Lichtpunkt schwebt hier", "Ein kleiner gelber Lichtpunkt schwebt etwa zwei Schritt ueber dem Boden.","Mit einem Zischen glimmt ein Lichtpunkt etwa zwei Schritt ueber dem Boden auf.", ({"punkt", "lichtpunkt"})}),
+                ({MALE, 0, "Ein faustgrosser Lichtpunkt schwebt hier", "Ein faustroter, gluehender Lichtpunkt schwebt etwa zwei Schritt ueber dem Boden.", "Pulsierend waechst der Lichtpunkt weiter an.", 0}),
+                ({MALE, "Feuerball", "Ein faustgrosser Feuerball brennt hier", "Dick wie Erbsensuppe erfuellt gruen-grauer Gruftnebel den Raum. Du erkennst undeutliche Schatten darin herumschleichen.", "Mit einem Knall explodiert der Lichtpunkt zu einem kleinen Feuerball.", ({"ball", "feuerball"})}),
+                ({MALE, 0, "Ein plusierender, heisser Feuerball schwebt hier", 0, "Der Feuerball beginnt weisslich-gelb zu gluehen und pulsiert im Takt der Musik.", 0}),
+                ({FEMALE, "Miniatursonne", "Eine Miniatursonne brennt mitten im Raum", "Etwa zwei Schritt ueber dem Boden schwebt eine gleissende Miniatursonne.", "Der Feuerball schwillt mit einem lauten Summen zu einer gleissenden Miniatursonne an.", ({"sonne", "miniatursonne"})}),
+                ({FEMALE, 0, "Eine gleissende Miniatursonne brennt mitten im Raum", 0, "Die Miniatursonne beginnt lodernd zu gleissen.", 0}),
+                ({FEMALE, 0, 0, 0, "Die Hitze der Miniatursonne nimmt immer mehr zu.", 0}),
+                ({FEMALE, 0, 0, 0, "Immer wieder loesen sich Lichtboegen und brennende Funkenstuerme aus der Sonne.", 0}),
+                ({FEMALE, "Sonne", "Eine kleine Sonne huellt deine Umgebung in Feuer und Hitze", "Eine kleine Sonne schwebt hier mitten im Raum. Sie huellt alles in beissende Hitze und gleissendes Licht.", "Die Miniatursonne schwillt weiter an bis sie alles um dich in Hitze huellt.", ({"sonne"})}),
+                ({MALE, "Sonnensturm", "Ein gluehender Sonnesturm fegt um dich herum", "Unzaehlige kleine Sonnenfunken zischen heiss brennend durch den Raum und umtanzen dich.", "Mit einem lauten Knall explodiert die Sonne. Ein Sonnensturm aus Milliarden von kleinen Funken huellt alles ein!", ({"sturm", "sonnensturm"})}),
+            });
+            break;
+        case HERO_XULGSCH:
+            dam_types = ({DT_UNHOLY, DT_TERROR});
+            states = ({
+                ({MALE, "Gruftnebel", "Gruftnebel wabert sachte ueber den Boden", "Sanft wabern einige Schwaden Gruftnebel ueber den Boden.","Sachte beginnt gruseliger Gruftnebel ueber den Boden zu wabern.", ({"nebel", "gruftnebel"})}),
+                ({MALE, 0, "Gruftnebel wallt ueber den Boden", "Immer wieder wallen Wolken aus grauem Gruftnebel ueber den Boden.", "Der Geruch von Moder und feuchter Graberde steigt auf.", 0}),
+                ({FEMALE, "Schatten", "Dicker Gruftnebel und undeutliche Schatten durchstreifen den Raum", "Dick wie Erbsensuppe erfuellt gruen-grauer Gruftnebel den Raum. Du erkennst undeutliche Schatten darin herumschleichen.", "Der Nebel wird immer dicker und huellt alles ein. Hungrige Schatten beginnen darin zu schleichen.", ({"schatten", "nebel", "gruftnebel"})}),
+                ({FEMALE, 0, "Unheimliche Schatten gleiten hungrig durm den Raum", 0, "Die Schatten im Nebel wachsen an und werden deutlicher erkennbar.", 0}),
+                ({MALE, 0,"Ein Schatten mit rotgluehenden Augen schleicht gierig herum", "Umgeben von Gruftnebel erkennst du deutlich eine schattenhafte Alptraumkreatur nach deinem Leben trachten.", "Einer der Schatten entsteigt nach Leben lechzend dem Gruftnebel", 0}),
+                ({FEMALE, 0, "In wallenden Gruftnebel gehuellt steht vor dir eine rotaeugige Schattenkreatur aus der Unterwelt.", 0, "Der Gruftnebel umwabert die Schattenkreatur, die immer deutlicher zu erkennen ist.", 0}),
+                ({FEMALE, 0, 0, 0, "Gierig geifernd fletscht der Schatten seine Spitzen Reisszaehne.", 0}),
+                ({FEMALE, 0, 0, 0, "Es scheint der geifernde Schatten entsteigt immer weiter deinen innersten Alptraeumen!", 0}),
+                ({MALE, "Vampirschatten", "Ein maechtiger Vampirschatten trinkt das Blut seiner Opfer", "Sicher zwei Schritt hoch erhebt sich der Schatten eines maechtigen Erzvampirs. Blutluestern giert er nach allem Leben.", "Der Schatten erhaelt mehr und mehr Substanz, bis du eine rot-gluehenden Augen und langen Fangzaehne erkennst.", ({"vampir", "vampirschatten"})}),
+                ({FEMALE, "Horde", "Eine Horde grauenhafter Vampirschatten rast knurrend um dich.", "Eine Unzahl an schattenhaften Vampiren heult und jault zaehnefletschend, auf der Suche nach Blut, um dich. Gierig stieren sie dich an!", "Mit Gebruell und Zischen entsteigen immer mehr vampirhafte Schatten dem unheimlichen Nebel!", ({"horde", "vampir", "vampire", "vampirschatten"})}),
+            });
+            break;
+        default:
+            raise_error(sprintf("Ungueltige Bardengruppe '%s", grp));
+            break;
+    }
+
+    damage = 0;
+    speed = 10 - (ability/3333) - (success/5000);
+    currentStage = 0;
+    lastIncrease = time();
+
+    duration = caster->QueryProp(P_LEVEL) / 5 +   // 8 - 20
+               ability/500 +                      // 6 - 20
+               random(success/1000) +             // 0 - 20
+               caster->QueryAttribute(A_DEX) / 2; // 10 - 20 = 24 - 80 sekunden
+    duration = modifyBySkillAttribute(duration, SA_DURATION);
+    duration = (int) (duration * factor);
+    endTime = time() + duration;
+
+    maxDamage = 200;
+    maxDamage = modifyBySkillAttribute(maxDamage, SA_DAMAGE);
+    maxDamage = (int) (maxDamage * factor);
+    if(TALENTMASTER->HasTalent(caster, TALENT_TAMBOURMAJOR)){
+        maxDamage = (int) (maxDamage * (1.0 + caster->QueryProp(P_BARD_INSPIRATION_LEVEL)/100));
+    }
+
+    SetProp(P_INVIS, 0);
+    changeStage(0);
+
+    if(caster->QueryProp(P_TESTPLAYER)) {
+        tell_object(caster, sprintf("%s :: duration=%d maxDamage=%d speed=%d dam_types=%O\n", songName, duration, maxDamage, speed, dam_types));
+    }
+
+   resetIds();
+
+    call_out("damage_tick", speed);
+
+    if(TALENTMASTER->HasTalent(caster, TALENT_LANDSTREICHER)) {
+        caster->AddPursuer(this_object());
+        tell_object(caster, BS(Name(WER) + " folgt dir jetzt!"));
+    }
+    return;
+}
+
+varargs public void ChangePower(int damageIncrease) {
+    int newStage;
+
+    damage += damageIncrease;
+
+    if(damage > maxDamage) damage = maxDamage;
+
+    if(caster->QueryProp(P_TESTPLAYER)) {
+        tell_object(caster, sprintf("room_damage :: ChangePower :: damageIncrease=%d damage =%d\n", damageIncrease, damage));
+    }
+
+    newStage = (int) (10*damage / maxDamage);
+    if(newStage != currentStage) {
+        changeStage(newStage);
+    }
+
+    if(damageIncrease > 0) {
+        lastIncrease = time();
+    }
+}
+
+public int isKillable(object ob) {
+    if(!objectp(caster)) return 0;
+    if(caster->QueryProp(P_NPC)) {
+        return member(caster->PresentEnemies(), ob) > -1;
+    }
+
+    return living(ob) && !ob->QueryProp(P_NOATTACK) && !ob->QueryProp(P_FRIEND) && !query_once_interactive(ob);
+}
+
+public void burn_victim(object target, int turns) {
+    if(!objectp(target)) return;
+    target->AddHp(-random(10));
+    if(--turns > 0) {
+        tell_room(environment(target), BS(target->Name(WER) + " steht in Flammen!"));
+        call_out("burn_victim", 0, target, turns);
+    } else {
+        tell_room(environment(target), BS(target->Name(WER) + " brennt nicht mehr."));
+    }
+    return;
+}
+
+private void applyCriticalHit(object target) {
+    int hitchance, roll;
+    object ob;
+
+    if(target->QueryProp("bard_last_critical") + 10 < time()) return;
+
+    hitchance = caster->QueryAttribute(A_DEX) - target->QueryAttribute(A_DEX)/3;
+    roll = random(100);
+    if(caster->QueryProp(P_TESTPLAYER)) {
+        tell_object(caster, sprintf("%s :: critical hit :: roll=%d chance=%d\n", songName, roll, hitchance));
+    }
+
+    if(roll > hitchance) return;
+
+    target->SetProp("bard_last_critical", time());
+
+    switch(grp) {
+        case BARD_GROUP_ALESTRA:
+            tell_room(environment(target), BS(target->Name(WER) + " wird von kalten Tentakeln umschlungen und festgehalten."), ({target}));
+            target->SetProp(P_DISABLE_ATTACK, (caster->QueryProp(P_BARD_INSPIRATION_LEVEL>4?2:1)));
+            break;
+        case BARD_GROUP_TIRENA:
+            tell_room(environment(target), BS(target->Name(WER) + " entzuendet sich mit einer Stichflamme!"), ({target}));
+            call_out("burn_victim", 0, target, caster->QueryProp(P_BARD_INSPIRATION_LEVEL));
+            break;
+        case BARD_GROUP_KORRIAX:
+            tell_room(environment(target), BS(target->Name(WER) + " wird von einem blendend hellen Blitz getroffen und faellt zu Boden."), ({target}));
+            target->SetProp(P_BLIND, 2+caster->QueryProp(P_BARD_INSPIRATION_LEVEL));
+            target->SetProp(P_LAST_RAMMEN_TIME, time());
+            break;
+        case BARD_GROUP_SARRIAN:
+            tell_room(environment(target), BS("Giftige Daempfe zersetzen " + target->Name(WEN) + " und dringen in " + target->QueryPossPronoun() + "en Koerper ein."), ({target}));
+            if(caster->QueryProp(P_NPC)) target->AddPoison(1);
+            else target->AddPoison(caster->QueryProp(P_BARD_INSPIRATION_LEVEL));
+            break;
+        case HERO_XULGSCH:
+            if(!objectp(ob=present("Leiche", ENV(TO)))) {
+                tell_object(caster, BS(Name(WER, 1) + " teilt einen grossen Teil der geraubten Lebenskraft mit dir!"));
+                tell_room(ENV(caster), BS(Name(WER, 1) + " teilt einen grossen Teil der geraubten Lebenskraft mit " + caster->name(WEM, 1) + "!"), ({caster}));
+                caster->AddHp(damage/10);
+                if(TALENTMASTER->HasTalent(caster, TALENT_HEILER)) {
+                    caster->AddHp(caster->QueryProp(P_BARD_INSPIRATION_LEVEL));
+                }
+            } else {
+                tell_room(ENV(TO), BS("Mit unheimlichem Stoehnen faehrt ein schattenhafter Geist in die Leiche ein!"));
+                ob = call_other("/spellbooks/nekro_spells", "CloneZombie", ob, caster, success);
+                caster->AddDefender(ob);
+                ob->SetMaster(caster);
+                summonedZombies += ({ ob });
+            }
+            break;
+        default:
+            raise_error(sprintf("illegal bard group: %s", grp));
+            break;
+    }
+    return;
+}
+
+public int isHealingTarget(object ob) {
+    return living(ob) && (interactive(ob) || ob->QueryProp(P_FRIEND));
+}
+
+private void healAllFor(int dmgDealt) {
+    object *targets;
+    int i, heal;
+
+    heal = (int) (dmgDealt * (caster->QueryProp(P_BARD_INSPIRATION_LEVEL)/100.0));
+    if(heal < 1) return;
+
+    targets = findTargets("isHealingTarget", 1, environment(this_object()));
+    for(i=0; i<sizeof(targets); ++i) {
+        if(targets[i] != caster) {
+            tell_object(targets[i], BS("Die Magie des Liedes von " + caster->Name(WEM) + " heilt dich!"));
+        } else {
+            tell_object(targets[i], BS("Die Magie des deines Liedes heilt dich!"));
+        }
+        targets[i]->AddHp(heal);
+    }
+}
+
+public int remove(int silent) {
+    int i;
+    if(sizeof(summonedZombies) > 0) {
+        for(i=0; i<sizeof(summonedZombies); ++i) {
+            if(objectp(summonedZombies[i])) summonedZombies[i]->die();
+        }
+    }
+    return ::remove(silent);
+}
+
+public void timeout() {
+    tell_room(environment(this_object()), BS(Name(WER) + " loest sich in Luft auf."));
+    if(objectp(caster)) caster->SetProp(P_BARD_ROOM_DAMAGE, 0);
+    remove(1);
+    return;
+}
+
+public void damage_tick() {
+    object *targets;
+    int i, dam, damageDealt;
+
+    if(!objectp(caster)) {
+        timeout();
+        return;
+    }
+
+    damageDealt = 0;
+    targets = findTargets("isKillable", 1 + (success/5000), environment(this_object()));
+    for(i=0; i<sizeof(targets); ++i) {
+        if(!objectp(targets[i])) continue;
+
+        dam = damage/2 + modifyBySkillAttribute(random(damage/2), SA_DAMAGE);
+        if(TALENTMASTER->HasTalent(caster, TALENT_TAMBOURMAJOR)){
+            dam = (int) (dam * (1.0 + caster->QueryProp(P_BARD_INSPIRATION_LEVEL)/100));
+        }
+
+        if(caster->QueryProp(P_TESTPLAYER) || caster->QueryProp(P_NPC)) {
+            tell_object(caster, sprintf("%s :: combat tick :: enemy=%O damage=%d\n", songName, targets[i], dam));
+        }
+
+        damageDealt += targets[i]->Defend(dam, dam_types, ([SP_NAME: songName, SP_SHOW_DAMAGE: 1, SP_NO_ENEMY: 1]), this_object());
+        applyCriticalHit(targets[i]);
+
+        if(member(regEnemies, targets[i]) < 0) {
+            targets[i]->Kill(caster);
+            regEnemies += ({targets[i]});
+            if(caster->QueryProp(P_TESTPLAYER)) {
+                tell_object(caster, sprintf("%s :: added enemy:: enemy=%O regEnemies=%O\n", songName, targets[i], regEnemies));
+            }
+        }
+    }
+
+    if(TALENTMASTER->HasTalent(caster, TALENT_HEILER)) {
+        healAllFor(damageDealt);
+    }
+
+    if(lowerstring(songName) == "fest der schatten" && damageDealt/10 > 0) {
+        tell_object(caster, BS("Gierig saugst du etwas von der vergossenen Lebensenergie deiner Feinde auf!"));
+        tell_room(ENV(caster), BS(caster->Name(WER, 1) + " saugt gierig etwas von der vergossene Lebenskraft auf!"), ({caster}));
+        caster->AddHp(damageDealt/10);
+    }
+
+    if(time()+speed > endTime) {
+       timeout();
+    } else {
+        call_out("damage_tick", speed);
+    }
+}
+
+public mapping QueryState() {
+    return ([
+        "caster": caster,
+        "ability": ability,
+        "success": success,
+        "states": states,
+        "currentState": currentStage,
+        "duration": duration,
+        "maxDamage": maxDamage,
+        "damage": damage,
+        "dam_types": dam_types
+    ]);
+}

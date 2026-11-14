@@ -1,0 +1,158 @@
+
+inherit "std/armour";
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <new_skills.h>
+#include <defines.h>
+#include <moredef.h>
+#include "../paladin.h"
+#include "../blessing.h"
+
+nosave object traeger;
+nosave object caster;
+nosave string armour;
+nosave int value, set;
+nosave int blessed;
+
+create() {
+  if( !is_clone(TO) ) return;
+  ::create();
+  set=0;
+  SetProp(P_SHORT, 0);
+  SetProp(P_INVIS, 1);
+  SetProp(P_NAME, 0);
+  SetProp(P_ARMOUR_TYPE, AT_MISC);
+  SetProp(P_AC, 0);
+  SetProp(P_WEIGHT, 0);  
+  SetProp(P_VALUE, 1);
+  SetProp(P_NOBUY, 1); 
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NOSELL, "Den kannst Du nicht verkaufen!\n");
+  SetProp(P_WEAR_FUNC, TO );
+  AddId(({PALADINITEM, "\nruestungssegen"}));
+  if(getuid(previous_object())!="GUILD.pal_spells") {
+   call_out("remove", 1);
+   return 0;
+  }
+  SUID;
+}
+
+nomask query_prevent_shadow() { return 1; }
+
+int SetVariables(object caster1, object armour1, int time, int ac) {
+  if(set) {
+   write_paladin_log("segen", sprintf("RS, cst: %O, TP: %O, PO: %O, "
+       +"Var:({%d %d}), Cloner: \n", caster, TP, previous_object(), time, ac, 
+       ME->QueryProp(P_CLONER)));
+   call_out("remove", 0);
+   return 0;
+  }
+  caster=caster1;
+  armour=file_name(armour1);
+  value=ac;
+
+  armour1->SetProp(P_DEFEND_FUNC, TO);
+  //armour->Set(P_AC, symbol_function("ac_change", TO), F_QUERY_METHOD);
+  armour1->Set(P_NOBUY, symbol_function("ac_change", TO), F_QUERY_METHOD);
+  if(armour1->QueryProp(P_ARMOUR_TYPE) == AT_SHIELD)
+    armour1->Set(P_PALADIN_SCHILDPARADE_AC, symbol_function("schildparade_change", TO),
+        F_QUERY_METHOD);
+  call_out("remove", time);
+  set=1;
+
+  if(HAS_BLESSING(caster, BLESSING_HOLY_ARMOUR)) {
+    blessed = 1;
+  } else {
+    blessed = 0;
+  }
+
+  return 1;
+}
+
+mixed QueryVariables() {
+  return ({caster, armour, value});
+}
+
+int DefendFunc(mixed dam_type, int spell, object enemy) {
+  object arm;
+  int holyBurn;
+
+  if(!objectp(caster)) return 0;
+  if(!arm=find_object(armour)) {
+    armour=0;
+    call_out("remove", 0);
+    return 0;
+  }
+  if(!intp(value)) return 0;
+  if(!find_player(getuid(caster))) {
+    call_out("remove", 1);
+    return 0;
+  }
+  traeger=arm->QueryProp(P_WORN);
+  if(!objectp(traeger)) return 0;
+
+  if(blessed && enemy->QueryProp(P_ALIGN) < 0 && !random(19-caster->QueryProp(P_GUILD_LEVEL))) {
+    holyBurn = 50 + random(caster->QueryProp(P_GUILD_LEVEL)) * 10;
+    holyBurn -= random(enemy->QueryProp(P_ALIGN)/20);
+    if(enemy->QueryProp(P_WEAPON) == 0) {
+      holyBurn += random(50);
+    }
+    tell_room(ENV(enemy), BS(enemy->Name(WER) + " verbrennt sich an der heiligen Ruestung von " + caster->name(WEM, 1)+"."), ({traeger}));
+    tell_object(traeger, BS(enemy->Name(WER) + " verbrennt sich an deiner heiligen Ruestung."));
+    enemy->Defend(holyBurn, DT_HOLY, ([SP_NAME: "Geweihte Ruestung", SP_SHOW_DAMAGE: 1, SP_PHYSICAL_ATTACK: 1, SP_RECURSIVE: 1]), traeger);
+  }
+
+  if ((member(dam_type, DT_UNHOLY) != -1) ||
+      (member(dam_type, DT_TERROR) != -1) ||
+      (member(dam_type, DT_POISON) != -1))
+  {
+    tell_object (traeger, BS("Deine gesegnete Ruestung faengt einen Teil "
+        +"des Schadens ab.\n"));
+    return random(25)+value;
+  }
+  return random(5)+5+value;
+}
+
+remove() {
+  object arm;
+  if(armour) {
+    if(arm=find_object(armour)) {
+      if(ENV(arm)) traeger=ENV(arm);
+      if(objectp(caster) && find_player(getuid(caster))) 
+        tell_object(caster, BS(sprintf("Der Ruestungssegen erlischt!\n"))); 
+      if(objectp(traeger) && caster!=traeger) 
+        tell_object(traeger, BS(sprintf("Der Ruestungssegen erlischt!\n")));
+      arm->SetProp(P_DEFEND_FUNC, 0);
+      arm->Set(P_NOBUY, 0, F_QUERY_METHOD);
+      arm->Set(P_PALADIN_SCHILDPARADE_AC, 0, F_QUERY_METHOD);
+    }
+  }
+  while(remove_call_out("remove")!=-1);
+  ::remove();
+}
+
+init() {
+ ::init();
+ if(!living(ENV(ME)))
+   call_out("remove", 0);
+}
+
+reset() {
+  ::reset();
+  if (is_clone(TO)) call_out("remove", 0);
+}
+/*
+BecomesNetDead(object wer) {
+  call_out("remove", 0);
+}
+*/
+
+int WearFunc(object me) {
+  return 0;
+}
+
+int schildparade_change() {
+  return value;
+}

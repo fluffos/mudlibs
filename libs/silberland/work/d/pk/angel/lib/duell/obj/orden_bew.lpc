@@ -1,0 +1,2650 @@
+/******************************************************************************
+ * Duell System fuer den Ehrenbuerger-Orden und die NPCs in der Stadt der Ehre
+ * 
+ * Orden der Bewaehrung (also hat nicht volle Funktionalitaet!)
+ *
+ * Datei: orden_bew.c
+ * Autor: Angel (avs@sbox.tu-graz.ac.at)
+ */
+/******************************************************************************
+* Revisions:
+*******************************************************************************
+* Revision 1.5: Auskommentierung saemtlicher XP-Veraenderungen bei Spielern
+*               aufgrund von Bugs - 01.04.2004 by Malar
+*
+* Revision 1.4: Splitten der Ankopplung zum Rating-System wegen EvalCost
+* (28.12.2002)  
+*               
+* Revision 1.3: Einfuehrung von duell_opponent fuer das Duell, da 
+*               challenge_opponent zu Verwirrungen fuehrte.
+*
+* Revision 1.2: Umstellung des bounty-systems auf die Wahl von einem Item.
+*
+* Revision 1.1: Umstellung es Duell-Systems von "client-server" auf "peer-peer"
+*               -> Die Aktionen laufen nicht mehr nur ueber den Orden des 
+*                 Herausforderers.
+*
+* Revision 1.0: Umstellung der Dateistruktur, Auslagerungen der #define in 
+*               duell.h
+******************************************************************************/
+
+
+inherit "/std/armour";
+inherit "/std/container/description";
+
+#define NEED_PROTOTYPES_ALL       // Alle Prototypen laden!
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <new_skills.h>
+#include <moving.h>
+#include <defines.h>
+#include <ansi.h>
+#include "/secure/wizlevels.h"
+#include "../headers/duell.h"
+#include "./def.h"
+
+init ()
+{
+  ::init();
+  
+  add_action("attempt_wear", "zieh");
+  add_action("attempt_wear", "ziehe");
+  add_action("attempt_kill", "toete");
+  add_action("request_end", "beende");
+  add_action("request_end", "abbruch");
+  add_action("confirm_end", "ok");
+  add_action("wear", "stecke");
+  add_action("wear", "steck");
+  add_action("put_off", "nimm");
+  add_action("put_off", "nehme");
+  add_action("show_commands", "kommandos");
+  add_action("reset_orden", "reset");  
+  add_action("report", "sekundant");
+  add_action("prevent_flee", "ende");
+  add_action("prevent_flee", "disconnect");
+  add_action("prevent_flee", "schlafe");
+  add_action("prevent_flee", "schlaf");
+  add_action("prevent_flee", "quit");
+  add_action("prevent_transfer", "verkauf");
+  add_action("prevent_transfer", "verkaufe");
+  add_action("prevent_transfer", "gib");
+  add_action("prevent_transfer", "gebe");
+  add_action("prevent_transfer", "leg");
+  add_action("prevent_transfer", "lege");
+  add_action("prevent_transfer", "wirf");
+  add_action("prevent_transfer", "werfe");
+  add_action("surrender", "aufgabe");
+  add_action("surrender", "kapitulation");
+  add_action("collect_bounty","waehle");
+  add_action("illegal_command", "turran");
+}
+
+create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+  SetProp(P_SHORT,"Ein Orden der Bewaehrung");
+  SetProp(P_LONG, break_string("Du siehst den Orden der Bewaehrung, den Du vom Arenaleiter "+
+  "der Arena in Neutijara auf Probe bekommen hast. Solltest Du gefallen an ihm gefunden haben "+
+  "so ueberlege es Dir besser zweimal bevor Du eine Dummheit begehst, die Dir den Orden kosten koennte!\n",78,0, BS_LEAVE_MY_LFS));
+  SetProp(P_INFO, break_string("Mit <kommandos> erhaeltst Du die Liste der verfuegbaren Befehle, die Dein Orden versteht. "+
+                               "Duelle sind mit dem Orden der Bewaehrung nur unter Aufsicht eines Arenaleiters moeglich!", 78, 0));
+  AddId( ({"orden","DuellItem"}) );
+  SetProp(P_NAME, "Orden der Bewaehrung");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_VALUE, 0);
+  SetProp(P_WEIGHT, 50);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_ARMOUR_TYPE, AT_MISC);
+  SetProp(P_MATERIAL, ([MAT_MAGIC:100]));
+  SetProp(P_AC, 0);
+  SetProp(P_DEFEND_FUNC, this_object());
+  seteuid(getuid());
+     
+  MayGet = 1;  // Nach dem clonen darf das objekt einmal mit M_GET weitergegeben werden.
+
+}
+
+// Hier wird der Orden zurueckgesetzt sofern wir kein Duell laufen haben.
+reset ()
+{
+  object orden, server;
+
+  ::reset();
+
+  if(!is_clone(this_object()))  { return;  }
+  //bugfix by dante da BP selten ein env hat:-))
+
+  // Sofern wir kein Duell geplant bzw. laufen haben setzen wir die Werte zurueck:
+
+  if ( ( is_registered(environment( this_object() )) 
+         && is_registered(get_duell_opponent()) )
+         || (check_duell() == 1) )
+     return;
+     
+  set_challenge_opponent (0);
+  set_duell_opponent (0);
+  set_challenger (0);
+  set_challenge_time (0);
+  set_wish_for_break_off (0);
+}
+
+void fail_safe()
+{
+   mixed enemies;
+   int time_index, hunting_time;
+   
+   // Sollten wir kein Duell laufen haben, brechen wir ab!
+   if ( check_duell() != 1)
+      return;
+   
+   // Sollten die Duellgegner nicht mehr agressiv sein -> Abbruch!
+   enemies = environment(this_object())->QueryEnemies();
+   time_index = member (enemies[0], get_duell_opponent());
+   if ( time_index != -1)
+      hunting_time = enemies[1][time_index];
+   else
+   {
+     enemies = get_duell_opponent()->QueryEnemies ();
+     time_index = member (enemies[0], environment(this_object()) );
+     if ( time_index != -1)
+        hunting_time = enemies[1][time_index];
+     else
+     {
+        break_off_duell(0);
+        return 0; // <- abbruch!
+     }
+   }
+   // Ist die Zeit abgelaufen? -> Abbruch!
+   if (hunting_time <= 0)
+   {
+      break_off_duell(0);
+      return;
+   }
+   call_out ("fail_safe", 2); // call_out loop
+}
+
+// Da es sich schon mal gespiesst hat mit dem remove/destruct, sehen wir zu, dass
+// der Orden abgenommen wird vor dem remove.
+varargs int remove(int silent)
+{
+   do_unwear("DuellItem", 1); 
+   return (::remove(silent)); 
+}
+
+// Move wurde ueberschrieben um zu verhindern, dass man den Orden nehmen kann.
+varargs int move(mixed dest, int method, string dir, string textout, string textin)
+{
+  object destination;
+  
+  if (!objectp(dest))
+     destination = find_living(dest);
+  else
+     destination = dest;
+
+  if ((method == M_GET)&&(!MayGet))
+  {
+     tell_object(this_player(), break_string("Bei Deiner Beruehrung beginnt der Orden "+
+         "der Bewaehrung hell zu gluehen und verbrennt! Du ziehst Dir schlimme Verbrennungen zu!"));
+
+     tell_room(environment(this_player()), break_string("Als "+this_player()->name(WER)+
+                          " den Orden der Bewaehrung nimmt, beginnt dieser hell zu gluehen und verbrennt! "+
+                          this_player()->name(WER)+" zieht sich schlimme Verbrennungen zu!"), ({this_player()}));
+     // Das tut weh, aber bringt niemanden um:
+     this_player()->AddHp ( negate ( random (10) ) - 10 );
+
+     call_out ("remove",1);
+
+     return 1;
+  }
+  else 
+  {
+    if (objectp(destination))
+    if (present("DuellItem", destination))
+    {
+       tell_object(destination, "Ein Orden ist Chance genug seine Ehre unter Beweis zu stellen!\n");
+       remove ();
+       return 0;
+    }
+
+    MayGet = 0; // Nun das Objekt wird uebergeben - ab jetzt kein M_GET mehr!
+    return(::move(dest, method, dir, textout, textin));
+  }
+}
+
+// Duellstatus:
+// Beide Gegner sind fuer ein Duell registriert -> Arenaduell in Vorbereitung
+// check_duell -> klar
+
+// Timeout fuer das Duell
+void duell_timeout ()
+{
+  object server;
+  // Sofern kein Duell laeuft ...
+  // check_duell "bereinigt" alle nicht beendeten Duelle.
+  // -> Ist das Duell aus, aber der Orden nicht zurueckgesetzt
+  //    holt check_duell das nach.
+  if ( ( is_registered(environment( this_object() )) 
+         && is_registered(get_duell_opponent()) )
+         || (check_duell() == 1) )
+       check_duell(); // Das das if u.U. nicht mehr zum check_duell gekommen ist pruefen wir nochmal
+
+    // Scheint sinnlos, aber wie es aussieht verschwinden Orden in der Funktion ...
+    if (!objectp(this_object()))
+       return;
+       
+    if (environment(this_object()) && is_registered(environment(this_object())))
+    {
+      catch(call_other(OBJ "coordinator", "???", 0));
+      server = find_object ( OBJ "coordinator" );
+      server->set_arena_registration (0);
+      server->set_partner (0);
+      server->set_challenger (0);
+    }
+}
+
+// Wir teilen dem Duell Koordinator mit, dass wir fertig sind!
+void notify_coordinator()
+{
+  object server;
+  if (is_registered(environment(this_object())))
+  {
+    catch(call_other(OBJ "coordinator", "???", 0));
+    server = find_object ( OBJ "coordinator" );
+    server->set_arena_registration (0);
+    server->set_partner (0);
+    server->set_challenger (0);
+  }
+}
+
+// Fuer die schlauen Spieler die sich "verzupf'n" wollen
+int prevent_flee()
+{
+   if (check_duell() == 1) 
+   {
+      write(break_string("Du verstehst sicher, dass"+
+            " ich das waehrend eines Duells nicht zulassen kann! "+
+            "Beende das Duell oder gib auf!\n", 78, 0, BS_LEAVE_MY_LFS));
+      return 1;
+   }
+   return 0;
+}
+
+// Fuer illegale waffen/specials
+int illegal_command()
+{
+   if (check_duell() == 1) 
+   {
+      write(break_string("Du verstehst sicher, dass"+
+            " ich das waehrend eines Duells nicht zulassen kann! "+
+            "Beende das Duell oder gib auf!\n", 78, 0, BS_LEAVE_MY_LFS));
+      return 1;
+   }
+   return 0;
+}
+
+// Fuer die schlauen Spieler die meinen: bevor ich es hergeben muss ...
+int prevent_transfer()
+{
+  mixed res;
+
+   // Pruefung ob wir und im Duell befinden:
+   if (check_duell() == 1)
+   {
+      write(break_string("Du verstehst sicher, dass"+
+            " ich das waehrend eines Duells nicht zulassen kann! "+
+            "Beende das Duell oder gib auf!\n", 78, "Dein Orden teilt Dir mit: "
+            , BS_LEAVE_MY_LFS));
+      return 1;
+   }
+
+  // Pruefung ob evtl. die Auswahl Zeit noch aktuell ist.
+  if (res=environment(this_object())->get_duell_results())
+  {
+    if ( pointerp(res) && sizeof(res) >= 3
+         && objectp(res[0]) && objectp(res[1])
+         && intp(res[2]) && time() < res[2] )
+       {
+         write (break_string("Warte noch bis der Gewinner gewaehlt hat!\n",
+               78, "Dein Orden teilt Dir mit: "));
+         return 1;
+       }
+   }
+
+   return 0;
+}
+
+// Nimmt Verbindung zum Duell Koordinator auf (sofern wir uns in der Arena befinden!)
+void duell_broadcast ()
+{
+  mixed test;
+  object server;
+
+  // Kein Duell, keine Meldung!
+  if (!(check_duell() == 1))
+     return;
+    
+  // Sind wir auf dem Kampfplatz?
+  if (test = regexp( ({file_name(environment(this_player()))}) ,
+      ROOM "battle_field_" ))
+     if (!sizeof(test))
+     {
+       return;
+     }
+  catch(call_other(OBJ "coordinator", "???", 0));
+  if (objectp(server = find_object( OBJ "coordinator")))
+     server->receive_duell_news (({ environment(this_object()), get_challenger(), get_duell_opponent()}));
+}
+
+int DefendFunc(string *dtyp, mixed spell, object enemy)
+{
+  int hunting_time, time_index;
+  mixed enemies;
+  mixed res, farben;
+  object orden;
+  
+  // Zeigen wir der Aussenwelt wie es um uns steht!
+  duell_broadcast();
+
+  // Handelt es sich beim Angreifer um den Duell Gegner oder sein Pet?
+  // -> Wenn nicht Duell abbrechen!
+  if (enemy != get_duell_opponent())
+  {  
+     if (objectp(get_duell_opponent()))
+     {
+        // jetzt schauen wir mal ob es ein Pet ist!
+        if (is_element (get_duell_opponent()->QueryPursuers(), enemy))
+        {
+           // Dann haben wir es mit einem Pet des Duellanten zu tun!
+           // Gleich mal einen saftigen Ruestungsschutz aufbauen!
+           return P_MODIFY_SUMMONED_DAMAGE;
+        }
+        else
+        {
+           // Koennte grad noch ein Item sein welches zuhaut:
+           if (enemy->id("DuellAllowed"))
+              return 0; 
+
+           // In diesem Fall Duell abbrechen!    
+        
+           switch (environment(this_object())->QueryProp(P_TTY))
+           {
+             case "ansi": farben=({ANSI_RED+ANSI_BOLD+ANSI_BLINK, 
+             ANSI_NORMAL, ANSI_RED+ANSI_BOLD, ANSI_NORMAL}); break;
+             case "vt100": farben=({ANSI_BOLD+ANSI_BLINK, ANSI_NORMAL, 
+             ANSI_BOLD, ANSI_NORMAL}); break;
+             default: farben=({"", "", "", "" }); break;
+           }
+        
+           tell_object(environment(this_object()), break_string(sprintf(
+           "%sDu wirst von%s %s"+enemy->name(WEM,0)+"%s %sangegriffen!%s\n",
+           farben[2], farben[3], farben[0], farben[1], farben[2], farben[3]),78,0));
+
+           switch (get_duell_opponent()->QueryProp(P_TTY))
+           {
+             case "ansi": farben=({ANSI_RED+ANSI_BOLD+ANSI_BLINK, 
+             ANSI_NORMAL, ANSI_RED+ANSI_BOLD, ANSI_NORMAL}); break;
+             case "vt100": farben=({ANSI_BOLD+ANSI_BLINK, ANSI_NORMAL, 
+             ANSI_BOLD, ANSI_NORMAL}); break;
+             default: farben=({"", "", "", "" }); break;
+           }
+           
+           tell_object(get_duell_opponent(), 
+           break_string( "%s"+sprintf(environment(this_object())->name(WER,0)+
+           " wird von%s %s"+enemy->name(WEM,0)+"%s %sangegriffen!%s\n",
+           farben[2], farben[3], farben[0], farben[1], farben[2], farben[3]),78,0));
+
+           tell_room(environment(environment(this_object())),
+           break_string(environment(this_object())->name(WER,0)+
+           " wird von "+enemy->name(WEM,0)+" angegriffen!\n",78,0),
+           ({environment(this_object()), get_duell_opponent()}));
+
+           this_object()->break_off_duell(0); // Duell abbrechen mit Meldung.
+        }
+     }
+     else
+     {
+        // Keine Sorge, wir bestreiten kein Duell!
+     }
+  }
+  else
+  {
+     // Der Duellgegner hat uns angegriffen.
+
+     // Pruefen wir ob der Die-Hook stabil ist:
+     if (res=environment(this_object())->QueryProp(P_TMP_DIE_HOOK))
+     {
+        if ( pointerp(res) && sizeof(res) >= 3
+        && intp(res[0]) && time() < res[0]
+           && objectp(res[1]) && stringp(res[2]) )
+        {
+           // In diesem Fall ist der Schutz (theoretisch) vorbei bevor
+           // das Duell aus ist (die Gegner hoeren nach 10 min mit der
+           // Jagd auf). (Es wird auch duell_timeout() erneuert.)
+           if (((time()+P_REFRESH_TIME) > res[0]))
+           {
+              enemies = environment( this_object() )->QueryEnemies ();
+              time_index = member ( enemies[0], get_duell_opponent() );
+              if ( time_index != -1 )
+                 hunting_time = enemies[1][time_index];
+              else
+              {
+              	 enemies = get_duell_opponent()->QueryEnemies ();
+                 time_index = member ( enemies[0], environment( this_object() ) );
+                 if ( time_index != -1)
+                    hunting_time = enemies[1][time_index];
+                 else
+                    break_off_duell(0); // <- Das passiert zwar eh nicht 
+                                        // (in der DefendFunc, aber was solls :-)
+              }
+              // Mal sehen ob es sich um ein Duell auf Leben und Tod handelt:
+              if (!fatality_mode)
+              {           	
+                 // Wir erneuern den Schutz auf die festgestellte hunting_time. 
+                 save_life(environment(this_object()), hunting_time);
+                 save_life(get_duell_opponent(), hunting_time);
+                 remove_call_out("duell_timeout");
+                 call_out("duell_timeout", hunting_time);
+              }
+              else
+              {           	
+                 // Wir erneuern die Dauer auf die festgestellte hunting_time. 
+                 no_save_life(environment(this_object()), hunting_time);
+                 no_save_life(get_duell_opponent(), hunting_time);
+                 remove_call_out("duell_timeout");
+                 call_out("duell_timeout", hunting_time);
+              }              
+           }
+        }
+     }
+     // Fuer beide Modi:
+  }
+  // Fuer beide Modi:
+  // Kein Hook gesetzt?! -> Na dann aber raus hier!
+  if (!(check_duell() == 1))
+  {
+     notify_coordinator();
+     break_off_duell(0);
+  }
+
+  return 0; 
+}
+
+
+// Funktion zum verzoegerten Duellstart
+void initiate_battle ()
+{
+   object server;
+
+   if (!(fatality_mode))
+   {
+     if ( !objectp(duell_opponent) )
+        return;
+        
+     // Verhinderung von Todesfaellen bei uns.
+     save_life (environment(this_object()), P_DUELL_DURATION);
+
+     // Verhinderung von Todesfällen beim Gegner.
+     save_life (duell_opponent, P_DUELL_DURATION);
+  }
+  else
+  {
+     if ( !objectp(duell_opponent) )
+        return;
+        
+     // Ruecksetzen der Werte nach dem Duell.
+     no_save_life (environment(this_object()), P_DUELL_DURATION);
+
+     // Ruecksetzen der Werte nach dem Duell.
+     no_save_life (duell_opponent, P_DUELL_DURATION);
+  }
+
+  // Teilt den Schaulustigen mit, dass es etwas zu sehen gibt:
+  catch(call_other(OBJ "coordinator", "???", 0));
+  server = find_object(OBJ "coordinator");
+  if (objectp(server))
+     server->notify_visitors ();  
+     
+  // Kampfbeginn
+  if (fatality_mode)
+  {
+     tell_room (environment(this_player()),
+     "\nDas Duell auf Leben und Tod beginnt!\n"+
+     "Moegen euch die Goetter beistehen!\n\n");
+  }
+  else
+  {
+     tell_room (environment(this_player()),"\nDas Duell beginnt!\n"+
+        "Moege der Bessere gewinnen!\n\n");
+  }
+
+   // Angriff mit Duellsystem: Kein PK wird gesetzt.
+   // environment(this_object())->Kill(get_duell_opponent(),1);
+   environment(this_object())->Kill(get_duell_opponent());  // SL-Arena!!!
+   fail_safe(); // Wir starten unsere Ansicherung
+}
+
+// Zeigt Hilfe an
+int show_commands (string args)
+{  
+   this_player()->More(read_file(LIB_DUELL "obj/commands"));
+   return 1;
+}
+
+int attempt_wear (string args)
+{
+  string test1, test2;
+  
+  if (!stringp(args))
+    return 0;
+
+  if (sscanf(args, "orden%s an%s", test1, test2) == 2)
+  { 
+     tell_object (this_player(), "Hmmm versuch es mal mit anstecken ...\n");
+
+     if(this_player()->QueryProp(P_GENDER) == FEMALE)
+     {
+       tell_room(environment(this_player()), 
+          break_string(this_player()->name(WER,0)+
+          " versucht erfolglos ihren Orden der Bewaehrung anzuziehen.\n"+
+          "Wie soll das auch gehen?\n",78), ({this_player()}));
+     }
+     else
+     {
+       tell_room(environment(this_player()), 
+          break_string(this_player()->name(WER,0)+
+          " versucht erfolglos seinen Orden der Bewaehrung anzuziehen.\n"+
+          "Wie soll das auch gehen?\n",78), ({this_player()}));
+     }
+     return 1;
+  }
+
+  if (sscanf(args, "orden%s aus%s", test1, test2) == 2)
+  {
+     tell_object (this_player(), "Hmmm versuch es mal mit abnehmen ...\n");
+
+     if(this_player()->QueryProp(P_GENDER) == FEMALE)
+     {
+       tell_room(environment(this_player()), 
+          break_string(this_player()->name(WER,0)+
+          " versucht erfolglos ihren Orden der Bewaehrung auszuziehen.\n"+
+          "Wie soll das auch gehen?\n",78), ({this_player()}));
+     }
+     else
+     {
+       tell_room(environment(this_player()), 
+          break_string(this_player()->name(WER,0)+
+          " versucht erfolglos seinen Orden der Bewaehrung auszuziehen.\n"+
+          "Wie soll das auch gehen?\n",78), ({this_player()}));
+     }
+     return 1;
+  }
+
+ return 0;
+}
+
+// An- bzw. ausziehen ist ja nicht moeglich mit einem Orden - darum stecken wir ihn an:
+int wear (string args)
+{
+  string test1, test2;
+
+  if (!stringp(args))
+    return 0;
+ 
+  if (sscanf(args, "orden%s an%s", test1, test2) != 2)
+  {
+    return 0;
+  }
+  else 
+  {
+     // Stecke Orden an.
+     if (!do_wear ("DuellItem", 1))
+     {
+        if(environment() != this_player())
+        {
+          tell_object(this_player(),"Du musst " + this_object()->name(WEN,1) + " erst nehmen!\n");  
+          return 1;
+        }
+
+        if(QueryProp(P_WORN))
+        {
+          tell_object(this_player(),"Du traegst " + this_object()->name(WEN,1) + " bereits.\n");
+          return 1;
+        }
+     }
+ 
+     tell_object(this_player(), "Du steckst Dir stolz Deinen Orden der Bewaehrung an.\n");
+
+     if(this_player()->QueryProp(P_GENDER) == FEMALE)
+     {
+       tell_room(environment(this_player()), break_string(this_player()->name(WER,0)+
+          " steckt sich stolz ihren Orden der Bewaehrung an.\n",78), ({this_player()}));
+     }
+     else
+     {
+       tell_room(environment(this_player()), break_string(this_player()->name(WER)+
+          " steckt sich stolz seinen Orden der Bewaehrung an.\n",78), ({this_player()}));
+     }
+
+     return 1;
+  }
+}
+
+// An- bzw. ausziehen ist ja nicht moeglich mit einem Orden - darum nehmen wir ihn ab:
+int put_off (string args)
+{
+  string test1, test2;
+
+  if (!stringp(args))
+    return 0;
+
+  if (sscanf(args, "orden%s ab%s", test1, test2) != 2)
+  {
+    return 0;
+  }
+  else
+  {
+     // Hat ein Duell begonnen, koennen wir den Orden nicht mehr abnehmen:  	
+     if (check_duell() == 1)
+     {
+        tell_object(this_player(),"Das ist im Kampf nicht moeglich!\n");
+        return 1;
+     }
+     // Ist ein Duell in Vorbereitung sollte das Abnehmen auch verhindet werden:
+     if ( objectp(get_duell_opponent() ) )
+     {
+        tell_object(this_player(),"Das ist erst nach dem Duell wieder moeglich!\n");
+        return 1;     	
+     }
+          
+     // Nimm Orden ab.
+     if (!do_unwear ("DuellItem", 1))
+     { 
+        if(environment() != this_player())
+        {
+          tell_object(this_player(),"Dazu muesstest Du " + this_object()->name(WEN,1) + " erst nehmen!\n");        
+          return 1;
+        }
+ 
+        if(!QueryProp(P_WORN))
+        {
+          tell_object(this_player(),
+            "Du traegst " + this_object()->name(WEN,1) + " doch gar nicht!\n");
+          return 1;
+        }
+     }
+
+     tell_object(this_player(), "Du nimmst Deinen Orden der Bewaehrung ab.\n");
+
+     if(this_player()->QueryProp(P_GENDER) == FEMALE)
+     {
+       tell_room(environment(this_player()), break_string(this_player()->name(WER,0)+
+          " nimmt ihren Orden der Bewaehrung ab.\n",78), ({this_player()}));
+     }
+     else
+     {
+       tell_room(environment(this_player()), break_string(this_player()->name(WER,0)+
+          " nimmt seinen Orden der Bewaehrung ab.\n",78), ({this_player()}));
+     }
+     return 1;
+  }
+}
+
+// Wärend eines Duells dürfen die Gegner niemanden angreifen!
+int attempt_kill(string args)
+{
+  
+  // Pruefung ob wir ein Geist sind ...  
+  if (this_player()->QueryProp(P_GHOST))
+  {
+     notify_fail("Du bist etwas zu durchsichtig als Geist ...\n");
+     return 0;
+  } 
+ 
+  // Pruefung ob im Duell-Modus
+  if (check_duell() == 1)
+  {
+     if (objectp(get_duell_opponent()))
+     write(break_string("Du duellierst Dich doch schon mit "+
+     get_duell_opponent()->name(WEM, 0)+ "!\nBeende erst das Duell,"+
+     " wenn Du mit jemand anderem kaempfen moechtest!\n",78,0,BS_LEAVE_MY_LFS));
+     return 1;
+  }
+     else
+       // Hier hat etwas anderes als der Orden den Hook gesetzt!
+      if (check_duell() == -1)
+         return 0;
+  // In diesem Fall ist ein eventueller Hook abgelaufen.
+  // Wir lassen ihn einfach wie er ist.
+  return 0;
+}
+
+// Prüft ob im Duell-Modus bzw. ob P_TMP_DIE/MOVE_HOOKS gesetzt sind.
+int check_duell ()
+{
+  mixed res;
+
+  if (!living(environment(this_object())))
+  { 
+     if (is_clone(this_object()))
+     { 
+       remove ();
+       return 0;
+     }
+  }
+
+  // Pruefung ob evtl. ein DIE_HOOK gesetzt ist. bzw.
+  // ob duell_opponent gesetzt ist.
+  if (res=environment(this_object())->QueryProp(P_TMP_DIE_HOOK))
+  {
+    if ( pointerp(res) && sizeof(res) >= 3
+         && intp(res[0]) && time() < res[0]
+         && objectp(res[1]) && stringp(res[2]) )
+       {
+         // In diesem Fall ist es ein Duell!
+         if (res[1]->id("DuellItem"))
+           return 1;
+         else
+         // In diesem Fall ist es ein externer Hook.
+           return -1;
+       }
+       else
+       {
+         // In diesem Fall _WAR_ es auch auch mal ein Duell ...
+         // welches aus unerfindlichen Gruenden nicht abgebrochen
+         // wurde -> das holen wir nach.
+         if (pointerp(res) && sizeof(res) >= 3 && objectp(res[1]) && res[1]->id("DuellItem"))
+            if (objectp(this_object()->get_duell_opponent()))
+            {
+               break_off_duell(0);
+            }
+       }
+   }
+
+  // Pruefung ob evtl. ein MOVE_HOOK gesetzt ist.
+  if (res=environment(this_object())->QueryProp(P_TMP_MOVE_HOOK))
+  {
+    if ( pointerp(res) && sizeof(res) >= 3
+         && intp(res[0]) && time() < res[0]
+         && objectp(res[1]) && stringp(res[2]) )
+       {
+         // In diesem Fall sind wir gelaehmt ...
+         // Ob eigener oder anderer Hook ist egal.
+           return -2;
+       }
+   }
+
+  // Pruefung auf: P_PARALYZED, P_DEFEND_HOOK, P_DISABLE_ATTACK, P_POISON
+  if((environment(this_object())->QueryProp(P_PARALYZED)) ||
+     (environment(this_object())->QueryProp(P_DISABLE_ATTACK))  ||
+     (environment(this_object())->QueryProp(P_DISABLE_SPELLS)) ||
+     (environment(this_object())->QueryProp(P_POISON)) )
+     return -2; // Behandlung wie Move_Hook
+
+  // Pruefung auf: P_TMP_DEFEND_HOOK
+  if (res=environment(this_object())->QueryProp(P_TMP_DEFEND_HOOK))
+  {
+    if ( pointerp(res) && sizeof(res) >= 3
+         && intp(res[0]) && time() < res[0]
+         && objectp(res[1]) && stringp(res[2]) )
+         // In diesem Fall haben wir uebernatuerlichen Schutz ...
+           return -1; // Behandlung wie DIE_HOOK
+   }
+
+   // Wennes das alles nicht war, ist es 0 :)
+   return 0;
+}
+
+// Herausforderung zum Duell
+int fordere(string args) 
+{
+  string gegner, test;
+  object opponent;
+  object orden;
+  args = this_player()->_unparsed_args();
+  if (!QueryWorn())
+  {
+     notify_fail ("Du musst Deinen Orden schon anstecken,"+
+                  " damit Du jemanden herausfordern kannst!\n");
+     return 0;
+  }
+  
+  switch (check_duell())
+  {
+     case 1: {  // Eigener Die_Hook = Duell?
+                if (objectp(get_duell_opponent()))
+                notify_fail (break_string("Du duellierst Dich doch schon mit "+
+                  get_duell_opponent()->name(WEM, 0)+ "!\nBeende erst das Duell,"+
+                  " wenn Du mit jemand anderem kaempfen moechtest!\n",78));
+                return 0;
+                break;
+             }
+     case -1: {  // Fremder Die_Hook?
+                notify_fail (break_string("Du hast zur Zeit einen"+
+                  " uebernatuerlichen Schutz.\n"+
+                  "Es waere nicht ehrenhaft mit diesem zu duellieren!\n",78));
+                return 0;
+                break;
+             }
+
+     case -2: {  // Gelaehmt oder aehnliches?
+                notify_fail ("Wie willst Du das anstellen? Du bist Doch stark eingeschraenkt!\n");
+                return 0;
+                break;
+             }
+     default: break; 
+  }
+
+
+  if (wartezeit > time())
+  {
+    notify_fail(message_penalty((get_wartezeit()-time()), 0));
+    return 0;
+  }
+
+  notify_fail("Wen moechtest Du zum Duell herausfordern?\n");
+  if (!stringp(args)) return 0;
+
+  if (sscanf(args, "%s zum duell", gegner) != 1)
+     return 0;
+  
+
+  if (sscanf(args, "%s zum duell der ehre%s", gegner, test) == 2)
+  {
+     honour_mode = 1; // Ohne Flucht!
+  }
+  else  
+  {
+     honour_mode = 0; // Mit Bewegung!
+  }
+
+  if ((sscanf(args, "%s zum duell auf leben und tod%s", gegner, test) == 2) || 
+      (sscanf(args, "%s zum duell der ehre auf leben und tod%s", gegner, test) == 2))
+  {
+     fatality_mode = 1; // Hier rollen Koepfe!
+  }   
+  else
+  {
+     fatality_mode = 0; // Dies ist ein freundschaftliches Duell.
+  } 
+
+  // Sollte jemand sich selber fordern wollen ...
+  if (gegner == lower_case(this_player()->name(RAW)))
+  {
+    notify_fail("Willst Du Dich etwas selbst herausfordern?!\n");
+    return 0;
+  }
+
+  opponent = verify_opponent (gegner);
+  
+  if (!objectp(opponent)) return 0; // Fehler, funktion bricht ab!
+
+  
+  // Will sich ein 1ti mit seinem 2ti auf Leben und Tod duellieren?
+  if (fatality_mode)
+     if (environment(this_object())->QueryProp(P_SECOND) == opponent->name() ||
+        opponent->QueryProp(P_SECOND) == environment(this_object())->name() )
+     {
+       notify_fail(break_string("Erstspieler duerfen sich mit ihren Zweitspielern nicht auf Leben und Tod duellieren!\n", 78) );
+       return 0;
+     }
+
+  // Handelt es sich um einen Spieler?
+  // Wenn ja, dann sehen ob er/sie einen Orden besitzt.
+  
+  if (!objectp(orden = check_orden (opponent)))
+  {
+     notify_fail(opponent->name(WER,0)+
+           " ist noch kein Ehrenbuerger der Stadt der Ehre!\n");
+
+     return 0;
+  }
+
+  if (find_player(gegner) == opponent)
+  {
+     if (objectp(orden))
+     {
+
+     // Pruefung ob wir ein Geist sind ...
+     if (environment(orden)->QueryProp(P_GHOST))
+     {
+        notify_fail("Du willst im ERNST einen Geist herausfordern?!\n");
+        return 0;
+     } 
+
+  switch (orden->check_duell())
+  {
+     case 1: {  // Eigener Die_Hook = Duell?
+                notify_fail(environment(orden)->name(WER, 0)+ " bestreitet selbst"+
+                  " gerade ein Duell!\n");
+                return 0;
+                break;
+             }
+     case -1: {  // Fremder Die_Hook?
+                notify_fail(break_string(environment(orden)->name(WER, 0)+ " besitzt einen uebernatuerlichen"+
+                  " Schutz!\nDu haettest keine Chance ... jedenfalls nicht im Augenblick.\n",78));
+                return 0;
+                break;
+             }
+
+     case -2: {  // Gelaehmt oder aehnliches?
+                notify_fail(break_string(environment(orden)->name(WER, 0)+ " ist zur Zeit stark eingeschraenkt!\n"+
+                  "Jetzt anzugreifen waere eine Schande!\n",78));
+                return 0;
+                break;
+             }
+     default: break;
+  }
+      // Wir sehen mal ob der Gegner den Orden angesteckt hat!
+      if (!orden->QueryWorn())
+      {
+         notify_fail(opponent->name(WER, 1)+" hat den"+
+                   " Orden ja gar nicht angesteckt!\n");
+         return 0;
+      }
+
+      // Stellen wir nun fest, ob uns unser Gegner nicht schon 
+      // selbst gefordert hat!
+      if ((orden->get_challenge_opponent() == this_player()) && 
+          (orden->get_challenger() == 1) && 
+          (orden->get_challenge_time() > (time()-120)))
+      {
+         notify_fail(break_string(opponent->name(WER,0)+" hat Dich doch schon heraus"+
+         "gefordert! Nimm das Duell einfach an!\n",78));
+         return 0;
+      }  
+     
+      // Nun bekommt der Herausgeforderte die Meldung, dass er
+      // herausgefordert wurde:
+      orden->akzeptiere(this_player(), fatality_mode, honour_mode); 
+
+      set_challenge_time (time());       // Hier wird festgehalten wann die 
+                                         // Herausforderung stattfand.
+
+      set_challenger (1);                // Wir haben jemanden herausgefordert!
+
+      set_challenge_opponent (opponent); // Wir merken uns wer der Gegner war.
+
+      return 1;
+    }
+    else 
+    {
+      notify_fail(opponent->name(WER,0)+
+            " ist noch kein Ehrenbuerger der Stadt der Ehre!\n");
+
+      return 0;
+    }
+  }
+  else // In diesem Fall ist es ein NPC, der zum Duell bereit ist!
+  {
+    // Jetzt aber!
+    // Ablauf:
+    // * wichtig ist ein Check, ob der Betreffende schon ein Duell kaempft
+    // * weiters muss der Tribut gezahl worden sein. (Flag  setzten)
+    // * beim Verlassen der Stadt (auch bei ende) 
+    //   -> Fluchtversuch mit Luftelementar unterbinden!! hook loeschen
+    // * Verhindern dass ein Duellant angegriffen wird -> Warnung (im NPC)
+
+      if (orden->get_wartezeit() > time())
+      {
+        tell_object (this_player(), 
+            break_string(message_penalty(orden->get_wartezeit()-time(),1),78, 
+            environment(orden)->name(WER, 0)+" teilt Dir mit: "));
+
+        return 1;
+      }
+    
+    if (!(fatality_mode))
+    {
+       // Nur hier ist ein Pfand angebracht!
+       if (get_pot_opponent() != opponent)
+       {
+         notify_fail(break_string(opponent->name(WER)+" teilt Dir mit: Du musst mir zuerst ein Pfand uebergeben, so "+
+         "ist es der Brauch!\n", 78));
+         return 0;
+       }
+       
+       save_life (this_player(),P_DUELL_DURATION);
+       save_life (opponent,P_DUELL_DURATION);
+    }
+    else
+    {
+       no_save_life (this_player(),P_DUELL_DURATION);
+       no_save_life (opponent,P_DUELL_DURATION);
+    }
+
+    // In jedem Fall Loeschen wir nun den potential_opponent
+    // da der Kampf beginnt und der potentielle Gegner zum
+    // Gegner wird. (Bei einem Kampf auf Leben und Tod bekommt
+    // der Spieler - sollte er sinnloser Weise einen Gegenstand
+    // verpfaendet haben - die Chance ihn wiederzubekommen.   
+    set_pot_opponent (0);  // Direkt, da die set-fun 0 nicht nimmt.
+ 
+    //Lokale Speicherung der Daten im Orden
+    set_challenge_time (time());       // Hier wird festgehalten wann die 
+                                   // Herausforderung stattfand.
+    set_challenger (1);                // Wir haben jemanden herausgefordert!
+
+    set_challenge_opponent (opponent); // Wir merken uns wen wir gefordert haben.
+    set_duell_opponent (opponent);     // Wir merken uns auch den Gegner.
+
+    //Speicherung der Daten im Gegner-Orden
+    orden->set_challenge_time (time()); // Hier wird festgehalten wann die 
+                                        // Herausforderung stattfand.
+    orden->set_challenger (2);          // Wir wurden herausgefordert!
+    
+    // Wir merken uns wer der Gegner war
+    orden->set_challenge_opponent (this_player()); 
+    orden->set_duell_opponent (this_player());
+
+    //opponent->Kill(this_player(),1);            // Das Duell beginnt!
+    opponent->Kill(this_player());                // Nur fuer's SL Arena!!!!
+    fail_safe(); // Wir starten unsere Absicherung
+  
+    // Kampfbeginn
+    if (fatality_mode)
+    {
+      tell_room (environment(this_player()),
+          "\nDas Duell auf Leben und Tod beginnt!\n"+
+          "Moegen euch die Goetter beistehen!\n\n");
+    }
+    else
+    {
+      tell_room (environment(this_player()),"\nDas Duell beginnt!\n"+
+          "Moege der Bessere gewinnen!\n\n");
+    } 
+
+    return 1;
+  }
+}
+
+// Es muss herausgefunden werden ob es sich beim herausgeforderten um einen
+// potentiellen Gegner handelt oder nicht. Weiters muss zwischen Spielern
+// und NPCs unterschieden werden.
+// NPCs akzeptieren Herausforderungen immer, Spieler haben jedoch die Wahl.
+
+object verify_opponent (string name)
+{
+  object ob;
+
+  ob = find_living(name); // Grundsaetzlich mal den Gegner finden.
+
+  if (!objectp(ob)) return 0;  // War nix: Kein Lebewesen mit diesem Namen!
+
+  // Wenn sich der Gegner im gleichen Raum befindet ...
+  if (present(lower_case(name), environment(this_player())))
+  { 
+      return ob;
+  }
+  return 0;
+}
+
+// Es wird geprueft, ob der Spieler/NPC einen Orden besitzt
+object check_orden(object opponent)
+{
+  object orden;
+
+  if (orden = present(("DuellItem"),opponent))
+  { 
+    return orden; // Der Spieler hat die Quest auch gespielt! 
+                  // Einem Kampf steht nichts im Wege!
+  }
+  else
+  {
+    return 0; // Leider nicht ... 
+              // der Spieler muss erst einmal die Quest spielen ...
+  }
+}
+
+int akzeptiere (object gegner, int fatality, int honour) 
+{
+  fatality_mode = fatality;
+  honour_mode = honour;
+
+  if (fatality)
+  {  
+     if (honour)
+     {
+       tell_object (environment (this_object()),
+       break_string("Du wurdest soeben von "+gegner->name(WEM,0)+
+       " zum Duell der Ehre AUF LEBEN UND TOD gefordert!\n",78));
+
+       tell_room (environment(environment (this_object())),
+       break_string(environment (this_object())->name(WER, 0)+
+       " wurde soeben von "+gegner->name(WEM,0)+
+       " zum Duell der Ehre AUF LEBEN UND TOD gefordert!\n",78),
+       ({environment (this_object()),gegner}));
+
+       tell_object (gegner, break_string("Du hast soeben "
+       +environment(this_object())->name(WEN,0)+
+       " zum Duell der Ehre AUF LEBEN UND TOD gefordert!\n",78));
+     }
+     else
+     {
+       tell_object (environment (this_object()), 
+       break_string("Du wurdest soeben von "+gegner->name(WEM,0)+
+       " zum Duell AUF LEBEN UND TOD gefordert!\n",78));
+
+       tell_room (environment(environment (this_object())),
+       break_string(environment (this_object())->name(WER, 0)+
+       " wurde soeben von "+gegner->name(WEM,0)+
+       " zum Duell AUF LEBEN UND TOD gefordert!\n",78),
+       ({environment (this_object()),gegner}));
+   
+       tell_object (gegner, break_string("Du hast soeben "
+       +environment(this_object())->name(WEN,0)+
+       " zum Duell AUF LEBEN UND TOD gefordert!\n",78));
+     } 
+  }
+  else 
+  {
+     if (honour)
+     {
+       tell_object (environment (this_object()),
+                 break_string("Du wurdest soeben von "+
+                 gegner->name(WEM, 0)+" zum Duell der Ehre gefordert!\n",78));
+
+       tell_room (environment(environment (this_object())),
+       break_string(environment (this_object())->name(WER, 0)+
+       " wurde soeben von "+gegner->name(WEM,0)+
+       " zum Duell der Ehre gefordert!\n",78),
+       ({environment (this_object()),gegner}));
+
+       tell_object (gegner, break_string( "Du hast soeben "
+       +environment(this_object())->name(WEN, 2)+" zum Duell der Ehre gefordert!\n",78));
+     }
+     else
+     {
+       tell_object (environment (this_object()), 
+                 break_string("Du wurdest soeben von "+
+                 gegner->name(WEM, 0)+" zum Duell bis zur Bewusstlosigkeit gefordert!\n",78)); 
+
+       tell_room (environment(environment (this_object())),
+       break_string(environment (this_object())->name(WER, 0)+
+       " wurde soeben von "+gegner->name(WEM,0)+
+       " zum Duell bis zur Bewusstlosigkeit gefordert!\n",78),
+       ({environment (this_object()),gegner}));
+
+       tell_object (gegner, break_string( "Du hast soeben "+
+       environment(this_object())->name(WEN, 1)+" zum Duell bis zur Bewusstlosigkeit gefordert!\n",78));
+     }
+
+  }
+
+  set_challenger (2);                       // Wir wurden herausgefordert!
+  set_challenge_opponent (gegner);          // Merken wer uns gefordert hat!
+
+  set_challenge_time (time());              // Hier wird festgehalten wann die 
+                                            // Herausforderung stattfand.
+
+  return 1;
+}
+
+int accept (string args)
+{
+  string gegner, test;
+  object opponent;
+  object orden, server;
+
+  // Wurden wir fuer ein Duell in der Arena gefordert? 
+  // -> Dann blocken wir alle anderen Versuche zur Annahme!
+  if (stringp(this_player()->_unparsed_args()))
+  if (!(sscanf ((this_player()->_unparsed_args()), "duell%s", test)) && 
+      ( is_registering(get_challenge_opponent())))
+  {
+     notify_fail ("Du wurdest zum Duell in der Arena gefordert, nicht sonstwo!\n"+
+                  "Bestaetige das Duell doch einfach!\n");
+     return 0;
+  }
+  // Melden wir uns gerade bei der Arena an?
+  if (!is_registering(environment(this_object())))
+  args = this_player()->_unparsed_args();
+  if (!QueryWorn())
+  {
+     notify_fail("Du musst Deinen Orden schon anstecken,"+
+                 " damit Du Dich duellieren kannst!\n");
+     return 0;
+  }
+
+  // Pruefung ob wir ein Geist sind ...
+  if (this_player()->QueryProp(P_GHOST))
+  {
+     notify_fail("Du bist etwas zu durchsichtig als Geist ...\n");
+     return 0;
+  }
+
+  notify_fail("Du kannst Dich nicht daran erinnern herausgefordert worden zu sein ...\n");
+  if (!stringp(args) || !objectp(get_challenge_opponent())) return 0;
+
+  if (fatality_mode)
+  {
+     // Duell der Ehre
+     if (honour_mode)
+     {
+       notify_fail(break_string("Du wurdest von "+get_challenge_opponent()->name(WEM, 0)+
+       " zum Duell der Ehre auf Leben und Tod "+
+       "herausgefordert. Dabei kannst Du Dein Leben, mit allen "+
+       "Konsequenzen verlieren und Du kannst Dich weder bewegen noch fluechten."+
+       "\nMit <[bestaetige] duell der ehre mit 'gegner' auf leben und tod> "+
+       "kannst Du annehmen.\n",78,0,BS_LEAVE_MY_LFS));
+
+       if (sscanf(args, "der ehre mit %s auf leben und tod%s", gegner, test) != 2) 
+       return 0;
+     }
+     else
+     {
+       notify_fail(break_string("Du wurdest von "+get_challenge_opponent()->name(WEM, 0)+
+       " zum Duell auf Leben und Tod "+
+       "herausgefordert. Dabei kannst Du Dein Leben, mit allen "+
+       "Konsequenzen verlieren.\nMit <[bestaetige] duell mit 'gegner' auf leben und tod> "+
+       "kannst Du annehmen.\n",78,0,BS_LEAVE_MY_LFS));
+
+       if (sscanf(args, "mit %s auf leben und tod%s", gegner, test) !=2)
+       return 0;
+     }
+  }
+  else
+  {
+     // Duell der Ehre
+     if (honour_mode)
+     {
+       notify_fail(break_string("Du wurdest von "+get_challenge_opponent()->name(WEM, 0)+
+       " zum Duell der Ehre "+
+       "herausgefordert. Dabei kannst Du Dich weder bewegen "+
+       "noch fluechten.\nMit <[bestaetige] duell der ehre mit 'gegner'> "+
+       "kannst Du annehmen.\n",78,0,BS_LEAVE_MY_LFS));
+
+       if (sscanf(args, "der ehre mit %s", gegner) != 1) return 0;
+     }
+     else
+     {
+       // "Normales Duell"
+       notify_fail("Du wurdest aber von "+get_challenge_opponent()->name(WEM, 0)+
+       " zum Duell bis zur Bewusstlosigkeit herausgefordert!\n");
+       if (sscanf(args, "mit %s", gegner) != 1) return 0;
+     }
+  }
+
+  if(!objectp(opponent = verify_opponent(gegner)))
+      return 0;
+  
+  notify_fail("Komisch ... Dein Herausforderer scheint seinen "+
+              "Orden verloren zu haben ...\n");
+
+  if (!objectp(orden = check_orden (opponent))) return 0;
+
+  // Abfrage ob uns der Gegner auch wirklich gefordert hat:
+  if ((orden->get_challenge_opponent()) == this_player())
+  {
+    if (orden->get_challenge_time() >= (time()-120))
+    {
+      if (present (opponent, environment(this_player())))
+      {
+
+        if (wartezeit > time())
+        {
+           notify_fail(message_penalty((get_wartezeit()-time()), 0));
+           return 0;
+        }
+
+        // Merken wir uns die Gegner!
+        set_duell_opponent(opponent);
+        orden->set_duell_opponent(this_player());
+
+        set_challenger (2);          
+
+        // Sofern wir nicht in der Arena kaempfen sollten startet das Duell.
+        if (is_registering(environment(this_object())))
+           return 1;
+
+        if (!(fatality_mode))
+        {
+           // Verhinderung von Todesfaellen bei uns.
+           save_life (this_player(), P_DUELL_DURATION);      
+        
+           // Verhinderung von Todesfällen beim Gegner.
+           save_life (duell_opponent, P_DUELL_DURATION); 
+        }
+        else
+        {
+           // Ruecksetzen der Werte nach dem Duell.
+           no_save_life (this_player(), P_DUELL_DURATION);
+
+           // Ruecksetzen der Werte nach dem Duell.
+           no_save_life (duell_opponent, P_DUELL_DURATION);
+        }
+
+        // Kampfbeginn
+        if (fatality_mode)
+        {
+           tell_room (environment(this_player()),
+              "\nDas Duell auf Leben und Tod beginnt!\n"+
+              "Moegen euch die Goetter beistehen!\n\n");
+        }
+         else
+        {
+          tell_room (environment(this_player()),"\nDas Duell beginnt!\n"+
+              "Moege der Bessere gewinnen!\n\n");
+        }
+
+        // Angriff mit Duellsystem: Kein PK wird gesetzt.
+        // this_player()->Kill(get_duell_opponent(),1); 
+        this_player()->Kill(get_duell_opponent());  // Fuer SL Arena!!
+        fail_safe(); // Wir starten unsere Absicherung
+        return 1;
+      }
+      else
+      {
+        // Wenn der Herausforderer schon weg ist ...
+        notify_fail(challenge_opponent->name(WER,1)+
+                   " ist aber nicht mehr hier!\n");
+
+        return 0;  
+      }
+    }
+    else
+    {
+      notify_fail("Dafuer ist es jetzt leider zu spaet!\n");
+
+      return 0;
+    }
+  }
+  else
+  {
+    notify_fail("Wessen Herausforderung moechtest Du annehmen?\n");
+    return 0;
+  }
+}
+
+// Eine extra Routine fuer den Tod in der Arena
+void arena_death(object dying, object killer, int lost_exp) 
+{
+  if (IS_LEARNING(dying) && query_once_interactive(dying))
+  {
+    tell_object(dying,
+        "Sei froh, dass Du unsterblich bist, "+
+        "sonst waere es eben zu Ende gewesen.\n");
+    return;
+  }
+  SetProp(P_KILL_NAME, killer->name());  
+//  1. April 2004: Malar kommentiert saemtliche XP-Veraenderungen bei Spielern
+//                 aufgrund von Bugs aus.
+//  dying->AddExp(-lost_exp);  
+//  dying->SetProp(P_LOST_XP, QueryProp(P_LOST_XP)+({lost_exp}));
+  dying->SetProp(P_GHOST, 1);
+  if (objectp(killer))
+    catch(killer->NotifyPlayerDeath(dying,killer,lost_exp));
+  if (environment())
+    catch(environment(dying)->NotifyPlayerDeath(dying,killer,lost_exp));
+  catch(map_objects(
+        (environment(dying) ? all_inventory(environment(dying)) : ({}))
+          + deep_inventory(dying) - ({killer}),
+        "NotifyPlayerDeath", dying,killer,lost_exp));
+  clone_object( "room/death/death_mark" )->move( dying, M_NOCHECK );
+  dying->UpdateAttributes(); // Beim Tod werden Dinge entfernt, Attribute pruefen
+  
+  return;
+}
+
+void broadcast_ending(int giveup, object en, object self)
+{
+  object ch_master;
+  object rk_master;
+  string str_mode;
+  
+  catch(call_other("/d/pk/angel/arena/std/duell_channel_master", "???", 0));
+  catch(call_other("/d/dschungel/angel/arena/ranking/arena_rating_master", "???", 0));
+  ch_master = find_object("/d/pk/angel/arena/std/duell_channel_master");  
+  rk_master = find_object("/d/dschungel/angel/arena/ranking/arena_rating_master");
+  
+  if (objectp(ch_master))
+  {
+    str_mode = "";
+  
+    if (honour_mode)
+        str_mode += "der Ehre ";
+      
+    if (fatality_mode)
+        str_mode += "auf Leben und Tod";
+    else
+        str_mode += "bis zur Bewusstlosigkeit";
+      
+    if (giveup)
+       str_mode += ", durch Kapitulation ";
+    else 
+       str_mode += " ";
+  
+    ch_master->Channel(break_string(en->name(WER,0)+" hat soeben "+
+                       self->name(WEN, 0)+" in einem Duell "+str_mode+"besiegt!", 78));
+    write_file(LOG "duell.log",
+      ctime()+": "+(capitalize(getuid(en)))+" besiegt "+(capitalize(getuid(self)))+
+      " in einem Duell "+str_mode+".\n");
+  } 
+  if (objectp(rk_master))
+  {
+     rk_master->Calculate( en, self, honour_mode, fatality_mode);
+  }               
+  return;
+}
+
+void remove_duellists(object opponent)
+{
+  mixed test;
+  object server, room;
+  
+  room = environment(environment(this_object()));
+  
+  if (objectp(room))
+  if (test = regexp( ({ file_name(room) }), ROOM "battle_field_" ))
+     if (sizeof(test))
+     {
+       tell_object (environment(this_object()), "Nach dem Duell wirst Du aus der Arena gebracht!\n");
+       tell_room (room, 
+                 "Nach dem Duell wird "+environment(this_object())->name()+" aus der Arena gebracht!\n",
+                 ({ environment(this_object()) }) );
+       environment(this_object())->SetProp(P_TMP_MOVE_HOOK, 0); // Darf keinen Move hook haben!
+       environment(this_object())->move ( DROOM "nordteil", M_NOCHECK );
+     }
+     
+  if (objectp(opponent))
+  {   
+     room = environment(opponent);
+     if (objectp(room))
+        if (test = regexp( ({ file_name(room) }), ROOM "battle_field_" ))
+           if (sizeof(test))
+           {
+             tell_object (opponent, "Nach dem Duell wirst Du aus der Arena gebracht!\n");
+             tell_room (room, 
+                 "Nach dem Duell wird "+opponent->name()+" aus der Arena gebracht!\n",
+                 ({ opponent }) );             
+             opponent->SetProp(P_TMP_MOVE_HOOK, 0); // Darf keinen Move hook haben!
+             opponent->move ( DROOM "nordteil", M_NOCHECK );
+           }
+  }
+  catch(call_other(OBJ "coordinator", "???", 0));
+  server = find_object ( OBJ "coordinator" );
+  
+  if (objectp(server))
+     server->clear_battle_field();  
+}
+
+// Verzoegerte Ausgabe der Meldung:
+void choose_msg(object winner)
+{
+  tell_object (winner, "\nFuer SEHR kurze Zeit hast Du nun die "+
+  "Moeglichkeit, Deine Belohnung zu waehlen!"+
+  "\n(Kommando: <waehle> ruft ein Menue auf!)\n\n");	
+}
+
+
+//Hilfsfunktion von keep_alife()
+void finish_duell ()
+{
+  int points;
+  object orden;
+  
+  orden = check_orden(get_duell_opponent());
+  
+  // Sofern ein NPC der Gewinner ist, geben wir eine passendere Meldung aus:
+  if (query_once_interactive(get_duell_opponent()))
+    tell_object (environment(this_object()), break_string("\nDu wurdest von "+
+      get_duell_opponent()->name(WEM,0)+" in einem Duell besiegt!\n"+
+      "Als Verlierer gibst Du einen Deiner Gegenstaende an den Gewinner.\n\n",
+      78, 0, BS_LEAVE_MY_LFS));
+  else  // ist ein NPC!
+  tell_object (environment(this_object()), break_string("\nDu wurdest von "+
+    get_duell_opponent()->name(WEM,0)+" in einem Duell besiegt!\n"+
+    "Als Verlierer bekommst Du Dein Pfand nicht mehr zurueck.\n\n",
+    78, 0, BS_LEAVE_MY_LFS));
+ 
+  tell_object (get_duell_opponent(), break_string("\nDu hast soeben "+
+    environment(this_object())->name(WEN, 0)+" im Duell besiegt!\n"+
+    "Du hast somit ein Anrecht auf einen Gegenstand Deines Gegners!\n\n",
+    78, 0, BS_LEAVE_MY_LFS));
+
+  tell_room (environment(get_duell_opponent()), 
+    break_string("\n"+get_duell_opponent()->name(WER,0)+" hat soeben "+
+    environment(this_object())->name(WEN, 0)+" im Duell besiegt!\n\n",
+    78, 0, BS_LEAVE_MY_LFS),({get_duell_opponent(), environment(this_object())}));
+
+  call_out( "broadcast_ending", 0, 0, get_duell_opponent(), environment(this_object()));
+
+  // Die Belohnung ist ein Gegenstand des Verlierers
+  call_out("choose_msg", 2, get_duell_opponent());
+
+   // Wir merken uns einfach mal wer von wem und wann besiegt wurde.
+  set_duell_results(({get_duell_opponent(),
+                      environment(this_object()), time()}));
+  if (objectp(orden))
+  orden->set_duell_results(({get_duell_opponent(),
+                      environment(this_object()), time()}));
+
+  // Fuer Spieler bekommt bei Bewusstlosigkeit nichts, fuer NPCs schon.
+  if ( !query_once_interactive( environment( this_object() ) ) )
+  {
+    // Die XP des besiegten ermitteln.
+    points = environment(this_object())->QueryProp(P_XP);
+    
+    // Der Gewinner erhaelt 1%o der XP des Gegners.
+    get_duell_opponent()->SetProp(P_XP,
+   (get_duell_opponent()->QueryProp(P_XP) + points/100));
+  }
+
+  // Kerbholz sollte er auch bekommen, falls nicht vorhanden!!
+
+  // Der Besiegte muss P_DUELL_PENALTY_TIME sec warten
+  // bis er erneut jemanden zum Duell herausfordern darf!
+  this_object()->set_wartezeit (time()+P_DUELL_PENALTY_TIME);
+
+  // Setze alle statischen Variablen zurueck
+  break_off_duell(1);
+}
+
+int keep_alife ()
+{
+  mixed farben;
+  // Wir pruefen mal ob wir den letzten Schlag von unserem Gegner 
+  // erhalten haben oder nicht.
+  // Dummerweise gibt es P_LAST_KILLER aber fuer NPCs nicht ...
+  // Also: Pruefen ob NPC - wenn ja! RETTEN
+  // Sonst: Sehen wer den letzten Schlag hatte.
+  // Weiters muss AUCH geprueft werden ob es denn nicht ein Pet
+  // war -> sonst killen die Pets den armen Gegner!
+  // Weiters muessen wir id("DuellAllowed") pruefen, da dies ja
+  // nicht zum abbruch fuehren soll! (und den Spieler nicht umbringen soll)
+  
+  if (query_once_interactive(environment(this_object())))  // Ein Spieler!
+  if ( (environment(this_object())->QueryProp(P_LAST_KILLER) !=
+         get_duell_opponent())&&(!is_element (get_duell_opponent()->QueryPursuers(), 
+       (environment(this_object())->QueryProp(P_LAST_KILLER)))) &&
+       !(environment(this_object())->QueryProp(P_LAST_KILLER)->id("DuellAllowed")) )
+  { 
+    break_off_duell(0); 
+    return 0; // Das war etwas anderes! Vom Baum gehuepft?
+  }
+  
+  finish_duell();
+
+  // Wir teilen dem Duell Koordinator mit, dass wir fertig sind!
+  notify_coordinator ();
+
+  environment(this_object())->SetProp(P_LAST_KILLER, 0);
+
+  switch (environment(this_object())->QueryProp(P_TTY))
+  {
+    case "ansi": farben=({ANSI_RED+ANSI_BOLD+ANSI_BLINK, ANSI_NORMAL}); break;
+    case "vt100": farben=({ANSI_BOLD+ANSI_BLINK, ANSI_NORMAL}); break;
+    default: farben=({"", "", "", "" }); break;
+  }
+
+  // Nach dem Duell sind wir fuer kurze zeit bewusstlos:
+  tell_object(environment(this_object()), sprintf("\n\n%sDu brichst bewusstlos zusammen!%s\n\n\n", 
+                                          farben[0], farben[1]) );
+  tell_room(environment(environment(this_object())), "\n\n"+environment(this_object())->name()+
+            " bricht bewusstlos zusammen!\n\n\n", ({environment(this_object())}));
+            
+  environment(this_object())->SetProp(P_PARALYZED, 
+             ([PARALYZE_TIME:15, PARALYZE_MSG: "Du bist noch immer bewusstlos!\n",
+               PARALYZE_MSG_OTHER: "%s liegt zuckend am Boden.\n", 
+               PARALYZE_END: "Du erwachst wieder aus deiner Ohnmacht!\n" , 
+               PARALYZE_END_OTHER: "%s scheint wieder zu erwachen.\n"]) );
+
+  return 1; // Haelt den Spieler am Leben - waehrend des Duells.
+}
+
+// Wenn ein Spieler wirklich nichtmehr kann ...
+int surrender ()
+{ 
+  object orden;
+
+  // Lauft ein Duell?
+  if (!(check_duell() == 1))
+    return 0;
+   
+  // Wir teilen dem Duell Koordinator mit, dass wir fertig sind!
+  notify_coordinator ();
+
+  orden = check_orden(get_duell_opponent());
+
+  // Falls NPC -> break_off_duell()
+  if (!query_once_interactive(get_duell_opponent()))
+  {
+     break_off_duell(0); // Abbruch des Duells, mit Meldung
+
+     tell_object (environment(this_object()),
+       break_string("\nDu hast soeben das Duell mit "+
+       get_duell_opponent()->name(WEM,0)+" Durch Aufgabe verloren!\n"+
+       "Als Verlierer bekommst Du Dein Pfand nicht mehr zurueck.\n\n",
+       78, 0, BS_LEAVE_MY_LFS));
+
+     return 1;
+  }
+  
+  tell_object (environment(this_object()), 
+    break_string("\nDu hast soeben das Duell mit "+
+    get_duell_opponent()->name(WEM,0)+" Durch Aufgabe verloren!\n"+
+    "Als Verlierer gibst Du einen Deiner Gegenstaende an den Gewinner.\n\n",
+    78, 0, BS_LEAVE_MY_LFS));
+
+  tell_object (get_duell_opponent(), break_string("\nDu hast soeben das Duell mit "+
+    environment(this_object())->name(WEN, 0)+" gewonnen!\n"+
+    "Du hast somit ein Anrecht auf einen Gegenstand Deines Gegners!\n\n",
+    78, 0, BS_LEAVE_MY_LFS));
+
+  tell_room (environment(get_duell_opponent()), break_string("\n"+get_duell_opponent()->name(WER,0)+
+    " hat soeben das Duell mit "+
+    environment(this_object())->name(WEN, 0)+" durch Kapitulation seines Gegners gewonnen!\n\n",
+    78, 0, BS_LEAVE_MY_LFS),({get_duell_opponent(), environment(this_object())}));
+
+  call_out( "broadcast_ending", 0, 1, get_duell_opponent(), environment(this_object()) );
+
+  // Die Belohnung ist ein Gegenstand des Verlierers
+  call_out("choose_msg", 2, get_duell_opponent());
+  
+   // Wir merken uns einfach mal wer von wem und wann besiegt wurde.
+  set_duell_results(({get_duell_opponent(), 
+                      environment(this_object()), time()}));
+  if (objectp(orden))
+  orden->set_duell_results(({get_duell_opponent(),
+                      environment(this_object()), time()}));
+ 
+  // Der Besiegte muss P_DUELL_PENALTY_TIME sec warten
+  // bis er erneut jemanden zum Duell herausfordern darf!
+  this_object()->set_wartezeit (time()+P_DUELL_PENALTY_TIME);
+
+  // Setze alle statischen Variablen zurueck
+  break_off_duell(1);
+
+  return 1;
+}
+
+// Hier bekommt der Gewinner seine Belohnung :o)
+int collect_bounty()
+{ 
+   object orden;
+
+   if (!pointerp(duell_results))
+      return 0;
+
+   if (!objectp(get_duell_results(2)))
+       return 0;
+
+   if (get_duell_results(2) == this_player())
+   {
+      notify_fail("Hmmm hast Du das Duell gewonnen oder verloren?\n");
+      return 0;
+   }
+
+   if (get_duell_results(3) < (time() - P_MAX_CHOOSE_TIME))
+   {
+      notify_fail("Du hast leider zu lange gewartet!\n");
+      set_duell_results (({0,0,0}));
+      return 0;
+   }
+   orden = check_orden (get_duell_results(2));
+   set_duell_results (({0,0,0}));   // Belohnungen gibts nur 1x!
+                                    // Fuer den Verlierer wird es im choose_object()
+                                    // zurueck gesetzt!
+   orden->choose_object();             
+   return 1;
+}
+
+int request_end (string reason)
+{
+  mixed farben;
+  // Lauft ein Duell?
+  if (!(check_duell() == 1))
+    return 0;
+
+  // Falls NPC -> break_off_duell()
+  if (!query_once_interactive(get_duell_opponent()))
+  {
+     break_off_duell(0); // Abbruch des Duells, mit Meldung
+     return 1;
+  }
+  switch (get_duell_opponent()->QueryProp(P_TTY))
+  {
+    case "ansi": farben=({ANSI_RED+ANSI_BOLD+ANSI_BLINK, ANSI_NORMAL, ANSI_RED+ANSI_BOLD, ANSI_NORMAL}); break;
+    case "vt100": farben=({ANSI_BOLD+ANSI_BLINK, ANSI_NORMAL, ANSI_BOLD, ANSI_NORMAL}); break;
+    default: farben=({"", "", "", "" }); break;
+  }
+  // Teile Gegner den Wunsch mit
+  tell_object(get_duell_opponent(), 
+    break_string(sprintf("\n%s!!!!!!   A C H T U N G   !!!!!!%s\n"+
+    "\n%s"+this_player()->name(WER,1)+
+    " moechte das Duell abbrechen.\nAus folgendem Grund: "+reason+
+    "\n\n(Quittieren mit <ok>)%s\n", farben[0], farben[1], farben[2], farben[3]), 78, 0, BS_LEAVE_MY_LFS));
+    
+  switch (this_player()->QueryProp(P_TTY))
+  {
+    case "ansi": farben=({ANSI_RED+ANSI_BOLD, ANSI_NORMAL}); break;
+    case "vt100": farben=({ANSI_BOLD, ANSI_NORMAL}); break;
+    default: farben=({"",""}); break;
+  }    
+  write(sprintf("%sDer Wunsch zum Abbruch wurde weitergeleitet!%s\n", farben[0], farben[1]));
+
+  // Setze Abbruch-Flag
+  set_wish_for_break_off(1);
+
+  return 1;
+}
+
+int confirm_end ()
+{
+  object orden, server;
+
+  // Teste ob Duell aufrecht
+  if (!objectp(get_duell_opponent()))
+    return 0;
+
+  // Wir teilen dem Duell Koordinator mit, dass wir fertig sind!
+  notify_coordinator();  
+
+  if (!objectp(orden = check_orden (get_duell_opponent())))
+  {
+    break_off_duell (0); // Oops kein Duell mehr! (Zeit aus?)
+    return 1;
+  }
+  else 
+  {
+    if (orden->get_wish_for_break_off ())
+    {
+      // Da will ja wirklich jemand nimma!
+      break_off_duell (0); //  
+      return 1;
+    }
+    else
+    {
+      // Nunja das war wohl nix ...
+      return 0;
+    }
+  }
+  return 0;
+}
+
+void StopPetHuntFor(object attacker, object victim)
+{
+  int i;
+  mixed arr;
+  
+  // Wenn also der Angreifer Pets dabei hat, lass 
+  // sie aufhoeren! Und damit DAS was hilft, lassen
+  // wir auch den Angegriffenen aufhoeren.
+
+  if (arr = attacker->QueryPursuers())
+  for (i = 0;i < sizeof(arr) ;i++)
+  {
+    if (objectp(arr[i]))
+    {
+      arr[i]->StopHuntFor(victim);
+      arr[i]->SetProp(P_DISABLE_ATTACK, 10);
+      arr[i]->SetProp(P_DISABLE_SPELLS, 10);
+      victim->StopHuntFor(arr[i]);
+    }
+  }
+
+}
+
+// Funktion zum Abbruch der Feindseeligkeiten:
+void cease_fighting( object us, object them )
+{
+  object dot;
+  
+  // Wir stoppen alle "damage over time" Spells
+  dot = present("\ndruiden_damage_over_time", us);
+  
+  if (objectp (dot))
+     dot->remove();
+     
+  dot = present("\ndruiden_damage_over_time", them);
+  
+  if (objectp (dot))
+     dot->remove();  
+     	
+  // Veranlasse den Gegner und seine Pets zum Kampfende
+  them->StopHuntFor(us);
+  StopPetHuntFor (them, us);   
+ 
+  // Gib selber den Kampf auf und sag das auch deinen Pets!
+  us->StopHuntFor(them);
+  StopPetHuntFor (us, them);
+  
+  tell_room(environment(us), "Ein Sanitaeter versorgt die Duellanten mit Erster Hilfe.\n", ({us, them}) );
+  
+  if ( !us->QueryProp(P_GHOST) )
+  {
+     tell_object (us, "Ein Sanitaeter versorgt Dich mit Erster Hilfe.\n");
+     us->AddHp(30);
+  }
+
+  if ( !them->QueryProp(P_GHOST) )
+  {
+     tell_object (them, "Ein Sanitaeter versorgt Dich mit Erster Hilfe.\n");
+     them->AddHp(30);
+  }
+}
+// Beendet ein laufendes Duell
+varargs void break_off_duell(int silent)
+{
+  mixed farben;
+  object orden;
+  
+  if (!objectp(get_duell_opponent()))
+  {
+    set_challenge_opponent (0);
+    set_duell_opponent (0);
+    set_challenge_time (0);
+    set_challenger (0);
+    set_wish_for_break_off (0);
+    // Wir entfernen einen eventuellen MOVE_HOOK
+    environment(this_object())->SetProp(P_TMP_MOVE_HOOK, 0);
+    remove_call_out("duell_timeout");
+ 
+    return;
+  }
+  // Werfen wie die Duellanten aus dem Rung:
+  call_out("remove_duellists", 2, get_duell_opponent());
+  // Wir rufen diese Funktion als zusaetzliche Absicherung auf:
+  call_out("cease_fighting", 2, environment(this_object()), get_duell_opponent());
+  // Veranlasse den Gegner und seine Pets zum Kampfende
+  get_duell_opponent()->StopHuntFor(environment(this_object()));
+  StopPetHuntFor (get_duell_opponent(), environment(this_object()));   
+ 
+  // Gib selber den Kampf auf und sag das auch deinen Pets!
+  environment(this_object())->StopHuntFor(get_duell_opponent());
+  StopPetHuntFor (environment(this_object()), get_duell_opponent());
+
+  // Ein eventuelles "AugeInAuge" wird beendet:
+  get_duell_opponent()->SetProp(P_PREFERED_ENEMY, 0);
+  environment(this_object())->SetProp(P_PREFERED_ENEMY, 0);
+
+  // Nach dem Duell werden die Duellanten entgiftet:
+  
+  if ( !(environment(this_object())->QueryProp(P_GHOST)) )
+     environment(this_object())->SetProp(P_POISON, 0);
+
+  if ( !(get_duell_opponent()->QueryProp(P_GHOST)) )
+     get_duell_opponent()->SetProp(P_POISON, 0);
+
+  // Loesche die Hooks wenn ein Duell laeuft!
+  // bzw. wenn ein Die-Hook gesetzt ist/war, check_duell kann man nicht
+  // verwenden, da es zu einer Rekursion kommen wuerde.
+  // Die Ausgabe der Meldungen ist aber relativ harmlos und darum akzeptabel.
+  if ( environment(this_object())->QueryProp(P_TMP_DIE_HOOK) )
+     remove_safety (environment(this_object()));
+  if ( get_duell_opponent()->QueryProp(P_TMP_DIE_HOOK) )
+     remove_safety (get_duell_opponent());
+
+  // Keiner unabsichtlich nach dem Duell nochmals angreift, verhindern wir das:
+  if (!get_duell_opponent()->QueryProp(P_PARALYZED))
+     get_duell_opponent()->SetProp(P_PARALYZED, 
+             ([PARALYZE_TIME:8, PARALYZE_MSG: "Das Duell war hart, goenne Dir etwas Ruhe!\n",
+               PARALYZE_MSG_OTHER: "%s atmet tief durch.\n", 
+               PARALYZE_END: "Du hast Dich von den Strapazen erholt!\n" , 
+               PARALYZE_END_OTHER: "%s hat sich von den Strapazen erholt.\n"]) );    
+                
+  if (!environment(this_object())->QueryProp(P_PARALYZED))
+     environment(this_object())->SetProp(P_PARALYZED, 
+           ([PARALYZE_TIME:8, PARALYZE_MSG: "Das Duell war hart, goenne Dir etwas Ruhe!\n",
+               PARALYZE_MSG_OTHER: "%s atmet tief durch.\n", 
+               PARALYZE_END: "Du hast Dich von den Strapazen erholt!\n" , 
+               PARALYZE_END_OTHER: "%s hat sich von den Strapazen erholt.\n"]) );  
+     
+  if (!silent)
+  {
+    switch (get_duell_opponent()->QueryProp(P_TTY))
+    {
+      case "ansi": farben=({ANSI_RED+ANSI_BOLD+ANSI_BLINK, ANSI_NORMAL}); break;
+      case "vt100": farben=({ANSI_BOLD+ANSI_BLINK, ANSI_NORMAL}); break;
+      default: farben=({"",""}); break;
+    }
+    // Gib mir selbst und dem Gegner eine Meldung
+    tell_object(get_duell_opponent(), break_string(sprintf("\n%sDas Duell mit "+
+    environment(this_object())->name(WEM,1)+" wurde abgebrochen.%s\n\n", farben[0], farben[1]),
+    78, 0, BS_LEAVE_MY_LFS)); 
+
+    tell_room(environment(environment(this_object())), 
+    break_string("\nDas Duell zwischen "+get_duell_opponent()->name(WEM,1)+" und "+   
+    environment(this_object())->name(WEM,1)+" wurde abgebrochen.\n\n",
+    78, 0, BS_LEAVE_MY_LFS), ({get_duell_opponent(), environment(this_object())}));
+    
+    switch (environment(this_object())->QueryProp(P_TTY))
+    {
+      case "ansi": farben=({ANSI_RED+ANSI_BOLD+ANSI_BLINK, ANSI_NORMAL}); break;
+      case "vt100": farben=({ANSI_BOLD+ANSI_BLINK, ANSI_NORMAL}); break;
+      default: farben=({"",""}); break;
+    }    
+    tell_object(environment(this_object()), break_string(sprintf("\n%sDas Duell mit "+
+    get_duell_opponent()->name(WEM,1)+" wurde abgebrochen.%s\n\n", farben[0], farben[1]),
+    78, 0, BS_LEAVE_MY_LFS));
+  } 
+  // Setze alle statischen Variablen zurueck
+  orden = check_orden(get_duell_opponent());
+  if(objectp(orden))
+  {
+    orden->set_challenge_opponent (0);
+    orden->set_duell_opponent (0);
+    orden->set_challenge_time (0);
+    orden->set_challenger (0);
+    orden->set_wish_for_break_off (0);
+    orden->remove_call_out("duell_timeout");
+  }
+
+  set_challenge_opponent (0);
+  set_duell_opponent (0);
+  set_challenge_time (0);
+  set_challenger (0);
+  set_wish_for_break_off (0);
+  remove_call_out("duell_timeout");
+
+  return; 
+}
+
+varargs void notify_death (int disconnected)
+{
+  object orden;
+  int lost_exp, l, rate;
+  orden = check_orden(get_duell_opponent());
+
+  // Fuer getoetete Spieler bekommt man XP, fuer NPCs erledigt sich das von selbst.
+  if (query_once_interactive( environment(this_object()) ) )
+  {
+  	
+    //Wir regeln den XP-Verlust/Transfer selbst:
+    
+    // Die XP des besiegten ermitteln.  	
+    if (!IS_SEER(environment(this_object())) 
+        || (l=environment(this_object())->QueryProp(P_LEVEL))<20)
+       lost_exp = environment(this_object())->QueryProp(P_XP)/3;    
+    else
+       lost_exp = environment(this_object())->QueryProp(P_XP)/(l-17);
+    
+    // Wir verlieren nur 10% des normalen Todesverlustes
+    lost_exp = lost_exp/10;
+    
+    // Und weiters nicht mehr als 200k
+    if (lost_exp > 200000)
+       lost_exp = 200000; // 200k ist cap!
+       
+    // Der Gewinner erhaelt einen Teil der in diesem Tod effektiv verlorenen XP des Gegners.
+    // Fuer Spieler ist die Regelung um vieles strikter als bei Sehern:
+    if (!IS_SEER(get_duell_opponent()))
+    {
+       rate = 100 - ( environment(this_object())->QueryProp(P_LEVEL) - 
+                      get_duell_opponent()->QueryProp(P_LEVEL) ) * 5;
+       if (rate > 90)
+          rate = 90;
+    }
+    else
+    {
+       rate = 100 - ( environment(this_object())->QueryProp(P_LEVEL) - 
+                      get_duell_opponent()->QueryProp(P_LEVEL) ) * 2;
+       if ( get_duell_opponent()->QueryProp(P_LEVEL) > 49 )
+          rate = 90;
+                                
+       if (rate > 90)
+          rate = 90;
+    }
+
+//  1. April 2004: Malar kommentiert saemtliche XP-Veraenderungen bei Spielern
+//                 aufgrund von Bugs aus.   
+//    if (rate >= 0) // Verlieren soll der Gewinner keine XP auch wenn es eine geschobene Sache war.
+//       get_duell_opponent()->AddExp((lost_exp*rate)/100 ); // Der Gewinner erhaelt die Punkte
+
+    write_file(LOG "exp.log",
+      ctime()+": "+(capitalize(getuid(get_duell_opponent())))+"("+get_duell_opponent()->QueryProp(P_LEVEL)+
+              "): +"+to_string((lost_exp*rate)/100)+" vs. "+
+              (capitalize(getuid(environment(this_object()))))+"("+environment(this_object())->QueryProp(P_LEVEL)+
+              "): -"+to_string(lost_exp)+"\n");
+       
+  }
+  if (disconnected)
+  {
+     SetProp(P_KILL_MSG, "Schande ueber Dich! Dein Verhalten war alles andere als ehrenvoll!");
+     call_out("arena_death", 1, environment(this_object()), this_object(), lost_exp);
+  }
+  else
+  {
+     SetProp(P_KILL_MSG, 0);
+     environment(this_object())->SetProp(P_LAST_KILLER, get_duell_opponent());
+     call_out("arena_death", 1, environment(this_object()), get_duell_opponent(), lost_exp);  
+  }
+  
+  tell_object (environment(this_object()), break_string("\nDu wurdest von "+
+  get_duell_opponent()->name(WEM, 1)+
+  " in einem Duell auf Leben und Tod besiegt!\n\n", 78, 0, BS_LEAVE_MY_LFS));
+
+  tell_object (get_duell_opponent(), break_string("\nDu hast soeben "+
+  environment(this_object())->name(WEN, 1)+
+  " in einem Duell auf Leben und Tod besiegt!\n\n", 78, 0, BS_LEAVE_MY_LFS));
+
+  tell_room (environment(environment(this_object())), 
+  break_string("\n"+environment(this_object())->name(WER, 0)+" wurde von "+
+  get_duell_opponent()->name(WEM, 1)+
+  " in einem Duell auf Leben und Tod besiegt!\n\n", 
+  78, 0, BS_LEAVE_MY_LFS),({environment(this_object()),get_duell_opponent()}));
+
+  call_out ( "broadcast_ending", 0, 0, get_duell_opponent(), environment(this_object()) );
+
+// Wir merken uns einfach mal wer von wem und wann besiegt wurde.
+//  set_duell_results(({get_duell_opponent(),
+//                      environment(this_object()), time()}));
+//  if (objectp(orden))
+//  orden->set_duell_results(({get_duell_opponent(),
+//                      environment(this_object()), time()}));
+
+
+  break_off_duell(1); // Reset der Werte aber "silent"!
+}
+
+// Reset der Werte nach dem Tod
+int after_life()
+{
+
+  // Wir teilen dem Duell Koordinator mit, dass wir fertig sind!
+  notify_coordinator ();
+
+  notify_death();
+  environment(this_object())->SetProp(P_TMP_MOVE_HOOK, 0); // Sonst ist's nix mit sterben!!
+  tell_object (environment(this_object()), "Du kannst Dich wieder bewegen!\n");
+
+  return 1; // Bringt den Spieler hier nicht um, aber er stirbt!
+}
+
+// Beendet den Schutz des Duellanten!
+void remove_safety (object player)
+{
+  if( !fatality_mode)
+  {
+     // Machen wir das ganze doch etwas stimmungsvoller! :o)
+     tell_room(environment(player), break_string("Der Schimmer von "+player->name(RAW)+
+              " beginnt zu dimmen und erlischt zeitgleich mit dem Orden.\n",78), ({player}));
+     tell_object(player, "Dein Schimmer beginnt zu dimmen und erlischt "+
+              "zeitgleich mit Deinem Orden.\n");
+     player->RemoveDetail(({"schimmer","schimmern","licht"}));
+  }
+  player->SetProp(P_TMP_DIE_HOOK, 0); // Schutz ist aus!
+  player->SetProp(P_TMP_MOVE_HOOK, 0); // Auch die Laehmung ist aus!
+  return;
+}
+
+// Setzt TMP_DIE_HOOK und rettet Spieler vor Tod
+void save_life (object player, int duration)
+{
+  object orden;
+
+  // Machen wir das ganze doch etwas stimmungsvoller! :o)
+  tell_room(environment(player), break_string("Der Orden von "+player->name(RAW)+
+           " leuchtet kurz auf und huellt "+player->name(RAW)+
+           " in silbrig schimmerndes Licht.\n",78), ({player}));
+
+  tell_object(player, "Dein Orden leuchtet kurz auf und huellt Dich "+
+           "in silbrig schimmerndes Licht.\n");
+
+  player->AddDetail( (({"schimmer","schimmern","licht"})), player->name(RAW)+" scheint "+
+           "regelrecht zu gluehen!\n");
+
+  player->_set_die_hook(({time()+
+    duration,orden = present("DuellItem",player),"keep_alife"}));
+
+  if (honour_mode)
+  orden->paralyze(P_DUELL_DURATION, player);
+
+  // Wir setzen Dem Duell auch ein Limit an Zeit:
+  call_out("duell_timeout", duration);
+
+  return;
+}
+
+// Setzt TMP_DIE_HOOK und beendet Duell nach Tod. 
+void no_save_life (object player, int duration)
+{
+  object orden;
+  player->_set_die_hook(({time()+
+  duration,orden = present("DuellItem",player),"after_life"}));
+
+  if (honour_mode)
+  orden->paralyze(P_DUELL_DURATION, player);
+
+ // Wir setzen Dem Duell auch ein Limit an Zeit:
+  call_out("duell_timeout", duration);
+
+  return;
+}
+
+// Gibt ein paar nette Meldungen zurueck :o)
+string message_penalty (int penalty, int opponent)
+{
+  if (opponent)  // Wenn opponent 1 ist, dann 
+                 // ist's ein Gegner sonst sind
+                 // wir's selber!
+  {
+    switch (penalty/60)
+    {
+      case 0 .. 1 : return "Ja gleich! Ich suche nur noch schnell meine Waffe!\n"; break;
+      case 2 .. 3 : return "Moment noch, meine Ruestung klemmt!\n"; break;
+      case 4 .. 5: return "Einen Augenblick! Ich muss mich noch frisch machen!\n"; break;
+      case 6 .. 7: return "Erstmal muss ich mir neue Ausruestung besorgen!\n"; break;
+      case 8 .. 9: return "Ich bin gut, aber so schnell komm nicht"+
+                            "  mal ich wieder auf die Beine!\n"; break;
+      case 10 .. 11: return "Lass mich Doch noch ein wenig ausruhen!\n"; break;
+      case 12 .. 13: return "Ich wurde doch gerade erst besiegt!\n"; break;
+      default: return "In Ordnung, aber ich muss vorher noch etwas erledigen.\nKomm spaeter wieder!\n"; break;
+    }
+  }
+  else
+  {
+    switch (penalty/60)
+    {
+      case 0 .. 1 : return "Geh vorher nochmal auf die Toilette, waer doch zu peinlich im Kampf, oder?\n"; break;
+      case 2 .. 3 : return "Deine Ruestung scheint zu klemmen, behebe das erst mal!\n"; break;
+      case 4 .. 5: return "Pruefe erst noch Deine Ausruestung!\n"; break;
+      case 6 .. 7: return "Jetzt waere ein gueter Zeitpunkt Ausruestung zu kaufen!\n"; break;
+      case 8 .. 9: return "Geh Dich doch erst mal staerken!\n"; break;
+      case 10 .. 11: return "Goenne Dir Doch noch etwas Ruhe, oder willst Du wieder verlieren!?\n"; break;
+      case 12 .. 13: return "Dir tut noch alles weh! An einen Kampf ist nicht zu denken ...\n"; break;
+      default: return "Es wird noch eine Weile dauern bis Du wieder fit bist.\n"; break;
+    }
+  }
+}
+
+// Hier wird der Gegenstand auf "Herz und Nieren" geprueft!
+int check_type ( object item)
+{
+  mixed test;
+
+  // Unsichtbar?
+  if (item->QueryProp(P_INVIS))
+     return 0;
+
+  // Questobjekt?
+  if (item->id("QUESTOBJECT"))
+    return 0;
+
+  // Keine Saecke, Beutel etc.
+  if (item->id("Container"))
+     return 0;
+
+  // Hat den Pfad: /tools oder /test?
+  if (test = regexp( ({file_name(item)}) , "tools"))
+     if (sizeof(test))
+        return 0;
+
+  if (test = regexp( ({file_name(item)}) , "test"))
+     if (sizeof(test))
+       return 0;
+
+  // Ist eine Unit? Keine Units!
+  if (item->IsUnit())
+    return 0;
+
+  // Ist Autoload/Neverdrop?
+  if (item->QueryProp(P_NEVERDROP))
+    return 0;
+
+  if (item->QueryProp(P_NODROP))
+     return 0;
+
+  if (item->QueryProp(P_AUTOLOADOBJ))
+    return 0;
+
+
+  // Passt alles? Dann geht's weiter!
+
+  return 1;
+}
+
+// Wir wollen den Gewinner ein Item aussuchen lassen und
+// zeigen ihm hiermit seine Auswahl.
+mixed query_objects (int silent)
+{
+  int i;
+  mixed inventory, filtered_inv, output_inv;
+
+  // Aufgerufen wird die fun vom Verlierer, der dem Gewinner
+  // einen Gegenstand "anbietet".
+
+  // Wir filtern gleich mal alle Items, die der Gewinner
+  // sowieso nicht bekommen kann mit check_type().
+  // Der Rest wird ausgegeben.
+
+  filtered_inv = ({});
+
+  inventory = deep_inventory(environment(this_object()));
+
+  for (i=0; i<sizeof(inventory); i++)
+  {
+    if (check_type(inventory[i]))
+    {
+      filtered_inv = filtered_inv+({inventory[i]});
+    } 
+  }
+
+  output_inv = "";
+
+  for (i = 0; i < sizeof(filtered_inv); i++)
+      output_inv += i+". "+filtered_inv[i]->QueryProp(P_SHORT)+"\n";
+  
+  if (!silent)
+  tell_object(get_duell_results(1), "\nAus folgender Liste"+
+    " darfst Du einen Gegenstand waehlen:\n\n"+output_inv+"\n"+
+    "Mit <nichts> kannst Du auf Dein Recht verzichten.\n\n"+
+    "Du nimmst: ");
+  
+  return filtered_inv;
+}
+
+// Hilfsfunktion fuer input_to
+int find_bounty (string args)
+{
+  mixed object_list;
+  int index;
+  
+  object_list = query_objects(1);
+  // Pruefen ob es das Objekt gibt
+  if (args != "nichts")
+  {  
+     if (!sscanf(args, "%d", index))
+     {
+        tell_object(get_duell_results(1), "Versuch es mit der Nummer des Objektes!\n");
+        query_objects(0);
+        input_to ("find_bounty");
+        return 0;
+     }
+     else
+     if ((index >= 0) && (index < sizeof(object_list)))
+     {
+        // Pruefen ob Transfer erfolgreich oder nicht
+        if (object_list[index]->move(get_duell_results(1), M_GIVE))
+        {
+           tell_object (environment(this_object()), break_string("Du gibst "+
+           object_list[index]->name(WEN,0)+" an "+get_duell_results(1)->name(WEN, 1)+".\n",78));
+           tell_object (get_duell_results(1), break_string("Du bekommst "+
+           object_list[index]->name(WEN,0)+" von "+
+           environment(this_object())->name(WEM, 1)+".\n", 78));
+
+           set_duell_results (({0,0,0})); 
+           return 1;
+        }
+        else
+        {
+           tell_object(get_duell_results(1), "Dies kannst Du nicht bekommen,"+
+               " waehle etwas anderes!\n");
+           query_objects(0);
+           input_to ("find_bounty");
+           return 0;
+        }     	
+     }
+     else
+     {
+         tell_object(get_duell_results(1), "So etwas siehst Du nicht!\n");
+         query_objects(0);
+         input_to ("find_bounty");
+         return 0;
+     }
+  }
+  else
+  {
+    // Teilen wir es den Gegnern mit dass hier jemand spendabel ist!
+    tell_object(get_duell_results(1), "Du verzichtest grossmuetig auf Deine "+
+       "Belohnung!\n");
+    tell_object(environment(this_object()), break_string(get_duell_results(1)->name(WER, 1)+
+       " verzichtet grossmuetig auf die Belohnung!\n", 78));
+
+    return 1;
+  }
+  return 0;
+}
+
+// Hier darf der Gegner waehlen!
+int choose_object ()
+{
+   object orden, item;
+   // Ist der Gewinner ein NPC hat er schon seine Belohnung
+   if(!query_once_interactive(get_duell_results(1)))
+     return 0;
+
+   orden = check_orden (get_duell_results(1));
+
+   // Sollte der Gegner ein NPC sein
+   // bekommt man auch seinen Pfand wieder:
+   if(!query_once_interactive(environment(this_object())))
+   {
+      // Dies ist ein NPC!!
+      item = orden->get_pawn();
+      item->move(get_duell_results(1), M_GIVE);
+      tell_room(environment(get_duell_results(1)), break_string(get_duell_results(1)->name(WER, 1)+
+          " erhaelt das hinterlegte Pfand nach gewonnenem Duell zurueck!\n", 78), ({get_duell_results(1)}));
+      tell_object (get_duell_results(1), "Du erhaeltst nach gewonnenem Duell Dein Pfand zurueck!\n");
+   }
+
+   // Liste Anzeigen
+   query_objects(0);
+   // Auswahl des Gegenstandes:
+   input_to ("find_bounty");
+
+   return 1;
+}
+
+// Zuruecksetzen aller Werte
+int reset_orden()
+{
+   mixed res;
+   object server;
+
+   if (this_player()->QueryProp(P_TESTPLAYER) || IS_LEARNER(this_player()))
+   {
+    if (is_registered(environment(this_object())))
+    {
+      catch(call_other(OBJ "coordinator", "???", 0));
+      server = find_object ( OBJ "coordinator");
+      server->set_arena_registration (0);
+      server->set_partner (0);
+      server->set_challenger (0);
+    }
+
+    // Pruefung ob evtl. ein DIE_HOOK gesetzt ist. bzw.
+    // ob duell_opponent gesetzt ist.
+    if (res=environment(this_object())->QueryProp(P_TMP_DIE_HOOK))
+    {
+      if ( pointerp(res) && sizeof(res) >= 3
+           && intp(res[0]) && time() < res[0]
+           && objectp(res[1]) && stringp(res[2]) )
+         {
+           // In diesem Fall ist es ein Duell!
+           if (res[1]->id("DuellItem"))
+            // Welches wir auch gleich beenden!
+            environment(this_object())->SetProp(P_TMP_DIE_HOOK, 0);
+            
+           // In diesem Fall ist es ein externer Hook.
+           // Den lassen wir in Ruhe!
+         }
+     }
+     // Setzt den Orden zurueck
+     set_wartezeit (0);
+     set_challenge_opponent (0);
+     set_duell_opponent (0);
+     set_challenger (0);
+     set_pawn (0);
+     set_pot_opponent (0);
+     set_challenge_time (0);
+     set_wish_for_break_off (0);
+     return 1;
+    }
+    else return 0; // Nix fuer Spieler :-P
+}
+
+// Ausgabe aller Werte in sinnvoller Form:
+int report()
+{
+   mixed res;
+
+   write("Dein Orden teilt Dir folgendes mit:\n\n");
+
+   if (!objectp(get_duell_opponent()))
+      write("Du duellierst Dich derzeit nicht!\n");
+   else
+   {
+      write("Du duellierst Dich gerade mit "
+            +get_duell_opponent()->name(WEM, 0)+"!\n");
+
+      if (get_wish_for_break_off() == 0)
+         write("Du wuenscht keinen Abbruch des Duells!\n");
+      else
+         write("Du hast Deinen Gegner um Abbruch des Duells gebeten!\n");
+   }
+
+   if ((get_challenger() == 0) && (!objectp(get_challenge_opponent()))) 
+      write("Du wurdest nicht herausgefordert!\n");
+   else
+      if (get_challenger() == 1)
+        write("Du hast "+get_challenge_opponent()->name(WEN, 0)+
+              " herausgefordert!\n");
+      else 
+        write("Du wurdest von "+get_challenge_opponent()->name(WEM, 0)+
+              " herausgefordert!\n");
+
+   if (get_challenge_time() != 0)
+   {
+      write("Die Herausforderung zu diesem Duell erfolgte vor: "
+      +(time()-get_challenge_time())/60+" min. und "+(time()-get_challenge_time())%60+" sec.\n");
+      if (fatality_mode)
+      {
+        write("Der Duellmodus ist: Auf Leben und Tod!!\n");
+        if (res=environment(this_object())->QueryProp(P_TMP_DIE_HOOK))
+        write(break_string("Das Duell wird noch maximal: "+(res[0]-time())/60+" min. und "+
+             (res[0]-time())%60+" sec. dauern sofern es zu keinem Schlagabtausch mehr kommmt!\n",78));
+      }
+      else 
+      {
+        write("Der Duellmodus ist: Bis zur Bewusstlosigkeit!\n");
+        if (res=environment(this_object())->QueryProp(P_TMP_DIE_HOOK))
+        write(break_string("Deine Schutzhuelle wird noch maximal: "+(res[0]-time())/60+" min. und "+
+             (res[0]-time())%60+" sec. lang aufrecht bleiben sofern es zu keinem Schlagabtausch mehr kommmt!!\n",78));
+      }
+   }
+   if (get_wartezeit() < time())
+      write("Du bist koerperlich fit genug fuer ein Duell!\n");
+   else
+      write("Du bist von Deiner letzten Niederlage noch zu erschoepft!\n");
+   if (objectp(get_pawn()))
+   if (objectp(get_pot_opponent()))
+      write(break_string("Du hast "+get_pot_opponent()->name(WEM, 1)+" "+get_pawn()->name(WEN, 0)+" als Pfand uebergeben,\n"+
+      "einem Duell steht somit nichts mehr im Wege!\n",78));
+   return 1;
+}
+
+// Sollten wir ein Duell laufen haben, brechen wir es ab!
+void BecomesNetDead(object spieler)
+{
+   if (check_duell() == 1)
+   {
+      if (fatality_mode)
+      {
+      	 spieler->SetProp(P_LAST_KILLER, this_object());
+      	 notify_death(1);
+      }
+      else
+      {
+      	 notify_coordinator();
+         surrender();
+      }
+   }
+   if ( objectp(get_duell_opponent()) )
+   {
+      notify_coordinator();
+      break_off_duell(0);   	
+   }
+}
+
+// Funktion zum Festhalten von Gegnern
+int paralyze (int zeit, object player)
+{
+  player->SetProp(P_TMP_MOVE_HOOK, ({time()+zeit, this_object(), "freeze_in_place"}));
+}
+
+// Hilfsfunktion fuer Move_Hook
+int freeze_in_place ()
+{
+  tell_object(environment(this_object()), 
+     "Du bist zur Zeit nicht in der Lage deine Fuesse zu bewegen!\n");
+  return 1;
+}
+
+//Funktion zur Variablenuebergabe
+int set_pawn (object obj)
+{
+  pawn_item = obj;
+  return 1;
+} 
+
+//Funktion zur Variablenuebergabe
+object get_pawn ()
+{
+  return pawn_item;
+}
+
+//Funktion zur Variablenuebergabe
+int set_pot_opponent (object obj)
+{
+  potential_opponent = obj;
+  return (objectp(obj));
+}
+
+//Funktion zur Variablenuebergabe
+object get_pot_opponent ()
+{
+  return potential_opponent;
+}
+
+//Funktion zur Variablenuebergabe
+void set_duell_opponent(object opponent)
+{
+  duell_opponent = opponent;
+  return;
+}
+
+//Funktion zur Variablenuebergabe
+object get_duell_opponent()
+{
+  return duell_opponent;
+}
+
+//Funktion zur Variablenuebergabe
+void set_challenge_opponent(object opponent)
+{
+  challenge_opponent = opponent;
+  return;
+}
+
+//Funktion zur Variablenuebergabe
+void set_challenge_time(int zeit)
+{
+  challenge_time = zeit;
+  return;
+}
+
+//Funktion zur Variablenuebergabe
+object get_challenge_opponent()
+{
+  return challenge_opponent;
+}
+
+//Funktion zur Variablenuebergabe
+int get_challenge_time()
+{
+  return challenge_time;
+}
+
+//Funktion zur Variablenuebergabe
+void set_challenger (int value)
+{
+  challenger = value;
+  return;
+}
+
+//Funktion zur Variablenuebergabe
+void set_wartezeit (int value)
+{
+  wartezeit = value;
+  return;
+}
+
+//Funktion zur Variablenuebergabe
+int get_challenger ()
+{
+  return challenger;
+}
+
+//Funktion zur Variablenuebergabe
+int get_wartezeit ()
+{
+  return wartezeit;
+}
+
+//Funktion zur Variablenuebergabe
+int get_wish_for_break_off ()
+{
+  return wish_for_break_off;
+}
+
+//Funktion zur Variablenuebergabe
+void set_wish_for_break_off (int value)
+{
+  wish_for_break_off = value;
+  return;
+}
+
+//Funktion zur Variablenuebergabe
+mixed get_duell_results (int number)
+{
+ switch (number)
+ {
+   case 1: return duell_results[0]; break;
+   case 2: return duell_results[1]; break;
+   case 3: return duell_results[2]; break;
+   default: return duell_results; break;
+ }
+}
+
+//Funktion zur Variablenuebergabe
+void set_duell_results (mixed res)
+{
+  duell_results = res;
+}
+
+// Checkt ob el element von arr ist.
+int is_element (mixed arr, object el)
+{
+  int i;
+  for (i = 0;i < sizeof(arr) ;i++)
+  {  
+     if (arr[i] == el) return 1;
+  }
+  return 0;
+}
+
+// Sind wir beim Duell Koordinator registriert?
+int is_registered (object ob)
+{
+  object server;
+  
+  catch(call_other(OBJ "coordinator", "???", 0));
+  if (objectp(server = find_object( OBJ "coordinator")))
+  {
+     if ((ob == server->get_partner())||
+         (ob == server->get_challenger()))
+         return 1;
+  }
+  else 
+  return 0;
+}
+
+// Sind wir dabei uns im Buero zu registrieren?
+int is_registering (object ob)
+{
+  object buero;
+  if (objectp(buero = find_object( DROOM "arena_buero")))
+  {
+     if ((ob == buero->get_pot_partner())||
+         (ob == buero->get_challenger()))
+         return 1;
+  }
+  return 0;
+}
+
+string check_duell_mode ()
+{
+   string modus;
+   modus = "Duell ";
+   if (honour_mode)
+      modus += "der Ehre ";
+   if (fatality_mode)
+      modus += "bis zum Tod eines Duellanten";
+   else
+      modus += "bis zur Bewusstlosigkeit eines Duellanten";
+   return modus;
+}

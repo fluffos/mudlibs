@@ -1,0 +1,177 @@
+/*******************************************************************************
+ * Duell System fuer den Ehrenbuerger-Orden und die NPCs in der Stadt der Ehre
+ * Datei: duell.c
+ * Autor: Angel (avs@sbox.tu-graz.ac.at)
+ */
+
+// Im NPC ist lediglich set_pawn_value( WERT ) auf den WERT zu setzen bei dem
+// dieser NPC herausgefordert werden kann. (WERT = Wert des Pfandes) 
+
+#define NEED_PROTOTYPES_NPC
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h> 
+#include <moving.h> 
+#include "../headers/duell.h"
+#include "./def.h"
+
+inherit LIB_UNIQUE "classes/unique_npc";
+inherit "std/npc/sequencer";
+
+
+// NPC-spezifische Variablen
+nosave int pawn_value;
+nosave int safe_challenge_duration;
+
+
+create ()
+{
+  //Init 
+  unique_npc::create();
+  ::create();
+
+  // Wir besorgen uns auch einen Orden der Ehre und stecken ihn an.
+  clone_object( LIB_DUELL "obj/orden" )->move(this_object());
+  command_me("trage orden");
+
+ // Vorbereiten des NPC auf das Duell:
+  set_pawn_value (50);  // Wieviel muss das Pfand wert sein
+
+  // Der NPC behaelt das Item und gibt eine zum NPC passende Meldung aus
+  // Hinweis: Sollte ein Spieler mehrere Items hergeben ist es sein Pech ...
+  SetProp( P_REJECT, ({ REJECT_KEEP, say("Lass mal sehen.\n") }) );
+  
+  // Hier wird das Pfand ausgewertet:
+  RegisterGive( "evaluate_pawn", ({
+     ({"emote betrachtet den Gegenstand genau.",2 }),
+     ({"sage Gut, dieser Gegenstand ist wuerdig!",1})
+  }) );
+}
+
+// Wieviel muss ein Gegenstand wert sein ...
+int get_pawn_value ()
+{
+  return pawn_value;
+}
+
+void set_pawn_value (int value)
+{
+  pawn_value = value;
+}
+
+// Hier wird der Gegenstand auf "Herz und Nieren" geprueft!
+int check_type ( object item)
+{
+  mixed test;
+
+  // Questobjekt?
+  if (item->id("QUESTOBJECT"))
+    return 0;
+
+  // Hat den Pfad: /tools oder /test?
+  if (test = regexp( ({file_name(item)}) , "tools"))
+     if (sizeof(test))
+        return 0;
+
+  if (test = regexp( ({file_name(item)}) , "test"))
+     if (sizeof(test))
+       return 0;
+
+  // Ist eine Unit? Keine Units!
+  if (item->IsUnit())
+    return 0;
+
+  // Ist Autoload/Neverdrop?
+  if (item->QueryProp(P_NEVERDROP) != 0)
+    return 0;
+
+  if (item->QueryProp(P_AUTOLOADOBJ) != 0)
+    return 0;
+
+  // Passt alles? Dann geht's weiter!
+  return 1;
+}
+
+// Pruefen ob das Pfand wuerdig ist
+evaluate_pawn( obj )
+{
+   object orden;
+
+   if ((check_challenge_duration()== 1) || 
+       (check_challenge_duration() == -1))
+   {
+     tell_object(this_player(), "Ich bin nicht zum Duell "+
+     "mit Dir bereit!\nKomm doch bitte spaeter nochmal "+
+     "vorbei, dann sehen wir weiter!\nDu erhaeltst Dein "+
+     "Pfand zurueck.\n");
+     obj->move(this_player(), M_GET);
+     return 0;
+   }
+ 
+   if ((obj->QueryProp(P_VALUE) >= get_pawn_value())&&(check_type( obj )))
+   {
+     // Dieses Pfand ist wuerdig!
+     // Wir merken es uns im Orden des Herausforderers.
+     // Was die Konsequenz hat, dass dieser, sollte
+     // er jemand anderen fordern, das Item verliert.
+     orden = present("orden", this_interactive());
+     if (objectp(orden))
+     {
+       // Der Herausforderer ist nun zum Duell berechtigt.
+       orden->set_pot_opponent (this_object());
+       orden->set_pawn (obj);
+       set_safe_challenge_duration(); // Nun kann niemand 
+                                      // anders ein Pfand
+                                      // einreichen.
+     }
+     return 1;
+   }
+   else 
+   {
+     say("Dieser Gegenstand ist nicht wuerdig!\n");
+     emote("gibt das Pfand zurueck.\n");
+     obj->move(this_player(), M_GIVE);
+
+     return 0;
+   }
+}
+
+// Sobald jemand dem NPC ein Pfand gegeben hat,
+// nimmt er kein weiteres Pfand von anderen Spielern an. 
+// Damit soll gewaehrleistet sein, dass der Spieler sein 
+// Pfand nicht ohne weiteres verliert, weil jemand anders
+// "dazwischenfunkt".
+// Die Routine verhindert auch zwei Kaempfe unmittelbar 
+// hintereinander.
+void set_safe_challenge_duration ()
+{
+  safe_challenge_duration = time()+P_CHALLENGE_DURATION;
+}  
+
+// Prueft ob schon ein neuer Spieler fordern darf oder nicht.
+// Weiters wird abgefragt, ob wir im penalty sind.
+int check_challenge_duration ()
+{
+  object orden;
+  orden = present("orden", this_object());
+  if(objectp(orden))
+  return ((time() <= safe_challenge_duration)||
+          (time() <= orden->get_wartezeit()));
+
+  else 
+  return -1;  // Da lief was schlimm schief! Wir haben keinen Orden!
+}
+
+catch_tell(str)
+{
+  sequencer::catch_tell(str);
+  unique_npc::catch_tell(str);
+}
+
+give_notify(ob)
+{
+  sequencer::give_notify(ob);
+  unique_npc::give_notify(ob);
+}
+

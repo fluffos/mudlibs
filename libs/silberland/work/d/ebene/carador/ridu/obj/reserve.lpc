@@ -1,0 +1,264 @@
+/****************************************************************************
+ reserve.c, (C) 2002 by Carador for Silberland
+****************************************************************************/
+
+#pragma strong_types
+#include "../def.h"
+
+inherit RD_THING;
+
+status in_kabine()
+{
+  return
+    (environment() &&
+      ("/" + RD_TOOLS->program_name(environment()) == RD_ROOMDIR"innen"));
+}
+
+
+int my_weight()
+{
+  int i, w;
+  object *inv;
+
+  inv = all_inventory(this_object());
+  for (i=sizeof(inv); i--;) 
+   w+=inv[i]->QueryProp(P_WEIGHT);
+  return w + QueryProp(P_WEIGHT);
+}
+
+
+string string2_inv(string sep)
+{
+  string txt;
+  object *inv;
+  int i;
+  txt = "";
+
+  if (!first_inventory(this_object())) return "";
+
+  inv = ({ this_object() }) + turn_array(all_inventory(this_object()));
+
+  for (i=0; i<sizeof(inv)-1; i++)
+    txt+= "An " + inv[i]->name(WEM, 1) + " " + 
+      (inv[i+1]->IsPlural()?"haengen":"haengt")+
+      sep + inv[i+1]->name(WER, 0) + ". ";
+  return txt;
+}
+
+string string_inv()
+{
+  object *inv;
+
+  inv = all_inventory(this_object());
+  if (!sizeof(inv)) return " an den Stein";
+  if (sizeof(inv) == 1)
+    return "an " + inv[0]->name(WEN,1) + " an dem Stein";
+
+  return "an " + inv[0]->name(WEN,1) + " an " + 
+    implode(map_objects(inv[1..], "name", WEM, 1), " an ") +
+   " an dem Stein";
+}
+
+status id(string str)
+{
+  return ::id(str) ||
+    sizeof(filter_objects(all_inventory(this_object()), "id", str));
+}
+
+string _query_long()
+{
+  if (!in_kabine()) return "\
+Hey, das ist gut! Der gruene Ersatzstein schwebt direkt neben dem kaputten \
+Stein, der an die Reling montiert ist. So sollte es jetzt fuer Dich ein \
+leichtes zu sein, einfach den Stein zu WECHSELN.";
+
+  return break_string("\
+Der Stein schimmert gruenlich und das ist gut so. Denn genau so einen \
+Stein brauchst Du doch, oder? Auf jeden Fall haengt der Stein gerade \
+hoch oben an der Raumdecke. " + string2_inv(" "));
+}
+
+void fallrunter()
+{
+  object *inv;
+
+  inv = all_inventory(this_object());
+  message(({ ({
+    "Ploetzlich " +
+    (sizeof(inv) > 1 || inv[0]->IsPlural() ? "fallen" : "faellt"), " ",
+    M_BEST, inv, "vom Stein runter." }) }));
+
+  filter_objects(inv, "move", environment(), M_SILENT|M_NOCHECK);
+}
+
+string _query_short()
+{
+  if (in_kabine())
+    return "Ein gruener Stein (unter der Decke schwebend)";
+  return "Ein gruener Stein (schwebend)";
+}
+
+
+string _query_noget()
+{
+  string cmd;
+  int diff;
+
+  if ( query_verb() &&
+       query_verb() != "schubs" && query_verb() != "schubse" &&
+       this_player() &&
+       (cmd = this_player()->_unparsed_args()) &&
+       !(::id(cmd)) &&
+       first_inventory(this_object())) {
+    if (in_kabine())  {
+      if (find_call_out("fallrunter") < 0) call_out("fallrunter", 0);
+      return "Das schaffst Du nicht, ohne grosses Unheil anzurichten.\n";
+    } 
+    return "\
+Du laesst jetzt lieber die Finger von dem Stein, nicht, dass er noch\n\
+davonfliegt.\n";
+  }
+
+  diff = my_weight();
+
+  if (!in_kabine())
+    return "\
+Du laesst jetzt lieber die Finger von dem Stein, nicht, dass er noch\n\
+davonfliegt.\n";
+
+  if (!environment()->auf_tisch()) {
+    if (!environment()->tisch_geschoben()) {
+      return "\
+Der Stein haengt ja an der Decke und der Raum ist doch so hoch, dass Du\n\
+von hier unten nicht rankommst. Aber wenn Du auf den Tisch steigst, dann\n\
+koennte es gehen.\n";
+    }
+    return "\
+Es war schonmal gut, den Tisch unter den Stein zu rutschen. Jetzt\n\
+solltest Du aber noch auf den Tisch steigen, sonst war die ganze Muehe\n\
+fuer die Katz.\n";
+  }
+
+  if (!environment()->tisch_geschoben()) return "\
+Nun stehst Du hier auf dem Tisch und versuchst, den Stein zu erreichen,\n\
+kommst aber noch immer nicht ran, da der Tisch zu weit vom Stein entfernt\n\
+steht. Allerdings verbietet Dir niemand, den Tisch unter den Stein zu\n\
+schieben.\n";
+
+  if (diff < 0) {
+    if (!first_inventory()) return "\
+Hui, mein lieber Scholli, der Stein hat ja gewaltigen Auftrieb. Der\n\
+drueckt so fest nach oben gegen die Decke, dass Du den so nicht\n\
+wegbekommst. Vielleicht kannst Du ja etwas als Beschwerung an den\n\
+den Stein haengen.\n";
+   return "\
+Nein, es geht noch immer nicht. Der Stein ist immer noch zu leicht als\n\
+dass Du ihn bewegen koenntest. Musst Du wohl noch mehr dranhaengen.\n";
+  }
+  if (query_verb() == "schubs" || query_verb() == "schubse")
+    return "SCHUBS_OK";
+  return "\
+Ja, das fuehlt sich ganz gut an. Du schaffst es, den Stein vorsichtig zu\n\
+bewegen. Allerdings wenn Du ihn jetzt nimmst, wuerde bestimmt die ganze\n\
+Beschwerung runterfallen. Besser waere es, du wuerdest den Stein vorsichtig\n\
+nach draussen schubsen.\n";
+}
+
+void create()
+{
+  ::create();
+  
+  SetProp(P_NAME, "Stein");
+  SetProp(P_NAME_ADJ, "gruen");
+  SetProp(P_GENDER, MALE);
+  AddId(({ "\nridu#reserve", "gruener stein", "gruenen stein",
+           "stein", "reserve", "reservestein"}));
+  SetProp(P_NOBUY,1);
+//  SetProp(P_WEIGHT, -9000);
+  SetProp(P_WEIGHT, -5000); 
+  SetProp(P_VALUE, 500);
+  AddRule("haeng <object> an <me>", "haeng");
+  AddRule("haenge <object> an <me>", "haeng");
+  AddRule("befestige <object> an <me>", "haeng");
+  AddRule("schubs <me> nach <text>", "schubs");
+  AddRule("schubse <me> nach <text>", "schubs");
+  AddRule("schubs <text>", "schubs_text");
+  AddRule("schubse <text>", "schubs_text");
+  AddErrorMessage(({ "schubs", "schubse" }), "\
+Wolltest Du vielleicht den Stein nach draussen schubsen?\n");
+}
+
+status do_action(string verb, mapping args)
+{
+  string noget;
+
+  switch(verb) {
+    case "schubs_text" : 
+      if (strstr(args[G_TEXT], "stein") >-1 &&
+          strstr(args[G_TEXT], "draussen") <0) {
+        message("Vielleicht moechtest Du den Stein nach draussen schubsen?");
+        return 1;
+      }
+      return 0;
+    case "schubs" :
+      if (args[G_TEXT] != "draussen" && args[G_TEXT] != "oben") {
+        return 0;
+      }
+      if (!in_kabine()) {
+        message("Aber der Stein ist doch schon draussen.");
+        return 1;
+      }
+      noget = _query_noget();
+      if (noget != "SCHUBS_OK") {
+        message(noget);
+        return 1;
+      }
+      message(({
+        ({ M_WRITE, "Ganz vorsichtig, um ja die komplizierte "
+           "Beschwerungsstatik nicht durcheinanderzubringen, schubst "
+           "Du den Stein leicht an. Und es funktioniert: der Stein "
+           "schwebt sanft nach draussen." }),
+        ({ M_SAY, "Ganz vorsichtig gibt ", M_PL, " dem Stein einen "
+           "leichten Schubs, so dass er sanft nach draussen gleitet." }),
+        ({ M_ROOM, RD_TOOLS->load_object(RD_ROOMDIR"r4"),
+           "Aus dem Kabineninneren schwebt ploetzlich ein Stein "
+           "herbei." })
+      }));
+      move(RD_ROOMDIR"r4", M_SILENT|M_NOCHECK);
+      return 1;
+
+    case "haeng" :
+      if (first_inventory() &&
+          !first_inventory()->id(args[G_ME,1])) {
+        notify_fail(break_string(
+         string2_inv(" bereits ") + "Und wenn Du jetzt noch "
+         "etwas ranhaengen willst, musst Du es an " +
+         first_inventory()->name(WEN,1) + " haengen. Ganz einfach.\n"));
+        return 0;
+      }
+      if (environment(args[G_OBJECT]) != this_player()) {
+        message("Das solltest Du erstmal nehmen.");
+        return 1;
+      }
+
+      if (args[G_OBJECT]->QueryProp(P_NODROP) ||
+          args[G_OBJECT]->QueryProp(P_NEVERDROP)||
+          args[G_OBJECT]->move(environment(this_player()),
+            M_PUT|M_SILENT) <1) {
+        message("Das geht nicht.");
+        return 1;
+      } 
+
+      if (!environment()->auf_tisch()) {
+        message("Von hier unten kommst Du nicht an den Stein ran.");
+        return 1;
+      }
+ 
+      message(({ ({
+        "Du weisst zwar nicht wie, aber irgendwie", M_PL_VERB, 
+        "schaff", M_PL, "es, ", M_AKK, args[G_OBJECT],
+        string_inv() + " zu haengen." }) }));       
+      args[G_OBJECT]->move(this_object(), M_SILENT|M_NOCHECK);
+      return 1;
+  }
+}

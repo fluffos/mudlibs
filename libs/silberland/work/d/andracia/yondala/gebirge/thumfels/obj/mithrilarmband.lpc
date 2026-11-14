@@ -1,0 +1,170 @@
+/*
+  Zwergenitem
+*/
+
+inherit "std/armour";
+
+#include <properties.h>
+#include <language.h>
+#include <wizlevels.h>
+#include <defines.h>
+#include <moredef.h>
+#include <ansi.h>
+#include <combat.h>
+#include <armour.h>
+#include <new_skills.h>
+
+nosave int lastHP, lastSP, aktiv=0;
+nosave object owner;
+
+void create() 
+{
+  if( !is_clone(TO) ) return;
+  ::create();
+
+  lastHP = lastSP = -1;
+
+  SetProp(P_SHORT, "Ein Mithrilarmband");
+  SetProp(P_LONG,
+    "Das ist ein magisches Mithrilarmband, von Zwergenhand geschmiedet und mt einer "+
+    "ungewoehnlichen Magie erfuellt. Dieses wertvolle Geschenk ist nur fuer Zwerge die sich um "+
+    "das Wohl der Stadt Thumfels verdient gemacht haben." );
+  SetProp(P_INFO, 
+    ",--------------------------------------------------------------------,\n"
+    "| Dieses Armband zeigt Dir wieviele Lebenspunkte und Magiepunkte     |\n"
+    "| du noch hast, sowie deine koerperliche Verfassung.                 |\n"
+    "|                                                                    |\n"
+    "| Die Kommandos dazu lauten wie folgt:                               |\n"
+    "| <zwreport ein>   zum einschalten,                                    |\n"
+    "| <zwreport aus>   zum ausschalten                                     |\n"
+/*  "|                                                                    |\n"
+    "| Ausserdem ermoeglicht Dir diese Amulett zusaetzliche Kommandos,    |\n"
+    "| um mit anderen Zaubereren aus der Ferne interagieren zu koennen.   |\n"
+    "|                                                                    |\n"
+    "| Die Befehle hierzu sind: zwuschel (1), zumarme (1), zkuschel (1),  |\n"
+    "| zdanke (1), zbeneide (1), zhuepfe (1), zstupse (1), ztroeste (1),  |\n"
+    "| znicke (1), zstrahle (1), zstiere (1), zhirte (1), zlache (1),     |\n"
+    "| zlaechel (1), zkraule (1), zschnurre (1), zkuesse (1), zfeuer (1), |\n"
+    "| zdruecke (1), zgrummel (3), ztrete (5).                            |\n"
+    "|                                                                    |\n"
+    "| Die Zahlenwerte in Klammern geben die fuer Nichtseher jeweils      |\n"
+    "| notwendigen Magiepunkte an.                                        |\n"*/
+    "`--------------------------------------------------------------------'\n"
+    );
+  SetProp(P_NAME, "Mithrilarmband");
+  SetProp(P_GENDER, NEUTER);
+  AddId( ({"armband", "mithrilarmband", "band", "\nmithrilarmband" }) );
+
+  SetProp(P_ARMOUR_TYPE, AT_MISC );
+  SetProp(P_MATERIAL, MAT_MITHRIL );
+  SetProp(P_NODROP, "Dieses Kleinod ist Dir zu wichtig zum wegwerfen.");
+  SetProp(P_NOSELL, "Du willst dieses Kleinod nicht wirklich verkaufen, oder?");
+  
+  SetProp(P_WEAR_RESTRICTIONS, ([ SR_INCLUDE_RACE: ({"Zwerg"}) ]) );
+
+  SetProp(P_NEVERDROP, 1); 
+
+	SetProp(P_WORN_TEXT, "angelegt");
+
+  SetProp(P_REMOVE_FUNC, TO );
+
+  lastHP = lastSP = -1;
+
+  AddCmd("zwreport", "Report");
+}
+
+int RemoveFunc(object me) {
+	if( !aktiv ) return 1;
+  write( "Du musst das Mithrilarmband erst ausschalten.\n" );
+	return 0;
+}
+
+int Report(string str)
+{
+  if( QueryProp(P_WORN)!=TP ) 
+    return notify_fail("Dazu musst Du das Mithrilarmband erst einmal anlegen!\n"), 0;
+  if(aktiv) notify_fail("Report deines Mithrilarmbands ist eingeschaltet. Syntax: report ein|aus.\n");
+  else notify_fail("Report deines Mithrilarmbands ist ausgeschaltet. Syntax: report ein|aus.\n");
+  switch (str)
+  {
+    case "ein":
+      if (aktiv)
+        write("Der Report-Modus deines Mithrilarmbands ist schon eingeschaltet!\n");
+      else {
+        write("Report-Modus deines Mithrilarmbands ist jetzt eingeschaltet.\n");
+        owner=TP;
+        aktiv=1;
+        owner->AddHpHook(TO);
+        lastHP = owner->QueryProp(P_HP);
+        lastSP = owner->QueryProp(P_SP);
+      }
+      break;
+    case "aus":
+      if (!aktiv)
+        write("Der Report-Modus deines Mithrilarmbands ist doch schon ausgeschaltet!\n");
+      else { 
+        write("Report-Modus deines Mithrilarmbands ist nun ausgeschaltet.\n");
+        owner->RemoveHpHook(TO);
+        owner=0;
+        aktiv=0;
+      }
+      break;
+    default:
+      return 0;
+  }
+  return 1;
+}
+
+void NotifyHpChange()
+{
+  int    hp, mhp, sp, msp;
+  string farbe, para, blind, taub, gift;
+
+  if (!previous_object() || !owner || (owner != previous_object()))
+  	{
+  		// remove();
+  		return;
+    }
+  // Test auf Geist
+  if (owner->QueryProp(P_GHOST))
+    return;
+
+  // aktuelle Werte ermitteln
+  hp = owner->QueryProp(P_HP);
+  mhp = owner->QueryProp(P_MAX_HP);
+  sp = owner->QueryProp(P_SP);
+  msp = owner->QueryProp(P_MAX_SP);
+  
+  // reportfarbe einstellen
+	if(hp*100/mhp<21)	farbe=ANSI_RED;
+	else if(hp*100/mhp<41)	farbe=ANSI_YELLOW;
+	else if(hp*100/mhp<61)	farbe=ANSI_CYAN;
+	else if(hp*100/mhp<81)	farbe=ANSI_BLUE;
+	else farbe=ANSI_GREEN;
+    
+  // Paralysiert?
+  if( !owner->QueryProp(P_PARALYZED) ) para=""; else para=ANSI_RED+"paralysiert "+ANSI_NORMAL;
+  // Blind? 
+  if( !owner->QueryProp(P_BLIND) )  blind=""; else blind=ANSI_RED+"blind "+ANSI_NORMAL;
+  // Taub?	
+  if( !owner->QueryProp(P_DEAF) ) taub=""; else taub=ANSI_RED+"taub "+ANSI_NORMAL;
+  // Vergiftet?
+  if( !owner->QueryProp(P_POISON) ) gift=""; else gift=ANSI_RED+"vergiftet "+ANSI_NORMAL; 
+  	
+  // Vergleich und Ausgabe
+  if ((hp < lastHP) || (hp != lastHP && sp == msp) || (sp != lastSP))
+  tell_object(owner, 
+      farbe+"  Lebenspunkte: "+hp+" ("+mhp+") Magiepunkte:"+sp+" ("+msp+")  "+ANSI_NORMAL+
+      gift+taub+blind+para+"\n");
+
+  // neue Werte merken
+  lastHP = hp; lastSP = sp;
+  return;
+}
+
+int remove()
+{
+  if (aktiv && owner) owner->RemoveHpHook(TO);
+  if (is_clone(TO)) write( "Dein Mithrilarmband zerfaellt zu Staub.\n" );
+	::remove();
+}

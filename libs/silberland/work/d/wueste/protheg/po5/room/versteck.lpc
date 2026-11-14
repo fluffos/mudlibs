@@ -1,0 +1,158 @@
+
+#include "../def.h"
+
+inherit MOST "std_room";
+
+#include <properties.h>
+#include <language.h>
+
+#define SCHLUSS 8
+
+mapping victims;
+
+create() {
+  ::create();
+
+  SetProp(P_INT_SHORT, "In den Faengen der Bruderschaft");
+  SetProp(P_INT_LONG,
+	  "Du wirst gerade von der Bruderschaft der Fuenf auseinander"+
+	  "genommen...\n");
+  SetProp(P_LIGHT, 1 );
+  SetProp(P_INDOORS, 0);
+  SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE: 15, ENV_TERRAIN: TT_ROAD]));
+
+  AddCmd("","haltstill",1);
+  victims=([]);
+}
+
+haltstill(string str)
+{
+  if(!IS_WIZARD(TP))
+    return write("Ugh haelt Dich fest und Du kannst Dich nicht bewegen.\n"),1;
+}
+
+Insert(object vic,string pun)
+{
+  tell_object(vic,
+	      "Ugh stampft herein.\n"+
+	      "Mantar wandert herein.\n"+
+	      "Kalandra schreitet herein.\n"+
+	      "Ein kleiner Hobbit wuselt herein.\n"+
+	      "Grub stampft herein.\n\n");
+  
+  vic->move(ME,M_NOCHECK|M_SILENT|M_NO_SHOW);
+  if(member(victims,getuid(vic)))
+    {
+      victims[getuid(vic)]=0;
+      victims[getuid(vic),1]=vic->QueryProp(P_LAST_COMMAND_ENV);
+      victims[getuid(vic),2]=pun;
+    }
+  else
+    victims+=([getuid(vic):0;vic->QueryProp(P_LAST_COMMAND_ENV);pun]);
+  call_out("seq",3,vic);
+  DB("*** PO5: Player "+CAP(getuid(vic))+" gets punished, from \'"+CAP(pun)+"\'\n");
+}
+
+seq(object who)
+{
+  string text;
+  int time,gd,mo;
+
+  if(!who) return;
+  switch(victims[getuid(who)])
+    {
+    case 0: 
+      text="Ugh packt Dich mit seinen gewaltigen Haenden, hebt Dich "+
+	"ein gutes Stueck in die Hoehe und blickt Dir finster ins Gesicht...\n"+
+	"Die anderen umringen Dich und kommen Dir dabei gefaehrlich nahe!\n\n";
+      time=10;
+      break;
+    case 1: 
+      mo=who->QueryMoney(); gd=200+random(200);
+      if(gd>mo) gd=mo;
+      text="Der kleine Hobbit tritt naeher an Dich heran und beginnt Deine "+
+	"Taschen zu durchsuchen...\n\n";
+      if(mo)
+	text+=(mo<=gd ? "Er schnappt sich Dein restliches Geld und steckt es "+
+	       "grinsend ein.\n":"Er schnappt sich "+gd+" Muenzen aus Deinen "+
+	       "Taschen und steckt sie grinsend ein.\n");
+      else
+	text+="Enttaeuscht, da Du offenbar voellig pleite bist laesst er von Dir "+
+	  "ab und murmelt etwas unverstaendliches in seinen Bart.\n";
+      text+="\nKalandra raeuspert sich...\n\n";
+      who->AddMoney(-gd);
+      time=15;
+      break;
+    case 2:
+      text="Kalandra meint: "+who->name(WER,1)+", wir sollen Dir von "+
+	capitalize(victims[getuid(who),2])+
+	" etwas ausrichten.\n\n";
+      time=6;
+      break;
+    case 3:
+      text="Mantar faehrt fort: "+capitalize(victims[getuid(who),2])+
+	" gefaellt wohl Dein Gesicht nicht!\n\n";
+      time=4;
+      break;
+    case 4:
+      text="Jemand kichert hinter Deinem Ruecken.\n\n";
+      time=10;
+      break;
+    case 5:
+      text="Grub laesst seine Finger noch einmal ordentlich Knacken und kommt "+
+	"dann mit einem gemeinen Grinser auf den Lippen auf Dich zu. Was der "+
+	"wohl vorhat?\n\n";
+      time=15;
+      break;
+    case 6:
+      if(who->QueryProp(P_SIZE)<130)
+	text="Der kleine Hobbit legt Dir eine Augenbinde an...\n\n";
+      else
+	text="Der kleine Hobbit krabbelt an Dir hoch und legt Dir dann "+
+	  "eine Augenbinde an...\n\n";
+      time=15;
+      break;
+    case 7:
+      if(present("\nbarm",who)&&present("\bbein",who))
+	{
+	  text="Grub meint: Ugh, lassen in Ruh "+who->name(WER,1)+"! Schon sein "+
+	    "Krueppel genug!\n";
+	  time=10;
+	  break;
+	}
+      
+      if((present("\nbbein",who))||(!present("\nbarm",who)&&random(10)>4))
+	{
+	  text="Ploetzlich verspuerst Du ein leichtes Ziehen an Deinem Arm...\n"+
+	    "Ugh meint: Jetzt vielleicht bisschen weh tun...\n\n"+
+	    "Jemand kichert hinter Deinem Ruecken.\n\n"+
+	    "Als Du noch ueberlegst, was das ganze eigentlich soll, jagt Dir auch "+
+	    "schon ein gewaltiger Schmerz durch die Glieder, als Ugh Dir Deinen "+
+	    "Arm bricht...\n";
+	  CLONE(OBJ "barm", who);
+	}
+      else
+	{
+	  text="Ploetzlich hebt jemand Dein Bein und als Du Dir gerade Gedanken "+
+	    "machst, was das wohl bedeuten mag, ist es auch schon geschehen...\n"+
+	    "Ein gewaltiger Schmerz durchzuckt Dein Bein, als es mit einem leisen "+
+	    "Krachen bricht...\n";
+	  CLONE(OBJ "bbein", who);
+	}
+      time=15;
+      
+    } 
+  tell_object(who,break_string(text,78,"",BS_LEAVE_MY_LFS));
+  victims[getuid(who)]+=1;
+  if(victims[getuid(who)]==SCHLUSS)
+    call_out("schluss",time,who);
+  else
+    call_out("seq",time,who);
+}
+
+schluss(object who)
+{
+  tell_object(who,"\nAbschliessend meint Mantar: Lass Dir das eine Lehre sein!\n"+
+	      "Mit diesen Worten entlaesst Dich die Bruderschaft der Fuenf...\n");
+  who->move(victims[getuid(who),1],M_NOCHECK|M_SILENT|M_NO_SHOW);
+}

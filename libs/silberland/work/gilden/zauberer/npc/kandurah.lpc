@@ -1,0 +1,141 @@
+inherit "/gilden/zauberer/zfun";
+inherit "std/npc";
+
+#pragma strong_types
+
+#include <npc.h>
+#include <defines.h>
+#include <moredef.h>
+#include <properties.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <ansi.h>
+
+#include "/gilden/zauberer/zauberer.h"
+
+
+object me = this_object();
+
+void create()
+{
+  if (is_clone(this_object())) return;
+
+  seteuid(getuid());
+  
+  ::create();
+
+  enable_commands();
+  
+  AddId(({"kandurah", "zauberer", "GUILD_NPC"}));
+  
+  SetProp(P_NAME, "Kandurah");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_SIZE, 200);
+  SetProp(P_WEIGHT, 90);
+  SetProp(P_ARTICLE, 0);
+
+  SetProp(P_SHORT, "Kandurah der Zauberer der hoechsten Stufe");
+  
+  TO->move("/gilden/zauberer", M_NOCHECK);
+
+  AddInfo("fertigkeiten", "@@skills@@", "sagt: ");
+  AddInfo( ({"neuen stab", "neuer stab"}), "@@newstick@@", "sagt: ");
+}
+
+string PercentBar(int percent)
+{
+  int dots;
+  int hashes;
+  string col_pre;
+  
+  if (percent < 33) col_pre = ANSI_RED;
+  else if (percent < 66) col_pre = ANSI_YELLOW;
+  else col_pre = ANSI_GREEN;
+
+  hashes = 20*percent/100;
+  dots   = 20*(100-percent)/100;
+
+  if (hashes+dots < 20) dots++;
+  
+  return sprintf("[%s%s%s%s]", col_pre,
+     strmul("#", hashes), 
+     ANSI_NORMAL,
+     strmul(".", dots));
+}
+
+
+/*
+    Gibt die Fertigkeiten aus - sortierter index aus P_NEWSKILLS
+*/
+string skills()
+{
+  string *spells;
+  mapping newskills;
+  int i;
+
+
+  if (lowerstring(TP->QueryProp(P_GUILD)) != "zauberer")
+    return sprintf("Du gehoerst diese Gilde nicht an, %s", TP->Name(WER));
+
+  newskills = copy_mapping(TP->QueryProp(P_NEWSKILLS));
+
+  spells = m_indices(newskills);
+  
+  spells = sort_array(spells, #'<);
+
+  tell_room(ENV(ME), break_string(sprintf("Du beherrscht Deine Zauber wie folgt, %s:",
+                            TP->Name(WER)), 78, ME->Name(WER)+ " sagt: "));
+  
+  for (i=0;i<sizeof(spells);i++)
+    {
+      say(sprintf("%s sagt: %20.20s : %s\n",
+              ME->Name(WER), 
+              capitalize(spells[i]), 
+	      PercentBar(newskills[spells[i]]["si_abil"]/100)));
+    }
+
+  return "";  
+  
+}
+
+/*
+  Tauscht das Stoeckchen
+ */
+string newstick()
+{
+  object ob, pl;
+ 
+
+  if (!(pl=this_player()) || !interactive(pl))
+    return "Was bist Du eigentlich, " + pl->name(WER)+"?";
+
+  if (lowerstring(pl->QueryProp(P_GUILD)) != "zauberer")
+    {
+      if (pl->QueryProp(P_GENDER)==FEMALE)
+        return "Du bist keine von uns, "+pl->name(WER)+"!";
+      else
+        return "Du bist keiner von uns,"+pl->name(WER)+"!";
+    }
+
+
+  if (objectp(ob=present("\nzauberer_stab", pl)))
+    {
+      ob->DoUnwield();
+      tell_object(pl, break_string(ME->Name(WER) + " nimmt Deinen "
+        + "Stab und zerstaeubt ihn.", 78));
+      tell_room(ENV(ME), break_string(ME->Name(WER) + " nimm "
+        + pl->name(WESSEN) + " Stab und zerstaeubt ihn.", 78),
+        ({ pl }));
+    }
+    
+  if (!objectp(ob = clone_object(Z_STICK)))
+    return "Ich bin kaputt! Hilfe!";
+
+  ob->move(ME, M_SILENT + M_NOCHECK);
+
+  give_obj(ob, pl);
+
+  return "Hier bitte, "+pl->name(WER)+".";
+ 
+
+}

@@ -1,0 +1,204 @@
+// /players/feyaria/berserker/blutrausch.c
+// blutrausch fuer Berserker-Gilde
+//
+// Update Gwenshara 31.08.2008 -- Per HB Speed beibehalten
+//
+// 1997-03-16  Feyaria@SilberLand
+
+#include <moredef.h>
+#include <defines.h> 
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include <new_skills.h>
+#include <ansi.h>
+
+int normal();
+
+int activ;
+object berserker;
+int old_wimpy;
+string old_title;
+string old_away;
+int ende;
+
+int global_speed, global_damage, stime, global_dauer;
+
+void create()
+{
+  if (!is_clone(TO) )  return;
+
+  ::create();
+
+  SetProp(P_SHORT, 0);
+  AddId(({"\nberserker_blutrausch", "\nblutrausch"}));
+
+  SetProp(P_MATERIAL, MAT_MAGIC );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NODROP, 1);
+}
+
+void init()
+{
+  ::init();
+  if( MENV->QueryProp(P_GUILD)!="berserker"  || 
+      present("\n blutrauch 2", MENV) )
+  {
+    call_out("remove",0);
+    if( berserker) normal();
+    return;
+  }
+  add_action( "nixda", "", 1);
+}
+
+int nixda()
+{
+  string a,b;
+
+  if(!berserker || MENV != berserker)
+  {
+    call_out("remove", 0);
+    return 0;
+  }
+  if(TP != berserker)
+    return 0;
+
+  if(berserker->InFight() )
+  {
+    switch(berserker->QueryProp(P_TTY))
+    {
+      case "ansi":  a=ANSI_BOLD; b=ANSI_NORMAL+ANSI_RED+ANSI_BG_BLACK; break;
+      case "vt100": a=ANSI_BOLD; b=ANSI_NORMAL; break;
+    }
+    write(a+"BLUT!!!  TOD!!!  METZELN!!!  STERBEN!!!  RAUSCH!!!"+b+"\n");
+  }
+  else
+  {
+    if( ende == 0 )
+    {
+      remove_call_out("normal");
+      call_out("normal",0);
+      ende=1;
+    }
+    if( berserker->QueryProp(P_TTY)=="ansi" ) 
+      write( ANSI_NORMAL);
+    write("Du beruhigst Dich langsam wieder.\n");
+  }
+  return 1;
+}
+
+void blutrausch(int suc, int dauer)
+{
+  int speed, max_speed, damage;
+  object ob;
+  if( file_name(PO)!="/spellbooks/berserker_spells" )
+  {
+    call_out("remove",0);
+    return;
+  }
+  ende=0;
+  if( ob=present("\nberserker_willenskraft", MENV) )
+    ob->willenskraft_ende();
+  if( ob=present("\nberserker_stirnband", MENV) )
+  {
+    ob->deactivate_other_reports();
+    ob->activate(0);
+  }
+  MENV->Set(P_WIMPY, symbol_function("wimpy", this_object()), F_QUERY_METHOD);
+  old_title=MENV->QueryProp(P_TITLE);
+  old_away=MENV->QueryProp(P_AWAY);
+  MENV->SetProp(P_AWAY,"Bin gerade im vollen Blutrausch *METZEL*" );
+  MENV->SetProp(P_TITLE,"im vollen Blutrausch");
+  max_speed = 400 + (MENV->QueryProp(P_GUILD_LEVEL) - 8) * 25;
+  if( (speed = suc/50) < 200 ) speed = 200; 
+  if( speed < 250 ) dauer/=2;
+  if( speed > max_speed) speed = max_speed;
+  if( !interactive(MENV) ) 
+    damage = 150;
+  else
+    damage = MENV->QuerySkillAttribute(SA_DAMAGE);
+  MENV->SetProp(P_SKILL_ATTRIBUTES, 0);
+  MENV->ModifySkillAttribute(MENV, SA_SPEED, speed, dauer);
+  MENV->ModifySkillAttribute(MENV, SA_DAMAGE, damage, dauer);
+  MENV->SetProp(P_TMP_DEFEND_HOOK, 0); 
+  MENV->SetProp(P_TMP_DEFEND_HOOK,({ time()+dauer, TO, "blutrausch_defend"}));
+  berserker=MENV;
+  if( berserker->QueryProp(P_TTY)=="ansi" ) write( ANSI_RED);
+  call_out("normal", dauer);
+
+  // Zum beibehalten des Rausch, falls irgendwas SA_SPEED oder SA_DAMAGE aendert!
+  // by Gwenshara
+  set_heart_beat(1);
+  global_speed  = speed;
+  global_damage = damage;
+  global_dauer  = dauer;
+  stime = time();
+}
+
+// Zum Beibehalten s.o.
+void heart_beat()
+{
+  int dur;
+  if(!objectp(berserker)) return;
+  if(berserker->QuerySkillAttribute(SA_SPEED) < global_speed ||
+     berserker->QuerySkillAttribute(SA_DAMAGE) < global_damage)
+  {
+    tell_object(berserker, "Deine Wut bringt Dich zum Rasen!\n");
+
+    dur = global_dauer-(time()-stime);
+    berserker->ModifySkillAttribute(MENV, SA_SPEED, global_speed, dur);
+    berserker->ModifySkillAttribute(MENV, SA_DAMAGE, global_damage, dur);
+  }
+}
+
+void normal()
+{
+  object ob;
+  if( berserker)
+  {
+    berserker->Set(P_WIMPY, 0, F_QUERY_METHOD);
+    berserker->SetProp(P_TITLE,old_title);
+    berserker->SetProp(P_AWAY,old_away);
+    berserker->SetProp(P_TMP_DEFEND_HOOK, 0);
+    berserker->SetProp(P_SKILL_ATTRIBUTES, 0);
+    if( berserker->QueryProp(P_TTY)=="ansi" ) write( ANSI_NORMAL);
+    write("Der Blutrausch ist beendet, Du wirst wieder normal.\n");
+    if( (ob=present("\nberserker_stirnband", berserker)) )
+    {   
+      ob->reactivate(berserker);
+    }
+    berserker = 0;
+  }
+  call_out("remove",0); 
+}
+
+mixed blutrausch_defend(int dam, mixed dam_type, mixed spell, object enemy)
+{
+  mapping para;
+  if (!pointerp(dam_type))
+    dam_type = ({ dam_type });
+  dam-=(20+random(25))*dam/100;
+  if( random(2) && ( para=berserker->QueryProp(P_PARALYZED)) )
+    berserker->SetProp(P_PARALYZED, para+([PARALYZE_TIME: para[PARALYZE_TIME]-1 ]) );
+  if( berserker->QueryProp(P_TTY)=="ansi" ) tell_object(berserker, ANSI_RED+ANSI_BG_BLACK);
+  return ({ dam, dam_type, spell, enemy });
+}
+
+varargs int remove(int silent)
+{
+  if( berserker )
+  {
+    normal();
+    remove_call_out("remove");
+  }
+  ::remove(silent);
+}
+
+int wimpy()
+{
+  return 0;
+}
+

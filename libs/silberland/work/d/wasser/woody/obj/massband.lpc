@@ -1,0 +1,186 @@
+
+/* Ein Massband - Woody
+ * ---
+ * Questbelohnung fuer die Hausquest
+ * ---
+ * Jun 05, 1998: Rev 1.0
+ * Jul 26, 2002: Rev 1.1 - Laenge nun 4 Meter, relative Groesse
+ * Sep 18, 2005: Rev 1.2 - Leiter verlaengert gg.falls Einsatzlaenge :)
+ *
+ */
+
+
+inherit "std/thing"; 
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <defines.h>
+#include <moredef.h>
+
+#define BANDLAENGE 400
+
+void create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  AddId ( ({ "massband", "band", "\nverianmassband" }) );
+  SetProp (P_SHORT, "Ein Massband");
+  SetProp (P_LONG,
+      "Du haeltst ein langes Massband in Deinen Haenden, mit dem Du "
+      "Lebewesen vom Scheitel bis zur Sohle abmessen kannst.");
+  SetProp (P_INFO, BS(
+      "Du kannst mit dem Massband andere Lebewesen, aber auch Dich "
+      "selbst bis zu einer Maximallaenge von "+BANDLAENGE+" Zentimetern "
+      "abmessen. Allerdings koennte es sein, dass Deine Groesse trotz "
+      "Deiner Armlaenge nicht ausreicht, um groessere Lebewesen abzumessen. "
+      "Auch Alkohol kann Deine Messfaehigkeit beeintraechtigen..."));
+
+  SetProp (P_GENDER, NEUTER);
+  SetProp (P_NAME, "Massband");
+  SetProp (P_VALUE, 0);
+  SetProp (P_WEIGHT, 20);
+  SetProp (P_NODROP, "Du willst Dich von diesem Geschenk nicht trennen.\n");
+  SetProp (P_NEVERDROP, 1);
+
+  AddCmd ( ({ "miss", "messe" }), "miss");
+
+}
+
+int miss(string str)
+{
+  object wen,ob,*obs,leiter;
+  string s1,s2;
+  int maxsize, size, alc;
+
+  notify_fail("Wen oder was willst Du abmessen?\n");
+  if (!str) return 0;
+  if ((sscanf(str, "%s ab%s", s1,s2) != 2) || (s2 != "")) return 0;
+  wen = present(s1,environment(TP)) || present(s1,TP);
+  if (!wen) return 0;
+
+  if (TP->QueryProp(P_GHOST))
+    return write("Mit Deinen Geisterhaenden kannst Du das Massband "
+        "einfach nicht festhalten!\n"), 1;
+
+  if (TP->InFight())
+    return write("Dazu bist Du viel zu beschaeftigt!\n"), 1;
+
+  if (wen->InFight())
+    return write(wen->Name(WER,1)+" haelt einfach nicht still genug.\n"), 1;
+
+  alc = 100 * TP->QueryProp(P_ALCOHOL) / TP->QueryProp(P_MAX_ALCOHOL);
+  size = wen->QueryProp(P_SIZE);
+  maxsize = TP->QueryProp(P_SIZE)*6/5;  // Groesse + 20%
+
+  if (!living(wen) && !size)
+    return write("Du kannst "+wen->name(WEN,1)+" leider nicht abmessen!\n"), 1;
+
+  // if (maxsize > BANDLAENGE) maxsize = BANDLAENGE;
+  if (alc > 20) size = size + random(alc) - random(alc);
+
+  leiter = 0;
+  if (size > maxsize) {
+    if (leiter = present("leiter",TP)) {
+      if (leiter->QueryProp(P_SIZE))
+        maxsize += leiter->QueryProp(P_SIZE);
+      else
+        leiter = 0;
+    }
+  }
+
+  if (wen==TP) {
+    write(BS("Du misst Dich selbst ab und stellst erstaunt fest, dass Du "
+        "genauso gross bist wie Du. Ganze "+TP->QueryProp(P_SIZE)+
+        " Zentimeter!"));
+    say(BS(TP->Name()+" zieht ein Massband aus der Tasche und misst sich "
+        "selbst ab."));
+    obs=filter_array(all_inventory(environment(TP)), #'living) - ({ TP });
+    obs-=filter_objects(obs, "QueryProp", P_INVIS);
+    if (sizeof(obs)) {
+      ob=obs[random(sizeof(obs))];
+      tell_object(ob,
+          "Weil das so albern aussieht, musst Du unwillkuerlich kichern.\n");
+      tell_room(environment(ob),
+          ob->Name()+" muss unwillkuerlich kichern.\n", ({ ob }) );
+    }
+  }
+  else if (size < 1) {
+    write(BS("Du versuchst, "+wen->name(WEN,1)+" abzumessen, merkst aber, "
+        "dass "+wen->QueryPronoun()+" viel zu klein zum Abmessen ist."));
+    say(BS(TP->Name()+" zieht ein Massband aus der Tasche und versucht, "+
+        wen->name(WEN)+" mit einem Massband abzumessen, scheitert aber "
+        "daran, dass "+wen->name(WER,1)+" viel zu klein ist."), wen);
+    tell_object(wen, BS(TP->Name()+" zieht ein Massband aus der Tasche und "
+        "versucht vergeblich, Dich abzumessen."));
+  }
+  else if (size > BANDLAENGE)
+  {
+    write(BS("Verzweifelt versuchst Du, die Groesse "+
+        wen->name(WESSEN,1)+" abzumessen, merkst aber, dass das Band "
+        "einfach zu kurz ist und gibst auf."));
+
+    if (size < (TP->QueryProp(P_SIZE) * 9 / 10))
+      write(BS("Du stellst aber mit freiem Auge fest, dass "+
+            wen->name(WER,1)+" deutlich kleiner ist als Du."));
+    else if (size < (TP->QueryProp(P_SIZE) * 10 / 9))
+      write(BS("Du stellst aber mit freiem Auge fest, dass "+
+            wen->name(WER,1)+" etwa gleich gross ist wie Du."));
+    else
+      write(BS("Du stellst aber mit freiem Auge fest, dass "+
+            wen->name(WER,1)+" deutlich groesser ist als Du."));
+
+    say(BS(TP->Name()+" zieht ein Massband aus der Tasche und misst "+
+        wen->name(WEN)+" mit einem viel zu kurzen Massband ab."), wen);
+    tell_object(wen, BS(TP->Name()+" zieht ein Massband aus der Tasche und "
+        "versucht vergeblich, Dich mit einem viel zu kurzen Massband "
+        "abzumessen."));
+  }
+  else if (size > maxsize) {
+    write(BS((leiter ? "Du kletterst auf Deine Leiter, aber so" : "So") +
+        " sehr Du Dich auch auf die Zehenspitzen stellst, Du schaffst "
+        "es nicht, "+wen->name(WEN,1)+" abzumessen. Das letzte, was Du noch "
+        "sehen kannst, sind die "+maxsize+" Zentimeter auf der Skala."));
+    say(BS(TP->Name()+" zieht ein Massband aus der Tasche, " +
+        (leiter ? "klettert auf eine Leiter, " : "") + "stellt sich auf "
+        "die Zehenspitzen und misst "+wen->name(WEN) + " ab, scheitert aber, "
+        "da " + TP->QueryPronoun()+" zu klein ist."), wen);
+    tell_object(wen, BS(TP->Name() + " zieht ein Massband aus der Tasche, " +
+        (leiter ? "klettert auf eine Leiter, " : "") +
+        "stellt sich auf die Zehenspitzen und versucht, Dich abzumessen, "
+        "scheitert aber, da "+TP->QueryPronoun()+" zu klein ist."));
+  }
+  else {
+    write(BS( (leiter ? "Du kletterst auf Deine Leiter, " : "Du ") +
+        "misst " + wen->name(WEN,1) + " ab und stellst fest, dass "+
+        wen->QueryPronoun() + (alc > 20 ? " <Hick!> " : " ")+
+        size + " Zentimeter gross ist."));
+    say(BS(TP->Name()+" zieht ein Massband aus der Tasche"+
+        (alc > 20 ? ", torkelt ein wenig" : "")+
+        (leiter ? ", erklimmt eine Leiter" : "")+
+        " und misst "+wen->name(WEN)+" ab."), wen);
+    tell_object(wen, BS(TP->Name()+" zieht ein Massband aus der Tasche"+
+        (alc > 20 ? ", torkelt ein wenig" : "")+
+        (leiter ? ", erklimmt eine Leiter" : "")+
+        " und misst Dich ab."));
+  }
+  if ((wen!=TP) && !query_once_interactive(wen) && living(wen) &&
+      !wen->QueryProp(P_NOATTACK) && (random(100) < 2) &&
+      (TP->QueryProp(P_LEVEL) >= 15))
+  {
+    tell_room(environment(TP),
+        "Oh-Oh... "+wen->name(WEM,1)+" scheint das gar nicht zu gefallen!\n",
+        ({ wen }) );
+    remove_call_out("PlAttack");
+    call_out("PlAttack", 4+random(5), wen, TP);
+  }
+  return 1;
+}
+
+nosave void PlAttack(object ob, object pl)
+{
+  if (ob && pl && (environment(ob) == environment(pl)))
+    ob->Kill(pl);
+}
+

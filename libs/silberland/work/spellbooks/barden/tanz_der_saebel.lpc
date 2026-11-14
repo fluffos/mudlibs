@@ -1,0 +1,87 @@
+mapping prep_tanz_der_saebel(object caster, mapping sinfo) {
+    object target;
+    mapping rmap;
+    string res;
+
+   sinfo = prepare_song(caster, sinfo);
+    if(sinfo == 0) {
+        return 0;
+    }
+
+    if(!paySpellCost(caster, sinfo, 1)) return 0;
+
+    if(present(SONG_DANCING_ITEM, caster)) {
+        write(BS("Du hast bereits eine tanzende Waffe."));
+        return 0;
+    }
+  
+    target = FindVictim(sinfo[SI_SKILLARG], caster, 0);
+    if(!objectp(target)) {
+        write(BS("Fuer welche Waffe moechtest du dieses Lied spielen?"));
+        return 0;
+    }
+    if(environment(target) != caster) {
+        write(BS("Dazu musst du " + target->Name(WEN) + " bei dir haben!"));
+        return 0;
+    }
+
+    if(!target->QueryProp(P_WEAPON_TYPE)) {
+        write(BS("Fuer dieses Ziel kannst du dieses Lied nicht spielen!"));
+        return 0;
+    }
+
+    if( (rmap=target->QueryProp(P_WIELD_RESTRICTIONS)) &&  (res=RESTR_CHECKER->check_restrictions(caster, rmap)) ){
+        write(BS("Auf diese Waffe kannst du dieses Lied nicht spielen:"));
+        write(res);
+        return 0;
+    }
+
+    tell_room(environment(caster), BS(sprintf("%s spielt ein paar rasante Takte eines froehlichen und wilden Lieds.", 
+              caster->Name(WER, 1))), ({caster}));
+
+    return sinfo;
+}
+
+int tanz_der_saebel(object caster, mapping sinfo) {
+    object target, song;
+    int success;
+    float factor;
+
+    target = FindVictim(sinfo[SI_SKILLARG], caster, 0);
+    if(!objectp(target)) {
+        write(BS("Huch? Dein Ziel ist gar nicht mehr da."));
+        return 0;
+    }
+
+    if(environment(target) != caster) {
+        write(BS("Dazu musst du " + target->Name(WEN) + " bei dir haben!"));
+        return 0;
+    }
+
+    if(!paySpellCost(caster, sinfo)) return 0;
+
+    if((success = SpellSuccess(caster,sinfo)) <=0 ) {
+        if(success < -3000) {
+            tell_room(environment(caster), BS("Mit einem mal schnellt %s hoch und schlaegt %s mitten ins Gesicht!"), ({caster}));
+            tell_object(caster, BS("Mit einem mal schnellt %s hoch und schlaegt dir mitten ins Gesicht!"));
+            caster->AddHp(-(target->QueryProp(P_WC)/10));
+        } else if(success < -2000) {
+            tell_room(environment(caster), BS(sprintf("%s beginnt wild herum zu rasen und knallt schliesslich hart gegen den Boden...", target->Name(WER, 2))));
+            target->TakeFlaw(5 + random(success * -1 / 1000));
+        } else {
+            tell_room(environment(caster), BS("Nichts passiert..."));   
+        }
+        return MISSERFOLG;
+    }
+
+    song = clone_object(OBJ("dancing_item"));
+    if(song->move(caster, M_GET|M_NOCHECK) != 1) {
+        write(BS("Das Lied kann sich nicht manifestieren..."));
+        song->remove(1);
+        return 0;
+    }
+
+    factor = 1.0 + ((float) CheckEquip(caster, "tanz der saebel"))/100.0;
+    song->Setup(lowerstring(sinfo[SI_CAP_NAME]), caster, sinfo[SI_SKILLABILITY], success, factor, target);
+    return ERFOLG;
+}

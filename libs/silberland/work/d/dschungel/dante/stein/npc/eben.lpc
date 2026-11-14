@@ -1,0 +1,121 @@
+//Aenderungen
+//
+//23/02/98 Thor: - NPC kaempft nun nur noch gegen den Schoepfer des
+//                 Spiegelbildes, siehe _query_noattack.
+
+
+inherit "std/mnpc";    
+#include "../def.h"
+
+string owner;
+
+void create() {
+  if(!is_clone(ME)) return;
+  ::create();
+  call_out("check_it",60);
+}
+
+void wech() {
+  if(!ME||!environment(ME)) return;
+  move("/room/npcasylraum",M_GO|M_NOCHECK);
+  call_out("remove",1);
+}
+
+void check_it() {
+  string n;
+  object e;
+  n=LOWER(QueryProp(P_NAME));
+  if(!n||!find_player(n)) return wech();
+  e=environment(find_player(n));
+  if(environment(ME)!=e) move(e,M_TPORT|M_NOCHECK);
+  call_out("check_it",60);
+}
+
+void reset() {
+  ::reset();
+  if(!is_clone(ME)) return;
+  while(remove_call_out("check_it")!=-1);
+  check_it();
+}
+
+void init() {
+  ::init();
+  if (!query_once_interactive(TP)) return;
+  if(getuid(TP) == owner) Kill(TP);
+  if(interactive(TP)) call_out("hallo",0);  
+}
+
+void hallo()     
+{
+
+  command("emote grinst boese und sagt: Hallo "+ TP->name(RAW) +"!");
+  }
+
+
+void Attack(object enemy) {
+  object e;
+  if(!enemy||enemy->query_real_name()!=lower_case(QueryProp(P_NAME))) {
+    while(remove_call_out("check_it")!=-1);
+    return check_it();
+  }
+  return ::Attack(enemy);
+}
+
+
+UseSkill(skill,args) {
+  string n;
+  object e;
+  mixed f,s;
+  n=lower_case(QueryProp(P_NAME));
+  if(!n||!find_player(n)) {
+    if (find_call_out("wech") < 0)
+      call_out("wech",0);
+    return 0;
+  }
+  f=catch(s=::UseSkill(skill,args));
+  if(f) {
+    while(remove_call_out("check_it")!=-1);
+    check_it();
+  }
+  return s;
+}
+
+int Defend(int dam, mixed dam_type, mixed spell, object enemy) {
+  if(!enemy||enemy->query_real_name()!=lower_case(QueryProp(P_NAME))) {
+    while(remove_call_out("check_it")!=-1);
+    check_it();
+    return 1;
+  }
+  return ::Defend(dam,dam_type,spell,enemy);
+}
+
+void NotifyPlayerDeath(object pl, object killer, int lost_xp) {
+  pl->RemovePursuer(ME);
+  while(remove_call_out("check_it")!=-1);
+  call_out("wech",1);
+}
+
+void die(int poisondeath)
+{
+  object ob;
+  write("Ploetzlich liegt eine seltsamer Gegenstand vor Dir!\n");
+  ob=clone_object("/d/dschungel/dante/weg/armour/wauge.lpc");
+  ob->move(environment(TP));
+  if (ob = present("\namazonen_spiegelbild_quest", TP))
+    ob->fertig();
+  ::die(poisondeath);
+}
+
+void SetOwner(string str) {
+  owner=str;
+}
+
+string QueryOwner() { return owner; }
+
+mixed _query_noattack()
+{
+  if ((QueryOwner() != getuid(TP)) && (TP != ME))
+    return "hat nichts am Hut mit Dir.";
+  return 0;
+}
+

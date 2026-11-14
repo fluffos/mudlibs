@@ -1,0 +1,859 @@
+// /spellbooks/nekro_spells.c  
+// Spellbook der Nekromanten
+// Genauere Erlaeuterungen bitte dem File /gilden/nekromanten/doc/nekro.txt
+// entnehmen.
+// Stahldorn@SilberLand
+
+/*
+
+Beschwoere :    Leiche im Raum wird wieder lebendig und kaempft mit dem 
+                Caster zusammen mit. Je hoeher die Stufe, desto bessere 
+                Leichen kann man beschwoeren.
+                (Level des gestorbenen NPC muss < sein als Level des Casters)
+                Level:1 - MP:10
+
+Verfluche:      schwacher Spell gegen einen Gegner, DT_UNHOLY
+                Level:1 - MP:10
+
+Kannibalismus:  Leichen von Livings derselben Rasse wie der Caster heilen
+                besonders gut.
+                Level:2 - MP:0
+
+Beherrsche:     Man versucht, einen Untoten zu beherrschen, damit er einem
+                nachlaeuft. Man kann immer nur einen Untoten glztg beherrschen.
+                Level:2 - MP:20
+
+Verpeste:       auf Waffe:    diese schlaegt zusaetzlich mit DT_UNHOLY zu
+                auf Ruestung: diese schuetzt zusaetzlich vor DT_UNHOLY
+                              und bei besonders gutem Erfolg noch vor einem
+                              anderen zufaelligen Schadenstyp (MAGIC, FIRE...)  
+                Level:3 - MP:25
+
+Kreische:       mittlerer Spell gegen einen Gegner, DT_SOUND
+                Level:3 - MP:20
+
+Faeulnis:       guter Spell gegen einen Gegner, ({ DT_POISON, DT_UNHOLY })
+                Level:4 - MP:25
+
+Eiterhuelle:    Man reibt sich mit unheiligem Eiter eigener Wunden ein.
+                Geht nur wenn P_HP < P_MAX_HP/2. Die Eiterhuelle bietet fuer
+                kurze Zeit zusaetzlichen Schutz vor physikalischen Angriffen
+                und erhoeht die Temperaturtoleranz stark.
+                Level:4 - MP:15
+
+Terror:         Spell gegen einen Gegner, DT_TERROR
+                wirkt bei Dunkelheit deutlich besser (groesserer Terroreffekt)
+                Level:5 - MP:30
+
+Spioniere:      Man erschafft eine Fledermaus oder Ratte, die man kurzzeitig
+                steuern kann, als ob man sie selber waere. Jeden heart_beat 
+                des Gefaehrten verliert man MP. Wenn die MP 0 werden, 
+                verschwindet der Spion wieder.
+                Level:5 - MP:40 (-10 MP jeden hb)
+
+Seelenfrass:    Magiepunkte des Gegners werden total abgezogen und man bekommt
+                die abgezogenen MP (gewichtet - Haelfte oder Drittel...) als 
+                LP gutgeschrieben. 
+                Level:6 - MP:50
+
+Todesgesang:    guter Spell gegen mehrere Gegner, ({ DT_SOUND, DT_UNHOLY })
+                Level:6 - MP:40
+*/
+
+
+#include <properties.h>
+#include <language.h>
+#include <attributes.h>
+#include <combat.h>
+#include <wizlevels.h>
+#include <new_skills.h>
+#include <moving.h>
+#include "/gilden/nekromanten/def.h"
+
+#define CANNIBAL_COST 3
+#define EXTRA_DTS ({ DT_MAGIC, DT_FIRE, DT_ACID, DT_POISON, DT_AIR, DT_SOUND,\
+                     DT_LIGHTNING, DT_TERROR, DT_LIGHT, DT_WATER, DT_COLD  })
+
+
+
+inherit "/std/spellbook";
+
+nosave int total_fail;
+
+create() {
+  ::create();
+  SetProp(P_GLOBAL_SKILLPROPS,
+          ([SI_SPELLFATIGUE:2,       // 2 Sekunden kein neuer Spell
+            SI_PREPARE_TIME: 0,     
+            SI_SKILLLEARN:5,         // 0.05% pro 2 A_INT 
+            OFFSET(SI_SKILLLEARN):5, // plus 0.05% in jedem Fall
+            SI_SKILLLEARN_ATTRIBUTE: A_INT, 
+            SI_SKILLRESTR_USE: ([SR_FUN:"CheckIfSpellAllowed"])
+           ]));
+
+  AddSpell("beschwoere",10,
+          ([SI_SPELLFATIGUE: 2,
+            SI_PREPARE_TIME: 2,
+            SI_SP_LOW_MSG: "Du brauchst 10 Magiepunkte, um die Toten zu "
+                           "beschwoeren.\n",
+            SI_SKILLRESTR_USE:([SR_FREE_HANDS:2]),
+            SI_SKILLLEARN: 3,
+            SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:1])
+          ]));
+
+  AddSpell("verfluche",10,
+          ([SI_SPELLFATIGUE: 2, 
+            SI_SKILLLEARN: 0,
+            SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:1]),
+            SI_SKILLDAMAGE:200,
+            SI_SKILLDAMAGE_TYPE:DT_UNHOLY
+          ]));
+
+  AddSpell("beherrsche",20,
+          ([SI_SPELLFATIGUE: 10,
+            SI_PREPARE_TIME: 5,
+            SI_SP_LOW_MSG: "Du brauchst 20 Magiepunkte, um einen Untoten zu "
+                           "beherrschen.\n",
+            SI_SKILLLEARN: 3,
+            SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:2])
+          ]));
+
+  AddSpell("kannibalismus",10,
+          ([SI_SPELLFATIGUE: 10,
+            SI_SKILLRESTR_USE: ([SR_FUN: "KannibalenTest"]),
+            SI_DIFFICULTY: 15,
+            SI_PREPARE_TIME: 6,
+            SI_SKILLLEARN: 7,
+            SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:2])
+          ]));
+
+  AddSpell("verpeste",25,
+          ([SI_SPELLFATIGUE: 5,
+            SI_SP_LOW_MSG: "Du brauchst 25 Magiepunkte, um etwas zu "
+                           "verpesten.\n",
+            SI_SKILLLEARN: 5,
+            SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:3])
+          ]));
+
+  AddSpell("kreische",20,
+          ([SI_SPELLFATIGUE: 2,
+            SI_SKILLLEARN: 5,
+            SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:3]),
+            SI_SKILLDAMAGE:300,
+            OFFSET(SI_SKILLDAMAGE):100,
+            SI_SKILLDAMAGE_TYPE:DT_SOUND
+          ]));
+
+  AddSpell("faeulnis",25,
+          ([SI_SPELLFATIGUE: 4,
+            SI_SKILLLEARN: 5,
+            SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:4]),
+            SI_SKILLDAMAGE:400,
+            OFFSET(SI_SKILLDAMAGE):200,
+            SI_SKILLDAMAGE_TYPE: ({ DT_POISON, DT_UNHOLY })
+          ]));
+
+
+  AddSpell("eiterhuelle",35,
+          ([SI_SPELLFATIGUE: 6, 
+            SI_SKILLLEARN: 5,
+            SI_SKILLRESTR_USE: ([SR_FUN: "EiterTest"]),
+            SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:4]),
+            SI_PREPARE_TIME: 5,
+            SI_SP_LOW_MSG: "Du brauchst 35 Magiepunkte, um eine Eiterhuelle zu "
+                           "erzeugen.\n"
+         ]));
+
+  AddSpell("terror",30,
+          ([SI_SPELLFATIGUE: 2,
+            SI_PREPARE_TIME: 2,
+            SI_SKILLLEARN: 5,
+            SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:5]),
+            SI_SKILLDAMAGE:700,                 // bei Licht 20% 
+            OFFSET(SI_SKILLDAMAGE):250,         // bei Licht 20%        
+            SI_SKILLDAMAGE_TYPE: DT_TERROR
+          ]));
+
+  AddSpell("seelenfrass",50,
+          ([SI_SPELLFATIGUE: 8,
+            SI_SKILLLEARN: 2,
+            SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:6]),
+            SI_SP_LOW_MSG: "Der Frass einer fremden Seele kostet Dich leider "
+                           "50 Magiepunkte.\n"
+          ]));
+
+  AddSpell("todesgesang",40, 
+          ([SI_SPELLFATIGUE: 4,
+            SI_PREPARE_TIME: 2,
+            SI_SKILLLEARN: 3,
+            SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:6]),
+            SI_SKILLDAMAGE:500, 
+            OFFSET(SI_SKILLDAMAGE):150, 
+            SI_SKILLDAMAGE_TYPE: ({ DT_SOUND, DT_UNHOLY })
+          ]));
+
+/*
+  AddSpell("spioniere",40,
+          ([SI_SPELLFATIGUE:12
+          ]));
+*/
+}
+
+void Misserfolg(object caster, string spell, mapping sinfo)
+{
+  int old_abil;
+  
+  if (!total_fail)
+    write("Der Zauberspruch ist missglueckt.\n");
+  total_fail = 0;  // gleich zuruecksetzen
+  old_abil = sinfo[SI_SKILLABILITY];
+  Learn(caster, spell, sinfo);
+  sinfo=caster->QuerySkill(spell);
+
+  if (old_abil < (mappingp(sinfo) ? sinfo[SI_SKILLABILITY] : sinfo))
+    write("Du lernst aus Deinem Fehler.\n");
+  else
+    write( "Leider lernst Du nicht aus Deinem Fehler.\n" );
+    
+}
+
+mixed CheckIfSpellAllowed(object caster, mapping sinfo)
+{
+
+  if(caster->QueryProp(P_ALIGN) > 0)
+    return BS(
+      "Du musst erst boeser werden, sonst sind die Tore ins Reich der Untoten "
+      "fuer Dich verschlossen.");
+  return 0;
+}
+
+
+object CloneZombie(object corpse, object caster, int succ)
+{
+  object *ob, zombie;
+  int i;
+
+  zombie=clone_object(NPC "zombie");
+  zombie->SetZombie(corpse, caster, succ); 
+  
+  for( i=sizeof(ob=all_inventory(corpse))-1; i>=0; i--) 
+    ob[i]->move(zombie,M_NOCHECK);
+  zombie->command_me("ziehe alles an");
+  zombie->move(environment(corpse), M_NOCHECK | M_SILENT);
+  corpse->remove(1);
+
+  return zombie;
+}
+
+
+string eng2germ(string eng)
+{
+    switch(eng)
+    {
+      case DT_FIRE: return "Feuer";
+      case DT_MAGIC: return "Magie";
+      case DT_COLD: return "Eisschaden";
+      case DT_ACID: return "Saeuren";
+      case DT_TERROR: return "Terror";
+      case DT_POISON: return "Giftschaden";
+      case DT_HOLY: return "Heiligschaden";
+      case DT_UNHOLY: return "Unheiligschaden";
+      case DT_LIGHT: return "Licht";
+      case DT_SOUND: return "Laerm";
+      case DT_WATER: return "Wasserschaden";
+      case DT_LIGHTNING: return "Blitzschlag";
+      case DT_ELECTRIC: return "Strom";
+      case DT_EXPLOSION: return "Explosionen";
+      case DT_AIR: return "Luftschaden";
+      default: return eng;
+    }
+}
+
+
+
+int verfluche(object caster, mapping sinfo) 
+{
+  object victim;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wen willst Du verfluchen?\n");
+  if (!victim)
+    return 0;
+  if (SpellSuccess(caster,sinfo)<=0)
+    return MISSERFOLG;
+
+  say(sprintf("%s belegt %s mit einem hoellischen Fluch.\n",
+                caster->Name(WER), victim->name(WEN, 2)), victim);
+
+  write(sprintf("Du belegst %s mit einem hoellischen Fluch.\n", 
+                victim->name(WEN, 2)));
+  tell_object(victim,sprintf("%s belegt Dich mit einem hoellischen Fluch.\n",
+                             caster->Name(WER)));
+  TryDefaultAttackSpell(victim,caster,sinfo,
+                        ([SP_NAME:"Nekromantenfluch",SP_SHOW_DAMAGE:1]));
+  return ERFOLG;
+}
+
+
+int beschwoere(object caster, mapping sinfo) 
+{
+  object corpse;
+  int succ;
+  
+  if(!sinfo[SI_SKILLARG] || 
+     !corpse=present(sinfo[SI_SKILLARG], environment(caster))) 
+  {
+    write("Welche Leiche willst Du beschwoeren?\n");
+    return 0;
+  }
+  
+  if(!corpse->id("Leiche")) {   // Eindeutige Leichen-ID !!!
+    write("Aber das ist doch gar keine Leiche!\n");
+    return 0;
+  }
+
+
+  if(corpse->QueryProp(P_LEVEL) >= caster->QueryProp(P_LEVEL)) {
+    write(BS(
+      "Dieses Wesen war zu maechtig, als dass Du es wieder ins Reich der "
+      "Lebenden zurueckholen koenntest!"));
+    return 0;
+  }
+
+  write(BS(sprintf(
+    "Du tanzt um %s herum und murmelst die rituellen Formeln, "
+    "die fuer das Beschwoeren der Toten vonnoeten sind.", 
+    corpse->name(WEN, 1))));
+  say(BS(sprintf(
+    "%s huepft laecherlich um %s herum und murmelt dabei mit todernstem "
+    "Gesicht und Schweiss auf der Stirn sinnlose Worte vor sich hin. "
+    "Hin und wieder kniet %s sich vor %s nieder und fummelt daran "
+    "herum... Was das wohl fuer einen Sinn haben soll?", caster->Name(),
+    corpse->name(WEN),caster->QueryPronoun(WER), corpse->name(WEM) )));
+
+  if ((succ=SpellSuccess(caster,sinfo)) <= -3000)
+  {
+     write(BS(
+       "Oh weh! Dein Beschwoerungsversuch ist Dir total misslungen! "
+       "Der Tote, den Du beschwoeren wolltest, wird lebendig und wendet "
+       "sich gegen Dich!"));
+     say(BS(sprintf(
+       "Ploetzlich wird die Leiche lebendig und greift %s an!",
+       caster->name(WEN) )));
+     CloneZombie(corpse, caster, 0)->Kill(caster);
+     total_fail=1;
+  }
+  
+  DB(succ);
+  if (succ <= 0)
+     return MISSERFOLG;
+
+  tell_room(environment(caster), BS(
+    "Die Leiche beginnt ploetzlich zu zucken. Ueberall formen sich Blaeschen "
+    "und es waechst in Sekundenbruchteilen eine rissige, eiternde Haut. "
+    "Die Leiche bricht kurz total auseinander, nur um sich dann wieder "
+    "vollstaendig neu zusammenzusetzen. Schliesslich steht ein grauenhafter "
+    "Zombie vor Dir, der praktisch kaum noch Aehnlichkeiten mit dem "
+    "Wesen hat, von dessen untoter Seele er nun erfuellt ist."));
+  CloneZombie(corpse, caster, succ);
+
+  return ERFOLG;
+}
+
+
+int beherrsche(object caster, mapping sinfo) 
+{
+  string str;
+  object ob;
+  int succ;
+  
+  
+  if(!str=sinfo[SI_SKILLARG]) {
+    write("Wen willst Du beherrschen?\n");
+    return 0;
+  }
+  
+  if(!ob=present(str, environment(caster))) {
+    write("So jemanden siehst Du hier nicht.\n");
+    return 0;
+  }
+  
+  if(present("Zombie_von_"+getuid(caster), environment(caster))) {
+    write("Du beherrschst doch bereits einen Zombie!\n");
+    return 0;
+  }
+  
+  if(!ob->id("Nekromantenzombie")) {
+    write("Das ist kein Untoter, den man beherrschen kann!\n");
+    return 0;
+  }
+
+  if(ob->QueryProp(P_NEKRO_CASTED_BY) != caster) {
+    write(BS(
+       "Dieser Zombie wurde von jemand anderem beschworen. "
+       "Du kannst leider nur Untote beherrschen, die Du auch selber "
+       "beschworen hast.\n"));
+    return 0;
+  }
+
+  write(BS(sprintf(
+    "Du konzentrierst Dich und versuchst, %s Deinen boesen Willen "
+    "aufzuzwingen. ", ob->name(WEM, 1))));
+  say(BS(sprintf(
+    "%s starrt %s an und murmelt dabei irgendeinen Hokuspokus. ", 
+    caster->Name(), ob->name(WEN) )));
+
+  if ((succ=SpellSuccess(caster,sinfo)) <= -5000)
+  {
+     write(BS(sprintf(
+       "%s hat ueberhaupt keine Lust, sich von Dir beherrschen zu lassen "
+       "und greift Dich brutal an.", ob->Name() )));
+     ob->Kill(caster);
+     total_fail=1;
+  }
+    if (succ <= 0)
+     return MISSERFOLG;
+
+  write("Dein Zauber ist geglueckt. Der Zombie wird Dir nun folgen.\n");
+  ob->SetMaster(caster);
+  
+  return ERFOLG;
+}
+
+
+int kannibalismus(object caster, mapping sinfo) 
+{
+  object corpse;
+  int succ;
+
+  if(!sinfo[SI_SKILLARG] || 
+     !corpse=present(sinfo[SI_SKILLARG], environment(caster)))
+  {
+    write("Welche Leiche willst Du rituell verzehren?\n");
+    return 0;
+  }
+  
+  if(!corpse->id("Leiche")) {   // Eindeutige Leichen-ID !!!
+    write("Aber das ist doch gar keine Leiche!\n");
+    return 0;
+  }
+
+  write(BS(sprintf(
+    "Du tanzt um %s herum und murmelst die rituellen Formeln des unheiligen "
+    "kannibalistischen Rituals. Du hoffst, dass die Seele des Toten Dich "
+    "erhoert. Schliesslich schneidest Du die besten Teile heraus und "
+    "verzehrst sie, waehrend Du ihre Eingeweide auf Deiner Brust verteilst.", 
+    corpse->name(WEN, 1))));
+  say(BS(sprintf(
+    "%s huepft laecherlich um %s herum und murmelt dabei mit todernstem "
+    "Gesicht und Schweiss auf der Stirn sinnlose Worte vor sich hin. "
+    "Immer wieder kniet %s sich vor %s nieder und fuegt ihr kleine Schnitte "
+    "mit einem Messer zu. Schliesslich schneidet %s einige grauenhafte Teile "
+    "ab und isst sie feierlich!", caster->Name(),
+    corpse->name(WEN),caster->QueryPronoun(WER), corpse->name(WEM),
+    caster->QueryPronoun(WER) )));
+
+/*  if(corpse->!RACE-ABFRAGE! != caster->QueryProp(P_RACE))
+  {
+    write(BS(
+      "Zu spaet bemerkst Du, dass das Wesen, welches diese Leiche "
+      "hinterlassen hat, nicht Deiner Rasse angehoerte! Die fremde Seele "
+      "dringt nur kurz in Dein Bewusstsein ein, aber doch lang genug um Dir "
+      "die Inkompatibilitaet eurer Gehirne klarzumachen. Qualvoll "
+      "schreist Du auf."));
+    say(BS(
+      caster->Name()+" schreit schmerzerfuellt auf und haelt mit "
+      "qualvoll verzerrtem Gesicht die Haende an den Kopf."));
+    corpse->remove(1);
+    SetProp(P_KILL_NAME, "Ein schwerer Fehler im Ritual");
+    caster->do_damage(caster->QueryProp(P_HP)*3/5 + random(25) );
+    caster->AddPoison(1+random(5));
+    return 0;
+  }
+*/
+
+  if (((succ=SpellSuccess(caster,sinfo)) <= -5000) )
+  {
+     write(BS(
+       "Der rituelle Kannibalismus schlaegt total fehl! Die halbverzehrte "
+       "Leiche erwacht zu untotem Leben und greift Dich an."));
+     say(BS(sprintf(
+       "Ploetzlich wird die Leiche lebendig und greift %s an!",
+       caster->name(WEN) )));
+     CloneZombie(corpse, caster, 0)->Kill(caster);
+     total_fail=1;
+  }
+  DB(succ);
+
+  if (succ <= 0)
+     return MISSERFOLG;
+
+  write(
+    "Die Kraft der verstorbenen Seele erfuellt Dich.\n" );
+  say(
+    caster->Name()+" sieht nun viel erfrischter aus als vorher.\n" );
+
+  
+  // Nun die Wirkungen...  
+  caster->heal_self(10 + succ / 30);
+  caster->SetProp(P_FOOD, caster->QueryProp(P_FOOD) + CANNIBAL_COST);
+  
+  
+  if((caster->QueryProp(P_POISON)) && (succ > 5000) && (random(100) > 50))
+  {
+    write("Deine Vergiftung wird etwas gelindert.\n");
+    caster->AddPoison(-2);
+  }
+  else if((caster->QueryProp(P_BLIND)) && (succ > 5000) && (random(100) > 50)) 
+  {
+    write("Deine Blindheit wurde geheilt!\n");
+    caster->SetProp(P_BLIND, 0);
+  }
+  if((caster->QueryProp(P_DEAF)) && (succ > 5000) && (random(100) > 50))
+  {
+    write("Deine Taubheit wurde geheilt!\n");
+    caster->SetProp(P_DEAF, 0);
+  }
+  else if((caster->QueryProp(P_FROG)) && (succ > 5000) && (random(100) > 50))
+  {
+    write(BS(
+      "Ploetzlich verschwinden Deine gruene Haut und Dein Appetit auf "
+      "Fliegen. Du verwandelst Dich wieder zurueck."));
+    say(caster->Name()+" entfroscht sich selbst.\n");
+    caster->SetProp(P_FROG, 0);
+  }
+  
+  corpse->remove(1);
+  return ERFOLG;
+}
+
+
+string KannibalenTest(object caster, mapping sinfo)
+{
+  object weapon;
+  
+  if( (!objectp(weapon=caster->QueryProp(P_WEAPON)) ||
+      (weapon->QueryProp(P_WEAPON_TYPE) != WT_KNIFE ) ))
+    return "Du musst ein Messer gezueckt haben, um den rituellen "
+           "Kannibalismus abzuhalten!\n";
+  if(caster->QueryProp(P_FOOD) > caster->QueryProp(P_MAX_FOOD) - CANNIBAL_COST)
+    return "Du bist zu satt, um den rituellen Kannibalismus durchzufuehren.\n";
+  if( caster->InFight() )
+    return "Im Kampf geht das nicht, da kannst Du Dich zu wenig " +
+           "konzentrieren.\n";
+  return CheckIfSpellAllowed(caster, sinfo);
+}
+
+
+int verpeste(object caster, mapping sinfo) 
+{
+  object ob;
+  string str, extra, *dts, obdp;
+  mixed obdt;
+  int succ;
+  
+  if(!str=sinfo[SI_SKILLARG]) {
+    write("Was willst Du verpesten?\n");
+    return 0;
+  }
+  
+  if(!ob=present(str,caster)) {
+    write("So etwas hast Du nicht!\n");
+    return 0;
+  }
+  
+  if(!ob->id("Ruestung") && !ob->id("Waffe")) {
+    write("Man kann nur Waffen oder Ruestungen verpesten!\n");
+    return 0;
+  }  
+
+  if(ob->QueryProp(P_NEKRO_PESTERED)) {
+    write("Das wurde bereits verpestet!\n");
+    return 0;
+  }
+
+  if((succ=SpellSuccess(caster,sinfo)) < -6000)
+  {
+    write("Huch! Da ist jetzt etwas Dummes passiert...\n");
+    ob->SetProp(P_CURSED,1);
+  }
+  DB(succ);
+  if (succ <= 0) return MISSERFOLG;
+  
+
+  write(
+     "Du konzentrierst Dich und fokussierst die Macht des Boesen in "
+     + ob->name(WEM,1) + ".\n");
+
+  // --- Waffen --- 
+  if(ob->id("Waffe"))
+  {
+    if(!pointerp(obdt=ob->QueryProp(P_DAM_TYPE)))
+      obdt = ({ obdt });
+      
+    ob->SetProp(P_DAM_TYPE, obdt+=({ DT_UNHOLY }));
+
+    if (succ > 8000)
+    {
+      extra=EXTRA_DTS[random(1000) % sizeof(EXTRA_DTS)];
+      ob->SetProp(P_DAM_TYPE, obdt+=({ extra }) );
+      write(BS(sprintf(
+        "Weil Dir der Spruch so gut gelingt, trifft %s ab nun zusaetzlich "
+        "mit %s.", ob->name(WER,1), eng2germ(extra) )));
+    }
+  }
+  // --- Ruestungen ---
+  else
+  {
+    ob->SetProp(P_DAM_PROTECTION, ob->QueryProp(P_DAM_PROTECTION) +
+           ([ DT_UNHOLY: (2 + ob->QueryProp(P_DAM_PROTECTION)[DT_UNHOLY]) ]));
+
+    if (succ > 8000)
+    {
+      extra=EXTRA_DTS[random(1000) % sizeof(EXTRA_DTS)];
+      ob->SetProp(P_DAM_PROTECTION, ob->QueryProp(P_DAM_PROTECTION) +
+          ([ extra: (2 + ob->QueryProp(P_DAM_PROTECTION)[extra]) ]) );
+      write(BS(sprintf(
+        "Weil Dir der Spruch so gut gelingt, schuetzt %s ausserdem vor %s.",
+        ob->name(WER,1), eng2germ(extra) )));
+    }    
+  }
+  
+  ob->SetProp(P_NEKRO_PESTERED, 1);
+  return ERFOLG;
+}
+
+
+int kreische(object caster, mapping sinfo)
+{
+  object victim;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wen willst Du ankreischen?\n");
+  if (!victim)
+    return 0;
+  if (SpellSuccess(caster,sinfo)<=0)
+    return MISSERFOLG;
+
+  say(sprintf("%s kreischt %s ohrenbetaeubend an.\n",
+                caster->Name(WER), victim->name(WEN, 2)), victim);
+
+  write(sprintf("Du kreischst %s ohrenbetaeubend an.\n", 
+                victim->name(WEN, 2)));
+  tell_object(victim,sprintf("%s kreisch Dich ohrenbetaeubend an.\n",
+                             caster->Name(WER)));
+  TryDefaultAttackSpell(victim,caster,sinfo,
+                        ([SP_NAME:"Nekromantenkreischer",SP_SHOW_DAMAGE:1]));
+  return ERFOLG;
+}
+
+
+int faeulnis(object caster, mapping sinfo) 
+{
+  object victim;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wen willst Du verfaulen lassen?\n");
+  if (!victim)
+    return 0;
+  if (SpellSuccess(caster,sinfo)<=0)
+    return MISSERFOLG;
+
+  say(BS(sprintf(
+    "%s spricht ein paar magische Worte, woraufhin %s furchtbar aufschreit. "
+    "Du bemerkst kleine Maden, die sich in %s Haut bohren.",
+    caster->Name(WER), victim->name(WER, 2), 
+    victim->QueryPossPronoun(FEMALE,WEN,SINGULAR))),victim);
+  write(BS(sprintf(
+    "Du sprichst die magischen Worte, woraufhin %s furchtbar aufschreit. "
+    "Hunderte kleine Maden bohren sich in %s Haut.",
+    victim->name(WER, 2), 
+    victim->QueryPossPronoun(FEMALE,WEN,SINGULAR) )));
+  tell_object(victim, BS(sprintf(
+    "%s spricht ein paar magische Worte, woraufhin Dich eine Welle von "
+    "Schmerz durchstroemt. Hunderte kleine Maden bohren sich in Deine Haut.",
+    caster->Name() )));
+
+  TryDefaultAttackSpell(victim,caster,sinfo,
+                        ([SP_NAME:"Nekromantenfaeulnis",SP_SHOW_DAMAGE:1]));
+  return ERFOLG;
+}
+
+
+int eiterhuelle(object caster, mapping sinfo)
+{
+  object ob;
+  int succ, temp;
+
+  if ( (succ=SpellSuccess(caster,sinfo)) <= 0)
+    return MISSERFOLG;
+
+  DB(succ);
+
+  write(BS(
+    "Du entnimmst etwas Eiter und Blut aus einer Deiner Wunden und rufst "
+    "Die Geister der Toten. Du fuehlst wie Dich eine magische Kraft durch"
+    "fliesst, als sich eine fast unsichtbare Schutzhuelle um Deinen Koerper "
+    "aufbaut."));
+
+  temp = caster->QueryProp(P_GUILD_LEVEL) +      // max.6+16, min.4+0 
+         (succ + sinfo[SI_SKILLABILITY])/1200;
+
+  ob=clone_object(OBJ "eiter");
+  ob->SetProp(P_TEMPERATURE_PROTECTION, 
+    ([ T_COLD_PROT: temp + random(5) - 2,
+       T_HEAT_PROT: temp + random(5) - 2]));
+  ob->SetProp(P_NEKRO_FESTER_DEFENCE, 
+     caster->QueryProp(P_GUILD_LEVEL)*2 + succ/500);  //max.12+20, min.8+0
+     
+  ob->move(caster, M_NOCHECK);
+  ob->DoWear(1);
+  ob->call_out("remove", 30+(succ+sinfo[SI_SKILLABILITY])/50); //max.30+400
+
+  return ERFOLG;
+}
+
+
+string EiterTest(object caster, mapping sinfo)
+{
+
+  if(present("NekromantenEiter", caster))
+     return "Aber Du hast doch schon eine Eiterhuelle!\n";
+  if(caster->QueryProp(P_HP) > caster->QueryProp(P_MAX_HP)/2)
+     return BS(
+       "Du hast leider keine eiternden Wunden, aus denen Du eine "
+       "Eiterhuelle zaubern koenntest! Du bist geradezu ekelerregend gesund.");
+  return CheckIfSpellAllowed(caster, sinfo);
+}
+
+
+int terror(object caster, mapping sinfo) 
+{
+  object victim;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wen willst Du terrorisieren?\n");
+  if (!victim)
+    return 0;
+  if (SpellSuccess(caster,sinfo)<=0)
+    return MISSERFOLG;
+
+  say(sprintf("%s terrorisiert %s mit boeser Magie.\n",
+                caster->Name(WER), victim->name(WEN, 2)), victim);
+
+  write(sprintf("Du terrorisierst %s mit boeser Magie.\n", 
+                victim->name(WEN, 2)));
+  tell_object(victim,sprintf("%s terrorisiert Dich mit boeser Magie.\n",
+                             caster->Name(WER)));
+
+  if(environment(caster)->QueryProp(P_TOTAL_LIGHT) > 0) 
+    sinfo += ([ SI_SKILLDAMAGE: sinfo[SI_SKILLDAMAGE]/5, 
+                OFFSET(SI_SKILLDAMAGE): sinfo[OFFSET(SI_SKILLDAMAGE)]/5]);
+
+  TryDefaultAttackSpell(victim,caster,sinfo,
+                        ([SP_NAME:"Nekromantenterror",SP_SHOW_DAMAGE:1]));
+  return ERFOLG;
+}
+
+
+int todesgesang(object caster, mapping sinfo) 
+{
+  object *victims;
+  int succ, i;
+
+  victims=FindGroup(caster,-1);
+
+  if ((succ=SpellSuccess(caster,sinfo)) <= 0)
+    return MISSERFOLG;
+
+  say(BS(sprintf(
+    "%s verfaellt in einen tranceartigen Zustand und beginnt, eine "
+    "schreckliche Melodie des Todes zu singen.",
+     caster->Name(WER))));
+  write(BS("Du beginnst mit der Melodie des Todes.")); 
+
+  for(i=sizeof(victims)-1; i>=0; i--)
+  {
+    if(victims[i]->QueryProp(P_DEAF))
+    {
+      tell_object(victims[i], 
+        caster->Name(WESSEN)+" Todesgesang kann Dir aufgrund Deiner Taubheit "
+        "nichts anhaben.");
+      say(BS(sprintf(
+        "%s widersteht aufgrund %s Taubheit voellig %s Angriff.", 
+        victims[i]->Name(WER), 
+        victims[i]->QueryPossPronoun(FEMALE,WESSEN,SINGULAR), 
+        caster->name(WESSEN))), ({victims[i]}));
+      write(BS(sprintf(
+        "%s widersteht aufgrund %s Taubheit voellig Deinem Angriff.", 
+        victims[i]->Name(WER), 
+        victims[i]->QueryPossPronoun(FEMALE,WESSEN,SINGULAR) )));
+    }
+    else
+    {
+      tell_object(victims[i], 
+        caster->Name(WESSEN)+" Todesgesang dringt in Dein Gehirn ein und "
+        "laesst es fast zerspringen.");
+      write(sprintf("Dein Todesgesang dringt tief in %s Gehirn ein.\n",
+        victims[i]->name(WESSEN) ));
+      say(BS(sprintf(
+        "%s Todesgesang dringt tief in %s Gehirn ein.", 
+        caster->Name(WESSEN), victims[i]->name(WESSEN))), 
+           ({ victims[i], caster }));
+      TryDefaultAttackSpell(victims[i],caster,sinfo,
+          ([SP_NAME:"Todesgesang",SP_SHOW_DAMAGE:1]));
+    }
+  }
+  
+  if(!sizeof(victims))
+    tell_room(environment(caster),
+       "Der Todesgesang verhallt ohne Wirkung.\n");
+
+  return ERFOLG;
+}
+
+
+int seelenfrass(object caster, mapping sinfo)
+{
+  object victim;
+  int succ, vsp;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wessen Seele willst Du fressen?\n");
+  if (!victim)
+    return 0;
+
+  if ( (succ=SpellSuccess(caster,sinfo)) <= 0)
+    return MISSERFOLG;
+
+  if((vsp=victim->QueryProp(P_SP)) < 20 )
+  {
+    write(victim->Name(WESSEN)+" Seele ist leider frei von jeglicher "
+          "magischer Kraft.\n");
+    return ERFOLG;
+  }
+
+
+  write(BS(sprintf(
+    "Du frisst die Seele von %s und saugst ihr alle magische Kraft aus, "
+    "die ihr innewohnt.", victim->name(WEM) )));
+  tell_object(victim, sprintf(
+    "%s beraubt Dich all Deiner magische Energie.\n", caster->Name() ));
+  say(BS(sprintf(
+    "%s beraubt %s all %s magischen Energie.", caster->Name(), 
+      victim->name(WEN), 
+      victim->QueryPossPronoun(FEMALE,WESSEN,SINGULAR))), 
+    ({ victim }) );
+  caster->reduce_hit_point(-(vsp/3));
+  victim->SetProp(P_SP, 0);
+
+  return ERFOLG;
+}
+
+
+
+
+// -----------------------------------------------------------
+// -----------------------------------------------------------
+// -----------------------------------------------------------
+

@@ -1,0 +1,234 @@
+#include "../def.h"
+
+inherit "std/thing";
+
+#include "light.h"
+
+#define D_FUEL       0 // 20 Sekunden
+#define D_LIGHTDESC  "brennend"
+#define SP 5
+#define CALL_OUT_TIME 100
+
+nosave int fuel, max_fuel, lighted, call_time, lightoffset, burninwater;
+nosave string syntax;
+nosave mixed comon,comoff;
+nosave mapping light_info=([]);
+
+varargs create(commands_on,commands_off)
+{
+  if(!is_clone(ME)) return;
+  ::create() ;
+  
+  if(!commands_on) commands_on="entzuende";
+  if(!commands_off) commands_off=({"loesche","loesch"});
+  SetProp(P_NAME, "Lichtquelle");
+  SetProp(P_SHORT, "Eine Lichtquelle");
+  SetProp(P_LONG, "Du siehst nichts besonderes.\n");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_LIGHT_INFO,
+	  ([ 
+	    L_FUEL:D_FUEL,
+	    L_DESC: D_LIGHTDESC,
+	    L_OFFSET:1,
+	    L_MAY_BURN_IN_WATER:0 ]));
+  SetProp(P_VALUE,5);
+  AddId("Lichtquelle");
+  AddCmd(commands_on, "LightOn");
+  AddCmd(commands_off, "LightOff");
+  comon=commands_on;
+  comoff=commands_off;
+}
+
+varargs void StartBurning(object pl) 
+{
+  write("Du entzuendest "+name(WEN,0)+".\n");
+  say((pl ? pl->name(WER,1):TPN)+" entzuendet "+name(WEN,0)+".\n");
+}
+
+varargs void StopBurning(object pl) 
+{
+  write("Du loescht "+name(WEN,0)+" aus.\n");
+  say((pl ? pl->name(WER,1):TPN)+" loescht "+name(WEN,0)+" aus.\n");
+}
+
+varargs second_life(object pl) { return 0; }
+
+int test_remove()
+{
+  if(!ME->second_life()) remove();
+  return 1;
+}
+
+varargs LightOn(string str, object pl)
+{
+  int time,fuel;
+  string tmp;
+
+  if(!objectp(pl)) pl=TP;
+  if(!objectp(pl)) return 0;
+
+  notify_fail("Die Syntax lautet: "+query_verb()+" <lichtquelle>\n");
+  if((!str)||!id(str)) return 0;
+  if(environment()!=pl)
+    return notify_fail("Erstmal solltest Du "+name(WEN,0)+" nehmen!\n"),0;
+  if(lighted)
+    return notify_fail(CAP(name(WER,1))+" brennt bereits.\n"),0;
+  fuel=QueryProp(P_LIGHT_INFO)[L_FUEL];
+  if(fuel<=0)
+    {
+      write(CAP(name(WER,1))+" ist abgebrannt.\n" );
+      test_remove();
+      return 1;
+    }
+  if(pl->QueryProp(P_SP)<SP)
+    return notify_fail("Deine Magie reicht nicht aus um "+name(WEN,0)+
+		       "zu entzuenden.\n"),0;
+  lighted=1;
+  call_time=(fuel<CALL_OUT_TIME)? fuel : CALL_OUT_TIME;
+  call_out("out_of_fuel", call_time);
+  pl->restore_spell_points(-SP);
+  light_me(1);
+  StartBurning();
+  return 1;
+}
+
+varargs LightOff(string str, object pl)
+{
+  int time;
+  
+  notify_fail("Die Syntax lautet: "+query_verb()+" <lichtquelle>\n");
+  if((!str)||!id(str)) return 0;
+  if(environment()!=TP)
+    return notify_fail("Erstmal solltest Du "+name(WEN,0)+" nehmen!\n"),0;
+  if(!lighted)
+    return notify_fail(CAP(name(WER,1))+" brennt doch gar nicht!\n"),0;
+  if((time=remove_call_out("out_of_fuel"))==-1) time=0;
+  fuel-=(call_time-time);
+  lighted=0;
+  light_me(0);
+  StopBurning();
+  if(QueryProp(P_LIGHT_INFO)[L_FUEL]<=0) test_remove();
+  return 1;
+}
+
+varargs light_me(int i,int water)
+{
+  if(i)
+    {
+      set_light(QueryProp(P_LIGHT_INFO)[L_OFFSET]);
+      lighted=1;
+      return 1;
+    }
+  else
+    {
+      if((!water)&&(!QueryProp(P_LIGHT_INFO)[L_MAY_BURN_IN_WATER]))
+	{
+	  set_light(-(QueryProp(P_LIGHT_INFO)[L_OFFSET]));
+	  lighted=0;
+	  return 1;
+	}
+      return 0;
+    }
+  return 0;
+}
+
+void out_of_fuel()
+{
+  int res;
+  
+  fuel-=call_time;
+  
+  if(fuel>0) return call_out( "out_of_fuel", call_time );
+  light_me(0);
+  if(environment()==this_player()) 
+    {
+      write(CAP(name(WER,1))+" erlischt.\n" );
+      say(CAP(name(WER,0))+" erlischt.\n");
+    }
+  test_remove();
+}
+
+// Brennstoff nachfuellen
+AddFuel(int f)
+{
+  fuel+=f;
+}
+
+// Property - Funktionen
+_set_lighted(int l)
+{
+  lighted=l;
+}
+
+_query_lighted()
+{
+  return lighted;
+}
+
+int fuel()
+{
+  int tmp;
+  
+  if ((tmp=find_call_out("out_of_fuel"))>=0)
+    return fuel-call_time+tmp;
+  else
+    return fuel;
+}
+
+_query_light_info()
+{
+  return light_info;
+}
+
+_set_light_info(mapping what)
+{
+  int f;
+  
+  light_info=QueryProp(P_LIGHT_INFO);
+  light_info+=what;
+  if ((f=light_info[L_FUEL])>max_fuel) max_fuel=f;
+  fuel=f;
+}
+
+lightdesc()
+{
+  string *tmp;
+  int n,i;
+  
+  tmp=QueryProp(P_LIGHT_INFO)[L_DESC];
+  if (!pointerp(tmp)) return tmp;
+  n=sizeof(tmp);
+  i=n*fuel()/max_fuel;
+  if (i>=n) i=n-1;
+  return tmp[i];
+}
+
+string syntax()
+{
+  syntax=CAP(ME->name(WEN))+" kannst du mit \'";
+  if(pointerp(comon)) syntax+=implode(comon, "\', oder \'")+"\'";
+  else syntax+=comon+"\'";
+  syntax+=" entzuenden und mit \'";
+  if(pointerp(comoff)) syntax+=implode(comoff, "\', oder \'")+"\'";
+  else syntax+=comoff+"\'";
+  syntax+=" wieder ausloeschen.\n";
+  return syntax;
+}
+
+string short()
+{
+  string s;
+  
+  if(!(s=QueryProp(P_SHORT)) || QueryProp(P_INVIS))
+    return 0;
+  return s+((lighted)?(" ("+lightdesc()+").\n"):".\n");
+}
+
+string long()
+{
+  string l,ret;
+
+  if(!(l=QueryProp(P_LONG)) || QueryProp(P_INVIS))
+    return 0;
+  return l+syntax();
+}

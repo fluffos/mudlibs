@@ -1,0 +1,171 @@
+//=========================================================================
+//
+// File:    dung_07_03.c
+// Created by Speedy
+//
+// Project: Sarumans Quest (Finde die verlorene Schriftrolle)
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit ROOM "dung-inh";
+
+void create()
+{
+  ::create();
+
+  // eine Wand ist schon ziemlich erledigt. Man muss die Ritzen und Spalten
+  // vergroessern (mit einem Loeffel) und kann dann mit einer Schaufel
+  // durchgraben.
+
+  AddSpecialDetail( ({"wand","waende","mauer","mauern"}), "detail_mauer" );
+  AddSpecialDetail( ({"stein","steine","mauersteine","mauerstein"}),
+                                                          "detail_stein" );
+  AddSpecialDetail( ({"erde"}),                           "detail_erde" );
+  AddSpecialDetail( ({"loch"}),                           "detail_loch" );
+
+  AddCmd( ({"lockere","locker"}), "cmd_lockern" );
+  AddCmd( ({"grabe","grab"}),     "cmd_graben" );
+  AddCmd( CMD_KLETTERN,           "cmd_klettern" );
+
+  AddExit( "norden", GETEXIT("07_02") );
+}
+
+string detail_loch(string str)
+{
+  if(SMASTER->QueryFlag(TPUID,F_STEIN_GELOCKERT) &&
+     SMASTER->QueryFlag(TPUID,F_ERDE_WEG))
+    return "Das Loch ist gerade gross genug, um durchzuklettern.\n";
+
+  return NICHTDA;
+}
+
+string detail_mauer(string str)
+{
+  if(!SMASTER->QueryFlag(TPUID,F_STEIN_GELOCKERT))
+    return BS("Du entdeckst an der Wand, dass ein Stein schon ziemlich "
+              "locker ist. Vielleicht kannst Du ihn herausbekommen. ");
+
+  if(!SMASTER->QueryFlag(TPUID,F_ERDE_WEG))
+    return BS("Der Stein ist zwar heraussen, aber sehr viel Erde ist noch "
+              "immer in der Wand. ");
+
+  return "In der westlichen Wand ist ein Loch, dort kannst Du "
+         "durchklettern.\n";
+}
+
+string detail_stein(string str)
+{
+  if(!SMASTER->QueryFlag(TPUID,F_STEIN_GELOCKERT))
+    return BS("Ein Stein ist ziemlich locker, den musst Du irgenwie "
+              "herauskriegen, er sitzt etwas locker, aber nicht locker "
+              "genug um ihn herauszubekommen.");
+
+  return "Der Stein ist schon heraussen.\n";
+}
+
+string detail_erde(string str)
+{
+  if(!SMASTER->QueryFlag(TPUID,F_STEIN_GELOCKERT))
+    return "Sowas siehst Du da nicht!\n";
+
+  if(!SMASTER->QueryFlag(TPUID,F_ERDE_WEG))
+    return "Die Erde ist ziemlich fest, schau mal was dahinter ist.\n";
+
+  return "Die Erde liegt auf der anderen Seite.\n";
+}
+
+int cmd_klettern(string str)
+{
+  notify_fail("Wodurch willst Du klettern?\n");
+  if(!str || str == "") return 0;
+  if(!(str == "loch"           ||
+       str == "mauer"          ||
+       str == "durch loch"     ||
+       str == "durch mauer"    ||
+       str == "wand"           ||
+       str == "durch wand"     )) return 0;
+
+  if(SMASTER->QueryFlag(TPUID,F_STEIN_GELOCKERT) &&
+     SMASTER->QueryFlag(TPUID,F_ERDE_WEG))
+  {
+    TELLPLAYER("Du kletterst durch das Loch nach Westen.\n");
+    TP->move(GETEXIT("06_03"), M_GO|M_SILENT);
+    return 1;
+  }
+
+  return 0;
+}
+
+int cmd_graben(string str)
+{
+  object schaufel;
+
+  notify_fail("Wo willst Du graben?\n");
+  if(!str || str == "") return 0;
+  if(!(str=="in erde" || str=="erde")) return 0;
+
+  if(!(schaufel=present("schaufel", TP)))
+  {
+    TELLPLAYER("Graben? Womit denn? Dazu brauchst Du hier schon eine "
+               "Schaufel.\n");
+    return 1;
+  }
+
+  if(SMASTER->QueryFlag(TPUID,F_ERDE_WEG))
+  {
+    TELLPLAYER("Du graebst ein wenig herum, findest aber nichts und "
+               "verlierst schnell die Lust.\n");
+    return 1;
+  }
+
+  if(!SMASTER->QueryFlag(TPUID,F_STEIN_GELOCKERT))
+  {
+    TELLPLAYER(BS("Du schaust Dich ein wenig um, ob man hier graben koennte. "
+                  "Die einzige Stelle wird jedoch von einem Stein "
+                  "blockiert. "));
+     return 1;
+  }
+
+  if(!schaufel->id("\nspy_schaufel"))
+  {
+    TELLPLAYER(BS("Du faengst an zu graben, aber Deine Schaufel scheint "
+                  "nicht mehr die Stabilste zu sein und der Stiel zerbricht. "
+                  "Veraergert wirfst Du die Bruchstuecke weg."));
+     schaufel->remove();
+     return 1;
+  }
+
+  TELLPLAYER("Du graebst die Erde zur Seite, in der Wand ist jetzt ein "
+             "Loch.\n ");
+  SMASTER->SetFlag(TPUID,F_ERDE_WEG);
+  return 1;
+}
+
+int cmd_lockern(string str)
+{
+  notify_fail("Was willst Du womit lockern?\n");
+  if(!str || str == "") return 0;
+  if(!(str == "stein mit loeffel"       ||
+       str == "mauerstein mit loeffel"  )) return 0;
+
+  if(!present("\nspy_loeffel", TP))
+  {
+    TELLPLAYER("Du hast doch aber gar keinen Loeffel bei Dir.\n");
+    return 1;
+  }
+
+  if(SMASTER->QueryFlag(TPUID,F_STEIN_GELOCKERT))
+  {
+    TELLPLAYER("Du hast den Stein doch schon gelockert und zur Seite "
+               "geschoben.\n");
+    return 0;
+  }
+
+  TELLPLAYER("Du lockerst den Stein mit Deinem Loeffel und ziehst ihn "
+             "heraus.\n");
+  SMASTER->SetFlag(TPUID,F_STEIN_GELOCKERT);
+  return 1;
+}
+

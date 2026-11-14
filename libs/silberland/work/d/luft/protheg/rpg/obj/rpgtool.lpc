@@ -1,0 +1,693 @@
+
+#include "../def.h"
+#include "predefined.h"
+
+inherit "std/thing";
+
+nosave string game;
+
+string QueryGame()
+{
+  return game;
+}
+
+int allowed_manager(object who)
+{
+  if(!RPGMASTER->GameMaster(who,game)) return 0;
+  
+  if(strstr(file_name(ENV(who)), ROOM "rpgroom_"+game)!=0) return 0;
+  
+  return 1;
+}
+
+void create() 
+{
+  if(!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Der Zauberstab des Gamemasters");
+  SetProp(P_LONG,
+	  "In Deinen Haenden haelst Du das ultimative Tool, den Zauberstab "
+	  "des Gamemasters. Damit kannst Du als Gamemaster das Spiel "
+	  "individuell gestalten, weitere Raeume, Objekte, Waffen, Ruestungen "
+	  "und sogar Npcs erzeugen und wieder zerstoeren. Das geht mit dem "
+	  "Befehl 'erzeuge' bzw. 'zerstoere'.");
+  SetProp(P_NAME, "Zauberstab");
+  SetProp(P_GENDER, MALE);
+  AddId(({"zauberstab","stab","tool","gamemastertool"}));
+  
+  SetProp(P_MATERIAL, MAT_MAGIC);
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_MAGIC, 1);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  
+  AddCmd(({"erzeug","erzeuge"}), "cmd_erzeugen");
+  AddCmd(({"zerstoer","zerstoere"}), "cmd_zerstoeren");
+  AddCmd(({"verbind","verbinde"}), "cmd_verbinden");
+  AddCmd(({"entfern","entferne"}), "cmd_entfernen");
+  AddCmd(({"haeng","haenge"}), "cmd_abhaengen");
+  AddCmd(({"echo"}), "cmd_echo");
+  AddCmd(({"echoto"}), "cmd_echoto");
+}
+
+void SetUpTool(string g)
+{
+  game=g;
+}
+
+nosave int cmd_echo(string str)
+{
+  if(!allowed_manager(TP)) return 0;
+  
+  notify_fail(BSST("Syntax: 'echo <text>'"));
+  if(!(str=TP->_unparsed_args())) return 0;
+  
+  tell_room(ENV(TP), BS(str));
+  
+  write_file(LOG "game_"+game+"_comm", BS(dtime()+": Echo: "+str));
+  
+  return 1;
+}
+
+nosave int cmd_echoto(string str)
+{
+  object pl;
+  string *tmp;
+  string pln, msg;
+  
+  if(!allowed_manager(TP)) return 0;
+  
+  notify_fail(BSST("Syntax: 'echoto <spielername> <text>'"));
+  if(!(str=TP->_unparsed_args())) return 0;
+  
+  tmp=explode(str, " ");
+  
+  pln=tmp[0];
+  
+  if(!objectp(pl=find_player(pln)))
+    return write(BSST("Kann Spieler '"+CAP(pln)+"' nicht finden.")), 1;
+  
+  if(strstr(file_name(ENV(pl)), ROOM "rpgroom_"+game)!=0)
+    return write(BSST("Spieler '"+CAP(pln)+"' befindet sich nicht in diesem "
+		      "Spiel.")), 1;
+  
+  msg=implode(tmp[1..], " ");
+  
+  tell_object(pl, BS(msg));
+  
+  write_file(LOG "game_"+game+"_comm", BS(dtime()+": Echoto: "+CAP(pln)+" - "+msg));
+  
+  return 1;
+}
+
+void get_connect_exits(string ex, string rm)
+{
+  string *e;
+  
+  if(ex=="q") return;
+  
+  e=explode(ex, " ");
+  
+  if((!member(PD_EXITS, ex)) && (sizeof(e)==1))
+    {
+      write(BSST("Bitte den Ausgang angeben, es wird versucht ein Gegenausgang "
+		 "zu setzen. Bei nichtstandardisierten Ausgaengen, bitte beide "
+		 "Ausgaenge angeben. Zuerst den Ausgang, der "
+		 "von hier wegfuehrt, dann den Ausgang der von dort "
+		 "zurueckfuehrt. z.B. 'norden' 'weitweg zurueck'. Abbrechen "
+		 "mit 'q'"));
+      write("Ausgaenge? ");
+      
+      input_to("get_connect_exits", 0, rm);
+      
+      return;
+    }
+  else
+    e+=({PD_EXITS[ex]});
+  
+  if(member(ENV(TP)->QueryProp(P_EXITS), e[0]))
+    if(ENV(TP)->QueryProp(P_EXITS)[e[0]]!=rm)
+      {
+	write(BSST("Ausgang '"+e[0]+"' gibt es hier schon."));
+	write(BSST("Bitte den Ausgang angeben, es wird versucht ein Gegenausgang "
+		   "zu setzen. Bei nichtstandardisierten Ausgaengen, bitte beide "
+		   "Ausgaenge angeben. Zuerst den Ausgang, der "
+		   "von hier wegfuehrt, dann den Ausgang der von dort "
+		   "zurueckfuehrt. z.B. 'norden' 'weitweg zurueck'. Abbrechen "
+		   "mit 'q'"));
+	write("Ausgaenge? ");
+	
+	input_to("get_connect_exits", 0, rm);
+      
+	return;
+      } 
+  
+  if(member(find_object(rm)->QueryProp(P_EXITS), e[1]))
+    if(find_object(rm)->QueryProp(P_EXITS)[e[1]]!=file_name())
+      {
+	write(BSST("Ausgang '"+e[1]+"' gibt es hier schon."));
+	write(BSST("Bitte den Ausgang angeben, es wird versucht ein Gegenausgang "
+		   "zu setzen. Bei nichtstandardisierten Ausgaengen, bitte beide "
+		   "Ausgaenge angeben. Zuerst den Ausgang, der "
+		   "von hier wegfuehrt, dann den Ausgang der von dort "
+		   "zurueckfuehrt. z.B. 'norden' 'weitweg zurueck'. Abbrechen "
+		   "mit 'q'"));
+	write("Ausgaenge? ");
+	
+	input_to("get_connect_exits", 0, rm);
+	
+	return;
+      } 
+  
+  write(BSST("Setze Ausgang '"+e[0]+"' zu Raum "+explode(rm, "_")[<1]+"."));
+  
+  ENV(TP)->AddExit(e[0], rm);
+  
+  write(BSST("Setze Ausgang '"+e[1]+"' hierher."));
+  
+  find_object(rm)->AddExit(e[1], file_name());
+  
+  write(BSST("Fertig."));
+}
+
+nosave int cmd_verbinden(string str)
+{
+  int r;
+  string rm;
+  
+  if(!allowed_manager(TP)) return 0;
+  
+  notify_fail(BSST("Was willst Du womit verbinden?"));
+  if(!str) return 0;
+  
+  if(sscanf(str, "raum mit raum %d", r)!=1) return 0;
+  
+  if(r < 0) return 0;
+  
+  if(RPGMASTER->QueryRooms(game) < r)
+    return write(BSST("So viele Raeume hast Du noch nicht erstellt!")), 1;
+  
+  rm=ROOM "rpgroom_"+QueryGame()+"_"+r;
+  
+  call_other(rm, "???");
+  
+  write(BSST("Bitte den Ausgang angeben, es wird versucht ein Gegenausgang "
+	     "zu setzen. Bei nichtstandardisierten Ausgaengen, bitte beide "
+	     "Ausgaenge angeben. Zuerst den Ausgang, der "
+	     "von hier wegfuehrt, dann den Ausgang der von dort "
+	     "zurueckfuehrt. z.B. 'norden' 'weitweg zurueck'. Abbrechen "
+	     "mit 'q'"));
+  write("Ausgaenge? ");
+  
+  input_to("get_connect_exits", 0, rm);
+  
+  return 1;
+}
+
+nosave int cmd_entfernen(string str)
+{
+  if(!allowed_manager(TP)) return 0;
+  
+  notify_fail(BSST("Welchen Ausgang willst Du entfernen?"));
+  if(!str) return 0;
+  
+  if(!member(ENV(TP)->QueryProp(P_EXITS), str))
+    return write(BSST("Kann Ausgang '"+str+"' nicht finden.")), 1;
+  
+  ENV(TP)->RemoveExit(str);
+  
+  write(BSST("Ausgang '"+str+"' ist entfernt."));
+  
+  return 1;
+}
+
+nosave int cmd_abhaengen(string str)
+{
+  int r,i;
+  string rm,rh;
+  mapping e;
+  string *ex;
+  
+  if(!allowed_manager(TP)) return 0;
+  
+  notify_fail(BSST("Welchen Raum willst Du abhaengen?"));
+  if(!str) return 0;
+  
+  if(sscanf(str, "raum %d ab", r)!=1) return 0;
+  
+  if(r < 0) return 0;
+  
+  if(RPGMASTER->QueryRooms(game) < r)
+    return write(BSST("So viele Raeume hast Du noch nicht erstellt!")), 1;
+  
+  rm=ROOM "rpgroom_"+QueryGame()+"_"+r;
+  
+  rh=file_name(ENV(TP));
+  
+  call_other(rm, "???");
+  
+  if(sizeof(ex=m_indices(e=find_object(rm)->QueryProp(P_EXITS))))
+    for(i=sizeof(ex)-1;i>=0;i--)
+      if(e[ex[i]]==rh)
+	{
+	  find_object(rm)->RemoveExit(ex[i]);
+	  write(BSST("Entferne in Raum "+r+" Ausgang "+ex[i]));
+	}
+  
+  if(sizeof(ex=m_indices(e=ENV(TP)->QueryProp(P_EXITS))))
+    for(i=sizeof(e)-1;i>=0;i--)
+      if(e[ex[i]]==rm)
+	{
+	  ENV(TP)->RemoveExit(ex[i]);
+	  write(BSST("Entferne hier Ausgang "+ex[i]));
+	}
+  
+  return 1;
+}
+
+void customize_predefined_room(string what, object r)
+{
+  if(what=="q" || what=="abbrechen" || what=="quit") 
+    return write(BSST("Ok, Abbruch. Der Raum bleibt wie er ist."));
+  
+  if(!member(PD_ROOMS, what))
+    {
+      write(BSST(implode(m_indices(PD_ROOMS), ", "))+
+	    BSST("Bitte waehle einen aus, oder tippe 'q' um den Raum so zu "
+	       "lassen wie er jetzt ist."));
+      
+      write("Auswahl: ");
+      
+      input_to("customize_predefined_room", 0, r);
+      
+      return;
+    }
+  
+  r->SetProp(P_LIGHT, PD_ROOMS[what, RPG_RLIGHT]);
+  r->SetProp(P_INDOORS, PD_ROOMS[what, RPG_RINDOORS]);
+  r->SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE: 15, ENV_TERRAIN: PD_ROOMS[what, RPG_RTERRAIN]]));
+  r->AddDetail(DEFAULT_SMELL, PD_ROOMS[what, RPG_RSTDSMELL]);
+  r->AddDetail(DEFAULT_SOUND, PD_ROOMS[what, RPG_RSTDSOUND]);
+  r->SetProp(P_INT_SHORT, PD_ROOMS[what, RPG_RSHORT]);
+  r->SetProp(P_INT_LONG, PD_ROOMS[what, RPG_RLONG]);
+  
+  write(BSST("Raum '"+what+"' fertig."));
+
+  write_file(LOG "game_"+game, dtime()+": "+TPN+" erzeugt einen fertigen Raum '"+what+"'.\n");
+}
+
+void customize_predefined_weapon(string what, object w)
+{
+  if(what=="q" || what=="abbrechen" || what=="quit") 
+    return write(BSST("Ok, Abbruch. Die Waffe bleibt wie sie ist."));
+  
+  if(!member(PD_WEAPONS, what))
+    {
+      write(BSST(implode(m_indices(PD_WEAPONS), ", "))+
+	    BSST("Bitte waehle eine aus, oder tippe 'q' um die Waffe so zu "
+	       "lassen wie sie jetzt ist."));
+      
+      write("Auswahl: ");
+      
+      input_to("customize_predefined_weapon", 0, w);
+      
+      return;
+    }
+  
+  w->SetProp(P_WEAPON_TYPE, PD_WEAPONS[what, RPG_WTYPE]);
+  w->SetProp(P_NAME, PD_WEAPONS[what, RPG_WNAME]);
+  w->SetProp(P_GENDER, PD_WEAPONS[what, RPG_WGENDER]);
+  w->SetProp(P_SHORT, PD_WEAPONS[what, RPG_WSHORT]);
+  w->SetProp(P_LONG, PD_WEAPONS[what, RPG_WLONG]);
+  w->AddId(lower_case(PD_WEAPONS[what, RPG_WNAME]));
+  
+  write(BSST("Waffe '"+what+"' fertig."));  
+  
+  write_file(LOG "game_"+game, dtime()+": "+TPN+" erzeugt eine fertige Waffe '"+what+"'.\n");
+}
+
+void customize_predefined_armour(string what, object a)
+{
+  if(what=="q" || what=="abbrechen" || what=="quit") 
+    return write(BSST("Ok, Abbruch. Die Ruestung bleibt wie sie ist."));
+  
+  if(!member(PD_ARMOURS, what))
+    {
+      write(BSST(implode(m_indices(PD_ARMOURS), ", "))+
+	    BSST("Bitte waehle eine aus, oder tippe 'q' um die Ruestung so zu "
+	       "lassen wie sie jetzt ist."));
+      
+      write("Auswahl: ");
+      
+      input_to("customize_predefined_armour", 0, a);
+      
+      return;
+    }
+  
+  a->SetProp(P_ARMOUR_TYPE, PD_ARMOURS[what, RPG_ATYPE]);
+  a->SetProp(P_NAME, PD_ARMOURS[what, RPG_ANAME]);
+  a->SetProp(P_GENDER, PD_ARMOURS[what, RPG_AGENDER]);
+  a->SetProp(P_SHORT, PD_ARMOURS[what, RPG_ASHORT]);
+  a->SetProp(P_LONG, PD_ARMOURS[what, RPG_ALONG]);
+  a->AddId(lower_case(PD_ARMOURS[what, RPG_ANAME]));
+  
+  write(BSST("Ruestung '"+what+"' fertig."));  
+  
+  write_file(LOG "game_"+game, dtime()+": "+TPN+" erzeugt eine fertige Ruestung '"+what+"'.\n");
+}
+
+void customize_predefined_npc(string what, object n)
+{
+  if(what=="q" || what=="abbrechen" || what=="quit") 
+    return write(BSST("Ok, Abbruch. Der Npc bleibt wie er ist."));
+  
+  if(!member(PD_NPCS, what))
+    {
+      write(BSST(implode(m_indices(PD_NPCS), ", "))+
+	    BSST("Bitte waehle einen aus, oder tippe 'q' um den Npc so zu "
+	       "lassen wie er jetzt ist."));
+      
+      write("Auswahl: ");
+      
+      input_to("customize_predefined_npc", 0, n);
+      
+      return;
+    }
+  
+  n->SetProp(P_NAME, PD_NPCS[what, RPG_NNAME]);
+  n->SetProp(P_GENDER, PD_NPCS[what, RPG_NGENDER]);
+  n->SetProp(P_RACE, PD_NPCS[what, RPG_NRACE]);
+  n->SetProp(P_SIZE, PD_NPCS[what, RPG_NSIZE]);
+  n->SetProp(P_ALIGN, PD_NPCS[what, RPG_NALIGN]);
+  n->SetProp(P_SHORT, PD_NPCS[what, RPG_NSHORT]);
+  n->SetProp(P_LONG, PD_NPCS[what, RPG_NLONG]);
+  n->AddId(lower_case(PD_NPCS[what, RPG_NNAME]));
+  
+  write(BSST("Npc '"+what+"' fertig."));  
+  
+  write_file(LOG "game_"+game, dtime()+": "+TPN+" erzeugt einen fertigen NPC '"+what+"'.\n");
+}
+
+void customize_predefined_object(string what)
+{
+  object o;
+  
+  if(what=="q" || what=="abbrechen" || what=="quit") 
+    return write(BSST("Ok, Abbruch."));
+  
+  if(!member(PD_OBJECTS, what))
+    {
+      write(BSST(implode(m_indices(PD_OBJECTS), ", "))+
+	    BSST("Bitte waehle eines aus, oder tippe 'q' um abzubrechen."));
+      
+      write("Auswahl: ");
+      
+      input_to("customize_predefined_object", 0);
+      
+      return;
+    }
+  
+  o=clone_object(OBJ "" + PD_OBJECTS[what]);
+  
+  o->move(TP, M_NOCHECK);
+   
+  o->SetUp(game);
+ 
+  write(BSST("Objekt '"+what+"' fertig."));  
+  
+  write_file(LOG "game_"+game, dtime()+": "+TPN+" erzeugt ein fertiges Objekt '"+what+"'.\n");
+}
+
+void new_object(string what)
+{
+  object o;
+  
+  if(!strlen(what))
+    {
+      o=clone_object(OBJ "rpgobj");
+      
+      o->move(TP, M_NOCHECK);
+
+      o->SetUp(game);
+      
+      write_file(LOG "game_"+game, dtime()+": "+TPN+" erzeugt ein Objekt.\n");
+      
+      return write(BSST("Fertig."));
+    }
+  
+  write(BSST("Folgende vordefinierte Objekte stehen zur Auswahl:"));
+  
+  write(BSST(implode(m_indices(PD_OBJECTS), ", "))+
+	BSST("Bitte waehle eines aus, oder tippe 'q' um abzubrechen."));
+  
+  write("Auswahl: ");
+  
+  input_to("customize_predefined_object", 0);
+}  
+
+void new_armour(string what)
+{
+  object a;
+  
+  a=clone_object(ARMOUR "rpgarmour");
+  
+  a->move(TP, M_NOCHECK);
+  
+  a->SetUp(game);
+  
+  if(!strlen(what))
+    {
+      write_file(LOG "game_"+game, dtime()+": "+TPN+" erzeugt eine Ruestung.\n");
+     
+      return write(BSST("Fertig."));
+    }
+  
+  write(BSST("Folgende vordefinierte Ruestungen stehen zur Auswahl:"));
+  
+  write(BSST(implode(m_indices(PD_ARMOURS), ", "))+
+	BSST("Bitte waehle eine aus, oder tippe 'q' um die Ruestung so zu "
+	   "lassen wie sie jetzt ist."));
+  
+  write("Auswahl: ");
+  
+  input_to("customize_predefined_armour", 0, a);
+}  
+
+void new_weapon(string what)
+{
+  object w;
+  
+  w=clone_object(WEAPON "rpgweapon");
+  
+  w->move(TP, M_NOCHECK);
+  
+  w->SetUp(game);
+  
+  if(!strlen(what))
+    {
+      write_file(LOG "game_"+game, dtime()+": "+TPN+" erzeugt eine Waffe.\n");
+      
+      return write(BSST("Fertig."));
+    }
+  
+  write(BSST("Folgende vordefinierte Waffen stehen zur Auswahl:"));
+  
+  write(BSST(implode(m_indices(PD_WEAPONS), ", "))+
+	BSST("Bitte waehle eine aus, oder tippe 'q' um die Waffe so zu lassen "
+	   "wie sie jetzt ist."));
+  
+  write("Auswahl: ");
+  
+  input_to("customize_predefined_weapon", 0, w);
+}  
+    
+void new_npc(string what)
+{
+  object n;
+  
+  n=clone_object(NPC "rpgnpc");
+  
+  n->move(ENV(TP), M_NOCHECK);
+
+  n->SetUp(game);
+  
+  if(!strlen(what))
+    {
+      write_file(LOG "game_"+game, dtime()+": "+TPN+" erzeugt einen NPC.\n");
+      
+      return write(BSST("Fertig."));
+    }
+
+  write(BSST("Folgende vordefinierte Npcs stehen zur Auswahl:"));
+  
+  write(BSST(implode(m_indices(PD_NPCS), ", "))+
+	BSST("Bitte waehle einen aus, oder tippe 'q' um den Npc so zu lassen "
+	   "wie er jetzt ist."));
+  
+  write("Auswahl: ");
+  
+  input_to("customize_predefined_npc", 0, n);
+}  
+    
+void new_room(string str, string what)
+{
+  string *rooms;
+  string *dirs;
+  string c;
+  object r,h;
+  int nr,i;
+  
+  if(str=="q" || str=="abbrechen" || str=="quit") 
+    return write(BSST("Ok, Abbruch."));
+  
+  if(sizeof(dirs=explode(str, " "))>2)
+    return write(BSST("Nur zwei Ausgaenge angeben bitte!"));
+  
+  if(strstr(file_name(h=ENV(TP)), ROOM "rpgroom_")!=0)
+    return write(BSST("Hier geht das nicht!"));
+  
+  str=dirs[0];
+  
+  if(sizeof(dirs)==2)
+    c=dirs[1];
+  else
+    c=PD_EXITS[str];
+  
+  if((!member(PD_EXITS, str)) && (sizeof(dirs)==1))
+    return write(BSST("Unbekannter Ausgang, bitte mit Gegenausgang angeben."));
+  
+  if(member(h->QueryProp(P_EXITS), str))
+    return write(BSST("Dieser Ausgang existiert bereits!"));
+  
+  nr=RPGMASTER->NewRoom(game);
+  
+  call_other(ROOM "rpgroom_"+game+"_"+nr, "rpgloadme");
+  
+  r=find_object(ROOM "rpgroom_"+game+"_"+nr);
+
+  write(BSST("Neuer Raum ("+nr+") angelegt..."));  
+
+  h->AddExit(str, ROOM "rpgroom_"+game+"_"+nr);
+
+  write(BSST("Setze Ausgang "+str+" dorthin..."));
+  
+  r->AddExit(c, file_name(h));
+  
+  write(BSST("Setze Ausgang "+c+" von dort hierher..."));
+  
+  if(!strlen(what))
+    {
+      write_file(LOG "game_"+game, dtime()+": "+TPN+" erzeugt einen Raum.\n");
+      
+      return write(BSST("Fertig."));
+    }
+
+  write(BSST("Folgende vordefinierte Raeume stehen zur Auswahl:"));
+  
+  write(BSST(implode(m_indices(PD_ROOMS), ", "))+
+	BSST("Bitte waehle einen aus, oder tippe 'q' um den Raum so zu lassen "
+	   "wie er jetzt ist."));
+  
+  write("Auswahl: ");
+  
+  input_to("customize_predefined_room", 0, r);  
+}
+
+nosave int cmd_erzeugen(string str)
+{
+  string *tmp;
+  string what;
+  
+  if(!TP) return 0;
+  
+  if(!allowed_manager(TP)) return 0;
+  
+  notify_fail(BSST("Was willst Du erzeugen? Raum, Waffe, Ruestung, Objekt, Npc?"));
+  if(!str) return 0;
+  
+  if(ENV(TP)->QueryGameName()!=game)
+    return write(BS("Hier geht das nicht!")), 1;
+  
+  if(sizeof(tmp=explode(str, " "))>1)
+    what=implode(tmp[1..], " ");
+  
+  str=tmp[0];
+  
+  if(strlen(what))
+    if(what!="vordefiniert")
+      return write(BSST("Meintest Du 'vordefiniert' ?")),1;
+  
+  switch(str)
+    {
+    case "raum":
+      write(BSST("Ok, ein neuer "+(strlen(what) ? "vordefinierter ":"")+"Raum "
+	       "wird erzeugt.")+
+	    BSST("Welcher Ausgang soll diesen Raum mit dem neuen verbinden?")+
+	    BSST("Fuer normale Ausgaenge wie 'norden', 'oben' etc. wird der "
+	       "jeweilige Rueckweg selbst ermittelt. Bei speziellen "
+	       "Ausgaengen bitte Hin- und Rueckweg angeben.")+
+	    BSST("zB: 'norden' , 'rein raus', 'hinueber zurueck'")+
+	    BSST("Abbrechen mit 'q'."));
+      write("Ausgang: ");
+      input_to("new_room", 0, what);
+      break;
+    case "waffe":
+      write(BSST("Ok, eine neue "+(strlen(what) ? "vordefinierte ":"")+"Waffe "
+	       "wird erzeugt."));
+      new_weapon(what);
+      break;
+    case "ruestung":
+      write(BSST("Ok, eine neue "+(strlen(what) ? "vordefinierte ":"")+
+	       "Ruestung wird erzeugt."));
+      new_armour(what);
+      break;
+    case "objekt":
+      write(BSST("Ok, ein neues "+(strlen(what) ? "vordefiniertes ":"")+
+	       "Objekt wird erzeugt."));
+      new_object(what);
+      break;
+    case "npc":
+      write(BSST("Ok, ein neuer "+(strlen(what) ? "vordefinierter ":"")+
+	       "Npc wird erzeugt."));
+      new_npc(what);
+      break;
+    default: return 0;
+    }
+  return 1;
+}
+
+nosave int cmd_zerstoeren(string str)
+{
+  object ob;
+  
+  if(!TP) return 0;
+  
+  if(!allowed_manager(TP)) return 0;
+  
+  notify_fail(BSST("Was willst Du zerstoeren?"));
+  if(!str) return 0;
+  
+  if(!objectp(ob=present(str, TP)))
+    if(!objectp(ob=present(str, ENV(TP))))
+      return write(BSST("Sicher, dass es sowas geben soll?")), 1;
+  
+  if(!ob->id(RPG_PROJECT_ID))
+    return write(BSST("Nein, Du kannst nur Requisiten zerstoeren!")), 1;
+  
+  ob->SetProp(P_CURSED, 0);
+  ob->remove(1);
+  
+  if(objectp(ob)) destruct(ob);
+  
+  if(objectp(ob))
+    return write(BSST("Hm, das will nicht zerstoert werden.")), 1;
+  
+  write(BSST(CAP(str)+" wurde zerstoert."));
+  
+  return 1;
+}
+

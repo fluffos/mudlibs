@@ -1,0 +1,73 @@
+#include "../../arkanisten.h"
+
+inherit GUILD_FOLDER "abilities/ability.lpc";
+
+public void create() {
+    if(is_clone(TO)) return;
+
+    ::create();
+    SetProp(P_ABILITY_NAME, CAP(GADGET_OVERDRIVE));
+    SetProp(P_ABILITY_DESCRIPTIPON, 
+        "Du kannst deine mechanischen Geraete fuer kurze Zeit uebertakten, "
+        "um ihre Leistung zu steigern. Dies erhoeht die Effektivitaet und "
+        "Reaktionsgeschwindigkeit deiner Geraete, sie benoetigen jedoch "
+        "mehr Energie, um zu funktionieren.");    
+    SetProp(P_ABILITY_TYPE, ABILITY_TYPE_ACTIVE);
+    SetProp(P_ABILITY_CASTVERB, CAST_VERB_ACTIVATE);
+    SetProp(P_ABILITY_BASE_ATTRIBUTE, A_INT);
+    SetProp(P_ABILITY_GROUP, ({ABILITY_GROUP_GADGET_POWERUP, ABILITY_GROUP_GADGETS}));
+    SetProp(P_ABILITY_REQUIRES, ({GYROSCOPIC_STABILIZER}));
+    SetProp(P_ABILITY_SPELLBREAK, 6);
+    SetProp(P_ABILITY_MIN_GUILD_LEVEL, 21);
+
+    modify(MODIFY_ALL, MODIFY_SKILLCHECK_RESULT);
+    modify(MODIFY_ALL, MODIFY_COST);
+}
+
+public void success(object caster, mapping sinfo, int skillcheck) {
+    int duration;
+    duration = skillcheck / 10 + caster->QuerySkillAbility(GADGET_OVERDRIVE) / 10;
+    caster->SetProp(P_WATCHER_OVERDRIVE_UNTIL, time() + duration);
+    tell_object(caster, BS("Du ueberlastest deine Geraete und steigerst ihre Leistung fuer kurze Zeit!"));
+    tell_room(environment(caster), BS(caster->Name(WESSEN) + " ueberlaedt die Werkzeuge und sie scheinen leistungsfaehiger zu werden!"), ({ caster }));
+    pDebug(caster, sprintf("gadget_overdrive :: duration=%d\n", duration));
+    call_out("end_overdrive", duration, caster);
+    return;
+}
+
+public void end_overdrive(object caster) {
+    if(!objectp(caster)) return;
+    if(caster->QueryProp(P_WATCHER_OVERDRIVE_UNTIL) < time()) {
+        caster->SetProp(P_WATCHER_OVERDRIVE_UNTIL, 0);
+        tell_object(caster, BS("Die Wirkung der Uebertaktung deiner Geraete klingt ab."));
+        tell_room(environment(caster), BS("Die Werkzeuge von " + caster->name(WESSEN) + " scheinen wieder ihre normale Leistung zu haben."), ({ caster }));
+    }
+    return;
+}
+
+public mapping modify_ability(string sender, int mtype, mapping payload) {
+    object caster;
+
+    caster = payload[SI_ABILITY_USER];
+    switch(mtype) {
+        case MODIFY_SKILLCHECK_RESULT:
+            // increase the skillcheck result by 20% of the ability level
+            if(caster->QueryProp(P_WATCHER_OVERDRIVE_UNTIL) < time()) break;
+            if(!member(payload, SI_SKILLABILITY) || !intp(payload[SI_SKILLABILITY])) break;
+            payload[SI_ABILITY_VALUE] += payload[SI_ABILIT_USER]->QuerySkillAbility(GADGET_OVERDRIVE) / 5;
+            pDebug(payload[SI_ABILITY_USER], sprintf("gadget_overdrive :: skillcheck increased modifier=%d new=%d\n", payload[SI_SKILLABILITY]/5, payload[SI_ABILITY_VALUE]));
+            break;
+        case MODIFY_COST:
+            // change SI_RAW_SPELLCOST in payload to increase costs by 50%
+            if(caster->QueryProp(P_WATCHER_OVERDRIVE_UNTIL) < time()) break;
+            if(!member(payload, SI_RAW_SPELLCOST) || !mappingp(payload[SI_RAW_SPELLCOST])) {
+                payload[SI_RAW_SPELLCOST] *= 1.5;
+            } else {
+                if(member(payload[SI_RAW_SPELLCOST], P_SP)) payload[SI_RAW_SPELLCOST][P_SP] = to_int(payload[SI_RAW_SPELLCOST][P_SP] * 1.5);
+                if(member(payload[SI_RAW_SPELLCOST], P_MV)) payload[SI_RAW_SPELLCOST][P_MV] = to_int(payload[SI_RAW_SPELLCOST][P_MV] * 1.5);
+                if(member(payload[SI_RAW_SPELLCOST], P_HP)) payload[SI_RAW_SPELLCOST][P_HP] = to_int(payload[SI_RAW_SPELLCOST][P_HP] * 1.5);
+            }
+            pDebug(payload[SI_ABILITY_USER], sprintf("gadget_overdrive :: cost increased by 50%%\n"));
+    }
+    return payload;
+}

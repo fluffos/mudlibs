@@ -1,0 +1,76 @@
+mapping prep_fesselfalle(object caster, mapping sinfo, int silent) 
+{  
+  object ob, trap;
+  
+  if(!TestNoTrance(caster, sinfo) || !FroschTest(caster, sinfo)  || 
+     !BlindTest(caster, sinfo)   ||
+     !IsNotInFight(caster, sinfo) )
+    return 0;
+    
+  if(!objectp(ob=present(TRAP_BELT_ID, caster)))
+  { tell_object(caster,BS("Du kannst ohne Deinen Fallenguertel keine Fallen "
+                       "bauen."));
+    return 0; }
+  if(!ob->can_build(1))
+  { tell_object(caster,BS("Du hast nicht genug Draehte fuer Diese Falle."));
+    return 0; }
+    
+  if(!ENV(caster)) return 0;
+  if(objectp(trap=present(FESSELFALLE_ID, ENV(caster))))
+  {ob=trap->QueryOwner();}
+  if(ob==caster) 
+  { tell_object(caster,BS("Du kannst hier nur eine solche Falle errichten."));
+    return 0;}
+  if(!silent){FirstPrepareFuncSuccessfull(caster, sinfo);}
+  return sinfo;
+}
+
+mixed fesselfalle_miss() {return BS("Du hast Dich noch nicht befreit.");}
+
+void fesselfalle_free(object caster)
+{
+  if(objectp(caster))
+  {
+    tell_object(caster, BSC("Du hast Dich wieder befreit."));
+  }
+}
+
+int fesselfalle(object caster, mapping sinfo)
+{
+  object trap, ob;
+  int success, ability;
+  
+  if(!mappingp(sinfo=prep_fesselfalle(caster, sinfo, 1))) return 0;
+  ability=sinfo[SI_SKILLABILITY];
+  
+  success=SpellSuccess(caster,sinfo);
+  if(success < (-5000+random(2000)))
+  {
+    tell_object(caster, BSC("Du verfaengst Dich in den Ranken und Draehten. "
+                        "Wie peinlich."));
+    caster->SetProp(P_TMP_MOVE_HOOK, ({time()+6, TO, "fesselfalle_miss"}) );
+    caster->SetProp(P_DISABLE_ATTACK, 3);
+    caster->SetProp(P_DISABLE_SPELLS, 3);
+    call_out("fesselfalle_free",8,caster);
+    if( objectp(ob=present(TRAP_BELT_ID, caster)) )
+    { ob->dec_ladungen(1); }
+    return MISSERFOLG;
+  }
+  if(success<0)
+  {
+    tell_object(caster, BSC("Die Falle zerfaellt."));
+    if( objectp(ob=present(TRAP_BELT_ID, caster)) )
+    { ob->dec_ladungen(1); }
+    return MISSERFOLG;
+  }
+  
+  trap=clone_object(OBJ"trap");  
+  trap->move(ENV(caster), M_SILENT|M_NOCHECK);
+  trap->Fesselfalle(caster, ability);
+  tell_object(caster, BS("Dir ist der Bau einer Fesselfalle gelungen."));
+  tell_room(ENV(caster),BS(caster->Name()+" stellt eine Fesselfalle auf."),
+            ({caster}) );
+  
+  if( objectp(ob=present(TRAP_BELT_ID, caster)) ) { ob->dec_ladungen(1); }
+  return ERFOLG;
+}

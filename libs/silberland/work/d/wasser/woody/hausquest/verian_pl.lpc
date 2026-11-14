@@ -1,0 +1,365 @@
+/*
+** Verian, der Fischer - Woody
+** ---
+** 19 Feb, 1997  Release
+** 24 Feb, 1997  GiveQuest handling
+** 25 Feb, 1997  MNPC_AREA eingeschraenkt
+** 23 Feb, 2001  P_NO_SCORE -> 1
+*/
+
+inherit "std/mnpc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <mnpc.h>
+#include <questmaster.h>
+#include <npcmaster.h>
+
+#include "files.h"
+#define TMIT(w,x) tell_object(w, break_string(x, 78, "Verian teilt Dir mit: "))
+#define SAG(x) tell_room(MENV, break_string(x, 78, "Verian sagt: "))
+#define ECHO(x) tell_room(MENV, break_string(x, 78))
+#define DEF_ROOM FISCHERDORF("room/wiesenweg")
+
+object lena;
+object pl, qo;
+
+create()
+{
+  object ob;
+
+  if (!is_clone(this_object())) return;  // (return on BP)
+
+  ::create();
+  AddId ("verian");
+  AddId ("\nverian");
+  set_living_name("verian");
+  SetProp (P_GENDER, MALE);
+  SetProp (P_NAME, "Verian");
+  SetProp (P_ARTICLE, 0);
+  SetProp (P_SHORT, "Verian, der Fischer");
+  SetProp (P_LONG, bs("Der alte Fischer Verian wurde vom Schicksal "
+      "oft und schwer getroffen, und das sieht man ihm auch an, der "
+      "alte Mann ist zwar koerperlich noch recht gut beisammen, doch "
+      "sein Gesicht ist erfuellt von Traurigkeit und Leere."));
+  SetProp (P_SIZE, 170+random(11));
+  SetProp (P_ALIGN, 200);
+  SetProp (P_LEVEL, 9);
+  SetProp (P_MAX_HP, 100);
+  SetProp (P_MAX_SP, 100);
+  SetProp (P_XP, 0);
+  SetProp (P_NO_SCORE, 1);      // keine EKs!
+  SetProp (P_NOCORPSE, 1);
+  SetProp (P_BODY, 40);
+  SetProp (P_HANDS, ({" mit blossen Haenden", 30, DT_BLUDGEON}) );
+  SetProp (P_NOATTACK, "schimpft: Lass das!");
+  SetProp (P_REJECT,
+      ({ REJECT_GIVE, "Verian braucht @WEN nicht.\n" }) );
+
+  SetProp (P_MSGIN, "kommt an");
+  SetProp (P_MSGOUT, "schlurft");
+  SetProp (P_MMSGIN, "kommt an");
+  SetProp (P_MMSGOUT, "schlurft weiter");
+
+  SetProp (P_MNPC_AREA, ({
+      FISCHERDORF("room/garten"),
+      FISCHERDORF("room/wiese"),
+      FISCHERDORF("room/haupt"),
+      FISCHERDORF("room/strand") }) );
+  SetProp (P_MNPC_WAIT, ({ 10+random(20), 120, 120 }));
+  SetProp (P_MNPC_DEFAULTROOM, DEF_ROOM);
+  SetProp (P_MNPC_FLAGS, MOV_OUTDOORS + MOV_MOVES);
+
+  SetProp (P_DEFAULT_INFO, ({
+      "schaut Dich fragend an.\n",
+      "zuckt mit den Schultern.\n",
+      "beachtet Dich gar nicht.\n",
+      "gruebelt ein wenig nach und sagt dann: Keine Ahnung!\n",
+      "sagt: Woher soll ich das wissen?\n" }) );
+
+  AddInfo (({"traurigkeit", "trauer", "leere", "schicksal"}),
+      "@@i_trauer@@",
+      "sagt: ");
+  AddInfo (({"tochter", "mirijam"}),
+      "Ich denke auch heute noch oft an sie zurueck... und es erfuellt "
+      "mich jedes Mal mit mehr Schmerz und Trauer.",
+      "seufzt: ");
+  AddInfo (({"lena", "frau"}),
+      "sagt: Lena ist meine Frau!\n");
+  AddInfo (({"haus"}),
+      "sagt: Es steht im Nordosten des Dorfes.\n");
+  AddInfo (({"hilfe","wiederaufbau"}),
+      "@@i_hilfe@@",
+      "sagt: ");
+  AddInfo ( ({"belohnung", "questbelohnung", "massband", "band"}),
+      "@@i_band@@",
+      "sagt: ");
+
+  lena=clone_object(QDIR("lena"));
+  pl=0;
+  AddPursuer(lena);
+}
+
+reset()
+{
+  ::reset();
+  if (!objectp(lena)) {
+    lena=clone_object(QDIR("lena"));
+    AddPursuer(lena);
+  }
+}
+
+int second_life(string arg)
+{
+  if (objectp(lena)) {
+    if (ENV(lena))
+      tell_room(ENV(lena), "Lena folgt ihrem Mann in den Tod.\n");
+    lena->die();
+  }
+  return 0;
+}
+
+string i_trauer()
+{
+  if (TP->QueryQuest(HAUSQUEST))
+    return "Ach, ich vermisse meine Tochter Mirijam so sehr... "
+      "Aber dabei kann mir niemand helfen.";
+  else
+    return
+      "Ach, unser Haus... wir wuerden so gerne dort einziehen, aber "
+      "als damals... naja, jedenfalls ist es vollkommen verwahrlost, "
+      "und wir koennten ein wenig Hilfe beim Wiederaufbau gut "
+      "gebrauchen, in meinem Alter kann ich nicht mehr viel "
+      "anpacken...";
+}
+
+string i_hilfe()
+{
+  if (TP->QueryQuest(HAUSQUEST))
+    return "Ja, Du hast mir damals sehr geholfen, vielen Dank dafuer!";
+  else if (present(QO_ID, TP))
+    return "Ich hoffe, der Wiederaufbau geht zuegig voran? Ich "
+      "kann ja gar nicht sagen, wie dankbar ich Dir fuer Deine "
+      "Hilfe bin!";
+  else {
+    write (
+        "Verian sagt: Willst Du mir wirklich helfen?\n"
+        "Verian jubelt.\n");
+    say ("Verian unterhaelt sich mit "+TP->name(WEM)+".\n", TP);
+    clone_object (QUESTOBJECT)->move(TP, M_NOCHECK);
+    write (
+        "Verian gibt Dir einen Schluessel.\n"+
+        break_string(
+        "Hier hast Du den Schluessel zum Haus, gib gut drauf acht, ich "
+        "habe nur den einen. Es ist eine Menge zu tun, schau Dich einfach "
+        "dort um! Und wenn Du fertig bist, teil es mir einfach mit! Ich "
+        "werde mich inzwischen mal nach irgendetwas umsehen, um mich bei "
+        "Dir erkenntlich zu zeigen.", 78, "Verian sagt: "));
+    say ("Verian gibt "+TP->name(WEM)+" einen Schluessel.\n", TP);
+    return "Danke, "+CAP(getuid(TP))+"!";
+  }
+}
+
+string i_band()
+{
+  if (TP->QueryQuest(HAUSQUEST)) {
+    if (!present("\nverianmassband",TP)) {
+      tell_room(MENV, "Verian gibt "+TP->name(WEM)+" ein Massband.\n",
+          ({ ME,TP }) );
+      tell_object(TP, "Verian gibt Dir ein Massband.\n");
+      clone_object(OBJ("massband"))->move(TP, M_NOCHECK);
+      return "Du hast mir damals sehr geholfen, Du hast Dir Deine "
+        "Belohnung redlich verdient. Ich hoffe, das Massband wird "
+        "Dir gute Dienste erweisen!";
+    }
+    else
+      return "Aber Du hast Deine Belohnung doch schon erhalten!";
+  }
+  else if (present(QO_ID, TP))
+    return "Du wirst Deine Belohnung schon noch bekommen, aber erst, "
+      "wenn Du fertig bist!";
+  else
+    return "Hae? Ich weiss nicht, wovon Du redest.";
+}
+
+void catch_tell(string str)
+{
+  if ((strstr(str, "teilt Dir mit: ") != -1) && (strstr(str, "fertig") != -1))
+  {
+   /* if (pl==TP)
+      TMIT(pl, "Jajaja, wie oft noch?"); 
+    else if (pl && interactive(pl))
+      TMIT(TP, "Gedulde Dich doch bitte noch einen Moment und "
+          "versuchs in ein paar Sekunden nochmal!");
+    else */
+    {
+      while (remove_call_out("fertig") != -1) /* continue */ ;
+      call_out("fertig", 3);
+      pl=TP;
+    }
+  }
+}
+
+void fertig(object pl)
+{
+  int i;
+
+  if (!pl || !interactive(pl))
+    return;
+
+  TMIT(pl, "Du bist fertig?");
+  if (pl->QueryQuest(HAUSQUEST))
+    TMIT(pl, "Weiss ich doch schon lange...");
+  else if (!qo=present(QO_ID, pl))
+    TMIT(pl, "Womit denn etwa?");
+  else if (explode(file_name(environment(pl)),"/")[<1] != "vhaus:"+getuid(pl))
+    TMIT(pl, "Gehe doch bitte ins Haus vor und ruf mich dann nochmal!");
+  else
+  {
+    for (i=0; i<=DO_FLAGS; i++)
+      if (!qo->TestFlag(i)) {
+        TMIT(pl, "Wirklich mit allem? Das glaube ich nicht!");
+        pl=0;
+        return;
+      }
+    TMIT(pl, "Hmm, das muss ich mir wohl gleich mal ansehen!");
+    SetProp (P_MNPC_FLAGS, QueryProp(P_MNPC_FLAGS) & ~MOV_MOVES);
+    ME->move(environment(TP), M_GO, "weg", "eilt schnell");
+    call_out("fertig2", 3);
+  }
+}
+
+string CountUp(string *s)
+{
+  if (sizeof(s) > 1)
+    return implode(s[0..<2], ", ")+" und "+s[<1];
+  else if (sizeof(s))
+    return s[0];
+  else
+    return 0;
+}
+
+void fertig2()
+{
+  int q;
+  string *s;
+  object *inv, ob;
+
+  if (!qo || !pl || !interactive(pl) || (ENV(pl) != MENV)) {
+    if (pl && qo)
+      TMIT(pl, "Wo hast Du denn den Schluessel gelassen? Such ihn "
+          "erst mal wieder, und ruf mich dann nochmals!");
+    else if (pl)
+      TMIT(pl, "Wo bist Du denn nun wieder hinverschwunden? Wenn Du "
+          "wieder im Haus bist, ruf mich wieder...");
+    pl=0;
+    SetProp (P_MNPC_FLAGS, QueryProp(P_MNPC_FLAGS) | MOV_MOVES);
+    ME->move(DEF_ROOM, M_GO, "weg", "eilt schnell");
+    return;
+  }
+
+  // 1. Quest geben
+  // 2. Questobjekt(e) zerstoeren
+  // 3. Spieler in/vor fertiges Haus transen
+
+
+  // 1. Quest geben
+
+  ECHO ("Verian jubelt.");
+  SAG ("Du hast ja tatsaechlich mein Haus renoviert!!");
+  SAG ("Danke, "+CAP(getuid(pl))+"!");
+
+  q = pl->GiveQuest(HAUSQUEST);
+  if (q==1)
+    write_file (HAUSQUESTLOG,
+        sprintf ("%s  %s hat Verians Haus renoviert.\n",
+            dtime(time()), capitalize(getuid(pl))));
+  else
+  {
+    write_file (HAUSQUESTLOG,
+        sprintf ("%s  %s: GiveQuest() returned %d (%s)\n",
+            dtime(time()), capitalize(getuid(pl)), q,
+            ERRNO_2_STRING("GQ",q) || "unbekannt" ));
+    if (q != -1)
+      write (sprintf("Fehler: %d (%s)\n"
+          "Bitte den zustaendigen Magier verstaendigen!\n",
+          q, ERRNO_2_STRING("GQ",q) || "unbekannt" ));
+  }
+
+
+  // 2. Questobjekt(e) zerstoeren
+
+  tell_object(pl, "Verian nimmt Dir den Schluessel wieder ab.\n");
+  qo->remove();
+  // a) Spieler-Inv
+  inv = deep_inventory(pl);
+  inv = filter_array(inv, #'call_other, "id", Q_ITEM_ID);
+  s = map_array(inv, #'call_other, "name", WEN);
+  if (sizeof(s)) tell_object(pl, bs("Verian nimmt Dir ausserdem "+
+      CountUp(s)+" ab und verstaut alles in den drei Kisten."));
+  if (sizeof(inv)) map_array(inv, #'call_other, "remove");
+  // b) Zeug im Raum
+  inv = all_inventory(MENV);
+  inv = filter_array(inv, #'call_other, "id", Q_ITEM_ID);
+  if (sizeof(inv)) map_array(inv, #'call_other, "remove");
+  // c) Restzeug in den 3 Raeumen (excl. interactive's)
+  inv = all_inventory(MENV);
+  if (sizeof(inv)) inv -= filter_array(inv, #'interactive);
+  if (sizeof(inv)) map_array(inv, #'call_other, "move", QDIR("vhaus"));
+  if (ob = find_object(QDIR("vhauso")+":"+getuid(pl))) {
+    inv = all_inventory(ob);
+    // if (sizeof(inv)) inv -= filter_array(inv, #'interactive);
+    if (sizeof(inv)) map_array(inv, #'call_other, "move", QDIR("vhaus"));
+    catch(ob->remove());
+  }
+  if (ob = find_object(QDIR("vhausu")+":"+getuid(pl))) {
+    inv = all_inventory(ob);
+    // if (sizeof(inv)) inv -= filter_array(inv, #'interactive);
+    if (sizeof(inv)) map_array(inv, #'call_other, "move", QDIR("vhausu"));
+    catch(ob->remove());
+  }
+
+  // 3. Belohnung
+
+  if (!present("\nverianmassband",pl))
+  {
+    if (catch(ob = clone_object(OBJ("massband"))))
+    {
+      SAG("Ach ja, falls Du eine Belohnung haben moechtest, "
+          pl->name()+", frag mich einfach danach!");
+    }
+    else
+    {
+      SAG("Ach ja, ich hatte Dir doch eine Belohnung versprochen, "+
+          pl->name()+". Hier hast Du ein Massband, dass Dir hoffentlich "
+          "ganz hilfreich sein wird, ein Handwerker wie Du kann sowas "
+          "immer gebrauchen!");
+      tell_room( MENV, "Verian gibt "+pl->name(WEM)+" ein Massband.\n",
+          ({ ME, pl }) );
+      tell_object(pl, "Verian gibt Dir ein Massband.\n");
+      ob->move(TP, M_NOCHECK);
+    }
+  }
+
+  // 4. Spieler in/vor fertiges Haus transen
+
+  SAG ("Ich werde noch ein wenig an die frische Luft gehen und begleite "
+      "Dich noch hinaus, "+pl->name()+". Noch einmal vielen Dank fuer "
+      "alles, und hoffentlich sehen wir uns bald wieder!");
+  ME->move(DEF_ROOM, M_GO, "", "schlendert vergnuegt weg");
+  if (ob = present("lena", MENV))
+    ob->move(DEF_ROOM, M_GO, "", "folgt Verian");
+  ob = ENV(pl);
+  pl->move(QDIR("vhausu"), M_GO, "", "folgt Verian hinaus");
+  TMIT(pl, "Du bist uebrigens in unserem Haus immer gern willkommen!");
+  inv=all_inventory(ob);
+  if (sizeof(inv))
+    map_array(inv, #'call_other, "move", QDIR("vhaus"), M_NOCHECK);
+  catch(ob->remove());
+  SetProp (P_MNPC_FLAGS, QueryProp(P_MNPC_FLAGS) | MOV_MOVES);
+  pl=0;
+
+}
+

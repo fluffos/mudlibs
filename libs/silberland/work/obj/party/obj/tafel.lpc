@@ -1,0 +1,174 @@
+// Eine Tafel Schokolade mit 8 Riegeln drin...
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <moving.h>
+#include "../party.h"
+
+#define P_SCHOKO_RIEGEL "angus_schoko_riegel"
+#define P_TAFEL_OFFEN "angus_tafel_offen"
+
+string riegels();
+create()
+{
+  if(!is_clone(this_object())) return;
+  ::create();
+
+  SetProp(P_SCHOKO_RIEGEL,8);
+  SetProp(P_NAME, "Schokoladentafel");
+  SetProp(P_SHORT, "Eine Tafel Schokolade");
+  SetProp(P_LONG, "Eine Tafel Schokolade. \"-Yogurette(TM)-\"\n"
+	  +"steht in grossen, rosafarbenen Lettern darauf geschrieben.\n"
+	  +"Die Tafel enthaelt "+riegels()+" Riegel Schokolade.\n");
+
+  SetProp(P_WEIGHT, 45);
+  SetProp(P_VALUE, 0);
+  SetProp(P_GENDER, FEMALE);
+
+  AddId(({"tafel","Tafel","Schokoladentafel",
+	    "schokoladentafel","packung","Packung"}));
+  AddCmd("oeffne","open");
+  AddCmd(({"hole","nimm"}),"nimmwas");
+  SetProp(P_TAFEL_OFFEN, 0);
+}
+
+string riegels()
+{
+  string ret;
+  switch(QueryProp(P_SCHOKO_RIEGEL))
+    {
+    case 8:
+      ret = "acht";
+      break;
+    case 7:
+      ret = "sieben";
+      break;
+    case 6:
+      ret = "sechs";
+      break;
+    case 5:
+      ret = "fuenf";
+      break;
+    case 4:
+      ret = "vier";
+      break;
+    case 3:
+      ret = "drei";
+      break;
+    case 2:
+      ret = "zwei";
+      break;
+    case 1:
+      ret = "einen";
+      break;
+    case 0:
+      ret = "leider keinen";
+      break;
+    default:
+      ret = "eine merkwuerdige Anzahl";
+    }
+  return ret;
+}
+
+void reduce_content()
+{
+  if(!QueryProp(P_SCHOKO_RIEGEL))
+    return;
+  SetProp(P_SCHOKO_RIEGEL, QueryProp(P_SCHOKO_RIEGEL) - 1);
+  SetProp(P_LONG, "Eine Tafel Schokolade. \"-Yogurette(TM)-\"\n"
+	  +"steht in grossen, rosafarbenen Lettern darauf geschrieben.\n"
+	  +"Die Tafel enthaelt "+riegels()+" Riegel Schokolade.\n");
+}
+
+int tafel_offen()
+{
+  return QueryProp(P_TAFEL_OFFEN);
+}
+
+int open(string str)
+{
+  notify_fail("Was willst Du denn oeffnen?\n");
+
+  if(!str || str == "" || !id(str))
+    return 0;
+
+  if(tafel_offen())
+    {
+      write("Aber die Tafel ist doch schon offen!\n");
+      return 1;
+    }
+
+  SetProp(P_TAFEL_OFFEN, 1);
+  write("Du oeffnest die Schokoladentafel.\n"
+	+"Die Vorfreude auf den leckeren Inhalt uebermannt Dich fast! ;)\n");
+  say(this_player()->name()+" oeffnet eine Tafel Schokolade.\n");
+  return 1;
+}
+
+int nimmwas(string str)
+{
+  int err;
+  string was, woher;
+  object ob;
+
+  notify_fail("Hole Riegel aus Tafel... nur zum Beispiel...\n");
+  if(!str || str == "")
+    return 0;
+
+//  write("step1");
+  if(sscanf(str, "%s aus %s", was, woher) != 2)
+    return 0;
+
+//  write("step2");
+  if(!id(woher))
+    return 0;
+  if(was != "yogurette"
+     && was != "schokolade"
+     && was != "riegel")
+    return 0;
+
+//  write("step3");
+  if(!tafel_offen())
+    {
+      write("Du musst Die Tafel erst oeffnen!\n");
+      return 1;
+    }
+
+  if(!QueryProp(P_SCHOKO_RIEGEL))
+    {
+      write("Tut mir leid, die Schokoladentafel is leer!\n");
+      return remove();
+    }
+  SetProp(P_WEIGHT, QueryProp(P_WEIGHT) - 5); 
+
+  ob = clone_object(OBJ("yogurette"));
+  if(err = ob->move(this_player(),M_GET)>0)
+    {
+      write("Genuesslich fummelst Du einen Riegel Yogurette(TM)\n"
+	    +"aus Deiner Schokoladentafel.\n");
+      say(this_player()->name()
+	  +" fummelt genuesslich einen Riegel Schokolade\n"
+	  +"aus "+this_player()->QueryPossPronoun(FEMALE,WESSEN)+" Packung.\n");
+      reduce_content();
+      return 1;
+    }
+  else
+    {
+      switch(err)
+	{
+	case ME_TOO_HEAVY:
+	  write("Du kannst nichts mehr tragen...\n"); /* Unwahrscheinlich... */
+	  break;
+	case ME_CANT_BE_INSERTED:
+	  write("Du kannst im Moment nichts nehmen...\n"); /* schoen bloed... */
+	  break;
+	default:
+	  write("Hier gibts noch irgendwo nen Fehler...\n");
+	}
+      ob->remove();
+      SetProp(P_WEIGHT, QueryProp(P_WEIGHT) + 5);
+      return 1;
+    }
+}
+

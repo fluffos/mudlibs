@@ -1,0 +1,234 @@
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include <material.h>
+#include <wizlevels.h>
+#include <ansi.h>
+#include "../files.h"
+#include "../quest.h"
+
+int cnt;
+private nosave string bin_str="";
+private nosave string must_str="";
+private nosave string owner;
+private nosave string *status_q;
+private nosave int quest_start;
+
+#define SPEC_ROOM ROOM("couch")
+
+nosave void fill_quest_tasks() {
+  status_q=allocate(IV_MAX_QUEST_FLAGS);
+
+  status_q[IV_QUEST_START]   = "Quest begonnen";
+  status_q[IV_FILL_PEN]      = "Feder in Tintenfass getunkt";
+  status_q[IV_GET_NOTEPAD]   = "Block geholt";
+  status_q[IV_COPY_BOOK]     = "Buch kopiert";
+  status_q[IV_GIVE_BOOK]     = "Kopiertes Buch (Block) an Vannor gegeben";
+  status_q[IV_GET_RAZOR]     = "Rasiermesser geholt";
+  status_q[IV_GET_MOSS]      = "Moos geholt";
+  status_q[IV_FILL_BOTTLE]   = "Flasche gefuellt";
+  status_q[IV_GET_YARI]      = "Yari geholt";
+  status_q[IV_GET_KETTLE]    = "Kessel geholt";
+  status_q[IV_INSERT_MOSS]   = "Moos in Kessel gelegt";
+  status_q[IV_INSERT_WATER]  = "Wasser in Kessel gegeben",
+  status_q[IV_GET_LANTERN]   = "Laterne von Tarion geklaut";
+  status_q[IV_MAKE_TINDER]   = "Zunder gebastelt";
+  status_q[IV_INFLAME_COAL]  = "Kohle entzuendet";
+  status_q[IV_COOK_MOSS]     = "Moospulver (Kessel mit Moos + Wasser angeheizt)";
+  status_q[IV_GET_POT]       = "Tiegel geholt";
+  status_q[IV_POWDER2POT]    = "Moospulver in Tiegel gesteckt";
+  status_q[IV_FAT2POT]       = "Fett in Tiegel gefuellt";
+  status_q[IV_MASH_HEART]    = "Eisherz mit Moerser zerkleinert";
+  status_q[IV_HEART2POT]     = "Eisherzpulver in Tiegel gefuellt";
+  status_q[IV_GIVE_POT]      = "Tiegel an Vannor gegeben";
+}
+
+create()
+{
+  int i;
+
+  if (!is_clone(this_object()))
+    return;
+  ::create();
+  AddId("feder");
+  AddId("schreibfeder");
+  AddId(IV_QUEST_ITEM);
+  SetProp(P_SHORT, "Eine edle Schreibfeder");
+  SetProp(P_IVORY, 1);
+  SetProp(P_LONG, BS(
+          "Diese vergoldete Schreibfeder dient dazu, Buecher zu kopieren."));
+  SetProp(P_INFO, BS(
+          "Du kannst versuchen, mit dieser absolut herrlich gearbeiteten"
+         +" vergoldeten Feder ein Buch zu kopieren."));
+  SetProp(P_NAME, "Schreibfeder");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_MATERIAL, MAT_GOLD);
+  SetProp(P_NODROP, "Du kannst die Feder nicht weglegen. Du wirst sie noch dringend brauchen!\n");
+  SetProp(P_NEVERDROP, 1);
+//  SetProp(P_VALUE, 600+random(170));
+  
+  AddCmd(({"kopiere", "kopier"}), "cpy");
+  cnt=0;
+
+  for (i = IV_MAX_QUEST_FLAGS -1; i >= 0; i--)
+    must_str=set_bit(must_str, i);
+  fill_quest_tasks();
+}
+
+_query_weight() { return 240+cnt*10; }
+
+FillIt()
+{
+  return cnt=1;
+}
+
+cpy(str)
+{
+  object e, b;
+  int book, cp;
+
+  notify_fail("Was willst Du kopieren?\n");
+  if (!str)
+    return 0;
+  if (str!="buch")
+    return 0;
+  if (ENV(TO) && (e=ENV(ENV(TO))) && file_name(e)!=SPEC_ROOM &&
+        !((book=member(e->QueryProp(P_DETAILS), "buch")) ||
+         (book=member(e->QueryProp(P_SPECIAL_DETAILS), "buch")))) {
+    tell_object(TP, "Siehst Du hier irgendwo ein Buch?\n");
+    return 1;
+  }
+  if (!cnt) {
+    tell_object(TP, "Die Feder ist staubtrocken. Du solltest sie mit Tinte fuellen.\n");
+    return 1;
+  }
+  if (book) {
+    tell_object(TP, "Das Buch das Du kopieren willst ist voellig wertlos.\n");
+    return 1;
+  }
+  if (e && file_name(e)==SPEC_ROOM)
+    if (e->MayCopy()) 
+      if ((b=present(IV_NOTEPAD, TP))) {
+	cp=b->Copy();
+	switch(cp) {
+	  case -1:
+	    tell_object(TP, "Du kannst mit der Feder noch nicht richtig umgehen. Du solltest vermutlich Vannor noch mal befragen");
+	  case  0: 
+	    tell_object(TP, "Das Notizbuch ist leider schon randvoll.\n");
+	  case  1:
+	  default:
+	    this_object()->set_flag(IV_COPY_BOOK);
+	    tell_object(TP, "Du kopierst das Buch auf den Notizblock.\n");
+	    tell_room(e, TPN+" schreibt den Inhalt eines Buchs auf einen Notizblock.\n", ({TP}));
+	}
+      }
+      else
+        tell_object(TP, "Du hast nichts dabei, worauf Du das Buch kopieren kannst.\n");
+    else
+      tell_object(TP, "Du musst das Buch erst finden.\n");
+  return 1;
+}
+
+int CheckPermissions() {
+  if(!IS_ARCH(TP) && file_name(PO)[0..29]!=PATH && 
+      member(IV_ALLOWED_FILES, explode(file_name(PO),"#")[0])==-1  )
+  {
+    raise_error("Illegales Setzen im Questobjekt!");
+    return 0;
+  }
+  return 1;
+}
+
+int check_owner(object pl) {
+  if(getuid(pl)!=owner) return 0;
+  return 1;
+}
+
+int start_quest(object pl) {
+  if(!CheckPermissions()) return -1;
+  if(owner) return 0;
+  quest_start=time();
+  owner=getuid(pl);
+  return 1;
+}
+
+int set_flag(int nr) {
+  object o;
+
+  if (!CheckPermissions()) return -1;
+  o=ENV(TO);
+  if (o && o->QueryQuest(IV_QUEST))
+    return 0;
+  if(test_bit(bin_str, nr))
+    return 0; 
+  IV_LOGQUEST(owner, "[QR] "+status_q[nr]);
+  bin_str=set_bit(bin_str, nr);
+  return 1;
+}
+
+int del_flag(int nr) {
+  if (!CheckPermissions()) return -1;
+  bin_str=clear_bit(bin_str, nr);
+  return 1;
+}
+
+int check_flag(int nr) {
+  if(!CheckPermissions()) return -1;
+  return test_bit(bin_str, nr);
+}
+
+int reset_quest() {
+  if(!CheckPermissions() && 
+      file_name(PO)[0..39]!="/d/dschungel/feyaria/tijara/npc/elsurion")
+  {
+    return -1;
+  }
+  bin_str="";
+  return 1;
+}
+
+int check_completed() {
+  if(!CheckPermissions() && 
+      file_name(PO)[0..39]!="/d/dschungel/feyaria/tijara/npc/elsurion")
+  {
+    return -1;
+  }
+  return bin_str==must_str;
+}
+
+int get_status() {
+   int i;
+   string txt;
+
+   txt="";
+   if(stringp(owner))
+     txt+="\nQueststatus von "+CAP(owner)+"\n\n";
+   else
+     txt+="Queststatus. "+ANSI_BOLD+"KEIN QUESTOWNER GESETZT"+ANSI_NORMAL+"\n";
+   for(i=0; i <= IV_MAX_QUEST_FLAGS-1; i++) {
+      if(test_bit(bin_str, i))
+        txt+="\t+ "+ANSI_BOLD+status_q[i]+ANSI_NORMAL+"\n";
+      else 
+        txt+="\t- "+status_q[i]+"\n";
+   } 
+   txt+=" Die Quest ist "+(check_completed()==1?"":"noch nicht ")+"beendet";
+   TP->More(txt);
+   return 1;
+}
+
+varargs int set_completed(string player) {
+  int i;
+
+  if (IS_ARCH(TP)) {
+    if (stringp(player))
+      owner=player;
+    else
+     owner=TP->query_real_name();
+    for (i=0; i < IV_MAX_QUEST_FLAGS; i++)
+      set_flag(i);
+    return 1;
+  }
+  return 0;
+}
+

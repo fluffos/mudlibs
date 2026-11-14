@@ -1,0 +1,159 @@
+/*
+ * Schrei des Verderbens
+ * Gildenstufe 1
+ *
+ * Ein einfacher Kampfspell, wirkt besser, je besser man den Spell beherrscht.
+ *
+ * Gwenshara@SL
+ *
+ * 08.07.2007
+*/
+
+private void makeDeaf(object target) {
+  int duration;
+
+  if(interactive(target)) {
+    duration = 50+random(50);
+  } else {
+    duration = 5 + random(5);
+  }
+
+  tell_object(target, BS("Der Schrei war so schlimm, dass dein Trommelfell platzt!"));
+  tell_room(ENV(target), BS(target->Name(WER, 1) + " blutet aus den Ohren."), ({target}));
+  target->AddHp(-5 + random(5));
+  target->SetProp(P_DEAF, ([
+    DEAF_TIME: 5 + random(10),
+    DEAF_MSG: "%s hat gerade ein geplatztes Trommelfell.\n",
+    DEAF_END_MSG: "Du kannst wieder hoeren!\n"
+  ]));
+  return;
+}
+
+int schrei(object caster, mapping sinfo)
+{
+  object victim, *targets;
+  int suc, abil, dam, n;
+
+  sinfo = prepare_song(caster, sinfo);
+  if(sinfo == 0) {
+    return 0;
+  }
+
+  // GEGNER FINDEN
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wen soll Dein Schrei treffen?\n");
+  if(!objectp(victim)) return 0;
+
+  // LIEDTEXT
+  if(BARDENMASTER->HasHeroPathLevel(caster, HERO_FLAMMARA, 2)) {
+    write(BS("Du singst das uralte Wort des Feuers, das die Flammen entfacht."));
+    tell_room(ENV(caster), BS(caster->Name(WER) + " singt das uralte Wort des Feuers, das die Flammen entfacht."), ({caster}));
+  } else {
+    write(BS("Du singst ein schrill ansteigendes Vibrato!"));
+    tell_room(ENV(caster), BS(caster->Name(WER)+" singt einen schrillen Ton, der in Deinen Ohren schmerzt."), ({caster}));
+  }
+
+  if(!paySpellCost(caster, sinfo)) return 0;
+
+  // GELUNGEN?
+  if((suc=SpellSuccess(caster,sinfo))<=0)
+  {
+     if(suc < -3000 && !objectp(present("\nsprachfluch", caster)))
+     {
+       object ob;
+       ob = clone_object(OBJ("heiser"));
+       write(BS("Du wirst heiser!"));
+       tell_room(ENV(caster), BS(caster->Name(WER)+" wird heiser!"), ({ caster }));
+       if(ob->move(caster) != 1)
+       {
+         ob->remove(1);
+         write(BS("Du raeusperst Dich und die Heiserkeit vergeht wieder.!"));
+         tell_room(ENV(caster), BS(caster->Name(WER)+" raeuspert sich."));
+       }
+       if(objectp(ob)) {
+         ob->SetTimeout(15+random(30));
+         ob->start();
+       }
+     }
+     else if(suc < -1500) {
+      makeDeaf(caster);
+     }
+     return MISSERFOLG;
+  }
+
+  abil = sinfo[SI_SKILLABILITY];
+  dam = sinfo[SI_SKILLDAMAGE];
+  dam += (int) (50 * ((float)suc/MAX_ABILITY+1));
+
+  n = (1 * caster->QuerySkillAttribute(SA_EXTENSION))/100;
+  if(TALENTMASTER->HasTalent(caster, TALENT_FORTE_FORTISSIMO)) {
+    n += caster->QueryProp(P_BARD_INSPIRATION_LEVEL);
+  }
+
+  targets = findTargets(caster, "isPotentialEnemy", TO, n);
+  if(!pointerp(targets) || targets==0) targets = ({ victim });
+  if(sizeof(targets) < 1) return ERFOLG;
+  if(member(targets, victim) < 0) targets[0] = victim; // das ausgewaehlte Ziel ist _immer_ dabei
+
+  for(n=0; n<sizeof(targets); ++n) {
+    victim = targets[n];
+    if(BARDENMASTER->HasHeroPathLevel(caster, HERO_FLAMMARA, 2)) {
+      tell_object(victim, BS("Dein Hirn, deine Haut und deine Kleidung gehen in einer Explosion in Flammen auf!"));
+      sinfo[SI_SKILLDAMAGE_TYPE] = ({DT_FIRE, DT_EXPLOSION});
+    } else if (victim->QueryProp(P_DEAF) == 0) {
+      tell_object(victim, BS("Der schrille Ton schmerzt schrecklich!"));
+    } else {
+      tell_object(caster, BS("Dein Schrei scheint wirkungslos!"));
+      tell_object(victim, BS("Aufgrund deiner Taubheit, ist der Schrei wirkungslos."));
+      tell_room(environment(victim), BS(sprintf("%s scheint wenig beeindruckt von diesem Schrei.", victim->Name(WER, 1))), ({victim, caster}));
+      dam = 0;
+    }
+
+    sinfo[SI_SKILLDAMAGE] = dam;
+
+    // Kritischer Erfolg!
+    if(suc > MAX_ABILITY) {
+        tell_room(ENV(victim), victim->Name(WER) + " taumelt verwirrt zurueck!\n");
+        tell_object(victim, "Dir wird kurz schwarz vor Augen!\n");
+        victim->SetProp(P_DISABLE_ATTACK, 1+((suc-MAX_ABILITY)/3333));
+    } 
+    
+    // chance, dass der gegner taub wird, und weitere anwendungen des spells wirkungslos sind.
+    if(!BARDENMASTER->HasHeroPathLevel(caster, HERO_FLAMMARA, 2) && victim->QueryProp(P_DEAF) == 0 && (!random((30) || dam > 199))) {
+      makeDeaf(victim);
+    }
+
+    TryDefaultAttackSpell(victim, caster, sinfo, ([SP_NAME:"schrei des verderbens",SP_SHOW_DAMAGE:1]));
+
+    if(TALENTMASTER->HasTalent(caster, TALENT_KREISCHENDES_ECHO) && random(5) < caster->QueryProp(P_BARD_INSPIRATION_LEVEL)) {
+      call_out("screaching_echo", 2, environment(caster), caster, victim, sinfo);
+    }
+  }
+
+  return ERFOLG;
+}
+
+public void screaching_echo(object room, object caster, object victim, mapping sinfo) {
+
+  if(!objectp(caster) || !objectp(victim)) {
+    tell_room(room, "Das Echo eines schrillen Vibrato verklingt wirkungslos.\n");
+    return;
+  }
+
+  sinfo[SI_SKILLDAMAGE] = (int) (sinfo[SI_SKILLDAMAGE] * 0.6);
+  sinfo[OFFSET(SI_SKILLDAMAGE)] = (int) (sinfo[OFFSET(SI_SKILLDAMAGE)] * 0.6);
+
+  if(BARDENMASTER->HasHeroPathLevel(caster, HERO_FLAMMARA, 2)) {
+    tell_room(room, BS(sprintf("Fluesternd kehren die Worte des Feuers von %s wieder und prallen auf %s ein.", caster->name(WEM, 1), victim->name(WEN, 1))),
+              ({victim, caster}));
+    tell_object(caster, BS(sprintf("Fluesternd kehren deine Worte des Feuers wieder und prallen auf %s ein.", victim->name(WEN, 1))));
+    sinfo[SI_SKILLDAMAGE_TYPE] = ({DT_FIRE, DT_EXPLOSION});
+  } else {
+    tell_room(room, BS(sprintf("Das Echo des schrillen Vibratos von %s toent auf %s ein.", caster->name(WEM, 1), victim->name(WEN, 1))),
+              ({victim, caster}));
+    tell_object(caster, BS(sprintf("Das schrille Echo deines Vibratos toent auf %s ein.", victim->name(WEN, 1))));
+  }
+
+  TryDefaultAttackSpell(victim, caster, sinfo, ([SP_NAME:"schrei des verderbens",SP_SHOW_DAMAGE:1]));
+  return;
+}

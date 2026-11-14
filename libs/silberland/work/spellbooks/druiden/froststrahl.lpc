@@ -1,0 +1,80 @@
+/*
+ * Froststrahl
+ *
+ *
+ * Kosten: 
+ * Level : 9
+ * Objekte:
+ * Damage:
+ *
+ */
+
+int prep_froststrahl(object caster, mapping sinfo) 
+{
+  if( !FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+        "Auf wen willst Du einen elementaren Froststrahl abfeuern?\n") )
+    return 0;
+  write_color("Deine Hand ueberzieht sich mit Raureif.\n", EIS, caster);
+  return 1;
+}
+
+int froststrahl(object caster, mapping sinfo) 
+{
+  object victim;
+  int hands,suc, dam;
+  string vnw;
+  object *victims;
+  int i;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+        "Auf wen willst Du einen elementaren Froststrahl abfeuern?\n");
+  if (!victim)
+    return 0;
+  sinfo=DoSpellModification(EIS, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  if ((suc=SpellSuccess(caster,sinfo))<=0)
+    return MISSERFOLG;
+  dam=to_int(sinfo[SI_SKILLDAMAGE]+(exp(caster->QueryProp(P_GUILD_LEVEL)/3.35)*
+    ((float)suc/MAX_ABILITY)));
+  dam=(3*dam/5)+random(2*dam/5);
+  
+  vnw = victim->name(WEN, 2);
+  say(BS(sprintf("%s feuert eine Lanze aus elementarem Eis auf %s.\n", 
+              capitalize(caster->name()), vnw)), victim);
+  write_color(BS(sprintf("Deine Haende werden ploetzlich von einer "
+          "Frostschicht "
+          "umgeben, als Du das elementare Eis in Form einer "
+          "toedlichen Lanze auf %s wirfst!", vnw)), EIS, caster, 1);
+  tell_object(victim, BS(sprintf("%s wirft einen elementaren Froststrahl "
+      "nach Dir.\n", capitalize(caster->name()))));
+  TryAttackSpell(victim,dam,sinfo[SI_SKILLDAMAGE_TYPE], 
+      ([SP_NAME:sinfo[SI_SPELLNAME],SP_SHOW_DAMAGE:1]),caster,sinfo );
+
+  if(victim && HAS_MYSTERY(caster, MYSTERY_RIME) && random(15000) < suc & !present("\n"+EIS+"pfeil_enhance", victim)) {
+    ob=clone_object(OBJ("arrow_special"));
+    ob->move(victim, M_NOCHECK);
+    ob->SetVariables(caster,EIS, victim);
+  }
+
+  if( sinfo[SI_SKILLABILITY] == MAX_ABILITY && suc > MAX_ABILITY && 
+      sizeof(victims=caster->PresentEnemies())>1 ) 
+  {
+    dam = dam/sizeof(victims);
+    for(i=sizeof(victims)-1; i>=0; i--)
+    {
+      if (victims[i] != victim)
+      {
+        tell_object(victims[i], BS(
+              "Ein Teil des Froststrahles trifft auch Dich!\n"));
+        TryAttackSpell(victims[i], dam/2+random(dam/2), sinfo[SI_SKILLDAMAGE_TYPE],
+            ([SP_NAME:sinfo[SI_SPELLNAME], SP_SHOW_DAMAGE:1]), caster, sinfo);
+      }
+    }
+  }
+  return ERFOLG;
+}

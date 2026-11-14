@@ -1,0 +1,334 @@
+/*-----------------------------------------------------------------------------\
+| Name-Master 0.1                                      (C) by Hotaru, 11.07.01 |
+\-----------------------------------------------------------------------------*/
+/*
+  Some examples:
+  ==============
+
+  s(an)V|BV(dan)|BvC(ian)|s(ey)V|Bv(nd)s|svCv|s(th|g|)(<V>n|<V>r|an|il)
+
+  Elfen  (m): sv(coron|driel|niel|riel|nian|yar)
+  Elfen  (w): sv(ana|cilia|lla|llia|lea|ria|nia)
+  Zwerge (m): <B|s>v(bosch|fax|grim|grosch|lasch|rik|rok|thag|x)
+
+
+  How it works:
+  =============
+
+  CreateName(), the namemaster's main function, expects a format string which
+  can be understood as a template for the names that will be generated.
+
+  * A template can consist of any combination of format chars. You can use the
+    following format chars:
+
+    Char | Meaning
+    -----+--------------------------------------------------------------------
+     B   | a group of consonants useable in the beginning of a name
+     C   | a group of consonants useable everywhere
+     c   | a single consonant
+     V   | a group of vowels
+     v   | a single vowel
+     s   | a syllable
+     i   | an insulting syllable (great for names of "dumb" characters)
+
+    For example, you can use combinations as "Bvs", "ss", "ii" etc...
+
+  * You can also let CreateName() choose one of several given formats using
+    angle brackets "<>". For example, "<Bvs|ss|ii>" randomly uses one of the
+    given formats seperated by "|".
+
+  * You can include fixed parts in your names using normal brackets "()". By
+    using "Bs(fax)", CreateName() will always return names consisting of a
+    group of consonants, a syllable and the ending "fax".
+
+  * All these formatting possibilities can be combined and nested. If you get
+    error messages like *ERROR:x* in your names, the parser didn't recognize a
+    format char (in this case the char "x"). If you don't want the parser to
+    parse it, just enclose it in brackets - like this: "(x)". On the other hand
+    you can also force the parser to parse a char, even if its inside normal
+    brackets, by enclosing it in angle brackets: Both "Bs(fax)" and "(<Bs>fax)"
+    return the same results.
+
+*/
+
+#pragma strong_types
+
+#include <properties.h>
+#include <language.h>
+#include <defines.h>
+#include <moredef.h>
+
+mapping data;
+
+// === Function prototypes ================================================== \\
+
+string AddData(string thename, string onechar, string altchar);
+string space(int count);
+
+// === Functions that can be called from outside ============================ \\
+
+// Creates a random name from the given template
+string CreateName(string templ)
+{
+  int u, c, a, *rund, *eckig;
+  string thename, onechar, lastchar, tmpstr, tmpmark, tmpstr2, *tmparr;
+
+  if (templ=="") {
+    templ = "s(an)V|BV(dan)|BvC(ian)|s(ey)V|Bv(nd)s|svCv|"
+            "s(th|g|)(<V>n|<V>r|an|il)|sV";
+  }
+  rund = ({ });
+  eckig = ({ });
+  templ = "<"+templ+">";
+  thename = templ;
+  for(u=0;u<strlen(templ);u++) {
+    onechar = templ[u..u];
+    if (onechar == "(")       rund  += ({ u });
+    else if (onechar == "<")  eckig += ({ u });
+    else if (onechar == ")") {
+      a = rund[<1];
+      rund = rund[0..<2];
+      tmparr = new_explode(thename[a+1..u-1], "|");
+      tmpstr = tmparr[random(sizeof(tmparr))];
+      templ   = templ[0..a-1]   + space(strlen(tmpstr)) + templ[u+1..];
+      thename = thename[0..a-1] +              tmpstr   + thename[u+1..];
+      u = a-1;
+    }
+    else if (onechar == ">") {
+      a = eckig[<1];
+      eckig = eckig[0..<2];
+      tmparr = new_explode(templ[a+1..u-1], "|");
+      c = random(sizeof(tmparr));
+      tmpstr  = tmparr[c];
+      tmpmark = new_explode(thename[a+1..u-1], "|")[c];
+      tmpstr2 = thename[0..a-1];
+      for(c=0;c<strlen(tmpstr);c++) {
+        tmpstr2 = AddData(tmpstr2, tmpstr[c..c], tmpmark[c..c]);
+      }
+      templ   = templ[0..a-1] + space(strlen(tmpstr2)-a) + templ[u+1..];
+      thename =                              tmpstr2     + thename[u+1..];
+      u = a-1;
+    }
+  }
+
+  // Remove triple characters
+  c = 1;
+  for(u=0;u<strlen(thename);u++) {
+    onechar = thename[u..u];
+    if (onechar == lastchar) c++;
+                        else c = 1;
+    lastchar = onechar;
+    if (c == 3) {
+      thename = thename[0..u-1] + thename[u+1..];
+      c--;
+      u--;
+    }
+  }
+  // Replace nonsense combinations
+  for(u=0,tmpstr="";(u<2 && tmpstr!=thename);u++) {
+    tmpstr  = thename;
+    thename = regreplace(thename,"aea", "ae",1);
+    thename = regreplace(thename,"auau","au",1);
+    thename = regreplace(thename,"oou", "ou",1);
+    thename = regreplace(thename,"uou", "uo",1);
+    thename = regreplace(thename,"aeou","au",1);
+    thename = regreplace(thename,"euau","eu",1);
+    thename = regreplace(thename,"roro","ro",1);
+    thename = regreplace(thename,"^oo|oo$","o",1);
+    thename = regreplace(thename,"^ou","o",1);
+    thename = regreplace(thename,"^(uu|uo)","u",1);
+    thename = regreplace(thename,"^(ie|iy)","i",1);
+    thename = regreplace(thename,"^(ns|ny)","n",1);
+    thename = regreplace(thename,"^fy","fi",1);
+    thename = regreplace(thename,"quu","qu",1);
+    thename = regreplace(thename,"dq","d",1);
+    thename = regreplace(thename,"y(e|a)y","y\\1",1);
+    thename = regreplace(thename,"yi","y",1);
+  }
+  return thename;
+}
+
+// Creates an array of names from the given template
+varargs void CreateNames(string templ)
+{
+  string *names;
+  int i;
+  if (!templ) templ = "";
+  names = ({});
+  for(i=0;i<50;i++) names += ({ capitalize(CreateName(templ)) });
+  write("------------------------------------------------------------------\n");
+  write(break_string(implode(names, ", "), 60));
+  write("------------------------------------------------------------------\n");
+}
+
+// === Internal stuff ======================================================= \\
+
+string space(int count)
+{
+  string nix;
+  int i;
+  nix = "";
+  for (i=0;i<count;i++) nix += " ";
+  return nix;
+}
+
+string AddData(string thename, string onechar, string altchar)
+{
+  int tryagain;
+  string newpart, tmpstr;
+  if (onechar == " ") return thename + altchar;
+  if (!member(data,onechar)) return thename + "*ERROR:" + onechar + "*";
+  tryagain = 1;
+  while (tryagain) {
+    tryagain = 0;
+    newpart = data[onechar][random(sizeof(data[onechar]))];
+    // Check if new part can't be used in the beginning
+    if (newpart[0..0] == "-") {
+      if (regreplace(thename,"<","",1) == "") {
+        tryagain = 1;
+        continue;
+      }
+      newpart = newpart[1..];
+    }
+    // Check if new part can only be used in the beginning
+    if (newpart[0..0] == "<") {
+      if (regreplace(thename,"<","",1) != "") {
+        tryagain = 1;
+        continue;
+      }
+      newpart = newpart[1..];
+    }
+    // Disallow repeating parts
+    if (newpart == thename[<strlen(newpart)..]) {
+      tryagain = 1;
+      continue;
+    }
+    // Disallow nonsense combinations
+    tmpstr = thename[<1..<1]+newpart[0..0];
+    if ((regreplace(tmpstr,"(y|j|q)","X",1) == "XX") ||
+        (tmpstr == "qp") ||
+        (tmpstr == "pq") ||
+        (tmpstr == "pb") ||
+        (tmpstr == "bp") ||
+        (tmpstr == "fb")
+       ) {
+      tryagain = 1;
+      continue;
+    }
+    thename += newpart;
+  }
+  return thename;
+}
+
+void create()
+{
+  // Don't allow master to be cloned
+  if (is_clone(this_object())) { destruct(this_object()); return; }
+  seteuid(getuid());
+
+  data =
+  ([
+    "s":({
+          "ach","ack","ad","age","ald","ale","an","ang","ar","as","ash","at",
+          "ath","augh","aw",
+          "ban","bel","bur",
+          "cer","cha","che",
+          "dan","dar","del","den","dra","dyn",
+          "ech","em","en","end","eng","enth","eld","elm","er","ess","est","et",
+          "far","fen","fil","fur",
+          "gar","gha","gor",
+          "hat","hin","hon",
+          "ia","ight","ild","im","ina","ine","ing","ir","is","iss","it",
+          "kal","kel","kim","kin",
+          "ler","lor","lye",
+          "mor","mos",
+          "nal","ny","nys",
+          "old","om","on","orm","or","os","ough",
+          "per","pol",
+          "qua","que",
+          "rad","rak","ran","ras","ray","ril","ris","rod","roth","ryn",
+          "sam","say","shy","skel","sul",
+          "tai","tan","tas","ther","tia","tin","ton","tor","tur",
+          "um","und","unt","urn","usk","ust",
+          "ver","ves","vor",
+          "war","wor",
+          "yer"
+        }),
+    "v":({
+          "a","e","i","o","u","y"
+        }),
+    "V":({
+          "a","e","i","o","u","y",
+          "ae","ai","au","ay",
+          "ea","ee","ei","eu","ey",
+          "ia","ie",
+          "oe","oi","oo","ou",
+          "ui"
+        }),
+    "c":({
+          "b","c","d","f","g","h","j","k","l","m","n","p","q","r","s","t","v",
+          "w","x","y","z"
+        }),
+    "B":({
+          "b","bl","br",
+          "c","ch","chr","cl","cr",
+          "d","dr",
+          "f",
+          "g",
+          "h",
+          "j",
+          "k",
+          "l","ll",
+          "m",
+          "n",
+          "p","ph",
+          "qu",
+          "r","rh",
+          "s","sch","sh","sl","sm","sn","st","str","sw",
+          "t","th","thr","tr",
+          "v",
+          "w","wh",
+          "z","zh"
+        }),
+    "C":({
+          "b",
+          "c","ch","ck",
+          "d",
+          "f",
+          "g","gh",
+          "h",
+          "k",
+          "l","ld","ll","lt",
+          "m",
+          "n","nd","nn","nt",
+          "p","ph",
+          "q",
+          "r","rd","rr","rt",
+          "s","sh","ss","st",
+          "t","th",
+          "v",
+          "w",
+          "y",
+          "z"
+        }),
+    "i":({
+          "<blind", "bloed",
+          "dick", "dumm",
+          "flapp", "fuck", "furz",
+          "hick", "hutz",
+          "jux", "jodel", "juck",
+          "kick", "knack", "knick", "<klein",
+          "<lasch", "<lusch",
+          "-max",
+          "<nackt", "nudel", "null", "nix",
+          "-opa", "-onkel",
+          "papp", "piep", "pipi", "plump", "pup",
+          "quack", "quiek",
+          "runzel", "ratz",
+          "sack",
+          "tick", "troet",
+          "<weich", "wurst",
+          "zapp", "zuck"
+        })
+  ]);
+}

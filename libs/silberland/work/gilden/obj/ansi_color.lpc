@@ -1,0 +1,210 @@
+//
+// ansi_color.c
+// (c) angrox@sl.mud.at
+// NUR ZUR VERWENDUNG IM SILBERLAND sl.mud.at 4711
+//
+// release: 15.12.2000
+
+
+/* DOKU
+ANSI FARBEN
+
+ +fg   - Vordergrundfarbe setzen auf Farbe fg.
+ -bg   - Hintergrundfarbe setzen auf Farbe bg.
+ =bgfg - Beide setzen
+ +n    - Alle Farben werden zurueckgesetzt
+  ~    - Invers
+  _    - Unterstrichen (abhaengig vom Client!)
+  *    - Fett (hervorgehoben)
+  #    - Blinkend
+  
+  Alle oben genannten Kombinationen benoetigen ein &
+  am Anfang!
+  
+  Farben
+  
+  l - Schwarz
+  r - Rot
+  g - Gruen
+  y - Gelb
+  b - Blau
+  m - Magenta
+  c - Cyan
+  w - Weiss
+  
+  Bsp: &*Haus&+n   ...  Hebt das Wort "Haus" heraus
+       &-gWiese&+n ...  Setzt den Hintergrund des Wortes
+                        "Wiese" auf Gruen
+       &+rBlaBlub  ...  Setzt alles auf rot bis zum Zeilen-
+                        umbruch (Vordergrund)
+       &=rrTEST&+n ...  Setzt Vorder- und Hintergrund auf rot
+                        (sinnvoll? - wer weiss?)
+                   
+
+*/
+
+#include <ansi.h>
+#include <defines.h>
+#include <moredef.h>
+#include <properties.h>
+#include "./ansi_color.h"
+
+nosave mapping colors=(["b": ANSI_BLUE, 
+           "r": ANSI_RED, 
+           "g": ANSI_GREEN,
+           "y": ANSI_YELLOW,
+           "m": ANSI_PURPLE,
+           "c": ANSI_CYAN,
+           "w": ANSI_WHITE,
+           "n": ANSI_NORMAL, 
+           "l": ANSI_BLACK,
+           "~": ANSI_INVERS,
+           "_": ANSI_UNDERL,
+           "*": ANSI_BOLD,
+           "#": ANSI_BLINK]);
+nosave mapping bgcolors=(["b": ANSI_BG_BLUE, 
+           "r": ANSI_BG_RED, 
+           "g": ANSI_BG_GREEN,
+           "y": ANSI_BG_YELLOW,
+           "m": ANSI_BG_PURPLE,
+           "c": ANSI_BG_CYAN,
+           "w": ANSI_BG_WHITE,
+           "l": ANSI_BG_BLACK]);
+
+// compability
+varargs string expand_color_strings(string msg, string pre, mixed pl,
+    int flag) 
+{
+  // letztes zeichen ist ein \n, daher [0..<2]
+//  return color_tell(msg,pre,pl,flag)[0..<2];
+//  wieso diese aenderung? preport war dadurch immer ohne \n 
+  return color_tell(msg,pre,pl,flag);
+}
+
+// color a tell
+// flag   : 0 -> allow color
+//          1 -> disallow colors
+//
+varargs string color_tell(string msg, string pre, mixed pl, int flag) 
+{
+  int i, j, first_is_an_and, col;
+  string *expand, *exp_full_msg;
+  string tty, full_msg, cur_color;
+  mixed helpvar;
+  cur_color="";
+
+  if(objectp(pl) && !flag)
+    tty=pl->QueryProp(P_TTY);
+  else 
+    tty="dumb";
+
+  if( objectp(pl) )
+    col = pl->QueryProp(P_SCREENWIDTH) || 78;
+  else
+    col = 78;
+
+
+  if(msg[0..0]=="&")
+    first_is_an_and=1;
+
+  expand=explode(msg, "&");  
+  for(i=0; i<=sizeof(expand)-1;i++) {
+      if (i == 0 && (msg[0] != '&') && !first_is_an_and)
+        helpvar=grab_ansi_code(expand[i], 1); 
+      else
+        helpvar=grab_ansi_code(expand[i]); 
+   // if(objectp(pl) && getuid(pl)=="angrox") TELL("angrox", sprintf("expand[i]=%O\nhelpvar[1]=%O\nexpand[i][helpvar[1]..]=%O\n", expand[i], helpvar[1], expand[i][helpvar[1]..]));
+    if(first_is_an_and) {
+      first_is_an_and=0;
+      if(helpvar[1]) helpvar[1]++; // notwendig weil bei zusammenfuegen 
+               //ein zeichen zuviel da ist (das '&' der naechsten Zeile
+      expand[i]="&"+expand[i]; // ein "&" wurde zu unrecht enfernt
+    }
+    if(helpvar[0]=="" && i>0) { 
+      expand[i]="&"+expand[i]; // ein "&" wurde zu unrecht enfernt
+    }
+    else {
+      if(tty=="ansi") {
+        expand[i]=helpvar[0]+expand[i][helpvar[1]..];
+  //      if(objectp(pl) && getuid(pl)=="angrox") TELL("angrox", sprintf("expand[i] after transform: %O\nhelpvar[0]= %O[color]%s\n", expand[i], helpvar[0], ANSI_NORMAL));
+        if(helpvar[0]==ANSI_NORMAL) cur_color="";
+        else cur_color=helpvar[0];
+      }
+      else expand[i]=expand[i][helpvar[1]..];
+    }
+  }
+  msg=implode(({""})+expand, "");
+  if(tty=="ansi")
+    msg=color_break_string(msg, col, pre);
+  else
+    msg=break_string(msg, col, pre);
+  //if(pre=="") msg=msg[1..]; // wenn kein presay ein space zuviel 
+  if(tty=="ansi")
+    return msg+ANSI_NORMAL;
+  return msg;
+}
+
+varargs mixed grab_ansi_code(string str, int firstocc) {
+  string ansi_code;
+  int sign;
+  if(!firstocc) firstocc=0;
+  ansi_code="";
+  if(!check_color_syntax(str, firstocc)) return ({"",0});
+  switch(str[0..0]) {
+    case "+": ansi_code+=colors[str[1..1]];   sign=2; break;
+    case "-": ansi_code+=bgcolors[str[1..1]]; sign=2; break;
+    case "=": ansi_code+=colors[str[1..1]];
+              ansi_code+=bgcolors[str[2..2]];
+              sign=3;
+              break;
+    case "~": ansi_code+=ANSI_INVERS; sign=1; break;
+    case "_": ansi_code+=ANSI_UNDERL; sign=1; break;
+    case "*": ansi_code+=ANSI_BOLD;   sign=1; break;
+    case "#": ansi_code+=ANSI_BLINK;  sign=1; break;
+  }
+  return ({ansi_code,sign});
+}
+
+varargs int check_color_syntax(string str, int firstocc) {
+  if(firstocc) return 0;
+  if(member(({"~", "_", "*", "#"}), str[0..0])!=-1) return 1;
+  if(member(({"-","+","="}), str[0..0])==-1) return 0;
+  if(member(({"b","r","g","y","m","c","w","n","l"}), str[1..1])==-1) return 0;
+  if(str[0..0]=="=") {
+    if(member(({"b","r","g","y","m","c","w","l"}), str[2..2])==-1) return 0;
+  }
+  return 1; 
+}
+
+
+string color_break_string(string msg, int width, string indent) {
+  //"Das ist ein \e[5mtest\e[0m"
+  string *sub_strings;
+  string new_msg;
+  int i, cur_pos, indent_count, ansi_count;
+
+  indent_count=strlen(indent);
+  
+  if(indent[<1..<1]==" ") // space vom indent entfernen, 
+                      // da beim ersten hinzufuegen eines kommt
+    new_msg=indent[0..<2];
+  else 
+    new_msg=indent;
+
+  cur_pos=indent_count;
+  sub_strings=explode(msg, " ");
+
+  for(i=0; i<=sizeof(sub_strings)-1;i++) {
+     ansi_count=4*(sizeof(explode(" "+sub_strings[i], "\e["))-1);
+     if((cur_pos+strlen(sub_strings[i])+1-ansi_count)<=width) {
+       new_msg+=" "+sub_strings[i];
+          // " " wird benoetigt damit explode() das richtig funktioniert
+       cur_pos+=strlen(sub_strings[i])+1-ansi_count;
+     }
+     else {
+       new_msg+=ANSI_NORMAL+"\n"+indent+sub_strings[i];
+       cur_pos=indent_count+strlen(sub_strings[i])-ansi_count;
+     }
+  }
+  return new_msg+ANSI_NORMAL+"\n";
+}

@@ -1,0 +1,377 @@
+#pragma strong_types
+
+inherit "std/thing";
+
+#include <moving.h>
+#include <properties.h>
+#include <wizlevels.h>
+#include <defines.h>
+#include <moredef.h>
+#include <ansi.h>
+
+#define EGGMASTER "/d/huegelland/iwo/muehle/morphei/eggmaster"
+#define SHADOW "/d/huegelland/iwo/muehle/morphei/eggshadow"
+
+#define TESTMODE 1
+
+#define TMI(x) if(find_player("iwo")) tell_object(find_player("iwo"), break_string(x, 128, "EGGMASTER: "))
+
+// ([ filename: realname; level ])
+mapping known_npcs = ([]);
+mapping known_eggs = ([]);
+
+object *shadows = ({});
+
+void create()
+{
+  if (is_clone(this_object())) return;
+  
+  ::create();
+  
+  seteuid(getuid(this_object()));
+  
+  SetProp(P_NAME, "Eggmaster");
+  
+  SetProp(P_SHORT, "The Eggmaster");
+
+  AddId( ({ "eggmaster" }));
+  
+  this_object()->move("/players/iwo/workroom", M_NOCHECK);
+  
+  AddCmd( "eggshow", "eggshow");
+  AddCmd( "eggknock", "eggknock");
+  AddCmd( "eggstat", "eggstat");
+  AddCmd( "eggfix", "eggfix");
+  AddCmd( "eggcheck", "eggpurge");
+  AddCmd( "eggpurge", "eggpurge");
+  
+  restore_object(EGGMASTER);
+
+  shadows = ({});
+}
+
+
+int eggpurge()
+{
+  string *npcs;
+  string verb;
+  int dry;
+  int i;
+
+  verb = query_verb();
+
+  if (verb == "eggpurge") dry = 0;
+  else dry = 1;
+
+
+  npcs = m_indices(known_npcs);
+
+  for (i=0; i < sizeof(npcs); i++)
+    {
+      if ((npcs[i][0..2] != "/d/" && npcs[i][0..7] != "/gilden/" && npcs[i][0..10] != "/p/service/") || npcs[i][0..26] == "/p/service/angel/haustiere/")
+        {
+          
+          tell_object(TP, BS(sprintf("X %s (%s)", known_npcs[npcs[i], 0],
+            npcs[i])));
+
+          if (!dry) known_npcs -= ([ npcs[i] ]);
+ 
+        }
+ 
+    }
+
+  if (!dry)
+    save_object(EGGMASTER);
+
+  return 1;
+
+}
+
+
+
+int eggfix(string str)
+{
+  object pl;
+  object shad;
+
+  if (!(pl = find_player(str))) 
+    {
+      notify_fail("Kein solcher Spieler!\n");
+      return 0;
+    }
+
+  return 1; // keine eggshadows mehr - Feyaria
+  shad = clone_object(SHADOW+"_fix");
+
+  shad->Attach(str);
+
+  return 1;
+
+}
+
+
+int eggstat()
+{
+  string *npcs;
+  string *xfn;
+  string *domains;
+  string domain;
+  string outstr;
+  mapping stats;
+  int i;
+
+  stats = ([]);
+
+  npcs = m_indices(known_npcs);
+
+  for (i=0; i<sizeof(npcs);i++)
+    {
+      domain = explode(npcs[i], "/")[1];
+      if (!member(stats, domain))
+        stats += ([ domain: 1; known_npcs[npcs[i], 1] ]);
+      else
+        {
+          stats[domain, 0]++;
+          stats[domain, 1] += known_npcs[npcs[i], 1];
+        }
+
+    }
+
+
+  domains = m_indices(stats);
+
+  outstr = sprintf("%15.15-s %5.5-s %6.6-s\n", "Region", "Anz.", "AvgLvl");
+
+  for (i=0; i<sizeof(domains);i++)
+    {
+      //TMI(sprintf("D: %s N: %d L: %d", domains[i], stats[domains[i], 0], stats[domains[i], 1]));
+      outstr += sprintf("%15.15-s %5d %6d\n", CAP(domains[i]), stats[domains[i], 0],
+                  stats[domains[i], 1] / stats[domains[i], 0]);
+    }
+
+
+  this_player()->More(outstr);
+
+
+  tell_room(ENV(ME), sprintf("EGGMASTER: %d NPCs\n", sizeof(known_npcs)));
+  return 1;
+}
+
+
+int eggknock(string str)
+{
+  string *npcs;
+  int i;
+  int found;
+  
+  found = 0;
+
+  if (!IS_ARCH(this_player()) && getuid(this_player()) != "iwo")
+    return 0;
+
+  str = this_player()->_unparsed_args();
+
+  if (!str || str == "") return 0;
+
+  npcs = m_indices(known_npcs);
+  
+  for (i=0; i<sizeof(npcs);i++)
+    {
+//	  TMI(sprintf("%O vs. %O", npcs[i], str));
+      if (npcs[i] == str)
+        {
+          known_npcs -= ([ npcs[i] ]);
+	  found = 1;
+	}
+    }
+  
+  if (found)
+    tell_room(ENV(ME), BS("EGGMASTER: Geloescht"));
+  else
+    tell_room(ENV(ME), BS("EGGMASTER: Nicht gefunden!"));
+  
+  return 1;
+}
+
+
+
+int eggshow()
+{
+  string *npcs;
+  string str;
+  int i;
+
+  if (!IS_ARCH(this_player()) && getuid(this_player()) != "iwo")
+    return 0;
+
+  npcs = m_indices(known_npcs);
+
+  str = "";
+
+  //TMI(sprintf("%O", npcs));
+
+  for (i=0;i<sizeof(npcs);i++)
+    str = sprintf("%s%20.20-s  %d  %s\n", str, 
+            known_npcs[npcs[i], 0],
+            known_npcs[npcs[i], 1],
+            npcs[i]);
+
+  this_player()->More(str);
+
+  return 1;
+}
+
+
+varargs int remove (int s)
+{
+  save_object(EGGMASTER);
+  
+  return ::remove(s);
+}
+
+
+int AddNpc(object npc, object pl)
+{
+  string fn;
+  string rn;
+  int lvl;
+
+  //TMI(sprintf("AddNpc: %O", npc));
+
+  fn = explode(file_name(npc), "#")[0];
+
+  if (fn[0..25] == "/p/service/angel/haustiere") return 0;
+
+  if (npc->QueryProp(P_NOATTACK) || member(known_npcs, fn))
+    return 0;
+
+  rn  = npc->query_real_name();
+  lvl = npc->QueryProp(P_LEVEL);
+
+  TMI(sprintf("Add %s%s%s (%s%d%s) %s%s%s (%s)", 
+        ANSI_RED+ANSI_BOLD,
+        npc->query_real_name(),
+	ANSI_NORMAL,
+	ANSI_YELLOW+ANSI_BOLD,
+	npc->QueryProp(P_LEVEL),
+	ANSI_NORMAL,
+	ANSI_GREEN,
+	fn,
+	ANSI_NORMAL,
+	ANSI_BOLD+getuid(pl)+ANSI_NORMAL
+	));
+	
+  known_npcs += ([ fn: rn; lvl ]);
+
+  return 1;
+
+  save_object(EGGMASTER);
+}
+
+
+void AddShadow(object shadow)
+{
+  shadows -= ({ 0 }); 
+
+  return; // Keine eggshadows mehr
+  if (sizeof(shadows)>5)
+    shadow->remove();
+    
+  if (member(shadows, shadow)==-1)
+    shadows += ({ shadow });
+}
+
+
+string *GiveEgg()
+{
+  int num;
+
+  string *npcs;
+
+  npcs = m_indices(known_npcs);
+
+  num = random(sizeof(npcs));
+
+
+  TMI(sprintf("Neues Ei: %s%s%s (%s%d%s) %s%s%s (%s)", 
+        ANSI_RED+ANSI_BOLD,
+        known_npcs[npcs[num], 0],
+	ANSI_NORMAL,
+	ANSI_YELLOW+ANSI_BOLD,
+	known_npcs[npcs[num], 1],
+	ANSI_NORMAL,
+	ANSI_GREEN,
+	npcs[num],
+	ANSI_NORMAL,
+	ANSI_BOLD+getuid(TP)+ANSI_NORMAL
+	));
+	
+
+  known_eggs += ([previous_object(): npcs[num] ]);
+
+  return ({ known_npcs[npcs[num], 0], known_npcs[npcs[num], 1], npcs[num] });
+}
+
+
+void reset()
+{
+  object shadow;
+
+  shadows -= ({ 0 });
+  known_eggs -= ([0]);
+
+  return; // Keine eggshadow mehr - Feyaria
+
+  if (sizeof(shadows)<5)
+    {
+  
+      shadow = clone_object(SHADOW);
+  
+      shadow->FollowSeer();
+    }
+  
+}
+
+
+int ShowEggs()
+{
+  string *outstr;
+  object *eggs;
+  object o_env;
+  string s_env;
+  int i;
+ 
+
+  notify_fail("Das ist nichts fuer Dich!\n");
+  if (getuid(this_interactive()) != "iwo" && !IS_ARCH(this_interactive()))
+    return 0;
+
+  known_eggs -= ([ 0 ]);
+
+  eggs = m_indices(known_eggs);
+
+  outstr = ({ "Aktive Morpheier:" });
+
+  for (i=0;i < sizeof(eggs); i++)
+    {
+      if (o_env = environment(eggs[i]))
+        {
+          if (living(environment(eggs[i])))
+            s_env = getuid(o_env);
+          else
+            s_env = file_name(o_env);
+        }
+      else s_env = "<unbekannt>";
+
+      outstr += ({ sprintf("%-15.15s %-20.20s %-40.40s",
+        s_env, known_npcs[known_eggs[eggs[i], 0], 0],
+        known_eggs[eggs[i], 0])
+         });
+        
+    }
+  
+  this_interactive()->More(implode(outstr, "\n"));
+
+  return 1;
+}
+

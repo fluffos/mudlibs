@@ -1,0 +1,187 @@
+#include <properties.h>
+#include <combat.h>
+#include <new_skills.h>
+#include <moving.h>
+#include <mnpc.h>
+#include "../def.h"
+
+inherit NPC + "zs_dorfbewohner.lpc";
+// inherit "/std/npc/spells.lpc";
+
+mapping fieser_moep;
+
+void reset()  {
+  ::reset();
+  fieser_moep = ([]); // Man ist Dir nur bis zum reset boese.
+}
+
+void create() {
+  if (!is_clone(TO)) return; //Abbruch fuer Blueprint
+  ::create(); //Ausfuehren von Create in Inherit "std/mnpc"
+  
+  create_default_npc(18); //erstellt Standartwerte fuer NPC des Level x
+  fieser_moep = ([]); 
+
+  //Properties
+  AddId(({"samson", "kramer", "Samson Palm", "buettel", "dorfbuettel" })); //Bezeichner zur Interaktion
+  SetProp( P_SHORT, "Samson Palm, der Dorfbuettel");
+  SetProp( P_LONG, BS("Dies ist Samson Palm, der Dorfbuettel. Er schaut recht grimmig und achtet auf alles was in seiner Umgebung "+
+    "so passiert. Er hat eine grosse Narbe unter dem rechten Auge das ihn besonders verwegen aussehen laesst."));
+  SetProp( P_GENDER, MALE);
+  SetProp( P_ARTICLE, 0);
+  SetProp( P_NAME, "Samson Palm");
+  SetProp( P_WIMPY, 0); //Fluchtschwelle an HP
+  SetProp( P_MNPC_AREA, DORF ); // Bereichsangabe fuer Bewegung
+  SetProp( P_MNPC_DEFAULTROOM, DORF ); // Startpunkt
+  SetProp( P_MNPC_FLAGS, MOV_OUTDOORS + MOV_INDOORS + MOV_BACKWARDS + MOV_MOVES); // Bewegungsmoeglichkeiten
+  SetProp( P_KILL_NAME, "Dorfbuettel"); //string fuer Todessequenz
+  SetProp( P_REJECT, ({ REJECT_DROP, QueryProp(P_NAME)+" will Deine Sachen nicht tragen.\n" }) );
+ 
+  //Chats
+  SetAttackChats( 5, ({"Samson Palm bruellt: Das war Eure letzte Schandtat! \n",
+  	                   "Samson Palm ruft: Tod dem Unhold! \n",
+  	                   "Samson Palm sagt: So leicht lasse ich mich nicht besiegen! \n",
+  	                   "Samson Palm sagt: Sterbt! \n" }) ); // rate in%
+
+  AddInfo( QueryProp(P_IDS), "Das bin ich! ", "sagt: ");
+  AddInfo( ({ "narbe" }),
+    "Ueber meine Narbe will ich nicht sprechen." ,
+    "sagt: ");
+
+/*
+  AddInfo( ({ "" }),
+    "" ,
+    "sagt: ");
+*/
+  AddDetail( ({ "narbe" }),
+    BS("Die narbe verlaeuft unterhalb seines rechten Auge schraeg auf seine Nase zu."));
+
+  //Ausruestung
+  SUID;
+  CLONEME( ARMOUR + "lederguertel_1.lpc" );
+  CLONEME( ARMOUR + "holzbuckler_1.lpc" );
+  CLONEME( ARMOUR + "lederhelm_1.lpc" );
+  CLONEME( "/d/andracia/yondala/gebirge/thumfels/armour/eisenstiefel_2.lpc" );
+  CLONEME( "/d/andracia/yondala/gebirge/thumfels/armour/eisenpanzer_2.lpc" );
+ // CLONEME( "/d/gebirge/yason/thumfels/armour/eisenstiefel_2.lpc" );
+ // CLONEME( "/d/gebirge/yason/thumfels/armour/eisenpanzer_2.lpc" );
+  command("trage alles");
+  CLONEME( WEAPON + "kampfschlegel.lpc" );
+  command("zuecke schlegel");
+  
+  SetProp( P_SPELLRATE, 20); //Fluchtschwelle an HP
+  /*
+  AddDefaultSpell(3, 100, DS_FEAR,         
+    "Samson bruellt Dich an und jagt Dir richtig Angst ein.\n",
+    "@WER wird von Samson angebruellt und wirkt stark veraengstigt.\n",
+    "anbruellen_spell" );
+    */
+  AddSpell(1, 100, 
+    "Samson bruellt Dich an und jagt Dir richtig Angst ein.\n", 
+    "@WER wird von Samson angebruellt und wirkt stark veraengstigt.\n",
+    DT_TERROR, "anbruellen_spell", ([SP_SHOW_DAMAGE:1]) );
+
+}
+
+ // Furcht verursachen
+void anbruellen_spell(object enemy, int damage, mixed dam_type)
+{
+  enemy->SetProp(P_WIMPY, enemy->QueryProp(P_WIMPY)+8+random(10) );
+  enemy->CheckWimpyAndFlee();
+  if( enemy->id("NOWIMPY") )
+    enemy->SetProp(P_WIMPY, 0);
+}
+
+
+// Reactions (werden von außen gestartet)
+
+void StartReaction(string verb, string gruppe, string adverb, int touch) { 
+  if (find_call_out("reaction") != -1) return; 
+  switch (gruppe) { 
+    case "aengstlich": 
+      call_out("reaction", 0, TP,  
+        "sagt: Ihr braucht keine Angst haben. \n", 
+        "sagt zu " + capitalize(this_player()->name()) + ": Ihr braucht keine Angst haben. \n"); 
+      break; 
+    case "aergerlich": 
+      call_out("reaction", 0, TP, 
+        "sagt: Ihr braucht gar nicht zu schimpfen, Ihr seid selbst schuld an allem. \n", 
+        "sagt zu " + capitalize(this_player()->name()) + ": Ihr braucht gar nicht zu schimpfen, Ihr seid selbst schuld an allem. \n"); 
+      break; 
+    case "albern": 
+      call_out("reaction", 0, TP, 
+        "sagt: Lasst doch bitte den Bloedsinn. \n", 
+        "sagt zu " + capitalize(this_player()->name()) + ": Lasst doch bitte den Bloedsinn. \n"); 
+      break; 
+    case "fies":
+      if( !member(fieser_moep, getuid(this_player()) ) )
+        {
+        fieser_moep+=([getuid(this_player()):1]);
+        call_out("reaction", 0, TP, 
+          "sagt: Wenn Du das nochmal machst, werd ich boese. \n", 
+          "sagt zu " + capitalize(this_player()->name()) + ": Wenn Du das nochmal machst, werd ich boese. \n"); 
+        break; 
+        }
+      else
+        {
+        fieser_moep[getuid(this_player()),0]++;
+        if(fieser_moep[getuid(this_player()),0] >= 3)
+          {
+          call_out("reaction", 0, TP, 
+            "sagt: Das war zuviel! \n", 
+            "sagt zu " + capitalize(this_player()->name()) + ": Das war zuviel. \n"); 
+            call_out ("Attack", 3, TP);
+            break;
+          }
+        else
+          {
+          call_out("reaction", 0, TP, 
+            "sagt: Letzte Warnung! \n", 
+            "sagt zu " + capitalize(this_player()->name()) + ": Letzte Warnung! \n"); 
+          break;
+          }
+        }  
+    case "frech": 
+      call_out("reaction", 0, TP, 
+        "sagt: He - Was soll das? \n", 
+        "sagt zu " + capitalize(this_player()->name()) + ": He - Was soll das? \n"); 
+      break; 
+    case "froh": 
+      call_out("reaction", 0, TP, 
+        "grinst.",  
+        "grinst."); 
+      break; 
+    case "intim": 
+      call_out("reaction", 0, TP, 
+        "sagt: Bitte sucht Euch jemand anderen fuer sowas. \n", 
+        "sagt zu " + capitalize(this_player()->name()) + ": Bitte sucht Euch jemand anderen fuer sowas. \n"); 
+      break; 
+    case "nett": 
+      call_out("reaction", 0, TP, 
+        "laechelt Dir zu. \n", 
+        "laechelt " + capitalize(this_player()->name()) + " freundlich an \n"); 
+      break; 
+    case "neutral": 
+      call_out("reaction", 0, TP, 
+        "zieht die Stirn kraus.", 
+        "zieht die Stirn kraus."); 
+      break; 
+    case "traurig": 
+      call_out("reaction", 0, TP, 
+        "troestet Dich. \n", 
+        "troestet " + capitalize(this_player()->name()) + ". \n"); 
+      break; 
+  } 
+} 
+void StartReactionAll(string verb, string gruppe, string adverb, int touch) {
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void reaction(object ob, string akteur, string andere) {
+  if (present(ob, ENV(TO))) {
+    tell_object(ob, BS(Name(WER, 1)+" "+akteur));
+    tell_room(ENV(TO), BS(Name(WER, 1)+" "+andere), ({ob}));
+  }
+}
+
+

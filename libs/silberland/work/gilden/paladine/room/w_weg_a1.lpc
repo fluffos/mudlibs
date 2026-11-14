@@ -1,0 +1,201 @@
+
+#include "../paladin.h"
+#include <wizlevels.h>
+
+inherit ROOM("w_weg_inh");
+
+#include <properties.h>
+#include <language.h>
+#define P_SEERDOOR_DISCOVER "rw_sehertor_disc"
+
+int count=0;
+int exit_check();
+
+create() {
+  ::create();
+  SetProp(P_INT_LONG, QueryProp(P_INT_LONG)+
+      "Ein Turm ragt hier in die Hoehe.@@Lichtstreiter@@");
+  AddDetail("turm", 
+      "Der Turm reicht weit nach oben. Er weisst einen Eingang und eine "
+      "Treppe nach oben auf.");
+  AddDetail("eingang", 
+      "Neben dem Eingang ist ein Schild.");
+  AddDetail("hoehe", 
+      "PFO! Ist der hoch!");
+  AddDetail("schild", 
+      "Du kannst es lesen.");
+  AddReadDetail( ({"schild"}),
+      "+===========================+\n"
+      "|                           |\n"
+      "|                           |\n"
+      "|      Paladin CALANAR      |\n"
+      "|                           |\n"
+      "|                           |\n"
+      "+===========================+\n");
+  AddItem( NPC("waechter"), REFRESH_DESTRUCT );
+
+  //  AddExit( "sueden", "./w_weg_a2" );
+   AddExit( "sueden", ([
+           EX_TESTFUNC: #'exit_check,
+           EX_DEST  : "./w_weg_a2"
+           ])
+         );
+
+  //  AddExit( "osten",  "./w_weg_b1" );
+   AddExit( "osten", ([
+           EX_TESTFUNC: #'exit_check,
+           EX_DEST  : "./w_weg_b1"
+           ])
+         );
+  //  AddExit( "oben", "./burg_nw_turm1");
+   AddExit( "oben", ([
+           EX_TESTFUNC: #'exit_check,
+           EX_DEST  : "./burg_nw_turm1"
+           ])
+         );
+  AddItem("/obj/sehertor", REFRESH_NONE, ([P_SEERDOOR_DISCOVER: 0]));
+  AddItem(NPC("portalwaechter"), REFRESH_DESTRUCT);
+  AddCmd(({"teleportiere", "teleportier"}), "check_teleport");
+  AddCmd( ({"versiegle", "versiegel"}), "DisableDoor" );
+  AddCmd( ({"reaktiviere", "reaktivier"}), "EnableDoor" );
+}
+
+
+
+varargs int check_teleport(string str, int chance) {
+  if(!chance) chance=1;
+  if(present("\n_p_waechter", ME) &&
+      member(call_other(NPCMASTER, "GetFeinde"),TP)!=-1 
+      && !random(chance))
+  {
+    write("Der Waechter haelt Dich fest!\n");
+    say(sprintf("%s wird von dem Waechter festgehalten.\n",
+        TP->Name(WER)));
+    return 1;
+  }
+  return 0;
+}
+
+int exit_check() {
+  if(check_teleport("",1)) return 0;
+  return 1;
+}
+
+int DisableDoor(string what) {
+  if(call_other(PALADINMASTER, "QueryNumberOne")[0] != getuid(TP) && !IS_ARCH(TP))
+    return 0;
+  if(what != "seherportal") {
+    write("Was moechtest Du versiegeln? Sicher das Seherportal, oder?\n");
+    return 1;
+  }
+  if(call_other("/obj/sehertormaster", "IsDisabled", 7)) {
+    write(BS("Paladin! Das Portal ist schon versiegelt!"));
+    return 1;
+  }
+  if(TP->QueryProp(P_SP) < 200) {
+    write("Du hast zuwenig Magiepunkte dafuer!\n");
+    return 1;
+  }
+  TP->AddSp(-200);
+  tell_object(TP, BS("Du sprichst die geheiligten Worte zur Versieglung "
+        "des Seherportals in der Burg Sturmfels. Es passiert nichts "
+        "aussergewoehnliches, dennoch bist Du Dir sicher das das Portal "
+        "nun gesichert ist!"));
+  tell_room(ME, TP->Name()+" murmelt etwas.\n", ({TP}));
+  if(present("sehertor"))
+    present("sehertor")->DisableDoor();
+  call_out("Check_MP",90,TP );
+  return 1;
+}
+
+int EnableDoor(string what) {
+  if(call_other(PALADINMASTER, "QueryNumberOne")[0] != getuid(TP) && !IS_ARCH(TP))
+    return 0;
+  if(what != "seherportal") {
+    write("Was moechtest Du versiegeln? Sicher das Seherportal, oder?\n");
+    return 1;
+  }
+  if(TP->QueryProp(P_SP) < 200) {
+    write("Du hast zuwenig Magiepunkte dafuer!\n");
+    return 1;
+  }
+  TP->AddSp(-200);
+  tell_object(TP, BS("Du sprichst die geheiligten Worte zur Reaktivierung "
+        "des Seherportals in der Burg Sturmfels. Es passiert nichts "
+        "aussergewoehnliches, dennoch bist Du Dir sicher das das Portal "
+        "nun wieder frei ist!"));
+  tell_room(ME, TP->Name()+" murmelt etwas.\n", ({TP}));
+  if(present("sehertor"))
+    present("sehertor")->EnableDoor();
+  return 1;
+}
+
+int AutoEnable() {
+  if(present("sehertor"))
+    present("sehertor")->EnableDoor();
+}
+
+string Lichtstreiter() {
+  string numberone;
+  if(call_other(PALADINMASTER, "QueryNumberOne")[0] != getuid(TP) && !IS_ARCH(TP))
+    return "";
+  if(TP->QueryProp(P_GENDER) == FEMALE) numberone="Streiterin des Lichts";
+  else numberone="Streiter des Lichts";
+  return "\n\n"+numberone+"! Ihr habt hier die Moeglichkeit das Seherportal zu "
+    "versiegeln und wieder zu reaktivieren. Im Falle eines Angriffs auf die "
+    "Burg koennt ihr Euch hiermit einen strategischen Vorteil verschaffen! "
+    "Vergesst nicht, dass ihr das Tor nur fuer eine gewisse Zeit "
+    "verschlossen halten koennt, naemlich solange wie Ihr mit magischer "
+    "Kraft gesegnet seit!\n";
+}
+
+int Check_MP(object pl) {
+  if(!pl) {
+     AutoEnable();
+     return 0;
+  }
+  if(pl->QueryProp(P_SP) < 50) {
+    tell_object(pl, BS("Paladin! Du hast zuwenig Magiepunkte um das Portal "
+          "weiter verschlossen zu halten!"));
+    AutoEnable();
+    return 0;
+  }
+
+  if(count > 10) {
+    tell_object(pl, BS("Paladin! Das Portal ist nun wieder offen!"));
+    return 0;
+  }
+
+  tell_object(pl, "Deine magische Energie haelt das Seherportal "
+      "verschlossen!\n");
+  pl->AddSp(-50);
+  count++; 
+  call_out("Check_MP", 60, pl);
+  return 1;
+}
+
+int _query_tport_cost_in()
+{ 
+  int cost;
+  cost=0;
+  if( TP && intp(TP->QueryProp(P_ALIGN)) )
+    cost=TP->QueryProp(P_ALIGN)/-400;
+  if(call_other(NPCMASTER, "IsEnemy", TP))
+    cost+=random(10)+10;
+  if(call_other(NPCMASTER, "IsPaladinEnemy", TP))
+    cost+=random(20)+15;
+  return cost;
+}
+
+int _query_tport_cost_out()
+{ 
+  int cost;
+  cost=0;
+  if( TP && intp(TP->QueryProp(P_ALIGN)) )
+    cost=TP->QueryProp(P_ALIGN)/-400;
+  if(call_other(NPCMASTER, "IsEnemy", TP))
+    cost+=random(10)+10;
+  if(call_other(NPCMASTER, "IsPaladinEnemy", TP))
+    cost+=random(25)+20;
+  return cost;
+}

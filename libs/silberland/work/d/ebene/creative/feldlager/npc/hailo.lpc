@@ -1,0 +1,483 @@
+inherit "std/npc";
+inherit "std/npc/spells";
+inherit "std/player/moneyhandler";
+inherit "std/npc/sequencer";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <wizlevels.h>
+#include "../files.h"
+
+#define HLOG LOG("hailo.log")
+
+#define HEALLOG(x) write_file(HLOG, \
+        sprintf("%s: "+x+" (%s)\n", dtime(time()), TPN))
+
+#define KOSTEN_ENTFROSCHEN 200
+#define KOSTEN_ENTGIFTEN 200
+#define KOSTEN_ENTGEISTEN 600
+#define KOSTEN_TAUBHEIT 300
+#define KOSTEN_BLINDHEIT 700
+#define KOSTEN_ENTKLETTEN 25
+
+#define MAXAPF 2
+
+string my_gem;
+int apf, seq_run;
+object traeger;
+
+create()
+{
+  if (!is_clone(this_object()))
+    return;
+
+  ::create();
+  SetProp(P_SHORT, "Hailo, der Heiler");
+  SetProp(P_LONG, BS (
+           "Hailo ist ein wahrhaft maechtiger Mann, wenn es um das Heilen von"
+          +" Krankheiten geht. Er weiss vieles ueber moderne Medizin und"
+          +" hat schon so manchem geholfen. Ausserdem ist er spezialisiert"
+          +" auf Klettomanie. Nein, das ist kein Typo. Er ist Spezialist"
+          +" fuer Klettomanie."));
+  SetProp(P_NAME, "Hailo");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_ARTICLE, 0);
+  AddId("hailo");
+  AddId("heiler");
+  create_default_npc (33);
+
+  AddInfo(({"heilen", "dienste", "heilung", "dienst", "preis", "preise"}),
+          "sagt: Das kann ich fuer Dich tun:\n"
+         +"                                                    \n"
+         +"     Entfroschen . . . . . . . . . . . " + KOSTEN_ENTFROSCHEN + " Muenzen\n"
+         +"     Entgeisten  . . . . . . . . . . . " + KOSTEN_ENTGEISTEN + " Muenzen\n"
+         +"     Entgiften . . . . . . . . . . . . " + KOSTEN_ENTGIFTEN + " Muenzen\n"
+         +"     Entkletten pro ca. 10 Kletten . . " + KOSTEN_ENTKLETTEN + " Muenzen\n"
+         +"     Blindheit heilen  . . . . . . . . " + KOSTEN_BLINDHEIT + " Muenzen\n"
+         +"     Taubheit heilen . . . . . . . . . " + KOSTEN_TAUBHEIT + " Muenzen\n\n");
+  AddInfo("entfroschen",
+          "Tipp einfach 'entfroschen' und im Nu kann ich Dir helfen.", "meint: ");
+  AddInfo("entgeisten",
+          "Tipp einfach 'entgeisten' und Du wirst wieder lebendig.", "meint: ");
+  AddInfo("entgiften",
+          "Tipp einfach 'entgiften' und Dir gehts gleich besser.", "meint: ");
+  AddInfo("entkletten",
+          "Tipp einfach 'entkletten' und alle Deine klettomanischen Probleme"
+         +" sind geloest. Bedenke aber, dass das eine durchaus schmerzvolle"
+         +" Prozedur ist, wenn ich Dir die Kletten vom Leib entfernen will.", "meint: ");
+  AddInfo(({"lager", "feldlager", "platz", "marktplatz"}),
+          "Das is da alles irgendwo hier, ich hab mich damit noch nicht"
+         +" beschaeftigt, da ich immer so viele Kunden habe.", "sagt: ");
+  AddInfo("creative",
+          "Ja, der war auch schon hier, dem hab ich ziemlich viele Kletten"
+         +" wegmachen muessen.", "seufzt: ");
+  AddInfo(({"woody", "dusty"}),
+          "Noe, kenn ich nicht. Hab ich nur mal von Max was gehoert, dass es die"
+         +" geben soll", "gruebelt: ");
+  AddInfo("feyaria",
+          "Aja, stimmt, die kommt immer hierher, wenn sie taub ist.", "sagt: ");
+  AddInfo("angrox",
+          "Hehe, seine Druiden wollen permanent geheilt werden von mir. Ich"
+         +" sollte mal ueber Preiserhoehung nachdenken.", "grinst: ");
+  AddInfo("eros",
+          "Ein seltener Gast, aber ab und zu wird er hier in der Gegend"
+         +" gesehen.", "sagt: ");
+  AddInfo(({"klette", "kletten"}),
+          "Kletten... jaja, das ist ein grosses Problem hier in dem Gebiet."
+         +" Man sollte nicht zu viel davon erwischen, denn sonst hat mans"
+         +" schwer mit dem herumlaufen... Schliesslich behindern die Kletten"
+         +" einen ziemlich.", "ueberlegt: ");
+  AddInfo("klettomanie",
+          "Da bin ich Spezialist. Wenn Du einmal Probleme mit Kletten hast,"
+         +" so komm ruhig zu mir. Derzeit forsche ich an einem neuen Subjekt.", "sagt: ");
+  AddInfo("subjekt",
+          "Ich hab gehoert, im oestlichen Gebiet des Feldlagers gibt es ein"
+         +" Tier, welches vor Kletten ueberstrotzt.", "nickt: ");
+  AddInfo("tier",
+          "Man munkelt, dass es sich um ein Gouffre handeln soll...", "stoehnt: ");
+  AddInfo("gouffre",
+          "Jaja, Gouffres sind sehr liebe Tiere, wenn man ihnen NUR nicht"
+         +" zu nahe kommt! Eigentlich sind sie ja possierlich... und zutraulich."
+         +" Aber ihre Kletten, die sie weitergeben sind aeusserst hartnaeckig."
+         +" Nunja, Du wirst es vielleicht auch bemerken, aber Vorsicht, komm"
+         +" nicht auf die Idee, es anzugreifen. Gouffres sind sehr boese, wenn"
+         +" man ihnen nicht gut gesinnt ist.", "sagt: ");
+  AddInfo(({"steine", "steinen", "edelsteine", "edelsteinen"}),
+          "Gouffres sind grundsaetzlich ziemlich geldgierig, hab ich gehoert...",
+          "erklaert: ");
+  AddInfo(({"buch", "buecher"}),
+          "Ja, Buecher habe ich schon ein paar geschrieben, schliesslich"
+         +" muss man ja fuer die Nachwelt so einiges aufheben.", "sagt: ");
+  AddInfo("nachwelt",
+          "Hmmm... das was nach mir kommt eben... Aber wer weiss das schon. Ich"
+         +" hoffe jedenfalls, dass ich noch lang am Leben bleib und werde mit"
+         +" meinen Kenntnissen ein wenig dabei helfen.", "erzaehlt: ");
+  AddInfo("kenntnisse",
+          "Das ist viel zu kompliziert... Darueber kann ich Dir nix beibringen.",
+          "meint: ");
+  AddInfo("leben",
+          "Derzeit bin ich definitiv noch am Leben.", "weiss: ");
+  AddInfo("medizin",
+          "Ja, Medizin hab ich studiert und Medizin ist mein Leben."
+         +" Sogar meine Dissertation hab ich in Medizin gemacht.", "sagt: ");
+  AddInfo("dissertation",
+          "Ach das ist schon so lang her...", "seufzt: ");
+  AddInfo(({"binde", "binden", "mullbinde", "mullbinden"}),
+          "Die hinten im Regal sind zu sproede, eine neue Lieferung kommt"
+         +" hoffentlich bald.", "sagt: ");
+  SetProp(P_DEFAULT_INFO, ({
+          "meint: Das wollte ich als Dissertationsthema nehmen.\n",
+          "schaut Dich mit strafendem Blick an und schuettelt den Kopf.\n",
+          "kichert unverschaemt, antwortet aber nix.\n",
+          "fragt Dich: Hast Du schon das Gouffre danach gefragt?\n",
+          "schimpft: Nix da, das beantworte ich Dir nicht!\n",
+          "sagt: Ich wollte darueber ja mal ein Buch schreiben, aber...\n",
+          "erzaehlt: Hm, erst kuerzlich hat mich jemand danach gefragt.\n"}));
+  SetChats(5, ({
+           "Hailo arglt.\n",
+           "Hailo zieht eine Ampulle auf.\n",
+           "Hailo studiert ein Buch ueber Gouffres.\n",
+           "Hailo denkt angestrengt nach.\n",
+           "Hailo laechelt Dich an.\n",
+           "Hailo fragt Dich: Hast Du ein paar Edelsteine?\n" }));
+  AddCmd(({"entfroschen", "entfrosche"}), "entfrosche");
+  AddCmd(({"entgeisten", "entgeiste"}), "entgeiste");
+  AddCmd(({"entgiften", "entgifte"}), "entgifte");
+  AddCmd(({"entkletten", "entklette"}), "entklette");
+  AddCmd(({"heile", "heil"}), "heile");
+  SetProp(P_RESISTANCE_STRENGTHS, ([
+          DT_FIRE:-0.2, DT_COLD:0.4, DT_AIR:-0.3, DT_MAGIC:0.1, DT_ELECTRIC:-0.1 ]));
+  SetProp(P_ALIGN, 300);
+  SetProp(P_SIZE, 140);
+  SetProp(P_WEIGHT, 90);
+  SetAttribute(A_STR, 20);
+  SetProp(P_HANDS, ({"mit einer kleinen Ampulle", 180, DT_PIERCE}));
+  SetProp(P_SPELLRATE, 80);
+  AddDefaultSpell(2, 100, DS_PARALYZE,
+                  "Hailo starrt Dir in die Augen und laehmt Dich vollends.\n",
+                  "Hailo laehmt @WEN durch einen boesen Blick in die Augen.\n");
+  AddSpell(1, 80,
+           "Hailo legt Dir seine Haende auf und entzieht Dir Lebensenergie.\n",
+           "Hailo legt @WEM seine Haende auf und klaut sich ein wenig Lebensenergie.\n",
+           DT_MAGIC, "drain");
+  AddSpell(7, 50,
+           "Hailo haut Dir das Gouffre-Buch um die Ohren.\n",
+           "Hailo haut @WEM ein Buch ueber Gouffres um die Ohren.\n", DT_BLUDGEON,
+           ([SP_SHOW_DAMAGE:1]));
+  RegisterGive("stein", ({
+               ({"sag Ah, fein, genau den suchte ich!", 2}),
+               ({"sag Ok, dafuer bekommst Du einen Apfel.", 3}),
+               ({"apfel", 2}) }) );
+  SetProp(P_KILL_MSG, "Und wer entklettet euch jetzt???");
+  SetProp(P_LOG_INFO, "creative/feldlager");
+  AddMoney(200+random(500));
+  my_gem=rnd_gem();
+  apf=MAXAPF;
+  seq_run=0;
+  traeger=0;
+  add_action("apple", "apfel");
+}
+
+apple()
+{
+  object a;
+  
+  a=clone_object(OBJ("apfel"));
+  a->move(TO);
+  if (traeger && present(traeger, ENV(TO)))
+    command_me("gib apfel an "+getuid(traeger));
+  else
+    a->remove();
+  traeger=0;
+  seq_run=0;
+  return 1;
+}
+
+string Query_Gem()
+{
+  return my_gem;
+}
+
+stein(object o)
+{
+  if (o->id("EDELSTEIN")) {
+    if (explode(file_name(o), "#")[0]==my_gem) {
+      if (!apf) {
+        command_me("sag Davon hab ich schon genug... trotzdem danke. :)");
+        return 0;
+      }
+      if (seq_run) {
+        command_me("emote schimpft: Nicht so schnell, ich bin kein D-Zug. Du kriegst nix.");
+        return 0;
+      }
+      traeger=this_interactive();
+      seq_run=1;
+      apf--;
+      return 1;
+    }
+    else {
+      command_me("sag Hmmm... noe, der Edelstein gefaellt mir nicht!!! Such einen anderen.");
+      command_me("gib edelstein an "+getuid(TP));
+    }
+    return 0;
+  }
+  if (o->id("geld")) {
+    command_me("sag Ah, danke. Aber Sonderrabatt gibts deswegen net.");
+    return 0;
+  }
+  command_me("emote grumpft: Du kannst mich mit "+o->name(WEM, 2)+" nicht bestechen!!!");
+  command_me("gib "+o->QueryProp(P_IDS)[0]+" an "+getuid(TP));
+  return 0;
+}
+
+int kein_geld()
+{
+  write("Hailo meint enttauescht: Ohne Geld keine Heilung.\n");
+  return 1;
+}
+
+int zuwenig_geld(int kosten)
+{
+  write("Hailo sagt entruestet: Du braeuchtest "+kosten+" Muenzen, um Dir"
+       +" von mir helfen lassen zu koennen.\n");
+  return 1;
+}
+
+int reinlegen(int kosten)
+{
+  object money;
+
+  money = present ("geld", TP);
+  kosten /= 2;
+  write(BS(
+        "Hailo untersucht Dich kurz und meint: Okok, Du wolltest mich scheints"
+       +" testen, ob ich wirklich gut bin. Fuer diesen Hilfsdienst muss ich Dir"
+       +" "+kosten+" Muenzen verrechnen."));
+  TP->AddMoney(-kosten);
+  HEALLOG("fail attempt");
+  return 1;
+}
+
+int entfrosche()
+{
+  int money;
+
+  money=TP->QueryMoney();
+  if (!money)
+    return kein_geld();
+  if (money<KOSTEN_ENTFROSCHEN)
+    return zuwenig_geld(KOSTEN_ENTFROSCHEN);
+  if (!TP->QueryProp(P_FROG))
+    return reinlegen(KOSTEN_ENTFROSCHEN);
+  write(BS(
+        "Hailo sucht verzweifelt ein Flaeschchen in einer Schublade. Nachdem"
+       +" er sie gefunden hat, gibt er Dir 17 Tropfen davon zu trinken."));
+  write(BS(
+        "Hailo meint: Ok, das sollte genuegen."));
+  TP->AddMoney(-KOSTEN_ENTFROSCHEN);
+  TP->SetProp(P_FROG, 0);
+  HEALLOG("frog");
+  return 1;
+}
+
+int entgeiste()
+{
+  int money;
+
+  money=TP->QueryMoney();
+  if (!money)
+    return kein_geld();
+  if (money<KOSTEN_ENTGEISTEN)
+    return zuwenig_geld(KOSTEN_ENTGEISTEN);
+  if (!TP->QueryProp(P_GHOST))
+    return reinlegen(KOSTEN_ENTGEISTEN);
+  write(BS(
+        "Hailo rueckt die UV-Bestrahlungslampe an der Decke direkt auf Deinen"
+       +" Kopf und betaetigt einen Schalter. Du sonnst Dich ein wenig in den"
+       +" Strahlen, und Deine Lebensgeister kehren langsam in Dich zurueck."));
+  write(BS(
+        "Hailo meint: Willkommen in Deiner normalen Gestalt!"));
+  TP->AddMoney(-KOSTEN_ENTGEISTEN);
+  TP->SetProp(P_GHOST, 0);
+  HEALLOG("ghost");
+  return 1;
+}
+
+int entgifte()
+{
+  int money;
+
+  money=TP->QueryMoney();
+  if (!money)
+    return kein_geld ();
+  if (money<KOSTEN_ENTGIFTEN)
+    return zuwenig_geld(KOSTEN_ENTGIFTEN);
+  if (TP->QueryProp(P_POISON)<=0)
+    return reinlegen(KOSTEN_ENTGIFTEN);
+  write(BS(
+        "Hailo zueckt ein winziges Lederetui, entnimmt ihm 23 kleine Nadeln und"
+       +" beginnt langsam, Dich zu akupunktieren. AUA! Nicht ober der Augenbraue!"
+       +" Und... autsch... hey, was soll das, doch nicht DA!!! Ggrrrrrgs!"));
+  write(BS(
+        "Hailo meint: 'schulligung, in Akupunktur bin ich noch nicht sehr bewandert."
+       +" Aber Du fuehlst Dich viel besser, nicht wahr?"));
+  TP->AddMoney(-KOSTEN_ENTGIFTEN);
+  TP->SetProp(P_POISON, 0);
+  HEALLOG("poison");
+  return 1;
+}
+
+int entklette()
+{
+  object klette;
+  int money, kletten, kosten, i, rupffakt;
+  string *rupf, *wie;
+
+  money=TP->QueryMoney();
+  if (!money)
+    return kein_geld();
+  if (!(klette=present("\nklette", TP)))
+    if (money<10*KOSTEN_ENTKLETTEN)
+      return reinlegen(money);
+    else
+      return reinlegen(10*KOSTEN_ENTKLETTEN);
+  kletten=klette->QueryProp(P_AMOUNT);
+  kosten=(kletten/10+1)*KOSTEN_ENTKLETTEN;
+  if (money<kosten)
+    return zuwenig_geld(kosten);
+  rupffakt=kletten/(5+random(6));
+  wie=({"rupft", "reisst", "schabt"});
+  switch (rupffakt) {
+    case 0..10:
+      rupf=({"ganz wenig", "ein paar", "eine Handvoll"});
+      break;
+    case 11..25:
+      rupf=({"ein ordentliches Bueschel", "zwei Handvoll", "eine ordentliche Portion"});
+      break;
+    case 26..80:
+      rupf=({"ziemlich viele", "eine melonengrosse Portion", "einen ziemlichen Batzen"});
+      break;
+    case 81..150:
+      rupf=({"unglaublich viele", "bueschelweise", "Berge von"});
+      break;
+    default:
+      rupf=({"eine unbeschreibliche Anzahl", "tonnenweise", "Myriaden" });
+      break;
+  }
+  write(BS(
+        "Hailo sagt: Ok, dann leg Dich mal hier auf das Bett."));
+  write(BS(
+        "Du legst Dich gehorsam auf das Bett und schaust Hailo mit"
+       +" schreckensgeweiteten Augen an."));
+  for (i=kletten/(rupffakt>1?rupffakt:2); i>0; i--) {
+    write(BS(
+          "Hailo "+wie[random(3)]+" Dir ungestuem "+rupf[random (3)]
+         +" Kletten vom Leib und wirft"+" sie hinter sich. Autsch, das tat weh!!!"));
+    TP->reduce_hit_point(rupffakt);
+  }
+  klette->remove();
+  TP->AddMoney(-kosten);
+  HEALLOG("kletten ("+kletten+")");
+  return 1;
+}
+
+int heile(string str)
+{
+  int money;
+
+  notify_fail("Hailo fragt Dich: Was soll ich Dir denn heilen?\n");
+  if (!str)
+    return 0;
+
+  money=TP->QueryMoney();
+  if (!money)
+    return kein_geld();
+  if (str=="taubheit") {
+    if (money<KOSTEN_TAUBHEIT)
+      return zuwenig_geld(KOSTEN_TAUBHEIT);
+    if (!TP->QueryProp(P_DEAF))
+      return reinlegen(KOSTEN_TAUBHEIT);
+    write(BS(
+          "Hailo kommt auf Dich zu und meint: ...... .... .. ..... .."
+         +" ..... .... .. .... .... ...... ..... ...! .......... .."
+         +" .. .... ....... .... ..., ..... ......?"));
+    write(BS(
+          "Hailo blaest durch Dein linkes Ohr gaaaaaanz fest durch, bis"
+         +" Du glaubst, Dein Gehirn fliegt mit auf der anderen Seite"
+         +" heraus."));
+    write(BS(
+          "Hailo fragt Dich: Kannst Du mich wieder hoeren?"));
+    TP->AddMoney(-KOSTEN_TAUBHEIT);
+    TP->SetProp(P_DEAF, 0);
+    HEALLOG("deaf");
+    return 1;
+  }
+  if (str=="blindheit") {
+    if (money<KOSTEN_BLINDHEIT)
+      return zuwenig_geld(KOSTEN_BLINDHEIT);
+    if (!TP->QueryProp(P_BLIND))
+      return reinlegen(KOSTEN_BLINDHEIT);
+    write(BS(
+          "Du hoerst Hailo zu Dir kommen und fuehlst seine Hand auf"
+         +" Deiner Stirn."));
+    write(BS(
+          "Hailo fragt Dich: Kannst Du das spueren?"));
+    write(BS(
+          "Du nickst, und Hailo streicht etwas kuehles auf Deine geschlossenen"
+         +" Augenlider."));
+    write(BS(
+          "Hailo wedelt mit seiner Hand vor Deinen Augen und grinst froehlich."));
+    TP->AddMoney(-KOSTEN_BLINDHEIT);
+    TP->SetProp(P_BLIND, 0);
+    HEALLOG ("blind");
+    return 1;
+  }
+  return 0;
+}
+
+drain(enemy, damage, dam_type)
+{
+  int mhp, hp;
+  float per;
+
+  hp=enemy->QueryProp(P_HP);
+  mhp=enemy->QueryProp(P_MAX_HP);
+  per=1-(float)((float)hp/(float)mhp);
+  hp=(int)(hp*per);
+  enemy->reduce_hit_point(hp);
+  TO->heal_self(hp);
+}
+
+reset()
+{
+  ::reset();
+  my_gem=rnd_gem();
+  apf=MAXAPF;
+}
+
+string rnd_gem()
+{
+  object g;
+  string s;
+
+  g=("/obj/gemmaster"->DistributeGem(1, 0, 0, 0))[0];
+  s=explode(file_name(g), "#")[0];
+  g->remove();
+  return s;
+}
+
+catch_tell(str)
+{
+  sequencer::catch_tell(str);
+  npc::catch_tell(str);
+}
+
+give_notify(ob)
+{
+  sequencer::give_notify(ob);
+  npc::give_notify(ob);
+}
+

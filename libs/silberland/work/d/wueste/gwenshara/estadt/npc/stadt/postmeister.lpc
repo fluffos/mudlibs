@@ -1,0 +1,163 @@
+//=========================================================================
+//
+// File: postmeister.c
+// Created by Gwenshara
+//
+// Project: Wuestenzwerge
+//
+//=========================================================================
+
+#include "../def.h" 
+#include "../../master/briefmaster.h"
+
+inherit STD "std_stadt_npc";
+
+void create()
+{
+  int i;
+  if(!is_clone(TO)) return;
+
+  ::create();
+
+//--Beschreibungen---------------------------------------------------------
+
+  SetProp(P_SHORT, "Murgin der Postmeister");
+  SetProp(P_LONG,
+    "Murgin ist der Postmeister der Wuestenzwerge. Er traegt eine blaue "
+    "Postbotenuniform und sortiert leise pfeifend Briefe. Er traegt einen "
+    "roten Turban mit einem roten Edelstein darauf.");
+
+//--Namen------------------------------------------------------------------
+
+  SetProp(P_NAME, "Murgin");
+  SetProp(P_GENDER, MALE);
+  AddId(({"zwerg", "wuestenzwerg", "murgin", "postmeister"}));
+  SetProp(P_ARTICLE, 0);
+
+  set_living_name("murgin");
+
+//--Eigenschaften----------------------------------------------------------
+
+  create_default_npc(22);
+
+  SetProp(P_HANDS, ({" mit seinen Haenden",
+                    QueryProp(P_HANDS)[1],
+                    ({DT_BLUDGEON})
+                    }) );
+
+  SetProp(P_RACE, "Zwerg");
+  SetProp(P_SIZE, 110+random(20));
+  SetProp(P_WEIGHT, 80000+random(20000));
+  SetProp(P_ALIGN, -1000+random(2000));
+  SetProp(P_MAX_HANDS, 2);
+
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    Name(WER,1)+" sagt: Tut mir leid, wir nehmen keine Pakete!\n" }) );
+
+//--Bewegungen-------------------------------------------------------------
+
+  SetProp(P_MSGIN, "kommt an");
+  SetProp(P_MSGOUT, "geht");
+  SetProp(P_MMSGIN, "erscheint in einer Rauchwolke");
+  SetProp(P_MMSGOUT, "verschwindet mit Knall und Schwefelduft");
+ 
+  SetProp(P_MNPC_FLAGS, 0);
+
+//--Tod--------------------------------------------------------------------
+
+  SetProp(P_DIE_MSG,  " faellt tot zu Boden.\n");
+
+//--Infos------------------------------------------------------------------
+
+  AddInfo(DEFAULT_INFO, "sagt: Darueber weiss ich nichts. Tut mir leid.");
+  AddInfo(MAGIERNAME, CAP(MAGIERNAME) + " hat mich erschaffen.","sagt: ");
+
+  AddInfo( ({ "post" }),
+    "Hier kannst Du Deine Post erledigen! Dazu musst Du nur <post> tippen!", 
+    "sagt: ");
+
+  AddInfo( ({ "briefe" }),
+    "Hier kommen oft viele Briefe an.", "sagt: ");
+
+  AddInfo( ({ "brief" }),
+    "Diesen einen Brief konnten wir bisher nicht zustellen. Er gehoert "
+    "eigentlich nach Derlim zu einem Bingo.", "sagt: ");
+
+  AddInfo( ({ "derlim" }),
+    "Der Brief gehoert nach Derlim, dort ist er nie angekommen. Keine Ahnung "
+    "wo das liegt.", "sagt: ");
+
+  AddInfo( ({ "bingo" }),
+    "Dieser Bingo duerfte wohl in Derlim leben. Wenn Du ihm den Brief bringen "
+    "willst tippe <hilf postmeister> ein!", "sagt: ");
+
+//--Kommandos-------------------------------------------------------------
+
+  AddCmd( ({"hilf", "helfe"}), "cmd_help" );
+
+}
+
+int cmd_help(string str)
+{
+  int queststatus;
+
+  notify_fail("Wem willst Du helfen?\n");
+  if(!str || str == "") return 0;
+  if(!(str == "postmeister" ||
+       str == "post" ||
+       str == "meister" )) return 0;
+
+  queststatus = call_other(BRIEFMASTER, "GetStatus", TP);
+  if(queststatus == Q_STATUS_END)
+  {
+    command_me("sag Danke. Aber Du hast den Brief schon ausgetragen!");
+    return -1;
+  }
+  
+  if(queststatus > Q_STATUS_STARTED)
+  {
+    command_me("sag Aber du bist doch schon dabei Post auszutragen! "
+	           "Mach nur weiter so!");
+    return -1;
+  }
+  
+  queststatus = call_other(BRIEFMASTER, "NextStatus", TP);
+  
+  if(queststatus != Q_STATUS_STARTED)
+  {
+    command_me("sag Oh nein! Da ist ein Fehler aufgetreten. Die Quest "
+	           "konnte nicht gestartet werden! Wende Dich bitte an den "
+			   "zustaendigen Magier!");
+	return -1;
+  }
+  
+  queststatus = call_other(BRIEFMASTER, "GetMailObject", TP);
+  if(queststatus < 1)
+  {
+    command_me("sag Fehler! Du kannst den Brief nicht tragen, Fehlercode: "
+	           +queststatus);
+	return -1;
+  }
+
+  command_me("sag Hier hast Du den Brief! Danke, dass Du das fuer mich tust!");
+  return 1;
+}
+
+void die(int poisondeath)
+{
+  write_file(STADTLOG "npc.kills",
+      dtime() + ": " + (CAP(getuid(QueryProp(P_KILLER) || TP)) || "<Unbekannt>") +
+      " killt " + name(WEN, 1) + ".\n");
+
+  ::die(poisondeath);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  if(killer == TO)
+  {
+    write_file(STADTLOG "npc.deads",
+        dtime() + ": " + Name(WER, 1) + "hat gerade " + CAP(getuid(player)) +
+        " umgebracht.\n");
+  }
+}

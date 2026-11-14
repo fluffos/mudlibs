@@ -1,0 +1,286 @@
+//=========================================================================
+// File: Standard-NPC: Cheraani
+// Project: Cheraani
+//
+// Created by Lilyth (2005)
+//=========================================================================
+
+//Level 6-9:   Kinder
+//Level 10-15: Erwachsene
+//Level 16-20: Wachen
+//Level 21+:   Aelteste
+
+//Spells fuer alle:  Schnell, Ausweichen
+//
+//zusaetzliche Spells:
+//  Kinder:      Steine werfen
+//  Erwachsene:  Lichtblitze, Geistangriff, Selbstheilung
+//  Wachen:      Lichtblitze, Geistangriff, Selbstheilung, vom Baum schubsen
+//  Aelteste:    Lichtblitze, Geistangriff, Selbstheilung, Waffe verzaubern
+
+#include "../def.h"
+
+inherit "std/mnpc";
+inherit "/std/npc/spells";
+
+//--Variablen&Defines------------------------------------------------------
+
+int ausweichen;
+int ausweich_ende;
+
+int schnell;
+int schnell_ende;
+
+int waffe_verzaubert;
+int waffe_verzaubert_ende;
+
+#define SP_KOSTEN 50
+#define HEAL 50
+
+//--Create-----------------------------------------------------------------
+
+void create()
+{
+  if(!is_clone(TO)) return;
+
+  ::create();
+
+  SUID;
+  
+  ausweichen    = 0;
+  ausweich_ende = 0;
+
+  schnell       = 0;
+  schnell_ende  = 0;
+}
+
+//--Funktionen-------------------------------------------------------------
+
+varargs void create_default_cheraani(int level, int aggressive)
+{
+  int hp;
+  hp = (10*level+level*level)*(95+random(11))/100;
+  
+  if(!intp(level))      level      = 1;
+  if(level < 1)         level      = 1;
+  if(!intp(aggressive)) aggressive = 0;
+  if(aggressive < 0)    aggressive = 0;
+  if(aggressive > 100)  aggressive = 100;
+  
+  AddId( ({"cheraani", "\ncheraani", "FELL_WUSCHEL"}) );
+  
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_RACE,"Cheraani");
+  SetProp(P_ALIGN, 250+random(350));
+  SetProp(P_SIZE, 100+random(20));
+  SetProp(P_WEIGHT, 35000+random(10000));
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_AGGRESSIVE, 0);
+  SetProp(P_NOMAGIC, 30);
+  SetProp(P_WIMPY, 0);
+  SetProp(P_HEAL, 0);
+  SetProp(P_TEMPERATURE_RANGE,([T_RANGE_MIN:-10,T_RANGE_MAX:30]));
+
+  SetProp(P_MSGIN, "huscht flink herein");
+  SetProp(P_MSGOUT, "huscht");
+  SetProp(P_MMSGIN, "kommt von einem anderen Ast herbeigeklettert");
+  SetProp(P_MMSGOUT, "klettert flink davon");
+  SetProp(P_MNPC_FLAGS, 0);
+
+  SetProp(P_DIE_MSG, " bricht tot zu Deinen Fuessen zusammen.\n");
+  SetProp(P_NOCORPSE, 0);
+
+  SetProp(P_RESISTANCE_STRENGTHS,
+    ([ DT_MAGIC:   -0.5,
+       DT_UNHOLY:   0.2,
+       DT_MIND:    -0.1,
+       DT_COLD:    -0.1 ]));
+
+  //nicht angreifbare NPCs brauchen keine Spells
+  if(QueryProp(P_NOATTACK)) return;
+
+  //--Spells-------------------------------------------------------//
+
+  SetProp(P_SPELLRATE, 50);
+
+  //Schnell fuer alle, Staerke nach Level
+  AddSpell(5, 1, "", "",
+    DT_MAGIC, "spell_schnell");
+
+  //Ausweichen fuer alle, Staerke nach Level
+  AddSpell(5, 1, "", "",
+    DT_MAGIC, "spell_ausweichen");
+
+  //Angriff: mit Steinen werfen (Kinder)
+  if(level >= 6 && level <= 9)
+  {
+     AddSpell(1, 250,
+      BS(Name(WER, 1)+" holt einen Stein hervor und wirft ihn nach Dir!\n"),
+      BS(Name(WER, 1)+" holt einen Stein hervor und wirft ihn nach @WEM!\n"),
+      DT_BLUDGEON, ([SP_SHOW_DAMAGE:1]));
+  }
+
+  //Angriff: Lichtblitze (alle ausser Kinder)
+  if(level >= 10)
+  {
+     AddSpell(1, 370,
+       BS(Name(WER, 1)+" schleudert winzige Lichtkuegelchen nach Dir, die "
+       +"wie kleine schmerzhafte Blitze auf Deinen Koerper prallen!\n"),
+       Name(WER, 1)+" schleudert winzige Lichtblitze auf @WEN!\n",
+       ({DT_MAGIC, DT_LIGHTNING}), ([SP_SHOW_DAMAGE:1]));
+  }
+  
+  //Selbstheilung (alle ausser Kinder)
+  if(level >= 10)
+  {
+     AddSpell(5, 1, "", "",
+     DT_MAGIC, "spell_heilung");
+  }
+
+  //Angriff: in Geist eindringen (alle ausser Kinder)
+  if(level >= 10)
+  {
+     AddSpell(1, 260,
+       Name(WER, 1)+" versucht, in Deinen Geist einzudringen.\nEin "
+       +"stechender Schmerz rast durch Deinen Koerper!\n",
+       Name(WER, 1)+" starrt @WEN eindringlich an.\n@WER kruemmt sich "
+       +"vor Schmerzen!\n",
+       ({DT_MIND, DT_MAGIC}), ([SP_SHOW_DAMAGE:1]));
+  }
+
+  //Waffe verzaubern (Aelteste)
+  if(level >= 21)
+  {
+     AddSpell(2, 1,
+     Name(WER, 1)+" verzaubert Deine Waffe!\n",
+     Name(WER, 1)+" verzaubert @WESSEN Waffe!\n",
+     DT_MAGIC, "spell_waffe");
+  }
+
+/*
+  //Vom Baum schubsen (Wachen)
+  if(level >= 16 && <= 20)
+  {
+     AddSpell(5, 150,
+     BS(Name(WER, 1)+" schubst Dich kraeftig, so dass Du das Gleichgewicht "
+     +"verlierst und in die Tiefe stuerzt.\n"),
+     Name(WER, 1)+" schubst @WEN kraeftig.\n",
+     DT_MAGIC, "spell_schubsen");
+  }
+*/
+
+  create_default_npc(level, hp);
+}
+
+//-------------------------------------------------------------------------
+
+//Spell: Schnell
+void spell_schnell(object enemy, int damage, mixed dam_type)
+{
+   if(schnell) return;
+   TO->ModifySkillAttribute(TO, SA_SPEED, 100+10*QueryProp(P_LEVEL), 10);
+
+   tell_room(ENV(TO), BS(Name(WER)+" beschleunigt ploetzlich "
+   +TO->QueryPossPronoun(FEMALE, WESSEN, PLURAL)+" Bewegungen."));
+
+   schnell      = 1;
+   schnell_ende = time() + 20; //10 Sek Dauer und 10 Sek Pause
+}
+
+//Spell: Ausweichen
+void spell_ausweichen(object enemy, int damage, mixed dam_type)
+{
+   if(ausweichen) return;
+   ausweichen = 1;
+   ausweich_ende = time() + QueryProp(P_LEVEL);
+}
+
+//Spell: Selbstheilung
+void spell_heilung(object enemy,int damage,string damtype)
+{
+    //erst ab Haelfte der Hp heilen:
+    if(TO->QueryProp(P_HP) > TO->QueryProp(P_MAX_HP)/2)
+    {
+      return;
+    }
+    
+    //zu wenig Mp:
+    if(QueryProp(P_SP) < SP_KOSTEN)
+    {
+      return;
+    }
+    
+    tell_room(ENV(TO), BS(Name(WER)+" umgibt sich mit einer hellen Aura."));
+
+    AddHp(HEAL);
+    AddSp(-SP_KOSTEN);
+    return;
+}
+
+/*
+//Spell: Vom Baum schubsen
+void spell_schubsen(object enemy, int damage, mixed dam_type)
+{
+  object *rooms;
+  
+  if(!enemy || enemy->QueryProps(P_GHOST)) return;
+  
+  //rooms muss anders, nicht nach ausgaengen, sondern eine
+  //vorgegebene liste mit den raeumen im wald (wenn es sie gibt)
+  rooms = m_values(ENV(TO)->QueryProp(P_EXITS));
+  
+  if(!sizeof(rooms)) return;
+  
+  enemy->move(rooms[random(sizeof(rooms))], M_GO|M_NO_SHOW,
+  "das Gleichgewicht und stuerzt in die Tiefe", "verliert",
+  "faellt von oben herab");
+}
+*/
+
+//Waffe verzaubern
+void spell_waffe(object enemy, int damage, mixed dam_type)
+{
+  if(waffe_verzaubert) return;
+ 
+  waffe_verzaubert      = 1;
+  waffe_verzaubert_ende = time() + 20; //10 sek dauer und 10 sek pause
+}
+
+
+//Defend-Funktion fuer Spells Ausweichen, Schnell und Waffe verzaubern
+int Defend(int dam, mixed dam_type, mixed spell, object enemy)
+{
+  if(ausweichen       && (time() > ausweich_ende)) ausweichen = 0;
+  if(schnell          && (time() > schnell_ende )) schnell    = 0;
+  if(waffe_verzaubert && (time() > waffe_verzaubert_ende )) waffe_verzaubert = 0;
+
+  if(waffe_verzaubert)
+  {
+    enemy->Defend(dam, dam_type, ([SP_SHOW_DAMAGE:1]));
+    return ::Defend(0, dam_type, spell, enemy);
+  }
+
+  if(!ausweichen) return ::Defend(dam, dam_type, spell, enemy);
+
+  if(!pointerp(dam_type)) dam_type = ({dam_type});
+  
+  if(sizeof(filter_array(dam_type,PHYSICAL_DAMAGE_TYPES)))
+  {
+     dam = 2 * dam / 3;
+
+     if(dam < 10)
+     {
+        tell_object(enemy, Name(WER)+" weicht Dir muehelos aus.\n");
+     }
+     else if(dam < 20)
+     {
+        tell_object(enemy, Name(WER)+" weicht Dir flink aus.\n");
+     }
+     else
+     {
+        tell_object(enemy, Name(WER)+" weicht Dir ein wenig aus.\n");
+     }
+  }
+
+  return ::Defend(dam, dam_type, spell, enemy);
+}

@@ -1,0 +1,125 @@
+inherit "/std/room";
+
+#include <rooms.h>
+#include "./def.h"
+#include LIB_DUELL "headers/duell.h"
+
+nosave int last_visit;
+
+init ()
+{
+  ::init();
+  last_visit = time();
+}
+
+// Den standard cleanup verhindern wir:
+int clean_up(int ref)
+{
+  return 0;
+}
+
+// Prueft ob ein Item eine illegale ID hat:
+int verify_item (object ob)
+{
+   int i;
+   for (i = 0; i <  sizeof( P_ILLEGAL_ITEMS ); i++)
+       if ( ob->id( P_ILLEGAL_ITEMS[i] ) )
+          return 1;
+}
+
+// Alle Illegalen Dinge werden hier eingelagert:
+int store (string args)
+{
+   int    index, i;
+   object ob;
+   mixed  illegal_inv;
+
+   ob = this_player();
+
+   if (!interactive(ob))
+      return 1;
+
+   // Dieses Array enthaelt dann alle illegalen items:
+   illegal_inv = filter_array(deep_inventory(ob), #'verify_item );
+
+   notify_fail( "Du hast, Dusty sei gepriesen, keine illegalen Gegenstaende bei Dir!\n" );
+
+   if (!sizeof(illegal_inv))
+      return 0;
+
+   write ( break_string( "Mit Hilfe des Spiegels hast Du schnell alle unfairen Gegenstaende "+
+                         "gefunden und breitest sie auf den Tisch aus.\n", 78) );
+   // Wir legen die Dinge im Raum ab:
+   for (i = 0; i < sizeof (illegal_inv); i++)
+   {
+      illegal_inv[i]->move(this_object(), M_NOCHECK);
+   }
+
+   return 1;
+}
+
+create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  SetProp( P_LIGHT, 1 );
+  SetProp( P_INT_SHORT, "Eine Umkleidekabine" );
+  SetProp( P_INT_LONG, break_string("Du befindest Dich in einer geraeumigen Umkleidekabine. "+
+           "An der Wand haengen ein Spiegel und eine Tafel, darunter siehst Du einen Tisch stehen. "+
+           "Ein Vorhang verschliesst den Ausgang der Kabine.",78));
+
+  SetProp(P_ENVIRONMENT,([ENV_TEMPERATURE: 25, ENV_TERRAIN: TT_TOWN]) );
+
+  SetProp(P_INDOORS, 1);
+
+  AddDetail( ({ "wand", "waende", "decke", "boden" }),
+             "Waende, Decke und Boden der Kabine sind aus Holz gefertigt.\n" );
+  AddDetail( "holz",
+             "Das Holz scheint gebeizt worden zu sein.\n" );
+  AddDetail( ({ "kabine", "umkleidekabine" }),
+             "Du befindest Dich in einer geraeumigen Umkleidekabine. "+
+             "An der Wand haengen ein Spiegel und eine Tafel, darunter siehst Du einen Tisch stehen. "+
+             "Ein Vorhang verschliesst den Ausgang der Kabine." );
+  AddDetail( "spiegel",
+             "Heute siehst Du aber wieder hinreissend aus!\n" );
+  AddDetail( "tisch",
+             "Ein einfacher Tisch, auf den man sicher alle nicht benoetigten Gegenstaende ablegen koennte.\n" );
+  AddDetail( "gegenstaende",
+             "Manche Gegenstaende sind fuer die Duelle nicht zulaessig, diese solltest Du hier deponieren.\n" );
+  AddDetail( ({ "duelle", "duell" }),
+             "Du moechtest doch ein Duell bestreiten oder?\n" );
+  AddDetail( "tafel",
+             "Es waere sicher moeglich sie zu lesen.\n" );
+  AddReadDetail( "tafel",
+                 "Sehr geehrter Gast!\n"+
+                 "Die Benuetzung dieser Einrichtung ist kostenlos.\n"+
+                 "Die hier gelagerten Gegenstaende werden sechs Stunden\n"+
+                 "lang fuer Euch aufbewahrt, bevor sie entfernt werden.\n"+
+                 "Ihr koennen den Spiegel dazu verwenden, alle fuer das \n"+
+                 "Duell unzulaessigen Gegenstaende auf dem Tisch zu deponierern.\n"+
+                 "Dies ist mit dem Befehl <pruefe> moeglich.\n\n"+
+                 "Viel Erfolg bei Euren kommenden Duellen wuenscht Euch,\n"+
+                 "Die Arenaleitung\n\n" );
+  AddExit("raus", ([EX_DEST : ROOM "arena_buero",
+                    EX_MSG  : "wieder raus ins Buero der Arenaverwaltung"]) );
+  AddCmd ("pruefe", "store");
+
+  previous_object()->CustomizeObject();
+
+  AddItem(OBJ "arena_kiste", REFRESH_DESTRUCT, 1);
+}
+
+// Nach einer 24h Frist wird die Kabine vernichtet:
+void reset()
+{
+  ::reset();
+  // Verlaengerung der Frist wenn der Spieler anwesend ist:
+  if (present("Spieler"))
+  {
+     last_visit = time();
+     return;
+  }
+  if ( (last_visit + 21600) < time() )
+     destruct (this_object());
+}

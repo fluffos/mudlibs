@@ -1,0 +1,76 @@
+public int isHeroAura_RynoxaTarget(object ob) {
+    return query_once_interactive(ob) || ob->QueryProp(P_FRIEND);
+  }
+  
+public void HeroAura_Rynoxa(object player) {
+    int  i, light, bonus;
+    object *people, buff;
+  
+    if((light=environment(player)->QueryProp(P_TOTAL_LIGHT)) < 1) return; // rynoxas kraft haengt vom licht ab!
+
+    tell_object(player, BS("Licht sammelt sich auf Hoehe deines Herzens und verstroemt Hoffung und Kraft!"));
+    tell_room(environment(player), BS(sprintf("Licht sammelt sich auf Hoehe %s Herzen.", player->name(WESSEN, 1))), ({player}));
+    
+    people = filter_array(all_inventory(environment(player)), "isHeroAura_RynoxaTarget");
+    bonus = (light*3>15?15:light*3);
+    for(i=0; i<sizeof(people); ++i) {
+      if(player->IsEnemy(people[i])) continue;
+
+      if(!objectp(buff=present("\nbard_rynoxa_buff", people[i]))) {
+        buff = clone_object(OBJ("bonus"));
+        buff->AddId("\nbard_rynoxa_buff");
+        buff->move(people[i], M_NOCHECK);
+        buff->SetEndMessage("Die Hoffnung von Rynoxas Licht schwindet.");
+      }
+      
+      buff->SetProp(P_X_HEALTH_MOD, ([P_HP: bonus, P_SP: bonus]));
+      buff->SetTimeout(player->QueryProp(P_BARD_INSPIRATION_LEVEL) * 7);
+      
+      people[i]->AddHp(bonus);
+      people[i]->Addp(bonus);
+      people[i]->UpdateAttributes();
+  
+      if(player != people[i]) tell_object(people[i], BS(sprintf("%s weckt neue Hoffnung und Kraft in dir!", player->name(WER, 1))));
+    }
+}
+
+// wird von der Brosche aufgerufen, wenn der Ryonxa-Pfad auf Stufe 3 ist
+public void rynoxaIdleUp(object pl) {
+    int i, next, success;
+  
+    if(!objectp(pl)) return;
+  
+    next = pl->QueryProp("bard_rynoxa_last_idle") + (60 - pl->QueryProp(P_BARD_INSPIRATION_LEVEL) * 6);
+    if(BARDENMASTER->HasHeroPathLevel(pl, HERO_RYNOXA, 3) && !pl->InFight() && next < time() &&
+       (pl->QueryProp(P_HP) < pl->QueryProp(P_MAX_HP) || pl->QueryProp(P_SP) < pl->QueryProp(P_MAX_SP))) {
+        // idle up additional HP/SP
+        i = environment(pl)->QueryProp(P_TOTAL_LIGHT);
+        if(i<=0) return;
+  
+        success = pl->UseSkill(SK_HEROISM(HERO_RYNOXA));
+        if(success > 0) {
+            pl->AddHp(success/3333 * i);
+            pl->AddSp(success/3333 * i);
+            tell_object(pl, BS("Du absorbierst Energie aus dem Licht der Umgebung."));
+            tell_room(environment(pl), BS(sprintf("%s saugt das Licht der Umgebung in sich auf.", pl->Name(WER, 1))), ({pl}));
+            pl->SetProp("bard_rynoxa_last_idle", time());
+        }
+    }
+  }
+
+public void HeroPassive_Rynoxa(object bard, int onoff) {
+    object ob;
+    if(!objectp(bard)) return;
+    if(!BARDENMASTER->HasHeroPathLevel(bard, HERO_RYNOXA, 3)) return;
+    if(!objectp(ob=present("\nbardenbrosche", bard))) return; // keine Brosche, keine Faehigkeiten
+  
+    if(bard->QueryProp(P_TESTPLAYER)) tell_object(bard, sprintf("HeroPassive_Rynoxa :: onoff = %d\n", onoff));
+  
+    if(onoff) {
+        tell_object(bard, BS("Die Erinnerung an Rynoxas Heldenmacht erfuellt dich. Du saugst die Kraft des Lichts in dich auf."));
+    } else {
+        tell_object(bard, BS("Deine Erinnerung an Rynoxas Licht verblasst."));
+    }
+  
+    return;
+  }

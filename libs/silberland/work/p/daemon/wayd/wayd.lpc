@@ -1,0 +1,238 @@
+/********************************************************
+**                                                     **
+** Weg-Such-Algorithmus                                **
+**                                                     **
+** (c) 2000 by Cirion@Silberland (Nico Ehemann)        **
+**                                                     **
+**                                                     **
+********************************************************/
+
+#include <properties.h>
+
+#define MAINTAINER "cirion"
+// #define DB(x) if (find_player(MAINTAINER)) tell_object(find_player(MAINTAINER),"DEBUG (wayd): "+x+"\n")
+#define DB(x)
+
+// evals per cycle
+#define MAXCOUNT              25000
+// maximum number auf evaluated rooms
+#define MAXROOMS              100
+// maximum eval ticks
+#define MAXEVAL               250000
+
+#define FLAG_START_LOADED      1
+#define FLAG_DEST_LOADED       2
+#define FLAG_SOLVED            4
+#define FLAG_FAILED            8
+#define FLAG_ASYNCHRONOUS     16
+#pragma strict_types
+
+// prototypes
+varargs mixed find_way(mixed start, mixed dest, mixed call_back);
+nosave void callback(object who,string fun,mixed data);
+nosave mixed synchronous(int flags, string dest, string start, string * stack, mapping solved);
+nosave mixed search(int flags, string dest, string start, string * stack,mapping solved);
+varargs mixed getexits(string room, string prev);
+nosave void asynchronous(int flags, string dest, string start, string * stack, mapping solved, mixed call_back);
+nosave void calc_exits(string key,mapping exit,mixed data,string room,string prev);
+void remove_calls();
+
+// code
+
+varargs mixed find_way(mixed start, mixed dest, mixed call_back)
+{
+  object ob;
+  int flags;
+  mixed exits;
+
+  // valid start room?
+  if (objectp(start))
+    start=file_name(start);
+
+  else if (!sizeof(get_dir(start+".lpc")))
+    return 0;
+  // valid dest room?
+  if (objectp(dest))
+    dest=file_name(dest);
+
+  else if (!sizeof(get_dir(dest+".lpc")))
+    return 0;
+
+  // everything seems to be ok
+
+  if (!call_back)
+  {
+    if (start == dest)
+      return ({({}), ({})});
+    return synchronous(flags,dest,(string)time(),({start}),([start:0;0]));
+  }
+  if (!pointerp(call_back) || !objectp(call_back[0]))
+  {
+    DB(sprintf("invalid call_back: %O",call_back));
+    return 0;
+  }
+  flags|=FLAG_ASYNCHRONOUS;
+  asynchronous(flags,dest,(string)time(),({start}),([start:0;0]),call_back);
+  return 1;
+}
+
+nosave void callback(object who,string fun,mixed data)
+{
+  if (interactive(who))
+    tell_object(who,sprintf("ASYNC wayd result:\n%O\n",data));
+  else
+    call_other(who,fun,data);
+}
+
+nosave mixed synchronous(int flags, string dest, string start, string * stack, mapping solved)
+{
+  mixed newdata;
+  mixed ret;
+  string key;
+
+  newdata=search(flags,dest,start,stack,solved);
+  DB(sprintf("searched rooms: %d",sizeof(solved)));
+  if (newdata[0]&FLAG_SOLVED)
+  {
+    key=dest;
+    ret=({({}),({})});
+    do
+    {
+      ret[0]=({key})+ret[0];
+      ret[1]=({newdata[2][key,1]})+ret[1];
+      key=newdata[2][key,0];
+    }
+    while (newdata[2][key]!=0);
+    return ret;
+  }
+  else if (newdata[0]&FLAG_FAILED)
+  {
+    return ({({}),({})});
+  }
+}
+
+nosave void asynchronous(int flags, string dest, string start, string * stack, mapping solved, mixed call_back)
+{
+  mixed newdata;
+  mixed ret;
+  string key;
+
+  newdata=search(flags,dest,start,stack,solved);
+  DB(sprintf("searched rooms: %d",sizeof(solved)));
+  if (newdata[0]&FLAG_SOLVED)
+  {
+    key=dest;
+    ret=({({}),({})});
+    do
+    {
+      ret[0]=({key})+ret[0];
+      ret[1]=({newdata[2][key,1]})+ret[1];
+      key=newdata[2][key,0];
+    }
+    while (newdata[2][key]!=0);
+    call_out("callback",0,call_back[0],call_back[1],ret);
+  }
+  else if (newdata[0]&FLAG_FAILED)
+  {
+    call_out("callback",0,call_back[0],call_back[1],({({}),({})}));
+  }
+  else
+    call_out("asynchronous",2,newdata[0],dest,start,newdata[1],newdata[2],call_back);
+}
+
+nosave mixed search(int flags, string dest, string start, string * stack,mapping solved)
+{
+  int count,exc,i,j,max,maxrooms,rooms;
+  mixed exits;
+
+  if (flags&FLAG_ASYNCHRONOUS)
+  {
+    max=to_int(MAXCOUNT*0.25);
+    maxrooms=MAXROOMS*5;
+  }
+  else
+  {
+    max=MAXCOUNT;
+    maxrooms=MAXROOMS;
+  }
+  do
+  {
+    exits=getexits(stack[<1],solved[stack[<1],0]);
+    //DB(sprintf("%O",exits));
+    //DB(sprintf("%O",unresolved));
+    //DB(sprintf("%O",stack));
+    j=sizeof(exits[0]);
+    for (;j-->0;)
+    {
+      if (exits[0][j]==dest)
+      { // gefunden, alle andren sind uninteressant
+        flags|=FLAG_SOLVED;
+        return ({flags,stack,solved+([dest:stack[<1];exits[1][j]])});
+      }
+      else if (!exits[0][j]->Query(sprintf("wayd#%s#%s",start,dest)))
+      { // nicht gefunden, aber valid, also auf den stack damit
+        solved+=([exits[0][j]:stack[<1];exits[1][j]]);
+        stack=({exits[0][j]})+stack;
+        exits[0][j]->Set(sprintf("wayd#%s#%s",start,dest),1);
+      }
+      exc++;
+    }
+    stack=stack[0..<2];
+    // eval_time_count. je mehr exits, desto hoeher, also vorsicht
+    count+=exc*exc*exc*exc;
+    rooms++;
+    //DB(sprintf("%O",count));
+    exc=0;
+  }
+  while (count<max && sizeof(stack) && rooms<MAXROOMS && 1000000-MAXEVAL<get_eval_cost());
+
+  if ((!sizeof(stack)&&!member(solved,dest)) || sizeof(solved)>maxrooms )
+    flags|=FLAG_FAILED;
+
+  return ({flags,stack,solved});
+}
+
+nosave void calc_exits(string key,mapping exit,mixed data,string room,string prev)
+{
+  mixed ex;
+
+  ex=exit["ex_dest"];
+  if (!ex || ex==room || ex==prev || -1!=member_array(ex,data[0]))
+    return;
+  data[0]+=({ex});
+  data[1]+=({key});
+}
+
+varargs mixed getexits(string room,string prev)
+{
+  object ob;
+  mixed data;
+  mapping exits;
+  string * keys,exit;
+  int flag,i;
+
+  //DB(sprintf("room: %O",room));
+  if (!ob=find_object(room))
+  {
+    if (catch(call_other(room,"???")) || !ob=find_object(room))
+      return ({({}),({})});
+    flag=1;
+  }
+
+  exits=(mapping)ob->Query(P_NEW_EXITS);
+  //DB(sprintf("%O",exits));
+  data=({({}),({})});
+  walk_mapping(exits,#'calc_exits,data,room,prev);
+
+  /* Entladen aus Geschwindigkeitsgruenden entfernt
+  // wurde raum geladen, wird er auch entladen
+  if (flag)
+    ob->remove();
+  */
+  return data;
+}
+
+void remove_calls()
+{
+  while(-1!=remove_call_out("asynchronous"));
+}

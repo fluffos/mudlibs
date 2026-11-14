@@ -1,0 +1,176 @@
+// 31.01.2003 Archon erstellt
+/*
+ Rev 1.1 28.02.2003 Archon: rep
+ Rev 1.0 31.01.2003 Archon: erstellt
+*/
+
+#pragma strong_types
+#include "../def.h"
+inherit "std/thing";
+
+void create();
+string _query_long();
+string detail_sprosse();
+int cmd_stelle(string str);
+int cmd_repariere(string str);
+varargs int remove(int silent);
+void reset();
+
+int g;
+int s;
+
+void create() 
+{
+  if (!is_clone(ME)) return;
+  ::create();
+  g=0;
+  s=2;
+
+  AddDetail(({"sprosse","sprossen"}),#'detail_sprosse);
+
+  SetProp(P_SHORT,"Eine Holzleiter");
+  SetProp(P_MATERIAL,([MAT_MISC_WOOD:100]));
+  SetProp(P_NAME, "Holzleiter");
+  SetProp(P_GENDER,FEMALE);
+  SetProp(P_WEIGHT,2500);
+  SetProp(P_VALUE,1);
+  AddId(({"leiter","holzleiter"}));
+  
+  AddCmd(({"stell","stelle","stellen"}),"cmd_stelle");
+  AddCmd(({"ersetz","ersetze","ersetzen","reparier","repariere","reparieren"}),"cmd_repariere");
+}
+
+string _query_long()
+{
+  if (!g && !s) g=1;
+  if (!g)
+  {
+   if (s==2) 
+     return break_string("Du siehst eine einfache Holzleiter, bei der "
+       "zwei Sprossen zerbrochen sind. Du solltest die Sprossen reparieren.");
+   return break_string("Du siehst eine einfache Holzleiter, bei der "
+     "eine Sprossen zerbrochen ist. Du solltest die Sprossen reparieren.");
+  }
+  return break_string("Du siehst eine einfache Holzleiter. Wenn Du sie irgendwo "
+    "benoetigst, solltest Du sie einfach im betreffenden Raum aufstellen.");
+}
+
+string detail_sprosse()
+{
+  switch(s)
+  {
+    case 0: return break_string("Die Leiter hat viele Sprossen, auf denen Du hinauf klettern kannst.");
+    case 1: return break_string("Eine Sprosse der Leiter ist zerbrochen, Du solltest sie reparieren.");
+    default: return break_string("Zwei Sprossen der Leiter ist zerbrochen, Du solltest sie reparieren.");
+  }
+}
+
+int cmd_stelle(string str)
+{
+  object env;
+
+  if (!S_STANDARD->check_cmd(str,
+       "leiter|holzleiter&auf",
+       "Was willst Du aufstellen?|Willst Du die Leiter AUFstellen?"))
+    return 0;
+
+  if (!g)
+  {
+    write(break_string("Aber die Leiter ist doch kaputt! Du kannst Sie noch nicht benutzen "
+          "und somit bringt Dir das Aufstellen nichts."));
+    return 1;
+  }
+  if (!objectp(env=environment(PL)))
+  {
+    write("Ups - Wo bist Du denn? Hier kannst Du keinen Leiter aufstellen.\n");
+    return 1;
+  }
+  if (file_name(env)==(ROOM "gang3_1"))
+  {
+    env->make_leiter(ME,PL);
+    return 1;
+  }
+  write(break_string("Wieso solltest Du hier eine Leiter aufstellen wollen? Hier ist doch nichts "
+    "wo Du nur mit der Leiter hinkommen wuerdest."));
+  return 1;
+}
+
+int cmd_repariere(string str)
+{
+  object stab,naegel;
+  if (!S_STANDARD->check_cmd(str,
+       "sprosse|sprossen|leiter|holzleiter",
+       "Was willst Du reparieren?"))
+    return 0;
+
+  if (g)
+    return notify_fail("Aber die Leiter ist doch schon ganz.\n"),0;
+  if (!s)
+  { //duerfte nie passieren!!
+    g=1;
+    return notify_fail("Aber die Leiter ist doch schon ganz.\n"),0;
+  }
+  if (!present("hammer",PL))
+  {
+    write("Ohne Hammer kannst Du die Leiter nicht reparieren.\n");
+    return -1;
+  }
+  naegel=S_STANDARD->present_clone(OBJ "naegel",PL);
+  if (!objectp(naegel))
+  {
+    if (objectp(present("naegel",PL)))
+      write("Du hast fuer die Reparatur nicht die richtigen Naegel bei Dir.\n");
+    else
+      write("Ohne Naegel kannst Du die Leiter nicht reparieren.\n");
+    return -1;  	
+  }
+  for (;s>0;s--)
+  { //man sollte eigentlich beide holzstaebe im inv haben ... aber wer weiss
+    stab=S_STANDARD->present_clone(OBJ "holzstab",PL);
+    if (!objectp(stab))
+    {
+      if (objectp(present("holzstab",PL)))
+        write("Du hast zwar Holzstaebe bei Dir, aber nicht die Richtigen fuer die Reparatur.\n");
+      else
+        write("Ohne einen bestimmten Holzstab kannst Du die Sprosse nicht ersetzen.\n");
+      return -1;  	
+    }
+    stab->remove(1);
+    tell_room(environment(PL),break_string(
+      PL->Name(WER,NAME_AUTO)+" haemmert an etwas herum."),({PL}));
+    write(break_string("Du ersetzt mit dem Holzstab eine der kaputten Sprossen der Leiter "
+          "nimmst dann ein paar Naegel und befestigst die Sprosse mit einigen "
+          "kraeftigen Hammerschlaegen."));
+    if (s==2)
+    {
+      write("\nGut eine Sprosse ist repariert.\nDu machst Dich gleich an der zweiten Sprosse zu schaffen.\n\n");
+    }
+  }
+  g=1;
+  naegel->remove(1);
+  tell_room(environment(PL),break_string(
+    PL->Name(WER,NAME_AUTO)+" jubelt."),({PL}));
+  write("\nDu jubelst.\nDie Leiter ist nun wieder ganz.\n\n");
+  write(break_string("Wenn Du die Leiter irgendwo benoetigst, solltest Du sie einfach im betreffenden Raum aufstellen."));
+  SetProp(P_SIZE,250);
+  return 1;
+}
+
+void reset()
+{
+  ::reset();
+  if (!is_clone(ME)) return;
+  if (!environment(ME)) { remove(1); return; }
+  if (!living(environment(ME))) remove(0);
+}
+
+varargs int remove(int silent)
+{
+  if (silent || !environment(ME)) return ::remove(0);
+  if (living(environment(ME)))
+    tell_object(environment(ME),"Die Holzleiter zerfaellt zu Staub.\n");
+  else
+    tell_room(environment(ME),"Die Holzleiter zerfaellt zu Staub.\n");
+  return ::remove(1);
+}
+

@@ -1,0 +1,190 @@
+//Basisklasse fuer tageszeitenabhaengige Raeume
+//Yara@Silberland 06
+//
+//
+// Eine Klasse, die Tageszeiten implementiert
+//
+// Die Reihenfolge von Angaben in Arrays ist immer Morgen, Tag, Abend, Nacht
+//
+// Funktionen:
+//    SetProp(P_TD_SHORT, ({}))
+//    SetProp(P_TD_LONG, ({}))
+//      Entweder ({"Beschreibung fuer alle Tageszeiten."})
+//      oder ({ ({""}), ({""}), ..., ... }) ( Array mit bis zu vier
+//        Eintraegen, wenn weniger als 4, wird fuer die fehlenden der
+//        letzte Eintrag gesetzt)
+//
+//    SetProp(P_TD_ROOM_MSG, ({}))
+//      Entweder ({"\n", "\n", "\n",....}) (Einfache Roomchats)
+//      oder ({ ({"","",...}), ({"",...}), ..., ... }) ( Array mit bis zu vier
+//        Eintraegen, wenn weniger als 4, wird fuer die fehlenden der
+//        letzte Eintrag gesetzt)
+//
+//    SetProp(P_INT_LONG), SetProp(P_INT_LONG) und AddRoomMessage() nicht
+//    mehr verwenden!
+//
+//    void NightnDayDetail(mixed keys, mixed desc)
+//    void NightnDaySound(mixed keys, mixed desc)
+//    void NightnDaySmell(mixed keys, mixed desc)
+//
+//      Verhalten wie Basisverhalten von AddDetail, AddDetail kann weiterhin
+//      benutzt werden.
+//
+
+
+#include "../def.h"
+
+inherit "std/room";
+
+
+#define DEBUG 0
+
+
+//Haelt aktuelle Tageszeit
+int daytime = 0;
+
+//Ermittelt Tageszeit und setzt tageszeitabhaengiges Zeugs
+void setTimeOfDay();
+
+//in "../def.h" 
+//#define TD_DAWN 0
+//#define TD_DAY 1
+//#define TD_DUSK 2
+//#define TD_NIGHT 3 
+
+//Tageszeitabhängige Details, Geraeusche, Gerueche
+mapping *details = ({ ([]), ([]), ([]), ([]) });
+mapping *sounds =  ({ ([]), ([]), ([]), ([]) });
+mapping *smells =  ({ ([]), ([]), ([]), ([]) });
+
+void create() {
+  ::create();
+
+  //Hier starten wir die Roomchats, sinnvoll gesetzt werden sie spaeter
+  AddRoomMessage( ({}), 40);
+
+  SetProp(P_TD_SHORT, ({}));
+  SetProp(P_TD_LONG, ({}));
+  SetProp(P_TD_ROOM_MSG, ({}));
+
+  //Tageszeit initial setzen
+  setTimeOfDay();
+}
+
+
+//Hier wird Tageszeit abhaengig von der tatsaechlichen Tageszeit gewechselt
+void reset() {
+  ::reset();
+  setTimeOfDay();
+}
+
+
+//Debug, Tageszeit von Hand einstellen
+int setday(int h) {daytime = h; setTimeOfDay(); return daytime;}
+
+
+//Setzt Tageszeit mitsamt zugehoeren Properties
+void setTimeOfDay() {
+  mixed a;
+
+//dtime gibt so einen String zurueck: "Son, 22. Okt 2006, 19:25:16"
+//die 20. und 21. buchstaben geben die Stunde an,
+//wir zaehlen von 0, also 19. und 20.
+  if(!DEBUG) daytime = to_int(dtime()[19..20]);
+
+  switch (daytime) {
+//Abend, 19:00 - 20:59
+    case 18 .. 20:
+      daytime = TD_DUSK;
+      SetProp( P_LIGHT, 1 );
+      SetProp( P_ENVIRONMENT, ([ENV_TEMPERATURE: 18]) );
+      break;
+//Nacht, 21:00 - 23:59 und 0:00 - 04:59
+    case 21 .. 23:
+    case 0 .. 4:
+      daytime = TD_NIGHT;
+      SetProp( P_LIGHT, -1 );
+      SetProp( P_ENVIRONMENT, ([ENV_TEMPERATURE: 15]) );
+      break;
+//Morgen, 05:00 - 08:59
+    case 5 .. 8:
+      daytime = TD_DAWN;
+      SetProp( P_LIGHT, 1 );
+      SetProp( P_ENVIRONMENT, ([ENV_TEMPERATURE: 20]) );
+      break;
+//Tag
+    case 9 .. 17:
+      daytime = TD_DAY;
+      SetProp( P_LIGHT, 1 );
+      SetProp( P_ENVIRONMENT, ([ENV_TEMPERATURE: 20]) );
+      break;
+    default:
+  }
+
+  //Short, Long und RoomMsgs setzen
+  if(sizeof(a = QueryProp(P_TD_SHORT)) == 1)
+    SetProp(P_INT_SHORT, a);
+  else if(sizeof(a) >= daytime)
+    SetProp(P_INT_SHORT, a[daytime]);
+  
+  if(sizeof(a = QueryProp(P_TD_LONG)) == 1)
+    SetProp(P_INT_LONG, a);
+  else if(sizeof(a) >= daytime)
+    SetProp(P_INT_LONG, a[daytime]);
+
+  if(sizeof(a = QueryProp(P_TD_ROOM_MSG)) == 1)
+    SetProp(P_ROOM_MSG, a);
+  else if(sizeof(a) >= daytime)
+    SetProp(P_ROOM_MSG, a[daytime]);
+
+// SetProp( P_LIGHT,  daytime != NIGHT ? 1 : -1);
+}
+
+
+//----------------------------------------------------------------------------
+//Details, Gerueche, Geraeusche
+//
+
+//Hilfsfunktion fuer NightnDay...(), setzt Daten
+void setDSS(mapping *what, mixed keys, mixed desc) {
+  int i, j;
+  
+  if(!keys || !desc) return;
+
+  //Umspeichern zu Arrays
+  if(!pointerp(keys)) keys = ({keys});
+  if(!pointerp(desc)) desc = ({desc});
+
+  //Nur eintragen, wenn Key sinnvoll
+  for(i=sizeof(keys); i--;) {
+    if(!stringp(keys[i]) || keys[i] == "")
+      return;
+
+    //Beschreibungen fuer einzelne Tageszeiten koennen auch leer sein
+    for(j=0; j<4; ++j)
+      if( (sizeof(desc) > j) && stringp(desc[j]) && (desc[j] != "") )
+        what[j] += ([keys[i]:desc[j]]);
+  }
+
+}
+
+//Tageszeitenabhaengige Details, Geraeusche, Gerueche
+void NightnDayDetail(mixed keys, mixed desc) { setDSS(&details, keys, desc); }
+void NightnDaySound(mixed keys, mixed desc) { setDSS(&sounds, keys, desc); }
+void NightnDaySmell(mixed keys, mixed desc) { setDSS(&smells, keys, desc); }
+
+//Abfragen. Wenn Eintrag zur Tageszeit existiert diesen zurueck geben,
+//ansonsten normale Details durchsuchen
+varargs string GetDetail(mixed key, mixed race) {
+  return member(details[daytime], key) ? BS(details[daytime][key])
+                                       : ::GetDetail(key, race);
+}
+varargs string GetSound(mixed key, mixed race) {
+  return member(sounds[daytime], key) ? BS(sounds[daytime][key])
+                                       : ::GetSound(key, race);
+}
+varargs string GetSmell(mixed key, mixed race) {
+  return member(smells[daytime], key) ? BS(smells[daytime][key])
+                                       : ::GetSmell(key, race);
+}
+//----------------------------------------------------------------------------

@@ -1,0 +1,208 @@
+/*
+  spezielle Muellschlucker version by PROtheG ;)
+*/
+
+#include "../def.h"
+
+inherit MOST "mynpc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+
+create()
+{
+  if (!is_clone(ME)) return;
+  ::create();
+  
+  SetProp(P_SHORT,"Ein boeser Muellschlucker");
+  SetProp(P_LONG,
+	  "Der Muellschlucker gehoert zu Familie der Kleinsaurier und zeichnet "+
+	  "sich durch ein sehr grosses Maul und nahezu unbegrenzten Appetit aus. "+
+	  "Dieser hier gehoert eindeutig zu dem boesartigen Teil der Familie, also "+
+	  "huete Dich vor seinem Zorn. Er scheint extrem gut gepanzert zu sein. Du "+
+	  "zweifelst daran, ihn verletzen zu koennen.\n"+
+	  "Mit 'fuettere muellschlucker mit <name>' kann man ihm Gegenstaende in "+
+	  "den Rachen stopfen.\n");
+  SetProp(P_INFO,
+	  "Dieser Muellschlucker verschlingt auch lose herumliegende Dinge. Also "+
+	  "pass auf, was Du wegwirfst.");
+  SetProp(P_NAME,"Muellschlucker");
+  SetProp(P_NAME_ADJ, "boes");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_RACE,"saurier");
+
+  AddId(({"muellschlucker","schlucker","kleinsaurier","saurier"}));
+
+  create_default_npc(10);
+
+  SetProp(P_BODY,150);
+  SetProp(P_HANDS,({" mit dem alles verschlingenden Gebiss",200,DT_RIP}));
+  SetProp(P_ALIGN, -300-random(100));
+
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:0,T_RANGE_MAX:60]));
+  
+  seteuid(getuid(this_object()));
+
+  SetProp(P_DEFAULT_INFO,"grunzt nur vor sich hin.\n");
+
+  SetProp(P_MSGIN,"watschelt herein");
+  SetProp(P_MSGOUT,"watschelt");
+  SetProp(P_TRANSPARENT,0);
+
+  AddCmd(({"fuetter","fuettere"}),"haps");
+
+  enable_commands();
+
+  SetProp(P_DIE_MSG, " grunzt ein letztes Mal und faellt dann tot um.\n");
+
+  SetProp(P_MURDER_MSG, "Nyak moch mt`patak nkmalha!");
+
+  SetProp(P_KILL_NAME, "Die Rache der Muellschlucker");
+  SetProp(P_KILL_MSG, "Wir lassen uns nicht laenger unterdruecken!");
+
+  SetProp(P_RESISTANCE_STRENGTHS , 
+	  ([
+	    DT_FIRE:  -0.3, DT_COLD:      0.1, DT_WATER:    -0.1,
+	    DT_AIR:   -0.3, DT_LIGHTNING:-0.1, DT_EXPLOSION: 0.1,
+	    DT_SOUND:  0.1, DT_LIGHT:     0.3, DT_ELECTRIC:  0.0,
+	    DT_ACID:   0.2, DT_POISON:    0.1, DT_TERROR:   -0.3,
+	    DT_HOLY:   0.2, DT_UNHOLY:   -0.4, DT_MAGIC:    -0.3]));
+
+  SetProp(P_SPELLRATE, 20+random(20));
+
+  AddSpell(3,100,
+	   "Der Muellschlucker reisst Dir Deine Ruestung vom Leib.\n",
+	   "Der Muellschlucker reisst "+TPN+" "+
+	   TP->QueryPossPronoun(FEMALE,WEN)+" Ruestung vom Leib.\n",
+	   DT_BLUDGEON, "wegnehmen");
+
+  AddSpell(7,100,
+	   "Der Muellschlucker beisst Dir in Deine Hand.\n",
+	   "Der Muellschlucker beisst "+TPN+"in "+
+	   TP->QueryPossPronoun(FEMALE,WEN)+" Hand.\n",
+	   DT_PIERCE, "entwaffnen");
+}
+
+wegnehmen(object enemy, int damage, mixed dam_type)
+{
+  object ob;
+  object *armours;
+  if(sizeof(armours=enemy->QueryProp(P_ARMOURS)))
+    {
+      ob=armours[random(sizeof(armours))];
+      ob->DoUnwear(1);
+      if(!ob->QueryWorn())
+	ob->move(ME,M_NOCHECK);
+    }
+}
+
+entwaffnen(object enemy, int damage, mixed dam_type)
+{
+  object ob;
+  if(ob=enemy->QueryProp(P_WEAPON))
+    enemy->drop_obj(ob);
+  command("nimm alles");
+}
+
+haps(str)
+{
+  string s1,s2;
+  object ob;
+  
+  notify_fail("Syntax: fuettere muellschlucker mit <name>\n");
+  if(!str)return 0;
+  
+  if(sscanf(str,"%s mit %s",s1,s2)!=2) return 0;
+  if(!id(s1)) return 0;
+  
+  notify_fail("So etwas hast Du nicht.\n");
+  if((!ob=present(s2,this_player())) && 
+     (!ob=present(s2,environment()))) return 0;
+  if(ob->QueryProp(P_NODROP) || ob->QueryProp(P_NEVERDROP))
+    return write("Das kannst Du nicht wegwerfen.\n"),1;
+  if(living(ob))
+    return write("Der Muellschlucker kaut ein wenig an "+ob->name(WEM)+
+		 " herum, aber spuckt "+ob->QueryPronoun(WEN)+
+		 " gleich wieder aus.\n"),1;
+  if(ob->QueryProp(P_CURSED))
+    return write("Verfluchte Dinge bekommen dem Muellschlucker nicht!\n"),1;
+  ob->remove();
+  if(ob) 
+    return write("Aus irgendeinem Grund scheint das dem Muellschlucker nicht "+
+		 "zu schmecken.\n"),1;
+  return write("Mit einem lauten Ruelpsen verschlingt der Muellschlucker "+
+	       "alles.\n"),1;
+}
+
+reset()
+{
+  int i;
+  object *inv;
+
+  ::reset();
+  
+  inv=all_inventory(this_object());
+  if(inv && sizeof(inv))
+    for(i=sizeof(inv)-1;i>=0;i--)
+      destruct(inv[i]);
+  command("nimm alles");
+}
+
+StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+  if (find_call_out("react")!= -1) return; 
+  switch(gruppe) 
+  {
+    case "fies":
+      call_out("react", 0, 
+	       "faucht Dich boese an",
+	       "faucht "+TP->name(WEN)+" boese an");
+      break;
+    case "traurig":
+      call_out("react", 0, 
+	       "lacht Dich aus",
+	       "lacht "+TP->name(WEN)+" aus");
+      break;
+    case "albern":
+      call_out("react", 0, 
+	       "grunzt genervt",
+	       "grunzt genervt");
+      break;
+    case "intim":
+      call_out("react", 0, 
+	       "kuesst Dich leidenschaftlich",
+	       "kuesst "+TP->name(WEN)+" leidenschaftlich");
+      break;
+    case "aengstlich":
+      call_out("react", 0, 
+	       "grinst Dich an",
+	       "grinst "+TP->name(WEN)+" an");
+      break;
+    case "frech":
+      call_out("react", 0, 
+	       "fiept Dich an", 
+	       "fiept "+TP->name(WEN)+" an");
+      break;
+    case "nett":
+      call_out("react", 0, 
+	       "ekelt sich", 
+	       "ekelt sich");
+      break;
+  }
+}
+
+react(string victim, string others)
+{
+  if (present(TP, ENV(TO))) 
+  {
+    tell_object(TP, BS(Name(WER, 1) + " "+victim+"."));
+    tell_room(ENV(TO), BS(Name(WER, 1)+" "+others+"."), ({TP,TO}));
+  }
+}
+
+StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+  return StartReaction(verb, gruppe, adverb, touch);
+}

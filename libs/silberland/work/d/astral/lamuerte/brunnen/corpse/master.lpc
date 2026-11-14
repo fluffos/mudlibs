@@ -1,0 +1,148 @@
+#include "../def.h"
+#include "/p/daemon/crond/crond.h"
+
+#define CORPSES CORPSE "corpses"
+#define LAGERRAUM this_object()
+
+mapping corpses=([]);
+
+void create()
+{
+  seteuid(getuid(this_object()));
+  restore_object(CORPSES);
+}
+
+query_prevent_shadow() { return 1; }
+
+void save_corpses()
+{
+  save_object(CORPSES);
+}
+
+void register_me(string wer, int level)
+{
+  corpses+=([file_name(previous_object()):wer; level]);
+  save_corpses();
+}
+
+void remove_me()
+{
+  m_delete(corpses, file_name(previous_object()));
+  save_corpses();
+}
+
+int check_user() 
+{
+   if( member(ALLOWED_UIDS, getuid(previous_object())) != -1 || 
+       !this_player() || 
+       IS_ARCH(this_player()) || 
+       getuid(this_player())=="lamuerte" )
+     return 1;
+   return 0;
+}
+
+int recover_corpses()
+{
+  int i;
+  string *c;
+  object ob;
+
+  if(!check_user()) return -1;
+  
+  c=m_indices(corpses);
+  for(i=sizeof(c)-1;i>=0;i--)
+  {
+    if(ob=find_object(c[i]))
+      ob->move(LAGERRAUM, M_NOCHECK);
+  }
+  return 1;
+}
+
+int get_corpse(object wer)
+{
+  int i;
+  string *c;
+  object ob;
+
+  if( !check_user())
+    return 0;
+  
+  c=m_indices(corpses);
+  for(i=sizeof(c)-1;i>=0;i--)
+  {
+    if(ob=find_object(c[i]))
+    {
+      if( corpses[c[i],0]==getuid(wer) )
+      {
+        tell_room(environment(ob),
+            "Loewenherz kommt hereingerannt.\n"
+            "Loewenherz schnappt sich eine Leiche.\n"
+            "Loewenherz rennt nach Hause.\n");
+        ob->move(environment(wer), M_NOCHECK);
+      }
+    }
+  }
+  return 1;
+}
+
+int query_corpses()
+{
+  if(!check_user()) return -1;
+  
+  printf("%O\n\n", corpses);
+  return 1;
+}
+
+void reset()
+{
+  int i, oldsize;
+  string *c;
+
+  oldsize=sizeof(c=m_indices(corpses));
+  for(i=sizeof(c)-1;i>=0;i--)
+  {
+    if( !objectp(find_object(c[i])) || !corpses[c[i],0])
+      corpses=m_delete(corpses, c[i]);
+  }
+  if( oldsize!=sizeof(m_indices(corpses)) ) 
+    save_corpses();
+}
+
+#define COINS_FIX 10000
+#define COINS_PER_WELL_LEVEL 1000
+#define COINS_PER_PLAYER_LEVEL 100
+#define COINS_PER_INVENTORY 100
+
+int check_corpse(object wer)
+{
+  int i;
+  string *c;
+  object ob;
+
+  if( !check_user())
+    return -1;
+
+  c=m_indices(corpses);
+  for (i=sizeof(c); i-->0;)
+  {
+    if(ob=find_object(c[i]))
+    {
+      if( corpses[c[i],0]==getuid(wer) && 
+          environment(ob)!=environment(previous_object()) )
+        return COINS_FIX+
+               COINS_PER_WELL_LEVEL * corpses[c[i],1]+
+               COINS_PER_PLAYER_LEVEL * wer->QueryProp(P_LEVEL)+
+               COINS_PER_INVENTORY * sizeof(all_inventory(ob));
+    }
+  }
+  return 0;
+}
+
+string p_corpse()
+{
+  if(file_name(environment(previous_object()))[0..36]==ROOMS "level") 
+    return CORPSE "corpse";
+  else
+    return previous_object()->Query(P_CORPSE);
+}
+

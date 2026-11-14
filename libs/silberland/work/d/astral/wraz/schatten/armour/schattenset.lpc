@@ -1,0 +1,727 @@
+// Schattenwelt
+// Wraz / Mendralim
+// Schattensetteile erben von hier
+
+#include "../def.h"
+#include "/gilden/berserker/berserker_extern.h"
+#include "/gilden/paladine/paladin_extern.h"
+#include "/gilden/zechpreller/zechpreller_extern.h"
+#include "/gilden/nekromanten/nekro_properties.h"
+#include "/gilden/bardengilde/barden_extern.h"
+#include "/gilden/druidenzirkel/druiden_extern.h"
+#include "/gilden/amazonen/amazonen_extern.h"
+
+inherit "/std/thing/description";
+inherit ZONE "std/std.lpc";
+
+int set_is_complete = 0; // muss 0 oder 1 sein
+
+int *_ac, *_hp, *_sp, *_heal_hp, *_heal_sp, *_cold_prot, *_heat_prot;
+
+int default_call_out_time = 450;
+
+int light = 0;
+
+string _umstroemung = "umstroemt Dich";
+string _extra_info = "";
+
+mapping dam_prot_physical = ([DT_PIERCE:1,DT_SLASH:1,DT_BLUDGEON:1,DT_RIP:1,
+  DT_WHIP:1,DT_SQUEEZE:1]);
+mapping dam_prot_elemental = ([DT_FIRE:1, DT_COLD: 1, DT_WATER:1, DT_AIR:1]);
+
+mapping _dam_prot, _gildenboni;
+
+// ------ _SET_AUTOLOADOBJ() ------------------------------------------------
+void _set_autoloadobj(mixed data)
+{     
+  SetProp(P_ITEMD_TMPMAGIC, data);
+}
+
+// ------ _QUERY_AUTOLOADOBJ() ----------------------------------------------
+mixed _query_autoloadobj()
+{   
+  return QueryProp(P_ITEMD_TMPMAGIC);
+}
+
+// ------ IN_SCHATTENWELT() -------------------------------------------------
+int in_schattenwelt(object player)
+{
+  if(!player || !ENV(player)) return 0;
+  if (strstr(file_name(ENV(player)), ROOM) == -1)
+    return 0;
+  else
+    return 1;
+}
+
+// ------ HealCallOut() ---------------------------------------------------
+void HealCallOut()
+{
+  if(!TO || !ENV(TO)) return;
+
+  if( (_heal_hp[set_is_complete] || _heal_sp[set_is_complete]) 
+    && find_call_out("Heal") == -1) 
+  {
+    call_out("Heal", 
+      default_call_out_time * (80+random(20))/100 * (in_schattenwelt(ENV(TO))?1:2) );
+  }
+}
+
+// ------ DoSetProperties() ------------------------------------------------
+void DoSetProperties()
+{
+  // Properties setzen
+  // Nur bei AC checken, ob >0 (weil Schattenpanzer AC sonst ueberschrieben werden koennte)
+  if(_ac[set_is_complete]) SetProp(P_AC, _ac[set_is_complete]-QueryProp(P_DAMAGED));
+  SetProp(P_M_HEALTH_MOD, ([P_HP:_hp[set_is_complete], P_SP:_sp[set_is_complete]]));
+  SetProp(P_TEMPERATURE_PROTECTION, ([T_COLD_PROT:_cold_prot[set_is_complete],
+    T_HEAT_PROT:_heat_prot[set_is_complete]]));
+  if(set_is_complete) SetProp(P_DAM_PROTECTION, _dam_prot);
+  else SetProp(P_DAM_PROTECTION, dam_prot_physical);
+  SetProp(P_NEVERDROP, set_is_complete);
+  SetProp(P_BERSERKER_BONUS, _gildenboni[P_BERSERKER_BONUS][set_is_complete]);
+  SetProp(P_PALADIN_BONUS, _gildenboni[P_PALADIN_BONUS][set_is_complete]);
+  SetProp(P_ZECHPRELLER_BONUS, _gildenboni[P_ZECHPRELLER_BONUS][set_is_complete]);
+  SetProp(P_NEKRO_BONUS, _gildenboni[P_NEKRO_BONUS][set_is_complete]);
+  SetProp(P_ITEMD_ELEMENTAL_VALUE, _gildenboni[P_ITEMD_ELEMENTAL_VALUE][set_is_complete]);
+  SetProp(P_BARDEN_BONUS, _gildenboni[P_BARDEN_BONUS][set_is_complete]);
+  if(QueryProp(P_ARMOUR_TYPE)==AT_GLOVE)
+    SetProp(P_DRUID_ADD_HAND_DAMAGE, _gildenboni[P_DRUID_ADD_HAND_DAMAGE][set_is_complete]);
+  if(QueryProp(P_WORN)) 
+    QueryProp(P_WORN)->AddResistanceModifier((set_is_complete?
+      ([DT_UNHOLY: -0.01, DT_TERROR: -0.02]):
+      ([DT_UNHOLY: -0.005, DT_TERROR: -0.01])) );
+
+  if(TO && ENV(TO))
+  {
+    ENV(TO)->UpdateAttributes(); // fuer zB health modifiers wegen call_out
+  }
+
+  // Heal-Callout ausrufen (koennte bei Setvollstaendigkeit erst jetzt aktiv werden)
+  HealCallOut();
+}
+
+// ------ SetComplete() ---------------------------------------------------
+int SetComplete(int i)
+{
+  if(i == set_is_complete) return set_is_complete;
+
+  set_is_complete = i;
+  DoSetProperties();
+  return set_is_complete;
+}
+
+// ------ CheckIfComplete() ------------------------------------------------
+int CheckIfComplete()
+{
+  object *ruest;
+  int i,j;
+  string kriegerin, artikel;
+
+  if(!TO || !ENV(TO) || !living(ENV(TO))) return 0;
+
+  // Zaehle, ob alle Setteile getragen werden
+  ruest = ENV(TO)->QueryArmours();
+  j=0;
+  for(i=0; i<sizeof(ruest); i++)
+  {
+    if(ruest[i]->id("\nwrazschattenset")) j++;
+  }
+
+  // Alle Setteile da?
+  if(j==11) // ja
+  {
+    set_is_complete = 1;
+    switch(ENV(TO)->QueryProp(P_GENDER))
+    {
+      case MALE: artikel="ein"; kriegerin="Schattenkrieger"; break;
+      case FEMALE: artikel="eine"; kriegerin="Schattenkriegerin"; break;
+      default: artikel="ein*e"; kriegerin="Schattenkrieger*in"; break;
+    }
+    if(ENV(TO)->QueryProp("last_schattenkrieger_set") < time()-1)
+    { // sonst kommt die Meldung bei "trage alles" 11 mal :)
+      ENV(TO)->SetProp("last_schattenkrieger_set", time());
+      ENV(TO)->SetProp(P_PRESAY, getcolor("blue")+kriegerin+getcolor("none"));
+      ENV(TO)->Message(BS(" Du bist nun "+artikel+" "+kriegerin+"!"));
+    }
+  }
+  else // nein (Set unvollstaendig)
+    set_is_complete = 0;
+
+  // Setze set_is_complete in allen getragenen (!) Setteilen
+  for(i=0;i<sizeof(ruest);i++)
+  {
+    if(ruest[i]->id("\nwrazschattenset"))
+    {
+      ruest[i]->SetComplete(set_is_complete);
+    }
+  }
+}
+
+// ------ UpdateAfterUnwear() ----------------------------------------------
+int UpdateAfterUnwear()
+{
+  object *ruest;
+  int i,j;
+
+  if(!TO || !ENV(TO) || !living(ENV(TO))) return 0;
+
+  if(!QueryProp(P_WORN)) set_is_complete = 0;
+  else return 0; // Ende hier, wenn die Ruestung noch getragen wird
+
+  ruest = ENV(TO)->QueryArmours();
+
+  // Setze set_is_complete in allen getragenen (!) Setteilen
+  for(i=0;i<sizeof(ruest);i++)
+  {
+    if(ruest[i]->id("\nwrazschattenset"))
+    {
+      ruest[i]->SetComplete(set_is_complete);
+    }
+  }
+
+  // update Props in dieser Ruestung (die ja gerade ausgezogen wurde, daher nicht 
+  //  in ruest aufscheint)
+  DoSetProperties();
+}
+
+// ------ WEARFUNC() ------------------------------------------------------
+int WearFunc(object me)
+{
+  if(!me || !ENV(me) || !living(ENV(me))) return 0;
+
+  if(find_call_out("CheckIfComplete") == -1) call_out("CheckIfComplete", 0);
+
+  // Licht/Dunkelheit setzen
+  if(QueryProp(P_ARMOUR_TYPE)==AT_BELT)
+  {
+    if(ENV(TO)->QueryProp(P_GUILD)=="Nekromanten")
+      light = -2;
+    else light = 1;
+  }
+  if(light)
+  {
+    SetProp(P_LIGHT, light);
+    if(light > 0)
+      ENV(TO)->Message(BS(Name(WER,1)+" beginnt zu leuchten."));
+    else if(light < 0)
+      ENV(TO)->Message(BS(Name(WER,1)+" verdunkelt die Umgebung."));
+  }
+
+  return 1;
+}
+
+// ------ REMOVEFUNC() ------------------------------------------------------
+int RemoveFunc(object me)
+{
+  if(!me || !ENV(me) || !living(ENV(me))) return 0;
+  if(find_call_out("UpdateAfterUnwear") == -1) call_out("UpdateAfterUnwear", 0);
+
+  // ev. Presay wieder loeschen
+  if(strstr(ENV(me)->QueryProp(P_PRESAY),getcolor("blue")+"Schattenkrieger")>=0)
+    ENV(me)->SetProp(P_PRESAY, 0);
+
+  // Licht/Dunkelheit wieder entfernen
+  if(QueryProp(P_ARMOUR_TYPE)==AT_BELT)
+  {
+    if (light > 0)
+      write(Name(WER,1)+" wird wieder dunkel.\n");
+    else if (light < 0)
+      write(Name(WER,1)+" verliert seine dunkle Aura.\n");
+    SetProp(P_LIGHT, 0);
+  }
+
+  // Resistenzen entfernen
+  QueryProp(P_WORN)->RemoveResistanceModifier();
+  
+  return 1;
+}
+/*
+// ------ AC() ------------------------------------------------------------
+int _query_ac()
+{
+  if(set_is_complete)
+    return _ac[1]-QueryProp(P_DAMAGED);
+  else
+    return _ac[0]-QueryProp(P_DAMAGED);
+}
+
+// ------ MAGIC_HEALTH_MODIFIER() -----------------------------------------
+mapping _query_magic_health_modifier()
+{
+  if(set_is_complete)
+    return ([P_HP:_hp[1], P_SP:_sp[1]]);
+  else
+    return ([P_HP:_hp[0], P_SP:_sp[0]]);
+}
+
+// ------ NEVERDROP() ------------------------------------------------------
+int _query_neverdrop()
+{
+  if(set_is_complete)
+    return 1;
+  else
+    return 0;
+}
+
+// ------ TEMPERATURE_PROTECTION() -----------------------------------------
+mapping _query_temperature_protection()
+{
+  if(set_is_complete)
+    return ([T_COLD_PROT:_cold_prot[1], T_HEAT_PROT:_heat_prot[1]]);
+  else
+    return ([T_COLD_PROT:_cold_prot[0], T_HEAT_PROT:_heat_prot[0]]);
+}
+
+// ------ DAM_PROT() ------------------------------------------------------
+mapping _query_dam_prot()
+{
+  if(set_is_complete)
+    return _dam_prot;
+  else
+    return dam_prot_physical;
+}
+*/
+// ------ HEAL() ----------------------------------------------------------
+varargs void Heal(int percent)
+{
+  object pl;
+  if(!TO || !pl=ENV(TO)) return;
+  if(!living(pl)) return;
+
+  if(QueryProp(P_WORN) == pl)
+  {
+    if((pl->QueryProp(P_HP) < pl->QueryProp(P_MAX_HP)) ||
+       (pl->QueryProp(P_SP) < pl->QueryProp(P_MAX_SP)))
+    {
+      pl->Message(BS(Name(WER,1)+" "+_umstroemung+" kurz und intensiv."));
+      pl->AddHp(_heal_hp[set_is_complete] * (80+random(41)) / 100);
+      pl->AddSp(_heal_sp[set_is_complete] * (80+random(41)) / 100);
+    }
+
+    switch (pl->QueryProp(P_GUILD))
+    {
+      case "paladine":
+        if (pl->QueryProp(P_ALIGN) < 1500)
+          pl->SetProp(P_ALIGN, pl->QueryProp(P_ALIGN)+random(25) );
+        break;
+      case "nekromanten":
+        if (pl->QueryProp(P_ALIGN) > -1500)
+          pl->SetProp(P_ALIGN, pl->QueryProp(P_ALIGN)-random(25) );
+        break;
+      case "druidenzirkel":
+        if (pl->QueryProp(P_ALIGN) > 200)
+          pl->SetProp(P_ALIGN, pl->QueryProp(P_ALIGN)-random(25) );
+        else if (pl->QueryProp(P_ALIGN) < -200)
+          pl->SetProp(P_ALIGN, pl->QueryProp(P_ALIGN)+random(25) );
+        break;
+      case "zechpreller":
+        if (pl->QueryProp(P_ALCOHOL) < 2*pl->QueryProp(P_MAX_ALCOHOL)/3)
+          pl->SetProp(P_ALCOHOL,pl->QueryProp(P_ALCOHOL)+random(15) );
+        break;
+    }
+  }
+
+  HealCallOut();
+}
+
+// ------ INFO() ----------------------------------------------------------
+string _query_info()
+{
+  if(!TO || !ENV(TO)) return 0;
+
+  if(interactive(ENV(TO)) && ENV(TO)->QueryAttribute(A_INT) >=35)
+    switch (ENV(TO)->QueryAttribute(A_INT))
+    {
+    case 35..39:
+      return BS("Du erkennst, dass "+TO->name(WER,1)+" besonders "+
+        (TO->QueryProp(P_PLURAL)?"sind":"ist")+", aber "
+        "Dein Intellekt reicht nicht, um Genaueres zu sagen.");
+      break;
+    case 40:
+      return BS("Du erkennst, dass "+TO->name(WER,1)+" Teil einer aussergewoehnlichen "
+        "Ruestung "+(TO->QueryProp(P_PLURAL)?"sind":"ist")+
+        ". Nur, wenn Du alle Teile besitzt, wird sich ihre ganze Macht entfalten.")+
+        _extra_info;
+      break;
+    default: return 0; break;
+    }
+  return 0;
+}
+
+// ------ SetPanzerAc() ---------------------------------------------------
+void SetPanzerAc(int ac0, int ac1)
+{
+  if(!TO) return;
+  _ac = ({ac0, ac1});
+  SetProp(P_AC, _ac[set_is_complete]-QueryProp(P_DAMAGED));
+}
+
+// ------ BECOMES_NET_ALIVE() ----------------------------------------------
+void BecomesNetAlive(object player)
+{
+  HealCallOut();
+}
+
+// ------ DoSetup() --------------------------------------------------------
+void DoSetup()
+{
+  string _file_name;
+  mapping modis;
+
+  if(!TO) return;
+
+  _file_name = explode(explode(file_name(TO),"/")[<1],"#")[0];
+
+  modis = ([
+    "schattenpanzer":([
+      "ac":({0,0}), // funktioniert anders, siehe panzer selbst; wird von SetPanzerAc() ueberschrieben
+      "hp":({0,0}), // funktioniert anders, siehe panzer selbst
+      "sp":({0,0}), // funktioniert anders, siehe panzer selbst
+      "heal_hp": ({0,0}), // funktioniert anders, siehe panzer selbst
+      "heal_sp": ({0,0}),// funktioniert anders, siehe panzer selbst
+      "cold_prot": ({2,3}), // nur das ist gleich
+      "heat_prot": ({2,3}),
+      P_DAM_PROTECTION:
+      dam_prot_physical + dam_prot_elemental +
+      ([
+        DT_LIGHTNING:1, DT_EXPLOSION:1, DT_SOUND:1, DT_LIGHT:1, DT_ELECTRIC:1,
+        DT_ACID:1, DT_POISON:1, DT_TERROR:1, DT_HOLY:1, DT_UNHOLY:1, DT_MIND:1,
+        DT_MAGIC:1
+      ]),
+      "gildenboni":
+      ([
+        P_BERSERKER_BONUS: ({0,(["all":30])}),
+        P_PALADIN_BONUS: ({0,(["all":30])}),
+        P_ZECHPRELLER_BONUS: ({0,(["all":30])}),
+        P_NEKRO_BONUS: ({0,(["all":30])}),
+        P_ITEMD_ELEMENTAL_VALUE: ({0,10}),
+        P_BARDEN_BONUS: ({0,(["all":30])}),
+        P_PALADIN_SPELLCOST: ({2,3}),
+        P_NEKRO_SPELLCOST: ({2,3}),
+        P_BARDEN_SPELLCOST: ({2,3}),
+        P_ZECHPRELLER_SPELLCOST: ({2,3}),
+        P_AMAZONEN_SPELLCOST: ({2,3})
+      ]),
+      "umstroemung": "" // funktioniert anders
+    ]),
+    "schattenhandschuhe":([
+      "ac":({7,10}),
+      "hp":({7,14}), 
+      "sp":({14,28}),
+      "heal_hp": ({50,100}),
+      "heal_sp": ({70,140}),
+      "cold_prot": ({1,2}),
+      "heat_prot": ({1,2}),
+      P_DAM_PROTECTION: 
+      dam_prot_physical + dam_prot_elemental +
+      ([
+        DT_EXPLOSION:1, DT_LIGHT:1, DT_ELECTRIC:1, DT_ACID:1, DT_TERROR:1, 
+        DT_UNHOLY:1, DT_MAGIC:1
+      ]),
+      "gildenboni":
+      ([
+        P_BERSERKER_BONUS: ({(["spalten":5]),(["spalten":30])}),
+        P_PALADIN_BONUS: ({(["behandle":5]),(["behandle":30])}),
+        P_ZECHPRELLER_BONUS: ({(["staenkern":5]),(["staenkern":30])}),
+        P_NEKRO_BONUS: ({(["kochendes_blut":5]),(["kochendes_blut":30])}),
+        P_ITEMD_ELEMENTAL_VALUE: ({2,4}),
+        P_BARDEN_BONUS: ({(["tanz der saebel":5,"flamme bin ich":5,"windlied der sylphen":5,
+          "des todes drei trommelschlaege":5,"das lied vom sturmvogel":5]),
+        (["tanz der saebel":30,"flamme bin ich":30,"windlied der sylphen":30,
+          "des todes drei trommelschlaege":30,"das lied vom sturmvogel":30])}),
+        P_PALADIN_SPELLCOST: ({0,1}),
+        P_NEKRO_SPELLCOST: ({0,1}),
+        P_BARDEN_SPELLCOST: ({0,1}),
+        P_ZECHPRELLER_SPELLCOST: ({0,1}),
+        P_AMAZONEN_SPELLCOST: ({0,1}),
+        P_DRUID_ADD_HAND_DAMAGE: ({30,50}) // nur handschuhe
+      ]),
+      "umstroemung": "umstroemen Deine Haende"
+    ]),
+    "schattenarmreife":([
+      "ac":({5,10}),
+      "hp":({7,14}),
+      "sp":({7,14}),
+      "heal_hp": ({20,60}),
+      "heal_sp": ({30,90}),
+      "cold_prot": ({1,2}),
+      "heat_prot": ({1,2}),
+      P_DAM_PROTECTION:
+      dam_prot_physical + dam_prot_elemental +
+      ([
+        DT_LIGHTNING:1,
+        DT_ACID:1, DT_TERROR:1, DT_UNHOLY:1, DT_MIND:1,
+        DT_MAGIC:1
+      ]),
+      "gildenboni":
+      ([
+        P_BERSERKER_BONUS: ({(["rammen":5]),(["rammen":30])}),
+        P_PALADIN_BONUS: ({(["spiegelschild":5]),(["spiegelschild":30])}),
+        P_ZECHPRELLER_BONUS: ({(["anhauchen":5,"trunkspruch":5]),(["anhauchen":30,"trunkspruch":30])}),
+        P_NEKRO_BONUS: ({(["hauch_der_verwesung":5]),(["hauch_der_verwesung":30])}),
+        P_ITEMD_ELEMENTAL_VALUE: ({([EIS:2]),([EIS:10])}),
+        P_BARDEN_BONUS: ({(["das geborstene schwert":5,"ruf der helden":5]),
+        (["das geborstene schwert":30,"ruf der helden":30])}),
+        P_PALADIN_SPELLCOST: ({2,3}),
+        P_NEKRO_SPELLCOST: ({2,3}),
+        P_BARDEN_SPELLCOST: ({2,3}),
+        P_ZECHPRELLER_SPELLCOST: ({2,3}),
+        P_AMAZONEN_SPELLCOST: ({2,3})
+      ]),
+      "umstroemung": "umstroemen Deine Arme"
+    ]),
+    "schattenhelm":([
+      "ac":({9,15}),
+      "hp":({7,14}),
+      "sp":({14,28}),
+      "heal_hp": ({80,160}),
+      "heal_sp": ({100,200}),
+      "cold_prot": ({1,2}),
+      "heat_prot": ({1,2}),
+      P_DAM_PROTECTION:
+      dam_prot_physical + dam_prot_elemental +
+      ([
+        DT_LIGHTNING:1, DT_SOUND:1, DT_ELECTRIC:1,
+        DT_ACID:1, DT_TERROR:1, DT_UNHOLY:1, DT_MIND:1
+      ]),
+      "gildenboni":
+      ([
+        P_BERSERKER_BONUS: ({(["kopfstoss":5]),(["kopfstoss":30])}),
+        P_PALADIN_BONUS: ({(["zielattacke":5]),(["zielattacke":30])}),
+        P_ZECHPRELLER_BONUS: ({(["alkoholwolke":5,"ruelpser":5]),(["alkoholwolke":30,"ruelpser":30])}),
+        P_NEKRO_BONUS: ({(["strahlderdunkelheit":5]),(["strahlderdunkelheit":30])}),
+        P_ITEMD_ELEMENTAL_VALUE: ({([FEUER:2]),([FEUER:10])}),
+        P_BARDEN_BONUS: ({(["also sprach qexyypbmizox":5,"hinter dem sternenwall":5,
+          "das geheimnis der insel":5,"beschwoerung der sonne":5]),
+          (["also sprach qexyypbmizox":30,"hinter dem sternenwall":30,
+          "das geheimnis der insel":30,"beschwoerung der sonne":30])}),
+        P_PALADIN_SPELLCOST: ({0,1}),
+        P_NEKRO_SPELLCOST: ({0,1}),
+        P_BARDEN_SPELLCOST: ({0,1}),
+        P_ZECHPRELLER_SPELLCOST: ({0,1}),
+        P_AMAZONEN_SPELLCOST: ({0,1})
+      ]),
+      "umstroemung": "umstroemt Deinen Kopf"
+    ]),
+    "schattenbeinkleid":([
+      "ac":({5,10}),
+      "hp":({7,14}),
+      "sp":({7,14}),
+      "heal_hp": ({30,70}),
+      "heal_sp": ({30,70}),
+      "cold_prot": ({1,2}),
+      "heat_prot": ({1,2}),
+      P_DAM_PROTECTION:
+      dam_prot_physical + dam_prot_elemental +
+      ([
+        DT_EXPLOSION:1, 
+        DT_ACID:1, DT_TERROR:1, DT_UNHOLY:1
+      ]),
+      "gildenboni":
+      ([
+        P_BERSERKER_BONUS: ({(["regeneration":5]),(["regeneration":30])}),
+        P_PALADIN_BONUS: ({(["talisman":5]),(["talisman":30])}),
+        P_ZECHPRELLER_BONUS: ({(["alkoholisiere":5]),(["alkoholisiere":30])}),
+        P_NEKRO_BONUS: ({(["anrufung des kharr-zzteth":5]),(["anrufung des kharr-zzteth":30])}),
+        P_ITEMD_ELEMENTAL_VALUE: ({([ERZ:2]),([ERZ:10])}),
+        P_BARDEN_BONUS: ({(["aller welten freund":5,"sei hier gast":5]),
+        (["aller welten freund":30,"sei hier gast":30])}),
+        P_PALADIN_SPELLCOST: ({1,2}),
+        P_NEKRO_SPELLCOST: ({1,2}),
+        P_BARDEN_SPELLCOST: ({1,2}),
+        P_ZECHPRELLER_SPELLCOST: ({1,2}),
+        P_AMAZONEN_SPELLCOST: ({1,2})
+      ]),
+      "umstroemung": "umstroemt Deine Beine"
+    ]),
+    "schattenamulett":([
+      "ac":({2,5}),
+      "hp":({7,14}),
+      "sp":({14,28}),
+      "heal_hp": ({60,120}),
+      "heal_sp": ({70,150}),
+      "cold_prot": ({1,2}),
+      "heat_prot": ({1,2}),
+      P_DAM_PROTECTION:
+      dam_prot_physical + dam_prot_elemental +
+      ([
+        DT_LIGHTNING:1, DT_SOUND:1, 
+        DT_ACID:1, DT_POISON:1, DT_TERROR:1, DT_HOLY:1, DT_UNHOLY:1, 
+        DT_MAGIC:1
+      ]),
+      "gildenboni":
+      ([
+        P_BERSERKER_BONUS: ({(["eisenhaut":5]),(["eisenhaut":30])}),
+        P_PALADIN_BONUS: ({(["eifer":5]),(["eifer":30])}),
+        P_ZECHPRELLER_BONUS: ({(["groehlen":5]),(["groehlen":30])}),
+        P_NEKRO_BONUS: ({(["mysterium":5]),(["mysterium":30])}),
+        P_ITEMD_ELEMENTAL_VALUE: ({1,2}),
+        P_BARDEN_BONUS: ({(["der fruehling":5,"der sommer":5,"der herbst":5,"der winter":5,
+        "haette ich ein herz":5,"vana-o isil ar elena":5,"toetet das biest":5,"wiegenlied des leids":5]),
+        (["der fruehling":30,"der sommer":30,"der herbst":30,"der winter":30,
+        "haette ich ein herz":30,"vana-o isil ar elena":30,"toetet das biest":30,"wiegenlied des leids":30])}),
+        P_PALADIN_SPELLCOST: ({2,3}),
+        P_NEKRO_SPELLCOST: ({2,3}),
+        P_BARDEN_SPELLCOST: ({2,3}),
+        P_ZECHPRELLER_SPELLCOST: ({2,3}),
+        P_AMAZONEN_SPELLCOST: ({2,3})
+      ]),
+      "umstroemung": "umstroemt Deinen Nacken"
+    ]),
+    "schattenring":([
+      "ac":({2,5}),
+      "hp":({0,7}),
+      "sp":({7,14}),
+      "heal_hp": ({30,60}),
+      "heal_sp": ({40,80}),
+      "cold_prot": ({0,1}),
+      "heat_prot": ({0,1}),
+      P_DAM_PROTECTION:
+      dam_prot_physical + dam_prot_elemental +
+      ([
+        DT_LIGHT:1, 
+        DT_ACID:1, DT_POISON:1, DT_TERROR:1, DT_HOLY:1, DT_UNHOLY:1, 
+        DT_MAGIC:1
+      ]),
+      "gildenboni":
+      ([
+        P_BERSERKER_BONUS: ({(["blutrausch":3]),(["blutrausch":20])}),
+        P_PALADIN_BONUS: ({(["goetterschutz":3]),(["goetterschutz":20])}),
+        P_ZECHPRELLER_BONUS: ({(["prelle":3]),(["prelle":20])}),
+        P_NEKRO_BONUS: ({(["ruf_der_ghoule":3]),(["ruf_der_ghoule":20])}),
+        P_ITEMD_ELEMENTAL_VALUE: ({1,1}),
+        P_BARDEN_BONUS: ({(["lied der zauber":3,"lied der lieder":3]),
+        (["lied der zauber":20,"lied der lieder":20])}),
+        P_PALADIN_SPELLCOST: ({1,2}),
+        P_NEKRO_SPELLCOST: ({1,2}),
+        P_BARDEN_SPELLCOST: ({1,2}),
+        P_ZECHPRELLER_SPELLCOST: ({1,2}),
+        P_AMAZONEN_SPELLCOST: ({1,2})
+      ]),
+      "umstroemung": "umstroemt Deine Finger"
+    ]),
+    "schattencape":([
+      "ac":({5,10}),
+      "hp":({7,14}),
+      "sp":({7,14}),
+      "heal_hp": ({30,70}),
+      "heal_sp": ({30,70}),
+      "cold_prot": ({2,4}),
+      "heat_prot": ({2,4}),
+      P_DAM_PROTECTION:
+      dam_prot_physical + dam_prot_elemental +
+      ([
+        DT_EXPLOSION:1, DT_LIGHT:1, 
+        DT_ACID:1, DT_TERROR:1, DT_UNHOLY:1, 
+        DT_MAGIC:1
+      ]),
+      "gildenboni":
+      ([
+        P_BERSERKER_BONUS: ({(["willenskraft":5,"schlachtruf":5]),(["willenskraft":30,"schlachtruf":30])}),
+        P_PALADIN_BONUS: ({(["massenheilung":5]),(["massenheilung":30])}),
+        P_ZECHPRELLER_BONUS: ({(["dunstpanzer":5,"weingeist":5]),(["dunstpanzer":30,"weingeist":30])}),
+        P_NEKRO_BONUS: ({(["unterwerfung der toten":5]),(["unterwerfung der toten":30])}),
+        P_ITEMD_ELEMENTAL_VALUE: ({([LUFT:2]),([LUFT:10])}),
+        P_BARDEN_BONUS: ({(["lied der winde":5,"lorica der musen":5,"ballade vom drachentoeter":5,
+        "schildsang der walkueren":5,"zwergisches ahnenlied":5,"stolze mauer am fluss":5]),
+        (["lied der winde":30,"lorica der musen":30,"ballade vom drachentoeter":30,
+        "schildsang der walkueren":30,"zwergisches ahnenlied":30,"stolze mauer am fluss":30])}),
+        P_PALADIN_SPELLCOST: ({1,2}),
+        P_NEKRO_SPELLCOST: ({1,2}),
+        P_BARDEN_SPELLCOST: ({1,2}),
+        P_ZECHPRELLER_SPELLCOST: ({1,2}),
+        P_AMAZONEN_SPELLCOST: ({1,2})
+      ]),
+      "umstroemung": "umstroemt Deine Schultern"
+    ]),
+    "schattenstiefel":([
+      "ac":({5,10}),
+      "hp":({14,28}),
+      "sp":({7,14}),
+      "heal_hp": ({30,70}),
+      "heal_sp": ({30,70}),
+      "cold_prot": ({1,2}),
+      "heat_prot": ({1,2}),
+      P_DAM_PROTECTION:
+      dam_prot_physical + dam_prot_elemental +
+      ([
+        DT_LIGHTNING:1, DT_ELECTRIC:1,
+        DT_ACID:1, DT_TERROR:1, DT_UNHOLY:1
+      ]),
+      "gildenboni":
+      ([
+        P_BERSERKER_BONUS: ({(["zertreten":5]),(["zertreten":30])}),
+        P_PALADIN_BONUS: ({(["meditation":5]),(["meditation":30])}),
+        P_ZECHPRELLER_BONUS: ({(["rumkugeln":5,"torkeln":5]),(["rumkugeln":30,"torkeln":30])}),
+        P_NEKRO_BONUS: ({(["biss_des_vampirs":5,"fluch_der_klinge":5]),(["biss_des_vampirs":30,"fluch_der_klinge":30])}),
+        P_ITEMD_ELEMENTAL_VALUE: ({([HUMUS:2]),([HUMUS:10])}),
+        P_BARDEN_BONUS: ({(["die strasse gleitet fort":5,"sieben schritte":5]),
+        (["die strasse gleitet fort":30,"sieben schritte":30])}),
+        P_PALADIN_SPELLCOST: ({1,2}),
+        P_NEKRO_SPELLCOST: ({1,2}),
+        P_BARDEN_SPELLCOST: ({1,2}),
+        P_ZECHPRELLER_SPELLCOST: ({1,2}),
+        P_AMAZONEN_SPELLCOST: ({1,2})
+      ]),
+      "umstroemung": "umstroemen Deine Fuesse"
+    ]),
+    "schattenguertel":([
+      "ac":({2,5}),
+      "hp":({0,7}),
+      "sp":({0,7}),
+      "heal_hp": ({15,30}),
+      "heal_sp": ({10,20}),
+      "cold_prot": ({0,1}),
+      "heat_prot": ({0,1}),
+      P_DAM_PROTECTION:
+      dam_prot_physical + dam_prot_elemental +
+      ([
+        DT_POISON:1, DT_TERROR:1, DT_HOLY:1, DT_UNHOLY:1, 
+        DT_MAGIC:1
+      ]),
+      "gildenboni":
+      ([
+        P_BERSERKER_BONUS: ({(["riesenkraft":5,"kampfschrei":5]),(["riesenkraft":30,"kampfschrei":30])}),
+        P_PALADIN_BONUS: ({(["verbannung":5]),(["verbannung":30])}),
+        P_ZECHPRELLER_BONUS: ({(["destilliere":5,"uebergeben":5]),(["destilliere":30,"uebergeben":30])}),
+        P_NEKRO_BONUS: ({(["terror":5]),(["terror":30])}),
+        P_ITEMD_ELEMENTAL_VALUE: ({([WASSER:2]),([WASSER:10])}),
+        P_BARDEN_BONUS: ({(["abendstille ueberall":5,"der besuch des raben":5,"band der freundschaft":5]),
+        (["abendstille ueberall":30,"der besuch des raben":30,"band der freundschaft":30])}),
+        P_PALADIN_SPELLCOST: ({1,3}),
+        P_NEKRO_SPELLCOST: ({1,3}),
+        P_BARDEN_SPELLCOST: ({1,3}),
+        P_ZECHPRELLER_SPELLCOST: ({1,3}),
+        P_AMAZONEN_SPELLCOST: ({1,3})
+      ]),
+      "umstroemung": "umstroemt Deine Lenden"
+    ])
+  ]);
+
+  _ac = modis[_file_name]["ac"];
+  _hp = modis[_file_name]["hp"];
+  _sp = modis[_file_name]["sp"];
+  _heal_hp = modis[_file_name]["heal_hp"];
+  _heal_sp = modis[_file_name]["heal_sp"];
+  _cold_prot = modis[_file_name]["cold_prot"];
+  _heat_prot = modis[_file_name]["heat_prot"];
+  _dam_prot = modis[_file_name][P_DAM_PROTECTION];
+  _gildenboni = modis[_file_name]["gildenboni"];
+  _umstroemung = modis[_file_name]["umstroemung"];
+
+  // Properties
+
+  AddId( ({"\nwrazschattenset"}) );
+  SetProp(P_WEIGHT, 1);
+  SetProp(P_WEAR_RESTRICTIONS, ([P_XP:100000000]) );
+  SetProp(P_MATERIAL, ([MAT_SHADOW:50,MAT_MAGIC:50]));
+  SetProp(P_QUALITY_DECAY, 750 );
+  SetProp(P_MAGIC, 1);
+  SetProp(P_ITEMD_TMPMAGIC, ({2000, 2000}) );
+  seteuid(getuid(TO));
+  find_object(ITEMD)->RegisterNewItem(this_object(), TIME_ID);
+  SetProp("federgewichtsbalsam", 1000); // Federgewichtsbalsam wirkt hier nicht
+  SetProp("ruestungsbalsam", 10); // Ruestungsbalsam wirkt hier nicht
+
+  DoSetProperties(); // wird hier zum ersten Mal aufgerufen; sonst aus WearFunc() und RemoveFunc()
+}

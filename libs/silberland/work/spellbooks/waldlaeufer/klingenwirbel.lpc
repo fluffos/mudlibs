@@ -1,0 +1,78 @@
+mapping prep_klingenwirbel(object caster, mapping sinfo, int silent) 
+{ 
+  object *obs;
+  int i;
+  string *str;
+   
+  if(!GuildItemTest(caster, sinfo) ||
+     !FroschTest(caster, sinfo) || 
+     !KnifeTest(caster,sinfo)   ||
+     !IsInFight(caster, sinfo)  ||
+     !BlindTest(caster,sinfo)     )
+    return 0;
+  
+  if(!pointerp(obs=sinfo[SI_ENEMY]))
+  { i=-1;
+    if(ENV(caster))
+    { str=explode(file_name(ENV(caster)), "/");
+      if( (str[0]=="d") && (str[1]=="pk") ) {i=0;} }
+    obs=FindGroupP(caster,i,100);
+    for(i=0;i<sizeof(obs);i++)
+    {
+      if(obs[i]->QueryProp(P_LAST_RAMMEN_TIME)+2>time()) {obs-=({obs[i]});}
+    }
+    if(!pointerp(obs) || (sizeof(obs) < 1))
+    { tell_object(caster, BS("Hier ist kein Feind, den du treffen kannst.") );
+      return 0;} }
+  sinfo[SI_ENEMY]=obs;
+  if(!silent){FirstPrepareFuncSuccessfull(caster, sinfo);}
+  return sinfo;
+}
+
+int klingenwirbel(object caster, mapping sinfo) 
+{
+  object *obs, weapon;
+  int dam, ability, i, success;
+  mixed dts;
+
+  if(!mappingp(sinfo=prep_klingenwirbel(caster, sinfo, 1))) return 0;
+  obs=sinfo[SI_ENEMY];
+
+  success=SpellSuccess(caster,sinfo);
+  if(success < (-5000+random(2000)))
+  {
+    tell_object(caster, BSC("Du drehst Dich zu schnell und verlierst das "
+                        "Gleichgewicht."));
+    tell_room( ENV(caster), 
+               BS(caster->Name(WER, 1)+" geht zu Boden.") ,
+               ({caster}) );
+    caster->SetProp(P_LAST_RAMMEN_TIME, time());
+    caster->SetProp(P_DISABLE_ATTACK, 1);
+    caster->AddHp(-random(5));
+    return MISSERFOLG;
+  }
+  if(success<0)
+  {
+    tell_object(caster, BSC("Du hast Dich verschaetzt und triffst keinen."));
+    return MISSERFOLG;
+  }
+
+  ability=sinfo[SI_SKILLABILITY];
+
+  dam=sinfo[SI_SKILLDAMAGE] + ability/75 + success/100;
+ 
+  weapon=caster->QueryProp(P_WEAPON); dts=weapon->QueryProp(P_DAM_TYPE);
+  tell_object(caster, BS("Du streckst Deine Waffenhand aus, sammelst Dein "
+                         "Gleichgewicht in der Koerpermitte und wirbelst "
+                         "einmal komplett um Deine Achse.")),
+  tell_room(ENV(caster),BS(caster->Name(WER,1 )+" wirbelt einmal schnell "
+                        "herum und haelt dabei "+weapon->name(WESSEN, 1)+" "
+                        "nach vorne.") , ({caster})); 
+  if(dts) {sinfo[SI_SKILLDAMAGE_TYPE]=dts;}
+  dam=(dam*3)/4; sinfo[SI_SKILLDAMAGE]=dam;
+  for(i=0; i<=sizeof(obs)-1; i++) { 
+    ExecuteAttackSpell(obs[i], caster, sinfo, ([SP_SHOW_DAMAGE:1]), ATTACK_SPELL_KNIFE);
+  }
+  return ERFOLG;
+}
+

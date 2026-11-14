@@ -1,0 +1,175 @@
+/*
+** Der Wilde, Midas  (w) Woody@SL
+** ---
+** 1996-06-02  1.0  Release
+** 1996-10-21  1.1  Bissl Feintuning, mehr random, mehr Spells+Hands+XP
+** 1996-11-08  1.2  Spells jetzt nicht mehr Magic, show damage
+** 2002-12-02  1.3  nach ./kanal/ verschoben, Anti-Powerplay-Taktik
+*/
+
+inherit "std/npc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <mnpc.h>
+#include <new_skills.h>
+
+#include "files.h"
+
+#define PP_ROUNDS 3
+
+mapping powerplayer = ([ ]);
+int last_anti_pp = 0;
+
+
+void create()
+{
+  if (!is_clone(this_object())) return;  // (return on BP)
+
+  ::create();
+  AddId ( ({"wilder", "wilden", "NOWIMPY" }) );
+  //SetProp (P_ARTICLE, 0);
+  //SetProp(P_NAME, ({"der Wilde", "des Wilden", "dem Wilden", "den Wilden"}));
+  SetProp (P_NAME, ({ "Wilder", ADJECTIVE }) );         // Mudlib does it all
+  SetProp (P_GENDER, MALE);
+  SetProp (P_SHORT, "Ein Wilder");
+  SetProp (P_LONG, "Der Wilde durchbohrt Dich mit seinem aggressiven "
+    "Blick nahezu, sodass Du es so richtig mit der Angst zu tun bekommst. "
+    "Du kommst Dir neben diesem Riesen richtig winzig vor.");
+  SetProp (P_ALIGN, -100-random(100));
+  SetProp (P_INFO,
+      "Es ist bestimmt eine grosse Erfahrung, den Wilden zu besiegen.\n");
+  create_default_npc(24+random(4));
+  // SetProp (P_LEVEL, 15);
+  // SetProp (P_MAX_HP, 650+random(200));
+  // SetProp (P_MAX_SP, 300);
+  // SetProp (P_XP, 900000);
+  // SetProp (P_BODY, 65+random(20));
+  SetProp (P_XP, QueryProp(P_XP)+100000);  // Spell-Bonus
+  SetProp (P_HEAL, 80+random(21));      // 80 bis 100 HP
+  SetProp (P_SIZE, 220+random(21));     // 2,2 bis 2,4 Meter
+  SetProp (P_WEIGHT, 130000);           // 130 kg Brockerl ;)
+  SetProp (P_RACE, "Mensch");
+  SetProp (P_MAX_HANDS, 2);
+  SetProp (P_HANDS,
+      ({ " mit seinen groben Haenden", 350 + random(30), DT_BLUDGEON }) );
+  SetProp(P_RESISTANCE_STRENGTHS,
+    ([ DT_FIRE:0.2,
+      DT_LIGHT:0.2,
+       DT_HOLY:0.3,
+     DT_POISON:-0.25,
+     DT_UNHOLY:-0.25 ]) );
+
+  SetProp (P_SPELLRATE, 25);
+
+  AddSpell(1, 400, 
+    "Der Wilde drischt wie wildgeworden auf Dich ein.\n",
+    "Der Wilde drischt wie wildgeworden auf @WEN ein.\n",
+    DT_BLUDGEON, ([SP_SHOW_DAMAGE:1]) );
+
+  AddSpell(1, 500, 
+    "Der Wilde versetzt Dir einen kraeftigen Schlag in den Bauch.\n",
+    "Der Wilde versetzt @WEM einen kraeftigen Schlag in den Bauch.\n",
+    DT_BLUDGEON, ([SP_SHOW_DAMAGE:1]) );
+
+  AddSpell(1, 650, 
+    "Der Wilde schlaegt Dir brutal den Schaedel ein.\n",
+    "Der Wilde schlaegt @WEM brutal den Schaedel ein.\n",
+    DT_BLUDGEON, ([SP_SHOW_DAMAGE:1]) );
+
+  SetAttackChats(6, ({
+    "Der Wilde rast vor Wut.\n",
+    "Der Wilde bruellt Dich gar graesslich an.\n",
+    "Du erschrickst, als der Wilde Dich ploetzlich von hinten tritt.\n",
+    "Der Wilde versetzt Dir eine schallende Ohrfeige.\n"}) );
+
+  SetProp (P_DIE_MSG, " sinkt tot zu Boden.\n");
+  SetProp (P_DEFAULT_INFO,
+      ({ "funkelt Dich nur boese an.\n",
+         "knurrt missgelaunt.\n",
+         "stampft mit dem Fuss am Boden auf.\n",
+         "wirft Dir veraechtliche Blicke zu.\n",
+      }) );
+
+  AddInfo (({"wilder", "wilden"}), "nickt wild.\n");
+
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    "Der Wilde betrachtet @WEN uninteressiert.\n" }) );
+}
+
+
+private nosave enemy_there(object enemy)
+{
+  return objectp(enemy) &&
+         present(enemy,environment()) &&
+         !enemy->QueryProp(P_GHOST) &&
+         !enemy->QueryProp(P_NOATTACK);
+}
+
+
+void Attack(object enemy)
+{
+  mixed ersti;
+  int i;
+
+  if (query_once_interactive(enemy))
+  {
+    if (powerplayer[getuid(enemy)])
+    {
+      if ((random(4)==2) && (time() > last_anti_pp))
+      {
+        i = PP_ROUNDS;
+        ersti = find_player(powerplayer[getuid(enemy)]);
+        last_anti_pp = time();
+
+        // Meldungen
+        tell_object(enemy,
+          "Der Wilde durchschaut Eure Taktik und wird nur noch wilder.\n");
+        if (objectp(ersti) && present(ersti,environment()))
+          tell_object(ersti,
+            "Der Wilde durchschaut Eure Taktik und wird nur noch wilder.\n");
+        tell_room(environment(),
+            "Der Wilde durchschaut " + enemy->name(WESSEN) + " Taktik "
+            "und wird nur noch wilder.\n", ({ enemy,ersti }) );
+
+        while ((i-- > 0) && enemy_there(enemy))
+        {
+          // Meldungen
+          tell_object(enemy,
+            "Der Wilde schlaegt brutal auf Dich ein.\n");
+          tell_room(environment(),
+              "Der Wilde schlaegt brutal auf " + enemy->name(WEN) + " ein.\n",
+              ({ enemy }) );
+          //
+          ::Attack(enemy);
+          // switch enemy:
+          if (enemy_there(find_player(powerplayer[getuid(enemy)])))
+            enemy = find_player(powerplayer[getuid(enemy)]);
+        }
+        return;
+      }
+      else
+      {
+        ::Attack(enemy);
+        return;
+      }
+    }
+    else if (stringp(ersti = enemy->QueryProp(P_SECOND)))
+      if ((ersti = find_player(lower_case(ersti))) &&
+          (present(ersti,environment())))
+      {
+        powerplayer[getuid(enemy)] = getuid(ersti);
+        powerplayer[getuid(ersti)] = getuid(enemy);
+      }
+  }
+  ::Attack(enemy);
+}
+
+
+void reset()
+{
+  powerplayer = ([ ]);
+}
+

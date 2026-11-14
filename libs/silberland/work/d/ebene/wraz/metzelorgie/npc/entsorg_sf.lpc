@@ -1,0 +1,297 @@
+// Schlachtfeld-Muellschlucker
+// Vorlage: /obj/entsorg.c
+
+/*
+** modifizierter Muellschlucker (StartReactions)
+**
+** by Muaddib@Silberland
+**
+** 3.8.2004  Feyaria  - P_NOGET abfrage
+*/
+
+inherit "/std/npc";
+
+#include <properties.h>
+#include <moving.h>
+#include <defines.h>
+#include <moredef.h>
+
+object player;
+
+void create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  SetProp(P_SHORT,"Ein Muellschlucker");
+  SetProp(P_LONG,
+    "Der Muellschlucker gehoert zu Familie der Kleinsaurier und zeichnet "+
+    "sich durch ein sehr grosses Maul und nahezu unbegrenzten Appetit aus. "+
+    "Das einzige, was er nicht mag, sind Dinge, die materiellen Wert haben. "+
+    "Alles andere kann man ihm mit 'fuettere muellschlucker mit <name>' "+
+    "in den Rachen stopfen.");
+  SetProp(P_INFO,break_string(
+    "Dieser Muellschlucker verschlingt auch lose herumliegende Dinge. Also "+
+    "pass auf, was Du wegwirfst.",78));
+  SetProp(P_NAME,"Muellschlucker");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_RACE,"saurier");
+  SetProp(P_ARTICLE,1);
+  AddId(({"muellschlucker","schlucker","kleinsaurier","saurier"}));
+  create_default_npc( 1 );
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:-100,T_RANGE_MAX:100]) );
+  SetProp(P_XP,0);
+  SetProp(P_BODY,100);
+  SetProp(P_HANDS,({" mit dem alles verschlingenden Gebiss",20}));
+  SetProp(P_ALIGN, 0);
+  seteuid(getuid(this_object()));
+  SetProp(P_DEFAULT_INFO,"grunzt nur vor sich hin.\n");
+  SetProp(P_MSGIN,"watschelt herein");
+  SetProp(P_MSGOUT,"watschelt");
+  AddCmd(({"fuetter","fuettere"}),"haps");
+  enable_commands();
+}
+
+int haps(string str)
+{
+  string s1,s2;
+  object ob;
+  notify_fail("Syntax: fuettere muellschlucker mit <name>\n");
+  if(!str)return 0;
+  if(sscanf(str,"%s mit %s",s1,s2)!=2)return 0;
+  if(!id(s1))return 0;
+  notify_fail("So etwas hast Du nicht.\n");
+  if((!ob=present(s2,this_player())) &&
+     (!ob=present(s2,environment()))) return 0;
+  if(ob->QueryProp(P_NODROP) || ob->QueryProp(P_NEVERDROP)){
+    write("Das kannst Du nicht wegwerfen.\n");
+    return 1;
+  }
+  if(living(ob)){
+    write("Der Muellschlucker frisst keine Lebewesen.\n");
+    return 1;
+  }
+  if(ob->QueryProp(P_VALUE)){
+    write("Das ist zu wertvoll, das vertraegt der Muellschlucker nicht.\n");
+    return 1;
+  }
+  if (ob->QueryProp(P_CURSED)) {
+    write("Verfluchte Dinge bekommen dem Muellschlucker nicht!\n");
+    return 1;
+  }
+  if (ob->QueryProp(P_NOGET)) {
+    write("Das kann der Muellschlucker nicht nehmen!\n");
+    return 1;
+  }
+  ob->remove();
+  if(ob){
+    write("Aus irgendeinem Grund scheint das dem Muellschlucker nicht "+
+    "zu schmecken.\n");
+    return 1;
+  }
+  write("Mit einem lauten Ruelpsen verschlingt der Muellschlucker alles.\n");
+
+  return 1;
+}
+
+void set_noattack(int t)
+{
+  environment(this_object())->Message(break_string(
+    "Die Haut des Muellschluckers bekommt einen schimmernden Glanz und er "
+    "wirkt geschickter als zuvor."
+  ));
+  AddDetail( ({"glanz","haut"}),
+    "Die Haut des Muellschluckers hat einen schimmernden Glanz.");
+  this_object()->SetProp(P_NOATTACK, time()+t);
+}
+
+// flag 1 -> Aufruf kam vom "friss" Kommando
+// flag 0 -> von reset()
+void nehmen_und_fressen(int flag)
+{
+  int i;
+  object *inv;
+
+  if(flag == 1 && !random(5))
+  {
+    write("Der Muellschlucker schaut herzzerreissend drein!\n");
+    return;
+  }
+
+  if(flag == 1) command("nimm alles");
+
+  inv=all_inventory(this_object());
+  if(inv && sizeof(inv))
+    for(i=sizeof(inv)-1;i>=0;i--)
+    {
+      catch(inv[i]->remove());
+      if (inv[i]) destruct(inv[i]);
+    }
+  if(!flag) 
+  {
+    command("nimm alles");
+    command("nimm "+(1+random(250)+" rattenzaehne"));
+  }
+  if(flag == 1)
+  {
+    if (sizeof(inv)) write("Der Muellschlucker verspeist alles und ruelpst zufrieden.\n");
+    else write("Der Muellschlucker sieht sich verzweifelt nach Essbarem um.\n");
+  }
+   
+}
+
+void reset()
+{
+  int noatt;
+  ::reset();
+
+  if(!is_clone(TO)) return;
+
+  noatt = to_int(this_object()->QueryProp(P_NOATTACK));
+
+  if(noatt && (noatt < time()))
+  {
+    environment(this_object())->Message(break_string(
+      "Der Muellschlucker verliert seinen schimmernden Glanz."
+    ));
+    RemoveDetail( ({"glanz","haut"}));
+    this_object()->SetProp(P_NOATTACK, 0);
+  }
+
+  call_other(TO,"nehmen_und_fressen",0);
+}
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+  if (find_call_out("react")!= -1) return;
+  switch(gruppe)
+  {
+    case "fies":
+      call_out("react", 0, "faucht Dich boese an",
+        "faucht "+TP->name(WEN)+" boese an");
+      break;
+    case "aergerlich":
+      call_out("react", 0, "zittert wie Espenlaub", "zittert wie Espenlaub");
+      break;
+    case "traurig":
+      call_out("react", 0, "leckt Dir troestend das Gesicht",
+	     "leckt "+TP->name(WEM, 2)+" troestend das Gesicht");
+      break;
+    case "albern":
+      call_out("react", 0, "legt den Kopf schief und grinst Dich an",
+             "legt den Kopf schief und grinst "+TP->name(WEN)+" an");
+      break;
+    case "neutral":
+      call_out("react", 0, "grinst Dich an", "grinst "+TP->name(WEN)+" an");
+      break;
+    case "intim":
+      call_out("react", 0, "kuesst Dich leidenschaftlich",
+                   "kuesst "+TP->name(WEN)+" leidenschaftlich");
+      break;
+    case "froh":
+      call_out("react", 0, "laechelt Dich froehlich an",
+             "laechelt "+TP->name(WEN)+" froehlich an");
+      break;
+    case "aengstlich":
+      call_out("react", 0, "floesst Dir neuen Mut ein",
+             "floesst "+TP->name(WEM)+" neuen Mut ein");
+      break;
+    case "frech":
+      call_out("react", 0, "fiept Dich an", "fiept "+TP->name(WEN)+" an");
+      break;
+    case "nett":
+      call_out("react", 0, "knuddelt Dich", "knuddelt "+TP->name(WEN));
+      break;
+  }
+}
+
+int PreventFollow(object dest)
+{
+  if ( strstr(file_name(ENV(player)),"/d/ebene/wraz/metzelorgie/room/") == -1 ) // nur am schlachtfeld
+    return 1;
+  else return 0; 
+}
+
+void stop_follow()
+{
+  if(!player) return;
+  player->RemovePursuer(TO);
+}
+
+void start_follow()
+{
+  if(!player) stop_follow();
+  else if (!interactive(player)) stop_follow();
+  else {
+    call_out("react", 0, "laechelt Dich froehlich an",
+             "laechelt "+player->name(WEN)+" froehlich an");
+    player->AddPursuer(TO);
+  }
+}
+
+void react(string victim, string others)
+{
+  if (present(TP, ENV(TO)))
+  {
+    tell_object(TP, BS(Name(WER, 1) + " "+victim+"."));
+    tell_room(ENV(TO), BS(Name(WER, 1)+" "+others+"."), ({TP,TO}));
+  }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+object set_player(string playername)
+{
+  player = find_player(playername);
+  if(!player) return 0;
+  else {
+    start_follow();
+    return player;
+  }
+}
+
+void catch_tell(string str)
+{
+  string who, what, *arwhat;
+  object room;
+  int n;
+
+  if(!room=ENV(TO)) return;
+  if(InFight()) return;
+  if(!player) return;
+
+  if(sscanf(str,"%s sagt: %s", who, what)==2)
+  {
+    what = lower_case(what[0..<2]);
+    who = lower_case(who);
+    arwhat=explode(lower_case(what), " ");
+
+    if(who!=getuid(player)) return;
+
+    for(n=0;n<sizeof(arwhat);n++)
+    {
+      if( member(({"friss"}), arwhat[n]) != -1 ) {
+        if(find_call_out("nehmen_und_fressen")==-1) call_out("nehmen_und_fressen",0,1);
+        break; }
+      else if ( member(({"bleib"}), arwhat[n]) != -1 ) {
+        stop_follow();
+        call_out("react", 0, "fiept Dich traurig an", "fiept "+TP->name(WEN)+" traurig an");
+        break; }
+      else if ( member(({"komm"}), arwhat[n]) != -1 ) {
+        start_follow();
+        break; }
+    }
+  }
+  return;
+}
+
+void InformDefend(object enemy)
+{
+  environment(this_object())->Message(break_string(
+      "Der Muellschlucker fiept wuetend!"
+    ));
+  Kill(enemy);
+}

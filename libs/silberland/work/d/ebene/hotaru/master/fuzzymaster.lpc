@@ -1,0 +1,125 @@
+/*-----------------------------------------------------------------------------\
+| Fuzzy code master V0.1                               (C) by Hotaru, 03.09.01 |
+\-----------------------------------------------------------------------------*/
+
+#pragma strong_types
+
+#include <properties.h>
+#include <language.h>
+#include <defines.h>
+#include <moredef.h>
+
+// === Function prototypes ================================================== \\
+
+string FuzzyVal(string letter);
+
+// === Functions that can be called from outside ============================ \\
+
+// Returns a fuzzy code for a given name
+varargs string GetFuzzyCode(string name)
+{
+  int i;
+  string finalcode, thisval, lastval;
+  if (name == "") return "";
+
+  // Do some preprocessing and cut plural endings etc. off German words
+  name = lower_case(name);
+  name   = regreplace(name, "ae",       "e",   1);
+  name   = regreplace(name, "en",       "n",   1);
+  name   = regreplace(name, "sch",      "ch",  1);
+  name   = regreplace(name, "sh",       "ch",  1);
+  name   = regreplace(name, "woo",      "wu",  1);
+  if (strlen(name) > 4) {
+    name = regreplace(name, "ungen\\>", "e",   1);
+    name = regreplace(name, "ern\\>",   "er",  1);
+    name = regreplace(name, "eln\\>",   "el",  1);
+    name = regreplace(name, "dos\\>",   "do",  1);
+    name = regreplace(name, "en\\>",    "e",   1);
+    name = regreplace(name, "ung\\>",   "e",   1);
+  }
+  name   = regreplace(name, "ie",       "i",   1);
+  name   = regreplace(name, "ae",       "e",   1);
+  name   = regreplace(name, "oe",       "o",   1);
+  name   = regreplace(name, "ue",       "u",   1);
+  name   = regreplace(name, "ou",       "u",   1);
+  name   = regreplace(name, "uo",       "u",   1);
+  name   = regreplace(name, "gs",       "x",   1);
+  name   = regreplace(name, "ks",       "x",   1);
+  name   = regreplace(name, "rl",       "l",   1);
+  name   = regreplace(name, "ts",       "z",   1);
+  name   = regreplace(name, "rn",       "ren", 1);
+  name   = regreplace(name, "bn",       "ben", 1);
+
+  finalcode = "";
+  lastval = "";
+
+  for (i=0;i<strlen(name);i++) {
+    thisval = FuzzyVal(name[i..i]);
+    if (thisval == lastval) continue; // ignore double characters
+    lastval = thisval;
+    if ((thisval == "h") && (finalcode != "")) continue; // ignore "h" in words
+    finalcode += thisval;
+  }
+
+  // Some last tuning
+  finalcode = regreplace(finalcode, "rc",       "c",   1);
+
+  return "@"+finalcode;
+}
+
+// Rewrites a given library (see "man AddLibrary") and adds fuzzy codes
+void RewriteLibrary(string filename)
+{
+  string *thefile, *details, tmpstr;
+  int i, u, tmpint, siz, madechanges;
+  if (file_size(filename) < 0) return; // Return if file doesn't exist
+  thefile = explode(read_file(filename),"\n");
+  if (!sizeof(thefile)) return; // Return if no lines could be found
+  // Parse file
+  for (i=0;i<sizeof(thefile);i++) {
+    // Found info line
+    if (sscanf(thefile[i], "info:%d:%s", tmpint, tmpstr) == 2) {
+      details = explode(tmpstr,",");
+      // Filter all existing fuzzy codes out
+      details = regexp(details, "^[^@]");
+      // Create new fuzzy codes for all details
+      siz = sizeof(details);
+      for (u=0;u<siz;u++) {
+        tmpstr = GetFuzzyCode(details[u]);
+        if ((tmpstr != "") && (member(details,tmpstr) == -1)) {
+          details += ({ tmpstr });
+        }
+      }
+      // Any changes?
+      tmpstr = "info:" + tmpint + ":" + implode(details,",");
+      if (tmpstr != thefile[i]) {
+        madechanges = 1;
+        //write(tmpstr + "\n");
+        thefile[i] = tmpstr;
+      }
+    }
+  }
+  // Only rewrite file if necessary
+  if (madechanges) {
+    if (!rm(filename)) return; // Couldn't delete file -> stop
+    write_file(filename, implode(thefile, "\n") + "\n");
+  }
+}
+
+// === Internal stuff ======================================================= \\
+
+string FuzzyVal(string letter)
+{
+  int pos;
+
+  pos  =  strstr("abcdefghijklmnopqrstuvwxyz", lower_case(letter));
+  if (pos == -1) return "";
+  return extract("abcdafchiiclmmobcrsduffcic",pos,pos);
+}
+
+void create()
+{
+  // Don't allow master to be cloned
+  if (is_clone(this_object())) { destruct(this_object()); return; }
+  seteuid(getuid());
+}

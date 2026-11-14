@@ -1,0 +1,1 @@
+/def -t'*Du hoerst die Uhr schlagen*' laeute = zieh strick%;

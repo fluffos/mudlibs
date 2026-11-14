@@ -1,0 +1,182 @@
+/*
+***************************************************
+** Ein Zwergendruide                              *
+** 15.10.1996 by Angrox@Silberland                *
+** Email: mzehetma@tks.fh-sbg.ac.at               *
+***************************************************
+**
+** 
+**
+*/
+
+inherit "std/npc";
+
+#include "/p/std/npc/druid_npc.h"
+
+#include <properties.h>
+#include <combat.h>
+#include <mnpc.h>
+#include <moving.h>
+#include <defines.h>
+#include <moredef.h>
+#include "../files.h"
+int geld;
+int max_heal_pool=10000;
+
+void create()
+{
+  object cash;
+
+  if (!is_clone(this_object())) return;  // (return on BP)
+
+  ::create();
+  AddId( ({"druide","zwerg","zwergendruide"}) );
+  SetProp(P_GENDER, MALE);
+  SetProp(P_RACE, "Zwerg");
+  SetProp(P_NAME, "Druide");
+  SetProp(P_SHORT, "Ein zwergischer Druide");
+
+  SetProp(P_LONG, "Der Druide ist eine kleine, hunzlige Gestalt. Er hat "
+                   "einen langen Bart und traegt eine Robe. Er sitzt einfach "
+                   "da und wartet ...\n");
+
+  create_default_druid("humus", 18, 8);
+  SetProp(P_ALIGN, 800);
+  SetProp(P_SIZE, 134);
+  SetProp(P_BODY, 300);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_HANDS, ({" mit runzligen Haendchen", 200, DT_BLUDGEON}) );
+
+  set_living_name("druide");
+  // euid setzen, damit Ausruestung gecloned werden kann
+  SUID;
+
+
+//  CLONEME(OBJ("robe"));
+//  command("trage robe");
+  cash=CLONEOB("/obj/money");
+  cash->SetProp(P_AMOUNT, (geld=random(400)));
+  cash->move(ME);
+  
+
+/*
+  SetProp(P_SPELLRATE,25);
+
+  AddSpell(2,300,
+	"Der Druide wirft einen Feuerball nach Dir.\n",
+	"Der Druide wirft einen Feuerball nach @WEN.\n");
+
+  AddSpell(1,200,
+	"Der Druide verflucht Dich.\n",
+	"Der Druide verflucht @WEN.\n");
+ */
+
+  SetChats(8, ({
+	"Der Druide sagt: Da bist Du ja endlich!\n",
+	"Der Druide sagt: Die Macht der Elemente mit Dir!\n",
+	"Der Druide sagt: Hier im Bergwerk ist die Macht des Erzes sehr stark!\n",
+	"Der Druide sagt: Hier im Bergwerk ist die Macht der Luft sehr schwach!\n",
+        "Der Druide sagt: Mit der Macht des Humus kann ich Dich heilen!\n",
+        "Der Druide sagt: Wenn Du micht bezahlen kannst, kann ich Dich heilen!\n",
+        "Der Druide sagt: Ich kann Dich heilen.\n"
+			   }) );
+  SetProp (P_DIE_MSG,
+	" stuerzt tot zu Boden.\n");
+
+  SetProp (P_DEFAULT_INFO,
+	"sagt: Deine Aufgabe wartet auf Dich. Eile Dich!\n");
+  SetProp (P_MNPC_AREA, EBENE3("ebene3"));
+  SetProp (P_MNPC_WAIT, ({ 30, 30, 10 }));                                     
+  SetProp (P_MNPC_DEFAULTROOM, EBENE3("ebene3_r7"));                            
+  SetProp (P_MNPC_FLAGS, MOV_INDOORS + MOV_MOVES);                              
+  
+  AddInfo ("angrox",
+	"Der hat mich hierher verfrachtet.", "grummelt: ");
+
+  AddInfo ("name",
+	"Mein Name tut hier nichts zur Sache.", "sagt: ");
+
+  AddInfo ( ({"aufgabe", "beruf" }),
+	"Ich bin hier um zu helfen.", "sagt: ");
+
+  AddInfo ( ({"helfen", "hilfe", "heilen", "heilung" }),
+	"Ich kann Dich heilen. Leider muss ich dafuer etwas Geld "
+        "verlangen. Je nachdem, wieviel Du mir gibst, umso mehr kann ich "
+        "Dich heilen.", "sagt: ");
+
+  AddInfo ( ({"elf", "elfen" }),
+	"Diese Baumhangler sollen sich bloss von "
+        "hier fernhalten...", "grummelt: ");
+
+  AddInfo ( ({"zwerg", "zwerge"}),
+        "Wir sind die Krone der Schoepfung ... unbeugsam "
+        "und stark, stets bereit unsere Heimat gegen anstuermende Horden "
+        "zu verteidigen! Wir helfen aber auch den anderen Rassen, damit "
+        "sie auch ueberleben...", "sagt stolz: ");
+}
+
+varargs int move(mixed dest, int methods, string direction, string textout, 
+    string textin)
+{
+  int x;
+  x=::move(dest, methods, direction, textout, textin);
+  if(objectp(ENV(ME)) && 
+      file_name(ENV(ME))=="/d/gebirge/angrox/room/ebene3/ebene3_r5") 
+    call_out("climb", random(3)+2);
+  return x;
+}
+
+int climb() {
+  if((file_name(ENV(ME))=="/d/gebirge/angrox/room/ebene3/ebene3_r5") && 
+      !random(2))
+  {
+    command_me("klettere durch loch");
+  }
+  return 1;
+}
+
+give_notify(obj)
+{
+  int heil_mich;
+  if(InFight(ME)) return ::give_notify(obj); 
+  if(!obj->id("\ngeld")) {
+     write(BS("Der Druide sagt: Danke!"));
+     return ::give_notify(obj);
+  }
+  geld = obj->QueryProp(P_GIVEN_AMOUNT); 
+  if(TP->QueryProp(P_RACE) == "Zwerg")
+     heil_mich = geld/9;
+  else 
+     heil_mich = geld/13;
+  if(max_heal_pool < 1) {
+    command_me("sag Tut mir leid, ich muss erst meine Kraefte wieder "
+        "regenerieren! Komm doch etwas spaeter wieder!");
+    write("Der Druide gibt dir das Geld zurueck!\n");
+    return 1;
+  }
+  TP->heal_self(heil_mich);
+  max_heal_pool-=heil_mich;
+  TP->do_exhaust(random(heil_mich));
+  //"p/daemon/zentralbank"->PayIn(geld, 100);
+   obj->remove();
+  if (TP->QueryProp(P_HP) == TP->QueryProp(P_MAX_HP))
+     write(("Der Druide sagt: Na gut. Ist ja Dein Geld.\n"));   
+  write(BS("Der Druide heilt Dich."));
+  say(BS("Der Druide heilt "+TPN+"."), ({TP}));
+}  
+
+
+reset()
+{
+  if(geld) {
+    "p/daemon/zentralbank"->PayIn(geld, 100);
+    geld=0;
+  }
+  max_heal_pool=10000;
+  ::reset();
+}
+
+int query_heal_pool() {
+  return max_heal_pool;
+}
+

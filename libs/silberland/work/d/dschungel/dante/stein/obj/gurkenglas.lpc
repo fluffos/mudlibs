@@ -1,0 +1,190 @@
+/*
+
+das teil is von meister protheg
+sl 2000 fuer die delfen wappler
+dante 
+*/
+
+#include "/players/protheg/def.h"
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+
+int gefuellt;
+int lichtlevel(object ob);
+
+create() 
+{
+  if(!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein Gurkenglas");
+  SetProp(P_NAME, "Gurkenglas");
+  SetProp(P_GENDER, NEUTER);
+  AddId(({"glas","gurkenglas"}));
+
+  SetProp(P_MATERIAL, MAT_GLASS);
+  SetProp(P_WEIGHT, 100);
+  SetProp(P_VALUE, 133);
+  SetProp(P_NOBUY, 1);
+  AddCmd(({"stopfe","stopf","steck","stecke"}), "stopfen");
+  AddCmd(({"schieb","schiebe"}), "schieben");
+  gefuellt=0;
+}
+
+long()
+{
+  string l;
+  
+  l="Ein kleines Gurkenglas, das dem Aussehen nach eher fuer den Transport "+
+    "von kleinen Insekten, oder Wuermern dient, als fuer Gurken...\n";
+  if(gefuellt) l+="Zur Zeit befindet sich ein Lichtwurm darin.\n";
+  SetProp(P_LONG, l);
+  return ::long();
+}
+
+info()
+{
+  if(gefuellt) 
+    SetProp(P_INFO, 
+	    "Du haelst einen Lichtwurm in dem Glas gefangen! Vielleicht "+
+	    "kannst Du ihn ja fuer Deine Zwecke missbrauchen und das Glas "+
+	    "jemandem, der Dich mit seiner vollen Passionsfrucht "+
+	    "aergert, unterschieben...\n");
+  else
+    SetProp(P_INFO,
+	    "Gemein wie Du bist, wuerdest Du am liebsten irgendein Insekt, "+
+	    "oder einen kleinen Wurm, vielleicht sogar einen Lichtwurm in "+
+	    "das Glas stopfen!\n");
+  return ::info();
+}
+
+stopfen(string str)
+{
+  object w,tp;
+  string what, foo;
+  
+  notify_fail("Was willst Du denn wo hineinstopfen?\n");
+  if(!str) return 0;
+  if(str=="wurm in glas"||str=="lichtwurm in glas"||
+     str=="wurm in gurkenglas"||str=="lichtwurm in gurkenglas"||
+     str=="wurm in glas hinein"||str=="lichtwurm in glas hinein"||
+     str=="wurm in gurkenglas hinein"||str=="lichtwurm in gurkenglas hinein")
+    {
+      if(gefuellt)
+	return notify_fail("Aber da ist bereits ein Lichtwurm im Glas, mehr "+
+			   "passen da nicht rein!\n"),0;
+      tp=TP;
+      if(!w=present("lw2",tp))
+	return write("Aber Du hast doch gar keinen Lichtwurm dabei!!\n"),1;
+      write("Du stopfst vorsichtig einen Lichtwurm in das Gurkenglas.\n"+
+	    "HA! Nun ist er gefangen!\n");
+      say(tp->name(WER)+" stopft einen armen kleinen Lichtwurm in ein "+
+	  "Gurkenglas!\n");
+      w->remove();
+      gefuellt=1;
+      return 1;
+    }
+  if(sscanf(str, "%s in %s",what,foo)==2||
+     sscanf(str, "%s in %s hinein",what,foo)==2)
+    {
+      if(member(({"glas","gurkenglas"}),foo)==-1)
+	return notify_fail("Wo willst Du denn das hineinstopfen?\n"),0;
+      if(member(({"wurm","lichtwurm"}),foo)==-1)
+	return write("Das passt da leider nicht hinein, Du musst es "+
+		     "mit etwas anderem versuchen!\n"),1;
+    }
+  return 0;
+}
+
+schieben(string str)
+{
+  string who,foo;
+  object *fruechte;
+  object pl,tp,fr;
+  
+  notify_fail("Wem willst Du denn Was unterschieben?\n");
+  if(!str) return 0;
+  if(sscanf(str, "%s %s unter",who,foo)==2)
+    {
+      if(member(({"wurm","lichtwurm","glas","gurkenglas"}),foo)==-1) return 0;
+      if(!gefuellt)
+	return notify_fail("Ein leeres Glas? Nein, nein, da muss schon was "+
+			   "drinnen sein, dass es sicht auszahlt!\n"),0;
+      tp=TP;
+      if(!pl=present(who,environment(tp))) 
+	return write("Aber "+CAP(who)+" ist doch gar nicht da!\n"),1;
+      if(!query_once_interactive(pl))
+	return write(pl->name(WER)+" braucht das sicher nicht!\n"),1;
+      if(pl==tp) return write("Bist Du noch ganz dicht?\n"),1;
+      fruechte=filter_array(deep_inventory(pl), CLOSURE(lichtlevel));
+      if(!sizeof(fruechte))
+	return write(pl->name(WER)+" scheint keine volle Passionsfrucht"+
+		     " zu besitzen!\n"),1;
+      fr=fruechte[0];
+      write("Du schiebst "+pl->name(WEM)+" das Gurkenglas mit dem Lichtwurm "+
+	    "unauffaellig in die Taschen. Diese"+
+	    (pl->QueryProp(P_GENDER)==FEMALE ? "":"r")+" bemerkt "+
+	    "das und nimmt das Gurkenglas in die Hand. Doch der Wurm ist "+
+	    "bereits in die Passionsfrucht gekrabbelt und hat sein "+
+	    "zerstoererisches Werk begonnen...\n");
+      tell_object(pl, "Du bemerkst ein kleines, leeres Gurkenglas, welches "+
+		  "Dir "+tp->name(WER)+" zugesteckt zu haben scheint...\n");
+      say(tp->name(WER)+" steckt "+pl->name(WEM)+" Irgendetwas zu...\n",
+	  ({tp,pl}));
+      ME->move(pl, M_NOCHECK|M_SILENT);
+      gefuellt=0;
+      write_file("/players/protheg/antipfrucht",
+		 ctime()+": "+tp->name(WER)+" schiebt "+pl->name(WEM)+" ein "+
+		 "Gurkenglas unter.\n");
+      fr->SetProp(P_NODROP, 1);
+      fr->SetProp(P_NEVERDROP, 1);
+      call_out("boooooom",10,fr,pl);
+      return 1;
+    }
+  return 0;
+}
+
+boooooom(object fr, object pl)
+{
+  int i;
+  object *inv;
+
+  tell_object(pl, "Ploetzlich beginnt Deine Passionsfrucht zu gluehen...\n"+
+	      "Sie leuchtet immer heller und heller, bis sie schliesslich in "+
+	      "einer gleissenden Explosion verglueht!!\n\n");
+  
+  pl->SetProp(P_BLIND,([BLIND_TIME:300,
+                        BLIND_MSG:"Du bist vom hellen Licht geblendet!!\n"]));
+  tell_room(environment(pl),pl->name(WER)+" ist ploetzlich in ein gleissendes"+
+	    " Licht getaucht und Sekunden spaeter explodiert irgendetwas und "+
+	    "eine Druckwelle reisst Dich um!\n\n",({pl}));
+    
+  inv=all_inventory(environment(pl));
+  for(i=sizeof(inv)-1;i>=0;i--) if(living(inv[i]))
+    inv[i]->reduce_hit_point(random(30)+30);
+  write_file("/players/protheg/antipfrucht",
+	     "    "+capitalize(getuid(pl))+" explodiert samt Pfrucht.\n");
+  if(environment(ME)==pl)
+    {  
+      tell_object(pl, "Wuetend wirfst Du das Gurkenglas weg.\n");
+      tell_room(environment(pl),"Wuetend wirft "+pl->name(WER)+
+		" das Gurkenglas weg.\n",({pl}));
+    }
+  fr->remove();
+  call_out("remove",0);
+}
+
+QueryGefuellt()
+{
+  return gefuellt;
+}
+
+lichtlevel(object ob)
+{
+  if(ob->id("passionsfrucht")&&ob->QueryProp(P_LIGHT)==10)
+    return 1;
+  return 0;
+}

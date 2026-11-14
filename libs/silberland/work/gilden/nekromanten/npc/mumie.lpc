@@ -1,0 +1,164 @@
+// 12.10.1999 Angrox
+//            SetAggressive hinzugefuegt
+// 30.05.2003 Archon
+//            anpassung auf /p/std/npc/nekro_npc, 
+//            alles rausgeworfen, was nicht genutzt wurde (copy/paste)
+
+inherit "/p/std/npc/nekro_npc";
+
+#include <properties.h>
+#include <combat.h>
+#include <new_skills.h>
+#include <moving.h>
+#include "../def.h"
+
+int creation_time;
+int dur=-1;
+
+void create()
+{
+ 
+  if (!is_clone(TO)) return;
+  ::create();
+
+  creation_time=time();
+
+  SetProp(P_SHORT, "Eine Mumie");
+  SetProp(P_LONG,
+    "Eine Mumie, die zu untotem Leben erweckt wurde. Sie ist am ganzen "
+    "Koerper mit schmutzigen, weissen Bandagen eingewickelt und macht "
+    "einen grauenvollen Eindruck. Ihre Augen gluehen in einem boesartigen "
+    "Rot." );
+  SetProp(P_NAME, "Mumie" );
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({ "mumie", "Nekromantenmumie" }));
+
+  SetProp(P_RACE, "Untoter");
+  SetProp(P_ALIGN, -800);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_NOCORPSE, 1);
+  SetProp(P_NO_GLOBAL_ATTACK, 1);
+  SetProp(P_FRIEND, 1);
+  SetProp(P_HP_DELAY, 0);
+  SetProp(P_MAX_FOOD, 0);
+  SetProp(P_MAX_DRINK, 0);
+  SetProp(P_MAX_ALCOHOL, 0);
+  SetProp(P_MAX_POISON, 0);
+  SetProp(P_TEMPERATURE_RANGE, ([0:-276, 1:500]));
+  SetProp(P_DIE_MSG, " zerfaellt zu Staub.\n");
+  SetProp( P_REJECT, ({ REJECT_DROP,
+        "Die Mumie will @WEN nicht tragen.\n" }) );
+
+  SetProp(P_MSGIN, "wandelt herein");
+  SetProp(P_MSGOUT, "wandelt");
+  SetProp(P_MMSGIN, "verschwindet ploetzlich.");
+  SetProp(P_MMSGOUT, "taucht ploetzlich auf");
+  SetProp(P_MAX_ALCOHOL, 100);
+  SetProp(P_MAX_FOOD, 100);
+  SetProp(P_MAX_DRINK, 100);
+
+  AddDetail( ({ "bandagen" }), 
+    "Die Mumie ist am ganzen Koerper mit schmuzigen, weissen Bandagen "
+    "eingewickelt.");
+  AddDetail( ({ "augen" }), 
+    "Die Augen der Mumie gluehen in einem boesartigen Rot." );
+
+}
+
+void SetMummy(mixed corpse, object caster, int succ)
+{
+  int level, maxlevel;
+  
+  if(objectp(caster)) 
+  {
+    SetProp(P_NEKRO_CASTED_BY, caster);
+
+    SetProp(P_LONG, QueryProp(P_LONG)[0..<2] + " " +
+        caster->Name()+" hat diesen Untoten beschworen.");
+  }
+  if(intp(corpse)) 
+  {
+    level=corpse;  
+    SetProp(P_SIZE, 150+random(80));
+  }
+  else 
+  {
+    SetProp(P_SIZE, corpse->QueryProp(P_SIZE));
+
+    maxlevel=(caster->QueryAttribute(A_INT)/2)
+      +caster->QueryProp(P_GUILD_LEVEL)
+      +caster->QueryProp(P_GUILD_CIRCLE)
+      + (5*succ/10000);
+    maxlevel=(succ*maxlevel/(4*10000))+3*maxlevel/4;
+    maxlevel=(3*maxlevel/4)+call_other(NEKRO_SPELLS, 
+        "DoModificationByAlign", maxlevel/4, caster);
+    if (maxlevel > 35) maxlevel = 35;
+    level=2*corpse->QueryProp(P_LEVEL)/3;
+    if( level > maxlevel )  
+      level=maxlevel;
+  }
+  create_default_npc(level);
+  SetProp(P_HANDS, ({" mit mumifizierten Haenden", 50+level*7+succ/66,
+                     DT_BLUDGEON })); // maximal 50+175+150
+  SetProp(P_XP, 0);
+  SetProp(P_MAX_HP, level*25 + succ/40); // maximal 625+250
+  SetProp(P_MAX_SP, QueryProp(P_MAX_HP));
+  SetProp(P_BODY, level*10 + succ/50); // maximal 250+200
+  SetProp(P_RESISTANCE_STRENGTHS, 
+      ([ DT_UNHOLY: -0.5, DT_PIERCE:-0.5, DT_SLASH: -0.5, DT_RIP: -0.5,
+         DT_WHIP: -0.5, DT_BLUDGEON: -0.5, DT_SQUEEZE: -0.5, DT_FIRE: 2,
+         DT_LIGHT: 0.5, DT_HOLY: 0.5]));
+  dur=caster->QueryProp(P_GUILD_LEVEL)*200 + succ/10 + random(1000);
+     //1400+1000+1000
+
+  SetProp(P_SPELLRATE, 10+level*2);  // maximal 60
+
+  AddSpell(2,level*10+succ/40,   // Lv.25 & max.success: 250+250
+    "Die Mumie bohrt ihre Finger in Deinen Koerper.\n",
+    "Die Mumie bohrt ihre Finger in @WESSEN Koerper.\n",
+    DT_PIERCE,([SP_SHOW_DAMAGE:1]));
+  AddSpell(3,level*10+succ/33,   // Lv.25 & max.success: 250+300
+    "Die Mumie wirft einen unheiligen Zauber nach Dir.\n",
+    "Die Mumie wirft einen unheiligen Zauber nach @WEM.\n",
+    DT_UNHOLY,([SP_SHOW_DAMAGE:1]));
+  if( level>15 )
+  {
+    switch(random(3) )
+    {
+      case 0:
+         AddSpell(1,level*15+succ/25,   // Lv.25 & max.success: 375+400
+           "Die Mumie bespritzt Dich mit Leichengift.\n",
+           "Die Mumie bespritzt @WEN mit Leichengift.\n",
+           DT_POISON,([SP_SHOW_DAMAGE:1]));
+         break;
+      case 1:
+         AddSpell(1,level*15+succ/25,   // Lv.25 & max.success: 375+400
+           "Die Mumie wirft eine Saeurekugel nach Dir.\n",
+           "Die Mumie wirft eine Saeurekugel nach @WEM .\n",
+           DT_ACID,([SP_SHOW_DAMAGE:1]));
+         break;
+      case 2:
+         AddSpell(1,level*15+succ/25,   // Lv.25 & max.success: 375+400
+           "Die Mumie verwirrt Deinen Geist.\n",
+           "Die Mumie verwirrt @WESSEN Geist .\n",
+           DT_MIND,([SP_SHOW_DAMAGE:1]));
+         break;
+    }
+  }
+
+  SetResetRemove();
+  return;
+}
+
+void init()
+{
+  ::init();
+  if(dur>0 && creation_time+dur<time()) 
+    call_out("die",0);
+}
+
+int QueryDuration()
+{
+  return creation_time+dur-time();
+}
+

@@ -1,0 +1,134 @@
+// Standhaftigkeit-Effekt: HP+ via P_X_HEALTH_MOD, SP- waehrend der Dauer,
+// und einmaliger Todesschutz via P_TMP_DIE_HOOK (heal auf 50% HP).
+
+inherit "std/thing";
+
+#include "../def.h"
+#include <new_skills.h>
+#include <properties.h>
+
+private object caster;
+private int used;
+private int hp_bonus;
+private int sp_penalty;
+private mixed old_die_hook;
+
+void create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  AddId(({"\namz_standhaftigkeit", AMAZON_STANDHAFTIGKEIT}));
+  SetProp(P_SHORT, 0);
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_MAGIC, 1);
+  SetProp(P_INVIS, 1);
+
+  if (getuid(previous_object()) != SPELL_UID)
+    call_out("remove", 1);
+}
+
+void init()
+{
+  ::init();
+  if (!TO || !MENV || MENV->QueryProp(P_GUILD) != GUILDNAME)
+    call_out("remove", 0);
+}
+
+int start_remove(int time)
+{
+  call_out("remove", time);
+  return 1;
+}
+
+void setup(object _caster, int _hp_bonus, int _sp_penalty, int _dur)
+{
+  object player;
+
+  caster = _caster;
+  hp_bonus = _hp_bonus;
+  sp_penalty = _sp_penalty;
+  used = 0;
+
+  player = environment();
+  if (!objectp(player))
+  {
+    call_out("remove", 0);
+    return;
+  }
+
+  SetProp(P_X_HEALTH_MOD, ([P_HP: hp_bonus, P_SP: sp_penalty]));
+  player->UpdateAttributes();
+
+  if (player->QueryProp(P_SP) > player->QueryProp(P_MAX_SP))
+    player->SetProp(P_SP, player->QueryProp(P_MAX_SP));
+
+  old_die_hook = player->QueryProp(P_TMP_DIE_HOOK);
+  player->SetProp(P_TMP_DIE_HOOK, ({time() + _dur, TO, "standhaft_die_hook"}));
+
+  start_remove(_dur);
+}
+
+public int standhaft_die_hook(int poisondeath)
+{
+  object player;
+  int maxhp, target;
+
+  player = environment();
+  if (!objectp(player))
+    return 0;
+
+  if (used)
+    return 0;
+  used = 1;
+
+  player->SetProp(P_TMP_DIE_HOOK, 0);
+
+  maxhp = player->QueryProp(P_MAX_HP);
+  target = maxhp / 2;
+  if (target < 1) target = 1;
+
+  tell_object(player, BS("Du solltest sterben, doch Deine Standhaftigkeit haelt Dich am Leben!"));
+  tell_room(environment(player),
+      BS(sprintf("%s schwankt und faellt fast, richtet sich aber standhaft wieder auf!",
+            player->Name(WER, 1))),
+      ({player}));
+
+  player->SetProp(P_HP, target);
+  if (player->QueryProp(P_SP) > player->QueryProp(P_MAX_SP))
+    player->SetProp(P_SP, player->QueryProp(P_MAX_SP));
+
+  return 1;
+}
+
+varargs int remove(int silent)
+{
+  object player;
+  mixed cur_hook;
+
+  player = environment();
+  if (objectp(player))
+  {
+    cur_hook = player->QueryProp(P_TMP_DIE_HOOK);
+    if (pointerp(cur_hook) && sizeof(cur_hook) >= 3 && cur_hook[1] == TO)
+      player->SetProp(P_TMP_DIE_HOOK, old_die_hook);
+
+    SetProp(P_X_HEALTH_MOD, 0);
+    player->UpdateAttributes();
+
+    if (player->QueryProp(P_HP) > player->QueryProp(P_MAX_HP))
+      player->SetProp(P_HP, player->QueryProp(P_MAX_HP));
+    if (player->QueryProp(P_SP) > player->QueryProp(P_MAX_SP))
+      player->SetProp(P_SP, player->QueryProp(P_MAX_SP));
+
+    if (!silent)
+      tell_object(player, "Deine Standhaftigkeit laesst nach.\n");
+  }
+  return ::remove(silent);
+}
+

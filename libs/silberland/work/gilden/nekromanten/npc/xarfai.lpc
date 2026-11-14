@@ -1,0 +1,544 @@
+/*
+//
+//  Xarfai, Meister der Nekromanten, Herr des endlosen Heerwurms, 
+//  Vernichter der Paladine, Herrscher der Blutinsel
+//  
+//  xx.xx.1999 Zordan release als Ayla
+//  17.09.1999 Angrox Ayla -> Xarfai
+//  28.05.2003 Archon entwarnt, libs hinzugefuegt
+//  31.05.2003 Archon erbt nun von default_nekro_npc
+//                    init, remove raus -> ist schon in default_nekro_npc
+//                    waiting_for komplett umgeschrieben, nicht verwendete
+//                    variablen rausgeworfen (von copy-paste?)
+//                    new_guilditem nutzt nun den uebergebenen player
+//                    veraltete @@ schreibweise rausgeworfen
+//
+//
+*/
+
+inherit "/p/std/npc/necromancer_npc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <wizlevels.h>
+#include "../nekro.h"
+
+// Prototypes
+void create();
+int _query_wimpy();
+nomask query_prevent_shadow();
+void reset();
+void new_short();
+mixed fertigkeiten();
+void die(int poisondeath);
+void NotifyPlayerDeath(object player, object killer, int lostexp);
+int Defend(int dam, mixed dam_type, mixed spell, object enemy);
+varargs int ModifySkillAttribute(object caster, string atrname, int value, int duration, mixed fun);
+string guild_item();
+string give_guild_item();
+void new_guilditem(object pl);
+void StartReaction(string verb, string gruppe, string adverb, int touch);
+void StartReactionAll(string verb, string gruppe, string adverb, int touch);
+void gut();
+void intim();
+void boese();
+void heart_beat();
+int sichtbar(object player);
+void waiting_check();
+void begruesse(string *names_new_users);
+string *test123();
+
+// Globvars
+nosave int hb_time;
+nosave string *waiting_for=({"archon","hiri","angrox"});
+nosave object *old_users = ({});
+nosave int soul_counter=0;
+nosave mapping tells = ([]);
+
+void create() 
+{
+  int i;
+  string *waitf_names; 
+
+  if (!is_clone(TO)) return;
+  ::create();
+  SUID;
+  SetProp(P_SHORT, "Xarfai, der Meister aller Nekromanten");
+  new_short();
+  SetProp(P_LONG,
+        "Vor Dir steht eine ueber zwei Schritt grosse, voellig "
+        "widernatuerliche Gestalt. Dunkle, straehnige Haare fallen ueber "
+        "ein kreidebleiches Gesicht, aus denen Dich zwei rot funkelnde Augen "
+        "anstarren. Das Gesicht von Xarfai ist ueber und ueber mit Narben "
+        "versehen, aus denen staendig ein leichter Blutstrom sickert. "
+        "Wenn das Gesicht nicht so verunstaltet waere, koennte man "
+        "es durchaus als ansehnlich bezeichnen. Doch nun scheint irgendeine "
+        "Art der Qual in dem Gesicht zu stecken. Seltsam ...");
+  SetProp(P_NAME, "xarfai");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_NEKRO_LOG_DEATH , LOG+"xarfai.log");
+  SetProp(P_NEKRO_LOG_PLAYERDEATH, LOG+"xarfai.log"); 
+  SetProp(P_NAME, "Xarfai");
+  SetProp(P_GENDER, MALE);
+  // Damit man auch beitreten kann ... 
+  SetProp(P_NEKRO_NOENEMYCHECK, 1);
+  AddId( ({ "xarfai", "mann", "nekromant" , GUILDNPC_ID }));
+ 
+  set_living_name("xarfai");
+
+  set_heart_beat(1);
+  old_users=users();
+
+  // DEFAULT NPC
+  create_necromancer_npc(50,7,7);
+  set_guild_spellrate(90);
+  // DEFAULT NPC END
+  SetProp(P_GUILD, "nekromanten");
+  SetProp(P_GUILD_LEVEL, 7);
+  SetProp(P_HANDS, ({" mit seinen langen Krallen",666,DT_UNHOLY}));
+  SetProp(P_RACE, "Untoter");
+  SetProp(P_SIZE, 210);
+  SetProp(P_ALIGN, -1000);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_HEAL,-20);
+  SetProp(P_NO_GLOBAL_ATTACK, 1);
+  SetProp(P_WIMPY, 0);
+  SetProp(P_AGGRESSIVE, ([P_RACE:(["Fee":0.01]),
+                        P_GUILD:(["Paladine":0.05])]));    
+
+  SetProp(P_RESISTANCE_STRENGTHS , 
+    ([
+      DT_SLASH:     -0.4, DT_BLUDGEON:  -0.4, DT_PIERCE: -0.4, DT_SQUEEZE:-0.4, 
+      DT_WHIP:      -0.4, DT_RIP:       -0.4,
+      DT_FIRE:      -0.4, DT_COLD:      -0.5, DT_WATER:  -0.4, DT_AIR:    -0.2, 
+      DT_LIGHTNING: -0.3, DT_EXPLOSION: -0.3, DT_SOUND:  -0.3, DT_LIGHT:  -0.1,
+      DT_ELECTRIC:  -0.3, DT_ACID:       0.0, DT_POISON: -0.6, DT_TERROR: -1.0,
+      DT_HOLY:       0.2, DT_UNHOLY:    -1.0, DT_MAGIC:  -0.7, DT_MIND:    0.3 ]) );
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_NOMAGIC, 45);
+  SetProp(P_MSGIN, "stapft herein.\nDie Erde erzittert, es wird eine Spur "
+           "kuehler");
+  SetProp(P_MSGOUT, "stapft Richtung#.\nDu atmest erleichtert auf");
+  SetProp(P_MMSGIN, "manifestiert sich aus der Kaelte");
+  SetProp(P_MMSGOUT, "verschwindet mit der Macht der Niederhoellen.\n");
+
+  SetProp(P_DIE_MSG,  " verbrennt von innen heraus mit bestialischem "
+      "Gestank.\n");
+  SetProp(P_NOCORPSE, 1);
+  SetProp(P_MURDER_MSG, "Wartet auf meine Wiederkehr! Dann gehoeren eure "
+      "Seelen mir! MUAHAHAHAHHAHA!");
+  SetProp(P_KILL_NAME, "Xarfai");
+  SetProp(P_KILL_MSG, "Ein Kaempfer mehr in meinen Reihen!");
+
+  
+  SetProp(P_LOG_INFO, "gilden/xarfai.log");
+
+  AddLibrary(LIBS "xarfai.lib", 5);
+  AddLibrary(LIBS "nekro.lib", 5);
+  AddLibrary(LIBS "zauber.lib", 1);
+  AddLibrary(LIBS "history.lib", 1);
+  
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    "Xarfai bruellt: WAS SOLL ICH DAMIT?!??!\n" }) );
+
+  SetProp(P_SPELLRATE,70);
+
+  AddDefaultSpell(3,900, DS_FEAR, 
+    "Xarfai bruellt Dich an!\n",
+    "Xarfai bruellt @WEN an!\n");
+  AddDefaultSpell(3,500, DS_CURSE_WEAPON, 
+    "Xarfai beschwoert die Macht der Niederhoellen auf Dich herab!\n",
+    "Xarfai beschwoert die Macht der Niederhoellen auf @WEN herab!\n");
+  AddDefaultSpell(3,700, DS_CURSE_ARMOUR, 
+    "Xarfai beschwoert die Macht der Niederhoellen auf Dich herab!\n",
+    "Xarfai beschwoert die Macht der Niederhoellen auf @WEN herab!\n");
+  AddDefaultSpell(3,500, DS_REDUCE_WC, 
+    "Xarfai beschwoert die Macht der Niederhoellen auf Dich herab!\n",
+    "Xarfai beschwoert die Macht der Niederhoellen auf @WEN herab!\n");
+  AddDefaultSpell(3,700, DS_REDUCE_AC,
+    "Xarfai beschwoert die Macht der Niederhoellen auf Dich herab!\n",
+    "Xarfai beschwoert die Macht der Niederhoellen auf @WEN herab!\n");
+
+  AddDefaultSpell(3,700, DS_DEAF,
+    "Xarfai deutet auf Dich und ruft: Mo'Karut!!\n",
+    "Xarfai deutet auf @WEN und ruft: Mo'Karut!!\n");
+  AddDefaultSpell(3,700, DS_BLIND,
+    "Xarfai deutet auf Dich und ruft: Ylem Tragot!!\n",
+    "Xarfai deutet auf @WEN und ruft: Ylem Tragot!!\n");
+  AddDefaultSpell(3,700, DS_SLOW,
+    "Xarfai deutet auf Dich und ruft: Kcatta Eromon!!\n",
+    "Xarfai deutet auf @WEN und ruft: Kcatta Eromon!!\n");
+  AddDefaultSpell(3,700, DS_ANTIMAGIC,
+    "Xarfai deutet auf Dich und ruft: Cigam Eromon!!\n",
+    "Xarfai deutet auf @WEN und ruft: Cigam Eromon!!\n");
+  AddDefaultSpell(1,1200, DS_PARALYZE,
+    "Xarfai deutet auf Dich und ruft: Qur'Zomor!!\n",
+    "Xarfai deutet auf @WEN und ruft: Qur'Zomor!!\n",3);
+  AddSpell(1,2500,
+      "Xarfai raubt Dir Deine Seele!\n",
+      "Xarfai raubt @WESSEN Seele!\n",
+      DT_UNHOLY, ([SP_SHOW_DAMAGE:1]));
+      
+  SetChats(1, ({
+    "Xarfai blickt Dich kurz an und Du bekommst eine Gaensehaut.\n",
+    "Xarfai bruellt: VERFLUCHT SEI DAS GUTE!\n",
+    "Ein paar Tropfen von Xarfais Blut fallen zu Boden, wo sie zischend "
+      "verdampfen.\n",
+    "Xarfai laesst vor Deinen Augen eine Seele erscheinen, die voller "
+    "Pein schreit!\n",
+    "Das Wimmern einer gemarterten Seele ist zu hoeren.\n"}) );
+
+  // Infos ausserhalb der Libraries  
+  AddInfo(({"maske", "schaedelmaske"}),#'guild_item,"kreischt: ");
+  AddInfo(({"neuer maske", "neuer schaedelmaske"}),#'give_guild_item,
+          "kreischt: ");
+  AddInfo(({"skills","fertigkeiten","faehigkeiten"}),#'fertigkeiten);
+
+  AddInfo(DEFAULT_INFO, ({
+    "bruellt: VERSCHWINDE DU WURM!\n",
+    "aefft Ayla nach: Dusty kennt auf alles eine Antwort, frag sie doch mal.\n"
+    "Xarfai grinst satanisch.\n",
+    "blickt Dich nur gierig an.\n"}));
+
+  CLONEME("/p/armour/ring/ring");
+  CLONEME("/p/armour/boots/sandalen");
+  CLONEME(NEKRO_ISLAND_ARMOUR+"kutte");
+  CLONEME(NEKRO_ISLAND_WEAPON+"blutdolch");
+  command_me("zuecke dolch");
+  command_me("trage alles");
+
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Misc
+//////////////////////////////////////////////////////////////////////////////
+
+
+nomask query_prevent_shadow() { return 1; }
+
+void reset() 
+{
+  ::reset();
+  if (!is_clone(ME)) return;
+  new_short();
+  tells = ([]);
+}
+
+void new_short()
+{
+  int i, j;
+  string *strs;
+  strs=({"der Herrscher der Niederhoellen", "der Meister der verlorenen Seelen",
+        "der Vernichter der Paladine", "der Herr der Blutinsel Yaq'Monoq",
+        "der Meisterbeschwoerer", "die Inkarnation des Boesen selbst",
+        "der Beherrscher der Untoten", "der Zombiemeister", "die Geissel der Goetter",
+        "der Skelettfreund","der Meister aller Nekromanten",
+        "die Wurzel allen Uebels", "der Herr ueber Nicht-Leben und Un-Tot",
+        "der Anfuehrer der Verdammten", "der Schlaechter der Feen",
+        "der Bewahrer der 7 mal 7 Geheimnisse", "der Hueter des verbotenen Wissens",
+        "der Verfluchte der Goetter", "der Blutsaeufer"
+        });
+  i=j=random(sizeof(strs));
+  while(j==i) j=random(sizeof(strs));
+  SetProp(P_SHORT, "Xarfai, "+strs[i]+" und "+strs[j][4..]);
+}
+
+mixed fertigkeiten() 
+{
+  call_other(ENV(TO), "faehigkeiten");
+  return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Logs
+//////////////////////////////////////////////////////////////////////////////
+
+void die(int poisondeath) 
+{
+  if((time()-hb_time)>4) 
+  { // Dann hat wohl der Herzschlag ausgesetzt -> bug
+    heal_self(3000);
+    return;
+  }
+  ::die(poisondeath);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp) 
+{
+  if (killer==ME) 
+  {
+    command_me("nkreische HARHAR! Ein Zombie mehr!");
+  }
+  ::NotifyPlayerDeath(player,killer,lostexp);
+  return;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Defend 
+//////////////////////////////////////////////////////////////////////////////
+
+int Defend(int dam, mixed dam_type, mixed spell, object enemy) 
+{
+  object ob;
+  int al,en;
+  SetProp(P_ALIGN, -1000);
+  call_other(NNPCMASTER,"help_me",enemy);
+  en=(sizeof(PresentEnemies()))*100;
+  if(en>600) en=600;
+  if(random(en)>=100 && !random(4)) ME->ModifySkillAttribute(ME,SA_SPEED,en,4);
+  TO->SetProp(P_SP,TO->QueryProp(P_MAX_SP));
+  return ::Defend(dam, dam_type, spell, enemy);
+}
+
+// Nur die Gilde selber darf SkillAttributes veraendern:
+varargs int ModifySkillAttribute(object caster, string atrname, int value, int duration, mixed fun) 
+{
+  if (PO && PO!=TO && getuid(PO)!="GUILD.nekromanten") return 0;
+  return ::ModifySkillAttribute(caster, atrname, value, duration, fun);
+}
+
+int _query_wimpy() { return 0; }
+int _query_disable_attack() { return 0; }
+int _query_disable_spells() { return 0; }
+int _query_poison(){ return 0; }
+int _query_align(){ return -1000; }
+//////////////////////////////////////////////////////////////////////////////
+// Gildensachen
+//////////////////////////////////////////////////////////////////////////////
+
+string guild_item() 
+{
+  if(TP->QueryProp(P_GUILD)!="nekromanten")
+    return "VERSCHWINDE, DU WURM!";
+  if(!present(GUILDITEM_ID, TP)) 
+  {
+    call_out("new_guilditem",0, TP);
+    return "BEI ALLEN NIEDERHOELLEN! WO IST DEINE MASKE!";
+  }
+  return "Harhar! Die Maske ist ein Zeichen Deines Hasses auf das Gute! "
+    "Es spiegelt Deine eigene Lust wieder, das Gute zu vernichten. ";
+}
+
+string give_guild_item() 
+{
+  object ob;
+  if(TP->QueryProp(P_GUILD)!=GUILDNAME)
+    return "VERSCHWINDE DU WURM!";
+  if(!ob=present(GUILDITEM_ID, TP)) 
+  {
+    call_out("new_guilditem",0, TP);
+    return "BEI ALLEN NIEDERHOELLEN! WO IST DEINE MASKE???";
+  }
+  ob->SetProp(P_CURSED, 0);
+  ob->remove();
+  call_out("new_guilditem",0, TP);
+  return "HIER!";
+}
+
+void new_guilditem(object pl) 
+{
+  object ob;
+  write("Xarfai bewegt seine Haende und murmelt seltsame Worte.\n"
+      "Deine Schaedelmaske hat sich erneuert!\n");
+  tell_room(ENV(ME), "Xarfai bewegt seine Haende und murmelt seltsame "
+      "Worte!\n", ({pl}));
+  ob=CLONEOB(ARMOUR "maske");
+  ob->move(pl,M_NOCHECK);
+  return;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Reactions
+//////////////////////////////////////////////////////////////////////////////
+
+void StartReaction(string verb, string gruppe, string adverb, int touch) 
+{
+  //if(TPN=="Angrox" || TPN=="Zordan") return;
+  if(TP->QueryGuest()) return;
+  switch(gruppe) {
+    case "nett"      : call_out("gut", 0); 
+                       break;
+    case "gut"      :  call_out("gut", 0); 
+                       break;
+    case "intim"     : call_out("intim", 0); 
+                       break;
+    case "fies"      : call_out("boese", 0);
+                       break;
+    case "frech"     : call_out("boese",0); 
+                       break;
+    case "boese"     : call_out("boese",0);
+                       break;
+    case "traurig"   : call_out("initm", 0); 
+                       break;
+    case "aengstlich": call_out("intim", 0);
+                       break;
+    case "aergerlich": call_out("boese", 0); 
+                       break;
+    case "froh"      : call_out("gut", 0); 
+                       break;
+    case "albern"    : call_out("gut", 0); 
+                       break;
+    default          : break;                   
+  }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+    return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void gut() 
+{
+  string *guttext;
+  if(!present(TP,MENV)) return;
+  guttext= ({ "Du kleines gutes Ekelpaket! Verschwinde, %s, bevor "
+              "ich Dir Deine Seele raube",
+              "HARHAR! Verschwinde, %s",
+              "DEINE SEELE WERDE ICH VERNICHTEN, %s", 
+              "Geh doch zur Schlampe Ayla, die steht auf so was!"});
+  command_me("sag " + sprintf(guttext[random(sizeof(guttext))],TPN)+ "!");
+  if( !random(20) && !IS_LEARNER(TP) )
+    Kill(TP);
+}
+
+void intim() 
+{
+  string *intimtext;
+  if(!present(TP,MENV)) return;
+  command_me("sag DU KLEINE RATTE! ICH WERDE DICH VERNICHTEN!");
+  if( random(2) && !IS_LEARNER(TP) )
+    Kill(TP);
+  return;
+}
+
+void boese() 
+{
+  string *boestext;
+  if(!present(TP,MENV)) return;
+  boestext=({ "Harhar! Du wuerdest gut zu uns passen, %s",
+              "DU ELENDIGER VERSAGER! Du musst NOCH boeser werden, %s",
+              "HARHAR! Das tut gut, %s"});
+  command_me("sag "+sprintf(boestext[random(sizeof(boestext))],TPN)+"!");
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Erwartete Personen
+//////////////////////////////////////////////////////////////////////////////
+
+void heart_beat() 
+{
+  waiting_check();
+  TO->SetProp(P_HB,1);
+  hb_time=time();
+  ::heart_beat();
+}
+
+int sichtbar(object player) {  return (player->QueryProp(P_INVIS)==0); }
+
+void waiting_check() 
+{
+  object *all_users,*new_users;
+  string *names_new_users;
+  all_users=users();
+  new_users=all_users-old_users;
+  new_users-=({0});
+  old_users=all_users;
+  new_users=filter_array(new_users,"sichtbar");
+  if (!sizeof(new_users)) return;
+  names_new_users = map_array(new_users,#'getuid);
+  names_new_users = names_new_users & waiting_for;
+  if (!sizeof(names_new_users)) return;
+  call_out("begruesse",2,names_new_users);
+}
+
+void begruesse(string *names_new_users)
+{
+  int i;
+  string *txts;
+  txts=({
+      "nkreische %s! Todesengel! Na endlich, ich dachte schon ich wuerde "
+      "Deine Bosheit und Hinterhaeltigkeit nie mehr spueren!",
+      "nkreische %s! Endlich bist Du da! Deine Bosheit wird dem 'Guten' den "
+      "Rest geben!!",
+      "nkreische HarHar! %s! Du verfluchter Todesengel! Es ist mir eine eklige "
+      "Freude, Dich zu begruessen!",
+      "nkreische AHHHHHHHHHHHHHHHHHHHHHHH, Todesengel %s! Welch verhetzende "
+      "Lust DICH hier zu sehen!"});
+
+  for (i=sizeof(names_new_users);i--;)
+  {
+    if (find_living(names_new_users[i])){ //nochmal sicher gehen !!
+      command_me(sprintf(txts[random(sizeof(txts))],CAP(names_new_users[i])));
+    }
+  }
+}
+
+string *test123() 
+{
+  old_users=({});
+  return waiting_for; 
+}
+
+void soul() {
+  soul_counter++;
+  if(soul_counter > 4) {
+    tell_room(ENV(ME), BSA("MUAHAHAHA! Weitere Seelen! Welche Lust sie zu "
+          "quaelen!", GUILDNPC_NAME+" bruellt: "));
+    soul_counter=0;
+  }
+}
+
+#define MAX_TELLS 6
+
+void catch_tell(string str) {
+  string wer, was;
+  mixed res;
+  mapping cond;
+  int blood_status;
+  int flag;
+  if(sscanf(str, "%s teilt Dir mit: %s\n", wer, was)!=2) return ;
+  if(!TI || lower_case(wer) != getuid(TI)) return ;
+  if(TI->QueryProp(P_GUILD)!=GUILDNAME) return;
+  if(TI->QueryProp(P_GUILD_CIRCLE) != 7) flag=0;
+  else flag=1;
+  if (!member(tells, getuid(TI)))
+    tells[getuid(TI)] = 1;
+  if ((tells[getuid(TI)]++) > MAX_TELLS) { 
+    res = "BELAESTIGE MAL DIE SCHLAMPE AYLA UND NICHT STAENDIG MICH!";
+    TI->Message(BSA(res, "Xarfai teilt Dir mit: "),MSGFLAG_TELL);
+  }
+  else if(was == "erhoehe") {
+    res=call_other(GUILD_ROOM, "check_advance", TI, flag);
+    if(stringp(res))
+      TI->Message(BSA(res, "Xarfai teilt Dir mit: "),MSGFLAG_TELL);
+    else 
+      TI->Message(BSA("MEHR MACHT WARTET AUF DICH! KOMM HER!", 
+            GUILDNPC_NAME+" teilt Dir mit: "), MSGFLAG_TELL);
+  }
+  else if(was == "fertigkeiten") {
+    res=call_other(GUILD_ROOM, "skill_string", TI);
+    tell_object(TI,"Dunkelheit umfaengt Dich und Du erkennst folgendes:\n\n");
+    tell_object(TI, res);
+    tell_object(TI, "Die Dunkelheit loest sich auf.\n");
+  }
+  TI->AddSp(-random(5) + TI->QueryProp(P_GUILD_LEVEL));
+  return;
+}
+
+void give_notify(object ob)
+{
+  if (explode(file_name(ob), "#")[0] == "/obj/gems/onyx" &&
+      ob->QueryProp(P_AMOUNT) == 66 && objectp(TP) && 
+      TP->QueryProp(P_GUILD) == GUILDNAME)
+  {
+     command("sag Deine Skillpunkte sind WEG!!! HARHARHAR!");
+     call_other(NEKROMASTER, "ResetSkillPoints", getuid(TP));
+     ob->remove();
+     WLOG (LOG "skillpoints.log", "resettet die Skillpunkte");
+     return;
+  }
+  return ::give_notify(ob);
+}

@@ -1,0 +1,167 @@
+/*
+   Ein schwacher Gehilfe mit einem Esel, der die Baeume zum Sammelplatz
+   bringt. Holzfaellerlager Zordan@SL
+
+*/
+
+inherit "std/npc";
+
+#include <properties.h>
+#include <room/exits.h>
+#include <language.h>
+#include <moving.h>
+#include <combat.h>
+#include <new_skills.h>
+
+#include "../def.h"
+
+string *befehle = ({
+  "suedwesten","norden","westen","nimm","osten","sueden","nordosten","lege",
+  "suedwesten","sueden","westen","nimm","osten","norden","nordosten","lege",
+  "suedwesten","nimm","westen","nimm","osten","nordosten","lege",
+  "suedwesten","norden","nimm","sueden","nordosten","lege",
+  "suedwesten","sueden","nimm","norden","nordosten","lege"
+  });
+
+int position;
+int delay;
+int size;
+int counthb;
+
+create() {
+  if (!is_clone(TO)) return;
+  ::create();
+
+  position = 0;
+  delay=0;
+  counthb=0;
+  size=sizeof(befehle)-1;
+
+  enable_commands();
+  set_heart_beat(1);
+
+  SetProp(P_SHORT, "Ein Gehilfe mit einem kleinen Lastesel");
+  SetProp(P_LONG, 
+    "Der kleine Gehilfe fuehrt einen Lastesel durch das Holzfaellerlager, "
+    "um die abgeholzten Baeume zur Sammelstelle zu bringen. Er ist eigentlich "
+    "recht schwach und nicht sehr gespraechig. Er fuehrt hinter sich einen " 
+    "Lastesel hinterher, der die dicken Baeume transportiert. " );
+
+  AddDetail( ({ "lastesel" , "esel" }),
+    "Der Esel ist gerade stark genug, um einen Baum von den Abholzstellen "
+    "zum Saegewerk zu bringen. Er aechst und stoehnt unter der schweren Last. " );
+
+  AddDetail( ({ "last" }),
+    "Die schwere Last sind Baeume und sicher nicht Du !" );
+
+  SetProp(P_NAME, "Gehilfe");
+
+  SetProp(P_GENDER, MALE);
+  AddId( ({ "gehilfe"}) );
+
+  create_default_npc(10);
+  SetProp(P_HANDS, ({" mit seinen winzigen Haenden", 50, DT_BLUDGEON}));
+  SetProp(P_RACE, "Mensch");
+  SetProp(P_SIZE, 160+random(15));
+  SetProp(P_ALIGN, 300);
+  SetProp(P_MAX_HANDS, 2);
+
+  SetProp(P_MSGIN, "kommt mit seinem Lastesel herein");
+  SetProp(P_MSGOUT, "zieht mit seinem Lastesel weiter");
+  SetProp(P_MMSGIN, "kommt mit seinem Lastesel herein");
+  SetProp(P_MMSGOUT, "verschwindet mit seinem Lastesel");
+
+  AddInfo(DEFAULT_INFO, 
+    "sagt: Bitte halte mich nicht bei meiner Arbeit auf.\n");
+
+  SetProp(P_REJECT, ({ REJECT_KEEP, 
+    "Der Gehilfe meint: Ich darf nichts von Dir nehmen.\n" }) );
+
+  SetAttackChats(30, ({
+    "Der Gehilfe isst einen kleinen Pilz zur Staerkung.\n",
+    "Der Gehilfe weint: \"Das erzaehle ich Oswin !\"\n",
+    "Der Gehilfe weint bitterlich.\n",
+    "Der Lastesel grinst Dich an.\n",
+    "Der Lastesel sagt: \"IIh AAh IIh AAh.\"\n" }) );
+
+  SetProp(P_SPELLRATE,20);
+
+  AddSpell(1, 75,
+    "Der Lastesel gibt Dir einen hinterhaeltigen Tritt.\n",
+    "Der Lastesel gibt @WEN einen hinterhaeltigen Tritt.\n",
+    DT_BLUDGEON, ([SP_SHOW_DAMAGE:1]) );
+
+  CLONEME("/d/ebene/obj/waffe/taschenmesser");
+  command("zuecke taschenmesser");
+  CLONEME( "/p/armour/boots/lederstiefel" );
+  CLONEME( ARMOUR "arbeitsgewand" );
+  command("trage alles");
+}
+
+init() {
+  ::init();
+  if (living(TP) && interactive(TP)) {
+    TO->SetProp(P_HB,1);
+    if (counthb>180) { counthb=0; }
+  }
+}
+
+reset() {
+  ::reset();
+
+  if (!is_clone(TO)) return;
+  position=0;
+  counthb=0;
+  delay=0;
+  TO->SetProp(P_HB,0);
+  TO->move( ROOM "room-c1" , M_GO, 0, "hat sich wohl verlaufen und verschwindet", 
+                                "kommt mit seinem Lastesel an");
+}
+
+heart_beat() {
+  object ob;
+
+  if (!is_clone(TO)) return;
+  counthb++;
+  if (counthb > 210) { TO->SetProp(P_HB,0); }
+  delay++;
+  if (delay > 5) {
+    delay=0;
+    switch(befehle[position]) {
+      case "nimm" :
+        if (ob=present("\nbaum", MENV)) {
+          ob->remove(); 
+          CLONEME( OBJ "baum" );
+          say("Der Gehilfe laedt einen Baum auf den Lastesel.\n");
+        }
+        break;
+      case "lege" :
+        if (ob=present("\nbaum", TO)) {
+          ob->remove();
+          CLONE(OBJ "baum" ,environment(TO));
+          say("Der Gehilfe laedt einen gefaellten Baum vom Lastesel ab.\n");
+        }
+        if (ob=present("\nsawer",MENV)) { call_other(ob,"saege",0); }
+        break;
+      default :
+        if (!command_me(befehle[position])) {
+          // fehlerbehandlung, falls sich der gehilfe verlaufen hat
+          write_file(LOG "gehilfe.log",
+            ctime()+": Raum "+ file_name(environment(TO)) +" versuchte - "
+            + befehle[position] +" .\n");
+          TO->move( ROOM "room-c1" , M_GO, 0, "hat sich wohl verlaufen und verschwindet", 
+                                        "kommt mit seinem Lastesel an");
+          position=-1;
+        }
+        break;
+    }
+    if ( position++ >= size ) position=0;
+  }
+  ::heart_beat();
+}
+
+int test() {
+  return(counthb);
+}
+
+int _query_wimpy() { return 0; }

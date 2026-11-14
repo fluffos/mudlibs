@@ -1,0 +1,266 @@
+/* ein stdbehaelter/rsack von dante vielen dank an Durian@mg und nairolf@mg
+*
+* 
+*
+*
+*
+*
+*
+*MUD-From: dante
+*MUD-To: albundy@schiller.big.ac.at
+*MUD-Cc: 
+*MUD-Subject: Fw: behaelte/rsack.
+*
+*
+*-----------------------------
+*
+*
+* ein rucksack ohne an auszieh func   
+*                             
+*
+* 
+*
+* in create()
+*
+* SetKey(string);   aufrufen, wenn der Behaelter nur mit einem Schluessel
+*                   zu oeffnen ist. Da muss string im Schluessel mit 
+*                   AddId(string) definiert sein, damit er passt.
+*
+* SetOffen();       aufrufen, wenn der Behaelter von Anfang an geoeffnet
+*                   sein soll, normal ist er zu.
+*
+* SetZu();          damit kann man den Behaelter auch wieder schliessen.
+*                   Sein Inhalt bleibt selbstverstaendlich erhalten!
+*
+* QueryAllowed();   diese Funktion kann ueberschrieben werden. Sie testet
+*                   NACH dem Syntaxcheck ob das oeffnen des Gegenstandes 
+*                   erlaubt ist. Wenn nicht, sollte in dieser Funktion ein
+*                   entsprechender Kommentar erscheinen und 0 returned werden.
+*                   Die Funktion oeffne bricht dann kommentarlos ab! Wenn
+*                   es erlaubt ist, sollte einfach 1 returned werden. Beispiel:
+*
+*                   QueryAllowed()
+*                   {
+*                     if (present("gardewaechter"))
+*                     {
+*                       write("Der Waechter hindert Dich!\n");
+*                       return 0;
+*                     }
+*                     else
+*                       return 1;
+*                    }
+*
+* default maessig ist der Behaelter auch ein solcher. D.h. jeder Behaelter ist
+* auch als solcher ansprechbar. P_NAME, P_GENDER, P_NOGET, P_MAX_WEIGHT etc.
+* muessen an Euren Behaelter (Schrank, Sack, Schatulle, Truhe ...) natuerlich
+* angepasst werden. Verbesserungsvorschlaege an mich.
+*
+*/
+
+#include <properties.h>
+#include <language.h>
+#include "files.h"
+#include <container.h>
+inherit "/std/container";
+
+bool offen,key;
+string key_string;
+
+create()  {
+	::create();
+  AddId("rucksack");
+  SetProp(P_NAME,"Rucksack");
+  SetProp(P_GENDER,MALE);
+  SetProp(P_MAX_WEIGHT,15000);
+  SetProp(P_TRANSPARENT,0);
+  offen=FALSE;
+  key=FALSE;
+  SetProp(P_SHORT,"Ein Rucksack");
+  SetProp(P_LONG,
+"Ein normaler Rucksack\n");
+  SetProp(P_CNT_STATUS,CNT_STATUS_CLOSED); 
+
+	}
+
+/*
+ *  QueryAllowed()
+ *  kann ueberschrieben werden um das Oeffnen von Objekten nicht zu erlauben.
+ *  Evtl notwendige Messages muessen hier ausgegeben werden. Wird 0 zurueck-
+ *  geliefert ist das oeffnen nicht erlaubt und es passiert in oeffne nichts!
+ *
+ */
+
+QueryAllowed()
+{
+  return 1;
+}
+
+
+/* 
+ *  long() wurde aus /std/container/descriptions abgeleitet und leicht abge-
+ *  wandelt ;-)
+ */
+
+long() {
+  string descr, inv_descr;
+
+  descr = process_string(QueryProp(P_LONG));
+  if( !QueryProp(P_TRANSPARENT) ) 
+    return descr+capitalize(QueryPronoun())+" ist geschlossen.\n";
+  inv_descr = make_invlist( this_player(), all_inventory(TO) );
+  if ( inv_descr != "" )
+    descr += capitalize(QueryPronoun()) + " ist geoeffnet und enthaelt:\n" + inv_descr;
+  else descr += capitalize(QueryPronoun()) + " ist geoeffnet und leer.\n";
+  return descr;
+}
+
+/*  
+ *  selbiges gilt fuer short()
+ *
+ */
+
+short()    {
+  string sh;
+  if (QueryProp(P_INVIS))
+    return 0;
+
+  if( sh = QueryProp( P_SHORT ) )
+    if (offen) return process_string( sh ) + " (geoeffnet).\n";
+    else return process_string(sh)+" (geschlossen).\n";
+}
+
+SetOffen()   {
+  offen=TRUE;
+  SetProp(P_TRANSPARENT,1);
+  SetProp(P_CNT_STATUS,CNT_STATUS_OPEN);
+}
+
+SetZu()   {
+  offen=FALSE;
+  SetProp(P_TRANSPARENT,0);
+  SetProp(P_CNT_STATUS,CNT_STATUS_CLOSED);
+}
+
+SetKey(str)   {
+  key_string=str;
+  key=TRUE;
+}
+
+init()  {
+	::init();
+  add_action("oeffne","oeffne");
+  add_action("schliesse","schliesse");
+  add_action("schliesse","schliess");
+	}
+
+schliesse(str)   {
+  if (!id(str))
+  {
+    notify_fail("WAS moechtest Du schliessen?\n");
+    return 0;
+  }
+  if (!offen)
+  {
+    write(
+capitalize(name(WER,1))+" ist doch geschlossen.\n");
+    return 1;
+  }
+  write(
+"Du schliesst "+(name(WEN,1))+".\n");
+  say(
+TPN+" schliesst "+name(WEN,1)+".\n");
+  offen=FALSE;
+  SetProp(P_TRANSPARENT,0);
+  SetProp(P_CNT_STATUS,CNT_STATUS_CLOSED);
+  return 1;
+}
+
+oeffne(str)   {
+  string was,womit;
+  object obj;
+
+  notify_fail("WAS moechtest Du oeffnen?\n");
+  if (!str) return 0;
+
+  if (key)
+  {
+    if (sscanf(str,"%s mit %s",was,womit)<2)
+    {
+      if (sscanf(str,"%s mit",was)==1)
+        str=was;
+      if (!id(str)) return 0;
+      else
+      {
+        write(
+"Du brauchst einen Schluessel, um "+name(WEN,1)+" zu oeffnen.\n");
+        return 1;
+      }
+    }
+    if (!id(was))
+      return 0;
+
+    if (!womit)
+    {
+      notify_fail("WOMIT denn ueberhaupt?\n");
+      return 0;
+    }  
+    if (!(obj=present(womit,TP)))
+    {
+      write(
+"Das hast Du nicht.\n");
+      return 1;
+    }
+    if (!(obj->id(key_string)))
+    {
+      write(
+"Damit kannst Du "+name(WEN,1)+" nicht oeffnen.\n");
+      return 1;
+    }
+  }
+  else
+    if (!id(str)) return 0;
+  if (offen)
+  {
+    write(
+capitalize(name(WER,1))+" ist schon offen.\n");
+    return 1;
+  }
+
+  if (!QueryAllowed())
+    return 1;
+
+  write(
+"Du oeffnest "+(name(WEN,1))+".\n");
+  say(
+TPN+" oeffnet "+(name(WEN,1))+".\n");
+  SetProp(P_CNT_STATUS,CNT_STATUS_OPEN);
+  SetProp(P_TRANSPARENT,1);
+  offen=TRUE;
+  return 1;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

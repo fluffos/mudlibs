@@ -1,0 +1,259 @@
+inherit "/gilden/bardengilde/obj/std_song_effect";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <defines.h>
+#include <new_skills.h>
+#include <moredef.h>
+#include <moving.h>
+#include "/gilden/bardengilde/bardengilde.h"
+#include "bard_song.h"
+
+private int tickSpeed, effectPower, bodyBonus, duration, powerOfFriendship;
+private object *targets;
+
+public void create() {
+    if (!is_clone(TO)) return;
+  
+    ::create();
+    AddId(({SONG_FRIEND_BOOST}));
+
+    SetProp(P_NAME, "Hymne der Hoffnung");
+
+    setUpkeepMode(0, CANCEL_COMMAND);
+
+    targets = ({ });
+    powerOfFriendship = 0;
+    SUID;
+}
+
+public void addTarget(object ob) {
+    if(!objectp(ob)) return;
+    if(member(targets, ob) < 0) targets += ({ ob });
+}
+
+public string targetsTostr() {
+    int i;
+    string str;
+
+    str = "";
+
+    for(i=0; i<sizeof(targets); ++i) {
+        if(!objectp(targets[i])) continue;
+        str += targets[i]->name();
+        if(i != sizeof(targets)-1) str += ", ";
+    }
+
+    return str;
+}
+
+public varargs void prepareSong() {
+    int i;
+    int minTickSpeed;
+    int maxDuration;
+
+    addTarget(victim);
+
+    tickSpeed = 45 - ability/500 - success/500;
+    minTickSpeed = 10 + random(5); // hoechstens all 10 Sekunden
+    tickSpeed = tickSpeed < minTickSpeed ? minTickSpeed : tickSpeed;
+
+    maxDuration = 450 + random(51); // maximale Dauer 500 Sekunden (8 min)
+    duration = caster->QueryProp(P_GUILD_LEVEL) + caster->QueryAttribute(A_INT) + ability/100 + random(success/200);
+    duration = modifyBySkillAttribute(duration, SA_DURATION);
+    duration = duration > maxDuration ? maxDuration : duration;
+
+    effectPower = (ability/400 + success/400 + caster->QueryAttribute(A_INT)) / 8;
+    effectPower = modifyBySkillAttribute(effectPower, SA_DAMAGE);
+
+    if(caster->QueryProp(P_TESTPLAYER)) {
+        tell_object(caster, sprintf("%s :: tickSpeed=%d duration=%d effectPower=%d\n",
+                    songName, tickSpeed, duration, effectPower));
+    }
+
+    tell_object(caster, BS(sprintf("Von dir ausgehend bildet sich ein Kreis aus Licht, der %s einhuellt. Du bist nun "
+                        "ein Leuchtfeuer der Hoffnung fuer diese Gemeinschaft!", targetsTostr())));
+
+    for(i=0; i<sizeof(targets); ++i) {
+        targets[i]->AddDefender(TO);
+        tell_object(targets[i], BS(sprintf("%s erstrahlt als Leuchtfeuer der Hoffnung. Ein Kreis aus Licht geht von %s aus "
+                    "und huellt dich ein. Du fuehlst dich als Teil einer starken Gemeinschaft!", caster->Name(WER, 1), caster->QueryPronoun(WEM))));
+    }
+
+    caster->AddPursuer(TO);
+    caster->SetProp("bard_friend_boost", TO);
+
+    call_out("tick", tickSpeed);
+
+    call_out("endSong", duration);
+
+    // Logging
+    bard_log_file("hymn_of_hope.log",
+        sprintf("%20s %7s effectPower=%5d int=%2d abil=%5d suc=%5d glvl=%2d duration=%3d tickSpeed=%3d INSP_LVL=%2d T_HEILER=%d\n", 
+            ctime()[<20..],
+            CAP(getuid(caster)),
+            effectPower,
+            caster->QueryAttribute(A_INT),
+            ability,
+            success,
+            caster->QueryProp(P_GUILD_LEVEL),
+            duration,
+            tickSpeed, 
+            to_int(caster->QueryProp(P_BARD_INSPIRATION_LEVEL)),
+            TALENTMASTER->HasTalent(caster, TALENT_HEILER) ));
+}
+
+private varargs object* presentTargets(object pov) {
+    int i;
+    object *presentTargets;
+
+    if(!objectp(pov)) pov = environment(TO);
+    else pov = environment(pov);
+
+    presentTargets = ({ });
+    presentTargets += ({caster});
+    for(i=0; i<sizeof(targets); ++i) {
+        if(!objectp(targets[i])) continue;
+        if(present(getuid(targets[i]), pov)) presentTargets += ({ targets[i ]});
+    }
+
+    return presentTargets;
+}
+
+private int adjustPowerFor(object pl) {
+    int power;
+
+    if(!objectp(pl) || !objectp(TO)) {
+        endSong();
+        return 0;
+    }
+
+    if(environment(pl) == environment(TO)) power = effectPower;
+    else power = effectPower/2;
+
+    return power * sizeof(presentTargets(pl));
+}
+
+private object cloneBonusFor(object target) {
+    object bonus;
+
+    if(!objectp(bonus=present("\nbarden_bonus", target))) {
+        bonus = clone_object(OBJ("bonus"));
+        bonus->move(target, M_GET|M_NOCHECK);
+    }
+
+    return bonus;
+}
+
+public void applyEffect(object ob) {
+    int effectNr, power, speed, speedDuration;
+    object bonus;
+
+    if(!objectp(ob)) return;
+
+    effectNr = random(3);
+    power = adjustPowerFor(ob);
+    power = power > 90 ? (90+random(21)) : power; // maximal 110 HP oder MP Heilung
+
+    if(effectNr == 0 && ob->QueryProp(P_HP) < ob->QueryProp(P_MAX_HP)) {
+        tell_object(ob, BS("Das Licht der Gemeinschaft durchstroemt dich und deine Wunden heilen!"));
+        ob->AddHp(power);
+        TW(sprintf(" * %s hymn_of_hope effect 0 DB: %s heilt %s um %d LP.\n", dtime(time()), caster->Name(WER), ob->name(WEN), power));
+        if(TALENTMASTER->HasTalent(caster, TALENT_HEILER)) {
+            ob->AddHp(caster->QueryProp(P_BARD_INSPIRATION_LEVEL));
+            TW(sprintf(" * %s hymn_of_hope effect 0 DB: %s heilt %s um extra %d LP (TALENT_HEILER).\n", dtime(time()), caster->Name(WER), ob->name(WEN), caster->QueryProp(P_BARD_INSPIRATION_LEVEL)));
+        }
+        return;
+    } else if(effectNr == 0) effectNr = 1;
+    
+    if(effectNr == 1 && ob->QueryProp(P_SP) < ob->QueryProp(P_MAX_SP)) {
+            tell_object(ob, BS("Das Licht der Gemeinschaft durchstroemt dich und dein Geist klaert sich!"));
+            ob->AddSp(power);
+            TW(sprintf(" * %s hymn_of_hope effect 1 DB: %s heilt %s um %d SP.\n", dtime(time()), caster->Name(WER), ob->name(WEN), power));
+            if(TALENTMASTER->HasTalent(caster, TALENT_HEILER)) {
+                ob->AddSp(caster->QueryProp(P_BARD_INSPIRATION_LEVEL));
+                TW(sprintf(" * %s hymn_of_hope effect 1 DB: %s heilt %s um extra %d SP (TALENT_HEILER).\n", dtime(time()), caster->Name(WER), ob->name(WEN), caster->QueryProp(P_BARD_INSPIRATION_LEVEL)));
+            }
+            return;
+    } else if(effectNr == 1) effectNr = 2;
+
+    if(effectNr >= 2 && ob->QuerySkillAttribute(SA_SPEED) == 100) {
+        if(interactive(ob) && query_idle(ob) > 120) return; // Idler werden nicht beschleunigt
+        tell_object(ob, BS("Durch den Mut der Gemeinschaft angefeuert wirst du schneller!"));
+        speed = 120+power>190?180+random(21):120+power;
+        speedDuration = power/2>15?13+random(6):power/2;
+        ob->ModifySkillAttribute(caster, SA_SPEED, speed, speedDuration);
+        TW(sprintf(" * %s hymn_of_hope effect 2 DB: %s beschleunigt %s um %d%% fuer %ds.\n", dtime(time()), caster->Name(WER), ob->name(WEN), speed, speedDuration));
+        return;
+    }
+}
+
+
+public void tick() {
+    int i;
+
+    for(i=0; i<sizeof(targets); ++i) {
+        applyEffect(targets[i]);
+    }
+
+    applyEffect(caster);
+
+    call_out("tick", tickSpeed);
+}
+
+public mixed DefendOther(int dam,mixed dam_type,mixed spell,object enemy) {
+    int i;
+    object *pt;
+
+    if(random(6-caster->QueryProp(P_BARD_INSPIRATION_LEVEL))) return ({dam, dam_type, spell});
+
+    pt = presentTargets();
+    pt -= ({ PO });
+    dam /= sizeof(pt) + 1;
+    for(i=0; i<sizeof(pt); ++i) {
+        tell_object(pt[i], BS("Eure Gemeinschaft faengt den Angriff auf."));
+        pt[i]->AddHp(-(dam/10));
+        TW(sprintf(" * %s hymn_of_hope DefendOther DB: %s -> %s AddHp %d LP (dam=%d).\n", dtime(time()), caster->Name(WER), pt[i]->name(WEN), -(dam/10), dam));
+    }
+
+    tell_object(PO, BS("Eure Gemeinschaft faengt den Angriff auf."));
+
+    powerOfFriendship+=(dam/10);
+    if(powerOfFriendship > 50 && !interactive(enemy)) {
+        // bei 50 geteilten LP gibt es einen laserstrahl
+        call_out("laserBeam", 0, enemy);
+        powerOfFriendship = 0;
+    }
+
+    return ({dam, dam_type, spell});
+}
+
+public void laserBeam(object target) {
+    int dam;
+
+    if(!objectp(target)) {
+        powerOfFriendship = 51;
+        return; // ziel tot, dann halt weiterreichen an den naechsten!
+    }
+
+    tell_room(environment(target), 
+        BS(sprintf("Zwischen den Kaempfern bildet sich ein Kreis aus Licht, in dessen Mitte ein Strahl aus gebuendeltem Licht entspringt und %s trifft!",
+           target->name(WEN, 1))));
+
+    dam = 100 * sizeof(presentTargets());
+    if(TALENTMASTER->HasTalent(caster, TALENT_TAMBOURMAJOR)) {
+        dam = (int) (dam * (1.05 + caster->QueryProp(P_BARD_INSPIRATION)/100));
+        TW(sprintf(" * %s hymn_of_hope Laser DB: %s -> %s damage %d (TAMBOURMAJOR).\n", dtime(time()), caster->Name(WER), target->name(WEN), dam));
+    }
+    dam = modifyBySkillAttribute(dam, SA_DAMAGE);
+    TW(sprintf(" * %s hymn_of_hope Laser DB: %s -> %s damage %d.\n", dtime(time()), caster->Name(WER), target->name(WEN), dam));
+
+    target->Defend(dam, DT_LIGHT, ([SP_NAME: "laserstrahl", SP_SHOW_DAMAGE: 1, SP_RECURSIVE: 1]), caster);
+    return;
+}
+
+public void BecomesNetDead(object pl) {
+    if(pl != caster) return;
+    endSong();
+}

@@ -1,0 +1,194 @@
+inherit "std/armour";
+
+#include "../def.h"
+#include "/p/daemon/itemd/itemd.h"
+#define HEALTIME 420
+#define P_HEAL_TIME "halsband_heal_time"
+int ready;
+int restzeit;
+int uses;
+
+void create()
+{
+  if (!is_clone(this_object()))
+     return;
+  ::create();
+  ready = 0;
+  AddId( ({"halsband","band",}) );
+  SetProp(P_SHORT, "Ein Halsband");
+  SetProp(P_LONG, 
+      "Dieses Halsband sieht wirklich praechtig aus. "
+      "Viele kleine Steine, die in ihm fein eingebettet sind, strahlen "
+      "und glitzern im Licht. Es ist mit der Kraft der Astralebene aufgeladen "
+      "und ist viel staerker als ein normales Halsband.");
+  SetProp(P_NAME, "Halsband");
+  SetProp(P_NAME_ADJ, "ultimativ");
+  SetProp(P_GENDER, NEUTER);
+  SetProp(P_WEIGHT, 100);
+  SetProp(P_VALUE, 1900);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_ARMOUR_TYPE, AT_MISC);
+  SetProp(P_AC, 0);
+  SetProp(P_WEAR_RESTRICTIONS, ([P_LEVEL: 60]) );
+  SetProp(P_M_HEALTH_MOD, ([P_HP: 1, P_SP: 1]) );
+
+  SetProp(P_INFO, "Dieses Halsband besitzt tatsaechlich magische "+
+    "Kraefte. Jedoch wirkt die Magie \ndes Bandes nur, wenn "+
+    "es Deine Haut spuert. Dies bedeutet auch, dass Du es \nzuerst "+
+    "mit Deinen Kraeften aufladen musst, bevor es Dir helfen kann.\n"
+    "Die Zauberworte lauten: \n"
+    "\t'heile mich silberkraft' -> Du wirst wieder stark sein \n"
+    "\t'heile mich silbermagie' -> Du wirst wieder zaubern koennen \n"
+    "\t'heile mich silbermacht' -> Du wirst stark und kannst wieder "
+    "zaubern \n");	
+  SetProp(P_MATERIAL, ([MAT_LEATHER:80, MAT_JEWEL:20]) );
+
+  AddSpecialDetail ( ({"halsband", "band"}), "halsband_det");
+  AddDetail (({"steine", "stein"}),
+    BS("Sie glitzern nicht nur hell, sie scheinen auch eine sehr positive "
+    "Kraft auszustrahlen."));
+  AddDetail (({"kraft", "kraefte", "magie"}), 
+    BS("Dieses Band besitzt sicher "
+    "magische Kraefte. Identifiziere es einmal mit Deinen magischen "
+    "Kraeften."));
+
+  AddCmd(({"heile", "heil", "heiltest"}), "silberkraft");
+  
+  SetProp(P_HEAL_TIME, time() );
+  restzeit=0;
+  uses=0;
+  SetProp(P_ITEMD_TMPMAGIC, ({2000, 2000}) );
+  find_object(ITEMD)->RegisterNewItem(this_object(), TIME_ID);
+
+}
+
+string halsband_det()
+{
+  string l;
+  l="Dieses Halsband sieht wirklich praechtig aus. "
+    "Viele kleine Steine, die in ihm fein eingebettet sind, strahlen "
+    "und glitzern ";
+  if ( time()-QueryProp(P_HEAL_TIME)<HEALTIME ||
+      time()-QueryProp(P_EQUIP_TIME)<HEALTIME/2 )
+    l+="im Licht.";
+  else
+    l+="sehr hell im Licht.";
+  return BS(l);
+}
+
+int silberkraft(string str)
+{
+  string was;
+  int level;
+  if (QueryWorn()!=this_player())
+  {
+    notify_fail(BS("Die Kraft des Halsbandes kann nur auf Dich uebergehen, "
+    "wenn Du es auch angezogen hast."));
+    return 0;
+  }
+
+  if ( time()-QueryProp(P_HEAL_TIME)<HEALTIME ||
+      time()-QueryProp(P_EQUIP_TIME)<HEALTIME/2 )
+  {
+    notify_fail(BS("So wie jeder magische Gegenstand muss auch das Halsband "
+        "erst wieder seine magischen Kraefte erlangen."));
+    return 0;
+  }
+
+  if(!str) return 0;
+
+  if( this_player()->InFight() && this_player()->QueryProp(P_ATTACK_BUSY) )
+  {
+    notify_fail("Du bist zu erschoepft, um Dich zu heilen!\n"); 
+    return 0;  
+  }
+  if ((level = this_player()->QueryProp(P_LEVEL)) > 100)
+    level = 100;        // upper limit
+  if (str=="mich silbermagie")
+  {
+    //this_player()->AddSp(65+level/2+random(level/3)-random(uses/10));
+    this_player()->AddSp(85+2*level/3+random(level/2));
+    was="Magie.";
+  }
+  else if (str=="mich silberkraft")
+  {
+    //this_player()->AddHp(65+level/2+random(level/3)-random(uses/10));
+    this_player()->AddHp(85+2*level/3+random(level/2));
+    was="Kraft.";
+  }
+  else if (str=="mich silbermacht")
+  {
+    //this_player()->heal_self(30+level/4+random(level/4)-random(uses/20));
+    this_player()->heal_self(40+level/3+random(level/3));
+    was="Macht.";
+  }
+  else
+  {
+    notify_fail("Was soll Dich heilen?\n"); 
+    return 0;  
+  }
+
+  write(BS("Eine magische Aura huellt Dich ein, und gibt Dir wieder "+was));
+  
+  say(BS("Eine magische Aura huellt "+this_player()->name(WEN)+" kurz "
+      "ein, und gibt "+this_player()->QueryPronoun(WEM)+" neue "+was));
+  SetProp(P_HEAL_TIME, time() );
+  if( this_player()->InFight() )
+    this_player()->SetProp(P_ATTACK_BUSY, 1+random(3));
+  uses++;
+  if (!IS_SEER(this_player()))
+    uses++;
+  return 1;
+}
+
+
+void BecomesNetDead(object wer) {
+  if(wer==QueryProp(P_WORN)) {
+    restzeit=time()-QueryProp(P_HEAL_TIME);
+  } 
+}
+
+void BecomesNetAlive(object wer) {
+  if(wer==QueryProp(P_WORN)) {
+    SetProp(P_HEAL_TIME, time()-restzeit);
+  }
+}
+
+int QueryUses()
+{
+  return uses;
+}
+
+void reset()
+{
+  if (!is_clone(this_object()))
+    return;
+  ::reset();
+  call_out("heal", 10 + random(200));
+}
+
+void heal()
+{
+  object pl;
+  if (objectp(pl = QueryProp(P_WORN)) && interactive(pl) &&
+      (time()-QueryProp(P_HEAL_TIME) > HEALTIME ||
+       file_name(environment(pl))[0..17] == "/d/astral/feyaria/") && 
+      (pl->QueryProp(P_HP) < pl->QueryProp(P_MAX_HP) ||
+       pl->QueryProp(P_SP) < pl->QueryProp(P_MAX_SP)))
+  {
+    tell_object(pl, "Dein Halsband heilt Dich selbstaendig.\n");
+    pl->heal_self(100 + random(50));
+    SetProp(P_HEAL_TIME, time() - HEALTIME / 2);
+  }
+}
+
+void _set_autoloadobj(mixed data)
+{ 
+  SetProp(P_ITEMD_TMPMAGIC, data);
+}
+
+mixed _query_autoloadobj()
+{ 
+  return QueryProp(P_ITEMD_TMPMAGIC);
+}
+

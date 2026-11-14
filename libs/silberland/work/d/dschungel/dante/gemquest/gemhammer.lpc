@@ -1,0 +1,228 @@
+//dante sl
+//magischer hammer fuer edelstein geschenk fuer quest
+//angepasst an die neuen gems dante 2001 14 jaenner
+/* erzeugt zts:
+   und zwar abhaengig vom wert der gems
+   */
+
+
+inherit "std/weapon";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include "/players/dante/myowndefine.h"
+#include <defines.h>
+#include <moving.h>
+#include <food.h>
+#include "/p/daemon/skillmaster/skillmaster.h"
+
+#define QUESTKEY "Im Edelsteingeschaeft"
+
+#define DELAY 800
+
+//zeit zwischen zwei schlaegen
+int schlag=0;
+
+int mal=0;
+
+string *all_gems;
+
+init()  {
+  ::init();
+  if(!living(environment(TO)))  {
+    destruct(); }
+}
+
+
+
+create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  AddId (({"hammer", "edelsteinhammer","GEM_HAMMER"}));
+  SetProp (P_SHORT, "Ein Edelsteinhammer");
+  SetProp (P_LONG, "gugu"); //long wird von long() ueberschrieben, by PROtheG
+
+  SetProp (P_NAME, "Edelsteinhammer");
+  SetProp (P_GENDER, MALE);
+  SetProp(P_MAGIC, 1);
+  SP(P_INFO, BS("Der Hammer ist magisch. Mit ihm kann man Edelsteine zertruemmern! "
+        "Aus den Truemmern der Edelsteine entsteht so ein Zaubertrank! "
+        "<syntax: zertruemmer(e) name >. Du kannst allerdings weder beliebig viele "
+        "Zaubertraenke besitzen, noch andauernd welche erzeugen. Zuviel ist auch "
+        "nicht gesund..."));
+
+
+  SetProp (P_VALUE, 5000);
+  SetProp (P_WEIGHT, 1000);
+  SetProp (P_WEAPON_TYPE, WT_CLUB);
+  SetProp (P_DAM_TYPE, DT_RIP);
+  SetProp(P_NOBUY, 1);
+  SetProp (P_WC, 30);
+  SetProp (P_NR_HANDS, 1);
+  SetProp (P_MATERIAL, ([MAT_MISC_MAGIC:50, MAT_GRANITE:50]));
+
+  SP(P_NODROP, 1);
+  SP(P_NEVERDROP, 1);
+
+  ACD(({"zertruemmer", "zertruemmere"}), "get_zt");
+
+  // Alle Edelsteine und Perlen einlesen
+  all_gems=(get_dir("/obj/gems/*.lpc"));
+  all_gems+=(get_dir("/obj/pearls/*.lpc"));
+  // .c entfernen
+  all_gems=map_array( all_gems, lambda( ({ 'a }), ({ #'[..<], 'a, 0, 3 }) ) );
+  SUID;
+}
+
+long()
+{
+  return break_string(
+      "Dieser Edelsteinhammer gehoerte einst Gihr Heuchlox, einem "
+      "verlogenen Zwerg aus Tijara. Er ist dort Edelsteinhaendler, "
+      "betruegt seine Kunden aber nur!\n"+(!schlag ? 
+        "Der Hammer ist von einer hellen Aura umgeben." :
+        "Der Hammer fuehlt sich kuehl an."),
+      78, "", BS_LEAVE_MY_LFS+BS_NO_PARINDENT);
+}
+
+int get_zt(string str)   {
+
+  int val, pearl;
+
+  object ob, zt;
+  NF("Was willst Du zertruemmern?!\n");
+
+  if(!QueryProp(P_WIELDED))  {
+    write("Zuecken waer gut, oder?!\n");
+    return 1; 
+  }
+
+  if(!str) return 0;
+  ob=present(str, TP);
+
+
+  if(member(({"edelstein","edelsteine","stein","steine"}),str)!=-1)  {
+    write("Welchen Edelstein willst Du genau zertruemmern?!\n");
+    return 1; 
+  }
+  if(member(({"perle","perlen"}),str)!=-1)  {
+    write("Welche Perle willst Du genau zertruemmern?!\n");
+    return 1; 
+  }
+/*
+  if(member(({
+          "achat","almandin","amethyst","apatit","apophyllit", "peridot", 
+          "aquamarin","aventurin","benitoit","bergkristall","bernstein",
+          "cuprit","diamant","diaspor","dioptas","granat","jadeit","jaspis",
+          "lapislazuli","onyx","opal","pyrit","rosenquarz","oktarin",
+          "rubin","saphir","smaragd","sugilith","tigerauge","citrin",
+          "topas","tuerkis","turmalin","zirkon"
+          "derlimperle","felseninselperle","haiperle",          
+          "knarkhperle","korallenperle","krakenperle",     
+          "mauritiusperle","midasperle","oktopusperle",      
+          "piratenperle","polarperle","quaulperle",        
+          "riffperle","schwertfischperle","smoerskyperle",     
+          "suedseeperle","tiefseeperle","tijaraperle",       
+          "walperle","zombieinselperle", }),str)!=-1)   {
+*/
+  if(member(all_gems, str)!=-1) {
+    if(schlag==1)   {
+
+      write(BS(
+            "Du versuchst den Hammer zu schwingen, doch die magische Edelsteinekliptik "
+            "ist noch nicht wieder ausbalanciert. Warte noch ein wenig!"));
+      return 1; 
+    }
+
+    if(TP->InFight())  {
+      write(BS(
+            "Im Kampf kannst Du nichts zertruemmern."));
+      return 1; 
+    }
+
+    if(present("ZAUBERTRANK 3"))  {
+
+      say(BS(
+            CAP_TPN+" verursacht fast eine Kruemmung der magischen Ekliptik!!!"));
+      write(BS(
+            "Nein! Das wuerde einen Zaubertrankmassendefekt ausloesen und eine "
+            "damit verbundenen Kruemmung der magischen Ekliptik!!! Und was das "
+            "fuer das Silberland bedeuten wuerde, ist Dir doch klar, oder?!!"));
+      return 1; 
+    }
+    if (strstr(str, "perle")!=-1) pearl=1;
+
+    if(!ob)   {
+      write("Aber Du hast doch gar keine"+(pearl?"":"n")+" "+capitalize(str)+"!\n"
+          "Also zertruemmerst Du Dir Dein eigenes Knie!!!\n");
+      TP->do_damage(10);  return 1; }
+
+      if(ob) {
+
+        val=ob->QP(P_VALUE);	
+
+        schlag=1;
+        call_out("geht_wieder", DELAY+random(100));	
+
+        write(BS(
+              "Du holst weit aus und zertruemmerst "+ob->name(WEN)+"! "
+              "Der Edelstein explodiert und aus den Truemmern entsteht "
+              "ein kleiner Zaubertrank!"));
+        say(BS(CAP_TPN+" zertruemmert mit einem Edelsteinhammer "
+              ""+ob->name(WEN)+"! Dann hat "+TPN+" auf einmal einen "
+              "Zaubertrank in der Hand!"));
+        if(!ob->IsUnit())
+          ob->remove();
+        else 
+          ob->AddAmount(-1);
+        zt=clone_object("d/dschungel/dante/gemquest/zt");
+        zt->move(TP, M_NOCHECK);
+        zt->SetProp(P_LONG, BS(
+              "Diesen kleinen Zaubertrank hat "+CAP(getuid(PL))+" mit einem "
+              "Edelsteinhammer aus eine"+(pearl?"r":"m")+" "+capitalize(str)+" erschaffen! Er "
+              "hat die Faehigkeit Deine Energie zu erhoehen und schmeckt "
+              "nebenbei auch sehr gut!"));
+
+        zt->wie_gut(val);
+
+        mal++;
+
+        if(mal>=40+random(10) || random(100) == 42)  {
+          if(SKILLMASTER->UseSkill(TP, SK_LUCK) > 0 )
+          {
+            write("Puh! Nochmal Glueck gehabt, fast waere Dir Dein Hammer "
+                "zerbroeselt!\n");
+          }
+          else
+          {
+            write(BS(
+                  "VERDAMMT!!! Dein Hammer zerbroeselt!!! VERFLUCHT!!! Naja, hol Dir halt "
+                  "einen neuen Hammer!"));
+            say(BS(
+                  CAP_TPN+" weint um den Edelsteinhammer!"));
+            remove(1);//silent:-)
+          }
+        }
+        return 1; 
+      }
+      return 0; 
+  }
+  else  {
+
+    write("Das kannst Du nicht zertruemmern!\n");
+    return 1; 
+  }
+  return 0; 
+}
+
+geht_wieder()  {
+  schlag=0;
+  tell_object(environment(TO),
+      "Dein Edelsteinhammer blitzt kurz auf. Er scheint wieder bereit zu sein.\n");
+}
+
+
+

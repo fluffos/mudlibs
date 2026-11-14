@@ -1,0 +1,246 @@
+//=========================================================================
+//
+// File:    hschere.c
+// Created by Ronja@SL
+//
+// Project: Feen
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit "std/weapon";
+
+int scharf;
+
+void machstumpf();
+void machscharf();
+
+void create()
+{
+  if (!is_clone(TO) ) return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Eine Heckenschere");
+
+  SetProp(P_LONG,
+    "Eine Heckenschere, wie man sie zum stutzen von Hecken benutzt. Sie hat "
+    "zwei grosse Griffe und zwei maechtige Scherenblaetter. Sei bloss "
+    "vorsichtig, dass Du Dir keinen Finger abschneidest."
+  );
+
+  SetProp(P_NAME, "Heckenschere");
+
+  machstumpf();
+
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({"heckenschere","schere","\nheckenschere","\nHECKENSCHERE"}) );
+
+  SetProp(P_MATERIAL, ([MAT_WOOD:20, MAT_METAL:80]) );
+  SetProp(P_WEIGHT, 2000);
+  SetProp(P_VALUE, 50);
+
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NODROP,BS("Das ist eine Leihgabe Blus, und er moechte seine "
+                      "Heckenschere bestimmt gerne wiederhaben."));
+  SetProp(P_NEVERDROP,1);
+  SetProp(P_NOSELL,1);
+
+  SetProp(P_WEAPON_TYPE, WT_KNIFE);
+  SetProp(P_WC, 50);
+  SetProp(P_WC_FIX, 5);
+  SetProp(P_DAM_TYPE, DT_SLASH );
+  SetProp(P_NR_HANDS, 2);
+
+  AddCmd( ({"qqqqqqxx" })                       , "cmd_schaerfen");
+  AddCmd( ({"schneide", "schneid",
+            "stutz", "stutze"})                 , "cmd_schneiden");
+  AddCmd( ({"vergroesser","vergroessere",
+            "erweiter","erweitere"})            , "cmd_vergroessern");
+
+}
+
+void machscharf()
+{
+  RemoveAdjective( ({"stumpfen","stumpfer","stumpfem","stumpfes","stumpfe"}) );
+
+  SetProp(P_NAME_ADJ, ({"scharf"}) );
+  AddAdjective( ({"scharfen","scharfer","scharfem","scharfes","scharfe"}) );
+
+  SetProp(P_INFO, "Die Heckenschere ist scharf.");
+  scharf=1;
+  return;
+}
+
+void machstumpf()
+{
+  RemoveAdjective( ({"scharfen","scharfer","scharfem","scharfes","scharfe"}) );
+
+  SetProp(P_NAME_ADJ, ({"stumpf"}) );
+  AddAdjective( ({"stumpfen","stumpfer","stumpfem","stumpfes","stumpfe"}) );
+
+  scharf=0;
+  return;
+}
+
+int cmd_schaerfen(string str)
+{
+  machscharf();
+  FMASTER->Msg(TPUID+" schaerft illegalerweise die Heckenschere");
+  return 1;
+}
+
+void seq_schneiden(int step)
+{
+  if (ENV(TP)->QueryProp(P_HECKE) != HECKE_TORBOGEN)
+  {
+    TELLPLAYER("Du brichst das Heckenschneiden ab.\n");
+    return;
+  }
+
+  switch(step)
+  {
+    case 1:
+      TELLPLAYER(BS("Du nimmst die Heckenschere fest in beide Haende und "
+                    "faengst an, den Ausgang freizuschneiden")+"\n\n\n");
+      TELLOTHERS(CTPN+" schneidet im Westen am Torbogen herum.\n");
+      break;
+    case 2:
+      TELLPLAYER("Die Aeste und Zweige fliegen nur so umher.\n\n\n");
+      break;
+    case 3:
+      TELLPLAYER("Geschafft! Der Ausgang ist frei!\n\n\n");
+      break;
+    case 4:
+      TELLPLAYER(BS("Voellig erschoepft ruhst Du Dich aus. Die Heckenschere "
+                    "ist zwar durch Deine Arbeit wieder stumpf geworden, "
+                    "doch der Ausgang ist frei.")+"\n\n\n");
+      TELLOTHERS(CTPN+" ist vom Heckenschneiden voellig erschoepft.\n");
+      machstumpf();
+      TP->SetProp(P_MV, 0);
+      break;
+    case 5:
+      TELLPLAYER("Ploetzlich raschelt es in der Hecke...\n\n\n");
+      break;
+    case 6:
+      TELLPLAYER("... und die Aeste und Zweige der Hecke fangen an sich "
+                 "zu bewegen !\n\n\n");
+    case 7:
+      TELLPLAYER(BS("Voller Entsetzen siehst Du wie die Hecke wieder "
+                    "zuwaechst! Die ganze Arbeit war umsonst!")+"\n\n");
+      TELLOTHERS(BS("Die Luecke die "+TPN+" gerade geschnitten hat waechst "
+                    "wieder zu!"));
+      return;
+      break;
+  }
+  call_out("seq_schneiden",3,++step);
+  return;
+}
+
+void ab_durch_die_bresche()
+{
+  TELLPLAYER(BS("Du erweiterst die Bresche mit Deiner Heckenschere "
+                "soweit, dass Du gerade eben durchpasst. Du machst Dich "
+                "ganz klein und kriechst durch die Hecke. Die Dornen "
+                "kratzen Dich dabei ganz schoen. Hinter Dir raschelt es "
+                "und Du siehst noch wie die Bresche sich wieder "
+                "schliesst. Dann wird Dir ganz schwummerig..."
+  ));
+
+  TP->AddHp(-20);
+  ENV(TP)->breschezu();
+  TP->move(ROOM "lichtung.lpc", M_GO, "", "verschwindet in der Bresche",
+                                        "betritt die Lichtung");
+}
+
+int cmd_schneiden(string str)
+{
+  object room;
+
+  notify_fail("Was moechtest Du mit der Heckenschere schneiden?\n");
+
+  if(!str || str == "") return 0;
+
+  if(!(str == "hecke"    ||
+       str == "torbogen" ||
+       str == "ausgang"  ||
+       str == "bresche"  )) return 0;
+
+  if(!(room = ENV(TP))) return 0;
+
+  if(room->QueryProp(P_HECKE) == HECKE_NICHT_DA)
+  {
+    notify_fail("Hier ist doch gar keine Hecke zum schneiden!\n");
+    return 0;
+  }
+
+  if(!scharf)
+  {
+    TELLPLAYER("Du musst die Heckenschere zuerst schaerfen lassen.\n");
+    return -1;
+  }
+
+  if(!objectp(QueryProp(P_WIELDED)))
+  {
+    TELLPLAYER("Du musst die Heckenschere zuerst zuecken.\n");
+    TELLOTHERS(CTPN+" scheint sich nicht mit Heckenscheren auszukennen.\n");
+    return -1;
+  }
+
+  if((str == "torbogen"))
+  {
+    if(room->QueryProp(P_HECKE) == HECKE_TORBOGEN)
+    {
+      seq_schneiden(1);
+      FMASTER->Msg(TPUID+" versucht den Torbogen frei zu schneiden");
+      return 1;
+    }
+    else
+    {
+      TELLPLAYER("Welchen Torbogen denn?\n");
+      return -1;
+    }
+  }
+
+  if((str == "bresche" || str == "ausgang"))
+  {
+    switch(room->QueryProp(P_HECKE))
+    {
+      case HECKE_BRESCHE_ZU:
+        TELLPLAYER("Welche Bresche denn?\n");
+        break;
+
+      case HECKE_BRESCHE_AUF:
+        ab_durch_die_bresche();
+        FMASTER->Msg(TPUID+" erweitert die Bresche");
+        return 1;
+        break;
+
+      default:
+        TELLPLAYER("Welche Bresche denn?\n");
+        break;
+    }
+    return -1;
+  }
+
+
+  TELLPLAYER(BS("Du schneidest hier und da etwas an der Hecke herum, "
+                "aber eigentlich braucht die Hecke gar keinen Schnitt."));
+  FMASTER->Msg(TPUID+" schneidet an der Hecke herum");
+
+  return -1;
+}
+
+int cmd_vergroessern(string str)
+{
+  notify_fail("Was mochtest Du mit der Heckenschere vergroessern?\n");
+
+  if(!str || str == "") return 0;
+
+  if(!(str == "bresche"  ||
+       str == "bresche"  )) return 0;
+
+  return cmd_schneiden("bresche");
+}
+

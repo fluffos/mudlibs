@@ -1,0 +1,505 @@
+// /spellbooks/ab_spells.c  Die Abenteurergilde
+// Im Original von Boing@MorgenGrauen
+// Spells
+/*
+     Lichtblitz: blitz
+       zeigt die Raumbeschreibung des Raumes an
+       Magiepunkte 3, Stufe 2
+
+       Lichtkugel herbeizaubern: licht  (im Silberland disabled)
+         Magiepunkte 5, Stufe 4
+         Dauer: Level * 20 Sekunden
+
+     Gegenstaende untersuchen: identifiziere <objekt>
+       Wenn P_INFO exisitiert, wird dies ausgegeben
+       Ausserdem Ausgabe von P_MATERIAL und, wenn der Spruch
+       besonders gut war, P_WEIGHT und P_VALUE
+       Magiepunkte 12, stufe 6
+
+     Monster/Gegenstaende einschaetzen: schaetz <name>
+       Bei Monstern wird die relative Staerke (LP,WC,AC) sowie deren
+       Gesinnung angezeigt, bei Dingen deren ungefaehren Wert sowie
+       das ungefaehre Gewicht.
+       Magiepunkte 5, Stufe 8
+
+     Pfeilangriff: pfeil <name>
+       Schaden maximal 20, Magiepunkte 10, Stufe 11
+
+     Ausweichen: ausweichen
+       Geht nur im Kampf, 2-10 Sekunden wird ausgewichen (von Geschick
+       und Spell Success abhaengig), in dieser Zeit werden physikalische
+       Schaeden gedrittelt
+       Magiepunkte 25, Stufe 12
+
+     Feuerball: feuerball <name>
+       Schaden maximal 40, Magiepunkte 20, Stufe 15
+
+     Schnelligkeit: schnell
+       Gibt fuer eine bestimmte Zeit zusaetzliche Angriffe
+       Magiepunkte 50, Stufe 17
+
+*/
+
+
+// Versionen
+// 22-08-1995	Mupfel
+// 	Spruchlevel und -kosten fuer AL angepasst, Mupfel 22-08-95
+// 	'Licht' aus Copyrightgruenden disablen (im Gildenobjekt)
+// 	'Identifiziere' jetzt ab Level 6 statt 8, und 12 statt 15 MP Kosten
+// 	'Schaetz'       jetzt ab Level 8 statt 10
+// 20-02-1996 	Mupfel
+//	Schaden (bei Feuerball, Pfeil) wird angezeigt
+// 11-04-1996   Woody
+//      Blitz Spruch
+// 1996/10/03   Woody
+//      schaetz erweitert: Kann auch Dinge einschaetzen, und zeigt
+//                         Alignment des Monsters an
+// 1996/10/13   Woody
+//      schaetz nochmal erweitert: Zeigt bei Dingen auch Gewicht an.
+//      Dafuer kostet's jetzt aber auch 5 MP statt 3...
+// 1996/11/22   Woody
+//      Bei 'blitz' nen Alternativstring fuer Environments ohne int_long()
+// 1997/01/18   Woody
+//      'licht' auskommentieren (ist nur unnoetiger Code, da eh disabled)
+//      Text bei 'blitz' geaendert (Wortwiederholung... :) )
+// 1997/04/17   Woody
+//      'Units bestehEN aus ....' (identifiziere)
+// 1997/07/26   Woody
+//      Bugfix beim schaetzen fuer Units (typofix und Bugfix bei Gewicht),
+//      neuer Spell 'ausweichen'
+// 1997/07/26   Woody
+//      Dritteln des Schadens bei 'ausweichen' reicht auch...
+//      Ausserdem P_TMP_DEFEND_HOOK setzen, wenn es ein eigener,
+//      abgelaufener Eintrag war
+// 1997/09/25   Woody
+//      Identifizieren ans neue Materialsystem angepasst
+// 1997/09/26   Woody
+//      'Units bestehEN aus ....' (identifiziere) - "u_req" statt P_AMOUNT
+//1997/09/29    Feyaria
+//       Feuerball ist jetzt je nach erfolg unterschiedlich gross
+//
+
+#include <properties.h>
+#include <language.h>
+#include <attributes.h>
+#include <combat.h>
+#include <wizlevels.h>
+#include <new_skills.h>
+
+inherit "/std/spellbook";
+
+create() {
+  ::create();
+  SetProp(P_GLOBAL_SKILLPROPS,
+          ([SI_SPELLFATIGUE:2,       // 2 Sekunden kein neuer Spell
+            SI_SKILLLEARN:5,         // 0.05% pro 2 A_INT 
+            OFFSET(SI_SKILLLEARN):10 // plus 0.1% in jedem Fall
+            ]));
+  AddSpell("blitz",3,2);
+  // AddSpell("licht",5,4);
+  AddSpell("schaetz",5,8);
+  AddSpell("pfeil",10,
+           ([SI_SKILLRESTR_LEARN:([P_LEVEL:11]),
+             SI_SKILLRESTR_USE:([SR_FREE_HANDS:1]),
+             SI_SKILLDAMAGE:200,
+             SI_SKILLDAMAGE_TYPE:DT_MAGIC
+             ]));
+  AddSpell("ausweichen", 25, 12);
+  AddSpell("identifiziere",12,6);
+  AddSpell("feuerball",20,
+           ([SI_SKILLRESTR_LEARN:([P_LEVEL:15]),    // zum Lernen mind. Lev 15
+             SI_SKILLRESTR_USE:([SR_FREE_HANDS:2]), // 2 freie Haende noetig
+             SI_SKILLDAMAGE:300,                    // Schaden: random(300)...
+             OFFSET(SI_SKILLDAMAGE):100,            //     ...plus 100
+             SI_SKILLDAMAGE_TYPE:DT_FIRE            // Damage Type: Fire
+             ]));
+  AddSpell("schnell",50,17);
+}
+
+// fuer 'schnell' ne andere Failmsg, wenns total daneben geht
+
+nosave int total_fail;
+
+void Misserfolg(object caster, string spell, mapping sinfo)
+{
+  int old_abil;
+  
+  if (!total_fail)
+    write("Der Zauberspruch ist missglueckt.\n");
+  total_fail = 0;  // gleich zuruecksetzen
+  old_abil = sinfo[SI_SKILLABILITY];
+  Learn(caster, spell, sinfo);
+  sinfo=caster->QuerySkill(spell);
+  if (old_abil < (mappingp(sinfo) ? sinfo[SI_SKILLABILITY] : sinfo))
+    write("Du lernst aus Deinem Fehler.\n");
+  else
+    write( "Leider lernst Du nicht aus Deinem Fehler.\n" );
+    
+}
+
+// jetzt die Spells
+
+int 
+schaetz(object caster, mapping sinfo) {
+   object victim;
+   int hpdiff, wcdiff, acdiff;
+   int hp, vhp, wc, vwc, ac, vac, gen, val;
+   string result;
+   string vname, vnamegen;
+
+   victim=FindVictim(sinfo[SI_SKILLARG],caster,
+                           "Wen oder was willst Du denn einschaetzen?\n");
+   if (!victim)
+     return 0;
+   if (SpellSuccess(caster,sinfo)<=0)
+      return MISSERFOLG;
+
+   if (!living(victim))
+   {
+     result = sprintf("Du schaetzt %s ab und kommst zu folgendem Schluss:\n",
+                      victim->name(WEN));
+     if (val = victim->QueryProp(P_VALUE))
+       result += sprintf("%s ha%s einen Wert von %d Muenze%s.\n",
+                      capitalize(victim->name(WER,1)),
+                      (victim->IsUnit() && victim->QueryProp("u_req") != 1) ?
+                        "ben" : "t",
+                      val, (val==1 ? "" : "n"));
+     else
+       result += sprintf("%s %s voellig wertlos...\n",
+                      capitalize(victim->name(WER,1)),
+                      (victim->IsUnit() && victim->QueryProp("u_req") != 1) ?
+                        "sind" : "ist");
+
+     if (victim->IsUnit())
+       val = victim->QueryProp(P_WEIGHT);
+     else
+       val = victim->QueryProp(P_TOTAL_WEIGHT);
+
+     if (val > 100)
+       result += sprintf("%s wieg%s %.1f Kilogramm.\n",
+                      capitalize(victim->QueryPronoun()),
+                      (victim->IsUnit() && victim->QueryProp("u_req") != 1) ?
+                          "en" : "t",
+                      to_float(val)/1000);
+     else
+       result += sprintf("%s wieg%s so gut wie nichts.\n",
+                      capitalize(victim->QueryPronoun()),
+                      (victim->IsUnit() && victim->QueryProp("u_req") != 1) ?
+                          "en" : "t");
+
+     write (result);
+     return ERFOLG;
+   }
+
+   hp = caster->QueryProp(P_HP);    vhp = victim->QueryProp(P_HP);
+   wc = caster->QueryProp(P_TOTAL_WC);  vwc = victim->QueryProp(P_TOTAL_WC);
+   ac = caster->QueryProp(P_TOTAL_AC);  vac = victim->QueryProp(P_TOTAL_AC);
+   hpdiff = hp - vhp;
+   wcdiff = wc - vwc;
+   acdiff = ac - vac;
+   vname = victim->name(WER, 1);
+   vnamegen = victim->name(WESSEN, 1);
+   gen = victim->QueryProp(P_GENDER);
+
+   if (hpdiff > 2*vhp)
+      result = "Du bist " + victim->name(WEM, 1) + " haushoch ueberlegen.\n";
+   else if (hpdiff > vhp)
+      result = "Du bist viel staerker als " + vname + ".\n";
+   else if (hpdiff > vhp/5)
+      result = "Du bist staerker als " + vname + ".\n";
+   else if (-hpdiff > 2*hp)
+      result = capitalize(vname) + " ist Dir haushoch ueberlegen.\n";
+   else if (-hpdiff > hp)
+      result = capitalize(vname) + " ist viel staerker als Du.\n";
+   else if (-hpdiff > hp/5)
+      result = capitalize(vname) + " ist staerker als Du.\n";
+   else
+      result = capitalize(vname) + " ist etwa gleich stark wie Du.\n";
+   write(result);
+
+   if (acdiff > 2*vac)
+      result = "Deine Ruestung ist unglaublich viel besser als die " 
+     + vnamegen + ".\n";
+   else if (acdiff > vac)
+      result = "Deine Ruestung ist viel besser als die " + vnamegen + ".\n"; 
+   else if (acdiff >vac/5)
+      result = "Deine Ruestung ist besser als die " + vnamegen + ".\n";
+   else if (-acdiff > 2*ac)
+      result = "Die Ruestung " + vnamegen 
+     + " ist unglaublich viel besser als Deine.\n";
+   else if (-acdiff > ac)
+      result = "Die Ruestung " + vnamegen + " ist viel besser als Deine.\n";
+   else if (-acdiff > ac/5)
+      result = "Die Ruestung " + vnamegen + " ist besser als Deine.\n";
+   else
+      result = "Eure Ruestungen sind etwa gleich gut.\n";
+   write(result);
+
+   if (wcdiff > 2*vwc)
+      result = "Deine Waffe ist eigentlich zu gut fuer diesen Gegner.\n";
+   else if (wcdiff > vwc)
+      result = "Deine Waffe ist viel besser als die " +vnamegen + ".\n";
+   else if (wcdiff > vwc/5)
+      result = "Deine Waffe ist besser als die " +vnamegen + ".\n";
+   else if (-wcdiff > 2*wc)
+      result = "Die Waffe " + vnamegen 
+     + " laesst Deine ganz mickrig aussehen.\n";
+   else if (-wcdiff > wc)
+      result = "Die Waffe " + vnamegen + " ist viel besser als Deine.\n";
+   else if (-wcdiff > wc/5)
+      result = "Die Waffe " + vnamegen + " ist besser als Deine.\n";
+   else
+      result = "Eure Waffen sind etwa gleich gut.\n";
+
+  result += capitalize(victim->QueryPronoun(WER) || "es");
+  if ((val = victim->QueryProp(P_ALIGN)) <= -1000)
+    result += " ist von satanischer Gesinnung.\n";
+  else if (val <= -200)
+    result += " ist von boeser Gesinnung.\n";
+  else if (val <= -40)
+    result += sprintf(" ist ein%s unfreundliche%s Zeitgenoss%s.\n",
+        (gen == FEMALE ? "e" : ""), (gen == FEMALE ? "" : "r"),
+        (gen == FEMALE ? "in" : "e") );
+  else if (val <= 40)
+    result += " sieht die Welt mit neutralen Augen.\n";
+  else if (val <= 200)
+    result += " ist eigentlich ganz nett.\n";
+  else if (val < 1000)
+    result += " ist von guter Gesinnung.\n";
+  else
+    result += " strahlt eine gewisse Heiligkeit aus.\n";
+
+   write(result);
+   return ERFOLG;
+}
+
+
+int
+identifiziere(object caster, mapping sinfo) {
+  object ob;
+  string* fi;
+  // string cn;
+  string result;
+  mapping mat;
+
+  ob=FindVictim(sinfo[SI_SKILLARG], caster,
+                "Was moechtest Du identifizieren?\n");
+  if (!ob)
+    return 0;
+
+  // cn = caster->name();
+   if (SpellSuccess(caster,sinfo)<=0)
+    return MISSERFOLG;
+  if (result=ob->QueryProp(P_INFO))
+    printf("Du identifizierst %s.\n%s", ob->name(WEN, 1), 
+           result);
+  else
+    printf("Du kannst nichts besonderes an %s erkennen.\n",
+           ob->name(WEM, 1));
+
+  if ( /* caster->QueryProp(P_LEVEL)>=10 && */  // keine Levelbeschr. im SL
+      (mat=ob->QueryProp(P_MATERIAL)) && (pointerp(mat)))
+  {
+    // 'lebende Materie' bei NPCs kommt nicht so dolle, aber livings
+    // sollte man schon identifizieren koennen, wg. enable_commands()
+    // (Mupfel@AL)
+    // Anm. Woody: Im SL haben wir MAT_LIVING (noch) nicht
+    // if (living(ob)) mat -= ({MAT_LIVING});
+
+    if (sizeof(mat))
+      write(break_string(sprintf("%s besteh%s aus %s.",
+          ob->Name(WER,1),
+          (ob->IsUnit() && ob->QueryProp("u_req") != 1 ? "en" : "t"),
+          ob->MatList(WEM) || "unbekanntem Material"), 78));
+  }
+  else if (mappingp(mat) && sizeof(mat-([MAT_MISC_LIVING]) ))
+  {
+    write(break_string(sprintf("%s besteh%s aus %s.",
+        ob->Name(WER,1),
+        (ob->IsUnit() && ob->QueryProp("u_req") != 1 ? "en" : "t"),
+        ob->MaterialList(WEM) || "unbekanntem Material"), 78));
+  }
+/*
+    if (matlist=ob->MatList(WEM))
+      printf(break_string("%s besteht aus %s.", 78),
+           capitalize(ob->name(WER,1)), matlist);
+    else
+      printf("Du kannst das Material leider nicht identifizieren.\n");
+*/
+  return ERFOLG;
+}
+
+/* *** Im SL disabled (wozu gibt's Fackeln ???)
+int
+licht(object caster, mapping sinfo) 
+{
+   object l;
+
+   printf("Du machst eine magische Bewegung.\n");
+   say(sprintf("%s macht eine magische Bewegung.\n",
+	       capitalize(caster->name())));
+
+   if (SpellSuccess(caster,sinfo)<=0)
+      return MISSERFOLG;
+
+   l = clone_object("/obj/misc/lichtkugel");
+   l->move(this_player());  // Gewicht 0
+   l->start_remove(caster->QueryProp(P_LEVEL)*20);
+   printf("Wie aus dem Nichts erscheint eine leuchtende Kugel.\n");
+
+   return ERFOLG;
+}
+*/
+
+int
+blitz(object caster, mapping sinfo) 
+{
+   object l;
+
+   printf("Du konzentrierst Dich auf Deine Umgebung.\n");
+   say(sprintf("%s versinkt fuer einen Augenblick in tiefster Konzentration.\n", 
+               caster->name()));
+
+   if (SpellSuccess(caster,sinfo)<=0)
+      return MISSERFOLG;
+
+   printf("Fuer einen kurzen Augenblick siehst Du alles ganz klar.\n");
+   printf(
+     environment(caster)->int_long(caster, caster) ||
+     "Irgendwie kannst Du nichts erkennen, so sehr Du dich auch anstrengst.\n");
+
+   return ERFOLG;
+}
+
+int ausweichen(object caster, mapping sinfo)
+{
+  mixed h;
+  int suc,dauer;
+
+  if (!caster->InFight())
+  {
+    write("Aber Du kaempfst doch gar nicht!\n");
+    return 0;
+  }
+  if (h=caster->QueryProp(P_TMP_DEFEND_HOOK))
+  {
+    if ((h[1]==this_object()) && (h[2]=="ausgewichen")) {
+      if (h[0] >= time())
+        return write("Noch mehr ausweichen kannst Du nicht.\n"), 0;
+    } else
+      return write("Irgendwie klappt das gerade nicht.\n"), 0;
+  }
+  if ((suc=SpellSuccess(caster,sinfo)) <= 0)
+    return MISSERFOLG;
+
+  dauer = 2 + caster->QueryAttribute(A_DEX)/6 + (suc/5000);
+  caster->SetProp(P_TMP_DEFEND_HOOK,
+      ({ time()+dauer, this_object(), "ausgewichen" }));
+  write("Du gehst ein wenig in Deckung.\n");
+  return ERFOLG;
+}
+
+mixed ausgewichen(int dam, mixed dam_type, mixed spell, object enemy)
+{
+  if (sizeof(filter_array(dam_type,PHYSICAL_DAMAGE_TYPES)))
+  {
+    dam /= 3;
+    if (dam < 20)
+      tell_object(previous_object(), "Du weichst gekonnt aus.\n");
+    else
+      tell_object(previous_object(), "Du weichst ein wenig aus.\n");
+    return ({ dam, dam_type, spell, enemy });
+  }
+  tell_object(previous_object(),
+      "Es gelingt Dir nicht, den Angriffen Deines Gegners auszuweichen.\n");
+  return ({ dam, dam_type, spell, enemy });
+}
+
+int 
+feuerball(object caster, mapping sinfo) {
+  object victim;
+  int hands, suc;
+  string vnw, feuertext;
+  
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Auf wen willst Du einen Feuerball schleudern?\n");
+  if (!victim)
+    return 0;
+   if ( (suc=SpellSuccess(caster,sinfo)) <=0)
+    return MISSERFOLG;
+
+  if( suc<2000 )
+    feuertext = "ein kleines Feuerbaellchen";
+  else if( suc<6000 )
+    feuertext = "einen Feuerball";
+  else if( suc<8000 )
+    feuertext = "einen grossen Feuerball";
+  else
+    feuertext = "einen gewaltig grossen Feuerball";
+  vnw = victim->name(WEM, 2);
+  say(sprintf("%s wirft "+feuertext+" nach %s.\n", 
+              capitalize(caster->name()), vnw), victim);
+  printf("Du wirfst "+feuertext+" nach %s.\n", vnw);
+  tell_object(victim, sprintf("%s wirft "+feuertext+" nach Dir.\n",
+                              capitalize(caster->name())));
+
+  TryDefaultAttackSpell(victim,caster,sinfo,
+                        ([SP_NAME:"Feuerball",SP_SHOW_DAMAGE:1]));
+  return ERFOLG;
+}
+
+int
+pfeil(object caster, mapping sinfo) {
+  object victim;
+  int hands;
+  string vn, vnw, cn;
+
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Nach wem willst Du einen magischen Pfeil werfen?\n");
+  if (!victim)
+    return 0;
+  if (SpellSuccess(caster,sinfo)<=0)
+    return MISSERFOLG;
+
+  cn = capitalize(caster->name());
+  vnw = victim->name(WEN, 2);
+  say(sprintf("%s feuert einen magischen Pfeil auf %s ab.\n",cn, vnw),
+      victim);
+  printf("Du feuerst einen magischen Pfeil auf %s ab.\n", vnw);
+  tell_object(victim,sprintf("%s feuert einen magischen Pfeil auf Dich ab.\n",
+                             cn));
+  TryDefaultAttackSpell(victim,caster,sinfo,
+                        ([SP_NAME:"Pfeil",SP_SHOW_DAMAGE:1]));
+  return ERFOLG;
+}
+
+int 
+schnell(object caster, mapping sinfo) {
+  int dauer, erfolg;
+
+  erfolg = SpellSuccess(caster,sinfo);
+  if (-2000 <= erfolg && erfolg<=0)
+    return MISSERFOLG;
+
+  dauer = caster->QueryAttribute(A_DEX) + random(sinfo[SI_SKILLABILITY]/1000);
+  if (erfolg < -2000)
+  {
+    total_fail = 1;
+    write("Der Spruch ging total daneben! Alles wird so zaehhh...\n");
+    caster->ModifySkillAttribute(caster,SA_SPEED,50,dauer);
+    return MISSERFOLG;
+  }
+  if (erfolg > 6000)
+  {
+    write("Du fuehlst Dich ploetzlich sehr viel schneller.\n");
+    caster->ModifySkillAttribute(caster,SA_SPEED,300,dauer/2);
+  }
+  else
+  {
+    write("Du fuehlst Dich ploetzlich deutlich schneller.\n");
+    caster->ModifySkillAttribute(caster,SA_SPEED,200,dauer);
+  }
+
+  return ERFOLG;
+}

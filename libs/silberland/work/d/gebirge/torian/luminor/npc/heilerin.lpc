@@ -1,0 +1,272 @@
+inherit "std/npc";
+
+#include <properties.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include "../def.h"
+
+// Heilspruch
+#define SP_KOSTEN 70
+#define HEAL 70
+
+// Spieler fuer Geld heilen - am Berkwergdruiden orientiert
+// Zugang zur Heilerin mit do_exhaust einschraenken
+
+int geld;
+int max_heal_pool;
+
+mapping spieler;
+
+create()
+{
+  if (!is_clone(TO)) return;
+  ::create();
+
+  geld = 0;
+  spieler = ([ ]);
+
+  SetProp(P_SHORT, "Sabrina, die Heilerin");
+  SetProp(P_LONG,
+    "Sabrina ist eine huebsche junge Frau mit langen dunklen Haaren und "
+    "blauen Augen. Sie traegt einen weiten Umhang und haelt einen "
+    "kleinen braunen Kasten in ihren Haenden. Eilig hastet sie zwischen "
+    "den stoehnenden Gefangenen hin und her, kuemmert sich um ihre "
+    "Wunden und spricht leise mit ihnen, um sie zu beruhigen und sie von "
+    "ihren Schmerzen abzulenken.");
+
+  SetProp(P_NAME, "Sabrina");
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:0,T_RANGE_MAX:30]));
+  AddId(({"sabrina", "heilerin", "frau"}));
+
+  AddClass(CL_HUMAN);
+
+  SetProp(P_GENDER, FEMALE);
+
+  create_default_npc(15);
+  SetProp(P_RACE, "Mensch");
+  SetProp(P_SIZE, 160);
+  SetProp(P_WEIGHT, 55000);
+  SetProp(P_ALIGN, 1000);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_HEAL,1);
+  SetProp(P_AGGRESSIVE,0);
+  SetProp(P_WIMPY, 0);
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_NOMAGIC,30);
+  SetProp(P_TRANSPARENT, 0);
+
+  SetProp(P_MSGIN, "kommt an");
+  SetProp(P_MSGOUT, "geht");
+  SetProp(P_MMSGIN, "kommt an");
+  SetProp(P_MMSGOUT, "verschwindet");
+
+  SetProp(P_DIE_MSG,  " faellt tot zu Boden.\n");
+  SetProp(P_NOCORPSE, 0 );
+
+  SetProp( P_REJECT, ({ REJECT_GIVE,
+    "Sabrina sagt: Was soll ich damit?\n" }) );
+
+  AddDetail( ({ "haare" }),
+    "Die Haare sind mit einem schmalen Band locker zusammengebunden.");
+  AddDetail( ({ "band" }),
+    "Ein schmales Band haelt die Haare zusammen.");
+  AddDetail( ({ "augen" }),
+    "Sabrina wirft Dir einen kurzen Blick zu und kuemmert sich dann "
+    "weiter um ihre Gefangenen.");
+  AddDetail( ({ "blick", "gesicht" }),
+    "Ab und zu breitet sich ein leicht verzweifelter Ausdruck auf "
+    "Sabrinas Gesicht aus.");
+  AddDetail( ({ "ausdruck" }),
+    "Sabrina kuemmert sich verzweifelt um die gequaelten Gefangenen.");
+  AddDetail( ({ "umhang" }),
+    "Der Umhang ist sehr weit und sieht schon etwas verblichen aus.");
+  AddDetail( ({ "kasten" }),
+    "In dem Kasten bewahrt Sabrina einige kleinere Flaeschchen und "
+    "Ampullen auf, die schmerzstillende Mittel enthalten.");
+  AddDetail( ({ "flaeschchen", "ampullen" }),
+    "Die kleinen Flaeschchen und Ampullen enthalten schmerzstillende Mittel.");
+  AddDetail( ({ "mittel" }),
+    "Gegen die groessten Schmerzen verabreicht Sabrina den Gefangenen "
+    "zunaechst einfache schmerzstillende Mittel, bevor sie ihre "
+    "besonderen Heilkraefte bei ihnen einsetzen kann.");
+  AddDetail( ({ "heilkraefte", "kraefte", "heilung" }),
+    "Sabrina besitzt besondere Kraefte, die sie zur Heilung der Gefangenen einsetzt.");
+  AddDetail( ({ "haende" }),
+    "In ihren Haenden haelt Sabrina einen kleinen braunen Kasten.");
+  AddDetail( ({ "wunden" }),
+    "Die Gefangenen sind teilweise sehr schwer verwundet.");
+  AddDetail( ({ "schmerzen" }),
+    "Viele der Gefangenen leiden starke Schmerzen.");
+
+  SetProp(P_LOG_INFO, "/torian/luminor/heilerin");
+
+  AddInfo(({"kerker"}),
+            "In diesem Keller haelt Luminor seine Gefangenen.",
+            "sagt: ");
+  AddInfo(({"gefangenen", "gefangene"}),
+            "Die armen Gefangenen, sie wurden von Luminors Monstern "
+            "hierher verschleppt.",
+            "seufzt: ");
+  AddInfo(({"monster"}),
+            "Luminor hat viele Wesen unter seiner Kontrolle, allen voran "
+            "seine heissgeliebten Oni.",
+            "sagt: ");
+  AddInfo(({"luminor", "feuerdaemon"}),
+            "Er hat uns alle entfuehren lassen um fuer ihn zu arbeiten, "
+            "oder als Mahlzeit zu dienen. Wenn uns nur jemand helfen koennte.",
+            "sagt: ");
+  AddInfo(({"mahlzeit", "nahrung"}),
+            "Luminor steht auf lebende Nahrung.",
+            "sagt schaudernd: ");
+  AddInfo(({"hilfe"}),
+            "Den Gefangenen helfe ich so gut ich kann, aber jemand muss "
+            "Luminor aufhalten! Ich habe leider nur wenig Informationen die "
+            "dabei helfen koennten.",
+            "sagt: ");
+  AddInfo(({"informationen", "information"}),
+            "Luminor ist ein Feuerdaemon der seine gesamte Kraft aus einer "
+            "magischen Flamme erhaelt.",
+            "erzaehlt: ");
+  AddInfo(({"kraft", "weg"}),
+            "Luminor ist dank seiner Lebensflamme nahezu unbesiegbar. Ich "
+            "bin nur eine Heilerin keine Kaempferin. Du wirst wohl alleine "
+            "einen Weg finden muessen ihn zu besiegen.",
+            "erzaehlt: ");
+  AddInfo(({"flamme", "lebensflamme"}),
+            "Ich habe die Waechter drueber erzaehlen hoeren. Die Lebensflamme "
+            "muss sich hier irgendwo im Turm befinden. Aber sei vorsichtig! "
+            "Die Waechter reden auch ueber eine starke Wache und vielen Fallen.",
+            "erzaehlt: ");
+  AddInfo(({"waechter", "kerkerknecht", "wachen"}),
+            "Der Kerkerknecht bringt uns manchmal Essen. Sonst sehen wir nicht viele "
+            "Wachen hier.",
+            "sagt: ");
+  AddInfo(({"gargyl", "gargylen", "marmorgargyl", "marmorgargylen"}),
+            "Ich habe gesehen wie einer der Kaempfer einen Gargyl zertruemmert hat, "
+            "bevor dieser zum Leben erwacht ist.",
+            "sagt: ");
+  AddInfo(({"essen"}),
+            "Viel zu selten bekommen wir Essen.",
+            "seufzt: ");
+  AddInfo(({"wache"}),
+            "Ich weiss leider nicht wer die Lebensflamme bewacht.",
+            "seufzt: ");
+  AddInfo(({"fallen", "falle"}),
+            "Sei bloss vorsichtig!",
+            "warnt: ");
+
+
+  SUID;
+
+  clone_object("/p/armour/cloak/robe" )->move(TO);
+  command("trage robe");
+
+  SetProp(P_SPELLRATE,30);
+
+  AddSpell(5,300,
+    Name()+" entzieht Dir Lebensenergie!\n",
+    Name()+" entzieht @WEM Lebensenergie!\n",
+     DT_MIND,([SP_SHOW_DAMAGE:1]));
+  AddSpell(3,1,
+    Name()+" umgibt eine helle Aura.\n",
+    Name()+" umgibt eine helle Aura.\n",
+     DT_BLUDGEON, "selbstheilung");
+
+  SetChats(2, ({
+    Name()+" kuemmert sich um die Gefangenen.\n",
+    Name()+" schaut Dich neugierig an.\n",
+    Name()+" fragt: Soll ich Dich auch heilen?\n"}) );
+  SetAttackChats(2, ({
+    Name()+" verflucht Dich!\n"}) );
+
+  SetProp (P_DEFAULT_INFO,
+	"sagt: Frag nicht soviel und hilf lieber!\n");
+
+}
+
+give_notify(obj)
+{
+  int heil_mich;
+  string uuid;
+  mixed keys;
+  
+  if(InFight(ME)) return ::give_notify(obj); 
+  if(!obj->id("\ngeld")) return ::give_notify(obj);
+
+  if(!query_once_interactive(TP)) return ::give_notify(obj); // Kein Spieler?
+  
+  heil_mich = obj->QueryProp(P_GIVEN_AMOUNT);
+
+  geld = geld + heil_mich;
+
+  uuid  = getuuid(TP);
+
+  heil_mich = heil_mich/10;
+  
+
+// Spieler nicht im mapping, aber schon 2 Leute drin
+  if(!(member(spieler, uuid)) && (sizeof(m_indices(spieler)) >1))
+  {
+    command_me("sag Tut mir leid, ich muss erst meine Kraefte wieder "
+        "regenerieren! Komm doch etwas spaeter wieder!");
+    return ::give_notify(obj);    
+  }
+  else if (!(member(spieler, uuid)))
+  {
+    spieler += ([uuid: heil_mich]);
+  }
+  else if((member(spieler, uuid) && ((spieler[uuid, 0] + heil_mich) > 900)))
+  {
+    // Mehr als 900 geheilt (mit aktuellem heilwert)
+    command_me("sag Tut mir leid, ich muss erst meine Kraefte wieder "
+        "regenerieren! Komm doch etwas spaeter wieder!");
+    return ::give_notify(obj);
+  }
+  else
+  {
+    // Spieler im mapping und noch keine 900 lp geheilt
+    spieler[uuid, 0] += heil_mich;
+  }
+
+  LUMINORMASTER->Msg(TP->Name()+" um "+heil_mich+" geheilt. Insgesamt:"+spieler[uuid, 0]);
+
+  TP->heal_self(heil_mich);
+  TP->do_exhaust(random(heil_mich));
+  obj->remove();
+
+  write(BS("Sabrina heilt Dich."));
+  say(BS("Sabrina heilt "+TP->Name(WEN)+"."), ({TP}));
+
+}  
+
+reset()
+{
+  if(geld)
+  {
+    LUMINORMASTER->Msg(geld+ " in Zentralbank eingezahlt");
+    "p/daemon/zentralbank"->PayIn(geld, 100);
+    geld=0;
+  }
+  spieler = ([ ]);
+  ::reset();
+}
+
+void selbstheilung(object enemy,int damage,string damtype)
+{
+  if(TO->QueryProp(P_HP) > TO->QueryProp(P_MAX_HP)/2)
+  {
+    return; // Heilen erst ab Haelfte der Hp
+  }
+  
+  if(QueryProp(P_SP) < SP_KOSTEN)
+  {
+  	return; // zuwenig mp uebrig
+  }
+
+  AddHp(HEAL);
+  AddSp(-SP_KOSTEN);
+  
+  return;
+  
+}

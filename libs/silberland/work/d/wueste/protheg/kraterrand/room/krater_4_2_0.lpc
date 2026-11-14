@@ -1,0 +1,415 @@
+/*
+  Ein kleiner Limonadenstand
+  by PROtheG
+  Besonderheiten: begrenzte Drinkzahl pro Reset
+  eventuell noch von durst-abhaengige Heilung (werma sehen)
+  durst-abhaengige Heilung eingebaut (sehr durstig -> etwas mehr heilung)
+  An Kraterrand angepasst (details, long, etc)
+  Zusaetzlich, wenn Aman tot ist, kann man seine Kasse ausraeumen (max 400)
+  Zum endgueltigen Anhaengen muessen die Preise noch angepasst werden!
+*/
+
+#include "../def.h"
+
+inherit "std/pub";
+inherit MOST "std_room";
+
+#define MAXZITRONE 16
+#define MAXORANGE 14
+#define MAXMELONE 10
+
+nosave int zitrone, orange, melone, money, k_offen;
+
+nosave void set_money() { money=200+random(200); }
+
+void create()
+{
+  ::create();
+  
+  SetProp(P_INT_SHORT, "Bei einem Limonadenstand");
+  SetProp(P_INT_LONG, 
+	  BS("Du stehst hier vor einem kleinen, unscheinbaren Zelt.")+
+	  BS("Waere da nicht das grosse Schild mit der Aufschrift: "
+	     "\"Limonadenstand\", waerest Du doch glatt vorbeigelaufen. "
+	     "Ansonsten gibt es hier nicht viel interessantes, bis auf den "
+	     "Rand des Kraters."));
+
+  AddDetail(({"zelt","stand","limonadenstand"}),
+	    "Unter dem weiten Vordach steht ein kleines Tischchen mit "
+	    "Glaesern und einer Registrierkasse. Daneben steht ein Sessel "
+	    "und an der Zeltwand stehen noch ein paar Kisten.");
+
+  AddDetail(({"schrift","aufschrift","schild"}), 
+	    "Probiers mal mit lesen!");
+
+  AddReadDetail(({"schrift","aufschrift","schild"}), 
+		"\"Limonadenstand\"");
+
+  AddDetail(({"rand","krater","kraterrand"}),
+	    "Pass bloss auf, dass Du nicht runterfaellst, oder willst Du "
+	    "etwa runterspringen!?");
+
+  AddDetail("boden",
+	    "Der Boden vor dem Zelt ist mit billigen Teppichen ausgelegt.");
+
+  AddDetail("himmel",
+	    "Blau und wolkenlos, wie immer.");
+
+  AddDetail("sonne",
+	    "Die Sonne brennt erbarmungslos auf dich herab!");
+
+  AddDetail("zeltwand",
+	    "An der Zeltwand haengt ein Schild und auf dem Boden davor "
+	    "stehen ein paar Kisten, ansonsten nichts interessantes.");
+
+  AddDetail("kisten",
+	    "Auf den Kisten steht: \"Obst, das Original, nur aus "
+	    "Tscherbonyl\"");
+
+  AddDetail(({"original","obst","tscherbonyl"}),
+	    "Du hast Dich schon immer gefragt, woher die ganzen Vorraete "
+	    "kommen ;)");
+
+  AddDetail("vorraete",
+	    "Die werden wohl in den Kisten gelagert.");
+
+  AddDetail("vordach",
+	    "Es schuetzt Aman und seine Kunden vor der sengenden Sonne.");
+
+  AddDetail(({"wueste","sand"}),
+	    "SAND, SAND, SAND, nichts als Sand! In der Wueste ist das "
+	    "nunmal so!");
+
+  AddDetail("sessel",
+	    "Auf dem sitzt Aman, wenn er gerade einmal nichts zu tun hat, "
+	    "also dauernd!");
+
+  AddDetail("tischchen",
+	    "Auf dem Tischchen stehen drei grosse Glaeser mit Limonade und "
+	    "einer Registrierkasse.");
+
+  AddDetail(({"teppiche","teppich"}),
+	    "Die sind auf dem Boden ausgelegt, um die Fuesse der Kunden vor "
+	    "dem sengenden Sand zu schuetzen.");
+
+  AddDetail("fuesse",
+	    "Ja auch Deine Fuesse werden von den Teppichen geschuetzt!");
+
+  AddDetail(({"kunde","kunden"}),
+	    "Viele Kunden scheint Aman ja nicht zu haben. Das liegt "
+	    "wahrscheinlich daran, dass der Stand ziemlich versteckt "
+	    "liegt.");
+
+  AddDetail("limonade","Versuchs doch mit <menue> !");
+
+  AddSpecialDetail(({"glas","glaeser"}),"glaeser");
+  AddSpecialDetail(({"kasse","registrierkasse","schublade"}), "kasse_check");
+  
+  AddDrink("Zitronenlimonade","zitronenlimonade",349,30,0,10,"zitrone");
+  AddDrink("Orangenlimonade","orangenlimonade",249,20,0,7,"orange");
+  AddDrink("Melonenlimonade","melonenlimonade",449,40,0,13,"melone");
+
+  AddCmd(({"kaufe","kauf","bestell","bestelle"}), "kaufen");
+  AddCmd(({"spendiere","spendier"}), "spendieren");
+  AddCmd("prelle", "nix_prell");
+  AddCmd(CMD_OEFFNEN, "kasse_oeffnen");
+  AddCmd("schliesse", "kasse_schliessen");
+  AddCmd(CMD_NEHMEN, "kasse_pluendern");
+
+  AddItem(NPC "aman",REFRESH_DESTRUCT);
+
+  RemoveItem("/obj/topliste");
+
+  AddExit("sueden", ([EX_DEST:DESERT ":67:38",
+                        EX_TESTFUNC: "nopewueste"]));
+  AddExit("suedwesten", ([EX_DEST:DESERT ":66:38",
+                        EX_TESTFUNC: "nopewueste"]));
+  AddExit("suedosten", ([EX_DEST:DESERT ":68:38",
+                        EX_TESTFUNC: "nopewueste"]));
+  
+  Ausgaenge("krater");
+  Licht("hell");
+  Umgebung("sehr_heiss", TT_DESERT);  
+
+  zitrone=orange=melone=k_offen=0;
+  set_money();
+}
+
+void reset()
+{
+  ::reset();
+
+  if(k_offen)
+    {
+      tell_room(TO,
+		BS("Aman fummelt etwas an seiner Registrierkasse herum."));
+
+      k_offen=0;
+
+      set_money();
+    }
+}
+
+nosave int kasse_pluendern(string str)
+{
+  if(!str) return 0;
+
+  if(str=="geld aus kasse"||str=="geld aus registrierkasse")
+    {
+      if(!k_offen) 
+	return write(BS("Die Schublade ist doch zu!")), 1;
+
+      if(!present("aman"))
+	if(money)
+	  {
+	    TP->AddMoney(money);
+	    
+	    write(BS("Als niemand hinsieht, schnappst Du Dir ein paar Muenzen "
+		     "aus der alten Registrierkasse."));
+	    
+	    money=0;
+	  }
+	else
+	  write(BS("Als niemand hinsieht, willst Du Dir ein paar Muenzen aus "
+		   "der alten Registrierkasse schnappen, doch da ist leider "
+		   "kein Geld mehr drinnen!"));
+      else
+	return write(BS("Aman sagt: Lass meine Registrierkasse in Ruh!!")), 1;
+
+      return 1;
+    }
+  return 0;
+}
+
+nosave int kasse_schliessen(string str)
+{
+  notify_fail(BS("Was willst Du denn schliessen?"));
+  if(!str) return 0;
+
+  if(str=="kasse"||str=="registrierkasse"||str="schublade")
+    if(!present("aman"))
+      if(k_offen)
+	{
+	  k_offen=0;
+	  return write(BS("Die Schublade rastet mit einem grossen Aechzer "
+			  "ein.")), 1;
+	}
+      else
+	return write(BS("Die Schublade ist doch zu!")), 1;
+    else
+      return write(BS("Aman sagt: Lass meine Registrierkasse in Ruh!!")), 1;
+
+  return 0;
+}
+
+nosave int kasse_oeffnen(string str)
+{
+  notify_fail(BS("Was willst Du denn oeffnen?"));
+  if(!str) return 0;
+
+  if(str=="kasse"||str=="registrierkasse"||str="schublade")
+    if(!present("aman"))
+      if(k_offen)
+	return write(BS("Die Kasse ist bereits offen!")),1;
+      else
+	if(random(15)<TP->QueryAttribute(A_STR))
+	  {
+	    k_offen=1;
+	    return write(BS("Mit einem festen Zug kannst Du die Schublade "
+			    "oeffnen.")), 1;
+	  }
+	else
+	  return write(BS("Die Kasse scheint zu klemmen, versuchs "
+			  "nochmal!")), 1;
+    else
+      return write(BS("Aman sagt: Lass meine Registrierkasse in Ruh!!")),1;
+  
+  return 0;
+}
+
+string kasse_check()
+{
+  string ret;
+  
+  ret=BS("Eine alte, eiserne Registrierkasse, in der Aman sein Geld "
+	 "aufbewahrt.");
+
+  if(k_offen)
+    ret+=BS("Die Kasse ist offen!");
+
+  if(!present("aman"))
+    ret+=BS("Die Kasse ist unbewacht!!");
+
+  return ret;
+}
+
+nosave int used_up(string str)
+{
+  switch(str)
+    {
+    case "zitronenlimonade": 
+      if(zitrone==MAXZITRONE) return 1; break;
+    case "orangenlimonade": 
+      if(orange==MAXORANGE)   return 1; break;
+    case "melonenlimonade": 
+      if(melone==MAXMELONE)   return 1; break;
+
+    default : return 0;
+    }
+}
+
+nosave int kaufen(string str)
+{
+  notify_fail(BS("Was willst Du denn kaufen?"));
+  if(!str) return 0;
+
+  if(!present("aman"))
+    return write(BS("Hmm, Aman scheint nicht da zu sein...")), 1;
+  
+  if(str=="limonade")
+    return write(BS("Aman sagt: Ich habe drei Sorten von Limonade, "
+		    "welche magst Du denn?")),1;
+
+  if(zitrone==MAXZITRONE&&orange==MAXORANGE&&melone==MAXMELONE)
+    return write(BS("Aman sagt: Tut mir leid, aber ich muss erst wieder "
+		    "Limonade machen.")+
+		 BS("Aman sagt: Komm spaeter wieder!")), 1;
+
+  if(str=="zitronenlimonade")
+    if(used_up(str)) 
+      return write(BS("Aman sagt: Tut mir leid, aber Zitronenlimonade habe "
+		      "ich keine mehr!")), 1;
+
+  if(str=="orangenlimonade")
+    if(used_up(str)) 
+      return write(BS("Aman sagt: Tut mir leid, aber Orangenlimonade habe "
+		      "ich keine mehr!")), 1;
+
+  if(str=="melonenlimonade")
+    if(used_up(str)) 
+      return write(BS("Aman sagt: Tut mir leid, aber Melonenlimonade habe "
+		      "ich keine mehr!")), 1;
+  
+  return ::bestelle(str);
+}
+
+string glaeser()
+{
+  string ret;
+  ret="";
+
+  if(zitrone==MAXZITRONE&&orange==MAXORANGE&&melone==MAXMELONE)
+    return BS("Die Glaeser scheinen alle leer zu sein! Da hat wohl jemand "
+	      "Durst gehabt.");
+
+  switch(zitrone)
+    {
+    case MAXZITRONE: ret+=BS("Das Glas mit der Zitronenlimonade ist leer!");
+      break;
+    case (MAXZITRONE/2) .. (MAXZITRONE-1): 
+      ret+=BS("Das Glas mit der Zitronenlimonade ist halb leer!"); 
+    break;
+    default : ret+=BS("Das Glas mit der Zitronenlimonade ist fast voll!");
+    }
+
+  switch(orange)
+    {
+    case MAXORANGE: ret+=BS("Das Glas mit der Orangenlimonade ist leer!");
+      break;
+    case (MAXORANGE/2) .. (MAXORANGE-1): 
+      ret+=BS("Das Glas mit der Orangenlimonade ist halb leer!"); 
+    break;
+    default : ret+=BS("Das Glas mit der Orangenlimonade ist fast voll!");
+    }
+
+  switch(melone)
+    {
+    case MAXMELONE: ret+=BS("Das Glas mit der Melonenlimonade ist leer!");
+      break;
+    case (MAXMELONE/2) .. (MAXMELONE-1): 
+      ret+=BS("Das Glas mit der Melonenlimonade ist halb leer!"); 
+    break;
+    default : ret+=BS("Das Glas mit der Melonenlimonade ist fast voll!");
+    }
+
+  return ret;
+}
+
+nosave int spendieren(string str)
+{
+  // Da das spendieren anders zu funktionieren scheint, als das kaufen,
+       //lass ich es mal voerst draussen
+       
+  notify_fail(BS("Was willst Du denn wem spendieren?"));
+  if(!str) return 0;
+
+  if(!present("verkaeufer"))
+    return write(BS("Hmm, Aman scheint nicht da zu sein...")), 1;
+
+  return write(BS("Aman sagt: Nichts da spendieren, selber kaufen!")), 1;
+}
+
+nosave int nix_prell(string str)
+{
+  if(!str) return 0;
+
+  if(!present("verkaeufer"))
+    return write(BS("Ohne Aman laeuft hier nichts...")), 1;
+
+  return write(BS("Aman sagt: Du willst mich doch nicht um mein Geld "
+		  "prellen?!")), 1;
+}  
+
+nosave void zitrone(object zahler, object trinker)
+{
+  tell_object(trinker, 
+	      BS("Du genehmigst Dir einen Schluck der saeuerlichen "
+		 "Zitronenlimonade."));
+
+  say(BS(trinker->Name(WER)+" trinkt einen Schluck der saeuerlichen "
+	 "Zitronenlimonade und verzerrt dabei das Gesicht."), ({trinker}));
+
+  zitrone++;
+
+  if(trinker->QueryProp(P_DRINK)<=(trinker->QueryProp(P_MAX_DRINK)/2))
+    {
+      trinker->heal_self(random(MAXZITRONE));
+      write(BS("Du fuehlst Dich viel frischer, da Du so durstig warst."));
+    }
+}
+
+nosave void orange(object zahler, object trinker)
+{
+  tell_object(trinker, 
+	      BS("Du genehmigst Dir einen Schluck der koestlichen "
+		 "Orangenlimonade."));
+
+  say(BS(trinker->Name(WER)+" nimmt einen Schluck Orangenlimonade zu sich "
+	 "und fuehlt sich danach sichtlich gestaerkt!"), ({trinker}));
+
+  orange++;
+
+  if(trinker->QueryProp(P_DRINK)<=(trinker->QueryProp(P_MAX_DRINK)/2))
+    {
+      trinker->heal_self(random(MAXORANGE));
+      write(BS("Du fuehlst Dich viel frischer, da Du so durstig warst."));
+    }
+}
+
+nosave void melone(object zahler, object trinker)
+{
+  tell_object(trinker,
+	      BS("Du genehmigst Dir einen Schluck der suessen "
+		 "Melonenlimonade."));
+
+  say(BS(trinker->Name(WER)+" trinkt das Glas mit der Melonenlimonade auf "
+	 "einen Schluck aus!"), ({trinker}));
+
+  melone++; 
+
+  if(trinker->QueryProp(P_DRINK)<=(trinker->QueryProp(P_MAX_DRINK)/2))
+    {
+      trinker->heal_self(random(MAXMELONE));
+      write(BS("Du fuehlst Dich viel frischer, da Du so durstig warst."));
+    }
+}

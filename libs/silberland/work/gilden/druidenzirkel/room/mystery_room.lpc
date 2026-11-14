@@ -1,0 +1,197 @@
+
+#include "../druiden.h"
+#include "../mysteries.h"
+#include <player.h>
+#include <properties.h>
+#include <language.h>
+#include <new_skills.h>
+#define TALENTMASTER "/gilden/druidenzirkel/master/talentmaster"
+
+private string getTalentGroupFor(int talentNr) {
+    if(member(MYSTERY_GROUP_MISC, talentNr) > -1) return "Allgemein";
+    if(member(MYSTERY_GROUP_HUMUS, talentNr) > -1) return "Humus";
+    if(member(MYSTERY_GROUP_FIRE, talentNr) > -1) return "Feuer";
+    if(member(MYSTERY_GROUP_ICE, talentNr) > -1) return "Eis";
+	if(member(MYSTERY_GROUP_STONE, talentNr) > -1) return "Erz";
+	if(member(MYSTERY_GROUP_WATER, talentNr) > -1) return "Wasser";
+	if(member(MYSTERY_GROUP_AIR, talentNr) > -1) return "Luft";
+    return "<unbekannt>";
+}
+
+public int getOpenTalentSlots(object pl) {
+    int i;
+    i = pl->QueryProp(P_GUILD_LEVEL);
+    if(i > 15) i = 15;
+    return (i / 2) - sizeof(TALENTMASTER->GetActiveTalents(pl));
+}
+
+public void printActiveTalents(object pl) {
+    int* activeTalents;
+	int openTalentSlots, i;
+
+	write(sprintf("+%73'='s+\n", ""));
+	write(sprintf("| %|71' 's |\n", "Erfahrene Mysterien"));
+	write(sprintf("+%73'~'s+\n", ""));
+	activeTalents = TALENTMASTER->GetActiveTalents(this_player());
+
+    for(i=0; i<sizeof(activeTalents); ++i) {
+        write(sprintf("| %|71' 's |\n", sprintf("%s (%s)", 
+            (MYSTERY_NAMES[activeTalents[i]]?MYSTERY_NAMES[activeTalents[i]]:"<deaktiviert>"), 
+            getTalentGroupFor(activeTalents[i]))));
+    }
+
+    for(openTalentSlots = getOpenTalentSlots(pl); openTalentSlots>0; --openTalentSlots) {
+        write(sprintf("| %|71' 's |\n", "<frei>"));
+    }
+
+	write(sprintf("+%73'~'s+\n", ""));
+}
+
+public void printTalentMenu(object pl) {
+    printActiveTalents(pl);
+	write(sprintf("|%|73' 's|\n", "Die Kraft der Element durchstroemt dich. Was willst du tun? "));
+	write(sprintf("| %2s - %-66' 's |\n", "1", "Neues Mysterium erlangen"));
+	write(sprintf("| %2s - %-66' 's |\n", "2", "Mysterien zuruecksetzen"));
+	write(sprintf("| %2s - %-66' 's |\n", "X", "Beenden"));
+	write(sprintf("+%73'='s+\n", ""));
+	input_to("talentMenuSelection");
+}
+
+
+public void learnTalentMenu() {
+    int openSlots;
+    int i, currentTalent;
+    string element;
+
+    openSlots = getOpenTalentSlots(TP);
+
+    write(sprintf("+%73'='s+\n", ""));
+	write(sprintf("| %|71' 's |\n", "Weles Mysterium willst du erfahren?"));
+    write(sprintf("| %|71' 's |\n", sprintf("Du hast %d freie Mysterien.", openSlots)));
+	write(sprintf("+%73'~'s+\n", ""));
+
+    write(sprintf("| %|71' 's |\n", "Allgemeine Mysterien"));
+    write(sprintf("+%73'~'s+\n", ""));
+    for(i=0; i<sizeof(MYSTERY_GROUP_MISC); ++i) {
+        currentTalent = MYSTERY_GROUP_MISC[i];
+        if(MYSTERY_NAMES[currentTalent] == 0) continue; // deaktiviert
+        if(TALENTMASTER->HasTalent(TP, currentTalent)) continue; // schon erlernt
+        write(sprintf("| %|71' 's |\n", sprintf("%d. %s", currentTalent, MYSTERY_NAMES[currentTalent])));
+    }
+    write(sprintf("+%73'~'s+\n", ""));
+
+    element = DRUIDENMASTER->GetDruidElement(TP);
+    write(sprintf("| %|71' 's |\n", sprintf("%s Mysterien", CAP(element))));
+    write(sprintf("+%73'~'s+\n", ""));
+    for(i=0; i<sizeof(ELEMENT_MYSTERY_MAP[element]); ++i) {
+        currentTalent = ELEMENT_MYSTERY_MAP[element][i];
+        if(MYSTERY_NAMES[currentTalent] == 0) continue; // deaktiviert
+        if(TALENTMASTER->HasTalent(TP, currentTalent)) continue; // schon elernt
+
+        write(sprintf("| %|71' 's |\n", sprintf("%d. %s", currentTalent, MYSTERY_NAMES[currentTalent])));
+    }
+    write(sprintf("+%73'~'s+\n", ""));
+    write(BS("Welches Mysterium willst du erfahren? [X = abbrechen]"));
+    input_to("learnTalent", 0, element);
+}
+
+public void learnTalent(string idStr, string element) {
+	int id, ret, grp;
+
+	if(lowerstring(idStr) == "x") {
+		write(BS("Auf bald!"));
+		return;
+	}
+	
+	if(sscanf(idStr, "%d", id) != 1) {
+		write(BS("Du musst eine Mysteriumsnummer angeben!"));
+		learnTalentMenu();
+		return;
+	}
+
+	if(member(MYSTERY_GROUP_MISC, id) < 0 && member(ELEMENT_MYSTERY_MAP[element], id) < 0) {
+    write(BS("Ungueltige Auswahl fuer allgemeine oder "+element+" Mysterien."));
+    learnTalentMenu();
+    return;
+  }
+
+	if(TALENTMASTER->HasTalent(this_player(), id)) {
+		write(BS("Dieses Mysterium ist bereits aktiv."));
+		learnTalentMenu();
+		return;
+	}
+
+	if(id < 0 || id > MAX_TALENT_NR) {
+		write(BS("Unbekannte Talentnummer."));
+		learnTalentMenu();
+		return;
+	}
+
+	ret = TALENTMASTER->ActivateTalent(this_player(), id);
+	if(ret <= 0) {
+		if(ret == -1){
+			write(BS("Fehler: Du darfst das nicht!\n"));
+		} else if(ret == -2) {
+			write(BS("Fehler: Du bist kein Druide!\n"));
+		} else if(ret == 0) {
+			write(BS("Fehler: Aktivierung fehlgeschlagen.\n"));
+		} else {
+			write(BS("Fehler: " + ret + "\n"));
+		}
+		return;
+	} else {
+		write(BS("Du fuehlst wie die Elemente durch dich fliessen."));
+		write(BS(sprintf("Du hast das Mysterium '%s' erfahren.", MYSTERY_NAMES[id])));
+	}
+	return;
+}
+
+public void resetTalents(string confirm) {
+	int ret;
+	if(lowerstring(confirm) != "zuruecksetzen") {
+		write(BS("Abgebrochen."));
+		return;
+	}
+
+	ret = TALENTMASTER->ResetTalents(this_player());
+	if(ret > 0) {
+			write(BS(sprintf("Du kannst deine Talente noch nicht zuruecksetzen. Du musst noch %d Tage warten.", ret)));
+      return;
+	}
+
+	write(BS("Die Kraft der Elemente stroemt aus dir."));
+	this_player()->SetProp(P_SP, 0);
+	this_player()->AddExp(-100000);
+}
+
+public void resetTalentMenu() {
+	printActiveTalents(TP);
+	write(sprintf("|%|73' 's|\n", " Zuruecksetzen der Mysterien bestaetigen! "));
+	write(sprintf("|%-73' 's|\n", " Wenn du deine Segnungen zuruecksetzt musst du folgendes bedenken: "));
+	write(sprintf("|%-73' 's|\n", "   1. Jedes Zueruecksetzen kostet 100.000 Erfahrungspunkte.  "));
+	write(sprintf("+%73'='s+\n", ""));
+	write("[Zum Zuruecksetzen gib 'zuruecksetzen' ein] ==> ");
+	input_to("resetTalents");
+}
+
+public void talentMenuSelection(string choice) {
+	if(choice == "1") {
+		learnTalentMenu();
+	} else if(choice == "2") {
+		resetTalentMenu();
+	} else if(lowerstring(choice) == "x") {
+		write(BS("Du erwachst wieder aus deiner Meditation."));
+	} else {
+		printTalentMenu(TP);
+	}
+}
+
+public int cmd_meditieren() {
+    notify_fail("Du kannst hier nicht meditieren.\n");
+    if(TP->QueryProp(P_GUILD) != "druidenzirkel") return 0;
+
+    write(BS("Du versenkst dich langsam in Meditation..."));
+    say(BS(TPN+" versenkt sich in Meditation..."));
+    printTalentMenu(TP);
+    return 1;
+}

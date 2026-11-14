@@ -1,0 +1,314 @@
+/* 
+** Waffenreparateur
+** 
+** einfach die defines abstimmen und Details aendern :)
+**
+** Speedy 27.10.97
+**
+** adaptiert fuer Elessar: Sargola,  01-01-98
+** er kann leder ruestungen, magie-gegenstaende
+** und speer- und wurfwaffen gut reparieren
+**
+
+*/
+
+inherit "std/room";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <bank.h>
+#include <moredef.h>
+
+// Ausgabe Meldung
+#define WEBS(x) break_string( x, 78, "Der Sattler sagt: " )
+
+// verfuegbare Sachen: (wenn nur ein Gebiet, trotzdem ein Array)
+/*
+#define REP ({WT_SWORD, WT_AXE, WT_CLUB, WT_SPEAR, WT_KNIFE, WT_WHIP,\
+              WT_CHAIN, WT_BOW, AT_ARMOUR, AT_HELMET, AT_AMULET, AT_RING,\
+              AT_GLOVE, AT_CLOAK, AT_BOOT, AT_SHIELD, AT_TROUSERS})
+*/
+
+// Preise pro DAMAGED Punkt
+#define WAFFE 50
+#define RUESTUNG 200
+
+// Damage Rest, das kann nicht hergestellt werden, die letzten ... Punkte
+// Der Reparateur kann ja keine Wunder vollbringen (random auch möglich)
+#define REST_WAFFE 5
+#define REST_RUESTUNG 5
+
+// Zeit zum überlegen, ob man repariert
+#define MAXZEIT 15
+
+// Properties
+#define REPAIR_TYPES "Speedy's Repairtypes"
+
+create() {
+  ::create();
+
+  SetProp( P_INDOORS, 1 );
+  SetProp( P_LIGHT, 1 );
+  SetProp( P_ENVIRONMENT, ([ENV_TEMPERATURE: 20]) );
+  SetProp( P_INT_SHORT, "Beim Sattler" );
+  SetProp( P_INT_LONG, BS(
+    "Du stehst in einem kleinen Laden, dem Sattler in Elessar. Entgegen Deinen "
+    +"Erwartunten liegen hier keine Saettel herum. Tausenderlei Lederteile und "
+    +"Waffen lehen an der Wand oder liegen in Regalen. Mit ´repariere "+
+    "<Gegenstand>' kannst Du was reparieren lassen, und mit "+
+    "'spezialgebiet' kannst das Spezialgebiet des Sattlers erfahren. ") );
+
+  AddDetail("laden", BS("Du stehst mittendrin."));
+  
+  AddDetail("erwartungen", BS("Du hast doch nicht etwa wirklich Saettel erwartet, oder?"));
+  
+  AddDetail( ({"stuecke","lederteile","teile"}),
+  	BS("Du kannst Dir gar nicht vorstellen, wozu man solche Teile ueberhaupt "
+  	+"brauchen koennte. Es sind Stuecke in allen Farben und allerhand versch"
+  	+"iedenen Verarbeitungstechniken zu sehen."));
+  	
+  AddDetail("farben", BS("Von tiefschwarzen Lederarmschienen bis zu fast weissen Koechern "
+  	+"fuer Elfenmesser kannst Du alle Farbschattierungen erkenne."));
+  	
+  AddDetail("verarbeitungstechniken", BS("Angefangen von Stickereien in Leder, bis ver"
+  	+"knuepfte und geflochtene Dinge, Praegungen mit gluehendem Eisen, mit starkem "
+  	+"Druck bis zu kunstvollen Malereien siehst Du hier alles."));
+  	
+  AddDetail("stickereien", BS("Sie stellen meist traditionelle Arbeiten von Elfen und "
+  	+"Elfinnen im Wald dar. Das Sammeln von Beeren ist zum Beispiel ziemlich oft "
+  	+"zu sehen."));
+  	
+  AddDetail("beeren",BS("Was auch immer das fuer Beeren sein moegen."));
+  
+  /*...*/ 
+
+  AddCmd( ({"repariere", "reparier"}), "xrepair" );
+  AddCmd( ({"spezialgebiet","spezial"}), "xspezial" );
+  AddCmd( ({"verkaufe","verkauf","versetz","versetze"}), "sell");
+  
+  AddExit( "norden", "/players/sargola/workroom.lpc" );
+
+  // Das kann ich reparieren
+  // auf Elfen zugeschnitten
+  TO->SetProp( REPAIR_TYPES, 
+        ({WT_SPEAR, WT_KNIFE, WT_CHAIN, WT_BOW, 
+          AT_ARMOUR, AT_HELMET, AT_AMULET, AT_RING,
+          AT_GLOVE, AT_CLOAK, AT_BOOT, AT_SHIELD, AT_TROUSERS}) );
+}
+
+sell() {
+  notify_fail( "Tut mir leid, wir kaufen nichts an!\n" );
+  return 0;
+}
+
+force_sell() { 
+  return sell(); 
+}
+
+evaluate() { 
+  return sell(); 
+}
+
+string
+wandel(string str) {
+  string x;
+
+  switch(str) {
+    case WT_SWORD    : x="Schwerter"; break;
+    case WT_AXE      : x="Aexte"; break;
+    case WT_CLUB     : x="Keulen"; break;
+    case WT_SPEAR    : x="Speere"; break;
+    case WT_KNIFE    : x="Messer"; break;
+    case WT_WHIP     : x="Peitschen"; break;
+    case WT_CHAIN    : x="Kettenwaffen"; break;
+    case WT_BOW      : x="Bogen"; break;
+    case AT_ARMOUR   : x="Ruestungen"; break;
+    case AT_HELMET   : x="Helme"; break;
+    case AT_AMULET   : x="Amulette"; break; 
+    case AT_RING     : x="Ringe"; break;
+    case AT_GLOVE    : x="Handschuhe"; break;
+    case AT_CLOAK    : x="Umhaenge"; break;
+    case AT_BOOT     : x="Schuhe"; break;
+    case AT_SHIELD   : x="Schilder"; break;
+    case AT_TROUSERS : x="Hosen"; break;
+    default: x="kenn i net! schleich di!";
+  }
+  return x;
+}
+
+xspezial() {
+  int max, i;
+  string ausgabe;
+
+  if( (max=sizeof( QueryProp(REPAIR_TYPES) ))==1 )
+    ausgabe="Mein Spezialgebiet ist "+wandel(QueryProp(REPAIR_TYPES)[0])+".";
+  else {
+    ausgabe="Meine Spezialgebiete sind ";
+    for(i=0; i<max; i++) {
+      if( i==max-1 )
+	ausgabe=ausgabe[0..(strlen(ausgabe)-3)]+" und "+
+                wandel(QueryProp(REPAIR_TYPES)[i])+". ";
+      else
+	ausgabe+=wandel(QueryProp(REPAIR_TYPES)[i])+", ";
+    }
+  }
+  write( WEBS(
+    ausgabe ) );
+
+  return 1;
+}
+
+int
+xrepair(string str) {
+  object ob;
+  int dam, wert, maxwert, damrest, preis, damrest_pct;
+  int i;
+
+  notify_fail( "Was willst Du reparieren lassen?\n" );
+
+  if( !str || !stringp(str) ) 
+    return 0;
+  if( !ob = present(str,TP) ) {
+    write( WEBS( 
+      "So etwas hast Du ja gar nicht dabei! " ) );
+    return 1;
+  }
+
+  dam = ob->QueryProp( P_DAMAGED );
+
+  if(member( QueryProp(REPAIR_TYPES), ob->QueryProp(P_WEAPON_TYPE) ) >= 0 ) {
+    write( WEBS(
+      "Aha, Du willst also eine Waffe reparieren, auf deren Material ich "+
+      "spezialisiert bin, mal sehen was sich machen laesst ... ") );
+    wert=ob->QueryProp( P_WC );
+    damrest_pct=REST_WAFFE;
+    preis=WAFFE;
+    }
+  else 
+    if(member( QueryProp(REPAIR_TYPES), ob->QueryProp(P_ARMOUR_TYPE)) >= 0 ) {
+      write( WEBS(
+        "Aha, Du willst also eine Ruestung reparieren, auf deren Material "+
+        "ich spezialisiert bin, mal sehen was sich machen laesst ... ") );
+      wert=ob->QueryProp( P_AC );
+      damrest_pct=REST_RUESTUNG;
+      preis=RUESTUNG;
+    }
+  else  
+    if( ob->QueryProp( P_WEAPON_TYPE ) ) {
+      write( WEBS(
+        "Tut mir leid, aber mit solchen Arten von Waffen kenne ich mich "+
+        "nicht aus. ") );
+      return 1;
+    }
+  else
+    if( ob->QueryProp( P_ARMOUR_TYPE ) ) {
+      write( WEBS(
+        "Tut mir leid, aber mit solchen Arten von Ruestungen kenne ich mich "+
+        "nicht aus. ") );
+      return 1;
+    }
+  else {
+    write( WEBS( 
+      "Ich kenne mich nur mit Waffen und Ruestungen aus, nicht aber mit "+
+      "dem Zeug, das Du da bei Dir hast! ") );
+    return 1;
+  }
+
+  write("Der Waffenexperte prueft "+ob->name(WEN,1)+" eingehend.\n");
+  maxwert = wert + dam;
+  damrest = (maxwert * damrest_pct) / 100;
+
+  if (dam <= damrest) {
+    write( WEBS(
+      "Hmmm, die Schaeden an "+ob->name(WEM,1)+" sind so minimal, "+
+      "da kann ich auch nichts mehr weiter tun!") );
+    return 1;
+  }
+
+  preis=preis*(dam-damrest);
+  write( WEBS(
+    "Die Reparatur "+ob->name(WESSEN,1)+" wuerde Dich "+preis+" Muenzen "+
+    "kosten."));
+  write( BS(
+    "Willst Du sie durchfuehren lassen? (ja/nein) -> ") );
+
+  input_to("xrepair_wirklich", 0, ob, dam-damrest, preis, time());
+  return 1;
+}
+
+void
+xrepair_wirklich(string str, object ob, int damrep, int preis, int zeit) {
+
+  if( !TP ) 
+    return;
+
+  if( environment( TP ) != TO) {
+    write( BS(
+      "Dazu ist es jetzt zu spaet!") );
+    return;
+  }
+
+  if( time() > (zeit+MAXZEIT) ) {
+    write( WEBS(
+      "Du hast Dir zuviel Zeit gelassen! Ueberlege es Dir noch einmal... "+
+      "unser Angebot bleibt natuerlich bestehen! ") );
+    return;
+  }
+
+  if( (str != "ja" ) && (str != "j") ) {
+    write( WEBS(
+      "Na gut, wie Du meinst. Viel Spass noch damit! ") );
+    return;
+  }
+
+  if( !ob ) {
+    write( WEBS(
+      "Nanu, wo ist denn der fragliche Gegenstand so ploetzlich "+
+      "hinverschwunden? ") );
+    return;
+  }
+
+  if( environment( ob ) != TP ) {
+    write( WEBS(
+      "Nanu, wo ist denn "+ob->name(WER,1)+" so ploetzlich "+
+      "hinverschwunden? ") );
+    return;
+  }
+
+  if( damrep > ob->QueryProp(P_DAMAGED) ) {
+    write( WEBS(
+      "Huch, irgendwas stimmt da nicht, "+ob->name(WER,1)+" ist ja gar "+
+      "nicht mehr so arg beschaedigt wie vorhin! Probier es doch bitte "+
+      "noch einmal...") );
+    return;
+  }
+
+  if( TP->QueryMoney() < preis ) {
+    write( WEBS(
+      "Das Problem ist nur, dass Du "+preis+" Muenzen gar nicht dabeihast! "+
+      "Das beste ist, Du holst Dir etwas Geld von der Bank oder pumpst Dir "+
+      "etwas...") );
+    return;
+  }
+
+  TP->AddMoney(-preis);
+  ZENTRALBANK->PayIn(preis);
+
+  if( ob->QueryProp(P_WEAPON_TYPE) )
+    ob->SetProp(P_WC, ob->QueryProp(P_WC)+damrep);
+  else
+    ob->SetProp(P_AC, ob->QueryProp(P_AC)+damrep);
+
+  ob->SetProp(P_DAMAGED, ob->QueryProp(P_DAMAGED)-damrep);
+
+  write( BS(
+    "Der Waffenexperte nimmt Dir "+preis+" Muenzen ab und beginnt mit der "+
+    "Reparatur "+ob->name(WESSEN,1)+". Kurze Zeit spaeter ist er fertig und "+
+    "drueckt "+ob->QueryPronoun(WEN)+" Dir in wesentlich besserem Zustand "+
+    "als zuvor in die Hand.") );
+}
+
+
+
+

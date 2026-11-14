@@ -1,0 +1,274 @@
+// Macht aus 3 magischen Items eines.
+// 29.10.2004 Feyaria@SilberLand
+
+#include "../def.h"
+#include "/p/daemon/itemd/itemd.h"
+
+inherit "std/thing";
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_NAME, "Magie");
+  SetProp(P_NAME_ADJ, "pur" );
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_SHORT, "Eine grosse Menge purer Magie");
+  SetProp(P_LONG,
+    "Eine grosse Menge purer Magie. Man kann sie verwenden, um magische "
+    "Eigenschaften von einem Gegenstand auf einen anderen zu uebertragen.");
+  AddId( ({"magie"}) );
+  AddAdjective( ({"pure", "purer", "puren", "pur"}) );
+  SetProp(P_INFO,
+      BS("Mit 'uebertrage magie von <1> und <2> auf <3>' kannst Du die "
+        "Magie von den ersten beiden Gegenstaenden auf den dritten "
+        "uebertragen. Dabei wird vom ersten Gegenstand der Prefix und vom "
+        "zweiten der Suffix genommen und auf den dritten uebertragen. "
+        "Auf diese Weise lassen sich extrem maechtige magische Gegenstaende "
+        "erzeugen."));
+
+  SetProp(P_MATERIAL, ([MAT_MAGIC: 100]) );
+  SetProp(P_WEIGHT, 1);
+  SetProp(P_SIZE, 1);
+  SetProp(P_VALUE, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NOBUY, 1);
+
+  AddCmd( ({"uebertrage", "uebertrag"}), "cmd_uebertragen");
+  SUID;
+}
+
+int canExtractPrefix(object ob)
+{
+    return pointerp(ob->QueryProp(P_ITEMD_VALUES)) &&
+           pointerp(ob->QueryProp(P_ITEMD_VALUES)[0]) &&
+           mappingp(ob->QueryProp(P_ITEMD_VALUES)[0][1]) &&
+           stringp(ob->QueryProp(P_ITEMD_VALUES)[0][1][P_NAME]);
+}
+
+string extractPrefix(object ob) 
+{
+    return (string) (ob->QueryProp(P_ITEMD_VALUES)[0][1][P_NAME]);
+}
+
+mixed extractPrefixFrom(object ob)
+{
+    mixed *prefixAndSuffix;
+    
+    prefixAndSuffix = ob->QueryProp(P_ITEMD_PRE_SUFFIX);
+    if (pointerp(prefixAndSuffix) || prefixAndSuffix[0] != "")
+    {
+        return prefixAndSuffix[0];
+    }
+    else if(canExtractPrefix(ob))
+    {
+        return extractPrefix(ob);
+
+    }
+        
+    return 0;
+}
+
+mixed extractSuffixFrom(object ob)
+{
+   string *prefixAndSuffix;
+
+   prefixAndSuffix = ob->QueryProp(P_ITEMD_PRE_SUFFIX);
+   if (!pointerp(prefixAndSuffix) || prefixAndSuffix[1] == "")
+   {
+     return 0;
+   }
+
+   return prefixAndSuffix[1];
+}
+
+int isValidTarget(object ob)
+{
+  return ob->QueryProp(P_ITEMD_PRE_SUFFIX) != 0;
+}
+
+void displayItemIsMissingMessage(string name) 
+{
+  tell_object(TP, "Aber du hast ja gar kein " + CAP(name) + "!\n");
+}
+
+mixed getItemsFromPlayerInventory(string teil1, string teil2, string teil3)
+{
+  object ob1, ob2, ob3;
+
+  ob1 = present(teil1, TP);
+  ob2 = present(teil2, TP);
+  ob3 = present(teil3, TP);
+
+  if (!objectp(ob1))
+  {
+    displayItemIsMissingMessage(teil1);
+    return 0;
+  }
+
+  if (!objectp(ob2)) 
+  {
+    displayItemIsMissingMessage(teil2);
+    return 0;
+  }
+
+  if (!objectp(ob3))
+  {
+    displayItemIsMissingMessage(teil3);
+    return 0;
+  }
+  
+  return ({ob1, ob2, ob3});
+}
+
+int itemIsUsedTwice(object a, object b, object c)
+{
+  return a == b || a == c || b == c;
+}
+
+int isWornOrWielded(object ob) 
+{
+  return ob->QueryProp(P_WORN) || ob->QueryProp(P_WIELDED);
+}
+
+int itemsAreNotUsable(object ob1, object ob2, object target)
+{
+  if(itemIsUsedTwice(ob1, ob2, target))
+  {
+    tell_object(TP, BS("ES muessen 3 verschiedene Gegenstaende sein!\n"));
+    return 1;
+  }
+
+  if(isWornOrWielded(ob1) || isWornOrWielded(ob2) || isWornOrWielded(target))
+  {
+    tell_object(TP, BS("Du musst die Sachen schon ausziehen, bevor Du die "
+          "Magie von einem auf den anderen Gegenstand uebertragen kannst!"));
+    return 1;
+  }
+
+  if (!isValidTarget(target))
+  {
+    tell_object(TP, BS(target->name(WER) + " muss magisch sein, damit Du die "
+          "Magie darauf uebertragen kannst.\n"));
+    return  1;
+  }
+
+  return 0;
+}
+
+void modifyItemToBeTemporary(object result)
+{
+    int dest_var;
+    tell_object(TP, BS(sprintf("Huch! Eine ueberlagerte magische Stroemung aus dem "
+          "Astralraum "
+          "veraendert die mirkroastralen Strukturen von %s! Langsam aber "
+          "sicher scheint die Magie von %s zu entweichen!",
+          result->name(WEM), result->QueryPronoun(WEM))));
+          
+    dest_var=(random(15)+15)*100;
+    result->SetProp(P_ITEMD_TMPMAGIC, ({dest_var,dest_var}));
+}
+
+int isBlacklisted(string file)
+{
+    string *blacklist;
+    blacklist = ({
+       "/p/std/skills/jewelry/magic_amulett",
+       "/p/std/skills/jewelry/magic_perlenkette",
+       "/p/std/skills/jewelry/magic_perlenring",
+       "/p/std/skills/jewelry/magic_ring",
+    });
+    return member(blacklist, file) > -1;
+}
+
+object cloneNewMagicItemBasedOn(object target, string prefix, string suffix)
+{
+  object result;
+  string file;
+  
+  file = explode(file_name(target), "#")[0];
+  
+  if(isBlacklisted(file)) {
+      tell_object(TP, BS("Dieser Gegenstand kann nicht das Ziel der puren Magie sein. "
+                "Du vermutest kosmische Gruende dafuer..."));
+      return 0;
+  }
+  
+  result = clone_object(file);
+  result->move(TP, M_NOCHECK);
+  
+  tell_object(TP, BS(sprintf("Die Magie der Gegenstaende fliesst mit Hilfe der puren Magie auf "
+        "%s ueber und verbindet sich. Die 3 Gegenstaende loesen sich auf und Du "
+        "haeltst nun %s in Deinen Haenden.", 
+        target->name(WEN), result->name(WEN))));
+  tell_room(ENV(TP), 
+            BS(TP->Name(WER) + " erzeugt mittels purer Magie: " + result->QueryProp(P_SHORT) + "."), 
+            ({TP}));
+
+  call_other(ITEMD, "SetMagicItem", result, prefix, suffix);
+
+  if(!random(3)) modifyItemToBeTemporary(result);
+  
+  return result;
+}
+
+void removeAllItemsAndSelf(object *items)
+{
+  int i;
+  for(i=0; i < sizeof(items); i++) {
+      items[i]->remove(1);
+  }
+  remove();
+}
+
+int mergeMagic(string teil1, string teil2, string teil3)
+{
+  mixed *items;
+  object ob1, ob2, target, result;
+  string prefix, suffix;
+
+  items = getItemsFromPlayerInventory(teil1, teil2, teil3);
+  if(!pointerp(items)) return -1;
+
+  ob1    = items[0];
+  ob2    = items[1];
+  target = items[2];
+
+  if(itemsAreNotUsable(ob1, ob2, target)) return -1;
+
+  prefix = extractPrefixFrom(ob1);
+  if(!stringp(prefix))
+  {
+      tell_object(TP, BS("Von " + ob1->name(WEM) + " kannst Du keine Magie uebertragen!"));
+      return -1;
+  }
+    
+  suffix = extractSuffixFrom(ob2);
+  if(!stringp(suffix)) {
+     tell_object(TP, BS("Von " + ob2->name(WEM) + " kannst Du keine Magie uebertragen!"));
+     return -1;
+  }
+  
+  result = cloneNewMagicItemBasedOn(target, prefix, suffix);
+  if(!result) return -1;
+  
+  WLOG(LOG "mimaker", sprintf("erzeugt %s aus %s, %s und %s", result->QueryProp(P_SHORT),
+        ob1->QueryProp(P_SHORT), ob2->QueryProp(P_SHORT), target->QueryProp(P_SHORT)));
+
+  removeAllItemsAndSelf(({ob1, ob2, target}));
+  return 1;
+}
+
+int cmd_uebertragen(string str)
+{
+  string teil1, teil2, teil3;
+
+  str = TP->_unparsed_args();
+  notify_fail("Was willst Du wohin uebertragen?\n");
+  if (!str || sscanf(str, "magie von %s und %s auf %s", teil1, teil2, teil3) != 3)
+    return 0;
+    
+  return mergeMagic(teil1, teil2, teil3);
+}

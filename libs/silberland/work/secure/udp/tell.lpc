@@ -1,0 +1,205 @@
+/* SilberLand MUDlib
+ *
+ * /secure/udp/tell.c -- UDP tell handling
+ *
+ * $Date: 2006/11/20 21:48:25 $
+ * $Revision: 1.7 $
+ * $Log: tell.c,v $
+ * Revision 1.7  2006/11/20 21:48:25  Woody
+ * Intermud emote/gemote werden nun als Empfaenger unterstuetzt
+ *
+ * Revision 1.6  2001/04/03 16:59:27  Woody
+ * Merlin@Silberland merkt, wenn IHM was mitgeteilt wird :)
+ *
+ * Revision 1.5  1999/02/20 13:40:36  Woody
+ * Leicht ueberarbeitet/optimiert, >10 min idle Meldung eingebaut
+ *
+ * Revision 1.4  1998/08/02 21:02:11  Woody
+ * Bugfix bei 'nicht anwesend' Meldung
+ *
+ * Revision 1.3  1997/11/05 20:10:23  Feyaria
+ * silberland -> mudname
+ *
+ * Revision 1.2  1997/06/25 10:57:36  Woody
+ * Message() updated, AddToTellHist() raus
+ *
+ * Revision 1.1  1997/03/16 00:26:36  Woody
+ * prepared for revision control
+ *
+ * Revision 1.0a  1997/01/06  Woody
+ * AWAY richtig handlen, AddToTellHist Aufruf angepasst
+ *
+ * Revision 1.0   1996/11/17  Woody
+ * Teilemit-History bei teile-mits erweitern
+ *
+ */
+
+#include <udp.h>
+#include <properties.h>
+#include <config.h>
+
+#ifdef ZEBEDEE
+#include <system.h>
+inherit "/sys/format";
+#elif !defined(INETD)
+#define INETD	"/secure/inetd"
+#endif
+
+#undef DEBUG
+
+
+void udp_tell(mapping data)
+{
+  string message_string, message_prefix, away;
+  object ob;
+  int i,re;
+
+  if (data[RECIPIENT] && (ob = find_player(lower_case(data[RECIPIENT]))) &&
+      interactive(ob))
+  {
+#ifdef DEBUG
+    if (ob == find_player("woody")) {
+      tell_object(ob, sprintf("UDP:tell:data: %O\n", data) );
+    }
+#endif
+
+    if (data[METHOD] == "emote")
+    {
+      data[SENDER]=implode(
+          filter_array(efun::explode(data[SENDER], ""), #'>=, " "), "");//'))
+      data[DATA]=implode(
+          filter_array(efun::explode(data[DATA], ""), #'>=, " "), "");//'))
+      message_prefix="";
+      message_string=break_string( capitalize(data[SENDER])+"@"+data[NAME]+" "+
+          data[DATA][1..<3], 78, 4)[4..];
+      re = ob->Message("\n"+message_string, MSGFLAG_RTELL);
+      message_string=break_string( capitalize(data[RECIPIENT])+"@"+LOCAL_NAME+"->"+
+            capitalize(data[SENDER])+"@"+data[NAME]+" "+
+          data[DATA][1..<3], 78, 4)[4..];
+    }
+    else if (data[METHOD] == "gemote")
+    {
+      data[SENDER]=implode(
+          filter_array(efun::explode(data[SENDER], ""), #'>=, " "), "");//'))
+      data[DATA]=implode(
+          filter_array(efun::explode(data[DATA], ""), #'>=, " "), "");//'))
+      message_prefix="";
+      message_string=break_string( capitalize(data[SENDER])+"@"+data[NAME]+"'s "+
+          data[DATA][1..<3], 78, 4)[4..];
+      re = ob->Message("\n"+message_string, MSGFLAG_RTELL);
+      message_string=break_string( capitalize(data[RECIPIENT])+"@"+LOCAL_NAME+"->"+
+            capitalize(data[SENDER])+"@"+data[NAME]+"'s "+
+          data[DATA][1..<3], 78, 4)[4..];
+    }
+    else
+    {
+      data[SENDER]=implode(
+          filter_array(efun::explode(data[SENDER], ""), #'>=, " "), "");//'))
+      data[DATA]=implode(
+          filter_array(efun::explode(data[DATA], ""), #'>=, " "), "");//'))
+      message_prefix=capitalize(data[SENDER])+"@"+data[NAME]+" teilt Dir mit: ";
+      message_string=break_string(data[DATA], 78, message_prefix);
+      re = ob->Message("\n"+message_string, MSGFLAG_RTELL);
+      // Antwort:
+      message_prefix="Du teilst "+capitalize(data[RECIPIENT]) + "@" + 
+	LOCAL_NAME + " mit: ";
+      message_string=break_string(data[DATA], 78, message_prefix);
+    }
+
+    if (!ob->QueryProp(P_INVIS))
+    {
+      switch(re)
+      {
+        case MESSAGE_CACHE:
+          message_string +=
+            sprintf("%s@"+MUDNAME+" moechte gerade nicht gestoert werden.\n"
+                "Die Mitteilung wurde von einem kleinen Kobold in Empfang "
+                "genommen.\nEr wird sie spaeter weiterleiten.\n",
+                capitalize(getuid(ob)));
+          break;
+        case MESSAGE_CACHE_FULL:
+          message_string +=
+            sprintf("%s@"+MUDNAME+" moechte gerade nicht gestoert werden.\n"
+                "Die Mittelung ging verloren, denn der Kobold kann sich "
+                "nichts mehr merken.\n", capitalize(getuid(ob)));
+          break;
+        case MESSAGE_DEAF:
+          message_string +=
+            sprintf("%s@"+MUDNAME+" ist momentan leider taub.\n",
+                    capitalize(getuid(ob)));
+          break;
+        case MESSAGE_IGNORE_YOU:
+          message_string +=
+            sprintf("%s@"+MUDNAME+" ignoriert Dich.\n",
+                    capitalize(getuid(ob)));
+          break;
+        case MESSAGE_IGNORE_MUD:
+          message_string +=
+            sprintf("%s@"+MUDNAME+" ignoriert das Mud '%s'.\n",
+                    capitalize(getuid(ob)), data[NAME]);
+          break;
+        default:
+          if (away=ob->QueryProp(P_AWAY))
+            message_string+=sprintf("%s@"+MUDNAME+
+                " ist gerade nicht da: %s\n", ob->name(WER), away);
+          else if ((i=query_idle(ob)) >= 600) {         // ab 10 Minuten
+            if (i < 3600)
+              away = time2string("%m %M", i);
+            else
+              away = time2string("%h %H und %m %M", i);
+            message_string+=sprintf("%s@"+MUDNAME+
+                " ist seit %s passiv.\n", ob->Name(WER), away);
+          }
+      }
+    }
+    else        // (invis)
+    {
+      message_string = "Merlin@" + MUDNAME + " teilt Dir mit: " +
+        capitalize(data[RECIPIENT]) + " kann ich leider nirgendwo finden!\n";
+    }
+
+  }
+  else
+  {
+    if (lower_case(data[RECIPIENT]) == "merlin") {
+      switch (random(5))
+      {
+        case 0:
+          message_string = "Aha, das ist ja interessant...";
+          break;
+        case 1:
+          message_string = "Tut mir leid, aber da kann ich Dir "
+                           "wohl auch nicht weiterhelfen!";
+          break;
+        case 2:
+          message_string = "Ich bin kein Spieler, weisst Du das denn nicht?";
+          break;
+        case 3:
+          message_string = "Hallo " + capitalize(data[SENDER]) + "@" +
+            data[NAME] + ", nett mit Dir zu plaudern!";
+          break;
+        case 4:
+          message_string = "Erzaehl mir doch ein bisschen mehr!";
+          break;
+      }
+      message_string = break_string(
+          message_string, 78, "Merlin@" + MUDNAME + " teilt Dir mit: " );
+      log_file( "game/MERLIN.RTELLS",
+             sprintf("[%s] %s@%s an Merlin: %s\n",
+               ctime()[4..], capitalize(data[SENDER]), data[NAME],
+               regreplace(data[DATA], " *\n *", " ", 1) ) );
+    }
+    else
+    {
+      message_string = "Merlin@" + MUDNAME + " teilt Dir mit: " +
+        capitalize(data[RECIPIENT]) + " kann ich leider nirgendwo finden!\n";
+    }
+  }
+  INETD->send_udp(data[NAME], ([
+                                REQUEST: REPLY,
+                                RECIPIENT: data[SENDER],
+                                ID: data[ID],
+                                DATA: "\n"+message_string
+                                ]) );   
+}
+

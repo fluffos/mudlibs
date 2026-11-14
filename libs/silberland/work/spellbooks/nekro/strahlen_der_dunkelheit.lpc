@@ -1,0 +1,144 @@
+/*
+ * Strahlen der Dunkelheit
+ *
+ * Der Gegner wird mit einem oder mehreren Strahlen der 
+ * Dunkelheit angegriffen. Bei entsprechender guten 
+ * Ausfuehrungen koenne bis zu 3 Strahlen entstehen
+ * und ggf (!random(3)) wird das Ziel in Dunkelheit
+ * gehuellt
+ *
+ * Schaden kann durch Equipment erhoeht werden
+ *
+ * Kosten: 15 MP
+ * Level : 1 
+ * Schaden : ca 120-200
+ *
+ * Skillpunktefaehig (dam, anzahl strahlen)
+ *
+ * Status: anschlussreif
+ *
+ */
+// 31.07.2003 Archon: skillpunkte
+// 28.04.2003 Archon: parse_target nicht mehr notwendig
+
+int strahlderdunkelheit(object caster, mapping sinfo) 
+{
+  int dam,suc,nr,i,skp;
+  string str;
+  object victim,ob;
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wen willst Du mit den Strahlen der Dunkelheit "
+                         "vernichten?\n");
+  if (!victim)
+    return 0;
+/*
+  if(!is_living(victim)) 
+  {
+    write(BS(sprintf("%s Auf %s haben die Strahlen keine Wirkung!", 
+            random_fluch(),
+            victim->name(WEN,1))));
+    return 0;
+  }
+*/
+  if(caster->QueryProp(P_BLIND)) 
+  {
+    write(BSC(sprintf("DU BIST BLIND, %s, wie willst Du da die "
+        "Strahlen der Dunkelheit zaubern?!?", caster->QueryProp(P_GENDER)==
+        FEMALE?"NAERRIN":"NARR")));
+    return 0;
+  }
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  if ((suc=SpellSuccess(caster,sinfo))<=0)
+    return MISSERFOLG;
+
+  skp=get_skillpoints(caster,"strahlen der dunkelheit");
+  nr=1;
+  if(skp > 0 && suc > 9500 - (skp < 2 ? 0 : (skp-1)*(skp-2)*99) )
+  {
+    nr=2;
+    if(!random(3))
+      Darkness(victim, caster, suc);
+  }
+  if(skp > 0 && suc > 10000 - (skp < 3 ? 0 : (skp-2)*(skp-3)*66) ) 
+    nr=3;
+  else if(sinfo[SI_SKILLABILITY] == MAX_ABILITY && random(666) < skp*skp)
+    nr++;
+
+  switch(nr) 
+  {
+    case 2: str="schiessen zwei dunkle Strahlen"; break;
+    case 3: str="schiessen drei dunkle Strahlen"; break;
+    default: str="schiesst ein dunkler Strahl"; 
+  }
+  tell_room(ENV(caster), BS(sprintf("Aus den Augen von %s %s "
+          "genau auf die Augen von %s zu!", caster->name(WEM), str,
+          victim->name(WEM,2))), ({victim,caster}));
+  write(BSC(sprintf("Aus Deinen Augen %s der Dunkelheit "
+        "auf %s zu! Du wirst %s damit vernichten!", str, victim->name(WEN, 2),
+        victim->QueryPronoun(WEN))));
+  if(victim->QueryProp(P_BLIND)) 
+  {
+    tell_room(ENV(caster), BS(sprintf("%s zeigt sich komplett unbeeindruckt!",
+            victim->Name(WER))));
+    return ERFOLG;
+  }
+  else 
+  {
+    tell_object(victim,BS(sprintf("Aus den Augen von %s %s "
+        "direkt auf Deine Augen zu! DIESE DUNKELHEIT! Du schreist "
+        "vor Schmerz!", caster->name(WEM), str)));
+  }
+
+  dam=sinfo[SI_SKILLDAMAGE]+5*caster->QueryProp(P_GUILD_LEVEL)/2+
+    2*caster->QueryProp(P_GUILD_CIRCLE);
+  dam+=CheckEquip(caster, sinfo[SI_SPELLFUNC]);
+  dam=DoModificationByAlign(dam, caster, victim);
+  dam=get_dam_with_skillpoints(dam,skp);
+  if (victim->QueryProp(P_LIGHT))
+  {
+    dam *= 2;
+    if (random(2))
+    {
+      victim->SetProp(P_LIGHT, victim->QueryProp(P_LIGHT) - 1);
+      tell_room(ENV(caster),BS(sprintf("%s wird deutlich dunkler.",
+            victim->Name(WER))));
+    }
+  }
+  for(i=1; i<=nr; i++) 
+  {
+    if(objectp(victim) && !victim->QueryProp(P_GHOST))
+      TryAttackSpell(victim, dam/4+random(3*dam/4), sinfo[SI_SKILLDAMAGE_TYPE], 
+        ([SP_NAME:sinfo[SI_SPELLFUNC],SP_SHOW_DAMAGE:1]), caster,sinfo);
+  }
+  if(objectp(victim) && !victim->QueryProp(P_GHOST) && 
+      suc > 9000-100*skp && is_living(victim) && !random(10-skp) && 
+      victim->QueryProp(P_NOMAGIC) < random(100)) 
+  {
+    tell_object(victim, BS("Dir wird schwarz vor Augen!"));
+    tell_room(ENV(caster), sprintf("%s torkelt geblendet umher!\n",
+        victim->Name(WER)), ({victim}));
+    victim->SetProp(P_BLIND, ([BLIND_TIME: 2+random(5),
+                               BLIND_MSG : "Diese Schwaerze!! Diese "
+                               "Schwaerze!!\n",
+                               BLIND_END_MSG: "Die unheilige Dunkelheit loest "
+                               "sich von Deinen Augen!\n"]));
+  }
+  
+  if(objectp(victim) && skp>9 && !random(3) && !present("\nekro_resist", victim)) {
+    ob = clone_object(OBJ "resist");
+    ob->SetVariables(caster, victim, suc);
+    if(ob->move(victim, M_NOCHECK) != 1) ob->remove(1);
+    tell_room(ENV(victim), BS(sprintf("%s wird mitten ins Herz getroffen und ist nun anfaelliger gegen nekromantische Rituale!",
+                              victim->Name(WER, 1))));
+  }
+
+  UseBlood(nr);
+  return ERFOLG;
+}
+

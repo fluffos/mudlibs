@@ -1,0 +1,184 @@
+#include <language.h>
+#include <properties.h>
+#include <material.h>
+#include <container.h>
+#include "../files.h"
+#include <moving.h>
+#include <defines.h>
+#include <moredef.h>
+#include <wizlevels.h>
+#include "../quest.h"
+
+inherit "std/container";
+
+string owner;
+
+create()
+{
+  if (!is_clone(this_object())) return;
+
+  ::create();
+  SetProp(P_NAME, "Tiegel");
+  SetProp(P_SHORT, "Ein Tiegel");
+  SetProp(P_IVORY, 1);
+  SetProp(P_LONG, BS(
+          "Dieser Tiegel dient zum Mischen eines Balsams. Um auch den"
+         +" richtigen Balsam zu mischen, muss man schon die genauen"
+         +" Ingredienzien kennen. Um alle Zutaten endgueltig zu vermischen,"
+         +" muessen sie sich in dem Tiegel befinden."));
+  SetProp(P_INFO, BS(
+          "In diesem Tiegel kannst Du einen gar besonderen Balsam"
+         +" mischen. Die Zutaten und das Rezept findest Du in der Gilde"
+         +" des Elfenbeinernen Tigers."));
+  SetProp(P_WEIGHT, 240);
+  SetProp(P_MAX_WEIGHT, 400);
+  SetProp(P_GENDER, MALE);
+  SetProp(P_MATERIAL, MAT_CERAMIC);
+  AddId("tiegel");
+  AddId(IV_POT);
+  SetProp(P_VALUE, 100);
+  AddCmd(({"vermische", "vermisch", "misch", "mische"}), "mix");
+  owner="";
+}
+
+PreventInsert(object o)
+{
+  string f;
+  object b;
+
+  if (getuid(TP)!=owner) {
+    write(BS(
+          "Du bist nicht derjenige, der den Tiegel geholt hat, Du Betrueger!"));
+    return 0;
+  }
+  f=explode(file_name(o), "#")[0];
+  switch (f) {
+    case OBJ("moospulver"): if (present("moospulver", TO)) {
+                              write("Das ist doch schon drin!\n");
+                              return 1;
+                            }
+                            else 
+                              return 0;
+    case OBJ("fett"): if (present(IV_FAT, TO)) {
+                        write("Das ist doch schon drin!\n");
+                        return 1;
+                      }
+                      else 
+                        return 0;
+    case OBJ("b_pulver"): if (present(IV_HEARTPOWDER, TO)) {
+                            write("Das ist doch schon drin!\n");
+                            return 1;
+                          }
+                          else {
+                            if(b=deep_present(IV_QUEST_ITEM, TP))
+                               b->set_flag(IV_HEART2POT);
+                            return 0;
+			  }
+    default: return 1;
+  }
+}
+
+AddMossPowder()
+{
+  object p;
+  
+  p=clone_object(OBJ("moospulver"));
+  p->move(TO, M_NOCHECK);
+}
+
+AddFat()
+{
+  object f;
+  
+  f=clone_object(OBJ("fett"));
+  f->move(TO, M_NOCHECK);
+}
+
+mix(str)
+{
+  object o, *inv;
+  int i;
+
+  notify_fail("Was moechtest Du mischen?\n");
+  if (!str)
+    return 0;
+  if (str!="balsam" && str!="zutaten" && str!="tiegel")
+    return 0;
+  if (sizeof(all_inventory(TO))!=3) {
+    write(BS("Dir fehlt wohl noch eine wichtige Zutat, um den Balsam"
+            +" fertigzumischen."));
+    return 1;
+  }
+  if (getuid(TP)!=owner) {
+    write(BS(
+          "Du bist nicht derjenige, der den Tiegel auch wirklich geholt"
+         +" und mit den Zutaten befuellt hat, Du Betrueger!"));
+    return 1;
+  }
+  if (!TP->QueryQuest(IV_QUEST)) {
+    write(BS(
+       "Du bist voellig ungeuebt im Mischen, das sollte wohl unbedingt"
+      +" ein Fachmann uebernehmen. Geh doch einmal zu Elsurion in"
+      +" Tijara und gib ihm den Tiegel."));
+    return 1;
+  }
+  write(BS(
+      "Du schraubst den Tiegel fest zu und schuettelst ihn kraeftig,"
+     +" so wie Elsurion es Dir gelehrt hat."
+     +" Dir wird schon leicht schwindlig, so fest scheinst Du ihn"
+     +" zu schuetteln. Nunja, wie Du ja weisst, muss die Emulsion"
+     +" in einer richtigen Phase sein, dass sich die Zusatzstoffe"
+     +" in ihr loesen und sich richtig binden. Waehrend Du ueber all"
+     +" das nachdenkst, bekommst Du schon einen richtig hochroten"
+     +" Kopf, denn das Schuetteln des Tiegels ist richtig anstrengend."
+     +" Ha! Jetzt ist der Zeitpunkt gekommen... Du kannst jetzt"
+     +" nachsehen, was Du Dir da zusammengemischt hast!"));
+  switch (present(IV_HEARTPOWDER, TO)->QueryMadeFrom()) {
+    case "schuppe": o=clone_object(OBJ("kschutz")); break;
+    case "herz": o=clone_object(OBJ("wschutz")); break;
+    default: o=clone_object(OBJ("dschutz")); break;
+  }
+  o->move(TP, M_NOCHECK);
+  inv=all_inventory(TO);
+  for (i=sizeof(inv)-1; i>=0; i--)
+    inv[i]->remove();
+  TO->remove();
+  return 1;
+}
+
+varargs int move(mixed dest, int method, string dir, string textout, 
+    string textin) {
+  object b;
+  int ret;
+
+  if(ENV(TO) && file_name(ENV(TO))[0..38]==OBJ("kassa") && 
+      b=deep_present(IV_QUEST_ITEM, TP)) { 
+    b->set_flag(IV_GET_POT);
+  }
+  ret=::move(dest,method,dir,textout,textin);
+  if (owner=="" && ret==1 && interactive(dest)) {
+    owner=getuid(dest);
+  }
+  return ret;
+}
+
+/*
+string query_owner() {
+  string po;
+
+  po=explode(file_name(previous_object()), "#")[0];
+  
+  if (!IS_ARCH(previous_object()) && po!="/d/dschungel/feyaria/tijara/npc/elsurion" && po!=NPC("moench"))
+    return "";
+  return owner;
+}
+*/
+int set_owner(string str) {
+  owner=str;
+  return 1;
+}
+
+string query_owner() {
+  return owner;
+}
+

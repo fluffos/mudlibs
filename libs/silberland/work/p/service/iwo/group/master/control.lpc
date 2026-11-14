@@ -1,0 +1,809 @@
+/*
+ group control stuff for Group master
+ Iwo@SL
+
+ CHANGES
+ =======
+ 
+ 2002-10-03 Iwo
+   Null-Angriffskommando '-' implementiert
+ 2003-02-15 Iwo
+   Leiter kann Null-Kommando fuer andere setzen
+*/
+ 
+
+
+// Create a new group
+int NewGroup(object pl, string grp)
+{
+  string s_pl;
+
+  s_pl = getuid(pl);
+
+  if (!grp || grp == "")
+    {
+      TellHelp(pl);
+      return 1;
+    }
+
+  grp = lowerstring(grp);
+
+  if (member(affiliations, s_pl))
+    {
+      TellP(pl, sprintf("Du bist bereits Mitglied der Gruppe '%s'.", affiliations[s_pl, 0]));
+      return 1;
+    }  
+
+  if (IsGroup(grp))
+    {
+      TellP(pl, "Eine Gruppe mit diesem Namen existiert bereits.");
+      return 1;
+    }
+  
+  if (strlen(grp) > 15)
+    {
+      TellP(pl, "Der Gruppenname ist zu lang.");
+      return 1;
+    }
+  
+  affiliations += ([ s_pl: grp; pl->QueryProp(P_HP),]);
+  groups += ([ grp: 0; ([ getuid(pl): pl->QueryProp(P_XP); pl->QueryProp(P_XP); 0; 0; "",]);0; ""; ({}); ({}),]);
+  SetLeader(grp, s_pl);
+
+  TellP(pl, sprintf("Die Gruppe '%s' wurde gegruendet.", grp));
+  TellP(pl, "Du wurdest automatisch zu ihrem Anfuehrer gemacht, und hast nun ca. 180 Sekunden Zeit Mitglieder zu suchen.");
+
+  // Check if groupsize is > 1 after 180 seconds
+  AddTask(180, 1, "CheckEmpty", ({ grp }) );
+
+  MasterInfo(sprintf("New group: %s (%s)", grp, CAP(s_pl)));
+
+  NotifyGobjs();
+
+  return 1;
+}
+
+
+
+
+
+// Breaks a group
+int BreakGroup(string grp, int method)
+{
+  string *members;
+  object ob_pl, ob_gobj;
+  int i;
+  
+  if (!IsGroup(grp) || grp == "gurus") return 0;
+  
+  members = m_indices(groups[grp, 1]);
+  
+  for (i = 0; i < sizeof(members); i++)
+    {
+      if (member(affiliations, members[i])) affiliations -= ([ members[i] ]);
+
+      ob_pl = find_player(members[i]);
+      if (ob_pl)
+        {
+
+          switch (method)
+            {
+            case BREAK_EMPTY:
+              TellP(ob_pl, sprintf("Da eine Gruppe aus mindestens 2 Mitgliedern besteht, beschliesst Du die Gruppe '%s' aufzuloesen.", grp));
+              break;
+            case BREAK_LEADER:
+              TellP(ob_pl, sprintf("Der Leiter hat soeben die Gruppe '%s' aufgeloest.", grp));
+              break;
+            case BREAK_MASTER:
+	      TellP(ob_pl, sprintf("Der Master hat soeben die Gruppe '%s' aufgeloest.", grp));
+              break;
+            default:
+              TellP(ob_pl, sprintf("Die Gruppe '%s' wurde aufgeloest.", grp));
+            }
+        }
+    }
+
+  groups -= ([ grp ]);
+
+  MasterInfo(sprintf("Group broken: %s (%d)", grp, method));
+
+  return 1;
+  
+}
+
+
+// Break by member
+int BreakByMember(object pl, string grp)
+{
+  string s_pl;
+
+  s_pl = getuid(pl);
+
+  if (!grp || grp == "")
+    {
+      TellHelp(pl);
+      return 1;
+    }
+
+  if (!member(affiliations, s_pl))
+    {
+      TellP(pl, "Du bist doch garkein Gruppenmitglied.");
+      return 1;
+    }
+
+  // The dirty hack offers a persistant group called 'gurus'
+  if (affiliations[s_pl, 0] != grp || !IsLeader(grp, s_pl) 
+      || (grp == "gurus" && s_pl != "iwo" && !IS_ARCH(pl)))
+    {
+      TellP(pl, sprintf("Du bist nicht der Leiter der Gruppe '%s'.", grp));
+      return 1;
+    }
+
+  TellP(pl, sprintf("Du loest die Gruppe '%s' auf.", grp));
+
+  BreakGroup(grp, BREAK_LEADER);
+
+  return 1;
+}
+
+
+// Change group leader
+int ChangeLeader(object pl, string newleader)
+{
+  string s_pl, str, grp;
+  string *members;
+  object ob_pl;
+  int i;
+
+  s_pl = getuid(pl);
+
+  if (!newleader || newleader == "")
+    {
+      TellHelp(pl);
+      return 1;
+    }
+
+  if (!member(affiliations, s_pl))
+    {
+      TellP(pl, "Du bist doch garkein Gruppenmitglied.");
+      return 1;
+    }
+    
+  grp = affiliations[s_pl, 0];
+
+  if (!IsLeader(grp, s_pl) && s_pl != "iwo" && !IS_ARCH(pl))
+    {
+      TellP(pl, sprintf("Du bist nicht der Leiter der Gruppe '%s'.", grp));
+      return 1;
+    }
+
+  
+  if (!member(affiliations, s_pl) || affiliations[newleader, 0] != grp)
+    {
+      TellP(pl, "Aber dieser Spieler ist doch gar kein Mitglied dieser Gruppe.");
+      return 1;
+    }
+    
+  members = m_indices(groups[grp, 1]);
+
+  groups[grp, 0] = newleader;
+  
+  for (i = 0; i < sizeof(members); i++)
+    {
+      ob_pl = find_player(members[i]);
+      if (ob_pl)
+        {
+        if (members[i] == newleader)
+          str = "Du bist nun der Leiter der Gruppe '" + grp + "'.";
+        else
+          str = CAP(newleader) + " ist nun der Leiter der Gruppe '" + grp + "'.";
+        TellP(ob_pl, str);
+        }
+    }
+
+  MasterInfo(sprintf("Group leader changed: %s->%s (%s)", CAP(s_pl), CAP(newleader), grp)); 
+
+  return 1;
+}
+
+
+
+
+
+
+// Set group leader
+int SetLeader(string grp, string pl)
+{
+  object ob_pl, gobj;
+  
+  // No such group
+  if (!IsGroup(grp)) return 0;
+  
+  groups[grp, 0] = pl;
+  
+  ob_pl = find_player(pl);
+  
+  gobj = present("\ngobj", ob_pl);
+
+  return 1;
+}
+
+
+
+
+int LeaveGroup(object pl, int silent)
+{
+  string *members;
+  string str, s_pl, grp;
+  object ob_pl, ob_gobj;
+  int i;
+
+  s_pl = getuid(pl);
+
+  if (!member(affiliations, s_pl))
+    {
+      if (!silent)
+        TellP(pl, "Du bist doch gar kein Mitglied einer Gruppe.");
+      return 1;
+    }
+  
+  // Sanity check
+  if (!IsGroup(affiliations[s_pl, 0]))
+    {
+      affiliations -= ([ s_pl ]);
+      if (!silent)
+        TellP(pl, "Du bist doch gar kein Mitglied einer Gruppe.");
+      return 1;
+    }
+
+  grp = affiliations[s_pl, 0];
+
+  members = m_indices(groups[grp, 1]);
+  
+  for (i = 0; i<sizeof(members); i++)
+    {
+      ob_pl = find_player(members[i]);
+      if (ob_pl)
+        {
+        if (members[i] == s_pl  && !silent)
+          str = "Du verlaesst die Gruppe '"+grp+"'";
+        else
+          str = CAP(s_pl) + " verlaesst die Gruppe '"+grp+"'";
+        str += ".";
+        TellP(ob_pl, str);     
+        }
+
+    }
+
+  // The dirty hack offers a persistant group called 'gurus'
+  if (IsLeader(grp, s_pl) && grp != "gurus")
+    {
+      members -= ({ s_pl });
+      if (sizeof(members)>0)
+        ChangeLeader(pl, members[0]);
+    }
+
+  groups[grp,1] = m_delete(groups[grp, 1],s_pl);
+  affiliations -= ([ s_pl ]);
+
+
+  // The dirty hack offers a persistant group called 'gurus'
+  if (NumMembers(grp) < 2 && grp != "gurus") BreakGroup(grp, BREAK_EMPTY);
+
+  return 1;    
+}
+
+
+int JoinGroup(object pl, string grp)
+{
+  string *members, s_pl;
+  object ob_pl, ob_gobj;
+  int i;
+
+  s_pl = getuid(pl);
+
+  if (!grp || grp == "")
+    {
+      TellHelp(pl);
+      return 1;
+    }
+
+  if (!IsGroup(grp)) 
+    {
+      TellP(pl, "So eine Gruppe existiert nicht.");
+      return 1;
+    }
+
+  if (member(affiliations, s_pl))
+    {
+      // Sanity Check
+      if (IsGroup(affiliations[s_pl,0]) 
+          && IsMember(affiliations[s_pl,0], s_pl))
+        {
+          TellP(pl, sprintf("Du bist bereits mitglied der Gruppe '%s'.", affiliations[s_pl, 0]));
+          return 1;
+        }
+      else affiliations -= ([ s_pl ]);
+    }  
+
+  // Arches and creator may join every group for debugging purposes
+  if (member(groups[grp, 4], s_pl) == -1 
+      && !IS_ARCH(pl) && getuid(pl)!="iwo" && !groups[grp, 2])
+    {
+      TellP(pl, sprintf("Du bist nicht eingeladen der Gruppe '%s' beizutreten.", grp));
+      return 1;
+    } 
+    
+  affiliations += ([ s_pl: grp; pl->QueryProp(P_HP),]);
+  groups[grp, 1] += ([ s_pl: pl->QueryProp(P_XP); pl->QueryProp(P_XP); 0; 0; "",]);
+
+  members = m_indices(groups[grp, 1]);
+  
+  for (i = 0; i<sizeof(members); i++)
+    {
+      ob_pl = find_player(members[i]);
+      if (ob_pl)
+        if (members[i] == s_pl)
+          TellP(ob_pl, sprintf("Du trittst der Gruppe '%s' bei.", grp));
+        else
+          TellP(ob_pl, sprintf("%s ist soeben der Gruppe '%s' beigetreten.", CAP(s_pl), grp));
+    }
+
+
+  return 1;
+}
+
+
+// Invites a player to join a group
+int InvitePlayer(object pl, string s_ipl)
+{
+  string grp, s_pl;
+  object ipl, gobj;
+  int silent;
+
+  s_pl = getuid(pl);
+
+  if (!s_ipl || s_ipl == "")
+    {
+      TellHelp(pl);
+      return 1;
+    }
+
+  s_ipl = lowerstring(s_ipl);
+
+  if (!member(affiliations, s_pl))
+    {
+      TellP(pl, "Du bist doch gar kein Gruppenmitglied.");
+      return 1;
+    }
+
+  ipl = find_player(s_ipl);
+
+  if (!ipl || !query_once_interactive(ipl))
+    {
+      TellP(pl, "Kein solcher Spieler.");
+      return 1;
+    }
+
+  if (ipl->QueryProp(P_INVIS) && !IS_WIZARD(pl))
+    silent = 1;
+
+  grp = affiliations[s_pl, 0];
+
+  // In theory this race is impossible..... theory..
+  if (!IsMember(grp, s_pl))
+    {
+      // failsafe
+      affiliations -= ([ s_pl ]);
+
+      // hide invis mages
+      if (silent)
+        TellP(pl, "Kein solcher Spieler.");
+      else
+        TellP(pl, "Du bist kein Gruppenmitglied.");
+      return 1;
+    }
+
+  if (!present("\ngobj", ipl))
+    {
+      /* Deaktiviert. Erster Test unter realen Bedingungen
+         2000-10-20 Iwo
+	 2001-01-26 Reaktiviert, checkt ob gobj da ist
+      if (!HasGroupAbility(ipl))
+        {
+      */
+      
+      if (silent)
+        TellP(pl, "Kein solcher Spieler.");
+      else
+        TellP(pl, sprintf("%s ist nicht gruppenfaehig.", CAP(s_ipl))); 
+        return 1;
+	  
+      /* Kein neu clonen, wird von Oink vergeben (gebirge)
+	}
+      gobj = clone_object(GROUPOBJ);
+      gobj->move(ipl, M_NOCHECK);
+      */
+    }
+
+  if (member(groups[grp, 4], s_ipl) == -1) groups[grp, 4] += ({ s_ipl });
+
+  if (silent)
+    TellP(pl, "Kein solcher Spieler.");
+  else
+    TellP(pl, sprintf("Du laedst %s ein der Gruppe '%s' beizutreten.", CAP(s_ipl), grp));
+
+  TellP(ipl, sprintf("%s hat Dich eingeladen Dich der Gruppe '%s' anzuschliessen. Du kannst mit 'g b %s' beitreten.", CAP(s_pl), grp, grp));
+
+  return 1;
+
+}
+
+
+// Fire a group member
+int FireMember(object pl, string s_fpl)
+{
+  string grp, s_pl;
+  object fpl, gobj;
+  int silent;
+
+  s_pl = getuid(pl);
+
+  if (!s_fpl || s_fpl == "")
+    {
+      TellHelp(pl);
+      return 1;
+    }
+
+  s_fpl = lowerstring(s_fpl);
+
+  if (!member(affiliations, s_pl))
+    {
+      TellP(pl, "Du bist doch gar kein Gruppenmitglied.");
+      return 1;
+    }
+
+  fpl = find_player(s_fpl);
+
+  if (!fpl || !query_once_interactive(fpl))
+    {
+      TellP(pl, "Kein solcher Spieler.");
+      return 1;
+    }
+
+  if (fpl->QueryProp(P_INVIS) && !IS_WIZARD(pl)) silent = 1;
+
+  grp = affiliations[s_pl, 0];
+
+
+  if (!IsLeader(grp, s_pl))
+    {
+      TellP(pl, "Das kann nur der Gruppenleiter.");
+      return 1;
+    }
+
+
+  // In theory this race is impossible..... theory..
+  if (!IsMember(grp, s_pl))
+    {
+      // failsafe
+      affiliations -= ([ s_pl ]);
+      TellP(pl, "Du bist kein Gruppenmitglied.");
+      return 1;
+    }
+
+  if (!IsMember(grp, s_fpl))
+    {
+      if (silent)
+        TellP(pl, "Kein solcher Spieler.");
+      else      
+        TellP(pl, sprintf("%s ist kein Mitglied der Gruppe '%s'.", capitalize(s_fpl), grp));
+      return 1;
+    }
+
+  TellP(pl, sprintf("Du wirfst %s aus der Gruppe '%s'.", capitalize(s_fpl), grp));
+
+  TellP(fpl, sprintf("Der Gruppenleiter hat Dich aus der Gruppe '%s' ausgeschlossen.",grp));
+
+  // Delete invitation if present
+  if (member(groups[grp, 4], s_fpl) != -1)
+    groups[grp, 4] -= ({ s_fpl });
+
+  LeaveGroup(fpl, 0);
+
+  return 1;
+
+}
+
+
+
+
+void ToggleOpen(object pl)
+{
+  string s_pl;
+  string grp;
+  
+  s_pl = getuid(pl);
+  
+  if (!member(affiliations, s_pl))
+    {
+      TellP(pl, "Du bist doch gar kein Mitglied einer Gruppe.");
+      return;
+    }
+    
+  grp = affiliations[s_pl, 0];
+  
+  if (groups[grp, 1][s_pl, 2] == 0)
+    {
+      groups[grp, 1][s_pl, 2] = 1;
+      TellP(pl, sprintf("Die Mitglieder der Gruppe '%s' koennen nun Deine genauen Werte einsehen.", grp));
+    }
+  else
+    {
+      groups[grp, 1][s_pl, 2] = 0;
+      TellP(pl, sprintf("Die Mitglieder der Gruppe '%s' koennen nun Deine genauen Werte nichtmehr einsehen.", grp));
+    }
+    
+}
+
+
+void ToggleFollow(object pl)
+{
+  string s_pl;
+  string grp;
+  
+  s_pl = getuid(pl);
+  
+  if (!member(affiliations, s_pl))
+    {
+      TellP(pl, "Du bist doch gar kein Mitglied einer Gruppe.");
+      return;
+    }
+    
+  grp = affiliations[s_pl, 0];
+
+  if (QueryLeader(grp) == s_pl)
+    {
+      TellP(pl, "Du willst Dir selbst folgen?");
+      return;
+    }
+  
+  if (groups[grp, 1][s_pl, 4] == 0)
+    {
+      groups[grp, 1][s_pl, 4] = 1;
+      TellP(pl, sprintf("Du folgst nun dem Leiter der Gruppe '%s'.", grp));
+    }
+  else
+    {
+      groups[grp, 1][s_pl, 4] = 0;
+      TellP(pl, "Du folgst nun dem Anfuehrer der Gruppe nichtmehr.");
+    }
+    
+}
+
+
+// Make a group public accessable
+void TogglePublic(object pl)
+{
+  string s_pl;
+  string grp;
+  
+  s_pl = getuid(pl);
+  
+  if (!member(affiliations, s_pl))
+    {
+      TellP(pl, "Du bist doch gar kein Mitglied einer Gruppe.");
+      return;
+    }
+    
+  grp = affiliations[s_pl, 0];
+  
+  if (!IsLeader(grp, s_pl))
+    {
+      TellP(pl, "Das kann nur der Gruppenleiter.");
+      return;
+    }
+
+  if (groups[grp, 2] == 0)
+    {
+      groups[grp, 2] = 1;
+      TellP(pl, sprintf("Die Gruppe '%s' ist nun frei zugaenglich.", grp));
+    }
+  else
+    {
+      groups[grp, 2] = 0;
+      TellP(pl, sprintf("Die Gruppe '%s' ist nun nichtmehr frei zugaenglich.", grp));
+    }
+}
+
+// This for setting common attack command
+int SetAttackCommand(object pl, string command)
+{
+  string s_pl, grp, g_attack_command, *members;
+  object ob_member;
+  int i;
+
+  s_pl = getuid(pl);
+  
+  if (!member(affiliations, s_pl))
+    {
+      TellP(pl, "Du bist doch gar kein Mitglied einer Gruppe.");
+      return 1;
+    }
+ 
+  grp = affiliations[s_pl, 0];
+
+  g_attack_command = groups[grp, 3];
+
+  members = m_indices(groups[grp, 1]);
+
+  // Leader is setting for whole Group
+  if (IsLeader(grp, s_pl))
+    {
+      // No command is passed, further checks required
+      if (!command || command == "")
+        {
+          // Looks like leader doesn't know what he's doing
+          if (!g_attack_command || g_attack_command == "")
+            {
+              TellP(pl, "Welches gemeinsames Angriffskommando moechtest Du vorschlagen?");
+              return 1;
+            }
+          // Leader deletes attack command
+          groups[grp, 3] = "";
+          // Inform all members
+          for (i=0;i<sizeof(members);i++)
+            {
+              // Should not happen... but safety
+              if (!ob_member = find_player(members[i])) continue;
+              // Delete member attack command
+              
+              if (groups[grp,1][members[i],4] != "-") // Null command
+                groups[grp,1][members[i],4] = "";
+              if (members[i] == s_pl)
+                {
+                  TellP(ob_member, "Ok, Angriffsvorbereitung abgebrochen.");
+                  continue;
+                }
+              TellP(ob_member, "Der Leiter hat die Angriffsvorbereitung abgebrochen.");
+            }
+          return 1;
+        } // if (!command || command == "")
+      else if (command == "-")
+        {
+	  TellP(pl, "Als Leiter kannst Du das Angriffskommando nicht ignorieren!");
+	  return 1;
+	}
+      // Force a member to ignore attack commands
+      else if (command[0..1] == "- ")
+        {
+          string ts_pl;
+          object to_pl;
+
+          // Is argument a group member?
+          if (!IsMember(grp, (ts_pl = command[2..])) 
+              || !(to_pl = find_player(ts_pl)))
+            {
+              TellP(pl, sprintf("In dieser Gruppe ist niemand, der '%s' heisst!", ts_pl));
+              return 1;
+            } // if (!IsMember(grp, (ts_pl = command[2..])))  
+
+          // Kinda stupid
+          if (ts_pl == s_pl)
+            {
+              TellP(pl, "Aber das bist Du doch selber!");
+              return 1;
+            }
+
+          // Set null-command and inform leader as well as
+          // the forced player
+          groups[grp,1][ts_pl,4] = "-";
+
+          TellP(pl, sprintf("Ok, %s ignoriert nun alle Angriffskommandos!", capitalize(ts_pl)));
+          TellP(to_pl, "Der Gruppenleiter zwingt Dich, bis auf weiteres alle Angriffskommandos zu ignorieren!");
+
+          return 1;
+        } // else if (command[0..1] == "- ")
+
+      // Ok, Leader sends common attack command
+      groups[grp, 3] = command;
+      groups[grp,1][s_pl,4] = command;
+      for (i=0;i<sizeof(members);i++)
+        {
+          // Should never happen.. but safety
+          if (!ob_member = find_player(members[i])) continue;
+          if (members[i] == s_pl)
+	    {
+	      TellP(ob_member, "Ok, Angriffskommando gesetzt.");
+	      continue;
+	    }
+          TellP(ob_member, sprintf("Der Gruppenleiter hat '%s' als Angriffskommando vorgeschlagen.", command));
+          if (groups[grp,1][members[i],4] != "-")
+            groups[grp,1][members[i],4] = "";
+        } // for
+
+      return 1;
+
+    } // if (IsLeader(grp, s_pl)
+
+  // Ok, non-leader. Either confirm command or set alternative
+
+  // No common attack command is set for this group
+  if (!g_attack_command || g_attack_command == "")
+    {
+      TellP(pl, "Der Gruppenleiter hat die Angriffsvorbereitung noch nicht begonnen.");
+      return 1;
+    }
+
+
+  if (!command || command =="")
+    {
+      groups[grp,1][s_pl,4] = g_attack_command;
+      TellP(pl, "Ok, Angriffskommando angenommen.");
+      TellP(find_player(QueryLeader(grp)), sprintf("%s hat das Angriffskommando angenommen.", CAP(s_pl)));
+    }
+  else if (command != "-")
+    {
+      groups[grp,1][s_pl,4] = command;
+      TellP(pl, sprintf("Ok, '%s' als Angriffskommando eingestellt.", command));
+      TellP(find_player(QueryLeader(grp)), sprintf("%s hat '%s' als alternatives Kommando eingestellt.", CAP(s_pl), command));
+    }
+  else
+    {
+      groups[grp,1][s_pl,4] = command;
+      TellP(pl, "Ok, bis auf weiteres ignorierst Du alle Angriffskommandos!");
+      TellP(find_player(QueryLeader(grp)), sprintf("%s ignoriert nun alle Angriffskommandos.", CAP(s_pl)));
+    }
+
+
+  return 1;
+
+}
+
+int ExecuteAttackCommand (object pl)
+{
+  string s_pl, *members, grp;
+  object ob_member;
+  int i;
+
+  s_pl = getuid(pl);
+  
+  if (!member(affiliations, s_pl))
+    {
+      TellP(pl, "Du bist doch gar kein Mitglied einer Gruppe.");
+      return 1;      
+    }
+
+  grp = affiliations[s_pl, 0];
+
+  if (!IsLeader(grp, s_pl))
+    {
+      TellP(pl, "Das kann nur der Gruppenleiter!");
+      return 1;
+    }
+
+  members = m_indices(groups[grp, 1]);
+  
+  for (i=0;i<sizeof(members);i++)
+    {
+      if (groups[grp,1][members[i], 4] == "")
+        {
+          TellP(pl, "Es sind noch nicht alle Mitglieder der Gruppe bereit.");
+	  return 1;
+	}
+    }
+    
+  for (i=0;i<sizeof(members);i++)
+    {
+      if (!ob_member = find_player(members[i])) continue;
+      // Null command
+      if ( groups[grp, 1][members[i], 4] == "-") continue;
+
+      TellP(ob_member, "Du stuerzt Dich mit Gebruell in den Kampf.");
+      ob_member->command_me(groups[grp, 1][members[i], 4]);
+      groups[grp, 1][members[i], 4] = "";
+    }  
+
+  return 1;
+    
+}

@@ -1,0 +1,241 @@
+inherit "std/armour";
+#include "../def.h"
+#include "/spellbooks/waldlaeufer/std/restrictions.lpc"
+
+object owner;
+int reactionSpeed;
+mapping temperatureProtection = ([]);
+mapping specialDamageDefense = ([]);
+mapping damageTypeHitsTaken = ([]);
+
+string *heat_adaptation_messages = ({
+  "Du spuerst, wie sich deine Haut leicht verdickt und widerstandsfaehiger gegen Hitze wird.",
+  "Ein warmes Kribbeln breitet sich in deinem Koerper aus, als du dich an die hohe Temperatur anpasst.",
+  "Dein Blut scheint kuehler zu fliessen, um die Hitze zu bekaempfen.",
+  "Schweissdruesen beginnen, verstaerkt zu arbeiten und kuehlen dich effektiv ab.",
+  "Deine Sinne passen sich an, und die Hitze stoert dich weniger.",
+  "Eine Welle von Energie durchstroemt dich und laesst dich die Hitze ignorieren.",
+  "Du fuehlst dich ploetzlich wohler in der Hitze, als ob du dafuer gemacht waerst.",
+  "Dein Koerper veraendert sich, um die hohen Temperaturen problemlos zu ertragen."
+});
+
+string *cold_adaptation_messages = ({
+  "Deine Haut wird leicht blaeulich und du spuerst, wie sie sich an die Kaelte anpasst.",
+  "Ein kaltes Kribbeln breitet sich in deinem Koerper aus, als du dich an die niedrige Temperatur anpasst.",
+  "Dein Blut scheint waermer zu fliessen, um die Kaelte zu bekaempfen.",
+  "Deine Muskeln zittern, um Waerme zu erzeugen und dich zu waermen.",
+  "Deine Sinne passen sich an, und die Kaelte stoert dich weniger.",
+  "Eine Welle von Energie durchstroemt dich und laesst dich die Kaelte ignorieren.",
+  "Du fuehlst dich ploetzlich wohler in der Kaelte, als ob du dafuer gemacht waerst.",
+  "Dein Koerper veraendert sich, um die niedrigen Temperaturen problemlos zu ertragen."
+});
+
+mapping damageAdoptionMessages = ([
+  DT_SLASH: "Deine Haut wird von einer duenenn Hornschicht ueberzogen und schnittfester.",
+  DT_BLUDGEON: "Deine Knochen werden dichter und widerstandsfaehiger gegen stumpfe Schlaege.",
+  DT_PIERCE: "Deine Haut wird haerter und wird stichfester.",
+  DT_SQUEEZE: "Deine Muskeln werden dichter und widerstandsfaehiger gegen Quetschungen.",
+  DT_WHIP: "Deine Haut wird elastischer, um Peitschenhiebe besser abzufangen.",
+  DT_ACID: "Eine Schleimschicht auf deiner Haut macht sie widerstandsfaehiger gegen Saeure.",
+  DT_AIR: "Deine Knochen verwachsen um dich windschnitter zu machen. Luftangriffe gleiten eher an dir ab.",
+  DT_COLD: "Ein dichtes Fell bedeckt deine haut und macht dich widerstandsfaehiger gegen Kaelte.",
+  DT_ELECTRIC: "Deine Haut wird wie Gummi und leitet Elektrizitaet schlechter.",
+  DT_EXPLOSION: "Ein dickes Schuppenkleid waechst ueber dich und schuetzt dich vor Explosionsn.",
+  DT_FIRE: "Du schwitzt feuerfestes Harz aus und schuetzt dich vor Feuer.",
+  DT_LIGHT: "Deine Haut faerbt sich dunkel, um sich gegen helles Licht zu schuetzen.",
+  DT_LIGHTNING: "Dir waechst ein duenner Metallschwanz, der dich erdet und gegen Blitze schuetzt.",
+  DT_MAGIC: "Eine irisierende Kristallschicht bildet sich auf deinen Haaren und schuetzt dich vor Magie.",
+  DT_MIND: "Dein Gehirn waechst und widerstandsfaehiger gegen mentale Angriffe.",
+  DT_POISON: "Deine Blutgefaesse erweitern sich und pumpen mehr Blut. Du wirst gegen Gift geschuetzt.",
+  DT_SOUND: "Deine Ohren verwachsen und werden schallunempfindlicher.",
+  DT_WATER: "Wie eine Lotuspflanze wird deine Haut wasserabweisend und schuetzt dich vor Wasserangriffen.",
+]);
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Melodie der Veraenderung" );
+  SetProp(P_LONG,  0 );
+  SetProp(P_NAME, 0);
+  SetProp(P_INVIS, 1);
+  SetProp(P_GENDER, FEMALE); 
+  AddId(MELODY_OF_CHANGE_ID);
+  SetProp(P_MATERIAL, MAT_MAGIC );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_SIZE, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NEVERDROP, 1);
+
+   
+  SetProp(P_ARMOUR_TYPE, AT_MISC );
+  SetProp(P_AC, 0);
+  SetProp(P_QUALITY_DECAY, 0);
+  SetProp(P_DEFEND_FUNC, TO );
+}
+
+
+// in general this effect adapts the owner to be more adapted to their envvironment. that includes:
+// * adapting to hot and cold climates
+// * consuming less movement points in a specific region
+// * in exceptional cases: get an environment they are adapted to as favourede terrain (like forest is by default)
+// * change their resistances based on damage they get (e.g. if they get a lot of DT_FIRE, their body will be accustomed to it)
+// * grow waterbreathing or flying abilities
+public void Setup(object caster, int ability, int success) {
+  int duration;
+
+  duration = caster->QueryAttribute(A_INT)*2 + success/50 + ability/16; 
+  duration = SPELL_DAMAGE_BONUS(caster, "melodie der veraenderung", duration);
+  owner = caster;
+
+  SetProp("end_time", time()+duration);
+
+  reactionSpeed = 20 - ability/1000 - success/200 - caster->QueryAttribute(A_INT)/10;
+  if(reactionSpeed < 1) reactionSpeed = 1;
+
+  DoWear(1);
+
+  pDebug(caster, sprintf("melody_change :: reactionSpeed=%d duration=%d\n", reactionSpeed, duration));
+
+  call_out("remove", duration);
+  call_out("adapt_to_environment", 9+reactionSpeed);
+
+  set_heart_beat(1);
+  return;
+}
+
+public void adapt_to_environment() {
+  int environmentTemperature, envTerrain;
+  mapping temperatureRange; 
+
+  if(!objectp(environment(owner))) return;
+  if(!environment(owner)->QueryProp(P_ENVIRONMENT)) return;
+  
+  temperatureRange =  owner->QueryProp(P_TEMPERATURE_RANGE);
+  if(member(environment(owner)->QueryProp(P_ENVIRONMENT), ENV_TEMPERATURE)) environmentTemperature =  environment(owner)->QueryProp(P_ENVIRONMENT)[ENV_TEMPERATURE];
+  else environmentTemperature = 0;
+  if(member(environment(owner)->QueryProp(P_ENVIRONMENT), ENV_TERRAIN)) envTerrain = environment(owner)->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN];
+  else envTerrain = 0;
+
+  pDebug(owner, sprintf("melody_change :: adapt_to_environment :: environmentTemperature=%d envTerrain=%d\n", environmentTemperature, envTerrain));
+
+  if (environmentTemperature <= temperatureRange[T_RANGE_MIN]-temperatureProtection[T_COLD_PROT]) {
+    temperatureProtection[T_COLD_PROT] += 5;
+    temperatureProtection[T_HEAT_PROT] -= 5;
+    tell_object(owner, cold_adaptation_messages[random(sizeof(cold_adaptation_messages))]+"\n");
+    owner->UpdateTotalTempProt();
+    pDebug(owner, sprintf("melody_change :: adapt_to_environment :: cold_adaptation tempProt=%O\n", temperatureProtection));
+  } else if (environmentTemperature >= temperatureRange[T_RANGE_MAX]+temperatureProtection[T_HEAT_PROT]) {
+    temperatureProtection[T_COLD_PROT] -= 5;
+    temperatureProtection[T_HEAT_PROT] += 5;
+    tell_object(owner, heat_adaptation_messages[random(sizeof(heat_adaptation_messages))]+"\n");
+    owner->UpdateTotalTempProt();
+    pDebug(owner, sprintf("melody_change :: adapt_to_environment :: heat_adaptation tempProt=%O\n", temperatureProtection));
+  }
+
+  if((envTerrain== TT_WATER || envTerrain == TT_UNDERWATER) && !id("\nwaterbreath")) {
+    pDebug(owner, sprintf("melody_change :: adapt_to_environment :: waterbreath\n"));
+    AddId("\nwaterbreath");
+    tell_object(owner, "Du spuerst, wie sich Kiemen an deinem Hals bilden und du ploetzlich unter Wasser atmen kannst.\n");
+  } else if(id("\nwaterbreath")){
+    pDebug(owner, sprintf("melody_change :: adapt_to_environment :: remove waterbreath\n"));
+    RemoveId("\nwaterbreath");
+    tell_object(owner, "Deine Kiemen schrumpfen und verschwinden, und du atmest wieder normal.\n");
+  }
+
+  // if the owner is not of class CL_FLYING and the environment is TT_AIR, add the class CL_FLYING to the owner
+  if(envTerrain == TT_AIR && !owner->is_class_member(CL_FLYING)) {
+    pDebug(owner, sprintf("melody_change :: adapt_to_environment :: flying\n"));
+    SetProp("flying", 1);
+    owner->AddClass(CL_FLYING);
+    tell_object(owner, "Du spuerst, wie sich Fluegel an deinem Ruecken bilden und du ploetzlich fliegen kannst.");
+  } else if(envTerrain != TT_AIR && owner->is_class_member(CL_FLYING) && QueryProp("flying")) {
+    pDebug(owner, sprintf("melody_change :: adapt_to_environment :: remove flying\n"));
+    owner->RemoveClass(CL_FLYING);
+    tell_object(owner, "Deine Fluegel schrumpfen und verschwinden, und du kannst nicht mehr fliegen.");
+    SetProp("flying", 0);
+  }
+
+  call_out("adapt_to_environment", 5+reactionSpeed);
+
+  return;
+}
+
+public mapping _query_temperature_protection() {
+  return temperatureProtection;
+}
+
+// defend func that, after 15-reactionSpeed hits are taken of the same damage type are taken returns a growing int value (protection) against that type.
+// with any hit of a different type, the protection against all other types is reduced
+// the current protection value against a specific damage type is stored in the mapping specialDamageDefense
+public int DefendFunc(string *dt, mixed spell, object enemy) {
+  int prot;
+  string *dam_types, d;
+  int i, j;
+
+  prot = 0;
+
+  for(j=0; j<sizeof(dt); j++) {
+    d = dt[j];
+
+    if(!member(damageTypeHitsTaken, dt)) damageTypeHitsTaken[dt] = 0;
+    damageTypeHitsTaken[d]++;
+    pDebug(owner, sprintf("melody_change :: Defend :: damageTypeHitsTaken[%s]=%d\n", d, damageTypeHitsTaken[d]));
+    if(damageTypeHitsTaken[d] > 5+reactionSpeed) {
+      if(!member(specialDamageDefense, d)) specialDamageDefense[d] = 0;
+      specialDamageDefense[d] += 1;
+      pDebug(owner, sprintf("melody_change :: Defend :: increase specialDamageDefense[%s]=%d\n", d, specialDamageDefense[d]));
+      tell_object(owner, damageAdoptionMessages[d]+"\n");
+      damageTypeHitsTaken[d] = 0;
+    }
+
+    prot += specialDamageDefense[d];
+  }
+
+  
+  if(prot < 0) prot = 0;
+  if(prot > 30) prot = 30;
+
+  return prot;
+}
+
+public void heart_beat() {
+  int i;
+  string *dam_types, currentDamType;
+  // reduce all specialDamageDefense values by 1 if they are above 0 and the owner is not in a fight
+  if(!owner->InFight() && !random(3)) {
+    dam_types = m_indices(specialDamageDefense);
+    for(i=0; i<sizeof(dam_types); i++) {
+      currentDamType = dam_types[i];
+      if(specialDamageDefense[currentDamType] > 0) {
+        specialDamageDefense[currentDamType]--;
+        pDebug(owner, sprintf("melody_change :: heart_beat :: reduce specialDamageDefense[%s]=%d\n", currentDamType, specialDamageDefense[currentDamType]));
+        tell_object(owner, "Dein Koerper wird wieder normaler verliert etwas von seiner Widerstandsfaehigkeit.\n");
+      }
+    }
+  }
+
+  return;
+}
+
+public void remove(int silent) {
+  if(objectp(owner)) {
+    tell_object(owner, "Die Melodie der Veraenderung verliert ihre Kraft und du fuehlst dich wieder normal.\n");
+  }
+
+  if(QueryProp("flying")) {
+    owner->RemoveClass(CL_FLYING);
+  }
+  
+  DoUnwear(1);
+  ::remove(silent);
+  return;
+}
+
+public mapping QuerySpecialDefense() {
+  return specialDamageDefense;
+}

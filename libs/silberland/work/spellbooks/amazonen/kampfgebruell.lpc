@@ -1,0 +1,77 @@
+// Kampfgebruell: Orakel-Ruf, der Verbundene im Raum mit mehr Wucht kaempfen laesst.
+
+nosave void clear_kampfgebruell(object pl)
+{
+  if (!objectp(pl)) return;
+  pl->SetProp(P_AMAZONEN_KAMPFGEBRUELL, 0);
+  tell_object(pl, "Die Kraft des Kampfgebruells verlaesst dich.\n");
+}
+
+
+varargs int prep_kampfgebruell(object caster, mapping sinfo, int flag)
+{
+  if (caster->QueryProp(P_AMAZONEN_KAMPFGEBRUELL))
+  {
+    tell_object(caster, "Du bruellst bereits und treibst Deine Mitkaempfer an.\n");
+    return 0;
+  }
+
+  if (!caster->InFight())
+  {
+    tell_object(caster, "Das Kampfgebruell entfaltet nur im Kampf seine Wirkung.\n");
+    return 0;
+  }
+
+  if (!pay_for_spell(caster, sinfo, !flag))
+    return 0;
+
+  return 1;
+}
+
+int kampfgebruell_filter(object ob) {
+    return (interactive(ob) && !ob->QueryProp(P_GHOST) || (living(ob) && ob->QueryProp(P_FRIEND))) && 
+            ob->QueryProp(P_AMAZONEN_KAMPFGEBRUELL) < time() && ob->InFight();
+  }
+
+int kampfgebruell(object caster, mapping sinfo)
+{
+  object *allies;
+  int suc, bonus, dur, dmg, i;
+
+  if (!prep_kampfgebruell(caster, sinfo, 1))
+    return 0;
+
+  if ((suc = SpellSuccess(caster, sinfo)) <= 0)
+    return MISSERFOLG;
+
+  bonus = sinfo[SI_SKILLABILITY] / 200 + suc / 200;
+  
+  dmg = 100 + bonus + (sinfo[SI_SKILLPOINTS] > 2 ? 50 : 0);
+
+  dur = caster->QueryProp(P_GUILD_LEVEL) + sinfo[SI_SKILLABILITY] / 333;
+  if (sinfo[SI_SKILLPOINTS] > 1)
+    dur *= 2;
+
+  allies = filter_array(all_inventory(environment(caster)),  "kampfgebruell_filter");
+
+  environment(caster)->Message(BS(sprintf("%s stoesst ein wildes Kampfgebruell aus!",
+        caster->Name(WER,1))),
+      MSGFLAG_SOUND, ([ MSGFLAG_EXCLUDE : ({ caster }) ]) );
+  tell_object(caster, "Du bruellst voller Kampflust und treibst Deine Verbundenen an.\n");
+
+  pDebug(caster, sprintf("Kampfgebruell: dmg=%d, dur=%d", dmg, dur));
+  //write(sprintf("Kampfgebruell: dmg=%d, dur=%d", dmg, dur));
+
+  // Buff fuer alle Verbundenen inkl. Caster.
+  for (i = 0; i < sizeof(allies); i++)
+  {
+    if (!objectp(allies[i]))
+      continue;
+    allies[i]->ModifySkillAttribute(caster, SA_DAMAGE, dmg, dur);
+    tell_object(allies[i], "Der wilde Ruf erfuellt Dich mit neuer Kampfeslust!\n");
+    call_out("clear_kampfgebruell", dur, allies[i]);
+    allies[i]->SetProp(P_AMAZONEN_KAMPFGEBRUELL, time() + dur);
+  }
+
+  return ERFOLG;
+}

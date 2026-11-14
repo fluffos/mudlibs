@@ -1,0 +1,10 @@
+#define STADTROOM   ROOM "stadt/"
+#define STADTOBJ    OBJ "stadt/"
+#define STADTWEAPON WEAPON "stadt/"
+#define STADTARMOUR ARMOUR "stadt/"
+#define STADTNPC    NPC "stadt/"
+#define STADTMASTER MASTER "stadtmaster"
+#define STADTLOG    LOG "stadt.log"
+
+#define ANSCHLUSS_GLEISE GLEISEROOM "l3_gleise"
+#define ANSCHLUSS_STADT_STOLLEN STOLLENROOM "stollen:0:10"

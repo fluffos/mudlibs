@@ -1,0 +1,319 @@
+// SilberLand MUDlib
+//
+// spellbooks/paladine/lokation.c
+//
+// $Date: 2009/01/22 15:28:44 $
+/* $Revision: 1.11 $
+ * $Log: lokation.c,v $
+ * Revision 1.11  2009/01/22 15:28:44  mud
+ * Angrox: DUSTY_AVATAR geadded
+ *
+ * Revision 1.10  2005/06/16 19:01:13  Feyaria
+ * TT_AIR
+ *
+ * Revision 1.9  2004/12/12 11:10:12  Feyaria
+ * nicht mehr moeglich wenn magier im raums steht
+ *
+ * Revision 1.8  2004/07/21 22:40:04  Feyaria
+ * ignore bruecksichtigen, nicht in der todessequenz beobachten
+ *
+ * Revision 1.7  2004/05/29 10:42:17  Feyaria
+ * anonymes_erblicken->anonym_erblicken (angrox)
+ * kein bug mehr bei raeumen ohne P_ENVIRONMENT
+ *
+ * Revision 1.6  2004/02/23 13:36:17  Angrox
+ * P_PALADIN_NO_LOCATION auswerten
+ *
+ * Revision 1.5  2004/01/01 20:16:14  Feyaria
+ * auf environment pruefen
+ *
+ * Revision 1.4  2003/12/30 20:17:27  Feyaria
+ * Keine lokalisation mehr in /players/ verzeichnis
+ *
+ * Revision 1.3  2003/12/29 18:49:41  Angrox
+ * ignoriere anonymes_erblicken eingebaut.
+ *
+ * Revision 1.2  2003/11/17 21:02:23  Feyaria
+ * TT_WATER und mittelmaessig warm-> kuehl
+ *
+ * Revision 1.1  2003/07/09 11:39:22  Angrox
+ * Initial revision
+ *
+ */
+// Prototypem
+int prep_lokation(object caster, mapping sinfo);
+int lokation(object caster, mapping sinfo);
+
+
+int prep_lokation(object caster, mapping sinfo) {
+  if(caster->InFight()) {
+    Message(caster,0,
+      BS("Du solltest erst Deinen Gegner fuer Dusty besiegen!"),0);
+    return 0;
+  }
+  if(!sinfo[SI_SKILLARG]) {
+    Message(caster, 0, "Wen moechtest Du lokalisieren?\n", 0);
+    return 0;
+  }
+  return 1;
+}
+
+int is_wizard(object ob)
+{
+  if (IS_WIZARD(ob) && !ob->QueryProp(P_INVIS))
+    return 1;
+  return 0;
+}
+
+int lokation(object caster, mapping sinfo) {
+  object schein, victim, env_vic, room;
+  int suc, dauer, value;
+  string env_short, env_long, *exp_fn, vn, str, temp1, temp2;
+  string *ign;
+
+  str="";
+  if( !prep_lokation(caster, sinfo) ) return 0;
+  if((!(victim=find_player(sinfo[SI_SKILLARG])) &&
+      !(victim=find_living(sinfo[SI_SKILLARG]))) ||
+       (victim && victim->QueryProp(P_INVIS)))
+  {
+     Message(caster, 0, "Bei Dusty, Du findest das Lebewesen nicht!\n", 0);
+                  return 0;
+  }
+  if(victim==caster) {
+    Message(caster, 0, BS("Dich selber zu lokalisieren hat wenig Sinn, "
+       +"Paladin!"), 0);
+    return 0;
+  }
+  if(victim->QueryProp(P_PALADIN_NO_LOCATION)) {
+    Message(caster, 0, BS("Dusty laesst Dich dieses Lebewesen nicht "
+        +"lokalisieren, Paladin!"), 0);
+    if(!random(20))
+      Message(caster, 0, BS("Daran sind bestimmt die unheiligen Nekromanten "
+            "schuld!"), 0);
+    return 0;
+
+  }
+  if((!find_player("dusty") && !find_living(DUSTY_AVATAR)) && 
+      !interactive(victim)) 
+  {
+    Message(caster, 0, BS("Nur wenn Dusty anwesend ist, kannst Du dieses "
+         "Lebewesen lokalisieren."),0);
+    return 0;
+  }
+  if(!interactive(victim) && caster->QueryProp(P_ALIGN)<(400+random(100))) {
+    Message(caster, 0, BS("Dusty laesst Dich dieses Lebewesen nicht "
+        +"lokalisieren, Paladin!"), 0);
+    return 0;
+  }
+  if(present(victim,ENV(caster))) {
+    Message(caster, 0, BS(sprintf("Bei Dusty, %s steht doch direkt neben Dir!",
+                       victim->name(WER))), 0);
+    return 0;
+  }
+  if(IS_WIZARD(victim)) {
+    Message(caster, 0, BS(
+      "Magier stehen unter Dustys besonderem Schutz und Du siehst gar "
+      "nichts!"), 0);
+    return 0;
+  }
+  if(victim->QueryProp(P_TESTPLAYER)) {
+    Message(caster, 0, BS(
+      "Testspieler stehen unter Dustys besonderem Schutz und Du siehst gar "
+      "nichts!"), 0);
+    return 0;
+  }
+  if( !room = ENV(victim) )
+  {
+    Message(caster, 0, BS(victim->Name(WER) + " schwebt im Nichts herum! "
+          "BUG! Magier benachrichtigen!") );
+    return 0;
+  }
+  if(file_name(room)[0..8] == "/players/" ||
+      sizeof(filter_array(all_inventory(room), "is_wizard")))
+  {
+    Message(caster, 0, BS("Eine magische Macht blockiert Deinen Zauber!") );
+    return 0;
+  }
+  if (file_name(room)[0..11] == "/room/death/")
+  {
+    Message(caster, 0, BS("Der Blick ins Reich der Toten bleibt Dir verwehrt!") );
+    return 0;
+  }
+  if (interactive(victim) && pointerp(ign = victim->QueryProp(P_IGNORE)))
+  {
+    if (member(ign, "beobachte") != -1 ||
+        member(ign, getuid(caster)) != -1 ||
+        member(ign, getuid(caster)+".beobachte") != -1)
+    {
+      Message(caster, 0, BS(victim->Name(WER)+" moechte nicht beobachtet "
+                      "werden."));
+      return 0;
+    }
+  }
+
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+      write(sinfo[SI_SP_LOW_MSG]);
+      return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  Message(caster, 0, BS(sprintf("Mit der Macht Dustys versuchst Du %s "
+      +"zu lokalisieren.", victim->name(WEN))), 0);
+  Message(caster, 0, sprintf("%s konzentriert sich...\n",caster->Name(WER)),
+      3);
+  if((suc=SpellSuccess(caster,sinfo))<=0) {
+    Message(caster, 0, BS(sprintf("Bei Dusty! Du kannst %s nicht "
+        +"lokalisieren!\n", victim->name(WEN))), 0);
+    Message(caster, 0, "Nichts passiert.\n", 3);
+    if(suc<-2000 && ENV(victim))
+      tell_room(ENV(victim), BS(sprintf("%s versuchte, diesen Ort zu "
+          +"betrachten.", caster->Name(WER))));
+    return MISSERFOLG;
+  }
+  vn=victim->Name(WER);
+  Message(caster,0,BS("Dusty offenbart Dir folgendes:\n"), 0);
+  write(BS("--------------------------------------------------------"
+      +"----------------------"));
+  if(!(env_vic=ENV(victim))) {
+    Message(caster, 0, BS(sprintf("%s befindet sich an einem geheimnissvollen "
+        +"und unbekanntem Ort. Mehr kannst Du nicht erkennen.\n",
+        vn)), 0);
+    return ERFOLG;
+  }
+  env_long=env_vic->int_long(caster,caster,0);
+  env_short=env_vic->QueryProp(P_INT_SHORT);
+  exp_fn=explode(file_name(env_vic), "/");
+  if(exp_fn[0]=="d") {
+    write(sprintf("%s befindet sich in der Region %s.\n", vn,
+        CAP(exp_fn[1])));
+  }
+  else if(exp_fn[0]=="gilden") {
+    write(sprintf("%s befindet sich in der Gilde der/des %s.\n", vn,
+        CAP(exp_fn[1])));
+  }
+  write(BS(sprintf("Der Ort, wo %s sich befindet, nennt sich '%s'.\n",
+      victim->QueryPronoun(WER), env_short)));
+  str="Normalerweise ist es dort ";
+  switch (env_vic->QueryProp(P_LIGHT)) {
+    case -10000..-3: temp1="unglaublich dunkel.";
+                     break;
+    case -2..-1:     temp1="sehr dunkel.";
+                     break;
+    case 0:          temp1="dunkel.";
+                     break;
+    case 1:          temp1="hell.";
+                     break;
+    case 2..3:       temp1="sehr hell.";
+                     break;
+    case 4..10000:   temp1="unglaublich hell.";
+                     break;
+    default:         temp1 = "undefinierbar hell oder dunkel";
+  }
+  str+=temp1;
+  switch (env_vic->_query_total_light()) {
+    case -10000..-3: temp2="unglaublich dunkel.";
+                     break;
+    case -2..-1:     temp2="sehr dunkel.";
+                     break;
+    case 0:          temp2="dunkel.";
+                     break;
+    case 1:          temp2="hell.";
+                     break;
+    case 2..3:       temp2="sehr hell.";
+                     break;
+    case 4..10000:   temp2="unglaublich hell.";
+                     break;
+    default:         temp2 = "undefinierbar hell oder dunkel";
+  }
+  if (temp1 != temp2) {
+    str+=" Derzeit ist es dort aber "+temp2;
+  }
+  write(BS(str));
+  if(!mappingp(env_vic->QueryProp(P_ENVIRONMENT))) {
+    write("Dieser Ort hat weder eine Temperatur noch ein Terrain, sehr "
+        "komisch!\n");
+    tell_angrox(sprintf("Raum ohne P_ENVIROMENT: %O\n", env_vic));
+    tell_zordan(sprintf("Raum ohne P_ENVIROMENT: %O\n", env_vic));
+  }
+  else {
+    if(value=(env_vic->QueryProp(P_ENVIRONMENT))[ENV_TEMPERATURE]) {
+      str="Die Temperatur an diesem Ort ist ";
+      switch(value||20) {
+        case -10000..-50: str+="toetlich kalt."; break;
+        case -49..-30   : str+="extrem kalt."; break;
+        case -29..-10   : str+="eiseskalt."; break;
+        case  -9..4     : str+="kalt."; break;
+        case   5..15    : str+="kuehl."; break;
+        case  16..25    : str+="angenehm warm."; break;
+        case  26..30    : str+="warm."; break;
+        case  31..40    : str+="heiss."; break;
+        case  41..50    : str+="sehr heiss."; break;
+        case  51..60    : str+="extrem heiss."; break;
+        case  61..10000 : str+="toetlich heiss."; break;
+        default         : str+="undefinierbar kalt oder warm."; break;
+      }
+      write(BS(str));
+    }
+    if(value=env_vic->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN]) {
+      str="Der Ort befindet sich ";
+      switch(value||TT_OTHER) {
+        case TT_CAVE:  str+="in einer hoehlenaehnlichen Umgebung.";
+                       break;
+        case TT_HOUSE: str+="in einer geschlossenen Umgebung.";
+                       break;
+        case TT_HILL:  str+="in einer huegelligen Gegend.";
+                       break;
+        case TT_FOREST:str+="in einer waldaehnlichen Gegend.";
+                       break;
+        case TT_TOWN:  str+="in einer stadtaehnlichen Gegend.";
+                       break;
+        case TT_MOUNTAIN: str+="in einer sehr bergigen Gegend.";
+                          break;
+        case TT_DESERT:str+="in einer wuestenaehnlichen Gegend.";
+                       break;
+        case TT_JUNGLE:str+="in einer dschungelaehnlichen Gegend.";
+                       break;
+        case TT_SWAMP: str+="in einer mooraehnlichen Gegend.";
+                       break;
+        case TT_PLAIN: str+="in einer flachen Gegend.";
+                       break;
+        case TT_ARCTIC:str+="in einer arktischen Gegend.";
+                       break;
+        case TT_UNDERWATER:str+="unter Wasser.";
+                           break;
+        case TT_WATER:str+="im oder am Wasser.";
+                      break;
+        case TT_ROAD:  str+="in einer strassenaehnlichen Gegend.";
+                       break;
+        case TT_AIR:  str+="hoch oben in der Luft.";
+                       break;
+        case TT_OTHER:  
+        default:        str+="in einem unbekannten Terrain.";
+                       break;
+      }
+      write(BS(str));
+    }
+  }
+  write(BS("Wenn Du Dich dort befinden wuerdest, wuerdest "
+      +"Du folgendes sehen:"));
+  write("\n"+env_long);
+  write(BS("--------------------------------------------------------"
+      +"----------------------"));
+  if(pointerp(victim->QueryProp(P_IGNORE)) &&
+      member(victim->QueryProp(P_IGNORE), "anonym_erblicken") != -1) 
+  {
+    tell_room(env_vic, BS("Du spuerst, wie der Ort hier betrachtet wird..."),
+      ({caster,victim}));
+    tell_object(victim, BS(sprintf("Du spuerst, wie dieser Ort von %s "
+            "betrachtet wird.", caster->name(WER))));
+  }
+  else 
+    tell_room(env_vic, BS("Du spuerst, wie der Ort hier betrachtet wird..."),
+      ({caster}));
+  Message(caster, victim, BS(sprintf("%s scheint nun wissender zu sein.\n",
+      caster->Name(WER))), 3);
+  return ERFOLG;
+}
+
+

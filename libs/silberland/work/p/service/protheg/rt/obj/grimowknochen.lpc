@@ -1,0 +1,642 @@
+/*
+** Ein Knochen von Grimow, nur fuer Oger ;)
+**
+** 2004-Jul-01  1.1  PROtheG  Fertigprogrammiert ;)
+**
+** 2004-Jul-01  1.2  PROtheG  Ignorieren komplett ueberarbeitet
+**
+** 2005-Feb-04  1.3  PROtheG  grinfo leicht ueberarbeitet
+**
+** 2006-May-09  1.4  PROtheG  Titel (FM fuer nichtseher vergessen)
+**
+** 2007-Jul-11  1.5  PROtheG  Titel (Typo ausgebessert male is male)
+**
+** 2008-Jun-16  1.6  PROtheG  verdrehte FM funktionen gefixed
+**
+*/
+
+#pragma strong_types;
+
+#include "../def.h"
+#include <ansi.h>
+#include <exploration.h>
+
+inherit STD "rt";
+
+#define QM "/secure/questmaster"
+
+#define SOULFILE SOUL "Oger"
+
+//Somit ist moeglich "blabla"+C+"blabla"+N
+#define C GetColor()
+#define S(x) GetColor(x)
+#define N NormalColor()
+
+nosave int lastlogin; 
+
+//Liefert die aktuelle Versionsnummer
+int Version() { return 6;}
+
+nomask void create()
+{
+  if(!is_clone(ME)) return;  // (return on BP)
+  ::create();
+
+  SetProp(P_SHORT, "Grimows Geschenk");
+  SetProp(P_LONG,
+	  BS("Du hast von Grimow diesen grossen, saftigen Knochen als "
+	     "Geschenk bekommen. Achte auf ihn und verliere ihn nicht, dann "
+	     "wird er Dir viele Dienste erweisen koennen."));
+  SetProp(P_NAME, "Knochen");
+  SetProp(P_GENDER, NEUTER);
+  AddId(({"geschenk", "knochen", "grimows geschenk","grimowknochen"}));
+
+  SetProp(P_WEIGHT, 400);
+  SetProp(P_MATERIAL, ([MAT_BONE:90,MAT_FLESH:8,MAT_SKIN:2]));
+
+  SetProp(P_NOSELL,
+	  "Du kannst doch nicht einfach Grimows Geschenk verkaufen!\n");
+
+  SetProp(P_INFO,
+	  "Mjam, ein Knochen! Aber Du solltest ihn lieber nicht essen, "
+	  "denn er kann Dir viele Dienste erweisen.");
+
+  AddDetail("dienste", CLOSURE(huefe));
+  
+  AddDetail(({"grimow"}),
+	    QueryProp(P_LONG));
+  
+  AddCmd("grreport", "Report");
+  
+  //Cmds fuer die Komunikation
+  AddCmd(({"grgrunze","grgrunz"}), "Rufen");
+  AddCmd(({"grhist"}), "History");
+  AddCmd(({"grwink","grwinke"}), "grwink");
+  
+  AddCmd(({"grinfo"}), "grinfo");
+  AddCmd(({"grwer"}), "grwer");
+  AddCmd(({"grfarbe","grfarben"}), "grfarbe");
+
+  AddCmd(({"grpresay"}), "grpresay");
+
+  //Hilfeanzeige
+  AddCmd(({"grhilfe"}), "grhilfe");
+  
+  AddCmd(({"knabber","knabbere","beiss","beisse"}), "cmd_knabbern");
+  AddCmd(({"schleck","schlecke"}), "cmd_schlecken");
+  AddCmd(({"sabber","sabbere"}), "cmd_sabbern");
+  
+  GetColor(1);
+  
+  SUID;
+
+  // r* commands:
+  init_soul_cmds(1);
+}
+
+nosave int cmd_knabbern(string str)
+{
+  if(!str) return 0;
+  if(!id(str)) return 0;
+  
+  write(BS("Du knabbern etwas an grosse Knochen von Grimow!"));
+  tell_room(ENV(TP), BS(TPN+" knabbert an einem grossen Knochen herum."), 
+	    ({TP}));
+  return 1;
+}
+
+nosave int cmd_schlecken(string str)
+{
+  if(!str) return 0;
+  if(!id(str)) return 0;
+  
+  write(BS("Du schlecken grosses Knochen von Grimow ab! Mjam!"));
+  tell_room(ENV(TP), BS(TPN+" schleckt an einem grossen Knochen herum."), 
+	    ({TP}));
+  return 1;
+}
+
+nosave int cmd_sabbern(string str)
+{
+  if(!str) return 0;
+  if(!id(str)) return 0;
+  
+  write(BS("Du sabbern an grosse, leckere Knochen von Grimow!"));
+  tell_room(ENV(TP), BS(TPN+" sabbert an einem grossen Knochen herum."), 
+	    ({TP}));
+  return 1;
+}
+
+//Liefert den Filename zum Masterobjekt
+string Master()
+{
+  return RTM "ogermaster";
+}
+
+// liefert den String fuers ignorieren (ignoriere bla)
+string IgnoriereID()
+{
+  return "knochen";
+}
+
+// liefert den String fuer die Rasse
+string Rasse()
+{
+  return "Oger";
+}
+
+// Meldung fuer Report wenn absolut fit
+string absolut_fit()
+{
+  return "Du jetzt wieder fit!";
+}
+
+// Report Zeilen normal
+string Report_normal(int hp, int maxhp, int sp, int maxsp)
+{
+  string ret;
+  
+  ret="* Du ";
+  
+  if(hp==maxhp)
+    ret+="volle Lebenspunkte und ";
+  else
+    ret+=""+hp+" von "+maxhp+" Lebenspunkte und ";
+  
+  if(sp==maxsp)
+    ret+="volle Magiepunkte.";
+  else
+    ret+=""+sp+" von "+maxsp+" Magiepunkte.";
+  
+  return ret;
+}
+
+// Report Zeilen kurz
+string Report_kurz(int hp, int maxhp, int sp, int maxsp)
+{
+  string ret;
+  
+  ret="* ";
+  
+  if(hp==maxhp)
+    ret+="LP: "+hp+" und ";
+  else
+    ret+="LP: "+hp+" von ("+maxhp+") und ";
+  
+  if(sp==maxsp)
+    ret+="MP: "+sp;
+  else
+    ret+="MP: "+sp+" von ("+maxsp+")";
+  
+  return ret;
+}
+
+// Spezialbehandlungen von Aufenthaltsorten bei werliste
+string Region(string str)
+{
+  if(strstr(str, "/d/ebene/zordan/ogerhoehle")==0)
+    return "Ogerlager";
+  
+  return "";
+}
+
+//Wird ausgegeben, wenn sich das Tool selbst erneuert
+string Erneuern_Meldung()
+{
+  return BS(C+"Dein Knochen schimmert kurz..."+N);
+}
+
+//Meldung wenn die History noch leer ist
+string History_leer()
+{
+  return BS("In letzter Zeit war ruhig...");
+}
+
+//Ueberschrift der History
+string History_msg()
+{
+  return "Oger Gegrunze!";
+}
+
+// <Spieler> <History_format> huhu
+//zb: Protheg teilte Dir mit: huhu
+string History_format()
+{
+  return "grunzte Dir zu: ";
+}
+
+//NotifyFail beim rufen
+string Rufen_syntax()
+{
+  return BS("Was Du andere Oger grunzen?");
+}
+
+// <Spieler> <Rufen_format> huhu
+//zb: Protheg teilt Dir mit: huhu
+string Rufen_format()
+{
+  return "grunzt Dir zu: ";
+}
+
+//Format der Rufenausgabe an den Spieler
+string Rufen_msg()
+{
+  return "Du grunzt andere Oger zu: ";
+}
+
+varargs nosave string huefe(int flag)
+{
+  string ret, rcmds;
+  int i;
+  
+  rcmds="";
+
+  //Formatierung der r* commands. fuer seher keine mpkosten
+  if(IS_SEER(TP))
+    {
+      for(i=sizeof(soulcmds)-1;i>=0;i--)
+	if(i==0)
+	  rcmds+="und "+soulcmds[i][0]+".";
+	else
+	  rcmds+=soulcmds[i][0]+", ";
+      
+      rcmds=break_string(rcmds, 60, " ", BS_NO_PARINDENT);
+    }
+  else
+    {
+      for(i=sizeof(soulcmds)-1;i>=0;i--)
+	if(i==0)
+	  rcmds+="und "+soulcmds[i][0]+"("+soulcmds[i,2]+").";
+	else
+	  rcmds+=soulcmds[i][0]+"("+soulcmds[i,2]+"), ";
+      
+      rcmds=break_string(rcmds, 60, " ", BS_NO_PARINDENT);
+      
+      rcmds+="Zahlen in Klammern Magiepunkte, die die\n"
+	"Aktionen kosten.\n \n";
+      
+    }
+  
+  ret="\n \n"
+    "Du immer schauen koennen Magie und Leben mit:\n \n"
+    "  <grreport ein>   Anzeigen.\n"
+    "  <grreport aus>   Nicht Anzeigen.\n \n"
+    "Andere Befehle von Knochen!\n"
+    +rcmds+" \n"
+    "  Grunzen mit andere Oger:  grgrunze <text>\n"
+    "  Grunzen von andere Oger:  grhist\n \n"
+    "  Wo andere Oger:           grwer\n"
+    "  Wie gut Du:               grinfo\n"
+    "  Bunt:                     grfarbe\n"
+    "  Winken zu andere Oger:    grwink\n"
+    "  Presay setzen:            grpresay\n"
+    "  Hilfe fuer Oger:          grhilfe\n \n"
+    "                                                         Ver 1."+Version()+"\n";
+
+  //in der Hilfefunktion brauchen wir kein document-format
+  if(!flag) return ret;
+  
+  TP->More(make_document(ret));
+  return "";
+}
+
+nosave int grhilfe(string str)
+{
+  string ret;
+
+  if(str) str=explode(str, " ")[0];
+
+  switch(str)
+    {
+    case "grreport": 
+      ret="Mit 'grreport' wissen ueber Magie und Leben.\n"
+	"* grreport normal    - Report normal.\n"
+	"* grreport kurz      - Report wenig Buchstaben.\n"
+	"* grreport farbe     - Report bunt.\n"
+	"* grreport farbekurz - Report bunt und\n"
+	"                       wenig Buchstaben.\n"
+	"* grreport aus       - Report aus.\n";
+      break;
+    case "grinfo": 
+      ret="'grinfo' zeigt wie gut Du sein! Gleich wie 'info'.\n"
+	"Mit 'grfarbe' auch bunt!\n";
+      break;
+    case "grwer": 
+      ret="Mit 'grwer' Du sehen wo andere Oger:\n \n"
+	"*  Welche Oger/Ogerfrau da?\n"
+	"*  Wenn nix Grimow Geschenk dann 'Grunze(r)'\n"
+	"*  Oger idle?\n"
+	"*  Oger Waffe?\n"
+	"*  Oger nett?\n"
+	"*  Wo steht Oger?\n"
+	"*  Mit wem kaempft Oger gerade (optional)\n\n"
+	"Mit 'grwer kurz' kleinere Liste!\n";
+    break;
+    case "grfarben":
+    case "grfarbe": 
+      ret="Mit '"+str+"' einstellen ob bunt! Brauchst Du 'stty ansi'\n"
+	"* grfarbe aus  -  Nicht bunt.\n"
+	"* grfarbe ein  -  Bunt.\n";
+    break;
+    case "grgrunze": 
+      ret="Mit 'grgrunze' Du grunzen zu andere Oger.\n"
+	"Mit 'grhist' Du sehen was andere Oger grunzen.\n";
+    break;
+    case "grhist": 
+      ret="Mit 'grhist' Du sehen was andere Oger grunzen mit 'grgrunze'";
+    break;
+    case "grwinke":
+    case "grwink": 
+      ret="Mit '"+str+"' Du winken zu andere Oger.";
+      break;
+    case "grpresay":
+      ret="Mit 'grpresay' Du setzen Oger-presay wie bei 'grwer'.\n"
+	"Mit 'grpresay loeschen' Oger-presay weg.\n";
+      break;
+    case "allgemein":
+      ret=huefe();
+      break;
+    case "ignoriere":
+    case "ignorieren":
+      ret=ignorieren_hilfe_text();
+      break;
+    default: 
+      ret="Mit 'grhilfe' Du sehen folgendes:\n"
+	"grhilfe <grreport>   Magie und Leben?\n"
+	"        <grinfo>     Oger 'info'.\n"
+	"        <grwer>      Wo andere Oger?\n"
+	"        <grfarbe>    Bunt oder nicht bunt.\n"
+	"        <grpresay>   Oger-presay setzen.\n"
+	"        <grgrunze>   grunzen zu andere Oger.\n"
+	"        <grhist>     grunzen von andere Oger.\n"
+	"        <grwink>     Winken zu andere Oger.\n"
+	"        <allgemein>  Uebersicht.\n"
+        "        <ignoriere>  Uebersicht von Ignorieren.\n";
+    }
+  return TP->More(make_document(ret)),1;
+}
+
+void BecomesNetAlive(object who)
+{
+  xpdiff=-1;
+
+  if((ENV(ME)) && (ENV(ME)==who))
+    {
+      netalivebug=0;
+      
+      call_out("erneuern", 0);
+      
+      xpdiff=who->QueryProp(P_XP);
+      
+      if(time()-lastlogin > 1000 && !IS_WIZARD(who))
+	{
+	  tell_object(who, BS("Du hast HUNGER!!"));
+	  lastlogin=time();
+	}
+    }
+}
+
+string Titel(object pl)
+{
+  string ret;
+  
+  if(!pl->QueryProp(Listener()))
+    if(!present(RACETOOLID, pl))
+      return "Grunz"+FM(pl,"erin ","er ");
+    else
+      pl->SetProp(Listener(), 1);
+  
+  if(pl->QueryProp(P_FROG))
+    return "";
+  
+  ret="Oger";
+
+  if(IS_WIZARD(pl))
+    return ret+"magier"+FM(pl,"in "," ");
+
+  if(pl->QueryProp(P_GUILD)=="druidenzirkel")
+    return ret+"druid"+FM(pl,"in ","e ");
+  
+  if(pl->QueryProp(P_GUILD)=="zechpreller")
+    return ret+"saeufer"+FM(pl,"in "," ");
+  
+  if(pl->QueryProp(P_GUILD)=="berserker")
+    return ret+"berserker"+FM(pl,"in "," ");
+  
+  if(pl->QueryProp(P_GUILD)=="nekromanten")
+    return ret+"nekromant ";
+  
+  return ret+FM(pl,"in "," ");
+}
+
+nosave int grfarbe(string str)
+{
+  notify_fail(BS("Syntax: grfarbe ein | aus"));
+  if(!str) return 0;
+  
+  if(str=="aus")
+    {
+      Setting(0); 
+
+      return write(BS("Keine Farbe.")), 1; 
+    }
+  
+  if(TP->QueryProp(P_TTY)!="ansi")
+    return write(BS("Du nicht 'stty ansi' gemacht!")), 1;
+  
+  Setting(1); 
+  
+  return write(BS("Farben! Farben!")), 1; 
+}
+
+nosave int grpresay(string str)
+{
+  string np, op;
+
+  notify_fail(BS("Mit 'grpresay' setzen Oger-presay.")+
+	      BS("Mit 'grpresay loeschen' loeschen Oger-presay."));
+  
+  if(strlen(str)) 
+    if(str=="loeschen")
+      {
+	if(!strlen(TP->QueryProp(P_PRESAY)))
+	  return write(BS("Du nicht Presay gesetzt!?")), 1;
+	
+	TP->SetProp(P_PRESAY, "");
+	
+	return write(BS("Dein Presay jetzt geloescht.")), 1;
+      }
+    else
+      return 0;
+  
+  np=Titel(TP);
+  
+  if(strlen(op=TP->QueryProp(P_PRESAY)))
+    if(np!=op)
+      write(BS("Dein Presay '"+op+"' werden ersetzt."));
+  
+  TP->SetProp(P_PRESAY, np[0..<2]);
+  
+  write(BS("Du jetzt:")+
+	BS(np+CAP(getuid(TP))+" "+(TP->QueryProp(P_TITLE) || "")));
+  
+  return 1;
+}
+
+nosave string Hunger(int food, int max_food, int drink, int max_drink)
+{
+  string ret;
+  int f, d;
+  
+  f=food*100/max_food;
+  d=drink*100/max_drink;
+  
+  ret="";
+  
+  switch(f)
+    {
+    case 26 ..  50 : ret+="VIEL HUNGER"; break;
+    case 51 ..  75 : ret+="Hunger"; break;
+    case 76 ..  90 : ret+="etwas Hunger"; break;
+    case 91 .. 100 : ret+="Essen satt"; break;
+    default : ret+="ARG HUNGER"; break;
+    }
+  
+  if((f < 50 && d > 50) ||
+     (f > 50 && d < 50))
+    ret+=" aber ";
+  else 
+    ret+=" und ";
+  
+  switch(d)
+    {
+    case 26 ..  50 : ret+="VIEL DURST"; break;
+    case 51 ..  75 : ret+="Durst"; break;
+    case 76 ..  90 : ret+="etwas Durst"; break;
+    case 91 .. 100 : ret+="Trinken satt"; break;
+    default : ret+="ARG DURST"; break;
+    }
+  
+  return ret+".";
+}
+
+nosave int grinfo(string str)
+{
+  object tp;
+  mapping at;
+  int xp;
+  
+  tp=TP;
+
+  if(tp->QueryProp(P_GHOST))
+    return write("Tote Oger nix Punkte!\n"),1;
+  
+  at=tp->QueryProp(P_ATTRIBUTES);
+
+  if(xpdiff<=0) xpdiff=tp->QueryProp(P_XP);
+
+  xp=tp->QueryProp(P_XP);
+
+
+  write(sprintf(
+"\n"
+"        "+C+"_______  ______________________________________________________"+N+"\n"
+"     ,-"+C+"/       \\/"+N+" %44.44|s        "+C+"/"+N+"--,\n"
+"     '-"+C+"\\                                                              \\"+N+"--'\n"
+"       "+C+"|"+N+" Gilde: %25-s                             "+C+"|"+N+"\n"
+"       "+C+"|"+N+"                                                              "+C+"|"+N+"\n"
+"       "+C+"|"+N+" Stufe: %21s         Erfahrung:   %10d "+C+"|"+N+"\n"
+" ___   "+C+"|"+N+" Abenteuerpunkte: %4d (%4d)         %23-s "+C+"|"+N+"   ___\n"
+"/   \\__"+C+"|"+N+"                                                              "+C+"|"+N+"__/   \\\n"
+"\\  / _ "+C+"|"+N+" Leben: %s    "+C+"|"+N+" _ \\  /\n"
+"/  \\ __"+C+"|"+N+" Magie: %s    "+C+"|"+N+"__ /  \\\n"
+"\\___/  "+C+"|"+N+"                                                              "+C+"|"+N+"  \\___/\n"
+"       "+C+"|"+N+" Intelligenz: %8-s  %s                  "+C+"|"+N+"\n"
+"       "+C+"|"+N+" Ausdauer   : %8-s  Zustand:%28.28-s  "+C+"|"+N+"\n"
+"       "+C+"|"+N+" Kraft      : %8-s  %14.14-s %s   "+C+"|"+N+"\n"
+"       "+C+"|"+N+" Geschick   : %8-s  %30.30-s        "+C+"|"+N+"\n"
+"       "+C+"|"+N+" %60.60-s "+C+"|"+N+"\n"
+"     ,-"+C+"/                                                       ,      /"+N+"--,\n"
+"     '-"+C+"\\_____________________________(o)__________________/\\__/\\______\\"+N+"--'\n",
+Titel(tp)+CAP(getuid(tp)),
+CAP(tp->QueryProp(P_GUILD))+" ("+tp->QueryProp(P_GUILD_LEVEL)+")",
+Stufenpunkte(tp), xp,
+tp->QueryProp(P_QP), QM->QueryAllQP(), 
+(xp-xpdiff ? "Unterschied: "+sprintf("%10d", xp-xpdiff):""),
+Balken(tp->QueryProp(P_HP), tp->QueryProp(P_MAX_HP), setting, tp->QueryProp(P_WIMPY),50),
+Balken(tp->QueryProp(P_SP), tp->QueryProp(P_MAX_SP), setting,0,50),
+sprintf("%d [%+d]", at[A_INT], tp->QueryAttributeOffset(A_INT)),
+Erschoepfung(tp),
+sprintf("%d [%+d]", at[A_CON], tp->QueryAttributeOffset(A_CON)),
+Zustand(tp),
+sprintf("%d [%+d]", at[A_STR], tp->QueryAttributeOffset(A_STR)),
+Gesinnung(tp), Gewicht(tp),
+sprintf("%d [%+d]", at[A_DEX], tp->QueryAttributeOffset(A_DEX)),
+Hunger(tp->QueryProp(P_FOOD), tp->QueryProp(P_MAX_FOOD),
+       tp->QueryProp(P_DRINK), tp->QueryProp(P_MAX_DRINK)),
+(tp->QueryProp(P_WIMPY) ? 
+ sprintf("Vo: %3d %30-s",tp->QueryProp(P_WIMPY),
+	 (tp->QueryProp(P_WIMPY_DIRECTION) ? 
+	  "Ri: "+tp->QueryProp(P_WIMPY_DIRECTION) : "")):"")
+
+));
+	
+  GetColor(1);
+  return 1;
+}
+
+nosave int grwink(string str)
+{
+  object *oger;
+  string me;
+  int i;
+
+  if(TP->QueryProp(P_INVIS)) 
+    return write(BS("Nur wenn Oger sichtbar sein!")), 1;
+  
+  oger=Alle_Anwesenden(TP);
+  oger-=({TP});
+
+  me=Titel(TP)+CAP(getuid(TP));
+  
+  if(!str) str="";  
+  if(str[0]=='/') 
+    str=str[1..<1]+" ";
+  else
+    str="";
+  
+  for(i=sizeof(oger)-1;i>=0;i--)
+    tell_object(oger[i], me+" winkt Dir "+str+"aus der Ferne zu.\n");
+
+  write("Du winken alle andere Oger "+str+"aus der Ferne zu.\n");
+  return 1;
+}
+
+nosave int grwer(string str)
+{
+  if(str && str!="kurz")
+    return write(BS("Syntax: grwer [kurz]")), 1;
+  
+  TP->More(make_document(who_list("Alle Oger in Silberland:\n",
+				  strlen(str), 1)));
+  
+  return 1;
+}
+
+string extra_look()
+{
+  return capitalize(environment()->QueryPronoun())+
+    " traegt stolz Grimows Geschenk bei sich.\n";
+}
+
+void hau_ab(object who)
+{
+  tell_object(who, 
+	      BS("Du hoerst ploetzlich Grimows wuetendes Groehlen in "
+		 "Deinem Kopf und laesst den Knochen vor Schreck fallen.")+
+	      BS("Der Knochen zerspringt in tausend Teile..."));
+  
+  RemoveCmd(0);
+ 
+  call_out("remove", 0);
+}

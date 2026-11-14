@@ -1,0 +1,484 @@
+/*
+ * SilberLand MUD-Lib
+ * ---
+ * /std/player/exploration.c
+ * Exploration Handling - verwaltet die Forscherpunkte im Spieler
+ * Maintained by Woody - Credits to Wargon@MorgenGrauen
+ * ---
+ * $Date: 2001/10/30 21:57:09 $
+ * $Revision: 3.6 $
+ * $Log: exploration.c,v $
+ * Revision 3.6  2001/10/30 21:57:09  Woody
+ * neu: LevelPerc() (analog zu NextLevelPerc(), aber mit Parameter)
+ *
+ * Revision 3.5  2001/03/22 01:15:57  Woody
+ * Neues Stufensystem, XP-Abwertung
+ *
+ * Revision 3.4  1999/05/18 12:34:04  Zordan
+ * QueryScores() neu fuer Erstkillerabfragen
+ *
+ * Revision 3.3  1997/10/09 16:19:42  Woody
+ * AP auf 1:1 abgewertet, Gildenrating auf max. 500 Stupse aufgewertet
+ *
+ * Revision 3.2  1997/06/25 12:43:54  Woody
+ * XP Faktor auf 1.6 erhoeht
+ * (damit XP etwas entwertet...)
+ *
+ * Revision 3.1  1997/06/01 15:53:13  Woody
+ * Auch der NPCMASTER darf jetzt AddScore() aufrufen
+ *
+ * Revision 3.0  1997/03/13 01:38:08  Woody
+ * prepared for revision control
+ *
+ * Revision 1.4  97-02-10  Woody
+ * Exp2Lp() ein wenig vereinfacht
+ *
+ * Revision 1.3  96-10-15  Woody
+ * Random herabgesetzt
+ *
+ * Revision 1.2  96-10-05  Woody
+ * Erstkillerbonus, XP_BASE von 500 auf 1000 angehoben
+ *
+ * Revision 1.1  96-10-01  Woody
+ * Verwaltung von P_AP hier, weiters P_EP_NUM_FOR_AP
+ *
+ * Revision 1.0  96-09-25  Woody
+ * Erste Implementation
+ *
+*/
+
+#define NEED_PROTOTYPES
+
+// ---------------------------- Konstanten fuer die Stufenpunktberechnung ---
+
+#define XP_BASE     5000        // XP-2-LP geht in etwa nach der Formel
+#define XP_FACT     1.6         // 5000 * 1,6 ^ (LP / 100) - 5000 = XP
+#define XP_EXPLIMIT 50000000    // Aber die XP die ueber 50 Mio. hinausgehn,
+#define LP_EXPLIMIT 1960        // sind zusaetzlich zu den dann 1960 Stupsen
+#define XP_PER_LP   250000      // nur noch 250,000 pro Stups wert.
+#define QP_FACT     1           // Abenteuerpunkte gehen mit Faktor 1 ein
+#define EP_FACT     2           // Forscherpunkte mit Faktor 2
+#define ZTZ_FACT    6           // zugewiesene ZTs mit Faktor 6
+#define ZTN_FACT    2           // nicht zugewiesene ZTs mit Faktor 2
+#define NPC_FACT    2           // Erstkillerbonus mit Faktor 2
+
+// --------------------------------------------------------------------------
+
+
+#include <thing/properties.h>
+#include <player/base.h>
+#include <exploration.h>
+#include <npcmaster.h>
+#include <properties.h>
+#include <new_skills.h>
+#include <attributes.h>
+
+#pragma strong_types
+
+// #define DEBUG(x,y) tell_object(find_player("woody"),sprintf(x,y))
+#define DEBUG(x,y)
+
+private string ep;			// Forscherpunkte (BitString)
+private int epnum;			// Forscherpunkte (Anzahl)
+private string given_scores;		// Monster(erst)killpunkte
+private int oldepnum;			// gemeldete EP_NUM
+private int epnum_upd_time;		// Zeitpunkt zu dem Aenderungen
+					// der EP_NUM aktiv werden
+private int ap;				// Attributpunkte
+private int epnum_for_ap;		// EP die in AP gewandelt wurden
+
+void create()
+{
+  Set(P_EP, SECURED, F_MODE_AS);
+  Set(P_EP_NUM, SECURED, F_MODE_AS);
+
+  Set(P_LP, SECURED|SAVE, F_MODE_AS);
+
+  Set(P_AP, SECURED, F_MODE_AS);
+  Set(P_EP_NUM_FOR_AP, SECURED, F_MODE_AS);
+
+  ep = "";
+  epnum = oldepnum = 0;
+  ap = epnum_for_ap = 0;
+  epnum_upd_time = -1;
+  given_scores = "";
+}
+
+string Forschung()
+{
+  int max, my, avg;
+  string ret;
+
+  if ((my=EPMASTER->QueryExplorationPoints(this_object())) < MIN_EP)
+    return "Du kennst Dich auf dieser Welt so gut wie gar nicht aus.\n";
+
+  my *= 100;
+  max = my / EPMASTER->QueryMaxEP();
+  avg = (my+1) / (EPMASTER->QueryAverage()+1);	// hack, um div 0 zu verhindern
+
+  ret = "Verglichen mit Deinen Mitspielern, kennst Du Dich auf dieser Welt ";
+  switch(avg) {
+  case 0..10:
+    ret += "kaum";
+    break;
+  case 11..40:
+    ret += "aeusserst schlecht";
+    break;
+  case 41..56:
+    ret += "sehr schlecht";
+    break;
+  case 57..72:
+    ret += "schlecht";
+    break;
+  case 73..93:
+    ret += "unterdurchschnittlich";
+    break;
+  case 94..109:
+    ret += "durchschnittlich gut";
+    break;
+  case 110..125:
+    ret += "besser als der Durchschnitt";
+    break;
+  case 126..145:
+    ret += "recht gut";
+    break;
+  case 146..170:
+    ret += "ziemlich gut";
+    break;
+  case 171..210:
+    ret += "gut";
+    break;
+  case 211..300:
+    ret += "sehr gut";
+    break;
+  case 301..400:
+    ret += "ausserordentlich gut";
+    break;
+  case 401..500:
+    ret += "unheimlich gut";
+    break;
+  default:
+    ret += "einfach hervorragend";
+    break;
+  }
+  ret += " aus.\nAbsolut gesehen ";
+
+  switch(max) {
+  case 0..5:
+    ret += "kennst Du nur wenig von dieser Welt.";
+    break;
+  case 6..10:
+    ret += "solltest Du Dich vielleicht noch genauer umsehen.";
+    break;
+  case 11..17:
+    ret += "bist Du durchaus schon herumgekommen.";
+    break;
+  case 18..25:
+    ret += "hast Du schon einiges gesehen.";
+    break;
+  case 26..35:
+    ret += "bist Du schon weit herumgekommen.";
+    break;
+  case 36..50:
+    ret += "koenntest Du eigentlich einen Reisefuehrer herausbringen.";
+    break;
+  case 51..75:
+    ret += "hast Du schon sehr viel gesehen.";
+    break;
+  default:
+    ret += "besitzt Du eine hervorragende Ortskenntnis.";
+  }
+  return break_string(ret, 78, 0, 1);
+}
+
+nosave mixed _set_ep(mixed arg)
+{
+  if (!previous_object(1) || file_name(previous_object(1)) != EPMASTER)
+    return EPERR_NOT_MASTER;
+
+  Set (P_EP, SAVE, F_MODE_AD);	// Damit niemand die EP saveable macht
+  return ep = (stringp(arg) ? arg : "");
+}
+
+nosave mixed _query_ep()
+{
+  if (!previous_object(1) || file_name(previous_object(1)) != EPMASTER)
+    return EPERR_NOT_MASTER;
+
+  return ep;
+}
+
+nosave int _set_ep_num(int arg)
+{
+  if (!previous_object(1) || file_name(previous_object(1)) != EPMASTER)
+    return EPERR_NOT_MASTER;
+
+  Set (P_EP_NUM, SAVE, F_MODE_AD);	// siehe _set_ep()
+  return epnum = arg;
+}
+
+nosave int _query_ep_num()
+{
+  if (time() >= epnum_upd_time)         // Anti-Listen-Massnahme
+  {
+    epnum_upd_time = time() + TIME_UPD_EPNUM + random(TIME_UPD_EPNUM);
+    oldepnum = epnum;   // Wert aktualisieren
+  }
+  return oldepnum;
+}
+
+nosave int _set_ap(int arg)
+{
+  if (!previous_object(1) ||
+      explode(file_name(previous_object(1)), "/")[0] != "gilden")
+    return -1;
+
+  Set (P_AP, SAVE, F_MODE_AD);		// siehe _set_ep()
+  return ap = arg;
+}
+
+nosave int _query_ap()
+{
+  return ap;
+}
+
+nosave int _set_ep_num_for_ap(int arg)
+{
+  if (!previous_object(1) ||
+      explode(file_name(previous_object(1)), "/")[0] != "gilden")
+    return -1;
+
+  Set (P_EP_NUM_FOR_AP, SAVE, F_MODE_AD);	// siehe _set_ep()
+  return epnum_for_ap = arg;
+}
+
+nosave int _query_ep_num_for_ap()
+{
+  return epnum_for_ap;
+}
+
+nomask int AddEP(int arg)
+{
+  if (!previous_object() || file_name(previous_object()) != EPMASTER)
+    return EPERR_NOT_MASTER;
+
+  Set (P_EP_NUM, SAVE, F_MODE_AD);	// siehe _set_ep()
+  return epnum += arg;
+}
+
+int AddScore(int contributor)
+{
+  mixed info;
+
+  DEBUG("AddScore called [%O]\n",this_object());
+  if (!pointerp(info = NPCMASTER->QueryNPCbyNumber(contributor)))
+    return -1;
+  DEBUG("AddScore proceeds [%O]\n",this_object());
+
+  if (!previous_object() ||
+      ( (explode(file_name(previous_object()),"#")[0] != info[2]) &&
+        (file_name(previous_object()) != "/secure/npcmaster")))
+    return -2;
+  DEBUG("AddScore passed security [%O]\n",this_object());
+
+  if (!stringp(given_scores))
+    given_scores = "";
+
+  if (!test_bit(given_scores, contributor)) {
+    DEBUG("AddScore succeeded, contributor: %d\n",contributor);
+    given_scores = set_bit(given_scores, contributor);
+    Set(P_LP, Query(P_LP) + NPC_FACT * info[1]);
+    this_object()->force_save();
+    return info[1];
+  }
+  return 0;
+}
+
+string QueryScores() {
+  return given_scores;
+}
+
+// Hier kommen Funktionen fuer die Levelpunkte
+
+#define LP_FOR_FIRST_BILLION_XP 5760
+#define LP_PER_BILLION_XP 4000
+
+// Helper function: Calculate LP for remaining XP beyond XP_EXPLIMIT
+int calculate_lp_for_excess_xp(int xp) {
+  int excess_xp;
+  excess_xp = xp - XP_EXPLIMIT;
+  return LP_EXPLIMIT + (excess_xp / XP_PER_LP);
+}
+
+// Helper function: Calculate LP for XP below XP_EXPLIMIT using logarithmic scaling
+int calculate_lp_for_logarithmic_xp(int xp) {
+  int total_xp;
+  total_xp = xp + XP_BASE;
+  return to_int(100 * log(to_float(total_xp) / XP_BASE) / log(XP_FACT));
+}
+
+nomask int NewExp2Lp(int billion_xp, int xp) {
+  int lp;
+
+  // Step 1: Handle the case where the player has no XP
+  if (billion_xp == 0 && xp <= 0) {
+    return 0;
+  }
+
+  // Step 2: Calculate LP for billion XP if present
+  lp = 0;
+  if (billion_xp > 0) {
+    lp += LP_FOR_FIRST_BILLION_XP + (billion_xp-1) * LP_PER_BILLION_XP; // Add LP for billions of XP
+    lp += xp / XP_PER_LP;
+    return lp;
+  }
+
+  // Step 3: Add LP for the remaining XP (xp)
+  if (xp > 0) {
+    if (xp > XP_EXPLIMIT) {
+      // Remaining XP exceeds the limit
+      lp += calculate_lp_for_excess_xp(xp);
+    } else {
+      // Remaining XP is within the limit
+      lp += calculate_lp_for_logarithmic_xp(xp);
+    }
+  }
+
+  return lp;
+}
+
+nomask int Exp2Lp(int xp)
+{
+  if (xp <= 0) return 0;
+  if (xp > XP_EXPLIMIT)
+    return LP_EXPLIMIT + ((xp - XP_EXPLIMIT) / XP_PER_LP);
+  else
+    return to_int (100 * log( to_float( xp + XP_BASE ) / XP_BASE )
+                   / log(XP_FACT) );
+}
+
+
+nomask int NeededLp(int level)
+{
+  if (level <= 1) return 0;
+  level--;
+  return level * 100 + level * level / 4;
+}
+
+
+nomask int LpLevel()
+{
+  return 1 + to_int( 2 * sqrt( to_float(QueryProp(P_LP)) + 10000.5 ) ) - 200;
+}
+
+
+nomask int NextLevelPerc()
+{
+  int have, need, start;
+
+  have = QueryProp(P_LP);
+  need = NeededLp( QueryProp(P_LEVEL) + 1 );
+
+  if (have >= need)
+    return 100;
+
+  start = NeededLp( QueryProp(P_LEVEL) );
+
+  if (have <= start)
+    return 0;
+
+  return 100 * (have - start) / (need - start);
+}
+
+
+nomask int LevelPerc(int level)
+{
+  int have, need, start;
+
+  if ( level <= 1 )     // fuer Level 1 hat man immer genug Stupse ;)
+    return 100;
+
+  have = QueryProp(P_LP);
+  need = NeededLp(level);
+
+  if (have >= need)
+    return 100;
+
+  start = NeededLp( level - 1 );
+
+  if (have <= start)
+    return 0;
+
+  return 100 * (have - start) / (need - start);
+}
+
+#ifndef P_BILLION_XP
+#define P_BILLION_XP "billion_xp"
+#endif
+
+nomask nosave int _query_lp()
+{
+  int ret, val, i, l;
+
+  // Beitrag A: Questpunkte
+  // ---
+  ret = QP_FACT * QueryProp(P_QP);
+
+  DEBUG("Nach QP: ret = %d\n", ret);
+
+  // Beitrag B: Erfahrungspunkte
+  //   Bis 50 Mio. EP haben sie noch hoehere Wirkung (aber
+  //   exponentiell abnehmend), aber bei alle drueber gehenden
+  //   EP gilt: 25 Mio. EP entsprechen einem Level.
+  //   - siehe auch Exp2Lp() weiter oben.
+  // ---
+  if(QueryProp(P_TESTPLAYER)) {
+    ret += NewExp2Lp(QueryProp(P_BILLION_XP), QueryProp(P_XP));
+  } else {
+    ret += Exp2Lp(QueryProp(P_XP));
+  }
+
+  DEBUG("Nach XP: ret = %d\n", ret);
+
+  // Beitrag C: Zaubertraenke
+  //   Zugewiesene Traenke geben 6 LEP,
+  //   nicht zugewiesene (aber gefundene) Traenke 2 LEP
+  // ---
+  if ((i=10-sizeof(QueryProp(P_POTIONROOMS))) > 0)
+    ret += ZTZ_FACT * i;
+  ret += ZTN_FACT * QueryProp(P_BONUS_POTIONS);
+
+  DEBUG("Nach ZT: ret = %d\n", ret);
+
+  // Beitrag D: Forscherpunkte
+  // ---
+  val = QueryProp(P_EP_NUM);
+  ret += EP_FACT * val;
+
+  DEBUG("Nach FP: ret = %d\n", ret);
+
+  // Beitrag E: Gildeneinstufung
+  //   Maximale Gildeneinstufung (10000) entspricht fuenf Leveln
+  // ---
+  ret += QueryProp(P_GUILD_RATING) / 20;
+
+  DEBUG("Nach GR: ret = %d\n", ret);
+
+  // Beitrag F: Levelpunkte von Monstern und Miniquests
+  //   Diese werden "direkt" gesetzt
+  //   Die 100 sind der Grundoffset, da man mit Level 1 das Spiel
+  //   beginnt und nicht mit Level 0.
+  // ---
+  if (!Query("lp:recalced")) {
+    Set(P_LP, NPC_FACT * NPCMASTER->Recalculate(given_scores));
+    Set("lp:recalced", 1);
+  }
+  ret += Query(P_LP);
+
+  DEBUG("Nach LP: ret = %d\n", ret);
+
+  // Na hoffentlich gibt die Summe was positives... :-)
+  return (ret > 0) ? ret : 0;
+
+}
+

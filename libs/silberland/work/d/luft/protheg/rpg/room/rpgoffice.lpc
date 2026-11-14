@@ -1,0 +1,541 @@
+/*
+**
+**
+*/
+
+#include "../def.h"
+
+inherit "std/room";
+
+#define CLOSEDGAME 0
+#define OPENGAME 1
+
+void setup_exits()
+{
+  string *e;
+  int i;
+  
+  RemoveExit(0);
+  
+  AddExit("silberland", "/gilden/abenteurer");
+  
+  if(!sizeof(e=RPGMASTER->ListOfGames())) return;
+  
+  for(i=sizeof(e)-1;i>=0;i--)
+    AddExit(lower_case(e[i]), ([EX_DEST:ROOM "rpgroom_"+e[i]+"_1", 
+				EX_TESTFUNC:"enter_game",
+				EX_MSG:"in das Spiel '"+e[i]+"'"]));
+}
+
+void create() 
+{
+  ::create();
+  
+  SetProp(P_INT_SHORT, "Auf Wolke 3");
+  SetProp(P_INT_LONG,
+	  "Du befindest Dich hier auf einer Wolke. Du wunderst Dich, warum "
+	  "Du nicht durch sie hindurchfaellst. Mitten auf der Wolke "
+	  "befindet sich ein kleiner Schreibtisch, an dem ein kleiner "
+	  "Gnom sitzt.");
+  SetProp(P_LIGHT, 1);
+  SetProp(P_INDOORS, 0);
+  SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE: 15, ENV_TERRAIN: TT_AIR]));
+
+  AddDetail(({"boden"}),
+	    "Der Boden liegt weit unter Dir... Oder meinst Du die Wolke "
+	    "auf der Du stehst?");
+  
+  AddDetail(({"gnom"}),
+	    "Der Gnom scheint gerade nicht da zu sein...");
+  
+  AddDetail(({"himmel"}),
+	    "Der Himmel umgibt Dich...");
+  
+  AddDetail(({"wolke"}),
+	    QueryProp(P_INT_LONG));
+  
+  AddDetail(({"tisch","schreibtisch"}),
+	    "Mitten auf der Wolke befindet sich ein kleiner Schreibtisch. "
+	    "Er ist ueber und ueber mit Buechern und verschiedenen Zetteln "
+	    "beladen. Vor dem Schreibtisch haengt ein Holzschild.");
+  
+  AddDetail(({"zetteln","zettel","stapel","zettelstapel"}),
+	    "Gewaltige Stapel von Zetteln tuermen sich auf dem Schreibtisch.");
+  
+  AddDetail(({"buecher","buch","rollenspielbuch","rollenspielbuecher"}),
+	    "Auf dem Schreibtisch stapeln sich massenweise "
+	    "Rollenspielbuecher.");
+  
+  AddDetail(({"ohr"}),
+	    "Dein Ohr halt.");
+  
+  AddDetail(({"schild","holzschild"}),
+	    "Lesen bildet.");
+  
+  AddReadDetail(({"zettel","zetteln","buecher","buch","rollenspielbuch",
+		    "rollenspielbuecher"}),
+		"Der Gnom meint: Finger weg, das sind meine!");
+  
+  AddReadDetail(({"schild","holzschild"}),
+		"Sei Dein eigener Gamemaster und erschaffe Dir eine "
+		"eigene kleine Welt fuer Dich und Deine Spielerfreunde. "
+		"Hier ist es moeglich, hier ist alles moeglich!\n"
+		"Um eine Broschuere zu erhalten, den Gnom bitte nach "
+		"'broschuere' fragen.\n"
+		"Eroeffnung eines neuen Spieles mit: 'eroeffne neues spiel'\n"
+		"Eine Eroeffnung kostet Dich 1000 Muenzen.\n"
+		"Um zB Spieler nachtraeglich hinzuzufuegen: 'aendere spiel'\n"
+		"Um das Spiel wieder zu beenden tippe: 'beende spiel'\n");
+  
+  AddSound(DEFAULT_SOUND,
+	   "Obwohl Du Dich hier auf einer Wolke befindest, ist es angenehm "
+	   "ruhig.");
+  
+  AddSound(({"himmel","wind","lueftchen"}),
+	   "Hin und wieder hoerst Du ein leises Lueftchen wehen...");
+  
+  AddSound(({"ohr"}),
+	   "Na, womit lauscht man sonst?");
+  
+  AddSmell(({DEFAULT_SMELL,"luft","frische luft"}),
+	   "Es riecht nach frischer Luft.");
+  
+  /*
+    AddRoomMessage(({"Ein leises Lueftchen kitzelt Dich am Ohr.\n",
+		       "Der Gnom am Schreibtisch kichert leise.\n",
+		       "Der Gnom kritzelt etwas auf einen Zettel.\n"}),30);
+  */
+  
+  AddCmd(({"farbfeen","farbfee"}), "keine_farbfeen");
+  AddCmd(({"eroeffne"}), "cmd_eroeffnen");
+  AddCmd(({"beende"}), "cmd_beenden");
+  AddCmd(({"aender","aendere"}), "cmd_aendern");
+  AddCmd(({"uebersicht"}), "cmd_uebersicht");
+  
+  setup_exits();
+  
+  AddItem(NPC "gnom", REFRESH_DESTRUCT);
+}
+
+void get_remove_player_list(string list, string g)
+{
+  int i;
+  string *plrs;
+  object pl;
+  
+  if(list=="q"||list=="abbruch"||list=="abbrechen")
+    return;
+  
+  if(strlen(list))
+    if(sizeof(plrs=explode(regreplace(list, ",", "", 1), " ")))
+      {
+	for(i=sizeof(plrs)-1;i>=0;i--)
+	  if(RPGMASTER->RemovePlayer(g, plrs[i])==1)
+	    {
+	      write(BSST("Entferne Spieler "+CAP(plrs[i])+" aus Spiel '"+g));
+	      
+	      if(objectp(pl=find_player(plrs[i])))
+		if(ENV(pl))
+		  if(!strstr(file_name(ENV(pl)), ROOM "rpgroom_"+g))
+		    pl->move(ME, M_NOCHECK);
+	      
+	      write_file(LOG "game", BS(dtime()+": "+TPN+" entzieht Spieler "+
+					plrs[i]+" Erlaubnis zu '"+g+"'"));
+	    }
+	  else
+	    write(BSST("Kann Spieler "+CAP(plrs[i])+" aus Spiel '"+g+
+		       "' nicht entfernen."));
+	
+	return;
+      }
+  
+  write(BSST("Spieler Entfernen... Bitte einen Spieler, oder eine "
+	     "Liste der Spieler angeben, die das Spiel nicht mehr "
+	     "betreten duerfen. Abbrechen mit 'q'."));
+  
+  write("Bitte Spieler(liste) angeben: ");
+  
+  input_to("get_remove_player_list", 0, g, 1);
+  
+  return;
+}
+
+varargs void get_closed_player_list(string list, string g, int flag)
+{
+  int i;
+  string *plrs;
+  
+  if(list=="q"||list=="abbrechen"||list=="abbruch")
+    return;
+  
+  if(!flag)
+    {
+      RPGMASTER->OpenGame(g);
+      
+      write_file(LOG "game", BS(dtime()+": "+TPN+" schliesst Spiel '"+g+"'"));
+    }
+  
+  if(strlen(list))
+    if(sizeof(plrs=explode(regreplace(list, ",", "", 1), " ")))
+      {
+	for(i=sizeof(plrs)-1;i>=0;i--)
+	  if(sizeof(MASTER->get_userinfo(plrs[i])))
+	    if(RPGMASTER->AddPlayer(g, plrs[i])==1)
+	      {
+		write(BSST("Fuege Spieler "+CAP(plrs[i])+" zum Spiel '"+g+
+			   "' hinzu."));
+		RPGMASTER->CloseGame(g);
+		write_file(LOG "game", BS(dtime()+": "+TPN+" fuegt Spieler "+
+					  CAP(plrs[i])+" zu Spiel '"+g+"'"));
+	      }
+	    else
+	      write(BSST("Kann Spieler "+CAP(plrs[i])+" zum Spiel '"+g+
+			 "' nicht hinzufuegen."));
+	  else
+	    write(BSST("Kann Spieler "+CAP(plrs[i])+" nicht finden..."));
+	
+	return;
+      }
+  
+  if(!flag)
+    {
+      write(BSST("Schliesse Spiel... Bitte eine Liste der Spieler angeben, "
+		 "die das Spiel betreten duerfen. Bei Abbrechen mit 'q' "
+		 "bleibt das Spiel offen."));
+      
+      write("Bitte Spielerliste angeben: ");
+      
+      input_to("get_closed_player_list", 0, g);
+      
+      return;
+    }
+
+  write(BSST("Spieler Hinzufuegen... Bitte einen Spieler, oder eine "
+	     "Liste der Spieler angeben, die das Spiel auch betreten "
+	     "duerfen. Bei Abbrechen mit 'q'."));
+  
+  write("Bitte Spieler(liste) angeben: ");
+  
+  input_to("get_closed_player_list", 0, g, 1);
+  
+  return;
+}
+
+void change_game(string what, string g)
+{
+  if(PO!=ME) return write(BS("Nudel"));
+  
+  if(what=="q" || what=="abbrechen" || what=="abbruch")
+    return;
+  
+  if(!strlen(what))
+    return;
+  
+  if(RPGMASTER->IsGameOpen(g))
+    {
+      if(what=="1")
+	{
+	  write(BSST("Schliesse Spiel... Bitte eine Liste der Spieler angeben, "
+		     "die das Spiel betreten duerfen. Bei Abbrechen mit 'q' "
+		     "bleibt das Spiel offen."));
+	  
+	  write("Bitte Spielerliste angeben: ");
+	  
+	  input_to("get_closed_player_list", 0, g);
+	  
+	  return;
+	}
+      write(BSST("Spiel: "+g+" ("+RPGMASTER->QueryRooms(g)+" Raeume)")+
+	    BSST(sprintf("(1) %25-s offen", "Spiel: ")));
+      
+      write("Bitte Zahl angeben: ");
+      
+      input_to("change_game", 0, g);
+      
+      return;
+    }
+      
+  switch(what)
+    {
+    case "1":
+      write(BSST("Spiel '"+g+"' wird geoeffnet und ist nun fuer jeden betretbar."));
+      
+      RPGMASTER->OpenGame(g);
+      write_file(LOG "game", BS(dtime()+": "+TPN+" oeffnet Spiel '"+g+"'"));
+      break;
+    case "2":
+      write(BSST("Spieler Hinzufuegen... Bitte einen Spieler, oder eine "
+		 "Liste der Spieler angeben, die das Spiel auch betreten "
+		 "duerfen. Abbrechen mit 'q'."));
+      
+      write("Bitte Spieler(liste) angeben: ");
+      
+      input_to("get_closed_player_list", 0, g, 1);
+      
+      return;
+      break;
+    case "3":
+      write(BSST("Spieler Entfernen... Bitte einen Spieler, oder eine "
+		 "Liste der Spieler angeben, die das Spiel nicht mehr "
+		 "betreten duerfen. Abbrechen mit 'q'."));
+      
+      write("Bitte Spieler(liste) angeben: ");
+      
+      input_to("get_remove_player_list", 0, g, 1);
+      
+      return;
+      break;
+    }
+}
+
+nosave int cmd_uebersicht(string str)
+{
+  string g;
+  
+  if(!strlen(g=RPGMASTER->IsGameMaster(TP)))
+    return write(BSST("Aber Du betreust doch kein Spiel!")), 1;
+  
+  write(BSST("Spiel: "+g+" ("+RPGMASTER->QueryRooms(g)+" Raeume)")+
+	BSST("Spiel: "+
+	     (RPGMASTER->IsGameOpen(g) ? "Offen":
+	      "Geschlossen\nErlaubte Spieler: "+
+	      implode(RPGMASTER->ClosedGame(g), ", ")+
+	      ".")));
+  
+  return 1;
+}
+
+nosave int cmd_aendern(string str)
+{
+  string g;
+  
+  notify_fail(BSST("Willst Du ein Spiel aendern?"));
+  if(!str) return 0;
+  
+  if(str!="spiel") return 0;
+  
+  if(!strlen(g=RPGMASTER->IsGameMaster(TP)))
+    return write(BSST("Aber Du betreust doch kein Spiel!")), 1;
+  
+  write(BSST("Spiel: "+g+" ("+RPGMASTER->QueryRooms(g)+" Raeume)")+
+	BSST("(1) Spiel: "+
+	     (RPGMASTER->IsGameOpen(g) ? "Offen":
+	      "Geschlossen\nSpieler: "+
+	      implode(RPGMASTER->ClosedGame(g), ", ")+".\n"
+	      "(2) Spieler hinzufuegen.\n"
+	      "(3) Spieler entfernen.\n")));
+  
+  write("Bitte Zahl angeben: ");
+  
+  input_to("change_game", 0, g);
+  
+  return 1;
+}
+
+nosave int cmd_beenden(string str)
+{
+  object zs,ob,ro;
+  string g;
+  int r,i;
+  string *mbrs;
+  
+  notify_fail(BSST("Willst Du ein Spiel beenden?"));
+  if(!str) return 0;
+  
+  if(str!="spiel") return 0;
+  
+  if(!objectp(zs=present("gamemastertool", TP)))
+    if(strlen(RPGMASTER->IsGameMaster(TP)))
+      return write(BSST("Hm Dein Zauberstab ist weg, wende Dich bitte an "
+		      "PROtheG.")), 1;
+    else
+      return write(BSST("Spiele beenden kann nur, wer auch eines eroeffnet "
+		      "hat...")), 1;
+  
+  if(!strlen(g=zs->QueryGame()))
+    {
+      zs->remove(1);
+      
+      if(strlen(RPGMASTER->IsGameMaster(TP)))
+	return write(BSST("Hm Dein Zauberstab ist kaputt, wende Dich bitte "
+			"an PROtheG.")), 1;
+      
+      return write(BSST("Dein Zauberstab zerfaellt ploetzlich...")+
+		   BSST("Tja, Bloed gelaufen...")), 1;
+    }
+  
+  zs->remove(1);
+  
+  if(!RPGMASTER->GameMaster(TP, g))
+    return write(BSST("Dein Zauberstab zerfaellt ploetzlich...")+
+		 BSST("Bitte wende Dich an PROtheG.")), 1;
+  
+  r=RPGMASTER->QueryRooms(g);
+
+  write(BSST("Loesche Spieleintrag..."));
+  
+  RPGMASTER->EndGame(g);
+  
+  write(BSST("Hole Spieler aus dem Gebiet..."));
+  
+  for(i=r;i>0;i--)
+    {
+      if(!objectp(ro=find_object(ROOM "rpgroom_"+g+"_"+i))) continue;
+      
+      DB(BSST("Killing room : "+file_name(ro)));
+      
+      while(objectp(ob=present("Spieler", ro)))
+	ob->move(ME, M_NOCHECK);
+      
+      call_out("kill_room", 1, ro);
+    }
+  
+  RemoveExit(g);
+  
+  write_file(LOG "game", BS(dtime()+": "+TPN+" beendet Spiel '"+g+"'"));
+  write_file(LOG "game_"+g, 
+	     BS("--------------- Spiel wurde beendet ---------------"));
+  write_file(LOG "game_"+g+"_comm", 
+	     BS("--------------- Spiel wurde beendet ---------------"));
+  
+  write(BSST("Spiel ist erfolgreich geloescht..."));
+  
+  return 1;
+}
+
+void kill_room(object r)
+{
+  if(strstr(file_name(r), ROOM)!=0) return;
+  r->remove(1);
+}
+
+void new_game_openclosed(string str, string g)
+{
+  string r;
+  string *l;
+  int i;
+  object o;
+  
+  r=ROOM "rpgroom_"+g+"_1";
+  
+  if(str=="q"||str=="abbrechen") return;
+  
+  if(TP->QueryMoney()< 1000)
+    return write(BSST("Du verfuegst nicht ueber die noetigen Finanzen!"));
+  
+  //TP->AddMoney(-1000);
+  
+  if(str=="offen")
+    RPGMASTER->NewGame(g, getuid(TP), ({}), OPENGAME);
+  else
+    {
+      str=regreplace(str, " ","",1);
+      l=explode(str, ",");
+      
+      for(i=sizeof(l)-1;i>=0;i--)
+	if(!("/secure/master"->find_userinfo(l[i])))
+	  {
+	    write(BSST("Kann Spieler '"+l[i]+"' nicht finden...")+
+		  BSST("Bitte noch einmal eingeben!")+
+		  BSST("Oder abbrechen mit 'q'."));
+	    write("Offen / Geschlossen ? ");
+	    input_to("new_game_openclosed", 0, g);
+	    
+	    return;
+	  }
+      RPGMASTER->NewGame(g, getuid(TP), l, CLOSEDGAME);
+    }
+  
+  AddExit(g, ([EX_DEST:r,
+	       EX_TESTFUNC:"enter_game",
+	       EX_MSG:"in das Spiel '"+g+"'"])); 
+  
+  call_other(r, "loadme");
+  
+  o=clone_object(OBJ "rpgtool");
+  
+  o->SetUpTool(g);
+  o->move(TP, M_NOCHECK);
+  write(BS("Der Gnom ueberreicht Dir einen Zauberstab."));
+  write(BSST("Spiel '"+g+"' ist eroeffnet.")+
+	BSST("Mit 'aendere spiel' kannst Du Aenderungen vornehmen.")+
+	BSST("Mit 'beende spiel' kannst Du es hier jederzeit beenden."));
+
+  write_file(LOG "game", BS(dtime()+": "+TPN+" startet Spiel '"+g+"'"));
+}
+
+void new_game(string str)
+{
+  if(!strlen(str) || str=="q")
+    return;
+  
+  str=lower_case(str);
+  
+  if(RPGMASTER->GameExists(str))
+    {
+      write(BSST("Das Spiel "+str+" existiert bereits.")+
+	    BSST("Wie soll denn das Spiel heissen?"));
+      write("Spielname: ");
+      input_to("new_game", 0);
+      
+      return ;
+    }
+  
+  write(BSST("Ist das neue Spiel offen, oder nur fuer ein paar Spieler ")+
+	BSST("reserviert? Tippe entweder 'offen', oder eine Liste der ")+
+	BSST("Spieler, durch Beistriche getrennt. Abbrechen mit 'q'."));
+  write("Offen / Geschlossen ? ");
+  input_to("new_game_openclosed", 0, str);
+  
+  return;
+}
+
+nosave int cmd_eroeffnen(string str)
+{
+  notify_fail(BSST("Willst Du ein neues Spiel eroeffnen?"));
+  if(!str) return 0;
+  
+  if(str!="spiel" && str!="neues spiel") return 0;
+  
+  if(strlen(RPGMASTER->IsGameMaster(TP)))
+    return write(BSST("Aber Du betreust doch schon ein Spiel!")), 1;
+  
+  if(TP->QueryMoney()< 1000)
+    return write(BSST("Du verfuegst nicht ueber die noetigen Finanzen!")), 1;
+  
+  write(BSST("Wie soll denn das Spiel heissen? (nur sehr kurz) Abbrechen "
+	   "mit 'q'"));
+  write("Spielname: ");
+  input_to("new_game", 0);
+  
+  return 1;
+}
+
+nosave int keine_farbfeen(string str)
+{
+  return write(BS("Trottel!")), 1;
+}
+
+int enter_game(string e)
+{
+  if(RPGMASTER->IsGameOpen(e)) return 1;
+  
+  if(RPGMASTER->IsPlayer(TP, e)) return 1;
+  
+  write(BSST("Du darfst da leider nicht mitspielen!"));
+  
+  return 0;
+}
+
+string GetExits(object v)
+{
+  string e;
+  
+  if(!sizeof(QueryProp(P_EXITS)))
+    return "";
+  
+  e="Es sind folgende Spiele betretbar:"+(explode(::GetExits(v), ":")[1]);
+  
+  return e;
+}
+

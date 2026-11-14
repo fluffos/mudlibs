@@ -1,0 +1,123 @@
+// Heldenaura: unsichtbares Objekt am Spieler, heilt im Raum und bufft Attribute.
+
+#include "../def.h"
+
+inherit "std/thing";
+
+object owner;
+int bonus;
+int end_time;
+
+void create()
+{
+  if (!is_clone(TO)) return;
+  ::create();
+
+  AddId(({"\namz_heldenaura"}));
+  SetProp(P_SHORT, 0);
+  SetProp(P_INVIS, 1);
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_MAGIC, 1);
+
+  if (getuid(previous_object()) != SPELL_UID)
+    call_out("remove", 1);
+}
+
+void init()
+{
+  ::init();
+  if (!environment() || environment()->QueryProp(P_GUILD) != GUILDNAME)
+    call_out("remove", 0);
+}
+
+public void setup_heldenaura(object pl, int b, int dur)
+{
+  owner = pl;
+  bonus = b;
+  end_time = time() + dur;
+
+  SetProp(P_X_ATTR_MOD, ([A_STR: bonus, A_DEX: bonus]));
+  owner->UpdateAttributes();
+  if(present(GUILD_ITEM, owner)) present(GUILD_ITEM, owner)->RegisterEffect();
+  set_heart_beat(1);
+}
+
+private object *room_players(object room)
+{
+  object *inv;
+  int i;
+
+  inv = all_inventory(room);
+  for (i = sizeof(inv) - 1; i >= 0; i--)
+  {
+    if (!objectp(inv[i]) || !interactive(inv[i]))
+      inv[i] = 0;
+  }
+  return inv - ({0});
+}
+
+public void heart_beat()
+{
+  object room, target, *pls, bless;
+
+  if (!objectp(owner))
+  {
+    remove(1);
+    return;
+  }
+
+  if (time() > end_time)
+  {
+    tell_object(owner, BS("Deine Heldenaura verblasst.\n"));
+    remove(1);
+    return;
+  }
+
+  room = environment(owner);
+  if (!objectp(room))
+    return;
+
+  pls = room_players(room);
+  if (!sizeof(pls))
+    return;
+
+  target = pls[random(sizeof(pls))];
+  if (!objectp(target))
+    return;
+
+  target->AddHp(2);
+
+  // Kurzer Segen auf dem geheilten Ziel (oder Dir).
+  bless = present("\namz_heldensegen", target);
+  if (!objectp(bless))
+  {
+    bless = clone_object("/gilden/amazonen/obj/heldensegen");
+    if (objectp(bless) && bless->move(target, M_NOCHECK | M_SILENT) != 1)
+    {
+      destruct(bless);
+      bless = 0;
+    }
+  }
+  if (objectp(bless))
+    bless->setup_heldensegen(target, bonus, 10);
+}
+
+varargs int remove(int silent)
+{
+  object pl;
+  pl = environment();
+  if (objectp(pl))
+  {
+    SetProp(P_X_ATTR_MOD, 0);
+    pl->UpdateAttributes();
+  }
+  if(present(GUILD_ITEM, owner)) present(GUILD_ITEM, owner)->UnregisterEffect("heldenaura");
+  set_heart_beat(0);
+  return ::remove(silent);
+}
+

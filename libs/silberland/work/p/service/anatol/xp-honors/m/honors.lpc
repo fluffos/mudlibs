@@ -1,0 +1,305 @@
+/* XP honors' master.
+ * __________________________________________(i) Anatol@Silberland (2012) */
+
+
+/* Grundsaetzliches Konzept:
+ *
+ * Dieses Masterobjekt bietet die noetigen Schnittstellen, um zu pruefen, ob 
+ * der Spieler XP fuer einen XP-Ehrenpunkt abgeben kann, und das auf Wunsch 
+ * auch durchzufuehren (d.h. Spieler um XP erleichtern, und den Zaehler der
+ * XP-Ehrenpunkte zu erhoehen). Die Property P_XP_HONORS im Spieler wird auf
+ * informeller Basis gesetzt, aber im weiteren Verlauf nicht beruecksichtigt.
+ * (Auswertungen durch Toplisten, Spieler-"info" etc. sind natuerlich ohne
+ * Probleme moeglich).  
+ *
+ * Oeffentliche Schnittstelle:
+ * 
+ * public int QueryXPHonorPoints(mixed player);
+ * public int * QueryXPHonorHistory(mixed player);
+ * public object MayIncreaseXPHonorPoints(mixed player);
+ * public int IncreaseXPHonorPoints(mixed player);
+ *
+ * public mixed GetToplistArray();
+ * public int NoToplist(mixed player, int kidding);
+ *
+ */
+
+#define X_HONOR         0
+#define X_HIST          1
+#define X_NO_TOPLIST    2
+
+#pragma strict_types
+
+#include <properties.h>
+#include <ansi.h>
+#include <wizlevels.h>
+#include "../xp-honors.h"
+
+
+public mapping honors;
+
+// ============================================================================
+// Interne Funktionen
+// ============================================================================
+
+public int
+query_prevent_shadow()
+{
+    return 1;
+}
+
+nosave int
+save()
+{
+    save_object(HONORS_SAVEFILE);
+    return 1;
+}
+
+nosave int
+reload()
+{
+    if (!restore_object(HONORS_SAVEFILE)) 
+    {   
+        honors=([]);
+        return 2;
+    }
+    return 1;
+}
+
+nosave string
+uniquePlayerId(mixed player)
+{
+    mixed user_data;
+
+    if (objectp(player))
+    {
+        if (query_once_interactive(player))
+            player=getuid(player);
+        else 
+            return 0;
+    }
+    else if (!stringp(player))
+        return 0;
+    
+    if (sizeof(user_data=(mixed)
+             call_other("/secure/master","get_userinfo",player))!=7)
+        return 0;
+    else
+        return (string)user_data[0]+"_"+to_string((int)user_data[5]);
+}
+
+public void 
+create()
+{
+    seteuid(getuid(this_object()));
+    reload();
+    write("XP Honor's Master Object loaded. Hi there.\n");
+}
+
+
+// ============================================================================
+// Begin Public Interface 
+// ============================================================================
+
+mixed Debug() { printf("%O", honors); }
+
+// ----------------------------------------------------------------------------
+/** NoToplist
+  * @param player : Spielerobjekt oder Spieler-UID
+  * @param kidding: OPTIONAL: Negiert Intention (nimmt Spieler in Topliste auf)
+  * @returns      : 1, wenn Aufruf geklappt hat
+  *                 0, wenn nicht
+  */
+
+varargs public int 
+NoToplist(mixed player, int kidding)
+{
+    string uid;
+
+    // Fuehrt der Parameter ueberhaupt zu einem Spieler?
+    if (!uid=uniquePlayerId(player))
+        return 0;
+
+    // Hat er ueberhaupt Punkte?
+    if (!member(honors,uid)) 
+        return 0;
+    
+    if (!kidding)
+        honors[uid]+=([X_NO_TOPLIST:1]);
+    else
+        honors[uid]+=([X_NO_TOPLIST:0]);
+    save();
+    return 1;
+}
+
+// ----------------------------------------------------------------------------
+/** QueryXPHonorPoints
+  * @param player : Spielerobjekt oder Spieler-UID
+  * @returns      : XP-Ehrenpunkte. 0, im Fehlerfall.
+  */
+
+public int
+QueryXPHonorPoints(mixed player)
+{
+    string uid;
+
+    // Fuehrt der Parameter ueberhaupt zu einem Spieler?
+    if (!uid=uniquePlayerId(player))
+        return 0;
+
+    // Hat er ueberhaupt Punkte?
+    if (!member(honors,uid)) 
+        return 0;
+
+    return honors[uid][X_HONOR];
+}
+
+
+// ----------------------------------------------------------------------------
+/** QueryXPHonorHistory
+  * @param player : Spielerobjekt oder Spieler-UID
+  * @returns      : kopiertes Array der Zeitstempel etwaiger Ehrenpunktgewinne.
+  *                 0,  falls nichts vorhanden.
+  */
+
+public int * 
+QueryXPHonorHistory(mixed player)
+{
+    string uid;
+
+    // Fuehrt der Parameter ueberhaupt zu einem Spieler?
+    if (!uid=uniquePlayerId(player))
+        return 0;
+
+    // Hat er ueberhaupt Punkte?
+    if (!member(honors,uid)) 
+        return 0;
+
+    return ({})+honors[uid][X_HIST];
+}
+
+
+// ----------------------------------------------------------------------------
+/** MayIncreasteXPHonorPoints
+  * @param player : Spielerobjekt oder Spieler-UID
+  * @returns      : Spielerobjekt, falls der Spieler XP-Ehrenpunkte gewinnen
+  *                 koennte. 0, wenn nicht.
+  */
+
+public object
+MayIncreaseXPHonorPoints(mixed player)
+{
+    // Fuehrt der Parameter ueberhaupt zu einem Spieler?
+    if (!uniquePlayerId(player))
+        return 0;
+
+    // Ist das Spielerobjekt geladen?
+    if ( (stringp(player)) 
+            && (! player = find_player(player) || find_netdead(player)))
+        return 0;
+
+    // Und: Hat der Spieler genug XP?
+    if (((int)player->QueryProp(P_XP))<HONOR_XP_NEEDED)
+        return 0;
+    
+    return player;
+}
+
+
+// ----------------------------------------------------------------------------
+/** IncreaseXPHonorPoints
+  * @param player : Spielerobjekt oder Spieler-UID
+  * @returns      : Neuer XP-Ehrenpunktezaehler.
+  *                 0, wenn das Erhoehen nicht geklappt hat.
+  */
+
+public int 
+IncreaseXPHonorPoints(mixed player)
+{
+    string uid;
+
+    // Fuehrt der Parameter ueberhaupt zu einem Spieler?
+    if (!uid=uniquePlayerId(player))
+        return 0;
+
+    // Ist die Punktvergabe ueberhaupt moeglich?
+    if (!objectp(player=MayIncreaseXPHonorPoints(player)))
+        return 0;
+
+    // Eintrag schon vorhanden? Wenn nein - initialisieren...
+    if (!member(honors,uid)) 
+    {
+        honors+=([uid:([X_HONOR:0, X_HIST:({}), X_NO_TOPLIST:0])]);
+    }
+
+    // Zaehler +=1.
+    honors[uid][X_HONOR]+=1;
+
+    // Zeitstempel ran.
+    honors[uid][X_HIST]+=({time()});
+    
+    // Spielerobjekt um XP bringen und Honor-Property setzen.
+    player->SetProp(P_XP,((int)(player->QueryProp(P_XP))) - HONOR_XP_COST);
+    player->SetProp(P_XP_HONORS,honors[uid][0]);
+    player->Set(P_XP_HONORS,SAVE,F_MODE_AS);
+
+    // Alles sichern.
+    player->Save();
+    save();
+    
+    // ... und wegloggen.
+    write_file(HONORS_LOGFILE,
+        sprintf("%s | %24s erhoeht XP-Ehrenpunkte auf %d\n",
+        dtime(time())[5..], implode(explode(uid,"_")," "), honors[uid][X_HONOR]));
+
+    return honors[uid][X_HONOR];
+}
+
+
+// ----------------------------------------------------------------------------
+/** GetToplistArray
+  * @param - Keine
+  * @returns      : Gibt ein Array aus Arrays zurueck. Jedes Element enthaelt
+  *                 die Spieler-UID, die Ehrenpunkte und den Zeitpunkt des 
+  *                 letzten Upgrades. Die Liste ist sortiert.
+  */
+
+public mixed 
+GetToplistArray()
+{
+    return map_array(
+        filter_array(
+            sort_array(
+                transpose_array(({
+                    map_array(m_indices(honors),
+                        lambda(({ 'x }),
+                               ({ #'[ , ({ #'explode , 'x , "_" }), 0}))),
+                    map_array(m_values(honors),
+                        lambda(({ 'x }), 
+                               ({ #'[ , 'x , X_HONOR }))),
+                    map_array(m_values(honors),
+                        lambda(({ 'x }), 
+                               ({ #'[< , ({ #'[ , 'x , X_HIST }), 1 }))),
+                    map_array(m_values(honors),
+                        lambda(({ 'x }), 
+                               ({ #'[ , 'x, X_NO_TOPLIST })))
+                })),
+                lambda( ({ 'a , 'b }),
+                    ({ #'? ,
+                        ({ #'== , ({ #'[ , 'a , 1 }), ({ #'[ , 'b , 1 }) }),
+                        ({ #'> , ({ #'[ , 'a , 2 }), ({ #'[ , 'b , 2 }) }),
+                        ({ #'< , ({ #'[ , 'a , 1 }), ({ #'[ , 'b , 1 }) }) 
+                    }))
+            ),
+            lambda( ({ 'x }), 
+                    ({ #'&& ,
+                        ({ #'< , ({ #'query_wiz_level , 
+                                       ({ #'[ , 'x , 0 })}), 100 }),
+                        ({ #'< , ({ #'[ , 'x , 3 }) , 1 })})
+                    )
+        ),
+        lambda(({ 'x }),({ #'[..] , 'x , 0 , 2 }))
+    );
+}
+
+// EOF

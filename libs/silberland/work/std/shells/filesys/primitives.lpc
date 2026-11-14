@@ -1,0 +1,170 @@
+// SilberLand MUDlib
+//
+// primitives.c -- file command primitives
+//
+// $Date: 2000/11/24 19:10:06 $
+/* $Revision: 1.8 $
+ * $Log: primitives.c,v $
+ * Revision 1.8  2000/11/24 19:10:06  Woody
+ * Rekursives 'mv' abfangen
+ *
+ * Revision 1.7  2000/11/24 18:42:23  Woody
+ * Mehr Abfragen in cp_file() und mv_file()
+ *
+ * Revision 1.6  1998/09/20 15:05:25  Woody
+ * Fehlermeldungen erweitert, auch fuer ARCH
+ *
+ * Revision 1.5  1997/03/13 02:11:20  Woody
+ * prepared for revision control
+ *
+ * Revision 1.4  1995/04/03  09:29:42  Hate
+ * fixed bug in grep of empty files
+ *
+ * Revision 1.3  1995/02/23  12:33:37  Hate
+ * Bugfix for CP by wargon
+ *
+ * Revision 1.2  1994/09/22  16:19:40  Hate
+ * *** empty log message ***
+ *
+ * Revision 1.1  1994/06/01  15:18:56  Hate
+ * Initial revision
+ *
+*/
+
+#pragma strong_types
+
+#include <defines.h>
+#include <config.h>
+#include <wizlevels.h>
+#include "/std/sys_debug.h"
+
+#define MAXLEN	20000
+
+#define SET(var, bit)	(var |= (1<<bit))	// set bit in var
+#define GET(var, bit)	(var & (1<<bit))	// test bit in var
+
+#define EXEC	2		// file status (loadable)
+#define WRITE	1		// writeable
+#define READ	0		// readable
+
+#define ERROR(msg,arg)          (printf(query_verb()+": "+msg,arg), -1)
+#define ERROR2(msg,arg1,arg2)   (printf(query_verb()+": "+msg,arg1,arg2), -1)
+
+#define NO_READ         "%s: no read permissions\n"
+#define NO_WRITE        "%s: no write permissions\n"
+#define DOESNT_EXIST    "%s: file doesn't exist\n"
+#define ALREADY_EXISTS  "%s: file exists\n"
+#define IS_DIRECTORY    "%s: is a directory\n"
+#define OMIT_DIRECTORY  "%s: omitting directory\n"
+#define SAME_FILE       "`%s' and `%s' are the same file\n"
+#define SAME_DIR        "cannot move `%s' to a subdirectory of itself\n"
+
+// exists() -- returns if the file or directory exists
+private int exists(string file)
+{ int size; return (size = file_size(file)) >= 0 || size == -2; }
+
+// access() -- checks the access rights for a file, returns bitfield
+private int access(string file)
+{
+  int rights;
+  //if(IS_ARCH(ME)) return EXEC|WRITE|READ;
+  // if(MASTER->valid_exec(file)) SET(rights, EXEC); not yet applicable
+  if(MASTER->valid_write(file, getuid(ME))) SET(rights, WRITE);
+  if(MASTER->valid_read(file, getuid(ME))) SET(rights, READ);
+  return rights;
+}
+
+// cp_file() -- copies from to to
+// overlong (50k) files will be split
+nosave int cp_file(string from, string to)
+{
+  string bytes; int ptr;
+  if(!exists(from)) return ERROR(DOESNT_EXIST, from);
+  if(!GET(access(from), READ)) return ERROR(NO_READ, from);
+  if(!GET(access(to), WRITE)) return ERROR(NO_WRITE, to);
+  if(file_size(from)==-2) return ERROR(OMIT_DIRECTORY, from);
+  if(from==to) return ERROR2(SAME_FILE, from, to);
+  if(exists(to)) rm(to);
+  do {
+    bytes = read_bytes(from, ptr, MAXLEN); ptr += MAXLEN;
+    write_file(to, bytes);
+  }
+  while(strlen(bytes) == MAXLEN);
+  return 1;
+}
+
+// mv_file() -- moves file from to to
+nosave int mv_file(string from, string to)
+{
+  if(!exists(from)) return ERROR(DOESNT_EXIST, from);
+  if(!GET(access(from), READ)) return ERROR(NO_READ, from);
+  if(!GET(access(from), WRITE)) return ERROR(NO_READ, from);
+  if(!GET(access(to), WRITE)) return ERROR(NO_WRITE, to);
+  if(file_size(from)==-2) {
+    if(from+"/"==to[0..strlen(from)]) return ERROR(SAME_DIR, from);
+    if(file_size(to)>=0) return ERROR(ALREADY_EXISTS, to);
+  }
+  if(from==to) return ERROR2(SAME_FILE, from, to);
+  rename(from, to);
+  return 1;
+}
+
+// rm_file() -- removes file
+nosave int rm_file(string file)
+{
+  if(!exists(file)) return ERROR(DOESNT_EXIST, file);
+  if(!GET(access(file), WRITE)) return ERROR(NO_WRITE, file);
+  if(file_size(file)==-2) return ERROR(IS_DIRECTORY, file);
+  if(!rm(file)) return ERROR(NO_WRITE, file);
+  return 1;
+}
+
+// dir_file() -- makes or removes directory
+nosave int dir_file(string file, int mk)
+{
+  if(mk && exists(file)) return ERROR(ALREADY_EXISTS, file);
+  if(!mk && !exists(file)) return ERROR(DOESNT_EXIST, file);
+  if(GET(access(file), WRITE)) 
+    if((mk && !mkdir(file)) || (!mk && !rmdir(file)))
+      return ERROR(NO_WRITE, file);
+  return 1;
+}
+
+#define IGN_CASE	4	// ignore case
+#define PUT_LNUM	16	// add line numbers
+#define NO_MATCH	32	// reverse matched lines
+
+// _put_line_number() -- adds a line number to line, taken from lines
+// and adds offset
+private string _put_line_number(string line, string *lines, int offset)
+{ return sprintf("%4d %s", member(lines, line)+offset, line); }
+
+// _copy_original() -- return original line from new in old 
+private string _copy_original(string line, string *new, string *old)
+{ return old[member(new, line)]; }
+
+// grep_file() -- grep file for pattern
+nosave mixed grep_file(string file, string rexpr, int flags)
+{
+  string *lines, *tmp, *tmp1, src, *result; int ptr, lno;
+  if(!exists(file)) return ERROR(DOESNT_EXIST, file);
+  if(!GET(access(file), READ)) return ERROR(NO_READ, file);
+  if(!file_size(file)) return -1;
+  result = ({});
+  do {
+    if(!(src  = read_bytes(file, ptr, MAXLEN))) continue;
+    tmp1 = lines = explode(src, "\n");
+    ptr += MAXLEN + 1;
+    if(flags & IGN_CASE) lines = map_array(lines, #'lower_case);
+    tmp = regexp(lines, rexpr);
+    if(flags & IGN_CASE) tmp = map_array(tmp, #'_copy_original, lines, tmp1);
+    if(flags & NO_MATCH) tmp = lines - tmp;
+    if(flags & PUT_LNUM) 
+      tmp = map_array(tmp, #'_put_line_number, lines, lno);
+    result += tmp;
+    lno += sizeof(lines);
+  }
+  while(strlen(src) == MAXLEN);
+  return result;
+}
+

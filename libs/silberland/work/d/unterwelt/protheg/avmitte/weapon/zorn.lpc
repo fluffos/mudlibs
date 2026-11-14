@@ -1,0 +1,174 @@
+/* 
+   Elektropeitsche
+   Tue Nov 17 08:30:04 1998, Koomi
+   Es ist eine normale Peitsche, aber im Griff ist ein Saphir, der pro 
+   Kampfrunder der Peitsche durch die Reibung d20 Reibungsenergie aufbaut.
+   Wenn erstmal MAX_LADUNG erreicht ist oder wenn man sie wegsteckt, entlaedt 
+   sie sich selbsttaetig in der Suchreihenfolge Enemy - Traeger. Felinen und
+   Elfen erhalten bei Benutzen der Waffe einen Angriffsbonus und Zwerge, 
+   Kobolde, Gnome und Hobbits einen Malus (die Peitsche ist lang und 
+   sie ist deshalb aufgrund ihrer geringen Koerpergroesse erschwert benutzbar) 
+   Riesen und Trolle sind zu ungeschickt und zu doof, um gut damit umzugehen
+   koennen, darum der Abschlag bei diesen. Sonst benoetigt man 15 Dex, sie
+   zuecken zu koennen
+   
+   
+   Tue Apr 11 16:58:51 2000, Samtpfote 
+   angepasst ans SL/Turithil und leicht modifiziert 
+
+   Mon Dez 11 gegen 2300, PROtheG
+   Der Name ist in einem FantasyMUD untragbar... bissi angepasst
+
+   Don Feb 28 2 Uhr frueh, PROtheG
+   blabla pragma
+*/
+
+#pragma strong_types;
+
+#include "../def.h"
+#include <combat.h>
+#include <properties.h>
+#include <new_skills.h>
+
+#define d20		random(20)
+
+#define MAX_LADUNG	400
+#define P_LADUNG	"sh:epeitsche-ladung"
+
+inherit "std/weapon";
+
+varargs void peitsche_entladen(object opfer, int flag)
+{
+  object pl;
+  int woom;
+  
+  if(!opfer || !ENV(opfer) || !pl=QueryProp(P_WIELDED)) return;
+  if(!present(pl, ENV(opfer))) return;
+  if(!opfer->IsEnemy(pl)) return;
+  
+  tell_room(ENV(pl), 
+	    BS("Lloths Zorn beginnt zu knistern, als kleine blaue Blitze "
+	       "vom Saphir aus, die Peitsche entlang auf "+opfer->name(WEN)+
+	       " zuschiessen..."), ({ opfer }));
+  tell_object(opfer,
+	      BS("Du wirst ploetzlich in blaue Blitze getaucht, als Lloths "
+		 "Zorn ueber Dich hereinbricht!!\n"));
+  
+  if(flag)
+    woom=random(QueryProp(P_LADUNG));
+  else
+    {
+      woom=random(QueryProp(P_LADUNG)*2)+random(pl->QueryAttribute(A_DEX));
+      if(woom>MAX_LADUNG) woom=MAX_LADUNG;
+      DB("*** Lloths Zorn: "+opfer->Name()+" kriegt von "+pl->name()+" "+
+	 woom+"\n");
+    }
+  
+  opfer->Defend(woom, DT_LIGHTNING, ([SP_SHOW_DAMAGE: 1]), TO);
+
+  SetProp(P_LADUNG, 0);		  
+}
+
+/* _DAS_ will ich nicht verpassen :-))) */
+void NotifyPlayerDeath(object dead, object killer, int lost_exp)
+{   
+  if(killer != TO) return;
+  
+  SetProp(P_KILL_NAME, "Lloths Zorn");
+  write_file(LOG "epeitsche.kills", 
+	     dtime()+" : "+dead->Name()+" gets killed \("+lost_exp+"\)\n");
+}
+
+int HitFunc(object en)
+{
+  int damage;
+  
+  SetProp(P_LADUNG, QueryProp(P_LADUNG)+d20);
+  
+  if(QueryProp(P_LADUNG) >= MAX_LADUNG/2+random(MAX_LADUNG/2))
+    if(find_call_out("peitsche_entladen")==-1)
+      call_out("peitsche_entladen", 1, en);
+  
+  return damage;
+}
+
+int UnwieldFunc()
+{
+  /* Beim Wegstecken wird die Peitsche auf den Besitzer entladen */
+  if(QueryProp(P_LADUNG)>200) 
+    peitsche_entladen(QueryProp(P_WIELDED),1);
+
+  return 1;
+}
+
+void create()
+{
+  if(!is_clone(ME)) return;
+  ::create();
+  
+  AddId(({"peitsche","zorn","lloths zorn","llothszorn","\nepeitsche"}));
+
+  SetProp(P_GENDER, MALE);
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_NAME, "Lloths Zorn");
+
+  SetProp(P_SHORT, "Lloths fuerchterlicher Zorn");
+  SetProp(P_LONG,
+	  BS("Lloths Zorn ist eine fast zwei Meter lange, schwarze "
+	     "Lederpeitsche mit Dornenkugeln an den Spitzen. Ein blauer "
+	     "Saphir ziert das stumpfe Ende."));
+
+  SetProp(P_INFO, 
+	  BS("Der Saphir knistert und Deine Haare stellen sich auf, wenn "
+	     "Du ihn beruehrst!"));
+
+  AddDetail(({"dornenkugeln","dornenkugel","kugel","kugeln","dornen","dorne"}),
+	    "Diese staehlernen Dornenkugeln scheinen dieser Peitsche ein "
+	    "sehr grobes Aussehen zu geben, doch in Wahrheit ist sie ein "
+	    "sehr praezises \"Werkzeug\" und du entscheidest, dass du "
+	    "nicht auf der falschen Seite der Peitsche stehen moechtest.");
+
+  AddDetail(({"griff","ledergriff","ende"}),
+	    "Der lederne Griff ist solide gearbeitet und liegt gut in der "
+	    "Hand. Am stumpfen Ende ist ein Saphir in das Leder "
+	    "eingearbeitet.");
+
+  AddDetail("leder",
+	    "Die Peitsche besteht groesstenteils aus Leder.");
+
+  AddDetail("saphir",	
+	    "Der Saphir ist fein geschliffen worden und ist in den Griff "
+	    "eingearbeitet, was der Peitsche eine grossartige Balance "
+	    "verleiht.");
+
+  AddDetail("balance",
+	    "Die Peitsche ist perfekt ausbalanciert.");
+  
+  SetProp(P_WC, 191+random(10)); 
+  SetProp(P_WC_FIX, 40);
+  SetProp(P_WEAPON_TYPE, WT_WHIP);
+  SetProp(P_DAM_TYPE, ({DT_WHIP, DT_TERROR}));
+  SetProp(P_WIELD_RESTRICTIONS, 
+	  ([A_DEX: 16, A_INT: 13, P_FROG: 0, 
+	  P_LEVEL: 15, P_SIZE: 170, SR_GOOD:100]));
+  SetProp(P_NR_HANDS, 1);
+  
+  SetProp(P_VALUE, 2501);
+  SetProp(P_WEIGHT, 989);
+  SetProp(P_SIZE, 179);
+  SetProp(P_QUALITY_DECAY, 150);
+
+  SetProp(P_WC_BONUS, (["hohepriesterin":300]));
+  SetProp(P_NOBUY, 1);
+  SetProp(P_MATERIAL,
+	  ([MAT_LEATHER: 93,MAT_STEEL: 2,MAT_SAPPHIRE: 5,MAT_LIGHTNING: 5]));
+  
+  SetUnwieldFunc(ME);
+  SetHitFunc(ME);
+  
+  SetProp(P_KILL_NAME, "Lloths Zorn");
+  SetProp(P_LADUNG, 0);
+
+  SetProp(P_MAGIC, 1);
+  SetProp(P_ITEMD, ({"elektrisiert die Gegner", "ist hochmagisch"}));
+}

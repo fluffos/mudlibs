@@ -1,0 +1,164 @@
+
+inherit "std/unit";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <new_skills.h>
+#include "../def.h"
+
+#define MAX_DAM 2000
+#define MIN_DAM_PER_VIC 250
+#define MANA_COST 25
+
+create() {
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  AddSingularId( ({ "ball",   "schleimball"   }) );
+  AddPluralId  ( ({ "baelle", "schleimbaelle" }) );
+  SetProp(P_WEIGHT, 1000);
+  SetProp(P_NOSELL, "Kein Haendler wuerde so etwas auch nur anfassen.\n");
+  SetProp(P_NOBUY,  1);
+  SetProp(P_SHORT, "Schleimball");
+  SetProp(P_LONG, BS(
+    "Du haeltst einen ekligen, stinkenden Schleimball in Deiner Hand. "
+    "Er scheint sogar zu leben, denn er pulsiert und bewegt sich leicht "
+    "hin und her. Allzu lange kannst Du ihn nicht einmal in einer Hand "
+    "halten, denn er frisst sich leicht in Dein Fleisch rein." ));
+  SetProp(P_INFO, BS(
+    "Diesen Schleimball koennte man vielleicht als Katapultwaffe benutzen. "
+    "Allerdings solltest Du damit vorsicht umgehen und sie nicht in Deiner "
+    "Naehe benutzen!" ));
+  SetProp(P_NAME, ({"Schleimball", "Schleimbaelle"}));
+  SetProp(P_MATERIAL, MAT_SLIME);
+  SetProp(P_GENDER, MALE);
+  SetProp(P_KILL_NAME, "Ein Schleimball");
+}
+
+init() {
+  ::init();
+  add_action( "werffkt", "katapultier");
+  add_action( "werffkt", "katapultiere");
+}
+
+werffkt(string str) {
+  string what, dest, *exit;
+  int cnt,mana,i,dam;
+  object env,vic,*liv;
+  mixed ex;
+
+  notify_fail("Wohin willst Du den Schleimball katapultieren?\n");
+  if (!str) return 0;
+  if (sscanf(str, "%s nach %s", what, dest) != 2)
+    return 0;
+  notify_fail("Du kannst nur einen Schleimball auf einmal katapultieren!\n");
+  if (sscanf(what, "%d %s", cnt, what)==2 && cnt>1 && id(what))
+    return 0;
+  if (!id(what))
+    return 0;
+  if (!env=MENV) {
+    call_out("remove",0);
+    return 0;
+  }
+  if (!ENV(env)) {
+    call_out("remove",0);
+    return 0;
+  }
+  if (!living(env)) {
+    call_out("remove",0);
+    return 0;
+  }
+  notify_fail("Du hast nicht genug Magiepunkte!\n");
+  if ((mana=env->QueryProp(P_SP))<MANA_COST)
+    return 0;
+  notify_fail("Du bist im Moment zu erschoepft!\n");
+  if (env->QueryProp(P_ATTACK_BUSY))
+    return 0;
+  vic=present(dest, ENV(env));
+  if (vic && !living(vic)) {
+    notify_fail("Das macht aber so keinen Sinn, oder?\n");
+    return 0;
+  }
+  if (vic) {
+    write(BS(
+      "Du katapultierst den Schleimball auf "+vic->name(WEM,2)+". Aber "
+      "da es viel zu nah ist, zerplatzt der Schleimball in Deiner Hand und "
+      "Du wirst mit aetzender Saeure ueberschuettet!!!"));
+    say(BS(
+       env->Name(WER,2)+" versucht einen Schleimball auf "+vic->name(WEN,2)+
+       " zu katapultieren. Aber es gelingt nicht und der Schleimball "
+       "zerplatzt in der Hand!!!"));
+    env->do_damage(10+random(MAX_DAM));
+    SetProp(P_AMOUNT, QueryProp(P_AMOUNT)-1);
+    return 1;
+  }
+  notify_fail("Hier geht das irgendwie nicht!\n");
+  ex=ENV(env)->QueryProp(P_EXITS);
+  if (!mappingp(ex)) {
+    return 0;
+  }
+  if (!sizeof(exit=m_indices(ex))) {
+    return 0;
+  }
+  notify_fail("Wohin willst Du den Schleimball katapultieren?\n");
+  if (member(exit,dest) == -1) {
+    return 0;
+  }
+
+  SetProp(P_AMOUNT, QueryProp(P_AMOUNT)-1);
+  env->SetProp(P_SP, mana-MANA_COST);
+  env->SetProp(P_ATTACK_BUSY, 1);
+  write("Du katapultierst einen Schleimball nach "+CAP(dest)+".\n");
+  say(env->name(WER)+" katapultiert einen Schleimball nach "+CAP(dest)+".\n");
+
+  if(!find_object(ex[dest]))
+    call_other(ex[dest],"???");
+  vic=find_object(ex[dest]);
+  liv=filter_array(all_inventory(vic), #'living);
+
+  cnt=MAX_DAM;
+  for (i=sizeof(liv)-1; i>=0; i--) {
+    dam=MIN_DAM_PER_VIC+random(MIN_DAM_PER_VIC)+env->QueryProp(P_LEVEL);
+    cnt-=dam;
+    if (cnt<0) dam=0;
+    if (!interactive(liv[i]) && !query_once_interactive(liv[i]) && dam>0) {
+      liv[i]->Defend( dam , DT_ACID, ([
+        SP_NAME:"schleimball",
+        SP_SHOW_DAMAGE:({
+          ({ -1, "@WESSEN2 Schleimball verfehlt Dich knapp.",
+                 "Dein Schleimball verpufft an @WEM1.",
+                 "@WESSEN2 Schleimball fliegt an @WEM1 vorbei."}),
+          ({  0, "@WESSEN2 Schleimball tut Dir gar nix.",
+                 "Dein Schleimball streift @WEN1.",
+                 "@WESSEN2 Schleimball streift @WEN1."}),
+          ({ 10, "@WESSEN2 Schleimball trifft Dich leicht an der Schulter.",
+                 "Dein Schleimball trifft @WEN1 leicht an der Schulter.",
+                 "@WESSEN2 Schleimball trifft @WEN1 leicht an der Schulter."}),
+          ({ 20, "@WESSEN2 Schleimball schuettelt Dich ordentlich durch.",
+                 "Dein Schleimball schuettelt @WEN1 ordentlich durch.",
+                 "@WESSEN2 Schleimball schuettelt @WEN1 ordentlich durch."}),
+          ({ 40, "@WESSEN2 Schleimball veraetzt Dich.",
+                 "Dein Schleimball veraetzt @WEN1.",
+                 "@WESSEN2 Schleimball veraetzt @WEN1."}),
+          ({ 60, "@WESSEN2 Schleimball zerplatzt direkt vor Deinen Augen.",
+                 "Dein Schleimball zerplatzt direkt vor @WESSEN1 Augen.",
+                 "@WESSEN2 Schleimball zerplatzt direkt vor @WESSEN1 Augen."}),
+          ({100, "@WESSEN2 Schleimball veraetzt Dir das Gesicht.",
+                 "Dein Schleimball veraetzt @WESSEN1 Gesicht.",
+                 "@WESSEN2 Schleimball veraetzt @WESSEN1 Gesicht."}),
+          ({150, "@WESSEN2 Schleimball zersetzt Dich in kleinsten Atome.",
+                 "Dein Schleimball zersetzt @WEN1 in kleinste Atome.\n",
+                 "@WESSEN2 Schleimball zersetzt @WEN1 in kleinste Atome.\n"})
+          })
+       ]), env);
+     }
+  }
+/*
+  write("Schaden:");
+  for (i=0; i<sizeof(liv); i++)
+    write(sprintf(" %d.", liv[i]->QueryProp(P_MAX_HP)-liv[i]->QueryProp(P_HP)));
+  write("\n");
+*/
+  return 1;
+}

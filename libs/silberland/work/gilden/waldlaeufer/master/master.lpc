@@ -1,0 +1,1290 @@
+/*************** GUILD_MASTER der Waldlaeufergilde ***************************
+22.08.2005 - Begin (Lilyth, Torian, Delgo)@Silberland <sl.mud.at>
+*****************************************************************************/
+//** INHERIT + INCLUDE + DEFINE ********************************************//
+#include "../def.h"
+#include "./master-skillmaster.h"
+#include RANGER_FUNCTIONS
+
+#define HIGHEST -666
+//--Vars----------------------------------------------------------------------
+mixed savefile;
+//Einziges non-nosave, Prinzip von Nekros uebernommen, mir ist nix besseres
+//eingefallen ;-)
+nosave mapping members=([]);
+nosave mapping toplist=([]);
+nosave int toprating=0;
+nosave mapping highest=([]);
+nosave mapping masterPaths=([]);
+nosave mapping masterAbilities=([]);
+  /*
+    highest speichert die hoechsten erreichbaren TopListen-Faktoren und die 
+    uid, des spielers, der sie erreicht hat
+  */
+nosave mapping mageshist=([]);
+nosave mapping rangershist=([]);
+nosave mapping spell_mapping=([
+                        BESCHWOERER_PFAD:({TIERE_DES_WALDES,WALDWOLF,
+                                           SCHWARZBAER,ADLER,SPINNE,WILDER_SCHWARM,WALDGEIST}),
+                        TIERMEISTER_PFAD:({TIERANGRIFF,KAMPFGEIST,
+                                           KRAFT_DES_TIERES,KRAFT_DER_AHNEN,
+                                           GEMEINSAME_ATTACKE,WUT_DER_BESTIE,INKARNATION_DER_KOEIGE}),
+                        MESSER_PFAD:({KLINGENWIRBEL,MESSERWURF,VIOLETTE_FLAMME,BLAUE_FLAMME,AUSWEIDEN,SEELE_DER_KLINGE,SCHATTENSCHNITT}),
+                        BOGEN_PFAD:({KALTE_FLAMME,ZIELSCHUSS,PANZERBRECHENDER_SCHUSS,GIFTPFEIL,SALVE,BLICK_DES_FALKEN,FREIPFEILE}),
+                        IAMA_PFAD:({MELODIE_DER_RUHE,ODE_DES_STURMES,
+                                    MELODIE_DER_AVATARA,HYMNE_DES_WALDES,
+                                    MELODIE_DES_OSTENS, MELODIE_DER_VERAENDERUNG,MELODIE_DER_ZEIT}) ]);
+nosave mapping master_spells=([
+  BESCHWOERER_PFAD:({WILDER_SCHWARM,WALDGEIST}),
+  TIERMEISTER_PFAD:({WUT_DER_BESTIE,INKARNATION_DER_KOEIGE}),
+  MESSER_PFAD:({BLICK_DES_FALKEN,FREIPFEILE}),
+  IAMA_PFAD:({MELODIE_DER_VERAENDERUNG,MELODIE_DER_ZEIT}) ]);
+nosave mixed path_spells=({});
+nosave mixed path_list=({MESSER_PFAD, BOGEN_PFAD, BESCHWOERER_PFAD, 
+                         TIERMEISTER_PFAD, IAMA_PFAD});
+nosave mapping archenemys_ids=([
+  "Bestie": ({"illithid", "minotaurus", "pilzwesen", "betrachter", "trgolodyt", "einhorn", "barghest", "grottenwesen",
+              "zyklop", "margyl", "doofmonster", "bandersnatch", "beholder", "gedankenschinder", "zentaur", "schleimwesen",
+              "schleimball", "tarraske", "bestie", "kuschelmonster", "mantikor", "gorgone", "schleimgestalt", "kristallbeisser",
+              "mutant", "betrachter", "riese", "werwolf", "gestaltwandler", "gigant", "eiljeen", "monster", "gelee"}),
+  "Daemon": ({"oni", "daemon", "hoellenfuerst", "teufel"}),
+  "Echse": ({"hydra", "riesenechse", "drache", "eidechse", "chamaeleon", "olm", "kroete", "reptil", "frosch", "skink", "drachenmensch", "schildkroete", "krokodil"}),
+  "Elementar": ({"steinrose", "sandwesen", "stein", "dschinn", "elementar", "wolke", "djin", "djinn", "wusel", "feuergeist", "steinmaul", "kristallwesen"}),
+  "Elf": ({"dunkelelf", "elf", "wasserelfe", "wasserelf", "halbelf"}),
+  "Fee": ({"fee", "kobold", "faun", "satyr", "rumpelwicht", "wicht", "engel", "blumengeist", "gierling", "astralwesen"}),
+  "Fisch": ({"fisch", "schlammspringer", "hai", "nixe", "wassermann", "muschel", "kraken"}),
+  "Fraggle": ({"fraggle"}),
+  "Gaffo": ({"gaffo"}),
+  "Golem": ({"ruestung", "golem", "wegweiser", "gargoyle", "gargyl", "kleiderstaender", "margyl", "gegenstand"}),
+  "Gott": ({"halbgoettin", "tugend", "macht", "byte", "motherfucker", "muse", "avatar", "ase", "gott"}),
+  "Hobbit": ({"halbling", "hobbit"}),
+  "Insekt": ({"insekt", "maulwurfsgrille", "spinne", "spinnentier", "moskito", "assel", "wespe", "gelsen", "gelse", "ungeziefer",
+              "insect", "made", "fliege", "grille", "biene", "hornisse", "schmetterling", "libelle", "termite", "drider", "falter", 
+              "kaefer", "kakerlake", "skorpion", "raupe"}),
+  "Mensch": ({"mensch", "aussaetziger", "nftah", "henker"}),
+  "Oger": ({"kannibale", "oger"}),
+  "Ork": ({"ork", "halbork", "goblin", "hobgoblin", "barghest"}),
+  "Pflanze": ({"buschwerk", "schlingpflanze", "vanataurie", "pflanze", "bluetenwesen", "mykonid", "pilz", "pilzwesen"}),
+  "Tier": ({"raubtier", "robbe", "marder", "rother", "mungo", "baer", "schwein", "wiesel", "ameisenbaer", "schnecke", "hase", "elefant", "kamel", "hustinettenbaer", 
+            "krebs", "otter", "hund", "schakal", "maulwurf", "bueffel", "katze", "fledermaus", "reittier", "mammut", "hoernchen", "luchs", "gnu", "dachs",
+            "sandwolf", "pferd", "kaninchen", "ratte", "affe", "biber", "rind", "wolf", "sandtiger", "schalentier", "wildschwein", "esel", "hamster", "raubkatze", 
+            "antilope", "zebra", "tier", "nashorn", "ziege", "fuchs", "stinktier", "tiger", "feline", "krustentier", "lemming", "viech", "maus", "hirsch", "nagetier",
+            "loewe", "huhn", "tapir", "fuchs", "kuh", "schafe", "schaf", "puma", "hahn", "steinbock", "igel", "stier", "waldtier", "krabbe"}),
+  "Troll": ({"troll", "juwelentroll", "riese", "gigant"}),
+  "Untoter": ({"mumie", "zwergengeist", "untoter", "skelett", "schatten", "leiche", "vampir", "zombie", "geist", "untot", "irrlicht", "ghoul"}),
+  "Vogel": ({"dodo", "vogel", "geier", "falke", "pinguin", "steingreifer", "fledermaus", "eulen", "eule", "spechte", "specht", "fluegelungeheuer", "fledermaus"}),
+  "Schlange": ({"drache", "schlange", "wurm", "worminator", "sandwurm"}),
+  "Zwerg": ({"gartenzwerg", "erzzwerg", "zwerg", "duergar", "dunkelzwerg", "terminatorzwerg", "zwergt", "gnom", "wuestenzwerg"})
+]);
+
+nosave mixed archenemys=m_indices(archenemys_ids);
+//--Prototypes----------------------------------------------------------------
+mixed get_path(string spell);
+void LoadList();
+void SaveList();
+mixed SetEntry(mixed caster, mixed entry, mixed value);
+mixed GetEntry(mixed caster, mixed entry);
+int GetAbilitys(object caster);
+mixed GetPaths(mixed caster);
+int UpdateMember(mixed caster);
+mixed get_caster(string caster);
+mixed caster_string(object caster);
+void save_read_toplist();
+int is_testie(string caster);
+int is_wizard(string caster);
+int is_toplister(string caster);
+mixed GetArchenemy(string caster);
+//**************************************************************************//
+
+
+
+//** StandardFunktionen ****************************************************//
+//-- Create ------------------------------------------------------------------
+void create()
+{ 
+  int i, k;
+  string *indices, *spells;
+
+  if(is_clone(this_object()))
+  { destruct(this_object());
+    return; } 
+  
+  indices=m_indices(spell_mapping);
+  for(i=0;i<sizeof(indices);i++)
+  { spells=spell_mapping[indices[i]];
+    for(k=0;k<sizeof(spells);k++) {path_spells+=({spells[k]});}
+  }  
+  SUID;
+  LoadList();
+
+  savefile = 0;
+  restore_object(MASTERPATHFILE);
+  masterPaths = savefile;
+
+  savefile = 0;
+  restore_object(MASTERABILITY_FILE);
+  masterAbilities = savefile;
+}
+//**************************************************************************//
+
+
+
+//** HistoryFunktionen *****************************************************//
+//--GildenmagierHistory-------------------------------------------------------
+int AddMagesHistory(mixed name, string msg)
+{
+  int i, k;
+  mixed m, sm;
+  
+  m=m_indices(mageshist);
+  i=sizeof(m);
+  mageshist+=([i:name;time();msg]);
+  i++;
+  if(i>20) 
+  { sm=([]);
+    for(k=0;k<(i-1);k++)
+    { sm+=([ k : mageshist[(k+1), M_HIST_NAME]; 
+                 mageshist[(k+1), M_HIST_TIME]; 
+                 mageshist[(k+1), M_HIST_MSG]  ]);  }
+    mageshist=sm; }
+  return 1;
+}
+mixed QueryMagesHistory() {return mageshist;}
+
+//--WaldlaeuferHistory--------------------------------------------------------
+int AddHistory(mixed name, mixed msg, int invis, int emote)
+{
+  int i, k;
+  mixed m, sm;
+  string s;
+  
+  s=dtime(time())+"\n "+name+": "+msg+" ";
+  s+=(invis?"[I]":""); s+=(emote?"[E]":""); s+="\n";
+  write_file(CHANNEL_HISTORY, s);
+  m=m_indices(rangershist);
+  i=sizeof(m);
+  rangershist+=([i:name;time();msg;invis;emote]);
+  i++;
+  if(i>20) 
+  { sm=([]);
+    for(k=0;k<(i-1);k++)
+    { sm+=([ k : rangershist[(k+1), HIST_NAME]; 
+                 rangershist[(k+1), HIST_TIME]; 
+                 rangershist[(k+1), HIST_MSG];
+                 rangershist[(k+1), HIST_INVIS];
+                 rangershist[(k+1), HIST_EMOTE]  ]);  }
+    rangershist=sm; }
+  return 1;
+}
+mixed QueryHistory() {return rangershist;}
+//**************************************************************************//
+
+
+
+//** Paths/Circles/Spells/Skills/Grade *************************************//
+//-- Die echte Gildenstufe zurueckliefern ------------------------------------
+int GetGuildLevel(string caster)
+{
+  mixed ob;
+  int gl;
+  
+  if(objectp(ob=get_caster(caster))) {return ob->QueryProp(P_GUILD_LEVEL);}
+  if(!member(members, caster)) {return 0;}
+  if(!intp(members[caster, M_GUILD_LEVEL])) members[caster, M_GUILD_LEVEL] = 1;
+  return members[caster, M_GUILD_LEVEL];
+}
+
+//-- Das echte Gender zurueckliefern -----------------------------------------
+int check_gender(string caster)
+{
+  mixed ob;
+    
+  if(objectp(ob=get_caster(caster))) {return ob->QueryProp(P_GENDER);}
+  if(is_wizard(caster)) {return 0;}
+  else {return SAVEMASTER->QueryFileProp(caster, P_GENDER);}
+}
+
+//-- Alle Spells, die nur auf einen Pfad anwendbar sind ----------------------
+mixed get_path_spells() {return path_spells;}
+
+//-- Ermittelt alle Spells zu einem pfad -------------------------------------
+mixed get_spells_to_path(string path)
+{ if(!member(spell_mapping, path)) {return 0;}
+  return spell_mapping[path];}
+
+//-- Ermittelt den Pfad zum Spell --------------------------------------------
+mixed get_path(string spell)
+{
+  int i, k;
+  string *indices, *spells;
+  
+  if(member(path_spells, spell) == -1) {return 0;}
+
+  indices=m_indices(spell_mapping);
+  for(i=0;i<sizeof(indices);i++)
+  { spells=spell_mapping[indices[i]];
+    for(k=0;k<sizeof(spells);k++)
+    { if(spell==spells[k]) {return indices[i];}}}
+  return 0;
+}
+
+//-- Alle Pfade --------------------------------------------------------------
+mixed get_paths() {return path_list;}
+
+//-- Ist der caster auf dem geforderten Pfad? --------------------------------
+int IsOnPath(string caster ,string path)
+{ 
+  mixed m;
+  
+  if(!pointerp(m=GetPaths(caster))) {return 0;}
+  return (member(m, CAP(path)) != -1);
+}
+//**************************************************************************//
+
+public int HasMasterPath(string caster, string path) {
+  mixed err;
+  string mp;
+
+ if(!member(masterPaths, caster)) return 0;
+
+ return masterPaths[caster] == path;
+}
+
+public mixed SetMasterPath(string caster, string path) {
+  if(!member(members, caster)) return "Du bist kein Mitglied dieser Gilde.";
+  if(!IsOnPath(caster, path)) return "Du folgst diesem Pfad nicht.";
+
+  if(!member(masterPaths, caster)) {
+    masterPaths += ([caster: 0]);
+  }
+
+  if(masterPaths[caster] != 0) return "Du bist bereits auf einem Meisterpfad.";
+
+  masterPaths[caster] = path;
+  savefile = masterPaths;
+  save_object(MASTERPATHFILE);
+  return 1;
+}
+
+public string GetMasterPath(string caster) {
+  if(!member(members, caster)) return "Du bist kein Mitglied dieser Gilde.";
+  if(!member(masterPaths, caster)) {
+    masterPaths += ([caster: 0]);
+  }
+
+  return masterPaths[caster];
+}
+
+public mixed DeleteMasterPath(string caster) {
+  if(!member(members, caster)) return "Du bist kein Mitglied dieser Gilde.";
+  if(!member(masterPaths, caster)) {
+    masterPaths += ([caster: 0]);
+  }
+
+  masterPaths[caster] = 0;
+  savefile = masterPaths;
+  save_object(MASTERPATHFILE);
+  return 1;
+}
+
+/*
+  Es ist an fuer sich nciht noetig jemanden extra aus der Top-Wertung zu 
+  kicken, da bei jedme aufruf die leute (Magier, Testies) gefiltert werden, 
+  sollte also jemand magier/testie werden ist das spaetestens nach 24h 
+  geklaert. austritt = dito. Lediglich die highest[...] muessen gereinigt 
+  werden.
+*/
+//-- Sind die leute in den highest noch wertbar? -----------------------------
+void check_highest()
+{
+  string caster;
+    
+  caster=highest[M_LEVEL,1];
+  if(!is_toplister(caster))
+  { highest[M_LEVEL, 0]=0; highest[M_LEVEL, 1]=GUILD_NPC;}
+  caster=highest[M_XP,1];
+  if(!is_toplister(caster))
+  { highest[M_XP, 0]=0; highest[M_XP, 1]=GUILD_NPC;}
+  caster=highest[M_EP,1];
+  if(!is_toplister(caster))
+  { highest[M_EP, 0]=0; highest[M_EP, 1]=GUILD_NPC;}
+  caster=highest[M_SCORE,1];
+  if(!is_toplister(caster))
+  { highest[M_SCORE, 0]=0; highest[M_SCORE, 1]=GUILD_NPC;}
+}
+
+//-- Folgende duerfen nicht auf die Topliste ---------------------------------
+int is_toplister(string caster)
+{
+  //return 1; //noch zu Testzwecken
+  if( is_testie(caster) ) return 0; // weitere Testzwecke
+  return !(is_wizard(caster)        || 
+           is_testie(caster)        || 
+           !member(members, caster)    );
+}
+//-- Magier werden gefiltert -------------------------------------------------
+int is_wizard(string caster) {return !(query_wiz_level(caster)<3);}
+
+//-- Testplayer werden gefiltert ---------------------------------------------
+int is_testie(string caster)
+{
+  mixed ob;
+  //return 0; //noch zu Testzwecken
+  if(objectp(ob=get_caster(caster))){return (0!=ob->QueryProp(P_TESTPLAYER));}
+  if(!is_wizard(caster))
+  { return (0!=SAVEMASTER->QueryFileProp(caster, P_TESTPLAYER));}
+  return 0;
+}
+
+
+//-- Berechnung fuer einzelne Mitglieder (nie manuell aufrufen!) -------------
+/*
+* Das  ist im wesentlichen von der Kenntnis aller Zauber abhaenig.
+* Man muss alle seine moeglichen Zauber MAX haben, um auch das maximale GuildRating
+* zu erhalten.
+*/
+public int isMasterSpell(string spell) {
+  string *keys;
+  int i;
+
+  keys = m_indices(master_spells);
+  for(i=0; i<sizeof(keys); ++i)  {
+    if(member(master_spells[keys[i]], spell) >= 0) return 1;
+  }
+  return 0;
+}
+
+public string* GetAllSkillsFor(object pl) {
+  string *skills_to_have, *paths, *path_spells, masterpath, sp;
+  int a, b, i, j;
+
+  skills_to_have = ({DURCHDRINGE, SCHAETZ, AUGEN_DES_JAEGERS, GESCHWINDIGKEIT,
+                    PAKT_DER_SCHATTEN, ZAEHMUNG, MARKIERUNGSSCHUSS, KRAEUTERMIXTUR,
+                    FUSSTRITT, TIERHEILUNG, ASPEKT_DES_PANTHERS, RINDENHAUT, 
+                    FESSELFALLE, FANGFALLE, STOLPERDRAHT, PFEILFALLE,
+                    SK_RANGER_HERBALISM, SK_MAGIC_DEFENSE});
+
+  paths = RANGERMASTER->GetPaths(getuid(pl));
+  masterpath = GetMasterPath(getuid(pl));
+  for(i=0; i<sizeof(paths); ++i) {
+    path_spells = RANGERMASTER->get_spells_to_path(paths[i]);
+    for(j=0; j<sizeof(path_spells); ++j) {
+      sp = path_spells[j];
+      if(!isMasterSpell(sp) || (paths[i] == masterpath && isMasterSpell(sp))) {
+        skills_to_have += ({ sp });
+      }
+    }
+  }
+  
+  a = pl->QuerySkillAbility(MESSERSTICH);
+  b = pl->QuerySkillAbility(DEUTSCHUSS);
+  if(a > b) skills_to_have += ({ MESSERSTICH });
+  else skills_to_have += ({ DEUTSCHUSS });
+
+  a = pl->QuerySkillAbility(FIGHT(WT_BOW));
+  b = pl->QuerySkillAbility(FIGHT(WT_KNIFE));
+  if(a > b) skills_to_have += ({ FIGHT(WT_BOW) });
+  else skills_to_have += ({ FIGHT(WT_KNIFE) });
+
+  return skills_to_have;
+}
+
+int GuildRating(string uid)
+{
+  string *skills;
+  int total, rating, i;
+  object pl;
+
+  pl = find_player(uid) || find_netdead(uid);
+  if(!objectp(pl)) return 0;
+
+  skills = GetAllSkillsFor(pl);
+
+
+  total = 0;
+  for(i=0; i<sizeof(skills); ++i) {
+    total += pl->QuerySkillAbility(skills[i]);
+  }
+
+  rating = total / 32; // 32 == maximale anzahl an skills
+  if(rating > MAX_ABILITY) rating = MAX_ABILITY;
+  else if(rating < 0) rating = 0;
+
+  members[getuid(pl), M_GUILD_RATING] = rating;
+  return pl->SetProp(P_GUILD_RATING, rating);
+}
+
+//-- Ausgabe des 'aktuellen' Guildrating -------------------------------------
+int GetGuildRating(string caster)
+{
+  if(!member(members, caster)) {return 0;}
+  return members[caster, M_GUILD_RATING];
+}
+
+//-- TopListe wird gebildet/aktualisiert -------------------------------------
+public int CalculateRating(string player, int stufe) {
+  int last;
+  float mod;
+  object pl;
+  int gstufe;
+  int rating;
+
+  rating = members[player, M_GUILD_RATING];
+  gstufe=GetGuildLevel(player);
+  rating += gstufe*200;
+  rating += stufe*10;
+
+  if(!pl=find_player(player)) {
+    if (pl=find_netdead(player))
+      last=pl->QueryProp(P_LAST_LOGOUT);
+    else
+      last=call_other(SAVEMASTER, "QueryFileProp", player, P_LAST_LOGOUT);
+
+    if((time()-2592000)>last) {         // 3600*24*30 = 30 tage
+      mod=1-((time()-2592000-last)/86400)*0.05;
+      if((rating=(int)(rating*mod))<gstufe*50) rating=gstufe*50+stufe;
+    }
+  }
+
+  return rating;
+}
+
+void UpdateTopList()
+{
+  mapping m;
+  int i, rating, gr, level;
+  string *memberlist;
+  mixed ob;
+  object pl;
+  
+  m=([]);
+  memberlist=m_indices(members);
+  check_highest();
+  for(i=0;i<sizeof(memberlist);i++) 
+  { 
+    if(!UpdateMember(memberlist[i])) {memberlist-=({memberlist[i]});}
+  }
+  //Erst updaten, dann rating berechnen (das highest muss ja stehen)
+  for(i=0;i<sizeof(memberlist);i++)
+  { 
+    if(objectp(pl = find_player(memberlist[i]) || find_netdead(memberlist[i]))) {
+      GuildRating(getuid(pl));
+      level = pl->QueryProp(P_LEVEL);
+    } else {
+      level = 0;
+    }
+
+    rating = CalculateRating(memberlist[i], level);
+
+
+    m+=([rating:memberlist[i]]);
+    members[memberlist[i], M_GUILD_RATING]=rating;
+  }
+  toplist=copy_mapping(m);
+  m=([]);
+  save_read_toplist();
+  SaveList();
+}
+
+//-- 'aktuelle' TopListe auswerfen -------------------------------------------
+mapping GetTopList() {return m_delete(toplist, HIGHEST);}
+
+//-- TopListe abspeichern fuer Spielerzugriff --------------------------------
+void save_read_toplist()
+{
+  mapping m;
+  int *ratings, i, gl;
+  string s, caster, p;
+  mixed paths;
+/*
+  __  _____    ____       ___________________________     _____________ 
+ /  \/     \/\/    \__  _/                           \_/\/             \_
+|                     \/                                                 \_
+|                     ~~~~~ Die besten Waldlaeufer ~~~~~                   |  
+|                                                                          |  
+|    Name          Kreis       Grad  Pfade                          Punkte |  
+|    ------------  ----------------  -----------------------------  ------ |  
+|  1 Delgoistdoof  Waldlaeuferin  5  Tiermeister, Beschwoerer       100.00 |  
+| 99 Ranger        Hueterin       4  Iama, Messer                    89.76 |
+|                                                                          |
+|                                                                          |
+|  Beste/r Kaempfer/in: Ranger                                             |
+|  Beste/r Forscher/in: Delgo                                              |
+|  Beste/r Kerbenjaeger/in: Delgo                                          |  
+|                                                                          |
+|   ______   ____________________     _______      ________________________|_ 
+|   )     \_/                    \    \      \/\  /                          )
+\  /                              \  _/         \/                          / 
+ \/________________________________\/______________________________________/  
+*/
+
+  if(file_size(READ_TOPLIST)>=0) {rm(READ_TOPLIST);}
+  m=m_delete(toplist, HIGHEST);
+  s="\n  __  _____    ____       ___________________________     ____________"
+    "_\n /  \\/     \\/\\/    \\__  _/                           \\_/\\/     "
+    "        \\_\n|                     \\/                                  "
+    "               \\_\n";
+  s+=sprintf("|%|74s|\n", "~~~~~ Die besten Waldlaeufer ~~~~~");
+  s+=sprintf("|%|74s|\n","");
+  s+=sprintf("|    %-12s  %-10s  %+4s  %-29s  %-6s |\n",
+             "Name",
+             "Kreis",
+             "Grad",
+             "Pfade",
+             "Punkte");
+  s+=sprintf("|    %-12s  %-13s--%1s  %-29s  %-6s |\n",
+             "------------",
+             "-------------",
+             "-",
+             "-----------------------------",
+             "------");
+  ratings=sort_array(m_indices(m), CLOSURE(<));
+  for(i=0;i<sizeof(ratings);i++)
+  {
+    caster=m[ratings[i]];
+    if(!i && (ratings[i] == 10000)) 
+    { write_file(F100_POINTS, CAP(caster)+":"+dtime()+"\n");}
+    if(i>99) {break;}
+    gl=GetGuildLevel(caster);
+    paths=GetPaths(caster);
+    switch(sizeof(paths))
+    {
+      case 1: p=paths[0]; break;
+      case 0: p=""; break;
+      default: 
+        if(stringp(HasMasterPath(caster, paths[0]))) {
+          p = sprintf("[%s], %s", paths[0], paths[1]);
+        } else if(stringp(HasMasterPath(caster, paths[1]))) {
+          p = sprintf("[%s], %s", paths[1], paths[0]);
+        } else {
+          p=implode(paths, ", "); 
+        }
+        break;
+         
+    }
+    s+=sprintf("|%3s %-12s  %-13s  %1s  %-29s  %6s |\n",
+               to_string(i+1),
+               CAP(caster),
+               circle_to_string(GetCircle(gl))+
+                 ((check_gender(caster)==FEMALE)?"in":""),
+               to_string(GetGrad(gl)),
+               p,
+               to_string(to_float(ratings[i])/100.0) );
+  }
+  s+=sprintf("|%|74s|\n","");
+  caster=highest[M_XP, 1];
+  s+=sprintf("|     %-22s%-47s|\n",
+             "Beste"+((check_gender(caster)==FEMALE)?"":"r")+" Kaempfer"+
+               ((check_gender(caster)==FEMALE)?"in":"")+":",
+             CAP(caster));
+  caster=highest[M_EP, 1];
+  s+=sprintf("|     %-22s%-47s|\n",
+             "Beste"+((check_gender(caster)==FEMALE)?"":"r")+" Forscher"+
+               ((check_gender(caster)==FEMALE)?"in":"")+":",
+             CAP(caster));
+  caster=highest[M_SCORE, 1];
+  s+=sprintf("|     %-22s%-47s|\n",
+             "Beste"+((check_gender(caster)==FEMALE)?"":"r")+" Kerbenjaeger"+
+               ((check_gender(caster)==FEMALE)?"in":"")+":",
+             CAP(caster));
+  s+=sprintf("|%|74s|\n","");
+  s+="|   ______   ____________________     _______      ____________________"
+     "____|_\n|   )     \\_/                    \\    \\      \\/\\  /       "
+     "                   )\n\\  /                              \\  _/        "
+     " \\/                          /\n \\/________________________________\\"
+     "/______________________________________/\n";
+  write_file(READ_TOPLIST,s);
+}
+//**************************************************************************//
+
+
+
+//** MemberVerwaltung ******************************************************//
+/*
+  Fur Schnelle Zugriffe auf Gildenmitglieder (netztot oder nicht), wird immer
+  ein mapping im Master existieren, welche diese und die wichtigesten 
+  Gildenwerte speichert. Bei jeder Aenderung eines solchen Wertes, wird das 
+  entsprechende Savefile upgedatet. dadurch kann der SaveFilemaster entfallen.
+  
+  Aufbau des Membermappings:
+  (Da sich aus diesen Werten auch die TopListe(n) zusammensetzt/(en), landen
+   hier auch LEVEL, XP, EP, QP, SCORE, ABILITYS)
+  ([string::Spieler UID:
+   0:   int   ::Gildenlevel;
+   1:   int   ::LEVEL;
+   2:   int   ::XP;
+   3:   int   ::EP;
+   4:   int   ::QP;
+   5:   int   ::SCORE; 
+   6:   string::Erzfeind;
+   7:   int   ::Freie Skillunkte;
+   8:  *string::Vergebene Skillpunkte;
+   9:   mixed ::Erledigte Gildenaufgaben;
+  10:   int   ::XP-Schwelle fuer naechste Stufe;
+  11:  *string::Paths 
+  12:   int   ::Alle Spell/SkillAbilitys
+  13:   int   ::GUILD_RATING])
+*/
+/*
+[Wizard:Woody] player->Query("lp") gibt den anteil der erstkills an den 
+               stufenpunkten zurueck
+[Wizard:Woody] durch 2 dividieren und du hast die anzahl der erstkillerpunkte 
+*/
+//-- Waehlt aus uid/object das Spielerobjekt oder 0 --------------------------
+mixed get_caster(string caster)
+{
+  object ob;
+  
+  if( ob=find_player(caster) ) {return ob;}
+  if( ob=find_netdead(caster) ) {return ob;}
+  return 0;
+}
+
+//-- Liefert die uid eines caster oder 0 -------------------------------------
+mixed caster_string(object caster)
+{
+  return getuid(caster);
+}
+
+//-- Listen speichern und Laden ----------------------------------------------
+void SaveList() 
+{
+  savefile=members;
+  save_object(MEMBERLIST);
+  savefile=0;
+  savefile=toplist;
+  savefile+=([HIGHEST:highest]);
+  save_object(TOPLIST);
+  savefile=0;
+}
+void LoadList()
+{
+  restore_object(MEMBERLIST);
+  members=savefile;
+  savefile=0;
+  restore_object(TOPLIST);
+  highest=savefile[HIGHEST];
+  toplist=m_delete(savefile, HIGHEST);
+  savefile=0;
+}
+
+//-- Gibt es neue Gilden'Rekorde'? -------------------------------------------
+void test_highest(string caster, int lv, int xp, int ep, int sc)
+{
+  if(!is_toplister(caster)) {return;}
+  if(lv>highest[M_LEVEL,0])
+  { highest[M_LEVEL,0]=lv;
+    highest[M_LEVEL,1]=caster; }
+  if(xp>highest[M_XP, 0])
+  { highest[M_XP,0]=xp;
+    highest[M_XP,1]=caster; }
+  if(ep>highest[M_EP, 0]){
+    highest[M_EP,0]=ep;
+    highest[M_EP,1]=caster; }
+  if(sc>highest[M_SCORE, 0])
+  { highest[M_SCORE,0]=sc;
+    highest[M_SCORE,1]=caster; }
+}
+
+//-- Fuer Debugging ----------------------------------------------------------
+void reset_highest() 
+{
+  highest=([
+    M_LEVEL:0;GUILD_NPC,
+    M_SCORE:0;GUILD_NPC,
+    M_XP:0;GUILD_NPC,
+    M_EP:0;GUILD_NPC,
+    M_QP:QUESTMASTER->QueryAllQP();GUILD_NPC,
+    M_ABILITYS:LEARNABLE_SPELLS*MAX_ABILITY;GUILD_NPC,
+    M_GUILD_LEVEL:MAX_GUILD_LEVEL;GUILD_NPC]);
+  SaveList();
+}
+
+//-- Statistik ---------------------------------------------------------------
+mixed get_highest() {return highest;}
+mixed get_highest_level(){return ({highest[M_LEVEL, 0],highest[M_LEVEL, 1]});}
+mixed get_highest_xp()   {return ({highest[M_XP, 0],highest[M_XP, 1]});}
+mixed get_highest_ep()   {return ({highest[M_EP, 0],highest[M_EP, 1]});}
+mixed get_highest_score(){return ({highest[M_SCORE, 0],highest[M_SCORE, 1]});}
+
+//-- Ein Member hinzufuegen --------------------------------------------------
+int AddMember(object caster, string archenemy)
+{
+  int gl,lv,xp,ep,qp,sc, abilitys;
+  mixed m;
+  
+  if(!objectp(caster) || !interactive(caster) || 
+      member(members, getuid(caster)) )  {return 0;}
+  gl=caster->QueryProp(P_GUILD_LEVEL);
+  lv=caster->QueryProp(P_LEVEL);
+  xp=caster->QueryProp(P_XP);
+  ep=caster->QueryProp("ep_num");
+  qp=caster->QueryProp(P_QP);
+  sc=caster->Query("lp")/2;
+  test_highest(getuid(caster), lv, xp, ep, sc);
+  m=caster->Query(P_NEWSKILLS);
+  if(!mappingp(m)) m=([]);
+  abilitys=GetAbilitys(m[GUILD]);
+  members+=([getuid(caster): 
+               gl; lv; xp; ep; qp; sc; archenemy; 
+               0; ({}); ""; 1; ({}); abilitys; 0 ; 0; ""]);
+  SaveList();
+  return 1;  
+}
+
+//-- Ermittelt die Pfade des Rangers -----------------------------------------
+mixed GetPaths(string caster)
+{
+  string *m, *ret;
+  int i;
+
+  if(!member(members, caster)) {return 0;}
+
+  // pass by reference... darum kopiren
+  m = GetEntry(caster, M_PATHS);
+
+  ret = ({});
+  for(i=0;i<sizeof(m);++i) {
+    ret += ({m[i]});
+  }
+
+  return ret;
+}
+
+//-- Setzt die Pfade direkt (am besten nur fuer Gildenmagier) ----------------
+void SetPaths(string caster, mixed value)
+{
+  if(!member(members, caster)) {return 0;}
+  if(intp(value) && value==0) {value=({});}
+  SetEntry(caster, M_PATHS, value);
+}
+
+//-- Einen Pfad hinzufuegen (inc. Pruefung) ----------------------------------
+int AddPath(string caster, string path)
+{
+  mixed paths;
+  int gl;
+  mixed ob;
+  
+  if(!member(members, caster)) {return 0;}
+  if(!(objectp(ob=find_player(caster)) || objectp(ob=find_netdead(caster)))) 
+  {return 0;}
+
+  gl=ob->QueryProp(P_GUILD_LEVEL);
+  gl=(gl-6)/5;
+  path=CAP(path);
+  if(member(path_list, path) == -1) {return -1;} //den pfad gibt es nicht
+  paths=GetPaths(caster);
+  if(sizeof(paths)>=MAX_PATH_SIZE) {return -2;} //Maximum an Pfaden erreicht
+  //if(sizeof(paths)+1>gl) {return -3;} //Noch nicht mehr pfade erlaubt
+  if(member(paths,path) != -1) {return -4;} //der pfad ist schon betreten
+  paths+=({path});
+  SetPaths(caster, paths);
+  return 1;
+}
+//-- Einen Pfad entfernen ----------------------------------------------------
+int RemovePath(string caster, string path)
+{
+  mixed paths;
+  
+  path=CAP(path);
+  if(!member(members, caster)) {return 0;}
+  paths=GetPaths(caster);
+  paths-=({path});
+  SetPaths(caster, paths);
+  return 1;
+}
+
+//-- Einen Pfad verlassen ----------------------------------------------------
+int LeavePath(object ob, string path)
+{
+  mixed paths, ps;
+  mapping m;
+  int i;
+  string caster;
+  
+  caster=getuid(ob);
+  if(!member(members, caster)) {return 0;}
+  paths=GetPaths(caster);
+  if(member(paths, path) == -1) {return -1;} //war nicht auf dem pfad
+  RemovePath(caster, path);
+  m=ob->QueryProp(P_NEWSKILLS);
+  if(!mappingp(m)) m=([]);
+  if(!pointerp(ps=get_spells_to_path(path))) {return 0;}
+  for(i=0;i<sizeof(ps);i++)
+  { if(member(m, ps[i])) {m=m_delete(m, ps[i]);} }
+  ob->SetProp(P_NEWSKILLS, m);
+  return 1;
+}
+
+//-- Filterfunktion fuer das Loeschen ----------------------------------------
+int filter_func(mixed key, string caster) { return (to_string(key)==caster); }
+
+//-- Mitglied loeschen -------------------------------------------------------
+int RemoveMember(string caster)
+{
+  string path;
+  if(!member(members, caster)) {return 0;}
+  
+  savefile=filter_mapping(members, "filter_func", TO, caster);
+  save_object(MEMBERBACKUP+caster);
+  savefile=0;
+  
+  members=m_delete(members, caster);
+  SaveList();
+
+  path=MEMBERS_PETS+caster+".o";
+  if((file_size(path))>0) { rm(path); }
+  
+  return 1;  
+}
+
+//-- Mitglied wiederherstellen (nur fuer den Notfall, ergo deaktiviert) ------
+mixed RestoreMember(string caster)
+{
+  return 0; // Sollten wir besser nicht brauchen
+  
+  restore_object(MEMBERBACKUP+caster);
+  members+=savefile;
+  savefile=0;
+  return members;
+}
+
+//-- MitgliederListe ausgeben ------------------------------------------------
+mixed MemberList() {return m_indices(members);}  
+
+//-- PropertyWerte aendern ---------------------------------------------------
+int UpdateMember(string caster)
+{
+  mixed ob;
+  int gl, lv,xp,ep,qp,sc,ab;
+  mapping m;
+  
+  if(objectp(ob=get_caster(caster)))
+  {
+    gl=ob->QueryProp(P_GUILD_LEVEL);
+    lv=ob->QueryProp(P_LEVEL);
+    xp=ob->QueryProp(P_XP);
+    ep=ob->QueryProp("ep_num");
+    qp=ob->QueryProp(P_QP);
+    sc=ob->Query("lp")/2;
+     m=ob->Query(P_NEWSKILLS);
+    if(!mappingp(m)) m=([]);
+    ab=GetAbilitys(m[GUILD]);
+  }
+  else
+  {
+    if(is_wizard(caster)) {return 0;}
+    gl=SAVEMASTER->QueryFileProp(caster, P_GUILD_LEVEL);
+    lv=SAVEMASTER->QueryFileProp(caster, P_LEVEL);
+    xp=SAVEMASTER->QueryFileProp(caster, P_XP);
+    ep=SAVEMASTER->QueryFileProp(caster, "ep_num");
+    qp=SAVEMASTER->QueryFileProp(caster, P_QP);
+    sc=(SAVEMASTER->QueryFileProp(caster, "lp"))/2;
+     m=SAVEMASTER->QueryFileProp(caster, P_NEWSKILLS);
+    if(!mappingp(m)) m=([]);
+    ab=GetAbilitys(m[GUILD]);
+  }
+  test_highest(caster, lv, xp, ep, sc);
+  members[caster, M_GUILD_LEVEL]=gl;
+  members[caster, M_LEVEL]=lv;
+  members[caster, M_XP]=xp;
+  members[caster, M_EP]=ep;
+  members[caster, M_QP]=qp;
+  members[caster, M_SCORE]=sc;
+  members[caster, M_ABILITYS]=ab;
+  SaveList();
+  return 1;  
+}
+
+//-- Alle Spell/Skillability-werte (neu) errechnen ---------------------------
+int GetAbilitys(mapping m)
+{
+  mixed a, k; 
+  int i, res; 
+  
+  res=0;
+  if(!mappingp(m)) return res;
+  a=m_indices(m); 
+  for(i=0;i<sizeof(a);i++) 
+  { if(mappingp(k=m[a[i]])) { res+=k[SI_SKILLABILITY]; } }
+  return res;
+}
+
+//-- Einzelne Eintraege aendern ----------------------------------------------
+mixed SetEntry(string caster, mixed entry, mixed value)
+{
+  if(!member(members, caster)) {return 0;}
+  if(entry>=M_LAST_ENTRY) {return 0;}
+  members[caster, entry]=value;
+  SaveList();
+  return members[caster, entry];
+}
+
+//-- Einzelne Werte auslesen -------------------------------------------------
+mixed GetEntry(string caster, mixed entry)
+{
+  mixed ret;
+  if(!member(members, caster)) {return 0;}
+  if(entry>=M_LAST_ENTRY) {return 0;}
+  if(catch(ret=members[caster, entry]) != 0) return 0;
+  return ret;
+}
+
+//-- Wieviel Erfahrung wird benoetigt ----------------------------------------
+int GetNeededXp(string caster)
+{ int i;
+
+  i=GetEntry(caster, M_NEEDED_XP);
+  if(i<1) {
+     i=1; 
+  }
+  return i; 
+}
+
+//-- benoetigte Erfahrung wird gesetzt ---------------------------------------
+int SetNeededXp(string caster, int xp)
+{ if(xp<1) { xp=1; }
+  return SetEntry(caster, M_NEEDED_XP, xp); }
+
+//-- Gildenlevel umsetzen ----------------------------------------------------
+int SetGuildLevel(string caster, int gl)
+{ return SetEntry(caster, M_GUILD_LEVEL, gl); }
+
+//-- Welcher task ist gesetzt? -----------------------------------------------
+string GetTask(string caster)
+{
+  string res;
+  
+  res=GetEntry(caster, M_TASKS);
+  if(!stringp(res)) { res=""; }
+  return res;
+}
+
+//-- Gildentask erfuellt -----------------------------------------------------
+mixed SetTask(string caster, mixed value)
+{
+  string task;
+   
+  if(!intp(value)) return 0;
+  if(!stringp(task=GetTask(caster))) return 0;
+  value=limit(value,0,21);
+  task=set_bit(task, value);
+  return SetEntry(caster, M_TASKS, task);
+}
+
+//-- Welche Level vom exam_room schon bestanden? -----------------------------
+string GetExamRoom(string caster)
+{
+  mixed res;
+  
+  res=GetEntry(caster, M_EXAM_ROOM);
+  if(!stringp(res)) { res=""; }
+  return res;
+}
+
+//-- ExamRoom Level setzen ---------------------------------------------------
+mixed SetExamRoom(string caster, mixed value)
+{
+  if(!stringp(value)) { value=""; }
+  return SetEntry(caster, M_EXAM_ROOM, value);
+}
+
+//-- Namen fuer die Positionen-defines ausgeben ------------------------------
+string GetPosName(int position)
+{
+  if(position>M_LAST_ENTRY || position<0){return "Position gibt es nicht.\n";}
+  switch(position)
+  {
+    case M_GUILD_LEVEL:       return "Gildenstufe";         break;
+    case M_LEVEL:             return "Spielerlevel";        break;
+    case M_XP:                return "Erfahrungspunkte";    break;
+    case M_EP:                return "Forscherpunkte";      break;
+    case M_QP:                return "Abenteuerpunkte";     break;
+    case M_SCORE:             return "Kerben";              break;
+    case M_ARCHENEMY:         return "Erzfeind";            break;
+    case M_FREE_SKILLPOINTS:  return "Skillpunkte";         break;
+    case M_SKILLPOINTS:       return "SkillTree";           break;
+    case M_TASKS:             return "Gildenaufgaben";      break;
+    case M_NEEDED_XP:         return "Benoetigte XP";       break;
+    case M_PATHS:             return "Pfade";               break;
+    case M_ABILITYS:          return "Spellabilitys";       break;
+    case M_GUILD_RATING:      return "Gildenrating";        break;
+    case M_LAST_ENTRY:        return "EMPTY";               break;
+    case M_KILLED_ARCHENEMYS: return "getoetete Erzfeinde"; break;
+    case M_EXAM_ROOM:         return "Raum der Pruefung";   break;
+    case M_MASTERPATH:        return "Meisterpfad"; break;
+  }
+  return "Position gibt es nicht.\n";
+}
+
+//-- Liefert die Anzahl der Eintraege ----------------------------------------
+int sizeof_caster_entrys() {return M_LAST_ENTRY;}
+
+//-- Gibt die Eintraege eines Members aus (fuer Gildenmagier) ----------------
+string QueryMember2(string caster)
+{
+  int i, k;
+  string s, sa, left, right;
+  mixed m, a, err;
+  
+  if(!member(members, caster))
+  { return BS("'"+caster+"' nicht gefunden.");}
+  
+  left="%-20s"; right="%+58s";
+  
+  s=sprintf(left, "Name:");  s+=sprintf(right, CAP(caster)); s+="\n";
+  for(k=0;k<78;k++) {s+="-";} s+="\n";
+  for(i=0;i<M_LAST_ENTRY;i++)
+  {
+    s+=sprintf(left, GetPosName(i)+":");
+    err = catch(m=members[caster, i]);
+    if(err == "*Illegal index\n") {
+      m = 0;
+    }
+    if(pointerp(m))
+    {
+      if(sizeof(m)<1) {s+=sprintf(right, "LEER");}
+      else 
+      {
+        sa=implode(m, ", ");
+        sa=break_string(sa, 78, sprintf(left, ""));
+        s+="\n"+sa;
+      }
+    }
+    else if(mappingp(m))
+    { 
+      a=m_indices(m);
+      sa=a[0]+": ";
+      a=m_values(m);
+      sa=implode(a, ", ");
+      s+="\n"+sa;
+    }
+    if(stringp(m=to_string(m))) {s+=sprintf(right, m);}
+    s+="\n";
+    if(i==3 || i==7 || i==11)
+    { for(k=0;k<78;k++) {s+="-";} s+="\n";}
+  }
+  return s;
+}
+
+//-- Ordentliche Ausgabe von QueryMember -------------------------------------
+void QueryMember(string caster)
+{
+  string s;
+  
+  s=QueryMember2(caster); 
+  write(s);
+}
+
+//-- Backup anlegen ----------------------------------------------------------
+int Backup()
+{
+  savefile=members;
+  save_object(MEMBERBACKUP+to_string(time()));
+  savefile=0;
+  return 1;
+}
+//**************************************************************************//
+
+
+
+//** Erzfeind-Verwaltung ***************************************************//
+/*
+  Angebot an Feinden: Fee, Mensch, Elf, Dunkelelf, Zwerg, Oger, 
+                      Troll, Hobbit, Untoter, Fraggle, Echse, Ork
+*/
+//-- Welche Rassen darf man waehlen? -----------------------------------------
+mixed get_archenemy_list() {return archenemys;}
+
+//-- Setzt den Erzfeind um ---------------------------------------------------
+int SetArchenemy(string caster, mixed value)
+{
+  string *currentEnemies;
+
+  if(!member(members, caster)) {return 0;}
+
+  if(!value) {
+    SetEntry(caster, M_ARCHENEMY, ({}));
+    return 1;
+  }
+
+  if(stringp(value)) {
+    value=CAP(lower_case(value));
+    if(member(archenemys, value) == -1) {
+      return -1;
+    }
+    
+    currentEnemies = GetArchenemy(caster);
+    currentEnemies += ({ value });
+  } else if(pointerp(value)) {
+    currentEnemies = value;
+  } else {
+    return -2;
+  }
+  
+  
+  SetEntry(caster, M_ARCHENEMY, currentEnemies);
+  return 1;
+}
+
+//-- Welchen Erzfein hat der Spieler gesetzt? --------------------------------
+mixed GetArchenemy(string caster)
+{
+  mixed enemy;
+  if(!member(members, caster)) {return 0;}
+
+  enemy = GetEntry(caster, M_ARCHENEMY);
+  if(!pointerp(enemy) && enemy != 0) {
+    SetArchenemy(caster, ({ enemy }));
+    enemy = GetArchenemy(caster);
+  }
+
+  return GetEntry(caster, M_ARCHENEMY);
+}
+
+//-- Ist das Objekt ein Erzfeind des Spielers? -------------------------------
+int is_archenemy_of(string caster, object ob) {
+  mixed ae;
+  int i, j;
+
+  if(!objectp(ob)) return 0;
+  if(!ob->QueryProp(P_RACE)) return 0;
+
+  ae = GetArchenemy(caster);
+
+  if(stringp(ae)) {
+    return (ae==ob->QueryProp(P_RACE));
+  } else if(pointerp(ae)) {
+    for(i=0;i<sizeof(ae);i++) {
+      if(member(archenemys_ids[ae[i]], lower_case(ob->QueryProp(P_RACE))) >= 0) return 1;
+
+      for(j=0;j<sizeof(archenemys_ids[ae[i]]);j++) {
+        if(ob->id(archenemys_ids[ae[i]][j])) return 1;
+      }
+    }
+  }
+
+  return 0;
+}
+
+//-- Eine gruendliche Pruefung fuer Testzwecke und evtl. spaeter -------------
+int is_deeper_archenemy_of(string caster, object ob)
+{
+  mixed ae, race, ids;
+  int i;
+  
+  if(!ae=GetArchenemy(caster)) {return 0;}
+  if(!stringp(race=ob->QueryProp(P_RACE))) {return 0;}
+  if(ae==race) {return 1;}
+  ids=archenemys_ids[ae];
+  for(i=0;i<sizeof(ids);i++) {if(ob->id(ids[i])) {return 1;}}
+  return 0;
+}
+
+//-- Wieviele Erzfeinde wurden getoetet? -------------------------------------
+int GetKilledArchenemys(string caster)
+{
+  if(!member(members, caster)) {return 0;}
+  return GetEntry(caster, M_KILLED_ARCHENEMYS);
+}
+
+//-- Erzfeinde werden gesetzt ------------------------------------------------
+int SetKilledArchenemys(string caster, int value)
+{
+  if(!member(members, caster)) {return 0;}
+  SetEntry(caster, M_KILLED_ARCHENEMYS, value);
+  return 1;
+}
+
+//-- Erzfeindliste wird um eines erhoeht -------------------------------------
+varargs int IncKilledArchenemys(string caster, int level)
+{
+  if(!member(members, caster)) {return 0;}
+  if(!level) level = 1;
+
+  SetKilledArchenemys(caster, level+GetKilledArchenemys(caster));
+  return 1;
+}
+
+//-- Plural der Rassen -------------------------------------------------------
+string get_race_plural(string race)
+{
+  switch(CAP(race))
+  {
+    case "Bestie": return "Bestien"; break;
+    case "Daemon": return "Daemonen"; break;
+    case "Echse": return "Echsen";break;
+    case "Elementar": return "Elementare"; break;
+    case "Elf": return "Elfen";  break;
+    case "Fee": return "Feen"; break;
+    case "Fisch": return "Fische"; break;
+    case "Gaffo": return "Gaffos"; break;
+    case "Gott": return "Goetter"; break;
+    case "Insekt": return "Insekten"; break;
+    case "Oger": return "Oger";break;
+    case "Pflanze": return "Pflanzen"; break;
+    case "Tier": return "Tiere"; break;
+    case "Troll": return "Trolle"; break;
+    case "Untoter": return "Untote"; break;
+    case "Vogel": return "Voegel"; break;
+    case "Schlange": return "Schlangen"; break;
+    case "Zwerg": return "Zwerge"; break;
+    case "Mensch": return "Menschen"; break;
+    default: return race+"s"; break;
+  }
+}
+
+public string GetMasterAbility(string caster) {
+  return masterAbilities[caster];
+}
+
+public mixed SetMasterAbility(string caster, string ability) {
+  string associatedPath;
+  if(!member(members, caster)) return "Du bist kein Mitglied dieser Gilde.";
+
+  switch(ability) {
+    case MASTER_ABIILITY_VOICE_OF_NATURE:
+    case MASTER_ABIILITY_RAGE_OF_NATURE:
+      associatedPath = IAMA_PFAD;
+      break;
+    case MASTER_ABIILITY_CRITICAL_AIM:
+    case MASTER_ABIILITY_BACKOFF:
+      associatedPath = BOGEN_PFAD;
+      break;
+    case MASTER_ABIILITY_DEEP_BOND:
+    case MASTER_ABIILITY_POWERFUL_COMPANION:
+      associatedPath = TIERMEISTER_PFAD;
+      break;
+    case MASTER_ABIILITY_CRIPPLING_STRIKE:
+    case MASTER_ABIILITY_THOUSAND_CUTS:
+      associatedPath = MESSER_PFAD;
+      break;
+    case MASTER_ABIILITY_PERMANENT_SUMMON:
+    case MASTER_ABIILITY_IMPROVED_BINDING:
+      associatedPath = BESCHWOERER_PFAD;
+      break;
+    default:
+      return "Diesen Pfad gibt es nicht.";
+  }
+
+  if(!HasMasterPath(caster, associatedPath)) return "Du folgst nicht dem passenden Meisterpfad.";
+  if(masterAbilities[caster] != 0) return "Du hast bereits eine Meisterfertigkeit gelernt.";
+
+  masterAbilities[caster] = ability;
+  savefile = masterAbilities;
+  save_object(MASTERABILITY_FILE);
+  return 1;
+}
+
+public RemoveMasterAbility(string caster) {
+  if(!member(members, caster)) return "Du bist kein Mitglied dieser Gilde.";
+  if(masterAbilities[caster] == 0) return "Du hast keine Meisterfertigkeit gelernt.";
+
+  masterAbilities[caster] = 0;
+  savefile = masterAbilities;
+  save_object(MASTERABILITY_FILE);
+  return 1;
+}
+
+//**************************************************************************//

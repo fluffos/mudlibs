@@ -1,0 +1,644 @@
+// 01.02.00 Archon: - erstellt 
+/*
+ Rev 1.5 18.01.2003 Archon: anpassungen an sl
+*/
+
+#pragma strong_types
+
+#include "../spiel.h"
+#define SAVE_DAT    SPIEL "arco_karten"
+#define LOAD_DAT    SPIEL "arco.dat" 
+
+mixed karten;
+
+public string lesen();
+public void save();
+public void AddKarte(string name,int farbe,int kosten,int bedingung,
+                     int a1,int aa1,int a2,int aa2,int a3,int aa3,int a4,int aa4);
+public int liefere_anzahl();
+public string liefere_beschreibung(int wk,mixed pl,object pl_sieht,int front,int breite);
+public string liefere_beschreibung2(int wk,mixed pl,int breite);
+public mixed liefere_karte(int welche);
+private string liefere_aktion(int welche);
+private string liefere_bedingung(int welche);
+private string liefere_farbe(int farbe);
+private string liefere_zahl(int zahl,int aktion);
+public int kann_ausspielen(int wk,mixed pl);
+public int kann_ablegen(int wk,mixed pl);
+public int karte_abwerfen(int wk,mixed pl);
+public int neuer_zug(int wk,mixed pl);
+public void aktion_ausfuehren(int wk,mixed spielt,mixed gegner);
+private int bedingung_relevant(int welche);
+private int bedingung_erfuellt(int welche,mixed pl1,mixed pl2);
+private void aktion(int welche,int wieviel,mixed pl1,mixed pl2);
+private void schaden(int wieviel,mixed pl);
+private void ausfuehren(int wieviel,int was,mixed pl);
+public mixed* liefere_karten_ausspielen(mixed pl);
+
+private string output_farbe(object pl,string farbe,string text)
+{
+  return text;
+}
+
+void create()
+{
+  if (is_clone(ME)) call_out("remove",1);
+  seteuid(getuid(ME));
+  karten=({});
+  if (file_size(SAVE_DAT+".o")>-1)
+  {
+    restore_object(SAVE_DAT);
+  }
+}
+
+public void save()
+{
+  save_object(SAVE_DAT);
+}
+
+public string lesen()
+{
+  string *data;
+  string zeile;
+  int znum;
+  karten=({});
+  tell_object(find_living("archon"),LOAD_DAT);
+  if (!read_file(LOAD_DAT,++znum,1)) return "nichts gelesen - Error 1";
+  if (!read_file(LOAD_DAT,++znum,1)) return "nichts gelesen - Error 2";
+  while(zeile=read_file(LOAD_DAT,++znum,1))
+  {
+    data=efun::explode(zeile,"|");
+    if (sizeof(data)<12) continue;
+    karten+=({ ({data[0],to_int(data[1]),to_int(data[2]),
+                to_int(data[3]),to_int(data[4]),to_int(data[5]),
+                to_int(data[6]),to_int(data[7]),to_int(data[8]),
+                to_int(data[9]),to_int(data[10]),to_int(data[11]) }) });
+  }
+  save();
+  return "gelesen";
+}
+
+public void AddKarte(string name,int farbe,int kosten,int bedingung,
+                     int a1,int aa1,int a2,int aa2,int a3,int aa3,int a4,int aa4)
+{
+  if (!stringp(name)) return;
+  karten+=({ ({name,farbe,kosten,bedingung,a1,aa1,a2,aa2,a3,aa3,a4,aa4}) });
+  save();
+}
+
+public int liefere_anzahl()
+{
+  return sizeof(karten);
+}
+
+public mixed liefere_karte(int welche)
+{
+  if (welche<0) return -1;
+  if (welche>sizeof(karten)) return -1;
+  return karten[welche];  
+}
+
+//beschreibung fuer einen selbst - und fuer info-anzeige
+public string liefere_beschreibung(int wk,mixed pl1,object pl_sieht,int front,int breite)
+{
+  string beschreibung;
+  int l;
+  int welche;
+  string help;
+  welche=pl1[ARCO_KARTE1+wk];
+  if (welche<0 || welche>sizeof(karten)) 
+  {
+    beschreibung=to_string(wk+1)+": unbekannt";
+    l=strlen(beschreibung);
+    for (;l<breite;l++)
+    {
+      beschreibung+=" ";
+    }
+    return beschreibung;
+  }
+  l=0;
+  beschreibung="";
+  if (front)  //front zahl: mit zeigen?
+  {
+    if (kann_ausspielen(wk,pl1))
+    {
+      beschreibung=output_farbe(pl_sieht,INFO_COL4,to_string(wk+1))+": ";
+    }
+    else
+    {
+      beschreibung=to_string(wk+1)+": ";
+    }
+    l=3;
+  }
+  help=to_string(-karten[welche][2])+" "+liefere_farbe(karten[welche][1]);
+  l+=strlen(help);
+  beschreibung+=output_farbe(pl_sieht,INFO_COL2,help);
+  if (karten[welche][3])
+  {
+    help = liefere_bedingung(karten[welche][3]);
+    l += 2 + strlen(help);
+    beschreibung+="; "+help;
+    if (karten[welche][3]==BEDINGUNG_ABLEGEN1) 
+    {
+      beschreibung+=";";
+      l++;
+    }
+  }
+  else
+  {
+    beschreibung+=";";
+    l++;
+  }
+  if (karten[welche][5]) //eine aktion definiert
+  {
+    help=" "+liefere_zahl(karten[welche][4],karten[welche][5])+liefere_aktion(karten[welche][5]);
+    l+=strlen(help);
+    beschreibung+=help;
+  }
+  if (karten[welche][3] && karten[welche][7]) //gibt es auch ein else? bei steinbruch=steinbruch gegner zBsp nicht
+  {
+    beschreibung+=" sonst";
+    l+=6;
+  }
+  else
+  if (karten[welche][7]) //kommt denn noch was?
+  {
+    beschreibung+=";";
+    l+=1;
+  }
+  if (karten[welche][7]) //eine aktion definiert
+  {
+    help=" "+liefere_zahl(karten[welche][6],karten[welche][7])+liefere_aktion(karten[welche][7]);
+    l+=strlen(help);
+    beschreibung+=help;
+  }
+  if (karten[welche][3] && (karten[welche][9] || karten[welche][11]))
+  {
+    beschreibung+=" immer";
+    l+=6;
+  }
+  if (karten[welche][9]) //eine aktion definiert
+  {
+    help="; "+liefere_zahl(karten[welche][8],karten[welche][9])+liefere_aktion(karten[welche][9]);
+    l+=strlen(help);
+    beschreibung+=help;
+  }  
+  if (karten[welche][11]) //eine aktion definiert
+  {
+    help="; "+liefere_zahl(karten[welche][10],karten[welche][11])+liefere_aktion(karten[welche][11]);
+    l+=strlen(help);
+    beschreibung+=help;
+  }
+
+/*
+  beschreibung+=" ";
+  l++;
+  if (l+strlen(karten[welche][0])<breite+1)
+  {
+    l+=strlen(karten[welche][0]);
+    for (;l<breite;l++)
+    {
+      beschreibung+=" ";
+    }
+    beschreibung+=output_farbe(pl_sieht,INFO_COL5,karten[welche][0]);
+  }
+  else
+  {
+    for (;l<breite;l++)
+    {
+      beschreibung+=" ";
+    }
+  }
+*/
+
+  for (; l < breite; ++l)
+    beschreibung += " ";
+
+  return beschreibung;
+}
+
+//beschreibung fuer anzeige letzten 3 karten + log in npc-logic - ohne farben
+//karten_id bekannt
+public string liefere_beschreibung2_karten_id(int welche,int breite,int wk)
+{
+  string beschreibung;
+  int l;
+  string help;
+  if (welche<0 || welche>sizeof(karten)) 
+  {
+    beschreibung=to_string(wk+1)+": unbekannt";
+    l=strlen(beschreibung);
+    for (;l<breite;l++)
+    {
+      beschreibung+=" ";
+    }
+    return beschreibung;
+  }
+  l=0;
+  beschreibung="";
+  help=to_string(-karten[welche][2])+" "+liefere_farbe(karten[welche][1]);
+  l+=strlen(help);
+  beschreibung+=help;
+  if (karten[welche][3])
+  {
+    help = liefere_bedingung(karten[welche][3]);
+    l += 2 + strlen(help);
+    beschreibung += "; "+help;
+    if (karten[welche][3]==BEDINGUNG_ABLEGEN1) 
+    {
+      beschreibung+=";";
+      l++;
+    }
+  }
+  else
+  {
+    beschreibung+=";";
+    l++;
+  }
+  if (karten[welche][3] && (karten[welche][9] || karten[welche][11]))
+  {
+    beschreibung+=" immer";
+    l+=6;
+  }
+  if (karten[welche][5]) //eine aktion definiert
+  {
+    help=" "+liefere_zahl(karten[welche][4],karten[welche][5])+liefere_aktion(karten[welche][5]);
+    l+=strlen(help);
+    beschreibung+=help;
+  }
+  if (karten[welche][3] && karten[welche][7]) //gibt es auch ein else? bei steinbruch=steinbruch gegner zBsp nicht
+  {
+    beschreibung+=" sonst";
+    l+=6;
+  }
+  else
+  if (karten[welche][7]) //kommt denn noch was?
+  {
+    beschreibung+=";";
+    l+=1;
+  }
+  if (karten[welche][7]) //eine aktion definiert
+  {
+    help=" "+liefere_zahl(karten[welche][6],karten[welche][7])+liefere_aktion(karten[welche][7]);
+    l+=strlen(help);
+    beschreibung+=help;
+  }
+  if (karten[welche][9]) //eine aktion definiert
+  {
+    help="; "+liefere_zahl(karten[welche][8],karten[welche][9])+liefere_aktion(karten[welche][9]);
+    l+=strlen(help);
+    beschreibung+=help;
+  }  
+  if (karten[welche][11]) //eine aktion definiert
+  {
+    help="; "+liefere_zahl(karten[welche][10],karten[welche][11])+liefere_aktion(karten[welche][11]);
+    l+=strlen(help);
+    beschreibung+=help;
+  }
+  return beschreibung;
+}
+
+//beschreibung fuer anzeige letzten 3 karten + log in npc-logic - ohne farben
+public string liefere_beschreibung2(int wk,mixed pl1,int breite)
+{
+  return liefere_beschreibung2_karten_id(pl1[ARCO_KARTE1+wk],breite,wk);
+}
+
+private string liefere_aktion(int welche)
+{
+  switch (welche)
+  {
+    case AKTION_SCHADEN: return "Schaden";
+    case AKTION_SCHADEN_SELBST: return "Schaden selbst";
+    case AKTION_SCHADEN_ALLE: return "Schaden alle";
+    case AKTION_SCHADEN_TURM: return "Turmschaden";
+    case AKTION_SCHADEN_TURM_SELBST: return "Turmschaden selbst";
+    case AKTION_SCHADEN_TURM_ALLE: return "Turmschaden alle";
+    case AKTION_MAGIE: return "Magie Gegner";
+    case AKTION_MAGIE_SELBST: return "Magie";
+    case AKTION_MAGIE_ALLE: return "Magie alle";
+    case AKTION_STEINBRUCH: return "Steinbruch Gegner";
+    case AKTION_STEINBRUCH_SELBST: return "Steinbruch";
+    case AKTION_STEINBRUCH_ALLE: return "Steinbruch alle";
+    case AKTION_ZOO: return "Zoo Gegner";
+    case AKTION_ZOO_SELBST: return "Zoo";
+    case AKTION_ZOO_ALLE: return "Zoo alle";
+    case AKTION_STEINE: return "Steine Gegner";
+    case AKTION_STEINE_SELBST: return "Steine";
+    case AKTION_STEINE_ALLE: return "Steine alle";
+    case AKTION_JUWELEN: return "Juwelen Gegner";
+    case AKTION_JUWELEN_SELBST: return "Juwelen";
+    case AKTION_JUWELEN_ALLE: return "Juwelen alle";
+    case AKTION_MONSTER: return "Monster Gegner";
+    case AKTION_MONSTER_SELBST: return "Monster";
+    case AKTION_MONSTER_ALLE: return "Monster alle";
+    case AKTION_TURM: return "Turm Gegner";
+    case AKTION_TURM_SELBST: return "Turm";
+    case AKTION_TURM_ALLE: return "Turm alle";
+    case AKTION_MAUER: return "Mauer Gegner";
+    case AKTION_MAUER_SELBST: return "Mauer";
+    case AKTION_MAUER_ALLE: return "Mauer alle";
+    case AKTION_NEUER_ZUG: return "Zug";
+    case AKTION_ABLEGEN: return "Karte ablegen";
+    case AKTION_ZIEHEN: return "Karte ziehen";
+    case AKTION_RESOURCEN: return "Rohstoffen Gegner";
+    case AKTION_RESOURCEN_SELBST: return "Rohstoffe";
+    case AKTION_RESOURCEN_ALLE: return "Rohstoffe alle";
+    case AKTION_GLEICHGEWICHT: return "Magie aller=hoechste Magie";
+    case AKTION_SCHADEN_MAUER: return "Mauerschaden";
+    case AKTION_SCHADEN_MAUER_SELBST: return "Mauerschaden selbst";
+    case AKTION_SCHADEN_MAUER_ALLE: return "Mauerschaden alle";
+    case AKTION_STEINBRUCH_STEINBRUCH_GEGNER: return "Steinbruch=Steinbruch Gegner";
+    case AKTION_MAUERTAUSCH: return "Mauer mit Gegner tauschen";
+    case AKTION_KLEINSTE_MAUER: return "Spieler mit kleinster Mauer -1 Zoo; 2 Turmschaden bei Gegner";
+  }
+  return "unbekannt";
+}
+
+private string liefere_bedingung(int welche)
+{
+  switch (welche)
+  {
+    case BEDINGUNG_MAUER1: return "Wenn Mauer=0";
+    case BEDINGUNG_MAGIE1: return "Wenn Magie>Magie Gegner";
+    case BEDINGUNG_MAUER2: return "Wenn Mauer Gegner>0";
+    case BEDINGUNG_STEINBRUCH1: return "Wenn Steinbruch<St. Gegner";
+    case BEDINGUNG_MAUER3: return "Wenn Mauer Gegner=0";
+    case BEDINGUNG_MAUER4: return "Wenn Mauer>Mauer Gegner";
+    case BEDINGUNG_ABLEGEN1: return "Karte darf nicht abgeworfen werden";
+    case BEDINGUNG_TURM1: return "Wenn Turm<Turm Gegner";
+    case BEDINGUNG_TURM2: return "Wenn Turm>Mauer Gegner";
+    case BEDINGUNG_ZOO1: return "Wenn Zoo<Zoo Gegner";
+  }
+  return "unbekannt";
+}
+
+private string liefere_farbe(int welche)
+{
+  switch(welche)
+  {
+    case FARBE_ROT: return "Steine";
+    case FARBE_BLAU: return "Juwelen";
+  }
+  return "Monster";
+}
+
+private string liefere_zahl(int zahl,int aktion)
+{
+  switch(aktion)
+  {
+    case AKTION_GLEICHGEWICHT:
+    case AKTION_STEINBRUCH_STEINBRUCH_GEGNER:
+    case AKTION_KLEINSTE_MAUER:
+    case AKTION_MAUERTAUSCH:
+      return "";
+  }
+  return to_string(zahl)+" ";
+}
+
+public int kann_ausspielen(int wk,mixed pl1)
+{
+  int welche;
+  welche=pl1[ARCO_KARTE1+wk];
+  if (pl1[ARCO_STEINE+karten[welche][1]-1]>=karten[welche][2]) return 1;
+  return 0;
+}
+
+public int kann_abwerfen(int wk,mixed pl1)
+{
+  int welche;
+  welche=pl1[ARCO_KARTE1+wk];
+  return (karten[welche][KARTE_BEDINGUNG]!=BEDINGUNG_ABLEGEN1);
+}
+
+public int karte_abwerfen(int wk,mixed pl1)
+{
+  int welche;
+  welche=pl1[ARCO_KARTE1+wk];
+  if (karten[welche][5]==AKTION_ABLEGEN) return 1;
+  if (karten[welche][7]==AKTION_ABLEGEN) return 1;
+  if (karten[welche][9]==AKTION_ABLEGEN) return 1;
+  if (karten[welche][11]==AKTION_ABLEGEN) return 1;
+  return 0;
+}
+
+public int neuer_zug(int wk,mixed pl1)
+{
+  int welche;
+  welche=pl1[ARCO_KARTE1+wk];
+  if (karten[welche][5]==AKTION_NEUER_ZUG) return 1;
+  if (karten[welche][7]==AKTION_NEUER_ZUG) return 1;
+  if (karten[welche][9]==AKTION_NEUER_ZUG) return 1;
+  if (karten[welche][11]==AKTION_NEUER_ZUG) return 1;
+  return 0;
+}
+
+public void aktion_ausfuehren_karte(int welche,mixed spielt,mixed gegner)
+{ //fuer npc wo karten_id bekannt
+  spielt[ARCO_STEINE+karten[welche][1]-1]-=karten[welche][2]; //kosten abziehen
+  
+  if (bedingung_relevant(karten[welche][3]))
+  {
+    if (bedingung_erfuellt(karten[welche][3],spielt,gegner))
+    { //aktion 1 ausfuehren
+    	aktion(karten[welche][5],karten[welche][4],spielt,gegner);
+    }
+    else
+    {  //aktion 2 ausfuehren
+   	aktion(karten[welche][7],karten[welche][6],spielt,gegner);
+    }
+    //die 2 anderen immer ausfuehren
+    aktion(karten[welche][9],karten[welche][8],spielt,gegner); 
+    aktion(karten[welche][11],karten[welche][10],spielt,gegner);  
+    return;
+  }  //keine bedingungen
+  aktion(karten[welche][5],karten[welche][4],spielt,gegner);
+  aktion(karten[welche][7],karten[welche][6],spielt,gegner);
+  aktion(karten[welche][9],karten[welche][8],spielt,gegner);
+  aktion(karten[welche][11],karten[welche][10],spielt,gegner);  
+}
+
+public void aktion_ausfuehren(int wk,mixed spielt,mixed gegner)
+{ //fuer spieler mit karten_id in hand
+  int welche;
+  welche=spielt[ARCO_KARTE1+wk];
+  aktion_ausfuehren_karte(welche,spielt,gegner);
+}
+
+private int bedingung_relevant(int welche)
+{
+  switch (welche)
+  {
+    case BEDINGUNG_MAUER1: return 1;
+    case BEDINGUNG_MAGIE1: return 1;
+    case BEDINGUNG_MAUER2: return 1;
+    case BEDINGUNG_STEINBRUCH1: return 1;
+    case BEDINGUNG_MAUER3: return 1;
+    case BEDINGUNG_MAUER4: return 1;
+    case BEDINGUNG_TURM1: return 1;
+    case BEDINGUNG_TURM2: return 1;
+    case BEDINGUNG_ZOO1: return 1;
+  }
+  return 0;
+}
+
+private int bedingung_erfuellt(int welche,mixed pl1,mixed pl2)
+{
+  switch (welche)
+  {
+    case BEDINGUNG_MAUER1: return (pl1[ARCO_MAUER]==0);
+    case BEDINGUNG_MAGIE1: return (pl1[ARCO_MAGIE]>pl2[ARCO_MAGIE]);
+    case BEDINGUNG_MAUER2: return (pl2[ARCO_MAUER]>0);
+    case BEDINGUNG_STEINBRUCH1: return (pl1[ARCO_STEINBRUCH]<pl2[ARCO_STEINBRUCH]);
+    case BEDINGUNG_MAUER3: return (pl2[ARCO_MAUER]==0);
+    case BEDINGUNG_MAUER4: return (pl1[ARCO_MAUER]>pl2[ARCO_MAUER]);
+    case BEDINGUNG_TURM1: return (pl1[ARCO_TURM]<pl2[ARCO_TURM]);
+    case BEDINGUNG_TURM2: return (pl1[ARCO_TURM]>pl2[ARCO_MAUER]);
+    case BEDINGUNG_ZOO1: return (pl1[ARCO_ZOO]<pl2[ARCO_ZOO]);
+  }
+  return 0;
+}
+
+private void aktion(int welche,int wieviel,mixed pl1,mixed pl2)
+{
+  int help;
+  switch(welche)
+  {
+    case AKTION_SCHADEN: schaden(wieviel,pl2); break;
+    case AKTION_SCHADEN_SELBST: schaden(wieviel,pl1); break;
+    case AKTION_SCHADEN_ALLE: schaden(wieviel,pl1); schaden(wieviel,pl2); break;
+    case AKTION_SCHADEN_TURM: ausfuehren(-wieviel,ARCO_TURM,pl2); break;
+    case AKTION_SCHADEN_TURM_SELBST: ausfuehren(-wieviel,ARCO_TURM,pl1); break;
+    case AKTION_SCHADEN_TURM_ALLE: ausfuehren(-wieviel,ARCO_TURM,pl1); ausfuehren(-wieviel,ARCO_TURM,pl2); break;
+    case AKTION_MAGIE: ausfuehren(wieviel,ARCO_MAGIE,pl2); break;
+    case AKTION_MAGIE_SELBST: ausfuehren(wieviel,ARCO_MAGIE,pl1); break;
+    case AKTION_MAGIE_ALLE: ausfuehren(wieviel,ARCO_MAGIE,pl1); ausfuehren(wieviel,ARCO_MAGIE,pl2); break;
+    case AKTION_STEINBRUCH: ausfuehren(wieviel,ARCO_STEINBRUCH,pl2); break;
+    case AKTION_STEINBRUCH_SELBST: ausfuehren(wieviel,ARCO_STEINBRUCH,pl1); break;
+    case AKTION_STEINBRUCH_ALLE: ausfuehren(wieviel,ARCO_STEINBRUCH,pl1); ausfuehren(wieviel,ARCO_STEINBRUCH,pl2); break;
+    case AKTION_ZOO: ausfuehren(wieviel,ARCO_ZOO,pl2); break;
+    case AKTION_ZOO_SELBST: ausfuehren(wieviel,ARCO_ZOO,pl1); break;
+    case AKTION_ZOO_ALLE: ausfuehren(wieviel,ARCO_ZOO,pl1); ausfuehren(wieviel,ARCO_ZOO,pl2); break;
+    case AKTION_STEINE: ausfuehren(wieviel,ARCO_STEINE,pl2); break;
+    case AKTION_STEINE_SELBST: ausfuehren(wieviel,ARCO_STEINE,pl1); break;
+    case AKTION_STEINE_ALLE: ausfuehren(wieviel,ARCO_STEINE,pl1); ausfuehren(wieviel,ARCO_STEINE,pl2); break;
+    case AKTION_JUWELEN: ausfuehren(wieviel,ARCO_JUWELEN,pl2); break;
+    case AKTION_JUWELEN_SELBST: ausfuehren(wieviel,ARCO_JUWELEN,pl1); break;
+    case AKTION_JUWELEN_ALLE: ausfuehren(wieviel,ARCO_JUWELEN,pl1); ausfuehren(wieviel,ARCO_JUWELEN,pl2); break;
+    case AKTION_MONSTER: ausfuehren(wieviel,ARCO_MONSTER,pl2); break;
+    case AKTION_MONSTER_SELBST: ausfuehren(wieviel,ARCO_MONSTER,pl1); break;
+    case AKTION_MONSTER_ALLE: ausfuehren(wieviel,ARCO_MONSTER,pl1); ausfuehren(wieviel,ARCO_MONSTER,pl2); break;
+    case AKTION_TURM: ausfuehren(wieviel,ARCO_TURM,pl2); break;
+    case AKTION_TURM_SELBST: ausfuehren(wieviel,ARCO_TURM,pl1); break;
+    case AKTION_TURM_ALLE: ausfuehren(wieviel,ARCO_TURM,pl1); ausfuehren(wieviel,ARCO_TURM,pl2); break;
+    case AKTION_MAUER: ausfuehren(wieviel,ARCO_MAUER,pl2); break;
+    case AKTION_MAUER_SELBST: ausfuehren(wieviel,ARCO_MAUER,pl1); break;
+    case AKTION_MAUER_ALLE: ausfuehren(wieviel,ARCO_MAUER,pl1); ausfuehren(wieviel,ARCO_MAUER,pl2); break;
+    case AKTION_NEUER_ZUG: break;
+    case AKTION_ABLEGEN: break;
+    case AKTION_ZIEHEN: break;
+    case AKTION_RESOURCEN: ausfuehren(wieviel,ARCO_STEINE,pl2); ausfuehren(wieviel,ARCO_JUWELEN,pl2); 
+                           ausfuehren(wieviel,ARCO_MONSTER,pl2); break;
+    case AKTION_RESOURCEN_SELBST: ausfuehren(wieviel,ARCO_STEINE,pl1); ausfuehren(wieviel,ARCO_JUWELEN,pl1); 
+                           ausfuehren(wieviel,ARCO_MONSTER,pl1); break;
+    case AKTION_RESOURCEN_ALLE: ausfuehren(wieviel,ARCO_STEINE,pl1); ausfuehren(wieviel,ARCO_JUWELEN,pl1); 
+                           ausfuehren(wieviel,ARCO_MONSTER,pl1); ausfuehren(wieviel,ARCO_STEINE,pl2); 
+                           ausfuehren(wieviel,ARCO_JUWELEN,pl2); ausfuehren(wieviel,ARCO_MONSTER,pl2); break;
+    case AKTION_GLEICHGEWICHT: if (pl1[ARCO_MAGIE]>pl2[ARCO_MAGIE]) pl2[ARCO_MAGIE]=pl1[ARCO_MAGIE]; else pl1[ARCO_MAGIE]=pl2[ARCO_MAGIE]; break;
+    case AKTION_SCHADEN_MAUER: ausfuehren(-wieviel,ARCO_MAUER,pl2); break;
+    case AKTION_SCHADEN_MAUER_SELBST: ausfuehren(-wieviel,ARCO_MAUER,pl1); break;
+    case AKTION_SCHADEN_MAUER_ALLE: ausfuehren(-wieviel,ARCO_MAUER,pl1); ausfuehren(-wieviel,ARCO_MAUER,pl2); break;
+    case AKTION_STEINBRUCH_STEINBRUCH_GEGNER: pl1[ARCO_STEINBRUCH]=pl2[ARCO_STEINBRUCH]; break;
+    case AKTION_MAUERTAUSCH: help=pl1[ARCO_MAUER]; pl1[ARCO_MAUER]=pl2[ARCO_MAUER]; pl2[ARCO_MAUER]=help; break;
+    case AKTION_KLEINSTE_MAUER: if (pl1[ARCO_MAUER]<pl2[ARCO_MAUER])
+    				{ ausfuehren(-1,ARCO_ZOO,pl1); }
+    				else
+    				if (pl1[ARCO_MAUER]>pl2[ARCO_MAUER])
+    				{ ausfuehren(-1,ARCO_ZOO,pl2); } 
+    				ausfuehren(-2,ARCO_TURM,pl2);
+    				break;
+    				
+  }
+}
+
+//verrechnet schaden und passt auf das nix <0 wird
+private void schaden(int wieviel,mixed pl)
+{
+  int m;
+  m=pl[ARCO_MAUER];
+  if (m>=wieviel) 
+  {
+    pl[ARCO_MAUER]=m-wieviel;
+  }
+  else
+  {
+    wieviel-=m;
+    pl[ARCO_MAUER]=0;
+    pl[ARCO_TURM]-=wieviel;
+    if (pl[ARCO_TURM]<0) pl[ARCO_TURM]=0;
+  }
+}
+
+//aendert die resourcen die je runde dazu kommen passt auf das nix <0 wird
+private void ausfuehren(int wieviel,int was,mixed pl)
+{
+  pl[was]+=wieviel;
+  if (pl[was]<0) pl[was]=0;
+  switch(was)
+  {
+    case ARCO_MAGIE: if (pl[was]<1) pl[was]=1; break;
+    case ARCO_ZOO: if (pl[was]<1) pl[was]=1; break;
+    case ARCO_STEINBRUCH: if (pl[was]<1) pl[was]=1; break;
+  }
+}
+
+//fuer logik in npc
+public mixed *liefere_karten_ausspielen(mixed pl)
+{
+  int i;
+  mixed *liste;
+  int abwerfen;
+  int welche;
+  liste=({});
+  for (i=0;i<6;i++)
+  {
+    welche=pl[ARCO_KARTE1+i];
+    abwerfen=(karten[welche][KARTE_BEDINGUNG]!=BEDINGUNG_ABLEGEN1);
+    if (pl[ARCO_STEINE+karten[welche][1]-1]>=karten[welche][2]) 
+    {
+    	liste+= ({ ({welche,0,i,1,abwerfen,0}) }); //({karte_id,prio,kartennr_in_hand,kann_spielen,kann_abwerfen,runden_bis_spielen})
+    	//spielbare haben automatisch ersteinmal hoehere prio
+    }
+    else
+    {
+    	liste+= ({ ({welche,0,i,0,abwerfen,0}) }); //({karte_id,prio,kartennr_in_hand,kann_spielen,kann_abwerfen,runden_bis_spielen})
+    }
+  }
+  return liste;
+}
+
+//wenn karten_id bekannt
+public int kann_ausspielen2(int welche,mixed pl1)
+{
+  if (pl1[ARCO_STEINE+karten[welche][1]-1]>=karten[welche][2]) return 1;
+  return 0;
+}
+
+//kann danach noch ein zug gespielt werden - wenn karten_id bekannt
+public int neuer_zug2(int welche)
+{
+  if (karten[welche][5]==AKTION_NEUER_ZUG) return 1;
+  if (karten[welche][7]==AKTION_NEUER_ZUG) return 1;
+  if (karten[welche][9]==AKTION_NEUER_ZUG) return 1;
+  if (karten[welche][11]==AKTION_NEUER_ZUG) return 1;
+  return 0;
+}
+
+public int karte_abwerfen_zwang(int welche)
+{
+  if (karten[welche][5]==AKTION_ABLEGEN) return 1;
+  if (karten[welche][7]==AKTION_ABLEGEN) return 1;
+  if (karten[welche][9]==AKTION_ABLEGEN) return 1;
+  if (karten[welche][11]==AKTION_ABLEGEN) return 1;
+  return 0;
+}

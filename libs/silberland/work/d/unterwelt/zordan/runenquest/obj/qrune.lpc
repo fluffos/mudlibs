@@ -1,0 +1,417 @@
+
+/*
+
+  Das Questitem fuer die Runenquest Zordan@SL
+
+*/
+
+#include "../def.h"
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include <wizlevels.h>
+
+nosave int *orte;       // enthaelt die Nummer der Orte wo die Runen liegen
+nosave int *found;      // =0 Rune noch nicht gefunden, =1 Rune gefunden
+nosave int *stelle;     // die Stelle, welches zeichen fehlt
+nosave int *position;   // An welche Stelle hat der Spieler die Rune eingesetzt ?
+nosave int *runenr;     // Welche Rune hat der Spieler eingesetzt ?
+
+nosave int gefragt;
+
+nosave string *woerter; // Liste der Woerter die der SPieler bekommt
+nosave string *zeichen; // Das Zeichen was fehlt
+nosave string *bloecke; // Die Woerter ohne die Zeichen
+nosave string *zauber;     // die Dunkelzauberliste
+nosave string zauberwort;  // das questwort um zu beenden
+nosave string *alphabet;   // Das Alphabet zum scrambeln
+
+nosave string frage;
+
+nosave mapping scram;
+
+#define alphabetdef ({ "","a","b","c","d","e","f","g","h","i","j","k","l","m", \
+              "n","o","p","q","r","s","t","u","v","w","x","y","z" })
+
+init() {
+  ::init();
+  if (MENV && !query_once_interactive(MENV)) call_out("remove",0);
+}
+
+create() {
+  if (!is_clone(TO)) return;
+  ::create();
+
+  orte=({ 0,1,2,3,4,5,6,7,8 });
+  found=({ 0,0,0,0,0 });
+  stelle=({ 0,0,0,0,0 });
+  runenr=({ 0,0,0,0,0 });
+  position=({ -1,-1,-1,-1,-1 });
+
+  bloecke=({ "","","","","" });
+  zeichen=({ "","","","","" });
+
+  woerter=({
+    "","lloth","dunkelheit","dhrkion","spinne","goettin","gebet",
+    "zunnxa","finster","boese","licht","sonne","strahl",
+    "fies","stadt","hoehle","unterwelt","zauber","magie","runen",
+    "hoelle","dunkelelf","gnome","macht","koenigin","silberland",
+    "fledermaus", "mystixfis" });
+
+  zauber=({
+    "","sedda","shardin","walpurgis","gefjon","wetterwachs","lotu-varia",
+    "lena","baaleth","serona","salina"});
+
+  alphabet=alphabetdef;
+
+  gefragt=0;
+  frage="";
+
+  scram=([ ]);
+
+  SetProp(P_SHORT, 0);
+  SetProp(P_LONG,  0);
+  SetProp(P_NAME, "");
+  SetProp(P_GENDER, NEUTER);
+  AddId( ({ QUESTRUNE }) );
+
+  SetProp(P_MATERIAL, MAT_MISC );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+}
+
+
+// wir generieren alle variablen, start der quest
+
+int startquest() {
+  int temp,s1,s2,i,j,k,l;
+  string str;
+
+  orte=({ 0,1,2,3,4,5,6,7,8 });
+  found=({ 0,0,0,0,0 });
+  stelle=({ 0,0,0,0,0 });
+  position=({ -1,-1,-1,-1,-1 });
+  runenr=({ 0,0,0,0,0 });
+
+  zeichen=({ "","","","","" });
+  bloecke=({ "","","","","" });
+
+  gefragt=0;
+  frage="";
+
+  j=sizeof(woerter)-1;
+  k=sizeof(zauber)-1;
+  l=sizeof(alphabet)-1;
+  for (i=0;i<500;i++) {
+    s1=random(8)+1;
+    s2=random(8)+1;
+    temp=orte[s1];
+    orte[s1]=orte[s2];
+    orte[s2]=temp;
+    s1=random(j)+1;
+    s2=random(j)+1;
+    str=woerter[s1];
+    woerter[s1]=woerter[s2];
+    woerter[s2]=str;
+    s1=random(k)+1;
+    s2=random(k)+1;
+    str=zauber[s1];
+    zauber[s1]=zauber[s2];
+    zauber[s2]=str;
+    s1=random(l)+1;
+    s2=random(l)+1;
+    str=alphabet[s1];
+    alphabet[s1]=alphabet[s2];
+    alphabet[s2]=str;
+  }
+
+  zauberwort=zauber[1];
+/* Frauenname nicht wuerfeln, das ist einfach VIEL zu schwer !!!
+  k=strlen(zauberwort);
+  for (i=1;i<100;i++) {
+    s1=random(k);
+    s2=random(k);
+    str=zauberwort[s1..s1];
+    zauberwort[s1..s1]=zauberwort[s2..s2];
+    zauberwort[s2..s2]=str;
+  }
+*/
+  while( (zeichen[1]==zeichen[2]) || (zeichen[1]==zeichen[3]) ||
+         (zeichen[1]==zeichen[4]) || (zeichen[2]==zeichen[3]) ||
+         (zeichen[2]==zeichen[4]) || (zeichen[3]==zeichen[4]) ) {
+    for (i=1;i<5;i++) {
+      s1=random(strlen(woerter[i]));
+      stelle[i]=s1;
+      zeichen[i]=woerter[i][s1..s1];
+    }
+  }
+  for (i=1;i<5;i++) {
+    s1=stelle[i];
+    bloecke[i]=woerter[i][0..s1-1]+woerter[i][s1+1..];
+  }
+  for (i=1;i<sizeof(alphabet);i++) {
+    scram[alphabetdef[i],0]=alphabet[i];
+  }
+
+  write_file(LOG "quest.log",
+    ctime()+": "+CAP(getuid(TP))+" beginnt die Runenquest.\n");
+  return 1;
+}
+
+
+// nur zu testzwecken eine ausgabe fuer magier
+
+void getquest() {
+  int i;
+
+  if(!IS_LORD(TP))
+  {
+    write_file(LOG "security.log",
+      ctime()+": "+CAP(getuid(TP))+" schaute sich getquest() an!\n");
+
+    return;
+  }
+
+  write("\n");
+  for (i=1;i<5;i++) {
+    write(woerter[i]+": "+zeichen[i]+" ("+stelle[i]+") -> "+bloecke[i]+" bei "+orte[i]);
+    if (found[i]==1) write(" gefunden");
+    if (runenr[i]==i) write(" + richtiger Block");
+    if (position[i]==stelle[i]) write(" + richtige Stelle");
+    write("\n");
+  }
+  write(zauberwort+"\n");
+  printf("%O\n",scram);
+}
+
+
+// scramble des Alphabetes
+
+nosave string scramble(string str) {
+  int i;
+  string out;
+  if (!str) return "";
+  out="";
+  for (i=0;i<strlen(str);i++) {
+    out+=scram[str[i..i],0];
+  }
+  return out;
+}
+
+
+// alle runen am richten block an der richtigen stelle ?
+
+int checkall() {
+    // alle 4 runen gefunden ?
+    // an den richtigen bloecken eingesetz ?
+    // und an der richtigen stelle eingesetz ?
+  if ( (found[1]==1) && (found[2]==1)  && (found[3]==1)  && (found[4]==1) &&
+       (position[1]==stelle[1]) && (position[2]==stelle[2]) &&
+       (position[3]==stelle[3]) && (position[4]==stelle[4]) &&
+       (runenr[1]==1) && (runenr[2]==2) && (runenr[3]==3) && (runenr[4]==4))
+    return 1;
+  return 0;
+}
+
+
+// wurde die rune hier schon gefunden ?
+
+int foundrune(int ort) { // ort = wo versteck gefunden
+  int nr,i;
+  nr=0;
+  for(i=1;i<5;i++) {
+      // wurde an diesem ort schon rune gefunden ?
+      // ist dieser ort einer der loesungsorte ?
+    if ((found[i]==0) && (orte[i]==ort)) {
+      nr=i;        // um in der rune den richtigen ort zu setzen
+      found[i]=1;  // und gefunden haben wir sie auch
+    }
+  }
+  return nr;  // rueckgabe=nr in orte (0-4) in rune zu setzen
+}
+
+
+// ist eine rune am ort ?
+
+int runehier(int ort) { // ort = wo versteck gefunden
+  int nr,i;
+  nr=0;
+  for(i=1;i<5;i++) {
+      // wurde an diesem ort schon rune gefunden ?
+      // ist dieser ort einer der loesungsorte ?
+    if ((found[i]==0) && (orte[i]==ort)) {
+      nr=i;        // um in der rune den richtigen ort zu setzen
+    }
+  }
+  return nr;  // rueckgabe=nr in orte (0-4) in rune zu setzen
+}
+
+
+// ausgabe wenn steinblock angesehen wird
+
+string schaueblock(int nr) {  // nr=ort wo der spieler schaut
+  int rune,wo;
+  string temp;
+    // ist eine rune eingesetzt ?
+  if (runenr[nr] != 0) {
+    rune=runenr[nr];
+    wo=position[nr];
+    temp=bloecke[nr][0..wo-1]+zeichen[rune]+bloecke[nr][wo..];
+    return RUNENMASTER->translate(scramble(temp))
+           +"\n"+BS("Du hast hier eine Rune eingesetzt, die Du wieder an "
+                    "Dich nehmen koenntest.");
+  }
+  return RUNENMASTER->translate(scramble(bloecke[nr]))
+         +"\n"+BS("Irgendwie ueberkommt Dich das Gefuehl, das an einer Stelle "
+                  "eine Rune fehlt und Du sie einsetzen solltest.");
+}
+
+
+// einsetzen einer rune in einen steinblock
+
+int setzrune(int ort,object rune,int pos) {
+    // wurde schon eine rune eingesetzt ?
+  if (runenr[ort] != 0) return 0;
+  if ((pos < 0) || (pos > strlen(bloecke[ort]))) return 0;
+  runenr[ort]=rune->getrune();
+  position[ort]=pos;
+  rune->remove();
+  return 1;
+}
+
+
+// eine rune von einem block nehmen
+
+int nimmrune(int ort) {
+  int temp;
+  object ob;
+  temp=runenr[ort];
+    // ist ueberhaupt eine rune da ?
+  if (temp == 0) return 0;
+  position[ort]=-1;
+  runenr[ort]=0;
+  ob=clone_object( OBJ "rune" );
+  ob->SetProp(P_LONG,RUNENMASTER->translate(scramble(zeichen[temp])));
+  ob->setrune(temp);
+  ob->move(TP,M_NOCHECK);
+  return temp;
+}
+
+
+// der Spieler findet evtl eine der runen
+
+int neuerune(int ort) {
+  int found;
+  object ob;
+  string lang;
+  found=foundrune(ort);
+    // erstmal schauen ob man hier ueberhaupt eine rune findet
+  if (!found) return 0;
+  ob=clone_object( OBJ "rune" );
+  ob->SetProp(P_LONG,RUNENMASTER->translate(scramble(zeichen[found])));
+  ob->setrune(found);
+  ob->move(TP,M_NOCHECK);
+    // goodie, spieler hat rune vom 'found' bei 'ort' gefunden
+  write_file(LOG "runen.found",
+    ctime()+": "+CAP(getuid(TP))+" findet eine Rune ("+found+").\n");
+  return 1;
+}
+
+
+// die uebersetzung der priesterin
+
+void priesterin(string str) {
+  int i,ok;
+  if (gefragt==0) {
+    ok=1;
+    for (i=1;i<5;i++)
+      if (strstr(str,zeichen[i]) != -1) ok=0;
+    if (str[0]==str[1] || str[0]==str[2] || str[0]==str[3] ||
+        str[0]==str[4] || str[0]==str[5] || str[1]==str[2] ||
+        str[1]==str[3] || str[1]==str[4] || str[1]==str[5] ||
+        str[2]==str[3] || str[2]==str[4] || str[2]==str[5] ||
+        str[3]==str[4] || str[3]==str[5] || str[4]==str[5]) ok=0;
+    if (ok==0) {
+      write(break_string(
+        "Du solltest die Buchstaben fuer die Uebersetzung besser "
+        "auswaehlen!",78,"Die Priesterin raet: "));
+      return;
+    }
+    frage=str;
+    gefragt=1;
+    write("Die Priesterin sagt: In dieser Reigenfolge sind das diese Runen:\n");
+    write(RUNENMASTER->translate(scramble(str)));
+    return;
+  }
+  write("Die Priesterin sagt: Du hast von mir schon folgende Uebersetzung bekommen.\n");
+  write("Die Priesterin sagt: "+frage+" war uebersetzt:\n" );
+  write(RUNENMASTER->translate(scramble(frage)));
+  return;
+}
+
+
+// zeige das zauberwort
+
+void showzauber() {
+  write(RUNENMASTER->translate(scramble(zauberwort)));
+}
+
+
+// ist das gesagt wort gleich zauberwort ? ja -> quest fertig
+
+int checkzauber(string str) {
+  if (str == zauberwort) {
+    write_file(LOG "quest.log",
+      ctime()+": "+CAP(getuid(TP))+" hat die Runenquest geloest.\n");
+    return 1;
+  }
+  return 0;
+}
+
+
+// das erklaeren der priesterin
+
+void erklaere(string str) {
+  write("Die Priesterin sagt: Diese Rune heisst: "+
+    RUNENMASTER->erklaere1(scramble(str[0..0]))+".\n");
+  write("Die Priesterin sagt: Ihre Bedeutung ist: "+
+    RUNENMASTER->erklaere2(scramble(str[0..0]))+".\n");
+  write("Die Priesterin sagt: Man koennte sie folgenden Dingen zuordnen:\n");
+  write(break_string(
+    RUNENMASTER->erklaere3(scramble(str[0..0]))+".\n",
+    78,"Die Priesterin sagt: " ));
+}
+
+
+// schon alle runen gefunden ??
+
+int allerunen() { // ort = wo versteck gefunden
+  int nr,i;
+  nr=0;
+  for(i=1;i<5;i++) {
+      // wurde an diesem ort schon rune gefunden ?
+    if (found[i]!=0) {
+      nr++;
+    }
+  }
+  if (nr == 4) return 1;  // alle runen gefunden
+  return 0;
+}
+
+
+// einzelne quest-Rune uebersetzen
+
+void uebersetzrune(int ort) {
+  write(break_string(
+    "Diese Rune ist ein '"+CAP(zeichen[ort])+"'.",
+    78,"Die Priesterin sagt: "));
+  return;
+}
+

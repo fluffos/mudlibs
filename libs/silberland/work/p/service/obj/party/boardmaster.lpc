@@ -1,0 +1,236 @@
+// SilberLand MUDlib
+//
+// /p/service/obj/party/boardmaster.c -- Partybrett Master
+//
+// $Date: 2002/07/26 13:28:18 $
+/* $Revision: 1.6 $
+ * $Log: boardmaster.c,v $
+ * Revision 1.6  2002/07/26 13:28:18  Woody
+ * CSV export
+ *
+ * Revision 1.5  2002/07/18 12:07:29  Woody
+ * Logging eingebaut
+ *
+ * Revision 1.4  2001/05/20 17:34:01  Woody
+ * Beim Dumpen Reihenfolge der Felder beruecksichtigen
+ *
+ * Revision 1.3  2001/03/12 12:15:21  Woody
+ * strict_types, neu: DeleteData() und Dump()
+ *
+ * Revision 1.2  1999/12/10 18:53:31  Woody
+ * Party-Info- und Invis-Verwaltung eingebaut
+ *
+ * Revision 1.1  1997/03/16 17:39:00  Woody
+ * prepared for revision control
+ *
+ */
+
+#pragma strict_types
+
+#include "board.h"
+#include "defines.h"
+
+#define ARC_DIR "/p/service/save/party/"
+#define LOG_FILE "game/PARTY"
+
+
+// - global data -------------------------------------------------------------
+
+// saved:
+mapping data;
+int invis;
+// not saved:
+nosave mapping tmpf;
+
+// - functions ---------------------------------------------------------------
+
+void create()
+{
+  seteuid(getuid());
+  if (!restore_object(SAVEFILE))
+  {
+    data = ([ ]);
+    invis = 1;
+  }
+  tmpf = FIELDS;
+}
+
+int ok()
+{
+  return geteuid() == geteuid(previous_object());
+}
+
+mapping QueryData()
+{
+  if (ok()) return data-(["PARTY_INFO"]);
+}
+
+int DeleteData()
+{
+  if (!ok()) return 0;
+  data = ([ ]);
+  invis = 1;
+  save_object(SAVEFILE);
+  log_file(LOG_FILE,
+      sprintf("[%s]: Partydaten geloescht (%s)\n",
+        ctime()[0..15], this_interactive() ?
+          capitalize(getuid(this_interactive())) : "unknown"));
+  return 1;
+}
+
+mapping QueryUser(string name)
+{
+  if (ok()) return data[name];
+}
+
+mapping QueryInfo()
+{
+  if (ok()) return data["PARTY_INFO"] || ([]);
+}
+
+int SetInfo(mapping info)
+{
+  if (!ok()) return 0;
+  if (!mappingp(info)) return 0;
+  if (!mappingp(data["PARTY_INFO"])) data["PARTY_INFO"] = ([]);
+  data["PARTY_INFO"] += info;
+  save_object(SAVEFILE);
+  log_file(LOG_FILE,
+      sprintf("[%s]: Partydaten [%s] gesetzt (%s)\n",
+        ctime()[0..15],
+        implode( m_indices(info), "," ),
+        this_interactive() ?
+          capitalize(getuid(this_interactive())) : "unknown"));
+  return 1;
+}
+
+int DeleteUser(string name)
+{
+  if (!ok()) return 0;
+  if (!data[name]) return 0;
+  efun::m_delete(data,name);
+  save_object(SAVEFILE);
+  log_file(LOG_FILE,
+      sprintf("[%s]: %s abgemeldet (%s)\n",
+        ctime()[0..15], capitalize(name), this_interactive() ?
+          capitalize(getuid(this_interactive())) : "unknown"));
+  return 1;
+}
+
+int SetUser(string name, mapping what)
+{
+  int changed;
+
+  if (!ok()) return 0;
+  if (!mappingp(what)) return 0;
+  changed = member(data,name);
+  data[name] = what;
+  save_object(SAVEFILE);
+  log_file(LOG_FILE,
+      sprintf("[%s]: %s %s (%s)\n",
+        ctime()[0..15], capitalize(name),
+        changed ? "Anmeldung geaendert" : "angemeldet",
+        this_interactive() ? capitalize(getuid(this_interactive()))
+                           : "unknown"));
+  return 1;
+}
+
+int QueryInvis()
+{
+  if (ok()) return invis;
+}
+
+int SetInvis(int inv)
+{
+  if (!ok()) return 0;
+  invis=inv;
+  save_object(SAVEFILE);
+  log_file(LOG_FILE,
+      sprintf("[%s]: Partybrett %ssichtbar gesetzt (%s)\n",
+        ctime()[0..15], invis ? "un" : "", this_interactive() ?
+          capitalize(getuid(this_interactive())) : "unknown"));
+  return 1;
+}
+
+nosave int smaller(mixed a, mixed b)
+{
+  return tmpf[a,1] < tmpf[b,1];
+}
+
+nosave int bigger(mixed a, mixed b)
+{
+  return tmpf[a,1] > tmpf[b,1];
+}
+
+varargs mixed Dump(string fname, int csv)
+{
+  int i,j;
+  mixed ind,ind2,tmp;
+  string ffname, txt;
+
+  if (!ok()) return 0;
+  ffname = explode( fname, "/" )[<1];   // Security
+  ffname = ARC_DIR + ffname;
+  if (csv) ffname += ".csv";
+
+  txt = "\n";
+  tmp = QueryInfo();
+  ind = sort_array( m_indices(tmp), #'< );
+  for (i = sizeof(ind); i-->0; )
+  {
+    if (csv)
+      txt += sprintf( "%s\t%s\n", capitalize(ind[i]), tmp[ind[i]] );
+    else
+      txt += sprintf( "%11s : %s\n", capitalize(ind[i]), tmp[ind[i]] );
+  }
+
+  tmp = QueryData();
+  ind = sort_array( m_indices(tmp), #'< );
+
+  if (csv)
+  {
+    txt += "\n";
+    ind2 = sort_array( m_indices(tmpf), #'bigger );
+    ind2 = map_array( ind2, #'capitalize );
+    txt += "Name\t" + implode( ind2, "\t" ) + "\n";
+    ind2 = sort_array( m_indices(tmpf), #'smaller );
+
+    for (i = sizeof(ind); i-->0;)
+    {
+      txt += capitalize(ind[i]);        // Name
+      for (j = sizeof(ind2); j-->0;)
+        txt += sprintf("\t%s", tmp[ind[i]][ind2[j]]);
+      txt += "\n";
+    }
+  }
+  else
+  {
+    for (i = sizeof(ind); i-->0;)
+    {
+      txt += "\n";
+      if (!csv) txt += sprintf( "%12s:\n", capitalize(ind[i]) );
+      ind2 = sort_array( m_indices(tmp[ind[i]]), #'smaller );
+
+      for (j = sizeof(ind2); j-->0;)
+      {
+        txt += break_string( tmp[ind[i]][ind2[j]], 78,
+                 sprintf( "             %11s : ", capitalize(ind2[j]) ),
+                 BS_INDENT_ONCE );
+      }
+    }
+    txt += "\n";
+  }
+
+  if (file_size(ffname) >= 0)
+    rm(ffname);
+
+  write_file( ffname, txt );
+
+  log_file(LOG_FILE,
+      sprintf("[%s]: Dump %s von Partybrett erstellt (%s)\n",
+        ctime()[0..15], fname, this_interactive() ?
+          capitalize(getuid(this_interactive())) : "unknown"));
+
+  return 1;
+}
+

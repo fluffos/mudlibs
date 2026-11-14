@@ -1,0 +1,137 @@
+// d/dschungel/feyaria/tijara/obj/pwerkzeug.c
+// Praeparationswerkzeug fuer Trophaeen-quest
+// 1998-10-17 Feyaria@SilberLand
+
+#include "../def.h"
+#include "../jaegerquest.h"
+
+inherit "std/thing";
+
+string *tiere;
+
+void create()
+{
+  if (!is_clone(TO) )  return;
+
+  ::create();
+  SetProp(P_SHORT, "Praeparationswerkzeug");
+  SetProp(P_LONG,  
+    "Mit diesem Praeparationswerkzeug kann man die Koepfe von Tieren "
+    "ausstopfen und somit haltbar machen.");
+  SetProp(P_NAME, "Praeparationswerkzeug");
+  SetProp(P_GENDER, NEUTER);
+  AddId( ({"werkzeug", "praeparationswerkzeug", "pwerkzeug", "QUESTOBJ",
+           "\npwerkzeug", JAEGERQUESTID }) );
+
+  SetProp(P_MATERIAL, 
+      ([MAT_METAL:50, MAT_CLOTH:20, MAT_FEATHER:10, MAT_MISC_PLANT:20]) );
+  SetProp(P_WEIGHT, 400);
+  SetProp(P_VALUE, 100);
+  SetProp(P_NODROP, "Du brauchst das Praeparationswerkzeug noch!\n");
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NOBUY, 1);
+
+  AddCmd( ({"praepariere", "praeparier"}), "preap");
+
+}
+
+int set_tiere(string *welche)
+{
+  string str;
+  int i;
+  if( getuid(PO)==getuid() || IS_ARCH(TI) )    // == "d.dschungel.feyaria"
+  {
+    tiere=welche;
+    str=":";
+    for( i=sizeof(welche)-1;i>=0;i--)
+      str+=welche[i]+" ";
+    WLOG ( LOG "jaegerquest", str);
+    return sizeof(welche);
+  }
+  else
+    WLOG( LOG "jaegerquest.illigeal", "Illegales Setzen von "+getuid(PO) );
+  return -1;
+}
+
+mixed query_tiere()
+{
+  if( getuid(PO)==getuid() || IS_ARCH(TI) ) return tiere;
+  return -1;
+}
+
+int preap(string str)
+{
+  object ob;
+  string was, kopfname;
+  notify_fail("Was willst Du praeparieren?\n");
+  if( !str ) return 0;
+  notify_fail("Du kannst nur Tierleichen praeparieren.\n");
+  if( str!="leiche" ) return 0;
+  if( !ob=present("leiche", ENV(TP)) )
+  {
+    write( "Hier ist doch gar keine Leiche!\n");
+    return 1;
+  }
+  if( ob->QueryProp(P_RACE)=="Vogel" && ob->QueryProp(P_LEVEL)<10 &&
+    member(tiere, "Krokodil") != -1 && !present("\nquest_Krokodilkopf", TP))
+  {
+    write("Du stellst aus der Vogelleiche einen passablen Koeder her und "
+        "steckst ihn ein.\n");
+    say(CAP_TPN+" stellt aus der Vogelleiche einen Koeder her.\n");
+    ob->remove();
+    CLONE( OBJ "koeder", TP);
+    return 1;
+  }
+  if( ob->QueryProp(P_KILLER)!=TP || 
+      member( tiere, was=ob->QueryProp(P_ORIG_NAME) )==-1 ||
+      present( "\nquest_"+was+"kopf", TP) )
+  {
+    write("Das Praeparieren misslingt.\n");
+    say(CAP_TPN+" versagt beim Praeparieren der Leiche.\n");
+    ob->remove();
+    return 1;
+  }
+  if( was[<1..]=="e" ) kopfname=was+"nkopf";
+  else kopfname=was+"kopf";
+  WLOG( LOG "jaegerquest", "praepariert einen "+kopfname);
+  write("Du praeparierst die Leiche und bekommst einen ausgestopften "+
+       kopfname+".\n");
+  say(CAP_TPN+" praepariert eine Leiche und bekommt einen ausgestopften "+ 
+      kopfname+".\n");
+  ob->remove();
+  ob=clone_object(OBJ "kopf");
+  ob->SetProp(P_NAME, kopfname );
+  ob->AddId( ({LOWER(kopfname), "\nquest_"+kopfname}) );
+  ob->move(TP, M_NOCHECK);
+  return 1;
+}
+    
+mixed _query_autoloadobj()
+{
+  return ( tiere );
+}
+
+void _set_autoloadobj( mixed args )
+{
+  tiere=args;
+}
+
+string _query_info()
+{
+  string str;
+  int i;
+
+  str = "Du musst folgende Tierkoepfe praeparieren: ";
+  for (i = sizeof(tiere) - 1; i >= 0; i--)
+  {
+    str += tiere[i];
+    if (i >= 1)
+      str += ", ";
+    else if (i == 1)
+      str += " und ";
+    else
+      str += ".";
+  }
+  return BS(str);
+}

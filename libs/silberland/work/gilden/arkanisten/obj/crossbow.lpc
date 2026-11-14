@@ -1,0 +1,139 @@
+
+#include "../waechter.h"
+
+inherit "std/weapon";
+
+object owner;
+int ability;
+
+void create() 
+{
+  if (!is_clone(TO) )  return;
+  ::create();
+
+  SetProp(P_LONG,
+    "Diese Handarmbrust ist ein feinmechanisches Meisterwerk. Sie laesst sich bequem in einer Hand "
+    "halten. Eine kleine Trommel unter dem Schaft haelt eine kleine Anzahl an Bolzen. Mit einer "
+    "Handkurbel wird der Mechanismus der Armbrust aufgezogen. Sobald er gespannt ist, kann er das "
+    "ganze Magazin in der Trommel verschiessen ohne extra nachzuladen, da der die Armbrust "
+    "nach dem Schuss automatisch nachspannt." );
+  SetProp(P_INFO, "Diese Armbrust kann nur von Mitgliedern des Waechterordens korrekt bedient werden.");
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({"armbrust", "handarmbrust", CROSSBOW_ID, CAN_EXPLOSIVE_AMMO_ID}) );
+
+  SetProp(P_WEAPON_TYPE, WT_BOW );
+  SetProp(P_NR_HANDS, 1);
+  SetProp(P_MATERIAL, ([MAT_WOOD: 80, MAT_IRON: 10, MAT_LEATHER: 10]) );
+  SetProp(P_WEIGHT, 500);
+  SetProp(P_SIZE, 30);
+  SetProp(P_VALUE, 10000);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_QUALITY_DECAY, 100);
+  
+  SetProp(P_WIELD_FUNC, TO );
+  SetProp(P_UNWIELD_FUNC, TO );
+  SetProp(P_HIT_FUNC, TO );
+  SetProp(P_WIELD_RESTRICTIONS, ([A_DEX:15]) );
+  
+  SetProp(P_UNWIELD_TEXT, ({"Du steckst %s in dein Bandolier.\n", " steckt %s weg.\n"}));
+  SetProp(P_WIELD_TEXT, ({"Du ziehst %s aus deinem Bandolier.\n", " zieht %s hervor.\n"}));
+
+  SetProp(P_NOGET, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+}
+
+public string _query_name() {
+    if(!objectp(owner)) return "Handkurbelarmbrust";
+
+    return owner->Name(WESSEN)+" Handkurbelarmbrust";
+}
+
+public string _query_short() {
+    if(!objectp(owner)) return "Eine Handkurbelarmbrust";
+
+    return owner->Name(WESSEN)+" Handkurbelarmbrust";
+}
+
+public void setup(object caster) {
+    owner = caster;
+}
+
+int WieldFunc(object waffe) {
+    if(waffe != TO) return 0;
+    if(!ABILITY_SERVICE->get_ability_by_name(HANDCROSSBOW)->has_learned(TP)) {
+        tell_object(TP, BS("Du kannst mit so einer Armbrust doch gar nicht umgehen!"));
+        remove(1);
+        return 0;
+    }
+    
+    tell_object(owner, BS("Du steckst Bolzen in das Trommelmagazin und kurbelst den Nachlademechanismus auf."));
+    return 1;
+}
+
+int UnwieldFunc(object waffe) {
+    call_out("remove", 0, 1);
+    return 1;
+}
+
+private int get_damage_bonus() {
+    object ab;
+    mapping sinfo;
+
+    ab = ABILITY_SERVICE->get_ability_by_name(HANDCROSSBOW);
+    if(objectp(ab) && ab->has_learned(owner)) {
+        sinfo = ([
+            SI_SKILLABILITY: owner->QuerySkillAbility(HANDCROSSBOW), 
+            SI_ABILITY_SILENT: 1,
+            SI_ABILITY_NOLEARN: random(5)
+        ]);
+
+        ab->use(owner, sinfo);
+
+        pDebug(owner, sprintf("handcrossbow :: damage_benefit=%d\n", QueryProp("damage_benefit")));
+        return QueryProp("damage_benefit");
+    }
+    else return 0;
+}
+
+public HitFunc(object enemy) {
+    int c;
+
+    ability = owner->QuerySkillAbility(HANDCROSSBOW);
+    c = random(MAX_ABILITY);
+    pDebug(owner, sprintf("handcrossbow :: salve chance=%d roll=%d\n", ability/3, c));
+    if(c < ability / 10) {
+        call_out("salve", 0, enemy);
+    }
+
+    return get_damage_bonus();
+}
+
+public void salve(object enemy) {
+    int nr, wc, fix, base_dam, rnd;
+
+    if(!objectp(enemy)) return;
+    tell_object(owner, BS("Geschickt gibst du eine Bolzensalve ab."));
+    tell_room(ENV(owner), BS(owner->Name(WER)+" feuert eine Bolzensalve ab."), ({owner}));
+    wc = QueryProp(P_WC);
+    fix = QueryProp(P_WC_FIX);
+
+    base_dam = wc * fix / 100;
+    rnd = wc - base_dam;
+    if(rnd < 0) rnd = 0;
+
+    for(nr=1+random(ability/3333); nr>0; nr--) {
+        enemy->Defend(owner->QueryAttribute(A_DEX) + base_dam + random(rnd) + get_damage_bonus(), QueryProp(P_DAM_TYPE), ([SP_SHOW_DAMAGE: 1, SP_RECURSIVE: 1, SP_NAME: "Bolzenschuss", SP_PHYSICAL_ATTACK: 1]), owner);
+        if(!objectp(enemy)) return; // tot
+    }
+}
+
+public int _query_wc() {
+    if(!objectp(owner)) return 0;
+    return owner->QuerySkillAbility(HANDCROSSBOW) / 125;
+}
+
+public string* _query_dam_type() {
+    if(owner->QueryProp(P_WATCHER_EXPLODING_AMMO) > 0) return ({DT_PIERCE, DT_EXPLOSION});
+    return ({DT_PIERCE});
+}

@@ -1,0 +1,326 @@
+//=========================================================================
+//
+// File:    master.c
+// Created by Ronja@SL
+//
+// Project: Unterwelt
+//
+//=========================================================================
+
+#include "../def.h"
+#include <ansi.h>
+
+#define SAVEFILE "/d/" REGION "/" MAGIERNAME "/" GEBIET "/master/master"
+#define TEXTFILE "/d/" REGION "/" MAGIERNAME "/" GEBIET "/master/uwelt.hpp"
+#define NPCFILE  "/d/" REGION "/" MAGIERNAME "/" GEBIET "/master/npcs.hpp"
+
+string *text_short;
+mapping text_long;
+mapping text_details;
+
+mapping npcs;
+
+string *listener;
+
+void Parse();
+void Customize(object room);
+
+void create()
+{
+  if(is_clone(this_object()))
+  {
+    destruct(this_object());
+    return;
+  }
+
+  seteuid(getuid(this_object()));
+
+  text_short   = ({ });
+  text_long    = ([ ]);
+  text_details = ([ ]);
+
+  npcs         = ([ ]);
+
+  listener     = ({ });
+
+  restore_object(SAVEFILE);
+
+  return;
+}
+
+void Msg(string s)
+{
+  object pl;
+  int i;
+
+  write_file(LOG "uwelt.log",ctime()+": "+s+".\n");
+
+  i = sizeof(listener);
+  while(i--)
+  {
+    pl = find_player(listener[i]);
+    if(!pl)              return;
+    if(!interactive(pl)) return;
+    if(!IS_WIZARD(pl))   return;
+
+    s = BSI(s+".","UWELT: ");
+    if(pl->QueryProp(P_TTY)) s = ANSI_BOLD+ANSI_RED+s+ANSI_NORMAL;
+    tell_object(pl,s);
+  }
+}
+
+void whereami()
+{
+  object pl;
+
+  if(!TP)
+  {
+    pl = find_player("ronja");
+  }
+  else
+  {
+    pl = TP;
+  }
+
+  if(!pl) return;
+  if(member(REGION1,file_name(ENV(pl))) > -1)
+    tell_object(pl,"Du befindest Dich in Region 1.\n");
+
+  if(member(REGION2,file_name(ENV(pl))) > -1)
+    tell_object(pl,"Du befindest Dich in Region 2.\n");
+
+  if(member(REGION3,file_name(ENV(pl))) > -1)
+    tell_object(pl,"Du befindest Dich in Region 3.\n");
+
+  if(member(REGION4,file_name(ENV(pl))) > -1)
+    tell_object(pl,"Du befindest Dich in Region 4.\n");
+
+}
+
+string *ExtractDetails(string s)
+{
+  string *temp;
+  int i;
+
+  temp = explode(s," ");
+  i = sizeof(temp);
+  while(i--) temp[i] = lowerstring(regreplace(temp[i],"[^a-zA-z]","",0));
+
+  temp = m_indices(mkmapping(temp));
+
+  return temp;
+}
+
+void AddNPC(string npc, string npcpath, string *rooms, object room, string fpath, string fname)
+{
+  if(member(rooms,fname) == -1) return;
+
+  switch(npc)
+  {
+    case "spinne2":
+      room->AddItem(NPC "spinne2", REFRESH_DESTRUCT,
+                    ([P_MNPC_DEFAULTROOM: fpath
+                     ,P_MNPC_AREA: ROOM "00"
+                     ,P_MSGIN: "krabbelt herein"
+                     ,P_MSGOUT: "krabbelt weiter#"
+                     ,P_MMSGIN: "krabbelt herein"
+                     ,P_MMSGOUT: "krabelt weiter"
+                     ])
+      );
+      break;
+
+    case "drow":
+    case "grotter":
+    case "ratte":
+      room->AddItem(npcpath, REFRESH_DESTRUCT,
+                    ([P_MNPC_DEFAULTROOM: fpath
+                     ,P_MNPC_AREA: ROOM "00"
+                     ])
+      );
+      break;
+
+    default:
+      room->AddItem(npcpath, REFRESH_DESTRUCT, ([P_MNPC_DEFAULTROOM: fpath]) );
+      break;
+  }
+}
+
+void Customize(object room)
+{
+  string s,race_s,det,fname,fpath;
+  int i,n;
+
+  string *todo,*done,*temp;
+
+  if(!objectp(room))
+  {
+    DB(sprintf("Ungueltiger Aufruf UMASTER->Customize(%O)",room));
+    return;
+  }
+
+  todo = ({"boden","decke","wand","waende"});
+  done = ({ });
+
+  room->SetProp(P_LIGHT, 0 );
+  room->SetProp(P_INDOORS, 1 );
+  room->SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE: 25+5*random(3), ENV_TERRAIN: TT_CAVE]) );
+
+  fpath = file_name(room);
+  fname = explode(fpath,"/")[<1];
+
+  walk_mapping(npcs, "AddNPC", TO, room, fpath, fname);
+
+  n = sizeof(text_short);
+  s = text_short[random(n)];
+  room->SetProp(P_INT_SHORT,s);
+
+  s = "";
+  temp = sort_array(m_indices(text_long), #'<);
+
+  i = sizeof(temp);
+  while(i--)
+  {
+    n = sizeof(text_long[temp[i],0]);
+    s += text_long[temp[i],0][random(n)]+" ";
+  }
+  room->SetProp(P_INT_LONG, s);
+
+  temp = ExtractDetails(s);
+  i = sizeof(temp);
+  while(i--) if(member(text_details,temp[i])) todo += ({ temp[i] });
+
+  while(sizeof(todo))
+  {
+    det = todo[0];
+    todo -= ({ todo[0] });
+    done += ({ det });
+
+    if(member(text_details,det))
+    {
+      n = sizeof(text_details[det,0]);
+      s = text_details[det,0][random(n)];
+
+      if(member(text_details,det+"/dunkelelf"))
+      {
+        n      = sizeof(text_details[det+"/dunkelelf",0]);
+        race_s = text_details[det+"/dunkelelf",0][random(n)];
+
+        room->AddDetail( ({det}), ([0: s,"dunkelelf": race_s]) );
+      }
+      else
+      {
+        room->AddDetail( ({det}), s);
+      }
+
+      temp = ExtractDetails(s);
+
+      i = sizeof(temp);
+      while(i--)
+      {
+        if((member(todo,temp[i])       == -1) &&
+           (member(done,temp[i])       == -1) &&
+           (member(text_details,temp[i])   )  ) todo += ({ temp[i]  });
+      }
+
+    }
+
+  }
+
+}
+
+void Parse()
+{
+  string *lines,s,currentdetail,*words,*z;
+  int nlines,i,j,key;
+
+  text_short   = ({ });
+  text_long    = ([ ]);
+  text_details = ([ ]);
+
+  words = ({ });
+  currentdetail = "";
+
+  lines = explode(read_file(TEXTFILE),"\n");
+  nlines = sizeof(lines);
+  DB(sprintf("%d read from %s",sizeof(lines),TEXTFILE));
+
+  for(i=0;i<nlines;i++) if((lines[i][0..0] != "#") || strlen(lines[i]) > 2)
+  {
+    if(lines[i][0..1] == "S:")
+    {
+      s = lines[i][2..];
+      words += explode(lines[i][2..]," ");
+      text_short += ({ s });
+    }
+
+    if(lines[i][0..1] == "L:")
+    {
+      sscanf(lines[i],"L:%d:%s",key,s);
+      if(member(text_long,key))
+      {
+        text_long[key,0] += ({ s });
+      }
+      else
+      {
+        text_long += ([key: ({ s }) ]);
+      }
+    }
+
+    if(lines[i][0..1] == "T:")
+    {
+      s = lines[i][2..];
+      if(member(text_details,currentdetail))
+      {
+        text_details[currentdetail,0] += ({ s });
+      }
+      else
+      {
+        text_details += ([currentdetail: ({ s }) ]);
+      }
+    }
+
+    if(lines[i][0..1] == "D:")
+    {
+      currentdetail = lines[i][2..];
+    }
+
+  }
+
+  npcs  = ([ ]);
+  lines = explode(read_file(NPCFILE),"\n");
+  i     = sizeof(lines);
+  DB(sprintf("%d read from %s",i,NPCFILE));
+
+  while(i--)
+  {
+    z     = explode(lines[i],",");
+
+    j     = sizeof(z);
+    while(j--) z[j] = regreplace(z[j],"^ *(.*[^ ]) *$","\\1",0);
+
+    if(strstr(z[1],"/",0) == -1) z[1] = NPC + z[1];
+    npcs += ([ z[0]:z[1];z[2..] ]);
+  }
+
+  save_object(SAVEFILE);
+}
+
+void AddListener(string uid)
+{
+  if(member(listener, uid) == -1)
+  {
+    listener += ({ uid });
+    save_object(SAVEFILE);
+    Msg("Neuer Listener: "+CAP(uid));
+  }
+}
+
+void RemoveListener(string uid)
+{
+  if(member(listener, uid) != -1)
+  {
+    listener -= ({uid});
+    save_object(SAVEFILE);
+    Msg("Listener entfernt: "+CAP(uid));
+  }
+}

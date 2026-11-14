@@ -1,0 +1,526 @@
+/*
+  Hochzeitszeremonie
+  Ring aus Jade
+  
+  In Anlehnung an den original Trauschein von Lupus
+  Die ID bleibt gleich, falls Lupus dreinpfuschen will :P
+*/
+
+#pragma strong_types;
+
+#include <armour.h>
+#include <combat.h>
+#include <ansi.h>
+#include "../def.h"
+
+inherit "std/armour";
+inherit MOST "std_things";
+
+#define PARTNER hochzeit["partner"]
+#define ZEUGE hochzeit["zeuge"]
+#define DATUM dtime(hochzeit["datum"])
+#define BSA(x) break_string(x, 78, "", 1)
+
+nosave mapping hochzeit;
+nosave int astralauge;
+
+void create()
+{
+  if(!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein dunkler Jadering");
+  SetProp(P_LONG, 
+	  BS("Ein schlichter Ring aus Jade."));
+  SetProp(P_NAME, "Jadering");
+  SetProp(P_NAME_ADJ, ({"dunkl"}));
+  AddAdjective(({"dunkel","dunklen","dunkelen","dunkler"}));
+
+  SetProp(P_INFO, 
+    BSA("Der Jadering ist von einem sehr dunklen gruen, aber tief in seinem "
+	"Inneren wirbeln feinste Schwaden aus silbergrauem Rauch. Eine "
+	"maechtige magische Aura geht von dem Ring aus...\n"
+	"Folgende Befehle koennt Ihr ausueben:\n"
+	"  'partner [zustand]' Damit koennt Ihr sehen wo sich Euer Partner "
+	"befindet.\n"	 
+	"  'p:' bzw. 'pemote'  Normales emote an den Partner.\n"
+	"  'p;' bzw. 'pgemote' Genitiv emote an den Partner.\n"
+	"  'pecho'             Beliebiges Echo an den Partner.\n"
+	"  'astralauge [kurz]' Den Partner beobachten.\n"
+	"  'perneuern'         Fingerinfo 'verheiratet' erneuern.\n"));
+  
+  AddId(({"ring", "jadering",TRAUSCHEIN,"\ntrauitem"}));
+  SetProp(P_MATERIAL, 
+	  ([MAT_JADE:80,MAT_SHADOW:20,MAT_MISC_UNHOLY:100]));
+  SetProp(P_GENDER, MALE);
+
+  SetProp(P_ARMOUR_TYPE, AT_MISC);
+  SetProp(P_AC, 0);
+  SetProp(P_QUALITY_DECAY, 100000);
+  SetProp(P_NO_DAMAGE_DESTRUCT, 1);
+
+  SetProp(P_WEAR_TEXT, ({
+    "Ihr steckt Euch den Jadering stolz an Euren Finger.\n",
+      " steckt sich einen dunklen Jadering an.\n"}));
+  SetProp(P_UNWEAR_TEXT, ({
+    "Ihr streift den Jadering von Eurem Finger und steckt ihn ein.\n",
+      " steckt einen Jadering weg.\n"}));
+  SetProp(P_WORN_TEXT, "angesteckt");
+
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_VALUE, 666);
+  SetProp(P_NOSELL, "So einfach werdet Ihr den nicht mehr los...\n");
+  SetProp(P_NODROP, "So einfach werdet Ihr den nicht mehr los...\n");
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_MAGIC, 1);
+  SetProp(P_ITEMD_NO_MAGIC, 1);
+  
+  AddDetail(({"lloth","goettin","spinnengoettin"}),
+	    "Lloth ist die Spinnengoettin! Die einzig wahre Goettin der "
+	    "Dunkelelfen");
+
+  AddDetail(({"dunkelelfen"}),
+	    "Die Dunkelelfen dienen Lloth!");
+
+  AddDetail(({"inneres","inneren"}),
+	    "Tief im Inneren des Ringes wabern und wirbeln silberne "
+	    "Rauchschwaden.");
+
+  AddDetail(({"rauch","rauchschwaden","schwaden"}),
+	    "Feine, schimmernde Rauchschwaden.");
+
+  AddDetail(({"aura"}),
+	    "Eine unheilige Aura umgibt diesen Jadering!");
+
+  AddCmd(({"partner"}), "partner");
+  AddCmd(({"pemote"}), "pemote");
+  AddCmd(({"p:"}), "pemote", 1);
+  AddCmd(({"pgemote"}), "pgemote");
+  AddCmd(({"p;"}), "pgemote", 1);
+  AddCmd(({"pecho"}), "pecho");
+  AddCmd(({"astralauge"}), "astralauge");
+  AddCmd(({"perneuern"}), "perneuern");
+  
+  hochzeit=(["partner":0, "zeuge":0, "datum":0]);
+  //hochzeit=(["partner":"ushmul", "zeuge":"guglhupf", "datum":983662100]);
+  astralauge=0;
+
+}
+
+string extra_look()
+{
+  object env;
+  string wen;
+
+  if((env=MENV) && (interactive(env)))
+    if(strlen(wen=PARTNER))
+      if(env->QueryProp(P_GENDER)==FEMALE)
+        return "Sie hat sich "+CAP(wen)+" zu ihrem Gefaehrten erwaehlt.\n";
+      else
+        return CAP(wen)+" hat ihn zu ihrem Gefaehrten erwaehlt.\n";
+}
+
+string gettitle(object who)
+{
+  string ret;
+  
+  if(who->QueryProp(P_RACE)!="Dunkelelf")
+    return "";
+
+  if(who->QueryProp(P_GUILD)=="spinnenkrieger")
+    ret="Spinnen";
+  else
+    ret="Drow";
+  
+  if(IS_WIZARD(who))                                                           
+    ret+="magier"+(who->QueryProp(P_GENDER)==FEMALE ? "in ":" ");
+  else if(IS_SEER(who))
+    ret+=""+(who->QueryProp(P_GENDER)==FEMALE ? "priesterin ":"krieger ");
+  else
+    ret+="elf"+(who->QueryProp(P_GENDER)==FEMALE ? "e ":" ");
+  return ret;
+}
+
+object QueryPartner()
+{
+  object p;
+  string who;
+  
+  if(!strlen(who=PARTNER)) return 0;
+  
+  if(!p=find_player(who))
+    {
+      if(p=find_netdead(who))
+	      notify_fail(gettitle(p)+CAP(who)+" ist leider netztot.\n");
+      else
+	      notify_fail(CAP(who)+" ist leider nicht anwesend.\n");
+      return 0;
+    }
+  //  if(p->QueryProp(P_INVIS)) return 0; <- nuex da
+  return p;
+}
+
+string coloredstat(int p, int maxp)
+{
+  string col;
+
+  switch (p*100/maxp)
+    {
+    case  0 ..  20: col=ANSI_RED+ANSI_BOLD;    break;
+    case 21 ..  40: col=ANSI_BLUE+ANSI_BOLD;   break;
+    case 41 ..  60: col=ANSI_CYAN+ANSI_BOLD;   break;
+    case 61 ..  80: col=ANSI_YELLOW+ANSI_BOLD; break;
+    case 81 .. 100: col=ANSI_GREEN+ANSI_BOLD;  break;
+    default: col=ANSI_NORMAL;
+    }
+  return col+p+ANSI_NORMAL+" ("+ANSI_GREEN+ANSI_BOLD+maxp+ANSI_NORMAL+")";  
+}
+
+int StopAuge()
+{
+  object p;
+
+  astralauge=0;
+
+  if(!p=QueryPartner()) return 0;
+  
+  p->RemovePursuer(ME);
+
+  tell_object(p, "Eure astrale Verbindung bricht zusammen...\n");
+  tell_object(MENV, 
+	      "Ihr beendet Eure astrale Verbindung zu "+CAP(PARTNER)+".\n"
+	      "Eure Umgebung wird wieder glasklar!\n");
+  return 1;
+}
+
+int Auge()
+{
+  return astralauge;
+}
+
+string long()
+{
+  object p;
+  string ret;
+
+  ret=BS("Ein schlichter Ring, geschnitten aus Jade - Ein Ring, "
+    "den man nur bei einer Hochzeit im grossen Tempel Lloths in Ardulvhier "
+    "erlangen kann. Er scheint von einer seltsamen Aura umgeben zu sein, "
+    "von einer unheiligen Aura.")+
+    BS(CAP(ZEUGE)+" hat Euch am "+DATUM[5..16]+" um "+
+       DATUM[19..23]+" diesen Ring als Symbol Eurer Verbindung mit "+
+       CAP(PARTNER)+" ueberreicht. Tragt diesen Talisman in Ehren und achtet "
+       "seine besonderen Faehigkeiten...");
+  
+  if(p=QueryPartner())
+    if(p->Auge())
+      ret+="!! "+CAP(PARTNER)+" beobachtet Euch von der astralen Ebene aus !!\n";
+  
+  SetProp(P_LONG, ret);
+  
+  return ::long();
+}
+
+nosave int astralauge(string str)
+{
+  object p;
+  
+  if(!p=QueryPartner()) return 0;
+
+  if(astralauge) 
+    return StopAuge();
+  
+  p->RemovePursuer(ME);
+  p->AddPursuer(ME);
+  
+  if(str && str=="kurz")
+    astralauge=2;
+  else
+    astralauge=1;
+
+  write("Ihr konzentriert Euch...\n"
+	"Ploetzlich empfangt Ihr "+p->Name(WESSEN)+" Gedankenmuster...\n");
+  tell_object(p,
+	      BS("Ihr spuert ploetzlich, wie "+TP->name(WER)+" "+
+		 TP->QueryPossPronoun(NEUTER,WEN)+" astrales Auge auf Euch "
+		 "richtet."));
+  
+  return 1;
+}
+
+int PreventFollow(object dest)
+{
+  string see;
+  object pl,p;
+
+  if(!pl=MENV) return 1;
+  if(!p=QueryPartner()) return 2;
+  
+  if(astralauge==1)
+    see=dest->int_long(p,p);
+  else
+    see=dest->int_short(p,p);
+
+  if(pl->QueryProp(P_TTY)=="ansi")
+    see=ANSI_GREEN+see+ANSI_NORMAL;
+  else
+    see=duplicate("-+", 30)+"\n"+see+duplicate("-+", 30)+"\n";
+
+  tell_object(pl, see);
+  pl->AddSp(-1);
+  
+  return 1;
+}
+
+nosave int partner(string str)
+{
+  object p;
+  string z;
+
+  notify_fail("Du solltest erstmal einen Partner haben.\n");
+  if(!(p=QueryPartner())) return 0;
+
+  if(TP->QueryProp(P_TTY)=="ansi")
+    z=sprintf("%s - %s Lp %s Mp -%s%s%s%s%s\n",
+	      CAP(getuid(p)), 
+	      coloredstat(p->QueryProp(P_HP),p->QueryProp(P_MAX_HP)),
+	      coloredstat(p->QueryProp(P_SP), p->QueryProp(P_MAX_SP)),
+	      (p->AddPoison() ? " gift":""), 
+	      (p->QueryProp(P_PARALYZED) ? " para":""), 
+	      (p->QueryProp(P_BLIND) ? " blind":""), 
+	      (p->QueryProp(P_FROG) ? " frosch":""), 
+	      (p->QueryProp(P_GHOST) ? " tot":""));
+  else
+    z=sprintf("%s - %d (%d) Lp %d (%d) Mp -%s%s%s%s%s\n",
+	      CAP(getuid(p)), 
+	      p->QueryProp(P_HP), p->QueryProp(P_MAX_HP),
+	      p->QueryProp(P_SP), p->QueryProp(P_MAX_SP),
+	      (p->AddPoison() ? " gift":""), 
+	      (p->QueryProp(P_PARALYZED) ? " para":""), 
+	      (p->QueryProp(P_BLIND) ? " blind":""), 
+	      (p->QueryProp(P_FROG) ? " frosch":""), 
+	      (p->QueryProp(P_GHOST) ? " tot":""));
+	      
+  if(str=="status")
+    write("Du lenkst Deine astrale Energie auf "+CAP(PARTNER)+" und siehst:\n"+
+	  z);
+  else
+    write("Du lenkst Deine astrale Energie auf "+CAP(PARTNER)+" und siehst:\n"+
+	  ENV(p)->int_long(TP, ME)+z);
+
+  if(!present("\ntrauschein", p)) 
+    write("Seltsam! Dein Partner hat den blutigen Talisman verloren!\n"
+	  "Das solltest Du einem Magier, am Besten PROtheG melden!\n");
+
+  return 1;
+}
+
+nosave int pemote(string str)
+{
+  object p;
+  if(!TP) return 0;
+
+  str=TP->_unparsed_args();
+
+  if(query_verb()!="pemote")
+    if(stringp(str))
+      str=(query_verb()+" "+str)[2..];
+    else
+      str=query_verb()[2..];
+
+  notify_fail("Syntax: p:<text> oder pemote <text>\n");
+
+  if((!stringp(str)) ||(str=="")) return 0;
+
+  if(!(p=QueryPartner())) return 0;
+
+  str=gettitle(TP)+TP->name(WER)+" "+str;
+
+  if(!present(p,environment(TP)))
+    str="{ "+str+" }";
+
+  write(BS(str));
+
+  tell_object(p, BS(str));
+
+  return 1;
+}
+
+nosave int pgemote(string str)
+{
+  object p;
+
+  if(!TP) return 0;
+
+  str=TP->_unparsed_args();
+
+  if(query_verb()!="pgemote")
+    if(stringp(str))
+      str=(query_verb()+" "+str)[2..];
+    else
+      str=query_verb()[2..];
+
+  notify_fail("Syntax: p;<text> oder pgemote <text>\n");
+
+  if((!stringp(str)) ||(str=="")) return 0;
+
+  if(!(p=QueryPartner())) return 0;
+
+  str=TP->name(WESSEN)+" "+str;
+
+  if(!present(p,environment(TP)))
+    str="{ "+str+" }";
+
+  write(BS(str));
+  tell_object(p, BS(str));
+  return 1;
+}
+
+nosave int pecho(string str)
+{
+  object p;
+  
+  if(!TP) return 0;
+
+  str=TP->_unparsed_args();
+
+  notify_fail("Syntax: pecho <text>\n");
+
+  if((!stringp(str)) ||(str=="")) return 0;
+
+  if(!(p=QueryPartner())) return 0;
+
+  if(!present(p,environment(TP)))
+    str="{ "+str+" }";
+
+  write(BS(str));
+  tell_object(p, BS(str));
+  return 1;
+}
+
+nosave int perneuern(string str)
+{
+  if(!TP) return 0;
+  if(!MENV) return 0;
+  if(TP!=MENV) return 0;
+
+  if(!m_sizeof(hochzeit))
+    {
+      remove();
+
+      return 0;
+    }
+
+  TP->SetProp(P_MARRIED, CAP(PARTNER)+" ("+DATUM[0..16]+" um "+
+	      to_int(DATUM[19..20])+" Uhr)");
+  
+  write(BS("Die Hochzeitsdaten wurden erneuert.")+
+	BS("Du bist mit "+TP->QueryProp(P_MARRIED)+" verheiratet."));
+  
+  return 1;
+}
+
+void NotifyPlayerDeath(object v, object k, int lost_xp)
+{
+  object p;
+  string c,o;
+  
+  if(p=QueryPartner())
+    {
+      if(p->QueryProp(P_TTY)=="ansi")
+	{ c=ANSI_RED; o=ANSI_NORMAL; }
+      else
+	{ c=""; o=""; }
+	
+      tell_object(p, 
+		  BS("Ploetzlich erfuellt Dich ein wahnsinniges Gefuehl und "
+		     "Du wuerdest das Wort in Deinem Kopf am liebsten "
+		     "herausbruellen!!!!")+
+		  c+"      ____      _    ____ _   _ _____ _\n"
+		  "     |  _ \\    / \\  / ___| | | | ____| |\n"
+		  "     | |_) |  / _ \\| |   | |_| |  _| | |\n"
+		  "     |  _ <  / ___ \\ |___|  _  | |___|_|\n"
+		  "     |_| \\_\\/_/   \\_\\____|_| |_|_____(_)"+o+"\n\n");
+      
+      if(k)
+        tell_object(p, CAP(k->name(WER))+" hat "+CAP(PARTNER)+" umgebracht.\n");
+      else
+        tell_object(p, gettitle(v)+CAP(v->name(RAW))+" ist gerade gestorben.\n");
+
+      tell_object(v,
+		  "\nEin letztes Mal noch spuerst Du die boshaften Gedanken "
+		  "von "+p->name(RAW)+",\ndoch es ist zu spaet... Der Tod "
+		  "ist staerker.\n\n");
+      StopAuge();
+    }
+  else
+    tell_object(v,
+		CAP(CAP(PARTNER))+" ist nicht da, um Dich zu raechen...\n");
+}
+
+void BecomesNetAlive(object wer)
+{
+  string who;
+  object ob;
+  
+  if(!strlen(who=PARTNER)) return;
+  if(ob=find_player(who))
+    {
+      tell_object(ob, 
+		  BS("Ploetzlich fuehlst Du eine, Dir vertraute Anwesenheit! "
+		     +wer->name(WESSEN)+" Macht durchstroemt Dich und "
+		     "kraeftigt Euren ehelichen Bund aufs Neue."));
+      
+      write(BS("Ein angenehmes Gefuehl der Macht durchstroemt Dich, als "
+	       "Du die Anwesenheit von "+CAP(PARTNER)+" spuerst."));
+      ob->heal_self(3);
+      wer->heal_self(3);
+    }
+  else
+    {
+      write(CAP(who)+" ist nicht da, Du bist auf Dich alleine gestellt!\n");
+      if(ob=find_netdead(who)) 
+	{
+	  int verpasst;
+	  
+	  if((verpasst=time()-ob->QueryProp(P_LAST_LOGOUT)) < 7200)
+	    write("Du hast "+ob->QueryPronoun(WEN)+" leider um "+
+		  (verpasst < 60 ? verpasst+" Sekunde"+(verpasst==1?"":"n")
+		   : "ungefaehr "+(verpasst/60)+" Minute"+
+		   ((verpasst/60)==1?"":"n"))+" verpasst.\n");
+	}
+    }
+}
+
+void BecomesNetDead(object wer)
+{
+  string who;
+  object ob;
+  
+  if(!strlen(who=PARTNER)) return;
+
+  if(ob=find_player(who))
+    tell_object(ob,
+		BS(CAP(getuid(wer))+" verlaesst das Silberland und laesst "
+		   "Dich mit all den Feinden zurueck..."));
+  
+  StopAuge();
+}
+
+mapping _set_autoloadobj(mapping data)
+{
+  object wer;
+  
+  if(mappingp(data)) hochzeit+=data;
+  
+  if((wer=previous_object(1))==ENV(TO))
+    BecomesNetAlive(wer);
+  return hochzeit;
+}
+
+mapping _query_autoloadobj()
+{
+  return hochzeit;
+}
+

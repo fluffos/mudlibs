@@ -1,0 +1,551 @@
+/*
+//
+//  Master fuer Arwenock
+//  Iwo@SL
+//  
+//  Funktionen f. Tangram-Quest by -Crea-
+//
+
+    History:
+
+    2000-02-26: Initial Release (Iwo)
+
+    2000-02-27: Funktionen f. Tangram-Quest (Creative)
+
+    2000-02-27: Funktionen fur NPC- und Playerdeath (iwo)  
+
+    2000-02-28: Tuersteuerung und Alarm/Npcmanagement (iwo)
+    
+
+*/
+
+
+#include <properties.h>
+#include <language.h>
+#include <defines.h>
+#include <moredef.h>
+#include <combat.h>
+#include <player.h>
+#include <moving.h>
+
+#include "../def.h"
+
+#include "../cave/map.lpc"
+
+#define CHAN_INFO "Adebug"
+#define CHAN_DEBUG "Adebug"
+
+int light     = 1;
+int temp      = 20;
+
+int defcon    = 0;
+
+string name = "<Info>";
+
+int event;
+int quest;
+int caveopen_known;
+int nuke_arkens;
+
+mapping m_npckills=([]);
+mapping m_deaths  =([]);
+mapping m_tore    =([]);
+mapping m_npcs    =([]);
+
+string *arkens = ({});
+
+// Funktionen vordefinieren
+mixed saveme             ();
+void  mylog              (string what, string logtext);
+int   QueryDefcon        ();
+int   SendDefconAlert    ();
+int   SetDefcon          (int newdefcon);
+int   CheckDefcon        ();
+int   QueryDoorState     (string tor);
+int   CloseDoor          (string tor);
+int   OpenDoor           (string tor);
+int   CloseAllDoors      ();
+int   OpenAllDoors       ();
+int   givelight          ();
+int   givetemp           ();
+int   AddNpc             ( object npc );
+int   DelNpc             ( object npc );
+int   PlayerKilledNpc    ( object npc, string player );
+int   NpcKilledPlayer    ( string player );
+
+
+void Debug(string message)
+{
+  string oldname;
+
+  oldname = name;
+  name = "<Debug>";
+ 
+  CHMASTER->send(CHAN_DEBUG, TO, message, MSG_SAY);
+
+  name = oldname;
+}
+
+
+int ResetAll()
+{
+  event = 0;
+  quest = 0;
+  caveopen_known = 0;  
+  OpenAllDoors();
+  return 1;
+}
+
+
+// Create. Hier wird das Objekt erzeugt und initialisier 
+mixed create()
+    {
+    int i;
+    
+    // Wir arbeiten direkt mit der blue
+    if (is_clone(this_object()))
+        {
+	destruct(this_object());
+	return 1;
+	}
+	
+    // euid setzen
+    seteuid(getuid(this_object()));
+
+
+
+    // Gespeicherte Stati laden
+    restore_object(AMASTER);
+
+    // Objekte werden nicht richtig gespeichert
+    m_npcs = ([]);
+    arkens -= ({0});
+
+    CHMASTER->join("Adebug", TO);
+
+    call_out("reset", 60);
+
+    }
+
+
+
+// Sinnlose Funktion zum Speichern :-)
+mixed saveme()
+{
+  return save_object(AMASTER);
+}
+
+
+int EventActive()
+{
+  return event;
+}
+
+int QuestActive()
+{
+  return quest;
+}
+
+
+varargs int StartEvent(string reason, int silent)
+{
+  event = 1;
+}
+
+varargs int StopEvent()
+{
+  event = 0;
+  caveopen_known = 0;
+}
+
+varargs int NotifyCaveClosed()
+{
+  caveopen_known = 0;
+}
+
+int NotifyCaveOpen()
+{
+  if (caveopen_known) return 0;
+  while (remove_call_out("NotifyCaveOpen")>0);
+
+  CHMASTER->send(CHAN_INFO, TO, "Die Schutzwache von Arwenock ist nichtmehr in der Lage den Angriffen der Arkens zu widerstehen. Jeder Spieler sollte umgehend aus der Stadt fluechten um sein Leben zu retten!", MSG_SAY);  
+  call_out("StartArkens", 2);
+  caveopen_known = 1;
+  if (!event) call_out("NotifyCaveOpen", 60);
+}
+
+
+int NotifyTownTaken()
+{
+  CHMASTER->send(CHAN_INFO, TO, "Arwenock ist verloren! Alle Tore wurden von innen verriegelt. Das Boese regiert.", MSG_SAY);  
+  CloseAllDoors();
+  event = 1;
+  while (remove_call_out("NotifyCaveOpen")>0);
+}
+
+
+
+_clone_arkens(int num)
+{
+  int i;
+  object ob;
+
+  call_other(CAVEPATH+"/room/k08", "???", 0);
+  call_other(CAVEPATH+"/room/n12", "???", 0);
+
+  for (i=0;i<num;i++)
+    {
+      ob = clone_object(CAVEPATH+"/npc/arkens");
+      if (random(2))
+        ob->move(CAVEPATH+"/room/k08", M_NOCHECK);
+      else
+        ob->move(CAVEPATH+"/room/n12", M_NOCHECK);
+    }
+}
+
+void CloneArkens(int num)
+{
+  if (num-3>0) call_out("CloneArkens", 0, num-3);
+  else Debug("Cloning last 3");
+  _clone_arkens(3);
+  Debug(sprintf("Arkens now: %d", sizeof(arkens)));
+  if (sizeof(arkens)>=30)
+    {
+      while (remove_call_out("CloneArkens")>0);
+      arkens -= ({ 0 });
+      Debug(sprintf("Aborted. Arkens: %d", sizeof(arkens)));
+    }
+
+}
+
+void StartArkens()
+{
+  int i;
+
+  arkens -= ({ 0 });
+
+  Debug(sprintf("Arkens: %d\n", sizeof(arkens)));
+
+  if (sizeof(arkens)<30)
+    {
+      Debug(sprintf("Nicht genug Arkens. Clone %d weitere ins Cave...", EVENT_ARKENS-sizeof(arkens)));
+      CloneArkens(EVENT_ARKENS-sizeof(arkens));
+    }
+
+  for (i=0; i <sizeof(arkens); i++)
+    {
+      arkens[i]->StartArkens();
+    }
+
+  
+}
+
+
+// mylog. schnelle moeglichkeit etwas zu loggen
+void mylog (string what, string logtext)
+    {
+    string text;
+    
+    text = sprintf("%s: %s %s\n", ctime(), what, logtext);
+    
+    write_file(ALOG "masterlog", text);
+    }
+
+
+// Alle Torstats auflisten
+void ListDoors()
+{
+
+  tell_object(TP, BS(sprintf("#Defined Tore: %O\n", TORE)));
+  
+  tell_object(TP, BS(sprintf("Gespeicherte Tore: %O\n", m_tore)));
+}
+
+
+// Fuers atool
+mixed AListDoors()
+{
+  return m_tore;
+}
+
+
+// Alle gespeicherten NPCs Anzeigen
+void ListNpcs()
+{
+  tell_object(TP, BS(sprintf("NPCs: %O\n", m_npcs)));
+}
+
+
+//////////////////////////////////////
+//
+// STADT-STATUS-FUNKTIONEN... DEFCON
+//
+/////////////////////////////////////
+
+
+/* INFO
+
+   DEFCON 0: NORMAL : Alles gruen :)
+   DEFCON 1: WARNUNG: Ein NPC wurde gekillt
+   DEFCON 2: ALARM  : Es sind weniger als <x> NPCs uebrig
+                      Tore werden Geschlossen, Alarm wird
+		      ausgerufen.
+*/
+
+
+
+
+// Status eines Tores abfragen
+int QueryDoorState(string tor)
+{
+  if (!member(TORE, tor))
+    {
+      mylog("MASTER", sprintf("ERROR: %s hat versucht ein non-existent Tor abzufragen.", file_name(PO)));
+      return -1;
+    }
+
+  if (DOORS_LOCKED) return 0;
+
+  // Das Tor existiert, aber es ist kein Status bekannt
+  if (!member(m_tore, tor))
+    {
+      TMI(sprintf("Erzeuge Tor neu: %s\n", tor));
+      // Stadt ist in DEFCON 2, Tor geschlossen
+      if(!QueryDefcon() == 2) m_tore += ([tor: 0; TORE[tor, 1]]);
+      
+      // Stadt ist frei, oder in DEFCON 1, Tor offen
+      else m_tore += ([tor: 1; TORE[tor, 1]]);
+      
+      saveme();
+      
+    }
+
+  return m_tore[tor, 0];
+}
+
+
+// Ein Tor schliessen
+int CloseDoor(string tor)
+{
+  if (!member(TORE, tor))
+    {
+      mylog("MASTER", sprintf("ERROR: %s hat versucht ein non-existent Tor zu schliessen.", file_name(PO)));
+      return -1;
+    }
+  
+  if (QueryDoorState(tor) == 0) return 1;
+  
+  // CloseDoor in dem Raum mit dem Tor aufrufen und Tor als geschlossen speichern
+  TORE[tor,1]->CloseDoor();
+  m_tore[tor,0] = 0;
+  
+  saveme();
+  
+  return 1;
+  
+}
+
+
+// Ein Tor oeffnen
+int OpenDoor(string tor)
+{
+  if (!member(TORE, tor))
+    {
+      mylog("MASTER", sprintf("ERROR: %s hat versucht ein non-existent Tor zu oeffnen.", file_name(PO)));
+      return -1;
+    }
+  
+  if (QueryDoorState(tor) == 1) return 0;
+  
+  // OpenDoor in dem Raum mit dem Tor aufrufen und Tor als offen speichern
+  TORE[tor,1]->OpenDoor();
+  m_tore[tor, 0] = 1;
+  
+  saveme();
+  
+  return 1;
+  
+}
+
+
+
+// Alle Tore schliessen. Sollte nur von SetDefcon aufgerufen werden
+int CloseAllDoors()
+{
+  int i;
+  string *tmptore;
+
+  tmptore = m_indices(TORE);
+
+  for (i = 0; i < sizeof(tmptore); i++)
+    {
+      CloseDoor(tmptore[i]);
+      TMI(sprintf("Schliesse Tor %s\n", tmptore[i]));
+    }
+    
+  return 1;
+}
+
+
+
+
+// Alle Tore oeffnen. Sollte nur von SetDefcon aufgerufen werden
+int OpenAllDoors()
+{
+  int i;
+  string *tmptore;
+
+  tmptore = m_indices(TORE);
+
+  for (i = 0; i < sizeof(tmptore); i++)
+    {
+      OpenDoor(tmptore[i]);
+    }
+    
+  return 1;
+}
+
+
+
+
+////////////////////////////////////////////////////////
+//
+// Funktionen fuer die Raeume (Licht, Temperatur,...)
+//
+///////////////////////////////////////////////////////
+
+// Rueckgabe des Lichtlevels an die Closure im stdRaum
+int givelight()
+{
+  return light;
+}
+
+
+// Rueckgabe der Temperatur an die Closure im stdRaum
+int givetemp()
+{
+  return temp;
+}
+
+
+
+/////////////////////////////////////////////
+//
+// Funktionen fuer Freund-Feind-System
+//   werden vom STDNPC aufgerufen
+//
+/////////////////////////////////////////////
+
+
+// Einen NPC zum Master hinzufuegen
+int AddNpc(object npc)
+{
+  if(!member(m_npcs, npc))
+    m_npcs += ([npc]);
+  return 1;
+}
+
+
+// Einen NPC ausm Master loeschen und DEFCON pruefen
+int DelNpc(object npc)
+{
+  if(member(m_npcs, npc))
+    m_npcs -= ([npc]);
+  
+  //CeckDefcon();
+  
+  return 1;
+}
+
+
+// Ein spieler hat einen NPC gekillt
+int PlayerKilledNpc(object npc, string player)
+{
+  int tmpk;
+  
+  //tell_object(find_player("iwo"), sprintf("MasterKill: %s\n", player));
+  
+  if (!member(m_npckills, player))
+    m_npckills += ([player: 1]);
+    
+  else
+    {
+      tmpk = m_npckills[player, 0];
+      m_npckills += ([player: tmpk+1]);
+    }
+    
+  // NPC ausm master loeschen
+  DelNpc(npc);    
+  
+  saveme();
+    
+  return 1;
+}
+
+
+// Ein NPC hat einen Spieler gekilled
+int NpcKilledPlayer(string player)
+{
+  int tmpk;
+  
+  if (!member(m_deaths, player))
+    m_deaths += ([player: 1]);
+    
+  else
+    {
+      tmpk = m_deaths[player, 0];
+      m_deaths += ([player: tmpk+1]);
+    }
+    
+  saveme();
+    
+  return 1;
+}
+
+int NukeArkens(int x)
+{
+  if (x)
+    nuke_arkens = 1;
+  else
+    nuke_arkens = 0;
+
+  return nuke_arkens;
+}
+
+
+string name()
+{
+  return name;
+}
+
+void UnRegisterArkens(object npc)
+{
+  arkens -= ({ npc });
+}
+
+
+void RegisterArkens(object npc)
+{
+  if (member(arkens, npc)<0) arkens += ({ npc });
+  if (nuke_arkens) PO->remove();
+}
+
+
+int QueryArkens()
+{
+  return sizeof(arkens);
+}
+
+
+void reset()
+{
+  arkens -= ({ 0 });
+  if (sizeof(arkens)<EVENT_ARKENS)
+    {
+      Debug(sprintf("Reset. Cloning %d Arkens.", EVENT_ARKENS-sizeof(arkens)));
+      //CloneArkens(EVENT_ARKENS-sizeof(arkens));
+    }
+
+  //SetDefcon(0);
+  saveme();
+}

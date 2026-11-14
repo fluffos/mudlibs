@@ -1,0 +1,556 @@
+// 30.05.00 Archon: - erstellt 
+/*
+ Rev 1.6 18.01.2003 Archon: anpassung an sl, umbenennung
+*/
+
+#include "../spiel.h"
+inherit "std/npc";
+
+int spiel; //spiel beigetreten?
+int zug; //spiel schon begonnen?
+int hatgespielt;
+object arco; //das arco-objekt
+mixed *spieler; //daten der spieler
+mixed *daten; //daten vorruebergehend
+int selbst; //welcher der beiden spieler bin ich
+mixed *liste; //aufbau ({ ({karte_id,prio,kartenr_in_hand,kann_spielen,kann_abwerfen,runden_bis_spielen}) })
+//beim abwerfen niedrigste prio - beim spielen hoeste prio
+int modus_verteidigung;
+int modus_angriff;
+int modus_resourcen;
+int zielturm;
+int zielr;
+
+void streichel_start();
+void SetzePrio(int karteabwerfen);
+void FuehreAus(int karteabwerfen);
+int runden_bis_play(int welche);
+int prio(int welche);
+int gewonnen_test();
+int prio_normal(int welche);
+void vergleich();
+int angriffs_klasse();
+int verteidigungs_klasse();
+int resourcen_klasse();
+int resourcen_je_runde_klasse();
+
+#define LOG_DATEI NPC "logik.log"
+
+void create()
+{
+  if (!is_clone(ME)) return;
+  ::create();
+  hatgespielt=0;
+  modus_verteidigung=0;
+  modus_angriff=0;
+  modus_resourcen=0;
+
+  SetProp(P_LOG_INFO,"archon/spiel_konsta.rep");
+
+  SetProp(P_SHORT,"Konsta");
+  SetProp(P_LONG,
+    "Dies ist Konsta. Sie ist fuer eine Kaeuerin recht gross. "
+    "Jede ihrer Bewegungen sehen aus, als ob Sie tanzen wuerde, wobei "
+    "sie jeden anstrahlt. Am liebsten sitzt sie jedoch bei einem Spiel "
+    "Arco und setzt dann ihr Poker-Gesicht auf. Auch wenn sie Dich anstrahlt, "
+    "wird sie Dich ohne mit den Wimpern zu zucken beim naechsten Zug besiegen. "
+    "Soll sie mitspielen, dann streichel sie doch einmal. Soll sie doch "
+    "nicht mehr mitspielen dann streichel sie ein weiteres Mal.");
+  SetProp(P_NAME, "Konsta");
+  SetProp(P_PLURAL, "");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_ARTICLE,0);
+  AddId(({"konsta","\nkonsta"}));
+  create_default_npc(30);
+  SetProp(P_XP,0);
+  SetProp(P_BODY, 5);
+  SetProp(P_HANDS, ({" mit einem Laecheln im Gesicht",200}));
+
+  AddInfo(DEFAULT_INFO,"zuckt die Schultern. "); 
+  AddInfo(({"arco","acro","spiel","hilfe"}),
+    "Oh das ist mein Lieblingsspiel. Seitdem Archon es mir beigebracht "
+    "hat, will ich gar nichts anderes mehr spielen. Willst Du nicht mit mir "
+    "spielen? Ich erklaere Dir auch gerne die Regeln.","sagt: ");
+  AddInfo(({"spielregeln","regeln"}),
+    "Die sind ganz einfach. Jeder Spieler ist abwechselnt dran. Wobei ich immer "
+    "hoffe, das ich selber anfangen darf. Wenn Du mehr wissen willst, erzaehle "
+    "ich es Dir gerne. Frage mich einfach nach dem Spielziel und nach dem "
+    "Vorgehen um dieses zu erreichen.","sagt: ");
+  AddInfo(({"spielziel","ziel","gewinnen","bedingungen","gewinnbedingungen","gewinnbedingung"}),
+    "Du musst versuchen, den Turm Deines Gegners nieder zu reissen, Deinen Turm "
+    "bis zu einer bestimmten Hoehe wachsen zu lassen, oder eine "
+    "bestimmte Anzahl von Ressourcen einer Art zu sammeln.","sagt: ");
+  AddInfo(({"turm","mauer"}),
+    "Jeder Spieler faengt mit gleichhoher Mauer und Turm an. Im Verlaufe des Spieles "
+    "kannst Du Deine Mauer und Turm aufbauen oder die Mauer und den Turm Deines Gegners "
+    "zerstoeren.","sagt: ");
+  AddInfo(({"ressourcen"}),
+    "Jede Spielrunde, wenn Du Deinen Zug beginnst, erhaelst Du Ressourcen. Es gibt "
+    "drei Arten. Erstens Steine - Die Anzahl der Steine, die Du pro Runde erhaeltst, "
+    "haengt von der Anzahl der Steinbrueche, die Du besitz ab. Diese Anzahl kann "
+    "durch bestimmte Karten die Du oder Dein Gegner ausspielt veraendert, doch niemals "
+    "unter 1 sinken. Zweitens Juwelen, Du erhaelst genau so viele pro Runde, wie Du "
+    "Magie besitzt und drittens noch Monster. Hier erhaeltst Du so viele, wie Zoos "
+    "in Deinem Besitz sind.","sagt: ");
+  AddInfo(({"magie","steine","steinbruch","steinbrueche","zoo","zoos","monster"}),
+    "Der Steinbruch erhoet Deinen Vorrat an Steinen, die Magie den Deiner Juwelen "
+    "und die Zoos den Deiner Monster.","sagt: ");
+  AddInfo(({"gegner"}),
+    "Du kannst hier gegen mich oder auch andere Spieler spielen.","sagt: ");
+  AddInfo(({"vorgehen"}),
+    "Jedesmal, wenn Du dran bist, kannst Du einer der 6 Karten, die Du besitzt "
+    "ausspielen, sovern Du ueber genug Ressourcen fuer diese Karte verfuegst.","sagt: ");
+  AddInfo(({"karte","karten"}),
+    "Jede Karte hat bestimmte Kosten. Diese stehen in der ersten Spalte. Zum Beispiel:\n"
+    "* 1: -9 Monster; Wenn Magie>Magie des Gegners 12 Schaden sonst 8     Einhorn *\n"
+    "Diese Karte wuerde Dich, wenn Du sie spielst 9 Monster kosten. Hast Du nicht "
+    "genuegend Monster, kannst Du die Karte nicht spielen. Wenn Du eine Karte ausspielst, "
+    "wird das ausgefuehrt, was hinter dem : steht. Hier wuerde Dein Gegner also "
+    "einen Schaden von 8 erleiden. Ist Deine Magie groesser als die Deines Gegners, "
+    "wuerde dieser sogar 12 Schaden erleiden.","sagt: ");
+  AddInfo(({"schaden"}),
+    "Viele Karten haben unterschiedliche Faehigkeiten. Es gibt zwei Arten von Schaden. "
+    "Der \"normale\" Schaden wird wie folgt verrechnet. Hat Dein Gegner eine Mauer "
+    "von 10 und einen Turm von 10 dann wuerde ein Schaden von 8 nur die Mauer treffen, "
+    "welche danach die Hoehe von 2 besitzt. Greifst Du hingegen mit einem Schaden von "
+    "12 an, wird die Mauer voellig vernichtet und der Turm bekommt sogar 2 Treffer ab. "
+    "Hast Du hingegen 8 Turmschaden, dann wird die Mauer gar nicht mitgerechnet und aller "
+    "Schaden geht sofort auf den Turm.","sagt: ");
+  AddInfo(({"faehigkeiten","art","arten"}),
+    "Es gibt viele Arten von Karten. Die meisten machen entweder bei Deinem Gegner Schaden, "
+    "oder Du kannst Deinen eigenen Turm oder Deine Mauer erhoehen. Die anderen Karten "
+    "erhoehe/erniedrigen [Deinen/Gegner] Vorraete an Ressourcen/Einkommen. Es gibt noch "
+    "viele andere Karten, aber diese wirst Du im Spiel schon verstehen.","sagt: ");
+}
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+  if (verb=="streichel")
+    streichel_start();
+}
+
+int Defend(int dam,mixed dam_type,int spell,object enemy)
+{
+  if (spiel)
+  {
+    SetProp(P_NOATTACK,({"Das geht jetzt nicht. Konsta ist doch "
+                         "ins Spiel vertieft. Willst Du sie denn einfach "
+                         "von hinten erdolchen? Schaem Dich!",
+                         "&&WER&& versucht Konsta anzugreifen. Doch ploetzlich mit "
+                         "hoch rotem Gesicht ueberlegt es sich &&WER&& anders."}));
+  }
+  else
+  if (!hatgespielt)
+  {
+    SetProp(P_NOATTACK,({"Geschickt weicht Konsta aus und bringt den "
+                           "Tisch zwischen euch. Mit blitzenden Augen funkelt "
+                           "sie Dich an und grummelt: 'Wenn Du schon Deine Kraft "
+                           "mit mir messen willst, dann zeige erst einmal, ob "
+                           "Du spielen kannst. Gestaerkt durch einen Sieg werde "
+                           "ich Dir dann zeigen, wer von uns beiden der Staerkere ist.'. "
+                           "Tja,  ohne dass Konsta nicht wenigstens einmal gespielt hat, "
+                           "wird sie wohl gegen keinen antreten.",
+                           "&&WER&& versucht Konsta anzugreifen, doch diese springt "
+                           "behende zur Seite und bringt den Tisch zwischen sich und "
+                           "&&WEN&&. Dann grummelt sie: 'Wenn Du schon Deine Kraft "
+                           "mit mir messen willst, dann zeige erst einmal, ob "
+                           "Du spielen kannst. Gestaerkt durch einen Sieg werde "
+                           "ich Dir dann zeigen, wer von uns beiden der Staerkere ist.'"}));
+  }
+  else
+  {
+    SetProp(P_NOATTACK,0);
+  }
+  return ::Defend((dam/2), dam_type, spell, enemy);
+}
+
+void Attack( object enemy )
+{
+  string pl_msg, env_msg;
+  pl_msg = 0;
+  env_msg = 0;
+  if (enemy->QueryProp(P_POISON)<5)
+  {
+    switch (random(5))
+    {
+      case 0:
+        pl_msg = "Ploetzlich grinst Konsta fies und haelt eine kleine "
+          "Nadel in der Hand. So sehr Du Dich auch bemuehst, dieser "
+          "auszuweichen, kannst Du doch einen Kratzer nicht vermeiden. Kaum "
+          "hat Konsta die Nadel weggezogen, explodiert in Dir der Schmerz. "
+          "Dir wird uebel, und Du fuehlst, wie das Gift sich in Deinem ganzen "
+          "Koerper ausbreitet.";
+        env_msg = "Ploetzlich grinst Konsta fies und haelt eine kleine "
+          "Nadel in der Hand. So sehr sich " + PL->name(WER, NAME_AUTO)+
+          " auch bemueht, dieser auszuweichen, kann " + PL->QueryPronoun(WER)+
+          " doch einen Kratzer nicht vermeiden. Kaum hat Konsta die Nadel "
+          "weggezogen, schreit " + PL->name(WER, NAME_DEF) + " auf.";
+        enemy->SetProp(P_POISON, 5);
+        enemy->DISABLE_ATTACK(2);
+        break;
+
+      case 1..2:
+        pl_msg = "Ploetzlich grinst Konsta fies und haelt eine kleine "
+          "Nadel in der Hand. So sehr Du Dich auch bemuehst, dieser "
+          "auszuweichen, kannst Du doch einen Kratzer nicht vermeiden. Kaum "
+          "hat Konsta die Nadel weggezogen, explodiert in Dir der Schmerz. "
+          "Dir wird uebel, und Du fuehlst, wie das Gift sich in Deinem ganzen "
+          "Koerper ausbreitet.";
+        env_msg = "Ploetzlich grinst Konsta fies und haelt eine kleine "
+          "Nadel in der Hand. So sehr sich " + PL->name(WER, NAME_AUTO)+
+          " auch bemuehst, dieser auszuweichen, kann " + PL->QueryPronoun(WER)+
+          " doch einen Kratzer nicht vermeiden. Kaum hat Konsta die Nadel "
+          "weggezogen, schreit " + PL->name(WER, NAME_DEF)+" auf.";
+        enemy->SetProp(P_POISON, enemy->QueryProp(P_POISON)+1);
+        break;
+
+      default:
+    }
+    if (pl_msg)
+    {
+      tell_object(enemy, break_string(pl_msg));
+      tell_room(environment(enemy), break_string(env_msg), ({ enemy }));
+      return;
+    }
+  }
+  ::Attack(enemy);
+}
+
+void streichel_start()
+{
+  if (!arco=S_STANDARD->present_clone(SPIEL "arco_spiel", environment()))
+  {
+    say("Aber hier ist doch gar kein Spiel.\n");
+    spiel = 0;
+    zug = 0;
+    return;
+  }
+  spiel = arco->spielt_npc_mit(ME);
+  if (!spiel)
+  {
+    if (arco->mitspielen_npc(ME))
+    {
+      tell_room(environment(ME),break_string("Konsta huepft freudig umher und macht es sich im Sessel bequem. Dann "
+            "schaut sie "+PL->name(WER,NAME_AUTO)+" mit grossen Augen an: 'Wann gehts endlich los?'"),({PL}));
+      tell_object(PL,break_string("Konsta huepft freudig umher und macht es sich im Sessel bequem. Dann "
+            "schaut sie Dich mit grossen Augen an: 'Wann gehts endlich los?'"));
+      spiel = 1;
+      zug = 0;
+      return;
+    }
+    zug = 0;
+    say("Das Spiel scheint schon voll zu sein. Konsta ist enttaeuscht.\n");
+    return;
+  }
+  if (arco->verlasse_spiel_npc(ME))
+  {
+    say("Traurig raeumt Konsta den Sessel. Dann eben nicht.\n");
+    spiel = 0;
+    zug = 0;
+    return;
+  }
+  say("Aber das Spiel hat doch schon angefangen. Nun spielt doch erst einmal zu ende.\n");
+}
+
+void spiel_ende(int wie)
+{
+  spiel = 0;
+  zug = 0;
+  hatgespielt = 1;
+  while(remove_call_out("SetzePrio")!=-1) ;
+  while(remove_call_out("FuehreAus")!=-1) ;
+  switch (wie)
+  {
+    case 0: say("Konsta freut sich ueber ihren Sieg.\n"); break; //gewonnen
+    case 1: say("Konsta ist ganz betruebt ueber ihre Niederlage.\n"); break; //verloren
+    case 2: say("Konsta brummt und mummerlt: 'Besser als eine Niederlage.'\n"); break; //patt
+    case 3: say(break_string("Konsta grummelt: 'Hast wohl Angst bekommen. Beim naechsten Zug haette ich auch so gewonnen.'")); break; //gewonnen aufgabe
+    default: say("Konsta gruebelt: Ich bin ausgestiegen? Also das duerfte nicht passieren!\nSag bitte einem Magier Bescheid!\n"); break; //verloren aufgabe
+  }
+}
+
+void spiele_zug(int karteabwerfen)
+{
+//aufbau ({ ({karte_id,prio,kartenr_in_hand,kann_spielen,kann_abwerfen,runden_bis_spielen}) })
+  if (!zug)
+  {
+    say("Konsta jubelt: 'Na endlich. Dann mal los.'\n");
+    zug=1;
+  }
+  spieler=arco->liefere_npc_spieler_daten();
+  (spieler[0][ARCO_PLAYER]==ME?selbst=0:selbst=1);
+  liste=ARCO_KARTEN->liefere_karten_ausspielen(spieler[selbst]); //lieferte alle karten in obiger form
+  if (!pointerp(liste) || !sizeof(liste)) 
+  {
+    BUGA("Konsta hat keine Karten?");
+    arco->verlasse_spiel_npc_force(ME);
+    spiel_ende(5);
+    return;
+  } //damit keine too long ev. entstehen
+  call_out("SetzePrio",1,karteabwerfen);
+}
+
+void FuehreAus(int karteabwerfen)
+{
+  int i,kann_spielen;
+  liste = sort_array(liste, lambda( ({'a,'b}), ({#'<, ({#'[,'a,1}), ({#'[,'b,1}) }) ));
+/*LOG*/
+  write_file(LOG_DATEI,ARCO_ANZEIGE->liefere_anzeige(spieler[0],spieler[1],1,zielturm,zielr));
+  for (i=0;i<6;i++)
+  {
+    write_file(LOG_DATEI,ARCO_KARTEN->liefere_beschreibung2_karten_id(liste[i][0],BS_STDLEN,i)+"\n");
+    write_file(LOG_DATEI,"Konsta Logik Prioritaet: "+liste[i][1]+" Kann spielen: "+liste[i][3]+"\n");
+  }
+/*LOG ENDE*/
+  if (!liste[0][3]) karteabwerfen=1; //karte mit hoester prio kann nicht gespielt werden
+  if (!liste[0][1]<0) karteabwerfen=1; //prio<0 also lieber abwerfen
+  if (karteabwerfen)
+  {
+    for (i=6;i--;)
+    {
+	if (liste[i][4]) break; //ok etwas gefunden
+	if (i==0) 
+	{ 
+	  BUGA("Konsta hat nur Karten die nicht abgeworfen werden koennen.");
+	  arco->verlasse_spiel_npc_force(ME);
+          spiel_ende(5);
+	}     
+    }
+    if (!arco->karte_abwerfen_npc(liste[i][2],ME))
+    {
+//	  BUGA("Konsta konnte Karte "+to_string(liste[i][0])+" nicht abwerfen.");
+	  arco->verlasse_spiel_npc_force(ME);
+          spiel_ende(5);
+    }
+    return;
+  }
+  if (!arco->karte_spielen_npc(liste[0][2],ME)) //die mit hoester prio spielen
+  {
+//    BUGA("Konsta konnte Karte "+to_string(liste[i][0])+" nicht spielen.");
+    arco->verlasse_spiel_npc_force(ME);
+    spiel_ende(5);
+  }
+  return;
+}
+
+void SetzePrio(int karteabwerfen)
+{
+  int i;
+//mal sehen wie man da was hinbekommt!
+//ist karte mit hoester prio nicht spielbar -> abwerfen
+//aufbau ({ ({karte_id,prio,kartenr_in_hand,kann_spielen,kann_abwerfen,runden_bis_spielen}) })
+  for (i=6;i--;)
+  {
+    if (!liste[i][3])
+    { //diese koennen nicht gespielt werden fuer jede runde die sie nicht gespielt werden koennen -1 prio
+      liste[i][1]=liste[i][1]-(runden_bis_play(liste[i][0])*10);
+    }
+    else
+    {
+      liste[i][1]=liste[i][1]+prio(liste[i][0]);
+    }
+  } 
+  call_out("FuehreAus",1,karteabwerfen);
+}
+
+int runden_bis_play(int welche)
+{
+  int i;
+  daten=({0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,""});
+  daten[ARCO_STEINE]=spieler[selbst][ARCO_STEINE];
+  daten[ARCO_JUWELEN]=spieler[selbst][ARCO_JUWELEN];
+  daten[ARCO_MONSTER]=spieler[selbst][ARCO_MONSTER];
+  daten[ARCO_STEINBRUCH]=spieler[selbst][ARCO_STEINBRUCH];
+  daten[ARCO_MAGIE]=spieler[selbst][ARCO_MAGIE];
+  daten[ARCO_ZOO]=spieler[selbst][ARCO_ZOO];
+  for (i=0;i<10;i++)
+  {
+    daten[ARCO_STEINE]+=daten[ARCO_STEINBRUCH];
+    daten[ARCO_JUWELEN]+=daten[ARCO_MAGIE];
+    daten[ARCO_MONSTER]+=daten[ARCO_ZOO];
+    if (ARCO_KARTEN->kann_ausspielen2(welche,daten))
+    {
+    	break;
+    }
+  }
+  return i+1;
+}
+
+string ausgabe_daten()
+{
+  string ret;
+  ret="T:"+daten[0][ARCO_TURM]+"M:"+daten[0][ARCO_MAUER]+
+      "SB:"+daten[0][ARCO_STEINBRUCH]+"MA:"+daten[0][ARCO_MAGIE]+
+      "Z:"+daten[0][ARCO_ZOO]+"ST:"+daten[0][ARCO_STEINE]+
+      "J:"+daten[0][ARCO_JUWELEN]+"MO:"+daten[0][ARCO_MONSTER]+
+      "T:"+daten[1][ARCO_TURM]+"M:"+daten[1][ARCO_MAUER]+
+      "SB:"+daten[1][ARCO_STEINBRUCH]+"MA:"+daten[1][ARCO_MAGIE]+
+      "Z:"+daten[1][ARCO_ZOO]+"ST:"+daten[1][ARCO_STEINE]+
+      "J:"+daten[1][ARCO_JUWELEN]+"MO:"+daten[1][ARCO_MONSTER];
+  return ret;
+}
+
+int prio(int welche)
+{
+  int g;
+  daten=({ ({0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,""}) , ({0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,""}) });
+  daten[0][ARCO_STEINE]=spieler[selbst][ARCO_STEINE];
+  daten[0][ARCO_JUWELEN]=spieler[selbst][ARCO_JUWELEN];
+  daten[0][ARCO_MONSTER]=spieler[selbst][ARCO_MONSTER];
+  daten[0][ARCO_TURM]=spieler[selbst][ARCO_TURM];
+  daten[0][ARCO_MAUER]=spieler[selbst][ARCO_MAUER];
+  daten[0][ARCO_STEINBRUCH]=spieler[selbst][ARCO_STEINBRUCH];
+  daten[0][ARCO_MAGIE]=spieler[selbst][ARCO_MAGIE];
+  daten[0][ARCO_ZOO]=spieler[selbst][ARCO_ZOO];
+  daten[1][ARCO_STEINE]=spieler[selbst?0:1][ARCO_STEINE];
+  daten[1][ARCO_JUWELEN]=spieler[selbst?0:1][ARCO_JUWELEN];
+  daten[1][ARCO_MONSTER]=spieler[selbst?0:1][ARCO_MONSTER];
+  daten[1][ARCO_TURM]=spieler[selbst?0:1][ARCO_TURM];
+  daten[1][ARCO_MAUER]=spieler[selbst?0:1][ARCO_MAUER];
+  daten[1][ARCO_STEINBRUCH]=spieler[selbst?0:1][ARCO_STEINBRUCH];
+  daten[1][ARCO_MAGIE]=spieler[selbst?0:1][ARCO_MAGIE];
+  daten[1][ARCO_ZOO]=spieler[selbst?0:1][ARCO_ZOO];
+  ARCO_KARTEN->aktion_ausfuehren_karte(welche,daten[0],daten[1]);
+  g=gewonnen_test();
+  if (g==1) return 1000; //damit wird gewonnen prioritaet sehr hoch  
+  if (g==-1) return -1000; //damit wird verloren prioritaet sehr niedrig -> sonst abwerfen
+  return prio_normal(welche); //versucht prioritaet aufgrund vorher/nachher aussagen zu machen
+}
+
+int gewonnen_test()
+{
+  int g1;
+  int g2;
+  zielturm=arco->liefere_zielturm();
+  zielr=arco->liefere_zielr();
+  g1=0;
+  g2=0;
+  if (daten[0][ARCO_TURM]>=zielturm) g1=1;
+  if (daten[0][ARCO_STEINE]>=zielr) g1=1;
+  if (daten[0][ARCO_JUWELEN]>=zielr) g1=1;
+  if (daten[0][ARCO_MONSTER]>=zielr) g1=1;
+  if (daten[0][ARCO_TURM]==0) g2=1;
+  if (daten[1][ARCO_TURM]>=zielturm) g2=1;
+  if (daten[1][ARCO_STEINE]>=zielr) g2=1;
+  if (daten[1][ARCO_JUWELEN]>=zielr) g2=1;
+  if (daten[1][ARCO_MONSTER]>=zielr) g2=1;
+  if (daten[1][ARCO_TURM]==0) g1=1;
+  if (g1 && g2)
+  {
+    return 0;
+  }
+  if (g1)
+  {
+    return 1;
+  }
+  if (g2)
+  {
+    return -1;
+  }
+  return 0;
+}
+
+//prio-logik
+//neuer zug = +50
+//
+int prio_normal(int welche)
+{
+  int prio;
+  int verteidigen;
+  int help;
+  verteidigen=0; //ersteinmal nicht verteidigen
+  prio=0;
+  if (daten[0][ARCO_TURM]<12) verteidigen=1; //ich koennte leicht verlieren also ...
+  if (ARCO_KARTEN->neuer_zug2(welche) && (!ARCO_KARTEN->karte_abwerfen_zwang(welche))) 
+    prio+=50; //neuer zug ja aber nicht wenn nur karte tauschen
+  vergleich(); //ermittelt vorher_nachher vergleich der gebrachten ereignisse
+  help=angriffs_klasse();
+  if (modus_angriff) prio+=2*help; else prio+=help;
+  help=verteidigungs_klasse();
+  if (modus_verteidigung || verteidigen) prio+=3*help; else prio+=help;
+  help=resourcen_klasse();
+  if (modus_resourcen) prio+=2*help; else prio+=help;
+  help=resourcen_je_runde_klasse();
+  if (modus_resourcen) prio+=2*help; else prio+=help;
+  return prio;
+}
+
+void vergleich()
+{ //daten gesetzt in prio
+  daten[0][ARCO_STEINE]=daten[0][ARCO_STEINE]-spieler[selbst][ARCO_STEINE]; //X weniger Steine
+  daten[0][ARCO_JUWELEN]=daten[0][ARCO_JUWELEN]-spieler[selbst][ARCO_JUWELEN];
+  daten[0][ARCO_MONSTER]=daten[0][ARCO_MONSTER]-spieler[selbst][ARCO_MONSTER];
+  daten[0][ARCO_TURM]=daten[0][ARCO_TURM]-spieler[selbst][ARCO_TURM];
+  daten[0][ARCO_MAUER]=daten[0][ARCO_MAUER]-spieler[selbst][ARCO_MAUER];
+  daten[0][ARCO_STEINBRUCH]=daten[0][ARCO_STEINBRUCH]-spieler[selbst][ARCO_STEINBRUCH];
+  daten[0][ARCO_MAGIE]=daten[0][ARCO_MAGIE]-spieler[selbst][ARCO_MAGIE];
+  daten[0][ARCO_ZOO]=daten[0][ARCO_ZOO]-spieler[selbst][ARCO_ZOO];
+  daten[1][ARCO_STEINE]=daten[1][ARCO_STEINE]-spieler[selbst?0:1][ARCO_STEINE];
+  daten[1][ARCO_JUWELEN]=daten[1][ARCO_JUWELEN]-spieler[selbst?0:1][ARCO_JUWELEN];
+  daten[1][ARCO_MONSTER]=daten[1][ARCO_MONSTER]-spieler[selbst?0:1][ARCO_MONSTER];
+  daten[1][ARCO_TURM]=daten[1][ARCO_TURM]-spieler[selbst?0:1][ARCO_TURM];
+  daten[1][ARCO_MAUER]=daten[1][ARCO_MAUER]-spieler[selbst?0:1][ARCO_MAUER];  
+  daten[1][ARCO_STEINBRUCH]=daten[1][ARCO_STEINBRUCH]-spieler[selbst?0:1][ARCO_STEINBRUCH];
+  daten[1][ARCO_MAGIE]=daten[1][ARCO_MAGIE]-spieler[selbst?0:1][ARCO_MAGIE];
+  daten[1][ARCO_ZOO]=daten[1][ARCO_ZOO]-spieler[selbst?0:1][ARCO_ZOO];
+}
+
+int angriffs_klasse()
+{
+/*
+  int help;
+  help=0;
+  if (daten[1][ARCO_MAUER]>0 || daten[1][ARCO_TURM]>0) help=-10;
+  if (daten[1][ARCO_MAUER]<0 && daten[1][ARCO_MAUER]>-6) help=5;
+  if (daten[1][ARCO_TURM]<0 && daten[1][ARCO_TURM]>-6) help=10;
+  if (daten[1][ARCO_MAUER]<-5) help=15;
+  if ((daten[1][ARCO_TURM]+daten[1][ARCO_MAUER])<-15) help=20;
+  if (daten[1][ARCO_TURM]<-5) help=25;
+  if ((daten[1][ARCO_TURM]+daten[1][ARCO_MAUER])<-20) help=30;
+  return help;
+*/
+  return -((daten[1][ARCO_MAUER]+daten[1][ARCO_TURM]*3)*2);
+}
+
+int verteidigungs_klasse()
+{
+/*
+  int help;
+  help=0;
+  if (daten[0][ARCO_MAUER]<0 || daten[0][ARCO_TURM]<0) help=-10;
+  if (daten[0][ARCO_MAUER]>0 && daten[0][ARCO_MAUER]<6) help=5;
+  if (daten[0][ARCO_TURM]>0 && daten[0][ARCO_TURM]<6) help=10;
+  if (daten[0][ARCO_MAUER]>5) help=15;
+  if ((daten[0][ARCO_TURM]+daten[0][ARCO_MAUER])>15) help=20;
+  if (daten[0][ARCO_TURM]>5) help=25;
+  if ((daten[0][ARCO_TURM]+daten[0][ARCO_MAUER])>20) help=30;
+  return help;
+*/
+  return (daten[0][ARCO_MAUER]+daten[0][ARCO_TURM]*3)*2;
+}
+
+int resourcen_klasse()
+{
+  int help;
+  help=0;
+  help+=daten[0][ARCO_STEINE]*2;
+  help+=daten[0][ARCO_JUWELEN]*2;
+  help+=daten[0][ARCO_MONSTER]*2;
+  help-=daten[1][ARCO_STEINE];
+  help-=daten[1][ARCO_JUWELEN];
+  help-=daten[1][ARCO_MONSTER];
+  return help;
+}
+
+int resourcen_je_runde_klasse()
+{
+  int help;
+  help=0;
+  help+=daten[0][ARCO_STEINBRUCH]*35;
+  help+=daten[0][ARCO_MAGIE]*35;
+  help+=daten[0][ARCO_ZOO]*35;
+  help-=daten[1][ARCO_STEINBRUCH]*35;
+  help-=daten[1][ARCO_MAGIE]*35;
+  help-=daten[1][ARCO_ZOO]*35;
+  return help;
+}

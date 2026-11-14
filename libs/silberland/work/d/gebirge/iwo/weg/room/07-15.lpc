@@ -1,0 +1,155 @@
+inherit "std/room";
+
+#include "/d/gebirge/gebirge.h"
+#include "defines.h"
+#include "properties.h"
+#include "moredef.h"
+#include <room.h>
+
+#include "def.h"
+
+object * jumpers = ({});
+
+void create()
+{
+  if (IS_CLONE(TO)) return;
+  
+  ::create();
+
+  SetProp(P_LIGHT, 1);
+
+  SetProp(P_INT_SHORT, "Nahe eines Waldrandes");
+  
+  SetProp(P_INT_LONG, "Hier ist der Waldrand nicht fern. Weiter "
+    "oestlich glaubst Du etwas zu erkennen. Die Baeume stehen hier "
+    "weniger dicht. Zwischen den maechtigen Staemmen wachsen nun "
+    "auch schon ein paar Gruenpflanzen.");
+
+  AddDetail( ({ "waldrand", "wald" }),
+    "Im Osten kannst Du den Waldrand erkennen.");
+  AddDetail( ({ "osten", "suedwesten" }),
+    "Du koenntest einfach hingehen.");
+  AddDetail( ({ "baeume" }),
+    "Da der Waldrand nicht fern ist, stehen sie hier nicht so dicht, "
+    "wie anderswo im Wald.");
+  AddDetail( ({ "wald" }),
+    "Der Wald zieht sich weiter gen Suedwesten.");
+  AddDetail( ({ "staemme", "staemmen" }),
+    "Die Staemme sind unglaublich dick.");
+  AddDetail( ({ "gruenpflanzen", "pflanzen" }),
+    "Hauptsaechlich unwirtliche Straeucher.");
+  AddDetail( ({ "straeucher" }),
+    "Es scheint, als waern es Dornenbuesche.");
+  AddDetail( ({ "dornenbuesche" }),
+    "Du koenntest wohl hineinhecken.");
+  AddDetail( ({ "himmel" }),
+    "Der Himmel ist hier kaum zu sehen.");
+  AddDetail( ({ "boden" }),
+    "Blaetter zieren den Boden hier.");
+  AddDetail( ({ "blaetter" }),
+    "Die Blaetter kommen von den Baeumen.");
+ 
+
+
+  AddExit("osten", BASE "08-15");
+  AddExit("suedwesten", BASE "06-14");
+
+  AddCmd( ({ "heck", "hecke" }), "hecking");
+     
+
+}
+
+void dornen(object bracer)
+{
+  string *old_adj;
+  int ac;
+
+  if(function_exists("long",bracer)[0..4] != "/std/" || 
+      function_exists("short",bracer)[0..4] != "/std/")
+    return 0;
+  if( bracer->QueryProp(P_EFFECTIVE_WC) )
+    return 0;
+
+  bracer->AddAdjective( ({"dornenumwickelt", "dornenumwickelte", 
+        "dornenumwickeltes", "dornenumwickelten"}) );
+  if( !old_adj=bracer->QueryProp(P_NAME_ADJ) )
+    old_adj=({});
+  if( (ac=bracer->QueryProp(P_AC))<9-bracer->QueryProp(P_DAMAGED) )
+    bracer->SetProp(P_AC, ac+random(3) );
+  bracer->SetProp(P_NAME_ADJ, old_adj+ ({"dornenumwickelt"}) );
+  bracer->SetProp(P_EFFECTIVE_WC, 70+random(50));
+  bracer->SetProp(P_SHORT, bracer->QueryProp(P_SHORT)+ " (dornenumwickelt)");
+  bracer->SetProp(P_LONG, bracer->QueryProp(P_LONG)+ 
+     "Dornenranken sind rundherum gewickelt.");
+  write_file("/d/gebirge/iwo/weg/hecking.log",
+      sprintf("%s %s %s AC=%d, EFF-WC=%d\n", ctime(), getuid(TP), 
+        bracer->QueryProp(P_SHORT), bracer->QueryProp(P_AC),
+        bracer->QueryProp(P_EFFECTIVE_WC)));
+}
+
+int hecking (string str)
+{
+  int damage;
+  object *bracers;
+
+  damage = 50;
+
+  SetProp(P_KILL_NAME, "Extremehecking");
+
+  notify_fail("In was willst Du hecken?\n");
+  if (str != "in busch" && str != "in dornenbusch"
+      && str != "in dornenbuesche") return 0;
+
+  damage -= this_player()->QueryProp(P_TOTAL_AC)/10;
+
+  if (sizeof(TP->QueryProp(P_ARMOURS))>0)
+    {
+      tell_object(TP, BS("Du nimmst Anlauf und heckst "
+        "elegant mitten in einen Dornenbusch."));
+      tell_room(ME, BS(TP->Name(WER) + " nimmt Anlauf und "
+        "springt voller Inbrunst mitten in einen Dornenbusch?!"),
+        ({ TP }));
+
+      tell_object(TP, BS("Deine Ruestung faengt ein paar "
+        "der schmerzhaften Dornen ab. Gottseidank bist Du "
+        "nicht nackt hinein gesprungen."));
+      tell_object(TP, BS("Ein gellender Schmerzensschrei entfaehrt "
+        "Deiner Kehle."));
+      tell_room(ME, BS(TP->Name(WER) + " schreit wie am Spiess."),
+        ({ TP }));
+      tell_object(TP, BS("Grummelnd kletterst Du aus dem stacheligen "
+        "Strauch."));
+      tell_room(ME, BS(TP->Name(WER) + " klettert grumelnd aus dem "
+        "stacheligen Strauch."), ({ TP }));
+      write_file("/d/gebirge/iwo/weg/hecking.log",
+        sprintf("%s %s (Angezogen)\n", ctime(), getuid(TP)));
+      TP->do_damage(damage);
+      if( sizeof(bracers=TP->QueryArmours( AT_BRACERS )) )
+        dornen(bracers[0]);
+      return 1;
+    }
+
+  tell_object(TP, BS("Du nimmst Anlauf und heckst "
+    "elegant pudelnackig mitten in einen Dornenbusch."));
+  tell_room(ME, BS(TP->Name(WER) + " nimmt Anlauf und "
+    "springt voller Inbrunst nackt mitten in einen Dornenbusch?!"),
+    ({ TP }));
+
+  tell_object(TP, BS("Wie durch ein Wunder streichen die Dornen "
+    "sanft ueber Deine Haut und heilen einen Teil Deiner Wunden."));
+  if (member(jumpers, TP)==-1) 
+    TP->AddHp(20);
+  tell_object(TP, 
+    BS("Quietschvergnuegt kletterst Du aus dem Strauch."));
+  tell_room(ME, BS(TP->Name(WER) + " klettert quietschvergnuegt "
+    "aus dem Strauch. Du schuettelst den Kopf."), ({ TP }));
+
+  jumpers += ({ TP });
+
+  write_file("/d/gebirge/iwo/weg/hecking.log",
+    sprintf("%s %s (NACKT)\n", ctime(), getuid(TP)));
+
+  return 1;
+  
+}
+

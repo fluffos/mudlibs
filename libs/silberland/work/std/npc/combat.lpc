@@ -1,0 +1,407 @@
+// SilberLand MUDlib
+//
+// std/npc/combat.c -- NPC combat/spells
+//
+// $Date: 2005/01/15 10:16:40 $
+/* $Revision: 1.20 $
+ * $Log: combat.c,v $
+ * Revision 1.20  2005/01/15 10:16:40  Feyaria
+ * @PWER usw fuer AddSpell, bugmeldung nur an magier bei illegalen schadenstyp
+ *
+ * Revision 1.19  2004/10/17 16:53:56  Feyaria
+ * Bugfix im init wenn P_ALCOHOL_DELAY = 0
+ *
+ * Revision 1.18  2004/09/04 11:17:25  Feyaria
+ * auf this_object() pruefen bei funktionsaufrufen von spells
+ *
+ * Revision 1.17  2003/10/09 17:54:59  Feyaria
+ * SHOWDAMAGE auch bei spells, die eine funktion aufrufen.
+ *
+ * Revision 1.16  2002/07/02 18:16:42  Feyaria
+ * Bugfix HP_DELAY=0
+ *
+ * Revision 1.15  2002/07/01 21:46:32  Feyaria
+ * \n in Bug-meldungen.
+ *
+ * Revision 1.14  2002/06/29 00:36:44  Feyaria
+ * Beim hochheilen QueryProp(P_HP_DELAY) statt HEALTH_DELAY
+ *
+ * Revision 1.13  2002/06/27 17:51:17  Feyaria
+ * Beim AddSpell pruefen, ob richtiger Schadenstyp gesetzt
+ *
+ * Revision 1.12  2001/08/01 10:35:27  Woody
+ * Spells nehmen nun auf P_DISABLE_SPELLS (statt P_DISABLE_ATTACK) Ruecksicht
+ *
+ * Revision 1.11  2001/02/16 18:22:29  Woody
+ * LOST_HEART_BEAT nach /log/npc/ verlegt
+ *
+ * Revision 1.10  2000/07/05 15:53:12  Woody
+ * Herzschlagverlust mitloggen, P_NOATTACK setzen
+ *
+ * Revision 1.9  1999/02/09 16:38:56  Woody
+ * Makro-Ersetzung (@WER,...) bugfixed, regreplace() verwendet
+ *
+ * Revision 1.8  1998/07/10 16:25:29  Woody
+ * Bugfix in heart_beat() (NPC koennte nach ::heart_beat() schon tot sein...)
+ *
+ * Revision 1.7  1998/02/23 17:07:55  Feyaria
+ * DefaultSpells nach spells.c ausgelagert
+ *
+ * Revision 1.6  1997/07/01 20:27:04  Feyaria
+ * defaultspells
+ *
+ * Revision 1.5  1997/06/26 23:15:27  Woody
+ * Bugfix: Autoattack NPCs griffen auch Mags an, P_NOAGGRESSIVE ging nicht
+ *
+ * Revision 1.4  1997/06/25 11:58:01  Woody
+ * AutoAttack(), nun wesentlich flexibler (Wahrsch., Props...)
+ *
+ * Revision 1.3  1997/05/31 20:23:06  Feyaria
+ * bug behoben .. Atacck ohne enemy aufgerufen :)
+ *
+ * Revision 1.2  1997/05/30 19:03:59  Feyaria
+ * spells jetzt im Attack statt im heartbeat
+ *
+ * Revision 1.1  1997/03/13 01:19:15  Woody
+ * prepared for revision control
+ *
+*/
+
+// neu ab 6.10.95 : Spieler mit gesetztem P_NOAGGRESSIVE
+//                  werden nicht angegriffen
+// neu ab 15.2.96 : AddSpell: Spell bei random(rate < gesamtrate) nicht
+//                  bei random(kumulierte rate < gesamtrate)
+//                  7. Parameter 'sp_info' wird, wenn gesetzt, an Defend als
+//                  3. Parameter uebergeben.
+//                  Hm.. die Ratenberechnung und das Drumrum ist irgendwie
+//                  alles Quatsch
+//                  Also mal was neues: in der Propertie P_NPC_SPELL_VECTOR
+//                  wird die laufende Nummer (Index) des aktuellen Spells
+//                  'rate'-mal als 'int' abgelegt. Also bei 3 Spells mit
+//                  Raten 1:3:4 wird P_NPC_SPELL_VECTOR zu
+//                  ({0,1,1,1,2,2,2,2}). Fuer den aktuellen Spell (in
+//                  'heart_beat') wird dann zufaellig ein Eintrag
+//                  ausgewaehlt und der zugehoerige Spell abgearbeitet.
+// neu ab 28.2.96 : Der 6. Parameter bei AddSpell ist entweder ein Mapping,
+//                  dann wird er 'Defend' als 3. Parameter uebergeben, oder
+//                  aber eine Funktion (String), diese wird nach dem Spell
+//                  mit dem aktuellen Schaden, dem Schadenstyp und dem
+//                  Feindobjekt als Parameter aufgerufen.
+// neu ab 12.3.96 : Parameterliste fuer AddSpell, Includes geaendert
+// 
+
+inherit "std/living/combat";
+
+#include <combat.h>
+#include <npc/combat.h>
+#include <language.h>
+#include <properties.h>
+#include <wizlevels.h>
+#include <health.h>
+
+#define HB_CHECK 7
+
+// Zur besseren Lesbarkeit:
+#define DAMAGE   0
+#define MSG_ENEMY 1
+#define MSG_OTHER 2
+#define DAM_TYPE  3
+#define SP_INFO   4
+#define SP_INFO2  5
+
+nosave int heartbeat, beatcount;
+
+
+void create()
+{
+  ::create();
+  beatcount=1;
+  heartbeat=1;
+}
+
+
+nosave void _set_max_hp(int i)
+{
+  Set(P_MAX_HP,i);
+  SetProp(P_HP,i);
+}
+
+
+nosave void _set_max_sp(int i)
+{
+  Set(P_MAX_SP,i);
+  SetProp(P_SP,i);
+}
+
+
+varargs void AddSpell(int rate, int damage, string TextForEnemy,
+                      string TextForOthers, mixed dam_type, mixed sp_info,
+                      mixed sp_info2)
+{
+  mixed *spells;
+  int   i, index, *rate_array;
+
+  if (rate<=0 || damage<=0 || !stringp(TextForEnemy) || !stringp(TextForOthers))
+    return;
+  if (!dam_type)
+    dam_type = DT_MAGIC;
+  if( stringp(dam_type) )
+  {
+    if( member(m_indices(ALL_DAMAGE_TYPES), dam_type)==-1 )
+      if (this_interactive() && IS_LEARNER(this_interactive()))
+        return tell_object(this_interactive(),
+            "\nBUG: Illegal Damage Type in AddSpell: "+dam_type+"\n\n");
+      else
+        return raise_error("Illegal Damage Type in AddSpell: "+dam_type+"\n");
+  }
+  else if( pointerp(dam_type) )
+  {
+    for (i=sizeof(dam_type)-1;i>=0;i--)
+    {
+      if( member(m_indices(ALL_DAMAGE_TYPES), dam_type[i])==-1 )
+        if (this_interactive() && IS_LEARNER(this_interactive()))
+          return tell_object(this_interactive(),
+              "\nBUG: Illegal Damage Type in AddSpell: "+dam_type[i]+"\n\n");
+        else
+          return raise_error("Illegal Damage Type in AddSpell: "+dam_type[i]+"\n");
+    }
+  }
+  else
+  {
+    if (this_interactive() && IS_LEARNER(this_interactive()))
+      return tell_object(this_interactive(),
+         sprintf("BUG: Illegal Damage Type in AddSpell: %O\n\n",dam_type));
+    else
+      return raise_error(sprintf("Illegal Damage Type in AddSpell: %O\n",dam_type));
+  }
+  spells = Query(P_SPELLS);
+  if (!pointerp(spells))
+    spells = ({({damage, TextForEnemy, TextForOthers, dam_type, sp_info, sp_info2})});
+  else
+    spells += ({({damage, TextForEnemy, TextForOthers, dam_type, sp_info, sp_info2})});
+  Set(P_SPELLS, spells);
+  // Index-Array aufbauen: Jeden Index gemaess seiner Rate 'rate'-mal eintragen
+  rate_array = Query(P_NPC_SPELL_VECTOR);
+  if (!pointerp(rate_array)) rate_array = ({});  // Initialisieren
+  // 'sizeof(spells)-1' ist der aktuelle Index (gibts kein 'fill_array'o.ae.??)
+  index = sizeof(spells)-1;
+  for (i=1;i<=rate;i++)
+    rate_array += ({index});
+  Set(P_NPC_SPELL_VECTOR, rate_array);
+}
+
+
+int AutoAttack(object ob) {
+  mixed m;
+
+  if (!query_once_interactive(ob))
+    return 0;
+  if (mappingp(m=QueryProp(P_AGGRESSIVE))) {
+    mixed *ind,x,z;
+    float f;
+    int i,n;
+
+    ind=m_indices(m)-({0});n=0;f=0.0;
+    for (i=sizeof(ind)-1;i>=0;i--) {
+      x=ind[i];
+      if ((z=m[x][ob->QueryProp(x)]) || (z=m[x][0])) {
+        f=f+(float)z;
+        n++;
+      }
+    }
+    if (n)
+      m=f/((float)n);
+    else
+      m=m[0];
+  }
+  if (((int)(100*(m+ob->QueryProp(P_AGGRESSIVE))))<=random(100))
+    return 0;
+  if (ob->QueryProp(P_NOAGGRESSIVE))
+    return 0;
+  if (IS_LEARNER(ob)
+      && (ob->QueryProp(P_INVIS)
+          || ob->QueryProp(P_WANTS_TO_LEARN)))
+    return 0;
+  return 1;
+}
+
+#if 0
+TJ(string s)
+{
+  object o;
+  if (o=find_player("debugger"))
+    tell_object(o,sprintf("%O: %s\n",this_object(),s));
+}
+#else
+#define TJ(x)
+#endif
+
+
+void heart_beat()
+{
+  int r,i;
+  string akt_spell_mess;
+  mixed env,*spells, sp_info;
+  object enemy;
+
+  beatcount--;
+  if (!beatcount && !Query(P_HB))
+  {
+    if (!environment())
+    {
+      set_heart_beat(0);
+      remove();
+      return;
+    }
+    if (!QueryProp(P_POISON))
+    {
+      env=all_inventory(environment());
+      i=sizeof(env)-1;
+      while (i>=0 && !query_once_interactive(env[i]))
+        i--;
+      if (i<0)
+      {
+	 set_heart_beat(0);
+	 heartbeat=0;
+	 TJ("OFF\n");
+	 beatcount=HB_CHECK;
+	 Set(P_NPC_HB_OFF_COUNT,absolute_hb_count());
+	 return;
+      }
+   }
+ }
+  ::heart_beat();
+  enemy=QueryEnemy();
+  if (QueryProp(P_AGGRESSIVE)
+      && (!enemy || environment()!=environment(enemy))
+      && this_object() && !beatcount)
+  {
+    env=all_inventory(environment());
+    beatcount=HB_CHECK;
+    if (!sizeof(env))
+      return;
+    for (i=sizeof(env)-1;i>=0;i--)
+      if (!AutoAttack(env[i]))
+        env=env[0..i-1]+env[i+1..];
+    if (!sizeof(env))
+       return;
+    i=random(sizeof(env));
+    Kill(env[i]);
+  }
+  else if (!beatcount)
+    beatcount=HB_CHECK;
+}
+
+
+void init()
+{
+  int hp, sp, alc, beat_off_num;
+  TJ(sprintf("Goin', %O %O %O\n",this_object(),this_player(),this_interactive()));
+  if (!heartbeat)
+  {
+    TJ("Continuin'");
+    set_heart_beat(1);
+    heartbeat=1;
+    beat_off_num=-Query(P_NPC_HB_OFF_COUNT)+absolute_hb_count();
+    if (beat_off_num>0) // Nicht ausgefuehrtes HEILEN nachholen
+    {
+      hp=QueryProp(P_HP);
+      sp=QueryProp(P_SP);
+      alc=QueryProp(P_ALCOHOL);
+      TJ(sprintf("%O: HP=%d, SP=%d\n",this_object(),hp,sp));
+      hp+=beat_off_num/(QueryProp(P_HP_DELAY)?QueryProp(P_HP_DELAY):1)+
+          alc/(QueryProp(P_ALCOHOL_DELAY)?QueryProp(P_ALCOHOL_DELAY):1);
+      sp+=beat_off_num/(QueryProp(P_SP_DELAY)?QueryProp(P_SP_DELAY):1)+
+          alc/(QueryProp(P_ALCOHOL_DELAY)?QueryProp(P_ALCOHOL_DELAY):1);
+      alc-=beat_off_num/(QueryProp(P_ALCOHOL_DELAY)?QueryProp(P_ALCOHOL_DELAY):1);
+      SetProp(P_HP,hp);
+      SetProp(P_SP,sp);
+      SetProp(P_ALCOHOL,alc);
+      update_hunt_times(beat_off_num);
+      Set(P_NPC_HB_OFF_COUNT,0);
+      TJ(sprintf("%O: HP=%d, SP=%d\n",this_object(),hp,sp));
+    }
+  }
+
+  if (AutoAttack(this_player()))
+    Kill(this_player());
+}
+
+
+void Attack(object enemy)
+{
+  int r,i;
+  string akt_spell_mess;
+  mixed env,*spells, sp_info;
+
+  ::Attack(enemy);
+
+  spells=Query(P_SPELLS);
+  if (!enemy
+      || !pointerp(spells)
+      || !sizeof(spells)
+      || environment(enemy)!=environment()
+      || QueryProp(P_DISABLE_SPELLS)
+      || random(100)>Query(P_SPELLRATE))
+    return;
+  // Spell auswaehlen. Dazu zufaellig ein Element des Rate-Arrays
+  // auswaehlen. Der Wert ist ein Index fuer das Spell-Array
+  r = random(sizeof(Query(P_NPC_SPELL_VECTOR)));
+  i = Query(P_NPC_SPELL_VECTOR)[r];
+  tell_object(enemy, spells[i][MSG_ENEMY]);
+  if (stringp(akt_spell_mess=spells[i][MSG_OTHER])) 
+  {
+    akt_spell_mess=regreplace(akt_spell_mess, "@WER", enemy->name(WER,1), 1);
+    akt_spell_mess=regreplace(akt_spell_mess, "@WESSEN",enemy->name(WESSEN,1),1);
+    akt_spell_mess=regreplace(akt_spell_mess, "@WEM", enemy->name(WEM,1), 1);
+    akt_spell_mess=regreplace(akt_spell_mess, "@WEN", enemy->name(WEN,1), 1);
+    akt_spell_mess=regreplace(akt_spell_mess, "@PWER", enemy->QueryPronoun(WER), 1);
+    akt_spell_mess=regreplace(akt_spell_mess, "@PWESSEN",enemy->QueryPronoun(WESSEN),1);
+    akt_spell_mess=regreplace(akt_spell_mess, "@PWEM", enemy->QueryPronoun(WEM), 1);
+    akt_spell_mess=regreplace(akt_spell_mess, "@PWEN", enemy->QueryPronoun(WEN), 1);
+    say(capitalize(akt_spell_mess), ({enemy, this_object()}));
+  }
+  if (!mappingp(sp_info = spells[i][SP_INFO]) &&
+      !mappingp(sp_info = spells[i][SP_INFO2]))
+      sp_info = 1;
+  enemy->Defend(r=random(spells[i][DAMAGE])+1,
+                spells[i][DAM_TYPE],
+                sp_info,
+                this_object());
+  
+  if (stringp(sp_info = spells[i][SP_INFO]) && this_object() &&
+      function_exists(sp_info, this_object()))
+     catch(call_other(this_object(),
+                      sp_info,
+                      enemy,
+                      r, // Damage
+                      spells[i][DAM_TYPE]));
+}
+
+
+void InformLostHeartbeat()
+{
+  mixed anw, enem;
+
+  enem=map_array(QueryEnemies()[0],#'file_name);
+  anw=all_inventory(environment());
+  anw=map_array(filter_array(anw,#'query_once_interactive),#'getuid);
+  log_file("npc/LOST_HEART_BEAT",
+      sprintf("[%s] %O in %O mit %d LP (anwesend: %s, Gegner: %s)\n",
+        ctime(), this_object(), environment(),
+        QueryProp(P_HP), implode(anw, "+"), implode(enem, "+")));
+  SetProp(P_NOATTACK,
+      "ist wie erstarrt. Bitte informiere einen Erzmagier!");
+  environment()->Message(Name(WER,1)+" erstarrt ploetzlich.\n",
+      MSGFLAG_VISUAL);
+}
+
+void _restart_beat()
+{
+  // wird derzeit nicht aufgerufen
+  if (set_heart_beat(1))
+    log_file("npc/LOST_HEART_BEAT",
+        sprintf("[%s] %O restarted heart_beat",
+          dtime(time()), this_object()));
+}
+

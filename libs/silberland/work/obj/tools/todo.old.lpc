@@ -1,0 +1,846 @@
+//////////////////////////////////////////////////
+//                                              //
+//     ToDo-Liste                               //
+//                                              //
+//                                              //
+//     Erstellt: 12/02/99                       //
+//                                              //
+//     Letzte Aenderung: siehe DATE             //
+//                                              //
+//     (c) by Cirion@Silberland                 //
+//                                              //
+//                                              //
+//                                              //
+//////////////////////////////////////////////////
+
+inherit "std/tool";
+
+#ifndef BS
+#define BS(string) break_string(string)
+#endif
+
+#include <defines.h>
+#include <moredef.h>
+#include <properties.h>
+#include <wizlevels.h>
+#include <language.h>
+#include <ansi.h>
+
+#define VERSION "v0.43"
+#define DATE "30/08/2000"
+#define C_YEARS "1999-2000"
+#define V_HIST \
+        "ToDo "VERSION"("DATE")   (c) "C_YEARS" by Cirion@Silberland\n\n"\
+        "Version History:\n"\
+        "\n"\
+        "v0.43 : Debug des restore, altes Savefileformat wird nicht mehr\n"\
+        "        unterstuetzt.\n\n"\
+        "v0.42 : Kleinere Debugs und Optimierungen\n\n"\
+        "v0.41 : Ueberarbeitung der Ausgaben\n"\
+        "        Ueberarbeitung des Resetlevels und der Hilfe\n\n"\
+        "v0.4  : Diese Version beinhaltet einige groessere Bugfixes\n"\
+        "        sowie eine generelle Optimierung des gesamten Codes.\n"\
+        "        Die Speicherung der Liste wurde auf ein Mapping \n"\
+        "        umgestellt. Zusaetzlich ist es jetzt endlich moeglich,\n"\
+        "        auch Grossbuchstaben innerhalb des ToDos zu benutzen.\n"\
+        "        Weiterhin wurde das nicht funktionierende Ausgeben der\n"\
+        "        Liste im Reset debuggt, sowie die farbliche Markierung\n"\
+        "        bereits erledigter ToDos abgeschafft.\n\n"\
+        "v0.36 : Einige groessere Neuerungen, wie Ausgabe der ToDo-Liste\n"\
+        "        in jedem Reset, farbliche Abhebung wichtiger ToDos, etc.\n\n"\
+        "Fruehere Versionen sind nicht dokumentiert.\n\n"
+
+#ifdef PATH
+#undef PATH
+#endif
+#define PATH "/players/cirion/tools/todo"
+
+#define AUFGABE "Aufgabe"
+#define PRIORITAET "Pri"
+#define DATUM "Datum"
+#define ERLEDIGTAM "Erledigt am"
+#define STATUS "Status"
+
+#define DONE "Erledigt"
+#define UNDONE "Offen"
+
+#pragma strong_types
+
+string tdversion;
+
+nosave string *argumentliste;
+
+int reportlevel;
+int warnlevel;
+int farblevel;
+int resetlevel;
+
+mapping tasks;
+
+int list_pref();
+int info_todo();
+int help();
+int new_todo();
+int list_todo(int opt);
+int set_task(string titel);
+int set_priority(string prio);
+int set_done(string number);
+int done_todo();
+int del_todo();
+int set_del(string number);
+int report_todo();
+int set_prefs();
+int set_prio();
+int set_pri(string number);
+int set_pr(string prio,int number);
+int v_hist();
+
+void create()
+{  
+  int i;
+  
+  if( !is_clone(TO) ) return;
+  if (present("\ntodo",TP)) 
+  {
+    write("Du hast doch schon ein ToDo-Tool.\n");
+    remove();
+    return;
+  }
+  
+  reportlevel=2;
+  warnlevel=5;
+  farblevel=0;
+  resetlevel=1;
+  tdversion="";
+  tasks=([AUFGABE:({}),
+          PRIORITAET:({}),
+          DATUM:({}),
+          ERLEDIGTAM:({}),
+          STATUS:({})]);
+  seteuid(getuid());
+ 
+  ::create();
+
+  AddId(({"todo", "todoliste","\ntodo","todotool"}));
+  SetProp(P_NAME, "ToDo "+VERSION);
+  SetProp(P_SHORT, TP->QueryProp(P_NAME)+"s ToDo "+VERSION);
+  SetProp(P_LONG,BS(
+	  "In das ToDo-Tool kann man Dinge eintragen, die man irgendwann "
+	  "einmal machen moechte. Wenn man sie erledigt hat, kann man sie "
+	  "abhaken.                            (Hilfe mit <todo hilfe|help>)"));
+  SetProp(P_GENDER, NEUTER);
+  SetProp(P_NODROP, "Dann wuerdest Du sie sicher sofort vermissen.\n");
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_AUTOLOADOBJ,1);
+
+  AddCmd (({"todo"}),"todo");
+  restore_object("/players/"+geteuid()+"/.todolist");
+
+  if (tdversion!=VERSION)
+  {
+    //Version Update fuer die .o-Files
+    tdversion=VERSION;
+    write("Du hast soeben eine neue Version der ToDo-Liste erhalten.\n"
+          "Die Aenderungen kannst Du mit <todo news|neues> ansehen.\n");
+  }
+  if (warnlevel>0)
+  {
+    if (resetlevel==1)
+      list_todo(0);
+    else if (resetlevel==2)
+      list_todo(1);
+  }
+  save_object("/players/"+geteuid()+"/.todolist");
+}
+
+void reset()
+{
+  ::reset();
+
+  if ((!MENV)||(!query_once_interactive(MENV)))
+  {
+    remove();
+    return;
+  }
+  if (resetlevel==1)
+    list_todo(0);
+  else if (resetlevel==2)
+    list_todo(1);
+}
+
+int set_prefs()
+{
+  int arg;	
+
+  if (1<sizeof(argumentliste))
+  {
+    switch (argumentliste[1])
+    {
+      case "rep":
+      case "report":
+      case "replevel":
+      case "reportlevel":
+        if (2<sizeof(argumentliste))
+        {  
+          arg=to_int(argumentliste[2]);
+          if (-1!=member(({1,2,3,4,5}),arg))
+          {
+            reportlevel=arg;
+            write("Reportlevel ist jetzt: "+reportlevel+" .\n");
+            save_object("/players/"+geteuid()+"/.todolist");
+            return 1;
+          }
+          else
+          {
+            write("Das Reportlevel muss zwischen 1 und 5 liegen.\n");
+            return 1;	
+          }
+          break;
+        }
+      case "warn":
+      case "warnlevel":
+        if (2<sizeof(argumentliste))
+        {
+          arg=to_int(argumentliste[2]);
+          if (-1!=member(({0,2,3,4,5}),arg))
+          {
+            warnlevel=arg;
+            write("Warnlevel ist jetzt: "+warnlevel+" .\n");
+            save_object("/players/"+geteuid()+"/.todolist");
+            return 1;
+          }
+          else
+          {
+            write("Das Warnlevel muss zwischen 2 und 5 liegen oder auf 0 gesetzt werden.\n");
+            return 1;	
+          }
+          break;
+        }
+      case "default":
+      case "standard":
+          warnlevel=5;
+          reportlevel=2;
+          farblevel=0;
+          resetlevel=0;
+          write("Die Voreinstellungen wurden wieder auf die Standardwerte\n"
+                "gesetzt.\n"
+                );
+          save_object("/players/"+geteuid()+"/.todolist");
+          return 1;
+          break;
+      case "farb":
+      case "farblevel":
+      case "col":
+      case "color":
+      case "colorlevel":
+        if (2<sizeof(argumentliste))
+        {
+          arg=to_int(argumentliste[2]);
+          if (-1!=member(({0,1,2}),arg))
+          {
+            farblevel=arg;
+            write("Farblevel ist jetzt: "+farblevel+" .\n");
+            save_object("/players/"+geteuid()+"/.todolist");
+            return 1;
+          }
+          else
+          {
+            write("Das Farblevel muss zwischen 0 und 2 liegen.\n");
+            return 1;	
+          }
+          break;
+        }
+      case "res":
+      case "resetlevel":
+      case "reset":
+        if (2<sizeof(argumentliste))
+        {
+          arg=to_int(argumentliste[2]);
+          if (-1!=member(({0,1,2}),arg))
+          {
+            resetlevel=arg;
+            write("Resetlevel ist jetzt: "+resetlevel+" .\n");
+            save_object("/players/"+geteuid()+"/.todolist");
+            return 1;
+          }
+          else
+          {
+            write("Das Resetlevel muss zwischen 0 und 2 liegen.\n");
+            return 1;	
+          }
+          break;
+        }
+      default:
+        break;
+    }
+  }
+  write("Syntax: todo set <voreinst.> <wert>\n");
+  return 1;	
+}
+
+int todo(string argument)
+{
+int i;	
+
+notify_fail("Falscher Befehl. <todo hilfe|help> fuer Hilfe.\n");
+if (!(argument==this_interactive()->_unparsed_args())) return 0;
+
+argumentliste=explode(argument," ");
+if (!pointerp(argumentliste))
+  return 0;
+
+switch (argumentliste[0])
+{
+  case "hilfe":
+  case "help":
+    help();
+    break;
+  case "neu":
+  case "new":
+    new_todo();
+    break;
+  case "erledigt":
+  case "done":
+    done_todo();
+    break;
+  case "liste":
+  case "list":
+    list_todo(3);
+    break;
+  case "del":
+  case "loeschen":
+    del_todo();
+    break;
+  case "info":
+    info_todo();
+    break;
+  case "rep":
+  case "report":
+    list_todo(2);
+    break;
+  case "set":
+    set_prefs();
+    break;
+  case "pri":
+  case "prioritaet":
+    set_prio();
+    break;
+  case "pref":
+  case "voreinstellung":
+    list_pref();
+    break;
+  case "news":
+  case "neues":
+    v_hist();
+    break;
+  case "":
+  default:return 0;
+    break;	
+}
+return 1;
+}
+
+int list_pref()
+{
+  write("Die momentanen Voreinstellungen sind:\n"
+        "Reportlevel: "+reportlevel+"\n"
+        "Warnlevel:   "+warnlevel+"\n"
+        "Farblevel:   "+farblevel+"\n"
+        "Resetlevel:  "+resetlevel+"\n"
+       );
+  
+  return 1;	
+}
+
+int set_prio()
+{
+  if (0==sizeof(tasks[AUFGABE]))
+  {
+    write("ToDo-Liste ist leer.\n");
+    return 1;	
+  }
+  if (sizeof(argumentliste)==1)
+  {
+    write("Nummer des ToDo eingeben (q fuer Abbruch): \n");	
+    input_to("set_pri");
+  }
+  else
+  {
+    set_pri(argumentliste[1]);	
+  }  
+  return 1;	
+}
+
+int set_pri(string number)
+{
+  int no;
+
+  if ((number=="")||(number=="q"))
+  {
+    write ("Prioritaet Setzen abgebrochen\n");
+    return 0;	
+  } 
+  no=to_int(number);
+  if ((0>no)||(sizeof(tasks[AUFGABE])<no))
+  {
+    write ("Dieses ToDo hast Du gar nicht.\n");
+    write("Nummer ToDo eingeben (q fuer Abbruch): \n");	
+    input_to("set_pri");
+    return 0;
+  }
+  if (sizeof(argumentliste)!=3)
+  {
+    write("Prioritaet des ToDo eingeben (1..5, Standard 0): ");	
+    input_to("set_pr",0,no);  
+    return 1;
+  }
+  else
+  {
+    set_pr(argumentliste[2],no);	
+  }  
+  return 1;	
+} 
+
+int set_pr(string prio,int number)
+{
+  int zahl;
+
+  if (strlen(prio)==0)
+  {
+    tasks[PRIORITAET][number-1]="0";  		
+  }
+  else if ( (strlen(prio) > 1) || (intp(prio) == 0) )
+  {
+    zahl=to_int(prio);
+    if (-1!=member(({0,1,2,3,4,5}),zahl))
+    {
+      tasks[PRIORITAET][number-1]=prio;  	
+      write(BS("Die Prioritaet des ToDo "+number+" ('"+tasks[AUFGABE][number-1]+"') ist jetzt "+prio+".\n"));
+      save_object("/players/"+geteuid()+"/.todolist");
+    }
+    else
+    {
+      write("Die Prioritaet muss im Bereich von 1 bis 5 liegen\n"
+           +"Prioritaet des ToDo eingeben (Standard 0): ");
+      input_to("set_pr",0,number);
+      return 1;	
+    }
+  }
+  return 1;	
+}
+
+int info_todo()
+{
+ write("ToDo "VERSION"("DATE")   (c) "C_YEARS" by Cirion@Silberland\n\n"
+       "Diese ToDo-Liste speichert ToDos in einer Datei ab, so\n"
+       "dass man sie immer von ueberall abrufen kann. Die Datei \n"
+       "heisst .todolist.o und liegt im jeweiligen Homeverzeichnis.\n"
+       "Features sind: Prioritaet des ToDos angeben, Meldung \n"
+       "beim Einloggen, wenn es ToDos mit hoher Prioritaet gibt\n"
+       "etc.\n"
+       "Anregungen und Ideen dazu sind herzlich willkommen,\n"
+       "Bugreports ebenso.\n\n"
+       "Die Nutzung in andren Muds ist auch erlaubt, solange der\n"
+       "Code unveraendert bleibt (sollte das Tool jemals seinen \n"
+       "Weg dorthin finden). Ich waere dann auch gerne bereit, \n"
+       "es auch dort zu supporten (d.h. bei Updates Bescheid \n"
+       "zu geben).\n\n");	
+  return 1;
+}
+
+int v_hist()
+{
+  TP->More(V_HIST);
+  return 1;
+}
+
+int list_todo(int opt)
+{
+  int i,j,warn;
+  int zahl,tempprio;
+  string *date_array;
+  string ausgabe;
+  string moretext;
+  
+  zahl=0;
+  moretext="";
+  switch (opt)
+  {
+    case 0:moretext+=(farblevel>0?ANSI_RED:"")+"\nAchtung!\n"+ANSI_NORMAL;
+           for (i=sizeof(tasks[AUFGABE]);i-->0;)
+             if ((to_int(tasks[PRIORITAET][i])>=warnlevel)
+               &&(tasks[STATUS][i]==UNDONE)) zahl++;
+           if (zahl>0)
+             moretext+=zahl+" ToDos sind auf Deiner ToDo-Liste als besonders dringlich markiert.\n";
+           break;
+    case 1:moretext+=(farblevel>0?ANSI_RED:"")+"\nAchtung!"+ANSI_NORMAL+" Folgende Dinge sind auf Deiner ToDo-"
+                    +"Liste als besonders dringlich\nmarkiert:\n\n";
+           warn=warnlevel;
+           break;
+    case 2:moretext+="Report aller ToDos mit Prioritaet > "+reportlevel+" :\n\n";
+           warn=reportlevel;
+           break;
+    case 3:moretext+="Deine ToDo-Liste sieht aus wie folgt:\n\n";
+           warn=0;
+           break;
+  }
+  if (opt>0)
+  {  
+    moretext+="     "+AUFGABE
+            +"                           "+STATUS
+            +"   "+PRIORITAET
+            +"  "+DATUM
+            +"  "+ERLEDIGTAM+"\n"; 
+    for (i=0;i<sizeof(tasks[AUFGABE]);i++)
+    { 
+      tempprio=to_int(tasks[PRIORITAET][i]);
+      if ((tempprio>=warn)&&(!((tasks[STATUS][i]==DONE)&&(opt<3))))
+      {
+        zahl++;   
+        ausgabe="";	
+        if (i<9)
+          ausgabe+="  "+(i+1)+"  ";
+        else if (i<99)
+          ausgabe+=" "+(i+1)+"  ";
+        else 
+          ausgabe+=(i+1)+"  ";
+        if ((tempprio>=reportlevel)&&(farblevel>1)&&(tasks[STATUS][i]==UNDONE))
+          ausgabe+=ANSI_YELLOW;
+        if ((tempprio>=warnlevel)&&(farblevel>0)&&(tasks[STATUS][i]==UNDONE))
+          ausgabe+=ANSI_RED;
+        /* Would be nice, but grey seems to be impossible  
+        if ((farblevel>0)&&(tasks[STATUS][i]==DONE))
+          ausgabe+=ANSI_????;
+        */
+        ausgabe+=tasks[AUFGABE][i];
+        for (j=0;j<34-strlen(tasks[AUFGABE][i]);j++)
+          ausgabe+=" ";
+        ausgabe+=tasks[STATUS][i];
+        for (j=0;j<9-strlen(tasks[STATUS][i]);j++)
+          ausgabe+=" ";
+        ausgabe+=" "+tasks[PRIORITAET][i];
+        if (farblevel>0)
+          ausgabe+=ANSI_NORMAL;
+        for (j=0;j<4-strlen(tasks[PRIORITAET][i]);j++)
+            ausgabe+=" ";
+        date_array=explode(tasks[DATUM][i],", ");
+        ausgabe+=date_array[1];
+        for (j=0;j<14-strlen(date_array[1]);j++)
+          ausgabe+=" ";
+        if (tasks[ERLEDIGTAM][i]=="-")
+        {
+          ausgabe+=tasks[ERLEDIGTAM][i];		
+        }
+        else
+        {
+           date_array=explode(tasks[ERLEDIGTAM][i],", ");
+          ausgabe+=date_array[1];	
+        }
+        ausgabe+="\n";
+        moretext+=ausgabe;
+      }
+    }
+    if (zahl<1)
+    {
+      switch (opt)
+      {
+        case 3:moretext="Deine ToDo-Liste ist leer! Du Gluecklicher!\n"
+                       +"Aber das liegt sicher nur daran, dass Du hier nix "
+                       +"eingetragen hast. Magier\nhaben immer Arbeit! :)";
+               break;
+        case 2:moretext="Du hast keine ToDos mit Prioritaet > "+opt+".";
+               break;
+      }
+    }
+    moretext+="\n";
+  }
+  if (!((zahl==0)&&(opt<2)))
+  {
+    if (TP)
+      if (opt>1)
+        TP->More(moretext);
+      else 
+        tell_object(TP,moretext);
+    else if ((MENV) && (query_once_interactive(MENV)))
+      if (opt>1)
+        MENV->More(moretext);
+      else 
+        tell_object(MENV,moretext);
+  }
+  return 1;	
+}
+
+int del_todo()
+{
+  if (sizeof(tasks[AUFGABE])==0)
+  {
+    write("ToDo-Liste ist bereits leer.\n");
+    return 1;	
+  }
+  if (sizeof(argumentliste)==1)
+  {
+    write("Nummer des zu loeschenden ToDo eingeben (q fuer Abbruch): \n");	
+    input_to("set_del");
+  }
+  else
+  {
+    set_del(argumentliste[1]);	
+  }  
+  return 1;	
+}
+
+int set_del(string number)
+{
+  int i,no;
+ 
+  if ((number=="")||(number=="q"))
+  {
+    write ("Loeschen abgebrochen\n");
+    return 0;	
+  }
+  no=to_int(number);
+  if ((1>no)||(sizeof(tasks[AUFGABE])<no))
+  {
+    write ("Dieses ToDo hast Du gar nicht.\n");
+    write("Nummer des zu loeschenden ToDo eingeben (q fuer Abbruch): \n");	
+    input_to("set_del");
+    return 0;
+  }
+  write("Das ToDo "+no+" ('"+tasks[AUFGABE][no-1]+"') wurde geloescht.\n");
+  tasks[AUFGABE]=tasks[AUFGABE][0..no-2]+tasks[AUFGABE][no..<1];
+  tasks[PRIORITAET]=tasks[PRIORITAET][0..no-2]+tasks[PRIORITAET][no..<1];
+  tasks[DATUM]=tasks[DATUM][0..no-2]+tasks[DATUM][no..<1];
+  tasks[ERLEDIGTAM]=tasks[ERLEDIGTAM][0..no-2]+tasks[ERLEDIGTAM][no..<1];
+  tasks[STATUS]=tasks[STATUS][0..no-2]+tasks[STATUS][no..<1];
+  save_object("/players/"+geteuid()+"/.todolist");
+  return 1;
+}
+
+int done_todo()
+{
+  if (sizeof(tasks[AUFGABE])==0)
+  {
+    write("ToDo-Liste ist leer.\n");
+    return 1;	
+  }
+  if (sizeof(argumentliste)==1)
+  {
+    write("Nummer des abzuhakenden ToDo eingeben (q fuer Abbruch):\n");	
+    input_to("set_done");
+  }
+  else
+  {
+    set_done(argumentliste[1]);	
+  }  
+  return 1;	
+}
+
+int set_done(string number)
+{
+  int no;
+	
+  string date;
+  
+  if ((number=="")||(number=="q"))
+  {
+    write ("Abhaken abgebrochen\n");
+    return 0;	
+  }
+  no=to_int(number);
+  if ((1>no)||(sizeof(tasks[AUFGABE])<no))
+  {
+    write ("Dieses ToDo hast Du gar nicht.\n");
+    write("Nummer des abzuhakenden ToDo eingeben (q fuer Abbruch): \n");	
+    input_to("set_done");
+    return 0;
+  }
+  tasks[STATUS][no-1]=DONE;
+  tasks[ERLEDIGTAM][no-1]=dtime(time());
+  write(BS("Das ToDo "+no+" ('"+tasks[AUFGABE][no-1]+"') wurde abgehakt.\n"));
+  save_object("/players/"+geteuid()+"/.todolist");
+  return 1;
+}
+
+int new_todo()
+{
+  if (sizeof(argumentliste)==1)
+  {
+    write("Wie soll das ToDo heissen? (q fuer Abbruch):\n");	
+    input_to("set_task");
+  }
+  else
+  {
+    set_task(implode(argumentliste[1..sizeof(argumentliste)-1]," "));	
+  }
+  return 1;
+}
+
+int set_task(string titel)
+{
+  if ((titel=="")||(titel=="q"))
+  {
+    write ("Neues ToDo abgebrochen\n");
+    return 0;	
+  }
+  if (strlen(titel)>32)
+  {
+    write ("Das ToDo sollte nicht laenger als 32 Zeichen sein.\n");
+    write("Wie soll das ToDo heissen? (q fuer Abbruch):\n");
+    input_to("set_task");
+  }
+  titel=capitalize(titel);
+  tasks[AUFGABE]+=({titel});
+  write("Prioritaet des ToDo eingeben (1..5, Standard 0): \n");	
+  input_to("set_priority");
+  return 1;	
+}
+
+int set_priority(string prio)
+{
+  int zahl;
+  
+  if (strlen(prio)==0)
+  {
+    tasks[PRIORITAET]+=({"0"});  		
+  }
+  else if ( (strlen(prio) > 1) || (intp(prio) == 0) )
+  {
+    zahl=to_int(prio);
+    if (-1!=member(({0,1,2,3,4,5}),zahl))
+    {
+      tasks[PRIORITAET]+=({prio});  	
+    }
+    else
+    {
+      write("Die Prioritaet muss im Bereich von 1 bis 5 liegen\n"
+           +"Prioritaet des ToDo eingeben (Standard 0): \n");
+      input_to("set_priority");
+      return 1;	
+    }
+  }
+  tasks[DATUM]+=({dtime(time())});
+  tasks[ERLEDIGTAM]+=({"-"});
+  tasks[STATUS]+=({UNDONE}); 	
+  write("Neues ToDo ('"+tasks[AUFGABE][sizeof(tasks[AUFGABE])-1]+"').\n");
+  save_object("/players/"+geteuid()+"/.todolist");
+  return 1;
+}
+
+int help()
+{
+  if  (2>sizeof(argumentliste))
+  {
+    write("ToDo "VERSION"("DATE")   (c) "C_YEARS" by Cirion@Silberland\n\n"
+          "Folgende Befehle sind moeglich:\n\n"
+          "todo hilfe|help [<cmd>] ............... Dies hier\n"
+          "todo neu|new [<titel>] ................ neues ToDo\n"
+          "todo erledigt|done [<nr>] ............. ToDo abhaken.\n"
+          "todo prioritaet|pri [<nr>][<lvl>] ..... Prioritaet setzen\n"
+          "todo liste|list ....................... Liste aller ToDos\n"
+          "todo loeschen|del ..................... ToDo aus Liste entfernen\n"
+          "todo report|rep ....................... ToDo-Report ausgeben\n"
+          "todo set <voreinst.> <wert> ........... ToDo-Voreinstellungen\n"
+          "todo pref|voreinstellung .............. Voreinstellungen zeigen\n"
+          "todo news|neues ....................... Veraenderungen/Version history\n"
+          "todo info ............................. Genauere Infos :)\n\n"
+          "Zusaetzliche Hilfe gibt es zu allen Befehlen mit <todo hilfe|help cmd>.\n"
+          "Beispiel: 'todo help help' gibt Hilfe zum Befehl help aus.\n"
+         );
+  }
+  else
+  {
+    switch (argumentliste[1])
+    {
+    case "help":
+    case "hilfe":
+      write("<todo hilfe|help> gibt die verfuegbaren Kommandos aus.\n"
+            "Mit todo <hilfe|help cmd> laesst sich ausserdem zu jedem\n"
+            "Kommando noch eine umfangreichere Hilfe anzeigen.\n"
+            );
+      break;
+    case "neu":
+    case "new":
+      write("Mit <todo neu|new> lassen sich neue Listeneintraege erzeugen.\n"
+            "Dabei kann man den Titel des ToDo direkt als Argument oder\n"
+            "nach der Eingabeaufforderung eingeben. Fuer jedes neue ToDo\n"
+            "muss eine Prioritaet gesetzt werden, mit <Return> wird dabei\n"
+            "der Default-Wert von 0 uebernommen.\n"
+            );
+      break;
+    case "done":
+    case "erledigt":
+      write("Mit <todo erledigt|done> kann man ein ToDo als erledigt setzen.\n"
+            "Die Nummer des ToDo kann dabei als Argument oder nach der\n"
+            "Eingabeaufforderung angegeben werden.\n"
+            );
+      break;
+    case "prioritaet":
+    case "pri":
+      write("Mit <todo prioritaet|pri> kann man die Prioritaet eines ToDo\n"
+            "nachtraeglich veraendern. Dazu kann man sowohl die Nummer\n"
+            "als auch die neue Prioritaet als Argument oder nach der\n"
+            "Eingabeaufforderung angeben.\n"
+            );
+      break;
+    case "liste":
+    case "list":
+      write("<todo liste|list> gibt die koplette Liste von ToDos aus, die\n"
+            "man bereits hat.\n"
+            );
+      break;
+    case "loeschen":
+    case "del":
+      write("Mit <todo loeschen|del> kann man komlette Eintraege aus der Liste\n"
+            "entfernen. Die Nummer des Eintrags kann dabei als Argument oder\n"
+            "nach der Eingabeaufforderung angegeben werden.\n"
+            );
+      break;
+    case "rep":
+    case "report":
+      write("<todo report|rep> gibt die Liste derjenigen ToDos aus, deren \n"
+            "Prioritaet hoeher liegt, als das momentane Reportlevel."
+            );
+      break;
+    case "set":
+      write("Mit <todo set> kann man die Voreinstellungen des Tools aendern.\n"
+            "Dazu gibt man bei <todo set> als Argumentnden kein 'more' verwendet werden ( und ist\n"
+            "    hoffentlich auch nie noetig ).\n"
+            "Bei all diesen Ausgaben wird auch das Farblevel beruecksichtigt.\n"
+            "Standard fuer das Resetlevel ist 1.\n");
+      break;  
+    case "warnlevel":
+      write("Das Warnlevel gibt an, ab welcher Prioritaet ToDos im Reset angezeigt\n"
+            "werden. Standard ist hier 5, und es sollte nicht zu niedrig sein.\n");
+      break;  
+    case "farblevel":
+      write("Das Farblevel gibt an, ob eine farbige Ausgabe der ToDos erfolgt. Bei 0\n"
+            "wird nichts eingefaerbt, 1 und 2 sind unterschiedliche Farbeinstellungen.\n"
+            "Standard ist 0.\n");
+      break;  
+    case "reportlevel":
+      write("Das Reportlevel gibt an, welche Todos beim Report ausgegeben werden.\n"
+            "Standard ist hier 2.\n");
+      break;  
+    case "pref":
+    case "voreinstellung":
+      write("<todo pref|voreinstellung> gibt die momentanen Voreinstellungen.\n"
+            "aus. Standard ist Warnlevel 5, Reportlevel 2, Farblevel 0 und \n"
+            "Resetlevel 0.\n"
+            );
+      break;
+    case "info":
+      write("<todo info> gibt zusaetzliche Informationen ueber ToDo aus.\n"
+            );
+      break;
+    case "news":
+    case "neues":
+      write("<todo news|neues> gibt die Liste der Veraenderungen des ToDo-Tools aus.\n"
+            );
+      break;
+    default:write("Falscher Befehl. <todo hilfe hilfe> fuer Hilfe.\n");
+      break;	
+    }
+  } 
+  return 1;
+}

@@ -1,0 +1,382 @@
+/*
+** NewsTool
+** ---
+** 1996/04/04  Woody  Einiges typos bereinigt ("Ok" etc.)
+** 1997/12/18  Woody  Bugfix in remover
+** 1998/02/11  Feyaria IS_LORD abfrage
+** 1999/03/16  Woody  inherited nun std/tool
+** 1999/04/27  Woody  auf Wunsch wieder IS_WIZARD (fuer die Rechte ist
+                      der newsd /secure/news zustaendig)
+** 2001/11/16  Woody  ginfo ueberarbeitet
+** 2005/05/26  Woody  ginfo um -v erweitert
+*/
+
+inherit "std/tool";
+
+#include <properties.h>
+#include <language.h>
+#include <config.h>
+#include <news.h>
+#include <defines.h>
+#include <wizlevels.h>
+
+#define UA PL->_unparsed_args()
+
+create()
+{
+  string str;
+  if (!is_clone(this_object())) return;
+  ::create();
+  SetProp(P_LONG,"Ein News-Gruppen-Tool.\n\
+Befehle: addg      <grname> <ownername>   : Gruppe erzeugen\n\
+         removeg   <grname>               : Gruppe loeschen\n\
+         addw      <grname> <username>    : Schreibberechtigten eintragen\n\
+         removew   <grname> <username>    : Schreibberechtigten austragen\n\
+         addd      <grname> <username>    : Loeschberechtigten eintragen\n\
+         removed   <grname> <username>    : Loeschberechtigten austragen\n\
+         addr      <grname> <username>    : Leseberechtigten eintragen\n\
+         remover   <grname> <username>    : Leseberechtigten austragen\n\
+         ginfo     [-v] [<regexp>]        : Info ueber Gruppen abfragen\n\
+         setexpire <grname> <tage>        : Expiretime setzen\n\
+         setmaxmsg <grname> <anz>         : Maxmsg setzen\n\
+         setg <grname> <loeschlev> <schreiblev> <leselev> <maxmsg> <expire>\n");
+  str=capitalize(((str=getuid(this_player()))[<1]=='s'||str[<1]=='x'||
+		  str[<1]=='z')?str+="'":str+="s");
+  SetProp(P_SHORT,str+" NewsTool");
+  SetProp(P_NAME,str+" NewsTool");
+  SetProp(P_GENDER,NEUTER);
+  SetProp(P_ARTICLE,0);
+  AddId("newstool");
+  AddId("newsgruppentool");
+  AddId("news-gruppen-tool");
+  SetProp(P_AUTOLOADOBJ,1);
+  SetProp(P_NODROP,1);
+}
+
+init()
+{
+  ::init();
+  if( !IS_WIZARD(environment(this_object())))
+  {  
+    call_out("remove",0);
+    return;
+  }
+  add_action("addg","addg");
+  add_action("removeg","removeg");
+  add_action("addw","addw");
+  add_action("removew","removew");
+  add_action("addd","addd");
+  add_action("removed","removed");
+  add_action("addr","addr");
+  add_action("remover","remover");
+  add_action("setg","setg");
+  add_action("setexpire","setexpire");
+  add_action("expire","expire");
+  add_action("ginfo","ginfo");
+  add_action("setmaxmsg","setmaxmsg");
+}
+
+addr(str)
+{
+  mixed *arr;
+  string st1, st2;
+  
+  if (!(str=UA) || sscanf(str,"%s %s",st1,st2) !=2){
+    write("addr <groupname> <username>\nAnschliessend darf der User unabhaengig vom Wizlevel die Gruppe lesen.\n");
+    return 1;
+  }
+  
+  arr=explode(st2," ")-({""});
+  switch ("/secure/news"->AddAllowed(st1,({}),({}),arr)){
+    case 0: write("Param err\n"); break;
+    case 1: write("Ok.\n"); break;
+    case -1: write("No permission\n"); break;
+    case -2: write("No such board\n"); break;
+  }
+  return 1;
+}
+
+remover(str)
+{
+  mixed *arr;
+  string st1, st2;
+
+  if (!(str=UA) || sscanf(str,"%s %s",st1,st2) !=2){
+    write("remover <gruppenname> <username>\nDanach darf der User die Gruppe nur noch lesen, wenn sein Wizlevel dies erlaubt.\n");
+    return 1;
+  }
+
+  arr=explode(st2," ")-({""});
+  switch ("/secure/news"->RemoveAllowed(st1,({}),({}),arr)){
+    case 0: write("Param err\n"); break;
+    case 1: write("Ok.\n"); break;
+    case -1: write("No permission\n"); break;
+    case -2: write("No such board\n"); break;
+  }
+  return 1;
+}
+
+addd(str)
+{
+  mixed *arr;
+  string st1, st2;
+
+  if (!(str=UA) || sscanf(str,"%s %s",st1,st2) !=2){
+    write("addd <gruppe> <user>\nUser darf Artikel loeschen (unabh vom Wizlevel)\n");
+    return 1;
+  }
+
+  arr=explode(st2," ")-({""});
+  switch ("/secure/news"->AddAllowed(st1,arr,({}),({}))){
+    case 0: write("Param err\n"); break;
+    case 1: write("Ok.\n"); break;
+    case -1: write("No permission\n"); break;
+    case -2: write("No such board\n"); break;
+  }
+  return 1;
+}
+
+removed(str)
+{
+  mixed *arr;
+  string st1, st2;
+
+  if (!(str=UA) || sscanf(str,"%s %s",st1,st2) !=2){
+    write("removed <gruppe> <user>\nUser darf nur noch Artikel loeschen, wenn sein Wizlevel das erlaubt.\n");
+    return 1;
+  }
+
+  arr=explode(st2," ")-({""});
+  switch ("/secure/news"->RemoveAllowed(st1,arr,({}),({}))){
+    case 0: write("Param err\n"); break;
+    case 1: write("Ok.\n"); break;
+    case -1: write("No permission\n"); break;
+    case -2: write("No such board\n"); break;
+  }
+  return 1;
+}
+
+addw(str)
+{
+  mixed *arr;
+  string st1, st2;
+
+  if (!(str=UA) || sscanf(str,"%s %s",st1,st2) !=2){
+    write("addw <gruppe> <user>\nUser darf Artikel schreiben (unabh vom Wizlevel)\n");
+    return 1;
+  }
+
+  arr=explode(st2," ")-({""});
+  switch ("/secure/news"->AddAllowed(st1,({}),arr,({}))){
+    case 0: write("Param err\n"); break;
+    case 1: write("Ok.\n"); break;
+    case -1: write("No permission\n"); break;
+    case -2: write("No such board\n"); break;
+  }
+  return 1;
+}
+
+removew(str)
+{
+  mixed *arr;
+  string st1, st2;
+
+  if (!(str=UA) || sscanf(str,"%s %s",st1,st2) !=2){
+    write("removew <gruppe> <user>\nUser darf nur noch Artikel schreiben, wenn sein Wizlevel dies erlaubt.\n");
+    return 1;
+  }
+
+  arr=explode(st2," ")-({""});
+  switch ("/secure/news"->RemoveAllowed(st1,({}),arr,({}))){
+    case 0: write("Param err\n"); break;
+    case 1: write("Ok.\n"); break;
+    case -1: write("No permission\n"); break;
+    case -2: write("No such board\n"); break;
+  }
+  return 1;
+}
+
+setg(str)
+{
+  string name;
+  int dlevel, wlevel, rlevel, maxmessages, expire;
+
+  if (!(str=UA) ||
+      sscanf(str,"%s %d %d %d %d %d",name,dlevel,wlevel,rlevel,maxmessages,expire) != 6) {
+    write("setg <gruppe> <loeschlevel> <schreiblevel> <leselevel> <maxmessages> <expire>\nGruppenparameter setzen, Bedeutung (Defaultwerte in Klammern):\n\
+    name              : Der Name der Newsgroup\n\
+    loeschlevel  (20) : Wizlevel, ab dem User Artikel loeschen koennen\n\
+    schreiblevel ( 0) : Wizlevel, ab dem User Artikel schreiben koennen\n\
+    leselevel    ( 0) : Wizlevel, ab dem User Artikel lesen koennen\n\
+    maxmessages  (40) : Maximale Anzahl Artikel in einer Newsgruppe\n\
+    expire       (-1) : Expiretime in Tagen, -1 = nie\n");
+    return 1;
+  }
+  expire=86400*expire;
+  switch("/secure/news"->SetGroup(name, dlevel, wlevel, rlevel, maxmessages,expire)){
+    case 1: write("Ok.\n"); break;
+    case 0: write("Param error.\n"); break;
+    case -1: write("No permission\n"); break;
+    case -2: write("No such group\n"); break;
+  }
+  return 1;
+}
+
+setexpire(str)
+{
+  string name;
+  int expire;
+  mixed *gr;
+
+  if (!(str=UA)||sscanf(str,"%s %d",name,expire)!=2)
+  {
+    write("setexpire <gruppe> <tage>\n");
+    return 1;
+  }
+  expire=86400*expire;
+  if (!pointerp((gr="/secure/news"->GetGroup(name))))
+  {
+    write("Get group error\n");
+    return 1;
+  }
+  switch("/secure/news"->SetGroup(name, gr[G_DLEVEL], gr[G_WLEVEL], gr[G_RLEVEL], gr[G_MAX_MSG],expire)){
+    case 1: write("Ok.\n"); break;
+    case 0: write("Param error.\n"); break;
+    case -1: write("No permission\n"); break;
+    case -2: write("No such group\n"); break;
+  }
+  return 1;
+}
+
+setmaxmsg(str)
+{
+  string name;
+  int maxmsg;
+  mixed *gr;
+  
+  if (!(str=UA)||sscanf(str,"%s %d",name,maxmsg)!=2)
+  {
+    write("setexpire <gruppe> <tage>\n");
+    return 1;
+  }
+  if (!pointerp((gr="/secure/news"->GetGroup(name))))
+  {
+    write("Get group error\n");
+    return 1;
+  }
+  switch("/secure/news"->SetGroup(name, gr[G_DLEVEL], gr[G_WLEVEL], gr[G_RLEVEL], maxmsg, gr[G_EXPIRE])){
+    case 1: write("Ok.\n"); break;
+    case 0: write("Param error.\n"); break;
+    case -1: write("No permission\n"); break;
+    case -2: write("No such group\n"); break;
+  }
+  return 1;
+}
+
+ginfo(str)
+{
+  string *groups;
+  string result;
+  mixed *gr;
+  int i;
+  int verbose;
+  
+  groups = NEWSSERVER->GetGroups();
+  str=UA;
+  if (stringp(str))
+  {
+    if (str[0..1] == "-v")
+    {
+      verbose = 1;
+      str = str[3..];
+    }
+    if (strlen(str))
+      groups = regexp( groups, str );
+  }
+
+  if (!sizeof(groups)) {
+    write("No matching groups found!\n");
+    return 1;
+  }
+  groups = sort_array( groups, #'> );
+
+  result = "";
+  result +=
+    "Name                     Owner       Exp  #De #Wr #Rd DLev WLev RLev Max #Msgs\n"
+    "------------------------------------------------------------------------------\n";
+
+  for (i = 0; i < sizeof(groups); i++)
+  {
+    if (!pointerp((gr="/secure/news"->GetGroup(groups[i]))))
+    {
+      result += groups[i] + ": Get group error\n";
+    }
+    else
+    {
+      result += sprintf(
+        "%-24s %-11s %3d  %3d %3d %3d %4d %4d %4d %3d %5d\n",
+        gr[G_NAME], capitalize(gr[G_OWNER]), gr[G_EXPIRE] / 86400,
+        sizeof(gr[G_DELETERS]), sizeof(gr[G_WRITERS]), sizeof(gr[G_READERS]),
+        gr[G_DLEVEL], gr[G_WLEVEL], gr[G_RLEVEL],
+        gr[G_MAX_MSG], sizeof(gr[G_MESSAGES]) );
+      if (verbose)
+      {
+        if (sizeof(gr[G_DELETERS]))
+          result += "  De: " + implode(map_array(gr[G_DELETERS], #'capitalize), ", ") + "\n";
+        if (sizeof(gr[G_WRITERS]))
+          result += "  Wr: " + implode(map_array(gr[G_WRITERS], #'capitalize), ", ") + "\n";
+        if (sizeof(gr[G_READERS]))
+          result += "  Rd: " + implode(map_array(gr[G_READERS], #'capitalize), ", ") + "\n";
+      }
+    }
+  }
+  result +=
+    "------------------------------------------------------------------------------\n"+
+    sizeof(groups) + (str ? " matching" : "") + " groups found.\n";
+
+  this_player()->More(result);
+  return 1;
+}
+
+removeg(str)
+{
+  if (!(str=UA))
+  {
+    write("removeg <gruppenname>\nGruppe LOESCHEN.\n");
+    return 0;
+  }
+  switch("/secure/news"->RemoveGroup(str)){
+    case 1: write("Ok. Bitte nicht vergessen, das Savefile der Newsgroup von Hand zu entfernen !\n"); break;
+    case 0: write("Param error.\n"); break;
+    case -1: write("No permission\n"); break;
+    case -2: write("No such group"); break;
+  }
+  return 1;
+}
+
+addg(str)
+{
+  string name, owner;
+
+  if (!(str=UA) || sscanf(str,"%s %s",name,owner)!=2)
+  {
+    write("addg <gruppe> <user>\nGruppe anlegen, <user> wird Besitzer der Gruppe\n");
+    return 1;
+  }
+  switch ("secure/news"->AddGroup(name, owner)){
+    case 1: write("Ok.\n"); break;
+    case 0: write("Param error.\n"); break;
+    case -1: write("No permission.\n"); break;
+    case -2: write("Group already there\n"); break;
+    case -3: write("Owner not found.\n"); break;
+    case -4: write("Savefile already in use.\n"); break;
+  }
+  return 1;
+}
+  
+expire()
+{
+  "/secure/news"->expire_all();
+  write("Expiring startet.\n");
+  return 1;
+}

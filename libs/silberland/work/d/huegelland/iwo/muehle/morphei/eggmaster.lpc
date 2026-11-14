@@ -1,0 +1,619 @@
+#pragma strong_types
+
+inherit "std/thing";
+
+#include <moving.h>
+#include <properties.h>
+#include <wizlevels.h>
+#include <defines.h>
+#include <moredef.h>
+#include <ansi.h>
+
+#define EGGMASTER "/d/huegelland/iwo/muehle/morphei/eggmaster"
+#define SHADOW "/d/huegelland/iwo/muehle/morphei/eggshadow"
+
+#define TESTMODE 1
+#define DB_INFO 1
+#define SHAD_CHECK 60
+#define SHAD_NUM 5
+#define NPC_MAX_AGE 365/2*86400 // Halbes Jahr
+
+#define TMI(x) if(find_player("iwo")) tell_object(find_player("iwo"), break_string(x, 128, "EGGMASTER: "))
+
+// Prototypes
+void DebugMsg(string msg, int dtype);
+int CheckShadows();
+int FindShadow();
+
+// ([ filename: realname; level; last_seen ])
+mapping known_npcs = ([]);
+mapping known_eggs = ([]);
+
+mapping shadows = ([]);
+
+int debug = 0;
+
+
+void create()
+{
+  if (is_clone(this_object())) return;
+  
+  ::create();
+  
+  seteuid(getuid(this_object()));
+  
+  SetProp(P_NAME, "Eggmaster");
+  
+  SetProp(P_SHORT, "The Eggmaster");
+
+  AddId( ({ "eggmaster" }));
+  
+  this_object()->move("/players/iwo/workroom", M_NOCHECK);
+  
+  AddCmd( "eggshow", "eggshow");
+  AddCmd( "eggknock", "eggknock");
+  AddCmd( "eggstat", "eggstat");
+  AddCmd( "eggfix", "eggfix");
+  AddCmd( "eggcheck", "eggpurge");
+  AddCmd( "eggpurge", "eggpurge");
+  AddCmd( "eggdebug", "eggdebug");
+  AddCmd( "eggshadows", "eggshadows");
+  
+  restore_object(EGGMASTER);
+
+  DebugMsg("Datenfile geladen", DB_INFO); 
+
+  shadows = ([]);
+
+  CheckShadows();
+}
+
+
+int eggshadows()
+{
+  int i;
+  object *keys;
+
+  keys = m_indices(shadows);
+
+  for (i = 0; i < sizeof(keys); i++)
+    {
+      tell_room(ENV(ME), sprintf("EGGMASTER: %15.15s (%O)\n",
+                           keys[i]->Name(), environment(keys[i])));
+    }
+
+  return 1;
+}
+
+
+int eggdebug()
+{
+
+  if (!IS_ARCH(this_player()) && getuid(this_player()) != "iwo")
+    return 0;
+
+  if (debug)
+    {
+      tell_room(ENV(ME), "EGGMASTER: Debug ausgeschaltet.\n");
+      debug = 0;
+    }
+  else
+    {
+      tell_room(ENV(ME), "EGGMASTER: Debug eingeschaltet.\n");
+      debug = 1;
+    } 
+
+  return 1;
+}
+
+void DebugMsg(string msg, int lvl)
+{
+  if (debug)
+    tell_room(ENV(ME), break_string(msg, 69, "EGGMASTER: "));
+}
+
+int eggpurge()
+{
+  string *npcs;
+  string verb;
+  int dry;
+  int i;
+
+  verb = query_verb();
+
+
+  npcs = m_indices(known_npcs);
+
+  DebugMsg(sprintf("Checking %d NPCs...", sizeof(known_npcs)), DB_INFO);
+
+  for (i=0; i < sizeof(npcs); i++)
+    {
+      if ((npcs[i][0..2] != "/d/" && npcs[i][0..7] != "/gilden/" && npcs[i][0..10] != "/p/service/") || npcs[i][0..26] == "/p/service/angel/haustiere/")
+        {
+          
+          DebugMsg(sprintf("X %s (%s)", known_npcs[npcs[i], 0],
+            npcs[i]), DB_INFO);
+
+          known_npcs -= ([ npcs[i] ]);
+ 
+        }
+      else if (known_npcs[npcs[i], 2] < time() - NPC_MAX_AGE)
+        {
+          DebugMsg(sprintf("X %s (%s) TIMEOUT", known_npcs[npcs[i], 0],
+            npcs[i]), DB_INFO);
+
+          known_npcs -= ([ npcs[i] ]);
+ 
+        }
+ 
+    }
+
+
+  DebugMsg(sprintf("New number of NPCs is: %d", sizeof(known_npcs)), DB_INFO);
+  save_object(EGGMASTER);
+
+  return 1;
+
+}
+
+
+int AddShadow(object pl)
+{
+
+  if (sizeof(shadows) >= SHAD_NUM)
+    return 0;
+
+  if (!objectp(pl))
+    {
+      notify_fail("Kein solcher Spieler!\n");
+      return 0;
+    }
+
+  shadows += ([ pl: ENV(pl); time() ]);
+
+  pl->AddPursuer(this_object());
+
+  return 1;
+
+}
+
+
+int eggfix(string str)
+{
+  object pl;
+  object shad;
+
+  if (!(pl = find_player(str))) 
+    {
+      notify_fail("Kein solcher Spieler!\n");
+      return 0;
+    }
+
+  AddShadow(pl);
+
+  return 1;
+}
+
+
+int eggstat()
+{
+  string *npcs;
+  string *xfn;
+  string *domains;
+  string domain;
+  string outstr;
+  mapping stats;
+  int i;
+
+  stats = ([]);
+
+  npcs = m_indices(known_npcs);
+
+  for (i=0; i<sizeof(npcs);i++)
+    {
+      domain = explode(npcs[i], "/")[1];
+      if (!member(stats, domain))
+        stats += ([ domain: 1; known_npcs[npcs[i], 1] ]);
+      else
+        {
+          stats[domain, 0]++;
+          stats[domain, 1] += known_npcs[npcs[i], 1];
+        }
+
+    }
+
+
+  domains = m_indices(stats);
+
+  outstr = sprintf("%15.15-s %5.5-s %6.6-s\n", "Region", "Anz.", "AvgLvl");
+
+  for (i=0; i<sizeof(domains);i++)
+    {
+      //TMI(sprintf("D: %s N: %d L: %d", domains[i], stats[domains[i], 0], stats[domains[i], 1]));
+      outstr += sprintf("%15.15-s %5d %6d\n", CAP(domains[i]), stats[domains[i], 0],
+                  stats[domains[i], 1] / stats[domains[i], 0]);
+    }
+
+
+  this_player()->More(outstr);
+
+
+  tell_room(ENV(ME), sprintf("EGGMASTER: %d NPCs\n", sizeof(known_npcs)));
+  return 1;
+}
+
+
+int eggknock(string str)
+{
+  string *npcs;
+  int i;
+  int found;
+  
+  found = 0;
+
+  if (!IS_ARCH(this_player()) && getuid(this_player()) != "iwo")
+    return 0;
+
+  str = this_player()->_unparsed_args();
+
+  if (!str || str == "") return 0;
+
+  npcs = m_indices(known_npcs);
+  
+  for (i=0; i<sizeof(npcs);i++)
+    {
+//	  TMI(sprintf("%O vs. %O", npcs[i], str));
+      if (npcs[i] == str)
+        {
+          known_npcs -= ([ npcs[i] ]);
+	  found = 1;
+	}
+    }
+  
+  if (found)
+    tell_room(ENV(ME), BS("EGGMASTER: Geloescht"));
+  else
+    tell_room(ENV(ME), BS("EGGMASTER: Nicht gefunden!"));
+  
+  return 1;
+}
+
+
+
+int eggshow()
+{
+  string *npcs;
+  string str;
+  int i;
+
+  if (!IS_ARCH(this_player()) && getuid(this_player()) != "iwo")
+    return 0;
+
+  npcs = m_indices(known_npcs);
+
+  str = "";
+
+  //TMI(sprintf("%O", npcs));
+
+  for (i=0;i<sizeof(npcs);i++)
+    str = sprintf("%s%20.20-s  %d  %s\n", str, 
+            known_npcs[npcs[i], 0],
+            known_npcs[npcs[i], 1],
+            npcs[i]);
+
+  this_player()->More(str);
+
+  return 1;
+}
+
+
+varargs int remove (int s)
+{
+  int i;
+  object *keys;
+
+  // Clear shadows
+  keys = m_indices(shadows);
+
+  for (i = 0; i < sizeof(keys); i++)
+    {
+      if (objectp(keys[i]))
+        keys[i]->RemovePursuer(this_object());
+    }
+
+  // Save datafile
+  save_object(EGGMASTER);
+  
+  return ::remove(s);
+}
+
+
+int AddNpc(object npc, object pl)
+{
+  string fn;
+  string rn;
+  int lvl;
+
+  //TMI(sprintf("AddNpc: %O", npc));
+
+  DebugMsg(sprintf("AddNpc: %O (%O)", npc, pl), DB_INFO);
+
+  fn = explode(file_name(npc), "#")[0];
+
+  if (fn[0..25] == "/p/service/angel/haustiere") return 0;
+
+  if (npc->QueryProp(P_NOATTACK))
+    {
+      DebugMsg("NPC ist NOATTACK", DB_INFO);
+      return 0;
+    }
+
+  if (member(known_npcs, fn))
+    {
+      DebugMsg("Already known... updating TS", DB_INFO);
+      known_npcs[fn, 2] = time();
+      return 0;
+    }
+
+  rn  = npc->query_real_name();
+  lvl = npc->QueryProp(P_LEVEL);
+
+  DebugMsg(sprintf("Add %s%s%s (%s%d%s) %s%s%s (%s)", 
+        ANSI_RED+ANSI_BOLD,
+        npc->query_real_name(),
+	ANSI_NORMAL,
+	ANSI_YELLOW+ANSI_BOLD,
+	npc->QueryProp(P_LEVEL),
+	ANSI_NORMAL,
+	ANSI_GREEN,
+	fn,
+	ANSI_NORMAL,
+	ANSI_BOLD+getuid(pl)+ANSI_NORMAL
+	), DB_INFO);
+	
+  TMI(sprintf("Add %s%s%s (%s%d%s) %s%s%s (%s)", 
+        ANSI_RED+ANSI_BOLD,
+        npc->query_real_name(),
+	ANSI_NORMAL,
+	ANSI_YELLOW+ANSI_BOLD,
+	npc->QueryProp(P_LEVEL),
+	ANSI_NORMAL,
+	ANSI_GREEN,
+	fn,
+	ANSI_NORMAL,
+	ANSI_BOLD+getuid(pl)+ANSI_NORMAL
+	));
+	
+  known_npcs += ([ fn: rn; lvl; time() ]);
+
+  return 1;
+
+  save_object(EGGMASTER);
+}
+
+
+
+
+int PreventFollow(object dst)
+{
+  object pl;
+  object *inv;
+  int i;
+
+  pl = previous_object();
+
+  if (!member(shadows, pl))
+    shadows += ([ pl: ENV(pl); time() ]);
+
+  shadows[pl, 1] = time();
+
+  inv = all_inventory(dst);
+
+  for (i = 0; i < sizeof(inv); i++)
+    {
+      if (living(inv[i]) && !query_once_interactive(inv[i]))
+        AddNpc(inv[i], pl);
+    }
+  
+
+  return 1;
+}
+
+
+string *GiveEgg()
+{
+  int num;
+
+  string *npcs;
+
+  npcs = m_indices(known_npcs);
+
+  num = random(sizeof(npcs));
+
+
+  TMI(sprintf("Neues Ei: %s%s%s (%s%d%s) %s%s%s (%s)", 
+        ANSI_RED+ANSI_BOLD,
+        known_npcs[npcs[num], 0],
+	ANSI_NORMAL,
+	ANSI_YELLOW+ANSI_BOLD,
+	known_npcs[npcs[num], 1],
+	ANSI_NORMAL,
+	ANSI_GREEN,
+	npcs[num],
+	ANSI_NORMAL,
+	ANSI_BOLD+getuid(TP)+ANSI_NORMAL
+	));
+	
+
+  known_eggs += ([previous_object(): npcs[num] ]);
+
+  return ({ known_npcs[npcs[num], 0], known_npcs[npcs[num], 1], npcs[num] });
+}
+
+
+int CheckShadows()
+{
+  object *keys;
+  mapping newshadows;
+  int i;
+
+  DebugMsg(sprintf("Checking %d Shadows....", sizeof(shadows)), DB_INFO);
+
+  newshadows = ([]);
+
+  keys = m_indices(shadows);
+
+  for (i = 0; i < sizeof(keys); i++)
+    {
+      if (!objectp(keys[i])) 
+        continue;
+
+      if (shadows[keys[i], 1] < time()-120)
+        {
+          DebugMsg(sprintf("Player %s has been idle for > 120sec",
+                     keys[i]->name()), DB_INFO);
+          keys[i]->RemovePursuer(this_object());
+          continue;
+        }
+
+      newshadows += ([ keys[i]: shadows[keys[i], 0]; shadows[keys[i], 1] ]);
+    }
+
+  shadows = newshadows;
+
+  call_out("CheckShadows", SHAD_CHECK);
+
+  if (sizeof(shadows) < SHAD_NUM)
+    FindShadow();
+
+  return 1;
+}
+
+
+
+int f_filter(object pl)
+{
+  object *pursuers;
+  string fn;
+  int i;
+
+  if (IS_SEER(pl) && !IS_LEARNER(pl) && !pl->QueryProp(P_TESTPLAYER) &&
+      query_idle(pl) < 60 && environment(pl)
+      && !is_clone(pl))
+    {
+      if (!pursuers = pl->QueryProp(P_PURSUERS)) return 1;
+      for (i=0;i<sizeof(pursuers);i++)
+        if (objectp(pursuers[i]) && pursuers[i] == this_object())
+          return 0;
+
+      return 1;
+    }
+
+  return 0;
+}
+
+
+
+
+int FindShadow()
+{
+  object *possible;
+  int max_loop;
+  object chosen;
+  //max_loop=10;
+  possible = filter_array(users(), "f_filter");
+
+
+  if (sizeof(possible)<1)
+    {
+      DebugMsg("No seers. Exiting.", DB_INFO);
+      return 0;
+    }
+
+  //TMI(sprintf("%O", possible));
+  possible-=({0});
+
+  chosen = possible[random(sizeof(possible))];
+
+  if(!objectp(chosen)) {
+    call_out("remove", 0);
+    return 0;
+  }
+  DebugMsg(sprintf("Chosen: %O", chosen), DB_INFO);
+
+  AddShadow(chosen);
+
+  return 1; 
+}
+
+
+void reset()
+{
+  int i;
+  mapping new_npcs;
+
+
+  while (find_call_out("CheckShadows") != -1)
+    remove_call_out("CheckShadows");
+
+  call_out("CheckShadows", SHAD_CHECK);
+
+  known_eggs -= ([0]);
+
+  i = 0;
+
+  while (sizeof(shadows) < SHAD_NUM && i++ < 20)
+    {
+      if (FindShadow() == 0)
+        break; // Keine moeglichen
+    }
+
+  eggpurge();
+
+
+  save_object(EGGMASTER);
+}
+
+
+int ShowEggs()
+{
+  string *outstr;
+  object *eggs;
+  object o_env;
+  string s_env;
+  int i;
+ 
+
+  notify_fail("Das ist nichts fuer Dich!\n");
+  if (getuid(this_interactive()) != "iwo" && !IS_ARCH(this_interactive()))
+    return 0;
+
+  known_eggs -= ([ 0 ]);
+
+  eggs = m_indices(known_eggs);
+
+  outstr = ({ "Aktive Morpheier:" });
+
+  for (i=0;i < sizeof(eggs); i++)
+    {
+      if (o_env = environment(eggs[i]))
+        {
+          if (living(environment(eggs[i])))
+            s_env = getuid(o_env);
+          else
+            s_env = file_name(o_env);
+        }
+      else s_env = "<unbekannt>";
+
+      outstr += ({ sprintf("%-15.15s %-20.20s %-40.40s",
+        s_env, known_npcs[known_eggs[eggs[i], 0], 0],
+        known_eggs[eggs[i], 0])
+         });
+        
+    }
+  
+  this_interactive()->More(implode(outstr, "\n"));
+
+  return 1;
+}
+

@@ -1,0 +1,493 @@
+inherit "std/thing";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <defines.h>
+#include <new_skills.h>
+#include <moredef.h>
+#include <moving.h>
+#include <class.h>
+#include "/gilden/bardengilde/bardengilde.h"
+
+string group, *dam_array, dischargeMessage;
+mixed room_msg;
+object owner;
+int baseDamage, hits, initialHits, chance, lastFight, hitsSinceLastFight;
+float factor;
+
+varargs private void discharge(int silent, int amount) {
+  string msg;
+  if(!silent && objectp(owner)) {
+    msg = BS(dischargeMessage);
+    if(stringp(msg)) tell_object(owner, msg);
+  }
+
+  if(!amount) {
+    amount = 1;
+  }
+
+  hits -= amount;
+  if(hits <= 0) {
+    msg = BS("Die intensiven Gefuehle, die du ausstrahlst, loesen sich auf.");
+    if(objectp(owner) && !find_netdead(getuid(owner)) && stringp(msg)) {
+      tell_object(owner, msg);
+    }
+    remove(1);
+  }
+  return;
+}
+
+public void autoDischarge() {
+  if(time()-lastFight > 300) {
+    discharge(0, 20);
+  }
+}
+
+private int nextRoomMessageInterval() {
+  return 60 + random(120);
+}
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+//--Beschreibungen---------------------------------------------------------
+
+  SetProp(P_SHORT, 0);
+  SetProp(P_LONG,
+    "Ein passiver Kampfzauber.");
+
+//--Namen------------------------------------------------------------------
+
+  SetProp(P_NAME, "Starke Gefuehle");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_INVIS, 1);
+  AddId(SONG_PASSIVE_DMG);
+
+//--Eigenschaften----------------------------------------------------------
+
+  SetProp(P_MATERIAL, MAT_MAGIC );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_SIZE, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NEVERDROP, 1);
+
+}
+
+private int modifyBySkillAttribute(int baseVal, string skillAttribute) {
+  return (int) (baseVal * (owner->QuerySkillAttribute(skillAttribute) / 100.0));
+}
+
+public void Setup(object _owner, string _bardGroup, int _ability, int _success, float _factor) {
+  group   = _bardGroup;
+  factor  = _factor;
+  owner = _owner;
+
+  hits = (int) (owner->QueryAttribute(A_INT)+_ability/1000+(_success/1000)+random(_success/1000));
+  hits = (int) (hits * (1.0 + factor));
+  initialHits = hits = modifyBySkillAttribute(hits, SA_DURATION);
+
+  baseDamage = (int) (75 * (1.0 + factor));
+
+  chance = (int) (_ability/200)+(_success/400);
+
+  owner->SetProp(P_TMP_ATTACK_HOOK, ({hits*60+time(), TO, "Fighting"}));
+
+  if(owner->QueryProp(P_TESTPLAYER)) {
+    tell_object(owner, sprintf("hits=%d baseDamage=%d chance=%d\n", hits, baseDamage, chance));
+  }
+
+  if(BARDENMASTER->HasHeroPathLevel(owner, HERO_ARCON, 2)) {
+    call_out("charge_arcon", 0);
+  } else {
+    call_out("charge_"+group, 0);
+  }
+  call_out("display_room_message", nextRoomMessageInterval());
+  return;
+}
+
+private void alestra_reduced_attack(object target, int inspiration) {
+  object ob;
+
+  if(!objectp(ob=present("\nbard_passive_weakness", target))) {
+
+    ob = clone_object("/gilden/bardengilde/obj/alestra_reduce_atk");
+    if(ob->move(target, M_NOCHECK|M_GET) != 1) {
+      ob->remove(1);
+      ob = 0;
+    }
+  }
+
+  if(objectp(ob)) {
+    ob->Setup(inspiration);
+  }
+
+  target->UpdateAttributes();
+
+  return;
+}
+
+private int applyCriticalHit(int roll, object *targets) {
+  int n, inspiration, hitchance;
+  object target;
+  
+  inspiration = owner->QueryProp(P_BARD_INSPIRATION_LEVEL);
+  
+  for(n=0; n<sizeof(targets); n++) {
+    target = targets[n];
+    if(!objectp(target)) continue;
+
+    hitchance = owner->QueryAttribute(A_INT) - target->QueryAttribute(A_INT)/3;
+    if(owner->QueryProp(P_TESTPLAYER)) {
+      tell_object(owner, sprintf("criticl hit chance = %d > %d\n", roll, hitchance));
+    }
+
+    if(roll < hitchance) {
+      tell_object(owner, dam_array[1]);
+      tell_object(target, dam_array[2]);
+      tell_room(ENV(owner), sprintf(dam_array[3], target->Name(WER, 1)), ({owner, target}));
+
+      if(BARDENMASTER->HasHeroPathLevel(owner, HERO_ARCON, 2)) {
+        if(target->is_class_member(({CL_UNDEAD, CL_DEMON}))) {
+          tell_object(owner, BS(sprintf("Deine heilige Aura zersetzt %s!", target->name(WEN, 1))));
+          tell_object(target, BS(sprintf("%s heilige Aura zersetzt dich!", owner->Name(WESSEN, 1))));
+          tell_room(environment(target), BS(sprintf("%s heilige Aura zersetzt %s!", 
+                    owner->Name(WESSEN, 1), target->name(WEN, 1))), ({owner, target}));
+          target->Defend(baseDamage + random(baseDamage), DT_HOLY, ([SP_NAME:"Arcons Heldenaura", SP_SHOW_DAMAGE: 1]), owner);
+        }
+      }
+
+      if(!objectp(target)) return 0;
+
+      switch(group) {
+        case BARD_GROUP_KORRIAX:
+          if(target->QueryProp(P_TMP_DEFEND_HOOK) == 0) {
+            target->SetProp(P_TMP_DEFEND_HOOK, ({time() + 2 + random(inspiration), this_object(), "korriax_reduced_defence"}));
+          }
+          break;
+        case BARD_GROUP_ALESTRA:
+          alestra_reduced_attack(target, inspiration);
+          break;
+        case BARD_GROUP_TIRENA:
+          target->SetProp(P_BLIND, 2 + random(inspiration));
+        case BARD_GROUP_SARRIAN:
+          target->ModifySkillAttribute(owner, SA_SPEED, 50, 2 + random(inspiration));
+          break;
+        default:
+          raise_error("ungueltige bardengruppe");
+          break;
+      }
+    }
+  }
+
+}
+
+public mixed* korriax_reduced_defence(int dam, string *dam_type_list, mixed spell, object enemy) {
+  return ({ (int) (dam * (1.1 + (0.1*owner->QueryProp(P_BARD_INSPIRATION_LEVEL)/2))), dam_type_list, spell });
+}
+
+public int Fighting(object enemy)
+{
+  object *targets, t, *enemies;
+  int n, damage, dmgOffset, m, roll;
+  mapping sinfo;
+  float currentFactor;
+
+  if(!objectp(enemy)) return 1;
+
+  // maximal 5 angriffe in 2 sekunde (= 1 tick)
+  if(lastFight >= time()-2) {
+    if(++hitsSinceLastFight > 5) return 1;
+  } else {
+     lastFight = time();
+     hitsSinceLastFight = 0;
+  }
+
+  roll = random(100);
+  if(roll > chance) return 1;
+
+  currentFactor = 1.0;
+  if(TALENTMASTER->HasTalent(owner, TALENT_TAMBOURMAJOR)) {
+    currentFactor += 0.05 + ((float) owner->QueryProp(P_BARD_INSPIRATION_LEVEL)) / 100.0;
+  }
+
+  dmgOffset = (int) (baseDamage * currentFactor);
+  damage = (int) (dmgOffset*0.75*currentFactor);
+
+  sinfo =  ([SI_SKILLDAMAGE: damage,  
+             OFFSET(SI_SKILLDAMAGE): dmgOffset, 
+             SI_SKILLDAMAGE_TYPE: dam_array[0]]);
+
+  // Ziel suchen
+  targets = ({ enemy });
+  m = 1;
+  if(TALENTMASTER->HasTalent(owner, TALENT_FORTE_FORTISSIMO)) {
+    m += owner->QueryProp(P_BARD_INSPIRATION_LEVEL);
+  }
+  enemies = owner->PresentEnemies();
+
+  m = modifyBySkillAttribute(m, SA_EXTENSION);
+  if(m>sizeof(enemies)) m = sizeof(enemies);
+
+  for(n=1; n<m && n < sizeof(enemies); n++) {
+    if(member(targets, enemies[n]) < 0) {
+      targets += ({ enemies[n] });
+    }
+  }
+
+  // Schaden verursachen
+  for(n=0; n<sizeof(targets); ++n) {
+    if(!objectp(targets[n])) continue;
+    if(owner->QueryProp(P_TESTPLAYER)) {
+      tell_object(owner, sprintf("%s :: TrydefaultAttackSpell :: target=%O offset=%d dmg=%d\n", "passiveCombat", targets[n], sinfo[OFFSET(SI_SKILLDAMAGE)], sinfo[SI_SKILLDAMAGE]));
+    }
+    "/spellbooks/barden_spells"->TryDefaultAttackSpell(targets[n], owner, sinfo, ([SP_NAME:"barden_kampfzauber_mittel", SP_SHOW_DAMAGE:1]));
+  }
+
+  applyCriticalHit(roll, targets);
+
+  // Ladung abziehen
+  discharge(1);
+
+  return objectp(enemy);
+}
+
+public void display_room_message() {
+  object room;
+  string *msg;
+
+  if(!objectp(owner)) {
+    remove(1);
+    return;
+  }
+
+  if(owner->InFight()) {
+    return; // keine meldungen im Kampf, da gibt es sowieso die Crits
+  }
+
+  room = environment(owner);
+  if(!objectp(room)) {
+    remove(1);
+    return;
+  }
+
+  if(objectp(find_netdead(getuid(owner)))) {
+    return;
+  }
+
+  if(room_msg == 0) {
+    return;
+  }
+
+  msg = room_msg[random(sizeof(room_msg))];
+
+  tell_object(owner, BS(msg[0]));
+  tell_room(room, BS(msg[1]), ({owner}));
+
+  autoDischarge();
+
+  call_out("display_room_message", nextRoomMessageInterval());
+}
+
+public void BecomesNetAlive(object player) {
+  if(player == owner) {
+    call_out("display_room_message", nextRoomMessageInterval());
+  }
+
+  autoDischarge();
+  return;
+}
+
+public void BecomesNetDead(object player) {
+  while(remove_call_out("display_room_message") != -1);
+  return;
+}
+
+void charge_alestra()
+{
+  // TODO TRAURIGKEIT / MELANCHOLIE
+  string *dtypes;
+  tell_object(owner, BS("Ein duesterer Nimbus aus Traurigkeit legt sich um dich. Kalt und zaeh breitet sie sich aus und "
+                    "erfuellt die Herzen der anderen mit traeger Verzweiflung."));
+  tell_room(ENV(owner), BS(sprintf("Eine Duesternis in einer Wolke von Traurigkeit sammelt sich um %s. "
+                        "Kalt und zaeh erfuellt sie dein Herz mit schwerer Melancholie...\n",
+    owner->name(WEM, 1))), ({owner}));
+
+  dtypes = ({ DT_COLD });
+  if(TALENTMASTER->HasTalent(owner, TALENT_ALTE_GESCHICHTEN)) {
+    dtypes += ({ DT_UNHOLY });
+  }
+
+  dam_array = ({ dtypes,
+                BS("Eine Welle der Verzweiflung geht von dir aus und laesst sie kraftlos werden."),
+                BS("Eine Welle der Verzweiflung geht von "+owner->Name(WEM)+" aus und erfuellt dich mit Traurigkeit!"),
+                BS(owner->Name(WER)+" wird von tiefer Traurigkeit erfasst!")});
+
+  room_msg = ({
+    ({"Die Welt um dich wirkt duester und triest.", "Ein Gefuehl der Traurigkeit erfasst dich. Alles wirkt leer und triest auf dich."}),
+    ({"Alle um dich wirken erschoepft und muede.", "Aus irgendeinem Grund erfasst dich ein Gefuehl der Sinnlosigkeit..."}),
+    ({"Ein trauriges Seufzen entringt sich deiner Kehle.", "Ein trauriges Seufzen entringt sich deiner Kehle."}),
+    /*({"Eine Woge der Hitze geht von dir aus.", "Eine Woge der Hitze geht von " + owner->name(WEM, 1) + " aus."}),
+    ({"Es riecht nach verbranntem Holz.", "Es riecht nach verbranntem Holz."}),
+    ({"Ein paar Ascheflocken bilden sich um dich herum.", "Ascheflocken wehen um " + owner->name(WEN, 1) + "."})*/
+  });
+
+  dischargeMessage = "Der Nimbus der Traurigkeit um dich wird schwaecher.";
+  return;
+}
+
+void charge_arcon()
+{
+  string *dtypes;
+  tell_object(owner, BS("Eine Welle von Mut und Heiligkeit stroemt von dir aus und huellt deine Umgebung ein."));
+  tell_room(ENV(owner), BS(sprintf("Eine warme Welle von Mut und Heiligkeit stroemt von %s aus und huellt dich ein.\n",
+    owner->name(WEM, 1))), ({owner}));
+
+  dam_array = ({ DT_HOLY,
+                BS("Deine Aura heiliger Kraft und gerechten Muts wendet sich gegen deine Feinde und zwingt sie in die Knie!"),
+                BS(owner->Name(WESSEN)+" Aura heiliger Kraft und gerechten Muts wendet sich gegen " + owner->QueryPossProunoun(WESSEN) + " Feinde!"),
+                BS("Ein heiliges Strahlen gerechten Muts von " + owner->name(WEM, 1) + " zwingt dich in die Knie!")});
+
+  room_msg = ({
+    ({"Du strahlst Mut und Zuversicht aus.", owner->Name(WER, 1) + " strahlt Mut und Zuversicht aus."}),
+    ({"Ein warmes Gluehen umgibt dich.", "Ein warmes Gluehen umgibt " + owner->name(WEN, 1)}),
+    ({"Dein Haupt erstrahlt in einem Heiligenschein.", owner->Name(WESSEN, 1)+" Haupt wird von einem Heiligenschein umspielt."}),
+    ({"Dein Herz schlaegt im mutigen Takt.", "Dein Herz schlaegt im mutigen Takt."}),
+    ({"Dein eifriger Blick schweift auf der Suche nach Boesem durch den Rau.", owner->Name(WESSEN, 1)+ " eifer gluehender Blick schweift durch den Raum."}),
+    ({"Du wirkst als ein Vorbild von Tapferkeit.", owner->Name(WER, 1)+ " inspiriert Tapferkeit in dir."})
+  });
+
+  dischargeMessage = "Deine Aura aus heiliger Kraft und gerechtem Mut wird schwaecher.";
+  return;
+}
+
+void charge_tirena()
+{
+  string *dtypes;
+  tell_object(owner, BS("Mit einem Mal wirst du von Sternenlicht erhellt, welches deine Schoenheit mit "
+                        "blendendem Licht, fast schon schmerzhaft, zum Vorschein bringt."));
+  tell_object(owner, BS("Wer dich erblickt wird dich lieben - und vor Sehnsucht und Begehren vergehen!"));
+
+  tell_room(ENV(owner), BS(sprintf("%s wird mit einem Mal von Sternenlicht erhellt, welches %s Schoenheit "
+                           "mit blendendem Licht, fast schon schmerzhaft, in dein Herz einbrennt.",
+    owner->name(WER, 1), owner->QueryPossPronoun(WEM))), ({owner}));
+  tell_room(ENV(owner), BS(sprintf("Du verzehrst dich danach %s auch nur einen Moment nahe sein zu koennen.",
+                        owner->QueryPronoun(WEM))), ({owner}));
+  
+  dtypes = ({DT_LIGHT});
+  if(TALENTMASTER->HasTalent(owner, TALENT_ALTE_GESCHICHTEN)) {
+    dtypes += ({ DT_COLD });
+  }
+  
+  dam_array = ({ dtypes,
+                BS("Deine Schoenheit blendet deine Angreifer!"),
+                BS(owner->Name(WESSEN)+" Schoenheit blendet dich!"),
+                BS("%s wird von " + owner->Name(WESSEN, 1) + " Anblick geblendet!")});
+
+  room_msg = ({
+    ({"Alle um dich schmachten dich an.", "Du schmachtest " + owner->Name(WEN, 1)+" an."}),
+    ({"Sternenlicht glitzert in deinen Haaren.", "Sternenlicht glitzert in " + owner->Name(WESSEN, 1) + " Haaren."}),
+    ({"Du erstrahlst in kalter Schoenheit.", owner->Name(WER, 1) + " erstrahlt in kalter Schoenheit."}),
+    ({"Du merkst, wie dir andere verstohlene Blicke zuwerfen.", "Ein sanftes Flattern entsteht in deinem Bauch, als du " + owner->Name(WEN, 1) + " siehst."}),
+    ({"Die Knie der Anwesenden werden unter deinen Blicken weich, wie Butter.", "Als " + owner->name(WER, 1)+" dir einen Blick zuwirft werden deine Knie ganz weich vor Freude."}),
+    ({"Fahles Sternenlicht umspielt dich, und laesst deine Zuege hart und kalt wirken.", owner->name(WER, 1)+" wird von kaltem Sternenlicht umspielt, welches " + owner->QueryPossPronoun(WEM) + " Schoenheit hervorstreicht."})
+  });
+
+  dischargeMessage = "Der Glanz deiner blendenden Schoenheit verblasst etwas."; 
+
+  SetProp(P_LIGHT, 1);
+
+  return;
+}
+
+void charge_korriax()
+{
+   // WUT
+  string *dtypes;
+  tell_object(owner, BS("Heisse Wut steigt in dir auf. Blanker Zorn erfuellt deinen Blick. Jeder, auf den er faellt, wird vom "
+                        "aetzenden Odem der Raserei erfasst!"));
+  tell_room(ENV(owner), BS(sprintf("%s Augen gluehen zornig auf. %s Blick faellt auf dich und du spuerst wie unbaendige Wut "
+                                   "und Raserei in dir aufsteigen!", owner->Name(WESSEN, 1), capitalize(owner->QueryPossPronoun()))), ({owner}));
+  
+  dtypes = ({ DT_FIRE });
+  if(TALENTMASTER->HasTalent(owner, TALENT_ALTE_GESCHICHTEN)) {
+    dtypes += ({ DT_ACID });
+  }
+  
+  dam_array = ({ dtypes,
+                BS("Dein Blick laesst deine Feinde in wilde Raserei verfallen!"),
+                BS(owner->Name(WESSEN)+" Blick faellt auf dich und in wilder Raserei stuerzt du los!"),
+                BS("%s stuerzt sich in eine blindwuetige Attacke!")});
+
+  room_msg = ({
+    ({"Heisse Wut brennt in deinem Bauch.", "Heisse Wut brennt in deinem Bauch."}),
+    ({"Dein flammender Blick der Raserei schweift durch den Raum.", owner->name(WER, 1) + " blickt dich mit zorngluehenden Augen an."}),
+    ({"Ein wuetendes Knurren entrigt sich deiner Kehle.", "Ein wuetendes Knurren entrigt sich deiner Kehle.."}),
+    ({"Deine Praesenz erhoeht den Zorn um dich herum.", "Du merkst wie Wut in dir hochwallt."}),
+    ({"Dein Blick laesst andere in Raserei verfallen.", owner->Name(WESSEN, 1) + " Blick ruht kurz auf Dir. Deine Faeuste verkrampfen sich zornig."}),
+  });
+
+  dischargeMessage = "Dein wuetender Blick wird ruhiger.";
+  return;
+}
+
+void charge_sarrian()
+{
+  // ANGST
+  string *dtypes;
+  tell_object(owner, BS("Die Schatten um dich werden tiefer und deine Augen leuchten mit angsterregendem Wahnsinn auf. "
+                        "Von dir ausgehend sickert blankes Entsetzen, wie schleichendes Gift, in deine Umgebung."));
+  tell_room(ENV(owner), BS(sprintf("Die Schatten um %s werden tiefer und %s Augen bekommen einen irrsinnig gruseligen Ausdruck. "
+                                   "Du weichst einige Schritte zurueck, als eine unnatuerliche Furcht dein Herz vergiftet.",
+    owner->name(WESSEN, 1), owner->QueryPossPronoun(WEM))), ({owner}));
+  
+
+  dtypes = ({ DT_TERROR });
+  if(TALENTMASTER->HasTalent(owner, TALENT_ALTE_GESCHICHTEN)) {
+    dtypes += ({ DT_POISON });
+  }
+    
+  dam_array = ({ dtypes,
+                BS("Eine Welle der Angst fegt von dir aus durch den Raum und laehmt deine Feinde!"),
+                BS("Unbaendige Furcht vor " + owner->name(WEM, 1) + " laehmt dich!"),
+                BS("%s schreckt angsterfuellt vor " + owner->name(WEM, 1) + " zurueck!")});
+
+  room_msg = ({
+    ({"Du laesst deinen fuerchterlichen Blick durch den Raum schweifen.", "Du fuehlst dich unheimlich beobachtet..."}),
+    ({"Du musst ein wenig Kichern, als du merkst, dass sich alle vor dir fuerchten.", owner->name(WER, 1) + " kichert irre und unheimlich. Gruselig."}),
+    ({"Eine leichte Gaensehaut rinnt deinen Ruecken hinab.", "Deine Haare stehen dir vor Furcht zu berge."}),
+    ({"Andere im Raum sehen sich aengstlich um.", "Deine Kehle fuehlt sich vor Panik zugeschnuert an."}),
+    ({"Jeder im Raum wirkt gehetzt.", "Dein Atem geht schneller vor Furcht."}),
+    ({"Du merkst, wie dir alle aengstliche Blicke zuwerfen.", "Dein Herz pocht laut, als dich ploetzlich eine Welle der Furcht erfasst."})
+  });
+
+  dischargeMessage = "Die Angst, die du verbreitest, wird schwaecher.";
+
+  return;
+}
+
+public int getCharges() {
+  return hits; 
+}
+
+public int CanRecharge() {
+  return hits <= (int) (initialHits/4);
+}
+
+public void reset() {
+  ::reset();
+  if(!objectp(owner) || objectp(find_netdead(getuid(owner)))) {
+    remove(1);
+  }
+
+  autoDischarge();
+}
+
+public void discharge_completely() {
+  discharge(0, 9999999);
+}

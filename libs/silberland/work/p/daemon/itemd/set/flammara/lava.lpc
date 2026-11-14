@@ -1,0 +1,178 @@
+#include "../def.h"
+#include "/gilden/druidenzirkel/druiden_extern.h"
+
+inherit ITEMD_SET_PATH "std_set_armour";
+
+#define COST_WUSEL 5 
+#define COST_ELE 25
+#define COST_SALAMANDER 400
+#define COST_PHOENIX 1000
+#define DNPC "/gilden/druidenzirkel/npc/"
+#define ELEMENTAL_CASTER "e_caster"
+#define ELEMENTAL_OWNER "e_owner"
+#define E_REMOVE_MSG "e_rem_msg"
+
+int kreaturen;
+
+void create() 
+{
+  if( !is_clone(this_object()) ) return;
+  ::create();
+
+  SetProp(P_SET, "Flammaras Feuer");
+  SetProp(P_SET_ITEM, "Flammaras Lava");
+  SetProp(P_NR_SET_ITEMS, 4);
+  SetProp(P_SET_BONUS, ([
+        0:(["feuerkreaturen":1, P_ITEMD_ELEMENTAL_VALUE: 0, P_LIGHT:0]),
+        1:(["feuerkreaturen":2, P_ITEMD_ELEMENTAL_VALUE: 0, P_LIGHT:0]),
+        2:(["feuerkreaturen":4, P_ITEMD_ELEMENTAL_VALUE: 1, P_LIGHT:1]),
+        3:(["feuerkreaturen":7, P_ITEMD_ELEMENTAL_VALUE: 2, P_LIGHT:1]),
+        ]));
+  SetProp(P_ITEMD, ({"gehoert zu Flammaras Feuer", 
+        "entfaltet die volle Wirkung erst gemeinsam mit anderen Sachen",
+        "leuchtet im Dunkeln", "erhoeht Deine Magiepunkte", "verringert die "
+        "Kosten aller elementarer Zauber", "nuetzt sich weniger ab", 
+        "veraendert den Temperaturschutz", 
+        "wehrt zusaetzlichen Schaden ab", "ist federleicht",
+        "laesst Dich Feuerkreatueren beschwoeren",
+        }) );
+  SetProp(P_SHORT, "Flammaras Lava");
+  SetProp(P_LONG,
+      "Flammaras Lava ist ein bodenlanger Rock, der aus gluehender Lava "
+      "besteht. Verschiedene Elementarwesen des Feuers sind in der Lava "
+      "zu erkennen, scheinbar dient der Rock als Fokus zur Beschwoerung "
+      "dieser Wesen. Die elementare Macht, die dieses Gebilde zusammenhaelt, "
+      "muss enorm sein. Obwohl eine spuerbare Hitze von ihr ausgeht, "
+      "scheint sie Dich nicht zu verbrennen.");
+  SetProp(P_NAME, "Flammaras Lava");
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({"lava","flammaras lava", }) );
+  SetProp(P_INFO,BS(
+      "In der Lava sind die elementaren Strukturen verschiedener "
+      "Feuerwesen gefangen. Du kannst einen Feuerwusel, ein Feuerelementar, "
+      "einen Feuerphoenix und einen Feuersalamander erkennen."));
+
+  SetProp(P_ARMOUR_TYPE, AT_TROUSERS );
+  SetProp(P_AC, 7);
+  SetProp(P_MATERIAL, ([MAT_FIRE: 100]) );
+  SetProp(P_WEIGHT, 1);
+  SetProp(P_VALUE, 6000);
+  SetProp(P_QUALITY_DECAY, 200);
+  SetProp(P_TEMPERATURE_PROTECTION, ([T_COLD_PROT:5, T_HEAT_PROT:-2]) );
+  AddProp(P_DAM_PROTECTION, ([DT_FIRE:2]) );
+
+  SetProp(P_WEAR_RESTRICTIONS, ([A_INT:22]) );
+  SetProp(P_DEFEND_FUNC, TO);
+  AddCmd( ({"beschwoere", "beschwoer"}), "beschwoeren");
+  kreaturen=1;
+}
+
+int DefendFunc (mixed dam_type, int spell, object enemy) {
+  return setmight()+setmight()*setmight()/2;
+}
+
+int beschwoeren(string str)
+{
+  object l;
+  notify_fail("Was willst Du beschwoeren?\n");
+  if( QueryProp(P_WORN)!=TP) 
+    return notify_fail("Dazu musst Du Flammaras Lava schon tragen!\n"),0;
+  if(str=="wusel" || str=="feuerwusel")
+  {
+    if ( call_other("/spellbooks/druiden_spells", "QueryOwnCreature", TP, 1, 0) )
+      return write("Du hast schon einen Feuerwuesel!\n"),1;
+    if( kreaturen <1 )
+      return write("Flammaras Lava muss sich erst wieder aufladen!\n"),1;
+    if( TP->QueryProp(P_SP)<COST_WUSEL)
+      return write("Du brauchst "+COST_WUSEL+" Magiepunkte!\n"),1;
+
+    printf(BS("Wie aus dem Nichts erscheint ein kleiner Feuerwusel, "
+          +"der Dir von nun an folgt und Licht spendet.\n"));
+    say(BS(sprintf("Ploetzlich erscheint ein kleiner Feuerwusel, der "
+            +"%s folgt und Licht spendet.\n", TPN)) );
+    l=clone_object(DNPC"feuerwusel");
+    l->move(environment(TP), M_NOCHECK|M_SILENT); 
+    l->SetProp(P_MSGOUT, "wuselt hinter "+TP->name(WEM)+" her");
+    l->SetProp(ELEMENTAL_CASTER, TP);
+    TP->AddPursuer(l);
+    l->start_remove(TP->QueryProp(P_LEVEL)*10*(1+setmight()));
+    kreaturen--;
+    return 1;
+  }
+  if(str=="elementar"  || str=="feuerelementar" )
+  {
+    if ( call_other("/spellbooks/druiden_spells", "QueryOwnCreature", TP, 0, 1) )
+      return write("Du beherrscht schon ein Elementar.\n"),1;
+    if( kreaturen <1 )
+      return write("Flammaras Lava muss sich erst wieder aufladen!\n"),1;
+    if( setmight()<1 )
+      return write("Dazu benoetigst Du mehr Teile von Flammaras Feuer!\n"),1;
+    printf(BS("Ploetzlich manifestiert sich eine Gestalt aus reinstem "
+          +"Feuer.\n"));
+    say(BS("Ploetzlich manifestiert sich eine Gestalt aus reinstem Feuer."));
+    l=call_other("/spellbooks/druiden_spells", "CreateElemental", TP, 10000+setmight()*setmight()*1000, "feuer");
+    l->move(environment(this_player()), M_NOCHECK|M_SILENT); 
+  TP->AddDefender(l);
+  TP->AddPursuer(l);
+  l->SetProp(ELEMENTAL_OWNER, TP);
+  if(l->CheckPursuers()) {
+    l->SetProp(P_MSGOUT, "folgt "+TP->name(WEM));
+    l->SetProp(P_MMSGOUT, "folgt "+TP->name(WEM));
+  }
+  l->SetProp(P_LONG, call_other("/spellbooks/druiden_spells", "Set_P_LONG", l->QueryElement()));
+  l->SetProp(P_LONG, l->QueryProp(P_LONG)+"Es bleibt staendig in "
+       +"der Naehe von "+CAP(getuid(TP))+".");
+  l->SetProp(E_REMOVE_MSG, BS(sprintf("Das Feuerelementar von %s loest sich "
+      "nach erfuelltem Dienst auf.", TP->name(WEM))));
+      l->z_kaempfen(TP, ({}));
+    kreaturen-=2;
+    return 1;
+  }
+  if(str=="salamander"  || str=="feuersalamander" )
+  {
+    if( kreaturen <2 )
+      return write("Flammaras Lava muss sich erst wieder aufladen!\n"),1;
+    if( setmight()+1!=QueryProp(P_NR_SET_ITEMS) )
+      return write("Dazu benoetigst Du alle Teile von Flammaras Feuer!\n"),1;
+    if( TP->QueryProp(P_SP)<COST_SALAMANDER)
+      return write("Du brauchst "+COST_SALAMANDER+" Magiepunkte!\n"),1;
+    write("Du beschwoerst einen maechtigen Feuersalamander!\n");
+    l=clone_object(DNPC "feuersalamander");
+    l->move(environment(this_player()), M_NOCHECK|M_TPORT); 
+    TP->AddDefender(l);
+    TP->AddPursuer(l);
+    l->SetProp(ELEMENTAL_OWNER, TP);
+    l->start_remove(60*(4+random(7)));
+    if(l->CheckPursuers())
+      l->SetProp(P_MSGOUT, "brennt sich hinter "+TP->name(WEM)+" her");
+    kreaturen-=4;
+    return 1;
+  }
+  if(str=="phoenix"  || str=="feuerphoenix" )
+  {
+    if( kreaturen <4 )
+      return write("Flammaras Lava muss sich erst wieder aufladen!\n"),1;
+    if( setmight()+1!=QueryProp(P_NR_SET_ITEMS) )
+      return write("Dazu benoetigst Du alle Teile von Flammaras Feuer!\n"),1;
+    if( TP->QueryProp(P_SP)<COST_PHOENIX)
+      return write("Du brauchst "+COST_PHOENIX+" Magiepunkte!\n"),1;
+    l=clone_object(DNPC "phoenix");
+    l->move(environment(this_player()), M_NOCHECK|M_TPORT); 
+    TP->AddDefender(l);
+    TP->AddPursuer(l);
+    l->SetProp(ELEMENTAL_OWNER, TP);
+    l->start_remove(60*(4+random(7)));
+    if(l->CheckPursuers())
+      l->SetProp(P_MSGOUT, "fliegt mit flammenden Fluegeln hinter "+TP->name(WEM)+" her");
+    kreaturen-=7;
+    return 1;
+  }
+  return 0;
+}
+
+void reset()
+{
+  ::reset();
+  kreaturen=QueryProp("feuerkreaturen");
+}

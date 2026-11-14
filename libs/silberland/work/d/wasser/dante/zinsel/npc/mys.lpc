@@ -1,0 +1,2460 @@
+/*
+
+   der mystagoge auf der zinsel:
+   jo was kann der:
+   1. druidendienste erhoehen , werte nun auf angrox vorlage angepasst
+   trotzdem wird man sie imho im laufe des spiels anpassen muessen
+   kann auch auskunft ueber die anzahl der dienste geben (random)
+
+   2. waffen verbessern, verwendet gleiche prop wie feys balsam, damit
+   pls nicht ewig erhoehen koennen. aber schwieriger zu bekommen
+
+//nicht aktiviert
+3. autoload machen von waffen 1 waffe pro pls pro 1 reboot
+//
+
+4. die verkaufte seele wieder herstellen (teufel usw)
+
+
+
+
+
+
+Die Erhoehungen an sich sollten eher bei random(6)+5 liegen (bei
+einzelerhoehungen), bzw bei random(8)+3 bei dauerhaften diensten, wobei
+dauerhafte dienste den wert 20 nicht ueberschreiten sollte. 
+
+
+dante sl 99 2000 129 mal ungebaut
+*/
+
+
+
+inherit "/std/npc";
+#include <combat.h>
+#include <moving.h>
+#include <properties.h>
+#include "/players/dante/myowndefine.h"
+#include <new_skills.h>
+#include <npc.h>
+#include <ansi.h>
+#define ASKTIME 600
+
+#define TIME 4+random(4)
+#define LOG   "/d/wasser/dante/zinsel/save/tropfen"
+
+//fuer die waffen!!!
+#define VERBESSERUNG 10
+#define SICHER       40
+
+
+
+
+//das savefile des masters
+#define SAVEFILE "/d/wasser/dante/zinsel/save/daten"
+//wird hier nicht gebraucht, aber damit man weiss wos hinkommt
+
+
+//das masterobj
+#define MASTER "/d/wasser/dante/zinsel/save/master"
+
+
+#define WARNUNG if(environment(TO)!=environment(TP))  {  tell_object(TP, BSA("Wenn Du meine Klause verlaesst, und ich den Kult vollendet habe, und Du dann nicht hier bist, so sind Deine Blutstropfen vergeudet gewesen! Also komm schnell zurueck!", "Der Mystagoge teilt Dir mit: "));  }
+#define STOP write(BS("Du musst Dich gedulden! Der Mystagoge arbeitet gerade an einer Sache!")); return 1;
+
+
+//fuer die druiden
+#define EINZEL_EINMAL 10
+#define EINZEL_IMMER  50
+#define ALLE_EINMAL 40
+#define ALLE_IMMER  100
+#define DAZ_ALLE 3
+#define DAZ_ELE 1
+
+string waffe, newdam, s;
+object w, tropfen;
+int i,maxwc;
+int wc,dam,qd,weight;
+int fix;
+mixed dam_type;
+string waffen_file; 
+string *pfad;
+int sicherungszeit;
+int asked=0;
+
+//die werte fuer die erhoehungen 
+
+int ee_wert; //einzel einmal
+int ei_wert;  //einzel immer
+int ae_wert; //alle einmal 
+int ai_wert; //alle immer 
+
+string feuer, wasser, humus, eis, luft, erz;
+string fi, wa, lu, hu, er,ei;
+
+
+void init()  {
+  ::init();
+  if(interactive(TP))  {
+    call_out("tag", 1);  
+  }
+}
+
+void tag()  {
+
+  if(environment(TP)!=environment(TO))  return;
+  write(BS(
+        "Der Mystagoge durchdringt Dich mit einem Blick und nickt Dir freundlich zu."));
+}
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Ein uralter Mystagoge");
+
+  SP(P_LONG, BS(
+        "Der Mystagoge ist ein kleines, runzeliges Maennchen, dessen Koerper "
+        "sich unter der Last vieler Jahre gebeugt hat. Doch ein Blick in "
+        "seine Augen zeigen Dir, dass er mehr weiss und mehr kann als "
+        "Du und Deines gleichen zusammen. Sie leuchten rot und scheinen "
+        "Dich zu durchblicken. Ein Kampf mit ihm wuerde fuer Dich "
+        "fatal ausgehen. Du solltest ihn ganz grundsaetzlich nach "
+        "dem Zombiekult fragen, er kann Dir sicher sehr nuetzlich sein und sein "
+        "grosses Wissen mit Dir teilen!"));
+
+
+
+  AI(({"syntax","wissen"}),
+      "Du solltest mich am besten nach Kult fragen, aber hier\n"
+      "zur Erinnerung noch einmal die wichtigsten Syntax':\n\n"
+      "Fuer das Sichern von Waffen: (Kosten: "+SICHER+" Tropfen.)\n"
+      "'sichere waffe durch zombiemagie'\n"
+      "'ueberpruefung'\n"
+      "'erschaffung'\n"
+      "'liste'\n"
+      "'loeschung'\n\n"
+      "Fuer das Verbessern einer Waffe: (Kosten: "+VERBESSERUNG+" Tropfen.)\n"
+      "'verbessere waffe durch zombiemagie'\n\n"
+      "Fuer die Erhoehung der Dienste der Druiden:\n"
+      "'einzelerhoehung element' Kosten: "+EINZEL_EINMAL+" Tropfen.\n"
+      "'dauereinzelerhoehung element' Kosten: "+EINZEL_IMMER+" Tropfen.\n"
+      "'einzelkompletterhoehung' Kosten: "+ALLE_EINMAL+" Tropfen.\n"
+      "'dauerkompletterhoehung' Kosten: "+ALLE_IMMER+" Tropfen.\n"
+      "'dienstanzahl alle' Kosten: "+DAZ_ALLE+" Tropfen.\n"
+      "'dienstanzahl element' Kosten: "+DAZ_ELE+" Tropfen.\n",
+      "sagt: ");
+
+
+  AD(({"augen","auge"}),
+      "Sie leuchten unheimlich.");
+  AD("koerper",
+      "Er ist gebueckt und verdorrt.");
+
+  SetProp(P_NAME,"Mystagoge");
+
+  SetProp(P_GENDER, MALE);
+  AddId(({"NOWIMPY","mystagoge","priester"}));
+  SetProp(P_ARTICLE, 1);
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:10, T_RANGE_MAX: 70]));
+  create_default_npc(50);
+  SetProp(P_HANDS, ({" mit seinen magischen Kuensten",500,({DT_MAGIC})}));
+  SetProp(P_BODY, 100);
+  SetProp(P_SIZE, 120);
+  SetProp(P_ALIGN, 1000);
+
+  SetProp(P_MAX_HANDS, 2);
+  SetProp( P_RESISTANCE_STRENGTHS,
+      ([DT_HOLY: -1.0,DT_UNHOLY: -1.0, DT_TERROR:-1.0, DT_FIRE:-1.0, DT_BLUDGEON:0.5,
+        DT_SLASH:-0.5, DT_WHIP:0.4,DT_COLD:0.6, DT_AIR:-0.6, DT_RIP:-0.7,
+        DT_PIERCE:-0.7,DT_LIGHTNING:-1.0, DT_ELECTRIC:-1.0]));
+
+
+  SetProp( P_REJECT, ({ REJECT_GIVE, "Der Mystagoge sagt: Hier nimm wieder! Danke aber!\n" }) );
+
+
+
+  AI(({"nekromanten","paladine","paladin","nekromant","nekropolis",
+        "unterwelt","saeurefall"}),
+      "Der weise Mann spricht nur einmal, also hoere mir gut zu. Fetter Bauch "
+      "bringt mehr Leute um als das Schwert! Ob Paladin, ob Nekromant, Tand "
+      "Tand ist alles aus Magier Hand!", "sagt leise: ");
+
+
+  SP(P_INFO, BS(
+        "Frag ihn doch einfach nach Kult!"));
+
+  AI(DEFAULT_INFO,({
+        "laechelt nur freundlich.\n",
+        "sagt: Die Zeit wird Dir helfen!\n",
+        "deutet nur nach oben!\n",
+        "sagt: Wer dies fragt, ist die Antwort nicht wert!\n",
+        "sagt: Frag lieber Dich selbst!\n",
+        "sagt: Ich habe Dante erschaffen!\n",
+        "sagt: Die Welt wird untergehen!\n",
+        "sagt: Nur ein Narr stellt diese Frage!\n",
+        "sagt: Der Kult ist alt und so schweigt man besser!\n"}));
+
+
+  AI("insel",
+      "Sie wird da sein, wenn wir nicht mehr da sind.", "sagt: ");
+  AI(({"kult","zombiekult"}),
+      "Es gibt derer "
+      "4 Goetzen, jeder ein anderer mit anderen Reichen. Die "
+      "Zombies huldigen diesen Goetzen auf 4 kleinen Inseln. Dort "
+      "steht jeweils ein Altar. Mit dem richtigen Wort wird einer "
+      "der Goetzen erscheinen. Doch huete Dich! Sie greifen ohne "
+      "Warnung an! Das Blut der Goetzen ist pure, boese Magie. Ich kann "
+      "aus diesem Blut Magie herstellen. Dabei hilft mir diese Statue. "
+      "Bring mir die Tropfen und frag mich dann, "
+      "wenn Du sie hast nach der Statue.", "sagt: ");
+
+  AI("statue",
+      "Die Statue habe ich mir selbst erschaffen aus dem Blut der Goetzen. "
+      "Es ist erstarrt und daher nicht so gefaehrlich. Mit ihrer Hilfe "
+      "werde ich Dir helfen koennen, mehr und besser "
+      "als es jeder irdische Magier kann. Wenn Du mehr wissen willst, "
+      "so frage mich nach Hilfe.", "sagt: ");
+
+
+  AI("magie",
+      "In den Tropfen steckt boese, dunkle Magie, die ich mit Hilfe "
+      "meiner unendlichen Weisheit und dieser Statue nuetzen kann. "
+      "Ich wandle sie in alle moeglichen Formen um und kann so "
+      "viel Nuetzliches erschaffen. Doch jedesmal, wenn ich das tue "
+      "spiele ich ein gefaehrliches Spiel mit dem Tod.", 
+      "sagt ernst: ");
+
+
+  AI(({"blut","goetzenblut"}),
+      "Ich benoetige mindestens 10 Tropfen, damit "
+      "ich Magie erschaffen kann. Das Blut ist sehr gefaehrlich "
+      "und nur ein Meister im Zombiekult kann damit umgehen. Jeder "
+      "Goetze hat ein anderes Blut. Manchmal kann man es an der Farbe "
+      "erkennen, doch mir ist das eigentlich egal, welche Tropfen Du "
+      "hast.",
+      "sagt: ");
+
+
+  AI(({"farbe","farben"}),
+      "Die Farben des Blutes haben boese Kraefte, doch mehr "
+      "will ich dazu nicht sagen.", "sagt: ");
+
+  AI(({"kraft","kraefte"}),
+      "Die Kraefte des Blutes sind dunkel und wenn Du versuchen "
+      "wuerdest hier Magie zu erschaffen waere es Dein Tod!", 
+      "warnt: ");
+  AI("tod",
+      "Der Tod lauert hier ueberall.", "sagt: ");
+  AI(({"goetze","goetzen"}),
+      "Es gibt derer 4 mit unaussprechlichen Namen. Sie sind der "
+      "Mittelpunkt des Kultes der Zombies!", "sagt: ");
+
+
+  AI(({"zombies", "zombie"}),
+      "Die Zombies sind harmlosen Kreaturen, arme Schweine. Sie sind "
+      "die Sklaven der Goetzen!", "sagt: ");
+
+  AI(({"virus","zombievirus"}),
+      "Tja, eine schlimme Sache, doch es gibt 2 Moeglichkeiten ihn "
+      "los zu werden. Zerfallos hat ein von mir gebrautes Antidot, "
+      "und ausserdem gibt es irgendwo unter der Insel bei den Zombies "
+      "einen Stachel, der eine Fluessigkeit absondert die heilend wirkt.", 
+      "sagt: ");
+
+  AI("antidot",
+      "Hilft sicher, aber teuer.", "sagt: ");
+
+  AI(({"stachel"}),
+      "Hmm, nicht weit von hier.", "sagt: ");
+  AI(({"fluessigkeit","fluessigkeiten"}),
+      "Ich zaubere mit ihnen sehr oft.", "sagt: ");
+  AI("mystagoge",
+      "Es gibt sicher mehrere, aber ich kenne nur mich.","sagt: ");
+  AI("dante",
+      "Ehrenzombie auf Lebenszeit!", "sagt: ");
+
+  AI("hilfe",
+      "Ich kann Dir verschiedene Dienste erweisen.\n"
+      "1. Du kannst mich nach Waffen fragen.\n"
+      "2. Du kannst mich nach Elementar fragen.\n"
+      "3. Wenn Du nur eine Uebersicht haben willst, frage mich nach 'syntax'!\n",
+      "sagt: ");
+
+  AI(({"waffe","waffen"}),
+      "Nun gut, folgendes kann ich erzeugen mit meiner Magie:\n"
+      "1. Ich kann Waffen so verzaubern, dass sie, sollte\n"
+      "   diese Welt einmal kurzzeitig vernichtet werden,\n"
+      "   Dir auch nach der Wiedererschaffung dieser Welt\n"
+      "   zur Verfuegung stehen. <Anmerkung: d.h. rebootsicher>\n"
+      "   Frag mich am besten nach Sicherheit.\n"
+      "ACHTUNG!!! Dieses feature steht momentan nicht zur Verfuegung!!!\n\n"
+      "2. Ich kann Waffen verbessern, was ihre Schlagkraft,\n"
+      "   die Leichtigkeit der Handhabung, ihre Beschaedigung\n"
+      "   und ihre Widerstandskraft gegen Abnuetzung betrifft.\n"
+      "   Moeglicherweise wird die Waffe auch noch in punkto\n"
+      "   anderer Qualitaeten verbessert, aber darueber darf\n"
+      "   ich Dir leider nichts erzaehlen.\n"
+      "   Frag mich am besten nach Verbesserung.\n",
+      "sagt: ");
+
+  AI(({"sicherheit","sicherung","sicher"}),
+      "Gut, folgende Vorrausetzungen muessen gegeben sein. "
+      "Du musst die Waffe natuerlich besitzen. Und Du musst "
+      "mindestens "+SICHER+" Blutstropfen haben. Dann tippe "
+      "einfach <sichere waffenname durch zombiemagie>." 
+      " Achtung! Ich werde die "
+      "erste Waffe nehmen die ich in Deinem Inventar finde, auf die Deine "
+      "Angabe zutrifft. Ein Beispiel: 'sichere langschwert durch zombiemagie'."
+      "Noch etwas ist wichtig! Solltest Du bereits eine Waffe bei mir "
+      "gesichert haben, und versuchen eine zweite zu sichern, so wirst "
+      "Du wahrscheinlich Deine hart erkaempften Blutstropfen verlieren, aber "
+      "keine zweite Waffe sichern koennen!!! "
+      "Hoer gut zu! Nachdem die Welt zerstoert und Wiedererschaffen wurde, musst "
+      "Du zu mir kommen und Dir hier Deine Waffe abholen. Momentan kann ich "
+      "pro Spieler nur eine Waffe ueber den Untergang der Welt hinweg retten. "
+      "Frage mich am besten nach Erschaffung.",
+      "sagt: ");
+
+  AI(({"druiden","druide"}),
+      "Druiden sind eine eigene Gilde, ich kann ihnen sicher gut helfen!",
+      "sagt: ");
+
+  AI("liste",
+      "Mit Liste bekommst Du eine Totalaufstellung aller Spieler und aller Waffen "
+      "die ich hier gesichert haben.",
+      "sagt: ");
+
+  AI("erschaffung",
+      "Wenn Du eine Waffe bei mir gegen den Untergang der Welt gesichert hast, "
+      "kannst Du zu mir herkommen und sie wieder bekommen. Tippe einfach "
+      "'erschaffung' und wenn ich eine Waffe fuer Dich gesichert habe, so "
+      "wirst Du sie hier wiederbekommen. Wenn Du wissen willst, ob Du schon eine "
+      "Waffe sichern hast lassen so tippe einfach 'ueberpruefung'. So ich hoffe, "
+      "Du hast das alles verstanden! Etwas noch. Mit 'liste' bekommst Du eine "
+      "Aufstellung aller Spieler und ihrer gesicherten Waffen!",
+      "sagt: ");
+
+  AI("ueberpruefung",
+      "Wenn Du wissen willst, ob Du schon eine "
+      "Waffe sichern hast lassen so tippe einfach 'ueberpruefung'. Denn "
+      "solltest Du bereits eine Waffe bei mir "
+      "gesichert haben, und versuchen eine zweite zu sichern, so wirst "
+      "Du wahrscheinlich Deine hart erkaempften Blutstropfen verlieren, aber "
+      "keine zweite Waffe sichern koennen!!! "
+      "Du kannst diese Waffe nur "+ANSI_RED+"nach"+ANSI_NORMAL+" "
+      "der naechsten Zerstoerung wieder haben! Wenn Du unbedingt eine neue "
+      "Waffe sichern lassen willst, so kannst Du das mit 'loeschung' machen.",
+      "warnt: ");
+
+  AI("loeschung",
+      "Solltest Du bereits eine Waffe gesichert haben, aber doch noch eine andere "
+      "Waffe sichern wollen, so kannst Du Deine alte Waffe mit 'loeschung' "
+      "entsichern lassen und dann eine neue Waffe wieder sichern. Das kostet "
+      "natuerlich wieder Blutstropfen. Also ueberlege Dir gut, was Du tust!",
+      "sagt: ");
+
+  AI("verbesserung",
+      "Wenn Du eine Waffe besitzt, sie aber noch besser machen willst, "
+      "dann ist das die richtige Magie fuer Dich! Wie genau die Gewichtung "
+      "der Verbesserung der einzelnen Waffenqualitaeten wirklich aussieht, darf "
+      "ich Dir nicht erklaeren, und wenn ich es machen wuerde, muesste ich Dich "
+      "danach sofort toeten! " 
+      "Du musst um diesen Dienst in Anspruch nehmen zu koennen, mindestens "
+      +VERBESSERUNG+" Blutstropfen der Zombiegoetzen haben. "
+      "Also, tippe "
+      "<verbessere waffenname durch zombiemagie>."
+      " Achtung! Ich werde die "
+      "erste Waffe nehmen die ich in Deinem Inventar finde, auf die Deine "
+      "Angabe zutrifft. Ein Beispiel: 'verbessere todesaxt durch zombiemagie'.",
+      "sagt: ");
+
+  AI(({"elementar","elementare","ring","ringe"}),
+      "Ich kann Dir mit meiner Magie die Anzahl der Dienste Deiner "
+      "Elementare erhoehen. Du musst dazu aber einen Ring besitzen. Wo "
+      "man die Ringe findet, weiss ich aber nicht. Frage mich am besten nach "
+      "Dienste.",
+      "sagt: "); 
+
+  AI(({"dienst","dienste"}),
+      "Gut, also erstens musst Du Druide sein, zweitens brauchst Du wie "
+      "immer Blutstropfen der Zombiegoetzen. Es gibt 4 Moeglichkeiten. "
+      "Frag mich nach Moeglichkeiten und dann wenn Du mehr wissen willst "
+      "darueber nach den angefuehrten Stichworten.",
+      "sagt: ");
+
+  AI(({"moeglichkeiten","moeglichkeit"}),
+      "Es gibt momentan folgende Moeglichkeiten:\n"
+      "1. Einzelerhoehung.\n"
+      "2. Kompletterhoehung.\n"
+      "3. Dienstanzahl.\n",
+      "sagt: ");
+
+  AI(({"dienstanzahl","anzahl"}), 
+      "Ich kann Dir sagen wieviel Dienste Dir zur Verfuegung stehen. "
+      "Du kannst auswaehlen zwischen 'dienstanzahl alle', das kostet Dich "
+      ""+DAZ_ALLE+" Tropfen. Dann gibt es noch 'dienstanzahl element', also "
+      "zum Beispiel 'dienstanzahl feuer'. Das kostet Dich bei mir "
+      ""+DAZ_ELE+" Tropfen. Ich hoffe, Du hast alles verstanden.",
+      "sagt: ");
+
+  AI(({"einzelerhoehung","einzel"}),
+      "Einzelerhoehung bedeutet, dass ein Dienst Dir haeufiger "
+      "zur Verfuegung steht."
+      "\nBei den Einzelerhoehungen gibt es momentan:\n"
+      "1. Einmalige Einzelerhoehung. Kosten: "+EINZEL_EINMAL+" Tropfen.\n"
+      "2. Dauerhafte Einzelerhoehung. Kosten: "+EINZEL_IMMER+" Tropfen.\n",
+      "sagt: ");
+
+  AI(({"kompletterhoehung"}),
+      "Kompletterhoehung bedeutet, dass Dir alle Dienste die Du "
+      "als Druide haben kannst erhoeht werden. Das heist also, "
+      "das Du jeden Deiner Dienste haeufiger verwenden kannst. "
+      "\nBei den Kompletterhoehungen gibt es momentan:\n"
+      "1. Einmalige Kompletterhoehung. Kosten: "+ALLE_EINMAL+" Tropfen.\n"
+      "2. Dauerhafte Kompletterhoehung. Kosten: "+ALLE_IMMER+" Tropfen.\n",
+      "sagt: ");
+
+
+  AI(({"einmalige einzelerhoehung"}),
+      "Gut, die einmalige Einzelerhoehung bedeutet, dass Du einen Dienst "
+      "eine Zeitlang oefter verwenden kannst. Wenn Du Deine Erhoehung aber "
+      "verbraucht hast, so steht Dir wieder nur mehr die normale Anzahl "
+      "der Dienste zur Verfuegung. syntax: <einzelerhoehung element>."
+      " Kosten: "+EINZEL_EINMAL+" Tropfen.",
+      "sagt: ");
+
+
+  AI("dauerhafte einzelerhoehung",
+      "Das bedeutet, dass der von Dir erhoehte Dienste "
+      "einmalig oefter zu verwenden ist. Und zwar solange bos die Welt untergeht. "
+      "Wenn die Welt wieder erschaffen wurde, steht Dir wieder nur mehr die normale Anzahl "
+      "dieses Dienstes zur Verfuegung. syntax: <dauereinzelerhoehung element>."
+      " Kosten: "+EINZEL_IMMER+" Tropfen.",
+      "sagt: ");
+
+
+  AI(({"einmalige kompletterhoehung"}),
+      "Gut, die einmalige Kompletterhoehung bedeutet, dass Du Deine Dienste "
+      "einmalig oefter verwenden kannst. Also einmal mehr Dienste, und zwar alle "
+      "zur Verfuegung hast. "
+      "Wenn Du Deine Dienste aber verbraucht hast, steht Dir nur mehr die normale "
+      "Anzahl "
+      "dieser Dienste zur Verfuegung. syntax: <einzelkompletterhoehung>."
+      " Kosten: "+ALLE_EINMAL+" Tropfen.",
+      "sagt: ");
+
+  AI("dauerhafte kompletterhoehung",
+      "Das bedeutet, dass alle Dir zur Verfuegung stehenden Dienste bis "
+      "zum naechsten Weltuntergang erhoeht zur Verfuegung stehen. "
+      "Wenn die Welt wieder erschaffen wurde, steht Dir wieder nur mehr die normale Anzahl "
+      "dieser Dienste zur Verfuegung. syntax: <dauerkompletterhoehung>."
+      " Kosten: "+ALLE_IMMER+" Tropfen.",
+      "sagt: ");
+
+  SetProp(P_HEAL, 0);
+  SetProp(P_AGGRESSIVE, 0);
+  SetProp(P_WIMPY, 0);
+  SetProp(P_NOMAGIC, 50);
+  SetProp(P_NOCORPSE, 1);
+  SetProp(P_MSGIN, "entsteht aus einer Wolke");
+  SetProp(P_MSGOUT, "gleitet auf einer Wolke");
+  SetProp(P_MMSGIN, "taucht ploetzlich aus einer Wolke auf");
+  SetProp(P_MMSGOUT, "verschwindet im Boden");
+  SP(P_NOCORPSE, 1);
+  SP(P_DIE_MSG, " verfluessigt sich und ist auf einmal weg!\n");
+  SetProp(P_KILL_MSG, "Warum musstest Du mich auch provozieren!!!");
+  SetProp(P_KILL_NAME, "Ein uralter Mystagoge und seine Kunst");
+  SetProp(P_MURDER_MSG, "Wie konnten meine Kuenste nur so versagen?! Dante?!!?");
+  SetProp(P_MSG_FLAGS, ([P_KILL_MSG:0, P_MURDER_MSG:0 ]));
+
+  SetChats(1,({
+        "Der Mystagoge sagt: Je dunkler der Kult, desto groesser die Macht!\n",
+        "Der Mystagoge sagt: 1000 Jahre lebe ich schon hier.\n",
+        "Der Mystagoge schuettelt eine dunkle Flasche.\n",
+        "Der Mystagoge sucht ein altes Buch!\n",
+        "Der Mystagoge sagt: Kennst Du die Goetzen?!\n",
+        "Der Mystagoge sagt: Der Kult ist uralt!\n",
+        "Der Mystagoge mischt 3 Fluessigkeiten miteinander.\n",
+        "Der Mystagoge murmelt eine Formel und flucht dann.\n",
+        "Der Mystagoge kontrolliert den Altar.\n",
+        "Der Mystagoge versinkt in Trance.\n",
+        "Der Mystagoge meditiert.\n",
+        "Der Mystagoge betet am Altar.\n",
+        "Der Mystagoge durchdringt Dich mit seinen Blicken.\n",
+        "Der Mystagoge warnt Dich vor dem Zombievirus.\n"}));
+
+  AI(({"zerfallos","daemon","blitzdaemon","zombioid"}),
+      "Tja, Zerfallos betreibt die Kneipe im Norden. Der Daemon bewacht "
+      "ihn vor den Zombies!", "sagt: ");
+  AI("kneipe",
+      "Naja, kennst Du doch, die von Zerfallos!", "sagt: ");
+  AI("altar",
+      "Den Altar brauche ich um zu zaubern.", "sagt: ");
+  AI("klause",
+      "Hier lebe, meditiere und zaubere ich!", "sagt: ");
+  AI("teufel",
+      "Der Teufel, besser gesagt eine Form von ihm, wohnt hier irgendwo an einem "
+      "Ort namens Inferno. Man einer ging einen Pakt mit ihm ein!!!", "sagt: ");
+  AI(({"inferno","pakt"}),
+      "Im Inferno kannst Du dem Teufel Deine Seele verkaufen! Wenn Du schon einen "
+      "Pakt mit dem Teufel hast, und diesen beenden willst, so kann nur ich Dir helfen! "
+      "Aber ich will als Gegenleistung einen magischen Trichter haben!!! Den gibt es hier auf der Insel irgendwo!!! "
+      "Komm einfach her und gib ihn mir!", "sagt: ");
+  AI("trichter",
+      "Ich glaube, der Trichter ist nicht an Land! Was immer das heisst!!! So genug verraten!",
+      "sagt: ");
+  AI("guertel",
+      "Der Guertel ist sehr maechtig und verfuegt ueber verschiedenste Arten "
+      "der Magie!", "sagt: ");
+
+  //cmds fuer waffen
+  /* ACD( "erschaffung", "erzeuge_waffe_aus_mapping");
+     ACD( "ueberpruefung", "ueberpruefe_ob_waffe_im_mapping");
+
+     ACD(({"sichere","sicher"}), "sicher_waffe");
+     ACD("liste", "zeige_alle_daten");
+     ACD("loeschung", "loesche_eintrag_im_mapping");
+     */
+  // cmds fuer druiden
+
+  SUID;
+  CLONEME("/d/wasser/dante/zinsel/armour/mguertel");
+  //nicht anziehen!
+
+  ACD(({"verbesser","verbessere"}), "verbessere_waffe");
+
+  //<einzelerhoehung element>."
+  ACD("einzelerhoehung", "fun_einzelerhoehung");
+
+  //<einzelkompletterhoehung>."
+  ACD("einzelkompletterhoehung", "fun_einzelkompletterhoehung");
+
+  //<dauerkompletterhoehung>."
+  ACD("dauerkompletterhoehung", "fun_dauerkompletterhoehung");
+
+  //dauereinzelerhoehung element>."
+  ACD("dauereinzelerhoehung", "fun_dauereinzelerhoehung");
+
+
+
+  ACD("dienstanzahl", "check_dienst_anzahl");
+  //erklaert sich eh selbst
+
+
+}
+//beginn der druiden funcs
+
+
+
+
+int check_dienst_anzahl(string str)  
+
+{
+  object tropfen, amulett;
+  int feuer_z, wasser_z, eis_z, luft_z, humus_z, erz_z, zahl;
+
+
+  NF(BSA(
+        "Du musst schon genauer sagen was Du ueber die Dienstanzahl wissen willst.",
+        "Der Mystagoge sagt: "));
+
+
+  if(!str) return 0;
+
+
+  if(
+      str!="alle" && str!="feuer" && str!="wasser"&&str!="eis"&&
+      str!="humus"&& str!="erz"   && str!="luft" )
+
+  {
+    write(BSA(
+          "Hmm, tut mir leid, aber mit '"+str+"' kann ich hier wenig anfangen. "
+          "Du kannst mich aber nach 'alle, feuer, eis, wasser, erz, humus, luft'"
+          " fragen!",
+          "Der Mystagoge sagt: "));
+    return 1;
+  }       	
+
+
+  tropfen=present("zombiegoetzenblutstropfen", TP);
+
+
+  if(!tropfen)   
+  {
+    write(BSA(
+          "Du hast leider keine Blutstropfen bei Dir!",
+          "Der Mystagoge sagt: "));
+    return 1;
+  }
+
+
+  if(!TP->QP(P_GUILD, "druidenzirkel")) 
+  {
+    write(BSA(
+          "Aber "+TPN+", Du bist doch kein Druide!",
+          "Der Mystagoge sagt: "));
+    return 1;  
+  }
+
+  amulett=present("\ndruidenamulett", TP);    
+
+
+  if(!amulett)  
+  {
+    write(BSA(
+          "Du hast kein Druidenamulett "+TPN+", also kann ich Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return 1;  
+  }                  
+
+
+  if(!amulett->QueryWorn() )
+  {
+    write(BSA(
+          "Du hast Dein Druidenamulett nicht angezogen "+TPN+", also kann ich Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return 1;  
+  }               
+
+
+  if(str=="alle")        { 
+
+
+
+    if(tropfen->QP(P_AMOUNT) < DAZ_ALLE ) 
+    {
+      write(BSA(
+            "Du hast ja nur "+tropfen->QP(P_AMOUNT)+" Zombiegoetzentropfen "+TPN+"! "
+            "Du brauchst aber "+DAZ_ALLE+" Tropfen! Tut mir leid!",
+            "Der Mystagoge sagt: "));
+      return 1;  
+    }	    
+
+
+
+    tropfen->AddAmount(-DAZ_ALLE);
+
+    write("Der Mystagoge nimmt Dir "+DAZ_ALLE+" Blutstropfen weg.\n");
+
+    if(!random(300))  {
+      write(BSA(
+            "Verflucht! Nun sind mir die Tropfen doch glatt auf den Boden gefallen! "
+            "Sie sind fuer immer verloren! Tut mir leid "+TPN+"! So etwas kann "
+            "dem allerbesten Magier passieren!",
+            "Der Mystagoge sagt: "));
+      return 1;  }
+
+      /*
+
+         Mittels amulet->QueryService(element) kannst du abfragen, wie hoch der Dienst
+         aktuell ist, und mit QueryStdService bekommst du ein array in der form:
+         ({ ([feuer: 10, ...]), ([feuer: 7, ...]) }), wobei ersteres mapping die Werte
+         --mehr--(74%) ANFANG 
+         anzeigt, auf die bei einem Reset zurueckgesetzt wird (Dauerhafte Erhoehung),
+         das zweite Mapping die aktuellen Werte.
+         */
+
+
+
+      write("\nDer Mystagoge leert die Tropfen in einen der Muender der Statue und "
+          "beginnt wild zu gestikulieren. Dann blickt er Dir genau ins Herz.\n");
+      write("Der Mystagoge sagt: Nun gut, "+TPN+"! Hier das Ergebnis:\n");
+
+      feuer_z=amulett->QueryService("feuer")+1-random(3); // +/-1
+      wasser_z=amulett->QueryService("wasser")+1-random(3); // +/-1
+      eis_z=amulett->QueryService("eis")+1-random(3); // +/-1
+      erz_z=amulett->QueryService("erz")+1-random(3); // +/-1
+      luft_z=amulett->QueryService("luft")+1-random(3); // +/-1
+      humus_z=amulett->QueryService("humus")+1-random(3); // +/-1
+
+      if(luft_z  < 0 ) { luft_z=0; }
+      if(feuer_z  < 0 ) { feuer_z=0; }	 
+      if(eis_z  < 0 ) { eis_z=0; }
+      if(erz_z  < 0 ) { erz_z=0; }
+      if(wasser_z  < 0 ) { wasser_z=0; }
+      if(humus_z < 0 ) { humus_z=0; }
+
+
+      write(
+          "Feuer : "+feuer_z+" Dienst(e).\n"
+          "Wasser: "+wasser_z+" Dienst(e).\n"
+          "Eis   : "+eis_z+" Dienst(e).\n"
+          "Humus : "+humus+" Dienst(e).\n"
+          "Erz   : "+erz_z+" Dienst(e).\n"
+          "Luft  : "+luft_z+" Dienst(e).\n");
+
+      return 1;
+
+  }
+
+  else
+
+  {
+
+    if(tropfen->QP(P_AMOUNT) < DAZ_ELE ) 
+    {
+      write(BSA(
+            "Du hast ja nur "+tropfen->QP(P_AMOUNT)+" Zombiegoetzentropfen "+TPN+"! "
+            "Du brauchst aber "+DAZ_ELE+" Tropfen! Tut mir leid!",
+            "Der Mystagoge sagt: "));
+      return 1;  
+    }	    
+
+
+
+    tropfen->AddAmount(-DAZ_ELE);
+
+    write("Der Mystagoge nimmt Dir "+DAZ_ELE+" Blutstropfen weg.\n");
+
+    if(!random(300))  {
+      write(BSA(
+            "Verflucht! Nun sind mir die Tropfen doch glatt auf den Boden gefallen! "
+            "Sie sind fuer immer verloren! Tut mir leid "+TPN+"! So etwas kann "
+            "dem allerbesten Magier passieren!",
+            "Der Mystagoge sagt: "));
+      return 1;  }	
+
+
+
+      write(BSA(
+            "Nun gut, "+TPN+", Du willst also etwas ueber die Dienstanzahl fuer "
+            "das Element "+CAP(str)+" wissen.",
+            "Der Mystagoge sagt: "));
+
+      write("\nDer Mystagoge leert die Tropfen in einen der Muender der Statue und "
+          "beginnt wild zu gestikulieren. Dann blickt er Dir genau ins Herz.\n");
+      write("Der Mystagoge sagt: Nun gut, "+TPN+"! Hier das Ergebnis:\n");      
+
+
+
+      zahl=amulett->QueryService(str)+1-random(3); // +/-1
+
+      if(zahl  < 0 ) { zahl=0; }	 
+
+      write(
+          ""+CAP(str)+": "+zahl+" Dienst(e).\n");
+
+      return 1;
+
+  }
+
+
+
+
+  return 0;  }
+
+
+  //ende diensanzahl func
+
+
+
+
+
+  //beginn der dauer einzel erhoehung
+
+int fun_dauereinzelerhoehung(string element) 
+{
+
+  object amulett, tropfen;
+
+  NF(BSA("Welches Element?! Feuer, Wasser, Humus, Eis, Luft, Erz?!",
+        "Der Mystagoge sagt: "));
+
+  if(find_call_out("einzel_einmal1")!=-1)  {
+    STOP  }
+  if(find_call_out("einzel_einmal2")!=-1)  {
+    STOP  }
+
+  if(find_call_out("alle_einmal1")!=-1)  {
+    STOP  }
+  if(find_call_out("alle_einmal2")!=-1)  {
+    STOP  }
+
+  if(find_call_out("einzel_immer1")!=-1)  {
+    STOP  }
+  if(find_call_out("einzel_immer2")!=-1)  {
+    STOP  }
+
+  if(find_call_out("alle_immer1")!=-1)  {
+    STOP  }
+  if(find_call_out("alle_immer2")!=-1)  {
+    STOP  }
+
+
+
+  if(find_call_out("mys1")!=-1)  {
+    STOP  }
+  if(find_call_out("mys2")!=-1)  {
+    STOP  }
+  if(find_call_out("mys3")!=-1)  {
+    STOP  }
+  if(find_call_out("mys4")!=-1)  {
+    STOP  }
+  if(find_call_out("mys5")!=-1)  {
+    STOP  }
+  if(find_call_out("mys6")!=-1)  {
+    STOP  }	
+
+
+
+
+  if(!element)  { return 0;  }
+
+  if( element!="feuer"&&element!="wasser"&&element!="humus"&&
+      element!="eis"&&element!="luft"&&element!="erz" )
+  {
+    return 0;
+  }
+
+  if(!TP->QP(P_GUILD, "druidenzirkel")) 
+  {
+    write(BSA(
+          "Aber "+TPN+", Du bist doch kein Druide!",
+          "Der Mystagoge sagt: "));
+    return 1;  
+  }
+
+  amulett=present("\ndruidenamulett", TP);    
+
+
+  if(!amulett)  
+  {
+    write(BSA(
+          "Du hast kein Druidenamulett "+TPN+", also kann ich Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return 1;  
+  }                  
+
+
+  if(!amulett->QueryWorn() )
+  {
+    write(BSA(
+          "Du hast Dein Druidenamulett nicht angezogen "+TPN+", also kann ich Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return 1;  
+  }               
+
+  tropfen=deep_present("zombiegoetzenblutstropfen", TP);
+
+  if(!tropfen) 
+  {
+    write(BSA(
+          "Du hast ja gar keine Zombiegoetzentropfen "+TPN+"! Ich kann Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return 1;  
+  }
+
+  if(tropfen->QP(P_AMOUNT) < EINZEL_IMMER ) 
+  {
+    write(BSA(
+          "Du hast ja nur "+tropfen->QP(P_AMOUNT)+" Zombiegoetzentropfen "+TPN+"! "
+          "Du brauchst aber "+EINZEL_IMMER+" Tropfen! Tut mir leid!",
+          "Der Mystagoge sagt: "));
+    return 1;  
+  }	    
+
+
+
+  tropfen->AddAmount(-EINZEL_IMMER);
+
+  write("Der Mystagoge nimmt Dir "+EINZEL_IMMER+" Blutstropfen weg.\n");
+
+  if(!random(300))  {
+    write(BSA(
+          "Verflucht! Nun sind mir die Tropfen doch glatt auf den Boden gefallen! "
+          "Sie sind fuer immer verloren! Tut mir leid "+TPN+"! So etwas kann "
+          "dem allerbesten Magier passieren!",
+          "Der Mystagoge sagt: "));
+    return 1;  }
+
+
+    write(BSA(
+          "Nun an "+TPN+". Ich werde mein bestes versuchen! Ich versuche nun die "
+          "boese Magie der Goetzen in gute umzuwandeln und damit die Energie "
+          "Deines Druidenamuletts zu erhoehen!",
+          "Der Mystagoge sagt: "));
+
+    tell_room(environment(TP),BSA(
+          "Nun an "+TPN+". Ich werde mein bestes versuchen! Ich versuche nun die "
+          "boese Magie der Goetzen in gute umzuwandeln und damit die Energie "
+          "Deines Druidenamuletts zu erhoehen!",
+          "Der Mystagoge sagt: "), ({TP}));
+
+
+    call_out("einzel_immer1", TIME, element);
+
+    return 1;  
+
+}  
+
+
+einzel_immer1(string element)  {
+  object amulett;
+  WARNUNG
+
+    amulett=present("\ndruidenamulett", TP);    
+
+
+  if(!amulett)  
+  {
+    write(BSA(
+          "Du hast kein Druidenamulett "+TPN+", also kann ich Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return ;  
+  }                  
+
+
+  if(!amulett->QueryWorn() )
+  {
+    write(BSA(
+          "Du hast Dein Druidenamulett nicht angezogen "+TPN+", also kann ich Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return ;  
+  }               
+
+
+  write(BS(
+        "Der Mystagoge kniet sich vor der Statue nieder und beginnt einzelne "
+        "Tropfen in die verschiedenen Muender der Statue zu leeren. "
+        "Dann murmelt er irgendwelche Worte die mit Deinem Namen "+TPN+" und "
+        "dem Element "+CAP(element)+" zu tun haben. Irgendetwas wie "
+        ""+CAP(element)+"zauber fuer "+TP->name(WEN)+" oder so..."));
+
+
+  tell_room(environment(TP),BS(
+        "Der Mystagoge kniet sich vor der Statue nieder und beginnt einzelne "
+        "Tropfen in die verschiedenen Muender der Statue zu leeren. "
+        "Dann murmelt er irgendwelche Worte die mit dem Namen "
+        ""+TPN+" und "
+        "dem Element "+CAP(element)+" zu tun haben. Irgendetwas wie "
+        ""+CAP(element)+"zauber fuer "+TP->name(WEN)+" oder so..."), ({TP}));
+
+
+  call_out("einzel_immer2", TIME, element);
+
+}
+
+
+
+einzel_immer2(string element)  {
+  object amulett;
+  WARNUNG
+
+    amulett=present("\ndruidenamulett", TP);    
+
+
+  if(!amulett)  
+  {
+    write(BSA(
+          "Du hast kein Druidenamulett "+TPN+", also kann ich Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return ;  
+  }                  
+
+
+  if(!amulett->QueryWorn() )
+  {
+    write(BSA(
+          "Du hast Dein Druidenamulett nicht angezogen "+TPN+", also kann ich Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return ;  
+  }               
+
+  write(BS(
+        "Ploetzlich schiesst ein "+CAP(element)+"zombie herein und attackiert den Mystagogen und DICH!!!"));
+
+  write("\nDer "+CAP(element)+"zombie verfehlt den Mystagogen.\n"
+      "Der Mystagoge pulverisiert den "+CAP(element)+"zombie.\n"
+      "Der z"+CAP(element)+"zombie explodiert mit lautem Knall.\n"
+      "Du atmest erleichtert auf! "
+      "Der Zauber scheint funktioniert zu haben!\n"); 
+
+
+  tell_room(environment(TP),
+      "Ploetzlich schiesst ein "+CAP(element)+"zombie herein und attackiert den Mystagogen und "+TP->name(WEN)+"!!!\n"
+      "Der "+CAP(element)+"zombie verfehlt den Mystagogen.\n"
+      "Der Mystagoge pulverisiert den "+CAP(element)+"zombie.\n"
+      "Der "+CAP(element)+"zombie explodiert mit lautem Knall.\n"
+      ""+TPN+" atmet erleichtert auf! "
+      "Der Zauber scheint funktioniert zu haben!\n", ({TP}));
+
+
+
+  switch(random(100)) 
+
+  {
+
+    case 0..50:
+      ei_wert=7;
+      break;
+
+    case 51..75:
+      ei_wert=9;
+      break;
+
+    case 76..86:
+      ei_wert=11;
+      break;      
+
+    case 87..96:
+      ei_wert=13;
+      break;
+
+    case 97..99:
+      ei_wert=15;
+      break;
+    default: ei_wert=8;
+
+
+  }            
+
+
+
+  switch(element)  {
+
+    case "feuer":
+      amulett->SetStdServices(ei_wert+random(3), -1, -1, -1, -1, -1);
+    break;
+    case "wasser":
+      amulett->SetStdServices(-1, ei_wert+random(3), -1, -1, -1, -1);
+    break;
+    case "eis":
+      amulett->SetStdServices(-1, -1, ei_wert+random(3), -1, -1, -1);
+    break;
+    case "humus":
+      amulett->SetStdServices(-1,- 1, -1, ei_wert+random(3), -1, -1);
+    break;
+    case "luft":
+      amulett->SetStdServices(-1, -1, -1, -1, ei_wert+random(3), -1);
+    break;
+    case "erz":
+      amulett->SetStdServices(-1, -1, -1, -1, -1, ei_wert+random(3));
+    break;             
+    default:
+    amulett->SetStdServices(-1, -1, -1, -1 , -1, -1);
+
+    write_file("/d/wasser/dante/zinsel/log/einzel_immer",
+        ctime()+": "+CAP(getuid(TP))+" BUG!!! element: "+element+" wert: "+ei_wert+" plus random 3\n");
+  }            
+
+
+  write_file("/d/wasser/dante/zinsel/log/einzel_immer",
+      ctime()+": "+CAP(getuid(TP))+" element: "+element+" wert: "+ei_wert+" + rand 3\n");
+  amulett->reset();
+}
+
+//ende der dauereinzelerhoehung
+
+
+
+//beginn der dauerkompletterhoehung
+
+int fun_dauerkompletterhoehung() 
+{
+
+  object amulett, tropfen;
+
+  NF(BSA("Sorry, aber da laeuft irgendetwas falsch?!",
+        "Der Mystagoge sagt: "));
+
+
+  //druiden call_outs
+
+  if(find_call_out("alle_einmal1")!=-1)  {
+    STOP  }
+
+  if(find_call_out("alle_einmal2")!=-1)  {
+    STOP  }
+
+  if(find_call_out("einzel_einmal1")!=-1)  {
+    STOP  }
+
+  if(find_call_out("einzel_einmal2")!=-1)  {
+    STOP  }
+
+
+  if(find_call_out("alle_immer1")!=-1)  {
+    STOP  }
+
+  if(find_call_out("alle_immer2")!=-1)  {
+    STOP  }
+
+  if(find_call_out("einzel_immer1")!=-1)  {
+    STOP  }
+
+  if(find_call_out("einzel_immer2")!=-1)  {
+    STOP  }
+
+
+
+  //waffen autoload call_outs
+  if(find_call_out("mys1")!=-1)  {
+    STOP  }
+
+  if(find_call_out("mys2")!=-1)  {
+    STOP  }
+
+  if(find_call_out("mys3")!=-1)  {
+    STOP  }
+
+  if(find_call_out("mys4")!=-1)  {
+    STOP  }
+
+  if(find_call_out("mys5")!=-1)  {
+    STOP  }
+
+  if(find_call_out("mys6")!=-1)  {
+    STOP  }		
+
+
+  if(!TP->QP(P_GUILD, "druidenzirkel")) 
+  {
+    write(BSA(
+          "Aber "+TPN+", Du bist doch kein Druide!",
+          "Der Mystagoge sagt: "));
+    return 1;  
+  }
+
+  amulett=present("\ndruidenamulett", TP);    
+
+
+  if(!amulett)  
+  {
+    write(BSA(
+          "Du hast kein Druidenamulett "+TPN+", also kann ich Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return 1;  
+  }                  
+
+
+  if(!amulett->QueryWorn() )
+  {
+    write(BSA(
+          "Du hast Dein Druidenamulett nicht angezogen "+TPN+", also kann ich Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return 1;  
+  }               
+
+  tropfen=deep_present("zombiegoetzenblutstropfen", TP);
+
+  if(!tropfen) 
+  {
+    write(BSA(
+          "Du hast ja gar keine Zombiegoetzentropfen "+TPN+"! Ich kann Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return 1;  
+  }
+
+  if(tropfen->QP(P_AMOUNT) < ALLE_IMMER ) 
+  {
+    write(BSA(
+          "Du hast ja nur "+tropfen->QP(P_AMOUNT)+" Zombiegoetzentropfen "+TPN+"! "
+          "Du brauchst aber "+ALLE_IMMER+" Tropfen! Tut mir leid!",
+          "Der Mystagoge sagt: "));
+    return 1;  
+  }	    
+
+
+
+  tropfen->AddAmount(-ALLE_IMMER);
+
+  write("Der Mystagoge nimmt Dir "+ALLE_IMMER+" Blutstropfen weg.\n");
+
+  if(!random(300))  {
+    write(BSA(
+          "Verflucht! Nun sind mir die Tropfen doch glatt auf den Boden gefallen! "
+          "Sie sind fuer immer verloren! Tut mir leid "+TPN+"! So etwas kann "
+          "dem allerbesten Magier passieren!",
+          "Der Mystagoge sagt: "));
+    return 1;  }
+
+
+    write(BSA(
+          "Nun an "+TPN+". Ich werde mein bestes versuchen! Ich versuche nun die "
+          "boese Magie der Goetzen in gute umzuwandeln und damit die Energie "
+          "Deines Druidenamuletts zu erhoehen!",
+          "Der Mystagoge sagt: "));
+
+    tell_room(environment(TP),BSA(
+          "Nun an "+TPN+". Ich werde mein bestes versuchen! Ich versuche nun die "
+          "boese Magie der Goetzen in gute umzuwandeln und damit die Energie "
+          "Deines Druidenamuletts zu erhoehen!",
+          "Der Mystagoge sagt: "), ({TP}));
+
+
+    call_out("alle_immer1", TIME);
+
+    return 1;  
+
+}  
+
+
+alle_immer1()  {
+  object amulett;
+  WARNUNG
+
+    amulett=present("\ndruidenamulett", TP);    
+
+
+  if(!amulett)  
+  {
+    write(BSA(
+          "Du hast kein Druidenamulett "+TPN+", also kann ich Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return ;  
+  }                  
+
+
+  if(!amulett->QueryWorn() )
+  {
+    write(BSA(
+          "Du hast Dein Druidenamulett nicht angezogen "+TPN+", also kann ich Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return ;  
+  }               
+
+
+  write(BS(
+        "Ploetzlich wird es immer dunkler in der Klause und der Mystagoge "
+        "scheint direkt zu pulsieren. Er zittert und dreht sich leicht um die "
+        "eigene Querachse?!! Der Boden erbebt und Du taumelst leicht umher. "
+        "Dieser Wunsch war wohl zu vermessen! SSSSSSSS!!!!! SSSSSS!!! Die Luft hier "
+        "scheint voller Energie zu sein! Es knistert laut und Du denkst bereits an "
+        "Flucht!"));
+
+  tell_room(environment(TP),BS(
+        "Ploetzlich wird es immer dunkler in der Klause und der Mystagoge "
+        "scheint direkt zu pulsieren. Er zittert und dreht sich leicht um die "
+        "eigene Querachse?!! Der Boden erbebt und Du taumelst leicht umher. "
+        "Dieser Wunsch war wohl zu vermessen! SSSSSSSS!!!!! SSSSSS!!! Die Luft hier "
+        "scheint voller Energie zu sein! Es knistert laut und Du denkst bereits an "
+        "Flucht!"
+        " Der Mystagoge deutet auf "+TP->name(WEN)+" und "+TP->name(WER)+" sieht aengstlich aus!"), 
+      ({TP}));
+
+  call_out("alle_immer2", TIME);
+
+}
+
+
+
+alle_immer2()  {
+  object amulett;
+  WARNUNG
+
+    amulett=present("\ndruidenamulett", TP);    
+
+
+  if(!amulett)  
+  {
+    write(BSA(
+          "Du hast kein Druidenamulett "+TPN+", also kann ich Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return ;  
+  }                  
+
+
+  if(!amulett->QueryWorn() )
+  {
+    write(BSA(
+          "Du hast Dein Druidenamulett nicht angezogen "+TPN+", also kann ich Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return ;  
+  }               
+
+
+  write(BS(
+        "Grelle Blitze zucken durch den Raum und erhellen diesen gespenstisch! "
+        "Der Mystagoge dreht sich nun immer schneller um sich selbst und "
+        "Du erkennst, wie Die Statue langsam immer groesser wird. "
+        "Die Zombiegoetzen scheinen sich gegen diesen Zauber zu wehren?! "
+        "WUMMMMMMMMMM!!! Der Mystagoge knallt auf den Boden und murmelt einige "
+        "leise Worte in einer laengst vergessenen Sprache! Dann steht er auf und "
+        "deutet Dir, dass alles gut gegangen ist. Der Zauber hat gewirkt!!! Du "
+        "Bist froh und freust Dich darueber!"));
+
+  tell_room(environment(TP),BS(
+        "Grelle Blitze zucken durch den Raum und erhellen diesen gespenstisch! "
+        "Der Mystagoge dreht sich nun immer schneller um sich selbst und "
+        "Du erkennst, wie Die Statue langsam immer groesser wird. "
+        "Die Zombiegoetzen scheinen sich gegen diesen Zauber zu wehren?! "
+        "WUMMMMMMMMMM!!! Der Mystagoge knallt auf den Boden und murmelt einige "
+        "leise Worte in einer laengst vergessenen Sprache! Dann steht er auf und "
+        "deutet "+TP->name(WEM)+", dass alles gut gegangen ist. Der Zauber hat gewirkt!!! "
+        ""+TP->name(WER)+" ist froh und freut sich darueber!"), ({TP}));
+
+
+
+  switch(random(100)) 
+
+  {
+
+    case 0..50:
+      ai_wert=5;
+      break;
+
+    case 51..75:
+      ai_wert=6;
+      break;
+
+    case 76..86:
+      ai_wert=8;
+      break;      
+
+    case 87..96:
+      ai_wert=10;
+      break;
+
+    case 97..99:
+      ai_wert=13;
+      break;
+    default: ai_wert=7;
+
+  }            
+
+
+
+
+
+  amulett->SetStdServices(
+      ai_wert+random(3),ai_wert+random(3),ai_wert+random(3),
+      ai_wert+random(3),ai_wert+random(3),ai_wert+random(3) );
+
+
+  write_file("/d/wasser/dante/zinsel/log/alle_immer",
+      ctime()+": "+CAP(getuid(TP))+" alle_immer "+ai_wert+" + random(3) \n");
+
+  amulett->reset();
+}
+
+//ende der dauerkompletterhoehung
+
+
+
+//beginn der einzelerhoehung
+int fun_einzelerhoehung(string element) 
+{
+
+  object amulett, tropfen;
+
+  NF(BSA("Welches Element?! Feuer, Wasser, Humus, Eis, Luft, Erz?!",
+        "Der Mystagoge sagt: "));
+
+
+  if(find_call_out("einzel_einmal1")!=-1)  {
+    STOP  }
+  if(find_call_out("einzel_einmal2")!=-1)  {
+    STOP  }
+
+  if(find_call_out("alle_einmal1")!=-1)  {
+    STOP  }
+  if(find_call_out("alle_einmal2")!=-1)  {
+    STOP  }
+
+  if(find_call_out("einzel_immer1")!=-1)  {
+    STOP  }
+  if(find_call_out("einzel_immer2")!=-1)  {
+    STOP  }
+
+  if(find_call_out("alle_immer1")!=-1)  {
+    STOP  }
+  if(find_call_out("alle_immer2")!=-1)  {
+    STOP  }
+
+
+
+  if(find_call_out("mys1")!=-1)  {
+    STOP  }
+  if(find_call_out("mys2")!=-1)  {
+    STOP  }
+  if(find_call_out("mys3")!=-1)  {
+    STOP  }
+  if(find_call_out("mys4")!=-1)  {
+    STOP  }
+  if(find_call_out("mys5")!=-1)  {
+    STOP  }
+  if(find_call_out("mys6")!=-1)  {
+    STOP  }	
+
+
+
+  if(!element)  { return 0;  }
+
+  if( element!="feuer"&&element!="wasser"&&element!="humus"&&
+      element!="eis"&&element!="luft"&&element!="erz" )
+  {
+    return 0;
+  }
+
+  if(!TP->QP(P_GUILD, "druidenzirkel")) 
+  {
+    write(BSA(
+          "Aber "+TPN+", Du bist doch kein Druide!",
+          "Der Mystagoge sagt: "));
+    return 1;  
+  }
+
+  amulett=present("\ndruidenamulett", TP);    
+
+
+  if(!amulett)  
+  {
+    write(BSA(
+          "Du hast kein Druidenamulett "+TPN+", also kann ich Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return 1;  
+  }                  
+
+
+  if(!amulett->QueryWorn() )
+  {
+    write(BSA(
+          "Du hast Dein Druidenamulett nicht angezogen "+TPN+", also kann ich Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return 1;  
+  }               
+
+  tropfen=deep_present("zombiegoetzenblutstropfen", TP);
+
+  if(!tropfen) 
+  {
+    write(BSA(
+          "Du hast ja gar keine Zombiegoetzentropfen "+TPN+"! Ich kann Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return 1;  
+  }
+
+  if(tropfen->QP(P_AMOUNT) < EINZEL_EINMAL ) 
+  {
+    write(BSA(
+          "Du hast ja nur "+tropfen->QP(P_AMOUNT)+" Zombiegoetzentropfen "+TPN+"! "
+          "Du brauchst aber "+EINZEL_EINMAL+" Tropfen! Tut mir leid!",
+          "Der Mystagoge sagt: "));
+    return 1;  
+  }	    
+
+
+
+  tropfen->AddAmount(-EINZEL_EINMAL);
+
+  write("Der Mystagoge nimmt Dir "+EINZEL_EINMAL+" Blutstropfen weg.\n");
+
+  if(!random(300))  {
+    write(BSA(
+          "Verflucht! Nun sind mir die Tropfen doch glatt auf den Boden gefallen! "
+          "Sie sind fuer immer verloren! Tut mir leid "+TPN+"! So etwas kann "
+          "dem allerbesten Magier passieren!",
+          "Der Mystagoge sagt: "));
+    return 1;  }
+
+
+    write(BSA(
+          "Nun an "+TPN+". Ich werde mein bestes versuchen! Ich versuche nun die "
+          "boese Magie der Goetzen in gute umzuwandeln und damit die Energie "
+          "Deines Druidenamuletts zu erhoehen!",
+          "Der Mystagoge sagt: "));
+
+    tell_room(environment(TP),BSA(
+          "Nun an "+TPN+". Ich werde mein bestes versuchen! Ich versuche nun die "
+          "boese Magie der Goetzen in gute umzuwandeln und damit die Energie "
+          "Deines Druidenamuletts zu erhoehen!",
+          "Der Mystagoge sagt: "), ({TP}));
+
+
+    call_out("einzel_einmal1", TIME, element);
+
+    return 1;  
+
+}  
+
+
+einzel_einmal1(string element)  {
+  object amulett;
+  WARNUNG
+
+    amulett=present("\ndruidenamulett", TP);    
+
+
+  if(!amulett)  
+  {
+    write(BSA(
+          "Du hast kein Druidenamulett "+TPN+", also kann ich Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return ;  
+  }                  
+
+
+  if(!amulett->QueryWorn() )
+  {
+    write(BSA(
+          "Du hast Dein Druidenamulett nicht angezogen "+TPN+", also kann ich Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return ;  
+  }               
+
+
+  write(BS(
+        "Der Mystagoge schuettet die Tropfen in einen der Muender der Statue. "
+        "Es beginnt augenblicklich zu surren und Dampf kommt aus dem Mund! "
+        "Blitze surren um den Kopf der Statue."));
+
+
+  tell_room(environment(TP),BS(
+        "Der Mystagoge schuettet die Tropfen in einen der Muender der Statue. "
+        "Es beginnt augenblicklich zu surren und Dampf kommt aus dem Mund! "
+        "Blitze surren um den Kopf der Statue."), ({TP}));
+
+  call_out("einzel_einmal2", TIME, element);
+
+}
+
+
+
+einzel_einmal2(string element)  {
+  object amulett;
+  WARNUNG
+
+    amulett=present("\ndruidenamulett", TP);    
+
+
+  if(!amulett)  
+  {
+    write(BSA(
+          "Du hast kein Druidenamulett "+TPN+", also kann ich Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return ;  
+  }                  
+
+
+  if(!amulett->QueryWorn() )
+  {
+    write(BSA(
+          "Du hast Dein Druidenamulett nicht angezogen "+TPN+", also kann ich Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return ;  
+  }               
+
+  write(BS(
+        "Der Mystagoge murmelt nun magische Formeln, die Statue scheint zu "
+        "pulsieren und ploetzlich schiesst ein starker "+CAP(element)+"strahl aus "
+        "den Augen des Mystagogen auf Dich zu und trifft Dich mit voller Wucht! "
+        "Benommen taumelst Du umher und scheinst aber zu merken, dass die "
+        "Energie Deines Druidenamuletts bezueglich des Elementes "+CAP(element)+" "
+        "erhoeht worden ist."));
+
+
+  tell_room(environment(TP),BS(
+        "Der Mystagoge murmelt nun magische Formeln, die Statue scheint zu "
+        "pulsieren und ploetzlich schiesst ein starker "+CAP(element)+"strahl aus "
+        "den Augen des Mystagogen auf "+TP->name(WEN)+" zu und trifft "
+        ""+TP->QueryPronoun(WEN)+" mit voller Wucht! "
+        "Benommen taumelt "+TP->name(WER)+" umher. "
+        "Die Energie "+TP->QueryPossPronoun(NEUTER, WESSEN, SINGULAR)+" Druidenamuletts "
+        "bezueglich des Elementes "+CAP(element)+" "
+        "scheint aber erhoeht worden zu sein."), ({TP}));
+
+
+
+
+  switch(random(100)) 
+    //dazu kommt immer noch ein random (3)      
+  {
+
+    case 0..50:
+      ee_wert=8;
+      break;
+
+    case 51..75:
+      ee_wert=10;
+      break;
+
+    case 76..86:
+      ee_wert=13;
+      break;      
+
+    case 87..96:
+      ee_wert=16;
+      break;
+
+    case 97..99:
+      ee_wert=19;
+      break;
+    default: ee_wert=8;
+
+
+  }            
+
+
+
+
+
+
+  amulett->SetService(element , ee_wert);
+
+
+  write_file("/d/wasser/dante/zinsel/log/einzel_einmal",
+      ctime()+": "+CAP(getuid(TP))+" element: "+element+" wert: "+ee_wert+"\n");
+
+}
+
+//ende einzel einmal fun
+
+//beginn  alle einmal fun
+
+
+
+int fun_einzelkompletterhoehung() 
+{
+
+  object amulett, tropfen;
+
+  NF(BSA("Sorry, aber da laeuft irgendetwas falsch?!",
+        "Der Mystagoge sagt: "));
+
+
+
+  if(find_call_out("einzel_einmal1")!=-1)  {
+    STOP  }
+  if(find_call_out("einzel_einmal2")!=-1)  {
+    STOP  }
+
+  if(find_call_out("alle_einmal1")!=-1)  {
+    STOP  }
+  if(find_call_out("alle_einmal2")!=-1)  {
+    STOP  }
+
+  if(find_call_out("einzel_immer1")!=-1)  {
+    STOP  }
+  if(find_call_out("einzel_immer2")!=-1)  {
+    STOP  }
+
+  if(find_call_out("alle_immer1")!=-1)  {
+    STOP  }
+  if(find_call_out("alle_immer2")!=-1)  {
+    STOP  }
+
+
+
+  if(find_call_out("mys1")!=-1)  {
+    STOP  }
+  if(find_call_out("mys2")!=-1)  {
+    STOP  }
+  if(find_call_out("mys3")!=-1)  {
+    STOP  }
+  if(find_call_out("mys4")!=-1)  {
+    STOP  }
+  if(find_call_out("mys5")!=-1)  {
+    STOP  }
+  if(find_call_out("mys6")!=-1)  {
+    STOP  }	
+
+
+
+  if(!TP->QP(P_GUILD, "druidenzirkel")) 
+  {
+    write(BSA(
+          "Aber "+TPN+", Du bist doch kein Druide!",
+          "Der Mystagoge sagt: "));
+    return 1;  
+  }
+
+  amulett=present("\ndruidenamulett", TP);    
+
+
+  if(!amulett)  
+  {
+    write(BSA(
+          "Du hast kein Druidenamulett "+TPN+", also kann ich Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return 1;  
+  }                  
+
+
+  if(!amulett->QueryWorn() )
+  {
+    write(BSA(
+          "Du hast Dein Druidenamulett nicht angezogen "+TPN+", also kann ich Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return 1;  
+  }               
+
+  tropfen=deep_present("zombiegoetzenblutstropfen", TP);
+
+  if(!tropfen) 
+  {
+    write(BSA(
+          "Du hast ja gar keine Zombiegoetzentropfen "+TPN+"! Ich kann Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return 1;  
+  }
+
+  if(tropfen->QP(P_AMOUNT) < ALLE_EINMAL ) 
+  {
+    write(BSA(
+          "Du hast ja nur "+tropfen->QP(P_AMOUNT)+" Zombiegoetzentropfen "+TPN+"! "
+          "Du brauchst aber "+ALLE_EINMAL+" Tropfen! Tut mir leid!",
+          "Der Mystagoge sagt: "));
+    return 1;  
+  }	    
+
+
+
+  tropfen->AddAmount(-ALLE_EINMAL);
+
+  write("Der Mystagoge nimmt Dir "+ALLE_EINMAL+" Blutstropfen weg.\n");
+
+  if(!random(300))  {
+    write(BSA(
+          "Verflucht! Nun sind mir die Tropfen doch glatt auf den Boden gefallen! "
+          "Sie sind fuer immer verloren! Tut mir leid "+TPN+"! So etwas kann "
+          "dem allerbesten Magier passieren!",
+          "Der Mystagoge sagt: "));
+    return 1;  }
+
+
+    write(BSA(
+          "Nun an "+TPN+". Ich werde mein bestes versuchen! Ich versuche nun die "
+          "boese Magie der Goetzen in gute umzuwandeln und damit die Energie "
+          "Deines Druidenamuletts zu erhoehen!",
+          "Der Mystagoge sagt: "));
+
+    tell_room(environment(TP),BSA(
+          "Nun an "+TPN+". Ich werde mein bestes versuchen! Ich versuche nun die "
+          "boese Magie der Goetzen in gute umzuwandeln und damit die Energie "
+          "Deines Druidenamuletts zu erhoehen!",
+          "Der Mystagoge sagt: "), ({TP}));
+
+
+    call_out("alle_einmal1", TIME);
+
+    return 1;  
+
+}  
+
+
+alle_einmal1()  {
+  object amulett;
+  WARNUNG
+
+    amulett=present("\ndruidenamulett", TP);    
+
+
+  if(!amulett)  
+  {
+    write(BSA(
+          "Du hast kein Druidenamulett "+TPN+", also kann ich Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return ;  
+  }                  
+
+
+  if(!amulett->QueryWorn() )
+  {
+    write(BSA(
+          "Du hast Dein Druidenamulett nicht angezogen "+TPN+", also kann ich Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return ;  
+  }               
+
+
+  write(BS(
+        "Der Mystagoge schreitet zur Statue und beginnt wild zu gestikulieren. "
+        "Der Boden beginnt leicht zu vibrieren und dann leert er die "
+        "Tropfen in die Muender der Statue worauf Du ploetzlich "
+        "lautes Gebruell hoerst. Woher es kommt, kann man nur sehr schwer sagen. "
+        "Es klingt als wuerden 1000 Zombies kreichen und Toben! "
+        "Dann blickt er Dich an und Dir wird mulmig zu Mute!")); 
+
+  tell_room(environment(TP),BS(
+        "Der Mystagoge schreitet zur Statue und beginnt wild zu gestikulieren. "
+        "Der Boden beginnt leicht zu vibrieren und dann leert er die "
+        "Tropfen in die Muender der Statue worauf Du ploetzlich "
+        "lautes Gebruell hoerst. Woher es kommt, kann man nur sehr schwer sagen. "
+        "Es klingt als wuerden 1000 Zombies kreichen und Toben! "
+        "Dann blickt er "+TP->name(WEN)+" an und "+TP->name(WEM)+" wird mulmig zu Mute!"), 
+      ({TP}));
+
+  call_out("alle_einmal2", TIME);
+
+}
+
+
+
+alle_einmal2()  {
+  object amulett;
+  WARNUNG
+
+    amulett=present("\ndruidenamulett", TP);    
+
+
+  if(!amulett)  
+  {
+    write(BSA(
+          "Du hast kein Druidenamulett "+TPN+", also kann ich Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return ;  
+  }                  
+
+
+  if(!amulett->QueryWorn() )
+  {
+    write(BSA(
+          "Du hast Dein Druidenamulett nicht angezogen "+TPN+", also kann ich Dir "
+          "nicht helfen!",
+          "Der Mystagoge sagt: "));
+    return ;  
+  }               
+
+
+  write(BS(
+        "Das Gebruell wird immer lauter und Du haeltst Dir die Ohren zu. "
+        "Der Mystagoge beginnt wie ein Derwisch um die Statue zu tanzen und "
+        "sein Gesicht verzerrt sich zu einer Fratze. Unheimliche Laute kommen "
+        "aus seinem Mund und dann, ein KNALL!!! Der Mystagoge bricht erschoepft "
+        "zusammen, kauert sich in eine Ecke. Dann steht er wieder auf und deutet "
+        "Dir mit einem Irren Blick und wild gestikulierenden Armen an, dass "
+        "das Werk vollbacht sei! Du bist froh und gluecklich, dieses magische "
+        "Prozedur ueberlebt zu haben!"));
+
+
+  tell_room(environment(TP),BS(
+        "Das Gebruell wird immer lauter und Du haeltst Dir die Ohren zu. "
+        "Der Mystagoge beginnt wie ein Derwisch um die Statue zu tanzen und "
+        "sein Gesicht verzerrt sich zu einer Fratze. Unheimliche Laute kommen "
+        "aus seinem Mund und dann, ein KNALL!!! Der Mystagoge bricht erschoepft "
+        "zusammen, kauert sich in eine Ecke. Dann steht er wieder auf und deutet "
+        ""+TP->name(WEM)+" mit einem Irren Blick und wild gestikulierenden Armen an, dass "
+        "das Werk vollbacht sei! "+TP->name(WER)+" bist froh und gluecklich, dieses magische "
+        "Prozedur ueberlebt zu haben! Dir schaudert."), ({TP}));
+
+
+
+  switch(random(100)) 
+
+  {
+
+    case 0..50:
+      ae_wert=8;
+      break;
+
+    case 51..75:
+      ae_wert=10;
+      break;
+
+    case 76..86:
+      ae_wert=13;
+      break;      
+
+    case 87..96:
+      ae_wert=16;
+      break;
+
+    case 97..99:
+      ae_wert=19;
+      break;
+    default: ae_wert=8;
+
+
+  }            
+
+
+
+  amulett->SetService(feuer ,  ae_wert+random(3) );
+  amulett->SetService(wasser , ae_wert+random(3) );
+  amulett->SetService(humus ,  ae_wert+random(3) );
+  amulett->SetService(eis ,    ae_wert+random(3) );
+  amulett->SetService(luft ,   ae_wert+random(3) );
+  amulett->SetService(erz ,    ae_wert+random(3) );
+
+  write_file("/d/wasser/dante/zinsel/log/alle_einmal",
+      ctime()+": "+CAP(getuid(TP))+" alle_einmal. wert: "+ae_wert+": + random(3)\n");
+
+}
+
+
+//ende einzel_alle fun
+
+
+//beginn der master funcs
+
+int loesche_eintrag_im_mapping() {
+  MASTER->loesche_eintrag_im_mapping(getuid(TP));
+  return 1;
+}
+
+int zeige_alle_daten()  {
+  MASTER->zeige_alle_daten(getuid(TP));
+  return 1;
+}	
+
+int ueberpruefe_ob_waffe_im_mapping()  {
+  MASTER->besteht_bereits_ein_eintrag(getuid(TP));
+  return 1;  
+}
+
+int erzeuge_waffe_aus_mapping()  {
+  MASTER->erzeuge_waffe_und_trage_aus(getuid(TP)) ;
+  return 1;  
+}
+
+
+int sicher_waffe(string str)  {
+  notify_fail("Der Mystagoge sagt: Welche Waffe willst Du sichern lassen?\n");
+
+  if( !str ) return 0;
+  if( sscanf( str, "%s durch zombiemagie", waffe)!=1 ) return 0;
+
+  if( !w=present( waffe, TP) )   
+  {
+    write(BSA(
+          "Du hast doch gar kein '"+CAP(waffe)+"'! Schau genauer!",
+          "Der Mystagoge sagt: "));
+    return 1;
+  }
+
+  if( !w->QueryProp(P_WEAPON_TYPE) )
+  {
+    write(BSA(
+          w->Name(WER,1)+" ist gar keine Waffe! Sieh doch genauer hin!",
+          "Der Mystagoge sagt: "));
+    return 1;  
+  }
+  tropfen=deep_present("zombiegoetzenblutstropfen", TP);
+
+  if(!tropfen)  {
+
+    write(BSA(
+          "Du hast gar keine Blutstropfen "+TPN+"! Was soll das?!",
+          "Der Mystagoge sagt: "));
+    return 1;  
+  }
+
+  if( tropfen->QP(P_AMOUNT)<SICHER ) {
+    write(BSA(
+          "Du hast leider nur "+tropfen->QP(P_AMOUNT)+" Zombiegoetzenblutstropfen! "
+          "Du brauchst aber mindestens "+SICHER+" dafuer.",
+          "Der Mystagoge sagt: "));
+    return 1; 
+  }
+
+  if(w->QP(P_AUTOLOADOBJ))  {
+    write(BSA(
+          "Diese Waffe ist doch sicher!",
+          "Der Mystagoge sagt: "));
+    return 1;  
+  }
+
+  if(w->id("mystagoge_save"))  {
+    write(BSA(
+          "Diese Waffe ist doch schon von mir gesichert worden!",
+          "Der Mystagoge sagt: "));
+    return 1;  
+  }	
+
+  if(find_call_out("mys1")!=-1)  {
+    STOP  }
+  if(find_call_out("mys2")!=-1)  {
+    STOP  }
+  if(find_call_out("mys3")!=-1)  {
+    STOP  }
+  if(find_call_out("mys4")!=-1)  {
+    STOP  }
+  if(find_call_out("mys5")!=-1)  {
+    STOP  }
+  if(find_call_out("mys6")!=-1)  {
+    STOP  }	
+
+  if(find_call_out("alle_einmal1")!=-1)  {
+    STOP  }
+  if(find_call_out("alle_einmal2")!=-1)  {
+    STOP  }
+  if(find_call_out("einzel_einmal1")!=-1)  {
+    STOP  }
+  if(find_call_out("einzel_einmal2")!=-1)  {
+    STOP  }
+
+
+  tropfen->AddAmount(-SICHER);
+
+  write(BSA(
+        "Nun gut "+TPN+", moege die Magie der Zombiegoetzen uns gnaedig sein und "
+        "uns ermoeglichen "+w->name(WEN)+" zu sichern.",
+        "Der Mystagoge sagt: "));
+  tell_room(environment(TO),
+      "Der Mystagoge sieht "+TP->name(WEN)+" ernst an uns beginnt etwas zu murmeln.\n",
+      ({TP}));
+
+  call_out("mys1", 3, w);
+
+  return 1;  
+}
+
+//call_outs beginn
+
+mys1()   {
+  WARNUNG
+    tell_room(environment(TO),
+        BS("Der Mystagoge nimmt ein Buch aus einem Regal und beginnt laut in einer Dir "
+          "unbekannten Sprache zu lesen. Die Statue beginnt zu pulsieren und "
+          "irgendwie scheint es, als lebe sie!"));
+  call_out("mys2", TIME, w); 	
+}
+
+mys2()  {
+  WARNUNG	
+    tell_room(environment(TO),
+        BS("Der Mystagoge beginnt nun einzelne Blutstropfen in die "
+          "vier verschiedenen Muender der Statue zu giesen. Die Statue stoehnt "
+          "und flucht in einer fremden Sprache. Dir wird unheimlich zu Mute!"));
+  call_out("mys3", TIME, w);		
+}
+
+
+mys3()   {
+  WARNUNG
+    tell_room(environment(TO),
+        BS("Der Mystagoge kniet sich vor den Altar und beginnt wie in Trance "
+          "zu murmeln. Die Statue verformt sich und die vier Gesichter "
+          "scheinen ploetzlich den Goetzen zu aehneln. Feuer und Rauch "
+          "quillt aus den vier Muendern und umhuellt den Mystagogen!!!"));	
+  call_out("mys4", TIME, w);
+}
+
+mys4()   {
+  WARNUNG
+    tell_room(environment(TO),
+        BS(
+          "Blitze zucken aus den vier Gesichter auf den Mystagogen nieder. "
+          "Er scheint zu brennen, doch er rezitiert immer weiter in einer "
+          "uralten Sprache. Die Statue bebt und pulsiert nun wild. "
+          "Feuer lodert aus den Muendern. Der Hass der Goetzen scheint "
+          "sich am Mystagogen zu entladen!"));
+  call_out("mys5", TIME, w);	
+}
+
+
+mys5()   {
+  WARNUNG
+    tell_room(environment(TO),
+        BS("WUMMMMMMMMM!!! Ein lauter Knall und ploetzlich ist alles ruhig. "
+          "Die Statue scheint nicht mehr zu leben, der Mystagoge liegt "
+          "tot am Boden. Stille. Sollte der Kult der Zombies staerker als "
+          "die Kunst des Mystagogen gewesen sein und ihn umgebracht haben?!"));
+  call_out("mys6", TIME, w);	
+}
+
+
+mys6()  {
+
+
+  if(environment(TO)!=environment(TP))  {
+    tell_object(TP,
+        BSA("Du wolltest ja nicht hoeren! So sind Deine Blutstropfen vergeudet!",
+          "Der Mystagoge teilt Dir mit: "));    }
+
+
+
+
+  write(BSA(
+        "Ich glaube, es ist vollbracht! "+w->QP(P_SHORT)+" ist nun fuer den naechsten "
+        "Weltuntergang gesichert! Nur der Zorn der teuflische Zombiegoetzen kann uns nun noch aufhalten!",
+        "Der Mystagoge sagt: "));
+  tell_room(environment(TP),
+      "Der Mystagoge steht auf und spricht dann irgendetwas zu "+TP->name(WEN)+".\n",
+      ({TP}));
+
+
+
+  write_file("/d/wasser/dante/zinsel/log/autoload",
+      ctime()+": "+CAP(getuid(TP))+" waffe: "+w->name()+"\n");
+
+
+  pfad=explode(file_name(w), "#");
+  waffen_file=pfad[0]; 
+
+  sicherungszeit=time();
+
+  MASTER->neue_waffe_im_mapping(getuid(TP), waffen_file, w , sicherungszeit);
+
+
+}
+
+
+
+
+
+//save fun ende alles
+
+//waffen verbesserungs func beginn
+//diese fun basiert auf der fun des waffenbalsams 
+//sie funzt und warum das rad zweimal erfinden
+
+
+int verbessere_waffe(string str)
+{
+  notify_fail("Der Mystagoge sagt: Welche Waffe willst Du verbessern lassen?\n");
+  if( !str ) return 0;
+  if( sscanf( str, "%s durch zombiemagie", waffe)!=1 ) return 0;
+  if( !w=present( waffe, TP) )   
+  {
+    write(BSA(
+          "Du hast doch gar kein '"+CAP(waffe)+"'! Schau genauer!",
+          "Der Mystagoge sagt: "));
+    return 1;
+  }
+  if( !w->QueryProp(P_WEAPON_TYPE) )
+  {
+    write(BSA(
+          w->Name(WER,1)+" ist gar keine Waffe! Sieh doch genauer hin!",
+          "Der Mystagoge sagt: "));
+    return 1;  
+  }
+  tropfen=deep_present("zombiegoetzenblutstropfen", TP);
+  if(!tropfen)  {
+    write(BSA(
+          "Du hast gar keine Blutstropfen "+TPN+"! Was soll das?!",
+          "Der Mystagoge sagt: "));
+    return 1;  
+  }
+  if( tropfen->QP(P_AMOUNT)<VERBESSERUNG ) {
+    write(BSA(
+          "Du hast leider nur "+tropfen->QP(P_AMOUNT)+" Zombiegoetzenblutstropfen! "
+          "Du brauchst aber mindestens "+VERBESSERUNG+" dafuer.",
+          "Der Mystagoge sagt: "));
+    return 1; 
+  }
+  tropfen->AddAmount(-VERBESSERUNG);
+  write(BS("Der Mystagoge sieht Dir genau in die Augen! "
+        "Dann sieht er genau auf "+w->name(WEN,1)+". Dir wird etwas schwindlig und "
+        "auch warm."));
+  tell_room(environment(TP),
+      "Der Mystagoge fuehrt einen Zombiezauber im Auftrag von "+TPN+" durch!\n",
+      ({TP}));
+  wc=w->QueryProp(P_WC);
+  dam=w->QueryProp(P_DAMAGED);
+  fix=w->QueryProp(P_WC_FIX);
+  qd=w->QueryProp(P_QUALITY_DECAY);
+  weight=w->QueryProp(P_WEIGHT);
+  if( dam) // reduziert DAMAGED   
+  {
+    i=dam*random(100)/100+1;
+    w->Damage(-i);
+    if( i != 0 )
+      write(BSA(
+            "Verschwindet ihr Maechte des Schadens!",
+            "Der Mystagoge murmelt: "));
+  }
+  if( w->QueryProp("waffenbalsam")<10 )
+  {
+    if( random(100) > 20 && qd>0) // erhoeht QUALITY_DECAY
+    {
+      w->SetProp(P_QUALITY_DECAY, qd+random(20) );
+      write(BSA(
+            "Ihr Geister der Haerte vereinigt euch!",
+            "Der Mystagoge murmelt: "));
+    }
+    if( random(100) > 40 ) // erhoeht WC
+    {
+      wc=w->QueryProp(P_WC);
+      dam=w->QueryProp(P_DAMAGED);
+      maxwc=MAX_WEAPON_CLASS-(w->QueryProp(P_NR_HANDS)==1?MAX_WEAPON_CLASS/3:0); 
+      w->SetProp(P_WC,wc+(maxwc-wc-dam)/7);
+      if( wc!=w->QueryProp(P_WC) )
+        write(BSA(
+              "Oh Goetzen der Schlagkraft versammelt Euch!",
+              "Der Mystagoge murmelt: "));
+    }
+    if( random(100) > 30 ) // reduziert WEIGHT
+    {
+      w->Set(P_WEIGHT, (90+random(10))*weight/100 );
+      if( weight!= w->QueryProp(P_WEIGHT) )
+        write(BSA(
+              "Ihr Monster der Schwerkraft seiht gnaedig!",
+              "Der Mystagoge murmelt: "));
+    }
+    if( random(100) > 70 && fix < (90 - w->QueryProp(P_NR_HANDS) * 20)) // erhoeht WC_FIXFACTOR
+    {
+      w->SetProp(P_WC_FIX, fix+3+random(5) );
+      write(BSA(
+            "Wesen der Geschicklichkeit sei barmherzig mit uns!",
+            "Der Mystagoge murmelt: "));
+    }
+    if( random(100) > 93 ) // setzt zusaetzlichen Schadenstyp
+    {
+      if( stringp(dam_type=w->QueryProp(P_DAM_TYPE)) )
+        dam_type=({dam_type});
+      dam = 1;
+      for( i=sizeof(dam_type)-1; i>=0; i--)
+      {
+        if( member( m_indices(MAGICAL_DAMAGE_TYPES), dam_type[i]) != -1 )
+          dam = 0;
+      }
+      switch( random(13) )
+      {
+        case 0: newdam=DT_COLD; s="weissem"; break;
+        case 1: newdam=DT_FIRE; s="rotem"; break;
+        case 2: newdam=DT_POISON; s="gruenem"; break;
+        case 3: newdam=DT_ACID; s="schwarzem"; break;
+        case 4: newdam=DT_LIGHTNING; s="orangenem"; break;
+        case 5: newdam=DT_LIGHT; s="gelbem"; break;
+        case 6: newdam=DT_MAGIC; s="regenbogenfarbenem"; break;
+        case 7: newdam=DT_HOLY; s="hellem"; break;
+        case 8: newdam=DT_UNHOLY; s="dunklem"; break;
+        case 9: newdam=DT_WATER; s="blauem"; break;
+        case 10: newdam=DT_AIR; s="braunem"; break;
+        case 11: newdam=DT_SOUND; s="violettem"; break;
+        case 12: newdam=DT_TERROR; s="grauem"; break;
+      }
+      if( dam )
+        w->SetProp(P_DAM_TYPE, dam_type+({newdam}) );
+      write(BSA(
+            "Zombies der "+s+" Lichtes! Erhoeret uns!",
+            "Der Mystagoge murmelt: "));
+    }
+    if( random(100) > 85 && !mappingp(w->QueryProp(P_M_HEALTH_MOD)) ) // M_HEALTH_MOD
+    {
+      w->SetProp(P_M_HEALTH_MOD, ([P_HP:1+random(9), P_SP:1+random(9)]) );
+      write(BSA(
+            "Lebens- und Magiegeister! Seid in diese Waffe gebannt!",
+            "Der Mystagoge murmelt: "));
+    }
+  }
+  w->SetProp("waffenbalsam", (intp(w->QueryProp("waffenbalsam"))?
+        w->QueryProp("waffenbalsam")+1:1) );
+
+  write_file("/d/wasser/dante/zinsel/log/verbesserung",
+      ctime()+": "+CAP(getuid(TP))+" verbessert "+w->name()+" \n");
+  return 1;
+}
+
+//waffen verbessserungs funcs ende
+
+//give fuer fluch mit teufel entfernen
+void give_notify(object ob)
+{
+  object pakt;
+  pakt=deep_present("TEUFEL_SEELE", TP);      
+  if(ob->id("magischer trichter"))  {
+
+    write("\n");
+
+    if(!pakt)  {
+      write(BSA(
+            "Danke fuer den Trichter! Aber Du hast keinen Pakt mit dem Teufel!",
+            "Der Mystagoge sagt: "));   
+    }
+
+
+    if(pakt)  {
+      write(BSA(
+            "Danke fuer den Trichter! Ok, ich bemuehe mich!",
+            "Der Mystagoge sagt: "));
+      write("\n");
+
+      write(BS(
+            "Dann nimmt der Mystagoge ein altes Buch und beginnt eine Formel zu lesen. "
+            "Du verstehst ueberhaupt nichts! Dann zuckt der Mystagoge zusammen und faellt zu Boden! "
+            "Du hoerst lautes Toben und Bruellen aus der Tiefe! Ein Blitz faehrt in Dich und reisst Dich herum!"
+            " Der Mystagoge steht auf, hilft Dir auf die Beine und laechelt! Alles ist vorbei!"));
+      pakt->remove();
+      write_file("/d/wasser/dante/zinsel/log/teufel",
+          ctime()+": "+CAP(getuid(PL))+" beseitigt den Pakt!!!!!!\n");             
+
+      if(pakt)  {
+        pakt->destuct();  
+      }
+
+    } 
+  }
+
+  else
+    ::give_notify(ob);
+}
+
+
+
+
+Defend(int dam, string dtype, mixed spell, object enemy)
+{
+  if(!random(4))  {
+    tell_object(enemy,
+        "Der Mystagoge baut eine Schutzaura auf!\n");
+    tell_object(enemy,
+        "Der Mystagoge zwingt Dich Dich selbst anzugreifen!!!\n");
+    enemy->Defend(200+random(100), DT_LIGHTNING, ([SP_SHOW_DAMAGE: 1]));
+    tell_room(environment(TO),
+        ""+enemy->Name()+" wird von einem grellen Blitz getroffen!\n", ({enemy}));
+    return ::Defend(0, dtype, spell, enemy);
+  }
+  else
+    return ::Defend(dam, dtype, spell, enemy);
+}
+
+
+
+
+die(arg)
+{	domainshout(
+    "\nDer Mystagoge loest sich in Luft auf. "+TPN+" hat ihn besiegt!\n");
+
+write_file("/d/wasser/dante/zinsel/log/mysstirbt",
+    ctime()+": "+CAP(getuid(PL))+" killt den Mystagogen.\n");
+::die(arg);                                                                                       
+}
+
+
+
+
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  write_file("/d/wasser/dante/zinsel/log/myskillt",
+      ctime()+": Der Mystagoge hat "+CAP(getuid(PL))+" umgebracht.\n");
+  call_out("nimm_alles", 0);
+}     	
+
+
+nimm_alles()  {
+  if(present("leiche", environment(TO)))  {
+    command("nimm alles aus leiche");
+  } 
+} 
+
+
+// give aus
+
+
+_query_wimpy() { return 0;}
+
+//***********************************************************************
+catch_tell(string str)
+
+{
+  string dum1,dum2,dum3;
+  if(sscanf(str,"%s teilt Dir mit: %s",dum1,dum2))   
+  { call_out("back",2,dum1,dum2);}
+}
+
+
+
+
+back(string dum1,string dum2)
+{  string dum3;
+  object ob;
+  string ans;               
+  object *pl;
+  int i;
+  int z; 
+  dum3=explode(dum1," ");
+  dum3=dum3[sizeof(dum3)-1];
+  ob=find_player(lower_case(dum3));
+  if(!ob)  { return;  }
+
+  if(ob->QP(P_LEVEL) < 45 )  {
+    tell_object(ob,
+        "Der Mystagoge teilt Dir mit: Ich darf Dir nichts verraten!\n");
+    return; 
+  }
+
+  if(ob->QP(P_SP)< 20 )  {	
+    tell_object(ob,
+        "Der Mystagoge teilt Dir mit: Deine Magie ist zu schwach!\n");
+    return; 
+  }
+
+
+  if( (strstr(dum2,"zombie")!=-1 || strstr(dum2,"zombies")!=-1 || 
+        strstr(dum2,"zombievirus")!=-1 || strstr(dum2,"virus")!=-1 )
+      && (asked==0) )
+  {
+    call_out("asked", ASKTIME );
+    asked=1;  
+    pl=users();
+    ob->AddSp(-20);
+
+    if(!sizeof(pl)) return;
+
+    z = 0;
+    ans = "";
+    for (i=0; i<sizeof(pl); i++)
+    {
+      if (pl[i]->QP(P_INVIS))
+        continue;
+
+      if (present("DANTE_ZOMBIE_VIRUS", pl[i])) {
+        ans += CAP(getuid(pl[i])) + " leidet am Zombievirus!\n";
+        z++;
+      }
+    }	
+    if (!z) {
+      ans = "Keiner der Spieler leidet momentan am Zombievirus!";
+    }
+    tell_object(ob,BSA( ans, "Der Mystagoge teilt Dir mit: "));
+  }
+  else
+  {
+    switch(random(5))
+    {
+      case 0:
+        tell_object(ob,
+            "Der Mystagoge teilt Dir mit: 1000 Jahre sind ein Tag!\n");
+        break;
+      case 1:
+        tell_object(ob, 
+            "Der Mystagoge teilt Dir mit: Dreimal muss der Goetze bluten!\n");
+        break;
+      case 2:
+        tell_object(ob,
+            "Der Mystagoge teilt Dir mit: Blut der Goetzen will ich haben!\n");    
+        break;
+      case 3:
+
+        tell_object(ob, 
+            "Der Mystagoge teilt Dir mit: Inseln, tiefe Inseln leben.\n");
+        break;
+      case 4:
+        tell_object(ob, 
+            "Der Mystagoge teilt Dir mit: Deine Aura verblasst!\n");
+        break;
+      default:tell_object(ob,
+                  "BUG!\n!");
+    }
+  }    
+
+}
+
+asked()  {
+  asked=0; 
+}
+

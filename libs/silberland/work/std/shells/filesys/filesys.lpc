@@ -1,0 +1,1332 @@
+// SilberLand MUDlib
+//
+// std/shells/filesys/filesys.c -- filesystem command handling
+//
+// $Date: 2004/06/15 18:10:16 $
+/* $Revision: 2.44 $
+ *
+ * $Log: filesys.c,v $
+ * Revision 2.44  2004/06/15 18:10:16  Woody
+ * Statt fixer Weite 78 nun QueryProp(P_SCREENWIDTH) verwenden
+ *
+ * Revision 2.43  2003/07/07 14:13:57  Cirion
+ * grep prueft jetzt, ob die regexp funktionsfaehig ist (bisher bug)
+ *
+ * Revision 2.42  2003/04/03 09:48:35  Woody
+ * Magierlehrlinge duerfen jetzt per 'cd' auch raus aus /doc/
+ *
+ * Revision 2.41  2003/03/17 09:28:41  Cirion
+ * Dummen Fehler der letzten Aenderung entfernt :/
+ *
+ * Revision 2.40  2003/03/17 09:16:49  Cirion
+ * _mv(): Fehler, wenn letztes Argument mit / endet, aber kein solches Verzeichnis existiert.
+ *
+ * Revision 2.39  2003/03/06 13:47:41  Cirion
+ * Variablennamen auf alphanumerische Zeichen sowie - und _ beschraenkt
+ *
+ * Revision 2.38  2003/03/06 11:09:53  Cirion
+ * neue Funktion subst_var(), Anpassung der Befehle aus subst_var()
+ *
+ * Revision 2.37  2002/08/29 13:02:45  Woody
+ * <player.h> include'd, include-Reihenfolge korrigiert
+ *
+ * Revision 2.36  2002/01/06 23:57:37  Woody
+ * manual client nicht mehr inheriten, man -i bedeutet nun case-insensitive
+ *
+ * Revision 2.35  2002/01/06 16:26:28  Woody
+ * Div. Befehle bereits ab Altmagier (Lev 15) freigeben
+ *
+ * Revision 2.34  2001/12/01 16:40:11  Woody
+ * P_FILESYS -> /sys/shells.h, ANSI-Farbstrings durch (neue) sefun getcolor()
+ *
+ * Revision 2.33  2001/02/19 11:01:39  Woody
+ * ls -l optimiert, more/ed jetzt mit permission check
+ *
+ * Revision 2.32  2001/02/17 11:10:38  Woody
+ * Bugfix bei ls -l fuers Datum von lesebeschraenkten Directories, manbuf_d_
+ *
+ * Revision 2.31  2001/02/17 10:34:56  Woody
+ * groups bei ls -l ganz rausgeworfen, Rechte bei Directories richtig anzeigen
+ *
+ * Revision 2.30  2001/02/17 09:59:14  Woody
+ * neues "ls -l" Format, manbuf nun in /p/daemon, cd nur in leseberechtigte Dirs
+ *
+ * Revision 2.29  2001/01/22 20:02:54  Zordan
+ * Parameter -P bei ls fuer More() statt write()
+ *
+ * Revision 2.28  2000/11/28 16:05:32  Woody
+ * Zusaetzliche Sicherheitsabfragen nach get_dir() in ls_output()
+ *
+ * Revision 2.27  2000/11/24 19:08:26  Woody
+ * Mit "cp" kann man nun mehrere Files nur noch in Subdirectories kopieren
+ *
+ * Revision 2.26  2000/11/20 11:11:48  Woody
+ * Mit "mv" kann man nun mehrere Files nur noch in Directories verschieben
+ *
+ * Revision 2.25  2000/11/19 18:14:33  Zordan
+ * BugFix nach erstem Login P_LAST_DIR nicht gesetzt durch Woodys Aenderung :)
+ *
+ * Revision 2.24  2000/11/09 02:52:41  Woody
+ * LS_A richtiger auswerten ("ls .p*" geht jetzt auch ohne -a),
+ * P_LAST_DIR nur setzen, wenn neues Verzeichnis != aktuelles
+ *
+ * Revision 2.23  2000/10/27 19:33:59  Zordan
+ * return 1 bei cd wieder rueckgaengig gemacht
+ *
+ * Revision 2.22  2000/10/27 19:29:06  Zordan
+ * cd erweitert um -. Ruecksprung zu vorherigem Verzeichnis
+ *
+ * Revision 2.21  1999/10/20 22:19:50  Zordan
+ * BugFix in normalize bei Dateiendungen mit . -> test..c -> Bug
+ *
+ * Revision 2.20  1999/07/16 12:20:33  Woody
+ * Weiterer Bugfix fuer tail (in _cat()) fuer sehr kurze Files
+ *
+ * Revision 2.19  1999/06/24 17:32:35  Woody
+ * Bugfix in tail() fuer Files < 1000 Bytes
+ *
+ * Revision 2.18  1999/06/17 11:24:07  Woody
+ * head/tail nehmen jetzt auch einen Parameter fuer die Anzahl d. Zeilen
+ *
+ * Revision 2.17  1999/04/22 23:36:12  Woody
+ * valid_read()-Abfrage in show_dir() bugfixed
+ *
+ * Revision 2.16  1999/03/26 17:37:08  Woody
+ * grep verarbeitet seine Optionen etwas intelligenter
+ *
+ * Revision 2.15  1999/03/07 02:00:27  Woody
+ * Sortieren bugfixed, neu: LS_VIR (virtual files einfaerben)
+ *
+ * Revision 2.14  1999/03/03 15:38:27  Woody
+ * Bugfix in _set_currentdir() fuer renew
+ *
+ * Revision 2.13  1999/03/01 17:52:58  Woody
+ * \n in "prompt" beruecksichtigt, neues prompt handling mit telneg's
+ *
+ * Revision 2.12  1999/02/14 14:05:16  Woody
+ * Rechte und Ausgabeformat fuer mudftp gefixt
+ *
+ * Revision 2.11  1998/09/21 09:36:12  Woody
+ * _ls_output() zu WS_FTP kompatibel gemacht (...und Konsorten)
+ *
+ * Revision 2.10  1998/09/20 15:04:33  Woody
+ * ueberarbeitete neue Version vom MG: ls, set, div. bugfixes, learner...
+ *
+ */
+
+#pragma strong_types
+
+// HTML man page client disabled.
+// private inherit "/std/shells/filesys/manual";
+
+private inherit "/std/shells/filesys/primitives";
+private inherit "/std/shells/filesys/asynchron";
+private inherit "/std/shells/filesys/make";
+
+#define NEED_PROTOTYPES
+
+#include <thing/properties.h>
+#include <player.h>
+#include <properties.h>
+
+#include <defines.h>
+#include <config.h>
+#include <moving.h>
+#include <wizlevels.h>
+#include <ansi.h>
+#include <udp.h>
+#include <telnet.h>
+
+#ifdef NAME
+#undef NAME  // in udp.h *UND* master.h deklariert :(
+#endif
+#include "/std/sys_debug.h"
+#define C       (LFUN|CALL|RET|ARGS|APPLY|APPLY|HB|NAME)
+
+#define GET_PATH        (symbol_function("_get_path", find_object(MASTER)))
+#define USAGE(str)      (notify_fail(sprintf("usage: %s\n", str)), 0)
+
+#define TW(x) if (find_player("woody")) tell_object(find_player("woody"),x)
+
+private nosave string *_ed_stack = ({});// ed/more file stack (item 0 contains
+                                        // function to call
+private nosave string *_pcache; // path cache
+private nosave string tmp_dir;  // temp var to enable sorting foreign dirs
+private nosave mixed colors;    // colors
+
+// prototypes
+nosave int _prompt(string prompt);
+int _cd(string path);
+private string _set_currentdir(string path);
+private string _query_currentdir();
+string subst_var(string str);
+
+nosave mixed *_query_localcmds()
+{
+  return ({
+    ({"ls","_ls",0,LEARNER_LVL}),
+    ({"cd","_cd",0,LEARNER_LVL}),
+    ({"pwd","_pwd",0,LEARNER_LVL}),
+    ({"prompt","_prompt",0,LEARNER_LVL}),
+    ({"cp","_cp",0,INACTIVEWIZ_LVL}),
+    ({"mv","_mv",0,INACTIVEWIZ_LVL}),
+    ({"rm","_rm",0,INACTIVEWIZ_LVL}),
+    ({"mkdir","_mkdir",0,INACTIVEWIZ_LVL}),
+    ({"rmdir","_mkdir",0,INACTIVEWIZ_LVL}),
+    ({"cat","_cat",0,LEARNER_LVL}),
+    ({"head","_cat",0,LEARNER_LVL}),
+    ({"tail","_cat",0,LEARNER_LVL}),
+    ({"man","_man",0,LEARNER_LVL}),
+    ({"more","_edit",0,LEARNER_LVL}),
+    ({"ed","_edit",0,INACTIVEWIZ_LVL}),
+    ({"grep","_grep",0,LEARNER_LVL}),
+    ({"upd","_upd",0,INACTIVEWIZ_LVL}),
+    ({"set", "_set",0,LEARNER_LVL}),
+  });
+}
+
+void initialize()
+{
+  Set(P_FILESYS, SAVE, F_MODE_AS);
+  if(!mappingp(Query(P_FILESYS))) Set(P_FILESYS, ([]));
+  Set(P_CURRENTDIR,#'_set_currentdir/*'*/,F_SET_METHOD);
+  _prompt(QueryProp(P_PROMPT));
+  /* cd to home directory, if existing */
+  _cd((string)0);
+}
+
+nosave void reconnect() { _cd(QueryProp(P_CURRENTDIR)); }
+
+// base() -- returns the basename of the file
+private string base(string file)
+{ string *tmp; return sizeof(tmp = explode(file, "/"))?tmp[<1]:""; }
+
+// path() -- returns the path part of the filename
+private string path(string file)
+{ return (file[0]=='/'?"/":"")+implode(explode(file,"/")[0..<2],"/"); }
+
+// normalize() -- gives the full path and name of the file
+// additionas arguments: the current path (__path) and the normalization
+// function (usually _get_path() in master.c) (__norm)
+// normalizes only basenames!! /pl*/ha* will not be normalized
+private void create_cache(string dir, closure __norm, string *cache)
+{
+  dir = funcall(__norm, dir) + "/";
+  if(file_size(dir) != -2) return;
+  cache += filter_array(map_array(get_dir(dir+"*"),
+                                  lambda(({'f/*'*/}),
+                                         ({#'+/*'*/, dir, 'f/*'*/}))),
+                        lambda(({'f/*'*/}),
+                               ({#'==/*'*/,
+                                    ({#'file_size/*'*/, 'f/*'*/}),
+                                    -2})));
+}
+
+private string normalize(string file, string __path, closure __norm)
+{
+  mixed p, tmp, i;
+  if(pointerp(p = QueryProp(P_FILESYS)["path"]) && !_pcache)
+  {
+    _pcache = ({});
+    map_array(p, #'create_cache/*'*/, __norm, &_pcache);
+  }
+  for(i = sizeof(tmp = explode(file, "/")); i--; )
+    if(strstr(tmp[i], "..") >= 0 && strlen(tmp[i]) != 2)
+      return "<FILE OR PATH ERROR>";
+  if(file[0] != '/' && file[0] != '~' && file[0] != '+')
+  {
+    mixed res;
+    if(strstr(file, "*") != -1 || strstr(file, "?") != -1)
+      return funcall(__norm, __path+file, getuid(ME));
+    if(file_size(res = funcall(__norm, __path+file, getuid(ME))) != -1 ||
+       (strlen(file)>0 && file[strlen(file)-1..strlen(file)-1] != "." &&
+        file_size(res = funcall(__norm, __path+file+".lpc", getuid(ME))) != -1))
+      return res;
+    if(pointerp(_pcache) && sizeof(res = regexp(_pcache, "/"+file)))
+      file = res[0];
+  }
+  return funcall(__norm, file, getuid(ME));
+}
+
+// _glob() -- globbing a string
+// additional arguments: the resulting command line array (line) to be given
+// by reference, the current path (__path) and a normalization function (__norm)
+private mixed _glob(string str, string *line, string __path, closure __norm)
+{
+  string *tmp, p;
+  while(str[0] == ' ') str = str[1..];
+  if(str[0] == '"') { line += ({ str[1..<2] }); return; } // preserve strings
+  if(str[0] == '-') { line += ({ str }); return; }        // preserve flags
+  str = subst_var(str);
+  if((member(str, '*') != -1 || member(str, '?') != -1) &&
+     (tmp = get_dir(p = normalize(str, __path, __norm))))
+  {
+    if(base(str)[0] != '.') tmp = regexp(tmp, "^[^.].*");
+    line += map_array(tmp, lambda(({'s/*'*/}),
+        ({#'+/*'*/, path(p)=="/" ? "/" : path(p)+"/", 's/*'*/})));
+  }
+  else
+    line += ({ normalize(str, __path, __norm) });
+}
+
+// glob() -- command line globbing
+// takes the commandline as argument and returns an array with all semantic
+// parts
+private string *glob(string cmdline)
+{
+  int i;
+  string *line; line = ({});
+  map_array(regexplode(cmdline,
+                       "[\"][^\"]*[\"]| -[a-zA-Z][a-zA-Z]*|$[^ ][^ ]*| ")
+           -({" ", ""}),
+            #'_glob/*'*/, &line, QueryProp(P_CURRENTDIR)+"/", GET_PATH);
+  return line - ({""});
+}
+
+// GetOpt() -- get all options (-blafu)
+// takes as first arguement an array containing strings like "-xyz", the
+// possible option characters as second and the command calling as third.
+// returns an integer with bits set when matching option is found
+private int GetOpt(string *cmdline, string opts, string __cmd)
+{
+  int flags;
+  while(sizeof(cmdline) && cmdline[0][0] == '-')
+  {
+    int i, f; i = strlen(cmdline[0]);
+    while(i-- && cmdline[0][i] != '-')
+      if((f = member(opts, cmdline[0][i])) != -1)
+        flags |= (1 << f);
+      else return (printf("%s: illegal flag '%c'\n", __cmd, cmdline[0][i]), -1);
+    cmdline = cmdline[1..];
+  }
+  return flags;
+}
+
+// variable substitution
+string subst_var(string str)
+{
+  mapping vars;
+  string * cand, * tmp;
+  int pos;
+
+  pos = strstr(str, "$");
+  if (pos == -1)
+    return str;
+  if ((pos != 0) && (str[pos-1]  == '\\'))
+  {
+    int n;
+
+    n = pos - 1;
+    while((n >= 0) && (str[n] == '\\'))
+      n--;
+    if ( (((pos+1)-n)%2) == 1)
+      return str[0..pos] + subst_var(str[pos+1..]);
+  }
+
+  vars = QueryProp(P_FILESYS);
+  // implode all pointerp()-values with ":"
+  vars = map_mapping(vars,lambda(({'v/*'*/,'m/*'*/}),
+      ({#'?/*'*/,({#'pointerp/*'*/,({#'[/*'*/,'m/*'*/,'v/*'*/})}),
+        ({#'implode/*'*/,({#'[/*'*/,'m/*'*/,'v/*'*/}),":"}),
+        ({#'[/*'*/,'m/*'*/,'v/*'*/})
+      })),vars);
+  cand = m_indices(vars);
+  // filter out nonmachting variables
+  cand = filter_array(cand, lambda(({'s}),
+    ({#'==/*'*/,
+      ({#'[..]/*'*/,'s/*'*/,0,({#'strlen/*'*/,'s/*'*/})}),
+      ({#'[..]/*'*/,str,pos+1,({#'+/*'*/,({#'strlen/*'*/,'s/*'*/}),pos})})
+    })));
+
+  // nothing found, leave this part unchanged
+  if (sizeof(cand) == 0)
+    return str[0..pos] + subst_var(str[pos+1..]);
+
+  // sort results by strlen()
+  cand = sort_array(cand, lambda(({'a/*'*/,'b/*'*/}),
+    ({#'</*'*/,
+      ({#'strlen/*'*/,'a/*'*/}),
+      ({#'strlen/*'*/,'b/*'*/})
+    })));
+
+  return str[0..pos-1]
+       + vars[cand[0]]
+       + subst_var(str[pos+strlen(cand[0])+1..]);
+}
+
+// set command
+nosave int _set(string args)
+{
+  int pos;
+  mixed var, val;
+
+  if(!args = this_player()->_unparsed_args())
+  {
+    if(!m_sizeof(QueryProp(P_FILESYS)))
+      printf("No variables defined!\n");
+    walk_mapping(QueryProp(P_FILESYS),
+                 lambda(({'n, 'a}),
+                        ({#'printf/*'*/, "%20s = %s\n", 'n/*'*/,
+                           ({#'?/*'*/, ({#'pointerp/*'*/, 'a/*'*/}),
+                                ({#'implode/*'*/, 'a/*'*/, ":"}), 'a/*'*/})})
+                        ));
+    return 1;
+  }
+  if((pos=strstr(args, " "))==-1)
+    pos=strstr(args, "=");
+  else
+    args[pos] = '=';
+  if (args[<1]=='=') //set xy= -> delete var
+  {
+    mapping vars;
+
+    vars = QueryProp(P_FILESYS);
+    args=args[0..<2];
+    if (!member(vars, args))
+    {
+      printf("Variable %s not found.\n", args);
+      return 1;
+    }
+    SetProp(P_FILESYS, m_delete(vars, args));
+    printf("Variable %s deleted.\n", args);
+    return 1;
+  }
+  if(pos==-1)
+    return USAGE("set <variable>[=]<value>");
+
+  if (!sizeof(var = regexp(({args[0..pos-1]}),"^[-A-Za-z0-9_]*$")))
+  {
+    printf(break_string("Variables may only contain the following "
+                        "characters: A-Z,a-z,0-9,-,_"));
+    return 1;
+  }
+  var = var[0];
+
+  val = (strstr(args[pos+1..], ":") != -1 ?
+         explode(args[pos+1..], ":") :
+         args[pos+1..]);
+  SetProp(P_FILESYS, QueryProp(P_FILESYS) + ([var : val]));
+  printf("Variable %s defined as %s.\n", var,
+      pointerp(val) ? implode(val,":") : val);
+  return 1;
+}
+
+
+// ls command
+#define LS_A    0x001                    // list all files
+#define LS_L    0x002                    // long listing
+#define LS_R    0x004                    // reverse
+#define LS_T    0x008                    // ordered by time
+#define LS_S    0x010                    // ordered by size
+#define LS_F    0x020                    // append filetype char
+#define LS_P    0x040                    // use More() instead write()
+#define LS_E    0x080                    // external master call
+
+#define LS_OPTS         "alrtSFP"
+
+#define SLASH "directory"
+#define LOADD "loaded"
+#define VIRTF "virtualfile"
+
+
+// strlcmp() -- compares the length of two strings (returns s1 < s2)
+private int strlcmp(string s1, string s2) { return strlen(s1) < strlen(s2); }
+
+// add_slash() -- adds a slash to directories and * to loaded blueprints
+private string add_slash(string file, string p, mapping colors, int extra)
+{
+  if(file_size((file[0]=='/'?"":p)+file)==-2) {
+    extra = colors[SLASH, 1];
+    return sprintf(colors[SLASH], file);
+  }
+  if(file_size((file[0]=='/'?"":p)+file)==-1) {
+    extra = colors[VIRTF, 1];
+    return sprintf(colors[VIRTF], file);
+  }
+  if(objectp(find_object((file[0]=='/'?"":p)+file))) {
+    extra = colors[LOADD, 1];
+    return sprintf(colors[LOADD], file);
+  }
+  extra = 0;
+  return file;
+}
+
+private int maxlen(string str, int maxlen)
+{
+  if(strlen(str) > maxlen) maxlen = strlen(str);
+}
+
+// sort by time
+private int stime(string f1, string f2)
+{
+  return (file_time(tmp_dir+f1)||time()) < (file_time(tmp_dir+f2)||time());
+}
+
+// sort by size
+private int ssize(string f1, string f2)
+{
+  return file_size(tmp_dir+f1) < file_size(tmp_dir+f2);
+}
+
+// reverse order
+private void reverse(string f, mixed new)
+{ new = ({ f }) + new; }
+
+// _ls_output() -- creates output from files given
+// if file is a dir directories is extended by the listed dir
+// if LS_A flag is set, also .* files will be listed
+public varargs mixed _ls_output(string file, string directories, mixed user,
+                        int __flags)
+{
+  string *files;
+  string a_file, term, format;
+  mixed tmp, vars;
+  int i, num, maxlen, execflag;
+  mixed fname, creator, size, date;
+  closure valid_r, valid_w;
+
+  if (!user) user=geteuid(this_interactive());
+  if (previous_object() &&
+      (previous_object() != this_object()) &&
+      (getuid(previous_object()) != ROOTID) &&
+      (user != getuid(previous_object())))
+    return "Access denied.\n";
+
+  valid_r = symbol_function("valid_read", find_object("/secure/master"));
+  valid_w = symbol_function("valid_write", find_object("/secure/master"));
+
+  if(objectp(user)) vars = user->QueryProp(P_FILESYS);
+  else vars = ([]);
+  colors = allocate_mapping(0,2);
+
+  if(__flags & LS_E) term = "extern";
+  else term = user->QueryProp(P_TTY);
+
+  switch(term)
+  {
+    case "vt100":
+    case "ansi":
+
+      if(stringp(vars["LS_DIR"]))
+        tmp = getcolor(vars["LS_DIR"]);
+      else
+        tmp = (term == "ansi") ? ANSI_BLUE+ANSI_BOLD : ANSI_BOLD;
+      colors[SLASH] = tmp + "%s" + (__flags & LS_F ? "/" : "") + ANSI_NORMAL;
+
+      if(stringp(vars["LS_OBJ"]))
+        tmp = getcolor(vars["LS_OBJ"]);
+      else
+        tmp = (term == "ansi") ? ANSI_RED : ANSI_INVERS;
+      colors[LOADD] = tmp + "%s" + (__flags & LS_F ? "*" : "") + ANSI_NORMAL;
+
+      if(stringp(vars["LS_VIR"]))
+        tmp = getcolor(vars["LS_VIR"]);
+      else
+        tmp = (term == "ansi") ? ANSI_GREEN : ANSI_INVERS;
+      colors[VIRTF] = tmp + "%s" + (__flags & LS_F ? "*" : "") + ANSI_NORMAL;
+
+      colors[SLASH,1] = colors[LOADD,1] = colors[VIRTF,1] =
+                        ((__flags & LS_F) != 0);
+      break;
+
+    case "dumb":
+      colors[SLASH] = "%s/"; colors[SLASH, 1] = 1;
+      colors[LOADD] = "%s*"; colors[LOADD, 1] = 1;
+      colors[VIRTF] = "%s*"; colors[VIRTF, 1] = 1;
+      break;
+    default:
+      colors[SLASH] = "%s"+(__flags & LS_F ? "/" : "");
+      colors[LOADD] = colors[VIRTF] = "%s"+(__flags & LS_F ? "*" : "");
+  }
+
+  if(file_size(file) == -2) {
+    files = get_dir(file +  "/*");
+    if (!files) return "Permission denied.\n";
+    if(!(__flags & LS_A)) files = regexp(files, "^[^.].*");
+  }
+  else {
+    files = get_dir(file);
+    if (!files) return "Permission denied.\n";
+    if (!sizeof(files)) return 0;
+    file = implode(efun::explode(file, "/")[0..<2], "/");
+  }
+
+  tmp_dir=file+"/";
+  if(__flags & LS_T) files = sort_array(files, #'stime/*'*/);
+  if(__flags & LS_S) files = sort_array(files, #'ssize/*'*/);
+  if(__flags & LS_R) {
+    tmp = ({});
+    files = map_array(files, #'reverse/*'*/, &tmp);
+    files = tmp;
+  }
+
+  // if(sizeof(files))
+  {
+    if((creator = find_object(file+"/virtual_compiler")) && !(__flags & LS_E))
+      if(call_resolved(&tmp, creator, "QueryObjects") && pointerp(tmp))
+        files += map_array(tmp, lambda(({'o/*'*/}),
+                                       ({#'base/*'*/,
+                                            ({#'file_name/*'*/, 'o/*'*/})})));
+      else printf("ls: /%O is not a standard virtual compiler\n", creator);
+    map_array(files, #'maxlen/*'*/, &maxlen);
+    if (__flags & LS_E) {
+      directories+=sprintf("total %d\n", sizeof(files));
+      format="\n%c%c%c%c%s %3d %-:8s %-:8s %8s %s %s";
+    } else {
+      directories+=sprintf("%s: %d files/directories",
+                           strlen(file) ? file : "/", sizeof(files));
+      format="\n%c%c%c%c%s %3d %-:21s%s %9s %s %s";
+    }
+    maxlen += 2;
+    num=0;
+    tmp = explode(file, "/");
+    while(sizeof(files))
+    {
+      if(__flags & LS_L)
+      {
+        fname = file+"/"+files[0];
+        switch(creator = "/secure/master"->creator_file(fname))
+        {
+          case ROOTID:          creator = "root"; break;
+          case BACKBONEID:      creator = "daemon"; break;
+          default:              if(!creator) creator = "none";
+        }
+        if(file_size(fname) == -1)
+          if(find_object(fname))
+            date = program_time(find_object(fname));
+          else
+            date = time();
+        else {
+          date = get_dir(fname,4);
+          if (pointerp(date))
+            date = date[0];
+          else
+            date = time();
+        }
+        if(time() - date < 31536000)
+          date=ctime(date), date=date[4..9]+" "+date[11..15];
+        else
+          date=ctime(date), date=date[4..9]+"  "+date[<4..];
+
+        maxlen = file_size(fname);
+        if (maxlen == -2)
+        {
+          execflag = funcall(valid_r, fname+"/*",
+              interactive(this_object()) ? getuid() : user, "get_dir", user);
+          directories += sprintf(format,
+                    'd',
+                    execflag ? 'r' : '-',
+                    funcall(valid_w, fname,
+                      interactive(this_object()) ? getuid() : user,
+                      "write_file", user) ? 'w' : '-',
+                    execflag ? 'x' : '-',
+                    __flags & LS_E ? "------" : "",
+                    sizeof( get_dir(fname+"/*") || ({}) ),
+                    creator, __flags & LS_E ? "mud" : "",
+                    __flags & LS_E ? "1024" : "-",
+                    date,
+                    add_slash(files[0], file+"/", colors, tmp));
+        }
+        else
+        {
+          execflag = find_object(fname) != 0;
+          directories += sprintf(format,
+                    '-',
+                    funcall(valid_r, fname,
+                      interactive(this_object()) ? getuid() : user,
+                      "read_file_test", user) ? 'r' : '-',
+                    funcall(valid_w, fname,
+                      interactive(this_object()) ? getuid() : user,
+                      "write_file", user) ? 'w' : '-',
+                    execflag ? 'x' : '-',
+                    __flags & LS_E ? "------" : "",
+                    1,
+                    creator, __flags & LS_E ? "mud" : "",
+                    maxlen == -1 ?
+                      (__flags & LS_E ? "0" : "<virtual>") :
+                      to_string(maxlen),
+                    date,
+                    add_slash(files[0], file+"/", colors, tmp));
+        }
+      }
+      else
+      {
+        a_file = sprintf("%-"+maxlen+"' 's", files[0]);
+        if (num + strlen(a_file) > (QueryProp(P_SCREENWIDTH) || 78))
+          num = 0;
+        if (!num) directories += "\n";
+        directories += add_slash(files[0], file+"/", colors, &tmp)
+          + a_file[strlen(files[0]) + tmp .. maxlen - 1];
+        num += strlen(a_file);
+      }
+      files[0..0] = ({});
+    }
+    directories+="\n";
+    return 0;
+  }
+  return base(add_slash(file, "", colors, tmp));
+}
+
+// _long() -- returns a long (LS_L) listing of the directory
+private void _long(string directory, int flags, closure __get_dir)
+{ write(funcall(__get_dir, directory)); }
+
+// _ls() -- list directories
+nosave int _ls(string args)
+{
+  int flags,i;
+  string *pargs, *files, directories;
+
+  if(!sizeof(pargs = explode(args=_unparsed_args() ||
+      QueryProp(P_CURRENTDIR) || "", " ")))
+    return USAGE("ls [-"+LS_OPTS+"] filename");
+
+  if((flags = GetOpt(&pargs, LS_OPTS, "ls")) == -1)
+    return USAGE("ls [-"+LS_OPTS+"] filename");
+
+  i = 0;
+  pargs = explode(args," ");
+  while(i<sizeof(pargs)) {
+    if (pargs[i][0] == '-')
+      pargs=pargs[0..i-1]+pargs[i+1..<1];
+    else {
+      pargs[i]=subst_var(pargs[i]);
+      pargs[i]=normalize(pargs[i], QueryProp(P_CURRENTDIR)+"/", GET_PATH);
+      i++;
+    }
+  }
+  if(!sizeof(pargs))
+    pargs = ({ normalize(".", QueryProp(P_CURRENTDIR)+"/", GET_PATH) });
+
+  directories = "";
+  files = map_array(pargs, #'_ls_output/*'*/, &directories, this_object(),
+                    flags) - ({0});
+  if(sizeof(files))
+  { int tab;
+    if(sizeof(files)) tab = strlen(sort_array(files, #'strlcmp/*'*/)[0])+1;
+    directories = break_string(sprintf("%-"+tab+"@s", files),
+        QueryProp(P_SCREENWIDTH) || 78) + "\n"+directories;
+  }
+  directories = implode(regexp(regexplode(directories, "\n[ ][ ]*"),
+                        "^[^\n][^ ].*"), "\n");
+  if (!strlen(directories))
+    write(sprintf("ls: %s: No such file or directory\n",
+        implode(pargs, " ")));
+  else
+  {
+    if (interactive(this_object()) && (flags & LS_P)) {
+       this_object()->More(directories);
+    }
+    else
+    {
+      write(directories);
+    }
+  }
+  return 1;
+}
+
+// _cd() -- change current directory
+int _cd(string args)
+{
+  string *pargs, msg,nd;
+  int flags;
+
+  args = (extern_call() ? _unparsed_args() : args) ||
+    (IS_INACTIVEWIZ(ME) ? "/players/" + getuid(ME) : "/doc");
+
+  if(!sizeof(pargs = glob(args)))
+    return USAGE("cd [-ls] directory");
+
+  if(flags = GetOpt(&pargs, "ls", "cd")) {
+    if(flags & 1) SetProp(P_SHORT_CWD, 0);
+    if(flags & 2) SetProp(P_SHORT_CWD, 1);
+    write("Directory status: "+(QueryProp(P_SHORT_CWD)?"short":"long")+"\n");
+  }
+  if (!sizeof(pargs))
+    if (IS_INACTIVEWIZ(ME))
+      pargs = ({ "/players/" + getuid(ME) });
+    else
+      pargs = ({ "/doc" });
+  if (args != "-")
+    nd=pargs[0];
+  else
+    nd=QueryProp(P_LAST_DIR) || ("/players/"+getuid(ME));
+
+  switch(file_size(nd))
+  {
+    case -2:
+      if (MASTER->valid_read(nd+"/*", getuid(), "get_dir", this_object()))
+        break;
+      return (printf("%s: permission denied\n", nd), 1);
+    case -1:
+      return (printf("%s: no such file or directory\n", nd), 1);
+    default:
+      return (printf("%s: not a directory\n", nd), 1);
+  }
+  if (nd != QueryProp(P_CURRENTDIR))
+    SetProp(P_LAST_DIR,QueryProp(P_CURRENTDIR));
+  write(SetProp(P_CURRENTDIR, nd)+"\n");
+  if(!QueryProp(P_SHORT_CWD) && file_size(nd + "/.readme") > 0)
+    write((msg = read_file(nd + "/.readme"))?msg:"");
+  return 1;
+}
+
+// _pwd() -- print current directory
+nosave int _pwd()
+{
+  write(QueryProp(P_CURRENTDIR)+"\n");
+  return 1;
+}
+
+// prompt command
+
+// _subst_prompt() -- substitute prompt macros
+// takes a string and returns matching macro value
+private string _subst_prompt(string str)
+{
+  switch(str)
+  {
+    case "\\h": return strlen(MUDNAME)?MUDNAME:"NamenlosMud";
+    case "\\u": return CAP(getuid(ME));
+    case "\\e": return "\e";
+    case "\\a": return "\a";
+    case "\\n": return "\n";
+    default: return str;
+  }
+}
+
+// _prompt() -- change the current prompt
+nosave int _prompt(string args)
+{
+  string *pargs;
+
+  args=(extern_call()?_unparsed_args():args)||"> ";
+  if(args[0]=='"') args = args[1..<2];
+  if(!sizeof(pargs = regexplode(args, "\\\\[huwean]")))
+    return USAGE("prompt \"<newprompt>\"");
+
+  pargs = map_array(pargs, #'_subst_prompt/*'*/);
+  SetProp(P_PROMPT, implode(pargs, ""));
+  _set_currentdir(_query_currentdir());
+  return 1;
+}
+
+// _cp() -- copy files
+#define CP_I            1               // copy interactive
+#define CP_R            2               // copy recursively
+#define CP_P            4               // preserver file status
+#define CP_OPTS         "irp"
+
+nosave int _cp(string args)
+{
+  int flags;
+  string *pargs, to;
+  closure exec_cmd, qask_cmd;
+
+  if(!(args=_unparsed_args()) || !sizeof(pargs = glob(args)))
+    return USAGE("cp [-ip] f1 f2; or: cp [-irp] f1 ... fn d2");
+
+  if((flags = GetOpt(&pargs, CP_OPTS, "cp")) == -1) return 1;
+  if(flags & CP_I) return (printf("cp: interactive not implemented\n"), 1);
+  if(flags & CP_R) return (printf("cp: recursive not implemented\n"), 1);
+  if(flags & CP_P) return (printf("cp: preserve not implemented\n"), 1);
+
+  if(!sizeof(pargs)) printf("cp: missing files\n");
+  if(file_size(to = pargs[<1]) == -2)
+    exec_cmd = lambda(({'f/*'*/}), ({#'cp_file/*'*/,
+                                          'f/*'*/,
+                                          ({#'+/*'*/,to+"/",
+                                                 ({#'base/*'*/, 'f/*'*/})})}));
+  else
+    if (sizeof(pargs) > 2)
+      return printf("cp: when copying multiple files, last argument "
+          "must be a directory\n"), 1;
+    else
+      exec_cmd = #'cp_file/*'*/;
+
+  asynchron(pargs[0..<2], exec_cmd, ({ to }));
+  return 1;
+}
+
+// _mv() -- move files
+#define MV_I            1               // move interactively
+#define MV_F            2               // force overwriting
+#define MV_OPTS         "if"
+
+nosave int _mv(string args)
+{
+  int flags, pos;
+  string *pargs, to;
+  closure exec_cmd;
+
+  if(!(args=_unparsed_args()) || !sizeof(pargs = glob(args)))
+    return USAGE("mv [-if] f1 f2 or mv [-if] f1 ... fn d1 "
+                +"(`fn' is a file or directory)");
+
+  if((flags = GetOpt(&pargs, MV_OPTS, "mv")) == -1) return 1;
+  if(flags & MV_I) return (printf("mv: interactive not implemented\n"), 1);
+  if(flags & MV_F) return (printf("mv: force not implemented\n"), 1);
+
+  if(!sizeof(pargs)) printf("mv: missing files\n");
+  if(file_size(to = pargs[<1]) == -2)
+    exec_cmd = lambda(({'f/*'*/}), ({#'mv_file/*'*/,'f/*'*/,
+                                          ({#'+/*'*/,to+"/",
+                                                 ({#'base/*'*/, 'f/*'*/})})}));
+  else
+    if (sizeof(pargs) > 2)
+      return printf("mv: when moving multiple files, last argument "
+          "must be a directory\n"), 1;
+    else
+    {
+      if (strlen(pargs[<1]) > 1
+       && file_size(pargs[<1]) != -2
+       && explode(args," ")[<1][<1] == '/')
+        return printf("mv: cannot move to %s/: no such directory\n",pargs[<1]), 1;
+      exec_cmd = #'mv_file/*'*/;
+    }
+
+  asynchron(pargs[0..<2], exec_cmd, ({ to }));
+  return 1;
+}
+
+// _rm() -- remove files
+#define RM_R            1               // remove recursively
+#define RM_I            2               // remove interactively
+#define RM_F            4               // force remove (not even interactive)
+#define RM_OPTS         "rif"
+
+nosave int _rm(string args)
+{
+  int flags, *ret;
+  string *pargs, to;
+  closure exec_cmd;
+
+  if(!(args=_unparsed_args()) || !sizeof(pargs = glob(args)))
+    return USAGE("rm [-"+RM_OPTS+"] file ...");
+
+  if((flags = GetOpt(&pargs, RM_OPTS, "rm")) == -1) return 1;
+  if(flags & RM_R) return (printf("rm: recursive not implemented\n"), 1);
+  if(flags & RM_I) return (printf("rm: interactive not implemented\n"), 1);
+  if(flags & RM_F) return (printf("rm: force not implemented\n"), 1);
+
+  if(!sizeof(pargs)) printf("rm: missing files\n");
+  asynchron(pargs, #'rm_file/*'*/);
+  return 1;
+}
+
+// _mkdir() -- make or remove directories
+nosave int _mkdir(string args)
+{
+  string *pargs, msg;
+  if(!(args=_unparsed_args()) || !sizeof(pargs = glob(args)))
+    return USAGE((query_verb()=="mkdir"?"mkdir":"rmdir")+" directory ...");
+
+  asynchron(pargs, #'dir_file/*'*/, ({ query_verb()=="mkdir" }));
+
+  return 1;
+}
+
+// _cat() -- cat, head or tail a file
+nosave int _cat(string args)
+{
+  string *pargs, file, verb;
+  mixed txt;
+  int size, n, lines;
+
+  verb = query_verb();
+  if(!(args=_unparsed_args()) ||
+     !(size = sizeof(pargs = glob(args))) ||
+     (size > 2) ||
+     (size > 1 && verb=="cat") ||
+     (size > 1 && !sscanf(pargs[0],"-%d",lines)))
+    return USAGE(verb=="cat" ? "cat file" : verb+" [-n] file");
+
+  file=pargs[<1];                       // file is last arg
+  if (size==1) lines=10;                // default value
+  else if (lines<0) lines=-lines;       // ABS
+
+  switch(file_size(file))
+  {
+    case -2: return (printf("%s: is a directory\n", file), 1); break;
+    case -1: return (printf("%s: no such file\n", file), 1); break;
+  }
+  switch(verb)
+  {
+    case "cat" : if(!cat(file)) printf("cat: failed\n"); break;
+    case "head": if(!cat(file, 0, lines)) printf("head: failed\n"); break;
+    case "tail":
+      if ((n=lines*160) < 1000) n=1000; else if (n>20000) n=20000;
+      if (n > file_size(file)) n=file_size(file);
+      if (!txt=read_bytes(file, file_size(file)-n,n)) {
+        printf("tail: failed\n"); break;
+      }
+      txt=efun::explode(txt,"\n");
+      if (n>=1000) txt=txt[1..];        // zu kleine Files nicht beschneiden!
+      txt=implode(txt[<(1+lines)..],"\n");
+      ME->More(txt);
+      break;
+  }
+  return 1;
+}
+
+// man command
+
+// remote_man() -- remote manual handling
+// takes the key and the mud (or 0) as arguments
+private int remote_man(string key, string mud) {
+  object zettel;
+  string x;
+  zettel=clone_object("/obj/manhelp");
+  x=INETD->send_udp(mud, ([ REQUEST: "man",
+                            SENDER:  zettel,
+                            DATA:    key ]), 1);
+  if (x) write(x);
+  write("Anfrage nach \'"+key+"\' an "+(mud?capitalize(mud):"alle bekannten "
+    "Muds")+" abgeschickt.\nEin magischer Zettel flattert Dir zu.\n");
+  zettel->SetKey(key);
+  zettel->move(this_player(), M_NOCHECK);
+  return 1;
+}
+
+// print_man() -- more the found manual
+// takes the filename and the manpath as arguments
+private void print_man(string file, string path)
+{
+  if(file_size(path+file) == -2)
+    ME->More("Topics for section "+file+":\n"+
+      break_string(
+        implode(
+          get_dir(path+file+"/*")-({".",".."}),", "),
+        QueryProp(P_SCREENWIDTH) || 78), 0);
+  else ME->More(path+file, 1);
+}
+
+// _man_search() -- search in manpath for given keywords
+// takes the manpath and an keyword array as arguments
+private void _man_search(string manpath, string keyword)
+{
+  // string *entries, *found;
+  string *entries;
+  if (!pointerp(entries = get_dir(manpath+"/*"))
+      || sizeof(entries) == 1) return;
+  entries -= ({".", ".."});
+  if (member(entries, keyword) != -1) {
+    print_man(keyword, manpath+"/");
+    keyword=0;  // als 'gefunden' markieren
+  }
+  /* evtl. spaeter mal gegen regexp pruefen
+  else if (sizeof(found=regexp(entries, keyword)))
+  {
+  }
+  */
+  else
+    map_array(map_array(entries, #'normalize, manpath+"/", GET_PATH),
+              #'_man_search, &keyword);
+}
+
+nosave int _man(string args)
+{
+  string *pargs, *tmp, manpath, word, section, mudname;
+  int remote;
+  int icase;
+
+  if(!(args=_unparsed_args()) ||
+     !sizeof(pargs=regexplode(args, "-M [^ ]*|-i|-R|-r [^ ]*| ")-({"", " "})))
+    return USAGE("man [-i] [-M path] [-r mud] [-R] [section] word");
+    // pargs=({});      // Alternative zur Usage Msg: MAIN TOPICS auflisten
+
+  manpath = "/doc";
+  section = "";
+  if(member(pargs, "-i") != -1)
+  {
+    icase = 1;
+    pargs -= ({ "-i" });
+  }
+  if(member(pargs, "-R") != -1)
+  {
+    remote = 1;
+    pargs -= ({ "-R" });
+  }
+  if(sizeof(tmp = regexp(pargs, "^-M")))
+  {
+    if(strlen(tmp[0]))
+    {
+      pargs -= tmp;
+      tmp = explode(tmp[0], " ");
+      if (sizeof(tmp) > 1)
+        manpath = normalize(tmp[1], QueryProp(P_CURRENTDIR)+"/", GET_PATH);
+      else return (printf("man: missing path for option -M\n"), 1);
+    }
+    else return (printf("man: missing path for option -M\n"), 1);
+  }
+  if(sizeof(tmp = regexp(pargs, "^-r")))
+  {
+    if(strlen(tmp[0]))
+    {
+      pargs -= tmp;
+      remote = 1;
+      tmp = explode(tmp[0], " ");
+      if (sizeof(tmp) > 1)
+        mudname = tmp[1];
+      else return (printf("man: missing mudname for option -r\n"), 1);
+    }
+    else return (printf("man: missing mudname for option -r\n"), 1);
+  }
+
+  if (remote)
+  {
+    if (!sizeof(pargs)) write("man: missing keyword for remote man query.\n");
+    else remote_man(pargs[0], mudname);
+    return 1;
+  }
+
+  switch (sizeof(pargs))
+  {
+    case 0:
+      write( "MAIN TOPICS:\n" +
+          break_string(
+            implode(
+              filter_array( get_dir(manpath+"/*"),
+                lambda( ({'x}), ({#'!=, ({ #'[, 'x, 0 }), '.' }) ) ),
+              ", "),
+            QueryProp(P_SCREENWIDTH) || 78) );
+      return 1;
+      break;
+    case 1:
+      // word=pargs[0];
+      break;
+    default:
+      if ((section=pargs[0])=="/") section="";
+      pargs=pargs[1..];
+      // word=pargs[1];
+      // word=implode(pargs[1..], " ");
+  }
+  word=pargs[0];
+  manpath+="/"+section;
+
+  // _man_search(manpath,&word);
+  this_object()->More(
+      "/p/daemon/manbufd"->query_man(manpath,
+        &pargs,
+        1 | (icase ? 2 : 0) ) );
+
+  if (sizeof(pargs))
+    write("No manual entry for "+implode(pargs, ", ")+
+        (section != "" ? " in section "+section : "")+"\n");
+  /*
+  if (word)
+    write("No manual entry for "+word+
+        (section != "" ? " in section "+section : "")+"\n");
+  */
+  return 1;
+}
+
+// grep command
+#define GREP_C          1               // count only found lines
+#define GREP_H          2               // do not display file names
+#define GREP_I          4               // ignore case
+#define GREP_L          8               // display explicitely file names
+#define GREP_N          16              // enumerate lines
+#define GREP_V          32              // print out lines in reverse order
+#define GREP_OPTS       "chilnv"
+
+// _do_grep() -- grep in a given file for a given pattern
+// takes the file, a regular expression and flags as arguments
+private void _do_grep(string file, string rexpr, int flags)
+{
+  string *result, msg; msg = "";
+  switch(file_size(file))
+  {
+  case -2: return;
+  case -1: return printf("%s: no such file or directory\n", file); break;
+  }
+  if(!pointerp(result = grep_file(file, rexpr, flags)) ||
+     !sizeof(result)) return;
+  if(flags & GREP_L) return write(file+"\n");
+  if(!(flags & GREP_H)) msg += file+":\n";
+  if(flags & GREP_C) return write(msg + sizeof(result)+"\n");
+  write(msg+implode(result, "\n")+"\n");
+}
+
+nosave int _grep(string args)
+{
+  int flags, pos;
+  string *pargs, rexpr, *tmp;
+
+  if(!(args=_unparsed_args()))
+    return USAGE("grep [-"+GREP_OPTS+"] expression file ...");
+
+  pargs = regexplode(args, "-["+GREP_OPTS+"]["+GREP_OPTS+"]*")-({"", " "});
+  if((flags = GetOpt(&pargs, GREP_OPTS, "grep")) == -1) return 1;
+  if(!sizeof(pargs)) return (printf("grep: missing expression\n"), 1);
+  tmp = regexplode(pargs[0], "\"[^\"]*\"|[ ]")-({"", " "});
+  rexpr = tmp[0];
+  if(rexpr[0]=='"') rexpr = rexpr[1..<2];
+  if (!regexp(({""}),rexpr)) return (printf("grep: invalid expression\n"), 1);
+  pargs = glob(implode(tmp[1..], " "));
+
+  if(!sizeof(pargs)) printf("grep: missing files\n");
+  if(flags & GREP_I) rexpr = lower_case(rexpr);
+  asynchron(pargs, #'_do_grep/*'*/, ({ rexpr, flags }));
+  return 1;
+}
+
+// ed/more command
+// edit_file() -- edit/more the first file on _ed_stack
+nosave void edit_file()
+{
+  mixed funct;
+  if(sizeof(_ed_stack) > 1)
+  {
+    string tmp; tmp = _ed_stack[1]; _ed_stack[1..1] = ({});
+    printf("Next file: %s:\n", tmp);
+    funct = _ed_stack[0];
+    if(funct == #'ed/*'*/) funcall(_ed_stack[0], tmp, "edit_file");
+    else funcall(_ed_stack[0], tmp, 1, #'edit_file/*'*/);
+  }
+  else return printf("No more files!\n");
+}
+
+// _edit() -- edit/more files
+nosave int _edit(string args)
+{
+  string *pargs, verb;
+  int i;
+
+  verb = query_verb();
+  if(!(args=_unparsed_args()) || !sizeof(pargs = glob(args)))
+    return USAGE(verb+" file ...");
+
+  for (i=0; i<sizeof(pargs); i++)
+  {
+    if ( file_size(pargs[i]) == -2 ) {
+      printf("%s: %s is a directory\n", verb, pargs[i]);
+      pargs[i] = 0;
+    }
+    else if ( !MASTER->valid_read( pargs[i], getuid(), "read_file", ME ) ) {
+      printf("%s: %s: Permission denied\n", verb, pargs[i]);
+      pargs[i] = 0;
+    }
+  }
+  if ( !sizeof( pargs -= ({ 0 }) ) )
+    return 1;
+
+  _ed_stack = ({ verb == "ed" ? #'ed/*'*/
+                 : symbol_function("More", ME) }) + pargs;
+  edit_file();
+  return 1;
+}
+
+// upd command
+#include "make.h"
+
+// _upd() -- update files
+nosave int _upd(string args)
+{
+  int flags, *ret;
+  string *pargs;
+
+  if(!(args=_unparsed_args()) || !sizeof(pargs = glob(args)))
+    return USAGE("upd [-"+UPD_OPTS+"] file ...");
+
+  if((flags = GetOpt(&pargs, UPD_OPTS, "upd")) == -1) return 1;
+  if((flags & UPD_A) && !IS_ELDER(ME))
+    return (printf("upd: -a flag only for elder use\n"), 1);
+
+  if(!sizeof(pargs)) pargs = ({ 0 });
+  asynchron(pargs, #'_make,/*'*/ ({ flags }));
+  return 1;
+}
+
+private nosave string short_path(string str)
+{
+  string erg;
+  erg=regreplace(str, "^/d/", "+", 1);
+  erg=regreplace(erg, "^/players/"+getuid(this_object()), "~", 1);
+  erg=regreplace(erg, "^/players/", "~", 1);
+  return erg;
+}
+
+private nosave string short_path2(string str)
+{
+  string erg;
+  erg=regreplace(str, "^/d/", "+", 1);
+  erg=regreplace(erg, "^/players/"+getuid(this_object()), "~", 1);
+  erg=regreplace(erg, "^/players/", "~", 1);
+  return erg+(erg=="/"?"":"/");
+}
+
+// property methods
+private string _set_currentdir(string path)
+{
+  string promptstring;
+  mapping TN;
+
+  if(!(promptstring = QueryProp(P_PROMPT)) || promptstring=="")
+    promptstring="> ";
+  else {
+    promptstring=implode(efun::explode(promptstring,"\\w"), path);
+    promptstring=implode(efun::explode(promptstring,"\\p"), short_path(path));
+    promptstring=implode(efun::explode(promptstring,"\\P"), short_path2(path));
+  }
+
+  TN = (mapping) this_object()->query_telnet_neg();
+
+    if ( mappingp(TN) && mappingp(TN["received"])
+         && (TN["received"][TELOPT_EOR,1] == DO) )
+        set_prompt(
+                   lambda( ({}),
+                           ({ #'efun::binary_message/*'*/,
+                                ({ #'+/*'*/,
+                                      ({ #'to_array/*'*/,
+                                              ({ #'implode/*'*/,
+                                                    ({ #'efun::explode/*'*/,
+                                                            promptstring,
+                                                            "\\t" }),
+                                                    ({ #'[..]/*'*/,
+                                                            ({ #'ctime/*'*/ }),
+                                                            11, 15 })
+                                                        })
+                                            }),
+                                      ({ #'({/*'*/, IAC, EOR }) })
+                                 })
+                         ), this_object()
+                 );
+        else
+                set_prompt(
+               lambda( ({}),
+                       ({ #'implode/*'*/,
+                               ({ #'efun::explode/*'*/,
+                                       promptstring, "\\t" }),
+                               ({ #'[..]/*'*/,
+                                       ({ #'ctime/*'*/ }),
+                                       11, 15 })
+                                   })
+                       ), this_object()
+               );
+
+  return Set(P_CURRENTDIR, path);
+}
+
+private string _query_currentdir()
+{
+  return Query(P_CURRENTDIR) ||
+         Set(P_CURRENTDIR,
+             (IS_INACTIVEWIZ(ME) ? "/players/" + getuid(ME) : "/doc") );
+}
+
+// damit telnetneg.c den Prompt auch von Ausserhalb setzen kann
+void renew_prompt()
+{
+  _set_currentdir(_query_currentdir());
+}
+
+// TO BE REMOVED
+
+mixed find_file(string str, string suffix)
+{
+  string res;
+  res = normalize(str+(stringp(suffix)?suffix:""),
+                  QueryProp(P_CURRENTDIR)+"/", GET_PATH);
+  if(file_size(res)>=0) return res;
+}

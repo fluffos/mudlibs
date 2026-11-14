@@ -1,0 +1,426 @@
+inherit "std/room";
+
+#include <moving.h>
+#include <player.h>
+#include <properties.h>
+#include <combat.h>
+#include <wizlevels.h>
+#include <exploration.h>
+#include "files.h"
+
+#define MAX_GUARDS 5
+
+int *loesung = ({ 0, 0, 0, -1 });
+int stelle, versenkt, kaese;
+int cloned_guards;
+mapping brotcnt;
+mapping found_spiders;
+
+void init_globals()
+{
+  cloned_guards = 0;
+  brotcnt = ([ ]);
+  found_spiders = ([ ]);
+  stelle = versenkt = kaese = 0;
+}
+
+create()
+{
+  ::create();
+  SetProp (P_LIGHT, 0);
+  SetProp (P_INDOORS, 1);
+  SetProp (P_ENVIRONMENT, ([ENV_TERRAIN:TT_CAVE, ENV_TEMPERATURE:5]));
+  SetProp (P_INT_LONG, bs(
+  "Du befindest Dich in einer tristen Gefaengniszelle. Eigentlich schaut es "+
+  "hier herinnen genauso trostlos wie ausserhalb der Zelle aus, allerdings, "+
+  "wie das bei Gefaengniszellen nun mal der Fall ist, deutlich enger. "+
+  "Der begrenzte Komfort und das einzigartige Klima werden ergaenzt durch "+
+  "ein kleines Eisenrohr, aus dem ab und zu ein Tropfen Wasser kommt. "+
+  "Und statt eines bequemen Doppelbettes entdeckst Du eine kleine, viel "+
+  "zu kurze Pritsche."));
+
+  SetProp (P_INT_SHORT, "Gefaengniszelle");
+
+  AddDetail ( ({"gefaengniszelle", "zelle"}), "Du befindest Dich in ihr.\n");
+  AddDetail ("kanalisation", "Du befindest Dich in ihr.\n");
+  AddDetail ("stadt", "Du befindest Dich tief unter ihr.\n");
+  AddDetail ("komfort", "Ueberall, bloss hier nicht.\n");
+  AddDetail ("klima", "Das Klima? Rauh, koennte man sagen.\n");
+  AddDetail ( ({"wand","waende"}), bs(
+    "Die kahlen Waende sind feucht und ziemlich kuehl, und geben ein "+
+    "ziemlich eintoeniges und trostloses Bild ab. An einer Wand kannst "+
+    "Du seltsame Knoepfe entdecken, und darueber drei kleine Fackeln. "+
+    "An einer anderen Wand siehst Du ein kleines Maeuseloch."));
+  AddDetail ("bild", bs(
+    "Bild kannst Du hier herinnen keines entdecken. Und das generelle "+
+    "Erscheinungsbild der Gefaengniszelle ist vor allem eines: trostlos."));
+  AddSmell (DEFAULT_SMELL, "Irgendwie riecht es hier ziemlich vermodert...\n");
+  AddSound (DEFAULT_SOUND, bs(
+    "Du glaubst, die Schritte der Wache vor der Tuer zu hoeren. Ansonsten "+
+    "herrscht hier eiserne Stille, die ab und zu durch zu Boden platschende "+
+    "Wassertropfen unterbrochen wird."));
+  AddSound ("stille", "Keineswegs eine beruhigende Stille...\n");
+  AddSound ("schritte", bs("Da waren doch eben Schritte vor der Tuer... "+
+    "scheint so als ob die Wache ihren Dienst versehen wuerde. Du solltest "+
+    "dennoch versuchen, einen Weg hier raus zu finden..."));
+  AddSound ( ({"plaetschern", "wasser", "tropfen", "wassertropfen"}),
+    "Platsch! Eben fiel wieder ein Tropfen auf den Boden.\n");
+
+  AddDetail ( ({"loch", "maeuseloch", "mausloch", "mauseloch"}), bs(
+    "Ein kleines Maeuseloch, viel zu klein um hineinzugreifen oder auch "+
+    "nur hineinzuspaehen. Aber vielleicht kannst Du ja die Bewohner "+
+    "irgendwie herauslocken?"));
+  AddDetail ("schild", bs(
+    "Ein kleines Schild mit seltsamen Zeichen drauf. Vielleicht handelt es "+
+    "sich hierbei um Buchstaben? Dann koenntest Du sie ja direkt lesen..."));
+  AddReadDetail ("schild",
+    "Auf dem Schild steht in fahlen Lettern:\n\n"+
+    " ,-----------------------------------------------.\n"+
+    " | Finde die richtige Kombination,  und Du wirst |\n"+
+    " | die Freiheit erlangen! Doch huete Dich davor, |\n"+
+    " | die falsche Zahl einzutippen.....  denn  dies |\n"+
+    " | koennte unweigerlich Deinen Tod bedeuten!     |\n"+
+    " `-----------------------------------------------'\n\n"+
+    "Darunter kannst Du noch drei Symbole erkennen.\n");
+  AddDetail ("symbole", bs(
+    "Das erste Symbol sieht aus wie ein Tier mit acht langen Beinen, "+
+    "als zweites Symbol meinst Du, ein paar Getreidekoernchen erkennen "+
+    "zu koennen, und das letzte Symbol zeigt eine Maus."));
+
+  AddDetail ("decke", bs("Die Decke ueber Dir ist feucht und grauenhaft. "+
+    "Und wie jede anstaendige Decke hat auch diese vier Ecken."));
+  AddSpecialDetail ( "ecken", "d_ecken");
+  AddSpecialDetail ( ({"spinne", "spinnen", "spinnweben", "weben"}),
+    "d_spinnweben");
+
+  AddDetail ("boden", "Auf dem Boden liegt nichts als Schmutz und Staub.\n");
+  AddDetail ( ({"schmutz", "staub"}), bs("Du malst gelangweilt einige "+
+    "Kreise in den Staub. Auf einmal bemerkst Du einige Brotkruemel, "+
+    "die wahllos im Raum verstreut herumliegen."));
+  AddSpecialDetail ( ({"brotkruemel", "kruemel"}), "d_brotkruemel");
+
+  AddDetail ("gang",
+    "Der Gang draussen ist dunkel und fuehrt ins Ungewisse.\n");
+  AddDetail ( ({"eisenrohr", "rohr"}), bs(
+    "Ein kleines Rohr aus Eisen, das wohl die einzige Wasserquelle hier "+
+    "zu sein scheint. Seltsamerweise kannst Du nirgends einen Wasserhahn "+
+    "entdecken. Das Wasser muss wohl irgendwie anders reguliert werden."));
+  AddDetail ("wasserquelle", bs(
+    "Die einzige Wasserquelle hier herinnen ist ein kleines Eisenrohr "+
+    "in einer Ecke, aus dem ab und zu ein Tropfen Wasser faellt."));
+  AddDetail ("ecke", bs(
+    "In einer Ecke der Zelle befindet sich ein kleines Eisenrohr, aus dem "+
+    "ab und zu ein Tropfen Wasser faellt."));
+  AddDetail ( ({"wasser", "tropfen", "wassertropfen"}),
+    "Platsch! Eben fiel wieder ein Tropfen auf den Boden.\n");
+
+  AddDetail ("pritsche", bs(
+    "Du siehst eine Pritsche, auf der die Insassen hier wohl ihre "+
+    "Naechte verbringen muessen, so diese ueberhaupt etwas anderes "+
+    "als Nacht in dieser scheinbar ewigen Finsternis kennen... Sie ist "+
+    "kurz und bietet kaum genug Platz, um sich auszustrecken. Wenigstens "+
+    "ist sie mit Stoff ueberzogen und einigermassen weich."));
+  AddDetail ("stoff", bs("Zwar keine Seide, und auch nicht sonderlich "+
+    "sauber, aber immer noch besser als das Holzbrett darunter."));
+  AddDetail ("holz", "Ganz gewoehnliches Holz.\n");
+  AddSpecialDetail ( ({"holzbrett", "brett"}), "d_holzbrett");
+
+  AddSpecialDetail ( ({"knopf", "knoepfe"}), "d_knoepfe");
+  AddSpecialDetail ( ({"fackel", "fackeln"}), "d_fackel");
+
+  AddItem (NPC "anborn", REFRESH_DESTRUCT);
+
+  NewDoor ("sueden", "./kanal2_f8",
+    ({"gitter", "gefaengnisgitter"}), ({
+    D_FLAGS, DOOR_CLOSED | DOOR_RESET_CL | DOOR_NEEDKEY,
+    D_LONG, "Ein Gefaengnisgitter, das aus festen Stahlrohren besteht.\n"+
+            "Ohne Schluessel gibt es da wohl kein Durchkommen.\n",
+    D_SHORT, "Ein %ses Gefaengnisgitter.",
+    D_GENDER, NEUTER,
+    D_OPENTESTFUNC, "opendoor",
+    D_NAME, "Gefaengnisgitter" }) );
+
+  AddCmd ( ({"drueck", "druecke"}), "druecke");
+  AddCmd ( ({"lock", "locke"}), "locke");
+  AddCmd ( ({"zaehl", "zaehle"}), "zaehle");
+
+  init_globals();
+  loesung = ({ 1+random(9), 1+random(9), 2+random(8), -1 });
+}
+
+string zahl2str(int x, int gender)
+{
+  string suffix;
+  if (gender==MALE) suffix="en";
+  else if (gender==FEMALE) suffix="e";
+  else suffix="";
+  switch (x)
+  {
+    case 0: return "kein"+suffix;
+    case 1: return "ein"+suffix;
+    case 2: return "zwei";
+    case 3: return "drei";
+    case 4: return "vier";
+    case 5: return "fuenf";
+    case 6: return "sechs";
+    case 7: return "sieben";
+    case 8: return "acht";
+    case 9: return "neun";
+    default: return "unzaehlbar viele";
+  }
+}
+
+string d_ecken()
+{
+  found_spiders[TP] = 1;
+  return "Du erkennst einige Spinnweben in den Ecken an der Decke.\n";
+}
+
+string d_spinnweben()
+{
+  if (! found_spiders[TP])
+    return "Wo siehst Du denn das?\n";
+
+  return bs(
+    "Als Du die Spinnweben naeher betrachtest, zaehlst Du "+
+    zahl2str(loesung[0], FEMALE)+" Spinne"+
+    (loesung[0]<=1 ? "" : "n")+
+    ", die sich in den Weben befinden.");
+}
+
+string d_brotkruemel()
+{
+  if (!member(brotcnt, TP))
+    brotcnt += ([TP:random(4)+2]);
+  if (brotcnt[TP])
+  {
+    int x;
+    brotcnt[TP]--;
+    return bs(
+      "Du zaehlst die Brotkruemel am Boden ab und erkennst insgesamt "+
+      zahl2str(x=random(8)+1, NEUTER)+" kleine"+
+      (x<=1 ? "s" : "")+" Teilchen. Du bist Dir bei der Anzahl "+
+      "jedoch nicht hundertprozentig sicher. Vielleicht solltest Du "+
+      "noch einmal nachzaehlen?");
+  }
+  return bs(
+    "Du zaehlst die Brotkruemel am Boden ab und erkennst insgesamt "+
+    zahl2str(loesung[1], NEUTER)+" kleine"+
+    (loesung[1]<=1 ? "s" : "")+" Teilchen. Diesmal bist Du Dir sicher.");
+}
+
+string d_holzbrett()
+{
+  if (kaese)
+    return bs("Du schiebst den Stoff auf der Pritsche zur Seite "+
+      "und entdeckst ein ganz normales, hartes Holzbrett.");
+  else
+  {
+    CLONEOB (OBJ("div/kaesestueck"))->move(TP, M_NOCHECK);
+    kaese=1;
+    return bs("Du schiebst den Stoff auf der Pritsche zur Seite "+
+      "und entdeckst ein kleines Stueckchen Kaese in einer Rille "+
+      "des Holzbretts, das Du sofort an Dich nimmst.");
+  }
+}
+
+void kaese()
+{
+  write (bs("Du laesst das kleine Kaesestueck fallen. Ploetzlich trippeln "+
+    zahl2str(loesung[2], NEUTER)+ " kleine Maeusejungen aus dem "+
+    "Maeuseloch, und eh Du Dich's versehen hast, tragen sie das "+
+    "kleine Kaesestueck geschaeftig weg."));
+}
+
+string d_knoepfe()
+{
+  if (versenkt)
+    return "Du erkennst zehn Knoepfe, die aber gerade in der Wand versenkt "
+      "sind.\n";
+  else
+    return "Zehn Knoepfe, numeriert von 0 bis 9. "
+      "Und ein kleines Schild daneben.\n";
+}
+
+string d_fackel()
+{
+  string s;
+  s="An einer der Waende siehst Du drei kleine Fackeln, ";
+  switch (stelle)
+  {
+   case 1:
+     return bs(s+"von denen eine fahl flackernd brennt.");
+   case 2:
+     return bs(s+"von denen zwei fahl flackernd brennen.");
+   case 3:
+     return bs(s+"die allesamt strahlend hell lodern.");
+   default:
+     return bs(s+"jedoch keine von ihnen brennt.");
+  }
+}
+
+int opendoor()
+{
+  object ob;
+  tell_room(ME, UPPER(TPN)+" oeffnet das Gefaengnisgitter.\n", ({TP}));
+  write (
+    "Du oeffnest das Gefaengnisgitter, wobei Dein Schluessel zerbricht.\n");
+  present("\nkey_zelle1", TP)->remove();
+  tell_room(ME, bs("Der Waechter stuerzt herein. Schnell erfasst Du die "+
+    "Situation und fliehst mit Deinen Mitgefangenen hinaus. Das Gitter "+
+    "faellt krachend ins Schloss, und der Waechter sitzt in der Zelle "+
+    "gefangen."));
+  catch( call_other(KANAL "kanal2_f8", "???"));
+  tell_room(find_object(KANAL "kanal2_f8"), bs("Ein Gefaengnisgitter "+
+    "wird von der anderen Seite geoeffnet. Der Waechter stuerzt in die "+
+    "Zelle, die Gefangenen jedoch entfliehen schnell und lassen das Gitter "+
+    "von aussen krachend ins Schloss fallen, sodass der Waechter nun "+
+    "in der Zelle gefangen ist."));
+  while (ob=present("\nwaechter", find_object(KANAL "kanal2_f8")))
+  {
+    ob->move(ME, M_SILENT | M_TPORT);
+    ob->noautolock();
+  }
+  for (ob=first_inventory(); ob;)
+  {
+    if (interactive(ob) || ob->id("\nanborn"))
+    {
+      ob->move(KANAL "kanal2_f8", M_SILENT | M_TPORT | M_NO_SHOW);
+      if (ob->id("\nanborn")) ob->door_opened();
+      ob=first_inventory();  // (schneller hack wg. ob->move())
+    }
+    else
+      ob=next_inventory(ob);
+  }
+  EPMASTER->GiveExplorationPoint("befreiung", EP_MISC);
+  return 1;
+}
+
+int druecke (string str)
+{
+  int k;
+  object ob;
+  if (!str) return 0;
+  if ((sscanf(str, "%d", k) != 1) &&
+      (sscanf(str, "knopf %d", k) != 1)) return 0;
+  if ((k<0) || (k>9)) {
+    write("Soviele Knoepfe sind da nicht!\n");
+    return 1;
+  }
+  if (versenkt) {
+    write("Du kannst die Knoepfe im Moment nicht betaetigen.\n");
+    return 1;
+  }
+  write (sprintf("Du drueckst Knopf %d.\n", k));
+  say (CAP_TPN+" drueckt einen Knopf.\n");
+  if (k != loesung[stelle])
+  {
+    if (cloned_guards < MAX_GUARDS)
+    {
+      cloned_guards++;
+      write ("Du hoerst ein lautes Knarren.\n"+
+        "Oweh... das war wohl die falsche Ziffer!\n"+
+        "Ein Waechter stuermt herein und stuerzt sich auf Dich.\n");
+      say (bs("Ploetzlich taucht ein Waechter auf und stuerzt "+
+        "sich auf "+TP->name(WEN)+".\n"));
+      ob=CLONEOB(NPC "waechter");
+      ob->SetProp(P_MAX_HP, 300+random(150));
+      ob->SetProp(P_HP, ob->QueryProp(P_MAX_HP));
+      ob->SetProp(P_HANDS,
+        ({" mit blossen Haenden", 200+random(300), DT_BLUDGEON}) );
+      ob->noautolock();
+      ob->setautoremove();
+      ob->move(ME, M_GO|M_SILENT);
+      ob->Kill(TP);
+#ifdef DEBUG
+      TW(sprintf("zelle::waechter: %d HP, hands: %d\n",
+        ob->QueryProp(P_HP),
+        ob->QueryProp(P_HANDS)[1]
+        ));
+#endif
+    }
+    else
+    {
+      write ("Du hoerst ein lautes Knarren.\n"+
+        "Oweh... das war wohl die falsche Ziffer!\n"+
+        "Gluecklicherweise ist es den Waechtern aber wohl schon zu bloed...\n");
+    }
+  }
+  else
+  {
+    write ("Du hoerst ein leises Knacken.\n");
+    stelle++;
+    switch (stelle)
+    {
+     case 1:
+       tell_room (ME, "Eine kleine Fackel geht an.\n");
+       SetProp (P_LIGHT, 1);
+       break;
+     case 2:
+       tell_room (ME, "Eine zweite fahle Fackel geht an.\n");
+       break;
+     case 3:
+       tell_room (ME,
+        "Eine dritte Fackel flammt auf und alle drei Fackeln lodern hell.\n");
+       tell_room (ME, "Auf einmal faellt ein kleiner Schluessel aus einer "+
+         "Ritze auf den Boden.\n");
+       CLONEME (OBJ("div/key_zelle1"));
+       tell_room (ME, "Die Knoepfe verschwinden ploetzlich in der Wand.\n");
+       versenkt=1;
+       break;
+    }
+  }
+  return 1;
+}
+
+locke()
+{
+  notify_fail (bs(
+    "Wenn Du irgendwen irgendwo rauslocken willst, musst Du "+
+    "Dir schon etwas einfallen lassen. Einfach nur rumstehen "+
+    "hilft Dir da sicher nicht weiter."));
+  return 0;
+}
+
+zaehle(string str)
+{
+  notify_fail("WAS willst Du zaehlen?\n");
+  if (!str) return 0;
+  switch (str)
+  {
+    case "spinne": case "spinnen":
+      write (d_spinnweben());
+      return 1;
+    case "brotkruemel": case "kruemel":
+      write (d_brotkruemel());
+      return 1;
+    case "fackel": case "fackeln":
+      write (d_fackel());
+      return 1;
+  }
+  return 0;
+}
+
+reset()
+{
+  object ob;
+  ::reset();
+  if (stelle>1) tell_room (ME, "Alle Fackeln erloeschen.\n");
+  else if (stelle>0) tell_room (ME, "Die kleine Fackel erlischt.\n");
+  if (versenkt)
+  {
+    tell_room (ME,
+      "Die Knoepfe tauchen ploetzlich wieder aus der Wand hervor.\n"+
+      "Ein kleiner Luftzug scheint einiges durcheinanderzuwirbeln.\n");
+    loesung = ({ 1+random(9), 1+random(9), 2+random(8), -1 });
+  }
+  SetProp (P_LIGHT, 0);
+  init_globals();
+  while (ob=present("\nwaechter"))
+  {
+    tell_room(ME, UPPER(ob->name(WER))+" verschwindet in die Dunkelheit.\n");
+    ob->remove();
+  }
+  if (ob=find_object(KANAL "kanal2_f8"))
+    ob->reset();
+}

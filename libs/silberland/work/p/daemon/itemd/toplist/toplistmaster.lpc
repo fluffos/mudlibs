@@ -1,0 +1,141 @@
+/*
+   //
+   // Toplistmaster fuer den Itemd
+   // (c)Angrox@SL
+   // 25.Novemeber 1998
+   //
+*/
+
+#include <wizlevels.h>
+#include <language.h>
+#include <config.h>
+#include <properties.h>
+#include <defines.h>
+#include <moredef.h>
+#include <new_skills.h>
+#include <wizlevels.h>
+#include "../itemd.h"
+//Globale Variablen
+
+mapping nr2name=([0:({})]);
+mapping name2nr=([]);
+//Prototypen
+
+create() {
+  if (is_clone(this_object())) {
+    destruct(this_object());
+    return 1;
+  }
+  seteuid(getuid(this_object()));
+  restore_object(ITEMD_TOPLIST);
+}
+
+nomask query_prevent_shadow() { return 1; }
+
+nosave int CheckIfAllowed() {
+  object ob;
+  string fname;
+  ob=previous_object();
+  fname=file_name(ob);
+  if(!IS_ARCH(getuid(ob)) && getuid(ob)!="p.daemon") { 
+    TELL("angrox",sprintf("Versuchte Aenderung im Toplistenmaster des Itemd"
+         +" von %s (direkt!)\n", CAP(getuid(ob))));
+    return 0;      
+  }
+  return 1;
+}
+
+varargs int AddToplistEntry(string pl, int nr) {
+  int old_nr;
+  if(!nr) nr=1;
+  if(!CheckIfAllowed()) return 0;
+  if(!member(name2nr, pl)) name2nr+=([pl:0]);
+  if(IS_WIZARD(TP)) return 1;
+  old_nr=name2nr[pl];
+  name2nr[pl]+=nr;
+  if(sizeof(nr2name[old_nr]) && member(nr2name[old_nr],pl)!=-1)
+    nr2name[old_nr]-=({pl});
+  if(!sizeof(nr2name[old_nr]))
+    nr2name=m_delete(nr2name, old_nr);
+  if(!member(nr2name, name2nr[pl])) 
+    nr2name+=([name2nr[pl]:({pl})]);
+  else 
+    nr2name[name2nr[pl]]+=({pl});
+  save_object(ITEMD_TOPLIST);
+  return 1;
+}
+
+int DeleteToplistEntry(string pl) {
+  if(!CheckIfAllowed()) return 0;
+  if(!member(name2nr, pl)) return 0;
+  nr2name[name2nr[pl]]-=({pl});
+  if(!sizeof(nr2name[name2nr[pl]]))
+    nr2name=m_delete(nr2name, nr2name[name2nr[pl]]);
+  name2nr=m_delete(name2nr, pl);
+  save_object(ITEMD_TOPLIST);
+  return 1;
+}
+
+int MakeReadList() {
+  int *numbers, i, j,anz_tabs, count, real_count, *helpvar;
+  object pl;
+  string pl_name, guild;
+  mixed guild_level;
+  int level;
+  
+  count=1;
+  real_count=1;
+  helpvar=({});
+  rm(ITEMD_READTOPLIST);
+  numbers=sort_array(m_indices(nr2name),#'>);
+  write_file(ITEMD_READTOPLIST, sprintf("\n\n    Name\tAnzahl\tGilde\t\t"
+      "Sstufe\tGstufe\n%*'-'s\n", 77,""));
+  for(i=sizeof(numbers)-1;i>=0;i--) {
+    if(sizeof(nr2name[numbers[i]])) {
+      if (count < 100) {
+        for(j=sizeof(nr2name[numbers[i]])-1;j>=0;j--) {
+          pl_name=nr2name[numbers[i]][j];
+          // Keine Magier und geloeschten Spieler
+          if( IS_LEARNER(pl_name) ||       
+              file_size("/save/"+pl_name[0..0]+"/"+pl_name+".o")==-1) 
+            continue;
+          if (count >= 100) continue;
+          anz_tabs=1; //-(int)(strlen(pl_name)/8);
+          if(strlen(pl_name) < 4) anz_tabs++;
+          if(pl=find_player(pl_name)||pl=find_netdead(pl_name))
+            write_file(ITEMD_READTOPLIST, sprintf("%2d. %-13s %4d  %-17s %3d     %3d\n", 
+                  count, CAP(pl_name), name2nr[pl_name], 
+                  CAP(guild=pl->QueryProp(P_GUILD)), pl->QueryProp(P_LEVEL),
+                  pl->QueryProp(P_GUILD_LEVEL)));
+          else {
+            level = call_other("/gilden/obj/savefilemaster", "QueryFileProp", 
+                    pl_name,P_LEVEL);
+            guild = call_other("/gilden/obj/savefilemaster", 
+                "QueryFileProp", pl_name, P_GUILD);
+            guild_level = call_other("/gilden/obj/savefilemaster",
+                      "QueryFileProp", pl_name, P_GUILD_LEVEL);
+            if (mappingp(guild_level)) guild_level = guild_level[guild];
+            else if (!guild_level) guild_level = level;
+            write_file(ITEMD_READTOPLIST, sprintf("%2d. %-13s %4d  %-17s %3d     %3d\n", 
+                  count, CAP(pl_name), name2nr[pl_name], 
+                  CAP(stringp(guild) ? guild : "abenteurer"), level, guild_level));
+          }
+//        else 
+//          write_file(ITEMD_READTOPLIST, sprintf("%2d. %s%*'\t's%3d\t%s\t%3d"
+//              "\t%3d\n",
+//              count, CAP(pl_name), anz_tabs,"", name2nr[pl_name], "(geloescht)",
+//              0,0));
+          count++;
+        }
+      }
+    }
+    else {
+      helpvar+=({numbers[i]});   
+    }
+  }
+  for(i=sizeof(helpvar)-1;i>=0;i--) 
+    nr2name=m_delete(nr2name, helpvar[i]);
+  save_object(ITEMD_TOPLIST);
+  return 1;
+}
+

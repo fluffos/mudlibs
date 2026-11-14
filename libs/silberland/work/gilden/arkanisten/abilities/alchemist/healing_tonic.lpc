@@ -1,0 +1,91 @@
+#include "../../arkanisten.h"
+
+inherit GUILD_FOLDER "abilities/ability.lpc";
+
+public void create() {
+    if(is_clone(TO)) return;
+
+    ::create();
+    SetProp(P_ABILITY_NAME, CAP(HEALING_TONIC));
+    SetProp(P_ABILITY_DESCRIPTIPON, 
+        "Mit dem Heiltonikum kannst du dir eine Phiole mit einer heilenden Mixtur verabreichen, "
+        "die deine Wundheilung beschleunigt und dich etwas erholt.");    
+    SetProp(P_ABILITY_TYPE, ABILITY_TYPE_ACTIVE);
+    SetProp(P_ABILITY_BASE_ATTRIBUTE, A_INT);
+    SetProp(P_ABILITY_CASTVERB, CAST_VERB_DRINK);
+    SetProp(P_ABILITY_GROUP, ({ABILITY_GROUP_ALCHEMY}));
+    SetProp(P_ABILITY_COST, ([
+        P_SP: 20,
+    ]));
+}
+
+public mapping prepare_use(object user, mapping sinfo) {
+    if(get_free_hands(user) < 2) {
+        tell_object(user, BS("Du musst eine zwei freie Haende haben, das Heiltonikum zu mischen!"));
+        return 0;
+    }
+
+    // if a callout is active to heal_over_time, we cannot use this ability
+    if(user->QueryProp(P_ARKANIST_HEAL_OVER_TIME)) {
+        tell_object(user, BS("Du kannst das Heiltonikum nicht mischen, solange du noch von einem anderen Heiltonikum geheilt wirst!"));
+        return 0;
+    }
+
+    tell_object(user, BS("Rasch mischt du mehrere Phiolen zusammen um ein Heiltonikum zu erschaffen."));
+    tell_room(ENV(user), BS(user->Name(WER)+" mischt mehrere Phiolen zusammen."), ({user}));
+
+    sinfo[SI_PREPARE_TIME] = 8;
+    sinfo[SI_SKILLARG] = user;
+
+    return ::prepare_use(user, sinfo);
+}
+
+public void failed(object user, mapping sinfo, int skillcheck) {
+    object victim;
+
+    victim = sinfo[SI_SKILLARG];
+    if(skillcheck < -5000) {
+        user->AddPoison(1);
+        tell_object(user, BS("Beim Mischen des Heiltonikums machst du einen Fehler und das Resultat ist giftig!"));
+        tell_room(ENV(user), BS(user->Name(WER)+" macht einen Fehler beim Mischen des Heiltonikums und sieht plötzlich sehr blass aus."), ({user}));
+        return ::failed(user, sinfo, skillcheck);
+    }
+
+    tell_room(ENV(user), BS(user->Name(WER)+" trinkt das Heiltonikum. Nichts passiert."), ({user}));
+    tell_object(user, BS("Du trinkst das Heiltonikum. Nichts passiert."));
+    return ::failed(user, sinfo, skillcheck);
+}
+
+public void success(object user, mapping sinfo, int skillcheck) {
+    int totalTicks, tickSpeed, heal;
+
+    totalTicks = 5 + skillcheck / 1000;
+    tickSpeed = 10 - skillcheck / 2000 - sinfo[SI_SKILLABILITY] / 2000;
+    heal = 5 + skillcheck / 2000 + sinfo[SI_SKILLABILITY] / 2000;
+
+    pDebug(user, sprintf("healing_tonic :: success :: heal %d HP every %d seconds for %d rounds\n", heal, tickSpeed, totalTicks));
+
+    call_out("heal_over_time", tickSpeed, user, tickSpeed, totalTicks, heal);
+
+    tell_room(ENV(user), BS(user->Name(WER)+" trinkt das Heiltonikum und sieht etwas erholter aus."), ({user}));
+    tell_object(user, BS("Du trinkst das Heiltonikum. Du fuehlst deine Wundheilung beschleunigt."));
+
+    user->SetProp(P_ARKANIST_HEAL_OVER_TIME, 1);
+    
+    return;
+}
+
+public void heal_over_time(object user, int tickSpeed, int remainingTicks, int heal) {
+    if(!objectp(user)) return;
+    if(remainingTicks <= 0) {
+        tell_object(user, BS("Die Wirkung des Heiltonikums ist vorbei."));
+        user->SetProp(P_ARKANIST_HEAL_OVER_TIME, 0);
+    
+        return;
+    }
+
+    user->AddHp(heal);
+    tell_object(user, BS("Das Heiltonikum wirkt und du fuehlst dich etwas erholter."));
+    call_out("heal_over_time", tickSpeed, user, tickSpeed, remainingTicks - 1, heal);
+    return;
+}

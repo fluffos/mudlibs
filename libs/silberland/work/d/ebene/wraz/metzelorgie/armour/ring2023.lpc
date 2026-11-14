@@ -1,0 +1,902 @@
+// Jadering
+// Belohnung auf dem Schlachtfeld (von NPC Ahtawqa verliehen)
+// von Wraz / Mendralim
+
+#include "../def.h"
+
+inherit "std/armour";
+
+#include "/p/daemon/itemd/itemd.h"
+
+int add_levels(int level);
+int get_bonus();
+
+int death_saves;
+int max_death_saves=7+random(2);
+
+int bonuslevels;
+int bonusdeaths;
+int bonusreset;
+int bonusreset_time = 60*60*24*14; // Wie oft werden Bonuslevels reduziert? Def: alle 2 Wochen
+
+int totallostxp=0;
+int xpreturn=0;
+int deathtime=0;
+int playerxpbeforedeath=0;
+
+int xpfac=60000000; // Fuer Testzwecke, sollte spaeter in ein #define
+int xpfac2=26000; // Fuer Testzwecke, sollte spaeter in ein #define
+
+int max_reset_xp_use = 100000; // XP Abzug Maximum im reset()
+
+int lichtstatus=0; // -1 verdunkelnd, 0 aus, 1 leuchtend
+
+//int haltbarkeit=60*60*24*(90+random(30)); // Haltbarkeitsdauer (in s), 90-120 Tage // obsolet!
+
+int max_total_speed_def = 700; // Maximum SA_SPEED das der Spieler haben soll
+int max_newspeed = 600; // Maximum SA_SPEED vom Ring alleine
+
+int death_odds = 1800; // 1:1800 Wahrscheinlichkeit zu sterben, in DefendFunc() // Update 28.1.24: 1800 (statt 2000)
+
+
+string playerguild;
+
+void create()
+{
+  if( !is_clone(TO) ) return;
+
+  ::create();
+
+  death_saves=0;
+  bonusdeaths=0;
+  bonusreset=0;
+  bonuslevels=0;
+
+  SetProp(P_SHORT, "Der Jadering");
+
+  SetProp(P_NAME, "Jadering");
+  SetProp(P_GENDER, MALE);
+  AddId( ({"jadering", "ring", "Jadering", "NODESTRUCT", "\nwrazjadering"}) );
+
+  SetProp(P_KILL_NAME, "Die Gier des Jaderings");
+
+  SetProp(P_MATERIAL, ([MAT_JADE:99,MAT_MISC_MAGIC:1]) );
+  SetProp(P_WEIGHT, 10);
+  SetProp(P_SIZE, 3);
+  SetProp(P_VALUE, 10000);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_MAGIC, 1);
+  SetProp(P_ITEMD_TMPMAGIC, ({3500, 3500}) ); // ca. 110 Tage
+  seteuid(getuid(TO));
+  find_object(ITEMD)->RegisterNewItem(this_object(), TIME_ID);
+
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NODROP, "Du fuehlst Dich an den Ring gebunden, so einfach willst Du \n"
+                    "ihn nicht hergeben.\n");
+
+  SetProp(P_ARMOUR_TYPE, AT_RING );
+  SetProp(P_AC, 5);
+  SetProp(P_QUALITY_DECAY, 0);
+
+  SetProp(P_WEAR_FUNC, TO );
+  SetProp(P_REMOVE_FUNC, TO );
+  SetProp(P_DEFEND_FUNC, TO );
+
+  SetProp("ringladungen", ({10,20,5}));
+
+  AddCmd(({"jadering"}),"cmd_light");
+  AddCmd(({"held*innentitel"}),"cmd_title");
+}
+
+// ------ _QUERY_LONG (P_LONG) ----------------------------------------------
+string _query_long()
+{
+  string txt;
+
+  if (lichtstatus <= -1) txt =
+  "Der Ring schimmert facettenreich in dunklem Jadegruen. ";
+
+  else if (lichtstatus >= 1) txt =
+  "Der Ring leuchtet facettenreich in hellem Jadegruen. ";
+
+  else txt = "Der Ring schimmert facettenreich in magischem Jadegruen. ";
+
+  txt +=
+  "Du hast ihn geschenkt bekommen fuer Deine heldenhaften kaempferischen "
+  "Leistungen auf dem blutruenstigen Schlachtfeld.";
+
+  return BS(txt);
+}
+
+// ------ _QUERY_INFO (P_INFO) ----------------------------------------------
+string _query_info()
+{
+  string ring_hunger;
+
+  switch (get_bonus())
+  {
+    case 0..5:
+      ring_hunger = "Der Ring ist fuerchterlich hungrig!";
+      break;
+    case 6..10:
+      ring_hunger = "Der Ring ist sehr hungrig!";
+      break;
+    case 11..15:
+      ring_hunger = "Der Ring ist ziemlich hungrig!";
+      break;
+    case 16..20:
+      ring_hunger = "Der Ring ist relativ hungrig!";
+      break;
+    case 21..25:
+      ring_hunger = "Der Ring ist einigermassen hungrig!";
+      break;
+    case 26..29:
+      ring_hunger = "Der Ring ist kaum hungrig!";
+      break;
+    case 30:
+      ring_hunger = "Der Ring ist vollkommen satt!";
+      break;
+    default:
+      ring_hunger = "Der Ring hat einen Fehler, bitte informiere einen Magier!";
+      break;
+  }
+
+  if (random(3))
+   return (
+    BS("Du fuehlst eine Verbindung dieses Rings mit Deiner Essenz, "
+    "Deiner Erfahrung. Es kommt Dir vor, als habe der Ring eine Aura, die den "
+    "TOD von Deiner Essenz abschirmen koennte - mit etwas Glueck. Vermutlich "
+    "wuerde der Ring den Verlust der Erfahrung nicht verhindern. Aber wenn der "
+    "TOD sie nicht bekommt, muesste sie vielleicht irgendwie wieder zu erlangen "
+    "sein?")+
+    BS("Die Verbindung des Rings mit deiner Erfahrung fuehlt sich wechselseitig an. "
+    "Du vermutest, dass sie nicht ausschliesslich zu Deinem Vorteil besteht, "
+    "denn von dem Ring geht ein Gefuehl aus, das Du als Hunger beschreiben wuerdest. "
+    "Du fuehlst, dass sich der Hunger nicht nur auf Dich und Deine Erfahrung "
+    "bezieht. Die Staerkung Deiner Faehigkeiten durch den Ring wird jedenfalls "
+    "durch den Hunger des Rings gehemmt.")+
+    BS("Der Ring kann das Umgebungslicht beeinflussen indem Du dem Ring direkt "
+    "einen Teil Deiner Erfahrung zufliessen laesst.")+
+    BS("Kommandos: jadering licht | dunkel | aus") +
+    BS("Ausserdem kannst Du Dir Deinen Schlachtfeldtitel setzen: ")+
+    BS("Kommando: held*innentitel farbe | farblos"));
+  else return BS(ring_hunger);
+}
+
+// ------ GET_BONUS (Kombination von NPC-Level-Bonus und Todeszahl-Bonus) ---
+int get_bonus()
+{
+  int bonus;
+
+  // Bei bonusdeaths == 0 && bonuslevels ==      0 -> bonus =  5
+  //                         bonuslevels ==   5000 -> bonus = 18
+  //                                         14000 -> bonus = 25
+  //                                         27000 -> bonus = 30 (cap)
+  bonus = to_int( (bonusdeaths/2) - 47.8 + 7.6 * log( bonuslevels+1050.0 ) );
+
+  // cap auf 30
+  bonus = (bonus > 30) ? 30 : bonus;
+
+  return bonus;
+}
+
+// ------ ACCELERATE (SA_SPEED Modifikation) ------------------------------
+// TP zeigt auf den enemy (von DefendFunc)
+int accelerate()
+{
+  object waffe, player;
+  int waffenfaktor, ringbonus;
+  int max_total_speed, oldspeed, newspeed, duration;
+  int acceleration_odds;
+  int pl_xp, xp_costs;
+  int mod_sk_attr_result;
+
+  if(QueryProp("last_ring_accelerate") > time()-6) return 0; // min 6 Sekunden Abstand
+
+  player = ENV(TO);
+
+  if(!player) return 0;
+  if(!interactive(player)) return 0;
+
+  oldspeed = player->QuerySkillAttribute(SA_SPEED);
+
+  // Spieler hat SA_SPEED bereits erhoeht, dann seltener (1 von 3)
+  if( (oldspeed > 100) && random(3)) return 0;
+
+  // Beschraenkung, wenn der Spieler schon SA_SPEED hat
+  max_total_speed = max_total_speed_def;
+  if(oldspeed >= max_total_speed) return 0;
+
+  // Haeufigere Aktivierung wenn Sterbewaffe gezueckt
+  waffe = player->QueryProp(P_WEAPON);
+  if(waffe && waffe->id("\nsterbewaffe")) waffenfaktor = 1;
+  else waffenfaktor = 3;
+
+  ringbonus = TO->get_bonus(); // 0 bis 30
+
+  // Aktiviert, wenn Ringbonus auf Maximum (30) und Sterbewaffe:
+  // bei 1 von 10 Angriffen
+  //  Hier ist zwar 1 von 1 (weil random(1800/901) == random(1) == 0 immer!)
+  //  aber accelerate() wird bereits mit !random(10) aufgerufen
+  //
+  // Beispiele, wie oft der SPEED Bonus kommt (bei 1/x Attacken)
+  //
+  // Ringbonus     mit Sterbewaffe    ohne Sterbewaffe
+  //        30                1/10                1/59
+  //        29                1/21                1/64
+  //        25                1/28                1/86
+  //        15                1/79               1/238
+  //         5               1/629              1/2076
+  acceleration_odds = (1800 * waffenfaktor) / (1+ringbonus*ringbonus);
+  if(QueryProp("wdebug")) DB("accelerate() odds: 1:"+acceleration_odds+" ("+player->Name()+")\n");
+
+  if(random(acceleration_odds)) return 0; // Wuerfeln
+
+  // Speedbonus & Dauer wuerfeln und limitieren
+  newspeed = oldspeed + 50 + random(1+8*ringbonus); // min: 50
+  newspeed = newspeed <= max_newspeed ? newspeed : max_newspeed;      // max: 500
+  duration = 4 + random(1+ringbonus/5) ; // min: 4, max: 10 Sekunden
+
+  // Limit auf SA_SPEED in Summe
+  // (es koennen mehrere Objekte SA_SPEED modifizieren, wird multipliziert!)
+  if((oldspeed * newspeed) / 100 >= max_total_speed)
+    newspeed = to_int(max_total_speed*100/oldspeed);
+  if(newspeed <= 100) return 0; 
+
+  mod_sk_attr_result = player->ModifySkillAttribute(TO,SA_SPEED,newspeed,duration);
+
+  if(mod_sk_attr_result <= 0) return 0; // hatte keinen Effekt
+
+  // Nachricht an Spieler
+  // Geringe Wahrscheinlichkeit zu sterben
+  switch (random(death_odds))
+  {
+    case 0:
+    player->Message(BS("Als der Ring gierig Deine Erfahrung frisst, verlierst Du "
+      "die Kontrolle ueber den Erfahrungsfluss und bezahlst mit Deinem Leben."));
+    ENV(player)->Message(BS("Der Jadering an "+player->Name(WESSEN)+" Finger leuchtet "
+      "grell auf, und "+player->Name()+" verdreht leblos die Augen."),
+      MSGFLAG_VISUAL | MSGFLAG_NO_TP);
+    player->die();
+    return 2;
+    break;
+
+    case 1..18: // 1/100 von death_odds
+    player->Message(BS("Der Ring frisst Deine Erfahrung mit immenser Gier! Beinahe "
+      "haettest Du die Kontrolle verloren."));
+    break;
+
+    case 19..909: // 1/2 + 1/200 von death_odds
+      player->Message(BS("Der Ring frisst gierig Deine Erfahrung und belohnt Dich!"));
+      break;
+
+    default:
+      player->Message(BS("Ring und Waffe harmonieren, Erfahrung ist wertlos!"));
+      break;
+  }
+
+  // Erfahrungspunktekosten
+  // zB bei 2 Milliarden XP: max 1.421.000 XP Abzug
+  //    bei 500 Mio XP:      max   165.000
+  //    bei 50 Millionen XP: max    11.600
+  //    bei 10 Millionen:    max     1.200 (aber mit so wenig XP wird man
+  //                                      den Jadering kaum haben koennen)
+  pl_xp = player->QueryProp(P_XP);
+  player->AddExp(xp_costs =
+                  -to_int( 1000 + random(to_int(
+                 (
+                   (pl_xp+(pl_xp/to_float(xpfac2))*(pl_xp/to_float(xpfac2)))/xpfac
+                 )
+                 * newspeed * duration
+               ))
+               )
+            );
+  
+  SetProp("last_ring_accelerate",time());
+  
+  if(QueryProp("wdebug"))
+  {
+    DB("accelerate(): newspeed "+newspeed+", duration "+duration+
+    ", xp_costs "+xp_costs+"\n");
+    DB("actual SA_SPEED for "+player->Name()+": "+player->QuerySkillAttribute(SA_SPEED)+"\n");
+    DB("mod_sk_attr_result: "+mod_sk_attr_result+"\n");
+  }
+  return mod_sk_attr_result;
+}
+
+// ------ WEARFUNC() ------------------------------------------------------
+int WearFunc(object me)
+{
+  // man kann nur einen Ring haben
+  // sollte man irgendwie an einen 2. kommen, verschwindet dieser beim
+  // Versuch, ihn zu tragen
+  object *inv;
+  int i, no_of_rings;
+
+  inv=deep_inventory(TP);
+  no_of_rings = 0;
+
+  // Globalvariable playerguild setzen
+  playerguild = ENV(TO)->QueryProp(P_GUILD);
+
+  for(i=0;i<sizeof(inv);i++)
+  {
+    if( inv[i]->id("\nwrazjadering"))
+    {
+      if(no_of_rings == 0) no_of_rings = 1;
+      else
+      {
+        TP->Message(BS(
+          "Als du den Jadering anziehen moechtest, verschwindet er."));
+        TO->remove(1);
+        return 0;
+      }
+    }
+  }
+  return 1;
+}
+
+// ------ REMOVEFUNC() ------------------------------------------------------
+int RemoveFunc(object me)
+{
+  if(lichtstatus < 0)
+  {
+    if(TP) TP->Message(BS("Der Jadering laesst das Umgebungslicht wieder fliessen."),
+      MSGFLAG_SENSE);
+    if(TP && ENV(TP)) ENV(TP)->Message(BS(TP->Name(WESSEN) +" Jadering laesst das Umgebungslicht wieder fliessen."),
+      MSGFLAG_VISUAL | MSGFLAG_NO_TP);
+    set_light(1);
+    lichtstatus = 0;
+  }
+
+  else if(lichtstatus > 0)
+  {
+    if(TP) TP->Message(BS("Das Leuchten des Jaderings erlischt."),
+      MSGFLAG_SENSE);
+    if(TP && ENV(TP)) ENV(TP)->Message(BS("Das Leuchten von "+ TP->Name(WESSEN) +" Jadering erlischt."),
+      MSGFLAG_VISUAL | MSGFLAG_NO_TP);
+    set_light(-1);
+    lichtstatus = 0;
+  }
+
+  return 1;
+}
+
+// ------ DEFENDFUNC() ------------------------------------------------------
+int DefendFunc(string *dtyp, mixed spell, object enemy)
+{
+  // Moeglichkeit von SA_SPEED Erhoehung
+  if(!random(QueryProp("ringladungen")[0])) accelerate();
+
+  // Kleiner Bonus auch beim Metzeln ausserhalb des Schlachtfeldes
+  if(!random(QueryProp("ringladungen")[1]) && !enemy->id("\nschlachtfeld"))
+    add_levels(enemy->QueryProp(P_LEVEL)/QueryProp("ringladungen")[2]);
+
+  return 0;
+}
+
+// ------ _QUERY_BERSERKER_BONUS --------------------------------------------
+mapping _query_berserker_bonus()
+{
+  if(!playerguild) return 0; // 0 statt ([]), sonst kommt bei wk "Der Jadering verbessert" (Satzende)
+  else if (playerguild == "berserker") return (["all": get_bonus() ]);
+  else return 0;
+}
+
+// ------ _QUERY_PALADIN_BONUS ----------------------------------------------
+mapping _query_paladin_bonus()
+{
+  if(!playerguild) return 0;
+  else if (playerguild == "paladine")
+    return (["eifer": get_bonus() ]);
+  else return 0;
+}
+
+// ------ _QUERY_PALADIN_SPELLCOST ------------------------------------------
+int _query_paladin_spellcost()
+{
+  if(!playerguild) return 0;
+  else if (playerguild == "paladine") return get_bonus()/2; // Update 28.1.2024: 1/2 statt voll
+  else return 0;
+}
+
+// ------ _QUERY_ZECHPRELLER_BONUS -------------------------------------------
+mapping _query_zechpreller_bonus()
+{
+  if(!playerguild) return 0;
+  else if (playerguild == "zechpreller") return (["all": get_bonus() ]);
+  else return 0;
+}
+
+// ------ _QUERY_ZECHPRELLER_SPELLCOST ------------------------------------------
+int _query_zechpreller_spellcost() // Update 28.1.2024: zechpreller_spellcost hinzugefuegt
+{
+  if(!playerguild) return 0;
+  else if (playerguild == "zechpreller") return get_bonus()/2;
+  else return 0;
+}
+
+// ------ _QUERY_NEKRO_BONUS -------------------------------------------------
+mapping _query_nekro_bonus()
+{
+  if(!playerguild) return 0;
+  else if (playerguild == "nekromanten") return (["all": get_bonus() ]);
+  else return 0;
+}
+
+// ------ _QUERY_NEKRO_SPELLCOST ------------------------------------------
+int _query_nekro_spellcost() // Update 28.1.2024: nekro_spellcost hinzugefuegt
+{
+  if(!playerguild) return 0;
+  else if (playerguild == "nekromanten") return get_bonus()/2;
+  else return 0;
+}
+
+// ------ _QUERY_ITEMD_ELEMENTAL_VALUE ---------------------------------------
+int _query_itemd_elemental_value()
+{
+  if(!playerguild) return 0;
+  else if (playerguild == "druidenzirkel") return get_bonus();
+  else return 0;
+}
+
+// ------ _QUERY_DRUID_ADD_HAND_DAMAGE --------------------------------------
+int _query_druid_add_hand_damage()
+{
+  if(!playerguild) return 0;
+  else if (playerguild == "druidenzirkel") return get_bonus();
+  else return 0;
+}
+
+// ------ _QUERY_BARDEN_BONUS ----------------------------------------------
+mapping _query_barden_bonus()
+{
+  if(!playerguild) return 0;
+  else if (playerguild == "bardengilde")
+    return (["all": get_bonus() ]);
+  else return 0;
+}
+
+// ------ _QUERY_BARDEN_SPELLCOST ------------------------------------------
+int _query_barden_spellcost()
+{
+  if(!playerguild) return 0;
+  else if (playerguild == "bardengilde") return get_bonus()/2; // Update 28.1.2024: 1/2 statt voll
+  else return 0;
+}
+
+// ------ ADD_LEVELS (Bonuswert der NPC-Levels die getoetet wurden) ---------
+int add_levels(int level)
+{
+  int old_bonus;
+  int new_bonus;
+
+  old_bonus = get_bonus();
+  bonuslevels += level;
+  new_bonus = get_bonus();
+
+  if( old_bonus < new_bonus )
+    write(BS("Der Jadering verbessert Deine Faehigkeiten nun staerker."));
+
+  return bonuslevels;
+}
+
+// ------ ADD_DEATHS (Bonuswert durch Spielertode) -------------------------
+int add_deaths(int deaths)
+{
+  int change;
+
+  change = get_bonus();
+  bonusdeaths += deaths;
+  change = get_bonus()-change;
+
+  if(change)
+    write(BS("Der Jadering verbessert Deine Faehigkeiten nun staerker."));
+
+  return bonusdeaths;
+}
+
+// ----- GET_DEATHS_LEVELS (Abfrage der Todeszahl und NPC-Level) ------------
+int *get_deaths_levels()
+{
+  return ({bonusdeaths, bonuslevels});
+}
+
+// ------ SET_BONUSRESET (Zeit der letzten Halbierung) ---------------------
+int set_bonusreset(int newresettime)
+{
+  if(!newresettime) return bonusreset;
+
+  else return bonusreset = newresettime;
+}
+
+// ------ NOTIFYPLAYERDEATH() ----------------------------------------------
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  int old_bonus;
+  int new_bonus;
+
+  if(!TO->QueryProp(P_WORN)) return; // nicht getragen -> hilft nix
+  if(player!=TO->QueryProp(P_WORN)) return; // traeger nicht gestorbener
+  if(!WMASTER->is_hero(getuid(player))) return; // kein hero, also ring irgendwie
+                                                // anders bekommen
+  if(totallostxp) return; // Mehrfachtod; stacked nicht
+
+  // bonusdeaths verbessert die Gildenfertigkeiten
+  old_bonus = get_bonus();
+  bonusdeaths++;
+  new_bonus = get_bonus();
+
+  if( old_bonus < new_bonus )
+    write(BS("Der Jadering verbessert Deine Faehigkeiten nun staerker."));
+
+  if(random(2)) return; // Aktiviert bei 1 von 2 Toden
+
+  if(death_saves >= max_death_saves)
+  {
+    player->Message(BS(
+      "Lars schmunzelt und nimmt Dir den Jadering ab."),
+    MSGFLAG_SENSE);
+    TO->remove(1);
+    return;
+  }
+
+  //player->Message(BS("debug deathtime: " + deathtime + "\n"),MSGFLAG_SENSE);
+
+  // letzter tod (mit jadering-aktivitaet) vor weniger als 2h
+  if( deathtime > time() - 7200 ) return;
+
+  totallostxp = lostexp;
+  xpreturn = lostexp / 10;
+  deathtime = time();
+  playerxpbeforedeath = player->QueryProp(P_XP) + lostexp;
+
+  player->Message(BS(
+      "Im Moment deines TODES fuehlst Du den Jadering an Deinem Finger "
+      "mit wohliger Waerme. Gleichzeitig schiessen Dir verwirrende Bilder "
+      "durch den Kopf. Ein Teil Deiner Essenz, die sich der Tod schon "
+      "genommen hatte, wird diesem wieder entrissen und fliegt ueber das "
+      "Silberland. Doch dann strudeln die Essenzfetzen an einen Ort zusammen. "
+      "Du erkennst ihn nicht genau, aber er kommt Dir bekannt vor, wirkt "
+      "duester und... es riecht nach Blut. Du fuehlst, wie sich Deine "
+      "Essenzbruchstuecke in Kreaturen, die Du nicht genau erkennst, verankern. "
+      "Ob es wohl moeglich ist, Dir Deine Essenzen wieder zu holen?"),
+     MSGFLAG_SENSE);
+
+  death_saves += 1;
+}
+
+// ------ QUERY_DEATHTIME ---------------------------------------------------
+int query_deathtime()
+{
+  return deathtime;
+}
+
+// ------ GIVEPLAYERXP ------------------------------------------------------
+// Wird vom getoeteten NPC via WMASTER aufgerufen:
+void GivePlayerXP (object player)
+{
+  if(totallostxp <= 0) return; // gibt keine XP, oder schon alle zurueckgegeben
+  if(!TO->QueryProp(P_WORN)) return; // ring muss getragen werden
+  if(player!=TO->QueryProp(P_WORN)) return;
+  if( deathtime < time() - 7200 ) // Tod laenger als 2h her
+  {
+    totallostxp = 0;
+    deathtime = 0;
+    playerxpbeforedeath = 0;
+    player->Message(BS("Die Waerme weicht wieder aus dem Jadering. Teile deiner Essenz "
+             "sind wohl fuer immer verloren."), MSGFLAG_SENSE);
+    return;
+  }
+  player->Message(BS("Du spuerst etwas an Deinem Finger - der Jadering wird aktiv! "
+           "Du findest einen Teil Deines gestorbenen Selbst wieder."),
+         MSGFLAG_SENSE);
+  player->AddExp(xpreturn); // XP zurueckgeben
+  totallostxp -= xpreturn; // totallostxp reduzieren
+
+  // letzte XP-Rueckgabe, Nachricht an Spieler
+  if( (totallostxp <= 0) || (player->QueryProp(P_XP) > playerxpbeforedeath) )
+  {
+    player->Message(BS("Nach diesem Fund fuehlst Du Deine Essenz wieder vollstaendig, "
+             "fast so, als waerest Du nie gestorben."), MSGFLAG_SENSE);
+    totallostxp = 0;
+    deathtime = 0;
+    playerxpbeforedeath = 0;
+  }
+
+  WMASTER->jadering_log(getuid(player),xpreturn);
+
+  return;
+}
+
+// ------ _QUERY_AUTOLOADOBJ() ----------------------------------------------
+mixed _query_autoloadobj()
+{
+  return ({death_saves, bonusdeaths});
+}
+
+// ------ _SET_AUTOLOADOBJ() ------------------------------------------------
+_set_autoloadobj(mixed data)
+{
+  death_saves = data[0];
+  bonusdeaths = data[1];
+}
+
+// ------ CMD_LIGHT ---------------------------------------------------------
+// Licht oder Dunkelheit aktivieren, Kosten: bis zu 10.000 XP
+int cmd_light(string str)
+{
+  if(str==""||!str) return 0;
+
+  notify_fail("Kommandos: jadering licht | dunkel | aus\n");
+
+  if(TP != TO->QueryProp(P_WORN)) {
+    write(BS(
+      "Du kannst die magische Helligkeit oder Dunkelheit des Jaderings "
+      "nur nutzen, wenn Du ihn traegst."));
+    return -1; }
+
+  else if(str=="licht")
+  {
+    if(TO->QueryProp("last_aktivierungszeit") > time()-4)
+    {
+      write(BS("Du brauchst noch etwas Zeit, bevor Du dich wieder auf Deine "
+        "innere Energie und den Jadering fokussieren kannst."));
+      return -1;
+    }
+    if(lichtstatus >= 1)
+    {
+      write(BS("Der Jadering leuchtet bereits."));
+      return -1;
+    }
+    else if(lichtstatus <= -1)
+    {
+      write(BS("Der Jadering absorbiert derzeit Licht. Deaktiviere ihn zuerst."));
+      return -1;
+    }
+    write(BS(
+      "Du fokussierst Deine innere Energie auf die Helligkeit des Todes. Ein "
+      "Teil Deiner Erfahrung fliesst in den Ring. "
+      "Der Jadering beginnt in hellem Jadegruen zu leuchten."));
+    ENV(TP)->Message(BS(TP->Name(WESSEN) +" Jadering beginnt in hellem Jadegruen zu leuchten."),
+      MSGFLAG_VISUAL | MSGFLAG_NO_TP);
+    set_light(1);
+    lichtstatus = 1;
+    TO->SetProp("last_aktivierungszeit", time());
+
+    // Aktivierungskosten bis zu 10.000 XP
+    TP->AddExp( (TP->QueryProp(P_XP) / 10000) > 10000 ?
+                     -(10000+random(1000)) :
+                     -((TP->QueryProp(P_XP) / 10000)+random(1000)) );
+    return 1;
+  }
+
+  else if(str=="dunkel")
+  {
+    if(TO->QueryProp("last_aktivierungszeit") > time()-4)
+    {
+      write(BS("Du brauchst noch etwas Zeit, bevor Du dich wieder auf Deine "
+        "innere Energie und den Jadering fokussieren kannst."));
+      return -1;
+    }
+    if(lichtstatus <= -1)
+    {
+      write(BS("Der Jadering absorbiert bereits Licht."));
+      return -1;
+    }
+    else if(lichtstatus >= 1)
+    {
+      write(BS("Der Jadering leuchtet derzeit. Deaktiviere ihn zuerst."));
+      return -1;
+    }
+    write(BS(
+      "Du fokussierst Deine innere Energie auf die Dunkelheit des Todes. Ein "
+      "Teil Deiner Erfahrung fliesst in den Ring. "
+      "Der Jadering schimmert in dunklem Jadegruen und absorbiert das "
+      "Umgebungslicht."));
+    ENV(TP)->Message(BS(TP->Name(WESSEN) +" Jadering schimmert in dunklem Jadegruen und absorbiert das "
+      "Umgebungslicht."),
+      MSGFLAG_VISUAL | MSGFLAG_NO_TP);
+    set_light(-1);
+    lichtstatus = -1;
+    TO->SetProp("last_aktivierungszeit", time());
+
+    // Aktivierungskosten bis zu 10.000 XP
+    TP->AddExp( (TP->QueryProp(P_XP) / 10000) > 10000 ?
+                     -(10000+random(1000)) :
+                     -((TP->QueryProp(P_XP) / 10000)+random(1000)) );
+    return 1;
+  }
+
+  else if(str=="aus")
+  {
+    if(lichtstatus == 0)
+    {
+      write(BS("Der Jadering ist bereits deaktiviert."));
+      return -1;
+    }
+    write(BS(
+      "Du fokussierst Deine innere Energie auf den Tod. "
+      "Der Jadering schimmert nun schwach in magischem Jadegruen."));
+    ENV(TP)->Message(BS(TP->Name(WESSEN) +" Jadering schimmert nun schwach in magischem Jadegruen."),
+      MSGFLAG_VISUAL | MSGFLAG_NO_TP);
+    if(lichtstatus >= 1) set_light(-1);
+    else if(lichtstatus <= -1) set_light(1);
+    lichtstatus = 0;
+    return 1;
+  }
+
+}
+
+// ------ CMD_TITLE ---------------------------------------------------------
+// Farbtitel setzen, Kosten: bis zu 10.000 XP
+int cmd_title(string str)
+{
+  int x_fach_held, gender;
+  string old_title, new_title, *grammar;
+  string title_part1, title_part2;
+  string textcol, bgcol;
+
+  textcol = "";
+  bgcol = "";
+
+  if(str==""||!str) return 0;
+  if(!TP) return 0;
+
+  x_fach_held = SMASTER->query_bling(TPU) / HELDENPUNKTE;
+
+  notify_fail("Kommando: held*innentitel farbe | farblos\n");
+
+  if(TP != TO->QueryProp(P_WORN)) {
+    write(BS(
+      "Du musst den Jadering tragen."));
+    return -1; }
+  
+  if(x_fach_held <= 0) {
+    write(BS("Du bist doch noch gar kein*e Held*in!"));
+    return -1;
+  }
+
+  switch(TP->QueryProp(P_GENDER))
+  {
+    case 1: grammar = ({"er",""}); break;
+    case 2: grammar = ({"e","in"}); break;
+    default: grammar = ({"","*in"}); break;
+  }
+
+  new_title = (x_fach_held > 1 ? 
+    (x_fach_held + "-fach" + grammar[0] + " ") : 
+    "") + 
+    "SF-Held" + grammar[1];
+  
+  if(str=="farblos") 
+    new_title = (x_fach_held > 1 ? 
+    (x_fach_held + title_part1) : "") + title_part2;
+
+  else if(str=="farbe") 
+  {  
+    switch(x_fach_held/2%7)
+    {
+      case 0: if(x_fach_held > 1) textcol = "red"; break; // das ist die "hoechste" textfarbe!
+      case 1: textcol = "bold"; break; // das ist die "niedrigste"
+      case 2: textcol = "green"; break; // zweit-niedrigste ...
+      case 3: textcol = "blue"; break;
+      case 4: textcol = "cyan"; break;
+      case 5: textcol = "purple"; break;
+      case 6: textcol = "yellow"; break; // vorletzte
+      default: textcol = ""; break;
+    }
+    if(x_fach_held > 15) switch((x_fach_held-2)/14%7)
+    {
+      case 0: bgcol = "bred"; break; // das ist die "hoechste" hintergrundfarbe!
+      case 1: bgcol = "bwhite"; break; // das ist die "niedrigste" hintergrundfarbe
+      case 2: bgcol = "bgreen"; break; // zweit-niedrigste ...
+      case 3: bgcol = "bblue"; break;
+      case 4: bgcol = "bcyan"; break;
+      case 5: bgcol = "bpurple"; break;
+      case 6: bgcol = "byellow"; break;
+      default: bgcol = ""; break;
+    }
+  }
+    
+  else return 0;
+
+  if(textcol != "" && strstr(bgcol,textcol)!=-1) textcol = "black"; // damit schrift- und hintergrund nicht gleich sind
+
+  new_title = getcolor(textcol) + getcolor(bgcol) + new_title;
+
+  new_title = "\b, " + new_title + getcolor("none");
+
+  old_title = TP->QueryProp(P_TITLE);
+  TP->SetProp(P_TITLE, new_title);
+
+  if(old_title && old_title != "") write(BS("Alter Titel: " + old_title));
+  write(BS("Neuer Titel: " + new_title));
+  return 1;
+}
+
+// ------ RESET() ----------------------------------------------
+void reset()
+{
+  object player;
+
+  int old_bonus;
+  int new_bonus;
+  int pxp_t; // Player-XP Tausendstel
+
+  ::reset();
+
+  player = environment(TO);
+  if (!player) return;
+  if (!interactive(player)) return;
+
+  // in MASTER weapon_master.c
+  WPMASTER->update_rings(TO);
+
+  // Ende des XP-Verlust-Wiederfindens (Zeitfenster Ende)
+  if (deathtime && deathtime < time() - 7200)
+  {
+    totallostxp = 0;
+    deathtime = 0;
+    playerxpbeforedeath = 0;
+    player->Message(BS("Die Waerme weicht wieder aus dem Jadering. "
+    "Teile deiner Essenz sind wohl fuer immer verloren."), MSGFLAG_SENSE);
+  }
+
+  pxp_t = (player->QueryProp(P_XP) / 1000);
+
+  // Ringnutzung kostet XP: 0.1% der Player XP, oder maximal 100.000 (im Schnitt)
+  if( player == TO->QueryProp(P_WORN) ) // wenn getragen
+  {
+    player->AddExp( pxp_t > max_reset_xp_use ?
+                     -(max_reset_xp_use+random(max_reset_xp_use/5)) : // im Schnitt: 110.000 XP
+                     -(pxp_t-(pxp_t/10)+random(pxp_t/5)) );
+    player->Message(BS("Der Jadering labt sich an Deiner Erfahrung."
+      ), MSGFLAG_SENSE);
+  }
+
+  // bonusdeaths und bonuslevels werden 1x pro 2 Wochen reduziert
+  if(!bonusreset) bonusreset = time();
+  if( (bonusreset < time() - bonusreset_time) )
+  {
+    old_bonus = get_bonus();
+
+    bonusreset = time();
+    if(bonusdeaths) bonusdeaths--;
+    bonuslevels /= 2;
+
+    new_bonus = get_bonus();
+
+    if(old_bonus > new_bonus) player->Message(BS(
+      "Der Jadering verbessert Deine Faehigkeiten "
+      "nun deutlich weniger."), MSGFLAG_SENSE);
+  }
+}
+
+// ------ SET_XPFAC() -------------------------------------------------------
+string set_xpfac(int newxpfac, int newxpfac2)
+{
+  if(newxpfac) xpfac=newxpfac;
+  if(newxpfac2) xpfac2=newxpfac2;
+  return "xpfac = "+xpfac+", xpfac2 = "+xpfac2;
+}
+
+// ------ set_defaults() ---------------------------------------------------
+varargs void set_defaults(int new_mds, int new_brt, int new_xpfac, int new_xpfac2,
+  int new_mrxu, int new_halt, int new_mts, int new_ns, int new_do)
+{
+  if(new_mds) max_death_saves = new_mds;
+
+  if(new_brt) bonusreset_time = new_brt; // Wie oft werden Bonuslevels reduziert? Def: alle 2 Wochen
+
+  if(new_xpfac) xpfac = new_xpfac;
+  if(new_xpfac2) xpfac2 = new_xpfac2;
+
+  if(new_mrxu) max_reset_xp_use = new_mrxu; // XP Abzug Maximum im reset()
+
+  //if(new_halt) haltbarkeit = new_halt; // Haltbarkeitsdauer (in s) // obsolet!
+
+  if(new_mts) max_total_speed_def = new_mts; // Maximum SA_SPEED das der Spieler haben soll
+  if(new_ns) max_newspeed = new_ns; // Maximum SA_SPEED vom Ring alleine
+  if(death_odds) death_odds = new_do; 
+}

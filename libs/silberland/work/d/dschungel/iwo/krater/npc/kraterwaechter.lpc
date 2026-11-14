@@ -1,0 +1,171 @@
+#include <npc.h>
+#include <combat.h>
+#include <moving.h>
+#include <defines.h>
+#include <moredef.h>
+#include <properties.h>
+#include <new_skills.h>
+
+#pragma strong_types
+
+#define MYLOG "/d/dschungel/iwo/krater/log/taguon.log"
+
+#define SCHATZRAUM "/d/dschungel/iwo/krater/room/schatzraum.lpc"
+
+inherit "std/npc";
+
+void create()
+{
+  object ob;
+
+  if (!is_clone(this_object())) return;
+
+  ::create();
+
+  seteuid(getuid(this_object()));
+
+  AddId( ({ "taguon", "\nkraterwaechter", "waechter", "NOWIMPY", "WATERBREATH" }) );
+
+  SetProp(P_NAME, "Taguon");
+
+  SetProp(P_SHORT, "Taguon der Waechter");
+
+  SetProp(P_LONG, "Die kolossale Gestalt erinnert Dich an eine "
+    "gewaltige Echse. Die Aschfahle Haut ist mit pockenaehnlichen "
+    "Beulen uebersaet, und scheint lederartiger Konsistenz zu sein. "
+    "Am hinteren Ende des riesigen Koerpers befindet sich ein etwas "
+    "abgeflachter muskuloeser Schwanz. Die Vorderbeine sind etwas "
+    "kuerzer und nicht so massiv, wie die hinteren, scheinen aber "
+    "trotzdem gefaehrliche Waffen zu sein. In seinem Maul finden "
+    "sich riesige, dolchartige Zaehne.");
+
+  SetProp(P_KILL_NAME, "Taguon der Waechter");
+
+  SetProp(P_GENDER, MALE);
+
+  SetProp(P_ARTICLE, 0);
+
+  create_default_npc(50);
+
+  SetProp(P_BODY, 450+random(50));
+  
+  SetProp(P_SIZE, 2000 + random(500));
+
+  SetProp(P_ALIGN, 0);
+  
+  SetProp(P_MAX_HANDS, 4);
+
+  SetProp(P_HANDS, ({ " mit seinen Klauen", 470+random(100), DT_RIP }));
+
+  SetProp(P_HEAL, 100 + random(35));
+
+  SetProp(P_NOMAGIC, 10);
+
+  SetProp(P_WIMPY, 0);
+
+  SetProp(P_MSGIN, "erhebt sich aus der Kraterasche");
+
+  SetProp(P_MMSGIN, QueryProp(P_MSGIN));
+
+  SetProp(P_DIE_MSG, " versinkt in der Kraterasche.\n");
+
+  SetChats(5, ({ sprintf("%s schwimmt langsam um den Krater.\n", TO->Name(WER)),
+                 sprintf("%s beobachtet Dich skeptisch.\n", TO->Name(WER)) }));
+
+
+  SetAttackChats(10, ({ BS(TO->Name(WER) + " schiesst wie ein Pfeil auf Dich zu."),
+                        BS(TO->Name(WER) + " stuerzt sich auf Dich."),
+                        BS(TO->Name(WER) + " tobt vor Wut.") }));
+
+
+  AddInfo(DEFAULT_INFO, ({ "laesst sich von Dir nicht stoeren.\n",
+                           "schwimmt unbeirrt weiter.\n" }));
+
+//  AddSpell(9,400,
+//              "Der Hexer greift Dich mit einem kleinen Feuerball an.\n",
+//              "Der Hexer greift @WEN mit einem kleinen Feuerball an.\n",
+//              ({DT_FIRE,DT_MAGIC}), ([SP_SHOW_DAMAGE:1]) ); 
+
+  SetProp(P_SPELLRATE, 20 + random(10));
+
+  AddSpell(9, 800,
+     TO->Name(WER) + " erschlaegt Dich beinahe mit seinem Schwanz.\n",
+     TO->Name(WER) + " erschlaegt @WEN beinahe mit seinem Schwanz.\n",
+     ({ DT_BLUDGEON }), ([ SP_SHOW_DAMAGE: 1]));
+
+  AddSpell(6, 950,
+     TO->Name(WER) + " rammt Dir seine Zaehne in den Leib.\n",
+     TO->Name(WER) + " rammt @WEM seine Zaehne in den Leib.\n",
+     ({ DT_PIERCE }), ([ SP_SHOW_DAMAGE: 1]));
+
+  AddSpell(2, 1, "", "", DT_BLUDGEON, "sp_freeze", ([ SP_SHOW_DAMAGE: 1 ]));
+  AddSpell(2, 1, "", "", DT_BLUDGEON, "sp_boil", ([ SP_SHOW_DAMAGE: 1 ]));
+
+  if( random(2) )
+  {
+    ob = clone_object("/gilden/druidenzirkel/obj/focus");
+    ob->SetVariables("wasser", 2 + random(2) + !random(3) + !random(10));
+    ob->move(TO, M_NOCHECK);
+  }
+
+}
+
+void sp_boil(object enemy, int damage, mixed dam_type)
+{
+  object *enemies;
+  int i;
+
+  tell_room(ENV(ME), BS(TO->Name(WESSEN) + " Augen fangen ploetzlich "
+    "an zu gluehen, und das Wasser rund um Dich beginnt zu kochen."));
+
+  enemies = filter_array(all_inventory(ENV(ME)), #'query_once_interactive);
+
+  for (i=0; i < sizeof(enemies); i++)
+    {
+      enemies[i]->Defend(350+random(100), DT_FIRE, 1, TO);
+      Kill(enemies[i]);
+    }
+
+}
+
+
+void sp_freeze(object enemy, int damage, mixed dam_type)
+{
+  enemy->ModifySkillAttribute(ME, SA_SPEED, 33, 20);
+
+  tell_object(enemy, BS(TO->Name(WER) + " vereist Deine Umgebung mit "
+    "eisigem Atem."));
+
+  tell_room(ENV(ME), BS(TO->Name(WER) + " vereist die Umgebung von " 
+    + enemy->Name(WESSEN) + " mit eisigem Atem."));
+
+  return;
+
+}
+
+
+void NotifyPlayerDeath(object victim, object killer, int lostxp)
+{
+  object *inv;
+
+  write_file(MYLOG, sprintf("%s %O hat %O getoetet (%d)\n",
+                            ctime(), killer, victim, lostxp));
+/*
+  if (killer == ME)
+    {
+      int i;
+
+      object corpse;
+
+      while ((corpse = present("leiche", ENV(ME))))
+        corpse->move(SCHATZRAUM, M_SILENT + M_NOCHECK);
+
+      tell_room(ENV(ME), BS(TO->Name(WER) + " verspeist "
+        + victim->name(WEN)), ({ victim }));
+      tell_object(victim, BS(TO->Name(WER) + " verspeist Dich.")); 
+      
+    }
+*/
+}
+
+

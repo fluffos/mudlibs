@@ -1,0 +1,329 @@
+/*
+** Der steirische Schwammerlsucher                 (w) Woody@SilberLand
+**
+**    date      Version  comments
+** --------------------------------------------------------------------
+** 1996-02-29     1.0    Release
+** 1996-03-01     1.1    Der Sucher gibt auf Anfrage nen Korb her
+** 1996-02-29     1.2    Der Sucher wandert im Silberwald
+** 1996-03-06     1.3    AddInfo "silberwald", "frau", Umbruch korrigiert,
+**                       Korb nur einmal pro Spieler pro Reset
+** 1996-03-31     1.4    Vergiftungsspell (Quest-NPC!)
+*/
+
+inherit "std/npc";
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include <combat.h>
+
+#include "quest.h"
+#include "/d/ebene/Silberwald/silberwald.h"
+
+
+#define ALLOWED SILBERWALD("")
+
+nosave object prev_room;
+object *hatkorb;
+// nosave string *...
+
+void wandern()  // groesstenteils von merlin uebernommen
+{
+  mapping ex,rooms;
+  mixed ziel;
+  object *raeume,env,ob;
+  string *ind,fn;
+  int i;
+
+  while (remove_call_out("wandern")>=0);
+  call_out("wandern",45+random(100));
+
+  if (!(env=environment()))
+  {
+    move(ROOM("room_e03"),0);
+    env=environment();
+  }
+  /*
+  // Nicht wandern, wenn Seher im Raum sind (??)
+  for (raeume=all_inventory(env); sizeof(raeume); raeume=raeume[1..])
+    if (interactive(raeume[0]) && query_idle(raeume[0]) < 180 &&
+        raeume[0]->QueryProp (P_XP) > 999999)
+      return;
+  */
+  ex = env->QueryProp(P_EXITS);
+  if (!mappingp(ex)) return;
+  ind = m_indices(ex);
+  rooms = ([]);
+  for (i=sizeof(ind)-1;i>=0;i--)
+  {
+    if (!stringp(ziel=ex[ind[i]])) continue;  // check exit
+    if (!ob=find_object(ziel)) continue;      // nur in geladene Raeume rein
+    if (ziel[0..strlen(ALLOWED)-1] != ALLOWED)
+      continue;                               // nur im Wandergebiet
+    rooms += ([ob]);
+  }
+  rooms -= ([env]);                           // nicht in selben Raum rein
+  if (prev_room && sizeof(m_indices(rooms))>1)
+    rooms -= ([prev_room]);                   // nicht in vorigen Raum
+  prev_room = env;
+  raeume = m_indices(rooms);
+  if (!i = sizeof(raeume)) return;
+  ob = raeume[random(i)];
+  move (ob, M_GO);
+}
+
+create()
+{
+  // OBLI:
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  SetProp (P_SHORT, "Ein Schwammerlsucher");
+  SetProp (P_LONG, bs("Du erblickst einen Schwammerlsucher, wie Du ihn nur "+
+    "in der tiefsten Steiermark vermuten wuerdest. Offenbar haelt er "+
+    "verzweifelt nach irgendetwas bestimmtem Ausschau. Eventuell koenntest "+
+    "Du ihm ja helfen? Frag ihn doch mal!\n"));
+  SetProp (P_NAME, "Schwammerlsucher");
+  SetProp (P_GENDER, MALE);
+  AddId ( ({"sucher", "schwammerlsucher"}) );
+  create_default_npc( 8 );
+  SetProp (P_BODY, 80);
+  SetProp (P_HANDS, ({" mit blossen Haenden", 50}));
+  SetProp (P_ALIGN, 200);
+  SetProp (P_RACE, "Mensch");
+  SetProp (P_XP, 20000);
+  SetProp (P_MSGOUT, "findet hier nichts und sucht woanders weiter");
+  SetProp (P_SPELLRATE, 20);  // hohe Wahrsch.!!! (Sucher ist Quest-NPC!)
+
+  set_living_name ("schwammerlsucher");
+  call_out ("wandern", 30);
+  hatkorb = ({ });
+
+  SetChats (2, ({
+    "Der Schwammerlsucher blickt sich suchend um.\n",
+    "Der Schwammerlsucher schaut kurz auf, mustert Dich und sucht dann weiter.\n",
+    "Der Schwammerlsucher seufzt: Damals in der Steiermark, da war's noch einfach.\n",
+    "Der Schwammerlsucher macht einen verzweifelten Eindruck.\n",
+    "Der Schwammerlsucher sagt: Wenn ich nur endlich den Pilz haette!\n"
+  }) );
+
+  SetAttackChats(5, ({
+    "Der Schwammerlsucher wirft Dir ein paar giftige Pilze an den Kopf.\n",
+  }) );
+
+  AddSpell (1, 20,
+    "Der Schwammerlsucher stopft Dir einen Fliegenpilz in den Mund.\n"+
+    "Du fuehlst Dich auf einmal viel schwaecher und wirst bleich im Gesicht.\n",
+    "Der Schwammerlsucher stopft @WEM einen Fliegenpilz in den Mund.\n"+
+    "@WER wird bleich im Gesicht.\n", DT_POISON, "vergifte");
+
+  AddInfo ("\ndefault info", "beachtet Dich gar nicht.\n");
+
+  AddInfo ("steiermark", "Jaja, die Steiermark, das ist meine alte Heimat, "+
+    "dort gab's noch Schwammerl in Massen... aber hier, im Silberwald, da "
+    "kannst stundenlang rumhatschen, bloss, finden tust nix...", "sagt: ");
+  AddInfo ("silberwald", "seufzt: Wunderschoen... Aber leider keine Pilze...\n");
+  AddInfo ( ({"schwammerl","schwammerln","pilz","pilze"}),
+    "seufzt: Ja, nur wo? Kannst Du mir vielleicht helfen?\n");
+  AddInfo ( ({"hilfe","aufgabe"}), "Ich suche schon seit Stunden "+
+    "verzweifelt nach einem Steinpilz, denn wenn ich ohne den nach "+
+    "Hause komme, erschlaegt mich vermutlich meine Frau, weil sie denkt "+
+    "dass ich wieder in der Stadtkneipe war... Wenn Du mir hilfst, ihn zu "+
+    "finden, waere ich Dir ueberaus dankbar!", "sagt: ");
+  AddInfo ("frau", "sagt: Frauen... sie sind so furchtbar misstrauisch!\n@@frauen@@\n");
+  AddInfo ("korb", "Ja, so ein Korb ist beim Pilzesuchen enorm praktisch!\n");
+  AddInfo ( ({"steinpilz","steinpilze"}), "@@steinpilz@@");
+}
+
+vergifte (object enemy)
+{
+  int p;
+  if ((p=enemy->QueryProp(P_POISON)) < enemy->QueryProp(P_MAX_POISON))
+    enemy->SetProp(P_POISON, p+1);
+}
+
+string frauen()
+{
+  if (TP->QueryProp(P_GENDER) == FEMALE)
+  {
+    return ("Der Schwammerlsucher erroetet.\n"+
+            "Der Schwammerlsucher sagt: Oops, Du bist ja eine Frau...");
+  }
+  else
+  {
+    return ("Der Schwammerlsucher sagt: Du kennst das sicher!");
+  }
+}
+
+string steinpilz()
+{
+  object ob;
+  int ret;
+
+  if (member_array (TP, hatkorb) != -1)
+  {
+    return "sagt: Aber ich habe Dir doch schon einen Korb gegeben!\n";
+  }
+
+  SUID;
+  ob = clone_object (QDIR("korb"));
+  ob->move(ME, M_NOCHECK);
+  ob->SetProp(P_ARTICLE, 0);
+  ob->SetProp(P_NAME, TP->name(WESSEN)+" Korb");
+  ob->SetProp(P_SHORT, TP->name(WESSEN)+" Korb");
+  ob->SetProp(P_LONG, ob->QueryProp(P_LONG)+"Er gehoert "+TP->name(WEM)+".\n");
+  ob->set_owner(TP->query_real_name());
+
+  say (break_string (
+    "Ach, Du willst mir also helfen, den Steinpilz zu finden, "+
+    capitalize(TP->query_real_name())+"? Oh, ich suche jetzt schon seit "+
+    "Stunden, aber bisher ohne jeglichen Erfolg! Solltest Du es dennoch "+
+    "schaffen, ihn aufzustoebern, waere ich Dir ueberaus dankbar! Ich will "+
+    "Dir einen Korb geben, damit Du die Pilze besser einsammeln kannst!", 78,
+    "Der Schwammerlsucher sagt: "));
+
+  hatkorb += ({ TP });
+  ret = ob->move(TP, M_GET);
+  if (ret != 1)
+  {
+    say ("Der Schwammerlsucher seufzt.\n");
+    say (break_string (
+      "Leider kannst Du den Korb nicht mehr tragen, ich lege ihn also "+
+      "einstweilen hier ab. Verkauf ein bisschen was von Deinen schweren "+
+      "Sachen und hol Dir den Korb dann wieder hier ab!", 78,
+      "Der Schwammerlsucher sagt: "));
+    // command ("lege korb ab");
+    say ("Der Schwammerlsucher laesst "+TP->name(WESSEN)+" Korb fallen.\n");
+    ob->move(MENV, M_NOCHECK);
+  }
+  else
+  {
+    // command ("gib korb an "+TP->name());
+    say ("Der Schwammerlsucher gibt "+TP->name(WEM)+" den Korb.\n", TP);
+    write ("Der Schwammerlsucher gibt Dir den Korb.\n");
+  }
+  return "laechelt zuversichtlich.\n";
+}
+
+reset()
+{
+  hatkorb = ({ });
+}
+
+give_notify(obj)
+{
+  int q, i, steinpilze;
+  string ow;
+  object *all, tp;
+
+  tp = TP;
+  if (obj->id(KORBID))
+  {
+    // EUID ok?
+    if (geteuid(obj) != "woody")
+    {
+      say (bs(
+        "Der Schwammerlsucher sagt: Was ist denn das fuer ein "+
+        "seltsamer Korb? Den habe ich Dir sicher nicht gegeben! "+
+        "Und weil man ja gerade bei Pilzen nie vorsichtig genug "+
+        "sein kann, schau ich erst gar nicht rein!\n"));
+      give_obj (obj, tp);
+      return;
+    }
+    // evtl. ein geklauter Korb?
+    if ((ow=obj->query_owner()) != tp->query_real_name())
+    {
+      say (bs("Der Schwammerlsucher sagt: Hey, das ist doch gar "+
+        "nicht Dein Korb! Diesen Korb hat urspruenglich "+
+        capitalize(ow)+" von mir bekommen!\n"));
+      give_obj (obj, tp);
+      return;
+    }
+    // Inhalt ok?
+    steinpilze = 0;
+    all = all_inventory(obj);
+    for (i=0; i<sizeof(all); i++)
+      if (all[i]->id(STEINPILZID)) steinpilze++;
+    if (steinpilze < 2)
+    {
+      if (steinpilze == 0)
+      {
+        say (bs(
+          "Der Schwammerlsucher sagt: Du machst es Dir wohl sehr einfach! "+
+          "Wo ist denn bitte der Steinpilz? Wenn Du ihn gefunden hast, lege "+
+          "ihn in den Korb und bring ihn mir!\n"));
+      }
+      else
+      {
+        // versch. write() bzw. say():
+        // Zufaellig anwesende andere Spieler muessen ja nich unbedingt
+        // mitkriegen, dass der unverschaemte Kerl gleich mehr als
+        // einen Pilz haben will... ;)
+        write (
+          "Der Schwammerlsucher blickt Dich freudig an.\n"+bs(
+          "Der Schwammerlsucher sagt: Prima, Du hast ja tatsaechlich einen "+
+          "Steinpilz gefunden! Meine Frau wird sich freuen! Bloss... Soll "+
+          "ich hungern? Wenn Du mir einen zweiten bringst, werde ich "+
+          "Dich dafuer belohnen, so sehr ich es mit meinen aermlichen "+
+          "Mitteln tun kann.\n"));
+        say ("Der Schwammerlsucher scheint noch nicht ganz zufrieden zu "+
+          "sein.\n", tp);
+      }
+      give_obj (obj, tp);
+      return;
+    }
+    say ("Der Schwammerlsucher strahlt.\n"+bs(
+      "Der Schwammerlsucher sagt: Danke, "+capitalize(tp->query_real_name())+
+      ", Du hast mir die langgesuchten Steinpilze gebracht!\n"));
+    /*
+    if (!present (MAGPILZID, tp))
+    {
+      write ("Der Schwammerlsucher sagt: Zur Belohnung will ich Dir diesen "+
+        "Pilz geben, den ich kuerzlich in einem fernen Land gefunden habe. "+
+        "Wenn Du ihn bei Dir hast, verraet Dir seine Farbe, wie es mit "+
+        "Deinen Kraeften so aussieht.\n");
+      say ("Der Schwammerlsucher gibt "+capitalize(tp->name(WEM))+
+        " einen magischen Pilz.\n", tp);
+      SUID;
+      clone_object ("/players/woody/obj/stein.lpc")->move(tp, M_NOCHECK);
+      say ("(Einstweilen ist der magische Pilz halt ein sprechender Stein :-))\n");
+    }
+    */
+    q = tp->GiveQuest(PILZQUEST);
+    if (q == 1)
+    {
+      write ("\nGratulation! Du hast die Aufgabe geloest!\n");
+      // dieses shout() wird spaeter mal wieder rausgenommen
+      // (wenns schwierigere Quests gibt :))
+      shout (sprintf ("Lautes Jubeln erklingt aus dem Silberwald.\n%s hat "+
+        "sich als Pilzsucher bewaehrt.\n", capitalize(TP->query_real_name())));
+      write_file (PILZQUESTLOG,
+        sprintf ("%s  %s hat sich als Pilzsucher bewaehrt.\n",
+        dtime(time()), capitalize(TP->query_real_name())));
+    }
+    else
+    if (q != -1)
+      write (sprintf("Unbekannter Fehler, bitte den zustaendigen Magier "+
+        "verstaendigen!\nFehlercode: %d\n", q));
+    if (steinpilze >= 3)
+    {
+      // zusaetzliche Vollheilung bei Loesung der Fleissaufgabe :)
+      write (bs(
+        "Der Schwammerlsucher merkt, dass er mehr Pilze hat, als er "+
+        "benoetigt. Er gibt Dir einen Steinpilz, den Du sofort "+
+        "verschlingst. Du fuehlst Dich auf einmal deutlich staerker.\n"));
+      tp->SetProp (P_HP, tp->QueryProp (P_MAX_HP));
+      tp->SetProp (P_SP, tp->QueryProp (P_MAX_SP));
+    }
+    write ("Der Schwammerlsucher winkt und verschwindet in der "+
+      "Dunkelheit des Waldes.\n");
+    for (i=0; i<sizeof(all); i++)   // Korb-Inhalt zerstoeren
+      all[i]->remove();
+    obj->remove();
+    ME->remove();
+    return;
+  }
+  write ("Der Schwammerlsucher sagt: Was mach ich denn damit?\n");
+  drop_obj (obj);
+}

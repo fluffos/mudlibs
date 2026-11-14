@@ -1,0 +1,436 @@
+// Axt des Sterbens
+// von Wraz / Mendralim
+
+#include "../def.h"
+
+#define TPU getuid(this_player())
+#define mio 1000000
+
+inherit "std/weapon";
+
+object me=TO;
+
+mapping lostxp=([]);
+mapping tode=([]);
+
+string color, wielded_by;
+  
+int specified_wc, specified_wc_fix, start_wc, start_wc_fix, gems;
+int hit_func_on=0, heldenbonus;
+
+int cvalue;
+
+int new_wc(string who) // ------ WC BERECHNUNG ------------------------------
+{
+  if(specified_wc>=300) return 300; // WC 300 -> nicht mehr erhoehen
+  if(!tode[who]) return start_wc; // noch kein tod -> nix erhoehen
+  if(!hit_func_on) return start_wc; // keine gems -> nix gibts!
+  
+  if(tode[who]<=10&&lostxp[who]<=40*mio)
+    specified_wc=start_wc+(lostxp[who]/mio)+tode[who]*3;
+    /*    unter 10 Toden und unter 40 mio lost XP:
+      - pro Tod                 +3 WC
+      - pro 1 mio lost XP       +1 WC
+    */
+  
+  else if(tode[who]<=10&&lostxp[who]>40*mio) {
+    specified_wc=start_wc+40+tode[who]*3;
+    // HitFunc!
+    }
+    /*    unter 10 Toden aber ueber 40 mio lost XP:
+      - pro Tod weiterhin      + 3WC
+      - fuer 40 mio lost XP    +40WC
+      - weiters HitFunc!
+    */
+    
+  else if(tode[who]>10&&lostxp[who]<=40*mio) {
+    specified_wc=start_wc+(lostxp[who]/mio)+30;
+    // HitFunc!
+   }
+   /*    ueber 10 Toden aber unter 40 mio lost XP:
+     - fuer 10 Tode                 +30WC
+     - pro 1 mio lost XP weiterhin  + 1WC
+     - weiters HitFunc!
+   */
+   
+  else if(tode[who]>10&&lostxp[who]>40*mio) {
+    specified_wc=300;
+     // HitFunc!
+  }
+   /*    ueber 10 TOden und ueber 40 mio lost XP:
+     - fuer 10 Tode           +30WC
+     - fuer 40 mio lost XP    +40WC
+     - weiters HitFunc!
+     
+     WC 300 kann nicht ueberschritten werden
+   */
+   
+  return specified_wc;
+}
+
+int new_wc_fix(string who) // ------- WC_FIX BERECHNUNG ---------------------
+{
+  if(specified_wc_fix>=30) return 30; // WC_FIX 40 -> nicht mehr erhoehen
+  if(!tode[who]) return start_wc_fix; // noch kein tod -> nix erhoehen
+  if(!hit_func_on) return start_wc_fix; // keine gems -> nix gibts!
+  
+  if(tode[who]<=10&&lostxp[who]<=40*mio)
+    specified_wc_fix=start_wc_fix+(tode[who]/2)+(lostxp[who]/(2*mio));
+    /*    unter 10 Toden und unter 40 mio lost XP:
+      - pro Tod              +0,5   WC_FIX
+      - pro 1 mio lost XP    +0,5   WC_FIX
+    */
+    
+  else if(tode[who]<=10&&lostxp[who]>40*mio)
+    specified_wc_fix=start_wc_fix+(tode[who]/2)+15;
+    // HitFunc!
+    
+    /*    unter 10 Toden aber ueber 40 mio lost XP:
+      - pro Tod weiterhin    + 0,5WC_FIX
+      - fuer 40 mio lost XP  +15  WC_FIX
+      - weiters HitFunc!
+    */
+    
+  else if(tode[who]>10&&lostxp[who]<=40*mio)
+    specified_wc_fix=start_wc_fix+5+(lostxp[who]/((40/15)*mio));
+    // HitFunc!
+  
+    /*    ueber 10 TOde aber unter 40 mio lost XP:
+      - fuer 10 Tode                 +5    WC_FIX
+      - pro 1 mio lost XP weiterhin  +0,375WC_FIX
+      - weiters HitFunc!
+    */
+    
+  else if(tode[who]>10&&lostxp[who]>40*mio) 
+    specified_wc_fix=40;
+    // HitFunc!
+  
+   /*    ueber 10 Toden und ueber 40 mio lost XP:
+     - fuer 10 Tode           + 5WC_FIX
+     - fuer 40 mio lost XP    +15WC_FIX
+     - weiters HitFunc!
+     
+     WC_FIX 40 kann nicht ueberschritten werden
+   */
+   
+  return specified_wc_fix;
+}
+
+void create()
+{
+  if(!is_clone(TO)) return;
+
+  ::create();
+  
+  gems=0;
+  color=({"saphirblau","diamantweiss","smaragdgruen","rubinrot",
+  "bernsteinbraun"})[random(5)];
+  
+  start_wc=230;
+  start_wc_fix=20;
+  
+  specified_wc=start_wc;
+  specified_wc_fix=start_wc_fix;
+
+  SetProp(P_SHORT, "Die Axt des Sterbens");
+  SetProp(P_LONG,
+    "Dieses Beil sieht eigentlich sehr schlicht aus, ein doppelseitiges "
+    "Axtblatt befestigt an einem Eichenholzstiel. Keine besonderen "
+    "Verzierungen oder Schnoerkeleien. Halt, doch! Eine seltsame "
+    "Ausnehmung befindet sich genau an der Stelle, wo der Stiel im "
+    "Beil verschwindet.");
+    
+  AddDetail( ({"axtblatt", "metall"}),
+    "Das Axtblatt besteht aus Metall.");
+    
+  AddDetail( ({"eichenholzstiel","holz","stiel","eichenholz"}),
+    "Der Stiel der Axt besteht eindeutig aus Eichenholz.");
+    
+  AddDetail( ({"verzierungen","schnoerkeleien","schnoerkel"}),
+    "Nichts dergleichen, nur eine Ausnehmung.");
+    
+  AddDetail( ({"ausnehmung"}),
+    "Sie schimmert "+color+".");
+
+  SetProp(P_NAME, "Axt des Sterbens");
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({"axt", "beil", "sterbeaxt", "axt des sterbens"}) );
+
+  SetProp(P_MATERIAL, ([MAT_STEEL:30, MAT_OAK:69, MAT_MISC_MAGIC:1]) );
+  
+  SetProp(P_ARTICLE, 1);
+  SetProp(P_WEIGHT, 5000);
+  SetProp(P_SIZE, 120);
+  SetProp(P_VALUE, 10000);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NEVERDROP, 1);
+
+  SetProp(P_QUALITY_DECAY, 140);
+  SetProp(P_WEAPON_TYPE, WT_AXE );
+  SetProp(P_WC, specified_wc);
+  SetProp(P_WC_FIX, specified_wc_fix);
+  SetProp(P_DAM_TYPE, DT_SLASH );
+  SetProp(P_NR_HANDS, 2);
+  SetProp("waffenbalsam", 10);
+
+  SetProp(P_WIELD_FUNC, TO );
+  SetProp(P_UNWIELD_FUNC, TO );
+  SetProp(P_HIT_FUNC, TO );
+
+  SetProp(P_WC_BONUS,(["Axtkaempfer":60, "Axtexperte":130, "Axtmeister":250]));
+
+  SetProp(P_WIELD_RESTRICTIONS, ([A_STR:10, P_LEVEL:10, P_XP:2500000]) );
+
+  SetProp(P_INFO, BS("Diese Waffe bezieht Kraft aus Deinen TODEN!"));
+  
+  AddCmd( ({"stecke","steck","stopfe", "setze"}), "cmd_edelstein");
+}
+
+int WieldFunc(object waffe) { // --- WIELD FUNC -----------------------------
+  wielded_by=TPU;
+  if(hit_func_on) TP->Message(BS( "Du fuehlst den TOD in Dir!"));
+  
+  if(!member(tode,   wielded_by)) tode[wielded_by]=0;
+  if(!member(lostxp, wielded_by)) lostxp[wielded_by]=0;
+  
+  me->SetProp(P_WC, new_wc(wielded_by) ); // jeder nur seine eigenen tode!
+  me->SetProp(P_WC_FIX, new_wc_fix(wielded_by) );
+  
+  return 1;
+}
+
+int UnwieldFunc(object waffe) { // --- UNWIELD FUNC -------------------------
+  wielded_by="nobody";
+  if(hit_func_on) TP->Message(BS( "Das Gefuehl des TODES weicht aus Dir."));
+  return 1;
+}
+
+int HitFunc( object enemy ) { // --- HIT FUNC ! -----------------------------
+  if(WMASTER->is_hero(QueryProp(P_WIELDED))) heldenbonus=80;
+  else heldenbonus=0;
+  
+  if(!hit_func_on) return 0;
+  
+  else if(tode[wielded_by]<=10&&lostxp[wielded_by]<=40*mio)
+    return 3+heldenbonus+
+           tode[wielded_by]+
+           random(lostxp[wielded_by]/(2*mio)); // maximal 33
+           // 2 mio lostxp = 1 (random)
+           // 1 tod = 1 fix
+  
+  else if(tode[wielded_by]>10&&lostxp[wielded_by]<=40*mio)
+    return 15+heldenbonus+
+           ((tode[wielded_by]-10)/2)+
+           random(lostxp[wielded_by]/(2*mio)-
+           2); // maximal eigentlich unbegrenzt
+           // aber nur noch jeder 2te tod bringt 1
+    
+  else if(tode[wielded_by]<=10&&lostxp[wielded_by]>40*mio)
+    return 3+heldenbonus+
+           tode[wielded_by]+
+           random(20+
+           (lostxp[wielded_by]/(5*mio))); // auch unbegrenzt
+           // 5 mio lostxp = 1 (random)
+  
+  else return 20+heldenbonus+
+              (tode[wielded_by]-10)+
+              random(20+
+              (lostxp[wielded_by]/(4*mio))+
+              ((tode[wielded_by]-5)/2)); // unbegrenzt
+              // wer so oft stirbt, soll was davon haben :)
+}
+
+// --- NOTIFY PLAYER DEATH --------------------------------------------------
+void NotifyPlayerDeath(object victim, object killer, int lost_xp)
+{
+  int newxp, deads;
+  
+  if(me->QueryProp(P_WIELDED)!=victim) return;
+  
+  if(hit_func_on) victim->Message(BS(
+    "Die Axt des Sterbens wird durch Deinen TOD maechtiger!!"));
+  
+  newxp=lostxp[getuid(victim)]+lost_xp;
+  deads=tode[getuid(victim)]+1;
+  
+  lostxp[getuid(victim)]=newxp;
+  tode[getuid(victim)]=deads;
+    
+  me->SetProp(P_WC, new_wc(getuid(victim)) );
+  me->SetProp(P_WC_FIX, new_wc_fix(getuid(victim)) );
+}
+
+int query_lostxp(string who) { return lostxp[who]; }
+int query_tode(string who) { return tode[who]; }
+
+void new_details(object player, string str) // NEW DETAILS ------------------
+{
+  object gem;
+  gem=present(str,player);
+  gem->remove();
+  
+  player->Message(BS(
+    "Du stopfst den Edelstein in die Axt des Sterbens und ploetzlich "
+    "spuerst Du den nackten TOD! Die Ausnehmung verschwindet und das "
+    "Axtblatt leuchtet ploetzlich "+color+"."));
+  me->RemoveDetail("ausnehmung");
+  me->RemoveDetail( ({"verzierungen","schnoerkeleien","schnoerkel"}) );
+  me->AddDetail( ({"verzierungen","schnoerkeleien","schnoerkel"}),
+   "Nichts dergleichen.");
+  me->SetProp(P_LONG,
+   "Dieses Beil sieht eigentlich sehr schlicht aus, ein doppelseitiges "
+   "Axtblatt befestigt an einem Eichenholzstiel. Keine besonderen "
+   "Verzierungen oder Schnoerkeleien. Die Klinge schimmert "
+    +color+".");
+  me->AddDetail("klinge",
+   "Sie schimmert "+color+".");
+  me->RemoveCmd( ({"stecke","steck","stopfe", "setze"}) );
+  hit_func_on=1;
+  return;
+}
+
+int cmd_edelstein(string str) // --- CMD EDELSTEIN --------------------------
+{
+  string was;
+  string wohin;
+  
+  if(!str||str=="") return 0;
+  
+  notify_fail("Willst Du etwas in die Ausnehmung an der Axt stecken?\n"
+  		"'stecke <gegenstand> in ausnehmung'\n");
+  
+  if( sscanf(str,"%s in %s",was,wohin)==2)
+  {
+    if(wohin!="ausnehmung"&&wohin!="axt") return 0;
+    
+    if(!present(was,TP)) {
+      TP->Message(BS("Sowas hast Du doch gar nicht!"));
+      return -1; }
+    
+    switch(color)
+    {
+      case "diamantweiss": // DIAMANT
+        if(was!="diamant"&&was!="diamanten")
+        {
+          TP->Message(BS( "Nichts passiert."));
+          return -1;
+        }
+        else
+        {
+         if(gems<13) {
+          TP->Message(BS(
+            "Du steckst den Diamant in die Axt des Sterbens und fuehlst, wie "
+            "die Macht des TODES staerker wird, aber die Ausnehmung bleibt "
+            "noch erhalten."));
+          gems++;
+          return -1; }
+          
+          else {
+           new_details(TP, "diamant");
+           return 1; }
+         }
+       break;
+       
+       case "saphirblau": // SAPHIR
+        if(was!="saphir"&&was!="saphire")
+        {
+          TP->Message(BS( "Nichts passiert."));
+          return -1;
+        }
+        else
+        {
+         if(gems<13) {
+          TP->Message(BS(
+            "Du steckst den Saphir in die Axt des Sterbens und fuehlst, wie "
+            "die Macht des TODES staerker wird, aber die Ausnehmung bleibt "
+            "noch erhalten."));
+          gems++;
+          return -1; }
+          
+          else {
+           new_details(TP, "saphir");
+           return 1; }
+         }
+       break;
+       
+       case "smaragdgruen": // SMARAGD
+        if(was!="smaragd"&&was!="smaragde")
+        {
+          TP->Message(BS( "Nichts passiert."));
+          return -1;
+        }
+        else
+        {
+         if(gems<13) {
+          TP->Message(BS(
+            "Du steckst den Smaragd in die Axt des Sterbens und fuehlst, wie "
+            "die Macht des TODES staerker wird, aber die Ausnehmung bleibt "
+            "noch erhalten."));
+          gems++;
+          return -1; }
+          
+          else {
+           new_details(TP, "smaragd");
+           return 1; }
+         }
+       break;
+      
+       case "rubinrot": // RUBIN
+        if(was!="rubin"&&was!="rubine")
+        {
+          TP->Message(BS( "Nichts passiert."));
+          return -1;
+        }
+        else
+        {
+         if(gems<13) {
+          TP->Message(BS(
+            "Du steckst den Rubin in die Axt des Sterbens und fuehlst, wie "
+            "die Macht des TODES staerker wird, aber die Ausnehmung bleibt "
+            "noch erhalten."));
+          gems++;
+          return -1; }
+          
+          else {
+           new_details(TP, "rubin");
+           return 1; }
+         }
+       break;
+      
+       case "bernsteinbraun": // BERNSTEIN
+        if(was!="bernstein"&&was!="bernsteine")
+        {
+          TP->Message(BS( "Nichts passiert."));
+          return -1;
+        }
+        else
+        {
+         if(gems<13) {
+          TP->Message(BS(
+            "Du steckst den Bernstein in die Axt des Sterbens und fuehlst, wie "
+            "die Macht des TODES staerker wird, aber die Ausnehmung bleibt "
+            "noch erhalten."));
+          gems++;
+          return -1; }
+          
+          else {
+           new_details(TP, "bernstein");
+           return 1; }
+         }
+       break;
+       
+       default: TP->Message(BS("PROGRAMMIERFEHLER!!!")); return -1;
+    }
+  }
+}
+
+int set_collector_value(int value)
+{
+  cvalue=value;
+  return cvalue;
+}
+
+int query_collector_value()
+{
+  return cvalue;
+}

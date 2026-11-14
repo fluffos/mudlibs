@@ -1,0 +1,167 @@
+/*
+** Ein Formular
+** ---
+** 1998-11-01  Woody@SL  Release
+*/
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <combat.h>
+#include "../../ebene.h"
+
+#define P_QUESTIONS "questions"
+#define P_ANSWERS   "answers"
+
+//
+// P_QUESTIONS == Array: Format: abwechselnd Frage, zulaessige Antwort
+//                       (also geradzahlige Anzahl an Elementen)
+//
+// zulaessige Antwort: 0 ................. alles zulaessig,
+//                     1 ................. nichtleerer String,
+//                     2 ................. ja/nein,
+//                     3 ................. beliebige Zahl,
+//                     4 ................. positive Zahl >= 0,
+//                     5 ................. Datum,
+//                     6 ................. Uhrzeit,
+//                     ({x,y}) ........... Zahlenbereich (x,y integer)
+//                     ({"x","y",...}) ... Antwortmenge mit gueltigen Antworten
+//
+
+private string editedby;
+private mixed q;
+private int i;
+
+void do_ask(string str);
+
+void create()
+{
+  if (!is_clone(ME)) return;
+  ::create();
+  AddId ( ({ "formular" }) );
+  SetProp (P_SHORT, "Ein Formular");
+  SetProp (P_LONG, "Du siehst ein Formular, das Du ausfuellen kannst.");
+  SetProp (P_NAME, "Formular");
+  SetProp (P_GENDER, NEUTER);
+  SetProp (P_NOBUY, 1);
+  SetProp (P_VALUE, 0);
+  SetProp (P_WEIGHT, 50);
+  SetProp (P_MATERIAL, MAT_PAPER);
+  AddCmd ( ({"fuell","fuelle"}), "ausfuellen" );
+  editedby = 0;
+}
+
+int ausfuellen(string str)
+{
+  string s1;
+  mixed q1;
+
+  if (!str) return 0;
+  if (sscanf(str, "%s aus",s1) != 1) return 0;
+  if (!id(s1)) return notify_fail("Was willst Du ausfuellen?\n"), 0;
+  if (environment() != this_player())
+    return notify_fail("Dazu musst Du das Formular schon nehmen.\n"), 0;
+
+  if (!(q1=QueryProp(P_QUESTIONS)) || !pointerp(q1) || (sizeof(q1)<2))
+    return notify_fail("Das Formular ist leider leer.\n"), 0;
+
+  if (editedby && interactive(environment()) &&
+      getuid(environment())==editedby)
+    return write("Aber das tust Du doch schon.\n"), 1;
+
+  editedby=getuid(this_player());
+  if (!QueryProp(P_ANSWERS)) SetProp(P_ANSWERS, allocate(sizeof(q1)/2));
+  q=q1+({});    // copy array
+  write("Du beginnst gewissenhaft mit dem Ausfuellen des Formulars.\n"
+      "Du kannst Deine Arbeit jederzeit mit ~q abbrechen.\n");
+
+  i=0;
+  do_ask(0);
+  return 1;
+}
+
+mixed ValidAnswer(mixed valid, string answer)
+{
+  int d,m,y,h;
+
+  if (pointerp(valid)) {
+    if (sizeof(valid)==2 && intp(valid[0]) && intp(valid[1])) {
+      d=to_int(answer);
+      if (to_string(d) != answer) return 0;
+      if (valid[0] <= d && d <= valid[1]) return answer; else return 0;
+    }
+    if (member(valid,answer)==-1) return 0; else return answer;
+  }
+  if (!intp(valid)) return answer;
+  switch (valid) {
+    case 0: return answer;
+    case 1: if (stringp(answer) && strlen(answer)) return answer; else return 0;
+    case 2: return (["ja":"j","j":"j","nein":"n","n":"n"])[answer];
+    case 3: if (to_string(to_int(answer))==answer) return answer; else return 0;
+    case 4: if (to_string(to_int(answer))==answer && to_int(answer) >= 0)
+              return answer; else return 0;
+    case 5: if (stringp(answer) && sscanf(answer, "%d.%d.%d",d,m,y) == 3)
+              return sprintf("%2d.%2d.%4d", d, m, (y<100?1900+y:y));
+            else
+              return 0;
+    case 6: if (stringp(answer) &&
+                (sscanf(answer, "%d.%d",h,m) == 2 ||
+                 sscanf(answer, "%d:%d",h,m) == 2))
+              return sprintf("%2d:%2d", h, m);
+            else
+              return 0;
+    default: return answer;
+  }
+}
+
+string ValidAnswers(mixed valid)
+{
+  if (pointerp(valid)) {
+    if (sizeof(valid)==2 && intp(valid[0]) && intp(valid[1]))
+      return sprintf("[%d..%d]",valid[0],valid[1]);
+    return "["+implode(valid,",")+"]";
+  }
+  if (!intp(valid)) return "";
+  switch (valid) {
+    case 0: return "";
+    case 1: return "";
+    case 2: return "[j/n]";
+    case 3: return "";
+    case 4: return "[0..]";
+    case 5: return "[tt.mm.[jj]jj]";
+    case 6: return "[ss:mm]";
+    default: return "";
+  }
+}
+
+void do_ask(string str)
+{
+  string va;
+  mixed ans;
+
+  if (str) {
+    if (str=="~q") {
+      write("Du beendest Deine Arbeit vorzeitig.\n");
+      editedby=0;
+      return;
+    }
+    if (str=ValidAnswer(q[2*i+1],str)) {
+      ans=QueryProp(P_ANSWERS); ans[i]=str; SetProp(P_ANSWERS, ans);
+      i++;
+      if (sizeof(q)<=2*i+1) {
+        write("Nach Beantwortung der letzten Frage "
+            "atmest Du erleichtert auf.\n");
+        editedby=0;
+        return;
+      }
+    } else {
+      write("Diese Antwort war ungueltig!\n");
+    }
+  }
+  write (q[2*i]);                       // (neue) Frage ausgeben
+  if (strlen(va=ValidAnswers(q[2*i+1])))
+    write (" "+va+" -> ");              // zulaessige Antworten ausgeben
+  else write(" -> ");                   // (Alternative: alles zulaessig)
+  input_to("do_ask");
+}
+

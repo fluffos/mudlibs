@@ -1,0 +1,769 @@
+/**********************************************/
+/**        Wizard  Tool  Master  Object      **/
+/**                 by Rumata                **/
+/**********************************************/
+/* Not to be cloned */
+inherit "std/thing";
+#include <language.h>
+#include <attributes.h>
+#include <properties.h>
+#include <terminal.h>
+#include <wizlevels.h>
+#include <defines.h>
+
+#define VERSION "3.10 (12.07.92)"
+
+#define HELPFILE "/obj/tools/sband/sbhelp"
+#define PROPPER "/obj/tools/sband/propper"
+#define LINK_NUM 5 /* must be the same as in hband */
+#define EFUN "/secure/efun " /* efun file */
+#define Q_LINK(i) (caller->query_link( i ))
+
+object helpDict; /* where are the helps in HELPFILE */
+object caller;   /* headband which did the call */
+
+/******************* Initializing *********************/
+
+create()
+{
+  if( IS_CLONE(ME) ) { return; }
+  ::create();
+  AddId( "focus" );
+  AddId( "focus der magie" );
+  AddId( "magierfocus" );
+  /* if you change the helpfile, change here too */
+  helpDict = ({ ({ "generell",    "",  2, 17 }),
+                ({ "focus"   ,  "fo", 20,  5 }),
+                ({ "link"    ,  "li", 26,  8 }),
+                ({ "objnamen", "obj", 35, 12 }),
+                ({ "examples", "exa", 48, 10 }),
+                ({ "patch"   ,  "pa", 59,  5 }),
+                ({ "destruct",  "de", 65,  2 }),
+                ({ "reset"   ,  "re", 68,  3 }),
+                ({ "fetch"   ,  "fe", 72,  2 }),
+                ({ "move"    ,  "mo", 75,  2 }),
+                ({ "scan"    ,  "sc", 78,  3 }),
+                ({ "quiet"   ,  "qu", 82,  3 }),
+                ({ "objects" ,  "ob", 86,  3 }),
+                ({ "beep"    ,  "be", 90,  3 }) });
+}
+
+init() {} /* Keine Interaktion zwischen Focus und Spielern */
+
+move() {} /* Kann nicht bewegt werden */
+
+_query_read_msg() { return 0; }
+_query_long() { return 0; }
+_query_short() { return 0; }
+
+/************* This routine is the "brain" of the master object" **********/
+
+schedule( str ) {
+  string comm; string arg;
+
+  if( !str || !IS_WIZARD(PL) ) return 0;
+  if( sscanf( str, "%s %s", comm, arg )!=2 ) {
+    comm = str; arg = 0;
+  }
+  caller = previous_object();
+  return call_other( ME, "cmd_"+comm, arg );
+}
+
+/******************************* help **************************************/
+
+cmd_hi( str ) { return cmd_hilfe( str ); }
+cmd_hilfe( str ) {
+  int i;
+  if( !str ) {
+    cat( HELPFILE, helpDict[0][2], helpDict[0][3] );
+    return 1;
+  }
+  for( i=0; i<sizeof(helpDict); i++ )
+    if( helpDict[i][0]==str || helpDict[i][1]==str ) {
+      cat( HELPFILE, helpDict[i][2], helpDict[i][3] );
+      return 1;
+    }
+  write( "Der Focus fragt Dich: Wie lautet das Thema ?\n" );
+  return 1;
+}
+
+/************************* qp QueryProp ***********************/
+cmd_qp( str ) { return cmd_queryprop( str ); }
+cmd_queryprop( str )
+{
+  string name, prop, real_prop;
+  object ob;
+
+  if( !str ) return 0;
+  if( sscanf( str, "%s %s", name, prop )!=2 ) return 0;
+  ob = parse_list(name);
+  if( !ob ) ob = present( name, PL );
+  if( !ob ) ob = present( name, environment(PL) );
+  if( !ob ) {
+    write( "Kein Objekt oder Spieler namens \"" + name + "\" gefunden.\n" );
+    return 1;
+  }
+  name = capitalize( name );
+  write( "Wert der Property \"" + prop + "\" in " + name + ": " );
+  write( ob->QueryProp( PROPPER->TheProp(prop) ) );
+  write( "\n" );
+  return 1;
+}
+
+/************************* sp SetProp ***********************/
+cmd_sp( str ) { return cmd_setprop( str ); }
+cmd_setprop( str )
+{
+  string name, prop, value;
+  object ob;
+
+  if( !str ) return 0;
+  if( sscanf( str, "%s %s %s", name, prop, value )!=3 ) return 0;
+  ob = parse_list(name);
+  if( !ob ) ob = present( name, PL );
+  if( !ob ) ob = present( name, environment(PL) );
+  if( !ob ) {
+    write( "Kein Objekt oder Spieler namens \"" + name + "\" gefunden.\n" );
+    return 1;
+  }
+  name = capitalize( name );
+  ob->SetProp( PROPPER->TheProp( prop ), value );
+  write( "Wert der Property \"" + prop + "\" in " + name + " auf "
+         + ob->QueryProp( PROPPER->TheProp(prop) )
+         + " gesetzt.\n" );
+  return 1;
+}
+
+/************************* piep *******************************/
+
+cmd_be( player ) { return cmd_beep( player ); }
+cmd_beep( player )
+{
+  object player_ob;
+  if( !( player_ob = find_player( player )) )
+    write( "Der Focus hat keinen Spieler namens \""+player+"\" gefunden.\n" );
+  else
+  {
+    write( capitalize(player) + " wird 5 mal angepiept.\n" );
+    tell_object( player_ob, this_player()->name(WER,1)+" piept Dich an.\n" );
+    call_out( "singlePiep", 0, ({ player_ob, 4 }) );
+  }
+  return 1;
+}
+
+/* Gebe n+1 pieps an den angegebene Objekt */
+/* argv ist muss ein Array der Form ({ objekt, n }) sein! */
+singlePiep( argv )
+{
+  if( !argv[0] ) return;
+  tell_object( argv[0], BEEP );
+  if( argv[1]>0 )
+    call_out( "singlePiep", 0, ({ argv[0], argv[1]-1 }) );
+}
+
+/**************************** objects ***************************************/
+
+do_object_at(ob,short) {
+  string short_str;
+  if( !short ) {
+    short_str = call_other(ob,"short");
+    if (short_str) write(ladjust(short_str,30));
+    else           write(ladjust("(unsichtbar)",30));
+  }
+  write(" ");
+  write( ob );
+  write("\n");
+}
+
+do_subobj(obj,short) {
+  object ob;
+  ob = first_inventory(obj);
+  while(ob) {
+    write("    ");
+    do_object_at(ob,short);
+    ob = next_inventory(ob);
+  }
+  return 1;
+}
+
+cmd_ob( str ) { return cmd_objects( str ); }
+cmd_objects(str) {
+  object ob;
+  string target, short;
+  int i;
+
+  str = explode( str, " " );
+  target = str[0];
+  /* unschoen, aber LPC bekommt hier keine SCE gebacken */
+  short = sizeof(str)>1;
+  if( short ) short = ( str[1]=="sh" || str[1]=="short" );
+
+  if (!target) return 0;
+  ob = parse_list("*"+target);
+  if (!ob) ob = parse_list("@"+target);
+  if (!ob) ob = parse_list(target);
+  if (!ob) {
+    write("Keinen Spieler oder Monster mit dem Namen \"" + target + "\" gefunden.\n");
+    return 1;
+  }
+  write( "In " ); write_ob_name( ob ); write( " sind:\n" );
+  i = 0;
+  ob = first_inventory(ob);
+  while(ob) {
+    write(radjust(i,2)); write(") ");
+    do_object_at(ob,short);
+    if (first_inventory(environment(ob))) do_subobj(ob,short);
+    ob = next_inventory(ob);
+    i++;
+  }
+  return 1;
+}
+
+/*************************** patch ****************************************/
+
+nosave patch_answer( ob, ret ) {
+  int i;
+
+  if( ob && living(ob) && !caller->query_quiet() && environment(ob) )
+  {
+    tell_room( environment(ob),
+       PL->name(WER)+" manipuliert "+ob->name(WESSEN)+" Seele.\n" );
+  }
+  if( pointerp(ret) ) {
+    write("Array der Groesse " + sizeof(ret) + "\n");
+    for( i=0; i<sizeof(ret); i++ ) {
+      write(radjust(i,3)+") "); write(ret[i]); write("\n");
+    }
+  }
+  else if( intp(ret) )	    write("Integer: " + ret + "\n");
+  else if( stringp(ret) )   write("String: \"" + ret + "\"\n");
+  else if( objectp(ret) ) { write("Object: "); write(ret); write("\n"); }
+  else {        write("????: "); write(ret); write("\n"); }
+  return 1;
+}
+
+cmd_pa( str ) { return cmd_patch( str ); }
+cmd_patch( str ) {
+  string name, with, what;
+  object ob;
+
+  if( !str ) return 0;
+  if( sscanf( str, "%s %s %d", name, with, what )!=3 ) {
+    if( sscanf( str, "%s %s %s", name, with, what )!=3 ) {
+        if( sscanf( str, "%s %s", name, with )!=2 ) return 0;
+    }
+  }
+  ob = parse_list(name);
+  if( !ob ) ob = present( name, PL );
+  if( !ob ) ob = present( name, environment(PL) );
+  if( !ob ) {
+    write( "Kein Objekt oder Spieler namens \"" + name + "\" gefunden.\n" );
+    return 1;
+  }
+  return patch_answer( ob, call_other( ob, with, what ) );
+}
+
+cmd_pa2( str ) {
+  string name, with, what;
+  int ret, i;
+  object ob, tmp, parList;
+
+  if( !str ) return 0;
+  if( sscanf( str, "%s %s %d", name, with, what )!=3 ) {
+    if( sscanf( str, "%s %s %s", name, with, what )!=3 ) {
+      if( sscanf( str, "%s %s", name, with )!=2 ) return 0;
+      return cmd_patch( str );
+    }
+  }
+  ob = parse_list(name);
+  if (!ob) ob = present( name, PL );
+  if (!ob) ob = present( name, environment(PL) );
+  if(!ob) {
+    write("Kein Spieler oder Objekt namens \"" + name + "\" gefunden.\n");
+    return 1;
+  }
+
+  /* allow object rather than strings as parameters */
+  parList = explode( what, " " );
+  for( i=0; i<sizeof( parList ); i++ )
+    if( tmp = parse_list( parList[i] ) ) parList[i] = tmp;
+
+  switch (sizeof(parList)) {
+    case 1: ret = call_other( ob, with, parList[0] );
+            break;
+    case 2: ret = call_other( ob, with, parList[0], parList[1] );
+            break;
+    case 3: ret = call_other( ob, with, parList[0], parList[1], parList[2] );
+            break;
+    default: ret = call_other( ob, with, what );
+  }
+  return patch_answer( ob, ret );
+}
+
+/***************************** epatch ****************************************/
+
+cmd_epa( str ) {
+  if( valid( str ) ) return cmd_patch( EFUN+str );
+}
+
+cmd_epatch( str ) {
+  if( valid( str ) ) return cmd_patch( EFUN+str );
+}
+
+cmd_epa2( str ) {
+  if( valid( str ) ) return cmd_pa2( EFUN+str );
+}
+
+nosave valid( str ) {
+  string efun;
+  int result;
+
+  efun = explode( str, " " )[0];
+  if( ( efun == "enable_commands" ) || ( efun == "move_object" ) )
+  {
+    write( "Diese EFun wird nicht unterstuetzt.\n" );
+    return 0;
+  }
+  return 1;
+}
+
+/********************************* link **************************************/
+
+cmd_li( str ) { return cmd_link( str ); }
+cmd_link( str ) {
+  int i;
+  object ob;
+  string text;
+  if( !str ) {
+    write("Gesetzte Links :\n");
+    for( i=0; i<LINK_NUM; i++) {
+      if( Q_LINK(i) ) {
+	write( "Link \%" + i + ": " );
+	write( Q_LINK(i) );
+	write( "\n" );
+      }
+    }
+    return 1;
+  }
+  if( sscanf(str,"\%%d %s",i,text)!=2 ) {
+    if( sscanf(str,"\%%d",i)==1 ) {
+      caller->set_link( i, 0 );
+      write("Link \%"+i+" geloescht.\n");
+      return 1;
+    } else
+      return 0;
+  }
+  if( i<0 || i>=LINK_NUM ) {
+    write( "Linknummer muessen zwischen 0 und "+LINK_NUM+" liegen.\n" );
+    return 1;
+  }
+  ob = parse_list(text);
+  if (!ob) ob = present( text, PL );
+  if (!ob) ob = present( text, environment(PL) );
+  if (!ob) {
+    write("Kein Objekt namens \"" + text + "\" gefunden.\n");
+    return 1;
+  }
+  caller->set_link( i, ob );
+  write("Ok.\n");
+  return 1;
+}
+
+/****************************** destruct ********************************/
+
+cmd_de( str ) { return cmd_destruct( str ); }
+cmd_destruct( str ) {
+  object obj;
+  string shortDesc;
+  string result;
+
+  if( !str ) return 0;
+  obj = parse_list( str );
+  if (!obj) obj = present( str, PL );
+  if (!obj) obj = present( str, environment(PL) );
+  if( !obj ) {
+    write( "Kein Objekt namens \"" + str + "\" gefunden.\n" );
+    return 1;
+  }
+  vmsg( obj, "wurde(n) atomisiert" );
+  if( environment( obj ) && !caller->query_quiet() )
+  {
+    if( obj->QueryProp( P_INVIS ) )
+      tell_room( environment(obj), capitalize(obj->NAME(WER,2)) +
+                 " wurde von " + PL->name(WER) + " atomisiert.\n" );
+    else
+      tell_room( environment(obj), PL->name(WER) +
+		 " hat irgendetwas unsichtbares atomisiert.\n" );
+  }
+  if( result = catch( obj->remove() ) )
+    write( "Fehler: " + result + "Aber jetzt ...\n" );
+  destruct( obj );
+  return 1;
+}
+
+/******************************** reset ***********************************/
+
+cmd_re( str ) { return cmd_reset( str ); }
+cmd_reset( str ) {
+  object obj;
+  if( !str ) return 0;
+  obj = parse_list( str );
+  if (!obj) obj = present( str, PL );
+  if (!obj) obj = present( str, environment(PL) );
+  if( !obj ) {
+    write( "Kein Objekt namens \"" + str + "\" gefunden.\n" );
+    return 1;
+  }
+  vmsg( obj, "wurde zurueckgesetzt" );
+  obj->reset( 1 );
+  return 1;
+}
+
+/******************************** scan ************************************/
+
+cmd_sc( str ) { return cmd_scan( str ); }
+cmd_scan( str ) {
+  object obj;
+  int monster;
+  string mtxt, stxt, mname, att, ip_name, snooper;
+
+  if (!str) return 0;
+  obj = parse_list( "*"+str );
+  if( !obj ) obj = parse_list( "@" + str);
+  if( !obj ) obj = parse_list( str );
+  if( !obj || !living(obj) ) {
+    write("Kein Spieler oder Monster namens \"" + str + "\" gefunden.\n");
+    return 1;
+  }
+  monster = obj->QueryProp(P_NPC);
+  if (monster) {
+    mname = obj->name(WER);
+    mtxt = "Monster";
+    stxt = obj->short();
+  } else {
+    mname = capitalize(getuid(obj));
+    mtxt = "Player: " + mname + ".\n";
+    if ( stringp( stxt=obj->short()) && strlen(stxt)>2 )
+    	stxt = stxt[0..<3];
+    else
+    {
+    	stxt = mname + " " + obj->QueryProp(P_TITLE)+")";
+    	if ( obj->QueryProp(P_PRESAY) )
+    		stxt = "(" + obj->QueryProp(P_PRESAY) + " " + stxt;
+    	else
+    		stxt = "(" + stxt;
+    }
+    if (obj->QueryEnemy()) att   = (obj->QueryEnemy())->name(WER);
+    else att = "nicht im Kampf";
+  }
+
+  write( mtxt + stxt + " ist Level (" + query_wiz_level(obj) + "/"
+         + obj->QueryProp( P_LEVEL ) + ")\n"
+         + capitalize(obj->QueryPronoun(WER)) + " befindet sich in "
+         + file_name(environment(obj))
+         + ".\nKraft      : " + obj->QueryAttribute( A_STR ) 
+         + "\t Abwehrstaerke  : " + obj->QueryProp( P_TOTAL_AC )
+         + "\nAgilitaet  : " + obj->QueryAttribute( A_DEX )
+         + "\t Angriffsstaerke: " + obj->QueryProp( P_TOTAL_WC )
+         + "\nIntelligenz: " + obj->QueryAttribute( A_INT )
+         + "\t Magiepunkte    : " + obj->QueryProp( P_SP )
+         + " ( von " + obj->QueryProp( P_MAX_SP ) + " )"
+         + "\nGesundheit : " + obj->QueryAttribute( A_CON )
+         + "\t Lebenspunkte   : " + obj->QueryProp( P_HP )
+         + " ( von " + obj->QueryProp( P_MAX_HP ) + " )"
+         + "\nErfahrung  : " + obj->QueryProp( P_XP ) + " punkte"
+         + "\nGoldstuecke: " + obj->QueryMoney()
+         + "\nTraegt     : "
+         + (string)(obj->QueryProp(P_TOTAL_WEIGHT) - obj->QueryProp(P_WEIGHT))
+         + " Gramm.\nCharakter  : " 
+         + compute_alignment(obj) + " ( = " + obj->QueryProp( P_ALIGN )
+         + " Punkte )\nGeschlecht : " + obj->QueryGenderString()
+         + "\nAlter      : " + get_age( obj ) + "\n"); 
+  if (monster) return 1;
+  if( obj->QueryProp(P_BRIEF) ) write( "Kurz modus\t" );
+  else                     write( "Lang modus\t" );
+  if( obj->QueryProp(P_WIMPY) ) write( "Vorsichtsmodus\n" );
+  else                     write( "Tapfer\n" );
+  ip_name=query_ip_name(obj);
+  if (!ip_name||ip_name=="") ip_name="keine";
+  write( "IP-Nummer     : "+query_ip_number(obj) +
+         " ["+lower_case(ip_name)+"]\n" );
+  write( "Email-adresse : "+obj->QueryProp( P_MAILADDR )+"\n" );
+  write( "Im Kampf mit  : " + att + "\n" + do_getidle(obj) + ".\n"
+  	+ phys_status(obj) + "\n" );
+  if( IS_ARCH(RPL) )
+  {
+  	write( "Gesnooped von : " );
+		if ( snooper = query_snoop(obj) ) 
+			write( capitalize(getuid(snooper)));
+		else
+			write( "niemandem" );
+	  write( "\nPlayerkills   : "+obj->QueryProp( P_KILLS ) + "\n"  );
+	}
+  return 1;
+}
+
+/******************************** who *************************************/
+
+cmd_who() {
+  object user;
+  string tmpNam;
+  int i;
+
+  write( "Spieler        Lvl Str Dex Int Con Alig      Gold Raum\n" );
+  user = users();
+  for( i=0; i<sizeof(user); i++ ) {
+    tmpNam = user[i]->query_real_name();
+    if( !user[i]->QueryProp(P_INVIS) ) tmpNam = "("+tmpNam+")";
+    write( ladjust( tmpNam, 15 )+
+           radjust( user[i]->QueryProp(P_LEVEL), 3 )+
+           radjust( user[i]->QueryAttr(A_STR), 4 )+
+           radjust( user[i]->QueryAttr(A_DEX), 4 )+
+           radjust( user[i]->QueryAttr(A_INT), 4 )+
+           radjust( user[i]->QueryAttr(A_CON), 4 )+
+           radjust( user[i]->QueryProp(P_ALIGN), 5 )+
+           radjust( user[i]->query_money(), 10 )+" " );
+    if( environment( user[i] ))
+      write( file_name( environment( user[i] )));
+    write( "\n" );
+  }
+  return 1;
+}
+
+/******************************* fetch **********************************/
+
+cmd_fe( str ) { return cmd_fetch( str ); }
+cmd_fetch( str ) {
+  object obj;
+  if( !str ) return 0;
+  obj = parse_list( str );
+  if (!obj) obj = present( str, PL );
+  if (!obj) obj = present( str, environment(PL) );
+  if( !obj ) {
+    write( "Kein Objekt namens \"" + str + "\" gefunden.\n" );
+    return 1;
+  }
+  vmsg( obj, "wurde in Dein Inventory gezogen" );
+  obj->move( PL, 0 );
+  if( !caller->query_quiet() )
+    say( PL->name(WER)+" schuettelt auf magische Weise etwas aus "
+         + PL->QueryPossPronoun( MALE, WEM ) + " Aermel.\n" );
+  return 1;
+}
+
+/********************************* move **********************************/
+
+cmd_mo( str ) { return cmd_move( str ); }
+cmd_move( str ) {
+  string what, where;
+  object source, obj, dest;
+
+  if( !str ) return 0;
+  if( sscanf( str, "%s %s", what, where )!=2 ) {
+    if( sscanf( str, "%s", what )!=1 ) return 0;
+    dest = environment(PL); /* MUST be vaild */
+  } else {
+    dest = parse_list( where );
+    if (!dest) dest = present( where, PL );
+    if (!dest) dest = present( where, environment(PL) );
+    if( !dest ) {
+      write( "Kein 'Behaelter' namens \"" + where + "\" gefunden.\n" );
+      return 1;
+    }
+  }
+  obj = parse_list( what );
+  if (!obj) obj = parse_list( what );
+  if (!obj) obj = present( what, environment( PL ) );
+  if( !obj ) {
+    write( "Kein Object namens \"" + what + "\" gefunden.\n" );
+    return 1;
+  }
+  source = environment( obj );
+  if( !caller->query_quiet() ) {
+    if( living(dest) )
+      tell_object( dest, obj->name(WER) + " ploppt in Dein Inventory.\n" );
+    else
+      tell_room( dest, obj->name(WER)+" ploppt aus einer anderen Dimension.\n" );
+  }
+  /* niemals diese Meldung verhindern ! */
+  tell_object( obj, PL->name(WER)+" schleudert Dich durch Ruam und Zeit.\n" );
+  move_object( obj, dest );
+  if( source && !caller->query_quiet() )
+    tell_room( source, obj->name(WER) +
+                       " wurde in eine andere Dimension geschleudert.\n" );
+  vmsg( obj, "wurde bewegt" );
+  return 1;
+}
+
+/*************************** quiet **************************************/
+
+cmd_qu() { return cmd_quiet(); }
+cmd_quiet() {
+  if( caller->toggle_quiet() )
+    write( "Der Focus daepmft seine Stimme.\n" );
+  else
+    write( "Die Stimme des Focus gewinnt an machtvollem Klang.\n" );
+  return 1;
+}
+
+/************************ internal functions ****************************/
+
+nosave vmsg( obj, str2 ) {
+  write( "Der Focus teilt Dir mit: " );
+  write_ob_name( obj );
+  write( " " + str2 + ".\n" );
+}
+
+nosave find_item( prev, str ) {
+  object ob;
+  string tmp;
+  if( str == "umg" )   return environment(prev);
+  if( str == "hier" )  return environment(PL);
+  if( str == "ich" || str == "mich" )   return PL;
+  if( sscanf(str,"@%s",tmp)==1 ) return find_living(tmp);
+  if( sscanf(str,"*%s",tmp)==1 ) return find_player(tmp);
+  if( sscanf(str,"/%s",tmp)==1 ) return find_object(tmp);
+  if( sscanf(str,"\%%d",tmp)==1 ) {
+    if( tmp>=0 && tmp<=LINK_NUM && Q_LINK(tmp) ) return Q_LINK(tmp);
+    return 0;
+  }
+  if( sscanf(str,"$%d",tmp)==1 ) {
+    object u;
+    u = users();
+    if( tmp>sizeof(u) || tmp<1 ) return 0;
+    return u[tmp-1];
+  }
+  if( prev==0 ) prev=environment(PL);
+  if( sscanf(str,"\"%s\"",tmp)==1 ) {
+    ob = first_inventory(prev);
+    while(ob && ob->short() != tmp) ob=next_inventory(ob);
+    return ob;
+  }
+  if( sscanf(str,"#%d",tmp)==1 ) {
+    if( prev==0 ) return 0;
+    ob = first_inventory(prev);
+    while( tmp>0 ) {
+      tmp -= 1;
+      if( ob==0 ) return 0;
+      ob = next_inventory(ob);
+    }
+    return ob;
+  }
+  return present(str,prev);
+}
+
+nosave parse_list( str ) {
+  string tmp,rest;
+  object prev;
+  prev = environment(this_player());
+  while(prev && str) {
+    if (sscanf(str,"%s:%s",tmp,rest) == 2) {
+      prev = find_item(prev,tmp);
+      str = rest;
+      continue;
+    }
+    prev = find_item(prev,str);
+    break;
+  }
+  return prev;
+}
+
+nosave ladjust(str, n) {
+  return extract(str+"                                                ",0,n-1);
+}
+
+nosave radjust(str, n) {
+  string tmp;
+  tmp = extract("                                                     "+str,0);
+  return extract(tmp,strlen(tmp)-n);
+}
+
+nosave write_ob_name( obj ) {
+  if( !obj ) return;
+  if( caller->query_quiet() )
+    write( file_name( obj ) );
+  else if( obj->short() )
+    write( obj->short() );
+  else
+    write( obj );
+}
+
+get_age( obj ) {
+  int i;
+  string tmp;
+  tmp="";
+  i = obj->QueryProp(P_AGE);
+  if (i/43200) { tmp=i/43200+" Tag(e) "; i=i-(i/43200)*43200; }
+  if (i/1800) { tmp=tmp+i/1800+" h "; i=i-(i/1800)*1800; }
+  if (i/30) { tmp=tmp+i/30+" min "; i=i-(i/30)*30; }
+  tmp=tmp+i*2+" sec";
+  return tmp;
+}
+
+do_getidle(obj) {
+  int i;
+  object u;
+  u = users();
+  for( i=0; i<sizeof(u); i++ )
+    if (obj == u[i]) return "Idle seit " + query_idle(obj) + " sec";
+  return "Kein echter Spieler.";
+}
+
+get_snooper( obj ) {
+  object snooper;
+  snooper = "secure/master"->QuerySnoop( obj );
+  if( !snooper ) return "niemandem";
+  return snooper->query_real_name();
+}
+
+phys_status(obj) {
+  int intox,stuff,soak;
+  string tmp;
+  intox = obj->QueryProp(P_ALCOHOL);
+  stuff = obj->QueryProp(P_FOOD);
+  soak  = obj->Queryprop(P_DRINK);
+  if (intox || stuff || soak) {
+    tmp = capitalize(obj->QueryPronoun(WER)) + " ist ";
+    if (intox) {
+      tmp += "benommen(" + intox + ")";
+      if (stuff && soak)      tmp += ", ";
+      else if (stuff || soak) tmp += " und ";
+      else                    tmp += ".";
+    }
+    if (stuff) {
+      tmp += "satt(" + stuff + ")";
+      if (soak) tmp += " und ";
+      else      tmp += ".";
+    }
+    if (soak) tmp += "nicht durstig(" + soak + ").";
+  } else tmp = capitalize(obj->QueryPronoun(WER)) + " ist bei klarem Geist.";
+  return tmp;
+}
+
+#undef KILL_NEUTRAL_ALIGNMENT
+#define KILL_NEUTRAL_ALIGNMENT 10
+
+compute_alignment( obj ) {
+  int alignment;
+  alignment = obj->QueryProp(P_ALIGN);
+
+  if (alignment > KILL_NEUTRAL_ALIGNMENT * 100) {
+    return "heilig";
+  }
+  if (alignment > KILL_NEUTRAL_ALIGNMENT * 20) {
+    return "gut";
+  }
+  if (alignment > KILL_NEUTRAL_ALIGNMENT * 4) {
+    return "nett";
+  }
+  if (alignment > - KILL_NEUTRAL_ALIGNMENT * 4) {
+    return "neutral";
+  }
+  if (alignment > - KILL_NEUTRAL_ALIGNMENT * 20) {
+    return "frech";
+  }
+  if (alignment > - KILL_NEUTRAL_ALIGNMENT * 100) {
+    return "boese";
+  }
+  return "daemonisch";
+}

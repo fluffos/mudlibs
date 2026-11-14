@@ -1,0 +1,366 @@
+/*
+************************************************
+**
+** Das schlechte Gewissen
+**
+** *) Zeitbeschraenkung fuer Tag/Woche
+** *) Zeitverkuerzung fuer Spieler moeglich 
+** *) loggt den Spieler aus, wenn Zeit abgelaufen ist
+** *) nach dem clonen set_period() aufrufen!
+**    sonst beginnt es nicht zu laufen...
+**
+************************************************
+*/
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include "/d/kristallwald/sargola/def_kristall.h"
+
+/*
+******************************************************
+** MAX_ONLINE_TIME: Zeit in Sekunden
+** PERIOD_OF_TIME_DAY
+** PERIOD_OF_TIME_WEEK
+** STEP_DAY 	  : Zeitintervall / Tag fuer call_out
+** STEP_WEEK	  : Zeitintervall / Woche fuer call_out
+*******************************************************
+*/
+/*
+#define MAX_ONLINE_TIME_DAY 60
+#define MAX_ONLINE_TIME_WEEK 3600
+#define PERIOD_OF_TIME 0
+#define STEP_DAY 5
+#define STEP_WEEK 10
+
+*/
+
+#define CCALL(x,y,z) if(find_call_out(x)==-1) call_out(x,y,z)
+
+
+//**********
+// VARIABLEN
+//**********
+int time;			// verbleibende Zeit in Sekunden
+int day;			// der aktuelle Tag
+int period;			// 1...Tag-Modus
+int max_online_time_day;	// online-zeit pro tag
+int max_online_time_week;	// online-zeit pro woche
+int step_day;			// call_out fuer tag
+int step_week;			// call_out fuer woche
+
+
+				// 2...Wochen-Modus
+//**********
+// FUNCTIONS
+//**********
+int restzeit();			// gibt die Rest-Online-Zeit an
+int los();			// Zeit beginnt wieder zu laufen
+int stop();			// Zeit wird gestoppt
+int reset();			// Zeit beginnt neu zu laufen
+int check_time(int t);		// call_out time-checker
+int accessor();		// nur "sargola" darf variablen setzen
+int set_period(int p, int ot, int step);		// Tag oder Wochen-Modus definieren
+int verkuerze(int v);		// verkuerzt die aktuelle Zeit
+int
+
+
+//************************
+// Meldungen, die vom Gewissen je nach Zeitablauf ausgegeben werden
+//************************
+string *messages60 =({
+	"Du verlierst die Ruhe, mit der Du bisher gemudded hast.\n",
+	"Dein Gewissen wird etwas unruhig.\n",
+	"Du kriegst ein wenig ein schlechtes Gewissen.\n",
+	"Du denkst. o 0 (Solltest Du nicht etwas fuer die Uni tun?)\n",
+	"Du fuehlst Dich von Deinem Gewissen unangenehm beobachtet.\n",
+	"Du musst ploetzlich an Dein Gewissen denken.\n"});
+
+string *messages70 =({
+	"Dein Gewissen wird unruhig.\n",
+	"Dein Gewissen kommt Dir wieder in den Sinn.\n",
+	"Du denkst . o 0 (Ob ich mich ausloggen sollte?)\n",
+	"Dein Gewissen schuettelt Dich durch.\n",
+	"Dein Gewissen mahnt Dich, auf die Zeit zu achten.\n",
+	"Du hoerst eine innere Stimme etwas von \"aussteigen\" fluestern.\n"});
+
+string *messages80=({
+	"Du denkst . o 0 (Ich bin schon ziemlich lange im Silberland)\n",
+	"Dein Gewissen fragt: Hast Du keine Vorlesung oder Uebung?\n",
+	"Dein Gewissen liegt wie eine Last auf Dir.\n",
+	"Dein Gewissen sagt: ...schlafe ein...\n",
+	"Du sagst zu Dir selbst: Mein Gewissen hat recht, ich sollte gehen!\n",
+	"Du denkst . o 0 (Ich sollte wirklich gehen)\n"});
+
+string *messages90=({
+	"Dein Gewissen bruellt: AUSLOGGEN!\n",
+	"Dein Gewissen stupst Dich hart an.\n",
+	"Du sagst zu Dir selbst: Ich MUSS jetzt gehen!\n",
+	"Du brichst fast unter der riesigen Belastung Deines Gewissens zusammen.\n",
+	"Dein Gewissen zerrt Dich in den Netztotenraum.\n",
+	"Dein Gewissen gibt Dir noch ein letztes Ultimatum.\n",
+	"Du denkst . o 0 (Bald ist das Gewissen staerker als ich)\n"});
+
+
+
+create()
+{
+	if(!is_clone(this_object())) return;
+		::create();
+
+	AddId("gewissen");
+	SetProp(P_SHORT, TP->name(WESSEN) + " schlechtes Gewissen");
+	SetProp(P_LONG, "Das ist Dein Gewissen. Es wird Dir, wann immer Du Dich "
+		+"zuoft im Silberland aufhaeltst, erinnern, dass Du auch noch "
+		+"ein Leben ausserhalb des Muds hast. Bist Du es irgend"
+		+"wann einmal nicht mehr aushaeltst...\n\n"
+		+"Du hast folgende Befehle:\n"
+		+"\n"
+		+"     <restzeit>       Zeigt Dir Deine verbleibende Zeit an\n"
+		+"         <stop>       Dein Gewissen passt nicht mehr auf\n"
+		+"          <los>       Dein Gewissen passt wieder auf\n"
+		+"        <reset>       Dein Gewissen passt neu auf Dich auf\n"
+		+"  <verkuerze x>       Dein Gewissen laesst Dir x Sekunden weniger\n"
+		+"\n"
+		+"Die Befehle <stop>, <los> und <reset> koennen nur von "
+		+"Deinem Vertrauensmagier erledigt werden.\n");
+
+	SetProp(P_INFO, 
+		"Du findest, dass Du Dein Gewissen magst. Auch wenn es manchmal "
+		+"hart zu Dir ist, ist es doch klueger, auf es zu hoeren.\n");
+//	SetProp(P_MATERIAL, ({MAT_MAGIC:100}) );
+	SetProp(P_ARTICLE, 1);
+	SetProp(P_NODROP, "Dein Gewissen fluestert: Du kannst mich nicht wegwerfen!\n" );
+	SetProp(P_NOSELL, "Dein Gewissen fluestert: Du kannst mich doch nicht verkaufen!\n" );
+	SetProp(P_NOGET, 1);
+	
+	AddCmd( ({"restzeit"}), "restzeit");
+	AddCmd( ({"los"}), "los");
+	AddCmd( ({"stop"}), "stop");
+	AddCmd( ({"reset"}), "reset");
+	AddCmd( ({"verkuerze"}), "verkuerze");
+
+}
+
+int set_period(int p, int ot, int step)
+{
+	
+	if(accessor())
+	{
+		period = p;
+		if(period == 1)
+		{
+		   time = ot;
+		   step_day = step;
+		}
+		else
+		{
+		   time = ot;
+		   step_week = step;
+		}
+		day = time();
+		los();
+		return 1;
+	}
+	return 0;
+}
+
+int verkuerze(int v)
+{
+	if(time<=v)
+	{
+		tell_object(TP, "Dein Gewissen ist erbost ueber den "
+			+"nidertraechtigen Versuch!\n");
+		time-=time*0.1;
+		return 1;
+	}
+	else
+	{
+		tell_object(TP, "Dein Gewissen sagt: Gut, ein Schritt in die "
+			+"richtige Richtung.\n");
+		time-=v;
+	}
+}
+
+int accessor()
+{
+	if(previous_object()!="sargola")
+	{
+		if(TP!=environment(TO))
+			tell_object(TP, "Du kannst das Gewissen von "
+				+TP->name(WEM)+" nicht einfach so beeinflussen.\n");
+		else
+			tell_object(TP, "Du kannst Dein Gewissen nicht einfach so "
+				+"beeinflussen.\n");
+		return 0;
+	}
+	return 1;
+}
+
+int restzeit()
+{	int stunden, minuten;
+	stunden = (int) time / 3600;
+	minuten = (int) time - (stunden * 3600) / 60;
+	tell_object(TP, "Dein Gewissen gewaehrt Dir noch "+stunden+" Stunden und "+minuten+" Minuten Zeit.\n");
+	return 1;
+}
+
+int los()
+{
+	if(accessor())
+	{
+	   tell_object(TP, "Dein Gewissen fluestert: Deine Zeit hat wieder begonnen abzulaufen...\n");
+	   CCALL("check_time", 1, time);
+	   return 1;
+	}
+	return 0;
+}
+
+int stop()
+{
+	if(accessor())
+	{
+	   tell_object(TP, "Dein Gewissen passt nun nicht mehr auf Dich auf.\n");
+	   remove_call_out("check_time");
+	   return 1;
+	}
+	return 0;
+}
+
+int reset()
+{
+	if(accessor())
+	{
+	   tell_object(TP, "Dein Gewissen beginnt von neuem, auf Dich aufzupassen.\n");
+	   if(periode ==1)
+		time = max_online_time_day;
+	   else
+		time = max_online_time_week;
+	   day = time();
+	   return 1;
+	}
+	return 0;
+}
+
+check_time(int t)
+{
+	if(!living(environment(TO))) TO->remove();
+
+	if(!interactive(TP))
+	{
+		remove_call_out("check_time");
+		return ;
+	}
+
+	if(period == 1)
+		time-=step_day;
+	else
+		time-=step_week;
+
+
+	// Meldungen, die anzeigen, wieviel Zeit noch ist...
+	if(max_online_time_day*0.6>time max_online_time_week*0.6>time)  
+	{
+		tell_object(TP, messages60[random(sizeof(messages60))]);
+	}
+	else if(max_online_time_day*0.7>time max_online_time_week*0.7>time)
+	{
+		tell_object(TP, messages70[random(sizeof(messages70))]);
+	}
+	else if(max_online_time_day*0.8>time max_online_time_week*0.8>time)
+	{
+		tell_object(TP, messages80[random(sizeof(messages80))]);
+	}
+	else if(max_online_time_day*0.9>time max_online_time_week*0.9>time)
+	{
+		tell_object(TP, messages90[random(sizeof(messages90))]);
+	}
+	
+	
+
+   if(period==1)						//Tagesweise***
+   {
+
+	if(day==time())
+	{
+	   if(time<=0)						// Zeit abgelaufen
+	   {
+		tell_object(TP, "\n\nDein Gewissen sagt: Tut mir leid, aber Du bist "
+			+"schon zu lange im Silberland.\n\n");
+		command(TP, "-a:wurde soeben von"+(TP->QueryProp(P_RACE)=="2" ? " ihrem "; " seinem ") + " Gewissen zum Aussteigen gezwungen.");
+		command(TP, "fwinke");
+		command(TP, "fknuddel");
+		command(TP, "frufe Mein Gewissen ist staerker als ich... bis bald!\n");
+		//TP->Disconnect();
+		return 1;
+	   }
+	   else							// Zeit verrint normal
+	   {
+		CCALL("check_time", STEP, time);
+	   }
+	}
+	else							// Neuer Tag/Woche
+	{
+		if(periode ==1)
+			time = max_online_time_day;
+		else
+			time = max_online_time_week;
+		day = time();
+		CCALL("check_time", STEP_DAY, time);
+		return 1;
+	}
+   }								// ENDE Tagesweise***
+   else								
+   {								// Wochenweise***
+	if(day+(7*3600)>time())					// gleiche Woche
+	{
+	   if(time<=0)						// Zeit abgelaufen
+	   {
+		tell_object(TP, "\n\nDein Gewissen sagt: Tut mir leid, aber Du bist "
+			+"schon zu lange im Silberland.\n\n");
+		command(TP, "-a:wurde soeben von"+(TP->QueryProp(P_RACE)=="2" ? " ihrem "; " seinem ") + " Gewissen zum Aussteigen gezwungen.");
+		command(TP, "fwinke");
+		command(TP, "fknuddel");
+		command(TP, "frufe Mein Gewissen ist staerker als ich... bis bald!\n");
+		//TP->Disconnect();
+		return 1;
+	   }
+	   else							// Zeit verrint normal
+	   {
+		CCALL("check_time", step_week, time);
+	   }
+	}
+	else							// Neue Woche
+	{
+		time = max_online_time_week;
+		day = date();
+		CCALL("check_time", step_week, time);
+		return 1;
+	}							// Ende Wochenweise****
+
+}
+
+
+void _set_autoloadobj(int t, int p)
+{
+	time = a;
+	period = p;
+}
+
+int _query_autoloadobj()
+{
+	return time;
+}
+
+destruct()
+{
+	if(accessor())
+		::destruct();
+}
+
+remove()
+{
+	if(accessor())
+		::remove();
+}	

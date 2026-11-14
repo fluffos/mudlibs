@@ -1,0 +1,572 @@
+#include "../def.h"
+#include <wizlevels.h>
+#include <properties.h>
+#include <moving.h>
+#include <language.h>
+
+inherit "/std/room";
+
+#define FLINE "------------------------------------------------------------------------------\n"
+#define SAVEFILE LOG "obj_antrag"
+#define MY_EDITOR PRIVDIR "editor"
+#define ERLAUBT ({ "dante","protheg","moira","ronja" })
+
+#ifdef BS
+#undef BS
+#endif
+#define BS break_string
+#define LOGIT(x,y) write_file(LOG "buerolog"+x, \
+    sprintf("[%s] %s\n", dtime(time()), y))
+#define FPL(x) find_player(x)
+#define TIA this_interactive()
+#define UTP getuid(this_player())
+#define PO previous_object()
+#define FN file_name
+
+int     count;
+mapping antr,cmts;
+string  *my_members;
+
+nosave mapping inputs,shorts;
+
+nosave string mitarbeiter=("Moira, Protheg und Ronja");
+
+nosave int level=20;
+
+nosave string tafel();
+
+void create()
+{
+   ::create();
+
+    inputs = ([]);
+    shorts = ([]);
+
+    if(!restore_object(SAVEFILE)) 
+      {
+	my_members = ({"dante", "ronja","moira","protheg"});
+	antr = ([]);
+        cmts = ([]);
+        count = 0;
+        LOGIT("","create()::RESTORE_ERROR"); 
+      }
+    
+    SetProp(P_INT_SHORT,"Das Buero fuer die Antraege auf private Objekte");
+    SetProp(P_INT_LONG,break_string(
+        "Hier bist Du nun im Buero fuer die Antraege auf private Objekte. "
+        "Hier kannst Du Dir wuenschen, was Du willst, ob Du es bekommst, ist "
+        "natuerlich eine andere Frage. "
+        "Du stehst in einem einfachen Raum, bei dem es sich offenbar "
+        "um ein Buero handelt. In der Mitte des Raumes steht ein "
+        "Schreibtisch aus Holz, auf dem eine kleine Saeule aus "
+        "Jade steht. Hinter dem Schreibtisch steht ein einfacher "
+        "Stuhl. Hinter dem Stuhl siehst Du ein grosses Schild, das an der "
+        "Wand haengt.\n"
+        "Eine grosse Tafel!",78,0,BS_LEAVE_MY_LFS));
+
+
+    AddDetail("tafel", CLOSURE(tafel));
+    AddReadDetail("tafel", CLOSURE(tafel));
+
+
+    AddDetail(({"raum","buero","ort"}),
+	      "Mach doch mal 'schau'\n");
+    AddDetail(({"mitte","tisch","schreibtisch","holztisch"}),
+	      BS("In der Mitte des Bueros steht ein Schreibtisch aus Holz. Auf "+
+		 "dem Schreibtisch steht eine kleine Saeule aus Jade. Hinter dem "+
+		 "Schreibtisch steht ein Stuhl.",78) );
+    AddDetail(({"holz","buchenholz"}),
+	      "Es handelt sich um ganz normales Buchenholz.\n");
+    AddDetail(({"saeule","jade","jadesaeule","kristall","speicher",
+		  "speicherkristall"}),
+	      BS("Die kleine Saeule aus Jade ist das einzige, was Du auf dem "+
+		 "Tisch sehen kannst. Es scheint sich dabei um einen magischen "+
+		 "Speicherkristall zu handeln.",78) );
+    AddDetail(({"boden","steinboden"}),
+	      "Der Boden besteht aus Stein.\n");
+    AddDetail(({"stein","gestein"}),
+	      "Ganz gewoehnliches hellgraues Gestein.\n");
+    AddDetail(({"decke","holzdecke"}),
+	      BS("Die Decke besteht aus dem gleichen Holz wie der Schreibtisch "+
+		 "und der Stuhl. An der Decke haengt eine Lampe.",78) );
+    AddDetail("lampe",
+	      "Eine einfache Lampe, die dieses Buero beleuchtet.\n");
+    AddDetail(({"wand","steinwand","waende","steinwaende"}),
+	      BS("Die Waende bestehen aus hellgrauem Gestein. An der Wand hinter "+
+		 "dem Schreibtisch haengt ein grosses Schild.",78) );
+    AddDetail("schild",
+	      "Probiers mal mit 'lies schild'.\n");
+    AddReadDetail("schild",
+		  "\n"+
+		  "**************************************************\n"+
+		  "*                                                *\n"+
+		  "*  Offizielles Buero fuer private Gegenstaende   *\n"+
+		  "*                                                *\n"+
+		  "**************************************************\n"+
+		  "\n");
+    AddDetail(({"stuhl","holzstuhl"}),
+	      "Der Stuhl hinter dem Schreibtisch ist recht einfach gearbeitet "+
+	      "und wirkt auch nicht besonders gemuetlich.");
+    
+    seteuid(getuid(TO));
+    
+    AddCmd("liste","antr_liste");
+    AddCmd("antrag","enter_antr");
+    AddCmd("help","manual");
+    AddCmd("xantr","xantr");
+    AddCmd("dantr","dantr");
+    AddCmd("cmt","cmt");
+    AddCmd("dcmt","dcmt");
+    
+    
+    AddExit("sueden", "/d/dschungel/dante/tijaraneu/room/ti_pfad6");
+    
+    AddItem("d/dschungel/dante/stein/npc/waechter2", REFRESH_DESTRUCT);
+}
+
+nosave tafel()
+{
+  return "+----------------------------------------------------------------------+\n"
+    "+                                                                      +\n"
+    "+  Richtlinien fuer das Antragstellen auf einen privaten Gegenstand!   +\n"
+    "+                                                                      +\n"
+    "+  1. Du kannst hier den Antrag auf einen persoenlichen Gegenstand     +\n"
+    "+     abliefern. Je genauer Antrag ist, desto schneller und unprob-    +\n"
+    "+     lematischer wird die Erfuellung Deines Wunsches ablaufen.        +\n"
+    "+     Einziges Kriterium ist, dass Du zumindest Stufe "+level+" sein musst.   +\n"
+    "+                                                                      +\n"
+    "+  2. Wuensche die Dir irgendeinen Vorteil gegenueber den anderen      +\n"
+    "+     Spielern bringen werden kommentarlos abgelehnt. Das heist,       +\n"
+    "+     keine Waffen, Ruestungen usw, die nur Du besitzen kannst.        +\n"
+    "+     Auch keine Wuensche die nur mit extrem grossen Aufwand zu        +\n"
+    "+     realisieren sind, also keine Burgen, Schloesser...               +\n"
+    "+                                                                      +\n"
+    "+  3. Nerve die verantworlichen Magier nicht jeden Tag, was nun mit    +\n"
+    "+     Deinem Wunsch sei. Sie kuemmern sich verlaesslich darum!         +\n"
+    "+     Ueberlege Dir bevor Du Deinen Antrag stellst was Du genau        +\n"
+    "+     willst und aendere Deinen Antrag nicht jeden Tag!                +\n"
+    "+                                                                      +\n"
+    "+  4. Wenn Dein Antrag erfuellt wurde, wirst Du verstaendigt.          +\n"
+    "+     Solltest Du nach einer Woche noch immer nichts gehoert haben,    +\n"
+    "+     so sprich die Verantwortlichen ruhig an!                         +\n"
+    "+                                                                      +\n"
+    "+                                                                      +\n"
+    "+            Dante im Namen von "+mitarbeiter+"!              +\n"
+    "+                                                                      +\n"
+    "+----------------------------------------------------------------------+\n";
+}
+
+/* ===== Interne Funktionen ===== */
+
+nosave nomask int sec_check()
+{
+  string u;
+  u = getuid(TP);
+  //  if ( u !="dante") return 0;
+  if (member(my_members,u)!=-1) return 0;
+  return 1;
+}
+
+nomask void save_it()
+{ 
+  save_object(SAVEFILE); 
+}
+
+varargs string GetExits( object viewer )
+{
+  string re;
+  re = BS("'help office', 'antrag'",78,"Kommandos: ");
+  re += ::GetExits(viewer);
+  return re;
+}
+
+/*
+nosave nomask int addmember(string wer)
+{ 
+//  if (getuid(TP)!="dante") return 0;
+  
+    if (!wer) return 0;
+    if (member(my_members,wer)!=-1) {
+        write(CAP(wer)+" ist schon eingetragen!\n");
+        return 1; }
+    LOGIT("office",getuid(TIA)+"::addmember("+wer+")");
+    my_members += ({ wer });
+    save_it();
+    write("OK.\n");
+    return 1;
+}
+
+nosave nomask int removemember(string wer)
+{    if (getuid(TP)!="dante") return 0;
+ 
+    if (!wer) return 0;
+    if (member(my_members,wer)==-1) {
+        write(CAP(wer)+" ist gar nicht eingetragen!\n");
+        return 1; }
+    LOGIT("office",getuid(TIA)+"::removemember("+wer+")");
+    my_members -= ({ wer });
+    my_members -= ({ 0 });
+    save_it();
+    write("OK.\n");
+    return 1;
+}
+*/
+
+/* ====== Antrag eingeben ===== */
+
+nosave nomask int enter_antr()
+{  
+	 //if (!IS_WIZARD(TP)) return 0;
+   
+  if(TP->QueryProp(P_LEVEL)<level)  
+    return write("Du hast erst Level "+TP->QueryProp(P_LEVEL)+"! Komm wieder, "
+		 "wenn Du Level "+level+" hast!\n"),1;
+  
+  if(present("PARA_O_EDIT",TP))
+    return write("Du schreibst doch schon an einem Antrag.\n"),1;
+
+    write("Du schreibst nun einen Antrag!\n\n");
+    write("Titel: ");
+    input_to("my_titel");
+    return 1;
+}
+
+nosave nomask int my_titel(string ti)
+{
+  string u;
+  object ob;
+  
+  if(!ti) return write("\nAbgebrochen.\n"),1;
+
+  u = UTP;
+
+  if(present("PARA_O_EDIT",TP))
+    return write("Du schreibst doch schon an einem Antrag.\n"),1;
+
+  u = CAP(u)+" / "+dtime(time())+"\n     -> "+ti;
+
+  ob = clone_object(MY_EDITOR);
+  if(!objectp(ob))
+    return write("ERROR!\n"),1;
+  ob->move(TP,M_NOCHECK);
+  ob->StartEditorA(TP,u);
+  return 1;
+}
+
+void EditorOutputA(object pl,string titel,string text)
+{
+  string *data;
+  
+  if(!PO || !objectp(PO) || explode(FN(PO),"#")[0]!=MY_EDITOR)
+    return tell_room(TO,"E-ERROR.\n");
+
+  if(!objectp(pl) || !stringp(titel) || !stringp(text) ||
+     strlen(titel)<2 || strlen(text)<1 )
+    return tell_room(TO,"E-ERROR 2.\n");
+  
+  count ++;
+  data = ({ titel })+explode(text,"\n");
+  antr += ([ count : getuid(pl);time();data ]);
+  save_it();
+  return;
+}
+
+/* ===== Hilfsseite ===== */
+
+nosave nomask int manual(string in)
+{
+  string re;
+    //if (!IS_WIZARD(TP)) return 0;
+  if (!in) return 0;
+  if (in=="office") 
+    {
+      re = "\n   Anleitung fuer das 'Buero fuer private Gegenstaende'\n "
+	"   Kommando    Funktion\n\n"
+	"   help office  Diese Seite anzeigen.\n"
+	"   antrag      Aktiviert einen Text-Editor, mit dem man einen Antrag\n"
+	"               eingeben kann. Als Titel bitte etwas aussagekraeftiges\n"
+	"               eingeben.\n"
+	"               Ein einmal beendeter Eintrag kann nicht mehr geloescht\n"
+	"               werden!\n\n"
+	"   liste       Listet alle vorhandenen Antraege auf.\n\n"
+	"   xantr <n>   Zeige Antrag <n> an.\n\n"
+	"   cmt   <n>   Kommentar zum Antrag <n> eingeben.\n\n"
+	"   dcmt  <n>   Eigenen Kommentar zu Antrag <n> loeschen.\n\n";
+      
+      if (IS_WIZARD(TP))
+	re += "   dantr <n>   Loesche Antrag <n>.\n\n";
+      
+      /*      re += "Spezielle Funktionen:\n   addmember <uid>     Mit diesen ";
+	      re += "Kommandos wird die generelle Raum-\n   removemember <uid>  ";
+	      re += "Erlaubnis gegeben/entzogen.\n\n";
+	      }
+      */
+      
+      TP->More(re);
+      return 1; 
+    }
+  if (in=="xantr") 
+    {
+      re = "Kommando 'xantr <nr>':\n"
+	"   Mit diesem Kommando wird der Antrag mit der Nummer <nr> angezeigt.\n"
+	"   Sofern vorhanden, werden auch bereits eingegebene Kommentare zu\n"
+	"   diesem Antrag angezeigt.\n";
+      write(re);
+      return 1; 
+    }
+  if (in=="dantr" && !sec_check()) 
+    {
+      re = "Kommando 'dantr <nr>':\n"
+	"   Mit diesem Kommando wird der Antrag mit der Nummer <nr> geloescht.\n"
+	"   Das ist nur fuer Magier moeglich.\n";
+      write(re);
+      return 1; 
+    }
+  if (in=="cmt") 
+    {
+      re = "Kommando 'cmt <nr>':\n"
+	"   Mit diesem Kommando kann man einen Kommentar zum Antrag mit der\n"
+	"   Nummer <nr> eingeben.\n"
+	"   Es steht kein Texteditor zur Verfuegung! Hat man bereits einen\n"
+	"   Kommentar eingegeben, wird dieser ueberschrieben.\n";
+      write(re);
+      return 1; 
+    }
+  if (in=="dcmt") 
+    {
+      re = "Kommando 'dcmt <nr>':\n"
+	"   Mit diesem Kommando loescht man den eigenen Kommentar zum Antrag mit\n"
+	"   der Nummer <nr>\n";
+      write(re);
+      return 1; 
+    }
+  return 0;
+}
+
+/* ===== Antraege anzeigen ===== */
+
+nosave nomask int antr_liste()
+{
+  string re,*ctrs;
+  int i,j;
+  int *ind;
+  mapping cm;
+//    if (sec_check()) return 0;
+  
+  if (m_sizeof(antr)<1)
+    return write("Keine Antraege vorhanden.\n"),1;
+  
+  ind = m_indices(antr);
+  
+  if (!intp(ind[0]))
+    return write("Oha, ein interner Fehler!\n"),1;
+
+  ind = sort_array(ind,CLOSURE(>));
+  
+  for(re="",i=sizeof(ind)-1;i>=0;i--) 
+    {
+      re += sprintf("%4d %s\n",ind[i],antr[ind[i],2][0]);
+      if (!member(cmts,ind[i])) continue;
+      cm = cmts[ind[i]];
+      ctrs = m_indices(cm);
+      if (sizeof(ctrs)<1) continue;
+      re += "    C:*";
+      for (j=sizeof(ctrs)-1;j>=0;j--) 
+	{
+	  if (member(shorts,ctrs[j])) re += shorts[ctrs[j]];
+	  else if (strlen(ctrs[j])<5) re += ctrs[j];
+	  else re += ctrs[j][0..3];
+	  re += "*"; 
+	}
+      re += "\n"; 
+    }
+  re += "<ENDE>\n";
+  TP->More(re);
+  return 1;
+}
+
+/* ===== Antrag lesen ===== */
+
+nosave string make_atext(int n)
+{
+  string re;
+  mapping comments;
+  int i;
+  int *namen;
+  
+  if (!n || n<1) return 0;
+  re = FLINE;
+  re += (antr[n,2][0]+"\n");
+  re += FLINE;
+  re += implode(antr[n,2][1..],"\n");
+  re += "\n"+FLINE;
+  if(member(cmts,n)) 
+    {
+      comments=cmts[n];
+      
+      if(m_sizeof(comments)>0) 
+	{
+	  namen = m_indices(comments);
+	  for (i=sizeof(namen)-1;i>=0;i--)
+	    re += (namen[i]+":\n"+comments[namen[i]]);
+	  re += FLINE;
+        } 
+    }
+       
+  return re;
+}
+
+nosave nomask int xantr(string nr)
+{
+  int n;
+  string re;
+  
+  //if (sec_check()) return 0;
+  notify_fail("Syntax: xantr <nr>\n");
+  if (!nr) return 0;
+  
+  n = to_int(nr);
+  if (n<0) return 0;
+  if(!member(antr,n) || !stringp(re=make_atext(n)))
+    return write("Antrag '"+nr+"' nicht gefunden.\n"),1;
+  TP->More(re);
+  return 1;
+}
+
+nosave nomask int dantr(string nr)
+{
+  int n;
+  string text;
+  
+  if (sec_check()) return 0;
+  notify_fail("FINGER WEG!\n");
+  //    if (!is_member(TP)) return 0;
+  
+  if(member(my_members,getuid(TP))==-1)
+    return write(BS("Du darfst diesen Antrag nicht loeschen!")),1;
+  
+  notify_fail("Syntax: dantr <nr>\n");
+  if (!nr) return 0;
+  
+  n = to_int(nr);
+  if (n<0) return 0;
+  if(!member(antr,n))
+    return write("Antrag wurde '"+nr+"' nicht gefunden.\n"),1;
+  text = make_atext(n);
+  LOGIT("antraege",sprintf("Antrag %d geloescht von %s:\n%s\n",n,UTP,text));
+  antr = m_delete(antr,n);
+  if (member(cmts,n)) cmts = m_delete(cmts,n);
+  save_it();
+  LOGIT("office",getuid(TP)+" loescht Antrag "+n);
+  write("Antrag Nummer "+n+" wurde geloescht.\n");
+  return 1;
+}
+
+nosave nomask int cmt(string nr)
+{
+  int n;
+  mapping c;
+  string u,pre;
+  object ob;
+  
+  //if (sec_check()) return 0;
+  notify_fail("Syntax: cmt <nr>\n");
+  if (!nr) return 0;
+  
+  n = to_int(nr);
+  if (n<0) return 0;
+  if (!member(antr,n))
+    return write("Antrag wurde leider '"+nr+"' nicht gefunden.\n"),1;
+  u = getuid(TP);
+  
+  if ( !mappingp(c=cmts[n]) || !stringp(pre=c[u]) )
+    pre = "";
+  ob = clone_object(MY_EDITOR);
+  if(!objectp(ob))
+    return write("ERROR\n"),1;
+  ob->move(TP,M_NOCHECK);
+  ob->StartEditorK(TP,pre,n);
+  return 1;
+}
+
+nomask void EditorOutputK(object pl, string in, int n)
+{
+  mapping c;
+  string u;
+  
+  if(!PO || !objectp(PO) || explode(FN(PO),"#")[0]!=MY_EDITOR)
+    return tell_room(TO,"E-ERROR.\n");
+  if(!objectp(pl) || !stringp(in) || !intp(n) ||
+      strlen(in)<2 || n<1 )
+    return tell_room(TO,"E-ERROR 2.\n");
+  u = getuid(pl);
+  if (!mappingp(c=cmts[n])) c = ([u:""]);
+  c[u]=in;
+  cmts[n]=c;
+  save_it();
+  return;
+}
+
+nosave nomask int dcmt(string nr)
+{
+  int n;
+  mapping c;
+  string u;
+
+  // if (sec_check()) return 0;
+  notify_fail("Syntax: dcmt <nr>\n");
+  if(!nr) return 0;
+  
+  n = to_int(nr);
+  if(n<0) return 0;
+  if(!member(antr,n))
+    return write("Antrag '"+nr+"' nicht gefunden.\n"),1;
+  if(!(c=cmts[n]))
+    return write("Keine Kommentare zu Antrag '"+nr+"' gefunden.\n"),1;
+  u = getuid(TP);
+  if(!member(c,u))
+    return write("Du hast keinen Kommentar zu diesem Antrag geschrieben.\n"),1;
+  c = m_delete(c,u);
+  if (m_sizeof(c)<1) cmts = m_delete(cmts,n);
+  else cmts[n]=c;
+  save_it();
+  write("OK. Du hast Dein Kommentar zu Antrag '"+nr+"' geloescht.\n");
+  return 1;
+}
+
+// Sortier-Funktion
+
+sort_antr()
+{
+  mapping newa,newc,olda,oldc;
+  int *ind,i,m;
+  
+  if(TIA!=FPL("dante")||
+     TIA!=FPL("protheg")) return 0;
+  if(m_sizeof(antr)<1) 
+    {
+      count = 0;
+      write("SHORT-CLEAN-UP DONE!\n");
+      return 1; 
+    }
+  olda = copy_mapping(antr);  newa = ([]);
+  oldc = copy_mapping(cmts);  newc = ([]);
+  ind = m_indices(olda);
+  ind = sort_array(ind,CLOSURE(>));
+  for (i=sizeof(ind)-1;i>=0;i--) 
+    {
+      newa[i+1,0] = olda[ind[i],0];
+      newa[i+1,1] = olda[ind[i],1];
+      newa[i+1,2] = olda[ind[i],2];
+      if(member(oldc,ind[i]))
+	newc[i+1] = oldc[ind[i]];
+      write(ind[i]+"->"+(i+1)+" / "); 
+    }
+  write("<DO");
+  antr = copy_mapping(newa);
+  cmts = copy_mapping(newc);
+  count = m_sizeof(antr);
+  save_it();
+  write("NE>\n");
+  return 1;
+}

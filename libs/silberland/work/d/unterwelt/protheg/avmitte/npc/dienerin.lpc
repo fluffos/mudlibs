@@ -1,0 +1,1319 @@
+/*
+  Hochzeitszeremonie
+  Dienerin der Hohepriesterin
+*/
+
+#pragma strong_types;
+
+#include <npcmaster.h>
+#include "../def.h"
+
+inherit DUNKELELF;
+
+#define KOSTEN_SCHEIDUNG 999
+#define KOSTEN_ER 500
+#define KOSTEN_SIE 300
+#define KOSTEN_ANFANG 666
+#define NOT_ALLOWED_RACE ({"Fee","Elf"})
+#define AI(x, y) AddInfo(x, (closurep(y) ? y : "'"+y+"'"), "sagt: ")
+
+
+nosave int frage, storno, zeuge_benachrichtigt;
+nosave object fragender;
+nosave mapping data;
+nosave object er, sie, zeuge;
+nosave string *scheidung_frage;
+
+nosave string kleider_info();
+nosave string kleid_info();
+nosave string anzug_info();
+nosave string hochzeit_info();
+nosave string terminliste_info();
+
+varargs void Storno(int silent)
+{
+  //if(!MENV) return;
+  
+  if(!silent)
+    tell_room(MENV,
+	      BS("Die Dienerin streicht grummelnd ein paar Namen von ihrer "
+		 "Liste."));
+
+  data=([]);
+  storno=0;
+  frage=0;
+  fragender=0;
+  zeuge_benachrichtigt=0;
+
+  SetProp(P_CHAT_CHANCE, 1);
+}
+
+void timeout()
+{
+  if((objectp(fragender)) && (interactive(fragender)) &&
+     (present(fragender, MENV)))
+    tell_object(fragender,
+		BS("Die Dienerin meint zu Euch: 'Laenger warte ich nicht!'"));
+  
+  Storno(1);
+}
+
+void create()
+{
+  if(!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Die Dienerin von Lotu-Varia, der Hohepriesterin");
+  SetProp(P_LONG,
+	  BS("Eine schmaechtige, junge Dunkelelfin steht Euch gegenueber. "
+	     "Ihr Blick ist gen Boden gerichtet und ihre Haare sind viel "
+	     "zu kurz fuer eine stolze Dunkelelfe. Anscheinend hat "
+	     "sie sich etwas Schlimmes zu Schulden kommen lassen, und "
+	     "muss nun als Dienerin fuer eine Hohepriesterin Busse tun."));
+  SetProp(P_NAME, "Dienerin");
+
+  SetProp(P_GENDER, FEMALE);
+
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:0,T_RANGE_MAX:40]));
+
+  AddId(({"dienerin", "NOWIMPY", "NOCONTROL"}));
+
+  SetProp(P_NO_SCORE, 1);
+  
+  create_default_darkelf(15, 15);
+  
+  SetProp(P_HANDS, ({" mit ihren Krallen", QueryProp(P_HANDS)[1],DT_RIP}));
+  
+  SetProp(P_SIZE, 190);
+  SetProp(P_ALIGN, -600);
+  SetProp(P_MAX_HANDS, 2);
+  
+  SetProp(P_NOMAGIC, 30);
+  SetProp(P_SPELLRATE, 80);
+  
+  SetProp(P_MSGIN, "kommt aus einer Seitentuer herein");
+  
+  SetProp(P_DIE_MSG, " loest sich in einer Rauchwolke auf.\n");
+  SetProp(P_NOCORPSE, 1);
+  
+  SetGuardProtection(GUARD_LOCATION, 100);
+  
+  SetProp(P_LOG_INFO, "protheg/hochzeit");
+  
+  AddInfo(DEFAULT_INFO,
+	  ({"scheint in ihre Gebete vertieft!\n",
+	      "blickt ueber Euch hinweg.\n",
+	      "meint: 'Ich bin nur fuer Hochzeiten und Scheidungen "
+	      "zustaendig.\n",
+	      "kritzelt kurz etwas auf einen Zettel.\n",
+	      "meint: 'Belaestigt mich mit sowas nicht!'\n"}));
+
+  AI(({"zeuge","trauzeuge","partnerin","partner","hochzeit","trauung",
+	 "bund"}),
+     CLOSURE(hochzeit_info));
+
+  AddInfo(({"ablauf","hochzeitsablauf","tafel","regel","regeln"}),
+	  "deutet auf eine Tafel an der Wand.");
+
+  AddInfo(({"schuld","busse","scham"}),
+	  "blickt nur beschaemt zu Boden.");
+  
+  AI(({"einladung","einladungen"}),
+     "Es ist moeglich, bei einem Aufgebot an bestimmte Spieler spezielle "
+     "Einladungen zu verschicken. Ich werde Euch danach fragen, wenn es "
+     "soweit ist.");
+
+  AI(({"ring","ringe","trauring","trauringe","beweis"}),
+     "Waehrend der Trauung bekommt das Paar je einen Trauring "
+     "ausgehaendigt. Er ist sozusagen der Beweis fuer die Hochzeit.");
+
+  AI(({"scheidung"}), 
+     "Wenn Ihr Euch scheiden lassen wollt, oder Ihr aus irgendwelchen "
+     "Gruenden falsch verheiratet seid, so kann ich Euch helfen. Ihr "
+     "muesst nur sagen 'dienerin ich will die scheidung'. Eine Scheidung "
+     "kostet jedoch "+KOSTEN_SCHEIDUNG+" Muenzen und bei einer korrekten "
+     "Scheidung muessen beide anwesend und einverstanden sein.");
+  
+  AI(({"raum","vorraum"}),
+     "Ihr befindet Euch hier im Vorraum des Tempels, der als das 'Auge von "
+     "Ardulvhier' bezeichnet wird. Hier verwalte ich das offizielle "
+     "Hochzeitsverzeichnis!");
+
+  AI(({"tempel","auge","auge von ardulvhier"}),
+     "Durch die Tore gelangt man in den Tempel zu Lotu-Varia!");
+
+  AI(({"verzeichnis","hochzeitsverzeichnis"}),
+     "Es befindet sich hier an der Wand!");
+
+  AI(({"priesterin","hohepriesterin"}),
+     "Meint Ihr Lotu-Varia?");
+
+  AI(({"lotu","varia","lotuvaria","lotu-varia"}),
+     "Die Hohepriesterin Lotu-Varia ...");
+
+  AI(({"kleider","kleidung","hochzeitskleider","hochzeitskleidung"}),
+     CLOSURE(kleider_info));
+  
+  AI(({"anzug","zeremonienanzug","zeremonieanzug"}),
+     CLOSURE(anzug_info));
+  
+  AI(({"kleid","zeremonienkleid","zeremoniekleid"}),
+     CLOSURE(kleid_info));
+  
+  AI(({"termine", "termin", "terminliste"}),
+     CLOSURE(terminliste_info));
+  
+  AI(({"storno","stornieren","hochzeit stornieren", "vorbereitung stornieren",
+	 "vorbereitungen stornieren"}),
+     "Mit \"storniere hochzeit\" koennt Ihr die Vorbereitungen abbrechen.");
+  
+  AI(({"anforderung","anforderungen","hochzeitsanforderung","hochzeitsanforderungen"}),
+     "Das Brautpaar muss bei ihrer Zeremonie in geforderter Kleidung "
+     "erscheinen. Der Braeutigam muss dabei zumindest von frecher Gesinnung "
+     "sein. Die Braut muss beinahe satanisch sein und muss in den Schreinen "
+     "am Tempelgelaende gebetet haben. In allen Schreinen!");
+  
+  AI(({"schrein","schreine"}),
+     "Die befinden sich am Tempelgelaende.");
+  
+  AI(({"tempelgelaende"}),
+     "Ihr braucht nur raus zu gehen, dann seid Ihr dort.");
+  
+  AI(({"gesinnung"}),
+     "Der Braeutigam muss zumindest von frecher Gesinnung, die Braut muss "
+     "beinahe satanisch sein.");
+
+  SetProp(P_REJECT,
+	  ({REJECT_DROP, "Die Dienerin meint: 'Danke, aber nein!'\n"}));
+
+  SetChats(1, ({
+    "Die Dienerin spricht ein kurzes Gebet.\n",
+      "Die Dienerin haelt eine kurze Andacht zu Lloth.\n",
+      "Die Dienerin geht durch die Tore in den Tempel.\n\n"
+      "Die Dienerin kommt wieder herein.\n",
+      "Die Dienerin mustert Dich.\n",
+      "Die Dienerin kniet vor dem Steinblock nieder und betet.\n"}));
+
+  AddCmd(({"storniere","stornier","storno","beende"}), "ausundvorbei");
+
+  Storno(1);
+  scheidung_frage=({});
+}
+
+string _query_noattack()
+{
+  if((frage && objectp(fragender) && present(fragender, MENV)) ||
+     !HZM->Keine_Hochzeit())
+    return "herrscht Euch an: 'Jetzt nicht!'\n";
+}
+
+nosave string terminliste_info()
+{
+  string l;
+  
+  if(!TP) return "bla";
+  
+  if(!strlen(l=HZM->Termin_Liste()))
+    return "Fuer die naechsten sieben Tage sind keine Termine festgesetzt.";
+  
+  call_out("termin_ausgabe", 0, l, TP);
+  
+  return "Hier ist die Liste fuer die naechsten sieben Tage...";
+}
+
+void termin_ausgabe(string what, object who)
+{
+  if((who) && (present(who, MENV)))
+    who->More(what);
+}
+
+nosave string hochzeit_info()
+{
+  mixed tdata;
+  string ret, gaeste;
+  int datum, i;
+
+  if((TP) && (datum=HZM->Bereits_vorhanden(getuid(TP))))
+    {
+      tdata=HZM->Termin_Data(datum);
+      
+      gaeste="";
+
+      if(sizeof(tdata[5]))
+	if(sizeof(tdata[5])==1)
+	  gaeste="Als Gast ist "+CAP(tdata[5][0])+" eingeladen.\n";
+	else
+	  {
+	    tdata[5]=map_array(tdata[5], CLOSURE(capitalize));
+
+	    gaeste="Folgende Gaeste sind geladen: "+
+	      implode(tdata[5][0..<2], ", ")+
+	      " und "+tdata[5][<1]+".\n";
+	  }
+	      
+      return
+	"Ihr habt bei mir um eine Hochzeit am "+dtime(datum)[0..16]+
+	" um "+tdata[0]+" Uhr angesucht. Ihr wollt Euch mit "+
+	(tdata[1]==getuid(TP) ? CAP(tdata[2]) : CAP(tdata[1]))+
+	" vermaehlen und "+CAP(tdata[3])+" soll als Zeuge der Zeremonie "
+	"beiwohnen.\n"+
+	(tdata[4] ? "Die Zeremonie wird geschlossen abgehalten.\n": 
+	 "Die Zeremonie ist fuer jeden zugaenglich.\n")+
+	gaeste+
+	"Falls Ihr Bedenken habt oder sonst etwas mit dem Termin nicht "
+	"stimmt, dann koennt Ihr immer noch die Hochzeit stornieren.\n";
+    }
+  else
+    if(datum=HZM->Vorbereitung())
+      {
+	tdata=HZM->Termin_Data(datum);
+	
+	gaeste="";
+	
+	if(sizeof(tdata[5]))
+	  if(sizeof(tdata[5])==1)
+	    gaeste="Als Gast ist "+CAP(tdata[5][0])+" eingeladen.\n";
+	  else
+	    {
+	      tdata[5]=map_array(tdata[5], CLOSURE(capitalize));
+	      
+	      gaeste="Folgende Gaeste sind geladen: "+
+		implode(tdata[5][0..<2], ", ")+
+		" und "+tdata[5][<1]+".\n";
+	    }
+	      
+      return
+	"Heute um "+tdata[0]+" Uhr wollen sich "+CAP(tdata[2])+" und "+
+	CAP(tdata[1])+" vermaehlen und "+CAP(tdata[3])+" soll als Zeuge "
+	"der Zeremonie beiwohnen.\n"+
+	(tdata[4] ? "Die Zeremonie wird geschlossen abgehalten.\n": 
+	 "Die Zeremonie ist fuer jeden zugaenglich.\n")+
+	gaeste;	
+      }
+    else
+      return "Wenn Ihr bereit seid den unheiligen Bund der Ehe einzugehen, so "
+	"sagt 'Dienerin, <Partnerin> und ich moechten heiraten' Vergesst "
+	"dabei nicht, dass der Mann eroeffnen muss! Danach frage ich Euch, "
+	"wer der Trauzeuge sein soll und informiere meine Hohepriesterin "
+	"ueber Euer Vorhaben. Ich hoffe Ihr wisst bescheid ueber die "
+	"Regeln solch einer Hochzeit.";
+}
+
+nosave string anzug_info()
+{
+  object tmp1, tmp2, tmp3, weg;
+  
+  if(HZM->Vorbereitungen())
+    if(!objectp(er)) 
+      er=find_player(HZM->Braeutigam()); 
+  
+  if((!HZM->Kleidungsausgabe()) || (er!=TP))
+    return "'Der Mann traegt bei der Hochzeitszeremonie einen eigens von "
+      "Lloth gesegneten Zeremonienanzug.'";
+    
+  if(TP->QueryMoney()<KOSTEN_ER)
+    return "'Ohne die erforderlichen "+KOSTEN_ER+
+      " Muenzen kann ich Euch den Anzug nicht aushaendigen!'";
+
+  if(present(KLEIDUNG, TP))
+    {
+      while(weg=present(KLEIDUNG, TP))
+	{
+	  weg->SetProp(P_CURSED, 0);
+	  weg->DoUnwear(1);
+	  weg->remove(1);
+	}
+      write(BS("Ihr uebergebt der Dienerin Eure Teile der "
+	       "Zeremonienkleidung!"));
+    }
+
+  tmp1=clone_object(ARMOUR "male_armour");
+  tmp2=clone_object(ARMOUR "male_trousers");
+  tmp3=clone_object(ARMOUR "male_cloak");
+  
+  if(tmp1->move(TP)==ME_TOO_HEAVY)
+    {
+      tmp1->remove(1);
+      tmp2->remove(1);
+      tmp3->remove(1);
+      
+      return "'Das wird Euch zu schwer sein!'";
+    }
+  
+  if(tmp2->move(TP)==ME_TOO_HEAVY)
+    {
+      tmp1->remove(1);
+      tmp2->remove(1);
+      tmp3->remove(1);
+      
+      return "'Das wird Euch zu schwer sein!'";
+    }
+  
+  if(tmp3->move(TP)==ME_TOO_HEAVY)
+    {
+      tmp1->remove(1);
+      tmp2->remove(1);
+      tmp3->remove(1);
+      
+      return "'Das wird Euch zu schwer sein!'";
+    }
+  
+  write(BS("Die Dienerin uebergibt Euch ein Hemd, eine Hose und einen "
+	   "Umhang aus kostbarer Spinnenseide."));
+  say(BS("Die Dienerin uebergibt "+CAP(getuid(TP))+
+	 " den Zeremonienanzug."), ({TP}));
+
+  if(!IS_WIZARD(TP))
+    TP->AddMoney(-KOSTEN_ER);
+
+  return "'Nun legt den Anzug an! Ich werde ihn Euch nach der Zeremonie "
+    "abnehmen, wenn Ihr den Tempel verlasst.'";
+}
+
+nosave string kleid_info()
+{
+  object tmp1, tmp2, weg;
+  
+  if(HZM->Vorbereitungen())
+    if(!objectp(sie)) 
+      sie=find_player(HZM->Braut()); 
+  
+  if(!HZM->Kleidungsausgabe() || sie!=TP)
+    return "'Die Frau traegt bei der Hochzeitszeremonie einen eigens von "
+      "Lloth gesegnetes Brautkleid.'";
+
+  if(TP->QueryMoney()<KOSTEN_SIE)
+    return "'Ohne die erforderlichen "+KOSTEN_SIE+
+      " Muenzen kann ich Euch den Anzug nicht aushaendigen!'";
+
+  if(present(KLEIDUNG, TP))
+    {
+      while(weg=present(KLEIDUNG, TP))
+	{
+	  weg->SetProp(P_CURSED, 0);
+	  weg->DoUnwear(1);
+	  weg->remove(1);
+	}
+      write(BS("Ihr uebergebt der Dienerin Eure Teile der "
+	       "Zeremonienkleidung!"));
+    }
+  
+  tmp1=clone_object(ARMOUR "female_armour");
+  tmp2=clone_object(ARMOUR "female_scarf");
+  
+  if(tmp1->move(TP)==ME_TOO_HEAVY)
+    {
+      tmp1->remove(1);
+      tmp2->remove(1);
+
+      return "'Das wird Euch zu schwer sein!'";
+    }
+  
+  if(tmp2->move(TP)==ME_TOO_HEAVY)
+    {
+      tmp1->remove(1);
+      tmp2->remove(1);
+
+      return "'Das wird Euch zu schwer sein!'";
+    }
+  
+  write(BS("Die Dienerin uebergibt Dir ein Brautkleid und einen Schleier "
+	   "aus kostbarer Spinnenseide."));
+  say(BS("Die Dienerin uebergibt "+CAP(getuid(TP))+
+	 " das Zeremonienkleid."), ({TP}));
+  
+  if(!IS_WIZARD(TP))
+    TP->AddMoney(-KOSTEN_SIE);
+  
+  return "'Nun legt das Brautkleid an! Ich werde es Euch nach der "
+    "Zeremonie abnehmen, wenn Ihr den Tempel verlasst.'";
+}
+
+nosave string kleider_info()
+{
+  if(HZM->Vorbereitungen())
+    {
+      if(!objectp(er)) 
+	er=find_player(HZM->Braeutigam()); 
+      
+      if(!objectp(sie)) 
+	sie=find_player(HZM->Braut()); 
+      
+      if(!objectp(zeuge)) 
+	zeuge=find_player(HZM->Zeuge()); 
+    }
+  
+  if(!HZM->Kleidungsausgabe())
+    return "'Bei der Hochzeit wird ganz spezielle Kleidung getragen!'";
+
+  if(er==TP)
+    return "'Wenn Ihr soweit seid, dann fragt mich nach dem Zeremonienanzug. "
+      "Doch bedenkt, dass die Entlehngebuehr dafuer "+KOSTEN_ER+" Muenzen "
+      "betraegt. Wenn Ihr die Sachen angezogen habt, werde ich Euch "
+      "passieren lassen!'";
+
+  if(sie==TP)
+    return "'Wenn Ihr soweit seid, dann fragt mich nach dem Zeremonienkleid. "
+      "Doch bedenkt, dass die Entlehngebuehr dafuer "+KOSTEN_SIE+" Muenzen "
+      "betraegt. Wenn Ihr die Sachen angezogen habt, werde ich Euch "
+      "passieren lassen!'";
+
+  if(zeuge==TP)
+    return "'Ihr braucht keine spezielle Kleidung fuer die Zeremonie!'";
+
+  return "'Bei der Hochzeit wird ganz spezielle Kleidung getragen!'";
+}
+
+void sfkt(string str)
+{
+  command_me("sage "+str);
+}
+
+varargs void scheidung_spezial(object pl, int flag)
+{
+  object ts;
+
+  if(!objectp(pl)) return;
+  if(!MENV) return;
+
+  if(!present(pl, MENV)) return;
+  
+  if(!pl->QueryProp(P_MARRIED)) return;
+
+  if(flag)
+    while(ts=present(TRAUSCHEIN, pl))
+      {
+	ts->SetProp(P_CURSED, 0);
+	ts->DoUnwear(1);
+	ts->remove(1);
+      }
+  
+  pl->SetMarried(0);
+  
+  tell_object(pl, BS("Ein seltsames Gefuehl ueberkommt Euch..."));
+  sfkt("'So, ich habe nun die Ueberbleibsel der ungueltigen Trauung "
+       "entfernt...'");
+
+  write_file(LOG "hochzeit",
+	     dtime(time())+" Spezialscheidung: "+CAP(getuid(pl))+
+	     (flag ? "(Trauschein removed)" : "")+"\n");
+}
+
+void scheidung_normal()
+{
+  object ts;
+
+  //scheidung_frage=({"protheg","ushmul"});
+  
+  if(sizeof(scheidung_frage)!=2) return;
+  if((!PO) || (PO!=ME)) return;
+
+  if((!present(scheidung_frage[0])) || (!present(scheidung_frage[1])))
+    {
+      scheidung_frage=({});
+      return;
+    }
+  
+  while(ts=present(TRAUSCHEIN, find_player(scheidung_frage[0])))
+    {
+      ts->SetProp(P_CURSED, 0);
+      ts->DoUnwear(1);
+      ts->remove(1);
+    }
+  
+  while(ts=present(TRAUSCHEIN, find_player(scheidung_frage[1])))
+    {
+      ts->SetProp(P_CURSED, 0);
+      ts->DoUnwear(1);
+      ts->remove(1);
+    }
+  
+  find_player(scheidung_frage[0])->SetMarried(0);
+  find_player(scheidung_frage[0])->SetProp(P_PARALYZED,
+	      ([PARALYZE_TIME: 9,
+	      PARALYZE_END: "",
+	      PARALYZE_END_OTHER: "",
+	      PARALYZE_MSG: "Ihr starrt gebannt auf die Dienerin!\n"]));
+  
+  find_player(scheidung_frage[1])->SetMarried(0);
+  find_player(scheidung_frage[1])->SetProp(P_PARALYZED,
+             ([PARALYZE_TIME: 9,
+	     PARALYZE_END: "",
+	     PARALYZE_END_OTHER: "",
+	     PARALYZE_MSG: "Ihr starrt gebannt auf die Dienerin!\n"]));
+  
+  call_out("sfkt", 2, 
+	   "'Ich werde alles veranlassen...'");
+  
+  call_out("sfkt", 5,
+	   "'Achtung ich spreche nun den Zauber...'");
+  
+  call_out("inform_scheidung", 9, scheidung_frage[0], scheidung_frage[1]);
+  
+  write_file(LOG "hochzeit",
+	     BS(dtime(time())+" "+CAP(scheidung_frage[0])+" und "+
+		CAP(scheidung_frage[1])+" lassen sich scheiden."));
+  
+  return call_out("sfkt", 8, "'So, das waere vollbracht!'");
+}  
+
+void inform_scheidung(string one, string two)
+{
+  if(!PO) return;
+  if(PO!=ME) return;
+  
+  LLOTH->Hochzeitsinform(one, two, 1);
+}
+
+void catch_tell(string str)
+{
+  string who, whom, what;
+  object oer, osie;
+  string tmpstr;
+  int tmpint, tmpint2, tmpint3;
+  string *tmparr, *tmparr2;
+  
+  if(!MENV) return;
+  if(file_name(MENV)!=ROOM "vorraum") return;
+
+  catch(call_other(HZM, "???"));
+  
+  str=lower_case(str);
+  str=implode(explode(str, "\n"), " ");
+  str=regreplace(str, "[^a-z0-9 ]","",1);
+
+  if(sscanf(str, "%s sagt dienerin ich will die scheidung", who)==1)
+    {
+      who=explode(who," ")[<1]; //Fuer Leute mit Presay
+      
+      if(!TP || TP!=find_player(who) || !present(TP, MENV)) return;
+
+      if(frage && objectp(fragender) && present(fragender, MENV))
+	if(fragender==TP)
+	  return call_out("sfkt", 1,
+            "'Scheidung? Ihr bereitet doch gerade eine Hochzeit vor!'");
+	else
+	  return call_out("sfkt", 1,
+	    "'Es tut mir leid, aber "+CAP(getuid(fragender))+
+	    " bereitet gerade eine Hochzeit vor!'");
+      
+      if(HZM->Hochzeit_laeuft())
+	return call_out("sfkt", 1,
+	  "'Tut mir leid, es ist zur Zeit eine Trauung im Gange! "
+	  "Fragt mich nachher nocheinmal!'");
+      
+      if(!strlen(whom=TP->QueryProp(P_MARRIED)))
+	return call_out("sfkt", 1,
+          "'Ihr seid doch gar nicht verheiratet! Nervt mich nicht!'");
+      
+      if(TP->QueryMoney() < KOSTEN_SCHEIDUNG)
+	return call_out("sfkt", 1,
+	  "'Ihr habt die erforderlichen "+KOSTEN_SCHEIDUNG+" Muenzen nicht "
+          "mit Euch!'");
+
+      whom=explode(whom, " ")[0]; // ist wegen datum in P_MARRIED
+      whom=lower_case(whom);
+
+      DB("*** "+who+" Scheidung von "+whom+".\n");
+      
+      if(!present(TRAUSCHEIN, TP))
+	{
+	  call_out("sfkt", 1,
+	      "'Scheinbar seid Ihr nicht richtig getraut worden, "
+	      "oder Euer Trauungsbeweis ist Euch abhanden gekommen...'");
+	  call_out("sfkt", 2,
+	      "'Da kann ich Euch nur anbieten, das rueckgaengig zu "
+	      "machen..'");
+	  
+	  if(!IS_WIZARD(TP))
+	    TP->AddMoney(-KOSTEN_SCHEIDUNG);
+
+	  call_out("scheidung_spezial", 4, TP);
+	  
+	  return;
+	}
+      
+      if(!MASTER->get_userinfo(whom))
+	{
+	  call_out("sfkt", 1,
+	      "'Scheinbar seid Ihr nicht richtig getraut worden, "
+	      "oder Euren Partner gibt es nicht mehr im Silberland...'");
+	  call_out("sfkt", 2,
+	      "'Da kann ich Euch nur anbieten, die Trauung zu "
+	      "annullieren...'");
+	  
+	  if(!IS_WIZARD(TP))
+	    TP->AddMoney(-KOSTEN_SCHEIDUNG);
+   
+	  call_out("scheidung_spezial", 4, TP, 1);
+	  
+	  return;
+	}
+      
+      if((!find_player(whom)) || !present(whom, MENV))
+	return call_out("sfkt", 1,
+	  "'Fuer eine korrekte Scheidung muss "+CAP(whom)+
+	  " auch anwesend sein!'");
+
+      scheidung_frage=({who, whom});
+
+      if(!IS_WIZARD(TP))
+	TP->AddMoney(-KOSTEN_SCHEIDUNG);
+      
+      return call_out("sfkt", 1,
+	  "'"+CAP(whom)+", wenn Ihr damit einverstanden seid, so antwortet "
+	  "mir mit einem deutlichen 'Ja'!'");
+    }
+  
+  if(sscanf(str, "%s sagt dienerin %s und ich moechten heiraten",who,whom)==2)
+    {
+      who=explode(who," ")[<1]; //Fuer Leute mit Presay
+
+      if(!TP || TP!=find_player(who) || !present(TP, MENV)) return;
+      
+      if(frage && objectp(fragender) && present(fragender, MENV))
+	if(fragender==TP)
+	  return call_out("sfkt", 1,
+            "'Ihr habt mir das bereits mitgeteilt! Antwortet mir auf meine "
+            "Frage, oder storniert die Angaben und fangt neu an!'");
+	else
+	  return call_out("sfkt",1,
+	    "'Es tut mir leid, aber "+CAP(getuid(fragender))+
+	    " hat bereits vor Euch angefragt!'");
+
+      if(HZM->Hochzeit_laeuft())
+	return call_out("sfkt",1,
+	        "'Tut mir leid, es ist zur Zeit eine Trauung im Gange! "
+		"Fragt mich nachher nocheinmal!'");
+
+      if(HZM->Vorbereitungen())
+	return call_out("sfkt",1,
+	        "'Tut mir leid, es ist zur Zeit eine Trauung in Vorbereitung! "
+		"Fragt mich nachher nocheinmal!'");
+      
+      if(!oer=find_player(who)) return;
+      if(!osie=find_player(whom)) return;
+
+      if(!present(oer,MENV) || !present(osie,MENV))
+	return call_out("sfkt",1,
+         "'Fuer die Bitte um Audienz muessen beide anwesend sein!'");
+
+      if(oer->QueryProp(P_GENDER)!=MALE)
+	return call_out("sfkt",1,
+         "'Der Mann muss eroeffnen!'");
+
+      if(osie->QueryProp(P_GENDER)!=FEMALE)
+	return call_out("sfkt",1,
+	 "'Nein so geht das nicht! Eine Frau und ein Mann!'");
+
+      if(member(NOT_ALLOWED_RACE, oer->QueryProp(P_RACE))>-1)
+	return call_out("sfkt",1,
+	       "'"+CAP(who)+", Euch als "+oer->QueryProp(P_RACE)+" ist die "
+			"Hochzeitszeremonie versagt! Und nun verschwindet!'");
+
+      if(member(NOT_ALLOWED_RACE, osie->QueryProp(P_RACE))>-1)
+	return call_out("sfkt",1,
+	       "'"+CAP(whom)+", Euch als "+osie->QueryProp(P_RACE)+" ist die "
+			"Hochzeitszeremonie versagt! Und nun verschwindet!'");
+      
+      if(who==whom)
+	return call_out("sfkt",1,
+         "'Ihr koennt Euch nicht selbst heiraten!'");
+      
+      if(osie->QueryProp(P_MARRIED))
+	return call_out("sfkt",1,
+	       "'Was soll das? "+CAP(whom)+" ist ja schon verheiratet!'");
+      if(oer->QueryProp(P_MARRIED))
+	return call_out("sfkt",1,
+	       "'Was soll das? "+CAP(who)+" ist ja schon verheiratet!'");
+
+      if(TP->QueryMoney()<KOSTEN_ANFANG)
+	return call_out("sfkt",1,
+	       "'Ohne die erforderlichen "+KOSTEN_ANFANG+" Muenzen kann ich "
+	       "nicht anfangen!'");
+      
+      if(HZM->Bereits_vorhanden(who))
+	return call_out("sfkt",1,
+			"'"+CAP(who)+" hat bereits eine Hochzeit angemeldet!");
+      
+      if(HZM->Bereits_vorhanden(whom))
+	return call_out("sfkt",1,
+			"'"+CAP(whom)+" befindet sich bereits auf der "
+			"Hochzeitsliste!");
+      
+      if((oer->QueryProp(P_GENDER)==FEMALE && oer->QueryProp(P_ALIGN)>-1000) ||
+	 (osie->QueryProp(P_GENDER)==FEMALE && osie->QueryProp(P_ALIGN)>-1000))
+	call_out("sfkt",1, 
+		 "'Vergesst nicht, dass die Braut fast satanisch sein muss bei "
+		 "der Zeremonie!'");
+      
+      if(!GESINNUNG->QueryAll4(getuid(oer->QueryProp(P_GENDER)==FEMALE ? oer:osie)))
+	call_out("sfkt", 2,
+		 "'Vergesst nicht, dass die Braut bei allen Schreinen am "
+		 "Tempelgelaende gebetet haben muss!");
+      
+      frage=1;
+      storno=1;
+      fragender=oer;
+
+      SetProp(P_CHAT_CHANCE, 0);
+      
+      data["er"]=who;
+      data["sie"]=whom;
+
+      if(!IS_WIZARD(fragender))
+	fragender->AddMoney(-KOSTEN_ANFANG);
+      
+      tell_room(MENV, 
+		BS("Die Dienerin nickt."));
+
+      call_out("sfkt", 1,
+	       "'So sei es!'");
+      
+      call_out("frage_nach_zeuge", 4);
+      
+      return;
+    }
+  
+  if((!frage) && (!sizeof(scheidung_frage))) return;
+
+//     (sscanf(str, "%s sagt %s",who, what)==2))
+  if((sscanf(str, "%s antwortet dir %s",who, what)==2))
+    {
+      who=explode(who," ")[<1]; //Fuer Leute mit Presay
+      
+      if(TP!=find_player(who)) return;
+      if(frage && (TP!=fragender)) return;
+
+      if(member(({"stornieren","storniere","storno"}), what)>-1)
+	return call_out("sfkt",1,
+	      "Mit dem Befehl \"storniere hochzeit\" koennt Ihr "
+	      "die Vorbereitungen abbrechen!");
+
+      if(sizeof(scheidung_frage))
+	if((present(scheidung_frage[0], MENV)) &&
+	   (present(scheidung_frage[1], MENV)))
+	  if((who==scheidung_frage[1]) && (what=="ja"))
+	    return call_out("scheidung_normal", 2);
+
+      scheidung_frage=({});
+      
+      switch(frage)
+	{
+	  // Frage nach dem Zeugen
+	case 1:	  
+	  if(file_size("/save/"+what[0..0]+"/"+what+".o")<0)
+	    return call_out("sfkt",1, 
+		    CAP(what)+" gibt es nicht! Nennt mir den Zeugen!");
+	  
+	  if(data["sie"]==what || data["er"]==what)
+	    return call_out("sfkt",1, 
+		    "Der Zeuge muss ein Aussenstehender sein! Nennt mir den "
+		    "Zeugen!");
+	  
+	  tell_room(MENV, 
+	    BS("Die Dienerin notiert sich etwas auf einem Pergament."));
+	  
+	  data["zeuge"]=what;
+	  
+	  frage++;
+	  call_out("frage_ob_sofort", 4);
+	  
+	  break;
+
+	  // Frage ob sofort geheiratet werden soll
+	case 2:	  
+	  if(what=="sofort")
+	    {
+	      if((tmpint=HZM->Termin_frei(time(), getuid(fragender)))<=0)
+		return call_out("sfkt",1,
+			"Es tut mir leid, doch es "+
+			(tmpint==-1 ? "hat heute bereits eine Trauung "
+			"stattgefunden! " : "ist fuer heute bereits "
+			"eine Trauung angesetzt! ")+
+			"Ihr koennt mir \"bald\" antworten und ich "
+			"werde Euch eine Liste mit moeglichen Terminen "
+			"vorlegen, oder Ihr koennt die Vorbereitungen "
+			"stornieren.");
+
+	      call_out("sfkt", 1, "Ich werde mich sofort darum kuemmern...");
+
+	      data["zeremonie"]=1;
+	      data["tag"]=time();
+	      data["uhrzeit"]=to_int(dtime(time())[19..20]);
+	      data["gaesteliste"]=({});
+	      
+	      frage+=2;
+	      
+	      call_out("frage_nach_zeremonieart",4);
+	      return ;
+	    }
+	  else
+	    if(what=="bald")
+	      {
+		data["zeremonie"]=2;
+		
+		tell_room(MENV, 
+		  BS("Die Dienerin notiert sich etwas auf einem Pergament."));
+	      
+		if(tmpstr=HZM->Termin_Liste())
+		  {
+		    sfkt("Folgende Termine habe ich in der kommenden Woche...");
+		    tell_room(MENV,
+		      BS("Die Dienerin haelt "+CAP(getuid(fragender))+
+			 " eine Liste vor."), ({fragender}));
+		    tell_object(fragender,
+		      BS("Die Dienerin haelt Euch eine Liste hin..."));
+		    
+		    fragender->More(tmpstr);
+		  }
+		else
+		  sfkt("In der kommenden Woche sind noch alle Termine frei...");
+		
+		frage++;
+		
+		call_out("frage_nach_datum", 4);
+	      }
+	    else
+	      if(what=="heute")
+		{
+		  data["zeremonie"]=3;
+		  
+		  if((tmpint=HZM->Termin_frei(time(), getuid(fragender)))<=0)
+		    return call_out("sfkt",1,
+			"Es tut mir leid, doch es "+
+			(tmpint==-1 ? "hat heute bereits eine Trauung "
+			"stattgefunden! " : "ist fuer heute bereits "
+			"eine Trauung angesetzt! ")+
+			"Ihr koennt mir \"bald\" antworten und ich "
+			"werde Euch eine Liste mit moeglichen Terminen "
+			"vorlegen, oder Ihr koennt die Vorbereitungen "
+			"stornieren.");
+		  
+		  frage++;
+		  
+		  call_out("frage_nach_datum", 4, 1);
+		}
+	      else
+		call_out("sfkt", 1, "Sofort/heute oder bald?");
+	  
+	  break;
+
+	case 3:
+	  if(data["zeremonie"]==3)
+	    {
+	      if(sscanf(what, "heute um %d uhr", tmpint)!=1)
+		return call_out("sfkt", 1, "Was meintet Ihr?");
+
+	      if(!intp(tmpint))
+		return call_out("sfkt", 1, "Was meintet Ihr?");
+	      
+	      if(tmpint > 23)
+		return call_out("sfkt", 1, "Was meintet Ihr?");
+
+	      if(to_int(dtime(time())[19..20]) > tmpint)
+		return call_out("sfkt", 1, "Aber es ist doch schon "+tmpint+
+				" Uhr vorbei!");
+
+	      if(to_int(dtime(time())[19..20])+1 >= tmpint)
+		if(tmpint==23)
+		  return call_out("sfkt", 1, "Das wird sich heute wohl nicht "
+				  "mehr ausgehen... Ihr koennt den Termin "
+				  "morgen ansetzen (z.B: in 1 Tag um "+
+				  random(24)+" Uhr)");
+		else
+		  return call_out("sfkt", 1, "Das wird mir zu knapp! Bitte "
+				"etwas spaeter!");
+
+	      data["tag"]=time();
+	      data["uhrzeit"]=tmpint;
+	      
+	      frage++;
+	      
+	      call_out("sfkt", 1, "Ja, der Termin ist noch frei.");
+	      call_out("frage_nach_zeremonieart",4);
+	    }
+	  else
+	    {
+	      if(sscanf(what, "in %d tag%s um %d uhr", tmpint, tmpstr, tmpint2)!=3)
+		return call_out("sfkt", 1, "Was meintet Ihr?");
+	      
+	      if(!intp(tmpint) || !intp(tmpint2))
+		return call_out("sfkt", 1, "Was meintet Ihr?");
+	      
+	      if(!intp(tmpint) || !intp(tmpint2))
+		return call_out("sfkt", 1, "Was meintet Ihr?");
+	      
+	      if(tmpint2==24)
+		{
+		  tmpint2=0;
+		  tmpint++;
+		}
+	      
+	      if(tmpint < 1 || tmpint > 7)
+		return call_out("sfkt", 1, 
+		    "Der Tag muss innerhalb der naechsten Woche liegen!");
+	  
+	      if((tmpint2 < 0) || (tmpint2 > 23))
+		return call_out("sfkt", 1, 
+		    "Zu welcher Stunde meint Ihr?");
+	  
+	      if(!HZM->Termin_frei(time()+60*60*24*tmpint, getuid(fragender)))
+		return call_out("sfkt", 1, 
+		    "Aber dieser Tag ist doch bereits vergeben! Habt "
+		    "Ihr nicht auf die Liste geachtet? Sucht Euch einen "
+		    "anderen Tag aus (z.B: in "+(random(7)+1)+
+		    " Tagen um "+random(24)+" Uhr)");
+
+	      data["tag"]=time()+60*60*24*tmpint;
+	      data["uhrzeit"]=tmpint2;
+	      
+	      frage++;
+	      
+	      call_out("sfkt", 1, "Ja, der Termin ist noch frei.");
+	      call_out("frage_nach_zeremonieart",4);
+	    }
+	  break;
+	  
+	case 4:
+	  if(what=="offen")
+	    {
+	      call_out("sfkt", 1, "Ihr wollt also eine oeffentliche, "
+		       "frei besuchbare Zeremonie... Gut.");
+
+	      data["art"]=0;
+	      frage++;
+
+	      if(data["zeremonie"]==1)
+		call_out("aufgebot_vervollstaendigen", 4);
+	      else
+		call_out("frage_nach_gaesteliste", 4, 1);
+	      return;
+	    }
+	  
+	  if(what!="geschlossen")
+	    return call_out("sfkt", 1, "Offen oder geschlossen?");
+
+	  call_out("sfkt", 1, "Ihr wollt also eine private Zeremonie... "
+		   "Gut.");
+
+	  data["art"]=1;
+	  frage++;
+
+	  if(data["zeremonie"]==1)
+	    call_out("aufgebot_vervollstaendigen", 4);
+	  else
+	    call_out("frage_nach_gaesteliste", 4);
+
+	  break;
+	  
+	case 5:
+	  tmparr=explode(what, " ");
+	  
+	  if(!sizeof(tmparr))
+	    return call_out("sfkt", 1, "Was ist das? Ich brauche eine Liste "
+			    "mit den einzuladenden Gaesten, sodass ich die "
+			    "Einladungen verschicken kann, oder \"keine\"");
+	  
+	  tmpstr="";
+	  tmpint=0;
+	  tmparr2=({});
+	  
+	  if(member(({"kein","keine"}), tmparr[0])>=0)
+	    {
+	      data["gaesteliste"]=({});
+	      
+	      call_out("sfkt", 1, "So, das sollte an Informationen reichen.");
+	      call_out("sfkt", 2, 
+		   "Ich setze somit den Termin der Hochzeit fuer\""+
+		   dtime(data["tag"])[0..16]+"\" um "+data["uhrzeit"]+" Uhr "
+		   "fest. Die Vorbereitungen dafuer beginnen ungefaehr eine "
+		   "Stunde davor, somit ist ein frueherer Beginn der Hochzeit "
+		   "auch moeglich, doch allzu lange solltet Ihr nicht zoegern,"
+		   " denn falls Ihr nicht rechtzeitig erscheint, verfaellt "
+		   "der Termin.");
+	      
+	      call_out("aufgebot_vervollstaendigen", 4);
+	      return;
+	    }
+
+	  for(tmpint=sizeof(tmparr)-1;tmpint>=0;tmpint--)
+	    if(file_size("/save/"+tmparr[tmpint][0..0]+"/"+tmparr[tmpint]+
+			 ".o")>0)
+	      if(member(tmparr2, tmparr[tmpint])==-1)
+		tmparr2+=({tmparr[tmpint]});
+	  
+	  if(sizeof(tmparr-=tmparr2))
+	    {
+	      sfkt("Folgende Spieler habe ich nicht gefunden... "+
+		   implode(tmparr, " ")+".");
+	      sfkt("Antwortet mir die Liste noch einmal, aber diesmal "
+		   "ohne Fehler!");
+	      return;
+	    }
+	  
+	  data["gaesteliste"]=tmparr2;
+
+	  call_out("sfkt", 1, "So, nun habe ich alle noetigen Informationen.");
+	  call_out("sfkt", 2, 
+		   "Ich setze somit den Termin der Hochzeit fuer\""+
+		   dtime(data["tag"])[0..16]+"\" um "+data["uhrzeit"]+" Uhr "
+		   "fest. Die Vorbereitungen dafuer beginnen ungefaehr eine "
+		   "Stunde davor, somit ist ein frueherer Beginn der Hochzeit "
+		   "auch moeglich, doch allzu lange solltet Ihr nicht zoegern,"
+		   " denn falls Ihr nicht rechtzeitig erscheint, verfaellt "
+		   "der Termin.");
+
+	  call_out("aufgebot_vervollstaendigen", 4);
+	  break;
+	}
+    }
+}
+
+void frage_nach_zeuge()
+{
+  if(objectp(fragender) && present(fragender, MENV))
+    {
+      sfkt("Nun beantwortet mir, wer denn der Trauzeuge sein wird bei der "
+	   "Zeremonie?");
+      sfkt("Antwortet mir einfach den Namen.");
+      return;
+    }
+  
+  sfkt("Wo ist er denn hin?");
+  Storno();
+}
+
+void frage_ob_sofort()
+{
+  if(objectp(fragender) && present(fragender, MENV))
+    {
+      sfkt("Nun moechte ich wissen, ob die Hochzeit heute noch stattfinden "
+	   "soll, oder bald innerhalb der naechsten Woche? (sofort/heute/bald)");
+      sfkt("Wenn Ihr nicht heute noch heiraten wollt, werde ich Euch gleich "
+	   "eine Liste der moeglichen Termine vorlegen.");
+      
+      return;
+    }
+
+  sfkt("Wo ist er denn hin?");
+  Storno();
+}
+
+varargs void frage_nach_datum(int flag)
+{
+  if(objectp(fragender) && present(fragender, MENV))
+    return sfkt("Vergesst nicht, dass nur ein mal am Tag eine Trauung "
+		"stattfindet! Antwortet mir dann, wenn Ihr einen Termin "
+		"ausgesucht habt "+(flag ? "z.B: heute um "+(random(22)+1)+
+				    " Uhr)":"(z.B: in "+(random(7)+1)+
+				    " Tagen um "+random(24)+" Uhr)"));
+  
+  sfkt("Wo ist er denn hin?");
+  Storno();
+}
+
+void frage_nach_zeremonieart()
+{
+  if(objectp(fragender) && present(fragender, MENV))
+    return sfkt("Soll die Zeremonie oeffentlich, oder in gschlossener "
+		"Gesellschaft stattfinden? (offen/geschlossen)");
+
+  sfkt("Wo ist er denn hin?");
+  Storno();
+}
+
+varargs void frage_nach_gaesteliste(int flag)
+{
+  if(objectp(fragender) && present(fragender, MENV))
+    if(flag)
+      return sfkt("Wollt Ihr trotzdem an einige Gaeste Einladungen "
+		  "verschicken? Wenn nicht, antwortet mir einfach \"keine\"");
+    else
+      {
+	sfkt("Dann brauche ich nun eine Liste mit den einzuladenden "
+	     "Gaesten, sodass ich die Einladungen verschicken kann.");
+	sfkt("Oder soll es eine ganz intime Hochzeit werden? Dann antwortet "
+	     "mir \"keine\".");
+	return;
+      }
+  
+  sfkt("Wo ist er denn hin?");
+  Storno();
+}
+
+int alles_gesetzt()
+{
+  if(!stringp(data["er"])) return 0;
+  DB("*** er="+data["er"]+"\n");
+  if(!stringp(data["sie"])) return 0;
+  DB("*** sie="+data["sie"]+"\n");
+  if(!stringp(data["zeuge"])) return 0;
+  DB("*** zeuge="+data["zeuge"]+"\n");
+  if(!intp(data["zeremonie"])) return 0;
+  DB("*** zeremonie="+data["zeremonie"]+"\n");
+  if(!intp(data["tag"])) return 0;
+  DB("*** tag="+dtime(data["tag"])+"\n");
+  if(!intp(data["uhrzeit"])) return 0;
+  DB("*** uhrzeit="+data["uhrzeit"]+"\n");
+  if(!intp(data["art"])) return 0;
+  DB("*** art="+data["art"]+"\n");
+  if(!pointerp(data["gaesteliste"])) return 0;
+  DB("*** gaesteliste="+implode(data["gaesteliste"], " ")+"\n");
+
+  return 1;
+}
+
+void aufgebot_vervollstaendigen()
+{
+  if(!alles_gesetzt())
+    {
+      sfkt("Irgendetwas stimmt hier nicht!");
+      sfkt("Versucht es noch einmal!");
+      Storno();
+      return;
+    }
+  
+  HZM->Neuer_Termin(data);
+  
+  call_out("checkenter", 4);
+  
+  Storno(1);
+}
+
+nosave int ausundvorbei(string str)
+{
+  int i;
+  
+  notify_fail("Was willst Du stornieren?\n");
+  if(!str) return 0;
+  
+  if(member(({"hochzeit","zeremonie","trauung","termin","hochzeitstermin"}),
+	    str)==-1) return 0;
+  
+  if(i=HZM->Bereits_vorhanden(getuid(TP)))
+    {
+      write("Du weist die Dienerin an, die Hochzeit zu stornieren!\n");
+      tell_room(MENV, TPN+" storniert die Hochzeitsvorbereitungen!\n", 
+		({TP}));
+      
+      HZM->Storno(i);
+
+      return 1;
+    }
+  
+  if(sizeof(data))
+    if(TP==fragender || TP==find_player(data["sie"]) || IS_WIZARD(TP))
+      {
+	write("Du weist die Dienerin an, die Hochzeit zu stornieren!\n");
+	tell_room(MENV, TPN+" storniert die Hochzeitsvorbereitungen!\n",
+		  ({TP}));
+	Storno();
+	return 1;
+      }
+    else
+      return write("Die Dienerin herrscht Dich an: Dazu hast Du kein Recht!\n"),1;
+  
+  return write(BS("Die Dienerin sieht Dich schief an und meint: "+
+		  CAP(str)+"?")), 1;
+}
+
+void init()
+{
+  if(!is_clone(TO)) return;
+
+  ::init();
+
+  if((interactive(TP)) && (HZM->Vorbereitungen()) && 
+     (find_call_out("checkenter")==-1))
+    call_out("checkenter", 1);
+}
+
+void checkenter()
+{
+  if(!objectp(er))
+    if(!objectp(er=find_player(HZM->Braeutigam()))) return;
+
+  if(!objectp(sie))
+    if(!objectp(sie=find_player(HZM->Braut()))) return;
+  
+  if(!objectp(zeuge)) 
+    if(!objectp(zeuge=find_player(HZM->Zeuge()))) return;
+
+  if(HZM->Kleidungsausgabe()) return;
+  
+  if(present(er, MENV) && present(sie, MENV))
+    if(present(zeuge, MENV))
+      {
+	HZM->Kleidungsausgabe(1);
+	
+	sfkt("Nun da ihr anwesend seid, fragt mich nach der "
+	     "Hochzeitskleidung und ich werde sie Euch aushaendigen. "
+	     "Nur mit angezogener Hochzeitsbekleidung lasse ich Euch "
+	     "passieren. Der Trauzeuge "+
+	     (HZM->Geschlossene_Gesellschaft() ? 
+	      "braucht keine spezielle Bekleidung und kann" : 
+	      "und die Gaeste brauchen keine spezielle Bekleidung und "
+	      "koennen")+" den Tempel nun betreten.");
+      }
+    else
+      if(!zeuge_benachrichtigt)
+	{
+	  sfkt("Der Trauzeuge sollte sich hier bald einfinden!");
+	  zeuge->Message(break_string(
+	  "Ihr wurdet als Zeuge fuer die Hochzeit von "+CAP(getuid(sie))+
+	  " und "+CAP(getuid(er))+" eingeladen. Bitte begebt Euch auf dem "
+	  "schnellsten Weg zum Haupttempel des Tempelgelaendes von "
+	  "Ardulvhier!", 78, "Eine Dienerin teilt Dir mit: "), MSGFLAG_TELL);
+
+	  zeuge_benachrichtigt=1;
+	}
+}
+
+void reset()
+{
+  if(!is_clone(TO)) return;
+
+  ::reset();
+  
+  if(storno) storno++;
+  if(storno>3) call_out("timeout", 1);
+}
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+  if(find_call_out("reaction") != -1) return;
+
+  switch(gruppe)
+    {
+    case "fies":
+      call_out("reaction", 0, TP,
+	       "wimmert: 'Lasst mich in Ruh!'\n",
+	       "wimmert: 'Lasst mich in Ruh!'\n");
+      break;
+    case "frech":
+      call_out("reaction", 0, TP,
+	       "zuckt zusammen.\n",
+	       "zuckt zusammen.\n");
+      break;
+    case "intim":
+      call_out("reaction", 0, TP,
+	       "laechelt Dich heimlich an.\n",
+	       "funkelt mit ihren Augen.\n");
+    }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void reaction(object ob, string macher, string andere)
+{
+  if(present(ob, ENV(TO)))
+    {
+      tell_object(ob, BS(Name(WER, 1)+" "+macher));
+      tell_room(ENV(TO), BS(Name(WER, 1)+" "+andere), ({ob}));
+    }
+}
+

@@ -1,0 +1,261 @@
+// Schattenstring
+// Schattenwelt
+// Von Wraz / Mendralim
+// Slotless, erhoeht einige Werte eines Spielers
+
+#include "../def.h"
+inherit "std/thing";
+inherit ZONE "std/std.lpc";
+
+#include "/p/daemon/itemd/itemd.h"
+
+object owner;
+int default_percent = 20;
+int default_call_out_time = 600;
+int shadow_skill;
+float shadow_skill_float;
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Ein Schattenstring");
+  SetProp(P_LONG,
+    "Der Schattenstring ist ein sehr seltsamer Gegenstand. Er erinnert Dich an "
+    "einen Bleistift, und zugleich auch ueberhaupt nicht. Honigartig wabern "
+    "Schattenfaeden um diesen laenglichen Gegenstand. Daher hat er wohl seinen "
+    "Namen.");
+    
+  AddDetail( ({"bleistift"}),
+    "Eine wirklich unpassende Beschreibung, wenn Du so drueber nachdenkst.");
+    
+  AddDetail( ({"schattenfaeden"}),
+    "Sie quirlen um den String herum, manchmal mit der Bewegung, manchmal "
+    "vollkommen unabhaengig davon.");
+
+  SetProp(P_NAME, "Schattenstring");
+  SetProp(P_GENDER, MALE);
+  AddId(({"schattenstring", "string", "\nschattenstring"}));
+  
+  SetProp(P_MATERIAL, ([MAT_SHADOW:95, MAT_MISC_MAGIC:5]) );
+  SetProp(P_WEIGHT, 12);
+  SetProp(P_SIZE, 21);
+  SetProp(P_VALUE, 10000);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NODROP, BS("Der Schattenstring wandert einfach von selbst wieder "
+    "in Dein Inventar."));
+  SetProp(P_ITEMD_TMPMAGIC, ({2000, 2000}) );
+  seteuid(getuid(TO));
+  find_object(ITEMD)->RegisterNewItem(this_object(), TIME_ID);
+
+    AddCmd("quantifiziere", "Quantifizieren");
+}
+
+// ------------------------------------------------------------------------------
+string _query_info()
+{
+  string str;
+  int needed_levels_for_next_skill;
+
+  str = "Der Schattenstring ist ";
+
+  switch(shadow_skill)
+  {
+    case 0:
+      str += "im kleinstmoeglichen";
+      break;
+    case 1:
+      str += "in einem winzigen";
+      break;
+    case 2:
+      str += "in einem sehr kleinen";
+      break;
+    case 3:
+      str += "in einem kleinen";
+      break;
+    case 4:
+      str += "in einem mittleren";
+      break;
+    case 5:
+      str += "in einem mittelgrossen";
+      break;
+    case 6:
+      str += "in einem relativ grossen";
+      break;
+    case 7:
+      str += "in einem sehr grossen";
+      break;
+    case 8:
+      str += "in einem gigantisch grossen";
+      break;
+    case 9:
+      str += "im maximalen\n";
+      break;
+  }
+
+  needed_levels_for_next_skill = to_int(
+    exp(log(10.0)*to_int(shadow_skill_float+1)) - exp(log(10.0)*shadow_skill_float)
+  );
+  needed_levels_for_next_skill = to_int(needed_levels_for_next_skill * (90.0+random(21)) );
+
+  str += " Zustand.\n";
+  str += "Bis zum naechsthoeheren Zustand benoetigst Du noch etwa "
+    +needed_levels_for_next_skill+" Schattenlevel.\n";
+  str += BS("Der Schattenstring wird durch die Desintegration (i.e. 'das Toeten') von "
+    "lichtlosen Astralwesen (i.e. 'Schattenkreaturen') geladen. Er "
+    "verschraenkt also die astralen Schattenerfahrungen "
+    "in sich, wodurch physische wie mentale Gegebenheiten modifiziert werden. Du wunderst "
+    "Dich ziemlich, aber nimmst an, dass er sowohl Deine Lebenskraft als auch Deine "
+    "astrale Kraft und Deine Attribute staerken kann.")+
+    BS("Gesehen hast Du ihn das erste Mal, nachdem Du Deinen Schatten vernichtet "
+    "hattest.")+
+    BS("Du kannst den Schattenstring mit dem Befehl 'quantifiziere' entfernen.");
+
+  return str;
+}
+
+// ------------------------------------------------------------------------------
+int Quantifizieren()
+{
+
+  TP->Message(BS("Du quantifizierst Deinen Schattenstring, was so viel bedeutet wie: "
+    "Er loest sich in Nichts auf."));
+  TO->remove();
+  return 1;
+
+}
+
+// ------------------------------------------------------------------------------
+varargs void ReduceSpellBreak(int percent)
+{
+  int spell_break_time;
+  string adjective;
+
+  if(!percent) percent = default_percent;
+  percent = percent - (percent/6) + random(percent/3);
+  percent = percent > 100 ? 100 : percent;
+  percent = percent < 0 ? 0 : percent;
+
+  if(!TO || !owner || !ENV(TO) || ENV(TO) != owner) return;
+  if(!interactive(owner)) return;
+
+  spell_break_time = owner->QueryProp(P_NEXT_SPELL_TIME) - time();
+  if(spell_break_time >= 2)
+  {
+    switch(percent)
+    {
+      case 0..10: adjective = " ein wenig"; break;
+      case 11..25: adjective = " teilweise"; break;
+      case 26..49: adjective = " betraechtlich"; break;
+      case 50..89: adjective = " grossteils"; break;
+      case 90..99: adjective = " fast vollstaendig"; break;
+      case 100: adjective = " vollstaendig"; break;
+    }
+    owner->SetProp(P_NEXT_SPELL_TIME, time() + spell_break_time * (100-percent) / 100);
+    owner->Message(BS("Der Schattenstring erfrischt Deine magische Konzentration"
+      +adjective+"."));
+  }
+
+  if(find_call_out("ReduceSpellBreak") == -1) 
+  {
+    // Manchmal 100 % Reduktion
+    if(!random(200-percent)) call_out("ReduceSpellBreak", 
+      default_call_out_time + random(default_call_out_time/10), 100);
+    // Sonst Default
+    else call_out("ReduceSpellBreak", 
+      default_call_out_time + random(default_call_out_time/10));
+  }
+}
+
+// ------------------------------------------------------------------------------
+void BecomesNetAlive(object player)
+{
+  if(find_call_out("ReduceSpellBreak") == -1) 
+    call_out("ReduceSpellBreak", default_call_out_time + random(default_call_out_time/10));
+}
+
+// ------------------------------------------------------------------------------
+void Setup(object player, float player_log_shadowlvl)
+{
+  if(!player) return;
+
+  owner = player;
+  shadow_skill = to_int(player_log_shadowlvl); // bis max. 9 (theoretisch)
+  shadow_skill = shadow_skill >= 0 ? shadow_skill : 0;
+  shadow_skill_float = player_log_shadowlvl;
+
+  DB("schattenstring Setup() ("+getuid(player)+"): shadow_skill = "+shadow_skill+"\n");
+
+  switch(shadow_skill)
+  {
+    case 0:
+      SetProp(P_X_HEALTH_MOD,([
+        P_HP:1,
+        P_SP:1])); 
+      break;
+    case 1:
+    case 2:
+      SetProp(P_X_ATTR_MOD,([
+        A_INT:1,
+        A_CON:1]));
+      SetProp(P_X_HEALTH_MOD,([
+        P_HP:shadow_skill,
+        P_SP:shadow_skill])); 
+      default_percent = 20 + 5 * shadow_skill;
+      default_call_out_time = 600 - 10 * shadow_skill;
+      break;
+    case 3:
+      SetProp(P_X_ATTR_MOD,([
+        A_INT:1,
+        A_STR:1,
+        A_CON:1]));
+      SetProp(P_X_HEALTH_MOD,([
+        P_HP:2*shadow_skill,
+        P_SP:2*shadow_skill])); 
+      default_percent = 20 + 7 * shadow_skill;
+      default_call_out_time = 600 - 20 * shadow_skill;
+      break;
+    case 4:
+    case 5:
+    case 6:
+    case 7:
+    case 8:
+    case 9:
+      SetProp(P_X_ATTR_MOD,([
+        A_INT:shadow_skill/2,
+        A_STR:shadow_skill/2,
+        A_DEX:shadow_skill/2,
+        A_CON:shadow_skill/2]));
+      SetProp(P_X_HEALTH_MOD,([
+        P_HP:3*shadow_skill,
+        P_SP:3*shadow_skill])); 
+      default_percent = 20 + 10 * shadow_skill;
+      default_call_out_time = 600 - 30 * shadow_skill;
+      break;
+    default: break;
+  }
+
+  if(find_call_out("ReduceSpellBreak") == -1) 
+    call_out("ReduceSpellBreak", default_call_out_time + random(default_call_out_time/10));
+
+}
+
+// ------------------------------------------------------------------------------
+void reset()
+{
+  object *inv;
+  int i, no_of_strings;
+
+  ::reset();
+  
+  if (!TO || !is_clone(TO)) return;
+
+  // falls der String irgendwie vom "owner" Spieler zu einem anderen kommt: remove()
+  if(ENV(TO) && owner && ENV(TO) != owner) TO->remove();
+  
+  // man kann nur einen String haben
+  if(MoreThanOnePresent(TO,"\nschattenstring")) TO->remove();
+}

@@ -1,0 +1,329 @@
+//=========================================================================
+//
+// File:    uwroom5.c
+// Created by Zaknafein@SL
+//
+// Project: Eheringquest
+//
+//=========================================================================
+
+#include "../def.h"
+#include "/d/wasser/cirion/water.h"
+
+inherit ROOM "std_unterwasser";
+
+#define OBEN 1
+#define UNTEN 0
+
+int pfeil_richtung;
+int schlamm_weg;
+int gitter;
+
+void create()
+{
+  ::create();
+
+  SetProp(P_INT_LONG,
+    "In diesem Abschnitt der Roehre erkennst Du ein Gitter, das sich "
+    "westlich von Dir befindet. Die Schlammschicht am Boden scheint hier "
+    "besonders dick zu sein."
+  );
+
+  AddDetail( ({ "abschnitt" , "Abschnitt" }) ,
+    "In diesem Abschnitt der Roehre erkennst Du ein Gitter im Westen.");
+
+  AddDetail( ({ "schlamm" , "schlammschicht" , "schicht" }) ,
+    "Mit der Zeit hat sich hier auf dem Boden der Roehre Sand abgesetzt "
+    "und eine schleimige Schlammschicht gebildet. Hm, vielleicht ist ja "
+    "etwas im Schlamm verborgen?");
+
+  AddDetail( ({"westen"}) ,
+    "Dort befindet sich ein Gitter.");
+
+  AddSpecialDetail( ({"pfeil"})   , "detail_pfeil" );
+  AddSpecialDetail( ({"scheibe"}) , "detail_scheibe");
+  AddSpecialDetail( ({"gitter"})  , "detail_gitter");
+
+  AddCmd( ({ "tauch" , "tauche" }), "cmd_tauchen");
+  AddCmd( ({ "dreh" , "drehe" }) , "cmd_drehen" );
+  AddCmd( ({ "drueck", "nehm" , "nehme" ,"nimm" , "druecke" }) , "cmd_nehmen" );
+
+  AddCmd(
+    "nehm|nehme|nimm&scheibe",
+    "cmd_nehmen",
+    "Was willst Du nehmen?\n"
+  );
+
+  AddCmd(
+    "wuehl|wuehle|durchwuehl|durchwuehle|such|suche"
+    "durchsuch|durchsuche&schlamm|schlammschicht|schicht",
+    "cmd_wuehlen",
+    "Was moechtest Du durchwuehlen?\n"
+  );
+
+  AddCmd(
+    "oeffne&gitter",
+    "cmd_oeffnen",
+    "Was moechtest Du oeffnen?\n"
+  );
+
+  AddCmd(
+    "schliess|schliesse&gitter",
+    "cmd_schliessen",
+    "Was moechtest Du schliessen?\n"
+  );
+
+  AddWaterExit( "osten", ROOM "uwroom3");
+
+
+  pfeil_richtung = 2;
+  schlamm_weg    = 0;
+  gitter         = UNTEN;
+}
+
+void OpenFence()
+{
+  gitter = OBEN;
+  AddWaterExit( "westen", ROOM "uwroom6");
+  ROOM "uwroom6"->AddWaterExit("osten", ROOM "uwroom5");
+}
+
+void CloseFence()
+{
+  gitter = UNTEN;
+  RemoveExit("westen");
+  ROOM "uwroom6"->RemoveExit("osten");
+}
+
+int QueryFenceOpen()
+{
+  if(gitter == OBEN) return 1;
+  return 0;
+}
+
+int QueryFenceClosed()
+{
+  if(gitter == UNTEN) return 1;
+  return 0;
+}
+
+void reset()
+{
+  ::reset();
+
+  if(QueryFenceOpen())
+  {
+    tell_room(TO, "Auf einmal faellt das Gitter nach unten.\n");
+    tell_room(ROOM "uwroom6", "Auf einmal faellt das Gitter nach unten.\n");
+    CloseFence();
+  }
+}
+
+int cmd_oeffnen(string str)
+{
+  tell_object(TP, "Das Gitter ist zu schwer, um es hochzuschieben.\n");
+  return 1;
+}
+
+int cmd_schliessen(string str)
+{
+  tell_object(TP, "Das Gitter laesst sich nicht schliessen.\n");
+  return 1;
+}
+
+int cmd_wuehlen(string str)
+{
+  if(schlamm_weg == 0)
+  {
+    EMASTER->Msg(TPUID+" wuehlt im Schlamm in der Roehre");
+    tell_object(TP, BS("Du wuehlst im Schlamm und legst dabei eine kleine "
+                       "Scheibe frei."));
+    schlamm_weg = 1;
+   }
+   else
+   {
+     tell_object(TP, BS("Du wuehlst weiter im Schlamm, kannst aber nichts "
+                        "mehr finden."));
+   }
+
+  return 1;
+}
+
+string detail_gitter(string str)
+{
+  string s;
+
+  if(QueryFenceOpen())
+  {
+    s = "Das Gitter ist geoeffnet.\n";
+  }
+  else
+  {
+    s = "Das Gitter versperrt Dir den Weg.\n";
+  }
+
+  return s;
+}
+
+string detail_scheibe(string str)
+{
+  string s;
+
+  if(schlamm_weg == 0)
+  {
+    s = "Sowas siehst Du da nicht!";
+  }
+  else
+  {
+    s = "Auf der kleinen Scheibe erkennst Du einen Pfeil.";
+  }
+
+  return BS(s);
+}
+
+string detail_pfeil()
+{
+  string s;
+
+  if(schlamm_weg == 0)
+  {
+    return "Sowas siehst Du da nicht!\n";
+  }
+
+  s = "Der Pfeil zeigt nach ";
+
+  switch(pfeil_richtung)
+  {
+    case 0:  s += "Norden.";     break;
+    case 1:  s += "Nordosten.";  break;
+    case 2:  s += "Osten.";      break;
+    case 3:  s += "Suedosten.";  break;
+    case 4:  s += "Sueden.";     break;
+    case 5:  s += "Suedwesten."; break;
+    case 6:  s += "Westen.";     break;
+    case 7:  s += "Nordwesten."; break;
+    default: s += "sonstwohin";  break;
+  }
+
+  return s+"\n";
+}
+
+cmd_drehen(str)
+{
+  notify_fail("Was moechtest Du drehen?\n");
+
+  if(!str || str == 0) return 0;
+
+  notify_fail("Moechtest Du die Scheibe nach links oder nach rechts "
+              "drehen?\n");
+
+  if(!(str == "scheibe nach links"  ||
+       str == "scheibe nach rechts" )) return 0;
+
+  if(str == "scheibe nach links")
+  {
+    EMASTER->Msg(TPUID+" dreht die Scheinbe nach links");
+
+    if(pfeil_richtung == 0)
+    {
+      pfeil_richtung = 7;
+    }
+    else
+    {
+      pfeil_richtung--;
+    }
+  }
+
+  if(str == "scheibe nach rechts")
+  {
+    EMASTER->Msg(TPUID+" dreht die Scheibe nach rechts");
+
+    if(pfeil_richtung == 7)
+    {
+      pfeil_richtung = 0;
+    }
+    else
+    {
+      pfeil_richtung++;
+    }
+  }
+
+  if(pfeil_richtung == 6)
+  {
+    if(QueryFenceOpen())
+    {
+      tell_object(TP, "Du drehst die Scheibe und das Gitter senkt sich.\n");
+      tell_room(TO, "Das Gitter senkt sich.\n", ({ TP }) );
+      tell_room(ROOM "uwroom6", "Das Gitter senkt sich.\n" );
+      CloseFence();
+    }
+    else
+    {
+      tell_object(TP, "Du drehst die Scheibe und das Gitter hebt sich.\n");
+      tell_room(TO, "Das Gitter hebt sich.\n", ({ TP }) );
+      tell_room(ROOM "uwroom6", "Das Gitter hebt sich.\n" );
+      OpenFence();
+    }
+  }
+  else
+  {
+    tell_object(TP, "Du drehst die Scheibe, aber es passiert nichts.\n");
+  }
+
+  return 1;
+}
+
+cmd_nehmen(string str)
+{
+  tell_object(TP, BS("Hm, das geht nicht, aber vielleicht kannst Du etwas "
+                     "anderes mit der Scheibe machen."));
+  return 1;
+
+}
+
+//--------------------------------------------------------------------------
+// UWROOM in seiner jetzigen Form unterstuetzt keine Tueren.
+//--------------------------------------------------------------------------
+
+/*
+
+  NewDoor("westen", ROOM "uwroom6" , ({"gitter"}) ,
+    ({D_FLAGS, DOOR_CLOSED|DOOR_RESET_CL
+     ,D_NAME,  "Gitter"
+     ,D_GENDER, NEUTER
+     ,D_LONG, "Ein massives Gitter ist in die Roehre eingelassen worde."
+     ,D_MSGS,    ({"durch das Gitter","taucht","kommt herein"})
+     ,D_OPENTESTFUNC, "doortest"
+     ,D_OPENMSG, ({"Du oeffnest das Gitter.",
+                   "%s oeffnet das Gitter.",
+                   " gleitet nach oben."})
+     ,D_CLOSEMSG, ({"Du schliesst das Gitter.",
+                    "%s schliesst das Gitter.",
+                    " faellt herunter."})
+     ,D_RESET_CLOSEMSG, " faellt herunter."
+     })
+  );
+
+
+
+int doortest()
+{
+  tell_object(TP, BS("Du versuchst das Gitter anzuheben, doch es ist viel "
+                     "zu schwer. "));
+  return 1;
+}
+
+void SetThisDoor(int dstatus)
+{
+  DOOR_MASTER->SetDoorStatus(ROOM "uwroom6",dstatus,TO);
+}
+
+int QueryThisDoor()
+{
+  return DOOR_MASTER->QueryDoorStatus(ROOM "uwroom6",TO);
+}
+
+
+*/
+
+

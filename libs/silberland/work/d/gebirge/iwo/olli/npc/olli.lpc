@@ -1,0 +1,607 @@
+#include <defines.h>
+#include <moredef.h>
+#include <moving.h>
+#include <combat.h>
+#include <mnpc.h>
+#include <properties.h>
+#include <npc.h>
+
+#include "../def.h"
+
+inherit "std/mnpc";
+
+#pragma strong_types
+
+#define FELSRAUM ROOM "fels.lpc"
+
+#define PANIC_RATE 10 // Seconds for decrease
+
+#define PANIC_ACTION_DELAY ({ 5, 5 })
+#define NORMAL_ACTION_DELAY ({ 15, 45 })
+
+#define CMDS ({ "scheuchen", "locken", "jagen", "schieben", "schubsen", "ziehen" })
+
+#define OLLI_FAILMSGS ({ "Olli ignoriert Dich einfach.", \
+                         "Olli schaut Dich doof an.", \
+                         "Olli sucht etwas zu essen.", \
+                         "Olli schnuppert an Dir.", \
+                         "Olli steht dumm rum." })
+
+// Prototypes
+void set_cmds();
+void do_walk();
+
+// Globals
+int panic = 0;
+
+int tied = 0;
+
+string *curr_cmds = ({});
+
+void create()
+{
+  if (!is_clone(this_object()))
+    return;
+
+  if (find_living("\niwoschaf"))
+    return;
+
+  ::create();
+
+  create_default_npc(5);
+
+  AddId( ({ "olli", "schaf", "\niwoschaf" }) );
+
+  SetProp(P_SHORT, "Olli das olle Schaf steht dumm rum");
+
+  SetProp(P_NAME, "Olli");
+
+  SetProp(P_ARTICLE, 0);
+
+  SetProp(P_GENDER, MALE);
+
+  SetProp(P_MSGIN, "schlendert herein");
+  SetProp(P_MSGOUT, "schlendert");
+
+  SetProp(P_LONG, "Olli steht hier ziemlich dumm in der "
+    "Gegend herum. Mit seinen sagenhaft doof wirkenden Augen "
+    "glotzt er Dich an. Hinter diesen Augen scheint sich "
+    "eine unendliche Leere auszubreiten. Seine Beine scheinen "
+    "nicht seinem Willen unterworfen zu sein, jedenfalls "
+    "machen sie den Eindruck als ginge jedes davon seine "
+    "eigenen Wege. Das kleine Schwaenzchen verdeckt Dinge, "
+    "die Du lieber garnicht naeher in Augenschein nehmen "
+    "moechtest, und um seinen Hals haeng ein rotes Band "
+    "mit einem kleinen Gloeckchen.");
+
+  SetProp(P_NOATTACK, "glotzt Dich doof an.\nNichteinmal Du bringst es fertig eine "
+    "so minderbemittelte Kreatur zu verletzen.");
+
+  SetProp(P_MAX_HANDS, 4);
+
+  SetProp(P_INFO, "Olli umgibt eine regelrechte Aura "
+    "von Dummheit");
+
+  SetAttribute(A_INT, -10);
+  SetAttribute(A_DEX,   0);
+  SetAttribute(A_CON,   4);
+  SetAttribute(A_STR,   2);
+
+  AddCmd (({ "seil", "seile" }), "drop_sheep");
+
+  AddCmd( ({ "erschrecke", "erschreck", "schrecke", "schreck", "erschrick", "erschricke" }),
+    "cmd_erschrecken");
+
+
+  AddCmd( ({ "scheuch", "scheuche" }),
+    "cmd_scheuchen");
+  AddCmd( ({ "locke", "lock" }),
+    "cmd_locken");
+  AddCmd( ({ "jage", "jag" }),
+    "cmd_jagen");
+  AddCmd( ({ "schiebe", "schieb" }),
+    "cmd_schieben");
+  AddCmd( ({ "schubse", "schubs" }),
+    "cmd_schubsen");
+  AddCmd( ({ "ziehe", "zieh", "zerr", "zerre", "schlepp", "schleppe" }),
+    "cmd_ziehen");
+
+  set_cmds();
+
+  call_out("do_walk", 0);
+
+}
+
+
+
+void do_walk()
+{
+  string *exits;
+
+  while(remove_call_out("do_walk")!=-1);
+
+  if (file_name(ENV(ME)) != sprintf("%s%s", ROOM, "fels"))
+    {
+      exits = m_indices(ENV(ME)->QueryProp(P_EXITS));
+
+      if (sizeof(exits)>0)
+      command_me(exits[random(sizeof(exits))]);
+    }
+
+  if (panic > 0)
+    call_out("do_walk", PANIC_ACTION_DELAY[0] + random(PANIC_ACTION_DELAY[1]));
+  else
+    call_out("do_walk", NORMAL_ACTION_DELAY[0] + random(NORMAL_ACTION_DELAY[1]));
+
+}
+
+
+
+
+
+int drop_sheep(string str)
+{
+  object rope;
+
+  notify_fail("Was willst Du wohin seilen?\n");
+  if (str != "olli ab"
+      && str != "olli runter"
+      && str != "olli hinunter"
+      && str != "olli nach unten")
+    return 0;
+
+  if (!tied)
+    {
+      tell_object(TP, BS("Olli bricht in Panik aus, als Du versuchst "
+        "ihn runter zu werfen."));
+      panic += 2;
+      call_out("run_away", 0);
+      return 1;
+    }
+
+  notify_fail("Aber wo ist denn das Seil?\n");
+  if (!(rope = present("seil", ENV(ME))))
+    {
+      tied = 0;
+      return 0;  
+    }
+
+  tell_object(TP, BS("Geschickt seilst Du Olli von dem Felsen runter.\n"));
+  tell_room(ENV(ME), BS("Geschickt seilt " + TP->name(WER) 
+    + " Olli ab."), ({ TP }));
+
+  notify_fail("Irgendwas ging schief!\n");
+  if (!ME->move(ROOM "fr_e02", M_SILENT | M_NOCHECK)) return 0;
+
+  rope->move(ROOM "fr_e02", M_SILENT | M_NOCHECK);
+
+  ME->AddPursuer(rope);
+
+  return 1;
+
+}
+
+
+
+string verify_command(string str)
+{
+  string dest;
+  mapping exits;
+
+  if (!stringp(str) || str == "") return 0;
+
+  if (sscanf(str, "olli nach %s", dest) != 1)
+    return 0;
+
+  exits = copy_mapping(ENV(ME)->QueryProp(P_EXITS));
+
+  if (!member(exits, dest))
+    return 0;
+
+  return dest;  
+}
+
+
+
+
+
+int cmd_scheuchen(string str)
+{
+  string dest;
+
+  notify_fail("Was willst Du wohin scheuchen?\n");
+
+  if (!dest = verify_command(str))
+    return 0; 
+
+  tell_object(TP, BS("Du versuchst Olli nach " + dest 
+    + " zu scheuchen."));
+  tell_room(ENV(ME), BS(TP->Name(WER) + " fuchtelt wild herum."),
+    ({ TP }));
+
+  if (panic > 0)
+    {
+      tell_object(TP, BS("Olli zittert voellig verstoert."));
+      return 1;
+    }
+
+  if (member(curr_cmds, "scheuchen") == -1)
+    {
+      tell_object(TP, 
+        BS(OLLI_FAILMSGS[random(sizeof(OLLI_FAILMSGS))]));
+      return 1;
+    }
+
+
+  if (random(100) > 66)
+    command_me(dest);
+  else
+    do_walk();
+
+  set_cmds();
+
+  return 1;
+}
+
+
+
+
+
+int cmd_locken(string str)
+{
+  string dest;
+
+  notify_fail("Was willst Du wohin locken?\n");
+
+  if (!dest = verify_command(str))
+    return 0; 
+
+  tell_object(TP, BS("Du versuchst Olli nach " + dest 
+    + " zu locken."));
+  tell_room(ENV(ME), BS(TP->Name(WER) + " macht Olli schoene Augen."),
+    ({ TP }));
+
+  if (panic > 0)
+    {
+      tell_object(TP, BS("Olli zittert voellig verstoert."));
+      return 1;
+    }
+
+  if (member(curr_cmds, "locken") == -1)
+    {
+      tell_object(TP, 
+        BS(OLLI_FAILMSGS[random(sizeof(OLLI_FAILMSGS))]));
+      return 1;
+    }
+
+
+  if (random(100) > 66)
+    command_me(dest);
+  else
+    do_walk();
+
+  set_cmds();
+
+  return 1;
+}
+
+
+
+
+
+int cmd_jagen(string str)
+{
+  string dest;
+
+  notify_fail("Was willst Du wohin jagen?\n");
+
+  if (!dest = verify_command(str))
+    return 0; 
+
+  tell_object(TP, BS("Du versuchst Olli nach " + dest 
+    + " zu jagen."));
+  tell_room(ENV(ME), BS(TP->Name(WER) + " benimmt sich merkwuerdig."),
+    ({ TP }));
+
+  if (panic > 0)
+    {
+      tell_object(TP, BS("Olli zittert voellig verstoert."));
+      return 1;
+    }
+
+  if (member(curr_cmds, "jagen") == -1)
+    {
+      tell_object(TP, 
+        BS(OLLI_FAILMSGS[random(sizeof(OLLI_FAILMSGS))]));
+      return 1;
+    }
+
+
+  if (random(100) > 66)
+    command_me(dest);
+  else
+    do_walk();
+
+  set_cmds();
+
+  return 1;
+}
+
+
+
+
+
+int cmd_schieben(string str)
+{
+  string dest;
+
+  notify_fail("Was willst Du wohin schieben?\n");
+
+  if (!dest = verify_command(str))
+    return 0; 
+
+  tell_object(TP, BS("Du versuchst Olli nach " + dest 
+    + " zu schieben."));
+  tell_room(ENV(ME), BS(TP->Name(WER) + " versucht Olli zu schieben."),
+    ({ TP }));
+
+  if (panic > 0)
+    {
+      tell_object(TP, BS("Olli zittert voellig verstoert."));
+      return 1;
+    }
+
+  if (member(curr_cmds, "schieben") == -1)
+    {
+      tell_object(TP, 
+        BS(OLLI_FAILMSGS[random(sizeof(OLLI_FAILMSGS))]));
+      return 1;
+    }
+
+
+  if (random(100) > 66)
+    command_me(dest);
+  else
+    do_walk();
+
+  set_cmds();
+
+  return 1;
+}
+
+
+
+
+int cmd_schubsen(string str)
+{
+  string dest;
+
+  notify_fail("Was willst Du wohin schubsen?\n");
+
+  if (!dest = verify_command(str))
+    return 0; 
+
+  tell_object(TP, BS("Du versuchst Olli nach " + dest 
+    + " zu schubsen."));
+  tell_room(ENV(ME), BS(TP->Name(WER) + " schubst das arme Schaf."),
+    ({ TP }));
+
+  if (panic > 0)
+    {
+      tell_object(TP, BS("Olli zittert voellig verstoert."));
+      return 1;
+    }
+
+  if (member(curr_cmds, "schubsen") == -1)
+    {
+      tell_object(TP, 
+        BS(OLLI_FAILMSGS[random(sizeof(OLLI_FAILMSGS))]));
+      return 1;
+    }
+
+
+  if (random(100) > 66)
+    command_me(dest);
+  else
+    do_walk();
+
+  set_cmds();
+
+  return 1;
+}
+
+
+
+int cmd_ziehen(string str)
+{
+  string dest;
+
+  notify_fail("Was willst Du wohin zerren?\n");
+
+  if (!dest = verify_command(str))
+    return 0; 
+
+  tell_object(TP, BS("Du versuchst Olli nach " + dest 
+    + " zu zerren."));
+  tell_room(ENV(ME), BS(TP->Name(WER) + " zieht das arme Schaf an den Ohren."),
+    ({ TP }));
+
+  if (panic > 0)
+    {
+      tell_object(TP, BS("Olli zittert voellig verstoert."));
+      return 1;
+    }
+
+  if (member(curr_cmds, "ziehen") == -1)
+    {
+      tell_object(TP, 
+        BS(OLLI_FAILMSGS[random(sizeof(OLLI_FAILMSGS))]));
+      return 1;
+    }
+
+
+  if (random(100) > 66)
+    command_me(dest);
+  else
+    do_walk();
+
+  set_cmds();
+
+  return 1;
+}
+
+
+
+
+
+
+void set_cmds()
+{
+  curr_cmds = CMDS;
+
+  while (sizeof(curr_cmds) > 3)
+    curr_cmds -= ({ curr_cmds[random(sizeof(curr_cmds))] });
+
+  if (find_player("iwo"))
+    tell_object(find_player("iwo"), BS("Olli Cmds: " + sprintf("%O", curr_cmds)));
+}
+
+int trusted(object pl)
+{
+  object *arm;
+  int i;
+
+  arm = pl->QueryProp(P_ARMOURS);
+
+  while (i < sizeof(arm) && arm[i])
+    if (arm[i++]->id("\nschafspelz"))
+      return 1;
+
+  return 0;
+}
+
+
+int cmd_erschrecken(string str)
+{
+  notify_fail("Wen willst Du erschrecken?\n");
+
+  if (!id(str)) return 0;
+
+  tell_object(TP, BS("Du erschreckst Olli."));
+
+  tell_room(ENV(ME), BS(TP->Name(WER) + " erschreckt Olli "
+    + "fuerchterlich."), ({ TP }));
+
+  call_out("run_away", 2+random(5));
+
+  panic++;
+
+  return 1;
+}
+
+
+void run_away(int wolf)
+{
+
+  while (remove_call_out("run_away") != -1);
+
+  call_out("decrease_panic", PANIC_RATE); 
+
+  tell_room(ENV(ME), BS("Ploetzlich reisst Olli die Augen "
+    + "weit auf und beginnt irr zu bloeken."));
+
+  if (ENV(ME)->id("\nfelsraum"))
+    {
+      tell_room(ENV(ME), BS("Olli springt wie vom boesen Schwein "
+        + "gebissen auf den Felsen."));
+      TO->move(FELSRAUM, M_SILENT + M_NOCHECK);
+
+      tell_room(ENV(ME), BS("Olli kommt wild bloekend herauf "
+        + "gesprungen."));
+
+    }
+  else
+    do_walk();
+}
+
+void start_panic(object pl)
+{
+  panic++;
+
+  tell_room(ENV(ME), BS("Olli erschrickt fuerchterlich, als er " +
+    TP->name(WEN) + " sieht."), ({ TP }));
+  tell_object(TP, BS("Olli erschricht fuerchterlich, als er Dich "
+    "sieht."));
+  call_out("run_away", 0);
+
+  SetProp(P_MSGIN, "kommt voellig verstoert hereingalloppiert");
+  SetProp(P_MSGOUT, "galloppiert voellig verstoert");
+
+}
+
+
+void decrease_panic()
+{
+  
+  while (remove_call_out("decrease_panic") != -1);
+
+  if (--panic <= 0)
+    {
+      tell_room(ENV(ME), ME->Name(WER) + " beruhigt sich wieder.\n");
+      SetProp(P_MSGIN, "schlendert herein");
+      SetProp(P_MSGOUT, "schlendert");
+      panic = 0;
+    }
+
+  if (panic > 0) call_out("decrease_panic", PANIC_RATE);
+
+}
+
+
+// Fuers Seil
+int tie(string what)
+{
+
+  if (panic > 0)
+    {
+      tell_object(TP, BS("Olli ist viel zu aufgeregt dafuer.\n"));
+      return 0;
+    }
+
+  if (random(100)>50)
+    {
+      tell_object(TP, BS("Olli kriegt es mit der Angst zu tun, als "
+        "Du versuchst ihm die Schlinge um den Hals zu legen."));
+      panic++;
+      call_out("run_away", 0);
+      tell_object(TP, BS("Vielleicht klappt es beim naechsten Mal!\n"));
+      return 0;
+    }
+
+
+  return tied = 1;
+  
+}
+
+
+int untie()
+{
+  tied = 0;
+  ME->RemovePursuer(PO);
+  return 1;
+}
+
+
+void init()
+{
+  if (!trusted(TP))
+    call_out("start_panic", 0, TP);
+  ::init();
+}
+
+void reset()
+{
+  if (is_clone(this_object()))
+    do_walk();
+  ::reset();
+}

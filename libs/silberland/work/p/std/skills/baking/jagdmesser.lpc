@@ -1,0 +1,168 @@
+inherit "/std/weapon";
+
+#include "def.h"
+
+mapping loot = ([
+    "fledermaus": ({"wing_bat"}); 2,
+    "baer": ({"meat_bear"}); 6,
+    "wolf": ({"meat_wolf"}); 4,
+    "hase": ({"meat_rabbit"}); 2,
+    "schwein": ({"meat_pig"}); 4,
+    "wildschwein": ({"meat_pig"}); 4,
+    "kuh": ({"meat_cow"}); 5,
+    "rind": ({"meat_cow"}); 5,
+    "katze": ({"meat_cat"}); 2,
+    "raubkatze": ({"meat_cat"}); 4,
+    "mensch": ({"meat_human"}); 4,
+    "elf": ({"ear_elf"}); 2,
+    "fee": ({"wing_fairy"}); 2,
+    "hobbit": ({"meat_hobbit"}); 3,
+    "troll": ({"meat_troll"}); 7,
+    "oger": ({"meat_oger"}); 6,
+    "dunkelelf": ({"ear_elf"}); 2,
+    "zwerg": ({"meat_dwarf"}); 4,
+    "schlange": ({"egg_snake"}); 3,
+    "vogel": ({"egg_bird"}); 3,
+    "schaf": ({"meat_sheep"}); 3,
+    "pferd": ({"meat_horse"}); 6,
+    "zebra": ({"meat_horse"}); 4,
+    "gnome": ({"meat_gnome"}); 2,
+    "drache": ({"meat_dragon"}); 1,
+    ]);
+
+
+void create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein Jagdmesser");
+  SetProp(P_LONG, 
+    "Die Klinge des Jagdmessers ist an der Spitze etwas gekruemmt, um das "
+    "Ausweiden von erlegten Tieren zu erleichtern. Die Klinge ist sehr "
+    "scharf und widerstandsfaehig, sodass man damit leicht durch Haut und "
+    "Knochen schneiden kann. In den hoelzernen Griff sind Hirsche und Rehe "
+    "geschnitzt.");
+  SetProp(P_NAME, "Jagdmesser");
+  SetProp(P_GENDER, NEUTER);
+  AddId( ({"messer", "jagdmesser", "\nsbaking_knife"}) );
+  SetProp(P_INFO,
+      "Wenn sich eine Leiche nicht ausweiden laesst, Du aber der Meinung "
+      "bist, dass es gehen sollte, dann benutze 'weidefehler leiche'.");
+
+  SetProp(P_WEAPON_TYPE, WT_KNIFE);
+  SetProp(P_WC, 50);
+  SetProp(P_WC_FIX, 25);
+  SetProp(P_DAM_TYPE, ({DT_PIERCE, DT_SLASH}) );
+  SetProp(P_NR_HANDS, 1);
+  SetProp(P_MATERIAL, ([MAT_STEEL:80, MAT_WOOD:20]) );
+  SetProp(P_WEIGHT, 120);
+  SetProp(P_VALUE, 550);
+  SetProp(P_SIZE, 30);
+  SetProp(P_QUALITY_DECAY, 150);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NEVERDROP, 1);
+
+  AddCmd( ({"weide"}), "cmd_weiden");
+  AddCmd( ({"weidefehler"}), "cmd_weidefehler");
+
+  seteuid(getuid(this_object()));
+}
+
+int cmd_weiden(string str)
+{
+  string what;
+  object corpse;
+  string race;
+
+  if (!QueryProp(P_WIELDED))
+    return notify_fail("Dazu musst Du das Jagdmesser schon zuecken!\n"), 0;
+  if (sscanf(str, "%s aus", what) != 1)
+    return notify_fail("Was willst Du ausweiden?\n"), 0;
+  if (!objectp(corpse = present(what, environment(this_player()))))
+    return notify_fail("Aber hier ist ja gar keine " + capitalize(what) + "!\n"), 0;
+  if (!corpse->id("Leiche"))
+    return notify_fail("Du kannst nur Leichen ausweiden!\n"), 0;
+  if (strstr(corpse->QueryProp(P_ORIG_FILENAME), ":") != -1)
+    return notify_fail("Du kannst keine Spielerleiche ausweiden!\n"), 0;
+  if (!member(loot, race = lower_case(corpse->QueryProp(P_RACE))))
+    return notify_fail("Diese Leicht eignet sich nicht zum Ausweiden.\n"), 0;
+  
+  write("Du versuchst, die Leiche auszuweiden.......\n");
+
+  call_out("ausweiden", 2, corpse, race);
+  return 1;
+}
+
+void ausweiden(object corpse, string race)
+{
+  int suc;
+  int skill;
+  object ob;
+  int i;
+
+  if (!this_player() || !interactive(this_player()))
+    return 0;
+  if (!objectp(corpse) || !present(corpse, environment(this_player())))
+    return write("Wo ist denn die Leiche ploetzlich hin?\n"), 0;
+
+  call_other(SKILLMASTER, "???");
+  suc = SKILLMASTER->UseSkill(this_player(), SK_BUTCHER); 
+  if (suc > 0)
+  {
+    skill = SKILLMASTER->QuerySkill(this_player(), SK_BUTCHER);
+    if (suc > 9900)
+    {
+      ob = clone_object(OBJ + "meat_secret");
+      write("Du findest etwas sehr seltenes: " + ob->short());
+      if (ob->move(this_player(), M_GET) < 0)
+      {
+        write("Du kannst " + ob->name(WEN) + " nicht mehr tragen!\n");
+        ob->move(environment(this_player()), M_NOCHECK);
+      }
+    }
+    else
+    {
+      i = 0;
+      do
+      {
+        ob = clone_object(OBJ + loot[race][random(sizeof(loot[race]))] );
+        write("Du findest: " + ob->short());
+        if (ob->move(this_player(), M_GET) < 0)
+        {
+          write("Du kannst " + ob->name(WEN) + " nicht mehr tragen!\n");
+          ob->move(environment(this_player()), M_NOCHECK);
+        }
+        i++;
+      }
+      while (i < loot[race, 1] && random(skill) > 4000 && random(suc) > 4000);
+    }
+    say(this_player()->Name(WER) + " weidet " + corpse->name(WEN,1) + " aus.\n"); 
+  }
+  else
+  {
+    write("Du versagst und findest nichts.\n");
+    say(this_player()->Name(WER) + " versucht vergeblich, " + corpse->name(WEN,1) +
+        " auszuweiden.\n");  
+  }
+  corpse->remove();
+}
+
+int cmd_weidefehler(string str)
+{
+  object corpse;
+  string msg;
+
+  notify_fail("Syntax: weidefehler leiche.\n");
+  if (!objectp(corpse = present(str, environment(this_player()))))
+    return 0;
+  msg = sprintf("%s: Weidefehler von %s: Filename: %s, Rasse: %s\n",
+        dtime(), capitalize(getuid(this_player())), 
+        corpse->QueryProp(P_ORIG_FILENAME), corpse->QueryProp(P_RACE) );
+  if (corpse = find_player("feyaria"))
+    tell_object(corpse, "\n"+msg+"\n");
+  write_file(LOG "fehler", msg);
+  write("Danke, das Problem wird in Kuerze behoben.\n");
+  return 1;
+}
+

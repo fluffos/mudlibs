@@ -1,0 +1,696 @@
+// SilberLand MUDlib
+//
+// /p/daemon/channeld.c -- Channel daemon
+//
+// $Date: 2010/04/30 09:11:22 $
+/* $Revision: 1.32 $
+ * $Log: channeld.c,v $
+ * Revision 1.32  2010/04/30 09:11:22  Woody
+ * Datum fuer Channel History aelter als 7 Tage anzeigen
+ *
+ * Revision 1.31  2007/08/01 11:27:48  Woody
+ * Bugfix in send() for permutate_string condition
+ *
+ * Revision 1.30  2007/08/01 09:42:30  Cirion
+ * *** empty log message ***
+ *
+ * Revision 1.29  2005/08/08 14:16:26  Woody
+ * Sprachflueche bei Channels mit Master in /secure/udp/ ignorieren
+ *
+ * Revision 1.28  2004/09/18 01:05:12  Feyaria
+ * nun ist bann <name> send.<channel> moeglich
+ *
+ * Revision 1.27  2004/06/25 07:31:39  Cirion
+ * Maximallaenge fuer Channelnamen eingefuehrt (MAX_CHANNELNAME_LEN)
+ *
+ * Revision 1.26  2004/04/16 19:06:11  Feyaria
+ * find returned jetzt 0 wenn der spieler auf keinen von mehreren moeglichen Kanaelen zugriff hat.
+ *
+ * Revision 1.25  2003/10/02 18:39:24  Woody
+ * ein paar Defines nach channel.h verlegt
+ *
+ * Revision 1.24  2001/12/13 10:41:13  Woody
+ * max. 60 Channels (statt bisher 50)
+ *
+ * Revision 1.23  2001/05/05 21:59:43  Zordan
+ * ab sofort sizeof(users()-invis) auf -<master> infos
+ *
+ * Revision 1.22  2001/02/16 20:35:44  Woody
+ * CHANNEL(.new) logs nach /log/daemon/ verlegt
+ *
+ * Revision 1.21  2000/10/22 14:58:58  Woody
+ * <MasteR> Command 'lust' eingefuehrt, History auf 50 Eintraege erhoeht
+ *
+ * Revision 1.20  2000/02/10 18:18:31  Woody
+ * Auch in History "Frosch <name>" vermerken (statt "Ein Frosch")
+ *
+ * Revision 1.19  2000/01/08 20:36:23  Zordan
+ * C_RECEIVE fuers Bannen des Empfangens auf den Ebenen
+ * dafuer query_ban() (nosave) eingefuehrt
+ *
+ * Revision 1.18  1999/04/11 14:59:03  Woody
+ * Ebenen, die mit "D-" beginnen, sind nun automatisch Intermud-Ebenen
+ *
+ * Revision 1.17  1999/03/12 18:37:12  Woody
+ * history(): Eintraege aelter als ein Tag bekommen Wochentag im Timestamp dazu
+ *
+ * Revision 1.16  1998/10/19 10:36:47  Woody
+ * Sprachflueche wieder beruecksichtigen
+ *
+ * Revision 1.15  1998/09/27 13:36:09  Woody
+ * Verlass-Meldung verkuerzt
+ *
+ * Revision 1.14  1998/09/20 18:01:03  Woody
+ * TIMEOUT fuer lag reaktiviert
+ *
+ * Revision 1.13  1998/09/20 13:10:54  Woody
+ * neuer channeld
+ *
+ */
+
+#pragma strong_types
+
+#include "/std/sys_debug.h"
+#include <lpctypes.h>
+#include <wizlevels.h>
+#include <properties.h>
+
+#define NEED_PROTOTYPES
+#include "channel.h"
+
+// Codes for check():
+#define RECV            0
+#define SEND            1
+#define FLAG            2
+
+// Flags:
+#define F_WIZARD        1
+
+
+// channels - contains the simple channel information
+//            ([ channelname : ({ I_MEMBER, I_ACCESS, I_INFO, I_MASTER })...])
+private nosave mapping lowerch;
+private nosave mapping channels;
+private nosave mapping channelH;
+private nosave mapping stats;
+
+private mapping channelC;
+private mapping channelB;
+
+private nosave mapping mon2num =
+    ([ "Jan":1, "Feb":2, "Mar":3, "Apr":4, "Mai":5, "Jun":6,
+       "Jul":7, "Aug":8, "Sep":9, "Okt":10, "Nov":11, "Dez":12 ]);
+
+// BEGIN OF THE CHANNEL MASTER ADMINISTRATIVE PART
+
+private nosave mapping admin = allocate_mapping(0, 3);
+
+int check(string ch, object pl, string cmd)
+{
+  int level;
+  if((admin[ch, FLAG] & F_WIZARD) && query_wiz_level(pl) < SEER_LVL) return 0;
+  level = (admin[ch, FLAG] & F_WIZARD
+           ? query_wiz_level(pl)
+           : pl->QueryProp(P_LEVEL));
+
+  switch(cmd)
+  {
+  case C_FIND:
+  case C_LIST:
+  case C_JOIN:
+    if(admin[ch, RECV] == -1) return 0;
+    if(admin[ch, RECV] <= level) return 1;
+    break;
+  case C_SEND:
+    if(admin[ch, SEND] == -1) return 0;
+    if(admin[ch, SEND] <= level) return 1;
+    break;
+  case C_LEAVE:
+    return 1;
+  default: break;
+  }
+}
+
+private int CountUser(mapping l)
+{
+  mapping n;
+  n = ([]);
+  walk_mapping(l, lambda(({'i/*'*/, 'a/*'*/, 'n/*'*/}),
+                         ({#'+=/*'*/, 'n/*'*/,
+                              ({#'mkmapping/*'*/,
+                                   ({#'[/*'*/, 'a/*'*/, 0})})})),
+               &n);
+  return m_sizeof(n);
+}
+
+private nosave void banned(string n, mixed cmds, string res)
+{
+  res += sprintf("%s [%s], ", capitalize(n), implode(cmds, ","));
+}
+
+private mapping Tcmd = ([]);
+#define TIMEOUT (time() - 60)
+#define TIMEOUT_RELAXED (time() - 20)
+
+void ChannelMessage(mixed msg)
+{
+  string ret, mesg;
+  string cmd1, cmd2;
+  if(msg[1] == this_object() || !stringp(msg[2]) ||
+     msg[0] != CMNAME || previous_object() != this_object()) return;
+
+
+  mesg = lower_case(msg[2]);
+
+  if(!strstr("hilfe", mesg) && strlen(mesg) <= 5)
+  {
+    ret = "Folgende Kommandos gibt es: "
+          "hilfe, lag, up[time], statistik, lust, bann";
+  }
+  else if(!strstr("lag", mesg) && strlen(mesg) <= 3)
+  {
+    mixed lag;
+    if(Tcmd["lag"] > TIMEOUT) return;
+    Tcmd["lag"] = time();
+    lag = "/p/daemon/lag-o-daemon"->read_lag_data();
+    ret = sprintf("Lag: %.1f%%/60, %.1f%%/15, %.1f%%/1",
+                  lag[0], lag[1], lag[2]);
+    call_out(#'send/*'*/, 2, CMNAME, this_object(), ret);
+    ret = query_load_average();
+  }
+  else if(!strstr("uptime", mesg) && strlen(mesg) <= 6)
+  {
+    int max, rekord;
+    string tmp;
+    if(Tcmd["uptime"] > TIMEOUT) return;
+    Tcmd["uptime"] = time();
+    if(file_size("/etc/maxusers") <= 0) {
+      ret = "Diese Information liegt nicht vor.";
+    } else {
+      sscanf(read_file("/etc/maxusers"), "%d %s", rekord, tmp);
+      sscanf(read_file("/etc/maxusers.today"), "%d|%s", max, tmp);
+      ret = sprintf("Das MUD laeuft jetzt %s. Es sind momentan %d Spieler "
+                  "eingeloggt; das Maximum lag heute bei %d und der Rekord "
+                  "bisher ist %d.", uptime(),
+                  sizeof(users()-filter_objects(users(),"QueryProp",P_INVIS)),
+                  max, rekord);
+    }
+  }
+  else if(!strstr("statistik", mesg) && strlen(mesg) <= 9)
+  {
+    if(Tcmd["statistik"] > TIMEOUT) return;
+    Tcmd["statistik"] = time();
+    ret = sprintf(
+    "Im Moment sind insgesamt %d Ebenen mit %d Teilnehmern aktiv.\n"
+    "Der %s wurde das letzte Mal am %s von %s neu gestartet.\n"
+    "Seitdem wurden %d Ebenen neu erzeugt und %d zerstoert.\n",
+    m_sizeof(channels), CountUser(channels), CMNAME,
+    dtime(stats["time"]), stats["boot"], stats["new"], stats["dispose"]);
+  }
+  else if(!strstr(mesg, "bann"))
+  {
+    string pl, cmd;
+    if(mesg == "bann")
+      if(m_sizeof(channelB)) {
+	ret = "";
+	walk_mapping(channelB, #'banned/*'*/, &ret);
+	ret = "Fuer folgende Spieler besteht ein Bann: " + ret;
+      } else ret = "Zur Zeit ist kein Bann aktiv.";
+    else
+      if(sscanf(mesg, "bann %s %s", pl, cmd) == 2 &&
+	 IS_ARCH(msg[1])) {
+#     define CMDS ({C_FIND, C_LIST, C_JOIN, C_LEAVE, C_SEND, C_NEW, C_RECEIVE})
+	pl = lower_case(pl); 
+        cmd = lower_case(cmd);
+        if (sscanf(cmd, "%s.%s", cmd1, cmd2) == 2)
+        {
+          if (!member(channels, cmd2))
+          {
+            ret = "Unbekannte Ebene " + cmd2;
+            cmd1 = "";
+          }
+        }
+        else
+          cmd1 = cmd;
+	if(member(CMDS, cmd1) != -1) {
+	  if(!pointerp(channelB[pl])) channelB[pl] = ({});
+	  if(member(channelB[pl], cmd) != -1)
+	    channelB[pl] -= ({ cmd });
+	  else
+	    channelB[pl] += ({ cmd });
+	  ret = "Fuer '"+capitalize(pl)+"' besteht "
+	    + (sizeof(channelB[pl]) ?
+	       "folgender Bann: "+implode(channelB[pl], ", ") :
+	       "kein Bann mehr.");
+	  if(!sizeof(channelB[pl])) channelB = m_delete(channelB, pl);
+	  save_object(CHANNEL_SAVE);
+	}
+	else if (!ret)
+          ret = "Das Kommando '"+cmd+"' ist unbekannt. Erlaubte Kommandos: "
+	       + implode(CMDS, ", ");
+      }
+      else
+	if(!IS_ARCH(msg[1])) return;
+	else ret = "Syntax: bann <name> <kommando>";
+  }
+  else if (mesg == "lust")
+  {
+    mixed t, up;
+    if(Tcmd["lag"] > TIMEOUT_RELAXED ||
+       Tcmd["statistik"] > TIMEOUT_RELAXED ||
+       Tcmd["uptime"] > TIMEOUT_RELAXED)
+      return;
+    Tcmd["lag"] = Tcmd["statistik"] = Tcmd["uptime"] = time();
+
+    lag = "/p/daemon/lag-o-daemon"->read_lag_data();
+    sscanf(read_file("/etc/maxusers"), "%d %s", rekord, tmp);
+    sscanf(read_file("/etc/maxusers.today"), "%d|%s", max, tmp);
+
+    up="";
+    t=time()-last_reboot_time();
+    if(t >= 86400)
+      up += sprintf("%dT ", t/86400);
+    if(t >= 3600)
+      up += sprintf("%dh ", (t=t%86400)/3600);
+    if(t > 60)
+      up += sprintf("%dm ", (t=t%3600)/60);
+    up += sprintf("%ds", t%60);
+
+    ret = sprintf("%.1f%%/15 %.1f%%/1 - %s - %d:%d:%d - E:%d T:%d",
+                  lag[1], lag[2], up,
+                  sizeof(users()-filter_objects(users(),"QueryProp",P_INVIS)),
+                  max, rekord,
+                  m_sizeof(channels), CountUser(channels));
+  } else return;
+
+  call_out(#'send/*'*/, 2, CMNAME, this_object(), ret);
+}
+
+// setup() -- set up a channel and register it
+//            arguments are stored in the following order:
+//            ({ channel name,
+//               receive level, send level,
+//               flags,
+//               description,
+//               master obj
+//            })
+private void setup(mixed c)
+{
+  closure cl;
+  object m;
+  string d;
+  d = "- Keine Beschreibung -";
+  m = this_object();
+  if(sizeof(c) && strlen(c[0]) > 1 && c[0][0] == '\\')
+    c[0] = c[0][1..];
+
+  switch(sizeof(c))
+  {
+  case 6:
+    if(!(m = (catch(c[5]->LOADME()), find_object(c[5]))))
+      m = this_object();
+  case 5: d = stringp(c[4]) || closurep(c[4]) ? c[4] : d;
+  case 4: admin[c[0], FLAG] = to_int(c[3]);
+  case 3: admin[c[0], SEND] = to_int(c[2]);
+  case 2: admin[c[0], RECV] = to_int(c[1]);
+    break;
+  case 0:
+  default:
+    return;
+  }
+  switch(new(c[0], m, d))
+  {
+  case E_ACCESS_DENIED:
+    log_file("daemon/CHANNEL",
+        sprintf("[%s] %s: %O: error, access denied\n",
+          dtime(time()), c[0], m));
+    break;
+  default:
+    break;
+  }
+  return;
+}
+
+void initialize()
+{
+  mixed tmp;
+  tmp = read_file(file_name(this_object())+".init");
+  tmp = regexp(explode(tmp, "\n"), "^[^#]");
+  tmp = map_array(tmp, #'regexplode/*'*/, "[^:][^:]*$|[ \\t]*:[ \\t]*");
+  tmp = map_array(tmp, #'regexp/*'*/, "^[^: \\t]");
+  map_array(tmp, #'setup/*'*/);
+}
+
+// BEGIN OF THE CHANNEL MASTER IMPLEMENTATION
+
+void create()
+{
+  seteuid(getuid());
+  restore_object(CHANNEL_SAVE);
+  if(!channelC) channelC = ([]);
+  if(!channelB) channelB = ([]);
+  channels = ([]);
+  channelH = ([]);
+  stats = (["time": time(),
+            "boot": capitalize(getuid(previous_object())||"<Unbekannt>")]);
+  new(CMNAME, this_object(), "Zentrale Informationen zu den Ebenen");
+  initialize();
+  map_objects(efun::users(), "RegisterChannels");
+  this_object()->send(CMNAME, this_object(),
+                      sprintf("%d Ebenen mit %d Teilnehmern initialisiert.",
+                              m_sizeof(channels),
+                              CountUser(channels)));
+}
+
+// reset() and cache_to() - Cache Timeout, remove timed out cached channels
+// SEE: new, send
+private int cache_to(string key, mapping m, int t)
+{
+  if(!pointerp(m[key]) || m[key][2] + 43200 > t) return 1;
+}
+varargs void reset(int nonstd)
+{
+  channelC = filter_mapping(channelC, #'cache_to/*'*/, channelC, time());
+}
+
+// query_prevent_shadow() -- no shadowing!
+// SEE: /secure/master
+int query_prevent_shadow(object po) { return 1; }
+
+// name() - define the name of this object.
+string name() { return CMNAME; }
+
+// access() - check access by looking for the right argument types and
+//            calling access closures respectively
+// SEE: new, join, leave, send, list, users
+varargs private int access(mixed ch, object pl, string cmd, string txt)
+{
+  mixed co, m;
+  if(!stringp(ch) || !strlen(ch = lower_case(ch)) || !channels[ch])
+    return 0;
+  if((stringp(channels[ch][I_MASTER]) &&
+      previous_object() == find_object(channels[ch][I_MASTER])) ||
+     !channels[ch][I_ACCESS] ||
+     (!extern_call() && previous_object() == this_object()) ||
+     ((string)previous_object()) == "/secure/master")
+    return 2;
+  if(!objectp(pl) ||
+     (previous_object() != pl && !(previous_object() == this_object())))
+     return 0;
+  if(pointerp(channelB[getuid(pl)]) &&
+     (member(channelB[getuid(pl)], cmd) != -1 ||
+     member(channelB[getuid(pl)], cmd + "." + ch) != -1))
+    return 0;
+  if(stringp(channels[ch][I_MASTER]) &&
+     (!(m = find_object(channels[ch][I_MASTER])) ||
+      (!to_object(channels[ch][I_ACCESS]) ||
+       get_type_info(channels[ch][I_ACCESS])[1])))
+  {
+    string err;
+    if(!objectp(m)) err = catch(call_other(channels[ch][I_MASTER], "?"));
+    if(!err &&
+       ((!to_object(channels[ch][I_ACCESS]) ||
+         get_type_info(channels[ch][I_ACCESS])[1]) &&
+        !closurep(channels[ch][I_ACCESS] =
+                  symbol_function("check",
+                                  find_object(channels[ch][I_MASTER])))))
+    {
+      log_file("daemon/CHANNEL",
+          sprintf("[%s] %O -> %O\n",
+            dtime(time()), channels[ch][I_MASTER], err));
+      channels = m_delete(channels, ch);
+      return 0;
+    }
+    this_object()->join(ch, find_object(channels[ch][I_MASTER]));
+  }
+  if(closurep(channels[ch][I_ACCESS]))
+      return funcall(channels[ch][I_ACCESS],
+                     channels[ch][I_NAME], pl, cmd, &txt);
+}
+
+// new() - create a new channel
+//         a channel with name 'ch' is created, the player is the master
+//         info may contain a string which describes the channel or a closure
+//         to display up-to-date information, check may contain a closure
+//         called when a join/leave/send/list/users message is received
+// SEE: access
+
+#define IGNORE  "^/xx"
+
+varargs int new(string ch, object pl, mixed info)
+{
+  if(!objectp(pl) || !stringp(ch) || !strlen(ch) || channels[lower_case(ch)] ||
+     strlen(ch) > MAX_CHANNELNAME_LEN ||
+     (pl == this_object() && extern_call()) ||
+     m_sizeof(channels) >= MAX_CHANNELS ||
+     sizeof(regexp(({ file_name(pl) }), IGNORE)) ||
+     (pointerp(channelB[getuid(pl)]) &&
+      member(channelB[getuid(pl)], C_NEW) != -1))
+    return E_ACCESS_DENIED;
+  if(!info)
+    if(channelC[lower_case(ch)]) {
+      ch = channelC[lower_case(ch)][0];
+      info = channelC[lower_case(ch)][1];
+    }
+    else return E_ACCESS_DENIED;
+  else channelC[lower_case(ch)] = ({ ch, info, time() });
+
+  if (lower_case(ch)[0..1]=="d-" && objectp(pl) && query_once_interactive(pl))
+    channels[lower_case(ch)] = ({ ({ find_object("/secure/udp/channel"), pl }),
+                                  symbol_function("check", pl) ||
+                                  #'check/*'*/, info,
+                                  find_object("/secure/udp/channel"),
+                                  ch,
+                               });
+  else
+    channels[lower_case(ch)] = ({ ({ pl }),
+                                  symbol_function("check", pl) ||
+                                  #'check/*'*/, info,
+                                  (!living(pl) &&
+                                   !is_clone(pl) &&
+                                   pl != this_object()
+                                   ? file_name(pl)
+                                   : pl),
+                                   ch,
+                               });
+
+  channelH[lower_case(ch)] = ({});
+  if(pl != this_object())
+    log_file("daemon/CHANNEL.new",
+        sprintf("[%s] %O: %O %O\n", dtime(time()), ch, pl, info));
+  if(!pl->QueryProp(P_INVIS))
+    this_object()->send(CMNAME, pl,
+			"laesst die Ebene '"+ch+"' entstehen.", MSG_EMOTE);
+  stats["new"]++;
+  save_object(CHANNEL_SAVE);
+}
+
+// join() - join a channel
+//          this function checks whether the player 'pl' is allowed to join
+//          the channel 'ch' and add if successful, one cannot join a channel
+//          twice
+// SEE: leave, access
+int join(string ch, object pl)
+{
+  if(!access(&ch, pl, C_JOIN)) return E_ACCESS_DENIED;
+  if(member(channels[ch][I_MEMBER], pl) != -1) return E_ALREADY_JOINED;
+  channels[ch][I_MEMBER] += ({ pl });
+}
+
+// leave() - leave a channel
+//           the access check in this function is just there for completeness
+//           one should always be allowed to leave a channel.
+//           if there are no players left on the channel it will vanish, unless
+//           its master is this object.
+// SEE: join, access
+int leave(string ch, mixed pl)
+{
+  int pos;
+  if(!access(&ch, pl, C_LEAVE)) return E_ACCESS_DENIED;
+  if((pos = member(channels[ch][I_MEMBER], pl)) == -1) return E_NOT_MEMBER;
+  if(pl == channels[ch][I_MASTER] && sizeof(channels[ch][I_MEMBER]) > 1)
+  {
+    channels[ch][I_MASTER] = channels[ch][I_MEMBER][1];
+    if(!pl->QueryProp(P_INVIS) && !channels[ch][I_MASTER]->QueryProp(P_INVIS))
+      this_object()->send(ch, pl, "uebergibt die Ebene an "
+			  +channels[ch][I_MASTER]->name(WEN)+".", MSG_EMOTE);
+  }
+  channels[ch][I_MEMBER][pos..pos] = ({ });
+
+  // let /secure/udp/channel leave elsewise empty dynamic d-* channels
+  if(lower_case(ch)[0..1]=="d-" &&
+     member(map_array(m_indices(admin), #'lower_case), lower_case(ch)) == -1 && //'
+     sizeof(channels[ch][I_MEMBER])==1 &&
+     channels[ch][I_MEMBER][0]==find_object("/secure/udp/channel"))
+  {
+    channels[ch][I_MEMBER] = ({ });
+  }
+
+  if(!sizeof(channels[ch][I_MEMBER]) && (!stringp(channels[ch][I_MASTER])))
+  {
+    // delete the channel that has no members
+    if(!pl->QueryProp(P_INVIS))
+      this_object()->send(CMNAME, pl,
+			  "verlaesst die Ebene '"
+			  +channels[ch][I_NAME]
+			  +"' und loest sie somit auf.", MSG_EMOTE);
+    channelC[lower_case(ch)] = ({ channels[ch][I_NAME],
+                                  channels[ch][I_INFO], time() });
+    channels = m_delete(channels, lower_case(ch));
+    stats["dispose"]++;
+    save_object(CHANNEL_SAVE);
+  }
+}
+
+// query_ban() - for banned Receivers
+nosave int query_ban(object pl) {
+  if(!objectp(pl)) return 0;
+  if(pointerp(channelB[getuid(pl)]) &&
+     member(channelB[getuid(pl)], C_RECEIVE) != -1)
+    return 0;
+  return 1;
+}
+
+// send() - send a message to all recipients of the specified channel 'ch'
+//          checks if 'pl' is allowed to send a message and sends if success-
+//          ful a message with type 'type'
+// SEE: access, channel.h
+varargs int send(string ch, object pl, string msg, int type)
+{
+  int a;
+  object *ob;
+  mixed masterfn;
+
+  if (!(a = access(&ch, pl, C_SEND, &msg)))
+    return E_ACCESS_DENIED;
+  if (a < 2 && member(channels[ch][I_MEMBER], pl) == -1)
+    return E_NOT_MEMBER;
+  if (!msg || !stringp(msg) || !strlen(msg))
+    return E_EMPTY_MESSAGE;
+  if (objectp(masterfn = channels[ch][I_MASTER]))
+    masterfn = file_name(masterfn);
+  if (!stringp(masterfn) || masterfn[0..11] != "/secure/udp/")
+    if (objectp(pl) && objectp(pl->QueryProp(P_PERM_STRING)))
+      msg=call_other( pl->QueryProp(P_PERM_STRING), "permutate_string",
+          (msg) ) || msg;
+  ob=filter_array(channels[ch][I_MEMBER],#'query_ban);
+  if(sizeof(ob)) map_objects(ob,
+    "ChannelMessage", ({ channels[ch][I_NAME], pl, msg, type }));
+  if(sizeof(channelH[ch]) > MAX_HIST_SIZE)
+    channelH[ch] = channelH[ch][1..];
+  channelH[ch] += ({ ({ channels[ch][I_NAME],
+                        (stringp(pl)
+                          ? pl
+                          : (pl->QueryProp(P_INVIS)
+                              ? "/("+capitalize(getuid(pl))+")$"
+                              : "") +
+                            (interactive(pl) && pl->QueryProp(P_FROG)
+                              ? "Frosch "+capitalize(getuid(pl))
+                              : capitalize((pl->name() || "<Unbekannt>")))),
+                        msg, time(), type }) });
+}
+
+// compatibility function
+varargs int SendToChannel(string channel, object user, int cmd, string msg)
+{
+  return send(channel, user, msg, cmd);
+}
+
+// list() - list all channels, that are at least receivable by 'pl'
+//          returns a mapping,
+// SEE: access, channels
+private void clean(string n, mixed a) { a[0] -= ({ 0 }); }
+mixed list(object pl)
+{
+  mapping chs;
+  chs = filter_mapping(channels, #'access/*'*/, pl, C_LIST);
+  walk_mapping(chs, #'clean/*'*/);
+  if(!sizeof(chs)) return E_ACCESS_DENIED;
+  return copy_mapping(chs);
+}
+
+// find() - find a channel by its name (may be partial)
+//          returns an array for multiple results and 0 for no matching name
+// SEE: access
+mixed find(string ch, object pl)
+{
+  mixed chs, s;
+  if(stringp(ch)) ch = lower_case(ch);
+  if(!sizeof(chs = regexp(m_indices(channels), "^"+ch+"$")))
+    chs = regexp(m_indices(channels), "^"+ch);
+  if((s = sizeof(chs)) > 1)
+    if(sizeof(chs = filter_array(chs, #'access/*'*/, pl, C_FIND)) == 1)
+      return channels[chs[0]][I_NAME];
+    else
+      return sizeof(chs) ? chs : 0;
+  return ((s && access(chs[0], pl, C_FIND)) ? channels[chs[0]][I_NAME] : 0);
+}
+
+// history() - get the history of a channel
+// SEE: access
+mixed history(string ch, object pl)
+{
+  string str;
+  mixed ret;
+  int i;
+
+  if(!access(&ch, pl, C_JOIN))
+    return E_ACCESS_DENIED;
+  if(pointerp(channelB[getuid(pl)]) &&
+     member(channelB[getuid(pl)], C_RECEIVE) != -1)
+    return ({ });
+
+  ret=allocate(sizeof(channelH[ch]));
+  for (i=sizeof(ret)-1; i>=0; i--) {
+    if ((time()-channelH[ch][i][3]) < 86400)
+      ret[i] = ({ channelH[ch][i][0], channelH[ch][i][1],
+          channelH[ch][i][2]+" <"+ctime(channelH[ch][i][3])[11..18]+">",
+          channelH[ch][i][4] });
+    else if ((time()-channelH[ch][i][3]) < 7 * 86400)
+      ret[i] = ({ channelH[ch][i][0], channelH[ch][i][1],
+          channelH[ch][i][2]+" <"+(str=dtime(channelH[ch][i][3]))[0..1]+", "+
+          str[<8..]+">", channelH[ch][i][4] });
+    else
+      ret[i] = ({ channelH[ch][i][0], channelH[ch][i][1],
+          sprintf("%s <%s, %d.%d., %s>",
+            channelH[ch][i][2],
+            (str=dtime(channelH[ch][i][3]))[0..1],
+            to_int(str[5..6]), to_int(mon2num[str[9..11]]), str[<8..<4]),
+          channelH[ch][i][4] });
+  }
+  return ret;
+}
+
+// remove - remove a channel
+// SEE: new
+mixed remove(string ch, object pl)
+{
+  mixed members;
+  if(previous_object() != this_object())
+    if(!stringp(ch) ||
+       pl != this_player() || this_player() != this_interactive() ||
+       this_interactive() != previous_object() ||
+       !IS_ARCH(this_interactive()))
+      return E_ACCESS_DENIED;
+  if(channels[lower_case(ch)]) {
+    channels[lower_case(ch)][I_MEMBER] =
+        filter_objects(channels[lower_case(ch)][I_MEMBER],
+                       "QueryProp", P_CHANNELS);
+    map_array(channels[lower_case(ch)][I_MEMBER],
+        lambda(({'u/*'*/}), ({#'call_other/*'*/, 'u, /*'*/
+                                   "SetProp", P_CHANNELS,
+                                   ({#'-/*'*/,
+                                          ({#'call_other/*'*/, 'u, /*'*/
+                                                 "QueryProp", P_CHANNELS}),
+                                          '({ lower_case(ch) })/*'*/,})
+                                   })));
+    channels = m_delete(channels, lower_case(ch));
+    stats["dispose"]++;
+  }
+  if(!channelC[lower_case(ch)])
+    return E_ACCESS_DENIED;
+  channelC = m_delete(channelC, lower_case(ch));
+  this_object()->send(CMNAME, pl,
+    "loest die Ebene '"+ch+"' auf.", MSG_EMOTE);
+  save_object(CHANNEL_SAVE);
+}

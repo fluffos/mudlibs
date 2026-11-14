@@ -1,0 +1,163 @@
+/*
+
+  /obj/gemmaster
+
+  2001-02-02  ab sofort kann man auch einen Typ mit angeben
+  2001-07-05  Magische Edelsteine werden nun mit vergeben
+  
+  
+  Usage:
+
+  "/obj/gemmaster"->DistributeGem(amount, rand, art, automove, typ)
+
+    ergibt amount + random(rand) Edelsteine
+
+    art         0                   ein beliebiger Edelstein
+                1                   lauter verschiedene Edelsteine
+                2                   ein beliebiger Edelstein, _nicht magisch_
+                3                   lauter verschiedene Edelsteine, _nicht magisch_
+    
+    automove    Wenn Objekt, Edelsteine nach Objekt moven,
+                sonst previous_object bei != 0
+
+    typ         ein string oder array von edelsteinen, die ausschliesslich
+                gecloned werden sollen    
+
+*/
+
+#define GEMLOC "/obj/gems"
+#define GEMLOG "obj/GEMS"
+
+#include <language.h>
+#include <properties.h>
+#include <moving.h>
+
+nosave string *gems;
+nosave int nr,nrlast,nrmagic;
+
+create()
+{
+  if (is_clone(this_object())) {
+    destruct(this_object());
+    return;
+  }
+  gems=(get_dir(GEMLOC+"/*.lpc"));
+  log_file(GEMLOG,sprintf("[%s]: %3d gems loaded.\n",
+    dtime(time())[5..],sizeof(gems))); 
+}
+
+varargs object * DistributeGem(int amount, int rand, int art, 
+                               mixed automove, mixed wantgems)
+{
+  int i,j,r;
+  object o, whereto;
+  object *ob;
+  string type, *clgems, *magicgems;
+ 
+  clgems=map_array( gems, lambda( ({ 'a }), ({ #'[..<], 'a, 0, 3 }) ) );
+  if(!pointerp(wantgems))
+    if(stringp(wantgems))
+      wantgems=({ wantgems });
+  if(pointerp(wantgems))
+    clgems=clgems & wantgems;
+ 
+  magicgems = ({"rubin","aquamarin","topas","smaragd","saphir","opal",
+                "onyx","bernstein","granat","bergkristall","diamant",
+                "amethyst","zirkon"}) & clgems;
+                
+  if (!(i=sizeof(clgems)))
+    return 0;
+  if (automove && objectp(automove))
+    whereto=automove;
+  else
+    whereto=previous_object();
+  if (!rand)
+    rand=1;
+  if (!amount)
+    amount=1;
+  r=random(rand);
+  // vergeben Edelsteine mitloggen, damit wir endlich eine ca.
+  // Uebersicht haben, wieviele wirklich im Spiel sind
+  log_file(GEMLOG,sprintf("[%s]: %3d gems for %O\n",
+    dtime(time())[5..],amount+r,whereto));
+  nr+=(amount+r);
+  nrlast+=(amount+r);
+  if (art&1) {
+    ob=({});
+    for (j=amount+r; j>0; j--) {
+      if (!random(2500) && sizeof(magicgems) && !(art&2))
+      {
+        nrmagic++;
+        o=clone_object("/d/wasser/cirion/gems/obj/std_magic_gem.lpc");
+        o->set_gemtype(magicgems[random(sizeof(magicgems))]);
+        log_file(GEMLOG,
+          sprintf("                          (thereof one %s, size %d)\n",
+          o->Name(),o->QueryGemSize()));        
+      }
+      else
+        o=clone_object(GEMLOC+"/"+clgems[random(i)]+".lpc");
+      if (automove)
+        o->move(whereto, M_MOVE_ALL);
+      ob+=({o});
+    }
+    ob -= ({ 0 });
+    return ob;
+  }
+  type = clgems[random(i)];
+  o=clone_object(GEMLOC+"/"+type+".lpc");
+  ob = ({o});
+  for (i=0;i<amount+r && !(art&2);i++) {
+    if (!random(2500) && member(magicgems,type)!=-1) {
+      nrmagic++;
+      o=clone_object("/d/wasser/cirion/gems/obj/std_magic_gem.lpc");
+      o->set_gemtype(type);
+      log_file(GEMLOG,
+        sprintf("                          (thereof one %s, size %d)\n",
+      o->Name(),o->QueryGemSize()));
+      if (automove)
+        o->move(whereto, M_MOVE_ALL);
+      ob += ({o});
+    }
+  }
+  if (amount+r == sizeof(ob)-1)
+  {
+    ob[0]->remove();
+    return ob[1..];
+  }
+  ob[0]->SetProp(P_AMOUNT, amount+r-(sizeof(ob)-1));
+  if (automove)
+    ob[0]->move(whereto, M_MOVE_ALL);
+  return ob;
+}
+
+string *QueryGems()
+{
+  return map_array( gems, lambda( ({ 'a }), ({ #'[..<], 'a, 0, 3 }) ) );
+}
+
+int QueryStatsTotal()
+{
+  return nr;
+}
+
+int QueryStatsLast()
+{
+  return nrlast;
+}
+
+int QueryStatsMagic()
+{
+  return nrmagic;
+}
+
+void reset()
+{
+  log_file(GEMLOG,sprintf("[%s]: nr of gems in last reset(): %5d\n"
+                              "[%s]: nr of gems total:           %5d (since %s)\n"
+                              "[%s]: nr of magic gems total:     %5d (since %s)\n",
+    dtime(time())[5..],nrlast,
+    dtime(time())[5..],nr,dtime(program_time())[5..],
+    dtime(time())[5..],nrmagic,dtime(program_time())[5..]));
+  nrlast=0;
+}
+

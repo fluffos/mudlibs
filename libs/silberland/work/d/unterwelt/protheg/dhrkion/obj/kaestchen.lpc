@@ -1,0 +1,255 @@
+/*
+** Hier kommen die Ingredienzen fuer die magischen Piwafwis rein...
+*/
+
+#include "../def.h"
+
+inherit "/std/container";
+
+nosave int offen;
+nosave string wer_darf;
+nosave int maglevel;
+nosave string *mod;
+nosave int timeout=1;
+
+void SetOffen()
+{
+  offen=1;
+  
+  SetProp(P_TRANSPARENT,1);
+  SetProp(P_CNT_STATUS, CNT_STATUS_OPEN);
+}
+
+void SetZu()
+{
+  offen=0;
+  
+  SetProp(P_TRANSPARENT,0);
+  SetProp(P_CNT_STATUS, CNT_STATUS_CLOSED);
+}
+
+void create()  
+{
+  if(!is_clone(ME)) return;
+  ::create();
+  
+  AddId(({"kaestchen","\npiwafwikaestchen"}));
+  SetProp(P_NAME, "Kaestchen");
+  SetProp(P_NAME_ADJ, "hoelzern");
+  AddAdjective(({"hoelzern","hoelzerne","hoelzernes","hoelzernen"}));
+  
+  SetProp(P_LONG,
+	  BS("Ein schmuckloses Kaestchen aus Holz. Du kannst die Gegenstaende "
+	     "fuer Mizzri hier hineinlegen und es ihr anschliessend "
+	     "wiedergeben."));
+
+  AddDetail(({"holz","eichenholz"}),
+	    "Das Kaestchen besteht aus massivem, jedoch sehr leichtem "
+	    "Eichenholz. Wahrscheinlich magisches Holz.");
+
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_VALUE, 1);
+  SetProp(P_GENDER, NEUTER);
+  
+  SetProp(P_MATERIAL, ([MAT_OAK:90, MAT_MISC_MAGIC:10]));
+  
+  SetProp(P_SHORT, "Ein hoelzernes Kaestchen");
+  SetProp(P_CNT_STATUS,CNT_STATUS_CLOSED); 
+  
+  SetProp(P_MAX_WEIGHT, 100000);
+    
+  AddCmd(({"oeffne"}),"oeffne");
+  AddCmd(({"schliess","schliesse"}), "schliesse");
+
+  SUID;
+  SetOffen();
+}
+
+void Activate(string who, int lvl, string *mods)
+{
+  wer_darf=who;
+  maglevel=lvl;
+  mod=mods;
+  
+  switch(lvl)
+    {
+    case 1:
+      SetProp(P_LONG, QueryProp(P_LONG)+
+	      BS("Bei der Abgabe sollte das Kaestchen zwei Diamanten, "
+		 "fuenf Schuppen eines Drachen, zwei Magiesteine, "
+		 "etwas Spinnenseide und dreissigtausend Goldmuenzen "
+		 "enthalten."));
+      break;
+    case 2:
+      SetProp(P_LONG, QueryProp(P_LONG)+
+	      BS("Bei der Abgabe sollte das Kaestchen vier Diamanten, "
+		 "zehn Schuppen eines Drachen, vier Magiesteine, "
+		 "etwas Spinnenseide und sechzigtausend Goldmuenzen "
+		 "enthalten."));
+      break;
+    case 3:
+      SetProp(P_LONG, QueryProp(P_LONG)+
+	      BS("Bei der Abgabe sollte das Kaestchen sechs Diamanten, "
+		 "fuenfzehn Schuppen eines Drachen, sechs Magiesteine, "
+		 "etwas Spinnenseide und neunzigtausend Goldmuenzen "
+		 "enthalten."));
+      break;
+    }
+}
+
+string QueryOwner()
+{
+  return wer_darf;
+}
+
+int QueryMagic()
+{
+  return maglevel;
+}
+
+string *QueryMods()
+{
+  return mod;
+}
+
+nosave QueryAllowed(object pl)
+{
+  //wenn nicht erlaubt 0 sonst 1
+  if(IS_WIZARD(pl)) return 1;
+  if(geteuid(pl)==geteuid()) return 1;
+  
+  if(stringp(wer_darf))
+    if(wer_darf==getuid(pl))
+      return 1;
+    else
+      return 0;
+  
+  return 1;
+}
+
+string long() 
+{
+  string descr, inv_descr;
+
+  descr=process_string(QueryProp(P_LONG));
+
+  if(!QueryProp(P_TRANSPARENT))
+    return descr+BS(CAP(QueryPronoun())+" ist geschlossen.");
+  
+  inv_descr=make_invlist(TP, all_inventory(TO));
+
+  if(inv_descr!="")
+    descr+=BS(CAP(QueryPronoun())+" ist geoeffnet und enthaelt:")+inv_descr;
+  else 
+    descr+=BS(CAP(QueryPronoun())+" ist geoeffnet und leer.");
+
+  return descr;
+}
+
+string short()
+{
+  string sh;
+  
+  if(sh=QueryProp(P_SHORT))
+    if(offen) 
+      return sh+" (geoeffnet).\n";
+    else 
+      if(stringp(wer_darf))
+	return sh+" (magisch verschlossen).\n";
+      else
+	return sh+" (geschlossen).\n";
+}
+
+nosave schliesse(str)
+{
+  notify_fail(BS("WAS moechtest Du schliessen?"));
+
+  if(!id(str)) return 0;
+
+  if(!offen) return write(BS(Name(WER,1)+" ist doch bereits geschlossen.")), 1;
+
+  write(BS("Du schliesst das Kaestchen."));
+  say(BS(TPN+" schliesst ein Kaestchen."), ({TP}));
+
+  SetZu();
+
+  return 1;
+}
+
+nosave oeffne(str)
+{
+  string was, womit;
+  object obj;
+
+  notify_fail(BS("WAS moechtest Du oeffnen?"));
+  if (!str) return 0;
+
+  if(id(str)) 
+    {
+      if(offen)
+	return write(BS(Name(WER,1)+" ist doch schon offen.")), 1;
+      
+      if(!QueryAllowed(TP))
+	return notify_fail(BS("Dieses Kaestchen gehoert "+CAP(wer_darf)+"!!")),
+	  0;
+      
+      write(BS("Du oeffnest das Kaestchen."));
+      say(BS(TPN+" oeffnet ein Kaestchen."));
+      
+      SetOffen();
+      
+      return 1;
+    }
+}
+
+varargs int PreventInsert(object ob)
+{
+  if(stringp(wer_darf) && TP)
+    if(!QueryAllowed(TP))
+      return write(BS("Das darf nur "+CAP(wer_darf)+"!")), 1;
+  
+/*
+  if(PO)
+    if(geteuid()!=geteuid(PO)) 
+      return write(BS("Das darfst Du nicht!")), 1;
+*/
+  
+  return ::PreventInsert(ob);
+}
+
+varargs int PreventLeave(object ob, mixed dest)
+{
+  if(stringp(wer_darf) && TP)
+    if(!QueryAllowed(TP))
+      return write(BS("Das darf nur "+CAP(wer_darf)+"!")), 1;
+  
+/*
+  if(PO)
+    if(geteuid()!=geteuid(PO)) 
+      return write(BS("Das darf nur "+CAP(wer_darf)+"!")), 1;
+*/
+
+  return ::PreventLeave(ob, dest);
+}
+
+void reset()
+{
+  if(!is_clone(ME)) return;
+  ::reset();
+  
+  timeout--;
+  
+  if(timeout <= 0)
+    call_out("remove_warning", 0);
+}
+
+void remove_warning()
+{
+  if(MENV)
+    if(interactive(MENV))
+      tell_object(MENV, BS("Das hoelzerne Kaestchen von Mizzri wird sich "
+			   "in Kuerze aufloesen..."));
+  
+  call_out("remove", 120);
+}

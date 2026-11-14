@@ -1,0 +1,144 @@
+// Heiligenschein der Paladine
+inherit "std/thing";
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <defines.h>
+#include <moredef.h>
+#include <new_skills.h>
+#include "../paladin.h"
+
+private int nrAttacks, atkBonus;
+
+create() {
+  if (!is_clone(this_object())) return;
+  ::create();
+  AddId (({PALADINITEM, "\neifer"}));
+  SetProp (P_SHORT, 0); 
+  SetProp (P_GENDER, MALE);
+  SetProp (P_WEIGHT, 0);
+  SetProp (P_LIGHT, 1);
+  SetProp (P_NODROP, 1);
+  SetProp (P_NEVERDROP, 1);
+  SetProp (P_MAGIC, 1);
+// if(getuid(previous_object())!="GUILD.pal_spells") {
+//   call_out("remove", 1);
+//   return 0;
+//  }
+}
+
+string extra_look() {
+  object player;
+  if(!player=ENV(ME)) return "";
+  if(player->QueryProp(P_GENDER)==FEMALE)
+    return "Sie hat einen durchdringenden Blick und scheint von Dusty gesegnet zu sein.\n";
+  else 
+    return "Er hat einen durchdringenden Blick und scheint von Dusty gesegnet zu sein.\n";
+}
+
+int start_remove(int time) {
+  call_out("remove_me", time);
+  return 1;
+}
+
+remove_me() {
+  object player, room;
+  if(player=ENV(ME)) {
+    tell_object(player, BS("Dein goettlicher Eifer laesst nach. Du fuehlst Dich von "
+          "Dusty gesegnet. Lob sei Dusty!"));
+    if (player->QueryProp(P_ALIGN) < 1000) {
+      player->SetProp(P_ALIGN, player->QueryProp(P_ALIGN)+random(250));
+    }
+  }
+        
+  if(room=ENV(player))
+    tell_room(room, sprintf("Der goettliche Blick von %s erlischt.\n",
+        player->name(WEM)), ({player}));
+  player->SetProp(P_TMP_ATTACK_HOOK, 0);
+  ME->remove();
+}
+
+public void SetPower(int ability, int success) {
+  nrAttacks = ability/2000;
+  atkBonus = success/100;
+}
+
+int MultipleAttack(object enemy) {
+  object *enemies;
+  mixed tmp_attack_hook;
+  int i, attacked, x, en, adjAtks;
+
+  tmp_attack_hook=PO->QueryProp(P_TMP_ATTACK_HOOK);
+  PO->SetProp(P_TMP_ATTACK_HOOK, 0);
+  
+  attacked=0;
+  enemies = ({ });
+
+  if(PO->QuerySkillAttribute(SA_SPEED) > 100) {
+    adjAtks = (int) (nrAttacks*exp((-2*PO->QuerySkillAttribute(SA_SPEED)/900.0)-0.2));
+  } else {
+    adjAtks = nrAttacks;
+  }
+
+  if(sizeof(PO->QueryEnemies()[0]) < 2) {
+    adjAtks = (int) (0.75 * adjAtks);
+  }
+
+  if(adjAtks < 1) {
+    adjAtks = 1;
+  }
+
+  if(PO->QueryProp(P_TESTPLAYER)) {
+    tell_object(PO, sprintf("eifer :: attacks = %d atkBonus = %d\n", adjAtks, atkBonus));
+  }
+
+  i = 0;
+  do {
+    i++;
+    if(sizeof(enemies) < 1) {
+      if(PO->QueryProp(P_TESTPLAYER)) {
+        tell_object(PO, sprintf("eifer :: no enemies\n"));
+      }
+      enemies=PO->QueryEnemies()[0];
+    }
+    if(sizeof(enemies) < 1) break;
+
+    if(PO->QueryProp(P_TESTPLAYER)) {
+      tell_object(PO, sprintf("eifer :: attack :: enemies = %O\n", enemies));
+    }
+
+    if(!objectp(enemies[0])) continue;
+    PO->do_my_heart_beat(); // damit no_more_attack auf 0 gesetzt wird
+    PO->Attack(enemies[0]);
+    attacked++;
+    if(!objectp(enemies[0])) continue;
+
+    x = 20+(enemies[0]->QueryProp(P_ALIGN)/100);
+    if(PO->QueryProp(P_TESTPLAYER)) {
+      tell_object(PO, sprintf("eifer :: sfxChance=1:%d\n", x));
+    }
+
+    if(objectp(enemies[0]) && enemies[0]->QueryProp(P_ALIGN) < 0 && !random(x)) {
+      switch(random(3)) {
+        case 0: tell_room(ENV(enemies[0]), BS(sprintf("%s eifrige Inbrunst laesst %s zurueckschrecken!", PO->Name(WESSEN), enemies[0]->name(WEN, 1))), ({PO}));
+                tell_object(PO, BS(sprintf("Deine eifrige Inbrunst laesst %s zurueckschrecken!", enemies[0]->name(WEN, 1))));
+                enemies[0]->SetProp(P_DISABLE_ATTACK, atkBonus/20);
+                break;
+        case 1: tell_room(ENV(enemies[0]), BS(sprintf("Dustys heiliger Zorn faehrt auf %s nieder!", enemies[0]->name(WEN, 1))));
+                enemies[0]->Defend(150 + atkBonus, DT_HOLY, ([SP_NAME: "eifer", SP_SHOW_DAMAGE: 1, SP_RECURSIVE: 1]), PO);
+                break;
+        default: tell_room(ENV(enemies[0]), BS(sprintf("%s ruft: LOB SEI DUSTY! HEILIG! HEILIG!", PO->Name(WER))), ({PO}));
+                tell_object(PO, BS("Du rufst: LOB SEI DUSTY! HEILIG! HEILIG!"));
+                tell_object(PO, BS("Heilige Kraft durchstroemt dich in deinem Eifer!"));
+                PO->AddHp(10 + (atkBonus/5));
+                break;
+      }
+    }
+
+    enemies = enemies[1..];
+  } while(i<adjAtks);
+
+  PO->SetProp(P_TMP_ATTACK_HOOK, tmp_attack_hook);
+
+  return !attacked;
+}

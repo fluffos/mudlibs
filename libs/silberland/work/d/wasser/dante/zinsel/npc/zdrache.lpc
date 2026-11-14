@@ -1,0 +1,202 @@
+//zombiedrache
+//dante sl 99-98
+
+inherit "/p/std/dragons/dragon";
+#include "/players/dante/myowndefine.h"
+#include <properties.h>
+#include <language.h>
+#include <combat.h> // fuer die damage types
+#include <moving.h> // fuer REJECT_KEEP
+#include <wizlevels.h>
+#include <class.h>
+#include <new_skills.h>n
+
+void create()
+{ 
+  object cash;
+  if (!is_clone(this_object())) return;
+  ::create();    
+
+  SetProp(P_NAME, "Kronomortis");
+  SetProp(P_ARTICLE, 0);
+  create_default_dragon(4,7,0, 27+random(7));
+  //schuppen auch runter gesetzt
+
+  AddId(({"NOWIMPY","drache","kronomortis", "zombiedrache"}));
+  SetProp(P_LONG,BS(
+        "Der Zombiedrache Kronomortis ist einer der boesartigesten Drachen des Silberland! "
+        "Untot und doch hoechst lebendig faucht er Dich an. Du waerst nicht der erste, "
+        "der bei seinem Anblick heulend und zitternd davonlaueft."));
+  SetProp(P_SHORT, "Kronomortis, der Zombiedrache");
+  AddId(({"kronomortis","drache","zombiedrache"}));
+  set_living_name("zombiedrache");
+
+  SetProp(P_RESISTANCE_STRENGTHS, QueryProp(P_RESISTANCE_STRENGTHS) +
+      ([DT_BLUDGEON: 0.6, DT_RIP:-1.0, DT_PIERCE:-1.0,
+        DT_UNHOLY:-1.0, DT_HOLY:0.3,DT_TERROR:-1.0]));
+
+  SetProp(P_HANDS, ({" mit seinen Zombieklauen",QueryProp(P_HANDS)[1]-50,
+        ({DT_ACID, DT_RIP})}));        
+
+  SetProp(P_AGGRESSIVE, 0.05);
+
+  AddSpell(1,100,
+      "Kronomortis, der Zombiedrache spuckt giftigen Schleim nach Dir!\n",
+      "Kronomortis, der Zombiedrache spuckt giftigen Schleim nach @WEM!!\n",
+      DT_POISON, "spell_gift", ([SP_SHOW_DAMAGE:1]) );
+
+  AddSpell(1,100,
+      "Kronomortis, der Zombiedrache blickt Dir direkt in Deine Augen!\n",
+      "Kronomortis, der Zombiedrache blickt Dir direkt in Deine Augen!\n",
+      DT_POISON, "spell_blindalle", ([SP_SHOW_DAMAGE:1]) );
+
+  AddSpell(1,1000,
+      "Kronomortis, der Zombiedrache attackiert Dich zombiemaessig!\n",
+      "Kronomortis, der Zombiedrache attackiert @WEN zombiemaessig!\n",
+      DT_BLUDGEON, ([SP_SHOW_DAMAGE:1]) );
+
+  SUID;
+  if( !random(3) )
+    CLONEME("/d/wasser/dante/zinsel/armour/zha2");
+  else
+    CLONEME("/d/wasser/dante/zinsel/armour/zring");
+
+  AddSpell(1,100,
+      "Kronomortis, der Zombiedrache spuckt EXTREM giftigen Schleim nach Dir!\n",
+      "Kronomortis, der Zombiedrache spuckt EXTREM giftigen Schleim nach @WEM!!\n",
+      DT_POISON, "spell_virus");
+
+
+
+  cash=clone_object("obj/money");
+  cash->SP(P_AMOUNT, 2000+random(2000));
+  //geld auch massiv runter!!!
+  cash->move(TO, M_GET);
+  AddClass(CL_UNDEAD);
+}
+
+void spell_blindalle(object enemy, int damage, mixed dam_type)
+{
+  int i;   
+  object *inv;
+  inv=PresentEnemies();
+
+  tell_room(ENV(ME), BS(
+        "Kronomortis lacht wissend ueber seine Feinde!\n"));
+  for(i=sizeof(inv)-1;i>=0;i--)
+  {
+    if(!random(10) && !inv[i]->QueryProp(P_BLIND))
+    {
+      tell_object(inv[i], "Deine Augen schmerzen heftig!\n");
+      inv[i]->SetProp(P_BLIND, 60);
+    } 
+    else 
+    {  
+      tell_object(inv[i],
+          "Du wendest Dich blitzschnell von Kronomortis ab!\n");  
+    }
+  }
+}
+
+void spell_gift(object enemy, int damage, mixed dam_type)
+{
+  if(!random(8)) {
+    tell_object(enemy,
+        "Der giftige Schleim dringt tief in Deine Haut ein!\n");
+    enemy->AddPoison(1+random(2)); 
+  }
+
+  else
+    tell_object(enemy,
+        "Der giftige Schleim verfehlt Dich nur knapp.\n"); 
+}
+
+void spell_virus (object enemy, int damage, mixed dam_type) {
+
+  object *inv, ob;
+  int i;
+
+  inv=PresentEnemies();
+  inv-=({ this_object(), 0 });
+
+  ob=clone_object("/d/wasser/dante/zinsel/obj/zv");
+
+  for(i=sizeof(inv)-1;i>=0;i--) {
+
+    if(!deep_present("ZV", inv[i]))  {
+
+      if(!deep_present("ZV_RESISTENT", inv[i]))  {
+
+        if(interactive(inv[i]))  {
+
+          ob->move(inv[i], M_NOCHECK);
+          tell_object(inv[i],
+              "Du wirst voll getroffen!!!\n");
+          write_file("/d/wasser/dante/zinsel/log/virus",
+              ctime()+": "+inv[i]->name()+" wird infiziert.\n");
+        }
+      }                           
+    }
+  }
+}    
+
+// Kills mitloggen
+void die(int poisondeath)
+{
+  TP->heal_self(500);
+  write("Das Blut des toten Zombiedrachen heilt Dich total!!!\n");
+
+  write_file("/d/wasser/dante/zinsel/log/zombiedrachestirbt",
+      ctime()+": "+CAP(getuid(TP))+" killt den Zdrachen.\n");
+  if( !IS_LEARNER(TP) )
+    domainshout(CAP(TP->query_real_name())+
+        " hat Kronomortis, den Zombiedrachen bezwungen.\n");
+  ::die(poisondeath);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  write_file("/d/wasser/dante/zinsel/log/zombiedrachetoetet",           
+      ctime()+": Der Zdrache hat gerade "+CAP(getuid(player))+" umgebracht.\n");
+
+  command("iss leiche");
+  call_out("nimm_alles", 0);
+}
+
+
+nimm_alles()  {
+  if(present("leiche", environment(TO)))  {
+    command("nimm alles aus leiche");
+  } 
+}
+
+catch_tell(string str)
+{
+  string dum1,dum2,dum3;
+  if(sscanf(str,"%s teilt Dir mit: %s",dum1,dum2))   
+  { call_out("back",2,dum1,dum2);}
+}
+
+back(string dum1,string dum2)
+{  string dum3;
+  object ob;
+  object env;
+  string *path;
+  string ans;               
+  dum3=explode(dum1," ");
+  dum3=dum3[sizeof(dum3)-1];
+  ob=find_player(lower_case(dum3));
+  if(!ob)  { return;  }
+
+  if(environment(TO)==environment(ob) )  {
+    tell_object(ob,
+        "Kronomortis bruellt Dich an!\n");
+    return;
+  }
+  else
+
+    tell_object(ob,
+        "Kronomortis bruellt Dich aus der Ferne an.\n"
+        "Komischerweise siehst Du ihn auf einmal vor Dir!\n"
+        ""+TO->long()+"\n");
+}

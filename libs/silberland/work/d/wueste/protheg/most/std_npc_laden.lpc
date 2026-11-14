@@ -1,0 +1,898 @@
+// einfach mal den std/laden gestohlen, mal gugen was passiert...
+
+inherit "std/mnpc";
+
+#define NEED_PROTOTYPES
+
+#include <properties.h>
+#include <rooms.h>
+#include <language.h>
+#include <moving.h>
+#include <routingd.h>
+#include <bank.h>
+#include <combat.h>
+#include <new_skills.h>
+#include <laden.h>
+
+#define MAX_ANZ 3       /* Max 3 Objekte einer Sorte im Laden */
+#define BUY_FACT 300    /* Objekte kosten BUY_FACT mal P_VALUE / 100 */
+#define MAX_SELL_OBS 40 /* Max 40 Objekte auf einmal verkaufen */
+#define EVAL_LIMIT 100000  /* eval darf dabei nicht unter 100000 sinken */
+
+#define RESTR_CHECKER "/std/restriction_checker"
+
+// global vars
+
+string storage;
+mapping ob_anz;
+int buyfact, mymoney, wantto, shop_percent_left, last;
+
+// Jetzt Variablen fuer staendig verfuegbare Objekte
+
+string *fixed_obj; // Liste der staendig verfuegbaren Objekte
+mapping fixed_value; // Preise bei Sonderangeboten
+mapping fixed_ids;   // Ids
+
+// prototypes
+
+int list(string str);
+int buy(string str);
+int sell(string str, int f);
+int force_sell(string str);
+int evaluate(string str);
+int show_obj(string str);
+
+mixed *GetList();
+varargs string KeeperPrefix(string verb, string alt);
+varargs string CheckKeeper(int silent, string verb);
+int DoList(string query_fun);
+varargs string CheckKeeper(int silent, string verb);
+mixed FindInStore(mixed x);
+varargs int do_sell(object ob, int force, int no_reg, string prefix);
+int ask_sell(string str, object ob, int val, string prefix, int reqamount);
+int do_sell2(object ob, int value, string prefix, int reqamount);
+void give_money(int value, object ob, string prefix);
+varargs int sell_all(object cnt, string prefix);
+
+
+varargs AddFixedObject(string str, int val, mixed ids)
+{
+  int i;
+
+  // Achtung, bei solchen Objekten muss die Blueprint initialisiert werden!
+  if (!str) return;
+  if (!val) val = str->QueryProp (P_VALUE);
+  if (!ids) ids = str->QueryProp (P_IDS);
+  if (!pointerp (ids)) ids = ({});
+  fixed_obj += ({ str });
+  fixed_value[str] = val;
+  for (i=sizeof(ids)-1; i>=0; i--)
+    fixed_ids[ids[i]] = str;
+}
+
+UpdateCounter(ob,num)
+{
+  string tmp;
+  mixed a;
+  
+  if (!num||!objectp(ob)) return;
+  tmp=file_name(ob);
+  if (tmp[0..2]!="/d/"&&tmp[0..8]!="/players/")
+    tmp=ob->short()+explode(tmp,"#")[0];
+  else
+    tmp=explode(tmp,"#")[0];
+  a=ob_anz[tmp]+num;
+  if (a<0) a=0;
+  if (!a)
+    efun::m_delete(ob_anz,tmp);
+  else
+    ob_anz[tmp]=a;
+}
+
+int InflateSellValue(int value, int cnt) {
+  cnt-=3;
+  if (cnt<0) cnt=0;
+  return value-(value*cnt)/(cnt+25);
+}
+
+int TruncateSellValue(int new_value) {
+  if (new_value>500)
+    new_value-=500,new_value=((1000*new_value)/(new_value+1000))+500;
+  return new_value;
+}
+
+int QueryValue(object ob, int value) {
+  string tmp;
+  int new_value;
+  
+  if (!objectp(ob)) return 0;
+  if (Query("laden::compat"))
+  {
+    new_value=(value>1000?1000:value);
+    if(new_value>mymoney)
+      return (mymoney>0?mymoney:0);
+    else
+      return new_value;
+  }
+  tmp=file_name(ob);
+  if (tmp[0..2]!="/d/"&&tmp[0..8]!="/players/")
+    tmp=ob->short()+explode(tmp,"#")[0];
+  else
+    tmp=explode(tmp,"#")[0];
+  new_value=TruncateSellValue(InflateSellValue(value,ob_anz[tmp]));
+  if (3*new_value>mymoney)
+  {
+    log_file("LADEN",sprintf("Out of money: %O for %O (%s)\n",this_object(),
+	                     this_player(),dtime(time())[5..]));
+    new_value=mymoney/3;
+  }
+  if (new_value<0) new_value=0;
+  return new_value;
+}
+
+int QuerySellValue(object ob)
+{
+  int value, wert, dam;
+  value=ob->QueryProp(P_VALUE);
+  if( dam = ob->QueryProp(P_DAMAGED) )
+  {
+    if( wert= ob->QueryProp(P_WC) )
+      value = value * wert / (dam+wert);
+    else if( wert= ob->QueryProp(P_AC) )
+      value = value * wert / (dam+wert);
+    else
+      value = 1;
+  }
+  return QueryValue(ob,value);
+}
+ 
+int QueryBuyValue(mixed ob) {
+  if (objectp(ob))
+    return (ob->QueryProp(P_VALUE)*buyfact)/100;
+  return (fixed_value[ob]*buyfact)/100;
+}
+
+
+_set_shop_percent_left()
+{
+  shop_percent_left=ZENTRALBANK->_query_shop_percent_left();
+}
+
+void create()
+{
+  object router;
+
+  ::create();
+
+  _set_shop_percent_left();
+  last=wantto=mymoney=50000;
+  buyfact=BUY_FACT;
+
+  SetProp( P_INT_SHORT, "StdLaden");
+  SetProp( P_INT_LONG,
+    "Der Magier, der diesen Laden erschuf, fand keine Beschreibung dafuer.\n");
+  SetProp(P_LIGHT, 1);
+  SetProp(P_INDOORS, 1);
+  SetProp(P_SHOPKEEPER_ID, "haendler");
+  SetProp(P_SHOPKEEPER_NAME, "der Haendler");
+  SetProp(P_SHOPKEEPER_GENDER, MALE);
+  SetStorageRoom("/room/lagerraum");
+
+  AddCmd(({"zeig","zeige"}),"list");
+  AddCmd(({"kauf","kaufe","bestell","bestelle"}),"buy");
+  AddCmd(({"verkauf","verkaufe"}),"sell");
+  AddCmd(({"versetz","versetze"}),"force_sell");
+  AddCmd(({"schaetz","schaetze"}),"evaluate");
+  AddCmd(({"untersuche","unt"}), "show_obj");
+
+  ob_anz=([]);
+  fixed_obj=({});fixed_value=([]);fixed_ids=([]);
+
+  if (!is_clone(this_object()) && objectp(router=find_object(ROUTER)))
+    router->RegisterTarget(TARGET_SHOP,file_name(this_object()));
+}
+
+string SetStorageRoom(string str) {
+  if (str && stringp(str)) return storage=str;
+  return 0;
+}
+
+string QueryStorageRoom() {
+  return storage;
+}
+
+int list(string str) {
+  notify_fail(
+    "Bitte 'zeige', 'zeige waffen', 'zeige ruestungen' oder\n"+
+    "'zeige verschiedenes' eingeben.\n");
+  if (!str) return DoList("AlwaysTrue");
+  if (!stringp(str)) return 0;
+  if (strlen(str)<3) return 0;
+  if ((strlen(str)>3) && (str=="schuhe"[0..strlen(str)-1]))
+    return DoList("Is_sti");
+  str="Is_"+str[0..2];
+  if (!function_exists(str, this_object()))
+    return 0;
+  return DoList(str);
+}
+
+AlwaysTrue(ob) {
+  return 1;
+}
+
+Is_waf(ob) {
+  return ob->QueryProp(P_WEAPON_TYPE);
+}
+Is_rue(ob) {
+  return ob->QueryProp(P_ARMOUR_TYPE);
+}
+Is_pan(ob) {
+  return (ob->QueryProp(P_ARMOUR_TYPE)==AT_ARMOUR);
+}
+Is_hel(ob) {
+  return (ob->QueryProp(P_ARMOUR_TYPE)==AT_HELMET);
+}
+Is_amu(ob) {
+  return (ob->QueryProp(P_ARMOUR_TYPE)==AT_AMULET);
+}
+Is_rin(ob) {
+  return (ob->QueryProp(P_ARMOUR_TYPE)==AT_RING);
+}
+Is_han(ob) {
+  return (ob->QueryProp(P_ARMOUR_TYPE)==AT_GLOVE);
+}
+Is_umh(ob) {
+  return (ob->QueryProp(P_ARMOUR_TYPE)==AT_CLOAK);
+}
+Is_sti(ob) {
+  return (ob->QueryProp(P_ARMOUR_TYPE)==AT_BOOT);
+}
+Is_sch(ob) {
+  return (ob->QueryProp(P_ARMOUR_TYPE)==AT_SHIELD);
+}
+Is_hos(ob) {
+  return (ob->QueryProp(P_ARMOUR_TYPE)==AT_TROUSERS);
+}
+Is_arm(ob) {
+  return (ob->QueryProp(P_ARMOUR_TYPE)==AT_BRACERS);
+}
+Is_gue(ob) {
+  return (ob->QueryProp(P_ARMOUR_TYPE)==AT_BELT);
+}
+/*
+Is_mis(ob) {
+  return (ob->QueryProp(P_ARMOUR_TYPE)==AT_MISC);
+}
+*/
+Is_1ha(ob) {
+  return (ob->QueryProp(P_WEAPON_TYPE) && ob->QueryProp(P_NR_HANDS)==1);
+}
+Is_ein(ob) {
+  return Is_1ha(ob);
+}
+Is_2ha(ob) {
+  return (ob->QueryProp(P_WEAPON_TYPE) && ob->QueryProp(P_NR_HANDS)==2);
+}
+Is_zwe(ob) {
+  return Is_2ha(ob);
+}
+Is_ver(ob) {
+  return (!ob->QueryProp(P_WEAPON_TYPE) && !ob->QueryProp(P_ARMOUR_TYPE));
+}
+
+mixed *GetList()
+{
+  object store;
+  int i;
+  mixed *output,tmp,str;
+  string comp;
+  mapping tmp2;
+
+  output=({});
+  call_other(storage, "_register_shop", this_object());
+  if (!objectp(store=find_object(storage))) return output;
+  tmp=fixed_obj+all_inventory(store); tmp2=([]);
+  for (i=sizeof(tmp)-1;i>=0;i--)
+  {
+    str=({({sprintf("%'.'-25.25s%'.'7.7d",
+               tmp[i]->short()[0..<3], QueryBuyValue(tmp[i])), tmp[i]})});
+    comp=str[0][0][0..25];
+    if (!tmp2[comp]) {
+      tmp2[comp]=1;
+      output+=str;
+    }
+  }
+  return output;
+}
+
+
+varargs string KeeperPrefix(string verb, string alt)
+{
+  object keeper;
+  if(QueryProp(P_SHOP_FLAGS)&SHOP_HASKEEPER)
+    keeper=present(QueryProp(P_SHOPKEEPER_ID));
+  return QueryProp(P_SHOP_FLAGS) & (SHOP_HASKEEPER | SHOP_NEEDSKEEPER) ?
+    capitalize(keeper?keeper->name(WER,1):
+        QueryProp(P_SHOPKEEPER_NAME) || "der Haendler")+
+    " "+(verb || "sagt: ") : alt || "";
+}
+
+//
+// CheckKeeper()
+// Prueft, ob sich der Haendler im Raum befindet, und gibt bei
+// Notwendigkeit dessen Anwesenheit eine entsprechende Meldung aus.
+// Rueckgabewert: der 'sag' Prefix-String ("Der Haendler sagt: ",
+// oder bei Shops ohne Haendler: "")
+//
+varargs string CheckKeeper(int silent, string verb)
+{
+  object keeper;
+  if ((QueryProp(P_SHOP_FLAGS) & SHOP_NEEDSKEEPER) )
+  { 
+    if( !(keeper=present(QueryProp(P_SHOPKEEPER_ID))))
+    {
+      if (!silent)
+        write((capitalize(QueryProp(P_SHOPKEEPER_NAME) || "der Haendler"))+
+          " ist leider nicht da!\n");
+      else if (silent==2)
+        _notify_fail((capitalize(QueryProp(P_SHOPKEEPER_NAME) || 
+           "der Haendler"))+ " ist leider nicht da!\n");
+      return 0;
+    }
+    if( keeper->InFight() )
+    {
+      if (!silent)
+        write((capitalize(QueryProp(P_SHOPKEEPER_NAME) || "der Haendler"))+
+          " kaempft gerade und kann sich leider nicht um Dich kuemmern!\n");
+      else if (silent==2)
+        _notify_fail((capitalize(QueryProp(P_SHOPKEEPER_NAME)||"der Haendler"))+
+         " kaempft gerade und kann sich leider nicht um Dich kuemmern!!\n");
+      return 0;
+    }
+  }
+  return KeeperPrefix(verb);
+}
+
+int DoList(string query_fun) {
+  object ob,keeper;
+  int i,j,n,indent;
+  string *output;
+  string prefix,out;
+
+  if (this_player()->InFight()) {
+    write("Dazu bist Du im Moment viel zu beschaeftigt.\n");
+    return 1;
+  }
+  if (!prefix=CheckKeeper()) return 1;
+  output=GetList();
+  indent=0;
+  if (!sizeof(output)) {
+    write(prefix+"Im Moment sind wir leider VOELLIG ausverkauft!\n");
+    return 1;
+  }
+  indent=0;
+  out="";
+  for (i=0;i<sizeof(output);i++) {
+    if (call_other(this_object(),query_fun,output[i][1])) {
+      n++;
+      out+=sprintf("%3d. %s",i+1,output[i][0]);
+      if (!(indent=!indent)) out+="\n";
+      else out+=" | ";
+    }
+  }
+  if (!n) {
+    write(prefix+"Davon haben wir leider nichts!\n");
+    return 1;
+  }
+  if (indent) out+="\n";
+  this_player()->More(out);
+  out=0;
+  return 1;
+}
+
+int show_obj(string str)
+{
+  int i;
+  string was, dummy;
+  mixed ob;
+  string prefix;
+  mapping restr;
+
+  if (!str) return 0;
+  prefix=CheckKeeper(1);
+  if (sscanf(str,"%s in laden",was)>0)
+  {
+    if (this_player()->InFight()) 
+    {
+      write("Dazu bist Du im Moment viel zu beschaeftigt.\n");
+      return 1;
+    }
+    if (!prefix) return CheckKeeper(), 1;
+    if (!ob=FindInStore(was)) {
+      write(prefix+"Das kann ich im Lager nicht finden.\n");
+      return 1;
+    }
+  }
+  else if (sscanf(str,"%d",i)>0 && (i>0) && (to_string(i)==str))
+  {
+    if (this_player()->InFight()) 
+    {
+      write("Dazu bist Du im Moment viel zu beschaeftigt.\n");
+      return 1;
+    }
+    if (!prefix) return CheckKeeper(), 1;
+    if (!ob=FindInStore(i))
+      return _notify_fail(prefix+"Das kann ich im Lager nicht finden.\n"), 0;
+  }
+  else return 0;
+  i=QueryBuyValue(ob);
+
+  write((QueryProp(P_SHOP_FLAGS) & (SHOP_HASKEEPER | SHOP_NEEDSKEEPER)
+        ? KeeperPrefix("zeigt Dir "+ob->name(WEN)) : ob->Name()) +
+      ":\n"+ob->long());
+  write(capitalize(ob->QueryPronoun())+" wuerde"+
+      (ob->IsPlural() ? "n Dich " : " Dich ")+i+" Muenze"+
+      (i==1 ? "" : "n")+" kosten.\n");
+
+  /* (zu spielerfreundlich :), ausserdem kein schoener Text...
+  // z.B. "Der Haendler warnt Dich: Als Zwerg kannst Du das nicht."
+  //
+  if (ob->QueryProp(P_ARMOUR_TYPE)&&(restr=ob->QueryProp(P_WEAR_RESTRICTIONS))
+      && (was=RESTR_CHECKER->check_restrictions(this_player(), restr)))
+    write(KeeperPrefix("warnt Dich: ", "Der Haendler warnt Dich: ")+was);
+  */
+  if (ob->QueryProp(P_ARMOUR_TYPE)&&(restr=ob->QueryProp(P_WEAR_RESTRICTIONS))
+      && RESTR_CHECKER->check_restrictions(this_player(), restr))
+    write(break_string(
+        "Du koenntest "+ob->name(WEN,1)+" allerdings nicht anziehen!", 78,
+        KeeperPrefix("warnt Dich: ", "Der Haendler warnt Dich: ")));
+  return 1;
+}
+
+int buy(string str)
+{
+  int i, val;
+  object ob, store;
+  string prefix, dummy;
+
+  if (this_player()->InFight()) {
+    write("Dazu bist Du im Moment viel zu beschaeftigt.\n");
+    return 1;
+  }
+  if (!prefix=CheckKeeper(2)) return 0;
+  if (!str) {
+    write(KeeperPrefix("fragt Dich: ")+"Was willst Du kaufen?\n");
+    return 1;
+  }
+  _notify_fail(prefix+"Das kann ich im Lager nicht finden.\n");
+  if (sscanf(str,"%d%s",i,dummy)>0 && i>0) {
+    if ((dummy==" ab") || (dummy==""))
+      ob=FindInStore(i);
+    else
+      ob=FindInStore(str);
+  } else {
+    ob=FindInStore(str);
+  }
+  if (!ob) return 0;
+  val=QueryBuyValue(ob);
+  if ((i=this_player()->QueryMoney()) < val) {
+    write(break_string(ob->Name(WER,1)+" wuerde"+
+        (ob->IsPlural() ? "n " : " ")+val+" Muenze"+
+        (val==1 ? "" : "n")+" kosten, Du "+
+        (i ? "hast aber nur "+i+"."
+           : "bist aber voellig pleite!"),
+        78, prefix));
+    return 1;
+  }
+  this_player()->AddMoney(-val);
+  mymoney+=val;
+  if (stringp(ob)) ob=clone_object((string)ob); // Staendig verfuegbares Obj?
+  if (ob->move(this_player(),M_GET)<=0){
+    write(prefix+"Du kannst das nicht mehr tragen!\n");
+    ob->move(this_object());            // Objekt in den Raum moven
+  } else {
+    write("Du kaufst "+ ob->name(WEN,1) + ".\n");
+  }
+  say(this_player()->Name()+" kauft "+ob->name(WEN)+".\n");
+  UpdateCounter(ob,-1);
+  return 1;
+}
+
+mixed FindInStore(mixed x)
+{
+  mixed list;
+  object store;
+  string res;
+
+  if (intp(x)) {
+    list = GetList();
+    if (x<1 || x>sizeof(list)) return 0;
+    return list[x-1][1];
+  }
+  if (stringp(x)) {
+    if (res=fixed_ids[x]) return res; // Staendig verfuegbares Objekt
+    if (!store=find_object(storage)) {
+      call_other (storage,"_register_shop",this_object());
+      if (!store=find_object(storage)) return 0;
+    }
+    return present(x,store);
+  }
+  return 0;
+}
+
+int evaluate(string str)
+{
+  object ob;
+  int val,rval;
+  string prefix;
+
+  if (!str) return 0;
+  if (this_player()->InFight()) {
+    write("Dazu bist Du im Moment viel zu beschaeftigt.\n");
+    return 1;
+  }
+  if (!prefix=CheckKeeper(2)) return 0;
+  ob=present(str,this_object());
+  if (!ob) ob=present(str,this_player());
+  if (!ob) 
+  {
+    write(prefix+"Hm? "+capitalize(str)+"? Wovon redest Du?\n");
+    return 1;
+  }
+  _notify_fail(prefix+"Nanu, seit wann werden hier Lebewesen verkauft?\n");
+  if (living(ob))
+    return 0;
+  
+  rval=ob->QueryProp(P_VALUE);
+  if (rval) {
+    val=QuerySellValue(ob);
+    if (rval==val)
+      write(break_string("Naja, ich denke, " +val+ " Muenze"+
+	    (val==1 ? "" : "n") + " waere"+(ob->IsPlural() ? "n ":" ")+
+	    (ob->QueryPronoun(WER))+" schon wert.\n", 78, prefix));
+    else
+      if (val)
+	write(break_string("Oh, nach der aktuellen Marktlage kann ich nur "+
+            val+" Muenze"+(val==1?"":"n")+" bezahlen, obwohl "+
+            ob->QueryPronoun()+" eigentlich "+rval+" Muenze"+(rval==1?"":"n")+
+            " wert "+(ob->IsPlural() ? "sind." : "ist."), 78, prefix));
+      else
+	write(prefix+"Ich bin vollkommen pleite, tut mir leid.\n");
+  }
+  else
+    write(prefix+capitalize(ob->QueryArticle(WER,1,1))+
+        (ob->IsPlural() ? "sind" : "ist")+" vollkommen wertlos.\n");
+  
+  return 1;
+}
+
+int force_sell(string str)
+{
+  return sell(str,1);
+}
+
+int sell(string str, int f)
+{
+  object ob, cnt;
+  string ob_str, cnt_str, prefix;
+
+  if (!str) return 0;
+  if (this_player()->InFight()) {
+    write("Dazu bist Du im Moment viel zu beschaeftigt.\n");
+    return 1;
+  }
+  if (!prefix=CheckKeeper(2)) return 0;
+  if (str=="alles")
+  { 
+    sell_all(0,prefix);
+    return 1;
+  }
+  if (sscanf(str,"alles aus %s", cnt_str))
+  {
+    if (cnt=present(cnt_str, this_player()))
+    {
+      sell_all(cnt,prefix);
+      return 1;
+    }
+    write(prefix+capitalize(cnt_str)+"? Sehe ich hier nicht, tut mir leid!\n");
+    return 1;
+  }
+  if (sscanf(str,"%s aus %s", ob_str, cnt_str))
+  {
+    if (cnt=present(cnt_str, this_player()))
+    {
+      if (ob=present(ob_str, cnt))
+      {
+	this_object()->do_sell(ob,f,0,prefix);
+	return 1;
+      }
+      write(prefix+capitalize(ob_str)+"? Sehe ich hier nicht, tut mir leid!\n");
+      return 1;
+    }
+    write(prefix+capitalize(cnt_str)+"? Sehe ich hier nicht, tut mir leid!\n");
+    return 1;
+  }
+  ob=present(str,this_object());
+  if (!ob) ob=present(str,this_player());
+  if (!ob) {
+    write(prefix+capitalize(str)+"? Sehe ich hier nicht, tut mir leid!\n");
+    return 1;
+  }
+  this_object()->do_sell (ob,f,0,prefix);
+  return 1;
+}
+
+varargs int do_sell(object ob, int force, int no_reg, string prefix)
+{
+  int value, rvalue; 
+  string str;
+  mapping special;
+  mixed key;
+  object inv;
+
+  if (!no_reg)
+    call_other(storage, "_register_shop", this_object());
+  if (explode(file_name(ob),"#")[0]=="/obj/money")
+  {
+    write(prefix+"Das waere ja wohl Unsinn, oder ...?\n");
+    return 1;
+  }
+  if (str=ob->QueryProp(P_NOSELL))
+  {
+    if (stringp(str))
+      write(str);
+    else
+      write(prefix+"Du kannst "+ob->name(WEN,1)+" nicht verkaufen!\n");
+    return 1;
+  }
+  if ((special=QueryProp(P_SPECIAL_SHOP)) && mappingp(special))
+  {
+    key=m_indices(special)[0];
+    if ((key==1) || !ob->QueryProp(key))
+    {
+      if (stringp(special[key]))
+        write(special[key]);
+      else
+        write(prefix+
+            "Tut mir leid, aber "+ob->name(WEN)+" kaufen wir hier nicht.\n");
+      return 1;
+    }
+  }
+  if (ob->QueryProp(P_VALUE)<=0)
+  {
+    write(prefix+ob->Name(WER)+(ob->IsPlural() ? " haben" : " hat")+
+        " keinen materiellen Wert, tut mir leid.\n");
+    return 1;
+  }
+  rvalue=ob->QueryProp(P_VALUE);
+  value=QuerySellValue(ob);
+  if (!value)
+  {
+    write(prefix+"Ich bin absolut pleite. Tut mir aufrichtig leid.\n");
+    return 1;
+  }
+  if(ob->QueryProp(P_KEEP_ON_SELL)==getuid(this_player()))
+  {
+    write(break_string(prefix+"Du wolltest "+ob->name(WEN)+" doch behalten. "
+      "Willst Du "+ob->QueryPronoun(WEN)+" mir trotzdem fuer " +value+
+      " Muenze"+(value==1?"":"n")+" ueberlassen? (ja/nein)\n",78)+" -> ");
+    input_to("ask_sell",0,ob,value,prefix,ob->QueryProp(P_REQUESTED_AMOUNT));
+    return 1;
+  }
+  if (value==rvalue || force)
+  {
+    return this_object()->do_sell2(ob,value,prefix,
+        ob->QueryProp(P_REQUESTED_AMOUNT));
+  }
+  write(break_string(
+    "Nach der aktuellen Marktlage kann ich Dir dafuer nur "+value+
+    " Muenze"+(value==1?"":"n")+" bieten, obwohl "+ob->name()+
+    " eigentlich "+rvalue+" Muenze"+(rvalue==1?"":"n")+" wert waere"+
+    (ob->IsPlural() ? "n." : "."), 78, prefix));
+  write(
+    "Willst Du "+ob->QueryPronoun(WEN)+" mir dafuer ueberlassen? "+
+    "(ja/nein) -> ");
+  input_to("ask_sell",0,ob,value,prefix,ob->QueryProp(P_REQUESTED_AMOUNT));
+}
+
+int ask_sell(string str, object ob, int val, string prefix, int reqamount)
+{
+  str=lower_case(str||"");
+  if (str=="ja"||str=="j")
+    this_object()->do_sell2(ob,val,prefix,reqamount);
+  else
+    write(prefix+"Ok, dann behalts!\n");
+  return 1;
+}
+
+int do_sell2(object ob, int value, string prefix, int reqamount)
+{
+  int ret;
+  string str,at;
+  closure qp;
+
+  // if (value>MAX_VALUE) value=MAX_VALUE;
+  if (value>mymoney)
+  {
+    write(prefix+"Ich habe das Geld leider nicht mehr.\n");
+    return 1;
+  }
+  if (!ob || !deep_present(ob,this_player()))
+  {
+    if (ob)
+      write(break_string("Nanu, wo "+(ob->IsPlural() ? "sind" : "ist")+
+          " denn "+ob->name(WER,1)+" hinverschwunden?", 78, prefix));
+    else
+      write(break_string("Nanu, wo ist denn der fragliche Gegenstand"+
+          " hinverschwunden?", 78, prefix));
+    return 1;
+  }
+  if (sizeof(all_inventory(ob)))
+  {
+    write(break_string("Aber "+ob->name(WER,1)+
+        (ob->IsPlural() ? " sind" : " ist")+
+        " doch gar nicht leer!", 78, prefix));
+    return 1;
+  }
+  qp=symbol_function("QueryProp", ob);
+  if (ob->IsUnit())
+    if (funcall(qp,P_AMOUNT) < reqamount)
+    {
+      write(prefix+"Tut mir leid, aber irgendwas ging da schief.\n");
+      return 1;
+    }
+    else
+      ob->SetProp(P_REQUESTED_AMOUNT, reqamount);
+  if (funcall(qp,P_NOBUY) || (funcall(qp,P_WC) > 150) ||
+      ((at=funcall(qp,P_ARMOUR_TYPE)) &&
+       funcall(qp,P_AC)>=KEEP_ARMOUR_CLASS[at]) )
+  {
+    string was;
+    was = ob->name(WEM, 1);
+    ret=ob->move(storage,M_PUT);
+    if (ret>0)  /* Sonst werden auch Sachen */
+                /* zerstoert, die man nicht weglegen kann */
+    {
+      say(this_player()->Name()+" verkauft "+ob->name(WEN)+".\n");
+      write(
+        break_string(sprintf("%sfindet Gefallen an %s und legt %s zu seinen "
+          "Privatsachen.", capitalize(KeeperPrefix("", "Der Haendler ")),
+          was, ob->QueryPronoun(WEN)), 78));
+      give_money(value,ob,prefix);
+      mymoney-=value;
+      mymoney+=value*shop_percent_left/100; // Wegen Zerstoerung des Objektes
+      UpdateCounter(ob,1);
+      destruct(ob);
+    }
+    else if (ret == ME_CANT_BE_DROPPED)
+    {
+      if ((str=funcall(qp,P_NODROP)) && stringp(str))
+      {
+	write(str);
+	return 1;
+      }
+      write("Du kannst "+ob->name(WEN,1)+" nicht verkaufen!\n");
+      return 1;
+    }
+    else
+      write(prefix+"Das interessiert mich nicht.\n");
+  }
+  else
+    if (ob->move(storage,M_PUT)>0)
+    {
+      say(this_player()->Name()+" verkauft "+ob->name(WEN)+".\n");
+      give_money(value,ob,prefix);
+      mymoney-=value;
+      UpdateCounter(ob,1);
+    }
+    else
+      write(prefix+"Du kannst "+ob->name(WEN,1)+" nicht verkaufen!\n");
+  return 1;
+}
+
+void give_money(int value, object ob, string prefix)
+{
+  write(KeeperPrefix("", "Der Haendler ")+"zahlt Dir "+value+" Muenze"+
+      (value==1 ? "" : "n")+".\n");
+  if (!this_player()->AddMoney(value)) 
+  {
+    object mon;
+
+    write("Du kannst das Geld nicht mehr tragen!\n");
+    mon=clone_object("/obj/money");
+    mon->SetProp(P_AMOUNT,value);
+    mon->move(this_object(),M_MOVE_ALL|M_NOCHECK);
+  } 
+}
+
+varargs int sell_all(object cnt, string prefix)
+{
+  object next, ob;
+  int flag,c;
+
+  flag = c = 0;
+  call_other (storage,"_register_shop",this_object()); // force load
+  if (cnt)
+    ob = first_inventory(cnt);
+  else
+    ob = first_inventory(this_player());
+  while (ob && (c++ < MAX_SELL_OBS) && (get_eval_cost() > EVAL_LIMIT))
+  {
+    next = next_inventory(ob);
+    if (ob->name(WER) && ob->short() && ob->QueryProp(P_VALUE))
+    {
+      flag = 1;
+      write(capitalize(ob->name(WER)||"")+": ");
+      if (ob->QueryProp(P_KEEP_ON_SELL)==getuid(this_player())
+          || ob->QueryProp(P_WORN)
+          || ob->QueryProp(P_WIELDED))
+	write("Du behaeltst "+ob->name(WEN)+".\n");
+      else {
+        write("\n");
+	this_object()->do_sell(ob,1,1,"");
+      }
+    }
+    ob = next;
+  }
+  if( !flag )
+    write(prefix+"Hmmm, viel hast Du aber nicht zu bieten...\n" );
+
+  return 1;
+}
+
+SetBuyFact(int i)
+{
+  buyfact=i*100;
+}
+
+QueryBuyFact()
+{
+  return buyfact/100;
+}
+
+reset()
+{
+  mixed *keys;
+  int i;
+ 
+  ::reset();
+  keys=m_indices(ob_anz);
+  _set_shop_percent_left();
+  for (i=sizeof(keys)-1;i>=0;i--)
+  {
+    ob_anz[keys[i]]=ob_anz[keys[i]]*7/8;
+    if (!ob_anz[keys[i]])
+      efun::m_delete(ob_anz,keys[i]);
+  }
+  if (last/3>mymoney)
+    wantto=wantto*110/100;
+  else
+    if (last/2<mymoney)
+      wantto=wantto*85/100;
+  if (wantto<25000) wantto=25500;
+  if (wantto>1500000) wantto=1500000;
+  if (wantto<mymoney)
+  {
+    ZENTRALBANK->PayIn(mymoney-wantto);
+    mymoney=wantto;
+  } else
+    mymoney+=ZENTRALBANK->WithDraw(wantto-mymoney);
+  last=mymoney;
+}
+
+_add_money(i)
+{
+  log_file("ZENTRALBANK",sprintf("TRANSFER: %O got %d from %O\n",this_object(),
+				 i,previous_object()));
+  mymoney+=i;
+}
+
+_query_current_money()
+{
+  return mymoney;
+}
+
+_query_wantto()
+{
+  return wantto;
+}

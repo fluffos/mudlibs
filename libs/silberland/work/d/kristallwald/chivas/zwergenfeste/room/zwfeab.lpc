@@ -1,0 +1,306 @@
+inherit "std/laden";
+inherit "/d/wueste/protheg/most/std_things";
+
+#include "../def.h"
+#include <properties.h>
+#include <player.h>
+#include <moving.h>
+#include <laden.h>
+
+#define MAX_BUY 8
+
+nosave mapping gekauft;
+
+void create()
+{
+  ::create();
+
+  SetProp(P_LIGHT, 1);
+  SetProp(P_INDOORS, 1);
+  SetProp(P_ENVIRONMENT, ([ENV_TERRAIN:TT_CAVE, ENV_TEMPERATURE:22]));
+
+  SetProp(P_INT_SHORT, "Im Backladen von Ardhmir");
+  SetProp(P_INT_LONG, 
+     BS("Du stehst in der Zweigstelle der Baeckerei von Felonia. Hier wird "
+        "zwar nicht selbst gebacken, aber jeden Morgen werden frische Waren "
+        "direkt aus Felonia angeliefert. Der koestliche Duft der Backwaren "
+        "ist verfuehrerisch.")+
+     BS("Wenn Du wissen willst, was Du hier kaufen kannst, gib einfach "
+        "'zeige' ein."));
+  
+  AddDetail(({"felonia","zwergenstadt","stadt","gebirge"}), 
+	    "Felonia ist die Zwergenstadt im Gebirge.");
+
+  AddDetail(({"bewohner"}), 
+	    "Die Bewohner der Zwergenfeste kaufen hier ihre Semmeln.");
+
+  AddDetail(({"zwergenfeste","feste","ardhmir"}), 
+	    "Du bist in der Zwergenfeste von Ardhmir.");
+
+  AddDetail(({"morgen"}),
+	    "Jeden Morgen werden die frischen Backwaren direkt aus Felonia "
+	    "angeliefert.");
+  
+  AddDetail(({"gebaeck","suessigkeit","suessigkeiten"}),
+	    "Mit 'zeige' siehst Du was Du hier alles kaufen kannst.");
+  
+  AddDetail(({"geruch"}),
+	    "Den Geruch kann man nicht sehen...");
+
+  AddDetail(({"backladen","zweigstelle"}),
+	    "Dies ist eine Zweigstelle des Baeckers aus Felonia. Hier wird "
+	    "nicht frisch gebacken, sondern nur die Backwaren verkauft, die "
+	    "jeden Morgen aus Felonia frisch angeliefert werden.");  
+
+  AddDetail(({"semmeln", "kipferl", "kipferln", "salzstangerl"}), 
+	    "Die kann man hier kaufen, wenn sie gerade vorraetig sind.");
+
+  AddDetail(({"backwaren", "waren"}), 
+	    "Alle Bewohner der Feste beziehen ihre Backwaren (Semmeln, "
+	    "Kipferln, Salzstangerl usw.) von diesem Backladen.");
+
+  AddDetail(({"baeckerei","baecker","baeckers"}), 
+	    "Die Baeckerei ist in Felonia. Hier wird nur verkauft.");
+  
+  AddDetail(({"wand", "waende","geschaeft"}), 
+	    "Die Waende sind weiss ausgemalt - und noch sehr sauber! Genau "
+	    "so stellst Du Dir ein professionelles Geschaeft vor.");
+  
+  AddDetail(({"decke","lampen","gluehwuermchen","licht"}), 
+	    "An der Decke haengen ein paar Lampen, in denen ein paar "
+	    "Gluehwuermchen rumschwirren, die Licht spenden.");
+  
+  AddDetail(({"steinboden", "fels"}), 
+	    "Du kannst an dem Steinboden nicht viel interessantes entdecken.");
+
+  AddDetail(({"boden"}), 
+	    "Der Boden besteht aus Fels. Quasi ein Steinboden.");
+
+  AddDetail(({"staub", "staubschicht", "schicht"}),                          
+	    "Du malst gelangweilt einige Kreise in den Staub.");
+  
+  AddSmell(DEFAULT_SMELL, 
+	   "Hier riecht es vielleicht gut nach Semmeln und Punschkrapferln!");
+  
+  AddSmell(({"rum","punschkrapfen","punschkrapferl"}),
+	   "Hier riecht es irgendwie nach Punschkrapferln...");
+
+  AddSmell(({"duft"}),
+	   "Hier riecht es einfach toll."); 
+
+  AddSmell(({"semmel","suesswaren","suessigkeit","suessigkeiten","semmeln",
+	       "broetchen"}), 
+	   "Du befindest dich hundertprozentig in einem Backladen, woanders "
+	   "kann es gar nicht so nach Semmeln und frisch gebackenen "
+	   "Suesswaren riechen!");
+
+  AddSound(DEFAULT_SOUND, "Du hoerst wie einige Zwerge den Laden betreten und "
+		          "ihren Einkaeufen nachgehen.");
+
+  AddSound( ({"zwerge"}),
+	   "Die Zwerge geben ihre Bestellung auf und werden prompt bedient "
+	   "und verlassen den Laden wieder.");
+
+  AddSound( ({"bestellung"}),
+	   "Die meisten Zwerge bestellen etwas zum naschen.");
+
+  SetProp(P_SHOP_FLAGS, SHOP_HASKEEPER | SHOP_NEEDSKEEPER);
+  SetProp(P_SHOPKEEPER_ID, "baeckergeselle");
+  SetProp(P_SHOPKEEPER_NAME, "Der Baeckergeselle");
+  SetProp(P_SHOPKEEPER_GENDER, MALE);
+  
+  SetStorageRoom(ROOM "blager");      
+
+  AddExit("nordosten", ROOM "zwfe15");
+
+  AddItem(NPC "baeckergeselle", REFRESH_DESTRUCT);  
+
+  
+  RemoveFixedObject(0);
+  
+  gekauft=([]);
+}
+
+void reset()
+{
+  ::reset();
+  
+  gekauft=([]);
+}
+
+int sell(string str, int f)
+{
+  if(present("baeckergeselle"))
+    return notify_fail(break_string("Entschuldigt bitte, edler Gast, aber "
+				    "wir kaufen hier nichts an.", 78, 
+				    "Der junge Baeckergeselle meint: ")), 0;
+  
+  return notify_fail(BS("Der Baeckergeselle ist leider nicht da!")), 0;
+}
+
+nosave int force_sell(string str) { return sell(); }
+nosave int evaluate(string str) { return sell(); }
+
+nosave string do_liste(string str)
+{
+  object store;
+  int i;
+  object *inv;
+  string *k;
+  mapping obj;
+  string tmp, out;
+    
+  call_other(storage, "_register_shop", ME);
+  
+  if(!objectp(store=find_object(storage))) return "";
+
+  inv=all_inventory(store);
+  obj=([]);
+  out="";
+  
+  switch(str)
+    {
+    case "suesses":
+    case "suessgebaeck":
+      for(i=sizeof(inv)-1;i>=0;i--)
+	if(inv[i]->id("SUESSIGKEIT"))
+	  if(member(obj, tmp=explode(file_name(inv[i]), "#")[0]))
+	    obj[tmp, 2]+=1;
+	  else
+	    obj+=([tmp:inv[i]->Name(WER); QueryBuyValue(inv[i]); 1]);
+      
+      k=m_indices(obj);
+      
+      for(i=sizeof(obj)-1;i>=0;i--)
+	out+=sprintf("  %30-'.'s %1d Stueck zu je %3d Muenzen\n",
+		     obj[k[i]]+" ", obj[k[i],2], obj[k[i],1]);
+      		     
+      break;
+      
+    case "gebaeck":
+    case "salzgebaeck":
+      for(i=sizeof(inv)-1;i>=0;i--)
+	if(!inv[i]->id("SUESSIGKEIT"))
+	  if(member(obj, tmp=explode(file_name(inv[i]), "#")[0]))
+	    obj[tmp, 2]+=1;
+	  else
+	    obj+=([tmp:inv[i]->Name(WER); QueryBuyValue(inv[i]); 1]);
+
+      k=m_indices(obj);
+      
+      for(i=sizeof(obj)-1;i>=0;i--)
+	out+=sprintf("  %30-'.'s %1d Stueck zu je %3d Muenzen\n",
+		     obj[k[i]]+" ", obj[k[i],2], obj[k[i],1]);
+		     
+      break;
+
+    default:
+      out+=do_liste("suessgebaeck");
+      tmp=do_liste("salzgebaeck");
+
+      if(strlen(out))
+	out=" Suessgebaeck\n==============\n"+out+"\n";
+            
+      if(strlen(tmp))
+	tmp=" Salzgebaeck\n=============\n"+tmp;
+      
+      out+=tmp;
+    }
+  return out;
+}
+
+nosave int list(string str)
+{
+  string prefix, ret;
+  
+  notify_fail("Mit 'zeige', 'zeige suessgebaeck' oder 'zeige salzgebaeck' "
+		 "siehst Du die Auswahl.");
+  
+  if((str) && 
+     (member(({"suesses","suessgebaeck","salzgebaeck","gebaeck"}), str)==-1)) 
+    return 0;
+  
+  if(!prefix=CheckKeeper()) return 1;
+  
+  if(strlen(ret=do_liste(str)))
+    TP->More(make_document(ret));
+  else
+    write(BS (prefix+"Ich bin im Moment leider total ausverkauft!"));
+
+  return 1;
+}
+
+//Alles unflexibel, muss ich das buy halt ueberschreiben...
+nosave int buy(string str)
+{
+  int i, val;
+  object ob, store;
+  string prefix, dummy;
+
+  // Im Kampf kann man nichts kaufen
+  if(TP->InFight())
+    return write(BS ("Dazu bist Du im Moment viel zu beschaeftigt.")), 1;
+
+  // Haendler da? Meldungen etc.
+  if(!prefix=CheckKeeper(2)) return 0;
+  if(!str)
+    return write(BS (KeeperPrefix("fragt Dich: ")+"Was willst Du kaufen?")), 1;
+
+  _notify_fail(prefix+"Das kann ich im Lager nicht finden.\n");
+  
+  // Objekt suchen
+  if(sscanf(str,"%d%s",i,dummy)>0 && i>0)
+    if((dummy==" ab") || (dummy=="")) ob=FindInStore(i);
+    else ob=FindInStore(str);
+  else ob=FindInStore(str);
+  
+  if(!ob)  return 0;
+
+  if(member(gekauft, getuid(TP)))
+    if(gekauft[getuid(TP)] >= MAX_BUY)
+      return write(prefix+"Du kaufst noch alles weg!\n"+
+		   prefix+"Lass den anderen doch auch etwas ueber!\n"), 1;
+
+  // Geld pruefen
+  val=QueryBuyValue(ob);
+  if((i=this_player()->QueryMoney()) < val)
+    return write(break_string(ob->Name(WER,1)+" wuerde"+
+			      (ob->IsPlural() ? "n " : " ")+val+" Muenze"+
+			      (val==1 ? "" : "n")+" kosten, Du "+
+			      (i ? "hast aber nur "+i+"."
+			       : "bist aber voellig pleite!"),
+			      78, prefix)), 1;
+
+  // Geldtransfer
+  this_player()->AddMoney(-val);
+  mymoney += val;
+
+  // fixed object? (staendig verfuegbar)
+  if(stringp(ob))
+    ob=clone_object((string) ob);
+
+  // Kaufen und als behalten markieren
+  write(BS ("Du kaufst Dir "+ob->name(WEN,1)+"."));
+  say(BS (TP->Name()+" kauft sich "+ob->name(WEN)+"."));
+  ob->SetProp(P_KEEP_ON_SELL, getuid(TP));
+
+  // Kanns der Spieler tragen?
+  if (ob->move(this_player(),M_GET) <= 0)
+  {
+    write(prefix + "Du kannst " + ob->QueryPronoun(WEN) +
+        " nicht mehr tragen!\n");
+    ob->move(environment(this_player()));       // Objekt in den Raum moven
+  }
+
+  UpdateCounter(ob,-1);
+
+  if(member(gekauft, getuid(TP))) gekauft[getuid(TP)]++;
+  else gekauft+=([getuid(TP):1]);  
+
+  return 1;
+}
+
+mapping QueryVars()
+{
+  return gekauft;
+}

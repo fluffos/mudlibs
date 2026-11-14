@@ -1,0 +1,224 @@
+/*
+ *  Tool um ZTs zu verwalten
+ *  Hadra@AnderLand 1995
+ *
+ *  03.08.1996	Mupfel	Neuer Befehl 'ChangeZTPath'
+ *  02.11.1998  Feyaria IS_ARCH abfrage im init
+ *  16.03.1999  Woody   inherited nun std/tool
+ *  22.01.2004  Woody   bessere Rueckmeldung bei 'ChangeZTPath'
+ */
+
+inherit "std/tool";
+inherit "std/more";
+
+#include <defines.h>
+#include <properties.h>
+#include <language.h>
+#include <wizlevels.h>
+
+#define PM "/secure/potionmaster"
+
+object owner;
+
+
+void create()
+{
+  string str;
+
+  if(IS_BLUE(ME)) return;
+  tool::create();
+  SetProp(P_GENDER,NEUTER);
+  owner = PL;
+  AddId("zttool");
+  AddId("zaubertranktool");
+  SetProp(P_ARTICLE,0);
+  SetProp(P_GENDER, NEUTER);
+
+str=capitalize(((str=owner->query_real_name())[<1]=='s'||str[<1]=='x'||str[<1]==
+'z')?str+="'":str+="s");
+  SetProp(P_NAME, str+" ZaubertrankTool");
+  SetProp(P_SHORT, str+" ZaubertrankTool");
+  SetProp(P_LONG,
+   "Das ZaubertrankTool dient der Administration von Zaubertraenken.\n\n"
+  +"implementierte Kommandos:\n"
+  +"  AddZT        <room>              : Neuen Zaubertrankeintrag einfuegen\n"
+  +"  ActiVateZT   <room> <liste>      : Zaubertrank in Liste einfuegen.\n"
+  +"  DeactiVateZT <room>              : Deaktiviert einen ZT.\n"
+  +"  HasZT        <room>              : Zeigt ob der Raum einen ZT hat.\n"
+  +"  ChangeZTPath <oldroom> <newroom> : Aendert den Pfad des ZTs.\n"
+  +"  ZTListe                          : Erstellt eine neue ZT-Liste in \n"
+  +"                                     /secure/ARCH/TRAENKE\n"
+  + " <room> ist der komplette Pfadname des Raumes in der Zaubertrank\n"
+  + " gefunden werden kann, oder \"here\", d.h. der aktuelle Raum.\n"
+  + " <liste> ist eine zahl von 0 bis 4, je nach Schwierigkeit den\n"
+  + " Zaubertrank zu finden.\n\n"
+  +"  (Alle Kommandos koennen abgekuerzt werden.)\n"
+  +"   -> Beispiel: AddZT == AZT == azt == addzt\n");
+
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NODROP,
+  "Mit Hilfe des Zaubertranktools koennen Zaubertraenke verwaltet werden.\n"+
+  "Du brauchst es vielleicht noch, deshalb wirfst Du es nicht weg.\n");
+  SetProp(P_NOBUY, 1);
+  AddCmd(({ "AddZT", "addzt", "AZT", "azt" }),                 "Add_ZT");
+  AddCmd(({ "AcitiVateZT", "activatezt", "avzt", "AVZT" }),    "ActivateZT");
+  AddCmd(({ "DeactiVateZT", "deactivatezt", "DVZT", "dvzt"}),  "DeactivateZT");
+  AddCmd(({ "ZTListe", "ztliste", "ZTL", "ztl"}),              "ListZT");
+  AddCmd(({ "HasZT", "haszt", "HZT", "hzt"}),                  "HasZT");
+  AddCmd(({ "ChangeZTPath", "changeztpath", "CZTP", "cztp"}),  "ChangeZTPath");
+}
+
+void init()
+{
+  if( !IS_ARCH(environment(this_object())))
+    call_out("remove",0);
+  ::init();
+}
+
+Add_ZT (string room)
+{
+  int errlvl;
+  notify_fail("Die Funktion benoetigt einen Raumnamen als Parameter.\n");
+  if ( !stringp(room) || room == "" ) return 0;
+  if (room == "here") room = file_name(environment(this_player()));
+  errlvl =  PM->AddPotionroom(room);
+  switch(errlvl)
+  {
+    case  0: write("Bitte wende Dich fuer das Eintragen neuer Zaubertraenke an\n"
+                 + "den zustaendigen Erzmagier.\n");
+             break;
+    case -1: write("Der Raumname fehlt oder ist ungueltig.\n");
+             break;
+    case -2: write("Der angegebene Raum existiert nicht.\n");
+             break;
+    case -3: write("Der angegebene Raum steht schon in der Liste aller Zaubertraenke.\n");
+             break;
+    case -4: write("Der angegebene Raum liegt nicht in /room/potion.\n");
+             break;
+//  Die letzte Meldung wurde nur der Vollstaendigkeit halber aufgenommen
+    default: write("Raum wurde als Nummer "+errlvl+" in die Liste aller Zaubertraenke aufgenommen.\n");
+  }
+  return 1;
+}
+
+ActivateZT(string eingabe)
+{
+  int errlvl;
+  string *strs;
+  notify_fail("Bitte die Parameter <room> und <liste> angeben.\n");
+  strs = explode(eingabe, " ");
+  if (sizeof(strs) != 2) return 0;
+  if (strs[1] < "0" || strs[1] > "4")
+  {
+    write("<liste> muss ein Wert von 0 bis 4 sein.\n");
+    return 1;
+  }
+  if (strs[0] == "here") strs[0] = file_name(environment(this_player()));
+  errlvl = PM->ActivateRoom(strs[0], (int) strs[1]);
+  switch(errlvl)
+  {
+    case  1: write("Raum wurde aktiviert.\n");
+             break;
+    case  0: write("Bitte wende Dich fuer das Eintragen von Zaubertraenken an\n"
+                 + "den zustaendigen Erzmagier.\n");
+             break;
+    case -1: write("<liste> muss ein Wert von 0 bis 4 sein.\n");
+             break;
+    case -2: write("Der angegebene Raum steht nicht in der Liste aller Zaubertraenke.\n");
+             break;
+    case -3: write("Der Raum ist bereits aktiviert.\n");
+             break;
+    default: write("Unbekannter Fehler.\n");
+  }
+  return 1;
+}
+
+DeactivateZT(string room)
+{
+  int errlvl;
+  notify_fail("Die Funktion benoetigt einen Raumnamen als Parameter.\n");
+  if ( !stringp(room) || room == "" ) return 0;
+  if (room == "here") room = file_name(environment(this_player()));
+  errlvl = PM->DeactivateRoom(room);
+  switch(errlvl)
+  {
+    case -1: write("Der angegebene Raum steht nicht in der liste der Zaubertraenke.\n");
+             break;
+    case  0: write("Das Deaktivieren von Zaubertraenken ist nur Erzmagiern erlaubt.\n");
+             break;
+    case  1: write("Raum wurde deaktiviert.\n");
+  }
+  return 1;
+}
+
+ListZT()
+{
+  PM->DumpList();
+  write("Neue Liste erstellt.\n");
+  return 1;
+}
+
+HasZT(string room)
+{
+  notify_fail("Die Funktion benoetigt einen Raumnamen als Parameter.\n");
+  if ( !stringp(room) || room == "" ) return 0;
+  if (room == "here") room = file_name(environment(this_player()));
+  if (PM->HasPotion((object)room) == -1)
+  {
+    write("Kein ZT fuer den Raum gefunden.\n");
+    return 1;
+  }
+  write("Der Raum hat einen ZT.\n");
+  return 1;
+}
+
+ChangeZTPath(string arg)
+{
+  string *paths;
+  int num;
+
+  notify_fail("Die Funktion benoetigt zwei Raumnamen als Parameter.\n");
+  if (!stringp(arg) || arg == "") return 0;
+  paths = explode(arg, " ");
+  if (sizeof(paths) != 2) return 0;
+  // fuer 2 braucht man noch keine Schleife... :-)
+  if (paths[0] == "here") paths[0] = file_name(environment(this_player()));
+  if (paths[1] == "here") paths[1] = file_name(environment(this_player()));
+  if (paths[0] == paths[1])
+  {
+    write("Die Pfade sollten schon verschieden voneinander sein.\n");
+    return 1;
+  }
+  if (PM->HasPotion(paths[0]) == -1)
+  {
+    write("'"+paths[0]+"' enthaelt keinen ZT.\n");
+    return 1;
+  }
+  switch (num = PM->ChangeRoomPath(paths[0], paths[1]))
+  {
+    case 0:
+      write("Sicherheitsfehler!\n");
+      break;
+    case -1:
+      write("Alten Pfad nicht gefunden!\n");
+      break;
+    case -2:
+      write("Neuen Pfad nicht gefunden!\n");
+      break;
+    case -3:
+      write("Kein ZT im alten Pfad!\n");
+      break;
+    case -4:
+      write("ZT im neuen Pfad bereits vorhanden!\n");
+      break;
+    case -5:
+      write("Neuer Pfad kann nicht geladen werden!\n");
+      break;
+    default:
+      write("Pfad wurde geaendert, ZT-Nummer: " + num + "\n");
+      break;
+  }
+  return 1;
+}
+
+int _query_autoloadobj() { return 1; }

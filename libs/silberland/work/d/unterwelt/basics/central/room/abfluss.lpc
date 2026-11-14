@@ -1,0 +1,262 @@
+//=========================================================================
+//
+// File:    abfluss.c
+// Created by Ronja@SL based on Zordan@SL & Stahldorn@SL
+//
+// Project: unterwelt basis
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit "std/room";
+
+#define RAUMUNTEN "00-10+16"
+#define RAUMOBEN "/d/ebene/Midas/room/kanal/kanal_f5"
+
+#define HOCH 1
+#define RUNTER 0
+
+mapping players;
+
+void create()
+{
+
+  ::create();
+
+  SetProp(P_INT_SHORT, "In einem Abflussrohr" );
+  SetProp(P_INT_LONG,
+    "Du befindest Dich in einem Abflussrohr."
+  );
+
+  SetProp(P_LIGHT, -2);
+  SetProp(P_INDOORS, 1);
+  SetProp(P_ENVIRONMENT,([ENV_TEMPERATURE: 22, ENV_TERRAIN:TT_CAVE]) );
+
+  AddSmell(DEFAULT_SMELL,
+    "Es riecht nach faulem Wasser und Exkrementen."
+  );
+
+  AddSound(DEFAULT_SOUND,
+    "Du hoerst hauptsaechlich Deinen eigenen keuchenden Atem..."
+  );
+
+  AddCmd("","nixda",1);
+
+  SetProp(P_HIDE_EXITS, ({"raus"}) );
+  AddSpecialExit( "raus", "exit_raus" );
+
+  players = ([ ]);
+}
+
+int exit_raus(string str)
+{
+  notify_fail("Gleich bist Du ja draussen, ein wenig Geduld bitte!\n");
+  return 0;
+}
+
+nixda(string str)
+{
+  if(IS_WIZARD(TP)) return 0;
+
+  TELLPLAYER("Du bist zu sehr beschaeftigt um im Moment etwas machen zu "
+             "koennen.\n");
+
+  return 1;
+}
+
+void init()
+{
+  object room;
+  string s, uid;
+
+  ::init();
+
+  if(!TP)              return;
+  if(!interactive(TP)) return;
+
+  s   = "";
+  uid = getuid(TP);
+
+  if(objectp(room=TP->QueryProp(P_LAST_COMMAND_ENV)))
+  {
+    s = explode(file_name(room),"/")[<1];
+  }
+
+  if(s == "") return;
+
+  if(s == RAUMUNTEN)
+  {
+    if(!member(players,uid)) players += ([uid: HOCH;0]);
+  }
+  else
+  {
+    if(!member(players,uid)) players += ([uid: RUNTER;0]);
+    walk_mapping(players,"collision",TO,TP);
+  }
+
+  call_out("moveplayers",4+random(2));
+}
+
+void collision(string uid, int direction, int level, object pldown)
+{
+  object pl;
+
+  if(direction == RUNTER) return;
+  level = 5 - level;
+  direction = RUNTER;
+
+  pl = find_player(uid);
+  if(!pl)             return;
+  if(!present(pl,TO)) return;
+
+  tell_object(pl,BS(pldown->Name()+" rauscht auf dem Weg nach unten an Dir "
+                    "vorueber und reisst Dich mit in die Tiefe."));
+
+  tell_object(pldown,BS("Du faellst an "+pl->Name()+" vorbei und reisst "+
+                        pl->QueryPronoun(WEN)+" mit in die Tiefe."));
+
+}
+
+varargs mixed make_invlist(object viewer, mixed inv, int flags)
+{
+  if(interactive(viewer) && IS_WIZARD(viewer))
+    return ::make_invlist(viewer,inv,flags);
+
+  return "";
+}
+
+varargs int PreventInsert(object ob)
+{
+  if(living(ob))                 return ::PreventInsert(ob);
+  if(interactive(ob))            return ::PreventInsert(ob);
+  if(query_once_interactive(ob)) return ::PreventInsert(ob);
+
+  call_out("objectdown",0,ob);
+
+  return 0;
+}
+
+void objectdown(object ob)
+{
+  tell_room(TO,BS(ob->Name(WER,0)+" faellt das Rohr hinunter.\n"));
+  ob->move(ROOM + RAUMUNTEN,M_NOCHECK|M_SILENT);
+//  tell_room(ROOM + RAUMUNTEN,BS(ob->Name(WER,0)+" faellt aus dem Loch in der "
+//                                  "Decke herein."));
+
+  (ROOM + RAUMUNTEN)->Message(BS(ob->Name(WER,0)+" faellt aus dem Loch in der "
+                               "Decke herein."),MSGFLAG_VISUAL);
+
+  (ROOM + RAUMUNTEN)->Message("*Pling*\n",MSGFLAG_SOUND);
+
+}
+
+int handleplayer(string uid)
+{
+  object pl;
+
+  pl = find_player(uid);
+  if(!pl)             return 0;
+  if(!present(pl,TO)) return 0;
+
+  if(players[uid,0] == HOCH)
+  {
+    players[uid,1] += 1;
+    switch(players[uid,1])
+    {
+      case 1:
+        tell_object(pl,BS("Du erklimmst voller Energie die ersten Sprossen."));
+        break;
+
+      case 2:
+        tell_object(pl,BS("Du kletterst und kletterst und kletterst... Nichts "
+                          "aufregendes passiert, ausser dass Dein Puls immer "
+                          "schneller geht."));
+        break;
+
+      case 3:
+        tell_object(pl,BS("Boah, ist das anstrengend. Du hast sicher schon "
+                          "tausend Sprossen erklettert. Wenn das so "
+                          "weitergeht bekommst Du einen Herzinfarkt."));
+        break;
+
+      case 5:
+        tell_object(pl,BS("Beinahe rutscht Du auf einer glatten Leitersprosse "
+                          "aus, kannst Dich aber gerade noch halten. Weit "
+                          "oben erkennst Du bereits einen Lichtschimmer, "
+                          "was Dich anspornt, weiterzuklettern."));
+        break;
+
+      default:
+        tell_object(pl,BS("Ja! Endlich! Du hast es geschafft und kletterst "
+                          "voellig erschoepft aus dem Rohr."));
+        pl->move(RAUMOBEN, M_NOCHECK | M_NO_SHOW,
+          "raus","kraxelt","kraxelt aus dem Abflussrohr heraus");
+        if(!IS_WIZARD(PL)) pl->SetProp(P_MV, 5);
+        return 0;
+        break;
+    }
+  }
+  else
+  {
+    players[uid,1] += 1;
+    switch(players[uid,1])
+    {
+      case 1:
+        tell_object(pl,BS("Du springst wagemutig in das Abflussrohr. "
+                          "Du faellst und faellst..."));
+        break;
+
+      case 2:
+        tell_object(pl,BS("Die Fahrt - beziehungsweise der Fall - nimmt "
+                          "rasant an Geschwindigkeit zu. Der Fallwind treibt "
+                          "Dir Traenen in die Augen."));
+        break;
+
+      case 3:
+        tell_object(pl,BS("Aua! Du stoesst Deinen Ellbogen schmerzhaft an "
+                          "einer Leitersprosse an. Das tut hoellisch weh."));
+        break;
+
+      case 4:
+        tell_object(pl,BS("Das Rohr macht einen scharfen Knick. Du wirst "
+                          "brutal gegen die Wand gepresst, sodass Dir die "
+                          "Luft aus den Lungen gedrueckt wird. Viel Zeit, "
+                          "darueber nachzudenken, bleibt Dir aber nicht, "
+                          "weil es schon wieder abwaerts geht."));
+        break;
+
+      default:
+        tell_object(pl,BS("Nach einem endlos langen Rutsch schlaegst Du "
+                          "endlich hart am Boden auf. Gluecklicherweise "
+                          "bleibst Du vollkommen unverletzt."));
+
+        pl->move(ROOM+RAUMUNTEN, M_NOCHECK | M_NO_SHOW | M_SILENT,
+          "", "", "");
+        tell_room(ROOM+RAUMUNTEN,
+          BS(pl->Name()+" kommt durch ein Loch in der Decke hereingefallen "
+             "und plumpst auf den Boden."), ({pl})
+        );
+
+        return 0;
+        break;
+    }
+  }
+
+  return 1;
+}
+
+void moveplayers()
+{
+  int n,i,direction,level;
+  string *keys,uid;
+  object pl;
+
+  players = filter_mapping(players, "handleplayer", TO);
+
+  if(!m_sizeof(players)) return;
+
+  call_out("moveplayers",4+random(4));
+}
+
+

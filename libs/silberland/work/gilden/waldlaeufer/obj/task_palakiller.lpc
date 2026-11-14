@@ -1,0 +1,170 @@
+#include "../def.h"
+#include "../ranger.h"
+#include "../ranger_tasks.h"
+
+inherit "std/thing";
+
+#define PLN(x) ENV(TO)->Name(x)
+#ifdef PL
+#undef PL
+#endif
+#define PL     ENV(TO)
+
+int kills, stage, ei1, ei2, ei3, ei4;
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+//--Beschreibungen---------------------------------------------------------
+
+  SetProp(P_INVIS, 1);
+  SetProp(P_SHORT, "Paladinkiller");
+
+//--Namen------------------------------------------------------------------
+
+  SetProp(P_NAME, "Paladine toeten");
+  SetProp(P_GENDER, NEUTER);
+  AddId(({"QUESTOBJ", RANGER_TASK_PALA_KILLER}));
+
+//--Eigenschaften----------------------------------------------------------
+
+  SetProp(P_MATERIAL, MAT_MAGIC );
+  SetProp(P_WEIGHT, 0);;
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NEVERDROP, 1);
+
+  kills = stage = 0;
+}
+
+public int QueryStage() {
+  return stage;
+}
+
+public void AcceptKill() {
+  if(stage != 1) return;
+
+  kills++;
+  if(kills > 2) {
+    PL->Message(break_string("Du Ablenkung war gelungen. Allerdings haben die Paladinwaechter einen unserer Agenten gefangen gesetzt. Er wird im "
+                             "suedwestlichen Turm gefangen gehalten. Nutze den 'Pakt der Schatten' um ungesehen dort hin zu gelangen und ihn "
+                             "zu befreien!", 78, 
+                             "Raziel teilt Dir mit: "), MSGFLAG_TELL);
+    stage++;
+    return;
+  }
+  if(kills > 1) {
+    PL->Message(break_string("Bei Woodys waldigem Bart! Das hat reicht noch nicht. Schalte noch mehr Paladinwaechter aus! Versuche dich bis zum Tor "
+                                  "durchzukaempfen.", 78, "Ein verhuellter Waldlaeufer teilt Dir mit: "), MSGFLAG_TELL);
+  }
+  return;
+}
+
+public InformStart() {
+  PL->Message(break_string("Es kann losgehen, "+PLN(WER)+"! Wir stehen bereit. Sobald du genug Ablenkung geschaffen hast dringen wir in die Burg ein. "
+                           "Greife das Tor der Burg an!", 78, "Ein verhuellter Waldlaeufer teilt Dir mit: "), MSGFLAG_TELL);
+  kills = 0;
+  stage = 1;
+}
+
+public void StartFreeSequence() {
+  if(stage != 2) return;
+
+  tell_object(PL, BS("Hier bist du an der richtigen Stelle. Hinter der Tuer links von dir befindet sich der gefangene Waldlaeufer."));
+  PL->move(ROOM "air", M_TPORT | M_SILENT | M_NO_SHOW | M_NOCHECK);
+  call_out("free_sequence", 0, 0);
+  return;
+}
+
+public void free_sequence(int step) {
+  string msg;
+
+  switch(step) {
+    case 0: msg = "Rasch trittst du aus dem Schatten und oeffnest die Tuer zum Turmzimmer."; break;
+    case 1: msg = "Mitten im Zimmer erkennst du einen gefangenen Waldlaeufer schwer verletzt an einen Stuhl gefesselt, der dich mit Hoffnung in den Augen ansieht."; break;
+    case 2: msg = "Rasch durchtrennst du die Fesseln des Waldlaeufers, befreist ihn aus seiner Gefangenschaft."; break;
+    case 3: msg = "Der Waldlaeufer dankt dir und fluestert: 'Die Waechter duerften uns bald bemerken. Beeilen wir uns, diesen Turm zu verlassen!'"; break;
+    case 4: msg = "Gemeinsam schleicht ihr vor die Tuer."; break;
+    case 6: msg = "Der Waldlaeufer verneigt sich vor dir."; break;
+    case 7: msg = "Der Waldaleufer sagt: Ich verdanke dir mein Leben. Leider konnte ich meine Aufgabe nicht beenden."; break;
+    case 8: msg = "Nervoes blickt sich der Vermummte um."; break;
+    case 9: msg = "Der Waldlaeufer sagt: Du musst fuer mich diese Kraeheneier in der Burg an passenden Orten verstecken."; break;
+    case 10: msg = "Der Waldaeufer gibt dir eine Hand voll Kraeheneier."; break;
+    case 11: msg = "Der Waldlaeufer sagt: Verstecke eines an der Spitze des Nordwestturms, eines vor der Schenke, und jeweils eines an den Wehrgaengen, "
+                   "die Tor und Graben ueberblicken."; break;
+    case 12: msg = "Der Waldlaeufer sagt: Wenn die Kraehen aus den Eiern schluepfen, werden sie Raziel berichten was in der Burg vor sich geht."; break;
+    case 13: msg = "Mit einem Schritt verschmilzt der Waldlaeufer mit seinem Schatten und huscht davon."; break;
+    default: PL->Message(break_string("Beeile dich! Und pass auf, dass du nicht entdeckt wirst. Verstecke die Eier an der Spitze des Nordwestturms, vor der Schenke, "
+                                      "und je eines an den Wehrgaengen, die das Tor ueberblicken!", 78, "Raziel teilt Dir mit: "), MSGFLAG_TELL);
+             SetProp(P_NAME, "Kraeheneier");
+             SetProp(P_SHORT, "Eine handvoll Kraeheneier");
+             SetProp(P_INVIS, 0);
+             SetProp(P_LONG, "Eine handvoll gesprenkelter Eier. Vermutlich von Suedwaldkraehen.");
+             AddCmd("verstecke|versteck&ei|kraehenei", "cmd_verstecken", "Was willst du verstecken?");
+             AddId(({"ei", "eier", "kraeheneier"}));
+             stage = 3;
+             ei1 = ei2 = ei3 = ei4 = 0;
+             PL->move("/gilden/paladine/room/burg_sw_turm3", M_TPORT | M_SILENT | M_NO_SHOW | M_NOCHECK);
+             return;
+  }
+  tell_object(PL, BS(msg));
+  call_out("free_sequence", 4, ++step);
+}
+
+public void endQuest() {
+  PL->Message(break_string("Sehr gut! Du kannst nun zu Raziel zurueckkehren und ihm berichten, dass du erfolgreich warst!", 78, 
+                           "Ein verhuellter Waldlaeufer teilt Dir mit: "), MSGFLAG_TELL);
+  RANGER_SET_TASK(ENV(TO), 13);
+  remove(1);
+  return;
+}
+
+public int cmd_verstecken() {
+  string fn;
+
+  fn = file_name(ENV(PL));
+  if(fn == "/gilden/paladine/room/w_weg_b3") {
+    if(ei1) {
+      write(BS("Hier hast du schon ein Ei versteckt."));
+      return 1;
+    }
+    write(BS("Sorgfaeltig versteckst du ein Ei in einer der Schiessscharten."));
+    ei1 = 1;
+    return 1;
+  } else if(fn == "/gilden/paladine/room/burg_nw_turm4") {
+    if(ei2) {
+      write(BS("Hier hast du schon ein Ei versteckt."));
+      return 1;
+    }
+    write(BS("Du blickst dich kurz um und versteckst dann ein Ei hinter einer Zinne."));
+    ei2 = 1;
+  } else if(fn == "/gilden/paladine/room/burg_b2") {
+    if(ei3) {
+      write(BS("Hier hast du schon ein Ei versteckt."));
+      return 1;
+    }
+    write(BS("Mit geschickter Hand versteckst du ein Ei hinter einem losen Stein ueber der Schenke."));
+    ei3 = 1;
+  } else if(fn == "/gilden/paladine/room/w_weg_d3") {
+    if(ei4) {
+      write(BS("Hier hast du schon ein Ei versteckt."));
+      return 1;
+    }
+    write(BS("Ein schneller Handgriff und ein Ei ist zwischen den Planken am Boden versteckt."));
+    ei4 = 1;
+  } else {
+    write(BS("Hier kannst du kein Ei verstecken!"));
+    return 1;
+  }
+
+  if(ei1+ei2+ei3+ei4 == 4) {
+    endQuest();
+  }
+
+  return 1;
+}
+

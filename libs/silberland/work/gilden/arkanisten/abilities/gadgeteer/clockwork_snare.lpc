@@ -1,0 +1,91 @@
+#include "../../arkanisten.h"
+
+inherit GUILD_FOLDER "abilities/ability.lpc";
+
+public void create() {
+    if(is_clone(TO)) return;
+
+    ::create();
+    SetProp(P_ABILITY_NAME, CAP(CLOCKWORK_SNARE));
+    SetProp(P_ABILITY_DESCRIPTIPON, 
+        "Die Uhrwerkschlinge ist ein kleines Gerät in einer Holzschachtel. Über ein Uhrwerk wird eine Federspule "
+        "aufgezogen, auf der sich ein dünner Draht befindet. Wird sie aktiviert, schleidert die Spannung der Feder "
+        "den Draht auf ein Opfer, dass davon umwickelt wird. Der Draht ist nicht sehr widerstandsfaehig und kann "
+        "leicht reissen. Dadurch, das er so duenn ist, schneidet er jedoch auch ein.");    
+    SetProp(P_ABILITY_TYPE, ABILITY_TYPE_ACTIVE);
+    SetProp(P_ABILITY_BASE_ATTRIBUTE, A_DEX);
+    SetProp(P_ABILITY_CASTVERB, CAST_VERB_ACTIVATE);
+    SetProp(P_ABILITY_GROUP, ({ABILITY_GROUP_GADGETS}));
+    SetProp(P_ABILITY_COST, ([
+        P_SP: 15,
+    ]));
+}
+
+public mapping prepare_use(object user, mapping sinfo) {
+    object victim;
+
+    if(get_free_hands(user) < 1) {
+        tell_object(user, BS("Du musst eine freie Hand haben, um die Uhrwerkschlinge zu aktivieren!"));
+        return 0;
+    }
+
+    victim = FindEnemyVictim(sinfo[SI_SKILLARG], user);
+    if(!objectp(victim)) {
+        tell_object(user, BS("Dazu benoetigst du einen Gegner!"));
+        return 0;
+    }
+
+    
+    tell_object(user, BS("Mit ein paar raschen Umdrehungen der Uhrwerkkurbel ziehst du die Uhrwerkschlinge auf."));
+    tell_room(ENV(user), BS(user->Name(WER)+" dreht eine kleine Kurbel an "+user->QueryPossPronoun(NEUTER, WEM)+" Bandolier."), ({user}));
+
+    sinfo[SI_PREPARE_TIME] = 2;
+    sinfo[SI_SKILLDAMAGE_TYPE] = ({ DT_SLASH });
+    sinfo[SI_SKILLDAMAGE] = 150;
+    sinfo[OFFSET(SI_SKILLDAMAGE)] = 50;
+    sinfo[SI_MAX_DAMAGE] = 300;
+    sinfo[SI_NOMAGIC] = 100;
+    sinfo[SI_SKILLARG] = victim;
+
+    return ::prepare_use(user, sinfo);
+}
+
+public void failed(object user, mapping sinfo, int skillcheck) {
+    if(skillcheck < -3000) {
+        tell_object(user, BS("Der Mechanismus der Uhrwerkschlinge loest aus - doch du verhedderst dich selber in dem Draht!"));
+        tell_room(ENV(user), BS("Ein Mechanismus bei "+user->name(WEM)+" loest aus und faengt "+user->QueryPronoun(WEN)+" in einem duennen Draht ein"));
+        user->SetProp(P_DISABLE_ATTACK, 1);
+        return ::failed(user, sinfo, skillcheck);
+    }
+
+    tell_room(ENV(user), BS("Ein Mechanismus an "+user->name(WEM)+" loest aus und schleudert eine Drahtschlinge ins Leere."), ({user}));
+    tell_object(user, BS("Die Uhrwerkschlinge loest aus, doch die Drahtschlinge geht ins Leere."));
+    
+    return ::failed(user, sinfo, skillcheck);
+}
+
+public int valid_target(object ob) {
+    return living(ob) && !query_once_interactive(ob) && !ob->QueryProp(P_NOATTACK) && !ob->QueryProp(P_FRIEND);
+}
+
+public void success(object user, mapping sinfo, int skillcheck) {
+    object victim;
+
+    victim = sinfo[SI_SKILLARG];
+    if(!objectp(victim)) {
+        tell_object(user, BS("Nanu? Dein Ziel ist nicht mehr da!"));
+        return;
+    }
+
+    tell_object(user, BS("Die Uhrwerkschlinge loest aus und feiner Draht wickelt sich um "+victim->name(WEN)+"."));
+    tell_room(ENV(user), BS("Ein Mechanismus von "+user->name(WEM)+" loest klickend aus und feinder Draht wickelt sich um "+victim->name(WEN)+"."));
+
+    call_other("/std/spellbook", "TryDefaultAttackSpell", victim, user, sinfo, ([SP_NAME: "Uhrwerkschlinge", SP_SHOW_DAMAGE: 1]));
+
+    if(!random(10 - sinfo[SI_SKILLABILITY]/1000)) {
+        tell_room(ENV(victim), BS(victim->Name(WER)+" verheddert sich im Draht."));
+        victim->SetProp(P_DISABLE_ATTACK, 1);
+    }
+
+    return;
+}

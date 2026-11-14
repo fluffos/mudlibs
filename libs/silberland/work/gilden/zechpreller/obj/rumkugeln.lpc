@@ -1,0 +1,154 @@
+/* rumkugeln.c
+ * __________________________________________
+ *
+ * 2012-07-02 Anatol - Bugfix in Fighting() - TakeFlaw() kann Ruestungen
+ *            zerstoeren, vor naechstem Referenzieren muss auf Existenz
+ *            geprueft werden ( ... objectp(arm) ... )
+ *
+ */
+#include "../zech.h"
+#include "../talents.h"
+#include <new_skills.h>
+#include <combat.h>
+
+inherit "std/thing";
+
+#include <properties.h>
+#include "/gilden/berserker/berserker_extern.h"
+#define MEENV environment(TO)
+
+object caster;
+int duration;
+
+void create() 
+{
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, 0);
+  SetProp(P_LONG,  0);
+  SetProp(P_INFO, 0);
+  SetProp(P_NAME, "Rumkugeln");
+  SetProp(P_GENDER, MALE);
+  AddId("\nzechpreller_rumkugeln");
+
+  SetProp(P_MATERIAL, MAT_ALCOHOL );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+
+  AddCmd("", "nix", 1);
+}
+
+int nix(string str)
+{
+  write("Du bischt grad am rumkugeln! Dasch geht ned!\n");
+  return 1;
+}
+
+void Start(object pl)
+{
+  caster = pl;
+  duration = (int) 2+(pl->QuerySkillAbility("rumkugeln")/3333);
+  duration*=2;
+  //caster->SetProp(P_TMP_ATTACK_HOOK, ({duration+time(), TO, "Fighting"}));
+  //tell_object(caster, "Rumkugeln geladen!\n");
+  call_out("Fighting", 0);
+  call_out("end", duration);
+//  caster->SetProp(P_DISABLE_ATTACK, duration);
+}
+
+void end()
+{
+  if(objectp(caster) && objectp(ENV(caster)))
+  {
+    tell_object(caster, BS("Du hoerst auf mit dem rumkugeln."));
+    tell_room(ENV(caster), BS(caster->Name(WEN)+
+	      " laesst das rumkugeln dann mal wieder."),
+  	      ({caster}));
+  }
+  remove(1);
+}
+
+public int QueryEffectiveWC(object item) {
+  int wc;
+  if(!objectp(item)) return 0;
+  wc = item->QueryProp(P_EFFECTIVE_WC);
+  if(wc < 0) wc = 0;
+  return wc;
+}
+
+void Fighting()
+{
+  object *enemy, arm, *inv;
+  int i, abil, dam, x, *wcs;
+  enemy =caster->QueryEnemies()[0];
+
+  if(!sizeof(enemy))
+  {
+    end();
+    return;
+  }
+  
+  abil = caster->QuerySkillAbility("rumkugeln");
+  tell_object(caster, "*roll* *roll* *roll*\n");
+
+  dam = 100+random(100);
+
+  // Das Gewicht der getragenen Ruestung zaehlt auch...
+  inv = all_inventory(caster);
+  for(i=0; i<sizeof(inv); ++i)
+    dam+=(int) (inv[i]->QueryProp(P_WEIGHT)/150);
+
+  x = 0;
+  wcs = map_array(inv, "QueryEffectiveWC", this_object());
+  for(i=0; i<sizeof(wcs); ++i)
+    x+=wcs[i];
+  dam += x / 2;
+
+  for(i=0; i<sizeof(enemy); ++i)
+  {
+     
+
+      // Evtl. faellt ein Gegner um
+      if(((int)abil/200) > random(100)) 
+      {
+	      enemy[i]->SetProp(P_DISABLE_ATTACK, 1);
+	      enemy[i]->SetProp(P_LAST_RAMMEN_TIME, time());
+	    if(objectp(ENV(enemy[i])))
+  	    tell_room(ENV(enemy[i]), enemy[i]->Name(WER)+" faellt zu Boden.\n");
+      }
+
+      // Abnutzung
+      if(sizeof(caster->QueryArmours()) > 0) {
+        arm = caster->QueryArmours()[random(sizeof(caster->QueryArmours()))];
+        if(!arm->id("NODESTRUCT") && !arm->QueryProp(P_NO_DAMAGE_DESTRUCT) && arm->QueryProp(P_ARMOUR_TYPE) != AT_MISC) {
+          arm->TakeFlaw(1+random(5));
+        }
+      }
+
+      // DefendFunc
+      if (objectp(arm) && (objectp(arm->QueryProp(P_DEFEND_FUNC))))
+        dam+=arm->QueryProp(P_DEFEND_FUNC)->DefendFunc(({DT_BLUDGEON}), 0, enemy[i]);
+
+      // Schaden
+      enemy[i]->Defend(dam, ({DT_SQUEEZE}), 
+ 		      ([SP_NAME:"Rumkugeln", SP_SHOW_DAMAGE:1]), caster);
+
+      // Tackle
+      if(objectp(enemy[i]) && (x=ZTMASTER->GetTalent(caster, ZT_TACKLE)) && !random(7-x)) {
+        tell_object(caster, BS("Du rempelst "+enemy[i]->name(WEN)+" so an, dass "+enemy[i]->QueryPronoun()+" zurueckstolpert!"));
+        enemy[i]->SetProp(P_DISABLE_ATTACK, 1);
+      }
+  }
+  // tell_object(caster, "Rumattacke!\n");
+  
+  // Logging per Spellbook
+  call_other("/spellbooks/zech_spells", "log_spell",
+      sprintf("Round: %i at %i", dam, abil),
+      "rumkugeln"
+      );
+  call_out("Fighting", 2);
+  return;  
+}

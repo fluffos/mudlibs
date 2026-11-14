@@ -1,0 +1,137 @@
+
+inherit "std/npc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include "../def.h"
+
+void create() {
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Die Huefte eines Riesen");
+  SetProp(P_LONG,
+    "Schwabbelig fett erstreckt sich die Huefte des Riesen vor Dir. Dicke "
+    "Fettschwarten taeuschen nicht ueber die gewalltige Kraft des Riesen "
+    "hinweg. Der Bauch und sein Hintern sind total ueberproportioniert." );
+  SetProp(P_NAME, "Huefte");
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({"huefte", "\n_huefte", "NOWIMPY", "NOFALLDOWN"}) );
+
+  create_default_npc(38);
+  SetProp(P_HANDS, ({" mit einer dicken Speckschwarte",600,DT_BLUDGEON}));
+  SetProp(P_RACE, "Riese");
+  SetProp(P_BODY, 260);
+  SetProp(P_SIZE, 650);
+  SetProp(P_ALIGN, -350);
+  SetProp(P_RESISTANCE_STRENGTHS , 
+    ([DT_FIRE:      -0.6, DT_COLD:      -0.7, DT_WATER:  -0.7, DT_AIR:    -0.7, 
+      DT_LIGHTNING: -0.7, DT_EXPLOSION: -0.6, DT_SOUND:  -0.7, DT_LIGHT:  -0.7,
+      DT_ELECTRIC:  -0.7, DT_ACID:      -0.3, DT_POISON: -0.7, DT_TERROR: -0.3,
+      DT_SLASH:     -0.3,
+      DT_HOLY:      -0.7, DT_UNHOLY:    -0.7, DT_MAGIC:  -0.6 ]) );
+//  SetProp(P_NOMAGIC,60);
+
+  SetProp(P_MSGIN, "schwabbelt herein");
+  SetProp(P_MSGOUT, "schwabbelt");
+
+  SetProp(P_DIE_MSG,  " ist jetzt total zerfetzt.\n");
+  SetProp(P_NOCORPSE, 1 );
+  SetProp(P_KILL_NAME, "Ein Riese");
+  SetProp(P_KILL_MSG, ({ "verspeist genuesslich eine Leiche.", MSG_EMOTE }) );
+  SetProp( P_MSG_FLAGS, ([P_KILL_MSG:1]) );
+
+  AddInfo(DEFAULT_INFO, "kann nicht reden, nur schwabbeln.\n");
+
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    "Der Riese will Deine Spielsachen nicht.\n" }) );
+
+  SetProp(P_SPELLRATE,60);
+
+  AddSpell(3,550,
+    "Der Riese blaeht Dir mitten ins Gesicht. Pfoa stinkt das.\n",
+    "Der Riese blaeht @WEN mitten ins Gesicht.\n",
+     DT_AIR,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(2,750,
+    "Eine Schwarte trifft Dich sehr hart.\n",
+    "Eine Schwarte trifft @WEN sehr hart.\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(1,1200,
+    "Eine dicke Speckschwarte huellt Dich ein.\n",
+    "Eine dicke Speckschwarte huellt @WEN ein.\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1]));
+
+/*  AddSpell(2, 0,
+    ".\n",
+    "@WEN.\n",
+    DT_MAGIC, "overall" , ([SP_SHOW_DAMAGE:1]) );
+*/
+
+  SetChats(1, ({
+    "Der Riese ruelpst.\n",
+    "Die Speckschwarten wabern.\n",
+    "Der Bauch des Riesen wird groesser und kleiner.\n"}) );
+  SetAttackChats(10, ({
+    "Der Bauch spritzt Dich mit Fett voll.\n",
+    "Der Riese schwingt seine Huefte und versucht Dich abzuwerfen.\n"}) );
+}
+
+void init() {
+  ::init();
+  if(RIESEMASTER->checkfeind(TP)) { Kill(TP); }
+}
+
+int Defend(int dam, mixed dam_type, mixed spell, object enemy) {
+  if(!interactive(enemy)) dam/=2;
+  RIESEMASTER->addfeind(enemy);
+  return ::Defend(dam, dam_type, spell, enemy);
+}
+
+void die(int poisondeath) {
+  if(!present("\n_huefte_ab")) { CLONE( OBJ "abhuefte",MENV); }
+  RIESEMASTER->teiltot("huefte");
+  write_file( LOG "huefte.kills" ,
+    ctime()+": "+CAP(getuid(PL))+" killt die Huefte.\n");
+  write_file( LOG "riese_total" ,
+    ctime()+": "+CAP(getuid(PL))+" killt die Huefte.\n");
+  ::die(poisondeath);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp) {
+  RIESEMASTER->feindtot(player);
+  write_file( LOG "huefte.deads" ,
+    ctime()+": "+CAP(getuid(player))+" stirb an der Huefte.\n");
+  write_file( LOG "riese_total" ,
+    ctime()+": "+CAP(getuid(player))+" stirb an der Huefte.\n");
+}
+
+varargs object SelectEnemy(object *here) {
+  object enemy;
+  int minhp,hp,i;
+
+  if (!pointerp(here)) {
+    here=PresentEnemies();
+  }
+  here=filter_array(here,#'interactive);
+  if (!sizeof(here)) {
+    return 0;
+  }
+  if(random(2)) {
+    minhp=here[0]->QueryProp(P_HP);
+    enemy=here[i];
+    for(i=1;i<sizeof(here);i++) {
+      if ((hp=here[i]->QueryProp(P_HP)) < minhp) {
+        minhp=hp;
+        enemy=here[i];
+      }
+    }
+  } else {
+    enemy=here[random(sizeof(here))];
+  }
+  return enemy;
+}

@@ -1,0 +1,249 @@
+inherit "std/armour";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <defines.h>
+#include <moredef.h>
+
+#define WIZNAME "iwo"
+
+#define RESTR_CHECKER "/std/restriction_checker"
+
+#define HOUR 3600
+
+
+string *def_pre = ({ "", "hell", "dunkel", "neon", "knall" });
+
+string *def_colors = ({ "olivgruene", "blaue", "gelbe", "gruene", 
+                  "rote", "lila", "rosa", "braune", "schwarze", 
+                  "weisse", "orange", "tuerkise", "violette", 
+                  "beige", "graue", "himmelblaue", 
+                  "schweinchenrosa", "blutrote", "rubinrote", 
+                   });
+
+string pre, color, prefix;
+
+string my_id = "my_id";
+
+int time_worn;
+
+create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  pre = def_pre[random(sizeof(def_pre))];
+
+  color = def_colors[random(sizeof(def_colors))];
+
+  time_worn = 0;
+
+  seteuid(getuid(this_object()));
+
+  AddId (({"stutze"}));
+
+  my_id = "stutze";
+
+  prefix = sprintf("%s%s", pre, color);
+
+  SetProp (P_GENDER, FEMALE);
+  SetProp (P_NAME, "Stutze");
+
+  SetProp (P_SHORT, sprintf("Eine %s Stutze", prefix));
+  SetProp (P_LONG,
+	   "Das ist eine ganz gewoehnliche Stutze. Sie ist "
+           + prefix + ". Gefertigt wurde sie aus der Wolle "
+           "hiesger Schafe.");
+  SetProp (P_WEIGHT, 10);
+  SetProp (P_VALUE, 120);
+  SetProp (P_ARMOUR_TYPE, AT_MISC);
+  SetProp (P_AC, 0);
+  SetProp (P_WORN_TEXT, "getragen");
+  SetProp (P_MATERIAL, MAT_WOOL);
+  SetProp( P_LOG_FILE, "report/" WIZNAME ".rep" );
+
+}
+
+int DoWash()
+{
+  time_worn = 0;
+
+  return 1;
+}
+
+
+string Taste()
+{
+  string statstr;
+
+  int hours;
+
+  hours = time_worn;
+
+  if (QueryProp(P_WORN))
+    hours += time() - QueryProp(P_EQUIP_TIME);
+
+  hours /= HOUR;
+
+  switch (hours)
+    {
+      case 0 .. 6:
+         statstr = "frisch";
+         break;
+      case 7 .. 12:
+         statstr = "etwas getragen";
+         break;
+      case 13 .. 18:
+         statstr = "etwas riechend";
+         break;
+      case 19 .. 24:
+         statstr = "ziemlich stinkend";
+         break;
+      default:
+         statstr = "erbaermlich stinkend";
+    }
+
+  return statstr;
+
+}
+
+
+varargs string _query_name(int causus, int demon)
+{
+  return sprintf("%s %se Stutze", prefix, Taste());
+}
+
+varargs string _query_short()
+{
+  return sprintf("Eine %s Stutze (%s)", prefix, Taste());
+}
+
+
+
+private void my_msg(string str, mixed fl)
+{
+  if(fl) write(str); else _notify_fail(str);
+}
+
+
+
+private object is_same(object armour)
+{
+  return armour->id(my_id);  
+}
+
+// Von AT_MISC kann nur jeweils eines pro short getragen
+// werden. Hier wird DoWear ueberlagert, um diese Restriktion
+// zu umgehen. 
+// ** Ansonsten werden alle restriktionen uebernommen! **
+varargs int DoWear(int silent, int all)
+{
+  object found, *armours;
+  mixed wear_func,type;
+  closure qp,sp;
+  mapping rmap;
+  string res;
+  int nh;
+
+  if (all) notify_fail("Alles angezogen, was ging.\n");
+  if (QueryProp(P_WORN))
+    return my_msg("Du traegst " + ME->name(WEN,1) + " bereits.\n", all), 0;
+  if (environment() != PL)
+    return my_msg("Du musst " + ME->name(WEN,1) + " erst nehmen!\n", all), 0;
+
+  qp = symbol_function("QueryProp", PL);
+  sp = symbol_function("SetProp", PL);
+  armours = funcall(qp, P_ARMOURS);
+
+
+  if (PL->QueryProp(P_GHOST)) {
+     write("Als Geist kannst du nichts tragen!\n");
+     return !all;
+  }
+
+
+   if( sizeof(filter_array(PL->QueryProp(P_ARMOURS), #'is_same) ) >= 2 )
+       return my_msg("Du traegst bereits zwei Stutzen!\n", all), 0;
+
+  // Trage-Restriktionen?
+  if( (rmap = QueryProp(P_WEAR_RESTRICTIONS)) &&
+      (res = RESTR_CHECKER->check_restrictions(PL, rmap)) )
+  {
+    write(res);
+    return !all;
+  }
+
+  // Im Kampf und zu beschaeftigt?
+  if( PL->InFight() && PL->QueryProp(P_ATTACK_BUSY) )
+  {
+    write("Du bist zu erschoepft, um "+name(WEN)+" anzuziehen.\n");
+    return !all;
+  }
+
+
+
+  // Attributsperre?
+  if (QueryProp(P_M_ATTR_MOD) &&
+      stringp(PL->TestAttributeLock(QueryProp(P_M_ATTR_MOD))))
+  {
+    write("Eine magische Kraft hindert Dich daran, "+ME->name(WEN,1)+
+        " anzuziehen.\n");
+    return !all;
+  }
+
+
+  // P_WEAR_FUNC im Spielerobject auswerten (kann object oder *object sein!)
+  wear_func = PL->QueryProp(P_WEAR_FUNC);
+
+  if (objectp(wear_func) && !wear_func->WearFunc(ME,silent))
+  {
+    if (nh)
+      PL->FreeHands(ME);
+    return !all;
+  }
+  else if (pointerp(wear_func))
+  {
+    int i;
+    PL->SetProp(P_WEAR_FUNC, wear_func=filter_array(wear_func,#'objectp));
+    for ( i = sizeof(wear_func); i-->0; )
+      if (!wear_func[i]->WearFunc(ME,silent)) return !all;
+  }
+
+
+  // Alle Checks erfolgreich durchlaufen -> anziehen!
+  SetProp(P_EQUIP_TIME, time());
+  SetProp(P_WORN, PL);
+  armours = armours - ({ 0 }) + ({ ME });
+  funcall(sp, P_ATTACK_BUSY, 1);
+  funcall(sp, P_ARMOURS, armours);
+  // P_TOTAL_AC und P_TOTAL_TEMPERATURE_PROTECTION im Traeger updaten
+  PL->QueryProp(P_TOTAL_AC);
+  PL->UpdateTotalTempProt();
+
+
+  // Attribute gegebenenfalls updaten!
+  if (QueryProp(P_M_ATTR_MOD) || QueryProp(P_M_HEALTH_MOD))
+    PL->UpdateAttributes();
+
+  // "anzieh"-Meldung ausgeben
+  if (!silent)
+  {
+    write(sprintf( QueryProp(P_WEAR_TEXT)[0], name(WEN,1) ));
+    say(PL->Name(WER) + sprintf( QueryProp(P_WEAR_TEXT)[1], name(WEN,0) ));
+  }
+  return !all;
+
+}
+
+varargs int DoUnwear(int silent)
+{
+  int retval;
+
+  if ((retval = ::DoUnwear(silent)))
+    time_worn += time() - QueryProp(P_EQUIP_TIME);
+
+  return retval;
+}
+
+

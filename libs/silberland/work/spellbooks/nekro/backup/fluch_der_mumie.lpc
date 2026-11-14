@@ -1,0 +1,158 @@
+/*
+ * Anwendungsgebiet:
+ * kampf gegen mehrere gegner - einzelne Gegner verschwinden so 
+ * kurzzeitig aus dem kampfgeschehen 
+ * (beschraenkung auf maximal 2 gleichzeitig)
+ *
+ * living/corpse:
+ * Erzeugt einen schwarzen Nebel, der das Ziel umgibt, daraus schiessen
+ * Bandagen vor, die das Ziel umwickeln und letztendlich bildet sich
+ * ein Sarg um das Ziel - das Ziel wird in den Sarg gemoved
+ * living:
+ * Das lebende Ziel befreit sich nach und nach von den Bandagen/Sarg
+ * Von aussen sind zunaechst dumpfe Toene spaeter krachende Toene zu
+ * hoeren, dann splittert der Sarg und bricht letztendlich auf - nachdem
+ * der Zauber gebrochen ist, verschwindet alles (Sarg, Bandagen)
+ * in schwarzem Rauch
+ * corpse:
+ * Ziel wird zerstoert, die Sachen landen im Sarg
+ * Mit dem Zauber 'anrufung des kharr-zzteth' kann man eine Mumie aus
+ * dem Sarg auferstehen lassen
+ *
+ * Beschraenkungen der Anwendung:
+ * corpse: keine
+ * living: Size des livings 50-250
+ *         Level des livings < casterlevel + 15
+ *         P_NOMAGIC des livings < random(101)
+ *         Schutzprop im livings nicht gesetzt (P_NO_MUMMY)
+ *         class im living nicht swimming, drache, daemon
+ *         environment des livings: nicht mehr als 1 sarg
+ *         environmentstyp des livings: nicht TT_UNDERWATER, TT_WATER
+ * 
+ * Kosten: 80 MP
+ * Dauer: 10-20 sec
+ * Delay: 60 sec
+ * Level : 4-7 
+ * Objekte: /gilden/nekromanten/obj/sarg (unterschiedliche Props living
+ *                                        vs corpse)
+ * sarg ist ein behaelter, man kann diesen nicht oeffnen,
+ * sarg loest sich nach einer zeit auf
+ *
+ * Spruch kann nicht durch Skillpunkte verbessert werden!
+ * ggf Dauer des Spruches beeinflussbar?
+ */
+
+int prep_fluch_der_mumie(object caster, mapping sinfo)
+{
+  object victim;
+  mapping env;
+  victim=FindVictim(sinfo[SI_SKILLARG],caster,
+      "Wen willst Du mit dem Fluch der Mumie strafen?\n");
+  if(!victim) return 0;
+  if(!victim->id("Leiche")) //es ist keine Leiche - also test ob es lebt!
+    victim=FindLivingVictim(sinfo[SI_SKILLARG],caster,
+        "Wen willst Du mit dem Fluch der Mumie strafen?\n");
+  if (!victim)
+  {
+    write(BS(sprintf("%s Sowas ist nicht hier! Schau Dich genauer um!",
+            random_fluch())));
+    return 0;
+  }
+  sinfo=DoSpellModification(caster, sinfo);
+  // Wenn eine Mumie entsteht soll der Spell mehr kosten (angrox)
+  if(victim->id("Leiche"))
+    sinfo[SI_RAW_SPELLCOST]+=80;
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }                             
+//beschrenkungen testen
+  if(victim->id("Leiche"))
+    return 1;
+  if (victim->QueryProp(P_SIZE)>250)
+    return write(BS(victim->Name(WER,1)+" ist viel zu gross, um in "
+      "einen Sarg zu passen.")),0;
+  if (victim->QueryProp(P_SIZE)<50)
+    return write(BS(victim->Name(WER,1)+" ist viel zu klein, um "
+      "erfasst zu werden.")),0;
+  if (victim->QueryProp(P_LEVEL)>caster->QueryProp(P_LEVEL))
+    return write(BS(victim->Name(WER,1)+" laesst sich von Dir noch "
+      "nicht durch diesen Spruch beeinflussen.")),0;
+  env=environment(victim)->QueryProp(P_ENVIRONMENT);
+  if (mappingp(env) && 
+      (env[ENV_TERRAIN]==TT_WATER || env[ENV_TERRAIN]==TT_UNDERWATER))
+    return write("Hier kann der Spruch nicht wirken.\n"),0;
+  if (present("\nmummy_sarg",environment(victim)))
+    return write("Hier ist schon ein Sarg!\n"),0;
+  if (victim->is_class_member(({CL_DEMON,CL_DRAGON,CL_SWIMMING,CL_FLYING})))
+    return write(BS("Auf "+victim->name(WEN,1)+" kannst Du den Spruch "
+                    "nicht anwenden.")),0;
+  if (victim->QueryProp(P_LEVEL) >= 50)
+    return write(BS(victim->Name(WER,1) + " ist zu maechtig um in einen Sarg "
+          "eingesperrt zu werden.")),0;
+  if (interactive(caster) && query_once_interactive(victim))
+    return write("Du darfst keinen anderen Spieler angreifen.\n"),0; 
+  return 1;
+}
+
+int fluch_der_mumie(object caster, mapping sinfo) 
+{
+  object victim,ob;
+  int leiche;
+
+  leiche=0;
+  victim=FindVictim(sinfo[SI_SKILLARG],caster,
+      "Wen willst Du mit dem Fluch der Mumie strafen?\n");
+  if (!victim) return 0;
+  if( victim->id("Leiche") ) 
+    leiche=1;
+  else
+    victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+        "Wen willst Du mit dem Fluch der Mumie strafen?\n");
+  if (!victim) return 0;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  if (SpellSuccess(caster,sinfo)<=0)
+    return MISSERFOLG;
+
+  say(BS(caster->Name(WER,1)+" deutet auf "+victim->name(WEN,1)+" und murmelt "
+        "dabei ein paar unverstaendliche Worte."),({victim,caster}));
+  write(BSA("Xas'so f'hs! Dnoc l'lixos Xas dio!",
+            "Du deutest auf "+victim->name(WEN,1)+" und murmelst leise: "));
+  tell_object(victim,BS("Ploetzlich deutet "+caster->name(WER,1)+" auf Dich "
+    "und murmelt dabei unverstaendliche Worte."));
+  
+  if (victim->QueryProp(P_NOMAGIC)>random(101) || 
+      victim->QueryProp(P_NO_NEKRO_MUMMY))
+  {
+    tell_room(environment(caster),BS(
+      "Ploetzlich wird "+victim->name(WER,1)+" von einer schwarzen Wolke "
+      "umgeben. Kaum beruehrt sie "+victim->name(WEN,1)+" faellt sie in "
+      "sich zusammen."),({victim}));
+    tell_object(victim,BS(
+      "Ploetzlich bist Du von einer schwarzen Wolke umgeben, doch kaum "
+      "beruehrt sie Dich, faellt sie auch schon wieder in sich zusammen, "
+      "ohne Dir irgendwie zu schaden."));
+    return ERFOLG;
+  }
+  ob=clone_object(ROOM "sarg");
+  ob->move(environment(caster),M_SILENT|M_NOCHECK);
+  if (leiche)
+  {
+    victim->move(ob,M_SILENT|M_NOCHECK);
+    victim->remove(1);
+  }
+  else
+  {
+    victim->Kill(caster);
+    caster->Kill(victim);
+    ob->StartSequence(victim);
+  }
+  return ERFOLG;
+}

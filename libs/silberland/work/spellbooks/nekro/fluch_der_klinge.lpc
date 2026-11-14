@@ -1,0 +1,195 @@
+/*
+ * Fluch der Klinge
+ *
+ * Verflucht ein Messer oder ein Schwert (intern wird dieses ausgetauscht gegen
+ * ein anderes Objekt, die Props werden 1:1 kopiert). Heiliger und Lichtschaden
+ * werden aus der Waffe entfernt, bei gutem Gelingen kommt DT_UNHOLY hinzu.
+ * Wenn ein anderer Nekromant die verpestete Waffe zueckt, kostet ihm dies
+ * 50 MP, der Caster bekommt beim zuecken mit einer Chance von 1:10 
+ * 10-15 SP. Andere Gilden koennen die Waffe nicht zuecken.
+ *
+ * Kosten: 100 MP
+ * Level : 5
+ * Objekt: /gilden/nekromanten/weapon/pestered_weapon
+ * Objekt: /gilden/nekromanten/obj/pestered_weapon_func
+ *
+ * Spruch kann nicht durch Skillpunkte verbessert werden!
+ *
+ * Status: anschlussreif
+ *
+ */
+//23.05.2003 Archon: parse_target entfernt
+//06.08.2003 Archon: sinfo uebergeben
+//13.08.2003 Archon: heilige angriff aus damtypes raus
+//27.12.2003 Feyaria: Waffenname beim zerstoeren durch Misserfolg anzeigen.
+
+mixed check_fluch_der_klinge(object caster, mapping sinfo) 
+{
+  object klinge;
+  int i;
+  string *damtypes;
+  if(caster->InFight()) 
+  {
+    write(BS("TOETE ZUERST!\n"));
+    return 0;
+  }
+  if(sinfo[SI_SKILLARG]=="amaryllion" && klinge=present("amaryllion", 
+        ENV(caster)))
+  {
+    write("Bei allen Niederhoellen, welch' verhetzende Lust ...\n");
+  } else if(!(klinge=present(sinfo[SI_SKILLARG], caster))) 
+  {
+    write(BS(sprintf("%s! So etwas hast Du nicht bei Dir!", 
+          checkgender(caster, "NAERRIN", "NARR"))));
+    return 0;
+  }
+  if(member( ({WT_KNIFE, WT_SWORD}), klinge->QueryProp(P_WEAPON_TYPE)) == -1) 
+  {
+    write(BS(sprintf("%s! DAS IST KEINE KLINGENWAFFE!", 
+          checkgender(caster, "NAERRIN", "NARR"))));
+    return 0;
+  }
+  if(klinge->QueryProp(P_WIELDED) == caster) 
+  {
+    write(BS(sprintf("%s! Du darfst die Klinge nicht gezueckt haben!", 
+            checkgender(caster, "NAERRIN", "NARR"))));
+    return 0;
+  }
+  if(klinge->QueryProp(P_NEKRO_PESTERED)) 
+  {
+    write(BS(sprintf("%s! Diese Klinge ist schon verflucht!", 
+            checkgender(caster, "NAERRIN", "NARR"))));
+    return 0;
+  }
+  if(klinge->QueryProp(P_SET_ITEM)) 
+  {
+    write(BS(sprintf("%s! Mit dieser Waffe funktioniert das nicht!", 
+            checkgender(caster, "NAERRIN", "NARR"))));
+    return 0;
+  }
+
+  if(!klinge->id("amaryllion")) {
+    for(i=sizeof(damtypes=klinge->QueryProp(P_DAM_TYPE))-1;i>=0;i--)
+    {
+      if(member(MAGICAL_DAMAGE_TYPES, damtypes[i]))
+      {
+        write(BS(sprintf("%s! Diese Klinge macht schon magischen Schaden!",
+                checkgender(caster, "NAERRIN", "NARR"))));
+        return 0;
+      }
+    }
+  }
+  return klinge;
+}
+
+mixed prep_fluch_der_klinge(object caster, mapping sinfo)
+{
+  object klinge;
+  if(!sinfo[SI_SKILLARG]) 
+  {
+    write(BS("Welche Klinge willst Du verfluchen?"));
+    return 0;
+  }
+  if(!klinge=check_fluch_der_klinge(caster,sinfo))
+    return 0;
+  sinfo[SI_ENEMY]=klinge;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }
+  tell_room(ENV(caster), BS(sprintf("%s spricht leise Worte, die Du nicht "
+          "verstehst.\n", caster->Name(WER))), ({caster}));
+  return sinfo;
+}
+
+int fluch_der_klinge(object caster, mapping sinfo) 
+{
+  object klinge,ob2;
+  string str, extra, *dts, obdp, *nekro_dam, nd;
+  mixed obdt;
+  int succ;
+
+  nekro_dam=NEKRO_DTS;
+  if(caster->InFight()) 
+  {
+    write(BS("TOETE ZUERST!\n"));
+    return 0;
+  }
+  if(sinfo[SI_SKILLARG]=="amaryllion" && !present("amaryllion",
+                ENV(caster)) && !present("amaryllion",caster))
+  {
+    write(BS("Verdammt, Amaryllion ist verschwunden!"));
+    tell_room(ENV(caster), BS(sprintf("%s flucht lautstark.",
+            caster->Name(WER))), ({caster}));
+    return 0;
+  }
+
+  if(!objectp(klinge=sinfo[SI_ENEMY]))
+    return 0;
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    tell_object(caster,sinfo[SI_SP_LOW_MSG]);
+    return 0;
+  }                             
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+
+  if((succ=SpellSuccess(caster,sinfo)+random(50*CheckEquip(caster, 
+          sinfo[SI_SPELLFUNC]))) < -random(5000))
+  {
+    write(BS(sprintf("%s Du hast %s nun endgueltig zerstoert!", 
+            random_fluch(), klinge->name(WEN))));
+    klinge->remove();
+  }
+  if (succ <= 0)
+    return MISSERFOLG; 
+  
+  write(BSC(sprintf(
+     "Die fokussierte Macht des Boesen faehrt in %s. %s "
+     "erstrahlt kurz in einem eiskalten Schwarz und scheint nun aus "
+     "blutenden Knochen zu bestehen.", klinge->name(WEN,1),
+     CAP(klinge->QueryPronoun(WER)))));
+  tell_room(ENV(caster), BS(sprintf("Ein kuehler Hauch des Boesen geht durch "
+        "den Raum. Irgendetwas von %s Besitztuemern verstroemt kurz "
+        "eine eiskalte Schwaerze.\n", caster->name(WESSEN))), ({caster}));
+
+  if(klinge->id("amaryllion")) {
+    klinge->set_pestered(caster, random(600)+700);
+    return ERFOLG;
+  } else if(klinge->id("\ncustom_pestered_weapon")) {
+    klinge->set_pestered(caster);
+    return ERFOLG;
+  }
+  
+  ob2=clone_object(WEAPON "pestered_weapon");
+  ob2->reinit(klinge, caster);
+      
+  if(!pointerp(obdt=klinge->QueryProp(P_DAM_TYPE)))
+    obdt = ({ obdt });
+
+  obdt-=NOT_NEKRO_DTS; //holy und co muss bei einer verfluchten waffe raus
+
+  nd=nekro_dam[random(sizeof(nekro_dam))];
+  if(member(obdt, nd) == -1)
+    ob2->SetProp(P_DAM_TYPE, obdt+=({ nd }) );
+  
+  if (succ > 9000 - (sinfo[SI_SKILLABILITY] == MAX_ABILITY ? 1000 : 0))
+  {
+    extra=EXTRA_DTS[random(1000) % sizeof(EXTRA_DTS)];
+    if(member(obdt, extra) == -1)
+    {
+      ob2->SetProp(P_DAM_TYPE, obdt+=({ extra }) );
+      write(BSC(sprintf(
+              "%s trifft ab nun zusaetzlich mit %s.", 
+              klinge->Name(WER,1), eng2germ(extra) )));
+    }
+  }
+  ob2->SetProp(P_INFO, (ob2->QueryProp(P_INFO)?klinge->QueryProp(P_INFO):"")+
+      "Diese Waffe ist verpestet und macht "+eng2germ(nd)+
+      (extra?" und "+eng2germ(extra):"")+".");
+  ob2->move(caster, M_NOCHECK);
+  klinge->remove();
+  UseBlood(2);
+  return ERFOLG;
+}

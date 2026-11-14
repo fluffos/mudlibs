@@ -1,0 +1,123 @@
+// SilberLand MUDlib
+//
+// std/food.c -- standard food object
+//
+// $Date: 1997/03/13 02:53:57 $
+/* $Revision: 1.1 $
+ * $Log: food.c,v $
+ * Revision 1.1  1997/03/13 02:53:57  Woody
+ * prepared for revision control
+ *
+ * 20.10.1995	00:58	Mupfel	P_MAX_FOOD, P_MAX_ALCOHOL selber testen
+ * 13.10.1995	19:54	Mupfel	/sys/food.h : F_HEAL statt "heal" etc.
+ * 06.09.1995	04:00	Mupfel	erste Version
+ */
+
+// Properties:
+// P_DRINK_INFO : mapping
+// ([F_HEAL:mixed,	Heilung, int (LP+SP) oder array ({LP, SP})
+//   F_SOAK:int,	Saettigung
+//   F_ALCOHOL:int,	Alkoholgehalt
+//   F_POISON:int])	Giftgehalt
+// (F_HEAL und F_POISON wird NACH 'BeimEssen' gesetzt, F_SOAK und
+// F_ALCOHOL davor, um abzutesten, ob der Spieler das noch essen kann)
+//
+// Funktionen:
+// void BeimEssen();
+// Wird in der 'Essfunktion' aufgerufen. Das Nahrungsobjekt wird
+// anschliessend zerstoert.
+//
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <defines.h>
+#include <living.h>
+#include <wizlevels.h>
+#include "drink.h"
+
+private int check_drink(int strength);
+private int check_alcohol(int strength);
+
+create()
+{
+  if (IS_BLUE(ME)) return;
+  ::create();
+  SetProp(P_SHORT, "Ein trinkbares Objekt");
+  SetProp(P_LONG, "Ein trinkbares Objekt.\n");
+  SetProp(P_NAME, "Trinkbares Objekt");
+  SetProp(P_GENDER, NEUTER);
+  SetProp(P_WEIGHT, 50);
+  SetProp(P_VALUE, 50);
+  SetProp(P_MATERIAL, MAT_FOOD);
+  AddId("Nahrung");
+  AddCmd(({"trink", "trinke"}), "sauf");
+}
+
+void BeimTrinken() {}
+
+int sauf(string what)
+{
+  mapping drinkinfo;
+  mixed   heal;
+  int     hp, sp, soak, alcohol;
+
+  notify_fail("Was moechtest Du trinken?\n");
+  if (!what) return 0;
+  if (id(what))
+  {
+    // P_FOOD_INFO auswerten:
+    drinkinfo = QueryProp(P_DRINK_INFO);
+    if (pointerp(heal=drinkinfo[F_HEAL]) && sizeof(heal)==2)
+    { hp = heal[0]; sp = heal[1]; }
+    else
+      hp = sp = heal;
+    if (soak=drinkinfo[F_SOAK] && !check_drink(soak))
+      return 1;
+    if (alcohol=drinkinfo[F_ALCOHOL] && !check_alcohol(alcohol))
+      return 1;
+    BeimTrinken();
+    if (hp)
+      PL->SetProp(P_HP, PL->QueryProp(P_HP)+hp);
+    if (sp)
+      PL->SetProp(P_SP, PL->QueryProp(P_SP)+sp);
+    if (drinkinfo[F_POISON])
+      PL->SetProp(P_POISON, PL->QueryProp(P_POISON)+drinkinfo[F_POISON]);
+    ME->remove();  // wechisses
+    return 1;
+  }
+  return 0;
+}
+
+private int check_drink(int strength)
+{
+  int drink;
+
+  drink = PL->QueryProp(P_FOOD);
+  if ((strength + drink > PL->QueryProp(P_MAX_FOOD))
+     && !IS_LEARNER(PL))
+  {
+    tell_object(PL, "Uff, das bekommst Du nicht mehr 'runter.\n");
+    return 0;
+  }
+  drink += strength;
+  PL->SetProp(P_FOOD, (drink < 0 ? 0 : drink));
+  return 1; 
+}
+
+private int check_alcohol(int strength)
+{
+  int alc;
+  
+  alc = PL->QueryProp(P_ALCOHOL);
+  if ((strength + alc > PL->QueryProp(P_MAX_ALCOHOL))
+     && !IS_LEARNER(PL))
+  {
+    tell_object(PL, "Asso das kannsu jezz nich... nichmehr trinken, hick.\n");
+    return 0;
+  }
+  alc += strength;
+  PL->SetProp(P_ALCOHOL, (alc < 0 ? 0 : alc));
+  return 1; 
+}
+

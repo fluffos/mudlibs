@@ -1,0 +1,752 @@
+/* Khorin Goldhandssohn - er hat ein Haendchen fuer Geld und Gold.
+ *
+ * Primaer dient Khorin als Beispiel dafuer, wie man mit dem Housed
+ * umgehen kann. Also im Klartext: Wie schreibe ich ein Objekt, das
+ * einem Seher einen weiteren Raum im Seherhaus freischalten kann?
+ * 
+ * (c) 2000 Adrian Holzwarth / Anatol@Silberland
+ *
+ *  2000 12 02  Revision 0.1      - Create
+ *  2012 02 02  Revision 0.2      - IS_WIZARD()-Abfrage vor 
+ *                                  Zentralbank-PayIn.
+ *  2014 03 31  Revision 0.3      - Zentralbank-PayIn nur bei Ueberweisungen
+ *                                  groesser 0 (expressis verbis).
+ */
+ 
+#pragma strict_types
+
+inherit "std/npc";
+
+#include <wizlevels.h>
+#include <properties.h>
+#include <combat.h>
+#include <moving.h>
+#include "../defines.h"
+#include "/p/daemon/housed/sys/upgrade.h"
+
+#define SAVEFILE OWNSAVE "khorin"
+
+// Getrenntes Logging hat den Vorteil, dass man irgendwann nur noch die
+// fehlerhaften Aufrufe ueberwachen muss und den Rest... well, ignoriert,
+// bis man ihn tatsaechlich mal braucht.
+
+#define ERROR_LOG(x) log_file(LOG "khorin.err", \
+    sprintf("%s: %s\n",dtime(time())[5..],x))
+
+#define SUCCESS_LOG(x) log_file(LOG "khorin", \
+    sprintf("%s: %s\n",dtime(time())[5..],x))
+
+#define CASH_LOG(x) log_file(LOG "khorin.cash", \
+    sprintf("%s: %s\n",dtime(time())[5..],x))
+
+nosave object gegenstand;   // /std/thing, wenn die Spieler das wuessten ;)
+nosave int zentral;         // Im reset() an die Zentralbank.
+
+mapping pay;               
+
+public void Save() { save_object(SAVEFILE); }
+
+private nosave void checkBillboard() {
+  string * s;
+  int i;
+
+  for (i=sizeof(s=m_indices(pay));i--;) 
+    if (pay[s[i],1]<time()) {
+      SUCCESS_LOG(sprintf("Frist abgelaufen: %s (%d Muenzen)",capitalize(s[i]),
+            pay[s[i],0]));
+      pay-=([s[i]]);
+    }
+}
+
+private nosave void chatThing() {
+  tell_room(environment(this_object()),break_string(
+   ({"Der seltsame Gegenstand faengt ploetzlich an, wie bloede rot und gelb "
+     "abwechsend zu blinken und gibt dabei ziemlich unanstaendige Geraeusche "
+     "von sich.",
+   "*zischschsch* *blink* *blink* *blink* *duuuuueeeedelduuuueeeee* *rauch*"
+     " *fiep* *rotier* *nebel* *jaul* *flacker* *piep* *piep* *piep* ...",
+   "Weisser Nebel stroemt langsam aus dem seltsamen Gegenstand aus, der "
+     "dann mit lauter Marschmusik stimmungsvoll von innen heraus im Takt "
+     "weiss-blau ausgeleuchtet wird.",
+   "Die vielen kleinen Knoepfe an diesem seltsamen Gegenstand beginnen, "
+     "eine gruen leuchtende Fluessigkeit abzusondern, die sofort in Rauch "
+     "aufgeht und mit unanstaendigem Stoehnen gen Himmel entschwindet. ",
+   "Aus einer Oeffnung an dem Gegenstand klingt fernes Glockengelaeute, "
+     "begleitet von kleinen roten Blitzen, die ueber die Oberflaeche des "
+     "'Trollkopfs' zucken.",
+   "YIIIIIIIIIIIIIIIIIIIIIAAAAAAAAAAAAAAAAAAAUUUUUUIIIIIIIIIIIKKKK!!!! "
+     "Der Ruf einer Todesfee schallt aus einem roten Hebel (?!?) des "
+     "Gegenstands.",
+   "In wilder Kakaphonie blinken tausende kleine Lichtchen in tausenden "
+     "Farben an der Oberflaeche des Dir SEHR suspekten Gegenstands auf.",
+   "PFLUNZ - eine kleine Klappe oeffnet sich an dem seltsamen Gegenstand "
+     "und haemmert dem verdutzten Zwerg zwei bis dreimal kraeftig ins "
+     "ohnehin geroetete Gesicht.",
+   "''Gold, Gold, Gold, Gold...'' klingt es ploetzlich aus dem Gegestand "
+     "heraus. Mit einem dezenten TATSCHANG verstummt die zwergische Hymne "
+     "wieder.",
+   "Der Gegenstand faengt zu rauschen an und weisser Nebel stroemt heraus, "
+     "sinkt zu Boden und loest sich dort langsam auf.",
+   "BZZZZZZZZ. Es saeuselt aus dem Gegenstand: ''Sie bekommen eine "
+     "Geldstrafe von 1 Muenze wegen Verstoss gegen das verbale "
+     "Moralitaetsstatut."
+     })[(random(11))]  ,77),({this_object()}));
+}
+
+private nosave void chatDwarf(string nm) {
+  tell_room(environment(this_object()),break_string(
+   ({"Brummelnd drueckt der Zwerg auf einen roten und einen blauen Knopf "
+     "an dem Gegenstand, den er in den Haenden haelt und fluestert: "
+     "''HUTABLAGE''.",
+    sprintf("Der Zwerg buchstabiert muehselig %s und drueckt dabei hektisch "
+      "an einer ohraehnlichen Oeffnung an seinem Gegenstand herum.",
+      implode(regexplode(nm,".")," ")),
+    "Der Zwerg schuettelt und ruettelt mit einem vielsagenden "
+      "Blick - Du kannst das Ich-haette-auch-besseres-zu-tun-Mienenspiel "
+      "problemlos deuten - an dem seltsamen Gegenstand herum.",
+    sprintf("Mit einem ''%s - soll mir das was sagen?'' schlaegt der Zwerg "
+      "den Gegenstand zweimal kraeftig auf den Boden und einmal genauso "
+      "kraeftig gegen seinen Kopf.",upperstring(nm)),
+    "Der Zwerg nimmt eine ungeheuer komplizierte Aktion an seinem tollen "
+      "Gegenstand vor: Er zieht einen kleinen Hebel.",
+    "Sichtlich verstimmt zerrt der Zwerg an ein paar Schlaufen, drueckt "
+      "ein paar Knoepfe, zieht ein paar Hebelchen, dreht ein paar Schalter "
+      "und mustert seinen blau-blau blinkenden Gegenstand mit zwergisch-"
+      "neugieriger Miene.",
+    "Konzentriert zieht der Zwerg zwei kleine blaue Hebelchen und drueckt "
+      "einen noch kleineren gelben Knopf.",
+    sprintf("Mit einem unverstaendlichen In-den-Bart-Gemurmel und einem "
+     " weniger unverstaendlichen ''%s'' zieht und zerrt der Zwerg an dem "
+     "Gegenstand herum.",nm),
+     })[(random(8))]  ,77),({this_object()}));
+}
+
+nosave void chatLoop(int loop, string final_func, string nm) {
+  switch (loop) {
+    case 0:
+      chatDwarf(nm);
+      call_out("chatLoop",2,1+loop,final_func,nm);
+      break;
+    case 1:
+      chatThing();
+      call_out("chatLoop",2,1+loop,final_func,nm);
+      break;
+    default:
+      funcall(symbol_function(final_func,this_object()),nm);
+      break;
+  }
+}
+
+private nosave void chat(string *msg) {
+  tell_room(environment(this_object()),
+    break_string(msg[0],77,(msg[1]?Name()+" "+msg[1]:0),1),({this_object()}));
+}
+
+private nosave int isPayer(mixed who) {
+  if (objectp(who)) who=getuid(who);
+  return member(pay, who);
+}
+
+private nosave int amountPayer(string who) {
+  if (!isPayer(who)) return 0;
+  return pay[who,0];
+}
+
+private nosave int timePayer(string who) {
+  if (!isPayer(who)) return 0;
+  return pay[who,1];
+}
+
+private nosave void addAmount(string who, int n) {
+  if (!isPayer(who)) return; 
+  if ((n<0) && ((pay[who,0]+n)<0)) 
+    n=-1*(pay[who,0]);
+  pay[who,0]+=n;
+  if (!IS_WIZARD(who)) 
+    zentral+=n;
+  Save();
+}
+
+private nosave void payIn(string who, int howmuch) {
+  CASH_LOG(sprintf("Einzahlung von %s (%d Muenzen)",who, howmuch));
+  addAmount(who,howmuch);
+}
+  
+nosave void delayPayer(string who) {
+  if (!isPayer(who)) {
+    chat(({"Hae? '"+capitalize(who)+"' ist bei mir gar nicht verzeichnet? "
+          "Wollen mich heute irgendwie alle veraeppeln?",
+          "mault veraergert: "}));
+  }
+  else if (amountPayer(who)<200000) {
+    chat(({"Soll das ein Witz sein, "+capitalize(who)+"? Eine "
+      "Fristverlaengerung kostet Dich nur schlappe 200'000, aber nicht "
+      "einmal diese bescheidene Summe hast Du zur Verfuegung.",
+          "mault veraergert: "}));
+    if (amountPayer(who)>5000) {
+      addAmount(who,-5000);
+      chat(({"Dafuer ziehe ich erstmal 5000 Muenzen ab! So!","grummelt: "}));
+    }
+  }
+  else {
+    pay[who,1]+=7*24*60*60;
+    SUCCESS_LOG(sprintf("Verlaengert Handel bis %s: %s",dtime(pay[who,1])[5..],
+          capitalize(getuid(this_player()))));
+    tell_room(environment(this_object()),break_string(
+        "Mit einer Mischung aus Brummeln und Zischen - ersteres kommt "
+        "vom Zwerg, letzteres von diesem Gegenstand in seinen Haenden - "
+        "passiert irgendwas.",77),({this_object()}));
+    chat(({"Ok, "+capitalize(who)+" hat jetzt bis zum "+
+          dtime(pay[who,1])[5..]+ " Zeit, den Handel zu erfuellen.",
+          "verkuendet: "}));
+    addAmount(who,-200000);
+  }
+  return;
+}
+
+nosave int removePayer(string who) {
+  if (!isPayer(who)) return 0;
+  pay-=([who]);
+  chat(({sprintf("So! %s ist raus, ein Kunde weniger!",capitalize(who)),
+        "seufzt: "}));
+  Save();
+}
+
+void give_notify(object given) {
+  string who;
+
+  if ((file_name(given)[0..9]!="/obj/money")||(!this_player())||
+      (!query_once_interactive(this_player()))||(!isPayer(this_player()))) {
+    chat(({"Hab' ich danach gefragt?!","pienst herum: "}));
+    drop_obj(given);
+  }
+  else {
+    payIn(getuid(this_player()),(int)given->QueryProp(P_AMOUNT));
+    given->remove();
+  }
+}
+
+nosave void addPayer(string who) {
+  object p;
+
+  if (!p=find_player(who)) return;
+  if (isPayer(who)) {
+    chat(({"Was soll das, '"+capitalize(who)+"' ist doch schon verzeichnet, "
+          "das tut mir doch auch weh! Koennen sich die Leute von heute nicht "
+          "mal nur auch ein BISSCHEN zusammennehmen?!","mault veraergert: "}));
+    if (amountPayer(who)>5000) {
+      addAmount(who,-5000);
+      chat(({"Dafuer ziehe ich erstmal 5000 Muenzen ab! So!","grummelt: "}));
+    }
+  }
+  else {
+    pay+=([who:0;time()+(3*7*24*60*60)]);
+    chat(({"Und wieder ein Kunde mehr!","freut sich: "}));
+    Save();
+    SUCCESS_LOG(sprintf("Neuer Kunde: %s",capitalize(who)));
+    tell_object(p,break_string(
+     "Der Zwerg ist eine ehrliche Haut und wird Dich nicht ueber's Ohr hauen,"
+     " doch etwas haette er Dir vorher sagen koennen: Wenn Du ihn nach "
+     "'stand' fragst, wird er Dir sagen, wie es um Deine Einzahlungen und "
+     "Deine Frist steht, aber auch jedesmal 1000 Muenzen von Deinem Guthaben "
+     "abziehen. Ausserdem wirst Du ihn, wenn Du das Geld vollstaendig "
+     "eingezahlt hast, explizit auch nach 'stand' fragen muessen, damit er "
+     "bemerkt, dass das Geld vollstaendig ist. Selbstverstaendlich zieht er "
+     "DANN keine Gebuehr mehr ein - auch nicht, wenn Du noch nicht Stufe 45 "
+     "bist oder noch kein Haus hast. Sieh' nur zu, dass Du, wenn Du musst, "
+     "die Frist rechtzeitig verlaengerst!",77,"    ",0));
+  }
+}
+
+// Diese Nummer wird von den Betreuenden der Seherhaeuser fest zugewiesen,
+// so kann ein Objekt durchaus mehrere verschiedene Upgrades durchfuehren.
+// Die Informationen ueber den Upgrade des (und welchen) Seherhauses sind
+// im Seherhausverwalter gespeichert und muessen nicht mit uebergeben werden.
+
+#define UPGRADE_NO 0    // Tja, war wohl der erste, gell ;)
+
+nosave void doUpgrade(object pl) {
+  string * text;
+  string owner;
+
+  if ((!pl)||(!query_once_interactive(pl))) return;
+
+    /* UPGRADE() ist in /p/daemon/housed/sys/upgrade.h definiert und
+     * braucht zwei Argumente: Zum einen die unique laufende Nummer des
+     * Upgrades, zum anderen den Hausbesitzer, den es mit dem Upgrade
+     * treffen soll. */
+
+  switch ((int)UPGRADE(UPGRADE_NO,owner=getuid(pl))) {
+
+    /* Das ist jetzt natuerlich furchtbar ausfuehrlich, kann man sich, wenn
+     * man einmal weiss, dass alles funktioniert, auch viel einfacher machen,
+     * in dem man die moeglichen Erfolgswerte behandelt und den ganzen Rest
+     * mit 'default:' erschlagen laesst. Ist hier also nur zum Spass so 
+     * ausfuehrlich. Zum Spass und weil damit die Fehlermeldungen auch gleich
+     * erklaert werden.
+     *
+     * Die Fehlermeldungen werden uebrigens in /p/daemon/housed/sys/upgrade.h
+     * definiert, das man sich dazuincluden muss, wenn man sie verwenden will.
+     */
+
+    case HOUSE_UPGRADE_BAD_CALL:                  // Echter Fehler
+      text=({"Na sowas, da hat sich einer mit den Eintraegen vertan, sag' "
+        "doch bitte mal Anatol bescheid *seufz*. Dieser Schlamper....",
+        "grummelt: "});
+      ERROR_LOG(sprintf("Fehlerhafter Aufruf (%s)",owner));
+      break;
+    case HOUSE_UPGRADE_ACCESS_FAILURE:            // Echter Fehler
+      text=({"Na sowas, wer hat mir die Erlaubnis, Immobilien zu verteilen, "
+        "entzogen?! Ich glaub das ja nicht! SKANDAL! Sag doch mal Anatol "
+        "bescheid!!!","flucht: "});
+      ERROR_LOG(sprintf("Fehlende Zugriffsrechte (%s)",owner));
+      break;
+    case HOUSE_UPGRADE_FAILED:                    // Echter Fehler
+      text=({"Hae? Der Grosse Hausverwalter teilt mir mit, dass er Aerger "
+          "hat? Erzaehl' mal Anatol davon, damit der dem Typ die Leviten "
+          "liest!", "jammert: "});
+      ERROR_LOG(sprintf("Seherhaus nicht ladbar (%s)",owner));
+      break;
+    case HOUSE_UPGRADE_HOUSE_LOAD_FAIL:           // Echter Fehler
+      text=({"Hae? Wieso in aller Welt buggen die Seherhaeuser jetzt??? "
+          "Mach' mal Anatol die Hoelle heiss!", "schreit: "});
+      ERROR_LOG(sprintf("Seherhaus nicht ladbar (%s)",owner));
+      break;
+    case HOUSE_UPGRADE_NO_SUCH_HOUSE:  // Uebergehen...
+      text=0;
+      break;
+    case HOUSE_UPGRADE_ALREADY_DONE:  // Fehler des Spielers :))
+      text=({"Du hast bei mir schonmal so einen Raum gekauft, und ich "
+          "habe Dir ganz sicher gesagt, dass Du nur einen von mir bekommen "
+          "wirst. Aber vielen Dank fuer das Geld!","grinst breit: "});
+      SUCCESS_LOG(sprintf("%s hatte schonmal gezahlt",capitalize(owner)));
+      removePayer(owner);
+      break;
+    case 1:                           // Hat hingehauen.
+      text=({"Ok, Du hast Deinen Teil der Abmachung eingehalten, ich werde "
+          "meinen auch einhalten. Dein Haus verfuegt nun ueber einen weiteren "
+          "Raum. Wenn Du nicht weisst, wie Du das siehst, hast Du Dich nicht "
+          "ausreichend informiert und solltest entsprechend nachlesen.",
+          "brummelt: "});
+      SUCCESS_LOG(sprintf("%s bekommt einen weiteren Raum",capitalize(owner)));
+      removePayer(owner);
+      break;
+    default:
+      text=({"Was ist denn nun passiert? Hallo? 1, 2, 3, Test? ANATOL!" ,
+          "pienst: "});
+      ERROR_LOG(sprintf("Rueckgabewert undefiniert (%s)",owner));
+      break;
+  }
+  if (text) chat(text);
+}
+
+public string _query_long() {
+  if (!this_player()) return "";
+  return break_string(
+  "Der Zwerg, der vor Dir steht, sieht auf den ersten Blick ... wie ein "
+  "wirklich normaler schwer arbeitender Zwerg aus: Langer ungepflegter Bart, "
+  "schmutziges und griesgraemiges Gesicht, zerlumpte schmutzige Kleider und "
+  "eine Dunstwolke."+((string)this_player()->QueryProp(P_RACE)=="Zwerg"?
+  " Aber ... Du bist selbst Zwerg und faellt natuerlich sofort auf, dass "
+  "sich dieser Angehoerige Deiner Rasse nur hinter einer Fassade versteckt!"
+    :""),77)+(this_player()->QueryProp("anatol_khorin")?
+   "'grmpfmblkbmasdf'  - Handel (Seherhausraum fuer 1'000'000) eingehen\n"
+   "'rzibxrzoiveimpf'  - vom Handel (Geld ist weg) zuruecktreten\n"
+   "'womcowmovmslqpe'  - Frist um eine Woche (fuer 200'000) verlaengern\n"
+   :"");
+}
+
+public string _query_short() {
+  if ((!this_player()) || ((string)this_player()->QueryProp(P_RACE)!="Zwerg"))
+    return "Ein zerlumpter Zwerg";
+  else return "Khorin Goldhandssohn, der Zwerg";
+}
+
+public string infoRaum() {
+  string s;
+  if (!this_player()) return "";
+  s="Also das ist so: Ich darf jedem Seher, der ein Haus besitzt, "
+    "einen Raum verkaufen. Also genau einen. NUR EINEN. Aber immerhin! "
+    "Das heisst, dass der Seher dann, wenn er vorher nur ein kleines Haus "
+    "mit einem Raum hatte, dann zwei Raeume hat. Oder wenn er vorher zwei "
+    "Raeume hatte, dann mit meiner Hilfe drei Raeume haben kann! Ist das "
+    "nicht fantastisch? Jedenfalls! Ich darf genau einen Raum je Seher "
+    "verkaufen - ich wuerde ja gerne mehr, aber dann wird mir die Handels"
+    "lizenz entzogen und der schoene Gegenstand wird mir auch weggenommen. "
+    "Aber ist ja egal, ein Raum ist mehr als kein Raum! Genau, und einen "
+    "Raum kann ich Dir verkaufen! Ich erklaere Dir gerne die Details. ";
+    
+  switch (MAY_UPGRADE(UPGRADE_NO,getuid(this_player()))) {
+    case HOUSE_UPGRADE_NO_SUCH_HOUSE:
+      s+="Du hast allerdings noch kein Haus, das heisst, dass Du bis zur "
+        "Vertragserfuellung tunlichst eines haben solltest - sonst geht "
+        "Dir das Geld ersatzlos verloren!";
+      break;
+    case HOUSE_UPGRADE_ALREADY_DONE:
+      s+="Aber das kennst Du ja alles schon, Du hast bereits einen Raum von "
+        "mir erhalten. Und einen zweiten bekommst Du nicht.";
+      break;
+    default:
+      break;
+  }
+  if ((int)this_player()->QueryProp(P_LEVEL)<45)
+    s+=" ... aber solange Du nicht ein paar Level dazulegst, zumindest "
+      "aber Seherstufe 45 hast, ist das ja alles nur halb so wichig.";
+  return s;
+}
+
+public string infoBefehle() {
+  if (this_player()) this_player()->SetProp("anatol_khorin",1);
+  return
+      "Es gibt genau mehrere magische Befehle, verwechsle sie bloss nicht! "
+      "Mit 'grmpfmblkbmasdf' schliesst Du den Handel mit mir ab, mit "
+      "'rzibxrzoiveimpf' trittst Du vom Vertrag zurueck, gleichgueltig, "
+      "wieviel Muenzen Du bereits bei mir gut hast! Mit 'womcowmovmslqpe'"
+      "zuletzt kannst Du die Dir zur Verfuegung stehende Zeit um eine "
+      "Woche verlaengern, was Dich aber 200'000 Muenzen kostet - die Du "
+      "natuerlich schon eingezahlt haben musst. "+(isPayer(this_player())?
+      "Als... aeh... 'zahlender Kunde' solltest Du das ja wissen.":"");
+}
+
+public string infoStand() {
+  string s;
+
+  checkBillboard();
+
+  if ((!this_player())||(!query_once_interactive(this_player()))) return "";
+  if (!isPayer(s=getuid(this_player()))) 
+    return "Du hast keinen Handel mit mir, "+(string)this_player()->name(WER)
+      +".";
+  else {
+    if (amountPayer(s)<1000000) addAmount(s,-1000);
+    if ((find_call_out("doUpgrade")==-1)&& (amountPayer(s)>=1000000) &&
+        ((int)this_player()->QueryProp(P_LEVEL)>=45))
+      call_out("doUpgrade",2,this_player());
+    return sprintf("%s, Du hast %d Muenzen bei mir abgegeben, "
+          "Deine Frist laeuft am %s aus, bis dahin dauert es noch etwa %s.",
+          this_player()->Name(WER),amountPayer(s),dtime(timePayer(s))[5..],
+          time2string("%x %X",timePayer(s)-time()));
+  }
+}
+
+public string infoDetails() {
+  string s;
+
+  if (!this_player()) return "";
+  s= "Also erstens betraegt der Preis fuer diesen einen Raum genau "
+  "1'000'000 Muenzen. In Worten: Eine Million Muenzen. Entweder ist es "
+  "Dir das wert, oder wir kommen nicht ins Geschaeft - ich habe ja auch "
+  "Ausgaben, die ich decken muss! "
+  "Zweitens: Du kannst in beliebigen Raten zahlen, aber wenn Du Dich einmal "
+  "entschlossen hast, hast Du nicht unendlich lange Zeit, sondern nur genau "
+  "drei Wochen. Wenn Du bis dahin die Million nicht zusammengekratzt oder "
+  "die Frist kostenpflichtig verlaengert hast, verfaellt das Geld. "
+  "Drittens: Du musst, damit ich Dir Dein Haus um einen Raum erweitern kann, "
+  "sowohl 1) ein passendes Haus besitzen und 2) mindestens Seher in der "
+  "Stufe 45 sein.  Solltest Du bei letztmoeglicher Vertragserfuellung, also "
+  "dann, wenn Du die Million komplett eingezahlt hast und die Frist gerade "
+  "ablaeuft, eine dieser beiden Bedingungen nicht erfuellen, verfaellt das "
+  "Geld sofort. Komplett. Ganz und gar. Unwiderruflich. Waere, wenn Du mich "
+  "fragst, der ideale Zeitpunkt zur Fristverlaengerung. "
+  "Viertens: Geld, das ich einmal habe, gebe ich nicht wieder heraus. ";
+  switch (MAY_UPGRADE(UPGRADE_NO,getuid(this_player()))) {
+    case HOUSE_UPGRADE_NO_SUCH_HOUSE:
+      s+="Ich fuehle mich verpflichtet, nochmals zu erwaehnen, dass Du noch "
+        "KEIN ENTSPRECHENDES HAUS hast.";
+      break;
+    case HOUSE_UPGRADE_ALREADY_DONE:
+      s+="Aber Du KENNST DAS ALLES SCHON, Du hast bereits einen Raum von "
+        "mir erhalten.";
+      break;
+    default:
+      if (isPayer(this_player()))
+        s+="Als zahlender Kunde solltest Du mit diesen Details "
+          "vertraut sein.";
+      break;
+  }
+  s+=" Wenn Du diese Bedingungen akzeptierst, kannst Du mit einem magischen "
+    "Befehl den Handel mit mir abschliessen. Bedenke aber: "
+    "Ab diesem Moment dann tickt die Zeit!";
+  return s;
+}
+
+public string infoGegenstand() {
+  if (present("\a\n\a\tol_gegenstand", this_object())) {
+    if (find_call_out("calloutZeige")==-1)
+      call_out("calloutZeige",0,getuid(this_player()));
+    return "Den hier?";
+  }
+  else return "Habsch keinen :(";
+}
+
+public void calloutZeige(string wem) {
+    command("zeige "+wem+" gegenstand");
+}
+
+public void create() {
+  closure c;
+
+  if (is_clone(this_object())) {
+    destruct(this_object());
+    return;
+  }
+  ::create();
+
+  zentral=0;
+
+  if (!restore_object(SAVEFILE))
+    pay=([]);
+
+  SetProp(P_SHORT,"Steht in _query_short()");
+  SetProp(P_LONG, "Steht in _query_long().");
+
+  SetProp(P_GENDER, MALE);
+  SetProp(P_INFO, break_string(
+   "Der Zwerg ist zwar nicht gerade guter Gesinnung, aber intuitiv weisst Du, "
+   "dass er wie alle Zwerge seine Versprechen haelt... man sollte Geschaefte "
+   "mit ihm machen koennen - Fragen kostet ja nichts, oder?",77));
+
+  SetProp(P_ARTICLE,1);
+  SetProp(P_NAME,"Zwerg");
+  AddAdjective("zerlumpt");
+  SetProp(P_KILL_NAME,"Khorin Goldhandssohn");
+  SetProp(P_KILL_MSG,"Geldgieriges Lumpenpack...");
+  SetProp(P_NOATTACK,"wird von hoher Magie geschuetzt.");
+
+  AddId(({"khorin", "zwerg", "\a\n\a\tol_khorin"}));
+
+  set_living_name("khorin"); 
+
+  create_default_npc(50);  
+  SetProp(P_ATTRIBUTES,([A_STR:100,A_DEX:40,A_INT:20,A_CON:50]));
+  // Die hohe Kraft, damit er auch groessere Summen Geld auf einmal in
+  // Empfang nehmen kann...
+  SetProp(P_XP,0); // KEIN Npc, der zum Killen da ist.
+
+  SetProp(P_AWAY,"Geh' mir doch bitte nicht auf die Nerven...");
+  SetProp(P_SIZE,94);   // Klein fuer nen Zwerg :)
+  SetProp(P_ALIGN,-520);
+  SetProp(P_RACE,"Zwerg");
+  SetProp(P_LOG_INFO,"anatol/khorin.log");
+
+  AddDetail("bart", 
+      ([0:"Der lange Bart schimmert in allen Grau- und Brauntoenen, "
+      "die Schmutz nur haben kann. Wobei es natuerlich auch eine sehr "
+      "modische Barttoenung sein koennte....",
+      "zwerg":"Dein zwergischer Kennerblick entdeckt natuerlich sofort, "
+      "dass die in Naturfarben gehaltenen Straehnen in diesem sehr "
+      "gepflegten Zwergenbart modisch-elegant getoent sind. Entspricht "
+      "wirklich dem aktuellen Chique!"]));
+  AddDetail("gesicht", 
+      ([0:"Das Gesicht wirkt erstaunlich gut genaehrt und der Schmutz "
+       "irgendwie... nur aufgesetzt, als ob er mit Absicht (und nicht "
+       "sehr professionell) aufgetragen wurde.",
+       "zwerg":"Dir ist nicht ganz klar, warum sich Khorin Goldhandssohn "
+       "etwas Kohlestaub im Gesicht verteilte. Wirklich elegant sieht "
+       "es nicht aus, vielleicht zur Tarnung, damit die Langohren ihn "
+       "nicht so sehr beachten..."]));
+  AddDetail(({"kleider","kleidung","fetzen"}),
+       "In zerlumpten Fetzen steht dieser verlotterte Zwerg vor Dir. "
+       "Wuerdest Du zumindest glauben, haettest Du Dir die Kleidung nicht "
+       "naeher angesehen. Unter den oberflaechlichen Fetzen scheint ein "
+       "Mithrilkettenhemd hervorzuschimmern. Und sowas kann sich nun "
+       "nicht wirklich jeder leisten!");
+  AddDetail(({"hemd","mithrilhemd","massanfertigung"}),
+       ([0:"Naja, so ein Kettehemd wird man wohl in einem Zwergenladen "
+        "kaufen koennen... qualitativ bessere Oberklasse, wuerdest Du "
+        "schaetzen.",
+        "zwerg":"Nach dem, was Du so unter den Fetzen durchschimmern siehst, "
+        "wuerdest Du auf eine Massanfertigung tippen, und zwar vom Feinsten: "
+        "Man beachte die unglaublich feinen Maschen, die Geschmeidigkeit des "
+        "Metallgewebes, das dezente Mehrfarbfunkeln bei Lichteinfall von "
+        "oben...! Meine Guete, was muss Khorin Goldhandssohn dafuer nur "
+        "ausgegeben haben...?"]));
+  AddDetail(({"geschmeidigkeit","maschen","mehrfarbfunkeln"}),
+      ([0:"Kann man das essen?",
+       "zwerg":"Vom Feinsten! Wirklich"]));
+  AddDetail("dunstwolke","Du kannst sie SEHEN! Wuah! Aber... Moment... "
+    "Das ist doch... also jetzt, wo Du genauer hinschaust, koennte das "
+    "eher eine getarnte Aura des Pazifismus sein. Eine Faehigkeit einer "
+    "unbekannten Gilde, welche den Wirkenden quasi unangreifbar macht. ");
+  AddDetail(({"aura", "aura des pazifisumus", "pazifismus"}),
+      "Wo hat man sowas schon gesehen? Wo kommt dieser Zwerg nur her...");
+
+  SetProp(P_RESISTANCE,({DT_MAGIC, DT_COLD }));
+
+  SetProp(P_DIE_MSG," rollt tot zur Seite.\n");
+  SetProp(P_MMSGIN,"faellt verdutzt vom Himmel");
+  SetProp(P_MSGIN,"stapft vor sich hinsummend herein");
+  SetProp(P_MSGOUT,"stapft pfeifend");
+  SetProp(P_MMSGOUT,"wird vom zwergischen Ponyexpress mitgenommen");
+
+  SetProp(P_MURDER_MSG,"Enzueckend.");
+
+  AddInfo(DEFAULT_INFO,
+      ({"stiert in den Himmel und ueberhoert die Frage geflissentlich.\n",
+       "zuckt mit den Schultern.\n",
+       "sagt: Hmmmmm?\n",
+       "weiss dazu noch nichts.\n",
+       "kann oder moechte darauf nicht antworten.\n",
+       "fragt: Wie bitte?\n"}));
+  AddInfo("geld",
+      "Geld ist immer gut, ich kann eine Menge damit anfangen.","sagt: ");
+  AddInfo("gold",
+      "Gold, Gold, Gold, Gold, Gold, Gold, Gold, Gold, Gold, Gold, Gold, "
+      "Gold, Gold, Gold, Gold, Gold, Gold, Gold, Gold, Gold, Gold, Gold, "
+      "Gold, Gold, Gold, Gold, Gold, Gold, Gold, Gold, Gold, Gold, Gold, "
+      "Gold, Gold, Gold, Gold, Gold, Gold, Gold, Gold, Gold, Gold, Gold, "
+      "....","rezitiert eine zwergische Weise: ");
+  AddInfo("gegenstand",#'infoGegenstand,"fragt verwundert: ");
+  AddInfo("name", "Ich bin Khorin Goldhandssohn.","sagt stolz: ");
+  AddInfo(({"zwerge", "zwerg"}), "Ich bin einer. Sieht man doch.","knurrt: ");
+  AddInfo(({"geschaeft","geschaefte"}),
+      "Oh, ich mache... gerne Geschaefte. Ich spezialisiere mich gerne auf "
+      "ganz besonders schwierige... hm... Handel.","meint zoegerlich: ");
+  AddInfo(({"handel"}),
+      "Ich bin der glueckliche Besitzer eines hochmagischen Gegenstands von "
+      "unschaetzbarem Wert, der nur durch mich zu bedienen ist. Mit dessen "
+      "Hilfe kann ich... Raeume herbeizaubern!","fluestert: ");
+  AddInfo("besitzer",
+      "Ich bin der rechtmaessige Besitzer!","stampft auf und sagt: ");
+  AddInfo("wert","Unschaetzbar, sagte ich doch.","sagt: ");
+  AddInfo("hilfe","Hilfe? Ich brauche keine Hilfe!","wundert sich: ");
+  AddInfo(({"stand",}),#'infoStand, "berichtet: ");
+  AddInfo(({"raum","raeume"}),#'infoRaum, "erzaehlt: ",1);
+  AddInfo(({"detail","details"}),#'infoDetails, "erzaehlt: ",1);
+  AddInfo(({"lizenz","handelslizenz"}),
+      "Ohne Lizenz traue selbst ich mich nicht zu handeln, und das heisst "
+      "schon was!","seufzt: ");
+  AddInfo(({"haus","seherhaus","haeuser","seherhaeuser"}),
+      "Wer mit der Groesse seines Seherhauses nicht zufrieden ist, koennte "
+      "mich ja mal fragen, ob ich ihm nicht einen Raum besorgen koennte. "
+      "KOENNTE...","fluestert: ");
+  AddInfo(({"preis","preise"}),
+      "Bei mir gibt es nur eines: EINEN Raum fuer das erste Seherhaus. Und "
+      "den gibt es fuer 1'000'000 Muenzen, fuer keine Muenze weniger.",
+      "raunt: ");
+  AddInfo(({"ausgaben"}),
+      "Meine Ausgaben gehen Dich gar nichts an!","herrscht: ");
+  AddInfo(({"bedingung","bedingungen"}),
+      "Erstens. Zweitens. Drittens. Viertens. Habe ich Dir die noch nicht "
+      "gesagt?");
+  AddInfo(({"magischer befehl","magische befehle","befehle","befehl",
+        "magischem befehl"}),
+       #'infoBefehle,"erlaeutert: ",1);
+ 
+  AddCmd("grmpfmblkbmasdf","cmdStart");
+  AddCmd("rzibxrzoiveimpf","cmdAbbruch");
+  AddCmd("womcowmovmslqpe","cmdVerlaengerung");
+
+  seteuid(getuid(this_object()));
+
+  gegenstand=clone_object("/std/thing");
+  c=symbol_function("SetProp",gegenstand);
+  funcall(c, P_SHORT,"Ein hoechst seltsamer Gegenstand");
+  funcall(c, P_LONG,"Ein hoechst seltsamer Gegenstand, wirklich. Er ist "
+      "so gross, dass ein Zwerg beide Haende braucht, um ihn sicher zu halten "
+      "und saehe in etwa aus wie ein etwas zusammengeschrumpfter Trollkopf, "
+      "wenn man ausser Acht liesse, dass es einer Oeffnung zischend Nebel "
+      "herausstroehmt, an anderen Stellen rote Lichter blinken, hie und da "
+      "buntgeringelte Staebchen herausstehen, ueberall blaue Knoepfe und "
+      "gelbe (bzw. auch weisse) Hebel sind, das Ding keine Haare hat, "
+      "ueberall auch noch lila-weiss kariert ist und im Dunkeln bestimmt "
+      "leuchtet. Immerhin scheint dieses Ding ein Ohr zu haben, was Deine " 
+      "etwas abstruse Trollkopftheorie immerhin ein kleinwenig rettet.");
+  funcall(c, P_NAME,"Gegenstand");
+  funcall(c, P_WEIGHT,0);
+  funcall(c, P_LIGHT,1);
+  funcall(c, P_MATERIAL,MAT_MISC_MAGIC);
+  funcall(c, P_GENDER,MALE);
+  funcall(c, P_INFO,"Schick' Anatol eine Mail. Die Codesequenz ist :\n\n"
+      "sjsaap5r34Tze8lZrhrjzrdymxtoSmV9rUUjzrdhz-45224234-B\n\n"
+      "Aber natuerlich nur, wenn Du regulaerer Spieler bist.\n");
+  funcall(c, P_NODROP,"Das bleibt, wo es ist");
+  funcall(c, P_NEVERDROP,"Das bleibt, wo es ist");
+  gegenstand->AddId(({"gegenstand","\a\n\a\tol_gegenstand"}));
+  gegenstand->move(this_object(),M_NOCHECK);
+
+  checkBillboard();
+
+  move(previous_object(),M_TPORT|M_NOCHECK);
+}
+
+int remove() {
+  if ((objectp(gegenstand))&&(gegenstand))
+    gegenstand->remove();
+  return ::remove();
+}
+
+nosave int cmdStart() {
+  if ((!this_player()) || (!query_once_interactive(this_player()))) 
+    return 0;
+  if (find_call_out("chatLoop")!=-1) 
+    write("Versuch's gleich nochmal...\n");
+  else {
+    tell_room(environment(this_object()),
+        (string)this_player()->Name(WER)+" tut irgendwas.\n",
+        ({this_player()})) ;
+    write("Du tust irgendwas.\n") ;
+    call_out("chatLoop",2,0,"addPayer",getuid(this_player()));
+  }
+  return 1;
+}
+
+nosave int cmdAbbruch() {
+  if ((!this_player()) || (!query_once_interactive(this_player()))) 
+    return 0;
+  if (find_call_out("chatLoop")!=-1) 
+    write("Versuch's gleich nochmal...\n");
+  else if (!isPayer(getuid(this_player()))) {
+    tell_object(this_player(),
+        "Du kommst erst gar nicht dazu, irgendetwas zu tun.\n"+
+        (string)Name(WER)+" stiert Dich an.\n");
+    tell_room(environment(), (string)Name(WER)+" stiert "+
+        (string)this_player()->name(WEN)+" an.\n",({this_player()}));
+    chat(({"Wie willst Du aus einem See steigen, in den Du nicht "
+        "gesprungen bist? Hm? Gedankenloses Jungvolk!","orakelt genervt: "}));
+  }
+  else {
+    SUCCESS_LOG(sprintf("Kuendigt Handel: %s",
+          capitalize(getuid(this_player()))));
+    tell_room(environment(this_object()),
+        (string)this_player()->Name(WER)+" tut irgendwas.\n",
+        ({this_player()})) ;
+    write("Du tust irgendwas.\n");
+    call_out("chatLoop",2,0,"removePayer",getuid(this_player()));
+  }
+  return 1;
+}
+
+nosave int cmdVerlaengerung() {
+  if ((!this_player()) || (!query_once_interactive(this_player()))) 
+    return 0;
+  if (find_call_out("chatLoop")!=-1) 
+    write("Versuch's gleich nochmal...\n");
+  else if (!isPayer(getuid(this_player()))) {
+    tell_object(this_player(),
+        "Du kommst erst gar nicht dazu, irgendetwas zu tun.\n"+
+        (string)Name(WER)+" stiert Dich an.\n");
+    tell_room(environment(), (string)Name(WER)+" stiert "+
+        (string)this_player()->name(WEN)+" an.\n",({this_player()}));
+    chat(({"Wie willst Du aus einem See steigen, in den Du nicht "
+        "gesprungen bist? Hm? Gedankenloses Jungvolk!","orakelt genervt: "}));
+  }
+  else {
+    tell_room(environment(this_object()),
+        (string)this_player()->Name(WER)+" tut irgendwas.\n",
+        ({this_player()})) ;
+    write("Du tust irgendwas.\n") ;
+    call_out("chatLoop",2,0,"delayPayer",getuid(this_player()));
+  }
+  return 1;
+}
+
+public int reset() {
+  ::reset();
+  if (zentral>0)
+  {
+    call_other("/p/daemon/zentralbank","PayIn",zentral);
+    zentral=0;
+  }
+  checkBillboard();
+}

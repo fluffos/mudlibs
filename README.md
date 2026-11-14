@@ -1,12 +1,12 @@
-# mudlibs — 282 restored LPC mudlibs (231 unique games), playable in the browser
+# mudlibs — 283 restored LPC mudlibs (232 unique games), playable in the browser
 
 **▶ Play now, no install: https://mudlibs.fluffos.info/** (English default; Chinese UI at https://mudlibs.fluffos.info/zh/)
 
 ![Screenshot of the mudlibs.fluffos.info game gallery](docs/site-preview.png)
 
-This repository is a working museum of LPC MUDs. It holds **282 restored
-mudlibs from 231 distinct game codebases**: 211 Chinese MUDs from the golden
-age of the Chinese MUD scene (mid-1990s to about 2015) and 71 games and
+This repository is a working museum of LPC MUDs. It holds **283 restored
+mudlibs from 232 distinct game codebases**: 211 Chinese MUDs from the golden
+age of the Chinese MUD scene (mid-1990s to about 2015) and 72 games and
 base libraries in English and other languages. Each one has been recovered
 from an archive, converted to UTF-8 and fixed to run on the modern
 [FluffOS](https://github.com/fluffos/fluffos) driver.
@@ -431,6 +431,7 @@ classes it's found.
 | 195 | `swlpc` | Shattered World (SWLPC 0.9.1) | `http://www.shattered.org/ (mlib-0.9.1.tar.bz2)` | 40400 | WASM playable |
 | 196 | `osb` | One Step Beyond | `osb-lib-030218.tar.gz` | 40401 | WASM playable |
 | 197 | `unitopia` | UNItopia | `http://www.unitopia.de/pub/UNItopia/mudlib.tar.gz` | 40402 | WASM playable |
+| 198 | `silberland` | SilberLand | `https://codeberg.org/lycis/silberland-mudlib` | 40403 | WASM playable |
 | 901 | `discworld` | Discworld MUD lib (v3) | `dw_fluffos_v3.zip` | 40206 | WASM playable |
 | 901-1 | `dw_fluffos_v1` | Discworld MUD lib (v1) | `dw_fluffos_v1.tar.gz` | 40271 | WASM playable |
 | 901-2 | `dw_fluffos_v2` | Discworld MUD lib (v2) | `dw_fluffos_v2.zip` | 40272 | WASM playable |

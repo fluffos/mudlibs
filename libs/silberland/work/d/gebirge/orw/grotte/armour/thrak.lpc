@@ -1,0 +1,193 @@
+inherit "std/armour";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <armour.h>
+#include <moredef.h>
+#include <defines.h>
+
+object wer;
+int counter;
+int benutzung;
+
+create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  counter=0;
+  benutzung=2;
+
+  AddId (({"schild","thrak","behueter"}));
+  SetProp (P_SHORT, "Thrak, der Behueter");
+  SetProp (P_LONG,
+      "In Deinen Haenden haeltst Du Thrak, ein maechtiges Schild. "
+      "Er wurde vor langer Zeit in den laengst vergessenen Schmieden "
+      "tief unter Felonia geschmiedet. Die alten Zwergenschmiede erschufen "
+      "diesen Schild mit all ihrem Wissen, er ist sicher einer der besten "
+      "Schilde im Silberland. An seiner Innenseite kannst Du eine Inschrift "
+      "erkennen.\n");
+  SetProp (P_NAME, "Thrak");
+  SetProp (P_GENDER, MALE);
+  SetProp (P_ARTICLE, 0);
+  SetProp (P_WEIGHT, 2750);
+  SetProp (P_VALUE, 4000);
+  SetProp (P_MAGIC, 1);
+
+  SetProp (P_MATERIAL,([MAT_MITHRIL:60, MAT_MISC_MAGIC:30, MAT_GOLD:10]) );
+  SetProp (P_ARMOUR_TYPE, AT_SHIELD);
+  SetProp (P_AC, 29);
+  SetProp (P_INFO,"Thrak wird Dich sicher vor vielen Gefahren behueten." );
+  SetProp (P_WEAR_RESTRICTIONS, ([A_STR:18,A_INT:20]) );
+  SetProp (P_QUALITY_DECAY, 250);
+  SetProp (P_NOBUY, 1);
+  SetProp (P_WEAR_TEXT,({
+    "Thrak leuchtet magisch auf als Du ihn anziehst.\n",
+    " zieht Thrak an und strahlt ploetzlich in goettlichem Licht.\n"}) );
+  AddDetail( ({ "innenseite","seite" }),
+    "Auf der Innenseite von Thrak kannst Du eine Inschrift erkennen.");
+  AddDetail( ({ "inschrift","schrift" }),
+    "Du koenntest versuchen sie zu lesen.");
+
+  AddReadDetail (({"inschrift", "schrift"}),
+    ([ 0:    BS("Du kannst die Inschrift nicht entziffern, sie ist in alter Zwergensprache geschrieben. "
+		"Gib Thrak einfach einem Zwerg, er wird es Dir sicher vorlesen koennen. "
+		"Aber Vorsicht, Zwerge sind gierig. Du solltest den Zwerg schon gut kennen, sonst bekommst "
+		"Du Thrak vielleicht nie wieder."),
+     "zwerg":   "In altzwergischer Schrift steht hier geschrieben:\n" +
+	     BS("Thrak wird Dir in vielen Situationen helfen koennen. "
+		"Man kann ihn mit einem Smaragd aufladen und dann mit dem Befehl "
+		"<beschwoere thraks magie> seine Energie zur Heilung einer Vergiftung "
+		"benuetzen."),
+     "gebirgszwerg": BS("Du weisst genau was Thrak kann, Du warst bei seiner Schoepfung "
+		     "dabei, Orw.")
+    ]) );
+
+
+  SetProp (P_DAM_PROTECTION,
+    QueryProp(P_DAM_PROTECTION)+([DT_UNHOLY:1,DT_BLUDGEON:1,DT_MAGIC:1]) );
+
+  SetProp(P_DEFEND_FUNC, ME);
+
+  AddCmd("lade","fktlade");
+  AddCmd("beschwoere","fktbeschwoere");
+}
+
+
+int DefendFunc (mixed dam_type, int spell, object enemy)
+{
+    if ((member(dam_type, DT_UNHOLY) != -1) ||
+	(member(dam_type, DT_MAGIC) != -1 ))
+    {
+      if( !random(3) )
+	tell_object (QueryProp(P_WORN),
+	  "Eine schuetzende Aura bildet sich kurz um Thrak und vermindert den Schaden.\n");
+    }
+    return 0;
+}
+
+int fktlade(string str)
+{
+  string gem;
+  object gem_obj;
+  notify_fail("Was moechtest Du womit aufladen?\n");
+  if (!str) return 0;
+  if ((sscanf(str,"thrak mit %s auf",gem)==1) && TP)
+  {
+    if (gem_obj=present(gem,TP))
+    {
+      if (gem_obj->id("smaragd"))
+      {
+	if (counter==0)
+	{
+	  counter=1;
+	  write ("Du laedst Thrak mit dem Edelstein auf.\n");
+	  say(CAP(TPN)+" laedt Thrak mit einem Edelstein auf.\n");
+	  gem_obj->AddAmount(-1);
+	  return 1;
+	}
+	else
+	{
+	  write ("Aber Thrak ist doch schon aufgeladen!\n");
+	  return 1;
+	}
+      }
+      else
+      {
+	write("Du kannst Thrak nur mit einem Smaragd aufladen!\n");
+	return 1;
+      }
+    }
+    else
+    {
+      write("Sowas besitzt Du doch gar nicht!\n");
+      return 1;
+    }
+  }
+  else
+  {
+    return 0;
+  }
+}
+
+int fktbeschwoere(string str)
+{
+  notify_fail("Was moechtest Du beschwoeren?\n");
+  if(str!="thraks magie") return 0;
+  {
+    if(QueryProp(P_WORN))
+    {
+     if(benutzung>0)
+     {
+      if(counter==1)
+      {
+	if(TP->QueryProp(P_POISON) > 0)
+	{
+	  write("Thrak beginnt gruen zu schimmern.\n");
+	  say(CAP(TPN)+" wird von der magischen Aura Thraks eingehuellt.\n");
+	    TP->AddPoison(-(1+random(4)));
+	  counter=0;
+	  benutzung--;
+	  switch(TP->QueryProp(P_POISON))
+	  {
+	    case 0   : write("Thrak hat Deine Vergiftung vollstaendig geheilt.\n");break;
+	    case 1..3: write("Du bist immer noch leicht vergiftet.\n");break;
+	    case 4..8: write("Du bist noch ziemlich stark vergiftet.\n");break;
+	    default  : write("Die Vergiftung ist zu stark, Du musst Thraks Magie noch einmal beschwoeren.\n");break;
+	  }
+	  return 1;
+	}
+	else
+	{
+	  write("Du bist doch gar nicht vergiftet!\n");
+	  return 1;
+	}
+      }
+      else
+      {
+	write("Du musst Thrak vorher aufladen um seine Magie zu benutzen.\n");
+	return 1;
+      }
+     }
+     else
+     {
+       write("So oft kannst Du Thraks Magie nicht beschwoeren.\n");
+       return 1;
+     }
+    }
+    else
+    {
+      write("Du musst Thrak tragen bevor Du mit ihm Zauber beschwoeren kannst!\n");
+      return 1;
+    }
+  }
+}
+
+reset()
+{
+      ::reset();
+      benutzung=2;
+}
+
+

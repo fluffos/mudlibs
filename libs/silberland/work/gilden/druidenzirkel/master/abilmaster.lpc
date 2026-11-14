@@ -1,0 +1,99 @@
+
+
+#include <wizlevels.h>
+#include <language.h>
+#include <config.h>
+#include <new_skills.h>
+#include <properties.h>
+
+#include "/gilden/druidenzirkel/druiden.h"
+
+mixed saveload;
+nosave mapping druids=([ ]);
+/*
+ Doch besser ein MApping von mappings, so braucht man nur einmal laden :)
+ also ([spieler:([spell:abil, spell:abil, ...]), spieler2:([...])...])
+ */
+create()
+{
+  if (is_clone(this_object())) {
+    destruct(this_object());
+    return 1;
+  }
+  seteuid(getuid(this_object()));
+  if (restore_object(ABILLIST))
+    druids=saveload;
+  saveload=0;
+}
+
+query_prevent_shadow() { return 1; }
+
+
+nosave int CheckIfAllowed()
+{
+ object ob;
+ string fname;
+ ob=previous_object();
+ fname=file_name(ob);
+  
+ if(!IS_ARCH(getuid(ob)) && getuid(ob)!="GUILD.druidenzirkel" &&
+    getuid(ob)!="GUILD.druiden_spells")
+   { 
+     if(find_player("angrox")) {
+       tell_object(find_player("angrox"), sprintf("Versuchte "
+      +"Aenderung im Abilmaster von %s (direkt!)\n", CAP(getuid(ob))));
+     }
+    write_secure_log("Versuchte Aenderung im Abilmaster "
+             +"von "+CAP(getuid(ob))+" (direkt!)\n");
+    return 0;      
+   }
+ return 1;
+}
+
+int CheckAbility(object pl, string spell, int abil)
+{
+  mapping spells;
+  if(!CheckIfAllowed()) return -2;
+  if(!member(druids, getuid(pl))) 
+    druids+=([getuid(pl):([])]);
+  spells=druids[getuid(pl)];
+  if(!member(spells, spell))
+    spells+=([spell:abil]);
+  if(spells[spell] < abil) {
+    write_secure_log(sprintf("Veraenderte Ability: %s(%d) -> %d von %s\n", 
+	      spell, spells[spell], abil, CAP(getuid(pl))));
+    return 1;
+  }
+  return 0;
+}
+
+int UpdateAbility(object pl, string spell, int new_abil)
+{
+  mapping spells;
+  if(!CheckIfAllowed()) return -2;
+  if(!member(druids, getuid(pl))) return -1;
+  spells=druids[getuid(pl)];
+  if(!member(spells, spell))
+    spells+=([spell:new_abil]);
+  spells[spell]=new_abil;
+  druids[getuid(pl)]=spells;
+  saveload=druids;
+  save_object(ABILLIST);
+  return 1;
+}
+
+mixed QueryAllAbils()
+{
+ return druids;
+}
+
+int DeleteEntry(string player)
+{
+  if(!CheckIfAllowed()) return -2;
+  if(!member(druids, player)) return -1;
+  druids=m_delete(druids, player);
+  saveload=druids;
+  save_object(ABILLIST);
+  return 1;
+}
+

@@ -1,0 +1,207 @@
+// SilberLand MUDlib
+//
+// std/repair.c --  Ein Standard-Reparatuer
+//
+// $Date$
+/* $Revision$
+ * $Log$
+ */
+
+inherit "std/mnpc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <bank.h>
+#include <defines.h>
+#include <moredef.h>
+
+#define RBS(x) break_string(x, 78, Name(WER,1)+" sagt: ", 1)
+#define MIN_WEAPON_COST 50
+#define MIN_ARMOUR_COST 200
+
+int rep_money, dam_rest_wc, dam_rest_ac;
+
+create(int rest_wc, int rest_ac)
+{
+  if (!is_clone(this_object())) return;
+
+  ::create();
+
+  dam_rest_wc=rest_wc;
+  dam_rest_ac=rest_ac;
+  rep_money=0;
+
+  AddId ( "Reparateur" );
+
+  AddInfo( ({"reparatur", "reparieren", "repariere"}),
+    "Wenn Du willst, kann ich Deine Waffen und Ruestungen reparieren. Gib "
+    "dazu einfach 'repariere <name>' ein. Leider muss ich aber einiges an "
+    "Geld dafuer verlangen.", "sagt: ");
+
+  AddCmd( ({"repariere", "reparatur"}), "reparatur");
+ 
+}
+
+int rep_auswahl(object ob)
+{
+  return 1;
+}
+
+int reparatur( string str)
+{
+  object ob;
+  int dam, value, wert, kosten, min_kosten, damrest, damrest_pct;
+  if( TP->InFight() )
+    return notify_fail("Im Kampf geht das nicht!\n"),0;
+  notify_fail(RBS("Was willst Du reparieren lassen?"));
+  if( !str ) return 0;
+  if( !(ob = present(str, TP)) ) return 0;
+  if( dam = ob->QueryProp(P_DAMAGED) )
+  {
+    if( ! (value = ob->QueryProp(P_VALUE)) )
+    {
+       write(RBS("Ich repariere keine wertlosen Sachen!"));
+       return 1;
+    }
+    if( ob->QueryProp(P_WEAPON_TYPE))
+    {
+      if(ob->Query(P_WC, F_QUERY_METHOD))
+      {
+       write(RBS("Das scheint verzaubert zu sein. Komm doch wieder, wenn "
+           "der Zauber erloschen ist!"));
+       return 1;
+      }
+      wert = ob->QueryProp(P_WC);
+      min_kosten=MIN_WEAPON_COST * dam;
+      damrest_pct=dam_rest_wc + random(dam_rest_wc/2);
+    }
+    else if( ob->QueryProp(P_ARMOUR_TYPE))
+    {
+      if(ob->Query(P_AC, F_QUERY_METHOD))
+      {
+       write(RBS("Das scheint verzaubert zu sein. Komm doch wieder, wenn "
+           "der Zauber erloschen ist!"));
+       return 1;
+      }
+      wert = ob->QueryProp(P_AC); 
+      min_kosten=MIN_ARMOUR_COST * dam;
+      damrest_pct=dam_rest_ac + random(dam_rest_ac/2);
+    }
+    else
+    {
+      write(RBS("Ich kann nur Waffen und Ruestungen reparieren."));
+      return 1;
+    }
+    if( ! rep_auswahl(ob) )
+      return 1;
+    if( damrest_pct )
+    {
+      damrest = ((wert+dam) * damrest_pct) / 100;
+      if ( damrest<1) damrest=1;
+      if (dam <= damrest) 
+      {
+        write(RBS("Hmmm, die Schaeden an "+ob->name(WEM,1)+" sind minimal, "
+                  "da kann ich auch nichts mehr weiter tun!"));
+        return 1;
+      }
+    }
+    kosten = 3 * value * dam /  (dam+wert) ;
+    if( kosten < min_kosten ) kosten = min_kosten;
+    if( ob->id("drachenruestung") ) 
+    {
+      write(RBS("Die Reparatur "+ob->name(WESSEN,1)+" wuerde "+kosten +
+        " Muenzen und "+dam+" Drachenschuppen kosten!"));
+    }
+    else
+      write(RBS("Die Reparatur "+ob->name(WESSEN,1)+" wuerde "+kosten +
+        " Muenzen kosten!"));
+    write(Name(WER,1)+" fragt Dich: Willst Du das bezahlen?\n");
+    write(" (ja/nein) -> ");
+    input_to("reparieren2",0, ob, dam, kosten, time());
+    return 1;
+  }
+  else
+  {
+    write(RBS("Aber "+ ob->name(WER,1)+ " brauch"+
+          (ob->IsPlural()?"en":"t")+" gar keine Reparatur."));
+    return 1;
+  }
+  return 0;
+}
+  
+void reparieren2(string str, object ob, int damrep, int kosten, int zeit)
+{ 
+  if (!TP) return;
+  if (environment(TP) != environment(TO)) {  // Spieler mit !bla rausgegangen...?
+    write("Dazu ist es jetzt zu spaet!\n");
+    return;
+  }
+  if (time() > (zeit+15))       // 15 Sekunden Zeit
+  {
+    write(RBS("Du hast Dir zuviel Zeit gelassen! Ueberlege es Dir "
+        "noch einmal... unser Angebot bleibt natuerlich bestehen!"));
+    return;
+  }
+  if ((str!="ja") && (str!="j")) 
+  {
+    write(RBS("Na gut, wie Du meinst. Viel Spass noch damit!"));
+    return;
+  }
+  if (!ob) 
+  {
+    write(RBS("Nanu, wo ist denn der fragliche Gegenstand " 
+        "so ploetzlich hinverschwunden??"));
+    return;
+  }             
+  if (environment(ob) != TP) 
+  { 
+    write(RBS("Nanu, wo "+(ob->IsPlural()?"sind":"ist")+" denn "+
+          ob->name(WER,1)+ " so ploetzlich hinverschwunden??"));
+    return;     
+  }
+  if (damrep > ob->QueryProp(P_DAMAGED)) 
+  {
+    write(RBS("Huch, irgendwas stimmt da nicht, "+ob->name(WER,1)+
+        (ob->IsPlural()?"sind":"ist")+" ja gar nicht mehr so arg "
+        "beschaedigt wie vorhin! Probier es doch bitte noch einmal..."));
+    return;
+  } 
+  if (TP->QueryMoney() < kosten) 
+  {
+    write(RBS("Das Problem ist nur, dass Du "+kosten+" Muenzen "
+        "gar nicht dabeihast! Das beste ist, Du holst Dir etwas "
+        "Geld von der Bank oder pumpst Dir etwas..."));
+    return;
+  } 
+  if( ob->QueryProp(P_CURSED) )
+  {
+    write(RBS(ob->Name(WER,1)+" "+(ob->IsPlural()?"sind":"ist")+" verflucht! "
+          "Darum kann ich "+ ob->QueryPronoun(WEN)+" nicht reparieren. "
+          "Versuch doch mal, den Fluch loszuwerden und komm dann wieder her."));
+    return;
+  }
+  ob->Damage(-damrep);
+  TP->AddMoney(-kosten);  
+  rep_money+=kosten;
+  write(BS(Name(WER,1)+" nimmt Dir "+kosten+" Muenzen ab und beginnt "
+    "mit der Reparatur "+ob->name(WESSEN,1)+"."));
+  TP->SetProp(P_PARALYZED, ([PARALYZE_TIME:1+damrep/10,
+        PARALYZE_MSG: BS( "Du wartest noch auf die Reparatur "
+           +ob->name(WESSEN,1)+".\n"),
+        PARALYZE_END: BS(Name(WER,1)+" ist fertig und drueckt Dir "
+           +ob->name(WEN,1)+" in wesentlich besserem Zustand als zuvor in "
+           "die Hand."),
+        PARALYZE_MSG_OTHER:TP->Name()+" wartet auf eine Reparatur.\n",
+        PARALYZE_END_OTHER: BS(Name(WER,1)+ " gibt "+ob->name(WEN,1)+" an "+
+            TP->name(WEN)+".")]) );
+}
+
+void reset()
+{
+  ::reset();
+  if( rep_money )
+    ZENTRALBANK->PayIn(rep_money);
+  rep_money=0;
+}
+

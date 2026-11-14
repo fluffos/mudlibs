@@ -1,0 +1,344 @@
+/* A standard book. Written and (C) 1994 by Troy.
+ * This file may be copied. Please mail me (troy), if you do so.
+ */
+
+inherit "std/thing";
+
+#include <properties.h>
+#include "../books.h"
+
+private int open,apage;
+private string text;
+
+#define LSTR "                                        "
+#define TT(x) if(find_player("troy")) tell_object(find_player("troy"),(x))
+
+create()
+{
+  if(!is_clone(this_object())) return;
+  ::create();
+  text = 0;
+  open = 0;
+  apage = 1;
+  SetProp(P_SHORT, "Ein Buch");
+  SetProp(P_LONG, break_string(
+	"Der Magier, der dieses Buch schrieb, war zu faul, eine Beschreibung "+
+	"mitzuliefern.",78));
+  SetProp(P_NAME,"Buch");
+  SetProp(P_GENDER, NEUTER);
+  SetProp(P_WEIGHT,250);
+  SetProp(P_VALUE,0);
+
+// Special properties for books as defined in books.h:
+  SetProp(P_BOOK_CONTENTS,0); // NO FILE SPECIFIED !!!
+  SetProp(P_BOOK_PAGE_HEIGHT,0); // P_SCREENSIZE will be assumed.
+  SetProp(P_BOOK_PAGE_WIDTH,30); // This adds up to 72 chars total width.
+  SetProp(P_BOOK_FRAME_CHAR,"#"); // default frame char is hash mark (#).
+  SetProp(P_BOOK_FILL_CHAR," "); // default fill char is space.
+
+  AddId(({"buch","\nbook"}));
+  AddCmd(({"lies","lese"}), "lies");
+  AddCmd("oeffne","oeffne");
+  AddCmd(({"schlag","schlage"}),"schlage");
+  AddCmd(({"schliess","schliesse"}),"schliesse");
+  AddCmd(({"blaetter","blaettere"}),"blaettere");
+  AddCmd("umblaettern","umblaettern");
+}
+
+// Support methods
+
+// return a string containing times characters char.
+string charstr(string char, int times)
+{
+  string s;
+  s = "";
+  if(strlen(char)>1) return "";
+  for(;times>0;times--) s += char;
+  return s;
+}
+
+// returns a formatted string from nr.
+string pnumber(int nr)
+{
+  return ("    "+to_string(nr))[<4..];
+}
+
+// special break_string method.
+string book_bs(string s, int w)
+{
+  int i,j;
+  string h,*slist,*snlist;
+  snlist = ({});
+  slist = efun::explode(s,"\n");
+  for(j=0;j<sizeof(slist);j++)
+  {
+    while(strlen(slist[j])>w)
+    {
+      h = slist[j][0..(w-1)];
+      for(i=w-1;i>=0;i--)
+	if(h[i..i]==" ") break;
+      if(i<0)
+      {
+	snlist += ({ h });
+	slist[j] = slist[j][w..];
+      }
+      else
+      {
+	snlist += ({ h[0..(i-1)] });
+	slist[j] = slist[j][(i+1)..];
+      }
+    }
+    snlist += ({ slist[j] });
+  }
+  return efun::implode(snlist,"\n");
+}
+
+string blocksatz(string s, int w, int last)
+{
+  int l,i,j,k,*spos,*ipos,*spaces;
+  if((l=strlen(s))>w) return s[0..(w-1)];
+  if(l==w) return s;
+  if(last) return (s+LSTR)[0..(w-1)];
+  spos = ({});
+  for(i=0;i<strlen(s);i++) // first: determine positions of spaces in string;
+    if(s[i..i]==" ") spos += ({ i });
+  l = w-l; // second: determine number of spaces to insert
+  spaces = ({});
+  ipos = ({});
+  if(!sizeof(spos))
+  {
+    if(l%2)
+      return charstr(" ",l/2)+s+charstr(" ",(l/2)+1);
+    else
+      return charstr(" ",l/2)+s+charstr(" ",l/2);
+  }
+  // third: create arrays with insert-positions and number of spaces
+  for(i=0;i<sizeof(spos);i++)
+  {
+    ipos += ({ 0 });
+    spaces += ({ 0 });
+  }
+  k=0;
+  j=sizeof(spos)-1;
+  for(i=0;i<sizeof(spos);i++) // get queue of insert-positions
+    if(i%2)
+    {
+      ipos[i] = j;
+      j--;
+    }
+    else
+    {
+      ipos[i] = k;
+      k++;
+    }
+  i = 0;
+  while(l) // distribute spaces to positions
+  {
+    if(i>=sizeof(ipos)) i=0;
+    spaces[ipos[i]]++;
+    i++;
+    l--;
+  }
+  // THIS MUST BE DECREMENTIVE!!! WILL NOT WORK OTHERWISE!!!
+  for(i=sizeof(spos)-1;i>=0;i--) // build return string.
+    s = s[0..spos[i]] + charstr(" ",spaces[i]) + s[spos[i]+1..];
+  return s;
+}
+
+
+// Internal book methods
+
+read_contents()
+{
+  string cntfile;
+  text = 0;
+  if(!(cntfile=QueryProp(P_BOOK_CONTENTS))) return ERR_BOOK_NO_CONTENTS;
+  if(!file_size(cntfile) ||
+	!(text=book_bs(read_file(cntfile),
+		QueryProp(P_BOOK_PAGE_WIDTH),"",1)))
+    return ERR_BOOK_CONTENTS_FILE_CORRUPT;
+  return 1;
+}
+
+display_page(int page_nr)
+{
+  string fr,fi;
+  int err,height,width,i,j,k,maxpage;
+  object pl;
+  string head1,head2,rmarg,lmarg,lfoot,rfoot;
+  string *lines,*disp;
+  if(!text && (err=read_contents())<1) return err;
+  if(!(pl=this_player())) return 0;
+  if(!(height=QueryProp(P_BOOK_PAGE_HEIGHT)))
+    height=pl->QueryProp(P_SCREENSIZE);
+  if(height<10) height=10; // minimum height!
+  if(strlen((fr = QueryProp(P_BOOK_FRAME_CHAR)))>1) fr = fr[0..0];
+  if(strlen((fi = QueryProp(P_BOOK_FILL_CHAR)))>1) fi = fi[0..0];
+  width = QueryProp(P_BOOK_PAGE_WIDTH);
+  lines = explode(text,"\n");
+  maxpage = (sizeof(lines) / (height-6))+1;
+  if(maxpage%2) maxpage++;
+  if(page_nr>maxpage) page_nr=maxpage;
+  if(!(page_nr%2)) page_nr--;
+  if(page_nr<1) page_nr = 1;
+  head1 = charstr(fr,6+width);
+  head2 = fr+charstr(fi,4+width)+fr;
+  lmarg = fr+fi+fi;
+  rmarg = fi+fi+fr;
+  lfoot = fr+fi+fi+pnumber(page_nr)+charstr(fi,width-2)+fr;
+  rfoot = fr+charstr(fi,width-4)+pnumber(page_nr+1)+charstr(fi,4)+fr;
+  j = height - 6;
+  i = (page_nr-1)*j;
+  disp = ({});
+  disp += ({ head1+head1,head2+head2 });
+  // no empty lines on page header;
+  while(i<sizeof(lines) && !strlen(lines[i])) i++;
+  while(i<sizeof(lines) && lines[i] && j)
+  {
+    disp += ({ lmarg+blocksatz(lines[i],width,
+	(sizeof(lines)>i+1 ? strlen(lines[i+1])<2 : 1))+rmarg });
+    j--;
+    i++; 
+  }
+  for(;j>0;j--) disp += ({ head2 });
+  disp += ({ head2+head2,lfoot+rfoot,head2+head2,head1+head1 });
+  j = height - 6;
+  k = 2;
+  // no empty lines on page header;
+  while(i<sizeof(lines) && !strlen(lines[i])) i++;
+  while(i<sizeof(lines) && lines[i] && j)
+  {
+    disp[k] += lmarg+blocksatz(lines[i],width,
+	(sizeof(lines)>i+1 ? strlen(lines[i+1])<2 : 1))+rmarg;
+    j--;
+    i++;
+    k++;
+  }
+  while(j)
+  {
+    disp[k] += head2;
+    k++;
+    j--;
+  }
+  write(implode(disp,"\n")+"\n");
+  return 1;
+}
+
+// Local command methods
+
+lies(string str)
+{
+  int page;
+  notify_fail("WAS willst Du lesen?\n");
+  if(!str || !stringp(str) ||
+	(str=lower_case(str))=="") return 0;
+  if(id(str)) page = apage;
+  else if(sscanf(str,"seite %d",page)!=1) return 0;
+  apage=page;
+  if(!present(this_object(),this_player()))
+  {
+    write("Dazu musst Du "+name(WEN,1)+" erstmal nehmen.\n");
+    return 1;
+  }
+  if(!open)
+  {
+    write(capitalize(name(WER,1))+" ist geschlossen.\n");
+    return 1;
+  }
+  if(page<1) page=1; // No zero or negative pages.
+  display_page(page);
+  apage += 2;
+  return 1;
+}
+
+umblaettern()
+{
+  if(!present(this_object(),this_player()))
+  {
+    notify_fail("Dazu musst Du "+name(WEN,1)+" erstmal nehmen.\n");
+    return 0;
+  }
+  if(!open)
+  {
+    write(capitalize(name(WER,1))+" ist geschlossen.\n");
+    return 1;
+  }
+  write("Du blaetterst um.\n");
+  say(capitalize(this_player()->name(WER,1))+" blaettert "+name(WEN,0)+" um.\n",this_player());
+  display_page(apage);
+  apage += 2;
+  return 1;
+}
+
+blaettere(string str)
+{
+  notify_fail("WIE willst Du blaettern?\n");
+  if(!str || !stringp(str) || (str=lower_case(str))=="" || str!="um") return 0;
+  return umblaettern();
+}
+
+schlage(string str)
+{
+  string was;
+  notify_fail("WAS willst Du [WIE] schlagen?\n");
+  if(!str || !stringp(str) ||
+	(str=lower_case(str))=="") return 0;
+  if(sscanf(str,"%s auf",was)==1) return oeffne(was);
+  if(sscanf(str,"%s zu",was)==1) return schliesse(was);
+  return 0;
+}
+
+schliesse(string str)
+{
+  notify_fail("WAS willst Du schliessen?\n");
+  if(!str || !stringp(str) ||
+	(str=lower_case(str))=="" || !id(str)) return 0;
+  if(!present(this_object(),this_player()))
+  {
+    notify_fail("Dazu musst Du "+name(WEN,1)+" erstmal nehmen.\n");
+    return 0;
+  }
+  if(!open)
+  {
+    notify_fail(capitalize(name(WER,1))+" ist doch schon geschlossen.\n");
+    return 0;
+  }
+  write("Du schliesst "+name(WEN,2)+".\n");
+  say(capitalize(this_player()->name(WER,1))+" schliesst "+
+	name(WEN,0)+".\n",this_player());
+  open = 0;
+  apage = 1;
+  return 1;
+}
+
+oeffne(string str)
+{
+  notify_fail("WAS willst Du oeffnen?\n");
+  if(!str || !stringp(str) ||
+	(str=lower_case(str))=="" || !id(str)) return 0;
+  if(!present(this_object(),this_player()))
+  {
+    notify_fail("Dazu musst Du "+name(WEN,1)+" erstmal nehmen.\n");
+    return 0;
+  }
+  if(!QueryProp(P_BOOK_CONTENTS))
+  {
+    notify_fail("Dieses Buch ist leer. Du laesst es daher geschlossen.\n");
+    return 0;
+  }
+  if(open)
+  {
+    notify_fail(capitalize(name(WER,1))+" ist doch schon offen.\n");
+    return 0;
+  }
+  if(!text && read_contents()<1)
+  {
+    notify_fail("Dieses Buch ist fehlerhaft. Bitte einen Magier verstaendigen.\n");
+    return 0;
+  }
+  write("Du oeffnest "+name(WEN,2)+".\n");
+  say(capitalize(this_player()->name(WER,1))+" oeffnet "+
+	name(WEN,0)+".\n",this_player());
+  return (open = 1);
+}
+

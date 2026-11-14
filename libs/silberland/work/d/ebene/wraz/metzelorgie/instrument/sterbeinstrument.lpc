@@ -1,0 +1,161 @@
+/* Sterbeinstrument
+** Alle Todesinstrumente erben von hier
+**
+** Wraz / Mendralim
+**
+** 2023-11-25
+** Last updated: 2024-03-18
+*/
+
+#include "../def.h"
+
+inherit "/p/std/barden/instrument";
+
+//#include "/gilden/bardengilde/bardengilde.h"
+#include "/p/std/barden/instrument.h"
+#include <properties.h>
+#include <combat.h>
+
+#include "/p/daemon/itemd/itemd.h"
+
+// --- SaveNewMaxAc -----------------------------------------------------
+void SaveNewMaxAc(object player)
+{
+  if(!player || !living(player) || !interactive(player)) return;
+  SetProp(getuid(player) + "_ac", QueryProp(P_AC));
+}
+
+// --- get_max_ac -----------------------------------------------------
+int get_max_ac(object player)
+{
+  int ac;
+  if(!player) return 1;
+
+  switch( to_int(QueryProp(getuid(player) + "_deaths")) )
+  {
+    case 0:
+      ac = 2;
+    break;
+
+    case 1:
+      ac = 4;
+    break;
+
+    case 2:
+      SetProp(P_DAM_PROTECTION, QueryProp(P_DAM_PROTECTION)+([DT_SOUND:1]) );
+      ac = 6;
+    break;
+    
+    case 3 .. 4:
+      ac = 8;
+    break;
+    
+    case 5 .. 6:
+      SetProp(P_DAM_PROTECTION, QueryProp(P_DAM_PROTECTION)+([DT_EXPLOSION:1]) );
+      ac = 10;
+    break;
+
+    case 7 .. 10:
+      ac = 12;
+    break;
+
+    case 11 .. 14:
+      SetProp(P_DAM_PROTECTION, QueryProp(P_DAM_PROTECTION)+([DT_UNHOLY:1]) );
+      ac = 14;
+    break;
+
+    case 15 .. 18:
+      ac = 16;
+    break;
+
+    case 19 .. 22:
+      SetProp(P_DAM_PROTECTION, QueryProp(P_DAM_PROTECTION)+([DT_MIND:1]) );
+      ac = 18;
+    break;
+
+    case 23 .. 999999:
+      SetProp(P_DAM_PROTECTION, QueryProp(P_DAM_PROTECTION)+([DT_FIRE:1, DT_POISON:1, DT_TERROR:1]) );
+      SetProp(P_TEMPERATURE_PROTECTION, ([ T_COLD_PROT:3,T_HEAT_PROT:3 ]));
+      ac = 22;
+    break;
+
+    default:
+      ac = 1;
+    break;
+  }
+
+  if(QueryProp(getuid(player) + "_ac") > ac)
+    return QueryProp(getuid(player) + "_ac");
+  else return ac;
+}
+
+// --- get_inst_level -----------------------------------------
+int get_inst_level(object pl)
+{
+  switch (QueryProp(getuid(pl) + "_deaths"))
+  {
+    case 0: return 4; break;
+    case 1..5: return 5; break;
+    default: return 6; break;
+  }
+
+  return 4;
+}
+
+// --- ADD DEATHS --------------------------------------------------
+string AddDeaths(object victim, object killer, int lost_xp)
+{
+  mixed ids;
+  string victim_deaths;
+  ids = TO->QueryProp(P_IDS);
+
+  if (QueryProp(P_WORN) != victim)
+  {
+    DB("Sterbeinstrument: NotifyPlayerDeath(), P_WORN != victim\n");
+    return sprintf("%s: %s stirbt, Sterbeinstrument nicht getragen -> Abbruch\n",
+             dtime(), getuid(victim));
+  }
+
+  victim_deaths = getuid(victim) + "_deaths";
+  SetProp(victim_deaths, QueryProp(victim_deaths) + 1);
+  SaveNewMaxAc(victim);
+
+  // Tode 1 bis 22
+  if (!QueryProp(victim_deaths) || QueryProp(victim_deaths) < 23)
+  {
+    victim->Message(BS(
+        Name(WER, 2) + " wird durch Deinen TOD maechtiger!!"));
+  }
+  // Tod 22
+  else if(QueryProp(victim_deaths) == 23 )
+  {
+    victim->Message(BS(
+        Name(WER, 2) + " erreicht durch Deinen TOD maximale Macht!!"));
+  }
+
+  // ev. neue AC setzen, und auch reparieren
+  SetProp(P_DAMAGED, 0);
+  if(QueryProp(P_AC) < get_max_ac(victim)) // nur setzen wenn hoeher
+    SetProp(P_AC, get_max_ac(victim));
+  SetProp(P_INSTRUMENT_LEVEL, get_inst_level(victim));
+
+  DB("Sterbeinstrument: NotifyPlayerDeath(), player:"+getuid(victim)+", victim_deaths:"
+     +QueryProp(victim_deaths)+", P_AC:"+QueryProp(P_AC)+"\n");
+  return sprintf("%s: %s stirbt, victim_deaths=%d, P_AC=%d\n",
+            dtime(), getuid(victim), QueryProp(victim_deaths), QueryProp(P_AC));
+}
+
+// --- RemoveFunc ---------------------------------------------
+int RemoveFunc(object ruest, int silent)
+{
+  if(TP) SaveNewMaxAc(TP);
+  return 1;
+}
+
+// --- WearFunc ----------------------------------------------------------
+int WearFunc(object ruest, int silent)
+{
+  SetProp(P_AC, get_max_ac(TP)-QueryProp(P_DAMAGED));
+  SetProp(P_INSTRUMENT_LEVEL, get_inst_level(TP));
+  return 1;
+}

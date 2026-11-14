@@ -1,0 +1,435 @@
+// SilberLand MUDlib
+//
+// /p/service/obj/party/board.c -- Das Partybrett
+//
+// $Date: 2006/02/28 12:42:28 $
+/* $Revision: 1.16 $
+ * $Log: board.c,v $
+ * Revision 1.16  2006/02/28 12:42:28  Woody
+ * "infos" als weiteres Feld ergaenzt
+ *
+ * Revision 1.15  2005/08/23 01:14:00  Woody
+ * E+ und Party-Admins duerfen An- und Abmeldungen fuer andere vornehmen
+ *
+ * Revision 1.14  2003/08/13 13:27:33  Woody
+ * E+ koennen nun auch andere abmelden, Gaeste sich nicht mehr anmelden
+ *
+ * Revision 1.13  2002/07/26 13:29:53  Woody
+ * Neuer Befehl: csvexport
+ *
+ * Revision 1.12  2001/10/03 09:48:07  Woody
+ * Kleine Fixes, "[unsichtbar]" in short() fuer Magier, wenn Brett invis ist
+ *
+ * Revision 1.11  2001/05/30 23:18:02  Woody
+ * Rubrik 'treffen' -> 'party', Typofix bei 'partyliste' bei 1 Anmeldung
+ *
+ * Revision 1.10  2001/05/25 13:50:46  Woody
+ * Kleiner Bugfix bei 'unt brett'
+ *
+ * Revision 1.9  2001/05/25 13:09:43  Woody
+ * "partyliste" etwas auskunftsfreudiger
+ *
+ * Revision 1.8  2001/03/12 12:13:31  Woody
+ * E-Kommandos unter einem "brett"-cmd gesammelt. Neu: archivieren, loeschen.
+ *
+ * Revision 1.7  1999/12/10 18:58:16  Woody
+ * Befehle fuer Party-Infos ergaenzt (fuer Erzis++)
+ *
+ * Revision 1.6  1999/12/08 13:17:06  Woody
+ * Details verbessert, bunt gemacht (ist aber ausschaltbar)
+ *
+ * Revision 1.5  1999/07/13 17:23:07  Angrox
+ * party_info.h integriert
+ *
+ * Revision 1.4  1998/12/08 15:00:17  Woody
+ * strict_types, Bugfix in 'frage'
+ *
+ * Revision 1.3  1997/11/30 16:23:28  Woody
+ * config.h, MUDNAME verwendet
+ *
+ * Revision 1.2  1997/03/18 10:20:33  Creative
+ * Rubrik 'party' -> 'treffen'
+ *
+ * Revision 1.1  1997/03/16 17:37:38  Woody
+ * prepared for revision control
+ *
+ */
+
+inherit "/std/thing";
+
+#pragma strict_types
+
+// Macht das Partybrett etwas bunter... *huestel* mag vielleicht nicht jeder :)
+#define BUNT
+#define BRETT_CMDS ({ "grund", "ort", "datum", "infos", "aufstellen", \
+                      "archivieren", "csvexport", "loeschen" })
+
+#include <properties.h>
+#include <defines.h>
+#include <moredef.h>
+#include <config.h>
+#include <ansi.h>
+#include <wizlevels.h>
+#include "board.h"
+
+mapping tmp;
+int i;
+
+void create()
+{
+  ::create();
+  seteuid(getuid());
+  SetProp(P_NAME, "Partybrett");
+  SetProp(P_SHORT, "Ein Partybrett");
+  SetProp(P_ARTICLE, 1);
+  SetProp(P_NOGET, "Stehenlassen!\n");
+  SetProp(P_WEIGHT, 12345678);
+  SetProp(P_READ_MSG,
+      "Du kannst das Brett befragen! Untersuch es doch mal!\n");
+  AddId( ({ "brett", "partybrett" }) );
+  AddCmd("anmelden","anmelden");
+  AddCmd("abmelden","abmelden");
+  AddCmd(({"frage","frag"}),"frage");
+  AddCmd("partyliste","partyliste");
+  AddCmd("brett","set_infos");
+}
+
+int greater(string a, string b)
+{
+  return tmp[a,1]<tmp[b,1];
+}
+
+string _query_long()
+{
+  string s,bold,bunt,rem,norm;
+  string *bunter;
+  mixed *k,info;
+  int i;
+
+  bold=bunt=rem=norm="";
+  bunter=({""});
+
+#ifdef BUNT
+  if (TP)
+  switch(TP->QueryProp(P_TTY))
+  {
+    case "ansi":
+      bold=ANSI_BOLD;
+      bunt=bold+ANSI_GREEN;
+      rem=bold+ANSI_BLUE;
+      norm=ANSI_NORMAL;
+      bunter=({
+            bold+ANSI_BLUE,
+            bold+ANSI_GREEN,
+            bold+ANSI_RED,
+            bold+ANSI_YELLOW,
+            bold+ANSI_CYAN,
+            bold+ANSI_PURPLE,
+            bold+ANSI_BLACK
+          });
+      break;
+    case "vt100":
+      bold=bunt=ANSI_BOLD;
+      bunter=({""});
+      norm=ANSI_NORMAL;
+  }
+#endif
+
+  s="";
+  for (i=0; i<strlen(MUDNAME); i++)
+  {
+    s+=bunter[i%sizeof(bunter)]+MUDNAME[i..i];
+  }
+
+  info = (mapping) PM->QueryInfo();
+  s=bunt+"\nDies hier ist ein Info- und Anmeldebrett zur naechsten "+
+    s+bunt+"-Party."+norm+"\n\n"+
+    bold+" Grund         :"+norm+" "+info["grund"]+"\n"+
+    bold+" Ort der Party :"+norm+" "+info["ort"]+"\n"+
+    bold+" Datum/Zeit    :"+norm+" "+info["datum"]+"\n"+
+    ( info["infos"] ?
+      bold+" Naehere Infos :"+norm+" "+info["infos"]+"\n" :
+      "" ) +
+    rem+" Naehere Informationen findest du auch in der Zeitung in Rubrik "
+    "'party'."+norm+"\n\n"+
+    bunt+"Dir stehen folgende Befehle zur Verfuegung:"+norm+"\n\
+ "+bold+"anmelden               "+norm+"  - klar\n\
+ "+bold+"abmelden "+
+ (TP && IS_ARCH(TP) ? "[<name>]" : "        ")+
+ "      "+norm+"  - auch klar\n\
+ "+bold+"frage brett nach <name>"+norm+"  - Infos ueber den Spieler mit dem Namen <name>\n\
+ "+bold+"partyliste             "+norm+"  - zeigt alle Angemeldeten an\n\
+ "+bold+"partyliste <schluessel>"+norm+"  - zeigt Daten unter dem Eintrag <schluessel> an\n\n\
+ "+bold+"Es gibt folgende Schluessel:"+norm+"\n "+rem;
+  k=sort_array(m_indices(tmp=FIELDS),#'greater);//'))
+  for (i=sizeof(k)-1;i>=0;i--) {
+    s += capitalize(k[i]);
+    if (i>1) s+=", ";
+    else if (i==1) s+=" und ";
+    else s+=".";
+  }
+  s += norm + "\n\n";
+
+  if (TP && IS_ARCH(TP))
+    s+=bunt+"Zusaetzliche Befehle fuer Erzmagier:"+norm+"\n"+
+      " " + bold + "brett grund <grund>     " +
+             norm + "Angabe fuer den Grund der Party\n"+
+      " " + bold + "brett ort <ort>         " +
+             norm + "Setzen des Ortes\n"+
+      " " + bold + "brett datum <datum>     " +
+             norm + "Festlegen von Datum und Uhrzeit\n"+
+      " " + bold + "brett infos <infos>     " +
+             norm + "Angabe einer URL mit naeheren Infos\n"+
+      " " + bold + "brett aufstellen <0|1>  " +
+             norm + "Partybrett (un)sichtbar "+
+      "(derzeit "+(PM->QueryInvis() ? "nicht " : "")+"aufgestellt)\n"+
+      " " + bold + "brett loeschen          " +
+             norm + "Partydaten loeschen\n"+
+      " " + bold + "brett archivieren <filename>  " +
+             norm + "Partydaten in /p/service/save/party/ archivieren\n"+
+      " " + bold + "brett csvexport <filename>    " +
+             norm + "Partydaten in -\"- als CSV exportieren\n"+
+      "\n";
+
+  return s;
+}
+
+string _query_short() {
+  if (PM->QueryInvis())
+    return Query(P_SHORT) + " [unsichtbar]";
+  else
+    return Query(P_SHORT);
+}
+
+string short() {
+  if (PM->QueryInvis() && TP && !IS_WIZARD(TP)) return 0;
+  return ::short();
+}
+  
+string long() {
+  if (PM->QueryInvis() && TP && !IS_WIZARD(TP)) return 0;
+  return ::long();
+}
+
+int id(string str) {
+  if (PM->QueryInvis() && TP && !IS_WIZARD(TP)) return 0;
+  return ::id(str);
+}
+
+int abmelden(string str)
+{
+  if (PM->QueryInvis() && TP && !IS_WIZARD(TP)) return 0;
+  if (PL!=RPL) return 0;
+
+  if (!str || !IS_ARCH(RPL))
+  {
+    if (!PM->DeleteUser(getuid(RPL))) {
+      write("Du warst doch gar nicht angemeldet.\n");
+      return 1;
+    }
+    write("Ok, abgemeldet.\n");
+    say(RPL->Name()+" hat sich grad beim Partybrett abgemeldet.\n");
+  }
+  else
+  {
+    if (!PM->DeleteUser(str)) {
+      write(capitalize(str) + " war doch gar nicht angemeldet.\n");
+      return 1;
+    }
+    write("Ok, " + capitalize(str) + " abgemeldet.\n");
+    say(RPL->Name() + " hat gerade " + capitalize(str) +
+        " beim Partybrett abgemeldet.\n");
+  }
+  return 1;
+}
+
+int anmelden(string str)
+{
+  string u;
+
+  if (PM->QueryInvis() && TP && !IS_WIZARD(TP)) return 0;
+  if (PL!=RPL) return 0;
+  if (PL->QueryGuest()) return 0;
+  if ( (stringp(str)) &&
+       (str[0..4] == "fuer ") &&
+       (MASTER->get_userinfo(str = str[5..])) &&
+       (IS_ARCH(TP) || member(PARTY_ADMINS, getuid(TP))) )
+    u = str;
+  else
+    u = 0;
+
+  if (str)
+    if (u)
+      write("\nACHTUNG: ANMELDUNG FUER " + capitalize(u) + "!!\n");
+    else
+    {
+      write("ANMELDUNG FUER " + capitalize(str) + " NICHT MOEGLICH!!\n");
+      return 1;
+    }
+
+  (void) clone_object(FORM)->starte(u);
+  return 1;
+}
+
+void zurueck(string wen)
+{
+  if (geteuid(previous_object())!=geteuid()) return;
+  say(
+      RPL->Name()+" hat " +
+      (wen == getuid(RPL) ? "sich" : capitalize(wen)) +
+      " gerade zur Party angemeldet.\n");
+}
+
+int frage(string str)
+{
+  mapping data;
+  mixed *k;
+  string s,s2;
+  int i;
+
+  if (PM->QueryInvis() && TP && !IS_WIZARD(TP)) return 0;
+  if (!str) return 0;
+  if (!sscanf(str,"brett nach %s",s)||s=="") return 0;
+  str=lower_case(s);
+  if (!(data = (mapping) PM->QueryUser(str)))
+  {
+    write(capitalize(str)+" hat sich bisher nicht angemeldet.\n");
+    return 1;
+  }
+  k=sort_array(m_indices(tmp=FIELDS),#'greater);//')
+  s=capitalize(str)+" hat sich angemeldet.\n";
+
+  for (i=sizeof(k)-1;i>=0;i--)
+    s += break_string( FIELDS[k[i]] + " " + data[k[i]], 78, 4 )[4..];
+    // s += break_string( data[k[i]], 78, FIELDS[k[i]] + " ", BS_INDENT_ONCE );
+
+  s += "\n";
+  RPL->More(s);
+  return 1;
+}
+
+int partyliste(string str)
+{
+  int i;
+  mixed p;
+  string s,s2;
+  mapping data;
+
+  if (PM->QueryInvis() && TP && !IS_WIZARD(TP)) return 0;
+  if (!str||str=="")
+  {
+    p = (mapping) PM->QueryData();
+    if (!mappingp(p) || !sizeof(p)) {
+      write("Es hat sich noch niemand zur Party angemeldet.\n");
+      return 1;
+    }
+    p = sort_array( m_indices(p), #'< );
+	write("Bisher " +
+            (sizeof(p) == 1 ? "hat sich ein" : "haben sich " + sizeof(p)) +
+            " Mitspieler angemeldet.\n");
+    s = "";
+    for (i=sizeof(p)-1;i>=0;i--)
+    {
+      s+=capitalize(p[i]);
+      if (i>1) s+=", ";
+      else if (i==1) s+=" und ";
+    }
+    s+=".";
+    write(break_string(s,78));
+    return 1;
+  }
+  if (!FIELDS[str])
+  {
+    s = "Ungueltiger Schluessel. Gueltige Schluessel sind: ";
+    p = sort_array( m_indices(tmp=FIELDS), #'greater );
+    for (i=sizeof(p)-1;i>=0;i--) {
+      s += capitalize(p[i]);
+      if (i>1) s+=", ";
+      else if (i==1) s+=" und ";
+      else s+=".";
+    }
+    write(break_string(s,78));
+    return 1;
+  }
+
+  data = (mapping) PM->QueryData();
+  p = sort_array( m_indices(data), #'< );
+  s = sprintf("Antworten zum Schluessel %s:\n", capitalize(str));
+
+  for (i=sizeof(p)-1;i>=0;i--)
+    s += break_string( data[p[i]][str], 78,
+        sprintf("%11s : ", capitalize(p[i])),
+        BS_INDENT_ONCE );
+
+  s += "\n";
+  RPL->More(s);
+  return 1;
+}
+
+int set_infos(string str)
+{
+  string was, data;
+  mixed res;
+
+  if (!TP || !IS_ARCH(TP))
+    return notify_fail("Dazu fehlen Dir die noetigen Rechte!\n"), 0;
+
+  if ( ! str = (string) TP->_unparsed_args() )
+    return notify_fail("Du musst schon ein bisschen mehr angeben!\n"), 0;
+
+  if ( (was = str) != "loeschen" )
+    if ( sscanf( str, "%s %s", was, data ) != 2 )
+      return notify_fail("Du musst schon ein bisschen mehr angeben!\n"), 0;
+
+  if (member(BRETT_CMDS,was) == -1)
+  {
+    write(
+        break_string( "Ungueltiger Befehl! Gueltig: " +
+          implode(BRETT_CMDS, ", ") + ".", 78 ) );
+    return 1;
+  }
+
+  switch (was)
+  {
+    case "aufstellen":
+    {
+      PM->SetInvis( res = (!to_int(data)) );
+      write("Ok, Partybrett ist jetzt " + (res ? "un" : "") + "sichtbar.\n");
+      break;
+    }
+    case "archivieren":
+    {
+      if ( PM->Dump( res = explode(data, " ")[0] ) )
+        write("Ok, Partydaten als /p/service/save/party/" + res +
+            " archiviert.\nAchtung: Das Brett ist noch nicht geloescht!\n");
+      else
+        write("Beim Archivieren ist etwas schiefgelaufen!\n");
+      break;
+    }
+    case "csvexport":
+    {
+      if ( PM->Dump( res = explode(data, " ")[0], 1 ) )
+        write("Ok, Partydaten als /p/service/save/party/" + res +
+            ".csv exportiert.\nAchtung: Das Brett ist noch nicht geloescht!\n");
+      else
+        write("Beim Exportieren ist etwas schiefgelaufen!\n");
+      break;
+    }
+    case "loeschen":
+    {
+      if ( PM->DeleteData() )
+        write("Ok, Partydaten geloescht!\n");
+      else
+        write("Beim Loeschen ist etwas schiefgelaufen!\n");
+      break;
+    }
+    default:
+    {
+      PM->SetInfo( ([ was : res = data ]) );
+      write("Ok, " + capitalize(was) + " ist jetzt '" + res + "'.\n");
+    }
+  }
+
+  return 1;
+}
+

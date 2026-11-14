@@ -1,0 +1,109 @@
+#include "../../arkanisten.h"
+
+inherit GUILD_FOLDER "abilities/ability.lpc";
+
+public void create() {
+    if(is_clone(TO)) return;
+
+    ::create();
+    SetProp(P_ABILITY_NAME, "Ausklappbarer Handschild");
+    SetProp(P_ABILITY_DESCRIPTIPON, 
+        "Das ausklappbare Handschild ist eine raffinierte Erweiterung der federmechanischen "
+        "Handschuhe. Auf der Rückseite jedes Handschuhs ist ein schmaler Mechanismus eingebaut, "
+        "der bei Bedarf einen kompakten Schild aus festem Stahl oder gehärtetem Messing ausklappen "
+        "lässt. Mit einem leisen Klicken öffnet sich der Schild in Sekundenbruchteilen, um die Hand "
+        "des Trägers zu schützen. Der Schild ist klein genug, um die Beweglichkeit nicht einzuschränken, "
+        "bietet jedoch eine starke Barriere gegen Angriffe. Zwar wird der verursachte Handschaden etwas "
+        "reduziert, doch der Träger erhält durch das Handschild eine wertvolle Verteidigung gegen "
+        "feindliche Schläge und magische Angriffe.");    
+    SetProp(P_ABILITY_TYPE, ABILITY_TYPE_ACTIVE);
+    SetProp(P_ABILITY_BASE_ATTRIBUTE, A_DEX);
+    SetProp(P_ABILITY_CASTVERB, CAST_VERB_ACTIVATE);
+    SetProp(P_ABILITY_GROUP, ({ABILITY_GROUP_GADGETS}));
+    SetProp(P_ABILITY_COST, ([
+        P_SP: 25
+    ]));
+    SetProp(P_ABILITY_REQUIRES, ({SPRINGLOADED_GLOVES}));
+}
+
+public mapping prepare_use(object user, mapping sinfo) {
+    if(!objectp(present(SPRINGLOADED_GLOVES_ID, user))) {
+        tell_object(user, BS("Du musst deine federmechanischen Handschuhe tragen, um den Schild zu aktivieren."));
+        return 0;
+    }
+
+    if(user->QueryProp(P_TMP_DEFEND_HOOK)) {
+        tell_object(user, BS("Du hast bereits eine Verteidigung aktiv."));
+        return 0;
+    }
+
+    if(!user->InFight()) {
+        tell_object(user, BS("Den Handschild kansnt du nur im Kampf aktivieren."));
+        return 0;
+    }
+
+    sinfo[SI_SPELLFATIGUE] = 4;
+
+    return ::prepare_use(user, sinfo);
+}
+
+public void failed(object caster, mapping sinfo, int skillcheck) {
+    if(skillcheck < -3000) {
+        tell_object(caster, BS("Dein Schild verklemmt sich. Du brauchst einen Moment um das wieder zu richten."));
+        caster->SetProp(P_DISABLE_ATTACK, 1);
+    }
+
+    return ::failed(caster, sinfo, skillcheck);
+}
+
+public void success(object caster, mapping sinfo, int skillcheck) {
+    int dauer;
+
+    tell_object(caster, BS("Du klappst einen Hebel an einem deiner Handschuhe um und klackernd entfaltet sich ein kleiner Handschild."));
+    tell_room(ENV(caster), BS(caster->name(WEM)+" legt einen Hebel an einem Handschuh um und klackernd entfaltet sich daraus ein kleiner Handschild."), ({caster}));
+
+    dauer=2+2*caster->QueryAttribute(A_DEX)/3+(skillcheck/2000);
+    call_out("handschild_end", dauer-2, caster);
+    caster->SetProp(P_TMP_DEFEND_HOOK, ({time()+dauer, TO, "handschild_func" }));
+    return;
+}
+
+nosave void handschild_end(object caster) {
+    mixed h;
+    if (!objectp(caster)) return;
+    if (h=caster->QueryProp(P_TMP_DEFEND_HOOK)) {
+      if ((h[1]==TO) && (h[2]=="handschild_func")) {
+        caster->SetProp(P_TMP_DEFEND_HOOK, 0);
+        tell_object(caster, BS("Dein Handschild klappt sich ratternd wieder ein!"));
+      }
+    }
+    return;
+}
+
+mixed handschild_func(int dam, mixed dam_type, mixed spell, object enemy) {
+    string dt;
+    object caster;
+    int ability, ac, idx;
+
+    if(!objectp(enemy)) return;
+    if (!living(caster = previous_object())) return ({ dam, dam_type, spell, enemy });
+
+    if(!present(SPRINGLOADED_GLOVES_ID, caster)) {
+        handschild_end(caster);
+        return ({ dam, dam_type, spell, enemy });
+    }
+
+    // only protect against physical damage
+    if(!pointerp(dam_type)) dam_type = ({ dam_type });
+    foreach(idx, dam_type, dt, {
+        if(member(MAGICAL_DAMAGE_TYPES, dam_type)) return;
+    });
+
+    ability = caster->QuerySkillAbility(DEPLOYABLE_SHIELD);
+    ac = ability/1000;
+    if(random(7-(ac/2))) return ({ dam, dam_type, spell, enemy });
+
+    dam -= ((ac * 2 + random(ac)) * dam) / 100;
+    tell_object(caster, BS("Du parierst die Attacke mit deinem Handschild!"));
+    return ({ dam, dam_type, spell, enemy });
+}

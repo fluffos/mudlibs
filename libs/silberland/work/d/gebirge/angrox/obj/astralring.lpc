@@ -1,0 +1,308 @@
+/*
+** Astralring
+** 08.10.1996 Angrox@SL
+**
+** 16.10.1997 Nun kann auch was schiefgehen
+** 05.11.2000 Wenn er verflucht ist geht immer was schief :)
+** 13.12.2000 Abfrage auf Geist
+*/
+
+inherit "std/armour";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <wizlevels.h>
+#include "../files.h"
+
+#define RING_DAMAGE "ring_damage"
+#define ASTRALRING_USAGE_TIME "astralring_usage_time"
+
+
+nosave int last_usage;
+nosave int unputtbar=0;
+nosave int repaired=0;
+nosave string owner;
+nosave string geocoin_finder="";
+
+nosave string *lebenspunkte, *magiepunkte, *wandeltext;
+
+create()
+{
+  if (!is_clone(this_object()))
+     return;
+  ::create();
+
+  lebenspunkte=({"Lebenspunkte", "Lebensenergie", "Punkte Deiner "
+      "Lebensenergie"});
+  magiepunkte =({"Magiepunkte", "Magie"});
+  wandeltext=({ ({"transformierst", "wandelst", "uebertraegst"}),
+		({"transformiert", "gewandelt", "uebertragen"}),
+                ({"Transformation", "Wandlung", "magische Transformierung"}),
+             });
+  AddId (({"ring","astralring"}));
+  SetProp (P_SHORT, "Ein Astralring");
+  SetProp (P_LONG, 
+      "Dieser Ring ist aus einer glasaehnlichen Substanz. Er "
+      "leuchtet von innen heraus ganz schwach in vielen, bunten Farben.");
+  SetProp (P_NAME, "Astralring");
+  SetProp (RING_DAMAGE, 0);
+  SetProp (P_GENDER, MALE);
+  SetProp (P_WEIGHT, 100);
+  SetProp (P_VALUE, 6000);
+  SetProp (P_NOBUY, 0);
+  SetProp (P_ARMOUR_TYPE, AT_RING);
+  SetProp (P_AC, 2);
+  SetProp (P_KILL_NAME, "Gier nach Magiepunkten");
+  SetProp (P_KILL_MSG, 
+      "Tststs ... haettest vielleicht Doch mehr auf Lebenspunkte "
+      +"schauen sollen!");
+  SetProp (P_WEAR_RESTRICTIONS, ([P_FROG:1, A_INT:16]));
+  SetProp (P_MATERIAL, ([MAT_GLASS:90, MAT_CRYSTAL:10]));
+  SetProp(P_INFO, BS("Dieser Ring ermoeglicht es Dir, Lebensenergie in "
+                 +"Astralpunkte zu verwandeln. Die geschieht (beinahe) im "
+                 +"Verhaeltnis 1:1. Vorsicht! Du kannst Dich damit auch "
+                 +"selbst umbringen! Das Kommando, auf das der Ring "
+                 +"reagiert, heisst \"xyrbol\"!\n"));
+  AddDetail ("substanz", BS("Hmm ... Du hast sowas noch nie "
+            +"gesehen... er scheint unzerbrechlich zu sein. In seinem "
+            +"Inneren wirbeln bunte Farben lustig umher.\n"));
+  AddDetail ("farben", BS("Die Farben wirbeln im Inneren des Ringes umher und "
+            +"wechseln sich staendig ab - wie ein Regenbogen.\n"));
+  AddCmd("xyrbol", "umwandlung");
+  SUID;
+}
+
+int umwandlung() {
+  int current_hp, current_sp, abzug, dazu, fehlerquote;
+  int needed_eqtime;
+  string out_txt;
+  object ob;
+
+  fehlerquote=350;
+
+  if(QueryProp(P_CURSED) || TP->QueryProp(P_GHOST)) {
+    write(BS("Hoppla! Irgendein astraler Wirbel subastraler Natur hat "
+           +"in Deinem Astralring eine Verzerrung des magischen Musters "
+           +"bewirkt. Du fuehlst, dass gleich etwas Schreckliches passieren " 
+           +"wird."));
+    call_out("ringfehler", 0, TP);
+    return 1;
+  }
+  if(QueryWorn()!=this_player()) {
+    notify_fail("Das geht nur, wenn Du den Ring auch traegst!\n");
+    return 0;
+  }
+  
+  
+  needed_eqtime=2;
+  if(TP->QueryProp(P_GUILD) != "druidenzirkel")
+    needed_eqtime+=2;
+  if(TP->QueryProp(P_GUILD) == "berserker") 
+    needed_eqtime+=2;
+  if(QueryProp(P_EQUIP_TIME)>(time()-needed_eqtime) || last_usage>(time()-2)) 
+  {
+    write(BS("Der Astralring muss sich erst auf Deine neue Aura einstellen."));
+    return 1; 
+  }
+  TP->SetProp(ASTRALRING_USAGE_TIME, time());
+  current_hp=TP->QueryProp(P_HP);
+  current_sp=TP->QueryProp(P_SP);
+  if(deep_present("ampulle",TP)) fehlerquote-=200;
+  if(fehlerquote < 1) fehlerquote=1;
+  if(random(350))
+    abzug=20+random(9)+QueryProp(RING_DAMAGE);
+  else if(!unputtbar) {
+    abzug=random(60);
+    write(BS("Hoppla! Irgendein astraler Wirbel subastraler Natur hat "
+           +"in Deinem Astralring eine Verzerrung des magischen Musters "
+           +"bewirkt. Du fuehlst, dass gleich etwas Schreckliches passieren " 
+           +"wird."));
+    call_out("ringfehler", 0, TP);
+    return 1;
+  }
+  dazu=20+random(7)-QueryProp(RING_DAMAGE);
+  if(getuid(TP) != owner) {
+    dazu-=random(5);
+    abzug+=random(5);
+  }
+  if((current_sp+dazu) > (TP->QueryProp(P_MAX_SP))) {
+     write ("Ueberschuessige Energie entweicht Deinem Koerper in Form von\n"
+              +"spruehenden Funken.\n");
+     say(BS(CAP(TPN)+" ist ploetzlich von spruehenden Funken umgeben.\n"));
+     TP->Set(P_SP, (TP->QueryProp(P_MAX_SP)));
+  }  
+  else 
+    TP->Set(P_SP, (current_sp+dazu));
+  if((current_hp-abzug)<0) {
+    write(BS("Mit einem seltsamen Gefuehl sinkst Du zusammen. Der Ring hat "
+          "Deine letzen Lebenspunkte in Astralenergie umgewandelt. Deine "
+          "Seele loest sich von Deinem Koerper ..."));
+    say(BS(CAP(TPN)+" sackt mit einem glueckseligen Laecheln in sich zusammen. "
+        +"Einige astrale Wirbel umgeben "+
+        (PlayerGender==FEMALE ? "ihren" : "seinen")+" Koerper noch fuer kurze "
+        +"Zeit."));
+  }
+  else {
+    switch(random(3)) {
+      case 0: out_txt=sprintf("Du %s %d %s in %d %s.",
+                  wandeltext[0][random(sizeof(wandeltext))],
+                  abzug, lebenspunkte[random(sizeof(lebenspunkte))],
+                  dazu, magiepunkte[random(sizeof(magiepunkte))]);
+              // Du wandelst xy Lebenspunkte in yz Magiepunkte.
+              break;
+      case 1: out_txt=sprintf("%d %s werden in %d %s %s.",
+                  abzug, lebenspunkte[random(sizeof(lebenspunkte))],
+                  dazu, magiepunkte[random(sizeof(magiepunkte))],
+                  wandeltext[1][random(sizeof(wandeltext))] );
+              // xy Punkte Deiner Lebensenergie werden in yz Magiepunkte 
+              // gewandelt
+              break;
+      case 2: out_txt=sprintf("Durch die %s des Astralringes erhaeltst "
+                  "Du %d %s und verlierst %d %s.",
+                  wandeltext[2][random(sizeof(wandeltext))],
+                  dazu, magiepunkte[random(sizeof(magiepunkte))],
+                  abzug, lebenspunkte[random(sizeof(lebenspunkte))]);
+              // Durch die Transformation des Astralrings erhaeltst Du 
+              // yz Magiepuntke und verlierst xy Lebenspunkte.
+    }
+    write(break_string(out_txt, TP->QueryProp(P_SCREENWIDTH)));
+  }
+  TP->do_damage(abzug, TO);
+  last_usage=time();
+  return 1;
+}
+  
+
+nosave int ringfehler(object pl) {
+ switch (random(100)+1) {
+   case 1..4: write(BS("Du verspuerst einen heftigen Schmerz!!!!\n"));
+            pl->do_damage(random(60)+1);
+            SetProp(RING_DAMAGE, QueryProp(RING_DAMAGE)+random(10));
+            break;
+   case 5..9: write(BS("Du verspuerst einen kleinen Schmerz, als sich "
+            +"der Astralring aufloest."));
+            TP->do_damage(random(20));
+            call_out("removeme", 1);
+            break;
+   case 10..49: write(BS("Der Ring vibriert leicht. Sonst ist nichts "
+                  +"passiert ... oder?\n"));
+                SetProp(RING_DAMAGE, QueryProp(RING_DAMAGE)+3);
+   case 50..98: write(BS("Du spuerst auf einmal eine grosse Leere "
+                  +"in Dir...\n"));
+                pl->SetProp(P_SP, 0);
+                SetProp(RING_DAMAGE, QueryProp(RING_DAMAGE)+1);
+                break;
+   case 99..100:if(!repaired) {
+                  write(BS("Astrale Energien durchstroemen Dich! Dein "
+                       "Astralring scheint magisch voellig erneuert!"));
+                  pl->SetProp(P_SP, 100000);
+                  SetProp(RING_DAMAGE, 0);
+                  if(TP->QueryProp(P_GUILD) != "druidenzirkel");
+                    repaired=1;
+                }
+                else {
+                  write(BS("Eine seltsame Ruhe kehrt in Dich ein ..."));
+                }
+                break;
+ }
+ return 1;
+}
+
+
+nosave int removeme()
+{
+ ME->remove();
+ return 1;
+}
+
+int SetMystical() {
+   if(unputtbar) return 0;
+   SetProp(P_NAME_ADJ, "mystisch");
+   SetProp(P_SHORT, "Ein mystischer Astralring");
+   SetProp(P_MAGIC, 1);
+   unputtbar=1;
+   write_file(LOG("astralring"), sprintf("%s: %s (PO: %O) -> mystical ring\n", 
+        dtime(time()), getuid(TP), PO));
+   return 1;
+}
+
+int QueryMystical() {
+  return unputtbar;
+}
+
+int find_necro_players(object pl) {
+  if(pl->QueryProp(P_GUILD) != "nekromanten") return 0;
+  if(IS_LEARNING(pl)) return 0;
+  return 1;
+}
+
+void reanimate_me() {
+  object *necros;
+  object choosen;
+  SetProp(P_NOGET, "Der Ring laesst sich nicht mehr aufheben!\n");
+  necros=filter_array(users(), "find_necro_players"); 
+  if(sizeof(necros)) {
+    choosen=necros[random(sizeof(necros))];
+    tell_object(choosen, BS("HARHAR! Unheilige Maechte durchstroemen Dich "
+          "und lassen Dich staerker werden!"));
+    choosen->AddSp(2000); 
+    choosen->AddHp(2000); 
+  }
+  tell_room(ENV(ME), BS("Der Astralring zerfaellt zu glitzernden Staub."));
+  remove();
+}
+
+int SetOwner(string pl_name) {
+  owner=pl_name;
+  return 1;
+}
+
+string QueryOwner() { return owner; }
+
+void SetGeoCoinOwner(string str) {
+  if (!str) return;
+  ME->SetProp(P_NEVERDROP, 1);
+  ME->SetProp(P_NODROP, 1);
+  geocoin_finder=str;
+  //ME->SetProp(P_AUTOLOADOBJ, 1);
+  ME->SetProp(P_LONG, ME->QueryProp(P_LONG)+"Dieser Ring ist ein ganz besonderer "
+      "Astralring. Er wird an die Helden verliehen, die den RL Astralring auf "
+      "www.geocaching.com gefunden haben. Dieser hier gehoert "+CAP(geocoin_finder)+
+      ".");
+  return ;
+}
+
+mixed _query_autoloadobj() {
+  if (geocoin_finder!="")
+    return geocoin_finder;
+  if (unputtbar)
+    return 1;
+  return 0;    
+}
+
+mixed _set_autoloadobj(mixed str) {
+  if(intp(str)) {
+    SetProp(P_NAME_ADJ, "mystisch");
+    SetProp(P_SHORT, "Ein mystischer Astralring");
+    SetProp(P_MAGIC, 1);
+    unputtbar=1;
+    return str;
+  }
+  if(!stringp(str) || str != getuid(ENV(ME))) 
+    return 0;
+  SetProp(P_NAME_ADJ, "mystisch");
+  SetProp(P_SHORT, "Ein mystischer Astralring");
+  SetProp(P_MAGIC, 1);
+  unputtbar=1;
+  if(str="") return "";
+  ME->SetProp(P_NEVERDROP, 1);
+  ME->SetProp(P_NODROP, 1);
+  geocoin_finder=str;
+  ME->SetProp(P_LONG, QueryProp(P_LONG)+" Dieser Ring ist ein ganz besonderer "
+      "Astralring. Er wird an die Helden verliehen, die den RL Astralring auf "
+      "www.geocaching.com gefunden haben. Dieser hier gehoert "+CAP(geocoin_finder));
+  return str;
+}
+
+

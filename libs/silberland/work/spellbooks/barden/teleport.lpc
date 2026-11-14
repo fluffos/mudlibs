@@ -1,0 +1,163 @@
+public string getRegionOfEnvironment(object ob) {
+  string fileName, *parts;
+  if(!objectp(ob)) return "astral";
+
+  fileName = file_name(environment(ob));
+  parts = explode(fileName, "/");
+
+  if(parts[0] == "d") {
+    return parts[1];
+  } else if(parts[0] == "gilden") {
+    switch(parts[1]) {
+      if(parts[1][strlen(parts[1])-2..] == ".lpc")
+        parts[1] = parts[1][strlen(parts[1])-2..];
+
+      case "abenteurer": return "ebene";
+      case "bardengilde": return "kristallwald";
+      case "druidenzirkel": return "huegelland";
+      case "dunkelelfen": return "unterwelt";
+      case "berserker": return "wasser";
+      case "nekromanten": return "unterwelt";
+      case "paladine": return "gebirge";
+      case "zechpreller": return "ebene";
+      default: "astral";
+    }
+  }
+
+  return "astral";
+}
+
+public mapping prep_teleport(object caster, mapping sinfo)
+{
+  object victim, mstein;
+  int success;
+  float factor;
+  string *parts;
+
+  if(caster->InFight()) {
+    tell_object(caster, BS("Im Kampf kannst du dieses Lied nicht spielen!"));
+    return 0;
+  }
+
+  parts = explode(file_name(environment(caster)), "/");
+  if(parts[0] != "d" && parts[0] != "gilden") {
+    write(BS("Du bist ausserhalb der normalen Welt. Das Lied hat hier keine Wirkung!"));
+    return 0;
+  } else if(parts[0] == "d" && (parts[1] == "pk" || parts[1] == "seher")) {
+    write(BS("An diesem Ort hat das Lied keine Wirkung. Versuche woanders noch einmal!"));
+    return 0;
+  }
+
+  if(!sinfo[SI_SKILLARG]) {
+    victim = caster;
+  } else {
+    /*if(!objectp(mstein=present("\nmagiestein", caster))) {
+      write(BS("Um andere mit diesem Lied auf Reisen zu schicken benoetigst du die Kraft eines Magiesteins!"));
+      return 0;
+    }*/
+
+    victim = FindVictim(sinfo[SI_SKILLARG], caster, 0);
+    if(!objectp(victim)) {
+      victim = caster;
+    }
+
+    if(!interactive(victim)) {
+      write(BS("Du kannst dieses Lied nur auf Spieler wirken!"));
+      return 0;
+    }
+
+    if(member(victim->QueryProp(P_IGNORE), "barden.teleport") >= 0) {
+      write(BS(victim->Name(WER, 1) + " moechte von dir nicht auf Reisen geschickt werden!"));
+      return 0;
+    }
+  }
+
+  if(!query_once_interactive(victim)) {
+    tell_object(caster, BS("Auf dieses Ziel kannst du das Lied nicht spielen."));
+    return 0;
+  }
+  
+  sinfo = prepare_song(caster, sinfo);
+  if(sinfo == 0) return 0;
+  if(!paySpellCost(caster, sinfo, 1)) return 0;
+
+  tell_room(environment(caster), BS(sprintf("%s beginnt ein froehliches Lied zu spielen.", caster->Name(WER,1))), ({caster}));
+  sinfo["victim"] = victim;
+  play_song_text(SPELLSEQ("lass_den_wind_dich_tragen.seq"), caster);
+  return sinfo;
+}
+
+int teleport(object caster, mapping sinfo) {
+  int success;
+  object victim, mstein;
+
+  if(caster->InFight()) {
+    tell_object(caster, BS("Im Kampf kannst du dieses Lied nicht spielen!"));
+    return 0;
+  }
+
+  if(!sinfo[SI_SKILLARG]) {
+    victim = caster;
+  } else {
+  /*  if(!objectp(mstein=present("\nmagiestein", caster))) {
+      write(BS("Um andere mit diesem Lied auf Reisen zu schicken benoetigst du die Kraft eines Magiesteins!"));
+      return 0;
+    }*/
+
+    victim = FindVictim(sinfo[SI_SKILLARG], caster, 0);
+    if(!objectp(victim)) {
+      victim = caster;
+    }
+
+    if(member(victim->QueryProp(P_IGNORE), "barden.teleport") >= 0) {
+      write(BS(victim->Name(WER, 1) + " moechte von dir nicht auf Reisen geschickt werden!"));
+      return 0;
+    }
+  }
+
+  if(!query_once_interactive(victim)) {
+    tell_object(caster, BS("Auf dieses Ziel kannst du das Lied nicht spielen."));
+    return 0;
+  }
+
+  if(!paySpellCost(caster, sinfo)) return 0;
+
+  if((success=SpellSuccess(caster,sinfo))<=0)
+  {
+   if(success < -1*random(9000)) {
+    tell_object(caster, BS("Du fuehlst dich irgendwie unwohl..."));
+    call_out("random_teleport", random(4), caster);
+   } else if(success < -1*random(5000)) {
+    tell_object(caster, BS("Deine Gestalt wird durchscheinend... und du bleibst auf halbem Weg in die Astralebene stecken!"));
+    tell_object(environment(caster), BS(caster->Name(WER, 1) + " verblasst, wie ein Geist!"));
+    caster->SetProp(P_GHOST, 1);
+   } else if(success < -1*random(2000)) {
+    tell_object(caster, BS("Deine Gestalt wird kleiner... und GRUEN!"));
+    tell_object(environment(caster), BS(caster->Name(WER, 1) + " schrumpft zu einem kleinen gruenen Frosch."));
+    caster->SetProp(P_FROG, 1);
+    } else {
+    tell_object(victim, BS("Ein paar Regenbogenfunken spruehen von dir weg. Sonst passiert nichts."));
+    tell_room(environment(victim), BS("Ein paar Regenbogenfunken spruehen von " + caster->Name(WEM, 1) + " weg. Sonst passiert nichts."), ({caster}));
+   }
+    return MISSERFOLG;
+  }
+
+  tell_object(victim, BS("Regenbogenfarbenes Licht umhuellt dich. Du schrumpfst und dir Wachsen Schwingen, mit denen du dich als Regenbogenfalke "
+                         "vom Boden abstoesst..."));
+  tell_room(environment(victim), BS(sprintf("Regenbogenfarbenes Licht umhuellt %s. %s schrumpft und %s Wachsen Schwingen, mit denen %s sich "
+                        "als Regenbogenfalke vom Boden abstoesst...",
+                        victim->name(WEN), capitalize(victim->QueryPronoun()), victim->QueryPronoun(WEM), victim->QueryPronoun())), ({victim}));
+
+  victim->move(sprintf("/d/astral/gwenshara/astralraum/room/%s", getRegionOfEnvironment(caster)), M_NOCHECK|M_SILENT);
+
+  return ERFOLG;
+}
+
+public void random_teleport(object caster) {
+  string randomGoal;
+  tell_object(caster, BS("Ein ploetzlicher Sog astraler Energie erwischt dich und schleudert dich fort..."));
+  randomGoal = TRAVEL_GOALS[m_indices(TRAVEL_GOALS)[random(sizeof(m_indices(TRAVEL_GOALS)))]];
+  tell_room(environment(caster), BS(caster->Name(WER, 1)+ " zerplatzt in tausende regenbogenfarbener Seifenblasen..."), ({caster}));
+  caster->move(randomGoal, M_TPORT|M_SILENT);
+  tell_room(environment(caster), BS(caster->Name(WER, 1)+ " erscheint in einem regenbogenfarbenen Blitz."), ({caster}));
+}

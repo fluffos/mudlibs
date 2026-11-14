@@ -1,0 +1,193 @@
+inherit "/std/armour";
+
+#include "../vt100.h"
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include "/p/daemon/itemd/itemd.h"
+
+int hp,sp,i;
+
+void create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+  hp=15+random(7);
+  sp=30+random(7);
+  i=0;
+  AddId( ({"schiene","schienen","todesschienen","beinschienen","beinschiene" }));
+  SetProp(P_SHORT,"->*<- Beinschienen");
+  SetProp(P_LONG,
+      "\tDie magisch gluehenden Beinschienen aus dem Turm der tausend Tode. Man muss\n"+
+      "schon sehr erfahren sein um sie tragen zu koennen. Dieses paar kann\n"+
+      "@@schaden@@\n");
+  SetProp(P_NAME, "Beinschienen");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_PLURAL, 1);
+  SetProp(P_AC, 7+random(3)); //max 9
+  SetProp(P_VALUE,2200);
+  SetProp(P_WEIGHT, 500);  
+  SetProp(P_VALUE, 1500);
+  SetProp(P_QUALITY_DECAY, 150+random(50));
+  SetProp(P_MAGIC,10); 
+  SetProp(P_ARMOUR_TYPE, AT_TROUSERS);
+  SetProp(P_MATERIAL, ([MAT_BONE:30, MAT_MAGIC:70]));
+  SetProp(P_WEAR_RESTRICTIONS, ([A_STR: 23, P_LEVEL: 66]) );
+  SetProp(P_INFO,"Das sind wohl die besten Beinschienen weit und breit.\n");
+  SetProp(P_M_HEALTH_MOD,([P_HP:hp,P_SP:sp]));
+  SetProp(P_WEAR_FUNC, this_object());
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_ITEMD_TMPMAGIC, ({1500,1500}) );
+  find_object(ITEMD)->RegisterNewItem(this_object(), TIME_ID);
+}
+
+string short()
+{
+  if(!this_player())  return VT_NORMAL+"->*<- Beinschienen (gluehend)..";
+
+  if (this_object()->QueryProp(P_WORN)!=0)
+  {  
+    switch(this_player()->QueryProp(P_TTY))
+    {
+      case "ansi": 
+        return VT_TA_B+VT_MAGENTA+"-"+VT_YELLOW+">"+VT_RED+"*"+VT_YELLOW+"<"+
+          VT_MAGENTA+"-"+VT_NORMAL+" Beinschienen (gluehend) (getragen)."; 
+      case "vt100": 
+        return VT_TA_B+"->*<-"+VT_NORMAL+" Beinschienen (gluehend) (getragen).";
+      default:
+        return "->*<- Beinschienen (gluehend) (getragen).";
+    }
+  }
+
+  switch(this_player()->QueryProp(P_TTY))
+  {
+    case "ansi": 
+      return VT_TA_B+VT_MAGENTA+"-"+VT_YELLOW+">"+VT_RED+"*"+VT_YELLOW+"<"+
+             VT_MAGENTA+"-"+VT_NORMAL+" Beinschienen (gluehend).";
+    case "vt100": 
+      return VT_TA_B+"->*<-"+VT_NORMAL+" Beinschienen (gluehend).";
+    default:
+      return "->*<- Beinschienen (gluehend).";
+  }
+}
+
+name()
+{
+  if(!this_player())  return VT_NORMAL+"->*<- Beinschienen";
+
+  switch(this_player()->QueryProp(P_TTY))
+  {
+    case "ansi": 
+      return VT_TA_B+VT_MAGENTA+"-"+VT_YELLOW+">"+VT_RED+"*"+VT_YELLOW+"<"+
+             VT_MAGENTA+"-"+VT_NORMAL+" Beinschienen";
+    case "vt100": 
+      return VT_TA_B+"->*<-"+VT_NORMAL+" Beinschienen";
+    default:
+      return "->*<- Beinschienen";
+  }
+}
+
+string extra_look()
+{
+  return capitalize(environment()->QueryPronoun())+
+    " besitzt die magisch gluehenden Todesschienen.\n";
+}
+
+
+schaden()
+{
+  int good;
+  good=this_object()->QueryProp(P_AC);
+  if (good<=4) return ("sehr wenig Schaden verhindern.");
+  if (good==5) return("wenig Schaden verhindern.");
+  if (good==6) return("so manchen Schaden verhindern.");
+  if (good==7) return("schon einigen Schaden verhindern.");
+  if (good==8) return("ganz schoen viel Schaden verhindern.");
+  if (good==9) return("extrem viel Schaden verhindern.");
+  if (good==10) return("jeden Schaden dieser Welt verhindern.");
+  return("BUG! Mail to Lamuerte!!! Ask ArchWIZARD for HELP!");
+}
+
+int Damage(int dam)
+{
+  object wer;
+  ::Damage(dam);
+  if (dam>1 && !random(20))
+  {
+    if (random(2)) hp=hp-1; else sp=sp-1;
+    SetProp(P_M_HEALTH_MOD,([P_HP:hp,P_SP:sp]));
+    if(wer=QueryProp(P_WORN))
+    {
+      wer->UpdateAttributes();
+      tell_object(wer,"Deine Todesschienen gluehen voller Hitze auf!\n");  
+      call_out("abkuehl",8, wer);
+    }
+  }
+}
+
+// Jetzt verlieren sie wirklich beim reset hp/sp.... aber nur ganz langsam
+// Wenn man sie staendig fleissig repariert, kann man das aufhalten
+
+void reset()
+{
+  object wer;
+  ::reset();
+
+  if( (wer=QueryProp(P_WORN)) && interactive(wer) )
+  {
+    if (random(100)>75 && QueryProp(P_DAMAGED)>random(5) ) 
+    {
+      if (random(2)) hp=hp-1; else sp=sp-1;
+      SetProp(P_M_HEALTH_MOD,([P_HP:hp,P_SP:sp]));
+      wer->UpdateAttributes();
+      tell_object(wer,"Deine Todesschienen gluehen voller Hitze auf!\n");  
+      i=1;
+      call_out("abkuehl",8, wer);
+    } 
+  }
+}
+
+int abkuehl(object wer)
+{
+  if(hp<=0 || sp <=0){
+    if (wer)
+      tell_object(wer,"Deine Todesschienen loesen sich in Luft auf.\n");  
+    this_object()->remove();
+    return 1;
+  }
+  if (wer)
+    tell_object(wer,"Deine Todesschienen kuehlen wieder ab.\n");  
+  i=0;
+  return 1;
+}
+
+int WearFunc(object me)
+{  //write ("I:"+i+"\n");
+  if(i==1){
+    write("Die Schienen sind viel zu heiss um sie jetzt schon anzuziehen.\n"); 
+    return 0;
+  }
+  if (interactive(environment()))
+    SetProp(P_NODROP, 1);
+  if(i==0) return 1;
+}
+
+void _set_autoloadobj(mixed data)
+{
+  SetProp(P_ITEMD_TMPMAGIC, data[0]);
+  SetProp(P_AC, data[1]);
+  SetProp(P_DAMAGED, data[2]);
+  SetProp(P_M_HEALTH_MOD, data[3]);
+  hp = QueryProp(P_M_HEALTH_MOD)[P_HP];
+  sp = QueryProp(P_M_HEALTH_MOD)[P_SP];
+  SetProp(P_NODROP, 1);
+}
+
+mixed _query_autoloadobj()
+{
+  return ([0: QueryProp(P_ITEMD_TMPMAGIC),
+           1: QueryProp(P_AC),
+           2: QueryProp(P_DAMAGED),
+           3: QueryProp(P_M_HEALTH_MOD)]);
+}
+

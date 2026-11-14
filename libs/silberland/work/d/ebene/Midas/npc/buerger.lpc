@@ -1,0 +1,202 @@
+/*
+** Buerger, Midas  (w) Woody@SL
+** ---
+** 1998-07-05  1.0  Release
+*/
+
+inherit "std/mnpc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <mnpc.h>
+#include <new_skills.h>
+
+#include "../midas.h"
+
+string *razzirooms = ({
+        "/d/ebene/Silberwald/room/room_k12",
+        "/d/ebene/creative/feldlager/room/a1_a3"
+    });
+
+
+// *ARGL* in ebene.h ist hinten ein unnoetiger Strichpunkt!!!
+// -> Probs beim compile vor if...else...
+//
+#undef CLONEME
+#define CLONEME(x) clone_object(x)->move(this_object())
+
+#define ZERRPAUSE 120
+void rauswurf(object ob);
+int zerrzeit = 0;
+
+// Waere nett, wenn Soeldner die armen Buerger verteidigen :)
+void init()
+{
+  ::init();
+  if (query_once_interactive(TP)) return;
+  if (TP && TP->id("Soeldner")) AddDefender(TP);
+  // Razzi wegzerren:
+  if ((time() - zerrzeit) < ZERRPAUSE) return;
+  if (random(3)) return;        // Rauswurf nicht immer. Aber oft.
+  if (TP && TP->id("razzi baba")) call_out( "rauswurf", 2, TP);
+}
+
+
+void rauswurf(object ob)
+{
+  string dest;
+
+  if (!ob) return;                                      // lebt Razzi noch?
+  if (environment() != environment(ob)) return;         // ist er noch da?
+
+  call_out( "gehzurueck", 4, environment() );
+  zerrzeit = time();
+  dest = razzirooms[random(sizeof(razzirooms))];
+  environment()->Message(
+      break_string(
+        Name(WER,1) + " packt " + ob->name(WEN) + " am Kragen.", 78),
+      MSGFLAG_VISUAL );
+
+  move( dest, M_GO,
+      "zum Stadttor", "zerrt " + ob->name(WEN) + " entnervt",
+      "zerrt " + ob->name(WEN) + " herein" );
+
+  ob->move( dest, M_GO,
+      "weggezerrt", "wird",
+      "wird von " + name(WEM) + " hereingezerrt" );
+
+  command_me( "sag Verschone Midas, Du Nervensaege!" );
+  ActivateMove(0);
+}
+
+
+void gehzurueck(object ob)
+{
+  if (environment() != ob)
+  {
+    move( ob, M_GO,
+        "zurueck", "eilt",
+        "kommt zurueckgeeilt" );
+    command_me( "sag So eine Nervensaege..." );
+  }
+  ActivateMove(1);
+}
+
+
+void create()
+{
+  object ob;
+  string *adj;
+  int i,n;
+
+  if (!is_clone(this_object())) return;  // (return on BP)
+
+  adj=({"alt","heruntergekommen","duenn","klein","gutaussehend",
+        "elegant","jung","sportlich","dick","gross"});
+  i=n=random(sizeof(adj));
+
+  ::create();
+  if (random(11)>=5) {
+    n+=2;                     // maennl. Buerger sind ein wenig staerker...
+    AddId ( ({"buerger"}) );
+    SetProp (P_GENDER, MALE);
+    SetProp (P_NAME, "Buerger");
+    SetProp (P_NAME_ADJ, adj[i]);
+    SetProp (P_SHORT, "Ein "+adj[i]+"er Buerger");
+    SetProp (P_LONG, "Du siehst einen "+adj[i]+"en Buerger vor Dir "
+        "stehen, der seinen Geschaeften nachzugehen scheint.");
+    AddAdjective( ({ adj[i],adj[i]+"er",adj[i]+"en" }) );
+  } else {
+    AddId ( ({"buergerin"}) );
+    SetProp (P_GENDER, FEMALE);
+    SetProp (P_NAME, "Buergerin");
+    SetProp (P_NAME_ADJ, adj[i]);
+    SetProp (P_SHORT, "Eine "+adj[i]+"e Buergerin");
+    SetProp (P_LONG, "Du siehst eine "+adj[i]+"e Buergerin vor Dir "
+        "stehen, die ihren Geschaeften nachzugehen scheint.");
+    AddAdjective( ({ adj[i],adj[i]+"e" }) );
+  }
+  SetProp (P_ALIGN, 50+random(30));
+  create_default_npc(5+n+random(3));
+  SetProp (P_SIZE, 150+n*3+random(10));
+  SetProp (P_RACE, "Mensch");
+  SetProp (P_MAX_HANDS, 2);
+
+  // euid setzen, damit Ausruestung gecloned werden kann
+  SUID;
+
+  //   alt,heruntergekommen,duenn,klein,gutaussehend,
+  //   elegant,jung,sportlich,dick,gross
+  //
+  // Ausruestung:
+  // Hose/Rock
+  if ( random(100) < 20 ) {
+    if (QueryProp(P_GENDER)==FEMALE) {
+      if (member(({"jung","gutaussehend","sportlich"}),adj[i])!=-1)
+        CLONEME ("/p/armour/trousers/rock_kurz");
+      else
+        CLONEME ("/p/armour/trousers/rock");
+    } else {
+      if (random(2)) CLONEME ("/p/armour/trousers/hose");
+      else CLONEME ("/p/armour/trousers/fellhose");
+    }
+    // Guertel (nur mit Hose/Rock sinnvoll :))
+    if ( random(100) < 50 ) CLONEME ("/p/armour/belt/guertel");
+  }
+  // Hemd/Weste/Bluse
+  if ( random(100) < 20 ) {
+    if ((QueryProp(P_GENDER)==FEMALE) &&
+        (member(({"elegant","gutaussehend"}),adj[i])!=-1))
+      CLONEME ("/p/armour/armour/bluse");
+    else
+      if (random(100) < 50) CLONEME ("/p/armour/armour/hemd");
+      else CLONEME ("/p/armour/armour/weste");
+  }
+  // Hut (passt auch nicht jedem Buerger...)
+  if ((QueryProp(P_GENDER)==MALE) && (random(100) < 10) &&
+      (member(({"heruntergekommen","elegant","gutaussehend"}),adj[i])!=-1))
+    CLONEME ("/p/armour/helm/hut");
+
+  command ("trage alles");
+
+  ob = CLONEOB ("/obj/money");
+  ob->SetProp(P_AMOUNT, 100+random(21)*5);
+  ob->move(ME);
+
+  SetProp(P_SPELLRATE,15);
+
+  AddSpell(1,100,
+      ME->Name(WER,1)+" tritt Dich kraeftig.\n",
+      ME->Name(WER,1)+" tritt @WEN kraeftig.\n",
+    DT_BLUDGEON, ([SP_SHOW_DAMAGE:1]) );
+
+  SetAttackChats(6, ({
+      ME->Name(WER,1)+" ruft verzweifelt die Soeldner zu Hilfe.\n",
+      ME->Name(WER,1)+" jammert qualvoll.\n" }) );
+
+  // SetProp (P_DIE_MSG, " faellt tot zu Boden.\n");
+  SetProp (P_DEFAULT_INFO,
+      ({ "sagt: Keine Ahnung, so lange bin ich noch nicht hier!",
+         "murmelt: Nie gehoert.",
+         "schaut Dich fragend an.",
+         "hoert Dir nicht zu.",
+         "zuckt ratlos mit den Schultern.",
+         "sagt: Alles kann selbst ich nicht wissen!",
+         "legt den Kopf schief und blickt fragend.",
+         "kratzt sich ratlos am Kopf." }) );
+  AddInfo ( ({"buerger","buergerin"}), "nickt.\n");
+
+  AddLibrary( NPC "midas.lib", 3 );
+
+  SetProp( P_REJECT, ({ REJECT_KEEP,
+      ME->Name(WER,1)+" bedankt sich artig fuer das Geschenk.\n" }) );
+
+  SetProp (P_MNPC_AREA, ROOM "room");
+  SetProp (P_MNPC_WAIT, ({ 10+random(20), 60, 120 }));
+  SetProp (P_MNPC_DEFAULTROOM, ROOM "room_d5");
+  SetProp (P_MNPC_FLAGS, MOV_OUTDOORS + MOV_INDOORS + MOV_MOVES);
+
+}
+

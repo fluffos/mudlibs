@@ -1,0 +1,436 @@
+/* SilberLand MUDlib
+ *
+ * /secure/master/network.c -- UDP-Handling
+ *
+ * $Date: 2005/09/17 19:27:38 $
+ * $Revision: 1.16 $
+ * $Log: network.c,v $
+ * Revision 1.16  2005/09/17 19:27:38  Woody
+ * Erst Altmagier haben Zugriff auf Mudftp
+ *
+ * Revision 1.15  2003/03/11 15:01:00  Woody
+ * IMPG_MSGS Log nach /log/game/ verschoben
+ *
+ * Revision 1.14  2003/02/24 20:05:24  mud
+ * FTP LIST command maps to get_dir function instead read_file function
+ *
+ * Revision 1.13  2002/06/10 17:09:27  Feyaria
+ * logfile auf game/FTP_LOGINFAIL geaendert
+ *
+ * Revision 1.12  2000/05/31 20:27:20  Woody
+ * FtpAccess() fuer proftpd (mod_mud) umgestellt
+ *
+ * Revision 1.11  1999/12/08 11:36:04  Woody
+ * new_erq() eingefuehrt
+ *
+ * Revision 1.10  1999/03/08 02:42:39  Woody
+ * Maximale Mailgroesse jetzt 80 KB, Fehlerhandling verbessert
+ *
+ * Revision 1.9  1998/09/20 20:05:28  Woody
+ * mailread() bugfixed
+ *
+ * Revision 1.8  1998/09/20 13:45:41  Woody
+ * carbon copy sollte nun funktionieren... (jof@mg)
+ *
+ * Revision 1.7  1998/04/28 14:23:45  Woody
+ * FTP Transfers werden jetzt mitgeloggt
+ *
+ * Revision 1.6  1998/02/24 15:21:51  Woody
+ * FTP wizard login erst ab IS_WIZARD moeglich
+ *
+ * Revision 1.5  1997/07/06 15:53:10  Woody
+ * FTP Fileliste ohne Leerzeilen
+ *
+ * Revision 1.4  1997/03/21 23:59:54  Woody
+ * Reply-To: Zeile von Inbound Mail in den Body aufnehmen
+ *
+ * Revision 1.3  1997/03/21 01:17:27  Woody
+ * mailread() bereinigt ueberfluessige Spaces im Header
+ *
+ * Revision 1.2  1997/03/17 19:29:56  Woody
+ * Bei finger neue /p Verzeichnisstruktur beruecksichtigt
+ *
+ * Revision 1.1  1997/03/16 00:04:09  Woody
+ * prepared for revision control
+ *
+ */
+
+#pragma strong_types
+
+#include "/secure/master.h"
+
+#define MAX_MAILSIZE    80000
+#define FTPLOG          "/log/ARCH/FTP"
+#define ftplog(x) write_file(FTPLOG, ctime()+": "+x+"\n")
+
+// #define DEB(msg)  if (funcall(symbol_function('find_player),"woody"))\
+//        tell_object(funcall(symbol_function('find_player),"woody"),msg)
+#define DEB(msg)
+
+string mail_normalize(string str)
+{
+  int pos;
+
+  if (strstr(str,"<")<0 && strstr(str,"(")<0) return str;
+  if (strstr(str,"<")<0)
+  {
+    pos=strstr(str,"(");
+    str=str[0..pos-1];
+    while (strlen(str) && str[0]==' ') str=str[1..];
+    while (strlen(str) && str[strlen(str)-1]==' ') str=str[0..strlen(str)-2];
+    return str;
+  }
+  pos=strstr(str,"<");
+  str=str[pos..];
+  pos=strstr(str,">");
+  str=str[1..pos-1];
+  return str;
+}
+
+string *mk_rec_list(string str)
+{
+  mixed *tmp, *tmp2;
+  int i;
+
+  tmp=explode(lower_case(implode(explode(str," "),"")),",");
+  tmp2=allocate(sizeof(tmp));
+  for (i=sizeof(tmp)-1;i>=0;i--)
+  {
+    tmp2[i]=mail_normalize(tmp[i]);
+  }
+  return tmp2;
+}
+
+nosave int CheckPasswd(string name, string passwd)
+{
+  mixed *uinf;
+
+  uinf=get_full_userinfo(name);
+  if (sizeof(uinf)<2) return 0;
+  return (crypt(passwd,uinf[USER_PASSWORD+1])==uinf[USER_PASSWORD+1]);
+}
+
+// The function 'FtpAccess()' is located within our master-object and is
+// called by receive_imp(). It is responsible for the communication with
+// ProFtpd and controls the access rights.
+
+nosave void FtpAccess( string host, string message, int port )
+{
+    string *comp, reply, head;
+
+#if __EFUN_DEFINED__(send_imp)
+    comp = efun::explode( message, "\t" );
+#define FTP_ID   0
+#define FTP_SEQ  1
+#define FTP_TAG  2
+#define FTP_CMD  3
+#define FTP_ARG1 4
+#define FTP_ARG2 5
+#define FTP_ARG3 6
+
+    // unknown requests are logged
+    if ( sizeof(comp) <= FTP_CMD || lower_case(comp[FTP_TAG]) != "req" ){
+        log_file( "game/IMP_MSGS", "Host: " + host + ":" + port + " - '" +
+                  message + "'\n" );
+        return;
+    }
+
+    // prepare the answer; default is 'not allowed'
+    reply = "INVALID";
+    head = sprintf( "%s\t%s\tRPLY\t%s\t",
+                    comp[FTP_ID], comp[FTP_SEQ], comp[FTP_CMD] );
+
+
+    // now let's see what is requested:
+    switch ( lower_case(comp[FTP_CMD]) ){
+    // a user wants to log in; test if it is a valid account
+    case "user":
+        if ( sizeof(comp) <= FTP_ARG1 )
+            break;
+        
+        // only wizards have ftp-accounts
+        // anonymous accounts are handled by ProFtpd
+        if ( IS_INACTIVEWIZ(lower_case(comp[FTP_ARG1])) )
+            reply = "/players/" + lower_case(comp[FTP_ARG1]);
+        else
+            reply = "NONE";
+        break;
+
+    // authenticate user; does password match username?
+    case "pass":
+        if ( sizeof(comp) <= FTP_ARG2 )
+            break;
+        
+        comp[FTP_ARG1] = lower_case(comp[FTP_ARG1]);
+        
+        // only wizards have ftp-accounts
+        // anonymous accounts are handled by ProFtpd
+        if ( IS_INACTIVEWIZ(comp[FTP_ARG1]) ){ 
+            if ( CheckPasswd( comp[FTP_ARG1], comp[FTP_ARG2] ) )
+                reply = "OK";
+            else 
+                // failed logins are logged
+                log_file( "game/FTP_LOGINFAIL",
+                          sprintf( "BAD PASSWORD:      (FTP)     %s %s\n",
+                                   comp[FTP_ARG1],
+                                   ctime(time()) ) );
+        }
+        else 
+            reply = "FAIL";
+        break;
+
+    // user wants to read files; is he allowed to?
+    case "read":
+        if ( sizeof(comp) <= FTP_ARG2 )
+            break;
+        
+        if ( comp[FTP_ARG2][0] == '/' &&
+             // check if read-access is valid
+             // access-rights for anonymous accounts are handled by ProtFpd
+             valid_read( comp[FTP_ARG2], lower_case(comp[FTP_ARG1]),
+                         "read_file", 0 ) )
+            reply = "OK";
+        else
+            reply = "FAIL";
+        break;
+
+    // is user allowed to write the given file?
+    case "writ":
+        if ( sizeof(comp) <= FTP_ARG2 )
+            break;
+        
+        if ( comp[FTP_ARG2][0] == '/' &&
+             // the same as above
+             valid_write( comp[FTP_ARG2], lower_case(comp[FTP_ARG1]),
+                          "write_file", 0 ) )
+            reply = "OK";
+        else
+            reply = "FAIL";
+        break;
+
+    // is user allowed to list contents of directory?
+    // NOTE: you need permissions to list the contents of a directory
+    // to 'cd' into it with ProFtpd
+    case "list":
+        if ( sizeof(comp) <= FTP_ARG2 )
+            break;
+        
+        if ( comp[FTP_ARG2][0] == '/' &&
+             // In contrast to NaseFtp, the mud-module for ProFtpd
+             // only expects "OK" or "FAIL" as an answer to the list-command.
+             // The directory listing is built by ProFtpd itself.
+             // Thus it is possible that a user can see a file but isn't
+             // allowed to read it`s contents.
+             // This solution isn't as flexible as the way NaseFtp handles
+             // directory listings, but it is _way_ faster.
+             valid_read( comp[FTP_ARG2], lower_case(comp[FTP_ARG1]),
+                         "get_dir", 0 ) )
+            reply = "OK";
+        else
+            reply = "FAIL";
+        break;
+        
+    default:
+        // unknown requests are logged
+        log_file( "game/IMP_MSGS", "Host: " + host + ":" + port + " - '" +
+                  message + "'\n" );
+        break;
+    }
+
+    // send the answer
+    send_imp( host, port, head+reply );
+#endif
+}
+
+mixed doReadMail(string file)
+{
+  mixed *lines, *message, *tmp;
+  string rest,what,*line;
+  int i;
+  int to_read,pos,now;
+  
+  DEB("READING "+file+"\n");
+  to_read=file_size(file);
+  if (to_read>MAX_MAILSIZE || to_read<5) return -1;
+  rest="";
+  pos=0;
+  while (to_read>0)
+  {
+    if ((now=to_read)>20000) now=20000;
+    rest+=read_bytes(file,pos,pos+now-1);
+    pos+=now;
+    to_read-=now;
+  }
+  DEB("GOT "+rest+"\n");
+  if (catch(lines=explode(rest,"\n"))) return -1;
+  if (!sizeof(lines)) {
+    DEB("RETURN: no data.\n");
+    return -2;
+  }
+  i=0;
+  while (i<sizeof(lines) && lines[i]!="")
+    i++;
+  if (i==sizeof(lines)) {
+    DEB("RETURN: no body.\n");
+    return -3;
+  }
+  rest=implode(lines[i..],"\n");
+  message=allocate(9);
+  message[MSG_BODY]="";
+  message[MSG_CC] = ({});
+  for (;i>=0;i--)
+  {
+    line=explode(lines[i],":");
+    if (sizeof(line)>1)
+    {
+      what=lower_case(line[0]);
+      line[0]=implode(line[1..],":");
+      line[0]=implode(explode(line[0], " ")-({""}), " ");
+      switch (what)
+      {
+        case "reply-to":
+          message[MSG_BODY] += lines[i] + "\n";
+          break;
+        case "subject":
+          message[MSG_SUBJECT] = line[0];
+          break;
+        case "from":
+          message[MSG_FROM] = mail_normalize(line[0]);
+          message[MSG_SENDER] = line[0];
+          break;
+        case "cc":
+          message[MSG_CC] += mk_rec_list(line[0]);
+          break;
+        case "bcc":
+          message[MSG_BCC] = mk_rec_list(line[0]);
+          break;
+        case "to":
+          tmp=mk_rec_list(line[0]);
+          message[MSG_RECIPIENT] = tmp[0];
+          if (sizeof(tmp)>1)
+            message[MSG_CC]+=tmp[1..];
+          break;
+      }
+    }
+  }
+  message[MSG_BODY]+=rest;
+  if (!message[MSG_FROM]) {
+    DEB("RETURN: no sender.\n");
+    return -4;
+  }
+  if (!message[MSG_RECIPIENT]) {
+    message[MSG_RECIPIENT]=explode(explode(file,"/")[<1],".")[0];
+    if (!strlen(message[MSG_RECIPIENT])) {
+      DEB("RETURN: no recipient.\n");
+      return -5;
+    }
+  }
+  DEB("SUCCESS: Handing out to mailer.\n");
+  "/secure/mailer"->DeliverMail(message,2);
+  (void)rm(file);
+}
+
+void mailread()
+{
+  string *files;
+  int ret;
+  
+  files=get_dir("/mail/InBound/*")-({"..","."});
+  while (sizeof(files))
+  {
+    DEB("FOUND FILE "+files[0]+"...\n");
+    if (file_size("/mail/InBound/"+files[0]) <= 0) {
+      files=files[1..];
+      continue;
+    }
+    ret=doReadMail("/mail/InBound/"+files[0]);
+    if (ret < 0)
+    {
+      string err, cerr;
+      mixed message;
+
+      switch (ret) {
+        case -1: err="Mail too big.\n"; break;
+        case -2: err="Mail contains no data.\n"; break;
+        case -3: err="Mail contains no body.\n"; break;
+        case -4: err="Mail has no sender.\n"; break;
+        case -5: err="Mail has no recipient.\n"; break;
+        default: err="Unknown error "+err+".\n"; break;
+      }
+      message = allocate(9);
+      cerr=catch(rename("/mail/InBound/"+files[0],
+                        "/secure/ARCH/MAIL/"+files[0]));
+      if (cerr) err+="rename failed: "+cerr;
+      message[MSG_SENDER]=geteuid();
+      message[MSG_FROM]=getuid();
+      message[MSG_SUBJECT]="Mail delivery error: /secure/ARCH/MAIL/"+files[0];
+      message[MSG_RECIPIENT]="woody";
+      message[MSG_BODY]=err+"\n";
+      "/secure/mailer"->DeliverMail(message,2);
+    }
+    files=files[1..];
+  }
+}
+
+void udp_query(string query,string host,int port)
+{
+  string *mess,tmp,*tmp2;
+  mixed *data;
+  int i;
+  
+  mess=explode(query," ");
+  switch (mess[1])
+  {
+    case "wholist":
+    case "who":
+    data="/obj/werliste"->QueryWhoListe();
+    break;
+    case "uptime":
+	  data=({funcall(symbol_function("uptime"))});
+	  break;
+    case "finger":
+    if (sizeof(mess)<3)
+      data=({"Error: Wen soll ich fingern ?"});
+    else
+      data=explode(FINGERD->finger_single(lower_case(mess[2]),0),"\n");
+    break;
+    case "mailread":
+    data=({"Okay"});
+    mailread();
+    break;
+    default:
+    data=({"Error: unknown request "+mess[1]+"\n"});
+  }
+  send_imp(host,port,sprintf("%s 0 %d",mess[0],sizeof(data)));
+  for (i=0;i<sizeof(data);i++)
+    send_imp(host,port,sprintf("%s %d %s",mess[0],i+1,data[i]));
+}
+
+void get_ip_name(string ip_num)
+{
+  send_imp(UDPSERV,4123,"IPNAME|"+ip_num);
+}
+
+#if __EFUN_DEFINED__(query_ip_port)
+void get_auth_user(object pl)
+{
+  string s;
+  
+//  send_imp(UDPSERV,4123,sprintf("AUTH|%s|%s|%d|%d",getuid(pl),query_ip_number(pl),query_ip_port(pl),query_mud_port(pl)));
+  s=sprintf("AUTH|%s|%s|%d|%d",getuid(pl),
+      query_ip_number(pl),query_ip_port(pl),query_mud_port(pl));
+  send_imp(UDPSERV,4123,s);
+}
+#endif
+
+// if you ever want a new erq started
+int new_erq()
+{
+  if (!this_interactive() || !IS_ARCH(this_interactive())) return -1;
+  write("Attaching new erq...\n");
+  attach_erq_demon("", 1);
+  // funcall(symbol_function('___updmaster));
+  // ___updmaster();
+  return 1;
+}
+

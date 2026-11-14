@@ -1,0 +1,147 @@
+
+inherit "std/thing";
+#include <properties.h>
+#include <combat.h>
+#include <wizlevels.h>
+#include <new_skills.h>
+#include <defines.h>
+#include <moredef.h>
+#include "../zech.h"
+
+int alkohol, last_drink_time, skill;
+#define TIME 10
+#define ALC_PER_GUILD_LEVEL 100
+#define HP_PER_SKILL 5
+
+void create() {
+  if( !is_clone(TO) ) return;
+  ::create();
+  skill = 0;
+  SetProp(P_SHORT, "Ein Faesschen");
+  SetProp(P_LONG,
+      "Ein Faesschen, das man bequem unter dem Arm mittragen kann. Es hat "
+      "sogar einen kleinen Zapfhahn eingebaut, damit man jederzeit einen "
+      "Schluck aus dem Fass genehmigen kann. Wenn Du Dein Faesschen nicht mehr "
+      "brauchst kannst du es zerbrechen.\n@@fuellstand@@");
+  SetProp(P_NAME, "Faesschen");
+  SetProp(P_GENDER, NEUTER);
+  AddId( ({"fass", "faesschen", "\nzechpreller_fass"}) );
+
+  SetProp(P_WEIGHT, 1000);  
+  SetProp(P_VALUE, 1000);
+  SetProp(P_NOBUY, 1); 
+  SetProp(P_NODROP, "Trinken, nicht wegwerfen!\n");
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NOSELL, "Trinken, nicht verkaufen!\n");
+  SetProp(P_SMELL, "Das Faesschen riecht stark nach Alkohol.\n");
+
+  AddCmd( ({"trink", "trinke"}), "cmd_trinken");
+  AddCmd( ({"zerbrich", "zerbreche", "zerbrech"}), "cmd_brechen");
+  alkohol = 0;
+  last_drink_time = 0;
+}
+
+int cmd_brechen(string str)
+{
+  notify_fail("Was willst Du zerbrechen?\n");
+  if(!str || str == "") return 0;
+  if(!(str == "fass" ||
+       str == "faesschen" ||
+       str == "zechprellerfass")) return 0;
+
+  write(BS("Du zerbrichst das Fass."));
+  say(BS(TPN+" zerbricht das Fass."));
+  call_out("remove", 0);
+ return 1; 
+}
+
+int QueryMaxFill(object pl)
+{
+  if( !objectp(pl) || pl->QueryProp(P_GUILD)!="zechpreller") 
+    return 1;
+  return ALC_PER_GUILD_LEVEL * (pl->QueryProp(P_GUILD_LEVEL)-3); 
+}
+
+string fuellstand()
+{
+  int a;
+  a = 100 * alkohol / (QueryMaxFill(TP) || 1);
+  if (a == 0)
+    return "Momentan ist das Faesschen leer.\n";
+  if( a < 25 )
+    return "Das Faesschen ist ziemlich leer.\n";
+  if( a < 50 )
+    return "Das Faesschen ist weniger als halb voll.\n";
+  if( a < 75 )
+    return "Das Faesschen ist mehr als halb voll.\n";
+  if( a < 100 )
+    return "Das Faesschen ist fast voll.\n";
+  return "Reiner Alkohol schwappt fast aus dem Faesschen, denn es ist randvoll!\n";
+}
+
+void init() 
+{
+ ::init();
+ if( !objectp(MENV) || present("\nzechpreller_fass 2",MENV) || 
+     MENV->QueryProp(P_GUILD)!="zechpreller" )
+   call_out("remove", 0);
+}
+
+
+int AddAlcohol(int a)
+{
+  if(getuid(previous_object())!="GUILD.zech_spells" && !IS_ARCH(TP)) 
+  {
+   return -1;
+  }
+  alkohol+=a;
+  if( alkohol > QueryMaxFill(TP) )
+  {
+    alkohol = QueryMaxFill(TP);
+    write("Alkohol schwappt aus dem Fass, denn es ist jetzt randvoll!\n");
+  }
+}
+
+int QueryAlkohol()
+{
+  return alkohol;
+}
+
+int cmd_trinken(string str)
+{
+  int alc, new_alc;
+  string x;
+  _notify_fail("Woraus willst Du trinken?\n");
+  if(!str)
+    return 0;
+  if( sscanf(str, "aus %s", x)!=1) return 0;
+  if( !id(x) ) return 0;
+  if( !alkohol )
+    return write("Leider ist Dein Faesschen leer!\n"),1;
+  if( time()-last_drink_time < TIME )
+    return write("Nicht so hastig, Du hast ja gerade aus Deinem Faesschen "
+        "getrunken!\n"),1;
+  last_drink_time = time();
+  new_alc = 10+random(10);
+  new_alc = new_alc>alkohol ? alkohol : new_alc;
+  alkohol -= new_alc;
+  write("Du nimmst einen tiefen Schluck aus Deinem Faesschen. *GLUCKGLUCK*\n");
+  tell_room(ENV(TP),BS(TP->Name(WER,1)+" nimmt einen tiefen Schluck aus "+
+        TP->QueryPossPronoun(NEUTER,WEM,SINGULAR)+" Faesschen."), 
+      ({TP}));
+  if( (alc=TP->QueryProp(P_ALCOHOL))+new_alc > (TP->QueryProp(P_MAX_ALCOHOL)))
+    write("Du torkelst und verschuettest alles. *HICKS*\n");
+  else
+  {
+    TP->SetProp(P_ALCOHOL, alc+new_alc);
+    TP->AddHp(skill*HP_PER_SKILL);
+  }
+  return 1;
+}
+
+void SetSkill(int sk)
+{
+  if(file_name(PO) != "/spellbooks/zech_spells") return;
+  skill = sk/1000;
+  return;
+}

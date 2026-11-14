@@ -1,0 +1,108 @@
+
+varargs int prep_aufspiessen(object caster, mapping sinfo, int flag) 
+{
+  object spear, victim;
+
+  if (!caster->InFight())
+  {
+    tell_object(caster,
+        "Wieso willst Du jemanden mit Deinem Speer stossen wenn Du gar "
+        "nicht kaempfst?\n");
+    return 0;
+  }
+  victim = FindEnemyVictim(sinfo[SI_SKILLARG], caster,
+      "Wen willst Du mit Deinem Speer aufspiessen?\n");
+  if (!victim)
+    return 0;
+  sinfo[SI_ENEMY] = victim;
+  if (caster->QueryProp(P_DISABLE_ATTACK))
+  {
+    tell_object(caster, "Du bist kampfunfaehig und kannst jetzt niemanden "
+        "aufspiessen!\n");
+    return 0;
+  }
+  if (!objectp(spear = caster->QueryProp(P_WEAPON)) || 
+      spear->QueryProp(P_WEAPON_TYPE) != WT_SPEAR)
+  {
+    tell_object(caster, "Du musst einen Speer gezueckt haben, um Deinen " 
+        "Gegner aufspiessen zu koennen!\n");
+    return 0;
+  }
+  if (!pay_for_spell(caster, sinfo, !flag))
+    return 0;
+  return 1;
+}
+
+int aufspiessen(object caster, mapping sinfo) 
+{
+  object victim;
+  int suc;
+  object spear;
+  string str1;
+  int bonus;
+  int dam;
+
+  if (!prep_aufspiessen(caster, sinfo, 1))
+    return 0;
+  victim = FindEnemyVictim(sinfo[SI_SKILLARG], caster, "");
+  spear = caster->QueryProp(P_WEAPON);
+
+  suc = SpellSuccess(caster,sinfo);
+
+  if(sinfo[SI_SKILLPOINTS] > 1) {
+    // reduzierte Zauberpause
+    sinfo[SI_SPELLFATIGUE] = 2;
+  }
+  
+  if (suc <= 0)
+    return MISSERFOLG;
+
+  if (spear->QueryProp(P_ARTICLE)) str1 = "D"; else str1 = "";
+
+  environment(caster)->Message(BS(sprintf("%s spiesst %s mit %s %s auf.",
+        caster->Name(WER,1), victim->name(WEN,1), 
+        caster->QueryPossPronoun(spear->QueryProp(P_GENDER), WEM),
+        spear->name(RAW) )),
+      MSGFLAG_VISUAL, ([ MSGFLAG_EXCLUDE : ({ caster, victim }) ]) );
+
+  tell_object(caster, BSC(sprintf("Du spiesst %s mit %s%s auf.\n", 
+          victim->name(WEN,1), str1, spear->name(WEM,0))));
+
+  tell_object(victim, BS(sprintf("%s spiesst Dich mit %s %s auf.",
+        caster->Name(WER,1),
+        caster->QueryPossPronoun(spear->QueryProp(P_GENDER), WEM),
+        spear->name(RAW) )));
+
+  bonus = CheckEquip(caster, sinfo[SI_SPELLFUNC]);
+  sinfo[SI_SKILLDAMAGE] += spear->QueryProp(P_WC) + suc / 100 + bonus;
+  sinfo[OFFSET(SI_SKILLDAMAGE)] += spear->QueryProp(P_WC_FIX) * 5 + bonus;
+  sinfo[SI_MAX_DAMAGE] += (caster->QueryProp(P_GUILD_LEVEL) - 7) * 30 + bonus * 2;
+  sinfo[SI_SKILLDAMAGE_TYPE] = spear->QueryProp(P_DAM_TYPE);
+  if(sinfo[SI_SKILLPOINTS] > 2 && victim->QueryProp(P_HP) < victim->QueryProp(P_MAX_HP) / 5) {
+    // Bonus gegen stark verwundete Gegner
+    tell_object(caster, BS("Du setzt zum Todesstoss an."));
+    sinfo[SI_SKILLDAMAGE] *= 2;
+    sinfo[OFFSET(SI_SKILLDAMAGE)] += caster->QueryProp(P_GUILD_LEVEL) * 5;
+    sinfo[SI_MAX_DAMAGE] += caster->QueryProp(P_GUILD_LEVEL) * 20;
+  }
+
+  if (IS_LEARNER(caster))
+    printf("dam = %d, off = %d, max = %d damtype = %O\n",
+        sinfo[SI_SKILLDAMAGE], 
+        sinfo[OFFSET(SI_SKILLDAMAGE)], 
+        sinfo[SI_MAX_DAMAGE],
+        sinfo[SI_SKILLDAMAGE_TYPE] );
+
+  dam = TryDefaultAttackSpell(victim, caster, sinfo, sinfo[SI_SPELL] + 
+      ([SP_REDUCE_ARMOUR: ([P_BODY: 101 - sinfo[SI_SKILLABILITY] / 200])]) );
+
+  if (IS_LEARNER(caster))
+    printf("Schaden = %d\n", dam);
+
+  if (victim && !victim->QueryProp(P_GHOST) && dam > 50 &&
+      random(100) > victim->QueryProp(P_NOMAGIC))
+    victim->SetProp(P_DISABLE_ATTACK, random(2));
+
+  return ERFOLG;
+}
+

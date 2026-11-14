@@ -1,0 +1,522 @@
+#pragma strong_types
+
+#include <properties.h>
+#include <wizlevels.h>
+#include <moving.h>
+
+inherit "/std/tool";
+
+//#define DEBUG            1
+
+#define VERSION          "0.2.3"
+#define DATE             "06.10.2003"
+#define MAINTAINER       "cirion"
+#define VHIST \
+  "0.0.1  11.03.2003  Implementation version\n"\
+  "0.1.0  13.03.2003  Initial relase\n"\
+  "0.1.1  13.03.2003  Security fixes and more customization\n"\
+  "0.1.2  13.03.2003  Small fix when trying to complete non-existant path\n"\
+  "                   Changed help system\n"\
+  "0.1.3  14.03.2003  Added switch to disable empty line completion\n"\
+  "0.1.4  07.05.2003  Fixed completion of directories (appending /)\n"\
+  "0.1.5  09.05.2003  Added new settings to exclude invisible files\n"\
+  "0.1.6  12.05.2003  Fixed small bug in / appending of files\n"\
+  "0.2.0  12.05.2003  Added completion of commands given by inventory\n"\
+  "0.2.1  15.05.2003  Added trailing space when expanding complete command\n"\
+  "                   The usage of this feature requires client-side changes\n"\
+  "0.2.2  16.07.2003  Fixed bug when completing single words (leading space)\n"\
+  "0.2.3  06.10.2003  Incomplete bugfix in / appending of directories\n"\
+
+#define HELPDIR          "/obj/tools/cmpl"
+
+#if ! defined(clonep)
+#define clonep is_clone
+#endif
+#ifdef DEBUG
+#define DB(x) if (find_player(MAINTAINER))\
+                tell_object(find_player(MAINTAINER),x+"\n")
+#else
+#define DB(x)
+#endif
+
+#define CMPL_ASK           1
+#define CMPL_SHOW_MANY     2
+#define CMPL_FILES_ONLY    4
+#define CMPL_SHOW_PLS      8
+#define CMPL_SHOW_INV     16
+#define CMPL_SHOW_ENV     32
+#define CMPL_EMPTY        64
+#define CMPL_DOT_FILES   128
+#define CMPL_JDOT_FILES  256
+
+#define CMPL_DEFAULT (CMPL_ASK|\
+                      CMPL_SHOW_MANY|\
+                      CMPL_FILES_ONLY|\
+                      CMPL_SHOW_PLS|\
+                      CMPL_SHOW_INV|\
+                      CMPL_SHOW_ENV|\
+                      CMPL_EMPTY|\
+                      CMPL_DOT_FILES)
+#define ITEMS_DEFAULT  100
+
+// saved variables
+int flags;
+int items;
+string version;
+nosave object owner;
+
+nosave void set_input(string s)
+{
+  printf("COMMANDLINECOMPLETED %s*****COMMANDLINECOMPLETEEND\n", s);
+}
+
+void create()
+{
+  if (!clonep(this_object()))
+    return;
+  ::create();
+  if (!flags)
+  {
+    items = ITEMS_DEFAULT;
+    flags = CMPL_DEFAULT;
+    version = VERSION;
+  }
+  owner = this_player();
+
+  SetProp(P_SHORT, "Ein Commandline-Completer v"+VERSION);
+  SetProp(P_NAME, "Commandline-Completer");
+  SetProp(P_LONG,
+    "Ein Commandline-Completer v"+VERSION+". Hilfe mit "
+    "'cmplhelp'.");
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NODROP, "Du kannst den Commandline-Completer nicht ablegen.\n");
+  SetProp(P_NOBUY, 1);
+  SetProp(P_GENDER, MALE);
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_ARTICLE,0);
+  SetProp(P_GENDER,0);
+  AddId(({"cmpl", "completer", "commandcompleter", "cmdcompleter",
+          "commandlinecompleter", "command-completer",
+          "commandline-completer"}));
+  AddCmd("COMMANDLINECOMPLETE", "cmd_cmpl");
+  AddCmd("cmplsettings", "cmd_set");
+  AddCmd("cmplhelp", "cmd_help");
+  AddCmd("cmplversion", "cmd_version");
+  AddCmd("cmplupdate", "cmd_update");
+}
+
+/// commands /////////////////////////////////////////////////////////////////
+
+nosave int cmd_update(string str)
+{
+  object new;
+
+  printf("Updating...\n");
+  new = clone_object(explode(file_name(this_object()),"#")[0]);
+  new->SetProp(P_AUTOLOADOBJ,QueryProp(P_AUTOLOADOBJ));
+  new->move(this_player(),M_NOCHECK|M_SILENT);
+  remove();
+  return 1;
+}
+
+void init()
+{
+  ::init();
+  if (environment(this_object())!=owner)
+  {
+    printf("Etwas verschwindet in einem ultrahellen Aufblitzen der astralen "
+           "Energien.\n");
+    remove();
+  }
+}
+
+nosave int cmd_version(string str)
+{
+  printf(
+    "Commandline-Completer v"+VERSION+" ("+DATE+")\n"
+    "(c) 2003 Cirion@Silberland\n"
+    "\n"
+    "Version History:\n"
+    +VHIST+
+    "\n");
+  return 1;
+}
+
+nosave int cmd_help(string str)
+{
+  if (!stringp(str) || str == "")
+  {
+    printf(
+      "Dies ist der Commandline-Completer v"+VERSION+" ("+DATE+").\n"
+      "(c) 2003 Cirion@Silberland"+
+      (MAINTAINER!="cirion"?" (gewartet von "+MAINTAINER+")":"")+"\n\n"+
+      break_string(
+      "Dieses Tool soll dazu dienen, auf Tastendruck eine Vervollstaendigung "
+      "der momentanen Kommandozeile zu erzeugen (aehnlich der UNIX-Shell "
+      "'bash'). Hierzu sind einige Einstellung am MUD-Client vonnoeten "
+      "(siehe 'cmplhelp client'). Die Einstellungen des Completers koennen "
+      "mittels 'cmplsettings' angezeigt und veraendert werden. Weitere Hilfe "
+      "kann mittels 'cmplhelp <topic>' angezeigt werden. Moegliche Themen "
+      "sind:")+break_string(implode(get_dir(HELPDIR+"/*")-({".",".."}),", ")));
+  }
+  else if (0 < file_size(HELPDIR+"/"+str))
+  {
+    this_player()->More(
+      "+--- Command-Completer Help ("+str+") ---+\n"+
+      read_file(HELPDIR+"/"+str));
+
+  }
+  else
+  {
+    printf("Hilfe nicht gefunden. Moegliche Themen sind:\n"+
+           break_string(implode(get_dir(HELPDIR+"/*")-({".",".."}),", ")));
+  }
+  return 1;
+}
+
+nosave int cmd_set(string str)
+{
+  string setting;
+  mixed val;
+  int flag;
+
+  if (!stringp(str) || str == "")
+  {
+    printf(
+      "Commandline-Completer v"+VERSION+" ("+DATE+")\n"
+      "Setting  Value\n"
+      "ask      %s\n"
+      "many     %s\n"
+      "howmany  %d\n"
+      "fonly    %s\n"
+      "players  %s\n"
+      "inv      %s\n"
+      "env      %s\n"
+      "empty    %s\n"
+      "dotfiles %s\n"
+      "justdot  %s\n",
+      (flags&CMPL_ASK?"on":"off"),
+      (flags&CMPL_SHOW_MANY?"on":"off"),
+      items,
+      (flags&CMPL_FILES_ONLY?"on":"off"),
+      (flags&CMPL_SHOW_PLS?"on":"off"),
+      (flags&CMPL_SHOW_INV?"on":"off"),
+      (flags&CMPL_SHOW_ENV?"on":"off"),
+      (flags&CMPL_EMPTY?"on":"off"),
+      (flags&CMPL_DOT_FILES?"on":"off"),
+      (flags&CMPL_JDOT_FILES?"on":"off"));
+  }
+  else if (2 == sscanf(str,"%s %s",setting, val))
+  {
+    switch (setting)
+    {
+      case "ask":
+        flag = CMPL_ASK;
+        break;
+      case "many":
+        flag = CMPL_SHOW_MANY;
+        break;
+      case "fonly":
+        flag = CMPL_FILES_ONLY;
+        break;
+      case "players":
+        flag = CMPL_SHOW_PLS;
+        break;
+      case "inv":
+        flag = CMPL_SHOW_INV;
+        break;
+      case "env":
+        flag = CMPL_SHOW_ENV;
+        break;
+      case "empty":
+        flag = CMPL_EMPTY;
+        break;
+      case "dotfiles":
+        flag = CMPL_DOT_FILES;
+        break;
+      case "justdot":
+        flag = CMPL_JDOT_FILES;
+        break;
+      case "howmany":
+        if (1 != sscanf(val,"%d",val))
+        {
+          printf("Please enter numeric value to 'howmany'.\n");
+          return 1;
+        }
+        items = val;
+        printf("'howmany' is now %d.\n", val);
+        return 1;
+      default:
+        printf("Unkown setting.\n");
+        return 1;
+    }
+    if (flag)
+    {
+      if (val == "off")
+        flags = (flags|flag) - flag;
+      else if (val == "on")
+        flags = flags|flag;
+      else
+      {
+        printf("Set to on or to off?\n");
+        return 1;
+      }
+      printf("'%s' is now %s.\n", setting, val);
+    }
+  }
+  else
+  {
+    printf("USAGE: cmplsettings [<setting> <value>]\n");
+  }
+  return 1;
+}
+
+/// autoloading //////////////////////////////////////////////////////////////
+
+nosave void _set_autoloadobj(mixed data)
+{
+  flags = data[0];
+  items = data[1];
+  version = data[2];
+  if (version != VERSION)
+  {
+    printf(break_string(
+      "Du hast gerade eine neue Version des Commandline-Completers erhalten. "
+      "'cmplversion' gibt eine Uebersicht ueber die Aenderungen."));
+    version = VERSION;
+  }
+}
+
+nosave mixed _query_autoloadobj()
+{
+  return ({flags,items,version});
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
+nosave void print_matches(string * res, string * input)
+{
+  int len, shortest, i;
+  string common;
+  string * cmds;
+
+  cmds = sort_array(res,lambda(({'a,'b}),
+    ({#'<,({#'strlen,'a}),({#'strlen,'b})})));
+  len = strlen(cmds[0]+1);
+  shortest = strlen(cmds[<1]);
+  for (common = cmds[0][0..0];
+       strlen(common) <= shortest+1;
+       common = cmds[0][0..strlen(common)])
+  {
+    if (sizeof(filter_array(res,
+      lambda(({'s}),({#'==,common,({#'[..],'s,0,strlen(common)-1})}))))
+      < sizeof(res))
+    {
+      if (sizeof(input[0..<2]))
+        set_input(implode(input[0..<2]," ") + " " + common[0..<2]);
+      else
+        set_input(common[0..<2]);
+      break;
+    }
+  }
+  printf(break_string(implode(map_array(res,lambda(({'s}),
+    ({#'sprintf,({#'+,"%-",({#'+,len,"' 's"})}),'s})))," "),(78/len)*len));
+}
+
+nosave void ask_input(string in, string * res, string * input)
+{
+  set_input(implode(input," "));
+  if (in[0] == 'y' || in[0] == 'j')
+  {
+    print_matches(res, input);
+  }
+}
+
+nosave string * GetCmds()
+{
+  string * res;
+
+  res = map_array(this_player()->QueryProp(P_LOCALCMDS),
+                   lambda(({'c}),({#'[,'c,0})))
+      + query_actions(this_player());
+  filter_array(all_inventory(this_player()),
+    lambda(({'o, 'r}),({#'?,({#'mappingp,({#'call_other,'o,"QueryProp",P_COMMANDS})})
+                           ,({#'+=,'r,({#'m_indices,({#'call_other,'o,"QueryProp",P_COMMANDS})})})
+                      })),&res);
+  res = map_array(res, lambda(({'c}),({#'+,'c," "})));
+  return res;
+}
+
+varargs string * GetPaths(string path, int cur)
+{
+  int i,j;
+  string * files;
+
+  i = -1;
+  do
+  {
+    j = i;
+    i = strstr(path,"/",i+1);
+  }
+  while(i >= 0);
+  DB("PATH: "+path);
+  if (!cur && (j == -1))
+    j = 0;
+  if ( path == "."
+    || path == ".."
+    || path[<2..<1] == "/."
+    || path[<3..<1] == "/.." )
+  {
+    files = map_array(get_dir(path+"/*")||({}),
+      lambda(({'f}),({#'=,'f,({#'+,path+"/",'f})})));
+  }
+  else
+    files = get_dir(path+"*")||({});
+  if (!(flags&CMPL_DOT_FILES))
+    files = filter_array(files,
+      lambda(({'f}),({#'!=,({#'[..],'f,0,0}),"."})));
+  else if (!(flags&CMPL_JDOT_FILES))
+    files = files - ({".",".."});
+  files = map_array(files,
+    lambda(({'s}),({#'=,'s,({#'+,path[0..j],'s})})));
+  files = map_array(files, lambda(({'f}),({#'?,
+    ({#'&&,({#'==,({#'file_size,'f}),-2}),
+           ({#'!=,({#'[..],'f,-1,0}),"/"})}),({#'+,'f,"/"}),'f})));
+  return files;
+}
+
+nosave string * GetPlayers()
+{
+  if (flags&CMPL_SHOW_PLS)
+    return map_array(users(),lambda(({'u}),({#'+,({#'getuid,'u})," "})));
+  else
+    return ({});
+}
+
+nosave string * GetIds()
+{
+  string * res;
+  object * obs;
+  res = ({});
+  obs = ({});
+  if (flags&CMPL_SHOW_ENV)
+    obs += (all_inventory(environment(this_player())) - ({this_player()}));
+  if (flags&CMPL_SHOW_INV)
+    obs += all_inventory(this_player());
+  filter_array(obs,
+    lambda(({'o, 'r}),({#'?,({#'call_other,'o,"QueryProp",P_IDS})
+                           ,({#'+=,'r,({#'call_other,'o,"QueryProp",P_IDS})})
+                      })),&res);
+  res = map_array(res, lambda(({'c}),({#'+,'c," "})));
+  return res;
+}
+
+nosave varargs int cmd_cmpl(string str, int force)
+{
+  string *cmds, *res, *input, *files;
+  object ob;
+  int path, i;
+
+  if (query_input_pending(this_player()) || query_editing(this_player()))
+    return 1;
+  if (1 != sscanf(this_player()->_unparsed_args(),"%s*****COMMANDLINECOMPLETEEND",str))
+    return 1;
+  while (str[0] == ' ')
+    str = str[1..];
+  if (str == "" && !(flags&CMPL_EMPTY))
+    return 1;
+  input = explode(str," ");
+  // alternative: find '-enclosed phrases at the cost of about 50% performance
+  // input = regexplode(str, "('[^']*'|'[^']*|[^ ]*)") - ({"", " "})
+  if (str[<1] == ' ')
+    input += ({""});
+  DB(sprintf("%O",input));
+  if (sizeof(input) == 1)
+  {
+    DB("CMPL simple #"+input[<1]+"#");
+    if ( (-1 == strstr("/+~",str[0..0]))
+      || !(flags&CMPL_FILES_ONLY) )
+    {
+      cmds = GetCmds();
+    }
+    else
+    {
+      files = GetPaths(input[<1]);
+      cmds = files
+           + GetCmds();
+      path = 1;
+    }
+  }
+  else if (strlen(input[<1]) && strstr("/~+",input[<1][0..0]) != -1)
+  {
+    DB("CMPL path #"+input[<1]+"#");
+    files = GetPaths(input[<1]);
+    cmds = files;
+    path = 2;
+  }
+  else
+  {
+    DB("CMPL complex #"+input[<1]+"#");
+    files = GetPaths(input[<1],1);
+    cmds = files
+         + GetPlayers()
+         + GetIds();
+    path = 1;
+  }
+  cmds -= ({""});
+  //printf("DEBUG %O\n",cmds);
+  cmds = sort_array(filter_array(cmds,lambda(({'c}),
+    ({#'==,
+      ({#'[..],'c,0,strlen(input[<1])-1}),
+      input[<1]
+    }))), #'>);
+  res = ({});
+  filter_array(cmds, lambda(({'c,'r}),
+    ({#'?,({#'==,-1,({#'member,'r,'c,})})
+              ,({#'+=,'r,({#'({,'c})})
+    })), &res);
+
+  if (sizeof(res) == 0)
+    printf("\a");
+  else if (sizeof(res) == 1)
+  {
+    /*
+    if (path == 2 || ((path == 1) && (-1 == member(files,res[0]))))
+    {
+      if (file_size(res[0]) == -2)
+        res[0] += "/";
+    }
+    */
+    if (path && file_size(res[0]) > -1)
+      res[0] += " ";
+    if (sizeof(input[0..<2]))
+      set_input(implode(input[0..<2]," ")+" "+res[0]);
+    else
+      set_input(res[0]);
+  }
+  else if (sizeof(cmds) > items)
+  {
+    if (!(flags&CMPL_SHOW_MANY))
+    {
+      printf("Too many matches (%i).\n", sizeof(cmds));
+      return 1;
+    }
+    else if (flags&CMPL_ASK)
+    {
+      printf("Display all %i possibilities? (y/n)\n", sizeof(cmds));
+      set_input("");
+      input_to("ask_input",0,res,input);
+      return 1;
+    }
+    else
+    {
+      print_matches(res, input);
+    }
+  }
+  else
+  {
+    print_matches(res, input);
+  }
+  return 1;
+}
+

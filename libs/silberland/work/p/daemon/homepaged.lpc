@@ -1,0 +1,194 @@
+// homepaged.c - Daemon um auf den WWW Seiten die Homepages der Spieler zu
+//               generieren
+// $Date: 2004/06/05 12:18:43 $
+/* $Revision: 1.5 $
+ * $Log: homepaged.c,v $
+ * Revision 1.5  2004/06/05 12:18:43  Feyaria
+ * Bugfix
+ *
+ * Revision 1.4  2002/01/06 04:26:58  Woody
+ * HP_DATAFILE wird geschrieben
+ *
+ * Revision 1.3  2000/04/01 00:27:12  Zordan
+ * BugFix in SetHomePage wenn ungueltige HP angegeben
+ *
+ * Revision 1.2  2000/03/21 13:26:28  Zordan
+ * empfaengt neue URL direkt aus Base und erneuert bei Bedarf die
+ * Seiten automatisch. incl. Savefile unter /save/homepaged.o
+ *
+ * Revision 1.1  2000/03/17 23:30:51  Zordan
+ * Initial revision
+ *
+ */
+
+
+#include <defines.h>
+#include <moredef.h>
+#include <properties.h>
+#include "homepaged.h"
+
+nosave int step,changed;
+mapping homepages;
+
+void create() {
+  if(is_clone(this_object()))
+    destruct(this_object());
+  seteuid(getuid(this_object()));
+  step=0;
+  changed=0;
+  homepages=([ ]);
+  if (file_size(HP_SAVEFILE+".o") > 0) {
+    if (!restore_object(HP_SAVEFILE)) {
+      raise_error("homepaged: invalid savefile "+HP_SAVEFILE+"\n");
+    } else {
+      call_out("generate_page",10);
+    }
+  } else {
+    call_out("generate_first",10);
+  }
+}
+
+nosave generate_first() {
+  do_step(step);
+  step++;
+  if (step>25) {
+    step=0;
+    save_object(HP_SAVEFILE);
+    call_out("generate_page",10);
+    return;
+  }
+  call_out("generate_first",10);
+}
+
+nosave void do_step(int nr) {
+  string str,*dir;
+  string name,hp;
+  int i,t;
+  
+//  str='a'+nr; Wozu is diese anweisung, die buggt und wirrd in der funktion nicht gebraucht....
+  dir=get_dir(sprintf("/save/%c/*.o",('a'+nr)));
+  for(i=0;i<sizeof(dir);i++) {
+    name=dir[i][0..<3];
+    hp=call_other("/gilden/obj/savefilemaster", "QueryFileProp", 
+       name,P_HOMEPAGE);
+    if(hp != 0 && stringp(hp)) {
+      t=strstr(hp,"http://");
+      if(t >= 0)
+        hp=hp[(t+7)..<0];
+      if(hp != 0) {
+        if (stringp(hp) && strlen(hp) > 0 && hp != " " && 
+            strstr(hp,".") != -1 && strstr(hp,"@") < 0) {
+          if (member(homepages,name)==0)
+            homepages+=([ name: "" ]);
+          homepages[name,0]=explode(hp," ")[0];
+        }
+      }
+    }
+  }
+}
+
+nosave void generate_page() {
+  int nr,row;
+  string *keys,key;
+  
+  if(!sizeof(homepages)) return;
+  keys=sort_array(m_indices(homepages),#'>);
+  if(!sizeof(keys)) return;
+
+  // Erst Datenfile schreiben:
+  if(file_size(HP_DATAFILE) >0 )
+    rm(HP_DATAFILE);
+
+  for (nr=0; nr<sizeof(keys); nr++)
+    write_file(HP_DATAFILE,
+        sprintf("%s\t%s\n", keys[nr], homepages[keys[nr]]) );
+
+  // Fertig. Jetzt HTML-File:
+  if(file_size(HP_WWWFILE) >0 )
+    rm(HP_WWWFILE);
+
+  write_file(HP_WWWFILE,HP_HEADER);
+  nr=0;
+  row=-1;
+  key="";
+  while(nr < sizeof(keys)) {
+    if(keys[nr][0..0] != key) {
+      key=keys[nr][0..0];
+      if(nr > 0)
+        write_file(HP_WWWFILE,"</TD>\n");
+      row++;
+      if(row>3) {
+        write_file(HP_WWWFILE,"</TR>\n<TR>\n");
+        row=0;
+      }
+      write_file(HP_WWWFILE,"<TH BGCOLOR=\"#FFAAAA\" VALIGN=\"TOP\">"+
+                 capitalize(key)+"</TH>\n");
+      write_file(HP_WWWFILE,"<TD WIDTH=100 BGCOLOR=\"#FFFFAA\" VALIGN=\"TOP\">\n");
+    }
+    write_file(HP_WWWFILE,"<A HREF=\"http://"+homepages[keys[nr]]+"\" "+
+                        "TARGET=_blank>"+capitalize(keys[nr])+"</A><BR>\n");
+    nr++;
+  }
+  while(!(row>2)) {
+    write_file(HP_WWWFILE,"</TD>\n");
+    write_file(HP_WWWFILE,"<TH BGCOLOR=\"#FFAAAA\" VALIGN=\"TOP\">&nbsp;</TH>\n");
+    write_file(HP_WWWFILE,"<TD WIDTH=100 BGCOLOR=\"#FFFFAA\" VALIGN=\"TOP\">\n");
+    write_file(HP_WWWFILE,"&nbsp;\n");
+    row++;
+  }
+  write_file(HP_WWWFILE,HP_TAILER);
+}
+
+int remove() {
+  save_object(HP_SAVEFILE);
+  destruct(this_object());
+  return 1;
+}
+
+void reset() {
+  if(changed) {
+    save_object(HP_SAVEFILE);
+    call_out("generate_page",30);
+    changed=0;
+  }
+}
+
+public void SetHomepage(string name, string hp) {
+  int t;
+
+  if(getuid(previous_object()) != name)
+    return;
+  changed=1;
+  if(hp != 0 && stringp(hp)) {
+    t=strstr(hp,"http://");
+    if(t >= 0)
+      hp=hp[(t+7)..<0];
+    if(hp != 0) {
+      if (stringp(hp) && strlen(hp) > 0 && hp != " " && 
+          strstr(hp,".") != -1 && strstr(hp,"@") < 0) {
+        if (member(homepages,name)==0)
+          homepages+=([ name: "" ]);
+        homepages[name,0]=explode(hp," ")[0];
+      } else {
+        homepages=m_delete(homepages,name);
+      }
+    } else {
+      homepages=m_delete(homepages,name);
+    }
+  } else {
+    homepages=m_delete(homepages,name);
+  }
+}
+
+public void UnsetHomepage(string name) {
+  if(getuid(previous_object()) != name)
+    return;
+  if(member(homepages,name)!=0) {
+    homepages=m_delete(homepages,name);
+    changed=1;
+  }
+}
+
+public mapping QueryHomepages() {
+  return copy_mapping(homepages);
+}

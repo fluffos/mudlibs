@@ -1,0 +1,87 @@
+
+/*
+**
+** Sequencer fuer die Zeremonien der Paladine 
+** Zordan@SL
+**
+*/
+
+#include <properties.h>
+#include <moving.h>
+#include "../paladin.h"
+
+string prefix;
+string *seq;
+int cur;
+object player;
+closure fkt;
+
+string mess(string str) {
+  if (!str || str=="") return str;
+  str=implode(efun::explode(str,"&&"),player->name(WER,2));
+  str=implode(efun::explode(str,"&?"),player->name(WESSEN,2));
+  str=implode(efun::explode(str,"&!"),player->QueryPronoun(WER));
+  str=implode(efun::explode(str,"&1"),player->QueryPronoun(WER));
+  str=implode(efun::explode(str,"&2"),player->QueryPronoun(WESSEN));
+  str=implode(efun::explode(str,"&3"),player->QueryPronoun(WEM));
+  str=implode(efun::explode(str,"&4"),player->QueryPronoun(WEN));
+  str=implode(efun::explode(str,"&="),player->QueryPossPronoun(1));
+  str=implode(efun::explode(str,"&#"),player->QueryPossPronoun(2));
+  str=implode(efun::explode(str,"&*"),GUILDNPC_NAME);
+  str=implode(efun::explode(str,"&+"),GUILDNPC_LONGNAME);
+  return str;
+}
+
+int LoadSequenz(string filename, object ob, closure cl) {
+  if (find_call_out("PaladinStep") != -1) return -1;
+  if (filename[0] != '/') {
+    filename="/gilden/paladine/master/"+filename;
+  }
+  seq=explode(read_file(filename), "\n");
+  if (sizeof(seq) < 1) return -1;
+  cur=0;
+  player=ob;
+  fkt=cl;
+  call_out("PaladinStep", 0);
+  return 1;
+}
+
+void PaladinStep() {
+  string s,cmd,arg;
+
+  while (cur < sizeof(seq)) {
+    s=seq[cur++];
+    if (s[0]=='#') continue;
+    cmd=0;
+    sscanf(s,"%s %s", cmd, arg);
+    if (!cmd) cmd=s;
+    switch (cmd) {
+      case "pause":
+        call_out("PaladinStep", to_int(arg));
+        return;
+      case "++":
+        while ((s=seq[cur++]) != "++" ) {
+          if (s == "*") s="\n";
+          tell_room(ME, BS(mess(s)));
+        }
+        break;
+      case "--":
+        while ((s=seq[cur++]) != "--" ) {
+          if (s == "*") s="\n";
+          tell_object(player, BS(mess(s)));
+          s=seq[cur++];
+          if (s == "*") s="\n";
+          tell_room(ME, BS(mess(s)), ({ player }));
+        }
+        break;
+      case "stop":
+        if (fkt != 0 && closurep(fkt)) {
+          funcall(fkt,player);
+        }
+        return;
+      default:
+        tell_zordan("PARSE ERROR IN PALADIN-SEQUENCER AT LINE #"+cur+" !!\n");
+        tell_angrox("PARSE ERROR IN PALADIN-SEQUENCER AT LINE #"+cur+" !!\n");
+    }
+  }
+}

@@ -1,0 +1,159 @@
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <wizlevels.h>
+#include "../def.h"
+
+inherit NPC "orden";
+
+void create()
+{
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein Exorzist");
+  SetProp(P_LONG, 
+    "Der Exorzist ist ein weiser und belesener Geistlicher. Man erkennt das "
+    "an seinem weissen Bart und den weissen Locken, die ihm ins Gesicht "
+    "haengen. Nur kluge Leute sehen so aus. Sein Lebenszweck ist es, Leuten "
+    "zu helfen, ihre Besessenheiten und Flueche auszutreiben, sowie ganz "
+    "allgemein neue Wege zu erkunden, um das Boese zu besiegen. Der Exorzist "
+    "laechelt Dich wissend an...");
+  SetProp(P_NAME, "Exorzist");
+  SetProp(P_GENDER, MALE);
+  AddId(({ "exorzist"}));
+
+  create_default_npc(25);
+
+  SetProp(P_RACE, "Mensch");
+  SetProp(P_SIZE, 177 + random(5));
+  SetProp(P_ALIGN, 850);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_AGGRESSIVE,0);
+  SetProp(P_WIMPY, 0);
+
+  SetProp(P_MSGIN, "kommt herein");
+  SetProp(P_MSGOUT, "geht");
+  SetProp(P_MMSGIN, "erscheint in strahlendem Glanz");
+  SetProp(P_MMSGOUT, "verschwindet in einem Lichtblitz");
+
+  SetProp(P_DIE_MSG,  " faellt tot zu Boden.\n");
+  SetProp(P_NOCORPSE, 0 );
+
+  AddInfo(DEFAULT_INFO, "fragt Dich: Bist Du vom Teufel besessen?\n");
+
+  SetProp( P_REJECT, ({ REJECT_GIVE,
+    "Der Exorzist sagt: Das kann ich nicht brauchen, danke.\n" }) );
+
+  SetProp(P_SPELLRATE, 60);
+  AddSpell(1,100,
+    "Der Exorzist versucht, Dir das Boese auszutreiben.\n",
+    "Der Exorzist versucht, @WEM das Boese auszutreiben.\n",
+     DT_HOLY,"austreibung",([SP_SHOW_DAMAGE:1]));
+  AddSpell(2,300,
+    "Ein maechtiger Blitz schiesst aus den Haenden des Exorzisten auf "
+      "Dich zu.\n",
+    "Ein maechtiger Blitz schiesst aus den Haenden des Exorzisten auf "
+      "@WEN zu.\n",
+     DT_LIGHTNING,([SP_SHOW_DAMAGE:1]));
+  AddSpell(2,300,
+    BS("Der Exorzist murmelt unverstaendliche Worte. Ein ploetzlicher Druck "
+    "in deinem Gehirn wird immer staerker! Quaelende Kopfschmerzen "
+    "lassen Deinen Kopf beinahe platzen!"),
+    BS("Der Exorzist murmelt unverstaendliche Worte. @WER greift sich an den "
+    "Kopf und beginnt zu schreien."),
+     DT_MIND,([SP_SHOW_DAMAGE:1]));
+  AddSpell(2,200,
+    "Der Exorzist bewirft Dich mit einer brennenden Kerze.\n",
+    "Der Exorzist bewirft @WEN mit einer brennenden Kerze.\n",
+     ({DT_LIGHT,DT_FIRE}),([SP_SHOW_DAMAGE:1]));
+
+  SUID;
+  
+  CLONEME(OBJ "scroll");
+  CLONEME(OBJ "scroll");
+
+//  CLONEME(OBJ "kreuz");
+//  CLONEME(OBJ "robe");
+  
+  command_me("trage alles");
+}
+
+
+void austreibung(object enemy, int dam, string dam_type)
+{
+  int align;
+  
+  if((align=enemy->QueryProp(P_ALIGN)) > 0) return;
+
+  enemy->Defend(random(-align/2)-align/2,dam_type,TO,([SP_SHOW_DAMAGE:1]));
+  if(align <= -1000) 
+  {
+    tell_object(enemy, "Die Macht der Austreibung laehmt Dich.");
+    enemy->SetProp(P_PARALYZED, 2+random(5));
+    if(!interactive(enemy)) enemy->DisableAttack(7);
+  }
+  else if(align < -750 && !enemy->QueryProp(P_BLIND)) 
+  {
+    tell_object(enemy,"Der Zauber des Exorzisten blendet Dich.\n");
+    enemy->SetProp(P_BLIND, 5+random(10));
+  }
+
+//  Ein gutes Monster, das gut macht, widerspricht dem Zweck des Ordens.
+//  obwohl es so logisch waer... *seufz*
+//  enemy->SetProp(P_ALIGN, align/2);
+}
+
+void geistertod()
+{
+  if(objectp(TP) && interactive(TP) && ENV(TP) == ENV(TO))
+  {
+    tell_object(TP,BS(
+       "Der Exorzist erkennt Deine Geistergestalt und treibt Dich aus. "
+       "Eine dunkle Wolke umfaengt Dich, Du versinkst in einer Welt voller "
+       "Schmerzen und Qual. Du moechstest nur noch schreien vor Schmerz."
+       "Das war wohl keine gute Idee, als Geist zu einem "
+       "Exorzisten zu gehen..."));
+    tell_room(ENV(TO), BS(
+       "Der Exorzist erkennt die Geistergestalt "+TP->name(WESSEN)+" und "
+       "treibt "+TP->QueryPronoun(WEN)+" aus. "+TP->Name()+" schreit "
+       "qualvoll auf."), ({TP}));
+    TP->SetProp(P_GHOST, 0);
+    write_file(LOG "kills",
+    sprintf(" %s %s geht als Geist zum Exorzisten!\n",
+        dtime(time()), CAP( TP->query_real_name() )));
+    SetProp(P_KILL_NAME, "Ein Exorzist");
+    SetProp(P_MSG_FLAGS, ([ P_KILL_MSG:1 ]));
+    SetProp(P_KILL_MSG, "kreischt: Hinfort, ihr Geister und Daemonen!");
+    call_out("stirb",0);
+  }
+}
+
+void stirb()
+{
+  if(objectp(TP) && interactive(TP))
+  {
+    TP->die();
+  }
+}
+
+init()
+{
+  ::init();
+  if(TP && TP->QueryProp(P_GHOST))
+  {
+    call_out("geistertod", 0);
+  }
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  write_file(LOG "kills",
+  sprintf(" %s %s vom Exorzisten umgebracht. ( -%d XP ).\n",
+      dtime(time()), CAP( player->query_real_name() ), lostexp ));
+}
+
+
+

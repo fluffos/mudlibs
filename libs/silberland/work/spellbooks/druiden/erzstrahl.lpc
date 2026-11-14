@@ -1,0 +1,82 @@
+/*
+ * Erzstrahl
+ *
+ *
+ * Kosten: 
+ * Level : 7
+ * Objekte:
+ * Damage:
+ *
+ */
+
+int prep_erzstrahl(object caster, mapping sinfo) 
+{
+  if( !FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+        "Auf wen willst Du einen elementaren Erzstrahl abfeuern?\n") )
+    return 0;
+  write_color("Elementares Erz bildet sich in Deiner Hand.\n", ERZ, caster);  
+  return 1;
+}
+
+int erzstrahl(object caster, mapping sinfo) 
+{
+  object victim;
+  int hands, suc, dam;
+  string vnw;  
+  object *victims;
+  int i;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+        "Auf wen willst Du einen elementaren Erzstrahl abfeuern?\n");
+  if (!victim)
+    return 0;
+  sinfo=DoSpellModification(ERZ, caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) 
+  {
+    printf(sinfo[SI_SP_LOW_MSG]); 
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  if ((suc=SpellSuccess(caster,sinfo))<=0)
+    return MISSERFOLG;
+  dam=to_int(sinfo[SI_SKILLDAMAGE]+(exp(caster->QueryProp(P_GUILD_LEVEL)/3.35)*
+    ((float)suc/MAX_ABILITY)));
+  dam=(3*dam/5)+random(2*dam/5);
+  
+  vnw = victim->name(WEN, 2);
+  say(BS(sprintf("%s feuert einen elementaren Strahl fluessigen Erzes auf "
+        "%s ab.\n", capitalize(caster->name()), vnw)), victim);
+  write_color(BS(sprintf("Du staerkst Deine Gedanken, laesst sie hart wie "
+          "Fels werden. Aus Deinen geoeffneten Haenden rast ein Strahl "
+          "fluessigen Erzes auf %s zu!", vnw)), ERZ, caster, 1);
+  tell_object(victim, BS(sprintf(
+        "%s konzentriert sich und wirft einen elementaren Strahl fluessigen "
+        "Erzes auf Dich.\n", capitalize(caster->name()))));
+  TryAttackSpell(victim,dam, sinfo[SI_SKILLDAMAGE_TYPE],
+      ([SP_NAME:sinfo[SI_SPELLNAME],SP_SHOW_DAMAGE:1, SP_REDUCE_ARMOUR:
+              ([P_BODY: 101-sinfo[SI_SKILLABILITY]/100])]), caster,sinfo );
+
+  if( sinfo[SI_SKILLABILITY] == MAX_ABILITY && suc > MAX_ABILITY && 
+      sizeof(victims=caster->PresentEnemies())>1 ) 
+  {
+    dam = dam/sizeof(victims);
+    for(i=sizeof(victims)-1; i>=0; i--)
+    {
+      if (victims[i] != victim)
+      {
+        tell_object(victims[i], BS(
+              "Ein Teil des Erzstrahles trifft auch Dich!\n"));
+        TryAttackSpell(victims[i], dam/2+random(dam/2), sinfo[SI_SKILLDAMAGE_TYPE],
+            ([SP_NAME:sinfo[SI_SPELLNAME], SP_SHOW_DAMAGE:1]), caster, sinfo);
+      }
+    }
+  }
+
+  
+  if(objectp(victim)) {
+    smashSpellResistance(caster, victim, suc);
+    petrify(caster, victim, suc);
+  }
+
+  return ERFOLG;
+}

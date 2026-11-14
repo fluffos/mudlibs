@@ -1,0 +1,908 @@
+/*
+** Der Allzweck-Teddy
+** ---
+** 1996-04-11  1.0  Woody  Initial Release
+** 1996-04-25  1.1  Woody  @@wer@@, @@wie@@ usw. statt %s
+** 1997-04-01  1.2  Woody  Adverbparsing bei Quotes jetzt wie soul,
+**                         match_living() zum Auffinden von Spielern,
+**                         Magier koennen andere invis Mags 'aergern' :),
+**                         Message() statt tell_object() (ignoriere geht),
+**                         'ignoriere spieler.teddy'
+** 1997-04-04  1.3  Woody  Adverbparsing Bugfix
+** 1997-08-30  1.4  Woody  Bugfix: unbekanntes Adverb -> "" statt " "
+**                         zudem nun knuddel/wuschel/kuschel/waschbar
+** 1997-09-09  1.5  Woody  P_AUTOLOADOBJ wird in move() gesetzt,
+**                         dann verdoppelt er sich auch nimmer bei renew
+** 1997-09-14  1.6  Woody  jammert, wenn man ihn fallenlaesst, bzw. freut
+**                         sich, wenn man ihn an sich nimmt. Und ab sofort
+**                         ist er sogar renew-sicher :).
+** 1997-12-07  1.8  Woody  'lehne' :)
+** 1998-01-02  1.9  Woody  capitalize() beim rbefehl()
+** 1998-11-11  1.10 Woody  Fuer Seher und Magier sind Verben nun gratis,
+**                         Magier sehen untereinander nun (Name)
+** 2000-06-13  1.11 Woody  "zuschwer" implementiert (fuer Testzwecke)
+** 2000-11-14  1.12 Woody  nach /obj/ verschoben
+** 2001-11-18  1.13 Woody  Beim rkitzeln "beherrschen aber doch lachen"...
+** 2002-06-10  1.20 Woody  Funktionen typisiert, neue Verben:
+**                         rbeneide, rhuepfe, rstupse, rgrummel, rknulle
+** 2002-06-20  1.21 Woody  neu: rnicke, rstrahle, rstiere, rhirte, rlache
+** 2003-03-17  1.22 Woody  rwuschel nun mit Haarfarbe
+** 2003-07-18  1.23 Woody  rhopse
+** 2003-07-21  1.24 Woody  rwuschel
+** 2004-09-27  1.25 Woody  rkitzel typofixed
+** 2005-03-08  1.26 Feyaria rlache typofixed
+** 2005-03-18  1.27 Feyaria match_living zuerst auf spieler
+** 2005-04-09  1.28 Woody  rkuesse, rfeuer
+** 2005-04-19  1.29 Woody  rdruecke
+**
+** basierend auf:
+**   Vrai's Freundschaftsband (Adverbparsing),
+**   Mupfel's sprechender Stein (LP/MP Anzeige),
+**   Diddl-Maus (Ideen fuer diverse r-Verben)
+**
+** Was r-Verben angeht: funktioniert im Grunde gleich wie die
+** Diddl-Maus, erlaubt hierbei aber relativ komplexes Parsing bzw.
+** Wortstellungen durch Makros.
+**
+** Ausserdem wird "in der Ferne" nicht ausgegeben, wenn sich Spieler
+** und Zielperson im selben Raum befinden (in diesem Fall wird
+** ausserdem zusaetzlich eine Raummeldung an alle anderen anwesenden
+** Spieler ausgegeben).
+**
+** Zur Erweiterung der r* Befehle am besten vorher den Header zur
+** Funktion rbefehl() durchlesen!! (ist die letzte Funktion, ganz
+** unten)
+**
+** Ach ja, fast haett ichs vergessen: Anders als bei der Maus kann
+** man mit diesem Teddy Adverben verwenden, genau wie bei allen
+** Standardverben (rwuschel woody froe = Du verwuschelst Woodys
+** Haare froehlich aus der Ferne.). Quoted Adverbs wieder per /
+** hintendran, wie gewohnt.
+**
+** Weiters kann das Aufspueren von unsichtbaren Magiern mit diesem
+** Teddy gegebenenfalls per #define INVIS_SPERRE verhindert werden.
+**
+*/
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include <wizlevels.h>
+#include <defines.h>
+#include <moredef.h>
+
+#define VERSION "1.29"
+
+/*
+** Wird folgende Zeile aktiviert, so koennen unsichtbare Magier
+** mit dem Teddy nicht mehr aufgespuert werden, andernfalls
+** heissts halt wieder "Jemand" etc.
+*/
+#define INVIS_SPERRE
+
+#define INV_TEST(x,y,z) (IS_LEARNER(x) && IS_LEARNER(y) && \
+                         z->QueryProp(P_INVIS))
+#define WIZ_NAME(pl,genitiv) ("("+capitalize(getuid(pl))+ \
+    (genitiv ? (strstr("xsz",getuid(pl)[<1..])!=-1?"'":"s"):"")+")")
+
+
+varargs int rbefehl(string str, string *form, int sp, int nearonly);
+
+nosave int lastHP, lastSP, aktiv=0;
+nosave object owner;
+nosave string owner_name;
+
+
+create()
+{
+  if (!is_clone(this_object())) return;  // (return on BP)
+  ::create();
+  SetProp(P_SHORT, "Ein kleiner suesser Teddy");
+  SetProp(P_LONG,
+    "Der kleine suesse Teddy ist knuddel- und wuschelecht. Er bietet Dir "
+    "zeit seines Lebens seine mannigfaltigen Dienste an und zwinkert "
+    "Dir dabei stets froehlich mit seinen kleinen Knopfaugen zu.\n"
+    "An seinem linken Ohr bemerkst Du irgendetwas.");
+  SetProp(P_NAME, "Teddy");
+  SetProp(P_GENDER, MALE);
+  AddId(({"teddy", "universal-teddy", "\nuniversalteddy"}));
+  SetProp(P_WEIGHT, 100);
+  SetProp (P_MATERIAL, ([MAT_CLOTH:30,MAT_FEATHER:70]));
+  SetProp(P_NEVERDROP, 1);  // Teddy wird beim Tod nicht in die Leiche gelegt
+  lastHP = lastSP = -1;
+  SetProp(P_NOSELL,
+      "Du wirst doch Deinen Teddy nicht verkaufen wollen, oder?\n");
+  AddDetail ( ({"augen", "knopfaugen"}),
+      "Die beiden kleinen schwarzen Knopfaugen blinzeln Dich froehlich an.\n");
+  AddDetail ("ohr", "Ein kleiner Zettel haengt am linken Ohr des Teddys.\n");
+  AddDetail ("zettel", "Du koenntest versuchen, ihn zu lesen.\n");
+  AddReadDetail ("zettel",
+    "Auf dem Zettel steht:\n"
+    ",--------------------------------------------------------------------,\n"
+    "| Dieser Teddy fluestert Dir jederzeit zu, wieviele Lebenspunkte und |\n"
+    "| Magiepunkte du noch hast, wenn Du das willst.                      |\n"
+    "|                                                                    |\n"
+    "| Die Kommandos dazu lauten wie folgt:                               |\n"
+    "| <report ein>   bringt den Teddy zum Reden,                         |\n"
+    "| <report aus>   laesst ihn wieder verstummen :)                     |\n"
+    "|                                                                    |\n"
+    "| Ausserdem ermoeglicht Dir der Teddy einige zusaetzliche Kommandos, |\n"
+    "| um mit Mitspieler aus der Ferne interagieren zu koennen.           |\n"
+    "|                                                                    |\n"
+    "| Die Befehle hierzu sind: rwuschel (1), rumarme (1), rkuschel (1),  |\n"
+    "| rdanke (1), rbeneide (1), rhuepfe (1), rstupse (1), rtroeste (1),  |\n"
+    "| rnicke (1), rstrahle (1), rstiere (1), rhirte (1), rlache (1),     |\n"
+    "| rlaechel (1), rkraule (1), rschnurre (1), rkuesse (1), rfeuer (1), |\n"
+    "| rdruecke (1), rgrummel (3), rtrete (5).                            |\n"
+    "|                                                                    |\n"
+    "| Die Zahlenwerte in Klammern geben die fuer Nichtseher jeweils      |\n"
+    "| notwendigen Magiepunkte an.                                        |\n"
+    "|                                                                    |\n"
+    "| 100% LPC, haendisch waschen!                              Ver "+
+    VERSION+" |\n"
+    "`--------------------------------------------------------------------'\n"
+    );
+
+  AddCmd("report", "Report");
+
+  // r* commands:
+  // ------------
+  AddCmd(({"rwuschel","rwuschle"}), "rwuschel");
+  AddCmd(({"rumarm","rumarme"}), "rumarme");
+  AddCmd(({"rdank","rdanke"}), "rdanke");
+  AddCmd(({"rtroest","rtroeste"}), "rtroeste");
+  AddCmd(({"rkitzel","rkitzle"}), "rkitzel");
+  AddCmd(({"rtritt","rtret","rtrete"}), "rtrete");
+  AddCmd(({"rkuschel","rkuschle"}), "rkuschel");
+  AddCmd(({"rkraul","rkraule"}), "rkraule");
+  AddCmd(({"rschnurr","rschnurre"}), "rschnurre");
+  AddCmd(({"rkuess","rkuesse"}), "rkuesse");
+  AddCmd(({"rbussi"}), "rbussi");
+  AddCmd(({"rfeuer","rfeuere"}), "rfeuere");
+  AddCmd(({"rdrueck","rdruecke"}), "rdruecke");
+  AddCmd(({"lehn","lehne"}), "lehne");
+
+  AddCmd(({"rbeneid","rbeneide"}), "rbeneide");
+  AddCmd(({"rhuepf","rhuepfe"}), "rhuepfe");
+  AddCmd(({"rhops","rhopse"}), "rhopse");
+  AddCmd(({"rstups","rstupse"}), "rstupse");
+  AddCmd(({"rgrummel","rgrummle"}), "rgrummel");
+  AddCmd(({"rknull","rknulle"}), "rknulle");
+
+  AddCmd(({"rnick","rnicke"}), "rnicke");
+  AddCmd(({"rstrahl","rstrahle"}), "rstrahle");
+  AddCmd(({"rstier","rstiere"}), "rstiere");
+  AddCmd(({"rhirt","rhirte"}), "rhirte");
+  AddCmd(({"rlach","rlache"}), "rlache");
+  AddCmd(({"rlaechel","rlaechle"}), "rlaechle");
+  AddCmd(({"rsuder","rsudere"}), "rsuder");
+
+  AddCmd(({"knuddel", "knuddle"}), "knuddel");
+  AddCmd(({"wuschel", "wuschle"}), "wuschel");
+  AddCmd(({"kuschel", "kuschle"}), "kuschel");
+  AddCmd(({"wasch", "wasche", "reinige"}), "wasche");
+  AddCmd(({"zuschwer"}), "zuschwer");
+}
+
+int knuddel(string str)
+{
+  if (!str || !id(str)) return 0;
+  write(BS("Du knuddelst Deinen Teddy von oben bis unten durch und fuehlst "
+      "Dich warm und geborgen. Fuer einen Moment vergisst Du die Welt "
+      "rund um Dich herum..."));
+  say(BS(TP->Name()+" knuddelt "+TP->QueryPossPronoun(MALE,WEN)+" Teddy "
+      "von oben bis unten durch und seufzt wohlig. Es scheint so als ob "+
+      TP->QueryPronoun()+" fuer einen Moment die Welt um sich vergessen "
+      "wuerde..."));
+  return 1;
+}
+
+int wuschel(string str)
+{
+  if (!str || !id(str)) return 0;
+  write(BS("Du wuschelst Deinem Teddy durchs flauschige Fell."));
+  say(BS(TP->Name()+" wuschelt "+TP->QueryPossPronoun(MALE,WEM)+" Teddy "
+      "durchs flauschige Fell."));
+  return 1;
+}
+
+int kuschel(string str)
+{
+  if (!str || !id(str)) return 0;
+  write(BS("Du kuschelst Dich in Deinen Teddy und verspuerst eine wohlige, "
+      "innere, Dich sanft umfangen haltende Waerme. Du schliesst Deine "
+      "Augen und gibst Dich ganz diesem Gefuehl der Geborgenheit hin."));
+  say(BS(TP->Name()+" kuschelt sich ganz fest in "+
+      TP->QueryPossPronoun(MALE,WEN)+
+      " Teddy und schliesst die Augen. Es scheint Dir als wuerde "+
+      TP->QueryPronoun()+" sich ganz diesem Gefuehl hingeben."));
+  return 1;
+}
+
+int wasche(string str)
+{
+  object e;
+  if (str && id(str) && TP && (e=environment(TP))) {
+    if ( /* member(e->QueryProp(P_COMMANDS), "wasche") && */
+        member(e->QueryProp(P_DETAILS), "wasser")) {
+      write("Du waeschst Deinen Teddy in dem Wasser gruendlich rein.\n");
+      say(TP->Name()+" waescht " + TP->QueryPossPronoun(MALE,WEN) +
+          " Teddy gruendlich.\n");
+      return 1;
+    }
+    else return notify_fail ("Das geht hier nicht!\n"), 0;
+  }
+  else
+    return 0;
+}
+
+string extra_look()
+{
+  return capitalize(environment()->QueryPronoun())+
+    " hat einen Teddy unter "+
+    environment()->QueryPossPronoun(MALE,WEN) + " Arm geklemmt.\n";
+}
+
+NotifyHpChange()
+{
+  int    hp, mhp, sp, msp;
+
+  // Sicherheits-Check
+  if (!previous_object() || !owner || (owner != previous_object()))
+    return;
+
+  // Ausschalten wenn aktiv == 0 (z.B. nach Tod)
+  if (!aktiv)
+  {
+    SetProp(P_NODROP, 0);
+    if (owner!=find_netdead(getuid(owner)))
+      owner->RemoveHpHook(ME);   // geht nur bei nicht-netztoten Spielern
+    return;
+  }
+
+  // Test auf Geist
+  if (owner->QueryProp(P_GHOST))
+    return;
+
+  // aktuelle Werte ermitteln
+  hp = owner->QueryProp(P_HP);
+  mhp = owner->QueryProp(P_MAX_HP);
+  sp = owner->QueryProp(P_SP);
+  msp = owner->QueryProp(P_MAX_SP);
+
+  // Test auf Tod
+  if ((hp<=0) || (!living(owner)))
+  {
+    tell_object(owner, "Dein Teddy blinzelt Dich noch einmal traurig an.\n");
+    return;
+  }
+
+  // Vergleich und Ausgabe
+  if ((hp < lastHP) || (hp != lastHP && sp == msp) || (sp != lastSP))
+    tell_object(owner,
+      // "Du hast jetzt "+hp+" Lebenspunkte und "+sp+" Magiepunkte.\n");
+      "Du hast jetzt "+hp+" ("+mhp+") Lebenspunkte und "+
+      sp+" ("+msp+") Magiepunkte.\n");
+
+  // neue Werte merken
+  lastHP = hp; lastSP = sp;
+}
+
+void activate(object ob)
+{
+  if (objectp(ob)) {
+    aktiv = 1;
+    owner = ob;
+    owner_name = getuid(owner);
+    SetProp(P_NODROP,
+      "Wenn Dein Teddy mit Dir redet, kannst Du ihn nicht wegwerfen!\n");
+    ob->AddHpHook(ME);
+    lastHP = ob->QueryProp(P_HP);
+    lastSP = ob->QueryProp(P_SP);
+  } else {
+    if (ob=(owner||TP)) ob->RemoveHpHook(ME);
+    owner = owner_name = aktiv = 0;
+    SetProp(P_NODROP, 0);
+  }
+}
+
+Report(str)
+{
+  if (MENV != TP)
+    return notify_fail("Dazu musst Du den Teddy erst einmal "+
+      "an Dich nehmen!\n"), 0;
+  notify_fail("Syntax: report ein|aus.\n");
+  switch (str)
+  {
+    case "ein":
+      if (aktiv && objectp(owner))
+        write("Der Report-Modus ist schon eingeschaltet!\n");
+      else {
+        write("Report-Modus ist jetzt eingeschaltet.\n");
+        activate(TP);
+      }
+      break;
+    case "aus":
+      if (!aktiv)
+        write("Der Report-Modus ist doch schon ausgeschaltet!\n");
+      else { 
+        write("Report-Modus ist nun ausgeschaltet.\n");
+        activate(0);
+      }
+      break;
+    default:
+      return 0;
+  }
+  return 1;
+}
+
+varargs int move(mixed dest, int method)
+{
+  int res;
+  object e_prev,e;
+
+  e_prev=MENV;
+  res = ::move(dest,method);
+  e=MENV;
+  if (IS_LEARNER(e))
+    SetProp(P_AUTOLOADOBJ, 1);        // fuer Magier autoload
+  else
+    SetProp(P_AUTOLOADOBJ, 0);
+  if (e_prev && e)
+    if (interactive(e_prev) && (ENV(e_prev) == e))
+      tell_object(e_prev,
+          "Der Teddy weint: Lass mich nicht allein, biiiiitteeeeee...\n");
+    else if (interactive(e) && (ENV(e) == e_prev))
+      tell_object(e,
+          "Der Teddy schaut Dich gluecklich an, als Du ihn aufhebst.\n");
+  call_out("checkowner", 1);
+  return res;
+}
+
+void checkowner()
+{
+  if (aktiv && !objectp(owner) && stringp(owner_name)) {
+    owner = find_player(owner_name);
+    if (!objectp(owner)) activate(0);
+    else activate(owner);
+  }
+}
+
+int remove(int x)
+{
+  if (aktiv && TP) TP->RemoveHpHook(ME);
+  return ::remove(x);
+}
+
+// ---------------------------------------------------------------------------
+
+int rwuschel(string str)
+{
+  string haare, haare2, fullname;
+  object wer;
+
+  if ( stringp(fullname = match_living(str, 1)) &&
+       (wer = find_player(fullname)) &&
+       (haare = wer->QueryProp(P_HAIR_COLOR)) )
+  {
+    haare2 = haare + "en Haare";
+    haare = haare + "e Haare";
+  }
+  else
+    haare = haare2 = "Haare";
+
+  return rbefehl (str,
+    ({ "Wessen Haare willst Du aus der Ferne verwuscheln?\n",
+       "Deine eigenen Haare? Aus der Ferne???\n",
+       "Wie willst Du @@wessen@@ "+haare+" verwuscheln?\n",
+       "%s verwuschelt@@wie@@ Deine "+haare2+"@@fern@@.\n",
+       "Du verwuschelst@@wie@@ @@wessen@@ "+haare+"@@fern@@.\n",
+       "%s verwuschelt@@wie@@ @@wessen@@ "+haare+".\n" }), 1);
+}
+
+int rumarme(string str)
+{
+  return rbefehl (str,
+    ({ "Wen willst Du aus der Ferne umarmen?\n",
+       "Dich selbst? Aus der Ferne???\n",
+       "Wie willst Du @@wen@@ umarmen?\n",
+       "%s umarmt Dich@@wie@@@@fern@@.\n",
+       "Du umarmst @@wen@@@@wie@@@@fern@@.\n",
+       "%s umarmt @@wen@@@@wie@@.\n" }), 1);
+}
+
+int rdanke(string str)
+{
+  return rbefehl (str,
+    ({ "Bei wem willst Du Dich aus der Ferne bedanken?\n",
+       "Bei Dir selbst? Aus der Ferne???\n",
+       "Wie willst Du Dich bei @@wem@@ bedanken?\n",
+       "%s bedankt sich@@wie@@ bei Dir@@fern@@.\n",
+       "Du bedankst Dich@@wie@@ bei @@wem@@@@fern@@.\n",
+       "%s bedankt sich@@wie@@ bei @@wem@@.\n" }), 1);
+}
+
+int rtroeste(string str)
+{
+  return rbefehl (str,
+    ({ "Wen willst Du aus der Ferne troesten?\n",
+       "Dich selbst? Aus der Ferne???\n",
+       "Wie willst Du @@wen@@ troesten?\n",
+       "%s troestet Dich@@wie@@@@fern@@.\n",
+       "Du troestest @@wen@@@@wie@@@@fern@@.\n",
+       "%s troestet @@wen@@@@wie@@.\n" }), 1);
+}
+
+int rkitzel(string str)
+{
+  return rbefehl (str,
+    ({ "Wen willst Du aus der Ferne kitzeln?\n",
+       "Dich selbst? Aus der Ferne???\n",
+       "Wie willst Du @@wen@@ kitzeln?\n",
+       "%s kitzelt Dich@@wie@@@@fern@@.\n"
+       "Du versuchst Dich zu beherrschen, musst aber doch lachen.\n",
+       "Du kitzelst @@wen@@@@wie@@@@fern@@.\n"
+       "@@WER@@ versucht sich zu beherrschen, muss aber doch lachen.\n",
+       "%s kitzelt @@wen@@@@wie@@.\n" }), 1);
+}
+
+int rtrete(string str)
+{
+  return rbefehl (str,
+    ({ "Wen willst Du aus der Ferne treten?\n",
+       "Dich selbst? Aus der Ferne??? Aua!!\n",
+       "Wie willst Du @@wen@@ treten?\n",
+       "%s tritt Dich@@wie@@@@fern@@.\n",
+       "Du trittst @@wen@@@@wie@@@@fern@@.\n",
+       "%s tritt @@wen@@@@wie@@.\n" }), 5);
+}
+
+int rkuschel(string str)
+{
+  return rbefehl (str,
+    ({ "Bei wem willst Du Dich aus der Ferne ankuscheln?\n",
+       "Bei Dir selbst? Aus der Ferne???\n",
+       "Wie willst Du Dich an @@wen@@ ankuscheln?\n",
+       "%s kuschelt sich@@fern@@@@wie@@ an Dich an.\n",
+       "Du kuschelst Dich@@wie@@ an @@wen@@@@fern@@ an.\n",
+       "%s kuschelt sich@@wie@@ an @@wen@@ an.\n" }), 1);
+}
+
+int rkraule(string str)
+{
+  return rbefehl (str,
+    ({ "Wen willst Du aus der Ferne kraulen?\n",
+       "Dich selbst? Aus der Ferne???\n",
+       "Wie willst Du @@wen@@ kraulen?\n",
+       "%s krault Dich@@wie@@@@fern@@.\n",
+       "Du kraulst @@wen@@@@wie@@@@fern@@.\n",
+       "%s krault @@wen@@@@wie@@.\n" }), 1);
+}
+
+int rkuesse(string str)
+{
+  return rbefehl (str,
+    ({ "Wen willst Du aus der Ferne kuessen?\n",
+       "Dich selbst? Aus der Ferne???\n",
+       "Wie willst Du @@wen@@ kuessen?\n",
+       "%s kuesst Dich@@wie@@@@fern@@.\n",
+       "Du kuesst @@wen@@@@wie@@@@fern@@.\n",
+       "%s kuesst @@wen@@@@wie@@.\n" }), 1);
+}
+
+int rbussi(string str)
+{
+  return rbefehl (str,
+    ({ "Wem willst Du aus der Ferne ein Bussi auf die Wange druecken?\n",
+       "Dir selbst? Aus der Ferne???\n",
+       "Wie willst Du @@wem@@ ein Bussi auf die Wange druecken?\n",
+       "%s drueckt Dir@@wie@@@@fern@@ ein Bussi auf die Wange.\n",
+       "Du drueckst @@wem@@@@wie@@@@fern@@ ein Bussi auf die Wange.\n",
+       "%s drueckt @@wem@@@@wie@@ ein Bussi auf die Wange.\n" }), 1);
+}
+
+int rfeuere(string str)
+{
+  return rbefehl (str,
+    ({ "Wen willst Du aus der Ferne anfeuern?\n",
+       "Dich selbst? Aus der Ferne???\n",
+       "Wie willst Du @@wen@@ anfeuern?\n",
+       "%s feuert Dich@@fern@@@@wie@@ an.\n",
+       "Du feuerst @@wen@@@@fern@@@@wie@@ an.\n",
+       "%s feuert @@wen@@@@wie@@ an.\n" }), 1);
+}
+
+int rdruecke(string str)
+{
+  return rbefehl (str,
+    ({ "Wen willst Du aus der Ferne druecken?\n",
+       "Dich selbst? Aus der Ferne???\n",
+       "Wie willst Du @@wen@@ druecken?\n",
+       "%s drueckt Dich@@fern@@@@wie@@ an sich.\n",
+       "Du drueckst @@wen@@@@fern@@@@wie@@ an Dich.\n",
+       "%s drueckt @@wen@@@@wie@@ an sich.\n",
+       "zaertlich" }), 1);
+}
+
+int rschnurre(string str)
+{
+  return rbefehl (str,
+    ({ "Wen willst Du aus der Ferne anschnurren?\n",
+       "Dich selbst? Aus der Ferne???\n",
+       "Wie willst Du @@wen@@ anschnurren?\n",
+       "%s schnurrt Dich@@wie@@@@fern@@ an.\n",
+       "Du schnurrst @@wen@@@@wie@@@@fern@@ an.\n",
+       "%s schnurrt @@wen@@@@wie@@ an.\n" }), 1);
+}
+
+int lehne(string str)
+{
+  return rbefehl (str,
+    ({ "An wen willst Du Dich anlehnen?\n",
+       "Du kannst Dich doch nicht an Dich selbst anlehnen!\n",
+       "Wie willst Du Dich an @@wen@@ anlehnen?\n",
+       "%s lehnt sich@@fern@@@@wie@@ an Dich an.\n",
+       "Du lehnst Dich@@wie@@ an @@wen@@@@fern@@ an.\n",
+       "%s lehnt sich@@wie@@ an @@wen@@ an.\n" }), 1, 1);
+}
+
+int rbeneide(string str)
+{
+  return rbefehl (str,
+    ({ "Wen willst Du aus der Ferne beneiden?\n",
+       "Dich selbst? Aus der Ferne???\n",
+       "Wie willst Du @@wen@@ beneiden?\n",
+       "%s beneidet Dich@@wie@@@@fern@@.\n",
+       "Du beneidest @@wen@@@@wie@@@@fern@@.\n",
+       "%s beneidet @@wen@@@@wie@@.\n" }), 1);
+}
+
+int rhuepfe(string str)
+{
+  return rbefehl (str,
+    ({ "Um wen willst Du aus der Ferne herumhuepfen?\n",
+       "Um Dich selbst? Aus der Ferne???\n",
+       "Wie willst Du Dich um @@wen@@ herumhuepfen?\n",
+       "%s huepft@@fern@@@@wie@@ um Dich herum.\n",
+       "Du huepfst@@fern@@@@wie@@ um @@wen@@ herum.\n",
+       "%s huepft @@wie@@ um @@wen@@ herum.\n" }), 1);
+}
+
+int rhopse(string str)
+{
+  return rbefehl (str,
+    ({ "Um wen willst Du aus der Ferne herumhopsen?\n",
+       "Um Dich selbst? Aus der Ferne???\n",
+       "Wie willst Du Dich um @@wen@@ herumhopsen?\n",
+       "%s hopst@@fern@@@@wie@@ voller Freude um Dich herum.\n",
+       "Du hopst@@fern@@@@wie@@ voller Freude um @@wen@@ herum.\n",
+       "%s hopst @@wie@@ voller Freude um @@wen@@ herum.\n" }), 1);
+}
+
+int rstupse(string str)
+{
+  return rbefehl (str,
+    ({ "Wen willst Du aus der Ferne anstupsen?\n",
+       "Dich selbst? Aus der Ferne???\n",
+       "Wie willst Du @@wen@@ anstupsen?\n",
+       "%s stupst Dich@@fern@@@@wie@@ an.\n",
+       "Du stupst @@wen@@@@fern@@@@wie@@ an.\n",
+       "%s stupst @@wen@@@@wie@@ an.\n" }), 1);
+}
+
+int rgrummel(string str)
+{
+  return rbefehl (str,
+    ({ "Wen willst Du aus der Ferne angrummeln?\n",
+       "Dich selbst? Aus der Ferne???\n",
+       "Wie willst Du @@wen@@ angrummeln?\n",
+       "%s grummelt Dich@@fern@@@@wie@@ an.\n",
+       "Du grummelst @@wen@@@@fern@@@@wie@@ an.\n",
+       "%s grummelt @@wen@@@@wie@@ an.\n" }), 3);
+}
+
+int rknulle(string str)
+{
+  return rbefehl (str,
+    ({ "Wen willst Du aus der Ferne knullen?\n",
+       "Dich selbst? Aus der Ferne???\n",
+       "Wie willst Du @@wen@@ knullen?\n",
+       "%s knullt Dich@@wie@@@@fern@@.\n",
+       "Du knullst @@wen@@@@wie@@@@fern@@.\n",
+       "%s knullt @@wen@@@@wie@@.\n" }), 1);
+}
+
+int rnicke(string str)
+{
+  return rbefehl (str,
+    ({ "Wem willst Du aus der Ferne zunicken?\n",
+       "Dir selbst? Aus der Ferne???\n",
+       "Wie willst Du @@wem@@ zunicken?\n",
+       "%s nickt Dir@@fern@@@@wie@@ zu.\n",
+       "Du nickst @@wem@@@@fern@@@@wie@@ zu.\n",
+       "%s nickt @@wem@@@@wie@@ zu.\n" }), 1);
+}
+
+int rstrahle(string str)
+{
+  return rbefehl (str,
+    ({ "Wen willst Du aus der Ferne anstrahlen?\n",
+       "Dich selbst? Aus der Ferne???\n",
+       "Wie willst Du @@wen@@ anstrahlen?\n",
+       "%s strahlt Dich@@fern@@@@wie@@ an.\n",
+       "Du strahlst @@wen@@@@fern@@@@wie@@ an.\n",
+       "%s strahlt @@wen@@@@wie@@ an.\n" }), 1);
+}
+
+int rstiere(string str)
+{
+  return rbefehl (str,
+    ({ "Wen willst Du aus der Ferne anstieren?\n",
+       "Dich selbst? Aus der Ferne???\n",
+       "Wie willst Du @@wen@@ anstieren?\n",
+       "%s stiert Dich@@fern@@@@wie@@ an.\n",
+       "Du stierst @@wen@@@@fern@@@@wie@@ an.\n",
+       "%s stiert @@wen@@@@wie@@ an.\n" }), 1);
+}
+
+int rhirte(string str)
+{
+  return rbefehl (str,
+    ({ "Um wen willst Du aus der Ferne herumhirten?\n",
+       "Um Dich selbst? Aus der Ferne???\n",
+       "Wie willst Du um @@wen@@ herumhirten?\n",
+       "%s hirtet@@fern@@@@wie@@ um Dich herum.\n",
+       "Du hirtest@@fern@@@@wie@@ um @@wen@@ herum.\n",
+       "%s hirtet@@wie@@ um @@wen@@ herum.\n" }), 1);
+}
+
+int rlache(string str)
+{
+  return rbefehl (str,
+    ({ "Wegen wem willst Du aus der Ferne lachen?\n",
+       "Wegen Dir selbst? Aus der Ferne???\n",
+       "Wie willst Du wegen @@wem@@ lachen?\n",
+       "%s bricht@@fern@@@@wie@@ vor Lachen zusammen.\n",
+       "Du brichst wegen @@wem@@@@fern@@@@wie@@ vor Lachen zusammen.\n",
+       "%s bricht wegen @@wem@@@@wie@@ vor Lachen zusammen.\n" }), 1);
+}
+
+int rlaechle(string str)
+{
+  return rbefehl (str,
+    ({ "Wen willst Du aus der Ferne anlaecheln?\n",
+       "Dich selbst? Aus der Ferne???\n",
+       "Wie willst Du @@wen@@ anlaecheln?\n",
+       "%s laechelt Dich@@fern@@@@wie@@ an.\n",
+       "Du laechelst @@wen@@@@fern@@@@wie@@ an.\n",
+       "%s laechelt @@wen@@@@wie@@ an.\n" }), 1);
+}
+
+int rsuder(string str)
+{
+  return rbefehl (str,
+    ({ "Wen willst Du aus der Ferne ansudern?\n",
+       "Dich selbst? Aus der Ferne???\n",
+       "Wie willst Du @@wen@@ ansudern?\n",
+       "%s sudert Dich@@fern@@@@wie@@ an.\n",
+       "Du suderst @@wen@@@@fern@@@@wie@@ an.\n",
+       "%s sudert @@wen@@@@wie@@ an.\n" }), 1);
+}
+
+string _in(string a, mapping m)
+{
+  if (member(m,lower_case(a)))
+    return m[a];
+  else
+    return "";
+}
+
+string ParseAdverben(string str, object ob)
+{
+  string *advpart;
+  mixed quotedpart;
+  mapping adverben;
+
+  if (!str) return 0;
+  str=" "+str;
+  adverben=ob->QueryStdAdverbs()+ob->QueryAdverbs();
+  advpart=explode(str,"/");
+  if (sizeof(advpart)>1)
+      quotedpart=" "+implode(advpart[1..],"/");
+  else
+    quotedpart="";
+  advpart=regexplode(advpart[0],"\\<[^, ]*\\>");
+  advpart=map_array(advpart,#'_in,adverben) - ({""});
+  return sizeof(advpart) ? ob->CountUp(advpart)+quotedpart : quotedpart[1..];
+}
+
+/*
+explode_str() - ersetzt @@...@@ Makros
+-------------
+str ......... der String
+ob .......... das Objekt, dessen Name eingesetzt werden soll
+adv ......... Adverben
+fern ........ 0: Naehe, 1: aus der Ferne
+*/
+varargs string explode_str(string str, object ob, string adv, int fern)
+{
+  string s,s1,s2,x;
+  s2=str;
+  s="";
+  while (sscanf(s2, "%s@@%s@@%s", s1, x, s2) == 3)
+  {
+    switch (x)
+    {
+      case "wer":    if (fern>0 && INV_TEST(TP,ob,ob)) s+=s1+WIZ_NAME(ob,0);
+                     else s+=s1+ob->name(WER);
+                     break;
+      case "WER":    if (fern>0 && INV_TEST(TP,ob,ob)) s+=s1+WIZ_NAME(ob,0);
+                     else s+=s1+ob->Name(WER);
+                     break;
+      case "wessen": if (fern>0 && INV_TEST(TP,ob,ob)) s+=s1+WIZ_NAME(ob,1);
+                     else s+=s1+ob->name(WESSEN);
+                     break;
+      case "wem":    if (fern>0 && INV_TEST(TP,ob,ob)) s+=s1+WIZ_NAME(ob,0);
+                     else s+=s1+ob->name(WEM);
+                     break;
+      case "wen":    if (fern>0 && INV_TEST(TP,ob,ob)) s+=s1+WIZ_NAME(ob,0);
+                     else s+=s1+ob->name(WEN);
+                     break;
+      case "wie":    s+=s1+adv; break;
+      case "fern":   if (fern>0) s+=s1+" aus der Ferne"; else s+=s1; break;
+    }
+  }
+  s+=s2;
+  return s;
+}
+
+/*
+rbefehl()
+---------
+str ......... der String, wie er beim Befehl angehaengt wurde
+form ........ ein Array mit den diversen Meldungen:
+  form[0].... Fehlermeldung, wenn str leer ist
+  form[1].... Fehlermeldung, wenn Spieler == Zielperson
+  form[2].... sprintf Fehlermeldung bei nicht parse-baren Adverben
+              "...%s...", Zielperson->Name(casus)
+  form[3].... sprintf Maske fuer Zielperson
+              "%s...%s...%s.\n", Spieler, Adverben, ["Ferne"]
+  form[4].... sprintf Maske fuer Spieler
+              "...%s...%s...%s.\n", Zielperson->Name(casus), Adverben, ["Ferne"]
+  form[5].... sprintf Maske fuer Raum
+              "%s...%s...%s...", Spieler, Zielperson->Name(casus), Adverben
+  form[6].... Default Adverb (optional)
+sp........... Kosten (spellpoints)
+---
+Anmerkungen:
+
+["Ferne"]  ist " aus der Ferne", wenn die Spieler in verschiedenen Raeumen
+           stehen, sonst ein Leerstring ("").
+Adverben   werden wie soul-Adverben geparsed, ihnen wird ausserdem ein
+           Space vorangestellt (um sie fuer die sprintf Maske optional
+           zu machen).
+*/
+
+varargs int rbefehl(string str, string *form, int sp, int nearonly)
+{
+  string *s, adv;
+  mixed ob;
+  object room;
+  int i, ferne;
+
+  if (MENV != TP)
+    return notify_fail("Dazu musst Du "+name(WEN,1)+" erst einmal "+
+      "an Dich nehmen!\n"), 0;
+  if (!IS_SEER(TP) && (TP->QueryProp(P_SP) < sp))
+    return notify_fail("Dazu hast Du zuwenig Magiepunkte!\n"), 0;
+
+  str=TP->_unparsed_args();
+
+  notify_fail(form[0]);
+  if (!stringp(str) || str=="") return 0;
+  s = explode (str, " ");
+  if (!i=sizeof(s)) return 0;
+  s[0]=LOWER(s[0]);
+  ob=find_player(s[0]) || match_living(s[0],1);
+    // ergibt:  - Spielerobjekt oder
+    //          - String (passender Spielername) oder
+    //          - Integer (-1: multiple matches, -2: no matches)
+  if (stringp(ob)) ob=find_player(ob);
+    // Jetzt: - Spielerobjekt oder
+    //        - Integer (0 oder -2: nicht da, -1: mehrere da)
+
+#ifdef INVIS_SPERRE
+  if (objectp(ob) && !IS_WIZARD(TP) && ob->QueryProp(P_INVIS)) ob=0;
+#endif
+
+  if (!objectp(ob)) {
+    if (ob==-1)
+      return notify_fail("Das war nicht eindeutig!\n"), 0;
+    else
+      return notify_fail("Kein solcher Spieler!\n"), 0;
+  }
+  if (ob==TP) return notify_fail(form[1]), 0;
+  if (i<2) adv="";
+  else
+  {
+    if (!adv=ParseAdverben(implode(s[1..], " "), TP))
+      return notify_fail (sprintf(explode_str(form[2], ob))), 0;
+    else
+      if (strlen(adv))
+        adv = " " + adv;
+  }
+  if (!strlen(adv))
+    if ((sizeof(form) > 6) && stringp(form[6]))
+      adv = " " + form[6];
+
+  // aus der Ferne?
+  // (Bei der Gelegenheit ausserdem gleich room und ferne setzen)
+  ferne=(room=ENV(TP)) != ENV(ob);
+
+  if (nearonly && ferne) {
+    write(ob->Name(WER)+" ist zuweit weg von Dir...\n");
+    return 1;
+  }
+  if (s=ob->QueryProp(P_IGNORE))
+    if (member(s, lower_case(getuid(TP))+".teddy") != -1)
+    {
+      write(ob->Name(WER)+" ignoriert Deinen Teddy. (Wie gemein...)\n");
+      return 1;
+    }
+
+  if (query_verb()[0..5] == "rwusch")
+    if (ob->QueryProp(P_FROG))
+    {
+      write("Was willst Du denn bei Froeschen verwuscheln???\n");
+      return 1;
+    }
+
+  // Nun die eigentliche Ausgabe:
+  // tell_object (ob, BS(sprintf(explode_str(form[3], ob, adv, ferne), TPN)));
+  if (ob->Message(break_string(
+      capitalize( sprintf(explode_str(form[3], ob, adv, ferne),
+          INV_TEST(ob,TP,TP) ? WIZ_NAME(TP,0) : TPN) ), 78, 0, 1))==-1)
+    write(ob->Name(WER)+" ignoriert Dich oder diesen Befehl.\n");
+  else {
+    write (break_string( capitalize(
+            sprintf(explode_str(form[4], ob, adv, ferne))), 78, 0, 1));
+    if (!ferne)
+      tell_room(
+          room, break_string( capitalize(
+              sprintf(explode_str(form[5], ob, adv, -1), TPN)), 78, 0, 1),
+          ({TP,ob}) );
+  }
+  if (!IS_SEER(TP) && sp)
+    TP->AddSp(-sp);
+  return 1;
+}
+
+int zuschwer(string str)
+{
+  int max,conts;
+
+  max=TP->QueryProp(P_MAX_WEIGHT);
+  conts=TP->query_weight_contents();
+
+  if (IS_WIZARD(TP) || TP->QueryProp(P_TESTPLAYER))
+  {
+    printf("Du kannst maximal %d Gramm tragen.\n", max);
+    printf("Du traegst %d Gramm mit Dir rum.\n", conts);
+    if (conts>max)
+      printf("Das ist um %d Gramm zuviel!!!\n", conts-max);
+    else
+      printf("Alles im gruenen Bereich.\n");
+    return 1;
+  }
+  if (TP->id("TEDDYTESTER"))
+  {
+    if (conts>max)
+      printf("Du traegst um %d Gramm zuviel!!\n", conts-max);
+    else
+      printf("Alles im gruenen Bereich.\n");
+    return 1;
+  }
+  return 0;
+}
+

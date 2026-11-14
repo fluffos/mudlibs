@@ -1,0 +1,313 @@
+//  NPC Master 
+//
+//  ANGROX@SL
+//
+//  23-07.1998
+//
+
+#include <wizlevels.h>
+#include <language.h>
+#include <config.h>
+#include <new_skills.h>
+#include <mnpc.h>
+#include <moving.h>
+#include <properties.h>
+#include <wizlevels.h>
+#include <defines.h>
+#include <moredef.h>
+#include <class.h>
+#include "/gilden/paladine/paladin.h"
+
+// Globvars
+nosave mapping npcs=([]);
+nosave object *npc_ob=({});
+nosave object *feinde;
+nosave int cnt=0;
+nosave int feinde_reset=5;
+mapping killer_list=([]);
+
+string *kill_at_reset=({});
+
+// Prototyping
+nosave int CheckKillList(object pl);
+int IsEnemy(object enemy);
+
+create() {
+  if(is_clone(this_object())) return 0;
+  npcs=([]);
+  feinde=({});
+  seteuid(getuid(this_object()));
+  restore_object(KILLERLIST);
+//  SetProp(P_KILL_NAME, "Dustys Zorn"); // hey! SetProp in einem master? das ist eine
+//  lfun, keine efun, wo ist denn die definiert?
+}
+
+// Vielleicht gehts ja mit einer _query-fun..... Feyaria
+string _query_kill_name() { return "Dustys Zorn"; }
+
+void add_npc() {
+  if(PO->CanHelp())
+    npcs+=([file_name(PO):PO->QueryProp(P_GUILD_LEVEL)]);
+  npc_ob+=({PO});
+  return;
+}
+
+varargs void del_npc(object killer) {
+  npcs=m_delete(npcs, file_name(PO));
+  npc_ob-=({PO});
+  if(objectp(killer) && !IS_WIZARD(killer) && interactive(killer)) {
+    if(!member(killer_list, getuid(killer)))
+      killer_list+=([getuid(killer):1;0;0]);
+    else
+      killer_list[getuid(killer)]++;
+    TELL("angrox",sprintf("*** npcmaster(paladine): %s: %d\n", getuid(killer), killer_list[getuid(killer)]));
+    if(killer_list[getuid(killer)]>MAX_KILLS)
+      call_out("tell_about_enemy", 2,killer);
+    save_object(KILLERLIST);
+  }
+  return;
+}
+
+
+varargs void help_me(object spieler, string txt)
+{
+  string *texte, sn;
+  int u,i;
+  sn=spieler->name(WER);
+  texte=({sprintf("ALARM! %s greift uns an! ZU DEN WAFFEN!",CAP(sn)),
+          sprintf("Zu den Waffen! %s attackiert die Burg!",CAP(sn)),
+            sprintf("ALARM! Angriff von %s! ALARM!",spieler->name(WEM)), 
+            sprintf("Bei Dusty! ZU DEN WAFFEN! %s attackiert uns!",CAP(sn))});
+  if(member(feinde, spieler)==-1) {
+    if(!txt)
+      txt=texte[random(sizeof(texte))];
+    previous_object()->command_me("prufe "+txt);
+    if(!sizeof(feinde) && find_call_out("FirstAttack")==-1) 
+      call_out("FirstAttack", 2);
+    feinde+=({spieler});
+    feinde-=({0});
+    npc_ob-=({0});
+    for(i=sizeof(npc_ob)-1;i>=0;i--)
+      catch(npc_ob[i]->InsertEnemy(spieler));
+  }
+}
+
+int IsFeind(object enemy) {
+  return IsEnemy(enemy);
+}
+
+int IsEnemy(object enemy) {
+  feinde-=({0});
+  if(present("DANTE_ZOMBIE_VIRUS", enemy)) return 1;
+  if(enemy->is_class_member(CL_DEMON)) return 1;
+  if(!enemy) return -1;
+  if(member(feinde, enemy)==-1 && !CheckKillList(enemy))
+    return 0;
+  else return 1;
+}
+
+int IsPaladinEnemy(object enemy) {
+  if(!enemy) return -1;
+  return CheckKillList(enemy);
+}
+
+int AddFeind(object enemy) {
+  if(member(feinde, enemy)!=-1) return 0;
+  feinde+=({enemy});
+  return 1;
+}
+
+mixed GetNpcs() { 
+  return m_indices(npcs);
+}
+
+mixed GetNpcList() {
+  return npcs;
+}
+
+mixed GetFeinde() { 
+  return feinde;
+}
+
+
+nosave int FirstAttack() {
+  object npc,ob;
+  catch(call_other(ROOM("burg_c3"), "???"));
+  catch(call_other(ROOM("burg_c2"), "???"));
+  npc=clone_object(NPC("waechter"));
+  if(!present("\n_p_waechter", find_object(ROOM("burg_c3")))) {
+    npc->SetProp(P_MNPC_FLAGS, 0);
+    npc->move(ROOM("burg_c3"), M_GO);
+    npc=clone_object(NPC("waechter"));
+  }
+  if(ob=find_living("mythar")) {
+    call_out("prufe", 0, "Wachen! Alarmbereitschaft! Wir werden attackiert!",
+        ob);
+    call_out("prufe", 4, "Jawoll, Hauptmann! Diese Frevler werden buessen!",
+        npc);
+  }
+  return 1;
+}
+
+nosave int prufe(string msg, object ob) {
+  ob->command_me("prufe "+msg);
+  return 1;
+}
+
+nosave int mythardeath() {
+  catch(find_living("ayla")->command_me("prufe Mythar ist gefallen! "
+      "Schuetzt die Burg!"));
+  return 1;
+
+}
+
+//
+// Funktionen fuer die Feinde der Burg
+//
+
+varargs int tell_about_enemy(object pl, int nr) {
+   object ayla;
+   string txt;
+   if(objectp(ayla=find_living("ayla")) &&
+      member(kill_at_reset, getuid(pl))==-1)
+   {
+     if(!nr) 
+       nr=2*killer_list[getuid(pl)];
+     txt=sprintf("prufe Bei Dusty, nun reicht es! Hier mit " 
+         "erklaere ich, Ayla von Sturmfels, hoechste Dienerin der Dusty, "
+         "das %s als Feind der Paladine anzusehen ist! Jegliche Hilfe"
+         "stellung sei %s verwehrt. Sollte %s es je wagen, die "
+         "Burg Sturmfels wieder zu betreten, wird er ohne weiteres Federlesen "
+         "exekutiert.", pl->name(WER), pl->QueryPronoun(WEM),
+         pl->QueryPronoun(WER));
+     ayla->command_me(txt);
+     pl->Message(BSA(sprintf("Bei Dusty, nun hast Du den Bogen ueberspannt! "
+         "Hiermit erklaere ich Dich zum Feind der Paladine und der Burg "
+         "Sturmfels. Solltest Du jemals die Burg wieder betreten, erwarte "
+         "keine Gnade! Suehnen kannst Du nur durch Deinen Tod hier auf der "
+         "Burg, oder wenn Du %d Dunkelelfen oder Nekromanten aus Dhrkion "
+         "toetest!", nr), "Ayla teilt Dir mit: "));
+     killer_list[getuid(pl),1]=nr;
+     kill_at_reset+=({getuid(pl)});
+     save_object(KILLERLIST); 
+   }
+   return 1;
+}
+
+int delfen_kill(object pl) {
+  object ayla;
+  if(member(kill_at_reset, getuid(pl))==-1) return 0;
+  killer_list[getuid(pl),1]--;
+  if(killer_list[getuid(pl),1]<1) {
+    if(ayla=find_object("ayla")) {
+      ayla->command_me(sprintf("prufe %s hat seine Schuld gesuehnt! "
+          "Von nun an sei ihm wieder Hilfe gewaehrt!", TP->Name(WER)));
+      pl->Message(BSA(sprintf("Du hast Deine Schuld gesuehnt. Von nun "
+          "an sei dir wieder Zugang zur Burg gestattet."), "Ayla teilt Dir "
+          "mit: "), MSGFLAG_TELL);
+    }
+    else {
+      tell_object(pl, BS("Du spuerst, dass Du Deine Schuld an den Paladinen "
+          "gesuehnt hast, und sie dir wieder wohlgesonnen sind."));
+    }
+    kill_at_reset-=({getuid(pl)});
+    feinde-=({getuid(pl)});
+    killer_list=m_delete(killer_list, getuid(pl));
+  }
+  save_object(KILLERLIST);
+  return 1;
+}
+
+nosave int CheckKillList(object pl) {
+  if(member(kill_at_reset, getuid(pl))!=-1)
+    return 1;
+  return 0;
+}
+
+int RequestHelp(object room, int req_lvl) {
+  object pal, npc;
+  string *npc_names; 
+  mixed way;
+  int i, ack_lvl, *levels;
+
+  pal=PO;
+  if(!PO && !living(PO) && query_once_interactive(PO)) 
+    return 0;
+  if(!sizeof(npcs)) 
+    return 0;
+  npc_names=m_indices(npcs);
+  levels=m_values(npcs);
+  
+  call_other(WAYD, "???"); // preload of WAYD
+  call_out("find_npc_way", 2, npc_names, levels, ack_lvl, req_lvl, room);
+  return 1;
+}
+
+nosave int find_npc_way(string *npc_names, int *levels, int ack_lvl, 
+    int req_lvl, object room) 
+{
+  object npc;
+  mixed way;
+  if(!sizeof(npc_names)) return 1;
+  if(ack_lvl>req_lvl) return 1;
+  npc=find_object(npc_names[0]);
+  if(objectp(npc) && !npc->IsMoving()) {
+    way=find_object(WAYD)->find_way(ENV(npc), room);
+    ack_lvl+=levels[0];
+    //tell_angrox(sprintf("npcmasterpala: NPC: %O, way = %O\n", npc, way));
+    if (pointerp(way) && sizeof(way) > 1 && sizeof(way[1]))
+      npc->DoWay(way[1]);
+  }
+  call_out("find_npc_way", 2, npc_names[1..], levels[1..], ack_lvl, req_lvl, room);
+  return 1;
+}
+
+/*
+int check_npc_array() {
+  call_out("check_array_async", 2, GetNpcs());
+}
+
+nosave int check_array_async(mixed npc_arr) {
+  int i, to;
+  if(sizeof(npc_arr) > 9) to=10;
+  else to = sizeof(npc_arr);
+  for(i=0; i<=(to-1); i++ ) {
+    if(!find_object(npc_arr[i]))
+      npcs=m_delete(npcs, npc_arr[i]);
+  }
+  call_out("check_array_async", 2, npc_arr[10..];
+
+}
+
+*/
+
+void reset() {
+   int i;
+   object *online_users;
+   object pl;
+   feinde_reset--;
+   if(feinde_reset < 0) {
+     feinde=({});
+     feinde_reset=5;
+   }
+   online_users=users();
+   for(i=sizeof(kill_at_reset)-1; i>=0;i--) {
+     if(pl=find_player(kill_at_reset[i]) &&
+         member(feinde, pl) !=-1)
+     {
+       feinde+=({pl});
+     }
+   }
+   for(i=sizeof(feinde)-1;i>=0;i--) {
+     if(random(3)) 
+       continue;
+     if(member(online_users, feinde[i])!=-1) {
+       tell_object(feinde[i], BS(sprintf("Du spuerst Dustys Zorn, Frevler%s!", 
+             feinde[i]->QueryProp(P_GENDER)==FEMALE?"in":"")));
+       feinde[i]->do_damage(10+random(6), this_object());
+       if(!random(3)) 
+         feinde[i]->SetProp(P_DISABLE_ATTACK, 10);
+     }
+   }
+   set_next_reset(600);
+}

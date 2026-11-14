@@ -1,0 +1,484 @@
+// /d/huegelland/raballion/echsen/obj/echsenrunenmaster.c
+// Ein Runenmaster der Echsen
+// dient zum zentralen verwalten der echsischen Runentexte
+// 2004-07-15  Raballion@
+
+#include "../def.h"
+
+#include <properties.h>
+#include <daemon.h>
+
+#define MASTERDIR "/d/huegelland/raballion/echsen/obj/"
+#define DBBASE "texte.txt"
+#define raba(x) if (find_player("raballion")) tell_object(find_player("raballion"),(x))
+
+// administration
+void lies_texte();
+void save_modul();
+string query_status();
+
+// DB Abfrage
+string setze_text_in_runen(int nr);
+string query_text(int nr);
+string query_typ(int nr);
+mixed *query_type(string str);
+mixed *query_kat();
+
+int rollennr;
+string rollentxt;
+int anztexte;
+
+// Runentexte
+mapping texte;
+mixed *texte_keys;
+mixed *texte_val;
+
+// Kategorien
+mapping kat;
+mixed *kat_keys;
+mixed *kat_val;
+
+create()
+{
+  if (is_clone(TO) )
+     {
+     return destruct(TO);
+     }
+//  AddId( ({"echsenrunenmaster", "erunenmaster"}) );
+
+  seteuid(getuid(this_object()));
+
+  texte=([]);
+  kat=([]);
+  lies_texte();
+  save_modul();
+  raba("Echsenrunenmaster gestartet\n");
+
+}
+
+int remove() { return 0; }
+
+// Administration
+// Wieviele Keys und welche sind geladen?
+string query_status()
+{
+int i;
+   raba("sizeof(texte_keys): "+(string)sizeof(texte_keys)+"\n");
+   for (i=0; i < sizeof(texte_keys); i++)
+     {
+     raba("Geladener Key: "+(string)texte_keys[i]+" Typ: "+kat_val[i]+"\n");
+     }
+}
+
+// Administration
+// laden der verfuegbaren Texte
+void lies_texte()
+{
+string str, strbuff;
+int i, id, idbuff;
+int anzbytes;
+string *s, *key, kategory, kategory_buff;
+   
+  anzbytes = file_size(MASTERDIR+DBBASE);
+
+  str = read_file(MASTERDIR+DBBASE);
+  if (!str) return;
+  s = explode(str, "\n");
+  idbuff = 1;
+  strbuff = "";
+  kategory_buff = "";
+  for (i=0; i<sizeof(s); i++)
+    {
+    if ((s[i]=="") || (s[i][0]=='#')) continue;
+    if (s[i][0..4]=="text:")
+      {
+      sscanf(s[i], "text:%d:%s:", id, kategory);
+      if (kategory_buff == "") kategory_buff = kategory;
+      }
+    else
+      {
+      if (id > idbuff)
+        {
+        if ( (strbuff[<1]!='\n') && (strbuff[<1]!=' ') ) strbuff += "\n";
+        texte += ([idbuff:strbuff]);
+        if ( (kategory_buff[<1]=='\n') || (kategory_buff[<1]==' ') ) kategory_buff = kategory_buff[0..<2];
+        kat += ([idbuff:kategory_buff]);
+        raba(idbuff+" "+kategory_buff+" geladen.\n");
+        idbuff = id;
+        kategory_buff = kategory;
+        strbuff = implode(efun::explode(s[i], "\\n"), "\n");
+        if ( (strbuff[<1]!='\n') && (strbuff[<1]!=' ') ) strbuff += " ";
+        }
+      else
+        {
+        strbuff += implode(efun::explode(s[i], "\\n"), "\n");
+        if ( (strbuff[<1]!='\n') && (strbuff[<1]!=' ') ) strbuff += " ";
+        }
+      }
+    }
+    if ( (strbuff[<1]!='\n') && (strbuff[<1]!=' ') ) strbuff += "\n";
+    texte += ([idbuff:strbuff]);
+    if ( (kategory_buff[<1]=='\n') || (kategory_buff[<1]== ' ') ) kategory_buff = kategory_buff[0..<2];
+    kat += ([idbuff:kategory_buff]);
+    raba(idbuff+" "+kategory_buff+" geladen.\n");
+    
+    anztexte = m_sizeof(texte);
+    texte_keys = m_indices(texte);
+    texte_val = m_values(texte);
+    kat_keys = m_indices(kat);
+    kat_val = m_values(kat);
+    raba("Echsenrunenmaster: " + anztexte + " geladen.\n");
+}
+
+// Administration
+// sichern aller Variablen. Damit man Fehler debugen kann.
+void save_modul()
+{
+  save_object(MASTERDIR+"echsenrunenmaster.save");
+}
+
+// DB-Abfrage
+// Welcher Kategorie gehoert der Text mit der Nummer nr an?
+string query_typ(int nr)
+{
+  if (member(kat, nr) != 0)
+    {
+//    return break_string(kat[nr],78,"",1);
+    return kat[nr];
+    }
+  else
+    {
+    return "";
+    }
+  return "";
+}
+
+// DB-Abfrage
+// Welche Kategorien gibt es derzeit
+mixed *query_kat()
+{
+return (m_indices(mkmapping(kat_val)));
+}
+
+// DB-Abfrage
+// Welche Texte gibt es zur Kategorie str?
+mixed *query_type(string str)
+{
+int i;
+mapping key;
+
+  key = ([]);
+  for (i=0; i<sizeof(kat_keys); i++)
+    {
+    if (kat_val[i] == str)
+      {
+      key += ([(int)kat_keys[i]:kat_val[i]]);
+      }
+    }
+return m_indices(key);
+}
+
+// DB-Abfrage
+// Gib den Text mit der Nummer nr aus
+string query_text(int nr)
+{
+  if (member(texte, nr) != 0)
+    {
+    return break_string(texte[nr],78,"",1);
+    }
+  else
+    {
+    return "";
+    }
+  return "";
+}
+
+// DB-Abfrage
+// Uebersetze die Rolle mit der Nummer nr in Runentext und gib sie aus
+string setze_text_in_runen(int nr)
+{
+int i;
+string strquelle;
+string strziel;
+
+  strquelle = texte[nr];
+  strziel = "";
+  for (i=0; i<strlen(strquelle); i++)
+    {
+    switch(strquelle[i..i])
+      {
+
+      case " ":
+         strziel += "/\\\\//";
+         break;
+      case "a":
+         strziel += "\\\\\\/";
+         break;
+      case "b":
+         strziel += "-\\\\/";
+         break;
+      case "c":
+         strziel += "//\\/";
+         break;
+      case "d":
+         strziel += "\\/\\/";
+         break;
+      case "e":
+         strziel += "-/\\/";
+         break;
+      case "f":
+         strziel += "/_\\/";
+         break;
+      case "g":
+         strziel += "\\_\\/";
+         break;
+      case "h":
+         strziel += "-_\\/";
+         break;
+      case "i":
+         strziel += "/\\//";
+         break;
+      case "j":
+         strziel += "\\\\//";
+         break;
+      case "k":
+         strziel += "-\\//";
+         break;
+      case "l":
+         strziel += "////";
+         break;
+      case "m":
+         strziel += "\\///";
+         break;
+      case "n":
+         strziel += "-///";
+         break;
+      case "o":
+         strziel += "/_//";
+         break;
+      case "p":
+         strziel += "\\_//";
+         break;
+      case "q":
+         strziel += "-_//";
+         break;
+      case "r":
+         strziel += "/\\|/";
+         break;
+      case "s":
+         strziel += "\\\\|/";
+         break;
+      case "t":
+         strziel += "-\\|/";
+         break;
+      case "u":
+         strziel += "//|/";
+         break;
+      case "v":
+         strziel += "\\/|/";
+         break;
+      case "w":
+         strziel += "-/|/";
+         break;
+      case "x":
+         strziel += "/_|/";
+         break;
+      case "y":
+         strziel += "\_|/";
+         break;
+      case "z":
+         strziel += "-_|/";
+
+      case "\n":
+         strziel += "/\\\\\\";
+         break;
+      case "A":
+         strziel += "\\\\\\\\";
+         break;
+
+      case "B":
+         strziel += "-\\\\\\";
+         break;
+
+      case "C":
+         strziel += "//\\\\";
+         break;
+
+      case "D":
+         strziel += "\\/\\\\";
+         break;
+
+      case "E":
+         strziel += "-/\\\\";
+         break;
+
+      case "F":
+         strziel += "/_\\\\";
+         break;
+
+      case "G":
+         strziel += "\\_\\\\";
+         break;
+
+      case "H":
+         strziel += "-_\\\\";
+         break;
+
+      case "I":
+         strziel += "/\\/\\";
+         break;
+
+      case "J":
+         strziel += "\\\\/\\";
+         break;
+
+      case "K":
+         strziel += "-\\/\\";
+         break;
+
+      case "L":
+         strziel += "///\\";
+         break;
+
+      case "M":
+         strziel += "\\//\\";
+         break;
+
+      case "N":
+         strziel += "-//\\";
+         break;
+
+      case "O":
+         strziel += "/_/\\";
+         break;
+
+      case "P":
+         strziel += "\\_/\\";
+         break;
+
+      case "Q":
+         strziel += "-_/\\";
+         break;
+
+      case "R":
+         strziel += "/\\|\\";
+         break;
+
+      case "S":
+         strziel += "\\\\|\\";
+         break;
+
+      case "T":
+         strziel += "-\\|\\";
+         break;
+
+      case "U":
+         strziel += "//|\\";
+         break;
+
+      case "V":
+         strziel += "\\/|\\";
+         break;
+
+      case "W":
+         strziel += "-/|\\";
+         break;
+
+      case "X":
+         strziel += "/_|\\";
+         break;
+
+      case "Y":
+         strziel += "\\_|\\";
+         break;
+
+      case "Z":
+         strziel += "-_|\\";
+         break;
+
+
+      case "0":
+         strziel += "/\\\\<";
+         break;
+
+      case "1":
+         strziel += "\\\\\\<";
+         break;
+
+      case "2":
+         strziel += "-\\\\<";
+         break;
+
+      case "3":
+         strziel += "//\\<";
+         break;
+
+      case "4":
+         strziel += "\\/\\<";
+         break;
+
+      case "5":
+         strziel += "-/\\<";
+         break;
+
+      case "6":
+         strziel += "/_\\<";
+         break;
+
+      case "7":
+         strziel += "\\_\\<";
+         break;
+
+      case "8":
+         strziel += "-_\\<";
+         break;
+
+      case ".":
+         strziel += "/\\/<";
+         break;
+
+      case ",":
+         strziel += "\\\\/<";
+         break;
+
+      case "?":
+         strziel += "-\\/<";
+         break;
+
+      case "!":
+         strziel += "///<";
+         break;
+
+      case ";":
+         strziel += "\\//<";
+         break;
+
+      case ":":
+         strziel += "-//<";
+         break;
+
+      case "-":
+         strziel += "/_/<";
+         break;
+
+      case "+":
+         strziel += "\\_/<";
+         break;
+
+      case "*":
+         strziel += "-_/<";
+         break;
+
+
+      default:
+         strziel += strquelle[i..i];
+         break;
+
+      }
+    }
+
+  return break_string(strziel);
+
+}
+
+

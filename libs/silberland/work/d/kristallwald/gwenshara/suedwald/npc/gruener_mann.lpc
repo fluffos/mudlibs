@@ -1,0 +1,296 @@
+#include "../def.h"
+#include "/gilden/waldlaeufer/def_extern.h"
+#include <ansi.h>
+
+inherit "/std/mnpc";
+inherit "/std/npc/spells";
+
+#define DEFAULT_RANGER_ID "\ndefault_ranger_npc"
+#define P_RANGER_MAX_PET_LEVEL "ranger_max_pet_level"
+#define P_RANGER_LAST_SWOOP "ranger_last_sturzflug"
+#define P_RANGER_LAST_NET "ranger_last_net|slow"
+
+//--Create-----------------------------------------------------------------
+object pet;
+
+public string _query_short() {
+  string s;
+  s = "Der gruene Mann";
+
+  switch( TP->QueryProp(P_TTY) )
+  {
+    case "ansi" :  s = ANSI_GREEN + ANSI_BG_BLACK + s + ANSI_NORMAL; break;
+    case "vt100" : s = ANSI_BOLD + s + ANSI_NORMAL; break;
+  }
+  
+  return s;
+}
+
+void create()
+{
+  string race, short;
+  if(!is_clone(TO)) return;
+
+  ::create();
+
+//--Beschreibungen---------------------------------------------------------
+SetProp(P_NAME, ({"Der gruene Mann", "Des gruenen Manns", "Dem gruenen Mann", "Den gruenen Mann"}));
+SetProp(P_ADJECTIVES, "gruen");
+SetProp(P_LONG,
+    "Der gruene Mann ist der Hueter dieses Waldes. Er ist eine grossgewachsene "
+    "Gestalt, komplet in gruenes Gewand gehuellt. Eine ebenso gruene Kapuze "
+    "und ein Tuch ueber dem Gesicht lassen nicht erahnen, wer sich darunter "
+    "verbirgt. Seine Glieder sind schlank und doch kraeftig. Manche halten ihn "
+    "fuer einen schweigsamen Waldgeist, andere sagen er waere ein Waldlaeufer, "
+    "der gelobt hat diesen Wald und die Wildnis zu schuetzen. Fest steht, "
+    "dass er fuer die Waldlaeufer eine Legende ist und fuer seine Feinde "
+    "ein maechtiger Gegner.");
+
+//--Namen------------------------------------------------------------------
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:0,T_RANGE_MAX:30]));
+  AddId(({"gruener mann", "gruene mann", "mann", "gruenen mann", "NOWIMPY", "NOCONTROL"}));
+  AddId( ({DEFAULT_RANGER_ID}) );
+  SetProp(P_ARTICLE, 0);
+
+//--Eigenschaften----------------------------------------------------------
+  
+  create_default_npc(42); 
+
+  SetProp(P_HANDS, ({" mit kraeftigen Haenden",QueryProp(P_HANDS)[1], ({DT_BLUDGEON})})  );
+
+  SetProp(P_RACE, "Dunkelelf");
+  SetProp(P_SIZE, 210);
+  SetProp(P_WEIGHT, 75000);
+  SetProp(P_ALIGN, 0);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_HEAL, 0);
+  SetProp(P_AGGRESSIVE, 0);
+  SetProp(P_WIMPY, 0);
+  SetProp(P_NOMAGIC, 0);
+
+  SetProp( P_REJECT, ({ REJECT_GIVE,
+    Name(WER,1)+" winkt ab.\n" }) );
+
+//--Bewegungen-------------------------------------------------------------
+
+  SetProp(P_MSGIN, "kommt herein");
+  SetProp(P_MSGOUT, "geht");
+  SetProp(P_MMSGIN, "tritt aus dem Wald");
+  SetProp(P_MMSGOUT, "verschwindet im Wald");
+
+//--Tod--------------------------------------------------------------------
+
+  SetProp(P_DIE_MSG,  " faellt tot zu Boden.\n");
+  SetProp(P_NOCORPSE, 0);
+//--Infos------------------------------------------------------------------
+
+  AddInfo(DEFAULT_INFO,
+         ({ "schweigt.\n",
+            "blickt dich schweigend an.\n",
+            "schuettelt den Kopf.\n"}));
+
+  AddInfo(({"waldlaeufer"}), "deutet auf seinen greuen Koecher.\n");
+  AddInfo(({"grotte"}), "blickt sich einmal um und nickt.\n");
+  AddInfo(({"zeichnungen", "tiere"}), "deutet auf die Zeichnungen an den Waenden.\n");
+  AddInfo(({"opfer", "tieropfer", "blut", "opferschale"}), 
+    "deutet auf sein Messer und macht eine schneidende Bewegung in Richtung der Bilder von kleinen Waldtieren.\n");
+  AddInfo(({"avatara", "tierkoenige", "namen der avatara"}), " deutet auf die Opferschale unter der Statue und zeigt auf sein Messer.\n");
+  AddInfo(({"raziel"}), "nickt und deutet wage in Richtung Norden.\n");
+  AddInfo(({"namen", "name"}), "scuetetlt nur den Kopf.\n");
+
+
+  SUID;
+  CLONEME("/p/weapon/bow/kriegsbogen");
+  if(find_object("/p/daemon/itemd/itemd") && !random(2)) {
+    find_object("/p/daemon/itemd/itemd")->identify(present("bogen",ME),
+        -1, 100, 100, ({40,80,100,102,103}));
+  }
+
+  CLONEME(ARMOUR "gruener_mann_kapuze");
+
+  SetProp(P_GUILD, "waldlaeufer");
+  SetProp(P_GUILD_LEVEL, 20);
+  CLONEME("/gilden/waldlaeufer/obj/koecher");
+
+  call_out("get_ready", 0);
+
+  SetProp(P_SPELLRATE, 40);
+  AddSpell(3, 400, 
+    Name(WER, 1) + " zielt mit einem raschen Schuss auf Dich.\n",
+    Name(WER, 1) + " zielt mit einem raschen Schuss auf @WEN.\n", 
+    DT_PIERCE, ([SP_SHOW_DAMAGE: 1]));
+  
+  AddDefaultSpell(2, 350, DS_PARALYZE,
+    Name(WER, 1) + " tritt Dich kraeftig.\n",
+    Name(WER, 1) + " tritt @WEN kraeftig.\n", 
+    DT_SQUEEZE, 1);
+
+  AddDefaultSpell(2, 400, DS_POISON, 
+    Name(WER, 1) + " trifft dich mit einem Giftpfeil.\n",
+    Name(WER, 1) + " trifft @WEN mit einem Giftpfeil.\n");
+
+  AddDefaultSpell(2, 600, DS_MASS_DAMAGE,
+    Name(WER, 1)+" laeuft ein paar Schritte weg und feuert eine Salve auf alle ab.\n",
+    Name(WER, 1)+" laeuft ein paar Schritte weg und feuert eine Salve auf alle ab.\n",
+    DT_PIERCE);
+//--Create Ende------------------------------------------------------------
+}
+
+public void zielschuss(object enemy) {
+  SetProp(P_DISABLE_ATTACK, 3);
+  SetProp(P_DISABLE_SPELLS, 3);
+  call_out("zielschuss_treffer", 4, enemy);
+}
+
+public void zielschuss_treffer(object enemy) {
+  tell_room(ENV(TO), BS(Name(WER, 1)+" laesst den Pfeil loss und trifft "+enemy->name(WEN)+" mitten in den Koerper!"),
+            ({enemy}));
+  tell_object(enemy, BS(Name(WER, 1)+" laesst den Pfeil loss und trifft dich mitten in den Koerper!"));
+
+  enemy->Defend(800+random(400) + (200*enemy->QueryProp(P_HP)/enemy->QueryProp(P_MAX_HP)), ({DT_PIERCE, DT_MAGIC}), ([SP_SHOW_DAMAGE:1, SP_PHYSICAL_ATTACK:1]), TO);
+  return;
+}
+
+public void get_ready() {
+  object ob;
+  int i;
+
+  command_me("zuecke bogen");
+  command_me("zieh alles an");
+  return;
+}
+
+public int Defend(int dam, string *dam_type_list, mixed spell, object enemy) {  
+  if(!random(15)) {
+    tell_room(ENV(TO), BS(Name(WER) + " weicht geschickt aus."));
+    return 0;
+  }
+
+  if(enemy->QueryProp(P_HP) < enemy->QueryProp(P_MAX_HP)/2 && !random(5) && !QueryProp(P_DISABLE_ATTACK)) {
+    tell_room(ENV(TO), BS("Der gruene Mann legt einen Pfeil auf seinen Bogen zielt konzentriert auf "+enemy->name(WEN)), ({enemy}));
+    tell_object(enemy, BS("Der gruene Mann legt einen Pfeil auf seinen Bogen zielt konzentriert auf dich."));
+    zielschuss(enemy);
+  }
+
+  if(!objectp(pet) && !random(3)) {
+    command_me("emote konzentriert sich kurz.");
+    SetProp(P_DISABLE_ATTACK, 1);
+    call_out("summon", 0);
+  } else if(objectp(pet) && !random(3) ) {
+    if(pet->id("spinne") && pet->QueryProp(P_RANGER_LAST_NET)+30 < time()) {
+      pet->netz(enemy);
+    } else if((pet->id("adler") || pet->id("riesenadler")) && pet->QueryProp(P_RANGER_LAST_SWOOP)+30 < time()) {
+      pet->sturzflug(enemy);
+    }
+  }
+
+  return ::Defend(dam, dam_type_list, spell, enemy);
+}
+
+public void summon() {
+  string *type;
+
+  if(objectp(pet)) return;
+
+  type = ({"wolf","adler","baer","spinne"});
+
+  pet = clone_object("/gilden/waldlaeufer/npc/summons");
+  if(!pet->customize(TO, type[random(sizeof(type))], 10000, 10000)) {
+    tell_room(ENV(TO), "Fehler: Summon!");
+    destruct(pet);
+    return;
+  }
+
+  pet->move(ENV(TO), M_GO|M_NOCHECK);
+  AddDefender(pet);
+  return;
+}
+
+
+public void init() {
+  ::init();
+
+  if(TP->id(SUEDWALD_RANGER)) {
+    AddDefender(TP);
+  }
+
+  return;
+}
+
+public void InformDefend(object enemy) {
+  Kill(enemy);
+}
+
+//--Reactions--------------------------------------------------------------
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+  if(find_call_out("reaction") != -1) return;
+
+  switch (gruppe)
+  {
+    case "aengstlich":
+      call_out("reaction", 0, TP,
+        "schuettelt verwundert den Kopf.",
+        "schuettelt verwundert den Kopf.");
+      break;
+
+    case "aergerlich":
+    case "fies":
+      call_out("reaction", 0, TP,
+        "knurrt: Leg Dich nicht mit mir an!",
+        "knurrt: Leg Dich nicht mit mir an!");
+        break;
+
+    case "frech":
+      call_out("reaction", 0, TP,
+        "brummt Dich unwirsch an.",
+        "brummt "+TP->name(WESSEN)+" unwirsch an.");
+      break;
+
+    case "albern":
+    case "froh":
+      call_out("reaction", 0, TP,
+        "runzelt die Stirn.",
+        "runzelt die Stirn.");
+      break;
+
+    case "intim":
+      call_out("reaction", 0, TP,
+        "sagt: Lass das lieber sein.",
+        "sagt: Lass das lieber sein.");
+      break;
+
+    case "neutral":
+      call_out("reaction", 0, TP,
+        "beachtet Dich gar nicht.",
+        "beachtet "+TP->name(WEN)+" gar nicht.");
+      break;
+
+    case "traurig":
+    case "nett":
+      call_out("reaction", 0, TP,
+        "mustert Dich stumm.",
+        "mustert "+TP->name(WEN)+" stumm.");
+      break;
+  }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void reaction(object pl, string macher, string andere)
+{
+  if(!ENV(TO))           return;
+  if(!objectp(pl))       return;
+  if(!ENV(pl))           return;
+  if(ENV(TO) != ENV(pl)) return;
+
+  tell_object(pl, BS(Name(WER, 1)+" "+macher));
+  tell_room(ENV(TO), BS(Name(WER, 1)+" "+andere), ({pl}) );
+}
+
+//--Funktionen-------------------------------------------------------------
+

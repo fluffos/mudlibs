@@ -1,0 +1,95 @@
+inherit "/std/thing/properties";
+
+#include <defines.h>
+#include <properties.h>
+#include "/std/sys_debug.h"
+
+#define EM_DATA		"/etc/Erzmagier"
+#define MAGIER		"/etc/Magierliste"
+#define MASTER		"/secure/master"
+#define WIZ_HOME	"/players"
+
+#define REM		0		// RegionsErzMagier
+#define MAG		1		// Normale Magier
+
+private mapping domains;
+private int Finished;
+
+private mapping _query_Magierliste() { return domains; }
+
+create()
+{
+  ::create();
+  Set("Magierliste", #'_query_Magierliste, F_QUERY_METHOD);
+}
+
+reset()
+{
+  MagierListe();
+}
+
+ProcessList(mixed names)
+{
+  string Dname;
+  int i;
+  i = 5;
+
+  while(i-- && sizeof(names))
+  {
+    if(!pointerp(Dname = MASTER->get_domain_homes(names[0])))
+      Dname = ({Dname});
+    if(!sizeof(Dname)) Dname = ({"Keine Region"});
+    while(sizeof(Dname))
+    {
+      if(!domains[Dname[0]]) 
+      {
+        domains[Dname[0], REM] = ({});
+        domains[Dname[0], MAG] = ({});
+      }
+      if(Dname[0]!="Keine Region" && MASTER->domain_master(names[0], Dname[0]))
+        domains[Dname[0], REM] += ({names[0]});
+      else
+        domains[Dname[0], MAG] += ({names[0]});
+      Dname = Dname[1..];
+    }
+    names = names[1..];
+  }
+  if(sizeof(names)) call_out("ProcessList", 0, names);
+  else { Finished = 1; MagierListe(); }
+}
+
+void MagierListe()
+{
+  string output;
+  mixed d;
+
+  if(!Finished)
+  {
+    if(find_call_out("ProcessList") == -1)
+    {
+      Finished = 0;
+      domains = allocate_mapping(0,2);
+      call_out("ProcessList", 0, get_dir(WIZ_HOME+"/*") - ({".", ".."}));
+    }
+    call_out("MagierListe", 20, 1);
+    return;
+  }
+  while(remove_call_out("Magierliste") !=  -1);
+
+  output = "Magierliste vom AnderLand vom "+dtime(time())+"\n";
+  for(d = m_indices(domains); sizeof(d); d = d[1..])
+  {
+    output += "REGION: "+capitalize(d[0])
+             +" REM: "
+             +implode(map_array(domains[d[0], REM], #'capitalize), ", ")
+             +" ("+sizeof(domains[d[0], REM]+domains[d[0], MAG])
+             +" Magier)\n         "
+             +implode(map_array(domains[d[0], MAG], #'capitalize),
+                                "\n         ")
+             +"\n";
+  }
+  rm(MAGIER);
+  write_file(MAGIER, output);
+}
+
+

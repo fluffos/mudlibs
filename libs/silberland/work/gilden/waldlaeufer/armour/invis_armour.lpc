@@ -1,0 +1,184 @@
+/*****************************************************************************
+InvisRuestung fuer verteidigungsbonus
+(c) Lilyth, Torian, Delgo @ Silberland <sl.mud.at>
+10.2.06 - Begin
+*****************************************************************************/
+#include "../def.h"
+inherit "std/armour";
+inherit "std/thing";
+
+#define P_REMOVE_TIME "remove_time"
+
+int protection;
+mixed dt;
+string baum;
+
+//** StandardFunktionen fuer Ruestungen ************************************//
+//-- Create() ----------------------------------------------------------------
+void create()
+{
+  if( !is_clone(TO) ) return;
+  ::create();
+  
+  SetProp(P_SHORT, 0 );
+  SetProp(P_LONG,  0 );
+  SetProp(P_NAME, 0);
+  SetProp(P_INVIS, 1);
+  SetProp(P_GENDER, FEMALE);
+  AddId(INVIS_ARMOUR_ID);
+  SetProp(P_MATERIAL, MAT_MAGIC );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_SIZE, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_REMOVE_TIME, 0);
+  protection=0;
+  
+  SetProp(P_ARMOUR_TYPE, AT_MISC );
+  SetProp(P_AC, 0);
+  SetProp(P_QUALITY_DECAY, 0);
+  SetProp(P_DEFEND_FUNC, TO );
+}
+
+//-- VerteidigungsFunktion ---------------------------------------------------
+int DefendFunc (mixed dam_type, int spell, object enemy)
+{ 
+  int i, prot, a, b;
+  
+  prot=0;  
+  //Schadensart und Schutzart stimmen ueberein
+  if(dt==dam_type) prot=protection;
+  //eine Schutzart und mehrerer Schadensarten
+  else if(stringp(dt) && pointerp(dam_type))
+  { if(member(dam_type, dt) != -1) prot=protection/(sizeof(dam_type)); }
+  //mehrere schutzarten und mehrere schadensarten (untersch.)
+  // a wieviele Schadensarten werden abgewehrt?
+  // b wieviele Schadensarten werden uebergeben?
+  else if(pointerp(dt) && pointerp(dam_type))
+  {
+    b=sizeof(dam_type); a=0;
+    for(i=0; i<=sizeof(dam_type)-1; i++)
+    { if(member(dt, dam_type[i]) != -1) a++; }
+    prot=(protection*a)/b;
+  }
+  return prot;
+}
+
+//-- Falls ein call_out durch ausloggen gestoert wurde -----------------------
+void BecomesNetAlive(object spieler)
+{ 
+  int rest;
+  
+  if(find_call_out("remove")) return;
+  if(QueryProp(P_REMOVE_TIME) <= time()) remove(1); return;
+  rest=QueryProp(P_REMOVE_TIME)-time();
+  if(rest<1) rest=1;
+  call_out("return", rest);
+  return;
+}
+
+//-- Remove, immer erst ausziehen --------------------------------------------
+int remove(int silent)
+{ 
+  object owner;
+  string s;
+
+  owner = ENV(TO);
+
+  if(objectp(owner)) {
+    s = owner->QueryProp(P_RANGER_ACTIVE_SPELLS);
+    if(!stringp(s)) s = "";
+    if(id(RINDENHAUT_ID)) {
+      s = clear_bit(s, TB_RINDENHAUT);
+    }
+
+    if(id(AVATARA_ARMOUR_ID)) {
+      s = clear_bit(s, TB_AVATARA);
+    }
+
+    owner->SetProp(P_RANGER_ACTIVE_SPELLS, s);
+  }
+
+  if(QueryProp(P_WORN)) DoUnwear(1);
+
+  return ::remove(silent);
+}
+//**************************************************************************//
+
+
+
+//** Aktivierung des Bonus *************************************************//
+int SetBonus(mixed types, int faktor, int duration)
+{
+  if(!types ||!faktor || !ENV(TO) || !duration) {remove(1); return 0;}
+  
+  dt=types;
+  protection=faktor;
+  DoWear(1);
+  SetProp(P_REMOVE_TIME, time()+duration);
+  call_out("end", duration);
+  return 1;
+}
+
+int AddResistance(string type, float faktor, int duration)
+{
+  if(!type ||!faktor || !ENV(TO) || !duration) {remove(1); return 0;}
+  
+  ENV(TO)->AddResistanceModifier(([type:faktor]), "ranger_invis_armour_"+type);
+  SetProp(P_REMOVE_TIME, time()+duration);
+  call_out("end", duration);
+  return 1;
+}
+
+public void end() {
+  object ob;
+  if(objectp(ob=QueryProp(P_WORN))) {
+    tell_object(ob, "Deine Haut wird wieder normal.\n");
+  }
+  remove(1);
+  return;
+}
+
+int SetExtraLook(string baumart) { baum=baumart; return 1;}
+
+string extra_look()
+{
+  string s;
+
+  if(!ENV(TO) || !baum) return "";
+  s=CAP(ENV(TO)->QueryPossPronoun(FEMALE, WER, 0))+" Haut sieht aus wie die "
+    "Rinde einer "+CAP(baum)+".";
+  return BS(s);
+}
+//**************************************************************************//
+
+public void AddId(mixed ids) {
+  string s;
+  object owner;
+
+  if(!pointerp(ids)) {
+    ids = ({ ids });
+  }
+
+  owner = ENV(TO);
+
+  if(objectp(owner)) {
+    s = owner->QueryProp(P_RANGER_ACTIVE_SPELLS);
+    if(!stringp(s)) s = "";
+    if(member(ids, RINDENHAUT_ID) > -1) {
+      s = set_bit(s, TB_RINDENHAUT);
+    }
+
+    if(member(ids, AVATARA_ARMOUR_ID) > -1) {
+      s = set_bit(s, TB_AVATARA);
+    }
+
+    owner->SetProp(P_RANGER_ACTIVE_SPELLS, s);
+  }
+
+  ::AddId(ids);
+  return;
+}

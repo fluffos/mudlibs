@@ -1,0 +1,120 @@
+
+inherit "/d/ebene/Park/room/park";
+
+#include <moving.h>
+#include <player.h>
+#include <properties.h>
+#include "../park.h"
+
+#define ERDRAUM SILBERWALD("room/erde3")
+
+create()
+{
+  ::create();
+  AddExit("osten", ROOM("room_h15"));
+  AddExit("sueden", ROOM("room_g16"));
+
+  AddItem (NPC("igel"), REFRESH_DESTRUCT);
+
+  AddDetail( "boden", "Du stehst auf ihm. Doch halt - da ist ja ein Loch!?" );
+  AddDetail( ({ "dunkelheit", "einzelheiten" }),
+      "Viel zu dunkel da unten, um Einzelheiten zu erkennen!" );
+  AddSpecialDetail( "loch", "d_loch" );
+
+  AddCmd( ({"zieh","ziehe"}), "ziehe" );
+  AddCmd( ({"kletter","klettere"}), "klettere" );
+}
+
+string d_loch()
+{
+  string str;
+  object erdraum;
+  mixed ppl;
+
+  erdraum = find_object(ERDRAUM);
+  str = "Durch das Loch kannst Du nach unten sehen.";
+  if (erdraum)
+    ppl = filter_array(all_inventory(erdraum), #'living);
+  if (ppl && sizeof(ppl))
+    str += " In der Dunkelheit unter Dir kannst Du die Umrisse von " +
+      TP->CountUp( map_objects( ppl, "name", WEM ) ) +
+      " erkennen. Du koenntest " +
+      (sizeof(ppl) > 1 ? "sie" :
+       (ppl[0]->QueryProp(P_GENDER) == FEMALE ? "sie" : "ihn"))+
+      " nach oben ziehen und so befreien!";
+  else
+    str += " Doch ausser tiefster Dunkelheit erkennst Du nichts.";
+  return BS(str);
+}
+
+int ziehe(string str)
+{
+  string wen,dummy;
+  object erdraum,opfer;
+
+  notify_fail("Wen oder was oder wie willst Du (wohin) ziehen?\n");
+  if (!str) return 0;
+  if ( (sscanf(str,"%s nach oben%s",wen,dummy) != 2) &&
+       (sscanf(str,"%s empor%s",wen,dummy) != 2) &&
+       (sscanf(str,"%s hoch%s",wen,dummy) != 2) )
+      return 0;
+  if (dummy != "") return 0;
+
+  erdraum = find_object(ERDRAUM);
+  if (erdraum)
+    opfer = present(wen,erdraum);
+
+  if (!erdraum || !opfer || opfer->QueryProp(P_INVIS))
+    write("Da ist aber niemand zum hochziehen!\n");
+  else if (!query_once_interactive(opfer))
+    write(BS("Du versuchst, " + opfer->name(WEN) +
+        " zu befreien, seltsamerweise wehrt " +
+        opfer->QueryPronoun(WER) + " sich aber dagegen!"));
+  else if (!interactive(opfer))
+    write(BS("Leider ist " + opfer->name(WER) +
+        " viel zu traege, um zu kooperieren..."));
+  else
+  {
+    write(BS("Du streckst Deine Hand nach unten und ziehst " +
+          opfer->name(WEN) + " mit aller Kraft empor. Puuuuh, " +
+          "ganz schoen schwer, so ein" +
+          (opfer->QueryProp(P_GENDER) == FEMALE ? "e " : " ") +
+          opfer->QueryProp(P_RACESTRING)[WER] + "!") +
+        opfer->Name(WER) + " rappelt sich auf.\n");
+    tell_object(opfer,
+        "Eine Hand wird von oben hinabgestreckt.\n"
+        "Schnell ergreifst Du sie und sie zieht Dich muehevoll empor.\n");
+    tell_room(erdraum,
+        "Eine Hand wird von oben hinabgestreckt.\n" +
+        opfer->Name(WER) + " ergreift sie und laesst sich aechzend nach "
+        "oben ziehen.\nOb Dich auch jemand befreit?\n",
+        ({ opfer }) );
+    tell_room(this_object(),
+        TP->Name(WER) + " streckt " + TP->QueryPossPronoun(FEMALE,WEN) +
+        " Hand nach unten und zieht " + opfer->name(WEN) + " empor.\n" +
+        opfer->Name() + " rappelt sich auf.\n",
+        ({ TP }) );
+    opfer->move(this_object(), M_GO | M_SILENT);
+  }
+  return 1;
+}
+
+int klettere(string str)
+{
+  notify_fail("Wohin willst Du klettern?\n");
+  if (!str)
+    return 0;
+  if (str != "runter" && str != "hinab" && str != "loch" &&
+      str != "in loch" && str != "durch loch" && str != "hinunter")
+    return 0;
+
+  write(BS("Du versuchst, durch das kleine Loch nach unten zu klettern, " +
+        "versuchst sogar krampfhaft, den Bauch einzuziehen, aber "
+        "irgendwie klappt das einfach nicht! Deprimiert gibst Du auf."));
+  Message(BS(TP->Name() + " zieht " + TP->QueryPossPronoun(MALE,WEN) +
+        " Bauch ein und versucht, durch das kleine Loch im Boden "
+        "nach unten zu klettern, scheitert aber klaeglich. Du "
+        "kicherst."),
+      MSGFLAG_VISUAL | MSGFLAG_NO_TP);
+  return 1;
+}

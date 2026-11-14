@@ -1,0 +1,194 @@
+//** Gebietsmaster von Delgo ***********************************************//
+/*
+  Master zur Steuerung/Kontrolle von simplen Gebieten
+  - Feindverwaltung
+  - Anwesende Spieler
+  - Nachrichten/Alarm bei Events
+*/
+//**************************************************************************//
+//** INHERIT + INCLUDE + DEFINE ********************************************//
+#include "../def.h"
+#include <ansi.h>
+
+//--Vars----------------------------------------------------------------------
+string *enemies;
+mixed area_color;
+int messagelevel;  // 0 = Nichts; 1 = Wichtiges; 2 = Quests; 3 = Alles
+
+//--Prototypes----------------------------------------------------------------
+
+//**************************************************************************//
+
+
+
+//** StandardFunktionen ****************************************************//
+//-- Create ------------------------------------------------------------------
+void create()
+{
+  if(is_clone(TO))
+  { destruct(TO); return; }
+
+  SUID;
+  enemies=({});
+  area_color=ANSI_BOLD+ANSI_YELLOW;
+  return;
+}
+
+//-- Feindschaft beenden -----------------------------------------------------
+void reset() { enemies=({}); }
+//**************************************************************************//
+
+
+
+//** GebietsFeind-Verwaltung************************************************//
+//-- Einen Feind hinzufuegen -------------------------------------------------
+void AddEnemy(object pl)
+{
+  string uuid;
+  if(!pl)              return;
+  if(!interactive(pl)) return;
+  uuid = getuuid(pl);
+  if(member(enemies, uuid) == -1) enemies += ({ uuid });
+}
+
+//-- Ist das objekt ein Feind? -----------------------------------------------
+int IsEnemy(object pl)
+{
+  string uuid;
+
+  if(!pl)              return 0;
+  if(!interactive(pl)) return 0;
+  uuid = getuuid(pl);
+  if(member(enemies, uuid) != -1) {return 1;}
+  return 0;
+
+}
+
+/***************************************************************************
+** Die folgenden drei Funktionen sind in den entsprechenden NPC zu kopieren
+** oder noch besser, man kreiiert sich seinen eigenen std_npc, der diese
+** Funktionen Beinhaltet
+****************************************************************************
+
+void angriff(object pl)
+{
+  string shouter;
+  if(!ENV(TO))           return;
+  if(!ENV(pl))           return;
+  if(!interactive(pl))   return;
+  if(ENV(TO) != ENV(pl)) return;
+  shouter = pl->CannotSee(1) ? "Jemand ruft: "
+                             : Name(WER,1)+" ruft: ";
+  tell_room(ENV(TO),
+     "\n"+break_string(pl->Name(WER)+" ist uns feindlich "
+             "gesinnt, auf "+pl->QueryPronoun(WEN)+" mit Gebruell!!!", 78,
+             shouter)+"\n", 1);
+  Kill(pl);
+  return;
+}
+
+void init()
+{
+  ::init();
+  if(!TP)                        return;
+  if(!interactive(TP))           return;
+  if(TP->QueryProp(P_GHOST))     return;
+  if(!WALDMASTER->IsEnemy(TP))   return;
+  call_out("angriff", 0, TP);
+}
+
+int Defend(int dam, mixed dam_type, mixed spell, object enemy)
+{
+  WALDMASTER->AddEnemy(enemy);
+  return ::Defend(dam, dam_type, spell, enemy);
+}
+*/
+//**************************************************************************//
+
+
+
+//** Message-Verwaltung ****************************************************//
+//-- Das NachrichtenLevel setzen ---------------------------------------------
+void SetLevel(int level) { messagelevel = level; }
+
+//-- Welches NachrichtenLevel ist gesetzt? -----------------------------------
+int QueryLevel() { return messagelevel; }
+
+//-- Nachricht an Gebietsmagier ----------------------------------------------
+void Msg(string s, int level)
+{
+  object pl;
+  int i;
+  string str;
+
+  // Log
+  write_file(LOG "master.log", dtime()+": "+s+".\n");
+  
+  // Message
+  pl=find_player(MAGIERNAME);
+  str="";
+  if( objectp(pl) && interactive(pl) && IS_WIZARD(pl) && 
+      (level <= messagelevel))
+  { str=break_string(area_color+CAP(GEBIET)+ANSI_NORMAL+": "+s+".", 
+                     pl->QueryProp(P_SCREENWIDTH));
+    tell_object(pl,str); }
+  return;
+}
+//**************************************************************************//
+
+
+
+//** Wer ist zur Zeit im Gebiet? *******************************************//
+//-- Vorfunktion zum Sortieren -----------------------------------------------
+int lvl_sort(object ob1, object ob2) 
+{
+  if (query_wiz_level(ob1)<query_wiz_level(ob2)) { return 1; }
+  if (query_wiz_level(ob1)>query_wiz_level(ob2)) { return 0; }
+  if ((ob1->query_real_name())<(ob2->query_real_name())) { return 1; }
+  return 0;
+}
+
+//-- Hauptfunktion -----------------------------------------------------------
+int area_info() 
+{
+  string s, fn;
+  object *user, ob, env;
+  mixed m;
+  int i,sz;
+
+  s="";
+  sz=strlen(ROOM)-1;
+  if(!objectp(TP) || !IS_WIZARD(TP)) { return 0; }
+  user=users();
+  user=sort_array(user,"lvl_sort", ME);
+  
+  s=sprintf("\n"+area_color+"%|78s"+ANSI_NORMAL+"\n"+ANSI_GREEN+
+            "%|78s"+ANSI_NORMAL+"\n\n"+ANSI_BOLD+ANSI_UNDERL+
+            "%-8s%-7s%-13s%-50s\n\n"+ANSI_NORMAL
+      , upperstring(GEBIET)
+      , "~ /d/"+REGION+"/"+MAGIERNAME+"/"+GEBIET+" ~"
+      , "Wizlvl"
+      , "Level"
+      , "Name"
+      , "Room"
+      );
+
+  for(i=0;i<=sizeof(user)-1;i++) 
+  {
+    ob=user[i];
+    if(!objectp(ob) || !objectp(env=environment(ob))) { continue; }
+    fn=file_name(env);
+    if(fn[0..sz]!= ROOM) { continue; }
+    fn=""+fn[sz..];
+    s+=sprintf("%|8d%-7d"+ANSI_BOLD+ANSI_YELLOW+"%-13s"+ANSI_GREEN+
+               "%-50s"+ANSI_NORMAL+"\n"
+         , query_wiz_level(ob)
+         , ob->QueryProp(P_LEVEL)
+         , CAP(getuid(ob))
+         , (strlen(fn)>46?"["+(fn[0..45])+"..]":"["+fn+"]")
+         );
+  }
+  write(s+"\n");
+  return 1;
+}
+//**************************************************************************//

@@ -1,0 +1,484 @@
+// Stabkampfausbilder
+
+#include <properties.h>
+#include <combat.h>
+#include <new_skills.h>
+#include <moving.h>
+#include <mnpc.h>
+#include "../def.h"
+
+inherit NPC + "marmorturmbewohner.lpc";
+
+// Variablen
+string pfad_uebungen = NPC+"/uebungen/";
+string start_sequenz = pfad_uebungen+"start.std";
+string zauberstab = "/gilden/zaubererzunft/weapon/wand_gr_random_1.lpc";
+string rues = "/d/huegelland/yason/zwirbelstein/armour/";
+string ruestung1 = rues+"lederweste_1.lpc";
+string ruestung2 = rues+"stoffumhang.lpc"; 
+mapping liste = ([]);
+string uebung;
+object uebender;
+mapping fieser_moep;
+
+string aus_name() {
+	return uebender->name();
+}
+
+void ende() {
+	int abil;
+	
+	abil=TP->QuerySkillAbility(SK_CLUBFIGHTING);
+  if( abil>=random(3000) ) {
+   	tell_room(environment(TO), 
+   	  break_string( uebender->Name()+", Ihr seid wohl ein bischen abgelenkt gewesen, oder? "+
+   	  "Ich glaube nicht dass Euch diese Uebung geholfen hat.", 78, TO->name()+" sagt: "));
+  } else {
+  	TP->LearnSkill(SK_CLUBFIGHTING, 25+random(76), 100);	
+    tell_room(environment(TO), 
+   	  break_string( uebender->Name()+", Ihr habt gelernt mit dem Stab etwas geschickter "+
+   	  "umzugehen. Ihr muesst noch viel ueben, damit Ihr ein guter Stabkaempfer werdet.", 78, TO->name()+" sagt: "));
+  }
+	uebender->SetProp( P_NOMOVE, 0);
+}
+
+void ausbildung_ende() {
+  TP->LearnSkill(SK_CLUBFIGHTING, 400, 100);	
+  tell_room(environment(TO), 
+   	break_string( uebender->Name()+ ", Ihr habt gelernt mit einem Stab euch nicht "+
+   	"selbst zu verletzen. Ihr muesst noch viel ueben, damit Ihr ein guter Stabkaempfer werdet.", 78, TO->name()+" sagt: "));
+	uebender->SetProp( P_NOMOVE, 0);
+}
+
+string start() {
+	string *ind_liste;
+	
+	if( find_call_out("ueben")!=-1 || find_call_out("ausbilden")!=-1) 
+		return "Tut mir leid, aber ich bin gerade beschaeftigt .\n";
+	if( sizeof(liste) == 0 )
+		return "Ich weiss leider gerade keine Uebung.\n";	
+	// uebung aussuchen
+	ind_liste = m_indices(liste);
+	uebung = ind_liste[random(sizeof(ind_liste))];
+	call_out("ueben", 3, 1);
+	uebender = TP;
+	uebender->SetProp( P_NOMOVE, BS("Du bist gerade am ueben und kannst daher nicht weg."));
+	return "Ich werde nun mit Euch den Stabkampf ueben. Falls ihr die Uebung abbrechen wollt, "+
+	  "so fragt mich einfach nach einem Abbruch.";
+}
+
+string neu_sequenz() {
+	
+	if( find_call_out("ueben")!=-1 || find_call_out("ausbilden")!=-1) 
+		return "Tut mir leid, aber ich bin gerade beschaeftigt .\n";
+	if( file_size(start_sequenz) == -1 )
+		return "Ich weiss leider gerade nicht wie man ausbildet.\n";	
+	call_out("ausbilden", 3, 1);
+	uebender = TP;
+	uebender->SetProp( P_NOMOVE, BS("Du bist gerade mit deiner Ausbildung beschaeftigt und kannst daher nicht weg."));
+	return "Ich werde Euch nun die Grundlagen des Stabkampfs beibringen.\n";
+}
+
+string abbruch() {
+ 	if(  find_call_out("ausbilden") != -1) 
+		return "Tut mir leid, aber ich bin gerade mitten beim Ausbilden.\n";
+	if( find_call_out("ueben") == -1 ) 
+    return "Ich bin gerade nicht mit ueben beschaeftigt.\n";
+	if( TP != uebender ) 
+    return "Ich uebe gerade mit "+uebender->name()+". "+
+      "Sprecht mich wieder an, wenn ich damit fertig bin.\n";
+	remove_call_out("ueben"); 
+	uebender->SetProp( P_NOMOVE, 0);
+	return "Dann hoere ich eben auf mit Euch zu ueben.\n";  
+}
+
+void ueben(int absatz) {
+	string zeile;
+	zeile = read_file(liste[uebung], absatz, 1);
+	if( zeile != "" && zeile != 0) {
+		tell_object(uebender, BS(process_string(zeile)) );
+		if( absatz%5 == 0) {
+		  tell_room(environment(TO), "Du kannst beobachten wie "+BS( TO->name(RAW)+" mit "+uebender->name()+" den Stabkampf uebt."), ({uebender}) );
+		}
+	  absatz = absatz + 1;
+	  call_out("ueben", 3, absatz);
+	}	else {
+		ende();
+	}  
+}
+
+void ausbilden(int absatz) {
+	string zeile;
+	zeile = read_file(start_sequenz, absatz, 1);
+	if( zeile != ""  && zeile != 0) {
+		tell_object(uebender, BS(process_string(zeile)) );
+		if( absatz%5 == 0 ) {
+  		tell_room(environment(TO), BS( "Du beobachtest wie "+TO->name(RAW)+" "+uebender->name()+" die Grundlagen des Stabkampfs beibringt."), ({uebender}) );
+  	}
+	  absatz = absatz + 1;
+	  call_out("ausbilden", 3, absatz);
+	}	else {
+		ausbildung_ende();
+	}  
+}
+
+void erzeuge_liste() {  
+  string *filenames, name, dummy;
+  int i;
+
+	filenames = get_dir( pfad_uebungen+"*" );
+  for(i=0; i<sizeof(filenames); i++)
+  {
+    if( sscanf(filenames[i],"%s.txt%s", name, dummy) == 2 )
+    	if( !member(liste, name) )
+        liste += ([name: pfad_uebungen+filenames[i] ]);
+  }
+}
+
+string ausbildungsstand()
+{
+	int abil;
+  string *skill_knowledge;
+  skill_knowledge = ({
+  	"schrecklich schlecht",
+  	"miserabel",
+  	"extrem schlecht",
+    "sehr schlecht",
+    "schlecht",
+    "fast gar nicht",
+    "maessig",
+    "mittelmaessig",
+    "durchschnitt",
+    "passabel",
+    "beinahe gut",
+    "gut",
+    "sehr gut",
+    "perfekt",
+    "meisterhaft",
+    "goettlich" });
+	abil=TP->QuerySkillAbility(SK_CLUBFIGHTING);
+	if( !abil )
+	  return "Du hast die Grundlagen des Stabkampfs noch nicht gelernt.\n";
+	if( abil<0 ) abil=0;  
+	return "Du kannst den Stabkampf "+skill_knowledge[abil/625]+".\n";  
+}
+
+string ausbildungsstart()
+{
+	object waffe;
+	if( find_call_out("ueben")!=-1 || find_call_out("ausbilden")!=-1) 
+		return "Tut mir leid, aber ich bin gerade beschaeftigt .\n";
+	waffe=TP->QueryProp(P_WEAPON);
+	if( TP->QuerySkillAbility(SK_CLUBFIGHTING)>0 )
+		return "Ihr habt die Grundlagen des Stabkampfs doch schon gelernt. "+
+		"Ihr musst nun ueben, ueben, ueben und nochmals ueben.";
+  if( !waffe ) 
+		return "Ohne eigene Waffe kann ich Euch nichts beibringen. "+
+		"Los geht und besorgt Euch einen Stab.";
+  if( waffe->QueryProp(P_WEAPON_TYPE) != WT_CLUB ) 
+  	return "Ich kann Euch nur den Stabkampf beibringen wenn Ihr auch einen "+
+  	"Stab gezueckt habt.";
+	if( TP->QueryProp(P_NOMOVE) ) return "Du bist doch aber gerade schon mit etwas beschaeftigt.\n";
+  return neu_sequenz();
+}
+
+string uebung()
+{
+	int abil;
+	object waffe;
+	abil = TP->QuerySkillAbility(SK_CLUBFIGHTING);
+	waffe=TP->QueryProp(P_WEAPON);
+	if( find_call_out("ueben")!=-1 || find_call_out("ausbilden")!=-1) 
+		return "Tut mir leid, aber ich bin gerade beschaeftigt .\n";
+	if( !abil )
+		return "Ihr habt die Grundlagen des Stabkampfs noch nicht gelernt. "+
+		"Ich kann mit Euch erst dann ueben wenn Ihr die Grundlagen kennt.";
+	if( abil>1200 )
+		return "Ihr hast den Stabkampf schon gut genug gelernt. "+
+		"Nur durch die Erfahrungen aus echten Kaempfen werdet Ihr eure Fertigkeit noch verbessern.";
+	if( !waffe ) 
+		return "Ohne eigene Waffe kann ich Euch nichts beibringen. "+
+		"Los geht und besorgt Euch einen Stab.";
+  if( waffe->QueryProp(P_WEAPON_TYPE) != WT_CLUB ) 
+  	return "Ich kann mit Euch den Stabkampf nur ueben wenn Ihr auch einen "+
+  	"Stab gezueckt habt.";
+	if( TP->QueryProp(P_NOMOVE) ) return "Du bist doch aber gerade schon mit etwas beschaeftigt.\n";
+  return start();  
+}
+
+void reset()  {
+  ::reset();
+  fieser_moep = ([]); // Man ist Dir nur bis zum reset boese.
+  erzeuge_liste(); // bei jedem RESET wird die Liste mit Geschichten aktualisiert
+}
+
+void init()
+{
+   ::init();
+   if (this_player() && this_player()->id("marmorturmbewohner")) AddDefender(this_player());
+}
+
+void create() {
+  if (!is_clone(TO)) return; //Abbruch für Blueprint
+  ::create(); //Ausführen von Create in Inherit "std/mnpc"
+  
+  create_default_npc(40); //erstellt Standartwerte für NPC des Level x
+  erzeuge_liste();
+  fieser_moep=([]);
+  //Properties
+  AddId(({"laurenzio", "furlani", "Laurenzio Furlani" })); //Bezeichner zur Interaktion
+  SetProp( P_SHORT, "Laurenzio Furlani");
+  SetProp( P_LONG, "Dies ist Laurenzio Furlani, der Meister des Stabkampfs");
+  SetProp( P_GENDER, MALE);
+  SetProp( P_RACE, "Mensch");
+  SetProp( P_ARTICLE, 0);
+  SetProp( P_NAME, "Laurenzio Furlani");
+  SetProp( P_SIZE, 180);
+  SetProp( P_WEIGHT, 85000);
+  SetProp( P_ALIGN, 200); 
+  SetProp( P_MAX_HANDS, 2); 
+  SetProp( P_WIMPY, 0); 
+  SetProp( P_MNPC_AREA, ROOM + "marmorturm_helix1_c3.lpc" ); // Bereichsangabe für Bewegung
+  SetProp( P_MNPC_DEFAULTROOM, ROOM + "marmorturm_helix1_c3.lpc" ); // Startpunkt
+  SetProp( P_MNPC_FLAGS, MOV_INDOORS ); // Bewegungsmöglichkeiten
+  SetProp( P_KILL_NAME, "Laurenzio"); //string für Todessequenz
+
+  SetProp(P_LOG_INFO, "missing_answers");
+
+  SetProp( P_REJECT, ({ REJECT_DROP, QueryProp(P_NAME)+" will Deine Sachen nicht tragen.\n" }) );
+ 
+  //Chats
+  SetAttackChats( 5, ({"Laurenzio Furlani bruellt: Dir werd ichs zeigen! \n" }) ); // rate in%
+
+  AddInfo( QueryProp(P_IDS), "Das bin ich! ", "sagt: ");
+
+  AddInfo( DEFAULT_INFO, "Da bin ich ueberfragt.", "sagt: ");
+  AddInfo( "yason", "Yason hat mich erschaffen.", "sagt: ");
+  AddInfo( "yondala", "Yondala ist die Liebste von Yason.", "sagt: ");
+  AddInfo( "aginor", "Aginor hilft Yondala und Yason.", "sagt: ");
+  
+  
+  AddInfo( ({"edorian", "edorian zwirbelstein"}), break_string("Das ist der Name des "+
+  "Freiherrn von Zwirbelstein. Seine Burg steht ein gutes Stueck westwaerts. ", 45),"sagt: ");
+
+  AddInfo( ({"hilfe"}), break_string("Ich kann Dir auch nicht helfen. ", 45),"sagt: ");
+  AddInfo( ({"quest"}), break_string("Tut mir leid. Ich habe keine Arbeit fuer dich. ", 45),"sagt: ");
+  AddInfo( ({"burg", "zwirbelstein"}), break_string("Die Burg Zwirbelstein ist der "+
+  "Sitz des Freiherrn von Zwirbelstein. ", 45),"sagt: ");
+  AddInfo( ({"welt", "abenteuerland"}), break_string("Diese Welt wird Abenteuerland genannt. ", 45),"sagt: ");
+  AddInfo( ({"essen", "trinken"}), break_string("Fuer die Verpflegung kannst Du hier im Marmorturm "+
+  "die Gasthaeuser aufsuchen. ", 45),"sagt: ");
+  AddInfo( ({"liebe"}), break_string("Die Liebe ist ein Geschenk. Halt Sie fest wenn Du sie "+
+  "findest. ", 45),"sagt: ");
+ 
+  //Zauberinfos
+  AddInfo( ({"zauberei"}), break_string("Es gibt viele Arten der Zauberei. Als Zauberer "+
+    "buendeln wir mit unserem Stab die Energien die in jedem Wesen Andracias schlummern. Es "+
+    "gibt viele Zaubersprueche und als Zauberer kann man sie alle erlernen. ", 45), "sagt: ");
+  AddInfo( ({"zunft", "zaubererzunft", "gilde"}), break_string("Hier ist der Sitz der Zauberergilde. "+
+    "Du kannst als Mitglied viele Zaubersprueche sprechen und deiner Kraft ueber einen Zauberstab "+
+    "Form verleihen. Als Zauberer kannst Du alle Spielarten von Magie wirken.", 45), "sagt: ");
+  AddInfo( ({"zauberstab"}), break_string("Der Zauberstab ist fuer jeden Zauberer das wichtigste. "+
+    "Viele Zauberer verbringen sehr viel Zeit auf der Suche nach dem perfekten Stab. Es gibt auch "+
+    "die, wenn auch kostspielige Moeglichkeit einen Zauberstab anzufertigen.", 45), "sagt: ");
+  AddInfo( ({"zauberer"}), break_string("Zauberer sind passable Einzelkaempfer, koennen aber auch in "+
+    "Gruppen ihre volle Faehigkeiten entfalten.", 45), "sagt: ");
+  AddInfo( ({"zaubersprueche", "sprueche", "zauber"}), break_string("Den Zauberern stehen folgende Zaubersprueche "+
+    "zur Verfuegung: lumini, meditat, analys, praesenz, feuerball, flammenzunge, eispfeil, froststrahl, "+
+    "wasserhose, windeseile, resistenz, steinhaut, schutzzauber, balsam, piorun, schwaechezauber, seelengift, "+
+    "teleportiere und manche Zauberer koennen Elementarwesen aus Feuer, Eis, Wasser und Erz erschaffen. ", 45), "sagt: ");
+  AddInfo( ({"spielarten"}), break_string("Alle Spielarten der Magie koennen von Zaubereren "+
+    "gewirkt werden.", 45), "sagt: ");
+  AddInfo( ({"elementarwesen"}), break_string("Manche Zauberer koennen Elementarwesen aus Feuer, Eis, "+
+    "Wasser und Erz erschaffen. ", 45), "sagt: ");
+// AddInfo( ({""}), break_string("", 45), "sagt: ");
+
+  // Allgmein
+  AddInfo( ({"lumini"}), break_string("Mit lumini kann ein Zauberer seinen Zauberstab zum leuchten bringen. "+
+    "Normalerweise kann jeder Zauberstab diesen Zauber wirken. ", 45), "sagt: ");
+  AddInfo( ({"meditat"}), break_string("Ein Zauberer der in Meditat versinkt laedt seine mentalen Energien "+
+    "wieder auf. Dabei ist er der normalen Welt entrueckt. "+
+    "Normalerweise kann jeder Zauberstab diesen Zauber wirken. ", 45), "sagt: ");
+  AddInfo( ({"analys"}), break_string("Der Zauberspruch analys liefert dem Zauberer ausfuehrliche Erkenntnisse "+
+    "ueber viele Eigenschaften des vom Zauber betroffenen Objekts. "+
+    "Normalerweise kann jeder Zauberstab diesen Zauber wirken. ", 45), "sagt: ");
+  AddInfo( ({"praesenz"}), break_string("Der Zauberspruch praesenz laesst den Zauberer fuer gewisse Zeit seine "+
+    "weltliche Verbindung verstaerken. Koerper und geist sind gleichermassen davon betroffen. "+
+    "Normalerweise kann jeder Zauberstab diesen Zauber wirken. ", 45), "sagt: ");
+  // Feuer
+  AddInfo( ({"feuerball"}), break_string("Ein gezauberter Feuerball ist eine gewaltige Energie die einem Gegner "+
+    "grosse Verbrennungen zufuegen kann.", 45), "sagt: ");
+  AddInfo( ({"flammenzunge"}), break_string("Die herbeigezauberte Flammenzunge verbrennt den Gegner des Zauberers "+
+    "zu Asche. ", 45), "sagt: ");
+  // Eis
+  AddInfo( ({"eispfeil"}), break_string("Ein gezauberter Espfeil kann den Gegner eines Zauberers mit Kaelte "+
+    "durchbohren. ", 45), "sagt: ");
+  AddInfo( ({"froststrahl"}), break_string("Ein Frostrahl der von einem Zauberer gewirkt wurde hat die Macht "+
+    "den Feind einzufrieren. ", 45), "sagt: ");
+  // Wasser
+  AddInfo( ({"wasserhose"}), break_string("Der Zauber Wasserhose laesst eine Woge Wasser ueber den Gegner "+
+    "schwappen. Man unterschaetzt eigentlich immer die Macht des Wassers. ", 45), "sagt: ");
+  AddInfo( ({"windeseile"}), break_string("Durch den Zauber Windeseile kann ein Zauberer seine Reflexe und "+
+    "seine Geschwindigkeit drastisch erhoehen.", 45), "sagt: ");
+  // Erz
+  AddInfo( ({"resistenz"}), break_string("Mit dem Zauber Resistenz wird ein Zauberer fast immun gegen viele "+
+    "Arten von magischen Angriffen.", 45), "sagt: ");
+  AddInfo( ({"steinhaut"}), break_string("Ein Zauberer der sich mit einer Steinhaut verzaubert hat, ist gegen "+
+    "physischen Schaden sehr gut geschuetzt.", 45), "sagt: ");
+  // Heil
+  AddInfo( ({"schutzzauber"}), break_string("Durch den Gebrauch eines Schutzzaubers werden diverse magische "+
+    "Angriffe gegen den Zauberer abgewehrt.", 45), "sagt: ");
+  AddInfo( ({"balsam"}), break_string("Mit dem zauber Balsam koennen alle Wunden geheilt werden.", 45), "sagt: ");
+  AddInfo( ({"piorun"}), break_string("Ein Zauberer der Piorun gegen einen Feind anwendet, blendet diesen Gegner "+
+    "fuer eine gewisse Zeit.", 45), "sagt: ");
+  // Schatten
+  AddInfo( ({"schwaechezauber"}), break_string("Ein Gegner der Ziel eines Schwaechezaubers geworden ist schlaegt "+
+    "mit verminderter Kraft zu und wird traege im Kampf." , 45), "sagt: ");
+  AddInfo( ({"seelengift"}), break_string("Seelengift ist ein Zauber der dem Feind eines Zauberer langsam "+
+    "seine Lebensenergie entzieht.", 45), "sagt: ");
+  AddInfo( ({"teleportiere"}), break_string("Mit Teleportation kann jeder Zauberer sich an die verschiedensten Orte "+
+    "in Andracia bewegen, und dass in in einer Sekunde zur anderen." , 45), "sagt: ");
+  // Elementare
+  AddInfo( ({"feuerelementar", "eiselementar", "wasserelementar", "erzelementar" }), break_string("Ein Elementarwesen "+
+    "wird den Befehlen des Zauberers gehorchen und alles in seiner Macht stehende tun um seinen Befehlen zu genuegen. "+
+    "nur wenige Zauberer schaffen es Elementare zu erzeugen. ", 45), "sagt: ");
+    
+  AddInfo( ({"ausbildungsstart"}), #'ausbildungsstart, "sagt: ");
+  AddInfo( ({"ausbildungsstand"}), #'ausbildungsstand, "sagt: ");
+  AddInfo( ({"uebung", "ueben", "lernen"}), #'uebung, "sagt: ");
+  AddInfo( ({"abbruch"}), #'abbruch, "sagt: ");
+
+  AddInfo( ({"stabkampf", "kampf", "ausbildung", "grundlagen"}), "Da seid Ihr bei mir an der richtigen Stelle. "+
+    "Wenn ich Euch die Grundlagen des Stabkampfs beibringen soll, so fragt mich "+
+    "einfach nach dem Ausbildungsstart. Wenn ich beurteilen soll, wie gut Ihr Euch "+
+    "im Stabkampf macht, so fragt mich nach dem Ausbildungsstand. Falls Ihr mit mir ueben wollt, "+
+    "so fragt mich nach einer Uebung.", "sagt: ");
+
+  AddInfo( ({"uebungsgeraet", "geraet", "uebungsgeraete", "geraete" }), 
+    "Hier im Uebungssaal sind genuegend Uebungsgeraete vorhanden. Schaut Euch einfach um.", "sagt: ");
+  AddInfo( ({"beitritt"}), "Unser Zunftvorsteher Goliath Kupferfeldt ist fuer Beitritte zustaendig. "+
+    "Auch bringt er Euch gegebenenfalls neue Zauber in Grundlagen bei.", "sagt: ");
+  AddInfo( ({"stab"}), "Mit einem Stab zu kaempfen ist nicht einfach. So manchen Knueppel "+
+    "kann man auch schon als Stab bezeichnen.", "sagt: ");
+  AddInfo( ({"einzelkaempfer", "kaempfer"}), 
+    "Zauberer sind passable Einzelkaempfer. ", "sagt: ");
+
+  /* Uebung
+  AddInfo( ({""}), "", "sagt: ");
+  */
+ 
+  /*Ausruestung*/
+  SUID;
+  CLONEME( ruestung1 );
+  CLONEME( ruestung2 );
+  command("trage alles");
+  CLONEME( zauberstab );
+  command("zuecke stab");
+}
+
+// Reactions (werden von außen gestartet)
+void StartReaction(string verb, string gruppe, string adverb, int touch) { 
+  if (find_call_out("reaction") != -1) return; 
+  switch (gruppe) { 
+    case "aengstlich": 
+      call_out("reaction", 0, TP,  
+        "sagt: Du brauchst keine Angst haben. \n", 
+        "sagt zu " + capitalize(this_player()->name()) + ": Du brauchst keine Angst haben. \n"); 
+      break; 
+    case "aergerlich": 
+      call_out("reaction", 0, TP, 
+        "sagt: Du brauchst gar nicht zu schimpfen, Du bist selbst schuld an allem. \n", 
+        "sagt zu " + capitalize(this_player()->name()) + ": Du brauchst gar nicht zu schimpfen, Du bist selbst schuld an allem. \n"); 
+      break; 
+    case "albern": 
+      call_out("reaction", 0, TP, 
+        "sagt: Lass doch bitte den Blödsinn. \n", 
+        "sagt zu " + capitalize(this_player()->name()) + ": Lass doch bitte den Blödsinn. \n"); 
+      break; 
+    case "fies":
+      if( !member(fieser_moep, this_player()->name()) )
+        {
+        fieser_moep+=([this_player()->name():1]);
+        call_out("reaction", 0, TP, 
+          "sagt: Wenn du das nochmal machst, werd ich boese. \n", 
+          "sagt zu " + capitalize(this_player()->name()) + ": Wenn du das nochmal machst, werd ich boese. \n"); 
+        break; 
+        }
+      else
+        {
+        fieser_moep[this_player()->name(),0]++;
+        if(fieser_moep[this_player()->name(),0] >= 3)
+          {
+          call_out("reaction", 0, TP, 
+            "sagt: Das war zuviel! \n", 
+            "sagt zu " + capitalize(this_player()->name()) + ": Das war zuviel. \n"); 
+            call_out ("Attack", 3, TP);
+            break;
+          }
+        else
+          {
+          call_out("reaction", 0, TP, 
+            "sagt: Letzte Warnung! \n", 
+            "sagt zu " + capitalize(this_player()->name()) + ": Letzte Warnung! \n"); 
+          break;
+          }
+        }  
+    case "frech": 
+      call_out("reaction", 0, TP, 
+        "sagt: He - Was soll das? \n", 
+        "sagt zu " + capitalize(this_player()->name()) + ": He - Was soll das? \n"); 
+      break; 
+    case "froh": 
+      call_out("reaction", 0, TP, 
+        "grinst.",  
+        "grinst."); 
+      break; 
+    case "intim": 
+      call_out("reaction", 0, TP, 
+        "sagt: Bitte such Dir jemand anderes für sowas. \n", 
+        "sagt zu " + capitalize(this_player()->name()) + ": Bitte such Dir jemand anderes für sowas. \n"); 
+      break; 
+    case "nett": 
+      call_out("reaction", 0, TP, 
+        "laechelt Dir zu. \n", 
+        "laechelt " + capitalize(this_player()->name()) + " freundlich an \n"); 
+      break; 
+    case "neutral": 
+      call_out("reaction", 0, TP, 
+        "zieht die Stirn kraus.", 
+        "zieht die Stirn kraus."); 
+      break; 
+    case "traurig": 
+      call_out("reaction", 0, TP, 
+        "troestet dich. \n", 
+        "troestet " + capitalize(this_player()->name()) + ". \n"); 
+      break; 
+  } 
+} 
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch) {
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void reaction(object ob, string akteur, string andere) {
+  if (present(ob, ENV(TO))) {
+    tell_object(ob, BS(Name(WER, 1)+" "+akteur));
+    tell_room(ENV(TO), BS(Name(WER, 1)+" "+andere), ({ob}));
+  }
+}
+
+void die(int poisondeath) {
+	if( find_call_out("ueben")!=-1 ) {
+		remove_call_out("ueben"); 
+	  uebender->SetProp( P_NOMOVE, 0);
+    tell_room(environment(TO), 
+   	  BS(TO->name()+" kann die Uebung mit "+uebender->name()+ " nicht mehr abschliessen."));
+  }
+	if( find_call_out("ausbilden")!=-1 ) {
+		remove_call_out("ausbilden"); 
+	  uebender->SetProp( P_NOMOVE, 0);
+    tell_room(environment(TO), 
+   	  BS(TO->name()+" kann die Ausbildung mit "+uebender->name()+ " nicht mehr abschliessen."));
+  }
+  ::die(poisondeath);
+}

@@ -1,0 +1,621 @@
+/*
+** Piwafwi der Umhang fuer Dunkelelfen
+**
+**
+** 2003-Sep-11  PROtheG  Mal angefangen
+**
+** 2004-Jun-03  PROtheG  Alle gewollten features eingebaut.
+**                       Ausschmuecken fehlt noch
+*/
+
+/*
+** Koennen soll der Umhang:
+**
+** dunkelmachen (standard)
+** nur von drow tragbar
+** 1-3 Features beim kauf des Umhangs (1 guenstig, 3 sehr teuer)
+** Fuer die Herstellung benoetigt man Spinnenseide, Edelsteine, Geld etc.
+** und Drachenschuppen ;)
+**
+** Waehlbare Mods:
+** mp- oder hp-mod 
+** defend holy-light / druidmagic / unholy-terror / dragonfire (magic/fire)
+** extra pockets (+10)
+** extra durable
+** extra dark
+**
+** Man kann nur MAX_WEAPONS Waffen (dolche und armbrueste) reinstecken
+** keine units, nix verfluchtes, keine grossen ruestungen etc... siehe
+** prevent_insert
+** 
+** rtfs
+**
+*/
+
+#include "../def.h"
+#include <ansi.h>
+#include <vt100.h>
+
+inherit "std/container";
+inherit "std/armour";
+inherit "std/armour/description";
+
+#define PMASTER ROOM "pmaster"
+#define MP_SUCK_TIME 900
+#define MP_SUCK 20
+#define MAX_WEAPONS 4
+
+nosave int extra_dark=0;
+nosave int durable=0;
+nosave int pockets=10;
+nosave int hpmod=0;
+nosave int mpmod=0;
+nosave int state=0;
+nosave string *defends=({});
+nosave string owner;
+nosave string *aload;
+
+string tascheninhalt()
+{
+  string inv;
+  int i;
+  
+  if(strlen(inv=make_invlist(TP, all_inventory())))
+    {
+      i=pockets-sizeof(all_inventory());
+      
+      return "Die Taschen "+name(WESSEN, 1)+" sind gefuellt mit :\n"+inv+
+	(i ? (i==1 ? "Es ist nur noch eine Tasche frei.\n": 
+	      "Es sind noch "+to_string(i)+" Taschen frei.\n") :
+	 "Alle Taschen sind voll.\n"); 
+    }
+  
+  return "Die "+pockets+" Taschen "+name(WESSEN, 1)+" sind leer.\n";
+}
+
+void create() 
+{
+  if(!is_clone(TO)) return;
+  armour::create();
+  container::create();
+  description::create();
+  
+  SetProp(P_NAME, ({"Piwafwi","Piwafwi","Piwafwi","Piwafwi"}));
+  SetProp(P_GENDER, MALE);
+  AddId(({"piwafwi", "umhang", "'piwafwi'","NODESTRUCT","NOUNCURSE",
+	    "p","SKILL_NOLEARN"}));
+
+  SetProp(P_SHORT, "Der 'Piwafwi'");
+  SetProp(P_LONG,
+	  BS("Das ist ein echter "+name(RAW)+", wie ihn jeder Dunkelelf haben "
+	     "sollte. Er besteht aus magisch gewobener, schwarzer Seide "
+	     "welche in langen und blutigen Zeremonien mit allerlei Zaubern "
+	     "belegt wurde. Das Innenfutter beherbergt viele eingenaehte "
+	     "Taschen, in denen man kleinere Utensilien verstecken kann."));
+  SetProp(P_INFO, BS("Dieser Piwafwi ist von Lloth persoenlich gesegnet "
+		     "worden! Behandle ihn mit Respekt, denn er kann Dir "
+		     "sehr nuetzlich sein."));
+  
+  SetProp(P_ARMOUR_TYPE, AT_CLOAK);
+  SetProp(P_AC, 6);
+  SetProp(P_MATERIAL, 
+	  ([MAT_SILK:80, MAT_VELVET:10, MAT_OBSIDIAN:5, 
+	    ({MAT_DIAMOND, MAT_RUBY, MAT_EMERALD, MAT_SAPPHIRE})[random(4)]:5
+	   ]));
+  SetProp(P_WEIGHT, 800);
+  SetProp(P_VALUE, 15000);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, "Nein! Das wuerde Lloth nicht erlauben!\n");
+  
+  SetProp(P_MAGIC, 1);
+  SetProp(P_NO_DAMAGE_DESTRUCT, 1);
+  
+  SetProp(P_QUALITY_DECAY, 100);
+  SetProp(P_MAX_WEIGHT, 8000);
+  SetProp(P_WEIGHT_PERCENT, 25);
+  
+  SetProp("ruestungsbalsam", 10); // Damit sich nix aendert...
+  SetProp(P_ITEMD_NO_MAGIC, 1);
+  
+  SetProp(P_WEAR_FUNC, TO);
+  SetProp(P_REMOVE_FUNC, TO);
+  SetProp(P_DEFEND_FUNC, TO);
+  
+  SetProp(P_LIGHT, 0);
+  
+  AddProp(P_DAM_PROTECTION, ([DT_UNHOLY:2]));
+  SetProp(P_WEAR_RESTRICTIONS, ([A_INT:5, SR_INCLUDE_RACE:({"Dunkelelf"})]));
+  
+  SetProp(P_WORN_TEXT, "umgehaengt");
+  
+  SetProp(P_WEAR_TEXT,
+	  ({"Du haengst Dir D"+name(WEN)+" um.\n",
+	      " haengt sich "+name(WEN)+" um.\n"}));
+  
+  SetProp(P_UNWEAR_TEXT,
+	  ({"Du nimmst D"+name(WEN)+" wieder ab.\n",
+	      " nimmt "+name(WEN, 1)+" ab.\n"}));
+  
+  AddDetail(({"tasche","taschen"}), CLOSURE(tascheninhalt));
+  
+  aload=({});
+  
+  AddCmd(({"trage","trag"}), "do_wear");
+  AddCmd(({"ziehe","zieh"}), "ziehe");
+  AddCmd(({"haenge","haeng"}), "umhaengen");
+  AddCmd(CMD_NEHMEN, "abnehmen");
+  
+  SUID;
+}
+
+nosave int umhaengen(string str)
+{
+  string ob;
+  if(!str) return 0;
+  if(sscanf(str, "%s um", ob)==1) return do_wear(ob);
+  return 0;
+}
+
+nosave int abnehmen(string str)
+{
+  string ob;
+  if(!str) return 0;
+  if(sscanf(str, "%s ab", ob)==1) return do_unwear(ob);
+  return 0;
+}
+
+public string SetOwner(object who)
+{
+  if(!objectp(who)) return 0;
+  
+  if((geteuid(PO)!=(geteuid())) && (getuid(PO)!="protheg")) return 0;
+  
+  owner=getuid(who);
+  
+  return owner;
+}
+
+public string QueryOwner()
+{
+  return owner;
+}
+
+public int QueryMagic()
+{
+  return state;
+}
+
+public varargs void activate(object pl, string *mods)
+{
+  string l;
+  
+  if(!stringp(owner)) return;
+  
+  if((geteuid(PO)!=(geteuid())) && (getuid(PO)!="protheg")) return;
+  
+  l="";
+  
+  if(sizeof(mods & ({"extradark"})))
+    {
+      extra_dark=1;
+      state++;
+      l+=Name(WER,1)+" scheint viel duenkler zu sein, als andere.\n";
+    }
+  
+  if(sizeof(mods & ({"durable"})))
+    {
+      SetProp(P_QUALITY_DECAY, 500);
+      state++;
+      l+=Name(WER,1)+" scheint viel widerstandsfaehiger zu sein, als "
+	"andere.\n";
+    }
+  
+  if(sizeof(mods & ({"extrapockets"})))
+    {
+      pockets+=10;
+      
+      SetProp(P_MAX_WEIGHT, 15000);
+      SetProp(P_WEIGHT_PERCENT, 20);
+      
+      state++;
+      l+=Name(WER,1)+" scheint mehr Taschen zu besitzen, als andere.\n";
+    }
+  
+  if(sizeof(mods & ({"hpmod"})))
+    {
+      hpmod=1;
+      state++;
+      l+=Name(WER,1)+" scheint von gewaltiger Lebensenergie umhuellt "
+	    "zu sein.\n";
+    }
+  
+  if(sizeof(mods & ({"mpmod"})))
+    {
+      mpmod=1;
+      state++;
+      l+=Name(WER,1)+" scheint von gewaltiger Magie umhuellt "
+	    "zu sein.\n";
+    }
+  
+  if(sizeof(mods & ({"druidmagic"})))
+    {
+      defends=({DT_AIR,DT_FIRE,DT_WATER,DT_COLD,DT_BLUDGEON});
+      state++;
+      l+=Name(WER,1)+" scheint vor Druidenmagie besser schuetzen"
+	    " zu koennen.\n";
+    }	
+  
+  if(sizeof(mods & ({"dragonmagic"})))
+    {
+      defends=({DT_FIRE,DT_MAGIC});
+      state++;
+      l+=Name(WER,1)+" scheint vor Drachenmagie besser schuetzen"
+	    " zu koennen.\n";
+    }	
+  
+  if(sizeof(mods & ({"holymagic"})))
+    {
+      defends=({DT_HOLY,DT_LIGHT});
+      state++;
+      l+=Name(WER,1)+" scheint vor heiliger Magie besser schuetzen"
+	    " zu koennen.\n";
+    }	
+  
+  if(sizeof(mods & ({"unholymagic"})))
+    {
+      defends=({DT_UNHOLY,DT_TERROR});
+      state++;
+      l+=Name(WER,1)+" scheint vor unheiliger Magie besser schuetzen"
+	    " zu koennen.\n";
+    }	
+  
+  if(mpmod)
+    SetProp(P_M_HEALTH_MOD,([P_HP:0,P_SP:(pl->QueryProp(P_LEVEL)<70 ? 
+					  pl->QueryProp(P_LEVEL)/10 : 7)]));
+  if(hpmod)
+    SetProp(P_M_HEALTH_MOD,([P_SP: mappingp(QueryProp(P_M_HEALTH_MOD)) ? 
+                                          QueryProp(P_M_HEALTH_MOD)[P_SP] : 0,
+			     P_HP:(pl->QueryProp(P_LEVEL)<70 ? 
+					  pl->QueryProp(P_LEVEL)/10 : 7)]));
+  
+  SetProp(P_LONG, QueryProp(P_LONG)+l);
+  
+  switch(state)
+    {
+    case 1: AddAdjective(({"magisch","magische","magischen","magischer"}));
+      SetProp(P_NAME_ADJ, "magisch");
+      break;
+    case 2: AddAdjective(({"stark magisch","stark magische","stark magischen",
+			     "stark magischer"}));
+      SetProp(P_NAME_ADJ, "stark magisch");
+      break;
+    default: AddAdjective(({"ultimativ magisch","ultimativ magische",
+			      "ultimativ magischen","ultimativ magischer"}));
+      SetProp(P_NAME_ADJ, "ultimativ magisch");
+    }
+
+  SetProp(P_WEAR_TEXT,
+	  ({"Du haengst Dir D"+name(WEN)+" um.\n",
+	      " haengt sich "+name(WEN)+" um.\n"}));
+  
+  SetProp(P_UNWEAR_TEXT,
+	  ({"Du nimmst D"+name(WEN)+" wieder ab.\n",
+	      " nimmt "+name(WEN, 1)+" ab.\n"}));
+  
+  SetProp(P_VALUE, 15000+state*5000);
+  
+  SetProp(P_AC, 6+state);
+  
+  aload=({owner, mods});
+  
+  PMASTER->RegisterPiwafwi(owner, file_name());
+}
+  
+nosave void SetMyLight(object pl, int x)
+{
+  if(!pl) 
+    {
+      SetProp(P_LIGHT, 0);         // Sicherheitsmassnahme...
+      return;
+    }
+
+  SetProp(P_LIGHT, x);
+  
+  if(!ENV(pl)) return;
+  
+  if(x < 0)
+    {
+      ENV(pl)->Message(pl->Name(WESSEN)+" "+name(RAW)+
+		       " verdunkelt ploetzlich Deine Umgebung...\n", 
+		       MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+      
+      write("Dein "+name(RAW)+" verdunkelt Deine Umgebung"+
+	    (extra_dark ? " stark.":".")+"\n");
+      
+      return;
+    }
+  
+  ENV(pl)->Message(pl->Name(WESSEN)+" "+name(RAW)+
+		   " wirkt nun nicht mehr...\n",
+		   MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+  
+  write("Dein "+name(RAW)+" verliert seine Dunkelheit...\n");
+}
+
+int WearFunc(object me) 
+{
+  while(remove_call_out("SetMyLight")!=-1);
+  while(remove_call_out("mp_suck")!=-1);
+  
+  if(stringp(owner) && getuid(TP)!=owner)
+    return write("Dieser "+name(RAW)+" ist nicht fuer Dich bestimmt!\n"+
+		 "Dieser "+name(RAW)+" gehoert "+CAP(owner)+"\n"), 0;
+  
+  call_out("mp_suck", MP_SUCK_TIME, TP);
+  
+  if(extra_dark)
+    call_out("SetMyLight", 2, TP, -4);
+  else
+    call_out("SetMyLight", 2, TP, -2);
+  
+  return 1;
+}
+
+int RemoveFunc(object me, int silent) 
+{
+  while(remove_call_out("SetMyLight")!=-1);
+  while(remove_call_out("mp_suck")!=-1);
+  
+  call_out("SetMyLight", 2, TP, 0);
+  
+  return 1;
+}
+
+varargs string name(int casus, int demon)
+{
+  string ret;
+
+  if(!QueryProp(P_NAME)) return 0;
+  
+  if(casus==RAW)
+    {
+      ret=::name(WER);
+      ret=implode(explode(ret, " ")[1..<1], " ");
+    }
+  else
+    ret=::name(casus, demon);
+  
+  if(TP && TP->QueryProp(P_TTY)=="ansi")
+    return regreplace(ret, "Piwafwi", ANSI_BLUE+"Piwafwi"+ANSI_NORMAL, 1);
+
+  if(TP && TP->QueryProp(P_TTY)=="vt100")
+    return regreplace(ret, "Piwafwi", ANSI_BOLD+"Piwafwi"+ANSI_NORMAL, 1);
+  
+  return ret;
+}
+
+int DefendFunc(string *dtype, mixed spell, object enemy) 
+{
+  int ret;
+  
+  if(!pointerp(dtype))
+    dtype=({dtype});
+  
+  if(sizeof(dtype & defends))
+    if(MENV)
+      if(ENV(MENV))
+	if(ENV(MENV)->QueryProp(P_TOTAL_LIGHT) < 1)
+	  if(random(100) < 75)
+	    {
+	      ret=MENV->QueryAttribute(A_DEX)/2+
+		random(MENV->QueryAttribute(A_DEX)/2);
+	      
+	      tell_object(MENV, 
+			  "Dein "+name(RAW)+" faengt einen "+
+			  (ret < (MENV->QueryAttribute(A_DEX)*2/3) ? 
+			   "kleinen ":"grossen ")+
+			  "Teil der Energie ab...\n");
+	      
+	      DB(BS("*** Piwafwi Defend in "+CAP(getuid(MENV))+" with "+
+		    implode(defends, "-")+" - "+ret));
+	    
+	      return ret;
+	    }
+  
+  return 0;
+}
+
+void BecomesNetDead(object wer) 
+{
+  while(remove_call_out("mp_suck")!=-1);
+}
+
+void BecomesNetAlive(object wer) 
+{
+  if(wer==QueryProp(P_WORN))
+    if(getuid(wer)==owner)
+      call_out("mp_suck", MP_SUCK_TIME/2, TP);
+}
+
+void mp_suck(object who)
+{
+  int mps;
+  
+  if(!objectp(QueryProp(P_WORN))) return;
+  if(QueryProp(P_WORN)!=who) return;
+  if(!interactive(who)) return;
+  if(getuid(who)!=owner) return;
+  
+  while(remove_call_out("mp_suck")!=-1);
+  
+  tell_object(who, "Die unheilige Magie D"+name(WESSEN)+" fordert "
+	      "ihren Tribut...\n");
+  
+  mps=MP_SUCK+state*5;
+  
+  if(who->QueryProp(P_SP) >= mps)
+    who->AddSp(-mps);
+  else
+    who->AddHp(-mps);
+  
+  call_out("mp_suck", MP_SUCK_TIME, TP);
+}
+
+int Waffen()
+{
+  int i,c;
+  object *inv;
+  
+  if(!sizeof(inv=all_inventory())) return 0;
+  
+  c=0;
+  
+  for(i=sizeof(inv)-1;i>=0;i--)
+    if(inv[i]->QueryProp(P_WEAPON_TYPE))
+      c++;
+  
+  return c;
+}
+
+varargs int PreventInsert(object ob) 
+{
+  if(sizeof(all_inventory(ME))>=pockets)
+    return write("Die Taschen des "+name(RAW)+" sind bereits alle voll!\n"), 1;
+  
+  if(ob->QueryProp(P_CURSED))
+    return write("Verfluchtes kann der "+name(RAW)+" nicht aufnehmen!\n"), 1;
+  
+  if(ob->QueryProp(P_WC))
+    if((ob->QueryProp(P_WEAPON_TYPE)!=WT_KNIFE) &&
+       (!ob->id("armbrust")))
+      return write(Name(WER,1)+" kann an Waffen nur Dolche und "
+		   " kleine Armbrueste beherbergen!\n"), 1;
+    else
+      if(Waffen() >= MAX_WEAPONS)
+	return write("Dein "+name(RAW)+" kann nur bis zu "+MAX_WEAPONS+
+		     " Waffen beherbergen!\n"), 1;
+  
+  if(ob->QueryProp(P_AC) &&
+     member(({AT_RING, AT_AMULET}), ob->QueryProp(P_ARMOUR_TYPE))==-1)
+    return write(Name(WER,1)+" kann an Ruestungen nur Ringe und "
+		 "Amulette beherbergen!\n"), 1;
+  
+  if(ob->QueryProp(P_SIZE) >= 50)
+    return write(BS(ob->Name(WER,1)+" ist zu gross fuer die "
+		    "Taschen!\n")), 1;
+  
+  if(ob->id("geld"))
+    return write(BS("Fuer Goldmuenzen gibt es sicher andere Moeglichkeiten "
+		    "der Aufbewahrung!")), 1;
+  
+  if(ob->QueryProp(P_AMOUNT))
+    return write("Dafuer sind die Taschen des "+name(RAW)+" nicht "
+		 "vorgesehen!\n"), 1;
+  
+  if(ob->id("Container"))
+    return write(ob->Name(WER,1)+" koennte die Magie des "+name(RAW)+
+		 " beeinflussen...\n"), 1;
+  
+  if(ob->QueryProp(P_WEIGHT) > 1000)
+    return write(ob->Name(WER,1)+" ist zu schwer! So stabil ist der "+
+		 name(RAW)+" nicht!\n"), 1;
+  
+  return ::PreventInsert(ob); 
+}
+
+void init()
+{
+  container::init();
+  armour::init();
+}
+
+string long()
+{
+  int s;
+  string r;
+  
+  if(s=sizeof(all_inventory()))
+    switch(s*100/pockets)
+      {
+      case  1 .. 33 : r=BS("Die Taschen sind nur wenig befuellt.");
+	break;
+      case 34 .. 66 : r=BS("Die Taschen sind teilweise befuellt.");
+	break;
+      case 67 .. 99 : r=BS("Die Taschen sind fast vollstaendig befuellt.");
+	break;
+      case 100 : r=BS("Die Taschen sind randvoll befuellt.");
+      }
+  else
+    r=r=BS("Die Taschen sind alle leer.");
+  
+  return QueryProp(P_LONG)+r;
+}
+
+string short()
+{
+  if(QueryProp(P_INVIS)) return 0;
+  
+  if(QueryProp(P_WORN))
+    return "Dein umgehaengter "+name(RAW)+".\n";
+  
+  if(TP)
+    if(getuid(TP)==owner)
+      return "D"+name(WER)+".\n";
+  
+  if(stringp(owner))
+    return Name(WER, 1)+" von "+CAP(owner)+".\n";
+  
+  return name(WER)+".\n";
+}
+
+varargs int remove(int silent)
+{
+  DoUnwear(silent);
+  
+  if(!QueryProp(P_WORN))
+    {
+      PMASTER->DeletePiwafwi(owner);
+      return container::remove(silent);
+    }
+}
+
+varargs move(mixed dest, int method)
+{
+  DoUnwear(method & M_SILENT);
+
+  if ((method & M_NOCHECK) || (!QueryProp(P_WORN)))
+    return ::move(dest, method);
+}
+
+mixed _query_autoloadobj()
+{
+  if(sizeof(aload))
+    return aload;
+  
+  return 0;
+}
+
+_set_autoloadobj(mixed data)
+{
+  if(!pointerp(data)) return;
+  if(!sizeof(data)) return;
+  if(sizeof(data)!=2) return;
+  if(!stringp(data[0])) return;
+  if(!pointerp(data[1])) return;
+  
+  SetOwner(find_player(data[0]));
+  PMASTER->DeletePiwafwi(data[0]);
+  activate(find_player(data[0]), data[1]);
+}
+
+/*
+ulc piwafwi
+xcall $me.piwafwi->SetOwner(find_player("ushmul"))
+xcall $me.piwafwi->activate(find_player("ushmul"), ({"extradark","durable"}))
+
+ulc piwafwi
+xcall $me.piwafwi->SetOwner(find_player("protheg"))
+xcall $me.piwafwi->activate(find_player("protheg"), ({"extradark","durable"}))
+
+
+*/

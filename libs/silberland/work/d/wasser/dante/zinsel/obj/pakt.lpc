@@ -1,0 +1,211 @@
+//dante sl 2000
+//pakt mit dem teufel
+
+inherit "std/thing";
+#include <properties.h>
+#include <moving.h>
+#include <wizlevels.h>
+#include "/players/dante/myowndefine.h"
+#include <combat.h>
+
+#define TIME 180
+
+object ob;
+int count=0;
+int boese=1;
+
+void init() {
+  ::init();
+  if(!living(environment(TO)))  {
+    remove();  
+  }
+}
+
+void create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  SP(P_MAGIC, 1);
+  SP(P_NEVERDROP, 1);
+  SP(P_KILL_NAME, "Ein Pakt mit dem Teufel");
+  SetProp(P_SHORT, 0);
+  SetProp(P_NODROP, 1);
+  SetProp(P_GENDER,MALE);
+  SetProp(P_WEIGHT, 0);
+  AddId  (({"TEUFEL_SEELE", "TS"}));
+  SetProp(P_KILL_NAME, "Ein Pakt mit dem Teufel");
+  SetProp(P_KILL_MSG, "Nun wird Deine Seele brennen!");
+
+  ACD(({"teufelspakt"}), "check");
+  ACD("test123", "test");
+}
+
+int test()  
+{
+  int i;	
+  string *w;
+
+  if( !IS_WIZARD(TP) ) return 0;
+  w=TO->QueryProp(P_IDS);	
+
+  write(""+boese+" boese\n"+count+" count\n");
+
+  for(i=0; i<sizeof(w);i++)  {
+    write(""+w[i]+"\n"); 
+  }
+  return 1;
+}
+
+mixed _query_autoloadobj()
+{
+  return ({count, boese ,QueryProp(P_IDS) });
+}
+
+void _set_autoloadobj(mixed arg)
+{
+  if (sizeof(arg) > 1)
+  {
+    count=arg[0];
+    boese=arg[1];
+    AddId(arg[2]);
+  }
+}
+
+int check()  
+{
+  if(boese==1 && (int)TP->QueryProp(P_ALIGN)>-1000 )  {
+    TP->Set(P_ALIGN, -1000 );
+    write(BS(
+          "Du erneuerst Deinen Pakt mit dem Teufel und fuehlst wie die Macht des "
+          "Boesen in Dir hochsteigt!"));
+    tell_room(environment(TP),
+        CAP_TPN+" erneuert den Pakt mit dem Teufel!\n", ({TP}));
+    boese=0;
+    return 1; 
+  }
+  else   {
+    write(BSA(
+          "Die Zeit ist noch nicht reif, etwas Geduld mein satanischer Freund!",
+          "Der Teufel teilt Dir mit: "));
+    return 1; 
+  } 
+  return 1;
+}
+
+void reset()  
+{
+  object pl;
+  int x;
+  ::reset();
+
+  if(!is_clone(TO))   { return;  }
+
+  if(!(pl=environment(TO)) || !interactive(pl))  
+  {
+    return;
+  }
+
+  tell_object(pl, BS("Dein Teufelspakt fordert seinen "
+        "Tribut!"));
+  x=random(10)+10;
+  if(pl->QueryProp(P_SP) < x) {
+    x=x-pl->QueryProp(P_SP);
+    pl->SetProp(P_SP,0);
+    pl->do_damage(x);
+  }
+  else {
+    pl->AddSp(-x);
+  }
+
+  boese=1;
+  count++;
+
+  if(count==5)   
+  {
+    tell_object(pl,
+        "\nPloetzlich erscheint ein Teufel vor Dir und sagt:\n"+
+     BS( "Heil dem Boesen, "+pl->name(WER)+", es wird nun Zeit, dass Du zu mir kommst "
+          "und mir huldigst! Du hast noch etwas Zeit, doch solltest Du daran "
+          "denken, auch Deinen Teil des Handels beizutragen! Denk daran! Mir "
+          "kannst Du nicht entkommen!")+
+        "\nDann verschwindet der Teufel mit Knall und Schwefelrauch.\n");
+    return;
+  }
+
+  if(count>5 && query_idle(pl)<5*60)  
+  { //das nur zur sicherheit
+    tell_object(pl,
+        "\nPloetzlich erscheint ein Teufel vor Dir und sagt:\n"+
+        BS( "Ich habe Dich gewarnt! Du aber wolltest nicht gehorchen! Nun eile, Du "
+          "hast genau noch 3 Minuten um zu mir zu kommen und mir zu huldigen! Danach "
+          "kenne ich keine Gnade mehr!")+
+        "\nDann verschwindet der Teufel mit Knall und Schwefelrauch.\n");
+    call_out("rache", TIME, pl);
+    AddId("RACHE");
+  }        
+}  
+
+void rache( object pl)  
+{
+  object ob;
+  count=0;
+
+  if(!objectp(pl) || !TO->id("RACHE"))  
+  { 
+    return; 
+  }
+  tell_object(pl,
+      "Ploetzlich erscheint ein Teufel vor Dir und sagt:\n");
+
+  tell_object(pl, BS(        
+        "Ich fordere meinen Teil des Paktes ein! Deine teuflische Seele wird "
+        "Dich nun in den Tod hetzen! Alles ist zu spaet fuer Dich!!! Lass Dir "
+        "das eine Lehre sein!"));
+
+  tell_object(pl,
+      "Dann verschwindet der Teufel mit Knall und Schwefelrauch.\n");
+
+
+
+  ob=CLONEOB(ZN"tseele");
+
+  ob->SP(P_NAME,  "Seele von "+CAP(getuid(pl))+"");
+  ob->SP(P_NAME_ADJ, "teuflisch");
+  ob->SP(P_ARTICLE, 1);
+
+
+  ob->SP(P_GENDER, FEMALE);
+
+  ob->SP(P_SHORT, "Die teuflische Seele von "+CAP(getuid(pl))+"");
+  ob->SP(P_LONG, BS("Das ist die teuflische Seele von "+CAP(getuid(pl))+", denn "
+        ""+pl->QueryPronoun(WER)+" hat sich nicht an einen Pakt mit "
+        "dem Teufel gehalten und wird nun so bestraft! Mit dem Teufel spielt "
+        "man eben nicht! Lass Dir das eine Lehre sein!"));
+
+  ob->SP(P_LEVEL, pl->QP(P_LEVEL));
+  ob->SP(P_ATTRIBUTES, pl->QP(P_ATTRIBUTES));
+  //ob->SP(P_TOTAL_WC, TP->QP(P_TOTAL_WC)*2);
+
+  ob->SP(P_BODY, pl->QP(P_LEVEL)*2);
+  ob->SP(P_SPELLRATE, pl->QP(P_LEVEL));
+  ob->SP(P_MAX_HP, pl->QP(P_MAX_HP)*2);
+  ob->move(environment(pl), M_TPORT,M_NOCHECK);
+  ob->SP(P_ARTICLE, 1);
+  RemoveId("RACHE"); 
+
+  pl->AddPursuer(ob);
+
+  ob->Kill(pl);
+  return;
+}
+
+void gehuldigt()   
+{
+  count=0;
+
+  if(TO->id("RACHE"))  {
+    RemoveId("RACHE"); 
+  }
+}
+

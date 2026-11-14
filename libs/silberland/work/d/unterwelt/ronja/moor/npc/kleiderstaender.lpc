@@ -1,0 +1,239 @@
+//=========================================================================
+//
+// File:    kleiderstaender.c
+// Created by Ronja@SL
+//
+// Project: Moor
+//
+//=========================================================================
+
+// 3.2.09 -> if(QueryProp(P_CURSED)) eingefuegt - Clementine.
+
+
+#include "../def.h"
+
+inherit "std/mnpc";
+
+#define MAXITEMS 3
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Ein Kleiderstaender");
+  SetProp(P_LONG,
+    "Ein hoelzerner Kleiderstaender. Eigentlich ist es nichts anderes als "
+    "ein langer Stab, der unten drei Beine hat und oben drei Haken, an "
+    "denen man seine Kleidung aufhaengen kann. Er hat auch schon bessere "
+    "Zeiten erlebt."
+  );
+
+  SetProp(P_NAME, "Kleiderstaender");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:0,T_RANGE_MAX:30]));
+  AddId(({"kleiderstaender", "staender","NOWIMPY"}));
+
+  create_default_npc(8);
+  SetProp(P_NOATTACK, "lebt doch gar nicht!\n");
+  SetProp(P_RACE, "Kleiderstaender");
+  SetProp(P_SIZE, 200);
+  SetProp(P_ALIGN, 0);
+  SetProp(P_MAX_HANDS, 3);
+  SetProp(P_WIMPY,0);
+
+  SetProp(P_MMSGIN, "kommt herein und haelt nach Kleidungsstuecken Ausschau");
+  SetProp(P_MMSGOUT, "stakst gelangweilt davon");
+  SetProp(P_MSGIN, "kommt herein und haelt nach Kleidungsstuecken Ausschau");
+  SetProp(P_MSGOUT, "stakst gelangweilt#");
+  SetProp(P_MNPC_AREA, ({ROOM "eingang"        ,ROOM "kueche",
+                         ROOM "bad"            ,ROOM "wohnzimmer",
+                         ROOM "schlafzimmer"}) );
+  SetProp(P_MNPC_DEFAULTROOM, ROOM "eingang");
+  SetProp(P_MNPC_WAIT, ({ 40, 40, 10 }));
+  SetProp(P_MNPC_FLAGS, MOV_INDOORS + MOV_MOVES + MOV_BACKWARDS);
+
+  AddInfo(DEFAULT_INFO, "ist gar nicht in der Lage, Dich zu verstehen.\n");
+
+  SetProp( P_REJECT, ({ REJECT_KEEP,
+    "Der Kleiderstaender haengt sich @WEN an einen seiner Haken.\n" }) );
+
+  SetChats(2,
+    ({"Der Kleiderstaender kratzt sich an einem Astloch.\n"
+     ,"Der Kleiderstaender knarrt ein wenig vor sich hin.\n"
+     ,"Der Kleiderstaender zieht sich einen Holzwurm heraus.\n"
+     ,"Der Kleiderstaender lehnt sich erschoepft an die Wand.\n"
+     })
+  );
+
+  SUID;
+
+  AddCmd( ({"nehm","nehme","nimm"}), "cmd_nehmen");
+  AddCmd( ({"haeng","haenge"})     , "cmd_haengen");
+}
+
+int ruestung_darf_weg(object ob)
+{
+  if( ob->QueryProp(P_CURSED))    return 0;
+  if( ob->QueryProp(P_NEVERDROP)) return 0;
+  if( ob->id("QUESTOBJ"))         return 0;
+  if( ob->QueryProp(P_NODROP))    return 0;
+  if(!ob->QueryProp(P_SHORT))     return 0;
+  if( ob->QueryProp(P_INVIS))     return 0;
+  if(!ob->QueryProp(P_NAME))      return 0;
+
+  if(ob->QueryProp(P_ARMOUR_TYPE) == AT_ARMOUR) return 1;
+  if(ob->QueryProp(P_ARMOUR_TYPE) == AT_CLOAK)  return 1;
+
+  return 0;
+}
+
+void getit(object player)
+{
+  object *ruestung;
+
+  if(!interactive(player))                  return;
+  if(ENV(TO) != ENV(player))                return;
+  if(sizeof(all_inventory(TO)) >= MAXITEMS) return;
+
+  ruestung = filter_array(player->QueryProp(P_ARMOURS),"ruestung_darf_weg");
+
+  if(sizeof(ruestung))
+  {
+    ruestung[0]->DoUnwear(1);
+    if(ruestung[0]->move(TO,M_PUT||M_SILENT))
+    {
+      TELLPLAYER(BS("Der Kleiderstaender fluestert Dir zu: Das schickt sich "
+                    "aber nicht, hier in voller Montur herumzulaufen!"));
+      MOORMASTER->Msg("Der Kleiderstaender nimmt sich "+ruestung[0]->name(WEN)+
+                      " von "+player->name(WEM));
+    }
+  }
+
+  return;
+}
+
+int cmd_nehmen(string str)
+{
+  object ob;
+  int i,n;
+  string was, wovon;
+
+  notify_fail("Was willst Du wovon nehmen?\n");
+
+  if(!str || str == "") return 0;
+  n=sscanf(str, "%s von %s", was, wovon);
+  if(n!=2){n=sscanf(str, "%s vom %s", was, wovon);}
+  if(n!=2){return 0;}
+
+  if( !((wovon == "staender") || (wovon == "kleiderstaender")) )
+  {
+    return 0;
+  }
+
+  if( (TP->QueryProp(P_SIZE) < 150) || (TP->QueryProp(P_FROG) == 1) )
+  {
+    TELLPLAYER(BS("Du reckst und streckst Dich, aber Du bist zu klein um "
+                  "etwas vom Kleiderstaender zu nehmen."));
+    return -1;
+  }
+
+  if(sizeof(all_inventory(TO)) == 0)
+  {
+    TELLPLAYER("An dem Kleiderstaender haengt doch aber gar nichts!\n");
+    return -1;
+  }
+
+  if(ob = present(was,TO))
+  {
+    if(ME_TOO_HEAVY==ob->move(TP,M_GET|M_SILENT))
+    {
+      TELLPLAYER("Das kannst Du nicht mehr tragen!\n");
+      return -1;
+    }
+    else
+    {
+      TELLPLAYER("Du nimmst "+ob->name(WEN)+" vom Kleiderstaender.\n");
+      TELLOTHERS(TP->Name()+" haengt "+ob->name(WEN)+" vom Kleiderstaender ab.\n");
+      MOORMASTER->Msg(TP->Name()+" nimmt sich "+ob->name(WEN)+" vom Kleiderstaender");
+    }
+    return 1;
+  }
+
+  TELLPLAYER("So etwas haengt nicht am Kleiderstaender.\n");
+  return -1;
+}
+
+int cmd_haengen(string str)
+{
+  object ob;
+  int n;
+  string was, woran;
+
+  notify_fail("Was willst Du woran aufhaengen ?\n");
+
+  if(!str || str == "") return 0;
+  n = sscanf(str, "%s an %s", was, woran);
+  if(n!=2){n=sscanf(str, "%s an %s auf", was, woran);}
+  if(n!=2){n=sscanf(str, "%s am %s", was, woran);}
+  if(n!=2){n=sscanf(str, "%s am %s auf", was, woran);}
+  if(n!=2){return 0;}
+
+  if( !((woran == "staender") || (woran == "kleiderstaender")) )
+  {
+    return 0;
+  }
+
+  if( (TP->QueryProp(P_SIZE) < 150) || (TP->QueryProp(P_FROG) == 1) )
+  {
+    TELLPLAYER(BS("Du reckst und streckst Dich, aber Du bist zu klein "
+                  "um etwas an den Kleiderstaender zu haengen."));
+    return -1;
+  }
+
+  if(!ob=present(was,TP))
+  {
+    TELLPLAYER("Sowas hast Du doch gar nicht bei Dir!\n");
+    return 1;
+  }
+
+  if(sizeof(all_inventory(TO)) >= MAXITEMS)
+  {
+    TELLPLAYER(BS("Der Kleiderstaender ist schon vollbehangen, da passt "
+                  "nichts mehr dran."));
+    return -1;
+  }
+  if(ob->QueryProp(P_CURSED))
+  {
+    TELLPLAYER("Das kannst Du nicht an den Kleiderstaender haengen.\n");
+    return 1;
+  }
+
+  if((ob->QueryProp(P_ARMOUR_TYPE) == AT_ARMOUR) ||
+     (ob->QueryProp(P_ARMOUR_TYPE) == AT_CLOAK))
+  {
+    ob->move(TO,M_PUT||M_SILENT);
+    TELLPLAYER("Du haengst "+ob->name(WEN)+" an den Kleiderstaender.\n");
+    TELLOTHERS(TPN+" haengt "+ob->name(WEN)+" an den Kleiderstaender.\n");
+    MOORMASTER->Msg(TP->Name()+" haengt "+ob->name(WEN)+" an den Kleiderstaender");
+
+    return 1;
+  }
+
+  TELLPLAYER("Das kannst Du nicht an den Kleiderstaender haengen!\n");
+  return -1;
+}
+
+void init()
+{
+  ::init();
+
+  if(!TP)              return;
+  if(!interactive(TP)) return;
+  if(IS_WIZARD(TP))    return;
+
+  call_out("getit",0,TP);
+}
+
+

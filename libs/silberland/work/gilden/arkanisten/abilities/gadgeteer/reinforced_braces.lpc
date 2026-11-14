@@ -1,0 +1,79 @@
+#include "../../arkanisten.h"
+
+inherit GUILD_FOLDER "abilities/ability.lpc";
+
+public void create() {
+    if(is_clone(TO)) return;
+
+    ::create();
+    SetProp(P_ABILITY_NAME, "Verstaerkende Schienen");
+    SetProp(P_ABILITY_DESCRIPTIPON, 
+        "Die verstaerkenden Schienen sind speziell geschmiedete Metallstangen, die du entlang "
+        "deiner Gelenke umschnallst. Wenn die Zahnradmechanik in ihnen aufgezogen wird, erlauben "
+        "sie dir eine Zeit lang mehr Gewicht als ueblich mit dir zu tragen, da die Zahnraeder "
+        "das Heben erleichtern und, wenn sie einrasten, deinen Koerper bei schweren Gewichten "
+        "entlasten.");    
+    SetProp(P_ABILITY_TYPE, ABILITY_TYPE_ACTIVE);
+    SetProp(P_ABILITY_BASE_ATTRIBUTE, A_STR);
+    SetProp(P_ABILITY_CASTVERB, CAST_VERB_ACTIVATE);
+    SetProp(P_ABILITY_GROUP, ({ABILITY_GROUP_GADGETS}));
+    SetProp(P_ABILITY_COST, ([
+        P_SP: 20
+    ]));
+    SetProp(P_ABILITY_REQUIRES, ({CLOCKWORK_SNARE}));
+}
+
+public mapping prepare_use(object user, mapping sinfo) {
+    if(present(REINFORCED_BRACES_ID, user)) {
+        tell_object(user, BS("Deine verstaerkenden Schienen sind bereits aktiv."));
+        return 0;
+    }
+    
+    tell_object(user, BS("Du schnallst die Metallschienen um und ziehst den Mechanismus auf."));
+    tell_room(ENV(user), BS(user->Name(WER)+" bindet sich merkwuerdige Metallschienen an Arme, Beine und um die Brust."), ({user}));
+    return ::prepare_use(user, sinfo);
+}
+
+private object clone_braces(object user) {
+    object ob;
+    ob = clone_object(OBJ "braces");
+    if(ob->move(user) != 1) {
+        tell_object(user, BS("Das geht gerade nicht!"));
+        destruct(ob);
+        return 0;
+    }
+    ob->do_wear(REINFORCED_BRACES_ID);
+    return ob;
+}
+
+public void failed(object user, mapping sinfo, int skillcheck) {
+    object ob;
+    if(skillcheck < -3500) {
+        tell_object(user, BS("Die Schienen versteifen sich so, dass du dich nicht bewegen kannst!"));
+        user->SetProp(P_PARALYZED, random(10));
+    } else if(skillcheck < -2000) {
+        tell_object(user, BS("Das Uhrwerk beginnt genau gegen deine Anstrenungen zu arbeiten! Du benoetigst mehr Kraft als ueblich!"));
+        ob = clone_braces(user);
+        ob->SetProp(P_WEIGHT, 10000);
+        ob->set_timeout(30 + random(30));
+    } else {
+        tell_object(user, BS("Das Uhrwerk tickt, aber es hilft dir nicht Lasten zu heben."));
+        ob = clone_braces(user);
+        ob->SetProp(P_WEIGHT, 0);
+        ob->set_timeout(30 + random(30));
+    }
+    return ::failed(user, sinfo, skillcheck);
+}
+
+
+public void success(object caster, mapping sinfo, int skillcheck) {
+    object ob;
+
+    tell_object(caster, BS("Der Mechanismus der Schienen tickt los. Sie helfen dir jetzt beim Tragen schwerer Lasten."));
+    tell_room(ENV(caster), BS("Ploetzlich geht ein ratterndes Ticken von "+caster->name(WEM)+" aus."), ({caster}));
+
+    ob = clone_braces(caster);
+    ob->SetProp(P_WEIGHT, -(sinfo[SI_SKILLABILITY]*2));
+    ob->set_timeout(30 + skillcheck/100);
+    return;
+}

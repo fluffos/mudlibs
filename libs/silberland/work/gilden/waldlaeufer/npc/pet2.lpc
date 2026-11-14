@@ -1,0 +1,183 @@
+/*****************************************************************************
+Die tierwandler der Gilde, hier wird der zu zaehmende NPC kopiert, in ein
+gildenfaehiges Tier geaendert, die variablen gespeichert und zum Schluss das
+alte Tier removed und die variblen unter ../members/pets/<name>.o gesichert
+und in ./pet.c anschliessen das eigentliche tier erstellt und zum spieler 
+gemoved
+(c) Lilyth, Torian, Delgo @ Silberland <sl.mud.at>
+16.09.05 - Begin
+*****************************************************************************/
+
+//** INCLUDE + INHERIT + DEFINE ********************************************//
+#include "../def.h"
+
+inherit "std/npc";
+inherit "/std/npc/spells";
+//-- Vars --------------------------------------------------------------------
+mapping p;
+string category;
+//-- Prototypes --------------------------------------------------------------
+
+//**************************************************************************//
+
+nosave string *RELEVANT_PROPS = ({
+  P_RANGER_PET_RACE, P_SHORT, P_LONG, P_NAME, P_GENDER, P_RANGER_PET_OWNER, 
+  P_IDS, P_CLASS, P_ARTICLE, P_LEVEL, P_RANGER_MAX_PET_LEVEL, P_ATTRIBUTES,
+  P_MAX_HP, P_MAX_SP, P_HANDS, P_BODY, P_XP, P_RACE, P_SIZE, P_WEIGHT,
+  P_MAX_HANDS, P_ALIGN, P_NOMAGIC, P_RESISTANCE_STRENGTHS, P_MSGIN, P_MSGOUT,
+  P_MMSGIN, P_MMSGOUT, P_DIE_MSG, P_NOCORPSE, P_MURDER_MSG, P_KILL_NAME
+});
+
+
+//** Standardfunktionen ****************************************************//
+//-- Create ------------------------------------------------------------------
+void create()
+{
+  if(!is_clone(TO)) return;
+  ::create();
+  enable_commands();
+  SUID;
+}
+//**************************************************************************//
+
+int SavePet(object owner)
+{
+  object dto;
+
+  dto = clone_object(OBJ "pet_data_holder");
+  dto->copyData(TO);
+  dto->Save(owner);
+  destruct(dto);
+  return 1;
+}
+
+
+//** Die Anpassung *********************************************************//
+//-- Hauptfunktion -----------------------------------------------------------
+int customize(object caster, object ob, string cat)
+{
+  string real_owner, rmv, hand;
+  object pet, owner;
+  int level, lb, i;
+  
+  if(!objectp(TO) || !caster || !ob || !cat) return 0;
+  if(interactive(ob)) return 0; 
+  owner=caster;
+  category=cat;
+  category=lower_case(category);
+  real_owner=getuid(owner);
+  
+  switch(category)
+  {
+    case "wolf":       rmv="schleicht"; break;
+    case "katze":      rmv="schleicht"; break;
+    case "baer":       rmv="stapft";    break;
+    case "riese":      rmv="stapft";    break;
+    case "vogel":      rmv="fliegt";    break;
+    case "spinne":     rmv="krabbelt";  break;
+    case "panzertier": rmv="kriecht";   break;
+    case "huftier":    rmv="trabt";     break;
+    case "echse":      rmv="huscht";    break;
+    default:           rmv="wuselt";    break; 
+    //Kleintiere
+  }
+  
+  if(category=="riese")           hand=" mit der ganzen Kraf";
+  else if(category=="huftier")    
+       {hand=" mit "+ob->QueryPossPronoun(2,2,1)+" Hufen";}
+  else if(category=="vogel")      
+       {hand=" mit "+ob->QueryPossPronoun(2,2,1)+" Fluegeln";}
+  else if(category=="spinne")     hand=" mit Gift";
+  else if(category=="panzertier") hand=" langsam mal";
+  else hand=" mit "+ob->QueryPossPronoun(2,2,1)+" Pfoten";
+  
+  
+  SetProp(P_RANGER_PET_RACE, category);
+  SetProp(P_SHORT, ob->QueryProp(P_SHORT)+" (gezaehmt)");
+  SetProp(P_LONG, ob->QueryProp(P_LONG)+"(gezaehmt von "+owner->Name()+")");
+  SetProp(P_NAME, ob->QueryProp(P_NAME));
+  SetProp(P_GENDER, ob->QueryProp(P_GENDER));
+  SetProp(P_RANGER_PET_OWNER, real_owner);
+  for(i=0; i<sizeof(QueryProp(P_IDS)); ++i) {
+    if(QueryProp(P_IDS)[i][0] == '\n') continue; // keine special ids!
+    AddId( ob->QueryProp(P_IDS) );
+  }
+  
+  AddId( ({ "\n"+real_owner+"_ranger_pet", 
+            NOZAEHMUNG, PET_ID, SKILL_NOLEARN }) );
+  AddClass( ob->QueryProp(P_CLASS) );
+  AddClass( ({CL_ANIMAL}) );
+  SetProp(P_ARTICLE, ob->QueryProp(P_ARTICLE));
+
+  level=ob->QueryProp(P_LEVEL);
+  lb=25;
+  if(R_SKILLMASTER->HasSkill(getuid(caster), VERBESSERTE_ZAEHMUNG)) {lb=27;}
+  if(level>lb) level=lb; 
+  SetProp(P_RANGER_MAX_PET_LEVEL, level+10);
+
+  if(RANGERMASTER->GetMasterAbility(getuid(caster)) == MASTER_ABIILITY_POWERFUL_COMPANION) {
+    SetProp(P_RANGER_MAX_PET_LEVEL, QueryProp(P_RANGER_MAX_PET_LEVEL)+10);
+  }
+
+  if(QueryProp(P_RANGER_MAX_PET_LEVEL) > MAX_LEVEL)
+  { SetProp(P_RANGER_MAX_PET_LEVEL, MAX_LEVEL); }
+  //create_default_npc(level)- BEGIN
+  SetProp(P_LEVEL, level);
+  SetProp(P_ATTRIBUTES, ([A_CON: level, A_DEX: level,
+                          A_STR: level, A_INT: level]));  
+  SetProp(P_MAX_HP, 30+level*level);
+  SetProp(P_MAX_SP, QueryProp(P_MAX_HP));
+  SetProp(P_HANDS, ({ob->QueryProp(P_HANDS)[0],
+                    10*level, ob->QueryProp(P_HANDS)[2]}) );
+  SetProp(P_BODY, 4*level);
+  SetProp(P_XP, 0);
+  //create_default_npc(level) - ENDE
+  SetProp(P_RACE, ob->QueryProp(P_RACE));
+  SetProp(P_SIZE, ob->QueryProp(P_SIZE));
+  SetProp(P_WEIGHT, ob->QueryProp(P_WEIGHT));
+  SetProp(P_ALIGN, ob->QueryProp(P_ALIGN));
+  SetProp(P_MAX_HANDS, ob->QueryProp(P_MAX_HANDS));
+  SetProp(P_HEAL, ob->QueryProp(P_HEAL));
+  SetProp(P_AGGRESSIVE, 0);
+  SetProp(P_WIMPY, ob->QueryProp(P_WIMPY));
+  SetProp(P_NOMAGIC, level/2);
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    Name(WER,1)+" kann oder will das nicht tragen.\n" }) );
+  SetProp(P_RESISTANCE_STRENGTHS , ob->QueryProp(P_RESISTANCE_STRENGTHS) );
+  SetProp(P_MSGIN, rmv+" heran");
+  SetProp(P_MSGOUT, rmv);
+  SetProp(P_MMSGIN, rmv+" heran");
+  SetProp(P_MMSGOUT, "folgt "+owner->Name(WEM));
+  SetProp(P_DIE_MSG,  " "+rmv+" davon.\n");
+  SetProp(P_NOCORPSE, 1 );
+  SetProp(P_MURDER_MSG, ob->QueryProp(P_MURDER_MSG));
+  SetProp(P_KILL_NAME, ob->Name());
+  SetProp(P_SPELLS, ob->QueryProp(P_SPELLS));
+  SetProp(P_SPELLRATE, 0);
+  SetProp(P_NPC_SPELL_VECTOR, ob->QueryProp(P_NPC_SPELL_VECTOR));
+  AddInfo(DEFAULT_INFO, "versteht Dich doch gar nicht.\n");
+  AddInfo(lower_case(owner->QueryProp(P_NAME)), 
+          CAP(owner->Name()) + " ist mein Meister.","sagt: ");
+  
+  /*SetChats(1,
+  ({Name(WER, 1)+" "+rmv+" herum.\n"}) );*/
+     
+  set_living_name("rangerpet:"+real_owner);
+  
+//-- Alles wichtige ausgelesen, pet wird jetzt erstellt -------
+  SavePet(owner);
+  
+  if(pet=clone_object(NPC "pet")) 
+  {
+    if(pet->second_create(caster))
+    { tell_object(caster, BS("Du hast es geschafft!")); }
+  }
+  else 
+  { caster->Message(BS("Fehler. Kontaktiere einen Gildenmagier."));
+    return 1; }
+  ob->deep_remove(1);
+  TO->remove();
+  
+  return 1;
+}
+//**************************************************************************//

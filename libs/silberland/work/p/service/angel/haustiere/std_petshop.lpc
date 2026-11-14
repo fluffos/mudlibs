@@ -1,0 +1,338 @@
+/********************************************************************
+ * Klasse: Standard Tierhandlung                                    *
+ * Datei: /p/service/angel/haustiere/std_petshop.c                  *
+ * Letzte Ueberarbeitung: 22.09.2003                                *
+ ********************************************************************/
+
+inherit "std/laden";
+
+#include <properties.h>
+#include <moving.h>
+#include <laden.h>
+#include "std_pet.h"
+
+#define strength ({ "< sehr schwach >", "< schwach >", "< mittelstark >", "< stark >", "< sehr stark >" })
+
+mixed race_register;
+mixed race_array;
+
+// Restriktionen
+mixed race_restriction;
+mixed guild_restriction;
+
+// Hilfsfunktionen:
+
+// Produziert einen Leerstring mit nr Stellen
+string get_points ( int nr )
+{
+   int i;
+   string result;
+
+   result = "";
+
+   for ( i = 0; i < nr; i++ )
+   {
+	 result += ".";
+   }
+   return result;
+}
+
+string query_str ( int lvl )
+{
+  if ( lvl < 0 )
+     lvl = 0;
+
+  if ( lvl > 19 )
+     lvl = 19;
+
+  return strength[lvl/4];
+}
+
+// Hilffunktion von GetAvaliableRaces
+void get_race_array( string name, string fn )
+{
+   race_array += ({name});
+}
+
+object GetShopkeeper ()
+{
+  return ( present ("\npetshop_vendor") );
+}
+
+void create()
+{
+  ::create();
+
+  // Preise im Laden sind 1:1
+  SetBuyFact(1);
+  SetProp(P_SHOP_FLAGS, SHOP_HASKEEPER | SHOP_NEEDSKEEPER);
+  SetProp(P_SHOPKEEPER_ID, "\npetshop_vendor");
+  SetProp(P_LIGHT, 1 );
+
+  RemoveFixedObject();
+
+  AddFixedObject("/p/service/angel/haustiere/obj/100k_gutschein");
+  AddFixedObject("/p/service/angel/haustiere/obj/50k_gutschein");
+  AddFixedObject("/p/service/angel/haustiere/obj/10k_gutschein");
+
+  SetProp(P_INT_SHORT, "Eine Tierhandlung" );
+  SetProp(P_INT_LONG,
+    "Du befindest Dich in einer Tierhandlung.\n"
+  );
+
+  race_register = ([]);
+  race_restriction = ({});
+  guild_restriction = ({});
+
+  AddCmd( ({ "waehl", "waehle" }), "BuyPet" );
+}
+
+// Fuegt dem Sortiment eine Rasse hinzu
+int AddPet( string name, string fn )
+{
+   catch(call_other( fn, "???" ));
+   race_register += ([ name:fn ]);
+}
+
+// Entfernt eine Rasse aus dem Sortiment
+int RemovePet( string name )
+{
+  if(name=="all")
+    race_register = ([]);
+  else
+    race_register -= ([ name ]);
+}
+
+// Liefert ein Array mit allen verfuegbaren Rassen
+mixed GetAvaliableRaces()
+{
+  race_array = ({ });
+  walk_mapping( race_register, #'get_race_array);
+
+  return race_array;
+}
+
+// Liefert den Preis fuer eine bestimmte Rasse
+int GetPrice( string key )
+{
+  int i;
+  object bp_pet;
+
+  catch(call_other( race_register[key], "???" ));
+  bp_pet = find_object( race_register[key] );
+  if ( objectp (bp_pet) )
+  {
+    return bp_pet->QueryProp(P_PET_PRICE);
+  }
+}
+
+int greater_fun ( string a, string b)
+{
+   return GetPrice(a) > GetPrice(b);
+}
+
+// Liefert eine formatierte Preisliste
+string GetPriceList()
+{
+  int i;
+  string result;
+  object bp_pet;
+
+  race_array = sort_array (GetAvaliableRaces(), "greater_fun", this_object());
+
+  result =  ";===================================================================;\n";
+  result += "| In dieser Tierhandlung koennen folgende Haustiere erworben werden |\n";
+  result += "'==================================================================='\n";
+  result += "| Haustier:                                                  Preis: |\n";
+  result += "'-------------------------------------------------------------------'\n";
+  for ( i = 0; i < sizeof (race_array); i++ )
+  {
+	 catch(call_other(race_register[race_array[i]], "???"));
+	 bp_pet = find_object( race_register[race_array[i]] );
+	 if ( objectp (bp_pet) )
+        result += sprintf("| %20-'.'s %20-'.'s%'.'24 d |\n", capitalize(race_array[i]),
+                  query_str(bp_pet->QueryProp(P_PET_LEVEL))+" ", bp_pet->QueryProp(P_PET_PRICE));
+  }
+  result += "'-------------------------------------------------------------------'\n";
+  result += "|   Mit <waehle rassenname> kannst Du Dir ein Haustier aussuchen.   |\n";
+  result += "'-------------------------------------------------------------------'\n";
+  return result;
+}
+
+// Stellt fest ob ein Spieler bereits ein Haustier besitzt (save_file)
+string FindPet( string uid )
+{
+   int i, max;
+   string name, player;
+   mixed files;
+
+   files = get_dir("/p/service/angel/haustiere/save/*");
+
+   max = sizeof(files);
+   for (i=0; i < max; i++)
+   {
+      sscanf(files[i], "pet_%s_%s.o", name, player);
+      if (player == uid)
+         return name;
+   }
+}
+
+// Stelle neuen Gutschein aus
+int CreateVoucher ( int value, object pl )
+{
+   object voucher;
+
+   voucher = clone_object ("/p/service/angel/haustiere/obj/gutschein");
+   voucher->SetProp(P_VALUE, value);
+   voucher->SetProp(P_AUTOLOADOBJ, value);
+   voucher->move(this_player(), M_NOCHECK);
+}
+
+// Hilfsfunktion
+int CheckVoucher( object ob )
+{
+   return ob->id("petshop\nvoucher");
+}
+
+// Auswerten der Gutscheine
+varargs int QueryVouchers (object customer, int encash)
+{
+   int i; int sum;
+   mixed vouchers;
+
+   if (!objectp( customer ))
+      return 0;
+
+   vouchers = deep_inventory(customer);
+   if ( !pointerp( vouchers ))
+      return 0;
+
+   vouchers = filter_array( vouchers, #'CheckVoucher );
+
+   if ( !pointerp( vouchers ))
+      return 0;
+
+   sum = 0;
+   for (i=0; i < sizeof(vouchers); i++)
+   {
+	  sum += vouchers[i]->QueryProp(P_VALUE);
+
+	  if (encash)
+	     vouchers[i]->remove();
+   }
+   return sum;
+}
+
+// Funktion zum Kaufen eines Haustiers
+int BuyPet ( string key )
+{
+   object new_pet, new_tool, vendor;
+
+   if ( sizeof (race_restriction) && this_player() && member (race_restriction, this_player()->QueryProp(P_RACE)) == -1 )
+   {
+	  if ( objectp ( GetShopkeeper() ) )
+	     GetShopkeeper()->sage(sprintf("Du als %s bekommst hier kein Haustier!\n", this_player()->_query_racestring()[WER]));
+      return 1;
+   }
+
+   if ( sizeof (guild_restriction) && this_player() && member (guild_restriction, this_player()->QueryProp(P_GUILD)) == -1 )
+   {
+	  if ( objectp ( GetShopkeeper() ) )
+	     GetShopkeeper()->sage(sprintf("Du als %s bekommst hier kein Haustier!\n", capitalize(this_player()->QueryProp(P_GUILD)) ));
+      return 1;
+   }
+
+   notify_fail ( "Welches Tier moechtest Du waehlen!\n");
+   if ( !stringp( key ) )
+      return 0;
+
+   notify_fail ( "Es ist zur Zeit kein Verkaeufer anwesend!\n");
+   if ( !objectp (vendor = present ( "\npetshop_vendor" ) ) )
+      return 0;
+
+   notify_fail ( capitalize (key)+" kannst Du hier nicht kaufen!\n");
+   if ( !member (race_register, key) )
+      return 0;
+
+   notify_fail ( "Du kannst nicht mehr als ein Haustier haben!\n");
+   if ( stringp (FindPet( this_player()->query_real_name() ) ) || objectp(deep_present("\nstd_pet_item", this_player() )) )
+      return 0;
+
+   if ( (this_player()->QueryDeepMoney() + QueryVouchers(this_player())) < GetPrice (key))
+   {
+     notify_fail ("Dafuer reichen Deine Finanzen nicht aus!\n");
+     return 0;
+   }
+   else
+   {
+	  new_pet = clone_object ( race_register[key] );
+	  if ( !objectp (new_pet) )
+	  {
+		 notify_fail ("Von diesen Tieren ist leider gerade keines verfuegbar!\n");
+		 return 0;
+	  }
+
+	  if ( !stringp(QueryProp(P_PET_KONFIG_TOOL)) )
+	  {
+		 notify_fail ("Es ist ein Fehler aufgetreten, bitte wende Dich an einen Magier!\n");
+		 return 0;
+	  }
+
+	  new_tool = clone_object ( QueryProp(P_PET_KONFIG_TOOL) );
+
+	  if ( objectp (new_tool) )
+	  {
+		 new_tool->move( this_player(), M_NOCHECK );
+	  }
+
+	  new_pet->SetProp(P_PET_OWNER_NAME, this_player()->query_real_name());
+	  new_tool->set_pet (new_pet);
+
+	  if ( QueryVouchers ( this_player() ) >= GetPrice (key) )
+	  {
+		 if ( QueryVouchers ( this_player() ) == GetPrice (key) )
+		 {
+		    QueryVouchers ( this_player(), 1);
+		    write("Du bezahlst den vereinbarten Betrag mit Gutscheinen.\n");
+		    tell_room(this_object(), this_player()->Name()+" waehlt ein Haustier und bezahlt mit Gutscheinen.\n", ({this_player()}) );
+	     }
+	     else
+	     {
+            CreateVoucher ( QueryVouchers ( this_player(), 1) - GetPrice (key), this_player() );
+		    write("Du bezahlst den vereinbarten Betrag mit Gutscheinen und erhaeltst einen\nGutschein ueber das Restguthaben ausgestellt.\n");
+		    tell_room(this_object(), this_player()->Name()+" waehlt ein Haustier und bezahlt mit Gutscheinen und Muenzen.\n", ({this_player()}) );
+         }
+	  }
+      else
+      {
+         this_player()->AddMoney( (-GetPrice (key) + QueryVouchers ( this_player(), 1) ) );
+         write("Du bezahlst den vereinbarten Betrag.\n");
+         tell_room(this_object(), this_player()->Name()+" waehlt ein Haustier und bezahlt den vereinbarten Betrag.\n", ({this_player()}) );
+      }
+	  new_pet->move( this_object(), M_GO );
+	  vendor->GiveIntroduction();
+      return 1;
+   }
+}
+
+void SetGuildRestriction ( mixed value )
+{
+   if ( pointerp (value) )
+      guild_restriction = value;
+}
+
+void SetRaceRestriction ( mixed value )
+{
+   if ( pointerp (value) )
+      race_restriction = value;
+}
+
+mixed GetGuildRestriction ( )
+{
+   return guild_restriction;
+}
+
+mixed GetRaceRestriction ( )
+{
+   return race_restriction;
+}

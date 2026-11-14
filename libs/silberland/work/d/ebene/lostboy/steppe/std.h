@@ -1,0 +1,52 @@
+#define MAGIERNAME "lostboy"
+
+#define PATH "/players/" 
+#define NPC(x)          "/npc/"+x
+#define OBJ(x)          "/obj/"+x
+#define ROOM(x)         "/room/"+x
+#define LOG(x)          "/log/"+x
+#define SAVEDIR(x)      "/save/"+x
+#define ARMOUR(x)       "/armour/"+x
+#define WEAPON(x)       "/weapon/"+x
+#define MISC(x)		"/misc/"+x
+
+#define DB(x) if (find_player(MAGIERNAME)) tell_object(find_player(MAGIERNAME),(x))
+#define HOME "/players/" MAGIERNAME "/"
+
+#define TI this_interactive()
+
+#define TP this_player()
+#define TPN this_player()->name()
+#define TPP this_player()->QueryPronoun
+#define TPPP this_player()->QueryPossPronoun
+#define PL this_player()
+#define PLN this_player()->name()
+
+#define TO this_object()
+#define ME this_object()
+
+#define BS(s) break_string(s,78)
+#define bs(s) break_string(s,78)
+//#define IS_BLUE(s) (!is_clone(s))
+
+#define CAP(x) capitalize(x)
+#define UPPER capitalize
+#define LOWER lower_case
+
+#define ENV(x) environment(x)
+#define MENV environment(this_object())
+#define SUID seteuid(getuid(this_object()));
+#define CLONEME(x) clone_object(x)->move(ME)
+#define CLONEOB(x) clone_object(x)
+#define CLONE(x,y) clone_object(x)->move(y);
+
+#define SP  SetProp
+#define QP  QueryProp
+#define AD  AddDetail
+#define ASD AddSpecialDetail
+#define ARD AddReadDetail
+#define ASO AddSound
+#define ASM AddSmell
+#define AE  AddExit
+#define AC  AddCmd
+

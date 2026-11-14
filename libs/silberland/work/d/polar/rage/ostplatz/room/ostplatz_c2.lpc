@@ -1,0 +1,1871 @@
+//Laden, der alles moegliche hat, Rage Nov 00
+// Laden: nur Verkauf, kein Ankauf !!!
+// Filename: ostplatz_c2.c
+// File by Rage, Juni 00
+
+inherit "std/laden";
+
+#include "../def.h"
+#include <combat.h>
+#include <moving.h>
+#include <laden.h>
+#include <mail.h>
+
+#define TOROOM (["norden":ROOM "ostplatz_c1", "nordwesten":ROOM "ostplatz_b1", \
+                 "westen":ROOM "ostplatz_b2", "sueden":ROOM "fellladen_c3", \
+                 "osten":ROOM "ostplatz_d2", "suedosten":ROOM "ostplatz_d3", \
+                 "nordosten":ROOM "ostplatz_d1"])
+
+string *scherz;                   //1 Scherz gefunden 
+string *meldbar;                  //Scherz laesst sich melden
+string *gemeldet;                 //Spieler hat Scherz gemeldet
+string *paare;                    //moegliche Detailpaare fuer Vergleich
+string richtiges_paar;
+mapping vergleichstexte;
+string *vergleich_gefunden;       //Spieler hat richtiges Detailpaar
+string HaendlerLauschen(string key);
+string ErwachseneLauschen(string key);
+string GravurLesen(string key);
+int stein_frei, stange_getauscht;
+int rutschgefahr;
+int blatt_da;                     //Schaufelblatt ist auffindbar
+int glas_eingeschlagen;           //Glas bei Laterne ist eingeschlagen
+mapping hungrig;                  //Hungrige Spieler
+int resetcounter;
+int exit_test();
+int geldregen;                    //Spieler kann Geld bekommen
+
+void create()
+{
+  ::create();
+
+  resetcounter = 0;
+  rutschgefahr = 0;
+  blatt_da = 1;
+  hungrig = ([]);
+  hungrig[getuid(TP)] = 1;
+  scherz = ({});
+  meldbar = ({});
+  gemeldet = ({});
+  vergleich_gefunden = ({});
+  stein_frei = 0;
+  stange_getauscht = 0;
+  glas_eingeschlagen = 0;
+  geldregen = 1;
+  paare = ({ "eispalisade:holzpalisade","kurzer pfad:pfad",
+             "osten:westen","sonne:wolke","eis:schnee",
+             "tor:tuer","seitenwand:vorderfront","matte:schild",
+             "erwachsener:kind","verkaeufer:kundin" });
+  richtiges_paar = paare[random(sizeof(paare))];
+  vergleichstexte =
+    ([ "eispalisade:holzpalisade":
+       BS("Beim Vergleich der beiden Palisaden stellst Du folgendes fest: die "
+       "Eispalisade ist hoeher und stabiler als die Holzpalisade. Erstere "
+       "ist aus Eis und Schnee und letztere aus Fichtenholz. Dir faellt auch "
+       "auf, dass die Eispalisade Yiqanuc und die Holzpalisade den "
+       "Ostplatz umgibt."),
+       "kurzer pfad:pfad":
+       BS("Du vergleichst die beiden Pfade und bemerkst, dass der Hauptpfad "
+       "um einiges breiter ist, bei weitem mehr begangen wird und "
+       "dementsprechend fest im Schnee ausgetreten wurde. Erst jetzt "
+       "faellt Dir eine kleine Erhebung an der Kreuzung der beiden Wege "
+       "auf."),
+       "osten:westen":
+       BS("Durch den Vergleich der beiden Himmelsrichtungen Osten und Westen "
+       "stellst Du wenig ueberraschend fest, dass es zwei "
+       "entgegengesetzte sind."),
+       "sonne:wolke":
+       BS("Ich weiss nicht, welche sensationellen Entdeckungen Du Dir "
+       "erwartet hast, wenn Du die Sonne mit den Wolken vergleichen "
+       "wolltest, zumal Du keine Wolken siehst. Ueberleg Dir beim "
+       "naechsten Mal besser, was Du vergleichen willst."),
+       "eis:schnee":
+       BS("Du findest keine grossen Unterschiede zwischen dem Eis und dem "
+       "Schnee, ausser dass das Eis fester und glatter ist und man "
+       "darauf leichter ausrutschen kann als auf Schnee."),
+       "tor:tuer":
+       BS("Zwischen den beiden Toren und der Tuer zum Laden stellst Du "
+       "folgenden Vergleich an: die beiden Tore sind um einiges hoeher "
+       "und breiter und sicher auch schwieriger zu oeffnen als die Tuer."),
+       "seitenwand:vorderfront":
+       BS("Die Seitenwaende und die Vorderfront des Ladens sehen sich sehr "
+       "aehnlich. Beide bestehen aus gleich vielen Baumstammreihen und keine "
+       "der Waende weist ein Fenster auf. Ein paar vereinzelte Kratzer "
+       "entdeckst Du noch links von der Tür, aber das war es dann auch "
+       "schon."),
+       "matte:schild":
+       BS("Als Du die Matte mit dem Schild vergleichst, merkst Du, dass beide "
+       "etwa gleich gross sind und dass auf beidem etwas geschrieben steht."),
+       "erwachsener:kind":
+       BS("Waehrend die Erwachsenen nicht nur groesser als die Kinder sind "
+       "und deshalb auch ein dunkleres, laengeres Fell als sie haben, "
+       "spazieren sie gemuetlich an den Laeden vorbei, um vielleicht was zu "
+       "kaufen oder zu tauschen, und die Kinder tummeln sich dafuer noerdlich "
+       "von Dir und sind alle sehr gut gelaunt."),
+       "verkaeufer:kundin":
+       BS("Normalerweise verkauft der Verkaeufer dem Kunden etwas bzw. der "
+       "Kunde kauft dem Verkaeufer was ab. Auch am Ostplatz von Yiqanuc "
+       "ist dies nicht anders als anderorts."),
+     ]);
+
+  SetStorageRoom( ROOM "mischlager" );
+  SetBuyFact( 5 );
+
+  SetProp( P_INT_SHORT, "Auf dem Ostplatz" );
+  SetProp( P_INT_LONG,
+    "Ein im Schnee ausgetretener Pfad fuehrt von der Eispalisade im Westen "
+    "zu der Holzpalisade im Osten. Suedlich von Dir sind einige Holzhuetten "
+    "und Ladentische, wo Haendler ihre Waren anbieten, waehrend genau "
+    "noerdlich von Dir ein Holzgeruest aufgestellt wurde, auf dem Kinder "
+    "herumtollen. Xandim gehen an Dir vorbei und bleiben vor den Laeden "
+    "stehen, und Kinder laufen an Dir vorueber und spielen Fangen. " );
+  SetProp( P_LIGHT, 1 );
+  SetProp( P_INDOORS, 0 );
+  SetProp( P_ENVIRONMENT, ([ENV_TERRAIN:TT_TOWN, ENV_TEMPERATURE: -4]) );
+
+  SetProp( P_SHOP_FLAGS, SHOP_HASKEEPER | SHOP_NEEDSKEEPER);
+  SetProp( P_SHOPKEEPER_ID, "graufell" );
+  SetProp( P_SHOPKEEPER_NAME, "Graufell" );
+  SetProp( P_SHOPKEEPER_GENDER, MALE );
+
+//DETAILS
+  AddDetail( "fangen",
+    "Die Kinder sind halt sehr verspielt und spielen deshalb fangen. Pass "
+    "nur, dass sie nicht Dich erwischen." );
+  AddDetail( ({ "platz","ostplatz" }),
+    "Der gesamte Ostplatz dient als Treffpunkt, wohin man sich nach einer "
+    "arbeitsreichen Zeit zurueckziehen kann. Kinder spielen vergnuegt, "
+    "Erwachsene kaufen etwas ein und Schlittenhunde laufen staendig frei "
+    "herum." );
+  AddDetail( ({ "schlittenhund","schlittenhunde","hunde","hund" }),
+    "Die Schlittenhunde laufen frei am Platz herum. Dir faellt allerdings "
+    "auf, dass sie den Pfad kaum betreten, sondern sich immer im tieferen "
+    "Schnee aufhalten. Ob sie speziell trainiert worden sind oder gefaellt "
+    "ihnen der Schnee einfach besser?" );
+  AddDetail( ({ "erwachsene","erwachsener","erwachsenen" }),
+    "Die Erwachsenen schlendern gemuetlich an Dir vorbei, sehen sich bei den "
+    "Laeden um, manche treten in einen ein, andere wiederum unterhalten sich "
+    "miteinander. Und auch wenn sie ihre Kinder allein auf den Platz "
+    "herumlaufen lassen, hat man das Gefuehl, dass sie doch stets ein Auge "
+    "auf ihre Kinder geworfen haben." );
+  AddDetail( "gefuehl",
+    "Du hast das Gefuehl, dass man Gefuehle nicht so einfach sehen kann." );
+  AddDetail( "gefuehle",
+    "Auch die Gefuehle lassen sich genauso schwer untersuchen wie ein "
+    "einzelnes Gefuehl." );
+  AddDetail( ({ "auge","augen" }),
+    "Deine eigenen siehst Du schwer, doch wenn Du in die Augen der Xandim "
+    "blickst, meinst Du, dass sie ein Auge stets auf ihre Kinder geworfen "
+    "haben." );
+  AddDetail( "treffpunkt",
+    "Die Xandim treffen sich auf diesem Platz, um sich mit ihrer Familie von "
+    "einer harten Arbeit zu erholen." );
+  AddDetail( ({ "familie","familien","gruppe" }),
+    "Nicht immer sind die Kinder getrennt von deren Eltern unterwegs, sondern "
+    "Du siehst ab und zu sogar eine groessere Gruppe vorbeigehen, von "
+    "Kleinkinder, ueber Kinder, Eltern und Grosseltern. Die Xandim sind mit "
+    "ihrer Familie sicher stark verbunden." );
+  AddDetail( "eltern",
+    "Die Eltern passen sicher gut auf ihre Kinder auf." );
+  AddDetail( "grosseltern",
+    "Die kannst Du nur deshalb von den anderen auseinanderhalten, weil ihr "
+    "Fell schon grau wird, waehrend das Fell der anderen eine hellbraune Farbe "
+    "hat." );
+  AddDetail( ({ "farbe","fell" }),
+    "Die Xandim haben ein natuerliches, wuscheliges, hellbraunes Fell." );
+  AddDetail( ({ "kleinkinder","kleinkind" }),
+    "Im Moment siehst Du nur zwei, die in einem Rucksack auf den Schultern von "
+    "Erwachsenen wieder zurueck in Richtung Yiqanuc getragen werden. Ihnen "
+    "scheint die Kaelte auch ueberhaupt nichts auszumachen." );
+  AddDetail( "kaelte",
+    "Im ganzen Polargebiet ist es kalt. Nur wenige koennen bei dieser Kaelte "
+    "ueberleben." );
+  AddDetail( ({ "richtung","richtungen","himmelsrichtung",
+                "himmelsrichtungen" }),
+    "In Richtung Westen liegt die Eispalisade, in Richtung Sueden ein Laden, "
+    "in Richtung Norden ein Holzgeruest und in Richtung Osten die "
+    "Holzpalisade." );
+  AddDetail( "norden",
+    "In diese Richtung weitet sich der Platz aus und ein Holzgeruest steht "
+    "da, auf dem sich viele Kinder tummeln." );
+  AddDetail( "yiqanuc",
+    "So heisst das Dorf der Xandim, das hinter der Eispalisade im Westen "
+    "liegt." );
+  AddDetail( "dorf",
+    "Das Dorf der Xandim nennt sich Yiqanuc, aber das solltest Du "
+    "mittlerweile doch schon wissen." );
+  AddDetail( "moment",
+    "Genau jetzt!" );
+  AddDetail( "rucksack",
+    "Zwei Erwachsene haben einen Rucksack auf ihren Schultern, in den sie "
+    "ihre Kleinkinder hineingesetzt haben." );
+  AddDetail( ({ "schulter","schultern" }),
+    "Die Schultern der Xandim sind breit und fellbedeckt, wie auch ihr "
+    "gesamter Koerper." );
+  AddDetail( "koerper",
+    "Der Koerper der Xandim ist fellbedeckt. Man darf sich von diesem "
+    "Erscheinungsbild nicht taeuschen lassen, denn die Xandim sind sehr "
+    "stark, nicht zuletzt deshalb, weil sie gelernt haben, in einer so "
+    "rauhen Umgebung wie im Polargebiet zu ueberleben." );
+  AddDetail( "umgebung",
+    "Die naehere Umgebung, in der Du Dich gerade aufhaeltst, ist der "
+    "Ostplatz. Gesamt betrachtet bist Du im Polargebiet." );
+  AddDetail( ({ "polargebiet","polar","region" }),
+    "Das Polargebiet zeichnet sich dadurch aus, dass es viel Schnee gibt, "
+    "sehr kalt ist und das Wetter stets unberechenbar ist." );
+  AddDetail( "erscheinungsbild",
+    "Jedes Wesen hat ein gewisses Erscheinungsbild, nur sollte man sich davon "
+    "nie taeuschen lassen." );
+  AddDetail( "wesen",
+    "Derzeit siehst Du Xandim und Schlittenhunde." );
+  AddDetail( "arbeit",
+    "Die Xandim haben immer genug harte Arbeit, da es in einer eisigen Region "
+    "wie Polar nicht gerade leicht ist, sich Nahrung zu besorgen." );
+  AddDetail( "nahrung",
+    "Wenn Du an Nahrung denkst, kriegst Du Hunger. Sehen tust Du keine, "
+    "dafuer steigt Dir ein Essensgeruch in die Nase. Die Xandim koennen Dir "
+    "sicher etwas ueber ihre Nahrungsmittelbeschaffung erzaehlen." );
+  AddSpecialDetail( "hunger", "detailHunger" );
+  AddDetail( "nase",
+    "Indem Du mit den Augen schielst, kannst Du sie sogar sehen." );
+  AddDetail( "zeit",
+    "Die Zeit im Polargebiet vergeht gleich schnell wie ueberall, auch wenn "
+    "sie hier zeitweise still zu stehen scheint." );
+  AddDetail( "boden",
+    "Es fuehrt ein im Schnee ausgetretener Pfad genau von Westen nach Osten "
+    "oder umgekehrt, je nach Betrachtungsweise. Zur Holzhuette im Sueden "
+    "zweigt ein kurzer Pfad ab, der genau bis zu einer Tuer fuehrt, in deren "
+    "Schwelle eine Fussmatte hingelegt wurde. Neben dem Pfad liegt eine "
+    "frische Neuschneeschicht." );
+  AddDetail( ({ "tuerschwelle","schwelle" }),
+    "In der Tuerschwelle vom Laden wurde eine grosse Fussmatte "
+    "ausgebreitet." );
+  AddDetail( ({ "matte","fussmatte" }),
+    "Die Fussmatte in der Tuerschwelle vom Laden wurde wohl deshalb "
+    "hingelegt, damit man beim Betreten des Ladens seine Schuhe vorher darauf "
+    "abstreifen kann." );
+  AddReadDetail( ({ "matte","fussmatte" }),
+    "Du musst den Laden schon betreten, um zu sehen, was auf der Fussmatte "
+    "geschrieben steht." );
+  AddDetail( "schuhe",
+    "Ob Du welche hast oder nicht, weisst Du selbst am besten - nehme ich "
+    "einmal an." );
+  AddDetail( "betreten",
+    "Gehe in den Laden oder nicht. Das bleibt ganz allein Dir ueberlassen." );
+  AddDetail( "tuer",
+    "Die Tuer zu dem Laden suedlich von Dir steht nach innen offen. Du kannst "
+    "jederzeit den Laden betreten, wenn Du willst." );
+  AddDetail( ({ "neuschneeschicht","schneeschicht" }),
+    "Dort, wo der Schnee nicht als Pfad niedergetreten wurde, liegt noch "
+    "immer eine frische Neuschneeschicht. Es kann sich kaum einer darueber "
+    "beschweren, dass es hier einmal zuwenig Schnee geben koennte." );
+  AddDetail( ({ "kurzer pfad","kurzer weg","kurzen pfad","kurzen weg" }),
+    "Dieser Pfad zweigt vom Hauptpfad ab und endet genau vor der Tuer. "
+    "Direkt daneben, ganz knapp neben der Vorderfront der Huette fuehrt eine "
+    "Spur im Schnee vorbei, die anders aussieht als die, die Du bisher auf "
+    "dem Ostplatz gesehen hast." );
+  AddDetail( "vorderfront",
+    "Die Vorderfront der Huette ist nicht sonderlich aufregend. Sie besteht "
+    "aus mehreren Baumstammreihen, hat fast genau in der Mitte eine Tuer, "
+    "ueber der ein Schild angebracht wurde, und seltsamerweise keine "
+    "Fenster." );
+  AddDetail( "fenster",
+    "Du kannst noch solange zu der Vorderfront hinsehen und es tauchen "
+    "trotzdem keine Fenster auf." );
+  AddDetail( "mitte",
+    "Die Tuer ist fast genau in der Mitte der Vorderfront." );
+  AddDetail( "schild",
+    "Das Schild wurde ueber der Tuer montiert und enthaelt eine Aufschrift." );
+  AddDetail( "aufschrift",
+    "Schon manch einer meinte, dass man eine Aufschrift lesen kann." );
+  AddReadDetail( ({ "aufschrift","schild" }), 
+    "          +---------------------------+\n"
+    "          |       Schwarzfells        |\n"
+    "          |         FELLADEN          |\n"
+    "          |                           |\n"
+    "          | Felle aus der ganzen Welt |\n"
+    "          +---------------------------+\n" );
+  AddDetail( "baumstammreihen",
+    "Da die Holzhuette eine Blockhuette ist, besteht die Vorderfront aus "
+    "mehreren Baumstammreihen. So zehn in etwa werden es sicher sein." );
+  AddDetail( ({ "spuren","wieselspuren","spur","wieselspur" }),
+    "Die Spur fuehrt direkt neben der Vorderfront der Huette vorbei und "
+    "erinnert Dich an die eines Wiesels. Wie kommt ein Wiesel in das "
+    "Polargebiet? Irgendwie waere es doch interessant zu erfahren, woher es "
+    "gekommen bzw. wohin es gegangen ist." );
+  AddDetail( "wiesel",
+    "Nein, Wiesel siehst Du keines. Du meinst nur, die Spur eines erkannt zu "
+    "haben." );
+  AddDetail( "westen",
+    "Im Westen ragt die gewaltige Eispalisade aus dem Boden heraus und "
+    "versperrt Dir die Sicht auf das Dorf. Durch das Tor darin kannst Du nur "
+    "vereinzelte Gestalten erahnen. Ein Pfad fuehrt vom Tor bis zu Dir." );
+  AddDetail( ({ "gestalten","gestalt" }),
+    "Um welche Gestalten es sich handelt, die Du durch das Tor im Westen "
+    "sehen kannst, laesst sich nur erahnen. Aber es erscheint Dir als sehr "
+    "wahrscheinlich, dass es Xandim sind." );
+  AddDetail( ({ "tor","tore" }),
+    "Wenn Du Dich nach Westen drehst, siehst Du ein grosses Tor in der "
+    "Eispalisade, drehst Du Dich hingegen nach Osten, erkennst Du ein fast "
+    "genauso grosses Tor in der Holzpalisade. Um mehr daran zu erkennen, "
+    "musst Du allerdings schon naeher hingehen." );
+  AddDetail( "osten",
+    "Der Pfad im Schnee fuehrt schnurgerade bis zu einem verschlossenen Tor "
+    "in der Holzpalisade. Auch in diese Richtung siehst Du noch immer "
+    "zahlreiche Kinder, aber auch ein paar Erwachsene." );
+  AddDetail( "betrachtungsweise",
+    "Es bleibt Dir ueberlassen, ob der Weg fuer Dich von Westen nach Osten "
+    "oder von Osten nach Westen fuehrt." );
+  AddDetail( "sueden",
+    "Ein kurzer Weg fuehrt nach Sueden und endet genau vor der Tuer des "
+    "Ladens. Du hebt Deinen Blick und siehst nun die komplette Vorderfront "
+    "der Holzhuette." );
+  AddDetail( "blick",
+    "Du kannst Deinen Blick zwar heben, aber nicht untersuchen, also lass es "
+    "besser lieber." );
+  AddDetail( ({ "laden","huette","blockhuette","holzhuette" }),
+    "Am Ende eines kurzen Weges in Richtung Sueden wurde eine Holzhuette "
+    "gebaut, die einem Haendler als Laden dient. Das erkennst Du daran, dass "
+    "ueber der Tuer, an der Vorderfront der Huette, ein Schild mit einer "
+    "Aufschrift montiert wurde." );
+  AddDetail( "ende",
+    "Dein Ende ist noch nicht gekommen, sondern nur das Ende des kurzen "
+    "Weges, an dem eine Holzhuette errichtet wurde." );
+  AddDetail( "laeden",
+    "Laeden gibt es entlang des Pfades mehrere. Einige sind schlichte "
+    "Ladentische, die ueber Nacht abgebaut werden, andere wiederum sind "
+    "groessere Holzhuetten. Ueberall werden verschiedenste Waren angeboten." );
+  AddDetail( "nacht",
+    "Die kannst Du nicht sehen, weil es Tag ist." );
+  AddSpecialDetail( "schnee", "detailSchnee" );
+  AddSpecialDetail( ({ "rand","wegesrand" }), "detailWegesrand" );
+  AddSpecialDetail( "stein", "detailStein" );
+  AddSpecialDetail( "haelfte", "detailHaelfte" );
+  AddSpecialDetail( "gravur", "detailGravur" );
+  AddReadDetail( "gravur", #'GravurLesen );
+  AddDetail( ({ "pfad","weg","hauptpfad" }),
+    "Der Pfad fuehrt vom Tor in der Eispalisade zum Tor in der Holzpalisade "
+    "und ist etwa so breit wie ein Oger gross ist. Er wurde im Schnee "
+    "ausgetreten und ist an manchen Stellen so hart, sodass man aufpassen "
+    "muss, nicht auf irgendwelchen Eisplatten auszurutschen." );
+  AddSpecialDetail( ({ "stellen","eisplatten" }), "detailStellen" );
+  AddSpecialDetail( ({ "ausrutschen","gefahr" }), "detailGefahr" );
+  AddDetail( "glueck",
+    "Dein Glueck ist, dass die Eisplatten klein sind und Du nicht darauf "
+    "ausgerutscht bist." );
+  AddDetail( "oger",
+    "Der Oger diente nur als Vergleich, um die Breite des Pfades in einer Dir "
+    "bekannten Groesseneinheit zu verdeutlichen." );
+  AddDetail( "vergleich",
+    "Die Breite des Pfades wurde mit der Groesse eines Oger verglichen. Ich "
+    "nehme an, dass Du diesen Vergleich verstehen kannst." );
+  AddDetail( "vergleiche",
+    "Vergleiche kannst Du sicher ueberall finden, Du brauchst Dich dazu nur "
+    "genau umzusehen." );
+  AddDetail( ({ "breite","pfadbreite" }),
+    "Die Breite das Pfades entspricht der Groesse eines Oger." );
+  AddDetail( ({ "groesse","ogergroesse" }),
+    "Die Groesse eines Oger entspricht der Breite des Pfades." );
+  AddDetail( ({ "groesseneinheit","einheit","groesseneinheiten","einheiten" }),
+    "Es gibt unterschiedliche Groesseneinheiten und Vergleiche. Du kannst "
+    "auch gern eigene Vergleiche anstellen, wenn Dir das lieber ist." );
+  AddDetail( "eispalisade",
+    "Viel faellt Dir an dieser Palisade nicht auf, ausser dass sie "
+    "vollstaendig aus Schnee und Eis zu bestehen scheint. Ein Tor darin steht "
+    "weit offen und am oberen Abschluss des Palisade zeichnet sich eine "
+    "Silhouette gegen den blauen Himmel ab oder war das nur eine "
+    "Sinnestaeuschung?" );
+  AddDetail( "abschluss",
+    "Am oberen Abschluss der Eispalisade meinst Du, eine Silhouette gesehen "
+    "zu haben." );
+  AddDetail( "silhouette",
+    "Du koenntest wetten, dass sich am oberen Abschluss der Eispalisade eine "
+    "Silhouette gegen den Himmel abgezeichnet hat." );
+  AddDetail( "sinnestaeuschung",
+    "Taeuschten Dich Deine Sinne oder hast Du auf der Eispalisade "
+    "tatsaechlich eine Silhouette gesehen?" );
+  AddDetail( "sinne",
+    "Meist konntest Du ihnen trauen, doch haben sie Dich dieses Mal "
+    "nicht vielleicht getaeuscht?" );
+  AddDetail( "mal",
+    "Was soll ich dazu schon sagen? Dieses Mal eben!" );
+  AddDetail( "eis",
+    "Die gesamte Eispalisade wurde aus Schnee und Eis errichtet, aber auch "
+    "der Pfad weist hin und wieder Stellen von Eis auf." );
+  AddDetail( "holzpalisade",
+    "Da Du mitten auf dem Ostplatz stehst, kannst Du keine Details der "
+    "Palisade erkennen. Eines ist jedoch sicher: sie umschliesst den "
+    "ganzen Platz und oestlich von Dir erblickst Du ein Tor." );
+  AddDetail( "details",
+    "Details gibt es mehr als genug, da musst Du schon um einiges praeziser "
+    "werden." );
+  AddDetail( ({ "palisaden","palisade" }),
+    "Welche der beiden Palisaden willst Du Dir genauer ansehen? Die Holz- "
+    "oder die Eispalisade?" );
+  AddDetail( ({ "holzhuetten","huetten","blockhuetten" }),
+    "Die Holzhuetten, die suedlich von Dir aufgestellt bzw gebaut wurden, "
+    "sind schlichte Blockhuetten, in denen Haendler ihre Waren feil bieten. "
+    "Sie haben eine quadratische Grundflaeche, werden von vier Holzwaenden "
+    "umgeben, haben ein Flachdach und keine Fenster. Wenn Du schon immer "
+    "wissen wolltest, wie Blockhuetten aussehen, dann weisst Du es ab "
+    "heute." );
+  AddDetail( ({ "flachdach","dach","flachdaecher","daecher" }),
+    "Was soll ich viel dazu sagen? Die Daecher der Blockhuetten sind flach, "
+    "aber wenn Du es genau wissen willst, dann ist es natuerlich leicht "
+    "wellig, da das Dach aus nebeneinander gereihten Baumstaemmen besteht." );
+  AddDetail( "baumstaemme",
+    "Baumstaemme bilden sowohl die Waende als auch die Daecher der "
+    "Blockhuetten. Die Baumstaemme auf den Daechern stehen ein wenig drueber, "
+    "sodass man so einen kleinen Unterstand gegen Schneefaelle hat." );
+  AddDetail( "baumstamm",
+    "Es faellt Dir bei all den Baumstaemmen keiner besonders auf, ausser jener "
+    "vielleicht, wo eine Laterne neben der Tuer aufgehaengt wurde." );
+  AddDetail( "unterstand",
+    "Dadurch, dass einige Baumstaemme vom Dach ueber die Waende hinausragen, "
+    "entsteht ein kleiner Unterstand. Wie Du Dir den von dem Laden vor Dir "
+    "genauer ansiehst, faellt Dir auf, dass genau an der Ecke, rechts von "
+    "der Tuere, eine kleine Laterne aufgehaengt wurde. Bei starkem "
+    "Schneefall ist es sicher praktisch, wenn man sich hier unterstellen "
+    "kann." );
+  AddDetail( "ecke",
+    "An der Ecke, rechts von der Tuer vom Laden vor Deinen Augen, unter dem "
+    "Dach, wurde eine Laterne auf einem Nagel aufgehaengt." );
+  AddDetail( "nagel",
+    "Der Nagel ist wie jeder andere. Ein bisschen rostig und irgendwo hinein "
+    "geschlagen worden. Um genau zu sein, wurde er in einen Baumstamm "
+    "geschlagen und eine Laterne auf ihn aufgehaengt." );
+  AddDetail( "laterne",
+    "Jetzt weisst Du, wieso Dir die Laterne nicht frueher aufgefallen ist. "
+    "Sie leuchtet nicht mehr und deshalb ist sie ganz unscheinbar. Sie hat "
+    "ein Metallgehaeuse und auf allen Seiten gelbfarbene Glaeser, die, wenn "
+    "ein Sonnenstrahl drauffaellt, fuer eine ganz kurze Zeit leuchten." );
+  AddDetail( "seiten",
+    "Die Laterne hat an allen Seiten gelbfarbene Glaeser." );
+  AddDetail( ({ "sonnenstrahl","sonnenstrahlen","strahl","strahlen" }),
+    "Es faellt nur ganz selten ein Sonnenstrahl auf die Laterne, da sie ja "
+    "unter dem Dach aufgehaengt wurde." );
+  AddDetail( ({ "metallgehaeuse","gehaeuse" }),
+    "Zu dem Metallgehaeuse der Laterne koennte man auch Fassung sagen, denn "
+    "es dient dazu, die zahlreichen Glaeser einfassen zu koennen und die "
+    "Laterne irgendwo aufhaengen zu koennen." );
+  AddDetail( "fassung",
+    "So kann man auch zu dem Metallgehaeuse der Laterne sagen." );
+  AddDetail( ({ "glas","glaeser" }),
+    "Die Glaeser sorgen dafuer, dass das Licht der Laterne nach aussen "
+    "dringen kann und dass es nicht bei einer Windboe gleich ausgeht. Sie "
+    "sind gelb und verhindern die Sicht ins Innere." );
+  AddDetail( ({ "innere","inneres" }),
+    "Ins Innere der Laterne kannst Du nicht sehen." );
+  AddDetail( ({ "windboe","boe" }),
+    "Es ist fast komplett windstill. Die Laterne muss schon laenger "
+    "ausgegangen sein." );
+  AddDetail( "licht",
+    "Es ist zwar Licht, aber das hast Du nicht der Laterne, sondern der "
+    "Sonne zu verdanken." );
+  AddDetail( "sicht",
+    "Die Sicht auf das Innere der Laterne wird Dir wegen der Glaeser "
+    "genommen." );
+  AddDetail( ({ "schneefall","schneefaelle" }),
+    "Es ist sehr stark anzunehmen, dass es im Polargebiet haeufig schneit. "
+    "Da kommt einem so ein Unterstand doch sehr gelegen." );
+  AddDetail( ({ "grundflaeche","flaeche" }),
+    "Nachdem Du kurz die Vorderfront einer Huette abwanderst und Dir die "
+    "Seitenwaende dabei ansieht, kommst Du zu dem Schluss, dass die "
+    "Grundflaeche der Blockhuetten quadratisch sein muss." );
+  AddDetail( "schluss",
+    "Fuer Dich ist noch lange nicht Schluss. Du kommst nur zu dem Schluss, "
+    "dass die Grundflaeche der Holzhuetten quadratisch ist." );
+  AddDetail( ({ "seitenwaende","seitenwand" }),
+    "Die Seitenwaende der Huetten sind gleich lang wie die Vorderfront und "
+    "sehen auch gleich aus." );
+  AddDetail( ({ "waende","holzwaende","wand","holzwand" }),
+    "Die Huetten sind quadratisch gebaut und haben deshalb vier Waende. Jede "
+    "Wand besteht aus mehreren Baumstammreihen." );
+  AddDetail( ({ "ladentisch","ladentische" }),
+    "Manche Haendler haben sich nur einen Ladentisch als Verkaufsflaeche "
+    "aufgestellt, der abends dann wieder abgebaut und weggetragen wird. An "
+    "die Breitseiten wurde jeweils eine Stange gesteckt, die einen Meter "
+    "ueber der Tischflaeche mit einer Querstange verbunden sind, auf der "
+    "noch weitere Waren aufgehaengt wurden." );
+  AddDetail( ({ "breitseiten","breitseite"}),
+    "In den Breitseiten der Ladentische wurden durch Loecher Stangen "
+    "gesteckt." );
+  AddDetail( ({ "loecher","loch" }),
+    "Jede Breitseite eines Ladentisches weist ein Loch auf, durch das eine "
+    "Stange gesteckt wurde." );
+  AddDetail( "meter",
+    "Muss ich Dir jedes Mal Meter erklaeren? Das wird doch langweilig, aber "
+    "ich will nicht so sein. Die Querstange ist einen Meter ueber der "
+    "Tischflaeche." );
+  AddDetail( "querstange",
+    "Eine Querstange wurde an ihren Enden mit den beiden Stangen am "
+    "Ladentisch mit einigen Schnueren verbunden, damit man darauf noch "
+    "zusaetzlich einige Waren unterbringen kann." );
+  AddDetail( ({ "enden","querstangenenden" }),
+    "Die Enden der Querstange sind genauso wenig besonders wie die "
+    "Querstange selbst, nur mit dem Unterschied, dass an den Enden die "
+    "Schnuere gewickelt wurden." );
+  AddDetail( ({ "unterschied","unterschiede" }),
+    "Obwohl Du Dir die Stange jetzt sehr oft angesehen hast, findest Du "
+    "trotzdem keine weiteren Unterschiede. Nicht hinter jedem Detail ist "
+    "ein Forscherpunkt versteckt." );
+  AddDetail( "detail",
+    "Hinter diesem Detail ist kein Forscherpunkt!" );
+  AddDetail( "forscherpunkt",
+    "Der Forscherpunkt taucht auch trotz Untersuchens nicht auf." ); 
+  AddDetail( ({ "schnur","schnuere" }),
+    "Um die Enden der Stangen und der Querstange wurden starke Schnuere "
+    "derart gewickelt, sodass gewaehrleistet ist, dass die Querstange nicht "
+    "runterfallen kann." );
+  AddSpecialDetail( "stangen", "detailStangen" );
+  AddSpecialDetail( ({ "stange","sprung" }), "detailSprung" );
+  AddDetail( "tischflaeche",
+    "Die Tischflaeche dient den Haendlern als Verkaufsflaeche." );
+  AddDetail( "verkaufsflaeche",
+    "Ein Ladentisch reicht einigen Haendlern als Verkaufsflaeche vollkommen "
+    "aus. Auf dieser haben sie ihre Waren verteilt, sodass der Kunde "
+    "Einblick ueber das reichhaltige Angebot hat." );
+  AddDetail( "haendler",
+    "Auf dem Ostplatz sind zahlreiche Haendler, die auch ihren ihren eigenen "
+    "Ladentisch aufgestellt haben. Einen davon siehst Du Dir direkt vor "
+    "Dir." );
+  AddDetail( ({ "kunde","kundin" }),
+    "Der Kunde ist Koenig und soll deshalb ungehinderten Einblick ueber das "
+    "reichhaltige Angebot haben." );
+  AddDetail( "einblick",
+    "Da die Waren alle offen angepriesen werden, hast Du einen guten "
+    "Einblick auf das Angebot. Den groessten wirst Du erhalten, wenn Du "
+    "<zeige> eingibst." );
+  AddSpecialDetail( ({ "koenig","koenigin" }), "detailKoenig" );
+  AddDetail( ({ "ware","waren" }),
+    "Die Waren werden entweder in den Laeden oder direkt an den Ladentischen "
+    "verkauft. Die Ladentische sind so mit Waren ueberfuellt, dass Du "
+    "meinst, sie muessten jeden Moment zusammenbrechen. Das Angebot reicht "
+    "von bunten Schals, ueber merkwuerdige Glaskugeln bis zu kleinen "
+    "Murmeln." );
+  AddDetail( "angebot",
+    "Falls Du das ganze Angebot der Laeden sehen willst, dann rate ich Dir "
+    "<zeige> zu tippen." );
+  AddDetail( ({ "schals","schal","glaskugel","glaskugeln","murmel","murmeln" }),
+    "Diese Waren und noch viele mehr werden auf den Ladentischen neben dem "
+    "Pfad feil geboten. Sieh Dich ruhig um, es wird Dich sicher keiner dabei "
+    "stoeren." );  
+  AddDetail( ({ "holzgeruest","geruest" }),
+    "Neben dem Pfad, ein paar Meter weiter noerdlich, wurde ein grosses "
+    "Holzgeruest aufgestellt, von dem Du allerdings nicht viel erkennen "
+    "kannst, weil viele Kinder darauf rauf- und runterklettern. Du "
+    "koenntest einfach naeher hingehen, um Dir das ganze genau anzusehen." );
+  AddDetail( "xandim",
+    "Die Xandim schlendern gemuetlich an Dir vorbei, bleiben kurz vor einem "
+    "Laden stehen, betreten eine Blockhuette oder unterhalten sich "
+    "miteinander. Im Moment scheinen sie genug Zeit zu haben, den Tag "
+    "einfach zu geniessen." );
+  AddDetail( "tag",
+    "Folge dem Beispiel der Xandim!" );
+  AddDetail( "beispiel",
+    "Ich sagte 'folgen', nicht 'untersuchen'!!! Pass doch einmal ein "
+    "bisschen auf!" );
+  AddDetail( ({ "kinder","xandimkinder" }),
+    "Du stehst beinahe im Epizentrum der Kinderschar. Im Norden hat sich "
+    "eine grosse Anzahl auf einem Holzgeruest versammelt und ein wenig "
+    "westlich davon bauen einige Schneemaenner. Im Gegensatz zu den "
+    "Erwachsenen schlendern sie nicht so gemuetlich auf dem Pfad entlang, "
+    "sondern laufen froehlich an Dir vorbei." );
+  AddDetail( "anzahl",
+    "Sehr, sehr viele Kinder haben sich auf dem Holzgeruest versammelt." );
+  AddDetail( "gegensatz",
+    "Die Erwachsenen schlendern am Pfad entlang, waehrend die Kinder darauf "
+    "laufen. Das ist der Gegensatz." );
+  AddDetail( ({ "kinderschar","schar" }),
+    "Die Schar von Kindern ist ziemlich gross, aber irgendwie sehen sie sich "
+    "alle aehnlich. Das liegt daran, dass Du ihre Felle nicht von einander "
+    "unterscheiden kannst. Schliesslich bist Du auch kein Xandim, der sich "
+    "bei so etwas auskennt." );
+  AddDetail( "felle",
+    "Jedes Kind, wie auch die erwachsenen Xandim, traegt ein Fell." );
+  AddDetail( "kind",
+    "Es gibt nicht nur ein Kind, sondern bei weitem mehr." );
+  AddDetail( ({ "epizentrum","zentrum" }),
+    "Das Epizentrum der Kinderschar scheint sich genau noerdlich von Dir zu "
+    "befinden, waehrend Du derzeit genau im Zentrum der unterschiedliche "
+    "Laeden stehst." );
+  AddDetail( ({ "schneemaenner","schneemann" }),
+    "Westlich vom Holzgeruest bauen die Kinder fleissig an ihren "
+    "Schneemaennern und lassen sich dabei durch nichts und niemand stoeren." );
+  AddDetail( "naehe",
+    "Ganz nah muss das sein!" );
+  AddDetail( "himmel",
+    "Der Himmel ist blau, die Sonne scheint rot, ach was bist Du schlau, "
+    "aber trotzdem bald tot." );
+  AddDetail( "sonne",
+    "Du hast zulange in die Sonne gesehen, deshalb ist sie Dir rot "
+    "vorgekommen. Sie ist aber doch nur wieder gelb. So was langweiliges." );
+  AddDetail( ({ "tot","tod" }),
+    "Du denkst . o O (ich und tot? Wieso? Ich habe ja gar nichts gemacht? "
+    "Hoffentlich war das nur ein boeser Scherz.)" );
+  AddSpecialDetail( ({ "scherz","scherze" }), "detailScherz" );
+  AddDetail( "blau",
+    "Da Du keine Wolken erblicken kannst, ist der ganze Himmel fuer Dich "
+    "blau." );
+  AddDetail( ({ "wolken","wolke" }),
+    "Du kannst keine Wolken sehen. Endlich mal ein schoenes Wetter." );
+  AddDetail( "wetter",
+    "Das Wetter gefaellt Dir ganz gut." );
+  AddDetail( "preis",
+    "Gib am besten <zeige> ein, dann weisst Du wieviel die unterschiedlichen "
+    "Waren kosten." );
+  AddDetail( "ort",
+    "Du stehst genau im Zentrum der zahlreichen Laeden." );
+  AddDetail( ({ "holz","fichtenholz" }),
+    "Holz siehst Du mehr als genug. Und wenn Du genau sein willst, handelt "
+    "es sich hierbei um Fichtenholz." );
+  AddDetail( ({ "laune","herzenslaune" }),
+    "Die Laune der Kinder ist sehr gut und ausgelassen, deshalb schreien "
+    "und rufen sie auch so laut." );
+  AddDetail( "magier",
+    "Es soll da so ein Geruecht umgehen, dass das irgendwelche komischen "
+    "Leute sind, die staendig ideln." );
+  AddDetail( ({ "geruecht","geruechte" }),
+    "Jedes Geruecht darf man nicht blind trauen, aber es ist sicher etwas "
+    "Wahres dran." );
+  AddDetail( "wahres",
+    "An jedem Geruecht ist auch etwas Wahres." );
+  AddDetail( "leute",
+    "Wie komisch die Leute genau sind, weiss keiner genau, aber sie machen "
+    "schon bloede Sachen." );
+  AddDetail( ({ "sache","sachen" }),
+    "Magier machen nur Unfug und den Spielern gehen sie nur auf die Nerven." );
+  AddDetail( "unfug",
+    "Magier sind fuer fast jeden Unfug zu haben. Pass nur auf, dass sie mit "
+    "Dir keinen machen." );
+  AddDetail( "spieler",
+    "Spieler sind noergelnde Personen, die immer an jedem und allem etwas "
+    "auszusetzen haben. Man darf aber nicht vergessen, dass sie trotzdem "
+    "das Silberland bereichern." );
+  AddDetail( "silberland",
+    "Das Silberland wird sowohl von den Spielern und, ja, es ist "
+    "tatsaechlich so, von den Magiern bereichert." );
+  AddDetail( ({ "person","personen" }),
+    "Die Spieler sind Personen, die staendig noergeln und etwas auszusetzen "
+    "haben und dann wundern sie sich noch, dass die Magier dumme Scherze "
+    "mit ihnen machen." );
+  AddDetail( "reichweite",
+    "Das Kind, das an Dir vorbeigehuscht ist, ist so schnell davongelaufen, "
+    "dass es schon laengst aus deiner Reichweite ist." );
+  AddDetail( "stiefel",
+    "Stiefel hat man an oder nicht." );
+  AddDetail( "verkaeufer",
+    "Es gibt sehr viele Verkaeufer auf dem Ostplatz und einer von ihnen "
+    "steht Dir praktisch gegenueber." );
+  AddDetail( "vorbeilaufen",
+    "Ein Kind hat Dich eben beim Vorbeilaufen angestupst, aber Du erkennst "
+    "nicht mehr, wer es war, weil es so schnell verschwunden ist." );
+  AddDetail( "wuerstchen",
+    "Ich weiss, dass Du ein armes Wuerstchen bist, aber weitere als Dich "
+    "wirst Du hier nicht sehen, viel eher allerdings riechen." );
+  AddDetail( ({ "xandimfrau","frau" }),
+    "Eine Xandimfrau hat den Laden suedlich von Dir betreten, womit Du sie "
+    "nicht mehr sehen kannst." );
+  AddDetail( "bein",
+    "Ein Bein bricht man sich oft schneller als man sich denkt." );
+  AddDetail( "kreuzung",
+    "Nachdem sich hier vor Dir zwei Wege schneiden, gibt es demzufolge "
+    "auch eine Kreuzung. Du bist heute wieder so was von schlau, echt gut "
+    "erkannt. :o)" );
+  AddSpecialDetail( "erhebung","detailErhebung" );
+  AddDetail( ({ "entdeckung","entdeckungen" }),
+    "Wenn Du Dich hier genau umsiehst, wirst Du sicher noch einiges "
+    "entdecken koennen." );
+  AddSpecialDetail( "kratzer","detailKratzer" );
+  AddSpecialDetail( ({ "tier","tiere" }), "detailTier" );
+  AddDetail( "leistung",
+    "Du kannst auf Deine Leistung ruhig stolz sein, Du brauchst Dich "
+    "ueberhaupt nicht zu verstecken." );
+  AddDetail( "atmosphaere",
+    "Die Atmosphaere auf dem Ostplatz ist sehr angenehm, sodass Du Dich "
+    "hier wohl fuehlst und laenger bleiben willst." );
+  AddDetail( "verwendungszweck",
+    "Vielleicht kommst Du irgendwann dahinter, was der Verwendungszweck des "
+    "Steins am Wegesrand ist." );
+  AddDetail( ({ "nahrungsmittelbeschaffung","essensgeruch","wiesels",
+                "schnueren","holzwaenden","baumstaemmen","ladentisches",
+                "untersuchens","kindern","weges","schneemaennern","ladens",
+                "ladentischen","pfades","haendlern","schals" }),
+    "Das kannst Du nicht untersuchen!" );
+    
+  AddSound( DEFAULT_SOUND,
+    "Du bist wohl am lautesten Ort auf dem Platz angelangt. Du hoerst "
+    "Kinderschreie vom Geruest im Norden, waehrend direkt neben Dir ein "
+    "paar Haendler ziemlich laut versuchen, ihre Waren zu verkaufen. Hinzu "
+    "kommt noch, dass sich ueberall auf dem Weg Erwachsene unterhalten oder "
+    "gerade dabei sind, den Preis runterzuhandeln." );
+  AddSound( ({ "kinderschreie","kinder","schreie" }),
+    "Den Kinder ist es ziemlich egal, wie laut sie sind, denn sie schreien "
+    "und rufen nach Herzenslaune. Auch den Erwachsenen scheint das "
+    "ueberhaupt nicht zu stoeren." );
+  AddSound( "unterhaltung",
+    "Zwei Xandim ueberhalten sich gerade ueber ein Amulett, dass sie im "
+    "Schmuckladen kurz zuvor gesehen haben." );
+  AddSound( "haendler", #'HaendlerLauschen );
+  AddSound( ({ "erwachsene","erwachsenem","erwachsenen" }),
+    #'ErwachseneLauschen );
+    
+  AddSmell( DEFAULT_SMELL,
+    "Die Winterluft ist so klar wie ueberall auf dem Ostplatz, doch der "
+    "Geruch von Essen wird deutlich staerker. Ganz in der Naehe wird etwas "
+    "gebraten oder fritiert." );
+  AddSmell( ({ "winterluft","luft" }),
+    "Einmal mehr geniesst Du es, die Luft tief einzuatmen und Deine Sinne "
+    "neu beleben zu lassen." );
+  AddSmell( ({ "essen","geruch","essensgeruch","bratengeruch","braten" }),
+    "Ein Bratengeruch weht von Westen genau vor Deiner Nase vorbei. "
+    "Irgendwie hast Du ploetzlich einen grossen Hunger." );
+  AddSmell( "wuerstchen",
+    "Dem Geruch nach zu urteilen werden wohl westlich von Dir ein paar "
+    "Wuerstchen gegrillt." );
+
+  AddRoomMessage( ({
+    BS("Ein Kind stupst Dich beim Vorbeilaufen an, ist aber schon ausserhalb "
+    "Deiner Reichweite, bevor Du erkennen kannst, wer es war."),
+    BS("Eine Xandimfrau geht an Dir vorbei, streift sich die Stiefel auf der "
+    "Fussmatte ab und betritt den Laden suedlich von Dir."),
+    "Ein Verkaeufer ruft: Heisse Wuerstchen! Heisse Wuerstchen!\n"
+                   }), 60, "roommessage" );
+    
+//ENDDETAILS
+
+  AddSpecialExit( "westen", "gehen" );
+  AddSpecialExit( "osten", "gehen" );
+  AddSpecialExit( "norden", "gehen" );
+  AddSpecialExit( "sueden", "gehen" );
+  AddSpecialExit( "nordwesten", "gehen" );
+  AddSpecialExit( "nordosten", "gehen" );
+  AddSpecialExit( "suedosten", "gehen" );
+  AddExit( "oben", ([
+        EX_TESTFUNC : #'exit_test,
+        EX_DEST     : "./fellladendach",
+        EX_MSG      : "ueber einen Baumstamm hinauf auf das Dach" ]) );
+  SetProp( P_HIDE_EXITS, ({ "oben" }) );
+
+  AddCmd( ({ "streif","streife" }), "cmd_streifen" );
+  AddCmd( ({ "meld","melde" }), "cmd_melden" );
+  AddCmd( ({ "such","suche" }), "cmd_suchen" );
+  AddCmd( ({ "stell","stelle" }), "cmd_stellen" );
+  AddCmd( ({ "vergleich","vergleiche" }), "cmd_vergleichen" );
+  AddCmd( ({ "folg","folge" }), "cmd_folgen" );
+//AddCmd( ({ "verfolg","verfolge" }), "verfolgen" ); fuer Wiesel
+  AddCmd( ({ "rutsch","rutsche" }), "cmd_rutschen" );
+  AddCmd( ({ "putz","putze","raeum","raeume","wisch","wische" }),
+             "cmd_putzen" );
+  AddCmd( ({ "beseitig","beseitige" }), "cmd_beseitigen" );
+  AddCmd( ({ "geniess","geniesse" }), "cmd_geniessen" );
+  AddCmd( ({ "wett","wette" }), "cmd_wetten" );
+  AddCmd( ({ "tausch","tausche","wechsl","wechsle","wechsel" }),
+             "cmd_tauschen" );
+  AddCmd( ({ "betret","betrete","betritt" }), "cmd_betreten" );
+  AddCmd( ({ "vergroesser","vergroessere","vergroessre" }),
+             "cmd_vergroessern" );
+
+  AddItem( NPC "graufell", REFRESH_DESTRUCT );
+  RemoveItem( "/obj/entsorg" );
+}
+
+int exit_test()
+{
+  if ( !TP -> id("\nschneewiesel") )
+  {
+    write(
+      "Du musst Dir schon eine bestimmte Methode ueberlegen, um dort hin zu "
+      "kommen!\n" );
+    return 0;
+  }
+  return 1;
+}
+//SPECIAL DETAILS
+string detailGefahr()
+{
+  if ( rutschgefahr )
+    return BS(
+      "Mitten auf dem Weg gibt es schon sehr grosse Stellen mit Eis, wo die "
+      "Gefahr des Ausrutschens schon sehr gross ist." );
+  return
+    "Die Gefahr ist sehr gering, weil die eisigen Stellen noch klein sind.\n";
+}
+
+string detailStellen()
+{
+  if ( rutschgefahr )
+  {
+    return BS(
+      "Manche Stellen wurden schon sooft betreten, dass der Schnee sich "
+      "verfestigt hat und irgendwann zu Eis geworden ist. Einige von diesen "
+      "Stellen wiederum scheinen gaenzlich von Schnee freigeschaufelt worden "
+      "zu sein, dass man sicher gut darauf dahinrutschen kann." );
+  }
+  return BS(
+    "Manche Stellen wurden schon sooft betreten, dass der Schnee sich "
+    "verfestigt hat und irgendwann zu Eis geworden ist. Zum Glueck sind die "
+    "Stellen noch sehr klein und die Gefahr des Ausrutschens dadurch gering. "
+    "Wie das wohl waere, wenn die Stellen groesser werden? Gar nicht "
+    "auszudenken, wie leicht man sich da dann das Bein brechen koennte." );
+}
+
+string detailHunger()
+{
+  string text;
+  object hunger;
+
+  switch ( hungrig[getuid(TP)] )
+  {
+    case 1:
+      text = "Also, wenn Du es Dir recht ueberlegst, bekommst Du allmaehlich "
+             "Hunger bei diesem Geruch.";
+    break;
+    case 2:
+      text = "Irgendwie scheint der Geruch in der Nase staerker geworden zu "
+             "sein und Dein Hunger steigt.";
+    break;
+    case 3:
+      text = "Der Geruch von Braten ist schon sehr intensiv. Die "
+             "Speichelbildung wird bei Dir schon merklich staerker.";
+    break;
+    case 4:
+      text = "Bald wirst Du verrueckt, wenn dieser Bratengeruch noch laenger "
+             "in Deine Nase steigt. Dein Hunger steigt ins Unermaessliche.";
+    break;
+    default:
+      text = "Du drehst durch. Du musst sofort etwas vom dem Braten essen, "
+             "sonst verhungerst Du am Ende noch.";
+      if ( hunger = present("\nbratenhunger",TP) )
+      {
+      	text += " Du kannst nur mehr an einen grossen Rentierbraten denken.";
+      }
+      else
+      {
+      	if ( (3/4)*TP->QueryProp(P_FOOD) < TP->QueryProp(P_MAX_FOOD) )
+      	{
+      	  hunger = clone_object(OBJ "bratenhunger");
+      	  hunger -> move(TP,M_NOCHECK|M_SILENT);
+      	  write_file(LOG "forsch.log",ctime()+": "+CAP(getuid(TP))+
+      	    " wird hungrig.\n");
+      	}
+      }
+    break;
+  }
+  hungrig[getuid(TP)] ++;
+  return BS( text );
+}
+hunger_weg()
+{
+  hungrig[getuid(TP)] = 1;
+}
+
+string detailKoenig()
+{
+  if ( TP->QueryProp(P_GENDER) == FEMALE )
+  {
+    return BS(
+      "Du bist zwar eine potentielle Kundin, aber noch lange keine Koenigin. "
+      "Dazu gehoert schon mehr, als nur ein Detail zu untersuchen." );
+  }
+  return BS(
+    "Du bist zwar ein potentieller Kunde, aber noch lange kein Koenig. Dazu "
+    "gehoert schon mehr, als nur ein Detail zu untersuchen." );
+}
+
+string detailSprung()
+{
+  if ( stange_getauscht )
+  {
+    return BS(
+      "Sowas siehst Du da nicht!" );
+  }
+  return BS(
+    "Mitten in der Stange ist bereits ein grosser Sprung drin. Wenn nicht "
+    "bald irgendwer etwas dagegen macht, dann bricht die Stange sicher bald "
+    "ab." );
+}
+
+string detailStangen()
+{
+  string text;
+
+  text = "Zwei Stangen sind an den Breitseiten der Ladentische befestigt "
+         "worden, indem sie durch ein Loch gesteckt wurden und so am Boden "
+         "aufliegen. Am oberen Ende ist mit einer staerkeren Schnur die "
+         "Querstange festgebunden.";
+  if ( !stange_getauscht )
+    text += " Eine der beiden Stangen hat einen nicht gerade unbedeutenden "
+            "Sprung, was darauf hinweist, dass die Stange nicht mehr lange "
+            "halten wird.";
+  return BS( text );
+}
+
+string detailSchnee()
+{
+  if ( stein_frei )
+  {
+    return BS(
+      "Dass auf dem ganzen Platz Schnee liegt ist nicht weiter "
+      "verwunderlich, in Anbetracht der Tatsache, dass Du Dich im "
+      "Polargebiet aufhaeltst. Wohl aber fallen Dir die Spuren im "
+      "Schnee neben dem Pfad auf. Sowohl der Boden als auch die "
+      "Huetten sind in weiss getaucht." );
+  }
+  return BS(
+    "Dass auf dem ganzen Platz Schnee liegt ist nicht weiter verwunderlich, "
+    "in Anbetracht der Tatsache, dass Du Dich im Polargebiet aufhaeltst. "
+    "Wohl aber fallen Dir die Spuren im Schnee neben dem Pfad auf. Der "
+    "Boden, die Holzhuetten, auch der Stein am Wegesrand sind in weiss "
+    "getaucht." );
+}
+
+string detailWegesrand()
+{
+  if ( stein_frei )
+  {
+    return BS(
+      "Direkt neben dem Weg liegt ein Stein im Schnee. Irgendetwas scheint "
+      "in ihn eingraviert worden zu sein." );
+  }
+  return BS(
+    "Direkt neben dem Weg liegt ein Stein, der ebenso wie der Boden und die "
+    "Holzhuetten mit Schnee bedeckt ist." );  
+}
+
+string detailStein()
+{
+  if ( stein_frei )
+  {
+    return BS(
+      "Der Stein ist viermal so gross wie ein Beutel und liegt scheinbar "
+      "ohne Grund direkt neben dem Weg im Schnee. Auf ihm kannst Du "
+      "eindeutig eine Gravur erkennen, die Du lesen koenntest." );
+  }
+  return BS(
+    "Der Stein ist etwa viermal so gross wie ein Beutel und liegt scheinbar "
+    "ohne Grund direkt neben dem Weg. Die oberere Haelfte ist mit Schnee "
+    "bedeckt." );
+}
+
+string detailGravur()
+{
+  if ( stein_frei )
+    return
+      "In grossen Buchstaben kannst Du folgendes drauf lesen:\n\n"
+      "            STARTSTEIN    \n"
+      "                DES       \n"
+      "            JAEHRLICHEN    \n"
+      "        HUNDESCHLITTENRENNES.\n";
+  return
+    "Du siehst weit und breit keine Gravur, die Du untersuchen koenntest.\n";
+}
+
+string detailHaelfte()
+{
+  if ( stein_frei )
+    return
+      "Die obere Haelfte vom Stein am Wegesrand wurde vom Schnee befreit.\n";
+  return BS(
+    "Du koenntest ja den Schnee vom Stein irgendwie beseitigen und "
+    "vielleicht siehst Du so sogar den Verwendungszweck." );
+}
+
+string GravurLesen(string key)
+{
+  if ( stein_frei )
+    return
+      "In grossen Buchstaben kannst Du folgendes drauf lesen:\n\n"
+      "            STARTSTEIN    \n"
+      "                DES       \n"
+      "            JAEHRLICHEN    \n"
+      "        HUNDESCHLITTENRENNES.\n";
+  return
+    "Du siehst weit und breit keine Gravur, die Du lesen koenntest.\n";
+}
+
+string HaendlerLauschen(string key)
+{
+  switch( random(5) )
+  {
+    case 0:
+      return "Ein Haendler ruft: Treten Sie ein und kaufen sie das neueste "
+             "Fell.\n";
+    break;
+    case 1:
+      return "Ein Verkaeufer schreit: Heisse Wuerstchen! Heisse Wuerstchen!\n";
+    break;
+    case 2:
+      return "Ein Haendler ruft: Hereinspaziert! Heute gibt es Ringe im "
+             "Sonderangebot!\n";
+    break;
+    case 3:
+      return "Ein Haendler schreit: Dieses Fuchsfell kostet heute "
+             "tatsaechlich nur\n"
+             "Ein Haendler schreit: 1200 Muenzen!\n";
+    case 4:
+      return "Ein Verkaeufer bruellt: Rentierkeule! Frisch vom Grill!";
+    break;
+    default: return 0;
+  }
+}
+string ErwachseneLauschen(string key)
+{
+  switch( random(5) )
+  {
+    case 0:
+      return "Eine Frau sagt entruestet: Soviel zu verlangen, ist ja "
+             "ungeheuerlich. Wenn das\n"
+             "Eine Frau sagt entruestet: mit den Preisen so weitergeht, "
+             "fahre ich einmal nach\n"
+             "Eine Frau sagt entruestet: Midas.\n";
+    break;
+    case 1:
+      return "Ein Xandim meint zu einem Haendler: Wenn Du noch um 200 "
+             "Muenzen runtergehst,\n"
+             "Ein Xandim meint zu einem Haendler: dann kauf ich das Fell.\n";
+    break;
+    case 2:
+      return "Ein Mann fragt: Was kostet bitte an dem Amulett soviel?\n";
+    break;
+    case 3:
+      return "Eine Frau meint: Dieses Wuerstchen ist total zaeh. Was haben "
+             "Sie fuer ein\n"
+             "Eine Frau meint: Fleisch verwendet?\n";
+    break;
+    case 4:
+      return "Die Stimme eines Mannes erhebt sich: Wollen Sie mich ausrauben "
+             "mit ihren\n"
+             "Die Stimme eines Mannes erhebt sich: Preisen?\n";
+    break;
+    default: return 0;
+  }	
+}
+
+string detailErhebung()
+{
+  if ( member(vergleich_gefunden, getuid(TP)) != -1 )
+  {
+    write_file(LOG "forsch.log",ctime()+": "+CAP(getuid(TP))+
+      " entdeckt Erhebung.\n");
+    return BS(
+      "Du schaust Dir die Erhebung genauer an, merkst aber gleich, dass "
+      "einfach nur Schnee angeweht wurde, der sich hier gesammelt hat. Es "
+      "war aber trotzdem eine gute Leistung von Dir, dass Du das gefunden "
+      "hast!" );
+  }
+  return BS(
+    "Du siehst Dich ein wenig um, aber Du findest keine Erhebung an, die "
+    "Dir irgendwie auffallen wuerde." );
+}
+
+string detailKratzer()
+{
+  if ( member(vergleich_gefunden, getuid(TP)) != -1 )
+  {
+    write_file(LOG "forsch.log",ctime()+": "+CAP(getuid(TP))+
+      " entdeckt Kratzer.\n");
+    return BS(
+      "Dort wo die Vorderfront auf die Seitenwand trifft, siehst Du mehrere "
+      "Kratzer von unten nach oben verlaufen, als ob irgendein Tier nach "
+      "oben geklettert waere." );
+  }
+  return
+    "Sowas siehst Du da nicht!\n";
+}
+
+string detailTier()
+{
+  if ( member(vergleich_gefunden, getuid(TP)) != -1 )
+  {
+    write_file(LOG "forsch.log",ctime()+": "+CAP(getuid(TP))+
+      " entdeckt Tier.\n");
+    return BS(
+      "Du kannst anhand der Kratzer nicht erkennen, durch welches Tier diese "
+      "hinterlassen wurde, aber Hund war es bestimmt keiner, sondern um "
+      "vieles kleiner." );
+  }
+  return BS(
+    "Die Tiere, die Dir am Ostplatz staendig auffallen, sind natuerlich die "
+    "Schlittenhunde, die ueberall zu sein scheinen." );
+}
+
+string detailScherz()
+{
+  if ( member (scherz, getuid(TP)) == -1 )
+    scherz += ({ getuid(TP) });
+  return BS(
+    "Ueber den Tod scherzt man nicht und solche Scherze findest Du einfach "
+    "geschmacklos. Wenn Du noch so einen ueblen Scherz findest, dann "
+    "meldest Du das einem Magier." );
+}
+//END SPECIAL DETAILS
+
+//COMMANDS
+int cmd_streifen(string str)
+{
+  int i, schuhwerk_getragen;
+  string was, dummy, worauf;
+  object *schuhwerk;
+
+  schuhwerk = TP->QueryProp(P_ARMOURS);
+  for ( i=sizeof(schuhwerk); i-->0; )
+  {
+    if ( schuhwerk[i]->QueryProp(P_ARMOUR_TYPE) == AT_BOOT )
+    {
+      schuhwerk_getragen = 1;
+      break;
+    }
+  }
+
+  notify_fail( "Was willst Du wo abstreifen?\n" );
+
+  if ( !str ) return 0;
+  if ( sscanf(str, "%s %s %s ab", was, dummy, worauf) != 3 ) return 0;
+  if ( member( ({ "auf","an" }),dummy) == -1 ) return 0;
+  if ( member( ({ "fuesse" }),was) != -1 )
+  {
+    if ( member( ({ "matte","fussmatte" }), worauf) != -1 )
+    {
+      if ( schuhwerk_getragen )
+      {
+        write( BS(
+          "Du hast doch "+schuhwerk[i]->name(WER)+" an. Das musst Du schon "
+          "ausziehen, um die Fuesse abstreifen zu koennen.") );
+        return -1;
+      }
+      write( BS(
+        "Da Du gut erzogen worden bist, streifst Du Dir zuerst die Fuesse "
+        "auf der Matte ab und betrittst erst dann den Laden.") );
+      say(
+        TPN+" streift sich "+TP->QueryPossPronoun(MALE,WEN,PLURAL)+" Fuesse "
+        "ab und betritt den Laden.\n" );
+      if ( "/d/polar/rage/ostplatz/room/fellladen_c3"->Getdreck() < 4 )
+        "/d/polar/rage/ostplatz/room/fellladen_c3" -> schriftzug();
+      "/d/polar/rage/ostplatz/room/fellladen_c3" -> Dreckiger();
+      TP -> move(ROOM "fellladen_c3", M_GO|M_SILENT);
+      write_file(LOG "forsch.log",ctime()+": "+CAP(getuid(TP))+
+        " streift die Fuesse draussen ab.\n");
+      return 1;
+    }
+    notify_fail( "Worauf willst Du Deine Fuesse abstreifen?\n" );
+  }
+
+  if ( member( ({ "stiefel","schuhe","sandalen" }),was) != -1 )
+  {
+    if ( member( ({ "matte","fussmatte" }), worauf) != -1 )
+    {
+      if ( !schuhwerk_getragen )
+      {
+        write(
+  	  "Du bist doch barfuss! Du kannst Dir nur Deine Fuesse "
+  	  "abstreifen.\n" );
+        return -1;
+      }
+      write( BS(
+        "Deine Eltern haben Dich gut erzogen, denn bevor Du den Laden "
+        "betrittst streifst Du Deine "+schuhwerk[i]->Name(WEN)+
+        " auf der Matte ab.") );
+      say(
+        TPN+" streift sich "+TP->QueryPossPronoun(FEMALE,WEN,PLURAL)+" "+
+        schuhwerk[i]->Name(WEN)+" ab und betritt den Laden.\n" );
+      if ( "/d/polar/rage/ostplatz/room/fellladen_c3"->Getdreck() < 4 )
+        "/d/polar/rage/ostplatz/room/fellladen_c3" -> schriftzug();
+      "/d/polar/rage/ostplatz/room/fellladen_c3" -> Dreckiger();
+      TP -> move(ROOM "fellladen_c3", M_GO|M_SILENT);
+      write_file(LOG "forsch.log",ctime()+": "+CAP(getuid(TP))+
+        " streift die Stiefel draussen ab.\n");
+      return 1;
+    }
+    if ( !schuhwerk_getragen )
+    {
+      write(
+        "Du bist doch barfuss! Du kannst Dir nur Deine Fuesse "
+  	"abstreifen.\n" );
+      return -1;
+    }
+    notify_fail( "Worauf willst Du Deine "+schuhwerk[i]->Name(WER)+
+                 " abstreifen?\n" );
+  }
+}
+
+int cmd_melden(string str)
+{
+  mixed *mail_melder, *mail_magier;
+  string wem, was, text_melder, text_magier;
+
+  notify_fail( "Wem willst Du was melden?\n" );
+
+  if ( !str || str=="" ) return 0;
+  if ( member( ({ "scherz","scherze" }),str ) != -1 )
+  {
+    write(
+      "Wem willst Du die Scherze melden?\n" );
+    return -1;
+  }
+  if ( sscanf(str,"%s %s",wem,was) != 2 ) return 0;
+  if ( member( ({ "magier","rage" }), wem ) != -1 )
+  {
+    if ( member( ({ "scherz","scherze"}), was) != -1 )
+    {
+      if ( member(gemeldet,getuid(TP)) != -1 )
+      {
+      	write( BS(
+      	  "Du brauchst nicht staendig die Scherze zu melden. Auch Rage "
+      	  "braucht ein wenig Zeit, um Deine Beschwerde zu bearbeiten.") );
+      	return -1;
+      }
+      if ( member(meldbar,getuid(TP)) != -1 )
+      {
+        write( BS(
+          "Nachdem Dir die Scherze von Rage eindeutig zu weit gegangen sind, "
+          "schickst Du ihm gleich eine Mail, damit er nicht mehr so dumme "
+          "Scherze mit Dir macht.") );
+        say(
+          TPN+" macht sich daran, jemandem eine Mail zu schreiben.\n" );
+        text_melder = "Hallo "+TPN+"!\n"
+                      "\n"
+                      "Deine Beschwerde ueber die hinterhaeltigen und "
+                      "gemeinen Witze sind bei Rage\n"
+                      "eingelangt.\n"
+                      "Er wird sich sobald wie moeglich darum kuemmern, dass "
+                      "Dir solche\n"
+                      "Unannehmlichkeiten nicht wieder passieren.\n"
+                      "\n"
+                      "Beschwerdebuero Yiqanuc - stets um ihre Anfragen "
+                      "bemueht";                    
+        text_magier = "Hallo Rage!\n\n"
+                      "Wieder einmal hat sich ein Spieler bei Dir wegen "
+                      "Deiner dummen Scherz\n"
+                      "aufgeregt.\n";
+        mail_melder = allocate(9);
+        mail_melder[MSG_FROM] = "Beschwerdebuero Yiqanuc";
+        mail_melder[MSG_SENDER] = "rage";
+        mail_melder[MSG_RECIPIENT] = getuid(TP);
+        mail_melder[MSG_SUBJECT] = "Beschwerdeeingang";
+        mail_melder[MSG_DATE] = dtime(time());
+        mail_melder[MSG_BODY] = text_melder;
+        "/secure/mailer" -> DeliverMail(mail_melder, 1);
+        mail_magier = allocate(9);
+        mail_magier[MSG_FROM] = getuid(TP);
+        mail_magier[MSG_SENDER] = getuid(TP);
+        mail_magier[MSG_RECIPIENT] = "rage";
+        mail_magier[MSG_SUBJECT] = "Beschwerdeeingang";
+        mail_magier[MSG_DATE] = dtime(time());
+        mail_magier[MSG_BODY] = text_magier;
+        "/secure/mailer" -> DeliverMail(mail_magier, 1);
+        gemeldet += ({ getuid(TP) });
+        return 1;
+      }
+      write(
+        "Du musst zuerst einen Scherz finden, um diesen melden zu "
+        "koennen.\n" );
+      return -1;
+    }
+    write(
+      "Was moechtest Du gerne Rage melden?\n" );
+    return -1;
+  }
+}
+
+int cmd_suchen(string str)
+{
+  if ( member( ({ "scherz","scherze" }),str ) != -1 )
+  {
+    if ( member(scherz,getuid(TP)) != -1 )
+    {
+      write( BS(
+        "Als Du auf die Suche nach einem Scherz gehst, trifft Dich "
+        "auf einmal von hinten ein Schneeball im Genick! Jetzt reicht "
+        "es Dir endgueltig und Du wirst solche Scherze einem Magier "
+        "unverzueglich melden.") );
+      say( BS(
+        TPN+" spaziert mit weitaufgerissenen Augen an Dir vorbei, als ob "+
+        TP->QueryPronoun(WER)+" auf der Suche nach etwas wäre, doch "
+        "ploetzlich wird "+TP->QueryPronoun(WER)+" von einem Schneeball "
+        "im Genick getroffen und bricht die Suche ab.") );
+      meldbar += ({ getuid(TP) });
+      write_file(LOG "forsch.log",ctime()+": "+CAP(getuid(TP))+
+        " hat Scherz gefunden.\n");
+      return 1;
+    }
+    if ( member(meldbar,getuid(TP)) != -1 )
+    {
+      write( BS(
+        "Du machst Dich ein weiteres Mal auf die Suche nach einem Scherz, "
+        "aber dieses Mal ueberrascht Dich keiner. Meld doch besser zuerst "
+        "die beiden, die Du bisher erlebt hast.") );
+      say(
+        TP+" scheint auf der Suche nach etwas zu sein.\n" );
+      return -1;
+    }
+    write( BS(
+      "Du suchst zwar ganz verbissen nach einem Scherz, aber weit und breit "
+      "laesst sich keiner finden. Sowas aergerliches!") );
+    return -1;
+  }
+}
+
+int cmd_stellen(string str)
+{
+  notify_fail( "Willst Du irgendeinen Vergleich anstellen?\n" );
+  
+  if ( str == "" || !str ) return 0;
+
+  if ( member( ({ "vergleich","vergleiche",
+                  "vergleich an","vergleiche an"
+                }),str) != -1 )
+  {
+    write( BS(
+      "Wenn Du tatsaechlich irgendeinen Vergleich anstellen willst, "
+      "dann verwende bitte die Syntax < vergleiche x mit y >.") );
+    return 1;
+  } 
+}
+
+int cmd_vergleichen(string str)
+{
+  string was, womit, text;
+  string *det;
+  mapping uniq;
+
+  uniq = ([ "kurzer weg":"kurzer pfad",
+                   "weg":"pfad","hauptpfad":"pfad",
+                "wolken":"wolke",
+                  "tore":"tor",
+          "seitenwaende":"seitenwand",
+             "fussmatte":"matte",
+          "xandimkinder":"kind","kinder":"kind",
+            "erwachsene":"erwachsener","erwachsenen":"erwachsener",
+                "kunde":"kundin" ]);
+
+  notify_fail( "Was moechtest Du womit vergleichen?\n" );
+
+  if ( !str || str=="" ) return 0;
+  if ( sscanf(str,"%s mit %s", was, womit) != 2 ) return 0;
+
+  det = m_indices(QueryProp(P_DETAILS))+
+        m_indices(QueryProp(P_SPECIAL_DETAILS));
+
+  if ( member(det,was) != -1 && member(det,womit) != -1 )
+  {
+    if  (was == womit)
+    {
+     write( "Ein und dasselbe miteinander zu vergleichen hat wenig Sinn.\n");
+     return -1;
+    }
+    if ( QueryProp(P_DETAILS)[was]==QueryProp(P_DETAILS)[womit] )
+    {
+      write(
+        "Zwei aehnliche Dinge miteinander zu vergleichen bringt nicht "
+        "viel.\n" );
+      return -1;
+    }
+    was = uniq[was] || was;
+    womit = uniq[womit] || womit;
+    if ( sizeof(paare & ({ was+":"+womit, womit+":"+was })) )
+    {
+      if ( (was+":"+womit == richtiges_paar) ||
+           (womit+":"+was == richtiges_paar) )
+      {
+        text = vergleichstexte[was+":"+womit] ||
+               vergleichstexte[womit+":"+was];
+        write(text);
+    	vergleich_gefunden += ({ getuid(TP) });
+        return 1;
+      }
+      write( BS(
+        "Es ist gar keine dumme Idee, diese beiden zu vergleichen, dennoch "
+        "faellt Dir nichts Besonderes auf.") );
+      return -1;
+    }
+    else
+    {
+      write(
+        "Du vergleichst "+CAP(was)+" mit "+CAP(womit)+", aber Du entdeckst "
+        "dabei keine Aehnlichkeiten.\n" );
+      return -1;
+    }
+  }
+  write( BS(
+    "Du kannst nur Dinge miteinander vergleichen, die Du im Raum "
+    "auch siehst.") );
+  return -1; 
+}
+
+int cmd_folgen(string str)
+{
+  notify_fail( "Wem oder was willst Du folgen?\n" );
+
+  if ( str=="" || !str ) return 0;
+  if ( member( ({ "dem beispiel","beispiel" }),str) != -1 )
+  {
+    write(
+      "Dem Bespiel von wem willst Du folgen?\n" );
+    return -1;
+  }
+  if ( member( ({ "dem beispiel der xandim","beispiel der xandim",
+                  "dem beispiel von xandim","beispiel von xandim",
+                  "dem beispiel vom xandim","beispiel vom xandim"
+                }),str) != 1 )
+  {
+    write(
+      "Ja, folge ihrem Beispiel endlich! Was machen die meisten Erwachsenen "
+      "hier?\n" );
+    say(
+      TPN+" will zwar was machen, weiss aber selbst noch nicht genau was.\n" );
+    write_file(LOG "forsch.log",ctime()+": "+CAP(getuid(TP))+
+      " will dem Beispiel folgen.\n");
+    return 1;
+  }
+}
+  
+int cmd_rutschen(string str)
+{
+  int i, schuhwerk_getragen;
+  object *schuhwerk, blatt;
+
+  notify_fail( "Worauf willst Du aus- bzw dahinrutschen?\n" );
+
+  schuhwerk = TP->QueryProp(P_ARMOURS);
+  for ( i=sizeof(schuhwerk); i-->0; )
+  {
+    if ( schuhwerk[i]->QueryProp(P_ARMOUR_TYPE) == AT_BOOT )
+    {
+      schuhwerk_getragen = 1;
+      break;
+    }
+  }
+  if ( str == "aus" )
+  {
+    write(
+      "Worauf willst Du ausrutschen?\n" );
+    return -1;
+  }
+  if ( str == "dahin" )
+  {
+    write(
+      "Worauf willst Du dahinrutschen?\n" );
+    return -1;
+  }
+  if ( member( ({ "auf eis aus","auf stellen aus",
+                  "auf eisstellen aus"
+                }),str) != -1 )
+  {
+    write( BS(
+      "Du weisst zwar nicht, was es bringen soll, aber Du rutschst bewusst "
+      "auf einer Eisflaeche aus und landest dabei auf Deinem "
+      "Allerwertesten.") );
+    say( BS(
+      TPN+" bewegt sich ganz kurz auf einer Eisflaeche, rutscht allerdings "
+      "gleich darauf aus.") );
+    return -1;
+  }
+  if ( member( ({ "auf eis dahin","auf stellen dahin",
+                  "auf eisstellen dahin"
+                }),str) != -1 )
+  {
+    if ( schuhwerk_getragen )
+    {
+      if ( TP->QueryAttribute(A_DEX) < 10+random(10) )
+      {
+      	write( BS(
+      	  "Du versuchst, elegant auf der kleinen Eisflaeche dahinzugleiten, "
+      	  "doch Du stellst Dich so ungeschickt an, dass Du nach einem "
+      	  "halben Meter ausrutschst und ziemlich dumm auf Deinem Ruecken "
+      	  "dabei landest.") );
+      	say(
+      	  TPN+" versucht sich als Eiskunstlaeufer, rutscht aber "
+      	  "peinlicherweise aus und landet auf "+
+      	  TP->QueryPossPronoun(MALE,WEM,SINGULAR)+" Ruecken.\n" );
+      	return -1;
+      }
+      write( BS(
+        "Elegant gleitest Du auf "+schuhwerk[i]->name(WEM)+" von einem Ende "
+        "der Eisflaeche zur anderen und fuehlst Dich phantastisch dabei. Du "
+        "wuerdest das am liebsten gleich wiederholen.") );
+      say( BS(
+        "Anmutig gleitet "+TPN+" ueber die kleine Eisflaeche am Weg und "
+        "beweist, wie gut "+TP->QueryPronoun(WER)+" eislaufen kann.") );
+      if ( !random(4) && blatt_da )
+      {
+      	write( BS(
+      	  "Du hast zu viel Anlauf genommen und gleitest ueber Dein Ziel "
+      	  "hinaus in einen Schneehaufen hinein, wo Dein Schienbein auf etwas "
+      	  "trifft, das dort schon laenger gelegen haben muss, und Du es nun "
+      	  "durch Deinen Schwung zu Tage gefoerdert hast.") );
+      	say( BS(
+      	  "Dabei schlittert "+TP->QueryPronoun(WER)+" in einen Schneehaufen "
+      	  "hinein und stoesst dabei etwas auf den Weg.") );
+      	blatt = clone_object(OBJ "schaufelblatt");
+      	blatt -> move(ENV(TP),M_SILENT);
+      	blatt_da = 0;
+      	write_file(LOG "forsch.log",ctime()+": "+CAP(getuid(TP))+
+      	  " findet Schaufelblatt.\n");
+      }
+      return 1;
+    }
+    write( BS(
+      "Du ueberlegst es Dir doch nochmals, ob es so ratsam waere, barfuss ueber "
+      "das Eis gleiten zu wollen.") );
+    say( BS(
+      TPN+" will "+TP->QueryPossPronoun(MALE,WEN,SINGULAR)+" nackten Fuss aufs "
+      "Eis setzen, laesst es aber dann doch bleiben.") );
+    return -1;
+  }
+}
+
+int cmd_putzen(string str)
+{
+  notify_fail( "Was moechtest Du wovon raeumen?\n" );
+
+  if ( str=="" || !str ) return 0;
+  if ( member( ({ "schnee von stein","schnee vom stein",
+                  "schnee von stein ab","schnee vom stein ab"
+                }),str) != -1 )
+  {
+    if ( stein_frei )
+    {
+      write( BS(
+        "Auf dem Stein liegt kein Schnee mehr. Mach doch besser Deine Augen "
+        "das naechste Mal auf, bevor Du was unternimmst!") );
+      return -1;
+    }
+    write( BS(
+      "Mit Deiner Hand wischst Du mehrere Male ueber den Stein, bis Du ihn "
+      "ganz vom Schnee befreit hast, da merkst Du, dass etwas auf dem Stein "
+      "eingraviert wurde.") );
+    say( BS(
+      TPN+" stellt sich an den Wegesrand und befreit dort mit "+
+      TP->QueryPossPronoun(FEMALE,WEM,SINGULAR)+" Hand einen Stein "
+      "vom Schnee.") );
+    stein_frei = 1;
+    write_file(LOG "forsch.log",ctime()+": "+CAP(getuid(TP))+
+      " putzt Schnee von Stein.\n");
+    return 1;
+  }
+}
+
+int cmd_beseitigen(string str)
+{
+  notify_fail( "Willst Du den Schnee vom Stein beseitigen?\n" );
+
+  if ( str=="" || !str ) return 0;
+  if ( str == "schnee" )
+  {
+    if ( stein_frei )
+    {
+      write(
+        "Der Schnee wurde bereits vom Stein beseitigt.\n" );
+      return -1;
+    }
+    write( BS(
+      "So einfach geht das auch wieder nicht, sondern Du musst Dir "
+      "schon eine andere Methode ueberlegen, aber Du bist fest davon "
+      "ueberzeugt, dass Du den Schnee noch vom Stein bringst.") );
+    write_file(LOG "forsch.log",ctime()+": "+CAP(getuid(TP))+
+      " will Schnee beiseitigen.\n");
+    return 1;
+  }
+}
+
+int cmd_geniessen(string str)
+{
+  notify_fail( "Was willst Du geniessen?\n" );
+
+  if ( str=="" || !str ) return 0;
+  if ( str == "tag" )
+  {
+    write( BS(
+      "Den Tag kannst Du am besten geniessen, indem Du Dich gemuetlich auf "
+      "dem Ostplatz umsiehst und Dich von der angenehmen Atmosphaere "
+      "mitreissen laesst.") );
+    say(
+      TPN+" schaut sich gerade um und blickt dabei zufrieden drein.\n" );
+    write_file(LOG "forsch.log",ctime()+": "+CAP(getuid(TP))+
+      " geniesst den Tag.\n");
+    return 1;
+  }
+}
+
+int cmd_wetten(string str)
+{
+  int geld;
+    
+  geld = 500+random(1000);
+
+  notify_fail( "Was moechtest Du wetten?\n" );
+  
+  str = TP->_unparsed_args();
+    if ( str == "dass sich am oberen abschluss der eispalisade eine silhouette gegen den himmel abgezeichnet hat" )
+  {
+    if ( geldregen )
+    {
+      write( BS(
+        "Du wettest, dass sich am oberen Abschluss der Eispalisade eine "
+        "Silhouette gegen den Himmel abgezeichnet hat, und Du hast "
+        "tatsaechlich recht, denn Du siehst sie ein zweites Mal. Ausserdem "
+        "scheint irgendwer gegen Dich gewettet zu haben, denn ploetzlich "
+        "prasseln "+geld+" Muenzen vom Himmel herunter, die Du natuerlich "
+        "gleich alle einsteckst.") );
+      say( BS(
+        "Auf "+TP->Name(WEN)+" prasseln ploetzlich Muenzen vom Himmel "
+        "herunter, die "+TP->QueryPronoun(WER)+" natuerlich gleich "
+        "einsteckt.") );
+      geldregen = 0;
+      TP -> AddMoney(geld);
+      write_file(LOG "forsch.log",ctime()+": "+CAP(getuid(TP))+
+        " hat Wette gewonnen.\n");
+      return 1;
+    }
+    write( BS(
+      "Du wettest, dass sich am oberen Abschluss der Eispalisade eine "
+      "Silhouette gegen den Himmel abgezeichnet hat, und Du hast "
+      "tatsaechlich recht, denn Du siehst sie ein zweites Mal. Schade, dass "
+      "dieses Mal niemand gegen Dich gewettet hat, weil sonst haettest "
+      "sicher viel gewinnen koennen.") );
+    return -1;
+  }
+}
+
+int cmd_tauschen(string str)
+{
+  string was, wovon;
+  object stange, graufell;
+
+  notify_fail( "Was moechtest Du gerne austauschen?\n" );
+
+  if ( !str || str=="" ) return 0;
+  if ( sscanf(str, "%s aus", was) != 1 ) return 0;
+  if ( member( ({ "stange","holzstange" }),was) != -1 )
+  {
+    write(
+      "Meinst Du die Holzstange vom Ladentisch?\n" );
+    return -1;
+  }
+  if ( sscanf(str, "%s %s aus", was, wovon) != 2 ) return 0;
+  {
+    if ( member( ({ "stange","holzstange" }),was) != -1 )
+    {
+      if ( member( ({ "vom ladentisch","von ladentisch",
+                      "beim ladentisch","am ladentisch"
+                    }),wovon) != -1 )
+      {
+        if ( stange = present("\nholzstange",TP) )
+        {
+          if ( graufell = present("graufell",ENV(TP)) )
+          {
+            if ( stange -> Stange_kaputt() )
+            {
+              graufell -> command_me( "sage He, "+TPN+"! Was "
+                          "machst Du an meinem Ladentisch! Eine angeknackste "
+                          "Stange kann ich nicht brauchen, denn da bricht "
+                          "mir noch alles zusammen." );
+              return -1;
+            }
+            if ( graufell -> QueryGeholfenen(TP) )
+            {
+              write( BS(
+                "Waehrend Graufell die Schnuere losbindet und die Querstange "
+                "haelt, tauschst Du die angebrochene Stange aus. "
+                "Anschliessend bindet Graufell die Schnuere wieder fest.") );
+              say( BS(
+                TPN+" tauscht mit der Hilfe von Graufell eine angebrochene "
+                "Stange vom Ladentisch aus.") );
+              graufell -> command_me("sage Vielen Dank fuer Deine Hilfe, "+
+                                     TPN+".\n");
+              stange_getauscht = 1;
+              stange -> schlechter_Zustand();
+              write_file(LOG "forsch.log",ctime()+": "+CAP(getuid(TP))+
+                " tauscht Stange aus.\n");
+              return 1;
+            }
+            write( BS(
+              "Als Du die Stangen austauschen moechtest, scheint Graufell "
+              "nicht ganz einverstanden damit zu sein.") );
+            say(
+              TPN+" greift gerade zum Ladentisch von Graufell, worauf der "
+              "entsprechend reagiert.\n" );
+            graufell -> command_me("emote sagt erbost: "+TPN+", Haende weg "
+                                   "von meinem Ladentisch!\n");
+            return -1;
+          }
+          if ( stange -> Stange_kaputt() )
+          {
+            write( BS(
+              "Nachdem Graufell gerade nicht da ist, machst Du Dich an die "
+              "Arbeit und tauscht die ganze Stange gegen Deine angeknackste "
+              "aus. Das ganze dauert ein wenig, weil Du alles allein machen "
+              "musst, deshalb grinst Du umso schelmischer nach Vollendung "
+              "deines Streiches.") );
+            say( BS(
+              TPN+" tausch am Ladentisch von Graufell eine Stange gegen eine "
+              "andere aus und grinst dabei schelmisch.") );
+            stange_getauscht = 0;
+            stange -> guter_Zustand();
+            return 1;
+          }
+          else
+          {
+            write(
+              "Ohne der Hilfe von Graufell wirst Du die Stange nicht "
+              "austauschen koennen.\n" );
+            return -1;
+          }
+        }
+        write( BS(
+          "Es ist sehr lobenswert von Dir, dass Du die Holzstange mit dem "
+          "Sprung austauschen moechtest, aber Du hast leider keine "
+          "Passende zum Austauschen dabei.") );
+        return -1;
+      }
+      write(
+        "Wo moechtest Du eine Holzstange austauschen?\n" );
+      return -1;
+    }
+  }
+}
+int stange_tauschbar()
+{
+  return stange_getauscht;
+}
+
+int gehen(string str)
+{
+  object *players;
+  int i, n;
+
+  if ( str == "suedosten" )
+  {
+    write( BS(
+      "Eine magische Barriere haelt Dich derzeit noch ab, in diese Richtung "
+      "zu gehen.") );
+    return -1;
+  }
+  if ( rutschgefahr && !random(4) )
+  {
+    write(
+      "Als Du nach "+CAP(str)+" gehen willst, rutscht Du auf einer "
+      "Eisplatte aus, die Du in\n"
+      "Deiner Hektik uebersehen hast.\n"
+      "Du denkst . o O (hoffentlich hat das jetzt niemand gesehen).\n" );
+    say( BS(
+      TPN+" rutscht sehr tolpatschig auf einer Eisplatte aus, sodass "
+      "Du Dir das Lachen nicht verkneifen kannst.") );
+    
+    players = ({});
+    players = filter_array(all_inventory(ENV(TP)), #'interactive);
+    n = sizeof(players);
+    for ( i=0; i<n; i++ )
+    {
+      if ( players[i] != TP )
+      {
+      	write(
+          players[i]->Name(WER)+" lacht Dich aus.\n" );
+        tell_object( players[i],
+          "Du musst total laut drauf loslachen, als Du siehst, wie "+TPN+
+          " hinfaellt.\n" );
+        tell_room( ENV(TP),
+          players[i]->Name(WER)+" lacht "+TP->Name(WEN)+" aus.\n",
+          ({ TP, players[i] }) );
+      }
+    }
+    return 1;
+  }
+  return ( TP->move(TOROOM[str], M_GO, "nach "+CAP(str)) );
+}
+
+int cmd_betreten(string str)
+{
+  notify_fail( "Ich bin mir sicher, dass Du den Laden betreten willst!\n" );
+
+  if ( member( ({ "laden","felladen","fellladen","huette","blockhuette"
+               }),str) != -1 )
+  {
+    write(
+      "Sehr entschlossen betrittst Du den Felladen.\n" );
+    TP->move( ROOM "fellladen_c3", M_GO, "nach Sueden" );
+    write_file(LOG "forsch.log",ctime()+": "+CAP(getuid(TP))+
+      " betritt den Laden.\n");
+    return 1;
+  } 
+}
+
+int cmd_vergroessern(string str)
+{
+  notify_fail( "Was wuerdest Du gerne vergroessern wollen?\n" );
+
+  if ( member( ({ "stellen","stelle" }),str) != -1 )
+  {
+    write( BS(
+      "Das ist zwar eine gemeine Idee, die Dir da durch den Kopf geht, "
+      "aber mach nur, wenn es Dir Spass macht, doch Du wirst wohl "
+      "irgendein Utensil dazu brauchen, um genug Eis freilegen zu koennen.") );
+    write_file(LOG "forsch.log",ctime()+": "+CAP(getuid(TP))+
+      " will das Eis vergroessern.\n");
+    return 1;
+  }
+}
+//END COMMANDS
+int schneebedeckt()
+{
+  return 1;
+}
+int schnee_da()
+{
+  return rutschgefahr;
+}
+void SetEisfrei()
+{
+  rutschgefahr = 1;
+}
+//RESET
+void reset()
+{
+  ::reset();
+  
+  rutschgefahr = 0;
+  if ( ! stange_getauscht )
+  {
+    say( BS(
+      "Ein riesiger Tumult entsteht bei einem Laden, weil ploetzlich eine "
+      "Querstange mit Waren runterbricht und es sehr laut klirrt und kracht. "
+      "Der Handler macht sich gleich daran, wieder alles in Ordnung zu "
+      "bringen, um seinen Geschaeften nachkommen zu koennen.") );
+  }
+  if ( resetcounter > 9 )
+  {
+    gemeldet = ({});
+    resetcounter = -1;
+  }
+  scherz = ({});
+  meldbar = ({});
+  vergleich_gefunden = ({});
+  stange_getauscht = 0;
+  geldregen = 1;
+  richtiges_paar = paare[random(sizeof(paare))];
+  resetcounter++;
+}
+
+do_sell(object ob, int force, no_reg)
+{
+  write(
+    "Graufell erklaert Dir, dass er nur Waren verkauft.\n" );
+  return -1;
+}
+
+buy(str)
+{
+  if ( present("\nverbot",TP) )
+  {
+    write( BS(
+      "Graufell bedient Dich derzeit nicht, weil er nicht vergessen hat, wie "
+      "hinterhaeltig Du ihm gegenueber warst.") );
+    return -1;
+  }
+  return ::buy(str);
+}
+
+/* IDEEN
+- Glas von Laterne einschlagen
+*/

@@ -1,0 +1,135 @@
+/*
+** Eine Massageliege Yara@SL
+** ---
+** 2005-12-13  1.0  Yara  initial version
+*/
+
+inherit "/std/thing";
+#include "../def.h"
+
+object liegender;
+
+object seat;
+
+
+void create() {
+  ::create();
+  if(!is_clone(TO)) return;
+
+  liegender = 0;
+
+// Initialisierung der Liegeflaeche
+  seat = clone_object(OBJ + "seat");
+  seat->initSeats(1,"liegt auf einer Massageliege");
+
+  SetProp(P_SHORT, "Eine bequeme Massageliege");
+  SetProp(P_LONG, "Du siehst eine bequeme Massageliege. "
+      "Am Kopfteil hat sie eine runde Aussparung.");
+
+  SetProp(P_NAME, "Massageliege");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_WEIGHT, 10000);
+  SetProp(P_NOGET, "Du kannst die Liege nicht nehmen.\n");
+
+  AddId(({"massageliege","liege","massageliege","\ny_liege"}));
+
+  AddCmd( ({"liege","lege","leg","lieg"}), "cmdLiege");
+  AddCmd( ({"stehe","steh"}), "cmdStehe" );
+
+
+  AddDetail(({"kopfteil","teil"}),
+    "Das Kopfteil ist, wie die ganze Liege, weich gepolstert, "
+    "und hat eine runde Aussparung.");
+  AddDetail("aussparung","Am Kopfteil hat die Liege eine runde "
+    "Aussparung, damit man seine Nase nicht platt drueckt, wenn man "
+    "mit dem Gesicht nach unten auf der Liege liegt.");
+  AddDetail("nase",
+    "Wer weiss, ob die sich dann wieder richtig aufrichtet.");
+  AddDetail("gesicht",
+    "Nein, eine plattgedrueckte Nase willst Du wirklich nicht.");
+}
+
+
+object get_liegender() {
+  if(sizeof(seat->getSittingPlayers()) == 1)
+    return (seat->getSittingPlayers())[0];
+  else return 0;
+}
+
+void BecomesNetDead(object pl) {seat->BecomesNetDead(pl);}
+
+void m_init() {
+  int i;
+  object ob;
+
+  ob=get_liegender();
+  if(ob && !present(ob))
+    seat->removePlayer(ob);
+}
+
+string short() { 
+  m_init();
+
+  if(!get_liegender())  return ::short();
+  return "Du siehst eine bequeme Massageliege. (belegt)\n";
+}
+
+
+string long() { 
+  m_init();
+
+  if(!get_liegender())  return ::long();
+  
+  return "Du siehst eine bequeme Massageliege. "
+         "Am Kopfteil hat sie eine runde Aussparung.\n"
+         + seat->getFormattedNames(TP) + " "
+         + (seat->playerSeated(TP)?"liegst":"liegt")
+         + " entspannt darauf.\n";
+}
+
+int cmdLiege(string str) {
+  string pname;
+  string s;
+  int ret;
+  
+  notify_fail("Worauf willst du liegen?\n");
+  if(str!="" && str!="auf liege") return 0;
+
+  s = (environment(TO))->playerSeated(TP); 
+  if(s!="") {
+    write(BS("Du solltest vorher von "+s+" aufstehen.")); 
+    return 1;
+  }
+
+  ret = seat->seatPlayer(TP);
+  switch (ret) {
+    case -2:  write("Du liegst doch schon auf der Massageliege.\n");
+              break;
+    case 0:   write(BS( seat->getFormattedNames(TP) + 
+                    " liegt schon auf der Liege.\n"));
+              break;
+    default:  write(BS("Du legst Dich auf die Massageliege.\n"));
+              say(BS(TP->Name() + " legt sich auf die Massageliege.\n"));
+  }
+  return 1;
+}
+
+int cmdStehe(string str) {
+  object ob;
+//  notify_fail("Wovon willst Du aufstehen?\n");
+
+  if(str != "auf" && str != "von liege auf") return 0;
+
+  if(!seat->playerSeated(TP)) return 0;
+  else {
+    ob = present("ayden");
+    if( ob && (ob->getKunde() == TP) ) {
+      write("Ayden massiert Dich noch.\n");
+      return 1;
+    }
+    seat->removePlayer(TP);
+    write("Du stehst von der Massageliege auf.\n");
+    say(BS(TP->Name() + " steht von der Massageliege auf."));
+  }
+  return 1;
+}

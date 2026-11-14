@@ -1,0 +1,178 @@
+//=========================================================================
+//
+// File: egloves.c
+// Created by Gwenshara@SL
+//
+// Project: Echsendorf
+//
+//=========================================================================
+
+#include "../def.h"
+#include "/gilden/druidenzirkel/druiden_extern.h"
+
+inherit "std/armour";
+
+mixed elements=({ERZ, FEUER, LUFT, WASSER, HUMUS, EIS, GEIST});
+mixed ele_cols=({"gelblich","roetlich","weisslich","blaeulich","gruenlich",
+		 "violett","graeulich"});
+int change, do_change;
+
+varargs void SetNewElement(int silent)
+{
+  int i;
+  i=random(sizeof(elements));
+  SetProp(P_DRUID_HAND_DAMAGE_TYPE, elements[i]);
+  SetProp(P_SHORT, "Ein Paar "+ele_cols[i]+"er elementarer Schuppenhandschuhe");
+  SetProp(P_NAME_ADJ, ({ele_cols[i], "elementar"}));
+
+  if(!intp(silent)) silent=0;
+  if(!silent)
+  {
+    if(!ENV(ME)) return;
+      tell_object(ENV(ME), BS("Die Schuppenhandschuhe leuchten "+ele_cols[i]+" auf."));    
+  }
+}
+
+void create()
+{
+  if( !is_clone(TO) ) return;
+
+  ::create();
+  change = 1;
+  do_change=1;
+
+//--Beschreibungen---------------------------------------------------------
+
+  SetProp(P_SHORT, "Ein Paar elementarer Schuppenhandschuhe");
+  SetProp(P_LONG,
+    "Die Schuppenhandschuhe sind aus der Haut, die ein Echsenmensch bei der "
+    "letzten Haeutung abwirft gemacht. Sie glitzern in allen Regenbogenfarben. "
+    "Sie scheinen perfekt auf Deine Hand zu passen. Auf die Handschuhe sind "
+    "in den passenden Farben die Symbole der Elemente gemalt."
+  );
+
+  AddDetail( ({"haut","leder"}),
+	    "Die Handschuhe sind aus der schuppigen Haut eines Echsenmenschen "
+	    "gefertigt.");
+
+  AddDetail( ({"regenbogenfarben","farben","regenbogen"}),
+	    "Das Leder der Schuppenhandschuhe schillert in allen erdenklichen "
+	    "Farben des Regenbogens.");
+
+  AddDetail( ({"symbole","elemente","runen","rand"}),
+	    "Die Runen der Elemente Feuer, Wasser, Luft, Erz, Eis und Humues sind "
+	    "in den entsprechenden Farben auf den Rand der Handschuhe gemalt.");
+
+
+//--Namen------------------------------------------------------------------
+
+  SetProp(P_NAME, "Paar Schuppenhandschuhe");
+  SetProp(P_GENDER, NEUTER);
+  AddId( ({"handschuhe", "schuppenhandschuhe", "\ngwenshara_elemental_gloves"}) );
+
+  SetProp(P_NAME_ADJ, ({"elementar"}) );
+  AddAdjective( ({"elementaren","elementarer","elementarem","elementares","elementare"}) );
+
+//--Eigenschaften----------------------------------------------------------
+
+  SetProp(P_MATERIAL, ([MAT_SKIN:60, 
+                        MAT_MISC_MAGIC:10, 
+                        MAT_FIRE:5,
+		        MAT_AIR:5,
+		        MAT_WATER:5,
+			MAT_GHOST:5,
+			MAT_MISC_STONE:5,
+			MAT_EARTH:5,
+			MAT_ICE:5]));
+  SetProp(P_WEIGHT, 600);
+  SetProp(P_SIZE, 20);
+  SetProp(P_VALUE, 3000);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 0);
+  SetProp(P_NEVERDROP, 0);
+
+//--Ruestungseigenschaften-------------------------------------------------
+
+  SetProp(P_ARMOUR_TYPE, AT_GLOVE );
+  SetProp(P_AC, 5);
+  SetProp(P_QUALITY_DECAY, 100);
+
+  AddProp(P_DAM_PROTECTION, PHYSICAL_DAMAGE_TYPES );
+  SetProp(P_WEAR_RESTRICTIONS, ([A_INT:22]) );
+
+  SetProp(P_INFO, BS("Eine elementare Wechselaura umgibt die Handschuhe.") );
+  SetProp(P_MAGIC, 1); //magisch!
+
+  SetNewElement(1);
+}
+
+void reset()
+{
+  mixed *flaw;
+  int total_flaw;
+
+  if( !is_clone(TO) ) return;
+  ::reset();
+
+  if(!do_change) return;
+  flaw       = QueryFlaw();
+  total_flaw = flaw[0];
+  
+  /* Falls die Handschuhe zu stark beschaedigt sind verlieren sie ihre Magie */
+  if(total_flaw > 400 && QueryProp(P_DRUID_HAND_DAMAGE_TYPE))
+  {
+    SetProp(P_MAGIC, 0); // nicht mehr magisch
+    SetProp(P_DRUID_HAND_DAMAGE_TYPE, 0); // keinen Bonus mehr
+    SetProp(P_INFO, BS("Die elementare Wechselaura, die diese Handschuhe "
+            "umgeben hat, ist inaktiv geworden.")); // anpassen
+    SetProp(P_SHORT, "Ein Paar farbloser elementarer Schuppenhandschuhe");
+    SetProp(P_NAME_ADJ, ({"farblos", "elementar"}));
+     
+    if(ENV(TO))    
+    {
+       tell_object(ENV(TO), BS("Die Schuppenhandschuhe beginnen zu zittern und "
+            "gluehen strahlend weiss auf. Irgendetwas stimmt nicht mit ihnen!"));
+    }
+    do_change=0;
+    return;
+  }    
+
+  if(--change <= 0)
+  {
+    SetNewElement();
+
+    /* je beschaedigter die Handschuhe sind, desto langsamer werden sie */
+    change     = (int) total_flaw/100 + 1;
+  }
+}
+
+varargs int move(mixed dest, int method)
+{
+  int ret;
+  ret = ::move(dest, method);
+  call_out("check", 0);
+  return ret;
+}
+
+void check()
+{
+  object *ob;
+  string *msg;
+  ob=filter_objects( deep_inventory(ENV(TO)), "id", "\ngwenshara_elemental_gloves");
+  ob-=({TO});
+  if(sizeof(ob) == 0) return;
+
+  msg = ({"vergluehen sie und hinterlassen nur eine Rauchwolke",
+	  "zerfliessen sie zu einer Wasserlacke",
+	  "verwandeln sie sich in ein Haeufchen Erde",
+	  "zerbroeseln sie zu Sand",
+	  "schmelzen sie dahin",
+	  "loesen sie sich in einen kleinen Windhauch auf"});
+	  
+  if(ENV(ME))
+  {
+    tell_object(ENV(ME), BS("Gerade als Du die Handschuhe an Dich genommen hast "
+		+msg[random(sizeof(msg))]+"."));
+  }
+  remove(1);
+}

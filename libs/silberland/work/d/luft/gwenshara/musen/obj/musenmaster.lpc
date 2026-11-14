@@ -1,0 +1,191 @@
+// verwaltet das Raetsel der Musen
+// Jedes Symbol muss zur richtigen Statue gebracht werden
+// Symbole entstehen in zufaelliger zuordnung
+#include "../def.h"
+
+private nosave int *werHatWas;
+private nosave int lastTimeInteracted;
+private nosave object *activeItems;
+
+public void InitWerHatWas() {
+    int *items, item, i;
+
+    werHatWas = ({ });
+    items = ({ HARFE, AULOS, PAPIERROLLE, SCHWERT, NICHTS, LYRA, MASKE });
+
+    i = 0;
+    while(sizeof(werHatWas) < 7) {
+        item = items[random(sizeof(items))];
+        if(i != 6 && item == i) continue;
+
+        items -= ({ item });
+        werHatWas += ({ item });
+        i++;
+    }
+}
+
+public int *WerHatWas() {
+    return werHatWas;
+}
+
+public int ItemOf(int muse) {
+    return werHatWas[muse];
+}
+
+public varargs string NameOf(int i, int article) {
+    switch(i) {
+        case HARFE: return sprintf("%sHarfe", (article>1?"eine ":article>0?"die ":""));
+        case AULOS: return sprintf("%sAulos", (article>1?"eine ":article>0?"die ":""));
+        case PAPIERROLLE: return sprintf("%sPapierrolle", (article>1?"eine ":article>0?"die ":""));
+        case SCHWERT: return sprintf("%sSchwert", (article>1?"ein ":article>0?"das ":""));
+        case NICHTS: return "nichts";
+        case LYRA: return sprintf("%sLyra", (article>1?"eine ":article>0?"die ":""));
+        case MASKE: return sprintf("%sMaske", (article>1?"eine ":article>0?"die ":""));
+    }
+}
+
+public string DescriptionOf(int item) {
+    string descr, detail;
+    descr = "%s ist lediglich eine marmorene Nachbildung. %s";
+    switch(item) {
+        case HARFE: detail = "Sie ist fein gearbeitet mit exakt sieben Saiten."; break;
+        case AULOS: detail = "Das ist eine V-foermige Floete mit zwei zylindrischen Roehren, aber nur einem Blasloch."; break;
+        case PAPIERROLLE: detail = "Was genau darauf geschrieben ist, kannst du nicht lesen."; break;
+        case SCHWERT: detail = "Es wirkt etwas uebertrieben dargestellt und erinnert dich an das von Ayla von Schattengrund."; break;
+        case NICHTS: detail = "Da ist einfach gar nichts."; break;
+        case LYRA: detail = "Die Lyra ist ein Zupfinstrument mit drei Saiten, das mit einem Bogen gehalten wird."; break;;
+        case MASKE: detail = "Sie zeigt ein lachendes Gesicht."; break;
+    }
+
+    return sprintf(descr, CAP(NameOf(item, 1)), detail);
+}
+
+public void GiveItemTo(int muse, object ob) {
+    int item;
+
+    lastTimeInteracted = time();
+
+    if(ob == 0) {
+        werHatWas[muse] = NICHTS;
+        if(muse == POLYHYMNIA) {
+            call_out("SpawnMuse", 2, ENV(TP));
+        }
+        return;
+    }
+
+    if(werHatWas[muse] != NICHTS) {
+        tell_object(TP, BS("Aber die Statue hat doch schon etwas in der Hand!"));
+        return;
+    }
+
+    if(!ob->id("\ngwenshara_muse_item")) {
+        tell_object(TP, BS("Hm. Das scheint irgendwie nicht da hin zu gehoeren."));
+        return;
+    }
+
+    item = ob->QueryProp(P_MUSE_ITEM);
+    werHatWas[muse] = item;
+
+    tell_object(TP, BS(sprintf("Vorsichtig legst du der Statue %s in die Hand.", ob->name(WEN, 1))));
+    tell_room(ENV(TP), BS(sprintf("%s legt der Statue %s in die Hand.", TPN, ob->name(WEN, 1))), ({TP}));
+    ob->remove(1);
+
+    if(IS_LEARNER(TP) || TP->QueryProp(P_TESTPLAYER)) {
+        write(sprintf("muse - item: %d room: %d\n", item, muse));
+    }
+
+    if(muse == item) {
+        call_out("SpawnMuse", 2, ENV(TP));
+    }
+    return;
+}
+
+public void SpawnMuse(object room) {
+    string museName;
+    object muse;
+    if(sscanf(file_name(room), ROOM "schrein_%s", museName) != 1) {
+        raise_error(sprintf("Muse soll in illegalem env geclont werden (%s)", file_name(room)));
+        return;
+    }
+
+    if(present("\ngwenshara_muse", room)) return; // kein doppelt clonen
+
+    muse = clone_object(NPC + museName);
+    muse->move(room, M_TPORT|M_NOCHECK);
+    return;
+}
+
+public int GenderOf(int item) {
+    if(item == SCHWERT) return NEUTER;
+    else return FEMALE;
+}
+
+public void TakeItemFrom(int muse) {
+    object ob;
+    int item, mv;
+    
+    lastTimeInteracted = time();
+
+    item = ItemOf(muse);
+    if(item == NICHTS) {
+        tell_object(TP, BS("Das geht nicht. Die Statue hat doch nichts in der Hand."));
+        return;
+    }
+
+    ob = clone_object(OBJ "musen_dummy");
+    ob->SetProp(P_NAME, NameOf(item));
+    ob->SetProp(P_SHORT, CAP(NameOf(item, 2)));
+    ob->SetProp(P_LONG, DescriptionOf(item));
+    ob->SetProp(P_MUSE_ITEM, item);
+    ob->SetProp(P_GENDER, GenderOf(item));
+    ob->AddId(lowerstring(NameOf(item)));
+    
+    mv = ob->move(TP, M_GET);
+
+    if(mv == ME_TOO_MUCH || mv == ME_TOO_HEAVY) {
+        tell_object(TP, BS(sprintf("Du kannst %s gerade nicht tragen.", NameOf(item, 1))));
+        ob->remove(1);
+        return;
+    }
+
+    activeItems += ({ ob });
+    
+    tell_object(TP, BS(sprintf("Du nimmst der Statue %s aus der Hand.", ob->name(WEN, 1))));
+    tell_room(ENV(TP), BS(sprintf("%s nimmt der Statue %s aus der Hand.", TPN, ob->name(WEN, 1))), ({TP}));
+
+    GiveItemTo(muse, 0);
+
+    return;
+}
+
+public void CleanUp() {
+    int i;
+    for(i=0; i<sizeof(activeItems);++i) {
+        if(!objectp(activeItems[i])) continue;
+        activeItems[i]->remove();
+    }
+    activeItems = ({ });
+}
+
+public int IsMusePresent(int muse) {
+
+}
+
+public void create() {
+    if(is_clone(TO)) return;
+    InitWerHatWas();
+    activeItems = ({ });
+}
+
+public void ResetStatus() {
+    CleanUp();
+    InitWerHatWas();
+}
+
+public void reset() {
+    // wenn eine stunde nix passiert -> aufraeumen
+    if(time()-lastTimeInteracted > 3600) {
+        ResetStatus();
+    }
+}
+

@@ -1,0 +1,1368 @@
+
+// Wappenrock
+// Wappenrock der Paladine
+// 01-12-97  Angrox@SilberLand
+// 
+// 01-01-2001  Zordan    a und A fuer Amaryllion benutzt/frei
+// 27-03-2000  Feyaria   Spieler sehen den Ort von Magiern nicht mehr
+// 14-12-2000  Angrox    ansi_color.c integriert
+// 
+
+// $Date: 2006/01/07 11:52:09 $
+// $Author: Feyaria $
+/* $Revision: 1.21 $
+ * $Log: wappenrock.c,v $
+ * Revision 1.21  2006/01/07 11:52:09  Feyaria
+ * bei magiern verstecken wenn man nicht in der paladingilde ist
+ *
+ * Revision 1.20  2005/09/28 23:02:44  Woody
+ * Numerisches Argument fuer "phist" erlaubt
+ *
+ * Revision 1.19  2005/09/28 22:59:09  Angrox
+ * noscroll-Code, etc.
+ *
+ * Revision 1.18  2004/08/20 14:32:46  Angrox
+ * bei pgesang alles -> bonus auf schaden
+ *
+ * Revision 1.17  2004/06/30 23:22:59  Woody
+ * Sicherheitsabfragen in RemoveFunc() und BecomesNet*()
+ *
+ * Revision 1.16  2004/02/06 09:15:42  Angrox
+ * Erzmagier koennen nun immer singen
+ *
+ * Revision 1.15  2004/01/03 22:39:31  Feyaria
+ * Report auch sehen, wenn man nur HP dazubekommt
+ *
+ * Revision 1.14  2003/12/28 09:40:31  Angrox
+ * Abfrage ob die Spellpoints > 100 sind, im DoNecromancerHpLoss()
+ *
+ * Revision 1.13  2003/12/22 18:18:54  Angrox
+ * Paladine verlieren nur mehr SP und keine HP mehr
+ *
+ * Revision 1.12  2003/11/27 12:41:23  Feyaria
+ * titel fuer 16er, nur ein enhanced_report pro heart-beat
+ *
+ * Revision 1.11  2003/11/22 14:33:46  Feyaria
+ * schutzspells beenden
+ *
+ * Revision 1.10  2003/10/22 21:46:44  Feyaria
+ * Extra-Title und M statt Level fuer Magier im pwer
+ *
+ * Revision 1.9  2003/07/22 08:01:51  Angrox
+ * Anpassungen fuer Glvl 16
+ *
+ * Revision 1.8  2003/06/18 12:47:09  Angrox
+ * Singen & Lvl16 Quest integriert
+ *
+ * Revision 1.7  2002/08/13 17:32:36  Woody
+ * Langbeschreibung/Details, pruf ueberarbeitet, "Dir" -> "Euch"
+ *
+ * Revision 1.6  2002/08/12 06:59:38  mud
+ * phist ueber More()
+ *
+ * Revision 1.5  2002/05/28 15:58:45  Feyaria
+ * Paladinmagier
+ *
+ * Revision 1.4  2002/05/28 12:51:16  Angrox
+ * Bugfixing
+ *
+ * Revision 1.3  2002/04/25 10:10:15  Angrox
+ * Wenn mehr als eine Ausgabe pro Sekunde -> nur mehr normale Ausgabe, keine Enhanced mehr
+ *
+ * Revision 1.2  2002/04/25 09:35:09  Angrox
+ * Nur mehr eine Msg alle 2 sek
+ *
+ * Revision 1.1  2002/04/17 20:39:38  Angrox
+ * Initial revision
+ *
+ * $Locker: mud $
+ */
+
+
+inherit "std/armour";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <wizlevels.h>
+#include <ansi.h>
+#include <new_skills.h>
+#include <moving.h>
+#include "/gilden/obj/ansi_color.h"
+#include "/gilden/obj/ansi_color.c"
+#include "/gilden/paladine/paladin.h"
+
+static object owner;
+static string owner_name;
+static int lastHP, lastSP, lasthp, lastsp;
+static int aktiv=0;
+static int enh=1;
+static string akt_lvl="";
+static int *history=({});
+static int cnt=0;
+static string align="";
+static int amaryllion=0;
+static int lastlogin=0;
+static int necromancer_hploss=1;
+static string *report_colors=({});
+static string *std_colors=({});
+static string last_flag="";
+static int last_enh;
+static int stop_singing=0;
+static int singing=0;
+static string *song_text=({});
+static int lay_hands;
+static int check_for_theevil=0;
+static int my_glvl=0;
+static int callout;
+static int noscroll = 0, scroll = 0, scrollHP = 0, scrollSP = 0;
+static int dk_start=0;
+
+//Prototypes
+static string EnhancedReport(object owner, int flag);
+static void activate(object ob);
+int QueryAmaryllion(object caster);
+int ShowColorHelp();
+void SetListener(int flag);
+int update_check_evil();
+// No Shadows, thank you :)
+nomask query_prevent_shadow() { return 1; }
+
+create() {
+  string *spells;
+
+  if( !is_clone(TO) ) return;
+  ::create();
+  SUID;
+  lay_hands=time()+25*3600;
+  std_colors=({ANSI_GREEN, ANSI_YELLOW, ANSI_CYAN, ANSI_BLUE, ANSI_RED});
+  report_colors=call_other(PALADINMASTER, "QueryColors", TP);
+  if(!pointerp(report_colors) || !sizeof(report_colors)) 
+    report_colors=std_colors;
+  akt_lvl=set_bit(akt_lvl, 1);
+  SetProp(P_SHORT, "Der Wappenrock der Paladine");
+  SetProp(P_LONG, BS( 
+    "Der Wappenrock der Paladine besteht aus feinstem Tuch, "
+    "das in schlichtem Weiss gehalten ist. Auf der Vorder- und "
+    "der Rueckseite ist ein kunstvolles Wappen zu sehen, welches "
+    "eine Rose inmitten zweier gekreuzter Schwerter zeigt. "
+    "Zusammengehalten wird der Wappenrock durch zwei silberne "
+    "Spangen."));
+  AddDetail("tuch",
+     "Das Tuch aus dem der Wappenrock besteht ist sehr fest. Es "
+    +"ist weiss.");
+  AddDetail(({"vorderseite", "rueckseite"}), 
+     "Sie zeigt ein Wappen.");
+  AddDetail("wappen", 
+     "Das Wappen stellt eine Rose in zwei gekreuzten Schwertern dar.");
+  AddDetail("rose", 
+     "Sie ist sehr kunstvoll gearbeitet.");
+  AddDetail(({"schwerter", "paladinschwerter"}), 
+     "Typische Paladinschwerter eben, wie Du sie sicher auch schon kennst.");
+  AddDetail( ({"spange","spangen"}), 
+     "Die Spangen bestehen aus blitzendem Silber.");
+  AddDetail("silber", 
+     "Kein einziger Kratzer verunstaltet die glaenzenden Spangen.");
+  SetProp(P_NAME, "Wappenrock");
+  SetProp(P_GENDER, MALE);
+  AddId( ({"wappenrock", "rock", GUILDITEM_ID }) );
+  SetProp(P_ARMOUR_TYPE, AT_MISC );
+  SetProp(P_AC, 0);
+  SetProp(P_MATERIAL, ([MAT_SILVER:10, MAT_CLOTH:90]));
+  SetProp(P_WEIGHT, 50);
+  SetProp(P_NO_DAMAGE_DESTRUCT, 1);
+  SetProp(P_QUALITY_DECAY, 0);
+  SetProp(P_VALUE, 100);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_AUTOLOADOBJ, 1);
+  SetProp(P_MAGIC, 1);
+  SetProp(P_CURSED, 0);
+  SetProp(P_INFO,
+      "Der Wappenrock der Paladine ist ein hochmagisches Artefakt.\n"
+      "Mit 'philfe' erfaehrst Du mehr ueber seine Faehigkeiten.\n" );
+  SetProp(P_WORN_TEXT, "ueber der Ruestung getragen");
+
+  AddCmd(({"prufe", "pruf"}),        "guild_shout");
+  AddCmd(({"pwer"}),                 "pwer");
+  AddCmd(({"preport"}),              "Report");
+  AddCmd(({"pwink", "pwinke"}),      "pwinken");
+  AddCmd(({"pknuddle", "pknuddel"}), "pknuddeln");
+  AddCmd(({"pgebet"}),               "pgebet");
+  AddCmd(({"phist"}),                "ShowHistory");
+  AddCmd(({"philfe"}),               "philfe");
+  AddCmd(({"pstatus"}),              "Status");
+  AddCmd(({"pfarben"}),              "SetColors");
+  AddCmd(({"pgesang"}),              "fuer_dusty");
+  AddCmd(({"wirke", "wirk"}),        "layhands");
+  AddCmd(({"beende", "beend"}),      "beenden");
+
+  // Dies ist fuer den Spell-blocker
+  // Alle spell commandos in eine checkfun umleiten
+  spells = m_indices(call_other("/gilden/paladine", "QueryProp", P_GUILD_SKILLS));
+  AddCmd( spells, "CastCheck" );
+
+  SetProp(P_WEAR_FUNC, TO);
+  SetProp(P_REMOVE_FUNC, TO);
+//  call_out("update_check_evil", 4);
+}
+
+// Simpler check ob casten erlaubt ist
+int CastCheck(string str)
+{
+  if (call_other("/gilden/paladine", "IsCastDisabled"))
+    {
+      // Die duerfen immer
+      if (IS_LORD(TP) || TP->QueryProp(P_TESTPLAYER))
+        return 0;
+
+      tell_object(this_player(), "Dusty erhoert Dich nicht!\n");
+      return 1;
+    }
+
+  return 0;
+}
+
+/*
+int update_check_evil() {
+  if(QueryProp(P_WORN)) { 
+    if(call_other(PALADINMASTER, "QueryQuestLvl16")["player"] == 
+        getuid(QueryProp(P_WORN)) || IS_ARCH(QueryProp(P_WORN)) )
+    {
+      check_for_theevil=1;
+    }
+  }
+}
+*/
+
+reset() {
+  object pl;
+  ::reset(); 
+  if( !is_clone(TO) ) return;
+//  update_check_evil();
+  if(objectp(pl=QueryProp(P_WORN)))
+  {
+    amaryllion=1+random(pl->QueryProp(P_GUILD_LEVEL)-10);
+    if(call_other(PALADINMASTER, "QueryNumberOne") &&
+        member(call_other(PALADINMASTER, "QueryNumberOne"), getuid(pl))!=-1)
+      pl->SetProp(P_GUILD_TITLE, 
+          ({"das Streiter des Lichts", "der Streiter des Lichts", 
+           "die Streiterin des Lichts"})[pl->QueryProp(P_GENDER)] );
+    else if ( member( ({"das Streiter des Lichts", "der Streiter des Lichts", 
+           "die Streiterin des Lichts"}),pl->QueryProp(P_GUILD_TITLE))!=-1 )
+      call_other("/gilden/paladine", "adjust_title", pl);
+  }
+  if(necromancer_hploss<=0) 
+    necromancer_hploss=1; // Damit die Nekros LPs stehlen koennen.
+  else if(!random(100))
+    necromancer_hploss++;
+}
+
+int update_glvl() {
+  my_glvl=ENV(ME)->QueryProp(P_GUILD_LEVEL);
+  return 1;
+}
+
+int query_glvl() {
+  return my_glvl;
+}
+
+int WearFunc(object ob) {
+  if (TP->QueryProp(P_GUILD) != "paladine" && !IS_WIZARD(TP)) {
+    write("Der Wappenrock zerfaellt zu Staub.\n");
+    call_out("remove",0);
+  }
+  if(ob == TO)
+  {
+    if (MENV->QueryProp(P_GUILD) == "paladine")
+      call_out("activate", 0, MENV);
+    SetListener(1);
+    my_glvl=TP->QueryProp(P_GUILD_LEVEL);
+    if(my_glvl > 14 || IS_ARCH(TP))
+      TP->AddPursuer(ME);
+  }
+  return 1;
+}
+
+int RemoveFunc(object ob, int silent) {
+  SetListener(0);
+  my_glvl=0;
+  if(QueryProp(P_WORN))
+    QueryProp(P_WORN)->RemovePursuer(ME);
+  return 1;
+}
+
+int WieldFunc(object ob) {
+  return 1; 
+}
+
+int IsListener(object wer) {
+  return (!is_clone(wer) && wer->QueryProp(P_TMP_PALADIN_LISTENER));
+}
+
+mixed QueryVersion() {
+  return LAST_GUILDITEM_UPDATE; 
+}
+
+static object CheckGuildItem(object wer) {
+  int i;
+  object *inv;
+  inv=all_inventory(wer);
+  for(i=sizeof(inv)-1;i>=0;i--) {
+    if(inv[i]->id(WAPPENROCK))
+      return inv[i];
+  }
+  return 0;
+}
+
+static int pgebet(string str) {
+  call_other("/spellbooks/pal_spells", "ShoutPrayer", TP);
+  return 1;
+}
+
+static int guild_shout(string str)
+{
+  int i, invis, no_colors;
+  object *members, paladin;
+  string *presay, *ignores, pre, std_pre;
+  mapping extra_title;
+
+  extra_title=PALADIN_EXTRA_TITLE;
+
+  // NPCs duerfen nur von Erzmagiern zu pruf gezwungen werden
+  if(ENV(ME) && living(ENV(ME)) && !query_once_interactive(ENV(ME)) && TI)
+    if(!IS_ARCH(TI))
+      return 0;
+
+  //if(previous_object(2) && previous_object(2)!=ENV(ME)) {
+  //  TELL("angrox", sprintf("WAPPENROCK, PO: %O\n, PO(2): %O", PO, 
+  //        previous_object(2)));
+  //  if(member(({"zordan", "angrox"}), getuid(previous_object(2)))==-1) {
+  //    return 0;
+  //  }
+ // }
+
+  // Nix zum prufen angegeben?
+  if (!stringp(str)) 
+    return notify_fail("Was moechtest Du den Paladinen mitteilen?\n"), 0;
+
+  // Rausfinden, wer aller da ist.
+  members = filter_array(users(), "IsListener");
+
+  // Presay ermitteln (Array: NEUTER, MALE, FEMALE)
+  if(getuid(TP)=="angrox" || getuid(TP)=="zordan" || TP->id("ayla"))
+    presay = ({"Paladinmeisteretwas ", "Paladinmeister ", "Paladinmeisterin "});
+  else if( IS_GOD(TP) )
+    presay = ({"Gott ","Gott ","Goettin "});
+  else if( IS_WIZARD(TP) )
+    presay = ({"Paladinmagier ","Paladinmagier " ,"Paladinmagierin "});
+  else if(call_other(PALADINMASTER, "QueryNumberOne") &&
+          member(call_other(PALADINMASTER, "QueryNumberOne"), getuid(TP))!=-1)
+    presay = ({"Das Streiter des Lichts ", "Der Streiter des Lichts ",
+               "Die Streiterin des Lichts "});
+  else if(member(extra_title, getuid(TP)))
+    presay=extra_title[getuid(TP)];
+  else if( TP->QueryProp(P_GUILD_LEVEL)>=16)
+    presay= ({"Das heilige ", "Der heilige ", "Die heilige "});
+  else if(!is_clone(TP) && !TP->QueryProp(P_FROG))
+    presay = ({"Paladinetwas ", "Paladin ", "Paladin "});
+  else
+    presay = ({"","",""});
+
+  // Standard-Presay (fuer die History):
+  if(TP->QueryProp(P_INVIS)) {
+    invis = 1;
+    std_pre = "("+CAP(getuid(TP))+") teilt Euch mit: ";
+  }
+  else {
+    invis = -1;
+    std_pre = capitalize(presay[TP->QueryProp(P_GENDER)] +
+              TP->name(WER)) + " teilt Euch mit: ";
+  }
+
+  // So und jetzt verteilen:
+  for(i = sizeof(members); i-->0; )
+  {
+    if(members[i] == TP) {
+      write(expand_color_strings(TP->_unparsed_args(), 
+           "Du teilst den Paladinen mit: ", TP));
+    }
+    else
+    {
+      if (pointerp(ignores=members[i]->QueryProp(P_IGNORE)) && sizeof(ignores))
+        no_colors = (member(ignores, "prufe_farben") != -1);
+
+      // Prefix:
+      if (TP->QueryProp(P_INVIS))
+        if (IS_LEARNING(members[i]))
+          pre = "(" + CAP(getuid(TP)) + ") teilt Euch mit: ";  
+        else
+          pre = "Jemand teilt Euch mit: ";
+      else     
+        pre = presay[TP->QueryProp(P_GENDER)] + TP->Name(WER) +
+              " teilt Euch mit: ";
+
+      members[i]->Message(
+          expand_color_strings( interactive(TP) ? TP->_unparsed_args() : str,
+          pre, members[i], no_colors ), MSGFLAG_CHANNEL | MSGFLAG_SILENT );
+    }
+  }
+
+  // Messages von Spielern in die History aufnehmen:
+  if(interactive(TP))
+    call_other(GUILD_MASTER, "AddHistory", std_pre,
+        expand_color_strings(TP->_unparsed_args(), "", ""), invis);
+  else
+    call_other(GUILD_MASTER, "AddHistory", std_pre,
+        expand_color_strings(str, "", ""));
+
+  return 1;
+}
+
+
+static int ShowHistory(string str)
+{
+  int i,first;
+  string *msgs, txt;
+  mixed *history;
+  mixed *hist_time;
+
+  history=call_other(GUILD_MASTER, "QueryHistory");
+  hist_time=history[0];
+  history=history[1];
+  if (sizeof(history)==0)
+  {
+    write("Die anderen Paladine haben Dir noch nichts mitgeteilt.\n");
+    return 1;
+  }
+
+  if (to_int(str) > 0) {
+    first = sizeof(history) - to_int(str);
+    if (first < 0) first = 0;
+  }
+  else
+    first = 0;
+
+  txt="Das haben Dir die anderen Paladine mitgeteilt:\n";
+  txt+="-----------------------------------------------"
+       +"-------------------------------\n";
+  for(i=first;i<=sizeof(history)-1;i++) {
+    msgs=explode(history[i],"&&*%%");
+
+    if (((time()+7200)/86400)>((hist_time[i]+7200)/86400)) {
+      txt+=BS(dtime(hist_time[i]));
+    }
+    else {
+      txt+=BS(dtime(hist_time[i])[19..26]);
+    }
+    if(msgs[2]=="1" && !IS_WIZARD(TP)) {
+      txt+=BSA(msgs[1], "Jemand (Dusty?) teilt Euch mit: ");
+    }
+    else {
+    txt+=BSA(msgs[1], CAP(msgs[0]));
+    }
+  }
+  txt+="-----------------------------------------------"
+       +"-------------------------------\n";
+  TP->More(txt);
+  return 1;  
+}
+
+
+static int pknuddeln(string str) {
+  int i;
+  object *spieler;
+  spieler=users();
+  for(i=sizeof(spieler)-1;i>=0; i--) {  
+    if(IsListener(spieler[i])) {
+      if(spieler[i]==TP) {
+        write(BS("Du knuddelst alle anwesenden Paladine aus "
+                +"der Ferne."));
+      } else { 
+        if(TP->QueryProp(P_GENDER)==FEMALE)
+          tell_object(spieler[i], sprintf("Lady %s "
+            +"knuddelt Euch aus der Ferne.\n", TP->name()));
+        else 
+          tell_object(spieler[i], sprintf("Lord %s "
+            +"knuddelt Euch aus der Ferne.\n", TP->name()));
+      }
+    }      
+  }
+  return 1;
+}
+
+static int pwinken(string str) {
+  int i;
+  object *spieler;
+  spieler=users();
+  for(i=sizeof(spieler)-1;i>=0; i--) {    
+    if(IsListener(spieler[i])) {
+      if(spieler[i]==TP)
+        write(BS("Du winkst alle anwesenden Paladinen aus der Ferne zu."));
+      else {
+        if(TP->QueryProp(P_GENDER)==FEMALE)
+          tell_object(spieler[i], sprintf("Lady %s "
+            +"winkt Euch aus der Ferne zu.\n", TP->name()));
+        else 
+          tell_object(spieler[i], sprintf("Lord %s "
+            +"winkt Euch aus der Ferne zu.\n", TP->name()));
+      }
+    }
+  }
+  
+  return 1;
+}
+
+
+static int MySort(object a, object b) {
+  if(a->Name(WER) > b->Name(WER)) return 0;
+  return 1;
+}
+
+static int pwer(string str) {
+  int i;
+  object *spieler,ayla;
+  string level;
+  string paladine, align, sh;
+
+  paladine="";
+  write("Folgende Paladine sind anwesend:\n");
+  spieler=sort_array((users()-filter_array(users(), #'is_clone)),"MySort",ME);
+  for(i=sizeof(spieler)-1;i>=0; i--) {    
+    if((IsListener(spieler[i]) ||
+        member(({"zordan", "angrox"}), getuid(spieler[i]))!=-1)
+        && !spieler[i]->QueryProp(P_INVIS)) {
+      level=sprintf("%d", spieler[i]->QueryProp(P_GUILD_LEVEL));
+      if( IS_GOD(spieler[i]) ) level ="G";
+      else if( IS_LEARNER(spieler[i]) ) level = "M";
+      align=spieler[i]->al_to_title(spieler[i]->QueryProp(P_ALIGN));
+      if( IS_GOD(spieler[i]) ) align ="goettlich";
+      if (str == "ort") {
+        paladine+=sprintf("%13s(%2s) - ",CAP(getuid(spieler[i])),level);
+        if (ENV(spieler[i]) && (sh=ENV(spieler[i])->QueryProp(P_INT_SHORT)) 
+            && (!IS_LEARNER(spieler[i]) || IS_LEARNER(TP) ) )
+          paladine+=sh+".\n";
+        else
+          paladine+="Im Nirgendwo.\n";
+      } else {
+        paladine+=CAP(getuid(spieler[i]))+"("+level+"/"+align+"), ";
+      }
+    }
+  }
+  if (str == "ort") {
+    if(ayla=find_living("ayla")) 
+      paladine="         Ayla(16) - "+ENV(ayla)->QueryProp(P_INT_SHORT)+".\n"
+               +paladine;
+    write(paladine);
+  } else {
+    if(find_living("ayla")) 
+      paladine="Ayla(16/heilig), "+paladine;
+    write(BS(paladine+"\b\b.\n"));
+  }
+  return 1;
+}
+
+void init() {
+  object ob;
+  ::init();
+  if(!living(MENV))
+    call_out("remove",0);
+  if( MENV->QueryProp(P_GUILD)!= "paladine" && !IS_WIZARD(MENV)) {
+    write("Der Wappenrock loest sich auf!\n");
+    call_out("remove",0);
+    return 0;
+  }
+  if(TP!=MENV) return 0;
+  DoWear();
+  tell_object(MENV, "Du spuerst die goettliche Kraft durch Dich fliessen.\n");
+  owner=MENV;
+  align=owner->al_to_title(owner->QueryProp(P_ALIGN));
+  MENV->SetProp(P_WEAR_FUNC, TO);
+  MENV->SetProp(P_WIELD_FUNC, TO); 
+}
+
+void SetListener(int flag) {
+  if(MENV && interactive(MENV)) {
+    if(flag)
+      MENV->SetProp(P_TMP_PALADIN_LISTENER, 1);
+    else 
+      MENV->SetProp(P_TMP_PALADIN_LISTENER, 0);
+  } 
+  return ;
+}
+
+void punishEvilPaladin()
+{
+    if(!objectp(owner))
+        return;
+
+    tell_object(owner, "FREVLER! DAFUER WIRD DUSTY DICH STRAFEN!\n");
+    tell_object(owner, "Da Du nicht mehr wuerdig bist, loest sich "
+          "der Wappenrock auf!\n");
+    owner->RemoveHpHook(ME);
+    owner->SetProp(P_SP, 0);
+    call_other(NPCMASTER, "AddFeind", owner);
+    DoUnwear(); // Unwear vor remove, sonst buggt das (Feyaria)
+    remove();
+}
+
+/*
+   PALADIN-REPORT!
+*/
+
+varargs void NotifyHpChange(int force) {
+  int hp, mhp, sp, msp, HPdif, length, stat, changedHP, changedSP;
+  string color, msg, flags;
+  color="";
+  flags="";
+  stat=0;
+  
+  // Sicherheits-Check
+  if (!previous_object() || !owner) return;
+  if (owner != previous_object()) {
+    if (TO != previous_object()) return;
+    stat=1;
+  }
+  // Ausschalten wenn aktiv == 0 (z.B. nach Tod)
+  if (!aktiv && !stat) {
+    if (owner!=find_netdead(getuid(owner)))
+      owner->RemoveHpHook(ME);   // geht nur bei nicht-netztoten Spielern
+    return;
+  }
+  
+  if(!query_once_interactive(owner)) {
+    activate(0);
+    return;
+  }
+
+  if(owner->QueryProp(P_ALIGN) < -500) {
+      call_out("punishEvilPaladin", 1);
+      return ;
+  }
+
+  // aktuelle Werte ermitteln
+  hp = owner->QueryProp(P_HP);
+  mhp = owner->QueryProp(P_MAX_HP);
+  sp = owner->QueryProp(P_SP);
+  msp = owner->QueryProp(P_MAX_SP);
+  if (noscroll &&
+      hp - scrollHP >= 0 && hp - scrollHP < 5 &&
+      sp - scrollSP >= 0 && sp - scrollSP < 5)
+  {
+    scroll += hp - scrollHP + sp - scrollSP;
+    scrollHP = hp;
+    scrollSP = sp;
+    if (!force && scroll < noscroll && 
+        !(hp == mhp && hp != lastHP) &&
+        !(sp == msp && sp != lastSP))
+      return;
+  }
+  scroll = 0;
+  scrollHP = hp;
+  scrollSP = sp;
+  if(test_bit(akt_lvl, 1)) {
+    switch(hp*100/mhp) {
+      case 0..20: color=report_colors[4];
+                  break;
+      case 21..40: color=report_colors[3];
+                  break;
+      case 41..60: color=report_colors[2];
+                  break;
+      case 61..80: color=report_colors[1];
+                  break;
+      case 81..100: color=report_colors[0];
+                  break;
+      default: color=ANSI_NORMAL;
+    }
+  }
+  if(owner->QueryProp(P_ALIGN)>0 && test_bit(akt_lvl, 0))
+  {
+    if( time() != last_enh) {
+      flags=EnhancedReport(owner, enh);
+      last_flag=flags;
+      last_enh=time();
+    }
+    else
+      flags=last_flag;
+  }
+  else
+    flags="-----------------------------";
+  if(cnt>5) { 
+      align=owner->al_to_title(owner->QueryProp(P_ALIGN));
+    cnt=0;
+  }
+  cnt++;
+  length=16-strlen(align)-2;
+  // Vergleich und Ausgabe
+  changedHP=hp-lasthp;
+  changedSP=sp-lastsp;
+  if ((((hp < lastHP) || (hp > lastHP && (sp == msp || callout)) || 
+       (sp != lastSP) || (stat)) && (changedHP || changedSP)) || force) 
+  {
+    msg=sprintf("%s%s(%s)%*'-'s LPs: %d(%s), MPs: %d(%s)%s",
+        color, flags, align,length, "", hp, (changedHP>0?"+":"")+
+        changedHP, sp, (changedSP>0?"+":"")+changedSP, ANSI_NORMAL);
+    tell_object(owner, msg+"\n"); 
+    lastsp = sp;
+    lasthp = hp;
+    callout = 0;
+    lastHP = hp; 
+  }
+  else if( !callout && (hp > lastHP+1) )
+  {
+    callout = 1;
+    call_out("NotifyHpChange",0);
+  }
+  else 
+  {
+    callout = 0;
+    lastHP = hp; 
+  }
+  // neue Werte merken
+  lastSP = sp;
+}
+
+static void activate(object ob) {
+  if (objectp(ob)) {
+    aktiv = 1;
+    owner = ob;
+    owner_name = getuid(owner);
+    ob->AddHpHook(ME);
+    scrollHP = lastHP = ob->QueryProp(P_HP);
+    scrollSP = lastSP = ob->QueryProp(P_SP);
+    NotifyHpChange(1);
+  } else {
+    if (ob=(owner||TP)) ob->RemoveHpHook(ME);
+    owner = owner_name = aktiv = 0;
+  }
+}
+
+static Report(str) {
+  string *msg;
+  notify_fail("Syntax: preport ein|aus|level <0|1>|farben <0|1>|scroll x.\n");
+  if(!sizeof(msg=explode(str, " "))) return 0;
+  switch (msg[0]) {
+    case "ein":
+      if (aktiv && objectp(owner))
+        write("Der Report-Modus ist schon eingeschaltet!\n");
+      else {
+        write("Report-Modus ist jetzt eingeschaltet.\n");
+        activate(TP);
+      }
+      break;
+    case "aus":
+      if (!aktiv)
+        write("Der Report-Modus ist doch schon ausgeschaltet!\n");
+      else { 
+        write("Report-Modus ist nun ausgeschaltet.\n");
+        activate(0);
+      }
+      break;
+    case "level":
+      if(sizeof(msg)>1)
+        ConfigureReport(msg[1], 0);
+      else 
+        write("Syntax: preport level <0|1|2>\n"); 
+      break;
+    case "farben":
+      if(sizeof(msg)>1)
+        ConfigureReport(msg[1], 1);
+      else 
+        write("Syntax: preport farben <0|1>\n"); 
+      break;
+    case "scroll":  
+      if(sizeof(msg)>1)
+      {
+        noscroll = to_int(msg[1]);
+        if (noscroll > 1 && noscroll < 100)
+        {
+          write("Preport erst, wenn " + noscroll + " Punkte hochgeidelt.\n");
+        }
+        else
+          write("PReport mit normalem Scroll.\n");
+      }
+      else 
+      {
+        write("PReport mit normalem Scroll.\n"); 
+        noscroll = 0;
+      }
+      break;
+    case "hilfe":
+      ShowReportHelp();
+      break;
+    default:
+      return 0;
+  }
+  return 1;
+}
+
+
+static int ConfigureReport(string str, int what) {
+ int flag;
+ string txt;
+ flag=to_int(str);
+ if(flag<0 || flag>2) {
+   write("Falsche Eingabe!\n");
+   return 1;
+ }
+ if(what==1) txt="Farben";
+ else txt="Level";
+ if(flag==0) 
+   akt_lvl=clear_bit(akt_lvl, what);
+ else if(flag==1) {
+   if(what==0) enh=1;
+   akt_lvl=set_bit(akt_lvl, what);
+ }
+ else if(flag==2 && what==0) {
+   enh=0;
+   akt_lvl=set_bit(akt_lvl, what);
+ }
+ write("Ok, "+txt+" auf "+flag+" gesetzt!\n");
+ return 1;
+}
+
+//
+// HILFESEITEN
+//
+static int philfe(string str) {
+  write("\nDer Wappenrock ermoeglicht folgende Kommandos:\n"
+       "preport hilfe     : Hilfeseite zu preport\n"
+       "pfarben hilfe     : Hilfe zu den Farbeinstellungen\n"
+       "pruf(e)           : Teile mit fuer Paladine\n"
+       "pwer (ort)        : Welcher Paladin ist gerade da und evtl. wo\n"
+       "pwink(e)          : Allen Paladinen zuwinken\n"
+       "pknuddle          : Alle Paladine knuddeln\n");
+  if(TP->QueryProp(P_GUILD_LEVEL) > 14) 
+ write("pgesang           : Fuer Dusty!\n");
+  if(TP->QueryProp(P_GUILD_LEVEL) > 15)
+ write("wirke dustys macht: Dustys Macht heilt alle!\n");
+ write("phist             : History\n"
+       "pstatus           : Eigener Status\n"
+       "pgebet            : Gebet aufsagen :)\n"
+       "beende (schutz)   : beenden von Schildparade/Goetterschutz/Spiegelschild\n");
+  return 1;
+}
+
+static int ShowReportHelp() {
+ write("\npreport Kommandos   :\n"
+       "preport hilfe         : Dieses hier\n"
+       "preport ein           : Schaltet den Report ein\n"
+       "preport aus           : Schaltet den Report aus\n"
+       "preport level <0|1|2> : Schaltet zwischen erweiterten und normalen\n"
+       "                        Modus um.\n"
+       "preport farben <0|1>  : Farben aus|ein\n"
+       "preport scroll x      : Meldung erst wenn x Punkte hochgeheilt\n"
+       "\nDie Statuszeile im erweiterten Modus hat folgende Bedeutungen:\n"
+       " -x-x-x-x-x-x-x-x-x [ETBVFGAPN]--(align)--------------LPs:...\n"
+       "  1 2 3 4 5 6 7 8 9  ABCDEFGHI\n"
+       "1 ... (D)usty anwesend   A ... Ziemlich erschoepft\n"
+       "2 ... (S)childparade     B ... Taub\n"
+       "3 ... (H)eiligenschein   C ... Blind\n"
+       "4 ... (R)uestungssegen   D ... Vergiftung\n"
+       "5 ... (W)affensegen      E ... Frosch\n"
+       "6 ... Goetterschu(T)z    F ... Geist\n"
+       "7 ... (G)ottsegen        G ... Amaryllion\n"
+       "8 ... (S)piegelschild    H ... Paralysiert\n"
+       "9 ... (E)ifer            I ... NoSpell\n"
+       "\n");
+ return 1;
+}
+
+static int ShowColorHelp() {
+  write("\nHilfe zu 'pfarben':\n"
+     "Mit diesem Kommando kann man sich die Farben des 'preports' setzen.\n"
+     "Fuer jeden der 5 Abstufungen kann eine eigene Farbe gewaehlt werden.\n"
+     "Syntax: pfarben farbe1 farbe2 farbe3 farbe4 farbe5\n\n"
+     "Moegliche Farben:  schwarz, rot, gruen, gelb, blau, lila, zyan, "
+     "weiss.\n\n");
+  return 1;
+}
+
+static string EnhancedReport(object owner, int flag) {
+  mixed h;
+  string flags, v, n, no;
+  object ob;
+  // Pro Sekunde nur EIN Report
+  if(flag==0) {
+    v="(";
+    n=")-";
+    no="( )-";
+  }
+  else {
+    v="";
+    n="-";
+    no="x-";
+  }
+  if((ob=find_player("dusty")) && !ob->QueryProp(P_INVIS))
+    flags="-"+v+"D"+n;
+  if((ob=find_living(DUSTY_AVATAR)) && !ob->QueryProp(P_INVIS))
+    flags="-"+v+"d"+n;
+  else flags=no;
+  if(h=owner->QueryProp(P_TMP_DEFEND_HOOK)) {
+    if(h[1] && getuid(h[1])=="GUILD.pal_spells" && h[2]=="schildparade_func")
+    {
+      if(h[0]>=time()) {
+        flags+=v+"S"+n;
+      }
+      else flags+=no;
+    }
+    else flags+=no;
+  }
+  else flags+=no;
+  if(present("\nheiligenschein", owner))
+    flags+=v+"H"+n;
+  else flags+=no;
+  if(present("\nruestungssegen", owner))
+    flags+=v+"R"+n;
+  else flags+=no;
+  if(present("\nwaffensegen", owner))
+    flags+=v+"W"+n;
+  else flags+=no;
+  if(h=owner->QueryProp(P_TMP_DEFEND_HOOK)) {
+    if(h[1] && getuid(h[1])=="GUILD.pal_spells" && h[2]=="schutz2") {
+     if(h[0]>=time()) {
+        flags+=v+"T"+n;
+      }
+      else flags+=no;
+    }
+    else flags+=no;
+  }
+  else flags+=no;
+  if(present("\nsegen", owner))
+    flags+=v+"G"+n;
+  else flags+=no;
+  if(present("\nspiegelschild", owner))
+    flags+=v+"S"+n;
+  else flags+=no;
+  if(present("\neifer", owner))
+    flags+=v+"E"+n;
+  else flags+=no;
+  if(flag) {
+    flags+="[";
+    if(owner->QueryProp(P_MV)*100/owner->QueryProp(P_MAX_MV)<10)
+      flags+="E";
+    else flags+="-";
+    if(owner->QueryProp(P_DEAF))
+      flags+="T";
+    else flags+="-";
+    if(owner->QueryProp(P_BLIND))
+      flags+="B";
+    else flags+="-";
+    if(h=owner->QueryProp(P_POISON))
+    {
+      if(h<=3) flags+="v"; else flags+="V";
+    }
+    else flags+="-";
+    if(owner->QueryProp(P_FROG))
+      flags+="F";
+    else flags+="-";
+    if(owner->QueryProp(P_GHOST))
+      flags+="G";
+    else flags+="-";
+    if(owner->QueryProp(P_GUILD_LEVEL)>11 && QueryAmaryllion(owner)>0)
+    {
+      if(!find_object("/gilden/paladine/weapon/amaryllion"))
+        flags+="A";
+      else
+        flags+="a";
+    }
+    else flags+="-";
+    if(owner->QueryProp(P_PARALYZED))
+      flags+="P";
+    else flags+="-";
+    if(time()<owner->QueryProp(P_NEXT_SPELL_TIME))
+      flags+="N";
+    else flags+="-";
+    flags+="]--";
+  }
+  return flags;
+}
+
+static int SetColors(string cols) {
+  string *colors, *set_cols;
+  mapping valid_colors;
+  int i;
+  set_cols=({});
+  valid_colors=(["schwarz":ANSI_BLACK,
+                 "rot":ANSI_RED,
+                 "gruen":ANSI_GREEN,
+                 "gelb":ANSI_YELLOW,
+                 "blau":ANSI_BLUE,
+                 "lila":ANSI_PURPLE,
+                 "zyan":ANSI_CYAN,
+                 "weiss":ANSI_WHITE,
+                 "normal":ANSI_NORMAL]);
+  if(!cols) cols="standard";
+  cols=lower_case(cols);
+  if(cols=="standard") {
+    report_colors=std_colors;
+    write(BS("Ok, Standard Farben (Gruen, Gelb, Cyan, Blau, Rot) "
+          "gesetzt!\n"));
+    call_other(PALADINMASTER, "SetColors", TP, set_cols);
+    return 1; 
+  }
+  if(cols=="hilfe") {
+    return ShowColorHelp(); 
+  }
+  colors=explode(cols, " ");
+  if(sizeof(colors)!=5) {
+    write("Es muessen fuenf Farben angegeben werden!\n");
+    return 0;
+  }
+  for(i=0;i<=sizeof(colors)-1;i++) {
+    if(!member(valid_colors, colors[i])) {
+      write(sprintf("Falsche Farbe: %s!\n", colors[i]));
+      return 0;
+    }
+    set_cols+=({valid_colors[colors[i]]});
+  }
+  report_colors=set_cols;
+  write("Ok, Farben gesetzt!\n");
+  call_other(PALADINMASTER, "SetColors", TP, set_cols);
+  return 1;
+}  
+
+
+
+BecomesNetDead(object wer) {
+  if (!objectp(wer)) return;
+  if(wer==MENV) {
+    wer->SetProp(PAL_WAFFENSEGEN, 0);
+    wer->SetProp(PAL_RUESTUNGSSEGEN, 0);
+    wer->RemoveDetail(({"heiligenschein", "schein"}));
+  }
+}
+
+BecomesNetAlive(object wer) {
+  if (!objectp(wer)) return;
+  if(wer==MENV) {
+    if(time()-lastlogin > 1000 && !IS_WIZARD(wer)) {
+      tell_object(wer,break_string(sprintf(
+        "Herzlich Willkommen, Paladin %s!",wer->Name(WER,2)),78,
+        "Ayla teilt Dir mit: "));
+    }
+    lastlogin=time();
+    if(aktiv) {
+      wer->RemoveHpHook(ME);
+      activate(wer);
+    }
+  }
+}
+
+int KneeDown() {
+  object paladin, env_paladin;
+
+  if(!paladin=ENV(ME)) return 0;
+  tell_object(paladin, "Du faellst auf Deine Knie und betest zu Dusty!\n");
+  if(!env_paladin=ENV(paladin)) return 0;
+  tell_room(env_paladin, BS(sprintf("%s faellt auf die Knie und betet "
+      +"zu Dusty!\n", paladin->Name(WER))), ({paladin}));
+  return 1; 
+}
+
+int SetAmaryllion() {
+  amaryllion--;
+  return 1;
+}
+
+int QueryAmaryllion(object caster) {
+  if(interactive(caster))
+    return amaryllion;
+  return 1;  
+}
+
+// Damit koennen die Nekromanten LP's abziehen :-)
+int DoNecromancerHpLoss(object necro) {
+  int loss;
+  if(necromancer_hploss <= 0) {
+    tell_object(ENV(ME), BS("Bei Dusty! Deine tiefe Glaeubigkeit hat gerade "
+        "eine hinterhaeltige Attacke der Nekromanten abgewehrt!"));
+    return 0;
+  }
+  loss=random(20+random(10));
+  if(ENV(ME)->QueryProp(P_SP) < 100)
+    return 0;
+  necromancer_hploss--;
+  tell_object(ENV(ME), BS("Du spuerst einen stechenden Schmerz und "
+     "Eiseskaelte in Deiner Brust! Bei Dusty! Was war das?"));
+  // Deppate Paladine regen sich wegen jeden Scheiss auf
+  // Daher keinen HP Verlust mehr, sondern dafuer nur mehr doppelten SP 
+  ENV(ME)->AddSp(-20-random(10));
+  return 1;
+}
+
+static int Status(string str) {
+  notify_fail("Paladin, Du musst den PReport dafuer aktiviert haben!\n");
+  if(!aktiv) return 0;
+  NotifyHpChange(1);
+  return 1;
+}
+
+
+void singing(string pl,string what) {
+  int i;
+  int last_i;
+  string *text;
+  text=song_text;
+  if(!find_player(pl) ||  stop_singing) {
+    stop_singing=0;
+    singing=0;
+    return ;
+  }
+  write("\nDu singst voller Inbrunst:\n");
+  say(sprintf("\n%s singt voller Inbrunst:\n", TP->Name(WER)));
+  for(i=0; i<=sizeof(text)-1;i++) {
+    if(text[i]=="#--") {
+      last_i=i;
+      break;
+    }
+    write("     "+text[i]+"\n");
+    say(  "     "+text[i]+"\n");
+  }
+  if(!last_i) {
+    write("Du hoerst auf zu singen.\n");
+    say(sprintf("%s hoert auf zu singen.\n", TP->Name(WER)));
+    singing=0;
+    if(ENV(ME) && what=="alles")
+      tell_object(ENV(ME), BS("Durch Deinen Gesang spuerst Du die Macht "
+            "Dustys in Dir!"));
+      ENV(ME)->SetProp(P_PALADIN_LAST_PGESANG_TIME, time());
+    return;
+  }
+  song_text=text[last_i+1..];
+  call_out("singing", 8,pl,what);
+  return;
+}
+
+int fuer_dusty(string what) {
+  string whole;
+  if(!IS_ARCH(TP) && TP->QueryProp(P_GUILD_LEVEL) < 15) 
+    return 0;
+  if(what != "ende" && (singing || find_call_out("singing") != -1) ) {
+    singing=1;
+    write ("Aber Du singst ja schon!\n");
+    return 1;
+  }
+  if(file_size(SONG(what+".seq"))==-1 && what != "ende") {
+    write(BS("Was moechtest Du singen (pgesang alles, refrain, refrain2) ?"));
+    write(BS("Oder moechtest Du aufhoeren zu singen (pgesang ende) ?"));
+    return 1;
+  }
+  if(what == "ende") {
+    write("Du hoerst auf zu singen!\n");
+    say(sprintf("%s hoert auf zu singen.\n", TP->Name(WER)));
+    stop_singing=1;
+    singing=0;
+    return 1;
+  }
+  singing=1;
+  //write("loading "+SONG(what+".seq")+"\n");
+  whole=read_file(SONG(what+".seq"));
+  song_text=explode(whole, "\n");
+  //call_other(PALADINMASTER, "AddSingingLocation", explode(file_name(ENV(TP))),
+  //    TP);
+  write("Du holst tief Luft.\n");
+  say(sprintf("%s holt tief Luft.\n", TP->Name(WER)));
+  call_out("singing", 0,getuid(TP),what);
+  return 1;
+}
+
+int PreventFollow(object room) {
+  if(my_glvl > 15 && !random(3) && find_call_out("check_stillstand")==-1)
+  {
+    call_out("check_stillstand", 0, room);
+  }
+
+  return 1;
+}
+
+void check_stillstand(object room) {
+  object pl;
+  object *players;
+  string guild;
+  mapping guild_say;
+  int i;
+  guild_say=(["nekromanten": "VERFLUCHTE PALADINE! WAHHHHRRHHGG! "
+      "DIESE AURA! TOETE ENDLICH!",
+              "dunkelelfen": "Du fuehlst Dich auf einmal extrem unwohl..."]);
+  if(!pl=QueryProp(P_WORN)) return;
+  if(ENV(pl) && room != ENV(pl)) {
+    call_out("check_stillstand", 0, ENV(pl));
+    return ;
+  }
+  players=filter_array(all_inventory(ENV(pl)), #'interactive);
+  players-=({pl});
+  if(!sizeof(players)) return;
+  for(i=sizeof(players)-1;i>=0;i--) {
+    guild=players[i]->QueryProp(P_GUILD);
+    if(member( ({"nekromanten", "dunkelelfen"}), guild)!= -1)
+    {
+      tell_object(players[i], BS(guild_say[guild]));
+    }
+    else if(players[i]->QueryProp(P_ALIGN) < 0) 
+      tell_object(players[i], "Du fuehlst Dich irgendwie leicht unwohl...\n");
+    else
+      tell_object(players[i], "Du fuehlst Dich von Dusty geschuetzt.\n");
+  }
+  return ;
+}
+
+
+int friend_check(object ob) {
+  if(!living(ob)) return 0;
+  if(ob->QueryProp(P_ALIGN) < 0) return 0;
+  if(ob->id("Dunkelelfspieler")) return 0;
+  if(ob->QueryProp(P_GUILD)=="nekromanten") return 0;
+  if(call_other(PALADINMASTER, "IsFeind",ob)) return 0;
+  return 1;
+}
+
+int set_layhands() {
+  lay_hands=time();
+  return 1;
+}
+
+int layhands(string str) {
+  string wen;
+  object *pls;
+  int i;
+  if(!str) return 0;
+  if(str != "dustys macht") return 0;
+  if(TP->QueryProp(P_GUILD_LEVEL) <16 && !IS_ARCH(TP))
+    return 0;
+  if(lay_hands > time()) {
+    write(BS("Paladin! Du musst noch warten bis Du Dustys Genesung "
+          "wirken kannst!"));
+    return 1;
+  }
+  lay_hands=time()+24*3600;
+  pls=filter_array(all_inventory(ENV(TP)), "friend_check");
+  for(i=sizeof(pls)-1;i>=0;i--) {
+    tell_object(pls[i], "\n\n\n");
+    if(pls[i]==TP)
+    write(BS("Du hebst Deine Haende gen Himmel! Mit all Deinem "
+          "Willen, Deiner Kraft und Deinem Glauben rufst Du Dusty um "
+          "Hilfe an. Dann ploetzlich wird die Umgebung von einer "
+          "gleissenden Helligkeit erfuellt. Du fuehlst Dich fuer einen "
+          "kurzen Moment geborgen als wuerdest Du im Schoss Deiner "
+          "Mutter ruhen. Schliesslich - nach einer unendlichen Zeitspanne - "
+          "verebbt das Licht und Du fuehlst Dich geheilt!"));
+    else 
+    tell_object(pls[i], BS(sprintf("%s hebt %se Haende gen Himmel! "
+            "Ploetzlich scheint er von Licht umgeben zu sein, das den "
+            "Raum taghell erstrahlen laesst!  Dann ploetzlich wird die "
+            "Umgebung von einer gleissenden Helligkeit erfuellt. Du "
+            "fuehlst Dich fuer einen kurzen Moment geborgen als "
+            "wuerdest Du im Schoss Deiner Mutter ruhen. Schliesslich - "
+            "nach einer unendlichen Zeitspanne - verebbt das Licht "
+            "und Du fuehlst Dich geheilt!", TP->Name(WER), 
+            TP->QPP(WESSEN))));
+    tell_object(pls[i], "\n\n\n");
+    pls[i]->SetProp(P_FROG, 0);
+    pls[i]->AddHp(1000);
+    pls[i]->AddSp(1000);
+    pls[i]->SetProp(P_POISON, 0);
+    pls[i]->SetProp(P_BLIND, 0);
+    pls[i]->SetProp(P_DEAF, 0);
+    pls[i]->SetProp(P_ALCOHOL, 0);
+    pls[i]->SetProp(P_FOOD, 0);
+    pls[i]->SetProp(P_DRINK, 0);
+  }
+  return 1;
+}
+
+int beenden(string str)
+{
+  int flag;
+  mixed h;
+  object ob;
+
+  flag = 0;
+  if( !str || 
+      member( ({"schutz", "spiegelschild", "schildparade", "goetterschutz"}), str)==-1 ) 
+    return 0;
+  if( str == "schutz" )
+    return notify_fail("Welchen Schutz willst Du beenden? "
+        "(schildparade/goetterschutz/spiegelschild)\n"), 0;
+  if(TP->QuerySkillAbility(str)==MAX_ABILITY && ((flag=1) && !TP->Infight())) {
+    switch( str ) {
+      case "spiegelschild":
+        if((ob=present("\nspiegelschild", TP))) {
+          ob->remove_me();
+          flag = 2;
+        }
+        else 
+          flag = 3;
+        break;
+      case "schildparade":
+        if( (h = TP->QueryProp(P_TMP_DEFEND_HOOK)) && h[0] >= time() &&
+            h[1] == find_object("/spellbooks/pal_spells") && h[2] == "schildparade_func" ) {
+          flag = 2;
+          TP->SetProp(P_TMP_DEFEND_HOOK, 0);
+        }
+        else 
+          flag = 3;
+        break;
+      case "goetterschutz":
+        if( (h = TP->QueryProp(P_TMP_DEFEND_HOOK)) && h[0] >= time() &&
+            h[1] == find_object("spellbooks/pal_spells") && h[2] == "schutz2" ) {
+          flag = 2;
+          TP->SetProp(P_TMP_DEFEND_HOOK, 0);
+        }
+        else 
+          flag = 3;
+        break;
+    }
+  }
+  switch( flag) {
+    case 0:
+      write("Du musst "+CAP(str)+" goettlich beherrschen, um es beenden zu koennen.\n");
+      break;
+    case 1:
+      write("Im Kampf kannst Du "+CAP(str)+" nicht beenden.\n");
+      break;
+    case 2:
+      write("Du beendest "+CAP(str)+".\n");
+      break;
+    case 3:
+      write(CAP(str)+" muss aktiv sein, um es beenden zu koennen!\n");
+      break;
+  }
+  return 1;
+}
+
+string short()
+{
+  if (QueryProp(P_WORN) && TP && TP != QueryProp(P_WORN) &&
+      QueryProp(P_WORN)->QueryProp(P_GUILD) != GUILDNAME)
+    return 0;
+  return ::short();
+}
+
+// Hier wird das Mapping wieder in die Properties eingetragen
+mixed _set_autoloadobj(mixed data)
+{
+  if(mappingp(data)) {
+    dk_start=data["dk_start"];
+  }
+  return 0 ;
+}
+
+// Und hier wird gespeichert
+mixed _query_autoloadobj()
+{
+  return (["dk_start": dk_start]);
+}
+
+
+int start_deathknight_process() {
+  if(dk_start && !objectp(ENV(ME)) && !interactive(ENV(ME)))
+  {
+    return 0;
+  }
+  write_file(MEMBERLOG("owner_name"), sprintf("%d: Start Todesritterprogress (%s) durch (%s)\n", dtime(time()),
+        owner_name, getuid(PO)));
+  dk_start=1;
+  return 1;
+}

@@ -1,0 +1,1457 @@
+/*
+** Der Wappenrock der Todesrittter:
+**
+** 16.08.2006 Gwenshara Kopiert von der Nekromantenmaske
+**
+*/
+
+inherit "std/armour";
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <wizlevels.h>
+#include <ansi.h>
+#include <new_skills.h>
+#include <moving.h>
+#include <class.h>
+#include "/secure/exploration.h"
+#include "../dk.h"
+#include "/gilden/obj/ansi_color.h"
+#include "/gilden/obj/ansi_color.lpc"
+
+#pragma strong_types
+#define QM "/secure/questmaster"
+#define NEKROMASTER "/gilden/nekromanten/master/nekromaster"
+
+nosave object owner;
+nosave string owner_name;
+nosave int lastHP, lastSP, lasthp, lastsp;
+nosave int cnt=0; // fuer Align-Anzeige
+nosave string align="";
+nosave int lastlogin=0;
+nosave string *report_colors=({});
+nosave string *std_colors=({});
+nosave int aktiv=0;
+nosave int enh=1;
+nosave string akt_lvl="";
+nosave mapping guildlvl_pre=GUILDLVLPRESAYS;
+nosave int *registered_spell_effects=({0,0});
+nosave int callout;
+nosave int noscroll = 0, scroll = 0, scrollHP = 0, scrollSP = 0;
+
+//Prototypes
+nosave int ShowReportHelp();
+nosave int ShowInfo();
+nosave int ConfigureReport(string str, int what);
+nosave string EnhancedReport(object owner);
+nosave int ShowColorHelp();
+varargs void NotifyHpChange(int force);
+nosave void activate(object ob);
+void SetListener(int flag);
+nosave int Sacrifice(string str);
+int is_nekromant(object ob);
+void CheckSpellEffect(int spell);
+
+// No Shadows, thank you :)
+nomask int query_prevent_shadow() { return 1; }
+//
+// CREATE
+//
+void create() {
+  if( !is_clone(TO) ) return;
+  ::create();
+
+  // Farben holen:
+  // Farben holen:
+  std_colors=({ANSI_GREEN, ANSI_YELLOW, ANSI_CYAN, ANSI_BLUE, ANSI_RED});
+  report_colors=call_other(GUILD_MASTER, "QueryColors", TP);
+  if(!pointerp(report_colors) || !sizeof(report_colors)) 
+    report_colors=std_colors;
+  akt_lvl=set_bit(akt_lvl, 1);
+  
+  // Properties:
+  SetProp(P_SHORT, "Ein schwarzer Wappenrock");
+  SetProp(P_NAME, "Wappenrock");
+  SetProp(P_GENDER, MALE);
+  AddId( ({"wappenrock", "rock", GUILD_ITEM_ID}) );
+  AddAdjective( ({"schwarz", "schwarzer", "schwarzen"}) );
+  SetProp(P_ARMOUR_TYPE, AT_MISC );
+  SetProp(P_AC, 0);
+  SetProp(P_QUALITY_DECAY, 0);
+  SetProp(P_MATERIAL, ([MAT_CLOTH:50, MAT_BLOOD:40, MAT_MISC_UNHOLY:10]));
+  SetProp(P_WEIGHT, 50);
+  SetProp(P_VALUE, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_AUTOLOADOBJ, 1);
+  SetProp(P_MAGIC, 1);
+  SetProp(P_CURSED, 0);
+  SetProp(P_INFO, "Vernichten! Toeten! Hass!\n\nMehr Infos: nhilfe\n");
+  SetProp(P_WORN_TEXT, "ueber der Ruestung getragen");
+  SetProp(P_WEAR_FUNC, TO);
+  SetProp(P_REMOVE_FUNC, TO);
+  
+  // Kommandos: 
+  AddCmd(({"tschrei", "tschreie","temote"}),"guild_shout");
+  AddCmd(({"mkreisch","mkreische"}), "mages_shout");
+  AddCmd(({"twer"}),                 "guild_who");
+  AddCmd(({"treport"}),              "Report");
+  AddCmd(({"ttrete", "ttritt"}),     "ntreten");
+  AddCmd(({"thist"}),                "ShowHistory");
+  AddCmd(({"mnhist"}),               "ShowMagesHistory");
+  AddCmd(({"thilfe"}),               "guilditem_help");
+  AddCmd(({"tstatus"}),              "Status");
+  AddCmd(({"tfarben"}),              "SetColors");
+  AddCmd(({"opfer","opfere"}),       "Sacrifice");
+  AddCmd(({"ttitel"}),               "SetNekroTitle");
+}
+
+void reset() {
+  if( !is_clone(TO) ) return;
+  ::reset();
+}
+
+
+string _query_long() 
+{
+  return BS("Dieser Wappenrock gehoerte einst einem Mitglied der "
+         "ehrenhaften Paladine. Doch nun hat sein Traeger die Seiten "
+         "gewechselt und zaehlt zu den Reihen der Todeskrieger. Der "
+         "zuvor strahlend weisse Wappenrock ist nun von unheilvoll "
+         "schwarzer Farbe. Kein Wappen der Paladine ziert ihn mehr, "
+         "sondern das Wappen der Todesritter ist auf ihn aufgetragen. "
+         "Es ist rot, wie das Blut der Unschuldigen, aus dem es gemacht "
+         "ist!");
+}
+
+string _query_info() 
+{
+  return BS("Das Blut unschuldiger Opfer klebt an ihm!");
+}
+
+string GetAlign(int i)
+{
+  string ret;
+  
+  if(!intp(i)) i = 0;
+
+  if(i <= -1300) ret = "diabolisch";
+  else if(i == -666) ret = "teuflisch";
+  else
+    switch(i)
+    {
+      case -1299 .. -1000: ret = "satanisch";  break;
+      case  -999 ..  -800: ret = "sehr boese"; break;
+      case  -799 ..  -500: ret = "boese";      break;
+      case  -499 ..  -200: ret = "gemein";     break;
+      case  -199 ..   -40: ret = "frech";      break;
+      case   -39 ..    39: ret = "neutral";    break;
+      case    40 ..   199: ret = "nett";       break;
+      case   200 ..   499: ret = "lieb";       break;
+      case   500 ..   799: ret = "gut";        break;
+      case   800 ..   999: ret = "sehr gut";   break;
+      default:             ret = "heilig";
+    }
+  return ret;
+}
+// init ueberschrieben:
+void init() 
+{
+  object ob;
+  string adj;
+  ::init();
+  if(!living(MENV))
+    call_out("remove",0);
+  if( MENV->QueryProp(P_GUILD)!= "todesritter" && !IS_WIZARD(MENV)) 
+  {
+    write("Der Wappenrock verbrennt in schwarzem Feuer!\n");
+    MENV->do_damage(random(20));
+    call_out("remove",0);
+    return 0;
+  }
+  if(TP!=MENV) return 0;
+  DoWear();
+  tell_object(MENV, "Du ziehst den Wappenrock an und siehst all Deine "
+              "wunderbar-schrecklichen Taten...\n");
+  owner = MENV;
+  align = GetAlign(owner->QueryProp(P_ALIGN));
+}
+
+// WearFunc: 
+int WearFunc(object ob) 
+{
+  if (TP->QueryProp(P_GUILD)!= "todesritter" && !IS_WIZARD(TP)) {
+    write("Der Wappenrock verbrennt in schwarzem Feuer!\n");
+    MENV->do_damage(random(20));
+    call_out("remove",0);
+  }
+  if(ob == TO)
+  {
+    if (MENV->QueryProp(P_GUILD) == "todesritter")
+      call_out("activate", 0, MENV);
+    call_out("SetListener",0,1);
+  }
+  return 1;
+}
+
+// Remove Func
+
+int RemoveFunc(object me) {
+  int wearer;
+  wearer=QueryProp(P_WORN);
+  if(!wearer) return 1;
+  if(wearer->QueryProp(P_GUILD) != GUILDNAME)
+    wearer->SetProp(P_TMP_DEATHKNIGHT_LISTENER, 0);
+  return 1;
+}
+
+//
+// ** MISC FUNCTIONS **
+//
+
+/* Ist das Objekt ein Nekromant? */
+int is_nekromant(object ob)
+{
+  return (ob->QueryProp(P_GUILD)=="todesritter"?1:0);
+}
+
+/* NPCs werden geopfert und im Master gesaved */
+nosave int Sacrifice(string str)
+{
+  object corpse,weap;
+  object *present_nekros;
+  string name;
+  int i,level,percent,align, glvl,grad, pestered;
+  float divisor;
+  int *pool;
+  pestered=0;
+  divisor=2.0; // level / divisor == uebergabe an bloodpool; 
+  notify_fail("So etwas siehst Du da gar nicht.\n");
+  if( !str ) return 0;
+  if (!corpse=present(str,ENV(TP)))
+    return 0;
+  notify_fail("Du kannst nur Leichen opfern.\n");
+  if (!corpse->id("Leiche"))
+    return 0;
+  if (corpse->QueryProp(P_KILLER)!=TP)
+    divisor+=2.0;
+  notify_fail("Daemonen und Untote haben keine Seele, die Du opfern kannst!\n");
+  if (corpse->is_class_member(({CL_UNDEAD,CL_DEMON})))
+    return 0;
+  notify_fail("Dafuer bist Du nicht boese genug.\n");
+  if (TP->QueryProp(P_ALIGN)>0)
+    return 0;
+  notify_fail("Du brauchst einen Dolch oder ein Messer dazu!\n");
+  if(!weap=TP->QueryProp(P_WEAPON))
+    return 0;
+  if(corpse->QueryProp(P_NOMAGIC) == "dusty") {
+    write(BS("Bei allen Niederhoellen! Diese jaemmerlichen Paladine "
+          "haben diese Seele gesegnet! NUN NUTZT SIE UNS NICHTS MEHR!"));
+    return 1;
+  }
+  if(weap->QueryProp(P_WEAPON_TYPE)!=WT_KNIFE) 
+    return 0;
+  if(weap->QueryProp(P_NEKRO_PESTERED)) {
+    pestered=1;
+    write(BS("Du spuerst das Verlangen Deiner verpesteten Klinge nach "
+        "Blut."));
+  }
+  pool=call_other(NEKROMASTER, "QueryBloodPool");
+  percent=100*pool[0]/pool[1];
+  if(percent < 2)
+    divisor=1.0;
+  else if(percent < 10)
+    divisor-=0.5;
+  if(percent > 70)
+    divisor+=(float)((30+percent)/100.0);
+  
+  name=corpse->QueryProp(P_SHORT);
+  name[0..0]=lower_case(name[0..0]);
+  present_nekros=filter_array(all_inventory(ENV(TP)),#'is_nekromant);
+  tell_object(TP,BS(
+    "Du kniest Dich vor "+name+" und fluesterst heiser die uralte, "
+    "verfluchte Formel der Opferung. Eine dunkle Aura scheint sich um "
+    "die Leiche zu bilden, Du vermeinst einen leisen, gequaelten Seufzer "
+    "von ihr zu hoeren, dann verschwindet die Aura und die Leiche zerfaellt "
+    "zu Staub."));
+  tell_object(TP,BS("Du spuerst Deine Macht wachsen."));
+  level=corpse->QueryProp(P_LEVEL);
+  align=corpse->QueryProp(P_ALIGN);
+  TP->AddSp((int)(divisor*random(level)/7));
+  if ((i=TP->QueryProp(P_ALIGN))>-1500)
+    TP->SetProp(P_ALIGN,(i-level/3)-2);
+  tell_room(ENV(TP),BS(
+    TP->Name()+" kniet sich vor "+name+" und fluestert mit heiserer Stimme "
+    "etwas. Eine dunkle Aura scheint sich um die Leiche zu bilden, dann "
+    "zerfaellt sie zu Staub. Du erschauderst."),present_nekros);
+  present_nekros-=({TP});
+  for (i=sizeof(present_nekros);i-->0;)
+    tell_object(present_nekros[i],BS(
+      TP->Name()+" kniet sich vor "+name+" und fluestert mit heiserer Stimme "
+      "die uralte Formel der Opferung. Eine dunkle Aura scheint sich um die "
+      "Leiche zu bilden, dann zerfaellt sie zu Staub."));
+  // Opfern soll immer was bringen - schliesslich isses egal ob der andere 
+  // gut oder boese war
+  glvl=TP->QueryProp(P_GUILD_LEVEL);
+  grad=TP->QueryProp(P_GUILD_CIRCLE);
+  if(level < (grad+glvl)) {
+    write(BS(sprintf("Das Opfern dieser Seele hat Dir nichts gebracht, Du %s! "
+          "OPFERE STAERKERE SEELEN!", 
+          TP->QueryProp(P_GENDER)==FEMALE?"Naerrin":"Narr")));
+    corpse->remove();
+    return 1;
+  }
+  if(!TP->QueryProp(P_TESTPLAYER) && !IS_LEARNING(TP)) {
+    if(pestered) {
+      // 2* Divisor damit der Dolch nicht so schnell voll wird.
+      weap->AddBloodPool((int)(corpse->QueryProp(P_LEVEL)/(2*divisor)));
+    }
+    else {
+      call_other(NEKROMASTER, "AddBlood", TP,
+         to_int(call_other(NEKROMASTER, "QueryBloodBonus") +
+               (corpse->QueryProp(P_LEVEL)/divisor)), align);
+    }
+  }
+  corpse->remove();
+  if(find_living(lower_case(GUILDNPC_NAME)))
+    find_living(lower_case(GUILDNPC_NAME))->soul();
+  return 1;
+}
+
+void BecomesNetAlive(object wer) 
+{
+  if(wer==MENV) {
+    if(time()-lastlogin > 1000 && !IS_WIZARD(wer)) 
+    {
+      tell_object(wer,break_string(sprintf(
+        "DA BIST DU JA ENDLICH, %s!",wer->Name(WER,2)),78,
+        "Xarfai bruellt Dich aus der Ferne an: "));
+    }
+    lastlogin=time();
+    if(aktiv) {
+      wer->RemoveHpHook(ME);
+      activate(wer);
+    }
+  }
+}
+
+// LISTENER HANDLING
+// Ueberpruefung ob der Spieler am nkreische lauscht
+int IsListener(object wer) 
+{
+  if(!is_clone(wer) && wer->QueryProp(P_TMP_DEATHKNIGHT_LISTENER))
+  {
+    return 1;
+  }
+  return 0;
+}
+
+// Setzen auf Listener
+void SetListener(int flag) {
+  if(MENV && interactive(MENV)) {
+    if(flag)
+      MENV->SetProp(P_TMP_DEATHKNIGHT_LISTENER, 1);
+    else 
+      MENV->SetProp(P_TMP_DEATHKNIGHT_LISTENER, 0);
+  } 
+  return ;
+}
+
+// Versions Check des Items
+mixed QueryVersion() {
+  return LAST_GUILDITEM_UPDATE; 
+}
+
+// Check des Items
+nosave object CheckGuildItem(object wer) {
+  int i;
+  object *inv;
+  inv=all_inventory(wer);
+  for(i=sizeof(inv)-1;i>=0;i--) {
+    if(inv[i]->id(GUILD_ITEM_ID))
+      return inv[i];
+  }
+  return 0;
+}
+
+// Kleine Sortfunktion
+nosave int MySort(object a, object b) {
+  if(a->Name(WER) > b->Name(WER)) return 0;
+  return 1;
+}
+
+//
+//  Interner Ruf der Gildenmagier
+//
+
+int IsWiz(object pl)
+{
+  return (-1!=member(MASTER_MAGES,getuid(pl)));
+}
+
+nosave int mages_shout(string str) {
+  int i, no_msg;
+  object *members;
+  string *ignores, pre;
+  if (-1==member(MASTER_MAGES,getuid(TP)))
+    return 0;
+  no_msg=0;
+  notify_fail("Was moechtest Du den anderen Gildenmagier mitteilen?\n");
+  if (!stringp(str)) 
+    return 0;
+  members=filter_array(users(), "IsListener");
+  members=filter_array(members,"IsWiz");
+  for(i=sizeof(members)-1;i>=0; i--) {
+    if(members[i]==TP) {
+      write(break_string(TP->_unparsed_args(), 78,
+           "Du teilst den andren mit: "));
+    } else {
+      ignores=members[i]->QueryProp(P_IGNORE);
+      if(sizeof(ignores) && (member(ignores, "mkreische")!=-1 ||
+                member(ignores, "mkreisch")!=-1))
+        no_msg=1;
+      else no_msg=0;
+      if(!no_msg) {
+        if(TP->QueryProp(P_INVIS))
+          pre="("+CAP(getuid(TP))+") teilt Euch mit: ";  
+        else     
+          pre=TP->Name(WER)+" teilt Euch mit: ";
+        tell_object(members[i], BSA(TP->_unparsed_args(),pre));
+      }
+    }
+  }
+  call_other(GUILD_MASTER, "AddMagesHistory",CAP(getuid(TP))+": ", TP->_unparsed_args()); // speichern
+  return 1;
+}
+
+//
+// Gildeninterner Ruf und Gildeninternes Emoten
+//
+nosave int guild_shout(string str) {
+  int i, no_msg, invis,lvl, no_colors, emote;
+  object *members;
+  string *presay, *ignores, pre, msg, newmsg, addon, std_pre;
+  no_msg=0;
+  
+  if(query_verb() == "temote")
+    emote=1;
+  notify_fail("WAS MOECHTEST DU DEN VERDAMMTEN ZUKREISCHEN!?!\n");
+  if (!stringp(str)) 
+    return 0;
+  lvl=TP->QueryProp(P_GUILD_LEVEL);
+  msg=TP->_unparsed_args();
+  if(objectp(TP->QueryProp(P_PERM_STRING)))
+     msg=call_other(TP->QueryProp(P_PERM_STRING),"permutate_string",msg)||"";
+  if(lvl > 7) lvl =7;
+  members=filter_array(users(), "IsListener");
+  if(member(MASTER_MAGES, getuid(TP))!=-1 || TP->name(WER)==GUILDNPC_NAME)
+    presay=({"Todesengel", "Todesengel", "Todesengel"});
+  else {
+    if(call_other(GUILD_MASTER, "QueryNumberOne") && 
+       member(call_other(GUILD_MASTER, "QueryNumberOne"), getuid(TP))!=-1)
+      presay=({"Todesmarschall", "Todesmarschall", "Todesmarschall"});
+    else if(!is_clone(TP) && !TP->QueryProp(P_FROG))
+      presay=({"Todesritter", "Todesritter", "Todesritter"});
+    else 
+      presay=({"","",""});
+  }
+  // std_pre wird fuer die History gebraucht
+  std_pre="<NK:"+presay[TP->QueryProp(P_GENDER)]+" "+TP->name(WER);
+  if(TP->QueryProp(P_INVIS)) {
+    invis=1;
+    std_pre="<NK:("+CAP(getuid(TP))+")";
+  }
+  else {
+    std_pre="<NK:"+presay[TP->QueryProp(P_GENDER)]+" "+TP->name(WER);
+    invis=-1;
+  }
+  if(emote) addon="";
+  else addon=">";
+  std_pre+=addon+" ";
+  for(i=sizeof(members)-1;i>=0; i--) {
+    ignores=members[i]->QueryProp(P_IGNORE);
+    if(sizeof(ignores) && (member(ignores, "nkreische")!=-1 ||
+          member(ignores, "nkreisch")!=-1))
+      no_msg=1;
+    else no_msg=0;
+    if (sizeof(ignores))
+      no_colors = (member(ignores, "nkreische.farben") != -1);
+    if (members[i]->QueryProp(P_DEAF) && !IS_WIZARD(members[i])) no_msg=1;
+    if(!no_msg) {
+      if(TP->QueryProp(P_INVIS) && !IS_WIZARD(members[i]))
+        pre="<NK:Ein Schatten"+addon+" ";
+      else if(TP->QueryProp(P_INVIS) && IS_WIZARD(members[i]))
+        pre="<NK:("+CAP(getuid(TP))+")"+addon+" ";  
+      else     
+        pre="<NK:"+presay[TP->QueryProp(P_GENDER)]+" "+TP->Name(WER)+
+          addon+" ";
+      if(emote) {
+        newmsg=pre+msg+">";
+        pre="";
+        no_colors=1;
+      }
+      else
+        newmsg=msg;
+      if(interactive(TP)) {
+        tell_object(members[i],
+            color_tell(newmsg, pre, members[i], no_colors));
+      } 
+      else {
+        tell_object(members[i], color_tell(str,pre,members[i]));
+      }
+    }
+  }
+  if(emote) {
+    newmsg=std_pre+"%s"+">";
+    std_pre=" ";
+  }
+  if(interactive(TP)) {
+    call_other(GUILD_MASTER, "AddHistory",std_pre,
+        expand_color_strings(msg,"",""),invis, emote, newmsg);
+  } 
+  else {
+    call_other(GUILD_MASTER, "AddHistory",std_pre, 
+        expand_color_strings(str, "",""), invis, emote, newmsg);
+  }
+  return 1;
+}
+
+
+
+nosave varargs int ShowHistory(mixed number) 
+{
+  int i;
+  string *msgs;
+  mixed *history;
+  mixed *hist_time;
+  
+  if(!number) number=10;
+  number=to_int(number);
+  history=call_other(GUILD_MASTER, "QueryHistory", number);
+  hist_time=history[0];
+  history=history[1];
+  if (sizeof(history)==0)
+  {
+    write("Die Verdammten haben bisher eine unheilige Ruhe bewahrt.\n");
+    return 1;
+  }
+  write("DAS HABEN DIR DIE VERDAMMTEN ZUGEKREISCHT:\n");
+  write(BS("-----------------------------------------------"
+       +"-------------------------------\n"));
+  for(i=0;i<=sizeof(history)-1;i++) {
+    msgs=explode(history[i],"&&*%%");
+    if( msgs[0][0..0] == " ")
+      msgs[0]=msgs[0][1..];
+    if (((time()+7200)/86400)>((hist_time[i]+7200)/86400)) {
+      write(BS(dtime(hist_time[i])));
+    }
+    else {
+      write(BS(dtime(hist_time[i])[19..26]));
+    }
+    // Wenn ein Spieler nhist macht bei jemand der invis nkreischt ...
+    if(msgs[2]=="1" && !IS_WIZARD(TP)) {
+      if(msgs[3] == "1") { // == emote 
+        write(BS(sprintf("<NK:Ein Schatten %s>",msgs[1])));
+      }
+      else {
+        write(BSA(msgs[1], "<NK:Ein Schatten> "));
+      }
+    }
+    else { // ... und hier der Magier 
+      if(msgs[3] == "1") { //emote
+        write(BS(sprintf(msgs[4],msgs[1])));
+      }
+      else {
+        write(BSA(msgs[1], msgs[0]));
+      }
+    }
+  }
+  write("-----------------------------------------------"
+       +"-------------------------------\n");
+  return 1;  
+}
+
+//
+// history des mkreische anzeigen
+//
+
+nosave int ShowMagesHistory() {
+  int i;
+  string *msgs;
+  mixed *history;
+  mixed *hist_time;
+  
+  if (-1==member(MASTER_MAGES,getuid(TP)))
+    return 0;
+  history=call_other(GUILD_MASTER, "QueryMagesHistory");
+  hist_time=history[0];
+  history=history[1];
+  if (sizeof(history)==0)
+  {
+    write("Die Gildenmagier haben Dir noch nichts mittgeteilt.\n");
+    return 1;
+  }
+  write("Das haben Dir die anderen Gildenmagier mitgeteilt:\n");
+  write(BS("-----------------------------------------------"
+       +"-------------------------------\n"));
+  for(i=0;i<=sizeof(history)-1;i++) {
+    msgs=explode(history[i],"&&*%%");
+    if ((time()/86400)>(hist_time[i]/86400))
+      write(BS(dtime(hist_time[i])));
+    else
+      write(BS(dtime(hist_time[i])[19..26]));
+    write(BSA(msgs[1], msgs[0]));
+  }
+  write("-----------------------------------------------"
+       +"-------------------------------\n");
+  return 1;  
+}
+
+nosave int ntreten(string str) 
+{
+  int i;
+  object *spieler;
+  string *ignores;
+
+  spieler=users();
+  for(i=sizeof(spieler)-1;i>=0; i--) {  
+    if(IsListener(spieler[i])) {
+      if(spieler[i]==TP) {
+        write(BS("Du trittst alle Verdammten aus der Ferne! MUAHAHAHA!"));
+      } else {
+        ignores=spieler[i]->QueryProp(P_IGNORE);
+        if( sizeof(ignores) && member(ignores, "ntrete") != -1 ) ;
+        else
+        {
+          if(TP->QueryProp(P_GENDER)==FEMALE)
+            tell_object(spieler[i], sprintf("%s, eine Dienerin der Verdammnis, "
+                  +"tritt Dich aus der Ferne.\nAHHH, DAS TUT GUT!\n",
+                  TP->name()));
+          else 
+            tell_object(spieler[i], sprintf("%s, einer der Verdammten, "
+                  +"tritt Dich aus der Ferne.\nAHHHH, DAS TUT GUT!\n", 
+                  TP->name()));
+        }
+      }
+    }
+  }
+  return 1;
+}
+
+
+
+/*  ninfo, Nekromantenersatz fuer das normale info
+**
+** brauchen todesritter nicht?
+**
+*/
+
+nosave string show_nekroinfo() 
+{
+  int i, xp, level, n;
+  mixed sp;
+  string ret,name;
+  string *skull, pl_name, killed_p;
+  mapping skulls; 
+  skulls=([
+      0:({" .-\"\"-. ", 
+          "/ _  _ \\", 
+          "|(_)(_)|", 
+          "(_ /\\ _)",
+          " L====J ",
+          " '-..-' "}),
+      1:({" .-\"\"-. ", 
+          "/ _  _ \\", 
+          "|(_\\/_)|", 
+          "(_ /\\ _)",
+          " |v==v| ",
+          " '-..-' "}),
+      ]); 
+  skull=skulls[random(2)]; 
+  
+  pl_name=getuid(TP);
+  sp=call_other(NEKROMASTER, "QuerySkillPoints",TP);
+  if (!mappingp(sp)) 
+    sp=0;
+  else
+    sp=sp["freiepunkte"];
+  if(pointerp(call_other(NEKROMASTER, "QueryKilledPaladin", TP)))
+    killed_p=call_other(NEKROMASTER, "QueryKilledPaladin", TP)[0];
+  else killed_p="ein Paladin";
+  ret="";
+  if (TP->QueryProp(P_INVIS))
+    name="("+CAP(getuid(TP))+")";
+  else
+    name=TP->short();
+  if (name[<1]=='\n') name=name[0..<2];
+  name=name[0..51];
+  ret+=sprintf("%s  %*' 's  %s\n", skull[0],52,"",skull[0]);   
+  ret+=sprintf("%s  %*' 's  %s\n", skull[1],52,"",skull[1]);   
+  ret+=sprintf("%s%*'='s%s\n", skull[2],56,"",skull[2]);   
+  if(member(name, '\b') != -1)
+    ret+=sprintf("%s  %|54s  %s\n", skull[3],name,skull[3]);   
+  else
+    ret+=sprintf("%s  %|52s  %s\n", skull[3],name,skull[3]);   
+  ret+=sprintf("%s%*'='s%s\n", skull[4],56,"",skull[4]);
+  ret+=sprintf("%s  %|52s  %s\n", skull[5],"Nekromantengilde",skull[5]);
+  if (!TP->QueryProp(P_GHOST))
+  {
+    if ((TP->LpLevel() == (QueryProp(P_LEVEL) + 1)) && 
+        (TP->LevelPerc(TP->LpLevel() + 1) < 20))
+      level = TP->QueryProp(P_LEVEL);
+    else
+      level = TP->LpLevel();
+    ret+=sprintf(
+    "   \\  Kreis der Verdammnis:     %2d | Innerer Grad:             %2d "
+    " /\n"
+    "    | Geopferte Seelen:      %5d | Geopf. Paladin:  %11s |\n"
+    "    +==============================+==============================+\n"
+    "    | Lebenspunkte:      %3d (%3d) | Erfahrungspunkte: %10d |\n"
+    "    | Magiepunkte:       %3d (%3d) | Abenteuerpunkte: %4d (%4d) |\n"
+    "    | Attributpunkte:           %2d | Stufe %d [%-'.'*s] %d |\n"
+    "    | Skillpunkte:              %2d | Rasse:  %20s |\n"
+    "    +------------------------------+------------------------------+\n"
+    "    | Ausdauer:           %8s | Kraft:              %8s |\n"
+    "    | Intelligenz:        %8s | Geschicklichkeit:   %8s |\n"+
+    "    +------------------------------+------------------------------+\n",
+      TP->QueryProp(P_GUILD_LEVEL), TP->QueryProp(P_GUILD_CIRCLE),
+      call_other(NEKROMASTER, "QuerySacrified", TP),
+      CAP(killed_p),
+      TP->QueryProp(P_HP), TP->QueryProp(P_MAX_HP),
+      TP->QueryProp(P_XP),
+      TP->QueryProp(P_SP), TP->QueryProp(P_MAX_SP),
+      TP->QueryProp(P_QP), QM->QueryAllQP(),
+      TP->QueryProp(P_AP),
+      level,
+      (n = 18 - strlen(to_string(level)) - strlen(to_string(level + 1))),
+      sprintf("%'#'*s", TP->LevelPerc( level + 1 ) * n / 100, ""),
+      level + 1,
+      sp,
+      TP->QueryProp(P_RACE)[0..19],
+      sprintf("%d (%+d)", TP->QueryProp(P_ATTRIBUTES)[A_CON], 
+        TP->QueryAttributeOffset(A_CON)),
+      sprintf("%d (%+d)", TP->QueryProp(P_ATTRIBUTES)[A_STR], 
+        TP->QueryAttributeOffset(A_STR)),
+      sprintf("%d (%+d)", TP->QueryProp(P_ATTRIBUTES)[A_INT], 
+        TP->QueryAttributeOffset(A_INT)),
+      sprintf("%d (%+d)", TP->QueryProp(P_ATTRIBUTES)[A_DEX], 
+        TP->QueryAttributeOffset(A_DEX))
+    );
+  }
+  else
+  {
+    xp=TP->QueryProp(P_TOTAL_LOST_XP);
+    ret+=sprintf(
+      "   \\                                                                /\n"
+      "    | %60-s |\n" 
+      "    +--------------------------------------------------------------+\n"
+      ,sprintf("Du hast %s Todeserfahrungen gesammelt."
+      ,xp <        1?"noch gar keine":
+       xp <    10000?"noch so gut wie gar keine":
+       xp <    50000?"noch fast gar keine":
+       xp <   150000?"erst unheimlich wenige":
+       xp <   300000?"erst sehr wenige":
+       xp <   600000?"erst wenige":
+       xp <  1000000?"wenige":
+       xp < 20000000?"schon einige":
+       xp < 30000000?"schon recht viele":
+       xp < 40000000?"schon ziemlich viele":
+       xp < 50000000?"schon sehr viele":
+       xp < 60000000?"schon extrem viele":
+       xp < 80000000?"schon unheimlich viele":
+       xp <100000000?"schon wahnsinnig viele":
+       xp <150000000?"schon unglaublich viele":"unschaetzbar viele"
+       ));
+  
+  }
+  return ret;
+}
+
+//aus base.c
+nosave string exhausted_text()
+{
+  int p;
+  p = 100 * TP->QueryProp(P_MV) / TP->QueryProp(P_MAX_MV);
+  switch (p)
+  {
+    case 0..5:   return "Du bist im Moment schwer erschoepft.";
+    case 6..15:  return "Du bist ziemlich ausser Atem.";
+    case 16..30: return "Du bist etwas erschoepft.";
+    default:     return "";
+  }
+}
+
+//aus base.c
+nosave string weight_text()
+{
+  int p;
+  p = 100 * (TP->QueryProp(P_TOTAL_WEIGHT) - TP->QueryProp(P_WEIGHT) )
+          / TP->QueryProp(P_MAX_WEIGHT);
+  switch (p)
+  {
+    case  0..50:  return "";
+    case 51..60: return "Du traegst einiges Gewicht mit Dir herum.";
+    case 61..70: return "Du bist ziemlich beladen.";
+    case 71..80: return "Du bist schwer beladen.";
+    case 81..90: return "Du bist sehr schwer beladen.";
+    case 91..95: return "Du bist extrem schwer beladen.";
+    case 96..100: return "Das schwere Gewicht zwingt Dich fast zu Boden.";
+    default:     return "Du schleppst mehr als Du eigentlich tragen kannst.";
+  }
+}
+
+//
+// Guild WHO
+//
+
+string idle_to_title(object pl)
+{
+  int i;
+
+  if (pl->InFight()) return "seelenbeschaffend";
+  i = query_idle(pl);
+  if (i < 30) return "aktiv";
+  else if (i < 3 * 60) return "gelangweilt";
+  else if (i < 7 * 60) return "untaetig";
+  else if (i < 23 * 60) return "faul";
+  else if (i < 45 * 60) return "verfaulend";
+  else if (i < 90 * 60) return "verwesend";
+  else if (i < 230 * 60) return "zerfallend";
+  else return "scheintot";
+}
+
+int guild_who(string str) {
+  int i;
+  object *nekros, *listener, *listener_only, npc_nek, 
+         *ritter, npc_tod, master;
+  string level;
+  string members, align, sh;
+  string *mastermages;
+
+  ritter=({});
+
+  members="";
+  mastermages=MASTER_MAGES;
+  write("DA SIND DIE VERDAMMTEN:\n");
+  listener=call_other(NEKROMASTER, "OnlineMembers"); 
+  for(i=sizeof(mastermages)-1;i>=0;i--) 
+    if(objectp(master=find_player(mastermages[i])) && member(listener,master)==-1)
+      listener+=({master});
+  nekros=sort_array(listener,"MySort",ME);
+
+  /* Wir unterscheiden in Nekromanten und Todesritter
+  // Todesritter kommen in ein eigenes Array
+  for(i=sizeof(nekros)-1; i>=0; i--)
+    if(nekros[i]->QueryProp(P_GUILD) == "todesritter")
+    {
+      ritter+=({nekros[i]});
+      nekros-=({nekros[i]});
+    }*/
+
+  // Todesritter ermitteln
+  ritter = users();
+  for(i=sizeof(ritter)-1;i>=0;i--)
+    if(ritter[i]->QueryProp(P_GUILD) != "todesritter")
+      ritter-=({ritter[i]});
+
+  listener=sort_array(call_other(NEKROMASTER, "Listeners"),"MySort",ME);
+  listener_only=listener-nekros;
+  for(i=sizeof(nekros)-1;i>=0; i--) {    
+    if(!nekros[i]->QueryProp(P_INVIS) || IS_LEARNER(TP)) 
+    {
+      level=sprintf("%d/%d", nekros[i]->QueryProp(P_GUILD_LEVEL), 
+          nekros[i]->QueryProp(P_GUILD_CIRCLE));
+      if( IS_LEARNER(nekros[i]) ) 
+        if( str == "ort") level = "Mag"; else level = "M";
+      align=GetAlign(nekros[i]->QueryProp(P_ALIGN));
+      if(member(mastermages, getuid(nekros[i]))!=-1)
+        align="satanisch";
+      else if (IS_GOD(nekros[i]))
+        align="abgrundtief boese";
+      if (str == "idle")
+        align = idle_to_title(nekros[i]);
+      if (str == "ort") {
+        members+=sprintf("%13s(%s) - ",CAP(getuid(nekros[i])),level);
+        if (ENV(nekros[i]) && (sh=ENV(nekros[i])->QueryProp(P_INT_SHORT)) 
+            && (!IS_LEARNER(nekros[i]) || IS_LEARNER(TP)) )
+        {
+          members+=sh+".\n";
+        } else {
+          members+="In den Schatten.\n";
+        }
+      } else {
+        if (nekros[i]->QueryProp(P_INVIS))
+          members+="("+CAP(getuid(nekros[i]))+")("+align+")";
+        else
+        members+=CAP(getuid(nekros[i]))+"("+level+"/"+align+")";
+        if(i>0) members+=", ";
+      }
+    }
+  }
+  if (members[<2..] == ", ") 
+    members = members[0..<3];
+  if (str == "ort") {
+    if(npc_nek=find_living(lower_case("xarfai"))) 
+      members="       Xarfai(7/7) - "+
+              ENV(npc_nek)->QueryProp(P_INT_SHORT)+".\n"+members;
+    write(members);
+  } else {
+    if(find_living(lower_case("xarfai"))) 
+      members="Xarfai(7/7/satanisch), "+members;
+    write(BS(members));
+  }
+
+  //Wir unterscheiden in Todesritter und Nekromanten!
+  members="";
+  write("\nDIE HOELLISCHEN HEERSCHAREN:\n");
+  for(i=sizeof(ritter)-1;i>=0; i--) {    
+    if(!ritter[i]->QueryProp(P_INVIS) || IS_LEARNER(TP)) 
+    {
+      level=sprintf("%d/%d", ritter[i]->QueryProp(P_GUILD_LEVEL), 
+          ritter[i]->QueryProp(P_GUILD_CIRCLE));
+      if( IS_LEARNER(ritter[i]) ) 
+        if( str == "ort") level = "Mag"; else level = "M";
+      align=GetAlign(ritter[i]->QueryProp(P_ALIGN));
+      if(member(mastermages, getuid(ritter[i]))!=-1)
+        align="satanisch";
+      else if (IS_GOD(ritter[i]))
+        align="abgrundtief boese";
+      if (str == "idle")
+        align = idle_to_title(ritter[i]);
+      if (str == "ort") {
+        members+=sprintf("%13s(%s) - ",CAP(getuid(ritter[i])),level);
+        if (ENV(ritter[i]) && (sh=ENV(ritter[i])->QueryProp(P_INT_SHORT)) 
+            && (!IS_LEARNER(ritter[i]) || IS_LEARNER(TP)) )
+        {
+          members+=sh+".\n";
+        } else {
+          members+="In den Schatten.\n";
+        }
+      } else {
+        if (nekros[i]->QueryProp(P_INVIS))
+          members+="("+CAP(getuid(ritter[i]))+")("+align+")";
+        else
+        members+=CAP(getuid(ritter[i]))+"("+level+"/"+align+")";
+        if(i>0) members+=", ";
+      }
+    }
+  }
+  if (members[<2..] == ", ") 
+    members = members[0..<3];
+  if (str == "ort") {
+    if(npc_tod=find_living(lower_case(GUILDNPC_NAME))) 
+      members="       "+GUILDNPC_NAME+"(7/7) - "+
+              ENV(npc_tod)->QueryProp(P_INT_SHORT)+".\n"+members;
+    write(members);
+  } else {
+    if(find_living(lower_case(GUILDNPC_NAME))) 
+      members=GUILDNPC_NAME+"(7/7/satanisch), "+members;
+    write(BS(members));
+  }
+  
+  write("\nDIE LUESTERNEN LAUSCHER:\n");
+  members="";
+  for(i=sizeof(listener_only)-1;i>=0; i--) {    
+    if(!listener_only[i]->QueryProp(P_INVIS) || IS_LEARNER(TP))
+    {
+      if (str == "idle")
+        align = idle_to_title(listener_only[i]);
+      else
+        align=listener_only[i]->al_to_title(listener_only[i]->QueryProp(P_ALIGN));
+      if (str == "ort") {
+        members+=sprintf("%16s - ",CAP(getuid(listener_only[i])));
+        if (ENV(listener_only[i]) && (sh=ENV(listener_only[i])->QueryProp(P_INT_SHORT)) 
+            && (!IS_LEARNER(listener_only[i]) || IS_LEARNER(TP)) )
+          members+=sh+".\n";
+        else
+          members+="In den Schatten.\n";
+      } else {
+        if (listener_only[i]->QueryProp(P_INVIS))
+          members+="("+CAP(getuid(listener_only[i]))+")("+align+")";
+        else
+          members+=CAP(getuid(listener_only[i]))+"("+align+")";
+        if(i>0) members+=", ";
+      }
+    }
+  }
+  if (members[<2..] == ", ") 
+    members = members[0..<3];
+  if (str == "ort") {
+    write(members);
+  } else {
+    write(BS(members));
+  }
+  return 1;
+}
+
+
+//
+// REPORT !!!
+//
+nosave int Status(string str) {
+  notify_fail("VERDAMMTER NARR! Du musst zuerst den treport einschalten!\n");
+  if(!aktiv) return 0;
+  NotifyHpChange(1);
+  return 1;
+}
+
+// Benachrichtigungsfunktion
+varargs void NotifyHpChange(int force) {
+  int hp, mhp, sp, msp, HPdif, length, stat, changedHP, changedSP;
+  string color, msg, flags, help;
+
+  color="";
+  flags="";
+  stat=0;
+  // Sicherheits-Check
+  if (!previous_object()) return;
+  if (owner != previous_object()) {
+    if (TO != previous_object()) return;
+    stat=1;
+  }
+  // Ausschalten wenn aktiv == 0 (z.B. nach Tod)
+  if (!aktiv && !stat) {
+    if (owner!=find_netdead(getuid(owner)))
+      owner->RemoveHpHook(ME);   // geht nur bei nicht-netztoten Spielern
+    return;
+  }
+  if(!query_once_interactive(owner)) {
+    activate(0);
+    return;
+  }
+  // aktuelle Werte ermitteln
+  hp = owner->QueryProp(P_HP);
+  mhp = owner->QueryProp(P_MAX_HP);
+  sp = owner->QueryProp(P_SP);
+  msp = owner->QueryProp(P_MAX_SP);
+  if (noscroll &&
+      hp - scrollHP >= 0 && hp - scrollHP < 5 &&
+      sp - scrollSP >= 0 && sp - scrollSP < 5)
+  {
+    scroll += hp - scrollHP + sp - scrollSP;
+    scrollHP = hp;
+    scrollSP = sp;
+    if (!force && scroll < noscroll && 
+        !(hp == mhp && hp != lastHP) &&
+        !(sp == msp && sp != lastSP))
+      return;
+  }
+  scroll = 0;
+  scrollHP = hp;
+  scrollSP = sp;
+  if(test_bit(akt_lvl, 1)) {
+    switch(hp*100/mhp) {
+      case 0..20: color=report_colors[4];
+                  break;
+      case 21..40: color=report_colors[3];
+                  break;
+      case 41..60: color=report_colors[2];
+                  break;
+      case 61..80: color=report_colors[1];
+                  break;
+      case 81..100: color=report_colors[0];
+                  break;
+      default: color=ANSI_NORMAL;
+    }
+  }
+  flags="-------------"+EnhancedReport(owner);
+  if(cnt>5) { 
+      align=GetAlign(owner->QueryProp(P_ALIGN));
+    cnt=0;
+  }
+  cnt++;
+  length=18-strlen(align)-2;
+  // Vergleich und Ausgabe
+  changedHP=hp-lasthp;
+  changedSP=sp-lastsp;
+  if ((((hp < lastHP) || (hp > lastHP && (sp == msp || callout)) || 
+       (sp != lastSP) || (stat)) && (changedHP || changedSP)) || force ) 
+  {
+    if(test_bit(akt_lvl, 2))
+    {
+      help = sprintf("(%s)%*'-'s", align,length,"");
+      msg=sprintf("%s%s%s LPs: %d/%3d(%s), MPs: %d/%d(%s)%s",
+        color, flags[4..], help[0..<5], hp, mhp, (changedHP>0?"+":"")+
+        changedHP, sp, msp, (changedSP>0?"+":"")+changedSP, ANSI_NORMAL);
+    }
+    else
+    msg=sprintf("%s%s(%s)%*'-'s LPs: %d(%s), MPs: %d(%s)%s",
+        color, flags, align,length, "", hp, (changedHP>0?"+":"")+
+        changedHP, sp, (changedSP>0?"+":"")+changedSP, ANSI_NORMAL);
+    tell_object(owner, msg+"\n"); 
+    lastsp = sp;
+    lasthp = hp;
+    callout = 0;
+    lastHP = hp; 
+  }
+  else if( !callout && (hp > lastHP+1) )
+  {
+    callout = 1;
+    call_out("NotifyHpChange",0);
+  }
+  else 
+  {
+    callout = 0;
+    lastHP = hp; 
+  }
+  // neue Werte merken
+  lastSP = sp;
+}
+
+// Report aktivieren
+nosave void activate(object ob) 
+{
+  if (objectp(ob)) 
+  {
+    aktiv = 1;
+    owner = ob;
+    owner_name = getuid(owner);
+    ob->AddHpHook(ME);
+    scrollHP = lastHP = ob->QueryProp(P_HP);
+    scrollSP = lastSP = ob->QueryProp(P_SP);
+    NotifyHpChange(1);
+  } 
+  else 
+  {
+    if (ob=(owner||TP)) ob->RemoveHpHook(ME);
+    owner = owner_name = aktiv = 0;
+  }
+}
+
+// Report cmd interface
+nosave int Report(string str) 
+{
+  string *msg;
+  notify_fail("Syntax: treport ein|aus|max <0|1>|farben <0|1>|scroll x.\n");
+  if(!sizeof(msg=explode(str, " "))) return 0;
+  switch (msg[0]) {
+    case "ein":
+      if (aktiv && objectp(owner))
+        write("Der Report-Modus ist schon eingeschaltet!\n");
+      else {
+        write("Report-Modus ist jetzt eingeschaltet.\n");
+        activate(TP);
+      }
+      break;
+    case "aus":
+      if (!aktiv)
+        write("Der Report-Modus ist doch schon ausgeschaltet!\n");
+      else { 
+        write("Report-Modus ist nun ausgeschaltet.\n");
+        activate(0);
+      }
+      break;
+    case "level":
+      if(sizeof(msg)>1)
+        ConfigureReport(msg[1], 0);
+      else 
+        write("Syntax: treport level <0|1>\n"); 
+      break;
+    case "farben":
+      if(sizeof(msg)>1)
+        ConfigureReport(msg[1], 1);
+      else 
+        write("Syntax: treport farben <0|1>\n"); 
+      break;
+    case "max":
+      if(sizeof(msg)>1)
+        ConfigureReport(msg[1], 2);
+      else 
+        write("Syntax: treport max <0|1>\n"); 
+      break;
+    case "scroll":  
+      if(sizeof(msg)>1)
+      {
+        noscroll = to_int(msg[1]);
+        if (noscroll > 1 && noscroll < 100)
+        {
+          write("Nreport erst, wenn " + noscroll + " Punkte hochgeidelt.\n");
+        }
+        else
+          write("NReport mit normalem Scroll.\n");
+      }
+      else 
+      {
+        write("NReport mit normalem Scroll.\n"); 
+        noscroll = 0;
+      }
+      break;
+    case "hilfe":
+      ShowReportHelp();
+      break;
+    default:
+      return 0;
+  }
+  return 1;
+}
+
+// Report konfigurieren
+nosave int ConfigureReport(string str, int what) 
+{
+ int flag;
+ string txt;
+ flag=to_int(str);
+ if(flag<0 || flag>2) {
+   write("Falsche Eingabe!\n");
+   return 1;
+ }
+ if(what==1) txt="Farben";
+ else if(what==2) txt="Max";
+ else txt="Level";
+ if(flag==0) 
+   akt_lvl=clear_bit(akt_lvl, what);
+ else if(flag==1) {
+   if(what==0) enh=1;
+   akt_lvl=set_bit(akt_lvl, what);
+ }
+ else if(flag==2 && what==0) {
+   enh=0;
+   akt_lvl=set_bit(akt_lvl, what);
+ }
+ write("Ok, "+txt+" auf "+flag+" gesetzt!\n");
+ return 1;
+}
+
+// Ausgabe des Erweiterten Reports
+nosave string EnhancedReport(object owner) 
+{
+  mixed h;
+  string flags, v, n, no;
+  object ob;
+
+  if( !enh) return "---------------";
+  flags="";
+
+  flags+="[";
+  if(registered_spell_effects[0]) CheckSpellEffect(0);
+  if(registered_spell_effects[0]) 
+    flags+="B";
+  else 
+    flags+="-";
+  if(registered_spell_effects[1]) CheckSpellEffect(1);
+  if(registered_spell_effects[1]) 
+    flags+="S";
+  else 
+    flags+="-";
+  flags+="]";
+  flags+="[";
+  if(owner->QueryProp(P_MV)*100/owner->QueryProp(P_MAX_MV)<10)
+    flags+="E";
+  else flags+="-";
+  if(owner->QueryProp(P_DEAF))
+    flags+="T";
+  else flags+="-";
+  if(owner->QueryProp(P_BLIND))
+    flags+="B";
+  else flags+="-";
+  if(h=owner->QueryProp(P_POISON))
+  {
+    if(h<=3) flags+="v"; else flags+="V";
+  }
+  else flags+="-";
+  if(owner->QueryProp(P_FROG))
+    flags+="F";
+  else flags+="-";
+  if(owner->QueryProp(P_GHOST))
+    flags+="G";
+  else flags+="-";
+  if(owner->QueryProp(P_PARALYZED))
+    flags+="P";
+  else flags+="-";
+  if(time()<owner->QueryProp(P_NEXT_SPELL_TIME))
+    flags+="N";
+  else flags+="-";
+  flags+="]--";
+  return flags;
+}
+
+
+//
+// Farben setzen
+//
+nosave int SetColors(string cols) 
+{
+  string *colors, *set_cols;
+  mapping valid_colors;
+  int i;
+  set_cols=({});
+  valid_colors=(["schwarz":ANSI_BLACK,
+                 "rot":ANSI_RED,
+                 "gruen":ANSI_GREEN,
+                 "gelb":ANSI_YELLOW,
+                 "blau":ANSI_BLUE,
+                 "lila":ANSI_PURPLE,
+                 "cyan":ANSI_CYAN,
+                 "zyan":ANSI_CYAN,
+                 "weiss":ANSI_WHITE,
+                 "normal":ANSI_NORMAL]);
+  if(!cols) cols="standard";
+  cols=lower_case(cols);
+  if(cols=="standard") {
+    report_colors=std_colors;
+    write(BS("Ok, Standard Farben (Gruen, Gelb, Cyan, Blau, Rot) "
+          "gesetzt!\n"));
+    call_other(GUILD_MASTER, "SetColors", TP, std_colors);
+    return 1; 
+  }
+  if(cols=="hilfe") {
+    return ShowColorHelp(); 
+  }
+  colors=explode(cols, " ");
+  if(sizeof(colors)!=5) {
+    write("Es muessen fuenf Farben angegeben werden!\n");
+    return 0;
+  }
+  for(i=0;i<=sizeof(colors)-1;i++) {
+    if(!member(valid_colors, colors[i])) {
+      write(sprintf("Falsche Farbe: %s!\n", colors[i]));
+      return 0;
+    }
+    set_cols+=({valid_colors[colors[i]]});
+  }
+  report_colors=set_cols;
+  call_other(GUILD_MASTER, "SetColors", TP, set_cols);
+  return 1;
+}  
+
+//
+// HILFESEITEN
+//
+nosave int guilditem_help(string str) 
+{
+  write("\nDeine Makse bietet Dir folgende Dienste:\n"
+       "treport hilfe  : Hilfeseite zu treport\n"
+       "tfarben hilfe  : Hilfe zu den Farbeinstellungen\n"
+       "tschrei        : Gildenruf\n"
+       "temote         : Gildenemote\n"
+       "ttrete         : Alle Nekromanten treten\n"
+       "twer (ort|idle): Welche Verdammte sind da und vor allem WO!\n"
+       "thist <nr>     : Anzeige der letzten <nr> nkreische\n"
+       "tstatus        : Eigener Status\n");
+  return 1;
+}
+
+nosave int ShowReportHelp() 
+{
+ write("\ntreport Kommandos   :\n"
+       "treport hilfe         : Dieses hier\n"
+       "treport ein           : Schaltet den Report ein\n"
+       "treport aus           : Schaltet den Report aus\n"
+       "treport farben <0|1>  : Farben aus|ein\n"
+       "treport max <0|1>     : Schaltet Anzeige der maximalen Punkte ein\n"
+       "treport scroll x      : Meldung erst wenn x Punkte hochgeheilt\n"
+       "\nDie Statuszeile im erweiterten Modus hat folgende Beteutungen:\n"
+       " -------------[BS][ETBVFGPN]---(Gesinnung)--------------LPs:...\n"
+       "               AB  12345678\n"
+       "A ... Beruehrung von Zum Uul\n"
+       "B ... Schleier des Val Tkro Tthar\n"
+       "1 ... Ziemlich erschoepft\n"
+       "2 ... Taub\n"
+       "3 ... Blind\n"
+       "4 ... Vergiftung\n"
+       "5 ... Frosch\n"
+       "6 ... Geist\n"
+       "7 ... Paralysiert\n"
+       "8 ... NoSpell\n"
+       "\n");
+ return 1;
+}
+
+nosave int ShowColorHelp() {
+  write("\nHilfe zu 'nfarben':\n"
+     "Mit diesem Kommando kann man sich die Farben des 'nreports' setzen.\n"
+     "Fuer jeden der 5 Abstufungen kann eine eigene Farbe gewaehlt werden.\n"
+     "Syntax: nfarben farbe1 farbe2 farbe3 farbe4 farbe5\n\n"
+     "Moegliche Farben:  schwarz, rot, gruen, gelb, blau, lila, zyan, "
+     "weiss.\n\n");
+  return 1;
+}
+
+nosave int SetNekroTitle(string str) {
+  mapping presays;
+  string presay;
+  string titel;
+  int lvl;
+
+  presays=GUILDLVLPRESAYS;
+  if(TP->QueryProp(P_GUILD)!="todesritter") {
+    write("Das geht nur als Todesritter!\n");
+    return 1;
+  }
+  lvl=TP->QueryProp(P_GUILD_LEVEL);
+  if(lvl > 6) {
+    write("Hier stimmt etwas nicht.\n");
+    return 1;
+  }
+  if(TP->QueryProp(P_GENDER)==FEMALE) {
+    titel=find_object("/gilden/todesritter")->QueryProp(P_GUILD_FEMALE_TITLES)[lvl];
+    presay=presays[lvl][FEMALE];
+  }
+  else {
+    titel=find_object("/gilden/todesritter")->QueryProp(P_GUILD_MALE_TITLES)[lvl];
+    presay=presays[lvl][MALE];
+  }
+  TP->SetProp(P_TITLE, titel);
+  TP->SetProp(P_PRESAY, presay);
+  write(BS(sprintf("Verdammte%s! Dein Titel und Dein Presay wurden "
+        "wieder zurueckgesetzt!", TP->QueryProp(P_GENDER)==FEMALE?"":"r")));
+  return 1;
+}
+
+//
+// Register Spell Effects
+// 0 ... Beruehurng von Zuum Uul
+// 1 ,,, Schleier von xy
+//
+void RegisterSpellEffect(int spell) {
+  registered_spell_effects[spell]=1;
+  return;
+}
+
+void DeRegisterSpellEffect(int spell) {
+  registered_spell_effects[spell]=0;
+  return;
+}
+
+void CheckSpellEffect(int spell) {
+  mixed h;
+  switch(spell) {
+    case 0: 
+      if(!present(ZUM_UUL_OBJ, ENV(ME)))
+        registered_spell_effects[0]=0;
+      break;
+    case 1:
+      h=ENV(ME)->QueryProp(P_TMP_DEFEND_HOOK);
+      if(!h || sizeof(h)<2 ||  h[2]!="nekro_schutz") {
+        registered_spell_effects[1]=0;
+      }
+  }
+  return;
+}
+
+
+void AddMax(string prop, int value)
+{
+  mapping mod;
+  if (!objectp(owner))
+    return;
+  if (file_name(PO) != GUILD_SPELLBOOK)
+    return;
+  if (!mappingp(mod = QueryProp(P_X_HEALTH_MOD)))
+    mod = ([P_HP: 0, P_SP: 0]);
+  mod += ([prop: mod[prop] + value]);
+  SetProp(P_X_HEALTH_MOD, mod);
+  SetProp(P_X_MAX_HEALTH_MOD, mod);
+  owner->UpdateAttributes();
+}
+
+/*
+string short()
+{
+  if (QueryProp(P_WORN) && TP && TP != QueryProp(P_WORN) &&
+      QueryProp(P_WORN)->QueryProp(P_GUILD) != GUILDNAME)
+    return 0;
+  return ::short();
+}*/
+

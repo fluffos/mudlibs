@@ -1,0 +1,109 @@
+// death_master
+// regelt die Pfad-NPC staerke, abhaengig vom spieler (schlachtfeld)
+// Wraz / Mendralim
+
+#include "../def.h"
+
+#define DEATH_SAVE ZONE "save/save_deaths"
+
+// KEY (string): Spielername (lower_case)
+// 1. value (int): player_deaths,
+// 2. value (int): pfadnpc_kills,
+// 3. value (int): (deaths * 700) / kills ; 7 -> anzahl der "allein-pfadnpc"
+//                                         *100 -> floats sind orsch
+//    3. value = player_deaths to NPC_kills ratio
+//       1 wenn man im Schnitt 1 Mal pro Pfaddurchlauf stirbt (excl. Meisterschlaechter)
+//       0 .. 0.99 wenn man zu selten stirbt
+//       1.01 .. unendlich wenn man haeufiger stirbt
+mapping deaths;
+int last_backup=0;
+
+void create()
+{
+  if(is_clone(TO))
+  {
+    destruct(TO);
+    return;
+  }
+  seteuid(getuid(this_object())); // fuer zugriff auf dateien benoetigt
+
+  deaths=allocate_mapping(10,3); // gehen Daten beim haendischen Laden verloren?
+  restore_object(DEATH_SAVE);
+  seteuid(getuid(TO));
+
+  return;
+}
+
+int save_death(string player,int death,int kill)
+{
+  player=lower_case(player);
+  if(!player||player=="") return 0;
+  if(!deaths||deaths==([])) restore_object(DEATH_SAVE);
+
+  // Player noch nicht in Liste:
+  if(member(m_indices(deaths),player)==-1) deaths+=([player: 0; 0; 0]);
+
+  // add new death/kill
+  deaths[player,0] += death;
+  deaths[player,1] += kill;
+  // recalculate death*700-to-kill ratio (7 NPC, *100 weil floats orsch sind)
+  deaths[player,2] = (deaths[player,0]*7*100) /
+      ((deaths[player,1] > 0) ? deaths[player,1] : 1);
+
+  return to_int(deaths[player,2]);
+}
+
+int save_playerdeath(string player)
+{
+  return save_death(player,1,0);
+}
+
+int save_npcdeath(string player)
+{
+  return save_death(player,0,1);
+}
+
+float query_death_ratio(string player)
+{
+  player=lower_case(player);
+  if(!player||player=="") return -1.0;
+  if(!deaths||deaths==([])) restore_object(DEATH_SAVE);
+  if(member(m_indices(deaths),player)==-1) return -1.0;
+
+  // Trick spart floats im mapping (keine floats noetig)
+  return (to_float(deaths[player,2])/100.0);
+}
+
+void do_save()
+{
+  if(last_backup < time()-604800) // backup jede Woche
+  {
+    save_object(ZONE "save/bkp/save_deaths_bkp_"+to_string(time()));
+    last_backup = time();
+  }
+  save_object(DEATH_SAVE);
+}
+
+mapping query_deaths_saves()
+{
+  return deaths;
+}
+
+void reset()
+{
+  if(!read_file(ZONE "master/death_master.lpc")) return;
+  do_save();
+}
+
+int remove()
+{
+  if(is_clone(TO)) {
+    destruct(TO);
+    return 1;
+  }
+
+  // nochmal speichern vor dem destruct
+  save_object(DEATH_SAVE);
+  destruct(TO);
+  return 1;
+}

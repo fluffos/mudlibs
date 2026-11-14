@@ -1,0 +1,394 @@
+
+// SilberLand MUDlib
+//
+// std/shells/darkelf  Dunkelelfen Shell
+//
+// $Date: 2005/02/02 08:58:35 $
+/* $Revision: 1.21 $
+ * $Log: darkelf.c,v $
+ * Revision 1.21  2005/02/02 08:58:35  Feyaria
+ * movekosten fuer TT_AIR
+ *
+ * Revision 1.20  2005/01/14 12:57:37  Feyaria
+ * Resistenzen Aenderung
+ *
+ * Revision 1.19  2004/02/14 22:55:49  Feyaria
+ * *** empty log message ***
+ *
+ * Revision 1.18  2004/02/14 21:27:28  Feyaria
+ * Fehlende \n bei chats.
+ *
+ * Revision 1.17  2003/03/19 10:48:24  Cirion
+ * Keine Blendung als Geist (da sonst nicht entblinded wird wg. fehlendem heart_beat())
+ *
+ * Revision 1.16  2002/08/18 21:13:24  Feyaria
+ * query -> _query
+ *
+ * Revision 1.15  2002/08/17 20:55:50  Feyaria
+ * Haar und Augenfarben
+ *
+ * Revision 1.14  2001/09/06 07:58:39  Feyaria
+ * this_player -> this_object in heart-beat
+ *
+ * Revision 1.13  2001/08/30 17:52:10  Feyaria
+ * *** empty log message ***
+ *
+ * Revision 1.10  2001/04/19 17:12:51  Feyaria
+ * resistance_strenghts geaendert
+ *
+ * Revision 1.9  2001/04/02 08:53:39  Angrox
+ * Blindheit nun auf maximal 20 Sekunden beschraenkt
+ *
+ * Revision 1.8  2001/03/20 13:58:57  Woody
+ * move() ein wenig optimiert
+ *
+ * Revision 1.7  1998/09/20 14:59:55  Woody
+ * Optimierungen, vars nosave,
+ * Ueberarbeitung (TT_WATER neu, P_AVERAGE_WEIGHT, Resists, Hands, Body)
+ *
+ * Revision 1.6  1998/08/17 13:49:52  Angrox
+ * heart_beat() ueberschrieben -> Zufaellige Ausgaben abhaengig
+ * vom Lichtlevel
+ *
+ * Revision 1.5  1998/06/03 12:33:50  Woody
+ * 'geblendet'-Meldung an this_object() statt mit write()
+ *
+ * Revision 1.4  1998/03/11 17:02:57  Angrox
+ * Dunkelsicht angepasst (...last_light<1 && ...)
+ *
+ * Revision 1.3  1998/03/10 22:16:45  Angrox
+ * Dunkelsicht jetzt flexibler
+ *
+ * Revision 1.2  1998/03/09 22:56:39  Angrox
+ * Blenden beim move(), wenn Zielraum heller als Startraum
+ *
+ * Revision 1.1  1998/02/10 19:19:59  Angrox
+ * Initial revision
+ *
+ */
+
+inherit "std/player/base";
+
+#include <properties.h>
+#include <attributes.h>
+#include <environment.h>
+#include <moving.h>
+#include <combat.h>
+#include <class.h>
+#include <new_skills.h>
+
+#define CHAT_LIGHT ({ \
+    "Du fuehlst Dich hier im Hellen unwohl.\n", \
+    "Das helle Licht macht Dir zu schaffen.\n", \
+    "Durch das helle Licht fuehlst Du Dich geschwaecht.\n", \
+    "Du verfluchst das helle Licht!!!\n", \
+    "Moege Lloth diese Helligkeit verfluchen!\n", \
+    "Du verfluchst die Goetter fuer dieses grelle Licht!\n", \
+    "Du glaubst durch die Helligkeit innerlich verbrennen zu muessen.\n", \
+    "Das helle Licht bringt Dich um den Verstand.\n", \
+    "Du birgst Dein Gesicht in den Haenden! Diese verfluchte Helligkeit!\n", \
+    "Die Helligkeit scheint Deine Augen zu verbrennen!\n" });
+
+#define CHAT_DARK ({ \
+    "Ahhhh ... diese herrliche Dunkelheit ...\n", \
+    "Du dankst Lloth fuer die Finsternis.\n", \
+    "Hier, in der Dunkelheit, fuehlst Du Dich wohl.\n", \
+    "Du geniesst die Umarmung der Dunkelheit...\n", \
+    "Finsternis ... Dunkelheit ... ahhhh Lloth sei Dank!\n", \
+    "Du fuehlst Dich hier im Dunkeln wie daheim.\n", \
+    "Waer doch nur das ganze SilberLand so dunkel wie hier.\n", \
+    "Dunkelheit ... welch suesse Verfuehrung der dunklen Goettin.\n", \
+    "Dein Koerper saugt die ewige Dunkelheit in sich auf.\n", \
+    "Dein eigenes Blut koennte nicht so dunkel wie diese Umgebung sein.\n" });
+
+#define CHAT_DARKENED ({ \
+    "Haha! In dieser verdunkelten Umgebung fuehlst Du Dich wohl.\n", \
+    "Hier, in der kuenstlichen Dunkelheit, laesst es sich aushalten.\n", \
+    "Abgedunkelt laesst sich jedes Licht aushalten!\n", \
+    "Du dankst Lloth fuer die Verdunkelung des Lichts!\n", \
+    "Die kuenstliche Dunkelheit ist herrlich!\n", \
+    "Welche Lust, die Verdunkelung des Hellen!\n", \
+    "Gepriesen sei die dunkle Lloth, alles zu Verfinstern!\n", \
+    "Welch satanischer Segen bringt hier Dunkel ins Licht?\n", \
+    "Dunkel ins Licht ... hihi ... welche Bosheit, welche Bosheit!\n", \
+    "Das Dunkle hat das Licht in dieser Umgebung glorreich besiegt.\n" });
+
+#define CHAT_LIGHTENED ({ \
+    "Du verfluchst die Helligkeit in einer sonst finsteren Umgebung!\n", \
+    "Verflucht sei derjenige, der hier alles erhellt!\n", \
+    "Du verfluchst die kuenstliche Lichtquelle!\n", \
+    "Das kuenstliche Licht bringt Dich fast um den Verstand.\n", \
+    "Verdammt sei dieses Helligkeit! Wo nur das Licht herkommt?\n", \
+    "Bei Lloth! Wer erhellt die Umgebung?!!?\n", \
+    "Moege Lloth dieses kuenstliche Licht vernichten!\n", \
+    "Verdammt seien alle Kreaturen, die diese Umgebung erhellen.\n", \
+    "In Dir kommt ein Hassgefuehl gegen die Lichtquelle auf.\n", \
+    "Dein Blut pulsiert unter der sengenden Lichtquelle.\n" });
+
+#define CHAT_LIGHT_ADAPTED ({ \
+    "Du hast Dich an das helle Licht gewoehnt.\n", \
+    "Das helle Licht kann Dir nichts mehr anhaben.\n", \
+    "Du fuehlst Dich im hellen Licht wohl.\n", \
+    "Das helle Licht bereitet Dir keine Probleme mehr.\n", \
+    "Du kannst das helle Licht nun ertragen.\n", \
+    "Die Helligkeit kann Dir nichts mehr anhaben.\n", \
+    "Du bist gegen die Helligkeit immun geworden.\n", \
+    "Das helle Licht kann Dir nichts mehr anhaben.\n", \
+    "Du hast Dich an die Helligkeit gewoehnt.\n", \
+    "Die Helligkeit bereitet Dir keine Probleme mehr.\n" });
+
+
+nosave int old_align;
+nosave int last_light=100;
+nosave string *ch_l, *ch_d, *ch_al, *ch_ad, *ch_lad;     // chats for light, dark,
+                                                         // and artificial light/dark
+
+void create()
+{
+  base::create();
+
+  SetDefaultHome("/d/unterwelt/zordan/dhrkion/room/tempel");
+  SetPrayRoom("/d/unterwelt/zordan/dhrkion/room/tempel");
+
+  AddId("Dunkelelfenspieler");
+  AddClass(CL_NIGHTVISION);
+  AddClass(CL_DARKELF);
+  SetProp(P_DEFAULT_GUILD, "dunkelelfen");
+  SetProp(P_AVERAGE_SIZE, 185);
+  SetProp(P_AVERAGE_WEIGHT, 72000);
+  SetProp(P_ATTRIBUTES_OFFSETS, ([ A_STR:-1, A_DEX:4, A_INT:4 ]) );
+  SetProp(P_MAX_FOOD, 90);
+  SetProp(P_MAX_DRINK, 135);
+  SetProp(P_MAX_ALCOHOL, 75);
+  SetProp(P_FOOD_DELAY, 10);
+  SetProp(P_DRINK_DELAY, 9);
+  SetProp(P_ALCOHOL_DELAY, 5);
+  SetProp(P_TEMPERATURE_RANGE,([T_RANGE_MIN:15,T_RANGE_MAX:35]));
+  SetProp(P_ALIGN, -1000);
+  SetProp(P_MSGIN,"schleicht herein");
+  SetProp(P_MSGOUT,"schleicht");
+  SetProp(P_MMSGIN,"tritt aus dem Schatten hervor");
+  SetProp(P_MMSGOUT,"verschwindet im Schatten");
+
+  SetProp(P_RESISTANCE_STRENGTHS,
+      ([ DT_UNHOLY: -0.2,
+         DT_HOLY  :  0.25,
+         DT_LIGHT :  0.3,
+         DT_MIND  : -0.1,
+         DT_MAGIC : -0.1]) );
+
+  SetProp(P_RACE_TT_MV,
+      ([ TT_OTHER:      4,
+         TT_CAVE:       3,
+         TT_HOUSE:      6,
+         TT_HILL:       9,
+         TT_FOREST:     9,
+         TT_TOWN:       9,
+         TT_MOUNTAIN:   14,
+         TT_DESERT:     10,
+         TT_JUNGLE:     9,
+         TT_SWAMP:      14,
+         TT_PLAIN:      6,
+         TT_ARCTIC:     12,
+         TT_UNDERWATER: 14,
+         TT_WATER:      12,
+         TT_ROAD:       5,
+         TT_AIR:        3,]));
+  SetProp(P_MATERIAL_KNOWLEDGE,
+      ([ MATGROUP_STONE:20,
+         MATGROUP_LIVING:10 ]) );
+
+  ch_l = CHAT_LIGHT;
+  ch_d = CHAT_DARK;
+  ch_al = CHAT_LIGHTENED;
+  ch_ad = CHAT_DARKENED;
+  ch_lad = CHAT_LIGHT_ADAPTED;
+}
+
+void FinalSetup()
+{
+  ::FinalSetup();
+  old_align = QueryProp(P_ALIGN);
+}
+
+string _query_race()
+{
+  return "Dunkelelf";
+}
+
+string *_query_racestring()
+{
+  if (QueryProp(P_GENDER)==2)
+    return ({"Dunkelelfe","Dunkelelfe","Dunkelelfe","Dunkelelfe"});
+  return ({"Dunkelelf","Dunkelelfen","Dunkelelf","Dunkelelf"});
+}
+
+string _query_racedescr()
+{
+  return break_string(
+      "Dunkelelfen sind boesartig und gemein. Sie versuchen alle durch "
+      "ihre Hinterlisten zu betruegen und zu hintergehen. Ihre Statur "
+      "ist durchaus mit der der Elfen zu vergleichen. Allerdings haben "
+      "Dunkelelfen eine fast schwarze Haut und schneeweisse Haare. "
+      "Mit ihren dunkelroten Augen durchdringen sie auch tiefste Finsternis, "
+      "dagegen haben sie es im hellen Tageslicht oft sehr schwer. Die "
+      "Dunkelelfen hassen alles Gute und bekaempfen es, wo es nur geht.", 78);
+}
+
+int QueryAllowSelect() { return 1; }
+
+int _query_hp_delay()
+{
+  int re;
+  re = Query(P_HP_DELAY);
+  if (environment() && set_light(0)>0 && QueryProp("darkelf_light_adapted"))
+    re+=9;
+  else
+    re--;
+  return re;
+}
+
+int _query_sp_delay()
+{
+  int re;
+  re = Query(P_SP_DELAY);
+  if (environment() && set_light(0)>0 && !QueryProp("darkelf_light_adapted"))
+    re+=9;
+  else
+    re--;
+  return re;
+}
+
+nosave int _set_align(int a)
+{
+  if( a > old_align ) a = (old_align+a)/2;
+  else a -= (old_align-a)/3;
+  old_align = a;
+  return Set(P_ALIGN, a);
+}
+
+varargs int move(mixed dest, int methods, string direction, string textout,
+                 string textin)
+{
+ int d_light, ret,time,lvl,maxtime;
+
+ if(last_light == 100 && objectp(environment(this_object())))
+   last_light = environment(this_object())->_query_total_light();
+
+ ret = ::move(dest, methods, direction, textout, textin);
+
+ // move() erfolgreich und environment vorhanden?
+ if (ret > 0 && objectp(environment(this_object())))
+ {
+   d_light = environment(this_object())->_query_total_light();
+   // Man wird blind, wenn ...
+   if (QueryProp("darkelf_light_adapted") == 0 &&
+       d_light > last_light &&  // ...das Licht im Zielraum > im Startraum und
+       d_light > 0 &&           // ...das Licht im Zielraum > 0 ist (== hell),
+       last_light <= 0 &&       // ...es vorher dunkel war
+       !QueryProp(P_BLIND) &&   // ...und man nicht ohnehin schon blind ist
+       !QueryProp(P_GHOST))     // ...man kein Geist ist, weil man sonst nicht
+                                // mehr automatisch entblindet wuerde
+   {
+     time = 2 + (d_light - last_light) * 3;
+     tell_object(this_object(),
+         "Durch das ploetzliche Licht wirst Du geblendet.\n");
+     maxtime=10-QueryProp(P_LEVEL)/15; // 20 sec auf lvl 1, 10 sec auf lvl 80
+     maxtime=(maxtime<2?2:maxtime); // aber mindestens 4 sec
+     SetProp(P_BLIND, ([BLIND_TIME:(time>maxtime?maxtime:time),
+       BLIND_MSG:"Du bist vom hellen Licht geblendet.\n"]));
+   }
+   last_light = d_light;
+ }
+ return ret;
+}
+
+
+// Ausgaben fuer Dunkelheit
+heart_beat() {
+  int light, total_light, rnd;
+  string *msg;
+  ::heart_beat();
+  if(!environment()) return;
+  if (!random(50) && interactive(this_object()) &&
+      query_idle(this_object())<1000 ) {    // Rechenzeit ist kostbar.
+    light=environment()->QueryProp(P_LIGHT);
+    total_light=environment()->_query_total_light();
+    if(QueryProp("darkelf_light_adapted") && total_light>0) {
+      if (!random(3))   // 50*3 -> 1:150
+        tell_object(this_object(), ch_lad[random(sizeof(ch_lad))]); // wir sind angepasst!
+    }
+    else if(light>0 && total_light>0) {        // hell hier, wie immer :(
+      if (!random(2))   // 50*2 -> 1:100
+        tell_object(this_object(), ch_l[random(sizeof(ch_l))]);
+    }
+    else if(light<1 && total_light<1) {   // dunkel hier, wie immer :)
+      if (!random(4))   // 50*4 -> 1:200
+        tell_object(this_object(), ch_d[random(sizeof(ch_d))]);
+    }
+    else if(light<1 && total_light>0) {   // kuenstlich hell hier :(
+      if (!random(2))   // 50*2 -> 1:100
+        tell_object(this_object(), ch_al[random(sizeof(ch_al))]);
+    }
+    else {                                // kuenstlich dunkel hier :)
+      if (!random(3))   // 50*3 -> 1:150
+        tell_object(this_object(), ch_ad[random(sizeof(ch_ad))]);
+    }
+  }
+}
+
+
+string *_query_default_guild_male_titles()
+{
+    return ({
+       "der hoffnungsvolle Dunkelelf", "der kleine Boesewicht",
+       "der Dunkle",   "der fiese Kundschafter", "der Dunkelreichdiener",
+       "der Meuchler", "der Schattenbringer",    "der Diener des Zwielichts",
+       "der Schattenkaempfer", "der Verfechter der Dunkelheit",
+       "der finstere Magiekundige", "der boese Magiemeister",
+       "der finstere Gelehrte",     "der Totenbeschwoerer",
+       "der Verfechter des Boesen", "der Gesandte von Lloth",
+       "der angehende Dunkelelfenpriester", "der Dunkelelfenpriester",
+       "der angehende Dunkelelfenseher", "der Dunkelelfenseher" });
+}
+
+string *_query_default_guild_female_titles()
+{
+    return ({
+       "die hoffnungsvolle Dunkelelfin", "die kleine Boesewichtin",
+       "die Dunkle",                  "die fiese Kundschafterin",
+       "die Dunkelreichdienerin",     "die Meuchlerin",
+       "die Schattenbringerin",       "die Dienerin des Zwielichts",
+       "die Schattenkaempferin",      "die Verfechterin der Dunkelheit",
+       "die finstere Magiekundige",   "die boese Magiemeisterin",
+       "die finstere Gelehrte",       "die Totenbeschwoererin",
+       "die Verfechterin des Boesen", "die Gesandte von Lloth",
+       "die Dunkelelfenpriesterin",   "die Oberin",
+       "die angehende Dunkelelfenseherin", "die Dunkelelfenseherin" });
+}
+
+/*
+mixed RaceDefault(string arg)
+{
+  if (!arg)
+    return 0;
+  switch(arg) {
+    case P_HANDS : return ({" mit blossen Haenden",30,DT_BLUDGEON});
+    case P_BODY :  return 0;
+  }
+  return ::RaceDefault(arg);
+}
+*/
+
+string *_query_eye_colors()
+{
+  return ({"rot", "hellrot", "dunkelrot", "violett",
+           "purpurn", "schwarz", "weiss", "silbern"});
+}
+
+string *_query_hair_colors()
+{
+  return ({"weiss", "hellweiss", "weissgrau", "dunkelweiss",
+           "strahlendweiss", "grauweiss", "schneeweiss", "silbern"});
+}
+

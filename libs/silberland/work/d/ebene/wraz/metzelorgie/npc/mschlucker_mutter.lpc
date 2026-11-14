@@ -1,0 +1,421 @@
+// Schlachtfeld: Mutter aller Muellschlucker
+// existiert nur als blueprint
+// Vorlage: /obj/entsorg.c
+// Wird von Ahtawqa gerufen
+// Tricks: frisst Spieler*innen & NPC -> move in Magen (Raum: ROOM mschlucker_magen)
+//         
+// Droppt einen "Magenumhang" (ARMOUR magenumhang.c)
+
+
+inherit "/std/npc";
+inherit "/std/npc/spells";
+
+#include <properties.h>
+#include <moving.h>
+#include <defines.h>
+#include <moredef.h>
+#include "../def.h"
+
+object player;
+
+void create()
+{
+  if(is_clone(TO)) { TO->remove(); return;}
+  ::create();
+
+  SetProp(P_SHORT,"Die Mutter aller Muellschlucker");
+  SetProp(P_LONG,
+    "Die Mutter aller Muellschlucker gehoert, wie die normalen "
+    "Muellschlucker auch, zur Familie der Kleinsaurier, wobei 'Kleinsaurier' "
+    "bei ihrer unfassbaren Groesse irrefuehrend ist. Sie zeichnet "
+    "sich durch ein gigantisch grosses Maul und einen unbegrenzten Appetit aus. "
+    "Huete Dich vor ihr!");
+  SetProp(P_INFO,break_string(
+    "Die Mutter aller Muellschlucker verschlingt nicht nur lose herumliegende Dinge, "
+    "sie schluckt auch Lebewesen im Ganzen. Ihre Magensaeure muss extrem aetzend "
+    "sein, um all diese Dinge aufloesen zu koennen.",78));
+  SetProp(P_NAME,"Mutter aller Muellschlucker");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_RACE,"saurier");
+  SetProp(P_ARTICLE,1);
+  set_living_name("muellschluckermutter");
+  AddId(({"mutter","muellschluckermutter","schluckermutter","mutter aller muellschlucker",
+  "muellschlucker","schlucker","kleinsaurier","saurier"}));
+  create_default_npc( 45, 12000+random(200) );
+  SetProp(P_SIZE, 500);
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:-100,T_RANGE_MAX:100]) );
+  SetProp(P_HANDS,({" mit dem alles verschlingenden Gebiss",700}));
+  SetProp(P_ALIGN, 0);
+  seteuid(getuid(this_object()));
+  SetProp(P_DEFAULT_INFO,"grunzt nur vor sich hin.\n");
+  SetProp(P_MSGIN,"watschelt herein");
+  SetProp(P_MSGOUT,"watschelt");
+  SetProp(P_MMSGOUT,"watschelt davon");
+
+  // TODO Aktivieren vor dem Anhaengen!
+  SetProp(P_MNPC_AREA, ({ ROOM "m", ROOM "w02"}) );
+  SetProp(P_MNPC_DEFAULTROOM, ROOM "m08");
+  SetProp(P_MNPC_WAIT, ({ 3600, 120, 60 }));
+  SetProp(P_MNPC_FLAGS, MOV_OUTDOORS + MOV_MOVES);
+
+  SetChats(2,
+  ({Name(WER,1)+" furzt hemmungslos.\n",
+    Name(WER,1)+" ruelpst laut.\n",
+    "@@random_verschlucken@@",
+    "@@random_ausfurzen@@"
+   }));
+
+  SetProp(P_SPELLRATE,75);
+
+  AddDefaultSpell(3, 800, DS_MASS_DAMAGE,
+   Name(WER,1)+" beisst mit ihrem gigantischen Maul alles und alle auf einmal!\n",
+   Name(WER,1)+" beisst mit ihrem gigantischen Maul alles und alle auf einmal!\n",
+   DT_SQUEEZE);
+
+  AddDefaultSpell(2,850,DS_MASS_DAMAGE,
+    Name(WER,1)+" stoesst einen markerschuetternden, aber seltsamen Ursaurierschrei aus!\n",
+    Name(WER,1)+" stoesst einen markerschuetternden, aber seltsamen Ursaurierschrei aus!\n",
+    DT_SOUND);
+  
+  AddDefaultSpell(2,650,DS_MASS_DAMAGE,
+    Name(WER,1)+" speit Magensaeure!\n",
+    Name(WER,1)+" speit Magensaeure!\n",
+    DT_ACID);
+
+  AddSpell(1, 200, 
+   "","",DT_SQUEEZE,"verschlucken",([SP_SHOW_DAMAGE:0]));
+
+  AddSpell(1, 1, 
+   "","",DT_SQUEEZE,"random_verschlucken",([SP_SHOW_DAMAGE:0]));
+
+  AddCmd(({"fuetter","fuettere"}),"haps");
+  enable_commands();
+}
+
+string random_ausfurzen()
+{
+  if(find_player("wraz")) find_player("wraz")->Message(BS("mutter random_ausfurzen"));
+
+  call_other(ROOM "mschlucker_magen","random_ausfurzen",ENV(TO));
+  return "";
+}
+
+void verschlucken(object enemy, int damage, mixed dam_type)
+{
+  enemy->Message(BS(Name(WER,1)+" stuelpt ihr gigantisches Maul ueber Dich und verschluckt "
+  "Dich im Ganzen!"));
+  enemy->move(ROOM "mschlucker_magen",M_TPORT,"von "+name(WEM,1)+" mit einem gigantischen *HAPS* "+
+    "verschluckt",
+    "wird","wird durch einen Schlund hereingespuelt");
+}
+
+string random_verschlucken()
+{
+  object *inv;
+  int i;
+
+  if(find_player("wraz")) find_player("wraz")->Message(BS("mutter random_verschlucken"));
+
+  if(!ENV(TO)) return "";
+  inv = all_inventory(ENV(TO));
+  if(!inv) return "";
+
+  for(i=0;i<sizeof(inv);i++)
+  {
+    if(!inv[i] || random(10)) continue;
+    // Unsichtbares wird nicht verschluckt
+    if(!inv[i]->QueryProp(P_SHORT) || inv[i]->QueryProp(P_INVIS)) continue;
+    // Ahtawqa wird nicht verschluckt, und sich selbst verschluckt sie auch nicht
+    if(inv[i]->id("Ahtawqa")) continue;
+    if(inv[i]->id("muellschluckermutter")) continue;
+
+    // Message wenn es ein Objekt ist (dann kommen naemlich die move() Messages nicht)
+    if(!living(inv[i])) ENV(inv[i])->Message(BS(inv[i]->Name(WER)+" wird von "+name(WEM,1)+" mit "
+    "einem gigantischen *HAPS* verschluckt."));
+    // Message an den verschluckten Spieler
+    if(interactive(inv[i])) inv[i]->Message(BS(Name(WER,1)+" stuelpt ihr gigantisches Maul ueber "
+    "Dich und verschluckt Dich im Ganzen!"));
+    // move
+    inv[i]->move(ROOM "mschlucker_magen",M_TPORT,"von "+name(WEM,1)+" mit einem gigantischen *HAPS* "+
+    "verschluckt",
+    "wird","wird durch einen Schlund hereingespuelt");
+    // Nochmal Objekt Message an den Zielraum
+    if(!living(inv[i])) ENV(inv[i])->Message(BS(inv[i]->Name(WER)+" wird durch einen Schlund "
+    "hereingespuelt."));
+  }
+  return "";
+}
+
+
+// Verfolgung, einschmieren, etc. (alles kopiert von entsorg_sf; tw. adaptiert)
+
+int haps(string str)
+{
+  string s1,s2;
+  object ob;
+  notify_fail("Syntax: fuettere muellschluckermutter mit <name>\n");
+  if(!str)return 0;
+  if(sscanf(str,"%s mit %s",s1,s2)!=2)return 0;
+  if(!id(s1))return 0;
+  notify_fail("So etwas hast Du nicht.\n");
+  if((!ob=present(s2,this_player())) &&
+     (!ob=present(s2,environment()))) return 0;
+  if(ob->QueryProp(P_NODROP) || ob->QueryProp(P_NEVERDROP)){
+    write("Das kannst Du nicht wegwerfen.\n");
+    return 1;
+  }
+  if(living(ob)){
+    write(Name(WER,1)+" frisst keine Lebewesen.\n");
+    return 1;
+  }
+  if(ob->QueryProp(P_VALUE)){
+    write("Das ist zu wertvoll, das vertraegt der Muellschlucker nicht.\n");
+    return 1;
+  }
+  if (ob->QueryProp(P_CURSED)) {
+    write("Verfluchte Dinge bekommen dem Muellschlucker nicht!\n");
+    return 1;
+  }
+  if (ob->QueryProp(P_NOGET)) {
+    write("Das kann der Muellschlucker nicht nehmen!\n");
+    return 1;
+  }
+  ob->remove();
+  if(ob){
+    write("Aus irgendeinem Grund scheint das dem Muellschlucker nicht "+
+    "zu schmecken.\n");
+    return 1;
+  }
+  write("Mit einem lauten Ruelpsen verschlingt der Muellschlucker alles.\n");
+
+  return 1;
+}
+
+void glanz_entfernen()
+{
+  int noatt;
+  noatt = to_int(this_object()->QueryProp(P_NOATTACK));
+
+  if(noatt && (noatt < time()))
+  {
+    environment(this_object())->Message(break_string(
+      "Die Mutter aller Muellschlucker verliert ihren schimmernden Glanz."
+    ));
+    RemoveDetail( ({"glanz","haut"}));
+    this_object()->SetProp(P_NOATTACK, 0);
+  }
+}
+
+void set_noattack(int t)
+{
+  t = 30+random(60); // t wird hier einfach ueberschrieben (in sf_entsorg aber verwendet)
+
+  environment(this_object())->Message(break_string(
+    "Die Haut der Muellschluckermutter bekommt kurz einen schimmernden Glanz und sie "
+    "wirkt geschickter als zuvor."
+  ));
+  AddDetail( ({"glanz","haut"}),
+    "Die Haut der Mutter aller Muellschlucker hat einen schimmernden Glanz.");
+  // Dauer bei Mutter viel kuerzer
+  this_object()->SetProp(P_NOATTACK, time()+t); 
+  if(find_call_out("glanz_entfernen") == -1) call_out("glanz_entfernen",t+1);
+}
+
+// flag 1 -> Aufruf kam vom "friss" Kommando
+// flag 0 -> von reset()
+void nehmen_und_fressen(int flag)
+{
+  int i;
+  object *inv;
+
+  if(flag == 1 && !random(5))
+  {
+    write("Die Mutter aller Muellschlucker schaut herzzerreissend drein!\n");
+    return;
+  }
+
+  if(flag == 1) command("nimm alles");
+
+  inv=all_inventory(this_object());
+  if(inv && sizeof(inv))
+    for(i=sizeof(inv)-1;i>=0;i--)
+    {
+      catch(inv[i]->remove());
+      if (inv[i]) destruct(inv[i]);
+    }
+  if(!flag) command("nimm alles");
+  if(flag == 1)
+  {
+    if (sizeof(inv)) write("Die Mutter aller Muellschlucker verspeist alles und ruelpst zufrieden.\n");
+    else write("Die Mutter aller Muellschlucker sieht sich verzweifelt nach Essbarem um.\n");
+  }
+   
+}
+
+void reset()
+{
+  ::reset();
+  call_other(TO,"set_player","ahtawqa");
+  if(find_call_out("start_follow") == -1) call_out("start_follow",2);
+  call_other(TO,"nehmen_und_fressen",0);
+}
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+  if (find_call_out("react")!= -1) return;
+  switch(gruppe)
+  {
+    case "fies":
+      call_out("react", 0, "faucht Dich boese an",
+        "faucht "+TP->name(WEN)+" boese an");
+      break;
+    case "aergerlich":
+      call_out("react", 0, "zittert wie Espenlaub", "zittert wie Espenlaub");
+      break;
+    case "traurig":
+      call_out("react", 0, "leckt Dir troestend das Gesicht",
+	     "leckt "+TP->name(WEM, 2)+" troestend das Gesicht");
+      break;
+    case "albern":
+      call_out("react", 0, "legt den Kopf schief und grinst Dich an",
+             "legt den Kopf schief und grinst "+TP->name(WEN)+" an");
+      break;
+    case "neutral":
+      call_out("react", 0, "grinst Dich an", "grinst "+TP->name(WEN)+" an");
+      break;
+    case "intim":
+      call_out("react", 0, "kuesst Dich leidenschaftlich",
+                   "kuesst "+TP->name(WEN)+" leidenschaftlich");
+      break;
+    case "froh":
+      call_out("react", 0, "laechelt Dich froehlich an",
+             "laechelt "+TP->name(WEN)+" froehlich an");
+      break;
+    case "aengstlich":
+      call_out("react", 0, "floesst Dir neuen Mut ein",
+             "floesst "+TP->name(WEM)+" neuen Mut ein");
+      break;
+    case "frech":
+      call_out("react", 0, "fiept Dich an", "fiept "+TP->name(WEN)+" an");
+      break;
+    case "nett":
+      call_out("react", 0, "knuddelt Dich", "knuddelt "+TP->name(WEN));
+      break;
+  }
+}
+
+int PreventFollow(object dest)
+{
+  if ( strstr(file_name(dest),ROOM) == -1 ) // nur am schlachtfeld
+    return 1;
+  else return 0; 
+}
+
+void stop_follow()
+{
+  if(!player) return;
+  player->RemovePursuer(TO);
+}
+
+void start_follow()
+{
+  if(!player) {
+    stop_follow();
+    return;
+  }
+  else {
+    call_out("react", 0, "laechelt Dich froehlich an",
+             "laechelt "+player->name(WEN)+" froehlich an");
+    player->AddPursuer(TO);
+  }
+  // Mutter verfolgt bald doch wieder Ahtawqa
+  if(player && find_call_out("start_follow") == -1) 
+  {
+    call_out("set_player",20,"ahtawqa");
+    call_out("start_follow",20+random(10));
+  }
+}
+
+void react(string victim, string others)
+{
+  if (TP && present(TP, ENV(TO)))
+  {
+    tell_object(TP, BS(Name(WER, 1) + " "+victim+"."));
+    tell_room(ENV(TO), BS(Name(WER, 1)+" "+others+"."), ({TP,TO}));
+  }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+object set_player(string name)
+{
+  // find_living -> Spieler & NPC (Ahtawqa)
+  player = find_living(name);
+  if(!player) return 0;
+  else {
+    start_follow();
+    return player;
+  }
+}
+
+void catch_tell(string str)
+{
+  string who, what, *arwhat;
+  object room;
+  int n;
+
+  if(!room=ENV(TO)) return;
+  if(InFight()) return;
+  if(!player) return;
+
+  if(sscanf(str,"%s sagt: %s", who, what)==2)
+  {
+    what = lower_case(what[0..<2]);
+    who = lower_case(who);
+    arwhat=explode(lower_case(what), " ");
+
+    if(who!=getuid(player)) return;
+
+    for(n=0;n<sizeof(arwhat);n++)
+    {
+      if( member(({"friss"}), arwhat[n]) != -1 ) {
+        if(find_call_out("nehmen_und_fressen")==-1) call_out("nehmen_und_fressen",0,1);
+        break; }
+      else if ( member(({"bleib"}), arwhat[n]) != -1 ) {
+        stop_follow();
+        call_out("react", 0, "fiept Dich traurig an", "fiept "+TP->name(WEN)+" traurig an");
+        break; }
+      else if ( member(({"komm"}), arwhat[n]) != -1 ) {
+        start_follow();
+        break; }
+    }
+  }
+  return;
+}
+
+void die(int poisondeath)
+{
+  object gems;
+
+  call_other(ROOM "mschlucker_magen","mutter_dies",ENV(TO));
+
+  "/obj/gemmaster"->DistributeGem(400, 201, 0, TO, "lapislazuli");
+
+  /*gems = clone_object("/obj/gems/lapislazuli");
+  gems->SetProp(P_AMOUNT, 800+random(401));
+  gems->move(TO,M_GET);*/
+
+  if(!random(2)) CLONEME(SCHATTEN "armour/schattenhelm");
+
+  clone_object(ARMOUR "magenumhang")->move(TO,M_GET);
+  
+  ::die(poisondeath);
+}
+
+void InformDefend(object enemy)
+{
+  Kill(enemy);
+}

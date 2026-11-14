@@ -1,0 +1,189 @@
+
+#include <moving.h>
+#include <properties.h>
+
+#include "../def.h"
+
+inherit ROOM "trollraum";
+
+int leiter;
+string sleiter;
+
+create() {
+  ::create();
+
+  SetProp(P_LIGHT,1);
+  SetProp(P_INT_SHORT,"Im Trollager");
+  SetProp( P_ENVIRONMENT, ([ENV_TEMPERATURE: 18]) );
+
+  AddDetail( ({ "sicherheit" }),
+    "Na vielleicht nicht die totale Sicherheit. Aber der Baum koennte "
+    "Dich durchaus schuetzen.");
+
+  AddDetail( ({ "attacken","attacke","chance" }),
+    "Wenn die Trolle Dich erstmal attackieren, duerftest Du kaum mehr eine "
+    "Chance haben.");
+
+  AddDetail( ({"baum","eiche"}),
+    "Eine riesige Eiche, deren Stamm hoch in den Himmel ragt.");
+
+  AddDetail(({"leiter","strickleiter"}),
+    "Du kannst, wenn sie heruntergelassen ist, hinaufklettern, und sie "
+    "hinter Dir hochziehen, um Dich vor aggresiven Trollen zu schuetzen.");
+
+  AddDetail(({"fels","felsen"}),
+    "Sie ragen steil auf allen Seiten des Lagers empor, und sind "
+    "unmoeglich zu besteigen.");
+
+  AddDetail( "stamm",
+    "Ein sehr, sehr dicker Stamm. Die Eiche ist bestimmt schon sehr alt.");
+
+  AddDetail( "boden",
+    "Der Boden ist dreckig.");
+
+  AddDetail( "loch",
+    "Durch das riesige Loch kannst Du in eine Hoehle nach unten gehen.");
+
+  AddDetail( "hoehle",
+    "Von hier aus kannst Du nur sehen, dass die Hoehle hell erleuchtet ist.");
+
+  AddCmd(({"kletter","klettere"}),"kletter");
+  AddCmd(({"lasse","ziehe","strickleiter","betaetige","stosse","lass",
+           "zieh","lasse","leiter"}),"sonicht");
+  AddCmd("rauf","gehrauf");
+  AddCmd( ({ "schuettle", "schuettel", "ruettle", "ruettel" }), "schuettel" );
+  AddCmd( ({ "bahn","bahne" }) , "bahnefkt" );
+
+  SetProp(P_HIDE_EXITS, ({ "sueden" }));
+
+  AddSpecialExit("oben","gehrauf"); 
+  AddExit("norden",     "./t2");
+  AddExit("suedunten",  "./laden");
+  AddExit("sueden",     "./laden");
+  AddExit("nordosten",  "./t3");
+  AddExit("suedosten",  "./t6");
+
+  AddItem(NPC "skink", REFRESH_DESTRUCT);
+
+  leiter = 0;
+  inileiter();
+}
+
+schau() {
+  SetProp(P_INT_LONG, BS(
+    "Du befindest Dich im Westen des Trollagers direkt unter einem hohen "+
+    "Baum, dessen Stamm ueber die Felsen hinausragt. Eine Strickleiter "+
+    "ist an diesem Baum befestigt, sodass Du dich hier bei gefaehrlichen "+
+    "Attacken der Trolle in Sicherheit begeben kannst. Im Sueden gaehnt "
+    "ein riesiges Loch im Boden. "+sleiter));
+}
+
+inileiter() {
+  if(leiter==0)
+    sleiter="Eine Strickleiter haengt hier von dem Baum herab.\n";
+  else
+    sleiter="Die Strickleiter ist allerdings gerade hochgezogen.\n";
+  schau();
+}
+
+sonicht(str) {
+  if ( (str=="leiter") || (str=="leiter runter") || 
+       (str=="leiter herunter") ) {
+    write(BS(
+      "Die Strickleiter laesst sich nur von oben hinunterlassen oder "
+      "hochziehen."));
+    return 1;
+  }
+  return 0;
+}
+
+leiterrunter() {
+  AddSpecialExit("oben","gehrauf");
+  leiter=0;
+  inileiter();
+  tell_room(ME,
+    "Eine Strickleiter wird gerade herunter gelassen.\n");
+}
+
+leiterhoch() {
+  RemoveSpecialExit("oben");
+  leiter=1;
+  inileiter();
+  tell_room(ME, 
+    "Die Strickleiter wird hinaufgezogen.\n");
+}
+
+gehrauf() {
+  write("Du kletterst die Stickleiter nach oben.\n");
+  TP->move(ROOM "baum",M_GO,"",
+    "klettert die Strickleiter nach oben",
+    "kommt hinaufgeklettert");
+  return(1);
+}
+
+kletter() {
+  write(BS(
+    "Der Baum ist nur ueber die Strickleiter zu besteigen. "
+    "Probier doch einfach nur nach oben zu gehen."));
+  return(1);
+}
+
+schuettel(str) {
+  if(member( ({ "baum", "am baum", "den baum" }), str ) >= 0 ) {
+    write("Du ruettelst am Baum. Hoffentlich faellt nichts herunter.\n");
+    say(CAP_TPN+" ruettelt am Baum.\n");
+    tell_room(ROOM "baum", 
+      "Du fuehlst Dich geschuettelt.\n"+CAP_TPN+" hat den Baum geschuettelt.\n");
+    if(find_call_out("runterfallen") == -1)
+      call_out("runterfallen", 4);
+  }
+  else {
+    write("Was willst Du schuetteln?\n");
+  }
+  return 1;
+}
+
+runterfallen() {
+  object *ding;
+  string target;
+  int minushp, i;
+
+  ding=all_inventory(find_object(ROOM "baum"));
+  for(i=0; i<sizeof(ding); i++) {
+    target=ROOM "t4";
+    ding[i]->move(target, M_SILENT|M_TPORT|M_NO_SHOW);
+    tell_room(target, CAP(ding[i]->name(WER))+
+      " faellt vom Baum herunter.\n", ({ ding[i] }) );
+    tell_room(ROOM "baum", CAP(ding[i]->name(WER))+
+      " faellt vom Baum runter.\n", ({ ding[i] }) );
+    if(living(ding[i])) {
+      tell_object(ding[i], "Du faellst vom Baum runter und verstauchst "+
+                           "dir alle Knochen.\n");
+      TP->reduce_hit_point(random(20)+10);
+    }
+
+  }
+  if(leiter!=0)
+    call_other(ROOM "baum", "leiterrunter");
+}
+
+int bahnefkt(string str) {
+  object item;
+  if (!item=present( QUESTITEM, TP)) return 0;
+  if (!item->checkgefragt()) return 0;
+  if (!item->checkfunkeln()) return 0;
+  notify_fail("Was moechtest Du Dir wohin bahnen?\n");
+  if (str == "weg") {
+    notify_fail("Wohin moechtest Du Dir einen Weg bahnen?\n");
+    return 0;
+  }
+  if (str == "weg in unterholz" || str == "weg nach unterholz" ||
+      str == "weg zu funkeln" || str == "weg zum unterholz" ||
+      str == "weg ins unterholz" || str == "weg zum funkeln") {
+    write(BS(
+      "Du versuchst Dir einen Weg ins Unterholz zu bahnen. Aber es gelingt "
+      "Dir an dieser Stelle nicht."));
+    return 1;
+  }
+  return 0;
+}

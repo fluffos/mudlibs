@@ -1,0 +1,501 @@
+/* SilberLand MUDlib
+ *
+ * /secure/master/userinfo.c -- secure save file handling
+ *
+ * $Date: 2012/03/20 15:08:40 $
+ * $Revision: 1.28 $
+ * $Log: userinfo.c,v $
+ * Revision 1.28  2012/03/20 15:08:40  Woody
+ * SHELLCHANGE_ALLOW += "/d/nacht/anatol/rassen/m/change"
+ *
+ * Revision 1.27  2009/09/10 16:03:45  Woody
+ * _cleanup_uinfo() nicht mehr als callout-Kette sondern im Master Reset
+ *
+ * Revision 1.26  2006/07/12 09:30:09  Woody
+ * Bugfix bei Passwort-Check in delete_player()
+ *
+ * Revision 1.25  2004/09/05 12:54:15  Feyaria
+ * bugfix zweitespieler mitloggen (dumme mehrfachverwednung von variablen)
+ *
+ * Revision 1.24  2004/04/20 21:39:19  Feyaria
+ * find_player und dtime ueber funcall
+ *
+ * Revision 1.23  2004/03/04 15:06:37  Feyaria
+ * Zweitspieler mitloggen bei selbstloeschung
+ *
+ * Revision 1.22  2004/02/22 16:52:19  Feyaria
+ * Rassenwechsel mitloggen
+ *
+ * Revision 1.21  2004/02/20 13:01:06  Angrox
+ * SHELLCHANGE_ALLOW darf nun Shells wechseln
+ *
+ * Revision 1.20  2003/05/20 15:07:31  Woody
+ * Zweitspieler je nach P_SECOND_MARK /nicht/ ausgeben
+ *
+ * Revision 1.19  2002/05/30 09:39:20  Woody
+ * Optimierung in _cleanup_uinfo() (Thx an Tiamak@MG)
+ *
+ * Revision 1.18  2002/03/19 15:22:26  Woody
+ * Untote zu den Spielershells hinzugefuegt
+ *
+ * Revision 1.17  2001/04/25 20:23:27  Zordan
+ * TypoFix in delete_player() "ein eine Seher"
+ *
+ * Revision 1.16  2001/02/17 09:47:20  Woody
+ * mehr shell-wechsel-security, wizlevels fuer d.,p.,GUILD.,room, Logs verlegt
+ *
+ * Revision 1.15  2000/11/11 02:42:22  Woody
+ * Bugfix in playerdel() (merke: s-efun im Master nie direkt aufrufen!!)
+ *
+ * Revision 1.14  2000/11/07 09:37:10  Woody
+ * Texte bei Selbstloeschung differenzieren mehr nach Geschlecht
+ *
+ * Revision 1.13  2000/10/23 10:20:36  Woody
+ * optionaler silent Parameter fuer playerdel
+ *
+ * Revision 1.12  2000/01/08 20:38:11  Zordan
+ * BugFix in delete_player (Zeitungsmeldung Gildenfix)
+ *
+ * Revision 1.11  1999/01/27 22:24:29  Woody
+ * Spielpause bei (Selbst-) Loeschung aufheben
+ *
+ * Revision 1.10  1998/09/21 16:09:04  Woody
+ * FINGERD statt altem Pfad verwendet
+ *
+ * Revision 1.9  1998/09/20 13:46:39  Woody
+ * Selbstloeschungsartikel ueberarbeitet, CHMASTER
+ *
+ * Revision 1.8  1998/05/02 23:31:32  Woody
+ * query_wiz_level fuer ROOTID gibt 100 zurueck
+ *
+ * Revision 1.7  1997/11/30 16:00:49  Woody
+ * Bugfix in delete_player (Zeitungsartikel buggte)
+ *
+ * Revision 1.6  1997/11/25 11:39:26  Feyaria
+ * playerdelete
+ *
+ * Revision 1.5  1997/04/09 20:50:55  Woody
+ * Bugfix: dtime() is ne simulefun -> Aufruf per funcall() *argl*
+ *
+ * Revision 1.4  1997/04/08 16:23:01  Woody
+ * Selbstloeschungsartikel ueberarbeitet
+ *
+ * Revision 1.3  1997/04/08 15:19:22  Woody
+ * Meldung auf [Info:] bei Selbstloeschung
+ *
+ * Revision 1.2  1997/03/17 19:30:22  Woody
+ * Bei finger neue /p Verzeichnisstruktur beruecksichtigt
+ *
+ * Revision 1.1  1997/03/16 00:05:15  Woody
+ * prepared for revision control
+ *
+ */
+
+#pragma strong_types
+
+#include "/secure/master.h"
+
+#define HBINT    2   /* interval between two heart_beats in seconds */
+
+nosave mapping userlist;
+string name, password;
+int level;
+string *domains, shell;
+int creation_date;
+
+void create()
+{
+  userlist=allocate_mapping(0,6);
+}
+
+int clear_cache() // Vergiss ALLE infos im Cache
+{
+  userlist=allocate_mapping(0,6);
+  return 1;
+}
+
+string secure_savefile(string name)
+{
+  if(!name||name=="")
+    return "";
+  name=explode(name,".")[0];
+  if (file_size(SECURESAVEPATH+name[0..0]+"/"+name+".o")>=0)
+    return SECURESAVEPATH+name[0..0]+"/"+name;
+  else if (file_size("secure/save_inactive/"+name[0..0]+"/"+name+".o")>=0)
+    return "secure/save_inactive/"+name[0..0]+"/"+name;
+  return "";
+}
+
+string secure_isavefile(string name)
+{
+  if(!name||name=="")
+    return "";
+  name=explode(name,".")[0];
+  if (file_size("secure/save_inactive/"+name[0..0]+"/"+name+".o")>=0)
+    return "secure/save_inactive/"+name[0..0]+"/"+name;
+  return "";
+}
+
+mixed *show_cache(){return m_indices(userlist);}
+
+int find_userinfo(string user) {
+  string file;
+  
+  if (!user||user==""||member(user,' ')!=-1||member(user,':')!=-1)
+    return 0;
+  if (!member(userlist,user)) {
+    if ((file=secure_savefile(user))=="")
+    {
+      userlist+=([user: "NP"; -1; ({}); "LOCKED"; -1; time() ]);
+      return 0;
+    }  
+    password="";
+    if (!restore_object(file)) return 0;
+    userlist+=([user: password; level; domains; shell; creation_date; time() ]);
+  }
+  userlist[user,USER_TOUCH]=time();
+  if (userlist[user,USER_LEVEL]==-1) return 0;
+  return 1;
+}
+
+void RemoveFromCache(string user)
+{
+  efun::m_delete(userlist,user);
+}
+
+mixed *get_userinfo(string user) {
+  if(!user||user=="")
+    return 0;
+  user=explode(user,".")[0];
+  if (!member(userlist,user) && !find_userinfo(user))
+    return 0;
+  level=userlist[user,USER_LEVEL];
+  if (level==-1) return 0;
+  domains=userlist[user,USER_DOMAIN];
+  shell=userlist[user,USER_OBJECT];
+  creation_date=userlist[user,USER_CREATION_DATE];
+  return ({user,"##"+user,level,domains,shell,creation_date,0});
+}
+
+nosave mixed *get_full_userinfo(string user) {
+  if(!user||user=="")
+    return 0;
+  user=explode(user,".")[0];
+  if (!member(userlist,user) && !find_userinfo(user))
+    return 0;
+  password=userlist[user,USER_PASSWORD];
+  level=userlist[user,USER_LEVEL];
+  domains=userlist[user,USER_DOMAIN];
+  shell=userlist[user,USER_OBJECT];
+  creation_date=userlist[user,USER_CREATION_DATE];
+  return ({user,password,level,domains,shell,creation_date,0});
+}
+
+nosave void save_userinfo(string user) {
+  if(!user||user=="")
+    return;
+  user=explode(user,".")[0];
+  if (!member(userlist,user)) return;
+  name = user;
+  level = userlist[name,USER_LEVEL];
+  domains = userlist[name,USER_DOMAIN];
+  shell = userlist[name,USER_OBJECT];
+  password = userlist[name,USER_PASSWORD];
+  creation_date = userlist[name,USER_CREATION_DATE];
+  if (!creation_date) creation_date = -1;
+  save_object(SECURESAVEPATH+name[0..0]+"/"+name);
+}
+
+int update_wiz_level(string user,int lev) {
+  if (getuid(PO) != ROOTID) return 0;
+  if (!find_userinfo(user)) return 0;
+  userlist[user,USER_LEVEL] = lev;
+  save_userinfo(user);
+  return 1;
+}
+
+
+#define PLAYERSHELLS ({"/std/shells/darkelf", "/std/shells/dwarf", \
+    "/std/shells/elf", "/std/shells/fairy", "/std/shells/hobbit", \
+    "/std/shells/human", "/std/shells/ogre", "/std/shells/troll", \
+    "/std/shells/undead" })
+
+#define SHELLCHANGE_ALLOW ({"/gilden/nekromanten","/d/nacht/anatol/rassen/m/change"})
+
+int set_player_object(string user, string objectname)
+{
+  mixed *path;
+  string prev;
+  int change_by_player;
+ 
+  // eigentlich duerfen nur EM und ROOT die Shell eines Charakters aendern
+  if ( (funcall(symbol_function('secure_level/*'*/)) < ARCH_LVL) &&
+       (!previous_object() || getuid(previous_object()) != ROOTID) ){
+      // Ausnahme: fuer Stellen ala Wurzels Frankenstein duerfen Spieler
+      // (keine Magier - die koennten zuviel Mist damit bauen!) ihre Shell
+      // aendern. Allerdings nur in eine andere Spielershell (siehe #define
+      // von PLAYERSHELLS) und jede Aenderung wird mitgeloggt.
+      // ERGAENZUNG: Alle von der SHELLCHANGE_ALLOW Liste duerfen auch 
+      // Rasse wechseln
+      if ( member( SHELLCHANGE_ALLOW, 
+            explode(file_name(previous_object()), "#")[0]) != -1 ||
+          (this_interactive() && getuid(this_interactive()) == user &&
+           !IS_LEARNER(user) && member( PLAYERSHELLS, objectname ) != -1))
+      {
+        change_by_player = 1;
+      }
+      else
+        return -1;
+  }
+ 
+  if (objectname == "")
+    objectname = 0;
+
+  if (!stringp(user) || user=="")
+    return -6;
+
+  if (!stringp(objectname))
+  {
+    if (!find_userinfo(user))
+      return -4;
+
+    userlist[user,USER_OBJECT] = 0;
+    save_userinfo(user);
+    return 1;
+  }
+
+  if (catch(call_other(objectname,"??")))
+  {
+    write("Fehler in "+objectname+"!\n");
+    return -2;
+  }
+
+  objectname = _get_path(objectname, 0);
+  path = efun::explode(objectname,"/") - ({ "",0 });
+
+  if (sizeof(path) < 3 || path[0] != "std" || path[1] != "shells")
+    return -3;
+
+  if (!find_userinfo(user))
+    return -4;
+
+  prev = userlist[user,USER_OBJECT] || "keine";
+  userlist[user,USER_OBJECT]=objectname;
+  save_userinfo(user);
+
+  if ( change_by_player )
+      log_file( "ARCH/SHELL_CHANGED",
+                sprintf( "%s: %s aendert die Shell von %s auf %s (PO: %s)\n",
+                         ctime()[4..<6], capitalize(user), prev, objectname,
+                         file_name( previous_object() ||
+                                    this_interactive() ) ) );
+
+  else if( !IS_LEARNER(user) && funcall(symbol_function('find_player),user)
+    && !funcall(symbol_function('find_player),user)->QueryProp(P_TESTPLAYER))
+  {
+    log_file( "interactive/RASSENWECHSEL",
+                sprintf( "%s: %s aendert die Shell von %s auf %s (%s)\n",
+                         funcall(symbol_function('dtime),time())[5..<4], 
+                         capitalize(user), prev, objectname,
+                         capitalize(getuid(this_interactive() || 
+                             previous_object())) ) );
+  }
+
+  return 1;
+}
+
+string query_player_object( string name )
+{
+  mixed *userentry;
+  if( !find_userinfo(name) ) return "";
+  return userlist[name,USER_OBJECT];
+}
+
+int update_password(string old,string new) {
+  string user;
+  
+  if (!find_userinfo(user=getuid(PO))) return 0;
+  password = userlist[user,USER_PASSWORD];
+  if (password && password != "" && crypt(old,password) != password)
+    return 0;
+  userlist[user,USER_PASSWORD] = crypt(new,0);
+  save_userinfo(user);
+  return 1;
+}
+
+string get_wiz_name(string file) {return creator_file(file);}
+
+int get_wiz_level(string user) {
+  if (user && find_userinfo(user)) return userlist[user,USER_LEVEL];
+}
+
+#define WIZLVLS ([ ROOTID: 100, "room": 25 ])
+
+int query_wiz_level(mixed player) {
+  if (objectp(player) && query_once_interactive(player))
+    return get_wiz_level(getuid(player));
+  else
+    if (stringp(player)) {
+      if( player[0..1]=="d." ) return 25;
+      if( player[0..5]=="GUILD.") return 30;
+      if( player[0..1]=="p." ) return 21;
+      return WIZLVLS[player] || get_wiz_level(player);
+    }
+  return 0;
+}
+
+nosave void set_domains(string player, mixed *domains)
+{
+  userlist[player, USER_DOMAIN]=domains;
+  save_userinfo(player);
+}
+
+void _cleanup_uinfo()
+{
+  mixed users;
+  int i;
+
+  for (users=m_indices(userlist),i=sizeof(users)-1; i>=0;i--)
+    if ((time()-userlist[users[i],USER_TOUCH]) > 1800
+	&& !funcall(symbol_function('find_player),users[i]))
+      efun::m_delete(userlist,users[i]);
+}
+
+int delete_player(string passwd, string real_name)
+{
+  mixed *userentry, *art, h, second;
+  string part_filename, text, wbl, guild;
+  int wlevel;
+
+  if (!PO || PO!=TP || PO!=TI || real_name != getuid(PO) ||
+      !find_userinfo(real_name))
+    return 0;
+
+  password = userlist[real_name,USER_PASSWORD];
+  if ((passwd != "") || (password != ""))
+    if (!stringp(password) || strlen(password) <= 2)
+      return 0;
+    else if (crypt(passwd, password) != password)
+      return 0;
+
+  wlevel = get_wiz_level(real_name);
+
+  if (wlevel || (TP->QueryProp("level") > 1))
+  {
+    guild = TP->QueryProp("guild") || TP->QueryProp("default_guild");
+    if (!guild || guild == "") guild = "abenteurer";
+    text = sprintf ("%s:\n%s hat sich soeben selbst geloescht.\n\n",
+        funcall(symbol_function('dtime),time()), capitalize(real_name));
+
+    if (TP->QueryProp("gender") == 2) {
+      text += "Sie"; wbl = "in"; }
+    else {
+      text += "Er"; wbl = ""; }
+    text += " war zu diesem Zeitpunkt ";
+    text += wlevel>=LEARNER_LVL ?
+      FINGERD->wiz_level_name(wlevel, TP->QueryProp("gender"), real_name)+
+      " (Magierlevel: "+wlevel+")" : (wlevel ? "Seher" : "Spieler")+wbl;
+
+    text += ".\nVoller Name: "+
+      (((stringp(h=TP->QueryProp("presay"))) && h!="") ? h+" " : "")+
+      capitalize(stringp(getuid(TP)) ? getuid(TP) : real_name)+
+      (stringp(h=TP->QueryProp("title")) && h!="" ? " "+h : "");
+
+    text += sprintf ("\nRasse: %s, Geschlecht: %s, Alter: %s\n",
+        TP->QueryProp("race") || "unbekannt",
+        ([0:"neutral?!", 1:"maennlich",
+          2:"weiblich"]) [TP->QueryProp("gender")] || "buggy",
+        FINGERD->timediff(TP->QueryProp("age")*HBINT));
+
+    if (wlevel>=LEARNER_LVL)
+    {
+      mixed data;
+      data = userlist[real_name,USER_DOMAIN];
+      if (sizeof(data)) 
+        text+="Regionsmagier"+wbl+" von     : "+
+          implode(map_array(data,#'capitalize),", ")+".\n";
+      data=MASTER->get_domain_homes(real_name);
+      if (sizeof(data))
+        text+="Regionsmitarbeiter"+wbl+" von: "+
+          implode(map_array(data,#'capitalize),", ")+".\n";
+    }
+    else
+      text += sprintf("Gilde: %s, Gildenlevel: %d, Spielerlevel: %d\n",
+        capitalize(guild),
+        TP->QueryProp("guild_level"), TP->QueryProp("level"));
+
+    if (stringp(h=TP->QueryProp("married")))
+      text += "Verheiratet mit: "+capitalize(h)+"\n";
+
+    if (h=TP->QueryProp(P_TESTPLAYER))
+      text+=capitalize(real_name)+" war Testspieler"+wbl+
+        (stringp(h) ? " von "+h : "")+".\n";
+
+    if ((second=TP->QueryProp(P_SECOND)) && (TP->QueryProp(P_SECOND_MARK)<0))
+      text += sprintf( "%s war Zweitspieler%s%s.\n",
+          capitalize(real_name), wbl,
+          ((TP->QueryProp(P_SECOND_MARK)>0) && stringp(second) ? " von "+second : "") );
+
+    text += ((h=TP->QueryProp("deads")) ? h+" mal" : "Nie")+" gestorben!\n";
+    text += ((h=TP->QueryProp("kills")) ?
+        h+" PLAYERKILL"+(h!=1?"S":"")+"!!\n" : "")+"\n";
+
+    art = ({"info", "SLP", 0, 0,
+        sprintf ("Selbstloeschung von %s",capitalize(real_name)), text});
+
+    NEWSSERVER->WriteNote(art,1);
+  }
+
+  CHMASTER->send("Info", "",
+      capitalize(real_name)+" hat sich soeben selbst geloescht.");
+
+  TO->TBanishName(real_name, 0);        // evtl. Spielpause aufheben
+  part_filename="/"+real_name[0..0]+"/"+real_name+".o";
+  (void)rm("secure/save"+part_filename);
+  (void)rm("save"+part_filename);
+  (void)rm("mail"+part_filename);
+  userlist=m_delete(userlist,real_name);
+
+  if (wlevel >= LEARNER_LVL)
+    TO->BanishName(real_name, "So hiess mal "+
+        (strlen(wbl) ? "eine Magierin" : "ein Magier")+" hier.");
+  else if (wlevel >= SEER_LVL)
+    TO->BanishName(real_name, "So hiess mal "+
+        (strlen(wbl) ? "eine Seherin" : "ein Seher")+" hier.");
+
+  log_file("game/USERDELETE",sprintf("%s: %s [%s]%s\n",
+      ctime(time()),real_name,query_ip_name(TI),
+      (second ? " (Zweitspieler von "+second+")": "")));
+  return 1;
+}
+
+varargs int playerdel(string real_name, int silent)
+{
+  string part_filename, text;
+  object ob;
+  int wlevel;
+
+  if (getuid(PO) != ROOTID) return 0;
+  if (funcall(symbol_function('secure_level)) < ARCH_LVL) return 0;
+
+  if (!find_userinfo(real_name))
+  {
+    write("Spieler '"+real_name+"' nicht gefunden!\n");
+    return 0;
+  }
+  TO->TBanishName(real_name, 0);        // evtl. Spielpause aufheben
+  part_filename="/"+real_name[0..0]+"/"+real_name+".o";
+  (void)rm("secure/save"+part_filename);
+  (void)rm("save"+part_filename);
+  (void)rm("mail"+part_filename);
+  userlist=m_delete(userlist,real_name);
+  log_file("game/USERDELETE",sprintf("%s: %s geloescht von %s\n",
+    ctime(time()),real_name,capitalize(getuid(TI))));
+  if (!silent)
+    CHMASTER->send("Info", "",
+        sprintf("%s wurde gerade von %s geloescht.",
+        capitalize(real_name), capitalize(getuid(TI))));
+
+  return 1;
+}
+

@@ -1,0 +1,164 @@
+/*
+** Seat Yara@SL
+** ---
+** Diese Klasse verwaltet Sitzgelegenheiten
+**
+** 2005-12-13  1.0  Yara  initial version
+*/
+
+/*
+* void initSeats(int cnt, string str)
+*     setzt Anzahl der Plaetze und titel der sitzenden personen
+* int seatPlayer(object pl)
+*     setzt einen Spieler auf den ersten freien Platz und gibt Platznr. zurueck
+*     0: keine freien Plaetze, -2: Spieler sitzt schon
+* int seatPlayerAtPos(object pl, int pos)
+*     setzt einen Spieler auf Platz pos, -2: pl sitzt schon auf pos, 0: jmd
+*     sitzt schon auf pos, pos: sonst
+* int getSeatCount()
+*     Anzahl der Plaetze
+* int getFreeSeatCount()
+*     Anzahl der freien Plaetze
+* int getSeatedCount()
+*     Anzahl der belegten Plaetze
+* string getFormattedNames()
+*     gibt String zurueck nach dem Muster: "plName1, PLN2 und PLN3"
+* object* getSittingPlayers()
+*     gibt Array der sitzenden Spieler zurueck
+* int playerSeated(object pl)
+*     prueft ob ein Spieler sitzt und gibt die Platznr. zurueck (1..n)
+* int removePlayer(object pl)
+*     laesst einen Spieler aufstehen und gibt Platznur. zurueck, -1 sonst
+*
+*/
+
+
+#include "../def.h"
+inherit "/std/thing";
+
+int seatCnt;
+string title;
+object* seats;
+object* players;
+string* plNames;
+
+debug() {printf("sitzende: %O\n", players);}
+
+void setPlayers();
+int removePlayer(object pl);
+int playerSeated(object pl);
+
+string getTitle() {return title;}
+int getSeatCount() {return seatCnt;}
+int getFreeSeatCount() {return seatCnt - sizeof(players);}
+int getSeatedCount() {return sizeof(players);}
+void BecomesNetDead(object pl) {removePlayer(pl);}
+object* getSittingPlayers() {return (sizeof(players)>0?players:0);}
+
+void create() {
+  if(!is_clone(TO)) return;
+  ::create();
+
+  seatCnt = 0;
+  title = 0;
+  seats = ({});
+  players = ({});
+  plNames = ({});
+}
+
+int removePlayer(object pl) {
+  int i;
+  if(!pl) return -1;
+
+  for(i=0;i<sizeof(seats);i++)
+    if(seats[i] == pl) {
+      seats[i] = 0;
+      pl->Set(P_TITLE, 0, F_QUERY_METHOD );
+      setPlayers();
+      return i+1;
+    }
+  return -1;
+}
+
+int playerSeated(object pl) {
+  int i;
+  for(i=0;i<sizeof(players);i++)
+    if(players[i] == pl)
+      return i+1;
+
+  return 0;
+}
+
+string getFormattedNames(object pl) {
+  int i;
+  for(i=0;i<sizeof(plNames);i++)
+    if(plNames[i] == pl->Name()) {
+      plNames[i] = "Du";
+      break;
+    }
+  return "/std/player/soul"->CountUp(plNames);
+}
+
+void initSeats(int cnt, string str) {
+  int i;
+  title = str;
+  seatCnt = cnt;
+  for(i=0;i<seatCnt;i++) {
+    seats += ({0});
+  }
+}
+
+int seatPlayer(object pl) {
+  int i;
+  if(playerSeated(pl))
+    return -2;
+  if(getFreeSeatCount() == 0)
+    return 0;
+
+  for(i=0;i<sizeof(seats);i++)
+    if(!seats[i]) {
+      seats[i] = pl;
+      pl->Set(P_TITLE, #'getTitle, F_QUERY_METHOD );
+      setPlayers();
+      return i+1;
+    }
+  return -1;
+}
+
+int seatPlayerAtPos(object pl, int pos) {
+  if(pos < 1 || pos > seatCnt)
+    return -1;
+  if(playerSeated(pl) == pos)
+    return -2;
+  if(seats[pos-1])
+    return 0;
+
+  seats[pos-1] = pl;
+  pl->Set(P_TITLE, #'getTitle, F_QUERY_METHOD );
+  setPlayers();
+  return pos;
+}
+
+/////////////////////////////////////////////////////////
+// nicht von aussen aufrufen
+//
+void setPlayerNameList() {
+  int i;
+  plNames = ({});
+  for(i=0;i<sizeof(players);i++) {
+    plNames += ({players[i]->Name()});
+  }
+}
+
+void setPlayers() {
+  int i, cnt;
+  players = ({});
+  for(i=cnt=0;i<sizeof(seats);i++) {
+    if(seats[i] != 0)
+      players += ({seats[i]});
+  }
+  setPlayerNameList();
+}
+//
+/////////////////////////////////////////////////////////
+

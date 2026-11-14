@@ -1,0 +1,103 @@
+#include "../../arkanisten.h"
+
+inherit GUILD_FOLDER "abilities/ability.lpc";
+
+public void create() {
+    if(is_clone(TO)) return;
+
+    ::create();
+    SetProp(P_ABILITY_NAME, CAP(CHAIN_LIGHTING_PROJECTOR));
+    SetProp(P_ABILITY_DESCRIPTIPON, 
+        "Du hast deinen Blitzstab mit einer Kettenblitzvorrichtung ausgestattet. "
+        "Wenn du den Blitzstab in der Hand haeltst, kannst du den Kettenblitzprojektor aktivieren "
+        "und damit einen Blitzschlag auf einen Gegner schleudern, der dann auf weitere Gegner in der Naehe "
+        "ueberspringt.");    
+    SetProp(P_ABILITY_TYPE, ABILITY_TYPE_ACTIVE);
+    SetProp(P_ABILITY_BASE_ATTRIBUTE, A_DEX);
+    SetProp(P_ABILITY_CASTVERB, CAST_VERB_ACTIVATE);
+    SetProp(P_ABILITY_GROUP, ({ABILITY_GROUP_GADGETS}));
+    SetProp(P_ABILITY_COST, 20);
+    SetProp(P_ABILITY_REQUIRES, ({TESLA_BATON}));
+    SetProp(P_ABILITY_SPELLBREAK, 4);
+    SetProp(P_ABILITY_MIN_GUILD_LEVEL, 11);
+}
+
+public int valid_target(object ob) {
+    return living(ob) && !query_once_interactive(ob) && !ob->QueryProp(P_NOATTACK) && !ob->QueryProp(P_FRIEND);
+}
+
+public mapping prepare_use(object user, mapping sinfo) {
+    object *enemies;
+
+    if(!objectp(present(TESLA_BATON_ID, user))) {
+        tell_object(user, BS("Um den Kettenblitzprojektor zu aktivieren musst du deinen Blitzstab gezueckt haben."));
+        return 0;
+    }
+
+        if(!user->InFight()) {
+        tell_object(user, BS("Den Kettenblitzprojektor kansnt du nur im Kampf aktivieren."));
+        return 0;
+    }
+
+    enemies = filter_array(all_inventory(ENV(user)), "valid_target");
+    enemies -= ({ user });
+    if(sizeof(enemies) < 1) {
+        tell_object(user, BS("Du hast keine Gegner!"));
+        return 0;
+    }
+    
+    tell_object(user, BS("Du legst den Hebel am Blitzstab um und er beginnt laut zu surren."));
+    tell_room(ENV(user), BS(user->Name(WER)+" legt einen kleinen Hebel am Blitzstab um."), ({user}));
+
+    sinfo[SI_PREPARE_TIME] = 2 + random(2);
+    sinfo[SI_SKILLDAMAGE_TYPE] = ({ DT_ELECTRIC });
+    sinfo[SI_SKILLDAMAGE] = 250;
+    sinfo[OFFSET(SI_SKILLDAMAGE)] = 100;
+    sinfo[SI_MAX_DAMAGE] = 500;
+    sinfo[SI_NOMAGIC] = 100;
+    sinfo[SI_RAW_SPELLCOST] =  ([
+        P_SP: 25,
+    ]);
+
+    return ::prepare_use(user, sinfo);
+}
+
+public void failed(object caster, mapping sinfo, int skillcheck) {
+    if(skillcheck < -3000) {
+        tell_object(caster, BS("Der Kettenblitz springt auf deine eigene Hand ueber!"));
+        caster->SetProp(P_DISABLE_ATTACK, 2);
+    }
+
+    return ::failed(caster, sinfo, skillcheck);
+}
+
+public void success(object user, mapping sinfo, int skillcheck) {
+    object *enemies, enemy;
+    int idx;
+    
+    sinfo[SI_SKILLDAMAGE] += skillcheck / 10;
+
+    tell_object(user, BS("Das Surren erreicht seinen Hoehepunkt und mit einem Knall springt ein Kettenblitz von deinem Blitzstab auf deine Gegner ueber."));
+    tell_room(ENV(user), BS(user->name(WEM)+" reckt einen Stab nach vorne von dem mit einem Knall ein Kettenblitz losspringt."), ({user}));
+
+    enemies = filter_array(all_inventory(ENV(user)), "valid_target");
+    enemies -= ({ user });
+    if(sizeof(enemies) < 1) {
+        tell_room(ENV(user), BS("Der Blitz schlaegt in den Boden ein."), ({user}));
+        return;
+    }
+
+    foreach(idx, enemies, enemy, {
+        if(enemy != user) {
+            default_attack_spell(enemy, user, sinfo, ([SP_NAME: "Kettenblitzprojektor", SP_SHOW_DAMAGE: 1]));
+            sinfo[SI_SKILLDAMAGE] -= sinfo[SI_SKILLDAMAGE] / 4;
+        }
+
+        if(skillcheck > 6000 && !random(3)) {
+            tell_object(enemy, BS("Der Kettenblitz laehmt "+enemy->name(WEN)+" kurzzeitig!"));
+            enemy->SetProp(P_PARALYZED, 2);
+        }
+    });
+
+    return;
+}

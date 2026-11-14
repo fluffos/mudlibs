@@ -1,0 +1,667 @@
+inherit "/gilden/zauberer/zfun";
+inherit "std/spellbook";
+
+#include <moving.h>
+#include <properties.h>
+#include <language.h>
+#include <attributes.h>
+#include <combat.h>
+#include <wizlevels.h>
+#include <new_skills.h>
+#include <material.h>
+#include <ansi.h>
+#include <moredef.h>
+
+#include "zauberer.h"
+
+#ifndef SI_RAW_SPELLCOST
+#define SI_RAW_SPELLCOST "si_raw_spellcost"
+#endif
+#ifndef SI_SPELLNAME
+#define SI_SPELLNAME "si_spellname"
+#endif
+
+nomask query_prevent_shadow() { return 1; }
+
+create() 
+{
+  spellbook::create();
+  
+  SetProp(P_GLOBAL_SKILLPROPS,
+            ([SI_SPELLFATIGUE:2,
+              SI_SKILLRESTR_USE: ([SR_FUN:"MayCast"]),      
+              SI_SKILLLEARN:2,  
+              OFFSET(SI_SKILLLEARN): 3, 
+              SI_SP_LOW_MSG:BS("Du hast nicht genuegend Magiepunkte!"),
+              SI_TIME_MSG: "Du solltest lieber noch etwas warten...\n",
+              SI_SKILLLEARN_ATTRIBUTE: A_INT
+            ]));
+
+
+ 
+
+  AddSpell("lichtstab", 0,
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 1]), 
+            SI_SKILLRESTR_USE:([P_GUILD_LEVEL: 1]),
+            SI_SPELLFATIGUE:2,
+            SI_RAW_SPELLCOST: 20,
+            SI_SPELLNAME: "lichtstab"
+          ]));
+
+  AddSpell("schaetz", 0,
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 1]), 
+            SI_SKILLRESTR_USE:([P_GUILD_LEVEL: 1]),
+            SI_SPELLFATIGUE:2,
+            SI_RAW_SPELLCOST: 20,
+            SI_SPELLNAME: "schaetz"
+          ]));
+
+  AddSpell("kampfstab", 0,
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL: 1]), 
+            SI_SKILLRESTR_USE:([P_GUILD_LEVEL: 1]),
+            SI_SPELLFATIGUE:4,
+            SI_RAW_SPELLCOST: 30,
+            SI_SPELLNAME: "kampfstab",
+	    SI_PREPARE_TIME: 3
+          ]));
+
+
+}
+
+
+string MayCast(object caster)
+{
+  if (!present("\nzauberer_stab", caster))
+    return "Ohne Deinem Stab kannst Du Deine Kraefte nicht genug buendeln...\n";
+
+  if (caster->QueryProp(P_GHOST))
+    return "Als Geist kannst Du nicht zaubern!\n";
+
+  return 0;
+}
+
+
+int PaySp(object caster, int succ, mapping sinfo)
+{
+  int costs,
+      raw,
+      align,
+      align_mod;
+  
+  raw = sinfo[SI_RAW_SPELLCOST,0];
+  
+  
+  /* Kosten:
+     Grundpreis abzueglich
+     % Erfolg vom halben Grundpreis
+     also bei vollem erfolg halbe kosten
+   */
+  if (succ<=0)
+    costs=raw;
+  else
+     costs = raw - (raw/2 * succ / 10000);
+
+
+  if (caster->QueryProp(P_SP)<costs)
+    {
+       tell_object(caster, BS("Deine magische Energie reicht nicht aus."));
+       return 0;
+    }
+
+  // Align modification
+  // Ein viertel der Kosten kann nochmal durch
+  // Align gespart werden
+  align = caster->QueryProp(P_ALIGN);
+  
+  if (align<0) align *= -1;
+
+  switch (align/100)
+    {
+      case 0..1:
+        break;
+      case 2..3:
+        align_mod = raw/4 * 25 / 100;
+        break;
+      case 4..5:
+        align_mod = raw/4 * 45 / 100;
+        break;
+      case 6..7:
+        align_mod = raw/4 * 65 / 100;
+        break;
+      case 8..9:
+        align_mod = raw/4 * 85 / 100;
+        break;
+
+      default:
+        align_mod = raw/4;
+        break;
+    }  
+  
+  if (IS_MAINTAINER(getuid(caster)))
+    {
+       printf("Succ: %d\n", succ);
+       printf("Costs: %d\n", costs);
+       printf("align_mod: %d\n", align_mod);
+    }
+
+  costs -= align_mod;    
+  
+  caster->AddSp(-costs);
+  
+  return 1;    
+}
+
+
+int lichtstab(object caster, mapping sinfo)
+{
+  int succ,
+      duration,
+      light;
+  object stab;
+
+
+  if (!stab = present("\nzauberer_stab", caster)) return 0;
+
+  if (stab->QueryProp(P_LIGHT)>0)
+    {
+      tell_object(caster, "Dein Stab leuchtet doch schon!\n");
+       return 0;
+    }
+  
+  succ = SpellSuccess(caster, sinfo);
+
+  if (!PaySp(caster, succ, sinfo)) return 0;
+  
+  if (succ<=0) return MISSERFOLG;
+  
+  tell_object(caster, "Du stoesst die Spitze Deines Stabes hart auf den Boden.\n");
+  tell_room(ENV(caster), BS(caster->Name(WER) + " stoesst die Spitze seies Stabes "
+                            "hart auf den Boden."), ({ caster }));
+
+
+  if (IS_MAINTAINER(getuid(caster)))
+    tell_object(caster, sprintf("Sinfo: %O\n", sinfo[SI_RAW_SPELLCOST, 0]));
+    
+  if (succ <=0)
+    {
+      tell_room(ENV(caster), BS("Der Stab kistert etwas, aber nicht passiert."));
+      return MISSERFOLG;
+    }
+
+  tell_room(ENV(caster), "Der Stab beginnt zu leuchten.\n");
+
+  if ((light = succ/2500)==0) light++;
+
+  if ((duration = succ/6)==0) duration=60;
+
+  if (IS_MAINTAINER(getuid(caster)))
+    tell_object(caster, sprintf("Succ: %d\nLight: %d\nTime:%d\n", succ, light, duration));
+
+
+  stab->lichtstab(light, duration);
+  
+  return ERFOLG;
+}
+
+
+
+int schaetz(object caster, mapping sinfo)
+{
+  int succ,
+      diff,
+      percent,
+      value,
+      costs;
+  string *outstr, hstr, hstr2, who;
+  object victim;
+  
+  outstr = ({});
+  
+  victim=FindVictim(sinfo[SI_SKILLARG],caster,
+    "Wen oder was willst Du denn einschaetzen?\n");
+
+  if (!victim) return 0;
+
+  succ = SpellSuccess(caster, sinfo);
+
+  if (!PaySp(caster, succ, sinfo)) return 0;
+  
+  if (succ<=0) return MISSERFOLG;
+
+  if (victim == caster)
+    {
+      tell_object(caster, BS("Du schaetzt Dich selber ein und findest, dass "
+                             "Du verdammt gut bist."));
+      return ERFOLG;
+    }
+
+      
+  switch (victim->QueryProp(P_GENDER))
+    {
+      case FEMALE:
+        who = "Sie";
+        break;
+      case MALE:
+        who = "Er";
+        break;
+      default:
+        who = "Es";
+      break;
+    }
+
+  if (living(victim))
+    {
+      percent = victim->QueryProp(P_SIZE)*100/caster->QueryProp(P_SIZE);
+      
+      hstr = who + " ist ";
+      
+      switch(percent)
+        {
+	  case 0..33:
+	    hstr += "unglaublich viel kleiner als Du.";
+	    break;
+	  case 34..66:
+	    hstr += "viel kleiner als Du.";
+	    break;
+	  case 67..80:
+	    hstr += "etwas kleiner als Du.";
+	    break;
+	  case 81..133:
+	    hstr += "etwa gleich gross wie Du.";
+	    break;
+	  case 134..150:
+	    hstr += "etwas groesser als Du.";
+	    break;
+	  case 151..200:
+	    hstr += "viel groesser als Du.";
+	    break;
+	  default:
+	    hstr += "unglaublich viel groesser als Du.";
+	    break;
+	}
+      
+      outstr += ({ hstr });
+
+      hstr = who + " hat ";
+	
+      switch(victim->QueryProp(P_TOTAL_AC))
+        {
+	  case 0..30:
+	    hstr += "praktisch keinen ";
+	    break;
+	  case 31..60:
+	    hstr += "kaum einen ";
+	    break;
+	  case 61..90:
+	    hstr += "einen sehr schlechten ";
+	    break;
+	  case 91..120:
+	    hstr += "einen ganz guten ";
+	    break;
+	  case 121..150:
+	    hstr += "einen sehr guten ";
+	    break;
+	  case 151..200:
+	    hstr += "einen ausgezeichneten ";
+	    break;
+	  case 201..300:
+	    hstr += "einen phantastischen ";
+	    break;
+	  case 301..400:
+	    hstr += "einen uebernatuerlichen ";
+	    break;
+	  default:
+	    hstr += "einen so gut wie undurchdringlichen ";
+	    break;
+	}
+      hstr += "Schutz gegen herkoemmliche Waffen.";
+
+      outstr += ({ hstr });
+
+      hstr = who + " ist ";
+  
+      switch(victim->QueryAttribute(A_STR)*100/caster->QueryAttribute(A_STR))
+        {
+          case 0..20:
+            hstr += "zu schwach um eine Ameise zu zerquetschen";
+   	    break;
+          case 21..40:
+            hstr += "verglichen mit Dir ein ziemlicher Schwaechling";
+            break;
+          case 41..60:
+            hstr += "viel schwaecher";
+	    break;
+          case 61..90:
+            hstr += "etwas schwaecher";
+            break;
+          case 91..110:
+            hstr += "etwa gleich stark";
+            break;
+          case 111..140:
+            hstr += "etwas staerker";
+            break;
+          case 141..160:
+            hstr += "viel staerker";
+            break;
+	  case 161..180:
+            hstr += "unglaublich viel staerker";
+            break;
+          case 181..200:
+            hstr += "so stark, dass Du zitterst vor Angst";
+	    break;
+          default:
+            hstr += "stark genug um Dich zu zerquetschen wie eine Ameise";
+	    break;
+        }
+    
+      hstr += ", ";
+    
+      switch(victim->QueryAttribute(A_INT)*100/caster->QueryAttribute(A_INT))
+        {
+          case 0..20:
+            hstr += "dumm wie ein Stein";
+	    break;
+          case 21..40:
+            hstr += "ziemlich dumm";
+	    break;
+          case 41..60:
+            hstr += "nicht besonders klug";
+	    break;
+          case 61..90:
+            hstr += "nicht ganz so schlau";
+	    break;
+          case 91..110:
+            hstr += "in etwa gleich klug";
+	    break;
+          case 111..140:
+            hstr += "etwas schlauer";
+	    break;
+          case 141..160:
+            hstr += "um einiges klueger";
+	    break;
+          case 161..180:
+            hstr += "viel klueger";
+	    break;
+          case 181..200:
+            hstr += "unglaublich viel klueger";
+	    break;
+          default:
+            hstr += "so klug, dass Du Dir dumm wie ein Stein vorkommst";
+	    break;
+        }
+
+      hstr += ", ";
+  
+      switch(victim->QueryAttribute(A_DEX)*100/caster->QueryAttribute(A_DEX))
+        {
+          case 0..33:
+            hstr += "ziemlich ungeschickt";
+	    break;
+          case 34..66:
+            hstr += "nicht besonders geschickt";
+	    break;
+          case 67..90:
+            hstr += "nicht ganz so geschickt";
+	    break;
+          case 91..110:
+            hstr += "etwa so geschickt";
+	    break;
+          case 111..133:
+            hstr += "ein bisschen geschickter";
+	    break;
+          case 134..166:
+            hstr += "viel geschickter";
+	    break;
+          case 167..200:
+            hstr += "unglaublich viel geschickter";
+	    break;
+          default:
+            hstr += "Dir in Geschicklichkeit haushoch ueberlgen";
+	    break;
+        }
+
+      hstr += " und ";
+  
+      switch (victim->QueryProp(P_MAX_HP)*100/caster->QueryProp(P_HP))
+        {
+          case 0..25:
+            hstr += "haelt so gut wie garnichts aus verglichen mit Dir.";
+	    break;
+          case 26..50:
+            hstr += "haelt kaum etwas aus verglichen mit Dir.";
+	    break;
+          case 51..80:
+            hstr += "haelt viel weniger aus als Du.";
+	    break;
+          case 81..130:
+            hstr += "haelt in etwa gleich viel aus wie Du.";
+	    break;
+          case 131..250:
+            hstr += "haelt etwas mehr aus als Du.";
+	    break;
+          case 251..400:
+            hstr += "haelt viel mehr aus als Du.";
+	    break;
+          case 401..550:
+            hstr += "haelt sehr viel mehr aus als Du.";
+	    break;
+          case 551..700:
+            hstr += "haelt unglaublich viel mehr aus als Du.";
+	    break;
+          default:
+            hstr += "scheint unbesiegbar verglichen mit Dir.";
+	    break;
+        }
+    
+  
+      outstr += ({ hstr });
+  
+      hstr = who + " ist ";
+  
+      switch((victim->QueryProp(P_ALIGN)+1000)/100)
+        {
+          case 0..3:
+            hstr += "extrem boeser Gesinnung";
+	    break;
+          case 4..6:
+            hstr += "von sehr boeser Gesinnung";
+	    break;
+          case 7..8:
+            hstr += "boese";
+	    break;
+          case 9..11:
+            hstr += "ziemlich neutral";
+ 	    break;
+          case 12..14:
+            hstr += "recht nett";
+	    break;
+          case 15..17:
+            hstr += "von guter Gesinnung";
+	    break;
+          case 18..19:
+            hstr += "extrem guter Gesinnung";
+	    break;
+    
+          default:
+            hstr += "heilig";
+	    break;
+        }
+  
+      outstr += ({ hstr + "." });
+ 
+   }
+  else
+   {
+      victim->QueryProp(P_PLURAL)>1?hstr = " haben ":hstr = " hat ";
+
+     if ((value = victim->QueryProp(P_VALUE))>0)
+       {
+         outstr += ({ victim->Name(WER) + hstr + "einen Wert von " 
+	        + sprintf("%d", value) + " Muenzen." });
+       }
+     else
+       outstr += ({ victim->Name(WER) + hstr + "keinen materiellen Wert." });
+   
+   }
+   
+  tell_object(caster, Box(60, "Du schaetzt " + victim->name(WEN) + " ein:", outstr));
+  
+  return 1;
+
+}
+
+
+
+int kampfstab(object caster, mapping sinfo)
+{
+  int succ,
+      duration,
+      factor,
+      skill_mod,
+      align,
+      align_dam;
+
+  mixed align_dam_type;
+
+  string *combat_stick_dt;
+      
+  mapping skill;
+      
+  object stab;
+
+  //write("here");
+
+  if (!stab = present("\nzauberer_stab", caster)) return 0;
+
+  if (caster->QueryProp(P_Z_COMBAT_STICK))
+    {
+      tell_object(caster, "Du kaempfst schon mit dem Stab!\n");
+       return 0;
+    }
+  
+  succ = SpellSuccess(caster, sinfo);
+
+  if (!PaySp(caster, succ, sinfo)) return 0;
+  
+  if (succ<=0) return MISSERFOLG;
+  
+  tell_object(caster, "Dein Stab blitzt kurz auf.\n");
+  tell_room(ENV(caster), BS("Der Stab von " + TP->name(WEM) 
+                         + " blitzt kurz auf."), ({ caster }));
+
+
+  if (IS_MAINTAINER(getuid(caster)))
+    tell_object(caster, sprintf("Sinfo: %O\n", sinfo[SI_RAW_SPELLCOST, 0]));
+    
+  if (succ <=0)
+    {
+      tell_room(ENV(caster), BS("Der Stab kistert etwas, aber nicht passiert."));
+      return MISSERFOLG;
+    }
+
+  tell_room(ENV(caster), "Du fuehlst die Macht welche von Deinem Stab ausgeht.\n");
+
+  if ((factor = succ/100)<10) factor = 10;
+
+  // Modifikation nach Skill (%)
+  if (!mappingp(caster->QuerySkill("kampfstab")))
+    return 0;
+
+  notify_fail("Boeser Fehler!\n");
+  if (!mappingp(skill = copy_mapping(caster->QuerySkill("kampfstab"))))
+     return 0;
+
+  skill_mod = skill["si_abil"]/100;
+  
+  // Volle Kraft erst bei voller uebung :)
+  factor = ( factor * skill_mod / 100 + 100 );
+
+
+  // Boni fuer WC:
+  factor += caster->QueryAttribute(A_STR)/3;  // Das sollte den WC
+  factor += caster->QueryAttribute(A_DEX)/3; // bei 28 um 9 erhoehen
+
+  factor += caster->QueryProp(P_GUILD_LEVEL); // Je 1 auf WC per gildenlevel
+  
+  factor += caster->QueryProp(P_LEVEL)/6; // Lvl/6 auf WC - bei lvl 100 = 16
+
+  // Obergrenze!
+  if (factor>250) factor = 250;
+
+  // Dauer ermitteln anhand Success (<=10000)
+  duration = succ/30;
+
+  // Zeit wird auch via Skill modifiziert
+  duration = ( duration * skill_mod / 100 );
+
+  // Untergrenze... sonst wird lernen zu leicht
+  if (duration<30) duration = 30;
+
+  // Jetzt wirds cool - Schadenstyp nach Align anpassen
+  // >= 1/3 DT_BLUDGEON ### SOCKEL? ###
+  // <= 1/3 DT_[UN]HOLY
+  // == 1/3 DT_MAGIC
+  // Fuck, kann man nicht prozentuell angeben... scheibe..
+  // Aber zuerst mal trimmen...
+  align = (int) caster->QueryProp(P_ALIGN);  // Zur Sicherheit casten...
+  
+  if (align > 1000) align = 1000;
+  else if (align < -1000) align = -1000;
+
+  align > 0 ? align_dam_type = DT_HOLY:align_dam_type = DT_UNHOLY;
+
+  if (align<0) align *= -1;
+
+  align_dam = 0; // Sicher ist sicher
+
+  combat_stick_dt = ({ DT_BLUDGEON, DT_MAGIC });
+
+  switch (align)
+    {
+      case 0..799:
+        break;
+	
+    /*
+      case 200..399:
+        align_dam = 33/4;
+      case 400..599:
+        align_dam = 33/3;
+      case 600..799:
+        align_dam = 33/2;
+    */
+    //  case 800..1000:
+    //    align_dam = 33;
+      default:
+	combat_stick_dt += ({ align_dam_type });
+    }
+
+
+  if (IS_MAINTAINER(getuid(caster)))
+    {
+      tell_object(caster, sprintf("Succ: %d\nfactor: %d\nTime:%d\nSkill_mod:%d\n", succ, factor, duration, skill_mod));
+    }
+
+  caster->SetProp(P_Z_COMBAT_STICK,
+      ([ Z_COMBAT_STICK_FACTOR: factor,
+         Z_COMBAT_STICK_TS: time()+duration,
+	 Z_COMBAT_STICK_DT: combat_stick_dt
+	  /* align_dam_type: align_dam,
+	                       DT_MAGIC: 33,
+			       DT_BLUDGEON: 100-33-align_dam
+			    ])*/
+      ]));
+
+  call_out("kampfstab_aus", duration, caster);
+  
+  return ERFOLG;
+}
+
+
+void kampfstab_aus(object pl)
+{
+  if (objectp(pl) && pl->QueryProp(P_Z_COMBAT_STICK))
+    {
+      tell_object(pl, BS("Die Macht Deines Stabes schwindet!"));
+      pl->SetProp(P_Z_COMBAT_STICK, 0);
+    }
+}

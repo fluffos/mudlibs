@@ -1,0 +1,155 @@
+inherit "std/unit";
+
+#include <properties.h>
+#include <language.h>
+#include "../files.h"
+#include <combat.h>
+#include <new_skills.h>
+
+#define MAX_DAM 1600
+#define MIN_DAM_PER_VIC 200
+#define MAX_VIC 3
+#define MANA_COST 30
+
+create()
+{
+  if (!is_clone(this_object()))
+    return;
+  ::create();
+
+  AddSingularId(({"blitz", "kugelblitz"}));
+  AddPluralId(({"blitze", "kugelblitze"}));
+  SetProp(P_WEIGHT, 1700);
+  SetProp(P_NOSELL, "Kein Haendler wuerde so etwas auch nur anfassen.\n");
+  SetProp(P_SHORT, "Kugelblitz");
+  SetProp(P_LONG, BS(
+          "Dieser Kugelblitz sieht aeusserst gefaehrlich aus. Du solltest"
+	 +" vorsichtig damit umgehen, bevor er Dich zerstoert."));
+  SetProp(P_INFO, BS(
+          "Du haeltst eine maechtige Waffe in Haenden. Wenn Du diesen"
+	 +" Kugelblitz nach jemandem schleuderst, so entlaedt sich seine Energie"
+	 +" fast todesartig auf den Gegner. Aber sei vorsichtig!"));
+  SetProp(P_NAME, ({"Kugelblitz", "Kugelblitze"}));
+  SetProp(P_MATERIAL, MAT_LIGHTNING);
+  SetProp(P_GENDER, MALE);
+}
+
+init()
+{
+  ::init();
+  add_action("throw","schleuder");
+  add_action("throw","schleudere");
+}
+
+throw(str)
+{
+  string what, dest;
+  object vic, env, *all, *liv;
+  int *dam, i, to_dam, cnt, d, mn;
+  string s_id, d_id;
+
+  notify_fail("Schleudere Kugelblitz nach wem?\n");
+  if (!str) return 0;
+  if (sscanf(str, "%s nach %s", what, dest) != 2)
+    return 0;
+  notify_fail("Du kannst nur einen Blitz auf einmal schleudern!\n");
+  if (sscanf(what, "%d %s", cnt, what)==2 && cnt>1 && id(what))
+    return 0;
+  else
+    if (!id(what))
+      return 0;
+  if (!(env=environment(this_object())))
+    remove();
+  notify_fail("Du hast nicht genug Magiepunkte dafuer.\n");
+  if ((mn=env->QueryProp(P_SP))<MANA_COST)
+    return 0;
+  notify_fail("Das kannst Du im Moment nicht tun!\n");
+  if (env->QueryProp(P_ATTACK_BUSY))
+    return 0;
+  
+  if (env->id("Spieler")) {
+    s_id="Spieler";
+    d_id="NPC";
+  }
+  else
+    if (env->id("NPC")) {
+      s_id="NPC";
+      d_id="Spieler";
+    }
+    else
+      remove();
+  vic=present(dest, environment(env));
+  if (!vic) {
+    write("Kein solches Lebewesen in der Naehe!\n");
+    return 1;
+  }
+
+  notify_fail("Du kannst den Blitz nicht auf "+s_id+" schleudern!\n");
+  if (vic->id(s_id))
+    return 0;
+
+  all=all_inventory(environment(env))-({vic});
+  liv=({vic});
+  for (i=sizeof(all)-1; i>=0; i--)
+    if (sizeof(liv)<MAX_VIC && all[i]->id(d_id))
+      liv+=({ all[i] });
+  to_dam=MAX_DAM;
+  dam=({});
+  for (i=MAX_VIC-1; i>0; i--) {
+    d=MIN_DAM_PER_VIC+random(to_dam/(i+1)-MIN_DAM_PER_VIC);
+    dam+=({ d });
+    to_dam-=d;
+  }
+  dam+=({to_dam});
+  dam=sort_array(dam, #'<);
+
+  env->SetProp(P_SP, mn-30);
+  env->SetProp(P_ATTACK_BUSY, 1);
+
+  write("Du schleuderst einen Kugelblitz nach "+vic->name(WEM)+".\n");
+  say(env->name(WER)+" wirft einen Kugelblitz nach "+vic->name(WEM)+".\n");
+
+  for (i=sizeof(liv)-1; i>=0; i--)
+    liv[i]->Defend(dam[i], DT_LIGHTNING, 
+            ([
+              SP_NAME:"kugelblitz",
+              SP_SHOW_DAMAGE:({
+              ({ -1, "@WESSEN2 Kugelblitz verfehlt Dich knapp.",
+                     "Dein Kugelblitz verpufft bei @WEM1.",
+                     "@WESSEN2 Kugelblitz fliegt an @WEM1 vorbei."}),
+              ({  0, "@WESSEN2 Kugelblitz tut Dir gar nix.",
+                     "Dein Kugelblitz streift @WEN1.",
+                     "@WESSEN2 Kugelblitz streift @WEN1."}),
+              ({ 10, "@WESSEN2 Kugelblitz zerzaust Dein Haar.",
+                     "Dein Kugelblitz zerzaust @WESSEN1 Haar.",
+                     "@WESSEN2 Kugelblitz zerzaust @WESSEN1 Haar."}),
+              ({ 20, "@WESSEN2 Kugelblitz schuettelt Dich ordentlich durch.",
+                     "Dein Kugelblitz schuettelt @WEN1 ordentlich durch.",
+                     "@WESSEN2 Kugelblitz schuettelt @WEN1 ordentlich durch."}),
+              ({ 40, "@WESSEN2 Kugelblitz verschmort Dich.",
+                     "Dein Kugelblitz verschmort @WEN1.",
+                     "@WESSEN2 Kugelblitz verschmort @WEN1."}),
+              ({ 60, "@WESSEN2 Kugelblitz explodiert direkt vor Deinen Augen.",
+                     "Dein Kugelblitz explodiert vor @WESSEN1 Augen.",
+                     "@WESSEN2 Kugelblitz explodiert vor @WESSEN1 Augen."}),
+              ({100, "@WESSEN2 Kugelblitz scheint Dir das Hirn auszubrennen.",
+                     "Dein Kugelblitz brennt fast @WESSEN1 Hirn heraus.",
+                     "@WESSEN2 Kugelblitz brennt fast @WESSEN1 Hirn heraus."}),
+              ({150, "@WESSEN2 Kugelblitz vernichtet Dich voellig.\n"
+                    +"Ein Haeufchen Asche bleibt zurueck.",
+                     "Dein Kugelblitz vernichtet @WEN1.\n"
+                    +"Ein Haeufchen Asche bleibt zurueck.",
+                     "@WESSEN2 Kugelblitz vernichtet @WEN1.\n"
+                    +"Ein Haeufchen Asche bleibt zurueck."})
+              })
+            ]), env);
+  SetProp(P_AMOUNT, QueryProp(P_AMOUNT)-1);
+/*
+  write("Schaden:");
+  for (i=0; i<sizeof(liv); i++)
+    write(sprintf(" %d.", liv[i]->QueryProp(P_MAX_HP)-liv[i]->QueryProp(P_HP)));
+  write("\n");
+*/
+  return 1;
+}
+

@@ -1,0 +1,729 @@
+/*
+// /d/huegelland/raballion/hobbits/obj/urne
+// 05-02-1998  Raballion@SilberLand
+// wahlurne von Derlim
+//
+//
+//
+// Update
+
+*/
+
+inherit "/std/thing";
+
+#include "../def.h"
+
+#include <properties.h>
+#include <language.h>
+#include <ansi.h>
+#include <wizlevels.h>
+#define URNDIR "/d/huegelland/raballion/hobbits/obj/wahlen.sav"
+
+mapping dwahllisten;
+mapping dwahllisteneintraege;
+mixed raete=({"raballion","teqlablu", "nemesis"});
+
+void lies_wahlen();
+void schreib_wahlen();
+
+int AnlegenListe(string str);
+int AnlegenEintrag(string wstr,mixed lstr);
+
+int LoeschenListe(string str);
+int LoeschenEintrag(string wstr,string lstr);
+
+int is_rat();
+int is_rasse();
+
+create()
+{
+  if(!is_clone(this_object()))
+    return;
+  ::create();
+
+  SetProp(P_SHORT, "Wahlurne von Derlim");
+  SetProp(P_LONG,
+    "Dies ist eine schoene Wahlurne und sie wird von der Stadtverwaltung fuer "
+    "verschiedene Wahlen benutzt.\nFuer Ueberflieger eine kleine Funktionsuebersicht:\n"
+    "Bisher sind nur Hobbits wahlberechtigt.\n"
+    "Ueberall gilt: ein * zeigt die eigene, erteilte Stimme an.\n\n"
+    "wwahllisten\n"
+    "Damit kann man sich die derzeit enthaltenen Wahllisten anzeigen lassen. "
+    "Die Ziffer hinter einer Wahlliste gibt die Anzahl der Eintraege an.\n\n"
+    "wwahlliste <wahllistenname>\n"
+    "Damit kann man sich die derzeitigen Eintraege einer Liste anzeigen lassen. "
+    "Die bisher abgegebenen Stimmen werden angezeigt.\n\n"
+    "wwaehle <wahllistenname> <wahlelement>\n"
+    "Damit kann man in einer Liste seine Stimme einem Eintrag geben. "
+    "Ein * zeigt dies am entsprechenden Eintrag an.\n\n"
+    "wentziehe <wahllistenname>\n"
+    "Damit entzieht man seine Stimme einer bestimmten Liste.\n\n\n"
+    "Mit \"hilfe urne\" erhaelt man eine laengere Hilfe.");
+
+  seteuid(getuid(this_object()));
+
+//  AddDetail(({"" }),
+//     "");
+
+  SetProp(P_NAME,"Wahlurne");
+  SetProp(P_GENDER,FEMALE);
+  AddId( ({"urne", "wahlurne"}) );
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+//  SetProp(P_NEVERDROP, 1);
+//  SetProp(P_NODROP, "Du kannst die Urne nicht haben und damit auch nicht ablegen.\n");
+  SetProp(P_NOGET, "Du kannst die Urne nicht nehmen, sie ist viel zu wichtig.\n");
+
+  AddCmd( ({"hilfe"}), "helfen");
+  AddCmd( ({"wwahllisten"}), "wahllisten");
+  AddCmd( ({"wwahlliste"}), "wahlliste");
+// nur fuer hobbits und raballion
+  AddCmd( ({"wwaehle"}), "waehle");
+  AddCmd( ({"wentziehe"}), "entziehe");
+// adminfkt
+  AddCmd( ({"wanlegen"}), "Anlegen");
+  AddCmd( ({"wloeschen"}), "Loeschen");
+  AddCmd( ({"wdebug"}), "debug");
+
+  dwahllisten=([]);
+  dwahllisteneintraege=([]);
+
+// alle Listen mit Eintraegen und Waehlern einlesen und halten
+lies_wahlen();
+}
+
+int debug()
+{
+
+if (is_rat() != 1)
+  return 0;
+
+write ("*************************************************\n");
+printf ("dwahllisten: %O\n",dwahllisten);
+write ("*************************************************\n");
+printf ("dwahllisteneintraege: %O\n",dwahllisteneintraege);
+write ("*************************************************\n");
+return 1;
+}
+
+void lies_wahlen()
+{
+
+  if(is_clone(this_object()))
+     restore_object(URNDIR);
+/*
+dwahllisten += ([ "seherhaeuser": ({"ja", "nein", "vielleicht"}) ]);
+dwahllisten += ([ "ausbau": ({"ja1", "nein1"}) ]);
+dwahllisten += ([ "aus": ({"ja", "nein"}) ]);
+
+dwahllisteneintraege += ([ "seherhaeuserja": ({"raballion","woody"})
+                         ]);
+dwahllisteneintraege += ([ "seherhaeusernein": ({"torben"})
+                         ]);
+dwahllisteneintraege += ([ "seherhaeuservielleicht": ({"thor","teqlablu"})
+                         ]);
+dwahllisteneintraege += ([ "ausbauja1": ({"torben","woody"}),
+                         ]);
+dwahllisteneintraege += ([ "ausbaunein1": ({"dusty"})
+                         ]);
+dwahllisteneintraege += ([ "ausja": ({"raballion"})
+                         ]);
+dwahllisteneintraege += ([ "ausnein": ({})
+                         ]);
+*/
+}
+
+int entziehe(string str)
+{
+int i;
+int j;
+int k;
+int l;
+int AusgabeFlag;
+int EintragFlag;
+
+mixed waehler;
+mixed eintraege;
+string waehler2;
+
+   notify_fail ("Kommando ist:\nwentziehe <Listenname>\n");
+   if (! stringp(str)) return 0;
+
+   if (is_rasse() != 1)
+     return 0;
+
+   str = lower_case(str);
+   if (member(dwahllisten,str) == 0)
+      {
+      write ("Wahlliste \""+(string)capitalize(str)+"\" existiert nicht.\n");
+      return 1;
+      }
+   else
+      {
+//    eintrag suchen mit der eigenen wahl
+      eintraege = dwahllisten[str,0];
+      i = sizeof(eintraege);
+      AusgabeFlag = 0;
+      EintragFlag = 0;
+      for (j = 0;j < i;j++)
+         {
+         waehler = dwahllisteneintraege[str+eintraege[j],0];
+         k = sizeof(waehler);
+         waehler2 = "";
+         for (l = 0;l < k;l++)
+            {
+            if (this_player()->query_real_name() != waehler[l])
+               {
+//             nicht gefunden
+               waehler2 += waehler[l];
+               waehler2 += " ";
+               }
+            else
+               {
+//             gefunden
+               AusgabeFlag = 1;
+               EintragFlag = j;
+               }
+            }
+         waehler = explode(waehler2," ");
+         if (strlen(waehler2) == 0)
+            waehler = ({});
+         dwahllisteneintraege[(str+eintraege[j]),0] = waehler;
+         }
+      }
+   if (AusgabeFlag == 1)
+     {
+     write ("Du hast in der Wahlliste \""+(string)capitalize(str)+
+            "\" dem Eintrag \""+(string)capitalize(eintraege[EintragFlag])+
+            "\" die Stimme entzogen.\n");
+     write("Schade um Deine Stimme.\n");
+     schreib_wahlen();
+     return 1;
+     }
+
+
+return 0;
+}
+
+int waehle(string str)
+{
+int i;
+int j;
+int k;
+int l;
+int m;
+int n;
+int o;
+int p;
+
+string *cmdl;
+mixed waehler;
+mixed eintraege;
+string waehler2;
+
+   notify_fail ("Kommando ist:\nwwaehle <Listenname> <Eintragname>\n");
+   if (! stringp(str)) return 0;
+
+   if (is_rasse() != 1)
+     return 0;
+
+   str = lower_case(str);
+   cmdl = explode(str, " ");
+   if ((sizeof(cmdl) == 2) && (strlen(cmdl[0]) > 0) && (strlen(cmdl[1]) > 0))
+      {
+      if (member(dwahllisten,cmdl[0]) == 1)
+         {
+         if (member(dwahllisteneintraege,cmdl[0]+cmdl[1]) == 1)
+            {
+//          pruefen, ob dieser eintrag nicht schon gewaehlt wurde
+            waehler = dwahllisteneintraege[(cmdl[0]+cmdl[1]),0];
+            i = sizeof(waehler);
+            for (j = 0;j < i;j++)
+               {
+               if (this_player()->query_real_name() == waehler[j])
+                  {
+                  j = i;
+                  write ("In der Wahlliste \""+(string)capitalize(cmdl[0])+
+                         "\" wurde der Eintrag \""+(string)capitalize(cmdl[1])+
+                         "\" schon gewaehlt.\n");
+                  return 1;
+                  }
+                }
+//          eventuell bestehenden alten eintrag in allen eintraegen loeschen
+            eintraege = dwahllisten[cmdl[0],0];
+            k = sizeof(eintraege);
+            for (l = 0;l < k;l++)
+               {
+               waehler = dwahllisteneintraege[(cmdl[0]+eintraege[l]),0];
+               m = sizeof(waehler);
+               waehler2 = "";
+               for (n = 0;n < m;n++)
+                  {
+                  if (this_player()->query_real_name() != waehler[n])
+                     {
+                     waehler2 += waehler[n];
+                     if (n < m - 1)
+                        {
+                        waehler2 += " ";
+                        }
+                     }
+                  else
+                     {
+//                     write ("waehler in einem anderen eintrag gefunden\n");
+                     }
+                  }
+               waehler = explode(waehler2," ");
+               if (strlen(waehler2) == 0)
+                  waehler = ({});
+               dwahllisteneintraege[(cmdl[0]+eintraege[l]),0] = waehler;
+               }
+//          neuen eintrag taetigen
+            waehler = dwahllisteneintraege[(cmdl[0]+cmdl[1]),0];
+            waehler = explode(implode(waehler," ")+
+                               " "+this_player()->query_real_name(), " ");
+            dwahllisteneintraege[(cmdl[0]+cmdl[1]),0] = waehler;
+
+            write ("Du hast in der Wahlliste \""+(string)capitalize(cmdl[0])+
+                   "\" den Eintrag \""+(string)capitalize(cmdl[1])+
+                   "\" gewaehlt.\n");
+            write("Danke fuer Deine Stimme.\n");
+            schreib_wahlen();
+            }
+         else
+            {
+            write ("In der Wahlliste \""+(string)capitalize(cmdl[0])+
+                   "\" existiert der Eintrag \""+(string)capitalize(cmdl[1])+
+                   "\" nicht.\n");
+            }
+         }
+      else
+         {
+         write ("Wahlliste \""+(string)capitalize(cmdl[0])+"\" existiert nicht.\n");
+         }
+      return 1;
+      }
+
+   return 0;
+}
+
+
+int helfen(string str)
+{
+   notify_fail ("Wozu willst Du Hilfe haben?\n");
+   if (! stringp(str)) return 0;
+
+   str = lower_case(str);
+   if (id(str) == 1)
+      {
+      if (is_rat() == 1)
+         {
+         TP->More(read_file(OBJ "urne2.txt"));
+//         this_player()->More(OBJ "urne2.txt",1);
+         return 1;
+         }
+      else
+         {
+         TP->More(read_file(OBJ "urne.txt"));
+//         this_player()->More(OBJ "urne.txt",1);
+         return 1;
+         }
+      }
+   return 0;
+}
+
+int wahllisten()
+{
+int i;
+int j;
+int k;
+int l;
+int m;
+string *mapkeysl;
+mixed mapvall;
+
+int n;
+int o;
+mixed waehler;
+
+
+   i = m_sizeof(dwahllisten);
+   mapkeysl = m_indices(dwahllisten);
+   mapvall = m_values(dwahllisten);
+   j = sizeof(mapvall);
+   if (i > 0)
+      {
+      write ("Es gibt zur Zeit folgende Wahllisten:\n");
+      for (k = 0; k < i; k++)
+         {
+         write ((string)(k+1)+": "+(string)capitalize(mapkeysl[k]));
+         l = sizeof(mapvall[k]);
+         if (l == 1)
+            {
+            write (" ("+(string)l+" Eintrag)");
+            }
+         else
+            {
+            write (" ("+(string)l+" Eintraege)");
+            }
+// * machen
+         for (m = 0;m < l;m++)
+            {
+            waehler = dwahllisteneintraege[(mapkeysl[k]+mapvall[k][m])];
+            n = sizeof(waehler);
+            for (o = 0;o < n;o++)
+               {
+               if (this_player()->query_real_name() == waehler[o])
+                  {
+                  write (" *");
+                  o = n;
+                  }
+               }
+            }
+// * machen ende
+         write ("\n");
+         }
+      }
+   else
+      {
+      write ("Zur Zeit gibt es keine Wahllisten.\n");
+      }
+   return 1;
+}
+
+int wahlliste(string str)
+{
+int i;
+int j;
+int k;
+int l;
+int m;
+string *mapkeysl;
+mixed mapvall;
+
+int n;
+int o;
+mixed listeneintraege;
+mixed waehler;
+
+   notify_fail ("Was willst Du fuer eine Wahlliste haben?\n");
+   if (! stringp(str)) return 0;
+
+   str = lower_case(str);
+   i = m_sizeof(dwahllisten);
+   mapkeysl = m_indices(dwahllisten);
+   mapvall = m_values(dwahllisten);
+   j = sizeof(mapvall);
+// *********************************************
+// liste existiert ?
+// *********************************************
+   if (member(dwahllisten,str) == 1)
+      {
+      listeneintraege = dwahllisten[str,0];
+      k = sizeof(listeneintraege);
+//    *********************************************
+//    liste zwar vorhanden, aber leer
+//    *********************************************
+      if (k == 0)
+         {
+         write ("Deine ausgewaehlte Wahlliste \""+(string)capitalize(str)+
+                "\" hat keine Eintraege.\n");
+         return 1;
+         }
+//       *********************************************
+//       liste vorhanden und hat folgende eintraege
+//       *********************************************
+      write ("Die Wahlliste \""+(string)capitalize(str)+
+             "\" enthaelt folgende Eintraege:\n");
+      for (l = 0;l < k;l++)
+         {
+         write ((string)(l+1)+": "+(string)capitalize(listeneintraege[l]));
+//       * machen
+         waehler = dwahllisteneintraege[(str+listeneintraege[l])];
+         m = sizeof(waehler);
+         if (m == 1)
+            {
+            write (" ("+(string)(m)+" Stimme) ");
+            }
+         else
+            {
+            write (" ("+(string)(m)+" Stimmen) ");
+            }
+         for (n = 0;n < m;n++)
+            {
+            if (this_player()->query_real_name() == waehler[n])
+               {
+               write (" *");
+               n = m;
+               }
+            }
+//       * machen ende
+         write ("\n");
+         }
+      }
+   else
+      {
+      write ("Deine ausgewaehlte Wahlliste \""+(string)capitalize(str)+
+             "\" existiert nicht.\n");
+      }
+   return 1;
+}
+
+int Anlegen(string str)
+{
+string *cmdl;
+
+
+   notify_fail ("Kommando ist:\nwanlegen liste <Listenname>\n"+
+                "wanlegen eintrag <Listenname> <Eintragname>\n");
+   if (! stringp(str)) return 0;
+
+
+   if (is_rat() != 1)
+      return 0;
+
+   str = lower_case(str);
+   cmdl = explode(str, " ");
+   if ((sizeof(cmdl) == 2) && (strlen(cmdl[0]) > 0) && (cmdl[0] == "liste"))
+      {
+      return AnlegenListe(lower_case(cmdl[1]));
+      }
+   if ((sizeof(cmdl) == 3) && (strlen(cmdl[0]) > 0) && (cmdl[0] == "eintrag"))
+      {
+      return AnlegenEintrag(lower_case(cmdl[1]), lower_case(cmdl[2]));
+      }
+
+   return 0;
+}
+
+int AnlegenListe(string str)
+{
+// existiert die liste noch nicht ?
+   if (member(dwahllisten,str) == 0)
+      {
+      dwahllisten += ([ str: ({}) ]);
+      write ("Wahlliste \""+(string)capitalize(str)+"\" angelegt.\n");
+      schreib_wahlen();
+      }
+   else
+      {
+      write ("Wahlliste \""+(string)capitalize(str)+"\" existiert schon.\n");
+      }
+return 1;
+}
+
+int AnlegenEintrag(string wstr,mixed lstr)
+{
+int i;
+int j;
+
+mixed listeneintraege;
+
+// existiert die liste schon ?
+   if (member(dwahllisten,wstr) == 1)
+      {
+//    existiert eintrag in der liste schon ?
+      listeneintraege = dwahllisten[wstr,0];
+      i = sizeof(listeneintraege);
+      if (i == 0)
+         {
+         listeneintraege = explode(implode(listeneintraege," ")+
+                            " "+lstr, " ");
+         dwahllisten[wstr,0] = listeneintraege;
+         dwahllisteneintraege += ([ wstr+lstr: ({})
+                                  ]);
+         write ("In der Wahlliste \""+(string)capitalize(wstr)+
+                "\" wurde der Eintrag \""+(string)capitalize(lstr)+
+                "\" angelegt.\n");
+         return 1;
+         }
+      for (j = 0;j < i;j++)
+         {
+         if (listeneintraege[j] == lstr)
+           {
+           write ("In der Wahlliste \""+(string)capitalize(wstr)+
+                  "\" existiert der Eintrag \""+(string)capitalize(lstr)+
+                  "\" schon.\n");
+           return 1;
+           }
+         else
+           {
+           listeneintraege = explode(implode(listeneintraege," ")+
+                              " "+lstr, " ");
+           dwahllisten[wstr,0] = listeneintraege;
+           dwahllisteneintraege += ([ wstr+lstr: ({})
+                                    ]);
+           j = i;
+           write ("In der Wahlliste \""+(string)capitalize(wstr)+
+                  "\" wurde der Eintrag \""+(string)capitalize(lstr)+
+                  "\" angelegt.\n");
+           schreib_wahlen();
+           }
+         }
+      }
+   else
+      {
+      write ("Wahlliste \""+(string)capitalize(wstr)+"\" existiert noch nicht.\n");
+      }
+return 1;
+}
+
+
+
+int Loeschen(string str)
+{
+string *cmdl;
+
+   notify_fail ("Kommando ist:\nwloeschen liste <Listenname>\n"+
+                "wloeschen eintrag <Listenname> <Eintragname>\n");
+   if (! stringp(str)) return 0;
+
+   if (is_rat() != 1)
+      return 0;
+
+   str = lower_case(str);
+   cmdl = explode(str, " ");
+   if ((sizeof(cmdl) == 2) && (strlen(cmdl[0]) > 0) && (cmdl[0] == "liste"))
+      {
+      return LoeschenListe(lower_case(cmdl[1]));
+      }
+   if ((sizeof(cmdl) == 3) && (strlen(cmdl[0]) > 0) && (cmdl[0] == "eintrag"))
+      {
+      return LoeschenEintrag(lower_case(cmdl[1]), lower_case(cmdl[2]));
+      }
+   return 0;
+}
+
+
+int LoeschenListe(string str)
+{
+int i;
+
+mixed listeneintraege;
+
+// existiert die liste ueberhaupt ?
+   if (member(dwahllisten,str) == 1)
+      {
+//    ist sie auch leer ?
+      listeneintraege = dwahllisten[str,0];
+      i = sizeof(listeneintraege);
+      if (i == 0)
+         {
+         dwahllisten -= ([str]);
+         write ("Wahlliste \""+(string)capitalize(str)+"\" geloescht.\n");
+         schreib_wahlen();
+         return 1;
+         }
+      else
+         {
+         write ("Wahlliste \""+(string)capitalize(str)+"\" ist nicht leer.\n");
+         return 1;
+         }
+      }
+   else
+      {
+      write ("Wahlliste \""+(string)capitalize(str)+"\" existiert nicht.\n");
+      }
+return 1;
+}
+
+
+int LoeschenEintrag(string wstr,string lstr)
+{
+int i;
+int j;
+
+mixed listeneintraege;
+string listeneintraege2;
+
+// existiert die liste ueberhaupt ?
+   if (member(dwahllisten,wstr) == 1)
+      {
+//    existiert der Eintrag ueberhaupt ?
+      listeneintraege = dwahllisten[wstr,0];
+      i = sizeof(listeneintraege);
+      if (i > 0)
+         {
+//       in dwahllisten den zugehoerigen Eintrag loeschen
+         listeneintraege2 = "";
+         for (j = 0;j < i;j++)
+            {
+            if (listeneintraege[j] != lstr)
+               {
+               listeneintraege2 += listeneintraege[j];
+               listeneintraege2 += " ";
+               }
+            }
+         listeneintraege = explode(listeneintraege2," ");
+         if (strlen(listeneintraege2) == 0)
+            listeneintraege = ({});
+         dwahllisten[wstr,0] = listeneintraege;
+//       in dwahllisteneintraege loeschen
+         dwahllisteneintraege -= ([wstr+lstr]);
+         write ("In der Wahlliste \""+(string)capitalize(wstr)+
+                "\" wurde der Eintrag \""+(string)capitalize(lstr)+
+                "\" geloescht.\n");
+         schreib_wahlen();
+         }
+      else
+         {
+         write ("In der Wahlliste \""+(string)capitalize(wstr)+
+                "\" existiert der Eintrag \""+(string)capitalize(lstr)+
+                "\" nicht.\n");
+         return 1;
+         }
+      }
+   else
+      {
+      write ("Wahlliste \""+(string)capitalize(wstr)+"\" existiert nicht.\n");
+      }
+
+return 1;
+}
+
+
+void reset()
+{
+  ::reset();
+  schreib_wahlen();
+}
+
+void schreib_wahlen()
+{
+  if(is_clone(this_object()))
+     save_object(URNDIR);
+}
+
+int is_rat()
+{
+int i;
+int j;
+string name;
+
+name = this_player()->query_real_name();
+i = sizeof (raete);
+for (j = 0;j < i;j++)
+   {
+   if (raete[j] == name)
+      {
+      return 1;
+      }
+   }
+notify_fail ("Du bist kein Ratsmitglied von Derlim.\n");
+return 0;
+}
+
+int is_rasse()
+{
+int i;
+int j;
+string rasse;
+
+rasse = this_player()->QueryProp(P_RACE);
+rasse = lower_case(rasse);
+if ((rasse == "hobbit") || (is_rat()))
+   return 1;
+
+notify_fail ("Du bist von der Rasse "+(string)capitalize(rasse)+
+             " und damit nicht Wahlberechtigt.\n");
+return 0;
+}

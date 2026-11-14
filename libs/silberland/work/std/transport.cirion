@@ -1,0 +1,424 @@
+// SilberLand MUDlib
+//
+// std/transport.c -- Standard Transporter
+//
+// $Date: 2002/08/29 13:16:06 $
+/* $Revision: 3.7 $
+ * $Log: transport.c,v $
+ * Revision 3.7  2002/08/29 13:16:06  Woody
+ * include <transport.h>, include-Reihenfolge korrigiert
+ *
+ * Revision 3.6  2002/01/29 23:56:27  Woody
+ * Paralysierte Reisende werden nicht mehr automatisch mitgenommen/abgeladen
+ *
+ * Revision 3.5  2001/11/30 20:29:29  mud
+ * "unbekannt" sollte bei "reise route" nur noch in Ausnahmefaellen aufscheinen
+ *
+ * Revision 3.4  2001/07/25 13:12:59  Woody
+ * QueryHarbours() gibt Ergebnis optional human-readable zurueck
+ *
+ * Revision 3.3  2000/03/24 10:04:22  Feyaria
+ * Raummeldungen bei LEAVEFAIL und ENTERFAIL nur mehr an Raum ausgeben.
+ *
+ * Revision 3.2  1999/05/12 09:17:08  Woody
+ * Ueberarbeitung, strong_types, neue Funktionen v.a. fuer "reise"
+ *
+ * Revision 3.1  1997/06/25 11:35:35  Woody
+ * _query_route() und _set_route(),
+ * P_ENTERFAIL/P_LEAVEFAIL duerfen auch closures sein
+ *
+ * Revision 3.0  1997/03/13 03:18:35  Woody
+ * prepared for revision control
+ *
+ * Revision 2.10  1995/03/30  13:48:56  Rumata
+ * ???
+ *
+ * Revision 2.9  1995/02/06  19:44:14  Jof
+ * RCS-Logs aufgeraeumt (leere Logs raus usw)
+ *
+*/
+
+
+#pragma strong_types
+
+inherit "std/thing/moving";
+inherit "std/room";
+
+#define NEED_PROTOTYPES
+
+#include <moving.h>
+#include <transport.h>
+#include <properties.h>
+
+#include <defines.h>
+#include <language.h>
+#include <config.h>
+
+/* transport.c
+ * Hates und Rumatas generisches Transport Objekt
+ * MorgenGrauen 15.2.93
+ *
+ * Dokumentation in /doc/std/transport
+ */
+
+/********************** Variablen **********************/
+
+mixed *route;    /* Liste der Haltepunkte. */
+int rpos;        /* Momentane position in obiger Liste. */
+string roomCode; /* Code des aktuellen Raumes (oder 0). */
+
+/**************** forward declarations *****************/
+
+static void connect(string room, string code);
+static varargs void disconnect(int change, int change_time);
+
+/********* Management der builtin-properties ***********/
+
+string _query_short()
+{ if ( roomCode ) return Query(P_SHORT); else return 0; }
+
+string _query_transparent()
+{ if ( roomCode ) return Query(P_TRANSPARENT); else return 0; }
+
+mixed *_set_route(mixed *r)
+{ return route=r; }
+
+mixed *_query_route()
+{ return route[0..]; }
+
+/***************** Zugriffsfunktionen ****************/
+
+public void Start(int pos)
+{
+  Halt();
+  rpos = ( pos>=sizeof(route) ) ? -1 : pos-1;
+  call_out( "changeHp", 0 );
+}
+
+public void Halt()
+{
+  while (remove_call_out( "changeHp" )>-1);
+  while (remove_call_out( "disconnect" )>-1);
+}
+
+// returns whether a certain destination is visited or not
+// (array consisting of filename of destination and destination string)
+public mixed HasRoute(string dest)
+{
+  int i,s;
+
+  s=sizeof(route);
+  for (i=rpos; i<=rpos+s-1; i++)
+    if (route[i%s][0]==HP_ROOM)
+      if (member(route[i%s][5],dest) != -1)
+        return ({ route[i%s][1],
+                  route[i%s][6] || "nach/zu(m/r) \""+capitalize(dest)+"\"" });
+  return 0;
+}
+
+public varargs void AddRoute(string room, int stay, int next,
+                             string code, mixed dest, string deststr)
+{
+  object ob;
+  string *trs;
+
+  room=MASTER->make_path_absolute(room);
+  if (!pointerp(dest))
+    if (stringp(dest))
+      dest=({ dest });  // einzelnes Wort? -> Array
+    else                // Hauptwoerter rausfiltern und lower_case'n
+      dest=map_array( filter_array( explode(code," "),
+                                    lambda( ({'x}),
+                                      ({ #'==, 'x, ({#'capitalize, 'x}) }) ) ),
+                      #'lower_case);
+
+  route += ({ ({ HP_ROOM, room, stay, next, code, dest, deststr }) });
+  SHIPD->AddHarbour( this_object(), room );
+}
+
+public void AddMsg(string msg, int next)
+{
+  route += ({ ({ HP_MSG, msg, next }) });
+}
+
+public void AddFun(string fun, int next)
+{
+  route += ({ ({ HP_FUN, fun, next }) });
+}
+
+public string QueryArrived()
+{
+  /* sollte es nich besser QueryRoom() heissen ? */
+  return roomCode;
+}
+
+public string *QueryPosition()
+{
+  return ({ route[rpos][1], route[(rpos+1)<sizeof(route)?(rpos+1):0][1] });
+}
+
+public object *QueryPassengers()
+{
+  mixed *livings;
+  object ob;
+
+  livings = ({});
+  for ( ob = first_inventory(ME); ob; ob = next_inventory( ob ) )
+    if ( living(ob) ) livings += ({ ob });
+
+  return livings;
+}
+
+// returns an array of all harbours visited (optionally human readable)
+public varargs string *QueryHarbours(int textflag)
+{
+  int i;
+  string *ret, s;
+
+  ret=({});
+
+  if (textflag)
+  {
+    for (i=0; i<sizeof(route); i++)
+      if (route[i][0] == HP_ROOM)
+      {
+        s = route[i][6];
+        if (!s)
+          s = route[i][1]->QueryProp(P_INT_SHORT) || "unbekannt";
+        else if (s[0..12] == "nach/zu(m/r) ")
+          s = s[13..];
+        else
+          s = regreplace( s, "^(nach|zu(m|r)) ", "", 0 );
+        ret += ({ s });
+      }
+  }
+  else
+  {
+    for (i=sizeof(route)-1; i>=0; i--)
+      if (route[i][0] == HP_ROOM)
+        ret+=({route[i][1]});
+  }
+
+  return ret;
+}
+
+
+public void RemoveRoute()
+{
+  Halt();
+  route = ({ });
+  rpos = 0;
+  SHIPD->RemoveShip(this_object());
+}
+
+public varargs int Enter(object who)
+{
+  mixed msgs;
+  int maxpassengers;
+
+  if (!objectp(who)) who=this_player();
+  if ( environment(who) == ME )
+  {
+    tell_object( who, "Da bist Du bereits.\n" );
+    return 1;
+  }
+
+  if( !roomCode )
+    return 0;
+
+  maxpassengers = QueryProp( P_MAX_PASSENGERS );
+  if ( maxpassengers && sizeof(QueryPassengers()) >= maxpassengers )
+  {
+    if ( pointerp( msgs = QueryProp(P_ENTERFAIL) ) )
+    {
+      tell_room( this_object(), who->Name(WER,2) + " " + msgs[1] + ".\n",
+              ({who}) );
+      msgs = msgs[0];
+    } else if (closurep(msgs)) {
+      funcall(msgs);
+      return 1;
+    }
+    tell_object( who, msgs + ".\n" );
+    return 1;
+  }
+  if ( !pointerp( msgs = QueryProp(P_ENTERMSG) ) )
+    msgs = ({ 0,0 });
+  return who->move( ME, M_GO, 0, msgs[0], msgs[1] );
+}
+
+public varargs int Leave(object who)
+{
+  mixed msgs;
+
+  if (!objectp(who)) who=this_player();
+  if ( environment(who) != ME )
+  {
+    if( roomCode )
+    {
+      tell_object( who, "Dafuer muesstest Du erstmal dort sein.\n" );
+      return 1;
+    }
+    return 0;
+  }
+
+  if( !roomCode )
+  {
+    if ( pointerp( msgs = QueryProp(P_LEAVEFAIL) ) )
+    {
+      tell_room( this_object(), who->Name(WER,2) + " " + msgs[1] + ".\n",
+              ({who}) );
+      msgs = msgs[0];
+    } else if (closurep(msgs)) {
+      funcall(msgs);
+      return 1;
+    }
+    tell_object( who, msgs + ".\n" );
+    return 1;
+  }
+  if ( !pointerp( msgs = QueryProp(P_LEAVEMSG) ) )
+    msgs = ({ 0,0 });
+  return who->move( environment(), M_GO, 0, msgs[0], msgs[1] );
+}
+
+
+/****************** Internal Functions ******************/
+
+public void create()
+{
+  ::create();
+  route = ({});
+  SetProp( P_ENTERCMDS, ({}) );
+  SetProp( P_LEAVEFAIL, "Das geht jetzt nicht" );
+  SetProp( P_ENTERFAIL, "Dort ist kein Platz" );
+  SetProp( P_TRANSPARENT, 1 );
+  AddId("Transporter");
+}
+
+public int remove()
+{
+  destruct( ME ); /* schoener waere "::remove();" */
+  return 1;
+}
+
+static void changeHp()
+{
+  if ( ++rpos == sizeof(route) )
+    rpos = 0;
+  if ( route[rpos][0] == HP_MSG )
+  {
+    tell_room( this_object(), route[rpos][1] );
+    call_out( "changeHp", route[rpos][2] );
+  }
+  else if ( route[rpos][0] == HP_FUN )
+  {
+    call_out( "changeHp", route[rpos][2] );
+    call_other( ME, route[rpos][1] );
+  }
+  else /* route[rpos][0] == HP_ROOM */
+  {
+    connect( route[rpos][1], route[rpos][4] );
+    call_out( "disconnect", route[rpos][2], 1, route[rpos][3] );
+  }
+}
+
+static void connect(string room, string code)
+{
+  mixed *arrivemsg, *t;
+  object *trav, ob;
+  string *trs, *msgs;
+  int i;
+
+  if ( roomCode ) disconnect();
+  roomCode = code ? code : "";
+  if ( catch(move( room , M_SILENT | M_NOCHECK )) )
+  { /* Wenn der "Hafen" kein korrekter Raum ist ... */
+    roomCode = 0;
+    return;
+  }
+  arrivemsg = QueryProp(P_ARRIVEMSG);
+  if ( pointerp(arrivemsg) )
+  {
+    tell_room( ME, process_string(arrivemsg[0]) );
+    tell_room( room, process_string(arrivemsg[1]) );
+  }
+
+  // Bitte aussteigen!
+  trav = filter_array( all_inventory(this_object()), #'living );
+  for ( i = sizeof(trav); i-->0; )
+  {
+    // Paralysierte Fahrgaeste bleiben am Boot.
+    if (trav[i]->QueryProp(P_PARALYZED))
+      continue;
+
+    if (pointerp(t = trav[i]->QueryProp(P_TRAVEL_INFO)))
+      if (t[0] == this_object())
+        if (t[2] == room)
+        {
+          Leave(trav[i]);
+          if (environment(trav[i]) != this_object())
+            trav[i]->SetProp(P_TRAVEL_INFO, 0);
+        }
+  }
+
+  // Bitte einsteigen!
+  trav = filter_array( all_inventory(find_object(room)), #'living ) - trav;
+  for ( i = sizeof(trav); i-->0; )
+  {
+    // Paralysierte Wartende warten weiterhin.
+    if (trav[i]->QueryProp(P_PARALYZED))
+      continue;
+
+    if (pointerp(t = trav[i]->QueryProp(P_TRAVEL_INFO)))
+      if (t[0] == environment(trav[i]) && t[1] == this_object())
+      {
+        Enter(trav[i]);
+        if (environment(trav[i]) == this_object()) {
+          t[0] = this_object();
+          trav[i]->SetProp(P_TRAVEL_INFO, t);
+        }
+      }
+  }
+}
+
+static varargs void disconnect(int change, int change_time)
+{
+  object room;
+  mixed *departmsg;
+
+  departmsg = QueryProp(P_DEPARTMSG);
+  if ( (room=environment()) && pointerp(departmsg) )
+  {
+    tell_room( ME, process_string(departmsg[0]) );
+    tell_room( room, process_string(departmsg[1]) );
+  }
+  roomCode = 0;
+  if (change)
+    call_out("changeHp",change_time);
+}
+
+int clean_up(int arg)
+{
+  return 1;
+}
+
+void __restart(string funname)
+{
+  if (!funname || funname=="" ||
+      (funname != "changeHp" && funname != "disconnect"))
+    return;
+
+  while (remove_call_out(funname) != -1) ;
+  call_out(funname, funname=="changeHp" ? 15 : 5);
+}
+
+/*** noch nicht einbauen !!!
+int _normalfunction(string str)
+{
+	if( !member(Query(P_EXITS),query_verb()) )
+		return 0; // kein Exit
+	if( environment(this_player()) != this_object() )
+		return 0; // Spieler ausserhalb
+
+	return room::_normalfunction(str);
+}
+***/

@@ -1,0 +1,1877 @@
+/* Paracelsus: Rage-Engine */
+/* Woody: Dankend erhaltend von Paracelsus, fuers SL ueberarbeitet */
+
+#include "../../files.h"
+#include "./rage2.h"
+#include <ansi.h>
+#include <properties.h>
+#include <moving.h>
+#include <language.h>
+#include <exploration.h>
+#include "/p/daemon/channel.h"
+#include <defines.h>
+#include <moredef.h>
+
+#pragma strong_types
+
+inherit "std/room";
+
+/* ==================== Variablen ==================== */
+
+// Die "Topliste" soll gespeichert werden
+       mixed   *T_win, *T_los;
+
+// Die Farbeinstellungen auch
+       mapping PL_cols;
+
+// Die anderen Variablen besser nicht
+nosave int     rg_round;      // Welche Runde gerade laeuft
+nosave int     *rg_play_c;    // Liste der Klassen der gespielten Karten
+nosave mapping ANSI_MAP;      // Ansi-Farben
+nosave mapping rg_game;       // Spieler-Informationen
+nosave mapping rg_int;        // Spiel-Informationen
+nosave mapping TRANSLATE;     // Hilfsmapping
+nosave string  *rg_player;    // Liste aller Spieler
+nosave string  rg_active;     // Der Spieler der dran ist
+nosave string  *rg_deck;      // Der Kartenstapel
+nosave string  *rg_played;    // Die aufgespielten Karten
+nosave string  *rg_off;       // Liste von "Aussteigern"
+
+/* ==================== Prototypen ==================== */
+
+public int    C_ansagen(string arg);
+public int    C_aussteigen();
+public int    C_bedienen(string arg);
+public int    C_einsteigen();
+public int    C_farbauswahl(string arg);
+public int    C_high_low();
+public int    C_karten_zeigen();
+public int    C_no_you_dont();
+public int    C_ragehilfe(string arg);
+public int    C_sage(string arg);
+public int    C_shortplay(string arg);
+public int    C_spielen(string arg);
+public int    C_spielstand();
+public int    C_spielstart();
+public int    C_topliste();
+nosave int    disp_card_sort(string c1, string c2);
+nosave int    get_card_val(string card);
+nosave int    get_points();
+nosave int    rg_end_sort(string a, string b);
+public int    save_me();
+nosave int    TestPlayerExit();
+nosave int    get_class(string input);
+public string D_stuehle();
+nosave string DisplayCard(string card, object pl);
+nosave string eval_joker(string in);
+nosave string playerinfo(string pl);
+nosave void   AddToWin(string uid, int sco);
+nosave void   AddToLos(string uid, int sco);
+nosave void   CleanAway(string uid);
+nosave void   clean_data();
+nosave void   create_deck();
+nosave void   EvalRound();
+nosave void   EvaluateCards();
+nosave void   Mischen();
+nosave void   PlayerLeave();
+nosave void   RMess(mixed pl, string t1, string t2);
+nosave void   SelectTrump();
+nosave void   set_first(string uid);
+nosave void   StartGame(string uid);
+
+/* ==================== Raum-Hauptfunktionen ==================== */
+
+void create()
+{
+    if (strstr(file_name(TO),"engine")!=-1)
+    {
+        set_next_reset(-1);
+        return;
+    }
+    ::create();
+
+    seteuid(getuid(TO));
+    if (!restore_object(RG_SAVEFILE))
+    {
+        T_win = ({ });
+        T_los = ({ });
+        PL_cols = ([ ]);
+    }
+    else
+    {
+      mixed ind;
+      int i;
+      ind = m_indices(PL_cols);
+      for (i=sizeof(ind);i--;)
+        if (file_size(sprintf("/save/%c/%s.o",ind[i][0],ind[i])) == -1)
+          efun::m_delete( PL_cols,ind[i] );
+      save_object(RG_SAVEFILE);
+    }
+
+    // rg_game muss hier initialisiert werden.
+    rg_game=([]);
+    rg_player=({});
+
+    SetProp(P_LIGHT,1);
+    SetProp(P_INDOORS,1);
+    SetProp(P_NOMAGIC,100);
+    SetProp(P_NO_TPORT,NO_TPORT);
+    SetProp(P_ARTICLE,1);
+
+    AddCmd( ({"ragehilfe","rhilfe"}),   "C_ragehilfe"     );
+    AddCmd( "einsteigen",               "C_einsteigen"    );
+    AddCmd( "aussteigen",               "C_aussteigen"    );
+    AddCmd( "spielstart",               "C_spielstart"    );
+    AddCmd( ({"ansagen","ansage"}),     "C_ansagen"       );
+    AddCmd( ({"karten","karte"}),       "C_karten_zeigen" );
+    AddCmd( ({"spiele","spiel"}),       "C_spielen"       );
+    AddCmd( ({"kartenfarbe","kfarbe"}), "C_farbauswahl"   );
+    AddCmd( "spielstand",               "C_spielstand"    );
+    AddCmd( "topliste",                 "C_topliste"      );
+    AddCmd( ({"sag","sage"}),           "C_sage"          );
+    AddCmd( ({"bedien","bediene"}),     "C_bedienen"      );
+    AddCmd( ({"hoch","tief"}),          "C_high_low"      );
+    AddCmd( ({"schwarze","rote",
+              "blaue","gelbe","gruene",
+              "ockerne","joker","plus",
+              "minus","trumpfblock",
+              "trumpfwechsel"}),        "C_shortplay"     );
+
+    AddCmd( ({"schlaf","schlafe","ende","quit","home","goto"}),
+            "C_no_you_dont" );
+
+    call_out("clean_data",0);
+}
+
+public string D_stuehle()
+{   string re;
+    int    i;
+
+    re = "Hier stehen "+RG_CHAIRS+" Stuehle um den Tisch herum.";
+    if (pointerp(rg_player))
+    {
+        i=sizeof(rg_player);
+        if (i>0)
+        {
+            switch (i)
+            {
+                case 1 :
+                    re += (" "+CAP(rg_player[0])+" sitzt auf einem der "+
+                           "Stuehle.");
+                    break;
+                case 2 :
+                    re += (" "+CAP(rg_player[0])+" und "+CAP(rg_player[1])+
+                           " sitzen beide auf je einem Stuhl.");
+                    break;
+                default :
+                    re += " Auf den Stuehlen sitzen ";
+                    for ( --i ; i>=0 ; i-- )
+                    {
+                        re += CAP(rg_player[i]);
+                        if (!i)
+                            re += ".";
+                        else if (i==1)
+                            re += " und ";
+                        else
+                            re += ", ";
+                    }
+            }
+        }
+    }
+    return BS(re);
+}
+
+public int save_me()
+{
+    save_object(RG_SAVEFILE);
+    return 1;
+}
+
+nosave void CleanAway(string uid)
+{   object pl;
+    string *tmp;
+
+    if (!stringp(uid))
+        return;
+    if (objectp(pl=find_player(uid)) && present(pl,TO))
+        return;
+    tmp=rg_off;
+    rg_off=({uid});
+    PlayerLeave();
+    rg_off=tmp;
+}
+
+public void BecomesNetDead(object pl)
+{   string uid;
+
+    if (!objectp(pl))
+        return;
+    uid=getuid(pl);
+    if (member(rg_player,uid)==-1)
+        return;
+    if (!rg_round)
+    {
+        rg_player -= ({ uid });
+        rg_player -= ({ 0 });
+        RMess(0,0,sprintf("%s wird dann wohl doch nicht mitspielen.",
+            CAP(uid)));
+        return;
+    }
+    call_out("CleanAway",60*RAGE_TIMEOUT,uid);
+}
+
+/* ==================== Hilfsfunktionen ==================== */
+
+nosave int TestPlayerExit()
+{
+    if (!TP || member(rg_player,getuid(TP))==-1)
+        return 1;
+    if (rg_round)
+    {
+        write("Solange das Spiel laeuft, solltest Du schon hierbleiben.\n");
+        return 0;
+    }
+    write("Du solltest vielleicht erstmal aussteigen, bevor Du gehst.\n");
+    return 0;
+}
+
+nosave void RMess(mixed pl, string t1, string t2)
+{   object *pls;
+    string *pts;
+    int    i,j;
+
+    pls=filter_array(all_inventory(),#'interactive);
+    if (stringp(pl))
+    {
+        if (!objectp(pl=find_player(pl)))
+        {
+//            RDB("Bad #1 in RMess()");
+              pl=0;
+        }
+        else if (!present(pl,TO))
+        {
+//            RDB("Bad #2 in RMess()");
+              pl=0;
+        }
+    }
+
+    if (objectp(pl))
+    {
+        pls -= ({ pl });
+        if (stringp(t1))
+        {
+            pts=efun::explode(t1,"@");
+            if (sizeof(pts)==3)
+                tell_object(pl,
+                    break_string(pts[0]+DisplayCard(pts[1],pl)+pts[2],
+                      78,RG_CHANNEL,1));
+            else
+                tell_object(pl,break_string(t1,78,RG_CHANNEL,1));
+        }
+    }
+    pls -= ({ 0 });
+
+    if (stringp(t2))
+    {
+        pts=efun::explode(t2,"@");
+        j=sizeof(pts);
+        for ( i=sizeof(pls)-1 ; i>=0 ; i-- )
+        {
+            if (member(rg_player,getuid(pls[i]))==-1 &&
+                    pls[i]->TestIgnore(({"rage"})))
+                continue;
+            if (j==3)
+            {
+                tell_object(pls[i],
+                    break_string(pts[0]+DisplayCard(pts[1],pls[i])+pts[2],
+                      78,RG_CHANNEL,1));
+            }
+            else
+            {
+                tell_object(pls[i],break_string(t2,78,RG_CHANNEL,1));
+            }
+        }
+    }
+}
+
+nosave void set_first(string uid)
+{   int i,s;
+
+    if (!stringp(uid) || (i=member(rg_player,uid))<1 ||
+            (s=sizeof(rg_player)-1)<0)
+        return;
+    if (i==s)
+        rg_player=({uid})+rg_player[0..(i-1)];
+    else
+        rg_player=({uid})+rg_player[(i+1)..<1]+rg_player[0..(i-1)];
+}
+
+nosave int get_class(string input)
+{
+    if (!stringp(input))
+        return 0;
+    switch (input[0..3])
+    {
+        case "rote" : return RGC_RED;
+        case "gelb" : return RGC_YELLOW;
+        case "grue" : return RGC_GREEN;
+        case "blau" : return RGC_BLUE;
+        case "schw" : return RGC_BLACK;
+        case "ocke" : return RGC_OCHRE;
+    }
+    return RGC_ACTION;
+}
+
+nosave void create_deck()
+{   int i,j;
+
+    rg_deck=({});
+    for (j=1;j<=6;j++)
+        for (i=RGN_FROM;i<=RGN_TO;i++)
+            rg_deck += ({ sprintf(TRANSLATE[j],i) });
+    for (i=RGN_PLUS;i;i--)
+        rg_deck += ({ "plus 5" });
+    for (i=RGN_MINUS;i;i--)
+        rg_deck += ({ "minus 5" });
+    for (i=RGN_JOKER;i;i--)
+        rg_deck += ({ "joker" });
+    for (i=RGN_CHANGE;i;i--)
+        rg_deck += ({ "trumpfwechsel" });
+    for (i=RGN_BLOCK;i;i--)
+        rg_deck += ({ "trumpfblock" });
+}
+
+nosave void clean_data()
+{
+    rg_player=({}); // Liste aller teilnehmenden Spieler
+    rg_active=0;    // Der Spieler, der am Zug ist.
+    rg_round=0;     // Aktuelle Runde
+    rg_deck=({});   // Der Kartenstapel
+    rg_off=({});    // Die "Aussteiger"
+    rg_int=([
+        RI_TCLASS : 0,
+        RI_TRUMP  : 0,
+        RI_STEP   : 0,
+        RI_CHANGE : 0,
+        RI_SAY    : 0,
+        RI_COLOR  : 0,
+        RI_NEXT   : 0,
+        RI_ACLASS : 0,
+        RI_JOKER  : 0
+    ]);
+
+    if (!mappingp(TRANSLATE))
+    {
+        TRANSLATE = ([
+            RGC_RED    : "rote %d"     ; "rot"     ,
+            RGC_YELLOW : "gelbe %d"    ; "gelb"    ,
+            RGC_GREEN  : "gruene %d"   ; "gruen"   ,
+            RGC_BLUE   : "blaue %d"    ; "blau"    ,
+            RGC_BLACK  : "schwarze %d" ; "schwarz" ,
+            RGC_OCHRE  : "ockerne %d"  ; "ocker"  
+        ]);
+    }
+
+    if (!mappingp(ANSI_MAP))
+    {
+        ANSI_MAP = ([
+           "aus"         : ANSI_NORMAL ,
+           "fett"        : ANSI_BOLD,
+           "bold"        : ANSI_BOLD,
+           "blink"       : ANSI_BLINK,
+           "rot"         : ANSI_RED,
+           "hgrot"       : ANSI_BG_RED,
+           "gelb"        : ANSI_YELLOW,
+           "hggelb"      : ANSI_BG_YELLOW,
+           "gruen"       : ANSI_GREEN,
+           "hggruen"     : ANSI_BG_GREEN,
+           "blau"        : ANSI_BLUE,
+           "hgblau"      : ANSI_BG_BLUE,
+           "magenta"     : ANSI_PURPLE,
+           "hgmagenta"   : ANSI_BG_PURPLE,
+           "cyan"        : ANSI_CYAN,
+           "hgcyan"      : ANSI_BG_CYAN,
+           "weiss"       : ANSI_WHITE,
+           "hgweiss"     : ANSI_BG_WHITE,
+           "schwarz"     : ANSI_BLACK,
+           "hgschwarz"   : ANSI_BG_BLACK ]);
+    }
+
+    // rg_game wird nicht geloescht, da man sich, wenn kein Spiel
+    // laeuft, den Endstand des letzten Spieles ansehen kann.
+}
+
+nosave string eval_joker(string in)
+{   string *parts;
+    int    val;
+
+    if (!stringp(in) || sizeof(parts=efun::explode(in," "))!=2 ||
+            member(({"rot","gelb","gruen","schwarz","ocker","blau"}),
+            parts[1])==-1 || member(({"hoch","tief"}),parts[0])==-1)
+        return 0;
+    if (parts[0]=="hoch")
+        val=RGN_TO+1+rg_int[RI_JOKER];
+    else
+        val=RGN_FROM-1-rg_int[RI_JOKER];
+    rg_int[RI_JOKER]=rg_int[RI_JOKER]+1;
+    return sprintf("%s%s %d",parts[1],(parts[1]=="ocker"?"ne":"e"),val);
+}
+
+// Zahlenwert einer Farbkarte ermitteln
+nosave int get_card_val(string card)
+{   int    nr;
+    string col;
+
+    if (!stringp(card) || sscanf(card,"%s %d",col,nr)!=2 ||
+            member(({"rote","gelbe","gruene","schwarze","blaue","ockerne"}),
+                col)==-1)
+        return -10;
+    return nr;
+}
+
+// Punkte fuer einen Stich ermitteln
+nosave int get_points()
+{   int i,sum;
+
+    for ( sum=1,i=sizeof(rg_played)-1 ; i>=0 ; i-- )
+    {
+        if (rg_played[i]=="minus 5")
+            sum -= 5;
+        else if (rg_played[i]=="plus 5")
+            sum += 5;
+    }
+    return sum;
+}
+
+// Der Gewinner wird evtl. in die Gewinner-Liste eingetragen
+nosave void AddToWin(string uid, int sco)
+{   mixed *new;
+    int   i,s,f;
+
+    if (!stringp(uid))
+        return;
+    uid=LOWER(uid);
+
+    new = ({});
+    s=sizeof(T_win);
+
+    for ( f=1, i=0 ; i<s ; i++ )
+    {
+        if (f && sco>T_win[i][0])
+        {
+            new += ({ ({ sco, uid, time() }) });
+            f=0;
+        }
+        new += ({ T_win[i] });
+    }
+
+    // Evtl. ganz unten einreihen
+    if (f)
+        new += ({ ({ sco, uid, time() }) });
+
+    // Liste enthaelt max. 10 Eintraege
+    if (s>9)
+        new=new[0..9];
+    T_win=new;
+}
+
+// Der Verlierer wird evtl. in die Verlierer-Liste eingetragen
+nosave void AddToLos(string uid, int sco)
+{   mixed *new;
+    int   i,s,f;
+
+    if (!stringp(uid))
+        return;
+    uid=LOWER(uid);
+
+    new = ({});
+    s=sizeof(T_los);
+
+    for ( f=1, i=0 ; i<s ; i++ )
+    {
+        if (f && sco<T_los[i][0])
+        {
+            new += ({ ({ sco, uid, time() }) });
+            f=0;
+        }
+        new += ({ T_los[i] });
+    }
+
+    // Evtl. ganz unten einreihen
+    if (f)
+        new += ({ ({ sco, uid, time() }) });
+
+    // Liste enthaelt max. 10 Eintraege
+    if (s>9)
+        new=new[0..9];
+    T_los=new;
+}
+
+nosave string DisplayCard(string card, object pl)
+{   string on,off,uid;
+
+    if (!stringp(card) || strlen(card)<4 || !objectp(pl))
+        return sprintf("%20.20s","");
+
+    if ((pl->QueryProp(P_TTY))!="ansi")
+        return sprintf("[%|18.18s]",card);
+
+    on=off="";
+    uid=getuid(pl);
+    if (member(PL_cols,uid) && mappingp(PL_cols[uid]))
+    {
+        switch(card[0..3])
+        {
+            case "rote" :
+                if (member(PL_cols[uid],RGC_RED))
+                {
+                    on=PL_cols[uid][RGC_RED];
+                    off=ANSI_NORMAL;
+                }
+                break;
+            case "gelb" :
+                if (member(PL_cols[uid],RGC_YELLOW))
+                {
+                    on=PL_cols[uid][RGC_YELLOW];
+                    off=ANSI_NORMAL;
+                }
+                break;
+            case "grue" :
+                if (member(PL_cols[uid],RGC_GREEN))
+                {
+                    on=PL_cols[uid][RGC_GREEN];
+                    off=ANSI_NORMAL;
+                }
+                break;
+            case "blau" :
+                if (member(PL_cols[uid],RGC_BLUE))
+                {
+                    on=PL_cols[uid][RGC_BLUE];
+                    off=ANSI_NORMAL;
+                }
+                break;
+            case "schw" :
+                if (member(PL_cols[uid],RGC_BLACK))
+                {
+                    on=PL_cols[uid][RGC_BLACK];
+                    off=ANSI_NORMAL;
+                }
+                break;
+            case "ocke" :
+                if (member(PL_cols[uid],RGC_OCHRE))
+                {
+                    on=PL_cols[uid][RGC_OCHRE];
+                    off=ANSI_NORMAL;
+                }
+                break;
+            default :
+                if (member(PL_cols[uid],RGC_ACTION))
+                {
+                    on=PL_cols[uid][RGC_ACTION];
+                    off=ANSI_NORMAL;
+                }
+                break;
+        }
+    }
+    return sprintf("%s[%|18.18s]%s",on,card,off);
+}
+
+nosave string playerinfo(string pl)
+{
+    if (!stringp(pl) || !member(rg_game,pl))
+        return "";
+    if (!pointerp(rg_game[pl,RA_TAKEN]))
+        return sprintf("  %-12s (0/0)",CAP(pl));
+    return sprintf("%1.1s %-12s (%d/%d)",(pl==rg_active?"*":" "),
+        CAP(pl),sizeof(rg_game[pl,RA_TAKEN]),rg_game[pl,RA_SAY]);
+}
+
+nosave int disp_card_sort(string c1, string c2)
+{   int cl1, cl2;
+
+    if (!stringp(c1) || !stringp(c2))
+        return 0;
+    cl1=get_class(c1);
+    cl2=get_class(c2);
+    if (cl1!=cl2)
+        return (cl1>cl2);
+    if (cl1==RGC_ACTION)
+        return c1>c2;
+    return (get_card_val(c1)>get_card_val(c2));
+}
+
+nosave int rg_end_sort(string a, string b)
+{
+    if (!stringp(a) || !stringp(b) || !member(rg_game,a) || 
+            !member(rg_game,b))
+        return 0;
+    if (rg_game[a,RA_TOTAL]==rg_game[b,RA_TOTAL])
+        return (a>b);
+    return (rg_game[a,RA_TOTAL]>rg_game[b,RA_TOTAL]);
+}
+
+/* ==================== Spiel-Funktionen ==================== */
+
+nosave void StartGame(string uid)
+{   int i;
+
+    if (!stringp(uid) || member(rg_player,uid)==-1)
+    {
+        RDB("Bad #1 in StartGame()");
+        return;
+    }
+
+    // In der ersten Runde gibts 10 Karten
+    rg_round=RAGE_START;
+
+    // Der Spieler, der das Spiel gestartet hat, gibt als erster
+    set_first(uid);
+
+    rg_active=uid;
+
+    // Im game-Mapping fuer jeden Spieler einen Eintrag aufbauen
+    for (rg_game=([]),i=sizeof(rg_player)-1;i>=0;i--)
+        rg_game += ([ rg_player[i] : ({}) ; // zugeteilte Karten
+                                     ([]) ; // Punkte in bisherigen Runden
+                                        0 ; // aktuelle Ansage
+                                     ({}) ; // Stiche diese Runde
+                                        0   // Gesamtpunktzahl
+                   ]);
+    
+    // Und los gehts ... 
+    Mischen();
+}
+
+nosave void SelectTrump()
+{   int i,r,c;
+
+    // Wieviele Karten liegen noch auf dem Stapel?
+    i=sizeof(rg_deck);
+
+    // Solange Karten auf dem Stapel liegen ...
+    while(i>0)
+    {
+        // zufaellig eine Karte aus dem Stapel ziehen
+        r=random(i);
+
+        // Karte neben den Stapel legen
+        rg_int[RI_TRUMP] = rg_deck[r];
+
+        // Anzahl Karten im Stapel um 1 reduzieren
+        i--;
+
+        // Karte aus Stapel loeschen
+        rg_deck[r] = 0;
+        rg_deck -= ({ 0 });
+
+        // Meldung ueber gezogene Karte ausgeben
+        RMess(0,0,sprintf("@%s@ wird aufgedeckt.",rg_int[RI_TRUMP]));
+
+        // Testen, ob eine Farbkarte gezogen wurde
+        if ((c=get_class(rg_int[RI_TRUMP]))!=RGC_ACTION &&
+            member(TRANSLATE,c))
+        {
+            // Wenn ja, ist diese Farbe jetzt Trumf. Meldung ausgeben.
+            RMess(0,0,sprintf("%s wird Trumpf",
+                capitalize(TRANSLATE[c,1])));
+
+            // Farbe des Trumpfes merken
+            rg_int[RI_TCLASS]=c;
+
+            // Und abbrechen
+            return;
+        }
+        // Wenn nein: fortfahren
+    }
+
+    // Oh oh, der Stapel ist leer - zufaellig eine Farbe waehlen
+    c=1+random(RGC_ACTION-1);
+
+    // Farbe des Trumpfes merken
+    rg_int[RI_TCLASS]=c;
+
+    // Pseudo-Trumpfkarte neben Stapel legen
+    rg_int[RI_TRUMP]=sprintf("*%s*",TRANSLATE[c,1]);
+
+    // Meldung ausgeben, was jetzt Trumpf ist.
+    RMess(0,0,sprintf("Trumpf wird %s (Zufall)",TRANSLATE[c,1]));
+}
+
+nosave void Mischen()
+{   int    i,j,k;
+    string *d;
+
+    if (!rg_round)
+    {
+        RDB("Bad #1 in Mischen()");
+        return;
+    }
+
+    // Meldung, dass Karten ausgeteilt werden, und wieviele
+    RMess(0,0,sprintf("Es werden an jeden %d Karten ausgeteilt.",
+        rg_round));
+
+    // Vollstaendiges Kartenspiel erzeugen.
+    create_deck();
+
+    // Karten austeilen an jeden Spieler
+    for ( i=sizeof(rg_player)-1 ; i>=0 ; i-- )
+    {
+        // Jeder erhaelt <rg_round> Karten
+        for ( d=({}),j=rg_round ; j ; j-- )
+        {
+            // Karte zufaellig aus dem Stapel ziehen
+            k = random(sizeof(rg_deck));
+
+            // Auf den Haufen des Spielers legen
+            d += ({ rg_deck[k] });
+
+            // Karte aus Stapel loeschen
+            rg_deck[k] = 0;
+            rg_deck -= ({ 0 });
+        }
+
+        // Haufen an Spieler geben
+        rg_game[rg_player[i],RA_DECK]=d;
+    }
+
+    // Trumpf waehlen
+    SelectTrump();
+
+    // Jeder Spieler hat anfangs noch keinen Stich gekriegt
+    for ( i=sizeof(d=m_indices(rg_game))-1 ; i>=0 ; i-- )
+        rg_game[d[i],RA_TAKEN]=({});
+
+    // Spieler nach dem Geber sagt als erster an
+    rg_active=rg_player[1];
+
+    // Der ist auch der naechste Geber
+    rg_int[RI_NEXT]=rg_active;
+
+    // Natuerlich noch keine Trumpfwechsel.
+    rg_int[RI_CHANGE]=0;
+
+    // Und noch kein Joker
+    rg_int[RI_JOKER]=0;
+
+    // Naechster Schritt: Ansagen
+    rg_int[RI_STEP]=-1;
+
+    // Insgesamt noch keiner angesagt.
+    rg_int[RI_SAY]=0;
+
+    // Noch keine Karten gespielt
+    rg_played=({});
+
+    RMess(0,0,"-> Ansagerunde <-");
+
+    // Spieler informieren, dass er ansagen muss.
+    RMess(rg_active,"Du musst jetzt ansagen.",0);
+}
+
+nosave void EvaluateCards()
+{   int i, win, max, pos, val;
+    string wnr;
+
+    if (!rg_int[RI_ACLASS])
+    {
+        // Nur Aktionskarten -> Stich geht an Aufspieler
+        wnr=rg_player[0];
+    }
+    else
+    {
+        if (rg_int[RI_CHANGE])
+        {
+            // Trumpfblock gespielt -> Aufspielfarbe gewinnt
+            win=rg_int[RI_ACLASS];
+        }
+        else
+        {
+            // Aufspielfarbe gewinnt ...
+            win=rg_int[RI_ACLASS];
+
+            // ... es sei denn, es wurde gestochen
+            for ( i=sizeof(rg_play_c)-1 ; i>=0 ; i-- )
+                if (rg_play_c[i]==rg_int[RI_TCLASS])
+                    win=rg_int[RI_TCLASS];
+        }
+
+        // Feststellen, wer den Stich bekommen hat.
+        for ( pos=0,max=-10,i=sizeof(rg_played)-1 ; i>=0 ; i-- )
+        {
+            if (rg_play_c[i]==win && (val=get_card_val(rg_played[i]))>max)
+            {
+                max=val;
+                pos=i;
+            }
+        }
+        wnr=rg_player[pos];
+    }
+
+    rg_game[wnr,RA_TAKEN] += ({ get_points() });
+
+    // meldung ausgeben, wer den Stich bekommen hat.
+    RMess(wnr,"Der Stich geht an Dich.",sprintf("Der Stich geht an %s.",
+          CAP(wnr)));
+
+    // Trumpfwechsel aufgrund von Trumpfblock ausfuehren
+    if (rg_int[RI_STEP]!=rg_round && rg_int[RI_CHANGE]>0)
+    {
+        // Trumpfwechsel von "Trumpfblock" nachholen
+        for ( i=rg_int[RI_CHANGE] ; i ; i-- )
+            SelectTrump();
+    }
+
+    // Varieblen "resetten"
+    rg_int[RI_CHANGE]=0;
+    rg_int[RI_JOKER]=0;
+    rg_int[RI_ACLASS]=0;
+    rg_played=({});
+    rg_play_c=({});
+
+    if (rg_int[RI_STEP]==rg_round)
+    {
+        // Runde auswerten
+        EvalRound();
+    }
+    else
+    {
+        // Counter erhoehen
+        rg_int[RI_STEP]=rg_int[RI_STEP]+1;
+
+        // Der Spieler, der den Stich bekommen hat, ist am Aufspiel
+        set_first(wnr);
+
+        // Damit ist er auch der aktive Spieler
+        rg_active=wnr;
+
+        RMess(rg_active,"Du bist am Aufspiel.",0);
+    }
+}
+
+nosave void EvalRound()
+{   int    i, *pts, j, sco, pnt;
+    string win, los, *out;
+
+    RMess(0,0,"--------------------");
+    // Punkte der einzelnen Spieler feststellen
+    for ( i=sizeof(rg_player)-1 ; i>=0 ; i-- )
+    {
+        if (!pointerp(pts=rg_game[rg_player[i],RA_TAKEN]))
+        {
+            RMess(0,0,sprintf("Error -> -5 Punkte fuer %s.",
+                CAP(rg_player[i])));
+            rg_game[rg_player[i],RA_SCORE] += ([ rg_round : -5 ]);
+            rg_game[rg_player[i],RA_TOTAL] += -5;
+        }
+        j=sizeof(pts);
+        if (j==rg_game[rg_player[i],RA_SAY])
+            sco=10;
+        else
+            sco=-5;
+        for ( --j ; j>=0 ; j-- )
+            sco += pts[j];
+        RMess(0,0,sprintf("%3d Punkte fuer %s.",sco,CAP(rg_player[i])));
+        rg_game[rg_player[i],RA_SCORE] += ([ rg_round : sco ]);
+        rg_game[rg_player[i],RA_TOTAL] += sco;
+        rg_game[rg_player[i],RA_SAY]=0;
+    }
+
+    rg_round--;
+
+    if (rg_round>0)
+    {
+        if (sizeof(rg_off)>0)
+        {
+            rg_int[RI_STEP]=0;
+            rg_active=0; // !!!
+            PlayerLeave();
+            if (sizeof(rg_player)<RAGE_MIN_PLAYER)
+                return;
+        }
+        // Naechste Runde beginnt wieder mit Ansage
+        rg_int[RI_STEP]=-1;
+        rg_int[RI_SAY]=0;
+
+        // Der naechste Spieler ist dran mit Geben
+        set_first(rg_int[RI_NEXT]);
+        Mischen();
+    }
+    else // Spiel vorbei
+    {
+        RMess(0,0,"**********\nDas Spiel ist beendet. Endergebnis:");
+        sco=-1000; win="?";
+        pnt=1000;  los="?";
+        // Fuer die Topliste feststellen, wer gewonnen und wer verloren
+        // hat
+        for ( i=sizeof(rg_player)-1 ; i>=0 ; i-- )
+        {
+            if (rg_game[rg_player[i],RA_TOTAL]>=sco)
+            {
+                if (rg_game[rg_player[i],RA_TOTAL]==sco)
+                {
+                    if (win=="?")  // Unwahrscheinlicher Fall ...
+                    {
+                        win=CAP(rg_player[i]);
+                    }
+                    else
+                    {
+                        win += (" und "+CAP(rg_player[i]));
+                    }
+                }
+                else
+                {
+                    win=CAP(rg_player[i]);
+                }
+                sco=rg_game[rg_player[i],RA_TOTAL];
+            }
+            else if (rg_game[rg_player[i],RA_TOTAL]<=pnt)
+            {
+                if (rg_game[rg_player[i],RA_TOTAL]==pnt)
+                {
+                    if (los=="?") // Unwahrscheinlicher Fall ...
+                    {
+                        los=CAP(rg_player[i]);
+                    }
+                    else
+                    {
+                        los += (" und "+CAP(rg_player[i]));
+                    }
+                }
+                else
+                {
+                    los=CAP(rg_player[i]);
+                }
+                pnt=rg_game[rg_player[i],RA_TOTAL];
+            }
+        }
+        out = sort_array(rg_player, "rg_end_sort");
+        for ( i=sizeof(out)-1 ; i>=0 ; i-- )
+        {
+            RMess(0,0,sprintf("%-'.'15.15s%4d Punkte",
+                CAP(out[i]),rg_game[out[i],RA_TOTAL]));
+        }
+        filter_array( efun::explode(win," und "), #'AddToWin, sco );
+        filter_array( efun::explode(los," und "), #'AddToLos, pnt );
+        catch(CHMASTER->send("Rage", TO,
+            sprintf("%s %s mit %d Punkten die Runde gewonnen.",
+                win,(strstr(win," und ")==-1?"hat":"haben"),sco),
+            MSG_SAY));
+        save_me();
+        clean_data();
+    }
+}
+
+nosave void PlayerLeave()
+{   int    i,j,m,x;
+    string n,d;
+
+    if ((i=sizeof(rg_off))<1)
+        return;
+
+    // Einige Variablen initialisieren
+    m=sizeof(rg_player);
+    d=0;
+
+    for ( --i ; i>=0 ; i-- )
+    {
+        if (!stringp(rg_off[i]) || (j=member(rg_player,rg_off[i]))==-1)
+            continue;
+        RMess(rg_off[i],"Du steigst aus.",
+            sprintf("%s steigt aus.",CAP(rg_off[i])));
+
+        if (rg_int[RI_STEP]>0) // Waehrend Karten gespielt werden
+        {
+            if (sizeof(rg_played)>j) // gespielte Karte evtl. loeschen
+            {
+                rg_played[j]=0;
+            }
+        }
+        // Ist der aussteigende Spieler "dran"?
+        if (stringp(rg_active) && rg_off[i]==rg_active)
+        {
+            // Naechsten Spieler suchen
+            n=0;
+            x=j;
+            while (!stringp(n) && x<m)
+            {
+                n=rg_player[x];
+                x++;
+            }
+
+            // Es wurde einer gefunden -> Dieser ist jetzt aktiv
+            if (stringp(n))
+            {
+                rg_active=n;
+                d=n;
+            }
+            // Keiner gefunden *seufz*
+            else
+            {
+                d="ACT";
+            }
+        }
+
+        rg_player[j]=0;
+        efun::m_delete(rg_game,rg_off[i]);
+    }
+    rg_player -= ({ 0 });
+    rg_played -= ({ 0 });
+    rg_off = ({});
+
+    if (sizeof(rg_player)<RAGE_MIN_PLAYER)
+    {
+        RMess(0,0,"Wegen zu geringer Spielerzahl wird das Spiel nun "+
+                  "beendet.");
+        catch(CHMASTER->send("Rage", TO,
+              "Schade, die Runde wurde soeben abgebrochen.",MSG_SAY));
+        clean_data();
+        rg_game=([]);
+        return;
+    }
+    if (rg_int[RI_STEP]<0) // In der Ansagerunde -> Gesamtzahl neu berechn.
+    {
+        for ( i=sizeof(rg_player)-1,rg_int[RI_SAY]=0 ; i>=0 ; i-- )
+        {
+            rg_int[RI_SAY]=rg_int[RI_SAY]+rg_game[rg_player[i],RA_SAY];
+        }
+    }
+    if (stringp(d))
+    {
+        // Kein "aktiver" Spieler mehr vorhanden
+        if (d=="ACT")
+        {
+            if (rg_int[RI_STEP]<0) // Ansagerunde beendet
+            {
+                // Neuen Aktiven Spieler festlegen
+                rg_active=rg_player[1];
+
+                RMess(0,0,sprintf("Insgesamt sind %d Stiche angesagt.",
+                      rg_int[RI_SAY]));
+     
+                // naechste Stufe: Spiel
+                rg_int[RI_STEP]=1;
+            
+                // Meldung ueber Anfang der naechsten Stufe ausgeben
+                RMess(0,0,sprintf("-> Start der %der-Runde <-",rg_round));
+         
+                // Diesen Spieler stellen wir in der Playerliste mal nach
+                // ganz vorne.
+                set_first(rg_active);
+     
+                // Noch ist keine Karte aufgespielt ...
+                rg_played=({}); 
+        
+                // ... folglich noch keine Klassen vorhanden
+                rg_play_c = ({});
+
+                // Noch keine Aufspielfarbe bekannt.
+                rg_int[RI_ACLASS]=0;
+             
+                // Spieler informieren, dass er aufspielen kann
+                RMess(rg_active,"Du bist am Aufspiel.",0);
+
+            }
+            else // Spielrunde beendet
+            {
+                // Dann den Stich auswerten.
+                EvaluateCards();  
+            }
+        }
+        else
+        {
+            RMess(d,"Du bist jetzt dran.",0);
+        }
+    }
+}
+
+/* ==================== Kommandos ==================== */
+
+public int C_ragehilfe(string arg)
+{
+    if (!TP)
+        return 0;
+
+    // Kommando ohne Argument eingegeben?
+    if (!stringp(arg))
+        arg="-";
+
+    // Welche Hilfe will der Spieler denn?
+    switch(arg)
+    {
+        // Allgemeine Spielregeln
+        case "sp" :
+        case "re" :
+        case "spiel" :
+        case "regeln" :
+
+            TP->More(sprintf(read_file(RG_HELP_REG),
+                RAGE_MIN_PLAYER, RAGE_MAX_PLAYER,
+                ( 6*(1+RGN_TO-RGN_FROM)+RGN_PLUS+RGN_MINUS+RGN_JOKER+
+                    RGN_CHANGE+RGN_BLOCK ),
+                RGN_FROM,RGN_TO,
+                ( RGN_PLUS+RGN_MINUS+RGN_JOKER+RGN_CHANGE+RGN_BLOCK ),
+                RAGE_START,RAGE_START,(RAGE_START-1)));
+            return 1;
+
+        // Hilfe zu den Aktionskarten
+        case "ak" :
+        case "aktion" :
+        case "aktionskarten" :
+
+            TP->More(sprintf(read_file(RG_HELP_AKT),
+                RGN_MINUS, RGN_PLUS, RGN_JOKER,
+                RGN_CHANGE, RGN_BLOCK ));
+            return 1;
+
+        // Hilfe zu den Kommandos
+        case "be" :
+        case "ko" :
+        case "befehl" :
+        case "befehle" :
+        case "kommando" :
+        case "kommandos" :
+
+            TP->More(sprintf(read_file(RG_HELP_KOM),
+                RAGE_MIN_PLAYER, RAGE_TIMEOUT,
+                RAGE_MIN_PLAYER ));
+            return 1;
+
+        case "fa" :
+        case "fachbegriff" :
+        case "fachbegriffe" :
+        
+            TP->More(read_file(RG_HELP_TRM));
+            return 1;
+
+        // Default-Hilfe
+        default :
+
+            TP->More("\n"+
+                " Hilfsseiten zum Spiel ´Rage´:\n\n"+
+                "   ragehilfe re[geln]       Die Regeln des Spieles\n\n"+
+                "   ragehilfe ak[tion]       Erklaerung der Aktionskarten\n\n"+
+                "   ragehilfe be[fehle]      Hilfe zu den Befehlen\n\n"+
+                "   ragehilfe fa[chbegriffe] Einige Rage-Ausdruecke\n\n");
+
+            return 1;
+    }
+    return 0;
+}
+
+public int C_einsteigen()
+{   string uid;
+
+    if (!TP || !TI || TP!=TI)
+        return 0;
+    uid=getuid(TP);
+
+    if (member(rg_player,uid)!=-1)
+    {
+        write("Du bist doch schon eingestiegen.\n");
+        return 1;
+    }
+    if (rg_round)
+    {
+        write("Das Spiel laeuft schon.\n");
+        return 1;
+    }
+    if (sizeof(rg_player)>=RAGE_MAX_PLAYER)
+    {
+        write("Die maximale Spielerzahl ist bereits erreicht.\n");
+        return 1;
+    }
+    rg_player += ({ uid });
+    if (sizeof(rg_player)==1)
+        catch(CHMASTER->send("Rage", TO, 
+            sprintf("%s scheint eine Runde "+RAGE_NAME+" spielen zu wollen.",
+                    TP->Name(WER)),MSG_SAY));
+    RMess(TP,"Du spielst jetzt mit.",
+             TP->Name(WER)+" spielt jetzt mit.");
+    return 1;
+}
+
+public int C_aussteigen()
+{   string uid;
+
+    if (!TP || !TI || TP!=TI)
+        return 0;
+    uid=getuid(TP);
+    if (member(rg_player,uid)==-1)
+    {
+        write("Du nimmst doch gar nicht am Spiel teil.\n");
+        return 1;
+    }
+
+    if (!rg_round)
+    {
+        rg_player -= ({ uid });
+        rg_player -= ({ 0 });
+        if (sizeof(rg_player)<1)
+            catch(CHMASTER->send("Rage", TO,
+                "Schade, die Runde wurde soeben abgeblasen.",MSG_SAY));
+
+        RMess(TP,"Du spielst dann doch nicht mit.",
+                 TP->Name(WER)+" spielt doch nicht mit.");
+        return 1;
+    }
+    if (member(rg_off,uid)==-1)
+    {
+        rg_off += ({ uid });
+        RMess(TP,"Du kuendigst an, dass Du am Ende der Runde aussteigst.",
+                  TP->Name(WER)+" will am Ende der Runde aussteigen.");
+    }
+    else
+    {
+        rg_off -= ({ uid });
+        rg_off -= ({ 0 });
+        RMess(TP,"Du steigst doch nicht aus.",
+                 TP->Name(WER)+" will doch nicht aussteigen.");
+    }
+    return 1;
+}
+
+public int C_spielstart()
+{   string uid;
+
+    if (!TP || !TI || TP!=TI)
+        return 0;
+    uid=getuid(TP);
+    if (member(rg_player,uid)==-1)
+    {
+        write("Um das Spiel starten zu koenne, musst Du erstmal "+
+              "einsteigen.\n");
+        return 1;
+    }
+    if (rg_round)
+    {
+        write("Das Spiel laeuft doch schon. Passt Du nicht auf?\n");
+        return 1;
+    }
+    if (sizeof(rg_player)<RAGE_MIN_PLAYER)
+    {
+        printf("Es muessen mindestens %d Spieler mitspielen.\n",
+            RAGE_MIN_PLAYER);
+        return 1;
+    }
+
+    RMess(TP,"Du startest das Spiel.",
+             TP->Name(WER)+" startet das Spiel.");
+
+    // Einer der Spieler startet das Spiel
+    StartGame(rg_player[random(sizeof(rg_player))]);
+
+    return 1;
+}
+
+public int C_ansagen(string arg)
+{   string uid;
+    int    num,pos;
+
+    // Feststelolen, ob derzeit ueberhaupt angesagt wird
+    if (!TP || !TI || TP!=TI || !rg_round || rg_int[RI_STEP]!=-1)
+        return 0;
+    uid=getuid(TP);
+
+    // Position des Spielers im Spieler-Array ermitteln und feststellen,
+    // ob er ueberhaupt dazu gehoert
+    if (!(pos=member(rg_player,uid))<0)
+        return 0;
+
+    // Ist dieser Spieler ueberhaupt dran?
+    if (uid!=rg_active)
+    {
+        write("Du bist doch gar nicht dran.\n");
+        return 1;
+    }
+
+    // Eingabe auswerten.
+    if (!stringp(arg) || arg=="" || !sscanf(arg,"%d",num))
+    {
+        write("Syntax: ansagen <nr>\n");
+        return 1;
+    }
+    if (num<0 || num>rg_round)
+    {
+        write("Du solltest schon etwas sinnvolles ansagen.\n");
+        return 1;
+    }
+
+    // Position des naechsten ermitteln (Ueberlauf beachten)
+    pos++;
+    if (pos==sizeof(rg_player))
+        pos=0;
+
+    // Wenn der Geber ansagt (der hat Position 0, also ist der naechste
+    // Spieler die 1), darf er eine Zahl nicht ansagen -> Test.
+    if (pos==1)
+    {
+        if ((num+rg_int[RI_SAY])==rg_round)
+        {
+            // Nicht aufgepasst
+            write("Soviel darfst Du nicht ansagen.\n");
+            return 1;
+        }
+    }
+
+    // Meldung, wieviel der Spieler ansagt.
+    RMess(uid,sprintf("Du sagst %d an.",num),
+          sprintf("%s sagt %d an.",CAP(uid),num));
+
+    // Ansage merken
+    rg_game[uid,RA_SAY]=num;
+
+    // Anzahl zur Gesamtzahl der angesagten Stiche addieren
+    rg_int[RI_SAY]=rg_int[RI_SAY]+num;
+
+    // Naechsten Spieler "aktivieren"
+    rg_active=rg_player[pos];
+
+    // Hat der Geber angesagt, ist die Ansagerunde vorbei. Es darf
+    // aufgespielt werden.
+    if (pos==1)
+    {
+        // Schnell nochmal anzeigen, wieviele Stiche insgesamt
+        // angesagt sind
+        RMess(0,0,sprintf("Insgesamt sind %d Stiche angesagt.",
+            rg_int[RI_SAY]));
+
+        // naechste Stufe: Spiel
+        rg_int[RI_STEP]=1;
+
+        // Meldung ueber Anfang der naechsten Stufe ausgeben
+        RMess(0,0,sprintf("-> Start der %der-Runde <-",rg_round));
+
+        // Diesen Spieler stellen wir in der Playerliste mal nach ganz
+        // vorne.
+        set_first(rg_active);
+
+        // Noch ist keine Karte aufgespielt ...
+        rg_played=({});
+
+        // ... folglich noch keine Klassen vorhanden
+        rg_play_c = ({});
+
+        // Noch keine Aufspielfarbe bekannt.
+        rg_int[RI_ACLASS]=0;
+
+        // Spieler informieren, dass er aufspielen kann
+        RMess(rg_active,"Du bist am Aufspiel.",0);
+    }
+    else
+    {
+        // NaechstenSpieler informieren, dass er jetzt mit der Ansage dran
+        // ist
+        RMess(rg_active,"Du musst jetzt ansagen.",0);
+    }
+
+    return 1;
+}
+
+public int C_spielen(string arg)
+{   string uid, crd, *cds;
+    int    pos, cls, i, x;
+
+    // Feststelolen, ob derzeit ueberhaupt gespielt wird
+    if (!TP || !TI || TP!=TI || !rg_round || rg_int[RI_STEP]<1)
+        return 0;
+    uid=getuid(TP);
+
+    // Position des Spielers im Spieler-Array ermitteln und feststellen,
+    // ob er ueberhaupt dazu gehoert
+    if ((pos=member(rg_player,uid))<0)
+        return 0;
+
+    // Ist dieser Spieler ueberhaupt dran?
+    if (uid!=rg_active)
+    {
+        write("Du bist doch gar nicht dran.\n");
+        return 1;
+    }
+
+    // Eingabe auswerten.
+    if (!stringp(arg) || arg=="")
+    {
+        write("Syntax: spiele <karte>\n");
+        return 1;
+    }
+    // Ggf. Joker-Eingabe auswerten
+    if (arg[0..4]=="joker")
+    {
+        if (strlen(arg)<10 || arg[5..5]!=" " ||
+            !stringp(crd=eval_joker(arg[6..])))
+        {
+            write("Versuchs mal mit 'joker [hoch|tief] <farbe>'.\n");
+            return 1;
+        }
+        arg="joker";
+    }
+    else
+        crd=arg;
+
+    // Feststellen, ob der Spieler die Karte ueberhaupt hat.
+    if ((x=member((cds=rg_game[uid,RA_DECK]),arg))==-1)
+    {
+        printf("Du hast keine(n) '%s'.\n",CAP(arg||"?"));
+        return 1;
+    }
+
+    // Klasse der Karte feststellen. Actionkarten haben Klasse 0
+    if ((cls=get_class(crd))==RGC_ACTION)
+        cls=0;
+
+    // Ist schon eine Aufspielfarbe bekannt?
+    if (rg_int[RI_ACLASS])
+    {
+        // Hat die ausgesuchte Karte eine andere Farbe als die
+        // Aufspielfarbe?
+        if (cls!=rg_int[RI_ACLASS])
+        {
+            // Testen, ob der Spieler nicht zufaellig bedienen musste.
+            for ( i=sizeof(cds)-1 ; i>=0 ; i-- )
+            {
+                // Die ausgewaehlte Karte ueberspringen
+                if (cds[i]==arg)
+                    continue;
+                // Und er haette doch bedienen sollen
+                if (get_class(cds[i])==rg_int[RI_ACLASS])
+                {
+                    write("Du solltest lieber bedienen.\n");
+                    return 1;
+                }
+            }
+        }
+    }
+    // Keine Aufspielfarbe bekannt, aber Spieler spielt eine Farbe?
+    else if (cls)
+    {
+        // Dann ist das die Aufspielfarbe
+        rg_int[RI_ACLASS]=cls;
+    }
+
+    if (rg_round==1)
+        EPMASTER->GiveExplorationPoint("rage");
+
+    // Meldung ueber die aufgespielte Karte ausgeben
+    if (arg=="joker")
+        RMess(TP,sprintf("Du spielst den Joker als @%s@.",(crd||"?")),
+            sprintf("%s spielt einen Joker als @%s@.",
+                TP->Name(WER),(crd||"?")));
+    else
+        RMess(TP,sprintf("Du spielst die Karte @%s@.",(crd||"?")),
+            sprintf("%s spielt die Karte @%s@.",TP->Name(WER),(crd||"?")));
+
+    // Aufgespielte Karte beim Spieler loeschen ...
+    cds[x]=0;
+    cds -= ({ 0 });
+    rg_game[uid,RA_DECK] = cds;
+
+    // ... und zu den aufgespielten Karten legen
+    rg_played += ({ crd });
+
+    // Auch die Klasse merken
+    rg_play_c += ({ cls });
+
+    // Trumpf-beeinflussende Aktionskarten auswerten.
+    switch (crd)
+    {
+        // Trumpfwechselkarte: sofort wechseln
+        case "trumpfwechsel" :
+            SelectTrump();
+            break;
+
+        // Trumpf-Block: merken
+        case "trumpfblock" :
+            rg_int[RI_CHANGE]=rg_int[RI_CHANGE]+1;
+            break;
+    }
+
+    pos++;
+
+    // Stich vollstaendig?
+    if (pos==sizeof(rg_player))
+    {
+        // Dann den Stich auswerten.
+        EvaluateCards();
+    }
+    else // sonst
+    {
+        // Meldung an den naechsten Spieler.
+        RMess(rg_player[pos],"Du bist jetzt dran.",0);
+
+        // Spieler als "aktiv" kennzeichnen
+        rg_active=rg_player[pos];
+    }
+
+    return 1;
+}
+
+public int C_bedienen(string arg)
+{   string uid,*deck,sel;
+    int    pos,i,j,val;
+
+    // Feststelolen, ob derzeit ueberhaupt gespielt wird
+    if (!TP || !TI || TP!=TI || !rg_round || rg_int[RI_STEP]<1)
+        return 0;
+
+    if (!stringp(arg))
+        arg="tief";
+
+    notify_fail("Syntax: bedienen [hoch|tief]\n");
+    if (member(({"hoch","tief"}),arg)==-1)
+        return 0;
+
+    uid=getuid(TP);
+
+    // Position des Spielers im Spieler-Array ermitteln und feststellen,
+    // ob er ueberhaupt dazu gehoert
+    if ((pos=member(rg_player,uid))<0)
+        return 0;
+
+    // Ist dieser Spieler ueberhaupt dran?
+    if (uid!=rg_active)
+    {
+        write("Du bist doch gar nicht dran.\n");
+        return 1;
+    }
+
+    // Karten des Spielers und Anzahl testen
+    if (!pointerp(deck=rg_game[uid,RA_DECK]) || ((i=sizeof(deck))<1))
+        return 0;
+
+    if (i==1)
+    {
+        if (deck[0]!="joker")
+        {
+            return C_spielen(deck[0]);
+        }
+        if (!pos)
+        {
+            write(BS("Bedienen nicht moeglich. Grund: Du musst Dich "+
+                     "schon selbst entscheiden, als was Du Deinen Joker "+
+                     "aufspielen moechtest."));
+        }
+    }
+
+    if (!rg_int[RI_ACLASS])
+    {
+        write(BS("Bedienen nicht moeglich. Grund: Es wurde noch keine "+
+                 "Farbe gespielt."));
+        return 1;
+    }
+
+    val = (arg=="hoch" ? -1 : 16 );
+    for ( --i,sel=0 ; i>=0 ; i-- )
+    {
+        if (!stringp(deck[i]) || get_class(deck[i])!=rg_int[RI_ACLASS])
+        {
+            continue;
+        }
+        j=get_card_val(deck[i]);
+        if (arg=="hoch")
+        {
+            if (j>val)
+            {
+                val=j;
+                sel=deck[i];
+            }
+        }
+        else
+        {
+            if (j<val)
+            {
+                val=j;
+                sel=deck[i];
+            }
+        }
+    }
+    if (!stringp(sel))
+    {
+        write(BS("Bedienen nicht moeglich. Grund: Keine passende Karte "+
+                 "gefunden."));
+        return 1;
+    }
+
+    return C_spielen(sel);
+}
+
+public int C_high_low()
+{
+    // Feststelolen, ob derzeit ueberhaupt gespielt wird
+    if (!TP || !TI || TP!=TI || !rg_round || rg_int[RI_STEP]<1)
+        return 0;
+    return C_bedienen(query_verb());
+}
+
+public int C_karten_zeigen()
+{   string *d,*p,uid,re,*pi;
+    int    i,f;
+
+    if (!TP || !TI || TP!=TI)
+        return 0;
+    if (!rg_round)
+    {
+        write("Es wird derzeit nicht gespielt.\n");
+        return 1;
+    }
+    uid=getuid(TP);
+
+    if (member(rg_game,uid) && pointerp(rg_game[uid,RA_DECK]))
+    {
+        d=(sort_array(rg_game[uid,RA_DECK],#'disp_card_sort)+
+            ({"","","","","","","","","",""}));
+        f=1;
+    }
+    else
+    {
+        d=({"","","","","","","","","",""});
+        f=0;
+    }
+
+    p=(rg_played+({"","","","","","","","","",""}));
+
+    if (rg_int[RI_STEP]<0)
+    {
+        pi = rg_player[1..]+rg_player[0..0];
+    }
+    else
+    {
+        pi = rg_player;
+    }
+    pi = map_array(pi,#'playerinfo)-({""});
+    pi -= ({ 0 });
+    pi += ({"","","","","","","","","",""});
+
+    re = "Du betrachtest den Spieltisch:\n"
+       + sprintf("%|20.20s | %|20.20s | %-32.32s\n",
+         (f?"Deine Karten":""),"Gespielte Karten",
+         "  Spieler (Stiche/Ansage)")
+       + sprintf("%'-'78s\n","");
+
+    for ( i=0 ; i<10 ; i++ )
+    {
+        re += sprintf("%s | %s | %-32.32s\n",
+            DisplayCard(d[i],TP),DisplayCard(p[i],TP),pi[i]);
+    }
+    re += sprintf("%'-'78s\n%|78s\n%'-'78s\n","",
+               sprintf("Trumpf: %s | Ansage: %d von %d",
+                   DisplayCard(rg_int[RI_TRUMP],TP),
+                   rg_int[RI_SAY],rg_round),"");
+
+    write(re);
+    return 1;
+}
+
+public int C_farbauswahl(string arg)
+{   string *in,col,*an,uid;
+    int    crd,i;
+
+    if (!TP || !TI || TP!=TI)
+        return 0;
+    notify_fail("Syntax: kartenfarbe <kartenfarbe> <ansi-attribut>\n");
+    if (arg=="anzeigen")
+    {
+        printf("Das sind Deine Farbeinstellungen:\n\n"+
+                "         %s\n         %s\n         %s\n"+
+                "         %s\n         %s\n         %s\n"+
+                "         %s\n\n",
+                DisplayCard("rote Karte",TP),
+                DisplayCard("gelbe Karte",TP),
+                DisplayCard("gruene Karte",TP),
+                DisplayCard("blaue Karte",TP),
+                DisplayCard("schwarze Karte",TP),
+                DisplayCard("ockerne Karte",TP),
+                DisplayCard("Aktionskarte",TP));
+        return 1;
+    }
+    if (!stringp(arg) || sizeof(in=efun::explode(arg," "))!=2)
+        return 0;
+    notify_fail("Syntax: kartenfarbe <kartenfarbe> <ansi-attribut>\n"+BS(
+                "Zulaessige Kartenfarben sind: rot, gelb, gruen, blau "+
+                "schwarz, ocker, aktion."));
+    crd=([ "rot"     : RGC_RED,
+           "gelb"    : RGC_YELLOW,
+           "gruen"   : RGC_GREEN,
+           "blau"    : RGC_BLUE,
+           "schwarz" : RGC_BLACK,
+           "ocker"   : RGC_OCHRE,
+           "aktion"  : RGC_ACTION ])[in[0]];
+    if (crd<RGC_RED || crd>RGC_ACTION)
+        return 0;
+    notify_fail("Syntax: kartenfarbe <kartenfarbe> <ansi-attribut>\n"+BS(
+                "Zulaessige Ansi-Attribute sind: aus, fett, blink, rot, "+
+                "hgrot, gelb, hggelb, gruen, hggruen, blau, hgblau, "+
+                "magenta, hgmagenta, cyan, hgcyan, weiss, "+
+                "hgweiss, schwarz, hgschwarz"));
+    an=efun::explode(in[1],"+");
+    if ( (i=sizeof(an) )<1)
+    {
+        return 0;
+    }
+    for ( --i, col="" ; i>=0 ; i-- )
+    {
+        if (!member(ANSI_MAP,an[i]))
+            return 0;
+        if (an[i]=="aus")
+        {
+            col=ANSI_NORMAL;
+            break;
+        }
+        col += ANSI_MAP[an[i]];
+    }
+    if (!stringp(col) || col=="")
+        return 0;
+    uid=getuid(TP);
+    if (!member(PL_cols,uid) || !mappingp(PL_cols[uid]))
+        PL_cols[uid]=([]);
+    if (col==ANSI_NORMAL)
+    {
+        if (!member(PL_cols[uid],crd))
+        {
+            write("Diese Kartenfarbe ist bereits ausgeschaltet.\n");
+        }
+        else
+        {
+            efun::m_delete(PL_cols[uid],crd);
+            write(BS("Du schaltest die Kartenfarbe fuer '"+in[0]+
+                     "' aus."));
+        }
+    }
+    else
+    {
+        write(BS("Du setzt die Kartenfarbe fuer '"+in[0]+"' auf '"+
+                 in[1]+"'."));
+        PL_cols[uid][crd]=col;
+    }
+    save_me();
+    if ((TP->QueryProp(P_TTY))!="ansi")
+        write("Hinweis: Dein Terminal steht nicht auf Ansi.\n");
+    return 1;
+}
+
+public int C_spielstand()
+{   string re,*pl,*out;
+    int    i,j,k;
+
+    if (!TP || !TI || TP!=TI)
+        return 0;
+    re = ("Spielstand der "+(rg_round?"laufenden":"letzten")+" Runde:\n\n");
+    pl = sort_array(m_indices(rg_game),#'<);
+    if ((i=sizeof(pl))<1)
+    {
+        write("Derzeit ist kein Spielstand verfuegbar.\n");
+        return 1;
+    }
+
+    out = allocate(i+3);
+
+    for ( j=i+2 ; j>=0 ; j-- )
+    {
+        out[j]="";
+    }
+
+    out[0] = sprintf("%|13s |","Spieler");
+    out[1] = "--------------+";
+    out[i+2] = "--------------+";
+    for ( k=i-1 ; k>=0 ; k-- )
+    {
+        out[k+2] += sprintf("%|13s |",CAP(pl[k]||"?"));
+    }
+
+    for ( j=RAGE_START ; j>0 ; j-- )
+    {
+        out[0] += sprintf(" %2d |",j);
+        out[1] += "----+";
+        out[i+2] += "----+";
+        for ( k=i-1 ; k>=0 ; k-- )
+        {
+            out[k+2] += sprintf("%3d |",rg_game[pl[k],RA_SCORE][j]);
+        }
+    }
+    out[0] += "  S \n";
+    out[1] += "----\n";
+    out[i+2] += "----\n";
+    for ( k=i-1 ; k>=0 ; k-- )
+    {
+        out[k+2] += sprintf(" %3d\n",rg_game[pl[k],RA_TOTAL]);
+    }
+
+    write(re+implode(out,""));
+    return 1;
+}
+
+public int C_topliste()
+{   mixed  *li;
+    int    i;
+    string re;
+
+    li=T_win+({0,0,0,0,0});
+    re = "Die fuenf besten Rage-Spieler:\n\n";
+
+    for (i=0 ; i<5 ; i++)
+    {
+        if (pointerp(li[i]) && sizeof(li[i])>2)
+            re += sprintf("%d. %-12s (%3d) [%s]\n",
+                      (i+1),CAP(li[i][1]),li[i][0],dtime(li[i][2]));
+        else
+            re += sprintf("%d.\n",(i+1));
+    }
+
+    li=T_los+({0,0,0,0,0});
+    re += "\nDie fuenf schlechtesten Rage-Spieler:\n\n";
+
+    for (i=0 ; i<5 ; i++)
+    {
+        if (pointerp(li[i]) && sizeof(li[i])>2)
+            re += sprintf("%d. %-12s (%3d) [%s]\n",
+                      (i+1),CAP(li[i][1]),li[i][0],dtime(li[i][2]));
+        else
+            re += sprintf("%d.\n",(i+1));
+    }
+
+    write(re+"\n");
+
+    return 1;
+}
+
+public int C_sage(string arg)
+{   string *pt;
+
+    if (!stringp(arg) || sizeof(pt=efun::explode(arg," "))!=2 ||
+            pt[1]!="an")
+        return 0;
+    return C_ansagen(pt[0]);
+}
+
+public int C_no_you_dont()
+{
+    if (!TP || !rg_round || member(rg_player,getuid(TP))==-1)
+        return 0;
+    write("Spiel doch erstmal zuende.\n");
+    return 1;
+}
+
+public int C_shortplay(string arg)
+{   string v;
+
+    if (!TP || !TI || TP!=TI || !rg_round || rg_int[RI_STEP]<1)
+        return 0;
+    v=query_verb();
+    if (v[0..0]=="t")
+        return C_spielen(v);
+    return C_spielen(v+" "+arg);
+}
+
+/*
+public int Nachtragen(string s1, int sco1, string s2, int sco2)
+{
+    if (!TI || UTI!="paracelsus")
+        return -1;
+    if (!stringp(s1) || !stringp(s2) || !intp(sco1) || !intp(sco2))
+        return 0;
+    AddToWin(s1,sco1);
+    AddToLos(s2,sco2);
+    save_me();
+    return 1;
+}
+*/

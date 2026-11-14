@@ -1,0 +1,172 @@
+//=========================================================================
+//
+// File:    kneipe_120.c
+// Created by Angrox
+//
+// Project: testgebiet
+//
+//
+// Kneipe mit Kneipenbesitzer.
+//
+//=========================================================================
+
+//-------------------------------------------------------------------------
+// Fuer eine Kneipe muss man nicht den std/room inheriten, sondern std/pub.
+// std/pub leitet sich von std/room ab, hat aber eigens definierte Funktionen
+// fuer das Funktionieren einer Kneipe / eines Restaurants.
+//-------------------------------------------------------------------------
+inherit "std/pub";
+
+#include "../def.h"
+//-------------------------------------------------------------------------
+// Eigene Definitionen fuer ein Pub
+//-------------------------------------------------------------------------
+#include <pub.h>
+
+
+void create()
+{
+  ::create();
+
+  SetProp (P_LIGHT, 1);
+  SetProp (P_INDOORS, 1);
+  SetProp (P_ENVIRONMENT, ([ENV_TERRAIN:TT_HOUSE, ENV_TEMPERATURE:20]));
+  SetProp(P_INT_SHORT,"In der Kneipe 'Zum einohrigen Elfen'");
+//-------------------------------------------------------------------------
+// P_INT_LONG lassen wir auskommentiert, da wir die Long anpassen wollen.
+// Je nachdem ob der Wirt da ist oder nicht kommt eine andere Lang-
+// beschreibung (siehe funktion _query_int_long())
+//-------------------------------------------------------------------------
+  // SetProp(P_INT_LONG, "");
+
+  SetProp(P_PUB_FLAGS, PUB_HASKEEPER+PUB_NEEDSKEEPER);
+  SetProp(P_PUBKEEPER_ID, "roglar");
+  SetProp(P_PUBKEEPER_NAME, "Roglar");
+  SetProp(P_PUBMSG_NOKEEPER, "Roglar ist leider nicht hier.\n");
+  SetProp(P_PUBMSG_NOENEMY, BS(
+      "Du bist gerade in einem verbissen Kampf mit Roglar. Kein Wunder, "
+      "dass er Dich nicht bedient."));
+  SetProp(P_PUBMSG_NOINVITE, BS(
+      "Roglar kaempft. Da hat er wahrhaft andere Sorgen als Kunden."));
+  SetProp(P_PUBMSG_FIGHTING, "Roglar kaempft gerade.\n");
+
+
+//-------------------------------------------------------------------------
+// Die Getraenke in einer Kneipe werden mit AddDrink() hinzugefuegt.
+// Die Funktion uebernimmt folgende Argumente:
+// AddDrink(string name, mixed ids, int preis, mixed heilung,
+//                         int alk, int staerke, mixed extra, int prozent);
+// Die ids koennen als array ({"id1","id2"}) bzw als einzelner string "id1"
+// angegeben werden. Der Name des Getraenks scheint im menue auf.
+// alk und staerke geben den Saettigungsgrad auf P_ALCOHOL und P_DRINK an.
+// Extras: (siehe man AddDrink)
+//
+// Abhaengig von extra wird dann eine der folgenden Aktionen ausgefuehrt:
+// + extra ist eine Closure oder ein Funktionsname
+//     Die Funktion wird aufgerufen. Als Parameter bekommt sie den
+//     Spender und den Empfaenger des Getraenks.
+//
+//     In der Funktion kann man irgendwelche Sonderfunktionen
+//     ausfuehren.
+//     Zum Beispiel koennte man nach dem Genuss eines besonders starken
+//     Gebraeus aus der Kneipe taumeln...
+//
+// +extra ist ein Array von zwei Strings
+//     Der erste dieser Strings wird an den Empfaenger des Getraenks
+//     ausgegeben, der zweite der Strings an alle anderen in der
+//     Kneipe.
+//
+//     Mit "&&" kann dabei der Name des Empfaengers in die Strings
+//     eingebaut werden, mit "&!" das Personalpronomen des Empfaengers
+//     im Nominativ.
+//
+//     Zusaetzlich werden "&1", "&2", "&3" und "&4" durch das Personal-
+//     pronomen des Empfaengers im Nominativ, Genitiv, Dativ und
+//     Akkusativ
+//     ersetzt, ausserdem "&=" durch das Possessivpronomen des
+//     Empfaengers
+//     im Singular ('sein', 'ihr') ersetzt und "&#" im Plural ('seine',
+//     'ihre').
+//-------------------------------------------------------------------------
+  AddDrink("Bier", ({"bier"}),
+           200, 25, 6, 4,
+           ({"Roglar laechelt und bringt Dir einen Humpen Bier.\n",
+             "&& trinkt einen Humpen Bier.\n"}));
+
+  AddDrink("Ruebenschnaps", ({"ruebenschnaps", "schnaps"}),
+            220, 28, 15, 1,
+           ({"Roglar bringt Dir einen kleinen Ruebenschnaps.\n"
+            +"ROECHEL!!!! Der war scharf!!\n",
+             "&& trinkt ein Stamperl Schnaps und roechelt dabei.\n"}));
+
+//-------------------------------------------------------------------------
+// AddFood fuegt Essen hinzu. Die Werte sind nahezu ident mit AddDrink, mit
+// der Ausnahme das kein Wert fuer Alkohol gebraucht wird.
+// Die Werde nach den Ids sind: kosten, heilung, saettigung
+//-------------------------------------------------------------------------
+  AddFood("Bohnensuppe", ({"suppe", "bohnensuppe"}), 100, 40, 17,
+           ({"Bordur bringt Dir eine Bohnensuppe trintrasiler Art. "
+            +"\nHmmmm, die ist lecker, auch wenn sie ein bisschen "
+            "fad schmeckt.\n",
+             "&& isst eine Bohnensuppe.\n"}));
+
+  AddFood("Ein saftiges Kotlett", ({"kotlett"}), 250, 30, 10,
+           ({"Bordur bringt Dir ein leckeres Kotlett!\n"
+            +BS("Wow, ist das Fleisch zart. Du hast schon viele Kotletts "
+                "gegessen aber dieses hier ist aussergewoehnlich gut! "
+                "Gierig isst Du alles auf und nagst auch den Knochen "
+                "komplett ab!"),
+             "&& isst gierig ein lecker aussehendes Kotlett!\n"}));
+
+
+  AddExit("westen", ROOM "platz_001");
+
+  AddItem(NPC "wirt_070", REFRESH_DESTRUCT);
+}
+
+//-------------------------------------------------------------------------
+// Anstatt die P_INT_LONG statisch zu setzen, nehmen wir eine dynamische
+// Ausgabe der Long. Die Funktion hierfuer setzt sich aus dem Propertie-
+// Namen mit vorgestelltem "_query_" zusammen.
+// Bsp: P_INT_LONG "int_long" -> _query_int_long
+//      P_LIGHT    "light"    -> _query_light
+// Der Rueckgabewert muss immer der Propertie entsprechen, in unserem Fall
+// string (im Fall von P_LIGHT waere ein Rueckgabewert von "integer"
+// richtig). Es ist daher auf jeden Fall immer ratsam die man page der
+//  AddFood fuegt Essen hinzu. Die Werte sind nahezu ident mit AddDrink, mit
+//  der Ausnahme das kein Wert fuer Alkohol gebraucht wird.
+//  Die Werde nach den Ids sind: kosten, heilung, saettigung
+// ensprechenden Propertie einzusehen.
+// Wenn eine Propertie dermassen "ueberschrieben" wird, kann sie NICHT
+// ueber SetProp veraendert werden. Es wird immer der return-wert der
+// "_query_" Funktion hergenommen.
+//-------------------------------------------------------------------------
+
+string _query_int_long()
+{
+  string txt;
+
+  txt = "Du bist hier in einer rauchigen Kneipe. Ueberall stehen Tische "
+    "und Baenke und Stuehler herum. Gleich neben der Tuer haengt ein "
+    "Menue an der Wand, das Du mit 'menue' lesen kannst. ";
+
+//-------------------------------------------------------------------------
+// Wenn der Wirt nicht hier ist geben wir das in der Long an
+//-------------------------------------------------------------------------
+
+  if(QueryProp(P_PUBKEEPER_ID))
+  {
+    if(!present(QueryProp(P_PUBKEEPER_ID)))
+    {
+      txt += "Seltsamerweise ist offenbar gerade niemand hier der Dich "
+        "bedienen koennte.";
+    }
+    else
+    {
+      txt += "Der Wirt steht hinter der Theke und laechelt Dich "
+        "freundlich an.";
+    }
+  }
+
+  return BS(txt);
+}

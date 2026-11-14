@@ -1,0 +1,167 @@
+#include "../bardengilde.h"
+#include "../barden_skills.h"
+#include <moving.h>
+#include <combat.h>
+#include <weapon.h>
+#include <properties.h>
+#include <npcmaster.h>
+#include <new_skills.h>
+
+inherit "/std/npc";
+
+object caster;
+private int virtualWimpy, duration, canRecharge;
+private string songName, short;
+
+public int modifyBySkillAttribute(int baseVal, string skillAttribute) {
+  return (int) (baseVal * (caster->QuerySkillAttribute(skillAttribute) / 100.0));
+}  
+
+void create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+
+  AddId(SONG_CHARMED, "NOCONTROL");
+}
+
+int move_and_wear(object ob)
+{
+  ob->move(this_object(), M_NOCHECK);
+  if (ob->QueryProp(P_WEAPON_TYPE))
+    command("zuecke " + ob->QueryProp(P_IDS)[0]);
+}
+
+void Setup(string _songName, object _caster, int _ability, int _success, float _factor, object victim)
+{
+  string *not_set;
+  mapping properties;
+  mixed *ind, *val;
+  int i;
+  float wimpyFactor;
+
+  caster = _caster;
+  songName = _songName;
+
+  not_set = ({"clone_time","commands","cloner","last_combat_time",
+      "armours","last_move", "weapon", "short"});
+  properties = victim->__query_properties(victim,0) [0];
+  ind = m_indices(properties);
+  val = m_values(properties);
+  for (i = sizeof(ind) - 1; i >= 0; i--) 
+  {
+    if (member(not_set, ind[i]) == -1) 
+      SetProp(ind[i], val[i]);
+  }
+  if (sizeof(all_inventory(victim)))
+    filter_array(all_inventory(victim), "move_and_wear");
+  command("trage alles");
+
+  SetProp(P_LONG, QueryProp(P_LONG) + sprintf("Er folgt %s und wird %s mit "
+        "%s Leben beschuetzen.\n", caster->name(WEM,1),
+        caster->QueryPronoun(WEN), this_object()->QueryPossPronoun(NEUTER, WEM)));
+  SetProp(P_FRIEND, 1);
+  SetProp(P_NO_GLOBAL_ATTACK, 1);
+  SetProp(P_XP, 0);
+  SetProp(P_NO_SCORE, 1);
+  SetProp(P_MSGOUT, "folgt " + caster->name(WEM));
+  SetProp(P_MMSGOUT, "folgt " + caster->name(WEM));
+  SetProp(P_BARD_CHARMED, caster);
+  short = victim->QueryProp(P_SHORT);
+
+  caster->AddPursuer(this_object());
+  caster->SetProp(P_BARD_CHARMED, this_object());  
+  caster->AddDefender(this_object());
+
+  wimpyFactor = (_ability/20000.0) + (_success/40000.0);
+  if(wimpyFactor>1.0) wimpyFactor = 1.0;
+  virtualWimpy = (int) (QueryProp(P_MAX_HP) * (1.0 - wimpyFactor));
+
+  duration = (int) (((_ability/2000) + (_success/4000) + (caster->QueryAttribute(A_INT)/8))*60);
+  if(TALENTMASTER->HasTalent(caster, TALENT_AGITATOR)) {
+    duration += caster->QueryProp(P_BARD_INSPIRATION_LEVEL) * 60;
+  }
+  duration = modifyBySkillAttribute(duration, SA_DURATION);
+
+  if(caster->QueryProp(P_TESTPLAYER)) {
+    tell_object(caster, sprintf("%s :: duration=%d victim=%O wimpy=%d\n", songName, duration, victim, virtualWimpy));  
+  }
+
+  call_out("warn_end", (int) (duration*0.75));
+}
+
+public string _query_short() {
+  return sprintf("%s (von %s verzaubert)", short, caster->Name(WEM));
+}
+
+public void warn_end() {
+  tell_object(caster, BS(sprintf("Dein Zauberbann ueber %s wird bald enden!", Name(WEN, 1))));
+  canRecharge = 1;
+  call_out("endSong", (int) (duration/4));
+}
+
+private void cleanUp() {
+  object *inv;
+  int i;
+
+  move("/room/npcasylraum.lpc", M_NOCHECK|M_SILENT);
+
+  if(!objectp(this_object())) return;
+
+  inv = deep_inventory(this_object());
+  for(i=0; i<sizeof(inv); ++i) 
+    if(objectp(inv[i])) 
+      inv[i]->remove();
+
+  SetProp(P_NOCORPSE, 1);
+  call_out("die", 2);
+}
+
+public void endSong() {
+  command_me(sprintf("sag Es war schoen eine Zeit lang mit dir zu reisen, %s!", caster->Name(WER)));
+  command_me("sag Bis bald!");
+  command_me("emote winkt.");
+  command_me("emote verschwindet mit Knall und Schwefelduft.");
+  caster->RemovePursuer(TO);
+  cleanUp();
+}
+
+public int Defend(int dam, string *dam_type_list, mixed spell, object enemy) {
+  int r;
+  r = ::Defend(dam, dam_type_list, spell, enemy);
+
+  if(QueryProp(P_HP) < virtualWimpy) {
+    command_me(sprintf("sag Hier wird es mir zu gefaehrlich, %s!", caster->Name(WER)));
+    command_me("sag Ich bin nicht bereit mein Leben fuer dich wegzuwerfen.");
+    command_me("emote laeuft davon.");
+    cleanUp();
+  }
+
+  return r;
+}
+
+void init()
+{
+  ::init();
+  if (objectp(caster) && interactive(caster))
+    caster->AddDefender(this_object());
+}
+
+void InformDefend(object enemy)
+{
+  Kill(enemy);
+}
+
+void die(int poisondeath)
+{
+  int xp;
+
+  xp = QueryProp(P_XP) / 100;
+  if (objectp(caster))
+  caster->AddExp((int) (0.6 * xp));
+
+  while(find_call_out("endSong") != -1) remove_call_out("endSong");
+
+  ::die(poisondeath);
+}
+

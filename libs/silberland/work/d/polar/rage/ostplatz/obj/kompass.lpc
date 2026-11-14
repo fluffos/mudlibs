@@ -1,0 +1,237 @@
+// Magischer Kompass: fuer Schneesturm
+// Filename: kompass.c
+// File by Rage, Februar 00
+
+inherit "std/thing";
+
+#include "../def.h"
+#include <moving.h>
+
+#define PASSENDER_STEIN "Aquamarin"
+#define RICHTUNG \
+  ({ "Norden", "Nordosten",  "Osten",  "Suedosten", \
+     "Sueden", "Suedwesten", "Westen", "Nordwesten" })
+
+int einsatzbereit, i, verbraucht;
+void explosion();
+
+void create()
+{
+  if ( !is_clone(TO) ) return;
+  ::create();
+
+  einsatzbereit = 0;
+
+  SetProp( P_SHORT, "Ein seltsames Schmuckstueck" );
+  SetProp( P_LONG,
+    "Das Schmueckstueck sieht aus wie eine Wolfspfote und wurde aus Elfenbein "
+    "hergestellt. Die Oberseite ist eher rauh, waehrend sich die Unterseite "
+    "glatt anfuehlt. Sogar die Klauen sind gut erkennbar." );
+  SetProp( P_INFO,
+    "Ein schwacher, leicht blauer, magischer Schimmer umgibt das Schmuckstueck." );
+  SetProp( P_NAME, "Schmuckstueck" );
+  SetProp( P_GENDER, NEUTER );
+
+//DETAILS
+  AddDetail( ({ "klaue","klauen" }),
+    "Die Klauen eines Wolfs, aber keine Angst, die tun Dir nichts!" );
+  AddDetail( ({ "wolf" }),
+    "Du haeltst keinen Wolf in Deinen Haenden, sondern nur eine Pfote von ihm.");
+  AddDetail( ({ "elfenbein" }),
+    "Nicht zu verwechseln mit den zarten, hauchduennen Knochen der Elfen. "
+    "Dieses Elfenbeinstueck wird aus Walrossstosszaehnen gewonnen." );
+  AddDetail( ({ "wolfspfote","nachbildung","pfote" }),
+    "Eine sehr naturgetreue Nachbildung einer Pfote. Die Unterseite scheint "
+    "eine kleine Einbuchtung zu haben." );
+  AddDetail( ({ "oberseite" }),
+    "Sie fuehlt sich leicht pelzig an, aber es nichts Besonderes daran zu "
+    "erkennen." );
+  AddDetail( ({ "unterseite","einbuchtung" }),
+    "Es scheint etwas zu fehlen. Was koennte man bei so einem wertvollen "
+    "Gegenstand hier plazieren?" );
+  AddDetail( ({ "schimmer","blauton" }),
+    "Der Schimmer umgibt das Schmuckstueck mit einem magischen Blauton." );
+//END DETAILS
+  
+  AddId( ({ "schmuckstueck","stueck","\nkompass","QUESTOBJ" }) );
+  SetProp( P_MATERIAL, MAT_IVORY );
+  SetProp( P_WEIGHT, 50 );
+  SetProp( P_VALUE, 4500 );
+  SetProp( P_NOSELL, 1 );
+  SetProp( P_NOBUY, 1 );
+
+  AddCmd( ({ "plazier","plaziere" }), "cmd_plazieren" );
+  AddCmd( ({ "dreh","drehe" }), "cmd_drehen" );
+}
+
+//COMMANDS
+int cmd_plazieren(string str)
+{
+  object ob;
+  string was, wohin;
+
+  notify_fail( "Was willst Du in der Einbuchtung plazieren?\n" );  
+
+  if ( !str ) return 0;
+  if ( sscanf(str,"%s in %s", was, wohin) != 2 ) return 0;
+  switch(wohin) 
+  {
+    case "einbuchtung": if ( ob=present(was,TP) )
+
+      if ( einsatzbereit )
+        return write( "Es steckt schon ein Aquamarin in der Einbuchtung.\n" ),1;
+      else
+        if ( ob->QueryProp(P_NAME) == PASSENDER_STEIN )
+	{
+          write( BS(
+            "Du steckst den Aquamarin in die Einbuchtung und das Schmuckstueck "
+            "beginnt zu leuchten. Irgendetwas hat sich getan, nur was?") );
+          ob -> remove();
+          SetProp( P_SHORT, "Ein magischer Kompass" );
+          SetProp( P_LONG, "Ein Kompass, der Dir in schwierigen Situationen "
+                           "sicher einmal dienlich sein kann." );
+          SetProp( P_INFO, "Wenn Du den Kompass benuetzen willst, dann schau "
+                           "Dir mal den Aquamarin genauer an." );
+          SetProp( P_NAME, "Kompass" );
+          SetProp( P_GENDER, MALE );
+          RemoveId( ({ "schmuckstueck","stueck" }) );
+          AddId( ({ "kompass" }) );
+          AddDetail( ({ "schimmer","blauton" }),
+            "Der Schimmer ist eindeutig staerker geworden, das bedeutet, dass "
+            "der Kompass nun einsatzbereit ist." );
+          AddDetail( ({ "unterseite","einbuchtung" }),
+            "In der Einbuchtung leuchtet nun der Aquamarin." );
+          AddDetail( ({ "aquamarin","aquamarin in kompass",
+                        "aquamarin in einbuchtung" }),
+            "Wie Du Dir den Aquamarin genauer ansiehst, merkst Du, dass er "
+            "sich in der Einbuchtung drehen laesst." );
+          i = 0;
+          verbraucht = random(6)+5;
+          einsatzbereit = 1;
+          write_file(LOG "forsch.log",ctime()+": "+CAP(getuid(TP))+
+            " laedt den Kompass.\n");
+        }
+        else
+	{
+          if ( member(ob->QueryProp(P_IDS), "EDELSTEIN") == -1 )
+            return write( "Das ist kein Edelstein!\n" ),1;
+          else
+	  {
+            write( BS(
+              "Du steckst den Edelstein in die Einbuchtung, worauf das "
+              "Schmueckstueck kurz zu leuchten beginnt. Doch kurz darauf "
+              "explodiert er und Du wirst von seinen Splittern getroffen. "
+              "War wohl der falsche Edelstein! Ausserdem hast Du genau in "
+              "die Explosion geschaut, weshalb Du fuer kurze Zeit blind bist.") );
+            say( BS(
+              TPN+" loest eine kleine Explosion aus und Du wirst von Splitter "
+                  "getroffen!") );
+            SetProp( P_KILL_NAME, "Eine kleine Explosion" );
+            TP -> do_damage(20+random(20));
+            explosion();
+            TP -> SetProp( P_BLIND, 10,
+              "Durch die Explosion bist Du fuer kurze Zeit blind.\n",
+              "Endlich kannst Du wieder sehen.\n" );
+            ob -> remove();
+          }
+        }
+    else
+    {
+      write(
+        "Das hast Du gar nicht dabei!\n" );
+      return -1;
+    }
+    break;
+    default: return 0;
+  }
+  return 1;
+}
+
+int cmd_drehen(string str)
+{
+  object aquamarin;
+
+  if ( member( ({ "aquamarin in einbuchtung","aquamarin" }), str) != -1 )
+  {
+    if ( einsatzbereit == 0 )
+    {
+      write(
+        "Du musst den Edelstein schon in der Einbuchtung plazieren.\n" );
+      return -1;
+    }
+    while ( i < verbraucht )
+    {
+      write( BS(
+        "Du drehst den Aquamarin einmal in der Einbuchtung herum, wunderst "
+        "Dich, dass er dabei nicht rausfaellt, und ploetzlich geht von ihm "
+        "ein Strahl aus, der in Richtung "+RICHTUNG[ENV(TP)->nord_richtung()]+
+        " leuchtet.") );
+      i++;
+      write_file(LOG "forsch.log",ctime()+": "+CAP(getuid(TP))+
+        " verwendet den Kompass.\n");
+      return 1;
+    }
+    write( BS(
+      "Du drehst den Aquamarin einmal in der Einbuchtung herum, wunderst "
+      "Dich, dass er dabei nicht rausfaellt, und ploetzlich geht von ihm ein "
+      "Strahl aus, der in Richtung "+RICHTUNG[ENV(TP)->nord_richtung()]+
+      " leuchtet. Die Energie, die im Aquamarin steckte, ist mit diesem "
+      "Einsatz leider verbraucht.") );
+    einsatzbereit = 0;
+
+    SetProp( P_SHORT, "Ein seltsames Schmuckstueck" );
+    SetProp( P_LONG,
+      "Das Schmueckstueck sieht aus wie eine Wolfspfote und wurde aus "
+      "Elfenbein hergestellt. Die Oberseite ist eher rauh, waehrend sich die "
+      "Unterseite glatt anfuehlt. Sogar die Klauen sind gut erkennbar." );
+    SetProp( P_INFO,
+      "Ein schwacher, leicht blauer, magischer Schimmer umgibt das "
+      "Schmuckstueck." );
+    SetProp( P_NAME, "Schmuckstueck" );
+    SetProp( P_GENDER, NEUTER );
+
+    RemoveDetail( ({ "schimmer","blauton" }),
+      "Der Schimmer ist eindeutig staerker geworden, das bedeutet, dass der "
+      "Kompass nun einsatzbereit ist." );
+    RemoveDetail( ({ "unterseite","einbuchtung" }),
+      "In der Einbuchtung leuchtet nun der Aquamarin." );
+    RemoveDetail( ({ "aquamarin","aquamarin in kompass",
+                     "aquamarin in einbuchtung" }),
+      "Wie Du Dir den Aquamarin genauer ansiehst, merkst Du, dass er sich in "
+      "der Einbuchtung drehen laesst." );
+    AddDetail( ({ "klaue","klauen" }),
+      "Die Klauen eines Wolfs, aber keine Angst, die tun Dir nichts!" );
+    AddDetail( ({ "wolf" }),
+      "Du haeltst keinen Wolf in Deinen Haenden, sondern nur eine Pfote von "
+      "ihm." );
+    AddDetail( ({ "elfenbein" }),
+      "Nicht zu verwechseln mit den zarten, hauchduennen Knochen der Elfen. "
+      "Dieses Elfenbeinstueck wird aus Walrossstosszaehnen gewonnen." );
+    AddDetail( ({ "wolfspfote","nachbildung","pfote" }),
+      "Eine sehr naturgetreue Nachbildung einer Pfote. Die Unterseite scheint "
+      "eine kleine Einbuchtung zu haben." );
+    AddDetail( ({ "oberseite" }),
+      "Sie fuehlt sich leicht pelzig an, aber es nichts Besonderes daran zu "
+      "erkennen." );
+    AddDetail( ({ "unterseite","einbuchtung" }),
+      "Es scheint etwas zu fehlen. Was koennte man bei so einem wertvollen "
+      "Gegenstand hier plazieren?");
+    AddDetail( ({ "schimmer","blauton" }),
+      "Der Schimmer umgibt das Schmuckstueck mit einem magischen Blauton." );
+
+    RemoveId( ({ "kompass" }) );
+    AddId( ({ "schmuckstueck","stueck","\nkompass","QUESTOBJ" }) );
+    return 1;
+  }    
+}
+
+void explosion()
+{
+  int i;
+  object * inv;
+
+  inv = all_inventory(environment(TP));
+  for ( i=sizeof(inv)-1; i>=0; i-- )
+  if ( living(inv[i]) )
+    inv[i] -> AddHP(-random(20)-20);
+}

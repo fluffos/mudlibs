@@ -1,0 +1,300 @@
+/*
+** Offizier, Midas  (w) Woody@SL
+** ---
+** 1996-04-13  1.0  Release
+** 1996-10-21  1.1  P_BODY reduziert, dafuer neuer 450er Spell
+** 1996-11-08  1.2  Spells sind nicht mehr magic, Schaden wird angezeigt
+** 1997-14-11  1.3  Geht nun in die Apotheke "tanken", wenn Geld vorhanden
+                    Wenn Spieler gekillt wird->Ausruestung im Laden verkaufen
+                    450er spell -> 550 spell
+** 1998-07-05  1.4  midas.lib
+** 2000-10-27  1.5  P_NAME kann ein Array sein, das versetzen buggte
+*/
+
+inherit "std/mnpc";    
+inherit "std/inpc/select";
+//inherit "std/inpc/boozing";
+inherit "std/player/moneyhandler";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <mnpc.h>
+#include <new_skills.h>
+#include "../midas.h"
+
+#ifdef LOGF
+#undef LOGF
+#define LOGF "/d/ebene/log/offizier.kills"
+#endif
+
+#define STOP 0
+#define SHOP 1
+#define APO  2
+#define HOME 3
+#define SHOP_ROOM "/d/ebene/Midas/room/laden"
+#define APO_ROOM  "/d/ebene/Midas/room/apotheke"
+#define HOME_ROOM "/d/ebene/Midas/room/wachweg_a1"
+#define ZENTRALBANK "/p/daemon/zentralbank"
+int GotoShopAndSell();
+
+string *weg, raum; 
+object *equip;
+int unterwegs=0;
+int i=0;
+int j=0;
+
+void create()
+{
+  if (!is_clone(this_object())) return;  // (return on BP)
+
+  ::create();
+  AddId ( ({"offizier", "Offizier"}) );
+  SetProp (P_GENDER, MALE);
+  SetProp (P_NAME, "Offizier");
+  SetProp (P_SHORT, "Ein Offizier");
+  SetProp (P_LONG, bs("Der Offizier hat die Oberaufsicht auf dem Wachweg, "+
+    "er befehligt die Kampfsoldaten, die fuer Ruhe und Ordnung in der Stadt "+
+    "sorgen. Er wirkt noch staerker und maechtiger als sie, Du solltest es "+
+    "Dir daher gut mit ihm stellen."));
+  SetProp (P_ALIGN, 150);
+  create_default_npc(34);
+  // SetProp (P_LEVEL, 20);
+  SetProp (P_MAX_HP, 1500);
+  // SetProp (P_MAX_SP, 1000);
+  SetProp (P_XP, 1600000);
+  // SetProp (P_BODY, 120);
+  SetProp (P_SIZE, 180+random(10));
+  SetProp (P_RACE, "Mensch");
+  SetProp (P_MAX_HANDS, 2);
+  SetProp (P_HANDS, ({" mit blossen Haenden", 100, DT_BLUDGEON}) );
+
+  set_living_name("offizier");
+
+  // euid setzen, damit Ausruestung gecloned werden kann
+  SUID;
+
+  // Ausruestung
+  CLONEME("/p/armour/armour/titanpanzer");
+  if( random(100) < 80 ) CLONEME(OBJ("ruestung/platinhelm"));
+  if( random(100) < 75 ) CLONEME("/p/armour/cloak/umhang");
+  if( random(100) < 25 ) CLONEME(OBJ("ruestung/armschienen"));
+  if( random(100) < 25 ) CLONEME(OBJ("ruestung/beinschienen"));
+  if( random(100) < 25 ) CLONEME("/p/armour/gloves/lederhandschuhe");
+  command ("trage alles");
+  CLONEME(OBJ("waffe/silberschwert"));
+  command ("zuecke silberschwert");
+  ME->AddMoney(500);
+
+  SetProp(P_SPELLRATE,20);
+
+  AddSpell(4,300, 
+    "Der Offizier springt Dir an die Kehle und wuergt Dich.\n",
+    "Der Offizier wuergt @WEN.\n",
+    DT_BLUDGEON, ([SP_SHOW_DAMAGE:1]) );
+
+  AddSpell(1,550, 
+    "Der Offizier packt Dich und schleudert Dich gegen die Mauer.\n",
+    "Der Offizier packt @WEN und schleudert @WEN gegen die Mauer.\n",
+    DT_BLUDGEON, ([SP_SHOW_DAMAGE:1]) );
+
+  SetAttackChats(6, ({
+    "Der Offizier lacht ueber Dich.\n",
+    "Der Offizier laesst seinem Blutrausch freien Lauf.\n",
+    "Der Offizier sagt: Das war ein grosser Fehler!\n"}) );
+
+  SetProp (P_DIE_MSG, " sinkt mit einem Aufschrei tot zu Boden.\n");
+  SetProp (P_DEFAULT_INFO, "mustert Dich schweigend.\n");
+  AddInfo ("offizier", "nickt Dir zu.\n");
+  AddInfo ("kampfsoldat", "sagt: Die Kampfsoldaten ueberwachen die Stadt "+
+    "von hier oben aus.\n");
+  AddInfo ("soeldner", "sagt: Die Soeldner sorgen direkt in der Stadt "+
+    "fuer Ordnung.\n");
+  AddInfo ( ({"gefahr","gefahren","tod"}),
+    "warnt Dich: Der Tod lauert an jeder Ecke auf Dich!");
+
+  AddLibrary( NPC "midas.lib", 3 );
+
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    "Der Offizier sagt: Was soll ich damit?\n" }) );
+
+  SetProp (P_MNPC_AREA, ROOM "wachweg");
+  SetProp (P_MNPC_WAIT, ({ random(60), 180, 240 }));
+  SetProp (P_MNPC_DEFAULTROOM, ROOM "wachweg_a1");
+  SetProp (P_MNPC_FLAGS, MOV_OUTDOORS + MOV_MOVES);
+  SetProp(P_HB, 1);
+}
+
+void InformDefend(object enemy) {
+  Kill(enemy);
+}
+
+void init() {
+  ::init();
+  if (TP && TP->id("Soeldner")) AddDefender(TP);
+  if (TP && TP->id("Kampfsoldat")) AddDefender(TP);
+}
+
+
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{ 
+  command_me("nimm alles aus leiche"); 
+  command_me("ziehe alles aus"); 
+  command_me("trage_beste_ruestungen"); 
+  command_me("zuecke_beste_waffe"); 
+  command_me("trage alles"); 
+  GotoShopAndSell();
+} 
+
+void heart_beat()
+{
+  if(unterwegs==STOP) { 
+    ::heart_beat();
+    SetProp(P_HB, 1);
+    return ;
+  }
+  if (i<sizeof(weg) && stringp(weg[i]))
+    command_me(weg[i]);
+  i++;
+  if(i>=sizeof(weg)-1) {
+    switch (unterwegs) {
+      case HOME:  unterwegs=STOP;  
+                  i=0;
+                  call_out("NormalWay", 0); 
+                  break;
+      case SHOP:  unterwegs=STOP;
+                  i=0;
+                  call_out("SellAll", 0);
+                  break;
+      case APO:   unterwegs=STOP;
+                  i=0;
+                  call_out("DrinkIt", 0);
+                  break;
+      default :   unterwegs=STOP;
+                  i=0;
+                  call_out("NormalWay", 0);
+                  break;
+    } 
+  }
+  ::heart_beat();
+  SetProp(P_HB, 1);
+  return;
+}
+
+int GotoShopAndSell() {
+  object ob, *ruest, waffe, *inv;
+  string raum;
+  int i;
+  equip=({});
+  if(unterwegs) return 0;
+  SetProp (P_MNPC_AREA, 0);
+  SetProp (P_MNPC_WAIT, 0);
+  SetProp (P_MNPC_DEFAULTROOM, 0);
+  SetProp (P_MNPC_FLAGS, 0);
+  waffe=TO->QueryProp(P_WEAPON);
+  ruest=TO->QueryProp(P_ARMOURS);
+  inv=all_inventory(TO);
+  for(i=sizeof(inv)-1;i>=0;i--) {
+    if(inv[i]!=waffe && member(ruest, inv[i])==-1 && 
+      !inv[i]->id("muenzen"))
+      equip+=({inv[i]});
+    }
+  raum=file_name(environment(ME));
+  set_heart_beat(1);
+  weg=call_other(WAYFIND, "find_way", raum, SHOP_ROOM);
+  unterwegs=SHOP;
+  return 1;
+}
+
+void SellAll() {
+  int i, cash;
+  mixed sellname;
+  
+  unterwegs=STOP;
+  for (i=sizeof(equip)-1;i>=0;i--) {
+    sellname=equip[i]->QueryProp(P_NAME);
+    if(pointerp(sellname)) sellname=sellname[1];
+    command_me("versetze "+lower_case(sellname));
+  }
+  raum=file_name(environment(ME));
+  if(ME->QueryProp(P_HP)<ME->QueryProp(P_MAX_HP)) {
+    weg=call_other(WAYFIND, "find_way", raum, APO_ROOM);
+    unterwegs=APO;
+    return;
+  }
+  weg=call_other(WAYFIND, "find_way", raum, HOME_ROOM);
+  unterwegs=HOME;
+  return ;  
+}
+
+
+int Defend(int dam, string dam_type, mixed spell, object enemy)
+{
+  int cur_hp, max_hp;
+  if(present("muenzen", ME)) {
+    cur_hp=ME->QueryProp(P_HP);
+    max_hp=ME->QueryProp(P_MAX_HP);
+    if(cur_hp <= (int)(0.3*max_hp)) {
+      unterwegs=STOP;
+      SetProp (P_MNPC_AREA, 0);
+      SetProp (P_MNPC_WAIT, 0);
+      SetProp (P_MNPC_DEFAULTROOM, 0);
+      SetProp (P_MNPC_FLAGS, 0);
+      raum=file_name(environment(ME));
+      weg=call_other(WAYFIND, "find_way", raum, APO_ROOM);
+      set_heart_beat(1);
+      unterwegs=APO;      
+    }
+  }
+  return ::Defend(dam, dam_type, spell, enemy);
+}
+ 
+void DrinkIt() {
+  int amount, cash,heal;
+  cash=ME->QueryMoney();
+  amount=(ME->QueryProp(P_MAX_HP)-ME->QueryProp(P_HP))*10;
+  if(amount>cash) amount=cash;
+  ME->reduce_hit_point(-amount/10);
+  ZENTRALBANK->PayIn(amount, 100); 
+  ME->AddMoney(-amount);
+  say(BS("Der Offizier kauft ein kleines Flaeschchen, "
+         "welches er austrinkt.\n"));
+  raum=file_name(environment(ME));
+  weg=call_other(WAYFIND, "find_way", raum, HOME_ROOM);
+  set_heart_beat(1);
+  unterwegs=HOME;
+}
+
+
+void NormalWay() { 
+  SetProp (P_MNPC_AREA, ROOM "wachweg");
+  SetProp (P_MNPC_WAIT, ({ random(60), 180, 240 }));
+  SetProp (P_MNPC_DEFAULTROOM, ROOM "wachweg_a1");
+  SetProp (P_MNPC_FLAGS, MOV_OUTDOORS + MOV_MOVES);
+}
+
+
+varargs void die(int p)
+{
+  int direkt;
+  object wer;
+  object zpq;
+
+  wer = TP || QueryProp(P_KILLER);
+  if (objectp(wer))
+  {
+    direkt = extern_call() && (previous_object() != this_object());
+    write_file(LOGF,
+        dtime(time())+": Der Offizier wird gekillt von "+CAP(getuid(wer))+
+        (direkt ? " (direkt!).\n" : ".\n"));
+    if (zpq = present("\nzechpreller_quest_11",wer))
+    {
+      zpq->Mark(p);
+      write_file(LOGF,
+          dtime(time())+": Zechpreller-Gildenaufgabe fuer "+CAP(getuid(wer))+
+          " erkannt.\n");
+    }
+  }
+  ::die(p);
+}

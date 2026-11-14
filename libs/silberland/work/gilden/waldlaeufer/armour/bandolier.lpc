@@ -1,0 +1,376 @@
+//** INHERIT + INCLUDE + DEFINE ********************************************//
+inherit "std/armour";
+#include "../def.h"
+
+#define MAXIMUM_HERBS 10
+#define MAXIMUM_MIXTURES 10
+
+private int throwingKinfes;
+private mapping herbs;
+private mapping mixtures;
+
+public void create()
+{
+  if( !is_clone(TO) ) return;
+  ::create();
+  
+  SetProp(P_SHORT, "Ein Bandolier des Waldlaeufers");
+  SetProp(P_LONG, "Ein Bandolier aus Leder, der ueber die Brust gebunden wird. "
+                  "Er ist mit vielen kleinen Faechern und Schlaufen versehen, in denen "
+                  "Waldlaeufer zusaetzliche Ausruestung, Kraeuter und nuetzliches Werkzeug "
+                  "aufbewahren koennen.\n"
+                  "@@content_str@@");
+  SetProp(P_NAME, "Bandolier des Waldlaeufers");
+  SetProp(P_INFO, "Du kannst darin Kraeuter und Wurfmesser aufbewahren.\n\n"
+                  "  Kraeuter, die du sammelst, steckst du automatisch in das Bandolier.\n"
+                  "  'stecke <kraut> in bandolier' um Kraeuter hineinzugeben.\n"
+                  "  'kraeuterkunde <kraut>' um die Wirkung eines Krauts zu erfahren.\n"
+                  "  'iss <kraut>' um ein Kraut zu essen.\n\n"
+                  "  Kraeutermixturen verstaust du ebenso automatisch im Bandolier.\n"
+                  "  'trinke <mixtur>' um eine Kraeutermixtur zu trinken.\n\n"
+                  "Wurfmesser:\n"
+                  "  'stecke <messer> in bandolier' um Wurfmesser hineinzugeben.\n");
+  SetProp(P_GENDER, NEUTER );
+  AddId( ({"bandolier", "bandolier des waldlaeufers", "waldlaeuferbandolier", BANDOLIER_ID}) );
+  SetProp(P_ARMOUR_TYPE, AT_MISC );
+  SetProp(P_AC, 0);
+  SetProp(P_MATERIAL, MAT_LEATHER );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_VALUE, 10 );
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_WORN_TEXT, "ueber die Brust gebunden");
+
+  throwingKinfes = 0;
+  herbs = ([]);
+  mixtures = ([]);
+
+  AddCmd(({"stecke", "steck"}), "cmd_reinstecken");
+  AddCmd(CMD_ESSEN, "cmd_kraut_essen");
+  AddCmd(CMD_TRINKEN, "cmd_mixtur_trinken");
+  AddCmd("kraeuterkunde", "cmd_kraeuterkunde");
+}
+
+public int CanPutHerb(string name) {
+  name = lower_case(name);
+  if(!member(herbs, name)) {
+    return 1;
+  }
+
+  return sizeof(herbs[name]) < MAXIMUM_HERBS;
+}
+
+public int CanPutMixture(string name) {
+  name = lower_case(name);
+  if(!member(mixtures, name)) {
+    return 1;
+  }
+
+  return sizeof(mixtures[name]) < MAXIMUM_MIXTURES;
+}
+
+public int cmd_kraeuterkunde(string str) {
+  string herb, description;
+  if(!str || str == 0 || str == "") {
+    notify_fail("Die Wirkung welchs Krauts willst du erfahren?\n");
+    return -1;
+  }
+
+  if (member(herbs, str) == 0 && member(mixtures, str+"mixtur") == 0) {
+    notify_fail("Du hast kein " + capitalize(str) + ".\n");
+    return 0;
+  }
+
+  description = HERBS_MASTER->QueryHerbDescription(str);
+  if(!stringp(description) || description == "") {
+    notify_fail("Dieses Kraut ist dir nicht bekannt.\n");
+    return 0;
+  }
+
+  write(BS(description));
+  
+  return 1;
+}
+
+public mapping QueryHerbs() {
+  return herbs;
+}
+
+public mapping QueryMixtures() {
+  return mixtures;
+}
+
+public string content_str() {
+  string s, *keys;
+  int i;
+
+  s = "In den Faechern und Schlaufen des Bandoliers befinden sich:\n\n";
+
+  s += "  Kraeuter:\n";
+  if (sizeof(herbs) == 0) {
+    s += "    keine\n";
+  } else {
+    keys = m_indices(herbs);
+
+    for(i=0; i<sizeof(keys); i++) {
+      s += sprintf("  %d %s\n", sizeof(herbs[keys[i]]), capitalize(keys[i]));
+    }
+  }
+
+  // mixturen
+  s += "\n  Kraeutermixturen:\n";
+  if(sizeof(mixtures) == 0) {
+    s += "    keine\n";
+  } else {
+    keys = m_indices(mixtures);
+    for(i=0; i<sizeof(keys); i++) {
+      s += sprintf(" %d %s\n", sizeof(mixtures[keys[i]]), capitalize(keys[i]));
+    }
+  }
+
+  s += "\n";
+  if (throwingKinfes == 0) {
+    s += "  keine Wurfmesser\n";
+  } else {
+    s += sprintf("  %d Wurfmesser\n", throwingKinfes);
+  }
+  return s;
+}
+
+public int HasKraut(string name) {
+  if (member(herbs, name) == 0) {
+    return 0;
+  }
+
+  return 1;
+}
+
+public int PushKraut(object herb) {
+  string short;
+
+  short = lower_case(herb->QueryProp(P_SHORT));
+  if (member(herbs, short) == 0) {
+    herbs[short] = ({ ({herb->QueryProp(P_HEAL_STRENGTH), herb->QueryProp(P_HEAL_TYPE)}) });
+  } else {
+    herbs[short] += ({ ({herb->QueryProp(P_HEAL_STRENGTH), herb->QueryProp(P_HEAL_TYPE)}) });
+  }
+  return 1;
+}
+
+public varargs object PopKraut(string name, int noclone) {
+  object herb;
+  mixed *herbData;
+
+  if (member(herbs, name) == 0) {
+    return 0;
+  }
+
+  if(!noclone) {
+   herbData = herbs[name][0];
+    herb = clone_object(OBJ "food/kraut");
+    herb->SetProp(P_HEAL_STRENGTH, herbData[0]);
+    herb->SetProp(P_HEAL_TYPE, herbData[1]);
+    herb->SetProp(P_NAME, capitalize(name));
+  }
+
+  if(sizeof(herbs[name]) == 1) {
+    herbs = m_delete(herbs, name);
+  } else {
+    herbs[name] = herbs[name][1..];
+  }
+
+  return herb;
+}
+
+public int cmd_reinstecken(string str) {
+  string *words;
+  string item, container, short;
+  object ob;
+  int amount;
+
+  if (!str) {
+    notify_fail("Was moechtest du in den Bandolier stecken?\n");
+    return 0;
+  }
+
+  words = explode(str, " ");
+  if (sizeof(words) < 3) {
+    notify_fail("Was moechtest du in den Bandolier stecken?\n");
+    return 0;
+  }
+
+  if (words[1] != "in") {
+    notify_fail("Was moechtest du in den Bandolier stecken?\n");
+    return 0;
+  }
+
+  item = words[0];
+  container = words[2];
+
+  if (!id(container)) {
+    notify_fail("Was moechtest du in den Bandolier stecken?\n");
+    return 0;
+  }
+
+  ob = present(item, TP);
+  if (!ob) {
+    notify_fail("Du hast kein " + item + ".\n");
+    return 0;
+  }
+
+  if (ob->id(KRAUT_ID)) {
+    PushKraut(ob); 
+    write(BS(sprintf("Du steckst %s in das Bandolier.", ob->name(WEN))));
+    ob->remove(1);
+    return 1;
+  } else if (ob->id(THROWING_KNIFE_ID)) {
+    throwingKinfes += ob->QueryProp(P_AMOUNT);
+    write(BS(sprintf("Du steckst %d Wurfmesser in das Bandolier.", ob->QueryProp(P_AMOUNT))));
+    TO->SetProp(P_WC, ob->QueryProp(P_WC));
+    TO->SetProp(P_DAM_TYPE, ob->QueryProp(P_DAM_TYPE));
+    ob->remove(1);
+    return 1;
+  } else {
+    notify_fail("Das kannst du nicht in das Bandolier stecken.\n");
+    return 0;
+  }
+
+  notify_fail("Das kannst du nicht in das Bandolier stecken.\n");
+  return 0;
+}
+
+public int cmd_kraut_essen(string str) {
+  string herb;
+  int amount;
+
+  if (!str) {
+    notify_fail("Was moechtest du essen?\n");
+    return 0;
+  }
+
+  if (member(herbs, str)) {
+    PopKraut(str, 1);
+    write(BS(sprintf("Du isst %s.", capitalize(str))));
+    TP->AddHp(random(10)+1);
+    TP->AddSp(random(10)+1);
+    TP->eat_food(random(5));
+  } else {
+    notify_fail("Du hast kein " + str + ".\n");
+    return 0;
+  }
+
+  return 1;
+}	
+
+public int id(string str) {
+  if(str == THROWING_KNIFE_ID && throwingKinfes > 0) {
+    return 1;
+  }
+
+  return ::id(str);
+}
+
+public void PushMixture(string name, mixed *activatedMixture, mixed *herbData) {
+  if (member(mixtures, name) == 0) {
+    mixtures[name] = ({ ({activatedMixture, herbData}) });
+  } else {
+    mixtures[name] += ({ ({activatedMixture, herbData}) });
+  }
+  return;
+}
+
+public mixed* PopMixture(string name) {
+  mixed *mixture;
+
+  if (member(mixtures, name) == 0) {
+    return 0;
+  }
+
+  mixture = mixtures[name][0];
+
+  if (sizeof(mixtures[name]) == 1) {
+    mixtures = m_delete(mixtures, name);
+  } else {
+    mixtures[name] = mixtures[name][1..];
+  }
+
+  return mixture;
+}
+
+public int cmd_mixtur_trinken(string str) {
+  string name;
+  mixed *mixture;
+  object kraut;
+
+  if (!str) {
+    notify_fail("Was moechtest du trinken?\n");
+    return 0;
+  }
+
+  if (member(mixtures, str) == 0) {
+    notify_fail("Du hast keine " + capitalize(str) + ".\n");
+    return 0;
+  }
+
+  kraut = clone_object(OBJ "food/kraut");
+  mixture = PopMixture(str);
+  kraut->SetProp(P_HEAL_STRENGTH, mixture[1][0]);
+  kraut->SetProp(P_HEAL_TYPE, mixture[1][1]);
+  kraut->Kraeutermixtur(TP, mixture[0][0], mixture[0][1]);
+  kraut->remove(1);
+
+  // Basiseffekt
+  TP->AddHp(random(10)+1);
+  TP->AddSp(random(10)+1);
+  TP->drink_drink(random(5));
+
+  return 1;
+}
+
+public void init() {
+  ::init();
+
+  if(TP == environment(TO) && TP->QueryProp(P_GUILD) == "waldlaeufer") {
+    DoWear();
+  }
+
+  return;
+}
+
+public void AddAmount(int n) {
+  throwingKinfes += n;
+
+  if(throwingKinfes <= 0) {
+    SetProp(P_WC, 0);
+    SetProp(P_DAM_TYPE, 0);
+    tell_object(ENV(TO), BS("Du hast keine Wurfmesser mehr im Bandolier."));
+    throwingKinfes = 0;
+  }
+  return;
+}
+
+public int _query_weight() {
+  int total_weight;
+
+  total_weight = 100;
+
+  // 10 gramm pro wurfmesser
+  total_weight += throwingKinfes * 10;
+
+  // 5 gramm pro kraut
+  total_weight += sizeof(herbs) * 5;
+
+  // 10 gramm pro mixtur
+  total_weight += sizeof(mixtures) * 10;
+
+  return total_weight;
+}
+
+public mapping _query_mixtures() {
+  return mixtures;
+}
+
+public mapping _query_herbs() {
+  return herbs;
+}

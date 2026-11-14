@@ -1,0 +1,225 @@
+int schaetzlied(object caster, mapping sinfo)
+{
+  object victim;
+  int hpdiff, wcdiff, acdiff;
+  int hp, vhp, wc, vwc, ac, vac, gen, val, success, cbc;
+  string result;
+  string vname, vnamegen;
+
+  sinfo = prepare_song(caster, sinfo);
+  if(sinfo == 0) {
+    return 0;
+  }
+  
+  victim=FindVictim(sinfo[SI_SKILLARG],caster,
+		    "Auf wen oder was willst Du das Lied richten?\n");
+   if (!victim)
+     return 0;
+
+
+  /* Spellkosten :) */
+  if(!paySpellCost(caster, sinfo)) return 0;
+
+  if ((success=SpellSuccess(caster,sinfo))<=0)
+    return MISSERFOLG;
+
+   if (!living(victim))
+   {
+     result = sprintf("\nDu stimmst 'Der Dinge wahrer Hintergrund an' und richtest deine Gedanken "+
+		      "auf %s als ploetzlich eine Stimme in deinem Kopf saeuselt:\n"+
+		      "-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-"+  
+		      "=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=\n",victim->name(WEN));
+     if (val = victim->QueryProp(P_VALUE))
+       result += sprintf("%s ha%s einen Wert von %d Muenze%s.\n",
+			 capitalize(victim->name(WER,1)),
+			 (victim->IsPlural()) ?
+			 "ben" : "t",
+			 val, (val==1 ? "" : "n"));
+     else
+       result += sprintf("%s %s voellig wertlos...\n",
+			 capitalize(victim->name(WER,1)),
+			 (victim->IsPlural()) ?
+			 "sind" : "ist");
+     
+     if (victim->IsUnit())
+       val = victim->QueryProp(P_WEIGHT);
+     else
+       val = victim->QueryProp(P_TOTAL_WEIGHT);
+
+     // ab 6 kg nur mehr auf 1 kg genau
+     if ( (val >= 6000) || (val > (3000+100*caster->QueryProp(P_LEVEL))) )
+       vname = "in etwa "+((val+500)/1000)+" Kilogramm";
+     else
+     {
+       if (val < 100)
+         vname = "so gut wie nichts";
+       else if (val < 950)
+         vname = "ungefaehr "+((val+50)-(val+50)%100)+" Gramm";
+         // vname=sprintf("%.1f",to_float(val)/1000);
+       else
+       {
+         if (val >= 1500)
+           val = val+random(100)-random(100);   // ein wenig random :)
+         if (val >= 2000)
+           val=(val+250)-(val+250)%500;
+         else
+           val=(val+125)-(val+125)%250;
+         vname = "ungefaehr "+
+           ({"","ein","zwei","drei","vier","fuenf","sechs"})[val/1000]+
+           ({"","einviertel","einhalb","dreiviertel"})[(val%1000)/250]+
+           " Kilogramm";
+       }
+     }
+
+     result += sprintf("%s wieg%s %s.\n",
+         capitalize(victim->QueryPronoun()),
+         (victim->IsPlural()) ? "en" : "t", vname);
+     result += sprintf("-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-"  
+		       +"=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=\n");
+     write (result);
+     return ERFOLG;
+   }
+
+   hp = caster->QueryProp(P_HP);    vhp = victim->QueryProp(P_HP);
+   wc = caster->QueryProp(P_TOTAL_WC);  vwc = victim->QueryProp(P_TOTAL_WC);
+   vac = victim->QueryProp(P_TOTAL_AC);
+   hpdiff = hp - vhp;
+   wcdiff = wc - vwc;
+   acdiff = ac - vac;
+   vname = victim->name(WER, 1);
+   vnamegen = victim->name(WESSEN, 1);
+   gen = victim->QueryProp(P_GENDER);
+
+
+
+   result = sprintf("\nDu stimmst 'Der Dinge wahrer Hintergrund an' und richtest deine Gedanken "+
+		    "auf %s als ploetzlich eine Stimme in deinem Kopf saeuselt:\n"+
+		    "-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-"+  
+		    "=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=\n",victim->name(WEN));
+   write(result);
+
+  if(QueryProp(P_INFO)) {
+    write(sprintf("Du erkennst etwas Besonderes an %s:\n", victim->name(WEM)));
+    write(BS(victim->QueryProp(P_INFO)));
+  }
+
+   if (hpdiff > 2*vhp)
+      result = "Du bist " + victim->name(WEM, 1) + " haushoch ueberlegen.\n";
+   else if (hpdiff > vhp)
+      result = "Du bist viel staerker als " + vname + ".\n";
+   else if (hpdiff > vhp/5)
+      result = "Du bist staerker als " + vname + ".\n";
+   else if (-hpdiff > 2*hp)
+      result = capitalize(vname) + " ist Dir haushoch ueberlegen.\n";
+   else if (-hpdiff > hp)
+      result = capitalize(vname) + " ist viel staerker als Du.\n";
+   else if (-hpdiff > hp/5)
+      result = capitalize(vname) + " ist staerker als Du.\n";
+   else
+      result = capitalize(vname) + " ist etwa gleich stark wie Du.\n";
+   write(result);
+
+   switch(vac) {
+    case 0..40   : result =" hat so gut wie keinen Schutz.\n";
+                    break;
+    case 41..80  : result =" kann Dir nicht viel entgegensetzen.\n";
+                    break;
+    case 81..120 : result =" hat eine gute Ruestung oder natuerlichen "
+                          +"Schutz.\n";
+                    break;
+    case 121..160: result =" hat eine maechtige Ruestung oder "
+                          +"natuerlichen Schutz.\n";
+                    break;
+    case 161..200: result =" hat eine extrem maechtige Ruestung oder "
+                          +"einen uebernatuerlichen Schutz.\n";
+                    break;
+    case 201..250: result =" scheint vom Element Erz selbst vollkommen "
+                          +"geschuetzt zu sein.\n";
+                    break;
+    case 251..350: result =" ist beinahe wie unverwundbar.\n";
+                    break;
+    default      : result =" ist durch normale Waffen nicht mehr zu "
+                          +"verletzen und scheint einen extrem "
+                          +"machtvollen uebernatuerlichen Schutz zu "
+                          +"haben.\n";
+  }
+   write(sprintf("%s%s", capitalize(vname), result));
+
+   if(caster->QuerySkillAbility("sieben schritte") > 0) {
+    switch(canBeCharmed(victim, caster)) {
+      case -2: write(BS(sprintf("Du kannst %s nicht bezaubern, da %s nicht lebt oder denkt.",
+               victim->QueryPronoun(WEN), victim->QueryPronoun(WER))));
+               break;
+      case 0:  write(BS(sprintf("%s wuerde deiner Bezauberung sicher widerstehen koennen!\n", capitalize(victim->QueryPronoun(WER)))));
+               break;
+      default: write(BS(sprintf("Du kannst %s bezaubern.", victim->QueryPronoun(WEN))));
+               break;
+    }
+  }
+
+   if(success > 6000) {
+    if(interactive(victim)) write(sprintf("%s kann zaubern.\n", capitalize(vname)));
+    else {
+      result = capitalize(vname);
+      switch(victim->QueryProp(P_SPELLRATE)) {
+        case 0      : result+=" kennt keine magischen Lieder.\n";
+                        break;
+        case 1..15  : result+=" kennt nur wenige Zauberlieder.\n";
+                        break;
+        case 16..30 : result+=" kennt ein paar Zaubermelodien.\n";
+                        break;
+        case 31..45 : result+=" singt relativ oft magische Lieder.\n";
+                        break;
+        case 46..60 : result+=" singt viele magische Lieder.\n";
+                        break;
+        case 61..75 : result+=" singt sehr viele magische Lieder.\n";
+                        break;
+        case 76..99 : result+=" nutzt unheimlich viele Zauberlieder.\n";
+                        break;
+        default     : result+=" ist permanent von magischer Musik umgeben.\n";
+                        break;
+      }
+    }
+  }
+
+
+   if (wcdiff > 2*vwc)
+      result = "Deine Waffe ist eigentlich zu gut fuer diesen Gegner.\n";
+   else if (wcdiff > vwc)
+      result = "Deine Waffe ist viel besser als die " +vnamegen + ".\n";
+   else if (wcdiff > vwc/5)
+      result = "Deine Waffe ist besser als die " +vnamegen + ".\n";
+   else if (-wcdiff > 2*wc)
+      result = "Die Waffe " + vnamegen 
+     + " laesst Deine ganz mickrig aussehen.\n";
+   else if (-wcdiff > wc)
+      result = "Die Waffe " + vnamegen + " ist viel besser als Deine.\n";
+   else if (-wcdiff > wc/5)
+      result = "Die Waffe " + vnamegen + " ist besser als Deine.\n";
+   else
+      result = "Eure Waffen sind etwa gleich gut.\n";
+
+  result += capitalize(victim->QueryPronoun(WER) || "es");
+  if ((val = victim->QueryProp(P_ALIGN)) <= -1000)
+    result += " ist von satanischer Gesinnung.\n";
+  else if (val <= -200)
+    result += " ist von boeser Gesinnung.\n";
+  else if (val <= -40)
+    result += sprintf(" ist ein%s unfreundliche%s Zeitgenoss%s.\n",
+        (gen == FEMALE ? "e" : ""), (gen == FEMALE ? "" : "r"),
+        (gen == FEMALE ? "in" : "e") );
+  else if (val <= 40)
+    result += " sieht die Welt mit neutralen Augen.\n";
+  else if (val <= 200)
+    result += " ist eigentlich ganz nett.\n";
+  else if (val < 1000)
+    result += " ist von guter Gesinnung.\n";
+  else
+    result += " strahlt eine gewisse Heiligkeit aus.\n";
+  result += sprintf ("-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-"+  
+		     "=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=\n");
+  write(result); 
+  tell_room(environment(caster), BS(sprintf("%s spielt eine Melodie und scheint genau zu lauschen.", caster->Name(WER))), ({caster}));
+  return ERFOLG;
+} 
+

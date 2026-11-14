@@ -1,0 +1,430 @@
+// Magen von Muellschlucker-Mutter, Schlachtfeld
+// Wraz / Mendralim
+// NPC mschlucker_mutter -> Frisst Spieler*innen/NPC -> Magen
+// Features:
+//  Kontinuierliches runerideln (Saeure)
+//  Gelegentlich wird man paralysiert (Magenwaende klemmen Spieler ein)
+//  Gegenstaende werden beschaedigt oder loesen sich auf (Saeure)
+//  Zufaellig kann man rausgefurzt werden :)
+//  Ausgang: mehrere Details durchforschen -> zwaenge durch grosse falte
+
+inherit "std/room";
+
+#include "../def.h"
+
+mapping zwaenger=(["dummy":0]);
+
+void create()
+{
+  ::create();
+
+  SetProp(P_INT_SHORT, "Im Magen der Mutter aller Muellschlucker");
+  SetProp(P_INT_LONG,
+    "Ekelige Saeure - ueberall! Die Mutter aller Muellschlucker hat Dich verschluckt, "
+    "Du befindest Dich hier offensichtlich in ihrem Magen. Die extrem aetzende Saeure "
+    "muss unfassbar stark sein, um all die Dinge aufzuloesen. Es sieht nicht gut fuer "
+    "Dich aus, wenn Du nicht schnell einen Ausgang findest.");
+
+  SetProp(P_KILL_NAME, "Magensaeure");
+
+  SetProp(P_LIGHT, 0);
+  SetProp(P_INDOORS, 1);
+  SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE: 35,
+  ENV_TERRAIN: TT_UNDERWATER,
+  ENV_WATER: 5]) );
+
+  AddDetail( ({"saeure","magensaeure"}),
+    "Sie ist gruenlich-gelb und zischt und dampft bei jeder Beruehrung mit etwas, das "
+    "nicht die Magenwand ist.");
+  
+  AddDetail( ({"magenwand","magenwaende"}),
+    "Die Magenwaende sind offenbar 100% saeureresistent. Waere toll, daraus Ruestungsteile "
+    "zu fertigen.");
+
+  AddDetail( ({"ruestungsteile",""}),
+    "Deine Ruestungsteile werden sich bald verabschieden, wenn Du noch laenger in dieser "
+    "Saeure bleibst.");
+
+  AddDetail( ({"mutter","mutter aller muellschlucker"}),
+    "IN dieser befindest Du Dich gerade. Kein guter Ort, um zu verweilen.");
+
+  AddDetail( ({"ort",""}),
+    "Der Ort, an dem Du Dich gerade befindest, ist der Magen der Mutter aller Muellschlucker.");
+
+  AddDetail( ({"magen",""}),
+    "Du befindest Dich hier im Magen der Mutter aller Muellschlucker. Er besteht aus Saeure, "
+    "Magenwaenden und derzeit noch Dir und Deiner Ausruestung.");
+
+  AddDetail( ({"ausruestung",""}),
+    "Deine Ausruestung loest sich in dieser starken Magensaeure in Hoechstgeschwindigkeit auf!");
+
+  AddDetail( ({"dinge",""}),
+    "Viele Dinge hat die Magensaeure wohl schon komplett zersetzt. Dinge und... Lebewesen.");
+  
+  AddDetail( ({"lebewesen",""}),
+    "Noch zaehlst Du zu ihnen, aber wenn Du noch laenger hier bleibst, wirst Du wohl "
+    "ein Geist.");
+
+  AddDetail( ({"ausgang",""}),
+    "Du siehst Dich um, findest aber keinen Ausgang. An einer Stelle bemerkst Du aber eine "
+    "grosse Falte in der Magenwand.");
+
+  AddDetail( ({"stelle",""}),
+    "An einer Stelle in der Magenwand ist eine grosse Falte.");
+
+  AddDetail( ({"falte","falten"}),
+    "Die Magenwand legt sich mehrmahls in kleinere Falten, einmal auch ist eine groessere "
+    "Falte zu sehen.");
+
+  AddDetail( ({"kleinere falten","kleine falte"}),
+    "Du untersuchst die kleineren Falten, findest aber nichts Besonderes.");
+
+  AddDetail( ({"groessere falte","grosse falte"}),
+    "Die grosse Falte in der Magenwand ist wirklich auffaellig. Du weisst zwar nicht, "
+    "was sich dort befindet, aber viel schlimmer als hier kann es wohl nicht werden, "
+    "wenn Du versuchst, Dich durch die grosse Falte zu zwaengen. Oder?");
+
+  AddDetail( ({"oeffnung",""}),
+    "Bei genauerer Betrachtung ist es eher eine grosse Falte.");
+  
+  AddDetail( ({"",""}),
+    "");
+
+  AddCmd("zwaenge&durch&grosse|groessere&falte",
+        "cmd_zwaengen",
+        "Wo willst Du Dich DURCH zwaengen?|"
+        "Durch was genau willst Du Dich zwaengen?|"
+        "Durch eine grosse WAS willst Du Dich zwaengen?");
+}
+
+// Logs
+varargs void LogFile(mixed player, mixed item, string msg)
+{
+  string tpu;
+  string itemname;
+
+  if(!item) itemname = "(no item)";
+  else if (objectp(item)) itemname = file_name(item);
+  else if (stringp(item)) itemname = item;
+  else itemname = "(no item)";
+
+  if(!msg) msg = "(no message given)";
+
+  if(!player) tpu = "(no player)";
+  else if(objectp(player))
+  {
+    if(player && interactive(player)) tpu = getuid(player);
+    else if(player->name()) tpu = lower_case(player->name(RAW));
+    else tpu = to_string(player);
+  }
+  else if(stringp(player)) tpu = player;
+  else tpu = to_string(player);
+
+  log_file("d/ebene/metzelorgie/mschlucker_magen.log",
+    dtime()+" "+tpu+": "+itemname+" -> "+msg+"\n");
+}
+
+void clone_ausgefurzt(object pl)
+{
+  object ausgefurzt;
+
+  if(!pl) return;
+
+  if(present("\nausgefurzt",pl)) return;
+
+  if(living(pl) && !pl->id("muellschluckermutter"))
+  {
+    ausgefurzt = clone_object(OBJ "ausgefurzt");
+    ausgefurzt->set_furzer(pl);
+    ausgefurzt->move(pl,M_NOCHECK+M_GET);
+  }
+}
+
+int cmd_zwaengen(string str)
+{
+  object target_room;
+
+  if(!str || str == "") return 0;
+
+  if(zwaenger[TPU] >= time()-(2+random(5)))
+  {
+    TP->Message(BS(
+      "So schnell kannst Du Dich nicht zwaengen, Du hast es doch gerade erst versucht!"
+    ));
+    return -1;
+  }
+  else if(zwaenger[TPU] < time()-60)
+  {
+    TP->Message(BS(
+    "Du versuchst Dich durch die groessere Falte zu zwaengen, schaffst es aber nicht. "
+    "Vielleicht einfach nochmal versuchen?"));
+    zwaenger += ([TPU:time()]);
+    return -1;
+  }
+  else
+  {
+    TP->Message(BS(
+      "Mit Muehe zwaengst Du Dich durch die Falte. Eine peristatlische Bewegung schiebt "
+      "Dich unerwartet weiter, ekelhafter Faekaliengeruch kriecht in Deine Nase! Dir wird "
+      "kotzuebel, waehrend Du durch den unerwartet kurzen Darm der Mutter aller "
+      "Muellschlucker geschoben und schliesslich ausgeschissen wirst."
+    ));
+
+    if(!find_living("muellschluckermutter"))
+    {
+      call_other(ROOM "m10a","???");
+      target_room = find_object(ROOM "m10a");
+    }
+    else target_room = ENV(find_living("muellschluckermutter"));
+
+    tell_room( target_room, BS(
+            "Die Mutter aller Muellschlucker verzieht kurz das Gesicht, bevor sie mit "
+            "offensichtlicher Erleichterung " + TPN + " rektal produziert."));
+    TP->move( target_room , M_NOCHECK + M_SILENT );
+
+    clone_ausgefurzt(TP);
+    LogFile(TP, 0, "befreit sich");
+    return 1;
+  }
+}
+
+void do_my_damage(object ob)
+{
+  int hp, max_hp, lose_hp, acid_res;
+  int i, armour_or_weapon, def_flaw;
+  string name_wer;
+  object env_ob, *inv;
+  string temp_file_name;
+
+  if(!ob) return;
+  if(query_wiz_level(ob)>10) return;
+
+  name_wer = ob->name(WER);
+  env_ob = ENV(ob);
+  temp_file_name = file_name(ob);
+
+  def_flaw = 20; // Default fuer TakeFlaw()
+
+  armour_or_weapon = 0;
+  if(ob->QueryProp(P_ARMOUR_TYPE)) armour_or_weapon = 1;
+  if(ob->QueryProp(P_WEAPON_TYPE)) armour_or_weapon = 2;
+
+  // Saeureresistenz abfragen (geht gleichermassen fuer Spieler und Objekte)
+  if(ob->QueryProp(P_RESISTANCE_STRENGTHS)) 
+    acid_res = ob->QueryProp(P_RESISTANCE_STRENGTHS)["acid"];
+  else acid_res = 0;
+
+  if (interactive(ob))
+  {
+    // Spieler -> Meldungen
+    ob->Message(BS("Die Saeure ist ueberall und setzt Dir und Deiner gesamten "
+      "Ausruestung uebel zu!"));
+    TO->Message(BS("Die Magensaeure hier setzt "+ob->Name()+" uebel zu!"),
+      MSGFLAG_VISUAL, ([MSGFLAG_EXCLUDE:({ob})]));
+    
+    // Spielerinventar durchgehen
+    inv = all_inventory(ob);
+
+    for(i=0;i<sizeof(inv);i++)
+      do_my_damage(inv[i]);
+  }
+
+  // living (Spiele oder NPC) -> Schaden
+  if(living(ob))
+  {
+    if(!random(12))
+    {
+      LogFile(ob, 0, "wird von Magenwand paralysiert");
+      ob->Message(BS("Die Magenwaende rumoren, und bevor Du Dich in Sicherheit begeben "
+        "kannst, bist Du voellig hilflos eingeklemmt."));
+      ENV(ob)->Message(BS("Die Magenwaende rumoren, und bevor "+ob->name()+" sich in Sicherheit begeben "
+        "kann, ist "+ob->QueryPronoun()+" voellig hilflos eingeklemmt."),MSGFLAG_VISUAL,
+        ([MSGFLAG_EXCLUDE:({ob})]));
+      ob->AddHp(-random(20));
+      ob->SetProp(P_PARALYZED, ([PARALYZE_TIME: 2+random(6),
+        PARALYZE_MSG: "Die Magenwaende haben Dich komplett eingeklemmt!\n",
+        PARALYZE_MSG_OTHER: "%s versucht sich zu bewegen, ist aber vollkommen "
+        "in den Magenwaenden eingeklemmt!\n",
+        PARALYZE_END: "Die Magenwaende rumoren und Du kannst Dich wieder bewegen!\n",
+        PARALYZE_END_OTHER: "Die Magenwaende rumoren und %s kann sich wieder bewegen!\n"]));
+    }
+
+    hp = ob->QueryProp(P_HP);
+    max_hp = ob->QueryProp(P_MAX_HP);
+    lose_hp = to_int((random(30) + 1) * (1.0 + acid_res));
+
+    if (0 > hp - lose_hp) 
+    {
+      ob->die();
+      LogFile(ob, 0, "stirbt");
+    }
+
+    else 
+    {
+      ob->AddHp(-lose_hp);
+      LogFile(ob, 0, "verliert "+lose_hp+" Lebenspunkte");
+    }
+    
+    return;
+  }
+
+  // wird niemals zerstoert: Dinge, die man nicht wegwerfen kann (P_NODROP)
+  else if(ob->QueryProp(P_NODROP)) return;
+
+  // wird niemals zerstoert: unsichtbare Objekte (P_SHORT ist nicht gesetzt: unsichtbar) 
+  else if (!ob->QueryProp(P_SHORT)) return;
+
+  // wird niemals zerstoert: unsichtbare Objekte (P_INVIS: explizit unsichtbar)
+  else if (ob->QueryProp(P_INVIS)) return;
+
+  // wird niemals zerstoert: Magenumhang (waere auch echt unlogisch)
+  else if (ob->id("magenumhang")) return;
+
+  else
+  {
+    // Ruestung? -> Decay mit damage type ACID (mehrmals)
+    if(ob && armour_or_weapon == 1)
+      for(i=random(def_flaw);i<def_flaw;i++)
+      {
+        if(!ob) break; // koennte schon kaputt sein
+        ob->TakeFlaw(DT_ACID);
+      }
+
+    // Waffe? -> Decay
+    else if(ob && armour_or_weapon == 2) ob->TakeFlaw(random(20)+1);
+
+    // anderes Object? -> per random() aufloesen
+    else if(!random(20) && (ob && !random(ob->QueryProp(P_VALUE)/1000))) ob->remove();
+
+    // nur selten Message von einzelnen Objekten (sonst scrollt es)
+    if(ob && env_ob && interactive(env_ob) && armour_or_weapon && !random(15))
+      env_ob->Message(BS(
+        capitalize(name_wer)+" blubbert und zischt durch die Magensaeure."));
+
+    // Meldung wenn sich etwas aufloest (im Spieler, oder im Raum)
+    else if(!ob && env_ob && (interactive(env_ob) || TO == env_ob)) 
+    {
+      env_ob->Message(BS(
+        capitalize(name_wer)+" zersetzt sich vollstaendig in der Magensaeure."));
+      LogFile(env_ob,temp_file_name,"loest sich auf (remove)");
+    }
+  }
+
+}
+
+void heart_beat()
+{
+  object *inv;
+  
+  int xp, xp_cost;
+  int i;
+
+  if(!random(3)) return; // nicht jeden heart_beat
+
+  if(!present("Interactive"))
+  {
+    set_heart_beat(0);
+    return;
+  }
+
+  inv = all_inventory(TO);
+
+  for(i=0;i<sizeof(inv);i++)
+    do_my_damage(inv[i]);
+
+}
+
+void init()
+{
+  ::init();
+  set_heart_beat(1);
+}
+
+void mutter_dies(object target_room)
+{
+  object *inv;
+  string *inv_string, implode_string;
+  int i;
+  
+  if(!target_room) 
+  {
+    call_other(ROOM "m10a","???");
+    target_room = find_object(ROOM "m10a");
+  }
+
+  inv = all_inventory(TO);
+  inv_string = ({});
+
+  for(i=0;i<sizeof(inv);i++)
+  {
+    if(living(inv[i]) || inv[i]->QueryProp(P_SHORT) || !inv[i]->QueryProp(P_INVIS)) 
+      inv_string += ({inv[i]->name(WEN)});
+  }
+
+  if(!inv_string || sizeof(inv_string) <= 0) return;
+
+  if(find_player("wraz")) find_player("wraz")->Message(BS("inv_string: "+implode(inv_string," ")));
+
+  implode_string = implode(inv_string[0..<2],", ") + 
+    (sizeof(inv_string) >= 2 ? (" und " + inv_string[<1]) : implode(inv_string,""));
+
+  tell_room( target_room, BS(
+                "Im Sterben furzt die Mutter aller Muellschlucker "+
+                 implode_string + " aus!"));
+
+  tell_room( TO, BS("Mit einem Mal erschlaffen die Magenwaende, doch ein letzter "
+        "Sog aus einer stinkenden Oeffnung saugt alles, inklusive Dir, aus dem Magen."));
+
+  for(i=0;i<sizeof(inv);i++)
+  {
+    if(living(inv[i]) || inv[i]->QueryProp(P_SHORT) || !inv[i]->QueryProp(P_INVIS)) 
+      inv[i]->move( target_room , M_NOCHECK + M_SILENT );
+
+    clone_ausgefurzt(inv[i]);
+  }
+}
+
+varargs void random_ausfurzen(object target_room, object ob)
+{
+  object *inv;
+  int i;
+
+  if(find_player("wraz")) find_player("wraz")->Message(BS("magen random_ausfurzen"));
+  
+  if(!target_room) 
+  {
+    call_other(ROOM "m10a","???");
+    target_room = find_object(ROOM "m10a");
+  }
+
+  inv = all_inventory(TO);
+
+  if(!ob && !inv) return;
+  if(!inv || sizeof(inv) == 0) return;
+
+  if(!ob)
+    for(i=0;i<10;i++)
+    {
+      ob = inv[random(sizeof(inv))];
+      if(living(ob) || ob->QueryProp(P_SHORT) || !ob->QueryProp(P_INVIS)) break;
+    }
+    
+  if(!ob || !(living(ob) || ob->QueryProp(P_SHORT) || !ob->QueryProp(P_INVIS))) return;
+
+  if(living(ob)) 
+        ob->Message(BS("Ploetzlich vibrieren die Magenwaende, und ein "
+          "kraeftiger Sog aus einer stinkenden Oeffnung saugt Dich aus dem Magen."));
+
+  tell_room( target_room, BS(
+              "Mit kraeftigem Druck furzt die Mutter aller Muellschlucker "+
+                ob->name(WEN) + " aus! Widerliche Duenste erfuellen den Raum."));
+
+  ob->move( target_room , M_NOCHECK + M_SILENT );
+
+  tell_room( TO, BS(
+              "Ploetzlich vibrieren die Magenwaende, und ein "+
+              "kraeftiger Sog aus einer stinkenden Oeffnung saugt " + 
+              ob->name(WEN) + " aus dem Magen."));
+
+  clone_ausgefurzt(ob);
+}

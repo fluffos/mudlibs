@@ -1,0 +1,1787 @@
+// stirnband.c
+// Das Stirnband des Berserkers
+// 1997-01-20  Feyaria@SilberLand
+
+
+inherit "std/armour";
+
+#include "../def.h"
+#include "/gilden/berserker/epic/berserkerstufe11.h"
+#include <moredef.h>
+#include <defines.h> 
+#include <properties.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <wizlevels.h>
+#include <ansi.h>
+
+#define REPORT_NORMAL 1
+#define REPORT_DIFF 2
+#define REPORT_LINKS 4
+#define REPORT_RECHTS 8
+#define REPORT_PROZENT 16
+#define REPORT_FARBE 32
+#define REPORT_SCROLL 64
+#define REPORT_KOMPAKT 128
+#define REPORT_MAX 256
+#define REPORT_BLIND 512
+
+#define BRMOD_NORMAL  0
+#define BRMOD_DIFF    1
+#define BRMOD_LINKS   2
+#define BRMOD_RECHTS  3
+#define BRMOD_PROZENT 4
+#define BRMOD_BLIND   5
+
+#define BEURTEIL_COST 2
+#define BEFOERDER_COST 5
+#define LEHREN_COST 10
+
+nosave int *history=({});
+nosave int lastHP, lastSP, aktiv=0;
+nosave int lasthp, lastsp;
+nosave object owner;
+nosave int brmod, farbe, scroll, kompakt, scrollhp, scrollsp, report, max;
+nosave string breportfarbe;
+nosave int startxp, startlostxp, starttime, deads;
+nosave int powerregain, regaining;
+nosave string *beurteilt;
+nosave mapping report_colors;
+nosave int last_report_time;
+nosave int callout;
+nosave string wk, eh, rk, special;
+nosave int lastStand;
+
+void activate(object ob);
+
+void create()
+{
+  if( !is_clone(TO) ) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein blutrotes Stirnband");
+  SetProp(P_LONG,  
+    "Das blutrote Stirnband ist das Erkennungszeichen eines Berserkers.");
+  SetProp(P_NAME, "Stirnband");
+  SetProp(P_NAME_ADJ, "blutrot");
+  SetProp(P_GENDER, NEUTER );
+  AddId( ({"stirnband", "\nberserker_stirnband"}) );
+  AddAdjective( ({"blutrotes", "blutrote"}) );
+  
+  SetProp(P_ARMOUR_TYPE, AT_MISC );
+  SetProp(P_AC, 0);
+  SetProp(P_MATERIAL, ([MAT_CLOTH:95, MAT_BLOOD:5]) );
+  SetProp(P_WEIGHT, 50);
+  SetProp(P_VALUE, 0 );
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_AUTOLOADOBJ, 1);
+  SetProp(P_NO_DAMAGE_DESTRUCT, 1);
+  SetProp(P_QUALITY_DECAY, 0);
+  SetProp(P_MAGIC, 1);
+  //  SetProp(P_CURSED, 1);
+  SetProp(P_TEMPERATURE_PROTECTION, ([T_COLD_PROT:1, T_HEAT_PROT:1]) );
+  
+  SetProp(P_WORN_TEXT, "um den Kopf gebunden");
+  SetProp(P_REMOVE_FUNC, TO);
+  
+  AddCmd( "bgilde", "gilde");
+  AddCmd(({"bbruelle", "bbruell"}), "bbruellen");
+  AddCmd(({"btitel", "berserkertitel"}), "btitel");
+  AddCmd( "bwer", "bwer");
+  AddCmd( "beurteile", "skills");
+  AddCmd( "befoerdere", "advance");
+  AddCmd( "lehre", "teach");
+  AddCmd( "bhist", "bhist");
+  AddCmd( "breport", "breport" );
+  AddCmd( "breportmodus", "breportmodus");
+  AddCmd( "breportfarben", "breportfarben");
+  AddCmd( "toete", "toeten");
+  AddCmd( "xplog", "xplog");
+  AddCmd( ({"bzuecke", "eisengriff"}), "bzuecke");
+  AddCmd( "heimkehr", "heimkehr");
+  AddCmd( "bbeta", "bbeta");
+
+  beurteilt = ({});
+  report_colors = (["S":ANSI_BLACK,
+                    "R":ANSI_RED,
+                    "G":ANSI_GREEN,
+                    "Y":ANSI_YELLOW,
+                    "B":ANSI_BLUE,
+                    "P":ANSI_PURPLE,
+                    "C":ANSI_CYAN,
+                    "W":ANSI_WHITE,
+                    "N":ANSI_NORMAL]);
+  breportfarbe = "RPCGY";
+
+  lastStand = 0;
+}
+
+public int bbeta(string str) {
+  if(!str || str == "") {
+    write("Berserker Beta ist "+(QueryProp(P_BERSERKER_BETA)?"aktiviert":"deaktiviert")+".\n");
+    write("Mit 'bbeta ein' oder 'bbeta aus' kannst Du den Beta-Modus umschalten.\n");
+    return 1;
+  } else if(str == "ein" || str == "an") {
+    SetProp(P_BERSERKER_BETA, 1);
+    write("Berserker Beta ist nun aktiviert.\n");
+    return 1;
+  } else if(str == "aus" || str == "ab") {
+    SetProp(P_BERSERKER_BETA, 0);
+    write("Berserker Beta ist nun deaktiviert.\n");
+    return 1;
+  } else {
+    write("Syntax: bbeta [ein|aus]\n");
+    return 1;
+  }
+}
+
+string _query_info()
+{
+  return BS(
+    "Das Stirnband ist Zeichen Deines Berserkertums. Ohne Stirnband kannst "
+    "Du die Faehigkeiten eines Berserkers nicht richtig nutzen, darum sollte "
+    "man es immer tragen. Bei Verlust einfach Kronang mitteilen, dass Du "
+    "ein neues Stirnband brauchst.")+BS(
+    "Ab Berserkerstufe 3 kannst Du anderen Berserkern etwas zubruellen. "
+    "(bbruelle <text>). Mit bhist kann man sich die letzen gebruellten Texte "
+    "nochmal anzeigen lassen.")+BS(
+    "Mit 'bwer' kann man schauen, welche Berserker alle anwesend sind, mit "
+    "'bwer axt' sieht man, welche Aexte die Berserker gezueckt haben.")+BS(
+    "Mit 'btitel' kann man sich als Seher den der Berserkerstufe "
+    "entsprechenden Titel setzen.")+BS(
+    "Mit 'breport ein|aus' kann man den Reportmodus ein- und ausschalten "
+    "(statt dem Teddy). " 
+    "Mit breportmodus kann man sich den genauen Reportmodus einstellen. "
+    "Mit breportfarben kann man sich die Farbanzeige des Breports umstellen.")+
+    "Mit 'xplog' kannst Du mitverfolgen, wieviele Erfahrungspunkte Du "
+    "machst.\nMit 'xplog reset' kannst Du diesen Wert wieder auf 0 setzen.\n"+
+    "Mit 'bbeta ein' oder 'bbeta aus' kannst Du den Beta-Modus umschalten.\n";
+    (TP->QueryProp(P_GUILD_LEVEL) > 10 ? "Mit 'befoerdere' kannst Du "
+     "andere Berserker auf die naechste Stufe erhoehen.\n"
+     "Mit 'lehre' kannst Du anderen Berserkern Faehigkeiten beibringen.\n":"")+
+    (TP->QueryProp(P_GUILD_LEVEL) > 10 && (BMASTER->GetMight(TP) & M_FIST) ?
+       BS("Mit 'eisengriff' kannst Du eine Axt so festhalten, dass Du nicht "
+         "mehr entwaffnet werden kannist."):"")+
+    (TP->QueryProp(P_GUILD_LEVEL) == 12 ? BS("Mit 'heimkehr' kannst Du "
+     "auf schnellstem Wege in die Berserkergilde zurueckkehren."):"")+
+    BS("Ignorieren kann man: berserker.bbruelle, berserker.bbruelle.<name> "
+    "berserker.beurteile, berserker.befoerdere, berserker.lehre") ;
+}
+
+int WearFunc(object ob)
+{
+  if (MENV->QueryProp(P_GUILD) != GUILDNAME)
+  {
+    if (!IS_WIZARD(MENV))
+    {
+      write("Wie kommst DU denn zu einem Berserkerstirnband?\n");
+      call_out("remove",0);
+    }
+    else
+      MENV->SetProp(P_TMP_BERSERKER_LISTENER, 1);
+    return 1;
+  }
+  if (ob->QueryProp(P_ARMOUR_TYPE) == AT_SHIELD && !IS_WIZARD(MENV))
+  { 
+    switch (random(6))
+    {
+      case 0:
+        write("Als Berserker darfst Du kein Schild tragen.\n");
+        break;
+      case 1:
+        write("Kronang teilt Dir mit: Zerstoert "+ob->name(WEN,2)+" sofort!\n");
+        break;
+      case 2:
+        write("Nur Feiglinge verstecken sich hinter einem Schild.\n");
+        break;
+      case 3:
+        write("Ein Berserker und ein Schild? Schaem Dich!\n");
+        break;
+      case 4:
+        TP->command_me("zerstoerung "+lower_case(ob->name(RAW)));
+        break;
+      case 5:
+        write("Du bekommst Lust, "+ob->name(WEN,2)+" zu zerstoeren.\n");
+        break;
+    }
+    return 0;
+  }
+  if (ob == TO)
+    call_out("activate", 0, MENV);
+  return 1;
+}
+
+int RemoveFunc(object ruestung, int silent)
+{
+  int wearer;
+  wearer=QueryProp(P_WORN);
+  if(!wearer) return 1;
+  if (aktiv )
+    activate(0);
+  return 1;
+}
+  
+int xpreset()
+{ 
+  startxp=TP->QueryProp(P_XP);
+  startlostxp=TP->QueryProp(P_TOTAL_LOST_XP);
+  starttime=time();
+  deads = TP->QueryProp(P_DEADS);
+  return 1;
+}
+  
+int xplog(string str)
+{
+  int zeit, xp, lost, nrdeads;
+
+  if( !QueryProp(P_WORN) ) return 0;
+  if( str=="reset")
+  {
+    write("Das Erfahrungspunkte-log steht nun auf Null.\n");
+    return xpreset();
+  }
+  write("Du hast "+(xp=(QueryProp(P_WORN)->QueryProp(P_XP))-startxp)+
+      " Erfahrungspunkte in "+
+      ((zeit=(time()-starttime))/60)+" Minuten ermetzelt.\n");
+  if (zeit)
+  {
+    write("Das "+ ( zeit < 3600 ? "waere" : "ist") + " ein Schnitt von "+
+        (zeit > 300 ? to_int(xp * 3600. / zeit) : xp * 12) + 
+        " Erfahrungspunkten pro Stunde.\n");
+    if( (lost=(QueryProp(P_WORN)->QueryProp(P_TOTAL_LOST_XP)-startlostxp)) > 0 )
+    {
+      nrdeads = (QueryProp(P_WORN)->QueryProp(P_DEADS)) - deads;
+      write("Leider hast Du auch "+lost+" Erfahrungspunkte durch " + 
+          (nrdeads==1 ? "einen Tod" : nrdeads + " Tode") + " verloren,\n"
+          "sonst haettest Du einen Schnitt von "+to_int((xp+lost)*3600./zeit)+".\n");
+    }
+  }
+  return 1;
+}
+
+public void BecomesNetAlive(object wer) 
+{
+  if(wer != owner) return;
+
+  xpreset();
+  set_heart_beat(1);
+}
+
+public void BecomesNetDead(object wer) {
+  if(wer != owner) return;
+  set_heart_beat(0);
+}
+
+
+
+private void displayResilienceMessage() {
+  switch(QueryProp(P_BERSERKER_RESILIENCE)*100/MAX_BERSERKER_RESILIENCE(owner)) {
+    case -20..0: tell_object(owner, "Deine Zaehigkeit ist erschoepft.\n");
+            break;
+    case 1..10: tell_object(owner, "Deine Zaehigkeit ist fast erschoepft.\n");
+                break;
+    case 11..20: tell_object(owner, "Deine Zaehigkeit ist bereits stark gesunken.\n");
+                break;
+    case 21..30: tell_object(owner, "Deine Zaehigkeit ist deutlich gesunken.\n");
+                break;
+    case 31..40: tell_object(owner, "Deine Zaehigkeit ist bereits merklich aufgebraucht.\n");
+                break;
+    case 41..50: tell_object(owner, "Deine Zaehigkeit ist etwa zur Haelfte aufgebraucht.\n");
+                break;
+    case 51..60: tell_object(owner, "Deine Zaehigkeit ist bereits zur Haelfte aufgebraucht.\n");
+                break;
+    case 61..70: tell_object(owner, "Deine Zaehigkeit ist noch gut vorhanden.\n");
+                break;
+    case 71..80: tell_object(owner, "Deine Zaehigkeit ist noch recht gut vorhanden.\n");
+                break;
+    case 81..90: tell_object(owner, "Deine Zaehigkeit ist noch sehr gut vorhanden.\n");
+                  break;
+    case 91..99: tell_object(owner, "Deine Zaehigkeit ist noch fast vollstaendig vorhanden.\n");
+                  break;
+    default: tell_object(owner, "Deine Zaehigkeit ist noch vollstaendig vorhanden.\n");
+              break;
+  }
+  return;
+}
+
+public void AddResilience(int r) {
+  int before, after;
+
+  if(!objectp(owner)) return;
+  if(!HAS_TALENT(owner, TALENT_HARD_SKIN)) return; // nur im Zaehigkeitsbaum gibt es Zaehigkeit
+  
+  after = before = QueryProp(P_BERSERKER_RESILIENCE);
+
+  if(QueryProp(P_BERSERKER_RESILIENCE) < MAX_BERSERKER_RESILIENCE(owner) && r > 0 ||
+     QueryProp(P_BERSERKER_RESILIENCE) > 0 && r < 0) {
+   after += r;
+  }
+
+  SetProp(P_BERSERKER_RESILIENCE, after);
+
+  if(before != after) {
+    if(!random(4) || after >= MAX_BERSERKER_RESILIENCE(owner) || after <= 0) {
+      displayResilienceMessage();
+    }  
+  }
+
+  return;
+}
+
+public void displayRageMessage() {
+  int max, current;
+  current = QueryProp(P_BERSERKER_RAGE);
+  max = MAX_BERSERKER_RAGE(owner);
+  switch(current*100/max) {
+    case -20..0: tell_object(owner, "Du verspuehrst keine Wut mehr.\n");
+            break;
+    case 1..10: tell_object(owner, "Ein wenig Wut wallt in Dir auf.\n");
+                break;
+    case 11..20: tell_object(owner, "Wut wallt in dir auf.\n");
+                break;
+    case 21..30: tell_object(owner, "Deine Wut nimmt langsam zu.\n");
+                break;
+    case 31..40: tell_object(owner, "Heisse Wut flammt in dir auf.\n");
+                break;
+    case 41..50: tell_object(owner, "Heisse Wut bringt dein Blut in Wallung.\n");
+                break;
+    case 51..60: tell_object(owner, "Du spuehrst wie die Wut dein Blut in Wallung bringt.\n");
+                break;
+    case 61..70: tell_object(owner, "Deine Wut bringt dein Blut zum rasen.\n");
+                break;
+    case 71..80: tell_object(owner, "Dein Blut kocht regelrecht vor Wut.\n");
+                break;
+    case 81..90: tell_object(owner, "Deine Augen und Adern treten zornerfuellt hervor.\n");
+                  break;
+    case 91..99: tell_object(owner, "Wutentbrannt bruellst du vor Zorn!\n");
+                  break;
+    default: tell_object(owner, "Rasende Wut brennt in dir, als du dich bruellend auf deine Feinde stuerzt!\n");
+              break;
+  }
+  return;
+}
+
+public void AddRage(int r) {
+  int before, after;
+
+  if(!objectp(owner)) return;
+  if(!HAS_TALENT(owner, TALENT_WAR_FURY)) return; // nur im Wutbaum gibt es Wut
+
+  before = after = QueryProp(P_BERSERKER_RAGE);
+
+  if(QueryProp(P_BERSERKER_RAGE) < 0) SetProp(P_BERSERKER_RAGE, 0);
+
+  if(QueryProp(P_BERSERKER_RAGE) < MAX_BERSERKER_RAGE(owner) && r > 0 ||
+     QueryProp(P_BERSERKER_RAGE) > 0 && r < 0) {
+    after += r;
+  }
+
+  SetProp(P_BERSERKER_RAGE, after);
+  if(QueryProp(P_BERSERKER_RAGE) < 0) SetProp(P_BERSERKER_RAGE, 0);
+
+  if(after != before) {
+    if( after == 0 || owner->InFight() && (!random(3) || after == MAX_BERSERKER_RAGE(owner))) {
+      displayRageMessage();
+    }
+  }
+
+  return;
+}
+
+public void heart_beat() {
+  if(!objectp(owner)) return;
+
+  if(HAS_TALENT(owner, TALENT_HARD_SKIN) && !owner->InFight()) {
+    AddResilience(5); 
+  }
+
+  if(HAS_TALENT(owner, TALENT_WAR_FURY) && !owner->InFight()) {
+    if(owner->QueryProp(P_LAST_WUETEN_TIME) + 75  < time()) AddRage(-5);
+  }
+
+  if(HAS_TALENT(owner, TALENT_STEADFAST) && QueryProp(P_BERSERKER_RESILIENCE) < MAX_BERSERKER_RESILIENCE(owner) && 
+    (owner->QueryProp(P_DISABLE_ATTACK) || owner->QueryProp(P_DISABLE_SPELLS) || owner->QueryProp(P_PARALYZED) || owner->QuerySkillAttribute(SA_SPEED) < 100 || owner->QueryProp(P_BLIND))) {
+      if(!random(2) && owner->InFight() || !random(5)) tell_object(owner, BS("Du nutzt die Unterbrechnung, um durchzuatmen und deine Zaehigkeit zu regenerieren."));
+      AddResilience(owner->QueryProp(P_GUILD_LEVEL));
+  }
+}
+ 
+void init()
+{
+  ::init();
+  if (!TO || !MENV || !living(MENV) || 
+      present("\nberserker_stirnband 2", MENV)) 
+  { 
+    call_out("remove",0);
+    return;
+  }
+
+  if(this_player() != environment(this_object())) return;
+
+  if(interactive(MENV)) {
+    set_heart_beat(1);
+  }
+
+  SetProp(P_WEAR_FUNC, TO);
+  SetProp(P_DEFEND_FUNC, TO);
+
+  if(!objectp(QueryProp(P_WORN))) {
+    DoWear();
+    tell_object(MENV, "Du fuehlst Dich nun stark und mutig.\n");
+  }
+
+  xpreset();
+
+  report=BMASTER->GetReportModus(MENV);
+  if (report & REPORT_NORMAL)  brmod   = BRMOD_NORMAL;
+  if (report & REPORT_DIFF)    brmod   = BRMOD_DIFF;
+  if (report & REPORT_RECHTS)  brmod   = BRMOD_RECHTS;
+  if (report & REPORT_LINKS )  brmod   = BRMOD_LINKS;
+  if (report & REPORT_PROZENT) brmod   = BRMOD_PROZENT;
+  if (report & REPORT_BLIND)   brmod   = BRMOD_BLIND;
+  if (report & REPORT_FARBE)   farbe   = 1;
+  if (report & REPORT_SCROLL)  scroll  = 10;
+  if (report & REPORT_KOMPAKT) kompakt = 1;
+  if (report & REPORT_MAX)     max     = 1;
+  if (strlen(breportfarbe=BMASTER->GetReportColors(MENV))!= 5 )
+    breportfarbe = "RPCGY";
+}
+
+public int DefendFunc(string *dtype, mixed spell, object enemy) {
+  int resilience, bonus;
+
+  bonus = 0;
+
+  if(HAS_TALENT(owner, TALENT_HARD_SKIN)) {
+    AddResilience(-1 - random(5));
+    resilience = QueryProp(P_BERSERKER_RESILIENCE);
+      if(resilience > 0) {
+
+        if(spell == 0 && 
+          (member(dtype, DT_BLUDGEON) >= 0 || member(dtype, DT_RIP) >= 0 || member(dtype, DT_SLASH) >= 0 || member(dtype, DT_PIERCE) >= 0 || member(dtype, DT_SQUEEZE) >= 0 || member(dtype, DT_WHIP) >= 0)) {
+         // so lange Zaehigkeit vorhanden ist, wird der physische Schaden reduziert
+          bonus += (int) (30 * resilience / 100.0);
+        }
+
+        if(spell != 0 && HAS_TALENT(owner, TALENT_UNSHAKABLE_WILL)) {
+          AddResilience(-3);
+          // gegen Zauber gibt es einen Sonderschutz
+          bonus += (int) (15*resilience / 100.0);
+        }
+      } 
+
+    if(HAS_TALENT(owner, TALENT_RELENTLESS)) {
+      // chance nach gilden level bei einem kassierten treffer ein paar MP zu regenerieren
+      if(!random(12-owner->QueryProp(P_GUILD_LEVEL))) {
+        owner->AddSp(1+random(owner->QueryProp(P_GUILD_LEVEL)));
+      }
+    }
+  }
+
+  if(QueryProp(P_BERSERKER_LAST_LAST_STAND) > time() - BERSERKER_LAST_STAND_COOLDOWN) {
+    // bonus im letzten gefecht
+    bonus += 25 + random(25);
+  }
+
+  return bonus;
+}
+
+int gilde()
+{
+  if(!TP->QueryProp(P_TESTPLAYER))
+    return 0;
+  notify_fail("Das geht nur von der Abenteuerergilde aus.\n");
+  if(ENV(TP)->QueryProp(P_INT_SHORT)!="Die beruehmte Abenteurergilde")
+    return 0;
+  TP->move(GUILD, M_TPORT);
+  return 1;
+}
+
+int bbruellen(string str)
+{
+  int i;
+  string b, n, pre, text;
+  object* spieler;
+  object stirnband;
+  string* ignore;
+  
+  if(TP->QueryProp(P_GUILD_LEVEL)<3) return 0;
+  notify_fail("Was moechtest Du allen Berserkern zubruellen?\n");
+  if (!stringp(str)) return 0;
+  spieler=users();
+  text=TP->_unparsed_args();
+  if (objectp(TP->QueryProp(P_PERM_STRING)))
+    text = call_other(TP->QueryProp(P_PERM_STRING),"permutate_string",text)||"";
+  text=upperstring(text);
+  for(i=sizeof(spieler)-1;i>=0; i--)
+  {
+    if( !pointerp(ignore = spieler[i]->QueryProp(P_IGNORE)) )
+      ignore = ({});
+    if( (spieler[i]->QueryProp(P_GUILD) == GUILDNAME ||
+          spieler[i]->QueryProp(P_TMP_BERSERKER_LISTENER) ||
+        getuid(spieler[i]) == "feyaria") &&  
+        member( ignore, "berserker.bbruelle" )==-1 &&
+        member( ignore, "berserker.bbruelle."+getuid(TP) ) == -1 &&
+        member( ignore, getuid(TP) ) == -1) 
+    {
+      switch(spieler[i]->QueryProp(P_TTY)) {
+        case "ansi": b=ANSI_BG_BLACK+ANSI_RED; n=ANSI_NORMAL; break; 
+        case "vt100": b=ANSI_BOLD; n=ANSI_NORMAL; break;
+        default: b=""; n="";
+      }
+      if(spieler[i]==TP)
+         write(break_string(text+n, TP->QueryProp(P_SCREENWIDTH), 
+              b+"Du bruellst den Berserkern zu: "));
+      else {
+        pre=(getuid(TP)=="feyaria"?"Berserkermama ": ( "Berserker"+ 
+              (TP->QueryProp(P_GENDER)==FEMALE?"in ":" ")))+
+                    CAP(getuid(TP))+ " bruellt: ";
+        tell_object(spieler[i], break_string(text+n,
+          spieler[i]->QueryProp(P_SCREENWIDTH), b+pre));
+        if( stirnband = present("\nberserker_stirnband", spieler[i]) ) 
+          stirnband->AddHistory(pre, text );
+      }
+    }
+  }
+  return 1;
+}
+
+nosave int bhist() 
+{
+  int i;
+  string *msgs;
+
+  write("Die Berserker haben folgendes gebruellt:\n");
+  write("-----------------------------------------------"
+       +"-------------------------------\n");
+  for(i=0;i<=sizeof(history)-1;i++) {
+    msgs=explode(history[i],"&&*%%");
+    if(sizeof(msgs) == 3)
+    {
+      write(BS(msgs[0]));
+      write(break_string(msgs[2], TP->QueryProp(P_SCREENWIDTH), msgs[1]));
+    }
+  }
+  write("-----------------------------------------------"
+       +"-------------------------------\n");
+  return 1;  
+}
+
+int AddHistory(string presay, string msg) 
+{
+  int i;
+  string timestring;
+  timestring=dtime(time())[19..26];
+  if(sizeof(history)>=10)
+    history-=({history[0]});
+  history+=({implode(({timestring, presay, msg}), "&&*%%")});
+  return 1;
+}
+
+int btitel()
+{
+  TP->SetProp(P_TITLE, 0);
+  write("Dein Titel lautet jetzt: "+TP->QueryProp(P_TITLE)+"\n");
+  return 1;
+}
+
+int is_berserker(object pl)
+{
+  if( (pl->QueryProp(P_GUILD)==GUILDNAME || getuid(pl)=="feyaria" 
+        || pl->QueryProp(P_TMP_BERSERKER_LISTENER)) && 
+      (!pl->QueryProp(P_INVIS) || IS_LEARNER(TP)))
+    return 1;
+  else
+    return 0;
+}
+
+int sort_berserker(object pl1, object pl2)
+{
+  if( (getuid(pl1) == "feyaria") * 10000000 +
+      pl1->QueryProp(P_GUILD_LEVEL) * 10000 + 
+      (pl1->QueryProp(P_GENDER) == FEMALE ? 500 : 0) +
+      pl1->QueryProp(P_LEVEL) * 100 +
+      pl1->QueryProp(P_GUILD_RATING) 
+      >
+      (getuid(pl2) == "feyaria") * 10000000 + 
+      pl2->QueryProp(P_GUILD_LEVEL) * 10000 + 
+      (pl2->QueryProp(P_GENDER) == FEMALE ? 500 : 0) +
+      pl2->QueryProp(P_LEVEL) * 100 +
+      pl2->QueryProp(P_GUILD_RATING) )
+    return 1;
+  else 
+    return 0;
+}
+
+int bwer(string str)
+{
+  int i;
+  object *spieler;
+  string berserker, presay, titel, b, n, special;
+  string lauscher, ret;
+  object gb;
+
+  lauscher = "";
+  switch(TP->QueryProp(P_TTY))
+  {
+    case "ansi": 
+    case "vt100": b=ANSI_BOLD; n=ANSI_NORMAL; break;
+    default: b=""; n="";
+  }
+  if( ! gb=find_object(GUILD) )
+  {
+    write("BUG IN DER BERSERKERGILDE!!! Sofort Feyaria verstaendigen!!!!\n");
+    return 1;
+  }
+  berserker="Folgende Berserker sind anwesend:\n";
+  spieler=filter_array(users(), "is_berserker");
+  spieler=sort_array(spieler, "sort_berserker", this_object() );
+  for(i=sizeof(spieler)-1;i>=0; i--)
+  {    
+    titel = presay = "";
+    if(getuid(spieler[i]) == "feyaria") 
+      presay = "Berserkermama ";
+/*
+    else if( IS_LEARNER(spieler[i]) ) 
+      presay = "Berserkermagier" +
+        (spieler[i]->QueryProp(P_GENDER) == FEMALE ? "in " : " ");
+    else if( spieler[i]->QueryProp(P_TESTPLAYER)) 
+      presay = "Berserkertester" +
+        (spieler[i]->QueryProp(P_GENDER) == FEMALE ? "in " : " ");
+*/
+    else if( IS_LEARNER(spieler[i]) ) 
+    {
+      if (spieler[i]->QueryProp(P_INVIS))
+        lauscher += "("+CAP(getuid(spieler[i])) + "), ";
+      else
+        lauscher += CAP(getuid(spieler[i])) + ", ";
+      continue;
+    }
+    else if( spieler[i]->QueryProp(P_TESTPLAYER)) 
+    {
+      lauscher += CAP(getuid(spieler[i])) + ", ";
+      continue;
+    }
+    else if( spieler[i]->QueryProp(P_GUILD_LEVEL) == 12) 
+      presay = "Berserkergildenmeister" +
+        (spieler[i]->QueryProp(P_GENDER) == FEMALE ? "in " : " ");
+    else if( spieler[i]->QueryProp(P_GUILD_LEVEL) == 11) 
+      presay = "Berserkerlegende ";
+    else 
+      titel = spieler[i]->QueryProp(P_GUILD_TITLE);
+
+    ret = " ";
+    if(TP->QueryProp(P_GUILD_LEVEL) > 11 && 
+        spieler[i]->QueryProp(P_GUILD_LEVEL) < 10 && 
+        (getuid(TP) == "feyaria" || 
+         (!IS_LEARNER(TP) && !TP->QueryProp(P_TESTPLAYER))))
+    {
+      switch(spieler[i]->QueryProp(P_GUILD_LEVEL))
+      {
+        case 1: ret=gb->Test2(spieler[i],2);break;
+        case 2: ret=gb->Test3(spieler[i],2);break;
+        case 3: ret=gb->Test4(spieler[i],2);break;
+        case 4: ret=gb->Test5(spieler[i],2);break;
+        case 5: ret=gb->Test6(spieler[i],2);break;
+        case 6: ret=gb->Test7(spieler[i],2);break;
+        case 7: ret=gb->Test8(spieler[i],2);break;
+        case 8: ret=gb->Test9(spieler[i],2);break;
+        case 9: ret=gb->Test10(spieler[i],2);break;
+      }
+      if(!ret)
+        ret=RES_CHECKER->check_restrictions(spieler[i], 
+            gb->QueryProp(P_GUILD_LEVELS)[spieler[i]->QueryProp(P_GUILD_LEVEL)+1]);
+    }
+    if(!ret)
+      special = "(aufstiegsfaehig)";
+    else if( spieler[i]->InFight() ) 
+    {
+      if( present("\nberserker_blutrausch", spieler[i]) ) 
+        special = "(im Blutrausch)";
+      else
+        special = "(metzelnd)";
+    }
+    else if(spieler[i]->QueryProp(P_GHOST) )
+      special = "(tot)";
+    else if(query_idle(spieler[i]) > 100 * 60 )
+      special = "(URIDLE)";
+    else if(query_idle(spieler[i]) > 30 * 60 )
+      special = "(uridle)";
+    else if(query_idle(spieler[i]) > 10 * 60 )
+      special = "(Idle)";
+    else if(query_idle(spieler[i]) > 3 * 60 )
+      special = "(idle)";
+    else if(call_other(BMASTER, "QueryWimpy",spieler[i]) && !IS_WIZARD(spieler[i]) )
+      special = "(feig)";
+    else if (environment(spieler[i]) && 
+             file_name(environment(spieler[i]))==GUILD &&
+             !IS_WIZARD(spieler[i]) ) 
+    {
+      if (spieler[i]->QueryProp(P_GUILD_LEVEL) > 10)
+        special = "(lehrend)";
+      else
+        special = "(lernend)";
+    }
+    else
+      special = "";
+    berserker += sprintf(" %-49s %-17s %-10s\n", 
+        presay+b+CAP(getuid(spieler[i]))+n+" "+titel,
+        special, str == "axt" ?  (
+          spieler[i]->QueryProp(P_WEAPON) ? spieler[i]->QueryProp(P_WEAPON)->Name(RAW) :
+          "-") : spieler[i]->QueryProp(P_RACE) );
+  }
+  write(berserker+"\n");
+  write(BS("Zusaetzlich lauschen noch: "+lauscher[0..<3]));
+  return 1;
+}
+
+int skills(string str)
+{
+  object wer, gb;
+  int i, wert;
+  string *arm, s;
+  mapping res;
+  string *ignore;
+
+  if( TP->QueryProp(P_GUILD_LEVEL) < 10 ) return 0;
+  notify_fail("Wen willst Du beurteilen?\n");
+  if( !str ) return 0;
+  if( !wer = present(str, ENV(TP))) return 0;
+  if( wer->QueryProp(P_GUILD) != GUILDNAME )
+    return notify_fail("Du kannst nur Berserker beurteilen.\n"),0;
+  if( present("kronang", ENV(TP)) && !IS_ARCH(TP))
+  {
+    write("Kronang kann das besser!\n");
+    return 1;
+  }
+  if( wer == TP )
+  {
+    write("Du kannst Dich nicht selber beurteilen!\n");
+    return 1;
+  }
+  if(wer->InFight() || TP->InFight())
+  {
+    write("Im Kampf geht das nicht.\n");
+    return 1;
+  }
+  if( IS_LEARNER(wer) && !IS_WIZARD(TP) )
+  {
+    write(wer->Name()+" entzieht sich durch Magie Deiner Beurteilung.\n");
+    return 1;
+  }
+  if( ! gb=find_object(GUILD) )
+  {
+    write("BUG IN DER BERSERKERGILDE!!! Sofort Feyaria verstaendigen!!!!\n");
+    return 1;
+  }
+  if (TP->QueryProp(P_SP) < BEURTEIL_COST)
+  {
+    write("Du hast zu wenig Magiepunkte!\n");
+    return 1;
+  }
+  TP->AddSp(-BEURTEIL_COST);
+  if( ! query_once_interactive(wer) )
+  {
+    write(wer->Name(WER,1)+" ist Berserkerstufe "+
+      wer->QueryProp(P_GUILD_LEVEL)+".\n");
+    return 1;
+  }
+  if( !pointerp(ignore = wer->QueryProp(P_IGNORE)) )
+    ignore = ({});
+  if( member( ignore, "berserker.beurteile" )!=-1 ||
+      member( ignore, getuid(TP)) != -1)
+  {
+    write(wer->Name(WER,1) + " will sich nicht beurteilen lassen.\n");
+    return 1;
+  }
+  if( wer->QueryProp(P_GUILD_RATING) == MAX_ABILITY)
+  {
+    write(wer->Name(WER,1)+" ist "+ (wer->QueryProp(P_GENDER)==FEMALE ?
+     "eine absolut perfekte Berserkerin":"ein absolut perfekter Berserker")+
+        ".\n");
+    if(TP->QueryProp(P_GUILD_LEVEL) >= 12 && gb->lvl12check(wer))
+    {
+      s = gb->int2string(BMASTER->GetTeaching(wer));
+      tell_object(wer, CAP_TPN+" sagt: Das Lehren von Berserkerfaehigkeiten "
+          "beherrschst Du "+s+".\n");
+      write(wer->Name()+ " beherrschst das Lehren von Berserkerfaehigkeiten " +
+          s + ".\n");
+    }
+    return 1;
+  }
+  res = wer->QueryProp(P_NEWSKILLS);
+  arm = sort_array(m_indices(res),CL(<));
+  for (i = sizeof(arm)-1;i>=0;i--)
+  {
+    if(arm[i] != "Bihand" && arm[i] != "Fight_axe")
+    {
+      s = gb->int2string(wer->QuerySkillAbility(arm[i]));
+      tell_object(wer,CAP_TPN+" sagt: "+capitalize(arm[i])+" beherrschst Du "+
+           s+".\n");
+      write(wer->Name()+ " beherrschst "+capitalize(arm[i])+" "+s+".\n");
+    }
+  }   
+  s = gb->int2string(wer->QuerySkillAbility("Fight_axe"));
+  tell_object(wer,CAP_TPN+" sagt: Den Axtkampf beherrschst Du "+s+".\n");
+  write(wer->Name()+ " beherrschst den Axtkampf "+s+".\n");
+  s = gb->int2string(wer->QuerySkillAbility("Bihand"));
+  tell_object(wer,CAP_TPN+" sagt: Den Kampf mit Zweihaendern beherrschst Du "+
+      s+".\n");
+  write(wer->Name()+" beherrschst den Kampf mit Zweihaendern "+s+".\n");
+  if((wert = wer->QueryProp(P_GUILD_RATING)) < 1501) wert = 1501;
+  s = gb->int2string(wert);
+  tell_object(wer,CAP_TPN+" sagt: Insgesamt betrachtet bist Du "+s+".\n"); 
+  tell_room(ENV(TP), sprintf("%s klaert %s ueber %s Fertigkeiten auf.\n", 
+      CAP_TPN, capitalize(getuid(wer)), 
+      wer->QueryPossPronoun(FEMALE, WEN, PLURAL)), ({wer,TP}) );
+  tell_object(TP,wer->Name(WER,1)+" ist Berserkerstufe "+
+      wer->QueryProp(P_GUILD_LEVEL) +" und insgesamt "+ s+".\n");    
+  if( TP->QueryProp(P_GUILD_LEVEL) > 10 && interactive(wer) && 
+      member(beurteilt, getuid(wer)) == -1 && 
+      wer->QueryProp(P_GUILD_RATING) != MAX_ABILITY )
+  {
+    BMASTER->AddTeaching(TP, 1, wer->Name(WEN) + " beurteilt");
+    beurteilt += ({getuid(wer)});
+  }
+  return 1;
+}
+
+int advance(string str)
+{
+  object wer, gb;
+  string ret;
+  string *ignore;
+
+  if( TP->QueryProp(P_GUILD_LEVEL) < 11 ) return 0;
+  notify_fail("Wen willst Du befoerdern?\n");
+  if( !str ) return 0;
+  if( !wer=present(str, ENV(TP))) return 0;
+  if( wer->QueryProp(P_GUILD) != GUILDNAME )
+    return notify_fail("Du kannst nur Berserker befoerdern.\n"),0;
+  if( present("kronang", ENV(TP)) && TP->QueryProp(P_GUILD_LEVEL) < 12 )
+  {
+    write("Kronang kann das besser!\n");
+    return 1;
+  }
+  if( wer == TP )
+  {
+    write("Du kannst Dich nicht selber befoerdern!\n");
+    return 1;
+  }
+  if(wer->InFight() || TP->InFight())
+  {
+    write("Im Kampf geht das nicht.\n");
+    return 1;
+  }
+  // gs 11 kann bis 9 befoerdern, gs 12 dann bis 10
+  if( ((IS_LEARNER(wer) || wer->QueryProp(P_TESTPLAYER)) && !IS_WIZARD(TP)) || 
+      TP->QueryProp(P_GUILD_LEVEL) - wer->QueryProp(P_GUILD_LEVEL) < 3 ||
+      !interactive(wer) )
+  {
+    write(wer->Name()+" kann von Dir nicht befoerdert werden.\n");
+    return 1;
+  }
+  if( ! gb=find_object(GUILD) )
+  {
+    write("BUG IN DER BERSERKERGILDE!!! Sofort Feyaria verstaendigen!!!!\n");
+    return 1;
+  }
+  if( !pointerp(ignore = wer->QueryProp(P_IGNORE)) )
+    ignore = ({});
+  if( member(ignore, "berserker.befoerdere" )!=-1 || 
+      member(ignore, getuid(TP)) != -1)
+  {
+    write(wer->Name(WER,1) + " will sich nicht befoerdern lassen.\n");
+    return 1;
+  }
+  if (TP->QueryProp(P_SP) < BEFOERDER_COST)
+  {
+    write("Du hast zu wenig Magiepunkte!\n");
+    return 1;
+  }
+  TP->AddSp(-BEFOERDER_COST);
+  switch(wer->QueryProp(P_GUILD_LEVEL))
+  {
+    case 1: ret=gb->Test2(wer,2);break;
+    case 2: ret=gb->Test3(wer,2);break;
+    case 3: ret=gb->Test4(wer,2);break;
+    case 4: ret=gb->Test5(wer,2);break;
+    case 5: ret=gb->Test6(wer,2);break;
+    case 6: ret=gb->Test7(wer,2);break;
+    case 7: ret=gb->Test8(wer,2);break;
+    case 8: ret=gb->Test9(wer,2);break;
+    case 9: ret=gb->Test10(wer,2);break;
+  }
+  if (!ret) 
+  {
+    ret=RES_CHECKER->check_restrictions(wer, 
+        gb->QueryProp(P_GUILD_LEVELS)[wer->QueryProp(P_GUILD_LEVEL)+1]);
+    if( !stringp(ret) )
+    {
+      ret = " auf die naechste Berserkerstufe!\n";
+      write("Du befoerderst "+wer->name(WEN)+ ret);
+      tell_object(wer, TP->Name(WER) + " befoerdert Dich"+ ret);
+      say(TP->Name(WER) + " befoerdert "+wer->name(WEN)+ ret, ({wer, TP}));
+      gb->remote_advance(wer, TP);
+      BMASTER->AddTeaching(TP, wer->QueryProp(P_GUILD_LEVEL)*10, wer->Name(WEN) + 
+          " auf Stufe "+ wer->QueryProp(P_GUILD_LEVEL) + " befoerdert");
+      return 1;
+    }
+  }
+  write(break_string( wer->Name(WER)+ ", Du kannst noch nicht auf die "
+      "naechste Stufe aufsteigen:"+ret ,78, "Du sagst: "));
+  say(break_string(wer->Name(WER)+ ", Du kannst noch nicht auf die "
+      "naechste Stufe aufsteigen:"+ret ,78, TP->Name(WER)+ " sagt: "));
+  if( member(beurteilt, getuid(wer)) == -1 )
+  {
+    BMASTER->AddTeaching(TP, 1, wer->Name(WEM) + " nicht befoerdert");
+    beurteilt += ({getuid(wer)});
+  }
+  return 1;
+}
+
+int teach(string str)
+{
+  object pl, gb;
+  string wer, was;
+  int ret;
+  string *ignore;
+
+  if( TP->QueryProp(P_GUILD_LEVEL) < 11 ) return 0;
+  if( !str ) return 0;
+  if( sscanf(str, "%s %s",wer, was) != 2 ) return write("Wem willst Du was lehren?\n"),1;
+  if( !pl=present(wer, ENV(TP))) return write("Wem willst Du was lehren?\n"),1;
+  if( pl->QueryProp(P_GUILD) != GUILDNAME )
+    return notify_fail("Du kannst nur Berserkern etwas lehren.\n"),0;
+  if( present("kronang", ENV(TP)) )
+  {
+    write("Kronang kann das besser!\n");
+    return 1;
+  }
+  if( pl==TP )
+  {
+    write("Du kannst Dir selber nichts beibringen!\n");
+    return 1;
+  }
+  if(pl->InFight() || TP->InFight())
+  {
+    write("Im Kampf geht das nicht.\n");
+    return 1;
+  }
+  if( ( (IS_LEARNER(pl) || pl->QueryProp(P_TESTPLAYER) ) && !IS_WIZARD(TP)) 
+      || !interactive(pl) )
+  {
+    write(pl->Name(WEM,1)+" kannst Du nichts lehren.\n");
+    return 1;
+  }
+  if( ! gb=find_object(GUILD) )
+  {
+    write("BUG IN DER BERSERKERGILDE!!! Sofort Feyaria verstaendigen!!!!\n");
+    return 1;
+  }
+  if( !pointerp(ignore = pl->QueryProp(P_IGNORE)) )
+    ignore = ({});
+  if( member(ignore, "berserker.befoerdere") !=-1 ||
+      member(ignore, "berserker.lehre") != -1 ||
+      member(ignore, getuid(TP)) != -1)
+  {
+    write(pl->Name(WER,1) + " will sich nicht belehren lassen.\n");
+    return 1;
+  }
+  if (TP->QueryProp(P_SP) < LEHREN_COST)
+  {
+    write("Du hast zu wenig Magiepunkte!\n");
+    return 1;
+  }
+  TP->AddSp(-LEHREN_COST);
+  if ( (ret=gb->LearnSpell(was, pl)) == 1)
+  {
+    BMASTER->AddTeaching(TP, pl->QueryProp(P_GUILD_LEVEL)*5,
+        pl->Name(WEM) + " " + CAP(was) +" gelehrt");
+    tell_object(pl, TP->Name()+" bringt Dir '"+CAP(was)+"' bei.\n");
+    gb->spell_log(pl, was);
+  }
+  notify_fail("Du kannst " + pl->name(WEM,1) + " nichts beibringen!\n");
+  return ret;
+}
+
+void reset()
+{
+  ::reset();
+  if( !is_clone(TO) ) return;
+  beurteilt = ({});
+}
+
+string * wueten_messages = ({
+    " ist wuetend.",
+    " kocht vor Wut.",
+    " brodelt.",
+    " schaeumt vor Wut.",
+    "s Halsschlagader schwillt unglaublich an.",
+    " hat Tollwut?",
+    " tobt schaeumend herum.",
+    " beisst sich vor Wut die Lippen auf und schleckt das Blut gierig ab.",
+    " schnaubt voller Wut.",
+    " wird vor Wut ganz rot im Gesicht.",
+    " zerplatzt fast vor Wut.",
+    " grunzt wuetend.",
+    " fletscht die Zaehne.",
+    " bruellt wuetend.",
+    " faucht Dich wuetend an.",
+     });
+
+void wueten_message()
+{
+  ENV(owner)->Message( owner->Name(WER) + 
+      wueten_messages[random(sizeof(wueten_messages))] + "\n",
+      MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE: ({owner})]) );
+}
+
+void deactivate_other_reports()
+{
+  object teddy, env;
+
+  env = environment();
+  if( teddy = present("teddy", env) )
+    teddy->activate(0);
+  if( teddy = present("\nprotheg_ursuper_questbelohnung_fingerhut", env) )
+    teddy->activate(0);
+  if( teddy = present("\nPROtheG_Racetool", env) )
+    teddy->activate(0);
+}
+
+void NoReport()
+{
+  regaining++;
+}
+
+void ForceReport()
+{
+  regaining = -1;
+}
+
+varargs void NotifyHpChange()
+{
+  int    hp, mhp, hpdiff, sp, msp, spdiff, i;
+  string c, c1;
+  object teddy;
+  object ob;
+  int scrollHP, scrollSP;
+  
+  // Sicherheits-Check
+  if (!previous_object() || !owner || (owner != previous_object() && 
+        this_object()!=previous_object() && 
+        getuid(previous_object()) != "GUILD.berserker") )
+    return;
+
+  // Ausschalten wenn aktiv == 0 (z.B. nach Tod)
+  if (!aktiv)
+  {
+    if (owner!=find_netdead(getuid(owner)))
+      owner->RemoveHpHook(ME);   // geht nur bei nicht-netztoten Spielern
+    return;
+  }
+
+  // Test auf Geist
+  if (owner->QueryProp(P_GHOST) || 
+      owner->QueryProp(P_HP)<0 || 
+      !living(owner))
+    return;
+
+  if(regaining > 0)
+  {
+    regaining--;
+    return;
+  }
+  
+  // Powerregain nach regeneration
+  if(hpdiff == 1 && powerregain && regaining != -1)
+  {
+    regaining = 2;
+    owner->AddHp(powerregain);
+    owner->AddSp(2 * powerregain / 3);
+  }
+
+  if( kompakt && time() == last_report_time && regaining != -1)
+  {
+    if( !callout )
+    {
+      callout = 1;
+      call_out("NotifyHpChange",0);
+    }
+    return;
+  }
+
+  // Nur einmal pro heartbeat die statusanzeige neu erzeugen
+  if( time() != last_report_time || regaining == -1)
+  {
+    if( present("\nberserker_willenskraft", owner) )   wk = "(WK)"; 
+    else                                               wk = "----";
+
+    if( ob=present("\nberserker_riesenkraft", owner) )
+    {
+      if( ob->QueryProp(P_X_ATTR_MOD)[A_STR] > 0  || 
+          ob->QueryProp(P_X_HEALTH_MOD)[P_HP] > 0)     rk = "(RK)";
+      else                                             rk = "(rk)";
+    }
+    else                                               rk = "----";
+
+    if( pointerp(owner->QueryProp(P_TMP_DEFEND_HOOK)) &&
+        (owner->QueryProp(P_TMP_DEFEND_HOOK)[0] - time()) > 0)  eh = "(EH)"; 
+    else                                                        eh = "----";
+
+    if( i = owner->QueryProp(P_POISON) )
+    {
+      switch(i)
+      {
+        case 1..3: special = "(gift)----"; break;
+        case 4..9: special = "(Gift)----"; break;
+        case 10..15: special = "(GIFT)----"; break;
+      }
+    }
+    else if( owner->QueryProp(P_PARALYZED) )
+      special = "(gelaehmt)";
+    else if( owner->QueryProp(P_FROG) )
+      special = "(Frosch)--";
+    else if( owner->QueryProp(P_BLIND) )
+      special = "(blind)---";
+    else if( owner->QueryProp(P_DEAF) )
+      special = "(taub)----";
+    else if( owner->QueryProp(P_MV) < 200 )
+      special = "(muede)---";
+    else if( owner->QueryProp(P_FOOD) > owner->QueryProp(P_MAX_FOOD) - 10 ) 
+      special = "(satt)----";
+    else if( owner->QueryProp(P_DRINK) > owner->QueryProp(P_MAX_DRINK) - 10 ) 
+      special = "(voll)----";
+    else if( owner->QueryProp(P_ALCOHOL) > owner->QueryProp(P_MAX_ALCOHOL) - 10 ) 
+      special = "(trunken)-";
+    else if( owner->QueryProp(P_LAST_WUETEN_TIME) > time() - 75  ) 
+    {
+      special = "(wuetend)-";
+      if( !random(4) )
+        wueten_message();
+    }
+    else 
+      special = "----------";
+  }
+
+  // aktuelle Werte ermitteln
+  hp = owner->QueryProp(P_HP);
+  mhp = owner->QueryProp(P_MAX_HP);
+  hpdiff = hp-lasthp;
+  sp = owner->QueryProp(P_SP);
+  msp = owner->QueryProp(P_MAX_SP);
+  spdiff = sp-lastsp;
+
+  if(hp < mhp/5 && lastStand) {
+    call_out("activateLastStand", 0);
+  }
+
+  // Faerbige Ausgabe
+  if( farbe )
+  {
+    if( owner->QueryProp(P_TTY) == "ansi" )
+    {
+      i = 5 * hp / (mhp + 1);
+      c = ANSI_BOLD + report_colors[breportfarbe[i..i]];
+/*
+      switch(100*hp/mhp)
+      {
+        case 0..20:   c=ANSI_BOLD+ANSI_RED; break;
+        case 21..40:  c=ANSI_BOLD+ANSI_PURPLE; break;
+        case 41..60:  c=ANSI_BOLD+ANSI_CYAN; break;
+        case 61..80:  c=ANSI_BOLD+ANSI_GREEN; break;
+        case 81..100: c=ANSI_BOLD+ANSI_YELLOW; break;
+      }
+*/      
+    }
+    else
+      c = ANSI_BOLD;
+    c1 = ANSI_NORMAL;
+  }
+  else
+  {
+    c = "";
+    c1 = "";
+  }
+  if (!random(10))
+    deactivate_other_reports();
+
+  if( (scrollHP = hp - lastHP) == 1 ) scrollhp++;
+  else if( scrollHP == 2 ) scrollhp += 2;
+  if( (scrollSP = sp - lastSP) == 1 ) scrollsp++;
+  else if( scrollSP == 2 ) scrollsp += 2;
+  
+  // Vergleich und Ausgabe
+  if( ((hp < lastHP) || (hp > lastHP && (sp == msp || callout)) || 
+        (sp != lastSP)) || regaining == -1)
+  {
+    if( !scroll || scrollhp >= scroll || scrollsp >= scroll || 
+       (scrollHP < 0 || scrollHP > 2) || 
+       (scrollSP < 0 || scrollSP > 2) || 
+       ((scrollHP == 1 || scrollHP == 2) && hp == mhp) || 
+       ((scrollSP == 1 || scrollSP == 2) && sp == msp) ||
+       regaining == -1)
+    {
+      switch(brmod) {
+        case BRMOD_NORMAL: 
+          tell_object(owner, 
+              sprintf(c+"Du hast jetzt %d (%d) Lebenspunkte und %d (%d) "
+                "Magiepunkte."+c1+"\n",
+                hp, mhp, sp, msp));
+          break;
+        case BRMOD_DIFF:
+          tell_object(owner,
+              sprintf( c+"Du hast jetzt %3d (%3d) Lebenspunkte (%+4d) und "
+                "%3d (%3d) Magiepunkte (%+4d)."+c1+"\n",
+                hp, mhp, hpdiff, sp, msp, spdiff));
+          break;
+        case BRMOD_RECHTS:
+          if (max)
+            tell_object(owner,
+                sprintf( c+"---- LPs: %3d/%3d (%+4d)  MPs: %3d/%3d (%+4d) --%s"
+                  "--%s--%s--%s-"+ c1+"\n", 
+                  hp, mhp, hpdiff, sp, msp, spdiff, wk, eh, rk, special));
+          else
+            tell_object(owner,
+                sprintf( c+"---- LPs: %3d (%+4d)  MPs: %3d (%+4d) ----------%s"
+                  "--%s--%s--%s-"+ c1+"\n", 
+                  hp, hpdiff, sp, spdiff, wk, eh, rk, special));
+          break;
+        case BRMOD_LINKS:
+          if (max)
+            tell_object(owner,
+                sprintf(c+"----%s--%s--%s--%s----- LPs: "+
+                  "%3d/%3d (%+4d), MPs: %3d/%3d (%+4d)"+c1+"\n", 
+                  wk, eh, rk, special, hp, mhp, hpdiff, sp, msp, spdiff));
+          else
+            tell_object(owner,
+                sprintf(c+"----%s--%s--%s--%s------------- LPs: "+
+                  "%3d (%+4d), MPs: %3d (%+4d)"+c1+"\n", 
+                  wk, eh, rk, special, hp, hpdiff, sp, spdiff));
+          break;
+        case BRMOD_PROZENT:  
+          tell_object(owner,
+              sprintf(c+"LP:%3d%% MP:%3d%% %s %s %s %s"+c1+"\n", 
+                100 * hp / mhp, 100 * sp / msp, 
+                wk != "----" ? wk : "", 
+                eh != "----" ? eh : "",
+                rk != "----" ? rk : "", 
+                special != "----------" ? regreplace(special,"-","",1) : ""));
+        case BRMOD_BLIND:
+          tell_object(owner,
+                  sprintf(c+"LP: %d MP: %d %s %s %s %s"+ c1+"\n", 
+                  hp, sp, regreplace(wk, "-", "", 1), regreplace(eh, "-", "", 1), 
+                  regreplace(rk, "-", "", 1), regreplace(special, "-", "", 1)));
+          break;
+        default:
+          tell_object(owner, "FEHLER: Ungueltiger Reportmodus. Bitte an einen Magier wenden!\n");
+      }
+      lasthp = hp; 
+      lastsp = sp;
+      scrollhp = 0; 
+      scrollsp = 0;
+      last_report_time = time();
+      if(regaining == -1) regaining = 0;
+    }
+    callout = 0;
+    lastHP = hp; 
+  }
+  else if( !callout && (hp > lastHP+1) )
+  {
+    callout = 2;
+    call_out("NotifyHpChange",0);
+  }
+  else 
+  {
+    callout = 0;
+    lastHP = hp; 
+  }
+
+  // neue Werte merken
+  lastSP = sp;
+}
+
+public void activateLastStand() {
+  if(!owner->InFight()) return; // nur im kampf
+  if(QueryProp(P_BERSERKER_LAST_LAST_STAND) > time() - BERSERKER_LAST_STAND_COOLDOWN) return; // max. einmal alle 2 minuten
+
+  if(owner->QueryProp(P_TTY) == "ansi") tell_object(owner, BS(ANSI_RED+"Du sammelst deine Kraefte fuer ein letztes Gefecht!"+ANSI_NORMAL));
+  else tell_object(owner, BS("Du sammelst deine Kraefte fuer ein letztes Gefecht!"));
+
+  owner->AddHp(owner->QueryProp(P_GUILD_LEVEL) + random(owner->QueryProp(P_GUILD_LEVEL)*2));
+  SetProp(P_BERSERKER_LAST_LAST_STAND, time());
+}
+
+void reactivate(object ob)
+{
+  if (objectp(ob)) 
+  {
+    owner = ob;
+    aktiv = 1;
+    ob->AddHpHook(ME);
+    scrollhp = 0;
+    scrollsp = 0;
+    ForceReport();
+    NotifyHpChange();
+    lastStand = HAS_TALENT(owner, TALENT_LAST_STAND);
+  }
+}
+
+int is_activate()
+{
+  return aktiv;
+}
+
+void activate(object ob)
+{
+  if (objectp(ob)) 
+  {
+    owner = ob;
+    aktiv = 1;
+    ob->AddHpHook(ME);
+    lastHP = ob->QueryProp(P_HP);
+    lastSP = ob->QueryProp(P_SP);
+    lastsp = lastSP;
+    lasthp = lastHP;
+    scrollhp = 0;
+    scrollsp = 0;
+    deactivate_other_reports();
+    ForceReport();
+    NotifyHpChange();
+    lastStand = HAS_TALENT(owner, TALENT_LAST_STAND);
+  } 
+  else 
+  {
+    if (ob=(owner||TP)) ob->RemoveHpHook(ME);
+    owner = aktiv = 0;
+  }
+}
+
+int breport(string str)
+{
+  notify_fail("Syntax: breport ein|aus.\n");
+  if( !str ) {
+    tell_room(ENV(TP), 
+       CAP_TPN+" hat jetzt "+TP->QueryProp(P_HP)+" ("+TP->QueryProp(P_MAX_HP)+
+       ") Lebenspunkte und "+TP->QueryProp(P_SP)+" ("+TP->QueryProp(P_MAX_SP)+
+       ") Magiepunkte.\n");
+    return 1;
+  }
+  switch (str)
+  {
+    case "ein":
+      if (aktiv && objectp(owner))
+        write("Der Report-Modus ist schon eingeschaltet!\n");
+      else {
+        write("Report-Modus ist jetzt eingeschaltet.\n");
+        activate(TP);
+      }
+      break;
+    case "aus":
+      if (!aktiv)
+        write("Der Report-Modus ist doch schon ausgeschaltet!\n");
+      else { 
+        write("Report-Modus ist nun ausgeschaltet.\n");
+        activate(0);
+      }
+      break;
+    default:
+      return 0;
+  }
+  return 1;
+}
+
+int remove(int x)
+{
+  if (aktiv && TP) TP->RemoveHpHook(ME);
+  return ::remove(x);
+}
+
+int Setreport()
+{
+  if(brmod == BRMOD_NORMAL)      report=REPORT_NORMAL;
+  else if(brmod == BRMOD_DIFF) report=REPORT_DIFF;
+  else if(brmod == BRMOD_RECHTS) report=REPORT_RECHTS;
+  else if(brmod == BRMOD_LINKS) report=REPORT_LINKS;
+  else if(brmod == BRMOD_PROZENT) report=REPORT_PROZENT;
+  else if(brmod == BRMOD_BLIND) report=REPORT_BLIND;
+  report += farbe * REPORT_FARBE + !!scroll * REPORT_SCROLL + 
+    kompakt * REPORT_KOMPAKT + max * REPORT_MAX;
+
+  BMASTER->SetReportModus(MENV,report);
+  return 1;
+}
+
+void writeCurrentReportMode()
+{
+    string tMode, tColour, tScroll, tCompact, tMax;
+
+    switch(brmod)
+    {
+        case BRMOD_NORMAL:
+            tMode = "normal";
+            break;
+        case BRMOD_DIFF:
+            tMode = "diff";
+            break;
+        case BRMOD_LINKS:
+            tMode = "links";
+            break;
+        case BRMOD_RECHTS:
+            tMode = "rechts";
+            break;
+        case BRMOD_PROZENT:
+            tMode = "prozent";
+            break;
+        case BRMOD_BLIND:
+            tMode = "blind";
+            break;
+        default:
+            tMode = "???";
+            break;
+    }
+
+    if(farbe) {
+        tColour = " mit Farbe";
+    } else {
+        tColour = " ohne Farbe";
+    }
+
+    tScroll = "";
+    if(scroll) {
+        tScroll = " mit weniger Scroll";
+    }
+
+    tCompact = "";
+    if(kompakt) {
+        tCompact = " kompakt";
+    }
+
+    tMax = "";
+    if(max) {
+        tMax = " mit maximalen Punkten";
+    }
+
+     write("Zur Zeit: "+ tMode + tColour + tScroll + tCompact + tMax + "\n");
+}
+
+int breportmodus(string str)
+{
+  notify_fail("Breportmodus info fuer genauere Informationen.\n"); 
+  if( !str) return 0;
+  if( str == "normal" ) {
+    brmod = BRMOD_NORMAL;
+    write("Breportmodus normal!\n");
+    return Setreport();
+  }
+  if( str == "diff" ) {
+    brmod = BRMOD_DIFF;
+    write("Breportmodus mit Differenzanzeige!\n");
+    return Setreport();
+  }
+  if( str == "links" ) {
+    brmod = BRMOD_LINKS;
+    write("Breportmodus links!\n");
+    return Setreport();
+  }
+  if( str == "rechts" ) {
+    brmod = BRMOD_RECHTS;
+    write("Breportmodus rechts!\n");
+    return Setreport();
+  }
+  if( str == "farbe" ){
+    if( farbe ) {
+      farbe = 0;
+      write("Breport ohne Farben!\n");
+    }
+    else {
+      farbe = 1;
+      write("Breport mit Farben!\n");
+    }
+    return Setreport();
+  } 
+  if( str[0..5] == "scroll" ){
+    if( scroll ) {
+      scroll = 0;
+      write("Breport mit normalem Raufidlen!\n");
+    }
+    else {
+      if(sscanf(str, "scroll %d", scroll) != 1)
+        scroll = 10;
+      scrollhp = 0;
+      scrollsp = 0;
+      write("Breport mit weniger Scroll beim Raufidlen!\n");
+    }
+    return Setreport();
+  }
+  if( str == "prozent" ){
+    brmod = BRMOD_PROZENT;
+    write("Breportmodus Prozent!\n");
+    return Setreport();
+  }
+  if( str == "kompakt" ){
+    if( kompakt) {
+      kompakt = 0;
+      write("Breportmodus normal (Jede Aenderung wird angezeigt!i)\n");
+    }
+    else {
+      kompakt = 1;
+      write("Breportmodus Kompakt (Nur eine Meldung je Herzschlag)!\n");
+    }
+    return Setreport();
+  }
+  if (str == "max") {
+    if( max ) {
+      max = 0;
+      write("Breportmodus ohne Maximale Lebenspunkten.\n");
+    }
+    else {
+      max = 1;
+      write("Breportmodus mit maximalen Lebenspunkten.\n");
+    }
+    return Setreport();
+  }
+  if (str == "blind") {
+      brmod = BRMOD_BLIND;
+      write("Breportmodus im sehbehinderten Modus.\n");
+      return Setreport();
+  }
+  if( str == "info" ){
+    write("Folgende Reportmodi stehen zur Verfuegung:\n"
+      "   normal    Normaler Reportmodus wie vom Teddy.\n"
+      "   diff      Differenz der lps und mps wird zusaetzlich angezeigt.\n"
+      "   links     Kurze Anzeige auf linker Blidschirmseite.\n"
+      "   rechts    Kurze Anzeige auf rechter Blidschirmseite.\n"
+      "   prozent   Lebens und Magiepunkte in Prozent angeben.\n"
+      "\n"
+      "   farbe     Wechselt zwischen faerbiger und normaler Anzeige.\n"
+      "             Benoetigt ansi-faehiges Terminal ( stty ansi)\n"
+      "             ansonsten wird nur Fett-Schrift verwendet.\n"   
+      "   scroll    Weniger Scrollen beim Raufidlen.\n"
+      "             Nur jeder 5te Lebenspunkt wird angezeigt.\n"
+      "   kompakt   Nur eine Meldung je Herzschlag.\n"
+      "   max       Man sieht auch die maximale Lebenspunkte.\n"+
+      "   blind     Ein spezieller Modus, angepasst fuer blinde und \n"+
+      "             sehbehinderte Spieler."+ 
+      "\n");
+    writeCurrentReportMode(); 
+    return 1;
+  }
+  return 0;
+}
+
+nosave int breportfarben(string cols) 
+{
+  string *colors;
+  string new_col;
+  mapping valid_colors;
+  int i;
+
+  valid_colors = ([
+      "schwarz":"S",
+      "rot":"R",
+      "gruen":"G",
+      "gelb":"Y",
+      "blau":"B",
+      "lila":"P",
+      "zyan":"C",
+      "weiss":"W",
+      "normal":"N"]);
+  if( TP->QueryProp(P_TTY) == "dumb" )
+    return notify_fail("Du musst vorher mittels 'stty' die Farben aktivieren!\n"),0;
+  if(!cols || cols == "hilfe") 
+  {
+    write(
+      "Hier kannst Du die farbliche Anzeige des Berserkerreports umstellen.\n"
+      "Fuer jede der 5 Abstufungen kann eine eigene Farbe gewaehlt werden.\n"
+      "Syntax: breportfarben farbe1 farbe2 farbe3 farbe4 farbe5\n"
+      "Moegliche Farben: schwarz, rot, gruen, gelb, blau, lila, zyan, weiss.\n"
+      "Farbentest:       "+ANSI_BOLD+ANSI_BLACK+"schwarz  "+ANSI_RED+"rot  "+
+      ANSI_GREEN+"gruen  "+ ANSI_YELLOW+"gelb  "+ANSI_BLUE+"blau  "+ANSI_PURPLE+
+      "lila  "+ANSI_CYAN+"zyan  "+ ANSI_WHITE+"weiss "+ANSI_NORMAL+"\n"
+      "breportfarben standard setzt die Werte wieder auf den normalen Wert.\n"
+      "Aktuelle Einstellung: "+ANSI_BOLD);
+    for(i = 0; i < 5; i++)
+    {
+      write(report_colors[breportfarbe[i..i]] + "*** ");
+    }
+    write(ANSI_NORMAL+ "\n");
+    return 1;
+  }
+  if(cols == "standard") 
+  {
+    breportfarbe = "RPCGY";
+    write("Ok, Standard Farben (Rot, Lila, Zyan, Gruen, Gelb) gesetzt!\n");
+    BMASTER->SetReportColors(TP, breportfarbe);
+    return 1; 
+  }
+  colors=explode(cols, " ");
+  new_col = "";
+  if(sizeof(colors) != 5) 
+    return notify_fail("Es muessen fuenf Farben angegeben werden!\n"),0;
+
+  for(i = 0; i <= sizeof(colors) - 1; i++) 
+  {
+    if(!member(valid_colors, colors[i])) 
+    {
+      write(sprintf("Falsche Farbe: %s!\n", colors[i]));
+      return -1;
+    }
+    new_col += valid_colors[colors[i]];
+  }
+  breportfarbe = new_col;
+  write("Ok, Farben gesetzt!\n");
+  BMASTER->SetReportColors(TP, breportfarbe);
+  return 1;
+}  
+
+int toeten(string str)
+{
+  object ob;
+
+  if(!random(20)){
+    switch(random(3)){
+      case 0:
+        write(BS("Du ueberpruefst nochmal den Halt Deines Stirnbandes, "
+              "bevor Du Dich in den Kampf stuerzst."));
+        break;
+      case 1:
+        write(BS("Du nimmst Deinen ganzen Mut zusammen und stuerzt Dich in "
+            "den Kampf."));
+        break;
+      case 2:
+        if(objectp(ob = TP->QueryProp(P_WEAPON)) )
+          write(BS("Du laesst "+ob->name(WEN,1)+" noch einmal pruefend "
+             "durch die Luft sausen und wirfst Dich auf Deine Gegner."));
+        break;
+    }
+  }
+  return 0;
+}
+     
+string short()
+{
+  string s;
+
+  if (QueryProp(P_WORN) && TP && TP != QueryProp(P_WORN) &&
+      QueryProp(P_WORN)->QueryProp(P_GUILD) != GUILDNAME)
+    return 0;
+
+  if(QueryProp(P_WORN)) s=" (um den Kopf gebunden)"; else s="";
+  if(this_player() && this_player()->QueryProp(P_TTY)=="ansi")
+     return "Ein "+ANSI_RED+"blutrotes"+ANSI_NORMAL+" Stirnband"+s+".\n"; 
+  return QueryProp(P_SHORT)+s+".\n";
+}
+
+string name(int casus, int demon)
+{
+  string r, b, s, n;
+  if (demon == 2)
+    demon = SuggestArticle(QueryProp(P_NAME));
+  if( this_player() && this_player()->QueryProp(P_TTY) == "ansi") {
+     r = ANSI_RED; n = ANSI_NORMAL;
+  }
+  else {
+    r = "";n = "";
+  }
+  b = "blutrot";
+  s = "Stirnband";
+  switch(casus)
+  {
+    case WEN:
+    case WER: return demon?"das "+r+b+"e"+n+" "+s:"ein "+r+b+"es "+n+s;
+    case WESSEN: return demon?"des "+r+b+"en"+n+" "+s+"es":"eines "+r+b+"en "+n+s+"es";
+    case WEM: return demon?"dem "+r+b+"en"+n+" "+s:"einem "+r+b+"en "+n+s;
+    case RAW: return "Stirnband";
+  }
+}
+
+string Name(int casus, int daemon)
+{
+  return capitalize(name(casus,daemon));
+}
+
+void PowerRegain(int suc)
+{
+  if( file_name(PO) != "/spellbooks/berserker_spells" ) return;
+  powerregain = (suc - 9000) / 250;
+  call_out("RemoveRegain", suc / 200);  
+}
+
+void RemoveRegain()
+{
+  powerregain=0;
+}
+
+int bzuecke(string str)
+{
+  object ob;
+  if( TP->QueryProp(P_GUILD_LEVEL) < 10 || !(BMASTER->GetMight(TP) & M_FIST) ) 
+    return 0;
+  if( !str ) ob = TP->QueryProp(P_WEAPON);
+  else if( !ob = present(str, TP) )
+    return notify_fail("Was willst Du mit eisernem Griff festhalten?\n"),0;
+  if( !objectp(ob) || ob->QueryProp(P_WEAPON_TYPE) != WT_AXE )
+    return notify_fail("Du kannst nur Aexte mit eisernem Griff festhalten.\n"),0;
+  if( ob->QueryProp(P_CURSED) )
+    return notify_fail("Das geht jetzt nicht!\n"),0;
+  ob->SetProp(P_CURSED, "Du haeltst "+ob->name(WEN)+" mit eisernem Griff fest.\n");
+  ob->wield_me();
+  write("Du nimmst "+ob->name(WEN)+" ganz fest in Deine Haende.\n");
+  say(TP->Name(WER)+" nimmt "+ob->name(WEN)+" ganz fest in die Haende.\n");
+  call_out("bunzuecke", 120 + random(120), ob);
+  return 1;
+}
+
+void bunzuecke(object ob)
+{
+  if( objectp(ob) )
+  {
+    ob->SetProp(P_CURSED, 0);
+    if( objectp(TP) && TP->QueryProp(P_WEAPON) == ob)
+      write("Dein eiserner Griff laesst nach.\n");
+  }
+}
+
+int heimkehr(string str)
+{
+  int tport;
+ 
+  if( TP->QueryProp(P_GUILD) != GUILDNAME || TP->QueryProp(P_GUILD_LEVEL) < 12)
+    return 0;
+  notify_fail("So oft kannst Du nicht heimkehren!\n");
+  if( time() - TP->QueryProp("letzte_heimkehr") < 12 * 60 * 60)
+    return 0;
+
+  notify_fail("Von hier aus kannst Du nicht heimkehren!\n");
+  if( (tport = ENV(TP)->QueryProp(P_NO_TPORT)) && 
+      (tport & NO_TPORT_OUT || tport & NO_TPORT) )
+    return 0;
+
+  notify_fail("Im Kampf geht das nicht!\n");
+  if( TP->InFight() )
+    return 0;
+
+  notify_fail("So kurz nach dem Kampf kannst Du nicht heimkehren!\n");
+  if( time() - TP->QueryProp(P_LAST_DAMTIME) < 60 )
+    return 0;
+
+  write("Du kehrst in die Berserkergilde heim!\n");
+  TP->move(GUILD, M_TPORT, "in die Berserkergilde heim", "kehrt",
+      "erscheint ploetzlich");
+  TP->SetProp(P_SP, 0);
+  TP->SetProp(P_MV, 0);
+  TP->SetProp(P_NEXT_SPELL_TIME, time() + 3 * 60);
+  TP->SetProp("letzte_heimkehr", time());
+  return 1;
+}
+
+string QueryVersion() 
+{
+  return LATEST_STIRNBAND_VERSION + 1;
+}
+

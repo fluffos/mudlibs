@@ -1,0 +1,495 @@
+/* vc_room.c - personalisierter Rassenwechselraum
+ * ____________________________________(i) Anatol@Silberland (1999-2012) */
+
+#pragma strict_types
+
+#include "../../defines.h"
+
+inherit STD "room";
+
+#include <properties.h>
+#include <wizlevels.h>    
+#include <moving.h>      
+#include <new_skills.h>      
+#include <thing/properties.h>
+#define MASTA RASSENWECHSEL "m/change"
+
+#define HALL ROOM "halle"
+#define QUITRAUM ROOM "kammer"
+
+#define TR(x) tell_room(this_object(),break_string("\n"+x+"\n",77,0,1))
+#define TR2(x) tell_room(this_object(),"\n"+\
+    break_string(x,65,"              ",1)[2..]+"\n")
+
+// Dieses Define ENTFERNEN, wenn der Rassenwechsel aktiv ist.
+// #define TEST_MODE  1
+
+public int prevent_shadow(object o) { return 1; }
+
+public void create() {
+  ::create(); 
+  seteuid(getuid(this_object()));
+  SetProp(P_INT_SHORT,"In hoeheren Sphaeren der heiligen Magie");
+  SetProp(P_INT_LONG, "In hoeheren Sphaeren der heiligen Magie.");
+  SetProp(P_LIGHT,1);   
+  SetProp(P_INDOORS,0);  
+  SetProp(P_ENVIRONMENT,([ENV_TEMPERATURE:24,ENV_TERRAIN:TT_OTHER]));
+  AddCmd("","cmdParse",1);
+}
+
+nosave int cmdParse() {
+  if ((!this_player()) || (IS_WIZARD(this_player())))
+    return 0;
+  return 1;
+}
+
+public void BecomesNetDead(object pl) {
+  if ((objectp(pl)) && (pl))
+    pl->move(HALL,M_GO,0,"faellt netztot davon",
+        "einem Lichtblitz und faellt erschoepft vom Podest herunter");
+    remove();
+  return;
+}
+
+public varargs int PreventFollow(object ob) {
+  if (ob!=this_object()) {
+    catch(previous_object()->RemovePursuer(this_object()));
+    return destruct(this_object()),2;
+  }
+  else return 0;
+}
+
+public string GetExits() { return 0; }
+
+private nosave void doFinal(string new_race) {
+  string uid, old_race, shell, guild, home, homedesc;
+  int gender;
+  if ((!this_player()) || (!interactive(this_player())) ||
+    (environment(this_player())!=this_object()) || 
+    (!new_race) || (!stringp(new_race)) ||
+    (process_call())) 
+    return;
+  uid=getuid(this_player());
+  old_race=(string)this_player()->_query_race();
+  if (IS_LEARNER(this_player())) 
+    write("*ARGH! WAS MACHST DU ALS MAGIER HIER? "
+          "- Naja, selbst schuld. :-P\n");
+
+
+  // Ist die Frage, was das Standardverhalten waere...
+  write("*Reinitialisiere Standardgildenzugehoerigkeit.\n"); 
+  this_player()->SetProp(P_DEFAULT_GUILD,0);
+
+  switch (new_race) {
+    case "formloser": shell="unshaped"; break; // Kommt NICHT vor!
+    case "mensch": shell="human"; break;
+    case "dunkelelf": shell="darkelf"; 
+       this_player()->SetProp(P_DEFAULT_GUILD,"dunkelelfen");
+       break;
+    case "zwerg": shell="dwarf"; break;
+    case "oger": shell="ogre"; break;
+    case "fee": shell="fairy"; break;
+    case "ork": shell="orc"; break;
+    default: shell=new_race; break;
+  }
+  if (member(get_dir("/std/shells/*.lpc"),shell+".lpc")==-1) {
+    write("FEHLER: Konnte entsprechende Rasse nicht finden!\n"
+          "Bitte Erzmagier oder Anatol verstaendigen!\n");
+    DO_LOG(LOG "rassenwechsel.err", 
+      sprintf("%s - Shell nicht gefunden %s -> %s!",
+      capitalize(uid),new_race,shell));
+      call_out("sequence",0,13);
+      return;
+    }
+  
+  printf("*Setze neue Rasse: %s... ", shell);
+    if (((int)(MASTA->set_player_object(uid, "/std/shells/"+shell)))==1)
+    write("ok\n"); 
+  else {
+    write("fehlgeschlagen\n");
+    DO_LOG(LOG "rassenwechsel.err", 
+      sprintf("%s - Shell konnte nicht gesetzt werden %s -> %s!",
+      capitalize(uid),new_race,shell));
+      call_out("sequence",0,13);
+      return;
+  }
+
+  write("*Trage Zeitpunkt des Rassenwechsels ein... ") ;
+  if (((int)(this_player()->SetProp(P_LAST_RACE_CHANGE,time())))==time())
+    write("ok\n"); 
+  else  {
+    write("fehlgeschlagen\n");
+    DO_LOG(LOG "rassenwechel.clear", 
+      sprintf("%s - P_LAST_RACE_CHANGE konnte nicht gesetzt werden (%d)!)",
+      capitalize(uid),time()));
+  }
+  this_player()->Set(P_LAST_RACE_CHANGE,SAVE,F_MODE_AS); 
+  write("*Bereite Reinitialisierung der Rasseneigenschaften vor... "); 
+  if (this_player()->ResetRaceDescription())
+    write("ok\n"); 
+  else  {
+    write("fehlgeschlagen\n");
+    DO_LOG(LOG "rassenwechel.clear", 
+      sprintf("%s - ResetRaceDescriptions() lieferte 0",
+      capitalize(uid)));
+  }
+ 
+#ifndef TEST_MODE
+   catch(call_other(HALL,"DoShout",uid));
+#endif
+
+  DO_LOG(LOG "rassenwechsel.log",sprintf("%s wechselt von %s auf %s",
+    capitalize(uid),old_race, capitalize(new_race)));
+
+  guild=(string)(this_player()->QueryProp(P_GUILD));
+  gender=(int)(this_player()->QueryProp(P_GENDER));
+
+  if ((strlen(home=(string)this_player()->QueryProp(P_START_HOME))) &&
+          (!catch(homedesc=(string)call_other(home,"QueryProp",P_INT_SHORT)))) {
+      printf("*Bewege Spieler an seinen Startpunkt (%s).\n",homedesc);
+      this_player()->move(home,M_GO|M_NOCHECK|M_NO_SHOW|M_SILENT);
+  }
+  else {
+    write("*Bewege Spieler in die Kammer.\n");
+    this_player()->move(QUITRAUM,M_GO|M_NOCHECK|M_NO_SHOW|M_SILENT);
+    write("*Setze temporaeren Startpunkt.\n");  // Reihenfolge wichtig!
+    this_player()->SetProp(P_START_HOME,QUITRAUM);
+  }
+  write("*Beende Spielerobjekt.\n");
+  write("\n\n          ----------------------------------------------------\n");
+  write("            Du solltest Dich besser gleich wieder einloggen.\n");
+  write("          ----------------------------------------------------\n\n");
+  this_player()->quit();
+
+  // this_player() nicht mehr verfuegbar!
+
+  // Notiz an die Gilde. Dass der Spieler schon gequittet ist, ist ein
+  // nuetzlicher Nebeneffekt: so kommt niemand auf den Gedanken, teure
+  // Operationen an den Aufruf ranzuhaengen. 
+
+#ifndef TEST_MODE
+
+  if ( (stringp(guild)) && (strlen(guild)) ) 
+    MASTA->send_notification_to_guild("/gilden/"+guild, 
+       capitalize(new_race), capitalize(uid)) ;
+
+  // Notiz an den Info-Kanal.
+
+   MASTA->send_notification_to_info_channel(
+       sprintf("%s, vormals Angehoerige%s %s, ist jetzt ein%s %s!",
+         capitalize(uid), 
+	 (gender==FEMALE?"":"r"),
+	 (string)HALL->GetPlayerRace(old_race,2),
+	 (gender==FEMALE?"e":""),
+	 (string)HALL->GetPlayerRace(new_race,(gender==FEMALE?1:0))));
+
+  // Notiz an die Zeitung.
+  // board - write - id - time - title - message
+
+
+  MASTA->send_notification_to_newspaper(
+    ({ "bekanntmachungen", "Myrrwhyn", 0, 0, 
+       sprintf("%s ist jetzt ein%s %s!",capitalize(uid), 
+	 (gender==FEMALE?"e":""),
+	 (string)HALL->GetPlayerRace(new_race,(gender==FEMALE?1:0))),
+      sprintf(
+        "Der Hohe Rat der Sternenpriester gibt hiermit bekannt:\n\n"+
+	break_string(
+	"%s nahm den weiten Weg zu unseren heiligen Hallen unter der ewigen Nacht "
+	"auf sich, auf dass dort durch die Wirkung der Magie der Wandlung "
+	"die Auren %s Gestalt aufgefrischt und neu geformt wurden.",60,"   ~| ",1)+
+	"\nUnd so sei %s %s von nun an bekannt als %s %s.\n"
+	"Gratulation und alles Gute, auch im Namen des Hohen Rats!\n"
+	"\nSilberland, %s,\n"
+	"Myrrwhyn Daemmersang, diensthabender Sternenpriester\n\n",
+	capitalize(uid),
+	 (gender==FEMALE?"ihrer":"seiner"),
+	 (string)HALL->GetPlayerRace(old_race,(gender==FEMALE?1:0)), capitalize(uid),
+	 (string)HALL->GetPlayerRace(new_race,(gender==FEMALE?1:0)), capitalize(uid),
+	 dtime(time())[5..16]
+	)}));
+
+#endif
+
+  destruct(this_object());
+  return;
+}
+
+public void StartSequence(object o) {
+  if ((!interactive(o)) || (catch(o->AddPursuer(this_object()))))
+    destruct(this_object());
+
+#ifndef TEST_MODE
+   call_out("sequence",6,0); 
+#else
+   call_out("sequence",0,25); 
+#endif
+  return;
+}
+
+nosave varargs void sequence(int x, string rasse) {
+ mixed n;
+
+ if (!this_player()) return (void) PreventFollow(this_object());
+
+ switch(x) {
+   case 0:
+     TR("\n\nTotenstille. Und Du weisst nicht einmal, wo Du bist.\n\n");
+     n=8; break;
+   case 1:
+     TR("Wie aus weiter Ferne vernimmst Du sehr leise sphaerische Klaenge.\n");
+     n=8; break;
+   case 2:
+     TR("Die schwebenden Toene werden lauter, sie hoeren sich "
+      "an wie ein wortloser, wunderschoener Gesang...");
+     n=6; break;
+   case 3:
+     TR("Der Gesang scheint wirklich rasch naeher zu kommen, "
+      "es klingt einfach toll! Langsam entspannst Du Dich und harrst der "
+      "schoenen Dinge, die da kommen.");
+     n=4; break;
+   case 4:
+     TR("Die berauschende Musik hat Dich eingehuellt, Du "
+      "schwebst mit verfuehrenden Melodien, mit bezaubernden Klaengen, "
+      "scheinst in Regenboegen zu tanzen...");
+     n=4; break;
+   case 5:
+     TR("Die Klaenge des ueberwaeltigenden Tohubawohu scheinen "
+      "langsam aber bestaendig soetwas wie eine Stimme zu bilden, die dann "
+      "zu sprechen beginnt:");
+     n=4; break;
+   case 6:
+     TR2("'' Sei willkommen, kleines Wesen. ''");
+     n=4; break;
+   case 7:
+     TR2("'' Wir sind die Magie der Wandlung. ''");
+     n=4; break;
+   case 8:
+     TR2("'' So bist Du denn zu Uns gekommen, um Deine Gestalt mit dem Denken "
+       "Deines Geistes zu verbinden, ein Ansinnen voller Edelmut.''");
+     n=6; break;
+   case 9:
+     TR2("'' Kleines Wesen, nenne Uns Deinen Namen. ''");
+     n="inputName"; break;
+   case 10:
+     TR("Der beschrauschende Farbenstrudel wird schwaecher, "
+       "die sinneraubende Musik zieht sich von Dir zurueck.");
+     n=8; break;
+   case 11: 
+     TR("Immer leiser werden die Klaenge, Du verspuerst einen "
+       "Schmerz in der Seele, die Nichterfuellung eines Traumes...");
+     n=10; break;
+   case 12: 
+     TR("\nDu fuehlst Dich einsam und ... so leer...\n\n");
+     n=8; break;
+   case 13:
+     this_player()->move(HALL,M_GO,0,"verschwindet", "erscheint mit "
+        "einem Lichtblitz und faellt erschoepft vom Podest herunter");
+     n=0; break;
+   case 14:
+     TR2("'' Kleines Wesen "+capitalize(getuid(this_player()))+". "
+      "Jetzt erkennen Wir "
+      "Dich, Dein Selbst hat sich Uns geoeffnet. Noch einmal heissen Wir "
+      "Dich willkommen. ''");
+     n=8; break;
+   case 15:
+     TR("Die Klaenge werden intensiver, die Farbenwirbel bunter und... "
+      "wilder.");
+     n=4; break;
+   case 16:
+     TR2("'' So fahren Wir fort und dienen mit dem, weswegen "
+          "Du suchend zu Uns in Unsere Welt gekommen bist. ''");
+     n=8; break;
+   case 17:
+     TR("Die Magie, die Musik umhuellt Dich enger, Farben scheinen "
+       "wild um Dich herumzuwirbeln.");
+     if (!(HALL->GetInterval(this_player())))
+       x+=2;
+     n=9; break;
+   case 18:
+     TR2("'' Deine Gestaltsauren, kleines Wesen "+
+       capitalize(getuid(this_player()))+", "
+       "sind noch zu sehr beansprucht, Wir koennen das Risiko, sie "
+       "zum jetzigen Zeitpunkt erneut zu belasten, nicht auf Uns nehmen, "
+       "denn das Leben ist uns heilig, Wir duerfen es nicht ohne Not "
+       "in Gefahr bringen. Verzeih' Uns, "+capitalize(getuid(this_player()))+
+       ", dass Wir Dir heute nicht dienen konnten. ''");
+     n=4; break;
+   case 19:
+     TR2("'' Leb' wohl, kleines Wesen... ''");
+     n=12; x=9; break;
+   case 20:
+     TR2("'' Deine Gestaltsauren, kleines Wesen "+
+       capitalize(getuid(this_player()))+", erscheinen uns gesund und "
+       "an rechter Stelle. Wir vermoegen Dir eine neue Gestalt zu schenken, "
+       "doch zuvor muessen Wir Gewissheit erlangen, dass es Dein Geist ist, "
+       "der eine andere Huelle begehrt und Du nicht Sklave fremder Maechte "
+       "wurdest. ''");
+     n=16; break;
+   case 21:
+     TR2("'' SAGE UNS, "+upperstring(getuid(this_player()))+
+       ", HAST DU DICH UEBER DIE KONSEQUENZEN DEINES HANDELNS INFORMIERT "
+       "UND BIST DENNOCH GEWILLT, DEINE GESTALT UND "
+       "RASSENZUGEHOERIGKEIT ZU AENDERN? SO ANTWORTE MIT JA. BIST DU "
+       "DIR UNSICHER, HAST ES DIR GAR ANDERS UEBERLEGT ODER TRAEGST NOCH "
+       "DINGE BEI DIR, DIE DU KEINESFALLS OHNE AUFSICHT LASSEN MOECHTEST, "
+       "KLEINES WESEN, "
+       "SO ANTWORTE MIT NEIN, DU KANNST ZU EINEM SPAETEREN ZEITPUNKT "
+       "WIEDERKEHREN. ENTSCHEIDE DICH JETZT! ''");
+     n="inputJaNein"; break;
+   case 22:
+      TR2("'' Zoegere lieber einmal zuviel als zuwenig, "+
+      capitalize(getuid(this_player()))+", Entscheidungen wie diese eine "
+      "hier moegen fatale Folgen haben. Doch denke daran, dass Wir immer "
+      "zu Deinen Diensten stehen werden. Lebe denn wohl, kleines Wesen, "
+      "wir entlassen Dich zurueck in Deine Welt. ''");
+      x=9;n=14; break;
+   case 23:
+      TR2("'' Es freut Uns, dass Du von Unseren "
+        "Hilfen und Moeglichkeiten Gebrauch machen moechtest. ''");
+      n=10;break;
+   case 24:
+      TR2("'' Nach den Regeln dieser Welt, vermagst Du Deinen Geist in "
+        "eine Gestalt der Rassen "+
+        (string)call_other(HALL,"GetChoices",this_player(),2)+
+        " hineinzuversetzen. Waehle mit Bedacht, denn Deine Auren, kleines "
+        "Wesen, muessen sich erholen, bevor sie erneut um eine andere "
+        "Gestalt genoetigt werden koennten. Waehle mit dem Herzen, erwaehle "
+        "die Rasse, nach der sich Geist und Seele sehnen, gib Dich nicht hin "
+        "den falschen Geluesten nach einer Gestalt, die nur niederen Zielen "
+        "dienlich ist. ''");
+      n=10;break;
+   case 25:
+      TR2("'' So waehle aus, "+capitalize(getuid(this_player()))+", zur "
+        "Wahl stehen "+
+        (string)call_other(HALL,"GetChoices",this_player(),2)+". Hast Du "
+        "doch noch Zweifel, waehle 'keine'. ''");
+      n="inputRace";break;
+   case 26:
+      TR2("'' Kleines Wesen, Du hast Dich entschieden. Moegest Du als "+
+          "Angehoerige"+((int)this_player()->QueryProp(P_GENDER)==MALE?"r":"")+
+          " der Rasse "+capitalize(rasse)+" gluecklich werden und Dein "
+          "Geist sich in der neuen Gestalt voll entfalten und lange "
+	  "wohlfuehlen! ''");
+      n=8;break;
+   case 27:
+      TR2("'' Lebt denn wohl, "+capitalize(getuid(this_player()))+". ''");
+      n=2;break;
+   case 28:
+      doFinal(rasse); 
+      n=0;
+      break;
+   case 29:
+      this_player()->move(HALL,M_GO,0,"verschwindet", "erscheint mit "
+        "einem Lichtblitz und faellt staunend und in neuer Gestalt vom Podest "
+        "herunter");
+      destruct(this_object());
+      n=0;
+      break;
+   default:
+     TR("\n\nFEHLER! Abbruch der Sequenz.\n\n");
+     if (this_player()) this_player()->move(HALL,M_GO,0,"purzelt davon",
+       "erscheint in einem Funkenregen");
+ }
+ if (!n) return;
+ else if (intp(n))
+   call_out("sequence",n,x+1,rasse);
+ else if (stringp(n)) {
+   tell_object(this_player(),"\n] ");
+   input_to(n,0,0);
+ }
+ return;
+}
+
+nosave void inputRace(string s, int f) {
+
+  if ((!this_player()) || (this_player()!=this_interactive()) ||
+      (((member((string*)call_other(HALL,"GetChoices",this_player(),0),
+           capitalize(s=lowerstring(s)))==-1)) && (s!="keine")))
+    switch (f) {
+      case 0..3:
+        TR2("'' Zur Wahl stehen "+
+          (string)call_other(HALL,"GetChoices",this_player(),2)+". Hast Du "
+          "Zweifel, waehle 'keine'. ''");
+        tell_object(this_player(),"\n] ");
+        input_to("inputRace",0,f+1);
+        break;
+      default:
+        TR2("'' So bedauern Wir, Dir nicht helfen zu koennen... "
+           "Verzeiht Uns Unsere Unvollkommenheit, Wir muessen Dich, "
+           "kleines Wesen nun zurueckschicken in Deine Welt. Lebe "
+           "denn wohl... ''");
+        call_out("sequence",5,10);
+        break;
+    }   
+  else {
+    if (s=="keine") 
+      call_out("sequence",6,22);
+    else 
+      call_out("sequence",6,26,s);
+  }
+  return;
+}
+
+
+nosave void inputJaNein(string s, int f) {
+  if ((this_player()!=this_interactive()) || (!this_player()) || 
+      (!sizeof(regexp(({s=lowerstring(s)}),
+                     "^(sag |antwort |antworte |sage |)(ja|nein)$"))))
+    switch (f) {
+      case 0..4:
+        TR2("'' ANTWORTE JA ODER NEIN, ENTSCHEIDE DICH. ''");
+        tell_object(this_player(),"\n] ");
+        input_to("inputJaNein",0,f+1);
+        break;
+      default:
+        TR2("'' So nehmen Wir Deine Antwort als ein Zeichen der "
+           "Ablehnung. Lebe denn wohl... ''");
+        call_out("sequence",5,10);
+        break;
+    }
+  else {
+    if (s[<2..<1]!="ja") {
+      call_out("sequence",6,22);
+    }
+    else {
+      call_out("sequence",10,23);
+    }
+  }
+  return;
+}
+    
+nosave void inputName(string s, int f) {
+  if ((!this_player()) || (getuid(this_player())!=lower_case(s)))
+    switch (f) {
+      case 0:
+        TR2("'' Kleines Wesen, nenne Uns Deinen Namen. ''");
+        tell_object(this_player(),"\n] ");
+        input_to("inputName",0,f+1);
+        break;
+      case 1:
+        TR2("'' Kleines Wesen, nenne Uns Deinen Namen. Dein Name ist Unser "
+           "Schluessel zu Deinem Selbst, ohne den Wir Dich nicht erkennen "
+           "koennen. ''");
+        tell_object(this_player(),"\n] ");
+        input_to("inputName",0,f+1);
+        break;
+      case 2:
+        TR2("'' Kleines Wesen, unterschaetze nicht Die Wichtigkeit Deines "
+           "Namens. Dein Name ist Unser Schluessel zu Deinem Selbst, ohne "
+           "diesen Schluessel koennen Wir Dich nicht erkennen. Wir wollen "
+           "Dir nichts uebles, so nenne Uns Deinen Namen. ''");
+        tell_object(this_player(),"\n] ");
+        input_to("inputName",0,f+1);
+        break;
+      default:
+        TR2("'' Kleines Wesen, Wir vermoegen nicht, Dich zu erkennen, Dein "
+           "Selbst bleibt Uns verschlossen. Wir muessen Dich wieder in "
+           "Deine Welt entlassen... ''");
+        call_out("sequence",5,10);
+        break;
+    }
+  else
+    call_out("sequence",5,14); 
+  return;
+}  

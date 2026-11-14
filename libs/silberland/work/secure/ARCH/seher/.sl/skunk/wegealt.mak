@@ -1,0 +1,39 @@
+/def weg = /echo ********wege*******%;/wege%;/echo *******************%;
+/def wege = /echo g2e%;/echo g2z%;/echo e2z%;/echo n2f%;/echo z2w%;/echo z2s%;/echo z2t
+/def z2g = /wegaus%;/zwerg_eingang2hochland%;/hochland2midas_guild%;/wegan%;schau%;
+/def g2z = /wegaus%;/midas_guild2hochland%;/hochland2zwerg_eingang%;/wegan%;schau%;
+/def e2g = /wegaus%;/elf_hain2hochland%;/hochland2midas_guild%;/wegan%;schau%;
+/def g2e = /wegaus%;/midas_guild2hochland%;/hochland2elf_hain%;/wegan%;schau%;
+/def n2f = /wegaus%;s%;w%;w%;w%;nw%;sw%;sw%;w%;sw%;sw%;s%;s%;s%;sw%;w%;w%;sw%;sw%;s%;sw%;s%;s%;s%;/wegan%;s%;
+/def f2n = /wegaus%;n%;n%;n%;n%;no%;n%;no%;no%;o%;o%;no%;n%;n%;n%;no%;no%;o%;no%;no%;so%;o%;o%;o%;/wegan%;n%;
+/def e2z = /wegaus%;/elf_hain2hochland%;/hochland2zwerg_eingang%;/wegan%;schau%;
+/def z2e = /wegaus%;/zwerg_eingang2hochland%;/hochland2elf_hain%;/wegan%;schau%;
+/def z2s = /wegaus%;/zwerg_eingang2soordhin%;/wegan%;schau
+/def s2z = /wegaus%;/soordhin2zwerg_eingang%;/wegan%;schau
+/def z2t = /wegaus%;/zwerg_eingang2troll%;/wegan%;schau
+/def t2z = /wegaus%;/troll2zwerg_eingang%;/wegan%;schau
+/def f2k = /wegaus%;/fisch2knarkh%;/wegan%;schau
+/def k2f = /wegaus%;/knarkh2fisch%;/wegan%;schau
+/def fisch2knarkh = n%;n%;n%;n%;o%;o%;so%;so%;s%;so%;o%;so%;o%;so%;so%;o%;
+/def knarkh2fisch = w%;nw%;nw%;w%;nw%;w%;nw%;n%;nw%;nw%;w%;w%;s%;s%;s%;s%;
+/def zwerg_eingang2troll = /z2w%;o%;no%;o%;o%;o%;
+/def troll2zwerg_eingang = w%;w%;w%;sw%;w%;/w2z%;
+/def zwerg_eingang2soordhin = ob%;ob%;ob%;s%;nw%;nwob%;w%;nwob%;rauf%;no%;nw%;n%;n%;n%;n%;w%;n%;o%;o%;kletter mit seil runter%;o%;s%;s%;o%;o%;n%;betrete kathedrale
+/def soordhin2zwerg_eingang = ob%;raus%;s%;w%;w%;n%;n%;w%;kletter rauf%;w%;w%;s%;o%;s%;s%;s%;s%;so%;sw%;runter%;sou%;o%;sou%;so%;n%;u%;u%;u
+/def midas_guild2hochland = n%;w%;w%;w%;w%;w%;nw%;n%;nw%;w%;nw%;w%;nw%;nw%;nw%;nw%;
+/def hochland2midas_guild = so%;so%;so%;so%;o%;so%;o%;so%;s%;so%;o%;o%;o%;o%;o%;s%;
+/def elf_hain2hochland = o%;n%;runter%;o%;so%;s%;s%;s%;s%;s%;sob%;sob%;s%;sob%;sw%;sw%;oob%;noob%;ou%;nou%;nu%;o%;no%;o%;ou%;o%;s%;sw%;sw%;ou%;o%;o%;o%;sob%;swob%;sw%;s%;nou%;sou%;nou%;o%;s%;s%;o%;sou%;o%;so%;o%;o%;
+/def hochland2elf_hain = w%;w%;nw%;w%;nwob%;w%;n%;n%;w%;swob%;nwob%;swob%;n%;no%;nou%;nu%;w%;w%;w%;wob%;no%;no%;n%;w%;wob%;w%;sw%;w%;sob%;swob%;wob%;swu%;wu%;no%;no%;nu%;n%;nu%;nu%;n%;n%;n%;n%;n%;nw%;w%;klettere rauf%;s%;w%;
+/def zwerg_eingang2hochland = ob%;ob%;ob%;s%;nw%;nwob%;w%;nwob%;sw%;sou%;s%;s%;s%;sou%;o%;o%;sou%;s%;s%;s%;
+/def hochland2zwerg_eingang = n%;n%;n%;nwob%;w%;w%;nwob%;n%;n%;n%;nwob%;no%;sou%;o%;sou%;so%;n%;u%;u%;u%;
+
+/def z2w = ultrakurz%;ob%;ob%;ob%;s%;nw%;nwob%;w%;nwob%;rauf%;no%;o%;o%;o%;no%;o%;so%;lang%;schau%;
+/def w2z = ultrakurz%;nw%;w%;sw%;w%;w%;w%;sw%;runter%;sou%;o%;sou%;so%;n%;u%;u%;u%;lang%;schau%;
+/def g2w = /g2z%;/z2w%;
+/def w2g = /w2z%;/z2g%;
+
+/def wegaus = ultrakurz
+/def wegan = lang
+/def g2f = /wegaus%;n%;w%;w%;w%;w%;w%;nw%;sw%;sw%;w%;sw%;sw%;s%;s%;s%;sw%;w%;w%;sw%;sw%;s%;sw%;/wegan%;schau%;
+/def f2g = /wegaus%;no%;n%;no%;no%;o%;o%;no%;n%;n%;n%;no%;no%;o%;no%;no%;so%;o%;o%;o%;o%;o%;s%;/wegan%;schau%;
+

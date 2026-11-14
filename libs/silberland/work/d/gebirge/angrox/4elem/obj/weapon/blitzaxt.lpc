@@ -1,0 +1,179 @@
+/*
+// /d/gebirge/angrox/4elem/obj/weapon/blitzaxt.c
+// 30-04-1997  Angrox@SilberLand 
+// Blitzaxt
+//
+//
+// 
+// Updates
+28-05-97: P_WC auf 250 
+
+*/
+
+inherit "std/weapon";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <new_skills.h>
+#include <wizlevels.h>
+#include "../../4elem.h"
+
+#define COST 30
+
+int allow_unwield=1;
+int zeit, first_use;
+
+int blitz(object gegner);
+
+void create()
+{
+  if (!is_clone(TO) )  return;
+
+  ::create();
+  if(file_name(previous_object())!="/p/daemon/itemd/itemd" && !IS_ARCH(TP)) {
+    raise_error("Illegales Clonen des Items! Sheriff! Tua wos! ");
+    destruct();
+    return;
+  }
+
+  zeit=time();
+  SetProp(P_SHORT, "Die Blitzaxt");
+  SetProp(P_LONG, BS( 
+        "Die Blitzaxt ist aus einem silbrigen Material gefertigt, "
+        +"welches staendig von kleinen Blitzen umzuckt wird. Sie sieht "
+        +"sehr maechtig aus.\n"));
+  SetProp(P_INFO, BS("Die Blitzaxt kann Deine Feinde mit dem "
+        +"mystischen Kommando \"turran\" vernichten."));
+  AddDetail("blitze", "Sie zucken um die Axt herum.");
+  AddDetail("material", "Hmmm ..Du hast keine Ahnung was das ist.");
+  SetProp(P_MAGIC, 1); 
+  SetProp(P_NAME, "Blitzaxt");
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({"axt", "blitzaxt"}) );
+  SetProp(P_WEAPON_TYPE, WT_AXE );
+  SetProp(P_WC, 250);
+  SetProp(P_WC_BONUS, (["NPC":100]));
+  SetProp(P_WC_FIXFACTOR, 0.3);
+  SetProp(P_DAM_TYPE, ({DT_SLASH, DT_LIGHTNING}) );
+  SetProp(P_NR_HANDS, 2);
+  SetProp(P_MATERIAL, ([MAT_TITANIUM:11, 
+                        MAT_LIGHTNING:40,
+                        MAT_OBSIDIAN :10,
+                        MAT_MISC_STONE: 5,
+                        MAT_OCTARINE: 15,
+                        MAT_IVORY: 5,
+                        MAT_MISC_JEWEL: 5,
+                        MAT_MISC_MAGIC:9]));
+  SetProp(P_WEIGHT, 2200);
+  SetProp(P_VALUE, 5000);
+  SetProp(P_NOBUY, 0);
+  SetProp(P_WIELD_RESTRICTIONS, ([P_LEVEL:45, A_STR:22,
+                                  SM_RACE: (["Golem": ([P_LEVEL:1]) ]),
+                                ])); 
+
+  AddCmd("turran", "spell_turran");
+  SetProp(P_COMBATCMDS,
+      ([ "turran":
+       ([ C_MIN:40,
+          C_AVG:55,
+          C_MAX:70,
+          C_DTYPES: ({DT_LIGHTNING}) ]) ]) );
+  SetProp(P_WIELD_FUNC, TO);
+}
+
+int WieldFunc(object ob, int silent)
+{
+  first_use=time()+10;
+  return 1;
+}
+
+int UnwieldFunc(object waffe, int silent) {
+  if(!allow_unwield) {
+    write("Du kannst die Blitzaxt nicht loslassen! Hilfe! "
+        "Was ist da los?\n");
+    return 0;
+  }
+  return 1;
+}
+
+int spell_turran(string str) {
+  object gegner; 
+  if (QueryProp(P_WIELDED)!=TP) {
+    notify_fail("Du musst die Axt erst zuecken!\n");
+    return 0; 
+  }
+  if (TP->QueryProp(P_SP)< COST) {
+    write("Du hast nicht genug Magiepunkte.\n");
+    return 1; 
+  }
+  if(first_use>time()) {
+    write("Die Axt muss erst Kraft sammeln.\n");
+    return 1;
+  }
+  if(str) {
+    if(gegner=present(str, ENV(TP)) )
+      if( !interactive(gegner))
+        return blitz(gegner);
+  }
+  if(gegner=TP->SelectEnemy())
+    return blitz(gegner);
+  write("Da ist ja gar kein Gegner.\n");
+  return 1;
+}
+
+
+int blitz(object gegner)
+{
+  mapping sinfo;
+  int schaden;
+
+  schaden=1;
+  if(zeit>time())
+  {
+    write("Die Axt muss erst wieder Energie sammeln.\n");
+    return 1;
+  }
+  if(TP->QueryProp(P_ATTACK_BUSY) ) 
+  {
+    write("Du bist im Moment zu sehr beschaeftigt.\n");
+    return 1;
+  }
+  TP->SetProp(P_ATTACK_BUSY, 3);
+  if((TP->QueryProp(P_SP))<COST )
+  {
+    write("Du hast nicht genug Magiepunkte!");
+    return 1;
+  }
+  TP->restore_spell_points(-COST);
+  if(!gegner)
+  {
+    write(BS("Ein Blitz zuckt aus Deiner Axt und schlaegt "
+          +"im Boden ein."));
+    say(BS("Ein Blitz zuckt aus der Axt von "+TPN+" und "
+          +"schlaegt im Boden ein."));
+    zeit=2000+time();
+    return 1;
+  }
+  printf(BS("Ein Blitz aus Deiner Axt trifft %s.\n"), gegner->name(WEM));
+  say( sprintf(BS("Ein Blitz aus der Axt von %s trifft %s.\n"), CAP(TPN),
+        gegner->name(WEN) ), ({gegner, TP}) );
+  tell_object(gegner, BS("Ein Blitz aus der Axt von "+CAP(TPN)+
+        " trifft Dich.\n"));
+  schaden=200+random(300);
+  sinfo=([SP_NAME : "turran",
+          SP_PHYSICAL_ATTACK : 0,
+          SP_SHOW_DAMAGE : 1
+        ]);
+  gegner->Defend(schaden, ({DT_LIGHTNING}), sinfo, this_player());
+  TP->ModifySkillAttribute(TP, SA_QUALITY, 150, 1);
+  allow_unwield=0;
+  call_out("allow_unwield_func", 10);
+  zeit=2500+time();
+  return 1;
+}
+
+void allow_unwield_func() {
+  allow_unwield=1;
+  return ;
+}

@@ -1,0 +1,411 @@
+/*
+ * Vivienne's unkaputtbare Katze
+ * ---
+ * 16.04.1997  Woody  schaun' ma mal, wie die erste Release so wird.
+ * 17.04.1997  Woody  set_genommen()
+ * 14.10.1997  Woody  MayAddWeight() ueberschrieben
+ *
+ */
+
+inherit "std/npc";
+
+#include <properties.h>
+#include <moving.h>
+#include <language.h>
+#include <combat.h>
+#include <wizlevels.h>
+#include "files.h"
+
+#include "vivicat.h"
+
+private int genommen, co;
+
+create()
+{
+  if (is_clone(ME)) return destruct(ME);        // Es gibt nur eine...
+  ::create();
+
+  SetProp(P_SHORT, "Eine kleine niedliche Katze");
+  SetProp(P_LONG,
+      "Du erblickst eine huebsche, relativ kraeftig aussehende Katze. "
+      "Sie schaut Dich mit leuchtenden Augen an und schnurrt sanft vor "
+      "sich hin. Ihr dunkelschwarzes Fell wirkt sehr elegant und "
+      "relativ gepflegt, auf jeden Fall aber sehr kuschelig. Sie "
+      "ist unkaputtbar und gehoert "+CAP(OWNER)+".");
+  SetProp(P_NAME, "Katze");
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({"katze", "\nvivicat"}) );
+
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_MAX_HP, 500);
+  SetProp(P_HP, 500);
+  SetProp(P_ALIGN, 1000);
+  SetProp(P_NODROP, 1);
+  SetProp(P_BODY, 100);
+  SetProp(P_XP, 0);
+
+  SetProp(P_MSGIN, "schleicht herein");
+  SetProp(P_HANDS, ({ " mit ihren Krallen", 150 }) );
+  SetProp(P_RACE, "Katze");
+  SetProp(P_REJECT,
+      ({ REJECT_DROP, "Die Katze dreht den Kopf weg.\n" }) );
+
+  AddCmd("nimm","nimm");
+  AddCmd( ({"leg","lege","setz","setze","wirf","werfe"}), "werfe");
+
+  genommen=0;
+  co=0;
+
+  if(find_player(OWNER))
+    move(ENV(find_player(OWNER)), M_GO);
+}
+
+/*
+varargs int PreventInsert(object ob)
+{
+  if (TP)
+    tell_object(TP, "Die Katze kann das nicht tragen.\n");
+  return 1;
+}
+*/
+
+varargs int MayAddWeight(int gewicht)
+{
+  return -1;
+}
+
+string _query_info()
+{
+  if (getuid(TP)==OWNER)
+    return
+      bs("Die Katze kann andere Spieler kratzen ('katzekratze <spieler>'), "
+      "anfauchen, anschnurren und um die Beine laufen ('beine <spieler>'). "
+      "Ausserdem kannst Du (und NUR Du) sie auf den Arm nehmen und wieder "
+      "auf den Boden setzen.");
+  else
+    return "Du erkennst, dass die Katze "+CAP(OWNER)+" gehoert.\n";
+}
+
+die(x)
+{
+  write("Die Katze hat offenbar nicht nur ein Leben.\n");
+  return 0;
+}
+
+remove()
+{
+  write("Die Katze hat offenbar nicht nur ein Leben.\n");
+  return 0;
+}
+
+init()
+{
+  ::init();
+  add_action("kratzen", "katzekratze");
+  add_action("kraule", "kraule");
+  add_action("kraule", "kraul");
+  add_action("streichle", "streichle");
+  add_action("streichle", "streichel");
+  add_action("fauche","fauche");
+  add_action("fauche","fauch");
+  add_action("schnurre","schnurre");
+  add_action("schnurre","schnurr");
+  add_action("beine_laufen","beine");
+}
+
+set_genommen(int x)
+{
+  if (!IS_ARCH(TI)) return;
+  return genommen=(x!=0);
+}
+
+kratzen(str)
+{
+  object ob;
+  if (getuid(TP) != OWNER) return 0;
+  notify_fail("WEN soll die Katze kratzen?\n");
+  if (!str) return 0;
+  if (genommen) {
+    write("Solange Du die Katze auf dem Arm hast, geht das leider nicht.\n");
+    return 1;
+  }
+  if (!ob=present(str,MENV)) {
+    write("So jemanden siehst Du hier nicht.\n");
+    return 1;
+  }
+  if (!living(ob)) {
+    write("Die Katze kratzt viel lieber Lebewesen!\n");
+    return 1;
+  }
+  tell_object (ob, "Die Katze schleicht sich an Dein Bein und kratzt "
+      "Dich vorsichtig mit ihrer Pfote.\n");
+  tell_room (MENV, break_string(
+      "Die Katze schleicht an "+ob->name(WESSEN)+" Bein heran und kratzt "+
+      ob->QueryPronoun(WEN)+" vorsichtig mit ihrer kleinen Pfote.\n", 78),
+      ({ ob,ME }) );
+  return 1;
+}
+
+kraule(str)
+{
+  notify_fail ("Moechtest Du vielleicht die Katze kraulen?\n");
+  if (!str) return 0;
+  if (!id(str)) return 0;
+  if (genommen) {
+    if (!objectp(ENV(MENV))) return 0;
+    tell_room(ENV(MENV),
+        CAP(MENV->name())+" krault "+MENV->QueryPossPronoun(FEMALE, WEN)+
+        " Katze auf dem Arm.\n", ({ MENV, ME }) );
+    tell_object(MENV, "Du kraulst die Katze auf Deinem Arm.\n");
+    return 1;
+  }
+  write("Du kraulst die Katze hinter den Ohren. Sie schnurrt gluecklich.\n");
+  tell_room(MENV, break_string(
+      CAP(TP->name(WER))+" krault die Katze hinter den Ohren. "+
+      "Sie schnurrt gluecklich.", 78), ({ TP,ME }) );
+  return 1;
+}
+
+streichle(str)
+{
+  if (!genommen) return 0;
+  if (!str || !id(str)) return 0;
+  if ((TP != MENV) || !objectp(ENV(MENV))) return 0;
+  tell_object(TP,
+      "Du streichelst liebevoll Deine Katze auf dem Arm.\n"
+      "Sie schliesst ihre Augen und schnurrt Dich gluecklich an.\n");
+  tell_room(ENV(TP),
+      CAP(TP->name())+" streichelt sanft "+
+      TP->QueryPossPronoun(FEMALE,WEN)+
+      " Katze auf dem Arm.\n"
+      "Sie schliesst ihre Augen und schnurrt gluecklich vor sich hin.\n",
+      ({ TP,ME }) );
+  return 1;
+}
+
+catch_tell(str)
+{
+  if (co >= MAX_CALLOUTS) return;
+  call_out("catch_tell_2", 0, str);
+  co++;
+}
+
+catch_tell_2(str)
+{
+  string wer,str2,dummy;
+  object ob;
+
+  co--;
+  if (sscanf(str,"%s tritt Dich%s", wer, str2) == 2)
+  {
+    tell_room(MENV,
+        "Die Katze springt zurueck und faucht "+TP->name(WEN)+
+        " boese an.\n", ({ TP, ME }) );
+    tell_object(TP, "Die Katze springt zurueck und faucht Dich boese an.\n");
+    return;
+  }
+  if (sscanf(str,"%s streichelt Dich%s", wer, str2) == 2)
+  {
+    if (getuid(TP) != OWNER)
+    {
+      tell_room(MENV,
+          "Die Katze schnurrt "+TP->name(WEN)+" gluecklich an.\n",
+          ({ TP, ME }) );
+      tell_object(TP, "Die Katze schnurrt Dich gluecklich an.\n");
+      return;
+    }
+    else
+    {
+      tell_room(MENV,
+          "Die Katze schnurrt gluecklich und schmiegt sich eng an "+
+          TP->name(WESSEN)+" Beine.\n", ({ TP, ME }) );
+      tell_object(TP, "Die Katze schnurrt gluecklich und schmiegt "
+          "sich eng an Deine Beine.\n");
+      return;
+    }
+  }
+  if (sscanf(str,"%s knuddelt%s Dich%s", wer, dummy, str2) == 3)
+  {
+    tell_room(MENV,
+        "Die Katze schliesst die Augen und schmust sich an "+TP->name(WEN)+
+        " ran.\n", ({ TP, ME }) );
+    tell_object(TP,
+        "Die Katze schliesst die Augen und schmust sich an Dich ran.\n");
+    return;
+  }
+  if (sscanf(lower_case(str),"%s tritt%s "+lower_case(OWNER)+"%s",
+      wer, dummy, str2) == 3)
+  {
+    tell_room(MENV,
+        "Die Katze faucht "+TP->name(WEN)+" boese an.\n", ({ TP, ME }) );
+    tell_object(TP, "Die Katze faucht Dich boese an.\n");
+    return;
+  }
+}
+
+schnurre(str)
+{
+  string wen;
+  object ob;
+
+  if (getuid(TP) != OWNER) return 0;
+  notify_fail("WEN soll die Katze anschnurren?\n");
+  if (!str) return 0;
+  if (sscanf(str, "%s an", wen) < 1) wen=str;
+  if (!ob=present(wen,ENV(TP))) return 0;
+  if (genommen) {
+    write("Solange Du die Katze auf dem Arm hast, geht das leider nicht.\n");
+    return 1;
+  }
+  if (!living(ob)) {
+    write("Die Katze schnurrt viel lieber Lebewesen an!\n");
+    return 1;
+  }
+  tell_object(ob, break_string(
+      "Die Katze schnurrt Dich an und schmiegt sich sanft an Dein Bein. "
+      "Dir wird ganz warm ums Herz.", 78));
+  tell_room(MENV,
+      "Die Katze schnurrt "+ob->name(WEN)+" sanft an.\n", ({ ob, ME }) );
+  return 1;
+}
+
+fauche(str)
+{
+  string wen;
+  object ob;
+
+  if (getuid(TP) != OWNER) return 0;
+  notify_fail("WEN soll die Katze anfauchen?\n");
+  if (!str) return 0;
+  if (sscanf(str, "%s an", wen) < 1) wen=str;
+  if (!ob=present(wen,ENV(TP))) return 0;
+  if (genommen) {
+    write("Solange Du die Katze auf dem Arm hast, geht das leider nicht.\n");
+    return 1;
+  }
+  if (!living(ob)) {
+    write("Die Katze faucht viel lieber Lebewesen an!\n");
+    return 1;
+  }
+  tell_object(ob, "Die Katze faucht Dich boese an.\n");
+  tell_room(MENV,
+      "Die Katze faucht "+ob->name(WEN)+" boese an.\n", ({ ob, ME }) );
+  return 1;
+}
+
+beine_laufen(str)
+{
+  object ob;
+  if (getuid(TP) != OWNER) return 0;
+  notify_fail("Um WESSEN Beine soll die Katze laufen?\n");
+  if (!str) return 0;
+  if (!ob=present(str,ENV(TP))) return 0;
+  if (genommen) {
+    write("Solange Du die Katze auf dem Arm hast, geht das leider nicht.\n");
+    return 1;
+  }
+  if (!living(ob)) {
+    write("Die Katze laeuft viel lieber um Lebewesen rum!\n");
+    return 1;
+  }
+  tell_object(ob,
+      "Die Katze laeuft Dir zwischen den Beinen durch.\n"
+      "Du musst aufpassen, dass Du nicht stolperst.\n");
+  tell_room(MENV, break_string(
+      "Die Katze laeuft zwischen "+ob->name(WESSEN)+
+      " Beinen durch. "+capitalize(ob->QueryPronoun())+
+      " muss aufpassen, dass "+ob->QueryPronoun()+
+      " nicht stolpert.", 78), ({ ob,ME }));
+  return 1;
+}
+
+werfe(str)
+{
+  string was;
+
+  if (!str) return 0;
+  if (sscanf(str,"%s weg",was)<1)
+    if (sscanf(str,"%s ab",was)<1)
+      return 0;
+
+  if (!id(was))
+    return 0;
+
+  if (!genommen)
+  {
+    write("Aber Du hast sie doch gar nicht auf dem Arm!\n");
+    return 1;
+  }
+  genommen=0;
+  write("Du setzt die Katze sanft auf den Boden.\n");
+  tell_room(ENV(TP), CAP(TP->name(WER))+
+      " setzt die Katze sanft auf dem Boden ab.\n", ({ TP,ME }) );
+  move(ENV(TP), M_GO|M_SILENT);
+  return 1;
+}
+
+nimm(str)
+{
+  if (!str || !id(str))
+    return 0;
+  if (genommen && (MENV==TP))
+  {
+    write("Aber Du hast sie doch schon genommen!\n");
+    return 1;
+  }
+  if (genommen) return 0;
+  if (getuid(TP) != OWNER) {
+    write("Die Katze faucht und greift Dich mit ihren Krallen an.\n"
+        "Schnell ziehst Du Deine Haende zurueck.\n");
+    tell_room(ENV(TP), CAP(TP->name(WER))+" versucht, die Katze aufzunehmen, "
+        "die daraufhin wild zu fauchen beginnt.\n"+
+        CAP(TP->name(WER))+" zuckt zurueck.\n", ({ TP,ME }) );
+    return 1;
+  }
+  genommen=1;
+  write("Du nimmst die Katze sachte auf den Arm.\n");
+  tell_room(ENV(TP), CAP(TP->name(WER))+" nimmt die Katze sanft auf "
+      "den Arm. Sie schnurrt gluecklich.\n", ({ TP,ME }) );
+  move(TP, M_GO|M_SILENT|M_NOCHECK);
+  return 1;
+}
+
+Defend(dam, dam_type, spell, enemy)
+{
+  object ob;
+  enemy->StopHuntFor(ME, 1);
+  StopHuntFor(enemy, 1);
+  ob=find_player(OWNER);
+  if (!ob || (ENV(ob) != MENV) || (ob==enemy))
+  {
+    tell_object(enemy, "Die Katze faucht Dich boese an und springt geschickt "
+        "aus Deiner Reichweite.\n");
+    tell_room(ENV(enemy), break_string("Die Katze faucht "+enemy->name(WEN)+
+        " boese an und springt geschickt aus "+
+        enemy->QueryPossPronoun(FEMALE, WEM)+
+        " Reichweite.", 78), ({ enemy,ME }) );
+  }
+  else
+  {
+    move(ob, M_GO|M_SILENT|M_NOCHECK);
+    genommen=1;
+    tell_object(enemy, break_string("Die Katze beginnt, Dich fuerchterlich "
+        "anzufauchen und springt bei "+ob->name(WEM)+" auf den Arm. "+
+        CAP(ob->name(WER))+" streichelt kurz "+
+        ob->QueryPossPronoun(FEMALE,WEN)+" Katze und schaut Dich "
+        "anschliessend dermassen boese an, dass es Dir eiskalt den Ruecken "
+        "hinunterlaeuft. Du beschliesst, NIE wieder diese Katze "
+        "anzugreifen.\n", 78));
+    tell_object(ob, break_string("Die Katze faucht "+enemy->name(WEN)+
+        " boese an und springt dann auf Deinen Arm. Du streichelst kurz "
+        "Deine Katze und schaust "+enemy->name(WEN)+" SEHR boese an.", 78));
+    tell_room(ENV(enemy), break_string("Die Katze faucht "+enemy->name(WEN)+
+        " boese an und springt bei "+ob->name(WEM)+" auf den Arm. "+
+        CAP(ob->name(WER))+" streichelt kurz "+
+        ob->QueryPossPronoun(FEMALE,WEN)+" Katze und schaut dann "+
+        enemy->name(WEN)+" boese an.", 78), ({ enemy,ob,ME }) );
+  }
+  return 0;
+}
+
+

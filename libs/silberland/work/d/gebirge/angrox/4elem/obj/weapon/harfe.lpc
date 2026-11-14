@@ -1,0 +1,223 @@
+/*
+// /d/gebirge/angrox/4elem/obj/weapon/harfe
+// 30-04-1997  Angrox@SilberLand 
+// Die Harfe der Winde
+//
+//
+// 
+// Update 
+
+*/
+
+
+inherit "std/weapon";
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <new_skills.h>
+#include "../../4elem.h"
+#include "/p/std/barden/instrument.h"
+
+#define COST_MELODIE 10
+#define COST_ATTACKE 5
+
+int zeit;
+string zauber;
+int windzauber(object gegner);
+
+void create()
+{
+  if (!is_clone(TO) )  return;
+
+  ::create();
+  zeit=time();
+  SetProp(P_SHORT, "Die Harfe der Winde");
+  SetProp(P_LONG, BS( 
+        "Die Harfe der Winde ist eine Harfe aus voellig unbekannten "
+        +"Material. Ihre Saiten scheinen aus reinem Licht zu bestehen, "
+        +"und sie ist staendig von einem Windstrom umgeben."));
+
+  AddDetail("saiten", 
+      "Die Saiten bestehen aus reinem Licht.");
+  AddDetail("windstrom", 
+      "Er ist deutlich zu erkennen, wie er die Harfe umspielt.");
+
+
+  SetProp(P_INFO, "Die Harfe ist mehr ritueller Fokus der "
+      +"Elementarmagie denn Waffe, da mit ihr transaetherische "
+      +"elementaren Wesenheiten in unsere Sphaere gerufen "
+      +"werden koennen. Nichtsdesdotrotz "
+      +"koennen verschiedene elementare Zauber auf einen "
+      +"bestimmten Gegner losgelassen werden. Das Kommando "
+      +"dazu lautet \"spiele <melodie> fuer <name>\". Die "
+      +"Harfe kann folgende Lieder: windmelodie, "
+      +"windattacke.\n");
+
+  SetProp(P_NAME, "Harfe der Winde");
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({"harfe", "windharfe", "harfe der winde", "\nharfe der winde", "\ninstrument"}) );
+  SetProp(P_WEAPON_TYPE, WT_CLUB);
+  SetProp(P_WC, 70);
+  SetProp(P_DAM_TYPE, DT_BLUDGEON);
+  SetProp(P_NR_HANDS, 2);
+  SetProp(P_MAGIC, 3);
+  SetProp(P_QUALITY_DECAY, 0);
+  SetProp(P_MATERIAL, MAT_MISC_MAGIC);
+  SetProp(P_WEIGHT, 300);
+  SetProp(P_VALUE, 2000+random(300));
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, "Du wuerdest die Harfe niemals hergeben.\n");
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NODROP, "Du wuerdest die Harfe niemals hergeben.\n");
+  SetProp(P_WIELD_RESTRICTIONS, ([SR_SEER: 1,
+                                  P_LEVEL: 30,
+                                  A_INT: 19, 
+                                  A_DEX: 19])); 
+
+  AddCmd(({"spiele", "spiel"}), "spiele_melodie");
+
+  SetProp(P_COMBATCMDS,
+      ([ "spiele":
+       ([ C_MIN:50,
+          C_AVG:75,
+          C_MAX:100,
+          C_DTYPES: ({DT_AIR}) ]) ]) ); 
+
+  SetProp(P_INSTRUMENT_LEVEL, 5);
+  SetProp(P_INSTRUMENT_TYPE, IT_STRING);
+}
+
+int spiele_melodie(string str)
+{
+  object gegner;
+  string wen;
+
+  if(!str) {
+    notify_fail("Was willst Du denn spielen?\n");
+    return 0;
+  }
+  if(sscanf(str, "%s fuer %s", zauber, wen)!=2 &&
+      sscanf(str, "%s fuer %s", zauber, wen)!=2)
+  {
+    notify_fail("Was willst Du fuer wen spielen?\n");
+    return 0;
+  }
+  if(QueryProp(P_WIELDED)!=TP) {
+    notify_fail("Du musst die Harfe erst zuecken!\n");
+    return 0; 
+  }
+  switch(zauber)
+  {
+    case "windmelodie":
+      if (TP->QueryProp(P_SP) < COST_MELODIE) {
+        notify_fail("Du hast nicht genug Magiepunkte.\n");
+        return 0; 
+      }
+    break;
+    case "windattacke":
+      if (TP->QueryProp(P_SP) < COST_ATTACKE) {
+        notify_fail("Du hast nicht genug Magiepunkte.\n");
+        return 0; 
+      }
+    break;
+    default:
+    notify_fail("Das kannst Du nicht spielen.\n");
+    return 0;
+  }
+  if(gegner=present(wen, ENV(TP))) {
+    if(gegner==TP || gegner->QueryProp(P_INVIS) || 
+        (query_once_interactive(gegner) && !TP->SelectEnemy(gegner)) ) {
+          notify_fail(BS("Da ist ja gar kein Gegner.\n"));
+      return 0;
+    }
+    return windzauber(gegner);
+  }
+
+  notify_fail("Da ist ja gar kein Gegner.\n");
+  return 0;
+}
+
+
+int windzauber(object gegner)
+{
+  mapping sinfo;
+  int schaden; 
+  schaden=1;
+  if(zeit>time())
+  {
+    write("Die Harfe muss erst wieder Energie sammeln.\n");
+    return 1;
+  }
+  if(TP->QueryProp(P_ATTACK_BUSY))
+  {
+    write("Du bist im Moment zu sehr beschaeftigt.\n");
+    return 1;
+  }
+  TP->SetProp(P_ATTACK_BUSY, 4);
+
+  if(!gegner)
+  {
+    write(BS("Die Magier der Harfe wird freigesetzt."));
+    zeit=600+time();
+    return 1;
+  }
+
+  if (zauber=="windmelodie")
+  {
+    TP->AddSp(-COST_MELODIE);
+    printf(BS("Aus der Harfe formt sich eine Windhose, "
+          +"die %s ordentlich in die Luft und dann auf den "
+          +"Boden schleudert.\n"), 
+        gegner->name(WEM));
+    say( sprintf(BS("Aus der Harfe von %s entsteht eine"
+            +"Windhose, welche %s mit voller Wucht auf den "
+            +"Boden wirft.\n"), CAP(TPN),
+          gegner->name(WEN) ), ({gegner, TP}) );
+    tell_object(gegner, BS("Eine Windhose aus der Harfe "
+          +"von "+CAP(TPN)+" reisst Dich in die Hoehe und "
+          +"wirft Dich mit Urgewalten auf den Boden."));
+    schaden=450+(3+random(5))*(TP->QueryProp(P_LEVEL));
+    sinfo=([SP_NAME : "windmelodie",
+            SP_PHYSICAL_ATTACK : 0,
+            SP_SHOW_DAMAGE : 1, 
+            ]);
+    gegner->Defend(schaden, ({DT_AIR, DT_LIGHTNING}), sinfo, this_player());
+    if( gegner )
+    {
+      if( !gegner->QueryProp(P_DISABLE_ATTACK) )
+        gegner->SetProp(P_DISABLE_ATTACK, 1);
+      if( !gegner->QueryProp(P_DISABLE_SPELLS) )
+        gegner->SetProp(P_DISABLE_SPELLS, 1);
+    }
+    zeit=3600+time();
+    return 1;
+  }
+
+  if (zauber=="windattacke")
+  {
+    TP->AddSp(-COST_ATTACKE);
+    printf(BS("Ein Windstoss aus der Harfe wirft %s zu Boden."),
+        gegner->name(WEM));
+    say( sprintf(BS("Ein Windstoss aus der Harfe von %s wirft "
+            +"%s zu Boden."), CAP(TPN), gegner->name(WEN) ), ({gegner, TP}) );
+    tell_object(gegner, BS("Eine Windstoss aus der Harfe "
+          +"von "+CAP(TPN)+" reisst Dich zu Boden."));
+    schaden=200+(4+random(5))*(TP->QueryProp(P_LEVEL));
+    sinfo=([SP_NAME : "windattacke",
+            SP_PHYSICAL_ATTACK : 0,
+            SP_SHOW_DAMAGE : 1, 
+            ]);
+    gegner->Defend(schaden, ({DT_AIR}), sinfo, this_player());
+    if( gegner )
+    {
+      if( !gegner->QueryProp(P_DISABLE_ATTACK) )
+        gegner->SetProp(P_DISABLE_ATTACK, 1);
+      if( !gegner->QueryProp(P_DISABLE_SPELLS) )
+        gegner->SetProp(P_DISABLE_SPELLS, 1);
+    }
+    zeit=1800+time();
+    return 1;
+  } 
+}
+
+

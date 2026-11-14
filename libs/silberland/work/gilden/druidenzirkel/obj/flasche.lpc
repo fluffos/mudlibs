@@ -1,0 +1,196 @@
+inherit "std/thing";
+
+#include <properties.h>
+#include <combat.h>
+#include <defines.h>
+#include <moredef.h>
+#include <ansi.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <wizlevels.h>
+#include "../druiden.h"
+#include "/p/daemon/skillmaster/skillmaster.h"
+
+#define BANN_COST 24
+#define BANN_TIME 300
+
+string element="";
+int level=0;
+int zeit;
+string name;
+string short;
+string adj;
+string caster;
+
+mapping colors=([FEUER:"rot", WASSER:"blau", EIS:"weiss", 
+                 LUFT:"gelb", HUMUS:"gruen", ERZ:"schwarz"]);
+
+void SetIds(string old, string new);
+
+void create()
+{
+  if(!is_clone(TO))
+    return;
+
+  ::create();
+
+  SetProp(P_NAME, "Flasche");
+  SetProp(P_INFO,
+      "Scheinbar kann man Elementarwesen in diese Flasche bannen. Ob man "
+      "Sie auch wieder mittels reiben daraus befreien kann, wie die alten "
+      "Legenden erzaehlen?");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_WEIGHT, 100);  
+  SetProp(P_VALUE, 100);
+  SetProp(P_NOBUY, 1); 
+  SetProp(P_NOSELL, 1);
+  AddId(({ DRUIDEN_FLASCHE, "flasche" }));
+
+  AddCmd( ({"banne", "bann"}), "cmd_bannen");
+  AddCmd( ({"reibe", "reib"}), "cmd_reiben");
+  SetIds( "", "magisch");
+}
+
+void SetIds(string old, string new)
+{
+  RemoveId(DRUIDEN_FLASCHE + old);
+  AddId(DRUIDEN_FLASCHE + new);
+  if( stringp(colors[old]) ) old = colors[old];
+  if( stringp(colors[new]) ) new = colors[new];
+  SetProp(P_NAME_ADJ, new);
+  RemoveAdjective( ({old, old +"e", old +"er", old +"en"}) );
+  AddAdjective( ({new, new +"e", new +"er", new +"en"}) );
+  SetProp(P_SHORT, Name(WER,0) );
+}
+
+int cmd_reiben(string str)
+{
+  object ob;
+  notify_fail("Was willst Du reiben?\n");
+  if( !str || !id(str) ) return 0;
+  notify_fail("Die Flasche ist doch leer!\n");
+  if( !level ) return 0;
+  if( time()-zeit < BANN_TIME )
+    return write("So schnell mag das "+CAP(element)+"elementar nicht wieder "
+        "aus der Flasche heraus!\n"),1;
+  if( getuid(TP) != caster )
+    return write("Du reibst aber nichts passiert.\n"),1;
+  if(DRUIDENSPELLS->QueryOwnCreature(TP, 0, 2))
+    return write("Aber Du beherrscht ja schon ein Elementar!\n"),1;
+  if(present(DRUIDEN_SPELL_ENHANCE, TP))
+    return write("Waehrend einer elementaren Verstaerkung geht das nicht!\n"),1;
+  
+  DRUIDENSPELLS->write_color(BS("Du reibst an der Flasche und ein "+CAP(element)+
+        "elementar materialisiert sich vor Dir."), element, TP); 
+  tell_room(ENV(TP), BS(
+        TP->Name(WER,1)+ " reibt an einer Flasche und ploetzlich taucht ein "+
+        CAP(element)+"elementar auf."), ({TP}) );
+  ob = clone_object(NPC("elementar"));
+  ob->SetProp(P_NAME, name);
+  ob->SetProp(P_SHORT, short);
+  if( stringp(adj) )
+  {
+    ob->SetProp(P_NAME_ADJ, adj);
+    ob->AddAdjective( ({adj, adj+"es", adj+"en"}) );
+  }
+  else if (level > 25)
+  {
+    ob->SetProp(P_ARTICLE, 0);
+    ob->AddId(lower_case(name));
+  }
+  ob->Customize(element, TP, 0, level, 1);
+  ob->SetProp(ELEMENTAL_OWNER, TP);
+  ob->SetOwner(TP, 1);
+  ob->move(ENV(TP), M_TPORT|M_NOCHECK);
+  SetIds(element, "magisch");
+  element= "";
+  level = 0;
+  caster = "";
+  if(!random(100))
+  {
+    if(SKILLMASTER->UseSkill(TP, SK_LUCK) > 0 )
+    {
+      tell_object(TP, "So ein Glueck! Fast haette sich die magische Flasche "
+          "aufgeloest!\n");
+    }
+    else
+    {
+      tell_object(TP, "Die magische Flasche loest sich auf!\n");
+      call_out("remove",0);
+    }
+  }
+  return 1;
+}
+
+int cmd_bannen(string str)
+{
+  int cost;
+  string wen, wohin;
+  object ob;
+  
+  notify_fail("Wen willst Du wo hinein bannen?\n");
+  if( !str) return 0;
+  if( sscanf(str, "%s in %s", wen, wohin)!=2 ) return 0;
+  notify_fail("Hier ist ja gar kein "+CAP(wen)+"!\n");
+  if( !objectp(ob=present(wen, ENV(TP))) ) return 0;
+  notify_fail("Dort hinein kannst Du "+CAP(wen)+" nicht bannen!\n");
+  if( !id(wohin) ) return 0;
+  notify_fail("In dieser Flasche steckt ja schon ein Elementar!\n");
+  if( element != "" ) return 0;
+  if( !ob->id(DRUIDENELEMENTAR) )
+    return write("Du kannst nur Elementare in diese Flasche bannen!\n"),-1;
+  if( ob->QueryProp(ELEMENTAL_OWNER) != TP ) 
+    return write("Du kannst nur von Dir beherrschte Elementare bannen!\n"),-1;
+  if( present(DRUIDEN_FLASCHE + ob->QueryProp(P_ELEMENT), TP))
+    return write("Du hast ja schon so ein Elementar gebannt!\n"),-1;
+  if( TP->InFight() || ob->InFight() )
+    return write("Im Kampf geht das nicht!\n"),-1;
+  cost = BANN_COST - TP->QueryProp(P_GUILD_LEVEL)/4;
+  if( TP->QueryProp(P_SP) < cost )
+    return write("Du hast zu wenig Magiepunkte!\n"), -1;
+  
+  TP->AddSp(-cost);
+  element = ob->QueryProp(P_ELEMENT);
+  DRUIDENSPELLS->write_color(BS("Du verbannst "+ob->name(WEN,1)+ " in "+
+        name(WEN,1)+".\n"), element, TP);
+  tell_room(ENV(TP), BS(TP->Name(WER,1)+" verbannt "+ob->name(WEN,1)+" in "+
+        name(WEN,1)+"."), ({TP}));
+  caster = getuid(TP);
+  SetIds("magisch", element);
+  level = ob->QueryProp(P_LEVEL);
+  name = ob->QueryProp(P_NAME);
+  short = ob->QueryProp(P_SHORT);
+  if( ob->QueryProp(P_NAME_ADJ) != ({}) )
+    adj = ob->QueryProp(P_NAME_ADJ)[0];
+  else
+    adj = 0;
+  ob->remove();
+  zeit = time();
+  return 1;
+}
+
+void reset()
+{
+  if(!is_clone(TO))
+    return;
+  ::reset();
+  if( MENV && interactive(MENV) && !level && !random(2222))
+  {
+    tell_object(MENV, "Die magische Flasche loest sich auf!\n");
+    call_out("remove",0);
+  }
+}
+
+_query_neverdrop() {return level;}
+_query_nodrop() {return level;}
+
+string long()
+{
+  return BS(
+      "Das ist eine komische Flasche. Sie ist mit Symbolen von Feuer, Wasser, "
+      "Luft, Eis, Erz und Humus verziert und scheinbar nicht zum daraus "
+      "trinken gemacht. Fuer was die wohl gut ist?"+
+      (element!=""? " Momentan leuchten die "+CAP(element)+"-Symbole "+
+       colors[element]+" auf.":"")
+      );
+}

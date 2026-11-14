@@ -1,0 +1,265 @@
+// SilberLand MUDlib
+//
+// std/player/description.c -- player description handling
+//
+// $Date: 2019/04/04 08:22:38 $
+/* $Revision: 3.11 $
+ * $Log: description.c,v $
+ * Revision 3.11  2019/04/04 08:22:38  Woody
+ * break_string() fuer Extralook
+ *
+ * Revision 3.10  2007/01/22 18:21:09  Woody
+ * include <lightsource.h>
+ *
+ * Revision 3.9  2005/11/02 13:19:29  Woody
+ * Bugfix in long(), cleanup
+ *
+ * Revision 3.8  2005/05/23 21:16:04  Feyaria
+ * beschreibung je nach gewicht
+ *
+ * Revision 3.7  2004/03/17 18:59:12  Feyaria
+ * _set_name_adj nur als Erzmagier
+ *
+ * Revision 3.6  2003/10/06 00:22:26  Feyaria
+ * RACESTRING statt RACE in short
+ *
+ * Revision 3.5  2003/09/30 17:11:40  Feyaria
+ * rasse/guild_title oder presay/title anzeigen im short
+ *
+ * Revision 3.4  2002/08/17 14:28:04  Feyaria
+ * Haar und Augenfarbe anzeigen.
+ *
+ * Revision 3.3  1998/02/26 17:49:09  Feyaria
+ * SIZE/AVERAGE_SIZE in long
+ *
+ * Revision 3.2  1997/11/08 12:16:41  Woody
+ * (rastend) an die Kurzbeschreibung anhaengen, wenn der Spieler rastet
+ *
+ * Revision 3.1  1997/06/25 12:03:17  Woody
+ * ME-> bei QueryArticle() raus
+ *
+ * Revision 3.0  1997/03/13 01:37:01  Woody
+ * prepared for revision control
+ *
+ * Revision 1.1  96/05/25  18:00:00  Woody
+ * short() Aenderungen wieder retour
+ *
+ * Revision 1.0  22/02/96  23:00:00  Hadra
+ * short() geaendert
+ */
+
+#pragma strong_types
+
+inherit "/std/living/description";
+
+#define NEED_PROTOTYPES
+
+#include <thing/language.h>
+#include <player/description.h>
+#include <properties.h>
+#include <lightsource.h>
+#include <wizlevels.h>
+#include <defines.h>
+#include <moving.h>
+#include <new_skills.h>
+
+#include "/std/sys_debug.h"
+
+void create()
+{
+  ::create();
+  Set(P_NAME, -1, F_SET_METHOD);
+  Set(P_PRESAY, SAVE, F_MODE_AS);	
+  Set(P_TITLE, SAVE, F_MODE_AS);	
+  Set(P_EXTRA_LOOK, SAVE, F_MODE_AS);
+  Set(P_GENDER, SAVE, F_MODE_AS);
+  AddId("Spieler");
+}
+
+int _query_size() {
+  if (QueryProp(P_FROG))
+    return 20;
+  return Query(P_SIZE);
+}
+
+// short() -- get the short description of a player
+string short()
+{
+  string answer;
+  string title;
+  
+  if(QueryProp(P_INVIS)) 
+    if(interactive(previous_object()) && IS_LEARNING(previous_object()))
+      return "("+QueryProp(P_NAME)+")\n";
+    else
+      return (string)0;
+
+  if(QueryProp(P_GHOST))
+  {
+    if (QueryProp(P_FROG))
+      return "Der Geist eines kleinen Frosches namens "+QueryProp(P_NAME)+
+	     ".\n";
+    else
+      return "Der Geist von "+QueryProp(P_NAME)+".\n";
+  }
+
+  if (QueryProp(P_FROG))
+    return "Ein kleiner Frosch namens "+QueryProp(P_NAME)+".\n";
+ 
+  if (!IS_LEARNER(this_object()) && this_player() &&
+      (!living(previous_object()) || this_player()==this_object() ) && 
+      file_name(previous_object())!="/obj/werliste" && 
+      !(this_player()->QueryProp(P_BRIEF) & BRIEF_TITLE))
+  { 
+    answer = (pointerp(QueryProp(P_RACESTRING))?QueryProp(P_RACESTRING)[WER]:
+        QueryProp(P_RACE)) + " " + QueryProp(P_NAME);
+    if ((title=QueryProp(P_GUILD_TITLE)) && title != "") answer += " " + title;
+  }
+  else
+  {
+    answer = QueryProp(P_PRESAY) + QueryProp(P_NAME);
+    if (QueryProp(P_ARTICLE)) answer=QueryArticle(0,0)+answer;
+    if((title=QueryProp(P_TITLE)) && title != "") answer += " " + title;
+  }
+  if(!interactive(ME)) answer += " (netztot)";
+  else if(QueryProp(P_RESTING)) answer += " (rastend)";
+  return answer+".\n";
+}
+
+private void select(object o, mixed weapon, mixed armour, mixed rest)
+{
+  if (!o->short()) return;  // unsichtbare Objekte nicht anzeigen (Rochus@MG)
+  if (member(QueryProp(P_ARMOURS), o) != -1) armour += ({ o });
+  else if (QueryProp(P_WEAPON) == o) weapon += ({ o });
+  else if (sizeof(all_inventory(o)) || o->QueryProp(P_LIGHT) ||
+           o->QueryProp(P_LIGHTED) || o->QueryProp(P_SHOW_INV))
+    rest += ({ o });
+}
+
+private string andlist(object *arr)
+{
+  string *tmp;
+  if(!sizeof(arr)) return "";
+  if(sizeof(tmp = map_objects(arr, "name", WEN))>1)
+    return implode(tmp[0..<2], ", ")+(sizeof(tmp)>1?" und "+tmp[<1]:"");
+  else return tmp[0];
+}
+
+varargs string long() 
+{
+  string exl, descr, tmp, colortext; 
+  object ob, *w, *a, *r;
+  mixed trans;
+  string size_descr, fill, fill2;
+  int per;
+  string weight_descr;
+  int avweight;
+
+  per=1000*QueryProp(P_SIZE)/QueryProp(P_AVERAGE_SIZE);
+  switch(per)
+  {
+    case 0..800: size_descr="ziemlich winzig"; break;
+    case 801..850: size_descr="eher winzig"; break;
+    case 851..900: size_descr="recht klein"; break;
+    case 901..950: size_descr="eher klein"; break;
+    case 951..1050: size_descr="mittelgross"; break;
+    case 1051..1100: size_descr="relativ gross"; break;
+    case 1101..1150: size_descr="ziemlich gross"; break;
+    case 1151..1200: size_descr="sehr gross"; break;
+    default: size_descr="riesig"; break;
+  }
+#define RassenString() ((QueryProp(P_FROG) ? "n Frosch" :\
+       (QueryProp(P_GENDER)==2?" ":"n ")+\
+       (pointerp(QueryProp(P_RACESTRING))?\
+        QueryProp(P_RACESTRING)[WEN]:QueryProp(P_RACE))))
+  fill2=fill=0;
+  if (QueryProp(P_AVERAGE_SIZE)<170)
+  {
+    if (per<950)
+      fill="selbst fuer eine"+RassenString()+" ";
+    else if (per>1050)
+      fill2=", wenn auch nur fuer eine"+RassenString();
+  }
+  else
+  {
+    if (QueryProp(P_AVERAGE_SIZE)>170)
+      if (per>1050)
+        fill="sogar fuer eine"+RassenString()+" ";
+      else if (per<950)
+        fill2=", wenn auch nur fuer eine"+RassenString();
+  }
+  
+  avweight = QueryProp(P_AVERAGE_WEIGHT) || 70000;
+  per = 1000 * QueryProp(P_WEIGHT) / avweight;
+  switch (per)
+  {
+    case 0..800: weight_descr=", hat die Figur einer Bohnenstange"; break;
+    case 801..850: weight_descr=", ist extrem schlank"; break;
+    case 851..900: weight_descr=", ist sehr schlank"; break;
+    case 901..950: weight_descr=", ist schlank"; break;
+    case 951..1050: weight_descr=", ist normal gebaut"; break;
+    case 1051..1100: weight_descr=", ist etwas kraeftiger gebaut"; break;
+    case 1101..1150: weight_descr=", ist leicht dicklich"; break;
+    case 1151..1200: weight_descr=", ist ziemlich dick"; break;
+    default: weight_descr=", ist dick und kugelrund"; break;
+  }
+
+  if (stringp(QueryProp(P_EYE_COLOR)) && stringp(QueryProp(P_HAIR_COLOR)))
+    colortext=", hat "+(stringp(QueryProp(P_TEMP_HAIR_COLOR))?
+        QueryProp(P_TEMP_HAIR_COLOR):QueryProp(P_HAIR_COLOR))+"e Haare und "+
+      QueryProp(P_EYE_COLOR)+"e Augen";
+  else
+    colortext="";
+  if (!fill&&!fill2) fill="fuer eine"+RassenString()+" ";
+  descr = break_string(
+      "Das ist "+name(WER,1)+". "+
+      capitalize(QueryPronoun())+
+      " ist "+ (fill||"")+size_descr+(fill2||"")+
+      weight_descr+colortext+".", 78);
+
+  if (QueryProp(P_GHOST))
+    return descr;
+  
+  trans = QueryProp(P_TRANSPARENT); SetProp(P_TRANSPARENT, 0);
+  descr += ::long(); SetProp(P_TRANSPARENT, trans);
+
+  /* extra_looks einsammeln und ggf in die desc einbauen */
+  if(stringp(tmp = QueryProp(P_EXTRA_LOOK)))
+    descr += break_string(tmp, 78, 0, BS_LEAVE_MY_LFS);
+  for(ob = first_inventory(ME); ob; ob = next_inventory(ob))
+    if(exl = ob->QueryProp(P_EXTRA_LOOK)) descr += exl;
+    else if(exl = ob->extra_look()) descr += exl; // TO BE REMOVED
+  w = ({}); a = ({}); r = ({});
+  map_array(all_inventory(ME), #'select, &w, &a, &r);
+  return descr + 
+         (QueryProp(P_TRANSPARENT) ?
+          break_string(capitalize(name(WER, 1))+" hat "
+                      +(sizeof(a)?andlist(a):"keine Ruestung")+" an"
+                      +(sizeof(r)?", ":" und ")
+                      +(sizeof(w)?andlist(w):"keine Waffe")+" gezueckt"
+		      +(sizeof(r)?" und traegt "+andlist(r):"")+".", 78): "");
+}
+
+
+// **** local property methods
+nosave mixed _query_presay()
+{
+  string presay;
+  if((presay = Query(P_PRESAY)) && (presay != "")) return presay + " ";
+  return "";
+}
+
+nosave string _query_name()
+{
+  return capitalize(Query(P_NAME));
+}
+// ****
+
+
+nosave mixed _set_name_adj(mixed adjectives)
+{ 
+  if(this_interactive() && !IS_ARCH(this_interactive()))
+    return -1;
+  if(!pointerp(adjectives)) adjectives = ({ adjectives });
+  return Set(P_NAME_ADJ, adjectives);
+}

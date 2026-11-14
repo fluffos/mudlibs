@@ -1,0 +1,762 @@
+/*  
+   das std riesen_file by dante@silberland 2000
+   verschoenert von roc(akn@fast.de), tja denkt er:-))
+   ok, nun noch einige aenderungen eingebaut von dante
+   
+   
+   
+   nicht das file ist riesig sondern es
+   erzeugt einen standard riesen/riesin
+   mehr darueber in giant_beispiel.c
+   falls jem hier was aendert bitte auch im code dokumentieren, danke.
+   dante
+
+   ich habe die werte so angelegt, das der level massiven einfluss auf
+   die staerke, body, usw der npcs hat. zwischen einem lvl 1 giant und einem
+   z.b lvl 8 giant sind welten; aber warum sollte es nicht auch kleine
+   schwache riesen geben, is ja nur ne rasse.
+   
+   momentan: 3648 moeglichkeiten
+  
+  dt_stone ausgebaut.
+  weniger gems/perls
+  
+  fuer sie extrem guten riesen noch haertere spells
+  (area)
+  
+
+
+   to_do:
+
+    fell resistenzen je nach riese einbauen name usw auch
+
+    die kill msgs
+ 
+   chatts attackchats 
+   
+   addinfos usw
+   
+   
+*/
+
+inherit "/std/mnpc";
+inherit "/std/npc/spells";
+#include <properties.h>
+#include <wizlevels.h>
+#include <mnpc.h>
+#include <language.h>
+#include <attributes.h>
+#include <defines.h>
+#include <moredef.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+
+#define RDG 7  //Really Dangerous Giants haben bessere spells und eben auch gems objs usw lvl 7
+#define HDG 9
+#define ELEMENTS 16
+#define LOG_PATH "/players/dante/giants/log/"
+
+create() {
+  if( !is_clone(this_object()) ) return;
+  ::create();
+
+  AddId(({"giant","STD_RIESE", "NOWIMPY", "riese"}));
+  SetProp(P_MSGIN, "stampft polternd herein.\nDer Boden erbebt unter Deinen Fuessen");
+  SetProp(P_MSGOUT, "stampft polternd.\nDir faellt ein Stein vom Herzen");
+  SetProp(P_MMSGIN, "stampft polternd herein.\nDer Boden erbebt unter Deinen Fuessen");
+  SetProp(P_MMSGOUT, "wird von seinem Schoepfer abberufen und stampft bruellend davon");
+  SetProp(P_RACE, "Riese");
+  SetProp(P_MAX_HANDS, 2);
+  
+}
+
+// aus dem level qualitaet der rue erzeugen und anzahl der objekte/gems
+
+void create_default_giant(int gender, int align, int element, int level) { 
+  string *level_string;  //level body spellrate size weight
+  string *element_string;  //angriff schadenstypen abwehr spells temp
+  string *align_string;  //aggressivewahrscheinlichkeit
+  string fight_name;   //das hat den sinn die langen echten namen der riesen
+  string *koerper_partie;   //bisschen zu kuerzen ;fuer die spells usw...
+  string *angriff_partie;   //damit es nicht so fade wird
+  string real_gender;
+  string spec_dt; //der spezielle schadenstyp des riesen
+  
+  object kristall;
+  object cash;
+  object fell;
+  
+  int i;
+
+  spec_dt=DT_BLUDGEON; //default wert wenn was schieft geht
+// 12
+  level_string=({
+    "sehr klein", "mittelklein", "klein",
+    "mittelgross", "gross", "sehr gross",
+    "mittelriesig","riesig","sehr riesig",
+    "gewaltig","bombastisch", "gigantisch"});
+
+
+// 16
+  element_string=({
+    "Feuer","Wasser","Luft","Eis","Erd", "Saeure","Licht",
+    "Gift","Blitz","Donner","Sumpf","Schlamm","Sand", "Schnee", "Schatten",
+    "Schreckens"});  
+
+
+// 9+1+9=19
+  align_string=({
+    "sehr teuflisch","teuflisch","nahezu teuflisch", //-10
+    "sehr boesartig","boesartig","nahezu boesartig",
+    "sehr unfreundlich","unfreundlich","unfreundlich",//-1
+    "neutral", //==0
+    "eher gutmuetig","gutmuetig","sehr gutmuetig", //+1
+    "eher freundlich","freundlich","sehr freundlich",         
+    "liebenswert","sehr liebenswert","aeusserst liebenswert"}); //bis +10
+     
+  koerper_partie=({
+    "Kopf","Bein","Hals","Fuss","Bauch","Arm","Ruecken",
+    "Hals","Auge","Ohr","Schulterbereich","Nacken","Knie"});
+
+// ev haken usw punches     
+
+  angriff_partie=({
+    "der Faust", "dem Fuss", "dem Knie", "dem Ellbogen",
+    "der Hand", "dem Bein", "der Handkante", "einem Kopfstoss",
+    "den Faeusten", "den Fuessen", "den Haenden", "den Handkanten", 
+    "den Beinen"});
+
+// level
+  if( level<1 || level>12) { level=6; }
+  create_default_npc(10+level*5); //min 15 max 70 ...
+  set_living_name("riese");
+  
+
+// gender
+  if( gender<1 || gender>2)  { gender=1; }
+  if(gender==1) {
+    SetProp(P_GENDER, MALE); 
+    real_gender="maennlich";
+  }
+  if(gender==2) {
+    SetProp(P_GENDER, FEMALE); 
+    real_gender="weiblich";
+  }
+  
+
+// align - 10 neutral 1 sehr teuflisch 20 heilig
+  if(align<1 || align > 19) {
+    align=-1+random(20);
+  }
+
+
+// z.b -1000-( -1*100)=-900; und so soll es auch sein: der 1 wert im array 
+// is ja der boeseste
+  if(align<10) { 
+    SetProp(P_ALIGN, -1000-(align*100)); 
+  }
+  if(align>=10) {
+    SetProp(P_ALIGN, -1000+align*100); //-1000+100*10=neutral z.b
+  }
+
+// nicht ok denk mal du ei  
+  if(align<0)  {        
+// d.h.: -((-10)/10)=1 oder 5/10=0.5 usw...   
+    SetProp(P_AGGRESSIVE, -((align)/10) );   
+    }
+  if(align>=10)  {
+    SetProp(P_AGGRESSIVE, 0);  
+  }
+  
+// objs zuerst kristalle:
+
+	
+
+	
+if(level>=RDG)  {
+ switch(random(3))  {	
+	case 0:
+ "obj/gemmaster"->DistributeGem(level/3 , 3 , 1 , 1);  
+   break;
+  	case 1:
+ "obj/pearlmaster"->DistributePearl(level/3 , 3 , 1 , 1);  
+   break;
+ case 2:
+ break;
+                } 	
+  }	
+  	
+  	
+    kristall=clone_object("/p/std/giant/kristall");
+    kristall->SetProp(P_AMOUNT, level*10+random(10) ); 
+    kristall->move(this_object(), M_NOCHECK);
+ 
+ 
+  
+
+  cash=clone_object("obj/money");
+  cash->SetProp(P_AMOUNT, level*level*50+random(1000) );
+  cash->move(this_object(), M_NOCHECK);
+
+  fell=clone_object("/p/std/giant/fell");
+  fell->move(this_object(), M_NOCHECK);
+  fell->SetProp(P_LONG, break_string(
+    "Dieses Fell bot einst "+this_object()->name(WEM)+" etwas Schutz. Riesen "
+    "tragen solche Felle um den Bauch. Fuer Dich ist es aber eher ein grosser, "
+    "schwerer Umhang. Es wurde mit Platten aus Mithril verstaerkt und haelt "
+    "sicher einiges aus!")
+  );
+  
+  
+  fell->SetProp(P_SIZE, level*5+100);
+  fell->SetProp(P_WEIGHT, 500+50*level+random(200) );
+  fell->SetProp(P_VALUE, 500+level*300+random(500) );
+  fell->SetProp(P_AC, level*3+4);  //z.b 6*3=18 +4 =22 max 40 also maxac fuer panzer
+  fell->move(this_object(), M_NOCHECK);
+ 
+  command("ziehe fell an");
+  
+// element
+
+  if( element<0 || element>ELEMENTS ) {
+    element=1+random(ELEMENTS);  
+  }
+//hier hands und res str
+  switch(element) { 
+  //feuer   
+    case 1: spec_dt=DT_FIRE;
+      SetProp(P_RESISTANCE_STRENGTHS, ([
+        DT_SLASH: -0.3, DT_BLUDGEON:-0.5, DT_PIERCE:-0.3, DT_SQUEEZE:-0.5,
+        DT_WHIP:-0.5, DT_RIP:-0.3,       
+        DT_FIRE:-0.5, DT_WATER:0.5, DT_COLD:0.5])
+      );
+      SetProp(P_LIGHT, 1);
+      // z.b. ein level 1 riese: 200+30; ein level 5: 200+5*30=350;
+      // ein lev 10: 200+10*30=500
+      SetProp(P_HANDS, ({
+        " mit "+QueryPossPronoun(gender, WEM, PLURAL)+" "+
+        level_string[level-1]+"en Feuerhaenden",
+        200+level*30, ({DT_BLUDGEON, spec_dt})})
+      );
+    break;
+   
+    // wasser
+    case 2: spec_dt=DT_WATER;
+      SetProp(P_RESISTANCE_STRENGTHS, ([
+        DT_SLASH: -0.3, DT_BLUDGEON:-0.5, DT_PIERCE:-0.3, DT_SQUEEZE:-0.5,
+        DT_WHIP:-0.5, DT_RIP:-0.3,       
+        DT_FIRE:0.5,DT_WATER:-0.5, DT_COLD:0.5])
+      );
+      SetProp(P_HANDS, ({
+        " mit "+QueryPossPronoun(gender,WEM, PLURAL)+" "+
+        level_string[level-1]+"en Wasserhaenden",
+        200+level*30, ({DT_BLUDGEON, spec_dt})})
+      );
+    break;
+
+    // luft
+    case 3: spec_dt=DT_AIR;
+      SetProp(P_RESISTANCE_STRENGTHS, ([ 
+        DT_SLASH: -0.3, DT_BLUDGEON:-0.5, DT_PIERCE:-0.3, DT_SQUEEZE:-0.5,
+        DT_WHIP:-0.5, DT_RIP:-0.3,       
+        DT_AIR:-0.5, DT_FIRE:0.5, DT_BLUDGEON:0.5])
+      );
+      SetProp(P_HANDS, ({
+        " mit "+QueryPossPronoun(gender,WEM,PLURAL)+" "+
+        level_string[level-1]+"en Lufthaenden",
+        200+level*30, ({DT_BLUDGEON, spec_dt})})
+      );
+    break;
+
+    // eis
+    case 4: spec_dt=DT_COLD;
+      SetProp(P_RESISTANCE_STRENGTHS, ([ 
+        DT_SLASH: -0.3, DT_BLUDGEON:-0.5, DT_PIERCE:-0.3, DT_SQUEEZE:-0.5,
+        DT_WHIP:-0.5, DT_RIP:-0.3,       
+        DT_COLD:-0.5, DT_FIRE:0.5, DT_ACID:0.5, DT_WATER:0.5])
+      );
+      SetProp(P_HANDS, ({
+        " mit "+QueryPossPronoun(gender,WEM,PLURAL)+" "+
+        level_string[level-1]+"en Eishaenden",
+        200+level*30, ({DT_BLUDGEON, spec_dt})})
+      );
+    break;
+
+    // erde
+    case 5: spec_dt=DT_BLUDGEON;
+      SetProp(P_RESISTANCE_STRENGTHS, ([ 
+        DT_SLASH: -0.3, DT_BLUDGEON:-0.5, DT_PIERCE:-0.3, DT_SQUEEZE:-0.5,
+        DT_WHIP:-0.5, DT_RIP:-0.3,       
+        DT_BLUDGEON:-0.5, DT_FIRE:-0.5, DT_AIR:0.5, DT_WATER:0.5,DT_COLD:0.5])
+      );
+      SetProp(P_HANDS, ({
+        " mit "+QueryPossPronoun(gender,WEM,PLURAL)+" "+
+        level_string[level-1]+"en Erdhaenden",
+        200+level*30, ({DT_BLUDGEON, spec_dt})})
+       );
+    break;
+
+    // saeure
+    case 6: spec_dt=DT_ACID;
+      SetProp(P_RESISTANCE_STRENGTHS, ([ 
+        DT_SLASH: -0.3, DT_BLUDGEON:-0.5, DT_PIERCE:-0.3, DT_SQUEEZE:-0.5,
+        DT_WHIP:-0.5, DT_RIP:-0.3,       
+        DT_ACID:-0.5, DT_WATER: 0.5, DT_COLD: 0.5, DT_POISON:-0.5])
+      );
+      SetProp(P_HANDS, ({
+        " mit "+QueryPossPronoun(gender,WEM,PLURAL)+" "+
+        level_string[level-1]+"en Saeurehaenden",
+        200+level*30, ({DT_BLUDGEON, spec_dt})})
+      );
+    break;
+
+    // licht
+    case 7: spec_dt=DT_LIGHT;
+      SetProp(P_RESISTANCE_STRENGTHS, ([
+        DT_SLASH: -0.3, DT_BLUDGEON:-0.5, DT_PIERCE:-0.3, DT_SQUEEZE:-0.5,
+        DT_WHIP:-0.5, DT_RIP:-0.3,       
+        DT_LIGHT:-0.5, DT_LIGHTNING:-0.5, DT_BLUDGEON:0.5])
+      );
+      SetProp(P_LIGHT, 1);
+      SetProp(P_HANDS, ({
+        " mit "+QueryPossPronoun(gender,WEM,PLURAL)+" "+
+        level_string[level-1]+"en Lichthaenden",
+        200+level*30, ({DT_BLUDGEON, spec_dt})})
+      );
+    break;
+
+    // gift
+    case 8: spec_dt=DT_POISON;
+      SetProp(P_RESISTANCE_STRENGTHS, ([ 
+        DT_SLASH: -0.3, DT_BLUDGEON:-0.5, DT_PIERCE:-0.3, DT_SQUEEZE:-0.5,
+        DT_WHIP:-0.5, DT_RIP:-0.3,       
+        DT_POISON:-0.5, DT_COLD: 0.5, DT_WATER:0.5])
+      );
+      SetProp(P_HANDS, ({
+        " mit "+QueryPossPronoun(gender,WEM,PLURAL)+" "+
+        level_string[level-1]+"en Gifthaenden",
+        200+level*30, ({DT_BLUDGEON, spec_dt})})
+      );
+    break;
+
+    // blitz
+    case 9: spec_dt=DT_LIGHTNING;
+      SetProp(P_RESISTANCE_STRENGTHS, ([ 
+        DT_SLASH: -0.3, DT_BLUDGEON:-0.5, DT_PIERCE:-0.3, DT_SQUEEZE:-0.5,
+        DT_WHIP:-0.5, DT_RIP:-0.3,       
+        DT_LIGHTNING:-0.5, DT_COLD: 0.5, DT_AIR:0.5, DT_LIGHT:-0.5])
+      );
+      SetProp(P_LIGHT, 1);
+      SetProp(P_HANDS, ({
+        " mit "+QueryPossPronoun(gender,WEM,PLURAL)+" "+
+        level_string[level-1]+"en Blitzhaenden",
+        200+level*30, ({DT_BLUDGEON, spec_dt})})
+      );
+    break;
+
+    // donner
+    case 10: spec_dt=DT_SOUND;
+		  SetProp(P_RESISTANCE_STRENGTHS, ([ 
+        DT_SLASH: -0.3, DT_BLUDGEON:-0.5, DT_PIERCE:-0.3, DT_SQUEEZE:-0.5,
+      	DT_WHIP:-0.5, DT_RIP:-0.3,       
+	      DT_SOUND:-0.5, DT_AIR: -0.5, DT_WATER: 0.5])
+	    );
+      SetProp(P_HANDS, ({
+      	" mit "+QueryPossPronoun(gender,WEM,PLURAL)+" "+
+       	level_string[level-1]+"en Donnerhaenden",
+        200+level*30, ({DT_BLUDGEON, spec_dt})})
+      );
+    break;
+
+    // sumpf
+    case 11: spec_dt=DT_POISON;
+      SetProp(P_RESISTANCE_STRENGTHS, ([ 
+  	    DT_SLASH: -0.3, DT_BLUDGEON:-0.5, DT_PIERCE:-0.3, DT_SQUEEZE:-0.5,
+   	    DT_WHIP:-0.5, DT_RIP:-0.3,       
+	      DT_POISON:-0.5, DT_ACID: -0.5, DT_FIRE:0.5,DT_AIR:0.5, DT_COLD:0.5])
+	   );
+      SetProp(P_HANDS, ({
+      	 " mit "+QueryPossPronoun(gender,WEM,PLURAL)+" "+
+      	 level_string[level-1]+"en Sumpfhaenden",
+	     200+level*30, ({DT_BLUDGEON, spec_dt})})
+	   );
+    break;
+
+    // schlamm
+    case 12: spec_dt=DT_ACID;
+      SetProp(P_RESISTANCE_STRENGTHS, ([ 
+  	    DT_SLASH: -0.3, DT_BLUDGEON:-0.5, DT_PIERCE:-0.3, DT_SQUEEZE:-0.5,
+        DT_WHIP:-0.5, DT_RIP:-0.3,       
+        DT_POISON:-0.5, DT_ACID: -0.5, DT_FIRE:0.5, DT_COLD:0.5])
+      );
+      SetProp(P_HANDS, ({
+      	 " mit "+QueryPossPronoun(gender,WEM,PLURAL)+" "+
+      	 level_string[level-1]+"en Schlammhaenden",
+	     200+level*30, ({DT_BLUDGEON, spec_dt})})
+	   );
+    break;
+
+		// sand
+		// erblinden lassen einbauen! dt einbauen!
+    case 13:
+      SetProp(P_RESISTANCE_STRENGTHS, ([
+        DT_SLASH: -0.3, DT_BLUDGEON:-0.5, DT_PIERCE:-0.3, DT_SQUEEZE:-0.5,
+        DT_WHIP:-0.5, DT_RIP:-0.3,       
+        DT_AIR:0.5, DT_FIRE:-0.5, DT_WATER:0.5])
+      );
+      SetProp(P_HANDS, ({
+      	" mit "+QueryPossPronoun(gender,WEM,PLURAL)+" "+
+      	level_string[level-1]+"en Sandhaenden",
+	      200+level*30, ({DT_BLUDGEON})})
+ 	    );
+    break;
+
+	  // schnee
+	  case 14: spec_dt=DT_COLD;
+      SetProp(P_RESISTANCE_STRENGTHS, ([ 
+        DT_SLASH: -0.3, DT_BLUDGEON:-0.5, DT_PIERCE:-0.3, DT_SQUEEZE:-0.5,
+        DT_WHIP:-0.5, DT_RIP:-0.3,       
+        DT_WATER: 0.5, DT_FIRE:0.5, DT_COLD:-0.5])
+      );
+      SetProp(P_HANDS, ({
+      	" mit "+QueryPossPronoun(gender,WEM,PLURAL)+" "+
+      	level_string[level-1]+"en Schneehaenden",
+		    200+level*30, ({DT_BLUDGEON, spec_dt})})
+		  );
+    break;
+
+		// schatten
+		case 15: spec_dt=DT_UNHOLY;
+      SetProp(P_RESISTANCE_STRENGTHS, ([ 
+        DT_SLASH: -0.3, DT_BLUDGEON:-0.5, DT_PIERCE:-0.3, DT_SQUEEZE:-0.5,
+        DT_WHIP:-0.5, DT_RIP:-0.3,       
+        DT_WATER: 0.5, DT_FIRE:0.5, DT_COLD:-0.5])
+      );
+      this_object()->SetProp(P_LIGHT,-1);
+      SetProp(P_HANDS, ({
+      	" mit "+QueryPossPronoun(gender,WEM,PLURAL)+" "+
+      	level_string[level-1]+"en Schattenhaenden",
+		    200+level*30, ({DT_BLUDGEON, spec_dt})})
+		  );
+    break;
+
+		// schrecken
+		case 16: spec_dt=DT_TERROR;
+      SetProp(P_RESISTANCE_STRENGTHS, ([ 
+        DT_SLASH: -0.3, DT_BLUDGEON:-0.5, DT_PIERCE:-0.3, DT_SQUEEZE:-0.5,
+        DT_WHIP:-0.5, DT_RIP:-0.3,       
+        DT_WATER: 0.5, DT_FIRE:0.5, DT_COLD:-0.5])
+      );
+      SetProp(P_HANDS, ({
+      	" mit "+QueryPossPronoun(gender,WEM,PLURAL)+" "+
+      	level_string[level-1]+"en Schreckenshaenden",
+	      200+level*30, ({DT_BLUDGEON, spec_dt})})
+	    );
+    break;
+
+    default:
+      SetProp(P_RESISTANCE_STRENGTHS, ([ 
+        DT_SLASH: -0.3, DT_BLUDGEON:-0.5, DT_PIERCE:-0.3, DT_SQUEEZE:-0.5,
+        DT_WHIP:-0.5, DT_RIP:-0.3,       
+        DT_WATER: 0.5, DT_FIRE:0.5, DT_COLD:-0.5])
+      );
+      SetProp(P_HANDS, ({
+      	" mit "+QueryPossPronoun(gender,WEM,PLURAL)+" "+
+      	level_string[level-1]+"en Schneehaenden",
+	      200+level*30, ({DT_BLUDGEON, DT_COLD})})
+	    );
+  }
+
+  // wie halten sie temperaturen aus...
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:10, T_RANGE_MAX: 35]));
+  if( spec_dt==DT_COLD ) {
+    SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:-99, T_RANGE_MAX: 20])); 
+  }
+  if( spec_dt==DT_FIRE || spec_dt=DT_LIGHT || spec_dt==DT_LIGHTNING ) {
+    SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:15, T_RANGE_MAX: 99]));
+  }
+  // riesenessen gibt kraft!!!
+  SetProp(P_HEAL, 10+level*3);
+  // zb: lvl1: 135; lvl5: 100+175; max: 100+420    
+  SetProp(P_BODY, 100+level*35);
+  // also max 12; riesen sollten ja eher unmagisch sein, aber die besten, 
+  // staerksten exemplare haben das gelernt
+  SetProp(P_NOMAGIC, level);
+  // 600kg der leichteste; 500kg + 1200kg der fetteste      
+  SetProp(P_WEIGHT, 500000+level*100000);
+//  SetProp(P_CORPSE, 1);
+  // 5,5 meter meter der kleinste 5+6 meter der groesste  
+  SetProp(P_SIZE, 500+level*50);
+  //lvl 1: 34 lvl 12: 78  
+  SetProp(P_SPELLRATE, 30+level*4);
+  
+  if( gender==1 ) {
+    SetProp(P_NAME, ""+element_string[element-1]+"riese");
+    SetProp(P_SHORT,
+ 		  "Ein "+ align_string[align-1]+ "er, "+ level_string[level-1] +"er"
+		  " "+ element_string[element-1] +"riese"
+		);
+    AddId(""+ lower_case(element_string[element-1]) +"riese");
+  }
+  if( gender==2 ) {
+    SetProp(P_NAME, ""+element_string[element-1]+"riesin");
+    SetProp(P_SHORT,
+		  "Eine "+ align_string[align-1] +"e, "+ level_string[level-1] +"e"
+		  " "+ element_string[element-1] +"riesin"
+		);
+    AddId(({""+ lower_case(element_string[element-1]) +"riesin", 
+            "riesin"}));   
+  }
+  SetProp(P_NAME_ADJ, ({ ""+ align_string[align-1] +"",
+                          ""+ level_string[level-1] +""}));
+  SetProp(P_LONG, break_string(
+		"Vor Dir steht nun ein Exemplar aus der Rasse "
+		"der Riesen. Unter den Riesen dieser Welt gibt es "
+		"grosse Unterschiede. Dieses Wesen ist "+real_gender+". "
+		"Manche Riesen sind sehr aggressiv, andere hingegen sind gutmuetig. "
+		"Der Charakter dieses Riesen ist als "+ align_string[align-1] +" "
+		"einzustufen. " 
+		"Die Riesen dieser Welt leben in voellig unterschiedlichen "
+		"Landschaften und haben sehr unterschiedliche Vorlieben und "
+		"Eigenschaften. Dieses Exemplar bevorzugt das Element "+ 
+		element_string[element-1]+". Manche davon werden nicht so gross, "
+		"andere hingegen hoch wie Tuerme. "
+		"Dieses Wesen gehoert zu den "+level_string[level-1]+"en Mitgliedern"
+		"aus der Familie der Riesen.")
+  );
+	// die sdt_spells fuer alle riesen, haben nur physische dt_types
+	// die einzelnen arten haben dann noch eigene spells mit ihren spezifischen
+	// dt_types usw
+  
+  if(gender==1) {
+	  fight_name = ("Der "+ element_string[element-1] +"riese");
+  }
+  if(gender==2) {
+  	fight_name = ("Die "+ element_string[element-1] +"riesin");
+  }
+
+
+
+	i=random(sizeof(angriff_partie));
+  AddSpell(5,100+level*40, 
+    " "+fight_name+" schlaegt mit "+angriff_partie[i]+" auf Dich ein.\n",
+    " "+fight_name+" schlaegt mit "+angriff_partie[i]+" auf @WEN ein.\n",
+    DT_BLUDGEON, ([SP_SHOW_DAMAGE:1])
+  );
+
+  AddSpell(4,150+level*40, 
+    " "+fight_name+" pruegelt wild auf Dich ein.\n",
+    " "+fight_name+" pruegelt wild auf @WEN ein.\n",
+    DT_BLUDGEON, ([SP_SHOW_DAMAGE:1])
+  );
+
+//nix gut so weil immer gleich 
+	i=random(sizeof(koerper_partie));
+ 	AddSpell(3,200+level*40, 
+    " "+fight_name+" versucht Dich am "+koerper_partie[i]+" zu treffen.\n",
+    " "+fight_name+" versucht @WESSEN "+koerper_partie[i]+" zu treffen.\n",
+    DT_BLUDGEON, ([SP_SHOW_DAMAGE:1])
+  );
+
+	i=random(sizeof(angriff_partie));
+  AddSpell(2,200+level*45, 
+    " "+fight_name+" versucht Dich mit "+angriff_partie[i]+
+    " zu zerquetschen.\n",
+    " "+fight_name+" versucht @WEN mit "+angriff_partie[i]+
+    " zu zerquetschen.\n",
+    DT_SQUEEZE, ([SP_SHOW_DAMAGE:1])
+  );
+
+	i=random(sizeof(koerper_partie));
+  AddSpell(1,250+level*50, 
+    ""+fight_name+" versucht auf Dein "+koerper_partie[i]+
+    " zu springen.\n",
+    ""+fight_name+" versucht auf @WESSEN "+koerper_partie[i]+
+    " zu springen.\n",
+    DT_BLUDGEON, ([SP_SHOW_DAMAGE:1])
+  );
+
+    
+  //die grossen riesen koennen bisschen mehr
+  if( level >= RDG ) {
+    AddDefaultSpell(1, 200+level*30, 
+		  ""+fight_name+" versucht Dir Deine Ausruestung vom Koerper "+
+		  "zu reissen.\n",
+	    ""+fight_name+" versucht @WEM die Ausreustung vom Koerper "+
+	    "zu reissen.\n",
+		  DS_DISARM, ([SP_SHOW_DAMAGE:1])
+		);
+ 
+  	AddDefaultSpell(1, 300+level*35, 
+      ""+fight_name+" schlaegt brutal auf Deine Waffen ein.\n",
+      ""+fight_name+" schlaegt brutal auf @WESSEN Waffen ein.\n",
+      DS_REDUCE_WC, ([SP_SHOW_DAMAGE:1])
+    );
+  
+	  AddDefaultSpell(1, 300+level*35, 
+  	  ""+fight_name+" schlaegt brutal auf Deine Ausruestung ein.\n",
+	    ""+fight_name+" schlaegt brutal @WESSEN Ausruestung ein.\n",
+   	  DS_REDUCE_AC, ([SP_SHOW_DAMAGE:1])
+   	);
+  } 
+  
+  //special_spells fuer die "rassen"
+  i=random(sizeof(koerper_partie));
+  AddSpell(1,200+level*15, 
+		""+fight_name+" versucht Dich mit einem "+element_string[element-1]+
+		"strahl am "+koerper_partie[i]+" zu treffen.\n",
+		""+fight_name+" versucht @WEN mit einem "+element_string[element-1]+
+		"strahl am "+koerper_partie[i]+" zu treffen.\n",
+    spec_dt, ([SP_SHOW_DAMAGE:1])
+  );
+ 
+  i=random(sizeof(koerper_partie));
+  AddSpell(1,200+level*20, 
+		""+fight_name+" versucht Dich mit einer "+element_string[element-1]+
+		"kugel am "+koerper_partie[i]+" zu treffen.\n",
+		""+fight_name+" versucht @WEN mit einem "+element_string[element-1]+
+		"kugel am "+koerper_partie[i]+" zu treffen.\n",
+    spec_dt, ([SP_SHOW_DAMAGE:1])
+  );
+
+  AddSpell(1,200+level*30, 
+		""+fight_name+" versucht Dich mit einem "
+		""+element_string[element-1]+"angriff zu treffen.\n",
+		""+fight_name+" versucht @WEN mit einem"
+		""+element_string[element-1]+"angriff zu treffen.\n",
+    spec_dt, ([SP_SHOW_DAMAGE:1])
+  );
+
+  AddSpell(1,200+level*25, 
+		""+fight_name+" schleudert einen "
+		""+element_string[element-1]+"ball nach Dir.\n",
+		""+fight_name+" schleudert einen "
+		""+element_string[element-1]+"ball nach @WEM.\n",
+    spec_dt, ([SP_SHOW_DAMAGE:1])
+  );
+
+//	SetProp(P_NOCORPSE, 1);
+  SetProp(P_DIE_MSG, " bricht unter lautem Getoese tot zusammen.\n"
+		""+capitalize(QueryPossPronoun(MALE, WER, SINGULAR))+" riesenhafter "
+		"Koerper erschlaegt Dich dabei fast.\n"
+  );
+
+ SetProp(P_KILL_NAME, ""+fight_name+"");
+ SetProp(P_MURDER_MSG, "Du kleiner Wicht hattest nur RIESIGES Glueck!\n");
+ SetProp(P_KILL_MSG, "Du hattest keine Chance gegen meine Riesenkraft!\n");
+ SetProp(P_MSG_FLAGS, ([P_KILL_MSG:0, P_MURDER_MSG:0 ]));
+
+  if( level >= HDG ) {
+
+ AddSpell(2,200,
+      ""+fight_name+" macht einen Rundumschlag.\n",
+      ""+fight_name+" macht einen Rundumschlag.\n",
+     DT_TERROR, "spell_all");
+
+AddSpell(1,200,
+      ""+fight_name+" steigert sich in einen Kampfrausch.\n",
+      ""+fight_name+" steigert sich in einen Kampfrausch.\n",
+     DT_TERROR, "spell_speed");
+
+
+
+}
+
+AddInfo(({"riese","riesen","riesin"}),
+"Ich entstamme dem Geschlecht der Riesen. Wir sind stark und maechtig "
+"und doch sehr verschieden. Es gibt gute, freundliche Riesen aber auch "
+"boesartige aggressive Riesen. Wir leben ueberall in dieser Welt und "
+"haben uns den Umstaenden angepasst.", "brummt: ");
+
+AddInfo("fell",
+"Das Fell waermt mich und bietet mir Schutz. Je staerker ein Riese ist, "
+"desto besser ist auch sein Fell.", "sagt brummig: ");
+
+AddInfo(({"kristall","magiekristall","splitter","magiesplitter",
+"magiekristallsplitter"}),
+"Wir Riesen sammeln seit Ewigkeiten die Splitter der Magiekristalle. "
+"Sie haben verschiedene magische Faehigkeiten und man weiss nie genau, "
+"was sie noch alle so koennen. Sie sind auf jeden Fall sehr wertvoll!",
+"sagt: ");
+
+
+}
+
+
+
+
+int _query_wimpy() { return 0; }
+
+
+void NotifyPlayerDeath(object player, object killer, int lostexp) {
+	write_file(LOG_PATH"giant_kills",           
+    ctime()+": "+name(WER)+" LV:"+QueryProp(P_LEVEL)+" -> "+
+    CAP(getuid(player))+".\n"
+  );
+	command("iss leiche");
+	call_out("nimm_alles", 0);
+}
+
+
+/*
+void die(int poisondeath)
+  
+       {
+    
+    write_file(LOG_PATH"giant_deads",           
+    ctime()+": "+name(WER)+" LV:"+QueryProp(P_LEVEL)+" getoetet von "+
+    CAP(getuid(TP))+".\n"
+    
+      ::die(poisondeath);
+      
+         }
+
+*/
+
+void nimm_alles() {
+  if(present("leiche", environment(TO))) {
+	  command("nimm alles aus leiche");
+  } 
+}
+
+
+ void spell_all(object enemy,int damage,mixed dam_type)
+    {
+      int i;
+         object *inv;
+      inv=PresentEnemies();
+             damage=random((1000)+500);
+                         damage/=sizeof(inv);
+        tell_room(ENV(ME), BS("Der Riese pruegelt Dich fast zu Tode!!!\n"));
+          for(i=sizeof(inv)-1;i>=0;i--)
+                  {
+         tell_object(inv[i], "Du geraetst in aergste Bedraengniss!!!\n");
+          inv[i]->Defend(damage, dam_type,
+      ([SP_SHOW_DAMAGE:1,SP_NAME:"Riese"]), this_object());
+     }
+   }
+   
+   
+   
+   
+ void spell_speed(object enemy,int damage,mixed dam_type)
+    {
+      int i;
+         object *inv;
+      inv=PresentEnemies();
+       TO->ModifySkillAttribute(this_object(),SA_SPEED,500,4+random(4));
+             damage=random((1000)+500);
+                         damage/=sizeof(inv);
+        tell_room(ENV(ME), BS("Der Riese pruegelt wie irr auf Dich ein!!!\n"));
+          for(i=sizeof(inv)-1;i>=0;i--)
+                  {
+         tell_object(inv[i], "Du geraetst in aergste Bedraengniss!!!\n");
+          inv[i]->Defend(damage, dam_type,
+      ([SP_SHOW_DAMAGE:1,SP_NAME:"Riese"]), this_object());
+     }
+   }
+   
+   
+   
+   

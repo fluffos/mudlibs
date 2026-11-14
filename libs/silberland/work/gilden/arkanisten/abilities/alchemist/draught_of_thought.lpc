@@ -1,0 +1,100 @@
+#include "../../arkanisten.h"
+
+inherit GUILD_FOLDER "abilities/ability.lpc";
+
+public void create() {
+    if(is_clone(TO)) return;
+
+    ::create();
+    SetProp(P_ABILITY_NAME, CAP(DRAUGHT_OF_THOUGHT));
+    SetProp(P_ABILITY_DESCRIPTIPON, 
+       "Das Kognitatrium ist ein alchemistisches Meisterwerk der Stimulanzen. "
+       "Wenn du es trinkst, beschleunigst du die Denkprozesse und Regeneration "
+       "in deinem Gehirn. Du gewinnst schneller Konzentration zurueck, doch "
+       "sei dir bewusst, dass es dafuer deine Wundheilung verlangsamt.");    
+    SetProp(P_ABILITY_TYPE, ABILITY_TYPE_ACTIVE);
+    SetProp(P_ABILITY_BASE_ATTRIBUTE, A_INT);
+    SetProp(P_ABILITY_CASTVERB, CAST_VERB_DRINK);
+    SetProp(P_ABILITY_GROUP, ({ABILITY_GROUP_ALCHEMY}));
+    SetProp(P_ABILITY_COST, ([
+        P_HP: 30,
+    ]));
+    SetProp(P_ABILITY_REQUIRES, ({ COGNITIVE_MUTAGEN }));
+}
+
+public mapping prepare_use(object user, mapping sinfo) {
+    object victim;
+
+    if(get_free_hands(user) < 2) {
+        tell_object(user, BS("Du musst eine zwei freie Haende haben, um das Kognitarium zu mischen!"));
+        return 0;
+    }
+
+    victim = user;
+
+    if(victim->Query(P_SP_DELAY, F_QUERY_METHOD) && victim->Query(P_HP_DELAY, F_QUERY_METHOD)) {
+        tell_object(victim, BS("Du stehst bereits unter einem solchen Effekt."));
+        return 0;
+    }
+
+    tell_object(user, BS("In schneller Abfolge mischt du regenbogenfarbene Ampullen zusammen und schuettelst das Ergebnis."));
+    tell_room(ENV(user), BS(user->Name(WER)+" mischt schnell verschiedenfarbige Amupllen zusammen und schuettelt dann."), ({user}));
+
+    sinfo[SI_PREPARE_TIME] = 10;
+    sinfo[SI_SKILLARG] = victim;
+
+    return ::prepare_use(user, sinfo);
+}
+
+public void failed(object user, mapping sinfo, int skillcheck) {
+    object victim;
+    victim = sinfo[SI_SKILLARG];
+
+    tell_object(user, BS("Das resultat verfaerbt sich schwarz und ist leider unbrauchbar."));
+    tell_room(ENV(user), BS(user->Name(WER)+" sieht enttaeuscht auf eine schwarze Ampulle."), ({user}));
+    
+    return ::failed(user, sinfo, skillcheck);
+}
+
+public void success(object user, mapping sinfo, int skillcheck) {
+    object victim;
+    int duration;
+
+    victim = sinfo[SI_SKILLARG];
+    if(!objectp(victim)) {
+        tell_object(user, BS("Nanu? Dein Ziel ist nicht mehr da!"));
+        return;
+    }
+
+    tell_object(victim, BS("Die Fluessigkeit faerbt sich durchsichtig und rasch trinkst du es. Du spuehrst wie deine Gedanken schneller werden."));
+    tell_room(ENV(victim), BS(user->Name(WER)+" trinkt rasch eine durchsichtige Fluessigkeit und bekommt glasige Augen."), ({victim}));
+
+    duration = 15 + (sinfo[SI_SKILLABILITY] / 300) + (skillcheck / 150);
+
+    victim->Set(P_SP_DELAY, symbol_function("sp_delay", TO), F_QUERY_METHOD);
+    victim->Set(P_HP_DELAY, symbol_function("hp_delay", TO), F_QUERY_METHOD);
+    call_out("remove_delay", duration, victim);
+
+    pDebug(user, sprintf("kognitarium :: duratiion = %d\n", duration));
+
+    return;
+}
+
+public int sp_delay() {
+    return 0;
+}
+
+public int hp_delay() {
+    return 10;
+}
+
+public void remove_delay(object caster)
+{
+  if( objectp(caster) )
+  {
+    caster->Set(P_HP_DELAY, 0, F_QUERY_METHOD);
+    caster->Set(P_SP_DELAY, 0, F_QUERY_METHOD);
+    tell_object(caster, BS("Die Wirkung des Kognitariums laesst nach."));
+  }
+}
+

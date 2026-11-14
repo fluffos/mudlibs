@@ -1,0 +1,285 @@
+// 'Schutz' beim nach Sueden gehen, da die Dunkelelfen autoattack sind
+// gegen jeden nicht dunkelelfen, bzw gegen jeden der sich nicht
+// als dunkelelf verkleidet hat
+// man kann nicht nach sueden gehen, wenn man eine verfluchte waffe traegt!
+// dies ist ein schutz, um in der quest kein 'fehlverhalten' zu erzeugen
+// 18.03.2003 erstellt: Archon
+/*
+ Rev 1.0 18.03.2003 Archon: erstellt
+*/
+
+#pragma strict_types
+#include "../def.h"
+inherit "std/room";
+
+#define ANSCHLUSS "/d/unterwelt/basics/central/room/00-05-09"
+
+void create();
+int exit_sueden();
+int cmd_gehe(string str);
+
+int rune;
+
+void create()
+{
+  ::create();
+  rune=1;
+
+  SetProp(P_INDOORS, 1);
+  SetProp(P_LIGHT, 0);
+  SetProp(P_ENVIRONMENT,([ENV_TEMPERATURE:20, ENV_TERRAIN:TT_CAVE]));
+  SetProp(P_INT_SHORT, "In einem Tunnel");
+
+  SetProp(P_INT_LONG,
+    "Dieser Teil des unterirdischen Tunnelsystems sieht nicht gerade "
+    "vertrauenserweckend aus. Schon lange scheint keiner mehr "
+    "hier gewesen zu sein. Unregelmaessig geformte Zacken haengen von "
+    "der Decke herab und scheinen Dich zu bedrohen. Einzelne Risse "
+    "in den Waenden und ein Loch in der Decke deuten darauf hin, "
+    "dass hier bald alles in sich zusammen brechen koennte. Du "
+    "bekommst Angst und willst nur weg von hier.");
+  
+  AddDetail(({"umgebung","tunnel","teil"}),QueryProp(P_INT_LONG));
+  AddDetail(({"zacken","kanten"}),
+    "Die unregelmaessig geformten Zacken haengen von der Decke "
+    "herab. Waehrend Du sie betrachtest, hast Du den Eindruck, "
+    "dass sie immer naeher kommen.");
+  AddDetail(({"eindruck"}),
+    "Dir kommt es vor, als ob Dein Ende nahe sei."),
+  AddDetail(({"ende","angst"}),
+    "Hier geht es nicht mit rechten Dingen zu, der Tunnel scheint "
+    "Dich magisch zu beeinflussen und erzeugt eine tiefe Angst in "
+    "Dir. Ob hier jemand will, dass Du nicht weiter gehst?");
+  AddDetail(({"ding","dinge","dingen"}),
+    "Ob hier jemand Magie angewand hat?");
+  AddDetail(({"magie"}),
+    "Will Dich hier jemand daran hindern, weiter nach Sueden zu "
+    "gehen?");
+  AddDetail(({"decke"}),
+    "Furchteinfloessende Zacken haengen von der Decke herab. "
+    "Es sieht so aus, als ob jederzeit einer dieser Zacken herab "
+    "fallen koennte, um Dich aufzuspiessen. Besonders das grosse "
+    "Loch in der Decke untermauert diese Befuerchtung.");
+  AddDetail(({"befuerchtung"}),
+    "Der Tunnel macht Dir Angst.");
+  AddDetail(({"loch"}),
+    "Ein grossen Loch klafft in der Decke. Ob dort einmal ein grosser "
+    "Zacken hing?");
+  AddDetail(({"boden"}),
+    "Der Boden ist ueberzogen von Rissen, so dass Du bei jedem Schritt "
+    "aufpassen musst, nicht in einem davon Deinen Fuss zu brechen. "
+    "Ausserdem liegt einiges an Geroell auf dem Boden verteilt, welches "
+    "diese Gefahr noch erhoeht.");
+  AddDetail(({"gefahr"}),
+    "Wo mag die Gefahr groesser sein. Hier oder im Sueden?");
+  AddDetail(({"geroell","rest"}),
+    "Das Geroell koennte der Rest von Zacken aus der Decke sein.");
+  AddDetail(({"risse","rissen"}),
+    "Die Decke, der Boden und die Waende sind von Rissen durchzogen. "
+    "Du hast das Gefuehl, das jederzeit der Tunnel zusammen brechen "
+    "koennte. Ein Riss im Boden faellt Dir besonders auf.");
+  AddDetail(({"riss"}),
+    "Vielleicht solltest Du einmal in den Riss greifen.");
+  AddDetail(({"gefuehl"}),
+    "Ob Du Deinem Gefuehl trauen kannst?");
+  AddDetail(({"wand","waende"}),
+    "Kleine und auch groessere Risse durchziehen die Waende. "
+    "Ob diese noch lange halten werden?");
+  AddDetail(({"schritt","schritte"}),
+    "Pass auf jeden einzelnen auf. Wer weiss wo er Dich hinfuehrt.");
+  AddDetail(({"fuss","fuesse"}),
+    "Sie tragen Dich durch das Silberland.");
+  AddDetail(({"silberland","land"}),
+    "Du bist gerade im Silberland - genauer in der Unterwelt.");
+  AddDetail(({"unterwelt","welt"}),
+    "Die Unterwelt mit ihrem Tunneln und Gaengen umgibt Dich wie "
+    "ein Gefaengnis.");
+  AddDetail(({"tunneln","tunnelsystem","tunnelsysteme","tunnelsystemen",
+              "system","systeme","systemen","tunnelsystems",
+              "gang","gaenge"}),
+    "Die riesige Anzahl an Tunneln laesst Dich schaudern. Verirr Dich "
+    "blos nicht.");
+  AddDetail(({"anzahl"}),
+    "Du willst nicht darueber nachdenken.");
+  AddDetail(({"gefaengnis"}),
+    "Hier ist keins. Aber vielleicht sitzt Du bald in einem.");
+  
+  AddCmd(({"geh","gehe","gehen"}),"cmd_gehe");
+  AddCmd(({"greif","greife","greifen"}),"cmd_greife");
+  
+  AddExit("sueden",#'exit_sueden);
+  AddExit("norden", ANSCHLUSS);
+  
+  set_next_reset(MASTERDELAY);
+}
+
+//mit gezueckter Verfluchter Waffe gehts nicht weiter ...
+int WaffenFluch(object ob)
+{
+  if (!ob->QueryProp(P_WIELDED)) return 0;
+  if (!ob->QueryProp(P_CURSED)) return 0;
+  return 1;
+}
+
+int exit_sueden()
+{
+  string race;
+  int pos,art;
+  int weiter;
+  object ob;
+
+  if (!PL) return 1;
+  if (!interactive(PL)) 
+    PL->move(ROOM "tunnel_02",M_GO,"","geht","kommt an");
+  if (sizeof(filter_array(all_inventory(PL),#'WaffenFluch)))
+  {
+    tell_object(PL,break_string(
+      "Du folgst dem Tunnel nach Sueden, als Du ploetzlich nicht mehr "
+      "weiter kommt, da eine unsichtbare Macht Deine Hand mit der Waffe "
+      "festhaelt. Solange Du diese Waffe fuehrst, wirst Du hier nicht "
+      "weiter kommen."));
+    return 1;
+  }
+  ob=find_object(ROOM "tunnel_02");
+  if (objectp(ob) && !present("DUNKELELFNPC",ob))
+  {
+    PL->move(ROOM "tunnel_02",M_GO,"","geht","kommt an");
+    return 1;
+  }   
+  tell_object(PL,break_string(
+    "Du folgst dem Tunnel nach Sueden, als Du ploetzlich vor "
+    "Dir etwas bemerkst. Erschreckt erstarrst Du mitten in Deiner "
+    "Bewegung und verharrst angestrengt lauschend. Dann ploetzlich "
+    "glaubst Du das Kriegslager einer Gruppe Dunkelelfen zu erkennen."));
+  race=(string)PL->QueryProp(P_RACE);
+  pos=(int)P_ARCHON_QUESTMASTER->get_quest_pos(PL);
+  art=(int)P_ARCHON_QUESTMASTER->get_quest_kind(PL);
+  weiter=0;
+  if (!stringp(race) || !strlen(race) || lower_case(race)!="dunkelelf")
+  {
+    if (PL->QueryProp(P_DARKELF_DISGUISE))
+    {
+      tell_object(PL,break_string(
+       "Du willst schon umkehren, als Dir Deine Verkleidung einfaellt "
+       "und Du entschlossen weiter gehst."));
+      weiter=1;
+    }
+    else if (art==2)
+    {
+      tell_object(PL,break_string(
+        "Auch wenn Du Dich entschlossen hast, den Dunkelelfen zu helfen, "
+        "solltest Du nicht mutig weiter schreiten und hoffen, dass Du nicht "
+        "gleich angegriffen wirst, sondern dir erst eine Verkleidung besorgen."));
+    }
+    else if (art==1)
+    {
+      if (pos<2)
+      {
+        tell_object(PL,break_string(
+          "Du solltest zuerst den Turm aufsuchen, bevor Du hierher kommst."));
+      }
+      else if (pos<4)
+      { //vertrauenszauber wird erst im naechsten raum abgefragt!!
+        tell_object(PL,break_string(
+          "Du solltest Dir zunaechst eine Verkleidung zulegen, bevor Du "
+          "versuchst das Lager der Dunkelelfen zu betreten."));
+      }
+      else
+      {
+        tell_object(PL,break_string(
+          "Du hast hier nichts mehr verloren und solltest so schnell "
+          "wie moeglich zum Turm zurueckkehren."));
+      }
+    }
+    else
+    {
+     tell_object(PL,break_string(
+      "Da Du kein Dunkelelf bist, solltest Du sie auf GAR KEINEN FALL "
+      "stoeren, denn wenn sie Dich erspaehen, werden sie Dich sofort "
+      "ALLE angreifen. Solltest Du das wollen, kannst mit 'gehe trotzdem "
+      "nach sueden' doch ihre naehere Bekanntschaft machen."));
+    }
+  }
+  else
+  {
+   if (art==1 && pos<3)
+   {
+     tell_object(PL,break_string(
+       "Du solltest zuerst den Turm aufsuchen, bevor Du hierher kommst."));
+   }
+   else
+   {
+    tell_object(PL,break_string(
+     "Du, als Dunkelelf, entspannst Dich wieder und gehst weiter."));
+    weiter=1;
+   }
+  }
+  if (weiter)
+   PL->move(ROOM "tunnel_02",M_GO,"","geht","kommt an");
+  else
+   tell_room(ME,break_string(
+     PL->Name(WER,1)+" verschwindet kurz nach Sueden, "
+     "nur um sofort wieder zurueck zu kommen."),({PL}));
+  return 1;
+}
+
+int cmd_gehe(string str)
+{
+  if (!S_STANDARD->check_cmd(str,
+    "trotzdem|trozdem&sueden",
+    "Du willst wohl TROTZDEM irgendwohin gehen?|"
+    "Wohin willst Du trotzdem gehen?"))
+    return 0;
+  
+  if (sizeof(filter_array(all_inventory(PL),#'WaffenFluch)))
+  {
+    tell_object(PL,break_string(
+      "Du folgst dem Tunnel nach Sueden, als Du ploetzlich nicht mehr "
+      "weiter kommt, da eine unsichtbare Macht Deine Hand mit der Waffe "
+      "festhaelt. Solange Du diese Waffe fuehrst, wirst Du hier nicht "
+      "weiter kommen."));
+    return 1;
+  }
+
+  PL->move(ROOM "tunnel_02",M_GO,"","geht","kommt an");
+  return 1;
+}
+
+int cmd_greife(string str)
+{
+  object r;
+  if (!S_STANDARD->check_cmd(str,
+    "riss",
+    "Wohin willst Du greifen?"))
+    return 0;
+  
+  tell_room(ME,break_string(
+    PL->Name(WER,1)+" greift nach irgendetwas."),({PL}));
+  if (!rune)
+  {
+    write(break_string(
+      "Du greifst tief in den Riss hinein, doch leider kannst "
+      "Du zur Zeit darin nichts finden."));
+    return 1;
+  }
+  rune--;
+  write(break_string(
+    "Du greifst tief in den Riss hinein und findest einen Rune, "
+    "die Du sofort an Dich nimmst."));
+  r=clone_object(TUNNEL "obj/rune");
+  if (r->move(PL,M_GIVE)<1)
+  {
+    write(break_string(
+      "Leider ist Dir die Rune zu schwer und Du laesst sie "
+      "wieder fallen."));
+    r->move(ME,M_PUT);
+  }
+  return 1;
+}
+
+void reset()
+{
+  ::reset();
+  set_next_reset(MASTERDELAY);
+  rune=1;
+}

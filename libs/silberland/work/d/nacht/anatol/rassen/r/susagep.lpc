@@ -1,0 +1,735 @@
+/* very troubling non-standard transporter. Gosh.
+ *
+ *  the ascii represantation of this flying animal comes from Joan G Stark,
+ *  who kindly allowed the usage of her ascii arts (even ommitting her jgs 
+ *  sign).
+ *
+ *  2021-09-13 Anatol: Typo Fix (thanks, Katarok)
+ * ____________________________________(i) Anatol@Silberland (1999-2012) */
+
+
+#pragma strict_types
+#include <wizlevels.h>
+#include <properties.h>
+#include <moving.h>
+#include <combat.h>
+#include "../defines.h"
+
+#define S_DOCKED1 0
+#define S_FLY1    1
+#define S_DOCKED2 2
+#define S_FLY2    3
+
+#define CONNECT ({  "/d/ebene/Silberwald/room/room_h05" , ROOM "klippen" })
+#define PARKPLATZ ROOM "vc/vc_room"  // Das ist mal Reusability!
+
+#define NEXT (stat=(++stat)%4)
+#define DOCKED (stat==(stat&2))
+
+#define MSG(x) Message(break_string(x,77), MSGFLAG_VISUAL) 
+
+inherit "/std/thing/moving";
+inherit STD "room";
+
+nosave int stat;
+nosave string * dests;
+nosave object guest;
+nosave string lastguest;
+
+
+public object * Guests() { // Falls mal mehr geplant sind?
+  return filter_array(all_inventory(this_object()),#'query_once_interactive);
+}
+
+public string _query_long() {
+  return Query(P_LONG)+break_string((sizeof(Guests())?
+    "Auf seinem Ruecken hat sich "+ (string)Guests()[0]->Name(WER)+
+    " breitgemacht.":
+    "Aus dem betont neutralen Verhalten des erhabenen des Susagep "
+      "schliesst Du vorsichtig, dass er Dich eventuell als Passagier "
+      "dulden wuerde."),77);
+}
+
+public string _query_int_long() {
+  return Query(P_INT_LONG)+(((DOCKED) && (environment(this_object())))?
+      "Wenn Du runter schaust, siehst Du: "+
+      (string)environment(this_object())->QueryProp(P_INT_SHORT)+".\n":
+      "Im Moment fliegt der Susagep mit Dir in schwindelnden Hoehen.\n");
+}
+
+public string GetExits() { return ""; }
+
+nosave void initStart(int i, int w) {
+  while (remove_call_out("susagep")>=0);
+  call_out("susagep",i,w);
+  return;
+}
+
+public int clean_up(int refcount) {
+  return 1;
+}
+
+nosave void home() {
+  move(dests[0],M_NOCHECK);
+  tell_room(dests[0],"Der edle Susagep gleitet mit rauschenden "
+      "Schwingen herab.\n");
+  initStart(120,0);
+  return;
+}
+
+public string name() { return "Susagep"; }
+public string Name() { return "Susagep"; }
+public int _query_total_ac() { return 100000; }
+public int _query_total_wc() { return 100000; }
+
+public void create() {
+
+  if (is_clone(this_object())) {
+    destruct(this_object());
+    return;
+  }
+  ::create();
+  enable_commands();
+  guest=0;
+  dests=CONNECT;
+  stat=S_DOCKED1;
+  AddId(({"susagep","\a\n\a\tol_susagep","\nsusagep","pferd",
+      "gefluegeltes pferd","Transporter"}));
+  SetProp(P_MAX_HP,SetProp(P_HP,SetProp(P_SP,SetProp(P_MAX_SP,1000))));
+  set_living_name("susagep");
+  SetProp(P_XP,0);
+  SetProp(P_BODY,19999);
+  SetProp(P_HANDS,({" mit toedlichen Hufschlaegen",100000,DT_BLUDGEON}));
+  SetProp(P_NAME,"Susagep");
+  SetProp(P_GENDER,MALE);
+  SetProp(P_WEIGHT,1000000);
+  SetProp(P_NOQUIT,1);
+  SetProp(P_NOREST,1);
+  SetProp(P_INDOORS,0);
+  SetProp(P_INFO,break_string(
+      "Dieses edle Tier stellt die Verbindung zwischen der "
+      "sonnigen Seite des Silberlands und dem Tempel der "
+      "Magie der Wandlung dar.",77));
+  SetProp(P_NOATTACK,"ignoriert Dich oder diesen Befehl.\n");
+  SetProp(P_SIZE,433);
+  SetProp(P_NO_TPORT,NO_TPORT);
+  SetProp(P_LIGHT,1);
+  SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE:22, ENV_TERRAIN:TT_OTHER])); 
+  SetProp(P_SHORT, "Der Susagep, das gefluegelte Pferd");
+  SetProp(P_LONG,
+      "Die strahlende Erhabenheit des mystischen gefluegelten Pferdes droht "
+      "Dich zu ueberwaeltigen, das ausdruckslose und unbeeindruckte Augenpaar "
+      "mustert Dich ueberlegen und scheinbar gedankenverloren die Umgebung. ");
+  SetProp(P_INT_SHORT, "Auf des Susagep' Ruecken");
+  SetProp(P_INT_LONG,
+      "Das erhabene Wesen des fast silbern strahlenden Susagep wuerde Dich "
+      "ehrfuerchtig in ewigen Bann schlagen, wuerdest Du nicht auf vor den "
+      "maechtigen, schneeweissen Schwingen auf dem edlen Ruecken des "
+      "gefluegelten Pferdes sitzen und die Gewissheit haben, dort geduldet "
+      "zu werden.");
+  AddDetail("maehne",
+      "Krall' Dich da besser nicht zu sehr in die Maehne.");
+  AddDetail("susagep","Du weisst gar nicht, wo Du da anfangen sollst.");
+  AddDetail(({"bein","beine"}),
+      "Wenn Du eine Stute waerst, wuerdest Du Dich in die Schoenheit dieser "
+      "edel geformten Beine verlieben. Zweifellos.");
+  AddDetail(({"augen","augenpaar"}),
+      "Mit nachtschwarzen ausdruckslosen Augen mustert Dich der Susagep. "
+      "Du fuehlst Dich etwas unbehaglich.");
+  AddDetail("ruecken",
+      "Sonderlich bequem sieht der Ruecken nun nicht aus, aber fuer eine "
+      "bestimmt kurze Reise wird das schon okay sein.");
+  AddDetail("reise","Offenkundig kann man mit dem Susagep reisen.");
+
+  AddDetail("stute",
+      "Doch da der Susagep mit gewoehnlichen Stuten ohnehin nichts anzufangen "
+      "wissen wuerde, bist Du ganz froh, dass Du keine bist.");
+  AddDetail(({"perd","erhabenheit","wesen"}),
+      "Der edle Susagep strahlt Wuerde, Edelmut und eine gewisse "
+      "Goettlichkeit aus, die nicht von dieser Welt zu sein scheint. "
+      "Du bist von der vollkommenen Schoenheit des edlen Geschoepfes "
+      "fast ueberwaeltigt.");
+  AddDetail(({"geschoepf","schoenheit","vollkommenheit","bann"}),
+      "Die Schoenheit und Vollkommenheit des wahrhaft goettlichen Wesens "
+      "ist ueberwaeltigend. Voller tiefer Bewunderung bestaunst Du das "
+      "helle, silbern glaenzende und samtweiche Fell, den funkelnden "
+      "Schweif, den edel geformten Hals... ach...!");
+  AddDetail(({"hals","haltung"}),
+      "So wie das gefluegelte Pferd sein Haupt haelt, seinen Hals in "
+      "Wuerde beugt, strahlt es eine unvergleichliche Anmut aus.");
+  AddDetail(({"schweif","strahlen"}),
+      "Wie Strahlen der Sonne selbst funkelt der Schweif des Susagep!");
+  AddDetail("fell",
+      "Silberseidig glaenzt das strahlendweisse Fell des Susagep, rein "
+      "wie eine junge Bluete, die sich den waermenden Strahlen der Sonne "
+      "entgegenreckt.");
+  AddDetail("bluete","So rein, so wunderschoen...");
+  AddDetail("glanz","Das Fell des Susagep glaenzt silbern.");
+  AddDetail("schoenheit", "Welch` koenigliche Ausstrahlung, welch' Anmut!");
+  AddDetail("ausstrahlung", "Du bist hin und weg.");
+  AddDetail(({"anmut","grazie"}),
+      "Die Bewegungen des gefluegelten Pferdes sind voller Grazie "
+      "und Anmut.");
+  AddDetail(({"fluegel","schwingen","kraft"}),
+      "Welch' Kraft muss hinter diesen gewaltigen Schwingen am Werke sein? "
+      "Und doch... Du vermutest, dass dieses Wesen auch ueber eine gehoerige "
+      "Portion Magie verfuegt.");
+  AddDetail(({"portion","magie"}),"... auch wenn Du sie nicht siehst.");
+  AddSmell(DEFAULT_SMELL,SetProp(P_SMELL,break_string(
+      "Das wahrhaft magische Wesen wird von einem wahrhaft unmagischen Geruch "
+      "begleitet. Nur wuerdest Du das dem Susagep nur ungern ins Gesicht "
+      "sagen wollen.",77)));
+  AddSound(DEFAULT_SOUND,SetProp(P_SOUND,break_string(
+      "Du hoerst nichts auffaelliges. Irgendwo unter Dir schlaegt ein grosses "
+      "Herz, pumpen ein paar kraeftige Lungen, alles normal also.",77)));
+  AddDetail("passagier","Offenbar duldet dieser Susagep gelegentlich Reisende. "
+      "auf seinem Ruecken.");
+
+  AddSpecialDetail("runter","detRunter");
+  SetProp(P_GEMA,({0,0,0}));
+
+  AddCmd(({"klettere","kletter"}),"cmdKlettere");
+  AddCmd(({"besteige","besteig"}),"cmdBesteige");
+  AddCmd(({"steige","steig"}),    "cmdSteige");
+  AddCmd(({"schwinge","schwing"}),    "cmdSchwinge");
+  AddCmd(({"verlasse","verlass"}),"cmdVerlasse");
+  AddCmd(({"reise","reis"}),"cmdReise");
+  home();
+}
+
+nosave string detRunter() {
+  if (!this_player()) return "";
+  if (DOCKED) 
+    return (string)(environment()->int_long(this_player(),this_object()));
+  else return "Um Dich herum ist vor allen Dingen viel nichts. Wuuuuaaaah!\n"; 
+}
+
+nosave int cmdReise(string s) {
+  notify_fail("Das waere zu einfach.\n");
+  return 0;
+}
+
+nosave int cmdVerlasse(string s) {
+  if ((!this_player())||(environment(this_player())!=this_object()))
+    return 0;
+  notify_fail("Wen oder was willst Du verlassen?\n");
+  if (!id(s)) 
+    return 0;
+  notify_fail(break_string(
+    "Verlassen? Einfach so? Mach' das mit Freund oder Freundin, von "
+    "einem Susagep mit drei Metern Schulterhoehe aber kann man hoechstens "
+    "herunterklettern.\n",77));
+  return 0;
+}
+
+nosave int cmdSteige(string s) {
+  notify_fail("Steige, steige - siehst Du hier irgendwo Stufen?\n");
+  return 0;
+}
+
+nosave int cmdSchwinge(string str) {
+  string s;
+  if ((!this_player())||(environment(this_player())==this_object()))
+    return 0;
+  notify_fail("Worauf willst Du Dich schwingen?\n");
+  if ((!str) || 
+     (! ( ((sscanf(str,"auf %s",s)==1) && (id(s)))
+        || (sscanf(str,"dich auf %s",s)==1) && (id(s)))))
+    return 0;
+  write(break_string(
+    "Mit einem vergnueglichen Jauchzer wirst Du Dich voller Elan "
+    "auf des edlen Susagep' Ruecken. Und hast dabei so viel Schwung, "
+    "dass Du auf der anderen Seite wieder herunterpurzelst.",77));
+  say(break_string((string)this_player()->Name(WER)+" wirft sich "
+     "schwungvoll auf des edlen Susagep' Ruecken ... und purzelt "
+     "ebenso schwungvoll auf der anderen Seite wieder runter. "
+     "Jetzt bloss nicht lachen!",77));
+  return 1;
+}
+
+
+nosave int cmdBesteige(string s) {
+  if ((!this_player())||(environment(this_player())==this_object()))
+    return 0;
+  notify_fail("Wen oder was willst Du besteigen?\n");
+  if (!id(s)) 
+    return 0;
+  write(break_string(
+     "Du machst Dich moeglichst unauffaellig von hinten an den Susagep "
+     "heran, der Deiner etwas eigenartigen Veranlagung jedoch eher keine "
+     "Toleranz entgegenzubringen scheint. Sein aeusserst kritischer Blick "
+     "und ein kurzes Spielen seiner Muskulatur lassen Dich dann doch schnell "
+     "von Deinem Vorhaben abkommen. "
+     "Mit hochrotem Haupte ziehst Du Dich wieder zurueck.",
+     77));
+  say(break_string((string)this_player()->Name(WER)+" pirscht sich spontan "
+     "und mit sehr zweifelhaften Absichten von hinten an den Susagep an, "
+     "der aber erstens plumpe Besteigversuche dieser Art sowohl gewohnt "
+     "ist als auch sehr wohl bemerkt und zweitens "+
+     (string)this_player()->name(WEM)+ 
+     " einen solch' kritischen Blick zuwirft, dass jene"+
+     ((int)this_player()->QueryProp(P_GENDER)==MALE?"r":"")+
+     " sofort und stark erroetend von "+
+     (string)this_player()->QueryPossPronoun(NEUTER,WEM,SINGULAR)+" Vorhaben "
+     "ablaesst.\nTapfer verkneifst Du Dir ein Grinsen.",77,0,1),this_player());
+  while (remove_call_out("cmdBesteigeCA")!=-1);
+  call_out("cmdBesteigeCA",3,this_player());
+  return 1;
+}
+
+nosave void cmdBesteigeCA(object p) {
+  if ((!objectp(p))||(!p)) return;
+  p->Message("Jemand teilt Dir mit: Auf den Susagep klettert man, "
+      "man besteigt ihn nicht. :o)\n");
+  return;
+}
+
+nosave int cmdKlettere(string str) {
+  string s,dummy;
+
+  notify_fail("Auf wen oder was moechtest Du klettern?\n");
+  if (!str) return 0;
+  if ((environment(this_player()))==environment(this_object())) {
+    if ((!str) || (sscanf(str,"auf %s",s)!=1) || (!id(s)))
+      return 0;
+    if (sizeof(Guests())) {
+      write(break_string(
+        "Du versuchst, auf den Susagep zu klettern, der aber einige "
+        "ausweichende Schritte von Dir wegtaenzelt. Offenbar hat er bereits "
+        "einen Gast und ist nicht gewillt, mehrere aufzunehmen.",77));
+      say(break_string((string)this_player()->Name(WER)+" versucht, auf "
+        "den Susagep zu klettern, welcher aber ausweichend zuruecktaenzelt."
+        " Mehr als einen Gast kann oder moechte das edle Wesen offenbar "
+        "nicht befoerdern.",77),
+          this_player());
+    }
+    else if (getuid(this_player())==lastguest) {
+      write(break_string(
+        "Wah, nein, goenne Deinem Magen erstmal ne kleine Pause..."));
+    }
+    else {
+      write("Vorsichtig kletterst Du auf den "
+        "Ruecken des majestaetischen Susagep.\n");
+      this_player()->move(this_object(),M_GO,0,"klettert sehr vorsichtig "
+        "auf den Ruecken des Susagep",
+        "klettert zu Dir (wie auch immer Du hier herkommst) herauf");
+      initStart(4,100*(stat/2));
+      guest=this_player();
+    }
+  }
+  else {
+    notify_fail("Von wem oder was moechtest Du klettern?\n");
+    if ((!str) || (sscanf(str,"von %s",s)!=1) || (!id(s)))
+      return 0;
+    if (!DOCKED) {
+      write(break_string(
+        "BIST DU JECK?!? Du wuerdest Dir wehtun!\n",77));
+      say(break_string((string)this_player()->Name(WER)+" macht fuer "
+            "einen Moment Anstalten, vom Susagep zu klettern. Jetzt. Aua.\n",
+            77),this_player());
+    }
+    else {
+      write(break_string(
+        "Du kletterst vorsichtig vom Ruecken des maechtigen Susagep "
+      "herunter.\n",77));
+      this_player()->move(environment(this_object()),M_GO,0,
+          "klettert vorsichtig vom maechtigen Susagep herunter",
+          "klettert vorsichtig vom maechtigen Susagep herunter");
+      guest=0;
+      initStart(30,100*(stat/2));
+    }
+  }
+  return 1;
+}
+
+nosave void removePlayer() {
+  object * o;
+  lastguest=0;
+
+  o=Guests();
+
+  // redesign because of wizardry issues...
+  while (sizeof(o))
+  {
+    lastguest=getuid(o[0]);
+    o[0]->Message("Oh Mist, die Landung war nicht sehr galant, Du kannst "
+      "dich nicht mehr\nrichtig festhaaaaaaaaaAAAAAHH....! ... Du purzelst aus "
+      "Deiner schoenen\nPosition vom Ruecken des Susagep hinunter. AUA!\n");
+    environment()->Message(
+        break_string("Waaaaah?! "+(string)o[0]->Name(WER)+
+      " purzelt mit viel zu viel Schwung vom Ruecken des edlen Tieres herunter "
+      "kegelt ersteinmal alles ueber den Haufen!",77),MSGFLAG_VISUAL);
+    catch(environment()->NotifyNewPlayerInRoom(o[0]));
+    o[0]->move(environment(this_object()),M_GO|M_SILENT);
+    guest=0;
+    o=o[1..];
+  }   
+    return;
+}
+
+nosave void susagep(int c) {
+  int n;
+  string msg;
+
+  while (remove_call_out("susagep")>=0);
+  switch (c) {
+    case 0: n=4;
+          MSG("Susagep schnaubt leise und wirft einen Blick gen Himmel.");
+          environment()->Message(
+            "Susagep schnaubt leise und wirft einen Blick gen Himmel.\n",MSGFLAG_VISUAL);
+          break;
+    case 1: n=10;
+          MSG("Mit zwei maechtigen Schlaegen seiner Schwingen "
+            "erhebt sich Susagep in die Luefte und strebt den Wolken "
+            "entgegen.");
+          environment()->Message(break_string(
+              "Mit zwei maechtigen Schlaegen seiner Schwingen "
+            "erhebt sich Susagep in die Luefte, strebt den Wolken "
+            "entgegen und ist rasch ausser Sichtweite.",77),MSGFLAG_VISUAL);
+          if ((!guest) && (sizeof(Guests()))) guest=Guests()[0];
+            NEXT;
+          move(PARKPLATZ,M_NOCHECK); 
+          AddDetail("wolken",
+            "Ueber Dir siehst Du einige vereinzelte Wolken. Du scheinst "
+            "Dich ihnen erstaunlich schnell zu naehern.");
+            AddDetail("midas",
+            "Klein wie Ameisen sehen die Buerger zwischen den winzigen "
+            "Haeuschen von Midas aus!");
+          AddDetail("ameisen","Hey, das sind Menschen! Aber sie sehen "
+            "so furchtbar klein aus...");
+          AddDetail(({"buerger","menschen"}),
+            "Du kannst von hier oben nichts naeheres erkennen, wenn man "
+            "mal davon absieht, dass es wirklich Menschen und keine "
+            "Ameisen sein muessen.");
+          AddDetail("haeuschen", "Joessas, san di kloa!");
+            break;
+    case 2: n=16;
+            MSG("Du kannst die Lichtung schon fast nicht mehr sehen.");
+          break;
+    case 3: n=10;
+          MSG("Diese kleinen Haeuschen... das muss Midas sein!");
+          break;
+    case 4: n=16;
+          MSG("Der Susagep gewinnt weiter rasch an Hoehe und naehert sich "
+            "den Wolken.");
+          break;
+    case 5: n=16;
+          MSG("Endlich dringt das mystische Pferd des Himmels in die "
+            "Wolken ein.");
+          RemoveDetail(({"midas","ameisen",
+              "buerger","haeuschen","menschen"}));
+          AddDetail(({"wolke","wolken"}),
+            "Die Wolken sind quasi ueberall um Dich herum. Du hast "
+            "allerdings trotzdem das Gefuehl, dass es bestaendig nach "
+            "oben geht...");
+          AddDetail("gefuehl",
+            "Es truegt Dich nicht.");
+          break;
+    case 6: n=10;
+          MSG("Wie hoch will dieses Pferd denn noch hinaus?");
+            break;
+    case 7: n=20;
+          MSG("Immer weiter strebt Susagep nach oben. Um Dich herum "
+            "sind nur Wolken, Wolken, Wolken... nichts als Wolken.");
+          break;
+    case 8: n=30;
+          MSG("Da, ploetzlich wird es heller um Dich herum, und ihr "
+            "seid aus dem ewigen Nebel. Strahlender Sonnenschein "
+            "und ein scheinbar unendlicher Teppich aus strahlenden "
+            "Wogen des Himmels breitet sich unter euch aus.");
+          AddDetail("sonnenschein",
+            "Oh ja, wie gut das tut...");
+          AddDetail("sonne",
+            "Die Sonne ist nicht zu uebersehen und strahlt eine "
+            "angenehme Waerme aus, die die klamme Feuchtigkeit der "
+            "nebligen Wolken aus Deiner Kleidung treibt.");
+          AddDetail("waerme",
+            "Angenehm warm strahlt die Sonne vom Himmel.");
+          AddDetail("feuchtigkeit",
+            "Die Feuchtigkeit Deiner Kleidung stiehlt sich "
+            "unauffaellig von dannen.");
+          AddDetail(({"wolken","teppich","meer","wogen"}),
+            "Die Wolken habt ihr unter euch gelassen, sie breiten sich "
+            "aus wie ein unendlich grosses Meer hell strahlender Wogen "
+            "aus ... Watte.");
+          AddDetail("watte","Tatsaechlich, der kitschige Vergleich trifft "
+	    "es recht gut.");
+          AddDetail("kleidung","Na, schau Dich doch an...");
+          AddDetail(({"horizont","ferne"}),
+            "In so ziemlich jeder Richtung sieht es "
+            "gleich aus - oben blau und unten wolkig. Und das bis in "
+            "weite Ferne...");
+
+            break; 
+    case 9: n=20;
+          MSG("Susagep gewinnt nochmals deutlich an Geschwindigkeit "
+            "und fliegt jetzt nicht nur nach oben, sondern auch... "
+            "welche Richtung ist das? Von der Sonne weg eben.");
+          break;
+    case 10: n=20;
+           MSG("Die Geschwindigkeit ist atemberaubend, so langsam wird "
+             "Dir der Hintergrund der Redensart 'nur fliegen ist "
+             "schoener' wirklich bewusst.");
+           break;
+    case 11: n=20;
+           MSG("Taeuscht das, oder habt ihr euch tatsaechlich von der "
+             "Sonne entfernt? Sie scheint auch dem Horizont naeher "
+             "gekommen zu sein...?");
+           break;
+    case 12: n=6;
+           MSG("Was ist das fuer ein Flimmern da vorne?");
+           AddDetail("flimmern","Irgendwas flimmert da! Magie?!");
+           AddDetail("magie","Bestimmt ist es Magie, was sollte es "
+             "sonst sein?");
+           break;
+    case 13: n=2;
+           MSG("Ein Ziehen und Zerren geht durch Deinen Koerper, es ist "
+             "ploetzlich ziemlich dunkel um Dich herum und Du siehst... "
+             "waaaaaaaaaaaaaaaah!");
+             RemoveDetail(({"horizont","ferne","kleidung","watte",
+                "wolken","teppich","meer","wogen","feuchtigkeit","waerme",
+                "sonne","sonnenschein","magie","flimmern"}));
+             break;
+    case 14: n=20;
+           MSG("Es ist ja .... NACHT!");
+           break;
+    case 15: n=20;
+           MSG("Langsam kommst Du mit der veraenderten Umgebung klar und "
+             "kannst ueber Dir Sterne ausmachen. Unter Dir ist es "
+             "allerdings voellig dunkel.");
+           AddDetail("sterne","Sie funkeln froehlich von oben herab, "
+             "fuer eine genauere Untersuchung ist es Dir hier aber... "
+             "etwas zu wackelig.");
+           break;
+    case 16: n=6;
+           MSG("Den Nuestern des gefluegelten Pferdes entflieht ein "
+             "vor Vorfreude belustigtes Schnauben.");
+           break;
+    case 17: n=10;
+           MSG("Aehm, was wird das...? Irgendwie faengt der Susagep an, "
+             "eine grosse Spirale nach unten zu segeln?! Und warum "
+             "wird dieser gefluegelte Kleingeist immer schneller?!?");
+           break;
+    case 18: n=10;
+           MSG("Als das silberweiss glaenzende gefluegelte Wesen ploetzlich "
+             "die Fluegel anzieht, bemerkt die Schwerkraft verdattert, "
+             "dass das Pferd und Du da einfach so herumhaengen.");
+           break;
+    case 19: n=4;
+           MSG("WAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH!!!!!");
+           break;
+    case 20: n=2; 
+           MSG("Ihr fallt geradezu nach unten! HILFE!!!!!!");
+           break;
+    case 21: n=20;
+           MSG("Der Susagep stoesst ein vergnuegtes Wiehern aus. Du "
+             "versuchst geflissentlich, das zu ueberhoeren, Du bist "
+             "gerade zu sehr mit Angsthaben beschaeftigt.");
+           break;
+    case 22: n=10;
+           MSG("Du siehst nicht viel um Dich herum, hast aber das "
+             "unbestimmte Gefuehl, dass Du Dich irgendeinem Boden "
+             "SEHR SCHNELL naeherst!! *jammer*!");
+           break;
+    case 23: n=10;
+           MSG("Waaah, wie schnell den nooooooch...");
+           break;
+    case 24: n=10;
+           MSG("Du willst noch nicht sterben.");
+           break;
+    case 25: n=2;
+           MSG("Der Susagep breitet die Schwingen aus.");
+           break;
+    case 26: n=6;
+           MSG("WUMP, Dein Magen haengt Dir abwechselnd unter dem "
+             "Kehlkopf und in den Kniekehlen. Die starke negative "
+             "Beschleunigung raubt Dir fast die Sinne.");
+           break;
+    case 27: n=0;
+           MSG("Sicher landet das edle Ross auf einem Vorsprung.");
+           NEXT;
+           move(dests[(stat/2)],M_NOCHECK); 
+           environment()->Message(break_string(
+             "Wie aus dem Nichts taucht der majestaetische Susagep "
+             "am Himmel auf und landet mit einem kleinen Wirbelwind "
+             "neben Dir.",77),MSGFLAG_VISUAL);
+           removePlayer();
+           initStart(60,100);
+           return;
+           break;
+    case 100: n=4;
+            MSG("Der edle Susagep reckt ein wenig den Hals und streckt "
+              "probeweise ein wenig seine Fluegel.");
+            environment()->Message(break_string(
+              "Der edle Susagep reckt ein wenig den Hals und streckt "
+              "probeweise ein wenig seine Fluegel.",77),MSGFLAG_VISUAL);
+            break;
+    case 101: n=10;
+            MSG("Mit maechtigen Schwuengen seiner Fluegel erhebt sich "
+              "der edle Susagep in die Luefte und schraubt sich den "
+              "Sternen entgegen.");
+            environment()->Message(break_string(
+                  "Mit maechtigen Schwuengen seiner Fluegel erhebt sich "
+              "der edle Susagep in die Luefte und schraubt sich den "
+              "Sternen entgegen.",77),MSGFLAG_VISUAL);
+            if ((!guest) && (sizeof(Guests()))) guest=Guests()[0];
+              NEXT;
+            move(PARKPLATZ,M_NOCHECK); // *grins*
+            break;
+    case 102: n=6;
+            MSG("Immer hoeher und hoeher geht es hinauf. "
+              "Wenn Du unter Dir etwas sehen koenntest, wuerde Dir "
+              "bestimmt uebel werden. Du bist irgendwie froh, dass es "
+              "so zappenduster ist...");
+            break;
+    case 103: n=20;
+            MSG("Das Gefuehl, dass sich der Susagep trotzdem irgendwie "
+              "nach oben schraubt, wirst Du trotzdem nicht los. Dein "
+              "Magen fuehlt sich auch ziemlich geschraubt an.");
+            break;
+    case 104: n=20;
+            MSG("Das gefluegelte Ross stoesst ein leises Schnauben aus.");
+            break;
+    case 105: n=30;
+            MSG("Langsam wird die Langeweile groesser als die Angst vor "
+              "der sicherlich immensen Hoehe. Du wuerdest gerne etwas "
+              "sehen koennen.");
+            break;
+    case 106: n=20;
+            MSG("Die Luft wird immer duenner.");
+            break;
+    case 107: n=4;
+            MSG("Du spuerst ein zoegerliches Zucken in den Muskeln des "
+              "Susagep. Vor welchem Geschoepf kann dieses edle Wesen "
+              "Furcht haben?");
+            break;
+    case 108: n=10;
+            MSG("WUUUUUUUUUUUUUUUUUUUUUSCHSCHSCHSCHSCHSCHSCHSCH!!!!"
+              " Ploetzlich dreht und trudelt und schaukelt der Susagep "
+              "in den heftigen Wogen einer gewaltigen Turbulenz.");
+            break;
+    case 109: n=20;
+            MSG("Was in aller Welt ist da eben an euch vorbeigeflogen...");
+            break;
+    case 110: n=30;
+            MSG("Der Susagep schnaubt und scheint zielgerichtet geradeaus "
+              "zu fliegen. Soweit Du das in der Finsternis abschaetzen "
+              "kannst.");
+            break;
+    case 111: n=4;
+            MSG("Du glaubst zu wissen, wo es hingeht.");
+            break;
+    case 112: n=10;
+            MSG("Ah, vor euch flimmert wieder etwas...");
+              break;
+    case 113: n=4;
+            MSG("Gleich zieht und zerrt es bestimmt wieder...");
+            break;
+    case 114: n=30;
+            MSG("WWHHHOOP! Mit einem eigenartigen Geraeusch beschwert "
+              "sich ploetzlich verdraengte Luft, dass Du und Dein "
+              "Pferd (\"Dein Pferd\". Richtig witzig findest Du das "
+              "nicht.) einfach so aus dem Nichts erscheinen.");
+            RemoveDetail("sterne");
+            AddDetail("sonnenschein",
+              "Oh ja, wie gut das tut...");
+            AddDetail("sonne",
+              "Die Sonne ist nicht zu uebersehen und strahlt eine "
+              "angenehme Waerme aus, die die klamme Feuchtigkeit der "
+              "nebligen Wolken aus Deiner Kleidung treibt.");
+            AddDetail("waerme",
+              "Angenehm warm strahlt die Sonne vom Himmel.");
+            AddDetail("feuchtigkeit",
+              "Die Feuchtigkeit Deiner Kleidung stiehlt sich "
+              "unauffaellig von dannen.");
+            AddDetail(({"wolken","teppich","meer","wogen"}),
+              "Die Wolken habt ihr unter euch gelassen, sie breiten sich "
+              "aus wie ein unendlich grosses Meer hell strahlender Wogen "
+              "aus ... Watte.");
+            AddDetail("watte","HMPF, mir fiel nix besseres ein ;)");
+            AddDetail("kleidung","Na, schau Dich doch an...");
+            AddDetail(({"horizont","ferne"}),
+              "In so ziemlich jeder Richtung sieht es "
+              "gleich aus - oben blau und unten wolkig. Und das bis in "
+              "weite Ferne...");
+              break; 
+    case 115: n=2;
+            MSG("Oh Nein...");
+            break;
+    case 116: n=2;
+            MSG("WAAAAAAAAAAAAAAAAAAAH!");
+            break;
+    case 117: n=40;
+            MSG("Wie ein Stein faellt Susagep vom Himmel und in "
+              "die Wolken.");
+              RemoveDetail(({"horizont","ferne","kleidung","watte",
+                "wolken","teppich","meer","wogen","feuchtigkeit","waerme",
+                "sonne","sonnenschein","magie","flimmern"}));
+            break;
+    case 118: n=20;
+            MSG("Verdammtes eingebildetes Ross! HILFE! Du bist doch "
+              "kein vom Himmel fallender Adler! Du bist nicht dafuer "
+              "gebaut! AUFHOEREN!!!");
+            break;
+    case 119: n=2;
+            MSG("Da, ihr seid wieder aus den Wolken raus.");
+            break;
+    case 120: n=2;
+            MSG("Unwillkuerlich siehst Du kurz nach unten.");
+            break;
+    case 121: n=6;
+            MSG("Du wuenschst, Du haettest es nicht getan. "
+              "WAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA!!!!!");
+            break;
+    case 122: n=10;
+            MSG("Die Schwingen des Susagep knattern im Wind, als sie "
+              "sich wieder ausbreiten.");
+            break;
+    case 123: n=4;
+            MSG("Aaaaaargh, das tut WEH!!");
+            if (objectp(guest)) guest->AddHp(-20);
+            break;
+    case 124:n=0;
+           MSG("Sicher laesst sich das gefluegelte Ross auf "
+             "einer Lichtung nieder.");
+           NEXT;
+           move(dests[(stat/2)],M_NOCHECK);
+           environment()->Message(break_string(
+             "Wie aus dem Nichts taucht der majestaetische Susagep "
+             "am Himmel auf und landet mit einem kleinen Wirbelwind "
+             "neben Dir.",77),MSGFLAG_VISUAL);
+           removePlayer();
+             initStart(60,0);
+           return;
+           break;
+    default: return;break;
+  }
+  call_out("susagep",n,++c);
+  return;
+}
+
+public varargs int PreventInsert(object o) {
+  if (!living(o)) {
+    if (this_player()) 
+      write(break_string(
+        "Auf einem Pfer... naja, gut, aber nur weil der Susagep nur FAST "
+        "ein Pferd ist, kann man noch lange nichts auf ihm "
+        "deponieren!\n",77));
+    return 1;
+  }
+  return ::PreventInsert(o);
+}
+
+public void BecomesNetDead(object o) {
+  if (objectp(o) && (environment(o) == this_object())) {
+    o->move(dests[stat/2],M_GO,0,
+      "kann sich netztot nicht festhalten und faellt runter",
+      "faellt netztot vom Himmel und schlaegt hart auf");
+    o->AddHp(-100);
+    guest=0;
+  }
+  return;
+}
+
+
+

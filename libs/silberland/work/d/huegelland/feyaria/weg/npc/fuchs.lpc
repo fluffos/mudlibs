@@ -1,0 +1,144 @@
+// /d/gebirge/feyaria/weg/npc/fuchs.c   
+// Ein listiger Fuchs
+// 25-12-1996  Feyaria@SilberLand
+
+inherit "std/mnpc";
+
+#include "../def.h"
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include <combat.h>
+#include <new_skills.h>
+#include <mnpc.h>
+
+create()
+{
+  if (IS_BLUE(ME)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein listiger Fuchs");
+  SetProp(P_LONG, BS(
+    "Dieser Fuchs hat ein seidiges, rotbraunes Fell und eine lange, "
+    "buschige Rute. Er schaut Dich mit seinen listigen Augen an und zeigt "
+    "dabei seine scharfen Zaehne."));
+  SetProp(P_INFO, BS(
+    "Fuechse koenne sehr gefaehrlich sein, denn manche uebertragen die "
+    "Tollwut."));
+  SetProp(P_NAME, "Fuchs");
+  SetProp(P_GENDER, MALE);
+  AddId( ({"fuchs", "rotfuchs", "FELL_WUSCHEL"}) );
+  AddAdjective( ({"listiger", "listigen"}) );
+
+  create_default_npc(12);
+  SetProp(P_HANDS, ({" mit seinen scharfen Zaehnen", 140, DT_RIP}));
+  SetProp(P_XP, QueryProp(P_XP)+20000);
+  SetProp(P_RACE, "Fuchs");
+  SetProp(P_SIZE, 60+random(10));
+  SetProp(P_ALIGN, -180);
+  SetProp(P_MAX_HANDS, 4);
+  SetProp(P_FOOD, 0);        // damit er Leichen fressen kann
+
+  SetProp(P_MSGIN, "schleicht sich herein");
+  SetProp(P_MSGOUT, "schleicht sich");
+  SetProp(P_MMSGIN, "schleicht sich herein");
+  SetProp(P_MMSGOUT, "schleicht sich weit weg");
+  SetProp(P_MNPC_AREA, "/" );
+  SetProp(P_MNPC_WAIT, ({ 10, 60, 60 }));
+  SetProp(P_MNPC_DEFAULTROOM, ROOM "0101");
+  SetProp(P_MNPC_FLAGS, MOV_OUTDOORS + MOV_MOVES + MOV_BACKWARDS);
+
+  AddInfo(DEFAULT_INFO, "schaut Dich listig an.\n");
+  AddInfo("feyaria", "Feyaria hat mich erschaffen.", "teilt Dir mit: ");
+  SetProp(P_REJECT, ({ REJECT_DROP, 
+     "Der listige Fuchs will Deine Sachen nicht.\n"}));
+  SetProp(P_DIE_MSG, " schleicht ins Reich der Toten.\n" );
+
+  SetChats(3, ({
+    "Der Fuchs schleicht um Dich herum.\n",
+    "Der Fuchs sieht Dich hungrig an.\n",
+    "Der Fuchs wedelt mit seiner Rute.\n",
+    "Der Fuchs sieht sich nach Nahrung um.\n",
+    "Der Fuchs zeigt seine Zaehne.\n",
+    "Der Fuchs fletscht seine Zaehne.\n"}) );
+
+  SetProp(P_SPELLRATE, 3);
+  AddSpell(1, 512,
+    "Der Fuchs steckt Dich mit Tollwut an.\n",
+    "Der Fuchs steckt @WEN mit Tollwut an.\n",
+    DT_POISON, ([SP_SHOW_DAMAGE:1]));
+
+  SUID;
+  CLONEME( FUCHSFELL);
+}
+
+void init()
+{
+  ::init();
+  call_out("hunger",0);
+}
+
+void hunger()
+{
+  int i;
+  object ob;
+  string *fressen;
+  fressen= ({ "hase", "kaninchen", "eichhoernchen"});
+  for(i=0;i<sizeof(fressen);i++)
+  {
+    if( ob=present(fressen[i]) )
+    {
+      if( !random(3) )
+      {
+        tell_room(MENV, "Der Fuchs bekommt Hunger.\n");
+        Kill(ob);
+      }
+      else
+        tell_room(MENV, "Der Fuchs schleicht um "+ ob->name(WEN) +" herum.\n");
+    }
+  }
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  if( killer == TO )
+    write_file(LOG "kills",
+      sprintf( ctime()+": "+CAP(getuid(player))+" ( Fuchs ) "
+               " -%d EP\n", lostexp) );
+}
+
+void reset()
+{
+  ::reset();
+  if(!is_clone(this_object()) )
+    return;
+  if( !InFight() )
+  {
+    tell_room(MENV, "Der Fuchs verschwindet im dichten Wald.\n");
+    call_out("remove",1);
+  }
+}
+
+void remove()
+{
+  object fell;
+  if( fell=present("fuchsfell") )
+  {
+    fell->DoUnwear(1);
+    fell->remove(1);
+  }
+  ::remove();
+}
+
+void catch_tell(string str)
+{
+  string s1;
+  if (!str)   return;
+  if (sscanf(str,"%s faellt tot zu Boden.\n", s1)==1)
+     call_out("fressen",0);
+}
+
+void fressen()
+{
+  TO->command_me("iss leiche");
+}

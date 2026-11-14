@@ -1,0 +1,109 @@
+// SilberLand MUDlib
+// 
+// spellbooks/paladine/spiegelschild.c
+//
+/* $Date: 2004/08/20 11:53:26 $
+ * $Revision: 1.4 $
+ * $Log: spiegelschild.c,v $
+ * Revision 1.4  2004/08/20 11:53:26  Angrox
+ * Spiegelschild ist nun ein echtes schild
+ *
+ * Revision 1.3  2004/07/15 00:44:51  Angrox
+ * Setup im spiegelschild-obj aufrufen fuer schildparade-ac
+ *
+ * Revision 1.2  2003/12/07 18:21:09  Angrox
+ * Abfrage auf sinfo[SI_SKILLARG] !=""
+ *
+ * Revision 1.1  2003/07/09 11:39:22  Angrox
+ * Initial revision
+ *
+*/
+
+
+// Prototypen
+int prep_spiegelschild(object caster, mapping sinfo);
+int spiegelschild(object caster, mapping sinfo);
+
+
+
+int prep_spiegelschild(object caster, mapping sinfo) {
+  mixed h;
+  object *armour;
+  int i;
+  if (sinfo[SI_SKILLARG] != 0 && sinfo[SI_SKILLARG] !="") {
+    write(BS("Du kannst um den Spiegelschild nur fuer Dich selber bitten!"));
+    return 0;
+  }
+  if(interactive(caster) && deep_present("\nspiegelschild", caster)) {
+    write("Du hast schon einen Spiegelschild bekommen, Paladin!\n");
+    return 0;
+  }
+  armour=caster->QueryProp(P_ARMOURS);
+  for(i=sizeof(armour)-1;i>=0;i--) {
+    if(armour[i]->QueryProp(P_ARMOUR_TYPE)==AT_SHIELD) {
+      Message(caster, 0, BS("Du hast bereits einen normalen Schild!"), 0);
+      return 0;
+    }
+  }
+  if (interactive(caster) && h=caster->QueryProp(P_TMP_DEFEND_HOOK)) {
+    write("Paladin! Du hast schon einen Schutz!\n");
+    return 0;
+  }
+  if(interactive(caster) && GetAlign(caster)<0) {
+    write("Frevler! Mit Deiner Gesinnung wird Dusty Dich NIE erhoeren!\n");
+    DoFailure(caster, 1);
+    return 0;
+  }
+  return 1;
+}
+
+int spiegelschild(object caster, mapping sinfo) {
+  object ob;
+  int suc,time, i;
+  string text;
+
+  if( !prep_spiegelschild( caster, sinfo) ) return 0;
+  sinfo=DoSpellModification(caster, sinfo);
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+      printf(sinfo[SI_SP_LOW_MSG]);
+      return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  text="Oh gesegnete Dusty! Hilf mir in meinem Kampf gegen das Boese und "
+       "schuetze mich vor den frevelhaften Angriffen meiner Feinde! Hilf "
+       "Hilf Hilf!!!";
+  Message(caster, 0, BSA(text,"Du rufst: "), 0);
+  Message(caster, 0, BSA(text, caster->Name(WER)+" ruft: "), 3);
+  if((suc=SpellSuccess(caster, sinfo))<=0) {
+    Message(caster, 0, BS("Dusty scheint Dich nicht zu erhoeren. "
+        +"Der entstandene Spiegel zerfaellt sofort wieder."), 0);
+    Message(caster, 0, sprintf("Dusty scheint %s Bitte nicht erhoert "
+            "zu haben!\n",caster->Name(WESSEN)), 3);
+    return MISSERFOLG;
+  }
+  Message(caster, 0, BS(sprintf("Auf einmal entsteht um Dich herum eine "
+      "schimmernde Wand die von Deiner Seite aus fast ganz durchsichtig ist. "
+      "Ehre sei Dusty! Ehre!\n")), 0);
+  Message(caster, 0, BS(sprintf("Auf einmal entsteht um %s herum eine "
+      "schimmernde Wand, in der Du ein Spiegelbild Deiner selbst erkennen "
+      "kannst.\n",caster->name(WER))), 3);
+  ob=CLONEOB(OBJ("spiegelschild_new"));
+  time=caster->QueryProp(P_GUILD_LEVEL)+
+         GetAlign(caster)/25+50*suc/MAX_ABILITY+random(60);
+  time=DoModificationByAlign(time, caster);
+  ob->Setup(5+(suc/500));
+// tell_zordan(sprintf("time: %d\n",time));
+
+  // ZUM LOGGEN DER SPELLSTAERKE!
+  if(enable_spell_log)
+    write_file("/gilden/paladine/spells/spiegelschild",
+        sprintf("CST: %O, CA: %d, suc: %d, time: %d\n",
+          caster, caster->QueryProp(P_ALIGN), suc, time ));
+  // ----------------------------
+  ob->move(caster, M_NOCHECK|M_SILENT);
+  ob->start_remove(time, suc);
+  ob->DoWear(0);
+  return ERFOLG;
+}
+
+

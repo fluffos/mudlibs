@@ -1,0 +1,331 @@
+/* Briefmarkenalbum */
+/* (C) 1993-1996 Loco */
+
+#include <language.h>                      
+#include <properties.h>
+#include <moving.h>
+ 
+inherit "/std/thing";
+inherit "/std/more";
+
+#include "/mail/post.h"
+
+#define SAVEVERSION 3
+#define ALLOWED(p) (member_array(geteuid(p),({"loco","cadra"}))!=-1)
+#define LOGGING
+#define LOG "/p/service/loco/save/ALBUMLOG"
+
+nosave int LfdNr;
+mixed stamps;
+string LastOwner;
+nosave mixed ausgabe;
+string keepit;
+
+
+create() {
+  //write("create ");
+  (::create());
+  seteuid(getuid());
+  SetProp(P_SHORT,"Ein Briefmarkenalbum");
+  SetProp(P_NAME,"Briefmarkenalbum");
+  SetProp(P_GENDER,NEUTER);
+  SetProp(P_LONG,"\
+Ein Briefmarkenalbum fuer Sammlermarken.\n\
+Du kannst Briefmarken mit 'stecke marke in album' hineinstecken,\n\
+und mit 'nimm <index> aus album' wieder herausnehmen.\n\
+Mit 'zeige album' kannst Du Dir Deine Briefmarkensammlung anschauen.\n\
+");
+  SetProp(P_IDS,({"album","markenalbum","briefmarkenalbum"}));
+  SetProp(P_VALUE,20);
+  if (!stamps) stamps=([]);
+}
+
+
+long() {
+  if (!LfdNr) LfdNr=STAMPSERV->GetNextAlbumNr();
+  return "\
+Ein Briefmarkenalbum fuer Sammlermarken.\n\
+Auf der Vorderseite ist die Fabrikationsnummer "+LfdNr+" eingepraegt.\n\
+Du kannst Briefmarken mit 'stecke marke in album' hineinstecken,\n\
+und mit 'nimm <index> aus album' wieder herausnehmen.\n\
+Mit 'zeige album' kannst Du Dir Deine Briefmarkensammlung anschauen,\n\
+mit 'zeige album an <spieler> jemandem anders zeigen.\n\
+"+(this_player()&&ALLOWED(this_player()) ? "\
+Spezialkommandos: markenausgabe <index>, bogendruck <index>\n" : "");
+}
+
+
+init() {
+  (::init());
+  add_action("MarkeRein","stecke");
+  add_action("MarkeRaus","nimm");
+  add_action("ShowStamps","zeige");
+  if (ALLOWED(this_player())) {
+    add_action("IssueStamp","markenausgabe");
+    add_action("ReprintStamp","bogendruck");
+  }
+}
+
+
+_set_autoloadobj(arg) {
+  // write("_set_autoloadobj ");
+  if (!stamps) stamps=([]);
+  if (!pointerp(arg)) return;
+  if (arg[0]<2) {
+    int i;
+    for (i=sizeof(arg[1])-1;i>=0;i--) {
+      if (arg[1][i][0]=='@') {
+	if (member(stamps,arg[1][i][1..])) stamps[arg[1][i][1..],1]++;
+	else stamps+=([arg[1][i][1..]:0;1]);
+      }
+      else {
+	if (member(stamps,arg[1][i])) stamps[arg[1][i]]++;
+	else stamps+=([arg[1][i]:1;0]);	
+      }
+    }
+    SaveData();
+    return;
+  }
+  if (arg[0]==2) {
+    stamps=arg[1];
+    SaveData();
+    return;
+  }
+  // version=3
+  LfdNr=arg[1];
+  restore_object("/p/service/loco/save/alben/"+LfdNr);
+}
+
+
+_query_autoloadobj() {
+//  write(" _query_autoloadobj ");
+//  SaveData();
+  return ({SAVEVERSION,LfdNr});
+}
+
+
+_set_keep_on_sell(a) { return keepit=a; }
+
+_query_keep_on_sell() {
+  if (keepit) return keepit;
+  return ((mappingp(stamps)&&m_sizeof(stamps)) ? geteuid(this_player()) : 0 );
+}
+
+
+ShowStamps(str) {
+  int i;
+  mixed check,ind;
+  string s,was,wem;
+
+  if (!str || (!id(str) && !(check=sscanf(str,"%s an %s",was,wem) && id(was)))) 
+    return notify_fail("Was denn zeigen? Dein Album, oder was?\n"),0;
+  s="\
+Anzahl Index     Wert Motiv\n";
+  ind=sort_array(m_indices(stamps),"IndexSortFunc");
+  if (!ind) return write("Dein Album ist leer.\n");
+  for (i=0;i<sizeof(ind);++i) {
+    if (stamps[ind[i]])
+      s+=
+	sprintf("%5d  %-10s%4d %s",
+		stamps[ind[i]],ind[i],
+		STAMPSERV->QueryStampPrice(ind[i]),
+		break_string(capitalize(STAMPSERV->QueryStampShort(ind[i])),55),
+	78);
+    if (stamps[ind[i],1])
+      s+=
+	sprintf("%5d  @%-9s%4d %s",
+		stamps[ind[i],1],ind[i],
+		STAMPSERV->QueryStampPrice(ind[i]),
+		break_string(capitalize(STAMPSERV->QueryStampShort(ind[i]))+" (gestempelt)",55)
+		);
+  }
+  if (id(str)) More("Diese Marken hast Du in Deinem Album drin:\n"+s);
+  else {
+    s=this_player()->name()+" zeigt Dir stolz "+
+    this_player()->QueryPossPronoun(1, 3)+" Briefmarkensammlung:\n"+s;
+    if (!check=present(wem,environment(this_player()))) 
+      return notify_fail("Steht hier nicht rum.\n");
+    tell_object(check,s);
+    say(this_player()->name()+" zeigt "+check->name()+" stolz "+
+	this_player()->QueryPossPronoun(1, 3)+" Briefmarkensammlung:\n",
+	({check,this_player()}));
+    write(check->name()+" schaut Deine Sammlung an.\n");
+  }
+  return 1;
+}
+
+
+MarkeRein(str) {
+  string m,txt;
+  object stamp;
+  
+  if (sscanf(str,"%s in %s",m,txt)<2) return notify_fail("Was willst Du wo rein stecken?\n");
+  if (!stamp=present(m)) return notify_fail("Du hast kein "+m+"!\n");
+  if (!id(txt)) return notify_fail("Wohin denn?\n");
+  m=stamp->QueryIndex();
+  if (m[0]=='@') {
+    if (member(stamps,m[1..])) stamps[m[1..],1]++;
+    else stamps+=([m[1..]:0;1]);
+  }
+  else {
+    if (member(stamps,m)) stamps[m]++;
+    else stamps+=([m:1;0]);
+  }	
+  write(break_string("Du steckst e"+stamp->short()[1..<2]+" ins Album.\n",78));
+  stamp->remove();
+  SaveData();
+  return 1;
+}
+
+
+MarkeRaus(str) {
+  string m,txt,cm;
+  object ob;
+  int pos;
+  if (sscanf(str,"%s aus %s",m,txt)<2) return notify_fail("Was willst Du wo rausnehmen?\n"),0;
+  if (!id(txt)) return notify_fail("Woraus denn?\n"),0;
+  cm=(m[0]=='@') ? m[1..] : m;
+  if (!member(stamps,cm) || 
+      (cm==m && !stamps[cm]) || (cm!=m && !stamps[cm,1]))
+    return notify_fail("So eine Marke hast Du nicht im Album!\n");
+  ob=clone_object(STAMP);
+  ob->SetIndex(m);
+  if (cm==m) stamps[m]--;
+  else stamps[cm,1]--;
+  if (!stamps[cm,0]&&!stamps[cm,1]) stamps=m_delete(stamps,cm);
+  write("Du nimmst eine Marke aus dem Album.\n");
+  ob->move(this_player(),M_SILENT);
+  SaveData();
+  return 1;
+}
+
+
+IndexSortFunc(a,b) {
+  int va,vb;
+
+  if ((va=STAMPSERV->QueryStampPrice(a))!=(vb=STAMPSERV->QueryStampPrice(b)))
+    return (va>vb);
+  return (a>b);
+}
+
+
+IssueStamp(str) {
+  if (!str) return 1;
+  ausgabe=allocate(7);
+  write("Ausgabe einer Marke mit Index "+str+"\nAnzahl Boegen: ");
+  ausgabe[0]=str;
+  input_to("iss2");
+  return 1;
+}
+iss2(str) {
+  if (!str) return 1;
+  sscanf(str,"%d",ausgabe[1]);
+  write("Bogengroesse: ");
+  input_to("iss3");
+  return 1;
+}
+iss3(str) { 
+  if (!str) return 1;
+  sscanf(str,"%d",ausgabe[2]);
+  write("Stueckpreis: ");
+  input_to("iss4");
+  return 1;
+}
+iss4(str) {
+  if (!str) return 1;
+  sscanf(str,"%d",ausgabe[3]);
+  write("Name (Ultrakurzbeschreibung): ");
+  input_to("iss5");
+  return 1;
+}
+iss5(str) {
+  if (!str) return 1;
+  ausgabe[4]=str;
+  write("Kurzbeschreibung (Thema): ");
+  input_to("iss6");
+  return 1;
+}
+iss6(str) {
+  if (!str) return 1;
+  ausgabe[5]=str;
+  write("Ergaenzungstext (Abbruch mit ~q): ");
+  input_to("iss7");
+  return 1;
+}
+iss7(str) {
+  if (str=="~q") return 1;
+  ausgabe[6]=str;
+  STAMPSERV->IssueStamp(ausgabe[0],ausgabe[1],ausgabe[2],ausgabe[3],ausgabe[4],ausgabe[5],ausgabe[6]);
+  write("Ausgabe erfolgt (Aber lieber nachpruefen)\n");
+  ausgabe=0;
+  return 1;
+}
+
+
+ReprintStamp(idx) {
+  if (!ALLOWED(this_player())) return 0;
+  STAMPSERV->PrintSheet(idx);
+}
+
+
+SetNumber(int nr) {
+  if (!ALLOWED(this_player())) return 0;
+  if (!LfdNr=nr) return 0;
+  restore_object("/p/service/loco/save/alben/"+LfdNr);
+  return LfdNr;
+}
+
+
+QueryStamps() { return stamps; }
+
+
+SaveData() {
+  object o;
+//  write("SaveData ");
+  if (!is_clone(this_object())) return;
+  o=this_object();
+#ifdef LOGGING
+  write_file(LOG,sprintf("%s Saving %d, Owner %s.\n",dtime(time()),LfdNr,
+    LastOwner?LastOwner:"-"));
+#endif
+  if (!LfdNr) LfdNr=STAMPSERV->GetNextAlbumNr();
+  while((o=environment(o))&&!query_once_interactive(o));
+  if (!o) LastOwner=0;
+  else LastOwner=geteuid(o);
+  if (mappingp(stamps)){
+    if (!m_sizeof(stamps))
+      rm("/p/service/loco/save/alben/"+LfdNr+".o");
+    else save_object("/p/service/loco/save/alben/"+LfdNr);
+  }
+  return 1;
+}
+
+
+QueryNumber() {
+  if (!LfdNr) LfdNr=STAMPSERV->GetNextAlbumNr();
+  return LfdNr;
+}
+
+#ifdef LOGGING
+remove() {
+  object o;
+  write_file(LOG,
+    sprintf(
+    "%s Remove: %d, Owner: %s\n  TI= %O [%s]\n  TP= %O [%s]\n  PO= %O [%s]\n"
+    "  Verb: %s\n",
+    dtime(time()),LfdNr,LastOwner?LastOwner:"0",
+    o=this_interactive(),(o?geteuid(o):""),
+    o=this_player(),(o?geteuid(o):""),
+    o=previous_object(),(o?geteuid(o):""),
+    query_verb()?query_verb():"-"));
+  return (::remove());
+}
+#endif
+
+
+move(dest,meth){
+  mixed res;
+  res=(::move(dest,meth));
+  SaveData();
+  return res;
+}

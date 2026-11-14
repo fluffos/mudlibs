@@ -1,0 +1,169 @@
+//=========================================================================
+//
+// File:    std_horn.c
+// Created by Ronja@SL
+//
+// Project: sternenwald
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit "std/weapon";
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include <combat.h>
+
+#define LF "\n"
+
+int lifetime;
+string ltext;
+
+create()
+{
+  if (!is_clone(TO))return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Ein Horn");
+  ltext = "Das Horn eines Einhornes.";
+
+  SetProp(P_NAME, "Horn");
+  SetProp(P_GENDER, NEUTER);
+  AddId( ({"horn","\nEINHORNHORN"}) );
+
+  SetProp(P_MATERIAL, ([MAT_HORN:90, MAT_MISC_MAGIC:10]) );
+  SetProp(P_WEIGHT, 350);
+  SetProp(P_SIZE, 80);
+  SetProp(P_VALUE,1500);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_MAGIC, 1);
+
+  SetProp(P_WEAPON_TYPE,WT_SPEAR);
+  SetProp(P_WC, 115);
+  SetProp(P_WC_BONUS, (["\nSTERNENWALDEINHORN":150]));
+  SetProp(P_DAM_TYPE, DT_PIERCE );
+  SetProp(P_NR_HANDS, 1);
+
+  lifetime = 2;
+}
+
+string _query_long()
+{
+  string s;
+
+  s = " Pulsierend liegt es in Deiner Hand, als ob es noch leben wuerde. "
+      "Man koennte fast meinen, dass dieses Horn nur in der Umgebung "
+      "eines Lebewesens existieren kann und ansonsten seinen ganz "
+      "eigenen Tod stirbt. ";
+
+  return BS(ltext+s);
+}
+
+int remove()
+{
+  DoUnwield(1);
+  return ::remove();
+}
+
+void hau_wech(object ti,object tp,object horn)
+{
+  object room;
+
+  if(tp && interactive(tp) && (room=ENV(TP)) )
+  {
+    tell_object(tp,LF+BS("Als die Hoerner einander nahe kommen, zerstrahlen "
+                         "sie in einem gewaltigen Blitz."));
+    tell_room(room,LF+BS("Etwas von "+TP->Name(WESSEN)+" Besitz zerstrahlt "
+                         "in einem gewaltigen Blitz."), ({tp}) );
+  }
+  else if(ti && interactive(ti) && (room=ENV(ti)) )
+  {
+    tell_room(room,LF+BS("Als die Hoerner einander nahe kommen, zerstrahlen "
+                         "sie in einem gewaltigen Blitz."));
+  }
+  else if( (room=ENV(horn)) )
+  {
+    tell_room(room,LF+BS("Als die Hoerner einander nahe kommen, zerstrahlen "
+                         "sie in einem gewaltigen Blitz."));
+  }
+
+  horn->remove();
+}
+
+void reset()
+{
+  object env;
+
+  if (!is_clone(TO))return;
+  ::reset();
+
+  env = ENV(TO);
+                                              // Bugfix Feyaria
+  if(objectp(env) &&                          // Muss ein env haben
+      (query_once_interactive(env) ||         // entweder spieler
+       living(env) ||                         // oder NPC
+        (objectp(ENV(env)) &&                 // oder ein Container
+         query_once_interactive(ENV(env)))))  // in einem Spieler
+      return;
+ 
+  // Ansonsten zerfaellt es nach 2 Resets    
+  lifetime--;
+  if(lifetime < 1)
+  {
+    if (env)
+      tell_room(env,"Das Horn zerfaellt zu Staub.\n");
+    call_out("remove",0);
+  }
+
+}
+
+void init()
+{
+  object *hoerner,env;
+  int i,n,spieler;
+
+  ::init();
+//  DB(sprintf("TI: %O / ENV(TI): %O ",TI,ENV(TI)));
+//  DB(sprintf("TP: %O / ENV(TP): %O ",TP,ENV(TP)));
+//  DB(sprintf("TO: %O / ENV(TO): %O ",TO,ENV(TO)));
+
+  env=ENV(TO);
+  if(!env) return;
+
+  if(interactive(env))
+  {
+    hoerner = filter_objects(deep_inventory(env), "id", "\nEINHORNHORN");
+    lifetime = 2;
+    spieler = 1;
+  }
+  else
+  {
+    hoerner = filter_objects(all_inventory(env), "id", "\nEINHORNHORN");
+    spieler = 0;
+  }
+
+  i = sizeof(hoerner);
+  if(i > 1)
+  {
+    while(i--) if(hoerner[i] != TO) hoerner[i]->remove();
+    call_out("hau_wech",0,TI,TP,TO);
+  }
+}
+
+int syntaxok(string str)
+{
+  if(!str || str == "") return 0;
+
+  if(str == "spitze"               ||
+     str == "spitze des hornes"    ||
+     str == "spitze des horns"     ||
+     str == "hornspitze"           ||
+     str == "spitze des einhornes" ||
+     str == "spitze des einhorns"  ||
+     str == "einhornspitze"         ) return 1;
+
+  return 0;
+}

@@ -1,0 +1,147 @@
+/*
+** Ein Beichtstuhl
+** ---
+** Woody@SL  1996/08/18  1.0  Release
+** Woody     1997/05/16  1.1  'beichte' als AddCmd() (wg. FP)
+*/
+
+#include <config.h>
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include "files.h"
+
+inherit "std/room";
+inherit "std/thing/moving";
+inherit "std/thing/commands";
+
+void create() {
+  (room::create());
+  (commands::create());
+  SetProp(P_LIGHT, 1);
+  SetProp(P_INDOORS, 1);
+  SetProp(P_ENVIRONMENT, ([ENV_TERRAIN:TT_HOUSE, ENV_TEMPERATURE:20]));
+  SetProp(P_NAME, "Beichtstuhl");
+  SetProp(P_NOMAGIC, 100);
+  SetProp(P_GENDER, MALE);
+  SetProp(P_SHORT, "Ein Beichtstuhl");
+  SetProp(P_INT_SHORT, "In einem Beichtstuhl");
+  SetProp(P_INT_LONG,
+    bs("In diesem Beichtstuhl kannst Du um Vergebung Deiner Suenden bitten. "+
+    "Solange Du Dich darin befindest, kann niemand anders hier rein, dafuer "+
+    "waere der Beichtstuhl ja wohl auch viel zu eng. Tippe einfach 'beichte' "+
+    "zum Beichten. Mit 'raus' kommst Du wieder raus hier."));
+  SetProp (P_NOGET, "So stark bist Du nun wirklich nicht.\n");
+  AddId("stuhl");
+  AddId("beichtstuhl");
+  AddCmd("beichte", "beichte");
+}
+
+int besetzt() {
+  mixed in,i;
+  in=all_inventory(this_object());
+  for (i=0;i<sizeof(in);i++)
+    if (living(in[i]) && in[i]!=this_player()) return 1;
+  return 0;
+}
+
+string long() {
+  return bs("Ein Beichtstuhl, in dem Du ungestoert Deine Suenden "+
+  "beichten und um Vergebung bitten kannst. "+
+   (besetzt()
+     ? "Derzeit ist der Beichtstuhl jedoch besetzt."
+     : "Du kannst ihn betreten."));
+}
+
+varargs int move(mixed dest, int method) {
+  int r;
+  r=(::move(dest, method));
+  if (environment())
+    AddExit("raus",file_name(environment()));
+  return r;
+}
+
+void init() {
+  (commands::init());
+  if (environment(this_player())==environment(this_object())) {
+    add_action("rein","betrete");
+    add_action("rein","betritt");
+    return;
+  }
+  if (besetzt()) {
+    this_player()->move(environment(this_object()), M_GO, 0,
+      "passt hier nicht mehr rein",
+      "macht die Tuer eines Beichtstuhls auf, aber der ist schon besetzt");
+    return;
+  }
+  if (environment(this_player())==this_object()) {
+    (room::init());
+    // add_action("beichte","beichte");  // AddCmd() in create()
+    return;
+  } 
+}
+
+int rein(string str) {
+  if (!str || !id(str)) {
+    notify_fail("Wo willst Du denn rein?\n");
+    return 0;
+  }
+  if (besetzt()) {
+    notify_fail("BESETZT!\n");
+    return 0;
+  }
+  this_player()->move(this_object(), M_GO, 0,
+    "betritt einen Beichtstuhl",
+    "betritt den Beichtstuhl");
+  return 1;
+}
+
+clean_up(arg) {
+  return 1;
+}
+
+
+// Hier speicher wir ab, wie oft ein bestimmter Spieler schon gebeichtet hat:
+mapping gebeichtet = ([ ]);
+
+void reset()
+{
+  // normalen Raumreset ausloesen:
+  ::reset();
+  // gebeichtet Mapping zuruecksetzen:
+  gebeichtet = ([ ]);
+}
+
+int beichte(string str)
+{
+  int al;
+
+  // Kommando ignorieren, wenn Spieler nicht IM Beichtstuhl
+  if (environment(TP) != ME)
+    return 0;
+
+  if (gebeichtet[getuid(TP)] < 1)       // maximal 1-mal beichten pro Reset
+  {
+    // Ausgabe an den Spieler:
+    write ("Du beichtest Deine Suenden und fuehlst Dich erleichtert.\n");
+    // Align-Modifikation:
+    al = TP->QueryProp(P_ALIGN);
+    // Spieler derzeit frech/boese/satanisch:
+    if (al < 0) TP->SetProp(P_ALIGN, al*4/5);
+    // Spieler derzeit nett:
+    else if (al<200) TP->SetProp(P_ALIGN, al*5/4);
+    // Spieler derzeit gut/heilig:
+    else if (al<1000) TP->SetProp(P_ALIGN, al+50);
+    // Zaehler erhoehen:
+    gebeichtet[getuid(TP)]++;
+  }
+  else
+  {
+    // Ausgabe an den Spieler:
+    write ("Du beichtest erneut Deine Suenden.\n");
+  }
+
+  // Aktion erfolgreich:
+  return 1;
+}
+

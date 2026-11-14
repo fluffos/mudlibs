@@ -1,0 +1,142 @@
+#include "../def.h"
+
+inherit ITEMD_SET_PATH "std_set_weapon";
+#define COST 10
+
+int flag = 0;
+
+void create() 
+{
+  if( !is_clone(this_object()) ) return;
+  ::create();
+
+  SetProp(P_SET, "Miras Verteidigung");
+  SetProp(P_SET_ITEM, "Miras Wache");
+  SetProp(P_NR_SET_ITEMS, 4);
+  SetProp(P_SET_BONUS, ([
+        0:([P_WC_FIX:0, P_DAM_TYPE:DT_SLASH]),
+        1:([P_WC_FIX:15, P_DAM_TYPE:DT_SLASH]),
+        2:([P_WC_FIX:45, P_DAM_TYPE:DT_SLASH]),
+        3:([P_WC_FIX:85, P_DAM_TYPE:({DT_SLASH, DT_MAGIC})]),
+        ]));
+  SetProp(P_ITEMD, ({"gehoert zu Miras Verteidigung", 
+        "entfaltet die volle Wirkung erst gemeinsam mit anderen Sachen",
+        "verbessert die Verteidigung", "liegt besser in der Hand",
+        "nutzt sich viel langsamer ab", "macht magischen Schaden"}) );
+
+  SetProp(P_SHORT, QueryProp(P_SET_ITEM));
+  SetProp(P_LONG,
+   "Miras Wache ist ein kurzes Breitschwert mit einer maechtigen "
+   "Parierstange. Es eignet sich hervorragend dazu, andere Schwerthiebe "
+   "abzuwehren. Die legendaere Kaempferin Mira war wegen ihres makellosen "
+   "Koerpers beruehmt, denn keine einzige Narbe verunzierte ihren Koerper, "
+   "obwohl sie in vielen Schlachten gekaempft hatte." );
+  SetProp(P_INFO,BS(
+      "Mit dieser Waffe kannst Du die Waffen Deiner Feinde parieren. "
+      "Natuerlich wird Deine Angriffsstaerke darunter leiden. Wenn Du "
+      "defensiv kaempfen willst, gib einfach 'parade' oder 'parieren' ein."));
+  SetProp(P_NAME, QueryProp(P_SET_ITEM));
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_GENDER, FEMALE);
+  AddId( ({"wache", "miras wache"}) );
+
+  SetProp(P_WEAPON_TYPE, WT_SWORD );
+  SetProp(P_DAM_TYPE, DT_SLASH );
+  SetProp(P_WC, 175);
+  SetProp(P_WC_FIX, 0);
+  SetProp(P_NR_HANDS, 1);
+  SetProp(P_MATERIAL, ([MAT_STEEL: 85, MAT_BRONCE:15]) );
+  SetProp(P_WEIGHT, 1200);
+  SetProp(P_VALUE, 7000);
+  SetProp(P_QUALITY_DECAY, 700);
+
+  SetProp(P_HIT_FUNC, TO );
+  SetProp(P_UNWIELD_FUNC, TO);
+
+  SetProp(P_WIELD_RESTRICTIONS, ([A_CON:15, A_STR:15]) );
+
+  AddCmd(({"pariere", "pararieren", "parade"}), "parade");
+}
+
+int HitFunc(object enemy)
+{
+  int m2;
+  mixed h;
+  m2=setmight()*setmight();
+  if (h=QueryProp(P_WIELDED)->QueryProp(P_TMP_DEFEND_HOOK))
+  {
+    if ((h[1]==this_object()) && (h[2]=="parry")) 
+      return -20-random(30);
+  }
+  return random(m2+m2*m2/2);
+}
+
+int parade(string str)
+{
+  int dauer;
+  if(TP!=QueryProp(P_WIELDED))
+    return notify_fail("Du musst Miras Wache erst zuecken!\n"),0;
+  if(!TP->InFight())
+    return notify_fail("Du musst im Kampf sein zum Parieren!\n"),0;
+  if(setmight()<1)
+    return notify_fail("Du hast nicht genugend Teile von Miras "
+        "Verteidigung zum Parieren!\n"),0;
+  if(TP->QueryProp(P_TMP_DEFEND_HOOK))
+    return notify_fail("Du hast schon eine Verteidigung aktiv!\n"),0;
+  if(TP->QueryProp(P_SP)<COST)
+    return notify_fail("Du hast zu wenig Magiepunkte zum Parieren!\n"),0;
+  dauer=20+random(25);
+  TP->SetProp(P_TMP_DEFEND_HOOK, ({ time()+dauer, this_object(), "parry"}));
+  write("Du konzentriest Dich voll auf das Parieren der gegnerischen "
+      "Schlaege.\n");
+  flag = 1;
+  call_out("parry_ende",dauer,TP);
+  return 1;
+}
+
+varargs void parry_ende(object who, int silent)
+{
+  if(who && flag)
+  {
+    if(!silent)
+      tell_object(who, "Du konzentrierst Dich wieder auf den Angriff!\n");
+    who->SetProp(P_TMP_DEFEND_HOOK, 0);
+  }
+  flag = 0;
+}
+
+mixed parry(int dam, mixed dam_type, mixed spell, object enemy)
+{
+  int cost;
+  object who;
+
+  if(stringp(dam_type))
+    dam_type = ({dam_type});
+  if(environment()!=(who=QueryProp(P_WIELDED)))
+  {
+    if(who)
+      who->SetProp(P_TMP_DEFEND_HOOK, 0);
+    return ({ dam, dam_type, spell, enemy });
+  }
+  if( objectp(enemy->QueryProp(P_WEAPON)) && 
+      (!spell || sizeof(m_indices(PHYSICAL_DAMAGE_TYPES) & dam_type)))
+  {
+    cost=10-setmight()*setmight()+dam/100;
+    if(random((3+setmight()) * who->QueryAttribute(A_DEX))>
+       random(2 * enemy->QueryAttribute(A_DEX)) && 
+       who->QueryProp(P_SP)>cost)
+    {
+      tell_object(who, "Du parierst die Attacke!\n");
+      who->AddSp(-cost);
+      TakeFlaw(cost*3);
+      return ({ 0, dam_type, spell, enemy });
+    }
+  }  
+  return ({ dam, dam_type, spell, enemy });
+}
+
+int UnwieldFunc(object waffe, int silent)
+{
+  parry_ende(QueryProp(P_WIELDED), silent);
+  return ::UnwieldFunc(waffe, silent);
+}

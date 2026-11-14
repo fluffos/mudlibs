@@ -1,0 +1,157 @@
+// Master fuer Elysia
+// 5.10.2004 Feyaria@SilberLand
+
+#include "../def.h"
+
+mapping npctimes = ([
+    "schoenheit": 0,
+    "liebe": 0,
+    "vertrauen": 0,
+    "mitleid": 0,
+    "wahrheit": 0,
+    "bescheidenheit": 0,
+    "tapferkeit": 0,
+    "ehrfurcht": 0,
+    ]);
+
+nosave mapping room2tugend = ([
+    "room0x-5y": "schoenheit",
+    "room4x-4y" : "liebe",
+    "room5x0y": "vertrauen",
+    "room4x4y" : "mitleid",
+    "room0x5y": "wahrheit",
+    "room-4x4y" : "bescheidenheit",
+    "room-5x0y" : "tapferkeit",
+    "room-4x-4y" : "ehrfurcht",
+    ]);
+
+string *tugenden = ({});
+int eventtime = 0;
+int callout;
+nosave int checking = 0;
+
+void check_all_tugend();
+
+void create()
+{
+  if( is_clone(TO) )
+  {
+    destruct(TO);
+    return;
+  }
+  SUID;
+  restore_object(MASTERSAVE);
+  if (callout != -1)
+    call_out("end_event", callout);
+  check_all_tugend();
+}
+
+// Shout nur innerhalb der Zone
+void ZoneShout(string str)
+{
+  write(str);
+  domainshout(str, ZONE, 1);
+}
+
+void end_event()
+{
+  int i;
+  object ob;
+  for (i = sizeof(tugenden) - 1; i >= 0; i--)
+    if (objectp(ob = find_object(tugenden[i])))
+      ob->deep_remove();
+  tugenden = ({});
+  eventtime = 0;
+  ZoneShout("\nDie Tugenden ziehen sich aus Elysia zurueck!\n\n");
+  npctimes = mkmapping(m_indices(npctimes), 
+      ({time() + TUGEND_DELAY, time() + TUGEND_DELAY, time() + TUGEND_DELAY, 
+       time() + TUGEND_DELAY, time() + TUGEND_DELAY, time() + TUGEND_DELAY, 
+       time() + TUGEND_DELAY, time() + TUGEND_DELAY}) );
+}
+
+void dead_tugend(string tugend)
+{
+  npctimes[tugend] = time() + TUGEND_DELAY;
+  tugenden -= ({file_name(PO)});
+  if (!eventtime)
+  {
+    eventtime = time();
+    call_out("end_event", EVENT_TIME);
+  }
+  if (eventtime + EVENT_TIME < time())
+    call_out("end_event", 10);
+  if (!sizeof(tugenden))
+  {
+    remove_call_out("end_event");
+    call_out("elysia", 10);
+  }
+  save_object(MASTERSAVE);
+}
+
+void elysia()
+{
+  object npc;
+  ZoneShout("\n\n" + BS("Die Kraefte aller Tugenden vereinigen sich und "
+        "Elysia, die Verkoerperung aller Tugenden erscheint.") + "\n\n");
+  npc = clone_object(NPC "elysia");
+  npc->move(ROOM + m_indices(room2tugend)[random(sizeof(room2tugend))], M_GO);
+  npc->SetProp(P_CORPSE, OBJ "elysialeiche");
+}
+
+void check_tugend()
+{
+  string *roomname;
+  string tugend;
+  object npc;
+  object room;
+  int i;
+
+  if (ASTRALMASTER->QueryTime("elysia") > 0 || checking) 
+    return;
+  checking = 1;
+  for (i = sizeof(roomname = m_indices(room2tugend)) - 1; i >= 0; i--)
+  {
+    call_other(ROOM + roomname[i], "???");
+    if (!(room = find_object(ROOM + roomname[i])))
+      raise_error("Bug in Elysiamaster");
+    tugend = room2tugend[roomname[i]];
+    if (!present(tugend, room))
+    {
+      if (npctimes[tugend] < time())
+      {
+        npc = clone_object(NPC + tugend);
+        npc->move(room, M_GO);
+        npc->SetProp(P_CORPSE, OBJ "elysialeiche");
+        tugenden += ({file_name(npc)});
+      }
+    }
+  }
+  check_all_tugend();
+  checking = 0;
+  save_object(MASTERSAVE);
+}
+
+void check_all_tugend()
+{
+  int i;
+
+  for (i = sizeof(tugenden) - 1; i >= 0; i--)
+  {
+    if (!objectp(find_object(tugenden[i])))
+      tugenden -= ({tugenden[i]});
+  }
+}
+
+void EventInfo()
+{
+  printf("TUGENDEN = %O\n", tugenden);
+  printf("TIME = %O\n", npctimes);
+  printf("CALLOUT = %O\n", find_call_out("end_event"));
+}
+
+varargs int remove(int silent)
+{
+  callout = find_call_out("end_event");
+  save_object(MASTERSAVE);
+  destruct(this_object());
+}

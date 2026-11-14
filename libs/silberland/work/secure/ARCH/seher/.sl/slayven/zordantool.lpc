@@ -1,0 +1,789 @@
+
+/*
+   Zordantool zum Auffinden der wichtigen Sachen in einem File @ Silberland
+ 
+   Ein paar Dinge einfach mal so geklaut von: ( Sorry for that )
+    Dancertool - Dancer@?
+    Magic Pen  - Woody@SL
+    FTeddy     - Feyaria@SL
+   und nur auf !!!MEINE!!! Beduerfnisse angepasst. 
+   ( Wozu das Rad nochmal erfinden ... )
+ 
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !!! Nicht fuer den Gebrauch Anderer oder Verbreitung bestimmt !!!
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+*/
+
+inherit "std/thing";
+ 
+#include <properties.h>
+#include <defines.h>
+#include <wizlevels.h>
+#include <ansi.h>
+#include <defines.h>
+#include <moredef.h>
+#include <udp.h>
+#include <moving.h>
+
+#define DEFAULT(x) (x=="\ndefault" ? "Default" : x)
+#define ENV_TERRAIN "env_terrain"
+#define NPCMASTER "/secure/npcmaster"
+
+#define version "0.2.9"
+#define datum   "15.01.1998"
+
+private mapping map;
+private object here,owner;
+private string *color;
+private int config,unters,notify;
+
+string given_scores;
+ 
+void create() {
+  object ob;
+  string str;
+  if (!is_clone(ME)) return;
+  ::create();
+  SetProp(P_LONG,
+    "Du haeltst einen wundervollen Kristallspiegel in Deinen Haenden. Wenn "
+    "Du mit ihm Dir die Raeume ansiehst, kannst Du unter Umstaenden ziemlich "
+    "wichtige Dinge sehen. mit <zhilfe> bekommst Du eine Hilfeseite." );
+  config=1;
+  notify=1;
+  unters=0;
+  owner=TP;
+  if (ob=MENV||TP) {
+    str=CAP(((str=geteuid(ob))[<1]=='s'||str[<1]=='x'||str[<1] =='z')?str+="'":str+="s");
+  } else {
+    str="Ein";
+  }
+  SetProp( P_SHORT,str+" Spiegel" );
+  SetProp( P_NAME, str+" Spiegel" );
+  SetProp( P_WEIGHT,    100 );
+  SetProp( P_VALUE,     100 );
+  SetProp( P_NOBUY,       1 );
+  SetProp( P_NOSELL,      1 );
+  SetProp( P_AUTOLOADOBJ, 1 );
+  SetProp( P_GENDER,   MALE );
+  SetProp( P_NODROP, "Nene, Du findest den Spiegel viel zu huebsch.\n" );
+  SetProp( P_NEVERDROP,   1 );
+  AddId( "spiegel" );
+  call_out("addhook",1,ME);
+  write("ZordanTool v"+version+" vom "+datum+" ... zhilfe fuer Hilfe.\n");
+}
+ 
+void init() {
+  string termial;
+  ::init();
+  if (!IS_LEARNER(TP)) return;
+  add_action("showall",        "za" );
+  add_action("showdetails",    "zd" );
+  add_action("showcmds",       "zc" );
+  add_action("showexits",      "ze" );
+  add_action("showsmells",     "zsm" );
+  add_action("showsounds",     "zso" );
+  add_action("showdoors",      "zdo" );
+  add_action("cfg",            "zstr" );
+  add_action("untersuche",     "zunt" );
+  add_action("notifyen",       "znot" );
+  add_action("hilfe",          "zhilfe" );
+  add_action("showcloner",     "zcl" );
+  add_action("showumg",        "zumg" );
+  add_action("shownpc",        "znpc" );
+  add_action("ztoete",         "zkill" );
+  add_action("erstkiller",     "zek" );
+  add_action("ekkill",         "zekk" );
+  add_action("eknotkill",      "zeknk" );
+  add_action("zausrueste",     "zausr" );
+  add_action("heilen",         "zheil" );
+  add_action("setalignstring", "zal" );
+  add_action("setracestring",  "zra" );
+  add_action("zkwer",          "zkwer" );
+  add_action("zprops",         "zprop" );
+  add_action("echoall",        "zea" );
+  add_action("transen",        "ztrans" );
+  color = ({ 0,0,0,0,0 });
+  if ((termial=TP->QueryProp(P_TTY)) == "ansi") {
+    color[0] = ANSI_NORMAL;
+    color[1] = ANSI_BOLD;
+    color[2] = ANSI_UNDERL;
+    color[3] = ANSI_BLUE;
+    color[4] = ANSI_RED;
+  } else if (termial == "vt100") {
+    color[0]=ANSI_NORMAL;
+    color[1]=ANSI_BOLD;
+    color[2]=ANSI_BOLD;
+    color[3]=ANSI_NORMAL;
+    color[4]=ANSI_NORMAL;
+  } else {
+    color[0]=color[1]=color[2]=color[3]=color[4]=ANSI_NORMAL;
+  }
+}
+ 
+int hilfe() {
+  write("+================================================================+\n");
+  write("| "+color[1]+color[2]+"Folgende Befehle sind mit Deinem Spiegel moeglich:"+color[0]+"       |\n");
+  write("+----------------------------------------------------------------+\n" );
+  write("|                                                                |\n");
+  write("| "+color[4]+"za"+color[0]+"   : Alle wichtigen Informationen im Raum                    |\n");
+  write("|                                                                |\n");
+  write("| "+color[4]+"zd"+color[0]+"   : Details            "+color[4]+"zsm"+color[0]+"  : Smells                        |\n");
+  write("| "+color[4]+"zc"+color[0]+"   : Commands           "+color[4]+"zso"+color[0]+"  : Sounds                        |\n");
+  write("| "+color[4]+"ze"+color[0]+"   : Exits              "+color[4]+"zdo"+color[0]+"  : Doors                         |\n");
+  write("|                                                                |\n");
+  write("| "+color[4]+"zstr  <");
+  if (config==1) write(color[2]);
+  write("Ein"+color[0]+color[4]+"/");
+  if (config==0) write(color[2]);
+  write("Aus"+color[0]+color[4]+">"+color[0]+"      : Ausgabe der Strings EIN/AUS             |\n");
+  write("| "+color[4]+"zunt  <");
+  if (unters==1) write(color[2]);
+  write("Ein"+color[0]+color[4]+"/");
+  if (unters==0) write(color[2]);
+  write("Aus"+color[0]+color[4]+">"+color[0]+"      : Automatisch Details untersuchen EIN/AUS |\n");
+  write("| "+color[4]+"znot  <");
+  if (notify==1) write(color[2]);
+  write("Ein"+color[0]+color[4]+"/");
+  if (notify==0) write(color[2]);
+  write("Aus"+color[0]+color[4]+">"+color[0]+"      : Anzeige bei neuen Sachen im Inv EIN/AUS |\n");
+  write("| "+color[4]+"znpc   <Stufe>"+color[0]+"       : Standard NPC Werte                      |\n");
+  write("| "+color[4]+"zkill  <Npc1> <Npc2>"+color[0]+" : NPC's gegeneinander kaempfen lassen     |\n");
+  write("| "+color[4]+"zek    <von> <bis>"+color[0]+"   : Liste der Erstkillermonster             |\n");
+  write("| "+color[4]+"zprop  [string]"+color[0]+"      : Liste aller Properties des Objektes     |\n");
+  write("| "+color[4]+"zal    [string]"+color[0]+"      : Align String setzen                     |\n");
+  write("| "+color[4]+"zra    [string]"+color[0]+"      : Race String setzen                      |\n");
+  write("| "+color[4]+"zea    [string]"+color[0]+"      : Echoall an alle Spieler OHNE Kanal      |\n");
+  write("|                                                                |\n");
+  write("| "+color[4]+"zumg   [Spieler]"+color[0]+"     : Environment                             |\n");
+  write("| "+color[4]+"zcl    <Spieler>"+color[0]+"     : Clonerliste                             |\n");
+  write("| "+color[4]+"zekk   <Spieler>"+color[0]+"     : Gekillte Erstkiller-monster             |\n");
+  write("| "+color[4]+"zeknk  <Spieler>"+color[0]+"     : NICHT gekillte Erstkiller-monster       |\n");
+  write("| "+color[4]+"zausr  <Spieler>"+color[0]+"     : Rueste Testspieler/Magier aus           |\n");
+  write("| "+color[4]+"zheil  <Spieler>"+color[0]+"     : Testspieler/Magier komplett heilen      |\n");
+  write("| "+color[4]+"ztrans <Spieler>"+color[0]+"     : Transt ohne Log-File-Eintrag            |\n");
+  write("|                                                                |\n");
+  write("| "+color[4]+"zkwer [mud] <opt>"+color[0]+"    : kwer an Mud senden                      |\n");
+  write("|                                                                |\n");
+  write("|                                  "+color[3]+"Version: "+version+" vom "+datum+" |\n"+color[0]);
+  write("+================================================================+\n");
+  return 1;
+}
+
+int sort_fkt(string a, string b) {
+  if (stringp(map[a]) && stringp(map[b])) {
+    return (map[a] > map[b]);
+  } else {
+    return (sprintf("%O", map[a]) > sprintf("%O", map[b]));
+  }
+}
+
+// xeval printf("%O\n",sort_array(m_indices(environment(find_player("zordan"))->QueryProp("details")),#'>))
+
+void showdet(int header,string str) {
+  string filename,*indices,indice;
+  int i,groesse,anzahl;
+  filename=file_name(here)+".lpc";
+  if (header==1) {
+    write("=============================================================================\n");
+    write(color[1]+"Aktuelle Datei:   "+filename+"\n");
+    write(         "Dateigroesse:     "+file_size(filename)+"\n");
+    write(         "Userid der Datei: "+getuid(here)+"\n"+color[0]);
+    write("=============================================================================\n");
+  }
+  write(color[2]+color[1]+"\nSuchbegriff: "+str+"\n\n"+color[0]);
+  if (!map) {  
+    write("Nicht definiert worden!\n");
+    write("=============================================================================\n");
+  } else {
+    anzahl=groesse=sizeof(map);
+    indices=sort_array(m_indices(map),"sort_fkt");
+    for (i=0;i<groesse;i++) {
+      indice=indices[i];
+      if (mappingp(map[indice])) { map[indice]="RASSE:\n"+map[indice][0]; }
+      if ((config==1) && (unters==0)) { write(color[0]+color[2]); }
+      if ((i<(groesse-1)) && (map[indice]==map[indices[i+1]])) {
+        anzahl--;
+        if (unters==0) { write(DEFAULT(indice)+", "); }
+      } else {
+        if (unters==0) { write(DEFAULT(indice));
+        } else {
+          write(color[2]+"\nUntersuche: "+indice+color[0]+"\n");
+          if (str=="Details") { TP->command_me("unt "+indice); }
+        }
+        if (unters==0) {
+          if (config==1) {
+            write(":\n"+color[0]);
+            if (stringp(map[indice])) { write(color[3]+map[indice]+"\n"); } 
+            else { write(sprintf(color[3]+"%O\n", map[indice])); }
+          } else {
+            write(".\n");
+          }
+        }
+      }
+    }
+    write(color[0]+"-----------------------------------------------------------------------------\n");
+    write(color[1]+"Anzahl gefunden: "+anzahl+"("+groesse+").\n"+color[0]);
+    write("=============================================================================\n");
+  }
+}
+
+int showdetails() {
+  here=ENV(TP);
+  map=here->QueryProp(P_DETAILS)+here->QueryProp(P_SPECIAL_DETAILS)+here->QueryProp(P_READ_DETAILS);
+  showdet(1,"Details");
+  return 1;
+}
+
+int showcmds() {
+  here=ENV(TP);
+  map=here->QueryProp(P_COMMANDS);
+  showdet(1,"Commands");
+  return 1;
+}
+
+int showexits() {
+  here=ENV(TP);
+  map=here->QueryProp(P_EXITS);
+  showdet(1,"Exits");
+  return 1;
+}
+
+int showsmells() {
+  here=ENV(TP);
+  map=here->QueryProp(P_SMELLS);
+  showdet(1,"Smells");
+  return 1;
+}
+
+int showsounds() {
+  here=ENV(TP);
+  map=here->QueryProp(P_SOUNDS);
+  showdet(1,"Sounds");
+  return 1;
+}
+
+int showdoors() {
+  here=ENV(TP);
+  map=here->QueryProp(P_DOOR_INFOS);
+  showdet(1,"Doors");
+  return 1;
+}
+
+int showall() {
+  here=ENV(TP);
+  map=here->QueryProp(P_DETAILS)+here->QueryProp(P_SPECIAL_DETAILS)+here->QueryProp(P_READ_DETAILS);
+  showdet(1,"Details");
+  map=here->QueryProp(P_COMMANDS);
+  showdet(0,"Commands");
+  map=here->QueryProp(P_EXITS);
+  showdet(0,"Exits");
+  map=here->QueryProp(P_SMELLS);
+  showdet(0,"Smells");
+  map=here->QueryProp(P_SOUNDS);
+  showdet(0,"Sounds");
+  map=here->QueryProp(P_DOOR_INFOS);
+  showdet(0,"Doors");
+  return 1;
+}
+
+int cfg(string str) {
+  notify_fail("*** Syntax: zstr <ein/aus>\n");
+  if ((str != "ein") && (str != "aus")) return 0;
+  if (str=="ein") {
+    config=1;
+    write("+============================================================================\n");
+    write("| Ausgabe der Strings fuer Deinen Spiegel: EIN.\n");
+    write("+============================================================================\n");
+  } else {
+    config=0;
+    write("+============================================================================\n");
+    write("| Ausgabe der Strings fuer Deinen Spiegel: AUS.\n");
+    write("+============================================================================\n");
+  }
+  return 1;
+}
+
+int untersuche(string str) {
+  notify_fail("*** Syntax: zunt <ein/aus>\n");
+  if ((str != "ein") && (str != "aus")) return 0;
+  if (str=="ein") {
+    unters=1;
+    write("+============================================================================\n");
+    write("| Automatisches Untersuchen der Details: EIN.\n");
+    write("+============================================================================\n");
+  } else {
+    unters=0;
+    write("+============================================================================\n");
+    write("| Automatisches Untersuchen der Details: AUS.\n");
+    write("+============================================================================\n");
+  }
+  return 1;
+}
+
+int notifyen(string str) {
+  notify_fail("*** Syntax: znot <ein/aus>\n");
+  if ((str != "ein") && (str != "aus")) return 0;
+  if (str=="ein") {
+    notify=1;
+    write("+============================================================================\n");
+    write("| Automatisches Anzeigen bei neuen Sachen im Inventory: EIN.\n");
+    write("+============================================================================\n");
+  } else {
+    notify=0;
+    write("+============================================================================\n");
+    write("| Automatisches Anzeigen bei neuen Sachen im Inventory: AUS.\n");
+    write("+============================================================================\n");
+  }
+  return 1;
+}
+
+int showcloner(string str) {
+  object pl,ob;
+  int i,anzahl;
+  notify_fail("*** zcl: Spieler "+color[4]+CAP(str)+color[0]+" nicht gefunden !\n");
+  if (!str) return 0;
+  if (!pl=find_player(str)) { pl=find_living(str); }
+  if (!pl) return 0;
+  anzahl=0;
+  write("+============================================================================\n");
+  write("| Clonerliste von "+color[1]+CAP(str)+color[0]+":\n");
+  write("+============================================================================\n");
+  for (ob=first_inventory(pl);ob;ob=next_inventory(ob)) {
+    anzahl++;
+    if(ob->QueryProp(P_CLONER)) {      
+      printf("|%57O",ob);
+      printf(" -> "+color[1]+color[3]+"%s"+color[0]+"\n",ob->QueryProp(P_CLONER));
+    } else {
+      printf("|%57O\n",ob);
+    }
+  }
+  write("+----------------------------------------------------------------------------\n");
+  write("| Anzahl gefunden: "+color[1]+anzahl+color[0]+".\n");
+  write("+============================================================================\n");
+  return 1;
+}
+
+QueryProp(string prop) {
+  if (prop==P_SHORT && environment() && TP && MENV!=TP && IS_WIZARD(MENV)) {
+    tell_object(MENV, 
+      "*** Inventory wurde von "+color[4]+color[1]+CAP(getuid(TP))+color[0]+" angesehen.\n"); 
+  }
+  return ::QueryProp(prop); 
+}
+
+int showumg(string str) {
+  int i;
+  string *TT;
+  string s;
+  string spieler;
+  object env;
+  spieler=TPN;
+  if(str) {
+    if(find_player(str)) {
+      env=ENV(find_player(str));
+      spieler=CAP(str);
+    } else {
+      notify_fail("*** zumg: Spieler "+color[4]+CAP(str)+color[0]+" nicht gefunden !\n");
+      return 0;
+    }
+  } else {
+    env=ENV(TP);
+  }
+  TT=({"Unbekannt","Hoehle","Haus","Huegel","Wald","Stadt",
+       "Gebirge","Wueste","Dschungel","Sumpf","Ebene",
+       "Polar","Unterwasser","Strasse"});
+  s="| Umgebung von "+color[1]+CAP(spieler)+color[0]+": ";
+  if(env->QueryProp(P_ENVIRONMENT)[ENV_FLAGS] && EF_INDOORS)
+    s+="drinnen";
+  else
+    s+="draussen";
+  i=env->QueryProp(P_ENVIRONMENT)[ENV_TEMPERATURE];
+    s+=", "+color[1]+i+color[0]+" Grad";
+  if(i=env->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN] )
+    s+=", Terrain: "+color[3]+TT[i]+color[0];
+  if(i=env->QueryProp(P_ENVIRONMENT)[ENV_WATER] )
+    s+=" (Tiefe "+color[1]+i+color[0]+" cm)";
+  i=env->QueryProp(P_LIGHT);
+  if(i>0)
+    s+=", hell ("+color[1]+i+color[0]+").\n";
+  else
+    s+=", dunkel ("+color[1]+i+color[0]+").\n";
+  write("+============================================================================\n");
+  write(s);
+  write("+============================================================================\n");
+  return 1;
+}
+
+int shownpc(string level) {
+  int stufe;
+  notify_fail("*** Syntax: znpc <Stufe>\n");
+  if( stufe=to_int(level) ) {
+    write("+============================================================================\n");
+    printf("| LEVEL: %i  HP: %i  HANDS: %i  BODY: %i  XP: %i\n",
+              stufe, stufe*stufe+10, stufe*10, stufe*3, (stufe*stufe+10)*50*stufe);
+    write("+============================================================================\n");
+   return 1;
+  }    
+  return 0;
+}
+
+int ztoete(string str) {
+  string npc1,npc2;
+  object n1, n2;
+  notify_fail("*** Syntax: zkill <npc1> <npc2>\n");
+  if(!str) return 0;
+  if(sscanf(str, "%s %s", npc1, npc2)!=2 ) return 0;
+  if((n1=present(npc1, ENV(TP))) && (n2=present(npc2, ENV(TP)))) {
+    if (n1->Kill(n2)) {
+      write("*** NPC "+color[1]+CAP(npc1)+color[0]+" versucht NPC "
+             +color[1]+CAP(npc2)+color[0]+" anzugreifen.\n");
+    } else {
+      notify_fail("*** zkill: Unbekannter Fehler.\n");
+    }
+    return 1;
+  }
+  return 0;
+}
+
+int erstkiller(string str) {
+  int i,von,bis;
+  string ausgabe,a,b;
+  notify_fail("*** Syntax: zek <von> <bis>\n");
+  if (!str) return 0;
+  if(sscanf(str, "%s %s", a, b)!=2 ) return 0;
+  if(!von=to_int(a)) return 0;
+  if(!bis=to_int(b)) return 0;
+  ausgabe="+============================================================================\n"
+         +"| Erstkillermonster von "+color[1]+a+color[0]+" bis "+color[1]+b+color[0]+":\n"
+         +"+============================================================================\n";
+  for(i=von;i<=bis;i++) {
+    if (NPCMASTER->QueryNPCbyNumber(i)) {
+          ausgabe+="| "+sprintf("%3d %3d",i,NPCMASTER->QueryNPCbyNumber(i)[1])
+                                   +" - "+NPCMASTER->QueryNPCbyNumber(i)[2]+"\n";
+    }
+  }
+  ausgabe+="+============================================================================\n";
+  TP->More(ausgabe);
+  return 1;
+}
+
+int ekkill(string str) {
+  int i,bis;
+  string dummy,ausgabe;
+  if (!str) str=TPN;
+  notify_fail("*** zekk: Spieler "+color[4]+CAP(str)+color[0]+" nicht gefunden !\n");
+  if (!restore_object(dummy=sprintf("/save/%c/%s",lowerchar(str[0]),lowerstring(explode(str," ")[0])))) { return 0; }
+  ausgabe="+============================================================================\n"
+         +"| Erstkillermonster gekillt von "+color[1]+CAP(str)+color[0]+":\n"
+         +"+============================================================================\n";
+  bis=8*strlen(given_scores)-1;
+  if (bis < 1) {
+    ausgabe+="| Gar keine.\n";
+  } else {
+    for(i=1;i<=bis;i++) {
+      if (test_bit(given_scores, i)) {
+        if (NPCMASTER->QueryNPCbyNumber(i)) {
+          ausgabe+="| "+sprintf("%3d %3d",i,NPCMASTER->QueryNPCbyNumber(i)[1])
+                                   +" - "+NPCMASTER->QueryNPCbyNumber(i)[2]+"\n";
+        }
+      }
+    }
+  }
+  ausgabe+="+============================================================================\n";
+  TP->More(ausgabe);
+  return 1;
+}
+
+int eknotkill(string str) {
+  int i,bis;
+  string dummy,ausgabe;
+  if (!str) str=TPN;
+  notify_fail("*** zeknk: Spieler "+color[4]+CAP(str)+color[0]+" nicht gefunden !\n");
+  if (!restore_object(dummy=sprintf("/save/%c/%s",lowerchar(str[0]),lowerstring(explode(str," ")[0])))) { return 0; }
+  ausgabe="+============================================================================\n"
+         +"| Erstkillermonster NICHT gekillt von "+color[1]+CAP(str)+color[0]+":\n"
+         +"+============================================================================\n";
+  bis=8*strlen(given_scores)-1;
+  if (bis < 1) {
+    ausgabe+="| Gar keine.\n";
+  } else {
+    for(i=1;i<=bis;i++) {
+      if (!test_bit(given_scores, i)) {
+        if (NPCMASTER->QueryNPCbyNumber(i)) {
+          ausgabe+="| "+sprintf("%3d %3d",i,NPCMASTER->QueryNPCbyNumber(i)[1])
+                                   +" - "+NPCMASTER->QueryNPCbyNumber(i)[2]+"\n";
+        }
+      }
+    }
+  }
+  ausgabe+="+============================================================================\n";
+  TP->More(ausgabe);
+  return 1;
+}
+
+int zausrueste(string str) {
+  object pl, ob;
+  if (!str) str=TPN;
+  notify_fail("*** zausr: Spieler "+color[4]+CAP(str)+color[0]+" nicht gefunden !\n");
+  if(!pl=find_player(str)) return 0;
+  if(!(pl->QueryProp(P_TESTPLAYER)) && !IS_WIZARD(pl)) return 0;
+  write("+============================================================================\n");
+  write("| Rueste "+color[1]+CAP(str)+color[0]+" mit Standardausruestung aus:\n");
+  write("+----------------------------------------------------------------------------\n");
+
+  if (!present("teddy", pl)) {
+    CLONE("/players/woody/obj/teddy2", pl);
+    pl->command_me("report ein");
+  }
+  if (!present("speisekarte", pl)) {
+    CLONE("/players/dusty/obj/speisekarte", pl);
+    pl->command_me("behalte speisekarte");
+  }
+  if (!present("fackel", pl)) {
+    CLONE("/obj/fackel", pl);
+    pl->command_me("behalte fackel");
+  }
+  switch(pl->QueryProp(P_GUILD)) {
+    case "abenteurer":
+      if (!present("mithrilschwert", pl)) {
+        CLONE("/d/ebene/obj/waffe/mithrilschwert", pl);
+        pl->command_me("zuecke schwert");
+      }
+      if (!present("mithrilschild", pl)) 
+        CLONE("/players/woody/obj/kevlarschild", pl);
+      break;
+    case "berserker":
+      if (!present("berserkeraxt", pl)) {
+        CLONE("/d/huegelland/feyaria/blut/weapon/baxt", pl);
+        pl->command_me("zuecke axt");
+      }
+      break;
+  }
+  if (!present("bronzehelm", pl)) 
+    CLONE("/d/dschungel/feyaria/tijara/armour/bronzehelm", pl);
+  if (!present("schuppenpanzer", pl)) 
+    CLONE("/d/gebirge/eros/ruestung/schuppenpanzer", pl);
+  if (!present("hose", pl)) 
+    CLONE("/d/ebene/lamuerte/burg/obj/kettenhose", pl);
+  if (!present("trollschienen", pl)) 
+    CLONE("/d/ebene/lamuerte/burg/obj/trollschienen", pl);
+  if (!present("handschuhe", pl))
+    CLONE("/d/ebene/obj/ruestung/handschuhe", pl);
+  if (!present("umhang", pl)) 
+    CLONE("/d/gebirge/dusty/zwerge/obj/umhang", pl);
+  if (!present("rausschmeisserstiefel", pl)) 
+    CLONE("/d/dschungel/feyaria/tijara/armour/stiefel", pl);
+  if (!present("amulett", pl)) 
+    CLONE("/d/gebirge/eros/ruestung/federnamulett", pl);
+  if (!present("guertel", pl)) 
+    CLONE("/d/dschungel/feyaria/tijara/armour/guertel", pl);
+  if (!present("platinring", pl)) 
+    CLONE("/d/gebirge/eros/ruestung/platinring", pl);
+  if (!present("astralring", pl))
+    CLONE("/d/gebirge/angrox/obj/astralring", pl);
+  if (!present("halsband", pl)) 
+    CLONE("/d/gebirge/eros/ruestung/halsband", pl);
+  pl->command_me("trage alles");
+  pl->AddMoney(10000);
+  write(color[4]+"Gelungen.\n"+color[0]);
+  write("+============================================================================\n");
+  return 1;
+}
+
+int heilen(string str) {
+  object pl;
+  if(str) {
+    if(!pl=find_player(str)) {
+      notify_fail("*** zheile: Spieler "+color[4]+CAP(str)+color[0]+" nicht gefunden !\n");
+      return 0;
+    }
+  } else {
+    pl=TP;
+    str=TPN;
+  }
+  write("+============================================================================\n");
+  write("| Heile "+color[1]+CAP(str)+color[0]+":\n");
+  write("+----------------------------------------------------------------------------\n");
+  printf("| Lebenspunkte :  %3i -> %3i   ..",pl->QueryProp(P_HP),pl->QueryProp(P_MAX_HP));
+  pl->SetProp(P_HP, pl->QueryProp(P_MAX_HP));
+  write(color[3]+"Ok\n"+color[0]);
+  printf("| Magiepunkte  :  %3i -> %3i   ..",pl->QueryProp(P_SP),pl->QueryProp(P_MAX_SP));
+  pl->SetProp(P_SP, pl->QueryProp(P_MAX_SP));
+  write(color[3]+"Ok\n"+color[0]);
+  printf("| Essen        :  %3i ->   0   ..",pl->QueryProp(P_FOOD));
+  pl->SetProp(P_FOOD, 0);
+  write(color[3]+"Ok\n"+color[0]);
+  printf("| Trinken      :  %3i ->   0   ..",pl->QueryProp(P_DRINK));
+  pl->SetProp(P_DRINK, 0);
+  write(color[3]+"Ok\n"+color[0]);
+  printf("| Alkohol      :  %3i ->   0   ..",pl->QueryProp(P_ALCOHOL));
+  pl->SetProp(P_ALCOHOL, 0);
+  write(color[3]+"Ok\n"+color[0]);
+  printf("| Blindheit    :  %3i ->   0   ..",pl->QueryProp(P_BLIND));
+  pl->SetProp(P_BLIND, 0);
+  write(color[3]+"Ok\n"+color[0]);
+  printf("| Taubheit     :  %3i ->   0   ..",pl->QueryProp(P_DEAF));
+  pl->SetProp(P_DEAF, 0);
+  write(color[3]+"Ok\n"+color[0]);
+  printf("| Frosch       :  %3i ->   0   ..",pl->QueryProp(P_FROG));
+  pl->SetProp(P_FROG, 0);
+  write(color[3]+"Ok\n"+color[0]);
+  printf("| Geist        :  %3i ->   0   ..",pl->QueryProp(P_GHOST));
+  pl->SetProp(P_GHOST, 0);
+  write(color[3]+"Ok\n"+color[0]);
+  printf("| Gift         :  %3i ->   0   ..",pl->QueryProp(P_POISON));
+  pl->SetProp(P_POISON,0);
+  write(color[3]+"Ok\n"+color[0]);
+  write("+============================================================================\n");
+  return 1;
+}
+
+int setracestring(string str) {
+  string race;
+  race=TP->_unparsed_args();
+  if(!race) race="";
+  TP->SetProp(P_RACE, race);
+  write("*** New Race String: '"+color[1]+race+color[0]+"'.\n");
+  return 1;
+}
+
+int setalignstring(string str) {
+  string align;
+  align=TP->_unparsed_args();
+  if(!align) align="";
+  TP->SetProp(P_ALIGN_STRING, align);
+  write("*** New Align String: '"+color[1]+align+color[0]+"'.\n");
+  return 1;
+}
+
+int zkwer(string str) {
+  string mud, txt, ret;
+  if (!str) {
+    notify_fail("*** Syntax: zkwer <mudname> <optionen>\n");
+    return 0;
+  }
+  if (sscanf(str,"%s %s",mud,txt)!=2) mud = str;
+  if (ret=INETD->send_udp(mud, ([ REQUEST: "kwer", SENDER: getuid(ME), DATA:txt ]), 1 )) {
+    write( ret );
+  } else {
+    write("*** Anfrage an "+color[1]+CAP(mud)+color[0]+" abgeschickt.\n");
+  }
+  return 1;
+}
+
+int zprops(string str) {
+  mapping allprops;
+  mapping props;
+  object ob;
+  int i,j;
+  int method;
+  string *propind;
+  string ausgabe;
+  string *keys;
+  string *allkeys;
+  string dummy;
+  notify_fail("*** Syntax: zprop [objekt]");
+  if (!str) { return 0; }
+  notify_fail("*** zprop: "+color[1]+str+color[0]+" wurde nicht gefunden\n");
+  if (!ob=present(str,TP))
+    if (!ob=present(str,ENV(TP)))
+      if (!ob=find_player(str))
+        if (!ob=find_object(str))
+          return 0;
+  if (!ob) { return 0; }
+  ausgabe="+============================================================================\n"
+         +"| Alle Properties von "+color[1]+str+color[0]+":\n"
+         +"+============================================================================\n";
+  allkeys=({});
+  allprops=ob->__query_properties();
+  for (i=sizeof(allprops)-1;i>=0;i--) {
+    keys=m_indices(allprops[i]);
+    for (j=sizeof(keys)-1;j>=0;j--)
+      if (member(allkeys,keys[j]) == -1)
+        allkeys+=({keys[j]});
+  }
+  allkeys=sort_array(allkeys, #'<);
+  props=([]);
+  for (i=sizeof(allkeys)-1;i>=0;i--) {
+    dummy="";
+    method=allprops[1][allkeys[i]];
+    if (method & SAVE)           dummy += "SAVE ";
+    if (method & PROTECTED)      dummy += "PROTECTED ";
+    if (method & SECURED)        dummy += "SECURED ";
+    if (method & NOSETMETHOD)    dummy += "NOSETMETHOD ";
+    if (method & SETMNOTFOUND)   dummy += "SETMNOTFOUND ";
+    if (method & QUERYMNOTFOUND) dummy += "QUERYMNOTFOUND ";
+    if (method & QUERYCACHED)    dummy += "QUERYCACHED ";
+    if (method & SETCACHED)      dummy += "SETCACHED ";
+    props+=([allkeys[i]:({allprops[0][allkeys[i]],dummy,
+                            allprops[2][allkeys[i]],
+                            allprops[3][allkeys[i]]}) ]);
+  }
+  for (i=sizeof(allkeys)-1;i>=0;i--) {
+      ausgabe+=break_string(sprintf("%O",
+               props[allkeys[i]][0]),78,"| "+allkeys[i]+": ",1);
+    if (props[allkeys[i]][1] != "") {
+      ausgabe+=break_string(sprintf("%O",
+               props[allkeys[i]][1]),78,"| "+allkeys[i]+": ",1);
+    }
+    if (props[allkeys[i]][2]) {
+      ausgabe+=break_string(sprintf("%O",
+               props[allkeys[i]][2]),78,"| "+allkeys[i]+": ",1);
+    }
+    if (props[allkeys[i]][3]) {
+      ausgabe+=break_string(sprintf("%O",
+               props[allkeys[i]][3]),78,"| "+allkeys[i]+": ",1);
+    }
+    ausgabe+="+----------------------------------------------------------------------------\n";
+  }
+  ausgabe+="| Anzahl Properties: "+color[1]+sizeof(allkeys)+color[0]+".\n";
+  ausgabe+="+============================================================================\n";
+  TP->More(ausgabe);
+  return 1;
+}
+
+int echoall(string str) {
+  string text;
+  object *spieler;
+  int i;
+  text=TP->_unparsed_args();
+  notify_fail("*** Syntax: zea [string]");
+  if (!text) return 0;
+  spieler=users();
+  write("+============================================================================\n");
+  write("| Echoall an alle "+color[1]+"Spieler"+color[0]+":\n");
+  write("| Text: '"+text+"'\n");
+  write("+============================================================================\n");
+  for (i=sizeof(spieler)-1;i>=0;i--) {
+    if (!IS_WIZARD(spieler[i])) {
+      tell_object(spieler[i], text+"\n");
+      printf("| %12s erreicht.\n",spieler[i]->Name());
+    }
+  }
+  write("+============================================================================\n");
+  return 1;
+}
+
+int transen(string str) {
+  object spieler;
+  notify_fail("*** Syntax: ztrans [Spieler]");
+  if (!spieler=find_living(str)) return 0;
+  if (!interactive(spieler)) return 0;
+  write("+============================================================================\n");
+  write("| Trans "+color[1]+CAP(str)+color[0]+".\n");
+  write("+============================================================================\n");
+  spieler->move(ENV(TP),M_TPORT|M_SILENT);
+  write(CAP(str)+" wird hereingetranst.\n");
+  return 1;
+}
+
+void InsertNotify(object obj) {
+  if ((notify==1) && (obj)) {
+    tell_object(owner,"*** Neu im Inv: "+(file_name(obj))+" - Cloner: "+CAP(obj->QueryProp(P_CLONER))+".\n");
+  }
+}
+
+void addhook(object obj) { 
+  if(objectp(obj)) owner->AddInsertHook(obj);
+}

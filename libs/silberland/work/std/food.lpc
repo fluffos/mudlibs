@@ -1,0 +1,376 @@
+// SilberLand MUDlib
+//
+// std/food.c -- standard food object
+//
+// $Date: 2005/10/19 10:51:22 $
+/* $Revision: 1.12 $
+ * $Log: food.c,v $
+ * Revision 1.12  2005/10/19 10:51:22  Woody
+ * neu: QueryEatCommands()
+ *
+ * Revision 1.11  2005/01/28 12:25:54  Woody
+ * Typofix
+ *
+ * Revision 1.10  2005/01/26 17:06:25  Feyaria
+ * Plural bei verschimmeln und zerfallen
+ *
+ * Revision 1.9  2004/01/12 18:06:50  Woody
+ * P_FOOD_STATE_DESC sowie F_BAKED auswerten, query_decay() und query_remove()
+ *
+ * Revision 1.8  2003/12/30 23:13:13  Woody
+ * start_decay(), decay(), decay_desc(), long() und Meldung in remove()
+ *
+ * Revision 1.7  2001/07/11 12:36:10  Feyaria
+ * P_ATTACK_BUSY setzten beim Essen.
+ *
+ * Revision 1.6  2000/10/09 13:04:51  Woody
+ * Bugfix (*argl*)
+ *
+ * Revision 1.5  2000/10/06 07:54:27  Woody
+ * Funktionen umbenannt, nach Eating() P_FOOD_INFO neu auswerten (fuer Ronja :))
+ *
+ * Revision 1.4  1999/01/13 00:33:58  Woody
+ * 'iss alles' (bzw. 'trink' o.a.) implementiert
+ *
+ * Revision 1.3  1998/09/29 21:25:04  Woody
+ * Optionaler Parameter 'pl' bei mampf() und BeimEssen()
+ *
+ * Revision 1.2  1997/10/07 11:45:11  Woody
+ * Ueberarbeitet, nun wesentlich flexibler
+ *
+ * Revision 1.1  1997/03/13 02:53:57  Woody
+ * prepared for revision control
+ *
+ * 20.10.1995	00:58	Mupfel	P_MAX_FOOD, P_MAX_ALCOHOL selber testen
+ * 13.10.1995	19:54	Mupfel	/sys/food.h : F_HEAL statt "heal" etc.
+ * 06.09.1995	04:00	Mupfel	erste Version
+ */
+
+// Properties:
+// P_FOOD_INFO : mapping
+// ([ F_HEAL:mixed,       Heilung, int (LP+SP) oder array ({LP, SP})
+//    F_SOAK:int,         Saettigung
+//    F_DRINK:int,        Trink-Saettigung
+//    F_ALCOHOL:int,      Alkoholgehalt
+//    F_POISON:int,       Giftgehalt
+//    F_MSG:string,       Text beim Essen/Trinken fuer den Spieler
+//    F_MSG_ROOM:string,  Text beim Essen/Trinken fuer den Raum
+//                        (Spielername+" " wird automatisch vorangestellt)
+//    F_VERB:string ])    Verb (wird bei der Fehlermeldung benoetigt);
+//                        Default ist "essen" (Verb in Nennform!!)
+//
+// (F_HEAL und F_POISON wird NACH 'BeimEssen' gesetzt, F_SOAK und
+// F_ALCOHOL davor, um abzutesten, ob der Spieler das noch essen kann)
+//
+// Funktionen:
+//
+// void BeimEssen(object pl);
+//   Wird in der 'Essfunktion' aufgerufen. Das Nahrungsobjekt wird
+//   anschliessend zerstoert, wenn die Funktion second_life() nicht
+//   existiert oder 0 zurueckliefert.
+//
+// int second_life(object pl);
+//   Wenn diese Funktion einen Wert ungleich 0 zurueckgibt, so hat
+//   das Objekt ein "zweites Leben" und wird nicht destructed nach
+//   der Konsumierung. Hier koennte man auch das Clonen leerer
+//   Flaschen, Obstkerne, etc. implementieren.
+//
+
+inherit "std/thing";
+
+#define NEED_PROTOTYPES
+
+#include <properties.h>
+#include <defines.h>
+#include <living.h>
+#include <wizlevels.h>
+#include <food.h>
+
+private nosave int check_food(int strength, object pl);
+private nosave int check_drink(int strength, int alcohol, object pl);
+
+string *eatcmds;
+
+varargs create(mixed commands)
+{
+  if (IS_BLUE(ME)) return;
+  ::create();
+  AddId("Nahrung");
+  SetProp(P_SHORT, "Ein essbares Objekt");
+  SetProp(P_LONG, "Ein essbares Objekt.\n");
+  SetProp(P_NAME, "Essen");
+  SetProp(P_GENDER, NEUTER);
+  SetProp(P_WEIGHT, 50);
+  SetProp(P_VALUE, 50);
+  SetProp(P_MATERIAL, MAT_FOOD);
+  SetProp(P_FOOD_STATE, F_RAW);
+
+  if (stringp(commands))
+    eatcmds = ({ commands });   // make to array
+  else if (pointerp(commands))
+    eatcmds = commands[0..];    // copy array
+  else
+    eatcmds = ({ "iss" });      // default
+
+  AddCmd(eatcmds, "eat");
+}
+
+
+void start_decay(int decay_time, int remove_time)
+{
+  while (remove_call_out("decay") != -1) /* continue */ ;
+  while (remove_call_out("remove") != -1) /* continue */ ;
+  if (decay_time >= 0)
+    call_out("decay", decay_time);
+  if (remove_time >= 0)
+    call_out("remove", decay_time + remove_time);
+}
+
+
+int decay(int silent)
+{
+  mapping fi;
+  string msg;
+  mixed heal;
+
+  if (!mappingp(fi = QueryProp(P_FOOD_INFO)))
+    return 0;
+
+  if (!silent && environment())
+  {
+    if (stringp(msg = fi[F_MSG_DECAY]))
+      environment()->Message(msg, MSGFLAG_VISUAL);
+    else
+      environment()->Message(Name() + " verschimmel"+
+          (IsPlural() ? "n" : "t") +".\n", MSGFLAG_VISUAL);
+  }
+
+  // Heilung deaktivieren und Vergiftung aktivieren
+  if (pointerp(heal=fi[F_HEAL]) && sizeof(heal)==2) {
+    fi[F_HEAL] = ({ heal[0] < 0 ? heal[0] : 0, heal[1] < 0 ? heal[1] : 0 });
+  }
+  else if (intp(heal)) {
+    fi[F_HEAL] = heal < 0 ? heal : 0;
+  }
+  if (fi[F_POISON] <= 0)
+    fi[F_POISON] = 1;
+
+  // Ess-Meldungen anpassen
+  if (fi[F_MSG])
+    fi[F_MSG] = "Du wagst es, " + name(WEN,1) + " zu " +
+      (stringp(fi[F_VERB]) ? fi[F_VERB] : "essen") +
+      ", obwohl " + QueryPronoun() + " bereits verdorben " +
+      (IsPlural() ? "sind" : "ist") + ". Ob das so gesund war...?";
+  if (fi[F_MSG_ROOM])
+    fi[F_MSG_ROOM] = "wagt es, " + name(WEN,1) + " zu " +
+      (stringp(fi[F_VERB]) ? fi[F_VERB] : "essen") +
+      ", obwohl " + QueryPronoun() + " bereits verdorben " +
+      (IsPlural() ? "sind" : "ist") + ". Ob das so gesund war...?";
+
+  // Veraenderte Werte offiziell wieder setzen
+  SetProp(P_FOOD_INFO, fi);
+  SetProp(P_FOOD_STATE, QueryProp(P_FOOD_STATE) | F_SPOILT);
+
+  // decay erfolgreich
+  return 1;
+}
+
+
+varargs int remove(int silent)
+{
+  mapping fi;
+  string msg;
+
+  fi = QueryProp(P_FOOD_INFO);
+
+  if (!silent && environment())
+  {
+    if (mappingp(fi) && stringp(msg = fi[F_MSG_REMOVE]))
+      environment()->Message(msg, MSGFLAG_VISUAL);
+    else
+      environment()->Message(Name() +
+          (IsPlural() ? " zerfallen.\n" : " zerfaellt.\n"), MSGFLAG_VISUAL);
+  }
+  return ::remove(silent);
+}
+
+
+string decay_desc()
+{
+  mapping fi, fsd;
+
+  fsd = QueryProp(P_FOOD_STATE_DESC) || ([ ]);
+  fi = QueryProp(P_FOOD_INFO);
+
+  if (QueryProp(P_FOOD_STATE) & F_SPOILT)
+    return fsd[F_SPOILT] || "verdorben";
+  if (QueryProp(P_FOOD_STATE) & F_COOKED)
+    return fsd[F_COOKED] || "gekocht";
+  if (QueryProp(P_FOOD_STATE) & F_FRIED)
+    return fsd[F_FRIED] || "gebraten";
+  if (QueryProp(P_FOOD_STATE) & F_BAKED)
+    return fsd[F_BAKED] || "gebacken";
+  if ((QueryProp(P_FOOD_STATE) & F_RAW) == F_RAW)
+    return (mappingp(fi) && fi[F_SHOW_RAW]) ? (fsd[F_RAW] || "roh") : 0;
+}
+
+
+string long()
+{
+  int dmg;
+  string s;
+
+  s = decay_desc();
+  return
+    ::long() +
+    (s ?
+     sprintf("%s %s %s.\n",
+       capitalize(QueryPronoun(WER)), IsPlural() ? "sind" : "ist", s) :
+     "");
+}
+
+
+// empty functions, for being overloaded.
+int second_life(object player) {}
+varargs void Eating(object pl) {}
+
+// deprecated. Use Eating() instead.
+varargs void BeimEssen(object pl) {}
+
+// deprecated. Use eat() instead.
+varargs int mampf(string what, object pl) {
+  return eat(what,pl);
+}
+
+varargs int eat(string what, object pl)
+{
+  mapping foodinfo;
+  mixed   heal;
+  int     hp, sp, all;
+
+  if (!objectp(pl)) pl=this_player();
+  if (!objectp(pl)) return 0;
+
+  foodinfo = QueryProp(P_FOOD_INFO);
+  notify_fail("Was moechtest Du "+(foodinfo[F_VERB] || "essen")+"?\n");
+  if (!what) return 0;
+  if (id(what) || (all=(what=="alles")))
+  {
+    if (all)
+      notify_fail("Du findest leider nichts mehr zu "+
+          (foodinfo[F_VERB] || "essen")+".\n");
+
+    // P_FOOD_INFO auswerten:
+    if (pointerp(heal=foodinfo[F_HEAL]) && sizeof(heal)==2) {
+      hp=heal[0]; sp=heal[1];
+    }
+    else if (!intp(heal)) {
+      raise_error("F_HEAL in P_FOOD_INFO nicht korrekt gesetzt.\n");
+      return 1;
+    }
+    else
+      hp = sp = heal;
+
+    if (foodinfo[F_SOAK] && !check_food(foodinfo[F_SOAK], pl))
+      return 1;
+    if (foodinfo[F_DRINK] || foodinfo[F_ALCOHOL])
+      if (!check_drink(foodinfo[F_DRINK], foodinfo[F_ALCOHOL], pl))
+          return 1;
+
+    if( pl->InFight() )
+    {
+      if(pl->QueryProp(P_ATTACK_BUSY) )
+      {
+        tell_object(pl, "Du bist zu erschoepft, um "+name(WEN)+
+            " zu "+(foodinfo[F_VERB] || "essen")+"!\n");
+        return 1;
+      }
+      pl->SetProp(P_ATTACK_BUSY, 1+(hp+sp)/50);
+    }
+    
+    if (foodinfo[F_MSG])
+      tell_object(pl, break_string(foodinfo[F_MSG], 78, 0, 1) );
+    if (foodinfo[F_MSG_ROOM] && environment(pl))
+      tell_room( environment(pl), break_string(pl->Name(WER)+" "+
+          foodinfo[F_MSG_ROOM], 78, 0, 1), ({ pl }) );
+
+    BeimEssen(pl);      // deprecated.
+    Eating(pl);
+
+    // reload hp/sp values from mapping.
+    foodinfo = QueryProp(P_FOOD_INFO);
+    if (pointerp(heal=foodinfo[F_HEAL]) && sizeof(heal)==2) {
+      hp=heal[0]; sp=heal[1];
+    }
+    else if (!intp(heal)) {
+      raise_error("F_HEAL in P_FOOD_INFO nicht korrekt gesetzt.\n");
+      return 1;
+    }
+    else
+      hp = sp = heal;
+
+    if (hp) pl->AddHp(hp);
+    if (sp) pl->AddSp(sp);
+    if (foodinfo[F_POISON]) pl->AddPoison(foodinfo[F_POISON]);
+
+    if (!ME->second_life(pl)) remove(1);
+    return !all;
+  }
+  return 0;
+}
+
+private nosave int check_food(int strength, object pl)
+{
+  int food;
+
+  food = pl->QueryProp(P_FOOD) + strength;
+  if ((food > pl->QueryProp(P_MAX_FOOD)) && !IS_LEARNER(pl))
+  {
+    tell_object(pl, "Uff, das bekommst Du nicht mehr 'runter.\n");
+    return 0;
+  }
+  pl->SetProp(P_FOOD, (food < 0 ? 0 : food));
+  return 1; 
+}
+
+private nosave int check_drink(int strength, int alcohol, object pl)
+{
+  int drink, alc;
+
+  drink = pl->QueryProp(P_DRINK) + strength;
+  alc = pl->QueryProp(P_ALCOHOL) + alcohol;
+
+  if (!IS_LEARNER(pl))
+  {
+    if (alc > pl->QueryProp(P_MAX_ALCOHOL))
+    {
+      tell_object(pl,
+          "Asso das kriegst Du jezz nich... nichmehr runter, hick.\n");
+      return 0;
+    }
+    if (drink > pl->QueryProp(P_MAX_DRINK))
+    {
+      tell_object(pl,
+          "Soviel kannst Du beim besten Willen nicht mehr trinken...\n");
+      return 0;
+    }
+  }
+  pl->SetProp(P_DRINK, (drink < 0 ? 0 : drink));
+  pl->SetProp(P_ALCOHOL, (alc < 0 ? 0 : alc));
+  return 1; 
+}
+
+int query_decay()
+{
+  return find_call_out("decay");
+}
+
+int query_remove()
+{
+  return find_call_out("remove");
+}
+
+string *QueryEatCommands()
+{
+  return eatcmds;
+}

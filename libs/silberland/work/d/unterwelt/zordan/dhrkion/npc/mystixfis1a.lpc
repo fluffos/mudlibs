@@ -1,0 +1,433 @@
+//=========================================================================
+//
+// File:    mystixfis.c
+// Created by Zordan@SL
+//
+// Project: dhrkion
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit "/d/unterwelt/basics/central/npc/std_darkelf";
+inherit "/std/player/moneyhandler";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <npcmaster.h>
+#include <moving.h>
+
+#define BSI(x,y) break_string(x,78,y,1)
+
+#define ENTFROSCHEPREIS 400
+#define ENTGIFTEPREIS   200
+
+int stufe;
+object *saved_enemies;
+object key;
+
+void customize(int stufe);
+
+void create()
+{
+  if(!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Mystixfis, der boese Dunkelelfenmagier");
+  SetProp(P_LONG,
+    "Auf den ersten Blick erkennst Du nur eine tiefschwarze Robe ohne "
+    "Gesichtsauschnitt. Auf den zweiten Blick kannst Du aber zwei dunkle "
+    "Punkte mitten aus der Robe direkt in Deine Augen schauen sehen. Einige "
+    "Heptagramme und Pentagramme zieren die Robe. Auffallend leise erklingt "
+    "ein tiefer Atem unter der Robe hervor."
+  );
+
+  SetProp(P_NAME, "Mystixfis");
+  SetProp(P_GENDER, MALE);
+  AddId(({"mystixfis", "magier","NOWIMPY","NOCONTROL"}));
+  set_living_name("mystixfis");
+
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_SOUND, "Unter Robe hoerst Du ein leises, tiefes Atmen.\n");
+  customize(1);
+
+  AddInfo(DEFAULT_INFO, "antwortet Dir einfach nicht.\n");
+
+  AddLibrary( NPC "dhrkion.lib",1);
+
+  AddCmd( ({"entfrosche","entfrosch"}) ,"cmd_entfroschen");
+  AddCmd( ({"entgifte"})               ,"cmd_entgiften" );
+
+//command("trage alles");
+
+  saved_enemies = ({ });
+}
+
+void customize(int s)
+{
+  string msg;
+
+  stufe = s;
+  if(objectp(key)) key->remove();
+
+  create_default_darkelf(18+stufe*7,18+stufe*7,10);
+
+  SUID;
+
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_AGGRESSIVE,0);
+  SetProp(P_WIMPY, 0);
+  SetProp(P_SIZE, 250);
+
+  SetProp(P_HANDS, ({" mit seinen blutmagischen Haenden",
+    QueryProp(P_HANDS)[1]*stufe,DT_FIRE}));
+
+  SetProp(P_MAX_HP, QueryProp(P_MAX_HP)*(stufe+1)/2);
+  SetProp(P_BODY, QueryProp(P_BODY)*(stufe+1)/2);
+  SetProp(P_XP, QueryProp(P_XP)+stufe*10000); // Bonus fuer Spells
+  SetProp(P_ALIGN, -(700+stufe*100));
+  SetProp(P_RESISTANCE_STRENGTHS,
+    ([DT_SLASH:     -(0.1*stufe)
+     ,DT_BLUDGEON:  -(0.1*stufe)
+     ,DT_PIERCE:    -(0.1*stufe)
+     ,DT_SQUEEZE:    (0.05*stufe)
+     ,DT_WHIP:      -(0.1*stufe)
+     ,DT_RIP:       -(0.1*stufe)
+     ,DT_FIRE:      -(0.5+0.1*stufe)
+     ,DT_COLD:      (0.05*stufe)
+     ,DT_WATER:     -0.2
+     ,DT_AIR:       -0.2
+     ,DT_LIGHTNING: 0.05
+     ,DT_EXPLOSION: -(0.2+0.05*stufe)
+     ,DT_SOUND:     -(0.5+0.1*stufe)
+     ,DT_LIGHT:     0.05
+     ,DT_ELECTRIC:  -0.1
+     ,DT_ACID:      -0.5
+     ,DT_POISON:    -0.1
+     ,DT_TERROR:    -(0.3*stufe)
+     ,DT_HOLY:      (0.05*stufe)
+     ,DT_UNHOLY:    -1.0
+     ,DT_MAGIC:     -1.0
+     ,DT_MIND:      -(0.3+0.1*stufe)
+     ])
+  );
+
+  SetProp(P_NOMAGIC,50+stufe*10);
+  SetProp(P_SPELLRATE,50+stufe*10);
+
+  SetProp(P_MSGIN, "manifestiert sich aus der Dunkelheit");
+  SetProp(P_MSGOUT, "verschwindet in der Dunkelheit");
+  SetProp(P_MMSGIN, "manifestiert sich aus der Dunkelheit");
+  SetProp(P_MMSGOUT, "verschwindet in der Dunkelheit");
+
+  SetProp(P_NOCORPSE, 1 );
+
+  switch(stufe)
+  {
+    case 1 :
+      msg = " loest sich in einer dunklen Rauchwolke auf.\n";
+      SetProp(P_NO_SCORE,1);
+      key = clone_object("/d/unterwelt/basics/central/obj/lavaschluessel");
+      key->move(TO,M_NOCHECK|M_GET);
+      break;
+
+    case 2 :
+      msg = " loest sich erneut in einer dunklen Rauchwolke auf.\n";
+      SetProp(P_NO_SCORE,1);
+      key = clone_object("/d/unterwelt/basics/central/obj/lavaschluessel");
+      key->move(TO,M_NOCHECK|M_GET);
+      break;
+
+    default :
+      msg = " loest sich fast widerstrebend in fast fuehlbare Dunkelheit "
+            "auf.\n";
+      SetProp(P_NO_SCORE,0);
+      key = clone_object("/d/unterwelt/basics/central/obj/lavaschluessel");
+      key->move(TO,M_NOCHECK|M_GET);
+      break;
+  }
+
+  SetProp(P_DIE_MSG, msg);
+}
+
+void init()
+{
+  ::init();
+
+  if(TP && interactive(TP) && member(saved_enemies,TP) > -1) Kill(TP);
+
+  if(TP && living(TP) && TP->id("\ndunkelelfenkoenigin"))
+  {
+    SetProp(P_DEFENDERS, QueryProp(P_DEFENDERS) - ({ TP }) );
+  }
+}
+
+void reset()
+{
+  ::reset();
+  if(!is_clone(TO)) return;
+
+  saved_enemies = ({ });
+
+  if(sizeof(QueryEnemies()[0]) == 0) customize(1);
+}
+
+int Defend(int dam, mixed dam_type, mixed spell, object enemy)
+{
+  if(enemy && interactive(enemy) && member(saved_enemies,enemy) == -1)
+  {
+    saved_enemies += ({ enemy });
+  }
+
+  return ::Defend(dam, dam_type, spell, enemy);
+}
+
+int _query_wimpy()
+{
+  return 0;
+}
+
+int second_life(object corpse)
+{
+  object *enemies,enemy,env,ob;
+  int i,ret;
+  string msg;
+
+  if(!(env = ENV(TO))) return 0;
+
+  if(stufe == 1 || stufe == 2)
+  {
+    if(stufe == 1) msg = "\n"+BS("Ploetzlich hoerst Du einen "
+                         "markerschuetternden Schrei wie er nur aus den "
+                         "tiefsten Tiefen der Unterwelt entspringen kann. "
+                         "Bevor Du Dich noch recht entsinnen kannst, steht "
+                         "ein noch staerkeres Ich Mystixfis' vor Dir!")+"\n";
+
+
+    if(stufe == 2) msg = "\n"+BS("Die Rauchfetzen kriechen noch etwas am "
+                         "Boden entlang, um sich kurz danach doch wieder zu "
+                         "vereinen. Aus der Wolke entsteht ein noch "
+                         "staerkeres Ich von Mystixfis!")+"\n";
+
+    tell_room(env,msg);
+    customize(stufe+1);
+    SetProp(P_HP,QueryProp(P_MAX_HP));
+    SetProp(P_SP,QueryProp(P_MAX_SP));
+
+    i = sizeof(saved_enemies);
+    while(i--) if(interactive(saved_enemies[i])) Kill(saved_enemies[i]);
+
+    return 1;
+  }
+
+  enemy = QueryProp(P_KILLER);
+  if(enemy && interactive(enemy))
+  {
+    tell_room(env,"\n"+BS("Die Dunkelheit verdichtet sich wieder, aber "
+                  "Mystixfis schein nicht mehr die Kraft zu haben, sich "
+                  "erneut zu reinkarnieren. Seine dunkle Robe sinkt leise "
+                  "zu Boden und zerfaellt zu reinster Magieseide.")+"\n");
+
+    domainshout(BS("Du hoerst "+enemy->name(WEN)+" laut aus Dhrkion "
+                   "jubeln. "+enemy->Name(WER)+" hat gerade Mystixfis, "
+                   "den boesesten aller Dunkelelfenmagier, besiegt!"),
+                   "/d/unterwelt/",1);
+
+    tell_object(enemy,
+      "Mit lautem Jubeln verkuendest Du Deinen glorreichen Sieg!!!\n");
+
+// Fuer Zechprellerquest
+
+    ob = present("\nzechpreller_quest_11", enemy);
+  if(ob)
+    ob->Mark();
+
+  }
+
+  i = random(5)+3;
+  while(i--) CLONEME("/d/unterwelt/ronja/sternenwald/weapon/edorn");
+
+  i = random(5)+3;
+  while(i--) CLONEME("/p/std/skills/sewing_tanning/obj/magieseide");
+
+  return 0;
+}
+
+void die(int poisondeath)
+{
+  object enemy;
+
+  if ( enemy = present ("\nzechpreller_quest_11",wer) )
+	  enemy -> Mark(poisondeath)
+  if((stufe == 1 || stufe == 2) && objectp(key)) key->remove();
+  
+  if(enemy = QueryProp(P_KILLER))
+  {
+    write_file(LOG "spieler.kills",
+      ctime()+": "+CAP(getuid(enemy))+" killt Mystixfis("+stufe+").\n");
+  }
+
+  ::die(poisondeath);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  if(killer == ME)
+  {
+    write_file(LOG "spieler.deads",
+      ctime()+": "+CAP(getuid(player))+" wurde von Mystixfis getoetet ("+lostexp+").\n");
+    DHRKIONMASTER->feindtot(player);
+  }
+}
+
+int cmd_entfroschen(string str)
+{
+  if(IsEnemy(TP))
+  {
+    tell_object(TP, Name(RAW)+" donnert: FAHR ZUR HOELLE "+TPN+"!\n");
+     return -1;
+  }
+
+  if(!TP->QueryProp(P_FROG))
+  {
+    tell_object(TP,"Der Magier murmelt: Ich kann nur Froesche entfroschen.\n");
+    return -1;
+  }
+
+  if(TP->QueryMoney() < ENTFROSCHEPREIS)
+  {
+    tell_object(TP,BSI("Das Entfroschen ist nicht einfach und deshalb muss "
+                       "ich Dir dafuer "+ENTFROSCHEPREIS+" Muenzen abnehmen. "
+                       "Soviel hast Du aber leider nicht bei Dir.",
+                       "Der Magier zischelt: "));
+    return -1;
+  }
+
+
+  tell_object(TP,"Der Magier beschwoert die Dunkelheit: So sei es.\n"+
+                 BS("Der Magier spricht eine magische Formel aus und Du "
+                    "fuehlst eine starke Magie durch Deinen Koerper "
+                    "fliessen. Du hast jetzt Deinen normalen Koerper wieder "
+                    "und gibst dem Magier die "+ENTFROSCHEPREIS+
+                    "Muenzen."));
+
+  TP->SetProp(P_FROG, 0);
+  TP->AddMoney(-ENTFROSCHEPREIS);
+  "p/daemon/zentralbank"->PayIn(ENTFROSCHEPREIS, 100);
+
+  return 1;
+}
+
+int cmd_entgiften(string str)
+{
+  int preis;
+  string s;
+
+  if(IsEnemy(TP))
+  {
+    tell_object(TP, Name(RAW)+" donnert: FAHR ZUR HOELLE "+TPN+"!\n");
+     return -1;
+  }
+
+  preis = TP->QueryProp(P_POISON) * ENTGIFTEPREIS;
+
+  if(TP->QueryMoney() < ENTGIFTEPREIS)
+  {
+    tell_object(TP,BSI("Du hast nicht genug Geld bei Dir, um meine Dienste "
+                       "in Anspruch nehmen zu koennen.","Der Magier ist "
+                       "erzuernt: "));
+    return -1;
+  }
+
+  if(!TP->QueryProp(P_POISON))
+  {
+    tell_object(TP,BSI("Aber Du bist ja gar nicht vergiftet. Fuer meine "
+                       "Untersuchung muss ich Dir aber trotzdem "+
+                       ENTGIFTEPREIS+" Muenzen abnehmen.","Der Magier wundert "
+                       "sich: "));
+    TP->AddMoney(-ENTGIFTEPREIS);
+    "p/daemon/zentralbank"->PayIn(ENTGIFTEPREIS, 100);
+
+    return -1;
+  }
+
+  if(TP->QueryMoney() < preis)
+  {
+    tell_object(TP,BSI("Das Entgiften ist wirklich schwer und deshalb muss "
+                       "ich Dir dafuer "+preis+" Muenzen berechnen. Soviele "
+                       "Muenzen hast Du aber leider zur Zeit nicht bei Dir."
+                       "Fuer meine Untersuchung verlange ich trotzdem "+
+                       ENTGIFTEPREIS+" Muenzen.","Der Magier zischelt: "));
+    TP->AddMoney(-ENTGIFTEPREIS);
+    "p/daemon/zentralbank"->PayIn(ENTGIFTEPREIS, 100);
+    return -1;
+  }
+
+  tell_object(TP,"\nDer Magier faengt an Dich zu untersuchen.\n\n");
+
+  switch(TP->QueryProp(P_POISON))
+  {
+    case 1:
+      s = "Du bist nur sehr leicht vergiftet. Das bekommen wir schnell hin.";
+      break;
+
+    case 2:
+      s = "Du bist nur wenig vergiftet. Das ist nicht schwer.";
+      break;
+
+    case 3:
+      s = "Du bist schon ganz gut vergiftet. Aber das schaffe ich schon. "
+          "Nur keine Angst.";
+      break;
+
+    case 4:
+      s = "Du bist wirklich gut vergiftet. Mal sehen ob ich das schaffe.";
+      break;
+
+    case 5:
+      s = "Du bist schon hart am Kaempfen mit dem Gift. Das naechste Mal "
+          "sei bloss vorsichter.";
+      break;
+
+    case 6:
+      s = "Du kaempfst schon sehr hart mit dem Gift. Ich werde Dir ein "
+          "wenig mehr Gegengift geben.";
+      break;
+
+    case 7:
+      s = "Du bist schwer vergiftet. Solch ein schweres Gift sieht man "
+          "selten.";
+      break;
+
+    case 8:
+      s = "Du bist sehr schwer vergiftet. Ob mein Gegengift da noch was "
+          "machen kann, weiss ich nicht genau.";
+      break;
+
+    case 9:
+      s = "Wo hast Du Dich bloss rumgetrieben? Dich hat es ja wirklich "
+          "schwer getroffen.";
+      break;
+
+    default:
+      s = "Uiui. Du bist kurz vorm Sterben. Besser ich beeil mich.";
+      break;
+
+  }
+
+  s = BSI(s,"Der Magier sagt:")+BS("Der Magier floesst Dir ein Gegengift "
+      "ein und kurz darauf bist Du wieder komplett geheilt. Erfreut schaut "
+      "Dich der Magier an und Du gibst ihm die "+preis+" Muenzen in die "
+      "Hand.");
+
+  tell_object(TP,s);
+  TP->AddMoney(-preis);
+  "p/daemon/zentralbank"->PayIn(ENTGIFTEPREIS, 100);
+  TP->SetProp(P_POISON, 0);
+
+  return 1;
+}

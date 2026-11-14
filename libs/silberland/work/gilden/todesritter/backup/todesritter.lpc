@@ -1,0 +1,1713 @@
+/*  Gildenraum der Nekromanten
+**
+** 07.08.2006 -- Beginn des Umarbeitens auf einen eigenstaendigen
+**               Raum (gwenshara)
+** 03.08.2006 -- Kopie nekromanten.c todesritter.c (angrox)
+*/
+
+//inherit "/gilden/nekromanten/room/nekro_gilde";
+inherit "/std/gilde";
+inherit "/std/gilden_ob";
+inherit "/std/gilden_room";
+inherit "/std/living/std_skills";
+inherit "/gilden/obj/sequencer_new";
+//inherit "/gilden/obj/restriction_checker";
+#include <properties.h>                  
+#include <rooms.h>
+#include <wizlevels.h>
+#include <defines.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <ansi.h>
+//#include "/gilden/nekromanten/nekro.h"
+#include "/gilden/todesritter/dk.h"
+
+#pragma strong_types
+
+// Maximum Dolch-Bonus
+#define MAX_KNIFE 99 
+
+// Globvars
+string paladinopfer;
+nosave int test_flag=0;
+int cast_disabled = 0;
+
+// Prototyping
+string skill_string(object pl);
+nosave void Channel(string msg);
+nosave void Sacrifice_Part_Two();
+nosave void Sacrifice_Part_Three();
+nosave void Sacrifice_Part_Two_input(string str);
+int set_guild_circle(int circle);
+nosave string integer2percent(int percent);
+nosave string check_lvl_cond(object pl, int flag);
+string LCond(object pl); // auf keinen Fall nosave!!
+string LCond2(object pl);// --"--
+nosave mixed advance(string str);
+nosave varargs int advance2();
+nosave void Become_Undead_One();
+string get_skill_name(string in);
+int faehigkeiten(string str);
+nosave string int2string(int wert);
+string topliste();
+void toplist_update(); 
+void reset_guild_npc();
+
+string *skillpointable = ({
+	                   "strahlen der dunkelheit",
+	//                   "schrecken der finsternis",
+	                   "schleier des val-tkro-tthar",
+	//                   "kochendes blut",
+	//                   "hauch der verwesung",
+	//                   "gekreische der todesfee",
+	//                   "geifer der verdammten",
+	//                   "empathie der schatten",
+                           "dunkler pakt",
+       //                    "blutpakt der verdammten",
+                           "biss des vampirs",
+                           "beruehrung von zum-uul",
+                           "auge des khaza-dhunaar",
+                           });
+/*
+zZ 
+ 9 Skill(s) a 10 Skillpunkt(e) --> 100 Skillpunkt(e)
+ 1 Skill(s) a  2 Skillpunkt(e) -->   2 Skillpunkt(e)
+                                   -----------------
+                                   102 Skillpunkt(e)
+ bei Vergabe von                    49 Skillpunkt(e)
+                                   -----------------
+                                    53 Skillpunkt(e) weniger als Wahlmoeglichkeiten
+*/
+
+void create() 
+{
+  ::create();
+  SetProp(P_NAME, GUILDNPC_NAME); // Fuer die Channelausgabe
+  SetNames(GUILDNPC_LONGNAME, GUILDNPC_NAME); // Fuer den Sequencer
+  SetProp(P_ARTICLE, 0);
+
+  SetProp(P_INT_SHORT, "Der Steinkreis von Yaq-Monnith");
+  SetProp(P_INT_LONG,
+	  "Du stehst im Steinkreis von Yaq-Monnith, dem Sanktuarium der "
+	  "hoellischen Heerscharen. Sieben Monolithen umgeben diesen Ort "
+	  "und buendeln unheilige Energien. Ueber dem Steinkreis haben "
+	  "sich schwarz-rote Wolken gesammelt, orangene Blitze zucken aus "
+	  "ihnen und Schwefelgeruch brennt Dir in der Nase. Der Boden "
+	  "besteht hier aus einer einzigen Masse von Blut und Schlamm. Als "
+	  "Du Deine Schritte ueber den blutigen Matsch lenkst greifen "
+	  "verfaulte Haende aus dem Erdreich nach Dir. In Mitten des "
+	  "Steinkreises steht ein Altar aus blutigen Knochen. Zwei "
+	  "schwarze Kerzen und ein Schwert liegen auf dem Altar auf einem "
+	  "blutbefleckten, weissen Tuch.");
+  
+  SetProp(P_GUILD_DEFAULT_SPELLBOOK,"nekro_spells");
+
+  SetProp(P_GUILD_RESTRICTIONS, ([P_LEVEL:45, SR_FUN: "pal_dk_initial_check"]));
+
+  SetProp(P_GUILD_LEVELS,
+   ([1: ([ P_LEVEL:45 ]),
+     2: ([ P_LEVEL:50, SR_GOOD: -1000, SR_FUN: "Lcond"]),
+     3: ([ P_LEVEL:55, SR_GOOD: -1000, SR_FUN: "Lcond"]),
+     4: ([ P_LEVEL:60, SR_GOOD: -1000, SR_FUN: "Lcond"]),
+     5: ([ P_LEVEL:65, SR_GOOD: -1000, SR_FUN: "Lcond"]),
+     6: ([ P_LEVEL:70, SR_GOOD: -1000, SR_FUN: "Lcond"]),
+//     7: ([ P_LEVEL:80, SR_GOOD: -1000, SR_FUN: "Lcond"]),
+    ]) );
+    SetProp(P_GUILD_CIRCLE_LEVELS, ([
+       1:([
+         2:([P_LEVEL: 45,SR_GOOD:-1000, SR_FUN:"LCond2"]),
+         3:([P_LEVEL: 45,SR_GOOD:-1000, SR_FUN:"LCond2"]),
+         4:([P_LEVEL: 46,SR_GOOD:-1000, SR_FUN:"LCond2"]),
+         5:([P_LEVEL: 47,SR_GOOD:-1000, SR_FUN:"LCond2"]),
+         6:([P_LEVEL: 48,SR_GOOD:-1000, SR_FUN:"LCond2"]),
+         7:([P_LEVEL: 49,SR_GOOD:-1000, SR_FUN:"LCond2"])
+         ]),
+       2:([
+         2:([P_LEVEL:50,SR_GOOD:-1000, SR_FUN:"LCond2"]),
+         3:([P_LEVEL:50,SR_GOOD:-1000, SR_FUN:"LCond2"]),
+         4:([P_LEVEL:51,SR_GOOD:-1000, SR_FUN:"LCond2"]),
+         5:([P_LEVEL:52,SR_GOOD:-1000, SR_FUN:"LCond2"]),
+         6:([P_LEVEL:53,SR_GOOD:-1000, SR_FUN:"LCond2"]),
+         7:([P_LEVEL:54,SR_GOOD:-1000, SR_FUN:"LCond2"])
+         ]),
+       3:([
+         2:([P_LEVEL:55,SR_GOOD:-1000, SR_FUN:"LCond2"]),
+         3:([P_LEVEL:55,SR_GOOD:-1000, SR_FUN:"LCond2"]),
+         4:([P_LEVEL:56,SR_GOOD:-1000, SR_FUN:"LCond2"]),
+         5:([P_LEVEL:57,SR_GOOD:-1000, SR_FUN:"LCond2"]),
+         6:([P_LEVEL:58,SR_GOOD:-1000, SR_FUN:"LCond2"]),
+         7:([P_LEVEL:59,SR_GOOD:-1100, SR_FUN:"LCond2"])
+         ]),
+       4:([
+         2:([P_LEVEL:60,SR_GOOD:-1000, SR_FUN:"LCond2"]),
+         3:([P_LEVEL:60,SR_GOOD:-1000, SR_FUN:"LCond2"]),
+         4:([P_LEVEL:61,SR_GOOD:-1000, SR_FUN:"LCond2"]),
+         5:([P_LEVEL:62,SR_GOOD:-1000, SR_FUN:"LCond2"]),
+         6:([P_LEVEL:63,SR_GOOD:-1100, SR_FUN:"LCond2"]),
+         7:([P_LEVEL:64,SR_GOOD:-1200, SR_FUN:"LCond2"])
+         ]),
+       5:([
+         2:([P_LEVEL:65,SR_GOOD:-1000, SR_FUN:"LCond2"]),
+         3:([P_LEVEL:65,SR_GOOD:-1000, SR_FUN:"LCond2"]),
+         4:([P_LEVEL:66,SR_GOOD:-1000, SR_FUN:"LCond2"]),
+         5:([P_LEVEL:67,SR_GOOD:-1100, SR_FUN:"LCond2"]),
+         6:([P_LEVEL:68,SR_GOOD:-1200, SR_FUN:"LCond2"]),
+         7:([P_LEVEL:69,SR_GOOD:-1300, SR_FUN:"LCond2"])
+         ]),
+       6:([
+         2:([P_LEVEL:70,SR_GOOD:-1000, SR_FUN:"LCond2"]),
+         3:([P_LEVEL:72,SR_GOOD:-1000, SR_FUN:"LCond2"]),
+         4:([P_LEVEL:74,SR_GOOD:-1100, SR_FUN:"LCond2"]),
+         5:([P_LEVEL:76,SR_GOOD:-1200, SR_FUN:"LCond2"]),
+         6:([P_LEVEL:78,SR_GOOD:-1300, SR_FUN:"LCond2"]),
+         7:([P_LEVEL:79,SR_GOOD:-1400, SR_FUN:"LCond2"])
+         ])
+       ]));
+ // Die Gildenlevel stellen mal die 'Kreise der Verdammnis' dar
+ SetProp(P_GUILD_MALE_TITLES,
+    ([ 1 : "der unheilige Knappe",
+       2 : "der Todesritter",
+       3 : "der hoellische Hetzer",
+       4 : "der Bringer des Grauens",
+       5 : "der Blutsaeufer",
+       6 : "der Feldmarschall der Hoelle",
+     ]));
+ SetProp(P_GUILD_FEMALE_TITLES,
+    ([ 1 : "die unheilige Knappin",
+       2 : "die Todesritterin",
+       3 : "die hoellische Hetzerin",
+       4 : "die Bringerin des Grauens",
+       5 : "die Blutsaeuferin",
+       6 : "der Feldmarschallin der Hoelle",
+     ]));
+     
+  SetNames(GUILDNPC_LONGNAME, GUILDNPC_NAME);  // Fuer den Sequencer
+
+  AddSkill( SK_SWORDFIGHTING, ([ SI_SKILLFUNC: "Schwertkampf", 
+    SI_DIFFICULTY: 100 ,SI_SKILLABILITY: 200]) );
+  AddSkill( SK_TWOHANDED, ([ SI_SKILLFUNC: "Zweihandkampf", 
+    SI_DIFFICULTY: 100 ,SI_SKILLABILITY: 200]) );
+  // Eventuell sollte man sich die Nachtsicht 'kaufen' koennen? :)
+  AddSkill( SK_NIGHTVISION, ([ SI_SKILLABILITY: 2000 ]) );
+ 
+  // AddSpell("name", ([SI_SPELLBOOK:"nekro_spells"])
+  // AddSpell("name", ([SI_SPELLBOOK:"pala_spells"])
+  // Level 1
+  // Level 2
+  // Level 3
+  // Level 4
+  // Level 5
+  // Level 6
+  // Level 7
+
+  AddCmd(({"play_seq"}), "play_seq");
+  AddCmd(({"austreten","austritt"}),"LeaveCeremony");
+  AddCmd(({"lerne","lern"}), "OwnLearnSpell" );
+  AddCmd(({"opfere","opfer"}), "blut_opfer");
+  AddCmd(({"skillpunkte"}),"show_skillpunkte");
+  AddCmd(({"skills","faehigkeiten","fertigkeiten"}), "faehigkeiten");
+  AddCmd(({"erhoehe","erhoeh"}), "advance");
+  AddCmd(({"seelenmuehle"}),"cmd_blutpool");
+
+  AddCmd(({"gilde", "ngilde"}), "magfunc");
+  AddCmd(({"testbeitritt"}), "testbeitritt");
+  
+  AddReadDetail( ({"liste", "topliste"}), #'topliste);
+
+  AddItem(NPC "vorlaeufig", REFRESH_DESTRUCT); 
+
+}
+
+int blut_opfer(string str)
+{
+  notify_fail("Was willst Du opfern?\n");
+  if(!str || str=="") return 0;
+  if(!(str == "blut" ||
+       str == "blut mit schwert")) return 0;
+  //Eine Sequenz, eine Abfrage auf Waffensegen etc.
+  return 1;
+}
+
+int testbeitritt(string str)
+{
+  int b;
+  if(!TP->QueryProp(P_TESTPLAYER)) return 0;
+  if(b=::beitreten()<0) return 1;
+  TP->ModifySkill(SK_SWORDFIGHTING, QuerySkill(SK_SWORDFIGHTING),100,
+      "todesritter");
+  TP->ModifySkill(SK_TWOHANDED, QuerySkill(SK_TWOHANDED),100,
+      "todesritter");
+  TP->SetProp(P_GUILD_CIRCLE, 1);
+  TP->SetProp(P_GUILD_LEVEL, 1);
+  write(BS("Beitritt erfolgreich!"));
+  return 1;
+}
+
+nosave int magfunc(mixed str) {
+  mixed *txt;
+  object ob;
+  int err, task;
+  string name;
+  if(!IS_LORD(TP)) return 0;
+  if(!str) str="hilfe";
+  if(str=="hilfe") {
+    write("Folgende Befehle sind moeglich:\n"
+          " gilde hilfe                  : Dieses hier\n"
+          " gilde toplist                : Updaten der Topliste\n");
+    if (IS_ARCH(TP) || member(MASTER_MAGES, getuid(TP)) != -1 ) {
+      write(
+            " gilde zaubern (ein|aus)      : Zaubern (de-)aktivieren\n"
+            " gilde backup                 : Backup des Memberfiles\n"
+            " gilde restore                : Zurueckspielen des Backups\n"
+            " gilde status <name>          : Ausgeben des Status' eines Spielers\n"
+            " gilde memberdel <name>       : Spieler aus Gilde loeschen\n");
+    }
+    return 1;
+  }
+  txt=explode(str, " ");
+  if(member(({"backup", "restore", "memberdel", "zaubern", "status"}), 
+      txt[0])!=-1) 
+  {
+    if (!IS_ARCH(TP) && member(MASTER_MAGES, getuid(TP)) == -1 ) {
+      write_secure_log(sprintf("Versuchte Aenderung im Gildenmaster (%s) "
+		      +"von %s\n", str, CAP(getuid(TP))));
+      write("Befehl nicht ausfuehrbar! Grund: Magierlevel < 60\n");
+      tell_angrox(sprintf("%s***%s Versuchte Aenderung im Gildenmaster von "
+          "%s!\n", ANSI_BLINK+ANSI_RED, ANSI_NORMAL, CAP(getuid(TP))));
+      return 1;
+    }
+    else {
+      if(txt[0] != "status");
+        //write_nekro_log("changes", sprintf("Aenderung im Gildenmaster"
+        //    +"(%s): gilde %s\n", CAP(getuid(TP)), str));
+    }
+  }
+
+  if (txt[0] == "status") {
+    if (sizeof(txt)<2)
+    {
+      tell_object(TP, "Syntax: gilde status <name>\n");
+      return 1;
+    }
+    call_other(DKMASTER, "PrintMemberEntry", txt[1]);
+    return 1;
+  }
+  // Hier wird zaubern ein- oder ausgeschaltet (Iwo)
+  if (txt[0] == "zaubern")
+    {
+      if (sizeof(txt)<2)
+        {
+          tell_object(TP, "Syntax: gilde zaubern (ein|aus)\n");
+          return 1;
+        }
+
+      if (txt[1] == "ein")
+        {
+          tell_object(TP, "Zaubern ist nun EINgeschaltet!\n");
+          cast_disabled = 0;
+        }
+      else if (txt[1] == "aus")
+        {
+          tell_object(TP, "Zaubern ist nun AUSgeschaltet!\n");
+          cast_disabled = 1;
+        }
+      else
+        tell_object(TP, "Stoned, eh?\n");
+         
+      return 1;
+
+    }
+
+  if(txt[0]=="memberdel") {
+    if(sizeof(txt)<2) {
+      tell_object(TP, "Syntax: gilde memberdel <name> \n");
+      return 1;
+    }
+    name=lower_case(to_string(txt[1]));
+    err=call_other(DKMASTER, "DeleteMember", name);
+    if(err!=1)
+      tell_object(TP, sprintf("DeleteMember: Fehler. Code %d\n", err));
+    else 
+      tell_object(TP, "DKMASTER: DeleteMember ok!\n");
+    err=call_other(DKMASTER, "DeleteTopEntry", name);
+    if(err!=1) 
+      tell_object(TP, sprintf("DeleteTopEntry: Fehler. Code %d\n", err));
+    else 
+      tell_object(TP, "DKMASTER: DeleteTopEntry ok!\n");
+
+    tell_object(TP, "Spieler aus Gilde geloescht!\n");
+    return 1;
+
+  }
+  if(txt[0]=="backup") {
+    call_other(DKMASTER, "DoBackup"); 
+    tell_object(TP, 
+        "Kopiere members/members.o nach backup/members_backup.o\n");
+    return 1;
+  }
+  if(txt[0]=="restore") {
+    if(call_other(DKMASTER, "DoRestore")==-2) {
+      tell_object(TP, 
+        "Fehler! Members.o konnte nicht restored werden!\n");
+      return 1;
+    } 
+    tell_object(TP, 
+      "Kopiere backup/members_backup.o nach members/members.o\n");
+    return 1;
+  }
+  if(txt[0]=="toplist") {
+    call_out("complete_toplist_update",0);
+    tell_object(TP, "Memberliste ist ist in 15 - 30 Sekunden fertig!\n");
+    return 1;
+  }
+  tell_object(TP, "Diesen Befehl gibt es nicht!\n");
+  return 1;
+}
+
+
+string check_gender(string _male, string _female) {
+  if(TP->QueryProp(P_GENDER)==FEMALE)
+    return _female;
+  return _male;
+}
+
+/*
+//
+// Austritt aus der Nekromantengilde
+//
+*/
+int LeaveCeremony(string str) 
+{
+  object gnpc; 
+  if(!gnpc=present(GUILDNPC_ID, ME)) 
+  {
+    write("Ohne "+GUILDNPC_LONGNAME+" laeuft hier gar nichts!\n");
+    return 1;
+  }
+  if(!IsGuildMember(TP)) 
+  {
+    write("Du bist kein Todesritter, Unwuerdiger!\n");
+    return 1;
+  } 
+  while(remove_call_out("reset_guild_npc") != -1) ;
+  call_out("reset_guild_npc", 200);
+  /*gnpc->SetProp(P_NOATTACK,"laesst sich nun nicht beirren.");
+  gnpc->SetProp(P_CHAT_CHANCE,0);
+  TP->SetProp(P_PARALYZED, ([PARALYZE_TIME:200, PARALYZE_MSG:"", 
+           PARALYZE_MSG_OTHER:"", PARALYZE_END:"", PARALYZE_END_OTHER:""]));
+  LoadSequenz(SEQ+"austritt.seq", TP, #'austreten);  Eigene Seqzent waer toll*/
+  austreten();
+  return 1;
+}
+
+int austreten() 
+{
+  object ob,gnpc;
+  if(TP->QueryProp(P_GUILD)!="todesritter")
+    return 0;
+
+  if(!gnpc=present(GUILDNPC_ID, ME)) 
+  {
+    write("Ohne "+GUILDNPC_LONGNAME+" laeuft hier gar nichts!\n");
+    return 1;
+  }
+  reset_guild_npc();
+  WLOG("/log/gilden/todesritter", "tritt aus der Gilde aus. ('austreten' in gilden/todesritter.c)");
+  if(ob=present(GUILDITEM_ID,TP)) 
+  {
+	  ob->SetProp(P_CURSED, 0);
+	  ob->remove();
+  }
+  call_other(NMASTER, "DeleteMember", TP);
+  call_other(NMASTER, "DeleteTopEntry", getuid(TP));
+  /*Channel(sprintf("%s hat gerade Verrat begangen und uns verlassen! "
+      "TOETET %s UND BRINGT MIR %s HERZ! Dann werden wir %sen "
+      "Geist in eine Leiche bannen, und %s wird uns auf immer als "
+      "verrottender Zombie dienen!!!", TP->Name(WER),
+      check_gender("IHN", "SIE"), check_gender("SEIN", "IHR"),
+      check_gender("sein","ihr"),check_gender("er","sie")));*/
+  // Nekromanten sollen attack auf spieler sein :P
+  write_file(MEMBERLOG+getuid(TP)+".log",
+             dtime(time())+": "+CAP(getuid(TP))+" ist "
+			 +"aus der Gilde ausgetreten.\n");
+  TP->SetProp(P_NEKRO_SKILLS_MOD, 0);
+  TP->SetProp(P_NEKRO_TASK_POINTS, 0);
+  TP->SetProp(P_TMP_DEATHKNIGHT_LISTENER, 0);
+  TP->SetProp(P_PARALYZED, 0);
+  TP->SetProp(P_GUILD_LEVEL, 0);
+  TP->SetProp(P_GUILD_CIRCLE, 0);
+  TP->Set(P_GUILD_CIRCLE,SAVE,F_MODE);
+//  gnpc->Kill(TP);
+  call_out("kill_player", 4);
+  return ::austreten();
+}
+
+void kill_player()
+{
+  object gnpc;
+
+  if(TP && present(TP, TO) && objectp(gnpc=present(GUILDNPC_ID, TO)) ) 
+    gnpc->Kill(TP);
+}
+
+
+nosave int Sacrifice(string str) 
+{
+  string wo;
+  string not_fail, g_indent, restr, *paladins;
+  object gnpc, ob;
+  int gender;
+
+  if(!str) return 0;
+  /*
+  notify_fail(BS(
+    "Zur Zeit duerfen nur Testspieler und Magier in dieser Gilde "
+    "Paladine opfern! Aber bald!"));
+  if(!TP->QueryProp(P_TESTPLAYER) && !IS_LEARNING(TP))
+    return 0;
+  */
+
+  notify_fail("Ohne "+GUILDNPC_LONGNAME+" laeuft hier gar nichts!\n");
+  if(!gnpc=present(GUILDNPC_ID, ME))
+    return 0;
+
+  if(gnpc->QueryProp(P_NOATTACK) == "ist zu vertieft in die Zeremonie.") {
+    write(GUILDNPC_LONGNAME+" hat gerade keine Zeit.\n");
+    return 1;
+  }
+  // Zuweisung erst NACH dem Check ob Xarfai Zeit hat.
+  paladinopfer=lower_case(str); 
+  
+  notify_fail(
+    BSA("Verschwinde, Du hast schon geopfert! Toete lieber ein paar "
+    "Unschuldige!", GUILDNPC_NAME+" kraechzt: "));
+  if(IsGuildMember(TP))
+     return 0;
+  if(TP->QueryProp(P_GUILD)=="paladine") 
+  {
+    tell_room(ME, BSA("STIRB!", GUILDNPC_NAME+" bruellt: "));
+    gnpc->Kill(TP);
+    return 1;
+  }
+  if( TP->QueryProp(P_DEFAULT_GUILD) &&
+      TP->QueryProp(P_GUILD)!=TP->QueryProp(P_DEFAULT_GUILD)) 
+  {
+    tell_room(ENV(TP), BSA(sprintf("BEI ALLEN NIEDERHOELLEN! Du "
+            "bist ein%s echte%s Versager%s, %s! Tritt erst einmal aus "
+            "Deiner laecherlichen Gilde aus! DANN und ERST DANN "
+            "komm wieder, sonst reisse ich Dir Dein Herz heraus!!!", 
+            check_gender("","e"),check_gender("r",""),check_gender("","in"),
+            TP->name(WER)), "Xarfai bruellt: "));
+    return 1;
+    
+  }
+  paladins=call_other(PMASTER, "QueryMembers");
+  if((member(paladins, paladinopfer)==-1 || IS_LEARNER(paladinopfer)) && 
+      !IS_WIZARD(TP))
+  {
+     tell_room(ENV(TP), BSA(sprintf("DU ELENDIG%s VERSAGER%s! Verschwinde, "
+             "bevor wir Dich opfern! Du wirst nie Nekromant werden, wenn "
+             "Du nicht mal unsere Feinde, die Paladine, erkennst, %s!!!", 
+             check_gender("ER","E"), check_gender("","IN"), 
+             TP->Name(WER)), GUILDNPC_NAME+" bruellt: "));
+     return 1;
+  }
+  if(find_player(paladinopfer)) 
+  {
+     tell_room(ENV(TP), BSA(sprintf("%s, Du verdammt%s %s! Muss man Dir "
+             "alles sagen? Hast Du kein Gehirn, oder stellst Du Dich nur "
+             "so bloed an? Der Paladin, den Du opfern sollst, darf "
+             "natuerlich nicht anwesend sein? "
+             "HAST DU ES DIESMAL VERSTANDEN!?!?!?!?!?!",
+             TP->Name(WER),check_gender("er","e"), 
+             check_gender("Narr","Naerrin")), 
+             GUILDNPC_NAME+" bruellt: "));
+     return 1;
+  }
+  
+  if(restr=call_other(RES_CHECKER, "check_new_restrictions", TP,  
+      QueryProp(P_GUILD_RESTRICTIONS))) 
+  {
+     tell_room(ENV(TP), BSA(sprintf("Du elendig%s Versager%s! Verschwinde, "
+             "bevor wir Dich opfern! Du wirst nie Nekromant werden, wenn "
+             "Du so schwach bist, %s! %s", 
+             check_gender("er","e"), check_gender("","in"),
+             TP->Name(WER), restr), GUILDNPC_NAME+" bruellt: "));
+    return 1;
+  }
+  TP->SetProp(P_PARALYZED, ([PARALYZE_TIME:200, PARALYZE_MSG:"", 
+           PARALYZE_MSG_OTHER:"", PARALYZE_END:"", PARALYZE_END_OTHER:""]));
+  gnpc->SetProp(P_NOATTACK,"ist zu vertieft in die Zeremonie.");
+  gnpc->SetProp(P_CHAT_CHANCE,0);
+  while(remove_call_out("reset_guild_npc") != -1) ;
+  call_out("reset_guild_npc", 200);
+  
+  if( IS_LEARNER(TP) || (TP->QueryProp(P_TESTPLAYER) && 
+        !IS_ARCH(lower_case(TP->QueryProp(P_TESTPLAYER)))) ) 
+    test_flag = 1; 
+  else
+    test_flag = 0;
+  gender=call_other(SAVEMASTER, "QueryFileProp", paladinopfer, 
+      P_GENDER);
+  SetThirdPerson(CAP(paladinopfer), gender==FEMALE?"sie":"er", 
+      gender==FEMALE?"sie":"ihn", gender==FEMALE?"ihr":"sein");
+  TELL("angrox", sprintf("Gewaehlter Paladin: %s\n", paladinopfer));
+  TP->SetProp(P_NOATTACK, 1);
+  if(!present("\n"+P_NOATTACK, TP)) {
+    ob=clone_object(OBJ+"noattack"); 
+    ob->move(TP, M_NOCHECK);
+  }
+  LoadSequenz(SEQ+"beitritt.seq", TP, #'Sacrifice_Part_Two); 
+  return 1;
+}
+
+nosave void Sacrifice_Part_Two() 
+{
+ TELL("angrox", sprintf("paladinopfer2 = %O\n", paladinopfer));
+ write(BS(sprintf("Um %s zu opfern gib nun 'toete %s' ein!", CAP(paladinopfer), 
+        paladinopfer)));
+ write("Was moechtest Du nun tun?\n");
+ input_to("Sacrifice_Part_Two_input"); 
+}
+
+nosave void Sacrifice_Part_Two_input(string str) 
+{
+  string *req_input;
+  object xarfai, ob;
+  req_input=({"toete "+paladinopfer, "t�e "+paladinopfer});
+  xarfai=present(GUILDNPC_ID);
+  if(!str || member(req_input, str)==-1) {
+    if(objectp(xarfai)) {
+      tell_room(ENV(TP), BSA("WAS! DU NARR! DAFUER WIRST DU BUESSEN!", 
+          "Xarfai bruellt erbost: "));
+      reset_guild_npc();
+      TP->SetProp(P_NOATTACK, 0);
+      if(ob=present("\n"+P_NOATTACK, TP)) {
+        ob->remove();
+      }
+      xarfai->Kill(TP);
+    }
+    return;
+  }
+  LoadSequenz(SEQ+"beitritt2.seq", TP, #'Sacrifice_Part_Three); 
+}
+
+nosave void Sacrifice_Part_Three() 
+{
+  object opfer;
+  string *msgs;
+  msgs=({BSA("UND DIE FLUESSE FAERBEN SICH ROOOOOOOOOOOOOOOOOOT!!!!!", 
+        "bruellt: "),
+      "kreischt: Stirb Paladinpack!", "kreischt: Ich bin euer schlimmster "
+      "Alptraum!", "bruellt: WO IST DER NAECHSTE VON EUCH?", "lacht wie von "
+      "Sinnen!", BSA("FEIGLINGE! VERKRIECHT EUCH IN EURE BURG!", "bruellt: "), 
+      "bruellt: UND SIE FALLEN IN HEKATOMBEN!"});      
+  if(!test_flag) {
+    shout(BS(sprintf("Der entsetzliche und grauenhafte Todesschrei "
+              "von %s hallt durch das SilberLand.", CAP(paladinopfer))));
+    SetProp(P_NAME, "Lars");
+    CHMASTER->join("Tod",TO);
+    CHMASTER->send("Tod", TO, sprintf("Paladin %s wurde von %s auf dem Altar "
+         "des Blutes der Nekromanten geopfert.", CAP(paladinopfer), 
+          TP->name(WER)), MSG_SAY);
+    SetProp(P_NAME, TP->Name(WER));
+    CHMASTER->send("Tod", TO, msgs[random(sizeof(msgs))], MSG_EMOTE);
+    SetProp(P_NAME, GUILDNPC_NAME); 
+    call_other(PNPCMASTER, "AddFeind", TP);
+    call_out("ayla_shout", 6);
+  }
+  else {
+    TELL("angrox", "TESTFLAG gesetzt, keine ausgabe auf -T\n");
+  }
+  LoadSequenz(SEQ+"beitritt3.seq", TP, #'beitreten);
+  return;
+}
+
+nosave void ayla_shout() 
+{
+  object ayla;
+  if(ayla=find_living("ayla"))
+    ayla->command_me(sprintf("prufe PALADINE! %s hat es gewagt, %s "
+          "zu opfern! DAFUER GIBT ES NUR EINE STRAFE! Bringt mir den "
+          "Kopf von %s!", TP->Name(WER), CAP(paladinopfer), 
+          TP->name(WER)));
+  return;
+}
+
+int beitreten() 
+{
+  int b;
+  object ob,gnpc;
+  string *who;
+
+  if(!gnpc=present(GUILDNPC_ID, ME)) {
+    write("Ohne "+GUILDNPC_LONGNAME+" laeuft hier gar nichts!\n");
+    return 1;
+  }
+  reset_guild_npc();
+  if(ob=present("\n"+P_NOATTACK, TP)) {
+    ob->remove();
+  }
+  who=({"Etwas", "Verdammter", "Verdammte"});
+  TP->SetProp(P_PARALYZED, 0);
+  TP->SetProp(P_NOATTACK, 0);
+  if(ob=present("\n"+P_NOATTACK, TP)) {
+    ob->remove();
+  }
+  if((b=::beitreten())<0) return 1;
+  tell_room(ENV(TP), BSA(sprintf("Haha, %s, nun gehoert Deine Seele UNS!", 
+          TP->Name(WER)), GUILDNPC_NAME+" kichert irr: "));
+  write(BS("Voller Blutlust nimmst Du die Schaedelfront und setzt sie Dir "
+        "als Maske auf!"));
+  say(BS(sprintf("Voller Blutlust nimmer %s die Schaedelfront und setzt sie "
+         "sich als Maske auf.", TP->Name(WER))));
+  ob=clone_object(ARMOUR+"maske");
+  ob->move(TP, M_NOCHECK);
+  ob->DoWear(0);
+  if(!paladinopfer) paladinopfer="juny";
+  WLOG("/log/gilden/nekromanten", "tritt in die Gilde ein. ("+paladinopfer+")");
+  call_other(NMASTER, "AddMember", TP, 
+      ({paladinopfer, call_other(SAVEMASTER, "QueryFileProp", paladinopfer, 
+      P_GENDER)}));
+  TP->ModifySkill(FIGHT(WT_KNIFE), QuerySkill(FIGHT(WT_KNIFE)),100,
+      "nekromanten");
+  TP->ModifySkill(SK_NIGHTVISION, QuerySkill(SK_NIGHTVISION),100,
+      "nekromanten");
+  TP->Set(P_NEKRO_SKILLS_MOD, SAVE, F_MODE_AS);
+  TP->Set(P_NEKRO_TASK_POINTS, SAVE, F_MODE_AS);
+  TP->Set(P_GUILD_CIRCLE,SAVE,F_MODE_AS);
+  TP->SetProp(P_GUILD_CIRCLE,1);
+  TP->SetProp(P_GUILD_LEVEL,1);
+  write_file(MEMBERLOG+getuid(TP)+".log",
+             dtime(time())+": "+CAP(getuid(TP))+" ist "
+			 +"in die Gilde eingetreten.\n");
+  if( !test_flag )
+    Channel(sprintf("%s! Ich wusste, dass Deine schwarze Seele "
+        "eines Tages zu uns Nekromanten finden wuerde! Bei "
+        "den endlosen Heerscharen von Yaq'Monoq, den verfluchten "
+        "Ebenen von Ylem'Huran und dem bluttriefenden Steinkreis von "
+        "Rot'Manuq, "
+        "moegest Du stets die Seelen der Unschuldigen verfuehren und "
+        "den dunklen Maechten opfern, auf dass sie eines Tages ihre "
+        "blutige Herrschaft ueber das SilberLand erlangen moegen!",
+      TP->Name(WER), who[TP->QueryProp(P_GENDER)]));
+  tell_room(ME, BSA("Vergiss nicht die Hilfe zu lesen! (hilfe nekromanten)",
+        GUILDNPC_NAME+" kichert: "));
+ return b;
+}
+
+/* Skillablilty am Anfang in einen Bereich 2500..3500 setzen */
+nosave int InitialSkillAbility(mapping ski, object pl) 
+{
+  int value;
+  if (!ski || !pl) return 0;
+  value=::InitialSkillAbility(ski, pl)-random(500)+random(500);
+  if( value > 3500 ) value = 3500;
+  if( value < 2500 ) value = 2500;
+  return value;
+}
+
+nosave void Channel(string msg) 
+{
+  if(!test_flag) {
+    CHMASTER->join("Info",TO);
+    CHMASTER->send("Info",TO,msg,MSG_SAY);
+  }
+  else {
+    TELL("angrox", sprintf("NEKROCHANNEL: %s\n", msg));
+    TELL("archon", sprintf("NEKROCHANNEL: %s\n", msg));
+  }
+  return ;
+}
+
+int show_skillpunkte(string str)
+{
+  int punkte;
+  mapping sp;
+  string *skills;
+  string ret;
+  int i;
+  
+  if(!IsGuildMember(TP)) 
+  {
+    tell_room(ME, BSA(sprintf("Hau ab! Du "
+                  "bist keiner von uns, %s!\n", TP->Name(WER)), GUILDNPC_NAME
+                  +" sagt: "));
+    return 1;
+  }
+
+  sp=call_other(DKMASTER, "QuerySkillPoints",PL);
+  if (!mappingp(sp))
+  {
+    punkte=0;
+    sp=([]);
+  }
+  else
+    punkte=sp["freiepunkte"];
+  skills=m_indices(sp-(["freiepunkte"]));
+  ret="\nSkillpunkte\n************\n\n";
+  if (punkte==1)
+    ret+="Du hast noch einen Skillpunkt zur Verfuegung.\n";
+  else if (punkte)
+    ret+="Du hast noch "+punkte+" Skillpunkte zur Verfuegung.\n";
+  else
+    ret+="Du hast keine Skillpunkte zur Verfuegung.\n";
+  ret+="\n";
+  if (!sizeof(skills))
+    ret+="Du hast noch keine Skillpunkte verteilt.\n";
+  else
+    for (i=sizeof(skills);i--;)
+    {
+      if (skills[i]=="time") ; 
+      else if (skills[i]=="auge des khaza-dhunaar")
+       ret+="Du hast fuer "+sprintf("%-29s",get_skill_name(skills[i]))+
+           " "+sp[skills[i]]+"/ 2 Skillpunkte vergeben.\n";
+      else
+       ret+="Du hast fuer "+sprintf("%-29s",get_skill_name(skills[i]))+
+           " "+sp[skills[i]]+"/10 Skillpunkte vergeben.\n";
+    }
+  ret+="\nDu kannst Deine Fertigkeiten in den folgenden Skills verbessern:\n";
+  skills = skillpointable-skills;
+  for (i=sizeof(skills);i--;)
+  {
+    ret+="  "+get_skill_name(skills[i])+"\n";
+  }
+  write(ret);
+  return 1;
+}
+
+nosave int advance_skill(string str)
+{
+  string skill;
+  string *skills;
+  mapping sp;
+  mixed help;
+  int punkte;
+
+  str=lower_case(TP->_unparsed_args()); //da sonst skills wie hauch der verwesung nicht gehen
+  if (sscanf(str,"zauber %s",skill)!=1)
+  {
+    write("Wenn Du einen Skill erhoehen willst, solltest Du ihn als Argument "
+          "angeben.\nSyntax: erhoehe zauber <name>\n");
+    return show_skillpunkte("");
+  }
+  help=PL->QueryProp(P_NEWSKILLS);
+  if (!mappingp(help))
+  {
+    tell_room(ME,BSA("So etwas beherrschst Du ueberhaupt nicht!\n",
+                 GUILDNPC_NAME+" kreischt: "));
+    return 1;    
+  }
+  if (!help[skill])
+  {
+    tell_room(ME,BSA("So etwas beherrschst Du ueberhaupt nicht!\n",
+                 GUILDNPC_NAME+" kreischt: "));
+    return 1;    
+  }
+  if (member_array(skill,skillpointable)<0)
+  {
+    tell_room(ME,BSA("Dies kannst Du nicht erhoehen!\n",
+                 GUILDNPC_NAME+" kreischt: "));
+    return 1;
+  }
+  sp=call_other(DKMASTER, "QuerySkillPoints",PL);
+  if (!mappingp(sp))
+    punkte=0;
+  else
+    punkte=sp["freiepunkte"];
+  if (punkte<1)
+  {
+    tell_room(ME,BSA("Dummkopf! Du hast ueberhaupt keine Skillpunkte "
+                 "zum Verteilen!\n",
+                 GUILDNPC_NAME+" kreischt: "));
+    return 1;
+  }
+  if (sp["time"] > time())
+  {
+    tell_room(ME,BSA("Du musst noch warten, bis Du wieder einen "
+          "Skillpunkt verteilen kannst.\n",
+                 GUILDNPC_NAME+" kreischt: "));
+    return 1;
+  }
+  if (TP->QueryProp(P_SP) < SKILLPOINT_COST)
+  {
+    tell_room(ME,BSA("Deine magische Kraft ist zu gering!\n",
+                 GUILDNPC_NAME+" kreischt: "));
+    return 1;
+  }
+  punkte=sp[skill];
+  if ( (skill=="auge des khaza-dhunaar" && punkte>1) || punkte>9)
+  {
+    tell_room(ME,BSA("Dummkopf! Du hast diesen Skill schon voll "
+                 "ausgeschoepft!\n",
+                 GUILDNPC_NAME+" kreischt: "));
+    return 1;
+  }
+  TP->AddSp(-SKILLPOINT_COST);
+  sp["freiepunkte"]--;
+  if (!sp[skill])
+    sp+=([skill:1]);
+  else
+    sp[skill]++;
+  sp += (["time": time() + SKILLPOINT_TIME]);
+  call_other(DKMASTER, "SetSkillPoints",PL,sp);
+  if ((skill=="auge des khaza-dhunaar" && sp[skill]==2) || sp[skill]==10)
+    write(BS("Du erhoest den Skill '"+get_skill_name(skill)+"' und hast nun "
+          "die maximale Skillpunktanzahl auf diesen Skill verwendet."));
+  else
+    write(BS("Du erhoest den Skill '"+get_skill_name(skill)+"' und hast nun "
+          +sp[skill]+"/" + (skill == "auge des khaza-dhunaar" ? "2" : "10") +
+          " Skillpunkte auf diesen Skill verwendet."));
+  write_file(MEMBERLOG+getuid(TP)+".log", dtime(time())+": "+ CAP(getuid(TP))+
+      " verteilt Skillpunkt auf "+skill+" ("+ sp[skill]+").\n");
+  return 1;
+}
+
+nosave mixed advance(string str) 
+{
+  mixed res;
+  mapping cond;
+  int glvl, ggrad, abil;
+  object xarfai;
+
+  glvl=TP->QueryProp(P_GUILD_LEVEL);
+  ggrad=TP->QueryProp(P_GUILD_CIRCLE); 
+  
+  notify_fail(BSA("Was willst Du erhoehen? Stufe? "
+        "Kreise der Verdammnis? Innerer Grad? Zauber? Kraft? Int(elligenz)? "
+        "Aus(dauer)? "
+        "Gesch(icklichkeit)?\n", GUILDNPC_NAME
+         +" sagt: "));
+  if (!str) return 0;
+ 
+  str = TP->_unparsed_args();
+  if(!xarfai=present(GUILDNPC_ID)) {
+    write("Hier ist leider niemand, der Dich erhoehen koennte!\n");
+    return 1;
+  }
+  if(xarfai->QueryProp(P_NOATTACK) == "ist zu vertieft in die Zeremonie.") {
+    write(GUILDNPC_LONGNAME+" hat gerade keine Zeit.\n");
+    return 1;
+  }
+  if (str=="stufe" || str2attr(str)) {
+	 return gilde::advance(str);
+  }
+  if (str[0..5]=="zauber")
+  {
+    if(!IsGuildMember(TP)) 
+    {
+      tell_room(ME, BSA(sprintf("Hau ab! Du "
+                +"bist keiner von uns, %s!\n", TP->Name(WER)), GUILDNPC_NAME
+                +" sagt: "));
+      return 1;
+    }
+    return advance_skill(str);
+  }
+  if(str=="kreis" || str=="kreis der verdammnis" ) 
+  {
+    if(!IsGuildMember(TP)) 
+    {
+      tell_room(ME, BSA(sprintf("Du kannst hier nicht erhoehen, Du "
+                +"bist keiner von uns, %s!\n", TP->Name(WER)), GUILDNPC_NAME
+                +" sagt: "));
+      return 1;
+    }
+    if(glvl==7) {
+      write(BSA("Du kannst nicht mehr weiter aufsteigen!\n",
+                GUILDNPC_NAME+" sagt: "));
+      say(BSA("Du kannst nicht mehr weiter aufsteigen, "
+              +CAP(getuid(TP))+".\n", GUILDNPC_NAME +" sagt: "));
+      return 1;
+    }
+    if (glvl>7)
+    {
+        write(BSA("Du kannst nicht mehr weiter aufsteigen! "
+              "Dein Gildenlevel ist zu hoch. Rufe einen Magier!"
+                  ,GUILDNPC_NAME" sagt: "));       
+        say(BSA("Du kannst nicht mehr weiter aufsteigen! Dein Gildenlevel "
+              "ist zu hoch. Rufe einen Magier!"
+                +CAP(getuid(TP))+".",GUILDNPC_NAME" sagt: ")); 
+      return 1;
+    }
+    if(ggrad!=7) {
+      write(BSA("VERSAGER! Du musst zuerst den 7. Grad des "+glvl+". Kreises "
+            "der Verdammnis erreicht haben!\n", GUILDNPC_NAME+" sagt: "));
+      say(BSA("VERSAGER! Du musst zuerst den 7. Grad des "+glvl+". Kreises der "
+            "Verdammnis erreicht haben, "
+              +CAP(getuid(TP))+".\n", GUILDNPC_NAME +" bruellt: "));
+      return 1;
+    }
+    if(glvl==6 && present("TEUFEL_SEELE")) {
+      tell_room(ME, BSA(sprintf("%s! Wie ich sehe hast Du Deine Seele "
+              "bereits jemanden geopfert. HAHAHAHA! Du kannst nicht weiter "
+              "aufsteigen - nicht ohne dem Opfer Deiner Seele! HAHAHAHA!", 
+              TP->Name(WER)), GUILDNPC_NAME+" kichert: "));
+      return 1;
+    }
+    if(glvl == 6 && !TP->QueryProp("nekro_lvl_7_inform")) {
+      tell_room(ME, BSA("SO! DU WILLST ALSO AUFSTEIGEN! Nun denn, " 
+              "hoer genau zu ...", GUILDNPC_NAME+" schnaubt: "));
+      tell_room(ME, BSA(sprintf("%s! Wenn Du in den siebten Kreis der "
+              "Verdammnis gelangen willst, musst Du ein Opfer bringen. "
+              "Du musst Deine Seele eintauschen gegen die Macht der "
+              "Finsternis, fuer die Kraft die in Dir die Unsterblich"
+              "keit der Untoten erwecken wird. Wenn Du also alle " 
+              "Anforderungen erfuellst und das naechste Mal "
+              "einen weiteren Kreis aufsteigen willst,  so bedeutet dies, das "
+              "Du bereit bist Deine Seele zu opfern. Das bedeutet auch, das "
+              "Du uns, die Nekromanten, NIE mehr verlassen kannst! "
+              "Du wirst dann fuer immer einer der maechtigen Untoten sein! "
+              "Wenn Du dies nicht moechtest und somit der absoluten Macht "
+              "entsagst, so halte Dich von dem naechsten Kreis der "
+              "Verdammnis fern! Ein unsichtbares Mal zeichnet Dich nun, "
+              "das Du diese Warnung erhalten hast. VERGISS DAS NICHT!", 
+              TP->Name(WER)), GUILDNPC_NAME+" fluestert: "));
+      TP->SetProp(P_NEKRO_LVL_7_INFORM, time());
+      TP->Set(P_NEKRO_LVL_7_INFORM, SAVE, F_MODE);
+      return 1;
+    }
+    cond=QueryProp(P_GUILD_LEVELS);
+    res=call_other(RES_CHECKER, "check_new_restrictions", TP, cond[glvl+1]);
+    if(!stringp(res)) {
+      TP->SetProp(P_PARALYZED, ([PARALYZE_TIME:200, PARALYZE_MSG:"", 
+            PARALYZE_MSG_OTHER:"", PARALYZE_END:"", PARALYZE_END_OTHER:""]));
+      while(remove_call_out("reset_guild_npc") != -1) ;
+      call_out("reset_guild_npc", 200);
+      xarfai->SetProp(P_NOATTACK,"ist zu vertieft in die Zeremonie.");
+      xarfai->SetProp(P_CHAT_CHANCE,0);
+      /* Das muss nach advance2()
+      gilden_room::advance(); // Eigentlicher Aufstieg der Gildenstufe
+      */
+      abil=TP->QuerySkill( SK_NIGHTVISION)[SI_SKILLABILITY]+200;
+      TP->ModifySkill( SK_NIGHTVISION, ([ SI_SKILLABILITY: 
+          (abil>MAX_ABILITY?MAX_ABILITY:abil) ]), 1,"nekromanten" );
+      if(glvl==6)  {
+        LoadSequenz(SEQ+"undead1.seq", TP, #'Become_Undead_One); 
+      } else {
+        LoadSequenz(SEQ+"aufstieg.seq", TP, #'advance2);
+      }
+      return 1;
+    }
+    else {
+      if(res!="")
+        tell_room(ME, BSA(sprintf("Du kannst noch nicht aufsteigen, %s! %s", 
+            TP->Name(WER), res), GUILDNPC_NAME+" sagt: "));
+      return 1;
+    }
+  }
+  // AB HIER DER INNERE GRAD
+  if(member(({"kreisstufe", "grad", "innerer grad", "inneren grad"}), str)!=-1)
+  {
+    if(!IsGuildMember(TP)) {
+      tell_room(ME, BSA(sprintf("Du kannst hier nicht erhoehen, Du "
+                +"bist keiner von uns, %s!\n", TP->Name(WER)), GUILDNPC_NAME
+                +" sagt: "));
+      return 1;
+    }
+    
+    if (glvl>7)
+    {
+        write(BSA("Du kannst nicht mehr weiter aufsteigen! Dein Gildenlevel ist zu hoch. Rufe einen Magier!\n"
+                  ,GUILDNPC_NAME" sagt: "));       
+        say(BSA("Du kannst nicht mehr weiter aufsteigen! Dein Gildenlevel ist zu hoch. Rufe einen Magier!\n"
+                +CAP(getuid(TP))+".\n",GUILDNPC_NAME" sagt: ")); 
+      return 1;
+    }
+    if(ggrad>=7) {
+      if (glvl>=7) {
+        write(BSA("Du kannst nicht mehr weiter aufsteigen!\n"
+                  ,GUILDNPC_NAME" sagt: "));       
+        say(BSA("Du kannst nicht mehr weiter aufsteigen, "
+                +CAP(getuid(TP))+".\n",GUILDNPC_NAME" sagt: ")); 
+      }
+      else {
+        write(BSA("Bevor Du wieder einen inneren Grad erhoehen kannst, "
+              "musst Du zuerst in einen hoeheren Kreis der Verdammnis "
+              "aufsteigen!\n", GUILDNPC_NAME+" sagt: "));
+        say(BSA("Bevor Du wieder einen inneren Grad erhoehen kannst, musst Du "
+              "zuerst in einen hoeheren Kreis der Verdammnis aufsteigen, "
+                +CAP(getuid(TP))+".\n", GUILDNPC_NAME +" sagt: "));
+      }
+      return 1;
+    }
+    /* Restrictions pruefen */
+    cond=QueryProp(P_GUILD_CIRCLE_LEVELS)[glvl];
+    res=call_other(RES_CHECKER, "check_new_restrictions", TP, cond[ggrad+1]);
+    if(!stringp(res)) {
+      TP->SetProp(P_GUILD_CIRCLE, ggrad+1);
+      abil=TP->QuerySkill( SK_NIGHTVISION)[SI_SKILLABILITY]+200;
+      TP->ModifySkill( SK_NIGHTVISION, ([ SI_SKILLABILITY: 
+          (abil>MAX_ABILITY?MAX_ABILITY:abil) ]), 1,"nekromanten" );
+      call_other(DKMASTER, "AdvanceInnerCircle", TP);
+      xarfai->command_me("nkreische "+sprintf("Har! %s hat soeben den "
+            "%d. inneren Grad des %d. Kreises der Verdammnis erreicht!",
+            TP->Name(WER), ggrad+1,glvl));
+      write(BS(
+        "Du bist soeben in den "+(ggrad+1)+". Grad des "+glvl+". Kreises "
+        "der Verdammnis aufgestiegen."));
+      say(BS(
+        TP->Name()+" hat soeben den "+(ggrad+1)+". Grad des "+glvl+". Kreises "
+        "der Verdammnis erreicht."));
+    write_file(MEMBERLOG+getuid(TP)+".log", dtime(time())+": "+
+        CAP(getuid(TP))+" hat den " + (ggrad+1) + " Kreis erreicht.\n");
+      return 1;
+    }
+    else {
+      if(res!="")
+        tell_room(ME, BSA(sprintf("Du kannst noch nicht aufsteigen, %s! %s", 
+            TP->Name(WER), res), GUILDNPC_NAME+" kichert irr: "));
+      return 1;
+    }
+  }
+  return 0;
+}
+
+nosave void Become_Undead_One() 
+{
+  string pl_name;
+  object pl;
+  pl_name=getuid(TP);
+  CHMASTER->join("Tod",TO);
+  CHMASTER->send("Tod", TO, sprintf("Der Verlust der eigenen Seele hat gerade "
+        "%s umgebracht.", CAP(pl_name)));
+  // Aendern der Shell auf Untot
+  TP->SetProp(P_OLD_SHELL_ATTR_OFFSET, TP->QueryProp(P_ATTRIBUTES_OFFSETS));
+  TP->Set(P_OLD_SHELL_ATTR_OFFSET, SAVE, F_MODE); // speichern im player
+  tell_feyaria(sprintf("NECRO: TI = %O\n", this_interactive()));
+  MASTER->set_player_object(pl_name, UNDEAD_SHELL);
+  MASTER->renew_player_object(pl_name);
+  pl=find_player(pl_name); 
+  pl->new_eye_and_hair_color();
+  pl->SetProp(P_PARALYZED, ([PARALYZE_TIME:200, PARALYZE_MSG:"", 
+        PARALYZE_MSG_OTHER:"", PARALYZE_END:"", PARALYZE_END_OTHER:""]));
+  LoadSequenz(SEQ+"undead2.seq", pl, #'advance2); 
+    // Shell - Ende
+  return ;
+}
+
+void reset_guild_npc()
+{
+  object gnpc;
+  if(gnpc=present(GUILDNPC_ID)) 
+  {
+    gnpc->SetProp(P_NOATTACK,0);
+    gnpc->SetProp(P_CHAT_CHANCE,1);
+  }
+}
+
+nosave varargs int advance2(object pl) 
+{
+  mixed b;
+
+  reset_guild_npc();
+  if(!pl) pl=TP;
+  TP->SetProp(P_PARALYZED, 0);
+  gilden_room::advance(); // Eigentlicher Aufstieg der Gildenstufe
+  TP->SetProp(P_GUILD_CIRCLE, 1);
+  call_other(NMASTER, "AdvanceLevel", TP);
+  if(TP->QueryProp(P_GUILD_LEVEL)>6) 
+  {
+    write_file(MEMBERLOG+getuid(TP)+".log", dtime(time())+": "+
+               CAP(getuid(TP))+" hat " +"die hoechste Stufe erreicht.\n");
+    Channel(sprintf("HARHAR! Fuerchtet Euch, ihr Narren! Ein weiterer "
+          "maechtiger Untoter wird euch nun heimsuchen und eure Alptraeume "
+          "wahr werden lassen! Und Du, %s, VERNICHTE SIE ALLE !!!", 
+          CAP(getuid(TP))));
+    return 1;
+  }
+  write_file(MEMBERLOG+getuid(TP)+".log",
+             dtime(time())+": "+CAP(getuid(TP))+" ist "
+             +"eine Stufe (->"+TP->QueryProp(P_GUILD_LEVEL)+
+              ") aufgestiegen.\n");
+  Channel(sprintf("HARHAR! %s ist nun naeher an der Macht der Untoten. "
+          "Ihr Narren zittert vor %s neuen Macht!",
+          CAP(getuid(TP)),TP->QueryPossPronoun(FEMALE,WESSEN)));
+  return 1;
+}
+
+int OwnLearnSpell(string str) 
+{
+  mapping sprueche;
+  if(!present(GUILDNPC_ID, ME)) 
+  {
+    write(BS(GUILDNPC_LONGNAME+" ist nicht hier! VERSCHWINDE!!\n"));
+    return 1;
+  }
+  str=TP->_unparsed_args();
+  if(!IsGuildMember(TP)) 
+  {
+    tell_room(ME,BSA("DU WURM!!\n", GUILDNPC_NAME+" bruellt: "));
+    return 1;
+  }
+  notify_fail("WELCHE DAEMONISCHE BOSHEIT MOECHTEST DU LERNEN??\n");
+  if(!str) 
+  {
+    tell_room(ME, BSA(sprintf("HARHARHAR! DU WEISST NICHT MAL WAS DU "
+             "EINSETZEN KANNST UM VERNICHTUNG IN DIE WELT ZU TRAGEN! "
+             "DU WURM, %s!", TP->Name(WER)), GUILDNPC_NAME+" bruellt: "));
+    return 1;
+  }
+  return LearnSpell(str);
+}
+
+nosave int GetAlign(object spieler) 
+{
+  mixed align;
+  string msg;
+  if(!intp(align=spieler->QueryProp(P_ALIGN))) {
+    raise_error(sprintf("GetAlign, %s hat falschen Datentyp fuer "
+      "Align: %O", spieler->Name(WER), align));
+    spieler->SetProp(P_ALIGN, -1);
+    tell_object(spieler, "[BUG:"+CAP(getuid(spieler))+"] Falscher Datentyp im "
+        "Align!!! Bitte Magier verstaendigen!\n");
+    return 0;
+  }
+  if(align<-1000) return -1000;
+  else if(align>1000) return 1000;
+  return align;
+}
+
+mapping Schwertkampf(object player, string skill, mapping sinfo) 
+{ 
+  int abil, ud, val, bonus;
+
+  ud=sinfo[SI_USR];
+  abil = sinfo[SI_SKILLABILITY];
+  val = (2* player->QueryAttribute(A_DEX) +  player->QueryAttribute(A_STR) +
+         3*player->QueryProp(P_GUILD_LEVEL) + 2*player->QueryProp(P_GUILD_CIRCLE) 
+        ) * abil / MAX_ABILITY;
+
+  bonus=random(val);
+  bonus=(bonus>MAX_KNIFE && interactive(player)?MAX_KNIFE:bonus);
+  sinfo[SI_SKILLDAMAGE] += bonus * player->QuerySkillAttribute(SA_DAMAGE)/100;
+  if( player->QueryProp(P_FROG) || 
+      player->QueryProp(P_WEAPON)->QueryProp(P_WC) < abil/100 ) return sinfo;
+  if( (sinfo[SI_ENEMY]->QueryProp(P_LEVEL) > abil/400 || !random(10) )
+     && ++ud > abil/50 && abil<MAX_ABILITY) 
+  {
+    ud = 0;
+    abil += random(player->QuerProp(P_GUILD_LEVEL) + 
+            player->QueryAttribute(A_DEX)/3 - GetAlign(player)/166);
+    if (abil >= MAX_ABILITY)
+      player->Message("Xarfai teilt Dir mit: Du kannst den Schwertkampf "
+          "nun daemonisch!!!\n", MSGFLAG_TELL);
+  }
+  if(!random(500+MAX_ABILITY-abil) ) {
+    tell_object(player, "Die Macht des Boesen verstaerkt Deine Attacke!\n");
+    sinfo[SI_SKILLDAMAGE]+=400;
+  }
+
+  if(abil>MAX_ABILITY) abil=MAX_ABILITY;
+  player->ModifySkill( FIGHT(WT_KNIFE), ([ SI_USR: ud, SI_SKILLABILITY: abil ]),
+                       sinfo[SI_DIFFICULTY], "nekromanten");
+  return sinfo;
+}
+
+mapping Zweihandkampf(object player, string skill, mapping sinfo) 
+{ 
+  int abil, ud, val, bonus;
+
+  ud=sinfo[SI_USR];
+  abil = sinfo[SI_SKILLABILITY];
+  val = (2* player->QueryAttribute(A_DEX) +  player->QueryAttribute(A_STR) +
+         3*player->QueryProp(P_GUILD_LEVEL) + 2*player->QueryProp(P_GUILD_CIRCLE) 
+        ) * abil / MAX_ABILITY;
+
+  bonus=random(val);
+  bonus=(bonus>MAX_KNIFE && interactive(player)?MAX_KNIFE:bonus);
+  sinfo[SI_SKILLDAMAGE] += bonus * player->QuerySkillAttribute(SA_DAMAGE)/100;
+  if( player->QueryProp(P_FROG) || 
+      player->QueryProp(P_WEAPON)->QueryProp(P_WC) < abil/100 ) return sinfo;
+  if( (sinfo[SI_ENEMY]->QueryProp(P_LEVEL) > abil/400 || !random(10) )
+     && ++ud > abil/50 && abil<MAX_ABILITY) 
+  {
+    ud = 0;
+    abil += random(player->QuerProp(P_GUILD_LEVEL) + 
+            player->QueryAttribute(A_DEX)/3 - GetAlign(player)/166);
+    if (abil >= MAX_ABILITY)
+      player->Message("Xarfai teilt Dir mit: Du kannst den Zweihandkampf "
+          "nun daemonisch!!!\n", MSGFLAG_TELL);
+  }
+  if(!random(500+MAX_ABILITY-abil) ) {
+    tell_object(player, "Die Macht des Boesen verstaerkt Deine Attacke!\n");
+    sinfo[SI_SKILLDAMAGE]+=400;
+  }
+
+  if(abil>MAX_ABILITY) abil=MAX_ABILITY;
+  player->ModifySkill( FIGHT(WT_KNIFE), ([ SI_USR: ud, SI_SKILLABILITY: abil ]),
+                       sinfo[SI_DIFFICULTY], "nekromanten");
+  return sinfo;
+}
+
+//
+//
+// Auswertung der Aufstiegsbedingungen
+//
+//
+string Lcond(object pl) 
+{
+  string str;
+  mixed var;
+  str="";
+  if(!IsGuildMember(pl)) return "Verschwinde!";
+  if(pl->QueryProp(P_FROG))
+     return BSA("Muahahahar! Du IDIOT! Als Frosch wagst Du Dich hier her!"
+          "VERSCHWINDE BEVOR ICH DICH VERNICHTE!", 
+          GUILDNPC_NAME+" kreischt: ");
+  if(stringp(var=check_lvl_cond(pl, 0))) // XP
+      str+=var;
+  if(stringp(var=check_lvl_cond(pl, 1))) // LXP
+      str+=var;
+  if(stringp(var=check_lvl_cond(pl, 2))) // Bloodopfer
+      str+=var;
+  if(str=="") return 0; // Ok, wir duerfen aufsteigen
+  return str; // Och, leider nicht :(
+}
+
+string LCond2(object pl) 
+{
+  string str;
+  mixed var;
+  str="";
+  if(!IsGuildMember(pl)) return 0;
+  if(pl->QueryProp(P_FROG))
+     return BSA("Muahahahar! Du IDIOT! Als Frosch wagst Du Dich hier her!"
+          "VERSCHWINDE BEVOR ICH DICH VERNICHTE!", 
+          GUILDNPC_NAME+" kreischt: ");
+  if(stringp(var=check_lvl_cond(pl, 3))) // zu opfernde 
+      str+=var;
+  if(str=="") return 0; // Ok, wir duerfen aufsteigen
+  return str; // Och, leider nicht :(
+}
+
+
+// Auswertung des Mappings und Ausgabe was denn wo fehlt
+nosave string check_lvl_cond(object pl, int flag) 
+{
+  string str;
+  int percent, x,lvl, value;
+  mixed cond;
+  cond=({XP_PER_LEVEL,LXP_PER_LEVEL,BLOOD_PER_LEVEL, KILLS_PER_INNERCIRCLE});
+  str="";
+  x=0;
+  lvl=pl->QueryProp(P_GUILD_LEVEL);
+  switch(flag) {
+    case 0: 
+       if(x=call_other(DKMASTER, "QueryXpDifference", pl)) 
+         str="Ahhh, ich sehe von der geforderten Erfahrung fehlt Dir ";
+       break;
+    case 1:
+       if(x=call_other(DKMASTER, "QueryLXpDifference", pl)) 
+         str="Harhar! Todeserfahrungen! Davon fehlen Dir ";
+       break;
+    case 2:
+       if(x=call_other(DKMASTER, "QueryNeededBlood", pl)) //Bluuuuuuuut ;)
+         str="Und eines noch! Vergiss nicht das Wichtigste: Seelen! Du "
+             "musst mehr Seelen opfern! Es fehlen Dir ";
+       break;
+    case 3:
+       lvl=pl->QueryProp(P_GUILD_CIRCLE);
+       if(x=call_other(DKMASTER, "QueryToSacrify", pl))
+         str="Ich sehe, Du musst noch toeten! Toeten! TOETEN! Geh hinaus "
+           "und toete! Um aufsteigen zu koennen musst Du mehr "
+           "Lebewesen toeten, es fehlen Dir ";
+  }
+  if(x<=1) return 0; // Alles erfuellt?
+  return str+integer2percent(100*x/cond[flag][lvl-1]);
+}
+
+// integer -> percent-string 
+nosave string integer2percent(int percent) 
+{
+  string str;
+  str="";
+  switch (percent) {
+    case 0..10:  str+="fast gar keine mehr.";
+                 break;
+    case 11..20: str+="weniger als ein Viertel.";
+                 break;
+    case 21..30: str+="etwa ein Viertel.";
+                 break;
+    case 31..40: str+="weniger als die Haelfte.";
+                 break;
+    case 41..60: str+="in etwa die Haelfte.";
+                 break;
+    case 61..70: str+="mehr als die Haelfte.";
+                 break;
+    case 71..80: str+="etwa drei Viertel.";
+                 break;
+    case 81..90: str+="mehr als drei Viertel.";
+                 break;
+    case 91..99: str+="beinahe alle.";
+                  break;
+    case 100   : str+="alle.";
+                  break;
+    case 101..150: str+="mehr als gewoehnlich. Harhar! Betrachte das "
+                    "als Strafe fuer Dein staendiges Versagen!";
+                   break;
+    case 151..199: str+="viel mehr als gewoehnlich. Harhar! Betrachte das "
+                    "als Strafe fuer Dein staendiges Versagen!";
+                   break;
+    case 200..299: str+="doppelt soviel als gewoehnlich. Harhar! Betrachte das "
+                    "als Strafe fuer Dein staendiges Versagen!";
+                   break;
+    case 300..399: str+="dreimal soviel als gewoehnlich. Harhar! Betrachte das "
+                    "als Strafe fuer Dein staendiges Versagen!";
+                   break;
+    case 400..499: str+="viermal soviel als gewoehnlich. Harhar! Betrachte das "
+                    "als Strafe fuer Dein staendiges Versagen!";
+                   break;
+    case 500..599: str+="fuenfmal soviel als gewoehnlich. Harhar! Betrachte das "
+                    "als Strafe fuer Dein staendiges Versagen!";
+                   break;
+    default: str+="mehr als fuenfmal soviel als gewoehnlich. Harhar! "
+             "Betrachte das als Strafe fuer Dein ewiges Versagen!";
+                   break;
+                   
+  }
+  return str+" ";
+}
+
+int Nightvision(object me, string sname, mixed sinfo) 
+{
+  int abil,light,llt,dt,res;
+
+  if (!sinfo || !environment(me) || !interactive(me)) 
+    return 0;
+  if (intp(sinfo)) 
+    sinfo=([SI_SKILLABILITY:sinfo]);
+  if (!mappingp(sinfo)) 
+    return 0;
+  if ((light = environment(me)->QueryProp(P_TOTAL_LIGHT)) > 0) {
+    me->ModifySkill(sname,([SI_LASTLIGHT:time()]));
+    return light;
+  }
+  abil=sinfo[SI_SKILLABILITY];
+  if (!(llt=sinfo[SI_LASTLIGHT])) {
+    me->ModifySkill(sname,([SI_LASTLIGHT:time()]));
+    dt=0;
+  } else {
+    dt=time()-llt;
+    if (dt<0) dt=0;
+    if (dt>86400) dt=86400;
+  }
+
+  res=(abil*dt)/(2*MAX_ABILITY)+light;
+  if (res<=0) {
+    res--; // Wert muss !=0 sein
+    if (res<-MAX_ABILITY) res=-MAX_ABILITY;
+  } else {
+    if (res>MAX_ABILITY) res=MAX_ABILITY;
+  }
+  return res;
+}
+
+void test123() 
+{
+  LoadSequenz(SEQ+"undead2.seq", TP, #'advance2);
+}
+
+string get_skill_name(string in)
+{
+  switch(in)
+  {
+    case "auge des khaza-dhunaar": return "Auge des Khaza-dhunaar";
+    case "pforte ins totenreich": return "Pforte ins Totenreich";
+    case "strahlen der dunkelheit": return "Strahlen der Dunkelheit";
+    case "beruehrung von zum-uul": return "Beruehrung von Zum-uul";
+    case "anrufung des kharr-zzteth": return "Anrufung des Kharr-zzteth";
+    case "unterwerfung der toten": return "Unterwerfung der Toten";
+    case "kochendes blut": return "Kochendes Blut";
+    case "dunkler pakt": return "Dunkler Pakt";
+    case "schleier des val-tkro-tthar": return "Schleier des Val-tkro-tthar";
+    case "hauch der verwesung": return "Hauch der Verwesung";
+    case "fluch der klinge": return "Fluch der Klinge";
+    case "biss des vampirs": return "Biss des Vampirs";
+    case "ruf der ghoule": return "Ruf der Ghoule";
+    case "geifer der verdammten": return "Geifer der Verdammten";
+    case "schrecken der finsternis": return "Schrecken der Finsternis";
+    case "empathie der schatten": return "Empathie der Schatten";
+    case "gekreische der todesfee": return "Gekreische der Todesfee";
+    case "mysterium von yok-njarg-zirm": return "Mysterium von Yok-njarg-zirm";
+    case "blutpakt der verdammten": return "Blutpakt der Verdammten";
+    case "fluch der mumie": return "Fluch der Mumie";
+    default: return CAP(in); break;
+  }
+}
+
+//
+// Auswertung der Faehigkeiten
+//
+string skill_string(object pl) {
+  int i, wert;
+  string txt, s;
+  string *arm;
+  mapping res,sp;
+  res=pl->QueryProp(P_NEWSKILLS);
+  arm = sort_array(m_indices(res), #'<);
+  sp=call_other(DKMASTER, "QuerySkillPoints",pl);
+  if(!mappingp(sp)) sp=([]);
+  txt=sprintf("%-36s %-29s %s\n","Zauber/Faehigkeit","Guete","Skillpunkte");
+  txt+=sprintf("%'-'-78s\n","");
+  for (i = sizeof(arm)-1;i>=0;i--) 
+  {
+    if(arm[i]!=SK_SWORDFIGHTING && arm[i]!=SK_TWOHANDED && arm[i]!="Nightvision") 
+    {
+      if (sp[arm[i]])
+        s=sprintf("%2d",sp[arm[i]]);
+      else
+      { //is faehig?
+        if (member_array(arm[i],skillpointable)<0)
+          s=" -";
+        else
+          s=" 0";
+      }
+     txt+=sprintf("%-36s %-37s %-2s\n",get_skill_name(arm[i]),
+         int2string(TP->QuerySkillAbility(arm[i])),s);
+    }
+  }
+  txt+=sprintf("%-36s %-37s %-2s\n","Kampf mit Zweihandschwertern",
+      int2string((TP->QuerySkillAbility(SK_SWORDFIGHTING)+
+		  TP->QuerySkillAbility(SK_TWOHANDED))/2)," -");
+  txt+=sprintf("%-36s %-37s %-2s\n","Dunkelsicht",
+      int2string(TP->QuerySkillAbility("Nightvision"))," -");
+  if((wert=TP->QueryProp(P_GUILD_RATING))<1501) wert=1501;
+  s=int2string(wert);
+  txt+="\n"+BS("In der Summe gesehen bist Du "+s+".");
+  return txt;
+}
+
+// Ausgabe der Fertigkeiten
+// ersteinmal nur eine kopie der pali's
+int faehigkeiten(string str) 
+{
+  int i, wert;
+  string *arm, s;
+  mapping res,sp;
+
+  if(!present(GUILDNPC_ID, ME)) 
+  {
+    write("Ohne "+GUILDNPC_NAME+" laeuft hier gar nichts!\n");
+    return 1;
+  }
+  if(!IsGuildMember(TP)) 
+  {
+    tell_room(ME, BSA(sprintf("Du dienst nicht dem Boesen, %s! "
+             +"Du wirst hier Deine kuemmerlichen Fertigkeiten nicht erfahren!",
+             TP->Name(WER)), GUILDNPC_NAME+" spricht energisch: "));
+    return 1;
+  }
+  write(BS(GUILDNPC_NAME+" hebt seine Hand und laesst Flammen vor Deinen "
+        "Augen tanzen. Dein Gesicht glueht und Du willst schon fluechten, "
+        "als Du etwas in ihnen erkennst:")+"\n");
+  write(skill_string(TP));
+  say(sprintf("%s klaert %s ueber %se Fertigkeiten auf.\n",
+              GUILDNPC_LONGNAME, TP->Name(WER), TP->QueryPossPronoun(WESSEN)));
+  return 1;
+}
+
+nosave string int2string(int wert) 
+{
+ string str;
+ switch(wert) 
+ {
+   case 0..500    : str="ueberhaupt nicht"; break;
+   case 501..1000 : str="fast ueberhaupt nicht"; break;
+   case 1001..1500: str="miserabel wie eine verfluchte Fee"; break;
+   case 1501..2000: str="wie eine hirnlose Mumie"; break;
+   case 2001..2500: str="wie ein unerfahrener Nekromant"; break;
+   case 2501..3000: str="schlecht"; break;
+   case 3001..3500: str="maessig"; break;
+   case 3501..4000: str="mittelmaessig"; break;
+   case 4001..4500: str="unterdurchschnittlich wie ein Zombie"; break;
+   case 4501..5000: str="durchschnittlich";  break;
+   case 5001..5500: str="ueberdurchschnittlich"; break;
+   case 5501..6000: str="gut"; break;
+   case 6001..6500: str="sehr gut"; break;
+   case 6501..7000: str="wie ein Nekromant"; break;
+   case 7001..7500: str="wie ein begabter Nekromant"; break;
+   case 7501..8000: str="wie ein rachsuechtiger Vampir"; break;
+   case 8001..8500: str="beinahe teufelgleich"; break;
+   case 8501..9000: str="teufelgleich"; break;
+   case 9001..9500: str="beinahe hoellisch"; break;
+   case 9501..9750: str="hoellisch"; break;
+   case 9751..9999: str="beinahe daemonisch"; break;
+   case 10000     : str="daemonisch"; break;
+  }
+// kleiner gag zum aergern :) 
+//  if (getuid(TP) == "texas") 
+//    return sprintf("%2d.%2d%%", 50 + random(50), random(100));
+  return str;
+}
+
+int cmd_blutpool(string str)
+{
+  mixed blut;
+  int prozent;
+  
+  if(!IsGuildMember(TP)) 
+    return 0;
+  blut=call_other(DKMASTER,"QueryBloodPool");
+  if (!pointerp(blut)) prozent=0;
+  else
+    prozent=blut[0]*100/blut[1];
+  if (prozent<0) prozent=0;
+  if (prozent>100) prozent=100;
+  switch(prozent)
+  {
+    case 0: 
+      str=sprintf("Die Seelenmuehle ist ausgetrocknet. Versager%s, "
+                  "Du musst viel mehr Seelen opfern.",
+                  TP->QueryProp(P_GENDER)==FEMALE?"in":"");
+    break;
+    case 1..9: 
+      str=sprintf("Nur noch ein paar Seelen stehen uns zur Verfuegung. "
+          "Versager%s, Du musst viel mehr Seelen opfern.",
+                  TP->QueryProp(P_GENDER)==FEMALE?"in":"");
+    break;
+    case 10..19: 
+      str="WIR HABEN ZUWENIG SEELEN! Du Wurm! "
+                  "Du musst viel mehr Seelen opfern.";
+    break;
+    case 20..29: 
+      str=sprintf("Die Anzahl der vorhandenen Seelen ist kaum der "
+          "Rede wert. Versager%s, Du musst viel mehr opfern.",
+                  TP->QueryProp(P_GENDER)==FEMALE?"in":"");
+    break;
+    case 30..39: 
+      str=sprintf("Steh hier nicht rum, Versager%s! "
+                  "Du musst viel mehr opfern. Die Seelen reichen noch lange "
+                  "nicht!",
+                  TP->QueryProp(P_GENDER)==FEMALE?"in":"");
+    break;
+    case 40..49: 
+      str=sprintf("Noch nichtmal halbvoll! Versager%s, "
+                  "Du musst mehr opfern.",
+                  TP->QueryProp(P_GENDER)==FEMALE?"in":"");
+    break;
+    case 50..59: 
+      str=sprintf("Halbleer! Schaff mehr Seelen herbei, Nekromant%s! "
+                  "Du musst mehr opfern.",
+                  TP->QueryProp(P_GENDER)==FEMALE?"in":"");
+    break;
+    case 60..69: 
+      str=sprintf("Langsam wird es! Doch wir brauchen mehr Seelen! "
+          "Nekromant%s, Du musst mehr opfern.",
+                  TP->QueryProp(P_GENDER)==FEMALE?"in":"");
+    break;
+    case 70..79: 
+      str=sprintf("Mehr! Ich brauche noch mehr Seelen! Nekromant%s, "
+                  "Du musst mehr opfern.",
+                  TP->QueryProp(P_GENDER)==FEMALE?"in":"");
+    break;
+    case 80..89: 
+      str=sprintf("Ein wenig mehr muss es schon noch werden. Elend%s, "
+                  "Du musst mehr opfern.",
+                  TP->QueryProp(P_GENDER)==FEMALE?"e":"er");
+    break;
+    case 90..99: 
+      str=sprintf("JA! Fast! Bald ist die Seelenmuehle voll. Elend%s, "
+                  "Du musst noch ein wenig mehr Seelen opfern.",
+                  TP->QueryProp(P_GENDER)==FEMALE?"e":"er");
+    break;
+    default: str="Die Seelenmuehle ist randvoll mit gefuellt. Was fuer "
+             "ein Fest!"; break;
+  }
+  write(BSA(str,GUILDNPC_NAME+" kreischt: "));
+  return 1;
+}
+
+//Archon 19.08.2003 uebertragen von palis
+string topliste()
+{
+  TP->More("\n               DIE BESTEN DER NEKROMANTEN:\n\n"+
+      read_file(REALTOPLIST) || "Problem, bitte an Angrox wenden!\n");
+  tell_room(TO, BS(sprintf("%s schaut sich die Liste genauer an.", 
+            TP->Name(WER))), ({TP}));
+  return "";
+}
+
+void complete_toplist_update() {
+  call_other(DKMASTER, "UpdateMemberLevels");
+  if(find_call_out("toplist_update") != -1) return;
+  call_out("toplist_update", 30);
+  return ;
+}
+
+//Archon 19.08.2003 uebertragen von palis
+void toplist_update() 
+{ 
+  if(find_call_out("toplist_update") != -1) return;
+  call_other(DKMASTER, "UpdateTopList");
+  return;
+} 
+
+void play_seq1() {
+  return ;
+}
+void play_seq(string seq) {
+  LoadSequenz(SEQ+seq, TP, #'play_seq1);  
+  return ;
+}
+
+
+void NotifyPlayerDeath(object victim, object killer, int lost_xp) {
+  if(victim == SeqPlayer()) {
+    StopSequence();
+  }
+  return;
+}
+
+void BecomesNetDead(object player) {
+  if(player == SeqPlayer()) {
+    StopSequence();
+  }
+  return;
+}
+
+
+//
+// Wenn der Spieler die Sequenz verlaesst, wird einfach aufgehoert oder
+// der Spieler getoetet. haha :)
+//
+void sequence_player_left(mixed player) {
+  object gnpc;
+  if(!gnpc=present(GUILDNPC_NAME)) return;
+  reset_guild_npc();
+  if(!objectp(player)) return;
+  if(environment(player) == this_object()) return;
+  call_other(NNPCMASTER, "AddFeind", player);
+  Message(BSA("Wage es nicht noch einmal hierher zu kommen!",
+        GUILDNPC_NAME+" teilt Dir mit: "), MSGFLAG_TELL);
+  gnpc->Kill(player);
+  return ::sequence_player_left(player);
+}
+
+int IsCastDisabled()
+{
+  return (cast_disabled == 1);
+}
+
+varargs mixed check_advance(object pl, int flag) {
+  int ggrad, glvl;
+  mapping cond;
+  mixed res;
+  ggrad=pl->QueryProp(P_GUILD_CIRCLE);
+  glvl=pl->QueryProp(P_GUILD_LEVEL);
+  if(flag) {
+    if(glvl > 6) return "Du bist schon im siebten Kreis der Verdammnis!";
+    cond=QueryProp(P_GUILD_LEVELS);
+    res=call_other(RES_CHECKER, "check_new_restrictions", pl, cond[glvl+1]);
+  }
+  else {
+    if(ggrad > 6) return "Du bist schon im inneren Grad sieben!";
+    cond=QueryProp(P_GUILD_CIRCLE_LEVELS)[glvl];
+    res=call_other(RES_CHECKER, "check_new_restrictions", pl, cond[ggrad+1]);
+  }
+  return res;
+}
+
+void add_room_messages() {
+  AddRoomMessage( ({ "" }), 35, "BeNasty");
+  return ;
+}

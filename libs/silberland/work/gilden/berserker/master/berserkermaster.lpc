@@ -1,0 +1,657 @@
+// Der Gildenmaster fuer die Berserkergilde
+// 1997-10-12  Feyaria@Silberland
+
+#include <wizlevels.h>
+#include <language.h>
+#include <config.h>
+#include <new_skills.h>
+#include <properties.h>
+#include "/secure/exploration.h"
+#include "../def.h"
+#include "../epic/berserkerstufe11.h"
+#include <moving.h>
+
+mixed saveload;
+nosave mapping berserker = ([ ]);
+nosave mapping top = ([ ]);
+nosave mapping riesenkraft = ([ ]);
+nosave string *number_one;
+int SetNumberOne();
+object *may_get_axe;
+
+void create()
+{
+  if (is_clone(this_object())) 
+  {
+    destruct(this_object());
+    return ;
+  }
+  seteuid(getuid(this_object()));
+  if (restore_object(MEMBERLIST))
+    berserker = saveload;
+  if (restore_object(TOPLIST))
+    top = saveload;
+  saveload = 0;
+  SetNumberOne();
+  may_get_axe = ({ });
+}
+
+int query_prevent_shadow() { return 1; }
+
+int CheckIfAllowed()
+{
+  object ob;
+  string fname;
+  ob = previous_object();
+  fname = file_name(ob);
+  if(IS_ARCH(getuid(ob)) && getuid(ob) != "feyaria" ) return 1;
+  if(fname != "/gilden/berserker" && fname != "/gilden/berserker/npc/kronang" 
+      && getuid(ob) != "feyaria" && getuid(ob) != "GUILD.berserker")
+  {
+    write_file(LOG"secure.log",
+             dtime(time())+": Versuchte Aenderung im Gildenmaster "
+             +"von "+CAP(getuid(ob))+"\n");
+    return 0;
+  }
+  return 1;
+}
+
+int DoBackup()
+{
+  saveload = berserker;
+  save_object(MEMBERBACKUP);
+  saveload = 0;
+  write_file("/gilden/berserker/members/backup.log",
+             "Letztes Backup: "+dtime(time())+"\n");
+  return 1;
+}
+
+int DoRestore()
+{
+  if(!CheckIfAllowed()) return -2;
+  if(restore_object(MEMBERBACKUP))
+      save_object(MEMBERLIST);
+  saveload = 0;
+  return 1;
+}
+
+mixed object2string(mixed name)
+{
+  if(objectp(name)) return getuid(name);
+  if(stringp(name)) return name;
+  return 0;
+}
+
+/* Neues Mitglied hinzufuegen */
+int AddMember(mixed pl)
+{
+  string waffe,player,rasse;
+  int level,report,leer;
+  
+  if(!player = object2string(pl)) return -3;
+  if (!CheckIfAllowed()) return -2;
+  if( objectp(pl) || (pl = find_player(player)) || (pl = find_netdead(player)) )
+  {
+    if( pl->QueryProp(P_WEAPON) )
+      waffe = pl->QueryProp(P_WEAPON)->QueryProp(P_NAME);
+    else
+      waffe = "  -  ";
+    level = pl->QueryProp(P_LEVEL);
+    rasse = pl->QueryProp(P_RACE);
+  }
+  else
+  {
+    level = 1;
+    waffe = "  -  ";
+    rasse = "????";
+  }
+  report = 0;
+  leer = 0; //                                       macht,lehre,farbe
+  berserker += ([player:0;1;level;rasse;waffe;report;leer;leer;leer;leer]);
+  saveload = berserker;
+  save_object(MEMBERLIST);
+  saveload = 0;
+  return 1;
+}
+
+/* Mitglied loeschen */
+int DeleteMember(mixed pl)
+{
+  string nam;
+  if(!pl) return -1;
+  if (!CheckIfAllowed()) return -2;
+  if( objectp(pl) ) nam = getuid(pl);
+  else if ( stringp(pl) ) nam = lower_case(pl);
+  else return -3;
+  if(!member(berserker, nam)) return -4;
+  berserker = m_delete(berserker, nam);
+  saveload = berserker;
+  save_object(MEMBERLIST);
+  saveload = 0;
+  return 1;
+}
+
+mixed QueryMemberEntry(string pl) {
+  if(!member(berserker, pl)) return 0;
+  return ({berserker[pl],berserker[pl,1],berserker[pl,2],berserker[pl,3], 
+      berserker[pl,4],berserker[pl,5],berserker[pl,6],
+      berserker[pl,7],berserker[pl,8],berserker[pl,9],});
+}
+
+
+mapping CheckMembers()
+{
+  return berserker;
+}
+
+string* QueryMembers()
+{
+  return m_indices(berserker);
+}
+
+int CheckXp(object pl, int cur_xp)
+{
+  if(!pl || !cur_xp) return -1;
+  if(berserker[getuid(pl), 0] > cur_xp) return 0;
+  else return 1;
+}
+
+int GetXpDifference(object pl, int cur_xp)
+{
+  if(!pl) return -1;
+  return berserker[getuid(pl), 0]-cur_xp;
+}
+
+int SetXp(object pl, int needed_xp)
+{
+  if(!pl || !needed_xp) return -1;
+  if (!CheckIfAllowed()) return -2;
+  berserker[getuid(pl), 0] = needed_xp;
+  saveload = berserker;
+  save_object(MEMBERLIST);
+  saveload = 0;
+  return 1;
+}
+
+/* Fuers Austreten -> Raus aus der Topliste */
+int DeleteTopEntry(string player)
+{
+  int *topratings, i; 
+  string *topnames;
+
+  if (!CheckIfAllowed()) return -2;
+  topnames = m_values(top);
+  topratings = m_indices(top);
+  for(i = sizeof(topnames) - 1; i >= 0; i--) 
+    if(member(topnames[i], player) != -1) 
+      top[topratings[i]] -= ({player});
+  saveload = top;
+  save_object(TOPLIST);
+  saveload = 0;
+  return 1;
+}
+
+/* Levels updaten */
+int UpdateMemberLevels() 
+{
+  int i;
+  object pl;
+  string *names;
+
+  names = m_indices(berserker);
+  for(i = sizeof(names) - 1; i >= 0; i--) 
+  {
+    if((pl = find_player(names[i])) || (pl = find_netdead(names[i])))
+    {
+      berserker[names[i], 1] = pl->QueryProp(P_GUILD_LEVEL);
+      berserker[names[i], 2] = pl->QueryProp(P_LEVEL);
+      berserker[names[i], 3] = pl->QueryProp(P_RACE);
+      if( pl->QueryProp(P_WEAPON) )
+        berserker[names[i], 4] = pl->QueryProp(P_WEAPON)->Name(RAW);
+    }
+  }
+  saveload = berserker;
+  save_object(MEMBERLIST);
+  saveload = 0;
+  return 1;
+}
+
+/* Den Besten herausfiltern und in einer Variablen speichern. */
+int SetNumberOne()
+{
+  int i, *topratings, bestrating;
+
+  bestrating = 0;
+  topratings = m_indices(top);
+  for(i = sizeof(topratings) - 1; i >= 0; i--)
+    if(topratings[i] > bestrating) bestrating = topratings[i];
+  number_one = top[bestrating];
+  return 1; 
+}
+
+/* Den Besten ausgeben */
+mixed QueryNumberOne()
+{
+  return number_one;
+}
+
+/* Berechnung der Wertung */
+int CalculateRating(string player, int rating, int stufe, int xp)
+{
+  int last, minrating;
+  float mod;
+  object pl;
+
+  // 100k XP zaelen soviel wie eine Stufe
+  // Ueber 100M XP zaehlen 55 M XP wie eine Stufe
+  if (xp > 100000000) xp = 100000000 + (xp - 100000000) / 55;
+  rating += berserker[lower_case(player), 1] * 400 + 20 * stufe + xp / 50000;
+  // Ab Stufe 11 zaehlt das Lehren auch dazu
+  if (berserker[lower_case(player), 1] >= 11)
+    rating += berserker[lower_case(player), 7] / 20;
+  if (pl = find_player(player) || pl = find_netdead(player))
+    last = pl->QueryProp(P_LAST_LOGOUT);
+  else
+    last = call_other(SAVEMASTER, "QueryFileProp", player, P_LAST_LOGOUT);
+  // nach 100 tagen abwesenheit sinkt das ranking
+  if( (time() - (3600 * 24 * 100)) > last &&           
+      berserker[lower_case(player), 1] < 10 ) // ab 10 kein absinken mehr
+  {
+    // Nach weiteren 50 Tagen erreicht man das Minimum
+    mod = 1 - ((time() - (3600 * 24 * 100) - last) / 86400) * 0.02;
+    minrating = rating / 4; // Miminum ist 1/4 des normalen Ratings
+    if ((rating = (int) (rating * mod)) < minrating) 
+      rating = minrating;
+  }
+  return rating;
+}
+
+
+/* Topliste updaten */
+varargs int UpdateTopList(mixed names)
+{
+  string *topnames;
+  int rating, i, j, *topratings, test;
+  object pl;
+
+  if (find_call_out("UpdateTopList") != -1)
+    return 0;
+
+  if (!names)
+  {
+    names = m_indices(berserker);
+  }
+  topnames = m_values(top);
+  topratings = m_indices(top);
+  i = 0;
+  while (i < sizeof(names))
+  {
+    rating = 0;
+    if( stringp(names[i]) && query_wiz_level(names[i]) < 3 && 
+        berserker[names[i],1] > 1) 
+    {
+      if(((pl = find_player(names[i])) || (pl = find_netdead(names[i]))) &&
+          !pl->QueryProp(P_TESTPLAYER)   )
+	rating = CalculateRating(names[i], pl->QueryProp(P_GUILD_RATING), 
+                 pl->QueryProp(P_LEVEL), pl->QueryProp(P_XP) );
+      else 
+      {
+        if(call_other(SAVEMASTER, "QueryFileProp", names[i], P_TESTPLAYER) == 0 )
+	  rating = CalculateRating(names[i],
+	  call_other(SAVEMASTER, "QueryFileProp", names[i], P_GUILD_RATING), 
+	  call_other(SAVEMASTER, "QueryFileProp", names[i], P_LEVEL),
+	  call_other(SAVEMASTER, "QueryFileProp", names[i], P_XP));
+      }
+    }
+    if(rating) 
+    {
+      for(j = sizeof(topnames) - 1; j >= 0; j--) 
+	if(member(topnames[j], names[i]) != -1) 
+	  top[topratings[j]] -= ({names[i]});
+      if(!member(top, rating)) 
+	top += ([rating:({names[i]})]);
+      else 
+        top[rating] += ({names[i]});
+    }
+    i++;
+    if (get_eval_cost() < 500000)
+    {
+      names = names[i..];
+      call_out("UpdateTopList", 2, names);
+      return 2;
+    }
+  }
+  for(i = sizeof(m_indices(top)) - 1; i >= 0; i--) 
+  {
+    if(!sizeof(m_values(top)[i]))
+      top = m_delete(top, m_indices(top)[i]);
+  }
+  saveload = top;
+  save_object(TOPLIST);
+  saveload = 0;
+  call_out("MakeReadList",2);
+  call_out("SetNumberOne",4);
+  return 1;   
+}
+
+/* Topliste in file 'toplist.read' schreiben, Ausgabe ueber 'more' */
+int MakeReadList()
+{
+  int *arm, i, j, gstufe, sstufe, nummer;
+  float best, fac;
+  string name, waffe, rasse; 
+
+  rm(REALTOPLIST);
+  nummer = 1;
+  write_file(REALTOPLIST,sprintf( 
+     "\n            DIE BESTEN BERSERKER DES SILBERLANDES: (%s)\n\n",
+     dtime()[5..16]));
+  write_file(REALTOPLIST, "Nr.   Name      Gstufe  Sstufe  "
+                          "Wertung     Rasse         bevorzugte Waffe\n");
+  write_file(REALTOPLIST, "--------------------------------"
+                          "-------------------------------------------\n");
+  arm = sort_array(m_indices(top), #'>); //');
+  for(i = sizeof(arm) - 1; i >= 0; i--) 
+  {
+    if(arm[i]) 
+    {
+      if(i == sizeof(arm) - 1)
+      {
+        best = (float)arm[i];
+      }
+      if( best == 0.0 || best == 0 ) best = 1.0;
+      for(j = sizeof(top[arm[i]]) - 1; j >= 0; j--) 
+      {
+        name = CAP(top[arm[i]][j]);
+        fac = (float)(arm[i] / (best ? best : 1)) * 100;
+        gstufe = berserker[lower_case(name), 1];
+        sstufe = berserker[lower_case(name), 2];
+        rasse = berserker[lower_case(name), 3];
+        waffe = berserker[lower_case(name), 4];
+        if(nummer < 200 && !IS_LEARNER(lower_case(name)) && gstufe > 1 &&
+            stringp(name) && intp(gstufe) && intp(sstufe) && stringp(rasse) &&
+            stringp(waffe) ) 
+        {
+          if(arm[i] == 1)
+            write_file(REALTOPLIST, 
+                sprintf("%3d. %11-s  %2d     %3d       -.---   %9|s %26|s\n", 
+                  nummer, name, gstufe, sstufe, rasse, waffe)); 
+          else 
+            write_file(REALTOPLIST, 
+                sprintf("%3d. %11-s  %2d     %3d     %7.3f   %9|s %26|s\n", 
+                  nummer, name, gstufe, sstufe, fac, rasse, waffe));
+          nummer++;
+        }
+      }
+    }
+  }
+//  cp(REALTOPLIST, READTOPLIST);
+  return 1;
+}
+
+int GetReportModus(object bersi)
+{
+  if( !objectp(bersi) ) return 0;
+  return berserker[getuid(bersi),5];
+}
+
+int SetReportModus(object bersi, int report)
+{
+  if( !objectp(bersi) ) return 0;
+  berserker[getuid(bersi),5] = report;
+  saveload = berserker;
+  save_object(MEMBERLIST);
+  saveload = 0;
+  return 1;
+}
+
+int GetMight(object bersi)
+{
+  if(dtime(time())[5..11] == "24. Dez" ||
+     dtime(time())[5..11] == "23. Apr" ||
+     dtime(time())[5..11] == " 1. Apr" && random(2))
+    return M_HEART+M_VOICE+M_FIST;
+  if( !objectp(bersi) ) return 0;
+  return berserker[getuid(bersi),6];
+}
+
+int SetMight(object bersi, int might)
+{
+  if( !objectp(bersi) ) return -1;
+  if(!CheckIfAllowed()) return -2;
+  berserker[getuid(bersi),6] += might;
+  saveload = berserker;
+  save_object(MEMBERLIST);
+  saveload = 0;
+  return 1;
+}
+
+int GetTeaching(mixed bersi)
+{
+  string wer;
+  if( objectp(bersi) ) wer = getuid(bersi);
+  else if( stringp(bersi) ) wer = lower_case(bersi);
+  else return -1;
+  return berserker[wer,7];
+}
+
+varargs int AddTeaching(object bersi, int t, string text)
+{
+  object axt;
+  if( !objectp(bersi) ) return 0;
+  berserker[getuid(bersi),7] += t;
+  saveload = berserker;
+  save_object(MEMBERLIST);
+  saveload = 0;
+  if (bersi->QueryProp(P_GENDER) == FEMALE)
+    t = t * 3 / 2;
+  write_file(LOG "Teaching", sprintf("%s: %O +%d Teaching %s (Gesamt: %d)\n",
+        dtime(), bersi, t, (text || ""), GetTeaching(bersi)));
+  if(GetTeaching(bersi) >= MAX_ABILITY && !deep_present("\nberserkeraxt", bersi))
+  {
+    /* Entfernt - Axt ist bei Kronang abzuholen @Gwenshara
+    while (axt = deep_present("axt", bersi))
+    {
+      axt->remove();
+      if (axt) destruct(axt);
+    }
+    */
+    tell_object(bersi, break_string("Komm und hol Dir eine Gildenmeisteraxt! Dazu musst Du "
+	        "auf die Felseninsel kommen und mich um die Axt bitten!\n", 78,
+		"Kronang teilt Dir mit: "));
+    may_get_axe+=({bersi});
+  }
+  return 1;
+}
+
+// Zum Abholen der Axt bei Kronang @Gwenshara
+int FetchAxe(object bersi)
+{
+  if(member(may_get_axe, bersi) == -1)
+    return -1;
+
+  clone_object(WEAPON "meisteraxt")->move(bersi, M_NOCHECK);
+  bersi->command_me("zuecke berserkeraxt");
+  berserker[getuid(bersi),7] -= 500;
+
+  write_file(LOG "Teaching", sprintf("%s: %O +%d Teaching %s (Gesamt: %d)\n",
+             dtime(), bersi, -500, "holt die Meisteraxt", GetTeaching(bersi)));
+  may_get_axe-=({bersi});
+  return 1;
+}
+
+mixed GetReportColors(object bersi)
+{
+  if( !objectp(bersi) ) return 0;
+  return berserker[getuid(bersi),8];
+}
+
+int SetReportColors(object bersi, string col)
+{
+  if( !objectp(bersi) ) return 0;
+  berserker[getuid(bersi),8] = col;
+  saveload = berserker;
+  save_object(MEMBERLIST);
+  saveload = 0;
+  return 1;
+}
+
+/*
+void convert_savefile()
+{
+  int i,j;
+  mapping berserker2, berserkerneu;
+  string* names;
+  mixed a0, a1, a2,a3,a4;
+  berserkerneu=([]);
+  if (restore_object("/gilden/berserker/members/members_report"))
+    berserker2=saveload;
+  names=m_indices(berserker2);
+  for(i=sizeof(names)-1;i>=0;i--)
+  {
+    a0=berserker2[names[i],0];
+    a1=berserker2[names[i],1];
+    a2=berserker2[names[i],2];
+    a3=berserker2[names[i],3];
+    a4=berserker2[names[i],4];
+    berserkerneu+=([names[i]:a0;a1;a2;a3;a4;0;0;0;0;0]);
+  }
+  saveload=berserkerneu;
+  printf("%O\n", berserkerneu);
+
+  save_object("/gilden/berserker/members/members_report_new");
+
+}
+
+*/
+
+string b11_raum(object player)
+{
+  switch (getuid(player))
+  {
+    case "berak": return "/d/gebirge/angrox/room/ebene1/bergwerk_r22"; break;
+    case "conan": return "/d/unterwelt/dante/skel/sk1"; break;
+    case "cherub": return "/d/ebene/lamuerte/turm/rooms/eingang"; break;
+    case "graven": return "/d/gebirge/dante/friedhof/room/pfad1"; break;
+    case "icy": return "/d/polar/lamuerte/eishoehle/rooms/19626"; break;
+    case "kleine": return "/d/kristallwald/sargola/insel/room/1"; break;
+    case "tower": return "/d/ebene/Midas/room/kirchturm"; break;
+    case "wumanzu": return "/d/dschungel/feyaria/tijara/room/schlafzimmer"; break;
+    default: 
+      switch(player->QueryProp(P_RACE))
+      {
+        case "Zwerg": return "/d/gebirge/dusty/zwerge/room/bierribs";
+        case "Elf": return "/d/kristallwald/sargola/lichtung/room/0303";
+        case "Oger": return "/d/ebene/zordan/ogerhoehle/room/room_b3";
+        case "Hobbit": return "/d/huegelland/raballion/hobbits/room/westtor";
+        case "Mensch": return "/d/ebene/creative/feldlager/room/a5_a5";
+        case "Troll": return "/d/gebirge/speedy/trollager/room/t6";
+        case "Dunkelelf": return "/d/unterwelt/zordan/dhrkion/room/rothe-h10";
+        default: return "/d/dschungel/feyaria/tijara/room/kraeuter_b6"; 
+      }
+  }
+}
+
+
+string b11_text(object player, int nr)
+{
+  string room, longdesc, result;
+  int i;
+
+  room = b11_raum(player);
+  call_other(room, "???");
+  longdesc = find_object(room)->QueryProp(P_INT_LONG);
+  longdesc = implode(explode(longdesc,"\n"),"");
+  longdesc = longdesc[0..219]; 
+  result = "";
+  for(i = nr; i < strlen(longdesc); i += 11)
+  {
+    result += longdesc[i..i];
+  }
+  return result;
+}
+
+int name2int(string str)
+{
+  int i, ret;
+  for(i = 0; i < strlen(str); i++)
+  {
+    switch ( str[i..i] )
+    {
+      case "z": ret += 1;
+      case "y": ret += 1;
+      case "x": ret += 1;
+      case "w": ret += 1;
+      case "v": ret += 1;
+      case "u": ret += 1;
+      case "t": ret += 1;
+      case "s": ret += 1;
+      case "r": ret += 1;
+      case "q": ret += 1;
+      case "p": ret += 1;
+      case "o": ret += 1;
+      case "n": ret += 1;
+      case "m": ret += 1;
+      case "l": ret += 1;
+      case "k": ret += 1;
+      case "j": ret += 1;
+      case "i": ret += 1;
+      case "h": ret += 1;
+      case "g": ret += 1;
+      case "f": ret += 1;
+      case "e": ret += 1;
+      case "d": ret += 1;
+      case "c": ret += 1;
+      case "b": ret += 1;
+      case "a": ret += 1;
+    }
+  }
+  return ret;
+}
+
+string b11_gem(string player, int nr)
+{
+  string *gems, *pre;
+  int x, l;
+ 
+  if(!CheckIfAllowed()) return "";
+  l = strlen(player);
+  x = (name2int(player) + nr * l) % 13;
+  gems = ({"diamant", "rubin", "saphir", "smaragd", "opal", "amethyst", 
+      "lapislazuli", "granat", "zirkon", "aquamarin", "topas", "onyx",
+      "turmalin"});
+  pre = ({"Super", "Ultra", "Hyper", "Riesen", "Mega"});
+  return pre[(nr + l) % 5] + gems[x];
+}
+
+int QueryRiesenkraft(string player)
+{
+  return riesenkraft[player];
+}
+
+int SetRiesenkraft(string player)
+{
+  if( file_name(PO)!="/spellbooks/berserker_spells" )
+    return -1;
+  if( !member(riesenkraft, player) )
+    return riesenkraft[player] = 1;
+  return riesenkraft[player]++;
+}
+
+void reset()
+{
+  riesenkraft = ([]);
+}
+
+mapping QueryAll() {
+  return berserker; 
+}
+
+
+int QueryWimpy(object pl) {
+    string *nowimpyplayers;
+    nowimpyplayers=NOWIMPYPLAYERS;
+    if (member(nowimpyplayers, getuid(pl))!=-1)
+      return 0;
+    return pl->QueryProp(P_WIMPY);
+}

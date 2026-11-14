@@ -1,0 +1,107 @@
+//eigene Attack funktion, damit der angriff der spells leichter 
+//variable gehalten werden kann
+//passt sich dem level des spielers an - schutz der kleinen spieler
+//falls grosse den raum betreten
+//19.01.03 Archon: - erstellt
+/*
+ Rev 1.1 21.07.2003 Archon: erneute abschwaechung
+ Rev 1.0 19.01.2003 Archon: erstellt
+*/
+
+#include "../def.h"
+inherit "std/npc";
+
+#define AUSGANG ROOM "kammer_01"
+
+int lev;
+
+void create();
+void init();
+void SpellAttack(object enemy,int dam,mixed dam_type,string str,string str_other);
+void Attack(object enemy);
+
+void create()
+{
+  if (!is_clone(ME)) return;
+  ::create();
+
+  AddClass(CL_SWIMMING); //CL_ELEMENTAR?? gibt es leider nicht
+  
+  SetProp(P_SHORT,"Ein gefaehrlicher Sog");
+  SetProp(P_LONG,
+    "Du bist mitten in einen Sog geraten, welcher Dich unbarmherzig "
+    "quetscht, umherschleudert und versucht Dich hinabzuziehen und "
+    "zu verschlingen.");
+
+  SetProp(P_NAME,"Sog");
+  SetProp(P_GENDER,MALE);
+
+  create_default_npc(1);
+  SetProp(P_BODY,0);
+  SetProp(P_SIZE,300);
+
+  SetProp(P_RACE,"Elementar");
+  SetProp(P_NOMAGIC,20);
+  SetProp(P_SPELLRATE,20);
+  SetProp(P_AGGRESSIVE,1);
+  SetProp(P_NOCORPSE,1);
+
+  AddId(({"sog","monster", "NOT_LIVING"}));
+
+  AddInfo(DEFAULT_INFO,
+    "schluerft kraeftig.");
+  lev=0;
+}
+
+void SetLevel(int level)
+{
+//level anpassen
+  if (level<10) level--;
+  else if (level<20) level-=level/4;
+  else level-=level/3;
+  if (level > 40) level = 40; // Balance-aenderung Feyaria, stufe 40 npc haut 
+                              // schon brutal genug zu, sonst wird das unfair 
+                              // fuer hochstufige Spieler
+  if (lev && (lev>level-2 || lev == 40)) return;  //nur erschaffen wenn neu, oder spieler ist mehr als 2 level aufgestiegen
+  lev=level;
+  create_default_npc(lev);
+  SetProp(P_BODY,QueryProp(P_BODY)*2/3);
+  SetProp(P_HANDS,({" mit seinen Wasserarmen",lev*9+10,DT_WATER}));
+}
+
+void SpellAttack(object enemy,int dam,mixed dam_type,string str,string str_other)
+{
+  tell_room(environment(ME),break_string(str_other),({enemy}));
+  tell_object(enemy,break_string(str));
+  enemy->Defend(random(dam)+1,dam_type,([SP_SHOW_DAMAGE:1]),ME);
+}
+
+void Attack(object enemy)
+{
+  if (!enemy
+   || QueryProp(P_DISABLE_SPELLS)
+   || random(100)>Query(P_SPELLRATE)) 
+  {
+    ::Attack(enemy);
+    return;
+  }
+  switch(random(3))
+  {
+    case 2:
+      SpellAttack(enemy,lev*16,({DT_WATER,DT_SOUND}),
+                  "Der Sog laesst ein Welle ueber Dich zusammenbrechen.",
+                  "Der Sog laesst eine Welle ueber "+enemy->name(WEN,1)+
+                  " zusammenbrechen.");
+    break;
+    case 1:
+      SpellAttack(enemy,lev*15,({DT_WATER}),
+                  "Der Sog zieht Dich unter Wasser.",
+                  "Der Sog zieht "+enemy->name(WEN,1)+" unter Wasser.");
+    break;
+    default:
+      SpellAttack(enemy,lev*14,({DT_WATER,DT_SQUEEZE}),
+                  "Der Sog schleudert Dich wild umher.",
+                  "Der Sog schleudert "+enemy->name(WEN,1)+" wild umher.");
+    break;
+  }
+}

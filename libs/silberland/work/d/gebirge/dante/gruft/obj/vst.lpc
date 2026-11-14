@@ -1,0 +1,111 @@
+
+// dante sl 99
+// balancemaessig ueberarbeitet von Zordan@SL
+
+inherit "std/thing"; 
+#include <language.h>
+#include <properties.h>
+#include <combat.h>
+#include <moving.h>
+#include "../gruft.h"
+
+int lastuse=1;
+
+create()
+{
+  if(!is_clone(this_object())) return;
+  thing::create();
+  SetProp(P_SHORT,"Ein Vampirstein");
+  SetProp(P_LONG,BS(
+    "Das ist einer der sagenumwobenen Vampirsteine. Er ist schwarz "
+    "und hat blutrote Flecken. Irgendwie fuehlt er sich umheimlich an."));
+
+  AD(({"fleck","flecken"}),
+    "Die Flecken leuchten blutrot und meinen, dass Du den Stein "
+    "identifizieren solltest.");
+   
+  SetProp(P_VALUE, 10000);
+  SetProp(P_WEIGHT,10);
+  SetProp(P_GENDER, MALE);
+  SetProp(P_NAME,"Vampirstein");
+  SetProp(P_MATERIAL, ([MAT_MISC_MAGIC:100]));
+  SetProp(P_INFO, BS(
+    "Der Vampirstein kann Dir helfen, Kreaturen zu finden. "
+    "Syntax <vstein name>."));
+
+  SP(P_MAGIC, 1);
+  AddId(({"stein","vampirstein"}));
+  SetProp(P_NOBUY, 1);
+  ACD(({"vstein"}), "finde_npc");
+  lastuse=time();
+}
+
+int finde_npc(string str)  {
+  string l;
+  int kost;
+	object gesucht;
+
+  NF("Du findest niemanden.\n");
+	if(!str)  {
+  	write(BS("Du musst einen Namen angeben!"));  
+  	return 1;
+  }
+
+  kost=7+random(5);
+  if(TP->QP(P_SP)<kost)  {
+	  write(BS("Deine Magie ist momentan zu schwach."));
+    return 1;
+  }
+
+  if(time()-lastuse < 30+random(30)) {
+    write(BS("Du ueberanspruchst den Vampirstein und er saugt Dir dafuer "
+             "eine Menge Energie aus Deinem Koerper!"));
+    TP->AddHp(-(TP->QueryProp(P_LEVEL)/5));
+    TP->AddSp(-(TP->QueryProp(P_LEVEL)/5));
+    return 1;
+  }
+
+  lastuse=time();	
+  gesucht=find_living(str);
+  if(!gesucht || gesucht->QueryProp(P_INVIS))   {
+	  write(BS("Sorry, aber "+CAP(str)+" kann ich nicht finden!"));
+    return 1;
+  }
+			
+  if(gesucht)  {
+	  if(query_once_interactive(gesucht))  {
+      write(BS(CAP(str)+" ist aber "
+        ""+((gesucht->QP(P_GENDER)==FEMALE)?"eine Spielerin":"ein Spieler")+" und "
+        "keine Kreatur des Silberlandes."));
+      return 1;
+    }
+    write(BS("Du suchst und findest "+gesucht->name(WEN)+":\n"));
+    if(environment(gesucht)) {
+      l=environment(gesucht)->QueryProp(P_INT_LONG);
+      if (!random(5) && (strstr(l,"@@") == -1))
+        write(BS(""+l+"\n"));
+      else
+        write(BS(""+
+          environment(gesucht)->QueryProp(P_INT_SHORT)+"."));
+      tell_room(environment(gesucht),BS(
+        CAP_TPN+" laesst hier eine magische Fledermaus die Gegend "
+        "ausspionieren."),({ TP,gesucht }) );
+      tell_object(gesucht,BS(
+        CAP_TPN+" laesst Dich durch eine magische Fledermaus suchen!"));
+    }
+
+    write(""+gesucht->short()+"");
+    TP->restore_spell_points(-kost);
+    if(!random(5) && !TP->QueryProp(P_GHOST)) {
+      write(BS("Der Vampirstein saugt Dir ein wenig Blut aus dem Koerper!"));
+      TP->AddHp(-(kost));
+    }
+    if(random(100)==42) {
+      write(BS("Der Vampirstein verdurstet und krepiert!"));
+      ME->remove();
+    }
+    return 1;
+  }
+  return 0;
+}
+

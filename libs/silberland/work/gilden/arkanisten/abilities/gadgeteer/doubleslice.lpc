@@ -1,0 +1,92 @@
+#include "../../arkanisten.h"
+
+inherit GUILD_FOLDER "abilities/ability.lpc";
+
+public void create() {
+    if(is_clone(TO)) return;
+
+    ::create();
+    SetProp(P_ABILITY_NAME, CAP(DOUBLE_SLICE));
+    SetProp(P_ABILITY_DESCRIPTIPON, 
+        "Dank meisterlicher Uebung im Kampf mit den federmechanischen Handschuhe, sowie "
+        "der versteckten Klinge, kannst du Doppelangriff mit beiden Haenden ausfuehren. "
+        "Ueberraschend, und unterstuetzt von der Federmechanik deiner Handschuhe, laesst "
+        "du beide versteckte Klingen auf dein Opfer stossen.");    
+    SetProp(P_ABILITY_TYPE, ABILITY_TYPE_ACTIVE);
+    SetProp(P_ABILITY_BASE_ATTRIBUTE, A_DEX);
+    SetProp(P_ABILITY_GROUP, ({ABILITY_GROUP_GADGET_POWERUP, ABILITY_GROUP_GADGETS}));
+    SetProp(P_ABILITY_REQUIRES, ({ASSASSINS_HANDS}));
+    SetProp(P_ABILITY_COST, ([
+        P_SP: 45,
+        P_MV: 20,
+    ]));
+}
+
+public mapping prepare_use(object user, mapping sinfo) {
+    object gloves, victim;
+
+    sinfo = ::prepare_use(user, sinfo);
+    if(!sinfo) return 0;
+
+    if(!objectp(gloves=present(SPRINGLOADED_GLOVES_ID, user))) {
+        tell_object(user, BS("Du musst deine federmechanischen Handschuhe tragen!"));
+        return 0;
+    }
+
+    if(!gloves->QueryProp(P_WORN)) {
+        tell_object(user, BS("Du musst deine federmechanischen Handschuhe tragen!"));
+        return 0;
+    }
+
+    if(get_free_hands(user) < 2) {
+        tell_object(user, BS("Du musst deine Haende frei haben!"));
+        return 0;
+    }
+
+    victim = FindEnemyVictim(sinfo[SI_SKILLARG], user);
+    if(!objectp(victim)) {
+        tell_object(user, BS("Dazu benoetigst du einen Gegner!"));
+        return 0;
+    }
+
+    
+    tell_object(user, BS("Du laesst deine versteckten Klingen hervorschnellen und stuerzt auf dein Opfer."));
+    tell_room(ENV(user), BS(user->Name(WER)+" laesst zwei Klingen aus den Handschuhen hervorschnellen und stuerzt sich auf "+victim->name(WEN)+"."), ({user}));
+
+    sinfo[SI_SKILLDAMAGE_TYPE] = ({ DT_SLASH, DT_PIERCE });
+    sinfo[SI_SKILLDAMAGE] = 400;
+    sinfo[OFFSET(SI_SKILLDAMAGE)] = 200;
+    sinfo[SI_MAX_DAMAGE] = 900;
+    sinfo[SI_NOMAGIC] = 100;
+    sinfo[SI_SKILLARG] = victim;
+    sinfo[SI_PREPARE_TIME] = 2;
+    sinfo[SI_SPELLFATIGUE] = 4;
+
+    return sinfo;
+}
+
+public void failed(object caster, mapping sinfo, int skillcheck) {
+    if(skillcheck < -3000) {
+        tell_object(caster, BS("Deine Klingen bleiben stecken und du musst sie einen Moment lang richten!"));
+        caster->SetProp(P_DISABLE_ATTACK, 1+random(3));
+    }
+
+    return ::failed(caster, sinfo, skillcheck);
+}
+
+public void success(object user, mapping sinfo, int skillcheck) {
+    object victim;
+
+    victim = sinfo[SI_SKILLARG];
+    if(!objectp(victim)) {
+        tell_object(user, BS("Nanu? Dein Ziel ist nicht mehr da!"));
+        return;
+    }
+
+    tell_object(user, BS("Mit zwei schnellen Hieben triffst du "+victim->name(WEN)+"."));
+    tell_room(ENV(user), BS(user->Name(WER)+" trifft "+victim->name(WEN)+" mit beiden Klingen gleichzeitig."));
+
+    default_attack_spell(victim, user, sinfo, ([SP_NAME: DOUBLE_SLICE, SP_SHOW_DAMAGE: 1]));
+
+    return;
+}

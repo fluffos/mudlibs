@@ -1,0 +1,127 @@
+/*
+ Group master
+ Iwo@SL
+*/
+ 
+#pragma strong_types
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <defines.h>
+#include <wizlevels.h>
+#include <moredef.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <ansi.h>
+
+#include "../group.h"
+
+// Function prototypes
+#include "prototypes.h"
+
+// Global variable definitions
+#include "var.lpc"
+
+// Functions
+#include "parse.lpc"
+#include "internals.lpc"
+#include "status.lpc"
+#include "comm.lpc"
+#include "control.lpc"
+#include "admin.lpc"
+
+
+// Ok, time to build the object
+void create()
+{
+  // No Copy of this object should exist
+  if( is_clone(TO) ) return;
+  ::create();
+
+  // set euid
+  seteuid(getuid(TO));
+
+  // It'll be available as admin interface - so name it
+  SetProp(P_NAME, "Groupmaster");
+  SetProp(P_SHORT, "The Groupmaster");
+  
+  SetProp(P_LONG, "Master and wizard interface for groups. Try 'gm h'.");
+
+  AddId( ({ "grpmaster", "groupmaster" }) );
+
+  SetProp(P_NOGET, "Das willst Du sicher nicht nehmen.\n");
+
+  // Yeah, it really is :)
+  SetProp(P_SENSITIVE, 1);
+  
+  // Fine place to park it for now
+  TO->move("/players/iwo/workroom");
+
+  // Noone will like this... but it's mandatory
+  set_heart_beat(1);
+
+  // This for administering groups
+  AddCmd( ({ "gm" }), "MasterCommand");
+
+  // Restore saved stati after updates
+  // This enables updating without dropping groups
+  restore_object(GROUPMASTER);
+
+  // Just looks cewl :)
+  MasterInfo("Loaded and ready.");
+
+  // After restoring tasks are cleared to avoid double tasks
+  tasks = ([]);
+
+  // Sure we carry trash
+  CheckGobjs();
+  
+  // Register all Group objects
+  FindAllGobjs();
+
+  // This will make someone leave a group if he's gone too long
+  AddTask(0, 0, "CheckPresence", ({}));
+
+  // Group object management
+  AddTask(30*60, 0, "CheckGobjs", ({}));
+  
+  AddTask(60*60, 0, "FindAllGobjs", ({}));
+}
+
+
+// We don't reset
+void reset()
+{
+  set_heart_beat(1);
+  return;
+}
+
+
+// Executed each HB by the driver
+void heart_beat()
+{
+  // Run Tasks
+  walk_mapping(tasks, "RunTask", TO);
+  // Run CheckMembers for each player
+  // walk_mapping(groups, "CheckMembers", TO);
+}
+
+
+// We don't want to get removed
+varargs int remove(int silent)
+{
+  string str;
+  save_object(GROUPMASTER);
+  if (PO) 
+    {
+      str = sprintf("%O tried to remove me", PO);
+      if (ENV(PO)) str += sprintf(" (%O)", ENV(PO));
+      MasterInfo(str);
+      return 0;
+    }
+  return 0;
+}
+

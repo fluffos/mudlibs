@@ -1,0 +1,398 @@
+/*******************************************************************************
+ * Besucher der Arena in Neutijara
+ * Datei: arena_guard.c
+ * Autor: Angel (avs@sbox.tu-graz.ac.at)
+ */
+ 
+#include <language.h>
+#include <ansi.h>
+#include "./def.h"
+#include "../../lib/unique_npc/headers/unique_npc.h"
+
+inherit "std/npc/sequencer";
+inherit LIB_UNIQUE "classes/race_specs";
+inherit LIB_UNIQUE "classes/unique_npc";
+
+nosave mixed msg_pro, msg_con;
+nosave object favorit, opponent;
+
+// Liefert wie schlimm ein Duellant zugerichtet ist:
+int get_health_level (object ob)
+{
+  int stat;
+  int hpnt, max_hpnt;
+
+  hpnt = ob->QueryProp( P_HP );
+  max_hpnt = ob->QueryProp( P_MAX_HP );
+  if (hpnt < max_hpnt/10) 
+    stat = 0;
+  else if (hpnt < max_hpnt/5) 
+    stat = 1;
+  else if (hpnt < max_hpnt*3/10) 
+    stat = 2;
+  else if (hpnt < max_hpnt*4/10) 
+    stat = 3;
+  else if (hpnt < max_hpnt/2) 
+    stat = 4;
+  else if (hpnt < max_hpnt*6/10) 
+    stat = 5;
+  else if (hpnt < max_hpnt*7/10) 
+    stat = 6;
+  else if (hpnt < max_hpnt*8/10) 
+    stat = 7;
+  else if (hpnt < max_hpnt*9/10) 
+    stat = 8;
+  else
+    stat = 9;
+
+  return stat;
+}
+
+// Die Zuseher feuern die Duellteilnehmer (je nach Zustand) an:
+void do_shout ()
+{
+   object server;
+   int index;
+   int x, y; // Dient der Speicherung des Status unserers Favoriten bzw. des Gegners
+       	      
+   catch(call_other(PKOBJ "coordinator", "???", 0));
+   server = find_object(PKOBJ "coordinator");
+   if (!objectp(server))   
+      return;   
+   
+   if (!objectp(favorit) || !objectp(opponent))
+      if (random(2))
+      {
+        favorit  = server->get_partner();
+        opponent = server->get_challenger();
+      }
+      else
+      {
+        favorit  = server->get_challenger();  
+        opponent = server->get_partner();
+      }
+     
+   if (server->get_duell_status ())
+   {
+      // Wie geht es unserem Favoriten/dessen Gegner?
+      x = get_health_level (favorit);
+      y = get_health_level (opponent);
+      
+      // Wir verlaengern solange das Duell andauert
+      call_out("do_shout", (5+random(5)) );
+      
+      if (objectp(environment(this_object())));
+      {
+      	// 50% Chance fuer's Anfeuern:
+      	if (random (2))
+      	{
+     	   index = random(sizeof(msg_pro[x]));
+     	   tell_room(environment(this_object()), this_object()->name()+" bruellt: "+
+     	                         sprintf(msg_pro[x][index], favorit->name(), favorit->name())+"\n");
+           server->transmit_shout(this_object()->name()+" bruellt: "+
+                                 sprintf(msg_pro[x][index], favorit->name(), favorit->name())+"\n");
+        }
+        // 50% Chance fuer's Auspfeifen des Gegners:
+        else
+        {
+     	   index = random(sizeof(msg_con[y]));
+     	   tell_room(environment(this_object()), this_object()->name()+" bruellt: "+
+     	                         sprintf(msg_con[y][index], opponent->name(), opponent->name())+"\n");
+           server->transmit_shout(this_object()->name()+" bruellt: "+
+                                 sprintf(msg_con[y][index], opponent->name(), opponent->name())+"\n");        	
+        }
+      }
+   }
+   // Kein Duell mehr! Wir loeschen Favoriten/Gegner
+   else
+   {
+     favorit  = 0;
+     opponent = 0;
+   }
+}
+
+create()
+{
+  object server;
+  
+  if (!is_clone(this_object()))
+  {
+    return;
+  }
+    
+  race_specs::create();
+  unique_npc::create();
+  ::create(); 
+ 
+  // Die Meldungen, welche der Schaulustige in den Kampfplatz schreit:
+  // * msg_pro ist fuers Anfeuern des Favoriten
+  // * msg_con ist fuers Auspfeifen desen Gegners
+  // -> beides sind Arrays mit 10 Arrays, die Meldungen je nach Status des Gegners
+  //    enthalten.
+  msg_pro = ({ ({"Lass %s leben! Lass %s leben!", // steht auf der Schwelle des Todes
+                 "%s, ich glaube an Dich!!",
+                 "Nur nicht schlapp machen, hoerst Du, %s?!",
+                 "Ich drueck Dir alle Daumen, %s!!"
+               }), 
+               ({"Was machst Du denn fuer Sachen, %s!?", // braucht dringend einen Arzt
+                 "%s, Du schaffst es noch!!",
+                 "Pass auf Deine Verteidigung auf, %s!",
+                 "Noch ist nichts verloren, %s!!"
+               }), 
+               ({"Nur nicht schlapp machen, %s!!", // ist in keiner guten Verfassung
+                 "Halte Durch, %s!!",
+                 "Deine Verletzungen sind nicht der Rede wert, %s!",
+                 "Auf zum Endspurt, %s!!"
+               }), 
+               ({"Streng Dich an, %s!!", // wankt bereits bedenklich
+                 "Gib alles was Du hast, %s!",
+                 "Denk an Deine Ehre, %s!",
+                 "Du wirst es schaffen, %s!"
+               }),
+               ({"Es ist noch alles offen, %s!!", // macht einen mitgenommenen Eindruck
+                 "Jetzt ist Schluss mit lustig, %s!!",
+                 "Hoer auf Deinen Gegner zu schonen, %s!!",
+                 "Bleib dran, %s!!"
+               }),
+               ({"Sind nur Kratzer, das bringt Dich nicht um %s!!", // sieht nicht mehr taufrisch aus
+                 "Pass auf Deine Deckung auf, %s!!",
+                 "Gleich hast Du's geschafft, %s!!",
+                 "Du kannst gar nicht verlieren, %s!!"
+               }),
+               ({"Dein Gegner hat keine Chance, %s!", // ist leicht angeschlagen
+                 "Du bist ueberlegen, %s!",
+                 "Ran an den Speck, %s!!",
+                 "Jaaaaaaa! Recht so, %s!!"
+               }),
+               ({"Weiter so, %s!" // fuehlte sich heute schon besser
+                 "Recht so! Du machst das hervorragend, %s!",
+                 "Schlag zu, %s!",
+                 "Toller Schlag, %s!!"
+               }),
+               ({"%s wird siegen!", // ist schon etwas geschwaecht
+                 "Du wirst gewinnen, %s! Ich fuehle es!",
+                 "Zeig was Du kannst, %s!!",
+                 "Recht so, immer drauf, %s!!"
+               }),
+               ({"Keine Gnade, %s!", // ist absolut fit
+                 "%s vor!! %s vor!!",
+                 "Du bist unbesiegbar, %s!",
+                 "Dein Gegner hat nicht die geringste Chance, %s!"
+               })
+  });
+  
+  msg_con = ({ ({"Rette Dein Leben und gib auf, %s!!", // steht auf der Schwelle des Todes
+                 "Gib endlich auf, %s!!",
+                 "Sieh ein, dass Du keine Chance hast, %s!",
+                 "Es ist vorbei, %s!!"
+               }), 
+               ({"Das wars fuer Dich, %s!!", // braucht dringend einen Arzt
+                 "Das schaffst Du nie und nimmer, %s!!",
+                 "Rette Deine Ehre und gib auf, %s!",
+                 "Der Kampf ist aus fuer Dich, %s!!"
+               }), 
+               ({"Lang machst Du's nicht mehr, %s!!", // ist in keiner guten Verfassung
+                 "Das wird nichts mehr,  %s!!",
+                 "Du stirbst ja schon fast, %s!!",
+                 "Sei nicht toericht und gib auf, %s!!"
+               }), 
+               ({"Das hat ja keinen Sinn mehr, %s!!", // wankt bereits bedenklich
+                 "Du kannst auch gleich aufgeben, %s!",
+                 "Denk an Deine Ehre und gib auf, %s!",
+                 "Das schaffst Du nie im Leben, %s!"
+               }),
+               ({"Sieht schlecht aus fuer Dich, %s!!", // macht einen mitgenommenen Eindruck
+                 "Du hast nicht die Ausdauer fuer sowas, %s!!",
+                 "Tu Dir selbst einen Gefallen und lass es sein, %s!!",
+                 "Deine Niederlage zeichnet sich schon ab, %s!!"
+               }),
+               ({"Du bist schon schlimm zugerichtet, %s!!", // sieht nicht mehr taufrisch aus
+                 "Dein Angriff ist viel zu schwach, %s!!",
+                 "Deine Deckung ist mieserabel, %s!!",
+                 "Jemand wie Du hat in der Arena nichts verloren, %s!!"
+               }),
+               ({"Die paar Treffer und schon angeschlagen!? Gib auf, %s!", // ist leicht angeschlagen
+                 "Sowas ist nichts fuer Leute wie Dich, %s!",
+                 "Geh wieder heim, %s!!",
+                 "Buuuuuuh, %s!!"
+               }),
+               ({"Ich seh schwarz fuer Dich, %s!", // fuehlte sich heute schon besser
+                 "Da wird einem ja langweilig bei Deinem Auftritt, %s!",
+                 "Was soll denn das gewesen sein, %s?!",
+                 "Ohhuuuuu! Schauderhaft, %s!!"
+               }),
+               ({"So wird das in hundert Jahren nichts, %s!", // ist schon etwas geschwaecht
+                 "Weg mit Dir, %s!!",
+                 "Da wird einem ja uebel beim zusehen, %s!!",
+                 "Ist das etwa alles was Du kannst, %s?!"
+               }),
+               ({"Du hast keine Chance, %s!!", // ist absolut fit
+                 "Dein Gegner ist viel zu stark, %s!!",
+                 "Gib auf solange Du noch kannst, %s!",
+                 "Du bist ein Versager, %s!!"
+               })
+  });               
+  
+  SetProp(P_UNIQUE_RACE_PROBABILITY, ({ 
+  	        ({"Mensch",20}), ({"Elf",20}), 
+                ({"Troll", 20}), ({"Zwerg",20}),
+                ({"Hobbit",20}),({"Fee",20}) }), 
+                ({"Oger", 20}), ({"Dunkelelf", 20}) );
+  SetProp(P_ARTICLE, 0);
+  create_default_unique_npc( 15, 50, 0 );
+  AddId(lower_case(QueryProp(P_NAME)));
+  AddId(distinguish_gender("schaulustiger", "schaulustige"));
+  SetProp(P_SHORT, 
+  QueryProp(P_NAME) + distinguish_gender(" der Schaulustige", " die Schaulustige"));
+  SetProp(P_LONG,  get_long("Vor Dir steht "+QueryProp(P_NAME)+" der Schaulustige. ",
+                       "Vor Dir steht "+QueryProp(P_NAME)+" die Schaulustige. ") );
+  set_details ("/d/dschungel/angel/lib/unique_npc/load_lib/details", 1);
+  SetProp(P_MAX_HANDS, 2);
+  seteuid(getuid(this_object()));
+  SetProp(P_MAX_HANDS, 2);
+  SetProp( P_NOCORPSE, 0 );
+  SetProp(P_DEFAULT_INFO, "sagt: Ich bin hier nur Besucher, fragt jemand anders!.\n");
+  SetProp(P_MNPC_AREA, "/d/dschungel/angel/arena/room/tribuene");
+  SetProp(P_MNPC_WAIT, ({ 10, 30, 30 }));
+  SetProp(P_MNPC_DEFAULTROOM, ROOM "tribuene_w");
+  SetProp(P_MNPC_FLAGS, MOV_OUTDOORS + MOV_MOVES + MOV_MAYLOAD + MOV_BACKWARDS);
+
+  SetChats(2, ({
+    name()+" starrt auf die Kampfflaeche.\n",
+    name()+" mustert Dich kurz.\n",
+    name()+" raeuspert sich.\n",
+    name()+" langweilt sich.\n",
+    name()+" fragt: Wer wird wohl als Naechster kaempfen?\n"}) );
+
+  SetAttackChats(5, ({
+    name()+" sagt: Verschwindet!\n",
+    name()+" sagt: Seht Euch lieber die Duelle an!\n",
+    name()+" sagt: Lasst mich in Ruhe!\n" }) );
+
+// Spezielle Informationen, die der NPC selbst beantwortet:
+  AddInfo( "neutijara",
+    "Neutijara ist ein Stadtteil von Tijara, der Hauptstadt der Region Dschungel.\n", "sagt: "
+  );
+  AddInfo( ({ "hauptstadt", "tijara", "stadt" }),
+    "Tijara ist eine maechtige und schoene Stadt, einer Hauptstadt wuerdig!\n" "sagt: "
+  );
+  AddInfo( ({ "region", "dschungel" }),
+    "Tijara liegt in der Region Dschungel.\n", "sagt: "
+  );
+  AddInfo( "arena",
+    "In dieser Arena koennt Ihr einen Gegner zum ehrenvollen Duell registrieren.\n",
+    "sagt: "
+  );
+  AddInfo( "gegner",
+    "Den muesst Ihr Euch selbst waehlen.\n", "sagt: "
+  );
+
+  SetProp (P_SPELLRATE, 30);
+  
+  // Schlag:
+  AddSpell(7, 600,
+           name()+" versetzt Dir einen harten Schlag.\n",
+           name()+" versetzt @WEM einen Harten Schlag.\n",
+          ({DT_BLUDGEON}), ([SP_SHOW_DAMAGE:1]) );
+  
+  // Tritt:
+  AddSpell(3, 750,
+           name()+" versetzt Dir einen gezielten Tritt.",
+           name()+" versetzt @WEM einen gezielten Tritt.\n",
+          ({DT_BLUDGEON}), ([SP_SHOW_DAMAGE:1]) );
+          
+  if (QueryProp(P_GENDER) == 1)
+  {
+    clone_object ("/p/armour/armour/weste")->move (this_object(), M_GET);
+    clone_object ("/p/armour/trousers/hose")->move (this_object(), M_GET);
+  }
+  else
+  {
+    clone_object ("/p/armour/shield/sonnenschirm")->move (this_object(), M_GET);
+    clone_object ("/p/armour/trousers/rock_kurz")->move (this_object(), M_GET);
+    clone_object ("/p/armour/armour/bluse")->move (this_object(), M_GET); 
+  }
+  clone_object ("/p/armour/boots/sandalen")->move (this_object(), M_GET);
+  command_me("trage alles");
+  
+  // Startet den "Schreihals-Loop"
+  call_out("do_shout", 5);
+  
+  catch(call_other(PKOBJ "coordinator", "???", 0));
+  server = find_object(PKOBJ "coordinator");
+  if (objectp(server))
+     server->register_visitor (this_object());
+  
+}
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+  if (find_call_out("react")!= -1) return;
+  switch(gruppe) 
+  {
+    case "fies":
+      call_out("react", 0, "tritt Dich.", "tritt "+TP->name(WEN)+".");
+      break;
+    case "aergerlich":
+      call_out("react", 0, "fragt: Haltet Euren Aerger von der Arena fern, "+TPN+"!");
+      break;
+    case "traurig":
+      call_out("react", 0, "sagt: Darueber kommt Ihr hinweg, "+TPN+"!");
+      break;
+    case "albern":
+      call_out("react", 0, "kichert albern.");
+      break;
+    case "neutral":
+      call_out("react", 0, "nickt Dir zu.", "nickt "+TP->name(WEM)+" zu.");
+      break;
+    case "intim":
+      if ( QueryProp(P_GENDER) != TP->QueryProp(P_GENDER) )
+         call_out("react", 0, "flirtet mir Dir.", 
+                  "flirtet mit "+TP->name(WEM)+".");
+      else
+         call_out("react", 0, "meint Ihr seid nicht mein Typ, "+TPN+".");
+      break;
+    case "froh":
+      call_out("react", 0, "nickt Dir zu.",
+             "nickt "+TP->name(WEM)+" zu.");
+      break;
+    case "aengstlich":
+      call_out("react", 0, "meint: Schaut lieber den Kaempfen zu!");
+      break;
+    case "frech":
+      call_out("react", 0, "meint: Schaemt Euch, "+TPN+"!");
+      break;
+    case "nett":
+      call_out("react", 0, "nickt Dir freundlich zu.", "nickt "+TP->name(WEM)+" freundlich zu.");
+      break;
+  }
+}
+
+void react(string victim, string others)
+{
+  if (present(TP, ENV(TO))) 
+  {
+    if( !others ) others = victim;
+    tell_object(TP, BS(Name(WER, 1) + " "+victim) );
+    tell_room(ENV(TO), BS(Name(WER, 1)+" "+others), ({TP,TO}) );
+  }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void die(int poisondeath) 
+{
+  object server;
+  
+  catch(call_other(PKOBJ "coordinator", "???", 0));
+  server = find_object(PKOBJ "coordinator");
+  if (objectp(server))
+     server->unregister_visitor (this_object());  
+  ::die(poisondeath);
+}
+
+void greet_player(mixed people)
+{ }

@@ -1,0 +1,270 @@
+mapping prep_durchdringe(object caster, mapping sinfo, int silent)
+{  
+  object ob;
+  
+  //Aenderungen der Werte im sinfo Mapping vermeiden!
+  if(!TestNoTrance(caster, sinfo) || !GuildItemTest(caster, sinfo) ||
+     !FroschTest(caster, sinfo)|| 
+     !BlindTest(caster, sinfo) )
+    return 0;
+    
+  if(!objectp(ob=sinfo[SI_ENEMY]))
+  {
+     ob = FindVictim(sinfo[SI_SKILLARG], caster, 
+                     "Was moechtest Du mit Deinem Geist durchdringen?\n");
+     if(!ob) return 0;
+     if(living(ob))
+     { tell_object(TP, 
+         "Du kannst keine Lebewesen durchdringen. Benutze schaetz!\n");
+       return 0; }
+  }
+  sinfo[SI_ENEMY]=ob;
+  if(!silent){FirstPrepareFuncSuccessfull(caster, sinfo);}
+  return sinfo;
+}
+
+string ist_sind(object ob)
+{ if(ob->IsPlural()) return "sind";
+  return "ist"; }
+
+public string getTrailing(object ob) {
+  switch(ob->QueryProp(P_GENDER)) {
+    case MALE: return "r";
+    case NEUTER: return "s";
+  }
+
+  return "";
+}
+
+public string weaponQuality(object ob, object caster) {
+  string result, ret;
+  mixed wert;
+
+  ret = "";
+
+  wert=ob->QueryProp(P_WC)+ob->QueryProp(P_DAMAGED)+random(10)-5;
+  if (!intp(wert)) wert=125;
+  if     ( wert>=275 ) result="fast perfekte";
+  else if( wert>=250 ) result="meisterhafte";
+  else if( wert>=225 ) result="hervorragende";
+  else if( wert>=200 ) result="extrem gute";
+  else if( wert>=175 ) result="sehr gute";
+  else if( wert>=150 ) result="gute";
+  else if( wert>=125 ) result="durchschnittliche";
+  else if( wert>=100 ) result="mittelmaessige";
+  else if( wert>=75 )  result="schlechte";
+  else if( wert>=50 )  result="sehr schlechte";
+  else                 result="absolut mieserable";
+  ret += sprintf("| %-70s |\n", sprintf("%s ist eine %s %shaendige Waffe.",
+    ob->Name(WER), result, ob->QueryProp(P_NR_HANDS)>1?"zwei":"ein"));
+
+  wert=ob->QueryProp(P_WC_FIXFACTOR);
+  if(!floatp(wert)) wert=0.3;
+  if     ( wert>=0.8 ) result="exzellent";
+  else if( wert>=0.7 ) result="extrem gut";
+  else if( wert>=0.6 ) result="sehr gut";
+  else if( wert>=0.4 ) result="gut";
+  else if( wert>=0.3 ) result="normal";
+  else if( wert>=0.2 ) result="schlecht";
+  else if( wert>=0.1 ) result="sehr schlecht";
+  else                 result="extrem schlecht";
+  ret += sprintf("| %-70s |\n", CAP(ob->QueryPronoun())+" liegt "+result+" in der Hand.");
+
+  wert=ob->QueryProp(P_QUALITY_DECAY);
+  if(!intp(wert)) wert=100;
+  if     ( wert>900 ) result="praktisch gar nicht";
+  else if( wert>500 ) result="extrem langsam";
+  else if( wert>300 ) result="sehr langsam";
+  else if( wert>200 ) result="langsam";
+  else if( wert>120 ) result="etwas langsamer";
+  else if( wert>90  ) result="normal";
+  else if( wert>70  ) result="etwas schneller";
+  else if( wert>50  ) result="schnell";
+  else if( wert>30  ) result="sehr schnell";
+  else if( wert>10  ) result="extrem schnell";
+  else if( wert>0   ) result="fuerchterlich schnell";
+  else                result="gar nicht";
+  ret += sprintf("| %-70s |\n", CAP(ob->QueryPronoun())+" nuetzt sich "+result+" ab.");
+
+  return ret;
+}
+
+int durchdringe(object caster, mapping sinfo)
+{
+ /*
+  Waffe/Ruestung/Rest
+  Ruestung:
+  - Typ
+  - Metallgehalt/Waldlaeuferruestung
+  - Giftschutz
+  
+  Waffe:
+  - Waffentyp
+  - Giftschaden
+  - Messer/Bogen -> Schadensarten
+  - lernt noch mit Waffe?
+  
+  Rest:
+  - Zustand
+  - Gewicht
+  - Bonus
+  - P_INFO
+
+ */  
+  int i, success;
+  object ob;
+  string result, s;
+  string *str, *dt;
+  
+  if( !mappingp(sinfo=prep_durchdringe(caster, sinfo, 1)) ) return 0;
+  ob=sinfo[SI_ENEMY];
+
+  success=SpellSuccess(caster,sinfo);
+  if(success<0)
+  {
+    tell_object(caster, BSC("Du konntest Deine Kraefte nicht richtig "
+                        "fokusieren."));
+    return MISSERFOLG;
+  }
+
+  tell_room(ENV(caster), BS(sprintf("%s durchdringt %s mit %s Augen.",
+            caster->Name(WER), ob->name(WEN, 2), caster->QueryPossPronoun(NEUTER, WEM, PLURAL))), ({caster}));
+  
+    
+  result="\n+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+         "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+\n";
+  if(ob->QueryProp(P_ARMOUR_TYPE))
+  {
+    //Ruestungstyp
+    if(ob->QueryProp(P_ARMOUR_TYPE)=="Misc") {s="Das ist eine Ruestung.";}
+    else
+    {s=ob->Name(WER, 1)+" "+ist_sind(ob)+" eine Ruestung vom Typ "
+       +ob->QueryProp(P_ARMOUR_TYPE)+"."; }
+    result+=sprintf( "| %-70s |\n+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+            "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+\n",s);
+      
+    /*us Metall? oder Gar Waldlaeuferruestung? - entfernt von Gwenshara. Die Einschraenkung ist doof
+    if( QuerySingleMetal(ob) )
+    { 
+      s="Diese Ruestung ist aus Metall und wird Dich stark behindern!";
+      if (member(ob->QueryProp(P_IDS), RANGER_ARMOUR_ID)>-1)
+      { s="Das ist eine spezielle Waldlaeuferruestung!";}
+      result+=sprintf( "| %-70s |\n",s);
+    }*/
+    if( ob->QueryProp(P_DAM_PROTECTION) && member(ob->QueryProp(P_DAM_PROTECTION), "poison") ) {
+      result+=sprintf("| %-70s |\n", ob->Name(WER, 1)+" "+(ob->IsPlural() ? "schuetzen" : "schuetzt")+" vor Gift.");
+    }
+    
+  }
+  else  if(ob->QueryProp(P_WEAPON_TYPE))
+  {
+    //Waffentyp
+    s=ob->Name(WER, 1)+" "+ist_sind(ob)+" "+weapon_to_german( lower_case(to_string(ob->QueryProp(P_WEAPON_TYPE))))+".";
+    result+=sprintf( "| %-70s |\n+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+            "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+\n",s);
+
+    if(member( ({WT_BOW, WT_KNIFE}),ob->QueryProp(P_WEAPON_TYPE))>-1) {
+      result += weaponQuality(ob, caster);
+    }
+    
+    //Giftschaden? Bogen/Messer + Schadensarten
+
+    if(!pointerp(ob->QueryProp(P_DAM_TYPE)) && ob->QueryProp(P_DAM_TYPE) == DT_POISON ||
+       pointerp(ob->QueryProp(P_DAM_TYPE)) &&  member(ob->QueryProp(P_DAM_TYPE), DT_POISON)>-1)
+    {result+=sprintf("| %-70s |\n", ob->Name(WER, 1)+" "
+             +(ob->IsPlural() ? "vergiften" : "vergiftet")+" Deine Feinde.");}
+    else if(member( ({WT_BOW, WT_KNIFE}),ob->QueryProp(P_WEAPON_TYPE))>-1)
+    {
+      dt=ob->QueryProp(P_DAM_TYPE);
+      if(pointerp(dt) && (sizeof(dt)>0) )
+      { s="";
+        for(i=0;i<=sizeof(dt)-1;i++)
+        { s+=to_german(dt[i]); if( i!=(sizeof(dt)-1) ) s+=", ";}
+        s=ob->Name(WER, 1)+" "
+          +(ob->IsPlural() ? "verursachen" : "verursacht")+" "+s+".";
+        s=break_string(s, 70); str=explode(s, "\n");
+        for(i=0;i<=sizeof(str)-1;i++)
+        {result+=sprintf("| %-70s |\n", str[i]);}
+      }
+      i=caster->QuerySkillAbility(FIGHT(WT_BOW));
+      if(ob->QueryProp(P_WEAPON_TYPE) == WT_BOW)
+      {
+        i=caster->QuerySkillAbility(FIGHT(WT_BOW));
+        if(ob->QueryProp(P_WC) >= i/40 ) {
+          result+=sprintf( "| %-70s |\n","Mit diesem Bogen kannst du das Kaempfen lernen.");
+        } else {
+          result+=sprintf( "| %-70s |\n","Dieser Bogen ist nicht gut genug fuer deiner Faehigkeiten.");
+        }
+      }
+      else if(ob->QueryProp(P_WEAPON_TYPE) == WT_KNIFE)
+      {
+        i=caster->QuerySkillAbility(FIGHT(WT_KNIFE));
+        if(ob->QueryProp(P_WC) > i/100) {
+          result+=sprintf( "| %-70s |\n","Mit dieser Waffe kannst du den Messerkampf weiter lernen.");
+        } else {
+          result+=sprintf( "| %-70s |\n","Dieses Messer ist nicht gut genug fuer deine Faehigkeiten.");
+        }
+      }
+    }
+  }
+  //Zustand
+  if( (ob->dam_desc()) != 0 )
+  { result+=sprintf( "| %-70s |\n", ob->Name(WER, 1)+" "+ist_sind(ob)+" in "
+            "einem "+to_string(ob->dam_desc())+"en Zustand."); }
+      
+  //Gewicht
+  i=ob->QueryProp(P_WEIGHT);
+  if(i<1) i=0;
+  s=ob->Name(WER, 1)+" "+ist_sind(ob)+" ";
+  switch(i)
+  {
+    case 0         : s+="schwerelos"; break;
+    case 1..100    : s+="federleicht"; break;
+    case 101..999  : s+="extrem leicht"; break;
+    case 1000..1500: s+="leicht"; break;
+    case 1501..2000: s+="mittelschwer"; break;
+    case 2001..2500: s+="schwer"; break;
+    case 2501..3500: s+="sehr schwer"; break;
+    case 3501..4600: s+="extrem schwer"; break;
+    default        : s+="unglaublich schwer"; break;
+  }
+  s+=" und besteht aus "+to_string(ob->MaterialList(WEM, caster))+".";
+  str=explode(break_string(s, 70), "\n");
+  for(i=0;i<=sizeof(str)-1;i++)  { result+=sprintf("| %-70s |\n",str[i]);  }
+    
+  //Boni?
+  i=0;
+  if(ob->QueryProp(P_RANGER_SPELLCOST) && ob->QueryProp(P_RANGER_BONUS))
+  { s=(ob->IsPlural() ? "verringern" : "verringert")+" die Kosten der "
+      "Waldlaeuferzauber und "+(ob->IsPlural() ? "verstaerken" : "verstaerkt")
+      +" die Magie der Waldlaeufer"; i=1;}
+  else if(ob->QueryProp(P_RANGER_SPELLCOST))
+  { s=(ob->IsPlural() ? "verringern" : "verringert")+" die Kosten der "
+      "Waldlaeuferzauber"; i=1;}
+  else if(ob->QueryProp(P_RANGER_BONUS))
+  { s=(ob->IsPlural() ? "verstaerken" : "verstaerkt")+" die Magie der "
+    "Waldlaeufer"; i=1;}
+  if(i)
+  { s=ob->Name(WER, 1)+" "+s+".";
+    str=explode(break_string(s, 70), "\n");
+    for(i=0;i<=sizeof(str)-1;i++) {result+=sprintf("| %-70s |\n",str[i]);}
+  }
+  
+  //P_INFO
+  if (s=ob->info(caster) || ob->QueryProp(P_INFO)) {
+    str=explode(s, "\t"); s="";
+    for(i=0;i<=sizeof(str)-1;i++) {s+=str[i]+" ";}
+    str=explode(break_string(s, 70,0,BS_SINGLE_SPACE | BS_LEAVE_MY_LFS),"\n");
+    for(i=0;i<=sizeof(str)-1;i++) {result+=sprintf("| %-70s |\n",str[i]);}
+  }
+
+  if(ob->QueryProp(P_CURSED)) {
+    result+=sprintf("| %-70s |\n", ob->Name(WER, 1)+" "+ist_sind(ob)+" verflucht.");
+  }
+
+  //Rest + Ausgabe
+  result+="+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+          "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+\n";
+  TP->More(result);
+  return ERFOLG;
+}

@@ -1,0 +1,190 @@
+// Gesellenstück
+// Pflanzenwesen im 2.Stock - plant.c
+// Vond Wraz / Mendralim
+
+inherit "std/npc";
+inherit "/std/npc/spells";
+
+#include <properties.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include "../def.h"
+
+object plant=TO;
+string *plant_hunter=({""}), player_name="";
+
+
+void create()
+{
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Zanthoxylum Clematis");
+  SetProp(P_LONG,
+    "Das ist Zanthoxylum Clematis. Sie bewegt sich auf ihren Wurzeln grazioes durch "
+    "den Raum. Ihre Blueten ergeben mit ihrem violett-weiss gemischtem Farbton "
+    "einen guten Kontrast zu den gruenen Blaettern, welche an den langen, duennen "
+    "Aesten haengen. Ihr rispiger Stamm ist eher kurz und wie die vielen, "
+    "langen, duennen Aeste halbverholz.");
+  SetProp(P_NAME, "Zanthoxylum Clematis");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:-20,T_RANGE_MAX:50]));
+  AddId(({"clematis", "zanthoxylum clematis", "pflanze", "NOWIMPY"}));
+  set_living_name("clematis");
+
+  create_default_npc(40);
+  SetProp(P_HANDS, ({" mit ihren Aesten",350,({DT_BLUDGEON,DT_WHIP})}));
+  SetProp(P_RACE, "Schlingpflanze");
+  SetProp(P_SIZE, 300+random(100));
+  SetProp(P_WEIGHT, 30000+random(10000));
+  SetProp(P_ALIGN, 0); 
+  SetProp(P_MAX_HANDS, 13+random(5));
+  SetProp(P_HEAL,0);
+  SetProp(P_AGGRESSIVE,0);
+  SetProp(P_RESISTANCE_STRENGTHS , 
+    ([DT_FIRE:      0.2, DT_COLD:      0.0, DT_WATER:  -0.9, DT_AIR:    -0.6, 
+      DT_LIGHTNING: 0.0, DT_EXPLOSION: 0.0, DT_SOUND:  -0.1, DT_LIGHT:  -1.0,
+      DT_ELECTRIC:  -1.0, DT_ACID:      -0.1, DT_POISON: -0.3, DT_TERROR: 0.4,
+      DT_HOLY:      -1.0, DT_UNHOLY:    0.7, DT_MAGIC:  -0.2, DT_MIND:   -0.3]) );
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_NOMAGIC,75);
+
+  SetProp(P_MSGIN, "wird lebendig");
+  SetProp(P_MSGOUT, "bewegt sich traege");
+  SetProp(P_MMSGIN, "erscheint in einer Rauchwolke");
+  SetProp(P_MMSGOUT, "verschwindet mit Knall und Schwefelduft");
+
+  SetProp(P_DIE_MSG,  " leuchtet kurz auf und sinkt anschliessend zu Boden.\n");
+  SetProp(P_NOCORPSE, 1 );
+  //SetProp(P_MURDER_MSG, "Ich komme wieder!");
+  //SetProp(P_KILL_MSG, "Du hattest keine Chance!");
+  
+  SetProp(P_MAX_HP, 1800);
+
+  AddInfo(DEFAULT_INFO, "ist nur eine Pflanze.\n");
+
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    "Zanthoxylum Clematis kann nichts nehmen.\n" }) );
+
+  SetProp(P_SPELLRATE,95);
+  AddDefaultSpell(8,400,
+    "Zanthoxylum Clematis schlaegt blitzschnell auf alle ihre Feinde ein.\n",
+    "Zanthoxylum Clematis laesst seine Aeste auf @WEN niedersausen.\n",
+    DT_WHIP,([SP_SHOW_DAMAGE:1]));
+    
+  AddSpell(3,400,
+    "Du fuehlst eine heilige Macht die dich schwaecht.\n",
+    "@WER stoehnt vor Schmerzen auf!\n",
+     DT_HOLY,"getunholy",([SP_SHOW_DAMAGE:0]));
+     
+  AddSpell(5,200,
+    "Zanthoxylum Clematis behindert Dich im Kampf.\n",
+    "Zanthoxylum Clematis schlingt seine Aeste um die Arme von @WEM.\n",
+     DT_SQUEEZE,"lessattacks",([SP_SHOW_DAMAGE:1]));
+     
+  AddSpell(7,350,
+    "Zanthoxylum Clematis laesst seine vielen Aeste auf Dich einprasseln.\n",
+    "Zanthoxylum Clematis attackiert @WEN mit all ihren Aesten.\n",
+     DT_WHIP,([SP_SHOW_DAMAGE:1]));
+     
+  AddSpell(4,450,
+    "Du wirst von einem ploetzlichen Windstoss ueberrascht.\n",
+    "Ein ploetzlicher Windstoss schleudert @WEN gegen die Wand.\n",
+    ({DT_SQUEEZE,DT_AIR}),([SP_SHOW_DAMAGE:0]));
+    
+  AddSpell(1,10,
+    "Zanthoxylum Clematis versucht Dich zur Vernunft zu bringen! Gib auf! \n"
+    "Beende den Kampf sofort!\n",
+    "Zanthoxylum Clematis versucht Dich zur Vernunft zu bringen! Gib auf! \n"
+    "Beende den Kampf sofort!\n",
+    DT_MIND,"stopfight",([SP_SHOW_DAMAGE:0]));
+    
+  AddSpell(2,750,
+    "Die Kraefte der Natur vereinigen sich gegen Dich!!\n",
+    "@WER wird von gigantischen Naturkraeften niedergemetzelt!\n",
+    ({DT_FIRE,DT_COLD,DT_WATER,DT_AIR,DT_LIGHTNING,DT_HOLY}),([SP_SHOW_DAMAGE:1]));
+
+  SetChats(3, ({
+    "Die Pflanze bewegt sich grazioes.\n",
+    "Clematis stapft herum.\n"}) );
+    
+  SUID;
+  
+  AddCmd( "beende|beend&kampf|schlacht", "cmd_peace", "Was beenden?");
+}
+
+void die(int poisondeath) 
+{
+  int plant_killed;
+  write_file(LOG "plant+natur.kills",
+    dtime()+": "+TP->QueryProp(P_UID)+" ("+TPN+") killt Zanthoxylum Clematis.\n");
+  //if(IS_WIZARD(TP)||TP->QueryProp(P_TESTPLAYER)!=0) //haut noch nicht hin
+  //{
+    
+    ROOM "gang"->SetProp("plant_killed",1);
+    "/obj/gemmaster"->DistributeGem(5, 0, 1, plant);
+    ::die(poisondeath);
+  //}
+  
+  //else ::die(poisondeath);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  if(killer == TO)
+  {
+    write_file(LOG "plant&natur.deads",
+      dtime()+": Zanthoxylum Clematis killt "+player->QueryProp(P_UID)+
+      ". XP:"+lostexp+"\n");
+  }
+}
+void getunholy(object player, mixed buffer)
+{
+  player->SetProp(P_ALIGN, player->QueryProp(P_ALIGN)-(40+random(20)) );
+  tell_object(player, "Du grinst boese.\n");
+  say(player->Name()+" grinst boese.\n", player);
+}
+
+void lessattacks(object player, int damage, mixed buffer)
+{
+  damage=damage/5;
+  player->ModifySkillAttribute(TO,SA_SPEED,20,5+damage);
+}
+
+void stopfight(object player, int damage, mixed buffer)
+{
+  TO->SetProp(P_DISABLE_SPELLS, 5);
+  TO->SetProp(P_DISABLE_ATTACK, 5);
+}
+
+int cmd_peace()
+{
+  if(!IsEnemy(TP)) {
+   write(BS("Du kaempfst aber gar nicht!"));
+   return 0; }
+   
+  if(plant_hunter==0||member(plant_hunter,TPN)<0) {
+  plant->StopHuntFor(TP, 1);
+  TP->StopHuntFor(plant, 1);
+  write(BS("Du beendest den Kampf."));
+  player_name=player_name+" "+TPN;
+  plant_hunter=explode(player_name, " ");
+  return 1; }
+  
+  write(BS("ARRRG!! DAS WILLST DU NICHT! DU WILLST TOETEN!!!"));
+  return -1;
+}
+
+void init()
+{
+  ::init();
+  
+  if(TP && TP->id("\nangroxistunserheld"))
+  {
+    ROOM "gang"->reset();
+    ::init();
+    ROOM "gang"->Message(BS("Zanthoxylum Clematis geht zurueck in ihren Korb."));
+    plant->remove(1);
+  }
+}

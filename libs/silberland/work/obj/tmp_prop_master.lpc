@@ -1,0 +1,97 @@
+#define NEED_PROTOTYPES
+#include <thing/properties.h>
+#pragma strong_types
+
+nosave mapping oldprops;
+nosave mixed *reset_times;
+
+void create() {
+  if (is_clone(this_object())) {
+    destruct(this_object());
+    return;
+  }
+  oldprops=([]);
+  reset_times=({});
+}
+
+void print_debug_info() {
+  printf("oldprops: %O\nreset_times: %O\n",oldprops,reset_times);
+}
+
+nosave string make_index(object ob, string s) {
+  string res;
+
+  res=((string)(objectp(ob)?file_name(ob):""));
+  res+="##";
+  res+=((string)(stringp(s)?s:""));
+  return res;
+}
+
+nosave void call_next_update() {
+  int dt;
+
+  while (remove_call_out("do_update")!=-1);
+  if (sizeof(reset_times)) {
+    dt=reset_times[0][0];
+    if (dt<=0) dt=5;
+    call_out("do_update",dt);
+  }
+}
+
+nosave void do_update() {
+  int i,tm,max;
+  string index;
+  mixed *val;
+
+  while (remove_call_out("do_update")!=-1) ;
+  call_out("do_update",30); // Zur Sicherheit...
+
+  if (!(max=sizeof(reset_times))) return;
+  tm=time();
+  if (!mappingp(oldprops)) oldprops=([]);
+  for (i=0;(i<max && reset_times[i][0]<=tm);i++) {
+    index=reset_times[i][1];
+    if (!(val=oldprops[index])) continue;
+    if (objectp(val[0]))
+      val[0]->SetProp(val[1],val[2]);
+    oldprops=m_delete(oldprops,index);
+  }
+  reset_times=reset_times[i..];
+  call_next_update();
+}
+
+void SetTmpProp(object ob, string prop, mixed newval, int tm) {
+  string index;
+  mixed oldval;
+  int max,pos,l,r;
+
+  if (!objectp(ob) || !prop || tm<=0) return;
+  oldval=ob->QueryProp(prop);
+  index=make_index(ob,prop);
+  if (!mappingp(oldprops)) oldprops=([]);
+  if (oldprops[index]) {
+    ob->SetProp(prop,newval);
+    return;
+  }
+  oldprops[index]=({ob,prop,oldval});
+
+  if (!(max=sizeof(reset_times)))
+    pos=0;
+  else {
+    l=0;r=max-1;
+    while (l<r) {
+      pos=(l+r)/2;
+      if (tm<reset_times[pos][0])
+        pos=r=pos-1;
+      else
+        pos=l=pos+1;
+    }
+    while (pos>=0 && pos<max && tm<reset_times[pos][0]) pos--;
+  }
+  reset_times=reset_times[0..pos]+({({tm,index})})+reset_times[pos+1..];
+
+  call_next_update();
+  ob->SetProp(prop,newval);
+  // printf("%O\n", reset_times);
+}
+

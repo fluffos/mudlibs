@@ -1,0 +1,119 @@
+inherit "std/npc";
+
+#include <properties.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include "../gaffos.h"
+
+#define QUESTNAME "Goblin im Gaffogarten"
+
+void create() {
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Strunz der kleine, betrunkene Goblin");
+  SetProp(P_LONG,
+    "Vor dir steht ein kleiner Goblin mit rotem, struppigem Fell. Seine Augen sind "
+    "glasig, und er schwankt leicht hin und her, während er sich an einem halbleeren "
+    "Krug gärenden Obsts festklammert. Er sieht nicht besonders freundlich aus, "
+    "und der Geruch von Alkohol umgibt ihn wie eine Wolke.");
+  SetProp(P_NAME, "Strunz");
+  SetProp(P_GENDER, MALE);
+  AddId(({ "goblin", "strunz", "betrunkener goblin" }));
+
+  create_default_npc(3);
+
+  SetProp(P_ARTICLE, 1);
+  SetProp(P_RACE, "Goblin");
+  SetProp(P_SIZE, 50);
+  SetProp(P_WEIGHT, 20000);
+  SetProp(P_ALIGN, -50);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_HANDS, ({" mit seinen krallenbewährten Händen", 20, DT_SLASH}));
+  SetProp(P_HEAL, 3);
+  SetProp(P_AGGRESSIVE, 0);  // Nicht von Natur aus aggressiv
+  SetProp(P_WIMPY, 20);      // Flieht, wenn er stark verletzt wird
+  SetProp(P_NOMAGIC, 0);
+  SetProp(P_RESISTANCE_STRENGTHS, 
+    ([DT_POISON: -0.2, DT_FIRE: 0.3])); // Goblins sind leicht entflammbar, resistent gegen Gift.
+
+  SetProp(P_MSGIN, "torkelt herein");
+  SetProp(P_MSGOUT, "schleppt sich davon");
+  SetProp(P_MMSGIN, "kommt aus dem Unterholz geschlichen");
+  SetProp(P_MMSGOUT, "verschwindet torkelnd ins Unterholz");
+
+  SetProp(P_DIE_MSG, "gibt einen letzten, alkoholgeschwängerten Seufzer von sich und fällt um.\n");
+  SetProp(P_NOCORPSE, 0);
+
+  SetProp(P_SPELLRATE, 0); // Keine Zauber
+  SetChats(3, ({
+    "Strunz nimmt einen großen Schluck aus seinem Krug und grinst breit.\n",
+    "Der Goblin murmelt: \"Das is' mein' Hain, verschwinde!\"\n",
+    "Strunz kichert albern und fällt beinahe um.\n",
+    "Strunz murmelt was von gutem Gaffoschnaps.\n",
+    "Strunz grunzt: Mit Gaffoschnaps kann man gut schlafen!\n"
+  }));
+  SetAttackChats(10, ({
+    "Strunz faucht: \"Das war ein Fehler, Freundchen!\"\n",
+    "Der Goblin holt mit seinem Krug aus und versucht dich zu treffen.\n",
+    "Strunz schreit: \"Mein Obst! MEIN!\"\n"
+  }));
+
+  AddInfo(DEFAULT_INFO, "Strunz versteht dich nicht und grummelt nur.\n");
+  AddInfo(({"schnaps", "gaffoschnaps"}),
+   "Oi! Oi! Strunz will Gaffoschnaps! Lecker! Lecker!", "kreischt: ");
+
+  CLONEME("/p/weapon/club/knueppel");
+  command("zuecke knueppel");
+
+  AddCmd("fessel|fessle&strunz|goblin", "cmd_fesseln", "Wen willst du fesseln?\n");
+}
+
+public int cmd_fesseln() {
+  object seil;
+  if(!QueryProp("sleepy")) {
+    write(BS("So wild wie sich der bewegt klappt das nicht. Da muss dir erst was einfallen!"));
+    return -1;
+  }
+
+  if(!objectp(seil=present("seil", TP))) {
+    write(BS("Aber du hast doch nix zum fesseln dabei! Wie waer's mit einem Seil oder so?"));
+    return -1;
+  }
+
+  if(!TP->QueryQuest(QUESTNAME)) {
+    TP->GiveQuest(QUESTNAME);
+  }
+
+  write(BS("Schnell verschnuerst du den schlafenden Goblin zu einem festen Paket und rufst die Wachen."));
+  say(BS(TPN+" verschnuert den schlafenden Goblin zu einem festen Paket und ruft die Wachen."));
+  tell_room(ENV(TO), BS("Die Gaffowaechter packen den schlafenden Goblin und bringen ihn weg."));
+  TP->command_me("denke Hey! Was ist jetzt mit der versprochenen Belohnung?!");
+  call_out("remove", 0, 1);
+  return 1;
+}
+
+void give_notify(object ob) {
+  if(ob->id("\ngaffo_quest_drink") && !QueryProp("sleepy")) {
+    command_me("sag Oi! Oi! Gaffoschnaps!");
+    command_me("emote trinkt den Schnaps in einem Zug aus und schlaeft gemuetlich ein.");
+    SetProp("sleepy", 1);
+    SetProp(P_CHAT_CHANCE, 0);
+    SetProp(P_NOATTACK, "schlaeft doch friedlich!\n");
+    call_out("wake_up", 300);
+    ob->remove(1);
+    return;
+  }
+
+  ::give_notify(ob);
+  return;
+}
+
+public void wake_up() {
+  command_me("emote streckt sich genuesslich als er wieder aufwacht.");
+  SetProp("sleepy", 0);
+  SetProp(P_CHAT_CHANCE, 3);
+  SetProp(P_NOATTACK, 0);
+  return;
+}

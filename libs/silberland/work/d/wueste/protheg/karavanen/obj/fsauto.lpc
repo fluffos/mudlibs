@@ -1,0 +1,338 @@
+/*
+  Ein Fahrscheinautomat by PROtheG
+  Hope i works ;)
+  31.06.1998:
+  Ich denke er is so halbwegs fertig!
+  kleinere Bugs gibt es aber noch...
+  Mussma suchen ;))
+
+  Generalueberholung am 24 02 2000
+        -""-         am 11 03 2002
+*/
+
+#pragma strong_types;
+
+inherit "std/thing";
+
+#include "../def.h"
+
+#define MAGIERKOSTEN 100
+#define MAGIER 3
+#define SEHERKOSTEN 40
+#define SEHER 2
+#define SPIELERKOSTEN 20
+#define SPIELER 1
+
+nosave int k_gewaehlt, g_einwurf, geld; 
+
+nosave string geldanzeige(string key)
+{
+  return BS("Auf der "+CAP(key)+" steht die Zahl: "+geld);
+}
+
+void create()
+{
+  ::create();
+
+  SetProp(P_SHORT, "Ein Fahrscheinautomat");
+  SetProp(P_LONG, 
+	  BS("Vor Dir steht ein ziemlich grosser Fahrscheinautomat.")+
+	  BS("An der Vorderseite kannst Du einen Muenzschlitz, 3 Knoepfe, "
+	     "ein Schild, eine Anzeige und eine Anleitung erkennen. Weiters "
+	     "siehst du einen Hebel an der Seite und ein Laempchen auf der "
+	     "Deckplatte."));
+
+  SetProp(P_NAME, "Fahrscheinautomat");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_MATERIAL, MAT_METAL);
+
+  SetProp(P_NOGET,
+	  "Du brauchst doch nur einen Fahrschein und nicht gleich den "+
+	  "ganzen Automaten!\n");
+
+  AddId(({"automat","automaten","fahrscheinautomaten","fahrscheinautomat"}));
+
+  AddDetail("deckplatte",
+	    "Die ist oben auf dem Automaten befestigt.");
+
+  AddDetail("laempchen",
+	    "Es leuchtet nicht.");
+
+  AddDetail("hebel",
+	    "Du kannst ihn ziehen.");
+
+  AddDetail(({"schlitz", "muenzschlitz"}), 
+	    "Mit 'wirf x muenzen ein' kannst du Geld einwerfen.");
+
+  AddDetail(({"knopf", "knoepfe"}),
+	    "Da sind 3 Knoepfe:\n"
+	    "Ein Spielerknopf, ein Seherknopf, und ein Magierknopf.");
+
+  AddDetail("spielerknopf",
+	    "Wenn Du ein Spieler bist, solltest du diesen Knopf druecken.");
+
+  AddDetail("seherknopf",
+	    "Wenn Du ein Seher bist, solltest du diesen Knopf druecken.");
+
+  AddDetail("magierknopf",
+	    "Wenn Du ein Magier bist, solltest du diesen Knopf druecken.");
+
+  AddDetail("schild",
+	    "Schilder sind zum Lesen da, nicht zum angucken!");
+
+  AddReadDetail("schild",
+		"Preisuebersicht:\n"
+		"================\n"
+		"Spieler:    "+SPIELERKOSTEN+" Muenzen\n"
+		"Seher  :    "+SEHERKOSTEN+" Muenzen\n"
+		"Magier :   "+MAGIERKOSTEN+" Muenzen\n"
+		"\nSei fair, denn Schwarzfahren zahlt sich nicht aus!\n");
+
+  AddDetail("anleitung",
+	    "Anleitungen sind zum Lesen da, nicht zum betrachten!\n");
+
+  AddReadDetail("anleitung",
+		"Wie kriege ich einen Fahrschein?\n"
+		"================================\n"
+		"1. Checken was ich ueberhaupt bin.\n"
+		"   Moeglichkeiten: Spieler, Seher oder Magier\n"
+		"2. Ich druecke also den mir passenden Knopf.\n"
+		"3. Ich lese das Schild, damit ich weiss, wieviel Geld\n"
+		"   ich einwerfen muss.\n"
+		"4. Ich werfe das Geld ein.\n"
+		"5. Ich ziehe den Hebel und erhalte meinen Fahrschein.\n\n"
+		"PS: Falls ich keinen bekomme, ueberpruefe ich alles von "
+		"vorne.\n");
+  AddSpecialDetail(({"geldanzeige","anzeige"}), "geldanzeige");
+
+  AddCmd(({"zieh","ziehe"}), "zieh_hebel");
+  AddCmd(({"drueck","druecke"}), "drueck_knopf");
+  AddCmd(({"wirf","werfe"}), "geld_einwerfen");
+
+  k_gewaehlt=0;
+  g_einwurf=0;
+  geld=0;
+
+  SUID;
+}
+
+nosave int zieh_hebel(string str)
+{
+  int fake;
+
+  notify_fail(BS("Was willst Du denn ziehen?"));
+  if(!str) return 0;
+
+  if((str!="hebel") && (str!="an hebel")) return 0;
+
+  if(!k_gewaehlt)
+    if(!g_einwurf)
+     return write(BS("Du musst zuerst Geld einwerfen und dann einen der "
+		     "Knoepfe druecken!")), 1;
+    else
+      return write(BS("Du hast vergessen, einen der Knoepfe zu druecken!")), 1;
+
+  if(!g_einwurf)
+    return write(BS("Du musst erst noch Geld einwerfen!")), 1;
+  
+  switch(k_gewaehlt)
+    {
+    case MAGIER  : if(!IS_WIZARD(TP)) fake=1;
+    case SEHER  : if(!IS_SEER(TP)) fake=1;
+    default : fake=0;
+    }
+  
+  if(fake)
+    {
+      write("Du ziehst an dem Hebel und der Automat beginnt zu rattern...\n"
+	    "Doch dann bleibt er abrupt stehen!\n");
+
+      say(TPN+" zieht an einem Hebel und der Automat beginnt zu "
+	  "rattern...\nDoch dann bleibt er abrupt stehen!\n", ({TP}));
+
+      write_file(LOG "automat", TP->Name()+" versucht einen Fake ("+
+		 k_gewaehlt+").\n");
+
+      k_gewaehlt=0;
+      g_einwurf=0;
+      geld=0;
+      
+      return 1;
+    }
+  else
+    {
+      call_out("get_fschein", 3);
+
+      write(BS("Du ziehst an dem Hebel und der Automat beginnt zu rattern."));
+
+      say(BS(TPN+" zieht an einem Hebel und der Automat beginnt zu rattern."),
+	  ({TP}));
+
+      return 1;
+    }
+}
+
+void get_fschein()
+{
+  object fs;
+  
+  if((!ENV(TP)) || (!MENV)) return;
+  
+  if(ENV(TP)!=MENV) return;
+
+  write(BS("Der Automat spuckt Dir einen Fahrschein aus, den Du sofort "
+	   "einsteckst."));
+  
+  say(BS(TPN+" steckt sich einen Fahrschein ein."));
+
+  fs=clone_object(OBJ "fschein");
+
+  fs->SetOwner(TP);
+
+  fs->move(TP, M_NOCHECK);
+
+  AddDetail("laempchen",
+	    "Es leuchtet nicht.\n");
+
+  switch(k_gewaehlt)
+    {
+    case SPIELER: if(geld > SPIELERKOSTEN) 
+      {
+	TP->AddMoney(geld-SPIELERKOSTEN);
+	
+	write(BS("Du hoerst das Wechselgeld aus dem Automaten klimpern und "
+		 "steckst es gleich ein."));
+      }
+      break;
+      
+    case SEHER: if(geld > SEHERKOSTEN) 
+      {
+	TP->AddMoney(geld-SEHERKOSTEN); 
+
+	write(BS("Du hoerst das Wechselgeld aus dem Automaten klimpern und "
+		 "steckst es gleich ein."));
+      }
+    break;
+
+    case MAGIER: if(geld > MAGIERKOSTEN) 
+      {
+	TP->AddMoney(geld-MAGIERKOSTEN);	
+
+	write(BS("Du hoerst das Wechselgeld aus dem Automaten klimpern und "
+		 "steckst es gleich ein."));
+      }
+    }
+
+  k_gewaehlt=0;
+  g_einwurf=0;
+  geld=0;
+  
+  return;
+}
+
+nosave int drueck_knopf(string str)
+{
+  notify_fail(BS("Was willst Du druecken?"));
+  if(!str) return 0;
+  
+  switch(str)
+    {
+    case "knopf": 
+      return write("Welchen Knopf willst Du denn druecken?\n"
+		   "Den Magierknopf, den Seherknopf, oder den "
+		   "Spielerknopf?\n"), 1; 
+      break;
+
+    case "magierknopf": 
+      if(IS_WIZARD(TP)) 
+	{
+	  write("Du drueckst den Magierknopf.\n"
+		"Ploetzlich leuchtet ein Laempchen rot auf.\n");
+	  
+	  say(BS(TPN+" drueckt einen Knopf und ein rotes Laempchen "
+		 "leuchtet auf."));
+
+	  k_gewaehlt=MAGIER;
+
+	  AddDetail("laempchen", "Es leuchtet rot.");
+	}
+      else
+	write(BS("Du bist doch gar kein Magier!")); 
+      
+      return 1;      
+      break;
+
+    case "seherknopf": 
+      if(IS_WIZARD(TP))
+	return write(BS("Du bist doch kein Seher mehr!")), 1;
+      
+      if(IS_SEER(TP))
+	{
+	  write("Du drueckst den Seherknopf.\n"
+		"Ein Laempchen leuchtet gelb auf.\n");
+
+	  say(BS(TPN+" drueckt einen Knopf und ein gelbes Laempchen "
+		 "leuchtet auf."));
+	  
+	  k_gewaehlt=SEHER;
+	  
+	  AddDetail("laempchen", "Es leuchtet gelb.");
+	}
+      else
+	write(BS("Du bist doch gar kein Seher!"));
+
+      return 1;
+      break;
+      
+    case "spielerknopf": 
+      if((IS_SEER(TP)) || (IS_WIZARD(TP)))
+	return write(BS("Du bist doch kein Anfaenger mehr!")), 1;
+
+      write("Du drueckst den Spielerknopf.\n"
+	    "Ploetzlich leuchtet ein Laempchen gruen auf.\n");
+
+      say(BS(TPN+" drueckt einen Knopf und ein gruenes Laempchen "
+	     "leuchtet auf."));
+      
+      k_gewaehlt=SPIELER;
+
+      AddDetail("laempchen", "Es leuchtet gruen.");
+      
+      return 1;
+      break;
+    }
+}
+  
+nosave int geld_einwerfen(string str)
+{
+  int einwurf;
+  
+  notify_fail(BS("Was willst Du einwerfen?"));
+  if(!str) return 0;
+  
+  if(sscanf(str, "%d muenzen ein", einwurf)!=1) return 0;
+
+  if(einwurf < 0) einwurf=0;
+
+  if(PL->QueryMoney() < einwurf)
+    return write(BS("Soviel Geld hast Du ja gar nicht!")), 1;
+
+  if(!einwurf)
+    return write(BS("Das ist ja sowas von sinnvoll!")), 1;
+      
+  write(BS("Du wirfst "+einwurf+" Muenze"+(einwurf==1 ? "": "n")+" ein."));
+  
+  PL->AddMoney(-einwurf);
+  
+  geld=geld+einwurf;
+  
+  if(((k_gewaehlt==MAGIER)  && (geld >= MAGIERKOSTEN)) || 
+     ((k_gewaehlt==SEHER)   && (geld >= SEHERKOSTEN))  ||
+     ((k_gewaehlt==SPIELER) && (geld >= SPIELERKOSTEN)))
+    {
+      write(BS("Jetzt muesstest Du eigentlich schon genug eingeworfen "
+	       "haben!"));
+      g_einwurf=1;
+    }
+  return 1;
+}

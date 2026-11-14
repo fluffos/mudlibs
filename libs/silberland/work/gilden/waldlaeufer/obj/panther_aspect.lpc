@@ -1,0 +1,145 @@
+inherit "std/thing";
+#include "../def.h"
+#include "/spellbooks/waldlaeufer/std/restrictions.lpc"
+
+int chance;
+object caster, *registeredEnemies;
+mapping nextHideTry;
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, 0 );
+  SetProp(P_LONG,  0 );
+  SetProp(P_NAME, 0);
+  SetProp(P_INVIS, 1);
+  SetProp(P_GENDER, FEMALE); 
+  AddId(PANTHER_ASPECT_ID);
+  SetProp(P_MATERIAL, MAT_MAGIC );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_SIZE, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NEVERDROP, 1);
+
+  nextHideTry = ([ ]);
+  registeredEnemies = ({ });
+}
+
+public void fail(object _caster, int success) {
+    caster = _caster;
+
+    if(success < -3000) {
+        caster->SetProp(P_DISABLE_ATTACK, -1*(success/500));
+        tell_object(caster, BS("Du wirst friedlich wie ein Schmusekaetzchen."));
+    }
+
+    call_out("end", -1*(success/500));
+    return;
+}
+
+public void Setup(object _caster, int abil, int success) {
+    int duration;
+
+    caster = _caster;
+
+    duration = caster->QueryAttribute(A_DEX)*2 + abil/333 + success/333;
+    duration = SPELL_DAMAGE_BONUS(caster, "aspekt des panthers", duration);
+    chance = abil/125 + success/500;
+
+    caster->Set(P_NOAGGRESSIVE, symbol_function("noattack", TO), F_QUERY_METHOD);
+    caster->Set(P_MSGIN, symbol_function("msgin", TO), F_QUERY_METHOD);
+    caster->Set(P_MSGOUT, symbol_function("msgout", TO), F_QUERY_METHOD);
+
+
+    tell_object(caster, BS("Fauchend faehrt der Geist des Tierkoenigs der Panther in dich ein. Deine "
+                          "Schritte werden vorsichtig und leise."));
+    tell_room(ENV(caster), BS(caster->Name(WER)+" schleicht nun wie ein Panther in der Nacht."), ({caster}));
+
+    pDebug(caster, sprintf("panther_aspect :: duration=%d chance=%d\n", duration, chance));
+
+    set_heart_beat(1);
+
+    call_out("end", duration);
+}
+
+public int isNotPresentAtCaster(object ob) {
+    return member(caster->PresentEnemies(), ob) < 0;
+}
+
+public void heart_beat() {
+    object *enemies;
+    int i;
+
+    registeredEnemies -= ({ 0 });
+
+    if(caster->InFight()) {
+        enemies = caster->PresentEnemies();
+        for(i=0; i<sizeof(enemies); ++i) {
+            if(member(registeredEnemies, enemies[i]) < 0) {
+                registeredEnemies += ({ enemies[i] });
+                pDebug(caster, sprintf("panther_aspect :: newEnemy=%O n=%d\n", enemies[i], sizeof(enemies)));
+            }
+        }
+    } else {
+        enemies = filter_array(registeredEnemies, "isNotPresentAtCaster");
+        if(sizeof(enemies) <= 0) return;
+
+        nextHideTry = m_delete(nextHideTry, 0);
+        pDebug(caster, sprintf("panther_aspect :: tryHide huntingEnemies=%O\n", enemies));
+
+        for(i=0;i<sizeof(enemies);++i) {
+            if(!objectp(enemies[i])) continue;
+            if(member(nextHideTry, enemies[i]) && nextHideTry[enemies[i]] > time()) continue;
+            pDebug(caster, sprintf("panther_aspect :: tryHide chance=%d enemy=%O\n", chance, enemies[i]));
+            if(random(100) < chance) {
+                tell_object(caster, BS("Du bist nun vor "+enemies[i]->Name(WER)+" versteckt."));
+                enemies[i]->StopHuntFor(caster, 1);
+                caster->StopHuntFor(enemies[i], 1);
+                registeredEnemies -= ({ enemies[i] });
+            } else {
+                nextHideTry[enemies[i]] = time() + 30 + random(60);
+            }
+        }
+    }
+
+    return;
+}
+
+public int noattack() {
+    int r, maxR;
+
+    maxR = 120-caster->QueryAttribute(A_DEX);
+    r = random(maxR);
+
+    pDebug(caster, sprintf("panther_aspect :: chance=%d roll=%d maxRoll=%d\n", chance, r, maxR));
+
+    if(r < chance && random(300)) {
+        return 1;
+    }
+
+    tell_object(caster, BS("Du wurdest entdeckt!"));
+    return 0;
+}
+
+public string msgin() {
+    return "schleicht herein";
+}
+
+public string msgout() {
+    return "schleicht";
+}
+
+public string extra_look() {
+    return CAP(caster->QueryPronoun())+" schleicht wie ein wildes Tier";
+}
+
+public void end() {
+    tell_object(caster, BS("Der Geist des Panthers verlaesst dich wieder."));
+    remove(1);
+    return;
+}

@@ -1,0 +1,678 @@
+inherit "std/mnpc";
+
+#include <defines.h>
+#include <moredef.h>
+#include <moving.h>
+#include <mnpc.h>
+#include <properties.h>
+#include "../def.h"
+#include <combat.h>
+#include <new_skills.h> 
+
+#pragma strong_types
+
+#define P_WALKER_TYPE "walker_type"
+#define P_WALKER_WALKS "walker_walks"
+#define P_WALKER_DIRECTION "walker_direction"
+#define P_WALKER_PATH "walker_path"
+#define P_WALKER_POS "walker_pos"
+#define P_WALKER_NOWALK "walker_nowalk"
+#define P_WALKER_WAIT "walker_wait"
+#define P_WALKER_CHATS "walker_chats"
+#define P_WALKER_CHATFREQ "walker_chatfreq"
+
+#define FORWARD 0
+#define REVERSE 1
+
+
+#define TARGET_TROLL "trollager"
+#define TARGET_PALADIN "sturmfels"
+#define TARGET_HAENDLER "midas"
+
+#define TYPES ({ "paladin", "troll" })
+#define RACES ({ "mensch", "zwerg", "troll", "elf", "hobbit" })
+
+
+#define ROUTE 1
+#define PATH 0
+#define DST 1
+
+#define LIBDB "/p/service/iwo/lib/db/db"
+
+/*
+#define EQUIP ([ "troll": \
+                 ({ "/d/gebirge/speedy/trollager/weapon/trolldolch", \
+                    "/d/gebirge/speedy/trollager/weapon/trollkeule", \
+                    "/p/weapon/club/steinkeule", \
+                    "/p/weapon/club/dornenkeule", \
+                    "/p/weapon/club/
+                 }); \
+                 ({ "
+*/
+
+#define DB(x) command_me(sprintf("sag  %s", x));
+
+#define BSA(x,y) break_string(x, 78, y)
+
+
+#include "walker_ways.lpc"
+
+
+void SetupTroll();
+void SetupPaladin(string race);
+void SetupHaendler(string race);
+void MakeMeWalk(string src, string dst);
+void SetupStations();
+string *GetRoute(string src, string dst);
+void Walk();
+
+string *stations = ({});
+mapping known_rooms = ([]);
+mapping cache = ([]);
+
+int is_paladin;
+
+void create()
+{
+  string type;
+  string race;
+  
+  if (!IS_CLONE(TO)) return;
+  ::create();
+
+  set_living_name("walker");
+  AddId("walker", "\nwalker");
+  
+  type = TYPES[random(sizeof(TYPES))];
+
+  SetProp(P_WALKER_TYPE, type);
+  
+  if (type == "troll") SetupTroll();
+  
+  race = RACES[random(sizeof(RACES))];
+  
+  switch (type)
+    {
+      case "paladin": SetupPaladin(race); break;
+      case "haendler": SetupHaendler(race); break;
+    }
+
+  //ME->move("/d/gebirge/iwo/arwenock/room/room_A-04", M_NOCHECK);
+
+  //MakeMeWalk("arwenock");
+
+  SetupStations();
+  
+  SetProp(P_WALKER_NOWALK, 0);
+
+  SetProp(P_WALKER_WAIT, random(10)+5);
+
+  SetProp(P_WALKER_CHATFREQ, random(90)+10);
+
+  LIBDB->DistributeLib("gebirge", 20);
+  LIBDB->DistributeLib("ebene", 20);
+  LIBDB->DistributeLib("rassen", 20);
+  LIBDB->DistributeLib("regionen", 20);
+  LIBDB->DistributeLib("ebene", 20);
+  LIBDB->DistributeLib("gilden", 20);
+  LIBDB->DistributeLib("allgemein", 20);
+  
+ 
+  call_out("wandern", 10);  
+}
+
+void SetupStations()
+{
+  string *srcs;
+  string *dsts;
+  int i;
+  
+  dsts = ({});
+  
+  srcs = m_indices(ways);
+  
+  for (i=0;i<sizeof(srcs);i++)
+    {
+      dsts += m_indices(ways[srcs[i], DST]);
+      known_rooms += ([ ways[srcs[i], PATH]: srcs[i] ]);
+    }
+    
+  stations = srcs + dsts;
+
+}
+
+void SetupTroll()
+{
+  int age;
+  int gender;
+  string long;
+  
+  age    = random(20)+20;
+  gender = random(2)+1;
+  
+  create_default_npc(age);
+  
+  SetAttribute(A_INT, -3);
+
+  SetProp(P_MAX_SP, 0);
+
+  SetProp(P_SIZE, age*10);
+  
+  SetProp(P_HANDS, ({" mit kraeftigen Trollhaenden", age*10 ,DT_BLUDGEON}) );
+  
+  SetProp(P_RACE, "Troll");
+  
+  SetProp(P_ALIGN, 400-random(1000));
+  
+  SetProp(P_ARTICLE, 1);
+  
+  SetProp(P_GENDER, gender);
+  
+  switch(age)
+    {
+      case 20..25:
+        SetProp(P_NAME_ADJ, "jung");
+	break;
+      case 26..35:
+        SetProp(P_NAME_ADJ, "staemmig");
+        clone_object("/d/gebirge/speedy/trollager/armour/trollruestung")->move(ME, M_NOCHECK);
+        AddId("Axtexperte");
+        AddId("Keulenexperte");
+        AddId("Kettenexperte");
+      case 36..40:
+        SetProp(P_NAME_ADJ, "riesig");
+        clone_object("/d/gebirge/speedy/trollager/armour/schwtrollruestung")->move(ME, M_NOCHECK);
+        AddId("Axtmeister");
+        AddId("Keulenmeister");
+        AddId("Kettenmeister");
+      default:
+        switch(random(3))
+          {
+            case 0:
+              clone_object("/p/weapon/club/dornenknueppel")->move(ME, M_NOCHECK);
+              command_me("zuecke dornenknueppel");
+              break;
+            case 1:
+              clone_object("/p/weapon/chain/morgenstern")->move(ME, M_NOCHECK);
+              command_me("zuecke morgenstern");
+              break;
+            default:
+              clone_object("/p/weapon/axe/steinbeil")->move(ME, M_NOCHECK);
+              command_me("zuecke steinbeil");
+          }
+    }
+
+  SetProp(P_NAME, gender>1?"Trollfrau":"Troll");
+  
+  SetProp(P_SHORT, TO->Name(WER));
+
+  AddId("troll");
+  if (gender>1) AddId(({"frau","trollfrau","walker","\nwalker"}));
+
+  long = "Du siehst ein";
+  gender>1?long = long + "e ":long = long + "en ";
+  long = sprintf("%s%s", long, QueryProp(P_NAME_ADJ)[0]);
+  gender>1?long = long + "e Trollfrau. ":long = long + "en Troll. ";
+  long = long + "Die maechtigen Trollhaende koennen Dir "
+    + "ernsthafte Verletzungen zufuegen. Du solltest "
+    + "Dich nicht mit ";
+  gender>1?long = long + "ihr ":long = long + "ihm ";
+  long = long + "anlegen.";
+  
+  SetProp(P_LONG, long);
+
+  SetProp(P_WALKER_CHATS, ({ "Heascht, hier isses fad - gemma",
+                             "Wo iss nur da Laden?",
+                             "Irgendwo muss doch a Kneipe sein..",
+                             "Gibts nier nix zum Essen?",
+                             "Wo hab mi i denn da verrent?",
+                             "I latschma de Plattfuess' wund",
+                             "Wasfuer a Tag" }));
+  SetProp(P_MSGIN, "trampelt herein");
+  SetProp(P_MSGOUT, "trampelt");
+  SetProp(P_MMSGIN, "erhebt sich von einem Stein am Wegesrand.");
+}
+
+
+void SetupPaladin(string race)
+{
+  int level;
+  int gender;
+  object ob;
+
+  gender = random(2)+1;
+
+  is_paladin = 1;
+
+  SetProp(P_GENDER, gender);
+  SetProp(P_RACE, CAP(race));
+
+  SetProp(P_ARTICLE, 1);
+
+  level = random(30)+10;
+
+  //level = 29;
+
+  create_default_npc(level);
+
+  AddId("paladin");
+
+  gender>1?AddId("knappin"):AddId("knappe");
+
+  SetProp(P_ALIGN, random(200)+800);
+
+  SetProp(P_MMSGIN, "erhebt sich von einem Stein am Wegesrand.");
+
+  SetProp(P_WALKER_CHATS, ({ "Bei Dusty! Wo bin ich hier?",
+                             "Frueher war alles anders...",
+                             "Was fuer ein schlechtes Schwert...",
+                             "Jeden Tag eine gute Tat!",
+                             "Warum hat Iwo mir das angetan?" }));
+
+  switch(level)
+    {
+      case 10..17:
+        gender>1?SetProp(P_NAME, "Knappin"):SetProp(P_NAME, "Knappe");
+        if (gender>1)
+            SetProp(P_SHORT, "Eine "+QueryProp(P_NAME)+" der Paladine");
+        else
+            SetProp(P_SHORT, "Ein "+QueryProp(P_NAME)+" der Paladine");
+        clone_object("/p/armour/helm/lederhelm")->move(ME,M_NOCHECK);
+        clone_object("/p/armour/shield/kupferschild")->move(ME,M_NOCHECK);
+        clone_object("/p/armour/armour/lederruestung")->move(ME, M_NOCHECK);
+        clone_object("/p/armour/boots/lederstiefel")->move(ME,M_NOCHECK);
+        clone_object("/p/armour/trousers/hose")->move(ME,M_NOCHECK);
+        clone_object("/p/weapon/sword/kurzschwert")->move(ME,M_NOCHECK);
+        command_me("trage alles");
+        command_me("zuecke schwert");
+        break;
+      case 33..40:
+        SetProp(P_NAME, "Paladin");
+        if (gender>1)
+            SetProp(P_SHORT, "Eine legendaere "+QueryProp(P_NAME));
+        else
+            SetProp(P_SHORT, "Ein legendaerer "+QueryProp(P_NAME));
+        SetProp(P_NAME_ADJ, "legendaer");
+        clone_object("/gilden/paladine/armour/p_helm.lpc")->move(ME,M_NOCHECK);
+        clone_object("/p/armour/armour/eisenpanzer")->move(ME,M_NOCHECK);
+        clone_object("/p/armour/shield/eisenschild")->move(ME,M_NOCHECK);
+        clone_object("/p/armour/boots/lederstiefel")->move(ME,M_NOCHECK);
+        clone_object("/p/armour/trousers/hose")->move(ME,M_NOCHECK);
+        ob = clone_object("/d/ebene/obj/waffe/kampfschwert");
+        ob->move(ME,M_NOCHECK);
+        ob->SetProp(P_WC_BONUS, (["walker":400]));
+        command_me("trage alles");
+        command_me("zuecke schwert");
+        SetProp(P_SPELLRATE, 20);
+        AddSpell(5, 1, "", "", DT_SLASH, "pal_heiligengebet", ([SP_SHOW_DAMAGE:1]));
+        AddSpell(4, 1, "", "", DT_SLASH, "pal_zielattacke", ([SP_SHOW_DAMAGE:1]));
+        break;
+      default:
+        SetProp(P_NAME, "Paladin");
+        if (gender>1)
+            SetProp(P_SHORT, "Eine erfahrene "+QueryProp(P_NAME));
+        else
+            SetProp(P_SHORT, "Ein erfahrener "+QueryProp(P_NAME));
+        SetProp(P_NAME_ADJ, "erfahren");
+        clone_object("/gilden/paladine/armour/p_helm.lpc")->move(ME,M_NOCHECK);
+        clone_object("/p/armour/armour/eisenpanzer")->move(ME,M_NOCHECK);
+        clone_object("/p/armour/shield/eisenschild")->move(ME,M_NOCHECK);
+        clone_object("/p/armour/boots/lederstiefel")->move(ME,M_NOCHECK);
+        clone_object("/p/armour/trousers/hose")->move(ME,M_NOCHECK);
+        ob = clone_object("/p/weapon/sword/langschwert");
+        ob->move(ME,M_NOCHECK);
+        ob->SetProp(P_WC_BONUS, (["walker":300]));
+        command_me("trage alles");
+        command_me("zuecke schwert");
+        SetProp(P_SPELLRATE, 20);
+        AddSpell(5, 1, "", "", DT_SLASH, "pal_heiligengebet", ([SP_SHOW_DAMAGE:1]));
+    } 
+
+  SetProp(P_LONG, "Mit Paladinen sollte man generell nicht "
+    "scherzen. Sie sind zwar im Dienste des Guten unterwegs, "
+    "sind aber nicht gerade sanft mit dem Schwert zu denen, "
+    "die ihnen schaden wollen.");
+
+}
+
+
+void pal_heiligengebet(object enemy, int damage, mixed dam_type)
+{
+
+  if (QueryProp(P_SP)<30) return;
+
+  TP->AddSp(-30);
+
+  command_me("ziehe schild aus");
+  command_me("steck schwert weg");
+
+  tell_room(ENV(ME), BSA(sprintf("DUSTY! Erhoere mich "
+     + "und strafe %s mit Deiner Macht!\n", enemy->name(WEN)),
+    TO->Name(WER)+ " ruft: "));
+  
+  if (random(100)<50+QueryProp(P_LEVEL))
+    {
+      tell_room(ENV(ME), BS(sprintf("Blitz zuckt "
+        "aus der Hand von %s und trifft %s!", TO->name(WEM),
+         enemy->name(WEN))), ({ enemy }));
+      tell_object(enemy, BS(sprintf("Ein Blitz zuckt "
+        "aus der Hand von %s und trifft Dich", TO->name(WEM))));
+      enemy->Defend(random(150)+150, DT_HOLY, 
+        ([SP_NAME:"heiligengebet", SP_SHOW_DAMAGE:1]),TO);
+    }
+
+  command_me("trage schild");
+  command_me("zuecke schwert");
+}
+
+
+void pal_zielattacke(object enemy, int damage, mixed dam_type)
+{
+
+  if (!QueryProp(P_WEAPON)) return;
+  if (QueryProp(P_SP)<50) return;
+
+  TP->AddSp(-50);
+
+  //command_me("ziehe schild aus");
+  //command_me("steck schwert weg");
+
+  tell_room(ENV(ME), BS(sprintf("%s ruft: DUSTY STEH MIR BEI!!", TO->Name(WER))));
+  tell_room(ENV(ME), BS(TO->Name(WER) + " attackiert " +
+    enemy->name(WEN)+"!"), ({ enemy }));
+  tell_object(enemy, BS(TO->Name(WER) + " attackiert Dich!"));
+  
+  if (random(100)<50+QueryProp(P_LEVEL))
+    {
+      tell_room(ENV(ME), BS("Mit goettlicher Wucht dringt die "
+        + "Waffe von " + TO->name(WEM) + " in "
+        + enemy->Name(WEN) + " ein!!"), ({ enemy }));
+      tell_object(enemy, BS("Mit goettlicher Wucht dringt die "
+        + "Waffe von " + TO->name(WEM) + " in Dich ein!!"));
+ 
+      enemy->Defend(random(200)+600, QueryProp(P_WEAPON)->QueryProp(P_DAM_TYPE), 
+        ([SP_NAME:"zielattacke", SP_SHOW_DAMAGE:1]),TO);
+    }
+  else
+    {
+      tell_room(ENV(ME), BS(enemy->Name(WER) + " weicht geschickt aus. "
+        + TO->Name(WER) + " verfehlt " + enemy->name(WEN) + "."),
+        ({ enemy }));
+      tell_object(enemy, BS("Du weichst geschicht aus. "
+        + TO->Name(WER) + " verfehlt Dich."));
+    }
+
+  //command_me("trage schild");
+  command_me("zuecke schwert");
+}
+
+/*
+string *ReversePath(string *path)
+{
+  string *rpath;
+  int i;
+  
+  DB("ReversePath");
+  
+  rpath = ({});
+  
+  for (i=sizeof(path); i>0; i--)
+    rpath += ({ path[i-1] });
+    
+  return rpath;
+}
+*/
+
+mixed *SearchRoute(string src, string dst, int depth, string *steps)
+{
+  mixed *myroute;
+  mixed *froute;
+  string *srcs;
+  string *dsts;
+  int i,j, found;
+  
+  froute = ({});
+  srcs = ({});
+  dsts = ({});
+  
+  if (depth>10) return 0;
+  
+  // Direct route forward
+  if (member(ways, src) && member(ways[src, DST], dst))
+      return ways[src, DST][dst];
+
+/*
+  // Direct route reverse
+  if (member(ways, dst) && member(ways[dst, DST], src))
+      return ReversePath(ways[dst, DST][src]);
+*/      
+  dsts = m_indices(ways[src, DST]);
+
+  dsts -= ({ src });
+  dsts -= steps;
+  
+   for (i=0; i < sizeof(dsts); i++)
+    {
+      froute = SearchRoute(dsts[i], dst, depth+1, steps + ({ dsts[i] }));
+      if (sizeof(froute)>0)
+        {
+	  myroute = GetRoute(src, dsts[i]);
+	  return myroute + froute;
+	}
+    }
+
+  return ({});
+}
+
+
+string *GetRoute(string src, string dst)
+{
+  string *path;
+  string *tpath;
+  int i;
+  string *a_h;
+  int found;
+  string *dsts;
+
+  path  = ({});
+  tpath = ({});
+  
+
+  // Direct route forward
+  if (member(ways, src) && member(ways[src, DST], dst))
+      return ways[src, DST][dst];
+
+  // Cached?
+  if (member(cache, sprintf("%s-%s", src, dst)))
+    {
+      path = ({ "sag Aah, den Weg kenn ich" }) + cache[sprintf("%s-%s", src, dst), 0];
+      return path;
+    }
+
+
+/*
+  // Direct route reverse
+  if (member(ways, dst) && member(ways[dst, DST], src))
+      return ReversePath(ways[dst, DST][src]);  
+*/
+  // Looks bad, now check if src and dst exit
+  if (member(stations, src)<0) return ({ "sag Start existiert nicht" });
+  if (member(stations, dst)<0) return ({ "sag Ziel existiert nicht" });
+  
+  
+  // Now tree search... this is very, VERY expensive!!!
+  dsts = m_indices(ways[src, DST]);
+  
+  // Now for each destination test all destinations
+  for (i=0;i<sizeof(dsts);i++)
+    {
+      path = SearchRoute(dsts[i], dst, 0, ({ src, dsts[i] }));
+      if (sizeof(path)>0) 
+        {
+	  tpath = ways[src, DST][dsts[i]];
+	  break;
+	}
+    }
+  
+  //path = SearchRoute(src, dst, 0);
+
+  if (!sizeof(path)>0) return ({ "sag Keine Route!" });
+
+  path += ({ "sag Ah, endlich da!" });
+
+  cache += ([ sprintf("%s-%s", src, dst): tpath + path ]);
+
+  //DB(sprintf("%O \n\n tpath: %O", path, tpath));
+  
+  return tpath + path;
+}
+
+int wandern()
+{
+  Walk();
+  return 1;
+}
+
+
+void StartMnpc()
+{
+  string *hp;
+  SetProp(P_MNPC_FLAGS, MOV_OUTDOORS + MOV_INDOORS + MOV_SPECIAL + MOV_MOVES);
+  SetProp(P_MNPC_WAIT, random(20)+5);
+  hp = explode(file_name(ENV(ME)), "/");
+  hp -= ({ hp[sizeof(hp)-1] });
+  SetProp(P_MNPC_AREA, sprintf("/%s", implode(hp, "/")));
+  SetProp(P_WALKER_WALKS, 0);
+  SetProp(P_MNPC_DEFAULTROOM, file_name(ENV(ME)));
+  SetProp(P_WALKER_NOWALK, 1);
+  call_out("StopNowalk", 30);
+  return (void) ::wandern();
+}
+
+
+void Walk()
+{
+  int index;
+  string cmd;
+  string *path;
+  string *hp;
+  string *dsts;
+  string mypos;
+
+  while (remove_call_out("Walk") != -1);
+
+
+  if (pointerp(QueryProp(P_WALKER_CHATS)) 
+    && random(100)>=QueryProp(P_WALKER_CHATFREQ))
+    command_me(sprintf("sag %s", 
+      QueryProp(P_WALKER_CHATS)[random(sizeof(QueryProp(P_WALKER_CHATS)))]));
+
+  if (QueryProp(P_WALKER_WALKS) == 0)
+    {
+      if (QueryProp(P_WALKER_NOWALK)==0)
+        {
+          if (member(known_rooms, file_name(ENV(ME))))
+            {
+              SetProp(P_MNPC_FLAGS, 0);
+              mypos = known_rooms[file_name(ENV(ME)),0];
+              dsts = fqdsts - ({ mypos });
+              return (void) MakeMeWalk(mypos, dsts[random(sizeof(dsts))]);
+            }
+        }
+     if (!(QueryProp(P_MNPC_FLAGS) & MOV_MOVES))
+       StartMnpc(); 
+
+     return (void) ::wandern();
+    }
+
+  
+  index = SetProp(P_WALKER_POS, QueryProp(P_WALKER_POS)+1)-1;
+  
+  path = QueryProp(P_WALKER_PATH);
+  
+  if (index >= sizeof(path))
+    return (void) StartMnpc();
+
+  cmd = path[index];     
+  
+  if (!command_me(cmd))
+    {
+      command_me("sag Ui, da hats was. I hab mi verrrent...");
+      return (void) StartMnpc();
+    }
+
+  call_out("Walk", QueryProp(P_WALKER_WAIT)
+                   + random(QueryProp(P_WALKER_WAIT)));
+}
+
+
+void MakeMeWalk(string src, string dst)
+{
+  string *path;
+  string *walkcmds;
+
+  path = GetRoute(src, dst);
+
+  SetProp(P_WALKER_WALKS, 1);
+  SetProp(P_WALKER_PATH, path);
+  SetProp(P_WALKER_POS, 0);    
+
+  Walk();
+}
+
+
+void Defend(int dam, mixed dam_type, mixed spell, object enemy)
+{
+  int elev;
+
+  elev = enemy->QueryProp(P_LEVEL);
+
+  if (elev < 15 && QueryProp(P_LEVEL)>elev+5)
+  {
+    tell_object(enemy, BS(TO->Name(WER) + 
+      " laesst sich von Dir nicht aus der Ruhe bringen."));
+
+    tell_room(ENV(ME), BS(TO->Name(WER) + " laesst sich von " +
+      enemy->name(WEM) + " nicht aus der Ruhe bringen."), ({ enemy }));
+
+    enemy->StopHuntFor(ME, 1);
+    ME->StopHuntFor(enemy, 1);
+    return;
+  }
+  if (QueryProp(P_WALKER_TYPE)=="paladin")
+    catch("/gilden/paladine/master/npcmaster"->AddFeind(enemy));
+  return (void) ::Defend(dam, dam_type, spell, enemy);   
+}
+
+
+void init()
+{
+  int pala_enemy;
+
+  ::init();
+  if (TP && TP->id("walker"))
+    if (TP->QueryProp(P_WALKER_TYPE) == QueryProp(P_WALKER_TYPE))
+       AddDefender(TP);
+  if (TP && QueryProp(P_WALKER_TYPE) == "paladin")
+    {
+      catch(pala_enemy = 
+        "/gilden/paladine/master/npcmaster"->IsPaladinEnemy(TP));
+      if (pala_enemy) Kill(TP);
+    }
+
+}
+
+
+void InformDefend(object enemy)
+{
+  int elev;
+  elev = enemy->QueryProp(P_LEVEL);
+  if (elev < 15 && QueryProp(P_LEVEL)>elev+5) return;
+  Kill(enemy);
+}
+
+
+void StopNowalk()
+{
+  SetProp(P_WALKER_NOWALK, 0);
+}

@@ -1,0 +1,987 @@
+// z_17erschluessel
+// Amulett der Zechpreller
+// 1997-08-03  Angrox@SilberLand
+
+// 20-10-98 Impulz@Silberland
+// - zproste hingefuegt
+// - Cmd druf->zruf bugfix
+// - zreport notify_fail korrigiert (dreport->zreport)
+
+// 21-10-98 Impulz@Silberland
+// - zproste komplett neu geschrieben, da passagen redundant waren
+// - Benutzung der Hilfsfunktion CreateRecieverArray fuer zproste
+
+// 28-10-98 Impulz@Silberland
+// - zgebet hinzugefuegt
+
+// 29-10-98 Impulz@Silberland
+// - zproste um Parameter 'freunde' ergaenzt.
+
+// 19-05-99 Zordan
+// - ein paar Typos und Bugfix in P_INFO
+
+
+// 09-05-2002  Feyaria
+// NO_DAMAGE_DESTRUCT
+//
+// 11-01-2004 Gwenshara
+// Als neue Zechprellermama gleich mal 'zhilfe' gemacht
+//
+// 13-01-2004 Gwenshara
+// zreport ueberarbeitet, BecomesNetAlive() geandert,
+// bei 'zrufe' eine abfrage auf P_INVIS gemacht
+//
+// 11-04-2004 Gwenshara
+// 'zwer ort' eingebaut
+//
+// 24-04-2004 Gwenshara
+// Bugfix in GetAlcString(object zechi)
+//
+// 04-10-2004 Gwenshara
+// GetAlcString überarbeitet; ztitel zur Befehlspalette
+//
+// 09-11-2004 Gwenshara
+// Bugfix in RemoveFunc()
+//
+// 06-12-2004 Gwenshara
+// 'zwer' ueberarbeitet, 'zupdate' aktiviert
+
+inherit "std/armour";
+
+#include "/gilden/zechpreller/zech.h"
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <wizlevels.h>
+#include <moving.h>
+#include <ansi.h>
+#include <new_skills.h>
+#include <moredef.h>
+
+#ifndef P_FRIENDS   // fuer 'zproste freunde'
+#define P_FRIENDS "friends"
+#define ME this_object()
+#endif
+
+nosave object owner;
+nosave string owner_name;
+nosave int lastHP, lastSP, changedHP, changedSP;
+nosave int aktiv=0;
+nosave string *report_colors=({});
+nosave string *std_colors=({});
+nosave string akt_lvl="";
+
+string zechmeister();
+int zrufen(string str);
+string GetAlcString(object zechi);
+int IsZechpreller(object wer);
+string AddBlanks(int anz);
+
+create()
+{
+  if( !is_clone(TO) ) return;
+  ::create();
+
+  std_colors=({ANSI_GREEN, ANSI_YELLOW, ANSI_CYAN, ANSI_BLUE, ANSI_RED});
+  report_colors=call_other(ZECHMASTER, "QueryColors", TP);
+  if(!pointerp(report_colors) || !sizeof(report_colors))
+    report_colors=std_colors;
+  SetProp(P_SHORT, "Der Siebzehnerschluessel");
+  SetProp(P_LONG,
+      "Auf einer Lederschnur ist er: Der universell einsetzbare "
+     +"Siebzehnerschluessel, zum Oeffnen jeglicher Gefaesse "
+     +"mit alkoholischem Inhalt. Die Benuetzung fuer irgendetwas "
+     +"anderes kaeme einem Sakrileg gleich.");
+  SetProp(P_NAME, "Siebzehnerschluessel");
+  SetProp(P_GENDER, MALE);
+  AddId( ({"schluessel", "siebzehnerschluessel", "siebzehner",
+      GILDENOBJ}) );
+  SetProp(P_ARMOUR_TYPE, AT_MISC );
+  SetProp(P_AC, 0);
+  SetProp(P_MATERIAL, ([MAT_MISC_METAL:80, MAT_LEATHER:15, MAT_ALCOHOL:5 ]));
+  SetProp(P_WEIGHT, 50);
+  SetProp(P_VALUE, 800+random(100) );
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_AUTOLOADOBJ, 1);
+  SetProp(P_NO_DAMAGE_DESTRUCT, 1);
+  SetProp(P_QUALITY_DECAY, 0);
+  SetProp(P_MAGIC, 1);
+  SetProp(P_CURSED, 0);
+  SetProp(P_INFO, BS(funcall(#'zechmeister))); //')))
+  SetProp(P_WORN_TEXT, "um den Hals getragen");
+
+  AddCmd(({"zrufe", "zruf","zlall","zlalle"}), "zrufen");
+  AddCmd ("zwer", "zwer");
+  AddCmd("zreport", "Report");
+  AddCmd(({"zwink", "zwinke"}), "zwinken");
+  AddCmd(({"zknuddle", "zknuddel"}), "zknuddeln");
+  //AddCmd("party", "party");
+  AddCmd(({"zhist", "zhistory"}), "zhist");
+  AddCmd(({"zprost","zproste"}),"zprosten");
+  AddCmd(({"zbete","zgebet"}),"zgebet");
+  AddCmd(({"zfarben"}),              "SetColors");
+  AddCmd(({"zhelp","zhilfe"}), "zhilfe");
+  AddCmd(({"ztitel"}), "ztitel");
+  AddCmd(({"zupd", "zupdate"}), "zupdate");
+}
+
+int zupdate()
+{
+  object schluessel;
+  if(!objectp(owner))
+  {
+    write("Dafuer muss der Report aktiviert sein!\n");
+    return -1;
+  }
+  
+  // Gut und schoen, aber kosten tuts auch was!
+  if(owner->QueryProp(P_SP) < 30)
+  {
+    write("Du hascht nicht genug Magie dafuer!\n");
+    return -1;
+  }
+  if(owner->QueryProp(P_ALCOHOL) < 5)
+  {
+    write("Du bischt zu nuechtern!\n");
+    return -1;
+  }
+  
+  schluessel = clone_object(OBJ("z_17erschluessel"));
+  tell_object(owner, break_string("Hier hascht einen neuen Siebzehnerschluessel!",
+	      78, "Zechus teilt Dir mit: "));
+  TO->DoUnwear();
+  schluessel->move(owner);
+  schluessel->DoWear();
+
+  owner->AddSp(-50);
+  owner->SetProp(P_ALCOHOL, (owner->QueryProp(P_ALCOHOL)-5));
+
+  TO->remove();
+  return 1;
+}
+
+int ztitel()
+{
+  mapping gtitles;
+  if(!IsZechpreller(TP)){
+     write("Aber Du bischt ja gar kein Zechpreller!\n");
+     write("Der Siebzehnerschluessel loest sich auf.\n");
+     TO->remove();
+     return 1;
+  }
+
+  if(TP->QueryProp(P_GENDER) == MALE)
+    gtitles = call_other("/gilden/zechpreller", "QueryProp", P_GUILD_MALE_TITLES);
+  else
+    gtitles = call_other("/gilden/zechpreller", "QueryProp", P_GUILD_FEMALE_TITLES);
+
+  write("Ok, Dein voller Name lautet nun:\n");
+  write(TP->QueryProp(P_PRESAY)+""+TP->Name(WER)+" "+gtitles[TP->QueryProp(P_GUILD_LEVEL)]+"\n");
+  TP->SetProp(P_TITLE, gtitles[TP->QueryProp(P_GUILD_LEVEL)]);
+  return 1;
+}
+
+
+int zhilfe()
+{
+  if(!IsZechpreller(TP)){
+     write("Aber Du bischt ja gar kein Zechpreller!\n");
+     write("Der Siebzehnerschluessel loest sich auf.\n");
+     TO->remove();
+     return 1;
+  }
+
+  write("Der Schiebzehnerschluessel ermoeglischt Dir folgendesch:\n");
+  write("zlalle		   Damit lallscht Deinen Saufkumpanen wasch tschu\n");
+  write("zhist              Was ham Dir Deine Saufkumpenen tschugerufen?\n");
+  write("zknuddel           Damit knuddelscht Deine Saufkumpanen\n");
+  write("zwinke             Damit winkscht Deinen Saufkumpanen tschu\n");
+  write("zwer (ort)         Welcher Saeufer ischt gerade da?\n");
+  write("zreport <ein|aus>  Schaltet den Report ein/aus\n");
+  write("zreport hilfe      Hilfe zum Report\n");
+  write("zfarben            Die Farbeinstellungen tschum Report\n");
+  write("zproste            Damit proschtest Deinen Saufkumpanen tschu\n");
+  write("ztitel             Damit kannscht Deinen Gildentitel setschen\n");
+  write("zupdate            So kannscht Dir direkt ein neuesch Gildenitem holen!\n");
+  write("                   (Funktioniert nur bei aktivem Report!!!)\n");
+
+  return 1;
+}
+int zhist()
+{
+  if(!IsZechpreller(TP))
+    {
+      write("Aber Du bischt ja gar kein Zechpreller!\n");
+      TO->remove();
+      return -1;
+    }
+  call_other(ZECHMASTER, "ShowHistory");
+  return 1;
+}
+int sequenz(int pos,string biername)
+{
+  switch(pos)
+  {
+    case 1 : write(BS("Du nimmst einen heiligen Bierkrug und stellst ihn "
+                      "vorsichtig vor Dich hin."));
+             say(BS(TPN+" nimmt einen heiligen Bierkrug und stellt ihn "
+                      "vorsichtig vor sich hin."));break;
+    case 2 : write(BS("Du kniest Dich vor dem Bierkrug hin."));
+             say(BS(TPN+" kniet sich vor dem Bierkrug hin."));break;
+    case 3 : write(BS("Du beginnst zu beten: Bier Unser das Du bist im "
+                      "Glase."));
+             say(BS(TPN+" beginnt zu beten: Bier Unser das Du bist im "
+                      "Glase."));break;
+    case 4 : write(BS("Du betest: Gesegnet werde Dein Erfinder."));
+             say(BS(TPN+" betet: Gesegnet werde Dein Erfinder."));break;
+    case 5 : write(BS("Du nimmst eine Flasche "+biername+" und betest weiter:"
+                      " Mein Rausch komme, "));
+             say(BS(TPN+" nimmt eine Flasche "+biername+" und betet weiter: "
+                        "Mein Rausch komme,"));break;
+    case 6 : write(BS("Du murmelst: Dein Wille geschehe,"));
+             say(BS(TPN+" murmelt: Dein Wille geschehe,"));break;
+    case 7 : write(BS("Du giesst langsam Bier in den Krug und murmelst: "
+                      "wie Zuhause,"));
+             say(BS(TPN+" giesst langsam Bier in den Krug und murmelt: "
+                        "wie Zuhause,"));break;
+    case 8 : write(BS("Du murmelst: so auch in der Kneipe,"));
+             say(BS(TPN+" murmelt: so auch in der Kneipe,"));break;
+    case 9 : write(BS("Du sagst: Und vergib uns unsere Schulden,"));
+             say(BS(TPN+" sagt: Und vergib uns unsere Schulden,"));break;
+    case 10: write(BS("Du betest: denn auch wir vergeben unseren "
+                      "Glaeubigern."));
+             say(BS(TPN+" betet: denn auch wir vergeben unseren Glaeubigern."
+                 ));break;
+    case 11: write(BSA("Und fuehre uns nicht in die Milchbar,",
+                       "Du verziehst das Gesicht und betest weiter: "));
+             say(BSA("Und fuehre uns nicht in die Milchbar,",
+                    TPN+" verzieht sein Gesicht und betet weiter: "));break;
+    case 12: write(BS("Du hebst den Krug und sagst: sondern gib uns die "
+                      "Kraft zum Weitertrinken."));
+             say(BS(TPN+" hebt den Krug und sagt: sondern gib uns die Kraft "
+                    "zum Weitertrinken."));break;
+    case 13:write(BS("Du murmelst: Denn Dein ist der Durst, der Rausch und"));
+             say(BS(TPN+" murmelt: Denn Dein ist der Durst, der Rausch und"));
+             break;
+    case 14: write(BS("Du betest: die Seligkeit in Ewigkeit."));
+             say(BS(TPN+" betet: die Seligkeit in Ewigkeit."));break;
+    case 15: write(BS("Du trinkst den Krug auf ex runter ...."));
+             say(BS(TPN+" trinkt den Krug auf ex runter ...."));break;
+    case 16: write("'BOOEERRRP'\n");
+             say(BS("'BOEEERRRP'"));break;
+   }
+   if (pos<=15) call_out("sequenz",2,pos+1,biername);
+   else {
+         TP->SetProp(P_PARALYZED,([PARALYZE_END:"",
+                     PARALYZE_END_OTHER:"",PARALYZE_TIME:0]));
+        }
+   return 1;
+}
+
+int zgebet(string strg)
+{ string *bad_drinks,*tmpstr,*tmpstr2;
+// To be filled up :)
+  bad_drinks=({"milch","tequilla","tomatensaft","saft","apfelsaft","feigling",
+               "wasser","cola","fanta","sprite","mezzomix","tee","eistee"});
+
+  notify_fail("Welches Bier willst anbeten? (z.B. 'Puntigamer')\n");
+  if (!strg) return 0;
+  notify_fail("Bischt sischer, dass des ueberhaupt Bier isch?\n");
+  if (member_array(lower_case(strg),bad_drinks)!=-1) return 0;
+  if (sizeof(tmpstr=explode(strg," "))>1)
+     { tmpstr2=map_array(tmpstr,#'capitalize);
+       strg=implode(tmpstr2," ");
+     }
+  else strg=capitalize(strg);
+  log_file("gilden/zgebet.log",
+             TPN+" betet "+strg+" an.\n");
+  TP->SetProp(P_PARALYZED,
+   ([PARALYZE_TIME:100,PARALYZE_MSG:"Du bischt doch gerade am beten!\n",
+     PARALYZE_MSG_OTHER:"",PARALYZE_END:"",PARALYZE_END_OTHER:""]));
+  call_out("sequenz",0,1,strg);
+
+  return 1;
+}
+
+object *CreateRecieverArray(int flag)
+// Erstellt je nach Eingabe ('raum' oder 'alle') die Liste mit den Zielen
+{
+  object *player,*pl_hilf,ob;
+  string *ignores;
+  int i,pos;
+
+  if (flag==1) // flag=1 -> raum
+    { player=filter_array(all_inventory(ENV(TP)),
+                         lambda(({'item}),({#'interactive,'item})));
+      pos=member_array(TP,player);
+      if (pos!=-1) player=player-({TP});
+      return player;
+    }
+  pl_hilf=({});
+  ignores=({});
+  player=({});
+
+
+  if (flag==0) //flag=0 -> alle zechpreller
+  {
+    player=users();
+    for(i=sizeof(player)-1;i--;i>=0)
+    {
+      if( player[i]->QueryProp(P_GUILD)=="zechpreller" )
+        pl_hilf+=({player[i]});
+    }
+    player=({});
+  }
+  if (flag==2) // flag=2 -> freunde
+    { ignores=TP->QueryProp(P_FRIENDS);
+      if (sizeof(ignores)<1) return ({});
+      for (i=sizeof(ignores)-1;i>=0;i--)
+       {
+         if (ob=find_living(ignores[i]))
+           pl_hilf=pl_hilf+({ob});
+       }
+     }
+
+  for(i=sizeof(pl_hilf)-1;i>=0; i--) {
+   if(pl_hilf[i]!=TP) {
+     ignores=pl_hilf[i]->QueryProp(P_IGNORE);
+     if ((!sizeof(ignores))
+         || (member(ignores, "zprost")==-1)
+         && (member(ignores, "zproste")==-1)
+        )
+        player=player+({pl_hilf[i]});
+     }
+     }
+  return player;
+}
+
+
+int zprosten(string str)
+{ // --- Variablen ---
+  object *spieler,ob;
+  string nr_one,*presay,ausgabe;
+  int index;
+
+  // --- Fehlerueberpruefungen ---
+  notify_fail(BS("Syntax: zproste [alle|raum|freunde|<Spielername>]"));
+  if (!str) return 0;
+  notify_fail(BS(
+    "So nuechtern wie Du bischt kannscht net proschten.\n"));
+  if (((100*TP->QueryProp(P_ALCOHOL)/TP->QueryProp(P_MAX_ALCOHOL))<20) &&
+     (!IS_WIZARD(TP)))
+   return 0;
+  notify_fail("Upsch, der isch ja gar net eingeloggt.\n");
+
+  // --- Beginn ---
+  switch(lower_case(str))
+  {
+   case "alle" : {spieler=CreateRecieverArray(0);
+                  write("Du proschtest allen anwesenden Saufkumpanen zu.\n");
+                  break;}
+   case "raum" : {spieler=CreateRecieverArray(1);
+                  if (sizeof(spieler)==0)
+                  { write(BS("Hmm, niemand hier dem Du zuproschten koenntest."
+                             " Schaade."));return 1;}
+                  write("Du proschtest allen im Raum, egal ob Saufkumpane "
+                        "oder nicht, zu.\n");break;}
+   case "freunde": spieler=CreateRecieverArray(2);
+                   if (sizeof(spieler)==0)
+                   { write(BS("Zu dumm, dass keine Freunde von Dir eingeloggt"
+                              " sind."));return 1;}
+                   write("Du proschtest all' Deinen Freunden tschu.\n");
+                   break;
+  default     : if (ob=find_player(str)) {
+                  spieler=({ob});
+                  write("Du proschtest "+ob->name()+" zu.\n");
+                 }
+                 else return 0;
+  }
+
+ if (sizeof(spieler)==0)
+  { write(BS("Hmm, niemand hier dem Du zuproschten koenntest. Schaaade."));
+    return 1;
+  }
+ nr_one=call_other(ZECHMASTER, "QueryNumberOne");
+ if(getuid(TP)=="angrox" || getuid(TP)=="stahldorn" || getuid(TP)=="feyaria" || getuid(TP) == "gwenshara")
+   presay=({"Braumeister ", "Braumeisterin "});
+ else
+  if (getuid(TP)=="impulz") presay=({"Hilfs-Papa ","Hilfs-Mama "});
+   else
+   if(stringp(nr_one) && member(nr_one, getuid(TP))!=-1)
+     presay=({"Obersaeufer ", "Obersaeuferin "});
+   else
+     presay=({"Schluckspecht ", "Schluckspechtin "});
+ if (lower_case(str)=="freunde")
+   presay=({ "Dein Freund und "+presay[0],
+             "Deine Freundin und "+presay[1] });
+
+  // --- Ausgabe ---
+  for (index=0;index<sizeof(spieler);index++)
+  {
+   ausgabe=presay[TP->QueryProp(P_GENDER)-1]+TP->name();
+   ausgabe+=" proschtet Dir ";
+   ausgabe+=((str=="raum")?"und allen anderen im Raum ":"");
+   ausgabe+=((ENV(TP)==ENV(spieler[index]))?"":"aus der Ferne ");
+   ausgabe+="tschu.";
+   tell_object(spieler[index],BS(ausgabe));
+
+  }
+
+  return 1;
+}
+
+
+string zechmeister()
+{
+   string text;
+   text="Mit 'zhilfe' kriegscht mehr Infosch.";/*
+   if(member(call_other(ZECHMASTER, "QueryNumberOne"), getuid(TP))!=-1)
+     text+=", und fuer Dich als Obersaeufer: party.";
+   */
+   return text;
+}
+
+int WearFunc(object ob)
+{
+  if(!IsZechpreller(TP))
+    {
+    write(BS("Der Siebzehnerschluessel loest sich in ein Alkoholwoelckchen "
+        +"auf!\n"));
+    call_out("remove",0);
+    return 1;
+    }
+  TP->SetProp(P_TMP_ZECHPRELLER_LISTENER, 1);
+  return 1;
+}
+
+int WieldFunc(object ob)
+{
+  if(!IsZechpreller(TP))
+  {
+    write(BS("Der Siebzehnerschluessel loest sich in einem Alkoholwoelckchen "
+        +"auf!\n"));
+    call_out("remove",0);
+    return 1;
+  }
+  return 1;
+}
+
+int RemoveFunc(object ruest,int silent)
+{
+  if(TP)
+    TP->SetProp(P_TMP_ZECHPRELLER_LISTENER, 0);
+  return 1;
+}
+
+int zrufen(string str)
+{
+ int i, no_msg, presay_mod;
+ object *spieler;
+ string *presay, *ignores, pre, nr_one, zruf_name;
+ no_msg=0;
+ zruf_name=getuid(TP);
+ presay_mod=TP->QueryProp(P_GENDER);
+ notify_fail(BS("Was moechescht Deinen Kneipenbruedern und -schwestern "
+        +"mitteilen?\n"));
+ if (!stringp(str)) return 0;
+ spieler=users();
+ nr_one=call_other(ZECHMASTER, "QueryNumberOne");
+ if(zruf_name=="angrox" || zruf_name=="stahldorn" || zruf_name=="feyaria" || zruf_name=="gwenshara")
+   presay=({"Braumeister ", "Braumeisterin ", "Ein "});
+ else
+   if(stringp(nr_one) && member(nr_one, getuid(TP))!=-1)
+     presay=({"Obersaeufer ", "Obersaeuferin "});
+   else
+     presay=({"Schluckspecht ", "Schluckspechtin "});
+
+ if(TP->QueryProp(P_INVIS) != 0){ //abfrage auf invis
+     zruf_name="Braumeister";
+     presay_mod=3;
+ }
+ for(i=sizeof(spieler)-1;i>=0; i--) {
+   if(spieler[i]==TP) {
+     write(break_string(TP->_unparsed_args(), 78,
+           "Du lallst den Zechprellern zu: "));
+   }
+   else {
+     ignores=spieler[i]->QueryProp(P_IGNORE);
+     if(sizeof(ignores) && (member(ignores, "zlalle")!=-1 ||
+           member(ignores, "zlalle")!=-1))
+       no_msg=1;
+     else no_msg=0;
+     if(((spieler[i]->QueryProp(P_TMP_ZECHPRELLER_LISTENER))==1 && !no_msg ))
+     {
+       pre=presay[presay_mod-1]+capitalize(zruf_name)+
+         " lallt euch zu: ";
+       tell_object(spieler[i], BSA(TP->_unparsed_args(),pre));
+     }
+   }
+ }
+  call_other(ZECHMASTER, "AddHistory", pre, TP->_unparsed_args());
+ return 1;
+}
+
+int zknuddeln(string str)
+{
+ int i;
+ object *spieler;
+ spieler=users();
+ for(i=sizeof(spieler)-1;i>=0; i--) {
+   if ((spieler[i]->QueryProp(P_GUILD))=="zechpreller" ) {
+     if(spieler[i]==TP)
+       write(BS("Du knuddelst Deine Saufkumpanen/innen aus "
+		+"der Ferne."));
+     else {
+       if(TP->QueryProp(P_GENDER)==MALE)
+	 tell_object(spieler[i], sprintf("Dein Saufkumpane %s "
+		   +"knuddelt Dich aus der Ferne.\n", TP->name()));
+       else
+	 tell_object(spieler[i], sprintf("Deine Saufkumpanin %s "
+	   +"knuddelt Dich aus der Ferne.\n", TP->name()));
+     }
+   }
+ }
+ return 1;
+}
+
+int zwinken(string str)
+{
+ int i;
+ object *spieler;
+
+ spieler=users();
+ for(i=sizeof(spieler)-1;i>=0; i--)
+   {
+     if ((spieler[i]->QueryProp(P_GUILD))=="zechpreller" )
+       {
+         if(spieler[i]==TP)
+	   write(BS("Du winkst allen Saufkumpanen/innen "
+                     +"der Ferne zu."));
+         else
+	   {
+	     if(TP->QueryProp(P_GENDER)==MALE)
+	       tell_object(spieler[i], sprintf("Dein Saufkumpane %s "
+                  +"winkt Dir aus der Ferne zu.\n", TP->name()));
+	     else
+	       tell_object(spieler[i], sprintf("Deine Saufkumpanin %s "
+                  +"winkt Dir aus der Ferne zu.\n", TP->name()));
+	   }
+       }
+   }
+ return 1;
+}
+
+
+int zwer(string str)
+{
+ int i, zeile;
+ object *spieler;
+ string schlucker, element, lauscher;
+ schlucker="";
+ lauscher="";
+ spieler=users();
+
+ write("Folgende Schluckspechte sind anwesend:\n");
+
+ if(str == "ort") /* Abfangen ob die anfrage 'ort' enthaelt */
+ {
+    for(i=sizeof(spieler)-1; i>=0; i--)
+    {
+      if( (spieler[i]->QueryProp(P_GUILD))=="zechpreller" &&
+           !spieler[i]->QueryProp(P_INVIS) )
+      {
+         element=spieler[i]->name();
+         if(IS_WIZARD(spieler[i]))
+	 {
+	   schlucker+=AddBlanks(15-strlen(element+4));
+	   schlucker+=element+" (M)";
+	   if(IS_WIZARD(TP))
+             schlucker+="   -  "+environment(spieler[i])->QueryProp(P_INT_SHORT)+"\n";
+	   else
+	     schlucker+="   -  Im Vollrausch\n";
+         }
+	 else if(spieler[i]->QueryProp(P_TESTPLAYER) != 0)
+	 {
+	   schlucker+=AddBlanks(15-strlen(element+4));
+	   schlucker+=element+" (T)";
+	   if(IS_WIZARD(TP))
+             schlucker+="   -  "+environment(spieler[i])->QueryProp(P_INT_SHORT)+"\n";
+	   else
+	     schlucker+="   -  Im Vollrausch\n";
+	 }
+	 else
+	 {
+	   schlucker+=AddBlanks(15-strlen(element+4));
+	   schlucker+=element+" ("+spieler[i]->QueryProp(P_GUILD_LEVEL)+")";
+	   schlucker+="   -  "+environment(spieler[i])->QueryProp(P_INT_SHORT)+"\n";
+         }
+      }
+    }
+    write(schlucker);
+    return 1;
+ }
+
+ for(i=sizeof(spieler)-1;i>=0; i--){
+   if ((spieler[i]->QueryProp(P_GUILD))=="zechpreller" && !spieler[i]->QueryProp(P_INVIS)){
+     schlucker+=spieler[i]->name()+"(";
+     if(IS_WIZARD(spieler[i]))
+       schlucker+="M";
+     else if(spieler[i]->QueryProp(P_TESTPLAYER))
+       schlucker+="T";
+     else
+       schlucker+=spieler[i]->QueryProp(P_GUILD_LEVEL)+"/"+GetAlcString(spieler[i]);
+     schlucker+="), ";
+   }
+ }
+
+ lauscher += "Nuechterne Zuhoerer:\n";
+ for(i=sizeof(spieler)-1; i>=0; i--)
+ {
+  if(spieler[i]->QueryProp(P_TMP_ZECHPRELLER_LISTENER) &&
+   !(spieler[i]->QueryProp(P_GUILD) == "zechpreller") &&
+   !spieler[i]->QueryProp(P_INVIS))
+     lauscher += spieler[i]->name()+", ";
+ }
+    
+ write(BS(schlucker+"\b\b")+"\n");
+ write(BS(lauscher));
+ return 1;
+}
+
+
+void init()
+{
+  object ob;
+  ::init();
+  if(!living(MENV))
+    call_out("remove",0);
+  if(MENV->QueryProp(P_GUILD)!= "zechpreller" && !IS_WIZARD(MENV)) {
+    write(BS("Der Siebzehnerschluessel loest sich in einem "
+	  +"Alkoholwoelkchen auf!\n"));
+    call_out("remove",0);
+    return 0;
+  }
+  if(TP!=MENV) return 0;
+  DoWear();
+  tell_object(MENV, BS("Du fuehlst deine Enthaltsamkeit schwinden und ein "
+        +"Dunst von Allohol steigt Dir in die Nase.\n"));
+  MENV->SetProp(P_WEAR_FUNC, TO);
+  MENV->SetProp(P_WIELD_FUNC, TO);
+  MENV->SetProp(P_REMOVE_FUNC, TO);
+}
+
+reset()
+{
+  ::reset();
+}
+
+/*
+Eiskalt vom Teddy kopiert :) 
+*/
+
+nosave int ShowColorHelp() 
+{
+  write("\nHilfe zu 'zfarben':\n"
+     "Mit diesem Kommando kann man sich die Farben des 'zreports' setzen.\n"
+     "Fuer jeden der 5 Abstufungen kann eine eigene Farbe gewaehlt werden.\n"
+     "Syntax: dfarben farbe1 farbe2 farbe3 farbe4 farbe5\n\n"
+     "Moegliche Farben:  schwarz, rot, gruen, gelb, blau, lila, zyan, "
+     "weiss.\n\n");
+  return 1;
+}
+
+nosave int ShowReportHelp() 
+{
+ write("\nzreport Kommandos   :\n"
+      +"zreport hilfe         : Dieses hier\n"
+      +"zreport ein           : Schaltet den Report ein\n"
+      +"zreport aus           : Schaltet den Report aus\n"
+      +"zreport max <0|1>     : Schaltet Anzeige der maximalen Punkte ein\n"
+      +"zreport farben <0|1>  : Farben aus|ein\n"
+      +"\nDie Statuszeile im erweiterten Modus hat folgende Beteutungen:\n"
+      +" -----------------[ETBVFGPN]---(Alkoholstatus)--------------LPs:...\n"
+      +"                   12345678\n"
+      +"1 ... Ziemlich erschoepft\n"
+      +"2 ... Taub\n"
+      +"3 ... Blind\n"
+      +"4 ... Vergiftung\n"
+      +"5 ... Frosch\n"
+      +"6 ... Geist\n"
+      +"7 ... Paralysiert\n"
+      +"8 ... NoSpell\n"
+      +"\n");
+ return 1;
+}
+
+NotifyHpChange()
+{
+  int hp, mhp, sp, msp, HPdif;
+  string color, stats;
+  stats="";
+  if (!previous_object() || (owner != previous_object())) return;
+  if (!aktiv){
+    if (owner!=find_netdead(getuid(owner)))
+      owner->RemoveHpHook(ME);   // geht nur bei nicht-netztoten Spielern
+      return;
+  }
+
+  //Abfrage der Stats (vergiftet, taub etc.)
+  stats+="[";
+  if(owner->QueryProp(P_MV)*100/owner->QueryProp(P_MAX_MV)<10)
+    stats+="E";
+  else stats+="-";
+  if(owner->QueryProp(P_DEAF))
+    stats+="T";
+  else stats+="-";
+  if(owner->QueryProp(P_BLIND))
+    stats+="B";
+  else stats+="-";
+  if(owner->QueryProp(P_POISON))
+    stats+="V";
+  else stats+="-";
+  if(owner->QueryProp(P_FROG))
+    stats+="F";
+  else stats+="-";
+  if(owner->QueryProp(P_GHOST))
+    stats+="G";
+  else stats+="-";
+  if(owner->QueryProp(P_PARALYZED))
+    stats+="P";
+  else stats+="-";
+  if(time()<owner->QueryProp(P_NEXT_SPELL_TIME))
+    stats+="N";
+  else stats+="-";
+  stats+="]";
+  
+  // aktuelle Werte ermitteln
+  hp = owner->QueryProp(P_HP);
+  mhp = owner->QueryProp(P_MAX_HP);
+  sp = owner->QueryProp(P_SP);
+  msp = owner->QueryProp(P_MAX_SP);
+  if(test_bit(akt_lvl, 1)) {
+    switch(hp*100/mhp) {
+      case 0..20: color=report_colors[4];
+                  break;
+      case 21..40: color=report_colors[3];
+                  break;
+      case 41..60: color=report_colors[2];
+                  break;
+      case 61..80: color=report_colors[1];
+                  break;
+      case 81..100: color=report_colors[0];
+                  break;
+      default: color=ANSI_NORMAL;
+    }
+  }
+  else
+    color="";
+  // Vergleich und Ausgabe
+  if(hp!=lastHP) 
+    changedHP+=hp-lastHP;
+  changedSP+=sp-lastSP;
+  if (((hp < lastHP) || (hp != lastHP && sp == msp) || (sp != lastSP))) {
+    if(test_bit(akt_lvl, 2))
+    {
+      tell_object(owner,sprintf("%s--------------"+stats+"--------------"+
+			sprintf("%18-'-'s", GetAlcString(owner))+"---------- "
+            "LPs: %d/%d(%s), MPs: %d/%d(%s)%s\n",
+          color, hp, mhp, (changedHP>0?"+":"")+ changedHP, sp, msp,
+          (changedSP>0?"+":"")+changedSP, ANSI_NORMAL));
+    }
+    else
+      tell_object(owner, color+
+          "---------"+sprintf("%18-'-'s", GetAlcString(owner))+"------"+stats+"------ LPs: "+
+          hp+" ("+(changedHP>0?"+":"")+changedHP+"), MPs: "+
+          sp+" ("+(changedSP>0?"+":"")+(changedSP)+")\n"+
+          ANSI_NORMAL);
+    changedSP=0;
+    changedHP=0;
+  }
+  lastHP = hp; lastSP = sp;
+}
+
+void activate(object ob)
+{
+  if (objectp(ob)) {
+    aktiv = 1;
+    owner = ob;
+    owner_name = getuid(owner);
+    ob->AddHpHook(ME);
+    lastHP = ob->QueryProp(P_HP);
+    lastSP = ob->QueryProp(P_SP);
+  } else {
+    if (ob=(owner||TP)) ob->RemoveHpHook(ME);
+    owner = owner_name = aktiv = 0;
+  }
+}
+
+nosave int ConfigureReport(string str, int what) {
+ int flag;
+ string txt;
+ flag=to_int(str);
+ if(flag<0 || flag>2) {
+   write("Falsche Eingabe!\n");
+   return 1;
+ }
+ if(what==1) txt="Farben";
+ else if(what==2) txt="Max";
+ else txt="Level";
+ if(flag==0) 
+   akt_lvl=clear_bit(akt_lvl, what);
+ else if(flag==1) {
+   akt_lvl=set_bit(akt_lvl, what);
+ }
+ write("Ok, "+txt+" auf "+flag+" gesetzt!\n");
+ return 1;
+}
+
+nosave int Report(string str)
+{
+  string *msg;
+  notify_fail("Syntax: zreport ein|aus|max <0|1>|farben <0|1>.\n");
+  if(!sizeof(msg=explode(str, " "))) return 0;
+  switch (msg[0])
+  {
+    case "ein":
+      if (aktiv && objectp(owner))
+        write("Der Report-Modus ist schon eingeschaltet!\n");
+      else {
+        write("Report-Modus ist jetzt eingeschaltet.\n");
+        activate(TP);
+      }
+      break;
+    case "aus":
+      if (!aktiv)
+        write("Der Report-Modus ist doch schon ausgeschaltet!\n");
+      else { 
+        write("Report-Modus ist nun ausgeschaltet.\n");
+        activate(0);
+      }
+      break;
+    case "farben":
+      if(sizeof(msg)>1)
+        ConfigureReport(msg[1], 1);
+      else 
+        write("Syntax: zreport farben <0|1>\n"); 
+      break;
+    case "max":
+      if(sizeof(msg)>1)
+        ConfigureReport(msg[1], 2);
+      else 
+        write("Syntax: zreport max <0|1>\n"); 
+      break;
+    case "hilfe":
+      ShowReportHelp();
+      break;
+    default:
+      return 0;
+  }
+  return 1;
+}
+
+
+nosave int SetColors(string cols) {
+  string *colors, *set_cols;
+  mapping valid_colors;
+  int i;
+  set_cols=({});
+  valid_colors=(["schwarz":ANSI_BLACK,
+                 "rot":ANSI_RED,
+                 "gruen":ANSI_GREEN,
+                 "gelb":ANSI_YELLOW,
+                 "blau":ANSI_BLUE,
+                 "lila":ANSI_PURPLE,
+                 "zyan":ANSI_CYAN,
+                 "weiss":ANSI_WHITE,
+                 "normal":ANSI_NORMAL]);
+  if(!cols) cols="standard";
+  cols=lower_case(cols);
+  if(cols=="standard") {
+    report_colors=std_colors;
+    write(BS("Ok, Standard Farben (Gruen, Gelb, Cyan, Blau, Rot) "
+          "gesetzt!\n"));
+    call_other(ZECHMASTER, "SetColors", TP, set_cols);
+    return 1; 
+  }
+  if(cols=="hilfe") {
+    return ShowColorHelp(); 
+  }
+  colors=explode(cols, " ");
+  if(sizeof(colors)!=5) {
+    write("Es muessen fuenf Farben angegeben werden!\n");
+    return 0;
+  }
+  for(i=0;i<=sizeof(colors)-1;i++) {
+    if(!member(valid_colors, colors[i])) {
+      write(sprintf("Falsche Farbe: %s!\n", colors[i]));
+      return 0;
+    }
+    set_cols+=({valid_colors[colors[i]]});
+  }
+  report_colors=set_cols;
+  write("Ok, Farben gesetzt!\n");
+  call_other(ZECHMASTER, "SetColors", TP, set_cols);
+  return 1;
+}
+
+string GetAlcString(object zechi)
+{
+  int prozent;
+  string alc_string;
+  if(!objectp(zechi)) return "nuechtern";
+  
+  prozent=(zechi->QueryProp(P_ALCOHOL) || 1)*100/(zechi->QueryProp(P_MAX_ALCOHOL) || 1);
+
+  switch(prozent){
+    case 0 .. 10 : alc_string="nuechtern";
+		  break;
+    case 11 .. 20: alc_string="leicht angeheitert";
+		   break;
+    case 21 .. 30: alc_string="feucht froehlich";
+		   break;
+    case 31 .. 50: alc_string="etwas angetrunken";
+		   break;
+    case 51 .. 60: alc_string="angetrunken";
+		   break;
+    case 61 .. 70: alc_string="etwas blau";
+		   break;
+    case 71 .. 80: alc_string="blau";
+		   break;
+    case 81 .. 99: alc_string="extrem blau";
+		   break;
+    default      : alc_string="zechprellerblau";
+                      break;
+  }
+
+  return alc_string;
+}
+
+void BecomesNetAlive(object wer)
+{
+  if(wer==MENV) {
+      tell_object(wer,break_string(sprintf(
+        "Proooooscht, %s!",wer->Name(WER,2)),78,
+        "Zechus ruft Dir zu: "));
+    }
+}
+
+int IsZechpreller(object wer){
+  if(wer->QueryProp(P_GUILD) != "zechpreller" && !IS_WIZARD(MENV))
+    return 0;
+  else
+    return 1;
+}
+
+string AddBlanks(int anz)
+{
+  int i;
+  string str;
+  str="";
+  for(i=anz; i>0; i--)
+  {
+    str+=" ";
+  }
+  return str;
+}

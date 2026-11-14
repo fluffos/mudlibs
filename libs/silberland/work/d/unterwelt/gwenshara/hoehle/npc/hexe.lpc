@@ -1,0 +1,122 @@
+#include "../def.h"
+
+inherit "/p/std/npc/necromancer_npc";
+
+public string _query_short() {
+    string name;
+
+    name = "Sheraxdina die Nachthexe";
+
+    if(!objectp(environment(TO))) return name;
+    switch(file_name(environment(TO))) {
+        case ROOM "b2_b2_hexer": return sprintf("%s schneidet Stuecke aus einer Leiche", name); break;
+        case ROOM "b2_b1_hexer": return sprintf("%s studiert ihre Buecher", name); break;
+        case ROOM "b1_b2_hexer": return sprintf("%s maestet ihre Gefangenen", name); break;
+        case ROOM "b2_b3_hexer": return sprintf("%s kocht ihr Sueppchen", name); break;
+    }
+
+    return name;
+}
+
+public void specialDeath(int poisondeath) {
+    object killer;
+
+    // Jemanden in dem Dungeon zu toeten ist fuer boese Leute keine gute Tat...
+    // wir verstaerken immer das alignment
+    if(!poisondeath) {
+        killer = QueryProp(P_KILLER);
+        if(objectp(killer) && (killer->QueryProp(P_GUILD) == "nekromanten" || killer->QueryProp(P_ALIGN) < -40)) {
+            SetProp(P_ALIGN, QueryProp(P_ALIGN) * -1);
+        }
+    }
+}
+
+public void die(int poisondeath) {
+    specialDeath(poisondeath);
+    return ::die(poisondeath);
+}
+
+
+public void create() {
+    if(!is_clone(this_object())) return;
+    ::create();
+
+    SetProp(P_LONG, "Die Nachthexe erhebt sich, trotz von Buckel gebeuter Haltung, gross vor dir. "
+                    "Lange, duenne und weisse Haare haengen ihr Spinweben vom Kopf. Zum Glueck "
+                    "kannst du ihr Gesicht unter der Schaedelmaske nicht erkennen, aber alleine "
+                    "die Form, die sich darunter abzeichnet wirkt entstellt. Knochenduerre Finger, "
+                    "mit dreckig gelben und spitzen Fingernaegeln vervollstaendigen das Bild.");
+    SetProp(P_NAME, "Sheraxdina");
+    SetProp(P_ARTICLE, 0);
+    SetProp(P_GENDER, FEMALE);
+    SetProp(P_RACE, "Mensch");
+    SetProp(P_SIZE, 190);
+    SetProp(P_MSGIN, "kommt mit langen Schritten an");
+    SetProp(P_MMSGIN, "geht mit langen Schritten");
+    AddId(({"sheraxdina", "hexe", "nachthexe", "\ngwenshara_evil_cave_witch"}));
+
+    SetProp(P_CAVE_FACTION, F_WITCHDOCTOR);
+    create_necromancer_npc(45, 6, 7, 1);
+    
+    SetProp(P_HANDS, ({" mit ihren spitzen Fingernaegeln", QueryProp(P_HANDS)[1], DT_PIERCE }));
+    SetProp(P_RESISTANCE_STRENGTHS, ([
+        DT_UNHOLY  : -0.4, DT_TERROR :  -0.2, DT_LIGHT: 0.1, DT_HOLY: 0.2,
+    ]));
+
+    SetProp(P_MNPC_AREA, ({
+        ROOM "b1_b2_hexer", ROOM "b2_b2_hexer", ROOM "b2_b2_hexer", ROOM "b2_b3_hexer"
+    }));
+    SetProp(P_MNPC_FLAGS, MOV_INDOORS + MOV_BACKWARDS + MOV_MOVES);
+
+    SetProp(P_DIE_MSG, " stirbt laut kreischend.\n");
+
+    SetProp(P_SPELLRATE, 75);
+
+    if(!random(3)) {
+        CLONEME(ARMOUR "nachtrobe");
+        command_me("trage alles");
+    } else {
+        CLONEME(OBJ "nekro_elixir");
+    }
+    CLONEME(OBJ "ringteil_2");
+}
+
+public void createHungryDead(int forced) {
+    object corpse;
+    if(!forced && !objectp(corpse=present("Leiche", environment(TO)))) return;
+
+    tell_room(environment(TO), BS(sprintf("%s hebt beschwoerend die Haende und murmelt finstere Worte...", Name(WER))));
+    call_out("resurrectCorpse", 2, corpse, forced);
+
+    return;
+}
+
+public void resurrectCorpse(object corpse, int forced) {
+    int ret;
+    if(!forced && !objectp(corpse)) {
+        tell_room(environment(TO), BS("Nichts geschieht."));
+        return;
+    }
+
+    tell_room(environment(TO), BS("Mit einem Reissen und Zucken erhebt sich die Leiche als hungriger Toter!"));
+    if(!forced) {
+        corpse->remove(1);
+    }
+    corpse = clone_object(NPC "hungry_dead");
+    ret = corpse->move(environment(TO), M_GO | M_SILENT | M_NOCHECK);
+    if(ret != 1) {
+        tell_room(environment(TO), BS("Sofort krepiert der Untote elendiglich. - " + ret));
+        destruct(corpse);
+    }
+    return;
+}
+
+public void init() {
+    ::init();
+
+    if(!is_clone(TO)) return;
+
+    if(present("Leiche", environment(TO))) {
+        call_out("createHungryDead", 2);
+    }
+}

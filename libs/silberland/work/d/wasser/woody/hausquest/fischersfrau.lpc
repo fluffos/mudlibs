@@ -1,0 +1,269 @@
+/*
+** Fischersfrau im Laden - Woody
+** ---
+** 19 Feb, 1997  Release
+*/
+
+inherit "std/npc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <mnpc.h>
+
+#include "files.h"
+
+#define MINDESTGEBOT 300
+#define MINIMALPREIS 500
+#define TIMEOUT 120     // zwei Minuten Timeout beim Feilschen
+#define RAUMSAG(x) tell_room(MENV, x)
+#define SAG(x) RAUMSAG(break_string(x, 78, "Die Fischersfrau sagt: "))
+#define VASE_LOGFILE QDIR("vase.log")
+
+string *gegeben;
+string *gefeilscht;
+string feilschtmit;
+int wanngeboten=0;
+int angebot;
+
+create()
+{
+  object ob;
+
+  if (!is_clone(this_object())) return;  // (return on BP)
+
+  ::create();
+  AddId (({"frau","fischersfrau","ladenbesitzerin"}));
+  SetProp (P_GENDER, FEMALE);
+  SetProp (P_NAME, "Fischersfrau");
+  SetProp (P_SHORT, "Eine Fischersfrau");
+  SetProp (P_LONG, "Vor Dir steht eine kleine, rundliche Fischersfrau, "
+      "offenbar die Ladenbesitzerin. Im Moment naeht sie gerade, aber "
+      "sie hat immer Zeit zum Plaudern. Sie ist sehr hilfsbereit und "
+      "weiss ueber alles und jeden im Dorf Bescheid.");
+  SetProp (P_ALIGN, 100);
+  SetProp (P_REJECT,
+      ({ REJECT_GIVE, "Die Fischersfrau braucht @WEN nicht.\n" }) );
+  create_default_npc (11);
+  // SetProp (P_HANDS, ({" mit blossen Haenden", 30, DT_BLUDGEON}) );
+
+  SetProp (P_DEFAULT_INFO, ({
+      "gruebelt ein wenig und meint: Frag mich spaeter nochmal!\n",
+      "sagt: Nie gehoert! Gibts wahrscheinlich gar nicht!\n",
+      "zuckt mit den Schultern.\n",
+      "antwortet: Seemannsgarn!\n",
+      "lacht: Das hat Dir bestimmt der Angler erzaehlt!\n" }) );
+  AddLibrary(QDIR("fischersfrau.lib"), 1, 1);
+
+  AddCmd ("bitte", "bitte");
+  AddCmd ( ({"feilsch", "feilsche"}), "feilsche");
+  AddCmd ( ({"biet", "biete"}), "biete");
+
+  SUID;
+  gegeben = ({});       // Wem hab ich schon Nadel und Faden gegeben?
+  gefeilscht = ({});    // Mit wem hab ich schon gefeilscht?
+  feilschtmit=0;        // Am Anfang feilscht sie noch mit keinem
+}
+
+reset()
+{
+  ::reset();
+  gegeben = gefeilscht = ({});
+}
+
+int bitte(string str)
+{
+  string s, um;
+  notify_fail ("WEN willst Du um WAS bitten?\n");
+  if (!str) return 0;
+  if (sscanf(str,"%s um %s",s,um)!=2) return 0;
+  if (!id(s)) return 0;
+  if (um!="nadel und faden" && um!="nadel" && um!="faden")
+    write (break_string(
+        CAP(um)+"?? Das kann ich Dir nicht geben, tut mir leid!",
+        78, "Die Fischersfrau sagt: "));
+  else {
+    if (present(NADELFADEN_ID,TP))
+      write ("Die Fischersfrau sagt: "
+          "Aber Du hast doch schon Nadel und Faden!\n");
+    else if (member(gegeben, getuid(TP))!=-1)
+      write (break_string(
+          "Ich habe Dir doch schon Nadel und Faden gegeben! Wenn Du "
+          "sie verloren hast, musst Du Dich gedulden, bis ich eine "
+          "neue Lieferung bekommen habe, und etwas spaeter wiederkommen.",
+          78, "Die Fischersfrau sagt: "));
+    else {
+      CLONETPNOCHK(QDIR("nadelfaden"));
+      write ("Die Fischersfrau gibt Dir Nadel und Faden.\n");
+      say ("Die Fischersfrau gibt "+TP->name(WEM)+" Nadel und Faden.\n", TP);
+      write ("Die Fischersfrau sagt: Hier hast Du, viel Spass!\n");
+      gegeben += ({getuid(TP)});
+    }
+  }
+  return 1;
+}
+
+int feilsche()
+{
+  say(CAP_TPN+" will mit der Fischersfrau zu feilschen beginnen.\n", TP);
+  if (feilschtmit==getuid(TP))
+    SAG("Aber wir feilschen doch schon!");
+  else if (feilschtmit && (time()-wanngeboten < TIMEOUT) &&
+      present(feilschtmit, MENV))
+    SAG("Aber ich feilsche doch noch mit "+capitalize(feilschtmit)+
+        ", gedulde Dich ein wenig!");
+  else if (TP->QueryQuest(HAUSQUEST) || (member(gefeilscht,getuid(TP))!=-1))
+    RAUMSAG(break_string("Wir haben doch schon einmal gefeilscht, "
+        "nochmal mach ich das nicht mit Dir, das war mir schon damals "
+        "zu anstrengend!", 78, capitalize(name(WER))+" erinnert sich: "));
+  else if (present(VASE_ID,TP))
+    SAG("Aber Du hast doch schon eine schoene Vase!");
+  else {
+    angebot=15000+random(50)*100;
+    wanngeboten=time();
+    if (feilschtmit)
+      SAG("Hmm, "+capitalize(feilschtmit)+" hat offenbar keine Lust "
+          "mehr, mit mir zu feilschen, also versuch Du Dein Glueck! "
+          "Es geht um diese schoene Vase!");
+    else
+      SAG("Gut, lass uns um diese schoene Vase feilschen!");
+    feilschtmit=getuid(TP);
+    SAG("Das Angebot steht bei "+angebot+" Muenzen, was bietest Du mir?");
+  }
+  return 1;
+}
+
+nosave void uebergabe(int x)
+{
+  int y;
+
+  CLONETPNOCHK(QDIR("vase"));
+  say(Name(WER,1)+" gibt "+TP->name(WEM)+" eine Vase.\n", TP);
+  write(Name(WER,1)+" gibt Dir die Vase.\n");
+  y=x*2+random(20)*100;
+  y-=y%100;
+  RAUMSAG("Die Fischersfrau brummelt: Wert war sie aber "+y+"!\n");
+  gefeilscht += ({getuid(TP)});
+  feilschtmit=0;
+  write_file(VASE_LOGFILE, dtime(time())+": "+
+      CAP(getuid(TP))+" kauft eine Vase um "+x+".\n");
+}
+
+int biete(string str)
+{
+  int x,l;
+  string s;
+
+  if (!str) {
+    write("Was willst Du bieten?\n");
+    return 1;
+  }
+  if (str=="muenzen") {
+    write("Wieviele Muenzen willst Du bieten?\n");
+    return 1;
+  }
+  else if (sscanf(str, "%d muenzen%s",x,s)!=2) {
+    if (str!=to_string(x=to_int(str))) {
+      notify_fail("Du kannst nur Muenzen bieten!\n");
+      return 0;
+    }
+  }
+  say(CAP_TPN+" bietet "+x+" Muenzen.\n", TP);
+  write("Du bietest "+x+" Muenzen.\n");
+  if (!feilschtmit ||
+      ((feilschtmit!=getuid(TP)) && (time()-wanngeboten >= TIMEOUT)))
+    SAG("Aber wir feilschen doch gar nicht!");
+  else if (feilschtmit!=getuid(TP))
+    SAG("Aber ich feilsche doch gerade mit "+capitalize(feilschtmit)+"!\n");
+  else {
+    wanngeboten=time();
+    if (x <= MINDESTGEBOT)
+      SAG ("Sehr lustig! Ein bisschen mehr sollte es schon sein...");
+    else if (x >= angebot) {
+      if (TP->QueryMoney() < x)
+        SAG("Aber soviel Geld hast Du ja gar nicht!");
+      else {
+        SAG("Also gut, fuer "+x+" Muenzen gebe ich sie Dir!");
+        TP->AddMoney(-x);
+        uebergabe(x);
+      }
+    }
+    else if ((x < angebot*3/5) || (x > angebot))
+      SAG ("Nein, so geht das nicht... Du bist jetzt bei "+
+          (angebot*3/5+random(20)*10)+" Muenzen! Mein Angebot "
+          "bleibt bei "+angebot+". Versuchs nochmal!");
+    else {
+      if (angebot<=(MINIMALPREIS+10)) {
+        angebot += random(QueryProp(P_LEVEL)*10);
+        SAG ("Hmm, wir waren schon bei meinem besten Preis... "
+            "also dann haette ich doch lieber "+angebot+" Muenzen dafuer!");
+      }
+      else
+      {
+        l=TP->QueryProp(P_LEVEL);
+        angebot = angebot*9/10;
+        if (l<=5) l=200;
+        else if (l<=10) l=100;
+        else if (l<=20) l=50;
+        else if (l<=30) l=30;
+        else l=10;
+        angebot -= random(l)*10;
+        if (angebot < x) angebot=x+(1+random(10))*10;
+        SAG (x+" Muenzen fuer diese "+
+            ({"schoene","wundervolle","prachtvolle",
+              "einzigartige","tolle","phantastische"})[random(6)]+
+            " Vase?!?");
+        if (angebot < MINIMALPREIS) {
+          angebot=MINIMALPREIS+random(10);
+          SAG ("Ich geb sie Dir fuer "+angebot+" Muenzen! Das ist mein "
+              "unwiderruflich letztes Angebot!");
+        }
+        else {
+          switch (random(5))
+          {
+            case 0:
+              SAG ("Ich ueberlasse sie Dir fuer "+angebot+".");
+              break;
+            case 1:
+              SAG ("Fuer "+angebot+" kannst Du sie haben.");
+              break;
+            case 2:
+              SAG ("Fuer "+angebot+" gehoert sie Dir.");
+              break;
+            case 3:
+              SAG (angebot+" und keine Muenze weniger!");
+              break;
+            case 4:
+              SAG ("Unter "+angebot+" bekommst Du sie nicht!");
+              break;
+          }
+          if (!random(8))
+            SAG ("Das ist mein letztes Angebot!");
+        }
+      }
+    }
+  }
+  return 1;
+}
+
+give_notify(object ob)
+{
+  int x,y;
+  if ((explode(file_name(ob),"#")[0]=="/obj/money") &&
+      (feilschtmit == getuid(TP)))
+  {
+    if ((x=ob->QueryProp(P_GIVEN_AMOUNT)) >= angebot)
+    {
+      uebergabe(x);
+      ob->remove();
+    }
+    else {
+      SAG(x+" Muenzen sind aber zuwenig!");
+      give_obj (ob, TP);
+    }
+  }
+  else
+    ::give_notify(ob);
+}
+

@@ -1,0 +1,221 @@
+// by dante & roc 2000 questbelohnung fuer die van kielhol quest
+/*
+roc hat nur unfug getrieben damit!!!!!
+dante hat nicht mal ein egenes rohr! :)
+
+dantes magisches fernrohr:
+
+spieler:   nur die long eines raumes
+
+seher:     long + inv
+
+erzseher:  long+inv + %anteil der momentanen hps von livings...
+
+magier: sehen zusaetzlich auch den pfad usw
+*/
+
+
+#include "/players/dante/myowndefine.h"
+//#include "/players/gott/dante_define.h"
+#include <language.h>
+#include <properties.h>
+#include <moving.h>
+#include <wizlevels.h>
+
+#define COST 0
+#define ATTACKCHANCE 50 
+#define ATTACKAT 0
+
+inherit "std/thing";
+
+string processString(string str, object anObject);
+void willAttack(object thisNPC);
+
+create() {
+  if ( !is_clone(this_object()) ) return;
+  ::create();
+
+  AddId(({"DANTE_ROHR", "fernrohr", "rohr"}));
+  SetProp(P_NAME, "Fernrohr" );
+  SP(P_NAME_ADJ, "magisch");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_ARTICLE, 1);
+  SetProp(P_SHORT, "Ein magisches Fernrohr" );
+  SetProp(P_LONG, BS(
+    "Du hast nun Dein eigenes magisches Fernrohr in Haenden! Es ist die "
+    "Belohnung fuer die von Dir bestandenen Abenteuer als Piet van Kielhol. "
+    "Doby Mick fand es einst angeblich auf der Insel der Zombies. Mit "
+    "<fernrohr ausgang/richtung> kannst Du mehr ueber Deine Umgebung "
+    "erfahren. Also zum Beispiel 'fernrohr osten'. Dann siehst Du was sich "
+    "oestlich von Dir alles befindet.")
+  );
+  SP(P_CURSED, 1);
+  SP(P_MAGIC, 1);
+  SP(P_WEIGHT, 10);
+  SP(P_MATERIAL, ([MAT_GLASS:50, MAT_MISC_MAGIC:10, MAT_STEEL:40]));
+  SP(P_NOBUY, 1);
+  SP(P_NODROP, 1);
+  SP(P_NEVERDROP, 1);
+  SP(P_AUTOLOADOBJ, 1);
+  SetProp(P_VALUE, 10000);
+  ACD(({"fernrohr", "rohr"}), "showExitLong");
+}
+
+int showExitLong(string str) {
+  mapping rooms;
+  string *allefiles;
+  string *alleexits;
+  string lifePointString;
+  mixed description;
+  int i, j, position;
+  float quote, maxhp, hp;
+  int zufall;
+   
+  object raum;
+  object *inv;
+  int randomAttack;
+  zufall=random(100);
+      
+  NF("Welche Richtung meinst Du denn?!\n");
+  
+  if( !str ) return 0;
+  if( !TP ) return 1;
+   
+  rooms=environment(TP)->QueryProp(P_EXITS);
+  allefiles=m_values(rooms);
+  alleexits=m_indices(rooms);
+  
+  if( !sizeof(allefiles) || !sizeof(alleexits) )  {
+    write(BS(
+     "Tut mir leid, aber hier gibt es keine Ausgaenge.")
+    );
+    return 1;
+  }
+
+  if( TP->QP(P_SP)< COST ) {
+    write(BS(
+      "Du hast zu wenig Magie, um durch das Fernrohr etwas erkennen zu "
+      "koennen.")
+    );
+    say(BS(
+      CAP_TPN +" schaut durch ein Fernrohr, sieht aber nichts.")
+    );
+    return 1; 
+  }
+
+  if( member_array(lower_case(str), alleexits)==-1 ) {
+    write(BS("Diesen Ausgang gibt es hier nicht!"));  
+    return 1;
+  }
+  
+  if( zufall==66 ) {
+    write(BS(
+	    "Du hebst das Fernrohr nach oben und willst hineinsehen! AUA!!! "
+    	"Du ungeschickter Narr rammst Dir das Fernrohr direkt ins Auge!")
+    );
+    TP->reduce_hit_point(5);
+    say(BS(
+    	CAP_TPN+" rammt sich ein magisches Fernrohr unabsichtlich ins Auge. "
+    	"AUA!!! Das muss wehgetan haben!")
+    );
+    return 1; 
+  }
+    
+  
+  if( (zufall==33) && (environment(TP)->QP(P_LIGHT)>0)  && 
+      (!TP->QP(P_BLIND)) ) {
+	  write(BS(
+	  	"Du willst in das magische Fernrohr sehen. Dummerweise haeltst Du es zu "
+	  	"weit nach oben und einfallendes Licht blendet Dich so stark, dass Du "
+	  	"kurzzeitig erblindest!")
+  	);
+  	TP->SetProp(P_BLIND, 5+random(30));
+  	say(BS(
+	  	CAP_TPN+" wird beim Versuch das magisches Fernrohr zu benutzen von "
+  		"reflektierenden Lichtstrahlen kurzzeitig geblendet.")
+  	);
+  	return 1; 
+  } else {
+  	position=member_array(lower_case(str), alleexits);
+    raum=to_object(allefiles[position]); 
+  	write(
+	    "\nDu blickst durch das magische Fernrohr Richtung "+ CAP(str) +".\n"
+	  );    
+    write("Ploetzlich erkennst Du etwas...\n");
+//    description=raum->QueryProp(P_INT_LONG);
+//    write( processString(description, raum) );
+		    write(raum->int_long(TP, TP, 0));
+//    write(""+ raum->GetExits() +"");
+    tell_room(raum,
+      CAP(getuid(TP)) +" beobachtet diese Umgebung mit "+
+      TP->QueryPossPronoun(NEUTER, WEM, SINGULAR) +" "+
+      "magischen Fernrohr, "+ TP->QueryPronoun(WER) +
+      " muss ganz in der Naehe sein!\n"
+    );
+    TP->restore_spell_points(-COST);
+    inv=all_inventory(raum);
+    if( !sizeof(inv) ) {
+      write(BS(
+        "Du kannst sonst nichts in dieser Richtung erkennen.")
+      );
+      return 1; 
+    }
+    
+    if( IS_SEER(TP) ) {
+    	lifePointString="";
+    	for(i=0 ;i<sizeof(inv); i++) {
+/*      	
+        if( !living(inv[i]) ) {
+          write(""+ inv[i]->QP(P_SHORT) +".\n");
+        }
+*/
+    		randomAttack=random(ATTACKCHANCE);
+        if( living(inv[i]) ) {  
+        	if( inv[i]->QP(P_MAX_HP) && inv[i]->QP(P_HP) ) {
+            maxhp=inv[i]->QP(P_MAX_HP);
+            hp=inv[i]->QP(P_HP);
+            quote=((hp*10000)/maxhp)/100;
+          } else {
+            quote=0;
+          }
+          if( !interactive(inv[i]) && !query_once_interactive(inv[i]) ) {
+//            lifePointString+=inv[i]->QP(P_SHORT);
+						lifePointString+=inv[i]->query_real_name();
+            // attack viewer
+            if( randomAttack==ATTACKAT && geteuid(inv[i])!=" R O O T " 
+                && inv[i]->QP(P_NOATTACK)==0 ) {
+              willAttack(inv[i]);
+            }
+            if( TP->QP(P_LEVEL)>=40 && geteuid(inv[i])!=" R O O T " ) {
+              lifePointString+=" ("+ quote +"% Lebenspunkte).\n";
+            }
+          }
+          if( interactive(inv[i]) || query_once_interactive(inv[i]) ) {
+            lifePointString+=inv[i]->QP(P_NAME); 
+            if( TP->QP(P_LEVEL)>=40 && geteuid(inv[i])!=" R O O T " ) {
+              lifePointString+=" ("+ quote +"% Lebenspunkte).\n";
+            }
+          }
+        }
+      }
+      if( lifePointString!="" ) {
+      	write("Lebenspunkte: \n"+ lifePointString +"\n");
+      }
+    }
+    
+  }
+  return 1; 
+}
+    
+void willAttack(object thisNPC) {
+	
+	if( TP && !thisNPC->QP(P_AGGRESSIVE) && !thisNPC->IsEnemy(TP) ) {
+		thisNPC->Kill(TP);
+		write(
+		  CAP(thisNPC->name(WEN)) +" hat Dich entdeckt und macht sich "
+		  "kampfbereit.\n"
+   	);
+	}
+	return;
+}
+	   

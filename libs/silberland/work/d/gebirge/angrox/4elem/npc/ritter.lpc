@@ -1,0 +1,573 @@
+
+/* /d/gebirge/angrox/<gebiet>/npc/ritter.c 
+//  
+// Angrox Zauberwerkstatt
+// 
+// Bonusgegner -> Soordhin, der Steinritter
+//                Abaenderung des Waechtergolems
+// 29-04-1997  
+//
+// Besonderheiten: 
+//       - wehrt zu 10% Spells ab.
+//       - kann Ruestungsteile vernichten.
+//       - kann einen Angreifer entwaffnen.
+//       - kann einen Angreifer in den naechsten Raum werfen 
+//         und fuer 20sek bewusstlos schlagen.
+//       - kann einen Angreifer im Raum fuer 3 sek bewusslos
+//         schlagen
+//       - kann selbststaendig zur nahegelegenen Tankstelle 
+//         laufen und sich heilen.
+//       
+// 
+// Updates:  
+//           22-05-97 logfiles added
+//                    spells im AttackChat                    
+//           03-08-98 berserker 
+//           02-04-99 heart_beat verbessert (tanken laufen)
+//                    kampfschrei hinzugefuegt
+//                    blutrausch wird im die() zerstoert.
+//                    turran auf den schwaechsten
+//                    P_AGGRESSIVE 1 -> 0.3
+//           10-03-00 Defend() debuggt
+*/                   
+
+
+inherit "std/inpc";
+inherit "std/npc/spells";
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <new_skills.h>
+#include "/sys/living/life.h"
+#include <moving.h>
+#include <wizlevels.h>
+#include <inpc.h>
+#include "../4elem.h"
+
+object GetEnemy(int flag);
+nosave int RandomizeResistances();
+nosave int GetCurrentPosition();
+void go_healing();
+nosave mixed get_no_enemies();
+
+nosave int low_hp, hb_count;
+nosave int cur_hp, max_hp, last_hp,cur_money, amount;
+nosave object cash;
+nosave mapping damage=([]);
+nosave int cur_pos=3;
+
+#define AddRes(x,y) SetProp(P_RESISTANCE_STRENGTHS, QueryProp(P_RESISTANCE_STRENGTHS)+([x:y]))
+
+void create()
+{
+  object ob;
+  low_hp=0;
+  hb_count=0;
+  if (!is_clone(TO)) return;
+  ::create();
+  SetProp(P_SHORT, "Soordhin, der Steinritter");
+  SetProp(P_LONG, 
+       "Soordhin, der Steinritter, ist eine zwei Meter grosse "
+       "Steinstatue, mit besten Waffen und Ruestungen ausgestattet, "
+       "und bereit jeden, der sich ihm entgegenstellt, zu toeten. Gegen "
+       "ihn alleine anzutreten ist eine haessliche Art des Freitodes."); 
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_NAME, "Soordhin");
+  SetProp(P_GENDER, MALE); 
+  SetProp(P_AGGRESSIVE, 0.3);
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:-100, T_RANGE_MAX:200]));
+  AddId(({"ritter", "steinritter", "soordhin"}));
+  enable_commands();
+  set_living_name("soordhin");
+ 
+  
+  create_default_npc(36);
+ /*
+  // P_LEVEL   = 25
+  // P_SP/P_HP = x*8+42        =242 -> 666
+  // P_HANDS   = x*10          =250 -> 250
+  // P_BODY    = x*4           =120 -> 144 
+  // P_XP      = HP*HANDS*5    =500*3*250*5=1875000
+                                    ^
+                                    2x tanken extra
+  */
+  
+  SetAttribute(A_STR, 40);
+  SetAttribute(A_DEX, 25);
+  SetProp(P_HANDS, ({" mit steinernen Faeusten",550,DT_BLUDGEON}));
+  SetProp(P_MAX_HP, 850); 
+  SetProp(P_HP, 850+random(300));
+  SetProp(P_BODY, 150);
+  SetProp(P_XP, QueryProp(P_XP)+3*500); // Bonus fuer Spells
+  SetProp(P_RACE, "Golem");
+  SetProp(P_SIZE, 200);
+  SetProp(P_ALIGN, 0); 
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_AGGRESSIVE,0.05);
+  SetProp(P_WIMPY, 0);
+  
+  SetProp(P_RESISTANCE_STRENGTHS, ([ 
+    DT_SLASH      :-0.5,     DT_BLUDGEON   :-0.4,     DT_PIERCE     :-0.4,
+    DT_SQUEEZE    :-0.4,     DT_WHIP       :-0.4,     DT_RIP        :-0.4,
+    DT_FIRE       :0,        DT_COLD       :-0.3,     DT_WATER      :0,    
+    DT_AIR        :0.4,      DT_LIGHTNING  :0,        DT_EXPLOSION  :0.4, 
+    DT_SOUND      :0,        DT_LIGHT      :0,        DT_ELECTRIC   :0,    
+    DT_ACID       :0.2,      DT_POISON     :0,        DT_TERROR     :0,     
+    DT_HOLY       :0,        DT_UNHOLY     :0,        DT_MAGIC      :0]) );
+
+  catch(RandomizeResistances());
+  SetProp(P_MSGIN, "stampft herein");
+  SetProp(P_MSGOUT, "stapft weiter");
+  SetProp(P_MMSGIN, "waechst aus der Erde");
+  SetProp(P_MMSGOUT, "versinkt im Boden");
+                       
+  SetProp(P_DIE_MSG, " zerbroeckelt zu Staub.\n");  
+  SetProp(P_NOCORPSE, 0 );
+  SetProp(P_MURDER_MSG, "WUAHHHHHHHHHHH!! Die Rache wird MEIN sein!!");
+  SetProp(P_KILL_NAME, "Soordhin");
+  SetProp(P_KILL_MSG, "Meister, ich habe Deine Befehle befolgt!");
+
+  AddInfo(DEFAULT_INFO, "ignoriert Dich.\n");
+
+  // Es reicht, Soordhin muss Berserker werden!
+  SetProp(P_GUILD, "berserker");
+  SetProp(P_GUILD_LEVEL, 10);
+  call_other("/gilden/berserker","learn_berserker_skills", 7000, 7000);
+  
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    "Soordhin laesst Deine Sachen fallen.\n" }) );
+
+  SetProp(P_SPELLRATE,50);
+  AddSpell(5,800,
+    "Soordhin vernichtet Dich mit einem einzigen Schlag.\n",
+    "Soordhin vernichtet @WEN mit einem einzigen Schlag.\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(2,1200,
+    "Soordhin schlaegt mit toetlicher Wucht auf Dich ein.\n",
+    "Soordhin schlaegt mit toetlicher Wucht auf @WEN ein.\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(1, 1600, 
+    "Soordhin pruegelt auf Dich ein bis Du roechelst.\n",
+    "Soordhin pruegelt auf @WEN ein. @WEN beginnt zu roechln.\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1])); 
+
+  AddDefaultSpell(3,200, DS_DISARM
+    "Soordhin entwaffnet Dich!\n",
+    "Soordhin entwaffnet @WEN !\n");
+
+  AddSpell(6,400,
+    "Soordhin zermalmt Dich zwischen seinen Fingern.\n",
+    "Soordhin zermalmt @WEN zwischen seinen Fingern.\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(2, 600, 
+    "Soordhin schlaegt Dich bewusstlos.\n",
+    "Soordhin schlaegt @WEN bewusslos.\n",
+     DT_BLUDGEON, "bewusstlos", ([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(3,1000, 
+    "Soordhin schlaegt Dich mit Urgewalten aus dem Raum.\n",
+    "Soordhin schlaegt @WEN mit Urgewalten aus dem Raum.\n",
+     DT_BLUDGEON, "rausschlagen", ([SP_SHOW_DAMAGE:1])); 
+
+  AddSpell(2,500, 
+    "Soordhin zerstoert Deine Ruestung!\n",
+    "Soordhin zerstoert @WESSEN Ruestung!\n",
+     DT_BLUDGEON, "spell_armour", ([SP_SHOW_DAMAGE:1]));
+
+  SetAttackChats(70, ({
+    "@@use_spell@@",
+    "@@AttackLight@@",
+    "@@AttackMedium@@"
+    }) );
+
+  SUID;
+  AddMoney(8000+random(8000));
+  ob=clone_object("/p/magic/magiestein");
+  ob->AddAmount(random(10)+5);
+  ob->move(TO, M_NOCHECK);
+  if( random(2) )
+  {
+    ob=clone_object("/gilden/druidenzirkel/obj/flasche");
+    ob->move(TO, M_NOCHECK);
+  }
+  else
+  {
+    ob=clone_object("/gilden/druidenzirkel/obj/focus");
+    ob->move(TO, M_NOCHECK);
+    ob->SetVariables("erz", 2+random(2)+random(2)+random(2)*random(2), 100);
+    // might 2: 19%, 3: 44%, 4: 31%, 5: 6%
+  }
+  //AddWeapon("blitzaxt", WEAP("blitzaxt"));
+  AddArmour("helm", ARMO("loewenhelm"));
+  AddArmour("panzer", ARMO("diamantpanzer"));
+  AddArmour("guertel", ARMO("str-guertel"));
+  AddArmour("diamantamulett", ARMO("diamantamulett"));
+  AddArmour("stirnband", "/gilden/berserker/obj/stirnband");
+  command("trage alles");
+  if(objectp(ob=find_object(ITEMD)->GenerateUnique(WEAP("blitzaxt"),1,0)))
+    ob->move(TO);
+  else 
+    CLONEME( "/p/weapon/axe/langaxt");
+  command( "zuecke axt");
+}
+
+int _query_wimpy() {
+  return 0;
+}
+
+string use_spell() {
+  object ob;
+  ob=present("geld", ME);
+  if((!ob || !ob->QueryProp(P_AMOUNT)) && 
+      !present("\nberserker_blutrausch", ME)) 
+  {
+    ME->ModifySkillAttribute(ME,SA_QUALITY, 150, 20);
+    SetProp(P_SPELLRATE, 0);
+    command_me("blutrausch");
+    return "";
+  } 
+  else if(!random(5) && (!ob || ob->QueryProp(P_AMOUNT)<6000)) {
+    command_me("eisenhaut");
+  }
+  else if(!random(2)) {
+    command_me("kampfschrei");
+  }
+  else {
+    command_me("rammen");
+  }
+  
+  return "";
+}
+
+void spell_armour(object enemy, int damage, mixed dam_type)
+{
+  int groesse,i;
+  object was;
+  object* ob;
+  ob=enemy->QueryProp(P_ARMOURS);
+  groesse=sizeof(ob);
+  if(groesse) {
+    was= ob[random(groesse)];
+    for(i=random(1000);i>0;i--)
+      was->TakeFlaw(dam_type);
+  } else 
+    enemy->do_damage(20);
+}
+
+
+void entwaffnen(object enemy, int damage, mixed dam_type) {
+  int groesse;
+  object* ob1, ob2;
+  string waffenname;
+  ob1=enemy->QueryProp(P_WEAPON);
+  if(ob1 && !(ob1->QueryProp(P_CURSED))) {
+    ob1->UnWield();
+    ob1->move(ENV(ME), M_NOCHECK); 
+  }
+  else enemy->do_damage(15);
+  if(!random(3)) {
+    command_me("nimm alles");	
+  }
+}
+
+
+void rausschlagen(object enemy, int damage, mixed dam_type) {
+ object *raeume, ob;
+ int groesse;
+ raeume=m_values(environment()->QueryProp(P_EXITS));
+ groesse=sizeof(raeume);
+ enemy->move(raeume[random(groesse)], M_GO, "", "fliegt raus", 
+             "wird hereingeschleudert und bleibt bewusstlos liegen"); 
+ enemy->SetProp(P_PARALYZED, ([
+        PARALYZE_TIME:60+random(60),
+        PARALYZE_MSG: "Aber Du bist Doch bewusstlos!\n",
+        PARALYZE_END: "Du wachst auf.\n",
+        PARALYZE_END_OTHER: "%s wacht auf.\n"]));
+ //ob=CLONEOB(OBJ2("bewusstlosigkeit"));
+ //ob->move(enemy, M_NOCHECK);
+}
+
+void bewusstlos(object enemy, int damage, mixed dam_type)
+{
+ object ob;
+ ob=CLONEOB(OBJ2("bewusstlosigkeit2")); 
+ ob->move(enemy, M_NOCHECK);
+ enemy->SetProp(P_PARALYZED, ([
+     PARALYZE_TIME:4+random(8), 
+     PARALYZE_MSG: "Aber Du bist Doch bewusstlos!\n",
+     PARALYZE_END: "Du wachst auf.\n",
+     PARALYZE_END_OTHER: "%s wacht auf.\n"]));
+ enemy->SetProp(P_DISABLE_ATTACK, 10);
+}
+
+
+void NotifyPlayerDeath(object player, object killer, int lostexp) {
+  object ob;
+  domainshout(BS("Der Tod ruft: "+player->name(WER, RAW)+" ist Dank "
+      +"Soordhin um "+lostexp+" Erfahrungspunkte aermer!"));
+  if(ob=present("\nberserker_blutrausch", ME))
+    ob->remove();
+  if(killer==TO)
+     write_file(LOG ("soordhin.kills"),
+       sprintf( ctime()+": Soordhin hat gerade "+CAP(getuid(player))
+         +" umgebracht - %d EP!\n", lostexp));
+  call_out("pluendern", 0);
+  return ;
+}
+
+int money_filter(object ob) {
+  if(explode(file_name(ob),"#")[0]="/obj/money")
+    ob->move(ME, M_NOCHECK);
+  return 0;
+}
+
+void pluendern()
+{
+  command_me("nimm alles aus leiche");
+  command_me("iss leiche");
+  filter_array(all_inventory(ME), "money_filter");
+}
+
+int Defend(int dam, string dam_type, mixed spell, object enemy) {
+  string en_name;
+  object ob;
+  if(interactive(enemy)) { // Speichern der Schaeden.
+    en_name=getuid(enemy);
+    if(!member(damage, en_name))
+      damage+=([en_name:dam]);
+    else 
+      damage[en_name]=(damage[en_name]+dam)/2; 
+  }
+  if(!low_hp) { 
+    if(ob=present("muenzen", ME)) {
+      cur_hp=ME->QueryProp(P_HP);
+      max_hp=ME->QueryProp(P_MAX_HP);
+      if(cur_hp <= (int)(0.5*max_hp)) {
+        low_hp=1;
+        cur_money=ob->QueryProp(P_AMOUNT);
+        amount=((max_hp-cur_hp)*10)-100;
+        if(amount > cur_money) 
+          amount=cur_money;
+      } 
+    } 
+  } 
+  return ::Defend(dam, dam_type, spell, enemy);
+}
+
+void heart_beat() {
+  object ob,en, *inv; 
+  int how,i;
+
+  ::heart_beat();
+  set_heart_beat(1);
+  if(low_hp) {
+    low_hp=0;
+    go_healing();
+  }
+  if(ME && !present("\nberserker_blutrausch", ME) && !QueryProp(P_SPELLRATE))
+    SetProp(P_SPELLRATE, 50);
+  if(!random(3)) how=1;
+  else how=0;
+  if(hb_count>3 && objectp(en=GetEnemy(how))) {
+    TELL("angrox", sprintf("*** Wieder Runde 3, enemy: %s\n", en->Name(WER)));
+    SetProp(P_PREFERED_ENEMY, ({100, en}));
+    hb_count=0;
+  }
+  hb_count++;
+}
+
+// Hier holen wir uns unseren naechsten Gegner
+// flag: 0 ... meisten LP 
+//       1 ... wenigsten LP
+//       2 ... meisten Schaden verursachend
+//       3 ... wenigsten Schaden verursachend
+mixed GetEnemy(int flag) {
+  int i, x, eval, old_eval;
+  object *en, paralyzed;
+  string en_name;
+  old_eval=0;
+  if(sizeof(en=filter_array(PresentEnemies(), #'interactive))<1) return 0;
+  for(i=sizeof(en)-1;i>=0;i--) {
+    if(en[i]->QueryProp(P_PARALYZED))
+      continue;
+    en_name=getuid(en[i]);
+    if(!flag || flag==1) 
+      eval=en[i]->QueryProp(P_MAX_HP)-en[i]->QueryProp(P_HP);
+    if(flag==2 || flag==3)
+      eval=damage[en];
+    if(!flag && eval<old_eval) x=i;
+    if(flag==1 && eval>old_eval) x=i;
+    if(flag==2 && eval>old_eval) x=i;
+    if(flag==3 && eval<old_eval) x=i;
+    old_eval=eval;
+  }
+  return en[x];
+}
+
+
+void die(int poisondeath) {
+  object spieler, ob;
+  spieler=ME->QueryProp(P_KILLER);
+  if((spieler->QueryProp(P_GUILD))=="druidenzirkel" &&
+       (spieler->QueryProp(P_GUILD_LEVEL))==14)
+  {
+    call_other("/gilden/druidenzirkel/master/druidenmaster",
+                "SetTask", spieler, 15);
+  }
+  
+  if(ob=present("\nberserker_blutrausch", ME)) {
+    ob->remove();
+  }
+  if(!IS_WIZARD(TP)) {
+    domainshout(BS("Jubel brandet durch das SilberLand: "+TP->name(WER, RAW)
+        +" hat soeben Soordhin, den Steinritter, bezwungen!!")); 
+    write_file(LOG("soordhin.kills"),
+      dtime(time())+": "+CAP(getuid(TP))+" toetet Soordhin.\n");
+  }
+  ::die(poisondeath);
+}
+
+
+
+string AttackLight()
+{
+ object en;
+ if (en = QueryEnemy()) 
+  {
+    tell_room(MENV,BS("Soordhin schlaegt auf "
+      + capitalize(en->name(WEN)) + " ein."), ({en}));
+    tell_object(en, "Soordhin schlaegt auf Dich ein.\n");
+    en->Defend(100+random(100), DT_SLASH,
+        ([SP_NAME:"Light", SP_SHOW_DAMAGE:1]), TO);
+  }
+  return "";
+}
+
+string AttackMedium()
+{
+ object en;
+ if (en = QueryEnemy()) 
+  {
+    tell_room(MENV,BS("Soordhin schlaegt stark auf "
+      + capitalize(en->name(WEN)) + " ein."), ({en}));
+    tell_object(en, "Soordhin schlaegt stark auf Dich ein.\n");
+    en->Defend(300+random(300), DT_SLASH,
+        ([SP_NAME:"Medium", SP_SHOW_DAMAGE:1]), TO);
+  }
+  return "";
+}
+
+string AttackSerious()
+{
+ object en;
+ if (en = QueryEnemy()) 
+  {
+    tell_room(MENV,BS("Soordhin schlaegt sehr hart auf "
+      + capitalize(en->name(WEN)) + " ein."), ({en}));
+    tell_object(en, "Soordhin schlaegt sehr hart auf Dich ein.\n");
+    en->Defend(400+random(300), DT_SLASH,
+        ([SP_NAME:"Serious", SP_SHOW_DAMAGE:1]), TO);
+  }
+  return "";
+}
+
+string AttackBlast()
+{
+ object en;
+ if (en = QueryEnemy()) 
+  {
+    tell_room(MENV,BS("Soordhin vernichtet "
+      + capitalize(en->name(WEN)) + " ohne Gnade."), ({en}));
+    tell_object(en, "Soordhin vernichtet Dich ohne Gnade.\n");
+    en->Defend(500+random(300), DT_SLASH,
+        ([SP_NAME:"Blast", SP_SHOW_DAMAGE:1]), TO);
+  }
+  return "";
+}
+
+nosave int RandomizeResistances() {
+  // Physischer Schaden
+  AddRes(DT_SLASH, -1.2+(random(8)/10.0));
+  AddRes(DT_BLUDGEON, -1.2+(random(8)/10.0));
+  AddRes(DT_PIERCE, -1.2+(random(8)/10.0));
+  AddRes(DT_SQUEEZE, -1.2+(random(8)/10.0));
+  AddRes(DT_WHIP, -1.2+(random(8)/10.0));
+  AddRes(DT_RIP, -1.2+(random(8)/10.0));
+  AddRes(DT_SQUEEZE, -1.2+(random(8)/10.0));
+  // Magischer Schaden
+  AddRes(DT_MIND, -1.2+(random(5)/10.0));
+  AddRes(DT_COLD, -0.8+(random(8)/10.0));
+  AddRes(DT_FIRE, -0.2+(random(5)/10.0));
+  AddRes(DT_WATER, -0.2+(random(5)/10.0));
+  AddRes(DT_AIR, (random(5)/10.0));
+  AddRes(DT_LIGHTNING, -0.3+(random(5)/10.0));
+  AddRes(DT_EXPLOSION, (random(5)/10.0));
+  AddRes(DT_SOUND, (random(3)/10.0));
+  AddRes(DT_LIGHT, -0.5+(random(5)/10.0));
+  AddRes(DT_ELECTRIC, (random(5)/10.0));
+  AddRes(DT_ACID, (random(5)/10.0));
+  AddRes(DT_ELECTRIC, (random(5)/10.0));
+  AddRes(DT_POISON, -1.1+(random(5)/10.0));
+  AddRes(DT_TERROR, 0.1+(random(3)/10.0));
+  AddRes(DT_HOLY, 0.1+(random(3)/10.0));
+  AddRes(DT_UNHOLY, 0.1+(random(3)/10.0));
+  AddRes(DT_MAGIC, 0.1+(random(3)/10.0));
+}
+
+nosave int GetCurrentPosition() {
+  int pos;
+  string *room_name;
+  if(!ENV(ME)) return -1;
+  room_name=explode(file_name(ENV(ME)), "/");
+  switch(room_name[sizeof(room_name)-1]) {
+    case "kathedr_1": pos=1; break;
+    case "kathedr_2": pos=2; break;
+    case "kathedr_3": pos=3; break;
+    default: pos=-1;
+  }
+  return pos;
+}
+
+nosave int SetCurrentPosition() {
+  cur_pos=GetCurrentPosition();
+  return cur_pos;
+}
+
+nosave mixed get_no_enemies() {
+  object *pls;
+  pls=filter_array(all_inventory(ENV(ME))-PresentEnemies(), #'interactive);
+  return pls;
+}
+
+int check_enemy(object ob) {
+
+}
+
+void go_healing() {
+  int i;
+  object en, *inv;
+  string *commands;
+
+  commands=({"westen", "oben", "opfere "+amount+" muenzen",
+    "klettere runter", "osten"});
+  en=GetEnemy(1);
+  catch(command_me(sprintf("turran %s", lower_case(en->name(RAW)))));
+  for(i=0;i<=sizeof(commands)-1;i++) {
+    if(i==3 && GetCurrentPosition()!=1) {
+      ME->move(STADT("kathedr_1"), M_GO);
+      SetCurrentPosition(); 
+    }
+    command_me(commands[i]); 
+    SetCurrentPosition(); 
+    if(!random(5) && sizeof(inv=filter_array(all_inventory(ENV(ME)), 
+           #'interactive)))
+    {
+      Kill(inv[random(sizeof(inv))]);
+    }
+  }
+}
+
+

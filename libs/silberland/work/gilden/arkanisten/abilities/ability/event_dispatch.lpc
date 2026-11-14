@@ -1,0 +1,69 @@
+#include "../../arkanisten.h"
+
+private mapping subscribers;
+private mapping modifiers;
+
+public void create() {
+    subscribers = ([ "__no__": ([ ])]);
+    modifiers = ([ MODIFY_ALL: ([ ])]);
+}
+
+public bool subscribe_to(string ability_name, int event, object listener) {
+    if(!member(subscribers, ability_name)) subscribers[ability_name] = ([ ]);
+    if(!member(subscribers[ability_name], event)) subscribers[ability_name][event] = ({ });
+
+    if(member(subscribers[ability_name][event], listener) < 0) subscribers[ability_name][event] += ({ listener });
+    else return false;
+
+    return true;
+}
+
+public bool modify(string ability_name, int modification_type, object listener) {
+    if(!member(modifiers, ability_name)) modifiers[ability_name] = ([ ]);
+    if(!member(modifiers[ability_name], modification_type)) modifiers[ability_name][modification_type] = ({ });
+
+    if(member(modifiers[ability_name][modification_type], listener) < 0) modifiers[ability_name][modification_type] += ({ listener });
+    else return false;
+
+    return true;
+}
+
+varargs public void fire_event(string sender_name, int event, mixed payload) {
+    object *all_subs, sub;
+    int idx;
+
+    if(!member(subscribers, sender_name)) return;
+    if(!member(subscribers[sender_name], event)) return;
+
+    all_subs = subscribers[sender_name][event];
+    foreach(idx, all_subs, sub, {
+        call_other(sub, "handle_ability_event", sender_name, event, payload);
+    });
+}
+
+public mapping apply_modifications(string sender_name, int mod_type, mapping payload) {
+    object *all_mods, mod;
+    mixed data;
+    int idx;
+
+    if(member(modifiers[MODIFY_ALL], mod_type)) {
+        all_mods = modifiers[MODIFY_ALL][mod_type];
+        foreach(idx, all_mods, mod, {
+            pDebug(TP, sprintf("apply_modifications :: target='__all__' sender='%s' mod_type=%d mod=%O\n", sender_name, mod_type, mod));
+            data = call_other(mod, "modify_ability", sender_name, mod_type, payload);
+        });
+    }
+
+    if(!member(modifiers, sender_name)) return payload;
+    if(!member(modifiers[sender_name], mod_type)) return payload;
+
+    data = copy_mapping(payload);
+   // DEBUG(sprintf("apply_modifications :: data =%O", data));
+
+    all_mods = modifiers[sender_name][mod_type];
+    foreach(idx, all_mods, mod, {
+        data = call_other(mod, "modify_ability", sender_name, mod_type, payload);
+    });
+
+    return data;
+}

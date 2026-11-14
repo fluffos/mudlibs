@@ -1,0 +1,1209 @@
+#include "../def.h"
+
+inherit STDWEG;
+
+#include <moving.h>
+#include <player.h>
+#include <properties.h>
+#include <language.h>
+#include <defines.h>
+#include <moredef.h>
+#include <wizlevels.h>
+
+#define BK(x) break_string(x,78,"",BS_LEAVE_MY_LFS+BS_NO_PARINDENT)
+#define LETZTE_LOG ALOG "hinrichtung_liste"
+#define WIZNAME "protheg"
+#define DB(x) if (find_player(WIZNAME)) tell_object(find_player(WIZNAME),(x))
+#define STEIN "\nsteinigt_ihn!"
+#define UPDATE 1
+#define ARWENOCK ROOM ""
+#define FISCHPREIS 150
+#define MAXFISCHE 10
+#define KTEILE (["kopf" :"den",                                       \
+		 "beine":"die",                                       \
+		 "rumpf":"den",                                       \
+		 "arme" :"die"])
+
+#define ZUSTAND ([0:"frisch erhaengt",                                \
+		  1:"vor kurzem erhaengt",                            \
+		  2:"schon etwas aelter",                             \
+		  3:"beginnt schon zu stinken",                       \
+		  4:"verbreitet einen unangenehmen Verwesungseruch",  \
+		  5:"stinkt erbaermlich",                             \
+		  6:"ist eigentlich nur noch als Fetzen vorhanden",   \
+		  7:"ist die Verwesung seiner selbst",                \
+		  8:"ist schon ziemlich im Endstadium der Verwesung", \
+		  9:"nur noch ein stinkender Haufen Fleisch"])
+
+nosave string pranger,pranger_next,galgen_string,exekution_string,grund;
+nosave mapping galgen,spenden;
+nosave int pranger_hits,fische;
+nosave object planned_exekution,victim;
+string *letztenliste;
+
+void init_galgen();
+
+create()
+{
+  ::create();
+
+  SetProp(P_INT_SHORT, sprintf("Hauptplatz von %s", STADT));
+  SetProp(P_INT_LONG,
+	  "Mitten auf dem mit Steinen gepflasterten Marktplatz befindet "+
+	  "sich eine alte Guillotine aus Stahl, an der zur oeffentlichen "+
+	  "Belustigung, aber auch zur Abschreckung von Dieben und sonstigem "+
+	  "Gesindel, des oefteren Hinrichtungen vollfuehrt werden. Wichtige "+
+	  "Verurteilte werden aufgehaengt und bleiben fuer Schaulustige "+
+	  "laenger haengen. Ebenfalls wurde ein Pranger aufgestellt, an "+
+	  "dem geaechtete aufgehaengt werden, um sie einer oeffentlichen "+
+	  "Steinigung auszusetzen. Zu diesem Zweck wurde ein Korb mit "+
+	  "faustgrossen Steinen aufgestellt. Weiters haben sich "+
+	  "offensichtlich einige Bettler niedergelassen, um die Leute mit "+
+	  "irgendwelchen Spielen zu unterhalten und auch hie und da ein paar"+
+	  " Muenzen zu ergattern. Einige Marktstaende befinden sich "+
+	  "ebenfalls auf dem Platz, jedoch werden sie nur zur Marktzeit "+
+	  "geoeffnet.");
+  
+  SetProp(P_INDOORS, 0);
+  
+  AddDetail(({"platz","marktplatz","hauptplatz"}),
+	    "Du befindest Dich hier auf Arwenocks beruehmtem und beruechtigten "+
+	    "Marktplatz, der gleichzeitig auch Arwenocks Hauptplatz ist. Die "+
+	    "Mitte des Platzes saeumt eine gefaehrlich aussehende Guillotine, "+
+	    "davor steht ein Pranger, an dem die geschaendeten "+
+	    "angekettet auf ihre Steinigung warten. An einer "+
+	    "langen Hauswand haben es sich einige Bettler gemuetlich gemacht "+
+	    "und hausen dort. Rund um die Marktplatzmitte stehen viele kleine "+
+	    "Laeden, die jedoch die meisste Zeit ueber geschlossen sind. "+
+	    "Im Westen kannst Du das grosse Stadttor erkennen, nach Sueden "+
+	    "zieht sich der Hauptplatz dahin und nach Osten und Norden geht es "+
+	    "tiefer in die Stadt hinein...\n");
+  AddDetail(({"mitte","marktplatzmitte","marktmitte","guillotine","anlage"}),
+	    "Eine maechtige, staehlerne Guillotine wurde hier aufgestellt. "+
+	    "Sie besteht aus einem grossen Betonblock, in den zwei hohe, "+
+	    "metallene Stangen eingelassen wurden, an denen ein riesiges "+
+	    "Axtblatt aufgehaengt wurde. Weiters befinden sich dahinter "+
+	    "einige Stangen, an denen Galgen befestigt wurden.\n");
+  AddDetail(({"stahl","zwergenstahl","bedingungen","wetterbedingungen"}),
+	    "Sieht nach Zwergenstahl aus, jedoch haben die Wetterbedingungen "+
+	    "hier bereits fuer einige Rostflecken gesorgt.\n");
+  AddDetail(({"flecken","rostflecken"}),
+	    "Als Du die Flecken naeher betrachtest, bemerkst Du, dass das gar "+
+	    "keine Rostflecken sind, sondern alte, verkrustete Blutflecken!\n");
+  AddDetail("blutflecken",
+	    "Alte, verkrustete Blutflecken kleben am vorderen Teil der "+
+	    "Guillotine und zeugen von dem oftmaligen Gebrauch dieser Anlage "+
+	    "fuer die Hinrichtung von allerlei Gesindel.\n");
+  AddDetail("gebrauch",
+	    "Die Guillotine wird anscheinend oft gebraucht.\n");
+  AddDetail(({"teil","block","betonblock"}),
+	    "Der Betonblock ist ungefaehr sechs Zwerge lang und 5 Zwerge "+
+	    "breit. Zwei Stangen wurden in ihn eingelassen, an dessen unteren "+
+	    "Enden ein kleiner, blutiger Strohhaufen liegt. In den hinteren "+
+	    "Teil wurde eine komplexe Anordnung von Holzbalken eingelassen, an "+
+	    "denen sich einige Galgenseile befinden.\nEin Plakat wurde an der "+
+	    "Seite angebracht.\n");
+  AddDetail("seite",
+	    "An der Seite des Betonblockes wurde ein Plakat angebracht.\n");
+  AddDetail(({"standardzwerg","zwerg","zwerge"}),
+	    "Ein Standardzwerg ist ungefaehr einhundertzwanzig centimeter gross.\n");
+  AddDetail(({"konstruktion","balken","holzbalken"}),
+	    "Die Holzbalken bilden eine seltsam anmutende, jedoch aeusserst "+
+	    "stabile Konstruktion, an der einige Galgenseile befestigt wurden.\n");
+  AddDetail("anordnung",
+	    "Sie sieht recht verwirrend aus, jedoch duerfte sie recht praktisch "+
+	    "sein.\n");
+  AddDetail("enden",
+	    "Ein kleiner, blutiger Strohhaufen wurde da ausgebreitet, um den "+
+	    "Kopf des frisch Verstorbenen aufzufangen.\n");
+  AddDetail("hals",
+	    "Der Hals muss beim Auftreffen des Axtblattes in einer speziellen "+
+	    "Position liegen, denn ansonsten koennte das Axtblatt durch kleine "+
+	    "querstehende Koerperteilchen beschaedigt werden.\n");
+  AddDetail("stangen",
+	    "Zwei maechtige, jedoch schon etwas angerostete Stangen wurden in "+
+	    "den grossen Betonblock eingelassen und halten ein riesiges "+
+	    "Axtblatt. Zwischen den Stangen ist ein Brett eingeschoben, welches "+
+	    "den Hals des zu Hinrichtenden in einer speziellen Stellung "+
+	    "festhalten soll. Ein kleiner Strohhaufen wurde davor ausgebreitet.\n");
+  AddDetail(({"streitaxt","axtblatt"}),
+	    "Ein riesiges Axtblatt einer Streitaxt, wie Du vermutest. Der Stiel "+
+	    "wurde aus der Oese geloest und statt dessen ein Seil herumgeknotet."+
+	    " Dieses Seil fuehrt zu einer, recht kompliziert aussehenden "+
+	    "Vorrichtung, welche durch eine herabhaengende Kordel ausgeloest "+
+	    "werden kann. Es scheint, dass die letzte Hinrichtung noch nicht "+
+	    "allzu lange her ist, denn es befinden sich noch einige Spritzer "+
+	    "frischen Blutes auf dem Axtblatt und das kleine Baenkchen davor ist"+
+	    " ebenfalls mit dem roten Saft bedeckt...\n");
+  AddDetail(({"galgen","galgenseile"}),
+	    "Zur Abschreckung werden die Raeuber, Diebe und sonstiges Gesindel "+
+	    "einfach nur aufgehaengt, anstatt ordentlich gekoepft zu werden. "+
+	    "Die Koerper bleiben dort einige Tage haengen, bis der Duft der "+
+	    "Verwesung irgendwelche Hunde oder sonstige Aasfresser anlockt und "+
+	    "somit der Henker gezwungen ist, den jeweiligen 'corpus delicti' "+
+	    "herunterzunehmen.\n");
+  AddDetail(({"woche","tage","zeit"}),
+	    "Meisstens nicht mehr als eine Woche.\n");
+  AddDetail(({"stadttor","tor"}),
+	    "Es befindet sich weiter im Westen.\n");
+  AddDetail(({"monate","jahre","jahrzehnte"}),
+	    "NICHT MEHR ALS EINE WOCHE!!\n");
+  AddDetail(({"seil","stiel"}),
+	    "Der Stiel der Streitaxt wurde durch ein Seil ersetzt, welches "+
+	    "zu einer seltsam aussehenden Vorrichtung fuehrt.\n");
+  AddDetail(({"fall","kordel"}),
+	    "Der Henker braucht nur an dieser Kordel zu ziehen und schon ist "+
+	    "derjenige, welcher auf dem kleinen Baenkchen liegt und seinen Hals "+
+	    "zwischen den Stangen eingezwickt hat, einen Kopf kuerzer...\n");
+  AddDetail("baenkchen",
+	    "Vor den zwei Stangen befindet sich ein kleines Baenkchen, auf das "+
+	    "sich der Hinzurichtende legen muss, so dass das Axtblatt nicht "+
+	    "durch einen querstehenden Wirbel, oder sonstige Knoechelchen oder "+
+	    "Knorpel abgelenkt werden kann. Durch haeufige Hinrichtungen hat "+
+	    "es der Henker jedoch scheinbar aufgegeben, das Baenkchen zu "+
+	    "reinigen, denn es trieft nur so von Blut und sonstigen Koerper"+
+	    "teilchen.\n");
+  AddDetail(({"blut","saft","spritzer"}),
+	    "Bei Hinrichtungen in der ersten Reihe stehen ist fuer manche "+
+	    "Leute das hoechste, denn es geht immer blutig zu und das Volk "+
+	    "ist nur zufrieden, wenn es das Blut eines Schuldigen spritzen "+
+	    "sieht!\n");
+  AddDetail("brett",
+	    "Zwischen den zwei Stangen wurde ein Brett eingespannt, welches "+
+	    "den Hals des Hinzurichtenden in eine, dem Axtblatt angenehme "+
+	    "Position bringen soll.\n");
+  AddDetail("oese",
+	    "Ein Seil wurde durch die Oese gezogen, sodass das Axtblatt bequem "+
+	    "rauf und wieder herabgelassen werden kann.\n");
+  AddDetail(({"aasfresser","hunde"}),
+	    "Hunde und sonstige Aasfresser kommen hier immer wieder her, um "+
+	    "sich an den Resten einer Hinrichtung zu laben.\n");
+  AddDetail(({"haare","teilchen","koerperteilchen","reste","knorpeln","knorpel",
+		"wirbel","knoechelchen","halswirbel"}),
+	    "Nach jeder Hinrichtung bleiben am Ort des Geschehens noch einige "+
+	    "Reste, inform von Haaren, kleinen Knorpeln und Knoechelchen, "+
+	    "Halswirbel und sonstigen Koerperteilchen zurueck, welche dann "+
+	    "des naechtens von Hunden und sonstigen Aasfressern vertilgt "+
+	    "werden.\n");
+  AddDetail(({"ort","ort des geschehens","geschehen"}),
+	    "Der Ort des Geschehens ist die Marktplatzmitte, an der die "+
+	    "Guillotine steht.\n");
+  AddDetail(({"verwesung","duft"}),
+	    "Wenn Du dem nicht glaubst, so rieche doch einmal!\n");
+  AddDetail("vorrichtung",
+	    "Du kannst nicht genau erkennen wie sie funktioniert, jedoch "+
+	    "erscheint Dir diese Tatsache als nicht wichtig, denn wichtig ist "+
+	    "nur, dass derjenige, der sich auf das Baenkchen gelegt hat, auch "+
+	    "seinem, ihm bestimmten, Schicksal zufgefuehrt wird.\n");
+  AddDetail("tatsache",
+	    "Sie ist unwichtig!\n");
+  AddDetail(({"vogelnest","haufen","strohhaufen"}),
+	    "Er koennte fast wie ein Vogelnest aussehen, waere nicht das "+
+	    "ganze Blut...\n"+
+	    "Direkt nach dem Fall des Axtblattes, faellt der Kopf hier in den "+
+	    "blutigen Haufen, sodass der Kopf nicht beschaedigt wird.\n");
+  AddDetail(({"belustigung","abschreckung"}),
+	    "Zur Abschreckung von Dieben, Raeubern und sonstigem Gesindel "+
+	    "werden hier des oefteren oeffentliche Hinrichtungen und "+
+	    "Erhaengungen vollfuehrt, aber auch um das, nach Blut duerstende "+
+	    "Volk zu belustigen.\n");
+  AddDetail("auftreffen",
+	    "Das Auftreffen des Axtblattes beendet meisst das Leben des "+
+	    "Hinzurichtenden.\n");
+  AddDetail("leben",
+	    "Kein Kopf, kein Leben!\n");
+  AddDetail(({"erfuellung","wichtigkeit","schicksal"}),
+	    "Die Mitte des Marktplatzes scheint fuer die Erfuellung des "+
+	    "Schicksals von groesster Wichtigkeit zu sein!\n");
+  AddDetail(({"hinrichtung","hinrichtungen","erhaengungen"}),
+	    "Obwohl Hinrichtungen an der Guillotine hier in Arwenock sehr "+
+	    "beliebt sind, werden zur Abschreckung oft auch Erhaengungen "+
+	    "vollstreckt, um eventuelle Diebe oder Moerder von ihren "+
+	    "Vorhaben abzuhalten.\n");
+  AddDetail("vorhaben",
+	    "Diebe stehlen, Moerder morden, Gesindel ... aeh stinkt halt.\n");
+  AddDetail("henker",
+	    "Er scheint wohl nicht da zu sein... schade!\n");
+  AddDetail(({"moerder","raeuber","diebe","gesindel"}),
+	    "Es treibt sich allerhand Gesindel herum in einer so reichen Stadt "+
+	    "wo es offensichtlich einiges zu holen gibt.\n");
+  AddDetail(({"hinrichtenden","hinzurichtenden","hinzurichtende","schuldige"}),
+	    "Sie werden auf das Baenkchen gelegt, dann wird der Kopf mit dem "+
+	    "Brett zwischen den zwei Stangen fixiert und sobald, das Volk "+
+	    "bereit ist, zieht der Henker die Kordel...\n");
+  AddDetail("kopf",
+	    "Der Kopf landet meisstens in dem kleinen, blutigen Strohhaufen.\n");
+  AddDetail("reihe",
+	    "Die Leute stehen meisst dicht gedraengt in der vordersten Reihe, um"+
+	    " von der Hinrichtung bloss nichts zu verpassen!.\n");
+  AddDetail(({"position","stellung"}),
+	    "Darum brauchst Du Dich nicht zu kuemmern, denn damit kennt sich der"+
+	    " Henker bestens aus!\n");
+  AddDetail(({"leute","bewohner","volk","schaulustige","zuschauer","monster"}),
+	    "Das sind die Bewohner von Arwenock. Hauptsaechlich Haendler und "+
+	    "Kaufleute, doch wenn eine Hinrichtung auf dem Plan steht, mutieren "+
+	    "sie zu blutruenstigen, wild groehlenden und laut jubelnden Monstern!\n");
+  AddDetail(({"haendler","kaufleute"}),
+	    "Arwenock wird hauptsaechlich von Haendlern und Kaufleuten bewohnt, "+
+	    "jedoch ist der Handel eine recht unsichere Sache und daher hausen hier "+
+	    "auch einige gestrandete Bettler und Landstreicher.\n");
+  AddDetail(({"handel","sache"}),
+	    "Der Handel ist eine aeusserst risikoreiche Sache, ein falscher "+
+	    "Verkauf, ein im Sturm untergegangenes Schiff, einige Raeuber auf "+
+	    "dem Weg und schon kann es einem passieren, dass man pleite ist...\n");
+  AddDetail(({"grat","verkauf","sturm","schiff"}),
+	    "Beim Handel wandelt man auf einem schmalen Grat, von welchem man "+
+	    "jederzeit abweichen kann und falls das passiert, endest Du wie die "+
+	    "Bettler, die da an der einen Hauswand leben...\n");
+  AddDetail("nase",
+	    "Sie ist noch da...\n");
+  AddDetail("verstorbener",
+	    "Der braucht seinen Kopf sowieso nicht mehr...\n");
+  AddDetail("steinigung",
+	    "Wer frei von Suende ist, der werfe den ersten Stein!\n");
+  AddDetail("suende",
+	    "Bist Du frei von Suende?!\n");
+  AddDetail("korb",
+	   "In dem Korb befinden sich einige menschenfaustgrosse Steine. "+
+	   "Leute kommen hier her, um geaechtetes und angeprangertes "+
+	   "Gesindel zu steinigen.\n");
+  AddDetail(({"reinigung","aufstellung","zweck"}),
+	    "Damit die Leute nicht mit faulen Eiern und Tomaten werfen, hat der "+
+	    "Buergermeister die Aufstellung dieses Korbes veranlasst. Es waere "+
+	    "eine enorm teure Reinigung der Hauswaende faellig, wenn die Leute "+
+	    "hier mit faulen Eiern und Tomaten rumwerfen wuerden.\n");
+  AddDetail(({"mann","buergermeister"}),
+	    "Der Buergermeister ist der wichtigste Mann in Arwenock, laesst es "+
+	    "sich aber nicht nehmen, ab und zu eine der Hinrichtungen zu besuchen.\n");
+  AddDetail(({"seiten","hauswaende"}),
+	    "Der Marktplatz wird von allen Seiten durch Hauswaende groesserer "+
+	    "Haeuser eingeschlossen.\n");
+  AddDetail("haeuser",
+	    "Du kannst von hier aus nicht viel erkennen, da muesstest Du wohl "+
+	    "in die jeweilige Richtung gehen, um mehr zu erfahren.\n");
+  AddDetail(({"eier","tomaten","zeugs"}),
+	    "Das uebliche faule Zeugs eben...\n");
+  AddDetail("prozedur",
+	    "Die Prozedur ist recht einfach... Man nimmt sich einen Stein aus "+
+	    "dem Korb, zielt auf einen Koerperteil des Opfers und wirft dann...\n");
+  AddDetail("opfer",
+	    "Natuerlich nur Opfer, die am Pranger haengen!\n");
+  AddDetail(({"hauswand","wand"}),
+	    "An einer langen Hauswand haben sich ein paar Bettler niedergelassen "+
+	    "und fristen hier ihr trauriges Dasein, indem sie um Geld betteln, "+
+	    "irgendwelches Ungeziefer essen oder Musik machen, um etwas Geld zu "+
+	    "bekommen.\n");
+  AddDetail(({"landstreicher","gruppe","bettler","bettlergruppe"}),
+	    "Eine Gruppe von Bettlern hat sich hier niedergelassen und wird sich "+
+	    "wohl so schnell nicht wieder vertreiben lassen. Nicht nur, dass sie "+
+	    "einen unangenehmen Geruch verbreiten (oder kommt das von der "+
+	    "Guillotine...), viele von ihnen spezialisieren sich auf das "+
+	    "Bestehlen von unschuldigen Buergern, oder nerven die Leute mit dem "+
+	    "Geklimper ihrer Becher, oder machen mitten auf dem Marktplatz ein "+
+	    "Lagerfeuer, um wieder einmal eine Ratte, eine Katze oder einen "+
+	    "Hund zu braten.\n");
+  AddDetail("becher",
+	    "Die Bettler rasseln laut mit ihren, mit Muenzen, halbgefuellten "+
+	    "Bechern, um milde Gaben von den Buergern zu erbetteln.\n");
+  AddDetail("dasein",
+	    "Die Bettler tun eigentlich nichts und stinken nur so dahin...\n");
+  AddDetail("geklimper",
+	    "Vielen Leuten geht das Geklimper auf die Nerven, deswegen werfen "+
+	    "sie ein paar Muenzen in einen der Becher, auf das die Bettler etwas "+
+	    "ruhiger sind.\n");
+  AddDetail(({"muenzen","geld"}),
+	    "Die Bettler haben das Geld viel noetiger als Du...\n");
+  AddDetail(({"ungeziefer","katze","ratte","hund"}),
+	    "Die Bettler essen alles, was sie finden!\n");
+  AddDetail("lagerfeuer",
+	    "Die Bettler veranstalten ab und zu ein kleines Lagerfeuer, um sich "+
+	    "eine gefangene Katze, einen Hund oder einfach nur eine Ratte zu "+
+	    "grillen.\n");
+  AddDetail("nerven",
+	    "Die Buerger muessen harte Nerven haben, bei dem Krach den die "+
+	    "Bettler verursachen.\n");
+  AddDetail("gaben",
+	    "Du ueberlegst, ob es sinnvoll waere auch etwas Geld zu spenden...\n");
+  AddDetail("spiele",
+	    "Lauter eher uninteressante Spiele, jedoch ein Bettler mit einem "+
+	    "Kartenspiel faellt Dir auf...\n");
+  AddDetail("kartenspiel",
+	    "Als der Bettler bemerkt, wie Du ihn beim Mischen beobachtest, blickt"+
+	    "er Dich an und fragt: 'Willst Du ein Spielchen wagen?\n");
+  AddDetail("spielchen",
+	    "Ob es wohl klug ist, ein Spielchen zu wagen?!\n");
+  AddDetail(({"karten","mischen"}),
+	    "Der Bettler mischt seine Karten so schnell, dass Du sie kaum noch "+
+	    "sehen kannst.\n");
+  AddDetail(({"buergerin","buergerinnen","buerger"}),
+	    "Viele Buerger wuseln hier kreuz und quer ueber den Marktplatz "+
+	    "einige begutachten die vielen Marktstaende, einge beschaeftigen sich "+
+	    "mit den Bettlern und die anderen stehen meist um die Guillotine und "+
+	    "betrachten die Gehaengten, oder warten gespannt auf eine neue "+
+	    "Hinrichtung.\n");
+  AddDetail("troll",
+	    ([0: "Riesig halt!\n",
+	     "troll": "So gross wie Du!\n"]));
+  AddDetail("gnom",
+	    ([0: "Sehr klein halt!\n",
+	     "fee": "So klein wie Du!\n"]));
+  AddDetail(({"kreuz","holzkreuz"}),
+	    "Ein massives Holzkreuz mit Hand- und Fussangeln.\n");
+  AddDetail(({"handangeln","fussangeln","angeln"}),
+	    "Damit wird derjenige am Pranger festgemacht.\n");
+  AddDetail("marktzeit",
+	    "Anscheinend herrscht jetzt keine Marktzeit, denn die Laeden sind "+
+	    "fast alle geschlossen. Normalerweise ist der Platz hier immer voll "+
+	    "mit Marktstaenden und sonstigen Verkaeufern.\n");
+  AddDetail(({"laeden","staende","marktstaende"}),
+	    "Es sieht aus, als ob fast alle Laeden geschlossen waeren, anscheinend "+
+	    "herrscht keine Marktzeit. Doch da erkennst Du einen kleinen "+
+	    "Fischladen neben den Bettlern.\n");
+  AddDetail("verkaeufer",
+	    "Weit und breit keine Verkaeufer zu sehen... Oder? Doch, einer steht "+
+	    "bei seinem Fischladen und preist seine angeblich frischen Fische an.\n");
+  AddDetail(({"laden","fischladen"}),
+	    "Ein kleiner Fischladen scheint hier immer offen zu haben. Ein "+
+	    "leichter Fischgeruch geht von dem Laden aus. Der Fischverkaeufer "+
+	    "blickt Dich freundlich an.\n");
+  AddDetail("fischverkaeufer",
+	    "Der Fischverkaeufer, offenbar nicht aus dieser Gegend, fragt Dich:\n"+
+	    "'Wollsta kaufta frischern Fischern? Guter Fischern! Nur "+
+	    FISCHPREIS+" Muenzen!'\n");
+
+  AddDetail( ({ "gegend" }),
+            "Die Gegend hier heisst 'Arwenock'.");
+  
+  AddSmell(DEFAULT_SMELL,
+	   "Ein gewisser Verwesungsgeruch stroemt Dir von der Marktmitte "+
+	   "entgegen. Ob der wohl etwas mit den Leichen zu tun hat, die dort "+
+	   "am Galgen haengen?\n");
+  AddSmell(({"verwesung","verwesungsgeruch","verwesungsduft","duft"}),
+	   "Ein, nicht zu leugnender Verwesungsduft steigt Dir in die Nase, es "+
+	   "ist wohl wieder an der Zeit, einen der Galgenfreunde zu erloesen.\n");
+  AddSmell("geruch",
+	   "Du kannst Dich nicht entscheiden, welcher Geruch staerker ist, der "+
+	   "Verwesungsgeruch, der von der Marktplatzmitte her weht, oder der "+
+	   "durchdringende Geruch, den die Bettler verbreiten...\n");
+  AddSmell("bettler",
+	   "*wuerg*pfui*waeh*!!\n");
+  AddSmell(({"fisch","fische","fischgeruch"}),
+	   "Also verdorben riechen die Fische nicht! Vielleicht solltest Du Dir "+
+	   "den Laden mal ansehen...\n");
+  
+  AddSound(({"geraeusche",DEFAULT_SOUND}),
+	   "Der Marktplatz ist voll von Geraeuschen... Ein bestaendiges Murmeln "+
+	   "von den Bettlern, ein oft lautes Jubeln, wenn jemand gesteinigt "+
+	   "wurde und hie und da ein paar Buerger, die sich bei den Marktstaenden"+
+	   " unterhalten.\n");
+  AddSound("murmeln",
+	   "Ein bestaendiges Murmeln ertoent von der Bettlergruppe, die es sich "+
+	   "an einer Hauswand bequem gemacht haben.\n");
+  AddSound(({"jubelgeschrei","jubeln","jubel"}),
+	   "Immer wieder werden hier Leute gesteinigt, gekoepft oder einfach "+
+	   "nur erhaengt. Das blutluesterne Volk von Arwenock bricht dabei "+
+	   "immer in ein grosses Jubelgeschrei aus.\n");
+  AddSound("buerger",
+	   "Du willst sie doch nicht etwa belauschen?\n");
+  AddSound(({"krach","musik"}),
+	   "Einige der Bettler versuchen offenbar, sich mit Musik einige Muenzen "+
+	   "dazuzuverdienen.\n");
+  
+  AddSpecialDetail(({"verurteilte","leichen","koerper","galgenfreunde","erhaengte",
+		       "verstorbene","baumelnde leichen"}),"galgendetail");
+  AddSpecialDetail(({"plan","plakat"}), "plakatdetail");		   
+  AddSpecialDetail("pranger", "prangerdetail");
+  
+  AddCmd(({"ziehe","zieh"}), "ziehenfake");
+  AddCmd(({"belausche","belausch"}), "belauschenfake");
+  AddCmd(({"nehme","nimm"}), "nehmenfkt");
+  AddCmd(({"lege","leg"}), "legenfkt");
+  AddCmd(({"ziel","ziele"}), "zielenfkt");
+  AddCmd("spende","spendenfkt");
+  AddCmd(({"wag","wage"}), "spielchenfkt");
+  AddCmd(({"kaufe","kauf"}), "kaufenfkt");
+  AddCmd("","check",1);
+
+  AddRoomMessage(({""}),70,"messages");
+  AddExit( "osten",  ROOM "room_D-04" );
+  AddExit( "norden", ROOM "room_C-05" );
+  AddExit( "westen", ROOM "room_B-04" );
+  AddExit( "sueden", ROOM "room_C-03" );
+
+  pranger="niemand";
+  pranger_next=0;
+  pranger_hits=0;
+  galgen=(["ein Troll":0]);
+  spenden=([]);
+  planned_exekution=0;
+  init_galgen();
+  letztenliste=({});
+  restore_object(LETZTE_LOG);
+  init_plakat();
+  victim=0;
+  fische=random(MAXFISCHE);
+}
+
+check(string str)
+{
+  if((victim==TP) && !IS_WIZARD(victim))
+    return write(({"Einer der Stadtwaechter haelt Dich brutal zurueck.\n",
+		     "Ein Stadtwaechter tritt Dir gegen Dein Knie.\n",
+		     "Ein Stadtwaechter sticht Dir mit seinem Schwert in die Seite.\n",
+		     "Du stehst vor der Guillotine und hast zu sehr Angst, um Dich "+
+		     "zu bewegen.\n",
+		     "Du traust Dich nicht...\n"})[random(5)]),1;
+  return 0;
+}
+
+reset()
+{
+  ::reset();
+
+  spenden=([]);
+  fische=random(MAXFISCHE);
+  
+  call_out("init_galgen",10,UPDATE);
+
+  if(!random(3) && pranger=="niemand")
+    AddPranger(({"ein Gnom","ein Troll","ein Ork","ein buggender Magier",
+		   "ein Dunkelelf","ein Paladin","ein Berserker","ein Dieb"})
+	       [random(8)]);
+  if(!random(3) && sizeof(galgen)<10)
+    galgen+=([({"ein Gnom","ein Troll","ein Ork","ein buggender Magier",
+		  "ein Dunkelelf","ein Paladin","ein Berserker","ein Dieb"})
+	     [random(8)]:0]);
+}
+
+messages(int msg)
+{
+  string s;
+  
+  switch(random(15))
+    {
+    case 0:s="Ein"+(random(2) ? "e Buergerin":" Buerger")+
+	    " wirft im Vorbeigehen einem Bettler ein paar Muenzen "+
+	      "in den Becher. Der Bettler bedankt sich und steckt das Geld "+
+	      "schnell ein.";
+      break;
+    case 1:s="Ein Bettler hebt seinen Becher und laesst es laut klingeln...";
+      break;
+    case 2:s="Zwischen zwei Bettlern bricht ein Streit aus, welcher nun auf "+
+	    "einem bestimmten Platz schlafen darf, doch als einer der "+
+	    "Stadtwaechter auf sie aufmerksam wird, ist es ploetzlich ruhig...";
+      break;
+    case 3:s="Ein kleiner Hund kommt zwischen den Bettlern hervor und grinst "+
+	    "Dich an. Du bist so fasziniert von dem Hund, dass Du nicht "+
+	    "bemerkst, wie er Dir ans Bein pinkelt...";
+      break;
+    case 4:s="Ein kleine"+(random(2) ? "s Maedchen":"r Bub")+
+	    " rennt auf Dich zu, direkt in Dich hinein und dann wieder weiter "+
+	      "nach "+({"Sueden","Norden","Osten","Westen"})[random(4)]+
+              ". Du blickst dem Kind nach, doch es ist bereits weit weg.\n";
+      break;
+    case 5:s="Ein kleiner Hund rennt bei Dir vorbei, er traegt scheinbar etwas "+
+	    "im Maul, doch Du kannst nicht erkennen, was es ist.\n";
+      break;
+    case 6:s="Du hoerst ein leichtes Knarren, als sich einer der Erhaengten "+
+	    "im Wind bewegt.\n";
+      break;
+    case 7:s="Eine Fliege fliegt an Dir vorbei und weiter in Richtung Guillotine.\n";
+      break;
+    case 8:s="Ploetzlich hoerst Du Irgendetwas laut quieken, anscheinend haben "+
+	    "die Bettler sich ein Abendessen inform "+
+	    ({"einer Ratte","eines kleinen Hundes","einer Katze"})[random(3)]+
+	    " gefangen.\n";
+      break;
+    case 9:s="Ein lautes Jubeln ertoent von einer Menschenmenge vor der "+
+	    "Guillotine, da einem Erhaengten "+
+	    ({"eine Hand","ein Finger","ein Arm","ein Zeh","ein Bein","ein Fuss",
+		"der Kopf","ein Ohr","die Nase"})[random(9)]+" abgefallen ist.\n";
+      break;
+    case 10:s="Ein lautes Jubeln durchzieht den Marktplatz, als ein junger "+
+	     ({"Oger","Troll","Mensch","Hobbit","Zwerg"})[random(5)]+
+             " dem an den Pranger gefesselten, einen Stein mitten "+
+  	     ({"ins Gesicht","in den Bauch","auf den Kopf"})[random(3)]+
+             " wirft.\n";
+      break;
+    default: s="Du hoerst leises Murmeln aus der Richtung der Bettler...";
+    }
+  tell_room(TO, BK(s));
+}
+
+varargs int PreventLeave(object ob, mixed dest)
+{
+  object stein;
+  
+  if(interactive(ob))
+    if(stein=present(STEIN,ob))
+      {
+	tell_object(ob, BK("Du legst den Stein wieder zurueck in den Korb, "+
+			   "sodass andere noch genug fuer die naechste "+
+			   "Steinigung haben...\n"));
+	stein->remove();
+      }
+  return ::PreventLeave(ob);
+}
+
+kaufenfkt(string str)
+{
+  object tp,fisch;
+  int geld;
+  
+  notify_fail("Was willst Du denn kaufen?\n");
+  if(!str) return 0;
+  
+  if(str=="fisch"||str=="frischen fisch"||str=="fische"||str=="frische fische")
+    {
+      tp=TP;
+      if((!geld=tp->QueryMoney() || geld<FISCHPREIS))
+	return write("Der Fischverkaeufer meint: 'Du nix genug Gelder!'\n"),1;
+      if(!fische)
+	return write("Der Fischverkaeufer seufzt: 'Nix mehr haben Fischern!'\n"),1;
+      fisch=clone_object(OBJ "fisch");
+      fisch->move(tp, M_NOCHECK);
+      write("Der Fischverkaeufter packt Dir einen schoenen Fisch ein und gibt "+
+	    "ihn Dir.\n"+
+	    "Du ueberreichst ihm dafuer "+FISCHPREIS+" Muenzen.\n");
+      say(tp->Name()+" kauft sich einen frischen Fisch.\n");
+      tp->AddMoney(-FISCHPREIS);
+      fische--;
+      return 1;
+    }
+  return 0;
+}
+
+spielchenfkt(string str)
+{
+  string karte;
+  
+  notify_fail("Was willst Du wagen?\n");
+  if(!str) return 0;
+  
+  if(str=="spielchen"||str=="ein spielchen")
+    {
+      karte=({"Pik","Herz","Karo","Treff"})[random(4)]+" ";
+      karte+=({"Sechs","Sieben","Acht","Neun","Zehn","Bube","Dame","Koenig","Ass"})[random(9)];
+
+      write(BK("Du wagst ein Spielchen und blickst den Bettler erwartungsvoll "+
+	       "an.\n\nDer Bettler mischt die Karten durch und fordert Dich "+
+	       "auf, eine Karte zu ziehen und sie anzusehen.\n\nDu ziehst eine "+
+	       "Karte: "+karte+"!\n\n"+
+	       "Der Bettler blickt Dich an und meint: 'Ich wette mit Dir, "+
+	       "dass es die Karte "+karte+" ist' und dann grinst er Dich wissend "+
+	       "an.\n\n"+
+	       "Als Du ihm die Karte zurueckgibst bemerkst Du einen kleinen "+
+	       ({"roten","gruenen","blauen","gelben","schwarzen","braunen"})[random(6)]+
+	       " "+({"Punkt","Kreis","Strich"})[random(3)]+" auf der Kartenrueck"+
+	       "seite, was der wohl bedeuten mag?\n"));
+      say(TP->Name()+" wagt ein Kartenspielchen mit einem der Bettler.\n");
+      return 1;
+    }
+  return 0;
+}
+
+zielenfkt(string str)
+{
+  string dest,who;
+  object tp,stein;
+  
+  notify_fail("Ziele doch auf einen Koerperteil von dem, der am Pranger haengt!\n");
+  if(!str) return 0;
+  if(sscanf(str, "auf %s von %s",dest,who)==2)
+    {
+      if(!stein=present(STEIN,tp=TP))
+	return write("Du hast doch gar nichts zum werfen dabei!\n"),1;
+      if(!member(KTEILE, dest))
+	return write("Auf folgende Koerperteile kannst Du zielen: \n"+
+		     implode(map_array(m_indices(KTEILE),CLOSURE(capitalize)),", ")+".\n"),1;
+      if(pranger=="niemand")
+	return write("Aber zur Zeit haengt doch niemand am Pranger!\n"),1;
+      if(who!=pranger)
+	return write("Wessen "+CAP(dest)+" meinst Du?\n"),1;
+      if(who=="niemand")
+	return write("Wirf Dir den Stein doch selber an den Kopf!\n"),1;
+      if(who==getuid(tp))
+	return write("Lass Deinen Koerper in Ruhe!\n"),1;
+      if(random(tp->QueryAttribute(A_DEX))<10)
+	{
+	  write(BK("Du holst weit aus und wirfst...\n"+
+		   ({"Der Stein ging weit daneben!",
+		       "Der Stein fliegt knapp an dem Pranger vorbei.",
+		       "Der Stein hat zu wenig Schwung und faellt auf den Boden.",
+		       "Der Stein trifft ein Fenster und Du drehst Dich schnell um.",
+		       "Der Stein fliegt irgendwohin."})[random(5)]));
+	  stein->remove();
+	  return 1;
+	}
+      write(BK("Du holst mit dem Stein weit aus...\n"+
+	       "Du nimmst noch einmal Mass... "+CAP(who)+" - "+CAP(dest)+"\n"+
+	       "Mit einem geschickten Wurf trifft Dein Stein mitten auf "+
+	       KTEILE[dest]+" "+CAP(dest)+". "+
+	       ({"Die Stelle faerbt sich blutrot und "+CAP(who)+" schreit vor "+
+		   "Schmerz auf. ",
+		   "Hart trifft er auf die weiche Haut Deines Opfers. ",
+		   "Blut spritzt als Dein Stein eine tiefe Wunde hinterlaesst! ",
+		   CAP(who)+" zuckt vor Schmerz zusammen, doch die Fesseln "+
+		   "schneiden nur noch mehr in das Fleisch hinein! "})[random(4)]+
+		   "Ein glorreiches Grinsen breitet sich auf Deinen Lippen aus, "+
+		   "als Du Dir einredest, etwas Gutes getan zu haben."));
+      say(BK(tp->Name()+" nimmt einen Stein in die Hand, zielt kurz und "+
+	     "wirft...\n"+CAP(pranger)+" "+
+	     ({"wird voll getroffen!!","bekommt einen Streifschuss ab!",
+		 "wird hart getroffen!"})[random(3)]+
+	     " Zufrieden und mit einem blutluesternen Grinser auf den Lippen "+
+	     "wendet sich "+tp->Name(WER)+" ab.\n"));
+      pranger_hits++;
+      if(pranger_hits>15)
+	if(!random(3))
+	  {
+	    write(BK("Durch Deinen schweren Schlag beginnt "+CAP(who)+" zu "+
+		     "zucken und bricht daraufhin tot hernieder... Ein Jubeln "+
+		     "erfuellt den Marktplatz, als ein paar Gnome den blutigen "+
+		     "Leichnahm wegtragen. Arwenocks Buerger feiern Dich als "+
+		     "Held!\n"));
+	    say(BK("Durch "+tp->Name(WESSEN)+" schweren Schlag beginnt "+CAP(who)+
+		   " zu zucken und bricht daraufhin tot hernieder... Ein Jubeln "+
+		   "erfuellt den Marktplatz, als ein paar Gnome den blutigen "+
+		   "Leichnahm wegtragen. Arwenocks Buerger feiern Dich als "+
+		   "Held!\n"));
+	    domainshout("Ein lautes Jubeln ertoent auf Arwenocks Marktplatz!\n"+
+			CAP(who)+" ist von "+tp->Name(WEM)+" zu Tode "+
+			"gesteinigt worden.\n",ARWENOCK,1); 
+	    write_file(ALOG "steinigung", ctime()+" - "+tp->Name()+" versetzt "+
+		       CAP(who)+" den Todesstoss ("+dest+").\n");
+	    if(pranger_next)
+	      {
+		pranger=pranger_next;
+		pranger_next=0;
+		tell_room(TO,
+			  BK("Ein paar Stadtwaechter kommen mit einem neuen Prangeropfer "+
+			     "herein.\n"+
+			     CAP(pranger)+" wehrt sich zwar, hat aber gegen die Stadtwaechter "+
+			     "keine Chance und wird am Pranger festgemacht. Zuerst die "+
+			     "Handgelenke in die Handangeln und anschliessend die Fussgelenke "+
+			     "in die Fussangeln.\n"+
+			     "Die Stadtwaechter verlassen den Hauptplatz nach Sueden.\n"));
+	      }
+	    else
+	      pranger="niemand";
+	  }
+      stein->remove();
+      return 1;
+    }
+  return 0;
+}
+
+nehmenfkt(string str)
+{
+  object stein,tp;
+
+  notify_fail("Was willst Du woraus nehmen?\n");
+  if(!str) return 0;
+
+  if(str=="stein aus korb"||str=="stein von korb")
+    {
+      tp=TP;
+      if(present(STEIN,tp)) 
+	return write("Du hast doch bereits einen Stein! Wirf doch den zuerst!\n"),1;
+      stein=clone_object(OBJ "blutstein");
+      if(stein->move(tp,M_SILENT)==ME_TOO_HEAVY)
+	return write("Was willst Du denn noch alles tragen!?!\n"),1;
+      write(BK("Mit einem blutruenstigen Grinser auf Deinen Lippen nimmst Du "+
+	       "einen Stein aus dem Korb und blickst in Richtung der Pranger."));
+      say(BK("Mit einem blutruenstigen Grinser auf "+
+	     tp->QueryPossPronoun(tp->QueryProp(P_GENDER), WESSEN, PLURAL)+" Lippen nimmt "+tp->Name(WER)+
+	     " einen der Steine aus dem Korb.\n"),tp);
+      return 1;
+    }
+  return 0;
+}
+
+legenfkt(string str)
+{
+  object stein,tp;
+
+  notify_fail("Was willst Du denn wohin legen?\n");
+  if(!str) return 0;
+
+  if(str=="stein in korb"||str=="stein in korb zurueck")
+    {
+      tp=TP;
+      if(!stein=present(STEIN,tp)) 
+	return write("Aber du hast doch gar keinen Stein!\n"),1;
+      write(BK("Du laesst den Stein achtlos in den Korb zurueckfallen.\n"));
+      say(BK(tp->Name()+" wirft einen Stein in den Korb zurueck.\n"),tp);
+      stein->remove();
+      return 1;
+    }
+  return 0;
+}
+
+spendenfkt(string str)
+{
+  int amount;
+  object belo,tp;
+
+  notify_fail("Wem willst Du denn wieviel spenden?\n");
+  if(!str) return 0;
+
+  if(str=="bettler 1 muenze"||str=="bettler 0 muenzen")
+    return write("Sei nicht so gemein Du "+TP->QueryProp(P_RACE)+" du!\n"),1;
+
+  if(sscanf(str, "bettler %d muenzen",amount)==1)
+    {
+      tp=TP;
+
+      if(tp->QueryMoney()<amount)
+	return write("Soviel Geld hast Du doch gar nicht dabei!\n"),1;
+
+      if(amount<0) return 0;
+
+      if(spenden[getuid(tp)]>10)
+	return write("Du hast genug gespendet fuers erste.\n"),1;
+
+      write("Du hast Mitleid fuer einen der Bettler, weil er "+
+	    ({"nur ein Auge hat","nur ein Bein hat","blind ist","taub zu sein "+
+		"scheint","komplett verwarlost aussieht","weil er Dich mit seinen"+
+		" zwei letzten Zaehnen so lieb anlaechelt"})[random(6)]+" und "+
+		"gibst ihm einige Muenzen. Der Bettler blickt Dich dankbar an "+
+		"und gibt Dir als Dank ein kleines Bonbon.\n");
+      say(tp->Name()+" spendet einem alten Bettler einige Muenzen.\n");
+
+      tp->AddMoney(-amount);
+
+      belo=clone_object(OBJ "bonbon");
+      belo->move(tp,M_NOCHECK);
+
+      if(spenden[getuid(tp)])
+	spenden[getuid(tp)]++;
+      else
+	spenden+=([getuid(tp):1]);
+
+      write_file(ALOG "bettlerspende",ctime()+" - "+tp->Name()+" bekommt ein "+
+		 "Bonbon fuer "+amount+" Muenzen.\n");
+      return 1;
+    }
+  return 0;
+}
+
+ziehenfake(string str)
+{
+  notify_fail("Was willst Du ziehen?\n");
+  if(!str) return 0;
+  
+  if(str=="kordel"||str=="an kordel")
+    return write(BK("Lass das! Sonst kommt vermutlich noch der Henker und zwingt"+
+		    " Dich, auf dem Baenkchen Platz zu nehmen...\n")),1;
+  return 0;
+}
+
+belauschenfake(string str)
+{
+  notify_fail("Wen willst Du denn belauschen?\n");
+  if(!str) return 0;
+  if(str=="buerger")
+    return write(BK("Einer der Buerger bemerkt Dein Vorhaben und verpasst "+
+		    "Dir eine schallende Ohrfeige, worauf sich Deine Wange "+
+		    "kurz rot faerbt.\n")),1;
+  notify_fail("Lass das!\n");
+  return 0;
+}
+
+galgendetail()
+{
+  return galgen_string;
+}
+
+plakatdetail()
+{
+  return exekution_string;
+}
+
+prangerdetail()
+{
+  string r;
+
+  if(pranger=="niemand")
+    return BK("Der Pranger besteht aus einem grossen, massiven Holzkreuz, an "+
+	      "dessen Enden ein Hand- und Fussangeln befestigt sind. Somit "+
+	      "kann man daran jeden festmachen, ob es nun ein kleiner Gnom ist, "+
+	      "oder ein grosser, klobiger Troll. Zur Zeit ist "+CAP(pranger)+
+	      " an den Pranger gefesselt.\n");
+
+    
+  switch(pranger_hits)
+    {
+    case  0 ..  5 :r="noch recht frisch";               break;
+    case  6 .. 10 :r="schon etwas angeschlagen";        break;
+    case 11 .. 15 :r="uebel hingerichtet";              break;
+    case 16 .. 20 :r="ziemlich zerdroschen und blutig"; break;
+    default       :r="eher tot als lebendig";
+    }
+  
+  return BK("Der Pranger besteht aus einem grossen, massiven Holzkreuz, an "+
+	    "dessen Enden ein Hand- und Fussangeln befestigt sind. Somit "+
+	    "kann man daran jeden festmachen, ob es nun ein kleiner Gnom ist, "+
+	    "oder ein grosser, klobiger Troll. Zur Zeit ist "+CAP(pranger)+
+	    " an den Pranger gefesselt. Das Opfer sieht "+r+" aus.\n");
+}
+
+varargs init_galgen(int upd)
+{
+  string *gf;
+  string *down;
+  int i;
+  
+  if(!sizeof(galgen))
+    {
+      galgen_string=BK("Schade, aber zur Zeit haengt niemand am Galgen!");
+      return;
+    }
+
+  gf=m_indices(galgen);
+  
+  down=({});
+  
+  if(upd==UPDATE)
+    for(i=sizeof(gf)-1;i>=0;i--)
+      {
+	galgen[gf[i]]++;
+	if(galgen[gf[i]]==10)
+	  {
+	    down+=({gf[i]});
+	    galgen-=([gf[i]]);
+	  }
+      }
+  
+  galgen_string="Folgende, vor kurzem erhaengte Leute kannst du erkennen:\n"+
+    "                                                                            .\n"+
+    ".--------------------------------------------------------------------------'|\n"+
+    "|                                                                           |\n";
+
+  for(i=sizeof(gf)-1;i>=0;i--)
+    galgen_string+=sprintf("|     %15s - %-52s|\n",CAP(gf[i]),ZUSTAND[galgen[gf[i]]]);
+  galgen_string+=
+    "|                                                                           |\n"+
+    "|,--------------------------------------------------------------------------'\n"+
+    "'\n";
+
+  if(sizeof(down))
+    write(BK("Ein Henker kommt an und nimmt ein paar halbverweste Leichnahme "+
+	     "von den Galgen... Darunter auch den Leichnahm von "+
+	     implode(down," und ")+".\n"));
+}
+
+varargs init_plakat(string newline)
+{
+  int i,siz;
+
+  if(newline)
+    {
+      if(sizeof(letztenliste)>15)
+	letztenliste-=letztenliste[0];
+      letztenliste+=({newline});
+    }
+  
+  exekution_string="\n"+
+    ".                                                                           .\n"+
+    "|`-------------------------------------------------------------------------'|\n"+
+    "|                                                                           |\n"+
+    "|                            Letzte Hinrichtungen:                          |\n"+
+    "|                           -=-=-=-=-=-=-=-=-=-=-=-                         |\n"+
+    "|                                                                           |\n";
+  siz=sizeof(letztenliste);
+  for(i=0;i<siz;i++)
+    exekution_string+=sprintf("|     %-65s     |\n",CAP(letztenliste[i]));
+  exekution_string+="|                                                                           |\n"+
+    
+    "|,-------------------------------------------------------------------------.|\n"+
+    "'                                                                           `\n";
+  save_object(LETZTE_LOG);
+}
+
+varargs AddFFK(string vic, string why)
+{
+  object who;
+
+  if(!vic) return 0;
+  if(!who=find_player(vic))
+    return -1;
+  
+  if(!why) why="Aus reiner Boshaftigkeit!";
+  
+  ROOM "zelle"->RegisterVictim(who, why);
+
+  tell_object(who, 
+	      BK("Ein Mann mit einer Kapuze ueber dem Kopf tritt herein.\n"+
+		 "Das wird wohl Dein Henker sein!\n"+
+		 "Der Henker sieht Dich gruendlich an...\n"+
+		 "Dann meint er grinsend: 'Tja, wer sich erwischen "+
+		 "laesst, ist selber schuld!'\n"+
+		 "Er nimmt Dir Deine Handschellen ab und murmelt dabei "+
+		 "etwas von 'Stroh' und 'letztes Nickerchen'.\n"+
+		 "Da blickt er Dich an und fragt: 'Willst Du gekoepft, "+
+		 "oder lieber gehaengt werden? Hmm. *gruebel*... na mir "+
+		 "wird schon was einfallen.'\n"+
+		 "Dann laesst er Dich in der dunklen, uebel riechenden "+
+		 "Zelle zurueck...\n\n"));
+  DB("Hinrichtung - Begin finished ("+who->Name()+")\n");
+  return 1;
+}
+
+AddPranger(string who)
+{
+  if(!who) return 0;
+  if(pranger=="niemand")
+    {
+      pranger=who;
+      tell_room(TO,
+		BK("Ein paar Stadtwaechter kommen mit einem neuen Prangeropfer "+
+		   "herein.\n"+
+		   CAP(who)+" wehrt sich zwar, hat aber gegen die Stadtwaechter "+
+		   "keine Chance und wird am Pranger festgemacht. Zuerst die "+
+		   "Handgelenke in die Handangeln und anschliessend die Fussgelenke "+
+		   "in die Fussangeln.\n"+
+		   "Die Stadtwaechter verlassen den Hauptplatz nach Sueden.\n"));
+      return 1;
+    }
+  else
+    {
+      if(pranger_next) return -1;
+      pranger_next=who;
+      return 2;
+    }
+}
+
+hinrichtung_seq_1(object who,string why)
+{
+  object henker;
+
+  if(victim) return 0;
+  victim=who;
+  
+  if(ENV(victim)==find_object(ROOM "zelle"))
+    {
+      tell_object(victim,
+		  BK("Die Zellentuer wird von aussen geoeffnet.\n"+
+		     "Der Henker tritt herein.\n"+
+		     "Er grinst Dich an und meint: 'Keiner hat fuer Dich Kaution"+
+		     " bezahlt, also viele Freunde scheinst Du nicht zu haben. "+
+		     "Aber was solls, gleich hast Du es hinter Dir.'\n"+
+		     "Er legt Dir wieder Deine Handschellen an und fuehrt Dich "+
+		     "hinaus\n\n"));
+      henker=clone_object(NPC "henker");
+      henker->move(TO,M_NOCHECK);
+      victim->move(TO, M_GO, "wird mit verbundenen Augen hinausgefuehrt","",
+		   "wird mit verbundenen Augen hereingefuehrt");
+      domainshout("Ein Buerger Arwenocks ruft: Eilt herbei Ihr Leut!!\n"+
+ 		  "Ein Buerger Arwenocks ruft: "+victim->Name()+" wird gleich "+
+ 		  "gerichtet!!\n",ARWENOCK,1); 
+      call_out("hinrichtung_seq_2",10,why);
+      DB("Hinrichtung - Seq 1 finished ("+victim->Name()+")\n");
+    }
+  else
+    {
+      DB("Hinrichtung - Aborting "+victim->Name()+" not present\n");
+      victim=0;
+      return 0;
+    }
+  return 1;
+}
+
+hinrichtung_seq_2(string why)
+{
+  tell_room(TO, 
+	    BK("Die Stimmung in der Menge hebt sich...\n"+
+	       victim->Name()+" wird ploetzlich von einem Stein getroffen und "+
+	       "sinkt zu Boden.\n"+
+	       "Die Leute jubeln auf.\n"+
+	       "Der Henker begutachtet inzwischen den Zustand der Guillotine.\n"+
+	       victim->Name()+" wird von zwei Stadtwachen zur Guillotine "+
+	       "begleitet.\n\n"),({victim}));
+  tell_object(victim, 
+	      BK("Die Stimmung in der Menge hebt sich...\n"+
+		 "Ploetzlich loest sich ein Stein aus der Menge und trifft "+
+		 "Dich direkt am Kopf!\n\n"));
+  victim->do_damage(10+random(10));
+  tell_object(victim, 
+	      BK("Die Leute jubeln auf.\n"+
+		 "Waehrend Du von zwei Stadtwaechtern zur Guillotine "+
+		 "gefuehrt wirst, begutachtet der Henker den Zustand der "+
+		 "Guillotine.\n\n"));
+  domainshout("Ein Buerger Arwenocks ruft: Seht! "+victim->Name()+" wird zur "+
+	      "Guillotine gefuehrt.\n",ARWENOCK,1);
+  call_out("hinrichtung_seq_3",15,why);
+  DB("Hinrichtung - Seq 2 finished ("+victim->Name()+")\n");
+}
+
+hinrichtung_seq_3(string why)
+{
+  int how;
+  
+  how=random(2);
+
+  //Feen kamma schlecht erhaengen...
+  if(victim->QueryProp(P_RACE)=="Fee") how=0;
+  
+  if(how)
+    {
+      tell_room(TO,
+		BK("Der Henker gruebelt wohl ueber etwas nach...\n"+
+		   "Er murmelt: "+victim->Name()+" soll erhaengt werden!\n\n"),
+		({victim}));
+      tell_object(victim, 
+		  BK("Der Henker gruebelt eine Weile und meint dann:\n"+
+		     "'Lasst "+victim->Name(WEN)+" am Galgen baumeln!'\n"+
+		     "Er grinst Dich boese an geht dann einen Strick "+
+		     "vorbereiten.\n\n"));
+      domainshout("Ein Buerger Arwenocks ruft: Kommt! "+victim->Name()+
+		  " soll erhaengt werden!\n",ARWENOCK,1);
+      call_out("erhaengen_seq_1",50,why);
+      DB("Hinrichtung - Seq 3 finished ("+victim->Name()+") wird erhaengt\n");
+    }
+  else
+    {
+      tell_room(TO, 
+		BK("Der Henker gruebelt wohl ueber etwas nach...\n"+
+		   "Er murmelt: "+victim->Name()+" soll gekoepft werden!\n\n"),
+		({victim}));
+      tell_object(victim, 
+		  BK("Der Henker gruebelt eine Weile und meint dann:\n"+
+		     "'Lasst uns "+victim->Name(WEN)+" koepfen!'\n"+
+		     "Mit diesen Worten geht er zur Guillotine und ueberprueft "+
+		     "den Zustand des Fallbeils und den Ausloesemechanismus.\n\n"));
+      domainshout("Ein Buerger Arwenocks ruft: Kommt! "+victim->Name()+
+		  " soll gekoepft werden!\n",ARWENOCK,1);
+      call_out("koepfen_seq_1",50,why);
+      DB("Hinrichtung - Seq 3 finished ("+victim->Name()+") wird gekoepft\n");
+    }
+}
+
+erhaengen_seq_1(string why)
+{
+  tell_room(TO,
+	    BK(victim->Name()+" muss sich auf einen Hocker stellen und "+
+	       "bekommt einen Strick um den Hals gelegt. Danach legt "+
+	       victim->QueryPronoun(WEM)+" der Henker eine Augenbinde an.\n\n"),
+	    ({victim}));
+  tell_object(victim,
+	      BK("Der Henker grinst Dich an und meint: 'Rauf auf den Hocker!'\n"+
+		 "Zittrig folgst Du seinem Befehl.\n"+
+		 "Er legt Dir einen Strick um den Hals und bindet Dir eine "+
+		 "Augenbinde an...\n\n"));
+  call_out("erhaengen_seq_2",15,why);
+  DB("Hinrichtung - Seq 4 finished ("+victim->Name()+" - Erhaengen)\n");
+}
+
+erhaengen_seq_2(string why)
+{
+  tell_room(TO,
+	    BK("Mit einem kraeftigen Tritt fegt der Henker "+victim->Name(WEM)+
+	       " den Hocker unter den Fuessen weg und "+victim->Name()+" faengt "+
+	       "an zu wuergen...\n"+
+	       "Der Henker grinst und alle um Dich herum warten gespannt auf "+
+	       "das letzte Roecheln von "+victim->Name(WEM)+".\n\n"),
+	    ({victim}));
+  tell_object(victim,
+	      BK("Der Henker grinst Dich noch einmal an und tritt dann gegen den "+
+		 "Hocker...\n"+
+		 "Du verspuerst ein unangenehmes Druecken im Hals und kurz darauf "+
+		 "beginnst Du zu roecheln...\n\n"));
+  domainshout("Auf Arwenocks Hauptplatz jubeln die Leute!\n"+
+	      "Ein Buerger Arwenocks ruft: Da baumelt "+victim->QueryPronoun(WER)+
+	      ", "+victim->Name()+", am Galgen!\n",ARWENOCK,1);
+  call_out("erhaengen_death",3,why);
+  DB("Hinrichtung - Seq 5 finished ("+victim->Name()+" - Erhaengen)\n");
+}
+
+erhaengen_death(string why)
+{
+  SetProp(P_KILL_NAME, "Der Strick");
+  if(victim->QueryProp(P_HP)>50)
+    {
+      tell_object(victim,
+		  BK(({"Deine Luft wird immer knapper...\n\n",
+			 "Deine Lungen scheinen zu zerbersten!\n\n",
+			 "Du roechelst vor Dich hin...\n\n",
+			 "Dein Gewicht zieht immer fester am Seil!\n\n",
+			 "Du versuchst zu schreien, doch Du kraechzt nur heiser.\n\n",
+			 "Nun ist es wohl soweit...\n\n"})[random(5)]));
+      victim->do_damage(30+random(20));
+      call_out("erhaengen_death",3,why);
+    }
+  else
+    {
+      tell_object(victim,
+		  BK("Dir wird schwarz vor Augen...\n\n"));
+      tell_room(TO,
+		BK(victim->Name()+" roechelt ein letztes Mal...\n\n"),({victim}));
+      victim->do_damage(200);
+      call_out("jubel",1,1,why);
+      galgen+=([victim->Name():0]);
+      init_galgen();
+    }
+}
+
+koepfen_seq_1(string why)
+{
+  tell_room(TO,
+	    BK(victim->Name()+" muss sich auf das Baenkchen legen und den Kopf "+
+	       "zwischen die zwei Stangen stecken. Danach fixiert der Henker "+
+	       victim->Name(WESSEN)+" Kopf mit einer Holzbrett.\n\n"),
+	    ({victim}));
+  tell_object(victim,
+	      BK("Der Henker grinst Dich an und meint: 'Leg Dich auf die Bank!'\n"+
+		 "Zittrig folgst Du seinem Befehl.\n"+
+		 "Er nimmt Deinen Kopf und fixiert ihn zwischen den zwei Stangen. "+
+		 "Danach befestigt er oberhalb Deines Halses ein Brett, wofuer das "+
+		 "wohl ist?\n\n"));
+  call_out("koepfen_death",15,why);
+  DB("Hinrichtung - Seq 4 finished ("+victim->Name()+" - Koepfen)\n");
+}
+
+koepfen_death(string why)
+{
+  SetProp(P_KILL_NAME, "Das Fallbeil");
+  tell_object(victim,
+	      BK("Ploetzlich hoerst Du ein lautes pfeifendes Geraeusch und ...\n\n"));
+  tell_room(TO,
+	    BK("Der Henker zieht einmal kraeftig an einer Kordel und schon saust "+
+	       "das Fallbeil auf "+victim->Name(WESSEN)+" Hals zu...\n\n"),
+	    ({victim}));
+  victim->do_damage(5000);
+  tell_room(TO,
+	    BK("Mit einem schmatzenden Geraeusch landet "+victim->Name(WESSEN)+
+	       " Kopf in dem Strohhaufen vor der Guillotine.\n\n"));
+  call_out("jubel",1,0,why);
+}
+
+varargs jubel(int how,string why)
+{
+  tell_room(TO,
+	    BK("Die Menge jubelt und groehlt wild, als "+victim->Name()+
+	       " stirbt!\n"));
+  domainshout("Ein gewaltiges Jubeln ertoent aus der Stadt Arwenock!!\n"+
+	      victim->Name()+" wurde der gerechten Strafe zugefuehrt!\n",
+	      "^/d/*",1);
+  init_plakat(dtime(time())+" : "+victim->Name()+" - "+why);
+  write_file(ALOG "hinrichtungen", dtime(time())+" :\n   "+victim->Name()+" - "+
+	     why+" "+(how ? "(gehaengt)":"(gekoepft)")+"\n");
+  victim=0;
+  call_out("finish",5);
+}
+
+finish(string why)
+{
+  object henker;
+
+  if(henker=present("\nhenker",TO))
+    {
+      tell_room(TO,
+		BK("Der Henker und ein paar Stadtwaechter gehen nach getaner "+
+		   "Arbeit nach Norden.\n"));
+      henker->remove();
+    }
+  else
+    DB("Arwenock: Henker nicht da nach Hinrichtung!!!\n");
+}
+

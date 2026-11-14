@@ -1,0 +1,158 @@
+// 02.04.2003 erstellt: Archon
+/*
+ Rev 1.0 02.04.2003 Archon: erstellt
+*/
+
+#pragma strict_types
+#include "../def.h"
+inherit "std/room";
+
+object sog;
+
+void create();
+int exit_raus();
+int find_leiche(object ob);
+void leicheweg(object l,object raum);
+void wegdamit(object was);
+void aufraeumen();
+void NotifyPlayerDeath(object victim, object killer, int lost_xp);
+
+void create()
+{
+  ::create();
+
+  AddId("wasser"); //damit man wasser finden kann - patch
+
+  SetProp(P_KILL_NAME,"Ein gefaehrlicher Sog");
+  SetProp(P_INDOORS, 1);
+  SetProp(P_LIGHT, 1);
+  SetProp(P_ENVIRONMENT,([ENV_TEMPERATURE:8, ENV_TERRAIN:TT_CAVE]));
+  SetProp(P_INT_SHORT, "In einem Fluss");
+    
+  AddDetail(({"umgebung","fluss","flusses"}),
+    QueryProp(P_INT_LONG));
+  AddDetail(({"wasser"}),
+    "Klares Wasser umgibt Dich. Dies reisst Dich mit sich und "
+    "stroemt unaufhaltsam dem Sog am oestlichen Ende der Kammer "
+    "entgegen. Als wenn dies nicht schon genug waere, ist es zu "
+    "allem Ueberfluss auch noch sehr kalt.");
+  AddDetail(({"sog"}),
+    "Der Sog zieht nur zu nah alles in sich hinein. Pass auf, "
+    "dass dies nicht auch mit Dir passiert.");
+  AddDetail(({"kammer"}),
+    "Dies ist eine geraeumigen Kammer. Soweit wie Du dies von "
+    "hier erkennen kannst, ist der Boden mit dichtem Moos bewachsen.");
+  AddDetail(({"boden"}),
+    "Leider kannst Du hier im Wasser den Boden nicht spueren.");
+  AddDetail(({"moos"}),
+    "Verlasse lieber den Fluss.");
+  
+  AddSound(({DEFAULT_SOUND,"wasser","fluss","rauschen"}),
+    "Das Wasser rauscht fuerchterlich laut.");
+
+  AddExit("raus",#'exit_raus);
+  reset();
+}
+
+void reset()
+{
+  ::reset();
+  if (!sog) 
+  {
+    sog=clone_object(NPC "sog");
+    sog->move(ME,M_NOCHECK);
+  }
+}
+//wir wollen nicht staendig aufraeumen - aber wenigstens dann, wenn jemand
+//den raum ansieht
+string _query_int_long()
+{
+  aufraeumen();
+  return break_string(
+    "Du bist mitten eines kleinen aber doch reissenden Flusses. "
+    "Unaufhaltsam treibt es Dich dem Sog entgegen, welcher, wenn Du "
+    "nicht vorsichtig bist, Dich verschlingen wird.");
+}
+
+void init()
+{
+  ::init();
+  aufraeumen();
+  if (!objectp(PL)) return;
+  tell_room(ME,break_string(
+    "Ploetzlich wird "+PL->name(WER,1)+" herein gerissen."),({PL}));
+  if (sog) sog->SetLevel(PL->QueryProp(P_LEVEL));
+}
+
+int exit_raus()
+{
+  if (objectp(sog) && !random(3)) //33% klappt es nicht 0=no 1,2=yes
+  {
+    write(break_string(
+      "Mit aller Kraft versuchst Du dem Sog entgegen zu schwimmen, "
+      "doch leider schaffst Du es nicht. Der Sog zieht Dich "
+      "schmerzhaft wieder zu sich heran. Schade das Du nichts "
+      "loses bei Dir hattest, was Du in den Sog haettest werfen "
+      "koennen."));
+    tell_room(ME,break_string(
+      PL->Name(WER,1)+" versucht mit aller Kraft dem Sog zu entgehen, "
+      "doch leider schafft "+PL->QueryPronoun(WER)+" es nicht."),({PL}));
+    PL->do_damage(random(10)+5,sog);
+    if (objectp(PL) && !PL->QueryProp(P_GHOST))
+    {
+      tell_object(PL,"Der Sog trifft Dich hart.\n");
+      tell_room(ME,break_string(
+        "Der Sog trifft "+PL->name(WEN,1)+" hart."),({PL}));
+    } 
+    return 1;
+  }
+  write(break_string(
+    "Mit letzter Kraft kannst Du dem Sog entgegen schwimmen "
+    "und Dich ans Ufer retten."));
+  PL->move(ROOM "kammer_01",M_GO,
+           "","rettet sich ans Ufer","rettet sich ans Ufer");
+  return 1;
+}
+
+int find_leiche(object ob)
+{
+  string file;
+  if (!ob->QueryProp(P_CONTAINER)) return 0; //kann keine leiche sein ...
+  file=efun::explode(file_name(ob),"#")[0];
+  if (file=="/std/corpse") return 1;
+  return 0;
+}
+
+void leicheweg(object l,object raum)
+{
+  l->move(ROOM "kammer_01",M_SILENT|M_NOCHECK);
+  tell_room(ME,"Eine Leiche wird an das Ufer gespuelt.\n");
+  if (objectp(raum)) 
+    tell_room(raum,"Eine Leiche wird an das Ufer gespuelt.\n");
+}
+
+void wegdamit(object was)
+{
+  if (living(was)) return; //bei npc + spieler true
+  if (was->QueryProp(P_NAME) && !was->QueryProp(P_INVIS))
+  { //unsichtbare items im raum lassen - die haben bestimmt einen nutzen!
+    tell_room(ME,was->Name(WER,1)+" verschwindet in den Fluten.\n");
+    was->remove(1);
+  }
+}
+
+void aufraeumen()
+{
+  object *obs;
+  object room;
+  obs=filter_array(all_inventory(ME),#'find_leiche);
+  call_other(ROOM "kammer_01", "???", 0);
+  room = find_object(ROOM "kammer_01");
+  map_array(obs,#'leicheweg,room);
+  map_array(all_inventory(ME),#'wegdamit);
+}
+
+void NotifyPlayerDeath(object victim, object killer, int lost_xp)
+{
+  call_out("aufraeumen",1);
+}

@@ -1,0 +1,132 @@
+inherit "std/thing";
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <new_skills.h>
+#include <defines.h>
+#include <moredef.h>
+#include <ansi.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <wizlevels.h>
+#include "../druiden.h"
+#include "../mysteries.h"
+
+nosave mapping color;
+nosave string ele;
+nosave object pl;
+nosave object vic;
+nosave int dauer=2;
+mapping e2dammsg;
+
+
+nosave void DoSpecialDamage();
+void do_damage();
+
+
+void create()
+{
+  if(!is_clone(TO))
+    return;
+
+  ::create();
+  e2dammsg=([
+    FEUER   : "%s beginnt zu brennen!\n";
+              "Waaaaah! Du beginnst zu brennen!\n",
+    EIS     : "%s friert kurz ein.\n";
+              "Du frierst ein.\n",
+    WASSER  : "%s wird irgendwie langsamer.\n";
+              "Du wirst langsamer.\n",
+    ERZ     : "%s hat permanenten Schaden genommen!\n";
+              "Dein natuerlicher Schutz hat Schaden genommen!\n",
+    LUFT    : "%s wird von Staub und Dreck geblendet!\n";
+              "Du wirst von aufwirbelndem Staub und Dreck geblendet!\n",
+    ]);
+
+  color = ELEMENT_COLORS;
+  SetProp(P_SHORT, 0);
+  SetProp(P_INVIS, 1);
+  SetProp(P_WEIGHT, 0);  
+  SetProp(P_VALUE, 1);
+  SetProp(P_NOBUY, 1); 
+  SetProp(P_NODROP, 1);
+  SetProp(P_NOGET, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NOSELL, 1);
+  AddId(({ DRUIDEN_ARROW_ENHANCE }));
+}
+
+// pl = 1 ...  von spieler gecastet (trifft NPCS)
+// pl = 0 ...  von npcs gecastet (trifft Spieler)
+int SetVariables(object player, string element, object victim) {
+  pl=player;
+  ele=element;
+  vic=victim;
+  AddId("\n"+element+"pfeil_enhance");
+  DoSpecialDamage();
+  return 1;
+}
+
+
+int abs(int x) {
+  if (x < 0) 
+    return -x;
+  return x;
+}
+
+nosave void DoSpecialDamage() {
+  if(!ele) return;
+  if(!vic) return;
+  if(!ENV(vic)) return ;
+  switch(ele) {
+    case ERZ: if(!query_once_interactive(vic))
+                vic->SetProp(P_BODY, vic->QueryProp(P_BODY)-random(20));
+              call_out("remove", 55);
+              break;
+    case EIS: dauer = 2;
+              if(HAS_MYSTERY(pl, MYSTERY_RIME)) dauer += random(pl->QueryProp(P_GUILD_LEVEL)/5);
+              vic->SetProp(P_DISABLE_ATTACK, dauer);
+              call_out("remove", 45);
+              break;
+    case WASSER: 
+              vic->SetProp(P_DISABLE_SPELLS, 2);
+              call_out("remove", 45);
+              break;
+    case FEUER: 
+              dauer=2;
+              if(HAS_MYSTERY(pl, MYSTERY_IGNITE)) dauer += pl->QueryProp(P_GUILD_LEVEL)/4;
+              call_out("do_damage", 2);
+              call_out("remove", 20);
+    case LUFT: 
+              vic->SetProp(P_BLIND, 4);
+              call_out("remove", 45);
+  }
+  tell_object(vic, e2dammsg[ele,1]);
+  tell_room(ENV(vic), sprintf(e2dammsg[ele,0], vic->Name(WER)), ({vic}));
+  return ;
+}
+
+
+void do_damage() {
+  object env;
+  int i, dam;
+  if(!vic) return;
+  if(!pl) return;
+
+  dam = 60;
+  if(HAS_MYSTERY(pl, MYSTERY_IGNITE)) {
+    dam += random(pl->QueryProp(P_GUILD_LEVEL)*10);
+  } else {
+    dam += random(30);
+  }
+  
+  tell_object(vic, "Du brennst!\n");
+  tell_room(ENV(vic), BS(sprintf("%s brennt!\n", vic->Name(WER))), ({vic}));
+  vic->Defend(dam,DT_FIRE,
+          ([SP_NAME: "feuerpfeil", SP_SHOW_DAMAGE:1]), pl); 
+  dauer--;
+  if(dauer <= 0) 
+    return;
+  call_out("do_damage", 2);
+  return;
+}

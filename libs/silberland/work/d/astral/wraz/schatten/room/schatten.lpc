@@ -1,0 +1,743 @@
+// Schattenwelt
+// Wraz / Mendralim
+// s-Raeume erben von hier
+
+#include "../def.h"
+
+inherit "std/room";
+inherit ZONE "std/std.lpc";
+
+mapping def_exits;
+mapping extra_exits;
+int room_no, flag;
+string forward_room;  // next room
+string backward_room; // previous room
+string def_forw_dir;  // default forward direction
+string def_back_dir;  // default backward direction
+
+// call room writing
+int call_room_writing(string room_path)
+{
+  int new_froom_written;
+
+  // TODO: int write_next_room(string room_path) --> nimmt nur 1 Parameter!
+  new_froom_written = RMASTER->write_next_room(room_path, def_forw_dir);
+  // DB("write_next_room('forward'): " + new_froom_written + "\n");
+
+  // Wenn neuer Raum geschrieben wurde kann man nicht speed-durchlaufen
+  // (damit die NPC Zeit haben vorher zu laden)
+  if(new_froom_written > 0 && TP->QueryProp(P_LAST_MOVE) > time()-3)
+  {
+    write(BS("Die Schattenwelt wirkt hier unendlich zaeh, als waere sie gerade erst "
+      "neu erschaffen worden. Du kommst nicht voran."));
+    return 0;
+  }
+
+  return 1;
+}
+
+// forward room function
+int call_forward_room(string dir)
+{
+  string room_path;
+  object monster, dm, mh;
+
+  room_path = TO->QueryProp(P_EXITS)[dir];
+
+  /*if(TP->QueryProp(P_GHOST) &&
+    file_size(room_path + ".lpc") <= 0 &&
+    // die hier muessen auch alle 0 sein, weil es koennte ja sein, dass Raeume uebersprungen
+    // wurden, und sich DANACH der exit auf einen uebersprungenen Raum geaendert hat...
+    // und dann haengt der Geist 
+    file_size(ROOM + def_exits[1, 3] + ".lpc") <= 0 && 
+    file_size(ROOM + def_exits[1, 4] + ".lpc") <= 0 && 
+    file_size(ROOM + def_exits[1, 5] + ".lpc") <= 0 )
+  */
+
+  if(!present("\nwrazschatten_movehook",TP))
+  {
+    DB("wrazschatten_movehook nicht da, wird erstellt.\n");
+    mh=clone_object(OBJ "schatten_movehook");
+    mh->move(TP,M_NOCHECK|M_SILENT);
+    mh->Setup(TP);
+  }
+  
+  if(TPU == "wraz")
+  {
+    if(!TP->QueryProp(P_INVIS) && monster = present("\nschattenwache",TO))
+    {
+      TO->Message(BS("Die Schatten weichen ehrfuerchtig vor dem Maechtigen zurueck."),
+        MSGFLAG_VISUAL | MSGFLAG_NO_TP);
+      TP->Message(BS("Die Schatten weichen ehrfuerchtig vor Dir zurueck."));
+    }
+    return call_room_writing(room_path);
+  }
+
+  if(TP && TP->QueryProp(P_GHOST) && 
+    sizeof(filter_objects(all_inventory(TP),"id","\nshadow_deathmark")) >= 1)
+  {
+    dm = filter_objects(all_inventory(TP),"id","\nshadow_deathmark")[0];
+
+    if(file_size(room_path + ".lpc") <= 0 &&
+      dm->QueryProp("shadow_death_room_no") <= call_other(TO,"get_room_no"))
+    {
+      write(BS("Als Geist kannst Du dieses unbekannte Territorium nicht betreten."));
+      return 0;
+    }
+  }
+
+  else if (!TP->QueryProp(P_GHOST) && 
+    monster = present("\nschattenwache",TO))
+  {
+    write(BS("Die Schatten verformen und wehren sich gegen Dein Vorankommen."));
+    if(monster->QueryProp(P_SHORT))
+      write(BS("Du kannst "+monster->name(WEN,1)+" nicht passieren."));
+    else write(BS("Irgendetwas Unsichtbares haelt Dich auf."));
+    return 0;
+  }
+
+  else if (RMASTER->is_room_blocked(room_no, def_forw_dir))
+  {
+    write(BS("Die Schatten verformen sich, und Du glaubst kurz, darin den "
+    "maechtigen Wraz zu erkennen. Du vermutest, dass es hier kein "
+    "Weiterkommen gibt. Vorerst.")+
+    BS("Temporaer erlauben die Schatten allerdings einen Ausgang in die "
+    "materielle Welt: Zum beliebten Lehmgolem!"));
+    return 0;
+  }
+
+  return call_room_writing(room_path);
+}
+
+// backward room function
+int call_backward_room(string dir)
+{
+  string room_path;
+  room_path = TO->QueryProp(P_EXITS)[dir]; // gets the full path to the exit in that direction
+                                           // e.g. "/d/astral/wraz/schatten/room/sn034"
+  return call_room_writing(room_path);
+}
+
+// set the room number
+varargs int set_room_no(int i, int new_flag)
+{
+  // flag 2: make only "backward" exit
+  // flag 1: make only "forward" exit
+  // else: make forward & backward exits
+  room_no = i;
+  flag = new_flag;
+  return room_no;
+}
+
+// get the room number
+int get_room_no()
+{
+  return room_no;
+}
+
+// removes all exits, then sets them newly with chances of slight direction change
+//   e.g. "nordosten" instead "norden"
+// called by sn_template.c & sn000.c; set_def_exits()
+void refresh_exits()
+{
+  int i;
+
+  // rooms with end-bosses (x99) cannot be skipped
+  switch(room_no)
+  {
+    // 96, 97, 98 here, bc. forward_room = room_no + (1 OR 2 OR 3) = 99
+    // 99-01 also, bc. portal could be there
+    case 96..101: 
+    case 196..201:
+    case 246..250: // 250: Aza
+    case 296..301:
+    case 396..398:
+    case 496..498:
+    case 596..598:
+    case 696..698:
+    case 796..798:
+    case 896..898:
+    case 996..998:
+      //DB("../room/schatten.c, refresh_exits(): room nr "+(def_exits[1, 3])+" not skipped by 'switch()' statement\n");
+      forward_room = def_exits[1, 3];
+      backward_room = def_exits[2, 3];
+      break;
+
+    default: 
+      forward_room = def_exits[1, 3 + RMASTER->room_random(3)];
+      backward_room = def_exits[2, 3 + RMASTER->room_random(3)];
+      break;
+  }
+
+
+  RemoveExit(0);
+  if (flag != 2)
+    AddExit(def_exits[1, RMASTER->room_random(3)], 
+      ([EX_DEST: ROOM + forward_room, EX_TESTFUNC: "call_forward_room"]));
+  if (flag != 1)
+    AddExit(def_exits[2, RMASTER->room_random(3)], 
+      ([EX_DEST: ROOM + backward_room, EX_TESTFUNC: "call_backward_room"]));
+  
+  // add all exits given in 'extra_exits' (format: key:exitdir;targetroom)
+  if (extra_exits && sizeof(m_indices(extra_exits)) > 0)
+  {
+    for(i=0;i<sizeof(m_indices(extra_exits));i++)
+    {
+      AddExit(extra_exits[m_indices(extra_exits)[i],0], 
+        extra_exits[m_indices(extra_exits)[i],1]);
+    }
+  }
+}
+
+// set default exits
+varargs int set_def_exits(mapping new_def_exits, string new_def_forw_dir, string new_def_back_dir,
+  mapping new_extra_exits)
+{
+  def_exits = new_def_exits;
+  def_forw_dir = new_def_forw_dir;
+  def_back_dir = new_def_back_dir;
+  extra_exits = new_extra_exits;
+  refresh_exits();
+  return 1;
+}
+
+// add NPC etc.
+void add_items()
+{
+  object npc;
+  string *npc_list;
+  int i;
+
+  // "Default"-NPC hinzufuegen
+  switch(get_room_no())
+  {
+    case 0..7: npc_list = ({
+      NPC "schattenrabe"}); break;
+    case 8..40: npc_list = ({
+      NPC "schattenrabe", 
+      NPC "geist", 
+      NPC "schatten",
+      NPC "schattengaul"}); break;
+    case 41..150: npc_list = ({
+      NPC "schattenrabe",
+      NPC "chaosfraggle",
+      NPC "geist", 
+      NPC "schatten",
+      NPC "schattengaul", 
+      NPC "schattenflughund",
+      NPC "schattendrachen_minions",
+      NPC "gruftschrecken"}); break;
+    case 151..300: npc_list = ({
+      NPC "schattenrabe", 
+      NPC "chaosfraggle",
+      NPC "geist", 
+      NPC "schatten", 
+      NPC "schattengaul", 
+      NPC "schattenflughund",
+      NPC "gruftschrecken",
+      NPC "spiegelschatten"}); break;
+    case 301..500: npc_list = ({
+      NPC "schattenrabe", 
+      NPC "chaosfraggle",
+      NPC "geist", 
+      NPC "schatten", 
+      NPC "schattenflughund", 
+      NPC "schreiter",
+      NPC "gruftschrecken",
+      NPC "spiegelschatten"}); break;
+    case 501..700: npc_list = ({
+      NPC "schattenrabe", 
+      NPC "chaosfraggle",
+      NPC "geist", 
+      NPC "schatten", 
+      NPC "schattenflughund", 
+      NPC "schreiter"}); break;
+    case 701..950: npc_list = ({
+      NPC "geist", 
+      NPC "schatten", 
+      NPC "schattenflughund", 
+      NPC "schreiter"}); break;
+    case 951..1000: 
+    default: npc_list = ({
+      NPC "schattenflughund", 
+      NPC "schreiter"}); break;
+  }
+
+  // Krieger*innen ab Raum 2 bis Raum 150
+  if(get_room_no() > 1 && get_room_no() <= 150 && !random(get_room_no()))
+  for(i=0;i<2;i++)
+    while (!random(2))
+      AddItem(NPC "krieger", REFRESH_NONE, 
+        (["expedition_mode": 1]));
+
+  // 1 NPC mit 1:10 Chance, der auch resettet
+  //  in niedrigen Raumnummern: hoehere Chance, damit was zum Metzeln da ist
+  if (!random( (int) ((1 + sqrt((float) get_room_no()) / 2) <= 10.0 ? 
+                      (1 + sqrt((float) get_room_no()) / 2) : 10.0)
+              )
+      )
+    AddItem( npc_list, REFRESH_DESTRUCT, 
+      (["shadow_room_no": get_room_no(), 
+      "shadow_difficulty":difficulty(get_room_no()),
+      "shadow_difficulty_int":difficulty_int(get_room_no())]));
+
+  // 3x while() loop fuer NPC, die nicht resetten // zuvor: i<2
+  for(i=0;i<3;i++)
+    while (!random(3)) // zuvor: !random(2)
+      AddItem( npc_list, REFRESH_NONE, 
+        (["shadow_room_no": get_room_no(), 
+        "shadow_difficulty":difficulty(get_room_no()),
+        "shadow_difficulty_int":difficulty_int(get_room_no())]));
+
+  // nochmal while() fuer NPC, die gleich versteckt sind (und auch nicht resetten)
+  while (!random(4)) // zuvor: !random(3)
+  {
+    npc = clone_object(npc_list[random(sizeof(npc_list))]);
+    npc->SetProp("shadow_room_no", get_room_no());
+    npc->SetProp("shadow_difficulty",difficulty(get_room_no()));
+    npc->SetProp("shadow_difficulty_int",difficulty_int(get_room_no()));
+    npc->hide(0,0,0,file_name(TO));
+  }
+
+  // Bosse & Portale hinzufuegen
+  switch(get_room_no())
+  {
+    case 99: AddItem( NPC "schattendrachin", REFRESH_NONE, 
+      (["shadow_room_no": get_room_no(), 
+        "shadow_difficulty":difficulty(get_room_no()),
+        "shadow_difficulty_int":difficulty_int(get_room_no())]));
+      SetProp("weekly_reset_npc", ({"schattendrachin","vagghuthcerrvnippintaa"})); // filename, living_name
+      SetProp("last_boss_death", time());
+      break;
+    
+    // "Zurueck"-Portal um ca. 100 Raeume
+    case 100: AddItem( OBJ "portal", REFRESH_DESTRUCT,
+      (["dest_room": ("sn"+RMASTER->get_lead_zeros(8+random(4))),
+        "reverse_room": ("sn"+RMASTER->get_lead_zeros(get_room_no()))
+      ]));
+      break;
+
+    case 199: AddItem( NPC "brandisborgel", REFRESH_NONE, 
+      (["shadow_room_no": get_room_no(), 
+        "shadow_difficulty":difficulty(get_room_no()),
+        "shadow_difficulty_int":difficulty_int(get_room_no())]));
+      SetProp("weekly_reset_npc", ({"brandisborgel","brandisborgel"})); // filename, living_name
+      SetProp("last_boss_death", time());
+      break;
+    
+    // "Zurueck"-Portal um ca. 100 Raeume
+    case 200: AddItem( OBJ "portal", REFRESH_DESTRUCT,
+      (["dest_room": ("sn"+RMASTER->get_lead_zeros(101+random(4))),
+        "reverse_room": ("sn"+RMASTER->get_lead_zeros(get_room_no()))
+      ]));
+      break;
+
+    case AZA_ROOM: 
+      SetProp(P_INT_LONG, QueryProp(P_INT_LONG) + "Ein hoher, seltsamer Turm befindet sich hier.");
+      AddDetail(({"turm"}),
+        "Der Turm ist rund und von beeindruckender Hoehe und ebensolchem Durchmesser. "
+        "Die Aussenwaende bestehen aus kolossalen, grauen "
+        "Granitfelsbloecken. "
+        "Das Aeussere wird ausserdem von knallorange bis dunkelroten Linien und "
+        "unterschiedlich grossen Runen geziert. "
+        "An der Spitze des Turms duerfte sich eine kleine Plattform "
+        "befinden.");
+      AddDetail(({"hoehe"}),
+        "Sicherlich fuenfzehn Meter, wenn nicht sogar etwas mehr.");
+      AddDetail(({"durchmesser","basis"}),
+        "An der Basis misst der Turm "
+        "im Durchmesser etwa zehn Meter, verjuengt sich aber ab der Mitte und nochmals "
+        "im oberen Bereich.");
+      AddDetail(({"mitte"}),
+        "Ab der Mitte verjuengt sich der Turm etwa auf die Haelfte des Durchmessers "
+        "der Basis.");
+      AddDetail(({"oberer bereich","oberen bereich"}),
+        "Im oberen Bereich verjuengt sich der Turm abermals um etwa die Haelfte.");
+      AddDetail(({"aussenwaende","waende"}),
+        "Die Aussenwaende des Turms bestehen aus kolossalen, grauen Granitfelsbloecken. "
+        "Jeder von ihnen misst mindestens eineinhalb Meter.");
+      AddDetail(({"granit","granitfelsbloecke"}),
+        ([0: 
+        "Der Granit ist grau. Ungewoehnlich grosse, weisse Einschluesse und "
+        "glaenzender Phyllit geben ihm ein "
+        "aussergewoehnliches Aussehen, von dem Zwerge bestimmt beeindruckt waeren.",
+        "zwerg":
+        "Der Granit ist grau. Ungewoehnlich grosse, weisse Feldspateinschluesse und samtig "
+        "glaenzender Phyllit, der normalerweise in Granit nicht vorkommt, geben ihm ein "
+        "aussergewoehnliches Aussehen."
+        ]));
+      AddDetail(({"feldspateinschluesse","einschluesse","feldspat","feldspaete"}),
+        ([0:
+        "Die weissen Einschluesse in diesem Granit sind groesser, als Du sie von anderen "
+        "Graniten kennst.",
+        "zwerg":
+        "Die Feldspaete im Granit wirken wirklich mystisch und aussergewoehnlich."]));
+      AddDetail(({"phyllit"}),
+        "Phyllit sollte in Granit eigentlich nicht vorkommen. Hier ist es aber eindeutig "
+        "glaenzender, samtiger Phyllit! Wahrlich beeindruckend und aussergewoehnlich, "
+        "eine echte Besonderheit.");
+      AddDetail(({"aussehen","raritaet"}),
+        ([0:
+        "Selbst, oder insbesondere Zwerge, aufgrund ihres besonderen geologischen "
+        "Verstaendnisses muessen von dieser Seltenheit hoechst "
+        "erquickt sein.",
+        "zwerg":
+        "Dieser Granit ist, da bist Du dir ganz sicher, eine absolute Raritaet. "
+        "So etwas hast Du noch nie gesehen."]));
+      AddDetail(({"aeussere","linien"}),
+        "Das Aeussere des Turms ist von knallorange bis dunkelroten Linien durchzogen, "
+        "die sich teils ohne erkennbares Muster, aber dennoch grazioes in grossen Boegen "
+        "um den Turm winden.");
+      AddDetail(({"muster", "boegen"}),
+        "Du kannst es kaum in gedankliche Worte fassen, doch die Linien beschreiben "
+        "ein klares, faszinierendes Muster, das letztendlich kein erkennbares Muster "
+        "ist. Das ergibt keinen Sinn, aber genau so fuehlt es sich fuer Dich an.");
+      AddDetail(({"sinn"}),
+        "Der Sinn der Linien erschliesst sich Dir nicht, doch bist Du sicher, dass "
+        "er existiert.");
+      AddDetail(({"runen","aura"}),
+        "Riesige bis winzige Runen verleihen dem Granit eine "
+        "mystische Aura.");
+      AddDetail(({"spitze","plattform"}),
+        "Von unten sieht man nur metallisch glaenzende, zugespitzte "
+        "Zinnen, die sich leicht nach innen neigen.");
+      AddDetail(({"linien"}),
+        "Erst jetzt wird Dir bewusst, dass die knallorange bis dunkelroten Linien hier in "
+        "der Schattenwelt fast einzigartig sind, da ja ansonsten alles nur in Graustufen "
+        "gefaerbt ist. Nur die Augen des Schattenflughunds gluehen in einem aehnlichen Rot.");
+      AddDetail(({"schattenflughund","flughund"}),
+        "Keiner da derzeit. Zum Glueck.");
+      AddDetail(({"zinnen"}),
+        "Von hier unten erkennst Du nur, dass die Zinnen metallisch glaenzen, zugespitzt "
+        "sind und sich nach innen neigen.");
+      break;
+
+    case 299:
+      AddItem( NPC "avatar_fingernagel", REFRESH_NONE, 
+        (["shadow_room_no": get_room_no(), 
+          "shadow_difficulty":difficulty(get_room_no()),
+          "shadow_difficulty_int":difficulty_int(get_room_no())]));
+      SetProp("weekly_reset_npc", ({"avatar_fingernagel","fingernagel"})); // filename, living_name
+      SetProp("last_boss_death", time());
+      break;
+
+    // "Zurueck"-Portal um ca. 100 Raeume
+    case 300: AddItem( OBJ "portal", REFRESH_DESTRUCT,
+      (["dest_room": ("sn"+RMASTER->get_lead_zeros(201+random(4))),
+        "reverse_room": ("sn"+RMASTER->get_lead_zeros(get_room_no()))
+      ]));
+    break;
+
+    case 399: AddItem( NPC "gedankenschinder", REFRESH_NONE, 
+      (["shadow_room_no": get_room_no(), 
+        "shadow_difficulty":difficulty(get_room_no()),
+        "shadow_difficulty_int":difficulty_int(get_room_no())]));
+      SetProp("weekly_reset_npc", ({"gedankenschinder","gedankenschinderin"})); // filename, living_name
+      SetProp("last_boss_death", time());
+      break;
+
+    // "Zurueck"-Portal um ca. 100 Raeume
+    case 400: AddItem( OBJ "portal", REFRESH_DESTRUCT,
+      (["dest_room": ("sn"+RMASTER->get_lead_zeros(301+random(4))),
+        "reverse_room": ("sn"+RMASTER->get_lead_zeros(get_room_no()))
+      ]));
+    break;
+  }
+
+  //reset(); // warum war hier ein reset() drin?
+}
+
+// room initialization, called by sn_template
+varargs void initialize_me(string forward_dir, string back_dir)
+{
+  string room_filename;
+  int room_number;
+  string main_dir;
+
+  room_filename = explode(file_name(TO), "/")[ < 1];
+  //DB("filename: " + room_filename + "\n");
+  room_number = to_int(room_filename[ < 3.. < 1]);
+  //DB("number: " + room_number + "\n");
+
+  if(!forward_dir)
+  {
+    main_dir = room_filename[1..1];
+    switch (main_dir)
+    {
+      case "n":
+        forward_dir = "norden";
+        back_dir = "sueden";
+        break;
+      case "o":
+        forward_dir = "osten";
+        back_dir = "westen";
+        break;
+      case "s":
+        forward_dir = "sueden";
+        back_dir = "sorden";
+        break;
+      case "w":
+        forward_dir = "westen";
+        back_dir = "osten";
+        break;
+    }
+  }
+
+  set_room_no(room_number);
+  if (room_number) // do not overwrite the seed-room sn000
+    set_def_exits(RMASTER->get_def_exits(forward_dir, back_dir, room_number), forward_dir, back_dir,
+      RMASTER->get_extra_exits(room_number));
+  //refresh_exits(); // deaktiviert wel set_def_exits() selbst refresh_exits() aufruft
+  add_items(); // muss nach set_room_no() stehen, weil die NPC die room_no abfragen
+}
+
+// Query Default Exits
+mapping query_def_exits()
+{
+  return def_exits;
+}
+
+// Detail Lichtspiel
+string lichtspiel()
+{
+  if(TO->QueryProp("planeshiftroom"))
+    return BS("Es sieht ungewoehnlich aus, woher kommt es? Als Du es naeher untersuchst fuehlst Du "
+          "Dich seltsam an die materielle Welt erinnert, als waere die Barriere zwischen den "
+          "Welten genau hier besonders duenn.");
+  return "Sowas siehst Du da nicht!\n";
+}
+
+// Detail Barriere
+string barriere()
+{
+  if(TO->QueryProp("planeshiftroom"))
+    return BS("Du meinst, dass die Barriere zwar duenn ist, aber nicht duenn genug, um von Koerper "
+      "und Geist gleichzeitig durchschritten zu werden. Ein duesterer Gedanke ueberkommt Dich, dass "
+      "Du wohl nur im Tod die Barriere durchbrechen kannst.")+
+      BS("Aber dann kommt Dir eine Idee: Vielleicht kannst Du auch sterben, ohne wirklich "
+      "zu sterben, und so die Schattenwelt verlassen? Wenn Du es versuchen willst, dann "
+      "stirb doch einfach!");
+    return "Sowas siehst Du da nicht!\n";
+}
+
+// default room in the shadow, called by sn_template & sn00
+//   flag != 0 -> can be "exit" room
+varargs int create_default_shadowroom(int flag)
+{
+  if(flag) 
+  {
+    SetProp("potential_planeshiftroom", 1);
+    if(!random(5)) SetProp("planeshiftroom", 1);
+    AddDetail(({"lichtspiel"}), #'lichtspiel); //'
+    AddDetail(({"barriere"}), #'barriere); //'
+  }
+
+  SetProp(P_INT_SHORT, "In den Schatten");
+  SetProp(P_INT_LONG,
+          "Du befindest Dich in der Schattenwelt. Alles ist schwarz-weiss, kein Gestirn erhellt "
+          "den Himmel. Die Umgebung erinnert Dich an das Schlachtfeld. Es ist eben, die wenigen, "
+          "grauen Baeume und Straeucher sind mit einer dunklen, klebrigen Fluessigkeit bedeckt. Im "
+          "Gegensatz zum Schlachtfeld sind hier keine Leichenteile.");
+
+  SetProp(P_LIGHT, 1);
+  SetProp(P_INDOORS, 0);
+  SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE:17,
+                               ENV_TERRAIN:TT_PLAIN]));
+  SetProp(P_NO_TPORT,NO_TPORT); // verhindert bersi "Heimkehr" und Druiden "Luftele-Teleport"
+
+  AddDetail(({"schattenwelt"}),
+            "Alles ist schwarz-weiss, und kein Gestirn erhellt den Himmel. Dennoch ist es nicht "
+            "stockfinster.");
+
+  AddDetail(({"gestirn", "himmel"}),
+            "Der Himmel ist grau, kein Gestirn ist zu sehen.");
+
+  AddDetail(({"baeume", "straeucher"}),
+            "Auch die Baeume und Straeucher hier sind grau und voellig farblos.");
+
+  AddDetail(({"boden", "schlachtfeld"}),
+            "Der duestere Boden erinnert an das Schlachtfeld. Einige Baeume und "
+            "Straeucher wachsen hier.");
+
+  AddDetail(({"umgebung"}),
+            "Die Umgebung erinnert Dich an das Schlachtfeld.");
+
+  AddDetail(({"baeume", "straeucher"}),
+            "Die wenigen Baeume und Straeucher sind mit einer klebrigen Fluessigkeit besprenkelt.");
+
+  AddDetail(({"fluessigkeit"}),
+            "Sie ist klebrig.");
+
+  AddDetail(({"klebrige fluessigkeit"}),
+            "Vermutlich Blut.");
+
+  AddDetail(({"blut"}),
+            "Es ist ueberall, aber Du findest nichts Besonderes. Allerdings ist es seltsam, "
+            "dass hier ueberall Blut klebt, aber keine Leichenteile zu finden sind.");
+
+  AddDetail(({"leichenteile", "leichen", "teile"}),
+            "Keine zu finden.");
+
+  AddDetail(({"blaetter"}),
+            "Die Baeume und Straeucher tragen Blaetter.");
+
+  AddDetail(({"rabe"}),
+            "Gelegentlich kraeht einer in der Ferne.");
+
+  AddSound(DEFAULT_SOUND,
+           "Selbst die Umgebung hoert sich farblos an.");
+
+  AddSound(({"rabe", "kraehen"}),
+            "Gelegentlich hoerst Du einen Raben in der Ferne dumpf kraehen.");
+
+  AddSound(({"rascheln"}),
+            "Ein leichter Windhauch laesst ab und zu die Blaetter der Baeume rascheln.");
+
+  AddSmell(DEFAULT_SMELL,
+           "Du kannst nichts Besonderes riechen. Es wirkt sogar ungewoehnlich geruchsarm.");
+
+  AddRoomMessage(
+      ({ 
+        ({"Ein Rabe kraechzt dumpf in der Ferne.\n",MSGFLAG_SOUND}),
+        ({"Ein leichter Windhauch laesst einige Blaetter rascheln.\n",MSGFLAG_SOUND})
+      }), 
+      600 + random(600), "exitroom_func");
+
+  // add_items() --> steht jetzt in initialize_me()
+  return 1;
+}
+
+void DelayedRoomMessage()
+{
+  Message("Ein Lichtspiel am Boden erscheint Dir ungewoehnlich.\n", MSGFLAG_VISUAL);
+}
+
+// planeshiftroom Function
+void exitroom_func(int msg)
+{
+  if(msg == 1 && !random(3) && TO->QueryProp("planeshiftroom"))
+    if(find_call_out("DelayedRoomMessage") == -1) call_out("DelayedRoomMessage",10+random(60));
+}
+
+// Reset: Planeshift-Room?
+void set_rnd_planeshift_option()
+{
+  if(QueryProp("potential_planeshiftroom") && !random(5))
+    SetProp("planeshiftroom", 1);
+  else SetProp("planeshiftroom", 0);
+}
+
+// Planeshift: Leiche in materielle Ebene bewegen
+void planeshift_corpse(object player, object room)
+{
+  object corpse;
+  string target_room;
+  object ob;
+  int i;
+
+  if(!room) return;
+
+  // Wenn Leiche da
+  // Schattenpanzer verhindert, dass die Leiche gemoved wird
+  if( (corpse=present("leiche", room)) &&
+      corpse->QueryProp(P_ORIG_NAME) == (player->Name()) &&
+      !sizeof(filter_objects(all_inventory(player),"id","\nwrazschattenpanzer")) &&
+      !sizeof(filter_objects(all_inventory(corpse),"id","\nwrazschattenpanzer")))
+  {
+    target_room = "/d/ebene/wraz/metzelorgie/room/" + ({"p01","w01"})[random(2)];
+    call_other(target_room, "???");
+    DB("corpse: " + to_string(corpse) + "\n");
+    corpse=present("leiche", room); // aus irgendeinem Grund ist vorher corpse =1 und nicht das Objekt...
+    corpse->move(find_object(target_room), M_NOCHECK);
+
+    tell_room( room, BS(
+      corpse->QueryProp(P_ORIG_NAME)+"s Leiche wird immer durchscheinender und "
+      "verschwindet schlussendlich gaenzlich."));
+
+    tell_room( target_room, BS(
+      "Eine Leiche materialisiert sich aus dem Nichts."));
+  }
+  // Ohne Leiche, wenns ein Untoter Spieler war: Alles im Raum kommt mit move() raus
+  // Schattenpanzer wird nur beruecksichtigt, wenn er noch am Spieler ist (also P_NODROP hat)
+  else if(player->QueryProp(P_RACE)=="Untoter" &&
+    !sizeof(filter_objects(all_inventory(player),"id","\nwrazschattenpanzer")))
+  {
+    target_room = "/d/ebene/wraz/metzelorgie/room/" + ({"p01","w01"})[random(2)];
+    call_other(target_room, "???");
+
+    for(ob=first_inventory(room);ob;ob=next_inventory(ob))
+    {
+      if(!ENV(ob)) continue; // Objekte ohne ENV
+      if(ENV(ob) != room) // Objekte die nicht unmittelbar im Raum liegen (zB in Containern)
+      if(living(ob) || query_once_interactive(ob)) continue; // NPC und Spieler und netdead Spieler
+      if(ob->QueryProp(P_NODROP)) continue; // Sachen die man beim Sterben mitnehmen wuerde
+      if(ob->QueryProp(P_NEVERDROP)) continue; // Sachen die man nicht ablegen kann 
+      if(!ob->QueryProp(P_SHORT)) continue; // Unsichtbares
+
+      ob->move(target_room, M_NOCHECK + M_NO_SHOW + M_SILENT);
+      i++;
+    }
+
+    if(i)
+    {
+      tell_room( room, BS(
+        player->Name(WESSEN)+" Tod loest einen Schattenwirbel aus, der Umherliegendes "
+        "einsaugt."));
+
+      tell_room( target_room, BS(
+        "Schattige Wirbel ziehen aus dem Nichts auf und spucken Material aus."));
+    }
+  }
+  return;
+}
+
+// Abhandlung Spielertod
+void player_death(object player, object killer, int lostexp)
+{
+  object dm;
+
+  if(!player) return;
+
+  if(QueryProp("planeshiftroom")) call_out("planeshift_corpse",4,player,TO);
+  SetProp("last_player_death",time());
+  SetProp(getuid(player)+"_died_here", 1);
+
+  // alte Schattenmarke ev. entfernen
+  while (sizeof(filter_objects(all_inventory(player),"id","\nshadow_deathmark")))
+  {
+    filter_objects(all_inventory(player),"id","\nshadow_deathmark")[0]->remove();
+  }
+
+  dm = clone_object(OBJ "schatten_deathmark");
+  dm->SetProp("shadow_death_room_file_name", file_name(TO));
+  dm->SetProp("shadow_death_room_no", get_room_no());
+  dm->move(player,M_NOCHECK|M_SILENT);
+}
+
+// Wiederbelebung bei Betreten des Raumes in welchem man verstorben ist
+void revive(object player)
+{
+  object dm;
+  object *dms;
+
+  if(!player) return;
+
+  dms = filter_objects(all_inventory(player),"id","\nshadow_deathmark");
+
+  if(player->QueryProp(P_GHOST) && // ist Geist
+    QueryProp(getuid(player)+"_died_here") && // hier gestorben
+    sizeof(dms) >= 1 && // hat Todesmarke dabei
+    ENV(player) == TO &&
+    file_name(TO) == dms[0]->QueryProp("shadow_death_room_file_name")) // Todesmarke ist von diesem Raum
+  {
+    dm = dms[0];
+    player->Message(BS("Beim Betreten dieser Umgebung wird Dein Innerstes an Deinen TOD "
+      "erinnert, und die schattige Essenz Deines Lebens kehrt in Dich zurueck."));
+    ENV(player)->Message(BS("Dem Geist "+player->Name(WESSEN)+" wird beim Betreten dieser Umgebung "
+      "Leben eingehaucht."),MSGFLAG_NO_TP);
+    player->SetProp(P_GHOST,0);
+    player->AddHp(100+random(100));
+    SetProp(getuid(player)+"_died_here", 0);
+    dm->remove();
+  }
+}

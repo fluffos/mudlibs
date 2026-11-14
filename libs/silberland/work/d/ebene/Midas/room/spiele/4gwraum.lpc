@@ -1,0 +1,493 @@
+/* MP-HEADER - DO NOT MODIFY ANYTHING BEFORE THE #include STATEMENTS!!
+** 4gwraum.c  [created using mpen v0.91 (18 Sep 96)]
+** Letzte Aenderung: Son, 31. Jan 1999, 19:55:56 von Woody
+** ---
+** 20. Okt 1996  Raum von Woody angelegt. [mp]
+** 20. Okt 1996  neue(s) Detail(s) von Woody. [mp]
+** 20. Okt 1996  20:52:  Release
+** 24. Mar 1997  Bugs behoben
+** 31. Jan 1999  neue(s) Detail(s) von Woody. [mp]
+** 31. Jan 1999  Ausgang 'unten' angeschlossen von Woody. [mp]
+** 31. Jan 1999  neue(s) Detail(s) von Woody. [mp]
+** 12. Jun 2000  Farben!
+** ---
+** details: 29, read det: 1, special det: 0, sounds: 0, smells: 0, exits: 1.
+*/
+
+#include <properties.h>
+#include <moving.h>
+#include <ansi.h>
+#include "../files.h"
+
+inherit "std/room";
+
+// --------------------------------------------------------------------------
+
+#define ROWS 6
+#define COLS 7
+
+#define DRAWN "\ndrawn"				// unentschieden
+
+#define WUERFEL20 "/obj/misc/wuerfel20"
+
+#define LOGFILE20 "/d/ebene/midas/wuerfel20"
+
+// 20-Seiter
+int wuerfel20;
+
+// Spieler/Status-Vars
+private string pl1, pl2, winner, dran, reason;
+private nosave int *board, draws;
+
+// Spielzeichen
+nosave mixed char4gw =
+    ({ ({ ".", ANSI_BOLD+ANSI_BLACK+"."+ANSI_NORMAL }),
+       ({ "x", ANSI_BOLD+ANSI_GREEN+"x"+ANSI_NORMAL }),
+       ({ "o", ANSI_BOLD+ANSI_RED  +"o"+ANSI_NORMAL }) });
+
+// Win/Loose-Smileys
+nosave mixed smileys =
+    ({ ({ "  _  _  _  ",
+          " (_)| |(_) ",
+          "    |_|    ",
+          "(\\_______/)",
+          " \\_______/ " }),
+       ({ "  _  _  _  ",
+          " (_)| |(_) ",
+          "    |_|    ",
+          "  _______  ",
+          " /_______\\ " }) });
+
+// --------------------------------------------------------------------------
+
+int xy2idx(int x, int y)
+{
+  return y*COLS+x;
+}
+
+clear4gw()
+{
+  int i;
+  for (i=0; i<ROWS*COLS; i++) board[i] = 0;
+  pl1=pl2=winner=dran=reason="";
+  draws=0;
+}
+
+neu4gw(string str)
+{
+  object tp, other, p1, p2;
+  tp=TP;
+  if (!str || !strlen(str))
+    return write ("Du musst schon angeben, mit wem Du spielen willst!\n"), 1;
+  other=find_player(str);
+  if (!other || other->QueryProp(P_INVIS))
+    return write ("Spieler "+capitalize(str)+" kann ich nicht finden!\n"), 1;
+  if (tp==other)
+    return write ("Hey, es gibt andere Mittel und Wege, gegen sich selbst "+
+      "zu bestehen.\n"), 1;
+  if (environment(other) != ME)
+    return write (capitalize(other->name(WER))+" ist leider nicht hier!\n"), 1;
+  p1=find_player(pl1);
+  p2=find_player(pl2);
+  if (!draws || !p1 || !p2 || (environment(p1)!=ME) || (environment(p2)!=ME) ||
+      winner != "")
+  {
+    if (draws && winner=="")
+      write (bs("Einer der beiden Spieler hat das Spiel oder den Raum "
+        "verlassen, daher wird das Brett geloescht."));
+    write ("Du bietest "+other->name(WEM)+" eine Partie 4-gewinnt an.\n"+
+      capitalize(other->QueryPronoun(WER))+" kann annehmen, indem "+
+      other->QueryPronoun(WER)+" einfach beginnt.\n");
+    tell_object (other, CAP_TPN+" bietet Dir eine Partie 4-gewinnt an.\n"+
+      "Du kannst annehmen, indem Du einfach anfaengst.\n");
+    tell_room (ME, CAP_TPN+" bietet "+other->name(WEM)+
+      " eine Partie 4-gewinnt an.\n", ({tp,other}) );
+    clear4gw();
+    pl1=getuid(tp);
+    pl2=dran=getuid(other);
+  }
+  else if (tp==p1 || tp==p2)
+    write (bs("Bevor Du ein neues Spiel beginnen kannst, musst Du erstmal "
+      "dieses beenden, sei es durch gewinnen, verlieren oder aufgeben :-)"));
+  else
+    write (bs("Im Moment spielt gerade "+p1->name(WER)+" gegen "+p2->name(WEN)+
+      ". Warte bitte, bis das Spiel beendet ist."));
+}
+
+varargs mixed show4gw(object ob, int smiley, string text)
+{
+  int x,y,ansi;
+  string s;
+
+  if (!objectp(ob))
+  {
+    smiley=0;
+    ob=this_player();
+    ansi=ob->QueryProp(P_TTY)=="ansi";
+    s = sprintf("\nEs spielt"+(winner!="" ? "e zuletzt " : " derzeit ")+
+        "%s (%s) gegen %s (%s).\nAnzahl der Zuege bisher: %d.\n",
+        capitalize(pl1), char4gw[1][ansi],
+        capitalize(pl2), char4gw[2][ansi], draws);
+    if (winner!="")
+      if (winner==DRAWN)
+        s += "Die Partie endete unentschieden.\n\n";
+      else
+        s += "Der Gewinner lautet: "+capitalize(winner)+".\n"+reason+"\n";
+    else
+      s += "Am Zug ist: "+capitalize(dran)+".\n\n";
+  } else
+  {
+    ansi=ob->QueryProp(P_TTY)=="ansi";
+    s = "\n";
+  }
+  if (pl1=="" || pl2=="") s = "\nIm Moment spielt niemand.\n\n";
+  for (y=ROWS-1; y>=0; y--)
+  {
+    s += " |";
+    for (x=0; x<COLS; x++)
+      s += " " + char4gw[board[xy2idx(x,y)]][ansi];
+    if (smiley) {
+      if ((y<=ROWS-1) && (y>=ROWS-5)) {
+        s+="     "+smileys[smiley-1][ROWS-y-1];
+      }
+    } else if (stringp(text) && (y==(ROWS/2-1)))
+      s+="    "+text;
+    s += "\n";
+  }
+  s += " +-";
+  for (x=0; x<COLS; x++) s+="--";
+  s += (smiley && stringp(text) ? "  "+text : "")+"\n  ";
+#if COLS > 9
+  for (x=0; x<COLS; x++)
+    s+=sprintf("%2s", x>=9 ? ""+((x+1)/10) : "");
+  s+="\n  ";
+#endif
+  for (x=0; x<COLS; x++) s+=sprintf("%2d", (x+1) % 10);
+  s += "\n\n";
+  tell_object (ob, s);
+  return "";
+}
+
+string checkwinner()
+{
+  int x,y,sx,sy,n,p,w;	// n...counter, p...previous
+
+  // erstmal horizontal guggen
+  for (y=ROWS-1; y>=0; y--)
+  {
+    p=n=0;
+    for (x=0; x<COLS; x++)
+    {
+      w=board[xy2idx(x,y)];
+      if (!w) n=0;
+      else if (w==p) n++;
+      else n=1;
+      p=w;
+      if (n>=4) return (w==1 ? pl1 : pl2);
+    }
+  }
+
+  // dann vertikal
+  for (x=0; x<COLS; x++)
+  {
+    p=n=0;
+    for (y=ROWS-1; y>=0; y--)
+    {
+      w=board[xy2idx(x,y)];
+      if (!w) n=0;
+      else if (w==p) n++;
+      else n=1;
+      p=w;
+      if (n>=4) return (w==1 ? pl1 : pl2);
+    }
+  }
+
+  // diagonal 1
+  sx=0;
+  sy=ROWS-4;
+  while (sx<=COLS-4)
+  {
+    p=n=0;
+    x=sx; y=sy;
+    while ((x<COLS) && (y<ROWS))
+    {
+      w=board[xy2idx(x,y)];
+      if (!w) n=0;
+      else if (w==p) n++;
+      else n=1;
+      p=w;
+      if (n>=4) return (w==1 ? pl1 : pl2);
+      x++; y++;
+    }
+    if (sy) sy--;	// wenn y Startpunkt noch > 0, eins tiefer versuchen
+    else sx++;		// sonst eins weiter rechts probiern (bei sy 0)
+  }
+
+  // diagonal 2
+  sx=0;
+  sy=ROWS-4;
+  while (sx<=COLS-4)
+  {
+    p=n=0;
+    x=sx; y=sy;
+    while ((x<COLS) && (y<ROWS))
+    {
+      w=board[xy2idx((COLS-1)-x,y)];	// einfach x spiegeln ;)
+      if (!w) n=0;
+      else if (w==p) n++;
+      else n=1;
+      p=w;
+      if (n>=4) return (w==1 ? pl1 : pl2);
+      x++; y++;
+    }
+    if (sy) sy--;	// wenn y Startpunkt noch > 0, eins tiefer versuchen
+    else sx++;		// sonst eins weiter rechts probiern (bei sy 0)
+  }
+
+  // noch kein Gewinner
+  if (draws==COLS*ROWS)
+    return DRAWN;
+  else
+    return "";
+}
+
+wirf4gw(str)
+{
+  int x, i;
+  object ob;
+  if (!str || str=="") return 0;
+  if (member( ({pl1,pl2}), getuid(TP)) == -1)
+    return write("Aber Du spielst doch gar nicht!\n"), 1;
+  if (winner && winner != "")
+    return write("Das Spiel ist bereits entschieden!\n"), 1;
+  if (getuid(TP) != dran)
+    return write("Aber Du bist doch gar nicht dran!\n"), 1;
+  x=to_int(str)-1;
+  if (x<0 || x>=COLS)
+    return write(bs("Wenn Du einen Stein in eine Spalte werfen willst, so "+
+      "gib auch bitte eine gueltige Nummer an (1-"+COLS+")!")), 1;
+  if (board[xy2idx(x,ROWS-1)]!=0)
+    return write("Spalte "+(x+1)+" ist schon voll!\n"), 1;
+  i=0;
+  while (board[xy2idx(x,i)]!=0) i++;
+  draws++;
+  if (dran==pl1) {
+    board[xy2idx(x,i)]=1;
+    dran=pl2;
+  }
+  else {
+    board[xy2idx(x,i)]=2;
+    dran=pl1;
+  }
+  write ("Du wirfst einen Spielstein in Spalte "+(x+1)+".\n");
+  tell_room (ME, CAP_TPN+" wirft einen Spielstein in Spalte "+(x+1)+".\n",
+    ({TP}) );
+
+  ob=find_player(dran);
+  if (!ob || environment(ob)!=ME || ob->QueryProp(P_INVIS)) ob=0;
+  if ((winner=checkwinner()) && (winner != ""))
+  {
+    dran = "";
+    if (winner==DRAWN) {
+      tell_room (ME, "Das Spiel endet unentschieden.\n", ({ TP,ob }) );
+      show4gw (TP, 0, "Das Spiel endet unentschieden.");
+      if (ob) show4gw (ob, 0, "Das Spiel endet unentschieden.");
+    }
+    else {
+      tell_room (ME, capitalize(winner)+" hat gewonnen!\n", ({ TP,ob }) );
+      show4gw (TP, 1, "Du hast gewonnen!");
+      if (ob) show4gw (ob, 2, "Du hast verloren!");
+    }
+  }
+  else if (!ob)
+  {
+    winner=getuid(TP);
+    tell_room (ME, capitalize(dran)+" hat den Raum oder das Spiel "+
+      "verlassen.\nDer Sieger heisst daher: "+capitalize(winner)+"!\n");
+    reason=capitalize(dran)+
+      " hat vorzeitig den Raum oder das Spiel verlassen.\n";
+    dran="";
+    show4gw (TP, 1, "Du hast gewonnen!");
+  }
+  else {
+    show4gw (TP, 0, CAP(dran)+" ist dran.");
+    show4gw (ob, 0, "Du bist dran.");
+  }
+  return 1;
+}
+
+aufgabe4gw()
+{
+  string wer;
+  wer=getuid(TP);
+  if (member( ({pl1,pl2}), wer) == -1)
+    return write("Aber Du spielst doch gar nicht!\n"), 1;
+  if (winner && winner != "")
+    return write("Das Spiel ist bereits entschieden!\n"), 1;
+  if (getuid(TP) != dran)
+    return write("Du kannst nur aufgeben, wenn Du dran bist!\n"), 1;
+  write ("Du gibst Dich geschlagen.\n");
+  tell_room (ME, capitalize(wer)+" gibt sich geschlagen.\n", ({TP}));
+  reason = capitalize(wer)+" hat vorzeitig aufgegeben.\n";
+  winner = ( wer==pl1 ? pl2 : pl1 );
+}
+
+do4gw(string str)
+{
+  string s1, s2, *s;
+  notify_fail ("Hae? Lies Dir doch bitte nochmal die Tafel genauer durch!\n");
+  if (!str) return 0;
+  s  = explode(str, " ");
+  s1 = s[0];
+  s2 = sizeof(s)>1 ? implode(s[1..]," ") : "";
+  switch (s1)
+  {
+    case "zeig":
+    case "zeige":
+      return show4gw(), 1;
+    case "neu":
+      return neu4gw(s2), 1;
+    case "aufgabe":
+    case "aufgeben":
+      return aufgabe4gw(), 1;
+    default:
+      return wirf4gw(s1);
+  }
+}
+
+void create()
+{
+  ::create();
+  // ROOM DESCRIPTION
+  SetProp (P_LIGHT, 1);
+  SetProp (P_INDOORS, 1);
+  SetProp (P_ENVIRONMENT, ([ENV_TERRAIN:TT_HOUSE, ENV_TEMPERATURE:22]));
+  SetProp (P_INT_SHORT, "Midas Spielewelt, 4-gewinnt Turnierraum");
+  SetProp (P_INT_LONG,
+    "Du befindest Dich im 4-gewinnt Turnierraum in der Spielwelt von Midas. "
+    "Die Waende bestehen aus schlichten aber dennoch eleganten "+
+    "Holzvertaefelungen, die Decke ist hell und freundlich, und der Boden "+
+    "ist mit sauberen Holzdielen verlegt. In der Mitte des Raumes steht "+
+    "ein grosser Tisch und ein 4-gewinnt Brett, an dem zwei Spieler "+
+    "gegeneinander antreten koennen. Eine Tafel haengt an einer der "+
+    "Waende. Ausserdem fuehrt eine kleine Wendeltreppe nach unten.");
+  // ROOM DESCRIPTION END
+
+  // DETAILS START
+  AddDetail ( ({"waende", "wand"}),
+    "Die Waende sind mit eleganten Holzvertaefelungen verkleidet. Sie "
+    "sind von einigen Fenstern unterbrochen, die den Raum mit einem "
+    "freundlichen Licht erhellen.");
+  AddDetail ( ({"fenster"}),
+    "Fuenf ganz gewoehnliche Fenster, ueber die Waende verteilt. "
+    "Durch sie tritt das freundliche Sonnenlicht und erhellt den Raum.");
+  AddDetail ( ({"sonnenlicht","licht"}),
+    "Original-Sonnenlicht (tm), wie es nur von oben/draussen kommen kann.");
+  AddDetail ( ({"holzvertaefelungen", "vertaefelungen"}),
+    "Die Holzvertaefelungen weisen kein besonderes Muster auf.");
+  AddDetail ( ({"muster"}),
+    "Nein, wirklich keins.");
+  AddDetail ( ({"decke"}),
+    "Hell und freundlich, vom durch die Fenster tretenden Sonnenlicht "
+    "erhellt.");
+  AddDetail ( ({"raum", "turnierraum"}),
+    "Versuch's mal mit 'schau' !");
+  AddDetail ( ({"dielen", "holzdielen"}),
+    "Die Holzdielen unter Deinen Fuessen knarren kein bisschen, sie sind "
+    "offenbar sehr sauber und sorgfaeltig verlegt worden. Eine Ritze "
+    "faellt Dir auf.");
+  AddSpecialDetail ( "ritze",
+      "det_ritze");
+  AddDetail ( ({"schmutz"}),
+    "Zwischen den Holzdielen befindet sich einiges an Schmutz.");
+  AddDetail ( ({"fuesse"}),
+    "Deine Fuesse koenntest Du eigentlich auch mal wieder waschen!");
+  AddDetail ( ({"boden"}),
+    "Der Boden wurde sauber mit dunkelbraunen Holzdielen verlegt.");
+  AddDetail ( ({"mitte", "tisch", "holztisch"}),
+    "In der Mitte des Raumes steht ein schlichter Holztisch, auf dem ein "+
+    "4-gewinnt Brett aufgestellt wurde.");
+  AddDetail ( ({"spieler"}),
+    "bist Du vielleicht einer?");
+  AddDetail ( ({"tafel"}),
+    "Du kannst sie lesen!");
+  AddReadDetail ( ({"tafel", "anleitung", "bedienungsanleitung"}),
+    "Auf der Tafel steht eine Bedienungsanleitung fuer das 4-gewinnt "+
+    "abgedruckt:\n\n"
+    "4gw neu <spieler>        ein neues Spiel mit Spieler beginnen.\n"
+    "4gw <spalte>             einen Stein in eine Spalte werfen.\n"
+    "4gw zeige                aktuellen Spielstand anzeigen.\n"
+    "4gw aufgabe              Du gibst Dich geschlagen.\n"
+    "\n\n");
+  AddDetail ( ({"anleitung", "bedienungsanleitung"}),
+    "Sie steht auf der Tafel. Du kannst sie lesen.");
+  AddSpecialDetail ( ({"brett", "spielbrett"}), "show4gw");
+  AddDetail ( ({"spielwelt"}),
+    "Die Spielwelt ist der Treffpunkt aller Spielsuechtigen des "+
+    "Silberlandes.");
+  AddDetail ( ({"treffpunkt"}),
+    "Hier kannst Du andere Spielsuechtige treffen.");
+  AddDetail ( ({"spielsuechtige", "spielsuechtiger"}),
+    "Bist Du vielleicht eine(r) von ihnen?");
+  AddDetail ( ({"midas"}),
+    "In dieser Stadt befindest Du Dich gerade.");
+  AddDetail ( ({"stadt"}),
+    "Diese hier heisst Midas.");
+  AddDetail ( ({"silberland"}),
+    "In dem befindest Du Dich gerade.");
+  AddDetail ( ({"treppe", "wendeltreppe"}),
+    "Die Wendeltreppe ist aus sauber verarbeitetem, glatt geschliffenen "+
+    "Holz und fuehrt weiter nach unten tiefer in die Spielwelt von Midas "+
+    "hinein.");
+  AddDetail ( ({"holz"}),
+    "Nur das feinste Holz wurde hier verwendet und sauber verarbeitet.");
+  // DETAILS END
+
+  // EXITS START
+  AddExit ("osten", "./../room_c2");
+  AddExit ("unten", "./maexchen_raum");
+  // EXITS END
+
+  // ITEMS START
+  // ITEMS END
+
+  wuerfel20 = 2+random(4);
+
+  board = allocate(ROWS*COLS);
+  clear4gw();
+  AddCmd ("4gw", "do4gw");
+}
+
+void reset()
+{
+  ::reset();
+  wuerfel20 = 2+random(4);
+}
+
+string det_ritze()
+{
+  object w;
+
+  if ( (wuerfel20 > 0) && !present("wuerfel20", TP) )
+  {
+    wuerfel20--;
+    w = clone_object(WUERFEL20);
+
+    if (w->move(TP, M_GET) != 1)
+    {
+      w->move(ME, M_NOCHECK);
+      Message(TP->Name() + " findet einen seltsamen Wuerfel.\n",
+          MSGFLAG_VISUAL | MSGFLAG_NO_TP);
+    }
+    else
+      Message(TP->Name() + " hebt einen Wuerfel auf.\n",
+          MSGFLAG_VISUAL | MSGFLAG_NO_TP);
+
+    log_file( LOGFILE20,
+        sprintf( "[%s] %s holt sich einen 20-Seiter.\n",
+          dtime(time())[5..], capitalize(getuid(this_player())) ) );
+
+    return "Hoppla! In einer Ritze findest Du einen seltsamen Wuerfel.\n";
+  }
+  return "In der Ritze befindet sich besonders viel Schmutz.\n";
+}

@@ -1,0 +1,306 @@
+//=========================================================================
+//
+// File:    dung_07_09.c
+// Created by Speedy
+//
+// Project: Sarumans Quest (Finde die verlorene Schriftrolle)
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit ROOM "dung-inh";
+
+void create()
+{
+  ::create();
+
+  AddSpecialDetail( ({"wand","waende","mauer","mauern"}), "detail_mauer" );
+  AddSpecialDetail( ({"haken"}),                          "detail_haken" );
+  AddSpecialDetail( ({"fallgitter","gitter"}),            "detail_gitter" );
+  AddSpecialDetail( ({"staub","dreck","schmutz"}),        "detail_staub" );
+  AddSpecialDetail( ({"loch"}),                           "detail_loch" );
+  AddSpecialDetail( ({"brett"}),                          "detail_brett");
+  AddSpecialDetail( ({"kette"}),                          "detail_kette" );
+  AddSpecialDetail( ({"boden"}),                          "detail_boden" );
+
+  AddCmd( CMD_OEFFNEN,                         "cmd_oeffnen" );
+  AddCmd( ({"schiebe","schieb","raeume","raeum","nimm","nehme","hebe","heb"}),
+                                               "cmd_heben" );
+  AddCmd( ({"wirf","werfe"}),                  "cmd_werfen" );
+  AddCmd( ({"hole","hol","angle","angel","fange","fische","fisch","fang"}),
+                                               "cmd_fischen" );
+  AddCmd( ({"haeng","haenge","binde","bind"}), "cmd_binden" );
+
+  AddExit( "norden", GETEXIT("07_08") );
+  AddExit( "sueden", GETEXIT("07_10") );
+  AddExit( "westen", GETEXIT("06_09") );
+  AddExit( "osten" , ([EX_DEST : GETEXIT("08_09"),EX_TESTFUNC : "exittest"]));
+
+}
+
+void init()
+{
+  ::init();
+
+  if(!TP)              return;
+  if(!interactive(TP)) return;
+
+  SMASTER->ClearStatus(TPUID, S_KETTE_INHAND);
+}
+
+int exittest(string dir)
+{
+  if(SMASTER->QueryDoorStatus(TPUID,"J") == DOOROPENED) return 1;
+  TELLPLAYER("Der Durchgang nach Osten ist durch ein geschlossenes "
+             "Gitter blockiert.\n");
+  return 0;
+}
+
+string _query_int_long()
+{
+  string s;
+
+  if(SMASTER->QueryDoorStatus(TPUID,"J") == DOOROPENED)
+  {
+    s = "Im Osten befindet sich ein geoeffnetes Fallgitter. ";
+  }
+  else
+  {
+    s = "Im Osten befindet sich ein geschlossenes Fallgitter. ";
+  }
+
+  return BS(ltext1 + s);
+}
+
+string detail_boden(string str)
+{
+  SMASTER->SetFlag(TPUID, F_BODEN);
+
+  return BS("Hier am Boden liegt mehr Staub als sonstwo, richtig schlimm "
+            "alles. ");
+}
+
+
+string detail_mauer(string str)
+{
+  if(SMASTER->QueryFlag(TPUID, F_KETTE_ANHAENGEN))
+    return "An der Wand ist ein Haken, an dem eine Kette festgebunden ist.\n";
+
+  return "An der Wand entdeckst Du einen Haken, wo man was einhaengen kann.\n";
+}
+
+string detail_haken(string str)
+{
+  if(SMASTER->QueryFlag(TPUID, F_KETTE_ANHAENGEN))
+    return BS("An diesem kleinen Haken ist eine Kette festgebunden, damit "
+              "das Gitter offenbleibt. ");
+
+  return "Ein kleiner Haken, wo man vielleicht was festbinden kann.\n";
+}
+
+string detail_kette(string str)
+{
+  if(SMASTER->QueryFlag(TPUID, F_KETTE_ANHAENGEN))
+    return "Die Kette ist an einem Haken in der Mauer festgebunden.\n";
+
+  if(SMASTER->QueryStatus(TPUID, S_KETTE_INHAND))
+    return BS("Du haelst eine Kette in Deinen Haenden, jetzt brauchst Du "
+              "sie nur noch irgenwo festbinden. ");
+
+  if(SMASTER->QueryFlag(TPUID, F_KETTE_GEFUNDEN))
+    return BS("Die Kette liegt ganz unten im Loch. Vielleicht kann man sie "
+              "irgendwie raufholen.");
+
+  return NICHTDA;
+}
+
+string detail_staub(string str)
+{
+  if(!SMASTER->QueryFlag(TPUID, F_BODEN))
+    return "Welchen Staub denn?\n";
+
+  SMASTER->SetFlag(TPUID, F_STAUB);
+
+  if(SMASTER->QueryFlag(TPUID, F_LOCH_AUF))
+    return BS("Neben dem vielen Staub und Dreck, siehst Du ein Loch am "
+              "Boden, daneben liegt ein Brett. ");
+
+  return BS("Als Du den Staub naeher betrachtest, entdeckst Du ein "
+              "viereckiges Loch, auf dem ein Brett liegt.");
+}
+
+string detail_brett(string str)
+{
+  if(!SMASTER->QueryFlag(TPUID, F_STAUB))
+    return NICHTDA;
+
+  if(!SMASTER->QueryFlag(TPUID, F_LOCH_AUF))
+    return BS("Das Brett liegt ueber einem Loch im Boden, vielleicht kannst "
+              "Du es ja irgendwie wegbekommen. ");
+
+  return "Das Brett liegt neben dem Loch, stoert also nicht mehr.\n";
+}
+
+string detail_loch(string str)
+{
+  if(!SMASTER->QueryFlag(TPUID, F_STAUB))
+    return NICHTDA;
+
+  if(!SMASTER->QueryFlag(TPUID, F_LOCH_AUF))
+    return BS("Das Loch ist viereckig und es liegt ein Brett darueber, "
+              "wenn es weg waere, koenntest Du vielleicht hineinschauen.");
+
+  if(SMASTER->QueryFlag(TPUID, F_KETTE_ANHAENGEN))
+    return "Aus dem Loch kommt eine Kette, die an die Mauer gebunden ist.\n";
+
+  if(SMASTER->QueryStatus(TPUID, S_KETTE_INHAND))
+    return "Aus dem Loch kommt eine Kette, die Du in Deinen Haenden "
+           "haeltst.\n";
+
+  if(!SMASTER->QueryFlag(TPUID, F_KETTE_GEFUNDEN))
+  {
+    if(TP->QueryProp(P_RACE) == "Dunkelelf")
+    {
+      SMASTER->SetFlag(TPUID, F_KETTE_GEFUNDEN);
+      return BS("Das Loch ist ca. 30x30 cm gross, und hat keine Abdeckung "
+                "mehr. Auf dem Grund des Loches kannst Du eine Kette "
+                "erkennen.");
+
+    }
+    else
+    {
+      return BS("Das Loch ist ca. 30x30 cm gross, und hat keine Abdeckung "
+                "mehr, vielleicht ist da was drinnen.");
+    }
+  }
+
+  if(SMASTER->QueryFlag(TPUID, F_KETTE_GEFUNDEN))
+  {
+    return BS("Das Loch ist ca. 30x30 cm gross, und hat keine Abdeckung "
+              "mehr. Auf dem Grund des Loches kannst Du gerade so eben "
+              "noch eine Kette erkennen.");
+  }
+
+  return BS("Das Loch ist ca. 30x30 cm gross, und hat keine Abdeckung "
+              "mehr, vielleicht ist da was drinnen.");
+
+}
+
+int cmd_binden(string str)
+{
+  if(!SMASTER->QueryStatus(TPUID, S_KETTE_INHAND)) return 0;
+
+  notify_fail("Was willst Du wo festbinden?\n");
+  if(!str || str == "") return 0;
+
+  if(!(str == "kette an haken" ||
+       str == "kette an haken fest")) return 0;
+
+  TELLPLAYER(BS("Du ziehst an der Kette und bindest sie an dem Haken in der "
+                "Mauer fest. Gleichzeitig oeffnet sich das Gitter."));
+
+  SMASTER->SetFlag(TPUID, F_KETTE_ANHAENGEN);
+  SMASTER->ClearStatus(TPUID, S_KETTE_INHAND);
+  SMASTER->SetDoorStatus(TPUID,"J",DOOROPENED);
+  return 1;
+}
+
+int cmd_fischen(string str)
+{
+  if(!SMASTER->QueryFlag(TPUID, F_LOCH_AUF)) return 0;
+
+  notify_fail("Was willst Du womit heraufholen?\n");
+  if(!str || str == "") return 0;
+
+  if(!(str == "kette mit seil"           ||
+       str == "kette mit seil rauf"      ||
+       str == "kette mit seil herauf"    ||
+       str == "kette mit strick"         ||
+       str == "kette mit strick rauf"    ||
+       str == "kette mit strick herauF"  )) return 0;
+
+  if(SMASTER->QueryStatus(TPUID, S_KETTE_INHAND))
+  {
+    TELLPLAYER(BS("Du haelst die Kette schon in Haenden, mehr kannst Du "
+                  "nicht heraufholen."));
+    return 1;
+  }
+
+  if(!present("\nspy_seil-haken", TP))
+  {
+    TELLPLAYER(BS("Du wuerdest irgendeinen Haken mit einem Seil benoetigen, "
+                  "so bringt das gar nichts, da Du nicht hinunter kommst."));
+    return -1;
+  }
+
+  TELLPLAYER(BS("Mit dem Haken an Deinem Seil schaffst Du es die Kette "
+                "hochzuziehen. Nun haeltst Du sie in Deiner Hand. "));
+
+  SMASTER->SetStatus(TPUID, S_KETTE_INHAND);
+  return 1;
+}
+
+int cmd_werfen(string str)
+{
+  object ob;
+
+  if(!SMASTER->QueryFlag(TPUID, F_LOCH_AUF)) return 0;
+
+  if(!(str == "fackel in loch"        ||
+       str == "fackel in loch hinein" )) return 0;
+
+  if(!ob=present("fackel", TP))
+  {
+    TELLPLAYER(BS("Du wirfst eine imaginaere Fackel in das Loch. Nutzt nur "
+                  "nichts."));
+    return -1;
+  }
+
+  if(ob->_query_lighted())
+  {
+    ob->remove();
+
+    if(SMASTER->QueryFlag(TPUID, F_KETTE_ANHAENGEN) ||
+       SMASTER->QueryStatus(TPUID, S_KETTE_INHAND)   )
+    {
+      TELLPLAYER("Du wirfst eine Fackel in das Loch, siehst aber nichts.\n");
+    }
+    else
+    {
+      TELLPLAYER(BS("Du wirfst eine Fackel in das Loch, und siehst ganz "
+                    "unten, ca. 10 Meter unten, eine Art Kette liegen. Das "
+                    "ist wahrscheinlich der Schluessel, um das Fallgitter "
+                    "zu oeffnen. "));
+    }
+
+    SMASTER->SetFlag(TPUID, F_KETTE_GEFUNDEN);
+    return 1;
+  }
+
+  TELLPLAYER("Du wirfst eine Fackel in das Loch, siehst aber nichts.\n");
+  return 1;
+}
+
+int cmd_heben(string str)
+{
+  if(!SMASTER->QueryFlag(TPUID, F_STAUB)) return 0;
+
+  notify_fail("Was willst Du wegheben?\n");
+  if(!str || str == "") return 0;
+
+  if(!(str == "brett weg" ||
+       str == "brett"     )) return 0;
+
+  if(SMASTER->QueryFlag(TPUID, F_LOCH_AUF))
+  {
+    TELLPLAYER(BS("Aber das Brett liegt ja schon neben dem Loch, wo willst "
+                  "Du es denn hinheben? "));
+    return 1;
+  }
+
+  TELLPLAYER("Du hebst das Brett vom Loch und legst es daneben hin.\n");
+  SMASTER->SetFlag(TPUID, F_LOCH_AUF);
+  return 1;
+}
+

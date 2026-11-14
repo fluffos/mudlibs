@@ -1,0 +1,258 @@
+// Eifer der Paladine
+//
+// 01/2024 Wraz: Limitiert auf max. 20 Attacken pro Runde; das ist extrem viel, aber die
+// letzten Jahre waren (theoretisch) bis zu 50 moeglich, und wir wollen die wenigen
+// Spieler nicht zu sehr veraergern :)
+// 5.2.24: auf 18 Attacken pro Runde limitiert
+// 12.2.24: 16
+// 19.2.24: 14
+// 26.2.24: 12
+// 4.3.24: 10-12 (random)
+// 22.3.24: 8-12 (random)
+// 6.7.24: 8-11 (random)
+// 5.11.24: 7-11 (random)
+
+inherit "std/thing";
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <defines.h>
+#include <moredef.h>
+#include <new_skills.h>
+#include "../paladin.h"
+#include "../blessing.h"
+
+private int additionalAttack, atkBonus, deathCount, maxDeaths, lastMultiAtk;
+private int atkCnt, atkOvf, atkCap=(7+random(5)); // Eifer Attack-Cap
+
+create() {
+  if (!is_clone(this_object())) return;
+  ::create();
+  AddId (({PALADINITEM, "\neifer"}));
+  SetProp (P_SHORT, 0); 
+  SetProp (P_GENDER, MALE);
+  SetProp (P_WEIGHT, 0);
+  SetProp (P_LIGHT, 1);
+  SetProp (P_NODROP, 1);
+  SetProp (P_NEVERDROP, 1);
+  SetProp (P_MAGIC, 1);
+  SUID;
+// if(getuid(previous_object())!="GUILD.pal_spells") {
+//   call_out("remove", 1);
+//   return 0;
+//  }
+}
+
+public void SetPower(int ability, int success) {
+  if(success>8000) {
+    additionalAttack = 1;
+  } else {
+    additionalAttack = 0;
+  }
+
+  atkBonus = success/100;
+}
+
+
+string extra_look() {
+  object player;
+  if(!player=ENV(ME)) return "";
+  if(player->QueryProp(P_GENDER)==FEMALE)
+    return "Sie hat einen durchdringenden Blick und scheint von Dusty gesegnet zu sein.\n";
+  else 
+    return "Er hat einen durchdringenden Blick und scheint von Dusty gesegnet zu sein.\n";
+}
+
+int start_remove(int t) {
+  object pl;
+
+  call_out("remove_me", t);
+
+  pl = ENV(ME);
+  if(objectp(pl) && HAS_BLESSING(pl, BLESSING_STEADFASTNESS)) {
+    tell_object(pl, BS("In deinem Eifer bist du unbeugsam und standhaft. Bis in den Tod! FUER DUSTY!"));
+    pl->SetProp(P_TMP_DIE_HOOK, ({time()+t, TO, "be_steadfast"}) );
+    maxDeaths = pl->QueryAttribute(A_CON)/2 + pl->QueryProp(P_ALIGN) / 100;
+    deathCount = 0;
+  }
+
+  return 1;
+}
+
+public int be_steadfast(int pd) {
+  string *messages;
+  object *enemies;
+
+  if(!objectp(ENV(ME))) return 0;
+
+  if(++deathCount > maxDeaths) {
+    ENV(ME)->SetProp(P_TMP_DIE_HOOK, 0);
+    return 0;
+  }
+
+  messages = ({
+    "Nur dein unbeugsamer Glaube haelt dich davon ab zu sterben!",
+    "DUSTY STEH DIR BEI! Dein Wille haelt dich am Leben.",
+    "Nur dein unerschuetterlicher Eifer verhindert deinen Tod!",
+    "Deine inbruenstige Verehrung Dustys haelt dich am Leben!",
+    "Dein Leben haengt am seidenen Faden, doch Dusty will, dass du lebst!",
+    "Eigentlich muesstest du schon tot sein, doch in deinem Eifer kaempfst du weiter.",
+    "Dusty erhoehrt dich und schiebt deinen Tod noch einen Moment auf.",
+    "Du glaubst schon die dunkle Robe des Todes zu sehen.",
+    "In deinen Ohren rauscht es - doch du weigerst dich zu sterben.",
+    "Mit letzter Kraft klammerst du dich an dein Leben.",
+    "Verbissen klammerst du dich an dein Leben. EHRE SEI DUSTY!"
+  });
+
+  tell_object(ENV(ME), BS(messages[random(sizeof(messages))]));
+  tell_object(ENV(ME), BS("Mit letzter Kraft ziehst du dich aus dem Gefecht zurueck."));
+  tell_room(ENV(ENV(ME)), BS(ENV(ME)->Name(WER, 1) + " zieht sich mit letzter Kraft aus dem Gefecht zurueck!"), ({ENV(ME)}));
+
+  enemies = ENV(ME)->PresentEnemies();
+  call_out("kill_again", 0, enemies);
+  
+  return 1;
+}
+
+public void kill_again(object *enemies) {
+  int i;
+
+  if(!objectp(ENV(ME))) return;
+
+  for(i=0; i<sizeof(enemies); ++i) {
+    if(objectp(enemies[i])) ENV(ME)->Kill(enemies[i]);
+  }
+
+  return;
+}
+
+remove_me() {
+  object player, room;
+  if(player=ENV(ME)) {
+    tell_object(player, BS("Dein goettlicher Eifer laesst nach. Du fuehlst Dich von "
+          "Dusty gesegnet. Lob sei Dusty!"));
+    if (player->QueryProp(P_ALIGN) < 1000) {
+      player->SetProp(P_ALIGN, player->QueryProp(P_ALIGN)+random(250));
+    }
+  }
+        
+  if(room=ENV(player))
+    tell_room(room, sprintf("Der goettliche Blick von %s erlischt.\n",
+        player->name(WEM)), ({player}));
+  player->SetProp(P_TMP_ATTACK_HOOK, 0);
+
+  if(objectp(player) && deathCount > 0) {
+    player->SetProp(P_TMP_DIE_HOOK, 0);
+    tell_object(player, BS("Mit einem Schlag brechen all die Wunden auf, die du in deinem "
+                        "Eifer unterdruckt hast. EHRE SEI DUSTY! IM LEBEN UND IM TODE!"));
+    call_other("/spellbooks/pal_spells", "ShoutPrayer", player);
+    SetProp(P_KILL_NAME, "Uebereifer");
+    player->do_damage(deathCount*20);
+  }
+
+  ME->remove();
+}
+
+void DebugMsg(string pl, int pl_speed)
+{
+  string msg;
+  msg = sprintf("%s: %s Eifer mit %d Angr., davon %d abgebr. (cap=%d) (SA_SPEED=%d)\n", 
+    ctime(), capitalize(pl), atkCnt, atkOvf, atkCap, pl_speed);
+  if(find_player("wraz"))
+    tell_object(find_player("wraz"), msg);
+  if(atkOvf) write_file(LOG("eifer"), msg);
+}
+
+private void attackEnemy(object pl, object enemy) {
+  int x;
+
+  if(!objectp(enemy) || !objectp(pl)) return;
+
+  if(lastMultiAtk == time()) 
+  {
+    atkCnt++;
+    if(find_call_out("DebugMsg") == -1) call_out("DebugMsg", 1, getuid(pl), pl->QuerySkillAttribute(SA_SPEED));
+  }
+  else { atkCnt = 1; atkOvf=0; lastMultiAtk = time();}
+
+  /*if(find_player("wraz"))
+    tell_object(find_player("wraz"), sprintf(
+      "eifer :: atkCount=%d, SA_SPEED=%d\n", atkCnt, pl->QuerySkillAttribute(SA_SPEED)));
+  */
+  if(atkCnt > atkCap) { atkOvf++; return;}
+
+  pl->do_my_heart_beat(); // damit no_more_attack auf 0 gesetzt wird
+  pl->Attack(enemy);
+
+  if(!objectp(enemy) || !objectp(pl)) return;
+
+  x = 20+(enemy->QueryProp(P_ALIGN)/100);
+  if(PO->QueryProp(P_TESTPLAYER)) {
+    tell_object(PO, sprintf("eifer :: sfxChance=1:%d, atkCnt=%d, SA_SPEED=%d\n", 
+    x, atkCnt, pl->QuerySkillAttribute(SA_SPEED)));
+  }
+
+  if(objectp(enemy) && enemy->QueryProp(P_ALIGN) < 0 && !random(x)) {
+    switch(random(3)) {
+      case 0: tell_room(ENV(enemy), BS(sprintf("%s eifrige Inbrunst laesst %s zurueckschrecken!", PO->Name(WESSEN), enemy->name(WEN, 1))), ({PO}));
+              tell_object(PO, BS(sprintf("Deine eifrige Inbrunst laesst %s zurueckschrecken!", enemy->name(WEN, 1))));
+              enemy->SetProp(P_DISABLE_ATTACK, random(atkBonus/20));
+              break;
+      case 1: tell_room(ENV(enemy), BS(sprintf("Dustys heiliger Zorn faehrt auf %s nieder!", enemy->name(WEN, 1))));
+              enemy->Defend(150 + random(atkBonus), DT_HOLY, ([SP_NAME: "eifer", SP_SHOW_DAMAGE: 1, SP_RECURSIVE: 1]), PO);
+              break;
+      default: tell_room(ENV(enemy), BS(sprintf("%s ruft: LOB SEI DUSTY! HEILIG! HEILIG!", PO->Name(WER))), ({PO}));
+              tell_object(PO, BS("Du rufst: LOB SEI DUSTY! HEILIG! HEILIG!"));
+              tell_object(PO, BS("Heilige Kraft durchstroemt dich in deinem Eifer!"));
+              PO->AddHp(10 + random((atkBonus/5)));
+              break;
+    }
+  }
+
+    return;
+}
+
+int MultipleAttack(object enemy) {
+  object *enemies;
+  mixed tmp_attack_hook;
+  int i, attacked,x, en;
+  enemies=PO->QueryEnemies()[0];
+//  if(sizeof(enemies)<2) return 1;
+//  2009 12 08, angrox: nicht wenn SA_SPEED > 100 ist
+  //if( PO->QuerySkillAttribute(SA_SPEED)>100 ) return 1; 
+  //TELL("angrox", sprintf("*** eifer.c: PO: %O, SA_SPEED: %O\n", PO,  PO->QuerySkillAttribute(SA_SPEED)));
+  tmp_attack_hook=PO->QueryProp(P_TMP_ATTACK_HOOK);
+  PO->SetProp(P_TMP_ATTACK_HOOK, 0);
+  attacked=0;
+
+  if(PO->QueryProp(P_TESTPLAYER)) {
+    tell_object(PO, sprintf("eifer :: additionalFixedAttack=%d\n", additionalAttack));
+  }
+
+  en = sizeof(enemies);
+
+  if (en > 0 && en < 2) {
+    attackEnemy(PO, enemies[0]);
+    attackEnemy(PO, enemies[0]);
+    if(additionalAttack || !random(2)) {
+      attackEnemy(PO, enemies[0]);
+    }
+    PO->SetProp(P_TMP_ATTACK_HOOK, tmp_attack_hook);
+    return 0;
+  } 
+  else if(en > 1){
+    // Jeder Gegner bekommt genau eine Attacke, bis zu 5 Gegner
+    x = (additionalAttack?5:4);
+    for(i=sizeof(enemies)-1;i>=0 && attacked<x;i--)
+    {
+      if( objectp(enemies[i]) && present(enemies[i], ENV(PO)) )
+      {
+        attackEnemy(PO, enemies[0]);
+        attacked++;
+      }
+    }
+
+    PO->SetProp(P_TMP_ATTACK_HOOK, tmp_attack_hook);
+  }
+  return 0; // Attacke auf Originalgegner abbrechen
+}

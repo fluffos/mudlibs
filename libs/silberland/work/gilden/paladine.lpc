@@ -1,0 +1,2384 @@
+
+//
+// Paladine
+//
+// 29-02-04 opfern fuer den Paladin als dank fuer auferstehung
+//
+//          hier fehlen wohl ein paar jahre die eintrage :)
+//
+// 14-01-01 max_opfer von 30 auf 20
+// 21-12-00 bei Palakammer check auf > 100 ausserhalb Klammer, sonst waren
+//          leider mehr als 100 Items moeglich :-/
+// 10-03-00 Opfere alles aus <container> (Iwo)
+// 18-09-99 Ayla kann nur eine Zeremonie gleichzeitig :P
+// 18-02-99 Toplistenupdate in /gilden/paladine/crontab
+// 02-02-99 Funktionen im Reset per call_out -> Vermeidung von reset-lags
+// 13-01-99 Schwertkampf nicht mehr als Frosch moeglich zu lernen
+//          Schwertkampf lernt man nur noch, wenn WC ( OHNE DAMAGE !!!! )
+//          groesser als DEX*5/8 ist
+// 09-01-99 Bugfix in Schwertkampf bei schon toten NPC
+// 19-11-98 Funktion fuer Geheimgang.
+// 06-06-98 Details fertiggestellt
+// 05-06-98 Testfunktionen eingefuehrt, muessen noch Spells angepasst werden
+// 04-06-98 Fkten nur noch moeglich wenn Ayla anwesend ( erweitert )
+//          Ayla ist nicht mehr angreifbar/redet nicht mehr waehrend Zeremonie
+//          Toplistenverwaltung und MagFkten eingebaut
+// 20-05-98 Anpassung an Paladine fertig
+// 02-05-98 erste Aenderungen/Anpassungen auf die Paladine, Zordan
+// 18-10-97 Angrox@SL
+//
+//
+
+#include "/gilden/paladine/paladin.h"
+#include "/gilden/paladine/blessing.h"
+
+/* 
+Alle wichtigen Funktionen sind in /std/gilden_ob.c 
+definiert!
+gilden_ob.c -> gilde.c -> gilden_room.c
+*/
+
+inherit "std/gilden_room";
+inherit "std/gilde";
+inherit "std/gilden_ob";
+inherit "std/living/std_skills";
+inherit "/gilden/paladine/master/sequencer";
+
+#include <properties.h>
+#include <rooms.h>
+#include <wizlevels.h>
+#include <language.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <ansi.h>
+
+#define P_NEKRO_PESTERED "nekro_pestered"
+
+// Prototypen
+nosave string int2string(int wert);
+nosave void Channel(string msg);
+varargs advance2(object pl);
+nosave object SwordClone(object pl);
+nosave int Sacrifice(string str);
+  // globale vars
+nosave int *xp_per_level=XP_PER_LEVEL;
+nosave int *money_per_level=MONEY_PER_LEVEL;
+nosave int zaehler=0;
+nosave int money_counter=0;
+nosave object ayla_abgelenkt;
+nosave int opferreport=0;
+nosave int cleanup=0;
+
+int cast_disabled = 0;
+
+nomask query_prevent_shadow() { return 1; }
+
+void create() {
+  ::create();
+  SetProp( P_INT_SHORT, "Im Burgfried der Burg Sturmfels" ); 
+  SetProp( P_INT_LONG, 
+    "Du findest Dich in einem prunkvollen Rittersaal wieder. Ein roter "
+    "Teppich fuehrt ein paar flache Stufen zu einem Altar hinauf. Vor dem "
+    "Altar steht eine kleine Statue mit einer Liste darauf. Links und "
+    "rechts stehen vor den Waenden mehrere Ritterruestungen in Reihe. "
+    "Samtweiche Vorhaenge mit heiligen Symbolen an der Wand wehen sanft im "
+    "Wind. Du spuerst in jedem Koerperteil eine starke heilige Praesenz und "
+    "bist Dir ziemlich sicher, dass Du in der Gilde der Paladine gelandet "
+    "bist. Es herrscht eine angenehme Ruhe im ganzen Saal. @@aligntest@@ "
+    "@@maghelp@@");
+
+  AddReadDetail( ({"liste", "topliste"}), "@@liste@@");
+
+  AddSpecialDetail( ({ "altar" }), "altar" );
+
+  AddDetail( ({ "rittersaal","saal" }), QueryProp(P_INT_LONG)[0..<27]);
+
+  AddDetail( ({ "decke" }),
+    "Die Decke ist wirklich sehr weit oben. An ihr haengt ein grosser "
+    "Kronleuchter.");
+
+  AddDetail( ({ "kronleuchter","leuchter" }),
+    "Der goldene Kronleuchter ist wahrhaftig riesig und erhellt diesen "
+    "Saal wohl auch, wenn das Boese ihn betritt.");
+
+  AddDetail( ({ "boden" }),
+    "Auf dem steinernen Boden liegt ein roter Teppich.");
+
+  AddDetail( ({ "gesinnung" }),
+    "Du solltest schon selber wissen, wie Deine Gesinnung ist.");
+
+  AddDetail( ({ "dunkelelf","dunkelelfen","feind","feinde","ort" }),
+    "Ihr seid die Feinde der Paladine. Vielleicht ist es besser, Du "
+    "wendest Dich ganz schnell diesem Ort ab.");
+
+  AddDetail( ({ "ruhe","haut" }),
+    "Seltsam, man kann hier die Ruhe sogar auf der Haut spueren.");
+
+  AddDetail( ({ "praesenz" }),
+    "Du vibrierst unter dieser goettlichen Praesenz. Du traust Dich kaum ein "
+    "Wort zu sagen oder etwas Frevelhaftes zu tun.");
+
+  AddDetail( ({ "wort","piep" }),
+    "Du willst grad 'Piep' sagen, aber brichst es wirklich ab.");
+
+  AddDetail( ({ "frevelhaftes" }),
+    "Nein, Du traust Dich einfach wirklich nicht!");
+
+  AddDetail( ({ "koerperteil" }),
+    "Ja, wirklich in jedem Koerperteil nimmst Du goettliche Praesenz wahr.");
+
+  AddDetail( ({ "vorhaenge","vorhang" }),
+    "Ein paar Vorhaenge haengen an den Waenden. Sie beinhalten heilige "
+    "Symbole und wehen im Wind.");
+
+  AddDetail( ({ "symbole","symbol","form" }),
+    "Die Symbole stellen das Gute in jeder nur denkbaren Form dar.");
+
+  AddDetail( ({ "waende","wand" }),
+    "Die Waende sind mit vielen kleinen Ornamenten verziert. In einer "
+    "langen Reihe stehen Ritterruestungen davor. Ein paar Vorhaenge wehen "
+    "im Wind.");
+
+  AddDetail( ({ "ornamente","ornament" }),
+    "Unzaehlbar viele Ornamente verzieren die Waende. Sie verleihen dem "
+    "Saal eine wirklich goettliche Ausstrahlung.");
+
+  AddDetail( ({ "reihe" }),
+    "Die Ritterruestungen reichen vom Eingang bis zu den Stufen des Altar "
+    "hin.");
+
+  AddDetail( ({ "ritterruestungen","ruestungen","ritter" }),
+    "Viele veschiedene Ritterruestungen wurden hier aufgestellt. Sie wurden "
+    "im Laufe der Zeit gesammelt und zeigen deutlich die Staerke und Macht "
+    "der Paladine.");
+
+  AddDetail( ({ "staerke","macht" }),
+    "In Worte kann man sie nicht mehr ausdruecken. Sei froh, wenn Du nicht "
+    "von ihr getroffen wirst.");
+
+  AddDetail( ({ "laufe","zeit" }),
+    "Das reicht von dem Zeitpunkt an, wo Dusty das Silberland erschaffen "
+    "hat.");
+
+  AddDetail( ({ "zeitpunkt" }),
+    "Genaueres ist ueber diesen Zeitpunkt leider nicht mehr bekannt.");
+
+  AddDetail( ({ "statue" }),
+    "Die Statue zeigt einen alten und erfahrenen Paladin. In seinen Haenden "
+    "liegt eine Liste.");
+
+  AddDetail( ({ "haende","hand" }),
+    "Der alte Paladin haelt eine Liste in seinen Haenden.");
+
+  AddDetail( ({ "liste" }),
+    "Das ist eine Liste der Paladine. Du kannst sie lesen. Als Die Liste "
+    "naeher betrachtest, schweift Dein Blick zur Statue ab, und Du erkennst, "
+    "dass ein Arm wohl beweglich ist.");
+
+  AddDetail( ({ "opferstelle","stelle","moeglichkeit" }),
+    "Diese Opferstelle gibt es den Angehoerigen der Paladine die "
+    "Moeglichkeit, Opfer fuer Dusty darzubringen. Aber auch jeder andere kann "
+    "das natuerlich machen wenn er moechte.");
+
+  AddDetail( ({ "opfer" }),
+    "Egal ob gross oder klein, Dusty freut sich ueber jedes Opfer fuer sie.");
+
+  AddDetail( ({ "angehoerigen","angehoerige" }),
+    "Die Paladine opfern laufend etwas fuer ihre Goettin.");
+
+  AddDetail( ({ "kerzen","kerze" }),
+    "Die Kerzen auf dem Altar sind hellweiss und flackern im Wind.");
+
+  AddDetail( ({ "wind" }),
+    "Der Wind kommt durch die offenen Fenster hinein.");
+
+  AddDetail( ({ "fenster" }),
+    "Die Fenster sind teilweise offen und teilweise geschlossen. Ihre Scheiben "
+    "wurden aus vielen kleinen Segmenten hergestellt.");
+
+  AddDetail( ({ "fensterscheiben","scheiben","segmente","segment","glas" }),
+    "Die Fensterscheiben kann man gar nicht als solche bezeichnen. Aus vielen "
+    "kleine Segmenten aus buntem Glas wurden sie gemacht. Sie zeigen die "
+    "Paladine in ihren Kaempfen und wie das Gute ueber das Boese siegt.");
+
+  AddDetail( ({ "kaempfe","kampf" }),
+    "Die Paladine kaempfen gegen das Boese an.");
+
+  AddDetail( ({ "boese" }),
+    "Das Boese ist immer und ueberall. Bei Dusty, es muss bekaempft werden!");
+
+  AddDetail( ({ "abbild" }),
+    "Das Abbild zeigt die Goettin Dusty, wie sie einen Paladin segnet.");
+
+  AddDetail( ({ "goettin","dusty","schoenheit" }),
+    "Du bist durch ihre Schoenheit fast geblendet. Sie strahlt eine "
+    "goettliche Aura aus.");
+
+  AddDetail( ({ "aura" }),
+    "Diese Aura kannst Du eigentlich gar nicht sehen, aber Du kannst sie "
+    "sogar um Dich herum spueren.");
+
+  AddDetail( ({ "teil","bereich" }),
+    "Der Rittersaal teilt sich einen Bereich fuer die Paladine im oberen "
+    "Teil und einen Bereich fuer Besucher im unteren Teil.");
+
+  AddDetail( ({ "besucher","besuch" }),
+    "Es kommen oft Besucher her, um Dusty und ihre Paladine fuer ihre Taten "
+    "zu danken und etwas zu opfern.");
+
+  AddDetail( ({ "taten" }),
+    "Das sind durch und durch gute Taten.");
+
+  AddDetail( ({ "paladin","paladine" }),
+    "Du bist in der Gilde der Paladine. Die uebrigen Paladine sind wohl "
+    "ausgezogen um das Gute zu verbreiten.");
+
+  AddDetail( ({ "gute" }),
+    "Die Paladine stehen fuer das Gute im Silberland ein.");
+
+  AddDetail( ({ "silberland","land" }),
+    "Hat Dusty Dir nicht beigebracht, dass Du derzeit im Silberland bist?");
+
+  AddDetail( ({ "gilde","ayla" }),
+    "Du bist in der Gilde der Paladine. Frag doch mal Ayla danach.");
+
+  AddDetail( ({ "teppich" }),
+    "Der Teppich fuehrt vom Eingang im Sueden ueber ein paar flache Stufen "
+    "bis zum Altar hinauf. Er wird wohl oft benutzt, sieht aber ueberhaupt "
+    "nicht abgenutzt aus.");
+
+  AddDetail( ({ "eingang" }),
+    "Der Eingang in den Rittersaal befindet sich um Sueden. Er ist "
+    "auch gleichzeitig der Ausgang.");
+
+  AddDetail( ({ "ausgang" }),
+    "Du kannst den prunkvollen Rittersaal wieder nach Sueden verlassen.");
+
+  AddDetail( ({ "stufen","stufe" }),
+    "Ziemlich flache Stufen fuehren hinauf zu einem Altar. Sie sind einige "
+    "Meter breit aber auch ziemlich tief. Man kann dadurch sehr gemuetlich "
+    "zum Altar hinaufgehen.");
+
+  AddDetail( ({ "meter" }),
+    "Du kannst einen Meter nur ziemlich schwer genau einschaetzen.");
+
+  AddSound( DEFAULT_SOUND,
+    "Es herrscht eine angenehme Ruhe im ganzen Saal. Ganz leise kann man "
+    "den Wind hoeren.");
+    
+  AddSound( "wind",
+    "Ein ganz leichter Wind pfeift durch den Saal.");
+    
+  AddSound( "ruhe",
+    "Eine goettliche Ruhe scheint das zu sein.");
+    
+  AddSound( ({ "saal","bewegungen","bewegung" }),
+    "Du kannst nur die leichten Bewegungen der Vorhaenge, hervorgerufen "
+    "durch den leichten Wind, wahrnehmen.");
+    
+  AddSound( ({ "vorhaenge","vorhang" }),
+    "Sie rauschen leise im Wind.");
+    
+  AddSmell( ({ DEFAULT_SMELL,"saal" }),
+    "Bei Dusty, es riecht hier nach frischen Blumen, aber auch nach alter und "
+    "abgestandener Kleidung.");
+
+  AddSmell( ({ "kleidung","ritterruestungen","ruestungen" }),
+    "Die Kleidung ist die der Ritterruestungen. Sie riechen ziemlich "
+    "abgestanden.");
+
+  AddSmell( "hauch",
+    "Es ist nur sehr wenig, doch es reizt Deine Nase schon sehr.");
+
+  AddSmell( ({ "blumen","blume" }),
+    "Der Duft von frischen Blumen weht mit dem Wind in den Saal hinein.");
+
+  AddSmell( "wind",
+    "Der Wind traegt einen Hauch von Blumen in den Saal.");
+
+  AddSmell( "duft",
+    "Sie riechen unglaublich, ja fast goettlich, schoen.");
+
+  AddSmell( ({ "dusty","ausstrahlung" }),
+    "Du kannst die goettliche Ausstrahlung von Dusty sogar mit Deiner "
+    "Nase erkennen.");
+
+  AddSmell( "nase",
+    "Genau, damit riecht man. Sie selber riecht nach ... Dir .. :)");
+
+
+  AddSpecialDetail( ({"arm"}), "det_arm");
+ 
+  
+  SetProp( P_LIGHT, 1 );
+  SetProp( P_INDOORS, 1 );
+  SetProp(P_NAME, GUILDNPC_NAME);
+  SetProp(P_ARTICLE, 0);
+
+  SetProp(P_ENVIRONMENT,([ENV_TERRAIN:TT_HOUSE, ENV_TEMPERATURE: 20]) );
+  SetProp(P_GUILD_DEFAULT_SPELLBOOK,"pal_spells"); 
+  SetProp(P_GUILD_RESTRICTIONS,
+      ([SR_EXCLUDE_RACE: ({"Dunkelelf", "Goblin", "Ork", "Oger"}),
+        P_LEVEL: 6, A_DEX: 10, A_STR: 8, A_INT: 3, P_QP: 20, SR_BAD: 400]));
+         // Die Aufnahmebedingungen fuer die Gilde
+
+  SetProp(P_GUILD_LEVELS,([
+     1: ([ P_LEVEL: 6,  A_STR: 8,  A_DEX: 10, A_INT: 3, SR_BAD:400, SR_FUN: "LConds", 
+           P_QP:20]),
+     2: ([ P_LEVEL: 9,  A_STR: 9,  A_DEX: 11, A_INT: 5, SR_BAD:400, SR_FUN:"LConds"]),
+     3: ([ P_LEVEL: 13, A_STR: 10, A_DEX: 12, A_INT: 7, SR_BAD:400, SR_FUN:"LConds"]),
+     4: ([ P_LEVEL: 15, A_STR: 12, A_DEX: 14, A_INT: 9, SR_BAD:400, SR_FUN: "LConds", 
+           P_QP:100]),
+     5: ([ P_LEVEL: 17, A_STR: 14, A_DEX: 15, A_INT: 11, SR_BAD:400, SR_FUN:"LConds"]),
+     6: ([ P_LEVEL: 19, A_STR: 15, A_DEX: 16, A_INT: 12, SR_BAD:400, SR_FUN:"LConds"]),
+     7: ([ P_LEVEL: 21, A_STR: 17, A_DEX: 18, A_INT: 14, SR_BAD:600, SR_FUN:"LConds"]),
+     8: ([ P_LEVEL: 23, A_STR: 18, A_DEX: 19, A_INT: 15, SR_BAD:800, SR_FUN:"LConds"]),
+     9: ([ P_LEVEL: 26, A_STR: 20, A_DEX: 21, A_INT: 15, SR_BAD:900, SR_FUN:"LConds"]), 
+    10: ([ P_LEVEL: 29, A_STR: 21, A_DEX: 22, A_INT: 15, SR_BAD:1000, SR_FUN:"LConds"]),
+    11: ([ P_LEVEL: 33, A_STR: 23, A_DEX: 24, A_INT: 15, SR_BAD:1000, SR_FUN:"LConds", 
+           SR_SEER:1]),
+    12: ([ P_LEVEL: 35, A_STR: 24, A_DEX: 25, A_INT: 15, SR_BAD:1100, SR_FUN:"LConds"]),
+    13: ([ P_LEVEL: 40, A_STR: 25, A_DEX: 26, A_INT: 15, SR_BAD:1200, SR_FUN:"LConds",
+           SM_RACE:(["Fee": ([A_STR:24]) ]) ]),
+    14: ([ P_LEVEL: 45, A_STR: 26, A_DEX: 27, A_INT: 15, SR_BAD:1300, SR_FUN:"LConds",
+           SM_RACE:(["Troll": ([A_DEX:26]), 
+                     "Fee": ([A_STR:24]) ]) ]),
+    15: ([ P_LEVEL: 50, A_STR: 27, A_DEX: 28, A_INT: 15, SR_BAD:1400, SR_FUN:"LConds",
+           SM_RACE:(["Elf": ([A_STR:26]), 
+                     "Troll": ([A_DEX:26]), 
+                     "Fee": ([A_STR:24]) ]) ]),
+  ]));
+       
+ SetProp(P_GUILD_MALE_TITLES,
+     ([1 : "der Aufgenommene bei den Paladinen",
+       2 : "der Page der Paladine",
+       3 : "der Knappenanwaerter der Paladine",
+       4 : "der Knappe der Paladine",
+       5 : "der Paladinschueler",
+       6 : "der angehende Paladin",
+       7 : "der Paladin",
+       8 : "der erfahrene Paladin",
+       9 : "der Burgwaechter der Paladine",
+       10: "der Ritter der Paladine",
+       11: "der Grossritter der Paladine",
+       12: "der Meister der Paladine", 
+       13: "der Grossmeister der Paladine",
+       14: "der legendaere Paladin",
+       15: "der heilige Paladin",
+       16: "der Heilige",
+       ]));
+  SetProp(P_GUILD_FEMALE_TITLES,
+     ([1 : "die Aufgenommene bei den Paladinen",
+       2 : "die Pagin der Paladine",
+       3 : "die Knappenanwaerterin der Paladine",
+       4 : "die Knappin der Paladine",
+       5 : "die Paladinschuelerin",
+       6 : "die angehende Paladin",
+       7 : "die Paladin",
+       8 : "die erfahrene Paladin",
+       9 : "die Burgwaechterin der Paladine",
+       10: "die Ritterin der Paladine",
+       11: "die Grossritterin der Paladine",
+       12: "die Meisterin der Paladine", 
+       13: "die Grossmeisterin der Paladine",
+       14: "die legendaere Paladin",
+       15: "die heilige Paladin",
+       16: "die Heilige",
+       ]));
+
+  // Die Skills/Spells:
+  AddSkill(FIGHT(WT_SWORD),([SI_SKILLFUNC:"SwordFight",SI_DIFFICULTY: 100]));
+
+  AddSpell("erblicke");
+  AddSpell("verbannung");
+  AddSpell("schaetz");
+  AddSpell("heiligenschein");
+  AddSpell("schildparade");
+  AddSpell("behandle"); 
+  AddSpell("meditation"); 
+  AddSpell("zielattacke");
+  AddSpell("waffensegen");
+  AddSpell("heiligengebet");
+  AddSpell("gottheilung");
+  AddSpell("goetterschutz");
+  AddSpell("ruestungssegen");
+  AddSpell("gottsegen");
+  AddSpell("massenheilung");
+  AddSpell("lokation");
+  AddSpell("wundenblick");
+  AddSpell("entfluche");
+  AddSpell("reparatur");
+  AddSpell("spiegelschild");
+  AddSpell("talisman");
+//  AddSpell("stossgebet");
+  AddSpell("eifer");
+  AddSpell("auferstehung");
+
+  
+  AddCmd(({ "tritt","trete" }), "tritt");
+  AddCmd(({ "lerne","lern" }),  "OwnLearnSpell" );
+  AddCmd(({ "austritt" }),      "Leave_Ceremony");
+  AddCmd(({ "beitritt" }),      "falscher_syntax");
+  AddCmd(({ "fertigkeiten","faehigkeiten"}),   "faehigkeiten");
+  AddCmd(({ "opfere","opfer"}), "Sacrifice"); 
+  AddCmd(({ "gilde", "pgilde"}),          "magfunc");
+  AddCmd(({ "drueck", "druecke"}), "arm_druecken");
+  AddCmd(({ "lenk", "lenke"}), "ayla_ablenken");
+  
+  AddExit("sueden", ROOM("burg_c2")); 
+  AddExit("norden", ROOM("schrein")); 
+  AddItem( NPC("ayla"), REFRESH_DESTRUCT);
+  RemoveItem("/obj/zeitungsautomat");
+  call_out("check_ayla", 6);
+}
+
+int check_ayla() {
+  object ob;
+  if(!present("ayla")) {
+    ob=clone_object(NPC("ayla"));
+    ob->move(ME, M_GO);
+  }
+  return 1;
+}
+
+/* Fuer den geheimen Abgang */
+nosave string det_arm() {
+  if(present(GUILDNPC_ID, ME)) 
+    return BS(sprintf("Du koenntest den Arm nach unten druecken, aber "
+        "solange %s im Raum ist, traust Du Dich nicht "
+        "wirklich.", GUILDNPC_NAME));
+  return BS(sprintf("%s ist nicht da, du koennest versuchen, den Arm "
+      "nach unten zu druecken.",
+      GUILDNPC_NAME));
+}
+
+int arm_druecken(string str) {
+  if(!str) return 0;
+  if(str!="arm nach unten" && str!="arm herunter")
+    return 0;
+  if(!ayla_abgelenkt && present(GUILDNPC_ID, ME)) {
+    tell_object(TP, BS(sprintf("%s ist nicht abgelenkt. Wenn sie Dich dabei "
+        "erwischt, wird sie Dich vermutlich umbringen. Du laesst es lieber "
+        "sein.", GUILDNPC_NAME)));
+    return 1;
+  }
+  tell_room(ME, BS(sprintf("%s sieht sich schnell um und drueckt "
+      "unauffaellig den Arm der Statue nach unten.", TP->Name(WER))),({TP}));
+  tell_object(TP, BS("Du schaust Dich schnell um und drueckst den Arm nach "
+      "unten."));
+  call_out("OpenSecret", 4);
+  return 1;
+}
+
+nosave int OpenSecret() {
+  object ob;
+  tell_room(ME, "Ploetzlich oeffnet sich hinter dem Altar eine Oeffnung nach "
+      "unten!\n");
+  if(!ayla_abgelenkt && ob=present(GUILDNPC_ID)) {
+    ob->command_me("prufe Alarm! Eindringliche versuchen "
+        "zur Schatzkammer vorzudringen! Alarm!");
+    ob->command_me("sag DAS WIRST DU BUESSEN, FREVLER!");
+    ob->Kill(TP);
+    AddExit("unten", ([EX_DEST:ROOM("burg_geheim1"),
+                       EXG_ID:GUILDNPC_ID,
+                       EXG_PLMSG:BSA("Hier darfst Du nicht runter", 
+                                     GUILDNPC_NAME+" sagt: "),
+                       EXG_RMMSG:BS(sprintf("%s versucht nach unten zu "
+                                     "gehen, aber %s laesst %s nicht.",
+                                     TP->Name(WER), GUILDNPC_NAME,
+                                     TP->QueryPronoun(WEN)))]));
+  }
+  else {
+    AddExit("unten", ROOM("burg_geheim1")); 
+  }
+  call_other(ROOM("burg_geheim1"), "set_next_reset", 1800);
+  call_other(ROOM("burg_geheim2"), "set_next_reset", 1800);
+  call_other(ROOM("burg_geheim3"), "set_next_reset", 1800);
+  call_other(ROOM("burg_geheim1"), "SetOpen", 1);
+  set_next_reset(1800);
+  if(!find_player("dusty")) 
+    opferreport=0;
+  return 1;
+}
+
+int ayla_ablenken(string str) {
+  string wen, was;
+  object ob;
+  notify_fail("Wen willst Du mit was ablenken?\n");
+  if(!str) return 0;
+  if(sscanf(str, "%s mit %s ab", wen, was)!=2) return 0;
+  if(!present(GUILDNPC_ID) || lower_case(wen)!="ayla") return 0;
+  if(!ob=present(was, TP)) {
+    write("So was hast Du doch gar nicht!\n");
+    return 1;
+  }
+  tell_room(ME, BS(sprintf("%s versucht Ayla mit %s abzulenken.", 
+       TP->Name(WER), ob->name(WEN))), ({TP}));
+  tell_object(TP, "Du versuchst Ayla abzulenken.\n");
+  if(!ob->id("\ndustyruestung")) {
+    find_living("ayla")->command_me("sag Hm, interessant. Wenn Du mich "
+        "mit etwas begeistern willst, dann zeig mir doch eine "
+        "von den Ruestungen, die von Dusty extra bestellt wurden.");
+    return 1;
+  }
+  find_living("ayla")->command_me("sag Ah, lass mal sehen.");
+  tell_room(ME, sprintf("%s lenkt %s ein wenig ab.\n", TP->Name(WER),
+      GUILDNPC_NAME), ({TP}));
+  tell_object(TP, sprintf("Du lenkst %s ein wenig ab.\n", GUILDNPC_NAME));
+  ayla_abgelenkt=TP;
+  TP->SetProp(P_PARALYZED, ([PARALYZE_TIME:5,
+                             PARALYZE_MSG: BS("Du lenkst gerade "+
+                                GUILDNPC_NAME+" ab!")]));
+  call_out("ayla_nicht_abgelenkt", 10);
+  return 1;
+}
+
+nosave int ayla_nicht_abgelenkt() {
+  ayla_abgelenkt=0;
+  find_living("ayla")->command_me("sag Danke! Das ist wirklich eine "
+      "goettliche Ruestung!");
+  tell_room(ME, sprintf("%s ist nun nicht mehr abgelenkt!\n", GUILDNPC_NAME));
+  return 1;
+}
+
+/*
+//
+// Reset -> TopListe updaten
+//
+*/
+reset() {
+  ::reset();
+  zaehler++;
+  if(zaehler>=5) {
+    call_other(PALADINMASTER, "DoBackup"); 
+    zaehler=0;
+  }
+  RemoveExit("unten");
+  if(find_call_out("ayla_nicht_abgelenkt")==-1)
+    ayla_abgelenkt=0;
+  // Fuer die Schatzkammer:
+  call_other(ROOM("burg_geheim1"), "SetOpen", 0);
+  call_out("update_wappenrock_glvl", random(20)+10);
+}
+
+// update durch crontab 
+void toplist_update() {
+  call_other(PALADINMASTER, "UpdateMemberLevels"); 
+  call_out("toplist2", 2);
+  call_out("toplist3", 4);
+  call_out("toplist4", 6);
+}
+
+void toplist2()
+{
+  call_other(PALADINMASTER, "UpdateTopList");
+}
+
+void toplist3()
+{
+  call_other(PALADINMASTER, "MakeReadList");
+}
+
+void toplist4()
+{
+  call_other(PALADINMASTER, "SetNumberOne");
+}
+
+
+//
+// init()
+//
+void init() {
+  mixed help_mixed;
+  mapping help_map;
+  ::init();
+  // Feuerhand -> Elementarhand 
+  if(TP->QueryProp(P_GUILD)=="paladine" && 
+      (help_map=TP->QuerySkill("stossgebet"))) 
+  {
+    help_mixed=TP->QueryProp(P_NEWSKILLS);
+    help_mixed=m_delete(help_mixed, "stossgebet");
+    TELL("angrox", sprintf("PALADINGILDE(init): TP: %O, %O\n",TP,help_map));
+    help_mixed+=(["eifer":help_map]);
+    TP->SetProp(P_NEWSKILLS, help_mixed);
+  }  
+}
+
+
+
+
+/*
+//
+// FEHLERAUSGABE
+//
+*/
+nosave int _error(string msg) {
+  write(BS(msg));
+  tell_angrox(msg);
+  tell_zordan(msg);
+  write_error_log(msg);
+  return 1;
+}
+
+
+
+/*
+//
+// Longerweiterungen incl. Magierfkten
+//
+*/
+nosave string altar() {
+  string str;
+  str="Ein unaussprechbar schoener Altar steht im oberen Teil des "
+      "Rittersaales. Auf ihm steht ein kleines Abbild und mehrere Kerzen. "
+      "Links neben dem Altar befindet sich eine Opferstelle und direkt vor "
+      "dem Altar wurde eine kleine Statue mit einer Liste darauf plaziert.";
+  if(present(GUILDNPC_ID, ME)) {
+    str+=" Ayla steht vor dem Altar.";
+  }
+  return BS(str);
+}
+
+nosave string aligntest() {
+  if(TP->QueryProp(P_RACE) == "Dunkelelf") {
+    return "Als Dunkelelf fuehlst Du Dich hier sehr unwohl!";
+  }
+  if(TP->QueryProp(P_ALIGN)<0) {
+    return "Allerdings fuehlst Du Dich mit Deiner boesen Gesinnung nicht "
+           +"wohl hier.";
+  }
+  return "Mit Deiner Gesinnung fuehlst Du Dich hier wie daheim.";
+}
+
+nosave string maghelp() {
+  string str;
+
+  if(!IS_LORD(TP)) return "";
+  str = "\nMagInfo: Hilfe fuer Magierbefehle mit 'gilde hilfe'.";
+
+  if (cast_disabled) str += "\n\nZAUBERN IST DEAKTIVIERT!!!\n";
+
+  return str;
+}
+
+nosave int magfunc(mixed str) {
+  mixed *txt;
+  object ob;
+  int err, task;
+  string name;
+  if(!IS_LORD(TP)) return 0;
+  if(!str) str="hilfe";
+  if(str=="hilfe") {
+    write("Folgende Befehle sind moeglich:\n"
+          " gilde hilfe                  : Dieses hier\n"
+          " gilde toplist                : Updaten der Topliste\n");
+    if (IS_ARCH(TP) || getuid(TP)=="zordan" || getuid(TP)=="iwo") {
+      write(
+            " gilde zaubern (ein|aus)      : Zaubern (de-)aktivieren\n"
+            " gilde backup                 : Backup des Memberfiles\n"
+            " gilde restore                : Zurueckspielen des Backups\n"
+            " gilde set_task <name> <task> : Setzen eines Tasks\n"
+            " gilde del_task <name> <task> : Loeschen eines Tasks\n"
+            " gilde memberdel <name>       : Spieler aus Gilde loeschen\n");
+    }
+    return 1;
+  }
+  txt=explode(str, " ");
+  if(member(({"backup", "restore", "set_task", "del_task", "memberdel", "zaubern"}), 
+      txt[0])!=-1) 
+  {
+    if(!IS_ARCH(TP) && getuid(TP)!="zordan" && getuid(TP)!="iwo") {
+      write_secure_log(sprintf("Versuchte Aenderung im Gildenmaster (%s) "
+		      +"von %s\n", str, CAP(getuid(TP))));
+      write("Befehl nicht ausfuehrbar! Grund: Magierlevel < 60\n");
+      tell_angrox(sprintf("%s***%s Versuchte Aenderung im Gildenmaster von "
+          "%s!\n", ANSI_BLINK+ANSI_RED, ANSI_NORMAL, CAP(getuid(TP))));
+      return 1;
+    }
+    else write_file(LOG("changes"), sprintf("Aenderung im Gildenmaster"
+          +"(%s): gilde %s\n", CAP(getuid(TP)), str));
+  }
+
+  // Huer wird zaubern ein- oder ausgeschaltet (Iwo)
+  if (txt[0] == "zaubern")
+    {
+      if (sizeof(txt)<2)
+        {
+          tell_object(TP, "Syntax: gile zaubern (ein|aus)\n");
+          return 1;
+        }
+
+      if (txt[1] == "ein")
+        {
+          tell_object(TP, "Zaubern ist nun EINgeschaltet!\n");
+          cast_disabled = 0;
+        }
+      else if (txt[1] == "aus")
+        {
+          tell_object(TP, "Zaubern ist nun AUSgeschaltet!\n");
+          cast_disabled = 1;
+        }
+      else
+        tell_object(TP, "Stoned, eh?\n");
+         
+      return 1;
+
+    }
+
+
+  if(txt[0]=="memberdel") {
+   if(sizeof(txt)<2) {
+     tell_object(TP, "Syntax: gilde memberdel <name> \n");
+     return 1;
+   }
+   name=lower_case(to_string(txt[1]));
+   err=call_other(PALADINMASTER, "DeleteMember", name);
+   if(err!=1)
+      tell_object(TP, sprintf("DeleteMember: Fehler. Code %d\n", err));
+   else tell_object(TP, "paladinmaster: DeleteMember ok!\n");
+   err=call_other(PALADINMASTER, "DeleteTopEntry", name);
+   if(err!=1) 
+     tell_object(TP, sprintf("DeleteTopEntry: Fehler. Code %d\n", err));
+   else tell_object(TP, "paladinmaster: DeleteTopEntry ok!\n");
+   err=call_other(ABILMASTER, "DeleteEntry", name);
+   if(err!=1) 
+     tell_object(TP, sprintf("Abilmaster, DeleteEntry: Fehler. Code %d\n", 
+         err));
+   else tell_object(TP, "abilmaster: DeleteEntry ok!\n");
+    tell_object(TP, "Spieler aus Gilde geloescht!\n");
+    return 1;
+
+  }
+  if(txt[0]=="backup") {
+    call_other(PALADINMASTER, "DoBackup"); 
+    tell_object(TP, 
+      "Kopiere members/members.o nach backup/members_backup.o\n");
+    return 1;
+  }
+  if(txt[0]=="restore") {
+    if(call_other(PALADINMASTER, "DoRestore")==-2) {
+      tell_object(TP, 
+        "Fehler! Members.o konnte nicht restored werden!\n");
+      return 1;
+    } 
+    tell_object(TP, 
+      "Kopiere backup/members_backup.o nach members/members.o\n");
+    return 1;
+  }
+  if(txt[0]=="toplist") {
+    toplist_update();
+    tell_object(TP, "Memberliste ist in wenigen Sekunden Up-to-date!\n");
+    return 1;
+  }
+  if(txt[0]=="set_task") {
+    if(sizeof(txt)<3) {
+      tell_object(TP, "Syntax: gilde set_task <name> <Task>\n");
+      return 1;
+    }
+    task=to_int(txt[2]);
+    name=lower_case(to_string(txt[1]));
+    if(!(ob=find_player(name)) && !(ob=find_netdead(name))) {
+      tell_object(TP, "Spieler nicht im Speicher. Abbruch.\n");
+      return 1;
+    }
+    err=call_other(PALADINMASTER, "SetTask", ob, task);
+    if(err!=1) {
+       tell_object(TP, sprintf("Fehler. Code %d\n", err));
+       return 1;
+    }
+    tell_object(TP, "Task wurde erfolgreich gesetzt.\n");
+    return 1;
+ } 
+ if(txt[0]=="del_task") {
+   if(sizeof(txt)<3) {
+     tell_object(TP, "Syntax: gilde del_task <name> <Task>\n");
+     return 1;
+   }
+   task=to_int(txt[2]);
+   name=lower_case(to_string(txt[1]));
+   if(!(ob=find_player(name)) && !(ob=find_netdead(name))) {
+     tell_object(TP, "Spieler nicht im Speicher. Abbruch.\n");
+     return 1;
+    }
+   err=call_other(PALADINMASTER, "DeleteTask", ob, task);
+   if(err!=1) {
+      tell_object(TP, sprintf("Fehler. Code %d\n", err));
+      return 1;
+   }
+    tell_object(TP, "Task wurde erfolgreich geloescht.\n");
+    return 1;
+  }
+  tell_object(TP, "Diesen Befehl gibt es nicht!\n");
+  return 1;
+}
+
+/* 
+//
+// Bestenliste
+//
+*/
+nosave string liste() {
+  TP->More("\nDIE BESTEN DER PALADINE "+
+      read_file(REALTOPLIST) || "Problem, bitte an Angrox wenden!\n");
+  tell_room(TO, BS(sprintf("%s schaut sich die Liste genauer an.", 
+            TP->Name(WER))), ({TP}));
+  return "";
+}
+
+/*
+//
+// Opferfunktion
+//
+*/
+nosave int Do_Sacrifice(object item, int allflag) {
+  int value;
+  string fn, flag;
+  object item2, *inv;
+  mixed var;
+  int nr, i;
+
+  if(item->QueryProp(P_PALADIN_SACRIFICED) || 
+      item->QueryProp(P_NEKRO_PESTERED))
+  {
+    if(TP->QueryProp(P_GUILD_LEVEL) > 10)
+      call_other(NPCMASTER, "del_npc", TP); // Erniedrigt die "Faction" des 
+                                          // Spielers bis hin zum Pal Feind.
+    write("Du sinkst in Dustys Gnade!\n");
+    TP->SetProp(P_ALIGN, TP->QueryProp(P_ALIGN)-random(40));
+    return 0;
+  }
+  value=(int)(item->QueryProp(P_VALUE)*(float)(random(6)+1)/5);
+  if(item2=present(TASKITEM, TP)) { // fuer die Tasks
+    fn=explode(file_name(item), "#")[0];
+    var=item2->GetVar();
+    flag=item2->GetFlag();
+    if(fn==KETZER_AMULETT && item2->GetTask(5, TP) && test_bit(flag, 0)) {
+      item2->SetFlag(1);
+    }
+    if(fn==NACHTKAEMPFER_SCHWERT && 
+        item2->GetTask(12, TP) && test_bit(flag, 0))
+    {
+      item2->SetFlag(1);
+    }
+    if(member(DIEB_DOLCH, fn)!=-1 && item2->GetTask(7, TP) && 
+        test_bit(flag, 0)) 
+    {
+      item2->SetFlag(1);
+    }
+  }
+  write(BS(sprintf("Du kniest vor dem Altar nieder und opferst Dusty %s.",
+        item->name(WEN))));
+  say(BS(sprintf("%s kniet vor dem Altar nieder und opfert Dusty %s.\n", 
+      TP->Name(WER), item->name(WEN))));
+  if(opferreport) {
+    TELL("dusty", sprintf("%s[PAL]%s Opfer von %s: %s (Wert: %d)\n", ANSI_RED,
+          ANSI_NORMAL, TP->Name(WER), item->name(WEN), 
+          item->QueryProp(P_VALUE)));
+  }
+  if( item2 = present(PALADINREVIVED, TP) )
+  {
+    call_other(PALADINMASTER, "SacrificeMoney", item2->QueryPaladin(), 3*value);
+    call_other(item2, "opfer", 3*value);
+  }
+  else if(IsGuildMember(TP)) 
+    call_other(PALADINMASTER,"SacrificeMoney",TP, value);
+  call_other(ROOM("burg_schatzkammer"), "??");
+  inv=filter_array(all_inventory(find_object(ROOM("burg_schatzkammer"))), 
+      "treasure_check");
+  if(sizeof(inv) > 100 && !cleanup) {
+    cleanup=1;
+    call_out("cleanup_treasure", 0, inv);
+  } 
+  if(!random(5) && item->QueryProp(P_VALUE)>1000)  {
+    // -> ab in die Schatzkammer damit
+    item->SetProp(P_PALADIN_SACRIFICED, getuid(TP));
+    item->SetProp(P_NOBUY, 1);
+    item->move(ROOM("burg_schatzkammer"), M_TPORT); 
+  }
+  else {
+    item->remove();
+    if(objectp(item)) item->destruct();
+  }
+  /*
+  money_counter+=value;
+  if(money_counter>50000) {
+    if(! call_other(ROOM("burg_a2"), "_add_money_if_needed", money_counter))
+      "p/daemon/zentralbank"->PayIn(money_counter, 100);
+    money_counter=0;
+  }
+  */ 
+  if(present(GUILDNPC_ID, ME)) {
+    if(!allflag) 
+      tell_room(ME, BSA(sprintf("Sehr gut, %s. Dieses Opfer hat Dusty "
+          +"gefallen!\n", TP->Name(WER)), GUILDNPC_NAME+" spricht: "));
+    if(TP->QueryProp(P_ALIGN)<1200)
+      TP->SetProp(P_ALIGN, TP->QueryProp(P_ALIGN)+5+random(5));
+  }
+}
+
+
+nosave int treasure_check(object ob) {
+  if(!living(ob) && !ob->id(PALADIN_STANDARTE)) return 1;
+  return 0;
+}
+
+void cleanup_treasure (object *inv) {
+  int i,x;
+  if(sizeof(inv) < 101) {
+    cleanup=0;
+    return;
+  }
+  x=sizeof(inv)-1;
+  for (i=x; i>=(x-20);i--) {
+    catch(inv[i]->remove());
+  }
+  inv-=({0});
+  call_out("cleanup_treasure", 0, inv);
+}
+
+nosave int TestItem(object item) {
+  if(!item->QueryProp(P_ARMOUR_TYPE) && !item->QueryProp(P_WEAPON_TYPE))
+    return 0;
+  if(item->QueryProp(P_CURSED)) return 0;
+  if(item->QueryProp(P_AUTOLOADOBJ)) return 0;
+  if(item->QueryProp(P_NEVERDROP)) return 0;
+  if(item->QueryProp(P_NOSELL)) return 0;
+  if(item->QueryProp(P_NODROP)) return 0;
+  if(item->QueryProp(P_KEEP_ON_SELL)==getuid(TP)) return 0;
+  if(!item->QueryProp(P_VALUE)) return 0;
+  if(!item->QueryProp(P_SHORT)) return 0;
+  if(item->QueryProp(P_INVIS)) return 0;
+  if(!item->QueryProp(P_NAME)) return 0;
+  if(item->QueryProp(P_WORN)) return 0;
+  if(TP->QueryProp(P_WEAPON)==item) return 0;
+  if(item->id(PALADINITEM)) return 0;
+  return 1;
+}
+
+nosave void SacrificeAll() {
+  int i,max;
+  object *inv;
+  inv=all_inventory(TP);
+  inv=filter_array(inv,"TestItem",ME);
+  if(!sizeof(inv)) {
+    write(BS("Aber Paladin, Du hast doch gar nichts zum opfern dabei!"));
+    return;
+  }
+  // write(sprintf("%O\n",inv));
+  max=sizeof(inv)-1;
+  if(max>MAX_OPFER) max=MAX_OPFER;
+  for(i=max;i>=0;i--) {
+    Do_Sacrifice(inv[i],i);
+  }
+  return;
+}
+
+nosave void SacrificeFrom(object container) {
+  int i,max;
+  object *inv;
+  inv=all_inventory(container);
+  inv=filter_array(inv,"TestItem",ME);
+  if(!sizeof(inv)) {
+    write(BS("Aber Paladin, " + container->name(WER) + " ist doch leer!"));
+    return;
+  }
+  // write(sprintf("%O\n",inv));
+  max=sizeof(inv)-1;
+  if(max>MAX_OPFER) max=MAX_OPFER;
+  for(i=max;i>=0;i--) {
+    Do_Sacrifice(inv[i],i);
+  }
+  return;
+}
+
+nosave int Sacrifice(string str) {
+  object item;
+  object container;
+  string what;
+  
+  if(!str) {
+    write("Was moechtest Du opfern?\n");
+    return 1;
+  }
+  if(str == "alles") {
+    SacrificeAll();
+    return 1;
+  }
+  if (sscanf(str, "alles aus %s", what)) {
+    if (container=present(what, TP)) {
+      SacrificeFrom(container);
+      return 1;
+    }    
+  }
+  if(!item=deep_present(str, TP)) {
+    write("So etwas besitzt Du nicht!\n");
+    return 1;
+  }
+  if(item->id("\nbrunnenherz"))
+    if(call_other(PALADINMASTER, "QueryQuestLvl16")["player"] == getuid(TP)) {
+      call_out("sacrificied_heart_lvl16",0);
+      item->remove();
+      return 1;
+  }
+  if(!item->QueryProp(P_ARMOUR_TYPE) && !item->QueryProp(P_WEAPON_TYPE)) {
+    write("Du solltest nur Waffen und Ruestungen hier opfern!\n");
+    return 1;
+  }
+  if(item->QueryProp(P_CURSED) || item->QueryProp(P_AUTOLOADOBJ) ||
+     item->QueryProp(P_NEVERDROP) || item->QueryProp(P_NOSELL) || 
+     item->QueryProp(P_NODROP)) {
+    write(BS("Das kannst Du nicht opfern. Dusty wuerde dieses Opfer nicht "
+        +"gefallen.\n"));
+    return 1;
+  }
+  if(item->QueryProp(P_KEEP_ON_SELL)==getuid(TP)) {
+    write(BS(sprintf("Du wolltest %s doch behalten!", item->name(WEN))));
+    return 1;
+  }
+  if(!item->QueryProp(P_VALUE)) {
+    write(BS(sprintf("Etwas so wertloses wie %s will Dusty nicht!", 
+        item->name(WEN))));
+    return 1;
+  }
+  if(item->QueryProp(P_WORN)) {
+    write(BS(sprintf("Aber Du traegst %s doch, Paladin!", item->name(WEN))));
+    return 1;
+  }
+  if(TP->QueryProp(P_WEAPON)==item) {
+    write(BS(sprintf("Du hast %s doch gezueckt!", item->name(WEN))));
+    return 1;
+  }
+  if(item->id(PALADINITEM)) {
+    write("Die Ausruestung der Paladine brauchst Du hier nicht opfern!\n");
+    return 1;
+  }
+  Do_Sacrifice(item,0);
+  return 1;
+}
+
+nosave int falscher_syntax() {
+  if(present(GUILDNPC_ID, ME)) {
+    if(IsGuildMember(TP)) 
+      tell_room(ME, BSA(sprintf("Du bist schon ein Paladin, %s! Nocheinmal "
+        +"beitreten kannst Du nicht!\n", TP->Name(WER)), GUILDNPC_NAME 
+        +" spricht: "));
+    else   
+      tell_room(ME, BSA(sprintf("So geht das nicht, %s! Die richtige Syntax "
+        +"lautet: 'trete gilde bei'!\n", 
+        TP->Name(WER)), GUILDNPC_NAME+" sagt: "));
+  }
+  else write("Die Syntax zum Beitreten lautet: 'tritt gilde bei'\n");
+  return 1;
+}
+
+/*
+//
+// Austritt aus der Paladingilde
+//
+*/
+int Leave_Ceremony() {
+  object ayla;
+  if(!ayla=present(GUILDNPC_ID, ME)) {
+    write("Ohne Ayla von Schattengrund laeuft hier gar nichts!\n");
+    return 1;
+  }
+  if(!IsGuildMember(TP)) {
+    write("Du gehoerst nicht zum auserwaehlten Kreis der Paladine!\n");
+    return 1;
+  }
+  if(ayla->QueryProp(P_NOATTACK) && !ayla->QueryProp(P_CHAT_CHANCE)) {
+    write("Ayla ist schon in eine Zeremonie vertieft!\n");
+    return 1;
+  }
+  ayla->SetProp(P_NOATTACK,"ist zu vertieft in die Zeremonie.");
+  ayla->SetProp(P_CHAT_CHANCE,0);
+  TP->SetProp(P_PARALYZED, ([PARALYZE_TIME:100000, PARALYZE_MSG:"", 
+           PARALYZE_MSG_OTHER:"", PARALYZE_END:"", PARALYZE_END_OTHER:""]));
+  LoadSequenz("leave.seq", TP, #'austreten);  
+  return 1;
+}
+
+varargs int austreten(string msg) {
+  object ob,ayla;
+  string *who;
+
+  if(!ayla=present(GUILDNPC_ID, ME)) {
+    write("Ohne Ayla von Schattengrund laeuft hier gar nichts!\n");
+    return 1;
+  }
+  ayla->SetProp(P_NOATTACK,0);
+  ayla->SetProp(P_CHAT_CHANCE,1);
+  TP->SetProp(P_PARALYZED, 0);
+  who=({"Etwas", "Bruder", "Schwester"});
+  TP->SetProp(P_GUILD_LEVEL, 0);
+  WLOG("/log/gilden/paladine", "tritt aus der Gilde aus.");
+  if(ob=present(GUILDITEM_ID,TP)) {
+	  ob->SetProp(P_CURSED, 0);
+	  ob->remove();
+  }
+  call_other(PALADINMASTER, "DeleteMember", TP);
+  call_other(PALADINMASTER, "DeleteTopEntry", getuid(TP));
+  call_other(ABILMASTER, "DeleteEntry", getuid(TP));
+  if(msg) {
+    Channel(msg);
+  }
+  else {
+  Channel(sprintf("%s hat uns gerade verlassen! Moege Dusty Dir "
+      +"trotzdem immer wohlgesonnen sein, %s!", TP->Name(WER), 
+      who[TP->QueryProp(P_GENDER)]));
+  }
+  write_file(MEMBERLOG(getuid(TP)+".log"),
+             dtime(time())+": "+CAP(getuid(TP))+" ist "
+			 +"aus der Gilde ausgetreten.\n");
+  return ::austreten();
+}
+
+/* 
+//
+// Beitrittsfunktion
+//
+*/
+int tritt(string str) {
+  string wo;
+  string not_fail, g_indent, restr;
+  mapping not_allowed;
+  object ayla;
+
+  // 'tritt'/'trete' -> aus der Soul
+  if (!str || (str && present(str))) return 0;
+
+  not_allowed=NOT_ALLOWED_MEMBER;
+
+  g_indent=GUILDNPC_NAME+" teilt Dir mit: ";
+  not_fail="Die Syntax zum Gildenbeitritt lautet: 'tritt gilde bei'!";
+
+  if(sscanf(str, "%s bei", wo)!=1) {
+    write(BSA(not_fail, g_indent));
+    return 1;
+  }
+  if(member(not_allowed, getuid(TP))) {
+     write(BS(sprintf("Du kannst den Paladinen nicht beitreten! Grund: %s. "
+            "Fuer genauere Informationen kontaktiere bitte den "
+            "Gildenerzmagier oder den Sheriff", not_allowed[getuid(TP)])));
+     return 1;
+  }
+  if(wo!="gilde" && wo!="paladinen") {
+    write(BSA("'"+wo+"' kannst Du hier nicht beitreten.", g_indent));
+    write(BSA(not_fail, g_indent));
+    // write(BSA(not_fail, g_indent));
+    return 1;
+  }
+  /*
+  if(!TP->QueryProp(P_TESTPLAYER) && !IS_WIZARD(TP)) {
+    write("Zur Zeit duerfen nur Testspieler und Magier dieser Gilde "
+         +"beitreten!\n");
+    return 1;
+  }
+  */
+  if(!ayla=present(GUILDNPC_ID, ME)) {
+    write("Ohne Ayla von Schattengrund laeuft hier gar nichts!\n");
+    return 1;
+  }
+  if(ayla->QueryProp(P_NOATTACK) && !ayla->QueryProp(P_CHAT_CHANCE)) {
+    write("Ayla ist schon in eine Zeremonie vertieft!\n");
+    return 1;
+  } 
+  if(IsGuildMember(TP)) {
+    write(BSA("Aber Du bist doch schon Mitglied!",  
+           GUILDNPC_NAME+" staunt: "));
+     return 1;
+  }
+  if(restr=call_other(RES_CHECKER, "check_restrictions", TP,  
+      QueryProp(P_GUILD_RESTRICTIONS))) 
+  {
+	  tell_room(ENV(TP), BSA(sprintf("Du erfuellst nicht alle Anforderungen, "
+        +"um Paladin zu werden, %s! %s\n", TP->Name(WER), restr), 
+        GUILDNPC_NAME+" sagt: "));
+    return 1;
+  }
+  TP->SetProp(P_PARALYZED, ([PARALYZE_TIME:100000, PARALYZE_MSG:"", 
+           PARALYZE_MSG_OTHER:"", PARALYZE_END:"", PARALYZE_END_OTHER:""]));
+  ayla->SetProp(P_NOATTACK,"ist zu vertieft in die Zeremonie.");
+  ayla->SetProp(P_CHAT_CHANCE,0);
+  LoadSequenz("start.seq", TP, #'beitreten); 
+  return 1;
+}
+ 
+
+int beitreten() {
+  int b;
+  object ob,ayla;
+  string *who;
+
+  if(!ayla=present(GUILDNPC_ID, ME)) {
+    write("Ohne Ayla von Schattengrund laeuft hier gar nichts!\n");
+    return 1;
+  }
+  ob=SwordClone(TP);
+  ob->move(TP, M_NOCHECK);
+  ayla->SetProp(P_NOATTACK,0);
+  ayla->SetProp(P_CHAT_CHANCE,1);
+  who=({"Etwas", "Bruder", "Schwester"});
+  TP->SetProp(P_PARALYZED, 0);
+  if((b=::beitreten())<0) return 1;
+  write(BSA(sprintf("Sei willkommen, %s", TP->Name(WER)),
+       GUILDNPC_NAME+" spricht erhaben: "));
+  say(BSA(sprintf("Sei willkommen, %s", TP->Name(WER)),
+       GUILDNPC_NAME+" spricht erhaben: "));
+  write(BS(GUILDNPC_LONGNAME+" ueberreicht Dir den Wappenrock, welchen Du "
+      +"sofort ueberziehst.\n"));
+  say(BS(sprintf("%s ueberreicht %s einen Wappenrock, welchen %s sofort "
+	  +"ueberzieht.\n", GUILDNPC_LONGNAME, TP->Name(WER),
+      TP->QueryPronoun(WER))));
+  ob=clone_object(ARMOUR("wappenrock"));
+  ob->move(TP, M_NOCHECK);
+  ob->DoWear(0);
+  call_other(PALADINMASTER, "AddMember",TP);
+  //say(BS(sprintf("%s gibt %s ein Pergament.\n", GUILDNPC_LONGNAME, 
+  //    TP->Name(WER))));
+  //write(BS(sprintf("%s gibt Dir ein Pergament.\n", GUILDNPC_LONGNAME)));
+  //ob=clone_object(OBJ("pergament"));
+  //ob->move(TP, M_NOCHECK);   
+  WLOG("/log/gilden/paladine", "tritt in die Gilde ein.");
+  call_other(PALADINMASTER, "AddMember", TP);
+  TP->ModifySkill(FIGHT(WT_SWORD), QuerySkill(FIGHT(WT_SWORD)),100,"paladine");
+  write_file(MEMBERLOG(getuid(TP)+".log"),
+             dtime(time())+": "+CAP(getuid(TP))+" ist "
+			 +"in die Gilde eingetreten.\n");
+  Channel(sprintf("%s ist gerade den Paladinen beigetreten. Moege Dusty "
+      +"Deinen Schwertarm staerken und Deinen Glauben festigen, um die "
+      +"teuflischen Ausgeburten der Unterwelt zu vernichten, %s!",
+      TP->Name(WER), who[TP->QueryProp(P_GENDER)]));
+  call_other(PALADINMASTER, "AdvanceLevel", TP);
+  return b;
+}
+
+/*
+//
+// Hier wird erhoeht
+//
+*/
+advance(string str) {
+  mixed res;
+  mapping cond;
+  int lvl;
+  object ayla;
+
+  notify_fail(BSA("Was willst Du erhoehen? Stufe(deaktiviert!!!)? Gildenstufe?, Kraft? "
+			   "Int(elligenz)? Aus(dauer)? Gesch(icklichkeit)?\n", GUILDNPC_NAME
+         +" sagt: "));
+  if (!str) return 0;
+  if (str == "stufe") return 0; // vorerst deaktiviert, da BUGGT was !!!
+                                // es wird autom evtl. gildenstufe mit erhoeht !!!
+  if(!ayla=present(GUILDNPC_ID)) {
+    write("Hier ist leider niemand, der Dich erhoehen koennte!\n");
+    return 1;
+  }
+  if(ayla->QueryProp(P_NOATTACK) && !ayla->QueryProp(P_CHAT_CHANCE)) {
+    write("Ayla ist schon in eine Zeremonie vertieft!\n");
+    return 1;
+  } 
+  if (str=="stufe" || str2attr(str)) {
+	 return gilde::advance(str);
+  }
+  if(str=="gildenstufe" || str=="gilde" ) {
+    if(!IsGuildMember(TP)) {
+      tell_room(ME, BSA(sprintf("Du kannst hier nicht erhoehen, Du "
+                +"bist keiner von uns, %s!\n", TP->Name(WER)), GUILDNPC_NAME
+                +" sagt: "));
+      return 1;
+    }
+    if(TP->QueryProp(P_GUILD_LEVEL)>=15) {
+      write(BSA("Du kannst nicht mehr weiter aufsteigen!\n",
+                GUILDNPC_NAME+" sagt: "));
+      say(BSA("Du kannst nicht mehr weiter aufsteigen, "
+              +CAP(getuid(TP))+".\n", GUILDNPC_NAME +" sagt: "));
+      return 1;
+    }
+    lvl=TP->QueryProp(P_GUILD_LEVEL);
+    cond=QueryProp(P_GUILD_LEVELS);
+    res=call_other(RES_CHECKER, "check_restrictions", TP, cond[lvl+1]);
+    if(!stringp(res) || IS_ARCH(TP)) {
+      TP->SetProp(P_PARALYZED, ([PARALYZE_TIME:100000, PARALYZE_MSG:"", 
+            PARALYZE_MSG_OTHER:"", PARALYZE_END:"", PARALYZE_END_OTHER:""]));
+      ayla->SetProp(P_NOATTACK,"ist zu vertieft in die Zeremonie.");
+      ayla->SetProp(P_CHAT_CHANCE,0);
+      LoadSequenz("advance.seq", TP, #'advance2);
+      return 1;
+    }
+    else {
+      if(res!="")
+        tell_room(ME, BSA(sprintf("Du kannst noch nicht aufsteigen, %s! %s", 
+            TP->Name(WER), res), GUILDNPC_NAME+" sagt: "));
+      return 1;
+    }
+  }
+  return 0;
+}
+
+varargs advance2() {
+  mixed b;
+  object ayla;
+  if(ayla=present(GUILDNPC_ID)) {
+    ayla->SetProp(P_NOATTACK,0);
+    ayla->SetProp(P_CHAT_CHANCE,1);
+  }
+  TP->SetProp(P_PARALYZED, 0);
+  if(!interactive(TP)) return; // Wer waehrend der sequenz netzttod wird,
+                               // steigt nicht auf
+  b=gilden_room::advance();
+  if(b) {
+    if(TP->QueryProp(P_GUILD_LEVEL)>14) {
+      write_file(MEMBERLOG(getuid(TP)+".log"), dtime(time())+": "+
+                 CAP(getuid(TP))+" hat " +"die hoechste Stufe erreicht.\n");
+      Channel(sprintf("Hoert! Hoert! %s hat soeben die hoechste Stufe der "
+          +"Paladine erreicht! Welch unglaubliche Leistung, Paladin! Wir "
+          +"alle blicken heute voller Stolz auf Dich!", TP->Name(WER)));
+      return b;
+    }
+    write_file(MEMBERLOG(getuid(TP)+".log"),
+               dtime(time())+": "+CAP(getuid(TP))+" ist "
+               +"eine Stufe (->"+TP->QueryProp(P_GUILD_LEVEL)+
+                ") aufgestiegen.\n");
+    Channel(CAP(getuid(TP))+" ist nach Ratschluss der allmaechtigen Dusty "
+            +"in der Hierarchie der Paladine aufgestiegen und hat somit "
+            +"Gildenstufe "
+            +TP->QueryProp(P_GUILD_LEVEL)+" erreicht.");
+    call_other(PALADINMASTER, "AdvanceLevel", TP);
+    if(present(GUILDITEM_ID, TP))
+      present(GUILDITEM_ID, TP)->update_glvl();
+    return b;
+  }
+}
+
+/*
+//
+// Spells lernen
+//
+*/
+
+/* Skillablilty am Anfang in einen Bereich 3000..5000 setzen */
+nosave int InitialSkillAbility(mapping ski, object pl) {
+  int value;
+  if (!ski || !pl) return 0;
+  value=::InitialSkillAbility(ski, pl);
+  if(value<3500) 
+    value=3500;
+  else if(value>4500) 
+    value=4500;
+  return value;
+}
+
+OwnLearnSpell(string str) {
+  mapping sprueche;
+  if(!present(GUILDNPC_ID, ME)) {
+    write(BS(GUILDNPC_LONGNAME+" ist nicht hier. Du kannst ohne sie "
+        +"nichts lernen!\n"));
+    return 1;
+  }
+  if(!IsGuildMember(TP)) {
+    tell_room(ME,BSA(sprintf("Du bist kein Paladin, %s!\n", TP->Name(WER)),
+              GUILDNPC_NAME+" sagt: "));
+    return 1;
+  }
+  notify_fail("Was moechtest Du hier lernen?\n");
+  if(!str) {
+    tell_room(ME, BSA(sprintf("Wie es scheint weisst Du selber nicht, "
+              +"was Du lernen willst! Vielleicht solltest Du Dich noch "
+              +"einmal nach den Zaubern erkundigen, %s?", TP->Name(WER)),
+              GUILDNPC_NAME+" spricht: "));
+    return 1;
+  }
+  return LearnSpell(str);
+}
+
+// Hier erfolgt die Ausgabe auf den Channel
+/*nosave void Channel(string msg) {
+  catch(VOICEMASTER->SendToChannel("Info",TO,SAY,msg));
+}*/
+
+// Hier erfolgt die Ausgabe auf den Channel
+nosave void Channel(string msg) {
+  CHMASTER->join("Info",TO);
+  CHMASTER->send("Info",TO,msg,MSG_SAY);
+}
+
+
+
+// Ausgabe der Fertigkeiten
+int faehigkeiten() {
+  int i, wert;
+  string *arm, s;
+  mapping res;
+
+  if(IS_WIZARD(this_player())) {
+    write(BSA("Deine Skills: ", GUILDNPC_NAME+" sagt: "));
+    s="";
+    res = this_player()->QueryProp(P_NEWSKILLS);
+    arm = m_indices(res);
+    for (i = sizeof(arm)-1;i>=0;i--) {
+      s += sprintf("%-15s",arm[i])+": ";
+      if (mappingp(res[arm[i]])) s += res[arm[i]][SI_SKILLABILITY];
+      else s += res[arm[i]];
+      s += "\n";
+      write(BSA(s, GUILDNPC_NAME+" sagt: "));
+      s="";
+    }
+    return 1;
+  }
+  if(!present(GUILDNPC_ID, ME)) {
+    write("Ohne Ayla von Schattengrund laeuft hier gar nichts!\n");
+    return 1;
+  }
+  if(!IsGuildMember(TP)) {
+    tell_room(ME, BSA(sprintf("Du dienst nicht der heiligen Dusty, %s! "
+             +"Du wirst hier Deine kuemmerlichen Fertigkeiten nicht erfahren!",
+             TP->Name(WER)), GUILDNPC_NAME+" spricht energisch: "));
+    return 1;
+  }
+  write(BSA("Du beherrschst die heiligen Zauber wie folgt: ",
+            GUILDNPC_NAME+" sagt: "));
+  s="";
+  res=this_player()->QueryProp(P_NEWSKILLS);
+  arm = sort_array(m_indices(res), #'<);
+  for (i = sizeof(arm)-1;i>=0;i--) {
+    if(arm[i]!="Fight_sword") {
+      s += sprintf("%-15s",CAP(arm[i]));
+      s += " -";
+      wert=TP->QuerySkillAbility(arm[i]);
+      s+=int2string(wert);
+      write(BSA(s, GUILDNPC_NAME+" sagt: "));
+      s="";
+    }
+  }
+
+  // Kleiner Joke :) --iwo
+  if (random(1000)<1)
+    write(BSA("Sudern          - goettlich."+s,
+              GUILDNPC_NAME+" sagt: "));
+
+
+  s=int2string(TP->QuerySkillAbility("Fight_sword"));
+  write(BSA("Das Kaempfen mit dem Schwert beherrschst Du"+s,
+            GUILDNPC_NAME+" sagt: "));
+  if((wert=TP->QueryProp(P_GUILD_RATING))<1501) wert=1501;
+  s=int2string(wert);
+  write(BSA("In Summe gesehen bist Du"+s, GUILDNPC_NAME+" sagt: "));
+  say(sprintf("%s klaert %s ueber %se Fertigkeiten auf.\n",
+              GUILDNPC_LONGNAME, TP->Name(WER), TP->QueryPossPronoun(WESSEN)));
+  return 1;
+}
+
+nosave string int2string(int wert) {
+ string str;
+ switch(wert) {
+   case 0..500    : str=" wie ein Druide - naemlich ueberhaupt nicht.\n"; break;
+   case 501..1000 : str=" fast ueberhaupt nicht.\n"; break;
+   case 1001..1500: str=" miserabel wie ein Vagabund.\n"; break;
+   case 1501..2000: str=" wie ein blutiger Anfaenger.\n"; break;
+   case 2001..2500: str=" wie ein junger Knappe.\n"; break;
+   case 2501..3000: str=" schlecht.\n"; break;
+   case 3001..3500: str=" maessig.\n"; break;
+   case 3501..4000: str=" mittelmaessig.\n"; break;
+   case 4001..4500: str=" unterdurchschnittlich wie ein Soeldner.\n"; break;
+   case 4501..5000: str=" durchschnittlich.\n";  break;
+   case 5001..5500: str=" ueberdurchschnittlich.\n"; break;
+   case 5501..6000: str=" gut.\n"; break;
+   case 6001..6500: str=" sehr gut.\n"; break;
+   case 6501..7000: str=" wie ein Burgwaechter.\n"; break;
+   case 7001..7500: str=" wie ein hochdekorierter Veteran.\n"; break;
+   case 7501..8000: str=" wie ein hochbegabter Meister.\n"; break;
+   case 8001..8500: str=" beinahe engelgleich.\n"; break;
+   case 8501..9000: str=" engelgleich.\n"; break;
+   case 9001..9500: str=" legendaer.\n"; break;
+   case 9501..9999: str=" beinahe goettlich.\n"; break;
+   case 10000     : str=" goettlich.\n"; break;
+  }
+  return str;
+}
+
+
+nosave void LevelText(object pl) {
+  write(BS("Du kniest vor dem Altar nieder und beginnst zu Dusty "
+         "zu beten.\n"));
+  say(BS(CAP(getuid(pl))+ " kniet vor dem Altar nieder und beginnt zu "
+         "Dusty zu beten.\n"));
+  return ;
+}
+
+
+
+/*
+//
+// Schwertskill
+//
+*/
+mapping SwordFight(object user, string sname, mapping sinfo)
+{
+  int abil, ud, rnd, align, val, waf, vorher;
+  object schild;
+  int schilddam;
+  mixed h;
+  if(user->QueryProp(P_TESTPLAYER)) tell_object(user, BS(sprintf("## SwordFight user=%O sname=%O sinfo=%O", user, sname, sinfo)));
+
+  if(!mappingp(sinfo)) return 0;
+  // bugfix fuer schon tote NPC's
+  if(!objectp(sinfo[SI_ENEMY])) return sinfo;
+  abil=sinfo[SI_SKILLABILITY];
+  ud=sinfo[SI_USR];
+  vorher=sinfo[SI_SKILLDAMAGE];
+  // Wenn keine Waffe gezueckt -> return
+  if(!objectp(user->QueryProp(P_WEAPON))) return sinfo;
+  if(!intp(align=user->QueryProp(P_ALIGN))) align=0;
+  if (align > 1100) align = 1100;
+  //val=abil*(user->QueryAttribute(A_DEX)+user->QueryProp(P_ALIGN)/50+
+  //    user->QueryAttribute(A_STR))/MAX_ABILITY;
+  val=to_int(1.5*abil*(user->QueryAttribute(A_DEX)+align/50+
+      user->QueryAttribute(A_STR))/MAX_ABILITY);
+
+  sinfo[SI_SKILLDAMAGE]+=(val/2)+random(val/2);
+
+  if(HAS_BLESSING(user, BLESSING_BLAZING_GAZE) && user->QueryProp(P_TMP_PALADINE_BLAZING_GAZE) == sinfo[SI_ENEMY]) {
+    sinfo[SI_SKILLDAMAGE] += (int) (val * (user->QueryProp(P_GUILD_LEVEL)/100.0));
+  }
+
+  if(align>500+random(500) && !random(400)) {
+    tell_object(user, "Dusty segnet Deine Attacke!\n");
+    sinfo[SI_SKILLDAMAGE]+=500;
+  }
+  if(abil>8000 && align>(700+random(300))) { 
+    sinfo+=([SI_SPELL:
+           ([SP_REDUCE_ARMOUR:([P_BODY:100-random((abil-8000)/100)]),
+             SP_NAME:"Schwertattacke", SP_SHOW_DAMAGE:1, 
+             SP_PHYSICAL_ATTACK:1])]);
+  }
+  if(abil>(5000+random(5000)) && align>(600+random(500))) {
+    if((rnd=45-user->QueryAttribute(A_DEX))<5) rnd=5;
+    if(!random(rnd)) {
+      tell_object(user, "Dein Glaube verleiht Deiner Waffe in der "
+          +"naechsten Attacke Fluegel!\n");
+      user->ModifySkillAttribute(user,SA_SPEED,200,2+random(3));
+    }
+  }
+  if(abil>8000 && !random(12)) {
+    if(!catch(schild=user->QueryArmours(AT_SHIELD)[0]) && sinfo[SI_ENEMY] &&
+        align > 1000)
+    {
+      if (!((h=user->QueryProp(P_TMP_DEFEND_HOOK))  && h[2]=="schildparade_func"))
+      {
+        schilddam=schild->QueryProp(P_AC)+schild->QueryProp(
+            P_PALADIN_SCHILDPARADE_AC)/2+schild->QueryProp(P_WEIGHT)/75 +
+            schild->QueryProp(P_EFFECTIVE_WC)/10;
+        schilddam*=(random(3)+3);
+        tell_object(user, "Du attackierst mit Deinem Schild! Fuer Dusty!\n");
+        tell_room(ENV(user), sprintf("%s attackiert mit %sem Schild.\n", 
+              user->Name(WER), user->QueryPossPronoun(WESSEN)),({user}));
+        if( sinfo[SI_ENEMY] )
+          sinfo[SI_ENEMY]->Defend(schilddam, ({DT_BLUDGEON}), 
+              ([SP_NAME:"schildschlag", SP_SHOW_DAMAGE:1, SP_PHYSICAL_ATTACK:1,
+                SP_NO_ENEMY: 1]), user);
+        if(sinfo[SI_ENEMY] && sinfo[SI_ENEMY]->QueryProp(P_SIZE) <= 250 && 
+            schilddam > (sinfo[SI_ENEMY]->QueryAttribute(A_STR)*40) &&
+            random(100) >= sinfo[SI_ENEMY]->QueryProp(P_NOMAGIC))
+        {
+          tell_room(ENV(user), sprintf("%s faellt zu Boden!\n", 
+                sinfo[SI_ENEMY]->Name(WER)));
+          sinfo[SI_ENEMY]->SetProp(P_DISABLE_ATTACK, 1 + random(2));
+          sinfo[SI_ENEMY]->SetProp("last_rammen_time", time());
+        }
+      }
+    }
+  }
+  // Als Frosch wollen wir nicht mehr lernen :)
+  if(user->QueryProp(P_FROG)) return sinfo;
+  // Und ab jetzt brauchen wir ein einigermassen gutes Schwert
+  waf=user->QueryProp(P_WEAPON)->QueryProp(P_WC);
+  if (waf<(user->QueryAttribute(A_DEX))*10/2) return sinfo;
+  // Lernen
+  if(!sinfo[SI_ENEMY]) return sinfo;
+  if( sinfo[SI_ENEMY]->QueryProp(P_LEVEL) > abil/400 && ++ud>abil/40 &&
+      abil < MAX_ABILITY) 
+  {
+    ud=0;
+    abil+=(user->QueryAttribute(A_DEX)+align/100)/3;
+    if (abil >= MAX_ABILITY)
+      player->Message("Ayla teilt Dir mit: Du beherrscht den Schwertkampf "
+          "nun goettlich!!!\n", MSGFLAG_TELL);
+  }
+  if (abil > MAX_ABILITY)
+    abil = MAX_ABILITY;
+  user->ModifySkill(FIGHT(WT_SWORD), ([SI_USR: ud, SI_SKILLABILITY: abil]),
+        100, "paladine");
+  //tell_object(find_player("angrox"), sprintf( "### SWORD-Bonus von %s:  vorher %d  nacher %d  val %d = %d Proz\n",
+  //    user->Name(WER),vorher,sinfo[SI_SKILLDAMAGE], val,
+  //     to_int(100*sinfo[SI_SKILLDAMAGE]/vorher)));
+
+  return sinfo;
+ }
+
+/*
+//
+// Task mitloggen
+//
+*/
+nosave void LogTask(object pl, int stufe) {
+  if(call_other(PALADINMASTER, "CheckTask", pl, stufe) &&
+	  stufe==15 && stufe==6) return;
+  write_file(MEMBERLOG(getuid(pl)+".log"),
+             dtime(time())+": "+CAP(getuid(pl))+" hat Aufgabe "
+             +stufe+" geloest.\n");
+  return;
+}
+
+/*
+//
+// Funktionen, die die Bedingungen fuer den Gildenaufstieg ueberpruefen
+// --------------------------------------------------------------------
+*/
+
+/*
+//
+// Paladine muessen XPs sammeln UND Waffen und Ruestungen spenden.
+// Flag = 0 ... Money
+// Flag = 1 ... XP
+//
+*/
+nosave string money_or_xp_check(object pl, int value, int flag) {
+  string str;
+  int percent, x,lvl;
+  string *what;
+  str="";
+  lvl=pl->QueryProp(P_GUILD_LEVEL);
+  what=({"Ruestungen und Waffen opfern", "Erfahrung sammeln"});
+  if(!flag) {
+	  if(x=call_other(PALADINMASTER, "GetMoneyDifference", pl)) 
+	    str="Von den Waffen und Ruestungen, die Du opfern musst, "
+	       +"fehlen Dir ";
+  }
+  else  {
+	  if(x=call_other(PALADINMASTER,"GetXpDifference",pl)) 
+	    str="Von den Erfahrungen, die Du benoetigst, fehlen Dir ";
+  }
+  if(x<=1) return 0;
+  percent=100*x/value;
+  //write("\n"+percent+"\n");
+  switch (percent) {
+    case 0..10:  str+="fast gar keine mehr.";
+                 break;
+    case 11..20: str+="weniger als ein Viertel.";
+                 break;
+    case 21..30: str+="etwa ein Viertel.";
+                 break;
+    case 31..40: str+="weniger als die Haelfte.";
+                 break;
+    case 41..60: str+="in etwa die Haelfte.";
+                 break;
+    case 61..70: str+="mehr als die Haelfte.";
+                 break;
+    case 71..80: str+="etwa drei Viertel.";
+                 break;
+    case 81..90: str+="mehr als drei Viertel.";
+                 break;
+    case 91..100: str+="beinahe alle.";
+                  break;
+    default:      str+="beinahe alle.";
+                  call_other(PALADINMASTER, "SetXp",pl,
+                      pl->QueryProp(P_XP)+xp_per_level[lvl-1]);
+                  break;
+  }
+  return str+" ";
+}
+
+nosave string Test(string str,int akt,int min,int max) {
+  string out;
+  int percent;
+  out="";
+  if(akt<max*MAX_ABILITY/100) {
+    percent=100-(akt-min*100)/(max-min);
+//    write(percent+"\n");
+    out+="Du musst "+str+" ";
+    switch (percent) {
+      case -10000..10:  
+                   out+="noch eine Winzigkeit mehr";
+                   break;
+      case 11..20: out+="nur noch sehr minimal";
+                   break;
+      case 21..30: out+="noch sehr wenig";
+                   break;
+      case 31..40: out+="noch ein wenig";
+                   break;
+      case 41..60: out+="etwa nochmal soviel";
+                   break;
+      case 61..70: out+="noch mehr";
+                   break;
+      case 71..80: out+="noch viel";
+                   break;
+      case 81..90: out+="noch sehr viel";
+                   break;
+      case 91..100: out+="noch unglaublich viel";
+                    break;
+      default:      out+="noch ungewoehnlich viel";
+                    write_file(LOG("erhoehe"), sprintf(
+                      "%s: Ungereimtheit beim Erhoehen: TP: %s, SPELL: %s, "
+                      "Akt: %d, Min: %d, Max: %d\n",
+                    dtime(time()), CAP(getuid(TP)), str, akt, min*100, 
+                    max*100));
+                    break;
+    }
+    out+=" ueben. ";
+  }
+  return out;
+}
+
+
+
+string LConds(object pl) {
+  int lvl;
+  string str;
+  mixed var;
+  str="";
+  lvl=pl->QueryProp(P_GUILD_LEVEL);
+  if(pl->QueryProp(P_FROG))
+     return BSA("Wie kannst Du es wagen, Dusty als Frosch "
+          +"um eine Erhoehung anzuflehen? VERSCHWINDE!", 
+          GUILDNPC_NAME+" donnert: ");
+  if(pl->QueryProp(P_GHOST))
+     return BSA("Gehe zuerst beten! Nur in der Stofflichkeit kannst "
+           +"Du Dusty um die Gnade einer Erhoehung anflehen!",
+           GUILDNPC_NAME+" spricht: ");
+  if(!IsGuildMember(pl)) return 0;
+  if(stringp(var=money_or_xp_check(pl,money_per_level[lvl-1], 0)))
+      str+=var;
+  if(stringp(var=money_or_xp_check(pl,xp_per_level[lvl-1], 1)))
+      str+=var;
+  switch(lvl+1) {
+    case  2: str+=Test("den 'Schwertkampf'",
+                 pl->QuerySkillAbility(FIGHT(WT_SWORD)),   0, 7);
+             str+=Test("'Erblicke'",
+                 pl->QuerySkillAbility("erblicke"),        0,36);
+             str+=Test("'Schaetz'",
+                 pl->QuerySkillAbility("schaetz"),         0,36);
+             break;
+    case  3: str+=Test("den 'Schwertkampf'",
+                 pl->QuerySkillAbility(FIGHT(WT_SWORD)),   7,14);
+             str+=Test("'Erblicke'",
+                 pl->QuerySkillAbility("erblicke"),       36,40);
+             str+=Test("'Schaetz'",
+                 pl->QuerySkillAbility("schaetz"),        36,40);
+             str+=Test("'Heiligenschein'",
+                 pl->QuerySkillAbility("heiligenschein"),  0,36);
+             str+=Test("'Schildparade'",
+                 pl->QuerySkillAbility("schildparade"),    0,40);
+             break;
+    case  4: str+=Test("den 'Schwertkampf'",
+                 pl->QuerySkillAbility(FIGHT(WT_SWORD)),  14,21);
+             str+=Test("'Erblicke'",
+                 pl->QuerySkillAbility("erblicke"),       40,44);
+             str+=Test("'Schaetz'",
+                 pl->QuerySkillAbility("schaetz"),        40,44);
+             str+=Test("'Heiligenschein'",
+                 pl->QuerySkillAbility("heiligenschein"), 36,40);
+             str+=Test("'Schildparade'",
+                 pl->QuerySkillAbility("schildparade"),   40,48);
+             str+=Test("'Verbannung'",
+                 pl->QuerySkillAbility("verbannung"),      0,40);
+             str+=Test("'Behandle'",
+                 pl->QuerySkillAbility("behandle"),        0,40);
+             break;
+    case  5: str+=Test("den 'Schwertkampf'",
+                 pl->QuerySkillAbility(FIGHT(WT_SWORD)),  21,27);
+             str+=Test("'Erblicke'",
+                 pl->QuerySkillAbility("erblicke"),       44,48);
+             str+=Test("'Schaetz'",
+                 pl->QuerySkillAbility("schaetz"),        44,48);
+             str+=Test("'Heiligenschein'",
+                 pl->QuerySkillAbility("heiligenschein"), 40,44);
+             str+=Test("'Schildparade'",
+                 pl->QuerySkillAbility("schildparade"),   48,55);
+             str+=Test("'Verbannung'",
+                 pl->QuerySkillAbility("verbannung"),     40,48);
+             str+=Test("'Behandle'",
+                 pl->QuerySkillAbility("behandle"),       40,48);
+             str+=Test("'Gottheilung'",
+                 pl->QuerySkillAbility("gottheilung"),     0,40);
+             str+=Test("'Wundenblick'",
+                 pl->QuerySkillAbility("wundenblick"),     0,40);
+             break;
+    case  6: str+=Test("den 'Schwertkampf'",
+                 pl->QuerySkillAbility(FIGHT(WT_SWORD)),  27,33);
+             str+=Test("'Erblicke'",
+                 pl->QuerySkillAbility("erblicke"),       48,52);
+             str+=Test("'Schaetz'",
+                 pl->QuerySkillAbility("schaetz"),        48,52);
+             str+=Test("'Heiligenschein'",
+                 pl->QuerySkillAbility("heiligenschein"), 44,48);
+             str+=Test("'Schildparade'",
+                 pl->QuerySkillAbility("schildparade"),   55,61);
+             str+=Test("'Verbannung'",
+                 pl->QuerySkillAbility("verbannung"),     48,61);
+             str+=Test("'Behandle'",
+                 pl->QuerySkillAbility("behandle"),       48,55);
+             str+=Test("'Gottheilung'",
+                 pl->QuerySkillAbility("gottheilung"),    40,46);
+             str+=Test("'Wundenblick'",
+                 pl->QuerySkillAbility("wundenblick"),    40,45);
+             str+=Test("'Heiligengebet'",
+                 pl->QuerySkillAbility("heiligengebet"),   0,40);
+             str+=Test("'Lokation'",
+                 pl->QuerySkillAbility("lokation"),        0,40);
+             break;
+    case  7: str+=Test("den 'Schwertkampf'",
+                 pl->QuerySkillAbility(FIGHT(WT_SWORD)),  33,39);
+             str+=Test("'Erblicke'",
+                 pl->QuerySkillAbility("erblicke"),       52,56);
+             str+=Test("'Schaetz'",
+                 pl->QuerySkillAbility("schaetz"),        52,56);
+             str+=Test("'Heiligenschein'",
+                 pl->QuerySkillAbility("heiligenschein"), 48,52);
+             str+=Test("'Schildparade'",
+                 pl->QuerySkillAbility("schildparade"),   61,67);
+             str+=Test("'Verbannung'",
+                 pl->QuerySkillAbility("verbannung"),     61,67);
+             str+=Test("'Behandle'",
+                 pl->QuerySkillAbility("behandle"),       55,61);
+             str+=Test("'Gottheilung'",
+                 pl->QuerySkillAbility("gottheilung"),    46,55);
+             str+=Test("'Wundenblick'",
+                 pl->QuerySkillAbility("wundenblick"),    45,50);
+             str+=Test("'Heiligengebet'",
+                 pl->QuerySkillAbility("heiligengebet"),  40,49);
+             str+=Test("'Lokation'",
+                 pl->QuerySkillAbility("lokation"),       40,45);
+             str+=Test("'Ruestungssegen'",
+                 pl->QuerySkillAbility("ruestungssegen"),  0,40);
+             break;
+    case  8: str+=Test("den 'Schwertkampf'",
+                 pl->QuerySkillAbility(FIGHT(WT_SWORD)),  39,44);
+             str+=Test("'Erblicke'",
+                 pl->QuerySkillAbility("erblicke"),       56,60);
+             str+=Test("'Schaetz'",
+                 pl->QuerySkillAbility("schaetz"),        56,60);
+             str+=Test("'Heiligenschein'",
+                 pl->QuerySkillAbility("heiligenschein"), 52,56);
+             str+=Test("'Schildparade'",
+                 pl->QuerySkillAbility("schildparade"),   67,72);
+             str+=Test("'Verbannung'",
+                 pl->QuerySkillAbility("verbannung"),     67,72);
+             str+=Test("'Behandle'",
+                 pl->QuerySkillAbility("behandle"),       61,67);
+             str+=Test("'Gottheilung'",
+                 pl->QuerySkillAbility("gottheilung"),    55,63);
+             str+=Test("'Wundenblick'",
+                 pl->QuerySkillAbility("wundenblick"),    50,55);
+             str+=Test("'Heiligengebet'",
+                 pl->QuerySkillAbility("heiligengebet"),  49,58);
+             str+=Test("'Lokation'",
+                 pl->QuerySkillAbility("lokation"),       45,50);
+             str+=Test("'Ruestungssegen'",
+                 pl->QuerySkillAbility("ruestungssegen"), 40,51);
+             str+=Test("'Waffensegen'",
+                 pl->QuerySkillAbility("waffensegen"),     0,40);
+             str+=Test("'Reparatur'",
+                 pl->QuerySkillAbility("reparatur"),       0,40);
+             break;
+    case  9: str+=Test("den 'Schwertkampf'",
+                 pl->QuerySkillAbility(FIGHT(WT_SWORD)),  44,49);
+             str+=Test("'Erblicke'",
+                 pl->QuerySkillAbility("erblicke"),       60,64);
+             str+=Test("'Schaetz'",
+                 pl->QuerySkillAbility("schaetz"),        60,64);
+             str+=Test("'Heiligenschein'",
+                 pl->QuerySkillAbility("heiligenschein"), 56,60);
+             str+=Test("'Schildparade'",
+                 pl->QuerySkillAbility("schildparade"),   72,77);
+             str+=Test("'Verbannung'",
+                 pl->QuerySkillAbility("verbannung"),     72,77);
+             str+=Test("'Behandle'",
+                 pl->QuerySkillAbility("behandle"),       67,72);
+             str+=Test("'Gottheilung'",
+                 pl->QuerySkillAbility("gottheilung"),    63,70);
+             str+=Test("'Wundenblick'",
+                 pl->QuerySkillAbility("wundenblick"),    55,60);
+             str+=Test("'Heiligengebet'",
+                 pl->QuerySkillAbility("heiligengebet"),  58,65);
+             str+=Test("'Lokation'",
+                 pl->QuerySkillAbility("lokation"),       50,55);
+             str+=Test("'Ruestungssegen'",
+                 pl->QuerySkillAbility("ruestungssegen"), 51,60);
+             str+=Test("'Waffensegen'",
+                 pl->QuerySkillAbility("waffensegen"),    40,48);
+             str+=Test("'Reparatur'",
+                 pl->QuerySkillAbility("reparatur"),      40,48);
+             str+=Test("'Meditation'",
+                 pl->QuerySkillAbility("meditation"),      0,40);
+             break;
+    case 10: str+=Test("den 'Schwertkampf'",
+                 pl->QuerySkillAbility(FIGHT(WT_SWORD)),  49,54);
+             str+=Test("'Erblicke'",
+                 pl->QuerySkillAbility("erblicke"),       64,68);
+             str+=Test("'Schaetz'",
+                 pl->QuerySkillAbility("schaetz"),        64,68);
+             str+=Test("'Heiligenschein'",
+                 pl->QuerySkillAbility("heiligenschein"), 60,64);
+             str+=Test("'Schildparade'",
+                 pl->QuerySkillAbility("schildparade"),   77,81);
+             str+=Test("'Verbannung'",
+                 pl->QuerySkillAbility("verbannung"),     77,81);
+             str+=Test("'Behandle'",
+                 pl->QuerySkillAbility("behandle"),       72,77);
+             str+=Test("'Gottheilung'",
+                 pl->QuerySkillAbility("gottheilung"),    70,76);
+             str+=Test("'Wundenblick'",
+                 pl->QuerySkillAbility("wundenblick"),    60,65);
+             str+=Test("'Heiligengebet'",
+                 pl->QuerySkillAbility("heiligengebet"),  65,72);
+             str+=Test("'Lokation'",
+                 pl->QuerySkillAbility("lokation"),       55,60);
+             str+=Test("'Ruestungssegen'",
+                 pl->QuerySkillAbility("ruestungssegen"), 60,68);
+             str+=Test("'Waffensegen'",
+                 pl->QuerySkillAbility("waffensegen"),    48,56);
+             str+=Test("'Reparatur'",
+                 pl->QuerySkillAbility("reparatur"),      48,56);
+             str+=Test("'Meditation'",
+                 pl->QuerySkillAbility("meditation"),     40,55);
+             str+=Test("'Goetterschutz'",
+                 pl->QuerySkillAbility("goetterschutz"),   0,40);
+             break;
+    case 11: str+=Test("den 'Schwertkampf'",
+                 pl->QuerySkillAbility(FIGHT(WT_SWORD)),  54,57);
+             str+=Test("'Erblicke'",
+                 pl->QuerySkillAbility("erblicke"),       68,72);
+             str+=Test("'Schaetz'",
+                 pl->QuerySkillAbility("schaetz"),        68,72);
+             str+=Test("'Heiligenschein'",
+                 pl->QuerySkillAbility("heiligenschein"), 64,68);
+             str+=Test("'Schildparade'",
+                 pl->QuerySkillAbility("schildparade"),   81,84);
+             str+=Test("'Verbannung'",
+                 pl->QuerySkillAbility("verbannung"),     81,84);
+             str+=Test("'Behandle'",
+                 pl->QuerySkillAbility("behandle"),       77,81);
+             str+=Test("'Gottheilung'",
+                 pl->QuerySkillAbility("gottheilung"),    76,81);
+             str+=Test("'Wundenblick'",
+                 pl->QuerySkillAbility("wundenblick"),    65,70);
+             str+=Test("'Heiligengebet'",
+                 pl->QuerySkillAbility("heiligengebet"),  72,78);
+             str+=Test("'Lokation'",
+                 pl->QuerySkillAbility("lokation"),       60,65);
+             str+=Test("'Ruestungssegen'",
+                 pl->QuerySkillAbility("ruestungssegen"), 68,75);
+             str+=Test("'Waffensegen'",
+                 pl->QuerySkillAbility("waffensegen"),    56,66);
+             str+=Test("'Reparatur'",
+                 pl->QuerySkillAbility("reparatur"),      56,66);
+             str+=Test("'Meditation'",
+                 pl->QuerySkillAbility("meditation"),     55,64);
+             str+=Test("'Goetterschutz'",
+                 pl->QuerySkillAbility("goetterschutz"),  40,58);
+             str+=Test("'Zielattacke'",
+                 pl->QuerySkillAbility("zielattacke"),     0,40);
+             break;
+    case 12: str+=Test("den 'Schwertkampf'",
+                 pl->QuerySkillAbility(FIGHT(WT_SWORD)),  57,60);
+             str+=Test("'Erblicke'",
+                 pl->QuerySkillAbility("erblicke"),       72,76);
+             str+=Test("'Schaetz'",
+                 pl->QuerySkillAbility("schaetz"),        72,76);
+             str+=Test("'Heiligenschein'",
+                 pl->QuerySkillAbility("heiligenschein"), 68,72);
+             str+=Test("'Schildparade'",
+                 pl->QuerySkillAbility("schildparade"),   84,87);
+             str+=Test("'Verbannung'",
+                 pl->QuerySkillAbility("verbannung"),     84,87);
+             str+=Test("'Behandle'",
+                 pl->QuerySkillAbility("behandle"),       81,85);
+             str+=Test("'Gottheilung'",
+                 pl->QuerySkillAbility("gottheilung"),    81,85);
+             str+=Test("'Wundenblick'",
+                 pl->QuerySkillAbility("wundenblick"),    70,75);
+             str+=Test("'Heiligengebet'",
+                 pl->QuerySkillAbility("heiligengebet"),  78,83);
+             str+=Test("'Lokation'",
+                 pl->QuerySkillAbility("lokation"),       65,70);
+             str+=Test("'Ruestungssegen'",
+                 pl->QuerySkillAbility("ruestungssegen"), 75,81);
+             str+=Test("'Waffensegen'",
+                 pl->QuerySkillAbility("waffensegen"),    66,74);
+             str+=Test("'Reparatur'",
+                 pl->QuerySkillAbility("reparatur"),      66,74);
+             str+=Test("'Meditation'",
+                 pl->QuerySkillAbility("meditation"),     64,72);
+             str+=Test("'Goetterschutz'",
+                 pl->QuerySkillAbility("goetterschutz"),  58,70);
+             str+=Test("'Zielattacke'",
+                 pl->QuerySkillAbility("zielattacke"),    40,60);
+             str+=Test("'Entfluche'",
+                 pl->QuerySkillAbility("entfluche"),       0,40);
+             str+=Test("'Gottsegen'",
+                 pl->QuerySkillAbility("gottsegen"),       0,40);
+             break;
+    case 13: str+=Test("den 'Schwertkampf'",
+                 pl->QuerySkillAbility(FIGHT(WT_SWORD)),  60,63);
+             str+=Test("'Erblicke'",
+                 pl->QuerySkillAbility("erblicke"),       76,80);
+             str+=Test("'Schaetz'",
+                 pl->QuerySkillAbility("schaetz"),        76,80);
+             str+=Test("'Heiligenschein'",
+                 pl->QuerySkillAbility("heiligenschein"), 72,76);
+             str+=Test("'Schildparade'",
+                 pl->QuerySkillAbility("schildparade"),   87,89);
+             str+=Test("'Verbannung'",
+                 pl->QuerySkillAbility("verbannung"),     87,89);
+             str+=Test("'Behandle'",
+                 pl->QuerySkillAbility("behandle"),       85,88);
+             str+=Test("'Gottheilung'",
+                 pl->QuerySkillAbility("gottheilung"),    85,88);
+             str+=Test("'Wundenblick'",
+                 pl->QuerySkillAbility("wundenblick"),    75,80);
+             str+=Test("'Heiligengebet'",
+                 pl->QuerySkillAbility("heiligengebet"),  83,87);
+             str+=Test("'Lokation'",
+                 pl->QuerySkillAbility("lokation"),       70,75);
+             str+=Test("'Ruestungssegen'",
+                 pl->QuerySkillAbility("ruestungssegen"), 81,86);
+             str+=Test("'Waffensegen'",
+                 pl->QuerySkillAbility("waffensegen"),    74,80);
+             str+=Test("'Reparatur'",
+                 pl->QuerySkillAbility("reparatur"),      74,80);
+             str+=Test("'Meditation'",
+                 pl->QuerySkillAbility("meditation"),     72,79);
+             str+=Test("'Goetterschutz'",
+                 pl->QuerySkillAbility("goetterschutz"),  70,78);
+             str+=Test("'Zielattacke'",
+                 pl->QuerySkillAbility("zielattacke"),    60,75);
+             str+=Test("'Entfluche'",
+                 pl->QuerySkillAbility("entfluche"),      40,50);
+             str+=Test("'Gottsegen'",
+                 pl->QuerySkillAbility("gottsegen"),      40,65);
+             str+=Test("'Talisman'",
+                 pl->QuerySkillAbility("talisman"),        0,40);
+             break;
+    case 14: str+=Test("den 'Schwertkampf'",
+                 pl->QuerySkillAbility(FIGHT(WT_SWORD)),  63,65);
+             str+=Test("'Erblicke'",
+                 pl->QuerySkillAbility("erblicke"),       80,85);
+             str+=Test("'Schaetz'",
+                 pl->QuerySkillAbility("schaetz"),        80,85);
+             str+=Test("'Heiligenschein'",
+                 pl->QuerySkillAbility("heiligenschein"), 76,80);
+             str+=Test("'Schildparade'",
+                 pl->QuerySkillAbility("schildparade"),   89,95);
+             str+=Test("'Verbannung'",
+                 pl->QuerySkillAbility("verbannung"),     89,95);
+             str+=Test("'Behandle'",
+                 pl->QuerySkillAbility("behandle"),       88,95);
+             str+=Test("'Gottheilung'",
+                 pl->QuerySkillAbility("gottheilung"),    88,95);
+             str+=Test("'Wundenblick'",
+                 pl->QuerySkillAbility("wundenblick"),    80,85);
+             str+=Test("'Heiligengebet'",
+                 pl->QuerySkillAbility("heiligengebet"),  87,95);
+             str+=Test("'Lokation'",
+                 pl->QuerySkillAbility("lokation"),       75,80);
+             str+=Test("'Ruestungssegen'",
+                 pl->QuerySkillAbility("ruestungssegen"), 86,93);
+             str+=Test("'Waffensegen'",
+                 pl->QuerySkillAbility("waffensegen"),    80,85);
+             str+=Test("'Reparatur'",
+                 pl->QuerySkillAbility("reparatur"),      80,85);
+             str+=Test("'Meditation'",
+                 pl->QuerySkillAbility("meditation"),     79,85);
+             str+=Test("'Goetterschutz'",
+                 pl->QuerySkillAbility("goetterschutz"),  78,85);
+             str+=Test("'Zielattacke'",
+                 pl->QuerySkillAbility("zielattacke"),    75,85);
+             str+=Test("'Entfluche'",
+                 pl->QuerySkillAbility("entfluche"),      50,60);
+             str+=Test("'Gottsegen'",
+                 pl->QuerySkillAbility("gottsegen"),      65,80);
+             str+=Test("'Talisman'",
+                 pl->QuerySkillAbility("talisman"),       40,70);
+             str+=Test("'Spiegelschild'",
+                 pl->QuerySkillAbility("spiegelschild"),   0,75);
+             break;
+    case 15: str+=Test("den 'Schwertkampf'",
+                 pl->QuerySkillAbility(FIGHT(WT_SWORD)),  63,80);
+             str+=Test("'Erblicke'",
+                 pl->QuerySkillAbility("erblicke"),       85,95);
+             str+=Test("'Schaetz'",
+                 pl->QuerySkillAbility("schaetz"),        85,95);
+             str+=Test("'Heiligenschein'",
+                 pl->QuerySkillAbility("heiligenschein"), 80,90);
+             str+=Test("'Schildparade'",
+                 pl->QuerySkillAbility("schildparade"),   95,97);
+             str+=Test("'Verbannung'",
+                 pl->QuerySkillAbility("verbannung"),     95,97);
+             str+=Test("'Behandle'",
+                 pl->QuerySkillAbility("behandle"),       95,97);
+             str+=Test("'Gottheilung'",
+                 pl->QuerySkillAbility("gottheilung"),    95,97);
+             str+=Test("'Wundenblick'",
+                 pl->QuerySkillAbility("wundenblick"),    85,95);
+             str+=Test("'Heiligengebet'",
+                 pl->QuerySkillAbility("heiligengebet"),  95,97);
+             str+=Test("'Lokation'",
+                 pl->QuerySkillAbility("lokation"),       80,90);
+             str+=Test("'Ruestungssegen'",
+                 pl->QuerySkillAbility("ruestungssegen"), 93,96);
+             str+=Test("'Waffensegen'",
+                 pl->QuerySkillAbility("waffensegen"),    85,95);
+             str+=Test("'Reparatur'",
+                 pl->QuerySkillAbility("reparatur"),      85,95);
+             str+=Test("'Meditation'",
+                 pl->QuerySkillAbility("meditation"),     85,90);
+             str+=Test("'Goetterschutz'",
+                 pl->QuerySkillAbility("goetterschutz"),  85,95);
+             str+=Test("'Zielattacke'",
+                 pl->QuerySkillAbility("zielattacke"),    85,95);
+             str+=Test("'Entfluche'",
+                 pl->QuerySkillAbility("entfluche"),      60,70);
+             str+=Test("'Gottsegen'",
+                 pl->QuerySkillAbility("gottsegen"),      80,90);
+             str+=Test("'Talisman'",
+                 pl->QuerySkillAbility("talisman"),       70,95);
+             str+=Test("'Spiegelschild'",
+                 pl->QuerySkillAbility("spiegelschild"),  75,95);
+             str+=Test("'Massenheilung'",
+                 pl->QuerySkillAbility("massenheilung"),   0,95);
+             break;
+  }
+  
+  if(!call_other(TASKMASTER, "CheckTask", pl)) {
+    if(!stringp(var=call_other(TASKMASTER, "ShowTask", pl))) {
+      _error(sprintf("Taskmaster/ShowTask, LVL: %d, returnwert: %d)", 
+          lvl+1, var));
+      return "";
+    }
+    else
+      str+=var;
+  }
+  if(str=="") return 0;
+  else return str;
+}
+
+
+/*
+//
+// NPC's die Skills lernen lassen
+//
+*/
+learn_paladin_skills(int sword) {
+  object wer;
+  wer=previous_object();
+  if( !wer || interactive(wer) || query_once_interactive(wer) ) return;
+  wer->ModifySkill(FIGHT(WT_SWORD),
+    QuerySkill(FIGHT(WT_SWORD))+([ SI_SKILLABILITY: sword]), 150,"paladine");
+
+  switch (wer->QueryProp(P_GUILD_LEVEL))
+  {
+    case 16:
+    case 15:
+      wer->ModifySkill("talisman", 10000);
+      wer->ModifySkill("talisman", ([SI_PREPARE_TIME:0, SI_SPELLCOST:0,]));
+    case 14:
+    case 13:
+      wer->ModifySkill("spiegelschild", 10000);
+      wer->ModifySkill("spiegelschild", ([SI_PREPARE_TIME:0, SI_SPELLCOST:0]) );
+    case 12:
+    case 11:
+    case 10:
+      wer->ModifySkill("zielattacke",   10000);
+      wer->ModifySkill("zielattacke",   ([SI_PREPARE_TIME:0, SI_SPELLCOST:0]) );
+    case 9:
+      wer->ModifySkill("goetterschutz", 10000);
+      wer->ModifySkill("goetterschutz", ([SI_PREPARE_TIME:0, SI_SPELLCOST:0, 
+                                     SI_SKILLRESTR_USE:([SR_FREE_HANDS:0]) ]) );
+    case 8:
+    case 7:
+      wer->ModifySkill("waffensegen",   10000);
+      wer->ModifySkill("waffensegen",   ([SI_PREPARE_TIME:0, SI_SPELLCOST:0]) );
+    case 6:
+    case 5:
+      wer->ModifySkill("heiligengebet", 10000);
+      wer->ModifySkill("heiligengebet", ([SI_PREPARE_TIME:0, SI_SPELLCOST:0]) );
+    case 4:
+    case 3:
+      wer->ModifySkill("behandle",      10000);
+      wer->ModifySkill("behandle",      ([SI_PREPARE_TIME:0, SI_SPELLCOST:0, 
+                                     SI_SKILLRESTR_USE:([SR_FREE_HANDS:0]) ]) );
+      wer->ModifySkill("verbannung",      10000);
+      wer->ModifySkill("behandle",      ([SI_SPELLCOST:0]) );
+    case 2:
+      wer->ModifySkill("schildparade",  10000);
+      wer->ModifySkill("schildparade",  ([SI_PREPARE_TIME:0, SI_SPELLCOST:0, 
+                                     SI_SKILLRESTR_USE:([SR_FREE_HANDS:0]) ]) );
+  }
+}
+
+
+/*
+//
+// Das Clonen des Schwerts der Weihe
+//
+*/
+nosave object SwordClone(object pl) {
+  object ob;
+  ob=clone_object("/p/weapon/sword/langschwert");
+  ob->SetProp(P_SHORT, pl->Name(WESSEN)+" Schwert der Weihe"); 
+  ob->SetProp(P_LONG, 
+      "Die Klinge dieses Schwertes ist lang, schmal und komplett "
+      "mit den heiligen Symbolen der Dusty uebersaeht. Die Parierstange "
+      "ist in Form zweier Rosen gehalten. Auf dem Knauf des Griffes "
+      "steht in goldenen Lettern: 'Das Weiheschwert von "+TP->name(WER)+"'.");
+  ob->SetProp(P_MAGIC, 1);
+  ob->SetProp(P_NOBUY, 1);
+  ob->SetProp(P_NEVERDROP, 1);
+  ob->SetProp(P_VALUE, 1);
+  ob->SetProp(P_NODROP, BS("Das Schwert wuerdest Du niemals weglegen."));
+  ob->SetProp(P_NOSELL, BS("Das Schwert wuerdest Du niemals verkaufen."));
+  ob->SetProp(P_ARTICLE, 0);
+  return ob;
+}
+
+//
+// Fuer das Dustytool
+//
+int set_opferreport(int x) {
+  if(x==0) {
+    opferreport=x;
+    return 1;
+  }
+  if(getuid(TP)!="dusty") return 0;
+  opferreport=1;
+  return 1;
+}
+
+
+/*
+
+  Fuer den Spell-blocker
+  2003-01-04 Iwo
+
+*/
+int IsCastDisabled()
+{
+  return (cast_disabled == 1);
+}
+
+
+
+int GuildRating(object pl)
+{
+  mapping ski;
+  string *sk;
+  int i, cnt, sum;
+  closure qsa;
+
+  if (!IsGuildMember(pl)||!query_once_interactive(pl))
+    return 0;
+
+  if (!(ski = QueryProp(P_GUILD_SKILLS)) ||
+      !(qsa = symbol_function("QuerySkillAbility",pl)))
+    return 0;
+
+  if(pl->QueryProp(P_GUILD_LEVEL) < 16)
+    ski=m_delete(ski,"auferstehung");
+    
+
+  sk = m_indices(ski);
+    
+  cnt = sizeof(ski);
+
+  for (i=cnt-1, sum=0; i>=0; i--)
+    sum += funcall(qsa, sk[i]);
+
+  sum = sum/cnt;
+  if (sum < 0)
+    sum = 0;
+  else if (sum > MAX_ABILITY)
+    sum = MAX_ABILITY;
+
+  return pl->SetProp(P_GUILD_RATING, sum);
+}
+
+
+void sacrificied_heart_lvl16() {
+  tell_object(TP, BS("Du kniest Dich vor dem Altar nieder und opferst "
+      "Dusty das Herz des Boesen!"));
+   tell_room(ME, BS(sprintf("%s kniet sich vor dem Altar der Dusty nieder "
+           "und legt einen pulsierenden schwarzen Klumpen nieder.", 
+           TP->Name())), ({TP}));
+   tell_room(ME, BS("Mit einem hoellischen Laerm sind unmenschliche Schreie "
+     "und Flueche zu hoeren! Das Herz auf dem Altar blaeht sich kurz auf, "
+     "und wird ueberirdischen Lichtstrahlen, welche dem Altar entweichen, von "
+     "innen heraus zersetzt, bis es schliesslich explodiert!"));
+   TP->SetProp(P_GUILD_LEVEL, 16);
+   ::adjust_title(TP);
+   if(present(GUILDITEM_ID, TP))
+      present(GUILDITEM_ID, TP)->update_glvl();
+   write_file(LOG("lvl16quest"), sprintf("%s: %s -> opfert das Herz und "
+           "SCHAFFT DIE QUEST! OLE OLE ! Super %s. Ole ole !\n", 
+           "eingetragen!\n", dtime(time()), getuid(TP), getuid(TP)));
+
+   call_out("quest_ende", 6);
+   return ;
+}
+
+void quest_ende() {
+  object ayla;
+  ayla=present("ayla");
+  if(!ayla) return;
+  ayla->command_me("sag Sehr gut, Paladin! Du hast das Herz des Boesen "
+      "vernichtet, und damit dem Silberland mehr Zeit gegeben, sich auf "
+      "die Invasion des Boesen vorzubereiten.");
+  call_out("quest_belohnung", 4);
+  return ;
+}
+
+void quest_belohnung() {
+  object ayla;
+  ayla=present("ayla");
+  if(!ayla) return;
+  ayla->command_me("sag Als Belohnung kann ich Dir nicht viel anbieten, "
+      "nur einen Zauber, der Dir hilft die Bestimmung und die Tradition "
+      "der Paladine fortzufuehren. Das goettliche Wunder 'auferstehung' "
+      "ermoeglicht es Dir, tote Gefaehrten, die im Kampf neben Dir gefallen "
+      "sind, wiederzubeleben (lerne auferstehung). Dieses Wunder kostet "
+      "Dich allerdings auch einen Teil Deiner Opfergaben an Dusty. "
+      "Dusty hat Dir auch noch eine besondere Aura "
+      "verliehen, mit der Deine Heiligkeit anderen guten Kreaturen ein "
+      "besonderes Wohlbefuehlen beschert. Und Du kannst nun einmal "
+      "am Tag die Macht Dustys wirken lassen und alle Kreaturen in einem "
+      "Raum komplett heilen - Dich mit eingeschlossen! (wirke dustys macht)"
+      );
+  Channel(sprintf("%s hat das Herz des Boesen auf Dustys Altar geopfert! "
+        "Das Silberland hat damit mehr Zeit sich auf die Invasion des "
+        "Boesen vorzubereiten!", TP->Name(WER)));
+  ayla->command_me("sag Paladin, ich bin stolz auf Dich! Von Deiner "
+      "Sorte gibt es nur Wenige. Meine Hochachtung!");
+  call_other(PALADINMASTER, "SetQuestLvl16Solved");
+  return ;
+}
+
+int update_wappenrock_glvl_filter(object ob) {
+  if(ob->QueryProp(P_GUILD) == "paladine") return 1;
+  return 0;
+}
+
+void update_wappenrock_glvl() {
+  object *pal;
+  object ob;
+  int i;
+  pal=filter_array(users(), "update_wappenrock_glvl_filter");
+  for (i=sizeof(pal)-1;i>=0;i--) {
+    ob=present(GUILDITEM_ID, pal[i]);
+    if (ob) ob->update_glvl();
+  }
+  return ;
+}
+
+int _query_total_light() {
+  return 2;
+}

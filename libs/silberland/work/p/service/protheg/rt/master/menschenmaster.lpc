@@ -1,0 +1,111 @@
+/*
+**  Zwergenmaster
+**
+*/
+
+#pragma strong_types;
+
+#include "../def.h"
+
+#define HISTSIZE 15
+#define SPANGESAVE RTM "menschenmastersave"
+#define SPANGE OBJ "menschenfibel"
+
+int version;
+nosave string *history;
+
+nomask int query_prevent_shadow() { return 1; }
+
+nomask varargs nosave int allowed(mixed prev, string what)
+{
+  if(!objectp(prev)) return 0;
+  
+  if((TP) && (interactive(TP)) && (getuid(TP)=="gwenshara")) return 1;
+  
+  if(interactive(prev)) return 0;
+  
+  if(stringp(what))
+    if(strstr(file_name(prev), what))
+      {
+	DB(sprintf("*** Menschentool %O messed by %O [%O]\n",
+		   ENV(ME), prev, prev->QueryProp(P_CLONER)));
+	return 0;
+      }
+  
+  return 1;
+}
+
+nomask void create()
+{
+  SUID;
+  
+  history=({});
+  
+  restore_object(SPANGESAVE);
+
+  DB("*** MENSCHENMASTER create() by "+
+     sprintf("%O [%O]",PO,PO->QueryProp(P_CLONER))+"\n");
+}
+
+nomask public void AddHistory(string who, string what)
+{
+  if(!allowed(PO, SPANGE)) return;  
+  
+  history+=({({time(), who, what})});
+  
+  if(sizeof(history) > HISTSIZE)
+    history-=({history[0]});
+}
+
+nomask public string *QueryHistory()
+{
+  if(!allowed(PO, SPANGE)) return 0;
+  
+  return history;
+}
+
+nomask nosave int is_listening(object who)
+{
+  if(who->QueryProp("Menschenlistener")) 
+    return 1;
+
+  return 0; 
+}
+
+nomask public object *QueryListeners()
+{
+  return filter_array(users(), "is_listening");
+}
+
+nomask public int GetCurrentVersion()
+{
+  return version;
+}
+
+nomask public varargs int UpdateCurrentVersion(int noversionupgrade)
+{
+  object *pls;
+  object tr;
+  int i;
+
+  if(!allowed(PO)) return 0;
+  
+  if(!noversionupgrade) version++;
+  save_object(SPANGESAVE);
+
+  if(sizeof(pls=QueryListeners()))
+    for(i=sizeof(pls)-1;i>=0;i--)
+      if(tr=present(RACETOOLID, pls[i]))
+	tr->erneuern(1);
+
+  return version;
+}
+
+nomask public int SetCurrentVersion(int i)
+{
+  if(!allowed(PO, SPANGE)) return 0;
+
+  version=i;
+  save_object(SPANGESAVE);
+  return version;
+}

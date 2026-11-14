@@ -1,0 +1,460 @@
+#include <properties.h>
+#include <defines.h>
+#include <moredef.h>
+#include <wizlevels.h>
+#include "skillmaster.h" 
+
+
+private nosave mixed _name_;
+nosave mapping AdjustByLastUsage(object player, string sk_name, mapping skill); 
+int SkillMod(object pl, string skill);
+mapping CheckCorrectSkillValues(object player, string skill, 
+    mapping skill_map);
+
+mapping all_skills = ([]); 
+
+void create()
+{
+  if (is_clone(TO)) {
+    destruct(this_object());
+    return ;
+  }
+  SUID; 
+}
+
+nomask int query_prevent_shadow() { return 1; }
+
+string name() { return _name_ ? _name_ : "<Der Meister aller Skills>"; }
+
+//
+// ([ player: ([skill : value; lastusage; lastgain; maxskill; maxunlearn;
+//                        0       1          2         3          4
+//              usage; skillname ])
+//                5        6
+//
+//
+int AddSkill(object pl, string skill, int value, int maxskill,
+    int maxunlearn, string skillname) 
+{
+  mapping skill_map;
+  string uniq_uid;
+
+  if (!IS_VALID_SKILL(skill))
+    return -2;
+
+  skill_map=pl->QueryProp(P_EXTERNAL_SKILLS);
+  if(!mappingp(skill_map)) {
+    skill_map=([skill:value;0;0;0;0;0;""]);
+    pl->SetProp(P_EXTERNAL_SKILLS, skill_map);
+    pl->Set(P_EXTERNAL_SKILLS, SAVE, F_MODE_AS);
+  }
+  else if(!member(skill_map,skill)) {
+    skill_map+=([skill: value;0;0;0;0;0;""]);
+  }
+  else {
+    if (skill_map[skill,0] < value)
+      skill_map[skill,0]=value;
+    if (value > maxskill)
+      maxskill = value;
+  }
+
+  skill_map[skill,1]=pl->QueryProp(P_AGE);
+  skill_map[skill,2]=pl->QueryProp(P_AGE);
+  if(maxskill > SK_MAXSKILL) maxskill = SK_MAXSKILL;
+  skill_map[skill,3]=maxskill;
+  skill_map[skill,4]=maxunlearn;
+  skill_map[skill,6]=skillname;
+  pl->SetProp(P_EXTERNAL_SKILLS, skill_map);
+  //save_object( SKMSAVE );
+  return 1;
+}
+
+int DeleteSkill(object player, string skill) {
+  mapping skill_map;
+  if (!IS_VALID_SKILL(skill))
+    return -1;
+  skill_map=player->QueryProp(P_EXTERNAL_SKILLS);
+  if(!member(skill_map,skill))
+    return -1;
+  skill_map=m_delete(skill_map,skill);
+  player->SetProp(P_EXTERNAL_SKILLS, skill_map);
+  return 1;
+}
+
+varargs int ModifySkill(object pl, string skill, string what, string value)
+{
+  mapping skill_map;
+  string uniq_uid;
+  if (!IS_VALID_SKILL(skill))
+    return -2;
+
+  skill_map=pl->QueryProp(P_EXTERNAL_SKILLS);
+  if(!member(skill_map,skill))
+    return -1;
+  switch (what) {
+    case "maxunlearn": skill_map[skill,4]=value; break;
+    case "maxskill"  :
+    case "maxlearn"  : skill_map[skill,3]=value; break;
+    default: break;
+  }
+  if(skill_map[skill] > skill_map[skill,3])
+    skill_map[skill] = skill_map[skill,3];
+  pl->SetProp(P_EXTERNAL_SKILLS, skill_map);
+  return 1;
+}
+
+varargs int QuerySkill(object player, string skill, int textmode, int no_mod) 
+{
+  string uniq_uid;
+  mapping help_map;
+  string *skill_knowledge;
+  mapping skill_map;
+  int mod, value;
+  skill_knowledge = ({
+    "fast gar nicht",
+    "sehr schlecht",
+    "schlecht",
+    "maessig",
+    "mittelmaessig",
+    "durchschnitt",
+    "beinahe gut",
+    "gut",
+    "sehr gut",
+    "perfekt",
+    "meisterhaft",
+    "goettlich" });
+
+  if (!IS_VALID_SKILL(skill))
+    return -1;
+  skill_map=player->QueryProp(P_EXTERNAL_SKILLS);
+  if(!mappingp(skill_map) || !member(skill_map,skill)) {
+    call_other(SK_DIR+skill, "obtain_skill", player);
+    skill_map=player->QueryProp(P_EXTERNAL_SKILLS);
+  }
+  if (!mappingp(skill_map) || get_type_info(skill_map)[1] != 7)
+  {
+    raise_error(sprintf("Bug in Skills von %O: skills = %O", player, skill_map));
+    return 0;
+  }
+  help_map=AdjustByLastUsage(player, skill, skill_map);
+  skill_map=help_map;
+  value=skill_map[skill,0];
+  if(textmode) tell_object(player,
+    capitalize(skill_map[skill,6])+" kannst Du "+
+    skill_knowledge[value/1000]+".\n");
+  if(!no_mod)
+    value+=SkillMod(player, skill);
+
+  return value;
+}
+
+mapping QueryPlayerSkills(object player) {
+  return player->QueryProp(P_EXTERNAL_SKILLS);
+}
+
+
+
+int SetSkill(object player, string skill, int value) {
+  mapping skill_map;
+  if(!IS_ARCH(TP))
+    return 0;
+  if(!skill) return -1;
+  if (!IS_VALID_SKILL(skill))
+    return -1;
+
+  skill_map=player->QueryProp(P_EXTERNAL_SKILLS);
+  skill_map[skill,0]=value;
+  player->SetProp(P_EXTERNAL_SKILLS, skill_map);
+  return 1;
+}
+
+varargs int LearnSkill(object player, string skill, int value, string *msgs) 
+{
+  int old_val,i;
+  string skill_name, what, msg1,msg2,msg3;
+  object lamu;
+  object *skill_members;
+  mapping skill_map;
+  
+  if(!skill) return -1;
+  if (!IS_VALID_SKILL(skill))
+    return -1;
+
+  if(pointerp(msgs)) {
+    if(stringp(msgs[0]))
+      msg1=msgs[0];
+    if(sizeof(msgs) > 1 && stringp(msgs[1]))
+      msg2=msgs[1];
+    if(sizeof(msgs) > 2 && stringp(msgs[2]))
+      msg3=msgs[2];
+  }
+  skill_map=player->QueryProp(P_EXTERNAL_SKILLS);
+
+  if(!value) value=1;
+  old_val=skill_map[skill];
+  // Wenn der Skill < 0 ist, ist kein Lernen mehr moeglich
+  if (old_val < 0 )
+    return 1;
+  skill_map[skill]+=value;
+  if(skill_map[skill] > skill_map[skill,3]) 
+  {
+    skill_map[skill]=skill_map[skill,3];
+  }
+  if(skill_map[skill] < 0)
+  {
+    skill_map[skill]=0;
+  }
+  skill_map[skill,2]=player->QueryProp(P_AGE);
+  skill_name=skill_map[skill,6];
+
+  // Tell an den Spieler
+  if(skill_map[skill] > old_val) {
+    if(skill_map[skill] == skill_map[skill,3] && old_val < skill_map[skill,3])
+    {
+      if(!msg3)
+        tell_object(player, BS(sprintf("Du kannst Deine Fertigkeit '%s' nun "
+              "nicht mehr weiter erhoehen.", CAP(skill_name))));
+      else
+        tell_object(player, BS(msg3));
+    }
+    else  {
+      if(!msg1)
+        tell_object(player, BS(sprintf("Deine Faehigkeit '%s' ist "
+              "besser geworden!", CAP(skill_name))));
+      else
+        tell_object(player, BS(msg1));
+    }
+    what="erhoeht";
+  }
+  else if (skill_map[skill] < old_val)
+  {
+    if(!msg2)
+      tell_object(player, BS(sprintf("Deine Faehigkeit '%s' ist "
+          "schlechter geworden!", capitalize(skill_name))));
+    else 
+      tell_object(player, BS(msg2));
+    what="etwas verlernt";
+  }
+  player->SetProp(P_EXTERNAL_SKILLS, skill_map);
+  return 1;
+}
+
+//difficulty: Wie schwer ist es das der Skill gelingt 
+// 0...normal -10000...sehr leicht +10000...sehr schwer
+//learn_diff: Wie schwer ist es das der Skill steigt
+// 0...normal -10000...sehr schwer +10000...sehr leicht 
+//
+varargs int UseSkill(object player, string skill, int difficulty, 
+   int learn_diff, int nolearn, string *msgs) 
+{
+  int calc, val;
+  mapping help_map, skill_map;
+
+  if (!skill) return -1;
+  if (!IS_VALID_SKILL(skill))
+    return -1;
+
+  
+  skill_map=player->QueryProp(P_EXTERNAL_SKILLS);
+  if(!mappingp(skill_map) || !member(skill_map, skill)) {
+    call_other(SK_DIR+skill, "obtain_skill", player);
+    skill_map=player->QueryProp(P_EXTERNAL_SKILLS);
+  }
+
+  if(!difficulty) difficulty=0;
+
+  skill_map[skill,1]=player->QueryProp(P_AGE);
+  help_map=AdjustByLastUsage(player, skill, skill_map);
+  skill_map=help_map;
+  help_map=CheckCorrectSkillValues(player, skill, skill_map);
+  skill_map=help_map;
+
+
+  skill_map[skill,5]++; // Usage
+  val=skill_map[skill];
+  val+=SkillMod(player, skill);
+  player->SetProp(P_EXTERNAL_SKILLS, skill_map);
+  calc=-random(SK_MAXSKILL)+val-difficulty+random(1000);
+
+  if(!nolearn && (calc >= 0) && ( random(15000+learn_diff) >= random(10*val)))
+  {
+    LearnSkill(player, skill, 25+random(30), msgs);
+  }
+  
+  return calc;
+}
+
+
+
+//
+// Internal Functions
+//
+
+
+nosave mapping AdjustByLastUsage(object player, string sk_name, mapping skill) {
+  int time_diff, skill_val, lgain, lusage, unlearn;
+
+  if(!mappingp(skill)) {
+    return ([]);
+  }
+  skill_val=skill[sk_name];
+  lgain=skill[sk_name,2];
+  lusage=skill[sk_name,1];
+  unlearn=skill[sk_name,4];
+  if(skill_val <= unlearn ) return skill;
+  if(skill_val==SK_MAXSKILL)
+    time_diff=(player->QueryProp(P_AGE)-lusage)/2; // HB -> sec
+  else
+    time_diff=(player->QueryProp(P_AGE)-lgain)/2;
+  if(time_diff < 200000) return skill;
+  time_diff -= 200000; // mehr als 50 h Schonfrist;
+  skill_val-=time_diff/3600; // 1 punkt pro stunde spielzeit
+  if(skill_val < unlearn) skill_val=unlearn;
+  skill[sk_name,0]=skill_val;
+  tell_object(player, BS(sprintf("Du hast Deine Fertigkeit '%s' "
+          "verlernt!", capitalize(skill[sk_name,6]))));
+  skill[sk_name,2]=player->QueryProp(P_AGE);
+  return skill;
+}
+
+string GenerateUniqueID(object player) {
+   return getuid(player)+"_"+to_string(player->QueryProp(P_CREATION_DATE));
+}
+
+
+int QueryPlayerSkillList(object player) {
+  string player_output;
+  string *indi;
+  int i;
+  string *skill_knowledge;
+  mapping skill_map;
+  skill_knowledge = ({
+    "fast gar nicht",
+    "sehr schlecht",
+    "schlecht",
+    "maessig",
+    "mittelmaessig",
+    "durchschnitt",
+    "beinahe gut",
+    "gut",
+    "sehr gut",
+    "perfekt",
+    "meisterhaft",
+    "goettlich" });
+
+  player_output="";  
+  skill_map=player->QueryProp(P_EXTERNAL_SKILLS);
+
+  player_output+="+-----------------------------------+\n"; 
+  player_output+="| Deine Fertigkeiten                |\n"; 
+  player_output+="+-----------------------------------+\n"; 
+  if(sizeof(skill_map)) {
+  if(!IS_LORD(this_player())){
+    for(i=0;i<sizeof(indi);i++){
+      player_output+=sprintf("| %-15s | %-15s |\n",
+        capitalize(skill_map[indi[i],6]),
+        skill_knowledge[to_int(skill_map[indi[i],0])/
+        1000]);
+      }
+    }
+    else{
+      for(i=0;i<sizeof(indi);i++){
+        player_output+=sprintf("| %-15s | %-15s | (%5d)/(%5d) V:%d\n",
+          capitalize(skill_map[indi[i],6]),
+          skill_knowledge[to_int(skill_map[indi[i],0])/
+          1000], skill_map[indi[i],0], skill_map[indi[i],3],
+          skill_map[indi[i],5]);
+      }
+    }
+  }
+  else {
+  player_output+=sprintf("| %-33s |\n",capitalize(getuid(player))+": noch keine.");
+  }
+  player_output+="+---------------+-------------------+\n";
+  player->More(player_output);
+  return 1; 
+}
+
+string QueryTopList(int size, string skill) {
+  string player_output;
+  mapping skill_map;
+
+  skill_map=TP->QueryProp(P_EXTERNAL_SKILLS);
+  if(!mappingp(skill_map) || !member(skill_map, skill)) {
+    call_other(SK_DIR+skill, "obtain_skill", TP);
+  }
+   if(TP && IS_LORD(TP)) {
+     player_output=read_file("/etc/top/"+skill+".toplist.wiz", 0, size+3);
+   }
+   else {
+     player_output=read_file("/etc/top/"+skill+".toplist", 0, size+3);
+   }
+   return player_output;
+}
+
+int SkillMod(object pl, string skill) {
+  object *obj;
+  int i, value;
+  mapping skill_mod;
+  obj=pl->QueryProp(P_ARMOURS);
+  obj+=({pl->QueryProp(P_WEAPON)});
+  obj-=({0});
+  if(!sizeof(obj)) return 0;
+  obj=filter_array(obj, "ProbCheck");
+  if(!sizeof(obj)) return 0;
+  for(i=sizeof(obj)-1;i>=0;i--) {
+    skill_mod=obj[i]->QueryProp(P_SKILL_MOD);
+    if(member(skill_mod, skill)) 
+      value+=obj[i]->QueryProp(P_SKILL_MOD)[skill];
+  }
+  return value;
+}
+
+int ProbCheck(object ob) {
+  if(mappingp(ob->QueryProp(P_SKILL_MOD))) return 1;
+  return 0;
+}
+
+int CheckRacialSkills(mixed pl)
+{
+  int i;
+  mapping skill_map;
+  string *skills;
+  
+  if (stringp(pl))
+    pl = find_player(pl);
+  if (!objectp(pl))
+    return -1;
+
+  skill_map = pl->QueryProp(P_EXTERNAL_SKILLS);
+  skills = m_indices(skill_map);
+  for (i = sizeof(skills) - 1; i >= 0; i--)
+  {
+    call_other(SK_DIR + skills[i], "obtain_skill", pl);
+  }
+  return 1;
+}
+
+
+mapping CheckCorrectSkillValues(object player, string skill, 
+    mapping skill_map) 
+{
+  int *valid;
+  valid=call_other(SK_DIR+skill, "obtain_skill", player,1);
+  // Wenn Skill nicht vorhanden -> return
+  if (!member(skill_map, skill))
+    return skill_map;
+  // wenn skill < 0 -> keine Aenderung, skill deaktiviert
+  if(skill_map[skill,0] < 0)
+    return skill_map;
+  // Check maxskill
+  if(skill_map[skill,3] != valid[1])
+    skill_map[skill,3]=valid[1];
+  // Check maxunlearn
+  if(skill_map[skill,4] != valid[2])
+    skill_map[skill,4]=valid[2];
+  // Check skill > maxskill
+  if(skill_map[skill,0] > skill_map[skill,3])
+    skill_map[skill,0] = skill_map[skill,3];
+  return skill_map;
+}

@@ -1,0 +1,172 @@
+
+inherit "std/npc";
+inherit "std/npc/spells";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <defines.h>
+#include <moredef.h>
+#include <wizlevels.h>
+
+#pragma strong_types
+
+int spells,spells_dam,hits,hits_dam;
+
+void create()
+{
+  if (!is_clone(this_object())) return;  // (return on BP)
+
+  ::create();
+  AddId ( ({"kaefer","hirschkaefer","monster"}) );
+  SetProp (P_NAME_ADJ, "riesig");
+  SetProp (P_GENDER, MALE);
+  SetProp (P_NAME, "Hirschkaefer");
+  SetProp (P_SHORT, "Ein riesiger Hirschkaefer");
+  SetProp (P_LONG, "Eigentlich waere er ein niedliches Tierchen, aber "
+    "offensichtlich ist hier etwas ganzschoen schief gelaufen. Er wirkt "
+    "wie ein Monster auf Dich, und seine gigantischen Klauen welche "
+    "wie ein Geweih geformt sind, machen Dir eine Hoellenangst. Du solltest "
+    "Dich keinesfalls mit diesem Koloss anlegen wenn Du Dir nicht ueber "
+    "die Konsequenzen im Klaren bist.");
+  SetProp (P_AGGRESSIVE, 0);
+  //SetProp (P_KILL_MSG, "");
+  SetProp (P_ALIGN, -200);
+  create_default_npc(39);
+  SetProp (P_RACE, "Kaefer");
+  SetProp (P_MAX_HANDS, 4);
+  SetProp (P_SIZE, 600);
+  SetProp (P_HANDS, 
+    ({" mit seinen riesigen Klauen", QueryProp(P_HANDS)[1], DT_RIP}) );
+
+  SetProp(P_BODY, 180);
+
+  SetProp(P_RESISTANCE_STRENGTHS, ([
+    DT_FIRE: -0.5,
+    DT_COLD: -0.5,
+    DT_WATER: -0.5,
+    DT_AIR: -0.5,
+    ]));
+
+  set_living_name("hirschkaefer");
+
+  // euid setzen, damit Ausruestung gecloned werden kann
+  SUID;
+
+  clone_object("/d/gebirge/iwo/weg/kaefer/armour/chitinpanzer")->move(ME, M_NOCHECK);
+  clone_object("/d/gebirge/iwo/weg/kaefer/weapon/kiefer")->move(ME, M_NOCHECK);
+  enable_commands();
+  command_me("trage alles");
+  command_me("zuecke kiefer");
+
+  SetProp(P_SPELLRATE, 45);
+
+  AddSpell(5,650,
+    "Der Hirschkaefer zerquetscht Dich fast mit seinen Greifern.\n",
+    "Der Hirschkaefer zerquetscht @WEN fast mit seinen Greifern.\n",
+    DT_SQUEEZE, ([SP_SHOW_DAMAGE:1]));
+  AddSpell(1,200,
+    "Der Hirschkaefer rammt Dir einen dornigen Lauf in den Leib.\n",
+    "Der Hirschkaefer rammt @WEN einen dornigen Lauf in den Leib.\n",
+    DT_RIP, ([SP_SHOW_DAMAGE:1]));
+  AddSpell(1,200,
+    "Der Hirschkaefer kreischt markerschuetternd.\n",
+    "Der Hirschkaefer kreischt @WEN markerschuetternd an.\n",
+    DT_TERROR, ([SP_SHOW_DAMAGE:1]));
+
+  SetAttackChats(30, ({
+    "Der Hirschkaefer blickt Dich vernichtend an.\n",
+    "Der Hirschkaefer zertritt Dich fast.\n",
+    "Der Hirschkaefer schlaegt wild um sich.\n",
+    "Der Hirschkaefer holt mit seinen Greifern aus.\n",   
+    "Der Hirschkaefer tobt vor Wut.\n"
+    }) );
+
+  SetProp (P_DIE_MSG, " faellt laut krachend zu Boden.\n");
+  SetProp (P_DEFAULT_INFO, "fuchtelt mit seinem Kauwerkzeug.\n");
+  SetProp (P_MURDER_MSG, "Wir sehen uns wieder, %s!\n");
+
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    "Der Hirschkaefer ignoriert Deinen Plunder.\n" }) );
+
+}
+
+void Defend(int dam, mixed dam_type, mixed spell, object enemy)
+  {
+    object weapon;
+    string *weapid;
+  
+    //tell_room(ENV(ME), sprintf("SPELL: %O\nDAM: %O\n", spell,dam));
+  
+    if (spell) { spells++; spells_dam += dam; }
+    else { hits++;hits_dam += dam; }
+  
+    if (!IS_SEER(enemy))
+      {
+        tell_object(enemy, BS("Der Hirschkaefer kratzt sich an der Stelle "
+	  "wo Du ihn getroffen hast."));
+	tell_room(ME, BS("Der Hirschkaefer kratzt sich an der Stelle wo " +
+	  enemy->name(WER) + " ihn getroffen hat."));
+	StopHuntFor(enemy,1);
+      }
+
+    //if (spell && spell["sp_name",0] == "zielattacke") dam = 0;
+      
+    if (weapon = enemy->QueryProp(P_WEAPON))  
+    if (member("schwert", weapid))
+      {
+        if (random(10)==5)
+          {
+	    tell_object(TP, BS("Dein Schwert dringt tief in den Leib des "
+	      "Kaefers ein."));
+	    tell_room(ENV(ME), BS("Das Schwert von " + TP->name(WEM) +
+	      "dringt tief in den Leib des Kaefers ein"), ({ TP }));
+	    dam = dam * 2 - dam / 2;
+	  }
+        else if (random(10)==3)
+          {
+	    tell_object(TP, BS("Dein Schwert prallt Wirkungslos vom "
+	                       "Chitinpanzer des Kaefers ab."));
+	    weapon->Damage(random(10));
+	    
+	    dam = 0;
+	  }
+	::Defend(dam, dam_type, spell, enemy);
+	return;
+      }
+	
+    ::Defend(dam, dam_type, spell, enemy);
+  }
+
+void statistik()
+{
+  object pl;
+  string outstr;
+  
+  if (!pl = find_player("iwo") || !objectp(pl)) return;
+
+  if (hits+spells==0) hits=1;
+  
+  outstr = sprintf("Spells: %6.5d  Spells Damage: %6.5d\nHits  : %6.5d  Hits Damage  : %6.5d\nTotal : %6.5d  Total Damage : %6.5d\n-------------------------------------\nAverage Damage:                %6.5d\n",
+             spells, spells_dam, hits, hits_dam, hits+spells, hits_dam+spells_dam,
+	     (hits+spells_dam)/(hits+spells));
+
+  tell_object(pl, outstr);
+  return;
+}
+
+
+varargs int StopHuntFor(mixed arg, int silent)
+{
+  statistik();
+  return ::StopHuntFor(arg, silent);
+}
+
+void die(int poisondeath, mixed enemy)
+{
+  statistik();
+  ::die(poisondeath, enemy);
+  return;
+}

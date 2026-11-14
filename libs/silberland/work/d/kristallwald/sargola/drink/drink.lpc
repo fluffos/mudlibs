@@ -1,0 +1,125 @@
+// SilberLand MUDlib
+//
+// std/drink.c -- standard drink object
+//
+// date: 06-09-97
+// sargola@silberland
+
+// Properties:
+// P_FOOD_INFO : mapping
+// ([F_HEAL:mixed,	Heilung, int (LP+SP) oder array ({LP, SP})
+//   F_SOAK:int,	Saettigung
+//   F_ALCOHOL:int,	Alkoholgehalt
+//   F_POISON:int])	Giftgehalt
+// (F_HEAL und F_POISON wird NACH 'BeimEssen' gesetzt, F_SOAK und
+// F_ALCOHOL davor, um abzutesten, ob der Spieler das noch essen kann)
+//
+// Funktionen:
+// void BeimTrinken();
+// Wird in der 'Trinkfunktion' aufgerufen. Das Nahrungsobjekt wird
+// anschliessend zerstoert.
+//
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <defines.h>
+#include <living.h>
+#include <wizlevels.h>
+#include <food.h>
+#include "/d/kristallwald/sargola/drink/drink.h"
+
+private int check_drink(int strength);
+
+
+create()
+{
+  if (IS_BLUE(ME)) return;
+  ::create();
+  SetProp(P_SHORT, "Eine trinkbare Fluessigkeit");
+  SetProp(P_LONG, "Eine trinkbare Fluessigkeit.\n");
+  SetProp(P_NAME, "Trinkbare Fluessigkeit");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_WEIGHT, 50);
+  SetProp(P_VALUE, 50);
+  SetProp(P_MATERIAL, MAT_FOOD);
+  AddId("Nahrung");
+  AddCmd(({"trink", "trinke","sauf"}), "sauf");
+}
+
+void BeimTrinken() {}
+
+int mampf(string what)
+{
+  mapping foodinfo;
+  mixed   heal;
+  int     hp, sp, soak, alcohol;
+
+  notify_fail("Was moechtest Du trinken?\n");
+  if (!what) return 0;
+
+  if (id(what))
+  {
+    // P_DRINK auswerten:
+    foodinfo = QueryProp(P_FOOD_INFO);
+
+/**********************
+    F_HEAL ({x,y})
+    x = LP
+    y = SP
+**********************/
+    if (pointerp(heal=foodinfo[F_HEAL]) && sizeof(heal)==2)
+    { hp = heal[0]; sp = heal[1]; }
+    else
+      hp = sp = heal;
+
+    if (soak=foodinfo[F_SOAK] && !check_drink(soak))
+      return 1;
+    if (alcohol=foodinfo[F_ALCOHOL] && !check_alcohol(alcohol))
+      return 1;
+
+    BeimTrinken();
+
+    if (hp)
+      PL->SetProp(P_HP, PL->QueryProp(P_HP)+hp);
+    if (sp)
+      PL->SetProp(P_SP, PL->QueryProp(P_SP)+sp);
+
+
+    ME->remove();  // wechisses
+    return 1;
+  }
+  return 0;
+}
+
+private int check_drink(int strength)
+{
+  int drink;
+
+  drink= PL->QueryProp(P_DRINK);
+  if ((strength + food > PL->QueryProp(P_MAX_FOOD))
+     && !IS_LEARNER(PL))
+  {
+    tell_object(PL, "Mit dem Wasserbauch solltest Du nichts mehr trinken.\n");
+    return 0;
+  }
+  drink += strength;
+  PL->SetProp(P_DRINK, (drink < 0 ? 0 : drink));
+  return 1; 
+}
+
+private int check_alcohol(int strength)
+{
+  int alc;
+  
+  alc = PL->QueryProp(P_ALCOHOL);
+  if ((strength + alc > PL->QueryProp(P_MAX_ALCOHOL))
+     && !IS_LEARNER(PL))
+  {
+    tell_object(PL, "Asso das kannsu jezz nich... nichmehr essen, hick.\n");
+    return 0;
+  }
+  alc += strength;
+  PL->SetProp(P_ALCOHOL, (alc < 0 ? 0 : alc));
+  return 1; 
+}

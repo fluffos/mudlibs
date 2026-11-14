@@ -1,0 +1,1220 @@
+/*****************************************************************************
+Spellbook der Waldlaeufer Gilde
+(c) Lilyth, Torian, Delgo @ Silberland <sl.mud.at>
+24.08.05 - Begin
+*****************************************************************************/
+//** INCLUDE + INHERIT + DEFINE ********************************************//
+#include "/gilden/waldlaeufer/def.h"
+inherit "/std/spellbook";
+#include "/gilden/waldlaeufer/functions.h"
+#include "/gilden/waldlaeufer/ranger_tasks.h"
+#include <food.h>
+
+//--Variablen-----------------------------------------------------------------
+nosave int total_fail;
+//--Vorfunktionen-------------------------------------------------------------
+mixed ranger_parsing(string str);
+mixed parse_target(string str);
+string checkgender(object pl, string female, string male);
+string to_german(string str);
+string weapon_to_german(string str);
+varargs int ExecuteAttackSpell(object ob, object caster, mapping sinfo,mixed is_spell, int weaponMode, object weapon);
+string CheckSpell(object caster, mapping sinfo);
+void FirstPrepareFuncSuccessfull(object caster, mapping sinfo);
+public void reload(object caster, mapping sinfo);
+public void aim(object caster, mapping sinfo);
+
+//-- Anforderungen/Modifikationen --------------------------------------------
+#include "waldlaeufer/std/restrictions.lpc"
+#include "waldlaeufer/std/modifications.lpc"
+
+//-- Questspell --------------------------------------------------------------
+#include "waldlaeufer/rindenhaut.lpc"
+
+//-- Die Fallen --------------------------------------------------------------
+#include "waldlaeufer/fesselfalle.lpc"
+#include "waldlaeufer/fangfalle.lpc"
+#include "waldlaeufer/stolperdraht.lpc"
+#include "waldlaeufer/pfeilfalle.lpc"
+
+//-- Grundspells -------------------------------------------------------------
+#include "waldlaeufer/durchdringe.lpc"
+#include "waldlaeufer/schaetz.lpc"
+#include "waldlaeufer/augen_des_jaegers.lpc"
+#include "waldlaeufer/deutschuss.lpc"
+#include "waldlaeufer/messerstich.lpc"
+#include "waldlaeufer/geschwindigkeit.lpc"
+#include "waldlaeufer/pakt_der_schatten.lpc"
+#include "waldlaeufer/zaehmung.lpc"
+#include "waldlaeufer/markierungsschuss.lpc"
+#include "waldlaeufer/fusstritt.lpc"
+#include "waldlaeufer/kraeutermixtur.lpc"
+#include "waldlaeufer/tierheilung.lpc"
+#include "waldlaeufer/aspekt_des_panthers.lpc"
+
+//-- Pfad der Tiere ----------------------------------------------------------
+#include "waldlaeufer/tiere.lpc"
+#include "waldlaeufer/waldwolf.lpc"
+#include "waldlaeufer/schwarzbaer.lpc"
+#include "waldlaeufer/adler.lpc"
+#include "waldlaeufer/spinne.lpc"
+#include "waldlaeufer/wilder_schwarm.lpc"
+#include "waldlaeufer/waldgeist.lpc"
+
+//-- Pfad der Iama -----------------------------------------------------------
+#include "waldlaeufer/melodie_der_ruhe.lpc"
+#include "waldlaeufer/ode_des_sturmes.lpc"
+#include "waldlaeufer/melodie_der_avatara.lpc"
+#include "waldlaeufer/hymne_des_waldes.lpc"
+#include "waldlaeufer/melodie_des_ostens.lpc"
+#include "waldlaeufer/melodie_der_veraenderung.lpc"
+#include "waldlaeufer/melodie_der_zeit.lpc"
+
+//-- Pfad des Bogens ---------------------------------------------------------
+#include "waldlaeufer/kalte_flamme.lpc"
+#include "waldlaeufer/zielschuss.lpc"
+#include "waldlaeufer/doppelschuss.lpc"
+#include "waldlaeufer/panzerbrechender_schuss.lpc"
+#include "waldlaeufer/giftpfeil.lpc"
+#include "waldlaeufer/salve.lpc"
+#include "waldlaeufer/blick_des_falken.lpc"
+#include "waldlaeufer/freipfeile.lpc"
+
+//-- Pfad der Messer ---------------------------------------------------------
+#include "waldlaeufer/klingenwirbel.lpc"
+#include "waldlaeufer/messerwurf.lpc"
+#include "waldlaeufer/blaue_flamme.lpc"
+#include "waldlaeufer/violette_flamme.lpc"
+#include "waldlaeufer/ausweiden.lpc"
+#include "waldlaeufer/seele_der_klinge.lpc"
+#include "waldlaeufer/schattenschnitt.lpc"
+
+//-- Pfad der Tiermeister ----------------------------------------------------
+#include "waldlaeufer/tierangriff.lpc"
+#include "waldlaeufer/kampfgeist.lpc"
+#include "waldlaeufer/kraft_des_tieres.lpc"
+#include "waldlaeufer/kraft_der_ahnen.lpc"
+#include "waldlaeufer/gemeinsame_attacke.lpc"
+#include "waldlaeufer/wut_der_bestie.lpc"
+#include "waldlaeufer/inkarnation_der_koenige.lpc"
+//**************************************************************************//
+
+
+
+//** StandardFUnktionen ****************************************************//
+//-- Create ------------------------------------------------------------------
+create() 
+{
+  ::create();
+  SetProp(P_SB_CASTVERB, "beschwoere");
+  SetProp(P_SB_PARSE_FUNC, "ranger_parsing");
+  SetProp(P_SB_NO_CASTVERB_NEEDED_MSG,
+            "Du brauchst nicht das Wort '"+QueryProp(P_SB_CASTVERB)+"'.");
+  SetProp(P_GLOBAL_SKILLPROPS,
+          ([SI_SKILLLEARN:5,
+            OFFSET(SI_SKILLLEARN):10,
+            SI_SKILLLEARN_ATTRIBUTE: A_DEX,
+            SI_SPELLFATIGUE:2,
+            SI_SP_LOW_MSG:BS("Du hast nicht genug Konzentration fuer eine "
+                             "erfolgreiche Beschwoerung."),
+            SI_ENABLE_CASTVERB: 1,
+            SI_SPELLNAME: "",
+            SI_PATH: 0,
+            ]));
+  
+  //--Grundspells----------------------------------------------------
+  AddSpell(RINDENHAUT,25,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:1]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:1]),
+             SI_SPELLFATIGUE: 2,
+             SI_PREPARE_TIME: 4,
+             SI_PREPARE_MSG: BS("Du bleibts stehen und stellst Dir einen "
+                                "Baum vor."),
+             SI_PREPAREFUNC: "prep_rindenhaut",
+             SI_SKILLDAMAGE_TYPE: ({ DT_PIERCE }),
+             SI_SKILLDAMAGE: 400,
+             SI_MAX_DAMAGE: 1500,
+             SI_NOMAGIC:100,
+             SI_SPELLFUNC: "rindenhaut",
+             ]));  
+  
+  AddSpell(DURCHDRINGE,10,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:1]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:1, A_INT:7]),
+             SI_SPELLFUNC: "durchdringe",
+             ]) );
+  AddSpell(SCHAETZ,10,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:2]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:2, A_INT:7]),
+             SI_SPELLFUNC: "schaetz",
+             ]) );
+  AddSpell(DEUTSCHUSS,15,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:3]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:3]),
+             SI_SPELLFATIGUE: 4,
+             SI_PREPARE_TIME: 0,
+             SI_PREPARE_MSG: BS("Du legst zu einem Schnellschuss an."),
+             SI_PREPAREFUNC: "prep_deutschuss",
+             SI_SKILLDAMAGE_TYPE: ({ DT_PIERCE }),
+             SI_SKILLDAMAGE:130, 
+             OFFSET(SI_SKILLDAMAGE):70,
+             SI_MAX_DAMAGE: 1000,
+             SI_NOMAGIC:100,
+             SI_SPELLFUNC: "deutschuss",
+             ]));
+  AddSpell(MESSERSTICH,10,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:3]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:3]),
+             SI_SPELLFATIGUE: 1,
+             SI_PREPARE_TIME: 0,
+             SI_PREPARE_MSG: BS("Du machst Dich zum Sprung bereit..."),
+             SI_PREPAREFUNC: "prep_messerstich",
+             SI_SKILLDAMAGE_TYPE: ({ DT_PIERCE }),
+             SI_SKILLDAMAGE:50, 
+             OFFSET(SI_SKILLDAMAGE):50,
+             SI_MAX_DAMAGE: 500,
+             SI_NOMAGIC:100,
+             SI_SPELLFUNC: "messerstich",
+             ]));
+  AddSpell(AUGEN_DES_JAEGERS,10,           
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:4]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:4]),
+             SI_PREPARE_TIME: 3,
+             SI_PREPARE_MSG: BS("Du schliesst die Augen."),
+             SI_SPELLFUNC: "augen_des_jaegers",
+             ]) );
+  AddSpell(GESCHWINDIGKEIT,15,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:5]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:5]),
+             SI_SPELLFUNC: "geschwindigkeit",
+             ]) );
+  AddSpell(PAKT_DER_SCHATTEN,0,           
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:6]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:6]),
+             SI_SPELLFUNC: "pakt_der_schatten",
+             ]) );
+  AddSpell(ZAEHMUNG,80,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:7]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:7]),
+             SI_SPELLFATIGUE: 4,
+             SI_PREPARE_TIME: 20,
+             SI_PREPARE_MSG: BS("Du beginnst Dich zu entspannen."),
+             SI_PREPAREFUNC: "prep_zaehmung",             
+             SI_SPELLFUNC: "zaehmung",
+             ])); 
+  AddSpell(MARKIERUNGSSCHUSS,25,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:8]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:8]),
+             SI_SPELLFATIGUE: 4,
+             SI_PREPARE_TIME: 4,
+             SI_PREPARE_MSG: BS("Du ziehst einen Farbbeutel hervor und zielst"
+                                " auf dein Opfer."),
+             SI_PREPAREFUNC: "prep_markierungsschuss",
+             SI_SPELLFUNC: "markierungsschuss",
+             ]));
+  AddSpell(FUSSTRITT,15,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:9]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:9]),
+             SI_SPELLFATIGUE: 2,
+             SI_PREPARE_TIME: 0,
+             SI_PREPARE_MSG: BS("Du setzt zu einem Fusstritt an."),
+             SI_PREPAREFUNC: "prep_fusstritt",
+             SI_SKILLDAMAGE:100,
+             SI_SKILLDAMAGE_TYPE: ({ DT_BLUDGEON }),
+             OFFSET(SI_SKILLDAMAGE):50,
+             SI_MAX_DAMAGE: 1000,
+             SI_SPELLFUNC: "fusstritt",
+             SI_NOMAGIC:100,
+             ]));
+  AddSpell(TIERHEILUNG,30,
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:9]),
+            SI_SKILLRESTR_USE:([P_GUILD_LEVEL:9]),
+            SI_SPELLFATIGUE: 4,
+            SI_PREPARE_TIME: 0,
+            SI_PREPARE_MSG: BS("Du legst dem Tier die Hand auf den Kopf und murmelst leise Worte."),
+            SI_PREPAREFUNC: "prep_tierheilung",
+            SI_SPELLFUNC: "tierheilung",
+            ]));
+  AddSpell(KRAEUTERMIXTUR,45,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:10]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:10]),
+             SI_SPELLFATIGUE: 4,
+             SI_PREPARE_TIME: 4,
+             SI_PREPARE_MSG: BS("Du kramst das richtige Kraut hervor und "
+                                "bereitest eine Mixtur vor."),
+             SI_PREPAREFUNC: "prep_kraeutermixtur",
+             SI_SPELLFUNC: "kraeutermixtur",
+             ]));
+  AddSpell(ASPEKT_DES_PANTHERS, 30,
+           ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL: 16]),
+            SI_SKILLRESTR_USE: ([P_GUILD_LEVEL: 16]),
+            SI_SPELLFATIGUE: 6,
+            SI_PREPARE_TIME: 6,
+            SI_PREPARE_MSG: BS("Du konzentrierst dich auf das Wesen des Panthers."),
+            SI_PREPAREFUNC: "prep_aspekt_des_panthers",
+            SI_SPELLFUNC: "aspekt_des_panthers"
+  ]));
+             
+  //--Fallen---------------------------------------------------------
+  AddSpell(FESSELFALLE,30,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:5]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:5]),
+             SI_SPELLFATIGUE: 2,
+             SI_PREPARE_TIME: 4,
+             SI_PREPARE_MSG: BS("Du schaust, wo Du eine Falle bauen kannst."),
+             SI_PREPAREFUNC: "prep_fesselfalle",
+             SI_SPELLFUNC: "fesselfalle",
+             ])); 
+  AddSpell(FANGFALLE,35,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:10]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:10]),
+             SI_SPELLFATIGUE: 2,
+             SI_PREPARE_TIME: 4,
+             SI_PREPARE_MSG: BS("Du schaust, wo Du eine Falle bauen kannst."),
+             SI_PREPAREFUNC: "prep_fangfalle",
+             SI_SPELLFUNC: "fangfalle",
+             ])); 
+  AddSpell(STOLPERDRAHT,45,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:15]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:15]),
+             SI_SPELLFATIGUE: 2,
+             SI_PREPARE_TIME: 4,
+             SI_PREPARE_MSG: BS("Du schaust, wo Du eine Falle bauen kannst."),
+             SI_PREPAREFUNC: "prep_stolperdraht",
+             SI_SPELLFUNC: "stolperdraht",
+             ])); 
+  AddSpell(PFEILFALLE,70,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:18]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:18]),
+             SI_SPELLFATIGUE: 2,
+             SI_PREPARE_TIME: 4,
+             SI_PREPARE_MSG: BS("Du schaust, wo Du eine Falle bauen kannst."),
+             SI_PREPAREFUNC: "prep_pfeilfalle",
+             SI_SPELLFUNC: "pfeilfalle",
+             ]));  
+
+  //--Pfad der Tiere-------------------------------------------------
+  AddSpell(TIERE_DES_WALDES,35,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:11]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:11]),
+             SI_SPELLFATIGUE: 6,
+             SI_PREPARE_TIME: 2,
+             SI_PREPARE_MSG: BS("Du konzentrierst Dich und schliesst die "
+                                "Augen."),
+             SI_PREPAREFUNC: "prep_tiere",
+             SI_SPELLFUNC: "tiere",
+             ]));
+  AddSpell(WALDWOLF,80,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:12]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:12]),
+             SI_SPELLFATIGUE: 6,
+             SI_PREPARE_TIME: 2,
+             SI_PREPARE_MSG: BS("Du konzentrierst Dich und schliesst die "
+                                "Augen."),
+             SI_PREPAREFUNC: "prep_waldwolf",
+             SI_SPELLFUNC: "waldwolf",
+             ]));
+  AddSpell(ADLER,80,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:13]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:13]),
+             SI_SPELLFATIGUE: 6,
+             SI_PREPARE_TIME: 2,
+             SI_PREPARE_MSG: BS("Du konzentrierst Dich und schliesst die "
+                                "Augen."),
+             SI_PREPAREFUNC: "prep_adler",
+             SI_SPELLFUNC: "adler",
+             ]));
+  AddSpell(SCHWARZBAER,80,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:14]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:14]),
+             SI_SPELLFATIGUE: 6,
+             SI_PREPARE_TIME: 2,
+             SI_PREPARE_MSG: BS("Du konzentrierst Dich und schliesst die "
+                                "Augen."),
+             SI_PREPAREFUNC: "prep_schwarzbaer",
+             SI_SPELLFUNC: "schwarzbaer",
+             ]));
+  AddSpell(SPINNE,80,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:15]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:15]),
+             SI_SPELLFATIGUE: 6,
+             SI_PREPARE_TIME: 2,
+             SI_PREPARE_MSG: BS("Du konzentrierst Dich und schliesst die "
+                                "Augen."),
+             SI_PREPAREFUNC: "prep_spinne",
+             SI_SPELLFUNC: "spinne",
+             ]));
+  AddSpell(WILDER_SCHWARM,80,
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:17]),
+          SI_SKILLRESTR_USE:([P_GUILD_LEVEL:17]),
+          SI_SPELLFATIGUE: 6,
+          SI_PREPARE_TIME: 2,
+          SI_PREPARE_MSG: BS("Du konzentrierst Dich und schliesst die "
+                            "Augen."),
+          SI_PREPAREFUNC: "prep_wilder_schwarm",
+          SI_SPELLFUNC: "wilder_schwarm",
+          ]));
+  AddSpell(WALDGEIST,80,
+    ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:19]),
+    SI_SKILLRESTR_USE:([P_GUILD_LEVEL:19]),
+    SI_SPELLFATIGUE: 6,
+    SI_PREPARE_TIME: 2,
+    SI_PREPARE_MSG: BS("Du beruehrst einen Baum und beginnst die Worte der Beschwoerung zu fluestern."),
+    SI_PREPAREFUNC: "prep_waldgeist",
+    SI_SPELLFUNC: "waldgeist",
+    ]));
+            
+  //--Pfad der Iama--------------------------------------------------
+  AddSpell(MELODIE_DER_RUHE,75,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:11]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:11]),
+             SI_SPELLFATIGUE: 10,
+             SI_PREPARE_TIME: 6,
+             SI_PREPARE_MSG: BS("Du nimmst Deine Iama in die Hand und "
+                             "spielst die 'Melodie der Ruhe'."),
+             SI_PREPAREFUNC: "prep_melodie_der_ruhe",
+             SI_SPELLFUNC: "melodie_der_ruhe",
+             ]));
+  AddSpell(ODE_DES_STURMES,65,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:12]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:12]),
+             SI_SPELLFATIGUE: 5,
+             SI_PREPARE_TIME: 4,
+             SI_PREPARE_MSG: BS("Du nimmst Deine Iama in die Hand und "
+                             "beginnst mit 'Ode des Sturmes'."),
+             SI_PREPAREFUNC: "prep_ode_des_sturmes",
+             SI_SPELLFUNC: "ode_des_sturmes",
+             ]));
+  AddSpell(MELODIE_DER_AVATARA,55,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:13]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:13]),
+             SI_SPELLFATIGUE: 4,
+             SI_PREPARE_TIME: 8,
+             SI_PREPARE_MSG: BS("Du nimmst Deine Iama in die Hand und "
+                             "spielst eine komplexe, auf- und abschwellende Melodie zu ehren der Avatara, "
+                             "der Tierkoenige."),
+             SI_PREPAREFUNC: "prep_melodie_der_avatara",
+             SI_SPELLFUNC: "melodie_der_avatara",
+             ]));
+  AddSpell(HYMNE_DES_WALDES,80,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:14]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:14]),
+             SI_SPELLFATIGUE: 4,
+             SI_PREPARE_TIME: 4,
+             SI_PREPARE_MSG: BS("Du nimmst Deine Iama in die Hand und "
+                             "beginnst mit der Hymne des Waldes."),
+             SI_PREPAREFUNC: "prep_hymne_des_waldes",
+             SI_SPELLFUNC: "hymne_des_waldes",
+             ]));
+  AddSpell(MELODIE_DES_OSTENS,60,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:15]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:15]),
+             SI_SPELLFATIGUE: 4,
+             SI_PREPARE_TIME: 4,
+             SI_PREPARE_MSG: BS("Du nimmst Deine Iama in die Hand und "
+                             "spielst die 'Melodie des Ostens'."),
+             SI_PREPAREFUNC: "prep_melodie_des_ostens",
+             SI_SPELLFUNC: "melodie_des_ostens",
+             ]));
+  AddSpell(MELODIE_DER_VERAENDERUNG,40,
+        ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:17]),
+          SI_SKILLRESTR_USE:([P_GUILD_LEVEL:17]),
+          SI_SPELLFATIGUE: 4,
+          SI_PREPARE_TIME: 4,
+          SI_PREPARE_MSG: BS("Du nimmst Deine Iama in die Hand und "
+                          "improvisierst eine schnelle Melodie."),
+          SI_PREPAREFUNC: "prep_melodie_der_veraenderung",
+          SI_SPELLFUNC: "melodie_der_veraenderung",
+          ]));
+  AddSpell(MELODIE_DER_ZEIT,80,
+        ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:19]),
+          SI_SKILLRESTR_USE:([P_GUILD_LEVEL:19]),
+          SI_SPELLFATIGUE: 6,
+          SI_PREPARE_TIME: 4,
+          SI_PREPARE_MSG: BS("Du nimmst Deine Iama in die Hand und "
+                          "spielst die komplex verwobene Meistermelodie der Zeit."),
+          SI_PREPAREFUNC: "prep_melodie_der_zeit",
+          SI_SPELLFUNC: "melodie_der_zeit",
+          ]));
+      
+  
+  //--Pfad der Messer------------------------------------------------
+  AddSpell(KLINGENWIRBEL,40,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:11]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:11]),
+             SI_SPELLFATIGUE: 4,
+             SI_PREPARE_TIME: 0,
+             SI_PREPARE_MSG: BS("Du packst deine Klinge fester und wirbelst einmal um deine eigene Achse."),
+             SI_PREPAREFUNC: "prep_klingenwirbel",
+             SI_SKILLDAMAGE_TYPE: ({ DT_SLASH }),
+             SI_SKILLDAMAGE:100, 
+             OFFSET(SI_SKILLDAMAGE):50,
+             SI_MAX_DAMAGE: 800,
+             SI_NOMAGIC:100,
+             SI_SPELLFUNC: "klingenwirbel",
+             ]));   
+  AddSpell(VIOLETTE_FLAMME,70,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:12]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:12]),
+             SI_SPELLFATIGUE: 4,
+             SI_PREPARE_TIME: 4,
+             SI_PREPARE_MSG: BS("Du bestreust deine Klinge mit den Samen des Blutdorns und traeufelst etwas von deinem Blut darueber."),
+             SI_PREPAREFUNC: "prep_violette_flamme",
+             SI_SPELLFUNC: "violette_flamme",
+             ]));
+  AddSpell(BLAUE_FLAMME,65,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:13]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:13]),
+             SI_SPELLFATIGUE: 4,
+             SI_PREPARE_TIME: 2,
+             SI_PREPARE_MSG: BS("Du schliesst Deine Augen und oeffnest deinen Geist der animalischen Wildheit des Ebers."),
+             SI_PREPAREFUNC: "prep_blaue_flamme",
+             SI_SPELLFUNC: "blaue_flamme",
+             ]));
+  AddSpell(MESSERWURF,20,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:14]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:14]),
+             SI_SPELLFATIGUE: 2,
+             SI_PREPARE_TIME: 2,
+             SI_PREPARE_MSG: BS("Du versuchst einen Messerwurf."),
+             SI_PREPAREFUNC: "prep_messerwurf",
+             SI_SKILLDAMAGE_TYPE: ({ DT_PIERCE }),
+             SI_SKILLDAMAGE:50, 
+             OFFSET(SI_SKILLDAMAGE):0,
+             SI_MAX_DAMAGE: 800,
+             SI_NOMAGIC:100,
+             SI_SPELLFUNC: "messerwurf",
+             ]));
+  AddSpell(AUSWEIDEN,30,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:15]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:15]),
+             SI_SPELLFATIGUE: 4,
+             SI_PREPARE_TIME: 2,
+             SI_PREPARE_MSG: BS("Mit grimmer Entschlossenheit wendest du deine Klinge in der Hand."),
+             SI_PREPAREFUNC: "prep_ausweiden",
+             SI_SKILLDAMAGE_TYPE: ({ DT_PIERCE, DT_RIP }),
+             SI_SKILLDAMAGE:200, 
+             OFFSET(SI_SKILLDAMAGE):200,
+             SI_MAX_DAMAGE: 10000,
+             SI_NOMAGIC:100,
+             SI_SPELLFUNC: "ausweiden",
+             ]));    
+    AddSpell(SEELE_DER_KLINGE,66,
+              ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:17]),
+                SI_SKILLRESTR_USE:([P_GUILD_LEVEL:17]),
+                SI_SPELLFATIGUE: 6,
+                SI_PREPARE_TIME: 2,
+                SI_PREPARE_MSG: BS("Du beruehrst deine Waffe und versuchst die Seele darin zu erspuehren."),
+                SI_PREPAREFUNC: "prep_seele_der_klinge",
+                SI_SPELLFUNC: "seele_der_klinge",
+                ]));
+    AddSpell(SCHATTENSCHNITT,30,([
+      SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:19]),
+      SI_SKILLRESTR_USE:([P_GUILD_LEVEL:19]),
+      SI_SPELLFATIGUE: 4,
+      SI_PREPARE_TIME: 6,
+      SI_PREPARE_MSG: BS("Du verschmilzt mit den Schatten, um an dein Ziel heranzuschleichen."),
+      SI_PREPAREFUNC: "prep_schattenschnitt",
+      SI_SKILLDAMAGE_TYPE: ({ DT_SLASH }),
+      SI_SKILLDAMAGE: 500, 
+      OFFSET(SI_SKILLDAMAGE):500,
+      SI_MAX_DAMAGE: 10000,
+      SI_NOMAGIC:100,
+      SI_SPELLFUNC: "schattenschnitt",
+    ])); 
+  
+  //--Pfad des Bogens------------------------------------------------
+  AddSpell(KALTE_FLAMME,60,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:11]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:11]),
+             SI_SPELLFATIGUE: 6,
+             SI_PREPARE_TIME: 2,
+             SI_PREPARE_MSG: BS("Du schliesst Deine Augen und Dein Geist "
+                                "sucht die Flamme von Tethyr."),
+             SI_PREPAREFUNC: "prep_kalte_flamme",
+             SI_SPELLFUNC: "kalte_flamme",
+             ]));
+  AddSpell(ZIELSCHUSS,50,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:12]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:12]),
+             SI_SPELLFATIGUE: 4,
+             SI_PREPARE_TIME: 6,
+             SI_PREPARE_MSG: BS("Du ziehst einen Pfeil auf und zielst genau."),
+             SI_PREPAREFUNC: "prep_zielschuss",
+             SI_SKILLDAMAGE_TYPE: ({ DT_PIERCE }),
+             SI_SKILLDAMAGE:500, 
+             OFFSET(SI_SKILLDAMAGE):500,
+             SI_MAX_DAMAGE: 10000,
+             SI_NOMAGIC:100,
+             SI_SPELLFUNC: "zielschuss",
+             ]));
+  AddSpell(GIFTPFEIL,30,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:13]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:13]),
+             SI_SPELLFATIGUE: 4,
+             SI_PREPARE_TIME: 2,
+             SI_PREPARE_MSG: BS("Du ziehst einen Giftpfeil aus Deinem "
+                                "Koecher und legst an."),
+             SI_PREPAREFUNC: "prep_giftpfeil",
+             SI_SKILLDAMAGE_TYPE: ({ DT_PIERCE, DT_POISON }),
+             SI_SKILLDAMAGE: 200,
+             OFFSET(SI_SKILLDAMAGE):100,
+             SI_MAX_DAMAGE: 2500,
+             SI_NOMAGIC:100,
+             SI_SPELLFUNC: "giftpfeil",
+             ]));
+ /* AddSpell(DOPPELSCHUSS,44,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:14]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:14]),
+             SI_SPELLFATIGUE: 4,
+             SI_PREPARE_TIME: 2,
+             SI_PREPARE_MSG: BS("Du ziehst zwei Pfeile aus dem Koecher."),
+             SI_PREPAREFUNC: "prep_doppelschuss",
+             SI_SKILLDAMAGE_TYPE: ({ DT_PIERCE }),
+             SI_SKILLDAMAGE: 200,
+             OFFSET(SI_SKILLDAMAGE):250,
+             SI_MAX_DAMAGE: 1500,
+             SI_NOMAGIC:100,
+             SI_SPELLFUNC: "doppelschuss",
+             ])); */
+  AddSpell(PANZERBRECHENDER_SCHUSS,50,
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:14]),
+            SI_SKILLRESTR_USE:([P_GUILD_LEVEL:14]),
+            SI_SPELLFATIGUE: 4,
+            SI_PREPARE_TIME: 2,
+            SI_PREPARE_MSG: BS("Du zielst auf eine Schwachstelle deines Gegners."),
+            SI_PREPAREFUNC: "prep_panzerbrechender_schuss",
+            SI_SKILLDAMAGE_TYPE: ({ DT_PIERCE }),
+            SI_SKILLDAMAGE: 100,
+            OFFSET(SI_SKILLDAMAGE):150,
+            SI_MAX_DAMAGE: 1500,
+            SI_NOMAGIC:100,
+            SI_SPELLFUNC: "panzerbrechender_schuss",
+            ])); 
+  AddSpell(SALVE,45,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:15]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:15]),
+             SI_SPELLFATIGUE: 2,
+             SI_PREPARE_TIME: 4,
+             SI_PREPARE_MSG: "\n",
+             SI_PREPAREFUNC: "prep_salve",
+             SI_SKILLDAMAGE_TYPE: ({ DT_PIERCE }),
+             SI_SKILLDAMAGE:250,
+             OFFSET(SI_SKILLDAMAGE):150,
+             SI_MAX_DAMAGE: 1000,
+             SI_NOMAGIC:100,
+             SI_SPELLFUNC: "salve",
+             ]));
+  AddSpell(BLICK_DES_FALKEN,30,
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:17]),
+            SI_SKILLRESTR_USE:([P_GUILD_LEVEL:17]),
+            SI_SPELLFATIGUE: 4,
+            SI_PREPARE_TIME: 2,
+            SI_PREPARE_MSG: BS("Du schliesst die Augen und beruehrst deine Schlaefen mit zwei Fingern."),
+            SI_PREPAREFUNC: "prep_blick_des_falken",
+            SI_SPELLFUNC: "blick_des_falken",
+            ]));
+  AddSpell(FREIPFEILE,100,
+        ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:19]),
+          SI_SKILLRESTR_USE:([P_GUILD_LEVEL:19]),
+          SI_SPELLFATIGUE: 10,
+          SI_PREPARE_TIME: 15,
+          SI_PREPARE_MSG: BS("Mit deinem Blut malst du einen Kreis auf den Boden und umringst ihn mit den Runen der Schatten. Dann "
+                             "setzt du dich davor und bittest die Schatten im Geiste um die Gabe der todbringenden Freipfeile."),
+          SI_PREPAREFUNC: "prep_freipfeile",
+          SI_SPELLFUNC: "freipfeile",
+          ]));
+      
+  //--Pfad des Tiermeisters------------------------------------------
+  AddSpell(TIERANGRIFF,5,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:11]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:11]),
+             SI_SPELLFATIGUE: 0,
+             SI_PREPARE_TIME: 2,
+             SI_PREPARE_MSG: BS("Du gibst Deinem Kampfgefaehrten das Zeichen "
+                                "zum Angriff."),
+             SI_PREPAREFUNC: "prep_tierangriff",
+             SI_SPELLFUNC: "tierangriff",
+             ]));
+  AddSpell(KAMPFGEIST,30,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:12]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:12]),
+             SI_SPELLFATIGUE: 0,
+             SI_PREPARE_TIME: 2,
+             SI_PREPARE_MSG: BS("Du beginnst Deinen Bewegungen mit, denen "
+                                "Deines Tieres abzustimmen."),
+             SI_PREPAREFUNC: "prep_kampfgeist",
+             SI_SPELLFUNC: "kampfgeist",
+             ]));
+  AddSpell(KRAFT_DES_TIERES,45,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:13]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:13]),
+             SI_SPELLFATIGUE: 2,
+             SI_PREPARE_TIME: 4,
+             SI_PREPARE_MSG: BS("Du blickst deinem Tierbegleiter tief in die Augen und "
+                                "konzentrierst dich auf sein Wesen."),
+             SI_PREPAREFUNC: "prep_kraft_des_tieres",
+             SI_SPELLFUNC: "kraft_des_tieres",
+             ]));
+  AddSpell(KRAFT_DER_AHNEN,70,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:14]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:14]),
+             SI_SPELLFATIGUE: 4,
+             SI_PREPARE_TIME: 6,
+             SI_PREPARE_MSG: BS("Du legst die Haende auf den Kopf deines Tierbegleiters und konzentrierst dich auf "
+                                "die Kraft der Natur."),
+             SI_PREPAREFUNC: "prep_kraft_der_ahnen",
+             SI_SPELLFUNC: "kraft_der_ahnen",
+             ]));
+  AddSpell(GEMEINSAME_ATTACKE,20,
+           ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:15]),
+             SI_SKILLRESTR_USE:([P_GUILD_LEVEL:15]),
+             SI_SPELLFATIGUE: 0,
+             SI_PREPARE_TIME: 4,
+             SI_PREPARE_MSG: BS("Du gibst deinen Tier den Befehl dich zu unterstutzen."),
+             SI_PREPAREFUNC: "prep_gemeinsame_attacke",
+             SI_SPELLFUNC: "gemeinsame_attacke",
+             ]));
+  AddSpell(WUT_DER_BESTIE, 25,
+          ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:17]),
+          SI_SKILLRESTR_USE:([P_GUILD_LEVEL:17]),
+          SI_SPELLFATIGUE: 0,
+          SI_PREPARE_TIME: 2,
+          SI_PREPARE_MSG: BS("Du konzentrierst dich auf die urtuemliche Wildheit deines Begleiters."),
+          SI_PREPAREFUNC: "prep_wut_der_bestie",
+          SI_SPELLFUNC: "wut_der_bestie",
+          ]));
+  AddSpell(INKARNATION_DER_KOEIGE, 70,
+    ([SI_SKILLRESTR_LEARN:([P_GUILD_LEVEL:19]),
+    SI_SKILLRESTR_USE:([P_GUILD_LEVEL:19]),
+    SI_SPELLFATIGUE: 0,
+    SI_PREPARE_TIME: 6,
+    SI_PREPARE_MSG: BS("Du beruehrst deinen Begleiter und stimmst dich auf die Macht der Tierkoenige ein."),
+    SI_PREPAREFUNC: "prep_inkarnation_der_koenige",
+    SI_SPELLFUNC: "inkarnation_der_koenige",
+    ]));
+}
+//**************************************************************************//
+
+
+
+//** Parsing der Spells/Uebersetzungen *************************************//
+//-- Skillargs ---------------------------------------------------------------
+mixed parse_target(string str) 
+{
+  string wen;
+  
+  if(!str) {return str;}
+  if(sscanf(str, "auf %s", wen)!=1) {return 0;}
+  return wen;
+}
+
+//-- Spells zwischen '' ------------------------------------------------------
+mixed ranger_parsing(string str) 
+{
+  string *parts;
+  string arg;
+  if(!sizeof(regexp( ({ str }), "'.*'"))) 
+  {
+    write(BS("Du musst den Namen des Zauberspruches zwischen ' ' setzen."));
+    return 0;
+  }
+  parts=explode(str, "'");
+  if(sizeof(parts) < 1)
+  {
+    write(BS("Du musst den Namen des Zauberspruches zwischen ' ' setzen."));
+    return 0;
+  }
+  arg=implode(parts[1..], " ");
+  if(arg[0..0] == " ")  {arg=arg[1..];}
+  arg=parse_target(arg);
+  return ({ arg, parts[0] });
+}
+
+//-- Schnelle Zugriffsfunktion fuer gender-abhaengige Formulierungen ---------
+string checkgender(object pl, string female, string male) 
+{
+  if(pl->QueryProp(P_GENDER) == FEMALE)
+  { return female; }
+  return male;
+}
+
+//-- Uebersetzungen ins deutsche ---------------------------------------------
+string to_german(string str)
+{
+  switch(str) {
+    //physische Schadensarten
+    case DT_SLASH:     str="Schlagschaden";        break;
+    case DT_BLUDGEON:  str="Hiebschaden";          break;
+    case DT_PIERCE:    str="stechenden Schaden";   break;
+    case DT_WHIP:      str="peitschenden Schaden"; break;
+    case DT_RIP:       str="reissenden Schaden";   break;
+    case DT_SQUEEZE:   str="quetschenden Schaden"; break;
+    //magsiche Schadensarten
+    case DT_FIRE:      str="Feuerschaden";         break;
+    case DT_COLD:      str="Kaelteschaden";        break;
+    case DT_WATER:     str="Wasserschaden";        break;
+    case DT_AIR:       str="Luftschaden";          break;
+    case DT_LIGHTNING: str="Blitzschaden";         break;
+    case DT_EXPLOSION: str="explosiven Schaden";   break;
+    case DT_SOUND:     str="Laermschaden";         break;
+    case DT_LIGHT:     str="Lichtschaden";         break;
+    case DT_ELECTRIC:  str="elektrischen Schaden"; break;
+    case DT_ACID:      str="Saeureschaden";        break;
+    case DT_POISON:    str="Giftschaden";          break;
+    case DT_TERROR:    str="Terrorschaden";        break;
+    case DT_HOLY:      str="heiligen Schaden";     break;
+    case DT_UNHOLY:    str="unheiligen Schaden";   break;
+    case DT_MIND:      str="psychischen Schaden";  break;
+    case DT_MAGIC:     str="Magieschaden";         break;
+  }
+  return str;
+}
+
+//-- Uebersetzungen der Waffenarten (ausgelagert wegen Ueberschneidungen) ----
+string weapon_to_german(string str)
+{
+  switch(str) {
+    //Waffenarten
+    case WT_SWORD:     str="ein Schwert";          break;
+    case WT_AXE:       str="eine Axt";             break;
+    case WT_CLUB:      str="eine Keule";           break;
+    case WT_SPEAR:     str="einen Speer";          break;
+    case WT_KNIFE:     str="ein Messer";           break;
+    case WT_WHIP:      str="eine Peitsche";        break;
+    case WT_CHAIN:     str="eine Kettenwaffe";     break;
+    case WT_BOW:       str="ein Bogen";            break;
+    case WT_AMMU :     str="Munition";             break;
+    case WT_HANDS:     str="eine Faustwaffe";      break;
+    case WT_MAGIC:     str="eine magische Waffe";  break;
+    case WT_MISC:      str="eine normale Waffe";   break;
+  }
+  return str;
+}
+//**************************************************************************//
+
+
+
+//** Einige Abfragen nach Aussen (u.a. default_npc) ************************//
+//-- Welches Gildenlevel benoetigt Zaehmung? ---------------------------------
+int get_spell_use_guild_level(string spell)
+{
+  mixed m, m2;
+  
+  m=QuerySpell(spell);
+  if( mappingp(m) && mappingp(m2=m[SI_SKILLRESTR_USE]) )
+  { return m2[P_GUILD_LEVEL]; }
+  return 0;
+}
+//**************************************************************************//
+
+
+
+//** ERFOLG/MISSERFOLG *****************************************************//
+//--Misserfolg----------------------------------------------------------------
+void Misserfolg(object caster, string spell, mapping sinfo)
+{
+  int old_abil;
+  
+  if (!total_fail)
+  { tell_object(caster, BS("Deine Beschwoerung ist fehlgeschlagen.\n")); }
+  total_fail = 0;  // gleich zuruecksetzen
+  old_abil = sinfo[SI_SKILLABILITY];
+  Learn(caster, spell, sinfo);
+  sinfo=caster->QuerySkill(spell);
+  if (old_abil < (mappingp(sinfo) ? sinfo[SI_SKILLABILITY] : sinfo))
+  { write("Du lernst aus Deinem Fehler.\n"); }
+  else
+  { write( "Leider lernst Du nicht aus Deinem Fehler.\n" ); }
+}
+
+//--Erfolg--------------------------------------------------------------------
+void Erfolg(object caster, string spell, mapping sinfo) 
+{ caster->ModifySkill(spell,([SI_USR:sinfo[SI_USR]+1]),0, "waldlaeufer");
+  return; }
+//**************************************************************************//
+
+
+
+//** SpellAnpassung ********************************************************//
+//-- Beim create den Pfad und den Spellnamen extra speichern -----------------
+int AddSpell(string verb, int kosten, mixed sinfo)
+{
+  if(mappingp(sinfo))
+  { sinfo[SI_SPELLNAME]=verb;
+    sinfo+=([SI_PATH:GUILD_MASTER->get_path(verb)]);}
+  return ::AddSpell(verb, kosten, sinfo);
+}
+
+//-- Nutzung eines Spells ----------------------------------------------------
+/*
+int UseSpell(object caster, string spell, mapping sinfo)
+{
+  return ::UseSpell(caster, spell, sinfo);  
+}
+*/
+
+//-- Darf der Ranger den Zauber beschwoeren? ---------------------------------
+int CanTrySpell(object caster, mapping sinfo)
+{
+  int i, n, gl;
+  mixed res;
+  
+  /*Metall - bloede Restriktion (gwenshara - 2024)
+  if(QueryMetal(caster))
+  {
+    tell_object(caster, BS("Du kannst mit soviel Metall an Deinem Koerper "
+                        "nicht die Kraefte des Waldes nutzen!"));
+    return 0; 
+  }*/
+  
+  //Pfadueberpruefung + GL
+  res=RANGERMASTER->GetPaths(getuid(caster));
+  if(!pointerp(res)) { res=({"",""}); }
+  n=member(res, sinfo[SI_PATH]);
+  if(stringp(sinfo[SI_PATH]))
+  {
+    if(n == -1)
+    {
+      tell_object(caster, BS("Du befindest Dich nicht auf dem Pfad der "
+                          +sinfo[SI_PATH]+"."));
+      return 0; 
+    }
+
+    i=get_spell_use_guild_level(sinfo[SI_SPELLNAME]);
+    if(i>16 && stringp(sinfo[SI_PATH]) && !RANGERMASTER->HasMasterPath(getuid(caster), sinfo[SI_PATH])) {
+      tell_object(caster, BS("Dazu musst du ein Meister des "+sinfo[SI_PATH]+"pfades sein!"));
+      return 0;
+    }
+
+    //DBD(sinfo[SI_SPELLNAME]);
+    /* Unnoetig - das Spellbook prueft das gildenlevel. das buggt nur in hoeheren kreisen mit niedrigerem rang
+    i=get_spell_use_guild_level(sinfo[SI_SPELLNAME]);
+    gl=caster->QueryProp(P_GUILD_LEVEL);
+    gl-=(5*n);
+    if(gl<i)
+    {
+      tell_object(caster, BS("Dein Rang ist nicht hoch genug."));
+      return 0; 
+    }*/
+  }
+  
+  //Kostenmodifizierung
+  sinfo=CostModification(caster, sinfo);
+  //uebergeordnete Funktion
+  return ::CanTrySpell(caster, sinfo);
+}
+
+//-- Ist die Vorfunktion gelungen, werden hier noch einige Dinge geregelt ----
+void FirstPrepareFuncSuccessfull(object caster, mapping sinfo)
+{
+  //Waerend der Vorbereitungszeit darf man nicht ausweichen!
+  caster->SetProp(P_RANGER_NO_MAGIC_DEFENSE, time()+sinfo[SI_PREPARE_TIME]);
+}
+
+public string highestWeaknessOf(object target) {
+  mapping weaknesses;
+  string bestMatch, *values, value;
+  float bmValue, cv;
+  int i;
+
+  if(!objectp(target)) return "magic";
+
+  weaknesses = target->QueryProp(P_RESISTANCE_STRENGTHS);
+  if(!mappingp(weaknesses)) return DT_MAGIC;
+
+  bestMatch = DT_MAGIC;
+  bmValue = -10.0;
+  values = m_indices(weaknesses);
+  for(i=0; i<sizeof(values); ++i) {
+    value = values[i];
+    cv = weaknesses[value];
+    if(!floatp(cv)) cv = 1.0 * cv;
+    if( cv > bmValue) {
+      bmValue = cv;
+      bestMatch = value;
+    }
+  }
+
+  return bestMatch;
+}
+
+//-- Alle Angriffsspells kommen hier zusammen --------------------------------
+// ob = Ziel des Angriffs
+// caster = Waldlaeufer
+// sinfo = spell info mapping
+// is_spell = passdown for TryAttackSpell
+// weaponMode = 0=ohne waffe|1=messer|2=bogen
+// weapon = uebersteuerte waffe, die zu verwenen ist (zB wurfmesser)
+// nocombo = wenn 1 dann wird keine combo getriggert
+// return: verursachter schaden
+varargs int ExecuteAttackSpell(object ob, object caster, mapping sinfo,mixed is_spell, int weaponMode, object weapon, int nocombo) {
+  int dam, can_see, i, magicDts, r;
+  mixed dtypes, combo, *flame;
+  string wt;
+  object booster;
+  
+  dam=sinfo[SI_SKILLDAMAGE];
+  can_see=( (IS_WIZARD(getuid(caster)) || caster->QueryProp(P_TESTPLAYER)) && (caster->QueryProp(P_RANGER_SHOW_COMBOS)==1) );
+
+  if(weaponMode == ATTACK_SPELL_BOW ||weaponMode == ATTACK_SPELL_KNIFE) {
+    
+    if(!objectp(weapon)) weapon=caster->QueryProp(P_WEAPON);
+    if(!objectp(weapon)) {
+      tell_object(caster, BS("Ohne Waffe geht das nicht!")); // ohne waffe keine waffenbasierten angriffe
+      return 0;
+    }
+
+    wt = weapon->QueryProp(P_WEAPON_TYPE);
+
+    // bei Waffenangriffen kommt der WC der waffe dazu
+    if(weaponMode == ATTACK_SPELL_BOW && wt == WT_BOW || weaponMode == ATTACK_SPELL_KNIFE && wt = WT_KNIFE) {
+      dam = weapon->QueryProp(P_WC) + sinfo[SI_SKILLDAMAGE];
+      pDebug(caster, sprintf("ExecuteAttackSpell :: weapon damage base = %d\n", dam));
+      r = caster->UseSkill(FIGHT(wt), ([SI_ENEMY: ob]))["si_damage"]/2; // kampfskillanwendung kommt halb dazu
+      dam += r;
+      pDebug(caster, sprintf("ExecuteAttackSpell :: +skill=%d dam=%d\n", r, dam));
+    }
+    // schdenstypen der waffe kommen dazu
+    dtypes = weapon->QueryProp(P_DAM_TYPE); 
+    if(!pointerp(dtypes)) dtypes = ({dtypes});
+
+    // kalte flamme einrechnen fuer den bogen
+    if(wt == WT_BOW && pointerp(flame=caster->QueryProp(P_RANGER_COLD_FLAME)) && flame[1] >= time()) {
+      r = flame[3];
+      dtypes += flame[2];
+      dam += r;
+      pDebug(caster, sprintf("ExecuteAttackSpell :: +flame=%d dam=%d\n", r, dam));
+    }
+
+    if(objectp(booster=present(EDGE_SOUL_ID, caster))) {
+      if(stringp(booster->QueryProp(P_DAM_TYPE))) {
+        dtypes += ({ booster->QueryProp(P_DAM_TYPE) });
+      }
+    }
+
+
+    if(!pointerp(sinfo[SI_SKILLDAMAGE_TYPE])) sinfo[SI_SKILLDAMAGE_TYPE] = ({ sinfo[SI_SKILLDAMAGE_TYPE] });
+    for(i=0; i<sizeof(dtypes); ++i) {
+      if(member(sinfo[SI_SKILLDAMAGE_TYPE], dtypes[i]) < 0) 
+        sinfo[SI_SKILLDAMAGE_TYPE] += ({ dtypes[i] });
+    }
+    pDebug(caster, sprintf("ExecuteAttackSpell :: damage_type=%O\n", sinfo[SI_SKILLDAMAGE_TYPE]))
+
+    // magische schadensarten koennen abgeblockt werden
+    if(sinfo[SI_NOMAGIC] != 0) {
+      magicDts = 0;
+      for(i=0;i<sizeof(sinfo[SI_SKILLDAMAGE_TYPE]); ++i) {
+        if(member(MAGICAL_DAMAGE_TYPES, sinfo[SI_SKILLDAMAGE_TYPE][i])) {
+          magicDts++;
+        }
+      }
+    //  pDebug(caster, sprintf("ExecuteAttackSpell :: nonmagic_dts=%d dts=%d nomagicReduction=%.2f\n", magicDts, ))
+      sinfo[SI_NOMAGIC] = (int) (sinfo[SI_NOMAGIC] * (1.0-((float) magicDts/sizeof(dtypes))));
+    }
+   }
+  
+  //Skillpoint
+  if(weaponMode == ATTACK_SPELL_KNIFE && wt == WT_KNIFE &&  R_SKILLMASTER->HasSkill(getuid(caster), KLINGENMEISTER) ||
+     weaponMode == ATTACK_SPELL_BOW && wt == WT_BOW && R_SKILLMASTER->HasSkill(getuid(caster), BOGENMEISTER)) {
+      r = dam/5; // nochmal bis zu +20% schaden
+      dam += r;
+      pDebug(caster, sprintf("ExecuteAttackSpell :: +mastery_skill=%d dam=%d\n", r, dam));
+  }
+                                 
+  //Erzfeind
+  if(IsArchEnemy(getuid(caster), ob)) {
+    r = random(dam*caster->QueryProp(P_GUILD_LEVEL)/100);
+    dam+=r;
+    pDebug(caster, sprintf("ExecuteAttackSpell :: +enemy=%d dam=%d\n", r, dam));
+  }
+  
+  //Im Wald?
+  if(IsInForest(caster)) { 
+    r = random((int) (dam*caster->QueryProp(P_GUILD_LEVEL)/200)); 
+    dam += r;
+    pDebug(caster, sprintf("ExecuteAttackSpell :: +forest=%d dam=%d\n", r, dam));
+  }
+  
+  //Ausruestung
+  dam=get_equip_damage(caster, sinfo[SI_SPELLNAME], dam);
+
+  pDebug(caster, sprintf("ExecuteAttackSpell :: modified by equipment dam=%d ffset(dam)=%d\n", dam, sinfo[OFFSET(SI_SKILLDAMAGE)]));
+  sinfo[SI_SKILLDAMAGE] = dam;
+
+  //Combos und liegende Feinde
+  sinfo=FalldownModification(ob, caster, sinfo);
+  pDebug(caster, sprintf("ExecuteAttackSpell :: falldown mod dam=%d offset(dam)=%d\n", sinfo[SI_SKILLDAMAGE], sinfo[OFFSET(SI_SKILLDAMAGE)]));
+  if(!nocombo) {
+    sinfo=ComboModification(ob, caster, sinfo);
+    pDebug(caster, sprintf("ExecuteAttackSpell :: combo mod dam=%d\n offset(dam)=%d\n", sinfo[SI_SKILLDAMAGE], sinfo[OFFSET(SI_SKILLDAMAGE)]));
+  }
+
+  if(wt == WT_BOW && caster->QueryProp(P_GUILD_LEVEL) > 18 && objectp(booster = present(GUILD_OBJ_ID, caster)) && pointerp(flame = booster->QueryProp(P_RANGER_FREISCHUETZ))) {
+    if(flame[RANGER_FREISCHUETZ_ACTIVE]) {
+      tell_object(caster, BS("Der Freipfeil erkennt im Flug die groesste Schwachstelle deines Gegners!"));
+      sinfo[SI_SKILLDAMAGE_TYPE] = ({ highestWeaknessOf(sinfo[SI_ENEMY]) });
+      pDebug(caster, sprintf("freipgeil :: dmt_type = %s\n", sinfo[SI_SKILLDAMAGE_TYPE][0]));
+      booster->UseFreipfeil();
+    }
+  }
+  
+  
+  //Der Angriff
+  if(can_see) {
+    tell_object(caster, BSC(ANSI_RED+"Uebergebener Schaden: "+ANSI_NORMAL+to_string(sinfo[SI_SKILLDAMAGE])+
+                            ANSI_RED+" Nomagic: "+ANSI_NORMAL+to_string(sinfo[SI_NOMAGIC])));
+  }
+  dam=TryDefaultAttackSpell(ob, caster, sinfo, is_spell);
+  
+  //Auswertung
+  if(can_see) {
+    tell_object(caster, BSC(ANSI_BOLD+ANSI_RED+"Erlittener Schaden: "+ANSI_NORMAL+to_string(dam)));
+  } 
+
+  if(!nocombo) {
+    if(!dam || !objectp(ob) ) { 
+      ComboFail(caster, sinfo); 
+    }
+    else {
+      ComboDone(caster, ob, sinfo);
+    } 
+  }
+  return dam;
+}
+//**************************************************************************//
+
+// nach pfeilschuessen ist ein kurzer aussetzer, das hier informiert, dass es weiter geht.
+public void inform_nachladen(object caster) {
+  string *msg;
+
+  msg = ({
+    "Du atmest kurz durch, senkst den Bogen und legst einen Pfeil nach.",
+    "Du ziehst einen neuen Pfeil auf die Sehne.",
+    "Erneut ziehst du den Bogen auf.",
+    "Schnell holst du einen neuen Pfeil aus dem Koecher.",
+    "Du entspannst die Schultern und bist bereit fuer den naechsten Schuss.",
+    "Mit geuebter Bewegung legst du einen neuen Pfeil auf die Sehne."
+  });
+
+  tell_object(caster, BS(msg[random(sizeof(msg))]));
+  return;
+}
+
+// hier wird nach bogenschuessen "nachgeladen"
+public void reload(object caster, mapping sinfo) {
+  caster->SetProp(P_DISABLE_ATTACK, sinfo[SI_SPELLFATIGUE]/4);
+  call_out("inform_nachladen", sinfo[SI_SPELLFATIGUE], caster);
+  return;
+}
+
+// zielen bei bogenschuessen
+public void aim(object caster, mapping sinfo) {
+  if(!mappingp(sinfo)) return;
+  caster->SetProp(P_DISABLE_ATTACK, sinfo[SI_PREPARE_TIME]);
+  return;
+}
+
+public void iama_voice_of_nature(object caster) {
+  object ob, env;
+  string terrain;
+  mapping envdata;
+
+  if(RANGERMASTER->GetMasterAbility(getuid(caster)) != MASTER_ABIILITY_VOICE_OF_NATURE) return;
+
+  env=environment(caster);
+  if(!objectp(env)) return;
+  if(!mappingp(envdata=env->QueryProp(P_ENVIRONMENT))) return;
+  if(!member(envdata, ENV_TERRAIN)) return;
+  terrain = envdata[ENV_TERRAIN];
+
+  if(objectp(ob=present("\nvoice_of_nature", caster))) {
+    if(ob->QueryProp("terrain") == terrain) return; // haben wir schon
+  }
+
+  if(objectp(ob=clone_object(OBJ "voice_of_nature"))) {
+    if(ob->move(caster, M_SILENT) != 1) {
+      destruct(ob);
+      return;
+    }
+    
+    ob->activate_terrain(terrain);
+  }
+
+  return;
+}
+
+public void rage_of_avatara(object caster, object enemy) {
+  string msg;
+  object p;
+
+  if(RANGERMASTER->GetMasterAbility(getuid(caster)) != MASTER_ABIILITY_RAGE_OF_NATURE) return;
+  if(!objectp(enemy)) return;
+
+  /*
+  Eoin (Licht, Schwanenkönigin) → Blendung → Gegner treffen seltener.
+Arawn (Unheilig, Fluchrabe) → Fluch → Gegner erleiden verringerten Schadenoutput.
+Morcan (Furcht, Schattenwolf) → Schrecken → Gegner verlieren Initiative.
+Ciaran (Kälte, Elchkönig) → Frost → Gegner bewegen sich langsamer.
+Fiachra (Gift, Schlange) → Vergiftung → Leichter Schaden über Zeit.
+Belenus (Magie, Drache) → Magiefluch → Gegnerische Zauber kosten +1 MP.
+Thorondor (Blitz, Donnervogel) → Schock → Chance auf kurze Lähmung.
+Bran (Luft, Sturmfalke) → Windstoß → Gegnerische Angriffe können fehlschlagen.
+Lir (Heilig, Weißer Hirsch) → Reinheit → Gegnerische Heilung ist schwächer.
+Aedan (Feuer, Sonnenluchs) → Verbrennung → Feuerschaden über Zeit.
+Brenin (Säure, Krötenherrin) → Zersetzung → Gegnerische Rüstung sinkt.
+*/
+  
+  switch(random(11)) {
+    case 0: // Eoin
+      msg = BS("Ein heller Schwan jagt durch den Raum. "+enemy->Name(WER)+" wird geblendet!");
+      enemy->SetProp(P_BLIND, 5 + random(15));
+      break;
+    case 1: // Arawn
+      msg = BS("Ein schwarzer Rabe kreist ueber "+enemy->Name(WEM)+" und ein schwaechender Fluch trifft "+enemy->name(WEN)+".");
+      enemy->ModifySkillAttribute(caster, SA_DAMAGE, 50, 5+random(10));
+      break;
+    case 2: // Morcan
+      msg = BS("Das Heulen eines Wolfs ist zu hoeren. "+enemy->Name(WER)+" wirkt verunsichert.");
+      enemy->SetProp(P_DISABLE_ATTACK, 2+random(4));
+      if(!random(3) && !enemy->id("NOWIMPY") && !enemy->QueryProp(P_WIMPY)) enemy->SetProp(P_WIMPY, enemy->QueryProp(P_WIMPY)+10);
+      break;
+    case 3: // Ciaran
+      msg = BS("Mit lautem Hufgetrappel donnert ein eisiger Elch an dir vorbei. "+enemy->Name(WER)+" friert ein.");
+      enemy->ModifySkillAttribute(caster, SA_SPEED, 50, 5+random(10));
+      break;
+    case 4: // Fiachra
+      msg = BS("Eine giftige Schlange windet sich um "+enemy->Name(WEN)+" und beisst zu!");
+      p=clone_object(OBJ "npc_poison"); p->move(enemy, M_TPORT|M_SILENT);
+      p->poison(enemy, caster, 0, random(200));
+      break;
+    case 5: // Belenus
+      msg = BS("Schemenhafte Drachenfluegel ziehen ueber euch. Magische Energie und hinterhaeltige Tricks weichen aus "+enemy->Name(WEM)+".");
+      enemy->SetProp(P_DISABLE_SPELLS, 2+random(4));
+      break;
+    case 6: // Thorondor
+      msg = BS("Der ohrenbetaeubende Schrei eines Donnervogels erklingt. "+enemy->Name(WER)+" zucket zitternd zusammen.");
+      if(!random(3)) enemy->SetProp(P_PARALYZED, 1+random(5));
+      break;
+    case 7: // Bran
+      msg = BS("Ein Sturmfalke kreist ueber euch und ein heftiger Windstoss wirft "+enemy->Name(WEN)+" zu Boden.");
+      enemy->SetProp(P_DISABLE_ATTACK, 2);
+      enemy->SetProp(P_LAST_RAMMEN_TIME, time());
+      break;
+    case 8: // Lir
+      msg = BS("Ein weisser Hirsch springt durch den Raum. Wo seine Hufe den Boden beruehren wachsen Blumen.");
+      caster->AddHp(25 + random(40));
+      break;
+    case 9: // Aedan
+      msg = BS("Ein feuriger Luchs saust an dir vorbei. Feine Rauchkringel steigen von "+enemy->Name(WEM)+" auf.");
+      enemy->Defend(150+random(150), DT_FIRE, ([SP_SHOW_DAMAGE: 1, SP_NAME: "Wildheit der Avatara"]), caster);
+      break;
+    case 10: // Brenin
+      msg = BS("Eine schleimige Kröte springt "+enemy->Name(WEN)+" an und quakt laut. "+enemy->Name(WESSEN)+" Ruestung scheint geschwaecht.");
+      if(!interactive(enemy)) enemy->SetProp(P_BODY, enemy->QueryProp(P_BODY)/4*3);
+      break;
+  }
+
+  tell_room(environment(caster), msg);
+  return;
+}

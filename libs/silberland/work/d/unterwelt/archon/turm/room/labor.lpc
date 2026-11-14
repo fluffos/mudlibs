@@ -1,0 +1,262 @@
+// hier stab ins wasser halten um ihn aufzuladen
+// 19.01.2003 erstellt (Archon)
+/*
+ zuletzt bearbeitet: 27.12.2004 Clementine@SL
+ Rev 1.2 02.09.2003 Archon: rep
+ Rev 1.1 28.02.2003 Archon: - set_next_reset
+ Rev 1.0 19.01.2003 Archon: - erste Version
+*/
+
+#pragma strict_types
+#include "../def.h"
+inherit STD "turm";
+
+int mon;
+
+void create();
+void reset();
+int cmd_tauche_w(string str);
+int cmd_trink_w(string str);
+int cmd_wuehle(string str);
+
+void create() 
+{
+  ::create();
+  SetProp(P_INDOORS, 1); 
+  SetProp(P_LIGHT, 1); 
+  SetProp(P_KILL_NAME,"Brennendes Wasser");
+
+  SetProp(P_INT_SHORT,"Ein verlassenes Laboratorium");
+  SetProp(P_INT_LONG,
+    "Du bist in einem schon vor langer Zeit aufgegebenen Laboratorium eines "
+    "Magiers. Ueberall liegen Truemmer, Stofffetzen und halb zerstoertes "
+    "Mobiliar ueber dem Boden verteilt. Nur ein rundes Becken an der Ostwand "
+    "ist noch immer intakt und mit dunklem Wasser gefuellt. Im Westen fuehrt "
+    "eine steinerne Wendeltreppe nach oben."); 
+
+  AddDetail(({"zeit"}),
+    "Das Laboratorium wurde schon vor langer Zeit aufgegeben.");
+  AddDetail(({"labor", "laboratorium", "staette", "forschungsstaette"}),
+    "Das Laboratorium ist voellig zerstoert und nichts zeugt mehr davon, "
+    "dass hier einmal Magie geformt wurde.");
+  AddDetail(({"decke", "wand", "waende"}),
+    "Die Decke und die Waende bestehen aus kaltem, rauen Stein.");
+  AddDetail(({"boden"}),
+    "Unter den ganzen Truemmern kannst Du den Boden nicht erkennen, doch "
+    "besteht auch dieser bestimmt aus Stein.");
+  AddDetail(({"nase"}),
+    "Du faesst Dir an die Nase und haeltst sie zu.");
+  AddDetail(({"stoff","stofffetzen","stoffetzen","fetzen"}),
+    "Ueberall zwischen den Truemmern liegen Stoffetzen.");
+  AddDetail(({"truemmer", "truemmern"}),
+    "Der Boden ist damit uebervoll. Es lohnt sich wohl nicht, sie "
+    "durchzuwuehlen.");
+  AddDetail(({"moebel", "mobiliar","mobilar", "truemmerhaufen", "haufen"}),
+    "Das Mobiliar ist nicht viel mehr, als ein grosser Truemmerhaufen.");
+  AddDetail(({"becken"}),
+    "Das runde Becken ist bis zum Rand mit dunklem Wasser gefuellt. Auf "
+    "dem Beckenrand kannst Du eine Zeichnung erkennen.");
+  AddDetail(({"rand","beckenrand","zeichnung","anleitung"}),
+    "Die Zeichnung scheint eine Anleitung zu sein, wie man bestimmte Objekte "
+    "magisch aufladen kann. Vermutlich muss man das Objekt (auf der "
+    "Zeichnung ist es ein Stab) in das Wasser tauchen.");
+  AddDetail(({"objekt","stab"}),
+    "Die Zeichnung scheint einen Stab zu zeigen.");
+  AddDetail(({"ostwand"}),
+    "An der Ostwand kannst Du ein rundes Becken erkennen.");
+  AddDetail(({"westwand","nordwand"}),
+    "Du kannst daran nichts besonderes erkennen.");
+  AddDetail(({"wasser"}),
+    "Das dunkle Wasser im Becken scheint mit magischer Energie angereichert "
+    "zu sein.");
+  AddDetail(({"westoben"}),
+    "In diese Richtung kannst Du gehen.");
+
+//treppe
+  AddDetail(({"treppe", "wendeltreppe"}),
+    "Eine steinerne Wendeltreppe fuehrt hinauf in den Turm.");
+  AddDetail(({"stein", "steine"}),
+    "Sowohl die Treppe, als auch die Waende bestehen aus Steinen.");
+  AddDetail(({"steinstufe", "steinstufen", "stufen"}),
+    "Die Treppe hat einfachen Steinstufen.");
+
+  AddDetail(({"rascheln"}),
+    "Du solltest einmal lauschen.");
+  AddSound(DEFAULT_SOUND,
+    "Es raschelt zwischen den Truemmern.");
+  AddSound(({"rascheln", "truemmer"}),
+    "Du hoerst ein leises Rascheln in den Truemmern. Vielleicht solltest Du "
+    "sie mal durchwuehlen, um festzustellen, was das ist?");
+
+  AddSmell(DEFAULT_SMELL,
+    "Du musst Dir die Nase zuhalten, so ein fuerchterlich Verwesungsgeruch "
+    "haengt hier im Raum. Nur schnell raus hier, bevor Du Dich noch "
+    "uebergeben musst.");
+  AddSmell(({"geruch","verwesungsgeruch","gerueche"}),
+    "Nun riech nicht noch so doll, Du musst so schon fast kotzen.");
+
+  AddRoomMessage (({      
+    "Es raschelt in den Truemmern.\n",  
+    "Du erschrickst.\n",
+    "Was war das?\n"}), 60); 
+
+  AddItem("/obj/fackel.lpc", REFRESH_REMOVE);
+
+  AddCmd(({"tauch","tauche","tauchen"}),"cmd_tauche_w");
+  AddCmd(({"trink","trinke"}),"cmd_trink_w");
+  AddCmd(({"wuehle","wuehl","wuehlen","durchwuehl","durchwuehle",
+           "durchwuehlen","durchsuch","durchsuche","durchsuchen"}),
+           "cmd_wuehle");
+
+  AddExit(({"westoben","westen"}), ROOM "gang1_4");
+  SetProp(P_HIDE_EXITS,({"westen","aufgabe"}));
+  mon = 2;
+}
+
+void reset()
+{
+  object ob;
+  ::reset();
+  mon = 2;
+  while (ob=(object)S_STANDARD->present_clone(NPC "monster",ME)) 
+  {
+    if (!ob->InFight()) 
+      ob->remove();
+    else
+    {
+      set_next_reset(240); //damit bei den naechsten 5 min der reset wieder kommt
+      return;
+    }
+  }
+}
+
+int cmd_tauche_w(string str)
+{
+  object stab;
+  if (!S_STANDARD->check_cmd(str,
+       "stab&wasser",
+       "Was willst Du tauchen?|Wohin willst Du den Stab tauchen?"))
+    return 0;
+
+  if (!present("stab",PL))
+  {
+    write("Aber Du hast doch gar keinen Stab.\n");
+    return 1;
+  }
+  if (!(stab=(object)S_STANDARD->present_clone(WEAPON "runenstab",PL)))
+  { 
+    write("Du glaubst nicht, dass dies der richtige Stab dafuer ist.\n");
+    return 1;
+  }
+  write("Du haelst den Runenstab in das Wasser.\n");
+  tell_room(ME,break_string(PL->Name(WER,1)+
+    " haelt einen Stab in das Wasser."),({PL}));
+  if (!stab->query_intact())
+  {
+    write(break_string(
+      "Nach einiger Zeit ziehst Du den Stab wieder heraus, doch "
+      "leider ist nichts passiert. Es sieht so aus, als ob an dem Stab "
+      "noch etwas fehlen wuerde."));
+    return 1;
+  }
+  if (stab->query_loaded())
+  {
+    write(break_string(
+      "Nach einiger Zeit ziehst Du den Stab wieder heraus, doch "
+      "ist nichts weiter passiert. Aber das dachtest Du Dir schon "
+      "davor, denn aufgeladen ist aufgeladen, oder?"));
+    return 1;
+  }
+  stab->set_loaded();
+  write(break_string(
+    "Kaum hast Du den Stab in das Wasser getaucht, als dieses zu brodeln "
+    "beginnt und der Runenstab seine feste Form verliert. Ploetzlich "
+    "dehnt sich der Stab aus und die Klaue scheint im Wasser etwas "
+    "hinterher zu jagen. Dies alles passiert so schnell, dass Du nicht "
+    "einmal die Zeit hattest aufzuschreien, bevor der Stab wieder fest "
+    "wird. Etwas ueberstuerzt ziehst Du nun den Stab wieder heraus und "
+    "siehst, dass zwischen den Klauen eine Kugel haengt."));
+  return 1;
+}
+
+int cmd_trink_w(string str)
+{
+  if (!S_STANDARD->check_cmd(str,
+       "wasser",
+       "Was willst Du trinken?"))
+    return 0;
+
+  write(break_string("Du tauchst Deine Hand ins Wasser und nimmst einen "
+          "kleinen Schluck. Kaum hast Du ihn hintergeschluckt verspuerst Du "
+          "ein fuerchterliches Brennen und Du faengst an zu wuergen. Also "
+          "noch einen Schluck solltest Du auf gar keinen Fall nehmen."));
+  PL->do_damage(random(80)+20);
+  return 1;
+}
+
+int cmd_wuehle(string str)
+{
+  object ob;
+
+  if (!S_STANDARD->check_cmd(str,
+       "truemmer",
+       "Was willst Du durchwuehlen?"))
+    return 0;
+
+  tell_room(ME,break_string(
+    PL->Name(WER,1)+" durchwuehlt irgendetwas."),({PL}));
+  if (mon)
+  {
+    mon--;
+    if (mon) //man findet eine drachenzehe fuer den stab
+    {
+      write(break_string(
+        "Du durchwuehlst die Truemmer und entdeckst ploetzlich eine "
+        "Drachenzehe, die Du sofort an Dich nimmst."));
+      ob=clone_object(OBJ "drachenzehe");
+      if (ob->move(PL,M_GIVE)<1)
+      {
+      	write(break_string("Leider kannst Du die Drachenzehe nicht "
+      	      "mehr tragen und laesst sie deshalb fallen."));
+        tell_room(ME,break_string(
+          PL->Name(WER,1)+" laesst eine Drachenzehe fallen."),({PL}));
+        ob->move(ME,M_PUT);
+      }
+      return 1;
+    }
+    write(break_string(
+        "Du durchwuehlst die Truemmer und entdeckst ploetzlich eine "
+        "Drachenzehe, doch als Du nach ihr greifen willst, entzieht sie "
+        "sich Deiner Hand und verschwindet. Vielleicht versuchst Du es "
+        "spaeter noch einmal."));
+    write(break_string("Du suchst noch eine Weile weiter, als du "
+        "ploetzlich eine fuerchterliches Fauchen hoerst und eine Horde "
+        "graesslicher Monster hinter Dir erscheint."));
+    clone_object(NPC "monster")->move(ME,M_GO);
+    switch(PL->QueryProp(P_LEVEL))
+    {
+      case  0..15: 
+      break; //1
+      case 16..20: 
+        clone_object(NPC "monster")->move(ME,M_GO); 
+      break; //2
+      case 21..40:
+        clone_object(NPC "monster")->move(ME,M_GO); 
+        clone_object(NPC "monster")->move(ME,M_GO);
+      break; //3
+      default: 
+        clone_object(NPC "monster")->move(ME,M_GO); 
+        clone_object(NPC "monster")->move(ME,M_GO); 
+        clone_object(NPC "monster")->move(ME,M_GO);
+      break; //3
+    }
+    set_next_reset(900); //in 15 wieder weg ...
+    return 1; 
+  }
+  write(break_string("Du durchwuehlst die Truemmer und entdeckst ploetzlich "
+        "eine Drachenzehe, doch als Du nach ihr greifen willst, entzieht "
+        "sie sich Deiner Hand und verschwindet. Vielleicht versuchst Du es "
+        "spaeter noch einmal. Da Du nichts anderes finden kannst, gibst Du "
+        "erst einmal auf."));
+  return 1;
+}

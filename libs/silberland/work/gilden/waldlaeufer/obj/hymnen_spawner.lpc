@@ -1,0 +1,87 @@
+inherit "std/thing";
+#include "../def.h"
+
+object lastEnv;
+int lastEnvChange;
+object caster, lastTransformedRoom;
+
+//** StandardFunktionen ****************************************************//
+//-- Create eines typischen Invisobjekts -------------------------------------
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, 0 );
+  SetProp(P_LONG,  0 );
+  SetProp(P_NAME, 0);
+  SetProp(P_INVIS, 1);
+  SetProp(P_GENDER, FEMALE); 
+  AddId(HYMNEN_SPAWNER);
+  SetProp(P_MATERIAL, MAT_MAGIC );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_SIZE, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NEVERDROP, 1);
+
+  lastEnv = 0;
+}
+
+public void Setup(object _caster, int ability, int success) {
+    int duration;
+
+    caster = _caster;
+    duration = caster->QueryAttribute(A_INT) + ability / 200 + success / 150;
+    duration = SPELL_DAMAGE_BONUS(caster, "hymne des waldes", duration);
+    
+
+    pDebug(caster, sprintf("hymn spawner :: setup duration=%d\n", duration));
+
+    lastEnv = ENV(caster);
+    lastEnvChange = time();
+    set_heart_beat(1);
+
+    call_out("end", duration, 1);
+    return;
+}
+
+public void end() {
+    if(objectp(caster)) tell_object(caster, BS("Die Wirkung der Hymne des Waldes endet."));
+    if(objectp(lastTransformedRoom)) {
+        R_SKILLMASTER->undo_hymne_des_waldes_exe(lastTransformedRoom);
+        lastTransformedRoom = 0; 
+    }
+    remove(1);
+    return;
+}
+
+public void heart_beat() {
+    //pDebug(caster, sprintf("hymn_spawner :: heartBeat lastEnv=%O currentEnv=%O lastChange=%d\n", lastEnv, ENV(caster), time() - lastEnvChange));
+    if(ENV(caster) == lastEnv) {
+        // 5 sekunden nicht bewegt
+        if(time() - lastEnvChange > 5) {
+            //pDebug(caster, sprintf("hymn_spawner :: standStill > 5 hymnActive=%d terrain=%d\n", ENV(caster)->QueryProp(P_RANGER_HYMN_OF_WOODS_ACTIVE),  ENV(caster)->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN]));
+
+            // hier ist schon ein wald
+            if(ENV(caster)->QueryProp(P_RANGER_HYMN_OF_WOODS_ACTIVE) || ENV(caster)->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN] == TT_FOREST) return;
+
+            // bewaldung starten - aufloesen uebernimmt der master!
+            pDebug(caster, "hymn_spawner :: activate transformation\n");
+            R_SKILLMASTER->hymne_des_waldes_exe(caster, 1);
+            lastTransformedRoom = ENV(caster);
+        }
+    }
+    else {
+        lastEnvChange = time();
+        lastEnv = ENV(caster);
+        if(objectp(lastTransformedRoom)) {
+            // wenn wir gehen, geht der wald mit
+            R_SKILLMASTER->undo_hymne_des_waldes_exe(lastTransformedRoom);
+            lastTransformedRoom = 0; 
+        }
+    }
+    return;
+}

@@ -1,0 +1,164 @@
+
+inherit "std/thing";
+
+#include <properties.h>
+#include "../def.h"
+
+int gefuellt;
+
+create()
+{
+  if (!is_clone(TO)) return;
+  ::create();
+
+  gefuellt = LEER;
+
+  SetProp( P_SHORT,"Ein Phiole");
+  SetProp( P_LONG,
+   "Siehe unten.");
+
+  SetProp( P_NAME, "Phiole");
+  AddId( ({"phiole", PHIOLE}));
+  SetProp( P_INFO, "Die Phiole eignet sich hervorragend zum Aufbewahren von Wasser.");
+  SetProp( P_GENDER, FEMALE);
+  SetProp( P_WEIGHT, 100);
+  SetProp( P_VALUE, 10);
+  SetProp( P_NODROP, BS("Die Phiole ist viel zu wertvoll, die willst Du nicht "
+                       +"weglegen! Wenn Du sie dennoch los werden moechtest "
+                       +"zerstoere sie einfach. <zerstoere phiole>"));
+  SetProp( P_MATERIAL, ([MAT_GLASS:100]) );
+  AddCmd(({"zerstoere", "zerstoer" }), "cmd_zerstoeren");
+  AddCmd(({"leere", "entleere" }), "cmd_leeren");
+  AddCmd(({"fuelle", "fuell"}), "cmd_fuellen");
+  AddCmd(({"trinke", "trink" }), "cmd_trinken");
+
+}
+
+string _query_short()
+{
+  return "Eine "+(gefuellt ? "mit Wasser gefuellte" : "leere") +" Phiole";
+}
+
+string _query_long()
+{
+  string s;
+  if(gefuellt)
+    s = "Die Phiole ist mit einer klaren Fluessigkeit gefuellt. Man koennte sie "
+       +"wieder leeren.";
+  else
+    s = "Die Phiole ist leer. Man koennte sie mit Wasser fuellen.";
+
+  return BS(s);
+}
+
+int cmd_zerstoeren(string str )
+{
+  notify_fail( "Was willst Du zerstoeren?\n" );
+  if(!str || !id(str)) return 0;
+
+  write(BS("Du wirfst die Phiole auf den Boden. Sie zerspringt in tausend kleine "
+          +"Scherben."));
+  if(ENV(TP))
+    ENV(TP)->Message(BS(TP->Name()+" wirft eine Phiole zu Boden. Sie zerspringt "
+             +"in tausend kleine Scherben."), MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+  TO->remove(1);
+  return 1;
+}
+
+int cmd_leeren(string str )
+{
+  notify_fail( "Was willst Du entleeren oder leeren?\n" );
+  if(!str || !id(str)) return 0;
+
+  if(!gefuellt) 
+  {
+    write(BS("Die Phiole ist bereits leer."));
+    return -1;
+  }
+
+  write(BS("Du verschuettest fein saeuberlich den kompletten Inhalt der Phiole."));
+  if(ENV(TP))
+    ENV(TP)->Message(BS(TP->Name()+" verschuettet den kompletten Inhalt der Phiole."),
+             MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+
+  SetProp( P_MATERIAL, ([MAT_GLASS:100]) );
+  gefuellt = LEER;
+
+  if(id(WASSER)) RemoveId(WASSER);
+
+  return 1;
+}
+
+int cmd_fuellen(string str)
+{
+  object raum;
+  string was;
+
+  raum = ENV(TP);
+  if(!raum)
+    return (notify_fail("Irgendwie geht das hier nicht.\n"), 0);
+
+  notify_fail("Wie waers wenn Du die Phiole mit Wasser fuellen wuerdest?\n");
+
+  if(!str) return 0;
+
+  if(!(str == "wasser in phiole" || str == "phiole mit wasser")) return 0;
+
+  if(gefuellt)
+    return (notify_fail("Die Phiole ist bereits mit Wasser gefuellt!\n"), 0);
+
+  if (member(raum->QueryProp(P_DETAILS), "wasser")  ||
+      member(raum->QueryProp(P_DETAILS), "quelle")  ||
+      member(raum->QueryProp(P_DETAILS), "bach")    ||
+      member(raum->QueryProp(P_DETAILS), "see")     ||
+      member(raum->QueryProp(P_DETAILS), "fluss")   ||
+      member(({TT_WATER,TT_UNDERWATER}),
+      raum->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN])!=-1)
+  {
+      write("Du fuellst die Phiole mit Wasser.\n");
+      raum->Message(BS(TP->Name()+" fuellt eine Phiole mit Wasser."),
+            MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+      gefuellt = VOLL;
+      SetProp( P_MATERIAL, ([MAT_GLASS:40, MAT_WATER:60]) );
+      
+      if(raum->id(QUELLE)) AddId(WASSER);
+
+      return 1;
+  }
+  else
+  {
+    write("Hier siehst Du kein Wasser...\n");
+    return -1;
+  }
+}
+
+int cmd_trinken(string str )
+{
+  string s;
+  notify_fail( "Willst Du Wasser aus der Phiole trinken?\n" );
+  if(!str || str == "") return 0;
+  if(!(str == "wasser aus phiole")) return 0;
+
+  if(!TP->drink_soft(10)) return -1;
+
+  s = "Du trinkst das Wasser aus der Phiole.";
+
+  ENV(TP)->Message(BS(TP->Name()+" trinkt Wasser aus einer Phiole."),
+           MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+
+  if(id(WASSER))
+  {
+    RemoveId(WASSER);
+    write(BS(s+" Die Magie des Wassers war zuviel fuer Dich."));
+    TP->heal_self(200);
+    TP->SetProp(P_PARALYZED, 10+random(10));
+  }
+  else
+  {
+    write(BS(s+" Du fuehlst Dich erfrischt."));
+  }
+
+  SetProp( P_MATERIAL, ([MAT_GLASS:100]) );
+  gefuellt = LEER;
+  return 1;
+}

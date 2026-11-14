@@ -1,0 +1,474 @@
+// Spellbook fuer die Alchemistengilde.
+// 14.10.1997  --  Stahldorn
+
+/*  Die Spells der Alchemisten
+
+Extraktion:        Zutaten: -, Gildenlevel: 1, SP:2
+Analyse:           Zutaten: -, Gildenlevel: 1, SP:10
+Schaetz:           Zutaten: -, Gildenlevel: 1, SP:5
+Rauchbombe:        Zutaten: ?, Gildenlevel: 2, SP:10/5
+Lichtbogen:        Zutaten: ?, Gildenlevel: 2, SP:3/5
+Nebelwolke:        Zutaten: ?, Gildenlevel: 3, SP:10/10
+Galvanisieren:     Zutaten: ?, Gildenlevel: 3, SP:10/25
+Knallerbsen:       Zutaten: ?, Gildenlevel: 4, SP:15/5
+BleiZuGold:        Zutaten: ?, Gildenlevel: 4, SP:20/45
+Antidot:           Zutaten: ?, Gildenlevel: 5, SP:20/40
+Saeurebatzen:      Zutaten: ?, Gildenlevel: 5, SP:20/10
+Kraftdroge:        Zutaten: ?, Gildenlevel: 6, SP:30/15
+Haarfarbe:         Zutaten: ?, Gildenlevel: 6, SP:10/10
+Haarausfall:       Zutaten: ?, Gildenlevel: 7, SP:20/10
+Thermitlanze:      Zutaten: ?, Gildenlevel: 7, SP:20/20
+Schnellkorrosion:  Zutaten: ?, Gildenlevel: 8, SP:30/30
+Waermecreme:       Zutaten: ?, Gildenlevel: 8, SP:20/25
+Ausdauerdroge:     Zutaten: ?, Gildenlevel: 9, SP:40/20
+Heiltrank:         Zutaten: ?, Gildenlevel: 9, SP:30/30
+Kuehlungscreme:    Zutaten: ?, Gildenlevel: 10, SP:20/25
+Drogenrausch:      Zutaten: ?, Gildenlevel: 10, SP:40/30
+Brandsatz:         Zutaten: ?, Gildenlevel: 11, SP:50/30
+Gefrierschock:     Zutaten: ?, Gildenlevel: 11, SP:45/30
+Dynamitangriff:    Zutaten: ?, Gildenlevel: 12, SP:80/40
+
+1   Alchemistenanfaenger
+2   Alchemistennovize
+3   Alchemistenschueler
+4   Alchemistenlehrling
+5   Alchemistengeselle
+6   fortgeschrittener Alchemistengeselle
+7   Alchemiekenner
+8   Alchemistenanwaerter
+9   Alchemist
+10  angesehener Alchemist
+11  Profialchemist
+12  Meisteralchemist
+
+die weiblichen Titel natuerlich entsprechend angepasst.
+*/
+
+#include <properties.h>
+#include <language.h>
+#include <attributes.h>
+#include <combat.h>
+#include <doors.h>
+#include <living/combat.h>
+#include <wizlevels.h>
+#include <new_skills.h>
+#include <moving.h>
+#include "/gilden/alchemisten/def.h"
+
+inherit "/std/spellbook";
+
+void create()
+{
+  ::create();
+  SetProp(P_GLOBAL_SKILLPROPS,
+          ([SI_SPELLFATIGUE: 2,              // 2 Sekunden kein neuer Spell
+            SI_SP_LOW_MSG:"Du hast leider nicht mehr genuegend magische "
+                          "Konzentration.\n",
+            SI_TIME_MSG: "Du bist noch zu erschoepft von Deiner letzten "
+                         "Aktion.\n",
+            ]));
+  AddSpell("extraktion",4,
+           ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:1]),
+             SI_PREPARE_TIME: 2,     
+//             SI_SKILLRESTR_USE: ([SR_FUN:"FroschTest"]),
+             SI_SKILLLEARN: 9,
+             SI_SKILLLEARN_ATTRIBUTE: A_INT,
+             SI_SP_LOW_MSG: break_string("Die Extraktion von Gegenstaenden "
+                            "kostet Dich leider 2 Magiepunkte an "
+                            "magischer Konzentration.", 78),
+			 ]));
+
+/*  AddSpell("kampfschrei",10,
+           ([SI_SKILLRESTR_LEARN: ([P_GUILD_LEVEL:3]),
+             SI_SKILLDAMAGE: 50,
+             OFFSET(SI_SKILLDAMAGE): 50,
+             SI_SKILLRESTR_USE: ([SR_FUN:"FroschTest"]),
+             SI_SKILLDAMAGE_TYPE: ({DT_TERROR, DT_SOUND}),
+             SI_SKILLLEARN_ATTRIBUTE: A_CON,
+             SI_SP_LOW_MSG: "Du benoetigst 10 Magiepunkte fuer einen "
+                            "Kampfschrei.\n",
+             ]));
+*/
+}
+
+string KastenTest(object caster, mapping sinfo)
+{
+  object kasten;
+  if( (kasten = present("\nalch_kasten", caster)) &&
+         kasten->QueryProp(P_WORN) == caster )
+    return 0;
+  else
+   return "Wie willst Du ohne Alchemiebaukasten Elexiere herstellen?\n";
+}
+
+string FroschTest(object caster, mapping sinfo)
+{
+  if (caster->QueryProp(P_FROG))
+    return "Als Frosch kannst Du das nicht!\n";
+}
+
+nosave int total_fail;
+
+void Misserfolg(object caster, string spell, mapping sinfo)
+{
+  int old_abil;
+
+  if (!total_fail)
+  {
+    switch(spell)
+    {
+      case "SPELL":
+        write("MISSERFOLGSTEXTBEIMSPELL\n");
+        break; 
+      default:
+        write("Der Zauberspruch ist missglueckt.\n");
+    }
+  }
+  total_fail = 0;  // gleich zuruecksetzen
+  old_abil = sinfo[SI_SKILLABILITY];
+  Learn(caster, spell, sinfo);
+  sinfo=caster->QuerySkill(spell);
+  if (old_abil < (mappingp(sinfo) ? sinfo[SI_SKILLABILITY] : sinfo))
+    write( "Du lernst aus Deinem Fehler.\n" ); 
+  else
+    write( "Leider lernst Du nicht aus Deinem Fehler.\n" );
+}
+int extraktion(object caster, mapping sinfo)
+{
+
+  string str;
+  object ob;
+  
+  if(!str=sinfo[SI_SKILLARG] )
+  {
+    write("Was willst Du extrahieren?\n");
+	return 0;
+  }
+  if(!ob=present(str,caster))
+  {
+    write("Du hast doch gar kein "+capitalize(str)+"?\n");
+	return 0;
+  }
+  if( ob->QueryProp(P_CURSED) )
+  {
+    write( break_string("Eine unbekannte Macht hindert Dich daran, "+ 
+      ob->name(WEN)+ " zu extrahieren.",78));
+    return 0;
+  }
+  if (SpellSuccess(caster,sinfo)<=0)
+  {
+    total_fail=1;
+    write("Du schaffst es nicht, "+ob->name(WEN)+ " zu extrahieren.\n");
+    return MISSERFOLG;
+  }
+  tell_object(caster, 
+    "Du zerstoerst voller Berserkerwut "+ ob->name(WEN)+".\n");
+  tell_room(environment(caster), 
+    caster->Name() + " zerstoert voller Berserkerwut " + ob->name(WEN)+".\n",
+    ({caster}) );
+  ob->remove();
+  return ERFOLG;  
+}
+// ---------------------------------------------------
+
+#ifdef _DAS_HAT_SICHER_KEINER_DEFINIERT
+int zerstoerung(object caster, mapping sinfo)
+{
+  string str;
+  object ob;
+  
+  if(!str=sinfo[SI_SKILLARG] )
+  {
+    write("Was willst Du zerstoeren?\n");
+	return 0;
+  }
+  if(!ob=present(str,caster))
+  {
+    write("Du hast doch gar kein "+capitalize(str)+"?\n");
+	return 0;
+  }
+  if( ob->QueryProp(P_CURSED) )
+  {
+    write( break_string("Eine unbekannte Macht hindert Dich daran, "+ 
+      ob->name(WEN)+ " zu zerstoeren.",78));
+    return 0;
+  }
+  if (SpellSuccess(caster,sinfo)<=0)
+  {
+    total_fail=1;
+    write("Du schaffst es nicht, "+ob->name(WEN)+ " zu zerstoeren.\n");
+    return MISSERFOLG;
+  }
+  tell_object(caster, 
+    "Du zerstoerst voller Berserkerwut "+ ob->name(WEN)+".\n");
+  tell_room(environment(caster), 
+    caster->Name() + " zerstoert voller Berserkerwut " + ob->name(WEN)+".\n",
+    ({caster}) );
+  if( ob->QueryProp(P_WC) || ob->QueryProp(P_WEIGHT)>1000 || !random(7) )
+  {
+    write("Leider verletzt Du Dich dabei selber.\n");
+    caster->reduce_hit_point(random(10));
+  }
+  ob->remove();
+  return ERFOLG;  
+}
+
+int schaetz(object caster, mapping sinfo)
+{
+  object victim;
+  int vhp, vwc, vac, vsr, vsz, msz, diff;
+  string result;
+  string vname;
+
+  int i;
+  string *arm, s;
+  mapping res;
+
+  if( !sinfo[SI_SKILLARG] && ( IS_WIZARD(this_player()) ||
+      this_player()->QueryProp(P_TESTPLAYER)=="Feyaria" ) )
+  {
+    s = "Fuer die Testphase - Deine Skills:\n";
+    res = this_player()->QueryProp(P_NEWSKILLS);
+    arm = m_indices(res);
+    for (i = sizeof(arm)-1;i>=0;i--)
+    {
+      s += arm[i]+": ";
+      if (mappingp(res[arm[i]])) s += res[arm[i]][SI_SKILLABILITY];
+      else s += res[arm[i]];
+      s += "\n";
+    }
+    printf( s );
+    return 1;
+  }
+
+  victim=FindLivingVictim(sinfo[SI_SKILLARG],caster,
+                           "Wen moechtest Du einschaetzen?\n");
+  if (!victim)
+    return 0;
+  if (SpellSuccess(caster,sinfo)<=0)
+    return MISSERFOLG;
+
+  msz = caster->QueryProp(P_SIZE);
+  vhp = victim->QueryProp(P_HP)+random(51)-25;
+  vwc = victim->QueryProp(P_TOTAL_WC)+random(21)-10;
+  vac = victim->QueryProp(P_TOTAL_AC)+random(21)-10;
+  vsr = victim->QueryProp(P_SPELLRATE)+random(5)-2;
+  vsz = victim->QueryProp(P_SIZE)+random(11)-5;
+// ein bischen ungenauigkeit muss sein :)
+  vname = victim->name(WER, 1);
+
+  if (vhp > 1000)
+    result = capitalize(vname) + " ist der richtige Gegner fuer einen Heldentod.\n";
+  else if (vhp > 500)
+    result = capitalize(vname) + " ist eine echte Herausforderung fuer Dich.\n";
+  else if (vhp > 250)
+    result = "Du kannst " + victim->name(WEN,1) + " mit etwas Anstrengung besiegen.\n";
+  else if ( vhp > 100)
+    result = "Du kannst " + victim->name(WEN,1) + " leicht besiegen.\n";
+  else 
+    result = "Du kannst " + victim->name(WEN,1) + " mit einem Schlag zerschmettern.\n";
+  write(result);
+
+  if (vac > 270 )
+    result = capitalize(vname) + " hat eine Haut wie Stahl.\n";
+  else if ( vac > 180)
+    result = capitalize(vname) + " ist ziemlich hart im Nehmen.\n"; 
+  else if ( vac > 140)
+    result = capitalize(vname) + " haelt einiges aus.\n";
+  else if ( vac > 100)
+    result = capitalize(vname) + " haelt nicht viel aus.\n";
+  else if ( vac > 50)
+    result = capitalize(vname) + " kann Dir keinen nennenswerten "
+      "Widerstand entgegensetzen.\n";
+  else
+    result = "Deine Axt wird in " + victim->name(WEN,1) + " in Stuecke hauen.\n";
+  write(result);
+
+  if ( vwc > 270)
+    result = capitalize(vname) + " kann Dich in kleine Stuecke hauen.\n";
+  else if ( vwc > 180)
+    result = capitalize(vname) + " kann Dir hart zusetzen.\n";
+  else if ( vwc > 140)
+    result = capitalize(vname) + " kann Dir einigen Schaden zufuegen.\n";
+  else if ( vwc > 70)
+    result = capitalize(vname) + " wird Dich kaum verletzen koennen.\n";
+  else
+    result = capitalize(vname) + " kann Dich hoechstens kitzeln.\n";
+  write(result);
+
+  if ( vsr > 50)
+    result = capitalize(vname) + " ist sehr hinterhaeltig.\n";
+  else if ( vsr > 25)
+    result = capitalize(vname) + " hat viele Tricks auf Lager.\n";
+  else if ( vsr > 1)
+    result = capitalize(vname) + " hat einige Tricks auf Lager.\n";
+  else
+    result = capitalize(vname) + " ist sehr fair im Kampf.\n";
+  write(result);
+
+  if (vsz > (5*msz)/2)
+    result = capitalize(vname) + " ist riesig gross.\n";
+  else if ( vsz > (3* msz) /2 )
+    result = capitalize(vname) + " ist viel groesser als Du.\n"; 
+  else if ( vsz > (6* msz) /5 )
+    result = capitalize(vname) + " ist groesser als Du.\n"; 
+  else if ( vsz < msz/5 )
+    result =  capitalize(vname) +  " ist winzig klein.\n";
+  else if ( vsz < msz/2 )
+    result =  capitalize(vname) + " ist viel kleiner als Du.\n";
+  else if ( vsz < (4*msz)/5 )
+    result =  capitalize(vname) + " ist kleiner als Du.\n";
+  else
+    result = "Ihr seid etwa gleich gross.\n";
+  write(result);
+
+  diff = caster->QueryProp(P_ALIGN)-victim->QueryProp(P_ALIGN);
+  if (diff > 1000)
+    result = "Du bist heilig im Vergleich zu "+ victim->name(WEM, 1) +".\n";
+  else if (diff > 600)
+    result = "Du bist viel braver als " + vname + ".\n";
+  else if (diff > 300)
+    result = "Du bist braver als " + vname + ".\n";
+  else if (diff > 150)
+    result = "Du bist etwas braver als " + vname + ".\n";
+  else if (-diff > 1000)
+    result = "Du bist satanisch im Vergleich zu "+ victim->name(WEM, 1) + ".\n";
+  else if (-diff > 600)
+    result = "Du bist viel boeser als " + vname + ".\n";
+  else if (-diff > 300)
+    result = "Du bist boeser als " + vname + ".\n";
+  else if (-diff > 150)
+    result = "Du bist etwas boeser als " + vname + ".\n";
+  else
+    result = "Eure Gesinnung ist etwa gleich gut (oder boese).\n";
+  write(result);
+
+  diff=caster->QueryProp(P_LEVEL)-victim->QueryProp(P_LEVEL)+random(5)-2;
+  if(diff <-25)
+    result = "Insgesamt hast Du keine Chance gegen "+victim->name(WEN,1)+".\n";
+  else if(diff <-15)
+    result = "Du wirst "+victim->name(WEN,1)+" kaum besiegen koennen.\n";
+  else if(diff <-5)
+    result = "Du wirst "+victim->name(WEN,1)+" nur mit viel Muehe besiegen "
+    "koennen.\n";
+  else if(diff >5)
+    result = "Du wirst "+victim->name(WEN,1)+" leicht besiegen koennen.\n";
+  else if(diff >15)
+    result = "Es wird ein Kinderspiel, "+victim->name(WEN,1)+" zu besiegen.\n";
+  else if(diff >25)
+    result = "Du kannst ueber "+victim->name(WEN,1)+" nur lachen.\n";
+  else
+    result = "Das wird ein spannender und ausgeglichener Kampf.\n";
+  write(result);
+
+  if( stringp(victim->QueryProp(P_INFO)) )
+    write("Zusaetzlich erkennst Du noch folgendes an "+victim->name(WEM,1)+
+	   ":\n"+victim->QueryProp(P_INFO)  );
+
+// eventuell angabe, ob gegner genen axthiebe resistent oder anfaellig ist.
+   return ERFOLG;
+}
+
+int wueten(object caster, mapping sinfo)
+{
+  object *anwesende;
+  int i, suc, clv, vlv;
+  object ob;
+
+  suc=SpellSuccess(caster,sinfo);
+  
+  anwesende=filter_array(all_inventory(environment(caster)),#'living);
+  if( sizeof(anwesende)<=1 )
+  {
+    write("Warum willst Du hier wueten, wo Doch gar niemand da ist?\n");
+    return 0;
+  }
+  if( suc<-2000 )
+  {
+    write("Du wuetest herum und bist von Dir selber erschreckt.\n");
+    say(caster->Name()+ " wuetet wie ein kleines Kind.\n"+
+        "Du lachst "+caster->name(WEN)+" aus.\n");
+    total_fail=1;
+    caster->SetProp(P_WIMPY, caster->QueryProp(P_WIMPY)+random(30));
+    caster->CheckWimpyAndFlee();
+    return MISSERFOLG;
+  }
+  if( suc<=0 )
+    return MISSERFOLG;
+
+  write("Du wuetest wie ein Wilder und schuechterst alle Anwesenden ein.\n");
+  say(caster->Name()+ " wuetet wie ein Wilder und schuechtert Dich ein.\n");
+  clv=caster->QueryProp(P_LEVEL);  
+  for(i=0;i<sizeof(anwesende);i++)
+  {
+    vlv = anwesende[i]->QueryProp(P_LEVEL);
+    if(anwesende[i]!=caster && vlv<clv)
+    {
+      anwesende[i]->Set(P_WIMPY, anwesende[i]->QueryProp(P_WIMPY)+
+        random(10+(clv-vlv)+suc/1000));
+      tell_object(anwesende[i], "Du bekommst Angst vor "+ caster->name()+".\n");
+      if( ! interactive(anwesende[i]) && ! random(10) )
+         anwesende[i]->Kill(caster);
+      if( anwesende[i]->QueryProp(P_WIMPY) >  anwesende[i]->QueryProp(P_HP) )
+      {
+        (ob=clone_object(OBJ "panik"))->move(anwesende[i],
+            M_NOCHECK);
+        ob->fluechten(caster->Name());
+          ;
+      }
+    }
+  }
+  return ERFOLG;
+}
+
+int kampfschrei(object caster, mapping sinfo)
+{
+  object victim;
+  string vnw, cn;
+  int dam, suc, dauer;
+
+  victim=FindEnemyVictim(sinfo[SI_SKILLARG],caster,
+                         "Wen willst Du mit Deinem Kampfschrei erschrecken?\n");
+  if (!victim)
+    return 0;
+  suc=SpellSuccess(caster,sinfo);
+  if( suc<-4000 )
+  {
+    write("Du bruellst so laut, dass Du selber taub wirst.\n");
+    total_fail=1;
+    caster->SetProp(P_DEAF,"berserker_kampfschrei_selbst");
+    return MISSERFOLG;
+  }
+  if( suc<=0 )
+    return MISSERFOLG;
+  
+  dam=50+random(50)+caster->QueryProp(P_GUILD_LEVEL)*2+
+      caster->QueryProp(P_LEVEL)/4;
+
+  cn = caster->name();
+  vnw = victim->name(WEN, 2);
+  say(sprintf("%s bruellt %s an.\n",capitalize(cn), vnw), victim);
+  printf("Du bruellst %s an.\n", vnw);
+  tell_object(victim,sprintf("%s bruellt Dich an.\n", capitalize(cn)));
+  if( victim->QueryProp(P_DEAF) )
+  {
+    printf("%s scheint taub zu sein und ist von Deinem Schrei gar nicht "
+       "beeindruckt.\n", capitalize(vnw) );
+    tell_object(victim, "Zu Deinem Glueck kannst Du gar nichts hoeren.\n");
+    dam=0;
+  } 
+  if( dam>75 )
+  {
+    dauer = 1 + (suc/1000 + random(caster->QueryProp(P_LEVEL)/2))/2;
+    victim->ModifySkillAttribute(caster, SA_SPEED, 50, dauer);
+  }
+  if( dam>100 && suc>8000 )
+  {
+    tell_object(victim, "Das laute Schreien laesst Dich ertauben.\n");
+    victim->SetProp(P_DEAF,"berserker_kampfschrei"); 
+  }
+  TryAttackSpell(victim, dam, ({DT_TERROR, DT_SOUND}), 
+            ([SP_NAME:"kampfschrei",SP_SHOW_DAMAGE:1]),caster,sinfo );
+  return ERFOLG;
+}
+#endif

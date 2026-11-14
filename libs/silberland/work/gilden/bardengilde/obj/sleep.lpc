@@ -1,0 +1,132 @@
+inherit "/gilden/bardengilde/obj/std_song_effect";
+
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <defines.h>
+#include <new_skills.h>
+#include <moredef.h>
+#include "/gilden/bardengilde/bardengilde.h"
+#include "bard_song.h"
+
+int speedReduction, duration, step;
+string short, shortAdjective;
+
+public void create() {
+    if (!is_clone(TO)) return;
+    ::create();
+  
+    AddId(({SONG_SLEEP}));
+
+    SetProp(P_NOGET, 1);
+
+    setSilentEnd(1);
+}
+
+public void init() {
+    if(!is_clone(TO)) return;
+    ::init();
+
+    if(!objectp(victim)) {
+        remove(1);
+    }
+}
+
+public varargs int move(mixed dest, int method, string dir, string textout, string textin) {
+    if(!objectp(victim)) {
+        call_out("remove", 0, 1);
+        return 0;
+    }
+
+    if(dest != victim) {
+        call_out("remove", 0, 1);
+        return 0;
+    }
+
+    return ::move(dest, method, dir, textout, textin);
+}
+
+private void printSleepyMessage(int reduction) {
+    string adjective, message;
+    message = "%s wird %smuede.";
+    
+    switch(reduction) {
+        case 0..24:  adjective="gar nicht "; shortAdjective=""; break;
+        case 25..32: adjective="kaum "; shortAdjective="etwas muede"; break;
+        case 33..49: adjective=""; shortAdjective="muede"; break;
+        case 50..59: adjective="sehr "; shortAdjective="sehr muede"; break;
+        case 60..69: adjective="extrem "; shortAdjective="extrem muede"; break;
+        case 70..79: message="%s kann die Augen kaum offen halten!"; shortAdjective="einschlafend"; break;
+        case 80..99: message="%s doest weg."; shortAdjective="doesend"; break;
+        default:     message="%s schlaeft tief und fest."; shortAdjective="schlafend"; 
+    }
+
+    if(reduction < 70) {
+        tell_room(environment(victim), BS(sprintf(message, victim->Name(WER, 1), adjective)), ({victim}));
+        tell_object(victim, BS(sprintf("Du wirst %smuede...", adjective)));
+    } else {
+        tell_room(environment(victim), BS(sprintf(message, victim->Name(WER, 1))), ({victim}));
+        tell_object(victim, BS("Du schlaefst beinahe ein!"));
+    }
+
+    return;
+}
+
+public void prepareSong() {
+    switch (success) {
+      case 0..3000:      speedReduction=25; break;
+      case 3001..7000:   speedReduction=33; break;
+      case 7001..12000:  speedReduction=50; break;
+      case 12001..15000: speedReduction=55; break;
+      case 15001..19000: speedReduction=60; break;
+      case 19001..20000: speedReduction=65; break;
+      default: speedReduction=0;
+    }
+
+    speedReduction = (int) (speedReduction * factor);
+    speedReduction = modifyBySkillAttribute(speedReduction, SA_DAMAGE);
+
+    duration = (caster->QueryAttribute(A_INT) + random(ability/200) + success/1000);
+    duration = (int) (duration * factor);
+    duration = modifyBySkillAttribute(duration, SA_DURATION);
+
+    printSleepyMessage(speedReduction);
+
+    if(caster->QueryProp(P_TESTPLAYER)) {
+        tell_object(caster, sprintf("speedReduction=%d duration=%d victim=%O\n", speedReduction, duration, victim));
+    }
+
+    victim->ModifySkillAttribute(caster, SA_SPEED, 100 - speedReduction, duration);
+
+    if(!victim->IsEnemy(caster)) {
+        victim->Kill(caster);
+    }
+
+    if(shortAdjective != "") {
+        short = victim->QueryProp(P_SHORT);
+        victim->Set(P_SHORT, symbol_function("titleOverwrite", this_object()), F_QUERY_METHOD);
+    }
+
+    if(TALENTMASTER->HasTalent(caster, TALENT_AGITATOR)) {
+        if(caster->QueryProp(P_BARD_INSPIRATION_LEVEL) > 0) {
+            tell_room(environment(victim), BS(sprintf("%s daemmert fuer einen Moment komplett weg.", victim->Name(WER, 1))), ({victim}));
+            tell_object(victim, BS("Du daemmerst fuer einen Moment komplett weg..."));
+            victim->SetProp(P_DISABLE_ATTACK, caster->QueryProp(P_BARD_INSPIRATION_LEVEL));
+            victim->SetProp(P_DISABLE_SPELLS, caster->QueryProp(P_BARD_INSPIRATION_LEVEL));
+        }
+    }
+
+    call_out("endSong", duration);
+}
+
+public string titleOverwrite() {
+    return short + " (" + shortAdjective +")";
+}
+
+public void onEndSong() {
+    if(objectp(victim)) victim->Set(P_SHORT, 0, F_QUERY_METHOD);
+    if(objectp(victim)) {
+        tell_object(victim, BS("Deine Muedigkeit legt sich."));
+        tell_room(environment(victim), BS(sprintf("%s schuettelt die Schlaefrigkeit ab.", victim->Name(WER, 1))));
+    }
+}

@@ -1,0 +1,333 @@
+//
+// Saeuresee
+//
+#include <properties.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <wizlevels.h>
+#include "../nekro.h"
+#include "../../directions.h"
+#include "../../coords.h"
+
+inherit "std/room";
+
+nosave int destroy_equip(object pl);
+nosave int check_items(object ob);
+nosave mixed GetNewRoom(string dir);
+nosave int coord_of_island(string roomname);
+nosave int SetAllExits();
+nosave mixed explode_coords(string roomname);
+nosave int get_out(string str);
+nosave int destroy_dead_things();
+
+nosave string *kueste=({});
+nosave string *walls=({});
+nosave mapping coords2rooms=([]);
+nosave mapping dir2rooms=([]);
+
+void create()
+{
+  if (!is_clone(this_object())) return;
+  ::create();
+  // Immer RELATIV zur Gilde. Diese liegt in absoulten Koordinaten auf
+  // 21/21
+  coords2rooms=COORDS2ROOM;
+  SetProp (P_SHORT, "In einem Saeuresee");
+  SetProp (P_LIGHT, 1);
+  SetProp (P_INDOORS, 1);
+  SetProp (P_KILL_NAME, "Saeure");
+  SetProp (P_KILL_MSG, "So aufgeloest habe ich Dich ja noch nie gesehen!");
+  SetProp (P_ENVIRONMENT, ([ENV_TEMPERATURE:15,ENV_TERRAIN:TT_WATER]));
+
+  AddRoomMessage( ({ "" }), 3, "acid_damage");
+  AddCmd( ({"untersuche", "unt"}), "no_explore");
+  call_out("SetAllExits",0);
+  previous_object()->CustomizeObject();
+  AddCmd( ({"erklimme","erklimm"}), "crawl_out");
+  AddCmd( ({"schwimme","schwimm"}), "swim_out");
+  //SetAllExits();
+}
+
+string _query_int_long() {
+  string txt;
+  int i;
+  txt="WAHHHH! Du schwimmst hier einem See voller dampfender "
+      "Saeure, die Dich zu zerfressen scheint! Egal an wen oder "
+      "was Du glaubst, nun ist es Zeit zu beten, bevor Du Dich in "
+      "nichts aufgeloest hast! Zeit etwas zu untersuchen hast Du nicht, "
+      "hier ist ohnehin nur Saeure und Du solltest lieber SO SCHNELL "
+      "WIE MOEGLICH das Ufer suchen!";
+  if(sizeof(kueste)) {
+    txt+=" Die rettende Kueste ist in folgende Richtungen: ";
+    for(i=sizeof(kueste)-1;i>=0;i--) {
+      txt+=kueste[i]+", ";
+    }
+    txt+="\b\b.";
+  }
+  if(sizeof(walls)) {
+    txt+=" Von der Saeure angefressene Felswaende sind in Richtung: ";
+    for(i=sizeof(walls)-1;i>=0;i--) {
+      txt+=walls[i]+", ";
+    }
+    txt+="\b\b.";
+  }
+
+  return BS(txt);
+}
+
+void init() {
+  ::init();
+  if(PO==TP) {
+    TP->SetProp(P_PARALYZED, 
+        ([PARALYZE_TIME: 5,
+          PARALYZE_MSG: "Du krampfst Dich vor Schmerzen zusammen!\n",
+          PARALYZE_END: "Du reisst Dich zusammen und unterdrueckst "
+                        "den Schmerz!\n",
+          PARALYZE_MSG_OTHER: "%s windet sich vor Schmerzen!\n",
+          PARALYZE_END_OTHER: BS("%s reisst sich zusammen und widersteht "
+                              "dem Schmerz!")
+         ]));              
+  }
+  return;
+}
+
+void reset() {
+  ::reset();
+  return;
+}
+
+varargs string GetExits(object viewer) {
+  return "";
+}
+
+nosave int no_explore(string str) {
+  write(BS("Du hast keine Zeit hier etwas "
+        "zu untersuchen! RETTE DICH LIEBER!"));
+  return 1;
+}
+
+nosave int acid_damage(string msg) {
+  object *liv;
+  int i,dam;
+  float acid_res;
+  mapping res;
+
+  liv=filter_array(all_inventory(ME), "check_living");
+
+  call_out("destroy_dead_things", 0);
+
+  for(i=sizeof(liv)-1;i>=0;i--) {
+    res=liv[i]->QueryProp(P_RESISTANCE_STRENGTHS);
+    if(mappingp(res))
+      acid_res=1.0+liv[i]->QueryProp(P_RESISTANCE_STRENGTHS)[DT_ACID];
+    else
+      acid_res=1.0;
+    dam=(int)((random(40)+15)*acid_res);
+    tell_object(liv[i], "DIE SAEURE VERAETZT DICH !!!\n");
+    liv[i]->do_damage(dam);
+    if(!random(3))
+      destroy_equip(liv[i]);
+  }
+}
+
+nosave int check_living(object ob) {
+  if(living(ob) && !IS_WIZARD(ob)) return 1;
+  return 0;
+}
+
+nosave int check_dead(object ob) {
+  if(IS_WIZARD(ob)) return 0;
+  if(living(ob)) return 0;
+  return 1;
+}
+
+nosave int destroy_dead_things() {
+  object *dead;
+  int i,nr;
+  dead=filter_array(all_inventory(ME), "check_items");
+  if(!nr=sizeof(dead)) return 0;
+  if(nr>10) nr=10; // Aus Perfomancegruenden
+  for(i=nr-1;i>=0;i--) {
+    if(objectp(dead[i]) && !random(3)) {
+      tell_room(ME, BS(sprintf("%s loest sich durch die daemonische Saeure "
+              "auf.", dead[i]->Name(WER))));
+      dead[i]->remove();
+    }
+  } 
+  return 1;
+}
+
+nosave int destroy_equip(object pl) {
+  object *equip;
+  int nr;
+  mapping res;
+  equip=pl->QueryProp(P_ARMOURS)+({pl->QueryProp(P_WEAPON)});
+  equip-=({0});
+  if(!sizeof(equip)) {
+    equip=filter_array(all_inventory(pl), "check_items");
+  }
+  if(!sizeof(equip)) return 0;
+  nr=random(sizeof(equip));
+  if(!objectp(equip[nr])) return 0;
+  if(mappingp(res=equip[nr]->QueryProp(P_DAM_PROTECTION))) {
+    if(member(res,DT_ACID) && res[DT_ACID]>=0.0) {
+      return 0;
+    }
+  }
+  tell_object(pl, BS(sprintf("%s loest sich in der Saeure auf!",
+          equip[nr]->Name(WER))));
+  equip[nr]->remove();
+  return 1;
+}
+
+nosave int check_items(object ob) {
+  if(IS_LEARNER(ob)) return 0;
+  if(living(ob)) return 0;
+  if(ob->id("QUESTOBJ") || ob->id("NODESTRUCT") || ob->id("UNZERSTOERBAR"))
+    return 0;
+  if(ob->QueryProp(P_CURSED)) return 0;
+  if(ob->QueryProp(P_AUTOLOADOBJ)) return 0;
+  if(ob->QueryProp(P_NEVERDROP)) return 0;
+  if(ob->QueryProp(P_NODROP)) return 0;
+  if(!ob->QueryProp(P_SHORT)) return 0;
+  if(!ob->QueryProp(P_LONG)) return 0;
+  if(ob->QueryProp(P_CURSED)) return 0;
+  return 1;
+}
+
+nosave int SetAllExits() {
+  string *dirs;
+  mixed cur_room;
+  int i;
+  dirs=({OSTEN,NORDEN,SUEDEN,WESTEN,NORDOSTEN,SUEDOSTEN,SUEDWESTEN,NORDWESTEN});
+  if(sizeof(explode(file_name(TO), ":"))<2) return 0;
+  for(i=sizeof(dirs)-1;i>=0;i--) {
+    cur_room=GetNewRoom(dirs[i]);
+    if(cur_room[0]!="") {
+      if(sizeof(explode(cur_room, "/"))<2) {
+        cur_room=NEKRO_ISLAND_DIR "room/acid_lake/"+cur_room[0];
+      }
+      AddExit(dirs[i],
+          ([EX_DEST: cur_room,
+            EX_PLMSG: "Voller Schmerzen schwimmst Du nach "+CAP(dirs[i])+".\n",
+            ]));
+    }
+    else {
+      if(!cur_room[1]) 
+        kueste+=({dirs[i]});
+      else if(cur_room[1]==-1)
+        walls+=({dirs[i]}); 
+    }
+  }
+  return 1;
+}
+
+
+nosave mixed GetNewRoom(string dir) {
+  mixed helpvar;
+  int x, y,what;
+  string roomname,my_name;
+  helpvar=explode(file_name(this_object()), "/");
+  my_name=helpvar[sizeof(helpvar)-1];
+  if(sizeof(helpvar=explode(my_name, ":"))) {
+    x=to_int(helpvar[1]);
+    y=to_int(helpvar[2]);
+  }
+  else {
+   x=0;
+   y=0;
+  }
+  switch(dir) {
+    case OSTEN:  roomname=sprintf("%s:%d:%d",helpvar[0],(x+1),y); break;
+    case NORDEN: roomname=sprintf("%s:%d:%d",helpvar[0],x,(y-1)); break;
+    case SUEDEN: roomname=sprintf("%s:%d:%d",helpvar[0],x,(y+1)); break;
+    case WESTEN: roomname=sprintf("%s:%d:%d",helpvar[0],(x-1),y); break;
+    case NORDOSTEN : roomname=sprintf("%s:%d:%d",helpvar[0],(x+1),(y-1)); break;
+    case SUEDOSTEN : roomname=sprintf("%s:%d:%d",helpvar[0],(x+1),(y+1)); break;
+    case SUEDWESTEN: roomname=sprintf("%s:%d:%d",helpvar[0],(x-1),(y+1)); break;
+    case NORDWESTEN: roomname=sprintf("%s:%d:%d",helpvar[0],(x-1),(y-1)); break;
+  }
+  if((what=coord_of_island(roomname))<1) {
+    helpvar=explode_coords(roomname);
+    x=helpvar[1]-21; //relativ zur Gilde
+    y=helpvar[2]-21;
+    helpvar=to_string(x)+to_string(y);
+    TELL("angrox", sprintf("STD_ACID: '%s'\n", helpvar));
+    if(!member(dir2rooms,dir)) {
+      if(member(coords2rooms,helpvar)) {
+        dir2rooms+=([dir:coords2rooms[helpvar]]);
+      }
+    }
+    TELL("angrox", sprintf("STD_ACID(%d/%d): dir2rooms: %O\n",x,y,dir2rooms));
+      roomname="";
+  }
+  return ({roomname,what});
+}
+
+nosave int coord_of_island(string roomname) {
+  mapping coord;
+  mixed helpvar;
+  int x,y, rel_x,rel_y;
+  // Die Insel Koordinaten sind RELATIV zum Inselmittelpunkt!!!
+  // Der Inselmittelpunkt ist eigentlich auf 21/21
+  
+  //      y    x  x x 
+  coord=([3:({-3,-2,2}),2:({-4,-3,-2,-1,0,1,3}),1:({-3,-2,-1,0,1,2,3}),0:({-3,-2,-1,0,1,2,3,4}),-1:({-2,-1,0,1,2,3}),-2:({-1,0,1}),-3:({-1,0,1}),-4:({-1,0,1}),-5:({0})]);
+  helpvar=explode_coords(roomname);
+  x=helpvar[1];
+  y=helpvar[2];
+  rel_x=x-21;
+  rel_y=y-21;
+  // INSEL
+  if(member(coord,rel_x)) {
+    if(member(coord[rel_x],rel_y)!=-1)
+      return 0;
+  }
+  // Stiege + Anlegestelle
+  if(rel_x==-21 && rel_y==0) return 0;
+  // Endgueltiger Rand (absolut gesehen)
+  if(x>40 || x<0 || y>40 || y<0) 
+    return -1;
+
+  return 1;
+}
+
+nosave mixed explode_coords(string roomname) {
+  mixed helpvar;
+  int x,y;
+  helpvar=explode(roomname, ":");
+  //        name              y                   x
+  return ({helpvar[0],to_int(helpvar[2]),to_int(helpvar[1])});
+}
+
+nosave int swim_out(string str) {
+  if(!sizeof(dir2rooms)) return 0;
+  if(member(({"an ufer", "ans ufer", "zurueck", "zur insel",
+          "zum festland"}), str)==-1) 
+  {
+    write(BS("Wohin moechtest Du schwimmen?"));
+    return 1;
+  }
+  return get_out(str);
+}
+nosave int crawl_out(string str) {
+  
+  if(!sizeof(dir2rooms)) return 0;
+  if(member(({"ufer", "insel", "festland"}), str)==-1) {
+    write(BS("Was moechtest Du erklimmen?"));
+    return 1;
+  }
+  return get_out(str);
+}
+
+nosave int get_out(string str) {
+  string room,dir;
+  string *rooms;
+ 
+  rooms=m_indices(dir2rooms);
+  dir=rooms[random(sizeof(rooms))];
+  room=dir2rooms[dir];
+  TP->move(NEKRO_ISLAND_DIR+"room/yaq_monoq/"+room, M_GO, "ans Ufer", 
+      "klettert", "klettert herein");
+  return 1;
+}

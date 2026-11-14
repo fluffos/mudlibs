@@ -1,0 +1,158 @@
+/************************************
+*  Thor@SilberLand                  *
+*  Ein Schneegeist - schneegeist.c  *
+*  1999-02-22                       *
+************************************/
+
+inherit "std/npc";
+
+#include "../weg.h"
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+
+mapping envir;
+
+void create() {
+  object ob;
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein Schneegeist");
+  SetProp(P_LONG,
+    "Vor Dir steht ein sich staendig veraenderndes Gebilde aus Schnee. "
+    "Du hast das Gefuehl, schwindlig zu werden, wenn Du es laenger "
+    "ansiehst, denn es veraendert staendig seine Groesse, seine Form und "
+    "seine Dichte. Fasziniert betrachtest Du dieses seltsame Gebilde aus "
+    "Schnee.");
+  SetProp(P_NAME, "Schneegeist");
+  SetProp(P_GENDER, MALE);
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:-100, T_RANGE_MAX:5]) );
+  AddId(({"geist", "schneegeist", "NOWIMPY"}));
+
+  create_default_npc(35);
+  SetProp(P_HANDS, ({" mit einem wirbelndem Schneesturm",
+                     QueryProp(P_HANDS)[1], DT_COLD}));
+//  SetProp(P_MAX_HP, );
+//  SetProp(P_BODY, );
+  SetProp(P_XP, QueryProp(P_XP)); // Bonus fuer Spells
+  SetProp(P_RACE, "Elementar");
+  SetProp(P_GUILD, "druidenzirkel");
+  SetProp(P_SIZE, 200);
+  SetProp(P_ALIGN, 150);
+  SetProp(P_MAX_HANDS, 0);
+  SetProp(P_HEAL,0);
+  SetProp(P_AGGRESSIVE,0);
+  SetProp(P_WIMPY, 0);
+  SetProp(P_RESISTANCE_STRENGTHS,     // komplett resistent gegen DT_COLD
+    ([DT_FIRE: 1.0, DT_COLD: -1.0, DT_WATER: 0.2, DT_POISON: 0.3]) );
+//  SetProp(P_ARTICLE, 0);
+  SetProp(P_NOMAGIC,0);
+  SetProp(P_TRANSPARENT, 0);
+
+  SetProp(P_MSGIN, "entsteht aus dem Schnee");
+  SetProp(P_MSGOUT, "verschwindet");
+  SetProp(P_MMSGIN, "erscheint in einer Rauchwolke");
+  SetProp(P_MMSGOUT, "verschwindet mit Knall und Schwefelduft");
+
+  SetProp(P_DIE_MSG,  " materialisiert sich zu einem Eisschild.\n");
+  SetProp(P_NOCORPSE, 1 );
+
+  AddInfo(DEFAULT_INFO, "veraendert seine Form.\n");
+
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    "Der Schneegeist veraendert seine Form.\n" }) );
+
+  SetProp(P_SPELLRATE,30);
+  AddSpell( 3, 400,
+    "Der Schneegeist vereist Dich.\n",
+    "Der Schneegeist vereist @WEN.\n",
+     DT_COLD, ([SP_SHOW_DAMAGE:1]));
+  AddSpell( 4, 300,
+    "Der Schneegeist huellt Dich in einen Schneesturm ein.\n",
+    "Der Schneegeist huellt @WEN in einen Schneesturm ein.\n",
+     ({DT_COLD, DT_AIR}), ([SP_SHOW_DAMAGE:1]));
+  AddSpell( 5, 200,
+    "Der Schneegeist blaest Dir eisig kalten Wind ins Gesicht.\n",
+    "Der Schneegeist blaest @WEN eisig kalten Wind ins Gesicht.\n",
+     ({DT_COLD, DT_AIR}), ([SP_SHOW_DAMAGE:1]));
+  AddSpell( 3, 1,
+    "Der Schneegeist laesst die Luft um Dich herum gefrieren.\n",
+    "Der Schneegeist laesst die Luft gefrieren.\n",
+     ({DT_COLD, DT_AIR}), "spell_temperatur");
+  
+  SUID;
+  CLONEME(ARMOUR("eisschild"));
+  ob=clone_object("/gilden/druidenzirkel/armour/elementarring");
+  ob->set_ring_element("eis");
+  ob->move(this_object(), M_NOCHECK);
+  command_me("trage ring");
+}
+
+init()
+{
+  ::init();
+  if (TP && query_once_interactive(TP))
+    SetProp(P_PREFERED_ENEMY, ({ 100,TP }) );
+}
+
+die(int poisondeath)
+{
+  write_file(LOG("schneegeist_kills"),
+         dtime(time())+": "+CAP(getuid(TP))+" toetet den Schneegeist.\n");
+
+  environment(ME)->Set( P_ENVIRONMENT, 0, F_QUERY_METHOD );
+  
+  ::die(poisondeath);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  if( killer == TO )
+    write_file(LOG("schneegeist_kills"),
+         sprintf( dtime(time())+": Der Schneegeist hat gerade "+CAP(getuid(player))
+                         +" umgebracht - %d EP!\n", lostexp));
+  return ;
+}
+
+
+int Defend(int dam, mixed dam_type_list, mixed spell, object enemy)
+{
+  string *temp;
+
+  if(spell)
+    return ::Defend(dam, dam_type_list, spell, enemy);
+
+  else if(stringp(dam_type_list) && (member(m_indices(PHYSICAL_DAMAGE_TYPES),
+      dam_type_list) != -1))
+    dam=0;
+  
+  else if(pointerp(dam_type_list) && sizeof(dam_type_list)) {
+    temp=m_indices(PHYSICAL_DAMAGE_TYPES) & dam_type_list;
+    dam -= dam * sizeof(temp) / sizeof(dam_type_list);
+  }
+  return ::Defend(dam, dam_type_list, spell, enemy);
+}
+
+void spell_temperatur(object enemy, int damage, mixed dam_type)
+{
+  envir=environment(ME)->QueryProp(P_ENVIRONMENT);
+  environment(ME)->Set(P_ENVIRONMENT, symbol_function("NewEnv", this_object()),
+            F_QUERY_METHOD );
+  if(find_call_out("warm")==-1)
+    call_out("warm", 10+random(10));
+}
+
+mapping NewEnv()
+{
+  return envir+([ENV_TEMPERATURE:-50]);
+}
+
+warm()
+{
+  tell_room(environment(ME), "Es wird wieder waermer.\n");
+  environment(ME)->Set( P_ENVIRONMENT, 0, F_QUERY_METHOD );
+}

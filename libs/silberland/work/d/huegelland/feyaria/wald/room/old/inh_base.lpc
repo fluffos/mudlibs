@@ -1,0 +1,151 @@
+/*                                                            *
+ *  Basis-Inherit fuer die Gaenge der Untwelt. Nur fuer die   *
+ *  Ausgaenge und die NPCs zustaendig.                        *
+ *                                                            *
+ *  Stahldorn  21.12.1997                                     *
+ *                                                            */
+
+inherit "std/room";
+
+#include "../def.h"
+#include <mnpc.h>
+#define ABS(x) (x>=0?x:-x)
+#define UNDER_CONSTRUCTION 1
+
+string *richtungen, *viecher, position;
+
+create()
+{
+  int i;
+  ::create();
+
+  position = file_name(this_object())[<8..<1];
+/*
+  for(i=sizeof(richtungen)-1; i>=0; i--)
+     AddExit(richtungen[i], get_dest_room(richtungen[i]));
+
+  for (i=sizeof(viecher)-1; i>=0; i--)
+     AddItem( viecher[i], REFRESH_DESTRUCT, 
+        ([P_MNPC_DEFAULTROOM: file_name(this_object())]));
+*/
+}
+
+
+string newpos(string oldpos, int xmod, int ymod)
+{ 
+  int tmp1, tmp2;
+
+  tmp1 = ((int) oldpos[2..4])+xmod;
+  tmp2 = ((int) oldpos[5..7])+ymod;
+
+  return ( oldpos[0..1] + 
+         ((tmp1>=0)?"+":"-") + ((ABS(tmp1)<10)?"0":"") + ABS(tmp1) +
+         ((tmp2>=0)?"+":"-") + ((ABS(tmp2)<10)?"0":"") + ABS(tmp2) );
+}
+
+string get_dest_room(string dir)
+{
+  string ret;
+//  DB("Position: "+position);
+  ret = ROOM ""; 
+
+  switch (dir)
+  {
+    case "norden": return (ret+ newpos(position,1,0)); 
+    case "nordosten": return (ret+ newpos(position,1,1));
+    case "osten": return (ret+ newpos(position,0,1));
+    case "suedosten": return (ret+ newpos(position,-1,1));
+    case "sueden": return (ret+ newpos(position,-1,0));
+    case "suedwesten": return (ret+ newpos(position,-1,-1));
+    case "westen": return (ret+ newpos(position,0,-1));
+    case "nordwesten": return (ret+ newpos(position,1,-1));
+    default: return "BUG!";
+  }
+}
+
+
+
+// -------------------------------------------------------------
+
+#if UNDER_CONSTRUCTION
+
+string inv_dir(string dir)
+{
+  string *dirs, *invdirs;
+
+  dirs=({ "norden", "nordosten", "osten", "suedosten", "sueden", 
+          "suedwesten", "westen", "nordwesten" });
+  invdirs=({ "sueden", "suedwesten", "westen", "nordwesten", "norden", 
+             "nordosten", "osten", "suedosten" });
+  return(invdirs[member(dirs, dir)]);
+}
+
+string long_dir(string dir)
+{
+  string *dirs, *longdirs;
+
+  dirs=({ "n", "no", "o", "so", "s", "sw", "w", "nw" });
+  longdirs=({ "norden", "nordosten", "osten", "suedosten", "sueden", 
+              "suedwesten", "westen", "nordwesten" });
+
+  if(member(longdirs, dir) > -1)
+    return dir;
+  if(member(dirs, dir) > -1)
+    return(longdirs[member(dirs, dir)]);
+  else
+    return dir;
+}
+
+
+int NeuRaum(string str)
+{
+  string dir, ftext;
+  int i;
+
+  if (!str) return 0;
+  if((dir=get_dest_room(str=long_dir(str))) == "BUG!")
+    return 0;
+
+  if(!rm(file_name(TO)+".lpc"))
+  {
+    write("Zugriff verweigert!\n");
+    return 1;
+  }
+  
+  ftext = 
+    "#include \"../def.h\"\n\n" +
+    "inherit ROOM \"inh_owald.c\";\n\n" +
+    "create()\n{\n" + 
+    "  viecher= ({ });\n" +
+    "  richtungen = ({ \"" +str +"\"" ;
+
+  for(i=sizeof(richtungen)-1; i>=0; i--)
+     ftext+=(", " + "\""+richtungen[i]+"\"");
+
+  ftext += (  
+    " });\n" +
+    "  ::create();\n}\n");
+
+//  DB(ftext);
+  write_file(file_name(TO)+".lpc", ftext);
+
+  if(rm(dir+".lpc"))
+    write("File: "+dir+".c wird geloescht.\n");
+  else
+    write("File: "+dir+".c wird neu angelegt.\n");
+
+  write_file(dir+".lpc", 
+       "#include \"../def.h\"\n\n" +
+       "inherit ROOM \"inh_owald.c\";\n\n" +
+       "create()\n{\n" + 
+       "  viecher= ({ });\n" +
+       "  richtungen = ({ \"" +inv_dir(str) +
+       "\"});\n" +
+       "  ::create();\n}\n");
+
+  this_player()->move(dir,128);
+  return remove();
+}
+
+#endif
+// -------------------------------------------------------------

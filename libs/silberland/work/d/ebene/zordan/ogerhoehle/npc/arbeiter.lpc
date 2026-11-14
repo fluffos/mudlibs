@@ -1,0 +1,143 @@
+
+inherit "std/npc";
+inherit "std/npc/spells";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include "../def.h"
+
+void create() {
+  if (!is_clone(TO)) return;
+  ::create();
+
+  SetProp(P_SHORT, "Ein Oger-Arbeiter");
+  SetProp(P_LONG,
+    "Der sehr kraeftige Oger ist dabei, den Weg nach Nordwesten wieder "
+    "freizulegen. Du aechzt unter seinen gewaltigen Muskeln, die er im "
+    "Laufe seiner langanhaltenden Arbeit aufgebaut hat.");
+  SetProp(P_NAME, "Oger-Arbeiter");
+  SetProp(P_GENDER, MALE);
+  AddId( ({"oger", "oger-arbeiter", "arbeiter", "Axtexperte"}));
+
+  create_default_npc(30);
+  SetProp(P_HANDS, ({" mit kraeftigen Haenden",QueryProp(P_HANDS)[1],DT_BLUDGEON}));
+  SetProp(P_BODY, 200);
+  SetProp(P_RACE, "Oger");
+  SetProp(P_SIZE, 230+random(20));
+  SetProp(P_ALIGN, -200);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_RESISTANCE_STRENGTHS , 
+    ([DT_FIRE:      -0.3, DT_COLD:      -0.3, DT_WATER:  -0.5, DT_AIR:     0.0, 
+      DT_LIGHTNING: -0.3, DT_EXPLOSION: -0.1, DT_SOUND:  -0.1, DT_LIGHT:  -0.3,
+      DT_ELECTRIC:  -0.2, DT_ACID:      -0.1, DT_POISON: -0.1, DT_TERROR:  0.3,
+      DT_HOLY:      -0.3, DT_UNHOLY:    -0.1, DT_MAGIC:  -0.3 ]) );
+  SetProp(P_NOMAGIC,0);
+
+  SetProp(P_FOOD, 0);
+
+  SetProp(P_MSGIN, "kommt verschwitzt herein und faengt an zu arbeiten");
+  SetProp(P_MSGOUT, "macht eine Pause");
+  SetProp(P_MMSGIN, "erscheint in einer Rauchwolke");
+  SetProp(P_MMSGOUT, "verschwindet mit Knall und Schwefelduft");
+
+  SetProp(P_DIE_MSG,  " hat erstmal Pause.\n");
+
+  AddInfo(DEFAULT_INFO, "ist zu vertieft in seine Arbeit.\n");
+  AddInfo("zordan", "grunzt Dich nur kurz an.");
+
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    "Der Arbeiter hat genug zu tun.\n" }) );
+
+  SetProp(P_SPELLRATE,40);
+
+  AddSpell(3,400,
+    "Der Oger-Arbeiter reisst ein grosse Wunde in Deinen Magen.\n",
+    "Der Oger-Arbeiter reisst ein grosse Wunde in Deinen Magen.\n",
+     DT_RIP,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(1,600,
+    "Der Oger-Arbeiter zerschmettert Deinen Kopf mit der Spitzhacke.\n",
+    "Der Oger-Arbeiter zerschmettert @WESSEN Kopf mit der Spitzhacke.\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1]));
+
+  AddDefaultSpell(1, 200, DS_DISARM);
+
+  AddDefaultSpell(1, 200, DS_REDUCE_AC);
+
+  SetChats(1, ({
+    "Der Arbeiter wischt sich den Schweiss von der Stirn.\n",
+    "Der Arbeiter lehnt sich kurz auf seine Spitzhacke.\n",
+    "Der Arbeiter schaut Dich kurz an und geht dann wieder an die Arbeit.\n",
+    "Der Arbeiter grunzt laut.\n",
+    "Der Arbeiter haut ein riesiges Stueck aus der Wand.\n"}) );
+  SetAttackChats(10, ({
+    "Der Arbeiter wirft sich wuetend in den Kampf.\n",
+    "Der Arbeiter holt zu einem gewaltigen Schlag aus.\n",
+    "Der Arbeiter grunzt Dich wild an.\n"}) );
+
+  SUID;
+  CLONEME( "/p/weapon/axe/spitzhacke" );
+  command("zuecke spitzhacke");
+  CLONEME( "/p/armour/armour/weste" );
+  if (random(100)>40) CLONEME( "/p/armour/helm/eisenhelm" );
+  CLONEME( "/p/armour/boots/sandalen" );
+  command("trage alles");
+}
+
+void die(int poisondeath) {
+  write_file(LOG "spieler.kills",
+    ctime()+": "+CAP(getuid(PL))+" killt den Arbeiter.\n");
+  ::die(poisondeath);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp) {
+  if(killer == ME)
+    write_file(LOG "spieler.deads",
+      ctime()+": Der Arbeiter hat gerade "+CAP(getuid(player))+" umgebracht.\n");
+  command_me("iss leiche");
+}
+
+// Reactions
+
+void StartReaction(string verb, string gruppe, string adverb, int touch) {
+  if (find_call_out("reaction") != -1) return;
+  switch (gruppe) {
+    case "aengstlich":
+    case "traurig":
+    case "aergerlich":
+      call_out("reaction", 0, TP, 
+        "grunzt Dich verachtend an.",
+        "grunzt "+TPN+" verachtend an.");
+      break;
+    case "fies":
+    case "frech":
+    case "intim":
+      call_out("reaction", 0, TP,
+        "mag das gar nicht und greift Dich an!",
+        "mag das gar nicht und greift "+TPN+" an!");
+      ME->Kill(TP);
+      break;
+    case "albern":
+    case "froh":
+    case "nett":
+    case "neutral":
+      call_out("reaction", 0, TP,
+        "grunzt: Lass das oder ich toete Dich wirklich!", 
+        "grunzt: Lass das oder ich toete Dich wirklich!");
+      break;
+  }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch) {
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void reaction(object ob, string macher, string andere) {
+  if (present(ob, ENV(TO))) {
+    tell_object(ob, BS(Name(WER, 1)+" "+macher));
+    tell_room(ENV(TO), BS(Name(WER, 1)+" "+andere), ({ob}));
+  }
+}

@@ -1,0 +1,357 @@
+// SilberLand MUDlib
+//
+// CONTAINER/RESTRICTIONS.C -- container restrictions
+//
+// $Date: 2002/01/19 20:36:37 $                      
+/* $Revision: 3.8 $       
+ * $Log: restrictions.c,v $
+ * Revision 3.8  2002/01/19 20:36:37  Woody
+ * Bugfix: auch bei in-Beutel-aufnehmen kein Nullgewicht zulassen
+ *
+ * Revision 3.7  2001/03/26 00:08:28  Woody
+ * Gender-Filter bei "jede(n/s) <objekt>" auskommentiert (siehe comment)
+ *
+ * Revision 3.6  1999/03/01 17:41:05  Woody
+ * MayAddObject(), P_TOTAL_OBJECTS, present_objects() erweitert
+ * (beherrscht nun "ausser", "und", "verschiedenes", "behaltenes",...)
+ *
+ * Revision 3.5  1998/12/08 21:05:50  Woody
+ * 'jede(n/s) xxx' Handling
+ *
+ * Revision 3.4  1997/11/05 16:15:05  Woody
+ * MayAddWeight() ueberarbeitet
+ *
+ * Revision 3.3  1997/10/16 15:45:20  Woody
+ * MayAddWeight() ueberarbeitet (Objekt als Parameter, Gewichtstoleranz)
+ *
+ * Revision 3.2  1997/06/25 11:49:34  Woody
+ * complex_id "waffe" raus, PreventLeave()
+ *
+ * Revision 3.1  1997/04/22 15:50:56  Feyaria
+ * ruestung entfernt (gibt ja sachen mit id ruestung)
+ *
+ * Revision 3.0  1997/03/13 01:09:51  Woody
+ * prepared for revision control
+ *
+ * Revision 2.9  1996/10/12  Woody
+ * present_objects() versteht jetzt (ausser "alles") auch die Filter
+ * "waffe(n)" und "ruestung(en)"
+ *
+ * Revision 2.8  1995/07/05  14:45:27  Jof
+ * MayAddWeight beachtest, auch das environment (i.e. Spieler) (Rumata)
+ *
+ * Revision 2.7  1995/04/20  18:54:31  Jof
+ * Implement caching of weightcontents
+ *
+ * Revision 2.6  1994/06/13  07:36:24  Jof
+ * Removed SET_METHODs
+ *
+ * Revision 2.5  1994/05/15  18:10:34  Jof
+ * cleanups
+ *
+ * Revision 2.4  1994/05/15  16:41:17  mud
+ * Clean-Ups
+ *
+ * Revision 2.3  1994/03/21  16:48:13  Jof
+ * Reindented files using emacs - once again
+ *
+ * Revision 2.2  1994/03/18  12:09:47  Jof
+ * Fixed indentation
+ *
+ * Revision 2.1  1994/01/14  22:49:09  mud
+ * fixed bug in create() : MAX -> TOTAL
+ *
+ * Revision 2.0  1994/01/13  16:59:58  mud
+ * *** empty log message ***
+ *
+ * Revision 1.2  1994/01/08  13:10:50  mud
+ * #pragma strong_types
+ *             
+ */                            
+
+// This is a simple container to put objects in. It defines all functions
+// which are necessary to describe an object which can be filled with
+// other things.
+//
+// It will support restrictions for volume, weight etc.
+//
+// The following properties are defined:
+// P_MAX_WEIGHT - maximum weight which container can carry
+// P_TOTAL_WEIGHT - total weight, with contents.
+// P_WEIGHT - the weight of the container without contents
+// P_TOTAL_OBJECTS - total number of objects inside
+//
+// Functions for manipulation of weight
+// MayAddWeight(weight) - Can <weight> be inserted?
+// AddWeight(weight) - Add an amount of <weight>
+// MayAddObject(ob) - Can object <ob> be inserted?
+//
+// IMPORTANT: unit equals 1 gram
+
+#pragma strong_types
+#pragma save_types
+
+#define NEED_PROTOTYPES
+
+#include "/sys/thing/properties.h"
+#include <properties.h>
+#include <defines.h>
+
+#define DEBUGGER "debugger"
+#define TD(x) if(find_player(DEBUGGER)) tell_object(find_player(DEBUGGER),x)
+#define MAX_OBJECTS 300
+ 
+// local properties prototypes
+nosave int _query_total_weight();
+nosave int _query_total_objects();
+
+void create()
+{
+  Set(P_WEIGHT_PERCENT, 50);
+  Set(P_TOTAL_WEIGHT, -1, F_SET_METHOD);
+  Set(P_TOTAL_WEIGHT, PROTECTED, F_MODE);
+}
+
+nosave int LastWeightCalc, contents, LastObjectCount, objcount;
+
+int query_weight_contents()
+{
+  object *objs;
+  int w,w2,i;
+
+  if (Query(P_LAST_CONTENT_CHANGE)<LastWeightCalc) return contents;
+  w=0;
+  objs=all_inventory(this_object());
+  i=sizeof(objs);
+  while (i--)
+  {
+    if (!(w2=objs[i]->QueryProp(P_TOTAL_WEIGHT)))
+      w2=objs[i]->QueryProp(P_WEIGHT);
+    w+=w2;
+  }
+  LastWeightCalc=time();
+  return contents=w;
+}
+
+// Anzahl der Objekte innerhalb eines Containers plus 1 fuer Container selbst
+int query_number_of_objects()
+{
+  object *inv;
+  int i;
+
+  if ( Query(P_LAST_CONTENT_CHANGE) < LastObjectCount )
+    return objcount;
+
+  LastObjectCount = time();
+  objcount = 1;
+
+  // Invis-Objekte werden nicht gezaehlt (Quest-Objekte etc)
+  inv = filter_objects( all_inventory(this_object()), "short" );
+
+  // Autoloader werden auch nicht mitgezaehlt
+  // inv -= filter_objects( inv, "QueryProp", P_AUTOLOADOBJ );
+
+  for ( i = sizeof(inv)-1; i >= 0; i-- )
+    objcount += ( inv[i]->QueryProp(P_TOTAL_OBJECTS) || 1 );
+
+  return objcount;
+}
+
+varargs int MayAddObject(object ob)
+{
+  // invis Objekte passen immer rein
+  if (!ob->short())             // || ob->QueryProp(P_AUTOLOADOBJ)
+    return 0;
+
+  // Bewegungen innerhalb eines env() klappen immer
+  if ( (previous_object() && environment(previous_object()) &&
+        environment(environment(previous_object()))) &&
+       // Gegenstand wird ein env() hoeher bewegt
+       ( (environment(environment(previous_object())) == this_object()) ||
+         // Gegenstand wird eine Ebene tiefer bewegt
+         present(this_object(), environment(previous_object())) ||
+         // Gegenstand wird auf einer Ebene bewegt (nicht im Raum)
+         (environment(environment(environment(previous_object()))) &&
+          environment(this_object()) ==
+          environment(environment(previous_object()))) ) )
+    return 0;
+
+  if ((_query_total_objects() + (ob->QueryProp(P_TOTAL_OBJECTS) || 1)) >
+      (MAX_OBJECTS + 1))
+    return -1;
+
+  if ( environment() )
+    return environment()->MayAddObject(ob);
+
+  return 0;
+}
+
+varargs int MayAddWeight(mixed weight)
+{
+  int w;
+  object env;
+
+  if (intp(weight)) {
+    if (weight <= 0) return 0;
+    w = weight;
+  }
+  else if (objectp(weight)) {
+    w = weight->IsUnit() ? weight->QueryProp(P_WEIGHT) :
+        weight->QueryProp(P_TOTAL_WEIGHT) || weight->QueryProp(P_WEIGHT);
+    if (w <= 0) return 0;
+    env = environment(weight);
+    // 1. Fall: z.B. "steck x (in mir) in beutel (in mir)"
+    if (env && (env == environment()))
+    {
+      if (query_weight_contents() + w > ME->QueryProp(P_MAX_WEIGHT))
+        return -1;
+      if (QueryProp(P_WEIGHT_PERCENT) <= 100)
+        return 0;
+      return env->MayAddWeight(w * QueryProp(P_WEIGHT_PERCENT) / 100 - w);
+    }
+    // 2. Fall: z.B. "nimm x aus beutel (in mir)"
+    if (env && (environment(env) == ME))
+      w -= w * env->QueryProp(P_WEIGHT_PERCENT) / 100;
+  }
+  else
+    return 0;
+
+  if (query_weight_contents() + w > ME->QueryProp(P_MAX_WEIGHT))
+    return -1;
+  if (environment() &&
+      environment()->MayAddWeight(
+        (w * QueryProp(P_WEIGHT_PERCENT) / 100) || 1) < 0)
+    return -2;
+  return 0;
+}
+
+/* Redefine PreventInsert() to prevent inserting of special objects. If
+ * a value greater 0 is returned the object ob can't be inserted in the
+ * container.
+ */
+varargs int PreventInsert(object ob) { return 0; }
+varargs int PreventLeave(object ob, mixed dest) { return 0; }
+
+/*
+ * get a list of all contained objects matching a complex description
+ */
+object *present_objects(string complex_desc) 
+{
+  string *strlst;
+  object ob;
+  object *obs, *erg;
+  int i;
+
+  strlst=allocate(2);
+  if (sscanf(complex_desc, "%s ausser %s", strlst[0], strlst[1])==2) {
+    erg=present_objects(strlst[0]);
+    obs=present_objects(strlst[1]);
+    return erg-obs;
+  }
+
+  erg=({});
+  strlst=explode(complex_desc, " und ");
+
+  for (i=0; i<sizeof(strlst); i++)
+  {
+    switch( complex_desc=strlst[i] )
+    {
+      case "alles":
+        obs=all_inventory(this_object());
+        break;
+      case "waffen":
+      case "jede waffe":
+      case "alle waffen":
+        obs=filter_objects(all_inventory(this_object()),
+                           "QueryProp", P_WEAPON_TYPE);
+        break;
+      case "ruestungen":
+      case "jede ruestung":
+      case "alle ruestungen":
+        obs=filter_objects(all_inventory(this_object()),
+                           "QueryProp", P_ARMOUR_TYPE);
+        break;
+      case "verschiedenes":
+        obs=all_inventory();
+        obs-=filter_objects(obs, "QueryProp", P_WEAPON_TYPE);
+        obs-=filter_objects(obs, "QueryProp", P_ARMOUR_TYPE);
+        break;
+      case "behaltenes":
+      case "alles behaltene":
+        obs=filter_array( all_inventory(this_object()),
+            lambda( ({ 'a }), ({ #'==,
+                ({ #'call_other, 'a, "QueryProp", P_KEEP_ON_SELL }),
+                getuid(this_object()) }) ) );
+        obs+=(QueryProp(P_ARMOURS)||({}))+({ QueryProp(P_WEAPON) })-({ 0 });
+        break;
+      default:
+      {
+        string s1,s2;
+        int gender;
+
+        if ((sscanf(complex_desc, "%s %s", s1, s2)==2) &&
+            member((["jeden","jede","jedes","alle"]),s1))
+        {
+          obs=filter_objects(all_inventory(this_object()),"id",s2);
+          /*
+          // sinnlos, solange man nicht fuer jede ID das Geschlecht weiss
+          if (gender=(["jeden":MALE+1,"jede":FEMALE+1,"jedes":NEUTER+1])[s1])
+            obs=filter_array( obs,
+                lambda( ({ 'a }), ({ #'==,
+                    ({ #'call_other, 'a, "QueryProp", P_GENDER }),
+                    gender-1 }) ) );
+          */
+        }
+        else
+          if (objectp(obs=present(complex_desc, this_object()) || ({ })))
+            obs=({ obs });
+      }
+    }
+    obs-=erg;
+    obs=filter_objects(obs, "short");
+    erg+=obs;
+  }
+  return erg;
+}
+
+/* 
+ * returns a list of all found objects inside itself
+ * may call same function in objects inside
+ */
+object *locate_objects(string complex_desc,int info) 
+{
+  object *search_obs;
+  object *found_obs;
+  object *found_i;
+  int i, si;
+  string was, wo;
+  
+  if( sscanf( complex_desc, "%s in %s", was, wo ) == 2 )
+  {
+    found_obs = ({});
+    search_obs = present_objects( wo );
+    si = sizeof(search_obs);
+    for( i=0; i<si; i++ )
+    {
+      found_i = search_obs[i]->locate_objects( was, info );
+      if( pointerp(found_i) )
+	found_obs += found_i;
+    }
+    return found_obs;
+  }
+  // kein "in" gefunden
+  return present_objects(complex_desc);
+}
+
+// **** local property methods
+nosave int _query_total_weight() 
+{ 
+  return QueryProp(P_WEIGHT)+
+    (QueryProp(P_WEIGHT_PERCENT)*query_weight_contents()/100); 
+}
+
+nosave int _query_total_objects()
+{
+    return query_number_of_objects();
+}
+

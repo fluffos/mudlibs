@@ -1,0 +1,1812 @@
+/***************** Koecher der Waldlaeufergilde ******************************
+18.07.2005 - Begin (Lilyth, Torian, Delgo)@Silberland <sl.mud.at>
+22.08.2005 - 1. Version fertig
+29.08.2006 - 2. Version fertig
+*****************************************************************************/
+//** INHERIT + INCLUDE + DEFINE ********************************************//
+inherit "std/armour";
+#include "../def.h"
+#include "/gilden/waldlaeufer/functions.h"
+#include "/spellbooks/waldlaeufer/std/restrictions.lpc"
+
+#define P_CORPSE_MARK "corpse_mark"
+//-- Farben -----------------------------------------------------------------
+nosave string *std_colors=({});    //Farben vom Spieler setzbar
+nosave string *report_colors=({}); //Idee von den Nekros uebernommen
+nosave string normal=ANSI_NORMAL;
+//-- Report-Vars -------------------------------------------------------------
+#define RL_COLOR 1
+#define RL_MAX 2
+#define RL_SPECIAL 3
+#define RL_SPELL 4
+#define RL_ALIGN 5
+#define RL_EXTRA_WIDE 6
+#define RL_XP 7
+#define RL_TEDDY 8
+#define RL_PET 9
+
+nosave int cnt=5; // fuer Align-Anzeige
+nosave int callout;
+nosave int aktiv=0;
+nosave int lastHP, lastSP, lasthp, lastsp, lastAnimalHp;
+nosave string akt_lvl="";
+nosave string align="";
+nosave string owner_name;
+nosave object owner;
+nosave object *summons = ({});
+nosave string masterAbility = 0;
+nosave int last_bond_check;
+nosave string last_bond_animal = 0;
+
+//-- Prototypes --------------------------------------------------------------
+nosave string SpecialReport(object owner);
+void NotifyHpChange(int force);
+void SetListener(int flag);
+nosave void activate(object ob);
+nosave int ConfigureReport(string str, int what);
+nosave int ShowReportHelp();
+nosave int ShowColorHelp();
+//**************************************************************************//
+
+
+
+//** Wichtige Vorfunktionen ************************************************//
+//-- Keine Shadows -----------------------------------------------------------
+nomask int query_prevent_shadow() { return 1; }
+//**************************************************************************//
+
+//** StandardFunktionen ****************************************************//
+//-- Create ------------------------------------------------------------------
+create()
+{
+  if( !is_clone(TO) ) return;
+  ::create();
+  
+  //Die Farben festsetzen
+  std_colors=({ANSI_GREEN, ANSI_BOLD+ANSI_YELLOW, ANSI_CYAN, 
+               ANSI_BOLD+ANSI_BLUE, ANSI_PURPLE, ANSI_RED});
+  report_colors=std_colors;
+
+  SetProp(P_SHORT, "Ein grauer Koecher");
+  SetProp(P_LONG, 
+    "Dieser schlichte Koecher ist das Zeichen der Waldlaeufer. Er wurde "
+    "an der ewigen Flamme von Tethyr genaeht und durch die Magie der Flamme "
+    "scheint der Vorrat von Pfeilen nie zu enden.\n@@freipfeile@@");
+  
+  AddDetail( ({"koecher"}),
+    "Darin bewahrt man Pfeile auf. Davon brauchen die Waldlaeufer viel.");
+    
+  AddDetail( ({"zeichen", "waldlaeufer", "laeufer"}),
+    "Der Koecher ist das Zeichen der Waldlaeufer.");
+    
+  AddDetail( ({"vorrat", "pfeile", "pfeil"}),
+    "Der Vorrat an Pfeilen in diesem Koecher scheint gespeisst durch die "
+    "Macht der ewigen Flamme nie zu enden.");
+    
+  AddDetail( ({"macht", "flamme", "tethyr"}),
+    "Die Magie kommt aus der ewigen Flamme von Tethyr.");
+  
+  SetProp(P_NAME, "Koecher");
+  SetProp(P_NAME_ADJ, "grau");
+  SetProp(P_GENDER, MALE );
+  SetProp(P_INFO, 
+    "Das Geschenk der Waldlaeufer. <wlhilfe> fuer mehr Infos.\n");
+  AddId( ({"koecher", GUILD_OBJ_ID}) );
+  SetProp(P_ARMOUR_TYPE, AT_MISC );
+  SetProp(P_AC, 0);
+  SetProp(P_MATERIAL, MAT_CLOTH );
+  SetProp(P_WEIGHT, 50);
+  SetProp(P_VALUE, 800+random(100) );
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_AUTOLOADOBJ, 1);
+  SetProp(P_WORN_TEXT, "um den Ruecken gebunden");
+  SetProp(P_WEAR_TEXT, ({ "Du wirfst Dir den Koecher ueber den Ruecken.\n", 
+                          " wirft sich den Koecher ueber den Ruecken.\n" }));
+  SetProp(P_UNWEAR_TEXT, ({ "Du nimmst den Koecher vom Ruecken.\n", 
+                            " nimmt den Koecher vom Ruecken.\n" }));
+                          
+  AddCmd( "wlhilfe"   , "ShowHelp"        ); //HilfeSeite
+  AddCmd( "wlinfo"    , "wlinfo"          ); //Info
+  AddCmd( "wlsinfo"   , "wlinfo_short"    ); //Info kurz
+  AddCmd( "wlwisper"  , "guild_shout"     ); //Gildeninternes rufen
+  AddCmd( "wlemote"   , "guild_shout"     ); //mit wlemote auch emote moeglich
+  AddCmd( "wllausch"  , "ShowHistory"     ); //History des guild_shout
+  AddCmd( "mwisper"   , "mages_shout"     ); //Kommunikation fuer Gildenmagier
+  AddCmd( "mwlhist"   , "ShowMagesHistory"); //GildenmagierHist
+  AddCmd( "wlpunkte"  , "ShowSkillPoints" ); //SKillpoints
+  AddCmd( "wlwer"     , "guild_who"       ); //Waldlaeufer-Wer,wlwer kurz 
+  AddCmd( "wlreport"  , "report"          ); //Ranger_Report
+  AddCmd( "wlstatus"  , "wl_status"       ); //Ranger_Report_Status
+  AddCmd( "wlfarben"  , "SetColors"       ); //REPORT Farben
+  AddCmd( "wlfarbe"   , "ColorSetting"    ); //Farbe AN oder AUS 
+  AddCmd( "wltitel"   , "AdjustTitle"     ); //Titel setzen
+  AddCmd( "wlgilde"   , "gilde"           ); //Transport in Gilde (Testies)
+  AddCmd( "wlcombo"   , "combo_trigger"   ); //Comboschaden anzeigen (Testies)
+  AddCmd( "wlsettask" , "set_task"        ); //Gildenaufgaben setzen (Testies)
+  AddCmd( "wlsetquest", "set_quest"       ); //Gildenquest setzen (Testies)
+  AddCmd( "wlpruefe"  , "corpse_test"     ); //Leichenpruefung
+  AddCmd( "freipfeil",  "cmd_freipfeil"   ); // fuer Bogenschuetzen, die Freipfeile beschwoeren koennen    
+  
+  call_out("SetListener",2,1);
+}
+
+public string freipfeileStatus() {
+  mixed *fs;
+  fs = QueryProp(P_RANGER_FREISCHUETZ);
+
+  if(fs && fs[RANGER_FREISCHUETZ_COUNT] > 0) return sprintf("Du hast noch %d Freipfeile im Koecher.", fs[RANGER_FREISCHUETZ_COUNT]);
+  else {
+    SetProp(P_RANGER_FREISCHUETZ, 0);
+    return "Du hast keine Freipfeile mehr im Koecher.";
+  } 
+}
+
+public int cmd_freipfeil(string str) {
+  mixed *fs;
+  fs = QueryProp(P_RANGER_FREISCHUETZ);
+  if(!fs) return 0;
+  if(fs[RANGER_FREISCHUETZ_ACTIVE]) {
+    write(BS("Du hast bereits einen Freipfeil eingelegt."));
+    return 1;
+  }
+
+  write(BS("Du ziehst einen Freipfeil auf den Koecher und legst ihn auf die Sehne."));
+  say(BS(TPN+" zieht einen schwarzen Pfeil mit roten Federn aus dem Koecher und legt ihn auf die Sehne."));
+  
+  fs[RANGER_FREISCHUETZ_ACTIVE] = 1;
+  fs[RANGER_FREISCHUETZ_COUNT] = fs[RANGER_FREISCHUETZ_COUNT] - 1;
+  SetProp(P_RANGER_FREISCHUETZ, fs);
+  
+  write(BS(freipfeileStatus()));
+
+  return 1;
+}
+
+public void UseFreipfeil() {
+  mixed *fs;
+  fs = QueryProp(P_RANGER_FREISCHUETZ);
+  fs[RANGER_FREISCHUETZ_ACTIVE] = 0;
+  SetProp(P_RANGER_FREISCHUETZ, fs);
+  return;
+}
+
+
+public string freipfeile() {
+  mixed *fs;
+  fs = QueryProp(P_RANGER_FREISCHUETZ);
+  if(!fs) return "\b";
+
+  return freipfeileStatus();
+}
+
+//-- Remove ------------------------------------------------------------------
+int remove(int silent)
+{
+  if(!silent) { write("Der Koecher wird zu Staub.\n"); }
+  SetListener(0);
+  return ::remove(1);
+}
+
+//-- Reset -------------------------------------------------------------------
+void reset()
+{
+  if(!is_clone(this_object())) return; 
+  ::reset();
+}
+
+//-- NetDead & Alive ---------------------------------------------------------
+void BecomesNetAlive(object wer) 
+{
+  if(wer==MENV) 
+  { if(aktiv) 
+    { wer->RemoveHpHook(ME);
+      activate(wer); //Report
+    }
+  }
+}      
+
+//-- Nur Waldlaeufer duerfen Koecher tragen ----------------------------------
+int WearFunc(object ob)
+{
+  if(TP->QueryProp(P_GUILD)!= GUILD)
+  { tell_object(TP, BS("Nur Waldlaeufer duerfen diesen Koecher tragen!\n"));
+    remove(); return 0; }
+  SetListener(1);
+
+  call_out("set_master_ability", 0);
+
+  return 1;
+}
+
+public void set_master_ability() {
+  if(!objectp(owner)) return;
+  if(owner->QueryProp(P_GUILD_LEVEL) > 19) {
+    masterAbility = RANGERMASTER->GetMasterAbility(getuid(owner));
+  }
+  return;
+}
+
+public string _query_master_ability() {
+  if(!objectp(owner)) return 0;
+  if(owner->QueryProp(P_GUILD_LEVEL) > 19) {
+    return masterAbility;
+  }
+  return 0;
+}
+
+//-- Das Init ----------------------------------------------------------------
+void init()
+{
+  object ob, env;
+  
+  ::init();
+  // Tests
+  if(!objectp(env=MENV) || !living(env)) {remove(); return 0;}
+  if((env->QueryProp(P_GUILD)!= GUILD) && (!IS_WIZARD(env)) )
+  { remove(); return 0; }
+  if(TP!=env) { return 0; }
+  
+  // Nur ein Koecher im INV
+  TO->RemoveId(GUILD_OBJ_ID);
+  if(objectp(ob=present(GUILD_OBJ_ID, env))) { ob->remove(1); }
+  TO->AddId(GUILD_OBJ_ID);
+  
+  owner=env;
+
+  // Sofort anziehen
+  DoWear();
+  env->SetProp(P_WEAR_FUNC, TO);
+  call_out("set_master_ability", 0);
+}
+
+//-- Ist der Report aktiv? ---------------------------------------------------
+int query_aktiv() { return aktiv; }
+
+//-- Das Ausziehen -----------------------------------------------------------
+int RemoveFunc(object me)
+{
+  int ob;
+  ob=QueryProp(P_WORN);
+  if(!ob) return 1;
+  if(ob->QueryProp(P_GUILD) != GUILD) 
+  { ob->SetProp(P_TMP_RANGER_LISTENER, 0); }
+  return 1;
+}
+//**************************************************************************//
+
+
+
+//** Hilfe Seiten **********************************************************//
+//-- MainHelp ----------------------------------------------------------------
+nosave int ShowHelp()
+{
+  string s;
+  
+  s="\nMit dem Koecher hast Du folgende Moeglichkeiten:\n\n"
+    "  wlhilfe       : Diese Hilfseite\n"
+    "  wlreport hilfe: Hilfeseite zum wlreport\n"
+    "  wlfarben hilfe: Hilfe zu den Farbeinstellungen\n"
+    "  wlstatus      : Status des wlreport\n"
+    "  wlfarbe <0|1> : Farben aus/an (report ausgenommen)\n"
+    "  wlinfo/wlsinfo: WaldlaeuferInfo/Kurzform\n"
+    "  wlwer <kurz>  : Welche Waldlaeufer sind anwesend?\n"
+    "  wlpunkte      : Wie hast Du Deine Fertigkeitspunkte verteilt?\n"
+    "  wlwisper      : Du laesst den anderen Waldlaeufern eine Nachricht\n"
+    "                  zukommen. (emote mit <wlemote>)\n"
+    "  wllausch <nr> : Was haben die anderen Waldlaeufer besprochen?\n"
+    "  wltitel       : Setzt den Gildentitel und Presay\n"
+    "  wlpruefe      : Welche der Leichen gehoert zu Deinen Erzfeinden?\n";
+  if(TP->QueryProp(P_TESTPLAYER) || IS_WIZARD(TP))
+  { s+="\n Ab Testspieler: \n";
+    s+="  wlgilde        : Transport in die Gilde \n";
+    s+="  wlcombo <0|1>  : Zeigt Combochancen/-schaden \n";
+    s+="  wlsettask <nr> : Setzt die Gildenaufgabe als erledigt f�r die \n"
+       "                   angegebene Gildenstufe (1-20)\n";
+    s+="  wlsetquest <nr>: Setzt die Quest f�r Gildenstufe (1-20)als "
+       "erledigt\n";
+  }
+  if(member(MASTER_MAGES, getuid(TP)) != -1)
+  { s+="\n Ab Gildenmagier: \n";
+    s+="  mwisper       : Den Gildenmagierin etwas mitteilen \n";
+    s+="  mwlhist       : Was haben die Gildenmagier gesagt? \n";
+  }
+  write(s);
+  return 1;
+}
+
+//-- Report-Hilfe ------------------------------------------------------------
+nosave int ShowReportHelp() 
+{
+  write("\nwlreport Kommandos:\n"
+        "wlreport hilfe           : Dieses hier\n"
+        "wlreport ein             : Schaltet den Report ein\n"
+        "wlreport aus             : Schaltet den Report aus\n"
+        "wlreport farben <0|1>    : Farben aus|ein\n"
+        "         max <0|1>       : Maximale Lebens\\Magiepunkte\n"
+        "         spezial <0|1>   : Zustaende\n"
+        "         zauber <0|1>    : Aktive Zauber\n"
+        "         gesinnung <0|1> : Gesinnung\n"
+        "         teddy <0|1>     : Der Teddyreport wird aktiviert "
+        "(zusaetzlich\n"
+        "                           lassen sich noch die Zauber anzeigen)\n"
+        "         erweitert <0|1> : Der erweiterte Report (Zeilenlaenge "
+        "120+\n"
+        "                           empfohlen)\n"
+        "         erfahrung <0<1> : Die Erfahrungspunkte (nur im erweiterten "
+        "Report)\n"
+        "         tierleben <0<1> : Die Gesundheit des eigenen Tieres (nur "
+        "im \n"
+        "                           erweiterten Report)\n\n"
+        " Zustaende: [ETBVFGPN]\n"
+        "             12345678\n"
+        " 1 ... Ziemlich erschoepft\n"
+        " 2 ... Taub\n"
+        " 3 ... Blind\n"
+        " 4 ... Vergiftung\n"
+        " 5 ... Frosch\n"
+        " 6 ... Geist\n"
+        " 7 ... Paralysiert\n"
+        " 8 ... NoSpell\n\n"
+        " Zauber: <------------>\n"
+        " R ... Rindenhaut\n"
+        " A ... Augen des Jaegers\n"
+        " S ... Geschwindigkeit\n"
+        " M ... Melodie der Avatara\n"
+        " O ... Melodie des Ostens\n"
+        " B ... Band des Schuetzen\n"
+        " K ... Klinge des Blutdorns\n"
+        " E ... Trances des wilden Ebers\n"
+        " G ... Kampfgeist\n"
+        " U ... Kraft der Ahnen\n"
+        " M ... Gemeinsame Attacke\n"
+        " T ... Kraft des Tieres\n"
+        " D ... Ode des Sturms\n\n");
+  return 1;
+}
+
+//-- Report-Farben-Hilfe -----------------------------------------------------
+nosave int ShowColorHelp()
+{
+  write("\nHilfe zu 'wlfarben':\n"
+     "Mit diesem Kommando kann man sich die Farben des 'wlreport' setzen.\n"
+     "Fuer jeden der 6 Abstufungen kann eine eigene Farbe gewaehlt werden.\n"
+     "Syntax: wlfarben farbe1 farbe2 farbe3 farbe4 farbe5 farbe6\n"
+     "                 standard\n"
+     "Moegliche Farben:  schwarz, rot, gruen, gelb, blau, lila, zyan, "
+     "weiss.\n\n");
+  return 1;
+}
+//**************************************************************************//
+
+
+
+//** Farb-Einstellungen ****************************************************//
+//--- Allg. Farben -----------------------------------------------------------
+int ColorSetting(string str)
+{
+  notify_fail("Befehl: <wlfarbe 0|1>\n"); //Farbe an oder aus?
+  if(str == "1")
+  { std_colors=({ANSI_GREEN, ANSI_BOLD+ANSI_YELLOW, ANSI_CYAN, 
+                 ANSI_BOLD+ANSI_BLUE, ANSI_PURPLE, ANSI_RED});
+    write("Farben eingeschaltet.\n");
+    return 1; }
+  if(str == "0")
+  { std_colors=({ANSI_NORMAL, ANSI_NORMAL, ANSI_NORMAL, 
+                 ANSI_NORMAL, ANSI_NORMAL, ANSI_NORMAL});
+    write("Farben ausgeschaltet.\n");
+    return 1; }
+  return 0;
+}
+
+//-- Report_Farben -----------------------------------------------------------
+nosave int SetColors(string cols) 
+{
+  string *colors, *set_cols;
+  mapping valid_colors;
+  int i;
+
+  notify_fail("Befehl: "
+              "<wlfarben farbe1 farbe2 farbe3 farbe4 farbe5 farbe6>\n");
+  set_cols=({});
+  valid_colors=(["schwarz": ANSI_BLACK,
+                 "rot"    : ANSI_RED,
+                 "gruen"  : ANSI_GREEN,
+                 "gelb"   : ANSI_BOLD+ANSI_YELLOW,
+                 "blau"   : ANSI_BOLD+ANSI_BLUE,
+                 "lila"   : ANSI_PURPLE,
+                 "cyan"   : ANSI_CYAN,
+                 "zyan"   : ANSI_CYAN,
+                 "weiss"  : ANSI_WHITE,
+                 "normal" : ANSI_NORMAL]);
+  if(!cols) { cols="standard";}
+  cols=lower_case(cols);
+  if(cols=="standard") 
+  { report_colors=({ANSI_GREEN, ANSI_BOLD+ANSI_YELLOW, ANSI_CYAN, 
+                    ANSI_BOLD+ANSI_BLUE, ANSI_PURPLE, ANSI_RED});
+    write(BS("Ok, Standard Farben gesetzt!\n"));
+    return 1; }
+  if(cols=="hilfe") { return ShowColorHelp(); }
+  colors=explode(cols, " ");
+  if(sizeof(colors)!=6)
+  { write("Es muessen sechs Farben angegeben werden!\n");
+    return 0; }
+  for(i=0;i<=sizeof(colors)-1;i++)
+  {
+    if(!member(valid_colors, colors[i]))
+    { write(sprintf("Falsche Farbe: %s!\n", colors[i]));
+      return 0; }
+    set_cols+=({valid_colors[colors[i]]});
+  }
+  report_colors=set_cols;
+  write("Neuer Farben fuer den Report wurden gesetzt.\n");
+  return 1;
+}
+//**************************************************************************//
+
+
+
+//** Ranger_Report *********************************************************//
+//-- Ranger_Report_Status (saukomplex) ---------------------------------------
+int wl_status(string str) 
+{
+  notify_fail("Du musst die Reportfunktion erst aktivieren.\n");
+  if(!aktiv) { return 0; }
+  NotifyHpChange(1);
+  return 1;
+}
+
+//-- Welche Spells sind aktiv? -----------------------------------------------
+string active_spells(object ob)
+{
+  string s, active;
+  mixed p;
+  int i;
+
+  active = ob->QueryProp(P_RANGER_ACTIVE_SPELLS);
+  if(!stringp(active)) {
+    active = "";
+  }
+  
+  if(test_bit(active, TB_RINDENHAUT)) { 
+    s = "R"; 
+  } else { 
+    s = "-"; 
+  }
+
+  if(test_bit(active, TB_VISION)) { 
+    s+="A"; 
+  } else { 
+    s+="-"; 
+  }
+  
+  if(pointerp(ob->QueryProp(P_RANGER_SPEED_ACTIVE))) {
+    i = ob->QueryProp(P_RANGER_SPEED_ACTIVE)[0];
+    if(i>= time()) s+="S";
+    else           s+="s";
+  } else { 
+    s+="-"; 
+  }
+  
+  if(test_bit(active, TB_EBER_TRANCE)) { 
+    s+="E"; 
+  } else {
+    s+="-";
+  } 
+    
+  if(test_bit(active, TB_MDO)) { 
+    s+="O"; 
+  } else {
+    s+="-";
+  }
+  if(test_bit(active, TB_AVATARA)) { 
+    s+="M"; 
+  } else {
+    s+="-";
+  }
+  
+  if(objectp(p=FindPet(ob))) { 
+    if(p->QueryBiest()) { 
+      s+="U"; 
+    } else if(!p->QueryBiestReady()) {
+      s+="u";
+    }
+      else {
+      s+="-";
+    }
+    if(p->QueryTeam())  { 
+      s+="G"; 
+    } else {
+      s+="-";
+    } 
+    if(ob->QueryProp(P_RANGER_PET_SUPPORT)) {
+      s+="M";
+    } else {
+      s+="-";
+    }
+    if(test_bit(active, TB_KRAFT_DES_TIERES)) { 
+      s+="T"; 
+    } else {
+      s+="-";
+    }
+  } else {
+    s+="----";
+  }
+    
+  if(pointerp(p=ob->QueryProp(P_RANGER_COLD_FLAME)) && to_int(p[1]) >= time()) {
+    s += "B";
+  } else {
+    s += "-";
+  }
+
+  if(test_bit(active, TB_ODS)) {
+    s += "D";
+  } else {
+    s += "-";
+  }
+
+  if(test_bit(active, TB_BLUTDORN)) {
+    s += "K";
+  } else {
+    s += "-";
+  }
+  
+  return s;
+}
+
+//-- Der neue Report ---------------------------------------------------------
+/*
+78er Aufteilung: spells: 8, align: 12, lps:13, mps:13, special: 8
+[~<-------->~~[________]~~{Durchtrieben}~~{LP:282/282(+281)|MP:282/282(+282)}]
+
+120er: xp: 10, tierzustand: 7
+~~+Tier:    +~~~~|Erfahrung:           |~~
+*/
+
+private int getPetHpPercentage() {
+  object pet;
+
+  if(!objectp(pet=FindHelpPet(owner))) return 0;
+
+  return pet->QueryProp(P_HP);
+} 
+
+private void update_x_mod(int modSp, int modHp, int sp, int hp) {
+  mapping mods;
+  
+  mods = QueryProp(P_X_HEALTH_MOD);
+  if(!mappingp(mods)) mods = ([]);
+
+  if(modSp) {
+    if(sp) {
+      mods[P_SP] = sp;
+    } else if(member(mods, P_SP)) {
+      mods = m_delete(mods, P_SP);
+    }
+  }
+
+  if(modHp) {
+    if(hp) {
+      mods[P_HP] = hp;
+    } else if(member(mods, P_HP)) {
+      mods = m_delete(mods, P_HP);
+    }
+  }
+
+  if(modHp || modSp) {
+    SetProp(P_X_HEALTH_MOD, mods);
+    owner->UpdateAttributes();
+  }
+
+  return;
+}
+
+public void check_deep_bonds() {
+  object p;
+  string bondEffect, attr, r;
+  mapping mods;
+  int changed;
+
+  last_bond_check = time();
+
+  if(!objectp(p=FindPet(owner))) {
+   update_x_mod(0, 1, 0, 0);
+   if(last_bond_animal != 0) tell_object(owner, BS("Das Band zu deinem Tier versiegt bis ihr euch wieder trefft."));
+   SetProp(P_X_ATTR_MOD, 0);
+   owner->UpdateAttributes();
+   last_bond_animal = 0;
+   return;
+  } 
+
+  r = p->QueryProp(P_RANGER_PET_RACE);
+  changed = last_bond_animal != r;
+
+  switch(last_bond_animal = r) {
+    case "insekt":
+      update_x_mod(1, 0, p->QueryProp(P_LEVEL)/10*2, 0);
+    case "katze":
+    case "vogel":
+    case "spinne":
+    case "huftier":
+    case "echse":
+    case "kleintier":
+      attr = A_DEX;
+      break;
+    case "bear":
+      update_x_mod(0, 1, 0, p->QueryProp(P_LEVEL)/10*2);
+    case "wolf":
+    case "riese":
+    case "panzertier":
+      attr = A_STR;
+      break;
+  }
+
+  SetProp(P_X_ATTR_MOD, ([attr: p->QueryProp(P_LEVEL)/10]));
+  if(changed) tell_object(owner, BS("Das Band zu deinem Tier verstaerkt dich."));
+  return;
+}
+
+varargs void NotifyHpChange(int status_cmd)
+{
+  int hp, mhp, sp, msp, stat, changedHP, changedSP, i, k, changedAnimalPercent;
+  string color, s;
+  mixed pet;
+
+  /*Existiert das aufrufende Objekt noch
+  if (!previous_object()) { return; }
+  if (owner != previous_object() && previous_object() != FindHelpPet(owner)) { 
+    if (TO != previous_object() ) { 
+      return; 
+    }
+    stat=1; 
+  }  */
+  
+  // Ausschalten wenn aktiv == 0 (z.B. nach Tod)
+  if (!aktiv && !stat)
+  { if (owner!=find_netdead(getuid(owner))) 
+    { owner->RemoveHpHook(ME); } // geht nur bei nicht-netztoten Spielern
+    return; }
+  if(!query_once_interactive(owner)) {activate(0); return;}
+
+  if(owner->QueryProp(P_GUILD_LEVEL) > 19) {
+    if(masterAbility == 0) call_out("set_master_ability", 0);
+    else if(masterAbility == MASTER_ABIILITY_DEEP_BOND && last_bond_check < time()-30) {
+      call_out("check_deep_bonds", 0);
+    }
+  }
+  
+  // aktuelle Werte ermitteln + ReportFarbe
+  hp  = owner->QueryProp(P_HP);
+  mhp = owner->QueryProp(P_MAX_HP);
+  sp  = owner->QueryProp(P_SP);
+  msp = owner->QueryProp(P_MAX_SP);
+  // Werte berechnen und soll gesendet werden? 
+  changedHP=hp-lasthp;
+  changedSP=sp-lastsp;    
+  changedAnimalPercent = (test_bit(akt_lvl, RL_PET) && objectp(pet=FindHelpPet(owner)) ? getPetHpPercentage() - lastAnimalHp : 0);
+
+  if (  (  ( (hp < lastHP)                           || 
+             (hp > lastHP && (sp == msp || callout)) || 
+             (sp != lastSP)                          ||
+             (changedAnimalPercent != 0) ||
+             (stat)
+           ) && ( changedHP || changedSP )
+        )  || status_cmd )
+  {
+    // Teddy-Report?
+    if(test_bit(akt_lvl, RL_TEDDY))
+    {
+      s="Du hast jetzt "+to_string(hp)+" ("+to_string(mhp)+") Lebenspunkte "
+        "und "+to_string(sp)+" ("+to_string(msp)+") Magiepunkte.\n"; 
+      if(test_bit(akt_lvl, RL_SPELL)) // einzige Teddy-Erweiterung
+      { s+="[Zauber: "+active_spells(owner)+"]\n"; }
+    }
+    else
+    {
+      // Farben Ja|Nein
+      if(test_bit(akt_lvl, RL_COLOR))
+      { switch(hp*100/mhp)
+        { case 0 .. 16: color=report_colors[5]; break;
+          case 17.. 32: color=report_colors[4]; break;
+          case 33.. 48: color=report_colors[3]; break;
+          case 49.. 64: color=report_colors[2]; break;
+          case 65.. 80: color=report_colors[1]; break;
+          case 81..100: color=report_colors[0]; break;
+          default:      color="";           break;
+        } 
+      }
+      else { color=""; }
+      if(cnt>5) { align=GetAlign(owner->QueryProp(P_ALIGN)); cnt=0; }
+      cnt++;
+      s=sprintf(color+"~[%s]~%s~%s~{LP:"+normal+"%d%s%s"+color+"|MP:"
+                +normal+"%d%s%s"+color+"}]"
+          ,(test_bit(akt_lvl, RL_SPELL)?
+            ""+normal+active_spells(owner)+color+"":
+            "")
+          ,(test_bit(akt_lvl, RL_SPECIAL)?
+            "["+normal+SpecialReport(owner)+color+"]":
+            "")
+          ,(test_bit(akt_lvl, RL_ALIGN)?
+            "{"+normal+align+color+"}":
+            "")
+          ,hp
+          ,(test_bit(akt_lvl, RL_MAX)?"/"+to_string(mhp):"")
+          ,(changedHP?"("+(changedHP>0?"+":"")+to_string(changedHP)+")":"")
+          ,sp
+          ,(test_bit(akt_lvl, RL_MAX)?"/"+to_string(msp):"")
+          ,(changedSP?"("+(changedSP>0?"+":"")+to_string(changedSP)+")":"")
+          );
+      if(test_bit(akt_lvl, RL_EXTRA_WIDE))
+      {
+        i=strlen(s); i-=2; s=s[0..i];
+        if(test_bit(akt_lvl, RL_PET) && objectp(pet=FindHelpPet(owner)) ) { 
+          k=getPetHpPercentage();
+          changedAnimalPercent = k - lastAnimalHp;
+          lastAnimalHp = k;
+        } else { 
+          k=0; 
+        } 
+
+        if(k) {
+          s += sprintf("~[Tier: "+normal+"%3d"+color+"%s|%s]~",
+              k,
+               (lastAnimalHp==0?"":sprintf(normal+"(%+d)"+color, changedAnimalPercent)),
+               (pet->QueryProp(P_RANGER_NEXT_ANIMAL_ATACK) < time()?" ":"!"));
+        }
+
+        if (test_bit(akt_lvl, RL_XP)) {
+              s += sprintf("~[XP: "+normal+"%d"+color+"]", owner->QueryProp(P_XP));
+        }
+      }
+    }
+
+    tell_object(owner, s+normal+"\n"); 
+    lastsp  = sp; lasthp  = hp;
+    callout = 0;  lastHP  = hp; 
+  }
+  else if( !callout && (hp > lastHP+1) )
+  { callout = 1;
+    call_out("NotifyHpChange",0); }
+  else { callout = 0; lastHP = hp; }
+  lastSP = sp;
+}
+
+//-- Report aktivieren -------------------------------------------------------
+nosave void activate(object ob) 
+{
+  mixed m;
+  
+  if(objectp(ob)) {
+    if(stringp(m=ob->QueryProp(P_RANGER_REPORT_LEVEL))) {akt_lvl=m;}
+     aktiv = 1;
+    owner = ob;
+    owner_name = getuid(owner);
+    ob->AddHpHook(ME);
+    lastHP = ob->QueryProp(P_HP);
+    lastSP = ob->QueryProp(P_SP);
+  } 
+  else 
+  { if(ob=(owner||TP)) { ob->RemoveHpHook(ME); }
+  if(stringp(m=ob->QueryProp(P_RANGER_REPORT_LEVEL))) {akt_lvl=m;}
+    owner = owner_name = aktiv = 0; }
+}
+
+//-- Report_cmd --------------------------------------------------------------
+nosave int report(string str) 
+{
+  string *msg;
+
+  notify_fail("Den Befehl gibt es nicht, Hilfe mit 'wlreport hilfe'.\n");
+  if(!sizeof(msg=explode(str," "))) { return 0; }
+  switch(msg[0])
+  {
+    case "ein":
+      if (aktiv && objectp(owner)) { write("Der Report war schon aktiv.\n"); }
+      else 
+      { write("Der Report ist jetzt aktiv.\n");
+        activate(TP); }
+    break;
+    
+    case "aus":
+      if (!aktiv) { write("Der Report ist schon ausgeschaltet.\n"); }
+      else 
+      { write("Der Report ist nun ausgeschaltet.\n");
+        activate(0); }
+    break;
+    
+    case "farben":
+      if(sizeof(msg)>1) { ConfigureReport(msg[1], RL_COLOR); }
+      else { write("Befehl: wlreport farben 0|1\n"); }
+    break;
+    
+    case "max":
+      if(sizeof(msg)>1) { ConfigureReport(msg[1], RL_MAX); }
+      else { write("Befehl: wlreport max 0|1\n"); }
+    break;
+    
+    case "spezial":
+      if(sizeof(msg)>1) { ConfigureReport(msg[1], RL_SPECIAL); }
+      else { write("Befehl: wlreport spezial 0|1\n"); }
+    break;
+    
+    case "zauber":
+      if(sizeof(msg)>1) { ConfigureReport(msg[1], RL_SPELL); }
+      else { write("Befehl: wlreport zauber 0|1\n"); }
+    break;
+    
+    case "gesinnung":
+      if(sizeof(msg)>1) { ConfigureReport(msg[1], RL_ALIGN); }
+      else { write("Befehl: wlreport gesinnung 0|1\n"); }
+    break;
+    
+    case "teddy":
+      if(sizeof(msg)>1) { ConfigureReport(msg[1], RL_TEDDY); }
+      else { write("Befehl: wlreport teddy 0|1\n"); }
+    break;
+    
+    case "erweitert":
+      if(sizeof(msg)>1) { ConfigureReport(msg[1], RL_EXTRA_WIDE); }
+      else { write("Befehl: wlreport erweitert 0|1\n"); }
+    break;
+    
+    case "erfahrung":
+      if(sizeof(msg)>1) { ConfigureReport(msg[1], RL_XP); }
+      else { write("Befehl: wlreport erfahrung 0|1\n"); }
+    break;
+    
+    case "tierleben":
+      if(sizeof(msg)>1) { ConfigureReport(msg[1], RL_PET); }
+      else { write("Befehl: wlreport tierleben 0|1\n"); }
+    break;
+    
+    case "hilfe": 
+      ShowReportHelp(); 
+    break;
+
+    default: return 0; break;
+  }
+  return 1;
+}
+
+//-- Report konfigurieren ----------------------------------------------------
+nosave int ConfigureReport(string str, int what) 
+{
+  int flag;
+  string anzeige;
+  
+  flag=to_int(str);
+  anzeige="";
+  if(flag<0 || flag>1) {  write("Falsche Eingabe!\n"); return 1; }
+  if(flag==0) { akt_lvl=clear_bit(akt_lvl, what); }
+  else { akt_lvl=set_bit(akt_lvl, what); }
+  switch(what)
+  {
+    case RL_COLOR:      anzeige="Farben"; break; 
+    case RL_MAX:        anzeige="maximalen Lebens\\Magiepunkte"; break;
+    case RL_SPECIAL:    anzeige="Zustaende"; break; 
+    case RL_SPELL:      anzeige="Zauberanzeige"; break;
+    case RL_TEDDY:      anzeige="Teddyreport"; break;
+    case RL_XP:         anzeige="Erfahrungspunkte"; break;
+    case RL_PET:        anzeige="Gesundheit des Tieres"; break;
+    case RL_EXTRA_WIDE: anzeige="Erweiterung"; break;
+    case RL_ALIGN:      anzeige="Gesinnung"; break;
+  }
+  write(BS("Du hast jetzt die "+anzeige+" "+(flag?"ein":"ab")+"gestellt."));
+  if(objectp(owner))
+  { owner->SetProp(P_RANGER_REPORT_LEVEL, akt_lvl);
+    owner->Set(P_RANGER_REPORT_LEVEL, SAVE, F_MODE_AS); }
+  return 1;
+}
+
+//-- Ausgabe des Erweiterten Reports -----------------------------------------
+nosave string SpecialReport(object owner) 
+{
+  string flags;
+
+  flags="";
+  if(owner->QueryProp(P_MV)*100/owner->QueryProp(P_MAX_MV)<10) {flags+="E";}
+  else { flags+="_"; }
+  if(owner->QueryProp(P_DEAF)) { flags+="T"; }
+  else { flags+="_"; }
+  if(owner->QueryProp(P_BLIND)) { flags+="B"; }
+  else { flags+="_"; }
+  if(owner->QueryProp(P_POISON)) { flags+="V"; }
+  else { flags+="_"; }
+  if(owner->QueryProp(P_FROG)) { flags+="F"; }
+  else { flags+="_"; }
+  if(owner->QueryProp(P_GHOST)) { flags+="G"; }
+  else { flags+="_"; }
+  if(owner->QueryProp(P_PARALYZED)) { flags+="P"; }
+  else { flags+="_"; }
+  if(time()<owner->QueryProp(P_NEXT_SPELL_TIME)) { flags+="N"; }
+  else { flags+="_"; }
+  return flags;
+}
+//**************************************************************************//
+
+
+
+//** GildenWer *************************************************************//
+//-- Sortfunktion ------------------------------------------------------------
+int Sort(object a, object b)
+{ if(a->Name(WER) < b->Name(WER)) { return 0; }
+  return 1; }
+
+//-- Welche Waldlaeufer sind online? -----------------------------------------
+nosave int guild_who(string str)
+{
+  string s, name, circle_string, addon;
+  mixed listener, m, env;
+  object ob;
+  int grad, gl, short, i;
+  
+  if(str == "kurz") {short=1;}
+  else {short=0;}
+
+  listener=filter_array(users(), "IsRanger");
+  for(i=0;i<sizeof(MASTER_MAGES);i++)
+  {
+    if( (objectp(ob=find_player(MASTER_MAGES[i]))) && 
+        (member(listener,ob)==-1) )
+    { listener+=({ob}); }
+  }
+    
+  listener=sort_array(listener,"Sort",ME);
+  
+  if(short) {s="Gilde Waldlaeufer:\n";}
+  else
+  { s="\n |"+std_colors[3]+"\\\\\\\\\\\\_"+normal+"\n |"+std_colors[3]+
+      "\\\\\\\\\\\\\\\\\\\\_"+normal+"      GILDE\n |"+std_colors[3]+
+      "\\\\\\\\\\\\\\\\\\\\\\\\\\_ "+normal+"      DER\n |"+std_colors[3]+
+      "\\\\\\\\\\\\\\_"+normal+"               WALDLAEUFER\n |\n"; }
+  
+  for(i=0;i<sizeof(listener);i++) 
+  {
+    ob=listener[i];    
+    if((ob->QueryProp(P_INVIS)) && !IS_WIZARD(TP)) { continue; }
+    name=CAP(getuid(ob));
+    gl=ob->QueryProp(P_GUILD_LEVEL);
+    grad=GetGrad(gl);
+    circle_string=circle_to_string(GetCircle(gl));
+    if(ob->QueryProp(P_GENDER)==2) {circle_string+="in";}
+    if(short)
+    { s+=sprintf(" %+13s | (%s|%d)\n", name, circle_string, grad);
+      continue; }
+    env=ENV(ob);
+    if(m=ob->InFight())
+    { addon="Im Kampf"+(objectp(m)?" ["+m->Name(WER)+"]":""); }
+    else if(query_idle(ob) >= 2*60)
+    { addon="Rastend"+(stringp(m=ob->QueryProp(P_AWAY))?" ["+m+"]":""); }
+    else
+    { addon="Unterwegs";
+      if(objectp(env) && pointerp(m=explode(file_name(env), "/")) )
+      { switch(m[0])
+        {
+          case "gilden": addon+=" ["+CAP(m[1])+"]"; break;
+          case "d":
+            switch(m[1])
+            {
+              case "seher": addon+=" [Im Land der Seher]"; break;
+              case "pk": addon+=" [Auf einem Schlachtfeld]"; break;
+              case "event": break;
+              default: addon+=" ["+CAP(m[1])+"]"; break;
+            }
+          break;
+          default: addon+=" [Ausserhalb des bekannten SilberLandes]"; break;
+        }
+      }
+    }
+    s+=sprintf(" |    %-12s %-22s %+19s\n"
+               " |    - %-70s \n"
+               " |    - %-70s \n"
+               " |\n"
+               ,name
+               ,(objectp(m=ob->QueryProp(P_WEAPON))?"{"+m->Name(WER)+"}":"")
+               , sprintf("[%s|%d]", circle_string, grad)
+               ,( (objectp(env) && 
+                   stringp(m=env->QueryProp(P_INT_SHORT))) ? m : "In "
+                   "unbekannten Gebiet")
+               , addon
+               );
+  }
+  if(!short)
+  {
+    s+=" \\   Welche Mitstreiter                               "
+       +std_colors[3]+"/\\"+normal+"  \n  \\_              sind anwesend?    "
+       "                 "+std_colors[3]+"//\\\\"+normal+" \n    \\~~~~~~~~~~"
+       "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"+std_colors[3]+"///\\\\\\"
+       +normal+"\n";
+  }
+  TP->More(s);
+  return 1;
+}
+//**************************************************************************//
+
+
+
+//** Gildeninternes Rufen (Magier/Spieler) *********************************//
+//-- Vorfunktionen fuer das Wispern ------------------------------------------
+int IsListener(object wer) 
+{ if(!is_clone(wer) && wer->QueryProp(P_TMP_RANGER_LISTENER))  { return 1; }
+  return 0; }
+
+//-- Ein/Ausschalten des Fluesterns ------------------------------------------
+void SetListener(int flag)
+{
+  if(MENV && interactive(MENV))
+  {
+    if(flag) { MENV->SetProp(P_TMP_RANGER_LISTENER, 1); }
+    else { MENV->SetProp(P_TMP_RANGER_LISTENER, 0); }
+  } 
+  return;
+}
+
+//-- Gildenmagier? -----------------------------------------------------------
+int IsWiz(object pl) { return (member(MASTER_MAGES,getuid(pl)) != -1); }
+
+//-- Zusammengefasste Zuhoererfunktion ---------------------------------------
+int is_wiz_or_listener(object ob)
+{
+  if(IsWiz(ob)) {return 1;}
+  if(IsListener(ob)) {return 1;}
+  return 0; 
+}
+
+//-- Ruf der Gildenmagier ----------------------------------------------------
+nosave int mages_shout(string str)
+{
+  object *members, ob;
+  string s, *msg;
+  int i, k;
+  
+  ob=TP;
+  if(!IsWiz(ob)) { return 0;}
+  notify_fail("Was moechtest Du den anderen Gildenmagier mitteilen?\n");
+  if (!stringp(str)) { return 0; }
+  members=filter_array(users(),"IsWiz");
+  for(i=0;i<sizeof(members);i++) 
+  { 
+    if(member(members[i]->QueryProp(P_IGNORE), "mwisper") != -1) {continue;}
+    if(members[i]==ob) { s="Du teilst den Gildenmagiern mit:\n"; } 
+    else { s="Gildenmagier (Waldlaeufer) "+std_colors[3]+CAP(getuid(ob))
+             +normal+" teilt Euch mit:\n"; }
+    msg=explode(break_string(str, 76), "\n");
+    for(k=0;k<sizeof(msg);k++) {s+=" "+msg[k]+"\n";}
+    members[i]->More(s);
+  }
+  GUILD_MASTER->AddMagesHistory(getuid(ob),ob->_unparsed_args());
+  return 1;
+}
+
+//-- Gildenruf + Emote -------------------------------------------------------
+nosave int guild_shout(string msg)
+{
+  string s, pre, p2, *str, name, n2;
+  object *members, ob;
+  int i, k, emote, invis;
+  
+  ob=TP;
+  if(query_verb()=="wlemote") {emote=1;}
+  else {emote=0;};
+  notify_fail("Was soll der Wind den Waldlaeufern uebermitteln?\n");
+  if (!stringp(msg)) { return 0; }
+  if(ob->QueryProp(P_INVIS)) {invis=1;}
+  name=ob->Name(RAW);
+  if(invis) {name=CAP(getuid(ob));}
+  if(interactive(ob)) { msg=ob->_unparsed_args(); }
+  
+  //Sprachfluch
+  if(objectp(ob->QueryProp(P_PERM_STRING)))
+  { msg=call_other(ob->QueryProp(P_PERM_STRING),"permutate_string",msg)||""; }
+  
+  members=filter_array(users(), "is_wiz_or_listener");
+  pre=" "+((ob->QueryProp(P_GENDER)==FEMALE)?"von der":"vom");
+  if(member(MASTER_MAGES, getuid(ob))!=-1 || ob->Name(WER)==GUILD_NPC)
+  { pre+=" "+(ob->QueryProp(P_GENDER)==FEMALE?"Waldgoettin":"Waldavatara")+
+         " "; }
+  else
+  { pre+=" "+circle_to_string(GetCircle(ob->QueryProp(P_GUILD_LEVEL)))+
+         (ob->QueryProp(P_GENDER)==FEMALE?"in":"")+" "; }
+  if(getuid(ob)=="torian")  { pre=" vom Waldopa "; }
+    
+  for(i=0;i<sizeof(members);i++) 
+  {
+    n2=name;
+    p2=pre;
+    k=IS_WIZARD(members[i]);
+    if(member(members[i]->QueryProp(P_IGNORE), "wlwisper")!= -1 ) {continue;}
+    if(members[i]->QueryProp(P_DEAF) && !k) {continue;}
+    if(invis)
+    { if(k) {n2="("+n2+")";   p2="von "+n2;}
+      else  {n2="Ein Schatten"; p2="von einem Schatten";} }
+    else { p2+=n2; }
+    s="Der Wind traegt Euch eine Botschaft"+p2+" heran:\n";
+    str=explode(break_string(msg, 60), "\n");
+    for(k=0;k<sizeof(str);k++)
+    {
+      s+=sprintf("{%s%s%s}\n"
+             ,(k?sprintf( "%"+to_string(1+!emote+strlen(n2))+"s", "")
+                :n2+normal)
+             ,(k?"":(emote?" ":": "))
+             ,str[k]);
+    }
+    //DBD(members[i]->Name()+"\n"+s);
+    members[i]->More(s);
+  }
+  GUILD_MASTER->AddHistory(getuid(ob), ob->_unparsed_args(), invis, emote);
+  return 1;
+}
+
+//-- RangersHistory ----------------------------------------------------------
+nosave varargs int ShowHistory(int n) 
+{
+  int i, k, iw;
+  mixed history, m;
+  string s, msg, *str, name;
+  
+  notify_fail("Befehl: <mwlhist nr> (1-20)\n");
+  if(!n) n=20;
+  n=limit(n,1,20);
+  n--;
+  history=GUILD_MASTER->QueryHistory();
+  if(sizeof(m=m_indices(history))<1)
+  { tell_object(TP,BS("Der Wind schweigt."));
+    return 1; }
+  
+  s=std_colors[3]+"Diese Nachrichten kannst Du dem Wind entnehmen:\n~~~~~~~~~"
+    "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n"
+    +normal;
+  iw=IS_WIZARD(TP);
+  for(i=0;i<sizeof(m);i++) 
+  {
+    if(i>n) {break;}
+    name=history[i, HIST_NAME];
+    name=CAP(name);
+    name=std_colors[3]+name+normal;
+    if(history[i, HIST_INVIS])
+    { if(iw) { name="("+name+")"; } 
+      else {name="Ein Schatten"; } }
+    msg=history[i, M_HIST_MSG];
+    if(!history[i, HIST_EMOTE])
+    { name+=":"; }
+    name+=" ";
+    s+=sprintf("%s:\n",dtime(history[i, HIST_TIME]) );
+    msg=name+msg;
+    str=explode(break_string(msg, 76), "\n");
+    for(k=0;k<sizeof(str);k++) {s+=(!k?"":"  ")+str[k]+"\n";}
+    s+="\n";
+  }
+  s+=std_colors[3]+"\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+     "~~~~~~~~~~~~~~~~~~~~~~~\n"+normal;
+  TP->More(s);
+  return 1;  
+}
+
+//-- MagierHistory -----------------------------------------------------------
+nosave int ShowMagesHistory(int n) 
+{
+  int i, k;
+  mixed history, m;
+  string s, msg, *str, name;
+  
+  notify_fail("Befehl: <mwlhist nr> (1-20)\n");
+  if(!n) n=20;
+  n=limit(n,1,20);
+  n--;
+  history=GUILD_MASTER->QueryMagesHistory();
+  if(sizeof(m=m_indices(history))<1)
+  { tell_object(TP,BS("Die Gildenmagier haben Dir noch nichts mittgeteilt."));
+    return 1; }
+  
+  s=std_colors[3]+"Das haben Dir die anderen Gildenmagier mitgeteilt:\n~~~~~~"
+    "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+    "\n"+normal;
+  for(i=0;i<sizeof(m);i++) 
+  {
+    if(i>n) {break;}
+    msg=history[i, M_HIST_MSG];
+    name=history[i, M_HIST_NAME];
+    name=CAP(name);
+    s+=sprintf("%s <%s>:\n"
+              ,name
+              ,dtime(history[i, M_HIST_TIME]) );
+    str=explode(break_string(msg, 76), "\n");
+    for(k=0;k<sizeof(str);k++) {s+="  "+str[k]+"\n";}
+  }
+  s+=std_colors[3]+"\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+     "~~~~~~~~~~~~~~~~~~~~~~~\n"+normal;
+  TP->More(s);
+  return 1;  
+}
+//**************************************************************************//
+
+
+
+//** Waldlaeufer Info ******************************************************//
+//-- Balken ausgeben ---------------------------------------------------------
+string get_bars(int percent)
+{
+  string s;
+  int i;
+  
+  percent=limit(percent,0,100);
+  percent=percent/10; s="";
+  for(i=0;i<10;i++) { s+=(percent>i?"#":"."); }
+  //if(strlen(s)!= 10) { s="..........";}
+  return s;
+}
+
+//-- Belastungsbalken --------------------------------------------------------
+int get_belastung(object ob)
+{
+  float f;
+  int i;
+  
+  f=to_float((ob->QueryProp(P_TOTAL_WEIGHT))-(ob->QueryProp(P_WEIGHT)))/to_float((ob->QueryProp(P_MAX_WEIGHT)));
+  i=limit(to_int(f*100),0,100);
+  return i;
+}
+
+//-- Ausdauerbalken ----------------------------------------------------------
+int get_ausdauer(object ob)
+{
+  float f;
+  int i;
+  
+  f=to_float(ob->QueryProp(P_MV))/to_float(ob->QueryProp(P_MAX_MV));
+  i=to_int(f*100);
+  return i;
+}
+
+//-- Environment-Beschreibung ------------------------------------------------
+string get_env_description(int env)
+{
+  string s;
+  
+  switch(env)
+  {
+    case TT_CAVE:       s="in einer Hoehle";         break;
+    case TT_HOUSE:      s="in einem Haus";           break;
+    case TT_HILL:       s="in huegeligen Land";      break;
+    case TT_FOREST:     s="im Wald" ;                break;
+    case TT_TOWN:       s="in der Stadt";            break;
+    case TT_MOUNTAIN:   s="im Gebirge";              break;
+    case TT_DESERT:     s="in der Wueste";           break;
+    case TT_JUNGLE:     s="im Dschungel";            break;
+    case TT_SWAMP:      s="in einem Sumpf";          break;
+    case TT_PLAIN:      s="auf einer Ebene";         break;
+    case TT_ARCTIC:     s="in arktischen Gefilden";  break;
+    case TT_UNDERWATER: s="unter Wasser";            break;
+    case TT_WATER:      s="im Wasser";               break;
+    case TT_ROAD:       s="auf einer Strasse";       break;
+    case TT_AIR:        s="in der Luft";             break;
+    default:            s="in unbekannter Umgebung"; break;
+  }
+  return s;
+}
+
+public string petStatus() {
+  object pet;
+  int levelProgress;
+  string progressStr;
+
+  if(!objectp(pet=FindPet(owner))) {
+    return "keines";
+  }
+
+  if(pet->QueryProp(P_LEVEL) >= pet->QueryProp(P_RANGER_MAX_PET_LEVEL)) {
+    return sprintf("%-30s     [%|10d]   ", sprintf("%s (%s)", pet->Name(RAW), pet->QueryProp(P_RACE)), pet->QueryProp(P_LEVEL));
+  }
+
+  levelProgress = 10*pet->QueryProp(P_XP)/pet->GetNextLevelXp();
+
+  progressStr = "";
+  for(; levelProgress > 0; --levelProgress) {
+    progressStr += "#";
+  }
+
+  return sprintf("%-30s  %d [%-10s] %d", sprintf("%s (%s)", pet->Name(RAW), pet->QueryProp(P_RACE)), pet->QueryProp(P_LEVEL), progressStr, pet->QueryProp(P_LEVEL)+1);
+}
+
+//-- Hauptfunktion -----------------------------------------------------------
+int wlinfo(string cmd) 
+{
+  string s, *ae;
+  object ob;
+  mixed m, n, p;
+  int i, j, k, l;
+
+  ob=TP;
+  if(ob->QueryProp(P_GHOST)) 
+  { tell_object(ob, BS("Als Geist ist das nicht moeglich!\n"));
+    return 1; }
+    
+  s="\n       "+std_colors[3]+"/\\"+normal+"                                 "
+    "                            "+std_colors[0]+"__"+normal+" \n      "
+    +std_colors[3]+"//\\\\"+normal+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+    "~~~~~~~~~~~~~~~~~~"+std_colors[0]+"(__)"+normal+"\n";
+
+  //Titel/Presay
+  if(ob->QueryProp(P_INVIS)) { m="("+CAP(getuid(ob))+")";}
+  else 
+  { 
+    m=ob->short(); 
+    if(m[<1]=='\n') { m=m[0..<2]; } 
+  }
+  m=m[0..54];
+  i=55; 
+  n=explode(m, "\b");
+  j=sizeof(n);
+  j--;
+  if(j>0) {i+=(2*j);}
+  s+=sprintf("     "+std_colors[3]+"///\\\\\\"+normal+"  %|"+to_string(i)+"s "
+             +std_colors[0]+"(__)"+normal+"\n", m); 
+  s+="    "+std_colors[3]+"////\\\\\\\\"+normal+"~~~~~~~~~~~~~~~~~~~~~~~~+~~~"
+     "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"+std_colors[0]+"(__)"+normal+"\n";
+  
+  //Erste 3 Attribute, Leben, Magie
+  s+=sprintf(
+       "   "+std_colors[3]+"////"+normal+"||"+std_colors[3]+"\\\\\\\\"
+       +normal+"     Ausdauer: %2d(%+3d) | Magie: %4d/%4d             "
+       +std_colors[0]+"__"+std_colors[0]+"(__)"+normal+std_colors[0]+"___"
+       +normal+"\n"+std_colors[3]+" _/////"+normal+"||"+std_colors[3]+
+       "\\\\\\\\\\_"+normal+"    Staerke: %2d(%+3d) | Leben: %4d/%4d         "
+       "  "+std_colors[0]+"/__________\\"+normal+"\n   "+std_colors[3]+"_///"
+       +normal+"||"+std_colors[3]+"\\\\\\\\_"+normal+"    Geschick: %2d(%+3d)"
+       " +~~~~~~~~~~~~~~~~~~~~~~~~~~~"+std_colors[0]+"(/"+normal+"   | "
+       +std_colors[2]+"|"+normal+"|   "+std_colors[0]+"\\)"+normal+"\n"
+      ,ob->QueryProp(P_ATTRIBUTES)[A_CON]
+      ,ob->QueryAttributeOffset(A_CON)
+      ,ob->QueryProp(P_SP)
+      ,ob->QueryProp(P_MAX_SP)
+      ,ob->QueryProp(P_ATTRIBUTES)[A_STR]
+      ,ob->QueryAttributeOffset(A_STR)
+      ,ob->QueryProp(P_HP)
+      ,ob->QueryProp(P_MAX_HP)
+      ,ob->QueryProp(P_ATTRIBUTES)[A_DEX]
+      ,ob->QueryAttributeOffset(A_DEX)
+      );
+      
+  //4. Attribut, Kreis, Attributpunkte, Rang, Pfade, Level, Fertigkeitspunkte
+  i=ob->QueryProp(P_GUILD_LEVEL);
+  m=RANGERMASTER->GetPaths(getuid(TP));
+  if(!m || !pointerp(m) || sizeof(m)<1) {
+    n="";
+  }
+  else {
+    if(stringp(RANGERMASTER->GetMasterPath(getuid(TP)))) {
+      m[member(m, RANGERMASTER->GetMasterPath(getuid(TP)))] = "*"+RANGERMASTER->GetMasterPath(getuid(TP));
+    }
+    n=sprintf("%-23s", implode(m, ", "))[0..21];
+  }
+  j=ob->LpLevel(); //das richtige Level des Spielers 
+  
+  s+=sprintf(
+       std_colors[3]+"_//////"+normal+"||"+std_colors[3]+"\\\\\\\\\\\\\\\_"+normal+"    Geist: %2d(%+3d) |  Kreis: %-22s | "+std_colors[2]+"|"+normal+"|\n "+std_colors[3]+"_/////"+normal+"||"+std_colors[3]+"\\\\\\\\_"+normal+" Attributpunkte:  %2d  |   Rang: %-22d | "+std_colors[2]+"|"+normal+"|\n"+
+       std_colors[3]+"_//////"+normal+"||"+std_colors[3]+"\\\\\\\\\\\\_"+normal+"~~~~~~~~~~~~~~~~~~~~+  Pfade: %-22s | "+std_colors[2]+"|"+normal+"|\n"
+       "       ||   %d [%-'.'*s] %d+ |  Fertigkeitspunkte: %-10d | "+std_colors[2]+"|"+normal+"|\n       || Spielerlevel:         %3d +~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| "+std_colors[2]+"|"+normal+"|\n" 
+      ,ob->QueryProp(P_ATTRIBUTES)[A_INT]
+      ,ob->QueryAttributeOffset(A_INT)
+      ,circle_to_string(GetCircle(i))
+      ,ob->QueryProp(P_AP)
+      ,GetGrad(i)
+      ,n
+      ,j
+      ,(p=18-strlen(to_string(j))-strlen(to_string(j+1)))
+      ,sprintf("%'#'*s", ob->LevelPerc(j+1)*p/100,"")
+      ,(j+1)
+      ,R_SKILLMASTER->GetFreeSkillPoints(getuid(TP))
+      ,ob->QueryProp(P_LEVEL)
+      );
+      
+  //Erfahrung, Belastung, QPs, Ausdauer, Rasse, Vermoegen
+  m=get_bars(get_belastung(ob));
+  n=get_bars(get_ausdauer(ob));
+  s+=sprintf(
+       "       || Erfahrung:     %10d | Belastung:        [%10s] | "
+       +std_colors[2]+"|"+normal+"|\n       || Abenteuer:      %4d/%4d |  "
+       "Ausdauer:        [%10s] | "+std_colors[2]+"|"+normal+"|\n      /  \\"
+       "Rasse: %18s | Vermoegen:  %10d Muenzen | "+std_colors[2]+"|"+normal+
+       "|\n     +    +~~~~~~~~~~~~~~~~~~~~~~~~~+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+       "~~~| "+std_colors[2]+"|"+normal+"|\n"
+      ,ob->QueryProp(P_XP)
+      ,m
+      ,ob->QueryProp(P_QP)
+      ,QUESTMASTER->QueryAllQP()
+      ,n
+      ,(ob->QueryProp(P_RACE)[0..17])
+      ,ob->QueryDeepMoney()
+      );
+      
+  //Poison, Blind, Deaf, Frog
+  if( (ob->QueryProp(P_POISON)) || (ob->QueryProp(P_BLIND)) ||
+      (ob->QueryProp(P_DEAF))   || (ob->QueryProp(P_FROG)) )
+  {
+    m=({});
+    if(i=ob->QueryProp(P_POISON) )
+    { m+=({(i<4 ? "leicht vergiftet" : "vergiftet")}); }
+    if(ob->QueryProp(P_BLIND) ) { m+=({"blind"}); }
+    if(ob->QueryProp(P_DEAF) )  { m+=({"taub"}); }
+    if(ob->QueryProp(P_FROG) )  { m+=({"verfroscht"}); }
+    if(sizeof(m)>0)
+    {
+      n=m[0];
+      if(sizeof(m)>1)
+      {
+        p=({m[sizeof(m)-1]});
+        p+=({m[sizeof(m)-2]});
+        n=implode(p, " und ");
+        m-=p; m+=({""});
+        if(sizeof(m)>0) { n=implode(m, ", ")+n; }
+      }
+      n+=".";
+      s+=sprintf("     | Du bist %-53s | "+std_colors[2]+"|"+normal+"|\n",n);
+    }
+  }
+  
+  //Vorsicht, Gesinnung, Alter
+  s+=sprintf(
+       "     | Rueckzug: %3d%:-48s | "+std_colors[2]+"|"+normal+"|\n     | "
+       "Einstellung: %-48s | "+std_colors[2]+"|"+normal+"|\n     | Alter: "
+       "%-54s | "+std_colors[2]+"|"+normal+"|\n"
+      ,ob->QueryProp(P_WIMPY)
+      ,(ob->QueryProp(P_WIMPY_DIRECTION)? ", Fluchtrichtung: "
+        +to_string(ob->QueryProp(P_WIMPY_DIRECTION)):"")
+      ,GetAlign(ob->QueryProp(P_ALIGN))
+      ,ob->get_age()
+      );
+      
+  //Umgebungsbeschreibung
+  m=explode(file_name(ENV(ob)), "/");
+  if(member( ({"d","gilden"}), m[0]) == -1) 
+  { n="Du hast keine Ahnung wo Du bist."; }
+  else 
+  {
+    if(m[0] == "gilden") {n="Gildengebiet";}
+    else { n=CAP(m[1]); }
+    n+=", Du bist ";
+    if(!objectp(ENV(ob))) {p=0;}
+    else {p=ENV(ob)->QueryProp(P_ENVIRONMENT)[ENV_TERRAIN];}
+    n+=get_env_description(p); n+=".";
+    n=n[0..50];
+  }
+ 
+  s+=sprintf(
+       "     | Umgebung: %-51s | "+std_colors[2]+"|"+normal+"|\n"
+       "     | Erzfeindrasse: %-46s | "+std_colors[2]+"|"+normal+"|\n"
+       "     | Tier: %-55s | "+std_colors[2]+"|"+normal+"|\n"
+       "     +~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| "+std_colors[2]+"|"+normal+"|\n",
+       n,
+       implode(map_array(RANGERMASTER->GetArchenemy(getuid(ob)), "get_race_plural", find_object(RANGERMASTER)), ", "),
+       petStatus()
+  );
+       
+  //Forscherfortschritt
+  m=explode(break_string(ob->Forschung(), 61), "\n");
+  for(i=0;i<sizeof(m);i++)
+  { s+=sprintf("     | %-61s | "+std_colors[2]+"|"+normal+"|\n", m[i]); }
+  
+  // Feinde aufzaehlen (direkt uebernommen)
+  m=((mixed) ob->QueryEnemies())[0];
+  if(sizeof(m))
+  {
+    n=({});
+    p=all_inventory(ENV(ob));
+    for(i=0;i<sizeof(m);i++)
+    { if(member_array(m[i], p) == -1) { n+=({m[i]}); } }
+    if(sizeof(n))
+    {
+      m=explode(break_string("Du verfolgst "
+          +ob->CountUp(map_objects(n,"name",WEN))+".", 61), "\n");
+      for(i=0;i<sizeof(m);i++)
+      { s+=sprintf("     | %-61s | "+std_colors[2]+"|"+normal+"|\n"
+                     , to_string(m[i])); }
+    }
+  }
+  
+  //Abschluss
+  s+="     +~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\\"
+     " "+std_colors[2]+"|"+normal+"/\n                                       "
+     "                               \\/\n";
+  TP->More(s);
+  return 1; 
+}
+
+//-- Die Kurzversion ---------------------------------------------------------
+/*
+  Werte: Leben, Magie, Attris, Taub/blind..., Erschoepfung, Belastung, 
+  Vorsicht, XP, Levelanstieg, im Wald?
+*/
+int wlinfo_short()
+{
+  object ob;
+  int i, j;
+  string s;
+  mixed m,n,p;
+  
+  if(!objectp(ob=ENV(TO))) {return 1;}
+  i=ob->LpLevel();
+  s=sprintf(
+       "\n      /\\~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+       "~~+\n     //\\\\  %|56s |\n   _///\\\\\\~~~~~~~~~~~~~~~~~~~~~~~~~+~~~"
+       "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|\n    //||\\\\\\_     Ausdauer: "
+       "%2d(%+3d) | Magie: %3d/%3d Leben: %3d/%3d  |\n _////||\\\\\\\\_     "
+       "Staerke: %2d(%+3d) +~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+\n  "
+       "_///||\\\\\\\\\\\\_  Geschick: %2d(%+3d) | Belastung:        [%10s] "
+       "|\n      ||            Geist: %2d(%+3d) | Ausdauer:         [%10s] "
+       "|\n      ||  %d [%-'.'*s] %d+  | Erfahrung:          %10d |\n      "
+       "||  Rueckzug: %3d%:-44s |\n"
+      ,"Du bist "+(IsInForest(ob)?"im Wald, Deine Zauber "
+        "sind nun staerker!":"nicht im Wald, Deine Zauber sind nun "
+        "schwaecher!")
+      ,ob->QueryProp(P_ATTRIBUTES)[A_CON]
+      ,ob->QueryAttributeOffset(A_CON)
+      ,ob->QueryProp(P_SP)
+      ,ob->QueryProp(P_MAX_SP)
+      ,ob->QueryProp(P_HP)
+      ,ob->QueryProp(P_MAX_HP)
+      ,ob->QueryProp(P_ATTRIBUTES)[A_STR]
+      ,ob->QueryAttributeOffset(A_STR)
+      ,ob->QueryProp(P_ATTRIBUTES)[A_DEX]
+      ,ob->QueryAttributeOffset(A_DEX)
+      ,get_bars(get_belastung(ob))
+      ,ob->QueryProp(P_ATTRIBUTES)[A_INT]
+      ,ob->QueryAttributeOffset(A_INT)
+      ,get_bars(get_ausdauer(ob))
+      ,i
+      ,(j=18-strlen(to_string(i))-strlen(to_string(i+1)))
+      ,sprintf("%'#'*s", ob->LevelPerc(i+1)*j/100,"")
+      ,(i+1)
+      ,ob->QueryProp(P_XP)
+      ,ob->QueryProp(P_WIMPY)
+      ,(ob->QueryProp(P_WIMPY_DIRECTION)? ", Fluchtrichtung: "
+        +to_string(ob->QueryProp(P_WIMPY_DIRECTION)):"")
+      );
+
+  //Poison, Blind, Deaf, Frog
+  if( (ob->QueryProp(P_POISON)) || (ob->QueryProp(P_BLIND)) ||
+      (ob->QueryProp(P_DEAF))   || (ob->QueryProp(P_FROG)) )
+  {
+    m=({});
+    if(i=ob->QueryProp(P_POISON) )
+    { m+=({(i<4 ? "leicht vergiftet" : "vergiftet")}); }
+    if(ob->QueryProp(P_BLIND) ) {m+=({"blind"}); }
+    if( TP->QueryProp(P_DEAF) ) {m+=({"taub"}); }
+    if( TP->QueryProp(P_FROG) ) {m+=({"verfroscht"}); }
+    if(sizeof(m)>0)
+    {
+      n=m[0];
+      if(sizeof(m)>1)
+      {
+        p=({m[sizeof(m)-1]});
+        p+=({m[sizeof(m)-2]});
+        n=implode(p, " und ");
+        m-=p; m+=({""});
+        if(sizeof(m)>0) { n=implode(m, ", ")+n; }
+      }
+      n+=".";
+      s+=sprintf("      ||  Du bist %-49s | \n",n);
+    }
+  }
+  
+  //MetallTest
+  if(QueryMetal(ob))
+  { s+=sprintf("      ||  Du bist %-49s | \n",
+               "Du traegst zuviel Metall bei Dir!"); }
+   
+  s+="     \\\\\\\\__________________________________________________________"
+     "_|\\\n     ////                                                        "
+     "   |/\n";
+  ob->More(s);
+  return 1;
+}
+//**************************************************************************//
+
+
+
+//** Skillpunkte einsehen **************************************************//
+//-- Alles vorgefertigt im Skillmaster ---------------------------------------
+int ShowSkillPoints()
+{
+  mixed res;
+  
+  res=R_SKILLMASTER->QuerySkillTree(getuid(TP));
+  if(stringp(res)) {TP->More(res);}
+  return 1;  
+}
+//**************************************************************************//
+
+
+
+//** Titel/presay setzen ***************************************************//
+//-- Der Gildenraum uebernimmt alles -----------------------------------------
+int AdjustTitle()
+{
+  if(objectp(TP)) GUILD_ROOM->adjust_title(TP, 1);
+  return 1;
+}
+//**************************************************************************//
+
+
+
+//** Testplayer-Zusaetze ***************************************************//
+//-- Transport in die Gilde --------------------------------------------------
+int gilde()
+{
+  if(TP->QueryProp(P_TESTPLAYER) || IS_WIZARD(TP)) 
+  { TP->move(GUILD_ROOM, M_TPORT); }
+  return 1;
+}
+
+//-- Combochancen/-schaden fuer Testies anzeigen? ----------------------------
+int combo_trigger(string str)
+{
+  int i;
+  
+  
+  if(!TP->QueryProp(P_TESTPLAYER) && !IS_WIZARD(TP)) return 0;
+  
+  notify_fail("Befehl: <wlcombo 0|1>\n");
+  if(!str || !stringp(str) ) return 0;
+  if(str != "0" && str != "1") return 0;
+  i=to_int(str);
+  i=limit(i,0,1);
+  
+  //DBD(to_string(i));
+  
+  if(objectp(owner))
+  {
+    owner->SetProp(P_RANGER_SHOW_COMBOS, i);
+    owner->Set(P_RANGER_SHOW_COMBOS, SAVE, i);
+    write("Comboanzeige "+(i?"ein":"aus")+"geschaltet.\n");
+    return 1;
+  }
+  return 0;
+}
+
+//-- Gildenquest setzen ------------------------------------------------------
+int set_quest(string str)
+{
+  mixed s;
+  int i;
+  
+  if(!TP->QueryProp(P_TESTPLAYER) && !IS_WIZARD(TP)) return 0;
+  
+  notify_fail("Befehl: <wlsettask 1 ... 20>\n");
+  i=to_int(str);
+  if(!i || i>20) return 0;
+  s=TP->QueryProp(P_RANGER_NEED_QUEST);
+  if(!stringp(s)) s="";
+  if(test_bit(s, i))
+  {
+    s=clear_bit(s,i);
+    TP->SetProp(P_RANGER_NEED_QUEST, s);
+    write(BS("Die Quest fuer Gildenstufe "+to_string(i)+" ist jetzt wieder "
+          "notwendig!"));
+    return 1;    
+  }
+  else
+  {
+    s=set_bit(s,i);
+    TP->SetProp(P_RANGER_NEED_QUEST, s);
+    write(BS("Die Quest fuer Gildenstufe "+to_string(i)+" ist jetzt nicht "
+          "mehr notwendig!"));
+    return 1;    
+  }
+  return 0;
+  
+}
+
+//-- Gildentask setzen -------------------------------------------------------
+int set_task(string str)
+{
+  int i;
+  
+  if(!TP->QueryProp(P_TESTPLAYER) && !IS_WIZARD(TP)) return 0;
+  
+  notify_fail("Befehl: <wlsetquest 1 ... 20>\n");
+  i=to_int(str);
+  if(!i || i>20) return 0;
+  if(objectp(owner))
+  {
+    RANGERMASTER->SetTask(getuid(owner), i);
+    write("Gildenaufgabe fuer Gildenstufe "+to_string(i)+" gesetzt.\n");
+    return 1;
+  }
+  return 0;
+  
+}
+
+//**************************************************************************//
+
+
+
+//** Leichenueberpruefung fuer Task und Archenemey *************************//
+//-- Filterfunktion um nur an die Leichen zu kommen --------------------------
+int is_correct_corpse(object ob)
+{
+  if( objectp(ob) && objectp(owner) && ob->id("Leiche") &&  
+      owner==ob->QueryProp(P_KILLER) && 
+      !stringp(ob->QueryProp(P_CORPSE_MARK))  )
+  { ob->SetProp(P_CORPSE_MARK, getuid(owner));
+    //DBD(to_string(ob)+" correct_corpse akzeptiert!");
+    return 1; }
+  return 0;
+}
+
+//-- ErzfeindTest ------------------------------------------------------------
+int archenemy_test(object corpse)
+{
+  if(!objectp(corpse) || !objectp(owner) ) { return 0; }
+  if( GUILD_MASTER->is_archenemy_of(getuid(owner), corpse) && 
+      (corpse->QueryProp(P_LEVEL))>=(owner->QueryProp(P_GUILD_LEVEL)) )
+  { 
+    GUILD_MASTER->IncKilledArchenemys(getuid(owner), corpse->QueryProp(P_LEVEL)); 
+    //DBD(to_string(corpse)+" archenemy_test akzeptiert!");
+    return 1;
+  }
+  return 0;
+}
+
+//-- TaskTest ----------------------------------------------------------------
+void task_test(object corpse)
+{
+  if(!objectp(corpse) || !objectp(owner) ) { return; }
+  return;
+}
+
+//-- Hauptfunktion -----------------------------------------------------------
+int corpse_test()
+{
+  mixed obs, env;
+  object ob;
+  string s;
+  int i, task_flag, res;
+  
+  notify_fail("Du spuerst nichts.\n");
+  res=0;
+  if(!objectp(TP) || !objectp(env=ENV(TP)) ) { return 0; }
+  
+  obs=filter_array(all_inventory(env), "is_correct_corpse");
+  if(!pointerp(obs) || sizeof(obs)<1) { return 0; }
+  if(present(TASK_OBJECT_ID, TP)) { task_flag=1; }
+  for(i=0;i<sizeof(obs);i++)
+  { //DBD(to_string(obs[i]));
+    res+=archenemy_test(obs[i]);
+    if(task_flag) { task_test(obs[i]); } }
+  if(!res) return 0;
+  tell_object(TP, BS(res==1?("Die Leiche wurde akzeptiert."):("Von den "
+                  "Leichen wurden "+to_string(res)+" akzeptiert.")));
+  return 1;
+}
+//**************************************************************************//
+
+public void updateSummonInvest() {
+  summons -= ({0}); // aufraeumen
+  if(RANGERMASTER->GetMasterAbility(getuid(owner)) != MASTER_ABIILITY_IMPROVED_BINDING) 
+    SetProp(P_X_HEALTH_MOD, ([P_SP: -(50*sizeof(summons))]));
+  owner->UpdateAttributes();
+  return;
+}
+
+//-- Summons Managen ----------------------------------------------------------
+public void RegisterSummon() {
+  if(!objectp(PO)) return;
+  if(!PO->id(SUMMON_ID)) return;
+
+  summons += ({PO});
+  updateSummonInvest();
+}
+
+public void UnregisterSummon() {
+  if(!objectp(PO)) return;
+  if(!PO->id(SUMMON_ID)) return;
+
+  summons -= ({PO});
+  updateSummonInvest();
+}
+
+public int Version() {
+  return KOECHER_VERSION;
+}

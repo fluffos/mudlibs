@@ -1,0 +1,469 @@
+// SilberLand MUDlib
+//
+// spellbooks/paladine/gottheilung.c
+//
+// $Date: 2005/01/07 18:10:40 $
+/* $Revision: 1.6 $
+ * $Log: gottheilung.c,v $
+ * Revision 1.6  2005/01/07 18:10:40  Feyaria
+ * Frosch auf 0 setzen vor der textausgabe.
+ *
+ * Revision 1.5  2004/12/14 21:51:17  Feyaria
+ * keine XP wenn man zweitie heilt.
+ *
+ * Revision 1.4  2003/11/21 00:04:55  Feyaria
+ * Weniger kosten wenn man spell goettlich kann
+ *
+ * Revision 1.3  2003/11/04 15:18:20  Feyaria
+ * NOUNCURSE bei sprachfluechen beruecksichtigen
+ *
+ * Revision 1.2  2003/09/25 06:01:20  Angrox
+ * XP fuers heilen
+ *
+ * Revision 1.1  2003/07/09 11:39:22  Angrox
+ * Initial revision
+ *
+ */
+// Prototypes
+nosave int gottheilung_test(
+              object caster, 
+              object victim, 
+              mapping sinfo,
+              string illness, 
+              mapping illnesses);
+
+int gottheilung(object caster, mapping sinfo);
+
+nosave int gottheilung_mes1(
+               object caster, 
+               object victim, 
+               mapping sinfo,
+               string illness, 
+               int poison_diff);
+
+private mapping activeVitalityTriggers = ([ ]);
+
+
+private void grant_vitality(object caster, object target, string illness) {
+  if(member(activeVitalityTriggers, target)) return; // nur die erste vitalitaet zaehlt
+
+  activeVitalityTriggers[target] = ({ time() + caster->QueryProp(P_GUILD_LEVEL)*30, illness });
+  tell_object(target, BS(sprintf("Dustys Segen gewaehrt dir eine Zeit lang Schutz vor weiter%s!",
+              (illness=="sprachfluch"?"en Sprachfluechen":"er "+capitalize(illness)))));
+
+  if(find_call_out("check_vitality") == -1) {
+    call_out("check_vitality", 2);
+  }
+}
+
+public void check_vitality() {
+  int i, x;
+  object *keys, pl, ob;
+  string illness;
+
+  keys = m_indices(activeVitalityTriggers);
+
+  for(i=0; i<sizeof(keys); ++i) {
+    pl = keys[i];
+    
+    // tote eintraege loeschen
+    if(!objectp(pl)) {
+      activeVitalityTriggers = m_delete(activeVitalityTriggers, pl);
+      continue;
+    }
+    
+    illness = activeVitalityTriggers[pl][1];
+
+    // abgelaufene eintraege loeschen
+    if(activeVitalityTriggers[pl][0] < time()) {
+      activeVitalityTriggers = m_delete(activeVitalityTriggers, pl);
+      tell_object(pl, BS(sprintf("Dustys Schutz vor weiter%s faellt von dir ab!",
+                  (illness=="sprachfluch"?"en Sprachfluechen":"er "+capitalize(illness)))));
+      continue;
+    }
+
+    // geltende eintraege abhandeln
+    x = 0;
+    switch(illness) {
+      case "taubheit":
+        if(pl->QueryProp(P_DEAF) != 0) {
+          tell_object(pl, BS("Dustys Segen heilt dich von deiner Taubheit und erlischt!"));
+          pl->SetProp(P_DEAF, 0);
+          x = 1;
+        }
+        break;
+      case "blindheit":
+        if(pl->QueryProp(P_BLIND) != 0) {
+          tell_object(pl, BS("Dustys Segen heilt dich von deiner Blindheit und erlischt!"));
+          pl->SetProp(P_BLIND, 0);
+          x = 1;
+        }
+        break;
+      case "verfroschung":
+        if(pl->QueryProp(P_FROG) != 0) {
+          tell_object(pl, BS("Dustys Segen heilt dich von deiner Verfroschung und erlischt!"));
+          pl->SetProp(P_FROG, 0);
+          x = 1;
+        }
+        break;
+      case "vergiftung":
+        if(pl->QueryProp(P_POISON) != 0) {
+          tell_object(pl, BS("Dustys Segen schwaecht deine Vergiftung ab und erlischt!"));
+          pl->AddPoison(-2);
+          pl->AddPoison(-1 * random(3));
+          x = 1;
+        }
+        break;
+      case "sprachfluch":
+      if(objectp(ob=present("\nsprachfluch", pl))) {
+        tell_object(pl, BS("Dustys Segen heilt deine Zunge und erlischt!"));
+        catch(ob->remove());
+        x = 1;
+      }
+    }
+
+    if(x) {
+      activeVitalityTriggers = m_delete(activeVitalityTriggers, pl);
+    }
+  }
+
+  if(sizeof(activeVitalityTriggers) > 0) {
+    call_out("check_vitality", 2);
+  }
+
+  return;
+}
+
+
+int gottheilung(object caster, mapping sinfo) {
+  int poison_diff, suc;
+  string vn, illness;
+  mapping illnesses;
+  object victim;
+  illnesses=(["blindheit":8, "taubheit":6, "verfroschung":4, "vergiftung":10,
+      "sprachfluch":12]);
+  //tell_angrox(sinfo[SI_SKILLARG]+"\n");
+  if(!sinfo[SI_SKILLARG] || sscanf(sinfo[SI_SKILLARG], "%s von %s",
+      vn, illness)!=2)
+  {
+    write(BS("Paladin, WEN willst Du von WAS mit der Macht Dustys "
+        +"heilen?\n"));
+    return 0;
+  }
+  if(!ENV(caster)) {
+    write("In dieser Umgebung kann Dich Dusty nicht erhoeren\n");
+    return 0;
+  }
+  if (ENV(caster) && ENV(caster)->_query_total_light() < 1) {
+    Message(caster,0,
+      BS("Bei Dusty, hier ist es VIEL zu dunkel dafuer!\n"),0);
+    return 0;
+  }
+  if(vn=="mich")
+    victim=caster;
+  else if(!victim=present(vn, ENV(caster)) ||
+         (victim && victim->QueryProp(P_INVIS))) {
+    write(BS(sprintf("Paladin, hier ist niemand, der '%s' heisst!\n",
+        vn)));
+    return 0;
+  }
+  if(call_other(NPCMASTER, "IsFeind", victim)) {
+    Message(caster,0,
+          BS("BEI DUSTY! Du wuerdeset einen FEIND der Paladine und somit "
+          "auch einen FEIND Deiner Goettin heilen? Dafuer gibt es nur "
+          "EINE Strafe!!!"),0);
+    call_out("DoFakeDeath",0,caster);
+    return 0;
+  }
+  illness=lower_case(illness);
+  poison_diff=gottheilung_test(caster, victim, sinfo, illness, illnesses);
+  if(!poison_diff) return 0;
+  if(victim==caster) {
+    Message(caster, 0, BS(sprintf("Du bereitest Dich darauf vor, mit der Macht "
+      +"Dustys Deine%s %s zu heilen.\n", illness=="sprachfluch"?"n":"",
+      CAP(illness))), 0);
+    Message(caster, 0, BS(sprintf("%s konzentriert sich und scheint in "
+        +"Meditation zu versinken.\n", caster->Name(WER))), 3);
+  }
+  else {
+    Message(caster, 0, BS(sprintf("Du bereitest Dich darauf vor, mit der "
+        +"Macht Dustys %s %s von %s zu heilen.\n", 
+        illness=="sprachfluch"?"den":"die",CAP(illness),
+        victim->name(WEM))), 0);
+    Message(caster, victim, BS(sprintf("%s bereitet sich darauf vor, mit der "
+        +"Macht Dustys Deine%s %s zu heilen.\n", caster->Name(WER),
+        illness=="sprachfluch"?"n":"", CAP(illness))), 1);
+    Message(caster, victim, BS(sprintf("%s konzentriert sich auf %s. "
+        +"Vermutlich versucht %s %s zu heilen.", caster->Name(WER),
+        victim->name(WEN), caster->QueryPronoun(WER),
+        victim->QueryPronoun(WEN))), 2);
+  }
+ if((suc=SpellSuccess(caster, sinfo))<=0) {
+   Message(caster, victim, BS("Dusty scheint Dich nicht erhoert zu haben. "
+       +"Nichts passiert."),0);
+   Message(caster, victim, BS("Nichts passiert."), 3);
+   return MISSERFOLG;
+ }
+ gottheilung_mes1(caster, victim, sinfo, illness, poison_diff);
+ if(victim!=caster && caster->QueryProp(P_ALIGN) <1100)
+   caster->SetProp(P_ALIGN, caster->QueryProp(P_ALIGN)+random(30)+10);
+ return ERFOLG;
+}
+
+
+nosave int gottheilung_test(object caster, object victim, mapping sinfo,
+    string illness, mapping illnesses)
+{
+  int mp, poisonlevel, poison_diff;
+  object ob;
+  if(member(m_indices(illnesses), illness)==-1) {
+    write("In Dustys Namen, das kannst Du nicht heilen!\n");
+    return 0;
+  }
+  if(illness=="verfroschung") {
+    if(!victim->QueryProp(P_FROG)) {
+      if(victim==caster)
+        write(BS(sprintf("Bei Dusty! Du bist kein Frosch!")));
+      else
+        write(BS(sprintf("Bei Dusty! %s ist kein Frosch!", victim->Name(WER))));
+      return 0;
+    }
+    if( sinfo[SI_SKILLABILITY] == MAX_ABILITY)
+      sinfo[SI_RAW_SPELLCOST]=35;
+    else
+      sinfo[SI_RAW_SPELLCOST]=40;
+    sinfo=DoSpellModification(caster, sinfo);
+  }
+  else if(illness=="taubheit") {
+    if(!victim->QueryProp(P_DEAF)) {
+      if(victim==caster)
+        write(BS(sprintf("Bei Dusty! Du bist nicht taub!")));
+      else
+        write(BS(sprintf("Bei Dusty! %s ist gar nicht taub!",
+            victim->Name(WER))));
+      return 0;
+    }
+    if(caster->QueryProp(P_GUILD_LEVEL)<illnesses[illness]) {
+      write(BS("Paladin, Du musst Gildenstufe "+illnesses[illness]+
+            " sein, um Taubheit heilen zu koennen."));
+      return 0;
+    }
+    if( sinfo[SI_SKILLABILITY] == MAX_ABILITY)
+      sinfo[SI_RAW_SPELLCOST]=40;
+    else
+      sinfo[SI_RAW_SPELLCOST]=50;
+    sinfo=DoSpellModification(caster, sinfo);
+  }
+  else if(illness=="blindheit") {
+    if(!victim->QueryProp(P_BLIND)) {
+      if(victim==caster)
+        write(BS(sprintf("Bei Dusty! Du bist gar nicht blind!")));
+      else
+        write(BS(sprintf("Bei Dusty! %s ist gar nicht blind!",
+            victim->Name(WER))));
+      return 0;
+    }
+    if(caster->QueryProp(P_GUILD_LEVEL)<illnesses[illness]) {
+      write(BS("Paladin, Du musst Gildenstufe "+illnesses[illness]+
+            " sein, um Blindheit heilen zu koennen."));
+      return 0;
+    }
+    if( sinfo[SI_SKILLABILITY] == MAX_ABILITY)
+      sinfo[SI_RAW_SPELLCOST]=50;
+    else
+      sinfo[SI_RAW_SPELLCOST]=60;
+    sinfo=DoSpellModification(caster, sinfo);
+  }
+  else if(illness=="vergiftung") {
+    if(!poisonlevel=victim->QueryProp(P_POISON)) {
+      if(victim==caster)
+        write(BS(sprintf("Bei Dusty! Du bist doch gar nicht vergiftet!")));
+      else
+        write(BS(sprintf("Bei Dusty! %s ist ueberhaupt nicht vergiftet!",
+            victim->Name(WER))));
+      return 0;
+    }
+    if(caster->QueryProp(P_GUILD_LEVEL)<illnesses[illness]) {
+      write(BS("Paladin, Du musst Gildenstufe "+illnesses[illness]+
+            " sein, um Vergiftungen heilen zu koennen."));
+      return 0;
+    }
+    if( sinfo[SI_SKILLABILITY] == MAX_ABILITY)
+      sinfo[SI_RAW_SPELLCOST]=20;
+    else
+      sinfo[SI_RAW_SPELLCOST]=25;
+    mp=caster->QueryProp(P_SP);
+    sinfo=DoSpellModification(caster, sinfo);
+    poison_diff=mp/sinfo[SI_RAW_SPELLCOST];
+    if(poison_diff == 0) {
+      Message(caster,0,sinfo[SI_SP_LOW_MSG],0);
+      return 0;
+    }
+    if(poison_diff>poisonlevel)
+      poison_diff=poisonlevel;
+    sinfo[SI_RAW_SPELLCOST]=sinfo[SI_RAW_SPELLCOST]*poison_diff;
+  }
+  else if(illness=="sprachfluch") {
+    if(!objectp(ob=present("\nsprachfluch", victim))) {
+      if(victim==caster)
+        write(BS(sprintf("Bei Dusty! Du bist gar nicht verflucht!")));
+      else
+        write(BS(sprintf("Bei Dusty! %s ist gar nicht verflucht!",
+            victim->Name(WER))));
+      return 0;
+    }
+    if(caster->QueryProp(P_GUILD_LEVEL)<illnesses[illness]) {
+      write(BS("Paladin, Du musst Gildenstufe "+ illnesses[illness]+
+            " sein, um Sprachflueche heilen zu koennen."));
+      return 0;
+    }
+    if( ob->id("NOUNCURSE"))
+    {
+      write(BS("Paladin, dieser Sprachfluch ist zu maechtig, Du kannst ihn "
+            "nicht heilen!"));
+      return 0;
+    }
+    if( sinfo[SI_SKILLABILITY] == MAX_ABILITY)
+      sinfo[SI_RAW_SPELLCOST]=180;
+    else
+      sinfo[SI_RAW_SPELLCOST]=200;
+    sinfo=DoSpellModification(caster, sinfo);
+  }
+  if(caster->QueryProp(P_SP) < sinfo[SI_RAW_SPELLCOST]) {
+    Message(caster,0,sinfo[SI_SP_LOW_MSG],0);
+    return 0;
+  }
+  caster->AddSp(-sinfo[SI_RAW_SPELLCOST]);
+  return poison_diff||1;
+}
+
+
+nosave int gottheilung_mes1(object caster, object victim, mapping sinfo,
+    string illness, int poison_diff)
+{
+  string tocaster, tovictim, toother;
+  object ob;
+  switch(illness) {
+    case "taubheit":
+      if(victim!=caster) {
+         tocaster=sprintf("Dusty sei Dank! Durch goettliches Wirken "
+              "kann %s wieder hoeren!\n", victim->name(WER));
+         tovictim=sprintf("Ploetzlich kannst Du wieder hoeren!!! Dusty "
+              "sei Dank!\n");
+         toother=sprintf("%s scheint wieder hoeren zu koennen! Dustys "
+              "Macht muss wahrlich gross sein!\n", victim->Name(WER));
+      }
+      else {
+         tocaster=sprintf("Bei der allmaechtigen Dusty! Du kannst wieder "
+              "hoeren!\n");
+         toother=sprintf("%s scheint wieder hoeren zu koennen!\n",
+             victim->Name(WER));
+      }
+      victim->SetProp(P_DEAF, 0);
+      break;
+    case "verfroschung":
+      victim->SetProp(P_FROG, 0);
+      if(victim!=caster) {
+        tocaster=sprintf("Dusty sei Dank! Durch goettliches Eingreifen "
+             "weicht die gruene Schuppenhaut von %s, und %s verwandelt sich "
+             "wieder zurueck.\n", victim->name(WEM), victim->QueryPronoun(WER));
+        tovictim=sprintf("Du verwandelst Dich durch die Macht der "
+             "goettlichen Dusty zurueck in Deine urspruengliche Rasse. Dusty "
+             "sei Dank!\n");
+        toother=sprintf("Durch die goettliche Macht Dustys wird %s "
+             "entfroscht.\n", victim->name(WER));
+      }
+      else {
+       tocaster=sprintf("Gepriesen sei Dusty! Durch ihre goettliche Macht "
+            "verwandelst Du Dich zurueck! Heilig! Heilig! Heilig!\n");
+       toother=sprintf("Ploetzlich verwandelt sich %s durch die goettliche "
+            "Macht Dustys zurueck.\n", caster->name(WER));
+      }
+      break;
+    case "blindheit":
+      if(victim!=caster) {
+        tocaster=sprintf("%s reisst %se Augen auf und kann wieder sehen! "
+             "Lob sei Dusty! Lob! Lob! Lob!\n", victim->Name(WER),
+            victim->QueryPossPronoun(WER));
+        tovictim=sprintf("Du spuerst ein Prickeln in Deinen Augen und reisst "
+             "sie weit auf! Du kannst wieder sehen! Dusty und %s sei Dank!\n",
+            caster->name(WER));
+        toother=sprintf("%s reisst %se Augen auf und kann wieder sehen! Das "
+             "muss ein goettliches Wunder sein!\n", victim->Name(WER),
+            victim->QueryPossPronoun(WER));
+      }
+
+      else {
+        tocaster=sprintf("Du betest kurz zu Dusty und reisst Deine Augen auf. "
+             "Du kannst wieder sehen! Gepriesen sei Dusty!\n");
+        toother=sprintf("%s reisst %se Augen auf und kann wieder sehen! Das "
+             "muss ein goettliches Wunder sein!\n", caster->Name(WER),
+            victim->QueryPossPronoun(WER));
+      }
+      victim->SetProp(P_BLIND, 0);
+      break;
+    case "sprachfluch":
+      if(victim!=caster) {
+        tocaster=sprintf("%s Zunge scheint nun wieder geloester zu sein! "
+             "Lob sei Dusty! Lob! Lob! Lob!\n", victim->Name(WESSEN));
+        tovictim=sprintf("Du spuerst wie sich Deine Zunge wieder nach Deinem "
+             "Willen bewegen kann! Dusty und %s sei Dank!\n",
+            caster->name(WER));
+        toother=sprintf("%s Zunge scheint nun wieder geloester zu sein! Das "
+             "muss ein goettliches Wunder sein!\n", victim->Name(WESSEN));
+      }
+      else {
+        tocaster=sprintf("Du betest kurz zu Dusty und fuehlst, wie Deine "
+            "Zunge wieder Deinem Willen gehorcht! Gepriesen sei Dusty!\n");
+        toother=sprintf("%s scheint wieder normal reden zu koennen! Das "
+             "muss ein goettliches Wunder sein!\n", caster->Name(WER));
+      }
+      ob=present("\nsprachfluch", victim);
+      catch(ob->remove());
+      break;
+    case "vergiftung":
+      if(victim!=caster) {
+        tocaster=sprintf("Du beruehrst die Wunden von %s, und ein silberner "
+             "Schimmer huscht ueber %se Haut. %s ist nun entgiftet! "
+             "Dusty sei Dank!\n", victim->name(WEM),
+            victim->QueryPossPronoun(WER), CAP(victim->QueryPronoun(WER)));
+        tovictim=sprintf("%s legt Dir die Hand auf die Wunden. Ein silberner "
+             "Schauer huscht ueber Deine Haut, und Du fuehlst Dich viel "
+             "besser.\n", caster->Name(WER));
+        toother=sprintf("%s legt %s die Hand auf die Wunden, und ein silberner "
+             "Schauer huscht ueber %se Haut.\n", caster->Name(WER),
+            victim->name(WEM), victim->QueryPossPronoun(WER));
+      }
+      else {
+        tocaster=sprintf("Du legst Dir die Hand auf Deine Wunden. Ein silberner "
+             "Schauer huscht ueber Deine Haut, und Du bist entgiftet! "
+             "Gepriesen sei Dusty! Heilig! Heilig! Heilig!\n");
+        toother=sprintf("%s legt sich die Hand auf die Wunden, und ein "
+             "silberner Schauer huscht ueber %se Haut.\n", caster->Name(WER),
+            caster->QueryPossPronoun(WER));
+      }
+      victim->SetProp(P_POISON, victim->QueryProp(P_POISON)-poison_diff);
+      break;
+  }
+  Message(caster, victim, BS(tocaster), 0);
+  if(victim==caster)
+    Message(caster, victim, BS(toother), 3);
+  else {
+    Message(caster, victim, BS(tovictim), 1);
+    Message(caster, victim, BS(toother), 2);
+  }
+  if(victim!=caster && !((caster->QueryProp(P_SECOND) && 
+          lower_case(caster->QueryProp(P_SECOND)) == getuid(victim)) ||
+        (victim->QueryProp(P_SECOND) && 
+         lower_case(victim->QueryProp(P_SECOND)) == getuid(caster))))
+    caster->AddExp(50+random(100));
+
+  if(HAS_BLESSING(caster, BLESSING_VITALITY)) {
+    grant_vitality(caster, victim, illness);
+  }
+
+  return 1;
+}
+
+
+

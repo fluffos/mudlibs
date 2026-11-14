@@ -1,0 +1,86 @@
+#include "../../arkanisten.h"
+
+inherit GUILD_FOLDER "abilities/ability.lpc";
+
+public void create() {
+    if(is_clone(TO)) return;
+
+    ::create();
+    SetProp(P_ABILITY_NAME, CAP(SPRINGLOADED_GLOVES));
+    SetProp(P_ABILITY_DESCRIPTIPON, 
+        "Die federmechanischen Handschuhe sind aus festem Leder "
+        "gefertigt und mit Messing- und Stahlplatten an den Knöcheln "
+        "verstärkt. In ihrem Inneren verborgene Federmechanismen spannen "
+        "sich bei jeder Faustbewegung und setzen beim Schlag eine explosive "
+        "zusätzliche Energie frei. Ein leises Zischen und das mechanische "
+        "Klicken begleiten jede Bewegung, bevor der verstärkte Hieb mit "
+        "verheerender Wucht zuschlägt. Diese Mischung aus präziser Ingenieurskunst "
+        "und brutaler Effektivität macht die Handschuhe zu einer gefürchteten "
+        "Waffe, die rohe Stärke und technischen Einfallsreichtum vereint.");    
+    SetProp(P_ABILITY_TYPE, ABILITY_TYPE_ACTIVE);
+    SetProp(P_ABILITY_BASE_ATTRIBUTE, A_STR);
+    SetProp(P_ABILITY_CASTVERB, CAST_VERB_ACTIVATE);
+    SetProp(P_ABILITY_GROUP, ({ABILITY_GROUP_GADGETS}));
+    SetProp(P_ABILITY_COST, 0);
+    SetProp(P_ABILITY_REQUIRES, ({}));
+    SetProp(P_ABILITY_SPELLBREAK, 0);
+}
+
+public mapping prepare_use(object user, mapping sinfo) {
+    if(present(SPRINGLOADED_GLOVES_ID, user)) {
+        tell_object(user, BS("Du traegst die federmechanischen Handschuhe bereits."));
+        return 0;
+    }
+
+    if(sizeof(user->QueryArmours(AT_GLOVE)) > 0) {
+        tell_object(user, BS("Du kannst keine anderen Handschuhe tragen, wenn du die federmechanischen Handschuhe aktivieren willst."));
+        return 0;
+    }
+
+    return ::prepare_use(user, sinfo);
+}
+
+public void success(object user, mapping sinfo, int skillcheck) {
+    object cb;
+    int val;
+    mixed h;
+    mapping mod;
+
+    if(objectp(cb=present(SPRINGLOADED_GLOVES_ID, user))) {
+        if(objectp(user->QueryProp(P_WEAPON))) return; // nur ohne waffen
+        val = user->QueryProp(P_GUILD_LEVEL)+skillcheck/100;
+
+        if(h=user->QueryProp(P_TMP_DEFEND_HOOK)) {
+            if(h[2]=="handschild_func") {
+                val /= 2; // halber bonus wenn handschild aktiv
+            }
+        }
+
+        pDebug(user, sprintf("springloaded_gloves :: bonusDamagePreMod=%d\n", val));
+        mod = apply_modifications(MODIFY_DAMAGE, ([
+            SI_ABILIT_USER: user,
+            SI_SKILLDAMAGE: val,
+            SI_ABILITY_NOLEARN: sinfo[SI_ABILITY_NOLEARN],
+        ]));
+        val = mod[SI_SKILLDAMAGE];
+        pDebug(user, sprintf("springloaded_gloves :: bonusDamage=%d\n", val));
+        sinfo[SI_SKILLDAMAGE] += val;  
+    } else {
+        cb = clone_object(OBJ "federhandschuhe");
+        if(!cb->move(user)) {
+            tell_object(user, BS("Du kannst das gerade nicht tun."));
+            destruct(cb);
+            return;
+        }
+
+        cb->setup(user);
+        cb->do_wear(SPRINGLOADED_GLOVES_ID);
+    }
+
+    return;
+}
+
+public int on_use_after_eval(object user, mapping sinfo, int skillcheck) {
+    if(!objectp(present(SPRINGLOADED_GLOVES_ID, user))) return ERFOLG; // always succeed in wearing it
+    return ::on_use_after_eval(user, sinfo, skillcheck);
+}

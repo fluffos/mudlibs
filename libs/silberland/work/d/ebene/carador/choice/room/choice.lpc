@@ -1,0 +1,1478 @@
+/****************************************************************************
+ Choice.c, written by Alethia & Carador, Tubmud, Domain MoMu, Dec-94
+ ins Deutsche uebertragen und an Silberland angepasst von Carador, Mar-2002
+****************************************************************************/
+
+#pragma strong_types
+#include "../def.h"
+
+// #define DEBUG
+
+#define G_SUM1 "<sum1>"
+#define G_SUM2 "<sum2>"
+
+#define MAX_FIFTH_DIE 8
+
+#define MAX_STAKE 1000
+#define TABLE_LOW_STAKE 5
+
+#define SCORE_LIST CH_LIBDIR"scores"
+#define CH_RULES CH_DOCDIR"regeln.txt"
+#define CH_BRIEF CH_DOCDIR"kurzregeln.txt"
+
+inherit CH_ROOM;
+inherit CH_STDDIR"list";
+inherit "std/more";
+
+mixed *dice_symbols = 
+   ({ ({ "   ", " * ", "   " }),
+      ({ "*  ", "   ", "  *" }),
+      ({ "*  ", " * ", "  *" }),
+      ({ "* *", "   ", "* *" }),
+      ({ "* *", " * ", "* *" }),
+      ({ "* *", "* *", "* *" })
+   });
+
+
+mixed *plates;
+
+int *points = ({ 100, 70, 60, 50, 40, 30, 40, 50, 60, 70, 100 });
+
+int stake;
+int overall_stake;
+int player_amount;
+int *dice;
+mapping players;
+string *has_chosen;
+string *has_agreed;
+string *game_over;
+int table_money;
+
+object *sitting = ({ });
+
+string desc_muenzen(int n)
+{
+  return n + " Muenze" + (n>1?"n":"");
+}
+
+varargs string get_numeral(int n, int cap) {
+  string res;
+  res = CH_GRAMMAR->get_numeral(n);
+  if (cap) res = capitalize(res);
+  return res;
+}
+
+string Get_numeral(int n)
+{
+  return get_numeral(n,1);
+}
+
+int is_real_player(object o)
+{
+  return !IS_LEARNER(o);
+}
+
+varargs mixed query_sitting(object who)
+{
+  if (who) return (member_array(who, sitting) > -1);
+  return sitting;
+}
+
+
+void AddMoney(object pl, int amount)
+{
+   string name;
+
+   pl->AddMoney(amount);
+   name = pl->query_real_name();
+   SCORE_LIST->notify_add_money(name, amount);
+}
+
+
+int calculate_single_score(int which, int how_often) {
+   if (!how_often) return 0;
+   if (how_often < 5) return -200;
+   return points[which] * ((how_often > 10 ? 10 : how_often) - 5);
+}
+
+int calculate_score(mixed arg) {
+   int *sums;
+   int sum, i;
+
+   if (stringp(arg)) {
+      if (!member(players, arg)) return 0;
+      sums = players[arg, 0];
+   }
+   else sums = arg[2];
+
+   for (i=0; i<11; i++) 
+     sum += calculate_single_score(i, sums[i]);
+   return sum;
+}
+
+string print_scores(mixed arg) {
+   int i, j;
+   int *sums, *fifth, *amount_fifth;
+   string res, tmp, *col2, header;
+   object pl;
+
+   if (stringp(arg)) {
+      if ( !member(players, arg) ||
+           !(pl = find_player(arg))
+         ) return 0;
+
+      header = capitalize(pl->query_real_name());
+      sums = players[arg, 0];
+      fifth = players[arg, 1];
+      amount_fifth = players[arg, 2];
+   }
+
+   else {
+      header = capitalize(arg[1]);
+      sums =  arg[2];
+      fifth = arg[3];
+      amount_fifth = arg[4];
+   }
+   
+   col2 = ({ "", "", "", "", "", "", "", "", "", "", "" });
+
+   for (i=0; i<3; i++) {
+      col2[i] += "| " + (fifth[i] ? (string)fifth[i] : ".") + " | ";
+      for (j=0; j<8; j++) 
+         if (j < amount_fifth[i]) col2[i] += "X";
+         else col2[i] += ".";
+      col2[i] += " |";
+   }
+   col2[3] = "+---+----------+";
+   col2[4] = "|              |";
+   col2[5] = "|QUAL DER WAHL |";
+   col2[6] = "|              |";
+   col2[7] = "+--------------+";
+   col2[8] = "| Gesamtpunkte |";
+   col2[9] = "+--------------+";
+   col2[10]= sprintf("|    %6d    |", calculate_score(arg));
+
+   res = " +-------------------------------------------------+\n" +
+         sprintf(" | %:|47s |\n", header) +
+         " +-----+-----+--------------+-------+--------------+\n" +
+         " |Wert |Summe|  Summenliste | Punkte| Der Fuenfte  |\n" +
+         " +-----+-----+--------------+-------+---+----------+\n";
+   
+   for (i=0; i<11; i++) {
+     tmp = "";
+     for (j=0; j < 11; j++) {
+        if (j == 4 || j == 5) tmp += " ";
+        if (j<sums[i]) tmp += "X";
+        else tmp += ".";
+     }
+     res += sprintf(" | %3d | %2d  | %:-12s | %5d %:-16s\n",
+        points[i],i+2,tmp, calculate_single_score(i, sums[i]), col2[i]);
+   }
+
+   res += " +-----+-----+--------------+-------+--------------+\n";
+   return res;
+}
+
+
+
+string get_score_word(int n) {
+  return "" + n;
+}
+
+string get_ordinal(int n) {
+  return CH_GRAMMAR->get_raw_ordinal(n);
+}
+
+string show_dice_symbols(int *d) {
+   string result;
+   int i,j;
+
+   result = "     ---      ---      ---      ---      ---\n";
+
+   for (i=0; i<3; i++) {
+      for (j=0; j<sizeof(d); j++) result += ("    |" + 
+         dice_symbols[d[j]-1][i] + "|");
+      result += "\n";
+   }
+
+   result += "     ---      ---      ---      ---      ---";
+   return result;
+}
+
+string describe_dice(int *d) {
+  int i;
+  string res;
+  mixed tmp, tmp2;
+
+  tmp = allocate(6);
+  tmp2 = ({ });
+  for (i=0; i<sizeof(d); i++) tmp[d[i]-1]++;
+  for (i=0; i<6;i++)  {
+    if (tmp[i] == 1) tmp2 += ({ "eine " + capitalize(get_numeral(i+1)) });
+    else if (tmp[i] > 1) tmp2 += ({ 
+      get_numeral(tmp[i]) + " " + capitalize(get_numeral(i+1)) + "en" });
+  }
+  return make_list(tmp2);
+}
+
+
+string plakat_long() {
+   return SCORE_LIST->print_win_and_loose();
+}
+string sign_long() {
+   return SCORE_LIST->print_scores();
+}
+
+private string my_sit_name(object ob)
+{
+  if (ob == this_player()) return "Du";
+  return ob->name();
+}
+
+string bank_long() {
+  object *s;
+  string str;
+
+  s = map_array(query_sitting(), #'my_sit_name);
+  str =  "\
+Die Bank umgibt den ganzen Tisch, so dass man rundherum sitzen kann. \
+Und genau das wuerde man machen, wenn man \
+sich entschlossen haette, um \
+- sagen wir mal - eine kleine Partie QUAL DER WAHL am Tisch zu spielen. ";
+  switch(sizeof(s)) {
+    case 0 :
+      return break_string(str + "Momentan sitzt niemand auf der Bank.", 78);
+    case 1 :
+      return break_string(str + "Momentan sitzt nur " + s[0] + 
+                                " auf der Bank.", 78);
+    default :
+      return break_string(str + "Momentan sitzen " + make_list(s) + 
+                                " auf der Bank.", 78);
+  }
+}
+
+
+string dice_long() {
+   return "Die Wuerfel zeigen "+describe_dice(dice)+":\n\n"+
+      show_dice_symbols(dice)+"\n";
+}
+
+
+string look_at_score() {
+  if (!query_sitting(this_player())) return "\
+Du versuchst von Deiner gewiss-nicht-auf-der-Bank-sitzenden Position, den \
+Punktestand anzuschauen, bist jedoch nicht in der Lage, auch nur die \
+kleinste Kleinigkeit zu erkennen.";
+
+  return "\
+Gerade als Du den hoelzernen Tisch anschaust, beginnt seine glatte Ober-\n\
+flaeche zu flimmern. Zahlen und Buchstaben erscheinen ploetzlich im Holz:\n" +
+    (print_scores(this_player()->query_real_name()) || 
+                  "Du kannst nichts besonderes erkennen.\n");
+}
+
+string table_long() {
+     return "\
+Nun, ja, dies ist ein Tisch, aber kein gewoehnlicher Tisch. Es ist einer\n\
+dieser beruehmten hoelzernen Tische, die jedes Kind seit seiner fruehsten\n\
+Kindheit kennt. Dies ist ein QUAL DER WAHL-Tisch und man kann daran und\n\
+sogar damit (und das ist es, was den Tisch so besonders macht) QUAL DER WAHL\n\
+spielen. Um den Tisch herum verleuft eine Bank und bietet so eine\n\
+hervorragende Sitzgelegenheit. Bequem und ideal um QUAL DER WAHL zu spielen.\n"+
+   ( overall_stake ? "\
+Auf dem Tisch kannst Du einige Muenzen erkennen. Ein genauer Blick. Dein\n\
+scharfer Verstand bemerkt, dass es genau " + overall_stake + " Muenzen sind.\n\
+Daraus folgerst Du haarscharf, dass gerade ein QUAL DER WAHL Spiel am laufen\n\
+sein muss.\n" : "\
+Es liegen fuenf Wuerfel auf dem Tisch. Aber da sind keine Muenzen. Dies\n\
+bedeutet, dass momentan niemand QUAL DER WAHL spielt. Demzufolge waere jetzt\n\
+der ideale Zeitpunkt, sich auf die Bank zu setzen (falls Du das nicht schon\n\
+laengst gemacht hast) und ein, zwei oder ein paar mehr Spielchen zu machen.\n");
+}
+
+string look_at_stake() {
+   if (overall_stake) return "\
+Momentan laeuft ein QUAL DER WAHL Spiel. Die Menge an Muenzen, die es zu\n\
+gewinnen oder zu verlieren gilt, ist als kleiner Haufen in der Mitte des\n\
+Tisches zu sehen. Um genauer zu sein, es liegen dort " + overall_stake + 
+  "Muenzen.\n";
+
+   if (stake == 1) return "\
+Keine Muenzen auf dem Tisch, kein Spiel am Laufen. Aber auf der Oberflaeche\n\
+des Tisches siehst Du das Bild einer einzelnen Muenze. Dies heisst, dass,\n\
+wenn Du jetzt ein Spiel beginnen wuerdest, es um eine Muenze gehen wuerde.\n\
+Natuerlich koenntest Du jetzt auch einen hoeheren Einsatz vorschlagen.\n";
+
+   return "\
+Keine Muenzen auf dem Tisch, kein Spiel am Laufen. Aber auf der Oberflaeche\n\
+des Tisches siehst Du das Bild von " +stake+" Muenzen. Dies ist der vorgeschlagene\n\
+Einsatz fuer das Spiel. Jeder Spieler, der an dem Spiel teilnehmen will, muss\n\
+diesem Einsatz zustimmen oder ihn ablehnen bevor das Spiel beginnen kann\n";
+}
+
+
+private string taefelchen_long(int i) {
+   return " +-------------------------------------------------+\n" +
+             sprintf(" | %:|47s |\n",
+                (i > 1 ? 
+                   capitalize(get_ordinal(i)) + "bester" : "Bester") +
+                " Spieler") + 
+             print_scores( (i > sizeof(plates) ? 
+              ({ "","", ({ 0,0,0,0,0,0,0,0,0,0,0 }), 
+                 ({ 0,0,0 }), ({ 0,0,0 }), 0 }) :
+              plates[i-1] ));
+}
+
+private string taefelchen_1() { return taefelchen_long(1); }
+private string taefelchen_2() { return taefelchen_long(2); }
+private string taefelchen_3() { return taefelchen_long(3); }
+private string taefelchen_4() { return taefelchen_long(4); }
+private string taefelchen_5() { return taefelchen_long(5); }
+private string taefelchen_6() { return taefelchen_long(6); }
+private string taefelchen_7() { return taefelchen_long(7); }
+private string taefelchen_8() { return taefelchen_long(8); }
+private string taefelchen_9() { return taefelchen_long(9); }
+private string taefelchen_10() { return taefelchen_long(10); }
+private string taefelchen_11() { return taefelchen_long(11); }
+private string taefelchen_12() { return taefelchen_long(12); }
+private string taefelchen_13() { return taefelchen_long(13); }
+private string taefelchen_14() { return taefelchen_long(14); }
+private string taefelchen_15() { return taefelchen_long(15); }
+
+
+status game_totally_over() {
+   int i;
+   int sc;
+   int sgo;
+   int reward, rest;
+   object pl;
+   mixed *scores;
+   string *winners;
+   object *winner_obs;
+   object w0;
+   string log;
+
+   sgo = sizeof(game_over);
+
+   // das spiel ist aus
+   if (sgo == m_sizeof(players)) {
+
+      // game hasn't started yet
+      if (!overall_stake) {
+         stake = 1;
+         return 1;
+      }
+ 
+      log = player_amount+"-player-game is totally over, ";
+      if (sgo) {                                            // es gab sieger
+         if (player_amount == 1) {                          // single_player
+            pl = find_player(game_over[0]);
+            sc = calculate_score(game_over[0]);
+            log += game_over[0] +" scored "+sc+" points";
+            if (sc > 0) {   // der spieler gewinnt
+               log += " and receives "+overall_stake+" coins";
+               message(({ 
+                  ({ pl, M_VERB, "gewinn", pl,  M_POSS, pl, "Solo-Spiel."}),
+                  ({ "Der Tisch verliert " + desc_muenzen(stake) + "."}),
+                  ({ get_numeral(overall_stake) +
+                     " Muenzen schweben auf magische Weise vom Tisch "
+                     "zu dem Ort, wo ", pl, " gewoehnlicherweise",
+                     M_POSS, pl, "~e Muenzen", M_VERB, "aufbewahr", pl,
+                     "." }) }));
+               AddMoney(pl,overall_stake);
+                
+            }  // ende von spieler gewinnt
+            else {  // gut, dann gewinnt der tisch
+               table_money += overall_stake;
+               log += ", table receives "+overall_stake+
+                  " coins, has now " + table_money;
+               SCORE_LIST->set_table_money(table_money);
+               message(({
+                  ({ pl, M_VERB, "verlier", pl, M_POSS, pl, "Solo-Spiel und " + 
+                     "damit " + 
+                      desc_muenzen(stake) + " an den Tisch."}),
+                  ({ "Ploetzlich erkennst Du ein dickes Grinsen auf der "
+                     "Tischoberflaeche und " +
+                      desc_muenzen(overall_stake) + " schweben " +
+                     "sanft unter den Tisch und verschwinden dort." })
+               }));
+            }  // ende von tisch gewinnt
+         }  // ende von single_player 
+         else {   // multi-player
+
+            message(({
+               ({ "Das Spiel ist nun fuer alle beendet, " + 
+                   get_numeral(player_amount) + " Spieler begannen, gemeinsam "+
+                   "QUAL DER WAHL zu spielen, davon " +
+                      (sgo == 1 ? "hielt " : "hielten ") +
+                      (player_amount == sgo ? "alle" : 
+                  ("nur " + get_numeral(sgo))), " bis zum Ende durch." })
+            }));
+
+            log += sgo+" player" +(sgo == 1 ? "" : "s") +
+               " reached the end, ";
+          
+            scores = sort_array(transpose_array( ({ game_over, 
+                     map_array(game_over, #'calculate_score) }) ),
+                     lambda( ({ 'a, 'b }),
+                             ({ #'<, ({ #'[, 'a, 1 }),
+                                     ({ #'[, 'b, 1 }) }) ));
+
+            log += "the results were: " +
+               implode(map_array(scores,
+                  lambda( ({ 'x }), 
+                          ({ #'+,
+                             ({ #'[, 'x, 0 }),
+                             ({ #'+, 
+                                " ",
+                                ({ #'[, 'x, 1 })
+                             })
+                          })
+                        )),", ") +", ";
+                      
+            if (sizeof(game_over) > 1) {         // mehr als einer am ende
+               winners = ({ scores[0][0] });
+               i = 1;
+
+               while (i<sizeof(game_over) && scores[i][1] == scores[0][1]) {
+                  winners += ({ scores[i][0] });
+                  i++;
+               }
+
+               winner_obs = map_array(winners, #'find_player);
+               
+               message(({
+                  ({ "Und nun die Endergebnisse: ",
+                     make_list(
+                        map_array(
+                           scores, 
+                           lambda(
+                              ({ 'x }),
+                              ({ #'+,
+                                 ({ #'describe, 
+                                    ({ #'find_player, ({ #'[, 'x, 0 }) }) }),
+                                 ({ #'+,
+                                    " hat ",
+                                    ({ #'get_score_word, ({ #'[, 'x, 1 }) })
+                                 })
+                              })
+                           )
+                        ),
+                        0,
+                        " Punkte und ",
+                        " Punkte, " 
+                     ), " Punkte."  })
+               }));
+            } // ende von mehr als einer am ende
+            else {  // nur einer am ende
+               winners = ({ game_over[0] });
+               winner_obs = ({ find_player(winners[0]) });
+            } // ende von nur einer am ende
+
+            reward = overall_stake / sizeof(winners);
+            rest = overall_stake % sizeof(winners);
+            w0 = winner_obs[0];
+
+            if (sizeof(winners) > 1) {       // mehr als ein sieger
+               log += "winners: "+ implode(winners,", ")+
+                  " ("+reward+" coin"+(reward==1?"":"s")+" each)";
+               message(({ 
+                     ({ "Deshalb ", M_VERB, "gewinn", w0, w0, 
+                        "den Einsatz in Hoehe von " +
+                        overall_stake + " Muenzen" + 
+                        " zusammen mit ", M_DAT, winner_obs[1..],
+                        ". Die Muenzen werden gleichmaessig verteilt und je " +
+                        desc_muenzen(reward) +
+                        (reward > 1 ? " schweben" : " schwebt"),
+                        " zu jedem der Gewinner."
+                     })
+               }));
+
+               if (rest) {
+                  log += ", table ("+rest+" coin"+(rest==1?"":"s")+")";
+                  message(({
+                     ({ "Die restlichen Muenzen, die auf der Tischoberflaeche "
+                        "verbleiben schweben unter den Tisch und man kann ein "
+                        "dickes Grinsen auf dem Tisch sehen."
+                     })
+                  }));
+               }
+            } // ende von mehr als ein sieger
+
+            else {                         // nur ein sieger
+               log += "winner: "+ winners[0]+
+                  " ("+reward+" coin"+(reward==1?"":"s")+")";
+               message(({
+                 ({ "Deshalb", M_VERB, "gewinn", w0, w0, 
+                    " den gesamten Einsatz in Hoehe von " +
+                   desc_muenzen(overall_stake) + "." })
+               }));
+            }
+
+            for (i=0; i<sizeof(winner_obs); i++)
+               AddMoney(winner_obs[i],reward);
+
+         } // ende von multi-player
+      } // ende von es gab sieger
+
+      else { // gut, es gab keine sieger, d.h. der table steckt ein
+         if (overall_stake) {
+            table_money += overall_stake;
+            SCORE_LIST->set_table_money(table_money);
+            log += "no player reached the end, table receives " +
+               overall_stake+" coins, has now "+
+               table_money;
+            message(({
+               ({ "Ploetzlich siehst Du ein dickes Grinsen auf der " +
+                  "Tischoberflaeche und " +
+                  get_numeral(overall_stake) + " Muenzen" +
+                  " schweben sanft unter den Tisch und verschwinden dort." })
+            }));
+         }
+      } // ende von es gab keine sieger
+
+      overall_stake = 0;
+      set_heart_beat(0);
+      stake = 1;
+      game_over = ({});
+      CH_LOGGER->do_log("choice", log);
+      call_out("update_win_and_loose",0);
+      return 1;
+   }
+   return 0;
+}
+
+
+void update_win_and_loose() {
+   SCORE_LIST->update_win_and_loose();
+}
+
+
+void adjust_game_data(string name) {
+   name = lower_case(name);
+   if (overall_stake)
+     CH_LOGGER->do_log("choice", name + " left running game");
+   players -= ([ name ]);
+   game_over -= ({ name });
+   has_agreed -= ({ name });
+   has_chosen -= ({ name });
+   game_totally_over();
+}
+
+void force_him_up(object ob) {
+  sitting -= ({ ob });
+  adjust_game_data(ob->query_real_name());
+}
+
+
+
+status mixed_wiz_and_pl() {
+   int si;
+
+   si = sizeof(filter_array(query_sitting(), #'is_real_player));
+   if (si && si < sizeof(query_sitting())) return 1;
+   return 0;
+}
+
+
+mixed do_sit(mixed args)
+{
+  object who;
+
+  who = this_player();
+
+  if (member_array(who, sitting) > -1) {
+    message("Aber Du sitzt doch schon.\n");
+    return 1;
+  }
+
+  if (!this_player()->QueryMoney()) {
+    message(({ 
+      ({ M_PL, M_PL_VERB, "versuch", M_PL_AKK_SICH,
+         "auf die Bank zu setzen. Doch irgendwie", M_PL_VERB, "stell",
+         M_PL, M_PL_AKK_SICH, "zu ungeschickt an." }),
+      ({ M_WRITE, "Ploetzlich bemerkst Du, dass Du kein Geld "
+         "dabei hast. Und Du brauchst mindestens eine "
+         "Muenze als Einsatz um QUAL DER WAHL zu spielen." })
+    }));
+    return 1;
+  }
+
+  if (overall_stake) {
+    message(({ 
+      ({ M_PL, M_PL_VERB, "versuch", M_PL_AKK_SICH,
+         "auf die Bank zu setzten, setzt", M_PL_AKK_SICH,
+         "aber irgendwie daneben." }),
+      ({ M_WRITE, "Da momentan gerade ein Spiel am laufen ist, ist es "
+         "nicht moeglich, sich jetzt hinzusetzen. Du solltest warten "
+         "bis das Spiel beendet ist." })
+    }));
+    return 1;
+  }
+
+  message(({ ({ M_PL, "setzt", M_PL_AKK_SICH, 
+                "auf die Bank." }) }));
+ 
+  sitting += ({ who });
+  set_heart_beat(1);
+
+  if (stake != 1) message(({
+     2,
+     ({ M_WRITE, "Ein Einsatz von " + desc_muenzen(stake) + 
+         " pro Spieler wurde vorgeschlagen "
+         "bevor Du ankamst. Du musst diesem jetzt zustimmen oder ihn "
+         "ablehnen." }) }));
+  players += ([who->query_real_name(): 
+      ({ 0,0,0,0,0,0,0,0,0,0,0 }); ({ 0,0,0 }); ({ 0,0,0 })]);
+  return 1;
+}
+
+
+private mixed lies_klein()
+{
+  More(CH_BRIEF,1);
+  return ({ ({ M_SAY, M_PL, M_PL_VERB, "lies", " das kleine Schild." }) });
+}
+
+private mixed lies_gross()
+{
+  More(CH_RULES,1);
+  return ({ ({ M_SAY, M_PL, M_PL_VERB, "lies", " das grosse Schild." }) });
+}
+
+
+void create()
+{
+  int i;
+
+  room::create();
+
+  dice = allocate(5);
+
+  for (i = 0; i < 5; i++)  
+     dice[i] = random(6) + 1;
+
+  stake = 1;
+  players = ([]);
+  has_chosen = ({});
+  game_over = ({});
+  has_agreed = ({});
+
+  SetProp(P_LIGHT, 1);
+  SetProp(P_INDOORS, 1);
+  SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE: 18, ENV_TERRAIN: TT_HOUSE]));
+  SetProp(P_INT_SHORT,"Midas Spielewelt, QUAL DER WAHL");
+  SetProp(P_INT_LONG, "\
+Hier ist er! Hier steht einer der beruehmten QUAL DER WAHL-Tische. Du bist \
+so beeindruckt, dass Du kaum bemerkst, dass das einzige Mobiliar hier eine \
+Bank ist, die um den ganzen Tisch herumfuehrt. Die Bank sieht aber sehr \
+bequem aus und bietet Sitzgelegenheiten fuer etwa zehn Mitspieler. \
+An der Wand hinter dem Tisch haengt ein grosses Schild mit vielen Regeln \
+neben einem kleinen Schild mit weniger Regeln. Fuenfzehn kleine Taefelchen \
+und daneben eine grosse Tafel sind an einer anderen Wand angebracht. \
+Wiederum daneben siehst Du noch ein rundes Plakat in Form einer Muenze.");
+  AddExit("westen", "/d/ebene/Midas/room/spiele/rage/rage2");
+  AddDetails(({
+               ({ "decke", "boden" }), "\
+Nicht weiter aufregend.",
+               ({ "wand", "waende" }), "\
+An einer Wand siehst Du ein grosses und ein kleines Schild mit Regeln \
+waehrend an einer anderen Wand eine grosse Tafel und fuenzehn kleine \
+Taefelchen haengen.",
+               "mobiliar", "\
+Tisch, Bank, grosses Schild, kleines Schild, grosse Tafel, Taefelchen, fertig.",
+               "tisch", #'table_long,
+               "wuerfel", #'dice_long,
+               "punkte", #'look_at_score,
+               "einsatz", #'look_at_stake,
+               "tafeln", "Tafeln hammer nicht, nur Taefelchen.",
+               "taefelchen", "\
+An einer Wand haengen fuenfezhn hoelzerne Gedenk-Highscore-Taefelchen. Einer \
+Deiner groessten Wuensche ist es, mindestens auf einem von ihnen zu \
+erscheinen. Wie dem auch sei, falls Du an einem bestimmten Taefelchen \
+interessiert sein solltest, solltest Du z.B. Taefelchen 1, Taefelchen 2,\
+usw. anschauen.",
+               ({ "schild", "schilder" }), "\
+Es gibt die vollstaendigen, ausfuehrlichen Regeln von QUAL DER WAHL auf dem \
+grossen Schild und eine Zusammenfassung der Regeln mit den wichtigsten \
+Befehlen auf dem kleinen Schild. Wie dem auch sei, Du solltest gewisse \
+beide einmal gelesen haben.",
+               ({ "grosse schild", "grosses schild" }) ,"\
+Die kompletten QUAL DER WAHL-Regeln stehen auf diesem Schild. Du solltest sie \
+lesen, wenn Du Dich das erste mal ueber QUAL DER WAHL informieren moechtest.",
+               ({ "kleinere schild", "kleine schild", "kleineres schild", "kleines schild" }), "\
+Wie angenehm. Nicht nochmal stundenlanges Regelwerk-Studieren. Dies sind die \
+Kurzregeln von QUAL DER WAHL. Natuerlich koenntest Du das kleine Schild lesen. \
+Aber sei bitte nicht ueberrascht, wenn Du das grosse Schild nicht gelesen hast \
+und die Kurzregeln nicht verstehst.",
+               "taefelchen 1", #'taefelchen_1,
+               "taefelchen 2", #'taefelchen_2,
+               "taefelchen 3", #'taefelchen_3,
+               "taefelchen 4", #'taefelchen_4,
+               "taefelchen 5", #'taefelchen_5,
+               "taefelchen 6", #'taefelchen_6,
+               "taefelchen 7", #'taefelchen_7,
+               "taefelchen 8", #'taefelchen_8,
+               "taefelchen 9", #'taefelchen_9,
+               "taefelchen 10", #'taefelchen_10,
+               "taefelchen 11", #'taefelchen_11,
+               "taefelchen 12", #'taefelchen_12,
+               "taefelchen 13", #'taefelchen_13,
+               "taefelchen 14", #'taefelchen_14,
+               "taefelchen 15", #'taefelchen_15,
+               "bank", #'bank_long,
+               "tafel", #'sign_long,
+               ({ "rundes plakat", "plakat" }), #'plakat_long
+  }));
+  AddDetailAction("taefelchen 1","lies <me>","l_tchen_1", #'taefelchen_1);
+  AddDetailAction("taefelchen 2","lies <me>","l_tchen_2", #'taefelchen_2);
+  AddDetailAction("taefelchen 3","lies <me>","l_tchen_3", #'taefelchen_3);
+  AddDetailAction("taefelchen 4","lies <me>","l_tchen_4", #'taefelchen_4);
+  AddDetailAction("taefelchen 5","lies <me>","l_tchen_5", #'taefelchen_5);
+  AddDetailAction("taefelchen 6","lies <me>","l_tchen_6", #'taefelchen_6);
+  AddDetailAction("taefelchen 7","lies <me>","l_tchen_7", #'taefelchen_7);
+  AddDetailAction("taefelchen 8","lies <me>","l_tchen_8", #'taefelchen_8);
+  AddDetailAction("taefelchen 9","lies <me>","l_tchen_9", #'taefelchen_9);
+  AddDetailAction("taefelchen 10","lies <me>","l_tchen_10", #'taefelchen_10);
+  AddDetailAction("taefelchen 11","lies <me>","l_tchen_11", #'taefelchen_11);
+  AddDetailAction("taefelchen 12","lies <me>","l_tchen_12", #'taefelchen_12);
+  AddDetailAction("taefelchen 13","lies <me>","l_tchen_13", #'taefelchen_13);
+  AddDetailAction("taefelchen 14","lies <me>","l_tchen_14", #'taefelchen_14);
+  AddDetailAction("taefelchen 15","lies <me>","l_tchen_15", #'taefelchen_15);
+  AddDetailAction(({ "rundes plakat", "plakat" }), "lies <me>", "read_plakat",
+     ({ ({ M_PL, "liest das Plakat." }),
+        ({ M_WRITE, #'plakat_long })
+     }));
+  AddDetailAction("tafel", "lies <me>", "read_sign",
+     ({ ({ M_PL, "liest die Tafel." }),
+        ({ M_WRITE, #'sign_long })
+     }));
+  AddDetailAction("schild","lies <me>","lies_schild",({
+     ({ M_WRITE, "Welches? Das grosse Schild oder das kleine Schild?\n" })
+  }));
+  AddDetailAction(({ "kleine schild", "kleines schild" }), "lies <me>", "lies_klein", #'lies_klein);
+  AddDetailAction(({ "grosse schild", "grosses schild" }), "lies <me>", "lies_gross", #'lies_gross);
+
+  AddDetailAction(
+    "bank",
+    ({ "setze auf <me>", "sitze auf <me>", "setz auf <me>", "sitz auf <me>",
+       "setze hin auf <me>", "setz hin auf <me>" }),
+    "setze_bank",
+    #'do_sit
+  );
+  AddErrorMessage("setze", "Du koenntest Dich auf die Bank setzen.\n");
+  AddErrorMessage("setz", "Du koenntest Dich auf die Bank setzen.\n");
+  AddErrorMessage("sitz", "\
+Du koenntest auf der Bank sitzen, also vorausgesetzt, Du setzt Dich dort hin.\n");
+  AddErrorMessage("sitze", "\
+Du koenntest auf der Bank sitzen, also vorausgesetzt, Du setzt Dich dort hin.\n");
+
+  AddRule("einsatz <number>", "stake");
+  AddErrorMessage("einsatz", "\
+Nun, mit 'einsatz <zahl>' setzt Du den Einsatz auf <zahl> Muenzen. Kapiert?\n");
+
+  AddRule("stimme einsatz zu","agree");
+  AddErrorMessage("stimme","Vielleicht 'stimme einsatz zu'?\n");
+
+  AddRule("lehne einsatz ab","disagree");
+  AddErrorMessage("lehne","Vielleicht 'lehne einsatz ab'?\n");
+   
+  AddRule("wuerfle", "roll_dice");
+  AddRule("wuerfle <text>", "roll_dice");
+  AddRule("wuerfel", "roll_dice");
+  AddRule("wuerfel <text>", "roll_dice");
+  AddErrorMessage("wuerfle", "Was spricht gegen ein schlichtes 'wuerfle'?\n");
+
+  duplicate_class("<number>", "<sum1>");
+  duplicate_class("<number>", "<sum2>");
+  AddRule("waehle <sum1> und <sum2> rest <number>", "choose");
+  AddRule("waehl <sum1> und <sum2> rest <number>", "choose");
+  AddErrorMessage("waehl", "\
+Warum waehlst Du nicht eine Summe und noch eine Summe und zum Schluss eine\n\
+Zahl, die Du als Rest weglassen moechtest?\n\
+(Ein einfaches Beispiel: waehl 2 und 3 rest 4)\n");
+  AddErrorMessage("waehle", "\
+Warum waehlst Du nicht eine Summe und noch eine Summe und zum Schluss eine\n\
+Zahl, die Du als Rest weglassen moechtest?\n\
+(Ein einfaches Beispiel: waehle 2 und 3 rest 4)\n");
+
+  AddRule("zeig <living> punkte","show_score");
+  AddRule("zeige <living> punkte","show_score");
+  AddRule("zeig punkte","show_score");
+  AddRule("zeige punkte","show_score");
+  AddErrorMessage("zeige","\
+Entweder Du machst 'zeige punkte' oder 'zeige <person> punkte'.\n");
+  AddErrorMessage("zeig","\
+Entweder Du machst 'zeig punkte' oder 'zeig <person> punkte'.\n");
+
+  AddRule("stehe auf", "steh_auf");
+  AddRule("steh auf", "steh_auf");
+  AddErrorMessage("steh", "Vielleicht moechtest Du aufstehen?\n");
+  AddErrorMessage("stehe", "Vielleicht moechtest Du aufstehen?\n");
+
+   plates = SCORE_LIST->query_scores() || ({ });
+   table_money = SCORE_LIST->query_table_money();
+}
+
+
+void heart_beat_checks()
+{
+   int i, mult, check_names;
+   string *names;
+   object pl, *sit2;
+
+   if (!sizeof(sitting) && !overall_stake) return;
+
+   check_names = 0;
+   if (sizeof(sitting) == 1) mult = 3;
+   else mult = 1;
+
+   sit2 = sitting[0..];
+   for (i=sizeof(sit2);i--;) {
+     pl = sit2[i];
+     // dieser lump hat gequittet
+     if (!pl) {
+       check_names = 1;
+       continue;
+     }
+     // spieler ist nicht mehr im raum
+     if (environment(pl) != this_object()) {
+       message(({ 
+          ({ M_ROOM, this_object(),
+          "Und da nur Anwesende QUAL DER WAHL spielen duerfen, hat dieses "
+          "Spiel hiermit einen Mitspieler weniger." }) }));
+       tell_object(pl,
+          "\
+Und da nur Anwesende QUAL DER WAHL spielen duerfen, hat dieses Spiel hiermit\n\
+einen Mitspieler weniger.\n");
+       force_him_up(pl);
+       continue;
+     }
+     // spieler ist statue aber noch im raum
+     if (!interactive(pl)) {
+       message(({ ({ M_ROOM, this_object(),
+         "Und da Netztote nicht spielen koennen, wird",
+         pl, "von der Bank runter geschubst und damit ist ",
+         M_POSS, pl, "Spiel beendet." }) }));
+       force_him_up(pl);
+       continue;
+     }
+
+     if (query_idle(pl) > 2 * mult * 90) {
+         message(({ ({ M_ROOM, this_object(),
+                       pl, M_VERB, ({ "bist", "ist" }), pl,
+                     "offensichtlich eingeschlafen und", M_VERB, "faell",
+                     pl, "von der Bank runter. Damit ist", M_POSS, pl,
+                     "Spiel beendet." }) }));
+         force_him_up(pl);
+         continue;
+     }
+
+     if ( (query_idle(pl) > mult * 90) && 
+          (query_idle(pl) < (mult * 90) + 3)) {
+         message(({
+            ({ M_TARGETS, ({ pl }), 
+               "Du hast seit laengerer Zeit nichts mehr gemacht. Wenn Du "
+               "verhindern willst, einzuschlafen und von der Bank runterzufallen, "
+               "solltest Du bald handeln." }) 
+         }));
+         continue;
+      }
+   }
+
+   if (!check_names) return;
+   names = m_indices(players);
+   for (i=sizeof(names);i--;) {
+     // spieler hat gequitted, frechheit aber auch
+     if (!(pl = find_player(names[i]))) {
+       if (overall_stake)
+         message(({ ({ M_ROOM, this_object(),
+          "Und damit hat dieses Spiel einen Mitspieler weniger." }) }));
+       adjust_game_data(names[i]);
+       sitting -= ({ 0 });
+       continue;
+     }
+  }
+}
+
+
+void heart_beat()
+{
+   if (!sizeof(sitting) && !overall_stake) {
+     set_heart_beat(0);
+     return;
+   }
+   heart_beat_checks();
+}
+    
+
+
+//////////////////////////////////////////////////////////////////////////
+// the commands which one can do
+
+status do_action(string verb, mapping args) {
+  int i;
+  object *tmp_ob;
+  int sum;
+  int index;
+  int *chosen_dice;
+  int *allowed_sums;
+  object ob;
+  object tp;
+  string tprn;
+  string *tmp;
+  mixed *output;
+
+  tp = this_player();
+  tprn = tp->query_real_name();
+
+  heart_beat_checks();   // Sicherstellen, dass quit/aufstehen rechtzeitig
+                         // erkannt wird
+
+  switch(verb) {
+
+
+
+///////////////////////////////////////////////////////////////////////
+// show somebody else your score
+
+    case "show_score" :
+      if (!query_sitting(tp)) {
+         message("\
+Bevor Du das tun kannst, musst Du Dich auf die Bank setzen.\n");
+         return 1;
+      }
+
+      if (args[G_LIVING]) {
+         if (!interactive(args[G_LIVING])) {
+            message(({ ({ M_WRITE, args[G_LIVING],
+               " scheint sich nicht die Bohne fuer Deine Punkte zu "
+               "interessieren." }) }));
+            return 1;
+         }
+         if (args[G_LIVING] == tp) {
+            message("Mach besser einfach 'unt punkte'.\n");
+            return 1;
+         }
+         message(({
+            ({ M_PL, M_PL_VERB, "zeig", M_DAT, args[G_LIVING],
+               M_PL_POSS, "~e Punkte." }),
+            ({ M_TARGETS, ({ args[G_LIVING] }), 
+               "Auf dem Tisch vor ", M_BEST, tp,
+               " kannst Du erkennen:\n"+ print_scores(tprn) }) }));
+         return 1;
+      }
+
+      if (!sizeof(filter_array(all_inventory(this_object()),#'interactive) -
+         ({ tp }))) {
+         message("Aber hier ist doch niemand ausser Dir.\n");
+         return 1;
+      }
+
+      message(({
+        ({ M_PL, M_PL_VERB, "zeig", "allen Anwesenden",
+            M_PL_POSS, "~e Punkte." }),
+         ({ M_SAY, "Auf dem Tisch vor ", M_BEST, tp,
+              " kannst Du erkennen:\n"+ print_scores(tprn) }) }));
+      return 1;
+      break;
+
+
+///////////////////////////////////////////////////////////////////////
+// set the stake for the game
+
+
+    case "stake" :
+       
+      if (!query_sitting(tp)) {
+         message("\
+Du musst Dich auf die Bank setzen, bevor Du einen Einsatz vorschlagen kannst.\n");
+         return 1;
+      }
+
+      if (overall_stake) {
+          message("Du kannst den Einsatz nicht waehrend des Spiels aendern. "+
+             "Er betraegt " + desc_muenzen(stake) + " je Spieler.\n");
+          return 1;
+      }
+
+      if (stake != 1) {
+          message("Es wurde bereits ein Einsatz vorgeschlagen. Dieser "
+             "betraegt " + stake + " Muenzen je Spieler.\n");
+         return 1;
+      }
+
+      if (args[G_NUMBER] < 2) {
+         message("Du musst den Einsatz auf mindestens zwei Muenzen setzen.\n");
+         return 1;
+      }
+
+      if (args[G_NUMBER] > MAX_STAKE) {
+         message("Der maximal zulaessige Einsatz betraegt " +
+            MAX_STAKE+ " Muenzen.\n");
+         return 1;
+      }
+
+      if (mixed_wiz_and_pl()) {
+         message("\
+In einem gemischten Spieler-Magier-Spiel darf der Einsatz nicht erhoeht\n\
+werden.\n");
+         return 1;
+      }
+
+      if (this_player()->QueryMoney() < args[G_NUMBER]) {
+         message("Aber soviel Muenzen hast Du doch nicht.\n");
+         return 1;
+      }
+
+      stake = args[G_NUMBER];
+      has_agreed = ({ tprn });
+
+      if (m_sizeof(players) > 1) 
+         message(({
+            ({ M_PL, M_PL_VERB, "schlaeg", "einen Einsatz von " + 
+               get_numeral(stake) + " Muenzen vor fuer dieses Spiel." }),
+            ({ M_WRITE, 
+               "Da Du den Vorschlag gemacht hast, stimmst Du "
+               "automatisch zu." }),
+            ({ M_SAY, "Du hast jetzt zwei Moeglichkeiten: 'stimme einsatz "
+               "zu' oder 'lehne einsatz ab'." })
+         }));
+      else
+         message("Du setzt den Einsatz fuer dieses Spiel auf " +
+            get_numeral(stake) + " Muenzen und darfst jetzt wuerfeln.\n");
+      return 1;
+      break;
+
+
+
+////////////////////////////////////////////////////////////////////////
+// for agreeing or disagreeing with a proposed stake
+
+      case "agree" :
+      case "disagree" :
+
+
+      if (!query_sitting(tp)) {
+         message("\
+Bevor Du irgendwas derartiges machen kannst, musst Du Dich schon auf die\n\
+Bank setzen.\n");
+         return 1;
+      }
+
+      if ( overall_stake ||
+           stake == 1
+         ) {
+         message("Aber es wurde noch kein Einsatz vorgeschlagen.\n");
+         return 1;
+      }
+
+      if (member_array(tprn, has_agreed)>-1) {
+         message("Aber Du hast dem Einsatz doch schon zugestimmt.\n");
+         return 1;
+      }
+
+      if (verb == "agree") {
+         if (this_player()->QueryMoney() < stake) {
+            message("Aber Du hast keine " + get_numeral(stake)+" Muenzen.\n");
+            return 1;
+         }
+         has_agreed += ({ tprn });
+         message(({
+            ({ M_PL, M_PL_VERB, "stimm", "dem vorgeschlagenen Einsatz zu." })
+         }));
+         if (sizeof(has_agreed) == m_sizeof(players)) {
+            message(({
+               ({ "Da jetzt jeder zugestimmt hat, kann das Spiel beginnen " 
+                  "und ihr duerft wuerfeln." })
+            }));
+         }
+         return 1;
+      }
+
+      message(({
+         ({ M_PL, M_PL_VERB, "lehnt", "den vorgeschlagenen Einsatz ab."
+               " Damit wird der Einsatz auf eine Muenze zurueckgesetzt. "
+               "Jetzt koennte das Spiel begonnen werden oder ein neuer "
+               "Einsatz vorgeschlagen werden." })
+      }));
+      has_agreed = ({});
+      stake = 1;
+      return 1;
+      break;
+
+
+
+///////////////////////////////////////////////////////////////////////
+//  the name says it, roll the dice
+
+    case "roll_dice":
+
+      // man sitzt nicht...
+      if (!query_sitting(tp)) {
+         message("\
+Du musst Dich auf die Bank setzen bevor Du wuerfeln darfst.\n");
+         return 1;
+      }
+
+// noch kein einsatz bestimmt...
+      if (!overall_stake) {
+
+        // aber es ist ein abstimmvorgang noch nicht beendet
+        if ( stake != 1 && 
+             (sizeof(tmp = m_indices(players) - has_agreed))
+           ) {
+           message(({
+              ({ M_WRITE, "Du darfst nicht wuerfeln bevor dem vorgeschlagenen "
+                 "Einsatz in Hoehe von " + get_numeral(stake) + 
+                 " Muenzen nicht von ", M_DAT, map_array(tmp, #'find_player),
+                 "zugestimmt wurde." }) }));
+           return 1;
+        }
+       
+        if ( stake != 1 &&
+             mixed_wiz_and_pl()
+           ) {
+          stake = 1;
+          message(({
+             ({ "Da sowohl Magier als auch Nichtmagier an diesem Spiel "
+                "beteiligt sind, wird der Einsatz auf eine Muenze "
+                "gesetzt." })
+          }));
+        }
+
+        if (this_player()->QueryMoney() < stake) {
+           message(({
+              ({ "Als", M_PL, M_PL_VERB, "versuch",
+              "zu wuerfeln, bemerkt der Tisch ploetzlich, dass ",
+              M_PL, "nicht genug Muenzen", M_PL_VERB, "ha",
+              "und schubst", M_PL_AKK_IHN, "von der Bank runter." }) }));
+           force_him_up(this_player());
+           return 1;
+           break;
+        }
+
+        tmp_ob = ({});
+        tmp = m_indices(players);
+        for (i=0; i< sizeof(tmp); i++) {
+           ob = find_player(tmp[i]);
+           if (ob->QueryMoney() < stake) {
+              message(({
+                 ({ "Da", ob, "nicht genug Muenzen", M_VERB, "ha", ob,
+                    ", schubst ", M_AKK_IHN, ob, "der Tisch von der Bank runter." })
+              }));
+              force_him_up(ob);
+              continue;
+           }
+           AddMoney(ob, -stake);
+           overall_stake += stake;
+           tmp_ob += ({ ob });
+        }
+
+
+        if ((player_amount = m_sizeof(players)) == 1) {
+           if (table_money < 0 && stake > TABLE_LOW_STAKE) {
+              message(({
+                 ({ "Da der Tisch fast pleite ist, senkt er den Einsatz auf "+
+                    get_numeral(TABLE_LOW_STAKE) + " Muenzen"
+                    " und wirft die passende Anzahl auf die "
+                    "Tisch-Oberflaeche." }) }));
+              AddMoney(
+                find_player(m_indices(players)[0]),
+                stake-TABLE_LOW_STAKE
+              );
+              stake = TABLE_LOW_STAKE;
+              overall_stake = 2 * stake;
+              table_money -= stake;
+              SCORE_LIST->set_table_money(table_money);
+           }
+           else {
+              message(({ 
+                 ({ "Da dieses Spiel ein Solo-Spiel ist, wirft der Tisch " +
+                    "auch " + desc_muenzen(stake) +
+                    " auf die Tisch-Oberflaeche. Schliesslich "
+                    "muss es etwas zu gewinnen geben, nicht?\n" })
+              }));
+              overall_stake += stake;    
+              table_money -= stake;
+              SCORE_LIST->set_table_money(table_money);
+           }
+        }
+
+        if (sizeof(tmp_ob)) message(({
+           ({ "Bevor", M_PL, M_PL_VERB, "wuerfel", 
+              (stake > 1 ?
+                "schweben " + get_numeral(stake) + " Muenzen":
+                "schwebt eine Muenze") +
+              " auf magische Weise von ", M_DAT, tmp_ob,
+              "auf den Tisch." })
+        }));
+
+        if (!player_amount) return 1;
+
+        has_chosen = m_indices(players);
+        players = ([]);
+        
+        for (i=0; i<sizeof(has_chosen); i++)
+           players += ([ has_chosen[i]: 
+               ({ 0,0,0,0,0,0,0,0,0,0,0 }); ({ 0,0,0 }); ({ 0,0,0 })]);
+
+        set_heart_beat(1);
+
+        if (!member(players,tprn)) return 1;
+
+       
+      } // ende vom einsatz ermitteln
+
+
+      tmp = m_indices(players) - game_over - has_chosen;
+
+      // ... oder es muessen erst noch andere choosen
+      if (sizeof(tmp)) {
+        message(({
+          ({ M_WRITE, "Du kannst nicht wuerfeln bevor",
+             map_array(tmp, #'find_player),
+             "nicht gewaehlt " +
+              (sizeof(tmp) == 1 ? 
+                (tmp[0] == this_player()->query_real_name() ? 
+                  "hast" : "hat") : "haben") + "." })
+// URGS IST DEUTSCH EINE KOMPLIZIERTE SPRACHE 
+        }));
+        return 1;
+      }
+
+      // Also gut, es WIRD gewuerfelt!
+
+      has_chosen = ({});
+
+      for (i = 0; i < 5; i++)  
+        dice[i] = random(6) + 1;
+
+ 
+      message(({ 
+        ({ M_PL, M_PL_VERB, "wuerfel", "."}),
+        ({ "Die Wuerfel zeigen ", describe_dice(dice), ":"}),
+        ({ "\n" + show_dice_symbols(dice) })
+      }));
+ 
+      if (args[G_TEXT] && strstr(lower_case(args[G_TEXT]), "punkte") > -1) {
+        message(look_at_score());
+      }
+
+      return 1;
+      break;
+
+
+///////////////////////////////////////////////////////////////////////////
+// choose your both sums and your rest
+
+    case "choose":
+
+      if (!query_sitting(tp)) {
+         message("Du musst Dich erst setzen.\n");
+         return 1;
+      }
+
+      if (!overall_stake) {
+        message("\
+Bevor Du waehlen kannst, musst Du ein neues Spiel beginnen, indem Du\n\
+wuerfelst.\n");
+        return 1;
+      }
+    
+      if (member_array(tprn, game_over) >-1) {
+        message("Dein Spiel ist schon beendet.\n");
+        return 1;
+      }
+            
+      if ((member_array(tprn, has_chosen)> -1)) {
+        message(({
+          ({ M_WRITE, "Aber Du hast doch schon gewaehlt." })
+        }));
+        return 1;
+      }
+
+      if ((index = member_array(args[G_NUMBER], dice)) < 0) {
+        message(({
+          ({ M_WRITE, "Aber keiner der Wuerfel zeigt eine " +
+                 get_numeral(args[G_NUMBER],1) + "." })
+        }));            
+        return 1;
+      }
+
+      allowed_sums = allocate(3);
+      chosen_dice = exclude_element(dice, index);
+
+      for (i = 0; i < 3; i++) {
+        allowed_sums[i] = chosen_dice[0]+chosen_dice[i+1]; 
+        sum += chosen_dice[i];
+      }
+
+      sum += chosen_dice[3];
+
+      if ((args[G_SUM1] + args[G_SUM2] != sum) ||
+          ((member_array(args[G_SUM1], allowed_sums) < 0) &&
+           (member_array(args[G_SUM2], allowed_sums) < 0))) {
+        message(({
+          ({ M_WRITE, "So eine Wahl lassen die Wuerfel nicht zu."})
+        }));
+        return 1;
+      }
+
+      if ((index = member(players[tprn, 1], args[G_NUMBER])) < 0) {
+        if ((index = member(players[tprn, 1], 0)) > -1) {
+          players[tprn, 1][index] = args[G_NUMBER];
+          players[tprn, 2][index]++;
+        } else if (sizeof(chosen_dice - players[tprn, 1]) != 4) {
+
+#ifdef DEBUG
+          write("Fifth:\n");
+          dump_array(players[tprn,1]);
+          write("\n");
+          write("Dice:\n");
+          dump_array(dice);
+          write("\n");
+          write("Differenz:\n");
+          dump_array(players[tprn,1] - (players[tprn,1]-dice));
+          write("\n");
+#endif
+ 
+          message(({
+            ({ M_WRITE, "Du kannst " + get_numeral(args[G_NUMBER],1) +
+               " nicht als Rest nehmen, sondern nur " +
+               make_list(map_array(players[tprn, 1] - (players[tprn, 1] - dice),
+                         "Get_numeral"), 0, " oder "), "."})
+
+          }));
+          return 1;
+        }
+      } else 
+        players[tprn, 2][index]++;
+
+      players[tprn, 0][args[G_SUM1] - 2]++;
+      players[tprn, 0][args[G_SUM2] - 2]++; 
+
+      output = ({ M_WRITE , "Du waehlst ", get_numeral(args[G_SUM1],1), 
+         " zum "});
+
+      if (args[G_SUM1] == args[G_SUM2])
+         output += ({ get_ordinal(players[tprn,0][args[G_SUM1] - 2] - 1) +
+            "en und ", get_ordinal(players[tprn,0][args[G_SUM1] - 2]) + "en" });
+
+      else output += ({ get_ordinal(players[tprn,0][args[G_SUM1] - 2]) +
+            "en Mal, " + get_numeral(args[G_SUM2],1) +  " zum " +
+            get_ordinal(players[tprn,0][args[G_SUM2] - 2]) + "en" });
+
+      if (index > -1)
+         output += ({ " Mal und laesst ", get_numeral(args[G_NUMBER],1),
+           " zum ", get_ordinal(players[tprn, 2][index]) + "en",
+           (players[tprn, 2][index] == MAX_FIFTH_DIE ? " und letzten Mal weg." : 
+              " Mal weg. ") });
+      else
+         output += ({ " Mal und laesst nichts weg, da Du einen Freiwurf " + 
+                      "hattest."});
+
+
+      has_chosen += ({ tprn });
+
+      message(({
+        output,
+        ({ M_SAY, M_PL, "hat", M_PL_POSS, "~e Entscheidung getroffen." })
+      }));
+
+      // das spiel ist fuer einen einzelnen mitspieler beendet.
+      if (index >-1 && players[tprn, 2][index] == MAX_FIFTH_DIE) {
+        i = calculate_score(tprn);
+        if (m_sizeof(players) != 1) 
+           message(({
+              ({ M_SAY, M_PL, "beendet damit ", M_PL_POSS, "Spiel."}),
+              ({ M_WRITE, "Damit ist Dein Spiel beendet und Du erreichst "+
+                 "insgesamt " + get_score_word(i) + " Punkte."})
+           }));
+        else
+           message(({
+              ({ M_PL, M_PL_VERB, "beende", M_PL_POSS, "Spiel und",
+                 M_PL_VERB, "erreich", "insgesamt " +
+                 get_score_word(i) + " Punkte." })
+           }));
+
+        game_over += ({ tprn });
+
+        plates += ({ ({
+           describe(tp), 
+           tprn, 
+           players[tprn,0], players[tprn,1], players[tprn,2], i 
+        }) });
+
+        plates = sort_array(
+           plates,
+           lambda(({ 'x, 'y }),
+                  ({ #'<,
+                     ({ #'[, 'x, 5 }),
+                     ({ #'[, 'y, 5 })
+                  })
+           )
+        );
+
+        if (sizeof(plates) > 15) plates = plates[0..14];
+
+        SCORE_LIST->set_scores(plates);
+
+        if (game_totally_over()) {
+           return 1;
+        }
+
+        message("Bitte bleibe sitzen, bis das Spiel fuer die anderen " +
+                "Mitspieler auch beendet ist.\n");
+            
+      }
+
+      if (!sizeof(m_indices(players) - has_chosen - game_over))
+        message(({
+          ({ "Es darf jetzt wieder gewuerfelt werden." })
+        }));
+
+      return 1;
+      break;
+
+    case "steh_auf" :
+      if (!query_sitting(this_player())) {
+        message("Aber Du sitzt doch gar nicht auf der Bank.\n");
+        return 1;
+      }
+      if (overall_stake) 
+        message(({ ({ M_PL, M_PL_VERB, "steh", "auf von der Bank und",
+            M_PL_VERB, "hoer", "auf, QUAL DER WAHL zu spielen." }) }));
+
+      else
+        message(({ ({ M_PL, M_PL_VERB, "steh", "auf von der Bank." }) }));
+      force_him_up(this_player());
+      return 1;
+  }
+  return room::do_action(verb,args);
+}
+
+
+////////////////////////////////////////////////////////////////////////////
+// interesting information, other objects want to know these
+
+void set_table_money(int arg) {
+   table_money = arg;
+   SCORE_LIST->set_table_money(table_money);
+}
+
+int query_table_money() { return table_money; }
+
+int query_overall_stake() { return overall_stake; }
+
+int query_stake() { return stake; }
+
+int query_player_amount() { return player_amount; }
+
+string *query_to_choose() { 
+   return m_indices(players) - game_over - has_chosen;
+}
+
+string *query_game_over() { return game_over; }
+
+string *query_has_agreed() { return has_agreed; }

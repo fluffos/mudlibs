@@ -1,0 +1,290 @@
+#include <moving.h>
+#include <ansi.h>
+#include "gems.h"
+
+//#define DB(x) if (find_player(KEEPER)) tell_object(find_player(KEEPER),x+"\n")
+#define DB(x)
+inherit "/players/cirion/service/fun";
+
+////////////////////////////////////////////////////////////////////////
+// mapping contains all active stargates
+//  
+// ([string uid:string room1;string room2;string gemtype;int resets;int free;int cost])
+mapping stargates;
+
+varargs void Error(string msg,int db)
+{
+  object keeper;
+
+  if (db && keeper=find_player(KEEPER))
+    tell_object(keeper,ANSI_RED+"BUG in stargatemaster: "+ANSI_NORMAL+msg);
+  write_log(GEM_LOG"/stargatem.log"
+    ,sprintf("[%s] ERROR: %s\n"
+            ,dtime(time())[5..]
+            ,msg));
+  return; 
+}
+
+int GateExists(string uid)
+{
+  return member(stargates,uid);        
+}
+
+int RemoveGate(string uid)
+{
+  object room,gate;
+  int i;
+  DB("RemoveGate");
+  if (!stringp(uid) || !member(stargates,uid))
+    return 0;
+  DB("uid ok, Eintrag vorhanden");
+  for (i=0;i<2;i++)
+  {
+   DB("Gate "+(i+1)+" entfernt ("+sprintf("%O",room=find_object(stargates[uid,i]))+")");
+        
+   room=find_object(stargates[uid,i]);
+   if (objectp(room) && gate=present(GATEID+uid,room))
+     gate->remove();
+  }
+  DB("Eintrag entfernt und gespeichert");
+  if (find_player(uid))
+    tell_object(find_player(uid),
+      "Du spuerst, dass Deine bisherigen Sternentore nunmehr verschwunden sind.\n");
+      
+  write_log(GEM_LOG"/stargatem.log"
+    ,sprintf("[%s] Gate removed by %s: UID %s resets %d (%d days)\n"
+            ,dtime(time())[5..]
+            ,previous_object()?getuid(previous_object()):"<unknown>"
+            ,uid
+            ,stargates[uid,3]
+            ,to_int(stargates[uid,3]/24.0)));
+            
+  stargates=m_delete(stargates,uid);
+  save_object(file_name());
+  return 1;
+}
+
+void RenewGate(string uid,string filename)
+{
+  object room,gate,othergate;
+  int i;
+
+  if (!member(stargates,uid))
+    return;
+  DB("RenewGate, Eintrag vorhanden");
+  
+  room=find_object(filename);
+  if (!objectp(room))
+  {
+    DB("Raum ist nicht geladen");
+    call_other(filename,"???");
+    room=find_object(filename);
+    if (!objectp(room))
+    {
+      DB("Raum konnte nicht geladen werden");
+      Error(sprintf("RenewGate: ROOM %s could not be loaded\n",filename));
+      return;
+    }
+  }
+  if (gate=present(GATEID+uid,room))
+  {
+    DB("Es ist ein Gate vorhanden, wird entfernt");
+    gate->remove();
+  }
+  else  
+  {
+    if (stargates[uid,0]==filename)
+      othergate=stargates[uid,1];
+    else
+      othergate=stargates[uid,0];
+    DB("Gate erstellt.");
+    gate=clone_object(STARGATE);
+    gate->SetGate(uid,stargates[uid,2],othergate);
+    gate->move(filename,M_NOCHECK);
+    gate->Appear();
+  }
+  DB("Done");
+  return;
+}
+
+void DelayRenewGate(string uid,string filename)
+{
+  call_out("RenewGate",2,uid,filename);
+}
+
+varargs void CreateGate(string uid, string room1, string room2, string gemtype, int resets, int free, int cost)
+{
+  int i;
+ 
+  for (i=0;i<2;i++)
+    RenewGate(uid,stargates[uid,i]);
+}
+ 
+void create()
+{
+  seteuid(getuid());
+ 
+  restore_object(file_name());
+  if (!mappingp(stargates))
+    stargates=([]);
+ 
+  walk_mapping(stargates,#'CreateGate);
+  write_log(GEM_LOG"/stargatem.log"
+    ,sprintf("[%s] Create called.\n"
+            ,dtime(time())[5..]));
+ 
+  return;
+}                                    
+
+int AddGate(string uid, string room1, string room2, string gemtype,int resets)
+{
+  int i;
+
+  DB(sprintf("%O",stargates));
+  if (member(stargates,uid))
+    return -1;
+  if (!stringp(uid) || !stringp(room1) || !stringp(room2) || !stringp(gemtype) || !intp(resets)) 
+    return 0;
+    
+  stargates+=([uid:room1;room2;gemtype;resets;FREE_TPORT;0]);
+  CreateGate(uid, room1, room2);
+
+  save_object(file_name());
+
+  if (member(stargates,uid))
+  {
+    write_log(GEM_LOG"/stargatem.log",
+      sprintf("[%s] Gate added: UID %s resets %d (%d days) gemtype %s \n"
+              "                         room1: %s\n"
+              "                         room2: %s\n"
+             ,dtime(time())[5..]
+             ,uid
+             ,resets
+             ,to_int(resets/24.0)
+             ,gemtype
+             ,room1
+             ,room2));
+    return 1;
+  }
+  return 0;
+}
+
+nosave void CheckGate(string filename, string uid)
+{
+  object gate,room,othergate;
+
+  room=find_object(filename);
+  if (!objectp(room))
+  {
+    if (file_size(filename)<1)
+    {
+      Error(sprintf("Reset: ROOM %s does not exist.\n",filename));
+      return;
+    }
+    call_other(filename,"???");
+    room=find_object(filename);
+    if (!objectp(room))
+    { 
+      Error(sprintf("Reset: ROOM %s could not be loaded\n",filename));
+      return;
+    }
+  }
+  if (!gate=present(GATEID+uid,room))
+  {
+    if (stargates[uid,0]==filename)
+      othergate=stargates[uid,1];
+    else
+      othergate=stargates[uid,0];
+    DB("Gate erstellt.");
+    gate=clone_object(STARGATE);
+    gate->SetGate(uid,stargates[uid,2],othergate);
+    gate->move(filename,M_NOCHECK);
+    gate->Appear();
+  }
+}
+
+nosave void reduce_resets(string uid, string room1, string room2,
+                          string gemtype, int resets, int free, int cost)
+{
+  object pl,room;
+  int hp;
+
+  pl=find_player(uid);
+  if (--resets<0)
+    call_out("RemoveGate",300+random(300),uid);
+  else if (pl && interactive(pl))
+  {
+    cost=0;
+    free=FREE_TPORT;
+    tell_object(pl,"Deine Sternentore fordern Ihren Tribut...\n");
+    ReduceSpHp(MP_RESET,pl,1);
+     
+    CheckGate(room1,uid);
+    CheckGate(room2,uid);
+  }   
+}
+
+int Cost(object pl)
+{
+  string uid;
+
+  uid=getuid(this_player());
+  if (!member(stargates,uid))
+    return 0;
+ 
+  if (stargates[uid,4]<1)
+    stargates[uid,5]=stargates[uid,5]+1;
+  else
+    stargates[uid,4]=stargates[uid,4]-1;
+
+  return stargates[uid,5];
+}
+
+void do_next_reset()
+{
+  // This fun just makes sure reset() will be called next time.
+}
+
+void reset()
+{
+  walk_mapping(stargates,#'reduce_resets);
+  // no longer needed write_log(GEM_LOG"/stargatem.log",sprintf("[%s]: reset()\n",dtime(time())[5..]));
+  save_object(file_name());
+
+  call_out("do_next_reset",2);
+
+  return;
+}
+
+void display_gate(string uid, string room1, string room2, 
+                  string gemtype, int resets)
+{
+  printf("UID %13s : %4d resets (%d Tage)\n"
+         ,uid,resets,to_int(resets/24.0));
+}
+
+varargs void ShowGates(string uid)
+{
+  object pl;
+  string txt;
+
+  if (!stringp(uid) || uid=="")
+    walk_mapping(stargates,#'display_gate);
+  else if (!member(stargates,uid))
+    write("Gate fuer UID "+uid+" nicht vorhanden.\n");
+  else
+    write(sprintf("Stargate UID %s:\n\n"
+                  "Edelstein:       %s\n"
+                  "Raum 1:          %s\n"
+                  "Raum 2:          %s\n"
+                  "Resets:          %d (%d Tage)\n"
+                  "Freie Teleports: %d (Kosten %d)\n"
+                  ,uid
+                  ,capitalize(stargates[uid,2])
+                  ,stargates[uid,0]
+                  ,stargates[uid,1]
+                  ,stargates[uid,3],to_int(stargates[uid,3]/24.0)
+                  ,stargates[uid,4],stargates[uid,5]
+                  ));
+  return;  
+}

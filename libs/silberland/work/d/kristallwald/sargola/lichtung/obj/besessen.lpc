@@ -1,0 +1,248 @@
+/*
+** Besessenheit - wenn man zu lange bei der alten Zeder steht...
+**
+** Man wird zu zufaelligen verben und wegen gezwungen...
+**
+**  2002-05-09  PROtheG  Neuueberarbeitung, Reaktivierung, kinder_counter
+**                       um kleine Spieler nicht zu vergraulen.
+**  2002-06-09  PROtheG  bewege-commands raus... ist sonst in shardins hoehle
+**                       unlustig
+*/
+
+nosave int kinder_counter;
+
+#define ANFAENGER 10
+
+#include "../def.h"
+
+inherit "std/thing";
+
+string *chats = ({
+	"rufe ICH bin der wahre Gott - vergesst Woody und Dusty!",
+	"-allgemein:krault sich unter den Achseln.",
+	"rufe Ich liebe Sex, Drugs and Rock n Roll!",
+	"rufe Armageddon, wo bleibst du???",
+	"-allgemein Hehehehe.....toeten.....",
+	"rufe Schwarz-braun ist die Haselnuss...",
+	"-allgemein Troeoeoeoe, heute sind wir alle lustig!!",
+	"rufe Sargola, Du bist mein Gott!",
+	"-allgemein lasst uns schmutzig Liebe machen, ... *schrumm* *schrumm*...",
+	"rufe landvlakfja slfjasl kfja l",
+	"-allgemein SAKRA - wo ist denn Lars hin?",
+	"-allgemein bin ich tot?",
+	"-allgemein wo kommen die vielen Farben her?",
+	"-allgemein gibt es eine andere Realitaet ausser dem SL?",
+	"rufe Leute, geht lieber lernen!",
+	"-allgemein boah! 102 Leute eingeloggt!",
+	"rufe Ich bin ein Vogel und kann fliegen!",
+	"rufe Mann-o-Mann, das Zeug faehrt ein sag ich euch!",
+	"rufe Hilfe, ich kann mich nicht mehr bewegen!"});
+
+string *verben_mit_object = ({"beneide","druecke","knuddel","tritt",
+	"betrachte","betaste","danke","deute","druecke","fauche",
+	"grinse","gratuliere","huste","jubel","kichere","kitzle",
+	"knuddle","knutsche","kotze","kuschel","kuesse","laechel",
+	"liebe","mustere","pfeife","schuettle","schreie","schmieg",
+	"spucke","staune","starre","stoss","streichle","taetschel",
+	"troeste","umarme","verfluche","wuerg","wuschel","zwinkere"});
+	
+string *verben_ohne_object= ({"aechze","applaudiere","bibbere",
+	"bohre in der nase","erbleiche","erroete","fluche","furze",
+	"gaehne","furze","grinse","grunz","grummel","guck","hickse",
+	"huepfe","huste","jubel","keuche","kicher","klatsch", "knirsche",
+	"knickse","knurre","krieche","lach","lag","nein","nicke","niese",
+	"philosophiere","pruste","rotfl","ruelpse","runzle","sabbere",
+	"schaeme","schuettle","schreie","schnurre","schnarche","schnippe",
+	"schmunzle","schmoll","schnaube","schnaufe","schluchze","seufze",
+	"schnief","traeume","verneige","wackle","waelze","weine","zuck"});
+
+string *adjektive = ({"unverschaemt","gutgelaunt","gutmuetig","froh",
+	"gluecklich","wuetend","frech","daemonisch","boese","ungluecklich",
+	"langsam","schnell","jammernd","freundlich","schuechtern","amuesiert",
+	"aergerlich","anerkennend","erstaunt","bitter","breit","vorsichtig",
+	"charmant","kalt","verfuehrerisch","zufrieden","tief","verzweifelt",
+	"dreckig","vertraeumt","ueberzeugt","frustriert","strahlend","hoffnungsvoll",
+	"ungeduldig","unsinnigerweise","unschuldig","unwissend","ironisch",
+	"wissend","gemaechlich","sehnsuechtig","laut","liebevoll","froehlich",
+	"dankbar","natuerlich","geduldig","perfekt","verspielt","hoeflich",
+	"stolz","fragend","ruppig","traurig","veraechtlich","schamlos","ernst",
+	"schuechtern","zaertlich","sanft","entgeistert","heimtueckisch",
+	"gelangweilt","wild","grummelnd","frank und frei","galant","extrem",
+	"lagend","idlend","masslos"
+	   });
+	
+void create()
+{
+  if(!is_clone(ME)) 
+    {
+      set_next_reset(-1);
+      return;                                                        
+    }
+  ::create();
+  
+  SetProp(P_SHORT, 0);
+  SetProp(P_WEIGHT, 0);
+  
+  SetProp(P_NODROP,1);
+  SetProp(P_NEVERDROP,1);
+  
+  AddId(({"\nbesessenheit","QUESTOBJ"}));
+  
+  call_out("tun", 1);
+  
+  kinder_counter=0;
+
+  
+}
+
+string extra_look()
+{
+  if(MENV)
+    return BS(CAP(MENV->QueryPronoun(WER))+ 
+	      " ist von einer fremden Macht besessen.");
+}
+
+nosave int obj_check(object ob)
+{
+  if(!ob->QueryProp(P_SHORT)) return 0;
+  if(ob->QueryProp(P_NODROP)) return 0;
+  if(ob->QueryProp(P_NEVERDROP)) return 0;
+  if(ob->QueryProp(P_CURSED)) return 0;
+  if(ob->QueryProp(P_WEIGHT)) return 1;
+
+  return 0;
+}
+
+void tun()
+{
+  object *sachen, *leute, *dirs, *inventory;
+  mapping exits;
+  object raum, pl;
+  int i;
+  string v, l, a, vl;
+  
+  if((!pl=MENV) || (!interactive(MENV))) return;
+  
+  raum=ENV(pl);
+  
+  leute=filter_array(all_inventory(raum), CLOSURE(living));
+  sachen=all_inventory(raum)-leute;
+  sachen=filter_array(sachen, CLOSURE(obj_check));
+  inventory=filter_array(all_inventory(pl), CLOSURE(obj_check));
+  
+  /*
+  ** 0: verben mit adjective
+  ** 1: verben ohne adjective
+  ** 2: zufaellig dinge nehmen
+  ** 3: zufaellig in eine richtung gehen gehen
+  */
+  
+  i = random(13);
+  
+  switch(i)
+    {
+    case 0:
+    case 1:
+    case 2:
+      if(sizeof(leute))
+	{
+	  v = verben_mit_object[random(sizeof(verben_mit_object))];
+	  l = (leute[random(sizeof(leute))])->name(RAW);
+	  a = adjektive[random(sizeof(adjektive))];
+	  vl = v + " " + l + " /" +a;
+	  pl->command_me(vl);
+	}
+      break;
+
+    case 3:
+    case 4:
+      pl->command_me(verben_ohne_object[random(sizeof(verben_ohne_object))]);
+      break;
+
+    case 5:
+    case 6:
+      if(sizeof(sachen))
+	{	
+	  v = (sachen[random(sizeof(sachen)-1)])->QueryProp(P_NAME);
+	  if(stringp(v))
+	    pl->command_me("nimm "+v);
+	}
+      break;
+
+    case 7:
+    case 8:
+      if(sizeof(inventory))
+	{	
+	  v = (inventory[random(sizeof(inventory)-1)])->QueryProp(P_NAME);
+	  if (stringp(v))
+	    pl->command_me("wirf "+v+" weg");
+	}
+      break;
+
+    case 9:
+    case 10:
+    case 11:
+      tell_object(pl, 
+		  BS("Eine fremde Macht hat von Dir Besitz ergriffen!")+
+		  BS("Wie wirst Du sie bloss wieder los?!"));
+      break;
+/*
+      exits=environment(pl)->QueryProp(P_EXITS);
+      if(sizeof(exits))
+	{
+	  dirs = m_indices(exits);
+	  pl->command_me(dirs[random(sizeof(dirs)-1)]);
+	}
+	break;
+*/	
+    default:
+      v = chats[random(sizeof(chats))];
+      pl->command_me(v);
+    }
+  
+  call_out("tun",30-(pl->QueryProp(P_LEVEL)/5)+random(11));
+}
+
+void NotifyPlayerDeath(object victim, object killer, int lost_xp)
+{
+  if(victim==MENV)
+    {
+      while(find_call_out("tun")!=-1)
+	remove_call_out("tun");
+
+      call_out("remove",0);
+    }
+}
+
+void BecomesNetAlive(object spieler)
+{
+  if(spieler==MENV)
+    if(find_call_out("tun")==-1)
+      call_out("tun", 2);
+}
+
+void BecomesNetDead(object spieler)
+{
+  if(spieler==MENV)
+    while(find_call_out("tun")!=-1)
+      remove_call_out("tun");
+}
+
+void reset()
+{
+  ::reset();
+  
+  if((MENV) && (query_once_interactive(MENV)))
+    {
+      if(kinder_counter >= 2)
+	call_out("remove", 0);
+      
+      if(MENV->QueryProp(P_LEVEL) > (2*ANFAENGER)) return;
+      
+      kinder_counter++;
+      
+      if(MENV->QueryProp(P_LEVEL) > ANFAENGER) return;
+    }
+  
+  call_out("remove", 0);
+}

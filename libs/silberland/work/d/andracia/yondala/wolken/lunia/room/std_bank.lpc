@@ -1,0 +1,222 @@
+/*
+
+Die Standardbank
+man kann den Namen des Bankangestellten setzen mit
+banker="name_xy"  (standard ist "der Bankangestellte")
+man kann den Namen der Bank setzen mit
+bankname="name_xy" (Standard ist "Luniabank")
+
+Das Maximale Guthaben fuer jeden Spieler kann veraendert werden mittels
+guthaben_pro_stufe= [integer Wert]
+startguthaben=[integer wert]
+maxguthaben=[integer wert]
+ACHTUNG: Nur aendern, wenn es eine eigenstaendige Bank ist und KEINE FILLIALE!!!!
+Standard ist 20000 Muenzen bei Stufe 1 + 3000 pro Stufe ab Stufe 2 und sollte nur mit 
+Sondergenehmigung geaendert werden
+Das Maximale Guthaben liegt bei 150000 Muenzen.
+
+
+Das aussehen des Sparbuchs kann auch Modifiziert werden mittels
+sparbuch_aussehen="aussehen"
+In dem Sparbuch steht in der Int_Short der Name der Bank
+
+*/
+#include "../def.h"
+inherit "std/room";
+#include <properties.h>
+
+string banker;
+string bankname;
+string sparbuch_aussehen;
+int guthaben_pro_stufe;
+int maxguthaben;
+int startguthaben;
+
+void create() 
+{
+  ::create();
+  banker="der Bankangestellte";
+  bankname="Luniabank";
+  guthaben_pro_stufe=3000;
+  startguthaben=20000;
+  maxguthaben=150000;
+  sparbuch_aussehen="Du haelst ein kleines duennes Buechlein in den Haenden. Der Einband ist in violette Seide "+
+    "gebunden, die Raender sind mit silber beschlagen. Das Ganze sieht sehr edel aus.\nDu "+
+    "kannst Deinen Kontostand auslesen.";
+  SetProp( P_INT_SHORT, "In einer Bank" );
+  SetProp( P_LIGHT, 1 );
+  SetProp( P_INDOORS, 0 );
+  SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE: 20, ENV_TERRAIN: TT_TOWN]) );
+
+  SetProp( P_INT_LONG,  
+    ("Du stehst in einer Bank. Ein Schild haengt an der Wand."));
+
+
+  AddDetail( ({ "schild" }),
+    ("Du kannst es lesen."));
+  AddDetail( ({ "" }),
+    (""));
+  AddDetail( ({ "" }),
+    (""));
+  AddDetail( ({ "" }),
+    (""));
+  AddReadDetail( ({ "schild" }),
+    ("Folgende Dienste bieten wir an:\n"
+     "Sparbuch anlegen:  200 M\n"
+     "Muenzen einzahlen:   0 M\n"
+     "Muenzen abheben:   100 M\n"
+     "Sparbuch aufloesen:  0 M"));
+  
+  AddCmd(({"lege", "leg"}),"sparbuch_anlegen"); //Funktion
+  AddCmd(({"zahle", "zahl"}),"geld_einzahlen"); //Funktion
+  AddCmd(({"hebe", "heb"}),"geld_abheben"); //Funktion
+  AddCmd(({"loese", "loes"}),"sparbuch_aufloesen"); //Funktion
+
+  AddExit( "suedwesten", LUNIA_ROOM + "lunia_8e.lpc" );
+
+
+}
+
+
+int sparbuch_anlegen(string str)
+{
+	object sparbuch;
+	notify_fail("Was moechtest Du anlegen?\n");
+	if(str=="sparbuch an"||str=="ein sparbuch an")
+		{
+			if(banker!="der Bankangestellte"&&!present(banker,TO))//wenn es einen Banker gibt, der aber nicht da ist
+				{
+					write("Das geht leider nur, wenn ein Bankangestellter anwesend ist.\n");
+					return 1;
+					}
+			if(present("\nsparbuch"+bankname,TP))
+				{
+					write(capitalize(banker)+" sagt: Ihr habt doch schon ein Sparbuch der "+bankname+", "+TPN+".\n");
+					return 1;
+				}
+			else //wenn er noch kein Sparbuch hat
+				{
+					write("Du eroeffnest ein Sparbuch.\n");
+					say(TPN+" eroeffnet ein Sparbuch.\n",TP);
+					write(capitalize(banker)+" sagt: Willkommen in der "+bankname+", "+TPN+".\n");
+					//Sparbuch clonen
+				  CLONE("/obj/sparbuch.lpc", TP);
+           sparbuch=present("sparbuch",TP);
+					//Sparbuch Namen geben
+					sparbuch->bankgebung(bankname);
+					//Sparbuch Langbeschreibung geben
+					sparbuch->langgebung(sparbuch_aussehen);
+					return 1;
+				}
+			}
+		return 0;
+	}
+					
+int geld_einzahlen(string str)
+{
+	int anzahl;
+	int darf; //wieviel Guthaben darf der Spieler
+	int hat; //wieviel Guthaben hat der Spieler
+	string dummy;
+	notify_fail("Wieviele Muenzen moechtet Ihr einzahlen?\n");
+	if(!str) return 0;
+	if (sscanf (str,"%d muenzen ein%s", anzahl, dummy)!=2) return 0;
+		{
+			if(banker!="der Bankangestellte"&&!present(banker,TO))//wenn es einen Banker gibt, der aber nicht da ist
+				{
+					write("Das geht leider nur, wenn ein Bankangestellter anwesend ist.\n");
+					return 1;
+					}
+			if(!present("\nsparbuch"+bankname,TP))
+				{
+					write(capitalize(banker)+" sagt: Ihr habt kein Sparbuch bei der "+bankname+", "+TPN+".\n");
+					return 1;
+					}
+			if(this_player()->QueryMoney() <anzahl)
+				{
+					write(capitalize(banker)+"sagt: So viel Geld habt Ihr nicht dabei, "+TPN+".\n");
+					return 1;
+				}
+			darf=(TP->QueryProp(P_LEVEL)-1)*(guthaben_pro_stufe)+startguthaben; //Wieviele Muenzen darf er auf seinem Konto haben?
+			hat=present("\nsparbuch"+bankname,TP)->guthaben_ausgabe();//Wieviele Muenzen hat er auf seinem Konto?
+	
+			if(anzahl>darf-hat)//Wenn er mehr einzahlen will, als auf sein Konto passt
+				{
+					write(capitalize(banker)+"sagt: Tut mir leid, "+TPN+".\n");
+					write(capitalize(banker)+"sagt: Ihr duerft derzeit maximal "+darf+" Muenzen auf Eurem Sparbuch haben.\n");
+					return 1;
+				}
+			 
+			present("\nsparbuch"+bankname,TP)->guthaben_erhoehen(anzahl);
+			write(capitalize(banker)+"sagt: Euer neues Guthaben betraegt: "+
+			present("\nsparbuch"+bankname,TP)->guthaben_ausgabe()+".\n");
+			say(TPN+" taetigt Bankgeschaefte.\n",TP);
+			return 1;
+		}
+		return 0;
+	}
+
+
+int geld_abheben(string str)
+{
+	int anzahl;
+	int hat; //wieviel Guthaben hat der Spieler
+	string dummy;
+	notify_fail("Wieviele Muenzen moechtet Ihr abheben?\n");
+	if(!str) return 0;
+	if (sscanf (str,"%d muenzen ab%s", anzahl, dummy)!=2) return 0;
+		{
+			if(banker!="der Bankangestellte"&&!present(banker,TO))//wenn es einen Banker gibt, der aber nicht da ist
+				{
+					write("Das geht leider nur, wenn ein Bankangestellter anwesend ist.\n");
+					return 1;
+					}
+			if(!present("\nsparbuch"+bankname,TP))
+				{
+					write(capitalize(banker)+" sagt: Ihr habt kein Sparbuch bei der "+bankname+", "+TPN+".\n");
+					return 1;
+					}
+			hat=present("\nsparbuch"+bankname,TP)->guthaben_ausgabe();//Wieviele Muenzen hat er auf seinem Konto?
+			if(hat <anzahl)
+				{
+					write(capitalize(banker)+"sagt: So viel Geld habt Ihr nicht auf Eurem Sparbuch, "+TPN+".\n");
+					return 1;
+				}
+			 
+			present("\nsparbuch"+bankname,TP)->guthaben_verringern(anzahl);
+			write(capitalize(banker)+"sagt: Euer neues Guthaben betraegt: "+
+			present("\nsparbuch"+bankname,TP)->guthaben_ausgabe()+".\n");
+			say(TPN+" taetigt Bankgeschaefte.\n",TP);
+			return 1;
+		}
+		return 0;
+	}	
+		
+		
+int sparbuch_aufloesen(string str)
+{
+	int anzahl;
+	int hat; //wieviel Guthaben hat der Spieler
+	string dummy;
+	notify_fail("Was moechtet Ihr aufloesen?\n");
+	if(str!="sparbuch auf"&&str!="konto auf") return 0;
+	
+	if(banker!="der Bankangestellte"&&!present(banker,TO))//wenn es einen Banker gibt, der aber nicht da ist
+		{
+			write("Das geht leider nur, wenn ein Bankangestellter anwesend ist.\n");
+			return 1;
+			}
+	if(!present("\nsparbuch"+bankname,TP))
+		{
+			write(capitalize(banker)+" sagt: Ihr habt kein Sparbuch bei der "+bankname+", "+TPN+".\n");
+			return 1;
+			}
+	write("Du gibst Dein Sparbuch ab.\n");
+	hat=present("\nsparbuch"+bankname,TP)->guthaben_ausgabe();//Wieviele Muenzen hat er auf seinem Konto?
+	if(hat>0)
+			write(capitalize(banker)+"sagt: Wohlan, hier habt Ihr Eure "+hat+" Muenzen, "+TPN+".\n");
+	write(capitalize(banker)+" zahlt Dich aus und zerreisst Dein Sparbuch.\n");
+	present("\nsparbuch"+bankname,TP)->remove();
+	return 1;
+	}	
+					

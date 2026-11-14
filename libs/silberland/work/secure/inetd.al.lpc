@@ -1,0 +1,927 @@
+/*
+ * inetd.c  --  UDP port handling code.
+ * 
+ * Original von: Nostradamus@Zebedee, Alvin@Sushi, Mateese@Nightfall
+ *
+ * $Date: 1997/05/09 18:49:43 $
+ * $Revision: 1.8 $
+ * $Log: inetd.c,v $
+ * Revision 1.8  1997/05/09 18:49:43  Hadra
+ * als lagbekaempfung mal das anpingen der muds aus dem reset() entfernt
+ *
+ * Revision 1.6  1996/10/05 10:00:54  Hadra
+ * in write_host_list() eine abfrage auf die : in testmuds eingebaut
+ * die hauen sonst die ganze liste durcheinander
+ *
+ * Revision 1.4  1996/08/26 19:05:45  Hadra
+ * startup() wird automatisch gestartet um fakemuds zu bremsen
+ *
+ * Revision 1.2  1996/08/22 09:31:52  Mupfel
+ * Bugfix: einige in inetd.h von XXX auf INETD_XXX umbenannte Konstanten
+ * heissen jetzt auch hier INETD_XXX (argl!)
+ * prepared for revision control
+ *
+ * Revision 1.1  1996/08/22 09:31:00  Hadra
+ * Initial revision
+ *
+ */
+
+#define DBNAME "hadra"
+#define DDD(str) if (find_player(DBNAME)) tell_object(find_player(DBNAME), (str)+"\n")
+
+#define LOGGING
+
+#include "config.h"
+#include <udp.h>
+#include <inetd.h>
+#include <daemon.h>
+
+private mapping hosts;                     // Die MUD-Infos
+private int last_cleanup;                  // Beseitigen alter Eintraege
+private nosave mapping pending_data;       // ???
+private nosave mapping incoming_packets;   // ???
+private nosave string *received_ids;       // ???
+private nosave int packet_id;              // ???
+private nosave int resetcount;             // zahl der vergangenen reset
+
+/* --- forward deklarationen --- */
+void set_host_list();
+void get_mud_port(string str);
+void write_host_list();
+varargs int send_udp(string mudname, mapping data, int expect_reply);
+void startup();
+int is_up(mapping hosts);
+
+/* --- Daemon erzeugen --- */
+void create() 
+{
+  if (is_clone(this_object())) destruct(this_object());
+  seteuid(getuid(this_object()));
+  packet_id = 0;
+  pending_data = ([ ]);
+  incoming_packets = ([ ]);
+  last_cleanup = time();
+  received_ids = ({ });
+  hosts = ([ ]);
+  resetcount = 0;
+  set_host_list();
+  if (!this_player()) call_out("startup", 1, 0);
+}
+
+/* --- Immer wieder --- */
+void reset()
+{
+//  if (++resetcount == 4)
+//  {
+//    startup();
+//    resetcount = 0;
+//   }
+  if ((time() - last_cleanup) > INETD_CLEANUP_TIME)
+  {
+    call_out("cleanup", 0);
+    last_cleanup = time();
+  } 
+  write_host_list();
+}
+
+/* --- kein shadowing des inetd --- */
+int query_prevent_shadow() { return 1; }
+
+/* --- --- */
+status check_system_field(mapping data, string field) 
+{
+  return data[SYSTEM] && member_array(field, data[SYSTEM]) != -1;
+}
+
+/* --- --- */
+mapping add_system_field(mapping data, string field) 
+{
+  if (data[SYSTEM]) 
+  {
+    if (!check_system_field(data, field)) data[SYSTEM] += ({ field });
+  }
+  else data[SYSTEM] = ({ field });
+  return data;
+}
+
+/*
+ * Read the INETD_HOSTS file and set the "hosts" mapping from it.
+ * Retain existing HOST_STATUS fields.
+ * This function is obsolete and should only maybe once be used to set
+ * the whole thing up for the first time
+ */
+void set_host_list() 
+{
+  mixed data;
+  string filename;
+  
+  if (data = read_file(INETD_HOSTS)) // fuer die testmuds
+  {
+    mapping old_hosts;
+    int i, stat;
+    string *local_cmds;
+    string name;
+    
+    old_hosts = hosts;
+    hosts = ([ ]);
+    for(i = sizeof(data = explode(data, "\n")); i--; ) 
+    {
+      if (data[i] == "" || data[i][0] == '#') 
+        continue;
+      if (sizeof(data[i] = explode(data[i], INETD_HOSTFILE_DEL)) < 6) {
+        LOG(INETD_LOG_HOSTFILE, sprintf("* Parse Error in HOSTS-File line %d",
+                                         (i+1)
+                                       ));
+        continue;
+      }
+      name = lower_case(data[i][HOST_NAME]);
+      if (member_array("*", local_cmds = explode(data[i][LOCAL_COMMANDS], 
+                            INETD_HOSTFILE_DEL2)) != -1)
+        local_cmds = local_cmds - ({ "*" }) + INETD_COMMANDS;
+      hosts[name] = ({
+        capitalize(data[i][HOST_NAME]),                        // Mudname
+        data[i][HOST_IP],                                      // IP-Nummer
+        to_int(data[i][HOST_UDP_PORT]),                        // UDP-Port
+        local_cmds,                                            // ???
+        explode(data[i][HOST_COMMANDS], INETD_HOSTFILE_DEL2),  // ???
+        to_int(data[i][HOST_STATUS]),                          // AccessTime
+        INETD_UNKNOWN                                          // Mudport
+      });
+      /*
+       * Retain existing host status as long as the IP and
+       * UDP ports are the same.
+       */
+      if (old_hosts[name] &&
+        old_hosts[name][HOST_IP] == hosts[name][HOST_IP] &&
+        old_hosts[name][HOST_UDP_PORT] == hosts[name][HOST_UDP_PORT])
+        hosts[name][HOST_STATUS] = old_hosts[name][HOST_STATUS];
+    }
+  }
+  else
+    LOG(INETD_LOG_HOSTFILE, "*Error in reading host file.\n");
+}
+
+// write INETD_HOSTS file from the data contained in the hosts mapping
+void write_host_list()
+{
+  string data;
+  string *hostname;
+  int i;
+  mixed host;
+  
+  hostname = m_indices(hosts);
+  data = "#\n#Alle Zeilen die mit # beginnen sind Kommentare\n#\n#Format:\n"+
+         "#Mudname:IP:UDP Port:LOCAL_COMMANDS:HOST_COMMANDS:last access "+
+         "time\n#\n#Minimaleintrag (Beispiel):\n#Anderland:130.83.112.121:"+
+         "*:*:*\n#\n";
+    
+  for (i=sizeof(hosts)-1; i>=0; --i)
+  {
+    host = hosts[hostname[i]];
+    if (strstr(host[HOST_NAME], ":", 0) > -1) continue; //fuer Testmuds *argh*
+    data += sprintf("%s:%s:%i:%s:%s:%i\n",
+                    host[HOST_NAME],
+                    host[HOST_IP],
+                    host[HOST_UDP_PORT],
+                    "*",
+                    "*",
+                    host[HOST_STATUS]);
+  }
+
+  rm(INETD_HOSTS);
+  if (!write_file(INETD_HOSTS, data))
+    LOG(INETD_LOG_HOSTFILE, "Error in writing host file.\n");
+}
+
+/*
+ * Make a PING request to all muds in the "hosts" mapping to set
+ * HOST_STATUS information and query the telnet mudport
+ */
+void startup() 
+{
+  string *muds;
+  int i;
+
+  for(i = sizeof(muds = m_indices(hosts)); i--; )
+  {
+    send_udp(muds[i], ([ REQUEST: PING ]), 1);
+    call_out("get_mud_port", 0, muds[i]);
+  }
+}
+
+/*
+ * Remove a buffered packet from the "incoming_packets" mapping.
+ */
+void remove_incoming(string id) 
+{
+    incoming_packets = m_delete(incoming_packets, id);
+}
+
+/*
+ * Decode a string from a UDP packet.
+ * Returns:   The actual value of the argument (either int or string)
+ */
+mixed decode(string arg) 
+{
+    if (arg[0] == '$')
+#ifdef INETD_USE_EXTRACT
+	return extract(arg, 1);
+#else
+	return arg[1..];
+#endif
+#ifdef INETD_RESTRICTED_CASTS
+    if (to_string(to_int(arg)) == arg)
+	return to_int(arg);
+#else
+    if ((string)((int)arg) == arg)
+	return (int)arg;
+#endif
+    return arg;
+}
+
+/*
+ * Decode a UDP packet.
+ * Arguments: UDP packet as a string.
+ * Returns:   The decoded information as a mapping, 1 for succes but no
+ *            output (buffered packet), or 0 on error.
+ */
+mixed decode_packet(string packet, string delimiter) 
+{
+  string *data;
+  mapping ret;
+  string info, tmp;
+  mixed class;
+  int i, id, n;
+
+  /* If this packet has been split, handle buffering. */
+  if (packet[0..strlen(PACKET)] == PACKET + ":") 
+  {
+    if (sscanf(packet, PACKET + ":%s:%d:%d/%d" + delimiter + "%s",
+               class, id, i, n, tmp) != 5)
+      return 0;
+    class = lower_case(class) + ":" + id;
+    if (pointerp(incoming_packets[class])) 
+    {
+      incoming_packets[class][i-1] = tmp;
+      if (member_array(0, incoming_packets[class]) == -1) 
+      {
+        ret =
+        decode_packet(implode(incoming_packets[class], ""), delimiter);
+        remove_incoming(class);
+        return ret;
+      }
+    } 
+    else 
+    {
+      incoming_packets[class] = allocate(n);
+      incoming_packets[class][i-1] = tmp;
+      /* If no timeout is running then start one. */
+      if (!pending_data[class]) 
+      {
+        call_out("remove_incoming",
+                 REPLY_TIME_OUT + REPLY_TIME_OUT * RETRIES, class);
+      } 
+      else 
+      {
+        DEBUG("\nINETD: *** Buffered packet Timeout already running! ***\n");
+      }
+    }
+    return 1;
+  }
+  ret = ([ ]);
+  for(i = 0, n = sizeof(data = explode(packet, delimiter)); i < n; i++) 
+  {
+    /* DATA fields can be denoted by a preceeding blank field. */
+    if (data[i] == "") 
+    {
+      tmp = DATA;
+      /* Test for illegal packet length (no DATA) */
+      if (++i >= n)
+        return 0;
+      info = data[i];
+    }
+    else 
+      if (sscanf(data[i], "%s:%s", tmp, info) != 2)
+        return 0;
+    switch((string)(class = decode(tmp))) 
+    {
+      case DATA:
+#ifdef INETD_USE_EXTRACT
+                 return ret + ([ DATA: decode(implode(
+                        ({ info }) + extract(data, i+1), delimiter)) ]);
+#else
+                 return ret + ([ DATA: decode(implode(
+                        ({ info }) + data[i+1..], delimiter)) ]);
+#endif
+      case SYSTEM:
+                 ret[class] = explode(info, ":");
+                 continue;
+      default:
+                 ret[class] = decode(info);
+                 continue;
+    }
+  }
+  return ret;
+}
+
+/* Check wether a UDP packet was valid.
+ * Logs are made and "host" information is updated as appropriate.
+ * Arguments: Decoded UDP packet (mapping)
+ * Returns:   0 for valid packets, an error string otherwise.
+ */
+string valid_request(mapping data) 
+{
+  mixed host_data;
+  string *muds;
+  string req;
+  int i;
+    
+  if (!data[NAME] || !data[UDP_PORT])
+    return DATE + ": Illegal packet.\n";
+  if (host_data = hosts[lower_case(data[NAME])]) 
+  {
+    if (data[HOST] != host_data[HOST_IP]) 
+    {
+      if (data[NAME] == LOCAL_NAME)
+      {
+        startup();
+        return DATE + ": *** FAKE MUD ***\n";
+      }
+      LOG(INETD_LOG_HOST, sprintf("Hostchange: %s %s -> %s",
+                                   host_data[HOST_NAME],
+                                   host_data[HOST_IP],
+                                   data[HOST]
+                                 ));
+      host_data[HOST_IP] = data[HOST];
+      call_out("get_mud_port", 0, lower_case(host_data[HOST_NAME]));
+    }
+    if (data[UDP_PORT] != host_data[HOST_UDP_PORT]) 
+    {
+      if (data[NAME] == LOCAL_NAME)
+      {
+        startup();
+        return DATE + ": *** FAKE MUD ***\n";
+      }
+      LOG(INETD_LOG_PORT, sprintf("Portchange: %s (%s) %i -> %i",
+                                   host_data[HOST_NAME],
+                                   host_data[HOST_IP],
+                                   host_data[HOST_UDP_PORT],
+                                   data[UDP_PORT]
+                                  ));
+      host_data[HOST_UDP_PORT] = data[UDP_PORT];
+      call_out("get_mud_port", 0, lower_case(host_data[HOST_NAME]));
+    }
+  } 
+  else 
+  {
+    if (lower_case(data[NAME]) == lower_case(LOCAL_NAME))
+    {
+      startup();
+      return DATE + ": *** FAKE MUD ***\n";
+    }
+    for(i = sizeof(muds = m_indices(hosts)); i--; ) 
+    {
+      host_data = hosts[muds[i]];
+      if (data[HOST] == host_data[HOST_IP] &&
+        data[UDP_PORT] == host_data[HOST_UDP_PORT]) 
+      {
+        LOG(INETD_LOG_NAME, sprintf("Namechange %s (%s) -> %s",
+                                     host_data[HOST_NAME],
+                                     host_data[HOST_IP],
+                                     data[NAME]
+                                    ));
+        host_data[HOST_NAME] = data[NAME];
+        hosts[lower_case(data[NAME])] = host_data;
+        hosts = m_delete(hosts, muds[i]);
+        call_out("get_mud_port", 0, lower_case(host_data[HOST_NAME]));
+        i = -2;
+	break;
+      }
+    }
+    if (i != -2) 
+    {
+      host_data = hosts[lower_case(data[NAME])] = ({
+                    data[NAME],
+                    data[HOST],
+                    data[UDP_PORT],
+                    INETD_COMMANDS,
+                    ({ "*" }),
+                    INETD_UP,
+                    0
+                  });
+      LOG(INETD_LOG_NEW, sprintf("New MUD: %s %s %d",
+                                  data[NAME],
+                                  data[HOST],
+                                  data[UDP_PORT]
+                                ));
+      call_out("get_mud_port", 0, lower_case(data[NAME]));
+    }
+  }
+  if (!(req = data[REQUEST]))
+    return DATE + ": System message.\n";
+  if (req != PING && req != QUERY && req != REPLY &&
+    member_array(req, host_data[LOCAL_COMMANDS]) == -1)
+  {
+    /* This should probably send a system message too. */
+    send_udp(host_data[HOST_NAME], ([
+             REQUEST: REPLY,
+             RECIPIENT: data[SENDER],
+             ID: data[ID],
+             DATA: "Invalid request @" + LOCAL_NAME + ": " +
+             capitalize(data[REQUEST]) + "\n"
+           ]) );
+    return DATE + ": Invalid request.\n";
+  }
+  return 0;
+}
+
+/*
+ * Incoming UDP packets are sent to this function to be interpretted.
+ * The packet is decoded, checked for validity, HOST_STATUS is updated
+ * and the appropriate udp module called.
+ * Arguments: Senders IP address (string)
+ *            UDP packet (string)
+ */
+void receive_udp(string sender, string packet) 
+{
+  mapping data;
+  string req, err, id;
+
+#ifdef LOGGING
+  LOG(INETD_LOG_PACKET, sprintf("Sender %s Packet %s\n", 
+                                 sender, 
+                                 packet
+                               ));
+#endif /* LOGGING */
+
+#ifdef UDP_MASTER
+  if (!previous_object() ||
+    file_name(previous_object()) != UDP_MASTER) 
+  {
+    LOG(INETD_LOG_ILLEGALC, sprintf("Illegal call of received_udp() by %s",
+                                     file_name(previous_object())
+                                   ));
+    return;
+  }
+#endif
+
+  if (
+#ifdef INETD_DELIMITER_COMPAT
+       (!mappingp(data = decode_packet(packet, INETD_NEW_DELIMITER)) || 
+         (data[HOST] = sender) && (err = valid_request(data)) ) && 
+       (!mappingp(data = decode_packet(packet, INETD_OLD_DELIMITER)) ||
+         (data[HOST] = sender) && (err = valid_request(data)) )
+#else
+       !(data = decode_packet(packet, INETD_DELIMITER))
+#endif
+       ) 
+  {
+    if (!data)
+#ifdef RECEIVE_UDP_COMPAT
+      RECEIVE_UDP_COMPAT(sender, packet);
+#else
+      LOG(INETD_LOG_INVALID, sprintf("Sender: %O, Packet: %O",
+                                      sender,
+                                      packet
+                                    ));
+#endif
+    return;
+  }
+
+#ifdef INETD_DELIMITER_COMPAT
+  if (!mappingp(data))
+    return;
+  if (err)
+#else
+    if (!mappingp(data))
+      return;
+    data[HOST] = sender;
+    if (err = valid_request(data))
+#endif
+    {
+      LOG(INETD_LOG_MISC, sprintf("%s Sender: %s\nPacket %O",
+                                   err,
+                                   sender,
+                                   packet
+                                 ));
+      return;
+    }
+    hosts[lower_case(data[NAME])][HOST_STATUS] = INETD_UP;
+    if ((req = data[REQUEST]) == REPLY) 
+    {
+      mapping pending;
+
+      /* If we can't find the reply in the pending list then bin it. */
+      if (!(pending = pending_data[lower_case(data[NAME]) + ":" + data[ID]]))
+        return;
+      /* Set data[REQUEST] correctly, but still send to (req = REPLY) */
+      data[REQUEST] = pending[REQUEST];
+#ifdef INETD_DIAGNOSTICS
+      data[PACKET_LOSS] = pending[PACKET_LOSS];
+      data[RESPONSE_TIME] = time() - pending[RESPONSE_TIME] + 1;
+#endif
+#if 0
+/* channel replies may not include a recipient, and shouldn't have one set */
+	/* Restore the RECIPIENT in replies if none given and it is known. */
+      if (!data[RECIPIENT] && pending[SENDER])
+           data[RECIPIENT] = pending[SENDER];
+#endif /* 0 */
+      pending_data =
+        m_delete(pending_data, lower_case(data[NAME]) + ":" + data[ID]);
+    }
+    else 
+      if (data[ID]) 
+      {
+	if (member_array(id = (lower_case(data[NAME]) + ":" + data[ID]),
+          received_ids) == -1)
+	{
+          received_ids += ({ id });
+          call_out("remove_received_id",
+            REPLY_TIME_OUT + REPLY_TIME_OUT * (RETRIES + 1), id);
+        }
+	else
+          add_system_field(data, REPEAT);
+      }
+    if (err = catch(
+      call_other(UDP_CMD_DIR + req, "udp_" + req, copy_mapping(data))))
+    {
+      send_udp(data[NAME], ([
+               REQUEST: REPLY,
+               RECIPIENT: data[SENDER],
+               ID: data[ID],
+               DATA: capitalize(req)+ " request failed @" + LOCAL_NAME + ".\n"
+              ]) );
+      LOG(INETD_LOG_FAILED, sprintf("%O from %s failed.\n%s %O\n",
+                                     data[REQUEST],
+                                     data[NAME],
+                                     err,
+                                     packet
+                                   ));
+    }
+    if ((data[QUERY]=="mud_port" || 
+         data["QUERY"]=="mud_port")&&
+         lower_case(data[RECIPIENT]) == INETD_SEND_ID )
+      hosts[lower_case(data[NAME])][HOST_MUD_PORT] = to_int(data[DATA]);  
+}
+
+/* --- --- */
+int do_match(string mudname, string match_str) 
+{
+    return mudname[0..strlen(match_str)-1] == match_str;
+}
+
+#ifdef INETD_NO_CLOSURES
+
+/* --- --- */
+status greater(mixed a, mixed b) 
+{
+    return a > b;
+}
+
+/* --- --- */
+string *expand_mud_name(string name) 
+{
+  return sort_array(
+    filter_array(m_indices(hosts), "do_match", this_object(), name),
+    "greater", this_object());
+}
+
+#else
+
+/* --- --- */
+string *expand_mud_name(string name) 
+{
+  return sort_array(filter_array(m_indices(hosts), #'do_match, name), #'>);
+}
+
+#endif
+
+/* --- --- */
+string encode(mixed arg) 
+{
+  if (objectp(arg))
+    return file_name(arg);
+  if (stringp(arg) && (arg[0] == '$' ||
+#ifdef INETD_RESTRICTED_CASTS
+    to_string(to_int(arg)) == (string)arg))
+#else
+    (string)to_int(arg) == (string)arg))
+#endif
+    return "$" + arg;
+  return to_string(arg);
+}
+
+/* --- --- */
+string encode_packet(mapping data) 
+{
+  int i;
+  mixed indices;
+  string header, body, t1, t2;
+  string *ret;
+  status data_flag;
+
+  for(ret = ({ }), i = sizeof(indices = m_indices(data)); i--; ) 
+  {
+    if (indices[i] == DATA) 
+    {
+      data_flag = 1;
+      continue;
+    }
+    header = encode(indices[i]);
+    body = encode(data[indices[i]]);
+    if (sscanf(header, "%s:%s", t1, t2) ||
+        sscanf(header + body, "%s" + INETD_DELIMITER + "%s", t1, t2)
+       )
+      return 0;
+
+      ret += ({ header + ":" + body });
+  }
+  if (data_flag)
+#ifdef INETD_USE_OLD_DATA_FORMAT
+    ret += ({ DATA + ":" + encode(data[DATA]) });
+#else
+    ret += ({ "", encode(data[DATA]) });
+#endif
+    return implode(ret, INETD_DELIMITER);
+}
+
+/* --- --- */
+string *explode_packet(string packet, int len) 
+{
+  if (strlen(packet) <= len)
+    return ({ packet });
+  return ({ packet[0..len-1] }) +
+  explode_packet(
+#ifdef INETD_USE_EXTRACT
+    extract(packet, len)
+#else
+    packet[len..]
+#endif
+    , len);
+}
+
+/* --- --- */
+varargs string send_udp(string mudname, mapping data, int expect_reply) 
+{
+  mixed host_data;
+  string *packet_arr;
+  string packet;
+  int i;
+
+  mudname = lower_case(mudname);
+  if (!(host_data = hosts[mudname])) 
+  {
+    string *names;
+
+    if (sizeof(names = expand_mud_name(mudname)) == 1)
+      host_data = hosts[mudname = names[0]];
+    else
+#ifdef SEND_UDP_COMPAT
+      return (string)SEND_UDP_COMPAT(mudname, data, expect_reply);
+#else
+      return "Unknown or ambiguous mudname: " + capitalize(mudname) + "\n";
+#endif
+  }
+  if (data[REQUEST] != PING &&
+      data[REQUEST] != QUERY &&
+      data[REQUEST] != REPLY &&
+      member_array("*", host_data[HOST_COMMANDS]) == -1 &&
+      member_array(data[REQUEST], host_data[HOST_COMMANDS]) == -1)
+    return capitalize(data[REQUEST]) + ": Command unavailable @" +
+      host_data[HOST_NAME] + "\n";
+  data[NAME] = LOCAL_NAME;
+  data[UDP_PORT] = LOCAL_UDP_PORT;
+  if (expect_reply) 
+  {
+    /* Don't use zero. */
+    data[ID] = ++packet_id;
+    /* Don't need copy_mapping() as we are changing the mapping size. */
+    pending_data[mudname + ":" + packet_id] =
+#ifdef INETD_DIAGNOSTICS
+    data + ([ NAME: host_data[HOST_NAME], RESPONSE_TIME: time() ]);
+#else
+    data + ([ NAME: host_data[HOST_NAME] ]);
+#endif
+  }
+
+#ifdef MUPFDEBUG
+  if (lower_case(mudname)=="morgengrauen")  // Datenflut etwas eindaemmen
+    DEBUG(sprintf("send_upd, before encoding, -> %O\n", data));
+#endif
+
+  if (!(packet = encode_packet(data))) 
+  {
+    if (expect_reply)
+      pending_data = m_delete(pending_data, mudname + ":" + packet_id);
+    LOG(INETD_LOG_ILLEGALP, sprintf("Illegal Packet sent by %s",
+                                     file_name(previous_object())
+                                   ));
+    return "inetd: Illegal packet.\n";
+  }
+
+#ifdef MUPFDEBUG
+  if (lower_case(mudname)=="morgengrauen")  // Datenflut etwas eindaemmen
+    DEBUG(sprintf("send_upd, encoded packet = %s\n", packet));
+#endif
+
+  if (expect_reply)
+    call_out("reply_time_out", REPLY_TIME_OUT, mudname + ":" + packet_id);
+  if (strlen(packet) <= INETD_MAX_PACKET_LEN)
+    packet_arr = ({ packet });
+  else 
+  {
+    string header;
+    int max;
+
+    /* Be careful with the ID.  data[ID] could have been set up by RETRY */
+    header = PACKET + ":" + lower_case(LOCAL_NAME) + ":" +
+	     ((expect_reply || data[REQUEST] != REPLY)&& data[ID] ?
+	     data[ID] : ++packet_id) + ":";
+    /* Allow 8 extra chars: 3 digits + "/" + 3 digits + DELIMITER */
+    packet_arr = explode_packet(packet, 
+                   INETD_MAX_PACKET_LEN - (strlen(header) + 8));
+    for(i = max = sizeof(packet_arr); i--; )
+      packet_arr[i] =
+        header + (i+1) + "/" + max + INETD_DELIMITER + packet_arr[i];
+  }
+  for(i = sizeof(packet_arr); i--; ) 
+  {
+    if (!send_imp(
+        host_data[HOST_IP], host_data[HOST_UDP_PORT], packet_arr[i]))
+      return "inetd: Error in sending packet.\n";
+  }
+  return 0;
+}
+
+/* --- --- */
+void reply_time_out(string id) 
+{
+  mapping data;
+
+  if (data = pending_data[id]) 
+  {
+    object ob;
+
+#ifdef INETD_DIAGNOSTICS
+    data[PACKET_LOSS]++;
+#endif
+    if (data[INETD_RETRY] < RETRIES) 
+    {
+      mapping send;
+
+      data[INETD_RETRY]++;
+      /* We must use a copy so the NAME field in pending_data[id]
+       * isn't corrupted by send_udp(). */
+      send = copy_mapping(data);
+      send = m_delete(send, INETD_RETRY);
+#ifdef INETD_DIAGNOSTICS
+      send = m_delete(send, PACKET_LOSS);
+      send = m_delete(send, RESPONSE_TIME);
+#endif
+      call_out("reply_time_out", REPLY_TIME_OUT, id);
+      send_udp(data[NAME], send);
+      return;
+    }
+    data = m_delete(data, INETD_RETRY);
+#ifdef INETD_DIAGNOSTICS
+    data = m_delete(data, RESPONSE_TIME);
+#endif
+    catch(call_other(UDP_CMD_DIR + REPLY, "udp_" + REPLY,
+      add_system_field(data, TIME_OUT)));
+    /* It's just possible this was removed from the host list. */
+    if (hosts[lower_case(data[NAME])])
+      hosts[lower_case(data[NAME])][HOST_STATUS] = INETD_DOWN;
+    remove_incoming(lower_case(data[NAME]) + ":" + id);
+  }
+  pending_data = m_delete(pending_data, id);
+}
+
+void remove_received_id(string id) 
+{
+  received_ids -= ({ id });
+}
+
+/* --- --- */
+varargs mixed query(string what, mixed extra1, mixed extra2) 
+{
+  mixed data;
+
+  switch(what) 
+  {
+    case "commands":
+                     return INETD_COMMANDS;
+    case "hosts":
+                     return copy_mapping(hosts);
+    case "pending":
+                     return copy_mapping(pending_data);
+    case "incoming":
+                     return copy_mapping(incoming_packets);
+    case "received":
+                     return ({ }) + received_ids;
+    /* args: "valid_request", request, mudname */
+       case "valid_request":
+    if (data = hosts[extra2])
+      return member_array("*", data[HOST_COMMANDS]) != -1 ||
+             member_array(extra1, data[HOST_COMMANDS]) != -1;
+    return 0;
+  }
+}
+
+/* --- --- */
+private void m_format_long(mixed mud, mixed hosts, string output)
+{
+  mixed data;
+  data = hosts[mud];
+  output += sprintf("%-:20s | %-:1s | %-:21s | %s\n",
+                    data[HOST_NAME],
+                    data[HOST_STATUS]?((data[HOST_STATUS]>0)?"*":" "):"?",
+                    data[HOST_IP] + " " + 
+                      (data[HOST_MUD_PORT]?(string)data[HOST_MUD_PORT]:"????"),
+                    TOWND->town(data[HOST_IP])
+                   );
+}
+
+string mudlist(string str) 
+{
+  string output;
+  mixed muds;
+  
+  output = sprintf("%-:20s |%-:2s | %-:21s | %s\n",
+                   "Mudname",
+                   "Up",
+                   "Adresse",
+                   "Standort");
+  output += 
+    "-------------------------------------------------------------------\n";
+  muds = sort_array(m_indices(hosts),#'>);
+  map_array(muds, #'m_format_long, hosts, &output);
+  return output+
+    "-------------------------------------------------------------------\n"+
+    sprintf("Insgesamt %i bekannte MUDs, %i davon sind erreichbar.\n",
+            sizeof(hosts),
+            is_up(hosts))+
+    "-------------------------------------------------------------------\n";
+}
+
+void remove() 
+{
+  write_host_list();
+}
+
+void get_mud_port(string str)
+{
+  if (str)
+  {
+    send_udp(str, (["REQ": "query", 
+                    "SND": INETD_SEND_ID, 
+                    "DATA": "mud_port"]), 1); 
+  }
+}
+
+void cleanup()
+{
+  int i;
+  string *hostnames;
+  string *to_delete;
+
+  hostnames = m_indices(hosts);
+  to_delete = ({ });
+  
+  for (i=sizeof(hostnames)-1;i>=0;--i)
+  {
+// hier ist der fehler!!
+    if (hosts[hostnames[i]][HOST_STATUS]<0)
+      if (-hosts[hostnames[i]][HOST_STATUS] + INETD_CLEANUP_ERASE < time())
+        to_delete += ({hostnames[i]});
+  }
+  if (sizeof(to_delete))
+    log_file("inetd/cleanup", sprintf("\nCleanup um %s -> %i\n%20s %s\n",
+                                 dtime(time()),
+                                 time(),
+                                 "Mudname",
+                                 "Status"));
+  for (i=sizeof(to_delete)-1;i>=0;i--)
+  {
+// log fuers debugging eingefuegt
+    log_file("inetd/cleanup", sprintf("%20s %i\n", 
+                                 hosts[to_delete[i]][HOST_NAME],
+                                 hosts[to_delete[i]][HOST_STATUS]));
+// zum debuggen rausgenommen
+//    efun::m_delete(hosts, to_delete[i]);
+  }
+}
+
+int is_up(mapping hosts)
+{
+  int i, ret;
+  string *index;
+  
+  ret = 0; 
+  index = m_indices(hosts);
+  
+  for (i=sizeof(index)-1;i>=0;i--)
+    if (hosts[index[i]][HOST_STATUS] > 0)
+      ret++;
+
+  return ret;
+}

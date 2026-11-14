@@ -1,0 +1,146 @@
+// willenskraft.c 
+// Das Object zum Willenskraft-Spell 
+// 1997-10-14  Feyaria@SilberLand
+
+inherit "std/armour";
+
+#include "../def.h"
+#include <wizlevels.h>
+
+int race;
+
+string *res = ({});
+
+#define MAX_C 15
+#define MAX_H 10
+
+void create()
+{
+  if( !is_clone(TO) ) return;
+  ::create();
+
+  if (!PO || file_name(PO) != SPELLBOOK)
+  {
+    call_out("remove",0);
+    return;
+  }
+  SetProp(P_SHORT, 0);
+  SetProp(P_LONG, 0); 
+  SetProp(P_NAME, 0);
+  AddId( ({"\nberserker_willenskraft"}) );
+
+  SetProp(P_ARMOUR_TYPE, AT_MISC );
+  SetProp(P_AC, 0);
+  SetProp(P_MATERIAL, MAT_MAGIC );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_VALUE, 0 );
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NODROP, 1);
+  SetProp(P_NOGET, "");
+  SetProp(P_INVIS, 1);
+  SetProp(P_DEFEND_FUNC, TO);
+}
+
+int DefendFunc (mixed dam_type, int spell, object enemy)
+{
+  if( stringp(dam_type) )
+    dam_type = ({dam_type});
+  if( member(dam_type, DT_TERROR) != -1 )
+    return 15 + random(1300 / race);  
+  if( member(dam_type, DT_SOUND) != -1 )
+    return 13 + random(1000 / race);  
+  if( member(dam_type, DT_MIND) != -1 )
+    return 12 + random(900 / race);  
+  if( sizeof(dam_type & res) )
+    return 10 + random(800 / race);
+  if( member(dam_type, DT_MAGIC) != -1 )
+    return 11 + random(700 / race);  
+  if( member(dam_type, DT_EXPLOSION) != -1 )
+    return 10 + random(600 / race);  
+/*
+  if( member(dam_type, DT_FIRE) != -1 )
+    return random(600 / race);  
+  if( member(dam_type, DT_COLD) != -1 )
+    return random(600 / race);  
+*/
+}
+
+void init()
+{
+  ::init();
+  if( !MENV || MENV->QueryProp(P_GUILD) != "berserker")
+    call_out("remove",0);
+}
+
+int res_check(string type)
+{
+  if (to_float(QueryProp(P_WORN)->QueryProp(P_RESISTANCE_STRENGTHS)[type]) > 0.0 && 
+      member(MAGICAL_DAMAGE_TYPES, type))
+    return 1;
+  return 0;
+}
+
+void willenskraft(int suc, int abil)
+{
+  int c, h, time; 
+  string* prot;
+
+  if (file_name(PO) != SPELLBOOK)
+    return;
+  c = random(2 * suc + abil) / 2500 + MENV->QueryProp(P_GUILD_LEVEL) / 2;
+  h = random(2 * suc + abil) / 2500 + MENV->QueryProp(P_GUILD_LEVEL) / 3;
+  time = random(suc + abil) / 50 + MENV->QueryProp(P_GUILD_LEVEL) * 8;
+  if (suc >= MAX_ABILITY)
+    time *= 2;
+
+  SetProp(P_TEMPERATURE_PROTECTION, 
+      ([ T_COLD_PROT: (c > MAX_C ? MAX_C : c), 
+         T_HEAT_PROT: (h > MAX_H ? MAX_H : h) ]) );
+  DoWear(1);
+  if (!QueryProp(P_WORN))
+  {
+    call_out("remove",0);
+    return;
+  }
+  if (query_once_interactive(QueryProp(P_WORN)))
+  {
+    switch (QueryProp(P_WORN)->QueryProp(P_RACE))
+    {
+      case "Troll": race = 11;
+      case "Elf": race = 7;
+      default: race = 10;
+    }
+    race = race * MAX_ABILITY / suc;
+    if (mappingp(QueryProp(P_WORN)->QueryProp(P_RESISTANCE_STRENGTHS)))
+      res = m_indices(filter_mapping(QueryProp(P_WORN)->QueryProp(P_RESISTANCE_STRENGTHS),
+         #'res_check));
+  }
+  else
+    race = 5;
+  if(!race)
+    race = 1;
+  call_out("willenskraft_ende", time, QueryProp(P_WORN));
+}
+
+void willenskraft_ende(object wer)
+{
+  tell_object(MENV, "Dein Wille wird wieder schwaecher.\n");
+  DoUnwear(1);
+  remove();
+}
+
+void reset()
+{
+  if (!is_clone(TO)) return;
+  ::reset();
+
+  remove(); 
+}
+
+varargs int remove(int silent)
+{
+  object ob;
+  if (MENV && objectp(ob = present("\nberserker_stirnband", MENV)))
+    ob->ForceReport();
+  return ::remove();
+}

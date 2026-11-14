@@ -1,0 +1,1216 @@
+// Xorgan@SilberLand
+// Drachenschuppenhaut
+// 2000-05-14
+
+#include "../def.h"
+
+/*
+#include <language.h>
+*/
+#define LOGPATH MYLOG + "schuppenhaut/" 
+#define LOGFILE LOGPATH + lower_case( TP->query_real_name() ) + ".log"
+#define LOGFILE2 LOGPATH + lower_case( ENV(TO)->query_real_name() ) + ".log"
+
+#define NUM_DAM_TYPES 5
+#define DAM_TYPES ({ "body", DT_FIRE, DT_WATER, DT_COLD, DT_LIGHTNING, DT_ACID })  
+#define DAM_COL ({"", "rot", "blau", "weiss", "silber", "schwarz" })
+#define DAM_COLEN ({"", "roten", "blauen", "weissen", "silbernen", "schwarzen" })
+#define DAM_BODY   0   // Welchen Arrayindex hat der body
+#define DAM_FIRE   1
+#define DAM_WATER  2
+#define DAM_COLD   3
+#define DAM_HOLY   4
+#define DAM_UNHOLY 5
+
+#define BEG_COST   69  // Kosten fuer den ersten Punkt
+#define INC_COST   14  // Kostensteigerung pro Punkt
+#define MAX_BONUS  20  // Maximale Punkte pro Schadenstyp
+#define MAX_DIV     5  // Maximale Punkte Unterschied zum naechsten Schadenstyp
+
+#define SICK_SPELL_COST    0  // Was kostet die Heilung an SP?
+#define SICK_SPELL_RATE   60  // Wie lange muss man zwischen den Heilversuchen warten?
+#define SICK_DAMAGE_RATE  30  // Wie ist der Abstand zwischen den Wirkungen? Halfte fix, haelfte random
+#define SICK_DAM_PERCENT 100  // Mit welcher Wahrscheindlichkeit treten Krankheitsfolgen auf.
+#define SICK_INC_RATE     10 // Pro erhoehen steigt das Krankheitrisiko um %
+
+inherit "std/armour";
+
+
+int         SetOwner( string str );
+string      GetOwner();
+int         SetCureSkill( int val );
+int         GetCureSkill();
+int         SetSickCount( int val );
+int         GetSickCount();
+int         SetDefendTyp( int typ, int val );
+int         GetDefendTyp( int typ );
+
+void        create();
+void        init();
+void        NotifyPlayerDeath( object victim, object killer, int lost_xp );
+varargs int remove( int silent );
+varargs int move( mixed dest, int method );
+void        reset();
+mixed       _set_autoloadobj( mixed a );
+mixed       _query_autoloadobj();
+varargs int DoUnwear( int silent );
+int         DefendFunc( string *dam_type, mixed spell, object enemy );
+int         incDefend( string str );
+void        seq1( object ob );
+void        seq2( object ob );
+void        seq3( object ob );
+void        seq4( object ob );
+void        seq5( object ob );
+void        seq6( object ob );
+void        seq7( object ob );
+void        seq8( object ob );
+string      extra_look();
+string      _query_info();
+string      MakeResult();
+int         ForceSick( string str );
+int         CheckSick();
+void        sickDamage( object ob );
+int         findSickDamage();
+int         EndSick( string str );
+void        EndSickSuccess( object ob );
+void        EndSickFailed( object ob );
+void        AllowCure( object ob );
+
+
+int *defendDamage;
+int alreadyInc;
+int isSick;          // ist krank
+int cureSkill;       // Wert fuers heilen
+int flagCure;        // Heilversuche moeglich
+int sickCount;       // Wie wahrscheinlich ist Krankkeit
+string owner;
+object *ownerObj;
+
+void create() 
+{
+   if (!is_clone(TO)) 
+      return;
+   
+   ::create();
+   
+   alreadyInc = 1;
+   flagCure = 1;
+   ownerObj = allocate(2);
+   
+   defendDamage = (int*)allocate(NUM_DAM_TYPES + 1);
+   
+   SetProp( P_SHORT, "Deine Drachenschuppenhaut");
+   SetProp( P_LONG,
+      "\nDeine Haut ist wie bei einem Drachen von Schuppen bedeckt. "
+      "Wenn man zu viele Drachen toetet, beginnt sich die Haut zu veraendern. "
+      "Schuppen beginnen zu wachsen. Am Ende "
+      "bedecken Drachenschuppen den ganzen Koerper. Was allerdings kein "
+      "Nachteil sein soll."
+      );
+   AddDetail( ({ "ritual", "meditation" }), 
+        "Fuer dieses Ritual, mit dem Du das Wesen und die Macht der Drachen "
+      + "verinnerlichen kannst, benoetigst Du etliche Drachenschuppen, die Du vor "
+      + "Dir ausbreitest und Dir die Meditation, die nicht ungefaehrlich "
+      + "ist, erleichteren." );
+      
+   SetProp( P_NAME, "Drachenschuppenhaut");
+   SetProp( P_GENDER, FEMALE);
+   AddId( ({"haut", "schuppenhaut", "drachenschuppenhaut", 
+            "\nschuppenhaut", "NODESTRUCT"}));
+   seteuid( getuid());
+   
+   SetProp( P_AC, 0);
+   SetProp( P_ARMOUR_TYPE, AT_MISC);
+   SetProp( P_MATERIAL, ([ MAT_HORN:100, MAT_MISC_MAGIC:100]) );
+   SetProp( P_WEIGHT, 0);
+   SetProp( P_VALUE, 500000);
+   SetProp( P_NOBUY, 1);
+   SetProp( P_NO_DAMAGE_DESTRUCT, 1); 
+   SetProp( P_NODROP, 1);
+   SetProp( P_NEVERDROP, 1);
+   SetProp( P_QUALITY_DECAY, 0);
+   SetProp( P_KILL_NAME, "Eine furchtbare Krankheit");
+   
+   SetProp( P_MAGIC, 1); // Damit es nicht magisch werden kann
+   SetProp( P_DEFEND_FUNC, TO);
+   
+   write_file( LOGFILE, sprintf( "%s: Die Haut wurde erstellt.\n", dtime( time() )));
+   write_file( LOGFILE, sprintf( "%s: Schadenstypen sind %@|6s.\n", dtime( time() ), 
+      DAM_TYPES ));
+}
+
+
+void init()
+{
+   int i;
+   ::init();
+   
+   add_action( "incDefend", "verinnerlich"  );
+   add_action( "incDefend", "verinnerliche" );
+   add_action( "EndSick", "besinne"  );
+   add_action( "ForceSick", "seikrank"  ); //Zwecks test
+   
+   DoWear( 1, 0 );
+   /*
+   for( i = 1; i <= NUM_DAM_TYPES; i++ )
+   {
+//      write( "Val: " + DAM_TYPES[i] + " " + defendDamage[i] + ".\n");
+      TP->RemoveResistanceModifier(DAM_TYPES[i]);
+      TP->AddResistanceModifier( ([DAM_TYPES[i]:to_float( -defendDamage[i] ) / 100]), 
+                                 DAM_TYPES[i] );
+   }
+   */
+}
+
+
+void NotifyPlayerDeath( object victim, object killer, int lost_xp )
+{
+   if( isSick )
+   {
+      write_file( LOGFILE2, sprintf( "%s: Der Spieler wurde getoetet. Krankheit "
+         + "beendet.\n", dtime( time() )));
+   
+      isSick = 0;
+   }
+}
+
+
+varargs int remove(int silent)
+{
+   int i;
+   
+   if( is_clone(TO) ) 
+   {
+      write_file( LOGFILE2, sprintf( "%s: Die Haut wurde zerstoert. Letzte Werte:\n",
+                   dtime( time() )));
+      
+      write_file( LOGFILE2, sprintf( "%s: CureSkill: %i\n",
+                   dtime( time() ), cureSkill ));
+      
+      write_file( LOGFILE2, sprintf( "%s: SickCount: %i\n",
+                   dtime( time() ), sickCount ));
+      
+      for( i = 0; i <= NUM_DAM_TYPES; i++ )
+      {
+         write_file( LOGFILE2, sprintf( "%s: %s: %i\n",
+                      dtime( time() ), DAM_TYPES[i], defendDamage[i] ));
+      }
+   }   
+   return ::remove( silent );
+}
+
+
+varargs int move( mixed dest, int method )
+{
+   object ob;
+   string sname;
+   string tname;
+   
+   if( objectp( dest )) // Was wurde uebergeben
+      ob = dest;
+   else
+      ob = find_object( dest );
+   
+   if( !ob->name() )
+      tname = ob->QueryProp( P_INT_SHORT );
+   else
+      tname = ob->name();
+   
+   if( query_wiz_level( this_interactive() ) > 1 )
+   {
+      write_file( LOGFILE, sprintf( "%s: %s hat move durchgefuehrt nach %s.\n", 
+         dtime( time()), TP->name(), tname ));
+      return ::move(dest,method);
+   }
+   else if( !ENV(TO) || !interactive( ENV(TO)) )  // Momentane Position kein Spieler?
+   {
+      // Nur ein move in den Eigentuemer darf ausgefuehrt werden
+      if( ob && interactive( ob ) && ob->query_real_name() == owner )
+      {
+         write_file( LOGFILE, sprintf( "%s: %s hat move durchgefuehrt nach %s.\n", 
+            dtime( time()), TP->name(), tname ));
+         return ::move(dest,method);
+      }
+   }
+   
+   raise_error( "Illegal move!\n" );
+   return 0;
+}
+
+
+void reset()
+{
+   // NPC-spezifische Aufraeumarbeiten...
+   if( environment() && interactive(environment()) && is_clone( TO )) 
+   {
+      alreadyInc = 0;
+      
+      CheckSick();
+      
+   }
+   
+   ::reset();
+   
+}
+
+
+mixed _set_autoloadobj( mixed a ) // bei Wiedereinloggen nach Ende/Reboot wichtig
+{
+   int i;
+   if( pointerp( a )) 
+   {
+      cureSkill = a[0];
+      
+      for( i = 1; i < sizeof(a); i++ )
+      {
+         defendDamage[i - 1]  = a[i];
+         SetProp(P_VALUE, QueryProp( P_VALUE ) + a[i] * 10000 );
+      }
+   }
+   
+   owner = ENV(TO)->query_real_name();
+   
+   for( i = 1; i <= NUM_DAM_TYPES; i++ )
+   {
+      ENV(TO)->RemoveResistanceModifier(DAM_TYPES[i]);
+      ENV(TO)->AddResistanceModifier( ([DAM_TYPES[i]:to_float( -defendDamage[i] ) / 100]), 
+                                 DAM_TYPES[i] );
+   }
+   
+   return Set(P_AUTOLOADOBJ, a);
+}
+
+
+mixed _query_autoloadobj()
+{
+   int *a;
+   int i;
+   
+   a = (int*)allocate(NUM_DAM_TYPES + 2);
+   
+   a[0] = cureSkill;
+   for( i = 0; i <= NUM_DAM_TYPES; i++)
+      a[i + 1] = defendDamage[i];
+   
+   return a;
+}
+
+
+varargs int DoUnwear(int silent)
+{
+   int i;
+   
+   if( QueryProp( P_WORN ))
+   {
+      if( query_wiz_level( TP ) > 1 )
+      {
+         for( i = 1; i <= NUM_DAM_TYPES; i++ )
+         {
+            TP->RemoveResistanceModifier(DAM_TYPES[i]);
+         }
+         return ::DoUnwear( silent );
+      }
+      else
+      {
+         tell_object( TP, "Du kannst Deine eigene Haut nicht ausziehen!\n");
+      }
+   }
+   return 0;
+}
+
+
+int DefendFunc( string *dam_type, mixed spell, object enemy ) 
+{
+   if( isSick )
+      return 0;
+   
+   if( !mappingp( spell ))
+      // Die haelfte abgerundet fix + die haelfte aufgerundet variabel
+      return defendDamage[DAM_BODY] / 2 
+         + random( defendDamage[DAM_BODY] - defendDamage[DAM_BODY] / 2 );
+   
+   return 0;
+}
+
+
+int SetOwner( string str )
+{
+   if( !ENV(TO) )
+      write_file( LOGFILE, sprintf( "%s: %s hat Eigentuemer geaendert auf %s.\n",
+         dtime(time()), TP->name(), str ));
+   else
+      write_file( LOGFILE2, sprintf( "%s: %s hat Eigentuemer geaendert auf %s.\n",
+         dtime(time()), TP->name(), str ));
+   
+   owner = str;
+   return 1;
+}
+
+
+string GetOwner()
+{
+   return owner;
+}
+
+
+int SetCureSkill( int val )
+{
+   write_file( LOGFILE2, 
+      sprintf( "%s: %s hat Heilskill von %i auf %i geaendert.\n",dtime(time()), 
+      TP->name(), cureSkill, val ));
+   
+   cureSkill = val;
+   return 1;
+}
+
+
+int GetCureSkill()
+{
+   return cureSkill;
+}
+
+
+int SetSickCount( int val )
+{
+   write_file( LOGFILE2, sprintf( "%s: %s hat Krankheitswahrscheinlichkeit von "
+      "%i auf %i geaendert.\n", dtime(time()), TP->name(), sickCount, val ));
+   
+   sickCount = val;
+   return 1;
+}
+
+
+int GetSickCount()
+{
+   return sickCount;
+}
+
+
+int SetDefendTyp( int typ, int val )
+{
+   write_file( LOGFILE2, 
+      sprintf( "%s: %s hat den Schadenstyp %s von %i auf %i geaendert.\n",dtime(time()), 
+      TP->name(), DAM_TYPES[typ], defendDamage[typ], val ));
+   defendDamage[typ] = val;
+   
+   ENV(TO)->RemoveResistanceModifier(DAM_TYPES[typ]);
+   ENV(TO)->AddResistanceModifier( ([DAM_TYPES[typ]:to_float( -val ) / 100]), 
+                              DAM_TYPES[typ] );
+   return 1;
+}
+
+
+int GetDefendTyp( int typ )
+{
+   return defendDamage[typ];
+}
+
+
+int incDefend( string str )
+{
+   int i, inc, points, cost, total, next, nextDefend, smallest;
+   
+   object ob;
+   string typ, color;
+
+   notify_fail( "Versuch's mal mit: verinnerlich drache <Farbe>!\n" );
+   if( !str || sscanf( str, "%s %s", typ, color ) != 2 )
+   {
+      return 0;
+   }
+   
+   if( typ == "drache" || ( typ == "noseq" && query_wiz_level( TP ) > 1 ))
+   {
+      // In diesem Reset schon gemacht? Magier duerfen immer! 
+      if( alreadyInc && query_wiz_level( TP ) < 2 ) 
+      {
+         write( BS( "Du kannst Dich nicht genug konzentrieren, um das Erbe der "
+            + "Drachen zu verinnerlichen! Versuch es spaeter nochmal.\n" ));
+         return 1;
+      }
+      
+      // Krank? Na dann kann man nix machen!
+      if( isSick )
+      {
+         write( BS( "Waehrend Du an dieser seltsamen Erkrankung leidest, kannst "
+            "Du die Staerken der Drachen nicht weiter verinnerlichen.\n" ));
+         return 1;
+      }
+      
+      // Farbe suchen
+      inc = 0;
+      for( i = 1; i <= NUM_DAM_TYPES; i++ )
+      {
+         points += defendDamage[i];
+         if( DAM_COL[i] == color )
+            inc = i;
+      }
+      
+      // Farbe gefunden?
+      if( inc == 0 || inc > NUM_DAM_TYPES )
+      {
+         write( "Diese Farbe gibt es nicht! Versuche es mit einer Anderen nochmal"
+                "!\n" );
+         return 1;
+      }
+      
+      // Maximum schon erreicht?
+      if( defendDamage[inc] >= MAX_BONUS )
+      {
+         write_file( LOGFILE, 
+            sprintf( "%s: Versuch ueber das Maximum von %i Punkten beim Typ " 
+            + DAM_COL[inc] + " zu erhoehen.\n",dtime(time()), MAX_BONUS ));
+         
+         write( "Du kannst Dir das Erbe der Drachenfarbe nicht tiefer "
+                "verinnerlichen!\n");
+         return 1;
+      }
+      // Wird der Abstand zur naechst kleineren Farbe auch nicht zu gross
+      smallest = 99;
+      for( i = 1; i <= NUM_DAM_TYPES; i++ )
+      {
+         if( smallest > defendDamage[i] )
+             smallest = defendDamage[i];
+         
+         if( inc != i && defendDamage[i] <= defendDamage[inc] )
+         {
+            if( nextDefend < defendDamage[i] )
+            {
+               next = i;
+               nextDefend = defendDamage[i];
+            }
+         }
+         
+      }
+      if( smallest != defendDamage[inc] && defendDamage[inc] - nextDefend >= MAX_DIV )
+      {
+         if( !next )
+         {
+            write( BS( "Du kannst diese Drachenfarbe nicht tiefer "
+                  "verinnerlichen. Du musst vorher eine andere Farbe "
+                  "verinnerlichen!\n"));
+         }
+         else
+         {
+            write( BS( "Du kannst diese Drachenfarbe nicht tiefer verinnerlichen. "
+                 + "Du musst vorher " + CAP( DAM_COL[next] )+ " verinnerlichen!\n"));
+         }
+/*
+         write( "inc " + inc + " next " + next + " protect inc " 
+               + defendDamage[inc] + " protect next " + nextDefend 
+               + "\n" );
+*/               
+         return 1;
+      }
+      
+      // Haben wir Schuppen?
+      ob = present( "\nschupp", TP );
+      if( !ob ) 
+      {
+         notify_fail( BS( "Du hast ja gar keine Drachenschuppen.\n"));
+         return 0;
+      }
+      
+      // Kosten berechnen
+      for( i = 1; i <= defendDamage[inc]; i++ )
+      {
+         cost += i;
+      }
+      total = BEG_COST + cost * INC_COST;
+      
+      // Genug Schuppen?
+      if( ob->QueryProp( P_AMOUNT ) < total ) 
+      {
+         notify_fail( BS( "Du hast nicht genuegend Drachenschuppen, um Dir das "
+            + "Erbe der Drachen weiter zu verinnerlichen.\n"));
+         return 0;
+      }
+      
+      // Alles erfolgreich geprueft! 
+      // Dann erhoehen durchfueren
+      write( BS( "Du beginnst Dir das Erbe der Drachen in einer Medidation zu "
+         + "verinnerlichen.\n"));
+      
+      TP->SetProp( P_PARALYZED, ([
+         PARALYZE_TIME:25, 
+         PARALYZE_MSG:BS("Du befindest Dich in einer Medidation und kannst Dich "
+            +"nicht bewegen.\n"),
+         PARALYZE_END_OTHER: "",
+         PARALYZE_END:BS("Langsam erwachst Du aus der Trance. Du stellst fest, "
+            + "dass die Drachenschuppen verschwunden sind und sich Deine Haut "
+            + "veraendert hat.\n") ]) );
+      
+      // Fuer Magier: Nur wenn die echte Syntax (Zwecks tests: geht schneller)
+      if( typ == "drache" ) 
+      {
+         call_out( "seq1", 5, TP );
+      }
+      
+      write_file( LOGFILE, 
+         sprintf( "%s: Erhoeht von% @i",dtime( time() ), defendDamage ));
+      
+      ob->AddAmount( -total );
+      defendDamage[inc]++;
+      defendDamage[DAM_BODY] = to_int( 1 + ( points + 1 ) / NUM_DAM_TYPES );
+      sickCount+=SICK_INC_RATE;
+      
+      for( i = 1; i <= NUM_DAM_TYPES; i++ )
+      {
+         TP->RemoveResistanceModifier(DAM_TYPES[i]);
+         TP->AddResistanceModifier( ([DAM_TYPES[i]:to_float( -defendDamage[i] ) / 100]), 
+                                    DAM_TYPES[i] );
+      }
+      write_file( LOGFILE, 
+         sprintf( " auf% @i. Kosten: %i, Krankheit: %i %%\n", defendDamage, total, sickCount ));
+      
+      return 1;
+   }
+   return 0;
+}
+
+
+void seq1( object ob )
+{
+   if( !ob )
+      return;
+   
+   write( BS( "Du setzt Dich auf den Boden und breitest vor Dir die "
+      + "Ingredenzien, unzaehlige Drachenschuppen, aus.\n\n"));
+   say( TPN + " setzt sich auf den Boden und breitet Drachenschuppen aus.\n" );
+   
+   call_out( "seq2", 5, ob );
+}
+
+
+void seq2( object ob )
+{
+   if( !ob )
+      return;
+   
+   write( "Du schliesst die Augen und atmest tief durch....\n\n");
+   say( TPN + " schliesst die Augen und atmet tief ein.\n" );
+   
+   call_out( "seq3", 3 , ob );
+}
+
+
+void seq3( object ob )
+{
+   if( !ob )
+      return;
+   
+   write( "... und beginnst zu meditieren.\n\n");
+   say( TPN + " faellt in eine tiefe Trance.\n" );
+   
+   call_out( "seq4", 3, ob );
+}
+
+
+void seq4( object ob )
+{
+   if( !ob )
+      return;
+   
+   write( "Vor Deinem geistigen Auge stellst Du Dir einen maechtigen Drachen "
+      + "vor.\n\n" );
+   say( TPN + " sitzt regungslos da und atmet flach.\n" );
+   
+   call_out( "seq5", 3, ob );
+}
+
+
+void seq5( object ob )
+{
+   if( !ob )
+      return;
+   
+   write( BS( "Du dringst in das Innere des Drachens ein und erkennst das "
+      + "Wesen dieses Untieres.\n\n"));
+   say( TPN + " wirkt angespannt.\n" );
+   
+   call_out( "seq6", 3, ob );
+}
+
+
+void seq6( object ob )
+{
+   if( !ob )
+      return;
+   
+   write( "Immer weiter erkundest Du seine Staerken und seine Maechte.\n\n");
+   say( TPN + " beginnt leicht zu zittern und Schweiss steht auf " 
+      + TP->QueryPossPronoun( FEMALE, WESSEN ) + " Stirn.\n" );
+      
+   call_out( "seq7", 3, ob );
+}
+
+
+void seq7( object ob )
+{
+   if( !ob )
+      return;
+   
+   write( "Deine Meditation wird tiefer und Du faellst in Trance.\n\n");
+   say( BS( TPN + " bricht zusammen und ist ohnmaechtig. Du bemerkst, dass auf "
+      + TP->QueryPossPronoun( FEMALE, WESSEN ) + " Haut farbige "
+      + "Drachenschuppen wachsen.\n" ));
+   call_out( "seq8", 15, ob );
+}
+
+
+void seq8( object ob )
+{
+   if( !ob )
+      return;
+   
+   alreadyInc = 1;
+   
+   TP->SetProp( P_PARALYZED, 1 );
+}
+
+
+string extra_look()
+{
+   object en;
+   
+   if( en = environment( this_object()) )
+      if( query_once_interactive( en ) )
+         if( this_object()->QueryProp( P_WORN ) )
+            return BS( "Was ist das? " + en->Name( WESSEN ) + " Haut ist schuppig. "
+               + "Wuesstest Du es nicht besser, wuerdest Du " + TP->QueryPronoun( WEN ) 
+               + " fuer einen Drachen halten.\n");
+}
+
+string _query_info()
+{
+   return "\nWie wenn Du Dein Leben lang nichts anderes gemacht haettest, kannst Du "
+      + "Dich an ein Ritual erinnern mit dem Du das Wesen, die Macht und die "
+      + "Staerke der Drachen verinnerlichen kannst. Mit jedem Verinnerlichen "
+      + "bleibt ein kleiner Teil der Macht der Drachen permanent in Dir "
+      + "zurueck.\nDie Struktur der Schuppenhaut ist eigenartig. " + MakeResult();
+    
+}
+
+
+string MakeResult()
+{
+   int i, res, split;
+   string str, str2, str3, str4;
+   
+   str = "Du begutachtest Deine Drachenschuppenhaut ganz genau und stellst fest:\n\n";
+      
+   for( i = 0; i <= NUM_DAM_TYPES; i++ )
+   {
+      if( i != DAM_BODY )
+         res += defendDamage[i];
+   }
+   
+   split = MAX_BONUS * NUM_DAM_TYPES / 10;
+   
+   str += "Weiche hautfarbene Schuppen bedecken ";
+   if( res < split )
+   {
+      str += "vollstaendig";
+      str3 = "unbedeutende";
+   }
+   else if( res < split * 2 )
+   {
+      str += "beinahe vollstaendig";
+      str3 = "minimale";
+   }
+   else if( res < split * 3 )
+   {
+      str += "zu grossen Teilen";
+      str3 = "sehr leichte";
+   }
+   else if( res < split * 4 )
+   {
+      str += "grossflaechig";
+      str3 = "leichte";
+   }
+   else if( res < split * 5 )
+   {
+      str += "ungefaehr zur Haelfte";
+      str3 = "maessige";
+   }
+   else if( res < split * 6 )
+   {
+      str += "kleinflaechig";
+      str3 = "durchschnittliche";
+   }
+   else if( res < split * 7 )
+   {
+      str += "stellenweise";
+      str3 = "gute";
+   }
+   else if( res < split * 8 )
+   {
+      str += "selten";
+      str3 = "sehr gute";
+   }
+   else if( res < split * 9 )
+   {
+      str += "sehr selten";
+      str3 = "extrem gute";
+   }
+   else if( res < MAX_BONUS * NUM_DAM_TYPES )
+   {
+      str += "vereinzelt";
+      str3 = "ausgezeichnete";
+   }
+   else
+   {
+      str += "nicht mehr";
+      str3 = "perfekte";
+   }
+   
+   str += " Deinen Koerper.\n\n";
+   
+   split = MAX_BONUS / 10;
+   for( i = 0; i <= NUM_DAM_TYPES; i++ )
+   {
+      if( i != DAM_BODY )
+      {
+         if( defendDamage[i] == 0)
+            str2 = "nicht vorhanden";
+         else if( defendDamage[i] < split)
+            str2 = "kaum vorhanden";
+         else if( defendDamage[i] < split * 2 )
+            str2 = "extrem selten";
+         else if( defendDamage[i] < split * 3 )
+            str2 = "sehr selten";
+         else if( defendDamage[i] < split * 4 )
+            str2 = "selten";
+         else if( defendDamage[i] < split * 5 )
+            str2 = "nicht gerade haeufig";
+         else if( defendDamage[i] < split * 6 )
+            str2 = "haeufig";
+         else if( defendDamage[i] < split * 7 )
+            str2 = "viele";
+         else if( defendDamage[i] < split * 8 )
+            str2 = "sehr viele";
+         else if( defendDamage[i] < split * 9 )
+            str2 = "extrem viele";
+         else if( defendDamage[i] < MAX_BONUS )
+            str2 = "unglaublich viele";
+         else 
+            str2 = "vollstaendig";
+         
+         str += "Die magischen " + DAM_COLEN[i] + " Schuppen sind " + str2 + ".\n";
+      }
+      else
+      {
+         if( defendDamage[i] == 0 )
+            str4 = "nicht";
+         else if( defendDamage[i] < split )
+            str4 = "unwesentlich";
+         else if( defendDamage[i] < split * 2 )
+            str4 = "kaum";
+         else if( defendDamage[i] < split * 3 )
+            str4 = "geringfuegig";
+         else if( defendDamage[i] < split * 4 )
+            str4 = "etwas";
+         else if( defendDamage[i] < split * 5 )
+            str4 = "viel";
+         else if( defendDamage[i] < split * 6 )
+            str4 = "sehr viel";
+         else if( defendDamage[i] < split * 7 )
+            str4 = "wesentlich";
+         else if( defendDamage[i] < split * 8 )
+            str4 = "gewaltig";
+         else if( defendDamage[i] < split * 9 )
+            str4 = "extrem";
+         else if( defendDamage[i] < MAX_BONUS )
+            str4 = "unglaublich";
+         else 
+            str4 = "absolut";
+      }
+   }
+   
+   str += "\nDas Besinnen beherrscht Du ";
+   switch( cureSkill )
+   {
+      case 500..1000 : 
+         str += "so gut wie gar nicht"; 
+         break;
+      case 1001..1500: 
+         str += "fast gar nicht"; 
+         break;
+      case 1501..2000: 
+         str += "kaum"; 
+         break;
+      case 2001..2500: 
+         str += "sehr miserabel"; 
+         break;
+      case 2501..3000: 
+         str += "miserabel"; 
+         break;
+      case 3001..3500: 
+         str += "ziemlich schlecht"; 
+         break;
+      case 3501..4000: 
+         str += "schlecht"; 
+         break;
+      case 4001..4500: 
+         str += "maessig"; 
+         break;
+      case 4501..5000: 
+         str += "unterdurchschnittlich"; 
+         break;
+      case 5001..5500: 
+         str += "durchschnittlich"; 
+         break;
+      case 5501..6000: 
+         str += "ueberdurchschnittlich";
+         break;
+      case 6001..6500: 
+         str += "gut"; 
+         break;
+      case 6501..7000: 
+         str += "sehr gut"; 
+         break;
+      case 7001..7500: 
+         str += "ausgezeichnet"; 
+         break;
+      case 7501..8000: 
+         str += "hervorragend"; 
+         break;
+      case 8001..8500: 
+         str += "meisterhaft"; 
+         break;
+      case 8501..9000: 
+         str += "phaenomenal"; 
+         break;
+      case 9001..9500: 
+         str += "nahezu perfekt"; 
+         break;
+      case 9501..9999: 
+         str += "perfekt"; 
+         break;
+      case 10000: 
+         str += "absolut perfekt"; 
+         break;
+      default: 
+         str += "ueberhaupt nicht"; 
+   }
+   
+   str += ".\n\n" + BS( "In Summe gesehen schuetzt Dich Deinen "
+       + "Drachenschuppenhaut " + str4 + " besser als normale Haut und hat "
+       + "einige " + str3 + " Resistenzen.\n" );
+   
+   if( isSick ) 
+   {
+      str += "\n" + BS( "Du leidest ja an einer furchtbaren Krankheit! Das solltest "
+          + "Dich schnellstens auf die Staerken der Drachen besinnen.\n\n");
+   }
+   else
+      str += "\n";
+   
+   return str;
+}
+
+
+int ForceSick( string str )
+{
+   if( query_wiz_level( this_interactive() ) > 1 )
+   {
+      write( "Nun bist krank!" );
+      CheckSick();
+      return 1;
+   }
+   return 0;
+}
+
+
+int CheckSick() 
+{
+   int i;
+   
+   // Jedem Reset steigt die Wahrscheinlichkeit krank zu werden um 1% 
+   // Jedes mal "verinnerliche" steigt die Wahrscheinlichkeit krank zu werden 
+   // um SICK_INC_RATE 
+   // Bricht die Krankheit aus wird die Wahrscheinlichkeit auf 0% reduziert
+   
+   sickCount++;
+   
+   if( !isSick )
+   {
+      if( random( 100 ) < sickCount )
+      {
+         write_file( LOGFILE2, sprintf( "%s: Krankheit ausgebrochen bei %i %%.\n", 
+            dtime( time() ), sickCount ));
+         
+         isSick = 1;
+         flagCure = 1;
+         sickCount = 0;
+         
+         // Wenn man krank ist hat die Haut keine positive Wirkung
+         for( i = 1; i <= NUM_DAM_TYPES; i++ )
+         {
+            ENV(TO)->RemoveResistanceModifier(DAM_TYPES[i]);
+         }
+         
+         call_out( "sickDamage", SICK_DAMAGE_RATE / 2 + random( SICK_DAMAGE_RATE / 2 ), ENV(TO) );
+      }
+   }
+   return 1;
+   
+}
+
+
+void sickDamage( object ob )
+{
+   if( !ob || !isSick )
+      return;
+   
+   // Da passiert was laestiges
+   while( !findSickDamage())
+   {
+      // Notwendig!?
+   }
+   
+   call_out( "sickDamage", SICK_DAMAGE_RATE / 2 + random( SICK_DAMAGE_RATE / 2 ), ob );
+}
+
+
+int findSickDamage()
+{
+   int dam;
+   object tp;
+   
+   tp = ENV(TO);
+   ownerObj[0] = tp;
+
+   // Suche eine Strafe und fuehre diese aus
+   dam = 10 + random(10);
+   switch( random( 100 ))
+   {
+      case 90..99 : 
+         // Vergiftung
+         if( tp->QueryProp( P_POISON ) < 3 )
+         {
+            tell_object( tp,  BS("Deine Adern am Handgelenk sind seltsam verfaerbt. Du bist sicher: "
+               "Dein Blut ist vergiftet!\n"));
+            tell_room( ENV(tp), tp->name() + " hat offensichtlich eine Blutver"
+               "giftung!\n", ownerObj );
+            if( random( 100 ) <= SICK_DAM_PERCENT )
+            {
+               tp->AddPoison( 1 );
+            }
+            return 1;
+         }
+         break;
+      case 80..89 : 
+         // Erschoepfung
+         if( tp->do_exhaust( 100 + random( 100 ), 1 ))
+         {
+            tell_object( tp, "Du bist total erledigt! Du brauchst dringend eine Rast.\n");
+            tell_room( ENV(tp), tp->name() + " ist total erschoepft und braucht "
+               "dringend eine Pause!\n", ownerObj );
+            return 1;
+         }
+         break;
+      case 70..79 : 
+         // Weniger Hunger. 
+         if( tp->QueryProp( P_MAX_FOOD ) >= tp->QueryProp( P_FOOD ) + dam )
+         {
+            tell_object( tp, "Dir ist unglaublich uebel. Beinahe musst Du Dich "
+               "uebergeben!\n");
+            tell_room( ENV(tp), tp->name() + " ist kreidebleich und sieht aus "
+               "als ob " + QueryPronoun(WER) + " sich uebergeben muss!\n", ownerObj );
+            if( random( 100 ) <= SICK_DAM_PERCENT )
+            {
+               tp->eat_food( dam, 1 );
+            }
+            return 1;
+         }
+         break;
+      case 60..69 : 
+         // Weniger Durst 
+         if( tp->QueryProp( P_MAX_DRINK ) >= tp->QueryProp( P_DRINK ) + dam )
+         {
+            tell_object( tp, "Dir ist unglaublich uebel. Beinahe musst Du Dich "
+               "uebergeben!\n");
+            tell_room( ENV(tp), tp->name() + " ist kreidebleich und sieht aus "
+               "als ob " + QueryPronoun(WER) + " sich uebergeben muss!\n", ownerObj );
+            if( random( 100 ) <= SICK_DAM_PERCENT )
+            {
+               tp->drink_soft( dam, 1);
+            }
+            return 1;
+         }
+         break;
+      case 50..59 : 
+         // Mehr Alkohol
+         if( tp->QueryProp( P_MAX_ALCOHOL ) >= tp->QueryProp( P_ALCOHOL ) + dam )
+         {
+            tell_object( tp, "Du wankst als waerst Du betrunken!\n");
+            tell_room( ENV(tp), tp->name() + " wankt wie ein betrunkener Steuer"
+               "mann!\n", ownerObj );
+            if( random( 100 ) <= SICK_DAM_PERCENT )
+            {
+               tp->drink_alcohol( dam, 1);
+            }
+            return 1;
+         }
+      case 40..49 : 
+         if( tp->QueryProp( P_DISABLE_SPELLS ) < 60 )
+         {
+      	   tell_object( tp, "Du hast hohes Fieber und kannst Dich nicht mehr "
+      	      "konzentrieren!.\n" );
+      	   tell_room( ENV(tp), tp->name() + " hat einen Fieberschub und ist "
+      	      "total abwesend.\n", ownerObj );
+            if( random( 100 ) <= SICK_DAM_PERCENT )
+            {
+               tp->SetProp( P_DISABLE_SPELLS, tp->QueryProp( P_DISABLE_SPELLS ) + dam );
+            }
+            return 1;
+         }
+      case 30..39 : 
+         tp->do_damage( dam );
+         tell_object( tp, "Du hast Schuettelfrost und zitterst am ganzen Koerper!\n");
+         tell_room( ENV(tp), tp->name() + " zittert am ganzen Koerper!\n", ownerObj );
+         return 1;
+      case 20..29 : 
+         tp->do_damage( dam );
+         tell_object( tp, "Dei Koerper wehrt sich gegen die fremdartigen Schuppen!\n" );
+         tell_room( ENV(tp), tp->name() + " kruemmt sich vor Schmerzen.\n", ownerObj );
+         return 1;
+      case 10..19 : 
+         tp->do_damage( dam );
+         tell_object( tp, "Du fuehlst Dich furchtbar! Du musst krank sein.\n");
+         tell_room( ENV(tp), tp->name() + " sieht sehr krank aus!\n", ownerObj );
+         return 1;
+      default: 
+         tp->do_damage( dam );
+         tell_object( tp, "Deine Haut brennt wie Feuer!\n" );
+         tell_room( ENV(tp), tp->name() + " sieht furchtbar aus.\n", ownerObj);
+         return 1;
+      
+   }
+   return 0;
+}
+   
+
+int EndSick( string str )
+{
+   
+   notify_fail( "Auf was moechtest Du besinnen? Auf einen Drachen?\n" );
+   if( str == "auf drache"  || str == "drache" ||
+       str == "auf drachen" || str == "drachen" )
+   {
+      if( !isSick )
+      {
+         notify_fail( "Du bist doch gar nicht krank?!\n" );
+         return 0;
+      }
+      
+      if( flagCure > 0 || query_wiz_level( TP ) > 1 )
+      {
+         flagCure = 0;
+         
+         write( BS( "Du setzt Dich auf den Boden, schliesst Deine Augen und beginnst "
+            + "Dich zu besinnen.\n" ));
+         say( TPN + " setzt sich auf den Boden, schliesst die Augen und beginnt sich zu "
+            + "konzentrieren.\n" );
+            
+         TP->SetProp( P_PARALYZED, ([
+            PARALYZE_TIME:25, 
+            PARALYZE_MSG:BS("Du besinnst Dich gerade auf die Heilkraefte der Drache.\n"),
+            PARALYZE_END_OTHER: "",
+            PARALYZE_END:BS("Du oeffnest Deine Augen und stehst wieder auf.\n") 
+            ]) );
+         
+         
+         if( random(10501) < cureSkill )
+         {
+            if( query_wiz_level( TP ) > 1 )
+               call_out( "EndSickSuccess", 1, TP );
+            else
+               call_out( "EndSickSuccess", 10, TP );
+         }
+         else
+         {
+            if( query_wiz_level( TP ) > 1 )
+               call_out( "EndSickFailed", 1, TP);
+            else
+               call_out( "EndSickFailed", 10, TP);
+         }
+      }
+      else
+      {
+         write( BS( "Du kannst Dich nicht genug konzentieren. Versuch es spaeter "
+            + "nochmal.\n" ));
+         say( TPN + " versucht sich auf etwas zu besinnen kann sich aber nicht "
+            + "konzentrieren.\n" );
+      }
+      return 1;
+   }
+}
+
+
+void EndSickSuccess( object ob )
+{
+   int i;
+   
+   if( !ob )
+      return;
+   
+   TP->SetProp( P_PARALYZED, 1 );
+   
+   write( "Mit einem Laecheln stellst Du fest, dass Du geheilt bist.\n");
+   say( TPN + " macht nun einen wesentlich gluecklicheren Eindruck als zuvor.\n" );
+   isSick = 0;
+   
+   write_file( LOGFILE, sprintf( "%s: Krankheit erfolgreich geheilt.\n", 
+      dtime( time() )));
+   
+   // Wenn geheilt positive Wirkung wieder herstellen
+   for( i = 1; i <= NUM_DAM_TYPES; i++ )
+   {
+      TP->AddResistanceModifier( ([DAM_TYPES[i]:to_float( -defendDamage[i] ) / 100]), 
+                                 DAM_TYPES[i] );
+   }
+   
+   call_out( "AllowCure", SICK_SPELL_RATE, TP );
+}
+
+
+void EndSickFailed( object ob )
+{
+   if( !ob )
+      return;
+   
+   TP->SetProp( P_PARALYZED, 1 );
+   
+   write( "Verzweifelt stellst Du fest, dass es nicht funktioniert hat.\n");
+   say ( TPN + " sieht verzweifelt aus.\n");
+   
+   if( cureSkill < 10000 )
+   {
+      write( "Kopf hoch! Du lernst ja aus Deinen Fehlern.\n");
+      
+      cureSkill += ( 10000 - cureSkill ) / 40 + random(( 10000 - cureSkill ) / 40 ) + 1;
+      
+      if( cureSkill > 10000 )
+         cureSkill = 10000;
+      
+      write_file( LOGFILE, sprintf( "%s: Heilversuch gescheitert. Neuer Skill = %i.\n", dtime( time() ), cureSkill ));
+   }
+   else
+   {
+      write( "Du beherschst das Besinnen schon perfekt. Du kann nichts mehr lernen.\n");
+   }
+   
+   call_out( "AllowCure", SICK_SPELL_RATE, TP );
+}
+
+
+void AllowCure( object ob )
+{
+   if( !ob )
+      return;
+   
+   flagCure = 1;
+}
+

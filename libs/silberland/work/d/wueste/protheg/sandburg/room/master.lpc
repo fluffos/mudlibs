@@ -1,0 +1,194 @@
+/*
+** Masterfile fuer das Verwalten der Druidenwaechter und der Drachen
+**
+*/
+
+#include "../def.h"
+
+#define MAX_BRUNNEN 5
+#define DAUER 3600
+
+nosave mapping types=(["feuer":"Feuerball";DT_FIRE,
+                       "eis":"Froststrahl";DT_COLD, 
+                       "erz":"Erzstrahl";DT_BLUDGEON,
+		       "wasser":"Wasserstrahl";DT_WATER]);
+
+nosave mapping elementals=(["feuer":0,
+			   "eis":0,
+			   "erz":0,
+			   "wasser":0]);
+nosave string *brunnen=({});
+nosave int abgelaufen=1;
+
+query_prevent_shadow() { return 1; }
+
+int RegisterElemental(string str)
+{
+  string el;
+
+  if(!PO) return 0;
+
+  if(member(m_indices(elementals), str)==-1) return -1;
+
+  if(strlen(elementals[str])) return 0;
+  
+  elementals[str]=file_name(PO);
+  
+  DB("*** Sandburg registering Elemental: "+str+"\n");
+
+  return 1;
+}
+
+int RemoveElemental()
+{
+  string el;
+  object po;
+  
+  if(!objectp(po=PO)) return 0;
+  
+  el=po->QueryElement();
+  
+  if(member(m_indices(elementals), el)==-1) return -1;
+  
+  if(!strlen(elementals[el])) return -1;
+  
+  DB("*** Sandburg removing Elemental: "+el+"\n");
+  
+  elementals[el]=0;
+  
+  return 1;
+}
+
+void Spell(object pl)
+{
+  string *ind;
+  string el;
+  object w;
+
+  ind=m_indices(elementals);
+  el=ind[random(sizeof(ind))];
+  
+  if(!objectp(pl)) return;
+  
+  if(strlen(elementals[el]))
+    if(w=present("\n"+el,find_object(elementals[el])))
+      {
+	tell_object(pl, "Ein elementarer "+types[el,0]+
+		    " rast von Oben auf Dich zu!!\n");
+	tell_room(ENV(pl), "Ein elementarer "+types[el,0]+
+		  " rast von Oben auf "+pl->Name()+" zu!!\n",({pl}));
+      
+	pl->Defend(250+random(350), ({types[el,1]}),
+		   ([SP_SHOW_DAMAGE:1,SP_NAME:types[el]]), w);
+      }
+    else elementals[el]=0;
+}
+
+mapping QueryElementals()
+{
+  return elementals;
+}
+
+int RegisterBrunnen()
+{
+  object po;
+  string fname;
+  
+  if(!po=PO) return -3;
+
+  fname=file_name(po);
+
+  if(member(brunnen, fname)!=-1) return -2;
+
+  if(sizeof(brunnen)>MAX_BRUNNEN) return -1;
+
+  if(file_name(PO)!=fname) return -666;
+
+  brunnen+=({fname});
+
+  //DB("*** Sandburg - Brunnen registering in: "+explode(fname, "/")[<1]+"\n");
+
+  return 1;
+}
+
+int RemoveBrunnen()
+{
+  object po;
+  string fname;
+  
+  if(!po=PO) return -3;
+
+  fname=file_name(po);
+
+  if(member(brunnen, fname)==-1) return -2;
+
+  if(file_name(PO)!=fname) return -666;
+
+  brunnen-=({fname});
+
+  return 1;
+}
+
+string *QueryBrunnen()
+{
+  return brunnen;
+}
+
+void ResetNPCs()
+{
+  call_other(ROOM "turm_0_0_2" , "DoElemental");
+  call_other(ROOM "turm_0_6_2" , "DoElemental");
+  call_other(ROOM "turm_6_0_2" , "DoElemental");
+  call_other(ROOM "turm_6_6_2" , "DoElemental");
+  call_other(ROOM "hof_3_3_1" ,  "DoDragonHe");
+  call_other(ROOM "hof_3_3_1" ,  "DoDragonShe");
+}
+
+varargs void loadme(int flag)
+{
+  if(abgelaufen)
+    {
+      DB("*** Sandburg - Starting master-sequence "+(TP ? getuid(TP):"")+"\n");
+
+      ResetNPCs();
+
+      domainshout("\n\n\n\n"
+		  "Irgendetwas seltsames ist gerade mit der Sandburg passiert...\n"+
+		  (flag ? "Die Zeit ist abgelaufen...\n":"")+
+		  "Es scheint als wuerde eine neue Runde gestartet werden!\n"
+		  "\n\n\n", ROOM, 1);
+      
+      if(TP)
+	tell_object(TP,
+		    "\n\n\n\n"
+		    "Irgendetwas seltsames ist gerade mit der Sandburg passiert...\n"+
+		    (flag ? "Die Zeit ist abgelaufen...\n":"")+
+		    "Es scheint als wuerde eine neue Runde gestartet werden!\n"
+		    "\n\n\n");
+
+      call_out("zeitablauf", DAUER);
+
+      abgelaufen=0;
+    }
+}
+
+int is_in_burg(object who)
+{
+  if(!ENV(who)) return 0;
+  if(strstr(file_name(ENV(who)), ROOM)==-1) return 0;
+  
+  return 1;
+}
+
+void zeitablauf()
+{
+  object *inv;
+
+  abgelaufen=1;
+  
+  if(sizeof(inv=filter_array(users(), "is_in_burg")))
+    loadme(1);
+  else
+    DB("*** Keiner in der Sandburg! Master beendet.\n");
+}
+

@@ -1,0 +1,363 @@
+// QuestItem fuer Koerperteilequest
+#include "../def.h"
+
+inherit "std/thing";
+
+private int saege, hammer, oel;
+private string *teile, besorgt;
+
+private void setRandomTile() {
+  teile = ({ "", "", "", "", "", "" });
+
+  teile[TORSO]       = RACES[random(sizeof(RACES))];
+  teile[ARM_LINKS]   = RACES[random(sizeof(RACES))];
+  teile[ARM_RECHTS]  = RACES[random(sizeof(RACES))];
+  teile[BEIN_LINKS]  = RACES[random(sizeof(RACES))];
+  teile[BEIN_RECHTS] = RACES[random(sizeof(RACES))];
+  teile[HIRN]        = RACES[random(sizeof(RACES))];
+
+  besorgt = "";
+}
+
+public int QuerySaege() {
+  return saege;
+}
+
+public int QueryHammer() {
+  return hammer;
+}
+
+public int QueryOel() {
+  return oel;
+}
+
+public string liste() {
+  string str;
+  str = "Folgende Koerperteile sind zu besorgen:\n";
+
+  str += sprintf("- Torso (%s)%s\n", teile[TORSO], (test_bit(besorgt, TORSO)?" - erledigt":""));
+  str += sprintf("- Arm, links (%s)%s\n", teile[ARM_LINKS], (test_bit(besorgt, ARM_LINKS)?" - erledigt":""));
+  str += sprintf("- Arm, rechts (%s)%s\n", teile[ARM_RECHTS], (test_bit(besorgt, ARM_RECHTS)?" - erledigt":""));
+  str += sprintf("- Bein, links (%s)%s\n", teile[BEIN_LINKS], (test_bit(besorgt, BEIN_LINKS)?" - erledigt":""));
+  str += sprintf("- Bein, rechts (%s)%s\n", teile[BEIN_RECHTS], (test_bit(besorgt, BEIN_RECHTS)?" - erledigt":""));
+  str += sprintf("- Hirn (%s)%s\n", teile[HIRN], (test_bit(besorgt, HIRN)?" - erledigt":""));
+  return str+"\n";
+}
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+  saege=hammer=oel=0;
+  setRandomTile();
+
+//--Beschreibungen---------------------------------------------------------
+
+  SetProp(P_SHORT, "Ein altes Lederkoefferchen");
+  SetProp(P_LONG,
+    "Dieses alte Lederkoefferchen sieht aus wie eine Arzttasche. Es ist sehr "
+    "abgegriffen und da und dort mit Blutspritzern versehen. Doktor Frank "
+    "N. Stein hat einen kleinen Zettel mit einer Liste daran geheftet. Wenn "
+    "du alle aufgelisteten Koerperteile im Koefferchen hast, bring es zum "
+    "Doktor zurueck.\n@@inhalt@@");
+
+//--Namen------------------------------------------------------------------
+
+  SetProp(P_INFO, "");
+  SetProp(P_NAME, "Lederkoefferchen");
+  SetProp(P_NAME_ADJ, "alt");
+  SetProp(P_GENDER, NEUTER);
+  AddId(({QUESTOB_ID, "QUESTOBJ", "koefferchen", "koffer"}));
+
+//--Eigenschaften----------------------------------------------------------
+
+  SetProp(P_MATERIAL, MAT_LEATHER );
+  SetProp(P_WEIGHT, 0);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NODROP, 1);
+
+  AddReadDetail( ({"liste", "zettel"}), CLOSURE(liste));
+  AddSpecialDetail( ({"liste", "zettel"}), "liste");
+
+  AddCmd( ({"saege", "saeg"}), "cmd_saegen");
+  AddCmd( ({"lege", "leg", "gib", "gebe"}), "cmd_legen");
+  AddCmd( ({"knacke", "knack"}), "cmd_knacken");
+  AddCmd( ({"balsamiere", "balsamier"}), "cmd_einbalsamieren");
+  AddCmd( "gib|gebe&doktor|doktor frank|frank|stein|doktor stein&koffer|koefferchen|lederkoffer|lederkoefferchen", "cmd_geben");
+}
+
+public int cmd_geben(string str) {
+  object doktor;
+  if(!objectp(doktor=present("\ngeisterhaus_doktor", ENV(TP)))) {
+    write(BS("Der Doktor ist gar nicht hier!"));
+    return -1;
+  }
+
+  doktor->give_koffer(TO);
+  return 1;
+}
+
+
+public int cmd_einbalsamieren(string str) {
+  string was;
+  object ob;
+
+  notify_fail("Was willst du einbalsamieren?\n");
+  if(!str || str == "") return 0;
+  if(sscanf(str, "%s ein", was) != 1) return 0;
+
+  if(!QueryOel()) {
+    write(BS("Ohne Balsamieroel wird das nicht klappen!"));
+    return -1;
+  }
+
+  if(!objectp(ob=present(was, TP))) {
+    write(BS("Das hast du nicht bei dir!"));
+    return -1;
+  }
+
+  if(!ob->id(QUEST_KT_ID)) {
+    write(BS("Du kannst nur Koerperteile einbalsamieren."));
+    return -1;
+  }
+
+  if(ob->QueryProp("einbalsamiert")) {
+    write(BS("Das wurde bereits einbalsamiert."));
+    return -1;
+  }
+
+  ob->SetProp("einbalsamiert", 1);
+  ob->SetProp(P_SHORT, ob->QueryProp(P_SHORT) + " (einbalsamiert)");
+
+  write(BS("Du reibst " + ob->Name(WEN, 1) + " gut mit dem Balsamieroel ein."));
+  say(BS(TPN + " reibt " + ob->Name(WEN, 1) + " mit Balsamieroel ein."));
+  return 1;
+}
+
+private int cloneBodyPart(string was, string welches, string rasse, int level) {
+  object ob;
+
+  ob = clone_object(OBJ+sprintf("kt_koerperteil", was, welches));
+  if(ob->move(ENV(TP), M_NOCHECK) != 1) {
+    write(BS("Du saegst zwar, aber irgendwie kommt das Teil nicht ab."));
+    ob->remove(1);
+    return 0;
+  }
+  ob->SetValues(was, welches, rasse, level);
+  return 1;
+}
+
+public int cmd_knacken(string str) {
+  object leiche, ob;
+
+  notify_fail("Was willst du knacken?\n");
+  if(str != "schaedel von leiche") return 0;
+
+  if(!hammer) {
+    write(BS("Ohne Schaedelhammer kannst du den Schaedel nicht knacken."));
+    return -1;
+  }
+
+  if(!objectp(leiche = present("Leiche", ENV(TP)))) {
+    write(BS("Hier ist keine Leiche."));
+    return -1;
+  }
+
+  if(leiche->QueryProp("hirn_entnommen")) {
+    write(BS("Jemand hat das Hirn der Leiche bereits entnommen."));
+    return -1;
+  }
+
+  cloneBodyPart("hirn", 0, leiche->QueryProp(P_RACE), leiche->QueryProp(P_LEVEL));
+  write(BS("Mit einem gezielten Schlag knackst den den Schaedel und holst das Hirn heraus."));
+  say(BS(TPN + " knackt den Schaedel der Leiche und holt das Hirn heraus."));
+  leiche->SetProp("hirn_entommen", 1);
+
+  return 1;
+}
+
+public int cmd_legen(string str) {
+  string was, wo;
+  object ob;
+
+  notify_fail("WAS willst du WO hineinlegen?\n");
+  if(!str || str == "") return 0;
+  if(sscanf(str, "%s in %s", was, wo) != 2) return 0;
+  if(!id(wo)) return 0;
+
+  if(!objectp(ob=present(was, TP))) {
+    write(BS("Sowas hast du nicht bei dir."));
+    return -1;
+  }
+
+  if(ob->id(QUEST_HAMMER_ID)) {
+    if(hammer) {
+      write(BS("Das hast du bereits im Koefferchen."));
+      return -1;
+    }
+    write(BS("Du legst den Hammer in das Koefferchen."));
+    hammer = 1;
+    ob->remove(1);
+  } else if(ob->id(QUEST_SAEGE_ID)) {
+    if(saege) {
+      write(BS("Das hast du bereits im Koefferchen."));
+      return -1;
+    }
+    write(BS("Du legst die Knochensaege in das Koefferchen."));
+    saege = 1;
+    ob->remove(1);
+  } else if(ob->id(QUEST_OEL_ID)) {
+    if(oel) {
+      write(BS("Das hast du bereits im Koefferchen."));
+      return -1;
+    }
+    oel = 1;
+    write(BS("Du legst die Flasche mit Balsamieroel in das Koefferchen."));
+    ob->remove(1);
+  } else if(ob->id(QUEST_KT_ID)) {
+    if(teile[ob->QueryProp("bodypart")] != ob->QueryProp(P_RACE)) {
+      write(BS("Das Koerperteil ist von der falschen Spezies!"));
+      return -1;
+    }
+
+    if(test_bit(besorgt, ob->QueryProp("bodypart"))) {
+      write(BS("Das Koerperteil hast du bereits."));
+      return -1;
+    }
+
+    if(ob->QueryProp(P_LEVEL) < (TP->QueryProp(P_LEVEL)/2>25?25:TP->QueryProp(P_LEVEL)/2)) {
+      write(BS("Hm. Du denkst, dass dieses Koerperteil nicht stark genug ist. Suche ein besseres!"));
+      return -1;
+    }
+
+    besorgt = set_bit(besorgt, ob->QueryProp("bodypart"));
+
+    if(!ob->QueryProp("einbalsamiert")) {
+      call_out("decay_bodypart", 300, ob->QueryProp("bodypart"));
+    }
+
+    ob->remove(1);
+    write(BS("Du legst das Koerperteil in das Koefferchen und streichst es von der Liste."));
+  } else {
+    write(BS("Das gehoert da sicher nicht rein!"));
+    return -1;
+  }
+
+  return 1;
+}
+
+public void decay_bodypart(int type) {
+  tell_object(ENV(TO), BS(sprintf("Ein ekelhafter Verwesungsgeruch dringt aus dem Koefferchen. Als du es "
+                          "oeffnest erkennst du ein verwestes %s. Sofort wirfst du es weg.", BODY_PART_NAMES[type])));
+  besorgt = clear_bit(besorgt, type);
+}
+
+public int cmd_saegen(string str) {
+  string welches, was, wo;
+  object leiche;
+
+  if(!saege) {
+    write(BS("Ohne Knochensaege kannst du nicht saegen!"));
+    return -1;
+  }
+
+  notify_fail("Welchen Arm oder welches Bein willst du wo absaegen? (z.B. saege linken arm von leiche)\n");
+  if(!str || str == "") return 0;
+  if(sscanf(str, "%s %s von %s", welches, was, wo) != 3) return 0;
+
+  if(was != "bein" && was != "arm") {
+    write("Mit der Knochensaege kannst du nur Arme oder beine absaegen.\n");
+    return -1;
+  }
+
+  if(wo != "leiche") {
+    write("Halt! Halt! Nur von Leichen absaegen!\n");
+    return -1;
+  }
+
+  if(welches != "linkes" && welches != "linken" && welches != "rechten" && welches != "rechtes") {
+    write("Links oder rechts absaegen?");
+    return -1;
+  }
+
+  if(welches == "linkes" || welches == "linken") welches = "links";
+  if(welches == "rechtes" || welches == "rechten") welches = "rechts";
+
+  if(!objectp(leiche=present("Leiche", ENV(TP)))) {
+    write(BS("Aber hier ist doch keine Leiche zum Zersaegen!"));
+    return -1;
+  }
+
+  if(leiche->QueryProp(sprintf("koerperteile_abgesaegt_%s_%s", was, welches))) {
+    write(BS("Jemand hat das Teil schon abgesaegt."));
+    return -1;
+  }
+
+  if(!cloneBodyPart(was, welches, leiche->QueryProp(P_RACE), leiche->QueryProp(P_LEVEL))) return -1;
+
+  write(BS("Ritsche, ratsche saegst du ein Teil der Leiche ab."));
+  say(BS("Ritsche, ratsche saegt "+TPN+" ein Teil der Leiche ab."));
+
+  leiche->SetProp(sprintf("koerperteile_abgesaegt_%s_%s", was, welches), 1);
+
+  if(leiche->QueryProp("koerperteile_abgesaegt_arm_rechts") && leiche->QueryProp("koerperteile_abgesaegt_arm_links") && 
+     leiche->QueryProp("koerperteile_abgesaegt_bein_rechts") && leiche->QueryProp("koerperteile_abgesaegt_bein_links")) {
+      write(BS("Es bleibt nur der Torso der Leiche ueber."));
+      say(BS("Es bleibt nur der Torso der Leiche ueber."));
+
+      cloneBodyPart("torso", 0, leiche->QueryProp(P_RACE), leiche->QueryProp(P_LEVEL));
+  }
+
+  return 1;
+}
+
+public string inhalt() {
+  string str;
+
+  if(!saege && !hammer && !oel) {
+    return "Es ist komplett leer. Da fehlt doch sicher was!";
+  }
+
+  str = "Darin befindet sich: \n";
+
+  if(saege) {
+    str += "* Eine Knochensaege (saege <linken|rechten> <arm|bein> von leiche)\n";
+  }
+
+  if(hammer) {
+    str += "* Ein Schaedelhammer (knacke schaedel von leiche)\n";
+  }
+
+  if(oel) {
+    str +="* Balsamieroel (<balsamiere <koerperteil> ein)\n";
+  }
+
+  if(!oel || !hammer || !saege) {
+    str += "Irgendwas fehlt in diesem Koefferchen noch.";
+  } else if(oel && hammer && saege) {
+    str += "Du hast alles, was du brauchst beisammen. Jetzt musst du nur "
+           "noch alle Koerperteile sammeln!";
+  }
+  
+  return str;
+}
+
+public int AllDone() {
+  return test_bit(besorgt, TORSO) && test_bit(besorgt, ARM_LINKS) &&
+         test_bit(besorgt, ARM_RECHTS) && test_bit(besorgt, BEIN_LINKS) &&
+         test_bit(besorgt, BEIN_RECHTS) && test_bit(besorgt, HIRN);
+}
+
+public int SetAllDone() {
+  besorgt = set_bit(besorgt, TORSO);
+  besorgt = set_bit(besorgt, ARM_LINKS);
+  besorgt = set_bit(besorgt, ARM_RECHTS);
+  besorgt = set_bit(besorgt, BEIN_LINKS);
+  besorgt = set_bit(besorgt, BEIN_RECHTS);
+  besorgt = set_bit(besorgt, HIRN);
+  return 1;
+}

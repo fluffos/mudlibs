@@ -1,0 +1,291 @@
+//=========================================================================
+//
+// File:    truhe.c
+// Created by Ronja@SL
+//
+// Project: moor
+//
+//=========================================================================
+
+#include "../def.h"
+
+inherit "/std/container";
+
+private int open_key, lock_key, is_open, is_locked;
+
+void create()
+{
+  if(!is_clone(TO)) return;
+
+  ::create();
+
+  is_open = 0; is_locked = 0;
+  open_key = 0; lock_key = 0;
+
+  SetProp(P_SHORT,"Eine Truhe");
+  SetProp(P_LONG,
+    "Eine alte Truhe aus schwerem, stabilem Holz. Die Truhe ist mit "
+    "Bandeisen umwickelt, dadurch wird sie so gut wie unzerstoerbar. "
+    "Der Deckel ist mit grossen Scharnieren an der Truhe befestigt. "
+    "Vorne an der Truhe befindet sich ein grosses Schluesselloch. "
+  );
+
+  AddId( ({"truhe","eichentruhe","\nTRUHE"}) );
+  SetProp(P_NAME, "Truhe");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_VALUE, 0);
+  SetProp(P_WEIGHT, 200000);
+  SetProp(P_MATERIAL, ([MAT_OAK:70,MAT_IRON:30]) );
+
+  SetProp(P_MAX_WEIGHT, 750000);
+  SetProp(P_NOBUY, 1);
+  SetProp(P_NOSELL, 1);
+  SetProp(P_NOGET, "Die Truhe ist viel zu unhandlich und zu schwer zum mitnehmen.\n");
+  SetProp(P_CNT_STATUS, CNT_STATUS_CLOSED);
+  SetProp(P_CNT_KEY, "OMA_WETTERWACHSENS_SCHLUESSEL");
+
+  AddDetail( ({"schluesselloch","loch"}) ,
+    "Das ist ein ziemlich grosses Schluesselloch. Vielleicht kannst Du "
+    "ja hindurch schauen?"
+  );
+
+  AddDetail( ({"holz"}) ,
+    "Das Holz ist schwarz und sieht extrem stabil aus."
+  );
+
+  AddDetail( ({"eisen","bandeisen"}) ,
+    "Das Bandeisen verstaerkt die Truhe."
+  );
+
+  AddDetail( ({"deckel"}) ,
+    "Der wuchtige Deckel verschliesst die Truhe."
+  );
+
+  AddDetail( ({"scharniere","schnarnier"}) ,
+    "Die Scharniere an der Truhe sehen extrem stabil aus. "
+  );
+
+  AddCmd( CMD_OEFFNEN                                , "cmd_oeffnen");
+  AddCmd(({"schliess", "schliesse", "verschliesse"}) , "cmd_schliessen");
+  AddCmd(({"blick","blicke","schau","schaue"})       , "cmd_blicken");
+}
+
+void reset()
+{
+  ::reset();
+
+  if(is_open)
+  {
+    tell_room(ENV(TO),BS("Ploetzlich faellt der Deckel der Truhe "
+                         "herunter und das Schloss schnappt zu."));
+    SetProp(P_CNT_STATUS, CNT_STATUS_CLOSED);
+  }
+
+}
+
+int cmd_blicken(string str)
+{
+  object *items;
+
+  notify_fail("Wodurch willst Du blicken ?");
+
+  if(!str || str == 0) return 0;
+  if(!(str == "durch schluesselloch"   ||
+       str == "durchs schluesselloch"  ||
+       str == "durch loch"             ||
+       str == "durchs loch"            )) return 0;
+
+  if(TP->QueryProp(P_FROG))
+  {
+    TELLPLAYER(BS("Du bist viel zu klein, um durchs Schluesselloch zu "
+                  "schauen."));
+    return -1;
+  }
+
+  if(sizeof(all_inventory(TO)))
+  {
+    TELLPLAYER(BS("Du versuchst durch das Schluesselloch etwas in der Truhe "
+                  "zu erkennen, aber das ist natuerlich schwierig, weil es "
+                  "in der Truhe ja stockfinster ist. Du glaubst allerdings "
+                  "so etwas wie Waffen oder Ruestungen zu erkennen."
+    ));
+  }
+  else
+  {
+    TELLPLAYER(BS("Du versuchst durch das Schluesselloch etwas in der Truhe "
+                  "zu erkennen, aber das ist natuerlich schwierig, weil es "
+                  "in der Truhe ja stockfinster ist. Aber so wie es aussieht, "
+                  "ist die Truhe leer. Aber ganz mit Sicherheit kannst Du das "
+                  "natuerlich nicht sagen."
+    ));
+  }
+
+  TELLOTHERS(CTPN+" blickt durch das Schluesselloch in der Truhe.\n");
+  return 1;
+}
+
+int _set_cnt_status(int st)
+{
+  switch (st)
+  {
+    case CNT_STATUS_OPEN :
+      is_open = 1; is_locked = 0;
+      break;
+    case CNT_STATUS_CLOSED :
+      is_open = 0;
+      break;
+    case CNT_STATUS_LOCKED :
+      is_open = 0; is_locked = 1;
+      break;
+    default :
+      return -1;  // Fehlerstatus
+  }
+  SetProp(P_TRANSPARENT, is_open);
+  return Set(P_CNT_STATUS, st);
+}
+
+// Methode zum Abfragen des Container-Status
+int _query_cnt_status()
+{
+  if (is_locked)
+    return CNT_STATUS_LOCKED;
+  if (is_open)
+    return CNT_STATUS_OPEN;
+  else
+    return CNT_STATUS_CLOSED;
+  return -1;   // Fehlerstatus
+}
+
+// Methode zum Setzen eines Schluessels (wenn P_CNT_KEY gesetzt
+// wird, wird angenommen, dass ein Schluessel erforderlich ist)
+mixed _set_cnt_key(mixed key)
+{
+  if (stringp(key))
+  {
+    open_key = lock_key = 1;
+    return Set(P_CNT_KEY, ([CNT_STATUS_OPEN:key,CNT_STATUS_LOCKED:key]));
+  }
+  else if (mappingp(key))
+  {
+    open_key = stringp(key[CNT_STATUS_OPEN]);
+    lock_key = stringp(key[CNT_STATUS_LOCKED]);
+    return Set(P_CNT_KEY, key);
+  }
+  else
+    return -1;  // Fehlerstatus
+}
+
+// short() ueberschreiben, damit der Status mitausgegeben wird:
+string short()
+{
+  string sh;
+
+  if (QueryProp(P_INVIS)) return 0;
+
+  return "";
+
+  if (sh = QueryProp(P_SHORT))
+    if (is_open)
+      return process_string(sh) + " (geoeffnet).\n";
+    else
+      return process_string(sh) + (is_locked?" (ab":" (") + "geschlossen).\n";
+}
+
+// long() ueberschreiben, damit der Status mitausgegeben wird:
+varargs string long()
+{
+  string descr, inv_descr;
+
+  descr = process_string(QueryProp(P_LONG));
+  if(!QueryProp(P_TRANSPARENT))
+    return descr+capitalize(QueryPronoun())+" ist "+(is_locked?"ab":"")+"geschlossen.\n";
+
+  inv_descr = make_invlist(PL, all_inventory(ME));
+  if (inv_descr != "")
+    descr += capitalize(QueryPronoun()) + " ist geoeffnet und enthaelt:\n" + inv_descr;
+  else
+    descr += capitalize(QueryPronoun()) + " ist geoeffnet und leer.\n";
+  return descr;
+}
+
+int cmd_oeffnen(string str)
+{
+  object key;
+  string was, wem;
+
+  notify_fail("Was moechtest Du oeffnen?\n");
+  if (!str || str=="") return 0;
+
+  notify_fail("Das kannst Du nicht oeffnen.\n");
+  if(sscanf(str, "%s mit %s", was, wem) < 2)
+  {
+    was = str;
+    wem = "";
+  }
+
+  if(!id(was)) return 0;
+
+  if(is_open)
+  {
+    TELLPLAYER(Name(WER,1)+" ist doch schon geoeffnet!\n");
+    return -1;
+  }
+
+  if(wem == "")
+  {
+    TELLPLAYER(Name(WER)+" ist abgeschlossen.\n");
+    return -1;
+  }
+
+  if(!(key = present(wem, TP)))
+  {
+    TELLPLAYER("So einen Schluessel hast Du doch gar nicht.\n");
+    return -1;
+  }
+
+  if(!key->id(QueryProp(P_CNT_KEY)[CNT_STATUS_OPEN]))
+  {
+    TELLPLAYER(key->Name(WER,1)+" passt nicht zu "+name(WEM,1)+".\n");
+    return -1;
+  }
+
+  TELLPLAYER(BS("Du steckst "+key->name(WEN,1)+" in das Schluesselloch "
+                "der Truhe und versuchst den Schluessel zu drehen. "
+                "Das geht ziemlich schwer. Ploetzlich gibt es einen Ruck, "
+                "der Schluessel dreht sich einmal im Schloss und zerbricht "
+                "dabei an der Kerbe in zwei Teile. Veraergert wirfst Du "
+                "die unbrauchbaren Teile fort. Wenigstens das Schloss ist offen. "
+                "Mit einem leisen Knarren oeffnest Du den Deckel der Truhe. "
+  ));
+
+  TELLOTHERS(BS(TPN+" steckt einen Schluessel in das Schluesselloch in der Truhe "
+             "und dreht den Schluessel mit aller Gewalt herum, wobei selbst dieser "
+             "stabile Eisenschluessel in zwei Teile zerbricht. Veraechtlicht wirft "+
+             TPN+" die beiden Teile fort. Anscheinend ist das Schloss aber offen, "
+             "denn "+TPN+" oeffnet den Deckel mit einem leisen Knarren. "
+  ));
+
+  key->remove();
+  SetProp(P_CNT_STATUS, CNT_STATUS_OPEN);
+  MOORMASTER->Msg(TPUID+" oeffnet die Truhe im Hexenhaus");
+  return 1;
+}
+
+int cmd_schliessen(string str)
+{
+  object key;
+
+  notify_fail("Was moechtest Du schliessen?\n");
+  if (!str || str=="" || !id(str)) return 0;
+
+  TELLPLAYER(BS("Du gibst dem Truhendeckel einen leichten Schubs und er faellt "
+                "mit einem lauten Knall wieder auf die Truhe und das Schloss "
+                "schnappt zu."
+  ));
+
+  TELLOTHERS(BS(TPN+" gibt dem Truhendeckel einen leichten Stoss, worauf dieser "
+                "mit einem lauten Knall zufaellt und das Schloss zuschnappt. "
+  ));
+  SetProp(P_CNT_STATUS, CNT_STATUS_CLOSED);
+  return 1;
+}

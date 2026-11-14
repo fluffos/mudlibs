@@ -1,0 +1,199 @@
+// TEST Schattenpanzer - Heilitem
+// Schattenwelt
+// von Wraz / Mendralim
+
+// Features:
+// HP & SP Heilung in Schattenwelt (schwaecher auch ueberall anders)
+// Verhindert ungewollten "Teleport" aus der Schattenwelt bei Tod (siehe ROOM schatten.c)
+
+#include "../def.h"
+
+inherit "std/armour";
+inherit ZONE "std/std.lpc";
+
+#include "/p/daemon/itemd/itemd.h"
+#include <properties.h>
+#include <combat.h>
+
+// zuvor: healing = 5, outside_shadow_div = 2, xp_div = 4000000;
+int healing = 2, outside_shadow_div = 2, xp_div = 2000000;
+// xp_div: ein hoererer Wert reduziert die XP-Kosten fuer Spieler (XP-Kosten fuer Heilung)
+
+void create()
+{
+  if (!is_clone(this_object()))
+    return;
+  ::create();
+
+  call_other(TO,"first_set",previous_object());
+
+  SetProp(P_SHORT, "Ein TEST Schattenpanzer");
+  SetProp(P_LONG,
+          "Schatten stroemen durch die Luft und formen einen farblosen Panzer, der aus Nichts "
+          "zu bestehen scheint. Je laenger Du ihn betrachtest, umso schwerer faellt es Dir, "
+          "ihn zu beschreiben, aber er ist eindeutig ein Panzer.");
+  SetProp(P_NAME, "TEST Schattenpanzer");
+  SetProp(P_GENDER, MALE);
+  AddId(({"panzer", "schattenpanzer", "testschattenpanzer", "\nwrazschattenpanzer"}));
+
+  SetProp(P_ARMOUR_TYPE, AT_ARMOUR);
+  SetProp(P_MATERIAL, ([MAT_SHADOW:100]));
+  SetProp(P_WEIGHT, 1);
+  SetProp(P_WIELD_RESTRICTIONS, ([P_XP:100000000]) );
+  SetProp(P_MAGIC, 1);
+  SetProp(P_ITEMD_TMPMAGIC, ({3, 3}) );
+  find_object(ITEMD)->RegisterNewItem(this_object(), TIME_ID);
+
+  SetProp("federgewichtsbalsam", 1000); // Federgewichtsbalsam wirkt hier nicht
+
+  SetProp(P_INFO, "Dieser Panzer ist aussergewoehnlich. \nEr verankert Deinen Leib "
+                  "in den Schatten. \nDu fuehlst das Verlangen, "
+                  "Dich auf die Schatten zu fokussieren.");
+
+  AddDetail(({"nichts"}),
+            "Der Panzer ist leichter als eine Feder und durchscheinend, und dennoch, "
+            "kannst Du ihn nehmen, tragen und ablegen.");
+
+  AddCmd("fokussiere&auf&schatten", "heilung_fokus");
+}
+
+// ------------------------------------------------------------------------------
+varargs string set_vars(int new_healing, int new_outside_shadow_div, int new_xp_div)
+{
+  if (new_healing)
+    healing = new_healing;
+  if (new_outside_shadow_div)
+    outside_shadow_div = new_outside_shadow_div;
+  if (new_xp_div)
+    xp_div = new_xp_div;
+
+  return sprintf("updated to: %d, %d, %d", healing, outside_shadow_div, xp_div);
+}
+
+// ------------------------------------------------------------------------------
+void first_set(object caller)
+{
+  object room;
+  int diff;
+  int osd;
+
+  if(!is_clone(TO)) return;
+
+  /*if(!caller) caller = previous_object();
+  if(!caller) caller = TO;
+
+  if(caller && ENV(caller)) room = ENV(caller);
+  if(room && ENV(room)) room = ENV(room);
+  if(room && ENV(room)) room = ENV(room); // Unwahrscheinlich, aber moeglich: in einem Container
+
+  // Difficulty mit Raumnummer in den Schatten abfragen
+  if(room) diff = difficulty_int(call_other(room, "get_room_no"));
+  else diff = 0;*/
+
+  // Difficulty abfragen
+  diff = QueryProp("shadow_difficulty_int");
+
+  // outside_shadow_div
+  osd = 9-diff;
+  osd = osd < 2 ? 2 : osd;
+
+  // Werte abhaengig von Difficulty setzen
+  // Beispiele:
+  // Raumnummer - healing - outside_shadow_div - xp_div
+  //    1 - 1 -  9 - 2 000 000 -> heilt 1 hp/heart_beat in Schattenwelt
+  //   10 - 3 -  7 - 2 571 428 -> heilt bis zu 3 hp/h_b in Schattenwelt
+  //  100 - 5 -  5 - 3 142 856 -> heilt bis zu 5 hp, ausserhalb bis zu 1 hp
+  // 1000 - 8 -  2 - 3 999 998 -> heilt bis zu 8 hp, ausserhalb bis zu 4 hp
+  set_vars(1+diff,osd,2000000+diff*285700);
+
+  SetProp(P_AC, 15+3*diff); // max AC 36
+  SetProp(P_VALUE, 62500*(diff+1));
+}
+
+// ------------------------------------------------------------------------------
+int in_schattenwelt(object player)
+{
+  if (strstr(file_name(ENV(player)), ROOM) == -1)
+    return 0;
+  else
+    return 1;
+}
+
+// ------------------------------------------------------------------------------
+void heart_beat()
+{
+  object player;
+  int hp, max_hp, add_hp, sp, max_sp;
+  int xp, xp_cost;
+
+  player = environment(TO);
+
+  if (!player || !interactive(player) || !TO->QueryProp(P_WORN))
+  {
+    set_heart_beat(0);
+    return;
+  }
+
+  hp = player->QueryProp(P_HP);
+  max_hp = player->QueryProp(P_MAX_HP);
+  add_hp = random(healing*(1+!random(100)*10)) + 1;
+
+  sp = player->QueryProp(P_SP);
+  max_sp = player->QueryProp(P_MAX_SP);
+
+  if (max_hp < hp + add_hp && max_sp < sp + add_hp)
+    return;
+
+  if (!in_schattenwelt(player))
+  {
+    if (!random(5))
+      player->Message(BS("In dieser Umgebung stroemt Dein Schattenpanzer nur schwach."));
+    add_hp /= outside_shadow_div;
+  }
+
+  xp = player->QueryProp(P_XP);
+  xp_cost = xp / xp_div * add_hp;
+
+  player->AddHp(add_hp);
+  player->AddSp(add_hp);
+  player->AddExp(-xp_cost);
+}
+
+// ------------------------------------------------------------------------------
+int heilung_fokus()
+{
+  if (!TO->QueryProp(P_WORN))
+    return 0;
+  if (set_heart_beat(1))
+  {
+    if(!QueryProp("first_activation")) SetProp("first_activation",time());
+    write(BS("Dein Schattenpanzer umstroemt Dich."));
+    return 1;
+  }
+  else if (set_heart_beat(0))
+  {
+    write(BS("Dein Schattenpanzer umstroemt Dich nun ruhiger."));
+    return 1;
+  }
+}
+
+// ------------------------------------------------------------------------------
+void reset()
+{
+  ::reset();
+
+  if (!is_clone(TO))
+  {
+    TO->remove();
+    return;
+  }
+
+  if (obj_expired(TO,QueryProp("first_activation")))
+  {
+    TO->remove();
+    return;
+  }
+
+  if (set_heart_beat(0))
+    write(BS("Dein Schattenpanzer umstroemt Dich nun ruhiger."));
+}

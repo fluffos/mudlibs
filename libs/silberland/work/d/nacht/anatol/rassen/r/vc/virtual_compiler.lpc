@@ -1,0 +1,79 @@
+/* virtual compiler for sequence rooms
+ * ____________________________________(i) Anatol@Silberland (1999-2012) */
+
+#pragma strict_types
+
+#include <v_compiler.h>
+#include <wizlevels.h>
+#include "../../defines.h"
+
+#define VIRTUAL ROOM "vc/"
+#define SAVEFILE VIRTUAL "vc.o"
+#define VCROOM VIRTUAL "vc_room"
+
+string * save_list;
+private nosave mapping objects;
+private nosave string last_loaded_file;
+private nosave string compiler_path;
+
+public void create() {
+  object o;
+
+  seteuid(getuid(this_object()));
+  compiler_path=VIRTUAL;
+  if (!restore_object(SAVEFILE))
+    save_list=({});
+  else rm(SAVEFILE);
+  objects=([]);
+  for (;sizeof(save_list);save_list=save_list[1..])
+    if (o=find_object("/"+save_list[0])) 
+      objects+=([explode(save_list[0], "/")[<1]:o]);
+}
+
+public string Validate(string file) { 
+  string n;
+  if ((!stringp(file))||(!file)||(!(file[<2..]==".lpc"?file=file[0..<3]:file))||
+       (file[0..7]!="wechsel:")||((!find_object(VIRTUAL+file))&& 
+       ((!this_player())||(getuid(this_player())!=file[8..])))|| 
+       (strlen(file[8..])<1))
+    return 0;
+  else return file;
+}
+
+public string CustomizeObject() {
+  string file, owner, dummy;
+  int room_no, house_no;
+  if (stringp(last_loaded_file)) 
+    file=last_loaded_file;
+  else file = Validate(explode(file_name(previous_object()), "/")[<1]);
+  if ((!file) && ((VIRTUAL+file)!=file_name(previous_object()))) return 0;
+  last_loaded_file = 0;
+  return file;
+}
+
+public mixed compile_object(string file) {
+  object o;
+
+  if (!(file=Validate(file)))
+    return;
+  objects = filter_mapping(objects, lambda(({'k}), ({#'objectp, 
+         ({#'[, ({#'objects}), 'k})})));
+  last_loaded_file = file;
+  if ((o=find_object(VIRTUAL+file)) || (o=clone_object(VCROOM)))
+    objects[file]=o;
+  return o;
+}
+
+public int sort_by_filename(object a, object b) {
+  return file_name(a)>file_name(b);
+}
+public mixed QueryObjects() { return sort_array(m_values(objects)-({0}),
+    "sort_by_filename"); }
+
+public int remove() {
+  if (sizeof(save_list=map_array(QueryObjects(),#'file_name)))
+    save_object(SAVEFILE);
+  destruct(this_object());
+  return 1 ;
+}
+

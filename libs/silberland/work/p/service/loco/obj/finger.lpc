@@ -1,0 +1,425 @@
+/* a finger
+ * Original (c) 14.03.1993 by Taube @Nightfall
+ * Umsetzung fuer Morgengrauen 09.08.1993 by Loco
+ * Version MG 1.10 deutsch.
+
+   Verwendung ausserhalb von Morgengrauen ist gestattet unter folgenden
+   Bedingungen:
+   - Benutzung erfolgt auf eigene Gefahr. Jegliche Verantwortung wird
+     abgelehnt.
+   - Auch in veraenderten oder abgeleiteten Objekten muss ein Hinweis auf
+     die Herkunft erhalten bleiben.
+   Ein Update-Service besteht nicht.
+
+ * 29.Okt 1993 Seherversion.
+ * spaeter auch fuer externen Aufruf verwendbar gemacht
+ * 13.Okt .plan und .project koennen auch in ~loco/plans sein.
+ * 15.Jan 1994 angepasst an neues Speicherformat
+ * 02-05.Dez94 -n, -p
+ * 28. Sep 95 Ausgabe modifiziert Hadra@AL
+ * Fre, 24. Nov 1995, 14:56:11 Ausgabe modifiziert Gundur@AL 
+ * 05-12-1995 Mupfel@AnderLand	Ausgabe modifiziert, Titel gefixed
+ * 04-03-1996 Hadra  Unsichtbare Magier altern nicht mehr
+ * 05-09-1996 Woody  bei leerem Titel wird jetzt fuer Seher++ nicht mehr
+ *                   automatisch der Gildentitel angezeigt.
+ * 05-27-1996 Woody  Ausgabe von Vorfahr/Kindern bei Magiern
+ *                   (Anregung von Hadra@AL)
+ * 09-24-1996 Woody  parentmaster ist jetzt in secure; parent check auf != ""
+ * 09-30-1996 Woody  Einlog-Datum wird angezeigt, Idle-Zeit raufgerueckt,
+ *                   Anzeige des ersten Logins
+ * 21.01.1997 Woody  TOWND verwenden fuer Anzeige der Organisation
+ * 22.01.1997 Woody  P_CALLED_FROM_IP(_NAME), ip, ipnum, country(), etc.
+ * 31.01.1997 Woody  age bei Netztoten aus den Properties holen...
+ * 12.02.1997 Woody  Questmagier als solche anzeigen
+ * 23.02.1997 Feyaria Weibliche Magiertiteln
+ * 10.03.1997 Woody  Magier sehen bei banished Namen auch den Grund
+ */
+
+inherit "/std/thing";
+
+#include <config.h>
+#include <properties.h>
+#include <wizlevels.h>
+#include <new_skills.h>
+#include "/secure/parentmaster.h"
+
+#define HBINT    2   /* interval between two heart_beats in seconds */
+#define MINIDLE 60   /* minimum idle time in seconds to be stated idle */
+#define TP this_player()
+#define wiz (local && IS_LEARNER(TP))
+#define seer (local && IS_SEER(TP))
+#define TW(x) tell_object(find_player("woody"), x)
+
+mapping properties;
+int age;
+nosave string parent, *children;
+
+
+create()
+{
+  (::create());
+  SetProp(P_IDS,({"finger","tfinger"}));
+  SetProp(P_SHORT,"Ein Finger");
+  SetProp(P_NAME,"Finger");
+  SetProp(P_GENDER,1);
+  /* SetProp(P_LONG,) removed, see QueryLong() below. */
+  SetProp(P_VALUE,0);
+  SetProp(P_AUTOLOADOBJ, 1);
+  SetProp(P_NOBUY,1);
+  SetProp(P_NODROP,1);
+  seteuid(getuid());
+}
+
+init()
+{
+  (::init());
+  if(this_player() == environment() && IS_SEER(this_player())) {
+    add_action("Finger", "tfinger");
+    add_action("Finger","finger");
+  }
+}
+
+long()
+{
+  return
+    "Mit dem Finger kannst Du ein paar Informationen auch ueber ausgeloggte "+
+    "Spieler\nabfragen. Befehl ist:\ntfinger <name> oder finger <name>\n";
+}
+
+Finger(string str)
+{
+  if(!str || str=="") { notify_fail("Wen denn?\n"); return 0; }
+  else
+    return finger_single(str,1);
+}
+
+string wiz_level_name(int level, int gender, string name)
+{
+  if( name=="Feyaria" ) return "Erzmagierin fuer Balance";
+  if( name=="Eros" ) return "Erzmagier, Sheriff";
+  if( name=="Berx") return "Erzseher";
+  
+  if (gender==FEMALE)
+  {
+    switch (level)
+    {
+      case 15 : return "Learner";
+      case 20 : return "Gastmagierin";
+      case 21 : return "Neumagierin";
+      case 25..29 : return "Regionsmitarbeiterin";
+      case 30..34 : return "Questmagierin";
+      case 35 : return "Magierin fuer besondere Aufgaben";
+      case 44..46 : return "Regionsmagierin";
+      case 55 : return "Weise";
+      case 65..67 : return "Erzmagierin";
+      case 111 : return "Mudgoettin";
+      default  : return "Magierin";
+    }
+  }
+  else
+  {
+    switch (level)
+    {
+      case 15 : return "Learner";
+      case 20 : return "Gastmagier";
+      case 21 : return "Neumagier";
+      case 25..29 : return "Regionsmitarbeiter";
+      case 30..34 : return "Questmagier";
+      case 35 : return "Magier fuer besondere Aufgaben";
+      case 44..46 : return "Regionsmagier";
+      case 55 : return "Weiser";
+      case 65..67 : return "Erzmagier";
+      case 111 : return "Mudgott";
+      default  : return "Magier";
+    }
+  }
+}
+
+varargs finger_single(string str,int local)
+{
+  mixed  *userinfo;
+  string ip,text,ipnum,filename,guild,title;
+  int wizlevel,playerlevel,idle,pos,tmp,noplan,last;
+  int i;
+  mixed h,data;
+  object player;
+
+  str=lower_case(str);
+  text="";
+
+  h=new_explode(str," ");
+  if (member(h,"-n")>=0) noplan=1;
+  if (member(h,"-p")>=0) noplan=0;
+  h=(h-({"-n","-p"}));
+  if (!sizeof(h)) {
+    text="Du solltest schon sagen, wer Dich interessiert!\n";
+    if (local) return write(text),0;
+    else return text;
+  }
+  str=h[0];
+  sscanf(str, "gast%d%s", i, text);
+  // dh. fuer Gast1..n ist d != 0 und text ein Leerstring
+  if (!i || text != "")  // sonst Namen auf nonalpha chars durchchecken
+  {
+    for (i=0; i < strlen(str); i++)
+    {
+      if (str[i] < 'a' || str[i] > 'z')
+      {
+        text="Also, so ("+str+") heisst bestimmt kein Spieler hier!\n";
+        if (local) return write(text),0;
+        else return text;
+      }
+    }
+  }
+
+  /* does this player exist? */
+  userinfo=MASTER->get_userinfo(str);
+  player=find_player(str);
+
+  if(!userinfo && !player) {
+    if (text="/secure/master"->QueryBanished(str))
+      text=
+      "Hoppla - dieser Name ist reserviert oder gesperrt (\"gebanisht\") !\n"+
+      (wiz ? "Grund: "+text+"\n" : "");
+    else
+      text="Hmm... diesen Namen gibt es im SilberLand nicht.\n";
+    if (local) return write(text),0;
+    else return text;
+  }
+
+  if (player)
+    properties=player->QueryProperties();
+  else if (find_netdead(str)) {
+    properties=find_netdead(str)->QueryProperties();
+    age=properties[P_AGE];
+  }
+  else
+    restore_object("/save/"+str[0..0]+"/"+str);
+  if (!properties)
+  {
+    text+="Mist!!! Das Einlesen der Daten klappt nicht wie es soll :-(\n";
+    properties=0;
+    if (!local)
+      return text;
+    write(text);
+    return 1;
+  }
+  guild=properties[P_GUILD];
+  if (!guild || guild=="")
+    guild="abenteurer";
+  title=properties[P_TITLE];
+  if (!query_wiz_level(player) && (!title || title==""))
+    title=(properties[P_GUILD_TITLE])[guild];
+  if (!stringp(title)) title="";
+  ipnum=properties[P_CALLED_FROM_IP];
+  ip=properties[P_CALLED_FROM_IP_NAME] || ipnum;
+  if(player)
+  {
+    if (ipnum=query_ip_number(player))
+    {
+      ip=query_ip_name(player);
+      if ((idle=query_idle(player))<MINIDLE)
+	idle=0;
+    }
+    age=(IS_WIZARD(player) && player->QueryProp(P_INVIS))
+      ? player->QueryProp(P_INVIS)
+      : player->QueryProp(P_AGE);
+  }
+  else
+    // idle=file_date("/save/"+str[0..0]+"/"+str+".o");
+    idle=properties[P_LAST_LOGOUT];
+
+  wizlevel=query_wiz_level(str);
+  last=properties[P_LAST_LOGOUT]||file_time("/save/"+str[0..0]+"/"+str+".o");
+
+  /* output routine for all */
+  if(player)
+  {
+    if(ipnum && (wiz || !(player->QueryProp(P_INVIS))))
+    {
+      text+=capitalize(str)+" ist seit "+
+        (time()-player->QueryProp(P_LAST_LOGIN) >= 86400 ?
+          dtime(player->QueryProp(P_LAST_LOGIN))[0..23] :
+          dtime(player->QueryProp(P_LAST_LOGIN))[19..23]) +
+        // dtime(player->QueryProp(P_LAST_LOGIN))+
+        // timediff(time()-player->QueryProp(P_LAST_LOGIN))+
+        " Uhr eingeloggt"+
+        (idle ? " (Idle-Zeit: "+timediff(idle)+")" : "")+
+        ",\n"+
+	"und zwar von: "+
+	(wiz ?
+          sprintf("%s (%s) [%s]\nOrganisation: %s.\n",
+                  ip, ipnum, country(ipnum), TOWND->description(player))
+          : country(ipnum)+".\n");
+      // if(idle) text+="Idle-Zeit: "+timediff(idle)+"\n";
+    }
+    else
+      text+=capitalize(str)+" ist nicht eingeloggt.\nZuletzt eingeloggt von: "+
+	(wiz ?
+         sprintf("%s (%s) [%s].\nOrganisation: %s.\n",
+                 ip, ipnum, country(ipnum), TOWND->description(player))
+         : country(ipnum)+".\n")+
+	"Zuletzt ausgeloggt: "+dtime(last)+" ("+timediff(time()-last)+")\n";
+  }
+  else
+  {
+    text+=capitalize(str)+" ist nicht eingeloggt.\nZuletzt eingeloggt von: "+
+      (wiz ?
+        sprintf("%s (%s) [%s].\nOrganisation: %s.\n",
+                ip, ipnum, country(ipnum),
+                TOWND->description(ipnum))
+        : country(ipnum)+"\n")+
+      "Zuletzt ausgeloggt: "+dtime(last)+" ("+timediff(time()-last)+")\n";
+  }
+  text+="Voller Name: "+(((h=properties[P_PRESAY]) && h!="") ? h+" " : "")+
+    capitalize((h=properties[P_NAME]) ? h : str)+" "+
+    ((h=title) ? h : "")+"\n";
+  if (properties[P_GHOST]) text+="Hoppla, ein Geist!\n";
+  text+="Rasse: "+((h=properties[P_RACE]) ? h :
+		   ( (userinfo && pointerp(userinfo) && sizeof(userinfo)>4 &&
+		      stringp(userinfo[4]) &&
+		      sizeof(h=explode(userinfo[4],"/"))>2 ) ?
+		     (((h=capitalize(h[2]))=="Human") ?
+		      "Mensch" : (h=="Dwarf" ? "Zwerg" : h)) : "<keine>"))+
+		      ",  Gilde: "+capitalize(guild)+ 
+		      ",  Geschlecht: "+({"neutral ?!","maennlich","weiblich","<verdammt seltsam>"})[properties[P_GENDER]]+"\n"+
+		      (seer ? "Alter: "+timediff(age*HBINT)+",  " : "")+
+		      (wizlevel>=10?"Magierlevel: "+wizlevel+", "+
+		       wiz_level_name(wizlevel,properties[P_GENDER], properties[P_NAME]):
+		       ("Spielerlevel: "+properties[P_LEVEL]+( wizlevel ? ", Seher" : "" )+
+		       ( wizlevel && properties[P_GENDER]==FEMALE ? "in" : "")))+
+                      (userinfo && pointerp(userinfo) ?
+                       sprintf("\nDatum des ersten Login: %s",
+                       (userinfo[5] > 0 ?
+                         dtime(userinfo[5]) :
+                         "vor dem 1. Okt 1996")) :
+                       "")+
+			 (wiz ? ("\nE-Mail-Adresse: "+((h=properties[P_MAILADDR]) ? h : "keine")+"\n") : "\n");
+  if (properties[P_MARRIED])
+    text+="Verheiratet mit: "+capitalize(properties[P_MARRIED])+"\n";
+  if (properties[P_AWAY])
+    text+="z.Z. abwesend, Grund  : "+properties[P_AWAY]+"\n";
+  if (h=properties[P_TESTPLAYER])
+  {
+    text+=capitalize(str)+" ist Testspieler"+
+      (properties[P_GENDER]==FEMALE ? "in" : "");
+    if (stringp(h)) text+=" von "+h;
+    text+=".\n";
+  }
+  if ( h=properties[P_SECOND])
+  {
+    text+=capitalize(str)+" ist Zweitspieler"+
+      (properties[P_GENDER]==FEMALE ? "in" : "");
+    if (stringp(h)) text+=" von "+h;
+    text+=".\n";
+  }
+  if (h=properties[P_DEADS])
+  {
+    text+="Bisher bereits "+properties[P_DEADS]+" mal gestorben!\n";
+  }
+     else
+	{
+	text+="Bisher nicht gestorben!\n";
+	}
+  if(seer&&h=properties[P_KILLS])    //PK's nur fuer Seher und Mags
+	{
+	text+=properties[P_KILLS]+" PLAYERKILLS!!\n";
+	}
+  if (wizlevel>=10)
+  {
+    parent = PARENTMASTER->GetParent(str);
+    children = map_array(PARENTMASTER->GetChildren(str), #'capitalize);
+    // ich werde hier den guild string missbrauchen um nicht noch mehr
+    // lokale variablen zu haben  -hadra-
+    if (parent||sizeof(children))
+      guild = capitalize(str) + " ist ";
+    else
+      guild = "";
+    if (parent && parent!="")
+    {
+      guild += ((properties[P_GENDER]==MALE)?"Sohn":
+               (properties[P_GENDER]==FEMALE)?"Tochter":"ein Nachkomme")+
+                " von "+capitalize(parent);
+    }
+    if (sizeof(children))
+    {
+      if (parent) guild += " und ";
+      guild += ((properties[P_GENDER]==MALE)?"Vater":
+               (properties[P_GENDER]==FEMALE)?"Mutter":"Vorfahr")+
+                " von ";
+      tmp = sizeof(children);
+      if (tmp > 1)
+      {
+        guild += implode(children[0..<2], ", ")+
+          " und "+ children[tmp-1];
+      }
+      else
+      {
+        guild += children[0];
+      }
+    }
+    if (strlen(guild)) guild += ".";
+    text += break_string(guild, 78, "", 1);
+  }
+  if (/*wiz && */userinfo)
+  {
+    data=userinfo[3];
+    if (sizeof(data)) 
+      text+="Regionsmagier von     : "+implode(map_array(data,#'capitalize),", ")+".\n";
+    data="/secure/master"->get_domain_homes(str);
+    if (sizeof(data))
+      text+="Regionsmitarbeiter von: "+implode(map_array(data,#'capitalize),", ")+".\n";
+  }
+  filename="/players/"+str+"/.project";
+  if(file_size(filename)>=0)
+    text+="Projekt: "+explode(read_file(filename), "\n")[0]+"\n";
+  else
+  {
+    filename="/p/service/loco/plans/"+str+".project";
+    if(file_size(filename)>=0)
+      text+="Projekt: "+explode(read_file(filename), "\n")[0]+"\n";
+  }
+  if (seer && !noplan)
+  {
+    filename="/players/"+str+"/.plan";
+    if(file_size(filename)>=0)
+      text+="Plan:\n"+read_file(filename);
+    else
+    {
+      filename="/p/service/loco/plans/"+str+".plan";
+      if(file_size(filename)>=0)
+	text+="Plan:\n"+read_file(filename);
+      else 
+	text+="Keine .plan-Datei.\n";
+    }
+  }
+  properties=0;
+  if (!local)
+    return text;
+  write(text);
+  return 1;
+}
+
+
+string timediff(int time)
+{
+  string ret;
+  
+  ret="";
+  if(time>=86400) {
+    ret+=time/86400+"d ";
+    time%=86400;
+  }
+  if(time<36000) ret+="0";
+  ret+=time/3600+":";
+  time%=3600;
+  if(time<600) ret+="0";
+  ret+=time/60+":";
+  time%=60;
+  if(time<10) ret+="0";
+  ret+=time+"";
+  return ret;
+}
+
+
+

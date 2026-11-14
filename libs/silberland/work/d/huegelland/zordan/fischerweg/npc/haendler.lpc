@@ -1,0 +1,269 @@
+/* 29.05.2012 07:54:40 (Anatol) - Wege Halle<-->Laden haben nicht gepasst */
+
+inherit "std/npc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <bank.h>
+#include "../def.h"
+
+#define WAYFIND "/d/ebene/Midas/way/myway1"
+
+#define TO_DERLIM 1
+#define TO_DORF   2
+#define DO_SELL   3
+#define DO_BUY    4
+
+#define LADEN "/d/huegelland/raballion/hobbits/room/laden"
+#define HALLE "/d/wasser/woody/fischerdorf/room/markthalle"
+
+/*   - ALT
+#define LADEN_TO_HALLE ({                                               \
+  "nordwesten","suedwesten","suedwesten","sueden","osten","osten",      \
+  "suedosten","osten","suedosten","sueden","suedosten","osten",         \
+  "sueden","suedosten","osten","osten","suedosten","osten",             \
+  "suedosten","sueden","suedosten","osten","osten","osten","suedosten", \
+  "sueden" })
+
+#define HALLE_TO_LADEN ({                                               \
+  "norden","nordwesten","westen","westen","westen","nordwesten",        \
+  "norden","nordwesten","westen","nordwesten","westen","westen",        \
+  "nordwesten","norden","norden","nordwesten","westen","nordwesten",    \
+  "westen","nordwesten","westen","westen","norden","nordosten",         \
+  "nordosten","suedosten" })  
+*/  
+
+#define LADEN_TO_HALLE ({                                               \
+  "nordwesten","suedwesten","suedwesten","sueden","osten","osten",      \
+  "suedosten","suedosten", "osten", "sueden","suedosten","osten",       \
+  "sueden","suedosten","osten","osten","suedosten","osten",             \
+  "suedosten","sueden","suedosten","osten","osten","osten","suedosten", \
+  "sueden" })
+
+#define HALLE_TO_LADEN ({                                                \
+   "norden","nordwesten","westen","westen","westen","nordwesten",        \
+   "norden","nordwesten","westen","nordwesten","westen","westen",        \
+   "nordwesten","norden","norden","nordwesten","westen","westen",        \
+   "nordwesten","nordwesten","westen","westen","norden","nordosten",     \
+  "nordosten","suedosten" })
+
+nosave int todo,hb,hbstatus;
+nosave *weg;
+
+void create() {
+  if (!is_clone(TO)) return;
+  ::create();
+
+  todo=TO_DORF;
+  weg=({ });
+  hb=0;
+  hbstatus=0;
+
+  SetProp(P_SHORT, "Ein Fischhaendler");
+  SetProp(P_LONG,
+    "Dieser Fischhaendler bringt die gefangenen Fische aus dem Fischerdorf "
+    "nach Derlim und versorgt so die Hobbits. Sein Alter kann ueber diesen "
+    "harten Job nicht hinwegtaeuschen. Er traegt auch bis auf die Fische "
+    "nicht viel.");
+  SetProp(P_NAME, "Fischhaendler");
+  SetProp(P_GENDER, MALE);
+  AddId(({"fischhaendler", "haendler", "NOWIMPY", "Messerexperte"}));
+
+  create_default_npc(20);
+  enable_commands();
+  TO->SetProp(P_HB,1);
+  SetProp(P_HANDS, ({" mit einem Fisch",
+    QueryProp(P_HANDS)[1]+100,DT_BLUDGEON}));
+  SetProp(P_RACE, "Hobbit");
+  SetProp(P_SIZE, 90+random(21));
+  SetProp(P_ALIGN, 400);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_RESISTANCE_STRENGTHS , 
+    ([DT_FIRE:       0.1, DT_COLD:      -0.1, DT_WATER:  -1.0, DT_AIR:    -1.0, 
+      DT_LIGHTNING: -0.2, DT_EXPLOSION: -0.1, DT_SOUND:  -0.1, DT_LIGHT:  -0.5,
+      DT_ELECTRIC:  -0.1, DT_ACID:      -0.1, DT_POISON: -0.1, DT_TERROR: -0.1,
+      DT_HOLY:      -0.1, DT_UNHOLY:    -0.1, DT_MAGIC:  -0.2 ]) );
+
+  SetProp(P_MSGIN, "kommt an. Es riecht hier auf einmal so komisch nach Fisch");
+  SetProp(P_MSGOUT, "geht weiter");
+  SetProp(P_MMSGIN, "kommt an. Es riecht hier auf einmal so komisch nach Fisch");
+  SetProp(P_MMSGOUT, "geht weiter");
+
+  SetProp(P_DIE_MSG,  " faellt tot zu Boden. Es riecht nach noch mehr Fisch.\n");
+
+  AddInfo(DEFAULT_INFO, "sagt: Ich habe keine Zeit fuer Dich.\n");
+  AddInfo("zordan", "Zordan hat mich erschaffen.","sagt: ");
+
+  SetProp( P_REJECT, ({ REJECT_GIVE,
+    "Der Fischhaendler will @WEN nicht.\n" }) );
+
+  SetProp(P_SPELLRATE,40);
+
+  AddSpell(1,200,
+    "Der Fischhaendler haut Dir einen Fisch mitten ins Gesicht.\n",
+    "Der Fischhaendler haut Dir einen Fisch mitten ins Gesicht.\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(1,300,
+    "Der Fischhaendler haut Dir einen Fisch mitten ins Gesicht.\n",
+    "Der Fischhaendler haut Dir einen Fisch mitten ins Gesicht.\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1]));
+
+  AddSpell(1,400,
+    "Der Fischhaendler haut Dir einen Fisch mitten ins Gesicht.\n",
+    "Der Fischhaendler haut Dir einen Fisch mitten ins Gesicht.\n",
+     DT_BLUDGEON,([SP_SHOW_DAMAGE:1]));
+
+  SetChats(1, ({
+    "Der Fischhaendler begruesst Dich freundlich.\n",
+    "Der Fischhaendler riecht ein wenig streng.\n",
+    "Der Fischhaendler sortiert seine Fische.\n",
+    "Der Fischhaendler rueckt seine Fische wieder zurecht.\n",
+    "Der Fischhaendler sagt: Bitte stoer mich nicht bei meiner Arbeit.\n",
+    "Der Fischhaendler sucht den Weg nach Derlim.\n",
+    "Der Fischhaendler sucht den Weg zum Fischerdorf.\n",
+    "Der Fischhaendler stoehnt unter seiner Last.\n"}) );
+
+  SUID;
+  CLONEME( "/p/weapon/knife/messer" );
+  command("zuecke messer");
+  CLONEME( "/p/armour/armour/weste" );
+  CLONEME( "/d/wasser/stahldorn/outlaw/obj/hasch" );
+  if(random(100)>50) CLONEME( "/p/armour/boots/lederschuhe" );
+  CLONEME( "/p/armour/ring/ring" );
+  command("trage alles");
+}
+
+heart_beat() {
+  object ob,env,fisch;
+  string fenv;
+  int i;
+  TO->SetProp(P_HB,hbstatus);
+  ::heart_beat();
+  TO->SetProp(P_HB,hbstatus);
+  // tell_object(find_living("zordan"),"OK: Heartbeat!\n");
+  env=MENV;
+  if(!env) return;
+  if(ob=present("angler",env)) {
+    if(present("fisch",ob)) {
+      tell_room(env,BS(
+        "Der Fischhaendler kauft dem Angler seine Fische ab."));
+      while(fisch=present("fisch",ob)) {
+        fisch->move(ME,M_NOCHECK);
+        tell_room(env,BS(
+          "Der Angler gibt dem Fischhaendler "+fisch->name(WEN,2)+"."));
+      }
+    }
+  }
+  fenv=file_name(env);
+  if(fenv==HALLE && todo==TO_DORF) {
+    todo=DO_BUY;
+    return;
+  }
+  if(fenv==HALLE && todo==DO_BUY) {
+    tell_room(env,BS(
+      "Der Fischhaendler kauft ein paar Fische und verstaut sie sicher."));
+    for(i=0;i<5+random(5);i++) {
+      switch(random(5)) {
+        default:
+        case 0..3:
+          ob=clone_object("/d/dschungel/feyaria/tijara/obj/fisch"+
+                          (string)(random(4)+1));
+          break;
+        case 4:
+          ob=clone_object("/d/wasser/angrox/insel/obj/hering");
+          break;
+      }
+      if(ob) {
+        ob->move(ME,M_NOCHECK);
+      }
+    }
+    todo=TO_DERLIM;
+    weg=HALLE_TO_LADEN;
+    return;
+  }
+  if(fenv==LADEN && todo==TO_DERLIM) {
+    todo=DO_SELL;
+    return;
+  }
+  if(fenv==LADEN && todo==DO_SELL) {
+    todo=TO_DORF;
+    command("verkaufe alles");
+    // command("nimm alles");
+    call_out("get_all",0);
+    weg=LADEN_TO_HALLE;
+    return;
+  }
+  hb++;
+  if(hb<4) return;
+  hb=0;
+  if(sizeof(weg)>0) {
+    if(!command(weg[0])) {
+      if(todo==TO_DORF) {
+        weg=call_other(WAYFIND, "find_way", fenv, HALLE);
+      }
+      if(todo==DO_SELL) {
+        weg=call_other(WAYFIND, "find_way", fenv, LADEN);
+        todo=TO_DERLIM;
+      }
+      if(todo==TO_DERLIM) {
+        weg=call_other(WAYFIND, "find_way", fenv, LADEN);
+      }
+      if(todo==DO_BUY) {
+        weg=call_other(WAYFIND, "find_way", fenv, HALLE);
+        todo=TO_DORF;
+      }
+    } else {
+      weg=weg[1..];
+    }
+    return;
+  }
+  if(todo==TO_DORF) {
+    weg=call_other(WAYFIND, "find_way", fenv, HALLE);
+  }
+  if(todo==DO_SELL) {
+    weg=call_other(WAYFIND, "find_way", fenv, LADEN);
+    todo=TO_DERLIM;
+  }
+  if(todo==TO_DERLIM) {
+    weg=call_other(WAYFIND, "find_way", fenv, LADEN);
+  }
+  if(todo==DO_BUY) {
+    weg=call_other(WAYFIND, "find_way", fenv, HALLE);
+    todo=TO_DORF;
+  }
+  return;
+}
+
+void get_all() {
+  if(MENV && file_name(MENV) == LADEN) {
+    command("nimm alles");
+  }
+}
+
+init() {
+  ::init();
+  if (living(TP) && interactive(TP)) {
+    TO->SetProp(P_HB,1);
+    hbstatus=1;
+  }
+}
+
+reset() {
+  int geld;
+  object ob;
+  ::reset();
+  if(!is_clone(TO)) return;
+  TO->SetProp(P_HB,0);
+  hbstatus=0;
+  if(ob=present("geld",ME)) {
+    geld=ob->QueryProp(P_AMOUNT);
+    ZENTRALBANK->PayIn(geld);
+    ob->remove();
+  }
+}
+
+int _query_wimpy() { return 0; }

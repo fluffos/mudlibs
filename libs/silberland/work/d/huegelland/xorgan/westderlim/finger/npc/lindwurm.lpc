@@ -1,0 +1,656 @@
+// Xorgan@SilberLand
+// Riesenlindwurm
+// 2004-06-10
+
+#include "../def.h"
+
+#define DRAGON_NAME1 "Zerz"
+#define DRAGON_NAME2 "Kerk"
+#define DRAGON_NAME3 "Sers"
+#define DRAGON_NAME_FULL DRAGON_NAME1 + "-" + DRAGON_NAME2 + "-" + DRAGON_NAME3
+
+#define LOGPATH MYLOG + "lindwurm/" 
+#define ATTACK_SPEED     300
+#define ATTACK_WEAKEST     1
+#define ATTACK_STRONGEST   2
+#define FLUCHT_RAUM REG_WESTWEG + "room/weg01.lpc"
+#define WARTE_RAUM ROOM + "warteraum.lpc"
+
+inherit "/p/std/dragons/dragon";
+inherit "/std/npc/spells";
+
+#include <npc.h>
+#include "../CheckPlayer.h"
+
+object SearchTarget( int pTyp );
+void Attack( object enemy );
+void AngriffZusatz( object enemy, string spruch, int zeit );
+void AngriffZusatzEnde( object enemy, int noattack, int nospell );
+void KopfSchuettel( object enemy, string kname, int lauf );
+
+int attackCount;
+
+void create( ) 
+{
+   if(!is_clone(TO)) 
+      return;
+   
+   ::create();
+
+   SetProp( P_SHORT, DRAGON_NAME_FULL + ", der dreikoepfige Riesenlindwurm" );
+   SetProp( P_LONG,
+      "Auf seinen gewaltigen Hort liegt der uralte Riesenlindwurm - ein Drache von "
+      "gewaltigen Ausmassen mit DREI Koepfen. Auf sechs mit scharfen und langen "
+      "Krallen bewehrte Beine ruht der gewaltige mit Schuppen besetze Koerper des "
+      "Ungetuems. Die zwei kraeftigen Fluegel haben wohl eine Spannweite von 15 Meter. "
+      "Sein gut und gerne 10 Meter langer Schwanz endet in einer flachen dreieckigen "
+      "und rasierklingenscharfen Hornplatte, einer Waffe vor der man sich in Acht "
+      "nehmen muss. Ebenso lange sind die drei maechtigen Haelse, die zu jedem der drei"
+      " beeindruckenden Koepfen fuehren. Jeder dieser Koepfe ist eines Diamantdrachen "
+      "wuerdig. Schmal und lange ist das mit dolchlangen Zaehnen bewehrte Maul. Aus den "
+      "an der Spitze liegenden Nasenloechern steigt beissender Rauch auf. Die zwei "
+      "gelben Echsenaugen mit den schmalen schwarzen Schlitzen durchbohren dich "
+      "foermlich. Meterlange Hoerner ragen rueckwaerts aus der Stirn." );
+
+   SetProp( P_NAME, DRAGON_NAME_FULL );
+   SetProp( P_GENDER, MALE );
+   SetProp( P_TEMPERATURE_RANGE, ([T_RANGE_MIN:-50,T_RANGE_MAX:50] ) );
+   AddId( ({ DRAGON_NAME_FULL, "riesenlindwurm", "lindwurm", "NOWIMPY", "NO_MUMMY", 
+             "NOCONTROL", "NOFALLDOWN" }) );
+   RemoveId( "drache" );
+   set_living_name( "riesenlindwurm" );
+
+   create_default_dragon( 5, 12, 2, 60 );
+   SetProp( P_HANDS, ({" mit drei gewaltigen Maeulern und seinem Schwanz",
+      QueryProp(P_HANDS)[1],DT_RIP}) );
+   SetProp( P_MAX_HP, QueryProp( P_MAX_HP ) * 2 );
+//   SetProp( P_BODY, 500 );
+   SetProp( P_XP, QueryProp( P_XP ) * 2 ); // Bonus fuer Spells
+//   SetProp( P_RACE, "Drache" );
+   SetProp( P_SIZE, 2550 );  // Vom der Schwanzspitze bis zur Schnauze
+   SetProp( P_WEIGHT, 2000000 ); // 2 Tonnen sind wohl nicht zu viel
+//   SetProp( P_ALIGN, 0 );
+   SetProp( P_MAX_HANDS, 6 ); 
+   SetProp( P_HEAL, 0 ); // Eigentlich sollte das sofort toetlich sein!
+   SetProp( P_AGGRESSIVE, 0 );
+   SetProp( P_WIMPY, 0 );
+   
+   SetProp( P_RESISTANCE_STRENGTHS, 
+    ([DT_FIRE:      -1.0, DT_COLD:      -0.5, DT_WATER:  -0.5, DT_AIR:    -0.5, 
+      DT_LIGHTNING: -0.5, DT_EXPLOSION: -0.5, DT_SOUND:  -0.5, DT_LIGHT:  -0.5,
+      DT_ELECTRIC:  -0.5, DT_ACID:      -1.0, DT_POISON: -0.5, DT_TERROR: -0.5,
+      DT_HOLY:      -0.5, DT_UNHOLY:    -0.5, DT_MAGIC:  -1.0, DT_MIND:   -1.0 ] )  );
+
+//   SetProp(P_ARTICLE, 0 );
+//   SetProp( P_NOMAGIC, 50 );
+
+   SetProp( P_MSGIN, "landet auf seinem beeindruckenden Hort" );
+   SetProp( P_MSGOUT, "breitet seine gewaltigen Schwingen aus und fiegt #." );
+   SetProp( P_MMSGIN, "landet auf seinem beeindruckenden Hort" );
+   SetProp( P_MMSGOUT, "breitet seine gewaltigen Scheingen aus und fiegt davon." );
+
+   SetProp( P_DIE_MSG,  " bricht toetlich getroffen ueber seinem Hort zusammen.\n" );
+   SetProp( P_NOCORPSE, 0  );
+   SetProp( P_MURDER_MSG, "Das naechste mal bist Du dran!" );
+   SetProp( P_KILL_NAME, DRAGON_NAME_FULL );
+   SetProp( P_KILL_MSG, "HMMMM! Der kleine Imbiss schmeckte nicht schlecht!" );
+   
+   SetProp(P_LOG_INFO, "xorgan/lindwurm.info");
+   
+   AddInfo( DEFAULT_INFO, "versteht Dich doch gar nicht.\n" );
+
+   SetProp( P_REJECT, ({ REJECT_DESTRUCT, DRAGON_NAME_FULL + " begutachtet Deine "
+      "Sachen und fuegt es danach seinem Hort hinzu.\n" }) );
+   
+   SetProp( P_SPELLRATE, 66 ); 
+   AddSpell(10,2000,
+      DRAGON_NAME1 + " speit Dir aetzende Saeure entgegen.\n",
+      DRAGON_NAME1 + " speit @WEN aetzende Saeure entgegen.\n",
+      DT_ACID,([SP_SHOW_DAMAGE:1]));
+   AddSpell(10,2000,
+      DRAGON_NAME2 + " huellt Dich in eine Giftwolke ein.\n",
+      DRAGON_NAME2 + " huellt @WEN in eine Giftwolke ein.\n",
+      DT_POISON,([SP_SHOW_DAMAGE:1]));
+   AddSpell(10,2000,
+      DRAGON_NAME3 + " schleudert Dir einen gewaltigen Blitz entgegen.\n",
+      DRAGON_NAME3 + " schleudert @WEN einen gewaltigen Blitz entgegen.\n",
+      DT_LIGHTNING,([SP_SHOW_DAMAGE:1]));
+
+
+   /*
+   AddDetail( ({ "" }), 
+      "" );
+   
+   AddInfo( ({"",""}),
+      ".",
+      "sagt: " );
+   
+   SetProp( P_LOG_INFO, "npc_logfile" );
+   
+   AddSpell( 1,0,
+      ".\n",
+      ".\n",
+      DT_,( [SP_SHOW_DAMAGE:1] ) );
+   
+   SetChats( 3, ({
+      ".\n"})  );
+   SetAttackChats( 10, ({
+      ".\n"})  );
+   */
+   SUID;
+   /*
+   CLONEME( WEAPON ""  );
+   command( "zuecke waffe" );
+   CLONEME( ARMOUR ""  );
+   command( "trage alles" );
+   */
+}
+
+
+object SearchTarget( int pTyp )
+{
+   int i, anz, ziel, hp;
+   object *enemy;
+   
+   if( pTyp == ATTACK_WEAKEST )
+      hp = 999999;
+   
+   ziel = -1;   
+   enemy = all_inventory( ENV( TO ));
+   
+   // Alles was lebt und nicht Magier ist, ist legitimes Ziel
+   // egal ob enemy oder nicht! da gibt es kein zuschauen!
+   for( i = 0; i < sizeof( enemy ); i++ )
+   {
+      if( interactive( enemy[i] ) && ( query_wiz_level( enemy[i] ) <= 2 || 
+          IsEnemy( enemy[i] )) )
+      {
+         // Moegliche Ziele zaehlen
+         anz++;
+         
+         if( pTyp == ATTACK_WEAKEST )
+         {
+            if( enemy[i]->QueryProp( P_HP ) < hp )
+            {
+               hp = enemy[i]->QueryProp( P_HP );
+               ziel = i;
+            }
+         }
+         else
+         {
+            if( enemy[i]->QueryProp( P_HP ) > hp )
+            {
+               hp = enemy[i]->QueryProp( P_HP );
+               ziel = i;
+            }
+         }
+      }
+   }
+   
+   if( anz < 3 )
+   {
+      // sind es weniger als 3 dann einen Schlag auf alle und rauswerfen
+      for( i = 0; i < sizeof( enemy ); i++ )
+      {
+         if( interactive( enemy[i] ) && ( query_wiz_level( enemy[i] ) <= 2 || 
+             IsEnemy( enemy[i] )) )
+         {
+            enemy[i]->Defend( 1500, DT_WHIP, 
+               ([ SP_NAME:"Ein gewaltiger Schwanzhieb",
+                  SP_SHOW_DAMAGE:({ ({ 0, 
+                  "Ein gewaltiger Schwanzhieb trifft Dich und schleudert dich hinaus.\n",
+                  "",
+                  "Ein gewaltiger Schwanzhieb trifft @WEN1 und schleudert @WEN1 hinaus.\n",
+                  }) }),
+                  SP_PHYSICAL_ATTACK:1
+               ]), TO );
+            
+            enemy[i]->move( FLUCHT_RAUM, M_TPORT + M_SILENT, "", "", 
+            " fliegt lauthals schreiend herein und schlaegt hart am Boden auf." );
+            ziel = -1;
+         }
+      }
+   }
+   if( ziel == -1 )
+      return 0;
+   else
+      return enemy[ziel];
+}   
+
+
+void Attack( object enemy )
+{
+   if( !attackCount )
+      enemy = SearchTarget( ATTACK_WEAKEST );
+   else
+      enemy = SearchTarget( ATTACK_STRONGEST );
+   
+   attackCount++;
+   if( enemy )
+   {
+      ::Attack( enemy );
+      if( random( 100 ) >= 90 )
+      {
+         switch( random( 100 ))
+         {
+            case 1..20:
+               // In die Luft werfen
+               AngriffZusatz( enemy, "InDieLuft", 2 );
+               break;
+            case 21..40:
+               // Kopfschuetteln
+               AngriffZusatz( enemy, "KopfSchuettel", 1 );
+               break;
+            case 41..60:
+               // hinaus in den Vorraum
+               AngriffZusatz( enemy, "InSicherheit", 1 );
+               break;
+            default:
+               // an die Wand
+               AngriffZusatz( enemy, "AnDieWand", 1 );
+               break;
+         }
+      }
+   }
+}
+
+
+void AngriffZusatz( object enemy, string spruch, int zeit )
+{
+   string kname;
+   
+   switch( random(3) )
+   {
+      case 0:
+         kname = DRAGON_NAME1;
+         break;
+      case 1:
+         kname = DRAGON_NAME2;
+         break;
+      default:
+         kname = DRAGON_NAME3;
+         break;
+   }
+   
+   write( kname + "  faehrt auf Dich hinab und packt Dich.\n" );
+   say( kname + " faehrt auf " + TPN + " hinab und packt " + enemy->name( RAW ) );
+   enemy->move( WARTE_RAUM, M_TPORT + M_SILENT, "", "", "" );
+   enemy->SetProp(P_PARALYZED, ([
+      PARALYZE_TIME:-1, 
+      PARALYZE_MSG: "Du bist zu keiner sinnvollen Handlung faehig!\n",
+      PARALYZE_END: "",
+      PARALYZE_END_OTHER: ""]));
+   
+   call_out( spruch, zeit, enemy, kname, 0 );
+}
+
+
+void AngriffZusatzEnde( object enemy, int noattack, int nospell )
+{
+   enemy->SetProp(P_PARALYZED, ([
+      PARALYZE_TIME:0, 
+      PARALYZE_MSG: "Du bist zu keiner sinnvollen Handlung faehig!\n",
+      PARALYZE_END: "",
+      PARALYZE_END_OTHER: ""]));
+   enemy->move( TO, M_TPORT + M_SILENT, "", "", "" );
+   
+   if( noattack > 0 )
+      enemy->SetProp( P_DISABLE_ATTACK, noattack );
+   if( nospell > 0 )
+      enemy->SetProp( P_DISABLE_SPELLS, nospell );
+   
+}
+
+
+void InDieLuft( object enemy, string kname, int lauf )
+{
+   string uo, lr;
+   
+   uo = "Oben";
+   lr = "linke";
+   
+   if( !enemy )
+      return;
+   
+   switch( lauf )
+   {
+      case 0:
+         write( BS( kname + " schleudert Dich mit gewaltiger Karft nach oben.\n" ));
+         break;
+      case 4:
+         write( BS( "Endlich hast Du den Scheitelpunkt erreicht. Ab nun geht es wieder "
+            "runter.\n" ));
+         break;
+      case 8:
+         enemy->Defend( 900, DT_RIP, 
+            ([ SP_NAME:"Ein Flug",
+               SP_SHOW_DAMAGE:({ ({ 0, 
+               "Du schlaegt unglaublich hart auf dem Boden auf.\n",
+               "",
+               enemy->Name() + "schlaegt unglaublich hart auf dem Boden auf.\n",
+               }) }),
+               SP_PHYSICAL_ATTACK:1
+            ]), TO );
+         
+         AngriffZusatzEnde( enemy, 5, 5 );
+         return;
+         break;
+      case 5..7:
+         uo = "Unten";
+         //Kein break hier!
+      case 1..3:
+         if( random( 2 ))
+            lr = "rechte";
+         
+         switch( random(10) )
+         {
+            case 0:
+               write( BS( "Du fliegst Dich in allen Richtungen ueberschlagend "
+                  "weiter nach " + uo + ".\n" ));
+               break;
+            case 1:
+               write( BS( "Dein geschundener Koerper streift die Felswand der Hoehle. "
+                  "Blut spritzt als der scharfkantige Fels dein Fleisch aufreisst.\n" ));
+               break;
+            case 2:
+               write( BS( "Du schlaegst hart gegen die Hoehle. Das ist Dein Ende!\n" ));
+               break;
+            case 3:
+               write( BS( "Du ueberschlaegst Dich waehrend Du weiter nach " + uo 
+               + " fliegst voellig unkontrolliert in alle Richtungen.\n" ));
+               break;
+            case 4:
+               write( BS( "Deine " + lr + " Hand verharkt einen Felsvorsprung. Die "
+                  "beleibt die Luft weg als Knochen brechen.\n" ));
+               break;
+            case 5:
+               write( BS( "Dein " + lr + "s Bein verhaengt sich in einer Ritze. Du "
+                  "schleuderst herum und ein stechender Schmerz zuckt durch dein "
+                  + lr + " Knie.\n" ));
+               break;
+            case 6:
+               write( BS( "Dein " + lr + " Arm verhaengt sich in einer Ritze. Du "
+                  "schleuderst herum und ein stechender Schmerz zuckt durch dein "
+                  + lr + " Ellenbogen.\n" ));
+               break;
+            case 7:
+               write( BS( "Du rast mit dem Kopf voran gegen die Felswand. Dir wird "
+               "schwarz vor den Augen..." ));
+               break;
+            case 8:
+               write( BS( "Du hast voellig die Orientierung verloren." ));
+               break;
+            case 9:
+               write( BS( "Hilflos musst Du mitansehen wie du weiter nach " + uo 
+                  + "fliegst."));
+               break;
+         }
+         break;
+   }
+   lauf++;
+   call_out( "InDieLuft", 2, enemy, kname, lauf );
+   
+}
+
+
+void KopfSchuettel( object enemy, string kname, int lauf )
+{
+   if( !enemy )
+      return;
+   
+   if( lauf <= 2 )
+   {
+      switch( lauf )
+      {
+         case 0:
+            write( BS( kname + " beisst zu. Deine Ruestung aechzt und kracht.\n" ));
+            break;
+         case 1:
+            write( BS( kname + " bohrt sein dolchlange Zaehne in Deinen Koerper.\n" ));
+            break;
+         case 2:
+            write( BS( kname + " schuettelt sich mit Dir in seinem Maul. Du bruellst "
+               "vor Schmerzen.\n" ));
+            break;
+      }
+      
+      lauf++;
+      call_out( "KopfSchuettel", 1, enemy, kname, lauf );
+   }
+   else
+   {
+      enemy->Defend( 600, DT_RIP, 
+         ([ SP_NAME:"Ein Kopfschuetteln",
+            SP_SHOW_DAMAGE:({ ({ 0, 
+            kname + " schuettelt sich und wirft Dich zu Boden.\n",
+            "",
+            kname + " schuettelt sich und wirft @WEN1 zu Boden.\n",
+            }) }),
+            SP_PHYSICAL_ATTACK:1
+         ]), TO );
+      
+      AngriffZusatzEnde( enemy, 3, 3 );
+   }
+}
+
+
+void AnDieWand( object enemy, string kname, int lauf )
+{
+   if( !enemy )
+      return;
+   
+   write( BS( kname + " reisst herum und ein furchtbarer Schmerz durchzieht deinen "
+      "Koerper.\n" ));
+   call_out( "AnDieWand1", 1, enemy, kname );
+}
+
+void AnDieWand1( object enemy, string kname )
+{
+   if( !enemy )
+      return;
+   
+   write( BS( kname + " schleudert herum und laesst Dich los.\n" ));
+   call_out( "AnDieWand2", 1, enemy, kname );
+}
+
+void AnDieWand2( object enemy, string kname )
+{
+   string ri;
+   
+   if( !enemy )
+      return;
+   
+   switch( random(4) )
+   {
+      case 0:  ri = RG1; break;
+      case 1:  ri = RG3; break;
+      case 2:  ri = RG5; break;
+      default: ri = RG7; break;
+   }
+   enemy->Defend( 1000, DT_SQUEEZE, 
+      ([ SP_NAME:"Die Hoehlenwand",
+         SP_SHOW_DAMAGE:({ ({ 0, 
+         "Du fliegst voellig unkontrolliert auf die " + ri + "wand zu und schlaegst "
+         "hart auf.\n",
+         "",
+         "",
+         }) }),
+         SP_PHYSICAL_ATTACK:1
+      ]), TO );
+   
+   call_out( "AngriffZusatzEnde", 1, enemy, 4, 4 );
+}
+
+
+void InSicherheit( object enemy, string name, int lauf )
+{
+   if( !enemy )
+      return;
+   
+   enemy->Defend( 800, DT_WHIP, 
+   ([ SP_NAME:"Ein Freiflug in Sicherheit",
+      SP_SHOW_DAMAGE:({ ({ 0, 
+      name + " holt weit aus und schleudert Dich aus der Hoehle hinaus.\n",
+      "",
+      "",
+      }) }),
+      SP_PHYSICAL_ATTACK:1
+   ]), TO );
+   enemy->move( FLUCHT_RAUM, M_TPORT + M_SILENT, "", "", 
+      " fliegt lauthals schreiend herein und schlaegt hart am Boden auf." );
+   
+   enemy->SetProp(P_PARALYZED, ([
+      PARALYZE_TIME:4, 
+      PARALYZE_MSG: "Du bist zu keiner sinnvollen Handlung faehig!\n",
+      PARALYZE_END: "",
+      PARALYZE_END_OTHER: ""]));
+}
+
+// Den Feind fuer diese Attacke aussuchen
+/*
+mixed _query_pref_enemy()
+{
+   return ({100, SearchTarget( ATTACK_STRONGEST )});
+}
+*/
+
+varargs int QuerySkillAttribute( string attr ) 
+{ 
+   if( attr == SA_SPEED ) 
+      return ATTACK_SPEED; 
+   else 
+      return ::QuerySkillAttribute( attr ); 
+}
+
+
+// Laesst sich nicht veraengstigen, laehmen oder sonst was
+int _query_disable_attack() { return 0; }
+int _query_disable_spells() { return 0; }
+int _query_wimpy() { return 0; }
+int _query_poison() { return 0; }
+int _query_frog() { return 0; }
+
+void heart_beat()
+{
+   attackCount = 0;
+}
+
+/*
+int Defend(int dam, string dam_type, mixed spell, object enemy)
+{
+//   int newval;
+//   
+//   newval = ATTACK_SPEED * 100 / QuerySkillAttribute( SA_SPEED );
+//   ModifySkillAttribute(TP, SA_SPEED, newval, 500);
+   
+   
+   return ::Defend( dam, dam_type, spell, enemy);
+}
+*/
+
+void die( int poisondeath ) 
+{
+   object ob;
+   
+   if( !poisondeath )
+   {
+      write_file( LOGPATH + "lindwurm.kills",
+         ctime()+ ": " + CAP(getuid(TP)) + " killt den NPC.\n" );
+      
+      if( interactive( TP ))
+      {
+         ob = clone_object( OBJ + "recht.lpc" );
+         ob->SetUser( QueryProp( P_ENEMY_DAMAGE ));
+         ob->move( TP, M_NOCHECK );
+         ob->anleitung( TP );
+      }
+// Xorgan: Hier kommt noch was hin
+// "/obj/gemmaster"->DistributeGem( amount, rand, art, automove, typ );
+// "/obj/pearlmaster"->DistributePearl(amount, rand, art, automove, typ);
+      
+   }
+   
+// Xorgan: Zwecks test
+//   ::die( poisondeath );
+}
+
+
+void NotifyPlayerDeath(object player, object killer, int lostexp ) 
+{
+   if( killer == ME )
+      write_file(LOG "lindwurm.deads",
+         ctime() + ": Der NPC hat gerade " + CAP(getuid(player)) + " umgebracht.\n" );
+}
+
+
+// Reactions
+void StartReaction(string verb, string gruppe, string adverb, int touch ) 
+{
+   if( find_call_out( "reaction" ) != -1 ) 
+      return;
+      
+   if( touch )
+   {
+      TP->Defend( 100 + random(300), DT_ACID, 1, TO); 
+   }
+   else
+   {
+      switch( gruppe ) 
+      {
+         case "aengstlich":
+            call_out("reaction", 0, TP, 
+               "lacht: Ja Du Wurm! ZITTERE vor uns! ",
+               "verspottet " + TP->name(WEN) + "." );
+            break;
+         case "intim":
+         case "aergerlich":
+         case "fies":
+         case "frech":
+         case "albern":
+            if( CheckPlayer( TP->name( RAW )))
+               call_out("angriff",0," erklaert gelassen: Also gut, Du willst wohl sterben.\n" );
+            else
+            {
+               call_out("reaction", 0, TP,
+                  "erwiedert veraergert: Verschindet, bevor ich Dich fresse!",
+                  "erwiedert veraergert: Verschindet, bevor ich Dich fresse!" );
+               SetPlayer( TP->name( RAW ), 1 );
+            }
+            break;
+         case "froh":
+         case "nett":
+         case "neutral":
+         case "traurig":
+         default:
+            call_out("reaction", 0, TP,
+               "scheint das nicht zu interessieren.", 
+               "interessiert sich nicht fuer " + TP->name( WEN ) + "." );
+            break;
+      }
+   }
+}
+
+void StartReactionAll( string verb, string gruppe, string adverb, int touch ) 
+{
+   return StartReaction( verb, gruppe, adverb, touch );
+}
+
+void reaction( object ob, string macher, string andere ) 
+{
+   if( present( ob, ENV(TO) ))
+   {
+      tell_object( ob, BS( Name( WER, 1 ) + " " + macher ) );
+      tell_room( ENV(TO ), BS( Name( WER, 1 ) + " " + andere ), ({ob}) );
+   }
+}
+
+
+void angriff(string text)
+{
+   if( present( TP, ENV(TO)) ) 
+   {
+      tell_room( ENV(TO), Name(WER, 1) + text );
+      Kill( TP );
+   }
+}
+

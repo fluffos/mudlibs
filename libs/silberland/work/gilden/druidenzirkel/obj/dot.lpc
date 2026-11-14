@@ -1,0 +1,277 @@
+inherit "std/thing";
+#include <properties.h>
+#include <combat.h>
+#include <language.h>
+#include <new_skills.h>
+#include <defines.h>
+#include <moredef.h>
+#include <ansi.h>
+#include <moving.h>
+#include <new_skills.h>
+#include <wizlevels.h>
+#include "../druiden.h"
+#include "../mysteries.h"
+#include "/gilden/berserker/berserker_extern.h"
+
+nosave object env;
+nosave int nr, complete_nr;
+nosave int suc;
+nosave int pl;
+nosave object caster;
+nosave string element;
+nosave dammsg;
+nosave mapping e2dammsg;
+nosave mapping spellname;
+nosave mapping color;
+nosave int damage;
+
+varargs void write_color(string text, int bold);
+int SpecialDamage(object en);
+
+
+create() {
+  if(!is_clone(TO)) return;
+  ::create();
+  e2dammsg=([
+    FEUER   : "Dein Feuersturm huellt %s komplett ein!";
+              "Der Feuersturm von %s huellt %s komplett ein!",
+    EIS     : "Dein Hagelschlag prasselt auf %s nieder!";
+              "Der Hagelschlag von %s prasselt auf %s nieder!",
+    WASSER  : "Deine Sturmflut bricht ueber %s herein!";
+              "Die Sturmflut von %s bricht ueber %s herein!",
+    ERZ     : "Dein Erdbeben schuettelt %s durch!";
+              "Das Erdbeben von %s schuettelt %s durch!",
+    LUFT    : "Deine Windhose wirbelt %s herum!";
+              "Die Windhose von %s wirbelt %s herum!",
+    ]);
+
+  spellname=([
+    FEUER: "Feuersturm",
+    EIS  : "Hagelschlag",
+    WASSER: "Sturmflut",
+    ERZ: "Erdbeben",
+    LUFT: "Windhose",
+    ]);
+  color=ELEMENT_COLORS;
+  SetProp(P_SHORT, 0);
+  SetProp(P_WEIGHT, 0);  
+  SetProp(P_VALUE, 1);
+  SetProp(P_NOBUY, 1); 
+  SetProp(P_NODROP, 1);
+  SetProp(P_NEVERDROP, 1);
+  SetProp(P_NOSELL, 1);
+  AddId(({ DRUIDEN_DOT }));
+}
+
+// pl = 1 ...  von spieler gecastet (trifft NPCS)
+// pl = 0 ...  von npcs gecastet (trifft Spieler)
+int SetVariables(int n, string e, int success, object cas, int player) {
+  object ob;
+
+  env=MENV;
+  element=e;
+  suc=success;
+  caster=cas;
+  pl=player;
+  damage = 33                                 // 33   
+      + 2 * caster->QueryProp(P_GUILD_LEVEL)  // 20-32
+      + caster->QueryProp(P_LEVEL) / 10       // 3-8  
+      + (suc/333) + random(suc/200);          // 30+R(50) bei success 10000
+                                              // 56 bis ca 200 bei success 20000 
+  damage=call_other(DRUIDENSPELLS, "SpellEnhanceModifier", ENV(ME), element, damage);
+  if (call_other(DRUIDENMASTER, "GetDruidElement", getuid(caster)) == element)
+    damage += caster->QueryProp(P_GUILD_LEVEL);
+  if( player && 
+      cas->QuerySkill(lower_case(spellname[e]))[SI_SKILLABILITY] == MAX_ABILITY)
+  {
+    n += 2;
+    damage += 10;
+  }
+  if (ob = present( DRUIDEN_FOCUS+element, caster) )
+    damage += ob->DotDamage(damage);
+  complete_nr=nr=n;
+  call_out("do_damage", 6);
+  return 1;
+}
+
+mixed QueryVariables() {
+  return ({nr, element, suc, caster, pl});
+}
+
+int search_filter(object ob) {
+  if(ob == caster) return 0;
+  if(ob->QueryProp(P_NOATTACK)) return 0;
+  if(ob->id(DRUIDENELEMENTAR)) return 0;
+  if(ob->id("feuerwusel")) return 0;
+  if(pl && ob->QueryProp(P_FRIEND)) return 0;
+  if(query_once_interactive(ob) && ENV(ob) &&
+      call_other ("/obj/pkmaster", "PK_allowed", ENV(ob), caster, ob)) 
+  {
+    return 1;
+  }
+  if(pl && living(ob) && !query_once_interactive(ob))
+    return 1;
+  if(!pl && query_once_interactive(ob))
+    return 1;
+  return 0;
+}
+
+int abs(int x) {
+  if (x < 0) 
+    return -x;
+  return x;
+}
+
+
+/* Beispiel: Damage von 100 ueber 10 Runden verteilt:
+ * Runde 1 -> 40 damage
+ * Runde 2 -> 55 damage
+ * Runde 3 -> 70 damage
+ * Runde 4 -> 85 damage
+ * Runde 5 -> 100 damage
+ * Runde 6 -> 85 damage
+ * Runde 7 -> 70 damage
+ * Runde 8 -> 55 damage
+ * Runde 9 -> 40 damage
+ * Runde 10 -> 25 damage
+ * ------------------
+ *  Summe: 625 (Anstatt 1000)
+ */
+int CalcDamage() {
+  int dam;
+  dam = damage;
+//  dam=dam-15*abs(nr-(complete_nr/2));
+  dam-=4*damage*abs(nr-(complete_nr/2))/(complete_nr*3); 
+  // Schaden nun zwischen 33% und 100%, unabhaengig von der Dauer
+  return dam;
+}
+
+
+void do_damage() {
+  object *targets;
+  object env;
+  int i, dam;
+  mapping e_dam;
+  e_dam=ELEMENT_DAMAGE;
+  if(!objectp(ENV(ME))) {
+    remove();
+    return;
+  }
+  if(!objectp(env=ENV(ENV(ME)))) {
+    remove();
+    return;
+  }
+  targets=filter_array(all_inventory(env), "search_filter");
+  if(sizeof(targets) > 5) 
+    targets=targets[0..4];
+  if(nr == complete_nr/2) {
+    write_color(BS(sprintf("Deine Schadensaura '%s' wird nun langsam "
+            "schwaecher.", spellname[element])),1);
+  }
+  if(sizeof(targets)) {
+    dam=CalcDamage();
+    for (i=sizeof(targets)-1;i>=0;i--) {
+      write_color(BS(sprintf(e2dammsg[element,0], targets[i]->name(WEN))), 
+          1);
+      tell_object(targets[i], BS(sprintf(e2dammsg[element,1], caster->name(WEM),
+              "Dich")));
+      tell_room(env, BS(sprintf(e2dammsg[element,1], caster->name(WEM),
+              targets[i]->name(WEN))), ({targets[i],caster}));
+      targets[i]->Defend(dam,e_dam[element],  
+          ([SP_NAME: spellname[element], SP_SHOW_DAMAGE:1, 
+            SP_REDUCE_ARMOUR : ([P_BODY: 1])]), caster); 
+      if(objectp(targets[i]) && (element == ERZ || (suc > 10000 && !random(20)))) 
+      {
+        SpecialDamage(targets[i]);
+      }
+    }
+  }
+  nr--;
+  if(nr < 1) {
+    call_out("remove_me", 6);
+    write_color(BS(sprintf("Deine Aura '%s' laesst langsam nach und "
+            "verursacht nun keinen Schaden mehr.\n", spellname[element])));
+    return ;
+  }
+  call_out("do_damage", 2);
+  return;
+}
+
+
+void remove_me() {
+  if( objectp(caster) )
+    write_color(BS(sprintf("Deine Schadensaura '%s'"
+          " erlischt nun vollends.", spellname[element])));
+  remove();
+}
+
+
+varargs void write_color(string text, int bold)
+{
+  string farb, tty;
+  tty=caster->QueryProp(P_TTY);
+  if(!caster->QueryProp(P_DRUID_SPELL_COLORS))
+    tty="dumb";
+  if( tty=="ansi")
+    farb=color[element];
+  if( tty=="ansi" || tty=="vt100" )
+    write( (farb?farb:"")+(bold?ANSI_BOLD:"")+text[0..<2]+ ANSI_NORMAL+"\n");
+  else
+    write(text);
+}
+
+void move_back(object wen, object wohin)
+{
+  if(objectp(wen) && objectp(wohin))
+    wen->move(wohin, M_NOCHECK|M_NO_ATTACK, "wieder hinunter", "faellt", 
+      "faellt wieder herunter");
+}
+
+int SpecialDamage(object en) {
+  object o;
+  if(!objectp(en)) return 0;
+  switch(element) {
+    case LUFT: 
+        if(!random(3) && objectp(en) && objectp(o=present(ID_WEATHERMASTERY, ENV(caster)))) {
+          o->lightningStike(en);
+        }
+        en->move("/room/npcasylraum", 
+            M_TPORT, "in die Luft gewirbelt", "wird", "wird heraufgewirbelt");
+         call_out("move_back",2+2*random(2), en, ENV(caster));
+         break;
+    case EIS:      
+         en->SetProp(P_PARALYZED, ([
+            PARALYZE_TIME:1+suc/9000,
+            PARALYZE_MSG: "Der Hagelschlag hat Dich eingefroren!\n",
+            PARALYZE_MSG_OTHER: "%s versucht, den Eispanzer um sich zu "
+               "durchbrechen!\n", 
+            PARALYZE_END: "Du durchbrichst die Eisschicht und kannst dich "
+               "wieder bewegen!\n",
+            PARALYZE_END_OTHER: "%s durchbricht die Eisschicht und kann sich "
+               "wieder bewegen!\n" ]));
+         tell_room(ENV(en), en->Name(WER,2)+" wird eingefroren!\n");
+         break;
+    case FEUER:      
+         en->SetProp(P_BLIND, 1+random(suc/3333));
+         tell_room(ENV(en), en->Name(WER,2)+" wird durch "
+                   "das helle Feuer geblendet!\n");
+         break;
+    case WASSER: 
+         en->SetProp(P_DISABLE_SPELLS, 2+random(1+suc/6000));
+         tell_room(ENV(en), en->Name(WER,2)+" schluckt zuviel Wasser und "
+                   "beginnt zu husten!\n");
+         break;
+    case ERZ:
+         if( en->QueryAttribute(A_STR)<15+random(25) && !en->id("NOFALLDOWN") )
+         {
+           tell_room(ENV(en), sprintf("%s faellt zu Boden.\n", en->Name(WER)));
+           en->SetProp(P_LAST_RAMMEN_TIME, time() );
+         }
+         if(!random(20))
+           en->SetProp(P_DISABLE_ATTACK, suc/10000+random(1+suc/5000) );         
+         call_other("/spellbooks/druiden_spells", "smashSpellResistance", caster, en, random(suc));
+         call_other("/spellbooks/druiden_spells", "petrify", caster, en, suc);
+         break;
+  }      
+  return 1;
+}

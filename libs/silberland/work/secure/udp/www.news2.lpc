@@ -1,0 +1,516 @@
+/* SilberLand MUDlib
+ *
+ * /secure/udp/www.news.c -- WWW frontend for reading mud news
+ *
+ * $Date: 2004/09/16 23:23:36 $
+ * $Revision: 1.9 $
+ * $Log: www.news.c,v $
+ * Revision 1.9  2004/09/16 23:23:36  Woody
+ * Linkersetzung verbessert
+ *
+ * Revision 1.8  2002/02/11 16:05:58  Woody
+ * Bugfix beim Header Parsen (%s statt %d)
+ *
+ * Revision 1.7  2002/01/29 03:01:30  Woody
+ * Originalautor sowie Verlege-History anzeigen
+ *
+ * Revision 1.6  2001/07/27 01:17:22  Woody
+ * Naechster/Voriger Artikel vertauscht, Bugfix bei Art 2->1, autom. Links
+ *
+ * Revision 1.5  1997/07/19 11:52:19  Woody
+ * Bugfix: & -> &amp; Ersetzung an 1. Stelle der Ersetzungen...
+ *
+ * Revision 1.4  1997/07/02 09:48:39  Woody
+ * Kleinere Optimierungen und Verschoenerungen...
+ *
+ * Revision 1.3  1997/07/01 22:43:00  Woody
+ * Neue Threadverwaltung, buggy headerline remove raus
+ *
+ * Revision 1.2  1997/07/01 19:42:40  Woody
+ * Ueberarbeitet, Links nach oben etc.
+ *
+ * Revision 1.1  1997/03/16 00:44:43  Woody
+ * prepared for revision control
+ *
+ */
+
+// MorgenGrauen MUDlib Contribution
+
+/*
+ * Beispiele:
+ * ---
+ *  test (Woody, 29. Jan 2002, 02:10:45):
+ *  [Autor: Woody, 29. Jan 2002, 02:10:39, verlegt von muell]
+ *  [Autor: Woody, 29. Jan 2002, 02:10:31, verlegt von schmarrn]
+ *
+ * ~#! on=Woody ot=1012266639 og=muell
+ * ~#! on=Woody ot=1012266631 og=schmarrn
+ * ...body...
+ * ---
+ *  [Autor: Protheg, 20. Jan 2002, 23:28:23, verlegt von allgemein]
+ *  [Bezug: Artikel in allgemein von Jarel vom 20. Jan 2002, 23:26:43]
+ *
+ * ~#! on=Protheg ot=1011565703 og=allgemein
+ * ~#! rn=Jarel rt=1011565603 rg=allgemein
+ * ~#! tid=1011562453
+ * ...body...
+ * ---
+ *  [Autor: Protheg, 20. Jan 2002, 23:28:23, verlegt von allgemein]
+ *  [Bezug: Artikel in allgemein von Jarel vom 20. Jan 2002, 23:26:43]
+ *
+
+  if (sscanf(m[0],"%s on=%s ot=%d og=%s",hs,s,hi,hs)==4)
+  {
+    txt+="[Autor: "+s+", "+dtime(hi)[5..26]+", verlegt von "+hs+"]\n";
+  }
+*/
+
+#pragma strong_types
+#pragma combine_strings
+
+#include <www.h>
+
+
+// path to news daemon:
+#define NEWSD	"/secure/news"
+
+// indices for article array:
+#define N_GROUP         0
+#define N_AUTHOR        1
+#define N_TID           2
+#define N_DATE          3
+#define N_TITLE         4
+#define N_ARTICLE       5
+
+// indices for result of tinfo()
+#define RN              0
+#define RT              1
+#define RG              2
+#define ON              3
+#define OA              4
+#define TID             5
+
+// regexp pattern for matching:
+#define THREAD(a) ("~#! rn="+(a[N_AUTHOR])+" rt="+(a[N_DATE])+ \
+                   " rg="+(a[N_GROUP]))
+#define TEXPR   "rn=[^\n ]*|rt=[^\n ]*|rg=[^\n ]*"
+
+// HTML table row per header:
+#define TROW(x,y) sprintf("<tr><th>%s</th><td>%s</td></tr>\n",x,y)
+
+
+varargs private string url(string group, string article)
+{
+  string args;
+
+  args = implode(
+      filter_array(
+        ({ (group ? GROUP+"="+group : ""),
+           (article ? ARTICLE+"="+article:"") }), #'strlen ), "&" );
+  return sprintf( "\"news.php%s%s\"", (strlen(args) ? "?" : ""), args );
+}
+
+
+varargs private string make_link(string text, string group, string article, string title)
+{
+  string qtitle;
+  if (qtitle = title) {
+    qtitle = regreplace( qtitle, "&", "\\&amp;", 1 );
+    qtitle = regreplace( qtitle, "\"", "'", 1 );
+  }
+
+  if(!text || !strlen(text)) text = "-Unbenannt-";
+  return "<a href=" + url(group, article) +
+    (title ? " title=\"" + qtitle + "\"" : "") + ">" + text + "</a>";
+}
+
+
+// Verlinkt URLs mit <A HREF> Tags
+// Einzige Schwäche bislang: abschliessende '/' werden nicht inkludiert
+private string url2href(string str)
+{
+  string prevstr, urlchar;
+  string *lines;
+  int i;
+
+  urlchar = "[-_A-Za-z0-9.,:;/~%?=&]";
+  prevstr = 0;
+
+  lines = efun::explode( str, "\n" );
+  for (i=0; i<sizeof(lines); i++)
+  {
+    // Erst saubere http:// Links
+    if ( sizeof(regexp( ({ lines[i] }),
+            "(http|https|ftp)(://[A-Za-z0-9][-_A-Za-z0-9.,:;/~%?=&]*)" )))
+    {
+      if (strlen(lines[i]) >= 78)
+      {
+        while (strlen(lines[i+1]) >= 78) {
+          lines[i] += lines[i+1];
+          lines = lines[0..i] + lines[i+2..];
+        }
+        lines[i] += lines[i+1];
+        lines = lines[0..i] + lines[i+2..];
+
+        lines[i] = regreplace( lines[i],
+            "(http|https|ftp)(://[-.A-Za-z0-9]*/)("+urlchar+"*)\\>",
+            "<a href=\"\\1\\2\\3\" title=\"\\1\\2\\3\" "+
+            "target=\"_blank\">\\1\\2\\&hellip;</a>", 1 );
+      }
+      else
+      {
+        lines[i] = regreplace( lines[i],
+            "(http|https|ftp)(://[A-Za-z0-9]"+urlchar+"*)\\>",
+            "<a href=\"\\1\\2\" target=\"_blank\">\\1\\2</a>", 1 );
+      }
+    }
+    else                                // Dann "schlampige" www.* Links
+    {
+      lines[i] = regreplace( lines[i],
+          "(^|[^\"/>])\\<(www\\.[-_A-Za-z0-9.,:/~%?=&]"+urlchar+"*)\\>",
+          "\\1<a href=\"http://\\2\" target=\"_blank\">\\2</a>", 1 );
+    }
+  }
+  str = efun::implode( lines, "\n" );
+  return str;
+
+  /*
+  while (str != prevstr)        // replace multiline URLs
+  {
+    prevstr = str;
+
+    str = regreplace( str,
+        "(http|https|ftp)"+
+        "(://[A-Za-z0-9]"+urlchar+"*)\n("+urlchar+"*)",
+        "\\1\\2\\3", 1 );
+  }
+
+  // Erst saubere http:// Links
+  str = regreplace( str,
+      "(http|https|ftp)(://[A-Za-z0-9][-_A-Za-z0-9.,:;/~%?=&]*)\\>",
+      "<A HREF=\"\\1\\2\" TARGET=\"_blank\">\\1\\2</A>", 1 );
+  // Dann "schlampige" www.* Links
+  str = regreplace( str,
+      "(^|[^\"/>])\\<(www\\.[-_A-Za-z0-9.,:/~%?=&][-_A-Za-z0-9.,:;/~%?=&]*)\\>",
+      "\\1<A HREF=\"http://\\2\" TARGET=\"_blank\">\\2</A>", 1 );
+  return str;
+  */
+}
+
+
+string GroupList()
+{
+  string *list, ret;
+  int i, t;
+
+  list = NEWSD->GetGroups();
+  for (i = 0, ret = ""; i < sizeof(list); i++)
+    ret += sprintf("[%3d Artikel, %-6s] %s\n",
+		   sizeof(NEWSD->GetNotes(list[i])),
+		   dtime(t = NEWSD->GetNewsTime(list[i]))[5..11],
+		   make_link(list[i],list[i]+":"+t));
+  return
+    "<H3>Gruppen&uuml;bersicht</H3>" +
+    "<I><B>Insgesamt "+sizeof(list)+" Gruppen, " +
+    "letzte &Auml;nderung: "+dtime(NEWSD->GetNewsTime())+"</B></I><P>" +
+    "<PRE>" + ret +"</PRE>";
+}
+
+string GroupListNeu()
+{
+  string *list, ret;
+  int i, t;
+
+  list = NEWSD->GetGroups();
+  for (i = 0, ret = ""; i < sizeof(list); i++)
+  {
+    t = NEWSD->GetNewsTime(list[i]);
+    ret += sprintf("<tr><td><strong>%s</strong></td><td style='text-align:right'>%s</td><td %s style='text-align:right'>%s</td></tr>\n",
+        make_link(list[i],list[i]+":"+t),
+        (string) sizeof(NEWSD->GetNotes(list[i])),
+        (t > (time() - 86400) ? "class='recent'" : ""),
+        dtime(t)[5..16] + dtime(t)[17..23] );
+  }
+
+  return "<h3>Gruppen&uuml;bersicht</h3>" +
+    "<table class='slp_thread'>" +
+    "<tr><th>Gruppe</th><th>Artikel</th><th>Letzter Artikel</th></tr>" +
+    ret +
+    "<tr><th colspan='3'>Insgesamt "+sizeof(list)+" Gruppen, " +
+    "letzte &Auml;nderung: "+dtime(NEWSD->GetNewsTime())+
+    "</th></tr>" +
+    "</table>";
+}
+
+
+private mixed tinfo(mixed article)
+{
+  mixed tmp, info, on;
+  string rn, rt, rg, tid, oa;
+  string o1, o2, o3;
+  int j, k;
+
+  // Zeilenweise nach \n splitten, Header rausfiltern
+  tmp = regexp(explode(article[N_ARTICLE], "\n"), "^~#!");
+
+  // Reihenfolge wichtig fuer chronologisch korrekte Verlege-History:
+  for (j = sizeof(tmp); j--;)
+  {
+    tmp[j] = tmp[j][4..];               // "~#! " am Anfang wegwerfen
+    switch(explode(tmp[j], "=")[0])
+    {
+      case "tid":
+        sscanf(tmp[j], "tid=%s", tid);
+        break;
+      case "rn":
+        sscanf(tmp[j], "rn=%s rt=%s rg=%s", rn, rt, rg );
+        break;
+      case "on":
+        sscanf(tmp[j], "on=%s ot=%s og=%s", o1, o2, o3 );
+        if (on)
+          on += ({ sprintf("%s in Gruppe %s (verlegt)",o1,capitalize(o3)) });
+        else {
+          on = ({ sprintf("%s in Gruppe %s (Original)",o1,capitalize(o3)) });
+          oa = o1;
+        }
+        break;
+    }
+  }
+  if (!tid) tid = ""+article[N_DATE];
+
+  return ({ rn, rt, rg, on, oa, tid });
+}
+
+
+private int thread(mixed article, int i, mapping t)
+{
+  mixed info;
+  info = tinfo(article);
+
+  if(info[TID]) {
+    t[info[TID]]++;
+    t[info[TID], 1] = sprintf("[%-12s %-6s]%-3s %s\n",
+                              article[N_AUTHOR]+":",
+                              dtime(article[N_DATE])[5..11],
+                              t[info[TID]] ? "+"+t[info[TID]] : " - ",
+                              make_link(article[N_TITLE],
+                                        article[N_GROUP], (string)i))
+      + (t[info[TID], 1] ? t[info[TID], 1] : "");
+    t[info[TID], 2] = info;
+    if(article[N_DATE] > to_int(t[info[TID], 3]))
+      t[info[TID], 3] = ""+article[N_DATE];
+    return 1;
+  }
+}
+
+#define MAX_TITLEN 60
+private int thread_neu(mixed article, int i, mapping t)
+{
+  mixed info;
+  string title;
+
+  info = tinfo(article);
+  if (info[TID])
+  {
+    title = article[N_TITLE];
+    if (strlen(title) > MAX_TITLEN+30)
+      title = title[0..MAX_TITLEN+28] + "...";
+    t[info[TID]]++;
+    t[info[TID], 1] = sprintf(
+        // "[%-12s %-6s]%-3s %s\n",
+        "<tr><td><strong>%s</strong></td><td style='text-align:right'>%s</td><td>%s</td></tr>\n",
+        article[N_AUTHOR],
+        dtime(article[N_DATE])[5..11] + dtime(article[N_DATE])[17..23],
+        make_link(title, article[N_GROUP], (string)i, article[N_AUTHOR]+": "+article[N_TITLE])) +
+      (t[info[TID], 1] ? t[info[TID], 1] : "");
+    t[info[TID], 2] = info;
+    if(article[N_DATE] > to_int(t[info[TID], 3]))
+      t[info[TID], 3] = ""+article[N_DATE];
+    return 1;
+  }
+}
+
+
+private int expired(mixed *list, int i)
+{
+  mixed info;
+  info = tinfo(list[i]);
+  for(i--; i >= 0; i--)
+    if(list[i][N_AUTHOR] == info[RN] &&
+       list[i][N_DATE] == to_int(info[RT]))
+      return 0;
+  return 1;
+}
+
+
+string ArticleList(string group)
+{
+  string *list, ret, title;
+  mapping t;
+  int i;
+
+  list = NEWSD->GetNotes(group = explode(group, ":")[0]);
+  t = allocate_mapping(0,4);
+  for (i = sizeof(list)-1, ret = ""; i >= 0; i--)
+  {
+    if(!thread(list[i], i, t) || expired(list, i))
+    {
+      string ttmp, tid;
+      ttmp = t[tid = tinfo(list[i])[TID]] - 1;
+      title = (string) list[i][N_TITLE];
+      if (strlen(title) > 36)
+        title = title[0..33] + "...";
+      ret = sprintf("[%-12s %-6s]%-3s %s\n",
+		    list[i][N_AUTHOR]+":",
+		    dtime(list[i][N_DATE])[5..11],
+                    ttmp > 0 ? "+"+ttmp : " - ",
+		    make_link(title
+                              +(ttmp > 0 ?
+                                " ("+dtime(to_int(t[tid, 3]))[5..11]
+                                +dtime(to_int(t[tid, 3]))[17..]+")" : ""),
+                              group, (string)i+":"+t[tid, 3])) + ret;
+    }
+  }
+
+  return make_link(
+        "<img style='border:none' src='"+ICONS+"/slp/gruppenuebersicht.gif' "+
+        "alt='[Gruppen&uuml;bersicht]'>")
+        +"<H3>Gruppe: "+group+"</H3>"
+	+"<I><B>Insgesamt "+sizeof(list)+" Artikel, letzte &Auml;nderung "
+        +dtime(NEWSD->GetNewsTime(group))+"</B></I><P>"
+        +"<PRE>" + ret + "</PRE>";
+}
+
+string ArticleListNeu(string group)
+{
+  string *list, ret, title;
+  mapping t;
+  int i;
+
+  list = NEWSD->GetNotes(group = explode(group, ":")[0]);
+  t = allocate_mapping(0,4);
+  for (i = sizeof(list)-1, ret = ""; i >= 0; i--)
+  {
+    if(!thread(list[i], i, t) || expired(list, i))
+    {
+      string ttmp, tid;
+      ttmp = t[tid = tinfo(list[i])[TID]] - 1;
+      title = (string) list[i][N_TITLE];
+
+      if (strlen(title) > MAX_TITLEN)
+        title = title[0..MAX_TITLEN-2] + "...";
+
+      ret = sprintf("<tr><td><strong>%s</strong></td><td style='text-align:right'>%s</td><td style='text-align:right'>%s</td><td %s>%s</td></tr>\n",
+          list[i][N_AUTHOR],
+          dtime(list[i][N_DATE])[5..11] +
+          dtime(list[i][N_DATE])[17..23],
+          ttmp > 0 ? "+"+ttmp : " - ",
+          ( (ttmp > 0 ? to_int(t[tid, 3]) : list[i][N_DATE]) > (time() - 86400) ? "class='recent'" : "" ),
+          make_link(title +
+            (ttmp > 0 ? " (" + dtime(to_int(t[tid, 3]))[5..16] +
+                               dtime(to_int(t[tid, 3]))[17..]+")" : ""),
+            group, (string)i+":"+t[tid, 3],
+            sprintf( "%s: %s", list[i][N_AUTHOR], (string) list[i][N_TITLE] )
+          )) + ret;
+    }
+  }
+
+  return make_link(
+      "<img style='border:none' src='"+ICONS+"/slp/gruppenuebersicht.gif' "+
+      "alt='[Gruppen&uuml;bersicht]'>") +
+      "<H3>Gruppe: "+group+"</H3>" +
+      "<I><B>Insgesamt "+sizeof(list)+" Artikel, letzte &Auml;nderung " +
+      dtime(NEWSD->GetNewsTime(group))+"</B></I><P>" +
+      "<table class='slp_thread'>" + 
+      "<tr><th>Autor</th><th>Datum</th><th>Antworten</th><th>Titel</th></tr>" +
+      ret + "</table>";
+}
+
+
+private varargs string Message(string group, mixed article)
+{
+  mixed text, tmp, next, prev, info;
+  string art, *tmp2;
+  mapping t;
+  int i;
+
+  if (!article) article = 0;
+  else article = to_int(explode(article, ":")[0]);
+
+  text = (tmp = NEWSD->GetNotes(group = explode(group, ":")[0]))[article];
+
+  t = allocate_mapping(0,4);
+  for(i = sizeof(tmp)-1; i > article; i--)
+    thread_neu(tmp[i], i, t);
+
+  art = implode((tmp2=efun::explode(text[N_ARTICLE],"\n"))
+                - regexp(tmp2, "^~#!"), "\n");
+
+  info = tinfo(text);
+  art = regreplace( art, "&", "\\&amp;", 1 );
+  art = regreplace( art, "<", "\\&lt;",  1 );
+  art = regreplace( art, ">", "\\&gt;",  1 );
+
+  // URLs erkennen und verlinken:
+  art = url2href(art);
+
+  next = "<img style='margin: 0px 3px' src='" + ICONS + "/slp/naechster_artikel.gif' " +
+         "alt='[N&auml;chster Artikel]'>";
+
+  prev = "<img style='margin: 0px 3px' src='" + ICONS + "/slp/voriger_artikel.gif' " +
+         "alt='[Voriger Artikel]'>";
+
+  return
+    "<div class='slp_navigation'>\n" +
+    (article ? make_link(prev, group, to_string(article-1)) : prev) +
+    (article < sizeof(tmp)-1 ? make_link(next, group, article+1) : next) +
+
+    make_link( "<img style='margin: 0px 3px' " + "src='" + ICONS + "/slp/artikelliste.gif' " +
+               "alt=\"[Artikelliste]\">", group) +
+
+    make_link( "<img style='margin: 0px 3px' " + "src='" + ICONS + "/slp/gruppenuebersicht.gif' " +
+               "alt=\"[Gruppen&uuml;bersicht]\">") +
+
+    "</div>\n" +
+    "<table class='slp_header'>\n" +
+
+    TROW("Gruppe/Artikel:",
+         capitalize(group) + ", Artikel " + (article+1) +
+         " von " + (sizeof(tmp))) +
+
+    TROW("Autor:", text[N_AUTHOR] +
+        (info[OA] ? " (Verleger; Originalautor: " + info[OA] + ")" : "")) +
+
+    TROW("Datum:", dtime(text[N_DATE])) +
+    TROW("Titel:", url2href(text[N_TITLE])) +
+
+    (info[RN] ?
+       TROW("Antwort auf:",
+         info[RN] + ( expired(tmp, article) ? " (verfallen)" : "")) : "") +
+
+    (info[ON] ?
+       TROW("<nobr>Ursprungsartikel von:</nobr>",
+         implode(info[ON], "<br>")) : "") +
+
+    "</table><p>\n" +
+    "<pre>" + art + "</pre>\n" +
+    (t[info[TID]] ?
+       "<hr><i><strong>Weitere Artikel zu diesem Thema:</strong></i>"
+       "<table class='slp_thread'>" +
+       "<tr><th>Autor</th><th>Datum</th><th>Titel</th></tr>" +
+       t[info[TID], 1] + "</table>" : "");
+}
+
+
+string Request(mapping cmds)
+{
+  string text;
+  if(!cmds[GROUP]) text = GroupListNeu();
+  else
+    if(!cmds[ARTICLE]) text = ArticleListNeu(cmds[GROUP]);
+    else text = Message(cmds[GROUP], cmds[ARTICLE]);
+
+  return "<H2>"+MUDNAME+" Zeitung<HR></H2>"
+        +text;
+}
+

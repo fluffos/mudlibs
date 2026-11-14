@@ -1,0 +1,356 @@
+// std_ork.c
+// 1998-07-27 Feyaria@SilberLand
+
+inherit "std/mnpc";
+
+
+#include "../def.h"
+#include "/secure/npcmaster.h"
+
+#define CLONEWEAPON(x); { weapon = clone_object(x); \
+  weapon->move(this_object(),2); weapon->wield_me();}
+
+void init()
+{
+  mnpc::init();
+  if ( TP && TP->id("ORK")) AddDefender(TP);
+#ifdef ORKEVENT
+  if( TP && TP->QueryProp(P_RACE)!="Ork" && !IS_LEARNER(TP) )
+    Kill(TP);
+#endif  
+}
+
+void create()
+{
+  if (!is_clone(this_object())) return;
+  mnpc::create();
+
+  AddId ( ({"ORK", "ork", "FELL_WUSCHEL"}) );
+  SetProp(P_RACE, "Ork");
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_ALIGN, -200-random(300) );
+  SetProp(P_RESISTANCE_STRENGTHS, 
+    ([DT_ACID:-0.3, DT_LIGHTNING:0.2, DT_TERROR:-0.4]) );
+  SetProp(P_AGGRESSIVE,([P_RACE:(["Elf":0.01, "Mensch":0.02, "Zwerg":0.03, 
+                         "Hobbit":0.01, "Fee":0.05, 0:0.0]) ]) );
+
+#ifdef ORKEVENT
+  SetProp(P_MNPC_AREA, ("/d/ebene/Midas/") );
+#else  
+  SetProp(P_MNPC_AREA, ROOM );
+#endif  
+  SetProp(P_MNPC_WAIT, ({ 10, 30, 30 }));
+  SetProp(P_MNPC_DEFAULTROOM, ROOM "");
+  SetProp(P_MNPC_FLAGS, MOV_OUTDOORS +MOV_INDOORS + MOV_MOVES + MOV_BACKWARDS);
+  SetProp(P_NO_SCORE, 1);
+
+  SetProp(P_LOG_INFO,"feyaria/orks");
+  AddInfo("feyaria", "Feyaria hat mich erschaffen.","sagt: ");
+  AddInfo( DEFAULT_INFO, ({
+    "grunzt etwas.\n",
+    "schaut Dich bloed an.\n",
+    "faucht Dich an.\n",
+    "knurrt laut.\n",
+    "kommt sich nicht angesprochen vor.\n",
+    "grunzt Dich nur veraergert an.\n",
+    "grunzt etwas unverstaendliches.\n",
+    "beachtet Dich nicht.\n",
+    "zuckt mit den Schultern.\n"}) );
+  AddInfo( "ai kattach",
+    "Ai Kattach ist unser Schlachtruf. Es bedeutet sowas wie \'Kein "
+    "Erbarmen\'.", "sagt stolz: ");
+  
+  SUID;
+  call_out("final_setup",0);
+}
+
+void final_setup()
+{
+  AddSpell(2,QueryProp(P_LEVEL)*10,
+    Name(WER,1)+ " beisst Dich.\n",
+    Name(WER,1)+ " beisst @WEN.\n",
+    DT_PIERCE,([SP_SHOW_DAMAGE:1]));
+  if( !QueryProp(P_SPELLRATE) )
+    SetProp(P_SPELLRATE, QueryProp(P_LEVEL)*2);
+
+  if( !QueryProp(P_REJECT) )
+    SetProp( P_REJECT, ({ REJECT_DROP,
+      ({Name(WER,1)+" braucht @WEN nicht.\n",
+        Name(WER,1)+" kann @WEN nicht brauchen.\n",
+        Name(WER,1)+" kann mit @WEM nichts anfangen.\n",
+        Name(WER,1)+" knurrt: Was soll ich mit @WEM?\n"
+      })[random(4)] }) );
+}
+
+void InformDefend(object enemy)
+{
+  if( !InFight() && random(QueryProp(P_LEVEL))> 10 )
+    call_out("kattach",2,enemy);
+}
+
+void kattach(object enemy)
+{
+  if( !InFight() )
+  {
+    tell_room(MENV, Name(WER,1)+" ruft: \'AI KATTACH!!!!\' und wirft sich "
+        "in den Kampf.\n");
+    Kill(enemy);
+  }
+}
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+  if( touch && !random(3) && find_call_out("beiss")==-1 )
+    call_out("beiss",0);
+  else
+  {
+    if( (gruppe=="fies" || gruppe=="intim" ) && find_call_out("fies")==-1)
+      call_out("fies",0);
+    if( (gruppe=="nett" || gruppe=="froh") && find_call_out("nett")==-1)
+      call_out("nett",0);
+    if( (gruppe=="traurig" || gruppe=="aengstlich")
+        && find_call_out("traurig")==-1 && !random(3) )
+      call_out("traurig",0);
+  }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+  StartReaction(verb, gruppe, adverb, touch);
+}
+
+void beiss()
+{
+  if( !present(TP, MENV) ) return;
+  tell_object(TP, Name(WER,1)+ " beisst Dich.\n");
+  tell_room(MENV, Name(WER,1)+ " beisst "+TP->name(WEN)+".\n", ({TP, TO}) );
+  TP->reduce_hit_points(random(QueryProp(P_LEVEL)));
+}
+
+void fies()
+{
+  if( !present(TP, MENV) ) return;
+  tell_room(MENV, Name(WER,1)+ " grunzt "+TP->name(WEN)+ " boesartig an.\n", 
+      ({TP, TO}) );
+  tell_object(TP, Name(WER,1)+ " grunzt Dich boesartig an.\n");
+}
+
+void nett()
+{  
+  if( !present(TP, MENV) ) return;
+  switch( random(3) )
+  {
+    case 0: tell_room(MENV, Name(WER,1)+ " sagt aergerlich: Kommst Du "
+                "vielleicht aus Nettstadt?\n");
+            break;
+    case 1: tell_room(MENV, Name(WER,1)+ "fragt: Warum bist Du so "
+                "ekeleregend gut gelaunt, "+TPN+"?\n");
+            break;
+    case 2: tell_room(MENV, Name(WER,1)+ " versucht, "+TP->name(WEN)+" zu "
+                "beissen.\n", ({TP, TO}) );
+            tell_object(TP, Name(WER,1)+ " versucht, Dich zu beissen.\n");
+            break;
+  }
+}
+
+void traurig()
+{
+  if( !present(TP, MENV) ) return;
+  tell_object(TP, Name(WER,1)+ " lacht Dich aus.\n");
+  tell_room(MENV, Name(WER,1)+ " lacht "+TP->name(WEN)+" aus.\n", ({TP, TO}) );
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  if( killer==TO )
+    write_file(LOG "kills",
+        dtime(time())+": "+Name(WER,1)+" hat gerade "+CAP(getuid(player))+
+        " umgebracht.( -"+lostexp+" XP )\n");
+  if( random(300) < QueryProp(P_LEVEL) )
+    call_out("pluendern", 2);
+}
+
+void pluendern()
+{
+  tell_room(MENV, Name(WER,1)+ " pluendert die Leiche.\n");
+  command("nimm alles aus leiche");
+  command("trage alles");
+}
+
+void equip(int w, int a)
+{
+  object weapon, itemd, ob;
+  if( w ) switch(QueryProp(P_LEVEL))
+  {
+    case 1..8: 
+      switch(random(10)){
+        case 0: CLONEWEAPON("/p/weapon/club/holzstock"); break;     // wc 40
+        case 1: CLONEWEAPON("/p/weapon/knife/messer"); break;       // wc 55
+        case 2: CLONEWEAPON("/p/weapon/club/knueppel"); break;      // wc 70
+        case 3: CLONEWEAPON("/p/weapon/spear/holzspeer"); break;    // wc 65
+      }
+      break;
+    case 9..13: 
+      switch( random(10)){
+        case 0: CLONEWEAPON("/p/weapon/knife/dolch"); break;        // wc 70
+        case 1: CLONEWEAPON("/p/weapon/club/keule"); break;         // wc 90
+        case 2: CLONEWEAPON("/p/weapon/spear/speer"); break;        // wc 95
+        case 3: CLONEWEAPON("/p/weapon/axe/handbeil"); break;       // wc 90
+        case 4: CLONEWEAPON("/p/weapon/axe/handaxt"); break;        // wc 100
+        case 5: CLONEWEAPON("/p/weapon/sword/holzschwert"); break;  // wc 90
+      }
+      break;
+    case 14..18: 
+       AddId( ({"Schwertkaempfer", "Speerkaempfer", "Axtkaempfer", 
+                "Keulenkaempfer", "Peitschenkaempfer", "Kettenkaempfer"}) );
+      switch(random(10)){
+         case 0..1: CLONEWEAPON("/p/weapon/sword/kurzschwert"); break; // wc 110 + 50
+         case 2..5: CLONEWEAPON("/p/weapon/sword/krummsaebel"); break; // wc 125 + 50
+         case 6: CLONEWEAPON("/p/weapon/club/dornenkeule"); break;     // wc 115 + 50
+         case 7: CLONEWEAPON("/p/weapon/spear/jagdspeer"); break;      // wc 115 + 50
+         case 8: CLONEWEAPON("/p/weapon/whip/peitsche"); break;        // wc 111 + 50
+         case 9: CLONEWEAPON("/p/weapon/knife/hiebdolch"); break;      // wc 95 + 50
+       }
+       break;
+    case 19..23:
+       AddId( ({"Schwertkaempfer", "Speerkaempfer", "Axtkaempfer", 
+                "Keulenkaempfer", "Peitschenkaempfer", "Kettenkaempfer"}) );
+       switch(random(10)){
+         case 0..2: CLONEWEAPON("/p/weapon//sword/krummsaebel"); break;// wc 125 + 50
+         case 3..4: CLONEWEAPON("/p/weapon/sword/krummschwert"); break;// wc 157 + 50
+         case 5: CLONEWEAPON("/p/weapon/club/stachelkeule"); break;    // wc 137 + 50
+         case 6: CLONEWEAPON("/p/weapon/club/kampfhammer");  break;    // wc 140 + 50
+         case 7: CLONEWEAPON("/p/weapon/spear/angriffsspeer"); break;  // wc 135 + 50
+         case 8: CLONEWEAPON("/p/weapon/whip/neunschwaenzige"); break; // wc 139 + 50
+         case 9: CLONEWEAPON("/p/weapon/club/streitkolben"); break;    // wc 155 + 50
+       }
+       break;
+    case 24..28: 
+       AddId( ({"Schwertexperte", "Speerexperte", "Axtexperte", 
+                "Keulenexperte", "Peitschenexperte", "Kettenexperte"}) );
+       switch(random(10)){
+         case 0..4: CLONEWEAPON("/p/weapon/sword/krummschwert"); break;// wc 157 + 150
+         case 5: CLONEWEAPON("/p/weapon/axe/kriegsbeil"); break;       // wc 166 + 90
+         case 6: CLONEWEAPON("/p/weapon/spear/kampfspiess"); break;    // wc 170 + 150
+         case 7: CLONEWEAPON("/p/weapon/whip/bullenpeitsche"); break;  // wc 165 + 150
+         case 8: CLONEWEAPON("/p/weapon/chain/morgenstern"); break;    // wc 187 + 100
+         case 9: CLONEWEAPON(WEAPON "kriegsaxt"); break;               // wc 222 + 111
+       }
+       break;
+    case 29..35: 
+       AddId( ({"Schwertexperte", "Speerexperte", "Axtexperte", 
+                "Keulenexperte", "Peitschenexperte", "Kettenexperte"}) );
+       switch(random(10)) {
+         case 0..1: CLONEWEAPON("/p/weapon/sword/krummschwert"); break; // wc 157 + 150
+         case 2: CLONEWEAPON("/p/weapon/sword/bihaender"); break;       // wc 202 + 150
+         case 3: CLONEWEAPON("/p/weapon/sword/bastardschwert"); break;  // wc 185 + 150
+         case 4: CLONEWEAPON("/p/weapon/chain/doppelstern"); break;     // wc 222 + 100
+         case 5: CLONEWEAPON("/p/weapon/club/kriegshammer"); break;     // wc 229 + 150
+         case 6: CLONEWEAPON("/p/weapon/axe/stabaxt"); break;          // wc 220 + 130
+         case 7..9: CLONEWEAPON(WEAPON "kriegsaxt"); break;             // wc 222 + 111
+       }
+       break;
+    default: // lvl 36++
+       AddId( ({"Schwertmeister", "Speermeister", "Axtmeister", 
+                "Keulenmeister", "Peitschenmeister", "Kettenmeister"}) );
+       switch(random(10)) {
+         case 0..1: CLONEWEAPON("/p/weapon/sword/krummschwert"); break; // wc 157 + 250
+         case 2: CLONEWEAPON("/p/weapon/sword/flamberge"); break;       // wc 235 + 265 
+         case 3: CLONEWEAPON("/p/weapon/spear/pike"); break;            // wc 205 + 230
+         case 4: CLONEWEAPON("/p/weapon/chain/trippelstern"); break;    // wc 266 + 250
+         case 5: CLONEWEAPON("/p/weapon/club/kriegshammer"); break;     // wc 229 + 250
+         case 6: CLONEWEAPON("/p/weapon/axe/streitaxt"); break;         // wc 257 + 250
+         case 7..9: CLONEWEAPON(WEAPON "kriegsaxt"); break;             // wc 222 + 111
+       }
+       break;
+  }
+  if( random(35)<QueryProp(P_LEVEL) && QueryProp(P_WEAPON) && 
+      QueryProp(P_WEAPON)->QueryProp(P_NR_HANDS)==1 )
+  {
+    switch(random(6)+QueryProp(P_LEVEL)/3){
+      case 0..4: CLONEME("/p/armour/shield/lederschild"); break; // lvl 1..14
+      case 5..6: CLONEME("/p/armour/shield/holzschild"); break;     //  1..20
+      case 7..8: CLONEME("/p/armour/shield/kupferschild"); break;   //  6..26
+      case 9:    CLONEME("/p/armour/shield/messingschild"); break;  // 12..29 
+      case 10:   CLONEME("/p/armour/shield/bronzeschild"); break;   // 15..32
+      case 11:   CLONEME("/p/armour/shield/eisenschild"); break;    // 18..35
+      case 12:   CLONEME("/p/armour/shield/titanschild"); break;    // 21..38
+      case 13:   CLONEME("/p/armour/shield/stahlschild"); break;    // 24..41
+      default:   CLONEME("/p/armour/shield/turmschild"); break;     // 27....
+    }
+  }
+  if( a )
+  {
+    if( random(10) < QueryProp(P_LEVEL) )
+    {
+      switch(random(5)+QueryProp(P_LEVEL)/4){
+        case 0..2: CLONEME("/p/armour/armour/hemd"); break;    // lvl  1..11
+        case 3: CLONEME("/p/armour/armour/weste"); break;          //  1..15 
+        case 4: CLONEME("/p/armour/armour/lederruestung"); break;  //  1..19
+        case 5: CLONEME("/p/armour/armour/lederpanzer"); break;    //  4..23
+        case 6: CLONEME("/p/armour/armour/messingruestung"); break;//  8..27
+        case 7: CLONEME("/p/armour/armour/ringelpanzer"); break;   // 12..31
+        case 8: CLONEME("/p/armour/armour/kettenhemd"); break;     // 16..35
+        case 9: CLONEME("/p/armour/armour/eisenpanzer"); break;    // 20..39
+        case 10: CLONEME("/p/armour/armour/kettenpanzer"); break;  // 24..43
+        default: CLONEME( ARMOUR "schaedelpanzer"); break;         // 28.. 
+      }
+    }
+    if( !random(3) && QueryProp(P_LEVEL) > 15 )
+    {
+      switch( random(3) ) {
+        case 0: CLONEME("/p/armour/helm/lederhelm"); break;
+        case 1: CLONEME("/p/armour/helm/kampfhelm"); break;
+        case 2: CLONEME( "/p/armour/helm/knochenhelm"); break;
+      }
+    }
+    if( !random(3) && QueryProp(P_LEVEL) > 10 )
+    {
+      switch( random(3) ){
+        case 0: CLONEME("/p/armour/cloak/wolfsfell"); break;
+        case 1: CLONEME("/p/armour/cloak/baerenfell"); break;
+        case 2: CLONEME( ARMOUR "orkmantel"); break;
+      }
+    }
+    if( !random(5) )
+    {
+      switch( random(4) ){
+        case 0: CLONEME("/p/armour/boots/lederschuhe"); break;
+        case 1: CLONEME("/p/armour/boots/lederstiefel"); break;
+        case 2: CLONEME("/p/armour/boots/fellstiefel"); break;
+      }
+    }
+    if( !random(4) && QueryProp(P_LEVEL) > 10 )
+    {
+      switch( random(4) ){
+        case 0: CLONEME("/p/armour/trousers/hose"); break;
+        case 1: CLONEME("/p/armour/trousers/fellhose"); break;
+        case 2: CLONEME("/p/armour/trousers/lederhose"); break;
+        case 3: CLONEME("/p/armour/trousers/lederbeinschienen"); break;
+      }
+      if( !random(3) )
+         CLONEME("/p/armour/belt/guertel");
+    }
+    if( !random(5) && QueryProp(P_LEVEL) > 17 )
+    {
+      switch( random(3) ){
+        case 0: CLONEME("/p/armour/bracers/lederarmschienen"); break;
+        case 1: CLONEME("/p/armour/bracers/messingarmschienen"); break;
+        case 2: CLONEME("/p/armour/bracers/bronzearmschienen"); break;
+      }
+    }
+    if( !random(8) && QueryProp(P_LEVEL) > 22 )
+    {
+      switch( random(2) )
+      {
+        case 0: ob=clone_object("/p/armour/ring/ring"); break;
+        case 1: ob=clone_object("/p/armour/amulet/amulett"); break;
+      }
+      ob->move(this_object(),2);
+      if((itemd=find_object("/p/daemon/itemd/itemd")) && !random(3)) 
+        itemd->identify(ob, 1, 100, 100, ({40,80,100,102,104}) ); 
+    }
+  }      
+  command_me("trage alles"); 
+}
+

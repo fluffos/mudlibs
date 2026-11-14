@@ -1,0 +1,416 @@
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include <moredef.h>
+#include <defines.h>
+#include <moving.h>
+#include <wizlevels.h>
+#include <npcmaster.h>
+
+int lastcount,lasteval;
+
+create() {
+  object ob;
+  string str;
+  
+  if (!is_clone(TO)) return;
+  ::create();
+
+  lastcount=lasteval=0;
+
+  if (ob=MENV||TP) {
+    str=CAP(((str=geteuid(ob))[<1]=='s'||str[<1]=='x'||str[<1] =='z')?
+        str+="'":str+="s");
+    SetProp(P_ARTICLE,0);
+  } else {
+    str="Ein";
+    SetProp(P_ARTICLE,1);
+  }
+  SetProp(P_SHORT,str+" Kerbholz");
+  SetProp(P_LONG, 
+    "Dieses Stueck Holz ist ein laenglicher Stab, auf dem alle wichtigen\n"
+    "Kaempfe durch eine kleine Kerbe in Erinnerung behalten werden koennen.\n"
+    "@@kerbenstr@@");
+  SetProp(P_NAME, str+" Kerbholz");
+  SetProp(P_GENDER, NEUTER);
+  
+  SetProp(P_INFO,
+    "Dieses Kerbholz kann Dir nuetzliche Informationen ueber Deine\n"
+    "Erstkillerpunkte geben. Es gibt dazu folgende Kommandos:\n"
+    "<zaehl(e)> Kerben\n"
+    "Zusaetzlich fuer Seher:\n"
+    "<richt(e) Kerbholz auf <Lebewesen>\n"
+    "<vergleich(e) Kerben mit <Spieler>\n"
+    "Du kannst das Vergleichen mit einem 'Ignoriere' auch verhindern:\n"
+    "Beispiele: ignoriere kerbholz, ignoriere kerbholz.zordan\n");
+  
+  AddSpecialDetail( ({"kerbe","kerben" }), "kerbenstr");
+  
+  AddId( ({ "stab","kerbholz","\n_kerbholz" }) ); // id "holz" entfernt
+
+  SetProp(P_MATERIAL, MAT_MISC_WOOD );
+  SetProp(P_WEIGHT, 100);
+  SetProp(P_VALUE, 0);
+  SetProp(P_NOBUY,  1);
+  SetProp(P_NOSELL, "Du willst lieber noch mit Deinem Kerbholz angeben.\n");
+  SetProp(P_NODROP, "Du willst lieber noch mit Deinem Kerbholz angeben.\n");
+  SetProp(P_NEVERDROP, 1);
+
+  AddCmd( ({ "zaehl","zaehle" }),         "kerbfkt" );
+  AddCmd( ({ "richt","richte" }),         "richtfkt" );
+  AddCmd( ({ "vergleich","vergleiche" }), "verglfkt" );
+}
+
+init() {
+  object ob;
+  string str;
+  
+  ::init();
+  if(!ob=MENV) return;
+  if (query_once_interactive(ob)) {
+    str=CAP(((str=geteuid(ob))[<1]=='s'||str[<1]=='x'||str[<1] =='z')?
+        str+="'":str+="s");
+    SetProp(P_ARTICLE,0);
+  } else {
+    str="Ein";
+    SetProp(P_ARTICLE,1);
+  }
+  SetProp(P_SHORT,str+" Kerbholz");
+  SetProp(P_NAME, str+" Kerbholz");
+  lastcount=lasteval=0;
+}
+
+string kerbenstr() {
+  object env;
+  string str,gs;
+  int anz,i;
+  mixed ret;
+  
+  str="";
+  env=MENV;
+  anz=0;
+  if(query_once_interactive(env)) {
+    gs=TP->QueryScores();
+    for (i=6*strlen(gs)-1; i>0; i--) {
+      if (test_bit(gs,i)) {
+        if(ret=NPCMASTER->QueryNPCbyNumber(i)) {
+          if(ret[NPC_SCORE] > 0) {
+            anz++;
+          }
+        }
+      }
+    }
+    str="Es sind derzeit genau "+anz+" Kerben eingeritzt.\n";
+  }
+  return str;
+}
+
+
+nosave int kerbfkt(string str) {
+  int anz,i,anzp;
+  string gs;
+  mixed ret;
+  
+  anz=anzp=0;
+  notify_fail("Was moechtest Du zaehlen? Deine Kerben?\n");
+  if(str != "kerben") return 0;
+  if((!IS_WIZARD(TP)) && (time()-lastcount) < 10) {
+    write(BS(
+      "Du hast Deine Kerben doch gerade erst gezaehlt und hast so schnell "
+      "gar keine Lust sie noch einmal zu zaehlen..."));
+    return 1;
+  }
+  gs=TP->QueryScores();
+  for (i=6*strlen(gs)-1; i>0; i--) {
+    if (test_bit(gs,i)) {
+      if(ret=NPCMASTER->QueryNPCbyNumber(i)) {
+        if(ret[NPC_SCORE] > 0) {
+          anz++;
+          anzp+=2*ret[NPC_SCORE];
+        }
+      }
+    }
+  }
+  // ein bisschen random() muss einfach sein :)
+  if(!IS_WIZARD(TP)) {
+    if(anzp>15) anzp=anzp-15+random(31);
+    else        anzp+=random(21);
+  }
+  write(BS(
+    "Derzeit zaehlst Du auf Deinem Kerbholz insgesamt "+anz+" Kerben, die "
+    "Dir circa "+anzp+" Stufenpunkte eingebracht haben."));
+  say(BS(
+    CAP(getuid(TP))+" zaehlt die Kerben auf "+
+    TP->QueryPossPronoun(2)+"m Kerbholz."));
+  lastcount=time();
+  return 1;
+}
+
+nosave int richtfkt(string str) {
+  string was,ziel,gs;
+  object ob;
+  int val,i,temp;
+  mixed ret;
+
+  val=0;
+  notify_fail("Dafuer musst Du schon Seher(in) sein!\n");
+  if(!IS_SEER(TP)) return 0;
+  notify_fail("Das geht hier irgendwie gerade nicht!\n");
+  if(!ENV(TP)) return 0;
+  notify_fail("Auf Wen moechtest Du das Kerbholz richten?\n");
+  if(!str) return 0;
+  if(sscanf(str,"%s auf %s",was,ziel) != 2) return 0;
+  notify_fail("Moechtest Du vielleicht Dein Kerbholz auf Wen richten?\n");
+  if(!id(was)) return 0;
+  notify_fail("Auf Wen moechtest Du Dein Kerbholz richten?\n");
+  if(!ziel) return 0;
+  notify_fail("Das Lebewesen muss schon im selben Raum sein!\n");
+  if(!ob=present(ziel,ENV(TP))) return 0;
+  notify_fail("Dein Ziel sollte schon ein Lebewesen sein!\n");
+  if(!living(ob)) return 0;
+  notify_fail("Das Lebewesen darf kein Spieler sein!\n");
+  if(query_once_interactive(ob)) return 0;
+
+  write(BS("Du richtest Dein Kerbholz auf "+ob->name(WEN,2)+" und ..."));
+  tell_object(ob,BS(CAP(getuid(TP))+" richtet "+ob->QueryPossPronoun(1)+
+    " Kerbholz auf Dich."));
+
+  temp=0;
+  gs=TP->QueryScores();
+  for (i=6*strlen(gs)-1; i>0; i--) {
+    if (test_bit(gs,i)) {
+      if(ret=NPCMASTER->QueryNPCbyNumber(i)) {
+        if(ret[2] == explode(file_name(ob),"#")[0]) {
+          temp=1;
+          write(BS(
+            "... findest eine deutliche Kerbe von "+ob->QueryPronoun(WEM)+
+            " darauf."));
+          say(BS(CAP(getuid(TP))+" richtet auf einmal "+TP->QueryPossPronoun(1)+
+            " Kerbholz auf "+ob->name(WEN,2)+" und grinst glorreich."), 
+            ({ TP,ob }) );
+        }
+      }
+    }
+  }
+  if(!temp) {
+    val=NPCMASTER->QueryScore(ob);
+    if(val==NPC_QUEUED) {
+      write(BS(
+        "... findest keine Kerbe von "+ob->QueryPronoun(WEM)+" darauf. "
+        "Es steht allerdings noch nicht fest, ob "+ob->QueryPronoun(WER)+
+        " jemals fuer eine Kerbe gut genug sein wird."));
+      say(BS(CAP(getuid(TP))+" richtet auf einmal "+TP->QueryPossPronoun(1)+
+        " Kerbholz auf "+ob->name(WEN,2)+" und stutzt nachdenklich."), 
+        ({ TP,ob }) );
+    } else if(val>0) {
+      write(BS(
+        "... findest keine Kerbe von "+ob->QueryPronoun(WEM)+" darauf. "
+        "Du bist Dir aber ziemlich sicher, dass sich ein erfolgreicher Kampf "
+        "mit "+ob->QueryPronoun(WEM)+" fuer eine Kerbe lohnen wuerde!"));
+      say(BS(CAP(getuid(TP))+" richtet auf einmal "+TP->QueryPossPronoun(1)+
+        " Kerbholz auf "+ob->name(WEN,2)+" und starrt "+ob->QueryPronoun(WEN)+
+        " erwartungsvoll an."), ({ TP,ob }) );
+    } else if(ob->QueryProp(P_NOATTACK)) {
+      write(BS(
+        "... findest keine Kerbe von "+ob->QueryPronoun(WEM)+" darauf. "
+        "Aber das ist auch nicht weiter verwunderlich, denn "+ 
+        ob->QueryPronoun(WER) + " kann ja auch gar nicht angegriffen werden."));
+      say(BS(CAP(getuid(TP))+" richtet auf einmal "+TP->QueryPossPronoun(1)+
+        " Kerbholz auf "+ob->name(WEN,2)+" und sich enttaeuscht ab."), 
+        ({ TP,ob }) );
+    } else if(ob->QueryProp(P_NO_SCORE) || ob->QueryProp(P_XP) < NPC_EXP_MARK1) {
+      write(BS(
+        "... findest keine Kerbe von "+ob->QueryPronoun(WEM)+" darauf. "
+        "Du bist Dir aber auch sicher, dass "+ob->QueryPronoun(WER)+
+        " nie eine Kerbe bringen wird!"));
+      say(BS(CAP(getuid(TP))+" richtet auf einmal "+TP->QueryPossPronoun(1)+
+        " Kerbholz auf "+ob->name(WEN,2)+" und sich enttaeuscht ab."), 
+        ({ TP,ob }) );
+    } else {
+      write(BS(
+        "... findest keine Kerbe von "+ob->QueryPronoun(WEM)+" darauf. "
+        "Du bist Dir aber ziemlich sicher, dass "+ob->QueryPronoun(WER)+
+        " niemals eine Kerbe wert sein wird (oder noch NIE von einem "
+        "Spieler getoetet wurde!!!)."));
+      say(BS(CAP(getuid(TP))+" richtet auf einmal "+TP->QueryPossPronoun(1)+
+        " Kerbholz auf "+ob->name(WEN,2)+" und wendet sich gelangweilt ab."), 
+        ({ TP,ob }) );
+    }
+  }
+  return 1;
+}
+
+nosave int verglfkt(string str) {
+  string was,ziel,gs1,gs2;
+  object ob;
+  int i,temp,anz1,anz2,both,other1,other2,anzp1,anzp2,noone,bothp;
+  int other1p,other2p;
+  mixed ret;
+  
+  notify_fail("Dafuer musst Du schon Seher(in) sein!\n");
+  if(!IS_SEER(TP)) return 0;
+  notify_fail("Das geht hier irgendwie gerade nicht!\n");
+  if(!ENV(TP)) return 0;
+  notify_fail("Was moechtest Du mit Wem vergleichen?\n");
+  if(!str) return 0;
+  if(sscanf(str,"%s mit %s",was,ziel) != 2) return 0;
+  notify_fail("Moechtest Du vielleicht Deine Kerben mit wem vergleichen?\n");
+  if(was != "kerben") return 0;
+  notify_fail("Mit Wem moechtest Du Deine Kerben vergleichen?\n");
+  if(!ziel) return 0;
+  notify_fail("Der andere Spieler muss schon im selben Raum sein!\n");
+  if(!ob=present(ziel,ENV(TP))) return 0;
+  if(ob->QueryProp(P_INVIS)) return 0;
+  notify_fail("Solltest Du nicht wen Anderen zum Vergleichen suchen?\n");
+  if(TI==ob || TP==ob) return 0;
+  notify_fail("Du kannst Deine Kerben nur mit einem anderen Spieler "
+              "vergleichen!\n");
+  if(!interactive(ob)) return 0;
+  notify_fail(CAP(getuid(ob))+" muss auch ein Kerbholz bei sich haben!\n");
+  if(!present("\n_kerbholz",ob)) return 0;
+  notify_fail(CAP(getuid(ob))+" ignoriert das Vergleichen Eurer Kerben!\n" );
+  if (pointerp(ret=ob->QueryProp(P_IGNORE))) {
+    if (member(ret,getuid(TP)) >= 0) return 0;
+    if (member(ret,"kerbholz") >= 0) return 0;
+    if (member(ret,"kerbholz."+getuid(TP)) >= 0) return 0;
+  }
+
+  if((!IS_WIZARD(TP)) && (time()-lasteval) < 10) {
+    write(BS(
+      "Du hast Deine Kerben doch gerade erst mit jemand anderem verglichen "
+      "und hast dazu so schnell keine Lust... warte noch ein wenig."));
+    return 1;
+  }
+ 
+  gs1=TP->QueryScores()||"";
+  gs2=ob->QueryScores()||"";
+  anz1=anz2=anzp1=anzp2=both=other1=other2=noone=temp=0;
+  
+  i=6*strlen(gs1)-1;
+  ret=6*strlen(gs2)-1;
+  if(i>ret) ret=i;
+  
+  for(i=ret; i>0; i--) {
+    if (test_bit(gs1,i)) {
+      if(ret=NPCMASTER->QueryNPCbyNumber(i)) {
+        if(ret[NPC_SCORE] > 0) {
+          anz1++;
+          anzp1+=2*ret[NPC_SCORE];
+        }
+      }
+    }
+    if (test_bit(gs2,i)) {
+      if(ret=NPCMASTER->QueryNPCbyNumber(i)) {
+        if(ret[NPC_SCORE] > 0) {
+          anz2++;
+          anzp2+=2*ret[NPC_SCORE];
+        }
+      }
+    }
+    if (test_bit(gs1,i) && test_bit(gs2,i)) {
+      if(ret=NPCMASTER->QueryNPCbyNumber(i)) {
+        if(ret[NPC_SCORE] > 0) {
+          both++;
+          bothp+=2*ret[NPC_SCORE];
+        }
+      }
+    }
+    if (!test_bit(gs1,i) && !test_bit(gs2,i)) {
+      if(ret=NPCMASTER->QueryNPCbyNumber(i)) {
+        if(ret[NPC_SCORE] > 0) {
+          noone++;
+          temp+=2*ret[NPC_SCORE];
+        }
+      }
+    }
+    if (test_bit(gs1,i) && !test_bit(gs2,i)) {
+      if(ret=NPCMASTER->QueryNPCbyNumber(i)) {
+        if(ret[NPC_SCORE] > 0) {
+          other1++;
+          other1p+=2*ret[NPC_SCORE];
+        }
+      }
+    }
+    if (!test_bit(gs1,i) && test_bit(gs2,i)) {
+      if(ret=NPCMASTER->QueryNPCbyNumber(i)) {
+        if(ret[NPC_SCORE] > 0) {
+          other2++;
+          other2p+=2*ret[NPC_SCORE];
+        }
+      }
+    }
+  }
+
+  // ein bisschen random() muss einfach sein :)
+  if(!IS_WIZARD(TP)) {
+    if(anzp1>15) anzp1=anzp1-15+random(31);
+    else         anzp1+=random(21);
+    if(anzp2>15) anzp2=anzp2-15+random(31);
+    else         anzp2+=random(21);
+    if(bothp>15) bothp=bothp-15+random(31);
+    else         bothp+=random(21);
+    if(other1p>15) other1p=other1p-15+random(31);
+    else           other1p+=random(21);
+    if(other2p>15) other2p=other2p-15+random(31);
+    else           other2p+=random(21);
+    if(temp>15) temp=temp-15+random(31);
+    else        temp+=random(21);
+  }
+
+  tell_room(ENV(TP),BS(
+    CAP(getuid(TP))+" und "+CAP(getuid(ob))+" vergleichen die Kerben auf ihren "
+    "Kerbhoelzern."), ({ TP,ob}) );
+
+  str="-----------------------------------------------------------------"
+      "-------------\n";
+  str+="Du hast insgesamt "+anz1+" Kerben,\n  welche Dir "
+       "circa "+anzp1+" Stufenpunkte eingebracht haben.\n";
+  str+=CAP(getuid(ob))+" hat insgesamt "+anz2+" Kerben,\n  welche "+
+       ob->QueryPronoun(WEM)+" circa "+anzp2+" Stufenpunkte eingebracht "
+       "haben.\n\n";
+  str+="Ihr habt beide "+both+" gleiche Kerben,\n  die circa "+
+       bothp+" Stufenpunkte eingebracht haben.\n";
+  if(other1 != 0)
+    str+="Du hast "+other1+" andere Kerben,\n  welche "+CAP(getuid(ob))+
+         " circa "+other1p+" weitere Stufenpunkte einbringen wuerden.\n";
+  if(other2 != 0)
+    str+=CAP(getuid(ob))+" hat "+other2+" andere Kerben,\n  welche Dir "
+         "circa "+other2p+" weitere Stufenpunkte einbringen wuerden.\n";
+  if(noone>0)
+    str+="\nEuch beiden fehlen zusaetzlich noch "+noone+" Kerben,\n  welche "+
+         "circa "+temp+" weitere Stufenpunkte einbringen wuerden.\n";
+  str+="-----------------------------------------------------------------"
+      "-------------\n";
+
+  was="-----------------------------------------------------------------"
+      "-------------\n";
+  was+="Du hast insgesamt "+anz2+" Kerben,\n  welche Dir "
+       "circa "+anzp2+" Stufenpunkte eingebracht haben.\n";
+  was+=CAP(getuid(TP))+" hat insgesamt "+anz1+" Kerben,\n  welche "+
+       TP->QueryPronoun(WEM)+" circa "+anzp1+" Stufenpunkte eingebracht "
+       "haben.\n\n";
+  was+="Ihr habt beide "+both+" gleiche Kerben,\n  die circa "+
+       bothp+" Stufenpunkte eingebracht haben.\n";
+  if(other2 != 0)
+    was+="Du hast "+other2+" andere Kerben,\n  welche "+CAP(getuid(TP))+
+         " circa "+other2p+" weitere Stufenpunkte einbringen wuerden.\n";
+  if(other1 != 0)
+    was+=CAP(getuid(TP))+" hat "+other1+" andere Kerben,\n  welche Dir "
+         "circa "+other1p+" weitere Stufenpunkte einbringen wuerden.\n";
+  if(noone>0)
+    was+="\nEuch beiden fehlen zusaetzlich noch "+noone+" Kerben,\n  welche "+
+         "circa "+temp+" weitere Stufenpunkte einbringen wuerden.\n";
+  was+="-----------------------------------------------------------------"
+      "-------------\n";
+
+  tell_object(TP,
+    "Du vergleichst Deine Kerben mit denen von "+CAP(getuid(ob))+" und "
+    "kommst zu dem Schluss:\n"+str);
+  tell_object(ob,
+    CAP(getuid(TP))+" vergleicht "+TP->QueryPossPronoun(2)+" Kerben mit Deinen "
+    "und ihr kommt zu dem Schluss:\n"+was);
+  lasteval=time();
+  return 1;
+}

@@ -1,0 +1,76 @@
+#include "../../arkanisten.h"
+
+inherit GUILD_FOLDER "abilities/ability.lpc";
+
+public void create() {
+    if(is_clone(TO)) return;
+
+    ::create();
+    SetProp(P_ABILITY_NAME, "Zweihand-Pistolero Technik");
+    SetProp(P_ABILITY_DESCRIPTIPON, 
+        "Mit dieser speziellen Kampftechnik erlernst du das Fuehren von zwei Steinschlosspistolen "
+        "gleichzeitig. Du feuerst sie abwechselnd, und manchmal gelingt dir sogar ein Doppeltreffer. "
+        "Du wendest die Zweihand-Pistolero Technik automatisch an, wenn du deine Steinschlosspistole "
+        "ziehst. Waehrend der Anwendung dieser Technik zaehlen deine Haende als frei fuer die Verwendung "
+        "von Arkanistenfaehigkeiten.");    
+    SetProp(P_ABILITY_TYPE, ABILITY_TYPE_PASSIVE);
+    SetProp(P_ABILITY_BASE_ATTRIBUTE, A_DEX);
+    SetProp(P_ABILITY_GROUP, ({ABILITY_GROUP_GADGET_POWERUP, ABILITY_GROUP_GADGETS}));
+    SetProp(P_ABILITY_REQUIRES, ({FLINTLOCK_PISTOL}));
+
+    subscribe_to(FLINTLOCK_PISTOL, EVENT_AFTER_USE);
+    modify(MODIFY_ALL, MODIFY_FREE_HAND_CALCULATION);
+    modify(FLINTLOCK_PISTOL, MODIFY_DAMAGE);
+}
+
+public void handle_ability_event(string sender_name, int event, mixed payload) {
+    object pistol;
+    object user, enemy;
+    mapping sinfo;
+    int success;
+
+    if(sender_name != FLINTLOCK_PISTOL) return;
+    if(event != EVENT_AFTER_USE) return;
+    if(!mappingp(sinfo=payload)) return;
+    if(!objectp(user = payload["user"])) return;
+    if(!objectp(pistol = present(PISTOL_ID, user))) return;
+    if(objectp(present(PISTOLERO_OFFHAND_ID, user))) return;
+
+    pistol = clone_object(OBJ "offhand_pistol");
+    if(pistol->move(user) != 1) {
+        tell_object(user, BS("Du kannst die Haltung gerade nicht einnehmen."));
+        destruct(pistol);
+        return;
+    }
+
+    pistol->setup(user);
+    pistol->do_wear(PISTOLERO_OFFHAND_ID);
+    return;
+}
+
+
+public mapping modify_ability(string sender, int mtype, mapping payload) {
+    int sc, damage;
+    object user, offhand;
+
+    if(!objectp(user=payload[SI_ABILITY_USER])) return payload;
+    if(!objectp(present(PISTOLERO_OFFHAND_ID, user))) return payload;
+
+    switch(mtype) {
+        case MODIFY_FREE_HAND_CALCULATION:
+            pDebug(user, sprintf("pistoler_stance :: freehands + 1\n"));
+            payload[P_NR_HANDS] = payload[P_NR_HANDS] + 1;
+            break;
+        case MODIFY_DAMAGE:
+            if(!member(payload, SI_SKILLDAMAGE)) break;
+            if(!intp(payload[SI_SKILLDAMAGE])) break;
+
+            sc = use(user, ([SI_ABILITY_NOLEARN: random(5), SI_ABILITY_SILENT: 1]), 1);
+            if(sc < 0) sc = 0;
+            pDebug(user, sprintf("pistolero_stance :: success=%d damBonus=%d\n", sc, sc/200));
+            payload[SI_SKILLDAMAGE] += sc / 200;
+            break;
+    }
+
+    return payload;
+}

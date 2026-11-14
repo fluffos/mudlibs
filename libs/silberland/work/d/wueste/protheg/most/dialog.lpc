@@ -1,0 +1,133 @@
+#include "../def.h"
+#include "language.h"
+#include "properties.h"
+#include "combat.h"
+
+#define TYP CAP(TO->name(WER,0))
+
+mapping dialog, spieler;
+string dialogquestion, dialognotifyfail;
+
+SetDialogQuestion(string str) { dialogquestion=str; }
+SetDialogNotifyfail(string str) { dialognotifyfail=str; }
+QueryDialogQuestion(string str) { return dialogquestion; }
+QueryDialogNotifyfail(string str) { return dialognotifyfail; }
+
+OutputDialog(int what) 
+{
+  int i,siz;
+  mixed antworten;
+  
+  if(what==0)
+    what=spieler[getuid(TP)];
+  else
+    {
+      if(!member(spieler,getuid(TP))+1)
+	spieler+=([getuid(TP):what]);
+      else
+	spieler[getuid(TP)]=what;
+    }
+  
+  write("\n");
+  write(dialog[what,0]+"\n");
+  write("\n");
+  antworten=dialog[what,1];
+  siz=sizeof(antworten)/2;
+  for(i=0;i<siz;i++) 
+    write((i+1)+") "+antworten[i*2]+"\n");
+  write("\n"+"0.) Gespraech beenden. 9.) Frage wiederholen."+"\n");
+  write(QueryDialogQuestion());
+}
+
+chat_next(string task)
+{
+  int i, siz;
+  mixed what;
+  
+  if(!present(TP))
+    return tell_object(TP, 
+		       TYP+" teilt Dir mit: He, wo bist Du denn hin?"+"\n");
+
+  if(task=="0")
+    {
+      write(TYP+" sagt: Bis dann..."+"\n");
+      say(CAP(TPN)+" beendet das Gespraech mit "+
+	  TO->name(WEM,0)+"."+"\n",TP);
+      return;
+    }
+  
+  if(task=="9")
+    {
+      write(TYP+" sagt: Nochmal!?! Na gut!"+"\n");
+      OutputDialog(0);
+      input_to("chat_next");
+      return;
+    }
+
+  /*
+    int auswerten(mixed cmd, string str)
+    {
+    if (closurep(cmd))
+    return funcall(cmd,str);
+    return (int)call_other(this_object(),cmd,str);
+    }
+    */
+  
+  if((to_int(task))&&(sizeof(dialog[spieler[getuid(TP)],1])/2)>=to_int(task)) 
+    {
+      what=dialog[spieler[getuid(TP)],1][(to_int(task)-1)*2+1];
+      if(closurep(what))
+	what=funcall(what,TP);
+      if(!to_int(what))
+	what=0;
+      if(what==0)
+	return write(TYP+" beendet euer Gespraech."+"\n");
+    }
+  else
+    write(QueryDialogNotifyfail()+"\n");
+  
+  OutputDialog(what);
+  input_to("chat_next");
+  return 1;
+}
+
+chat_first(string str)
+{
+  string wem;
+  
+  if(!str) return write("Mit wem willst Du denn reden?"+"\n"),1;
+  if(sscanf(str, "mit %s", wem)!=1) 
+    return write("Mit wem willst Du denn reden?"+"\n"),1;
+  if(!present(wem))
+    return write(CAP(wem)+" ist nicht da!"+"\n"),1;
+  if(lower_case(ME->QueryProp(P_NAME))!=lower_case(wem))
+    return write(TYP+" fragt: Willst Du vielleicht mit mir reden?!"+"\n"),1;
+  if(TP->QueryProp(P_DEAF))
+    return write(TYP+" laechelt Dich nur schief an und deutet auf deine "+
+		 "Ohren!\n"),1;
+  if(TP->InFight())
+    return write(TYP+" sagt: Doch nicht waehrend eines Kampfes!"+"\n"),1;
+  if(TO->InFight())
+    return write(TYP+" keucht: Ich kaempfe doch gerade!"+"\n"),1;
+  say(CAP(TPN)+" beginnt ein Gespraech mit "+TO->name(WEM,0)+".\n",TP);
+  if(!sizeof(dialog)) 
+    return write(TYP+" sagt: Ich weiss doch gar nix."+"\n"),1;    
+  
+  OutputDialog(1);
+  input_to("chat_next");
+  return 1;
+}
+
+AddDialog(int num, string frage, mixed antworten) 
+{
+  dialog+=([num:frage; antworten]);
+}
+
+use_dialog()
+{
+  dialog=([]);
+  spieler=([]);
+  dialogquestion="Tipp mal was: ";
+  dialognotifyfail="Irgendwas machst du falsch!";
+  AddCmd("rede","chat_first");
+}

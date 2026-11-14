@@ -1,0 +1,182 @@
+/*****************************************************************************
+Raum der Pruefungen (Waldlaeufer)
+(c) Lilyth, Torian, Delgo @ Silberland <sl.mud.at>
+01.10.06 - Begin
+*****************************************************************************/
+//** INCLUDE + INHERIT + DEFINE ********************************************//
+#include "../def.h"
+inherit "std/room";
+#include "/gilden/waldlaeufer/functions.h"
+
+int level, counter, last_hp, very_last_hp;
+
+void loose_armour(object player);
+void fake_message(object player);
+//**************************************************************************//
+
+
+
+//** StandardFunktionen ****************************************************//
+//-- Create ------------------------------------------------------------------
+void create()
+{
+  ::create();
+
+  SetProp(P_INT_SHORT, "Der Raum der Pruefungen");
+  SetProp(P_INT_LONG,
+    "du schwebst im nichts, es scheint keine kanten und balken zu geben, "
+    "aber du kannst dich dennoch bewegen wie du willst. scheinbar haben die "
+    "gesetze der physik hier keine gueltigkeit, du bist gespannt was dich "
+    "hier erwartet.\nes gibt einen sichtbaren ausgang: oben.");
+  SetProp(P_LIGHT, 1);
+  SetProp(P_INDOORS, 1);
+  SetProp(P_ENVIRONMENT, ([ENV_TEMPERATURE: 20, ENV_TERRAIN: TT_HOUSE]) );
+  SetProp(P_HIDE_EXITS, 1);
+  AddExit( "oben", ([
+              EX_TESTFUNC: "exit_func",
+              EX_DEST    : GUILD_ROOM]) );
+  previous_object()->CustomizeObject();
+  AddItem(NPC"exam_npc", REFRESH_NONE);
+  level=0;
+  counter=8+random(2);//gl 1 8+2
+}
+
+//-- Init, erstmal belassen fuer Testzwecke ----------------------------------
+void init()
+{
+  int i;
+  object ob;
+  
+  ::init();
+  // Erstmal checken, ob es sich hier ueberhaupt um den Clone
+  // handelt, der fuer TP 'zustaendig' ist, oder ob es z.B. ein
+  // verfolgender Magier (bzw. Haustier o.ae.) ist...
+  // -- habe den Teil bei Woody geklaut --
+  // if(explode(file_name(ME),":")[<1] != getuid(TP))
+  // { TP->move(ROOM "axt", M_GO); }
+  i=1;
+  if(objectp(TP) && interactive(TP) )
+  {
+    level=(int) (5+TP->QueryProp(P_GUILD_LEVEL)*1.5);
+    if(level>=4) { i=i*(-1); }
+    if("dunkelelf" == lower_case(TP->QueryProp(P_RACE)) ) { i=i*(-1); }
+    SetProp(P_LIGHT, i*100);
+    //ob=clone_object(NPC"exam_npc");
+    //ob->move(TO, M_NOCHECK);
+    ob=present(EXAM_NPC_ID);
+    ob->set_level(level, TP);
+    ob->Kill(TP);
+  }
+}
+
+//-- Hindert nicht am durchschreiten, meldet nur weiter ----------------------
+int exit_func()
+{
+  string s, *str;
+  
+  if(explode(file_name(TO),":")[<1] == getuid(TP)) { call_out("remove", 0); }
+  return 1;
+}
+
+//-- Keine Ausruestung verlieren ---------------------------------------------
+int remove()
+{
+  int i;
+  mixed m;
+  
+  m=all_inventory();
+  if(pointerp(m) && sizeof(m)>0) { for(i=0;i<sizeof(m);i++)
+  { if(m[i]->id(EXAM_NPC_ID)) { m[i]->remove(1); continue; }
+    m[i]->move(GUILD_ROOM, M_SILENT);}  }
+  return ::remove();
+}
+//**************************************************************************//
+
+
+
+//** Pruefungsfunktionen ***************************************************//
+//-- Illusionsfunktionen zum Erschrecken -------------------------------------
+void random_effect(object player)
+{
+  if(!objectp(player) || !present(player) ) { return; }
+  if(!random(10))
+  {
+    if(random(2)) { loose_armour(player); }
+    else { fake_message(player); }
+  }
+}
+
+//-- Countfunktion -----------------------------------------------------------
+void count(object player)
+{
+  string s;
+  int hp;
+  object ob;
+  
+  //DBD(to_string(counter)+":"+getuid(player));
+  if(!objectp(player)) { return; }
+  
+  hp=player->QueryProp(P_HP);
+  if(hp>last_hp && last_hp > 0) 
+  {
+    tell_object(player, BS("Du hast Dich nicht als wuerdig erwiesen, Du "
+                        "darfst Dich nicht heilen!"));
+    if(objectp(ob=present(EXAM_NPC_ID))) { ob->remove(1); }
+    player->move(GUILD_ROOM, M_NOCHECK);
+    call_out("remove",2);
+    return;
+  }
+  if(counter<=0)
+  {
+    s=GUILD_MASTER->GetExamRoom(getuid(player));
+    GUILD_MASTER->SetExamRoom(getuid(player), set_bit(s, level));
+    tell_object(player, BS("Du hast Dich als wuerdig erwiesen."));
+    if(objectp(ob=present(EXAM_NPC_ID))) { ob->remove(1); }
+    player->move(GUILD_ROOM, M_NOCHECK);
+    call_out("remove",2);
+    return;
+  }
+  random_effect(player);
+  last_hp=hp;
+  counter--;
+  return;
+}
+//-- Eine Ruestung verschwinden lassen ---------------------------------------
+void loose_armour(object player)
+{
+  object *armours;
+  object ob;
+    
+  if(!objectp(player) || !present(player) ) { return; }
+  if(pointerp(armours=player->QueryProp(P_ARMOURS)) && sizeof(armours)>0 )
+  {
+    ob=armours[random(sizeof(armours))];
+    tell_object(player, BS(ob->Name(WER,1)+" scheint sich langsam "
+                        "aufzuloesen, wenn Du "+ob->QueryPronoun(WEN)+
+                        " nicht verlieren willst, dann verschwinde!"));
+    return;
+  }
+  return;
+}
+
+//-- Noch etwas gemeiner ... ;-) ---------------------------------------------
+void fake_message(object player)
+{
+  string s, *str;
+  mixed res;
+  
+  if(!objectp(player) || !present(player) ) { return; }
+  str=({GUILD_NPC+" teilt Dir mit: Ich brauche deine Hilfe!",
+        GUILD_NPC+" teilt Dir mit: Du hast bestanden, komm raus.",
+        "[Tod:Lars] Angst hat gerade "+player->name(RAW)+" umgebracht."});
+        // Klassiker
+  if(stringp(res=player->QueryProp(P_MARRIED)))
+  {
+    res=explode(res, " ")[0];
+    res=CAP(res);
+    str+=({res+" teilt Dir mit: Schatz, ich brauche Deine Hilfe!"});
+  }
+  tell_object(player, BS(str[random(sizeof(str))]));
+  return;
+}
+//**************************************************************************//

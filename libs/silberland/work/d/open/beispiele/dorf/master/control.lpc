@@ -1,0 +1,210 @@
+//=========================================================================
+//
+// File:    master.c
+// Created by Ronja@SL
+//
+// Project: testgebiet
+//
+//=========================================================================
+
+#include "../def.h"
+
+#include <ansi.h>
+
+#define SPACES "    "
+#define BSI(x, y) break_string((x), 72, (y), BS_INDENT_ONCE|BS_SINGLE_SPACE)
+
+void create()
+{
+  if(is_clone(this_object()))
+  {
+    destruct(this_object());
+    return;
+  }
+
+  seteuid(getuid(this_object()));
+
+  return;
+}
+
+int greater_fun(string a_str, string b_str)
+{
+  int a_i, b_i;
+  string *arr;
+
+  arr = explode(a_str, "_");
+  if(sizeof(arr) > 1)
+  {
+    a_i = to_int(arr[sizeof(arr)-1]);
+  }
+  else
+  {
+    a_i = 0;
+  }
+
+  arr = explode(b_str, "_");
+  if(sizeof(arr) > 1)
+  {
+    b_i = to_int(arr[sizeof(arr)-1]);
+  }
+  else
+  {
+    b_i = 0;
+  }
+
+  if(a_i > b_i) return 1;
+
+  return 0;
+}
+
+string Extract(string fname)
+{
+  int nl, inside, i;
+  string *lines, s, tmp, delimit;
+
+  lines = explode(read_file(fname, 1, 10), "\n");
+  nl    = sizeof(lines);
+
+  inside  = 0;
+  s       = "";
+  delimit = "";
+
+  for(i=0;i<nl;i++)
+  {
+    if(lines[i][0..10] == "//=========")
+    {
+      inside = 0;
+    }
+
+    if(inside)
+    {
+      tmp = regreplace(lines[i][3..], " *(.*[^ ]) *", "\\1", 0);
+      if(strlen(tmp) > 0)
+      {
+        s += delimit+tmp;
+        delimit = " ";
+      }
+    }
+
+    if(lines[i][0..10] == "// Project:")
+    {
+      inside = 1;
+    }
+  }
+
+  return s;
+}
+
+string header(string s, string u)
+{
+  int i;
+  string tmp;
+
+  i = strlen(s);
+
+  tmp = ""; while(i--) tmp += u;
+
+  return SPACES + s + "\n" + SPACES + tmp + "\n";
+}
+
+string ReIndex(string dir)
+{
+  string *files;
+  string s, fmt, indent, outstr, path;
+  int i, nf, max;
+
+  outstr = "";
+  path   = "/d/" + REGION + "/" + MAGIERNAME + "/" + GEBIET + "/" + dir;
+
+  files = get_dir(path + "/*.lpc");
+
+  max = 0;
+  nf  = sizeof(files);
+
+  for(i=0;i<nf;i++)
+  {
+    files[i] = files[i][0..<3];
+    if(strlen(files[i]) > max) max = strlen(files[i]);
+  }
+
+  fmt = SPACES + "%-"+max+"s";
+  files = sort_array(files, "greater_fun");
+
+  for(i=0;i<nf;i++)
+  {
+    indent = sprintf(fmt, files[i]) + ": ";
+    s = Extract(path + "/" + files[i] + ".lpc");
+    if(strlen(s) == 0) s = " ";
+    s = BSI(s, indent);
+
+    outstr += s;
+  }
+
+  return outstr;
+}
+
+void ReIndexDir(string dir)
+{
+  string s, path;
+  int i;
+
+  if(!(dir == "room"   ||
+       dir == "weapon" ||
+       dir == "armour" ||
+       dir == "npc"    ||
+       dir == "obj"    ))
+  {
+    tell_object(TP, "Ungueltiges Verzeichnis '"+dir+"'!\n");
+    return;
+  }
+
+  s = header("Verzeichnis: "+dir, "=") + "\n";
+
+  s += BSI("Die Dateien bauen aufeinander auf, Sachen die in Dateien mit "
+           "einer niedrigen Nummer erklaert wurden, werden in darauf "
+           "folgenden Dateien nur noch umrissen bzw gar nicht mehr "
+           "erklaert.", SPACES);
+
+  s += SPACES + "siehe auch: /d/" + REGION + "/" + MAGIERNAME + "/" +
+       GEBIET + "/doc/index.txt\n\n";
+
+  s += ReIndex(dir);
+
+  tell_object(TP, s);
+
+  path   = "/d/" + REGION + "/" + MAGIERNAME + "/" + GEBIET + "/" + dir;
+
+  rm(path + "/" + ".readme");
+  write_file(path + "/" + ".readme", s);
+}
+
+string ReIndexAll()
+{
+  string s, path, line;
+
+  line = "\n" + SPACES +
+         "-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*" +
+         "\n\n";
+
+  s  = header("Verzeichnis ueber alle Dateien", "=");
+
+  s += BSI("Die Dateien sind nach steigenden Nummwern in den jeweiligen "
+           "Verzeichnissen aufgelistet. Dabei bedeuten groessere "
+           "Nummern eine steigende Komplexetitaet. In komplexeren "
+           "Dateien werden einfachere Sachen nicht oder nur noch "
+           "nach Notwendigkeit erklaert. ", SPACES) + "\n";
+
+  s += header("Verzeichnis room", "-")   + "\n" + ReIndex("room")   + line;
+  s += header("Verzeichnis npc", "-")    + "\n" + ReIndex("npc")    + line;
+  s += header("Verzeichnis obj", "-")    + "\n" + ReIndex("obj")    + line;
+  s += header("Verzeichnis armour", "-") + "\n" + ReIndex("armour") + line;
+  s += header("Verzeichnis weapon", "-") + "\n" + ReIndex("weapon") + line;
+
+  tell_object(TP, s);
+
+  path   = "/d/" + REGION + "/" + MAGIERNAME + "/" + GEBIET + "/doc";
+
+  rm(path + "/index.txt");
+  write_file(path + "/index.txt", s);
+
+}

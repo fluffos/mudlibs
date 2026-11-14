@@ -1,0 +1,78 @@
+mapping prep_schattenschnitt(object caster, mapping sinfo, int silent) 
+{ 
+  object ob;
+  int r;
+  
+  if(!GuildItemTest(caster, sinfo) ||
+     !FroschTest(caster, sinfo)|| 
+     !BlindTest(caster, sinfo) ||
+     !KnifeTest(caster, sinfo) ||
+     !IsNotInFight(caster, sinfo))
+    return 0;
+  
+  if(!objectp(ob=sinfo[SI_ENEMY])){ 
+    ob=FindLivingVictim(sinfo[SI_SKILLARG], caster, "An wen willst du dich anschleichen?\n");
+    if(!ob) return 0;
+  }
+
+  if(!silent){
+    FirstPrepareFuncSuccessfull(caster, sinfo);
+    tell_room(ENV(caster), BS(caster->Name(WER)+" verschmilzt mit den Schatten und schleicht hinter "+ob->name(WEN, 1)), ({caster, ob}));
+  }
+  return sinfo;
+}
+
+
+int schattenschnitt(object caster, mapping sinfo)
+{
+  int dam, abil, success, pause;
+  object ob, weapon;
+  
+  if(!mappingp(sinfo=prep_schattenschnitt(caster, sinfo, 1))) return 0;
+
+  ob=FindEnemyVictim(sinfo[SI_SKILLARG], caster, "Dein Ziel ist verschwunden!\n");
+  if(!objectp(ob)) return 0;
+  weapon=caster->QueryProp(P_WEAPON);
+
+  success=SpellSuccess(caster,sinfo);
+  if(success < 0) {
+    if(objectp(present(PANTHER_ASPECT_ID, caster)) && !random(2)) {
+        tell_object(caster, BS("Du erwischt dein Opfer nicht und verschwindest sofort wieder im Schatten."));
+        return MISSERFOLG;
+    }
+
+    tell_object(caster, BSC("Gerade als du versuchst die Kehle deines Opfers durchzuschneiden, wirst du entdeckt!"));
+    ob->Kill(caster);
+    caster->SetProp(P_DISABLE_ATTACK, 1);
+    if(!random(3))
+    {
+      tell_object(caster, BSC("Verwirrt stolperst du zurueck!"));
+      tell_room( ENV(caster), 
+                 BS(caster->Name(WER, 1)+" geht zu Boden.") ,
+                 ({caster}) );
+      caster->SetProp(P_LAST_RAMMEN_TIME, time());
+      caster->SetProp(P_DISABLE_ATTACK, 2+random(4));
+    }
+    return MISSERFOLG;
+  }
+ 
+  dam = sinfo[SI_SKILLDAMAGE];
+  dam += sinfo[SI_SKILLABILITY]/100;
+
+  sinfo[SI_SKILLDAMAGE]=dam;
+  sinfo[OFFSET(SI_SKILLDAMAGE)] += dam/2;
+
+  tell_object(caster, BS("Geschickt schleichst du dich an "+ob->name(WEN, 1)+" an und schneidest "+ob->QueryPossPronoun(FEMALE, WEN)+" Kehle durch."));
+  tell_room(ENV(caster), BS(caster->Name(WER, 1)+" springt ploetzlich aus dem Schatten hervor und faellt "+ob->name(WEM, 1)+" in den Ruecken."), ({caster}));
+
+  dam = ExecuteAttackSpell(ob, caster, sinfo, ([SP_SHOW_DAMAGE:1]), ATTACK_SPELL_KNIFE);
+
+  if(success > 8000 && objectp(ob)) {
+    pause = 2+random((success-8000)/500);
+    ob->SetProp(P_DISABLE_ATTACK, pause);
+    ob->SetProp(P_DISABLE_SPELLS, pause);
+    tell_room(ENV(caster), BS(sprintf("%s ist von dem Angriff vollkommen ueberrumpelt!", ob->Name(WER, 1))));
+  }
+
+  return ERFOLG;
+}

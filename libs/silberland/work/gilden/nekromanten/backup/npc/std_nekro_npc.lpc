@@ -1,0 +1,178 @@
+// Alle NPC die Nekromanten unterwerfen koennen, erben diesen NPC
+/*
+ Rev 1.0 19.04.2003 Archon: erstellt
+*/
+
+inherit "std/mnpc";
+#include "../def.h"
+#include <mnpc.h>
+
+#pragma strong_types
+
+void create()
+{
+  if (!is_clone(ME)) return;
+  ::create();
+  SetProp(P_NEKRO_IS_CONTROLABLE,1);
+}
+
+int SetMaster(object master)
+{
+  object oldmaster;
+
+  if(!objectp(master)) return 0;
+  if(objectp(oldmaster=QueryProp(P_NEKRO_CASTED_BY)))
+    oldmaster->RemoveDefender(ME);
+  if(objectp(oldmaster=QueryProp(P_NEKRO_MASTERED_BY)))
+  {
+    oldmaster->RemoveDefender(this_object());
+    oldmaster->RemovePursuer(this_object());
+    tell_object(oldmaster, break_string(sprintf("Bei allen Niederhoellen! %s hat "
+            "die Herrschaft ueber Deinen Diener uebernommen!",
+            master->Name(WER)),78));
+  }
+  SetProp(P_NEKRO_MASTERED_BY, master);
+//Einige Sicherheiten
+  SetProp(P_NO_GLOBAL_ATTACK,1);
+  SetProp(P_FRIEND,1);
+  SetProp(P_MNPC_FLAGS,0);
+//chats weg, da diese ggf an spezielle raeume bzw gegebenheiten gebunden sind
+  SetProp(P_CHATS,0);
+  SetProp(P_ACHATS,0);
+  SetProp(P_COMMANDS,0);
+  master->AddPursuer(ME);
+  master->AddDefender(ME);
+  return 1;
+}
+
+void InformDefend(object enemy) 
+{ 
+  Kill(enemy); 
+}
+
+int SetAggressive(int x) 
+{
+  object ob;
+
+  if(intp(x))
+    SetProp(P_AGGRESSIVE, x); 
+  if(objectp(ob=QueryProp(P_NEKRO_CASTED_BY)))
+    ob->RemoveDefender(ME);
+  if(objectp(ob=QueryProp(P_NEKRO_MASTERED_BY)))
+  {
+    ob->RemoveDefender(ME);
+    ob->RemovePursuer(ME);
+  }
+  SetProp(P_NO_GLOBAL_ATTACK,0);
+  SetProp(P_FRIEND,0);
+  return 1;  
+}
+
+void message(object pl)
+{
+  switch(random(4))
+  {
+    case 3:
+      command_me("sag Jawohl, Meister.");
+    break;
+    case 2:
+      tell_room(environment(ME),break_string(Name(WER,1)+
+        " gehorcht widerwillig."));
+    break;
+    case 1:
+      tell_room(environment(ME),break_string(Name(WER,1)+" versucht sich "
+        "zu widersetzen, schafft es aber nicht."));
+    break;
+    default: 
+      tell_room(environment(ME),break_string(Name(WER,1)+" beugt sich "
+        "dem Befehl von "+pl->name(WEN,1)+"."),({pl}));
+      tell_object(pl,break_string(Name(WER,1)+" beugt sich Deinem "
+        "Befehl."));
+    break;
+  }
+}
+
+void not_now(object pl)
+{
+  tell_room(environment(pl),Name(WER,1)+" reagiert nicht.\n");
+}
+
+void help_me(object pl)
+{
+  if (member_array(ME,pl->QueryProp(P_DEFENDERS))>-1)
+  { //macht er ja schon
+    tell_object(pl,break_string(Name(WER,1)+" knurrt Dich an."));
+    tell_room(environment(pl),break_string(Name(WER,1)+" knurrt "
+      +pl->name(WEN,1)+" an."),({pl}));
+    return;
+  }
+  pl->AddDefender(ME);
+  message(pl);
+}
+
+void no_fighting(object pl)
+{
+  if (member_array(ME,pl->QueryProp(P_DEFENDERS))==-1)
+  { //macht er ja schon
+    tell_object(pl,break_string(Name(WER,1)+" knurrt Dich an."));
+    tell_room(environment(pl),break_string(Name(WER,1)+" knurrt "
+      +pl->name(WEN,1)+" an."),({pl}));
+    return;
+  }
+  pl->RemoveDefender(ME);
+  message(pl);
+}
+
+void follow_me(object pl)
+{
+  mixed *pur;
+  pur=pl->Query(P_PURSUERS);
+  
+  if (pointerp(pur) && member_array(ME,pur[1])>-1)
+  { //macht er ja schon
+    tell_object(pl,break_string(Name(WER,1)+" knurrt Dich an."));
+    tell_room(environment(pl),break_string(Name(WER,1)+" knurrt "
+      +pl->name(WEN,1)+" an."),({pl}));
+    return;
+  }
+  pl->AddPursuer(ME);
+  message(pl);
+}
+
+void stay_here(object pl)
+{
+  mixed *pur;
+  pur=pl->Query(P_PURSUERS);
+  
+  if (!pointerp(pur) || member_array(ME,pur[1])==-1)
+  { //macht er ja schon
+    tell_object(pl,break_string(Name(WER,1)+" knurrt Dich an."));
+    tell_room(environment(pl),break_string(Name(WER,1)+" knurrt "
+      +pl->name(WEN,1)+" an."),({pl}));
+    return;
+  }
+  pl->RemovePursuer(ME);
+  message(pl);
+}
+
+void catch_tell(string str) 
+{
+  string wer,was;
+  if (!query_verb()) return ;
+  if(PL!=QueryProp(P_NEKRO_MASTERED_BY)) return ;
+
+  if(query_verb() == "sag" || query_verb()[0..0]!="'") 
+  {
+    if (sscanf(str,"%s sagt: sklave %s\n",wer,was)!=2) return;
+    if (InFight())
+      not_now(PL);
+    if (was[0..7]=="hilf mir") 
+      help_me(PL);
+    else if (was[0..9]=="kampfpause")
+      no_fighting(PL);
+    else if (was[0..8]=="folge mir")
+      follow_me(PL);
+    else if (was[0..9]=="bleib hier")
+      stay_here(PL);
+  }
+}

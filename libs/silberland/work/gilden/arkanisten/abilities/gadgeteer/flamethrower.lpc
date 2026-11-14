@@ -1,0 +1,123 @@
+#include "../../arkanisten.h"
+
+inherit GUILD_FOLDER "abilities/ability.lpc";
+
+public void create() {
+    if(is_clone(TO)) return;
+
+    ::create();
+    SetProp(P_ABILITY_NAME, "Flammenwerfermodul");
+    SetProp(P_ABILITY_DESCRIPTIPON, 
+        "Das Flammenwerfermodul verwandelt die federmechanischen Handschuhe in eine Waffe von "
+        "beeindruckender Zerstoerungskraft. An der Unterseite des Handschuhs befindet sich ein "
+        "raffinierter Mechanismus aus Kupferroehren, einer Brennkammer und einem Reservoir fuer "
+        "alchemistische Brennfluessigkeit. Ein versteckter Hebel entfesselt einen breiten "
+        "Flammenkegel, der mehrere Feinde gleichzeitig erfasst und die Umgebung in ein Inferno "
+        "taucht. Die Flammen koennen Gegner entzuenden und Panik verbreiten, waehrend der Traeger sich "
+        "selbst durch das Chaos bewegt. Der modulare Aufbau ermoeglicht eine kurze, aber intensive "
+        "Nutzung, die taktisch entscheidend sein kann – sei es, um Gegner zurueckzudraengen oder "
+        "sie in einem Meer aus Feuer zu vernichten.");    
+    SetProp(P_ABILITY_TYPE, ABILITY_TYPE_ACTIVE);
+    SetProp(P_ABILITY_BASE_ATTRIBUTE, A_DEX);
+    SetProp(P_ABILITY_CASTVERB, CAST_VERB_ACTIVATE);
+    SetProp(P_ABILITY_GROUP, ({ABILITY_GROUP_GADGETS}));
+    SetProp(P_ABILITY_COST, ([
+        P_SP: 35
+    ]));
+    SetProp(P_ABILITY_REQUIRES, ({DEPLOYABLE_SHIELD}));
+    SetProp(P_ABILITY_MIN_GUILD_LEVEL, 11);
+}
+
+public int valid_target(object ob) {
+    return living(ob) && !query_once_interactive(ob) && !ob->QueryProp(P_NOATTACK) && !ob->QueryProp(P_FRIEND);
+}
+
+public mapping prepare_use(object user, mapping sinfo) {
+    object *enemies;
+
+    if(!objectp(present(SPRINGLOADED_GLOVES_ID, user))) {
+        tell_object(user, BS("Du musst deine federmechanischen Handschuhe tragen, um das Flammenwerfermodul zu aktivieren."));
+        return 0;
+    }
+
+    if(!user->InFight()) {
+        tell_object(user, BS("Den Flammenwerfer kansnt du nur im Kampf aktivieren."));
+        return 0;
+    }
+
+    enemies = filter_array(all_inventory(ENV(user)), "valid_target");
+    enemies -= ({ user });
+    if(sizeof(enemies) < 1) {
+        tell_object(user, BS("Du hast keine Gegner!"));
+        return 0;
+    }
+    
+    tell_object(user, BS("Du pumpst das Brennoel in die Feuerkammer deines Handschuhs."));
+    tell_room(ENV(user), BS(user->Name(WER)+" macht die Faust mit einem mechanischen Handschuh mehrfach auf und zu."), ({user}));
+
+    sinfo[SI_PREPARE_TIME] = 2 + random(2);
+    sinfo[SI_SKILLDAMAGE_TYPE] = ({ DT_FIRE });
+    sinfo[SI_SKILLDAMAGE] = 250;
+    sinfo[OFFSET(SI_SKILLDAMAGE)] = 100;
+    sinfo[SI_MAX_DAMAGE] = 500;
+    sinfo[SI_NOMAGIC] = 100;
+    sinfo[SI_RAW_SPELLCOST] =  ([
+        P_SP: 30 + 5*sizeof(enemies),
+    ]);
+
+    return ::prepare_use(user, sinfo);
+}
+
+public void failed(object caster, mapping sinfo, int skillcheck) {
+    if(skillcheck < -3000) {
+        tell_object(caster, BS("Du aktivierst den Flammenwerfer und brennendes Oel spritzt ueber dich!"));
+        caster->AddHp(-random(20));
+    }
+
+    return ::failed(caster, sinfo, skillcheck);
+}
+
+public void success(object user, mapping sinfo, int skillcheck) {
+    object *enemies, enemy;
+    int idx;
+    
+    sinfo[SI_SKILLDAMAGE] += skillcheck / 10;
+
+    tell_object(user, BS("Mit einer schnellen bewegung entzuendest du den Brenner im Handschuhe in ein Kegel aus Feuer fegt ueber deine Feinde."));
+    tell_room(ENV(user), BS(user->name(WEM)+" stoesst eine behandschuhte Hand vor und es klickt kurz. Dann fegt eine Feuerwelle durch den Raum."), ({user}));
+
+    enemies = filter_array(all_inventory(ENV(user)), "valid_target");
+    enemies -= ({ user });
+    if(sizeof(enemies) < 1) {
+        tell_room(ENV(user), BS("Der Flammenstoss geht ins Leere."), ({user}));
+        return;
+    }
+
+    foreach(idx, enemies, enemy, {
+        if(enemy != user) default_attack_spell(enemy, user, sinfo, ([SP_NAME: "Flammenwerfermodul", SP_SHOW_DAMAGE: 1]));
+        if(!ABILITY_SERVICE->get_ability_by_name(INFERNO_MODULE)->has_learned(user) && objectp(enemy) && skillcheck > 7500) {
+            tell_room(ENV(enemy), BS(enemy->Name(WER)+" beginnt zu brennen!"));
+            call_out("burn_baby", 0, enemy);
+        }
+    });
+
+    if(user->QueryProp(P_WATCHER_LAST_FLAMETHROWER) + 10 > time() && !random(2)) {
+        tell_object(user, BS("Aua! Der Flammenwerfer ueberhitzt den Handschuhe und du verbrennst dich!"));
+        SetProp(P_KILL_NAME, "Ein ueberhitzter Flammenwerfer");
+        user->do_damage(random(10));
+    }
+
+    user->SetProp(P_WATCHER_LAST_FLAMETHROWER, time());
+    
+    return;
+}
+
+public void burn_baby(object who) {
+    if(!objectp(who)) return;
+    if(!random(4)) return;
+
+    tell_room(ENV(who), BS(who->Name(WER)+" brennt!"));
+    who->AddHp(-10 + random(10));
+    call_out("burn_baby", who);
+    return;
+}

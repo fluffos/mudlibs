@@ -1,0 +1,358 @@
+/*
+**  Ein magischer Knochenhelm
+**  
+**  dem Knochenhelm aus /p/armour/helm nachempfunden.
+**  Per Cmd idlet man eine zeitlang lp/mp hoch und mp/lp runter -> wandeln
+*/
+
+#include "../def.h"
+
+inherit "std/armour";
+
+nosave int fitted, active, nextuse, used, reset_timeout;
+
+#define NOSPELL 600
+
+#define MAX_USED 35
+#define MAX_COUNT 20
+#define MAX_COUNT_OLD 8
+
+void create()
+{
+  if(!is_clone(ME)) return;
+  ::create();
+  
+  SetProp(P_SHORT, "Ein blutiger Raubkatzenschaedel");
+  SetProp(P_LONG, 
+	  BS("Dieser Helm wurde aus den Schaedelknochen einer grossen "
+	     "Raubkatze gefertigt. Die grossen Fangzaehne beschatten die "
+	     "Augen und lassen den Traeger sehr gefaehrlich aussehen.")+
+	  BS("Hin und wieder tropft sogar Blut davon herab.")+
+	  BS("Einige, Dir unbekannte Symbole sind in die Knochen geritzt.")+
+	  BS("Mit einem breiten Lederband kann man ihn am Kinn festbinden."));
+
+  SetProp(P_NAME, "Raubkatzenschaedel");
+  SetProp(P_NAME_ADJ, "blutig");
+  AddAdjective(({"blutig","blutiger","blutigen","blutige"}));
+  SetProp(P_GENDER, MALE);
+  AddId(({"helm", "schaedel","raubkatzenschaedel","katzenschaedel"}));
+  
+  SetProp(P_INFO, "");
+  
+  SetProp(P_ARMOUR_TYPE, AT_HELMET);
+  SetProp(P_AC, 9);
+  SetProp(P_MATERIAL, ([MAT_BONE:90, MAT_LEATHER:8, MAT_BLOOD:2]));
+  SetProp(P_WEIGHT, 800);
+  SetProp(P_VALUE, 666);
+  SetProp(P_QUALITY_DECAY, 70);
+  
+  SetProp(P_WEAR_FUNC, TO);
+  SetProp(P_REMOVE_FUNC, TO);
+  
+  SetProp(P_WEAR_RESTRICTIONS, ([P_LEVEL: 15, A_INT:15, P_FROG:1]));
+  
+  AddDetail(({"schaedelknochen", "knochen", "raubkatze"}),
+    "Von welcher Raubkatze der Schaedelknochen stammt, laesst sich nicht "
+    "mehr feststellen.");
+
+  AddDetail(({"lederband", "leder"}),
+    "Mit einem breiten Lederband kann man den Helm am Kinn festbinden.");
+  
+  AddDetail(({"macht"}),
+    "Du kannst sie nicht erkennen...");
+  
+  AddCmd("uskelit", "uskelit");
+  
+  fitted=0;
+  active=0;
+  nextuse=0;
+  used=0;
+  reset_timeout=0;
+}
+
+nosave int uskelit(string str)
+{
+  if(QueryWorn()!=TP)
+    return write(BS("Dafuer musst Du den Raubkatzenschaedel tragen!")), 1;
+  
+  if(active)
+    return write(BS("Der Raubkatzenschaedel ist bereits aktiviert und "
+		    "gehorcht Dir daher nicht.")), 1;
+  
+  write(BS("Du konzentrierst Dich auf den Raubkatzenschaedel und murmelst "
+	   "das alte Wort 'uskelit' fuer 'Tausch'..."));
+  
+  if(nextuse > time())
+    {
+      TP->AddSp(-1-random(2));
+      
+      return write(BS("Der Schaedel scheint sich noch nicht wieder bereit "
+		      "zu sein.")),1;
+    }
+  
+  if(!fitted)
+    {
+      TP->AddSp(-1-random(2));
+
+      return write(BS("Du hast den Schaedel doch gerade erst aufgesetzt!")), 1;
+    }
+
+  if(used > MAX_USED)
+    {
+      call_out("wegmitdir"), 1;
+      
+      return write(BS("Ploetzlich beginnt der Raubkatzenschaedel zu "
+		      "vibrieren...")), 1;
+    }
+  
+    active=1;
+  
+  used++;
+  
+  SetProp(P_SHORT, "Ein blutiger Raubkatzenschaedel (aktiv)");
+  
+  write(BS("Der Raubkatzenschaedel beginnt ploetzlich zu pulsieren!"));
+
+  call_out("healing", 4, TP, 0);
+  
+  return 1;
+}
+
+void back_to_normal()
+{
+  active=0;
+  
+  SetProp(P_SHORT, "Ein blutiger Raubkatzenschaedel");
+}
+
+varargs int heal_me(object who, int i, int flag)
+{
+  if(who->QueryProp(P_ALIGN) > 0)
+    if(!flag)
+      who->AddHp(i);
+    else
+      if(who->QueryProp(P_SP) >= i)
+	who->AddSp(-i);
+      else
+	{
+	  tell_object(who,
+		      BS("Du bist nicht mehr maechtig genug, um "
+			 "den Schaedel zu kontrollieren!")+
+		      BS("Der Raubkatzenschaedel hoert auf zu "
+			 "pulsieren..."));
+	  
+	  back_to_normal();
+	  
+	  return 0;
+	}
+  else
+    if(!flag)
+      who->AddSp(i);
+    else
+      if(who->QueryProp(P_HP) >= i)
+	who->AddHp(-i);
+      else
+	{
+	  SetProp(P_KILL_NAME, "Blutmangel");
+	  
+	  tell_object(who,
+		      BS("Der Raubkatzenschaedel saugt Dir die letzten "
+			 "Tropfen Blut ab..."));
+	  
+	  who->do_damage(i+1);
+	  
+	  back_to_normal();
+	  
+	  return 0;
+	}
+  
+  return 1;
+}
+
+int drain_me(object who, int i)
+{
+  return heal_me(who, i, 1);
+}
+
+void healing(object who, int c)
+{
+  if(!active) return;
+
+  if((objectp(who)) && (who==MENV) && (interactive(who)))
+    if(((used < (MAX_USED/2)) && (c < MAX_COUNT)) ||
+       (c < MAX_COUNT_OLD))
+      {
+	if(!random(3))
+	  tell_object(who,
+		      BS("Die Magie des Raubkatzenschaedels wirkt auf Dich!"));
+	
+	if(used > (MAX_USED*4/5))
+	  {
+	    if(!drain_me(who, 4)) return;
+	  }
+	else
+	  {
+	    if(!drain_me(who, 3)) return;
+	  }
+
+	if(used < 2)
+	  heal_me(who, 3);
+	else
+	  heal_me(who, 2);
+	
+	c++;
+	
+	if(used < (MAX_USED/2))
+	  call_out("healing", 4+random(2), who, c);
+	else
+	  call_out("healing", 5+random(3), who, c);
+	
+	return;
+      }
+    else
+      tell_object(who,
+		  BS("Der Raubkatzenschaedel hoert auf zu pulsieren..."));
+  
+  back_to_normal();
+}
+
+varargs string info(object ob)
+{
+  if(fitted)
+    SetProp(P_INFO,
+	    BS("Als Du die Symbole identifizieren willst, bildet sich in "
+	       "Deinen Gedanken ein Wort 'uskelit'. Mehr kannst Du ueber "
+	       "diesen Schaedel nicht erfahren..."));
+  else
+    SetProp(P_INFO,
+	    BS("Du versuchst, die Symbole zu identifizieren, doch eine "
+	       "seltsame Macht scheint Dich zu hindern..."));
+  
+  return ::info(ob);
+}
+
+varargs string long()
+{
+  string l;
+
+  l=BS("Dieser Helm wurde aus den Schaedelknochen einer grossen "
+       "Raubkatze gefertigt. Die grossen Fangzaehne beschatten die "
+       "Augen und lassen den Traeger sehr gefaehrlich aussehen.")+
+    BS("Einige, Dir unbekannte Symbole sind in die Knochen geritzt.")+
+    BS("Mit einem breiten Lederband kann man ihn am Kinn festbinden.");
+    
+
+  if(nextuse < time())
+    l+=BS("Eine seltsame Aura umgibt den Helm...");
+
+  if(used > (MAX_USED-3))
+    l+=BS("Die Magie des Schaedels wird bald zusammenbrechen!!");
+  else
+    if(used > (MAX_USED/2))
+      l+=BS("Die Magie des Schaedels ist schon geschwaecht...");
+  
+  SetProp(P_LONG, l);
+
+  return ::long();
+}
+
+int WearFunc(object me) 
+{
+  if(interactive(MENV))
+    call_out("einrasten", 15, MENV);
+  
+  return 1;
+}
+
+int RemoveFunc(object me) 
+{
+  if(active)
+    return write(BS("Der Schaedel laesst sich jetzt nicht abnehmen!")), 0;
+  
+  while(remove_call_out("einrasten") != -1);
+  
+  fitted=0;
+  
+  SetProp(P_NODROP, 0);
+
+  if(used > MAX_USED)
+    {
+      write(BS("Ploetzlich beginnt der Raubkatzenschaedel zu vibrieren..."));
+      
+      call_out("wegmitdir"), 1;
+    }
+  
+  return 1;
+}
+
+void einrasten(object who)
+{
+  if((objectp(who)) && (interactive(who)) && (MENV==who) && (QueryWorn()==who))
+    {
+      fitted=1;
+      
+      tell_object(who, 
+		  BS("Du weisst instinktiv, dass Dein Knochenhelm "
+		     "nun bereit zu sein scheint...")+
+		  BS("Aber wofuer?!"));
+      
+      SetProp(P_NODROP, 1);
+    }
+}
+
+void wegmitdir()
+{
+  SetProp(P_CURSED, 0);
+
+  active=0;
+  
+  if((MENV) && (interactive(MENV)))
+    tell_object(MENV,
+		BS("Die Magie in Deinem Knochenhelm laesst nach.")+
+		BS("Dein Knochenhelm loest sich auf..."));
+  
+  remove();
+  if(ME) destruct();
+}
+
+void reset()
+{
+  if(!is_clone(ME)) return;
+  ::reset();
+  
+  if(!MENV) return call_out("remove", 0);
+  
+  if((!living(MENV)) && ((ENV(MENV)) && (!living(ENV(MENV)))))
+    reset_timeout++;
+  else
+    reset_timeout=0;
+  
+  if(reset_timeout > 4) return call_out("remove", 0);
+}
+
+/*
+------------------------------------------------------------------------------
+Filename:  /d/kristallwald/protheg/turm/armour/knochenhelm.c
+P_ARMOUR_TYPE:  AT_HELMET
+P_AC: 9
+P_DAM_PROTECTION: standard
+P_TEMPERATURE_PROTECTION: nein
+DefendFunc(): nein
+Beschraenkungen (P_WEAR_RESTRICTIONS o.ae.): nofrog, int 15, stufe 15 ... ist 
+verhandelbar ;)
+Beschaffung/Aufwand: Schwarzmagierturm hochmetzeln (9 riesenspinnen (lvl 
+19-22) und 1 magier (viele zauber))
+Vor-/Nachteile: Keine besondere Damprot qual_decay 70
+Besonderheiten: weight: 8000 value:666 decay 70 keine mods P_WEAR_FUNC und 
+P_REMOVE_FUNC
+Bemerkungen: Dem Knochenhelm aus /p/armour/helm nachempfunden. Einmal 
+aufgesetzt rastet er nach einer kurzen Zeit ein und ist dann benutzbar (P_INFO 
+angepasst). Per Befehl kann dann alle 10 Minuten ausgefuehrt werden bis 
+MAX_USED 35, danach zerfaellt er. Einmal aktiviert idlet der Spieler 
+alignabhaengig lp bzw mp hoch und das gegenteil runter wobei mehr abgezogen 
+wird als hinzugefuegt (dauer ist vom zustand abhaengig, jedoch max 20 mal). 
+Werden lp bzw mp auf 0 gesetzt, bricht der call_out ab. Bleibt das Teil 
+irgendwo liegen oder wird gehortet loest es sich nach ein paar resets auf. Hm, 
+sollte reichen erstmal ;)
+------------------------------------------------------------------------------
+*/

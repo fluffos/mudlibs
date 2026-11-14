@@ -1,0 +1,540 @@
+// unique_master
+// verwaltet Schlachtfeld-Uniques und Rares
+// Wraz / Mendralim
+
+#include "../def.h"
+
+mapping ilist; // Liste der Items (Schlachtfeld-Uniques, Rares)
+
+void create()
+{
+    if (is_clone(TO))
+    {
+        destruct(TO);
+        return;
+    }
+    seteuid(getuid(TO)); // fuer zugriff auf dateien benoetigt
+
+    return;
+}
+
+// --- get_finders_and_owners ------------------------------------------------------
+//  Von recent_weapons() aufgerufen
+//  Filtert aus dem Logfile die Spielernamen heraus
+string get_finders_and_owners(string str, string which)
+{
+    string weekday, month, finder, unique_or_rare, weapon_owner, weapon, obj_name;
+    int monthday, year, hour, minute, second;
+
+    if( sscanf(str,"%s, %d. %s %d, %d:%d:%d: %s finds %s: %s einzigartige %s des Sterbens (%s)",
+                weekday, monthday, month, year, hour, minute, second, finder, unique_or_rare, 
+                weapon_owner, weapon, obj_name) != 12
+                &&
+        sscanf(str,"%s, %d. %s %d, %d:%d:%d: %s finds %s: %s %s des Sterbens (%s)",
+                weekday, monthday, month, year, hour, minute, second, finder, unique_or_rare, 
+                weapon_owner, weapon, obj_name) != 12)
+        return "";
+
+    if(which == "get_finders")
+    {
+        if(!finder) return "";
+        else return lower_case(finder);
+    }
+    else if(which == "get_owners") 
+    {
+        if(!weapon_owner) return "";
+        else return lower_case(weapon_owner[0..<2]);
+    }
+
+    return "finder/owner?";
+}
+
+// --- recent_weapons ------------------------------------------------------------
+// Gibt einen Array zurueck mit Spielernamen (koennen auch mehrfach enthalten sein)
+// finders_or_owners == 1 -> finders (zB Hihi, wenn Hihi der Finder einer Waffe ist)
+// else -> owners (zB Fenris, wenn es zB "Fenris' Axt des Sterbens" ist, die gefunden wurde)
+// Beispiele: ({"","fenris","fenris","fenris","xiao","xiao","rambo","balzac"})
+//            ({"","wraz","wraz","hihi","hihi","hihi"})
+string *recent_weapons(int finders_or_owners)
+{
+    string *log, *finders, *owners;
+    int size;
+    
+    if(size = file_size(LOG "unique_rare.log") <= 0) 
+        return ({"unique_rare.log does not exist or empty"});
+    size = size > 1000 ? -1000 : -size+1;
+    log = explode(read_bytes(LOG "unique_rare.log",-1000),"\n");
+
+    finders = map_array(log,"get_finders_and_owners",TO,"get_finders");
+    owners = map_array(log,"get_finders_and_owners",TO,"get_owners");
+
+    if (finders_or_owners == 1) return finders;
+    else return owners;
+}
+
+// --- create_ilist ------------------------------------------------------------
+//
+// ...
+//  Mapping "ilist":
+//    KEY    = lostxp_anzahl (in Millionen, zB 24)
+//    VALUE0 = spielername (zB "balzac")
+//    VALUE1 = zeitstempel (urspruenlich erstes Mal Hackstock-Hacken, zB 1602951681)
+//    VALUE2 = identisch wie KEY
+//    VALUE3 = tode_anzahl (zB 4)
+//    VALUE4 = list_wem (zB "der Axt des Sterbens")
+//    VALUE5 = qualifier (qualifiziert sich die Waffe fuer Unique oder Rare? "unique","rare","default")
+
+// xp, player_id, deaths, list_wem --> Werte aus "query_sorted_list"
+// to_rawname --> waffen_object->Name(RAW)
+void create_ilist(int xp, string player_id, int deaths, string list_wem,
+                  string to_rawname, string unique_or_rare)
+{
+    int ilist_xp;
+    string player;
+    string id;
+    string qualifier;
+
+    qualifier = "default";
+    ilist_xp = to_int(xp); // xp ist eine Zeigervariable
+
+    if (!ilist_xp)
+        return;
+
+    sscanf(player_id, "%s_%d", player, id);
+
+    // soll verhindern dass es zufaellig 2x den gleichen xp-stand gibt:
+    while (member(ilist, to_int(ilist_xp)))
+        ilist_xp++;
+
+    
+    if (strstr(list_wem, to_rawname) == -1)
+    {
+        // TODO Debug output
+        if(find_player("wraz")) find_player("wraz")->Message(
+            "NO MATCH; wem: " + list_wem + ", to_rawname: " + to_rawname + ", XP: " + ilist_xp + 
+            ", deaths: " + deaths + ", " + player + "\n");
+        return; // RETURN IST WICHTIG! NICHT AUSKOMMENTIEREN!
+    }
+    else
+        // TODO Debug output
+        if(find_player("wraz")) find_player("wraz")->Message(
+            "MATCH; wem: " + list_wem + ", to_rawname: " + to_rawname + ", XP: " + ilist_xp + 
+            ", deaths: " + deaths + ", " + player + "\n");
+    
+    // Qualifier ermitteln
+    if (ilist_xp >= UNIQUE_XP_MIN)
+        qualifier = "unique";
+    else if (ilist_xp >= RARE_XP_MIN)
+        qualifier = "rare";
+
+    // Filter nach "unique + rare" oder nur "unique" --> alles mit zu wenig xp faellt raus
+    if ((unique_or_rare == "unique") && (qualifier == "rare"))
+        return;
+    else if (qualifier == "default")
+        return;
+
+    ilist += ([to_int(ilist_xp):
+                   to_string(player); to_int(id); to_int(ilist_xp); to_int(deaths); to_string(list_wem); to_string(qualifier)]);
+}
+
+// returns "unique", "rare", or "default" (i.e. nope)
+string find_unique(string playeruid)
+{
+    int points; // Schlachtfeldpunkte (ab 330.000 -> Held*in)
+    int odds, roll;   // 1:Wahrscheinlichkeit, Wuerfelwurfergebnis
+
+    points = (SMASTER->query_bling(playeruid));
+    points = points < HELDENPUNKTE ? HELDENPUNKTE : points; // sonst, bei sehr wenig points, wirds negativ
+
+    //  1x Held: ca. 1:208 fuer unique, fuer rare immer 2x so wahrscheinlich
+    //  3x Held: ca. 1: 45 
+    // 50x Held: ca. 1: 13
+    // man muss dazurechnen, dass es 6 verschiedene Waffen gibt, die random droppen
+    // (mit Wahrscheinlichkeiten jeweils von 2:19 [zB Peitsche] bis 4:19 [zB Axt])
+    odds = to_int( 85.0 / (1.6 * log(to_float(points)/HELDENPUNKTE) + 0.1) );
+    odds = odds < 500 ? odds : 500;
+    odds = odds > 11 ? odds : 11;
+    roll = random(odds);
+    //find_player("wraz")->Message(BS("odds: " + odds)); // TODO: Debug output
+
+    // Log
+    write_file(LOG "unique_rare_odds.log",
+     dtime()+": "+playeruid+", points: "+points+", roll: "+roll+" ("+odds+")\n");
+
+    if ( !roll ) 
+        return "unique";
+    else if ( roll <= 2 )
+        return "rare";
+
+    // TODO -TEST- am Ende: dieses if entfernen
+    /*if((TP->QueryProp(P_TESTPLAYER) || query_wiz_level(playeruid) > 10) )
+    {
+        //if (!random(3)) return "unique";
+        //else if (!random(2)) return "rare";
+    }*/
+
+    return "default";
+}
+
+// ------ remove_old_weapon ----------------------------------------------------
+void remove_old_weapon(object weapon)
+{
+    call_other(weapon, "remove", 0);
+    return;
+}
+
+// ------ get_Wessen ----------------------------------------------------------
+string get_Wessen(string name)
+{
+    string Wessen;
+    mixed last;
+    Wessen = capitalize(name);
+    last = Wessen[ < 1];
+    switch (last)
+    {
+    case 'x':
+    case 's':
+    case 'z':
+        return (string)Wessen + "'";
+        break;
+    default:
+        return (string)Wessen + "s";
+    }
+    return Wessen;
+}
+
+// ------ check_if_unique ------------------------------------------------------
+string check_if_unique(string currentplayeruid, string weapon_name_raw, object weapon)
+{
+    mapping slist;
+
+    int *ilist_keys;
+    string def;
+    string unique_or_rare;
+    object player, pl, *all_pl;
+    object new_weapon;
+    string ilist_playername; // Spieler aus Hackstockliste
+    string i_player_wessen;
+    string wname;    // weapon name
+    string filename; // Waffentyp: axt, bidenhaender, hellebarde, kriegshammer, peitsche, schwert, 
+    int wg;          // weapon gender
+    int id;          // timestamp der Waffe
+    int lostxptotal; // in MIO, wie sie in der Hackstock-Liste stehen
+    int lostxp;      // in MIO
+    int lostxp2;     // in MIO
+    int deaths;
+    string qualifier;
+    int key; // key in ilist (identifiziert die Waffe)
+    int i;
+    string *player_weapon;
+
+    def = "";
+    player = find_player(currentplayeruid);
+    unique_or_rare = find_unique(currentplayeruid);
+
+    if (!player)
+        return "currentplayeruid not found (logged out?)";
+    
+    if(getuid(player)=="wraz")
+        DB(sprintf("unique_or_rare='%s'; forced to '%s'\n",
+            unique_or_rare,
+            unique_or_rare = weapon->QueryProp("force_find")));
+
+    // Findet der Spieler ein Unique oder Rare?
+    // * nope -> return
+    if (unique_or_rare == "default")
+    {
+        return def + "no unique found";
+    }
+    // * unique oder rare; liste erzeugen
+    else
+    {
+        // Waffenliste (ilist) erzeugen/updaten
+        //  sortierte Waffenliste aus Hackstock kopieren:
+        call_other(LMASTER, "???", 0); // sicherstellen dass Master geladen ist
+        slist = copy_mapping(LMASTER->query_sorted_list());
+        if (!slist || slist == ([]))
+            return "slist empty (-> return)\n";
+
+        // Waffe ermitteln
+        switch (to_string(weapon->QueryProp(P_NR_HANDS))+weapon->QueryProp(P_WEAPON_TYPE))
+        {
+        case "2axe": filename = "axt"; break;               //"Axt des Sterbens"
+        case "1sword": filename = "schwert"; break;         //"Schwert des Sterbens"
+        case "2sword": filename = "bidenhaender"; break;    //"Bidenhaender des Sterbens"
+        case "2club": filename = "kriegshammer"; break;     //"Kriegshammer des Sterben"
+        case "2spear": filename = "hellebarde"; break;      //"Hellebarde des Sterbens"
+        case "1whip": filename = "peitsche"; break;         //"Peitsche des Sterbens"
+        case "1knife": filename = "dolch"; break;           //"Dolch des Sterbens"
+        case "2bow": filename = "kriegsbogen"; break;       //"Kriegsbogen des Sterbens"
+        default: 
+            write_file(LOG "unique_rare.log",
+            dtime()+": ERROR for player "+currentplayeruid+": weapon unknown, "+
+            to_string(weapon->QueryProp(P_NR_HANDS))+weapon->QueryProp(P_WEAPON_TYPE)+"\n");
+            return "ERROR, weapon unknown\n";
+            break;
+        }
+        //player->Message(BS("filename: " + filename)); // Debug
+        
+        // Wenn das Unique erst kuerzlich (45 Tage) gefunden wurde, findet man stattdessen ein rare:
+        if (unique_or_rare == "unique")
+        {
+            new_weapon = find_object(WEAPON + "unique_" + filename);
+            if(new_weapon && new_weapon->QueryProp(P_CLONE_TIME) > time()-60*60*24*45)
+                unique_or_rare = "rare";
+            new_weapon = 0; // wird unten eh ueberschrieben, aber zur Sicherheit...
+        }
+
+        // ilist (item list) erstellen:
+        //def += (currentplayeruid + ", points: " + points + "\n"); // debug
+        ilist = ([]);
+        walk_mapping(slist, "create_ilist", UMASTER, weapon_name_raw, unique_or_rare);
+        ilist_keys = sort_array(m_indices(ilist), #'<); //'
+
+        // nur der beste Eintrag jedes Spielers je Waffe kann gefunden werden
+        player_weapon = ({});
+        for(i=0;i<sizeof(ilist_keys);i++)
+        {
+            if(member(player_weapon, ilist[ilist_keys[i],0]+"__"+ilist[ilist_keys[i],4]) > -1)
+            {
+                // debug
+                if(find_player("wraz")) find_player("wraz")->Message(
+                    " *unique_master* player_weapon: " + ilist[ilist_keys[i],0]+"__"+ilist[ilist_keys[i],4] + " (xp: "+
+                    ilist[ilist_keys[i],2] + ") already in player_weapon --> DELETE\n");
+                ilist = m_delete(ilist, ilist_keys[i]);
+            }
+            else
+            {
+                // debug
+                if(find_player("wraz")) find_player("wraz")->Message(
+                    " *unique_master* player_weapon: " + ilist[ilist_keys[i],0]+"__"+ilist[ilist_keys[i],4] + " (xp: "+
+                    ilist[ilist_keys[i],2] + ") added to player_weapon\n");
+                player_weapon += ({ilist[ilist_keys[i],0]+"__"+ilist[ilist_keys[i],4]});
+            }
+        }
+        ilist_keys = sort_array(m_indices(ilist), #'<); //' // nochmal die Keys holen (weil jetzt Eintraege geloescht wurden)
+
+        if (!ilist || ilist == ([]) || sizeof(ilist_keys) == 0) return "ilist leer (-> return)\n";
+
+        // key finden (Welche Waffe soll es sein?)
+        if(unique_or_rare == "rare")
+        {
+            key = 1 + random(sizeof(ilist) - 1); // alle ausser key 0 (weil 0 ist beste Waffe -> nur Unique)
+            if (sizeof(ilist_keys) == 1) key = 0;
+
+            // Diese rare Waffe wurde erst kuerzlich gefunden? --> Versuche eine andere zu finden
+            for(i=0;i<10;i++)
+            {
+                if(find_player("wraz")) find_player("wraz")->Message(
+                "for-loop, re-rolling random; OLD playername: " + lower_case(ilist[ilist_keys[key],0]) + 
+                ", OLD key: "+ key + "\n");
+
+                ilist_playername = lower_case(ilist[ilist_keys[key],0]);
+                // Name nicht in den letzten Zeilen des Log -> ok
+                if(member(recent_weapons(2),ilist_playername) < 0) break; 
+                // ansonsten: nochmal wuerfeln
+                key = 1 + random(sizeof(ilist) - 1);
+                if (sizeof(ilist_keys) == 1) key = 0;
+
+                // DEBUG
+                if(find_player("wraz")) find_player("wraz")->Message(
+                "for-loop, re-rolled: NEW playername: " + lower_case(ilist[ilist_keys[key],0]) + 
+                ", NEW key: " + key + "\n");
+            }
+            
+        }
+        else if (unique_or_rare == "unique")
+        {
+            key = 0; // unique: erster Eintrag (sollte die meisten lostxp haben; entspricht staerkster Waffe)
+        }
+        else return def + " 'key' not matching 'unique' or 'rare' -> return\n";
+
+        ilist_playername = ilist[ilist_keys[key],0];
+        i_player_wessen = get_Wessen(ilist_playername);
+        id = to_int(ilist[ilist_keys[key],1]);
+        lostxptotal = to_int(ilist[ilist_keys[key],2]);
+        deaths = to_int(ilist[ilist_keys[key],3]);
+        qualifier = ilist[ilist_keys[key],5];
+        lostxp = lostxptotal < 2000 ? lostxptotal : 2000; // lostxp & lostxp2: siehe sterbewaffe.c
+        lostxp2 = lostxptotal < 2000 ? 0 : lostxptotal - 2000;
+    }
+    // * rare
+    if (unique_or_rare == "rare")
+    {
+        def += "rare found\n";
+        new_weapon = clone_object(WEAPON "sterbe" + filename);
+
+        wg = new_weapon->QueryProp(P_GENDER);
+        wname = new_weapon->QueryProp(P_NAME);
+
+        // Rare Waffe "herrichten"
+        new_weapon->add_rip_dmg();
+        new_weapon->SetProp("first_query", 0); // soll nicht nochmal rare/unique werden koennen (ist ja schon rare)
+        new_weapon->SetProp(P_SHORT, i_player_wessen + " " + wname);
+        new_weapon->SetProp(P_NAME, i_player_wessen + " " + wname);
+        new_weapon->AddId(({"\nsfrare"}));
+        new_weapon->SetProp(P_ARTICLE, 0);
+        new_weapon->set_info(0, BS("Diese Waffe wurde durch " + i_player_wessen + " TODE gestaerkt, "
+                                "sie wird nur in " +
+                                i_player_wessen + " Haenden ihre volle Kraft entfalten. Sie kann allerdings auch "
+                                "von ihrem Finder sehr effektiv gefuehrt werden. Eine kleine "
+                                "Einritzung erkennst Du noch."));
+        new_weapon->AddDetail(({"einritzung"}),
+                              "Mit dieser Waffe schlug " + capitalize(ilist_playername) + " am " + dtime(id)[5..16] + 
+                              " eine gewaltige Scharte. Gefunden von " + capitalize(currentplayeruid) + ".");
+        // Rare: Spieler findet seine "eigene" Waffe - UPDATE 29.12.2023
+        if(currentplayeruid == ilist_playername)
+        {
+            new_weapon->add_deaths_lostxp( // Finder == "Originalspieler" --> nur 1 Eintrag
+                currentplayeruid, 
+                deaths / 10 * 9, lostxp / 10 * 9 * 1000000, lostxp2 / 10 * 9); // Update 29.12.23: 90% der lostxp (zuvor 80%)
+        }
+        // Rare: Spieler der die Waffe findet != "Originalspieler" aus der Hackstock-Liste
+        else
+        {
+            new_weapon->add_deaths_lostxp( // Finder
+                currentplayeruid, 
+                deaths / 10 * 7, lostxp / 10 * 7 * 1000000, lostxp2 / 10 * 7); // Update 29.12.23: 70% der lostxp (zuvor 40%)
+
+            new_weapon->add_deaths_lostxp( // "Original"-Spieler aus der Hackstock-Liste
+                ilist_playername,
+                deaths / 10 * 8, lostxp / 10 * 8 * 1000000, lostxp2 / 10 * 8); // 80% (zuvor ebenfalls 80%)
+        }
+        new_weapon->SetProp("first_wield_time", time() + 2592000); // 30 Tage in Zukunft (Rare)
+        new_weapon->set_collector_value(1000);
+    }
+    // * unique
+    else if (unique_or_rare == "unique")
+    {
+        call_other(WEAPON + "unique_" + filename, "???", 0);
+        new_weapon = find_object(WEAPON + "unique_" + filename); // kein clone weil unique
+        new_weapon->remove();                            // zuerst removen um eventuelle alte Werte zu loeschen
+        call_other(WEAPON + "unique_" + filename, "???", 0);
+        new_weapon = find_object(WEAPON + "unique_" + filename);
+        if (!new_weapon)
+            return "error: unique could not be loaded";
+
+        wg = new_weapon->QueryProp(P_GENDER);
+        wname = new_weapon->QueryProp(P_NAME);
+
+        // Unique Waffe "herrichten"
+        new_weapon->SetProp(P_SHORT, getcolor("bold") + i_player_wessen + " einzigartige" + ({"s", "r", ""})[wg] + " " + wname + getcolor("none"));
+        // P_GENDER: 0: NEUTER, 1: MALE, 2: FEMALE
+        new_weapon->SetProp(P_NAME, ({i_player_wessen + " einzigartige" + ({"s", "r", ""})[wg] + " " + wname,    // Nominativ WER/WAS: "xy schiesst ein Tor!"; FEMININ: e, MASKULIN: er, NEUTER: es
+                                      i_player_wessen + " einzigartige" + ({"n", "n", "r"})[wg] + " " + wname,   // Genitiv WESSEN: "Wir gedenken xy"; FEMININ: er, MASKULIN: en, NEUTER: en
+                                      i_player_wessen + " einzigartige" + ({"m", "m", "r"})[wg] + " " + wname,   // Dativ WEM: "Das Auto gehoert xy"; FEMININ: er, MASKULIN: em, NEUTER: em
+                                      i_player_wessen + " einzigartige" + ({"s", "n", ""})[wg] + " " + wname})); // Akkusativ WEN/WAS: "Das Maedchen sucht xy"; FEMININ: e, MASKULIN: en, NEUTER: es
+        new_weapon->AddAdjective(({i_player_wessen + " einzigartig",
+                                   i_player_wessen + " einzigartige",
+                                   i_player_wessen + " einzigartigen",
+                                   i_player_wessen + " einzigartiges",
+                                   i_player_wessen + " einzigartiger",
+                                   i_player_wessen + " einzigartigem"}));
+        new_weapon->SetProp("unique_rare_long",
+                            "Du haeltst ehrfuerchtig " + new_weapon->Name(WEN) + " in Deinen Haenden! ");
+        new_weapon->SetProp(P_LONG, new_weapon->QueryProp("unique_rare_long") +
+                                        new_weapon->QueryProp(P_LONG));
+        new_weapon->set_info(0, BS("Diese Waffe wurde durch " + i_player_wessen + 
+                                " TODE einzigartig maechtig, sie wird daher nur in " +
+                                i_player_wessen + " Haenden ihre volle Macht entfalten, kann allerdings auch "
+                                "aeusserst effektiv von ihrem Finder genutzt werden. Eine kleine "
+                                "Einritzung erkennst Du noch."));
+        new_weapon->AddDetail(({"einritzung"}),
+                              "Mit dieser Waffe schlug " + capitalize(ilist_playername) + " am " + dtime(id)[5..16] + " eine maechtige Scharte. Gefunden "
+                              "von " + capitalize(currentplayeruid) + ".");
+        // Unique: Spieler findet seine "eigene" Waffe - UPDATE 29.12.2023
+        if(currentplayeruid == ilist_playername)
+        {
+            new_weapon->add_deaths_lostxp( // Finder == "Originalspieler"
+                currentplayeruid, 
+                deaths, lostxp * 1000000, lostxp2); // 100% der lostxp (zuvor ebenfalls 100%)
+        }
+        // Unique: Spieler der die Waffe findet != "Originalspieler" aus der Hackstock-Liste
+        else
+        {
+            new_weapon->add_deaths_lostxp( // Unique: Finder
+                currentplayeruid, 
+                deaths / 10 * 8, lostxp / 10 * 8 * 1000000, lostxp2 / 10 * 8); // Update 29.12.23: 80% der lostxp (zuvor 50%)
+
+            new_weapon->add_deaths_lostxp(
+                ilist_playername, 
+                deaths, lostxp * 1000000, lostxp2); // 100% fuer "Original"-Spieler aus der Hackstock-Liste (zuvor ebenfalls 100%)
+        }        
+        new_weapon->SetProp("first_wield_time", time() + 5184000); // 60 Tage in Zukunft (Unique)
+        new_weapon->set_collector_value(10000);
+
+        def += "unique found\n";
+    }
+    else
+        return "warning: 'unique_or_rare' unknown; abort";
+
+    // alte Waffe entfernen
+    if (find_call_out("remove_old_weapon") == -1)
+        call_out("remove_old_weapon", 1, weapon);
+
+    new_weapon->move(player, M_NOCHECK);
+
+    // Messages:
+    player->Message(
+        "\n"+getcolor("bold") +
+        (unique_or_rare == "unique" ? getcolor("yellow") : "") +
+         " Du findest eine "+
+        (unique_or_rare == "unique" ? "einzigartige" : "sehr seltene") +
+         " Sterbewaffe!" + 
+        getcolor("none")+"\n\n");
+    // shout nur auf dem Schlachtfeld, und alle im gleichen Raum
+    all_pl = users()-({player});
+    for(i=0; i<sizeof(all_pl); i++)
+        if((all_pl[i] && ENV(all_pl[i]) && player && ENV(player)) &&
+            (strstr(file_name(ENV(all_pl[i])),"/d/ebene/wraz/metzelorgie/room/")!=-1 ||
+            ENV(all_pl[i]) == ENV(player)))
+            tell_object(all_pl[i],"\n"+capitalize(currentplayeruid)+" hat gerade eine "+
+            (unique_or_rare == "unique" ? "einzigartige" : "sehr seltene") +
+            " Sterbewaffe gefunden!\n\n");
+
+    //call_other(UMASTER, "read_sorted_ilist", 0); // Debug
+
+    // Log
+    write_file(LOG "unique_rare.log",
+     dtime()+": "+currentplayeruid+" finds "+unique_or_rare+": "+new_weapon->Name()+
+            " ("+explode(file_name(new_weapon),"/")[sizeof(explode(file_name(new_weapon),"/"))-1]+")\n");
+
+    return (def + "\nlast return\n"); // Debug (wird in sterbewaffe.c an Wraz ausgegeben)
+}
+
+// Abfragen --------------------------------------------------------------------
+mapping query_ilist()
+{
+    return ilist;
+}
+
+// Fuer Debug ----------------------------------------------------------------
+string read_sorted_ilist()
+{
+    int *ilist_keys;
+    int i;
+    string list_text;
+
+    list_text = "\n";
+    ilist_keys = sort_array(m_indices(ilist), #'<); //#'
+
+    for (i = 0; i < sizeof(ilist); i++)
+    {
+        list_text += sprintf(
+            "%3d %-12s %-12s %-6s %-6s %-26s %-12s",
+            i + 1,
+            to_string(ilist[ilist_keys[i], 0]),
+            to_string(ilist[ilist_keys[i], 1]),
+            to_string(ilist[ilist_keys[i], 2]),
+            to_string(ilist[ilist_keys[i], 3]),
+            to_string(ilist[ilist_keys[i], 4]),
+            to_string(ilist[ilist_keys[i], 5])
+
+        );
+        list_text += "\n";
+    }
+
+    //if(interactive(TP)) TP->Message(list_text); // TODO Debug output
+
+    return list_text;
+}

@@ -1,0 +1,170 @@
+#include "../def.h"
+inherit "std/npc";
+inherit "/std/npc/spells";
+
+void create()
+{
+  if(!is_clone(TO)) return;
+
+  ::create();
+
+  SetProp(P_SHORT, "Tharess der Daemon");
+  SetProp(P_LONG,
+    "Die kleine duerre Gestalt vor Dir erinnert mehr an einen Grottenolm als "
+    "an einen Daemon, der mehrere Druiden der Insel in Angst und Schrecken "
+    "versetzt. Schwarze Haut, von gruenen Schuppen durchsetzt und die kalten "
+    "leblosen Augen jagen Dir Angst ein.");
+
+  SetProp(P_NAME, "Tharess");
+  SetProp(P_GENDER, MALE);
+  AddId(({"tharess", "daemon", "\ntharess_daemon"}));
+  SetProp(P_ARTICLE, 0);
+  create_default_npc(15, 3000);
+  SetProp(P_XP, 8000); //wer so einfach zu besiegen ist, sollte nit zu viele 
+                       //xp bringen, kerbe ja, xp nein
+  SetProp(P_HANDS, ({" mit seinen Klauen",
+                    QueryProp(P_HANDS)[1],
+                    ({DT_BLUDGEON})
+                    }) );
+  SetProp(P_RACE, "Daemon");
+  SetProp(P_SIZE, 150);
+  SetProp(P_WEIGHT, 45000);
+  SetProp(P_ALIGN, -700);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_HEAL, 0);
+  SetProp(P_AGGRESSIVE, 100);
+  SetProp(P_WIMPY, 0);
+  SetProp(P_NOMAGIC, 50);
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    Name(WER,1)+" will lieber kaempfen.\n" }) );
+  SetProp(P_MSGIN, "kriecht herein");
+  SetProp(P_MSGOUT, "kriecht");
+  SetProp(P_MMSGIN, "erscheint in einer Rauchwolke");
+  SetProp(P_MMSGOUT, "verschwindet mit Knall und Schwefelduft");
+  SetProp(P_DIE_MSG,  " verdampft mit einem Schmerzensschrei.\n");
+  SetProp(P_NOCORPSE, 1 );
+  SetProp(P_MURDER_MSG, "%s hat mich tatsaechlich besiegt?");
+  SetProp(P_KILL_NAME, "Der Daemon der Todesinsel");
+  SetProp(P_KILL_MSG, "Glaeserne Traeume!");
+
+  AddInfo(DEFAULT_INFO, "versteht Dich doch gar nicht.\n");
+  AddInfo(MAGIERNAME, CAP(MAGIERNAME) + " hat mich beschworen.","sagt: ");
+  SetProp(P_SPELLRATE, 99);
+
+  AddSpell(9, 1,
+    "Aus Tharess' Augen schiessen Strahlen auf Dich zu ...\n",
+    "Aus Tharess' Augen schiessen Strahlen auf Dich zu ...\n",
+     DT_MAGIC, "dark_cloud", ([SP_SHOW_DAMAGE:0]));
+
+  SetAttackChats(10,
+  ({Name(WER, 1)+" sagt: Gleich hau ich Dich!\n",
+    Name(WER, 1)+" sagt: Das hat gar nicht weh getan.\n",
+   }) );
+  SUID;
+
+}
+int my_filter_func(object ob) 
+{
+  if(ob->id("\ntharess_daemon")) return 0;
+  if(ob->id("\nglas_skelett")) return 0;                                  
+  return 1;
+}
+void dark_cloud()
+{
+	int i, k, aim;
+	mixed enemies;
+	object ob, *p;
+	
+  ob=present("\nglas_skelett", ENV(TO));
+  if(ob)
+  {
+    ENV(TO)->Message(BS("... doch bevor die schwarzen Strahlen Dich treffen, "
+                        "werden sie von dem Glasskelett reflektiert und treffen"
+                        " Tharess selbst!")
+                   , MSGFLAG_VISUAL);
+    TO->AddHp(-300);
+    return; 
+  }
+	enemies = filter_array(all_inventory(ENV(TO)), "my_filter_func");
+	for (i=0; i<sizeof(enemies);i++)
+	{
+		//Stufe 20 Spieler ueberleben den ersten Schlag nicht ohne diesen Part:
+		aim=1;
+		p=enemies[i]->QueryPursuers();
+		if(sizeof(p)>0)
+		{ 
+		  for(k=0; k<=sizeof(p)-1; k++)
+		  { 
+		    if(p[k]->id("\nglas_skelett")) 
+		    {
+		      enemies[i]->Message(BS("  Tharess ***VERNICHTET*** Dich "
+	                               "mit daemonischer Macht!!!!"));
+          enemies[i]->Message(BS("...dachtest Du zumindest. Doch das "
+                                 "Glasskelett hat die Strahlen abgefangen."));
+		      aim=0; 
+		    } 
+		  } 
+		}
+		if(aim) enemies[i]->Defend(2100, "unholy", 0, TO);
+	}	
+	return;	
+}
+
+
+
+//--Rest____________________________________________________________________
+void die(int poisondeath)
+{
+  object ob;
+	
+  //Sehertor
+  "/obj/sehertormaster"->DiscoverDoor(
+      "/d/kristallwald/delgo/avir/room/e1-e5-rh",
+      QueryProp(P_KILLER) || TP );
+
+  ob=present("\nglas_skelett", ENV(TO));
+  if(ob) {ob->reset();} //wenns net da ist auch net so wild
+  write_file(LOG "npc.kills",
+      dtime() + ": " + (CAP(getuid(QueryProp(P_KILLER) || TP)) || 
+      "<Unbekannt>") + " killt " + name(WEN, 1) + ".\n");
+  TIMASTER->Msg(""+TPN+" hat gerade Tharess den Daemon umgebracht", 2);
+  ::die(poisondeath);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  if(killer == TO)
+  {
+    write_file(LOG "npc.deads",
+        dtime() + ": " + Name(WER, 1) + "hat gerade " + CAP(getuid(player)) +
+        " umgebracht.\n");
+  }
+}
+
+//--Reactions--------------------------------------------------------------
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+ if(find_call_out("reaction") != -1) return;
+ {
+   call_out("reaction", 0, TP,
+        "bruellt Dich an.",
+        "bruellt @WEN an.");
+ }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void reaction(object pl, string macher, string andere)
+{
+  if(!ENV(TO))           return;
+  if(!objectp(pl))       return;
+  if(!ENV(pl))           return;
+  if(ENV(TO) != ENV(pl)) return;
+
+  tell_object(pl, BS(Name(WER, 1)+" "+macher));
+  tell_room(ENV(TO), BS(Name(WER, 1)+" "+andere), ({pl}) );
+}

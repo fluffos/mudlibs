@@ -1,0 +1,176 @@
+/* 
+// /gilden/druidenzirkel/npcs/f_elementar.c   
+//
+// Erzelementar der Druidengilde
+// 26-06-1997
+// Angrox@Silberland
+//
+*/
+
+inherit "std/npc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <new_skills.h>
+#include "/gilden/druidenzirkel/druiden.h"
+
+int zeit=0;
+int setremove=0;
+int fehler=0;
+
+void create()
+{
+  if (!is_clone(TO)) return;
+  ::create();
+  SetProp(P_SHORT, "Ein Feuerelementar");
+  SetProp(P_NAME, "Feuerelementar");
+  SetProp(P_GENDER, NEUTER);
+  AddId(({"elementar", "feuerelementar"}));
+  create_default_npc(1);
+// P_LEVEL   = x                            =
+// P_SP/P_HP = [(10+x*x)*(95+rnd(10))]/100  =
+// P_HANDS   = x*10                         =
+// bei x>30  = 300+5*(x-30)                 =
+// P_BODY    = x*4                          =  
+// P_XP      = HP*HANDS*5                   =   
+                          // 1/100 davon als Killbonus
+  SetProp(P_HANDS, ({"mit Feuerhaenden",100,DT_COLD}));
+  SetProp(P_RACE, "Elementar");
+  SetProp(P_XP, 0);
+  SetProp(P_SIZE, 200);
+  SetProp(P_ALIGN, 0);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_HEAL,0);
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:10,T_RANGE_MAX:100]));
+  SetProp(P_AGGRESSIVE,0);
+  SetProp(P_WIMPY, 0);
+   // Verwundbarkeiten und Resistenzen
+  SetProp(P_RESISTANCE_STRENGTHS, ([ 
+    DT_SLASH      :0,        DT_BLUDGEON   :0,        DT_PIERCE     :0,
+    DT_SQUEEZE    :0,        DT_WHIP       :0,        DT_RIP        :0,
+    DT_FIRE       :-1,       DT_COLD       :0.5,      DT_WATER      :2,    
+    DT_AIR        :0,        DT_LIGHTNING  :0,        DT_EXPLOSION  :0, 
+    DT_SOUND      :-0.5,     DT_LIGHT      :-1,       DT_ELECTRIC   :0,    
+    DT_ACID       :-1,       DT_POISON     :-1,       DT_TERROR     :-1,     
+    DT_HOLY       :-1,       DT_UNHOLY     :-1,       DT_MAGIC      :-0.5]) );
+  SetProp(P_NOMAGIC,10);
+
+  SetProp(P_MSGIN, "manifestiert sich aus ploetzlich aufspringenden Flammen.");
+  SetProp(P_MMSGIN, "stapft");
+  SetProp(P_MMSGOUT, "stapft"); 
+  SetProp(P_DIE_MSG,  " erlischt.\n");
+  SetProp(P_NOCORPSE,1);
+  SetProp(P_MATERIAL, MAT_FIRE);
+  SetProp(P_KILL_NAME, "Ein Feuerelementar");
+  SetProp(P_KILL_MSG, "Mein Meister wollte Deinen Tod, %s!");
+  AddInfo(DEFAULT_INFO, "reagiert nicht auf Dich.\n");
+  SetProp( P_REJECT, ({ REJECT_DROP,
+    "Das Feuerelementar ignoriert Dich.\n" }) );
+  SetProp(ELEMENT_DEFENDS, 1);
+}
+
+
+init()
+{
+object ob;
+::init();
+ob=find_living(lower_case(QueryProp(ELEMENT_CASTER)));
+if(!ob)
+  {
+    say(BS("Das Feuerelementar loest sich in einer Rauchwolke auf.\n"));
+    ME->remove();
+    return;
+  }
+if(ob && ob->QueryProp(P_GHOST))
+  {
+    say(BS("Das Feuerelementar loest sich in einer Rauchwolke auf.\n"));
+    ME->remove();
+  }
+if(objectp(ob) && present(getuid(ob))) 
+          ob->AddDefender(TO);
+  
+}
+
+
+reset()
+{
+  ::reset();
+  say(BS("Das Feuerelementar loest sich in einer Rauchwolke auf.\n"));
+  ME->remove();
+}
+
+set_time(int x)
+{
+ zeit=x;
+}
+
+set_fehler()
+{
+ fehler=1;
+}
+
+InformDefend(object enemy)
+{
+  ::InformDefend();
+ if(fehler) return;
+ ME->Kill(enemy);
+ if(!setremove)
+   {
+     call_out("remove_me", zeit);
+     setremove=1;
+   }
+}
+
+remove_me()
+{
+ say(BS("Das Feuerelementar loest sich nach erfuelltem Dienst auf.\n"));
+ ME->remove();
+ }
+
+/*
+DefendOther(int dam, mixed dam_type, mixed spell, object enemy)
+{
+ mixed res;
+ int i;
+ object caster; 
+ i=random(4);
+ if(fehler)
+   {
+    res=({dam, dam_type, spell, enemy});
+    return res;
+   }
+ if(!caster)
+   {
+    caster=find_living(lower_case(QueryProp(ELEMENT_CASTER)));
+   }
+ if(!i)
+   { 
+     if(member_array(dam_type, ({DT_FIRE}))!=-1)
+       {
+         say(sprintf(BS("Das Feuerelement wehrt eine Attacke "
+             +"fuer %s ab!\n"),QueryProp(ELEMENT_CASTER)),caster);
+         tell_object(caster, BS("Das Feuerelementar wehrt eine Attacke "
+            "fuer Dich ab!\n"));
+         dam=0;
+       } 
+     else
+       {
+         tell_object(caster, "Das Feuerelement schwaecht die Attacke ab!\n");
+         say(sprintf(BS("Das Feuerelementar schwaecht eine "
+           +"Attacke fuer %s ab."), QueryProp(ELEMENT_CASTER)), caster);
+         dam=dam/2;
+	}
+     SetProp(ELEMENT_DEFENDS, QueryProp(ELEMENT_DEFENDS)-1);
+   }
+
+ if(QueryProp(ELEMENT_DEFENDS)<1)
+   {
+    say("Das Feuerelementar loest sich nach dieser parierten Attacke auf!\n");
+    ME->remove();
+   }
+ res=({dam, dam_type, spell, enemy});
+ return res;
+}
+*/

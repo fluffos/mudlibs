@@ -1,0 +1,2856 @@
+/*-----------------------------------------------------------------------------\
+| Pfadfinderfee Navi                                   (C) by Hotaru, 19.07.01 |
+\-----------------------------------------------------------------------------*/
+/*
+  History:
+  --------
+  28.05.02 - Logging von "sag" ausgeschaltet
+           - Begruessung von Clones als "Gast von XYZ" anonymisiert
+  24.03.02 - Logging erheblich eingeschraenkt
+  30.01.02 - Logging von write_file auf log_file umgestellt
+  24.01.02 - Endlosrekursion bei falschen Hilfe-Fuehrungs-Verweisen gefixed
+           - Navi ueberlebt jetzt "schlaf ein" von Spielern waehrend Fuehrungen
+  04.01.02 - Navi ignoriert jetzt "spendiere"
+           - Navi reagiert richtig, wenn jemand ueber sie lacht
+  06.11.01 - Raummeldung beim Teleport von Navi nach "geh weg" gefixed
+  17.10.01 - Doppel-Leerzeichen-Filter eingebaut: "navi fuehre  mich nach midas"
+  16.10.01 - Reaktionen auf Fragen von Nicht-Anfaengern verbessert
+  07.09.01 - Navi erkennt falsch geschriebene Fuehrungsziele
+  02.09.01 - Bug in CannotHelp() beseitigt, delaygoto() beruecksichtigt
+           - Hilfe-Mitteilungen waehrend dem Mitteilungs-Punkt der Einfuehrung
+             werden erkannt und der Newbie gelobt
+           - Navi bietet bei Fragen nach Orten nur noch dann eine Fuehrung an,
+             wenn der Spieler Anfaenger ist (oder Magier)
+           - Navi checkt jetzt nach jedem Schritt, ob sie sich erfolgreich
+             bewegt hat. Wenn nicht, wird die Fuehrung abgebrochen.
+  28.08.01 - Bug in catch_tell() beseitigt, hat auch NPC-Ausgaben verarbeitet
+  27.08.01 - Waymaster upgedated, Rassencheck-Bug bei FindWayToArea behoben
+           - Fuehrungsziele "dunkelelfenkoenigin", "koenigin", "tempel",
+             "hohenpriesterin", "hohepriesterin" und "priesterin" eingebaut
+           - Check eingebaut, ob der Spieler Navi folgen kann. Wenn nicht, wird
+             die Fuehrung abgebrochen
+  15.08.01 - Fuehrungsziel "hafen" eingebaut
+           - Reaktion auf "einf?hrung" u. "einf?rung" eingebaut
+  08.08.01 - Reaktion auf "teile navi mit wo bist du?" etc. eingebaut
+           - Verweis auf evtl. vorhandene Hilfetopics bei Fragen eingebaut
+  07.08.01 - Anzeige von MSGOUTs mit "#" waehrend der Fuehrung korrigiert
+  01.08.01 - Kaempfen komplett verboten (in _query_noattack)
+           - Levelbeschraenkung eingefuehrt (keine Hilfe fuer Spieler > LV 15)
+           - Fuehrung durch Tor vor Dhrkion geht nur noch mit Schluessel
+           - Reaktion auf "hau ab!", "verschwinde" etc. eingebaut
+           - Reaktion auf Spieler/Magier als Fuehrungsziel eingebaut
+
+  Todo:
+  -----
+  * "fuehre mich in die wueste"?, quaul
+  * Fuehrungsziel "silberwald" unbekannt!
+  * Fuehrungsziel "kristallwald" unbekannt!
+  * Fuehrungsziel "marktplatz" unbekannt!
+  * Einführung Punkt 2 wenn es zu dunkel ist - fackel!
+  * Devon sagt: hilfe
+*/
+
+#pragma strong_types
+
+inherit "std/npc";
+
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <moving.h>
+#include <npc.h>
+#include <new_skills.h>
+#include <defines.h>
+#include <moredef.h>
+#include <wizlevels.h>
+#include "/d/ebene/hotaru/hotaru.h"
+#include "navi.h"
+
+nosave string JustGuiding, GuideTarget;
+nosave object FollowingPlayer;
+nosave string *LastVisited;
+nosave string *GreetedNewbies;  // Array of the last 50 greeted players
+nosave mixed *NewbiesToGreet;   // Array of player objects yet to greet
+nosave mapping HelpStatus;      // ([ "playername":(["einfuehrung":pos]) ])
+nosave mixed *HelpLocks;        // ({ ({[/elf:Nell],LOCK_INTRO,2382983}) })
+nosave int RoomMeetCounter, DoSilentMove, DelaySequences, AllowAbort;
+
+// === Prototypes ===========================================================
+
+void CheckEnvironment();
+void GoAway();
+void DelayExploreMode(int delay);
+void ShowStats();
+void GiveMap();
+varargs void playseq(object ob, mixed sequence, int recall);
+void teile_mit(object spieler, string msg);
+void do_tm(string spieler, string msg);
+void delaysay(object env, string msg);
+void delaygoto(object spieler);
+void write_log(string line);
+varargs void DisableMovement(object player, int disabletime);
+int CannotHelp(object player, string question, int strict, int erraction);
+int in_libs(string text);
+void AddLock(object player, int locktime);
+void RemLocks(object player);
+void DelayedGuide(object spieler, mixed way);
+void WaitForGuideItem(object spieler, string objID, mixed way, int c);
+void AbortGuide(int showmessage);
+varargs void guide_einfuehrung(int yes);
+string GetGuildName();
+
+// === Creation =============================================================
+
+void create()
+{
+  object ob;
+  string *adj;
+
+  if (is_clone(this_object())) {
+    write("Bitte Navi nicht clonen! Sie rennt als Blueprint herum.\n");
+    destruct(this_object());
+    return;
+  }
+
+  ::create();
+
+  //----------------------------- Properties -------------------------------
+  AddId( ({"navi", "pfadfinderfee", "fee"}) );
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_ARTICLE, 0);
+  SetProp(P_NAME, "Navi");
+  SetProp(P_PRESAY, "Pfadfinderfee");
+  SetProp(P_SHORT, "Pfadfinderfee Navi hilft Anfaengern");
+  SetProp(P_LONG, "Das ist Navi. Sie ist fuer eine Fee mittelgross.\n"
+    "Navi kennt sich im Silberland bestens aus und hat ihre Erfuellung darin "
+    "gefunden, Anfaengern zu helfen und ihnen den Weg zu beliebigen Orten zu "
+    "zeigen. Du kannst sie mit \"frag navi nach hilfe\" ansprechen."
+  );
+  create_default_npc(30+random(5));
+  SetProp(P_ALIGN, 900+random(100));
+  SetProp(P_SIZE, 65);
+  SetProp(P_RACE, "Fee");
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_MSGIN, "flattert herein");
+  SetProp(P_MSGOUT, "flattert");
+  SetProp(P_NO_GLOBAL_ATTACK, 1);
+  SetProp(P_IGNORE, ({ "spendiere" }) );
+  SetProp(P_REJECT, ({ REJECT_GIVE,
+          ME->Name(WER,1)+" sagt: Behalte das mal lieber!\n" }) );
+  SetProp(P_DIE_MSG,
+          " ruft verzweifelt: NEIIIN! Ich wollte doch nur helfen!!! :-((\n"
+          "Navi gibt ihren Widerstand auf und faellt leblos zu Boden.\n");
+  SetProp(P_KILL_MSG, "So. Wer wollte noch zu Lars gefuehrt werden?");
+
+  //------------------------------ Equipment -------------------------------
+  SUID;
+
+  //CLONEME("/players/hotaru/npc/navi/schokoriegel");
+  //CLONEME("/players/hotaru/npc/navi/schokoriegel");
+  //CLONEME("/players/hotaru/npc/navi/schokoriegel");
+  //CLONEME("/players/hotaru/npc/navi/schokoriegel");
+  CLONEME("/p/armour/armour/brustpanzer");
+  CLONEME("/p/armour/trousers/rock_kurz");
+  CLONEME("/p/armour/boots/sandalen");
+  //CLONEME("/d/unterwelt/connect/central/obj/torschluessel");
+
+  command("trage alles");
+
+  //ob = CLONEOB ("/obj/money");
+  //ob->SetProp(P_AMOUNT, 100+random(21)*5);
+  //ob->move(ME);
+
+  //-------------------------------- Spells --------------------------------
+  /*   Momentan nicht benoetigt, da das Kaempfen komplett disabled wurde!
+  SetProp(P_SPELLRATE,45);
+  SetProp(P_HANDS, ({" mit maechtiger Feenmagie",850,"bludgeon"}));
+
+  AddSpell(5,700,
+    ME->Name(WER,1)+" ruft: Waechter des Lichtes! Leiht mir eure Kraft!\n"
+   +ME->Name(WER,1)+" schiesst eine kleine blaue Lichtkugel auf Dich.\n",
+    ME->Name(WER,1)+" ruft: Waechter des Lichtes! Leiht mir eure Kraft!\n"
+   +ME->Name(WER,1)+" schiesst eine kleine blaue Lichtkugel auf @WEN.\n",
+    DT_LIGHT, ([SP_SHOW_DAMAGE:1])
+  );
+  AddSpell(4,900,
+    ME->Name(WER,1)+" ruft: Waechter des Lichtes! Leiht mir eure Kraft!\n"
+   +ME->Name(WER,1)+" schiesst eine grosse gruene Lichtkugel auf Dich.\n",
+    ME->Name(WER,1)+" ruft: Waechter des Lichtes! Leiht mir eure Kraft!\n"
+   +ME->Name(WER,1)+" schiesst eine grosse gruene Lichtkugel auf @WEN.\n",
+    DT_LIGHT, ([SP_SHOW_DAMAGE:1])
+  );
+  AddSpell(3,1100,
+    ME->Name(WER,1)+" ruft: Waechter des Lichtes! Leiht mir eure Kraft!\n"
+   +ME->Name(WER,1)+" schiesst eine gigantische weisse Lichtkugel auf Dich.\n",
+    ME->Name(WER,1)+" ruft: Waechter des Lichtes! Leiht mir eure Kraft!\n"
+   +ME->Name(WER,1)+" schiesst eine gigantische weisse Lichtkugel auf @WEN.\n",
+    DT_LIGHT, ([SP_SHOW_DAMAGE:1])
+  );
+  AddSpell(2,1500,
+    ME->Name(WER,1)+" ruft: DUSTY! HILF MIR!\n"
+    "Ein maechtiger Blitz zuckt vom Himmel und trifft Dich!\n",
+    ME->Name(WER,1)+" ruft: DUSTY! HILF MIR!\n"
+    "Ein maechtiger Blitz zuckt vom Himmel und trifft @WEN!\n",
+    DT_LIGHTNING, ([SP_SHOW_DAMAGE:1])
+  );
+  AddSpell(1,1600,
+    ME->Name(WER,1)+" ruft die Elemente zu Hilfe.\n"
+    "Ein gewaltiger Sturm zerreisst Dich fast!\n",
+    ME->Name(WER,1)+" ruft die Elemente zu Hilfe.\n"
+    "Ein gewaltiger Sturm zerreisst @WEN fast!\n",
+    DT_RIP, ([SP_SHOW_DAMAGE:1])
+  );
+  SetAttackChats(6, ({
+    ME->Name(WER,1)+" flattert aufgeregt umher.\n",
+    ME->Name(WER,1)+" flattert wild durch die Gegend.\n"
+  }) );
+  */
+
+  //----------------------------- Knowledge --------------------------------
+  SetProp(P_DEFAULT_INFO, ({
+    "sagt: Keine Ahnung, sorry!",
+    "murmelt: Nie gehoert.",
+    "schaut fragend.",
+    "zuckt ratlos mit den Schultern.",
+    "sagt: Alles kann selbst ich nicht wissen!",
+    "legt den Kopf schief und blickt fragend.",
+    "kratzt sich ratlos am Kopf."
+  }) );
+  AddInfo(({"raeume","raeumen"}), #'ShowStats);
+  AddInfo(({"einfuehrung","einfuehren","einfuerung","einfuhrung","einfurung",
+            "einf?hrung","einf?rung","einbfuehrung","einfeuhrung","eifuehrung",
+            "einfuerhung","einfuehrun","der einfuehrung","einuerung"}),
+          #'guide_einfuehrung);
+  AddInfo(({"karte","stadtplan","plan"}), #'GiveMap);
+  AddInfo(({"kampf"}),
+    "Sorry, dieses Thema ist noch nicht eingebaut - wahrscheinlich gibt das "
+    "mal eine interaktive Einfuehrung. Feuer Hotaru ein wenig an! :)",
+    "sagt: "
+  );
+
+  FUZZY_MASTER->RewriteLibrary(NAVI_LIB);
+  AddLibrary(NAVI_LIB,100);
+  AddCmd(({"nick","nicke","ja"}),"positiv");
+  AddCmd(({"nein","nee","noe"}),"negativ");
+  AddCmd(({"schau","schaue","unt","untersuche"}),"anschauen");
+  //AddCmd(({"sag","sage"}),"log_sagen");
+  AddCmd(({"-a"}),"allgemein");
+  AddCmd(({"furz","furze"}),"furzen");
+
+  // Reset variables and arrays
+  JustGuiding = "";
+  GuideTarget = "";
+  LastVisited = ({ });
+  GreetedNewbies = ({ });
+  NewbiesToGreet = ({ });
+  HelpStatus = ([ ]);
+  HelpLocks = ({ });
+  FollowingPlayer = 0;
+  DoSilentMove = 0;
+  DelaySequences = 0;
+  AllowAbort = 0;
+
+  // Add to helpmaster
+  HELP_MASTER->AddHelper(this_object());
+  if (QueryProp(P_CLONER) != "hotaru") {
+    write_log(this_object()->Name() + " gecloned von " +
+              capitalize(QueryProp(P_CLONER)));
+  }
+
+  // Start exploring
+  DelayExploreMode(EXP_DELAY_CLONE);
+
+  // Check environment
+  call_out("CheckEnvironment", 2);
+}
+
+// === Main functions =======================================================
+
+// See if Navi has no environment and if so, make her move
+void CheckEnvironment()
+{
+  if (!environment())
+    move("/gilden/abenteurer", M_GO);
+}
+
+// Inspect current room
+void GetRoomInfo()
+{
+  object env, furz;
+  string filename, *mout, textout;
+  int i;
+
+  if (!this_object() || !env=environment(this_object())) return;
+  filename = file_name(env);
+
+  // Are we guiding someone?
+  if (FollowingPlayer) {
+    // Ensure that the player is not in the death room (simply checking for
+    // P_GHOST would not suffice as Navi should also be able to guide ghosts
+    // to their praying points)
+    if (file_name(environment(FollowingPlayer)) != "/room/death/death_room") {
+      // Make player follow
+      if (environment(FollowingPlayer) && (environment(FollowingPlayer) != env)) {
+        if (!DoSilentMove) {
+          tell_object(FollowingPlayer, "Du folgst Navi.\n\n");
+          mout = explode(FollowingPlayer->QueryProp(P_MSGOUT),"#");
+          textout = mout[0] + " Navi hinterher" + (sizeof(mout)>1?mout[1]:"");
+          FollowingPlayer->move(env, M_GO, "",
+            textout, FollowingPlayer->QueryProp(P_MSGIN)
+          );
+        } else {
+          FollowingPlayer->move(env, M_NOCHECK|M_SILENT, "", "", "");
+          DoSilentMove = 0;
+        }
+      }
+    }
+  }
+
+  // Add room to "last visited" queue (max: 50 entries)
+  LastVisited -= ({ filename });
+  LastVisited += ({ filename });
+  if (sizeof(LastVisited) > 50) LastVisited = LastVisited[1..];
+
+  // Explore
+  RoomMeetCounter = 0;
+  DelayExploreMode(EXP_DELAY);
+
+  // Check for farts and clear the air ;)
+  if ((JustGuiding == "") && (find_call_out("furzrache") == -1)) {
+    if (present("_furz_", env)) {
+      while (furz=present("_furz_", env)) destruct(furz);
+      playseq(this_object(), ({
+        "@ME ruempft angewidert die Nase.",
+        "@ME zueckt ein penetrantes Duftbaeumchen.",
+        "@ME flattert in einem Affentempo kreuz und quer durch den Raum.\n"
+        "Alle widerlichen Duenste verziehen sich auf einen Schlag.°°",
+        "@ME steckt das Duftbaeumchen zufrieden wieder zurueck."
+      }));
+      DelaySequences = 10;
+      call_out("playseq", 10, this_object(), ({}));
+      write_log("Verfurzte Luft in " + filename + " gereinigt");
+    }
+  }
+
+  // Check room and map it
+  if (!strstr(filename,"/d/seher/haus/",0)) {
+    //say("Navi weigert sich, dieses Seherhaus zu mappen.\n");
+    return;
+  }
+  if (!strstr(filename,"/players/",0)) {
+    //say("Navi weigert sich, diesen Workroom zu mappen.\n");
+    return;
+  }
+  if (WAY_MASTER->AddRoom(env)) {
+    if (JustGuiding == "") say("Navi kritzelt etwas auf ihre Karte.\n");
+  } else {
+    //if (JustGuiding == "") say("Navi sieht sich um und nickt wissend.\n");
+  }
+}
+
+void ShowStats()
+{
+  object env;
+  mapping roommap;
+  if (!env=environment(this_object())) return;
+
+  roommap = WAY_MASTER->GetRoomMap();
+
+  say("Navi sagt: Ich kenne schon sagenhafte " + sizeof(m_indices(roommap))
+      + " Raeume!\n");
+  say("Navi strahlt wie eine ganze Honigkuchenpferdehorde.\n");
+  //say("<Navi> Ich kenne schon folgende Räume:\n");
+  //say(break_string(implode(m_indices(roommap)," "), 60, "<Navi>   "));
+}
+
+// Makes Navi "go away" -> teleport to a random guild
+void GoAway()
+{
+  object env;
+  string *targets;
+  if (!env=environment(this_object())) return;
+  targets = ({
+    "/gilden/abenteurer",
+    "/gilden/abenteurer/hobbitgilde",
+    "/gilden/abenteurer/trollgilde",
+    "/gilden/abenteurer/ogergilde",
+    "/gilden/abenteurer/elfengilde"
+  });
+  targets -= ({ file_name(env) });
+
+  move(targets[random(sizeof(targets))], M_NOCHECK|M_SILENT, "", "", "");
+  if (!this_object() || !env=environment(this_object())) return;
+  tell_room(env, "Navi flattert herein.\n");
+}
+
+void GiveMap()
+{
+  object player;
+  if (!player=this_player()) return;
+  if (!present("midaskarte", player)) {
+    playseq(player, ({
+      "@ME sagt: $Oh, ich habe sogar noch eine dabei! Hier...°",
+      "@ME gibt @WEM eine Karte.°°",
+      "§@ME sagt: $Mit \"unt karte\" kannst Du sehen, wo Du gerade bist."
+    }));
+    clone_object("/d/ebene/obj/div/midaskarte")->move(player, M_GET|M_SILENT);
+  } else {
+    playseq(player, ({
+      "@ME sagt: $Aber Du hast doch schon eine Karte!°",
+      "§@ME sagt: $Mit \"unt karte\" kannst Du sehen, wo Du gerade bist."
+    }));
+  }
+}
+
+/*
+void ausruesten(object pl)
+{
+  string *hemden, *hosen;
+  object ob, env;
+
+  if (!pl) return;
+  if (!env=environment(pl)) return;
+  if (env != environment(this_object())) return;
+
+  hosen  = filter_array(pl->QueryProp(P_ARMOURS),
+           lambda( ({'x}), ({ #'==,
+               ({ #'call_other, 'x, "QueryProp", P_ARMOUR_TYPE }),
+               AT_TROUSERS }) ) );
+  hemden = filter_array(pl->QueryProp(P_ARMOURS),
+           lambda( ({'x}), ({ #'==,
+               ({ #'call_other, 'x, "QueryProp", P_ARMOUR_TYPE }),
+               AT_ARMOUR }) ) );
+
+  if ((!sizeof(hemden)) && (!sizeof(hosen))) {
+    if (!present("hemd", pl)) {
+      tell_object(pl, "Navi fluestert Dir zu: Huch, Du hast ja gar nichts an! "
+                      "Nimm das hier.\n");
+      ob = clone_object("/p/armour/hemd");
+      ob->SetProp(P_NOSELL,1);
+      ob->move(pl,M_GET|M_NOCHECK);
+      say("Navi gibt "+pl->Name(WEN,1)+" ein Hemd.\n", pl);
+      tell_object(pl, "Navi gibt Dir ein Hemd.\n");
+      tell_object(pl, "Navi fluestert Dir zu: Du kannst die Sachen mit "
+                      "\"trage alles\" anziehen.\n");
+    }
+  }
+}
+*/
+
+/*
+void greet_part1()
+{
+  say("Navi laechelt "+TP->Name(WEN,1)+" an.\n", TP);
+  tell_object(TP, "Navi laechelt Dich an.\n");
+}
+*/
+
+void GreetNewbie(object newbie)
+{
+  object env, env2;
+  if (!newbie) return;
+  if (!env=environment(this_object())) return;
+  if (!env2=environment(newbie)) return;
+
+  // Add newbie to GreetedNewbies list
+  if (sizeof(GreetedNewbies) > 50) GreetedNewbies = GreetedNewbies[1..];
+  GreetedNewbies += ({ file_name(newbie) });
+  // Guests get two entries, <filename> and <filename>* when greeted
+  if (newbie->QueryGuest()) {
+    if (sizeof(GreetedNewbies) > 50) GreetedNewbies = GreetedNewbies[1..];
+    GreetedNewbies += ({ file_name(newbie) + "*" });
+  }
+
+  if (env != env2) {
+    tell_room(env, "Navi streckt einen Arm in die Luft.\n"
+                   "Navi ruft: Waechter des Lichtes, bringt mich zu " +
+                   newbie->Name(WEM,1) + "!\n");
+    move(env2, M_TPORT, "in einem grellen Lichtblitz", "verschwindet",
+                        "flattert herein");
+  }
+  playseq(newbie, ({
+    "§@ME sieht sich um.°",
+    "@ME stellt sich @WEM vor."
+    "§@ME sagt: Oh, ein Neuling!°",
+    "§@ME laechelt @WEN freundlich an.°°",
+    "§@ME sagt: $Hallo @NAME, willkommen im SilberLand! Ich bin Navi, die "
+    "Pfadfinderfee. Ich kann Dir eine Einfuehrung in diese Welt geben und Dir "
+    "bei Deinen ersten Schritten hier helfen.°°°°°",
+    "§@ME sagt: $Du kannst mit mir kommunizieren, indem Du mich nach etwas "
+    "fragst. Gib einfach mal \"frag navi nach einfuehrung\" ein, wenn "
+    "ich Dir helfen soll."
+  }));
+  DelayExploreMode(EXP_DELAY_GREET);
+  AddLock(newbie, LOCK_GREET);
+  write_log(newbie->Name() + " automatisch begruesst");
+}
+
+string GetPlayerFromIP(string TheIP)
+{
+  mixed *userlist;
+  string username;
+  int i, count;
+  count = 0;
+  userlist = users();
+  username = "";
+  for (i=0;i<sizeof(userlist);i++) {
+    if (userlist[i]->QueryProp(P_CALLED_FROM_IP) == TheIP) {
+      if (!userlist[i]->QueryGuest()) {
+        username = capitalize(geteuid(userlist[i]));
+        count++;
+      }
+    }
+  }
+  if (count > 1) username = "";
+  return username;
+}
+
+int FindNewbies()
+{
+  mixed *userlist;
+  string userip, username;
+  object userobj;
+  int i, age, pos;
+
+  // Add all nongreeted newbies to greet queue
+  userlist = users();
+  for (i=0;i<sizeof(userlist);i++) {
+    age = userlist[i]->QueryProp(P_AGE);
+    if ((age > 0) && (age < 100)) {
+      // Don't greet already greeted newbies or ghosts
+      if ((member(GreetedNewbies, file_name(userlist[i])) == -1) &&
+         (!userlist[i]->QueryProp(P_GHOST))) {
+        // Is it a guest?
+        if (userlist[i]->QueryGuest()) {
+          // Is a player with the same IP online?
+          username = GetPlayerFromIP(userlist[i]->QueryProp(P_CALLED_FROM_IP));
+          if (username != "") {
+            teile_mit(userlist[i],
+              "Hallo " + userlist[i]->Name() + ", willkommen im SilberLand! "
+              "Ich denke zwar, dass Du ein Gast eines Spielers hier bist und "
+              "Dich daher schon auskennst, aber solltest Du trotzdem meine "
+              "Hilfe benoetigen, tipp einfach \"teile navi mit hilfe\"."
+            );
+            write_log(userlist[i]->Name() + " begruesst, evtl. Clone von " +
+                      username);
+            GreetedNewbies += ({ file_name(userlist[i]) });
+          } else {
+            NewbiesToGreet += ({ userlist[i] });
+          }
+        } else {
+          NewbiesToGreet += ({ userlist[i] });
+        }
+      }
+    }
+  }
+
+  // Do we have time to greet a newbie?
+  if (find_call_out("playseq") != -1) return 0;
+
+  // Get first newbie from queue (if there is any)
+  for (i=0;i<sizeof(NewbiesToGreet);i++) {
+    // Newbie no longer there? -> remove from queue
+    if (!NewbiesToGreet[i] ||
+        !interactive(NewbiesToGreet[i]) ||
+        NewbiesToGreet[i]->QueryProp(P_TESTPLAYER) ||
+        NewbiesToGreet[i]->QueryProp(P_GHOST))
+    {
+      NewbiesToGreet -= ({ NewbiesToGreet[i] });
+      continue;
+    }
+    GreetNewbie(NewbiesToGreet[i]);
+    NewbiesToGreet -= ({ NewbiesToGreet[i] });
+    return 1;
+  }
+
+  return 0;
+}
+
+void Explore()
+{
+  string *exits, *names, movecmd;
+  mapping map;
+  object env;
+  int i, tmpval, bestval;
+  if (!env=environment(this_object())) return; // No environment? Stop moving!
+  if (JustGuiding != "") return; // Don't explore when guiding
+
+  // Found a newbie to greet? Don't explore then!
+  if (FindNewbies()) return;
+
+  // Turn "exit":"filename" to "filename":"exit" (needed for StopRooms)
+  map = env->QueryProp(P_EXITS);
+  if (!map) map = ([ ]);
+  map = mkmapping(m_values(map),m_indices(map));
+  // Remove all exits that match StopRooms
+  for (i=0;i<sizeof(StopRooms);i++) {
+    map -= mkmapping(regexp(
+             m_indices(map),
+             "^" + regreplace(StopRooms[i], "\\*", ".*", 1) + "\$"
+           ));
+  }
+
+  names = m_indices(map);
+  exits = m_values(map);
+
+  // No exits found? Teleport to previous room or "/gilden/abenteurer"!
+  if (!sizeof(exits)) {
+    say("Navi stutzt.\n");
+    if (sizeof(LastVisited) < 2) movecmd = "/gilden/abenteurer";
+                            else movecmd = LastVisited[<2];
+    move(movecmd, M_TPORT|M_NOCHECK, "in einem grellen Lichtblitz",
+         "verschwindet", "erscheint in einem grellen Lichtblitz");
+    return;
+  }
+
+  // Find exit to room where we haven't been the longest time
+  bestval = 100;
+  movecmd = "";
+  for (i=0;i<sizeof(exits);i++) {
+    tmpval = member(LastVisited, CutDotC(names[i]));
+    if (tmpval == bestval) {
+      if (!random(3)) {
+        movecmd = exits[i];
+      }
+    }
+    if (tmpval < bestval) {
+      bestval = tmpval;
+      movecmd = exits[i];
+    }
+  }
+
+  if (movecmd == "") {
+    DelayExploreMode(100);
+    say("Navi seufzt. Scheinbar hat sie keinen Zielraum gefunden.\n");
+    return;
+  }
+  command(movecmd);
+}
+
+string Waffenempfehlung()
+{
+  string gilde;
+  gilde = TP->QueryProp(P_GUILD);
+  switch (gilde) {
+    case "paladine":
+      return "Du als " + GetGuildName() + " solltest natuerlich ein Schwert "
+             "als Waffe benutzen, um Deinen Schwertkampf erfolgreich ueben "
+             "zu koennen!";
+    case "berserker":
+      return "Dir als " + GetGuildName() + " kann ich eine Axt waermstens "
+             "empfehlen. Mit ihr wirst Du erfolgreich Deine Kaempfe bestehen!";
+    case "druidenzirkel":
+      return "Du als " + GetGuildName() +" solltest allerdings gar keine Waffe "
+             "verwenden, denn Druiden sind Meister des waffenlosen Kampfes.";
+    case "abenteurer":
+      return "Du als " + GetGuildName() + " kannst eigentlich jeden Waffentyp "
+             "verwenden, ein Schwert waere aber wohl die beste Wahl.";
+    case "dunkelelfen":
+      return "Du als " + GetGuildName() + " solltest am Besten einen Bogen, "
+             "eine Peitsche oder ein Schwert verwenden.";
+    case "zechpreller":
+      return "Du als " + GetGuildName() + " koenntest natuerlich auch "
+             "Einrichtungsgegenstaende, Kuechengeraete oder Bierkruege als "
+             "Waffe verwenden. :)";
+    default:
+      return "Leider kenne ich Deine Gilde nicht und kann Dir daher auch "
+             "keinen Waffentyp empfehlen!";
+  }
+}
+
+varargs string GuideInfo(string guideto, string target1, string target2)
+{
+  if (!guideto || !target1 || !TP) return "";
+  GuideTarget = guideto;
+  if (!IS_LEARNER(TP) && (TP->QueryProp(P_LEVEL) > 15)) return "";
+  if (!target2) {
+    return " Wenn Du dorthin willst, tipp einfach \"sag_navi,_"
+           "fuehr_mich_" + target1 + "\".";
+  } else {
+    return " Wenn Du " + regreplace(target1,"_"," ",1) + " willst, tipp "
+           "einfach \"sag_navi,_bring_mich_" +
+           target2 + "\".";
+  }
+}
+
+void GuidePlayer(object spieler, mixed way, string destination)
+{
+  object env;
+  if (!spieler) return;
+  if (!env=environment(spieler)) return;
+
+  JustGuiding = spieler->Name(WER,1);
+  FollowingPlayer = spieler;
+  DisableMovement(spieler);
+  SetProp (P_MSGIN, "flattert " + JustGuiding + " fuehrend herein");
+
+  tell_object(spieler, "\n"
+".----------------------------------------------------------------------------.\n"
+"| Du folgst jetzt Navi und kannst Dich waehrenddessen nicht selbst bewegen.  |\n"
+"| Du kannst die Fuehrung aber jederzeit mit \"sag stop!\" abbrechen.           |\n"
+"`----------------------------------------------------------------------------'\n"
+"\n"
+  );
+  if (geteuid(spieler) == "sternchen(disabled)") {
+    playseq(spieler, ({
+      "@ME streckt @WEM die Zunge raus.\n"
+      "@ME sagt: Ich fuehre Dich jetzt " + destination + ", Du Bloedmann!",
+      "@ME zwinkert."
+    }));
+  } else {
+    if (sizeof(way) > 20) {
+      switch (random(100)) {
+        case 0..33:
+          playseq(spieler, ({
+            "@ME stoehnt.\n"
+            "@ME fragt: Weisst Du, wie weit es bis " + destination + " ist?!?",
+            "@ME sagt: Aber mit mir kann man's ja machen..."
+          }));
+          break;
+        case 34..66:
+          playseq(spieler, ({
+            "@ME japst entgeistert.\n"
+            "@ME fragt: Du weisst, wie weit es bis " + destination + " ist, ja??",
+            "@ME denkt    . o O (warum bin ich nicht doch ein Drache geworden?)"
+          }));
+          break;
+        case 67..99:
+          playseq(spieler, ({
+            "@ME starrt @WEN entsetzt an.\n"
+            "@ME fragt: Du willst bis " + destination + "? Von hier aus?!?",
+            "@ME sagt: Na dann. Ich hatte heute Abend ja sowieso nichts mehr vor."
+          }));
+          break;
+      }
+    } else {
+      playseq(spieler,
+        "@ME nickt @WEM zu.\n"
+        "@ME sagt: Ich fuehre Dich jetzt " + destination + "."
+      );
+    }
+  }
+
+  //AddPursuer(spieler);
+  call_out("DelayedGuide", 6, spieler, way);
+}
+
+void DelayedGuide(object spieler, mixed way)
+{
+  object env, env2, ob;
+  string exittype, exitcmd;
+  int tmpint, defaultexit;
+  // Lost player?
+  if ((!spieler) || (find_netdead(geteuid(spieler)))) {
+    if (env=environment(this_object())) {
+      tell_room(env, "Navi grummelt ueber " + JustGuiding + ".\n");
+    }
+    write_log("Fuehrung abgebrochen: Spieler hat das SilberLand verlassen!");
+    AllowAbort = 1;
+    AbortGuide(0);
+    return;
+  }
+  if (JustGuiding == "" || !FollowingPlayer) return;
+  if (!env=environment(this_object())) return;
+  if (!env2=environment(spieler)) return;
+  // Player couldn't follow?
+  if (env != env2) {
+    tell_room(env, "Navi gruebelt, wo " + JustGuiding + " bleibt.\n");
+    move(env2, M_TPORT|M_NOCHECK, "in einem grellen Lichtblitz", "verschwindet",
+                                  "flattert herein");
+    playseq(spieler, ({
+      "@ME gruebelt.°",
+      "@ME sagt: $Du kannst mir aus irgendeinem Grund nicht folgen. Ich breche "
+      "die Fuehrung daher hier ab. Sorry!"
+    }));
+    write_log("Fuehrung abgebrochen: Spieler kann mir nicht von " + 
+              file_name(env2) + " nach " + file_name(env) + " folgen!");
+    AllowAbort = 1;
+    AbortGuide(0);
+    return;
+  }
+  // Arrived at destination?
+  if (sizeof(way) == 0) {
+    AllowAbort = 1;
+    AbortGuide(1);
+    tell_room(env, "Navi sagt: Wir sind da!\n");
+    tell_room(env, "Navi strahlt.\n");
+    return;
+  }
+
+  // Is special exit?
+  if (sscanf(way[0], "@%s:%s", exittype, exitcmd) == 2) {
+    // Special exit
+    defaultexit = 0;
+    switch (exittype) {
+      // Command-only exit type
+      case "command":
+        command(exitcmd);
+        break;
+      case "door":
+        if (sizeof(explode(exitcmd,"|")) == 2) {
+          // Open door
+          command(explode(exitcmd,"|")[0]);
+          // Walk through
+          command(explode(exitcmd,"|")[1]);
+          break;
+        }
+      case "ronjadoor":
+        if (sizeof(explode(exitcmd,"|")) == 2) {
+          // Check door status
+          tmpint = DOOR_MASTER->QueryDoorStatus(explode(exitcmd,"|")[0]);
+          switch (tmpint) {
+            case D_STATUS_OPEN:
+              // Walk through
+              command(explode(exitcmd,"|")[1]);
+              break;
+            case D_STATUS_CLOSED:
+              // Open door
+              command("oeffne tor");
+              // Walk through
+              command(explode(exitcmd,"|")[1]);
+              break;
+            default:
+              if (ob=present("\n_torschluessel", spieler)) {
+                playseq(spieler,
+                  "@ME schnappt sich @WESSEN Torschluessel.§"
+                  "@ME schnappt sich Deinen Torschluessel."
+                );
+                ob->move(this_object(),M_NOCHECK);
+                // Open door
+                command("oeffne tor mit schluessel");
+                // Walk through
+                command(explode(exitcmd,"|")[1]);
+                // Close door
+                command("schliesse tor");
+                // Give back
+                ob->move(spieler, M_NOCHECK);
+                playseq(spieler, ({ "",
+                  "@ME gibt @WEM den Torschluessel zurueck."
+                }));
+                call_out("DelayedGuide", 4, spieler, way[1..]);
+                return;
+              } else if (spieler->QueryProp(P_RACE) == "Dunkelelf") {
+                playseq(spieler, ({
+                  "@ME ruettelt am Tor.°",
+                  "@ME sagt: $Mist, das Tor ist abgeschlossen! Besorg Dir doch "
+                  "schnell einen Schluessel! Frag mal die Waechterin danach."
+                }));
+                write_log("Fuehrung unterbrochen: Das Tor ist geschlossen");
+                WaitForGuideItem(spieler, "\n_torschluessel", way, 0);
+                return;
+              } else {
+                playseq(spieler, ({
+                  "@ME ruettelt am Tor.°",
+                  "@ME sagt: $Mist, das Tor ist abgeschlossen! Da wir beide "
+                  "keinen Schluessel haben, kommen wir hier wohl nicht "
+                  "weiter.°°",
+                  "@ME schnieft.°",
+                  "@ME sagt: $Sorry! Ich breche die Fuehrung hier ab."
+                }));
+                write_log("Fuehrung abgebrochen: Das Tor ist geschlossen");
+                AllowAbort = 1;
+                AbortGuide(0);
+                return;
+              }
+          }
+          break;
+        }
+      case "see-teleport":
+        playseq(spieler, ({
+          "§\n@ME deutet auf den See, der direkt vor Dir liegt.°°",
+          "§@ME sagt: Da muessen wir rueber. Bitte nicht bewegen!°°",
+          "§@ME haelt Deine Hand fest und streckt einen Arm in die Luft.°",
+          "§@ME ruft: Waechter des Lichtes! Bringt uns ueber den See!°°",
+          "§\nEin greller Blitz schiesst vom Himmel herab.°",
+          "§Du wirst von einer gewaltigen Macht vom Boden gerissen!°°°",
+          "§\nDu kannst erkennen, wie der See unter Dir vorbeirauscht.°°",
+          "§\nDu hast Angst, hineinzufallen, aber @ME haelt Deine Hand fest "
+          "umklammert.°°°",
+          "@ME verschwindet mit @WEM in einem grellen Lichtblitz."
+          "§\nMit einem Ruck ist alles vorbei. Das grelle Licht verglueht und "
+          "ihr steht auf der anderen Seite.\n °°",
+          "@ME erscheint mit @WEM in einem grellen Lichtblitz.§°°",
+          "@ME grinst @WEN an."
+        }));
+        DoSilentMove = 1;
+        call_out("move", 34, exitcmd, M_TPORT|M_NOCHECK|M_SILENT, "", "", "");
+        call_out("DelayedGuide", 42, spieler, way[1..]);
+        DisableMovement(spieler, 36);
+        return;
+      case "ronjasarg":
+        playseq(spieler, ({
+          "@ME untersucht konzentriert die drei an der Wand stehenden Saerge.°°",
+          "@ME oeffnet und schliesst alle Saerge aufmerksam.°°°",
+          "@ME laeuft zielsicher zu einem der Saerge und oeffnet den Deckel.",
+          "§@ME streckt die Hand nach Dir aus und grinst Dich an.°",
+          "§Nach kurzem Zoegern ergreifst Du Navis Hand und kletterst mit ihr "
+          "in den Sarg.°°",
+          "@ME laeuft zielsicher zu einem der Saerge, oeffnet den Deckel, "
+          "steigt zusammen mit @WEM hinein und schliesst den Deckel "
+          "wieder hinter sich.§"
+          "@ME schliesst den Sargdeckel hinter Dir. Gemeinsam steigt ihr "
+          "eine lange Leiter hinab in die Tiefe."
+        }));
+        env->CloseCoffin(0);
+        env->CloseCoffin(1);
+        env->CloseCoffin(2);
+        DoSilentMove = 1;
+        call_out("move", 24, exitcmd, M_TPORT|M_NOCHECK|M_SILENT, "", "", "");
+        call_out("DelayedGuide", 28, spieler, way[1..]);
+        DisableMovement(spieler, 26);
+        return;
+      // Unknown exit type
+      default:
+        say("Navi sagt traurig: Tut mir leid, da ist was schiefgelaufen!\n");
+        write_log("Unbekannter exittype in " + file_name(env) + ": " + way[0]);
+        AllowAbort = 1;
+        AbortGuide(0);
+        return;
+    }
+  } else {
+    // Default exit
+    defaultexit = 1;
+    command(way[0]);
+  }
+  // Check ob movment ueberlebt wurde - Feyaria
+  if (!this_object())
+    return;
+
+  // Check if movement was successful
+  if (!(env2=environment(this_object())) || (env == env2)) {
+    if (defaultexit) {
+      playseq(spieler, ({
+        "@ME gruebelt.°",
+        "@ME sagt: $Ich haette schwoeren koennen, dass es hier nach " + 
+        capitalize(way[0]) + " weitergeht... Eventuell ist ein Tor geschlossen "
+        "oder etwas anderes versperrt uns den Weg. Ich breche die Fuehrung "
+        "hier ab. Sorry!"
+      }));
+    } else {
+      playseq(spieler, ({
+        "@ME gruebelt.°",
+        "@ME sagt: $Ich habe mich scheinbar verlaufen! Es geht hier "
+        "jedenfalls nicht in die Richtung weiter, in die ich wollte. Ich "
+        "breche die Fuehrung daher ab. Sorry!"
+      }));
+    }
+    write_log("Fuehrung abgebrochen: Move in " + 
+              file_name(env) + " fehlgeschlagen: " + way[0]);
+    AllowAbort = 1;
+    AbortGuide(0);
+    return;
+  }
+
+  // Time next step
+  call_out("DelayedGuide", 2, spieler, way[1..]);
+  DisableMovement(spieler);
+}
+
+// Waits for the player to get a special item and continues guiding then
+void WaitForGuideItem(object spieler, string objID, mixed way, int c)
+{
+  object env, env2;
+  // Abort guiding if player is no longer in my room
+  if ((!spieler) || (!env=environment(this_object())) ||
+     (!env2=environment(spieler)) || (env!=env2)) {
+    DelayedGuide(0, way);
+    return;
+  }
+  c++;
+  if (c > 30) {
+    playseq(spieler, ({
+      "@ME fragt: $Aehm, schlaefst Du?",
+      "@ME sagt: $Sorry, aber das dauert mir zu lang. Ich breche die Fuehrung "
+      "hier ab. Frag mich einfach nochmal nach dem Weg, wenn Du wieder da bist."
+    }));
+    AllowAbort = 1;
+    AbortGuide(0);
+    write_log("Fuehrung abgebrochen: Timeout");
+    return;
+  }
+  DisableMovement(spieler);
+  if (present(objID, spieler)) {
+    write_log("Fuehrung fortgesetzt");
+    playseq(spieler, ({ "@ME sagt: Ah, prima!" }));
+    call_out("DelayedGuide", 2, spieler, way);
+  } else {
+    call_out("WaitForGuideItem", 2, spieler, objID, way, c);
+  }
+}
+
+void AbortGuide(int showmessage)
+{
+  if (!AllowAbort) return;
+  AllowAbort = 0;
+  if (JustGuiding == "" || !FollowingPlayer) return;
+  if (showmessage) {
+    tell_object(FollowingPlayer, "\n"
+".----------------------------------------------------------------------------.\n"
+"| Du folgst Navi jetzt nicht mehr und kannst Dich wieder frei bewegen.       |\n"
+"`----------------------------------------------------------------------------'\n"
+"\n"
+    );
+  }
+  JustGuiding = "";
+  FollowingPlayer = 0;
+  SetProp (P_MSGIN, "flattert herein");
+  remove_call_out("DelayedGuide");
+  DelayExploreMode(EXP_DELAY_HELP);
+  write_log("Fuehrung beendet");
+}
+
+// Simplifies a sentence
+string Simplify(string sentence)
+{
+  // Convert everything to lowercase
+  sentence = lower_case(sentence);
+  // Remove double spaces ("take  me   higher" -> "take me higher")
+  return implode(regexp(regexplode(sentence, "  *"), "[^ ]"), " ");
+}
+
+// Converts a German sentence asking for a room to "TARGET room"
+string ParseTarget(string was)
+{
+  was = Simplify(was);
+  was = regreplace(was,
+          ".*\\<(fuer[a-z]* mich|fuehr[a-z]* mich|bring[a-z]* mich|ich will|"
+          "wo geht[a-z]*|wie komm[a-z]*|weg) .*"
+          "(zum|zu dem|zur|zu der|zu den|nach|zu|in das|ins|auf die) "
+          "([a-z0-9_/ ]*).*",
+          "TARGET \\3", 1
+        );
+  was = regreplace(was,
+          ".*\\<(zeig[a-z]* mir|wo ist|wo befindet|wo liegt)"
+          "(.* der|.* die|.* das|.* dieser|.* diese|.* den|) ([a-z0-9_/ ]*).*",
+          "TARGET \\3", 1
+        );
+  was = regreplace(was, "( |^)(bitte|einmal|einem|einer|mal|plz)( |$)", " ", 1);
+  return was;
+}
+
+// Checks if a German sentence is a greeting
+int IsGreeting(string sentence)
+{
+  string was, wer;
+  sentence = Simplify(sentence);
+  was = regreplace(sentence,
+          ".*\\<(hallo|hai|hiya|hiho|hi|hoi|tach|moin|hepps|huhu|"
+          "sei[a-z]* [a-z]*grues*t|grues[a-z]* dich|grues[a-z]* gott)\\>"
+          "([a-z0-9_/ ]*).*",
+          "GRUSS\\2", 1
+        );
+  if (was[0..4] == "GRUSS") {
+    wer = regreplace(sentence,
+            ".*\\<(" + lower_case(this_object()->Name()) + "[a-z]*|fee|"
+            "pfadfinder[a-z]*)\\>.*",
+            "ICH", 1
+          );
+    // Are there more people in current room than the player and myself?
+    if (sizeof(filter_array(all_inventory(environment(TP)), #'living)) > 2) {
+      // User is talking with me
+      if ((wer == "ICH") ||
+         ((was == "GRUSS") && sizeof(HelpLocks) && (HelpLocks[0][0] == TP))) {
+        return 1;
+      } else {
+        return 0;
+      }
+    }
+    return 1;
+  } else {
+    return 0;
+  }
+}
+
+// Checks if a German sentence is a "thank you"
+int IsThankYou(string sentence)
+{
+  string was, wer;
+  sentence = Simplify(sentence);
+  was = regreplace(sentence,
+          ".*\\<(danke[a-z]*|thanks|thx|thanx|thankx)\\>"
+          "([a-z0-9_/ ]*).*",
+          "DANKE\\2", 1
+        );
+  if (was[0..4] == "DANKE") {
+    wer = regreplace(sentence,
+            ".*\\<(" + lower_case(this_object()->Name()) + "[a-z]*|fee|"
+            "pfadfinder[a-z]*)\\>.*",
+            "ICH", 1
+          );
+    // Are there more people in current room than the player and myself?
+    if (sizeof(filter_array(all_inventory(environment(TP)), #'living)) > 2) {
+      // User is talking with me
+      if ((wer == "ICH") ||
+         ((was == "DANKE") && sizeof(HelpLocks) && (HelpLocks[0][0] == TP))) {
+        return 1;
+      } else {
+        return 0;
+      }
+    }
+    return 1;
+  } else {
+    return 0;
+  }
+}
+
+// Checks if a German sentence is a "go away"
+int IsGoAway(string sentence)
+{
+  string was, wer;
+  sentence = Simplify(sentence);
+  was = regreplace(sentence,
+          ".*\\<(hau[a-z'´]* ab|verzieh[a-z'´]* dich|verpis[a-z'´]* dich|"
+          "geh[a-z'´]* (weg|scheiss[a-z'´]*)|schleich[a-z'´]* di[a-z]*|"
+          "bitte geh|geh bitte|mach .*fliege|verduen[a-z'´]* dich|"
+          "loes[a-z'´]* .*luft .*auf|kratz[a-z'´]* .*(ab|kurve)|"
+          "verschwind[a-z'´]*)\\>"
+          "([a-z0-9_/ ]*).*",
+          "GEH\\4", 1
+        );
+  if (was[0..2] == "GEH") {
+    wer = regreplace(sentence,
+            ".*\\<(" + lower_case(this_object()->Name()) + "[a-z]*|fee|"
+            "pfadfinder[a-z]*)\\>.*",
+            "ICH", 1
+          );
+    // Are there more people in current room than the player and myself?
+    if (sizeof(filter_array(all_inventory(environment(TP)), #'living)) > 2) {
+      // User is talking with me
+      if ((wer == "ICH") ||
+         ((was == "GEH") && sizeof(HelpLocks) && (HelpLocks[0][0] == TP))) {
+        return 1;
+      } else {
+        return 0;
+      }
+    }
+    return 1;
+  } else {
+    return 0;
+  }
+}
+
+// Check if player wants to be guided to a location
+varargs int HandleWayQuestion(object spieler, string question, int recall)
+{
+  string was, roomname, target;
+  string destination, *roomareas;
+  object env;
+  mixed way;
+  
+  // Make sure everything is alright
+  if (!spieler || !this_object() || !environment(this_object())) return 0;
+  if (!env=environment(spieler)) return 0;
+  if (env != environment(this_object())) return 0;
+
+  // Try to find a guiding target
+  was = ParseTarget(question);
+  if (sscanf(was, "TARGET %s", target)==1) {
+    // Found something!
+    target = implode(explode(target, " "), " ");
+    // Check whether we're "free" to help somebody :)
+    if (CannotHelp(spieler, " will gefuehrt werden", 0, ERR_SAY)) return 1;
+    // Yes, stay longer
+    DelayExploreMode(EXP_DELAY_HELP);
+    AddLock(spieler, LOCK_ASK);
+    roomname = file_name(env);
+
+    // Is target an area?
+    if (member(areas, target)) {
+      // Search way to area
+      way = WAY_MASTER->FindWayToArea(roomname, areas[target][0],
+                   ({"command","door","ronjadoor","ronjasarg","see-teleport"}));
+      if (way == -4) {
+        call_out("delaysay", 0, env, "Aber wir sind doch schon " +
+                 areas[target][3] + " " + areas[target][1] + "!");
+        return 1;
+      }
+      if ((way == -1) || (way == -2) || (way == -3)) {
+        roomareas = ({});
+      } else {
+        roomareas = WAY_MASTER->GetRoomAreas(way[0]);
+        way = way[1..];
+      }
+      destination = areas[target][2] + " " + areas[target][1];
+    } else {
+      // Search way to room
+      way = WAY_MASTER->FindWay(roomname, target,
+                   ({"command","door","ronjadoor","ronjasarg","see-teleport"}));
+      roomareas = WAY_MASTER->GetRoomAreas(target);
+      destination = "dorthin";
+    }
+
+    // -- Check if we are allowed to guide player to certain areas --
+    if (member(roomareas, "ogerhoehle") != -1) {
+      if (spieler->QueryProp(P_RACE) != "Oger") {
+        call_out("delaysay", 0, env,
+          "Tut mir leid, ich kann Dich nicht in die Ogerhoehle fuehren. "
+          "Oger sind sehr aggressiv und greifen automatisch alle anderen "
+          "Rassen an. Da Du kein Oger bist, waere eine Fuehrung dorthin "
+          "Selbstmord!"
+        );
+        write_log("Fuehrungsziel \"" + target + "\" verweigert (kein Oger)");
+        return 1;
+      }
+    }
+    if (member(roomareas, "trollager") != -1) {
+      if (spieler->QueryProp(P_RACE) != "Troll") {
+        call_out("delaysay", 0, env,
+          "Tut mir leid, ich kann Dich nicht ins Trollager fuehren. "
+          "Die Trollwaechter greifen automatisch alle anderen Rassen an. "
+          "Da Du kein Troll bist, waere eine Fuehrung dorthin Selbstmord!"
+        );
+        write_log("Fuehrungsziel \"" + target + "\" verweigert (kein Troll)");
+        return 1;
+      }
+    }
+    if (member(roomareas, "sturmfels") != -1) {
+      if (spieler->QueryProp(P_RACE) == "Dunkelelf") {
+        call_out("delaysay", 0, env,
+          "Tut mir leid, ich kann Dich nicht auf die Burg Sturmfels fuehren. "
+          "Die Paladine gewaehren Dunkelelfen keinen Zutritt."
+        );
+        write_log("Fuehrungsziel \"" + target + "\" verweigert (Dunkelelf)");
+        return 1;
+      }
+      if (spieler->QueryProp(P_ALIGN) < 0) {
+        call_out("delaysay", 0, env,
+          "Tut mir leid, ich kann Dich nicht auf die Burg Sturmfels fuehren. "
+          "Du bist zu boese, um dort hineingelassen zu werden."
+        );
+        write_log("Fuehrungsziel \"" + target + "\" verweigert (zu boese, " +
+                  spieler->QueryProp(P_ALIGN) + ")");
+        return 1;
+      }
+    }
+    if (member(roomareas, "dhrkion") != -1) {
+      if (spieler->QueryProp(P_RACE) != "Dunkelelf") {
+        call_out("delaysay", 0, env,
+          "Tut mir leid, ich fuehre nur Dunkelelfen in die Unterwelt. Die "
+          "Unterwelt ist fuer Anfaenger anderer Rassen zu gefaehrlich."
+        );
+        write_log("Fuehrungsziel \"" + target + "\" verweigert (kein "
+                  "Dunkelelf)");
+        return 1;
+      }
+    }
+    if (member(roomareas, "polaris") != -1) {
+      if (spieler->QueryProp(P_RACE) != "Dunkelelf") {
+        call_out("delaysay", 0, env,
+          "Tut mir leid, ich bringe nur Dunkelelfen nach Polaris. Der "
+          "Weg ist fuer Anfaenger anderer Rassen zu gefaehrlich."
+        );
+        write_log("Fuehrungsziel \"" + target + "\" verweigert (kein "
+                  "Dunkelelf)");
+        return 1;
+      }
+    }
+
+    // -- Check if any error occurred during wayfinding --
+    if (way == -1) {
+      call_out("delaysay", 0, env, "Sorry, ich kenne den Raum nicht, in dem "
+               "ich gerade stehe! Das mag daran liegen, dass es sich um ein "
+               "Seherhaus oder einen Workroom handelt. Draussen helfe ich "
+               "Dir gern.");
+      return 1;
+    }
+    // Target not found
+    if (way == -2) {
+      // Do some checks to react to certain invalid targets
+      if ((target=="navi") || (target=="dir")) {
+        call_out("delaysay", 0, env, "Dich zu mir zu fuehren fuehrt doch zu "
+                 "nichts! ;)");
+        write_log("Auf Fuehrungsziel \"" + target + "\" reagiert");
+        return 1;
+      }
+      if ((target=="hause") || (target=="haus")) {
+        call_out("delaysay", 0, env, "Ich bringe Dich gerne nach Hause. Ich "
+                 "weiss aber nicht, welchen Ort Du Dein Zuhause nennst. Sag "
+                 "mir einfach, wohin Du genau willst!");
+        write_log("Auf Fuehrungsziel \"" + target + "\" reagiert");
+        return 1;
+      }
+      if ((target=="lars") || (target=="tod")) {
+        call_out("delaysay", 0, env, "Hehe, da kommst Du schon noch frueh "
+                 "genug von alleine hin, keine Sorge! :)");
+        write_log("Auf Fuehrungsziel \"" + target + "\" reagiert");
+        return 1;
+      }
+      if (MASTER->get_userinfo(target) != 0) {
+        if (IS_LEARNER(target)) {
+          call_out("delaysay", 0, env, "Sorry, ich kann Dich nicht zu "
+                   "Magiern fuehren!");
+          write_log("Auf Fuehrungsziel \""+target+"\" (Magier) reagiert");
+        } else {
+          call_out("delaysay", 0, env, "Sorry, ich kann Dich nicht zu "
+                   "Spielern fuehren!");
+          write_log("Auf Fuehrungsziel \""+target+"\" (Spieler) reagiert");
+        }
+        return 1;
+      }
+      // Last try, search libraries for info
+      if (in_libs(target)) {
+        // Check whether this is the first try and whether we found a target
+        if ((recall) || (GuideTarget == "")) {
+          // Target not found or already the second try
+          call_out("delaysay", 0, env, "Ich weiss zwar etwas ueber " +
+                   capitalize(target) + ", den Weg dorthin kenne ich aber "
+                   "nicht. Frag mich einfach nach " + capitalize(target) +
+                   ", wenn ich Dir etwas darueber erzaehlen soll.");
+          write_log("Fuehrungsziel \"" + target + "\": Weg unbekannt!");
+        } else {
+          // Target found - make a second try using this target from the library
+          write_log("Fuehrungsziel \"" + target + "\" -> " + GuideTarget);
+          HandleWayQuestion(spieler, "weg nach " + GuideTarget, 1);
+        }
+      } else {
+        // Nothing found -> aborting
+        call_out("delaysay", 0, env, "\"" + capitalize(target) + "\"? "
+                 "Der Name sagt mir nichts, sorry!");
+        write_log("Fuehrungsziel \"" + target + "\" unbekannt!");
+      }
+      return 1;
+    }
+    if (way == -3) {
+      call_out("delaysay", 0, env, "Sorry, ich weiss nicht, wie ich von hier "
+               "aus da hinkomme!");
+      write_log("Kein Weg von \"" + roomname + "\" nach \"" + target +
+                "\" gefunden!");
+      return 1;
+    }
+    if (!sizeof(way)) {
+      playseq(spieler, ({"","@ME sagt: Aber da sind wir doch schon!"}));
+      return 1;
+    }
+    write_log("Fuehrung nach \"" + target + "\" (" + sizeof(way) +" Schritte)");
+    call_out("GuidePlayer", 0, spieler, way, destination);
+    return 1;
+  }
+}
+
+void catch_tell(string str)
+{
+  string wer, was, question, roomname, roomali, tmpstr, fname;
+  string *responses;
+  object env, spieler;
+  int i, scanresult;
+
+  // Analyze "teile mit"'s
+  // -------------------------------------------------------------------------
+  if (sscanf(str, "%s teilt Dir mit: %s\n", wer, was) == 2) {
+    if(!spieler=find_player(lower_case(wer))) return;
+    if (!env=environment(spieler)) {
+      teile_mit(spieler,
+        "Nanu, da ist wohl was schiefgelaufen. Du befindest Dich laut meinen "
+        "Informationen in gar keinem gueltigen Raum!"
+      );
+      return;
+    }
+    roomname = file_name(env);
+    // Somebody is asking for help
+    // ---------------------------
+    if (sizeof(regexp( ({ (lower_case(was)) }),
+        "(\\<hilfe\\>)|"
+        "(\\<hilf\\>.*\\<mir\\>)|"
+        "(\\<komm.*(\\<zu\\>.*\\<mir\\>|\\<(hier|)her\\>))|"
+        "(\\<herkommen\\>)|"
+        "(\\<du\\>.*\\<mir\\>.*\\<helfen\\>)"))) {
+      if (!WAY_MASTER->IsRoomMapped(roomname)) {
+        if (roomname[0..13] == "/d/seher/haus/") {
+          write_log(spieler->Name() + " ruft um Hilfe (aber ist in Seherhaus)");
+          teile_mit(spieler,
+            "Sorry, ich komme nicht in Seherhaeuser! Geh raus und probier es "
+            "nochmal."
+          );
+        } else {
+          write_log(spieler->Name() + " ruft um Hilfe (unbekannter Raum: " +
+                    roomname + ")");
+          teile_mit(spieler,
+            "Sorry, ich habe keinen Schimmer, wo Du gerade bist! Auf Inseln "
+            "oder in Questgebieten kann ich Dir leider nicht helfen."
+          );
+        }
+        return;
+      }
+      // Check whether we're "free" to help somebody :)
+      if (CannotHelp(spieler," teilt Dir mit: " + was,1,ERR_TELL)) return;
+      // If a nongreeted guest is calling for help, do GreetNewbie instead
+      if (spieler->QueryGuest()) {
+        if (member(GreetedNewbies, file_name(spieler)+"*") == -1) {
+          write_log(spieler->Name() + " will eine Begruessung");
+          call_out("teile_mit",0,spieler,"Ah, Du bist wohl doch neu hier!");
+          call_out("teile_mit",4,spieler,"Kein Problem - here we go...");
+          call_out("GreetNewbie",8,spieler);
+          return;
+        }
+      }
+      // Check if person is in my room & check for introduction
+      if (env == environment(this_object())) {
+        fname = file_name(spieler);
+        if (HelpStatus[fname] && HelpStatus[fname]["guide_einfuehrung"] &&
+            HelpStatus[fname]["guide_einfuehrung"] == 5) {
+          write_log("Hilferuf bestaetigt (Spieler macht die Einfuehrung)");
+          playseq(TP, ({"",
+            "§@ME sagt: $Ja, genau so funktioniert es! Normalerweise wuerde "
+            "ich jetzt zu Dir kommen und Dir meine Hilfe anbieten. Nicke, um "
+            "fortzufahren."
+          }));
+        } else {
+          write_log("Hilferuf abgewiesen (Spieler steht neben mir!)");
+          playseq(spieler, ({
+            "@ME stupst @WEN.",
+            "@ME fluestert @WEM etwas zu.§"
+            "@ME fluestert Dir zu: $Psscht! Kleiner Tip! Ich stehe direkt "
+            "neben Dir...",
+            "@ME grinst @WEN an."
+          }));
+        }
+        return;
+      }
+      write_log("Ok, Teleport zum Spieler");
+      teile_mit(spieler, "Einen Moment, ich komme zu Dir!");
+      call_out("delaygoto", 2+random(4), spieler);
+      DelayExploreMode(EXP_DELAY_HELP);
+      return;
+    }
+    // Somebody is asking for my location
+    // ----------------------------------
+    if (sizeof(regexp( ({ (lower_case(was)) }),
+        "\\<wo\\>.*\\<(bist|haelts|haels|befind|stecks|steks).*"))) {
+      write_log(spieler->Name() + " will wissen wo ich bin");
+      fname = environment(this_object())->QueryProp(P_INT_SHORT);
+      if (fname != "") tmpstr = "Der Ort hier heisst \"" + fname + "\".";
+                  else tmpstr = "Ich befinde mich gerade an einem Ort ohne "
+                                "Namen.";
+      fname = regreplace(
+        explode(environment(this_object())->QueryProp(P_INT_LONG),".")[0],
+        "\n", " ", 1
+      );
+      if (fname != "") tmpstr += " Beim Umsehen erkenne ich folgendes: "
+                                 "\"" + fname + "\".";
+                  else tmpstr += " Es ist total langweilig hier.";
+      teile_mit(spieler, tmpstr);
+      return;
+    }
+    // Assign alias to room
+    if(sscanf(was, "nenne raum %s", roomali)==1) {
+      if (!WAY_MASTER->IsRoomMapped(roomname)) {
+        teile_mit(spieler,
+          "Sorry, ich kenne den Raum nicht, in dem Du gerade stehst! "
+          "Du kannst nur fuer mir bekannte Raeume Aliasnamen vergeben."
+        );
+        return;
+      }
+      roomali = lower_case(roomali);
+      WAY_MASTER->AddRoomAlias(roomname, roomali);
+      write_log("Alias gesetzt (\"" + roomname + "\" = \"" + roomali + "\")");
+      teile_mit(spieler,
+        "Okay! Der Raum " + roomname + " ist nun bei mir auch unter "
+        "dem Alias " + roomali + " zu erreichen."
+      );
+      return;
+    }
+    teile_mit(spieler,
+      "Sorry, ich verstehe Dich nicht! Wenn Du Hilfe brauchst, teile "
+      "mir einfach \"hilfe\" oder \"hilf mir\" mit."
+    );
+    return;
+  }
+
+  // Analyze talk of players in my room
+  // -------------------------------------------------------------------------
+  scanresult=sscanf(str, "%s sagt: %s\n", wer, was);
+  if (scanresult!=2) scanresult=sscanf(str, "%s fragt: %s\n", wer, was);
+  if (scanresult!=2) scanresult=sscanf(str, "%s fragt Dich: %s\n", wer, was);
+  if (scanresult==2) {
+    // Try to find talking player with previous_object() first
+    if (!(spieler=previous_object()) || !interactive(spieler)) {
+      // No success? Try to find player using the name saved in <wer>
+      if (!spieler=find_player(lower_case(wer))) return;
+    }
+    if (!this_object() || !environment(this_object())) return;
+    if (!env=environment(spieler)) return;
+    if (env != environment(this_object())) return;
+    question = was;
+
+    // Are we waiting for the player to say something?
+    fname = file_name(spieler);
+    if (HelpStatus[fname] && HelpStatus[fname]["guide_einfuehrung_waitsag"]) {
+      if (find_call_out("playseq") == -1) {
+        HelpStatus[fname] -= ([ "guide_einfuehrung_waitsag" ]);
+        call_out("guide_einfuehrung",0);
+        return;
+      }
+    }
+
+    // Stop/Halt?
+    if (JustGuiding != "" && FollowingPlayer && FollowingPlayer == spieler) {
+      if (sizeof(regexp( ({ (lower_case(was)) }), "(stop|halt)"))) {
+        AllowAbort = 1;
+        AbortGuide(1);
+        say("Navi nickt "+spieler->Name(WEM,1)+" zu.\n", spieler);
+        tell_object(spieler, "Navi nickt Dir zu.\n");
+        tell_room(env, "Navi sagt: Okay, vorzeitiges Ende der Fuehrung.\n");
+        return;
+      }
+    }
+
+    // Handle way questions
+    // --------------------
+    if (HandleWayQuestion(spieler, question)) return;
+
+    // React to "go away"
+    // ------------------
+    if (IsGoAway(question)) {
+      if (CannotHelp(spieler," schickt mich weg",0,ERR_NOLEVEL)) return;
+      // Abort all currently playing sequences
+      while (remove_call_out("playseq") != -1);
+      // Remove all locks for this player
+      RemLocks(spieler);
+      // Choose random "go away" sequence
+      switch (random(6)+1) {
+        case 1:
+          responses = ({
+            "@ME erschrickt fuerchterlich.",
+            "@ME sagt: Sorry, ich wollte Dich nicht nerven.",
+            "@ME schnippt mit den Fingern.",
+            "@ME loest sich vor Deinen Augen in Luft auf."
+          });
+          break;
+        case 2:
+          responses = ({
+            "@ME geht in die Ecke und schmollt.",
+            "@ME sagt: Jaja, ich geh ja schon.",
+            "@ME ruft: Beam me up, Scot... aeh, Dusty!",
+            "@ME verschwindet in einem grellen Lichtblitz."
+          });
+          break;
+        case 3:
+          responses = ({
+            "@ME sagt: Pah. Da will man helfen und dann sowas.",
+            "@ME gibt einen markerschuetternden Urschrei von sich.°",
+            "Ploetzlich schwingt Tarzan herein, schnappt sich @ME und "
+            "verschwindet wieder."
+          });
+          break;
+        case 4:
+          responses = ({
+            "@ME ruft: Hey, Lars! @NAME mag mich nicht!",
+            "Lars kommt herein, sieht @WEN veraechtlich an und schuettelt den "
+            "Kopf.",
+            "Lars sagt: Komm, @ME. Wir gehen. Du hast bessere Gesellschaft "
+            "verdient.",
+            "Lars schnippt mit den Fingern und beide verschwinden in einem "
+            "Rauchwoelkchen."
+          });
+          break;
+        case 5:
+          responses = ({
+            "@ME wirft einen grossen, blau leuchtenden Kristall in die Luft.",
+            "@ME ruft: Crystal key, take me home!",
+            "@ME wird ploetzlich in den Kristall gesogen.",
+            "Der Kristall verschwindet in einer spektakulaeren Lichtexplosion."
+          });
+          break;
+        case 6:
+          responses = ({
+            "@ME greift @WEN mit maechtiger Feenmagie an.",
+            "  @ME schleudert @WEN einmal rund ums SilberLand.\n"
+            "  @ME zerbroeselt @WEN zu feinem Staub.\n"
+            "  @ME atomisiert @WEN.\n"
+            "  @ME zerstoert @WEN.\n"
+            "@ME stupst @WEN.",
+            "@WER faellt leblos nach hinten um.§"
+            "Du faellst leblos nach hinten um.",
+            "[Tod:Lars] @MEwegschicken hat gerade @NAME umgebracht.\n"
+            "@ME kichert albern und verschwindet."
+          });
+          break;
+      }
+      DelayExploreMode(10);
+      playseq(spieler, ({""})+responses);
+      call_out("GoAway",8);
+      return;
+    }
+    // React to greetings
+    if (IsGreeting(question)) {
+      responses = ({
+                     "Hallo #!",
+                     "Hi #!",
+                     "Gruess Dich, #!",
+                     "Huhu #!",
+                     "Hallo #.",
+                     "Hiho #!",
+                     "Sei gegruesst, #!",
+                     "Hallo!"
+                  });
+      write_log(spieler->Name() + " zurueckgegruesst.");
+      call_out("delaysay", 0, env, regreplace(
+        responses[random(sizeof(responses))],"#",spieler->Name(),1) + "\n"
+      );
+    }
+    // React to "thank you"
+    if (IsThankYou(question)) {
+      responses = ({
+                     "Kein Problem.",
+                     "Kein Problem, #.",
+                     "Nichts zu danken, #!",
+                     "Gern geschehen!",
+                     "Null Problemo, #.",
+                     "Aber gerne doch."
+                  });
+      write_log(spieler->Name() + " 'kein Problem' geantwortet.");
+      call_out("delaysay", 0, env, regreplace(
+        responses[random(sizeof(responses))],"#",spieler->Name(),1) + "\n"
+      );
+    }
+    if (geteuid(this_player()) == "hotaru") {
+      if (was == "navi, bleib stehen!") {
+        call_out("delaysay", 0, env, "Okay.\n");
+        JustGuiding = "niemandem, aber Hotaru hat mir verboten, mich zu "
+                      "bewegen";
+      }
+      if (was == "navi, beweg dich!") {
+        call_out("delaysay", 0, env, "Okay.\n");
+        JustGuiding = "";
+        DelayExploreMode(EXP_DELAY);
+      }
+      // Forgive a helperkiller
+      if (sscanf(was, "navi, vergib %s!", tmpstr)==1) {
+        if (!spieler=find_player(tmpstr)) {
+          call_out("delaysay", 0, env, "Dieser Spieler ist nicht online.\n");
+        } else {
+          scanresult = 0;
+          for(i=0;i<sizeof(HelpLocks);i++) {
+            if (HelpLocks[i][0] &&
+               interactive(HelpLocks[i][0]) &&
+               (HelpLocks[i][0] == spieler)) {
+              switch (HelpLocks[i][1]) {
+                 case LOCK_FIGHT:
+                 case LOCK_SCHMOLL:
+                   HelpLocks = HelpLocks[0..i-1] + HelpLocks[i+1..];
+                   scanresult = 1;
+                   i--;
+              }
+            }
+          }
+          if (HELP_MASTER->RemoveHelperKills(spieler)) scanresult = 1;
+          if (scanresult) {
+            call_out("delaysay", 0, env, "Okay.\n");
+          } else {
+            call_out("delaysay", 0, env, "Der Spieler hat nix verbrochen...\n");
+          };
+        }
+      }
+    }
+  }
+}
+
+// Reactions
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+  string *responses;
+
+  if (find_call_out("playseq") != -1) return;
+
+  DelayExploreMode(EXP_DELAY_MEET);
+
+  switch (gruppe) {
+    case "aengstlich":
+      playseq(TP, ({"","@ME sagt: Hab keine Angst!\n@ME wuschelt @WEN."}));
+      break;
+    case "aergerlich":
+      playseq(TP, ({"","@ME grummelt @WEN an."}));
+      break;
+    case "albern":
+      playseq(TP, ({"","@ME kichert albern."}));
+      break;
+    case "fies":
+      playseq(TP, ({"","@ME sagt: Du bist gemein, @NAME!\n@ME schmollt."}));
+      break;
+    case "frech":
+      playseq(TP, ({"",
+        "@ME zwickt @WEM in das Hinterteil.\n@WER zuckt zusammen und quiekt.§"
+        "@ME zwickt Dir in Dein Hinterteil.\nDu quiekst."}));
+      break;
+    case "froh":
+      if (verb=="lach") {
+        playseq(TP, ({"","@ME erzaehlt einen schmutzigen Witz ueber @WEN "
+                         "und lacht sich kaputt."}));
+      } else {
+        playseq(TP, ({"","@ME laechelt @WEN lieb an."}));
+      }
+      break;
+    case "intim":
+      playseq(TP, ({"",
+        "@ME kuesst @WEN.\n@ME erroetet.§"
+        "@ME gibt Dir einen innigen Kuss.\n@ME erroetet."}));
+      break;
+    case "nett":
+      if (verb=="dank") {
+        responses = ({
+                       "Kein Problem.",
+                       "Kein Problem, #.",
+                       "Nichts zu danken, #!",
+                       "Gern geschehen!",
+                       "Null Problemo, #.",
+                       "Aber gerne doch."
+                    });
+        write_log(TP->Name() + " bedankt sich bei mir.");
+        write_log(TP->Name() + " 'kein Problem' geantwortet.");
+        playseq(TP, ({"", "@ME sagt: $" + regreplace(
+          responses[random(sizeof(responses))],"#",TP->Name(),1)
+        }));
+      } else if (verb=="wink") {
+        playseq(TP, ({"","@ME winkt @WEM zu."}));
+      } else {
+        playseq(TP, ({"","@ME knuddelt @WEN."}));
+      }
+      break;
+    case "neutral":
+      if (verb=="frag") {
+        playseq(TP, ({"",
+          "@ME sagt: $Du darfst das Wort \"nach\" nicht vergessen, wenn Du "
+          "mich nach etwas fragen willst! Wenn Du z.B. etwas ueber die Themen "
+          "erfahren willst, dann tippe: frag navi nach themen"}));
+      } else {
+        playseq(TP, ({"","@ME grinst @WEN an."}));
+      }
+      break;
+    case "traurig":
+      playseq(TP, ({"","@ME troestet @WEN."}));
+      break;
+  }
+}
+
+// === Introduction =========================================================
+
+varargs void guide_einfuehrung(int yes)
+{
+  object player;
+  string fname, errmsg, thisroom, *exits;
+  int curpos;
+  if (!player=this_player() || !interactive(player)) return;
+  if (!environment(this_object())) return;
+  thisroom = file_name(environment(this_object()));
+  fname = file_name(player);
+  // Check whether we're "free" to help somebody :)
+  if (find_call_out("playseq") != -1) {
+    playseq(player, "@ME sagt: $Sorry, ich bin gerade mit einem anderen "
+                    "Spieler beschaeftigt. Bitte probier es spaeter nochmal.");
+    return;
+  }
+  // Initialize mapping data
+  if (!HelpStatus[fname]) {
+    curpos = 0;
+    HelpStatus[fname] = ([ "guide_einfuehrung":curpos ]);
+  } else {
+    curpos=HelpStatus[fname]["guide_einfuehrung"];
+    HelpStatus[fname] += ([ "guide_einfuehrung":curpos ]);
+  }
+  // Only one introduction for each player
+  if (HelpStatus[fname]["guide_einfuehrung_done"]) {
+    playseq(player, "@ME sagt: Du hast doch schon eine Einfuehrung bekommen!");
+    return;
+  }
+  // Was the last part of the introduction a long time ago?
+  if (HelpStatus[fname]["guide_einfuehrung_lasttime"]) {
+    if (time() - HelpStatus[fname]["guide_einfuehrung_lasttime"] > 200) {
+      write_log(
+        player->Name() + " kommt nach " +
+        (time() - HelpStatus[fname]["guide_einfuehrung_lasttime"]) +
+        " Sekunden wieder zur Einfuehrung zurueck!"
+      );
+      playseq(player,
+        "§@ME sagt: $Ah, da bist Du ja wieder! Hier nochmal der letzte Punkt "
+        "der Einfuehrung:"
+      );
+      curpos--;
+      HelpStatus[fname] -= ([
+        "guide_einfuehrung_waitnick",
+        "guide_einfuehrung_waitebenen",
+        "guide_einfuehrung_waityesno",
+      ]);
+    }
+  }
+  // Don't allow Navi to moved while introducing a player
+  HelpStatus[fname] += ([ "guide_einfuehrung_lasttime":time() ]);
+  DelayExploreMode(EXP_DELAY_HELP);
+  AddLock(player, LOCK_INTRO);
+  // Do introduction
+  switch (curpos) {
+    case 0:
+      write_log(player->Name() + " wird eingefuehrt");
+      playseq(player, ({
+        "@ME gibt @WEM eine Einfuehrung.§@ME nickt zustimmend.°",
+        "§@ME sagt: $Okay, die Einfuehrung also.°°",
+        "§@ME sagt: $Erstmal etwas Wichtiges vorneweg: Ich sage immer nur ein "
+        "paar Saetze und warte dann darauf, dass Du nickst (mit \"nicke\"), "
+        "bevor ich fortfahre.°°°°",
+        "§@ME sagt: $Auf diese Weise kannst Du das Tempo selbst bestimmen und "
+        "wirst nicht so von mir zugequasselt.°°",
+        "§@ME grinst.",
+        "§@ME sagt: Nicke, um fortzufahren."
+      }));
+      HelpStatus[fname] += ([ "guide_einfuehrung":1 ]);
+      HelpStatus[fname] += ([ "guide_einfuehrung_waitnick":1 ]);
+      break;
+    case 1:
+      playseq(player, ({
+        "§@ME sagt: $Prima! Also, das wohl wichtigste auf dieser Welt ist, "
+        "sich alles genau anzusehen. Nur so kannst Du hier lustige Dinge "
+        "entdecken, Geheimnisse finden und Raetsel loesen.°°°°°",
+        "§@ME sagt: $Eine Beschreibung Deiner Umgebung bekommst Du mit dem "
+        "Kommando \"schau\". Alles, was dort erwaehnt ist, kannst Du mit "
+        "\"unt <objekt>\" naeher untersuchen. Ist also z.B. von einer Blume "
+        "die Rede, liefert Dir \"unt blume\" naehere Details.°°°°°°",
+        "§@ME sagt: $Schau Dich mal ein wenig hier um und nicke, wenn Du "
+        "fertig bist."
+      }));
+      HelpStatus[fname] += ([ "guide_einfuehrung":2 ]);
+      HelpStatus[fname] += ([ "guide_einfuehrung_waitnick":1 ]);
+      break;
+    case 2:
+      exits = m_indices(environment(player)->QueryProp(P_EXITS));
+      if (!sizeof(exits)) exits = ({"norden"});
+      playseq(player, ({
+        "§@ME sagt: $Was Dir bei \"schau\" bestimmt auch aufgefallen ist, sind "
+        "die Ausgaenge. Du kannst Dich in jede der dort angegebenen Richtungen "
+        "bewegen, indem Du sie einfach eingibst (z.B. \"" +
+        exits[random(sizeof(exits))] + "\").°°°°°",
+        "§@ME sagt: $Die Richtungen lassen sich auch abkuerzen, z.B. steht "
+        "\"n\" fuer Norden, \"s\" fuer Sueden, \"nw\" fuer Nordwesten "
+        "etc...°°°°",
+        "§@ME sagt: $Probier es einfach mal aus und laufe ein wenig herum! "
+        "Komm wieder zu mir zurueck und nicke, wenn Du fertig bist.°°",
+        "§@ME nickt Dir ermutigend zu.",
+      }));
+      call_out("guide_laufhilfe_weg", 55, player);
+      player->SetProp(P_TMP_MOVE_HOOK, ({
+        time()+150, this_object(), "guide_move"
+      }));
+      HelpStatus[fname] += ([ "guide_einfuehrung":3 ]);
+      HelpStatus[fname] += ([ "guide_einfuehrung_waitnick":1 ]);
+      break;
+    case 3:
+      remove_call_out("guide_laufhilfe_weg");
+      remove_call_out("guide_laufhilfe_her");
+      player->SetProp(P_TMP_MOVE_HOOK,0);
+      playseq(player, ({
+        "§@ME sagt: $Wenn Du hier beim Herumlaufen auf andere Spieler triffst, "
+        "kannst Du Dich natuerlich auch mit ihnen verstaendigen. Wenn sie "
+        "direkt neben Dir stehen (d.h. wenn sie bei \"schau\" mit aufgefuehrt "
+        "werden), dann benutze den Befehl \"sag\".°°°°°",
+        "§@ME sagt: Tipp mal \"sag hallo\"!"
+      }));
+      HelpStatus[fname] += ([ "guide_einfuehrung":4 ]);
+      HelpStatus[fname] += ([ "guide_einfuehrung_waitsag":1 ]);
+      break;
+    case 4:
+      playseq(player, ({
+        "§@ME sagt: $Prima, das hat doch schon sehr gut funktioniert!°°",
+        "§@ME sagt: $Wenn ein Spieler nicht direkt neben Dir steht, sondern "
+        "sich irgendwo im Spiel aufhaelt, dann kannst Du ihm Mitteilungen "
+        "schicken.°°°°",
+        "§@ME sagt: $Das geht mit dem Befehl \"teile <spieler> mit <text>\", "
+        "also z.B. \"teile navi mit hilfe\". Wenn Du mir \"hilfe\" mitteilst, "
+        "dann komme ich jederzeit zu Dir!°°°°",
+        "§@ME sagt: Nicke, um fortzufahren."
+      }));
+      HelpStatus[fname] += ([ "guide_einfuehrung":5 ]);
+      HelpStatus[fname] += ([ "guide_einfuehrung_waitnick":1 ]);
+      break;
+    case 5:
+      playseq(player, ({
+        "§@ME sagt: $Vielleicht ist Dir schon aufgefallen, dass sich hier ab "
+        "und zu Leute auf [Allgemein] unterhalten. Das ist eine der "
+        "Chat-Ebenen im SilberLand, auf denen Du Dich mit allen Personen im "
+        "Spiel unterhalten kannst.°°°°°°",
+        "§@ME sagt: $Um dort etwas zu sagen, tippe einfach \"-a <text>\". Der "
+        "Bindestrich am Anfang bedeutet \"sende etwas an eine Ebene\" und das "
+        "\"a\" ist die Abkuerzung fuer \"Allgemein\".°°°°°",
+        "§@ME sagt: $Tipp doch mal \"-a hallo\"!"
+      }));
+      HelpStatus[fname] += ([ "guide_einfuehrung":6 ]);
+      HelpStatus[fname] += ([ "guide_einfuehrung_waitebenen":1 ]);
+      break;
+    case 6:
+      if (member(WAY_MASTER->GetRoomAreas(thisroom), "midas") != -1) {
+        // We are in Midas, offer map
+        playseq(player, ({
+          "§@ME sagt: $Das war alles! Jetzt steht Deinen Erkundungen hier "
+          "eigentlich nichts mehr im Wege. Wir besorgen Dir am besten noch "
+          "eine Karte von Midas, dann verlaeufst Du Dich hier nicht so "
+          "schnell.°°°°°",
+          "§@ME sagt: $Nicke, wenn ich Dir zeigen soll, wo man eine Karte "
+          "bekommt, ansonsten tippe \"nein\"."
+        }));
+        HelpStatus[fname] += ([ "guide_einfuehrung":7 ]);
+        HelpStatus[fname] += ([ "guide_einfuehrung_waityesno":1 ]);
+      } else {
+        write_log(player->Name() + " hat die Einfuehrung abgeschlossen");
+        // We are NOT in Midas, say goodbye
+        playseq(player, ({
+          "§@ME sagt: $Das war alles! Jetzt steht Deinen Erkundungen hier "
+          "eigentlich nichts mehr im Wege.°°°",
+          "@ME sagt: $Danke, dass Du die Einfuehrung mitgemacht hast!§"
+          "@ME sagt: $Danke, dass Du die Einfuehrung mitgemacht hast! Wenn Du "
+          "noch etwas mehr ueber das SilberLand erfahren willst, dann tipp "
+          "\"frag navi nach themen\".°°°",
+          "@ME winkt @WEM zu."
+        }));
+        HelpStatus[fname] += ([ "guide_einfuehrung_done":1 ]);
+      }
+      break;
+    case 7:
+      write_log(player->Name() + " hat die Einfuehrung abgeschlossen");
+      if (yes) {
+        playseq(player, ({
+          "§@ME sagt: $Oh, ich habe sogar noch eine dabei! Hier...°",
+          "@ME gibt @WEM eine Karte.°°",
+          "§@ME sagt: $Mit \"unt karte\" kannst Du sehen, wo Du gerade bist.°°",
+          "@ME sagt: $Danke, dass Du die Einfuehrung mitgemacht hast!§"
+          "@ME sagt: $Danke, dass Du die Einfuehrung mitgemacht hast! Wenn Du "
+          "noch etwas mehr ueber das SilberLand erfahren willst, dann tipp "
+          "\"frag navi nach themen\".°°°",
+          "@ME winkt @WEM zu."
+        }));
+        clone_object("/d/ebene/obj/div/midaskarte")->
+          move(player, M_GET|M_SILENT);
+      } else {
+        playseq(player, ({
+          "§@ME sagt: $Okay, dann viel Spass noch bei Deinem Aufenthalt "
+          "hier!°°",
+          "@ME sagt: $Danke, dass Du die Einfuehrung mitgemacht hast!§"
+          "@ME sagt: $Danke, dass Du die Einfuehrung mitgemacht hast! Wenn Du "
+          "noch etwas mehr ueber das SilberLand erfahren willst, dann tipp "
+          "\"frag navi nach themen\".°°°",
+          "@ME winkt @WEM zu."
+        }));
+      }
+      HelpStatus[fname] += ([ "guide_einfuehrung_done":1 ]);
+      break;
+  }
+}
+
+mixed guide_move(mixed dest, int methods, string direction, string textout,
+                 string textin)
+{
+  object player;
+  if (!player=this_player()) return 0;
+  // Make Navi stay longer
+  if (HelpStatus[file_name(player)]) {
+    HelpStatus[file_name(player)] += ([ "guide_einfuehrung_lasttime":time() ]);
+  }
+  DelayExploreMode(EXP_DELAY_HELP);
+  AddLock(player, LOCK_INTRO);
+  player->SetProp(P_TMP_MOVE_HOOK,0);
+  remove_call_out("guide_laufhilfe_weg");
+  if (find_call_out("guide_laufhilfe_her") == -1) {
+    call_out("guide_laufhilfe_her", 30, player);
+  }
+  return 0;
+}
+
+void guide_laufhilfe_weg(object player)
+{
+  object env;
+  string *exits;
+  if (!player || !interactive(player)) return;
+  if (!env=environment(player)) return;
+  // Make Navi stay longer
+  if (HelpStatus[file_name(player)]) {
+    HelpStatus[file_name(player)] += ([ "guide_einfuehrung_lasttime":time() ]);
+  }
+  DelayExploreMode(EXP_DELAY_HELP);
+  AddLock(player, LOCK_INTRO);
+  // Help newbie to move out
+  exits = m_indices(environment(player)->QueryProp(P_EXITS));
+  if (!sizeof(exits)) {
+    playseq(player, ({
+      "§@ME stutzt.°",
+      "§@ME sagt: $Hier gibt es ja gar keine Ausgaenge! Sorry, ist wohl der "
+      "typische Demonstrationseffekt. :-(°°",
+      "§@ME sagt: Nicke einfach, um fortzufahren."
+    }));
+    return;
+  }
+  playseq(player, ({
+    "§@ME fragt: $Klappt irgendwas nicht?°°",
+    "§@ME sagt: $Mit \"schau\" siehst Du die Ausgaenge dieses Raumes. Gib dann "
+    "einfach den Namen von einem der Ausgaenge ein. Du kannst hier z.B. \"" +
+    exits[random(sizeof(exits))] + "\" als Ausgang benutzen."
+  }));
+}
+
+void guide_laufhilfe_her(object player)
+{
+  object env,env2;
+  mixed way;
+  if (!player || !interactive(player)) return;
+  if (!env=environment(player)) return;
+  if (!env2=environment(this_object())) return;
+  // Make Navi stay longer
+  if (HelpStatus[file_name(player)]) {
+    HelpStatus[file_name(player)] += ([ "guide_einfuehrung_lasttime":time() ]);
+  }
+  DelayExploreMode(EXP_DELAY_HELP);
+  AddLock(player, LOCK_INTRO);
+  // Help newbie to come back
+  way = WAY_MASTER->FindWay(file_name(env), file_name(env2));
+  if (way != -3 && way != -2 && way != -1) {
+    teile_mit(player,
+      "Komm wieder zu mir zurueck, um die Einfuehrung weiterzumachen! "
+      "Der Weg zu mir ist: " + implode(way, ", ")
+    );
+  } else {
+    teile_mit(player,
+      "Komm wieder zu mir zurueck, um die Einfuehrung weiterzumachen!"
+    );
+  }
+}
+
+// === Helper functions =====================================================
+
+/*
+  Plays a sequence for a given player.
+    "°" at the end of a line creates a delay of 2 seconds.
+    "§" separates msgs for the room (left) from msgs for the player (right).
+  Example:
+  playseq(player, ({
+    "@ME sagt: Hallo @NAME!°",
+    "@ME wuschelt @WEN.°°",
+    "@ME fluestert @WEM etwas zu.§"
+    "@ME fluestert Dir zu: Das hier kannst nur Du lesen!"
+  }));
+*/
+varargs void playseq(object ob, mixed sequence, int recall) {
+  int trenner, waittime;
+  string curline, general, personal;
+  if (!ob) return;
+  if (!recall && DelaySequences) {
+    if (sizeof(sequence) > 0) {
+      call_out("playseq", DelaySequences, ob, sequence, 1);
+    }
+    DelaySequences = 0;
+    return;
+  }
+  if (present(ob, ENV(TO))) {
+    // Get current sequence line
+    if (pointerp(sequence)) {
+      if (sizeof(sequence) == 0) return;
+      curline = sequence[0];
+    } else {
+      curline = sequence;
+    }
+    // Get delay
+    waittime = strstr(curline, "°", 0);
+    if (waittime == -1) {
+      waittime = 0;
+    } else {
+      waittime = (strlen(curline) - waittime) * 2;
+      curline = curline[0..strstr(curline, "°", 0)-1];
+    }
+    // Replace placeholders for both general and personal string
+    curline  = regreplace(curline,  "@ME",     TO->Name(WER, 1),    1);
+    curline  = regreplace(curline,  "@NAME",   ob->Name(WER, 1),    1);
+    // Separate general and personal string
+    trenner = strstr(curline, "§", 0);
+    if (trenner != -1) {
+      general = curline[0..trenner-1];
+      personal = curline[trenner+1..];
+    } else {
+      general = personal = curline;
+    }
+    // Replace placeholders for general string
+    general  = regreplace(general,  "@WER",    ob->Name(WER, 1),    1);
+    general  = regreplace(general,  "@WESSEN", ob->Name(WESSEN, 1), 1);
+    general  = regreplace(general,  "@WEM",    ob->Name(WEM, 1),    1);
+    general  = regreplace(general,  "@WEN",    ob->Name(WEN, 1),    1);
+    // Replace placeholders for personal string
+    personal = regreplace(personal, "@WER",    "Du",                1);
+    personal = regreplace(personal, "@WESSEN", "Dein",              1);
+    personal = regreplace(personal, "@WEM",    "Dir",               1);
+    personal = regreplace(personal, "@WEN",    "Dich",              1);
+    // Output result
+    if (personal != "") tell_object(ob, MyBS(personal));
+    if (general  != "") tell_room(ENV(TO), MyBS(general), ({ob,this_object()}));
+    // call_out next line if necessary
+    if (pointerp(sequence)) {
+      if (sizeof(sequence) == 1) return;
+      call_out("playseq", waittime, ob, sequence[1..], 1);
+    }
+  }
+}
+
+void teile_mit(object spieler, string msg)
+{
+  spieler->Message(break_string(msg,78,"Navi teilt Dir mit: "), MSGFLAG_TELL);
+}
+
+void do_tm(string spieler, string msg)
+{
+  object spob;
+  spob = find_player(spieler);
+  if (!spob) return;
+  spob->Message(break_string(msg,78,"Navi teilt Dir mit: "), MSGFLAG_TELL);
+}
+
+void delaysay(object env, string msg)
+{
+  if (!env) return;
+  tell_room(env, break_string(msg,78,"Navi sagt: ",BS_LEAVE_MY_LFS),
+            ({this_object()}));
+}
+
+void delaygoto(object spieler)
+{
+  object env, env2;
+  string *rarr;
+  if (!spieler) return;
+  if (!env=environment(this_object())) return;
+  if (!env2=environment(spieler)) return;
+
+  if (env == env2) {
+    say("Navi sieht "+spieler->Name(WEN,1)+" und stutzt.\n", spieler);
+    tell_object(spieler, "Navi sieht Dich und stutzt.\n");
+    tell_room(env, "Navi sagt: Nanu, da bist Du ja schon, " +
+                   spieler->Name(WER,1) + "!\n");
+    say("Navi grinst "+spieler->Name(WEN,1)+" an.\n", spieler);
+    tell_object(spieler, "Navi grinst Dich an.\n");
+    return;
+  }
+  tell_room(env, "Navi streckt einen Arm in die Luft.\n"
+                 "Navi ruft: Waechter des Lichtes, bringt mich zu " +
+                 spieler->Name(WEM,1) + "!\n");
+  move(env2, M_TPORT|M_NOCHECK, "in einem grellen Lichtblitz", "verschwindet",
+                                "flattert herein");
+
+  rarr = ({
+            "@ME sagt: Tadaa! :)",
+            "@ME sagt: Hi! Was gibts?",
+            "@ME sagt: Da bin ich! Wie kann ich Dir helfen?",
+            "@ME sagt: Aloha! Was gibts?",
+            "@ME sagt: Hallo @NAME! Was kann ich fuer Dich tun?",
+            "@ME fragt: Wie kann ich Dir helfen, @NAME?",
+            "@ME schaut sich fragend um.\n"
+              "@ME sagt: Ah, da bist Du! Wie kann ich helfen?",
+            "@ME sagt: $Ah, da bist Du ja! Wie kann ich Dir behilflich sein?"
+         });
+  if (geteuid(spieler) == "sternchen(disabled)") {
+    rarr = ({
+              "@ME fragt: Wie kann ich Dir helfen, Du Bloedmann?",
+           });
+  }
+  if (DelaySequences) {
+    rarr = ({ "@ME fragt: So, wie kann ich Dir jetzt helfen, @NAME?" });
+  }
+  playseq(spieler, ({ rarr[random(sizeof(rarr))] + "°",
+                      "@ME laechelt @WEN erwartungsvoll an." }));
+}
+
+void DelayExploreMode(int delay)
+{
+  // Don't explore when guiding
+  if (JustGuiding != "") return;
+  // Only change delay if it's higher than the current one (if there is one)
+  if (find_call_out("Explore") < delay) {
+    // Don't change delay if maximum number of meet delays has been exceeded
+    if ((RoomMeetCounter > MAX_MEET_WAIT) && (delay == EXP_DELAY_MEET)) return;
+    remove_call_out("Explore");
+    call_out("Explore", delay);
+  }
+}
+
+// Returns 0 if Navi is "free" to help somebody or 1 if not
+int CannotHelp(object player, string question, int strict, int erraction)
+{
+  int i, tmpint;
+  string errmsg, errdesc;
+  if (!player) return 1;
+  errmsg = "";
+  errdesc = "";
+  // Just guiding a player? Reject!
+  if (JustGuiding != "") {
+    errmsg = "Sorry, ich helfe gerade " + JustGuiding + "! "
+             "Probier es bitte spaeter nochmal.";
+    errdesc = "Fuehrung aktiv";
+  }
+  // Check for recent actions
+  for(i=0;(errmsg == "") && (i<sizeof(HelpLocks));i++) {
+    if ((time() < HelpLocks[i][2]) &&
+        HelpLocks[i][0] &&
+        interactive(HelpLocks[i][0])) {
+      switch (HelpLocks[i][1]) {
+        case LOCK_ASK:
+          if (!strict) continue;
+          if (HelpLocks[i][0] == player) continue;
+          errmsg = "Sorry, ich rede gerade mit " + HelpLocks[i][0]->Name(WEM) +
+                   "! Probier es bitte spaeter nochmal.";
+          errdesc = "Rede mit " + HelpLocks[i][0]->Name(WEM);
+          break;
+        case LOCK_GREET:
+          if (HelpLocks[i][0] == player) continue;
+          errmsg = "Sorry, ich begruesse gerade " + HelpLocks[i][0]->Name(WEN) +
+                   "! Probier es bitte spaeter nochmal.";
+          errdesc = "Begruesse " + HelpLocks[i][0]->Name(WEN);
+          break;
+        case LOCK_INTRO:
+          if (HelpLocks[i][0] == player) continue;
+          errmsg = "Sorry, ich gebe gerade " + HelpLocks[i][0]->Name(WEM) +
+                   " eine Einfuehrung! Probier es bitte spaeter nochmal.";
+          errdesc = "Einfuehrung von " + HelpLocks[i][0]->Name(WEM);
+          break;
+        case LOCK_FIGHT:
+          if (HelpLocks[i][0] == player) continue;
+          errmsg = "Sorry, ich bin gerade in einen Kampf mit " +
+                   HelpLocks[i][0]->Name(WEM) + " verwickelt! Keine Zeit!";
+          errdesc = "Kampf mit " + HelpLocks[i][0]->Name(WEM);
+          break;
+        case LOCK_GOAWAY:
+          return 1;
+      }
+    }
+    // Check other stuff without timeouts
+    if (HelpLocks[i][0] &&
+        interactive(HelpLocks[i][0]) &&
+        (HelpLocks[i][0] == player)) {
+      switch (HelpLocks[i][1]) {
+        case LOCK_FIGHT:
+          errmsg = "Pah, hilf Dir doch selbst, Du " +
+                   capitalize(NAME_MASTER->CreateName("ii")) + "! "
+                   "Erst greifst Du mich an und dann soll ich auch noch auf "
+                   "Dich hoeren...";
+          errdesc = "Hat mich angegriffen!";
+          AddLock(player, LOCK_SCHMOLL);
+          break;
+        case LOCK_SCHMOLL:
+          errmsg = ":schmollt @WEN an.";
+          errdesc = "Ich schmolle";
+          break;
+      }
+    }
+  }
+
+  // Did the player kill Navi?
+  if ((errmsg == "") && (HELP_MASTER->CountHelperKills(player) > 0)) {
+    errmsg = "Pah, hilf Dir doch selbst, Du " +
+      capitalize(NAME_MASTER->CreateName("ii")) + "! Erst killst Du mich "
+      "und dann soll ich auch noch auf Dich hoeren...";
+    errdesc = "Helperkiller!";
+    AddLock(player, LOCK_SCHMOLL);
+  }
+
+  // Player level too high?
+  if (erraction!=ERR_NOLEVEL) {
+    tmpint = player->QueryProp(P_LEVEL);
+    if (!IS_LEARNER(player) && (tmpint > 15)) {
+      if (erraction == ERR_TELL) { 
+        errmsg = "Tut mir leid, ich komme nur zu Anfaengern! Du kannst aber "
+                 "gerne selbst bei mir vorbeischauen. Frag mich einfach "
+                 "danach, wo ich gerade bin.";
+      } else {
+        errmsg = "Tut mir leid, ich helfe nur Anfaengern! Mit Deiner Stufe "
+                 "solltest Du Dich auch ohne mich hier zurechtfinden.";
+      }
+      errdesc = "Kein Anfaenger, Level " + tmpint;
+    }
+  }
+  
+  // Is a teleport pending?
+  if (find_call_out("delaygoto") != -1) {
+    errmsg = "Jaja, nur mit der Ruhe, ich komme ja schon!";
+    errdesc = "Teleport geplant";
+  }
+
+  // Output error message if necessary
+  if (errmsg != "") {
+    switch (erraction) {
+      case ERR_SAY:
+      case ERR_NOLEVEL:
+        if (errmsg[0..0] != ":")
+          playseq(player, ({"", "@ME sagt: $" + errmsg}));
+        else
+          playseq(player, ({"", "@ME " + errmsg[1..]}));
+        break;
+      case ERR_TELL:
+        if (errmsg[0..0] != ":")
+          teile_mit(player, errmsg);
+        else
+          player->Message("Navi schmollt Dich aus der Ferne an.\n");
+        break;
+    }
+    write_log(capitalize(geteuid(player)) + question + " (Err: " +
+              errdesc + ")");
+    return 1;
+  }
+  write_log(capitalize(geteuid(player)) + question);
+  return 0;
+}
+
+string GetGuildName()
+{
+  string gilde;
+  int geschlecht;
+  gilde = TP->QueryProp(P_GUILD);
+  geschlecht = TP->QueryProp(P_GENDER);
+  switch (gilde) {
+    case "paladine":
+      return "Paladin";
+    case "berserker":
+      if (geschlecht==2) return "Berserkerin";
+                    else return "Berserker";
+    case "druidenzirkel":
+      if (geschlecht==2) return "Druidin";
+                    else return "Druide";
+    case "abenteurer":
+      if (geschlecht==2) return "Abenteurerin";
+                    else return "Abenteurer";
+    case "dunkelelfen":
+      if (geschlecht==2) return "Dunkelelfin";
+                    else return "Dunkelelf";
+    case "zechpreller":
+      if (geschlecht==2) return "Zechprellerin";
+                    else return "Zechpreller";
+    case "nekromanten":
+      if (geschlecht==2) return "Nekromantin";
+                    else return "Nekromant";
+    case "barden":
+      if (geschlecht==2) return "Bardin";
+                    else return "Barde";
+    default:
+      return capitalize(gilde);
+  }
+}
+
+void write_log(string line)
+{
+  log_file(NAVI_LOG, "[" + dtime() + "] " + line + "\n", 50000, 2);
+}
+
+varargs void DisableMovement(object player, int disabletime)
+{
+  if (!player || !interactive(player)) return;
+  if (!disabletime) disabletime = 8;
+  player->SetProp(P_TMP_MOVE_HOOK,({time()+disabletime,this_object(),"AllowMove"}));
+}
+
+mixed AllowMove(mixed dest, int methods, string direction, string textout,
+                string textin)
+{
+  if (this_object() && environment(this_object()) && dest &&
+     (dest == environment(this_object()))) return 0;
+  if (!FollowingPlayer || FollowingPlayer != this_player()) return 0;
+  if (direction && direction == "Navi hinterher") return 0;
+  return "Beweg Dich besser nicht, sonst verlierst Du Navi noch!\n"
+         "Wenn Du die Fuehrung abbrechen willst, tipp einfach \"sag stop!\".\n";
+}
+
+int positiv(string arg)
+{
+  string fname;
+  if (!this_player() || !interactive(this_player())) return 0;
+  fname = file_name(this_player());
+  // Did we wait for the player to nod?
+  if (HelpStatus[fname] && HelpStatus[fname]["guide_einfuehrung_waitnick"]) {
+    if (find_call_out("playseq") == -1) {
+      HelpStatus[fname] -= ([ "guide_einfuehrung_waitnick" ]);
+      write("Du nickst zustimmend.\n");
+      call_out("guide_einfuehrung",0);
+      return 1;
+    } else {
+      write("Du musst nicht nach jedem Satz nicken!\n"
+            "Warte einfach, bis Navi Dich dazu auffordert.\n\n");
+      return 1;
+    }
+  }
+  // Did we wait for the player to choose yes/no?
+  if (HelpStatus[fname] && HelpStatus[fname]["guide_einfuehrung_waityesno"]) {
+    if (find_call_out("playseq") == -1) {
+      HelpStatus[fname] -= ([ "guide_einfuehrung_waityesno" ]);
+      write("Du nickst zustimmend.\n");
+      call_out("guide_einfuehrung",0,1);
+      return 1;
+    }
+  }
+  return 0;
+}
+
+int negativ(string arg)
+{
+  string fname;
+  if (!this_player() || !interactive(this_player())) return 0;
+  fname = file_name(this_player());
+  // Did we wait for the player to choose yes/no?
+  if (HelpStatus[fname] && HelpStatus[fname]["guide_einfuehrung_waityesno"]) {
+    if (find_call_out("playseq") == -1) {
+      HelpStatus[fname] -= ([ "guide_einfuehrung_waityesno" ]);
+      write("Du schuettelst den Kopf.\n");
+      call_out("guide_einfuehrung",0,0);
+      return 1;
+    }
+  }
+  return 0;
+}
+
+int allgemein(string arg)
+{
+  string fname;
+  if (!this_player() || !interactive(this_player())) return 0;
+  fname = file_name(this_player());
+  // Did we wait for the player to say something?
+  if (HelpStatus[fname] && HelpStatus[fname]["guide_einfuehrung_waitebenen"]) {
+    if (find_call_out("playseq") == -1) {
+      HelpStatus[fname] -= ([ "guide_einfuehrung_waitebenen" ]);
+      call_out("guide_einfuehrung",0);
+    }
+  }
+  return 0;
+}
+
+void AddLock(object player, int locktime)
+{
+  int i;
+  if (!player) return;
+  // Remove existing lock for this player or outdated locks
+  for(i=0;i<sizeof(HelpLocks);i++) {
+    if (!HelpLocks[i][0] ||
+        ((HelpLocks[i][0] == player) && (HelpLocks[i][1] == locktime))) {
+      HelpLocks = HelpLocks[0..i-1] + HelpLocks[i+1..];
+      i--;
+    }
+  }
+  // Add new lock to top of queue
+  switch (locktime) {
+    case LOCK_SCHMOLL:
+      HelpLocks = ({ ({player,locktime,time()+60}) }) + HelpLocks[0..18];
+      break;
+    default:
+      HelpLocks = ({ ({player,locktime,time()+locktime}) }) + HelpLocks[0..18];
+      break;
+  }
+}
+
+void RemLocks(object player)
+{
+  int i;
+  if (!player) return;
+  // Remove existing locks for this player
+  for(i=0;i<sizeof(HelpLocks);i++) {
+    if (!HelpLocks[i][0] || (HelpLocks[i][0] == player)) {
+      HelpLocks = HelpLocks[0..i-1] + HelpLocks[i+1..];
+      i--;
+    }
+  }
+}
+
+int anschauen(string arg)
+{
+  if (!arg) {
+    write_log(TP->Name() + " -> schau");
+  } else {
+    write_log(TP->Name() + " -> schau " + arg);
+  }
+  // Make Navi stay longer when newbie is looking around during introduction
+  if (HelpStatus[file_name(TP)]) {
+    if (HelpStatus[file_name(TP)]["guide_einfuehrung"] == 2) {
+      HelpStatus[file_name(TP)] += ([ "guide_einfuehrung_lasttime":time() ]);
+      DelayExploreMode(EXP_DELAY_HELP);
+      AddLock(TP, LOCK_INTRO);
+    }
+  }
+  return 0;
+}
+
+int furzen(string arg)
+{
+  if (TP && interactive(TP)) {
+    call_out("furzrache", 0, TP);
+  }
+  return 0;
+}
+
+void furzrache(object furzer)
+{
+  object furz,env,env2;
+  object *inv;
+  int u;
+  // Only continue if farter is in my room
+  if (!furzer || !interactive(furzer) || !(env=environment(this_object())) ||
+      !(env2=environment(furzer)) || (env != env2)) return;
+  
+  // Search for his fart
+  furz = 0;
+  inv = all_inventory(environment(this_object()));
+  for(u=0;u<sizeof(inv);u++) {
+    if (inv[u] && inv[u]->id("_furz_") && 
+        (geteuid(furzer) == inv[u]->QueryProp(P_CLONER))) {
+      furz = inv[u];
+      break;
+    }
+  }
+  // No fart found?
+  if (!furz) return;
+  
+  playseq(furzer, ({
+    "@ME schleudert einen kleinen Feuerball auf @WESSEN Furz.§"
+    "@ME schleudert einen kleinen Feuerball auf Deinen Furz.",
+    "Der Furz geht in Flammen auf und versengt @WEM gehoerig den Arsch!§"
+    "Der Furz geht in Flammen auf und versengt Dir gehoerig den Arsch!",
+    "@NAME springt laut jaulend durch den Raum.§"
+    "Du springst laut jaulend durch den Raum.°°",
+    "@ME prustet los."
+  }));
+  destruct(furz);
+  write_log(TP->Name() + " furzt - Hintern wird versengt ;)");
+}
+
+/*int log_sagen(string arg)
+{
+  arg=TP->_unparsed_args();
+  if (arg) write_log(TP->Name() + " sagt: " + arg);
+  return 0;
+}*/
+
+// === Overridden functions and other stuff =================================
+
+// Called when meeting players
+void init()
+{
+  string fname;
+
+  ::init();
+  if (TP && interactive(TP)) {
+    RoomMeetCounter++;
+    DelayExploreMode(EXP_DELAY_MEET);
+
+    fname = file_name(TP);
+    if (HelpStatus[fname] && HelpStatus[fname]["guide_einfuehrung"] &&
+        HelpStatus[fname]["guide_einfuehrung"] == 3) {
+      remove_call_out("guide_laufhilfe_her");
+      if (find_call_out("playseq") == -1) {
+        playseq(TP, ({"",
+          "§@ME sagt: $Super! Nicke, um die Einfuehrung fortzusetzen."
+        }));
+      }
+    }
+
+    //call_out("ausruesten", 2, TP);
+    //call_out("greet_part2", 1);
+    //call_out("showroominfo",0);
+  }
+}
+
+// Called every time when Navi enters a room
+varargs int move(mixed dest, int method,
+                 string dir, string textout, string textin)
+{
+  int retval;
+  retval = ::move(dest,method,dir,textout,textin);
+  if ((method & M_GO) || (method & M_TPORT) || (method & M_NOCHECK)) {
+    GetRoomInfo();
+  }
+  return retval;
+}
+
+int in_libs(string text)
+{
+  string tempstr, answer, *libs, *result;
+  int i;
+  libs = m_indices (libraries);
+  answer=0;
+  // Search for text in libraries - exact match
+  for (i=sizeof(libs)-1; i>=0; i--)
+    if (result=INFOLIB_MASTER->GetInfo(libs[i], text, libraries[libs[i]],
+        this_player() )) {
+      answer=result[0];
+      break;
+    };
+  // No answer found? -> try fuzzy match
+  if (!answer) {
+    tempstr = FUZZY_MASTER->GetFuzzyCode(text);
+    for (i=sizeof(libs)-1; i>=0; i--)
+      if (result=INFOLIB_MASTER->GetInfo(libs[i], tempstr, libraries[libs[i]],
+          this_player() )) {
+        answer=result[0];
+        break;
+      }
+  }
+  if (!answer) return 0;
+  GuideTarget = "";
+  answer = process_string(answer);
+  return 1;
+}
+
+// Called on "frag navi nach xyz"
+int do_frage(string question, string text)
+{
+  mixed answer, silent;
+  string indent, tempstr, fname;
+  object *nodeaf;
+  int j, foundanswer;
+
+  DelayExploreMode(EXP_DELAY_HELP);
+  AddLock(TP, LOCK_ASK);
+
+  // Check for: frage navi nach "waffen" etc.
+  if(sscanf(text, "\"%s\"", tempstr)==1) {
+    text = "anfuehrungszeichen";
+  }
+  if(sscanf(text, "<%s>", tempstr)==1) {
+    text = "klammern";
+  }
+  // Analyze question
+  tempstr = ParseTarget(text);
+  if(sscanf(tempstr, "TARGET %s", tempstr)==1) {
+    // Handle way question
+    write_log(TP->Name() + " fragt nach: " + text);
+    catch_tell(TP->Name() + " fragt Dich: " + text + "\n");
+    // Output question to others
+    nodeaf=filter_array(all_inventory(environment(PL)), #'living);
+    for(j=sizeof(nodeaf)-1;j>=0;j--)
+      if(!nodeaf[j]->QueryProp(P_DEAF))
+        nodeaf-=({ nodeaf[j] });
+    nodeaf+=({ PL });
+    say(question, nodeaf);
+    return 1;
+  }
+
+  answer=indent=0;
+  if (!member(infos, text))
+  {
+    string *libs, *result;
+    int i;
+    libs = m_indices (libraries);
+    // Search for text in libraries - exact match
+    for (i=sizeof(libs)-1; i>=0; i--)
+      if (result=INFOLIB_MASTER->GetInfo(libs[i], text, libraries[libs[i]],
+                                         this_player() )) {
+        answer=result[0];
+        indent=result[1];
+        if (sizeof(result) > 2) silent=result[2];
+        break;
+      }
+
+    // No answer found? -> try fuzzy match
+    if (!answer) {
+      tempstr = FUZZY_MASTER->GetFuzzyCode(text);
+      for (i=sizeof(libs)-1; i>=0; i--)
+        if (result=INFOLIB_MASTER->GetInfo(libs[i], tempstr, libraries[libs[i]],
+                                           this_player() )) {
+          answer=result[0];
+          indent=result[1];
+          if (sizeof(result) > 2) silent=result[2];
+          break;
+        }
+    }
+
+    // User asking for himself?
+    if (!answer) {
+      if (lower_case(text)==lower_case(TP->Name())) {
+        answer=
+    "sagt: Das bist Du! Ich kann Dir aber nicht viel ueber Dich erzaehlen...\n"
+    "sagt: Normalerweise solltest Du Dich ja selbst am besten kennen.\n"
+    "grinst.";
+        indent="";
+      }
+    }
+
+    // User asking for a help topic?
+    if (!answer) {
+      tempstr = regreplace(lower_case(text),"[^a-z]","",1);
+      if (tempstr != "") {
+        // Try exact match
+        if (file_size("/doc/helpdir/" + tempstr) <= 0) {
+          // Nothing found? Cut last char...
+          tempstr = tempstr[0..<2];
+          if (file_size("/doc/helpdir/" + tempstr) <= 0) tempstr = "";
+        }
+        if (tempstr != "") {
+          answer=
+    "sagt: Ueber dieses Thema gibt es eine ausfuehrliche Hilfeseite. Tipp\n"
+    "sagt: einfach \"hilfe " + tempstr + "\", um sie zu lesen!\n";
+          indent="";
+        }
+      }
+    }
+
+    // Still no answer found?
+    if (!answer) {
+      write_log(TP->Name() + " fragt nach: " + text + " (unbekannt)");
+      if( this_interactive() && QueryProp(P_LOG_INFO) )
+        smart_npc_log(text);
+      text = DEFAULT_INFO;
+    }
+  }
+
+  if (!answer)  // nothing found in libraries
+  {
+    if (pointerp(answer=infos[text,0]))
+      answer=answer[random(sizeof(answer))];
+    indent=infos[text,1];
+    silent=infos[text,2];
+    foundanswer=0;
+  } else {
+    write_log(TP->Name() + " fragt nach: " + text);
+    foundanswer=1;
+  }
+
+  nodeaf=filter_array(all_inventory(environment(PL)), #'living);
+  for(j=sizeof(nodeaf)-1;j>=0;j--) {
+    fname = file_name(nodeaf[j]);
+    if (!(HelpStatus[fname]) ||
+        !(HelpStatus[fname]["guide_einfuehrung_lasttime"]) ||
+        (time() - HelpStatus[fname]["guide_einfuehrung_lasttime"] > 200)) {
+      if(!nodeaf[j]->QueryProp(P_DEAF)) nodeaf -= ({ nodeaf[j] });
+    }
+  }
+  nodeaf+=({ PL, this_object() });
+
+  if (!silent || !intp(silent))
+    say(question, nodeaf);
+
+  if ( closurep(answer) )
+  {
+    answer = funcall(answer, text);
+    if (!stringp(answer))
+      return 1;
+  }
+  answer = process_string(answer);
+
+  if (indent)
+    answer = break_string(answer, 78, ME->Name(WER,2)+" "+indent, 1);
+  else
+    answer = break_string(ME->Name(WER,2)+" "+answer, 78, 0, 1);
+
+  // Nice new feature: "say_hello_navi,_help_me" prevents line break
+  answer = regreplace(answer, "_", " ", 1);
+
+  if( PL->QueryProp(P_DEAF) )
+    tell_object(PL, ME->Name(WER,2)+ " sagt etwas, aber Du kannst nichts "
+                "hoeren.\n");
+  else
+    tell_object(PL, answer);
+  if (intp(silent) && silent)
+    return 1;
+  // small modification to prevent scrolling
+  if (!stringp(silent) && foundanswer) {
+    indent="";
+    silent="antwortet @WEM etwas.";
+  }
+  if (stringp(silent))
+  {
+    silent=DefaultReplace(silent,PL);
+    silent=process_string(silent);
+    if (indent)
+      silent = break_string(silent, 78, ME->Name(WER,2)+" "+indent, 1);
+    else
+      silent = break_string(ME->Name(WER,2)+" "+silent, 78, 0, 1);
+    say(silent, nodeaf);
+  }
+  else
+    say(answer, nodeaf);
+
+  return 1;
+}
+
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch) {
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+mixed _query_noattack()
+{
+  object env;
+  if (!(TP && interactive(TP))) return 0;
+  if (!env=environment(this_object())) return 0;
+  if (TP == this_object()) return 0;
+  // Don't allow players to kill a helper more than twice
+  if (HELP_MASTER->CountHelperKills(TP) >= 2) {
+    say(
+      TP->Name(WER,1) + " versucht, Navi anzugreifen.\n"
+      "Navi schuettelt den Kopf.\n"
+      "Navi sagt: Ich kaempfe nicht mehr mit Dir, " + TP->Name(WER,1) + "!\n",
+      TP
+    );
+    write("Navi schuettelt den Kopf.\n");
+    return "sagt: Ich kaempfe nicht mehr mit Dir, " + TP->Name(WER,1) + "!";
+  }
+  // Only fight if level > 35
+  if (TP->QueryProp(P_LEVEL) > 35) {
+    say(
+      TP->Name(WER,1) + " versucht, Navi anzugreifen.\n"
+      "Navi schuettelt den Kopf.\n"
+      "Navi sagt: Tut mir leid! Die Magier haben mir das Kaempfen verboten.\n",
+      TP
+    );
+    write("Navi schuettelt den Kopf.\n");
+    return "sagt: Tut mir leid! Die Magier haben mir das Kaempfen verboten.";
+
+    //AddLock(TP, LOCK_FIGHT);
+    //return 0;
+  }
+
+  say(
+    TP->Name(WER,1) + " versucht, Navi anzugreifen.\n"
+    "Navi taetschelt " + TP->Name(WEM,1) + " besorgt den Kopf.\n"
+    "Navi sagt: Ich will nicht mit Dir kaempfen, " + TP->Name(WER,1) + "!\n", TP
+  );
+  write("Navi taetschelt Dir besorgt den Kopf.\n");
+  return "sagt: Ich will nicht mit Dir kaempfen, " + TP->Name(WER,1) + "!";
+}
+
+int Defend(int dam, mixed dam_type, mixed spell, object enemy)
+{
+  int retval;
+  retval = ::Defend(dam, dam_type, spell, enemy);
+  if (this_object() && (this_object()->QueryProp(P_HP) < (300 - random(100)))) {
+    if (present("schokoriegel", this_object())) {
+      command("iss schokoriegel");
+    } else {
+      if (QuerySkillAttribute(SA_SPEED) == 100) {
+        playseq(enemy, "@ME wird ploetzlich viel schneller!!");
+        ModifySkillAttribute(this_object(), SA_SPEED, 260, 60);
+      }
+    }
+  }
+  return retval;
+}
+
+void NotifyPlayerDeath(object victim, object killer, int lost_xp)
+{
+  object env;
+  if (victim && FollowingPlayer && (victim == FollowingPlayer)) {
+    if (env=environment(this_object())) {
+      tell_room(env, "Navi ruft: OH NEIIIN! " + upperstring(JustGuiding) +
+                     "!!!\n");
+      tell_room(env, "Navi trauert um " + JustGuiding + ".\n");
+    }
+    if (killer) {
+      write_log("Fuehrung abgebrochen: Spieler wurde von " + killer->Name(WEM) +
+                " getoetet!");
+    } else {
+      write_log("Fuehrung abgebrochen: Spieler wurde getoetet!");
+    }
+    AllowAbort = 1;
+    AbortGuide(0);
+  }
+}
+
+varargs void die(int poisondeath)
+{
+  if (TP && poisondeath == 0) {
+    write_log("Navi umgebracht von " + capitalize(TP->Name()) + "!!!");
+    HELP_MASTER->AddHelperKill(TP);
+    HELP_MASTER->RemoveHelper(this_object());
+  }
+  ::die(poisondeath);
+}
+
+varargs int remove(int silent)
+{
+  if (previous_object()) write_log("Navi zerstoert von " +
+                                   geteuid(previous_object()) + "/" + 
+                                   geteuid(TP) + "!!!");
+  HELP_MASTER->RemoveHelper(this_object());
+  return ::remove(silent);
+}

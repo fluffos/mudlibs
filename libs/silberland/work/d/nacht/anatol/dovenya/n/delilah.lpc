@@ -1,0 +1,1042 @@
+/* Jeder braucht eine Privatassistenz.
+ * Eigentlich traurig, dass ich mir meine selbst schreiben musste. :-)
+ * __________________________________________(i) Anatol@Silberland (2012) */
+
+#pragma strict_types
+
+inherit "std/npc";
+inherit "std/player/comm";
+inherit "std/player/soul";
+inherit "std/player/viewcmd";
+
+#include <properties.h>
+#include <combat.h>
+#include <moving.h>
+#include <ansi.h>
+#include <wizlevels.h>
+
+#include "../defines.h"
+
+#define HOME_SWEET_HOME ROOM "zypresse"
+#define DELILAH_LOG_DIR DOVENYA "log/delilah/"
+#define DELILAH_SAVE_FILE DOVENYA "save/delilah"
+
+#define GEBIETER_UID "anatol"
+#define GEBIETER "/magier:anatol"
+#define GEBIETER_SECURITY   \
+    (this_player() && this_player()==this_interactive() && \
+    file_name(this_player())==GEBIETER)
+#define DB(x)   if (find_player("anatol")) tell_object(find_player("anatol"),break_string(x,77,"Debug: ",1))
+
+
+#define PERM_ALL 0
+#define PERM_SEER 1
+#define PERM_WIZARD 2
+#define PERM_GEBIETER 3
+
+mapping services;
+
+private nosave string unparsed_args;
+private nosave mapping impressed;
+private nosave mapping waitforlist;
+private nosave string env;
+private nosave mapping completely_ignored_verbs;
+
+nosave void issue(mixed target, string message);
+
+
+nosave int 
+cmdUnt(string what) 
+{
+    if (this_player()!=this_object()) return 0;
+    unparsed_args=what;
+    return _examine(what);
+}
+
+nosave int
+cmdInv(string what)
+{
+    if (this_player()!=this_object()) return 0;
+    unparsed_args=what;
+    return _inventory(what);
+}
+
+
+nosave int 
+cmdTell(string what) 
+{
+    int vis,res;
+    string n;
+
+    if (this_player()!=this_object()) return 0;
+    unparsed_args=what;
+    if (!QueryProp(P_INVIS))
+        return _tell(what);
+    else
+    {
+        vis=(int)QueryProp(P_INVIS);
+        n=(string)QueryProp(P_NAME);
+        SetProp(P_NAME,"("+n+")");
+        SetProp(P_INVIS,0);
+        res=_tell(what);
+        SetProp(P_INVIS,vis);
+        SetProp(P_NAME,n);
+        return res;
+    }
+}
+
+nosave int 
+cmdSchau(string what) 
+{
+    if (this_player()!=this_object()) return 0;
+    unparsed_args=what;
+    return _look(what);
+}
+
+nosave int
+cmdChannelParser(string what)
+{
+    if (this_player()!=this_object()) return 0;
+    unparsed_args=what;
+    return ChannelParser(what);
+}
+
+nosave int
+cmdShoutToAll(string what)
+{
+    if (this_player()!=this_object()) return 0;
+    unparsed_args=what;
+    return _shout_to_all(what);
+}
+
+nosave int
+cmdChannelAdmin(string what)
+{
+    if (this_player()!=this_object()) return 0;
+    unparsed_args=what;
+    return ChannelAdmin(what);
+}
+
+public string
+_unparsed_args()
+{
+    return unparsed_args;
+}
+
+public void
+save()
+{
+    save_object(DELILAH_SAVE_FILE);
+}
+
+
+nosave void
+recalc_waitforlist()
+{
+    string * ind;
+    waitforlist=([]);
+    ind=m_indices(services["waitfor"]);
+    while(sizeof(ind)) 
+    {
+        waitforlist+=services["waitfor"][ind[0]];
+        ind=ind[1..];
+    }
+    return;
+}
+
+public void
+init()
+{
+    ::init();
+    if ((environment()) && (file_name(environment())!=env))
+    {
+            env=file_name(environment());
+            catch_tell(sprintf("* '%s' [%s] *\n",
+                (string)(environment()->QueryProp(P_INT_SHORT)), env));
+    }
+}
+
+public void 
+create() 
+{
+    seteuid(getuid(this_object()));
+
+    if (is_clone(this_object())) 
+    {
+        destruct(this_object());
+        return;
+    }
+    npc::create();
+    "/std/player/comm"::create();
+
+    impressed=([]);
+    if (!restore_object(DELILAH_SAVE_FILE))
+    {
+        services=(["waitfor":([]),
+                     "snoop":([]),
+                  "protocol":([]),
+                    "follow":([])
+                ]);
+    }
+    SetProp(P_SHORT,"Delilah Sternentanz");
+    SetProp(P_LONG,
+      "Diese charmante Privatassistenz ist nicht nur hochkompetent, sie "
+      "sieht auch noch unverschaemt gut aus. Die devote junge Dame von "
+      "Welt traegt das wildkirschrote lange Haar hochgesteckt, wodurch ihre "
+      "apfelgruenen Augen und die hinreissende Stupsnase noch besser zur "
+      "Geltung kommen scheinen. Ansonsten ist die zweifellos "
+      "fantasieanregende Wohlgestalt eher schlicht verhuellt: Sie traegt "
+      "nur ein hochgeschlossenes, schneeweisses Gewand mit einer fingerdicken "
+      "goldenen Kordel.");
+    
+    AddDetail(({"privatassistenz","assistenz"}),
+      "Offenbar steht die junge Dame jemanden zu Diensten.");
+
+    AddDetail(({"figur","gestalt","wohlgestalt"}),
+      "Die Figur der reizenden Schoenheit wird durch das Kleid vielleicht "
+      "verhuellt, doch nicht gewiss verborgen. Du kannst unschwer erkennen, "
+      "dass es sich um eine eindeutig weibliche Vertreterin ihrer Rasse "
+      "handeln muss - und sie gewiss kein Kind mehr ist. Sie ist kleiner "
+      "als der "
+      "Durchschnittsmensch, duerfte mit knapp einssiebzig aber nicht zu den "
+      "kleineren Nachtelfinnen gehoeren. Ihre Ma/3e (das 'sz' ist hier "
+      "wichtig) duerften Deiner Einschaetzung nach so perfekt sein wie alles "
+      "andere an ihr.");
+
+    AddDetail(({"kleid","gewand"}),
+      "Das schneeweisse Gewand ist ein Traum von einem Kleid. Es ist "
+      "eng geschnitten und reicht der Nachtelfin ueber die Knoechel, so "
+      "dass nur gelegentlich ein nackter Fuss (sic!) darunter hervorschaut. "
+      "Am Hals ist es hochgeschlossen und endet mit einem duennen "
+      "Stehkragen, der eine gewisse Reserviertheit vermitteln mag. "
+      "Das Kleid ist aermellos und an sich schon figurbetont - was durch "
+      "die um die Taille getragene Kordel noch aufregend verstaerkt wird. "
+      "Der Stoff ist duenn, aber blickdicht - und Du siehst nirgendwo "
+      "Knoepfe oder Haekchen.");
+
+    AddSpecialDetail(({"knopf","knoepfe","haekchen"}),"detailKnopf");
+
+    AddDetail(({"kragen","stehkragen"}),
+      "Der kleine Stehkragen gibt dem Gewand eine gewisse Reserviertheit.");
+
+    AddDetail("schnitt",
+       "Du kannst Dich zunaechst nicht so recht entscheiden, ob das Gewand "
+       "konservativ oder aufregend geschnitten ist. Nach etwas Ueberlegen "
+       "kommst Du zum Schluss, dass das Kleid konservativ geschnitten ist, "
+       "an dieser Frau aber aufregend wirkt.");
+
+    AddDetail(({"guertel","kordel"}),
+        "Die junge Dame hat modebewusst eine goldene Kordel als Ersatz fuer "
+        "einen Guertel genommen. Die fingerdicke Kordel liegt ihr doppelt "
+        "um die Taille (wodurch die Figur unverschaemt gut zur Geltung "
+        "kommt) und ist vorn geknotet. Die Enden haengen lose, etwa drei "
+        "Spannen lang, herunter.");
+
+    AddDetail("masze",
+      "Tja, gute Frage. 85-60-85 bei 168 Hoehe und einem Gewicht von... tja, "
+      "wenn Du das jetzt wuesstest. Aber irgendwie ist das jetzt wirklich "
+      "nicht wichtig.");
+
+    AddDetail("masse",
+       "Es ist beeindruckend, was man aus Masse alles... erschaffen kann.");
+
+    AddDetail("gewicht", 
+       "Das Gewicht der Nachtelfin ist wirklich nicht von Bedeutung.");
+
+    AddDetail("alter","Du kannst nicht abschaetzen, wie alt diese "
+      "Frau wirklich ist.");
+
+    AddDetail("kind", "Diese junge Frau ist gewiss kein Kind mehr. Oh nein.");
+    
+    AddDetail("rasse",
+      "Diese junge Dame ist ganz sicher nachtelfischer Herkunft.");
+
+    AddDetail(({"ohr","ohren"}),
+      "Die Ohren der jungen Dame sind, das ist jetzt nicht ueberraschend, "
+      "an ihren oberen Enden leicht spitz geformt.");
+
+    AddDetail(({"nase","stupsnase"}),
+      "Die Stupsnase passt ganz hervorragend in das huebsche Gesicht dieses "
+      "ueberaus nett anzuschauenden Maedchens.");
+
+    AddDetail(({"gesicht","antlitz"}),
+      "Das Antlitz der jungen Frau hat die typischen Zuege einer "
+      "(zugegebenermassen makellos schoenen) Nachtelfin.  Du entdeckst "
+      "ein paar Sommersprossen, die sich nahtlos in die Komposition der "
+      "Vollkommenheit einfuegen.");
+
+    AddDetail(({"sommersprossen","sommersprosse"}),
+      "Tatsaechlich - juengere Nachtelfen zeigen vereinzelte Sommersprossen, "
+      "wenn sie laengere Zeit abseits der immerwaehrenden Nacht unter der "
+      "Sonne verbracht haben. Dieser jungen Frau verleihen sie einen ganz "
+      "besonderen Reiz, ihre fast unnahbare Schoenheit wird in einen "
+      "neuen Kontext gesetzt, der sie unglaublich begehrenswert "
+      "erscheinen wirken laesst.");
+
+    AddDetail(({"schoenheit","geltung"}),
+      "... ... Oh ja ... ... ...");
+
+    AddDetail(({"frau", "maedchen","dame"}),
+      "Diese weibliche Vertreterin der nachtelfischen Rasse ist unbestimmten "
+      "Alters, duerfte aber entsprechend ihrer Rasse im fruehen "
+      "Erwachsenenalter sein, wenngleich sie Reife und, dann doch, "
+      "eine gewisse Alterslosigkeit ausstrahlt.");
+
+    AddDetail(({"haar","haare"}),
+      "Das lange kirschrote Haar wuerde der jungen Frau vermutlich weit in "
+      "den Ruecken fallen, haette sie es nicht mit einer kleinen goldenen "
+      "Spange hochgesteckt.");
+
+    AddDetail(({"spange","haarspange"}),
+      "Offenkundig ist die Haarspange perfekt auf die als Guertel "
+      "fungierende Kordel abgestimmt.");
+
+    AddSpecialDetail(({"augen","auge","blick"}),"detailAugen");
+
+    SetProp(P_GENDER, FEMALE);
+    SetProp(P_INFO, break_string(
+       "Delilah ist Anatols Privatassistenz. Ihre vielseitigen Dienste "
+       "stehen nicht jedem zur Verfuegung. Was sicher sehr schade ist."
+        ,77));
+
+    SetProp(P_NAME,"Delilah");
+    AddId(({"delilah", 
+            "lilah", 
+            "del", 
+            "\a\n\a\tol_assistenz"}));
+  
+    SetProp(P_ARTICLE,0);
+    set_living_name("delilah"); 
+    set_heart_beat(1);
+    add_soul_commands();
+    create_default_npc(1);
+    SetProp(P_MAX_HP,300);
+    SetProp(P_MAX_SP,300);
+    SetProp(P_BODY,30);
+    SetProp(P_NOATTACK,"ist fuer dererlei Techtelmechtel nicht zu haben."); 
+    SetProp(P_HANDS,({" bestimmt nicht",150,DT_SQUEEZE}));
+    SetProp(P_XP,0);
+    SetProp(P_SIZE,165);
+    SetProp(P_ALIGN,950);
+    SetProp(P_ALIGN_STRING,"devot");
+    SetProp(P_RACE,"Privatassistentin");
+    SetProp(P_REJECT, REJECT_DROP);
+    SetProp(P_IGNORE,({"wuschel"}));
+    SetProp(P_DIE_MSG," ist unsterblich.\n");
+    SetProp(P_MMSGIN,"tritt aus einem Wirbel von Kirschblueten");
+    SetProp(P_MSGIN,"tritt unauffaellig hinzu");
+    SetProp(P_MSGOUT,"entfernt sich unauffaellig");
+    SetProp(P_MMSGOUT,"verschwindet in einem Wirbel aus Kirschblueten");
+
+    SetProp(P_MURDER_MSG,"Huch, das war... unerwartet.");
+  
+
+    recalc_waitforlist();
+    if (find_player("anatol"))
+        this_object()->move(environment(find_player("anatol")), 
+        M_GO|M_NOCHECK);
+
+    AddInfo(DEFAULT_INFO,
+      ({"laechelt und schweigt diskret.\n", }));
+
+    add_action("cmdInv","i");
+    add_action("cmdInv","inv");
+    add_action("cmdUnt","unt");
+    add_action("cmdSchau","schau");
+    add_action("cmdTell","my_erzaehle");
+    add_action("cmdTell","msg");
+    add_action("cmdTell","erzaehle");
+    add_action("cmdTell","erzaehl");
+    add_action("cmdChannelParser","-",1);
+    add_action("cmdChannelAdmin","ebene",0);
+    add_action("ignoriere","ignoriere",0);
+
+    completely_ignored_verbs= ([
+       "schmieg", "betast", "drueck", "haetschel", "keuche",
+       "kuess","kotz","knutsch","lieb","nies","ruelps","schuett",
+       "spuck","starr","stoehn","stoss","streich","tanz",
+       "umarm","verfluch","fluch","kitz","knudd","taetsch",
+       "wusch","streck","wuerg","kusch","sabber",
+       "glusch","groehl","haens","krau","kneif","knuff","zwick","kraul",
+       "nerv","queng","schmeich","schmus","beschimpf",
+       "versoh","splash","flame"]);
+
+}
+
+public void
+heart_beat()
+{
+    string * s;
+    string * pp;
+    object o;
+
+    ::heart_beat();
+
+    if (sizeof(s=m_indices(services["follow"])))
+    {
+        while (sizeof(s))
+        {
+            if ((o=find_player(s[0])) && 
+                (member((object*)(o->QueryPursuers()),this_object())<0))
+            {
+                o->AddPursuer(this_object());
+                if (objectp(o) && (environment(o)) &&
+                    ((environment(this_object()))!= (environment(o))))
+                    move(environment(o),M_GO);
+            }
+            s=s[1..];
+        }
+    }
+    if (sizeof(s=m_indices(filter_mapping(waitforlist,lambda(({'x}),
+          ({#'|| , ({#'!, ({#'find_player , 'x }) }),
+                  ({#'< , ({#'query_idle , ({#'find_player , 'x})}), 4 })}))))))
+    {
+        while (sizeof(s))
+        {
+            pp=m_indices(services["waitfor"]);
+            while (sizeof(pp))
+            {
+                if (member(services["waitfor"][pp[0]],s[0]))
+                {
+                    services["waitfor"][pp[0]]-=([s[0]]);
+                    if (!sizeof(services["waitfor"][pp[0]]))
+                        services["waitfor"]-=([pp[0]]);
+
+                    if ( (!find_player(s[0]))
+                        || ( (find_player(s[0])->QueryProp(P_INVIS))
+                            && (!IS_LEARNER(pp[0]))))
+                    {
+                         issue(pp[0], "Oh, "+capitalize(s[0])+" ist "
+                         "leider verschwunden, aus Deinem Gespraech wird "
+                         "dann wohl nichts.");
+                    }
+                    else
+                    {
+                         issue(pp[0], capitalize(s[0])+" scheint "
+                         "gerade wieder aktiv geworden zu sein. Darf ich Dich "
+                         "an Deinen Gespraechswunsch erinnern?\a");
+                    }  
+                }
+                pp=pp[1..];
+            }
+            s=s[1..];
+        }
+        recalc_waitforlist();
+        save();
+    }
+
+    while ((o=present("\nobj_misc_furz",
+                environment(this_object())))&& (!living(o))
+            && (explode(file_name(o),"#")[0]=="/obj/misc/furz"))
+    {       
+        environment()->Message(break_string(
+           Name(WER)+" huestelt pikiert und wedelt den Gestank weg.",77),
+           MSGFLAG_VISUAL);
+        o->remove();
+    }
+
+
+}
+
+nosave int
+is_ignored_verb(string str)
+{
+    if ((!str) || ( GEBIETER_SECURITY))
+        return 0;
+    if ( (str[<2..<1] == "le") || (str[<2..<1] == "el"))
+        str=str[0..<3];
+    if (str[<1..<1] == "e")
+        str=str[0..<2];
+    return (member(completely_ignored_verbs,str));
+}
+
+public int 
+die(int poisondeath) 
+{
+    if(this_player())
+      tell_room(environment(this_player()),
+        "Delilah hat noch zu viel vor.\n");
+    return 1;
+}
+
+/* ankucken */
+
+public void caDetailAugen()
+{
+    if ( !this_player()  ||
+         (this_object()!=previous_object()) ||
+         (!environment(this_object())) ||
+         (environment(this_object()) != environment(this_player())) )
+         return;
+
+    impressed+=([file_name(this_player()):time()]);
+
+    this_player()->Message(
+            break_string("Delilah hebt ihren Blick und fuer einen "
+            "Moment schaut ihr euch in die Augen.",77),MSGFLAG_VISUAL);
+
+    if (this_player()->QueryProp(P_INVIS))
+    {
+        environment()->Message("Delilah hebt kurz ihren Blick.\n",
+            MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+        this_player()->Message("Sie... kann Dich sehen.\n",MSGFLAG_VISUAL);
+    }
+    else
+    {
+        environment()->Message(break_string(
+            "Delilah hebt ihren Blick und schaut " + 
+            (string)this_player()->name(WEM)  + 
+            " fuer einen kurzen Moment in die Augen.",77), 
+                 MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+    }
+    this_player()->Message(break_string(
+        "Fuer einen kurzen Augenblick entgleitet Dir die "
+        "Wirklichkeit, und Du spuerst, dass Du vor ... "
+        "diesem hoeheren Wesen ... nichts verbergen kannst. "
+        "Obwohl Du Deiner eigenen Hilflosigkeit sehr gewahr bist, "
+        "ist es kein unangenehmens Gefuehl, im Gegenteil, aber... "
+        "sehr fremd.",77),MSGFLAG_VISUAL);
+
+}
+
+nosave string
+detailKnopf()
+{
+    if ((!this_player()) || 
+       ((int)(this_player()->QueryProp(P_GENDER))==FEMALE))
+         return break_string("Das voellige Fehlen von Knoepfen oder "
+          "aehnlichem irritiert Dich sehr. Wie will man ein solches "
+          "Kleid an- oder ausziehen? Es sieht aus wie auf den Leib "
+          "gezaubert.",77);
+    else
+         return break_string("Das voellige Fehlen von Knoepfen oder "
+         "aehnlichem irritiert Dich etwas. Wie will man einer so "
+         "schoenen Frau das Kleid ausziehen, wenn es keine Knoepfe "
+         "hat? Es sieht aus wie auf den Leib gezaubert. Vermutlich "
+         "ist auch genau das passiert.",77);
+}
+
+nosave string
+detailAugen()
+{
+    // wenn zwei gleichzeitig kucken, kriegt nur einer was mit. Aber
+    // wir wollen die call_out-Table ja nicht volllaufen lassen...
+
+    if ((this_player()) && (find_call_out("caDetailAugen")<0) && 
+       ((!member(impressed,file_name(this_player())) || 
+       (time()-impressed[file_name(this_player())]>60))))
+        call_out("caDetailAugen",4);
+
+    return break_string(
+      "Die apfelgruenen Augen verleihen Delilah ein ueberaus exotisches "
+      "Aussehen. Obschon sie ihren Blick devot gesenkt haelt, entgeht ihr "
+      "kein Wunsch ihres Gebieters - und auch sonst recht wenig.",77);
+}
+
+
+public string 
+short() 
+{ 
+    return 
+        (QueryProp(P_INVIS)
+            ?0
+            :QueryProp(P_SHORT)+
+            (sizeof(services["protocol"])?" (mitschreibend)":"")+".\n"); 
+}
+
+public string long() { return QueryProp(P_LONG); }
+public int _query_poison() { return 0;} 
+public int _query_frog() { return 0;} 
+public int _query_hp() { return (int)QueryProp(P_MAX_HP);} 
+public int _query_sp() { return (int)QueryProp(P_MAX_SP);} 
+public int query_prevent_shadow() { return 1; }
+
+public int remove() 
+{ 
+    catch(call_other("/d/nacht/region/master/resurrect","Resurrect",1));
+    return ::remove(); 
+}
+
+public string
+_query_away()
+{
+    if (!random(1000))
+        return ({
+            "Gerade schwer mit Aufraeumen beschaeftigt...",
+            "Protokoll in Reinschrift schreiben, Moment bitte.",
+            "Augenblick, gleich fertig...",
+            "Veuillez attendre un moment je vous prie."})[random(4)];
+}
+
+varargs int 
+Message(string message, int flags, mixed extra)
+{
+    if (query_verb() &&
+      is_ignored_verb(query_verb()))
+      return -1;
+    return "/std/player/comm"::Message(message,flags,extra);
+}
+
+public varargs int id(string str, int lvl)
+{
+    return ((query_verb() && (is_ignored_verb(query_verb())))
+        ?0
+        :(::id(str,lvl)));
+}
+
+
+public void 
+StartReaction(string verb, string gruppe, string adverb, int touch) 
+{
+    if (is_ignored_verb(verb)) return;
+    if (!this_player()) return;
+    if (!environment(this_player()) || 
+      (environment() != environment(this_player()))) return;
+
+    switch (gruppe)
+    {
+        case "fies":
+        case "aergerlich":
+        case "frech":
+            call_out("command_me",0,"muster "+lower_case((string)
+                 this_player())->query_real_name()+" /irritiert");
+            break;
+        case "intim":
+           if (GEBIETER_SECURITY)
+              call_out("command_me",0, "laechel "+lower_case((string)
+                 this_player())->query_real_name()+ " zaer");
+           else
+              call_out("command_me",0,"muster "+lower_case((string)
+                 this_player())->query_real_name()+ " /pikiert");
+            break;
+        default:
+   }
+}
+
+public void 
+StartReactionAll(string verb, string gruppe, string adverb, int touch) 
+{
+    // StartReaction(verb, gruppe, adverb, touch);
+}
+
+// ----------------------------------------------------------------------------
+// tell
+// ----------------------------------------------------------------------------
+
+nosave void
+issue(mixed target, string message)
+{
+    if (objectp(target))
+        target=lower_case((string)(target->query_real_name()));
+    if (!stringp(target))
+        return;
+    command_me("my_erzaehle "+target+" "+message);
+}
+
+// ----------------------------------------------------------------------------
+// command handling
+// ----------------------------------------------------------------------------
+
+nosave void
+executeCommand(string cmd,string mufti)
+{
+    string * args,ccmd,answer;
+    object ob;
+    ccmd=lower_case(cmd);
+    ccmd=regreplace(ccmd,"[!?,:.-]","",1);
+    ccmd=regreplace(ccmd,"  *"," ",1);
+    args=explode(ccmd," ");
+
+
+    switch(args[0])
+    {
+        case "status":
+            if (mufti!=GEBIETER_UID)
+                break;;
+            issue(mufti,"Ich zeige Dir mal eben meinen Notizblock...");
+            if (ob=find_player(mufti))
+                tell_object(ob,sprintf("%O\n",services));
+            return;
+            break;
+        case "hilfe":
+            if (mufti!=GEBIETER_UID)
+                return issue(mufti,"Hilfe?! Meine Dienste moechte ich nicht "
+                "jedem anbieten. Was ich nebenbei tun kann - ich kann mir "
+                "anwesende idelnde Mitspieler fuer dich merken und dich daran "
+                "erinnern, dass Du mit ihnen sprechen moechtest, sobald sie "
+                "wieder aktiv sind. Teile mir dafuer 'merke <name>' mit. "
+                "Oh, und mein Gebieter hat mir ausserdem "
+                "gestattet, ueber ihn selbst auf Nachfrage zu berichten. "
+                "Teile mir dazu 'gebieter' mit.");
+            else
+               return issue(mufti,"Ich verstehe: hilfe, folge, bleib, komm, "
+               "heim, vis, invis, schau, log [ein|aus], snoop [ein|aus], "
+               "merke [wen], "
+               "tu [irgendwas] und status.");
+            break;
+        case "schau":
+            command_me("schau");
+            return;
+            break;
+        case "log":
+            if (mufti!=GEBIETER_UID)
+                break;
+            if (sizeof(args)<2)
+                return issue(mufti,"Derzeit schreibe ich "+
+                  (sizeof(services["protocol"])
+                  ?"nach '"+services["protocol"][0]+"' mit. "
+                   +(file_size(DELILAH_LOG_DIR+services["protocol"][0])
+                        ?"Meine Aufzeichnungen umfassen bereits "+
+                        to_string(
+                           file_size(DELILAH_LOG_DIR+services["protocol"][0]))
+                           +" Zeichen."
+                        :"")
+                  :"nicht mit."));
+            if (member((["ein","an","start","los"]),args[1]))
+            {
+                if (sizeof(services["protocol"]))
+                    return issue(mufti,"Aber ich schreibe doch schon "
+                      "nach '"+services["protocol"][0]+"' mit!");
+                services["protocol"]+=([0:"delilah_"+to_string(time())+".log"]);
+                command_me("sag Ich schreibe jetzt Protokoll.");
+                save();
+                return issue(mufti,"Okay, ich schreibe jetzt nach "
+                      "'"+services["protocol"][0]+"' mit!");
+
+            }
+            if (member((["aus","stop","ende"]),args[1]))
+            {
+                if (sizeof(services["protocol"]))
+                {
+                    issue(mufti,"Okay, ich habe nach "
+                      "'"+services["protocol"][0]+"' mitgeschrieben "
+                      "und hoere jetzt auf.");
+                    command_me("sag Ich hoere mit dem Protokollschreiben auf.");
+                    services["protocol"]-=([0]);
+                    save();
+                    return;
+                }
+                return issue(mufti,"Aber... ich hab doch gar nicht "
+                      "mitgschrieben?");
+            }
+            break;
+
+        case "erwarte":
+        case "erw":
+        case "melde":
+        case "merke":
+            if (sizeof(args)<2)
+            {
+                if ((!member(services["waitfor"],mufti)) ||
+                   (!sizeof(services["waitfor"][mufti])))
+                   return issue(mufti,"Zur Zeit habe ich "
+                        "dir niemanden fuer ein Gespraech vorgemerkt.");
+                else
+                   return issue(mufti,"Folgende Eintraege hat "
+                   "meine Liste derer, die Du sprechen moechtest: " +
+                   implode(map_array(m_indices(
+                        services["waitfor"][mufti]),#'capitalize),", ")
+                        +".");
+            }
+            args=args[1..];
+            if (!member(services["waitfor"],mufti))
+                services["waitfor"]+=([mufti:([])]);
+            while (sizeof(args))
+            {
+                if (!member(services["waitfor"][mufti],args[0])) 
+                {
+                    if ( (!find_player(args[0])) ||
+                            (!IS_LEARNER(mufti) && 
+                            (find_player(args[0])->QueryProp(P_INVIS))))
+                    {
+                        issue(mufti,"Aber "+
+                             capitalize(args[0])+" ist doch gar nicht da, "
+                             "nutze da doch besser 'erwarte', mh?");
+                    }
+                    else
+                    {
+                        if (query_idle(find_player(args[0]))<10)
+                            issue(mufti,"Aber "+
+                                capitalize(args[0])+" ist doch gar nicht "
+                                "idle - los, selbst ansprechen!");
+                        else
+                        {
+                            issue(mufti,"Okay, "+
+                                capitalize(args[0])+" wird vorgemerkt.");
+                            services["waitfor"][mufti]+=([args[0]]);
+                        }
+                    }
+                }
+                else
+                {
+                    issue(mufti,"Okay, "+capitalize(args[0])+
+                       " wird nicht mehr vorgemerkt.");
+                    services["waitfor"][mufti]-=([args[0]]);
+                    if (!sizeof(services["waitfor"][mufti]))
+                        services["waitfor"]-=([mufti]);
+                }
+                args=args[1..];
+                recalc_waitforlist();
+                save();
+            }
+            return;
+            break;
+
+        case "snoop":
+            if (mufti!=GEBIETER_UID)
+                break;
+            if (sizeof(args)<2)
+                return issue(mufti,(member(services["snoop"],mufti)
+                   ?"Derzeit lasse ich Dich an allem teilhaben, "
+                     "was ich erlebe."
+                   :"Was ich erlebe, das behalte ich derzeit fuer mich."));
+            else
+            {
+                if (member((["ein","an","start","los"]),args[1]))
+                {
+                    if (member(services["snoop"],mufti))
+                        return issue(mufti,
+                           "Du bist doch schon live mit "
+                            "dabei, was willst Du noch?");
+                    services["snoop"]+=([mufti]);
+                    save();
+                    return issue(mufti,
+                      "Okay, ich lasse Dich an meinen Erlebnissen teilhaben.");
+                }
+                if (member((["aus","stop","ende"]),args[1]))
+                {
+                    if (!member(services["snoop"],mufti))
+                        return issue(mufti,
+                           "Du wirst doch ohnehin nicht mit Details "
+                            "aus meinem Leben beglueckt, oder?");
+                    services["snoop"]-=([mufti]);
+                    save();
+                    return issue(mufti,
+                       "Okay, ich behalte meine Erlebnisse wieder fuer mich.");
+                }
+            }
+            return;
+            break;
+        case "vis":
+        case "sichtbar":
+            if (mufti!=GEBIETER_UID)
+                break;
+            if (!(QueryProp(P_INVIS)))
+                return issue(mufti,
+                    "Aber ich bin doch schon sichtbar.");
+            else
+            {
+                SetProp(P_INVIS,0);
+                environment()->Message(break_string(
+                    Name(WER)+" wird sichtbar und tritt unauffaellig hinzu.\n",
+                        77),
+                    MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({this_object()})]));
+                return issue(mufti,
+                    "Ich bin jetzt wieder sichtbar.");
+            }
+            break;
+        case "invis":
+        case "unsichtbar":
+            if (mufti!=GEBIETER_UID)
+                break;
+            if (QueryProp(P_INVIS))
+                return issue(mufti,
+                    "Aber ich bin doch schon unsichtbar.");
+            else
+            {
+                environment()->Message(break_string(
+                    Name(WER)+" entfernt sich unauffaellig "
+                    "und wird unsichtbar.\n",77),
+                    MSGFLAG_VISUAL,([MSGFLAG_EXCLUDE:({this_object()})]));
+                SetProp(P_INVIS,time());
+                return issue(mufti,
+                    "Ich bin jetzt unsichtbar.");
+            }
+            break;
+        case "tu":
+        case "tue":
+        case "mach":
+        case "x":
+            if (mufti!=GEBIETER_UID)
+                break;
+            if (!command_me(regreplace(cmd,"^[^ ]* ","",1)))
+                return issue(mufti, "Was? Das hat leider nicht geklappt.");
+            return;
+            break;
+        case "gebieter":
+        case GEBIETER_UID:
+            if (!ob=find_player(GEBIETER_UID))
+                return issue(mufti, "Mein Gebieter "+capitalize(GEBIETER_UID)+ 
+                 " ist leider nicht da. Ich vermisse ihn auch... sehr.");
+            answer="Mein Gebieter "+capitalize(GEBIETER_UID)+" ist ";
+            if (ob->QueryProp(P_INVIS))
+                answer+="gerade unsichtbar und ";
+            if (query_idle(ob)<60)
+                answer+="nicht idle, was mich persoenlich sehr freut. ";
+            else
+                answer+="ueber "+time2string("%x %X",query_idle(ob))+
+                  " idle, schade. ";
+            if (environment(ob) && (environment(ob)->QueryProp(P_INT_SHORT)))
+            {
+              answer+=
+                capitalize((string)ob->QueryPossPronoun(MALE,WER,SINGULAR))+
+                " Aufenthaltsort ist '"+
+                (string)environment(ob)->QueryProp(P_INT_SHORT)+"'";
+              if (environment()!=environment(ob))
+                answer+=".";
+              else
+                answer+=", ich bin an "+
+                ((string)ob->QueryPossPronoun(FEMALE,WEM,SINGULAR))
+                   +" Seite.";
+            }
+            return issue(mufti, answer);
+            break;
+        case "folge":
+            if (mufti!=GEBIETER_UID)
+                break;
+            if (!ob=find_player(mufti))
+                break;
+            if ((member((object*)(ob->QueryPursuers()),this_object())>=0) 
+              || (member(services["follow"],mufti)))
+                return issue(mufti, 
+                   "Aber ich folge Dir doch schon ... ueberallhin.");
+            ob->AddPursuer(this_object());
+            services["follow"]+=([mufti]);
+            save();
+                return issue(mufti,
+                   "Wo Du hingehst, werde auch ich hingehen.");
+            break;
+        case "warte":
+        case "bleibe":
+            if (mufti!=GEBIETER_UID)
+                return;
+            if (!ob=find_player(mufti))
+                return;
+            if ((member((object*)(ob->QueryPursuers()),this_object())<0)
+                  && (!member(services["follow"],mufti)))
+                return issue(mufti, 
+                   "Aber ich folge Dir doch gar nicht...?");
+            ob->RemovePursuer(this_object());
+            services["follow"]-=([mufti]);
+            save();
+            return issue(mufti,
+                   "Ich werde hier auf Dich warten...");
+            break;
+        case "komm":
+        case "hier":
+            if (mufti!=GEBIETER_UID)
+                break;
+            if (!ob=find_player(mufti))
+                return;
+            if (!environment(ob))
+                return issue(mufti, "Erklaer mir mal, "
+                    "wie Du Deine Umgebung losgeworden bist...");
+            if ((move(environment(ob),M_TPORT)==1) ||
+                (move(environment(ob),M_GO|M_NOCHECK)==1))
+                return issue(mufti,"Hier bin ich, "
+                    "zu Deinen treusten Diensten.");
+            else
+                return issue(mufti,"Ich... kann nicht zu Dir kommen.");
+            break;
+        case "geh":
+        case "heim":
+            if (mufti!=GEBIETER_UID)
+                break;
+            move(HOME_SWEET_HOME,M_GO|M_NOCHECK);
+            issue(mufti, "Okay, ich bin nach Hause.");
+            if (!ob=find_player(mufti))
+                return;
+            if (member((object*)(ob->QueryPursuers()),this_object())<0)
+                return;
+            ob->RemovePursuer(this_object());
+            services["follow"]-=([mufti]);
+            return issue(mufti, "Ich warte dort auf Dich.");
+            break;
+        default: break;
+    }
+    return issue(mufti,
+       ({"Dunkel ist der Sinn Eurer Rede.",
+         capitalize(mufti)+", bitte lenkt mich nicht ab.",
+         "Darauf darf ich nicht eingehen.",
+         "Ist das fuer Euch wichtig?",
+         "Das ist ja hochinteressant!",
+         "Ist das kompatibel?",
+         "Ach... ja?",
+         "Habt Ihr das auch ueberprueft?",
+         "Das bekommt Ihr doch sicher alleine hin, oder?"
+         })[random(9)]);
+
+}
+
+nosave string
+validateMufti(string str)
+{
+    if (!this_player()) return 0;
+    if (!interactive(this_player()))
+    {
+        if (this_player()!=this_object())
+            issue(this_player(), "Meine Dienste stehen nur interaktiven "
+                "Mitgliedern der Gesellschaft zur Verfuegung, tut mir leid. "
+                "Wende Dich bitte an Deinen Regionsmagier, er wird sich um "
+                "Dein Anliegen sicher gern kuemmern.");
+        return 0;
+    } 
+    if (this_player()==this_interactive()) 
+        return getuid(this_player());
+
+    return 0;
+}
+
+nosave string
+extractCommand(string raw)
+{
+    if ((!raw) || (!stringp(raw)) || (!strlen(raw))) 
+        return 0;
+    if (!sizeof(regexp(({raw}),"^[^:]* teilt Dir mit: ")))
+        return 0;
+    return regreplace(
+        regreplace("\n"+raw[0..<2],"\n[^:]* teilt Dir mit: "," ",1)[1..],
+            " \\[[0-9][0-9]:[0-9][0-9]\\]$","",1);
+
+} 
+
+public void 
+catch_tell(string str)
+{
+    string cmd,mufti;
+
+    string *snoopies;
+    if (sizeof(services["protocol"]))
+        write_file(DELILAH_LOG_DIR + services["protocol"][0],
+           dtime(time())[6..] + " | "+str);
+
+    snoopies=m_indices(services["snoop"]);
+
+    while (sizeof(snoopies))
+    {
+        if (find_player(snoopies[0]))
+            find_player(snoopies[0])->Message(ANSI_BOLD+ANSI_BLACK+"~"+
+                regreplace(str,"\n","\n~",1)[0..<2]+ANSI_NORMAL);
+        snoopies=snoopies[1..];
+    }
+
+
+    // command evaluation.
+
+    if ((cmd=extractCommand(str)) && (mufti=validateMufti(str)))
+        call_out("executeCommand",2,cmd,mufti);
+}
+
+
+public void 
+More(string what)
+{
+    tell_object(this_object(),what);
+}
+
+public void 
+Debug()
+{
+    printf("%O\n", _query_localcmds());
+}
+

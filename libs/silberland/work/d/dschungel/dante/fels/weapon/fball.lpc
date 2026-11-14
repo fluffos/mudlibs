@@ -1,0 +1,104 @@
+ 
+ inherit "/std/unit";
+  
+#include <properties.h>
+#include <language.h>
+#include <combat.h>
+#include <wizlevels.h>
+#include <new_skills.h>
+#include "files.h" 
+ 
+  create() {
+    if (!is_clone(TO) ) return;
+   ::create();
+    SetProp(P_NAME,({"Spinnenei","Spinneneier"}));
+    AddId("spinneneier");   AddSingularId("ei");
+    AddId("\nvei");
+   AddSingularId("spinenei");
+   AddPluralId("eier");
+   AddPluralId("spineneier");
+   SetCoinsPerUnits(100,1);
+    SetGramsPerUnits(50,1);
+   // SetProp(P_AMOUNT, 6);
+    SetProp(P_NOBUY,1);
+   SetProp(P_GENDER,3);
+  SetProp(P_INFO, "Das Spinnenei kann man auf seine Feinde schleudern!\n");
+  
+  
+    SetProp(P_COMBATCMDS, (["schleuder ei":
+                            ([C_MIN:10,C_AVG:30,C_MAX:50,C_DTYPES:({DT_ACID,DT_POISON})])
+                          ]));
+    AddCmd(({"schleuder","schleudere"}),"stechen");
+  }
+  
+  stechen(str) {
+    object pl,ob,targs,env;
+    int i,dam;
+    string aus;
+  
+    if (!str) return 0;
+    if (!(pl=PL)) return 0;
+    if (ME!=present(lower_case(str),PL)) return 0;
+   if (!env=environment(PL)) return 0;
+   if (QueryProp(P_AMOUNT)<1) return 0;
+   if (pl->QueryProp(P_GHOST)) {
+         notify_fail("Das kannst Du in diesem immateriellen Zustand nicht.\n");
+         return 0;
+   }
+   if ((pl->QueryProp(P_MAX_HANDS) -
+        pl->QueryProp(P_USED_HANDS)) <1) {
+     write("Du brauchst mindestens eine freie Hand.\n");
+     return 1;
+   }
+ 
+   if(PL->QueryProp(P_ATTACK_BUSY))
+         {
+    write( "Langsam, langsam. Immer schoen ruhig bleiben.\n");
+       return 1;
+         }
+   PL->SetProp(P_ATTACK_BUSY, 1);  
+   targs=({});  
+   if (query_once_interactive(PL)) {
+         for (ob=first_inventory(env);ob;ob=next_inventory(ob)) {
+           if (!living(ob)) continue;
+           if (query_once_interactive(ob)) continue;
+//           if( ob->QueryProp( P_NO_GLOBAL_ATTACK)) continue;
+           targs+=({ob});
+         }
+   } else {
+         for (ob=first_inventory(env);ob;ob=next_inventory(ob)) {
+           if (!living(ob)) continue;
+           if (!interactive(ob)) continue;
+           if (IS_LEARNER(ob))
+                 if (ob->QueryProp(P_INVIS) || ob->QueryProp(P_WANTS_TO_LEARN))
+                   continue;
+  //         if( ob->QueryProp( P_NO_GLOBAL_ATTACK)) continue;
+        targs+=({ob});
+         }
+  }
+ 
+   AddAmount(-1);
+   write("Du schleuderst ein Spinnenei auf den Boden.\n");
+   say(capitalize(PL->name(WER))+
+           " schleudert ein Spinnenei fort.\n",PL);
+   if (!sizeof(targs)) {
+         tell_room(env,"Das Spinnenei zerplatzt, trifft aber niemanden.\n");
+         return 1;
+   }
+   aus="";
+   for (i=sizeof(targs)-1;i>=0;i--) {
+         aus+=targs[i]->name(WEN);
+         if (i)
+           aus+=((string)((i>1)?", ":" und "));
+   }
+   say(break_string("Das Spinnenei zerplatzt und sein giftiger Inhalt trifft "+aus+".\n",78),
+           targs);
+   dam= 50+pl->QueryAttribute(A_INT)*5+random(150);  // 50..314 (50+23*5+149)
+   for (i=sizeof(targs)-1;i>=0;i--) {
+ 	ob=targs[i];
+         tell_object(ob,"Das zerplatzende Spinnenei trifft Dich.\n");
+         ob->Defend( dam, ({DT_ACID,DT_POISON}), 
+               ([SP_NAME:"Spinnenei", SP_SHOW_DAMAGE:1]), PL);
+   }
+   return 1;
+  }

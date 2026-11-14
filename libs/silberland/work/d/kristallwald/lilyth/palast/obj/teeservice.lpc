@@ -1,0 +1,338 @@
+//=========================================================================
+// File: teeservice.c
+// Project: Palast
+//
+// Created by Lilyth (2004)
+//=========================================================================
+
+#include "../def.h"
+
+inherit "std/thing";
+
+//--Variablen&Defines------------------------------------------------------
+
+int zustand;
+int i;
+int paralyze (int zeit, object player);
+string sorte;
+
+#define MILCH 2
+#define UNGEKOCHT 3
+#define GEKOCHT 4
+
+//--Create-----------------------------------------------------------------
+
+void create()
+{
+  if (!is_clone(TO)) return;
+
+  ::create();
+
+//--Initialisierungen------------------------------------------------------
+
+  sorte = "";
+  i = 0;
+
+//--Beschreibungen---------------------------------------------------------
+
+  SetProp(P_SHORT, "Ein kleines Teeservice");
+  SetProp(P_LONG,
+    "Das Teeservice besteht aus einem kleinen Stoevchen, einem Teekaennchen, "
+    "drei winzigen Teetassen mitsamt Untertassen und Loeffeln sowie einer "
+    "kleinen Zuckerdose und einem dazu passenden Milchkaennchen. Auch ein "
+    "paar bunte Teelichter liegen mit bei.");
+
+  AddDetail( ({ "stoevchen" }),
+    "Auf dem kleinen Stoevchen kannst Du Dir den Tee kochen.");
+
+  AddDetail( ({ "teelichter", "lichter" }),
+    "Ein paar bunte Teelichter liegen dem Service mit bei.");
+
+  AddDetail( ({ "teetassen", "tassen" }),
+    "Vorsichtig nimmst Du eine der winzigen, mit kleinen Bluemchen "
+    "verzierten Teetassen hoch. Geh lieber sorgsam damit um, sonst zerbricht "
+    "sie Dir womoeglich noch.");
+
+  AddDetail( ({ "bluemchen", "blueten" }),
+    "Die kleinen Teetassen sind, ebenso wie das Teekaennchen, mit winzigen "
+    "rosa Blueten verziert.");
+
+  AddDetail( ({ "untertassen" }),
+    "Die Untertassen sehen genauso zerbrechlich aus wie die Teetassen.");
+
+  AddDetail( ({ "loeffel", "silber", "silberloeffel" }),
+    "Die Loeffel bestehen aus edlem Silber.");
+
+  AddDetail( ({ "zuckerdose" }),
+    "Die Zuckerdose ist mit kleinen herzfoermigen Zuckerstueckchen "
+    "gefuellt. Sie scheint sich immer wieder von selbst aufzufuellen, denn "
+    "egal, wieviele Zuckerstuecke Du aus der Dose herausnimmst, sie ist "
+    "immer bis obenhin voll.");
+
+  AddDetail( ({ "zuckerstueckchen", "zuckerstuecke" }),
+    "Damit kannst Du den Tee ein wenig versuessen, wenn Du willst.");
+
+  AddDetail( ({ "milchkaennchen" }),
+    "In dem Milchkaennchen befindet sich immer frische Milch.");
+
+  AddDetail( ({ "teekaennchen", "kaennchen", "teekanne" }),
+    "Die kleine bauchige Teekanne ist mit winzigen rosa Bluemchen verziert.");
+
+//--Namen------------------------------------------------------------------
+
+  SetProp(P_INFO, "Hm, was koennte man mit solch einem Teeservice wohl "
+  "alles machen...");
+  SetProp(P_NAME, "Teeservice");
+  SetProp(P_NAME_ADJ, "klein");
+  AddAdjective( ({ "kleines" } ));
+  SetProp(P_GENDER, NEUTER);
+  AddId( ({"teeservice", "service"}) );
+
+//--Eigenschaften----------------------------------------------------------
+
+  SetProp(P_MATERIAL, ([ MAT_CERAMIC: 80, MAT_SILVER: 10, MAT_WAX: 5 ]));
+  SetProp(P_WEIGHT, 10);
+  SetProp(P_SIZE, 30);
+  SetProp(P_VALUE, 1000);
+
+//--Kommandos-------------------------------------------------------------
+
+  AddCmd( ({ "koch", "koche" }), "kochen" );
+  AddCmd( ({ "suess", "suesse", "versuess", "versuesse" }), "zucker" );
+  AddCmd( ({ "giess", "giesse", "schuett", "schuette" }), "milch" );
+
+//--Create Ende-----------------------------------------------------------
+
+}
+
+//--Funktionen-------------------------------------------------------------
+
+//Tee kochen:
+int kochen(string str)
+{
+  object mytasse;
+  object tee;
+  mixed res;
+
+  notify_fail("Was moechtest Du kochen?\n");
+
+  if(!str || str == "") return 0;
+
+  if(str == "tee")
+  {
+        write("Welche Sorte Tee moechtest Du denn kochen?\n");
+        return -1;
+  }
+
+  tee = present(str, TP);
+
+  if(tee && tee->id("\ntee"))
+  {
+        mytasse=clone_object(OBJ "teetasse");
+        sorte = tee->QuerySorte();
+
+        if(mytasse)
+        {
+                mytasse->SetSorte(sorte);
+        }
+
+        write(break_string("Du zuendest eines der bunten Teelichter an und "
+        +"stellst es unter das Stoevchen.\n\n", 78, 0, BS_LEAVE_MY_LFS));
+
+        ENV(TP)->Message(BS(TP->Name(WER, 1)+" scheint sich ein wenig "
+        +"Tee kochen zu wollen."),
+        MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+
+        //Tasse ist zu schwer
+        if(ME_TOO_HEAVY == mytasse->move(TP,M_GET|M_SILENT))
+        {
+                mytasse->move(ENV(TP), M_PUT|M_SILENT);
+
+                write(BS("Da Du die volle Teetasse nicht mehr tragen kannst, "
+                +"stellst Du sie auf dem Boden ab."));
+                return -1;
+
+                ENV(TP)->Message(BS(TP->Name(WER, 1)+" stellt eine Tasse Tee "
+                +"auf dem Boden ab."),
+                MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+        }
+
+        if(res=TP->QueryProp(P_TMP_MOVE_HOOK))
+        {
+          if ( pointerp(res) && sizeof(res) >= 3
+               && intp(res[0]) && time() < res[0]
+               && objectp(res[1]) && stringp(res[2]) )
+          {
+            if (res[1] == TO)
+            {
+              notify_fail("Du kochst gerade eine Tasse Tee.\n");
+              return 0;
+            }
+            else
+            {
+              notify_fail("Aber Du kochst doch gerade Tee!\n");
+              return 0;
+            }
+          }
+        }
+
+        call_out("seqtee", 5 , TP, 1);
+        paralyze (23, TP);
+        tee->SetTeeblaetter();
+        return 1;
+  }
+  else
+  {
+        write(BS("Moechtest Du nicht lieber Tee kochen, den Du auch bei "
+        +"Dir hast?"));
+        return -1;
+  }
+}
+
+//Teekochen-Sequenz:
+void seqtee(object player, int pos)
+{
+  string s;
+  string s2;
+
+    if(player != ENV(TO))
+    {
+        return;
+    }
+
+    	switch(pos)
+        {
+        case 1:
+        s = "Dann fuellst Du die kleine Teekanne etwa zur Haelfte mit "
+        +"Wasser, stellst sie auf das Stoevchen und wartest ein wenig.\n\n";
+        s2 = (PL->QueryProp(P_GENDER)==MALE?"Er":"Sie")+" stellt ein "
+        +"brennendes Teelicht unter "
+        +(PL->QueryProp(P_GENDER)==MALE?"sein":"ihr")+" Teestoevchen, "
+        +"fuellt eine kleine Teekanne mit Wasser und stellt sie auf "
+        +"das Stoevchen.";
+        break;
+
+        case 2:
+        s = "Als das Wasser anfaengt zu kochen, nimmst Du das Kaennchen "
+        +"wieder vom Stoevchen herunter und legst ein paar Teeblaetter von "
+        +"Deinem "+sorte+" hinein.\n\n";
+        s2 = "Als das Wasser zu kochen anfaengt, nimmt "+player->Name()+" "
+        +"das Kaennchen wieder herunter und fuegt einige Teeblaetter "
+        +"hinzu.";
+        break;
+
+        case 3:
+        s = "Noch ein paar Minuten ziehen lassen...\n\n";
+        s2 = "Dann laesst "+(PL->QueryProp(P_GENDER)==MALE?"er":"sie")+" "
+        +"das ganze ein paar Minuten ziehen.\n"
+        +"Ein herrlicher Duft breitet sich langsam im Raum aus.";
+        break;
+
+        case 4:
+        s = "Und schon ist der Tee fertig! Vorsichtig fuellst Du ihn in eine "
+        +"der kleinen Teetassen hinein.\n\n";
+        s2 = "Endlich scheint der Tee fertig zu sein. Vorsichtig fuellt "
+        +player->Name()+" ihn in eine kleine Teetasse hinein.";
+        break;
+
+        default:
+          return;
+          break;
+        }
+
+        tell_object(player, break_string(s, 78, 0, BS_LEAVE_MY_LFS));
+        ENV(TP)->Message(BS(s2), MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+        pos = pos + 1;
+        call_out("seqtee", 6, player, pos);
+}
+
+//waehrend des Teekochens nicht den Raum verlassen:
+int paralyze (int zeit, object player)
+{
+  if (objectp(player))
+     player->SetProp(P_TMP_MOVE_HOOK, ({time()+zeit, this_object(),
+     "freeze_in_place"}) );
+}
+
+//Hilfsfunktion fuer Move_Hook
+string freeze_in_place()
+{
+  return "Aber Du bist doch gerade am Teekochen!\n";
+}
+
+//Zucker in den Tee tun:
+int zucker(string str)
+{
+  object mytasse;
+  mytasse = present("teetasse", TP);
+  notify_fail("Was moechtest Du versuessen?\n");
+
+  if(!str || str == "") return 0;
+
+  if(str == "tee" || str == lower_case(sorte))
+  {
+    if(!mytasse)
+    {
+        write(BS("Aber Du hast doch gar keinen "+sorte+" bei Dir!"));
+        return -1;
+    }
+
+    if(mytasse->SetZucker()>3)
+    {
+        write(BS("Du hast bereits drei Stueck Zucker in Deinem Tee, "
+        +"das sollte reichen."));
+        return -1;
+    }
+
+    else
+    {
+        write(BS("Du laesst ein kleines Stueckchen Zucker in den "+sorte+" "
+        +"plumpsen."));
+
+        ENV(TP)->Message(BS(TP->Name(WER, 1)+" versuesst den "+sorte+" mit "
+        +"etwas Zucker."),
+        MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+        return 1;
+    }
+  }
+
+  return 0;
+}
+
+//Milch in den Tee giessen:
+int milch(string str)
+{
+  object mytasse;
+  mytasse = present("teetasse", TP);
+  notify_fail("Was moechtest Du in den Tee giessen?\n");
+
+  if(!str || str == "") return 0;
+
+  if(str == "milch in tee" || str == "milch in "+lower_case(sorte) ||
+     str == "milch in den tee" || str == "milch in den "+lower_case(sorte))
+  {
+    if(!mytasse)
+    {
+        write(BS("Aber Du hast doch gar keinen "+sorte+" bei Dir!"));
+        return -1;
+    }
+
+    if(mytasse->SetMilch()>1)
+    {
+        write(BS("Du hast bereits Milch in Deinem Tee."));
+        return -1;
+    }
+
+    else
+    {
+        write(BS("Du giesst ein wenig Milch in den Tee."));
+
+        ENV(TP)->Message(BS(TP->Name(WER, 1)+" giesst ein wenig Milch in "
+        +"den Tee."),
+        MSGFLAG_VISUAL|MSGFLAG_NO_TP);
+        return 1;
+    }
+  }
+
+  return 0;
+}

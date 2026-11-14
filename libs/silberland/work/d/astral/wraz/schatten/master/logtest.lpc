@@ -1,0 +1,100 @@
+// log_test
+
+#include "../def.h"
+
+#define SAVE_PATH ZONE "save/test_log"
+
+mapping test_log; 
+int last_backup=0;
+
+void create()
+{
+  if(is_clone(TO))
+  {
+    destruct(TO);
+    return;
+  }
+  seteuid(getuid(this_object())); // fuer zugriff auf dateien benoetigt
+
+  test_log=allocate_mapping(10,2);
+  restore_object(SAVE_PATH);
+  seteuid(getuid(TO));
+
+  return;
+}
+
+// Get
+mapping Get()
+{
+  return test_log;
+}
+
+// GetSchattenlevel
+int GetSchattenlevel(string player)
+{
+  if(!player || player == "") return -1;
+  return to_int(test_log[player,1]);
+}
+
+// GetSchattenlevelFloat
+float GetSchattenlevelFloat(string player)
+{
+  if(!player || player == "") return -1.0;
+  return to_float(test_log[player,1]);
+}
+
+// test_log-NPC: player-deaths, NPC-deaths
+int DoLog(string player,int death)
+{
+  float nonsquared_shadow_lvl;
+
+  if(!test_log) restore_object(SAVE_PATH);
+
+  // Mapping leer oder 0
+  if(!mappingp(test_log) || test_log == ([])) test_log=allocate_mapping(10,6);
+  // Player noch nicht in Liste:
+  if(member(m_indices(test_log),player)==-1) 
+  {
+    test_log+=([player: 0; 0.0]);
+    DB("done\n");
+  }
+
+
+  // add new death/kill
+  test_log[player,0] += death;
+  test_log[player,1] += death/10.0;
+
+  return 1;
+  //return test_log[player,0] + 10*test_log[player,1];
+}
+
+
+// Masterobjekt speichern
+void DoSaveMe()
+{
+  if(last_backup < time()-604800) // backup jede Woche
+  {
+    save_object(ZONE "save/bkp/test_log_bkp_"+to_string(time()));
+    last_backup = time();
+  }
+  save_object(SAVE_PATH);
+}
+
+void reset()
+{
+  if(!read_file(ZONE "master/logtest.lpc")) return;
+  DoSaveMe();
+}
+
+int remove()
+{
+  if(is_clone(TO)) {
+    destruct(TO);
+    return 1;
+  }
+
+  // nochmal speichern vor dem destruct
+  save_object(SAVE_PATH);
+  destruct(TO);
+  return 1;
+}

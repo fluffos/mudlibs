@@ -1,0 +1,483 @@
+#include "../def.h"
+#include <ansi.h>
+#include "../well_level.h"
+#include "/gilden/druidenzirkel/druiden_extern.h"
+
+#define FRAG_CHANCE 850
+
+mapping items;
+
+nosave string *frags=({"wasserfragment.lpc","luftfragment.lpc","eisfragment.lpc","feuerfragment.lpc"});
+
+varargs string* exclude_sets(int f);
+
+void create()
+{
+  if (is_clone(this_object())) 
+  {
+    destruct(this_object());
+    return;
+  }
+  items = ([
+      "Eraditor": ({WEAPON "eisaxt"}),
+      "Horgar": ({WEAPON "horgarspeer", WEAPON "horgarspeer_klein"}),
+      "Eisfrosch": ({WEAPON "eisdolch"}),
+      "Hoellenkatze": ({WEAPON "hoellenpeitsche"}),
+      "Hoellenhund": ({WEAPON "hoellenpeitsche"}),
+      "Winterwolf": ({ARMOUR "winterwolffell"}),
+      "Pyrohydra": ({ARMOUR "hydralederstiefel", WEAPON "lavaaxt", WEAPON "lavabogen"}),
+      "Tessalhydra": ({ARMOUR "hydralederstiefel", WEAPON "lavaaxt", WEAPON "lavabogen"}),
+      "Gorgone": ({ARMOUR "gorgonenhose", OBJECTS "ambrosia"}),
+      "Tessalgorgon": ({ARMOUR "gorgonenhose", OBJECTS "ambrosia"}),
+      "Tessaltrice": ({ARMOUR "kupferohrring"}),
+      "Terrordaemon": ({ARMOUR "schmerzring"}),
+      "Sturmdaemon": ({ARMOUR "sturmschild"}),
+      "Otyugh": ({ARMOUR "otyughpanzer"}),
+      "Neo-Otyugh": ({ARMOUR "otyughpanzer"}),
+      "Beholder": ({ARMOUR "beholderguertel"}),
+      "Thonis Daemon": ({ OBJECTS "ambrosia"}),
+      "Medusa": ({ OBJECTS "ambrosia", ARMOUR "medusaschild"}),
+      "Efreeti Malik": ({WEAPON "efreetiklinge", WEAPON "lavaaxt", ARMOUR "efreeti_sitar"}),
+      "Efreeti Amir": ({WEAPON "efreetiklinge", WEAPON "lavaaxt", ARMOUR "efreeti_sitar"}),
+      "Efreeti Sultan": ({WEAPON "efreetiklinge", WEAPON "lavaaxt", ARMOUR "efreeti_sitar"}),
+      "Marid Mufti": ({ARMOUR "maridhandschuhe", ARMOUR "marid_glungsang"}),
+      "Marid Atabeg": ({ARMOUR "maridhandschuhe", ARMOUR "marid_glungsang"}),
+      "Marid Padisha": ({ARMOUR "maridhandschuhe", OBJECTS "ambrosia", ARMOUR "marid_glungsang"}),
+      "Djinni Malik": ({ARMOUR "djinnihaube", ARMOUR "djinni_floete"}),
+      "Djinni Wesier": ({ARMOUR "djinnihaube", ARMOUR "djinni_floete"}),
+      "Djinni Kalif": ({ARMOUR "djinnihaube", OBJECTS "ambrosia", ARMOUR "djinni_floete"}),
+      "Dao Sabri": ({ARMOUR "daoarmschienen", ARMOUR "dao_tamburin"}),
+      "Dao Hetman": ({ARMOUR "daoarmschienen", ARMOUR "dao_tamburin"}),
+      "Dao Khan": ({ARMOUR "daoarmschienen", OBJECTS "ambrosia", ARMOUR "dao_tamburin"}),
+      "Das Boese": ({ARMOUR "silmaril"}),
+      ]);
+
+      seteuid(getuid(this_object()));
+}
+
+void give_frags(int whatfrag, int amount)
+{
+  int npclevel, arealevel, i;
+  int up;
+  object ob, killer;
+  string npcname, itemname, file, logname, dummy;
+  string *citems;
+  string g, n;
+  object *e;
+  mixed o;
+
+  if (!environment(previous_object()) || 
+      previous_object()->id("\nnofrags")) 
+    return;
+
+  if (!amount && !whatfrag) 
+  {
+    ob = environment(previous_object());
+    arealevel = well_level(previous_object());
+
+    npclevel = previous_object()->QueryProp(P_LEVEL);
+    npcname = previous_object()->QueryProp(P_NAME);
+    if (!stringp(npcname) || strstr(file_name(previous_object()), "dwarfs") != -1 
+        || strstr(file_name(previous_object()), "tarnbiest") != -1) 
+      npcname = capitalize(explode(file_name(previous_object())[30..], "#")[0]);
+    if (npcname == "Dasboese")
+      npcname = "Das Boese";
+
+    if (ob->QueryProp(P_ELEMENTAL_ROOM) == WASSER) whatfrag = 0; //wasser(feucht)
+    else if (ob->QueryProp(P_ELEMENTAL_ROOM) == HUMUS) whatfrag = 1;   //luft (normal)
+    else if (ob->QueryProp(P_ELEMENTAL_ROOM) == EIS) whatfrag = 2; //eis(wasser)
+    else if (ob->QueryProp(P_ELEMENTAL_ROOM) == FEUER) whatfrag = 3; //feuer(feuer)
+    //tell_object(find_player("lamuerte"),"blah"+whatfrag); 
+    if (previous_object()->id("marid")) whatfrag = 0;
+    else if (previous_object()->id("djinni")) whatfrag = 1;
+    else if (previous_object()->id("dao")) whatfrag = 2;
+    else if (previous_object()->id("efreeti")) whatfrag = 3;
+
+    if (arealevel == 0) return;
+    else if (arealevel <= 3) whatfrag=0;
+    else if (arealevel > 3 && arealevel <= 5 && whatfrag == 2) whatfrag = 0;
+    else if (arealevel > 3 && arealevel <= 5 && whatfrag == 3) whatfrag = 1;
+    else if (arealevel > 5 && arealevel <= 8 && whatfrag == 3) whatfrag = random(3);
+
+    amount = (int)( (random(5 * arealevel) + 1) *
+        (npclevel + (npclevel > 40 ? (npclevel - 40) * (npclevel - 40) : 0)) / 
+        (whatfrag * 2 + 4) );
+//    amount = amount * 120 / 100; // 20% Bonus momentan
+    if ((dtime()[9..11] == "Dez" && to_int(dtime()[5..6]) >= 20 &&
+          to_int(dtime()[5..6]) <= 26) ||  // Weihnachten
+        dtime()[5..11] == "24. Jul" ||  // Lamuerte Geburtstag 
+        dtime()[5..11] == "23. Apr")   // Feyaria Geburtstag
+      amount *= 2;  // doppelte Fragmente
+    if (dtime()[5..11] == " 1. Apr" || dtime()[0..6] == "Fre, 13")
+      amount = random(20) * amount / 10;
+  }
+
+  if (random(1000) < FRAG_CHANCE + npclevel + arealevel * 10)
+  {
+    o = clone_object(FRAGS + frags[whatfrag]);
+    o->AddAmount(amount);
+    o->move(previous_object(),M_NOCHECK);
+    call_other(FRAGS "kristallmaster", "fraggained", frags[whatfrag][0..8], amount + 1);
+    logname = implode(explode(npcname, " "),"");
+    // Bugfix by Gwenshara 2. Dec. 2009
+    if(objectp(this_player()))
+    {
+      if (!query_once_interactive(this_player()) )
+        file = LOGS "/npc/" + logname + ".log";
+      else if (!IS_LEARNER(this_player()))
+        file = LOGS "/player/" + logname + ".log";
+      else
+        file = LOGS "/wizard/" + logname + ".log";
+      write_file(file, sprintf("%s - %s - %d - %d - %s - %d - %s\n", 
+            dtime(time()), npcname, npclevel, arealevel, getuid(this_player()), 
+            amount + 1, frags[whatfrag][0..<11]));
+    }
+  }
+
+  if (npclevel < random(25)) return;
+  // Ausruestung vergeben
+  o = 0;
+  for (i = 0; i < (npclevel > 50 ? (npclevel - 48) / 2 : 1); i++)
+  {
+    do
+    {
+      switch (random(100))
+      {
+        case 0..3:  // 150-2000 Muenzen
+          amount = arealevel * 50 + npclevel * 10;
+          o = clone_object("/obj/money");
+          o->AddAmount(amount + random(amount));
+          o->move(previous_object(),M_NOCHECK);
+          break;
+        case 4..7: // 1-6 Magiesteine || 1 Erzmagiestein
+          if (!random(50)) 
+          {
+            o = clone_object("/p/magic/m2");
+            o->_set_extended_function(1);
+            o->move(previous_object(),M_NOCHECK);
+            write_file(LOGS "/items/rare.log", 
+                sprintf("%s - %s - %d - %d - %s - Erzmagiestein\n", 
+                  dtime(time()), npcname, npclevel, arealevel, getuid(this_player()) ));
+            break;
+          }    
+          amount = random(1 + arealevel / 5 + npclevel / 20);
+          o = clone_object("/p/magic/magiestein");
+          o->AddAmount(amount);
+          o->move(previous_object(),M_NOCHECK);
+          break;
+        case 8..20: // 1-14 Edelsteine
+          amount = 1 + random(arealevel / 3 + npclevel / 10);
+          o = call_other("/obj/gemmaster", "DistributeGem", amount, amount, 1, previous_object());
+          break;
+        case 21..33: // 1-14 Perlen
+          amount = 1 + random(arealevel / 3 + npclevel / 10);
+          o = call_other("/obj/pearlmaster", "DistributePearl", amount, amount, 1, previous_object());
+          break;
+        case 34..47: // leere Ampulle
+          if (8 * arealevel + 2 * npclevel > random(90))
+          {
+            if (ob = present("ampullentasche", this_player()))
+              up = ob->number_of_potions();
+            else
+              up = 0;
+            if (!deep_present("\nbrunnenampulle" +  to_string(50 - up), this_player()) || !random(3))
+            {
+              o = clone_object(POTIONS "ampulle");
+              o->move(previous_object(),M_NOCHECK);
+              write_file(LOGS "/items/ampulle.log", 
+                  sprintf("%s - %s - %d - %d - %s - Ampulle\n", 
+                    dtime(time()), npcname, npclevel, arealevel, getuid(this_player()) ));
+            }
+          }
+          break;
+        case 48..58: // Rezepte
+          if (5 * arealevel + npclevel > random(100) &&
+              call_other(POTIONS "ampullenmaster", "anzahl_rezepte", getuid(this_player())) <
+              random(100))
+          {
+            o = clone_object(POTIONS "rezept");
+            o->move(previous_object(),M_NOCHECK);
+            o->final_setup();
+            write_file(LOGS "/items/rezept.log", 
+                sprintf("%s - %s - %d - %d - %s - Rezept %d\n", 
+                  dtime(time()), npcname, npclevel, arealevel, 
+                  getuid(this_player()), o->QueryProp("rezept_nr") ));
+          }
+          break;
+        case 59: // Runenwoerter
+          if (10 * arealevel + npclevel > 50 + random(99))
+          {
+            o = clone_object(OBJ "runenwort");
+            o->move(previous_object(),M_NOCHECK);
+            o->final_setup();
+            write_file(LOGS "/items/runenwort.log", 
+                sprintf("%s - %s - %d - %d - %s - %s", 
+                  dtime(time()), npcname, npclevel, arealevel, 
+                  getuid(this_player()), o->QueryProp(P_LONG) ));
+          }
+          break;
+        case 60: // Rezeptbuch
+          if (5 * arealevel + npclevel > random(140)) 
+          {
+            o = clone_object(POTIONS "rezeptbuch");
+            o->move(previous_object(),M_NOCHECK);
+            write_file(LOGS "/items/rezeptbuch.log", 
+                sprintf("%s - %s - %d - %d - %s - Rezeptbuch\n", 
+                  dtime(time()), npcname, npclevel, arealevel, 
+                  getuid(this_player()) ));
+          }
+          break;
+        case 61..81: // Scrolls
+          if (5 * arealevel + npclevel > random(100))
+          {
+            switch (random(20))
+            {
+              case 0..4:   file = "scroll_circle_heal"; break;
+              case 5..7:   file = "scroll_circle_powerheal"; break;
+              case 8..13:  file = "scroll_circle_protection"; break;
+              case 14..16: file = "scroll_portal"; break;
+              case 17..18: file = "scroll_resurrect"; break;
+              case 19:     file = "scroll_dig"; break;
+            }
+            o = clone_object(SPELLOBJ + file);
+            o->move(previous_object(),M_NOCHECK);
+            write_file(LOGS "/items/scroll.log", 
+                sprintf( "%s - %s - %d - %d - %s - %s\n", 
+                  dtime(time()), npcname, npclevel, arealevel, 
+                  getuid(this_player()), file));
+          }
+          break;
+        case 83..87: // Spezielle Ausruestung
+          if (stringp(npcname))
+            if (arealevel > random(10) && (citems = items[npcname]))
+            {
+              itemname = citems[random(sizeof(citems))];
+              if (!random(3) || !deep_present(explode(itemname, "/")[5], this_player()))
+              {
+                o = clone_object(itemname);
+                o->move(previous_object(),M_NOCHECK);
+                write_file(LOGS "/items/items.log", 
+                    sprintf( "%s - %s - %d - %d - %s - %s\n", 
+                      dtime(time()), npcname, npclevel, arealevel, 
+                      getuid(this_player()), o->name()));
+              }
+            }
+          break;
+        case 88..95: // Set Items
+          if (arealevel * arealevel > random(111) && // je tiefer desto mehr sets
+              random(150) > "/p/daemon/itemd/itemd"->set_nr() && 
+              npclevel > random(100) )  
+          {
+            if ("/p/daemon/itemd/itemd"->GenerateSet("random", 1, 0, 1, exclude_sets()))
+            {
+              switch(this_player()->QueryProp(P_TTY))
+              {
+                case "ansi": g = ANSI_GREEN + ANSI_BOLD; n = ANSI_NORMAL; break;
+                case "vt100": g = ANSI_BOLD; n = ANSI_NORMAL; break;
+                default: g = n = "";
+              }
+              tell_object(this_player(), 
+                  g+"Du findest einen Teil der Ausruestung der alten Helden!"+n+"\n");
+              tell_room(environment(this_player()), this_player()->Name(WER,1)+
+                  " nimmt einen gruen leuchtenden Gegenstand an sich.\n", ({this_player()}) );
+              write_file(LOGS "/items/set.log", 
+                  sprintf("%s - %s - %d - %d - %s - set\n", 
+                    dtime(time()), npcname, npclevel, arealevel, getuid(this_player()) ));
+              o = 1;
+            }
+          }
+          break;
+        case 96: // seelenkristall 
+          if (!random(10) || !present("seelenkristall", this_player())) 
+          {
+            o = clone_object(FRAGS "seelenkristall");
+            o->move(previous_object(),M_NOCHECK);
+            write_file(LOGS "/items/seelenkristall.log", 
+                sprintf("%s - %s - %d - %d - %s - seelenkristall\n", 
+                  dtime(time()), npcname, npclevel, arealevel, getuid(this_player()) ));
+          }
+          break;
+        case 97: // kompass
+          if (!random(5) || !deep_present("kompass", this_player()))
+          {
+            o = clone_object(OBJ "kompass");
+            o->move(previous_object(),M_NOCHECK);
+            write_file(LOGS+"/items/kompass.log", 
+                sprintf("%s - %s - %d - %d - %s - kompass\n", 
+                  dtime(time()), npcname, npclevel, arealevel, getuid(this_player()) ));
+          }
+          break;
+        case 98..99:
+          if (arealevel > random(50))
+          {
+            o = clone_object("/d/astral/feyaria/frostania/obj/rsalbe");
+            o->move(previous_object(),M_NOCHECK);
+            write_file(LOGS "/items/rare.log", 
+                sprintf("%s - %s - %d - %d - %s - %s\n", 
+                  dtime(time()), npcname, npclevel, arealevel, getuid(this_player()),
+                  o->QueryProp(P_SHORT)));
+          }
+          else if (arealevel > random(50))
+          {
+            o = clone_object("/d/astral/feyaria/frostania/obj/wsalbe");
+            o->move(previous_object(),M_NOCHECK);
+            write_file(LOGS "/items/rare.log", 
+                sprintf("%s - %s - %d - %d - %s - %s\n", 
+                  dtime(time()), npcname, npclevel, arealevel, getuid(this_player()),
+                  o->QueryProp(P_SHORT)));
+          }
+          else if (arealevel > random(50))
+          {
+            o = clone_object("/d/astral/feyaria/draconia/obj/salbe");
+            o->move(previous_object(),M_NOCHECK);
+            write_file(LOGS "/items/rare.log", 
+                sprintf("%s - %s - %d - %d - %s - %s\n", 
+                  dtime(time()), npcname, npclevel, arealevel, getuid(this_player()),
+                  o->QueryProp(P_SHORT)));
+          }
+          break;
+      }
+    }
+    while (o == 0 && random(3));
+  }
+
+  if (previous_object()->id("marid") && !random(2)) 
+  {
+    if (random(3))
+    {
+      ob = clone_object(OBJ "elementarfigur");
+      ob->set_element("wasser");
+      ob->move(previous_object(), M_NOCHECK);
+    }
+    else if (random(2))
+    {
+      ob = clone_object("/gilden/druidenzirkel/obj/focus");
+      ob->SetVariables("wasser", npclevel / 11 - random(3) );
+      ob->move(previous_object(), M_NOCHECK);
+    }
+  }
+  else if (previous_object()->id("djinni") && !random(2))
+  {
+    if (random(3))
+    {
+      ob = clone_object(OBJ "elementarfigur");
+      ob->set_element("luft");
+      ob->move(previous_object(), M_NOCHECK);
+    }
+    else if (random(2))
+    {
+      ob = clone_object("/gilden/druidenzirkel/obj/focus");
+      ob->SetVariables("luft", npclevel / 11 - random(3) );
+      ob->move(previous_object(), M_NOCHECK);
+    }
+  }
+  else if (previous_object()->id("dao") && !random(2))
+  {
+    if (random(3))
+    {
+      ob = clone_object(OBJ "elementarfigur");
+      ob->set_element("eis");
+      ob->move(previous_object(), M_NOCHECK);
+    }
+    else if (random(2))
+    {
+      ob = clone_object("/gilden/druidenzirkel/obj/focus");
+      ob->SetVariables("eis", npclevel / 11 - random(3) );
+      ob->move(previous_object(), M_NOCHECK);
+    }
+  }
+  else if (previous_object()->id("efreeti") && !random(2))
+  {
+    if (random(3))
+    {
+      ob = clone_object(OBJ "elementarfigur");
+      ob->set_element("feuer");
+      ob->move(previous_object(), M_NOCHECK);
+    }
+    else if (random(2))
+    {
+      ob = clone_object("/gilden/druidenzirkel/obj/focus");
+      ob->SetVariables("feuer", npclevel / 11 - random(3) );
+      ob->move(previous_object(), M_NOCHECK);
+    }
+  }
+  else if (previous_object()->id("boese"))
+  {
+    for (i = 0; i <= 7; i++) 
+    {
+      ob = clone_object(({OBJ "hdb", ARMOUR "feldherrenguertel", 
+            ARMOUR "staubschild", ARMOUR "silmaril", ARMOUR "meisterring",
+            ARMOUR "knochenschild", ARMOUR "erbenguertel", ARMOUR "fallenmeisterguertel"})[i]);
+      ob->move(previous_object(), M_NOCHECK);
+      write_file(LOGS "/items/items.log", 
+          sprintf( "%s - %s - %d - %d - %s - %s\n", 
+            dtime(time()), npcname, npclevel, arealevel, 
+            getuid(this_player()), ob->name()));
+    }
+
+    for (i = 1 + random(4); i >= 0; i--)
+    {
+      "/p/daemon/itemd/itemd"->GenerateSet("random", 1);
+      switch(this_player()->QueryProp(P_TTY))
+      {
+        case "ansi": g = ANSI_GREEN + ANSI_BOLD; n = ANSI_NORMAL; break;
+        case "vt100": g = ANSI_BOLD; n = ANSI_NORMAL; break;
+        default: g = n = "";
+      }
+      tell_object(this_player(), 
+          g + "Du findest eine Teil der Ausruestung der alten Helden!" + n + "\n");
+      tell_room(environment(this_player()), this_player()->Name(WER,1)+
+          " nimmt einen gruen leuchtenden Gegenstand an sich.\n", ({this_player()}) );
+      write_file(LOGS "/items/set.log", 
+          sprintf("%s - %s - %d - %d - %s - set\n", 
+            dtime(time()), npcname, npclevel, arealevel, getuid(this_player()) ));
+    }
+    e = previous_object()->PresentEnemies();
+    for (i = sizeof(e) - 1; i >= 0; i--)  // Bonus-XP fuer kill am Boesen.
+    {
+      up = e[i]->QueryProp(P_LEVEL);
+      e[i]->AddExp(123 * up * up);
+    }
+  }
+}
+
+void GenerateSet(string* exclude)
+{
+  if (member(ALLOWED_UIDS, getuid(previous_object())) == -1)
+    return;
+  "/p/daemon/itemd/itemd"->GenerateSet("random", 1, 0, 1, exclude + exclude_sets(1));
+}
+
+varargs string* exclude_sets(int f)
+{
+  string* exclude;
+
+  exclude = ({});
+  if (random(4 - f))
+    exclude += ({"stah"});
+  if (random(4 - f))
+    exclude += ({"anga"});
+  if (random(4 - f))
+    exclude += ({"ryno"});
+  if (random(3 - f) && this_player()->QueryProp(P_GUILD) != "amazonen")
+    exclude += ({"schl"});
+  if (random(3 - f) && this_player()->QueryProp(P_GUILD) != "nekromanten")
+    exclude += ({"xulg"});
+  if (random(3 - f) && this_player()->QueryProp(P_GUILD) != "druidenzirkel")
+    exclude += ({"flam"});
+  if (random(3 - f) && this_player()->QueryProp(P_GUILD) != "druidenzirkel")
+    exclude += ({"zafi"});
+  if (random(3 - f) && this_player()->QueryProp(P_GUILD) != "paladine")
+    exclude += ({"mira"});
+  if (random(3 - f) && this_player()->QueryProp(P_GUILD) != "paladine")
+    exclude += ({"arco"});
+  if (random(3 - f) && this_player()->QueryProp(P_GUILD) != "berserker")
+    exclude += ({"grim"});
+  if (random(3 - f) && this_player()->QueryProp(P_GUILD) != "berserker")
+    exclude += ({"khar"});
+  // Zechprellerset by Gwenshara
+  if (random(3 - f) && this_player()->QueryProp(P_GUILD) != "zechpreller")
+    exclude += ({"frag"});
+  return exclude;
+}
+  

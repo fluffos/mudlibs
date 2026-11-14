@@ -1,0 +1,381 @@
+/* Bedienelement des Masterobjekts fuer Firmamentsteuerung
+ * _____________________________________(i) Anatol@Silberland (1998-2012) */
+ 
+#include "../defines.h"
+
+inherit "/std/tool";
+inherit "/mail/nedit";
+
+#define SKY MASTER "sky"
+
+
+nosave string global_planet;
+nosave string global_string;
+nosave int global_int;
+
+public void create() {
+  if (!is_clone(this_object())) return;
+  tool::create();
+  SetProp(P_NAME,"Planeten- und Sternenschraubenschluessel");
+  SetProp(P_SHORT, "Ein P.u.S.S.");
+  SetProp(P_LONG,break_string(
+    "Mit dem interplanetaren Planeten und Sternenschraubenschluessel kann man "
+    "unter anderem die Planeten und Sternbilder ueber Tol Tindome warten.\n"
+    "   pussp|pusss|pussd [<name>]   - Zeigen\n"
+    "   pussp+|pusss+ <name>         - Einfuegen\n"
+    "   pussp-|pusss- <name>         - Loeschen\n"
+    "   pussp#|pusss# <name>         - Aendern\n"
+    "   pussrooms                    - zeigt registrierte Raeume\n"
+    "   pussinfo <spieler>           - Zeigt P_NACHT-Eigenschaften\n"
+    "Anregungen, Wuensche | mail anatol\n",77,0,1));
+  AddAdjective("interplanetar");
+  AddId(({"puss","schraubenschluessel",
+           "WIZ_TOOL","\nanatol_planeten-und-sternen-schraubenschluessel"}));
+  SetProp(P_GENDER,MALE);
+  SetProp(P_WEIGHT,0);
+  SetProp(P_AUTOLOADOBJ,1);
+  SetProp(P_MATERIAL,MAT_IRON);
+  SetProp(P_INFO,"Oh, Du kannst identifizieren!\n");         
+  SetProp(P_NOBUY,1);
+  SetProp(P_NODROP,"Der ist zu... gigantisch, um ihn wegzuwerfen...\n"
+                 "Du koenntest versehentlich eine Stadt zertruemmern.\n");
+  SetProp(P_NEVERDROP,1);
+
+  AddCmd("pussp","showPlanet");
+  AddCmd("pusss","showStar");
+  AddCmd("pussp+","addPlanet");
+  AddCmd("pussp-","removePlanet");
+  AddCmd("pussp#","changePlanet");
+  AddCmd("pusss+","addStar");
+  AddCmd("pusss-","removeStar");
+  AddCmd("pusss#","changeStar");
+  AddCmd("pussd","showDetails");
+  AddCmd("pussrooms","showRooms");
+  AddCmd("pussinfo","showPlayerNightProperty");
+}
+
+nomask nosave int insecure() {
+  if (!this_player()) return 1;
+  if ((environment(this_object())) && 
+     (environment(this_object())!=this_player())) return 1;
+  if ( (!IS_ARCH(this_player())) && (getuid(this_player())!="anatol"))
+    return remove();
+  else return 0;
+}
+      
+nosave int showRooms() {
+  if (!IS_WIZARD(this_player())) return remove();
+  else this_player()->More((string)SKY->ShowRooms());
+  return 1;
+}
+
+nosave int showPlanet(string planet) {
+  if (!IS_WIZARD(this_player())) return remove();
+  if ((!stringp(planet)) || (!planet)) this_player()->More(SKY->ShowPlanets());
+  else this_player()->More((string)SKY->ShowPlanet(planet));
+  return 1;
+}
+
+nosave int showDetails(string det) {
+  if (!IS_WIZARD(this_player())) return remove();
+  if ((!stringp(det)) || (!det)) this_player()->More(SKY->ShowSkymiscs());
+  else this_player()->More((string)SKY->ShowSkymisc(det));
+  return 1;
+}
+
+nosave int showStar(string star) {
+  if (!IS_WIZARD(this_player())) return remove();
+  if ((!stringp(star)) || (!star)) this_player()->More(SKY->ShowStars());
+  else this_player()->More((string)SKY->ShowStar(star));
+  return 1;
+}
+
+nosave int addPlanet(string planet) {
+  if (insecure()) return 0;
+  if ((!stringp(planet)) || (!planet)) return 0;
+  write("Hinzufuegen eines neuen Planets hat "+
+  ((SKY->addPlanet(planet))?"":"nicht ")+"geklappt.\n");  
+  return 1;
+}
+
+nosave int removePlanet(string planet) {
+  if (insecure()) return 0;
+  write("Entfernen hat "+
+  ((SKY->RemovePlanet(planet))?"":"nicht ")+"geklappt.\n");  
+  return 1;
+}
+
+/* Das ist nur so runtergehackt, aber ein Notbehelfstool hat bei mir  */
+/* absolut keinen Anspruch auf Codeoptimierung oder Sauberkeit. Nein, */
+/* wirklich nicht.                                                    */
+
+nosave int changePlanet(string planet) {
+  if (insecure()) return 0;
+  if ((!stringp(planet)) || (!planet)) return 0;
+  if (member((string *)SKY->getPlanetList(),
+        (planet=lowerstring(planet)))==-1) {
+    write("Dieser Planet existiert nicht.\n");
+    return 1;
+  }
+  global_planet=planet;
+  write("Planet `"+capitalize(planet)+"` ...\n");
+  if (!(SKY->queryPlanetGender(planet))) {
+    write("Unbekannter Fehler beim Zugriff auf den Skymaster!\n");
+    return 1;
+  } 
+  write("Geschlecht (m)aennlich oder (w)eiblich? ["+
+    (global_string=((((int)SKY->queryPlanetGender(planet))==2)?"w":"m"))+"] ");
+  input_to("changePlanetGender");
+  return 1;
+}
+
+nosave void changePlanetGender(string gender) {
+  if (gender=="") write("Altes Geschlecht beibehalten.\n");
+  else if (gender=="m") {
+    if (!SKY->setPlanetGender(global_planet, MALE))
+      return (void) write(
+        "Unbekannter Fehler (2) beim Zugriff auf den Skymaster!\n");
+    write("Neues Geschlecht: maennlich.\n");
+  }
+  else if (gender=="w") {
+    if (!SKY->setPlanetGender(global_planet, FEMALE))
+      return (void) write(
+        "Unbekannter Fehler (3) beim Zugriff auf den Skymaster!\n");
+    write("Neues Geschlecht: weiblich.\n");
+  }
+  else {
+    write("Geschlecht (m)aennlich oder (w)eiblich? ["+global_string+"] ");
+    input_to("changePlanetGender");
+  }
+  if(!global_int=(int)SKY->queryPlanetOrbitPeriod(global_planet))
+    return (void) write(
+      "Unbekannter Fehler (4) beim Zugriff auf den Skymaster!\n");   
+  write("Umlaufzeit   (tage:stunden:minuten:sekunden) ["+
+  (global_string=time2string("%d:%h:%m:%s",global_int))+"] ");
+  input_to("changePlanetOrbitPeriod");
+  return;
+}
+
+nosave void changePlanetOrbitPeriod(string timestring) {
+  string * times;
+  int newtime;
+  if (timestring=="") 
+    write("Alter Wert beibehalten.\n");
+  else {
+    if (sizeof(times=explode(timestring,":"))!=4) {
+      write("Leider ungueltiges Format.\n"
+        "Umlaufzeit   (tage:stunden:minuten:sekunden) ["+global_string+"] ");
+      input_to("changePlanetOrbitPeriod");
+      return;
+    }
+    else if ((newtime=(to_int(times[0])*86400)+
+                      (to_int(times[1])*3600)+
+                      (to_int(times[2])*60)+
+                      (to_int(times[3])))<=0) {
+      write("Ungueltige Eingabe, Umlaufzeit MUSS groesser 0 sein!\n"
+         "Umlaufzeit   (tage:stunden:minuten:sekunden) ["+global_string+"] ");
+      input_to("changePlanetOrbitPeriod");
+      return;
+    }
+    if (!SKY->setPlanetOrbitPeriod(global_planet,newtime)) 
+      return (void) write(
+        "Unbekannter Fehler (5) beim Zugriff auf den Skymaster!\n");
+    write("Neue Umlaufzeit gesetzt.\n");
+  }
+  write("UmlaufOffset (tage:stunden:minuten:sekunden) ["+
+    (global_string=time2string("%d:%h:%m:%s",
+    global_int=(int)SKY->queryPlanetOrbitOffset(global_planet)))+"] ");
+  input_to("changePlanetOrbitOffset");
+  return;
+}
+   
+nosave void changePlanetOrbitOffset(string offset) {
+  string * times;
+  int newoffset;
+  if (offset=="") 
+    write("Alter Wert beibehalten.\n");
+  else {
+    if (sizeof(times=explode(offset,":"))!=4) {
+      write("Leider ungueltiges Format.\n"
+        "UmlaufOffset (tage:stunden:minuten:sekunden) ["+global_string+"] ");
+      input_to("changePlanetOrbitOffset");
+      return;
+    }
+    else if ((newoffset=(to_int(times[0])*86400)+
+                        (to_int(times[1])*3600)+
+                        (to_int(times[2])*60)+
+                        (to_int(times[3])))<0) {
+      write("Ungueltige Eingabe, Umlaufzeit MUSS "
+         "groesser oder gleich 0 sein!\n"
+         "Umlaufzeit (tage:stunden:minuten:sekunden) ["+global_string+"] ");
+      input_to("changePlanetOrbitOffset");
+      return;
+    }
+    if (!SKY->setPlanetOrbitOffset(global_planet,newoffset)) 
+      return (void) write(
+        "Unbekannter Fehler (6) beim Zugriff auf den Skymaster!\n");
+    write("Neuen Umlaufzeit-Offset gesetzt.\n");
+  }
+  write("Sichtbarkeit (tage:stunden:minuten:sekunden) ["+
+    (global_string=time2string("%d:%h:%m:%s",
+    global_int=(int)SKY->queryPlanetVisibility(global_planet)))+"] ");
+  input_to("changePlanetVisibility");
+  return;
+}
+ 
+nosave void changePlanetVisibility(string vis) {
+  string * times;
+  int newvis;
+  if (vis=="") 
+    write("Alter Wert beibehalten.\n");
+  else {
+    if (sizeof(times=explode(vis,":"))!=4) {
+      write("Leider ungueltiges Format.\n"
+        "Sichtbarkeit (tage:stunden:minuten:sekunden) ["+global_string+"] ");
+      input_to("changePlanetVisibility");
+      return;
+    }
+    else if ((newvis=(to_int(times[0])*86400)+
+                        (to_int(times[1])*3600)+
+                        (to_int(times[2])*60)+
+                        (to_int(times[3])))<0) {
+      write("Ungueltige Eingabe, Sichtbarkeit MUSS "
+         "groesser oder gleich 0 sein!\n"
+         "Sichtbarkeit (tage:stunden:minuten:sekunden) ["+global_string+"] ");
+      input_to("changePlanetVisibility");
+      return;
+    }
+    if (!SKY->setPlanetVisibility(global_planet,newvis)) 
+      return (void) write(
+        "Unbekannter Fehler (7) beim Zugriff auf den Skymaster!\n");
+    write("Neue Sichtbarkeitsperiode gesetzt.\n");
+  }
+  if (!(global_string=(string)SKY->queryPlanetDescription(global_planet)))
+    return (void) write(
+      "Unbekannter Fehler (8) beim Zugriff auf den Skymaster!\n");     
+  write("Planetenbeschreibung:\n"+break_string(global_string,77,0,1)+
+    "Planetenbeschreibung beibehalten (j/n)? [j] ");
+  input_to("changePlanetDescription");
+  return;
+}
+
+nosave void changePlanetInfoPrologue();
+    
+nosave void changePlanetDescription(string yesno) {
+  if ((yesno=="j")||(yesno=="")) {
+    write("Behalte Planetenbeschreibung bei.\n");
+    return (void) changePlanetInfoPrologue();
+  }
+  else if (yesno!="n") {
+    write("Planetenbeschreibung beibehalten (j/n)? [j] ");
+    input_to("changePlanetDescription");
+    return;
+  }
+  else {
+    write(
+      "** oder . wenn fertig, ~q fuer Abbruch, ~h fuer eine Hilfeseite.\n");
+    nedit("changePlanetDescriptionDone");
+    return;
+  }
+}
+
+nosave void changePlanetDescriptionDone(string newdesc) {
+  if (!newdesc) {
+    write("Planetenbeschreibung:\n"+break_string(global_string,77,0,1)+
+      "Planetenbeschreibung beibehalten (j/n)? [j] ");
+    input_to("changePlanetDescription");
+    return;
+  }
+  if (!SKY->setPlanetDescription(global_planet,newdesc))
+    return (void)
+      write("Unbekannter Fehler (9) beim Zugriff auf den Skymaster!\n");
+  write("Neue Planetenbeschreibung gesetzt.\n");
+  return (void) changePlanetInfoPrologue();
+}  
+
+nosave void changePlanetInfoPrologue() {
+  if (!(global_string=(string)SKY->queryPlanetInfo(global_planet)))
+    return (void) 
+      write("Unbekannter Fehler (10) beim Zugriff auf den Skymaster!\n");
+  write("Planeteninformation:\n"+break_string(global_string,77,0,1)+
+     "Planeteninformation beibehalten (j/n) ? [j] ");
+  input_to("changePlanetInfo");
+  return;  
+}
+
+nosave void changePlanetInfo(string yesno) {
+  if ((yesno=="j")||(yesno=="")) {
+    write("Behalte Planeteninformation bei.\n"
+       "OK!\n");
+    return; 
+  }
+  else if (yesno!="n") {
+    write("Planeteninformation beibehalten (j/n)? [j] ");
+    input_to("changePlanetInfo");
+    return;
+  }
+  else {
+    write(
+      "** oder . wenn fertig, ~q fuer Abbruch, ~h fuer eine Hilfeseite.\n");
+    nedit("changePlanetInfoDone");
+    return;
+  }
+}
+
+nosave void changePlanetInfoDone(string newinfo) {
+  if (!newinfo) {
+    write("Planeteninformation:\n"+break_string(global_string,77,0,1)+
+      "Planeteninformation beibehalten (j/n)? [j] ");
+    input_to("changePlanetInfo");
+    return;
+  }
+  if (!SKY->setPlanetInfo(global_planet,newinfo))
+    return (void)
+      write("Unbekannter Fehler (9) beim Zugriff auf den Skymaster!\n");
+  write("Neue Planeteninformation gesetzt.\n"
+       "OK!\n");
+  return;
+}  
+                        
+nosave int showPlayerNightProperty(string target) {
+  object player;
+  object tmpobj;
+  string tmpfile;
+  string savefile;
+  int content;
+  if ((!this_player()) || (!IS_WIZARD(this_player()))) return 0;
+  if (getuid(this_object())!=getuid(this_player())) return 0;
+  if ((!target)||(!stringp(target)))
+    target=getuid(this_player());
+  if (!((tmpobj=find_player(target=lowerstring(target))) ||
+      (tmpobj=find_netdead(target)))) {
+    write("Spieler weder im Spiel noch netztot. Existiert "
+          +(savefile=sprintf("/save/%c/%s",target[0],target))+
+            ".o? ");
+    write_file((tmpfile="/players/"+getuid(this_player())+"/.pss_tmpfile.lpc"),
+      "inherit \"/std/thing\";\ncreate() { ::create();restore_object(\""
+       +savefile+"\");\n}\n");
+    if ( (file_size(savefile+".o")<=0) ||
+       (catch(tmpobj=clone_object(tmpfile)))) {
+      write("Nope.\n");
+      rm(tmpfile);
+      return 1;
+    }
+    else {
+      write("Jep!\n");
+      content=(int)(tmpobj->QueryProp(P_NACHT));
+      tmpobj->remove();
+      if (objectp(tmpobj))
+        destruct(tmpobj);    
+      rm(tmpfile);
+    }
+  }   
+  else                      /* Hier wird natuerlich staendig geupdatet.. */
+    content=(int)(tmpobj->QueryProp(P_NACHT));
+  printf("Spieler %s - Nacht (%d)\n",capitalize(target), content);
+  printf("Astronomiekenntnisse........ %s\n"
+         "'persona non grata'......... %s\n",
+         (content&KNOWLEDGE_SKY?"Ja":"Nein"),
+         (content&PERSONA_NON_GRATA?"Ja":"Nein"));
+  return 1;
+}

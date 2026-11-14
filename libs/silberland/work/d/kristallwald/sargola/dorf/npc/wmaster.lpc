@@ -1,0 +1,225 @@
+/*
+**  Elfenwaechter Masterfile
+**
+**  2002-05-25  PROtheG  Umstellung, in Anlehnung an den Master von Dhrkion
+**                       seit 1800 wird jetzt mitgezaehlt, wer wieviele
+**                       Elfenwaechter
+*/
+
+#include "../def.h"
+
+#define EW_MALE ({"Tuloeral", "Isheezeryl", "Timyl", "Walintal", "Tenur", \
+"Mydamyl", "Ranef", "Xadelr", "Odeliryl", "Yadomyl", "Delhinyl", "Radathtyl", \
+"Ernal", "Tonkinther", "Keldarran", "Onelmatyl", "Roniryl", "Rerenyl", \
+"Nyrilu", "Rydohyl", "Dawakavyl", "Lindyl", "Zonyl", "Limauyl", "Agedryl", \
+"Orolin", "Quill", "Raenefel", "Rhialdor", "Sydor", "Talon", "Tislin", \
+"Riltran", "Achanis", "Engatyl", "Ightond", "Noradyl"})
+
+#define EW_FEMALE ({"Nataith", "Elereasa", "Tiwenifa", "Eawirade", "Aneele", \
+"Mahata", "Ainaeacha", "Daildundyl", "Asherryn", "Acharayl", "Eyeruma", \
+"Nezabe", "Ishaealla", "Idiele"})
+
+#define SAVEFILE NPC "master_save"
+
+nosave object *feinde;
+mapping reserviert;
+mapping permanent;
+mapping playerkills;
+
+query_prevent_shadow() { return 1; }
+
+void create()
+{
+  if(is_clone(ME)) return destruct();
+
+  SUID;
+
+  feinde=({});
+  permanent=([]);
+  playerkills=([]);
+  reserviert=([]);
+
+  restore_object(SAVEFILE);
+  reserviert=([]);
+}
+
+void reset() 
+{
+  feinde=({});
+
+  call_out("CleanEWNames", 10);
+}
+
+public varargs void killed_by(object pl, int flag)
+{
+  string bla;
+
+  if(!objectp(pl)) return;
+  if(!interactive(pl)) return;
+  if(IS_WIZARD(pl)) return;
+
+  if(flag) //Flag steht fuer Zivile Kills (Wirt, Waechter, etc.)
+    if(member(permanent, getuuid(pl)))
+      permanent[getuuid(pl), 1]++;
+    else
+      permanent+=([getuuid(pl):0;1]);
+  else
+    if(member(permanent, getuuid(pl)))
+      permanent[getuuid(pl), 0]++;
+    else
+      permanent+=([getuuid(pl):1;0]);
+  
+  save_object(SAVEFILE);
+
+  bla="*** Elessar Killmaster - "+CAP(getuid(pl))+" : "+
+    (flag ? "Waechter" : "Waechterkill")+" - "+
+    permanent[getuuid(pl)]+
+    (flag ? " Zivilkill" : " Zivil")+" - "+
+    permanent[getuuid(pl), 1];
+
+  PRO(bla);
+}
+
+public void ruf_um_hilfe(object pl)
+{
+  if(!objectp(pl)) return;
+  if(!interactive(pl)) return;
+  if(IS_WIZARD(pl)) return;
+
+  if(member(feinde, pl)==-1)
+    feinde+=({pl});
+}
+
+public void player_killed(object pl)
+{
+  if(!objectp(pl)) return;
+  if(!interactive(pl)) return;
+  if(IS_WIZARD(pl)) return;
+
+  if(member(feinde, pl)!=-1)
+    feinde-=({pl});
+  
+  if(member(playerkills, getuuid(pl)))
+    playerkills[getuuid(pl)]++;
+  else
+    playerkills+=([getuuid(pl):1]);
+
+  save_object(SAVEFILE);
+
+  PRO(BS("*** Elessar Killmaster - "+CAP(getuid(pl))+" killed "+
+	 playerkills[getuuid(pl)]+" Time(s)."));
+}
+    
+varargs public int *getfeindkills(object pl, int flag)
+{
+  if(member(permanent, getuuid(pl)))
+    if(flag)
+      return ({permanent[getuuid(pl), 0]+permanent[getuuid(pl), 1]});
+    else
+      return ({permanent[getuuid(pl), 0], permanent[getuuid(pl), 1]});
+
+  return ({});
+}
+
+public int is_elessar_enemy(object pl)
+{
+  if(member(feinde, pl)!=-1) return 1;
+
+  if(member(permanent, getuuid(pl)))
+    if(getfeindkills(pl, 1)[0] >= 500)
+      return 1;
+  
+  return 0;
+}
+
+public object *getfeinde()
+{
+  return feinde;
+}
+
+public string getfeindtoplist()
+{
+  string ret;
+  string *ind;
+  int i,j,t;
+  mapping tmp;
+  
+  ret="\n";
+  
+  tmp=permanent;
+  ind=m_indices(tmp);
+  
+  for(j=0;j<=9;j++)
+    {
+      for(t=sizeof(ind)-1,i=t;i>=0;i--)
+	if(tmp[ind[t],0] < tmp[ind[i],0])
+	  t=i;
+	else
+	  if(tmp[ind[t],0] == tmp[ind[i],0])
+	    if(tmp[ind[t],1] < tmp[ind[i],1])
+	      t=i;
+      
+      ret+=" "+sprintf("%18.18s", CAP(explode(ind[t], "_")[0])+" mit ")+
+	sprintf("%5d", tmp[ind[t],0])+" Waechter- "
+	"und "+sprintf("%5d", tmp[ind[t],1])+" Ziviltoetungen.\n";
+      tmp=m_delete(tmp, ind[t]);
+    }
+  
+  return ret;
+}
+
+// Namen fuer Elfenwaechter
+
+varargs public string *QueryAllEWNames(int gender)
+{
+  if(!gender)
+    return EW_MALE + EW_FEMALE;
+  
+  if(gender==MALE)
+    return EW_MALE;
+  
+  return EW_FEMALE;  
+}
+
+public void CleanEWNames()
+{
+  int i;
+  string *ind;
+  
+  if(sizeof(ind=m_indices(reserviert)))
+    for(i=sizeof(ind)-1;i>=0;i--)
+      if(!objectp(reserviert[ind[i]]))
+	reserviert=m_delete(reserviert, ind[i]);
+}
+
+public string GetEWName(int gender)
+{
+  string *tmp;
+  string ret;
+  
+  tmp=QueryAllEWNames(gender)-m_indices(reserviert);
+  
+  if(!sizeof(tmp)) return 0;
+  
+  ret=tmp[random(sizeof(tmp))];
+  
+  reserviert+=([ret:PO]);
+
+  return ret;
+}
+
+public int FreeEWName(string str)
+{
+  if(!member(reserviert, str)) return 0;
+  
+  reserviert=m_delete(reserviert, str);
+  
+  CleanEWNames();
+  
+  return 1;
+}
+
+mapping dump()
+{
+  return reserviert;
+}

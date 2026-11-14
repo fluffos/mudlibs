@@ -1,0 +1,260 @@
+// Wuetender Bogenschuetze
+// 
+// Von Wraz / Mendralim
+// 15.01.2024
+
+#include "../def.h"
+
+#define RANDOM_BONUS_DEFEND WMASTER->query_random_bonus_defend()
+
+inherit "std/mnpc";
+inherit "/std/npc/spells";
+inherit NPC "npc.lpc";
+
+string heroes;
+string _name;
+
+void create()
+{
+  if(!is_clone(TO)) return;
+
+  ::create();
+
+  heroes=read_file(ZONE "list/heroes")+"\nwraz";
+
+  switch(random(100))
+  {
+    case 0..50: SetProp(P_GENDER, FEMALE); _name="Bogenschuetzin"; break;
+    case 51..98: SetProp(P_GENDER, MALE); _name="Bogenschuetze"; break;
+    default: SetProp(P_GENDER, (random(2)?FEMALE:MALE)); _name="Bogenschuetz*in"; break;
+  }
+
+  SetProp(P_NAME, _name);
+  SetProp(P_NAME_ADJ, "wuetend");
+
+  SetProp(P_SHORT, Name(WER,0));
+  SetProp(P_LONG, sprintf("Diese%s %s sieht wild und heruntergekommen aus. "
+  "%s Kleidung ist zerschlissen und schmutzig, und %s Gesicht ist von Narben "
+  "gezeichnet. %s Augen funkeln vor wilder Entschlossenheit, waehrend %s %s "
+  "Bogen spannt. Es ist offensichtlich, dass %s schon viele Kaempfe ausgefochten "
+  "und nur das Schlachten im Sinn hat.",
+  QueryProp(P_GENDER)==MALE?"r":"",_name,CAP(QueryPossPronoun(FEMALE,WEN)),
+  QueryPossPronoun(NEUTER,WEN),CAP(QueryPossPronoun(FEMALE,WEN,PLURAL)),
+  QueryPronoun(),QueryPossPronoun(MALE,WEN),QueryPronoun()
+  ));
+
+  SetProp(P_TEMPERATURE_RANGE, ([T_RANGE_MIN:0,T_RANGE_MAX:30]));
+  AddId(({lower_case(_name), explode(_name,"Bogen")[0], "Krieger", // wimpy, laeuft davon
+  "Bogenexperte", "\nschlachtfeld"}));
+  set_living_name("\nschlachtfeld_minions_by_wraz");
+
+  AddAdjective( ({"wuetenden","wuetender","wuetendes"}) );
+
+  SetProp(P_ARTICLE, 1);
+
+  create_default_npc(32+random(3));
+
+  SetProp (P_HANDS, ({" mit "+QueryPossPronoun(FEMALE,WEM)+" Bogen", 100, DT_PIERCE}) );
+
+  SetProp(P_RACE, "Elf");
+  SetProp(P_SIZE, 170+random(20));
+  SetProp(P_WEIGHT, 80000+random(10000));
+  SetProp(P_ALIGN, -400);
+  SetProp(P_MAX_HANDS, 2);
+  SetProp(P_WIMPY, 0);
+
+  SetProp( P_REJECT, ({ REJECT_KEEP,
+    Name(WER,1)+" grinst dunkel!\n" }) );
+
+  SetProp(P_LOG_INFO, "/wraz/fragen_metzelorgie");
+
+  SetProp(P_MSGIN, "kommt an");
+  SetProp(P_MSGOUT, "laeuft");
+  SetProp(P_MMSGIN, "kommt an");
+  SetProp(P_MMSGOUT, "verschwindet");
+
+  SetProp(P_MNPC_AREA, ({ ROOM "m" }) );
+  SetProp(P_MNPC_DEFAULTROOM, ROOM "m09");
+  SetProp(P_MNPC_WAIT, ({ 80, 100, 100 }));
+  SetProp(P_MNPC_FLAGS, MOV_OUTDOORS + MOV_MOVES + MOV_BACKWARDS);
+
+  SetProp (P_DIE_MSG, " stirbt unaufgeregt.\n");
+
+  AddInfo(DEFAULT_INFO, "ruempft die Nase.\n");
+
+  //AddInfo( ({"",""}),
+  //  ".",
+  //  "sagt: ");
+
+  SetProp(P_SPELLRATE,40);
+
+  AddSpell(2,380,
+    Name(WER,1)+" trifft Dich mit einem schnellen Schuss empfindlich.\n",
+    Name(WER,1)+" trifft @WEN mit einem schnellen Schuss empfindlich.\n",
+    DT_PIERCE, ([SP_SHOW_DAMAGE:1]) );
+
+  AddDefaultSpell(1,450,DS_POISON,
+    Name(WER,1)+" trifft Dich mit einem Giftpfeil.\n",
+    Name(WER,1)+" trifft @WEN mit einem Giftpfeil.\n",
+    1+random(3));
+
+  SUID;
+  CLONEME("/p/armour/armour/lederpanzer");
+  if( random(100) < 35 ) CLONEME("/p/armour/boots/lederschuhe");
+  if( random(100) < 2 ) CLONEME("/p/armour/bracers/lederarmschienen");
+  if( QueryProp(P_GENDER) == MALE )
+  {
+    if( random(100) < 1 ) CLONEME(ARMOUR "rock");
+    else if ( random(100) < 25 ) CLONEME("/p/armour/trousers/lederhose");
+  }
+  else
+  {
+    if( random(100) < 1 ) CLONEME("/p/armour/trousers/lederhose");
+    else if ( random(100) < 25 ) CLONEME(ARMOUR "rock");
+  }
+  if( random(100) < 12 ) CLONEME("/p/armour/gloves/seidenhandschuhe");
+  command ("trage alles");
+  if( random(100) < 3 ) CLONEME("/p/weapon/bow/kriegsbogen");
+  else CLONEME("/p/weapon/bow/langbogen");
+  command ("zuecke bogen");
+
+}
+
+void die(int poisondeath)
+{
+  object ob;
+
+  WMASTER->npc_death_log("standardnpc", TO->Name(RAW), TPU, TPN);
+
+  ob=clone_object(OBJ "bling");
+  WMASTER->bling_prop(ob,"bogenschuetze");
+  ob->set_collector_value(QueryProp(P_LEVEL)+5);
+  // wenig Bonus, schwache Spells
+  ob->move(TO,M_GET);
+
+  npc::jadering_xp(TP, QueryProp(P_LEVEL));
+  call_other(IMASTER, "DropItems", ENV(TO), QueryProp(P_LEVEL));
+  ::die(poisondeath);
+}
+
+void NotifyPlayerDeath(object player, object killer, int lostexp)
+{
+  if(killer == TO) WMASTER->npc_kill_log(TO->Name(RAW), getuid(player), lostexp);
+}
+
+//--Reactions--------------------------------------------------------------
+
+void StartReaction(string verb, string gruppe, string adverb, int touch)
+{
+  if(find_call_out("reaction") != -1) return;
+
+  switch (gruppe)
+  {
+    case "aengstlich":
+      call_out("reaction", 0, TP,
+        "ignoriert Dich.",
+        "ignoriert "+TPN+".",
+        0);
+      break;
+
+    case "aergerlich":
+      call_out("reaction", 0, TP,
+        "kreischt Dich wuetend an!",
+        "kreischt "+TPN+" an!",
+        1);
+      break;
+
+    case "albern":
+      call_out("reaction", 0, TP,
+        "spuckt vor Dir auf den Boden.",
+        "spuckt vor "+TPN+" auf den Boden.",
+        0);
+      break;
+
+    case "fies":
+      call_out("reaction", 0, TP,
+        "stuerzt sich auf Dich!",
+        "stuerzt sich auf "+TPN+"!",
+        1);
+      break;
+
+    case "frech":
+      call_out("reaction", 0, TP,
+        "schreit: Aaaaahhh!",
+        "schreit "+TPN+" an: Aaaaahhh!",
+        1);
+      break;
+
+    case "froh":
+      call_out("reaction", 0, TP,
+        "ignoriert Dich.",
+        "ignoriert "+TPN+".",
+        0);
+      break;
+
+    case "intim":
+      call_out("reaction", 0, TP,
+        "kreischt: Du Drecksack!",
+        "kreischt "+TPN+" an: Du Drecksack!",
+        1);
+      break;
+
+    case "nett":
+      call_out("reaction", 0, TP,
+        "grummelt Dich an.",
+        "grummelt "+TPN+" an.",
+        0);
+      break;
+
+    case "neutral":
+      call_out("reaction", 0, TP,
+        "schnalzt mit der Zunge.",
+        "schnalzt mit der Zunge.",
+        0);
+      break;
+
+    case "traurig":
+      call_out("reaction", 0, TP,
+        "lacht wiehernd ueber Dich!",
+        "lacht "+TPN+" wiehernd aus!",
+        0);
+      break;
+    default: break;
+  }
+}
+
+void StartReactionAll(string verb, string gruppe, string adverb, int touch)
+{
+  return StartReaction(verb, gruppe, adverb, touch);
+}
+
+void reaction(object pl, string macher, string andere, int kill)
+{
+  if(!ENV(TO))           return;
+  if(!objectp(pl))       return;
+  if(!ENV(pl))           return;
+  if(ENV(TO) != ENV(pl)) return;
+
+  tell_object(pl, BS(Name(WER,1)+" "+macher));
+  tell_room(ENV(TO), BS(Name(WER,1)+" "+andere), ({pl}) );
+
+  if(kill) Kill(pl);
+}
+
+int Defend(int dam, string *dtypelist, int spell, object enemy)
+{
+  if ( strstr(heroes,lower_case( getuid(enemy) )) )
+    return ::Defend(dam+random(RANDOM_BONUS_DEFEND), dtypelist, spell, enemy);
+
+  else return ::Defend(dam, dtypelist, spell, enemy);
+}
+
+int query_random_bonus_defend()
+{
+  return RANDOM_BONUS_DEFEND;
+}
+
+void InformDefend(object enemy)
+{
+  Kill(enemy);
+}
